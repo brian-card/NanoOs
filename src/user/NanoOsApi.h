@@ -162,8 +162,8 @@ typedef struct NanoOsApi {
     struct passwd **result);
 
   // NanoOs-specific functionality
-  void* (*callOverlayFunction)(const char *overlay, const char *function,
-    void *args);
+  void* (*callOverlayFunction)(const char *overlayPath, const char *overlay,
+    const char *function, void *args);
   char** (*parseArgs)(char *command, int *argc);
 } NanoOsApi;
 

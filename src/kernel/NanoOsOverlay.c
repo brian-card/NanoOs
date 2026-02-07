@@ -33,6 +33,7 @@
 #include "NanoOs.h"
 #include "NanoOsOverlayFunctions.h"
 #include "../user/NanoOsLibC.h"
+#include "Scheduler.h"
 #include "Tasks.h"
 
 // Must come last
@@ -167,12 +168,14 @@ OverlayFunction findOverlayFunction(const char *overlayFunctionName) {
   return overlayFunction;
 }
 
-/// @fn void* callOverlayFunction(const char *overlay, const char *function,
-///   void *args)
+/// @fn void* callOverlayFunction(const char *overlayDir, const char *overlay,
+///   const char *function, void *args)
 ///
 /// @brief Kernel function to load an overlay into memory, find a designated
 /// function, call it with the provided arguments, and return the return value.
 ///
+/// @param overlayDir The path to the overlay on the filesystem.  If this
+///   parameter is NULL then this means the overlay path currently in use.
 /// @param overlay The name of the overlay minus the ".overlay" file extension
 ///   that is local to getRunningTask()->overlayDir.
 /// @param function The name of the function exported by the overlay.
@@ -181,11 +184,10 @@ OverlayFunction findOverlayFunction(const char *overlayFunctionName) {
 ///
 /// @return Returns the value returned by the overlay function on success, NULL
 /// on failure.
-void* callOverlayFunction(const char *overlay, const char *function,
-  void *args
+void* callOverlayFunction(const char *overlayDir, const char *overlay,
+  const char *function, void *args
 ) {
   void *returnValue = NULL;
-  
   if ((overlay == NULL) || (function == NULL)) {
     fprintf(stderr,
       "ERROR: One or more NULL arguments provided to callOverlayFunction\n");
@@ -199,14 +201,22 @@ void* callOverlayFunction(const char *overlay, const char *function,
   }
   
   // Keep track of the overlay that's currently running.
+  const char *previousOverlayDir = runningTask->overlayDir;
   const char *previousOverlay = runningTask->overlay;
   
   // We have to copy the arguments we were provided into dynamic memory because
   // they may be pointers into the current overlay, which we're about to
   // replace.
+  char *overlayDirCopy = NULL;
+  if (overlayDir != NULL) {
+    char *overlayDirCopy = (char*) malloc(strlen(overlayDir) + 1);
+    if (overlayDirCopy == NULL) {
+      goto exit;
+    }
+  }
   char *overlayCopy = (char*) malloc(strlen(overlay) + 1);
   if (overlayCopy == NULL) {
-    goto exit;
+    goto freeOverlayDir;
   }
   strcpy(overlayCopy, overlay);
   
@@ -224,30 +234,36 @@ void* callOverlayFunction(const char *overlay, const char *function,
   // there, but we want to give other processes some time to run, too.  Also,
   // loading the overlay is an operation that shouldn't be interrupted.   The
   // scheduler will automatically load the correct overlay before a process is
-  // resumed, so just set the pointer of the task's overlay and then yield.
+  // resumed, so just set the pointers of the task's overlay and then yield.
   //
   // A few things of note:
   //
   // 1.  Because the scheduler will automatically load the correct overlay
   //     before a task is resumed, it's technically permissible to set the
-  //     task's overlay pointer and then load the overlay, however, that's
+  //     task's overlay pointers and then load the overlay, however, that's
   //     redundant.  It would *NOT* be permissible to load the overlay and then
-  //     set the pointer as that could create an overlay of mixed content if
+  //     set the pointers as that could create an overlay of mixed content if
   //     loading the overlay was preempted.
   //
-  // 2.  Setting the pointer for the overlay has to be an atomic operation.
-  //     We cannot assume that it will be so and use '=' because this system
-  //     may run on an 8-bit processor where loading a pointer requires
-  //     multiple fetches from memory.  The reason it has to be atomic is
-  //     because the value of the pointer is used by the scheduler, which is
-  //     outside the context of this process.  If we were to load, say, only
-  //     one byte of a two-byte pointer and then do a context switch, the
-  //     scheduler would attempt to load the overlay from a mangled pointer
-  //     before the context of this process was restored to complete the load.
-  //     That's why we have to use atomic_store here.
+  // 2.  Setting the pointers for the overlay has to be an atomic operation.
+  //     The reason it has to be atomic is because the value of the pointers
+  //     are used by the scheduler, which is outside the context of this
+  //     process.  There are two (2) pointers that have to be set:  The path
+  //     to the overlay directory and the name of the overlay.  Because there
+  //     are to operations that have to be done here, it's not sufficient to do
+  //     an atomic store on a single pointer.  We need to make sure the
+  //     preemption timer isn't running and then set both.  We don't have to
+  //     re-enable the timer again after setting the pointers because we're
+  //     going to then immediately yield after setting them.  So, we can get
+  //     away with just calling cancelTimer instead of cancelAndGetTimer since
+  //     there's nothing to resume.
   //
   // JBC 2025-01-24
-  atomic_store(&runningTask->overlay, overlayCopy);
+  HAL->cancelTimer(PREEMPTION_TIMER);
+  if (overlayDirCopy != NULL) {
+    runningTask->overlayDir = overlayDirCopy;
+  }
+  runningTask->overlay = overlayCopy;
   taskYield();
   
   // If we made it this far, then our new overlay has been successuflly loaded.
@@ -262,13 +278,20 @@ void* callOverlayFunction(const char *overlay, const char *function,
   returnValue = overlayFunction(args);
   
 restorePreviousOverlay:
-  // See note above on use of atomic_store.
-  atomic_store(&runningTask->overlay, previousOverlay);
-  // Make the scheduler load the overlay back into memory.
+  // See note above on use of HAL->cancelTimer.
+  HAL->cancelTimer(PREEMPTION_TIMER);
+  runningTask->overlay = previousOverlay;
+  if (overlayDirCopy != NULL) {
+    runningTask->overlayDir = previousOverlayDir;
+  }
   taskYield();
+  
+  // Release all the memory for the copies.
   free(functionCopy);
 freeOverlay:
   free(overlayCopy);
+freeOverlayDir:
+  free(overlayDirCopy);
 exit:
   return returnValue;
 }

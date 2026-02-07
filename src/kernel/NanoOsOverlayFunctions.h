@@ -47,8 +47,8 @@ extern "C"
 
 int loadOverlay(const char *overlayDir, const char *overlay, char **envp);
 OverlayFunction findOverlayFunction(const char *overlayFunctionName);
-void* callOverlayFunction(const char *overlay, const char *function,
-  void *args);
+void* callOverlayFunction(const char *overlayDir, const char *overlay,
+  const char *function, void *args);
 int runOverlayCommand(const char *commandPath,
   int argc, char **argv, char **envp);
 

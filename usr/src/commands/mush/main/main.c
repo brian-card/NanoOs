@@ -151,7 +151,7 @@ int main(int argc, char **argv) {
     // pointer to dynamic memory.  So, it's safe to pass as a parameter to
     // callOverlayFunction.
     returnValue = (intptr_t) callOverlayFunction(
-      "Builtins", "processBuiltin", input);
+      NULL, "Builtins", "processBuiltin", input);
     if (returnValue < -1)  {
       // The command wasn't processed as a built-in.  Try running it from the
       // filesystem.
