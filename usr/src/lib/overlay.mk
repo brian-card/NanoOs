@@ -18,7 +18,7 @@ LDFLAGS += $(LINKER_SCRIPT) -Wl,--gc-sections -static -no-pie
 LDFLAGS += -Wl,--build-id=none -nostartfiles
 
 OBJ_DIR = ../../../../obj
-BIN_DIR = ../../../../bin
+BIN_DIR = ../../../../lib
 
 # Source and target files
 ELF = $(OBJ_DIR)/$(TARGET)/$(OVERLAY)/overlay.elf
