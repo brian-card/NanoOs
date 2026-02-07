@@ -1,4 +1,4 @@
-SOURCES := commands
+SOURCES := commands lib
 
 .PHONY: all clean overlays
 
