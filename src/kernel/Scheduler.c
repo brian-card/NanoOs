@@ -3317,9 +3317,9 @@ void runScheduler(SchedulerState *schedulerState) {
         taskDescriptor->overlayDir, taskDescriptor->overlay,
         taskDescriptor->envp) != 0
       ) {
-        removeTask(schedulerState, taskDescriptor, "Overlay load failure");
         schedulerDumpMemoryAllocations(schedulerState);
         schedulerDumpOpenFiles(schedulerState);
+        removeTask(schedulerState, taskDescriptor, "Overlay load failure");
         return;
       }
     }
