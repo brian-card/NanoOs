@@ -164,7 +164,7 @@ int showIssue(void) {
   }
   
   if (fgets(buffer, 96, issueFile) != buffer) {
-    fputs("ERROR! fgets did not read \"/etc/isue\"\n", stderr);
+    fputs("ERROR! fgets did not read \"/etc/issue\"\n", stderr);
   }
   fclose(issueFile);
   
