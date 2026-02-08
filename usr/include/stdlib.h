@@ -52,7 +52,10 @@ static inline void* calloc(size_t nmemb, size_t size) {
 }
 
 static inline char *getenv(const char *name) {
-  return overlayMap.header.osApi->getenv(name);
+  // The 'args' parameter of callOverlayFunction is a void* without the 'const'
+  // qualifier, so we have to cast it here to avoid a compiler warning.
+  return overlayMap.header.osApi->callOverlayFunction(
+    "/usr/lib/stdlib", "getenv", "getenv", (void*) name);
 }
 
 static inline int rand(void) {
