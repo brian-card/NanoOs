@@ -1213,6 +1213,11 @@ static int searchDirectory(
     EXFAT_MAX_FILENAME_LENGTH * sizeof(uint16_t)
   );
   if (searchName == NULL) {
+    printDebugString(__func__);
+    printDebugInt(__LINE__);
+    printDebugString(": Could not allocate ");
+    printDebugInt(EXFAT_MAX_FILENAME_LENGTH * sizeof(uint16_t));
+    printDebugString(" bytes\n");
     return EXFAT_NO_MEMORY;
   }
 
@@ -1222,6 +1227,11 @@ static int searchDirectory(
   );
   if (fullName == NULL) {
     free(searchName);
+    printDebugString(__func__);
+    printDebugInt(__LINE__);
+    printDebugString(": Could not allocate ");
+    printDebugInt(EXFAT_MAX_FILENAME_LENGTH * sizeof(uint16_t));
+    printDebugString(" bytes\n");
     return EXFAT_NO_MEMORY;
   }
 
@@ -1231,6 +1241,11 @@ static int searchDirectory(
   if (tempFileEntry == NULL) {
     free(fullName);
     free(searchName);
+    printDebugString(__func__);
+    printDebugInt(__LINE__);
+    printDebugString(": Could not allocate ");
+    printDebugInt(sizeof(ExFatFileDirectoryEntry));
+    printDebugString(" bytes\n");
     return EXFAT_NO_MEMORY;
   }
 
@@ -1241,6 +1256,11 @@ static int searchDirectory(
     free(tempFileEntry);
     free(fullName);
     free(searchName);
+    printDebugString(__func__);
+    printDebugInt(__LINE__);
+    printDebugString(": Could not allocate ");
+    printDebugInt(sizeof(ExFatStreamExtensionEntry));
+    printDebugString(" bytes\n");
     return EXFAT_NO_MEMORY;
   }
 
@@ -1252,6 +1272,11 @@ static int searchDirectory(
     free(tempFileEntry);
     free(fullName);
     free(searchName);
+    printDebugString(__func__);
+    printDebugInt(__LINE__);
+    printDebugString(": Could not allocate ");
+    printDebugInt(sizeof(ExFatFileNameEntry));
+    printDebugString(" bytes\n");
     return EXFAT_NO_MEMORY;
   }
 
@@ -1479,6 +1504,11 @@ static int navigateToDirectory(
   // Allocate component buffer
   char* component = (char*) malloc(EXFAT_MAX_FILENAME_LENGTH + 1);
   if (component == NULL) {
+    printDebugString(__func__);
+    printDebugInt(__LINE__);
+    printDebugString(": Could not allocate ");
+    printDebugInt(EXFAT_MAX_FILENAME_LENGTH + 1);
+    printDebugString(" bytes\n");
     return EXFAT_NO_MEMORY;
   }
 
@@ -1487,6 +1517,11 @@ static int navigateToDirectory(
     (ExFatFileDirectoryEntry*) malloc(sizeof(ExFatFileDirectoryEntry));
   if (dirEntry == NULL) {
     free(component);
+    printDebugString(__func__);
+    printDebugInt(__LINE__);
+    printDebugString(": Could not allocate ");
+    printDebugInt(sizeof(ExFatFileDirectoryEntry));
+    printDebugString(" bytes\n");
     return EXFAT_NO_MEMORY;
   }
 
@@ -1496,6 +1531,11 @@ static int navigateToDirectory(
   if (streamEntry == NULL) {
     free(dirEntry);
     free(component);
+    printDebugString(__func__);
+    printDebugInt(__LINE__);
+    printDebugString(": Could not allocate ");
+    printDebugInt(sizeof(ExFatStreamExtensionEntry));
+    printDebugString(" bytes\n");
     return EXFAT_NO_MEMORY;
   }
 
