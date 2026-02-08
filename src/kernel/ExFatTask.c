@@ -78,7 +78,14 @@ int exFatTaskOpenFileCommandHandler(
       nanoOsFile->file = exFatFile;
       nanoOsFile->currentPosition = exFatFile->currentPosition;
       nanoOsFile->fd = driverState->filesystemState->numOpenFiles + 3;
+      nanoOsFile->owner = taskId(taskMessageFrom(taskMessage));
+      nanoOsFile->next = NULL;
       driverState->filesystemState->numOpenFiles++;
+      NanoOsFile **prev = &driverState->filesystemState->openFiles;
+      while (*prev != NULL) {
+        prev = &((*prev)->next);
+      }
+      *prev = nanoOsFile;
     }
   }
 
@@ -107,12 +114,18 @@ int exFatTaskCloseFileCommandHandler(
 
   FilesystemFcloseParameters *fcloseParameters
     = nanoOsMessageDataPointer(taskMessage, FilesystemFcloseParameters*);
-  ExFatFileHandle *exFatFile = (ExFatFileHandle*) fcloseParameters->stream->file;
+  ExFatFileHandle *exFatFile
+    = (ExFatFileHandle*) fcloseParameters->stream->file;
   free(fcloseParameters->stream);
   if (driverState->driverStateValid) {
     fcloseParameters->returnValue = exFatFclose(driverState, exFatFile);
     if (driverState->filesystemState->numOpenFiles > 0) {
       driverState->filesystemState->numOpenFiles--;
+      NanoOsFile **prev = &driverState->filesystemState->openFiles;
+      while (*prev != fcloseParameters->stream) {
+        prev = &((*prev)->next);
+      }
+      *prev = (*prev)->next;
     }
   }
 
@@ -271,16 +284,52 @@ int exFatTaskSeekFileCommandHandler(
   return 0;
 }
 
+/// @fn int exFatTaskDumpOpenFilesCommandHandler(
+///   ExFatDriverState *driverState, TaskMessage *taskMessage)
+///
+/// @brief Command handler for the FILESYSTEM_SEEK_FILE command.  Walk the open
+/// files list and display information about all of the files and their owning
+/// processes.
+///
+/// @param driverState A pointer to the FilesystemState object maintained
+///   by the filesystem task.
+/// @param taskMessage A pointer to the TaskMessage that was received by
+///   the filesystem task.
+///
+/// @return Returns 0 on success, a standard POSIX error code on failure.
+int exFatTaskDumpOpenFilesCommandHandler(
+  ExFatDriverState *driverState, TaskMessage *taskMessage
+) {
+  printString("Open files:\n");
+  for (NanoOsFile *nanoOsFile = driverState->filesystemState->openFiles;
+    nanoOsFile != NULL;
+    nanoOsFile = nanoOsFile->next
+  ) {
+    ExFatFileHandle *exFatFile = (ExFatFileHandle*) nanoOsFile->file;
+    printString("0x");
+    printHex(nanoOsFile);
+    printString(": \"");
+    printString(exFatFile->fileName);
+    printString("\" owned by ");
+    printInt(nanoOsFile->owner);
+    printString("\n");
+  }
+
+  taskMessageSetDone(taskMessage);
+  return 0;
+}
+
 /// @var filesystemCommandHandlers
 ///
 /// @brief Array of ExFatCommandHandler function pointers.
 const ExFatCommandHandler filesystemCommandHandlers[] = {
-  exFatTaskOpenFileCommandHandler,   // FILESYSTEM_OPEN_FILE
-  exFatTaskCloseFileCommandHandler,  // FILESYSTEM_CLOSE_FILE
-  exFatTaskReadFileCommandHandler,   // FILESYSTEM_READ_FILE
-  exFatTaskWriteFileCommandHandler,  // FILESYSTEM_WRITE_FILE
-  exFatTaskRemoveFileCommandHandler, // FILESYSTEM_REMOVE_FILE
-  exFatTaskSeekFileCommandHandler,   // FILESYSTEM_SEEK_FILE
+  exFatTaskOpenFileCommandHandler,      // FILESYSTEM_OPEN_FILE
+  exFatTaskCloseFileCommandHandler,     // FILESYSTEM_CLOSE_FILE
+  exFatTaskReadFileCommandHandler,      // FILESYSTEM_READ_FILE
+  exFatTaskWriteFileCommandHandler,     // FILESYSTEM_WRITE_FILE
+  exFatTaskRemoveFileCommandHandler,    // FILESYSTEM_REMOVE_FILE
+  exFatTaskSeekFileCommandHandler,      // FILESYSTEM_SEEK_FILE
+  exFatTaskDumpOpenFilesCommandHandler, // FILESYSTEM_DUMP_OPEN_FILES,
 };
 
 

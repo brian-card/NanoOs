@@ -128,12 +128,16 @@ typedef intptr_t ssize_t;
 /// @brief Definition of the FILE structure used internally to NanoOs.
 ///
 /// @param file Pointer to the real file metadata.
+/// @param next A pointer to the next open NanoOsFile.
 /// @param currentPosition The current position within the file.
 /// @param fd The numeric file descriptor for the file.
+/// @param owner The TaskId of the process that owns the file.
 typedef struct NanoOsFile {
-  void     *file;
-  uint32_t  currentPosition;
-  int       fd;
+  void              *file;
+  struct NanoOsFile *next;
+  uint32_t           currentPosition;
+  int                fd;
+  TaskId             owner;
 } NanoOsFile;
 
 /// @struct IoPipe

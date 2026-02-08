@@ -72,13 +72,15 @@ extern "C"
 /// @param endLba The address of the last block of the filesystem.
 /// @param numOpenFiles The number of files currently open by the filesystem.
 ///   If this number is zero then the blockBuffer pointer may be NULL.
+/// @param openFiles A pointer to the first FILE that's open.
 typedef struct FilesystemState {
   BlockStorageDevice *blockDevice;
-  uint16_t blockSize;
-  uint8_t *blockBuffer;
-  uint32_t startLba;
-  uint32_t endLba;
-  uint8_t  numOpenFiles;
+  uint16_t  blockSize;
+  uint8_t  *blockBuffer;
+  uint32_t  startLba;
+  uint32_t  endLba;
+  uint8_t   numOpenFiles;
+  FILE     *openFiles;
 } FilesystemState;
 
 /// @struct FilesystemIoCommandParameters
@@ -142,6 +144,7 @@ typedef enum FilesystemCommandResponse {
   FILESYSTEM_WRITE_FILE,
   FILESYSTEM_REMOVE_FILE,
   FILESYSTEM_SEEK_FILE,
+  FILESYSTEM_DUMP_OPEN_FILES,
   NUM_FILESYSTEM_COMMANDS,
   // Responses:
 } FilesystemCommandResponse;
