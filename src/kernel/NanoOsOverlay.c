@@ -209,10 +209,11 @@ void* callOverlayFunction(const char *overlayDir, const char *overlay,
   // replace.
   char *overlayDirCopy = NULL;
   if (overlayDir != NULL) {
-    char *overlayDirCopy = (char*) malloc(strlen(overlayDir) + 1);
+    overlayDirCopy = (char*) malloc(strlen(overlayDir) + 1);
     if (overlayDirCopy == NULL) {
       goto exit;
     }
+    strcpy(overlayDirCopy, overlayDir);
   }
   char *overlayCopy = (char*) malloc(strlen(overlay) + 1);
   if (overlayCopy == NULL) {
