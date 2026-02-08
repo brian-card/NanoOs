@@ -467,6 +467,44 @@ int memoryManagerAssignMemoryCommandHandler(
   return returnValue;
 }
 
+/// @fn int memoryManagerDumpMemoryAllocations(
+///   MemoryManagerState *memoryManagerState, TaskMessage *incoming)
+///
+/// @brief Command handler for MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS.  Walk
+/// the memory allocation list and display information about all of the
+/// allocations and their owning processes.
+///
+/// @param memoryManagerState A pointer to the MemoryManagerState
+///   structure that holds the values used for memory allocation and
+///   deallocation.
+/// @param incoming A pointer to the message received from the requesting
+///   task.
+///
+/// @return Returns 0 on success, error code on failure.
+int memoryManagerDumpMemoryAllocations(
+  MemoryManagerState *memoryManagerState, TaskMessage *incoming
+) {
+  int returnValue = 0;
+  
+  printString("Outstanding allocations:\n");
+  for (MemNode *cur = memNode(memoryManagerState->mallocNext);
+    cur != NULL;
+    cur = cur->prev
+  ) {
+    printString("  0x");
+    printHex(&cur[1]);
+    printString(": ");
+    printInt(cur->size);
+    printString(" bytes owned by ");
+    printInt(cur->owner);
+    printString("\n");
+  }
+  
+  taskMessageSetDone(incoming);
+  
+  return returnValue;
+}
+
 /// @typedef MemoryManagerCommandHandler
 ///
 /// @brief Signature of command handler for a memory manager command.
@@ -484,6 +522,8 @@ const MemoryManagerCommandHandler memoryManagerCommandHandlers[] = {
   // MEMORY_MANAGER_FREE_TASK_MEMORY:
   memoryManagerFreeTaskMemoryCommandHandler,
   memoryManagerAssignMemoryCommandHandler,  // MEMORY_MANAGER_ASSIGN_MEMORY
+  // MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS:
+  memoryManagerDumpMemoryAllocations,
 };
 
 /// @fn void handleMemoryManagerMessages(
