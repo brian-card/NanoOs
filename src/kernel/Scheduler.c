@@ -2892,6 +2892,81 @@ void forceYield(void) {
   taskYield();
 }
 
+/// @fn int schedulerDumpMemoryAllocations(SchedulerState *schedulerState)
+///
+/// @brief Make the memory manager dump metadata about all its outstanding
+/// allocations.
+///
+/// @param schedulerState A pointer to the SchedulerState managed by the
+///   scheduler.
+///
+/// @return Returns 0 on success, -1 on failure.
+int schedulerDumpMemoryAllocations(SchedulerState *schedulerState) {
+  int returnValue = 0;
+  
+  TaskMessage *dumpMemoryAllocationsMessage = getAvailableMessage();
+  if (dumpMemoryAllocationsMessage != NULL) {
+    taskMessageInit(dumpMemoryAllocationsMessage,
+      MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS, NULL, 0, true);
+    schedulerSendTaskMessageToTask(
+      &schedulerState->allTasks[NANO_OS_MEMORY_MANAGER_TASK_ID - 1],
+      dumpMemoryAllocationsMessage);
+    if (taskMessageDone(dumpMemoryAllocationsMessage) == false) {
+      printString("ERROR: dumpMemoryAllocationsMessage is not done!\n");
+    }
+    taskMessageRelease(dumpMemoryAllocationsMessage);
+  } else {
+    printString("WARNING: Could not allocate dumpMemoryAllocationsMessage.\n");
+    returnValue = -1;
+  }
+  
+  return returnValue;
+}
+
+/// @fn int schedulerDumpOpenFiles(SchedulerState *schedulerState)
+///
+/// @brief Make the memory manager dump metadata about all its outstanding
+/// allocations.
+///
+/// @param schedulerState A pointer to the SchedulerState managed by the
+///   scheduler.
+///
+/// @return Returns 0 on success, -1 on failure.
+int schedulerDumpOpenFiles(SchedulerState *schedulerState) {
+  int returnValue = 0;
+  
+  TaskMessage *dumpOpenFilesMessage = getAvailableMessage();
+  if (dumpOpenFilesMessage != NULL) {
+    taskMessageInit(dumpOpenFilesMessage,
+      FILESYSTEM_DUMP_OPEN_FILES, NULL, 0, true);
+    schedulerSendTaskMessageToTask(
+      &schedulerState->allTasks[NANO_OS_FILESYSTEM_TASK_ID - 1],
+      dumpOpenFilesMessage);
+    if (taskMessageDone(dumpOpenFilesMessage) == false) {
+      printString("ERROR: dumpOpenFilesMessage is not done!\n");
+    }
+    taskMessageRelease(dumpOpenFilesMessage);
+  } else {
+    printString("WARNING: Could not allocate dumpOpenFilesMessage.\n");
+    returnValue = -1;
+  }
+  
+  return returnValue;
+}
+
+/// @fn void removeTask(SchedulerState *schedulerState,
+///   TaskDescriptor *taskDescriptor, const char *errorMessage)
+///
+/// @brief Clean up all of a task's resources so that it can be removed from
+/// the scheduler's task queues.
+///
+/// @param schedulerState A pointer to the SchedulerState managed by the
+///   scheduler.
+/// @param taskDescriptor A pointer to the TaskDescriptor to clean up.
+/// @param errorMessage A string containing the message to display to the user
+///   to indicate the reason this task is being remoevd.
+///
+/// @return This function returns no value.
 void removeTask(SchedulerState *schedulerState, TaskDescriptor *taskDescriptor,
   const char *errorMessage
 ) {
@@ -2906,36 +2981,29 @@ void removeTask(SchedulerState *schedulerState, TaskDescriptor *taskDescriptor,
   taskDescriptor->userId = NO_USER_ID;
   taskDescriptor->taskHandle->state = COROUTINE_STATE_NOT_RUNNING;
 
-  TaskMessage *schedulerTaskCompleteMessage = getAvailableMessage();
-  if (schedulerTaskCompleteMessage != NULL) {
+  TaskMessage *consoleReleasePidPortMessage = getAvailableMessage();
+  if (consoleReleasePidPortMessage != NULL) {
     schedulerSendNanoOsMessageToTaskId(
       schedulerState,
       NANO_OS_CONSOLE_TASK_ID,
       CONSOLE_RELEASE_PID_PORT,
-      (intptr_t) schedulerTaskCompleteMessage,
+      (intptr_t) consoleReleasePidPortMessage,
       taskDescriptor->taskId);
+    taskMessageRelease(consoleReleasePidPortMessage);
   } else {
     printString("WARNING: Could not allocate "
-      "schedulerTaskCompleteMessage.  Memory leak.\n");
+      "consoleReleasePidPortMessage.  Console leak.\n");
     // If we can't allocate the first message, we can't allocate the second
     // one either, so bail.
     return;
   }
 
-  TaskMessage *freeTaskMemoryMessage = getAvailableMessage();
-  if (freeTaskMemoryMessage != NULL) {
-    NanoOsMessage *nanoOsMessage = (NanoOsMessage*) taskMessageData(
-      freeTaskMemoryMessage);
-    nanoOsMessage->data = taskDescriptor->taskId;
-    taskMessageInit(freeTaskMemoryMessage,
-      MEMORY_MANAGER_FREE_TASK_MEMORY,
-      nanoOsMessage, sizeof(*nanoOsMessage), /* waiting= */ false);
-    sendTaskMessageToTask(
-      &schedulerState->allTasks[NANO_OS_MEMORY_MANAGER_TASK_ID - 1],
-      freeTaskMemoryMessage);
-  } else {
-    printString("WARNING: Could not allocate "
-      "freeTaskMemoryMessage.  Memory leak.\n");
+  if (schedulerSendNanoOsMessageToTaskId(
+    schedulerState, NANO_OS_MEMORY_MANAGER_TASK_ID,
+    MEMORY_MANAGER_FREE_TASK_MEMORY,
+    /* func= */ 0, taskDescriptor->taskId)
+  ) {
+    printString("ERROR: Could not free task memory. Memory leak.\n");
   }
 
   return;
@@ -3110,32 +3178,12 @@ int schedulerRunOverlayCommand(
   }
   execArgs->argv[ii] = NULL; // NULL-terminate the array
 
-  if (envp != NULL) {
-    size_t envpLen = 0;
-    for (; envp[envpLen] != NULL; envpLen++);
-    envpLen++; // Account for the terminating NULL element
-    execArgs->envp = (char**) schedMalloc(envpLen * sizeof(char*));
-    if (execArgs->envp == NULL) {
-      returnValue = -ENOMEM;
-      goto freeExecArgs;
-    }
-
-    // envpLen is guaranteed to always be at least 1, so it's safe to run to
-    // (envpLen - 1) here.
-    for (ii = 0; ii < (envpLen - 1); ii++) {
-      // We know that envp[ii] isn't NULL because of the calculation for envpLen
-      // above, so it's safe to use strlen.
-      execArgs->envp[ii] = (char*) schedMalloc(strlen(envp[ii]) + 1);
-      if (execArgs->envp[ii] == NULL) {
-        returnValue = -ENOMEM;
-        goto freeExecArgs;
-      }
-      strcpy(execArgs->envp[ii], envp[ii]);
-    }
-    execArgs->envp[ii] = NULL; // NULL-terminate the array
-  } else {
-    execArgs->envp = NULL;
-  }
+  // There are two possibilities for how this function is called:  Either envp
+  // is NULL or it's the envp that already existed for the taskDescriptor.  So,
+  // either there is no envp or it is already the one we should be using for
+  // the task.  We do *NOT* want to make a copy of it.  Just assign it direclty
+  // here.  The logic below will take care of memory ownership.
+  execArgs->envp = envp;
 
   execArgs->schedulerState = schedulerState;
 
@@ -3270,6 +3318,8 @@ void runScheduler(SchedulerState *schedulerState) {
         taskDescriptor->envp) != 0
       ) {
         removeTask(schedulerState, taskDescriptor, "Overlay load failure");
+        schedulerDumpMemoryAllocations(schedulerState);
+        schedulerDumpOpenFiles(schedulerState);
         return;
       }
     }
