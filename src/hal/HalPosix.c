@@ -753,7 +753,8 @@ const Hal* halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
   fprintf(stderr, "Top of stack        = %p\n", (void*) &topOfStack);
   
   // Simulate having a total of 64 KB available for dynamic memory.
-  _bottomOfStack = (void*) (((uintptr_t) &topOfStack) - ((uintptr_t) 65536));
+  _bottomOfStack = (void*) (((uintptr_t) &topOfStack)
+    - ((uintptr_t) (65536 - 11456)));
   fprintf(stderr, "Bottom of stack     = %p\n", (void*) _bottomOfStack);
   
   // The size used in the mmap call has to be large enough to accommodate the
