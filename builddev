@@ -24,13 +24,10 @@ echo "Build complete."
 
 sudo mkfs.exfat "${targetDevice}" -L NanoOs
 sudo mount "${targetDevice}" "${mountDir}"
+sudo mkdir -p "${mountDir}/usr"
+sudo cp -r usr/bin "${mountDir}/usr"
+sudo cp -r usr/lib "${mountDir}/usr"
 sudo mkdir -p "${mountDir}/etc"
-sudo mkdir -p "${mountDir}/usr/bin"
-pushd usr/bin
-for dir in *; do
-	sudo cp -r "${dir}" "${mountDir}/usr/bin"
-done
-popd
 sudo bash -c "printf \"${hostname}\" >\"${mountDir}/etc/hostname\""
 sudo bash -c "printf '\\s \\\r \\\n \\l\n\n' >\"${mountDir}/etc/issue\""
 sudo umount "${mountDir}"
