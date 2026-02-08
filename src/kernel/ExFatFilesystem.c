@@ -1593,6 +1593,9 @@ ExFatFileHandle* exFatOpenFile(
     || (filePath == NULL) || (*filePath == '\0')
     || (mode == NULL) || (*mode == '\0')
   ) {
+    printDebugString(__func__);
+    printDebugInt(__LINE__);
+    printDebugString(": return NULL\n");
     return NULL;
   }
 
@@ -1622,6 +1625,9 @@ ExFatFileHandle* exFatOpenFile(
       read = true;
     }
   } else {
+    printDebugString(__func__);
+    printDebugInt(__LINE__);
+    printDebugString(": return NULL\n");
     return NULL;
   }
 
@@ -1632,6 +1638,9 @@ ExFatFileHandle* exFatOpenFile(
     sizeof(ExFatFileHandle)
   );
   if (handle == NULL) {
+    printDebugString(__func__);
+    printDebugInt(__LINE__);
+    printDebugString(": return NULL\n");
     return NULL;
   }
 
@@ -1639,6 +1648,9 @@ ExFatFileHandle* exFatOpenFile(
   char* fileName = (char*) malloc(EXFAT_MAX_FILENAME_LENGTH + 1);
   if (fileName == NULL) {
     free(handle);
+    printDebugString(__func__);
+    printDebugInt(__LINE__);
+    printDebugString(": return NULL\n");
     return NULL;
   }
 
@@ -1648,6 +1660,9 @@ ExFatFileHandle* exFatOpenFile(
   if (fileEntry == NULL) {
     free(fileName);
     free(handle);
+    printDebugString(__func__);
+    printDebugInt(__LINE__);
+    printDebugString(": return NULL\n");
     return NULL;
   }
 
@@ -1658,6 +1673,9 @@ ExFatFileHandle* exFatOpenFile(
     free(fileEntry);
     free(fileName);
     free(handle);
+    printDebugString(__func__);
+    printDebugInt(__LINE__);
+    printDebugString(": return NULL\n");
     return NULL;
   }
 
@@ -1673,6 +1691,11 @@ ExFatFileHandle* exFatOpenFile(
     free(fileEntry);
     free(fileName);
     free(handle);
+    printDebugString(__func__);
+    printDebugInt(__LINE__);
+    printDebugString(": result = ");
+    printDebugInt(result);
+    printDebugString("\n");
     return NULL;
   }
 
@@ -1691,6 +1714,9 @@ ExFatFileHandle* exFatOpenFile(
       free(fileEntry);
       free(fileName);
       free(handle);
+      printDebugString(__func__);
+      printDebugInt(__LINE__);
+      printDebugString(": return NULL\n");
       return NULL;
     }
 
@@ -1704,6 +1730,9 @@ ExFatFileHandle* exFatOpenFile(
       free(fileEntry);
       free(fileName);
       free(handle);
+      printDebugString(__func__);
+      printDebugInt(__LINE__);
+      printDebugString(": return NULL\n");
       return NULL;
     }
   } else if (result != EXFAT_SUCCESS) {
@@ -1711,6 +1740,9 @@ ExFatFileHandle* exFatOpenFile(
     free(fileEntry);
     free(fileName);
     free(handle);
+    printDebugString(__func__);
+    printDebugInt(__LINE__);
+    printDebugString(": return NULL\n");
     return NULL;
   }
 
@@ -1723,6 +1755,9 @@ ExFatFileHandle* exFatOpenFile(
     free(fileEntry);
     free(fileName);
     free(handle);
+    printDebugString(__func__);
+    printDebugInt(__LINE__);
+    printDebugString(": return NULL\n");
     return NULL;  // Cannot open read-only file for writing
   }
 
