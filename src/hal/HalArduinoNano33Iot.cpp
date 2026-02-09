@@ -336,6 +336,11 @@ int arduinoNano33IotWriteDio(int dio, bool high) {
 /// configured.
 static bool globalSpiConfigured = false;
 
+/// @var globalSpiInUse
+///
+/// @brief Whether or not the Arduino's SPI interface is currently in use.
+static bool globalSpiInUse = false;
+
 /// @var arduinoSpiDevices
 ///
 /// @brief Array of structures that will hold the information about SPI
@@ -351,9 +356,10 @@ static bool globalSpiConfigured = false;
 /// So, the maximum number of devcies we can support is the number of DIO pins
 /// minus 5.
 static struct ArduinoNano33IotSpi {
-  bool    configured;         // Will default to false
-  uint8_t chipSelect;
-  bool    transferInProgress; // Will default to false
+  bool     configured;         // Will default to false
+  uint8_t  chipSelect;
+  bool     transferInProgress; // Will default to false
+  uint32_t mbps;
 } arduinoSpiDevices[NUM_DIO_PINS - 5] = {};
 
 /// @var numArduinoSpis
@@ -363,7 +369,7 @@ static const int numArduinoSpis
   = sizeof(arduinoSpiDevices) / sizeof(arduinoSpiDevices[0]);
 
 int arduinoNano33IotInitSpiDevice(int spi,
-  uint8_t cs, uint8_t sck, uint8_t copi, uint8_t cipo
+  uint8_t cs, uint8_t sck, uint8_t copi, uint8_t cipo, uint32_t mbps
 ) {
   if ((spi < 0) || (spi >= numArduinoSpis)) {
     // Outside the limit of the devices we support.
@@ -386,8 +392,8 @@ int arduinoNano33IotInitSpiDevice(int spi,
   
   if (globalSpiConfigured == false) {
     // Set up SPI at the default speed.
-    SPI.begin();
     globalSpiConfigured = true;
+    SPI.begin();
   }
   
   // Configure the chip select DIO for output.
@@ -397,6 +403,7 @@ int arduinoNano33IotInitSpiDevice(int spi,
   
   // Configure our internal metadata for the device.
   arduinoSpiDevices[spi].chipSelect = cs;
+  arduinoSpiDevices[spi].mbps = mbps;
   arduinoSpiDevices[spi].configured = true;
   
   return 0;
@@ -408,10 +415,20 @@ int arduinoNano33IotStartSpiTransfer(int spi) {
   ) {
     // Outside the limit of the devices we support.
     return -ENODEV;
+  } else if (globalSpiInUse == true) {
+    return -EBUSY;
   }
+  
+  // Mark the interface in use.
+  globalSpiInUse = true;
   
   // Select the chip select pin.
   arduinoNano33IotWriteDio(arduinoSpiDevices[spi].chipSelect, 0);
+  
+  // Begin the transaction
+  SPI.beginTransaction(SPISettings(arduinoSpiDevices[spi].mbps,
+    MSBFIRST, SPI_MODE0));
+  
   arduinoSpiDevices[spi].transferInProgress = true;
   
   return 0;
@@ -425,12 +442,19 @@ int arduinoNano33IotEndSpiTransfer(int spi) {
     return -ENODEV;
   }
   
+  arduinoSpiDevices[spi].transferInProgress = false;
+  
+  // End the transaction.
+  SPI.endTransaction();
+  
   // Deselect the chip select pin.
   arduinoNano33IotWriteDio(arduinoSpiDevices[spi].chipSelect, 1);
   for (int ii = 0; ii < 8; ii++) {
     SPI.transfer(0xFF); // 8 clock pulses
   }
-  arduinoSpiDevices[spi].transferInProgress = false;
+  
+  // Mark the interface not in use.
+  globalSpiInUse = false;
   
   return 0;
 }

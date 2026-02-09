@@ -207,11 +207,15 @@ typedef struct Hal {
   /// @brief Initialize a SPI device on the system.
   ///
   /// @param spi The zero-based index of the SPI device to initialize.
-  /// @param chipSelect The DIO to use as the chip-select line.
+  /// @param cs The DIO to use as the chip-select line.
+  /// @param sck The DIO to use as the clock line.
+  /// @param copi The DIO to use as the COPI line.
+  /// @param cipo The DIO to use as the CIPO line.
+  /// @param mbps The speed, in megabits per second, the SPI is to run at.
   ///
   /// @return Returns 0 on success, -errno on failure.
   int (*initSpiDevice)(int spi,
-    uint8_t cs, uint8_t sck, uint8_t copi, uint8_t cipo);
+    uint8_t cs, uint8_t sck, uint8_t copi, uint8_t cipo, uint32_t mbps);
   
   /// @fn int startSpiTransfer(int spi)
   ///

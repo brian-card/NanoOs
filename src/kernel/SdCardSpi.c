@@ -125,7 +125,8 @@ int sdSpiCardInit(SdCardSpiArgs *sdCardSpiArgs) {
     sdCardSpiArgs->spiCsDio,
     sdCardSpiArgs->spiSckDio,
     sdCardSpiArgs->spiCopiDio,
-    sdCardSpiArgs->spiCipoDio
+    sdCardSpiArgs->spiCipoDio,
+    4000000
   );
   if (initStatus != 0) {
     // Just pass the error upward.
