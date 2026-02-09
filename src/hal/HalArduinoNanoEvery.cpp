@@ -238,7 +238,7 @@ static struct ArduinoNanoEverySpi {
   bool     configured;         // Will default to false
   uint8_t  chipSelect;
   bool     transferInProgress; // Will default to false
-  uint32_t mbps;
+  uint32_t baud;
 } arduinoSpiDevices[NUM_DIO_PINS - 5] = {};
 
 /// @var numArduinoSpis
@@ -248,7 +248,7 @@ static const int numArduinoSpis
   = sizeof(arduinoSpiDevices) / sizeof(arduinoSpiDevices[0]);
 
 int arduinoNanoEveryInitSpiDevice(int spi,
-  uint8_t cs, uint8_t sck, uint8_t copi, uint8_t cipo, uint32_t mbps
+  uint8_t cs, uint8_t sck, uint8_t copi, uint8_t cipo, uint32_t baud
 ) {
   if ((spi < 0) || (spi >= numArduinoSpis)) {
     // Outside the limit of the devices we support.
@@ -282,7 +282,7 @@ int arduinoNanoEveryInitSpiDevice(int spi,
   
   // Configure our internal metadata for the device.
   arduinoSpiDevices[spi].chipSelect = cs;
-  arduinoSpiDevices[spi].mbps = mbps;
+  arduinoSpiDevices[spi].baud = baud;
   arduinoSpiDevices[spi].configured = true;
   
   return 0;
@@ -305,7 +305,7 @@ int arduinoNanoEveryStartSpiTransfer(int spi) {
   arduinoNanoEveryWriteDio(arduinoSpiDevices[spi].chipSelect, 0);
   
   // Begin the transaction
-  SPI.beginTransaction(SPISettings(arduinoSpiDevices[spi].mbps,
+  SPI.beginTransaction(SPISettings(arduinoSpiDevices[spi].baud,
     MSBFIRST, SPI_MODE0));
   
   arduinoSpiDevices[spi].transferInProgress = true;

@@ -238,14 +238,14 @@ int posixWriteDio(int dio, bool high) {
 }
 
 int posixInitSpiDevice(int spi,
-  uint8_t cs, uint8_t sck, uint8_t copi, uint8_t cipo, uint32_t mbps
+  uint8_t cs, uint8_t sck, uint8_t copi, uint8_t cipo, uint32_t baud
 ) {
   (void) spi;
   (void) cs;
   (void) sck;
   (void) copi;
   (void) cipo;
-  (void) mbps;
+  (void) baud;
   
   return -ENOSYS;
 }
