@@ -421,20 +421,48 @@ typedef struct ReallocMessage {
   int responseType;
 } ReallocMessage;
 
+/// @struct MemNode
+///
+/// @brief Metadata for a single block of memory managed by the memory manager.
+///
+/// @param next Pointer to the next block of memory in the list.
+/// @param prev Pointer to the previous block of memory in the list.
+/// @param numChunks The number of chunks in this block of memory.
+/// @param owner The TaskId of the owner of this block of memory.
+typedef struct MemNode {
+  struct MemNode *next;
+  struct MemNode *prev;
+  uint8_t         numChunks;
+  TaskId          owner;
+} MemNode;
+
 /// @struct MemoryManagerState
 ///
 /// @brief State metadata the memory manager task uses for allocations and
 /// deallocations.
 ///
-/// @param mallocNext A pointer to the next free piece of memory.
-/// @param mallocStart The numeric value of the first address available to
-///   allocate memory from.
-/// @param mallocEnd The numeric value of the last address available to allocate
-///   memory from.
+/// @param start Address of the first byte of memory managed by the memory
+///   manager.
+/// @param end Address of the last byte of memory managed by the memory
+///   manager.
+/// @param totalMemory The total number of bytes managed by the memory manager.
+/// @param bytesPerChunk The number of bytes that each chunk of memory
+///   represents.
+/// @param firstFree Pointer to the MemNode that represents the first free
+///   block of memory managed by the memory manager.
+/// @param lastFree Pointer to the MemNode that represents the last free block
+///   of memory managed by the memory manager.  This block will always hold all
+///   of the remaining non-fragmented memory.
+/// @param allocated Pointer to the MemNode that represents the first allocated
+///   block of memory managed by the memory manager.
 typedef struct MemoryManagerState {
-  char *mallocNext;
-  uintptr_t mallocStart;
-  uintptr_t mallocEnd;
+  uintptr_t start;
+  uintptr_t end;
+  size_t    totalMemory;
+  size_t    bytesPerChunk;
+  MemNode  *firstFree;
+  MemNode  *lastFree;
+  MemNode  *allocated;
 } MemoryManagerState;
 
 /// @struct User

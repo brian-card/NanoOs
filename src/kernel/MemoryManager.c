@@ -39,22 +39,6 @@
 
 /****************** Begin Custom Memory Management Functions ******************/
 
-/// @struct MemNode
-///
-/// @brief Metadata that's placed right before the memory pointer that's
-/// returned by one one of the memory allocation functions.  These nodes are
-/// used when the pointer is deallocated.
-///
-/// @param prev A pointer to the previous MemNode.
-/// @param size The number of bytes allocated for this node.
-/// @param owner The PID of the task that owns the memory (which is not
-///   necessarily the task that allocated it).
-typedef struct MemNode {
-  struct MemNode *prev;
-  uint16_t        size;
-  TaskId          owner;
-} MemNode;
-
 /// @def memNode
 ///
 /// @brief Get a pointer to the MemNode for a memory address.
@@ -66,15 +50,18 @@ typedef struct MemNode {
 /// @brief Retrieve the size of a block of dynamic memory.  This information is
 /// stored sizeof(MemNode) bytes before the pointer.
 #define sizeOfMemory(ptr) \
-  (((ptr) != NULL) ? memNode(ptr)->size : 0)
+  (((ptr) != NULL) ? \
+    ((uint32_t) memNode(ptr)->numChunks) * memoryManagerState->bytesPerChunk \
+    : 0 \
+  )
 
 /// @def isDynamicPointer
 ///
 /// @brief Determine whether or not a pointer was allocated from the allocators
 /// in this library.
 #define isDynamicPointer(ptr) \
-  ((((uintptr_t) (ptr)) <= memoryManagerState->mallocStart) \
-    && (((uintptr_t) (ptr)) >= memoryManagerState->mallocEnd))
+  ((((uintptr_t) (ptr)) >= memoryManagerState->start) \
+    && (((uintptr_t) (ptr)) <= memoryManagerState->end))
 
 #ifdef __cplusplus
 extern "C"
@@ -92,28 +79,60 @@ extern "C"
 ///
 /// @return This function always succeeds and returns no value.
 void localFree(MemoryManagerState *memoryManagerState, void *ptr) {
-  char *charPointer = (char*) ptr;
-  
   if (isDynamicPointer(ptr)) {
     // This is memory that was previously allocated from one of our allocators.
     
-    // Check the size of the memory in case someone tries to free the same
-    // pointer more than once.
-    if (sizeOfMemory(ptr) > 0) {
-      // Clear out the size and owner.
-      memNode(charPointer)->size = 0;
-      memNode(charPointer)->owner = TASK_ID_NOT_SET;
-      
-      if (charPointer == memoryManagerState->mallocNext) {
-        // Special case.  The value being freed is the last one that was
-        // allocated.  Do memory compaction.
-        for (MemNode *cur = memNode(ptr);
-          (cur != NULL) && (cur->size == 0);
-          cur = cur->prev
-        ) {
-          memoryManagerState->mallocNext = (char*) &cur->prev[1];
-        }
+    // Splice out memNode from the allocated list.
+    MemNode *memNode = memNode(ptr);
+    if (memNode->prev != NULL) {
+      memNode->prev->next = memNode->next;
+    }
+    if (memNode->next != NULL) {
+      memNode->next->prev = memNode->prev;
+    }
+    if (memoryManagerState->allocated == memNode) {
+      memoryManagerState->allocated = memNode->next;
+    }
+    
+    // Put the memNode in the right place in the free list.
+    MemNode *cur = memoryManagerState->lastFree;
+    while (((uintptr_t) cur->prev) > ((uintptr_t) memNode)) {
+      cur = cur->prev;
+    }
+    
+    memNode->next = cur;
+    memNode->prev = cur->prev;
+    
+    size_t numBytes
+      = ((size_t) memNode->numChunks) * memoryManagerState->bytesPerChunk;
+    MemNode *next
+      = (MemNode*) (((uint8_t*) memNode) + numBytes + sizeof(MemNode));
+    
+    if (next != cur) {
+      cur->prev = memNode;
+    } else {
+      // Do memory compaction between memNode and cur.
+      memNode->numChunks += cur->numChunks;
+      memNode->next = cur->next;
+      if (memoryManagerState->lastFree == cur) {
+        memoryManagerState->lastFree = memNode;
       }
+    }
+    
+    if (memNode->prev != NULL) {
+      MemNode *prev = memNode->prev;
+      numBytes = ((size_t) prev->numChunks) * memoryManagerState->bytesPerChunk;
+      next = (MemNode*) (((uint8_t*) prev) + numBytes + sizeof(MemNode));
+      
+      if (next != memNode) {
+        prev->next = memNode;
+      } else {
+        // Do memory compaction between prev and memNode.
+        prev->numChunks += memNode->numChunks;
+        prev->next = memNode->next;
+      }
+    } else {
+      memoryManagerState->firstFree = memNode;
     }
   } // else this is not something we can free.  Ignore it.
   
@@ -121,43 +140,32 @@ void localFree(MemoryManagerState *memoryManagerState, void *ptr) {
 }
 
 /// @fn void localFreeTaskMemory(
-///   MemoryManagerState *memoryManagerState, TaskId pid)
+///   MemoryManagerState *memoryManagerState, TaskId taskId)
 ///
 /// @brief Free *ALL* the memory owned by a task given its task ID.
 ///
 /// @param memoryManagerState A pointer to the MemoryManagerState
 ///   structure that holds the values used for memory allocation and
 ///   deallocation.
-/// @param pid The ID of the task to free the memory of.
+/// @param taskIUd The ID of the task to free the memory of.
 ///
 /// @return This function always succeeds and returns no value.
 void localFreeTaskMemory(
-  MemoryManagerState *memoryManagerState, TaskId pid
+  MemoryManagerState *memoryManagerState, TaskId taskId
 ) {
-  void *ptr = memoryManagerState->mallocNext;
-  
-  // We have to do two passes.  First pass:  Set the size of all the pointers
-  // allocated by the task to zero and the pid to TASK_ID_NOT_SET.
-  for (MemNode *cur = memNode(ptr); cur != NULL; cur = cur->prev) {
-    if (cur->owner == pid) {
+  for (MemNode *cur = memoryManagerState->allocated; cur != NULL; ) {
+    MemNode *next = cur->next;
+    if (cur->owner == taskId) {
       localFree(memoryManagerState, &cur[1]);
     }
-  }
-  
-  // Second pass, move memoryManagerState->mallocNext back until we hit
-  // something that's allocated.
-  for (MemNode *cur = memNode(ptr); cur != NULL; cur = cur->prev) {
-    if (cur->size != 0) {
-      break;
-    }
-    memoryManagerState->mallocNext = (char*) &cur->prev[1];
+    cur = next;
   }
   
   return;
 }
 
 /// @fn void* localRealloc(MemoryManagerState *memoryManagerState,
-///   void *ptr, size_t size, TaskId pid)
+///   void *ptr, size_t size, TaskId taskId)
 ///
 /// @brief Reallocate a provided pointer to a new size.
 ///
@@ -168,18 +176,13 @@ void localFreeTaskMemory(
 ///   is NULL, new memory will be allocated.
 /// @param size The new size desired for the memory block at ptr.  If this value
 ///   is 0, the provided pointer will be freed.
-/// @param pid The ID of the task making the request.
+/// @param taskId The ID of the task making the request.
 ///
 /// @return Returns a pointer to size-adjusted memory on success, NULL on
 /// failure or on free.
 void* localRealloc(MemoryManagerState *memoryManagerState,
-  void *ptr, size_t size, TaskId pid
+  void *ptr, size_t size, TaskId taskId
 ) {
-  size += 7;
-  size &= ~((size_t) 7);
-  char *charPointer = (char*) ptr;
-  char *returnValue = NULL;
-  
   if (size == 0) {
     // In this case, there's no point in going through any path below.  Just
     // free it, return NULL, and be done with it.
@@ -187,42 +190,49 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
     return NULL;
   }
   
+  // We need to fix the size to be aligned with our memory model.
+  size_t numChunks = (size + (memoryManagerState->bytesPerChunk - 1))
+    / memoryManagerState->bytesPerChunk;
+  size = numChunks * memoryManagerState->bytesPerChunk;
+  
+  void *returnValue = NULL;
+  char *charPointer = (char*) ptr;
+  MemNode *next = NULL;
   if (isDynamicPointer(ptr)) {
     // This pointer was allocated from our allocators.
-    if (size <= sizeOfMemory(ptr)) {
+    MemNode *memNode = memNode(ptr);
+    size_t oldSize = sizeOfMemory(ptr);
+    next = (MemNode*) (charPointer + oldSize);
+    
+    if (size <= oldSize) {
       // We're fitting into a block that's larger than or equal to the size
       // being requested.  *DO NOT* update the size in this case.  Just
       // return the current pointer.
       return ptr;
-    } else if (charPointer == memoryManagerState->mallocNext) {
-      // The pointer we're reallocating is the last one allocated.  We have
-      // an opportunity to just extend the existing block of memory instead
-      // of allocating an entirely new block.
-      if ((uintptr_t) (charPointer - size - sizeof(MemNode)
-          + memNode(charPointer)->size)
-        >= memoryManagerState->mallocEnd
-      ) {
-        size_t oldSize = memNode(ptr)->size;
-        returnValue = charPointer - size + memNode(charPointer)->size;
-        memNode(returnValue)->size = size;
-        memNode(returnValue)->prev = memNode(charPointer)->prev;
-        memNode(returnValue)->owner = memNode(charPointer)->owner;
-        // Copy the contents of the old block to the new one.
-        size_t ii = 0;
-        for (char *newPointer = returnValue, *oldPointer = charPointer;
-          ii < oldSize;
-          newPointer++, oldPointer++
-        ) {
-          *newPointer = *oldPointer;
-          ii++;
+    } else if (next == memoryManagerState->lastFree) {
+      // We're being asked to extend the last block that was allocated.  Just
+      // extend it if we have enough space.
+      if ((memNode->numChunks + next->numChunks) >= numChunks) {
+        next = (MemNode*) (charPointer + size);
+        next->prev = memoryManagerState->lastFree->prev;
+        next->next = NULL;
+        if (next->prev != NULL) {
+          next->prev->next = next;
         }
-        // Update memoryManagerState->mallocNext with the new last pointer.
-        memoryManagerState->mallocNext = returnValue;
-        return returnValue;
-      } else {
-        // Out of memory.  Fail the request.
-        return NULL;
+        // Reduce the free space by the delta between how much we were requested
+        // and how much used to be managed by this node.
+        next->numChunks = memoryManagerState->lastFree->numChunks
+          - (numChunks - memNode->numChunks);
+        memNode->numChunks = numChunks;
+        if (memoryManagerState->firstFree == memoryManagerState->lastFree) {
+          memoryManagerState->firstFree = next;
+        }
+        memoryManagerState->lastFree = next;
+        return ptr;
       }
+      
+      // If we made it this far then we don't have enough memory to grant the
+      // request at the end of memory.  Fall through to the logic below.
     }
   } else if (ptr != NULL) {
     // We're being asked to reallocate a pointer that was *NOT* allocated by
@@ -230,17 +240,50 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
     return NULL;
   }
   
-  // We're allocating new memory.
-  if ((((uintptr_t) (
-      memoryManagerState->mallocNext - size - sizeof(MemNode))
-    ) >= memoryManagerState->mallocEnd)
-  ) {
-    returnValue = memoryManagerState->mallocNext - size - sizeof(MemNode);
-    memNode(returnValue)->size = size;
-    memNode(returnValue)->owner = pid;
-    memNode(returnValue)->prev = memNode(memoryManagerState->mallocNext);
-    memoryManagerState->mallocNext -= size + sizeof(MemNode);
-  } // else we don't have enough memory left to satisfy the request.
+  // We're allocating new memory.  Search from the beginning.
+  MemNode *cur = NULL;
+  for (cur = memoryManagerState->firstFree; cur != NULL; cur = cur->next) {
+    if (cur->numChunks >= numChunks) {
+      break;
+    }
+  }
+  
+  if (cur != NULL) {
+    // Memory allocation has succeeded.
+    returnValue = &cur[1];
+    charPointer = (char*) returnValue;
+    next = (MemNode*) (charPointer + size);
+    
+    // Update the links on the next pointer.
+    next->prev = cur->prev;
+    if (next->prev != NULL) {
+      next->prev->next = next;
+    }
+    next->next = cur->next;
+    if (next->next != NULL) {
+      next->next->prev = next;
+    }
+    
+    // Reduce the free space by the delta between how much we were requested
+    // and how much used to be managed by this node.
+    next->numChunks = cur->numChunks - numChunks;
+    cur->numChunks = numChunks;
+    
+    // Update the first and last pointers.
+    if (cur == memoryManagerState->firstFree) {
+      memoryManagerState->firstFree = next;
+    }
+    if (cur == memoryManagerState->lastFree) {
+      memoryManagerState->lastFree = next;
+    }
+    
+    // Move cur to the allocated list.
+    cur->next = memoryManagerState->allocated;
+    cur->prev = NULL;
+    
+    // Set the owner for the memory.
+    cur->owner = taskId;
+  }
   
   if ((returnValue != NULL) && (ptr != NULL)) {
     // Because of the logic above, we're guaranteed that this means that the
@@ -289,7 +332,7 @@ int memoryManagerReallocCommandHandler(
   reallocMessage->ptr = clientReturnValue;
   reallocMessage->size = 0;
   if (clientReturnValue != NULL) {
-    reallocMessage->size = memNode(clientReturnValue)->size;
+    reallocMessage->size = sizeOfMemory(clientReturnValue);
   }
   
   TaskDescriptor *from = taskMessageFrom(incoming);
@@ -363,8 +406,14 @@ int memoryManagerGetFreeMemoryCommandHandler(
   int returnValue = 0;
   
   TaskDescriptor *from = taskMessageFrom(incoming);
-  uintptr_t dynamicMemorySize = (uintptr_t) memoryManagerState->mallocNext
-    - memoryManagerState->mallocEnd + sizeof(void*);
+  size_t dynamicMemorySize = 0;
+  for (MemNode *cur = memoryManagerState->firstFree;
+    cur != NULL;
+    cur = cur->next
+  ) {
+    dynamicMemorySize
+      += ((size_t) cur->numChunks) * memoryManagerState->bytesPerChunk;
+  }
   
   // We need to mark waiting as true here so that taskMessageSetDone signals the
   // client side correctly.
@@ -403,8 +452,8 @@ int memoryManagerFreeTaskMemoryCommandHandler(
   int returnValue = 0;
   NanoOsMessage *nanoOsMessage = (NanoOsMessage*) taskMessageData(incoming);
   if (taskId(taskMessageFrom(incoming)) == NANO_OS_SCHEDULER_TASK_ID) {
-    TaskId pid = nanoOsMessageDataValue(incoming, TaskId);
-    localFreeTaskMemory(memoryManagerState, pid);
+    TaskId taskId = nanoOsMessageDataValue(incoming, TaskId);
+    localFreeTaskMemory(memoryManagerState, taskId);
     nanoOsMessage->data = 0;
   } else {
     printString(
@@ -487,14 +536,14 @@ int memoryManagerDumpMemoryAllocations(
   int returnValue = 0;
   
   printString("Outstanding allocations:\n");
-  for (MemNode *cur = memNode(memoryManagerState->mallocNext);
+  for (MemNode *cur = memoryManagerState->allocated;
     cur != NULL;
-    cur = cur->prev
+    cur = cur->next
   ) {
     printString("  0x");
     printHex(&cur[1]);
     printString(": ");
-    printInt(cur->size);
+    printInt(((size_t) cur->numChunks) * memoryManagerState->bytesPerChunk);
     printString(" bytes owned by ");
     printInt(cur->owner);
     printString("\n");
@@ -574,49 +623,30 @@ void handleMemoryManagerMessages(MemoryManagerState *memoryManagerState) {
 void initializeGlobals(MemoryManagerState *memoryManagerState,
   jmp_buf returnBuffer, char *stack
 ) {
-  // The buffer needs to be 64-bit aligned, so we need to use a 64-bit pointer
+  // The buffer needs to be machine-width aligned, so we need to use a pointer
   // as the placeholder value.  This ensures that the compiler puts it at a
   // valid (aligned) address.
-  char *mallocBufferStart = NULL;
+  char *mallocBufferEnd = NULL;
   
-  // We want to grab as much memory as we can support for the memory manager.
-  // Get the delta between the address of mallocBufferStart and the end of
-  // memory.
-  mallocBufferStart = (char*) ((uintptr_t) HAL->bottomOfStack());
-  uintptr_t memorySize
-    = (((uintptr_t) &mallocBufferStart)
-    - ((uintptr_t) mallocBufferStart));
-  memorySize &= ((uintptr_t) ~7);
-
-  printDebugString("mallocBufferStart = ");
-  printDebugInt((uintptr_t) mallocBufferStart);
-  printDebugString("\n");
-
-  printDebugString("&mallocBufferStart = ");
-  printDebugInt((uintptr_t) &mallocBufferStart);
-  printDebugString("\n");
-
-  printDebugString("memorySize = ");
-  printDebugInt(memorySize);
-  printDebugString("\n");
+  // Set up the memory manager's state.
+  memoryManagerState->start = (uintptr_t) HAL->bottomOfStack();
+  memoryManagerState->end = (uintptr_t) &mallocBufferEnd;
+  memoryManagerState->totalMemory
+    = ((size_t) memoryManagerState->end) - ((size_t) memoryManagerState->start);
+  memoryManagerState->allocated = NULL;
+  memoryManagerState->firstFree = (MemNode*) memoryManagerState->start;
+  memoryManagerState->lastFree = memoryManagerState->firstFree;
+  size_t divisor = 1 << (sizeof(memoryManagerState->firstFree->numChunks) * 8);
+  size_t bytesPerChunk = memoryManagerState->totalMemory / divisor;
+  memoryManagerState->bytesPerChunk
+    = (bytesPerChunk + (sizeof(size_t) - 1)) & ~(sizeof(size_t) - 1);
   
-  // To allocate mallocBufferStart, we had to decrement the stack pointer by at
-  // least sizeof(mallocBufferStart) bytes first.  So, the true beginning of our
-  // buffer is not at the address of mallocBufferStart but that address plus
-  // sizeof(mallocBufferStart);
-  memoryManagerState->mallocNext
-    = ((char*) &mallocBufferStart) + sizeof(mallocBufferStart);
-  memNode(memoryManagerState->mallocNext)->prev = NULL;
-  memoryManagerState->mallocStart
-    = (uintptr_t) memoryManagerState->mallocNext;
-  
-  // The value at memNode(memoryManagerState->mallocNext)->size needs to be
-  // non-zero in order for the memory compaction algorithm in localFree to work
-  // properly.
-  memoryManagerState->mallocEnd
-    = ((uintptr_t) memoryManagerState->mallocStart) - memorySize;
-  memNode(memoryManagerState->mallocNext)->size = memorySize;
-  memNode(memoryManagerState->mallocNext)->owner = TASK_ID_NOT_SET;
+  // Setup the first node in the free list.
+  memoryManagerState->firstFree->next = NULL;
+  memoryManagerState->firstFree->prev = NULL;
+  memoryManagerState->firstFree->numChunks
+    = memoryManagerState->totalMemory / memoryManagerState->bytesPerChunk;
+  memoryManagerState->firstFree->owner = TASK_ID_NOT_SET;
   
   printDebugString("Leaving initializeGlobals in MemoryManager.c\n");
   longjmp(returnBuffer, (int) ((intptr_t) stack));
@@ -711,7 +741,7 @@ void* runMemoryManager(void *args) {
   MemoryManagerState memoryManagerState;
   TaskMessage *schedulerMessage = NULL;
   jmp_buf returnBuffer;
-  uintptr_t dynamicMemorySize = 0;
+  size_t dynamicMemorySize = 0;
   if (setjmp(returnBuffer) == 0) {
     allocateMemoryManagerStack(&memoryManagerState, returnBuffer,
       HAL->memoryManagerStackSize(MEMORY_MANAGER_DEBUG), NULL);
@@ -719,8 +749,8 @@ void* runMemoryManager(void *args) {
   printDebugString("Returned from allocateMemoryManagerStack.\n");
   
   //// printMemoryManagerState(&memoryManagerState);
-  dynamicMemorySize
-    = memoryManagerState.mallocStart - memoryManagerState.mallocEnd;
+  dynamicMemorySize = memoryManagerState.firstFree->numChunks
+    * memoryManagerState.bytesPerChunk;
   printDebugString("dynamicMemorySize = ");
   printDebugInt(dynamicMemorySize);
   printDebugString("\n");
