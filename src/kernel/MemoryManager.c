@@ -209,8 +209,6 @@ void localFree(MemoryManagerState *memoryManagerState, void *ptr) {
     printDebugString("\n");
   }
   
-  exit(0);
-  
   return;
 }
 
@@ -342,7 +340,9 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
     printDebugString(" bytes available, need ");
     printDebugInt(size);
     printDebugString("\n");
+#ifdef NANO_OS_DEBUG
     msleep(100);
+#endif // NANO_OS_DEBUG
   }
   printDebugString("Memory search complete\n");
   
