@@ -50,10 +50,7 @@
 /// @brief Retrieve the size of a block of dynamic memory.  This information is
 /// stored sizeof(MemNode) bytes before the pointer.
 #define sizeOfMemory(ptr) \
-  (((ptr) != NULL) ? \
-    ((uint32_t) memNode(ptr)->numChunks) * memoryManagerState->bytesPerChunk \
-    : 0 \
-  )
+  (((ptr) != NULL) ? ((uint32_t) memNode(ptr)->size) : 0)
 
 /// @def isDynamicPointer
 ///
@@ -80,13 +77,16 @@ extern "C"
 /// @return This function always succeeds and returns no value.
 void localFree(MemoryManagerState *memoryManagerState, void *ptr) {
   if (isDynamicPointer(ptr)) {
+    MemNode *memNode = memNode(ptr);
+    
     // This is memory that was previously allocated from one of our allocators.
-    printDebugString("Freeing dynamic memory 0x");
+    printDebugString("Freeing ");
+    printDebugInt(memNode->size);
+    printDebugString(" bytes at 0x");
     printDebugHex(ptr);
     printDebugString("\n");
     
     // Splice out memNode from the allocated list.
-    MemNode *memNode = memNode(ptr);
     if (memNode->prev != NULL) {
       printDebugString("Updating memNode->prev->next\n");
       memNode->prev->next = memNode->next;
@@ -120,10 +120,15 @@ void localFree(MemoryManagerState *memoryManagerState, void *ptr) {
     printDebugHex(memNode->prev);
     printDebugString("\n");
     
-    size_t numBytes
-      = ((size_t) memNode->numChunks) * memoryManagerState->bytesPerChunk;
+    printDebugString("Increasing memoryManagerState->bytesFree from ");
+    printDebugInt(memoryManagerState->bytesFree);
+    memoryManagerState->bytesFree += memNode->size;
+    printDebugString(" to ");
+    printDebugInt(memoryManagerState->bytesFree);
+    printDebugString("\n");
+    
     MemNode *next
-      = (MemNode*) (((uint8_t*) memNode) + numBytes + sizeof(MemNode));
+      = (MemNode*) (((uint8_t*) memNode) + memNode->size + sizeof(MemNode));
     
     if (next != cur) {
       printDebugString("next != cur\n");
@@ -137,12 +142,19 @@ void localFree(MemoryManagerState *memoryManagerState, void *ptr) {
       printDebugString("next == cur\n");
       printDebugString("Doing memory compaction\n");
       
-      memNode->numChunks += cur->numChunks;
+      memNode->size += cur->size + sizeof(MemNode);
       memNode->next = cur->next;
       if (memoryManagerState->lastFree == cur) {
         printDebugString("Setting memoryManagerState->lastFree to memNode\n");
         memoryManagerState->lastFree = memNode;
       }
+      
+      printDebugString("Increasing memoryManagerState->bytesFree from ");
+      printDebugInt(memoryManagerState->bytesFree);
+      memoryManagerState->bytesFree += sizeof(MemNode);
+      printDebugString(" to ");
+      printDebugInt(memoryManagerState->bytesFree);
+      printDebugString("\n");
     }
     
     if (memNode->prev != NULL) {
@@ -153,12 +165,7 @@ void localFree(MemoryManagerState *memoryManagerState, void *ptr) {
       printDebugHex(prev);
       printDebugString("\n");
       
-      numBytes = ((size_t) prev->numChunks) * memoryManagerState->bytesPerChunk;
-      printDebugString("numBytes = ");
-      printDebugInt(numBytes);
-      printDebugString("\n");
-      
-      next = (MemNode*) (((uint8_t*) prev) + numBytes + sizeof(MemNode));
+      next = (MemNode*) (((uint8_t*) prev) + prev->size + sizeof(MemNode));
       printDebugString("next = 0x");
       printDebugHex(next);
       printDebugString("\n");
@@ -173,20 +180,26 @@ void localFree(MemoryManagerState *memoryManagerState, void *ptr) {
         printDebugString("next == memNode\n");
         printDebugString("Doing memory compaction\n");
         
-        prev->numChunks += memNode->numChunks;
-        printDebugString("prev->numChunks = ");
-        printDebugInt(prev->numChunks);
+        prev->size += memNode->size + sizeof(MemNode);
+        printDebugString("prev->size = ");
+        printDebugInt(prev->size);
         printDebugString("\n");
         
         prev->next = memNode->next;
         printDebugString("prev->next = 0x");
         printDebugHex(prev->next);
         printDebugString("\n");
+        
+        printDebugString("Increasing memoryManagerState->bytesFree from ");
+        printDebugInt(memoryManagerState->bytesFree);
+        memoryManagerState->bytesFree += sizeof(MemNode);
+        printDebugString(" to ");
+        printDebugInt(memoryManagerState->bytesFree);
+        printDebugString("\n");
       }
     } else {
       printDebugString("memNode->prev == NULL\n");
       printDebugString("Setting memoryManagerState->firstFree to memNode\n");
-      
       memoryManagerState->firstFree = memNode;
     }
   } else {
@@ -195,6 +208,8 @@ void localFree(MemoryManagerState *memoryManagerState, void *ptr) {
     printDebugHex(ptr);
     printDebugString("\n");
   }
+  
+  exit(0);
   
   return;
 }
@@ -248,18 +263,26 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
     // free it, return NULL, and be done with it.
     localFree(memoryManagerState, ptr);
     return NULL;
+  } else if (size > memoryManagerState->bytesFree) {
+    // Sanity test failed.  We're being asked for more memory than is available
+    // in the system.  Fail immediately.
+    printDebugString("Error: Request to allocate ");
+    printDebugInt(size);
+    printDebugString(" bytes, which is more than available memory of ");
+    printDebugInt(memoryManagerState->bytesFree);
+    printDebugString(" bytes\n");
+    return NULL;
   }
   
   // We need to fix the size to be aligned with our memory model.
-  size_t numChunks = (size + (memoryManagerState->bytesPerChunk - 1))
-    / memoryManagerState->bytesPerChunk;
-  size = numChunks * memoryManagerState->bytesPerChunk;
+  size += sizeof(size_t) - 1;
+  size &= ~(sizeof(size_t) - 1);
   
   void *returnValue = NULL;
   char *charPointer = (char*) ptr;
   MemNode *next = NULL;
   if (isDynamicPointer(ptr)) {
-    // This pointer was allocated from our allocators.
+    // This pointer was allocated from our allocator.
     MemNode *memNode = memNode(ptr);
     size_t oldSize = sizeOfMemory(ptr);
     next = (MemNode*) (charPointer + oldSize);
@@ -274,7 +297,7 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
     } else if (next == memoryManagerState->lastFree) {
       // We're being asked to extend the last block that was allocated.  Just
       // extend it if we have enough space.
-      if ((memNode->numChunks + next->numChunks) >= numChunks) {
+      if ((memNode->size + next->size) >= size) {
         printDebugString("Extending last memory block\n");
         next = (MemNode*) (charPointer + size);
         next->prev = memoryManagerState->lastFree->prev;
@@ -284,9 +307,10 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
         }
         // Reduce the free space by the delta between how much we were requested
         // and how much used to be managed by this node.
-        next->numChunks = memoryManagerState->lastFree->numChunks
-          - (numChunks - memNode->numChunks);
-        memNode->numChunks = numChunks;
+        size_t delta = size - memNode->size;
+        memoryManagerState->bytesFree -= delta;
+        next->size = memoryManagerState->lastFree->size - delta;
+        memNode->size = size;
         if (memoryManagerState->firstFree == memoryManagerState->lastFree) {
           memoryManagerState->firstFree = next;
         }
@@ -308,9 +332,17 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
   printDebugString("Allocating new memory, searching from beginning\n");
   MemNode *cur = NULL;
   for (cur = memoryManagerState->firstFree; cur != NULL; cur = cur->next) {
-    if (cur->numChunks >= numChunks) {
+    if (cur->size >= size) {
       break;
     }
+    printDebugString("0x");
+    printDebugHex(cur);
+    printDebugString(" only has ");
+    printDebugInt(cur->size);
+    printDebugString(" bytes available, need ");
+    printDebugInt(size);
+    printDebugString("\n");
+    msleep(100);
   }
   printDebugString("Memory search complete\n");
   
@@ -319,8 +351,8 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
     printDebugString("Found available memory node 0x");
     printDebugHex(cur);
     printDebugString("\n");
-    printDebugString("cur->numChunks = ");
-    printDebugInt(cur->numChunks);
+    printDebugString("cur->size = ");
+    printDebugInt(cur->size);
     printDebugString("\n");
     
     returnValue = &cur[1];
@@ -344,24 +376,32 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
       next->prev->next = next;
     }
     
-    next->next = cur->next;
-    printDebugString("next->next = 0x");
-    printDebugHex(next->next);
-    printDebugString("\n");
-    if (next->next != NULL) {
-      next->next->prev = next;
+    if (next != cur->next) {
+      printDebugString("next != cur->next\n");
+      printDebugString("Updating metadata for next\n");
+      next->next = cur->next;
+      printDebugString("next->next = 0x");
+      printDebugHex(next->next);
+      printDebugString("\n");
+      
+      if (next->next != NULL) {
+        next->next->prev = next;
+      }
+      
+      // Reduce the free space by the delta between how much we were requested
+      // and how much used to be managed by this node.
+      next->size = cur->size - size;
+      printDebugString("next->size = ");
+      printDebugInt(next->size);
+      printDebugString("\n");
+    } else {
+      printDebugString("next == cur->next\n");
+      printDebugString("*NOT* updating metadata for next\n");
     }
     
-    // Reduce the free space by the delta between how much we were requested
-    // and how much used to be managed by this node.
-    next->numChunks = cur->numChunks - numChunks;
-    printDebugString("next->numChunks = ");
-    printDebugInt(next->numChunks);
-    printDebugString("\n");
-    
-    cur->numChunks = numChunks;
-    printDebugString("New cur->numChunks = ");
-    printDebugInt(cur->numChunks);
+    cur->size = size;
+    printDebugString("New cur->size = ");
+    printDebugInt(cur->size);
     printDebugString("\n");
     
     // Update the first and last pointers.
@@ -386,8 +426,22 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
     
     // Set the owner for the memory.
     cur->owner = taskId;
+    
+    // Reduce system memory.
+    printDebugString("Updating memoryManagerState->bytesFree from ");
+    printDebugInt(memoryManagerState->bytesFree);
+    printDebugString(" to ");
+    memoryManagerState->bytesFree -= size;
+    printDebugInt(memoryManagerState->bytesFree);
+    printDebugString("\n");
+    
+    printDebugString("Allocating ");
+    printDebugInt(cur->size);
+    printDebugString(" bytes at 0x");
+    printDebugHex(returnValue);
+    printDebugString("\n");
   } else {
-    printDebugString("Error: could not find memory node with enough space\n");
+    printDebugString("Error: Could not find memory node with enough space\n");
   }
   
   if ((returnValue != NULL) && (ptr != NULL)) {
@@ -512,19 +566,10 @@ int memoryManagerGetFreeMemoryCommandHandler(
   int returnValue = 0;
   
   TaskDescriptor *from = taskMessageFrom(incoming);
-  size_t dynamicMemorySize = 0;
-  for (MemNode *cur = memoryManagerState->firstFree;
-    cur != NULL;
-    cur = cur->next
-  ) {
-    dynamicMemorySize
-      += ((size_t) cur->numChunks) * memoryManagerState->bytesPerChunk;
-  }
-  
   // We need to mark waiting as true here so that taskMessageSetDone signals the
   // client side correctly.
   taskMessageInit(response, MEMORY_MANAGER_RETURNING_FREE_MEMORY,
-    NULL, dynamicMemorySize, true);
+    NULL, memoryManagerState->bytesFree, true);
   if (taskMessageQueuePush(from, response) != taskSuccess) {
     returnValue = -1;
   }
@@ -649,7 +694,7 @@ int memoryManagerDumpMemoryAllocations(
     printString("  0x");
     printHex(&cur[1]);
     printString(": ");
-    printInt(((size_t) cur->numChunks) * memoryManagerState->bytesPerChunk);
+    printInt(cur->size);
     printString(" bytes owned by ");
     printInt(cur->owner);
     printString("\n");
@@ -737,21 +782,20 @@ void initializeGlobals(MemoryManagerState *memoryManagerState,
   // Set up the memory manager's state.
   memoryManagerState->start = (uintptr_t) HAL->bottomOfStack();
   memoryManagerState->end = (uintptr_t) &mallocBufferEnd;
-  memoryManagerState->totalMemory
-    = ((size_t) memoryManagerState->end) - ((size_t) memoryManagerState->start);
+  memoryManagerState->bytesFree
+    = ((size_t) memoryManagerState->end)
+    - ((size_t) memoryManagerState->start)
+    + 1;
+  memoryManagerState->bytesFree &= ~(sizeof(size_t) - 1);
+  memoryManagerState->bytesFree -= sizeof(MemNode);
   memoryManagerState->allocated = NULL;
   memoryManagerState->firstFree = (MemNode*) memoryManagerState->start;
   memoryManagerState->lastFree = memoryManagerState->firstFree;
-  size_t divisor = 1 << (sizeof(memoryManagerState->firstFree->numChunks) * 8);
-  size_t bytesPerChunk = memoryManagerState->totalMemory / divisor;
-  memoryManagerState->bytesPerChunk
-    = (bytesPerChunk + (sizeof(size_t) - 1)) & ~(sizeof(size_t) - 1);
   
   // Setup the first node in the free list.
   memoryManagerState->firstFree->next = NULL;
   memoryManagerState->firstFree->prev = NULL;
-  memoryManagerState->firstFree->numChunks
-    = memoryManagerState->totalMemory / memoryManagerState->bytesPerChunk;
+  memoryManagerState->firstFree->size = memoryManagerState->bytesFree;
   memoryManagerState->firstFree->owner = TASK_ID_NOT_SET;
   
   printDebugString("Leaving initializeGlobals in MemoryManager.c\n");
@@ -847,7 +891,6 @@ void* runMemoryManager(void *args) {
   MemoryManagerState memoryManagerState;
   TaskMessage *schedulerMessage = NULL;
   jmp_buf returnBuffer;
-  size_t dynamicMemorySize = 0;
   if (setjmp(returnBuffer) == 0) {
     allocateMemoryManagerStack(&memoryManagerState, returnBuffer,
       HAL->memoryManagerStackSize(MEMORY_MANAGER_DEBUG), NULL);
@@ -855,13 +898,11 @@ void* runMemoryManager(void *args) {
   printDebugString("Returned from allocateMemoryManagerStack.\n");
   
   //// printMemoryManagerState(&memoryManagerState);
-  dynamicMemorySize = memoryManagerState.firstFree->numChunks
-    * memoryManagerState.bytesPerChunk;
-  printDebugString("dynamicMemorySize = ");
-  printDebugInt(dynamicMemorySize);
+  printDebugString("memoryManagerState.firstFree->size = ");
+  printDebugInt(memoryManagerState.firstFree->size);
   printDebugString("\n");
   printConsoleString("Using ");
-  printConsoleULong(dynamicMemorySize);
+  printConsoleULong(memoryManagerState.firstFree->size);
   printConsoleString(" bytes of dynamic memory.\n");
   releaseConsole();
   

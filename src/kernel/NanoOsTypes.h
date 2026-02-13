@@ -427,12 +427,12 @@ typedef struct ReallocMessage {
 ///
 /// @param next Pointer to the next block of memory in the list.
 /// @param prev Pointer to the previous block of memory in the list.
-/// @param numChunks The number of chunks in this block of memory.
+/// @param size The number of bytes allocated at this pointer.
 /// @param owner The TaskId of the owner of this block of memory.
 typedef struct MemNode {
   struct MemNode *next;
   struct MemNode *prev;
-  uint8_t         numChunks;
+  size_t          size;
   TaskId          owner;
 } MemNode;
 
@@ -445,9 +445,7 @@ typedef struct MemNode {
 ///   manager.
 /// @param end Address of the last byte of memory managed by the memory
 ///   manager.
-/// @param totalMemory The total number of bytes managed by the memory manager.
-/// @param bytesPerChunk The number of bytes that each chunk of memory
-///   represents.
+/// @param bytesFree The total number of bytes available to allocate.
 /// @param firstFree Pointer to the MemNode that represents the first free
 ///   block of memory managed by the memory manager.
 /// @param lastFree Pointer to the MemNode that represents the last free block
@@ -458,8 +456,7 @@ typedef struct MemNode {
 typedef struct MemoryManagerState {
   uintptr_t start;
   uintptr_t end;
-  size_t    totalMemory;
-  size_t    bytesPerChunk;
+  size_t    bytesFree;
   MemNode  *firstFree;
   MemNode  *lastFree;
   MemNode  *allocated;
