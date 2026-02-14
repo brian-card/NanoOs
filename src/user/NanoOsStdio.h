@@ -74,7 +74,7 @@ typedef struct NanoOsFile NanoOsFile;
 /// @brief Print a non-newline-terminated debug message.
 #define startDebugMessage(message) \
   printString("["); \
-  printInt(HAL->getElapsedMilliseconds(0)); \
+  printInt(HAL->getElapsedMicroseconds(0)); \
   printString(" Task "); \
   printInt(getRunningTaskId()); \
   printString(" "); \
