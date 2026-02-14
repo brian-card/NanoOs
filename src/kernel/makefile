@@ -31,7 +31,7 @@ endif
 LDFLAGS = 
 
 # Compiler flags
-CFLAGS = $(CPU) -std=gnu17
+CFLAGS = $(CPU) -std=gnu17 -g -rdynamic
 
 LINKS = \
 

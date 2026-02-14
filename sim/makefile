@@ -27,7 +27,7 @@ ifeq ($(COMPILE),arm-none-eabi-gcc)
 endif
 
 # Compiler flags
-CFLAGS := $(CPU) -std=gnu17
+CFLAGS := $(CPU) -std=gnu17 -g -rdynamic
 
 LINKS := \
 
