@@ -78,7 +78,9 @@ typedef struct NanoOsFile NanoOsFile;
   printString(" Task "); \
   printInt(getRunningTaskId()); \
   printString(" "); \
-  printString((strrchr(__FILE__, '/') + 1)); \
+  printString((strrchr(__FILE__, '/')) \
+    ? (strrchr(__FILE__, '/')  + 1) \
+    : __FILE__); \
   printString(":"); \
   printString(__func__); \
   printString("."); \
