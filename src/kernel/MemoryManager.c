@@ -327,7 +327,9 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
   }
   
   // We're allocating new memory.  Search from the beginning.
-  startDebugMessage("Allocating new memory, searching from beginning\n");
+  startDebugMessage("Allocating ");
+  printDebugInt(size);
+  printDebugString(" bytes, searching from beginning\n");
   MemNode *cur = NULL;
   for (cur = memoryManagerState->firstFree; cur != NULL; cur = cur->next) {
 #ifdef NANO_OS_DEBUG
