@@ -74,15 +74,15 @@ typedef struct NanoOsFile NanoOsFile;
 /// @brief Print a non-newline-terminated debug message.
 #define startDebugMessage(message) \
   printString("["); \
-  printLongLong(HAL->getElapsedMilliseconds(0)); \
+  printInt(HAL->getElapsedMilliseconds(0)); \
   printString(" Task "); \
-  printUInt(coroutineId(getRunningCoroutine())); \
+  printInt(getRunningTaskId()); \
   printString(" "); \
   printString((strrchr(__FILE__, '/') + 1)); \
   printString(":"); \
   printString(__func__); \
   printString("."); \
-  printULong(__LINE__); \
+  printInt(__LINE__); \
   printString("] "); \
   printString(message);
 
