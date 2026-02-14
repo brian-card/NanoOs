@@ -147,9 +147,13 @@ int main(int argc, char **argv) {
   CoroutineConfigOptions coroutineConfigOptions = {
     .stackSize = HAL->processStackSize(),
     .stateData = &coroutineStatePointer,
+    .coroutineYieldCallback = NULL,
     .comutexUnlockCallback = comutexUnlockCallback,
     .coconditionSignalCallback = coconditionSignalCallback,
   };
+  if (HAL->getNumTimers() > 0) {
+    coroutineConfigOptions.coroutineYieldCallback = coroutineYieldCallback;
+  }
   if (coroutineConfig(&_mainCoroutine, &coroutineConfigOptions)
     != coroutineSuccess
   ) {
