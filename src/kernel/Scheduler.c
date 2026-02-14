@@ -3330,6 +3330,8 @@ void runScheduler(SchedulerState *schedulerState) {
       schedulerState->preemptionTimer, 10000000, forceYield);
   }
   taskResume(taskDescriptor, NULL);
+  // No need to call HAL->cancelTimer since that's called by
+  // coroutineYieldCallback if we're running preemptive multitasking.
 
   if (taskRunning(taskDescriptor) == false) {
     schedulerSendNanoOsMessageToTaskId(schedulerState,
