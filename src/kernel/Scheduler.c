@@ -312,6 +312,12 @@ int taskQueueRemove(
 void coroutineYieldCallback(void *stateData, Coroutine *coroutine) {
   (void) coroutine;
   SchedulerState *schedulerState = *((SchedulerState**) stateData);
+  if (schedulerState == NULL) {
+    // We're being called before the scheduler has been started.  This is
+    // sometimes done to fix the stack size of the scheduler itself before
+    // starting it.  Just return.
+    return;
+  }
 
   HAL->cancelTimer(schedulerState->preemptionTimer);
 
