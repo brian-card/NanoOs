@@ -99,6 +99,8 @@ void localFree(MemoryManagerState *memoryManagerState, void *ptr) {
     printDebugInt(memNode->size);
     printDebugString(" bytes at 0x");
     printDebugHex(ptr);
+    printDebugString(" from process ");
+    printDebugInt(memNode->owner);
     printDebugString("\n");
     startDebugMessage("memNode = 0x");
     printDebugHex(memNode);
@@ -862,6 +864,18 @@ int memoryManagerDumpMemoryAllocations(
     printString(" bytes owned by ");
     printInt(cur->owner);
     printString("\n");
+  }
+  
+  printString("Available memory blocks:\n");
+  for (MemNode *cur = memoryManagerState->firstFree;
+    cur != NULL;
+    cur = cur->next
+  ) {
+    printString("  0x");
+    printHex(&cur[1]);
+    printString(": ");
+    printInt(cur->size);
+    printString(" bytes available\n");
   }
   
   taskMessageSetDone(incoming);
