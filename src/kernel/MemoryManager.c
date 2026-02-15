@@ -85,6 +85,9 @@ void localFree(MemoryManagerState *memoryManagerState, void *ptr) {
     printDebugString(" bytes at 0x");
     printDebugHex(ptr);
     printDebugString("\n");
+    startDebugMessage("memNode = 0x");
+    printDebugHex(memNode);
+    printDebugString("\n");
     
     // Splice out memNode from the allocated list.
     if (memNode->prev != NULL) {
@@ -354,7 +357,7 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
     }
 #endif // NANO_OS_DEBUG
     
-    if (cur->size >= size) {
+    if (cur->size >= (size + sizeof(MemNode))) {
       break;
     }
     
@@ -402,7 +405,11 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
     }
     
     if (next != cur->next) {
-      startDebugMessage("next != cur->next\n");
+      startDebugMessage("next (0x");
+      printDebugHex(next);
+      printDebugString(") != cur->next (0x");
+      printDebugHex(cur->next);
+      printDebugString(")\n");
       startDebugMessage("Updating metadata for next\n");
       next->next = cur->next;
       startDebugMessage("next->next = 0x");
@@ -415,7 +422,7 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
       
       // Reduce the free space by the delta between how much we were requested
       // and how much used to be managed by this node.
-      next->size = cur->size - size;
+      next->size = cur->size - size - sizeof(MemNode);
       startDebugMessage("next->size = ");
       printDebugInt(next->size);
       printDebugString("\n");
@@ -462,7 +469,7 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
     startDebugMessage("Updating memoryManagerState->bytesFree from ");
     printDebugInt(memoryManagerState->bytesFree);
     printDebugString(" to ");
-    memoryManagerState->bytesFree -= size;
+    memoryManagerState->bytesFree -= size + sizeof(MemNode);
     printDebugInt(memoryManagerState->bytesFree);
     printDebugString("\n");
     
