@@ -91,6 +91,7 @@ extern "C"
 ///
 /// @return This function always succeeds and returns no value.
 void localFree(MemoryManagerState *memoryManagerState, void *ptr) {
+  startDebugMessage("In localFree\n");
   if (isDynamicPointer(ptr)) {
     MemNode *memNode = memNode(ptr);
     
@@ -358,12 +359,17 @@ void localFreeTaskMemory(
 void* localRealloc(MemoryManagerState *memoryManagerState,
   void *ptr, size_t size, TaskId taskId
 ) {
+  startDebugMessage("In localRealloc\n");
+  // We need to fix the size to be aligned with our memory model.
+  size += sizeof(size_t) - 1;
+  size &= ~(sizeof(size_t) - 1);
+  
   if (size == 0) {
     // In this case, there's no point in going through any path below.  Just
     // free it, return NULL, and be done with it.
     localFree(memoryManagerState, ptr);
     return NULL;
-  } else if (size > memoryManagerState->bytesFree) {
+  } else if ((size + sizeof(MemNode)) > memoryManagerState->bytesFree) {
     // Sanity test failed.  We're being asked for more memory than is available
     // in the system.  Fail immediately.
     startDebugMessage("Error: Request to allocate ");
@@ -373,10 +379,6 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
     printDebugString(" bytes\n");
     return NULL;
   }
-  
-  // We need to fix the size to be aligned with our memory model.
-  size += sizeof(size_t) - 1;
-  size &= ~(sizeof(size_t) - 1);
   
   void *returnValue = NULL;
   char *charPointer = (char*) ptr;
@@ -399,8 +401,9 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
       // extend it if we have enough space.
       if ((memNode->size + next->size) >= size) {
         startDebugMessage("Extending last memory block\n");
+        MemNode lastFree = *memoryManagerState->lastFree;
         next = (MemNode*) (charPointer + size);
-        next->prev = memoryManagerState->lastFree->prev;
+        next->prev = lastFree.prev;
         next->next = NULL;
         if (next->prev != NULL) {
 #ifdef NANO_OS_MEM_DEBUG
@@ -420,7 +423,7 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
         // and how much used to be managed by this node.
         size_t delta = size - memNode->size;
         memoryManagerState->bytesFree -= delta;
-        next->size = memoryManagerState->lastFree->size - delta;
+        next->size = lastFree.size - delta;
         memNode->size = size;
         if (memoryManagerState->firstFree == memoryManagerState->lastFree) {
           memoryManagerState->firstFree = next;
@@ -500,11 +503,21 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
     
     charPointer = (char*) returnValue;
     
-    if (cur->next == NULL) {
+    if (cur->size >= (size + sizeof(MemNode))) {
       // This is the expected case.
       next = (MemNode*) (charPointer + size);
-    } else {
+    } else if (cur->next != NULL) {
       next = cur->next;
+    } else {
+      // cur == memoryManagerState->lastFree and there isn't enough memory left
+      // for the data plus a memory node.  We could get particular about this
+      // and allow for NULL pointers in firstFree and lastFree but I *REALLY*
+      // don't want to add in the code complexity to manage those cases.  We
+      // need this algorithm to be as compact as possible and that adds extra
+      // codespace.  This should be a pretty rare occurrence, so just disallow
+      // it rather than trying to do something fancy.
+      startDebugMessage("Not enough space in memoryManagerState->lastFree\n");
+      return NULL;
     }
     startDebugMessage("next = 0x");
     printDebugHex(next);
@@ -568,6 +581,9 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
     } else {
       startDebugMessage("next == cur->next\n");
       startDebugMessage("*NOT* updating metadata for next\n");
+      // Reduce bytesFree by the delta.
+      memoryManagerState->bytesFree += sizeof(MemNode);
+      memoryManagerState->bytesFree -= (cur->size - size);
     }
     
     cur->size = size;
