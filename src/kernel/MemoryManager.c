@@ -60,6 +60,21 @@
   ((((uintptr_t) (ptr)) >= memoryManagerState->start) \
     && (((uintptr_t) (ptr)) <= memoryManagerState->end))
 
+#ifndef NANO_OS_MEM_DEBUG
+
+// If NANO_OS_MEM_DEBUG isn't defined then we don't want ANY debugging going on
+// here.  Oveerride the debug macros if they were defined by NANO_OS_DEBUG.
+#undef startDebugMessage
+#define startDebugMessage(message) {}
+#undef printDebugString
+#define printDebugString(message) {}
+#undef printDebugInt
+#define printDebugInt(value) {}
+#undef printDebugHex
+#define printDebugHex(value) {}
+
+#endif // NANO_OS_MEM_DEBUG
+
 #ifdef __cplusplus
 extern "C"
 {
