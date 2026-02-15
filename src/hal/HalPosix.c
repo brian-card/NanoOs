@@ -55,7 +55,7 @@
 /// @def PROCESS_STACK_SIZE
 ///
 /// @brief The size, in bytes, of a regular process's stack.
-#define PROCESS_STACK_SIZE (4 * 1024)
+#define PROCESS_STACK_SIZE (8 * 1024)
 
 /// @def MEMORY_MANAGER_STACK_SIZE
 ///
@@ -98,9 +98,9 @@ uintptr_t posixProcessStackSize(void) {
 uintptr_t posixMemoryManagerStackSize(bool debug) {
   if (debug == false) {
     // This is the expected case, so list it first.
-    return MEMORY_MANAGER_STACK_SIZE;
+    return MEMORY_MANAGER_STACK_SIZE * 4;
   } else {
-    return MEMORY_MANAGER_DEBUG_STACK_SIZE;
+    return MEMORY_MANAGER_DEBUG_STACK_SIZE * 4;
   }
 }
 
@@ -214,6 +214,7 @@ ssize_t posixWriteSerialPort(int port,
   
   if ((port >= 0) && (port < _numSerialPorts) && (length >= 0)) {
     numBytesWritten = fwrite(data, 1, length, *serialPorts[port]);
+    fflush(*serialPorts[port]);
   }
   
   return numBytesWritten;
@@ -738,6 +739,47 @@ static Hal posixHal = {
   .cancelAndGetTimer = posixCancelAndGetTimer,
 };
 
+/// @fn void returnToTop(jmp_buf returnBuffer, char *topOfStack)
+///
+/// @brief Return back to the top of the stack via a longjmp.  This function
+/// is really pointless and exists only to make the compiler stop complaining
+/// about infinite recursion.
+///
+/// @param returnBuffer A jmp_buf that contains the context we will jump back
+///   to when the full stack has been allocated.
+/// @param topOfStack A pointer to the beginning of the stack we allocate.
+///
+/// @return This function reeturns no value.
+void returnToTop(jmp_buf returnBuffer, char *topOfStack) {
+  longjmp(returnBuffer, (int) ((intptr_t) topOfStack));
+}
+
+/// @fn void allocateGlobalStack(jmp_buf returnBuffer, char *topOfStack)
+///
+/// @brief Allocate the full stack that the simulator will be able to use.
+/// This forces the host OS's memory manager to allocate all the stack space
+/// up front.
+///
+/// @param returnBuffer A jmp_buf that contains the context we will jump back
+///   to when the full stack has been allocated.
+/// @param topOfStack A pointer to the beginning of the stack we allocate.
+///
+/// @return This function reeturns no value.
+void allocateGlobalStack(jmp_buf returnBuffer, char *topOfStack) {
+  char stack[16384];
+  stack[sizeof(stack) / 2] = '\0';
+  
+  if (topOfStack == NULL) {
+    topOfStack = stack;
+  }
+  
+  if (((uintptr_t) stack) > ((uintptr_t) _bottomOfStack)) {
+    allocateGlobalStack(returnBuffer, topOfStack);
+  }
+  
+  returnToTop(returnBuffer, topOfStack);
+}
+
 const Hal* halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
   fprintf(stdout, "Setting _sdCardDevicePath.\n");
   fflush(stdout);
@@ -755,8 +797,13 @@ const Hal* halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
   
   // Simulate having a total of 64 KB available for dynamic memory.
   _bottomOfStack = (void*) (((uintptr_t) &topOfStack)
-    - ((uintptr_t) (65536 - 11456)));
+    - ((uintptr_t) (65536 * 2)));
   fprintf(stderr, "Bottom of stack     = %p\n", (void*) _bottomOfStack);
+  jmp_buf returnBuffer;
+  if (setjmp(returnBuffer) == 0) {
+    allocateGlobalStack(returnBuffer, NULL);
+  }
+  fprintf(stderr, "Global stack allocated\n");
   
   // The size used in the mmap call has to be large enough to accommodate the
   // size used for the overlay, plus the offset into the overlay.  It also has
