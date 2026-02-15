@@ -211,6 +211,9 @@ void localFree(MemoryManagerState *memoryManagerState, void *ptr) {
       }
 #endif // NANO_OS_MEM_DEBUG
       memNode->next = cur->next;
+      if (memNode->next != NULL) {
+        memNode->next->prev = memNode;
+      }
       if (memoryManagerState->lastFree == cur) {
         startDebugMessage("Setting memoryManagerState->lastFree to memNode\n");
         memoryManagerState->lastFree = memNode;
@@ -277,9 +280,17 @@ void localFree(MemoryManagerState *memoryManagerState, void *ptr) {
         }
 #endif // NANO_OS_MEM_DEBUG
         prev->next = memNode->next;
+        if (prev->next != NULL) {
+          prev->next->prev = prev;
+        }
         startDebugMessage("prev->next = 0x");
         printDebugHex(prev->next);
         printDebugString("\n");
+        
+        if (memoryManagerState->lastFree == memNode) {
+          startDebugMessage("Setting memoryManagerState->lastFree to prev\n");
+          memoryManagerState->lastFree = prev;
+        }
         
         startDebugMessage("Increasing memoryManagerState->bytesFree from ");
         printDebugInt(memoryManagerState->bytesFree);
