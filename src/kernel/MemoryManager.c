@@ -91,6 +91,18 @@ void localFree(MemoryManagerState *memoryManagerState, void *ptr) {
     
     // Splice out memNode from the allocated list.
     if (memNode->prev != NULL) {
+#ifdef NANO_OS_DEBUG
+      MemNode *cur;
+      for (cur = memoryManagerState->allocated; cur != NULL; cur = cur->next) {
+        if (cur == memNode->prev) {
+          break;
+        }
+      }
+      if (cur == NULL) {
+        startDebugMessage("ERROR!!!  memNode->prev is not allocated!!\n");
+        exit(1);
+      }
+#endif // NANO_OS_DEBUG
       startDebugMessage("Updating memNode->prev->next\n");
       memNode->prev->next = memNode->next;
     }
@@ -106,6 +118,17 @@ void localFree(MemoryManagerState *memoryManagerState, void *ptr) {
     // Put the memNode in the right place in the free list.
     startDebugMessage("Searching free list in reverse order\n");
     MemNode *cur = memoryManagerState->lastFree;
+#ifdef NANO_OS_DEBUG
+    if (((uintptr_t) cur) < ((uintptr_t) memNode)) {
+      // This should be impossible.
+      startDebugMessage("ERROR!!! cur (0x");
+      printDebugHex(cur);
+      printDebugString(") < memNode (0x");
+      printDebugHex(memNode);
+      printDebugString(")\n");
+      exit(1);
+    }
+#endif // NANO_OS_DEBUG
     while (((uintptr_t) cur->prev) > ((uintptr_t) memNode)) {
       cur = cur->prev;
     }
@@ -113,6 +136,17 @@ void localFree(MemoryManagerState *memoryManagerState, void *ptr) {
     printDebugHex(cur);
     printDebugString("\n");
     
+#ifdef NANO_OS_DEBUG
+    if (((uintptr_t) cur) < ((uintptr_t) memNode)) {
+      // This should be impossible.
+      startDebugMessage("ERROR!!! cur (0x");
+      printDebugHex(cur);
+      printDebugString(") < memNode (0x");
+      printDebugHex(memNode);
+      printDebugString(")\n");
+      exit(1);
+    }
+#endif // NANO_OS_DEBUG
     memNode->next = cur;
     startDebugMessage("memNode->next = 0x");
     printDebugHex(memNode->next);
@@ -146,6 +180,19 @@ void localFree(MemoryManagerState *memoryManagerState, void *ptr) {
       startDebugMessage("Doing memory compaction\n");
       
       memNode->size += cur->size + sizeof(MemNode);
+#ifdef NANO_OS_DEBUG
+      if ((cur->next != NULL)
+        && (((uintptr_t) cur->next) < ((uintptr_t) memNode))
+      ) {
+        // This should be impossible.
+        startDebugMessage("ERROR!!! cur->next (0x");
+        printDebugHex(cur->next);
+        printDebugString(") < memNode (0x");
+        printDebugHex(memNode);
+        printDebugString(")\n");
+        exit(1);
+      }
+#endif // NANO_OS_DEBUG
       memNode->next = cur->next;
       if (memoryManagerState->lastFree == cur) {
         startDebugMessage("Setting memoryManagerState->lastFree to memNode\n");
@@ -177,6 +224,17 @@ void localFree(MemoryManagerState *memoryManagerState, void *ptr) {
         startDebugMessage("next != memNode\n");
         startDebugMessage("Setting prev->next to memNode\n");
         
+#ifdef NANO_OS_DEBUG
+        if (((uintptr_t) memNode) < ((uintptr_t) prev)) {
+          // This should be impossible.
+          startDebugMessage("ERROR!!! memNode (0x");
+          printDebugHex(memNode);
+          printDebugString(") < prev (0x");
+          printDebugHex(prev);
+          printDebugString(")\n");
+          exit(1);
+        }
+#endif // NANO_OS_DEBUG
         prev->next = memNode;
       } else {
         // Do memory compaction between prev and memNode.
@@ -188,6 +246,19 @@ void localFree(MemoryManagerState *memoryManagerState, void *ptr) {
         printDebugInt(prev->size);
         printDebugString("\n");
         
+#ifdef NANO_OS_DEBUG
+        if ((memNode->next != NULL)
+          && (((uintptr_t) memNode->next) < ((uintptr_t) prev))
+        ) {
+          // This should be impossible.
+          startDebugMessage("ERROR!!! memNode->next (0x");
+          printDebugHex(memNode->next);
+          printDebugString(") < prev (0x");
+          printDebugHex(prev);
+          printDebugString(")\n");
+          exit(1);
+        }
+#endif // NANO_OS_DEBUG
         prev->next = memNode->next;
         startDebugMessage("prev->next = 0x");
         printDebugHex(prev->next);
@@ -304,6 +375,17 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
         next->prev = memoryManagerState->lastFree->prev;
         next->next = NULL;
         if (next->prev != NULL) {
+#ifdef NANO_OS_DEBUG
+          if (((uintptr_t) next) < ((uintptr_t) next->prev)) {
+            // This should be impossible.
+            startDebugMessage("ERROR!!! next (0x");
+            printDebugHex(next);
+            printDebugString(") < next->prev (0x");
+            printDebugHex(next->prev);
+            printDebugString(")\n");
+            exit(1);
+          }
+#endif // NANO_OS_DEBUG
           next->prev->next = next;
         }
         // Reduce the free space by the delta between how much we were requested
@@ -357,7 +439,7 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
     }
 #endif // NANO_OS_DEBUG
     
-    if (cur->size >= (size + sizeof(MemNode))) {
+    if (cur->size >= size) {
       break;
     }
     
@@ -369,7 +451,7 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
     printDebugInt(size);
     printDebugString("\n");
 #ifdef NANO_OS_DEBUG
-    msleep(100);
+    //// msleep(100);
 #endif // NANO_OS_DEBUG
   }
   startDebugMessage("Memory search complete\n");
@@ -390,7 +472,12 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
     
     charPointer = (char*) returnValue;
     
-    next = (MemNode*) (charPointer + size);
+    if (cur->next == NULL) {
+      // This is the expected case.
+      next = (MemNode*) (charPointer + size);
+    } else {
+      next = cur->next;
+    }
     startDebugMessage("next = 0x");
     printDebugHex(next);
     printDebugString("\n");
@@ -401,6 +488,17 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
     printDebugHex(next->prev);
     printDebugString("\n");
     if (next->prev != NULL) {
+#ifdef NANO_OS_DEBUG
+      if (((uintptr_t) next) < ((uintptr_t) next->prev)) {
+        // This should be impossible.
+        startDebugMessage("ERROR!!! next (0x");
+        printDebugHex(next);
+        printDebugString(") < next->prev (0x");
+        printDebugHex(next->prev);
+        printDebugString(")\n");
+        exit(1);
+      }
+#endif // NANO_OS_DEBUG
       next->prev->next = next;
     }
     
@@ -411,6 +509,19 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
       printDebugHex(cur->next);
       printDebugString(")\n");
       startDebugMessage("Updating metadata for next\n");
+#ifdef NANO_OS_DEBUG
+      if ((cur->next != NULL)
+        && (((uintptr_t) cur->next) < ((uintptr_t) next))
+      ) {
+        // This should be impossible.
+        startDebugMessage("ERROR!!! cur->next (0x");
+        printDebugHex(cur->next);
+        printDebugString(") < next (0x");
+        printDebugHex(next);
+        printDebugString(")\n");
+        exit(1);
+      }
+#endif // NANO_OS_DEBUG
       next->next = cur->next;
       startDebugMessage("next->next = 0x");
       printDebugHex(next->next);
