@@ -3151,6 +3151,10 @@ int schedulerRunOverlayCommand(
 
   // Copy over the exec args.
   ExecArgs *execArgs = schedMalloc(sizeof(ExecArgs));
+  if (execArgs == NULL) {
+    returnValue = -ENOMEM;
+    goto exit;
+  }
   execArgs->callingTaskId = taskDescriptor->taskId;
 
   execArgs->pathname = (char*) schedMalloc(strlen(commandPath) + 1);
@@ -3276,6 +3280,7 @@ freeExecArgs:
 
   schedFree(execArgs);
 
+exit:
   return returnValue;
 }
 
