@@ -1801,7 +1801,7 @@ int schedFclose(SchedulerState *schedulerState, FILE *stream) {
   nanoOsMessage->data = (intptr_t) &fcloseParameters;
   taskMessageInit(taskMessage, FILESYSTEM_CLOSE_FILE,
     nanoOsMessage, sizeof(*nanoOsMessage), true);
-  taskResume(
+  taskMessageQueuePush(
     &schedulerState->allTasks[NANO_OS_FILESYSTEM_TASK_ID - 1],
     taskMessage);
 
@@ -1840,7 +1840,7 @@ int schedRemove(SchedulerState *schedulerState, const char *pathname) {
   nanoOsMessage->data = (intptr_t) pathname;
   taskMessageInit(taskMessage, FILESYSTEM_REMOVE_FILE,
     nanoOsMessage, sizeof(*nanoOsMessage), true);
-  taskResume(
+  taskMessageQueuePush(
     &schedulerState->allTasks[NANO_OS_FILESYSTEM_TASK_ID - 1],
     taskMessage);
 
@@ -1892,7 +1892,7 @@ size_t schedFread(SchedulerState *schedulerState,
   nanoOsMessage->data = (intptr_t) &filesystemIoCommandParameters;
   taskMessageInit(taskMessage, FILESYSTEM_READ_FILE,
     nanoOsMessage, sizeof(*nanoOsMessage), true);
-  taskResume(
+  taskMessageQueuePush(
     &schedulerState->allTasks[NANO_OS_FILESYSTEM_TASK_ID - 1],
     taskMessage);
 
@@ -1936,7 +1936,7 @@ size_t schedFwrite(SchedulerState *schedulerState,
   nanoOsMessage->data = (intptr_t) &filesystemIoCommandParameters;
   taskMessageInit(taskMessage, FILESYSTEM_WRITE_FILE,
     nanoOsMessage, sizeof(*nanoOsMessage), true);
-  taskResume(
+  taskMessageQueuePush(
     &schedulerState->allTasks[NANO_OS_FILESYSTEM_TASK_ID - 1],
     taskMessage);
 
@@ -1981,7 +1981,7 @@ char* schedFgets(SchedulerState *schedulerState,
   nanoOsMessage->data = (intptr_t) &filesystemIoCommandParameters;
   taskMessageInit(taskMessage, FILESYSTEM_READ_FILE,
     nanoOsMessage, sizeof(*nanoOsMessage), true);
-  taskResume(
+  taskMessageQueuePush(
     &schedulerState->allTasks[NANO_OS_FILESYSTEM_TASK_ID - 1],
     taskMessage);
 
@@ -2029,7 +2029,7 @@ int schedFputs(SchedulerState *schedulerState,
   nanoOsMessage->data = (intptr_t) &filesystemIoCommandParameters;
   taskMessageInit(taskMessage, FILESYSTEM_WRITE_FILE,
     nanoOsMessage, sizeof(*nanoOsMessage), true);
-  taskResume(
+  taskMessageQueuePush(
     &schedulerState->allTasks[NANO_OS_FILESYSTEM_TASK_ID - 1],
     taskMessage);
 
@@ -3728,6 +3728,7 @@ __attribute__((noinline)) void startScheduler(
       schedRemove(&schedulerState, "hello");
       break;
     }
+    printDebugString("Opened helloFile for reading\n");
 
     char worldString[11] = {0};
     if (schedFgets(&schedulerState,
@@ -3738,6 +3739,7 @@ __attribute__((noinline)) void startScheduler(
       schedRemove(&schedulerState, "hello");
       break;
     }
+    printDebugString("Read data from helloFile into worldString\n");
 
     if (strcmp(worldString, "world") != 0) {
       printDebugString("ERROR: Expected \"world\", read \"");
