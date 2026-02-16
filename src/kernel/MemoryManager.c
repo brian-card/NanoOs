@@ -508,6 +508,7 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
       next = (MemNode*) (charPointer + size);
     } else if (cur->next != NULL) {
       next = cur->next;
+      size = cur->size;
     } else {
       // cur == memoryManagerState->lastFree and there isn't enough memory left
       // for the data plus a memory node.  We could get particular about this
