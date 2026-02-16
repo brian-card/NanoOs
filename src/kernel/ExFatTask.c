@@ -75,17 +75,19 @@ int exFatTaskOpenFileCommandHandler(
     ExFatFileHandle *exFatFile = exFatOpenFile(driverState, pathname, mode);
     if (exFatFile != NULL) {
       nanoOsFile = (NanoOsFile*) malloc(sizeof(NanoOsFile));
-      nanoOsFile->file = exFatFile;
-      nanoOsFile->currentPosition = exFatFile->currentPosition;
-      nanoOsFile->fd = driverState->filesystemState->numOpenFiles + 3;
-      nanoOsFile->owner = taskId(taskMessageFrom(taskMessage));
-      nanoOsFile->next = NULL;
-      driverState->filesystemState->numOpenFiles++;
-      NanoOsFile **prev = &driverState->filesystemState->openFiles;
-      while (*prev != NULL) {
-        prev = &((*prev)->next);
+      if (nanoOsFile != NULL) {
+        nanoOsFile->file = exFatFile;
+        nanoOsFile->currentPosition = exFatFile->currentPosition;
+        nanoOsFile->fd = driverState->filesystemState->numOpenFiles + 3;
+        nanoOsFile->owner = taskId(taskMessageFrom(taskMessage));
+        driverState->filesystemState->numOpenFiles++;
+
+        nanoOsFile->next = driverState->filesystemState->openFiles;
+        nanoOsFile->prev = NULL;
+        driverState->filesystemState->openFiles = nanoOsFile;
+      } else {
+        exFatFclose(driverState, exFatFile);
       }
-      *prev = nanoOsFile;
     }
   }
 
@@ -114,18 +116,22 @@ int exFatTaskCloseFileCommandHandler(
 
   FilesystemFcloseParameters *fcloseParameters
     = nanoOsMessageDataPointer(taskMessage, FilesystemFcloseParameters*);
-  ExFatFileHandle *exFatFile
-    = (ExFatFileHandle*) fcloseParameters->stream->file;
+  NanoOsFile *nanoOsFile = fcloseParameters->stream;
+  ExFatFileHandle *exFatFile = (ExFatFileHandle*) nanoOsFile->file;
   free(fcloseParameters->stream);
   if (driverState->driverStateValid) {
     fcloseParameters->returnValue = exFatFclose(driverState, exFatFile);
     if (driverState->filesystemState->numOpenFiles > 0) {
       driverState->filesystemState->numOpenFiles--;
-      NanoOsFile **prev = &driverState->filesystemState->openFiles;
-      while (*prev != fcloseParameters->stream) {
-        prev = &((*prev)->next);
-      }
-      *prev = (*prev)->next;
+    }
+    if (nanoOsFile->next != NULL) {
+      nanoOsFile->next->prev = nanoOsFile->prev;
+    }
+    if (nanoOsFile->prev != NULL) {
+      nanoOsFile->prev->next = nanoOsFile->next;
+    }
+    if (nanoOsFile == driverState->filesystemState->openFiles) {
+      driverState->filesystemState->openFiles = nanoOsFile->next;
     }
   }
 

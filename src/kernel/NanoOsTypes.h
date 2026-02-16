@@ -129,12 +129,14 @@ typedef intptr_t ssize_t;
 ///
 /// @param file Pointer to the real file metadata.
 /// @param next A pointer to the next open NanoOsFile.
+/// @param prev A pointer to the previous open NanoOsFile.
 /// @param currentPosition The current position within the file.
 /// @param fd The numeric file descriptor for the file.
 /// @param owner The TaskId of the process that owns the file.
 typedef struct NanoOsFile {
   void              *file;
   struct NanoOsFile *next;
+  struct NanoOsFile *prev;
   uint32_t           currentPosition;
   int                fd;
   TaskId             owner;
