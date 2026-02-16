@@ -116,24 +116,23 @@ int exFatTaskCloseFileCommandHandler(
 
   FilesystemFcloseParameters *fcloseParameters
     = nanoOsMessageDataPointer(taskMessage, FilesystemFcloseParameters*);
-  NanoOsFile *nanoOsFile = fcloseParameters->stream;
-  ExFatFileHandle *exFatFile = (ExFatFileHandle*) nanoOsFile->file;
-  free(fcloseParameters->stream);
   if (driverState->driverStateValid) {
-    fcloseParameters->returnValue = exFatFclose(driverState, exFatFile);
+    fcloseParameters->returnValue= exFatFclose(
+      driverState, (ExFatFileHandle*) fcloseParameters->stream->file);
     if (driverState->filesystemState->numOpenFiles > 0) {
       driverState->filesystemState->numOpenFiles--;
     }
-    if (nanoOsFile->next != NULL) {
-      nanoOsFile->next->prev = nanoOsFile->prev;
+    if (fcloseParameters->stream->next != NULL) {
+      fcloseParameters->stream->next->prev = fcloseParameters->stream->prev;
     }
-    if (nanoOsFile->prev != NULL) {
-      nanoOsFile->prev->next = nanoOsFile->next;
+    if (fcloseParameters->stream->prev != NULL) {
+      fcloseParameters->stream->prev->next = fcloseParameters->stream->next;
     }
-    if (nanoOsFile == driverState->filesystemState->openFiles) {
-      driverState->filesystemState->openFiles = nanoOsFile->next;
+    if (fcloseParameters->stream == driverState->filesystemState->openFiles) {
+      driverState->filesystemState->openFiles = fcloseParameters->stream->next;
     }
   }
+  free(fcloseParameters->stream);
 
   taskMessageSetDone(taskMessage);
   return 0;
