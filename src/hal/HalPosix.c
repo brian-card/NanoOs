@@ -55,7 +55,7 @@
 /// @def PROCESS_STACK_SIZE
 ///
 /// @brief The size, in bytes, of a regular process's stack.
-#define PROCESS_STACK_SIZE (8 * 1024)
+#define PROCESS_STACK_SIZE (4 * 1024)
 
 /// @def MEMORY_MANAGER_STACK_SIZE
 ///
@@ -98,9 +98,9 @@ uintptr_t posixProcessStackSize(void) {
 uintptr_t posixMemoryManagerStackSize(bool debug) {
   if (debug == false) {
     // This is the expected case, so list it first.
-    return MEMORY_MANAGER_STACK_SIZE * 4;
+    return MEMORY_MANAGER_STACK_SIZE;
   } else {
-    return MEMORY_MANAGER_DEBUG_STACK_SIZE * 4;
+    return MEMORY_MANAGER_DEBUG_STACK_SIZE;
   }
 }
 
@@ -797,7 +797,7 @@ const Hal* halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
   
   // Simulate having a total of 64 KB available for dynamic memory.
   _bottomOfStack = (void*) (((uintptr_t) &topOfStack)
-    - ((uintptr_t) (65536 * 2)));
+    - ((uintptr_t) (65536 - 11456)));
   fprintf(stderr, "Bottom of stack     = %p\n", (void*) _bottomOfStack);
   jmp_buf returnBuffer;
   if (setjmp(returnBuffer) == 0) {
