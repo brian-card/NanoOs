@@ -120,32 +120,6 @@ void msleep(int durationMs) {
   while (HAL->getElapsedMilliseconds(start) < durationMs);
 }
 
-/// @fn char* nanoOsGetenv(const char *name)
-///
-/// @brief Implementation of the standard C getenv fundtion for NanoOs.
-///
-/// @param name The name of the environment variable to retrive.
-///
-/// @return Returns a pointer to the value of the named environment variable on
-/// success, NULL on failure.
-char* nanoOsGetenv(const char *name) {
-  char **env = HAL->overlayMap()->header.env;
-  if ((name == NULL) || (*name == '\0') || (env == NULL)) {
-    return NULL;
-  }
-
-  size_t nameLen = strlen(name);
-  char *value = NULL;
-  for (int ii = 0; env[ii] != NULL; ii++) {
-    if ((strncmp(env[ii], name, nameLen) == 0) && env[ii][nameLen] == '=') {
-      value = &env[ii][nameLen + 1];
-      break;
-    }
-  }
-
-  return value;
-}
-
 /// @fn time_t time(time_t *tloc)
 ///
 /// @brief Implementation of standard C time function.

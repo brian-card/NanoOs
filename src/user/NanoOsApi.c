@@ -119,7 +119,7 @@ NanoOsApi nanoOsApi = {
   .strlen = strlen,
   
   // Other stdlib functions:
-  .getenv = nanoOsGetenv,
+  .getenv = NULL,
   .rand = rand,
   .srand = srand,
   

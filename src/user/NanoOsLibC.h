@@ -102,12 +102,6 @@ char* nanoOsStrError(int errnum);
 #endif
 #define strerror nanoOsStrError
 
-char* nanoOsGetenv(const char *name);
-#ifdef getenv
-#undef getenv
-#endif
-#define getenv(name) nanoOsGetenv(name)
-
 #ifdef __cplusplus
 } // extern "C"
 #endif
