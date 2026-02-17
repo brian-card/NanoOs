@@ -42,41 +42,13 @@ extern "C"
 {
 #endif
 
-static size_t libStrlen(const char *str) {
-  size_t len = 0;
-  if (str != NULL) {
-    for (; str[len] != '\0'; len++);
-  }
-  
-  return len;
+static inline int strncmp(const char *s1, const char *s2, size_t n) {
+  return overlayMap.header.osApi->strncmp(s1, s2, n);
 }
-
-static int libStrncmp(const char *s1, const char *s2, size_t n) {
-  int returnValue = 0;
-  
-  if (s1 == NULL) {
-    returnValue--;
-  }
-  if (s2 == NULL) {
-    returnValue++;
-  }
-  if (returnValue != 0) {
-    return returnValue;
-  }
-  
-  for (size_t ii = 0; (ii < n) && (returnValue == 0); ii++) {
-    int c1 = (int) s1[ii];
-    int c2 = (int) s2[ii];
-    returnValue = c1 - c2;
-    if ((c1 == 0) || (c2 == 0)) {
-      break;
-    }
-  }
-  
-  return returnValue;
+#define strcmp(s1, s2) strncmp(s1, s2, (size_t) -1)
+static inline size_t strlen(const char *s) {
+  return overlayMap.header.osApi->strlen(s);
 }
-
-#define libStrcmp(s1, s2) strncmp(s1, s2, (size_t) -1)
 
 #ifdef __cplusplus
 }

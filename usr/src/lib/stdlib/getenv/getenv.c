@@ -17,10 +17,10 @@ void* getenv(void *args) {
     return NULL;
   }
 
-  size_t nameLen = libStrlen(name);
+  size_t nameLen = strlen(name);
   char *value = NULL;
   for (int ii = 0; env[ii] != NULL; ii++) {
-    if ((libStrncmp(env[ii], name, nameLen) == 0) && env[ii][nameLen] == '=') {
+    if ((strncmp(env[ii], name, nameLen) == 0) && env[ii][nameLen] == '=') {
       value = &env[ii][nameLen + 1];
       break;
     }
