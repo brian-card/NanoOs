@@ -70,9 +70,9 @@ When a user process needs something from one of the kernel processes, it prepare
 
 ## Dynamic Memory
 
-NanoOs does support dynamic memory, just not very much of it.  The memory manager is started as the last process and makes use of all of the remaining memory at that time.  As of 30-Nov-2025, that amount is about 7 KB.  Due to the way the data structures are organized, the maximum amount of dynamic memory is 64 KB.
+NanoOs does support dynamic memory, just not very much of it.  The memory manager is started as the last process and makes use of all of the remaining memory at that time.  As of 2-Feb-2026, that amount is about 6 KB.
 
-The memory manager is a modified bump allocator that supports automatic memory compaction.  Any time the last pointer in the allocation list is freed, the next pointer is moved backward until a block that has not been freed is found or until the beginning of dynamic memory is reached.  The number of outstanding memory allocations is not tracked because it's unnecessary.  This allows partial reclamation of memory space without having to free all outstanding allocations.
+The memory manager is a first-fit allocator that supports automatic memory compaction and is O(1) in the LIFO case.  Any time the last pointer in the allocation list is freed, the next pointer is moved backward until a block that has not been freed is found or until the beginning of dynamic memory is reached.  When a block of memory is freed that is next to another piece of freed memory, the blocks are joined together into a contiguous block of free memory.
 
 The memory manager also tracks the size of each allocation.  This allows for realloc to function correctly.  If the size of the reallocation is less than or equal to the size already allocated, no action is taken.  If the size of the reallocation is greater than the size already allocated, the old memory can be copied to the new location before returning the new pointer to the user (as is supposed to happen for realloc).
 
