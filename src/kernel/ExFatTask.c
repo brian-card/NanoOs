@@ -114,10 +114,20 @@ int exFatTaskCloseFileCommandHandler(
 ) {
   (void) driverState;
 
+  // A note about the way this function is written:
+  //
+  // I used to have sensible variables in this function.  That worked fine most
+  // of the time.  However, I was getting stack corruptions when debug messages
+  // were enabled.  So, I had to reduce the number of variables declared here.
+  // I know it's tempting, but *DO NOT* declare more variables in this function.
+  // Yes, it would definitely be more clear if there were proper variables
+  // declared and used in this function, but functionality comes first.
+  //
+  // JBC 2026-02-17
   FilesystemFcloseParameters *fcloseParameters
     = nanoOsMessageDataPointer(taskMessage, FilesystemFcloseParameters*);
   if (driverState->driverStateValid) {
-    fcloseParameters->returnValue= exFatFclose(
+    fcloseParameters->returnValue = exFatFclose(
       driverState, (ExFatFileHandle*) fcloseParameters->stream->file);
     if (driverState->filesystemState->numOpenFiles > 0) {
       driverState->filesystemState->numOpenFiles--;
