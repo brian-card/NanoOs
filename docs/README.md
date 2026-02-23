@@ -60,3 +60,5 @@ This work started out as an experiment to see if I could implement an operating 
 
 [2026-01-16: Atomic Power](2026-01-16_Atomic-Power.md)
 
+[2026-02-16: New Memory Manager](2026-02-16_New-Memory-Manager.md)
+
