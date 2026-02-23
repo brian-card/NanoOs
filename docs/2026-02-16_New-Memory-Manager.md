@@ -35,7 +35,11 @@ So, now, I have a new, functional memory manager that meets all of the requireme
 
 Anyway, when I finally got everything put back together, I was able to run any number of user commands that I wanted!!  SUCCESS!!  Mission accomplished.  This strategy is still susceptible to fragmentation in bad enough cases, but it's much better than what it was.  For an embedded system that really only allows for simple memory management, it's not bad.
 
-The main reason I'm embarking on this quest to move code to overlays is to free up space in the kernel.
+The main reason I'm embarking on this quest to move code to overlays is to free up space in the kernel.  It now takes up over 91 KB compiled on both the Every and the 33 IoT.  In fact, the code is actually a little larger on the Every and that's an 8-bit processor!  This is much larger than I want it to be.  I think the general strategy I have of using some of the standard library functions that are already in use in the kernel makes sense, but I need to trim back how much content that is as much as I can.  There's functionality that's currently implemented in the kernel that reallly doesn't need to be.
+
+I got myself into this mess because I moved the implementation of `getenv` out of the kernel and into its own library overlay.  There was nothing about that implementation that necessitated it being in the kernel.  To my great surprise, it worked flawlessly, however I falied to take into account how much that's already in use by user programs.  The repeated swapping of overlays pushed the memory allocator higher and higher until there was nothing left.  For now, at least, that's no longer a concern.  On the plus side, I did prove that my library implementation strategy worked fine.
+
+Now that I've dug myself out of this, I can go back to implementing userspace libraries that take the load off the kernel.  The real goal here is to have userspace, overlay equivalents of the commands that have been embedded into the kernel since last year.  That should free up a lot more space than piecemeal replacements of individual functions.  More to do.
 
 *\*We now return you to our program already in progress.\**
 
