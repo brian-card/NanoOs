@@ -37,6 +37,9 @@
 #define NANO_OS_PWD_H
 
 #include <sys/types.h>
+#if defined(__AVR__)
+typedef unsigned int gid_t;
+#endif // __AVR__
 
 #ifdef __cplusplus
 extern "C"
