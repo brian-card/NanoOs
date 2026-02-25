@@ -1,5 +1,5 @@
 #include "NanoOsUser.h"
-#include "libstring.h"
+#include "string.h"
 
 /// @fn void* getenv(void *args)
 ///
