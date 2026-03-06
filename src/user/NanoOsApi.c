@@ -120,8 +120,8 @@ NanoOsApi nanoOsApi = {
   
   // Other stdlib functions:
   .getenv = NULL,
-  .rand = rand,
-  .srand = srand,
+  .rand = NULL,
+  .srand = NULL,
   
   // unistd functions:
   .gethostname = nanoOsGethostname,
