@@ -1216,7 +1216,7 @@ int coroutineTerminate(Coroutine *targetCoroutine, Comutex **mutexes) {
       if (atomic_load(&mutexes[i]->coroutine) == targetCoroutine) {
         // Unlock the mutex.
         mutexes[i]->recursionLevel = 0;
-        atomic_store(&mutexes[i]->coroutine, NULL);
+        atomic_store(&mutexes[i]->coroutine, (Coroutine*) NULL);
       }
     }
   }
