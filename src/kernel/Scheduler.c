@@ -3038,9 +3038,8 @@ int schedulerLoadOverlay(SchedulerState *schedulerState,
     return 0;
   }
 
-  NanoOsOverlayMap *overlayMap = HAL->overlayMap();
-  uintptr_t overlaySize = HAL->overlaySize();
-  if ((overlayMap == NULL) || (overlaySize == 0)) {
+  NanoOsOverlayMap *overlayMap = HAL->overlayMap;
+  if ((overlayMap == NULL) || (HAL->overlaySize == 0)) {
     printString("No overlay memory available for use.\n");
     return -ENOMEM;
   }
@@ -3080,7 +3079,7 @@ int schedulerLoadOverlay(SchedulerState *schedulerState,
   printDebugHex((uintptr_t) overlayFile);
   printDebugString("\n");
   if (schedFread(schedulerState,
-    overlayMap, 1, overlaySize, overlayFile) == 0
+    overlayMap, 1, HAL->overlaySize, overlayFile) == 0
   ) {
     printString("Could not read overlay from \"");
     printString(fullPath);

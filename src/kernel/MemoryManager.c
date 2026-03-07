@@ -986,7 +986,7 @@ void initializeGlobals(MemoryManagerState *memoryManagerState,
   char *mallocBufferEnd = NULL;
   
   // Set up the memory manager's state.
-  memoryManagerState->start = (uintptr_t) HAL->bottomOfStack();
+  memoryManagerState->start = (uintptr_t) HAL->bottomOfHeap();
   memoryManagerState->end = (uintptr_t) &mallocBufferEnd;
   memoryManagerState->bytesFree
     = ((size_t) memoryManagerState->end)

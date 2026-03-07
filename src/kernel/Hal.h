@@ -81,33 +81,27 @@ typedef struct Hal {
   /// This call never fails.
   uintptr_t (*memoryManagerStackSize)(bool debug);
   
-  /// @fn void* bottomOfStack(void)
+  /// @fn void* bottomOfHeap(void)
   ///
-  /// @brief The memmory manager uses stack memory for dynamic memory
-  /// allocation and needs to know where the bottom of it is so that it doesn't
-  /// overallocate.
+  /// @brief The memmory manager needs to know where the bottom of the heap is
+  /// so that it knows where to start allocating memory.
   ///
-  /// @return Returns the address of the bottom of the stack.   This call never
+  /// @return Returns the address of the bottom of the heap.   This call never
   /// fails.
-  void* (*bottomOfStack)(void);
+  void* (*bottomOfHeap)(void);
   
   // Overlay definitions.
   
-  /// @fn NanoOsOverlayMap* overlayMap(void)
+  /// @var overlayMap
   ///
   /// @brief Memory address where overlays will be loaded.
-  ///
-  /// @return Returns the address of the overlay map in memory.  This call
-  /// never fails.
-  NanoOsOverlayMap* (*overlayMap)(void);
+  NanoOsOverlayMap *overlayMap;
   
-  /// @fn uintptr_t overlaySize(void)
+  /// @var overlaySize
   ///
-  /// @brief The number of bytes available for the overlay.
-  ///
-  /// @return Returns the number of bytes in the overlay.   This call never
-  /// fails, but may return 0 on systems that don't support overlays.
-  uintptr_t (*overlaySize)(void);
+  /// @brief The number of bytes available for the overlay.  This may be 0 on
+  /// systems that don't support overlays.
+  uintptr_t overlaySize;
   
   // Serial port functionality.
   

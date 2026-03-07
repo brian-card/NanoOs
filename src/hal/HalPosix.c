@@ -104,26 +104,13 @@ uintptr_t posixMemoryManagerStackSize(bool debug) {
   }
 }
 
-/// @var _bottomOfStack
+/// @var _bottomOfHeap
 ///
-/// @brief Where the bottom of the stack will be set to be in memory.
-static void *_bottomOfStack = NULL;
+/// @brief Where the bottom of the heap will be set to be in memory.
+static void *_bottomOfHeap= NULL;
 
-void* posixBottomOfStack(void) {
-  return _bottomOfStack;
-}
-
-/// @var _overlayMap
-///
-/// @brief Where the overlay map is located in memory.
-static NanoOsOverlayMap *_overlayMap = NULL;
-
-NanoOsOverlayMap* posixOverlayMap(void) {
-  return _overlayMap;
-}
-
-uintptr_t posixOverlaySize(void) {
-  return OVERLAY_SIZE;
+void* posixBottomOfHeap(void) {
+  return _bottomOfHeap;
 }
 
 /// @var serialPorts
@@ -691,11 +678,11 @@ static Hal posixHal = {
   // Memory definitions.
   .processStackSize = posixProcessStackSize,
   .memoryManagerStackSize = posixMemoryManagerStackSize,
-  .bottomOfStack = posixBottomOfStack,
+  .bottomOfHeap = posixBottomOfHeap,
   
   // Overlay definitions.
-  .overlayMap = posixOverlayMap,
-  .overlaySize = posixOverlaySize,
+  .overlayMap = NULL,
+  .overlaySize = OVERLAY_SIZE,
   
   // Serial port functionality.
   .getNumSerialPorts = posixGetNumSerialPorts,
@@ -773,7 +760,7 @@ void allocateGlobalStack(jmp_buf returnBuffer, char *topOfStack) {
     topOfStack = stack;
   }
   
-  if (((uintptr_t) stack) > ((uintptr_t) _bottomOfStack)) {
+  if (((uintptr_t) stack) > ((uintptr_t) _bottomOfHeap)) {
     allocateGlobalStack(returnBuffer, topOfStack);
   }
   
@@ -796,9 +783,9 @@ const Hal* halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
   fprintf(stderr, "Top of stack        = %p\n", (void*) &topOfStack);
   
   // Simulate having a total of 64 KB available for dynamic memory.
-  _bottomOfStack = (void*) (((uintptr_t) &topOfStack)
+  _bottomOfHeap = (void*) (((uintptr_t) &topOfStack)
     - ((uintptr_t) (65536 - 11456)));
-  fprintf(stderr, "Bottom of stack     = %p\n", (void*) _bottomOfStack);
+  fprintf(stderr, "Bottom of stack     = %p\n", (void*) _bottomOfHeap);
   jmp_buf returnBuffer;
   if (setjmp(returnBuffer) == 0) {
     allocateGlobalStack(returnBuffer, NULL);
@@ -814,20 +801,20 @@ const Hal* halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
     = ((size_t) (OVERLAY_OFFSET + OVERLAY_SIZE + (pageSize - 1)))
     & ~((size_t) (pageSize - 1));
   
-  _overlayMap = (NanoOsOverlayMap*) mmap((void*) OVERLAY_BASE_ADDRESS,
+  posixHal.overlayMap = (NanoOsOverlayMap*) mmap((void*) OVERLAY_BASE_ADDRESS,
     overlayBaseSize, PROT_READ | PROT_WRITE | PROT_EXEC,
     MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED,
     -1, 0);
-  if (_overlayMap == MAP_FAILED) {
+  if (posixHal.overlayMap == MAP_FAILED) {
     fprintf(stderr, "mmap failed with error: %s\n", strerror(errno));
     return NULL;
   }
   
   // The address that the code is built around for both the Cortex-M0 and the
   // simulation code is OVERLAY_OFFSET bytes into the map we just made.
-  _overlayMap = (void*) (OVERLAY_BASE_ADDRESS + OVERLAY_OFFSET);
+  posixHal.overlayMap = (void*) (OVERLAY_BASE_ADDRESS + OVERLAY_OFFSET);
   
-  fprintf(stderr, "_overlayMap         = %p\n", (void*) _overlayMap);
+  fprintf(stderr, "posixHal.overlayMap = %p\n", (void*) posixHal.overlayMap);
   fprintf(stderr, "\n");
   
   _mainThreadId = pthread_self();

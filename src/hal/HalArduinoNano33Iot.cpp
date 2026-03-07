@@ -63,6 +63,11 @@
 /// @brief The size, in bytes, of the memory manager process's stack.
 #define MEMORY_MANAGER_STACK_SIZE 192
 
+/// @def OVERLAY_ADDRESS
+///
+/// @brief The address of where the overlay will be placed in memory.
+#define OVERLAY_ADDRESS 0x20001400
+
 /// @def OVERLAY_SIZE
 ///
 /// @brief The size, in bytes, of the overlay supported by the Nano 33 IoT.
@@ -216,23 +221,10 @@ uintptr_t arduinoNano33IotMemoryManagerStackSize(bool debug) {
 /// @var _bottomOfStack
 ///
 /// @brief Where the bottom of the stack will be set to be in memory.
-static void *_bottomOfStack = (void*) (0x20001400 + OVERLAY_SIZE);
+static void *_bottomOfHeap = (void*) (OVERLAY_ADDRESS + OVERLAY_SIZE);
 
-void* arduinoNano33IotBottomOfStack(void) {
-  return _bottomOfStack;
-}
-
-/// @var _overlayMap
-///
-/// @brief Where the overlay map is located in memory.
-static NanoOsOverlayMap *_overlayMap = (NanoOsOverlayMap*) 0x20001400;
-
-NanoOsOverlayMap* arduinoNano33IotOverlayMap(void) {
-  return _overlayMap;
-}
-
-uintptr_t arduinoNano33IotOverlaySize(void) {
-  return OVERLAY_SIZE;
+void* arduinoNano33IotBottomOfHeap(void) {
+  return _bottomOfHeap;
 }
 
 /// @var serialPorts
@@ -968,11 +960,11 @@ static Hal arduinoNano33IotHal = {
   // Memory definitions.
   .processStackSize = arduinoNano33IotProcessStackSize,
   .memoryManagerStackSize = arduinoNano33IotMemoryManagerStackSize,
-  .bottomOfStack = arduinoNano33IotBottomOfStack,
+  .bottomOfHeap = arduinoNano33IotBottomOfHeap,
   
   // Overlay definitions.
-  .overlayMap = arduinoNano33IotOverlayMap,
-  .overlaySize = arduinoNano33IotOverlaySize,
+  .overlayMap = (NanoOsOverlayMap*) OVERLAY_ADDRESS,
+  .overlaySize = OVERLAY_SIZE,
   
   // Serial port functionality.
   .getNumSerialPorts = arduinoNano33IotGetNumSerialPorts,
@@ -1018,9 +1010,11 @@ static Hal arduinoNano33IotHal = {
 
 const Hal* halArduinoNano33IotInit(void) {
   extern char __bss_end__;
-  if (((uintptr_t) &__bss_end__) > ((uintptr_t) _overlayMap)) {
+  if (((uintptr_t) &__bss_end__)
+    > ((uintptr_t) arduinoNano33IotHal.overlayMap)
+  ) {
     printString("ERROR!!! &__bss_end__ > ");
-    printInt((uintptr_t) HAL->overlayMap());
+    printInt((uintptr_t) arduinoNano33IotHal.overlayMap);
     printString("\n");
     printString("*******************************************************\n");
     printString("* Running user programs will corrupt system memory!!! *\n");

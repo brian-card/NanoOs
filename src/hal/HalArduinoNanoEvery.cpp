@@ -100,18 +100,10 @@ uintptr_t arduinoNanoEveryMemoryManagerStackSize(bool debug) {
   }
 }
 
-void* arduinoNanoEveryBottomOfStack(void) {
+void* arduinoNanoEveryBottomOfHeap(void) {
   extern int __heap_start;
   extern char *__brkval;
   return (__brkval == NULL) ? (char*) &__heap_start : __brkval;
-}
-
-NanoOsOverlayMap* arduinoNanoEveryOverlayMap(void) {
-  return NULL;
-}
-
-uintptr_t arduinoNanoEveryOverlaySize(void) {
-  return 0;
 }
 
 /// @var serialPorts
@@ -539,11 +531,11 @@ static Hal arduinoNanoEveryHal = {
   // Memory definitions.
   .processStackSize = arduinoNanoEveryProcessStackSize,
   .memoryManagerStackSize = arduinoNanoEveryMemoryManagerStackSize,
-  .bottomOfStack = arduinoNanoEveryBottomOfStack,
+  .bottomOfHeap = arduinoNanoEveryBottomOfHeap,
   
   // Overlay definitions.
-  .overlayMap = arduinoNanoEveryOverlayMap,
-  .overlaySize = arduinoNanoEveryOverlaySize,
+  .overlayMap = NULL,
+  .overlaySize = 0,
   
   // Serial port functionality.
   .getNumSerialPorts = arduinoNanoEveryGetNumSerialPorts,

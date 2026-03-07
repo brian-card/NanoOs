@@ -58,9 +58,8 @@ int loadOverlay(const char *overlayDir, const char *overlay, char **envp) {
     return 0;
   }
 
-  NanoOsOverlayMap *overlayMap = HAL->overlayMap();
-  uintptr_t overlaySize = HAL->overlaySize();
-  if ((overlayMap == NULL) || (overlaySize == 0)) {
+  NanoOsOverlayMap *overlayMap = HAL->overlayMap;
+  if ((overlayMap == NULL) || (HAL->overlaySize == 0)) {
     fprintf(stderr, "No overlay memory available for use.\n");
     return -ENOMEM;
   }
@@ -98,7 +97,7 @@ int loadOverlay(const char *overlayDir, const char *overlay, char **envp) {
   printDebugString(": Reading from overlayFile 0x");
   printDebugHex((uintptr_t) overlayFile);
   printDebugString("\n");
-  if (fread(overlayMap, 1, overlaySize, overlayFile) == 0) {
+  if (fread(overlayMap, 1, HAL->overlaySize, overlayFile) == 0) {
     fprintf(stderr, "Could not read overlay from \"%s\" file.\n",
       fullPath);
     fclose(overlayFile); overlayFile = NULL;
@@ -149,7 +148,7 @@ OverlayFunction findOverlayFunction(const char *overlayFunctionName) {
   int comp = 0;
   OverlayFunction overlayFunction = NULL;
   
-  NanoOsOverlayMap *overlayMap = HAL->overlayMap();
+  NanoOsOverlayMap *overlayMap = HAL->overlayMap;
   for (uint16_t ii = 0, jj = overlayMap->numExports - 1; ii <= jj;) {
     cur = (ii + jj) >> 1;
     comp = strcmp(overlayMap->exports[cur].name, overlayFunctionName);
