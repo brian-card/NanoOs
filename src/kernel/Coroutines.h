@@ -213,7 +213,7 @@ typedef struct Coroutine {
 /// @param coconditionSignalCallback A function to call when a cocondition is
 ///   signalled.  This parameter is optional and may be NULL.
 typedef struct CoroutineConfigOptions {
-  int stackSize;
+  uintptr_t stackSize;
   void *stateData;
   CoroutineYieldCallback coroutineYieldCallback;
   ComutexUnlockCallback comutexUnlockCallback;
