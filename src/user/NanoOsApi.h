@@ -167,9 +167,16 @@ typedef struct NanoOsApi {
   int (*sched_yield)(void);
   
   // NanoOs-specific functionality
+  
+  // NanoOsUser.h functions:
   void* (*callOverlayFunction)(const char *overlayPath, const char *overlay,
     const char *function, void *args);
+  
+  // NanoOsUtils.h functions:
   char** (*parseArgs)(char *command, int *argc);
+  size_t (*getFreeMemory)(void);
+  
+  // NanoOsTasks.h functions:
   TaskInfo* (*getTaskInfo)(void);
 } NanoOsApi;
 

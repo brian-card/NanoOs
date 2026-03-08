@@ -62,6 +62,8 @@
 #undef fileno
 
 NanoOsApi nanoOsApi = {
+  // Standard Unix functionality
+  
   // Standard streams:
   .stdin  = (FILE*) ((intptr_t) 0x1),
   .stdout = (FILE*) ((intptr_t) 0x2),
@@ -151,8 +153,15 @@ NanoOsApi nanoOsApi = {
   .sched_yield = nanoOsSchedYield,
   
   // NanoOs-specific functionality
+  
+  // NanoOsUser.h functions:
   .callOverlayFunction = callOverlayFunction,
+  
+  // NanoOsUtils.h functions:
   .parseArgs = parseArgs,
+  .getFreeMemory = getFreeMemory,
+  
+  // NanoOsTasks.h functions:
   .getTaskInfo = schedulerGetTaskInfo,
 };
 
