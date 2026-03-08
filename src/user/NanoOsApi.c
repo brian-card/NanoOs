@@ -54,7 +54,6 @@
 #undef vfscanf
 #undef vfprintf
 #undef fputs
-#undef puts
 #undef fgets
 #undef fread
 #undef fwrite
@@ -82,7 +81,7 @@ NanoOsApi nanoOsApi = {
   
   // Character I/O:
   .fputs = nanoOsFPuts,
-  .puts = nanoOsPuts,
+  .puts = NULL,
   .fgets = nanoOsFGets,
   
   // Direct I/O:

@@ -39,6 +39,9 @@
 
 #include "NanoOsUser.h"
 
+// C defines:
+#define EOF (-1)
+
 // Standard streams:
 #define stdin \
   overlayMap.header.osApi->stdin
@@ -138,7 +141,10 @@ static inline int fputs(const char *s, FILE *stream) {
   return overlayMap.header.osApi->fputs(s, stream);
 }
 static inline int puts(const char *s) {
-  return overlayMap.header.osApi->puts(s);
+  if (overlayMap.header.osApi->fputs(s, stdout) != 0) {
+    return EOF;
+  }
+  return overlayMap.header.osApi->fputs("\n", stdout);
 }
 static inline char *fgets(char *s, int size, FILE *stream) {
   return overlayMap.header.osApi->fgets(s, size, stream);

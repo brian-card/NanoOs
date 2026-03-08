@@ -135,11 +135,10 @@ int nanoOsFPuts(const char *s, FILE *stream);
 #endif
 #define fputs nanoOsFPuts
 
-int nanoOsPuts(const char *s);
 #ifdef puts
 #undef puts
 #endif
-#define puts nanoOsPuts
+#define puts(s) nanoOsFPuts(s, stdout) nanoOsFPuts("\n", stdout)
 
 int nanoOsVFPrintf(FILE *stream, const char *format, va_list args);
 #ifdef vfprintf

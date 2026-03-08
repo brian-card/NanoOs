@@ -1200,20 +1200,6 @@ int nanoOsFPuts(const char *s, FILE *stream) {
   return returnValue;
 }
 
-/// @fn int nanoOsPuts(const char *s)
-///
-/// @brief Print a string followed by a newline to stdout.  Calls nanoOsFPuts
-/// twice:  Once to print the provided string and once to print the trailing
-/// newline.
-///
-/// @param s A pointer to the string to print.
-///
-/// @return Returns the value of nanoOsFPuts when printing the newline.
-int nanoOsPuts(const char *s) {
-  nanoOsFPuts(s, stdout);
-  return nanoOsFPuts("\n", stdout);
-}
-
 /// @fn int nanoOsVFPrintf(FILE *stream, const char *format, va_list args)
 ///
 /// @brief Print a formatted string to the nanoOs.  Gets a string buffer from
