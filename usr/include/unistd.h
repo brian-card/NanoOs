@@ -40,6 +40,11 @@
 
 #include "NanoOsUnistd.h"
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 static inline int gethostname(char *name, size_t len) {
   return overlayMap.header.osApi->gethostname(name, len);
 }
@@ -57,6 +62,10 @@ static inline int execve(const char *pathname,
 static inline int setuid(uid_t uid) {
   return overlayMap.header.osApi->setuid(uid);
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // UNISTD_H
 

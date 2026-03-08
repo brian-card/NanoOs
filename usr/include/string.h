@@ -39,6 +39,11 @@
 
 #include "NanoOsUser.h"
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 // Copying functions:
 static inline void *memcpy(void *dest, const void *src, size_t n) {
   return overlayMap.header.osApi->memcpy(dest, src, n);
@@ -95,6 +100,10 @@ static inline char *strerror(int errnum) {
 static inline size_t strlen(const char *s) {
   return overlayMap.header.osApi->strlen(s);
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // STRING_H
 

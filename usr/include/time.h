@@ -38,9 +38,18 @@
 
 #include "NanoOsUser.h"
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 static inline time_t time(time_t *tloc) {
   return overlayMap.header.osApi->time(tloc);
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // TIME_H
 

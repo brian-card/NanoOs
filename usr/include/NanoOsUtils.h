@@ -1,14 +1,14 @@
 ///////////////////////////////////////////////////////////////////////////////
 ///
-/// @author            James Card
-/// @date              01.18.2026
+/// @author            Brian Card
+/// @date              03.08.2026
 ///
-/// @file              termios.h
+/// @file              NanoOsUtils.h
 ///
-/// @brief             Functionality in the Unix unistd library.
+/// @brief             Utility functions exposed by the NanoOs kernel.
 ///
 /// @copyright
-///                   Copyright (c) 2012-2025 James Card
+///                      Copyright (c) 2026 Brian Card
 ///
 /// Permission is hereby granted, free of charge, to any person obtaining a
 /// copy of this software and associated documentation files (the "Software"),
@@ -28,35 +28,28 @@
 /// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 /// DEALINGS IN THE SOFTWARE.
 ///
-///                                James Card
-///                         http://www.jamescard.org
+///                                Brian Card
+///                      https://github.com/brian-card
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef TERMIOS_H
-#define TERMIOS_H
+#ifndef NANO_OS_UTILS_H
+#define NANO_OS_UTILS_H
 
 #include "NanoOsUser.h"
-
-#include "NanoOsTermios.h"
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 
-static inline int tcgetattr(int fd, struct termios *termios_p) {
-  return overlayMap.header.osApi->tcgetattr(fd, termios_p);
-}
-static inline int tcsetattr(int fd, int optional_actions,
-  const struct termios *termios_p
-) {
-  return overlayMap.header.osApi->tcsetattr(fd, optional_actions, termios_p);
+static inline char** parseArgs(char *command, int *argc) {
+  return overlayMap.header.osApi->parseArgs(command, argc);
 }
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // TERMIOS_H
+#endif // NANO_OS_UTILS_H
 

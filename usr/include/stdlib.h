@@ -38,6 +38,11 @@
 
 #include "NanoOsUser.h"
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 static inline void free(void *ptr) {
   overlayMap.header.osApi->free(ptr);
 }
@@ -64,6 +69,10 @@ static inline int rand(void) {
 static inline void srand(unsigned int seed) {
   overlayMap.header.osApi->srand(seed);
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // STDLIB_H
 

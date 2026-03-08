@@ -58,9 +58,6 @@ static inline void* callOverlayFunction(
   return overlayMap.header.osApi->callOverlayFunction(overlayDir, overlay,
     function, args);
 }
-static inline char** parseArgs(char *command, int *argc) {
-  return overlayMap.header.osApi->parseArgs(command, argc);
-}
 
 #ifdef __cplusplus
 }

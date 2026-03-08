@@ -40,11 +40,20 @@
 #include "NanoOsUser.h"
 #include "NanoOsPwd.h"
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 static inline int getpwnam_r(const char *name, struct passwd *pwd,
   char *buf, size_t buflen, struct passwd **result
 ) {
   return overlayMap.header.osApi->getpwnam_r(name, pwd, buf, buflen, result);
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // PWD_H
 

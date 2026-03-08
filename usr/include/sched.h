@@ -38,9 +38,18 @@
 
 #include "NanoOsUser.h"
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 static inline int sched_yield(void) {
   return overlayMap.header.osApi->sched_yield();
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // SCHED_H
 

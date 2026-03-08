@@ -39,6 +39,11 @@
 
 #include "NanoOsUser.h"
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 // C defines:
 #define EOF (-1)
 
@@ -172,6 +177,10 @@ static inline size_t fwrite(
 ) {
   return overlayMap.header.osApi->fwrite(ptr, size, nmemb, stream);
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // STDIO_H
 
