@@ -1151,6 +1151,11 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *nanoOsBuffer) {
       returnValue = EOF;
     }
     taskMessageRelease(taskMessage);
+
+    // Release the buffer to avoid creating a leak.
+    sendNanoOsMessageToTaskId(
+      NANO_OS_CONSOLE_TASK_ID, CONSOLE_RELEASE_BUFFER,
+      /* func= */ 0, /* data= */ (intptr_t) nanoOsBuffer, false);
   }
 
   return returnValue;
@@ -1158,30 +1163,42 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *nanoOsBuffer) {
 
 /// @fn int nanoOsFPuts(const char *s, FILE *stream)
 ///
-/// @brief Print a raw string to the nanoOs.  Uses the CONSOLE_WRITE_STRING
-/// command to print the literal string passed in.  Since this function has no
-/// way of knowing whether or not the provided string is dynamically allocated,
-/// it always waits for the nanoOs message handler to complete before
-/// returning.
+/// @brief Print a raw string to a file stream.
 ///
 /// @param s A pointer to the string to print.
 /// @param stream The file stream to print to.  Ignored by this function.
 ///
 /// @return This function always returns 0.
 int nanoOsFPuts(const char *s, FILE *stream) {
-  int returnValue = EOF;
-  ConsoleBuffer *nanoOsBuffer = nanoOsGetBuffer();
-  if (nanoOsBuffer == NULL) {
-    // Nothing we can do.
-    return returnValue;
-  }
+  // This implementation is almost identical to nanoOsFwrite.  Really, we should
+  // just call that.  But, we won't do that because we're concerned about stack
+  // space.
+  int returnValue = 0;
+  size_t bytesRemaining = strlen(s);
+  size_t bytesWritten = 0;
 
-  strncpy(nanoOsBuffer->buffer, s, CONSOLE_BUFFER_SIZE);
-  returnValue = nanoOsWriteBuffer(stream, nanoOsBuffer);
+  while (bytesRemaining > 0) {
+    ConsoleBuffer *nanoOsBuffer = nanoOsGetBuffer();
+    if (nanoOsBuffer == NULL) {
+      // Nothing we can do.  Return what we've written so far.
+      return EOF;
+    }
+
+    size_t bytesToCopy = MIN(bytesRemaining, CONSOLE_BUFFER_SIZE - 1);
+    memcpy(nanoOsBuffer->buffer, s, bytesToCopy);
+    nanoOsBuffer->buffer[bytesToCopy] = '\0';
+    if (nanoOsWriteBuffer(stream, nanoOsBuffer) == 0) {
+      bytesWritten += bytesToCopy;
+      s += bytesToCopy;
+      bytesRemaining -= bytesToCopy;
+    } else {
+      returnValue = EOF;
+      break;
+    }
+  }
 
   return returnValue;
 }
-
 
 /// @fn int nanoOsPuts(const char *s)
 ///
@@ -1292,5 +1309,149 @@ int nanoOsFileno(FILE *stream) {
   }
   
   return stream->fd;
+}
+
+/// @fn size_t nanoOsFread(void *ptr, size_t size, size_t nmemb, FILE *stream)
+///
+/// @brief Custom implementation of fread for this library.
+///
+/// @param ptr A pointer to the memory to read data into.
+/// @param size The size, in bytes, of each element that is to be read from the
+///   file.
+/// @param nmemb The number of elements that are to be read from the file.
+/// @param stream A pointer to the previously-opened file.
+///
+/// @return Returns the total number of objects successfully read from the
+/// file.
+size_t nanoOsFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
+  size_t returnValue = 0;
+  char *charBuffer = (char*) ptr;
+  ConsoleBuffer *nanoOsBuffer
+    = (ConsoleBuffer*) getTaskStorage(FGETS_CONSOLE_BUFFER_KEY);
+  size_t numBytesReceived = 0;
+  char *newlineAt = NULL;
+  int numBytesToCopy = 0;
+  size_t nanoOsInputLength = 0;
+  int bufferIndex = 0;
+  size_t bufferSize = size * nmemb;
+
+  if (stream == stdin) {
+    // There are four stop conditions:
+    // 1. nanoOsWaitForInput returns NULL, signalling the end of the input
+    //    from the stream.
+    // 2. We read a newline.
+    // 3. We read an escape sequence.
+    // 4. We reach bufferSize - 1 bytes received from the stream.
+    if (nanoOsBuffer == NULL) {
+      nanoOsBuffer = nanoOsWaitForInput();
+      setTaskStorage(FGETS_CONSOLE_BUFFER_KEY, nanoOsBuffer);
+    } else {
+      // We're continuing to read from a buffer that contained a newline plus
+      // something else after it.
+      newlineAt = strchr(nanoOsBuffer->buffer, ASCII_NEWLINE);
+      if (newlineAt == NULL) {
+        newlineAt = strchr(nanoOsBuffer->buffer, ASCII_RETURN);
+      }
+      if (newlineAt != NULL) {
+        bufferIndex = (((uintptr_t) newlineAt)
+          - ((uintptr_t) nanoOsBuffer->buffer)) + 1;
+      } else {
+        // This should be impossible given the algorithm below, but assume
+        // nothing.
+      }
+    }
+
+    while (
+      (nanoOsBuffer != NULL)
+      && (newlineAt == NULL)
+      && (numBytesReceived < bufferSize)
+    ) {
+      newlineAt = strchr(&nanoOsBuffer->buffer[bufferIndex], '\n');
+      if (newlineAt == NULL) {
+        newlineAt = strchr(nanoOsBuffer->buffer, '\r');
+      }
+
+      if ((newlineAt == NULL) || (newlineAt[1] == '\0')) {
+        // The usual case.
+        nanoOsInputLength = (int) strlen(&nanoOsBuffer->buffer[bufferIndex]);
+      } else {
+        // We've received a buffer that contains a newline plus something after
+        // it.  Copy everything up to and including the newline.  Return what
+        // we copy and leave the pointer alone so that it's picked up on the
+        // next call.
+        nanoOsInputLength = (int) (((uintptr_t) newlineAt)
+          - ((uintptr_t) &nanoOsBuffer->buffer[bufferIndex]));
+      }
+
+      numBytesToCopy
+        = MIN((bufferSize - numBytesReceived), nanoOsInputLength);
+      memcpy(&charBuffer[numBytesReceived], &nanoOsBuffer->buffer[bufferIndex],
+        numBytesToCopy);
+      numBytesReceived += numBytesToCopy;
+      charBuffer[numBytesReceived] = '\0';
+      // Release the buffer.
+      sendNanoOsMessageToTaskId(
+        NANO_OS_CONSOLE_TASK_ID, CONSOLE_RELEASE_BUFFER,
+        /* func= */ 0, /* data= */ (uintptr_t) nanoOsBuffer, false);
+
+      if ((newlineAt != NULL) || (strchr(nanoOsBuffer->buffer, ASCII_ESCAPE))) {
+        // We've reached one of the stop cases, so we're not going to attempt
+        // to receive any more data from the file descriptor.
+        nanoOsBuffer = NULL;
+      } else {
+        // There was no newline in this message.  We need to get another one.
+        nanoOsBuffer = nanoOsWaitForInput();
+        bufferIndex = 0;
+      }
+
+      setTaskStorage(FGETS_CONSOLE_BUFFER_KEY, nanoOsBuffer);
+    }
+    returnValue = numBytesReceived;
+  } else {
+    // stream is a regular FILE.
+    returnValue = filesystemFRead(ptr, size, nmemb, stream);
+  }
+
+  return returnValue;
+}
+
+/// @fn size_t nanoOsFwrite(const void *ptr, size_t size, size_t nmemb,
+///   FILE *stream)
+///
+/// @brief Write data to a previously-opened file or output stream.
+///
+/// @param ptr A pointer to the memory to write data from.
+/// @param size The size, in bytes, of each element that is to be written to
+///   the file.
+/// @param nmemb The number of elements that are to be written to the file.
+/// @param stream A pointer to the previously-opened file.
+///
+/// @return Returns the total number of objects successfully written to the
+/// file.
+size_t nanoOsFwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream) {
+  size_t bytesRemaining = size * nmemb;
+  size_t bytesWritten = 0;
+  const char *charPointer = (const char*) ptr;
+
+  while (bytesRemaining > 0) {
+    ConsoleBuffer *nanoOsBuffer = nanoOsGetBuffer();
+    if (nanoOsBuffer == NULL) {
+      // Nothing we can do.  Return what we've written so far.
+      return bytesWritten / size;
+    }
+
+    size_t bytesToCopy = MIN(bytesRemaining, CONSOLE_BUFFER_SIZE - 1);
+    memcpy(nanoOsBuffer->buffer, charPointer, bytesToCopy);
+    nanoOsBuffer->buffer[bytesToCopy] = '\0';
+    if (nanoOsWriteBuffer(stream, nanoOsBuffer) == 0) {
+      bytesWritten += bytesToCopy;
+      charPointer += bytesToCopy;
+      bytesRemaining -= bytesToCopy;
+    } else {
+      break;
+    }
+  }
+
+  return bytesWritten / size;
 }
 
