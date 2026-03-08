@@ -40,12 +40,12 @@ int main(int argc, char **argv) {
       fprintf(stderr, "ERROR: Could not open file \"%s\"\n", filename);
       return 1;
     }
-    while (
-      fread(buffer, 1, sizeof(buffer) - 1, inputFile) == sizeof(buffer) - 1
-    ) {
-      fputs(buffer, stdout);
+    size_t bytesRead = fread(buffer, 1, sizeof(buffer), inputFile);
+    while (bytesRead > 0) {
+      fwrite(buffer, 1, bytesRead, stdout);
+      bytesRead = fread(buffer, 1, sizeof(buffer), inputFile);
+      bytesRead = 0;
     }
-    fputs("\n", stdout);
   } else {
     // Read from stdin and echo the input back to the user until "EOF\n" is
     // received.
