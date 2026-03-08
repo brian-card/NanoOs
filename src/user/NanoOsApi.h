@@ -160,7 +160,10 @@ typedef struct NanoOsApi {
     char *buf,
     size_t buflen,
     struct passwd **result);
-
+  
+  // sched.h functions:
+  int (*sched_yield)(void);
+  
   // NanoOs-specific functionality
   void* (*callOverlayFunction)(const char *overlayPath, const char *overlay,
     const char *function, void *args);

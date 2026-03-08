@@ -38,6 +38,7 @@
 #include "../kernel/Tasks.h"
 #include "NanoOsLibC.h"
 #include "NanoOsPwd.h"
+#include "NanoOsSched.h"
 #include "NanoOsTermios.h"
 #include "NanoOsUnistd.h"
 
@@ -65,6 +66,10 @@ NanoOsApi nanoOsApi = {
   .stdin  = (FILE*) ((intptr_t) 0x1),
   .stdout = (FILE*) ((intptr_t) 0x2),
   .stderr = (FILE*) ((intptr_t) 0x3),
+  
+  // NanoOs-specific functionality
+  .callOverlayFunction = callOverlayFunction,
+  .parseArgs = parseArgs,
   
   // File operations:
   .fopen = filesystemFOpen,
@@ -146,8 +151,7 @@ NanoOsApi nanoOsApi = {
   .getpwnam_r = nanoOsGetpwnam_r,
   .getpwuid_r = nanoOsGetpwuid_r,
   
-  // NanoOs-specific functionality
-  .callOverlayFunction = callOverlayFunction,
-  .parseArgs = parseArgs,
+  // sched.h functions:
+  .sched_yield = nanoOsSchedYield,
 };
 
