@@ -35,7 +35,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "NanoOsUser.h"
+#include "NanoOsUtils.h"
 
 extern char **environ;
 
