@@ -53,6 +53,8 @@
 typedef struct NanoOsFile NanoOsFile;
 #define FILE NanoOsFile
 
+typedef struct TaskInfo TaskInfo;
+
 #include "NanoOsPwd.h"
 #include "NanoOsSys.h"
 
@@ -168,6 +170,7 @@ typedef struct NanoOsApi {
   void* (*callOverlayFunction)(const char *overlayPath, const char *overlay,
     const char *function, void *args);
   char** (*parseArgs)(char *command, int *argc);
+  TaskInfo* (*getTaskInfo)(void);
 } NanoOsApi;
 
 extern NanoOsApi nanoOsApi;

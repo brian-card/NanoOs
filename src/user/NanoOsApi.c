@@ -67,10 +67,6 @@ NanoOsApi nanoOsApi = {
   .stdout = (FILE*) ((intptr_t) 0x2),
   .stderr = (FILE*) ((intptr_t) 0x3),
   
-  // NanoOs-specific functionality
-  .callOverlayFunction = callOverlayFunction,
-  .parseArgs = parseArgs,
-  
   // File operations:
   .fopen = filesystemFOpen,
   .fclose = filesystemFClose,
@@ -153,5 +149,10 @@ NanoOsApi nanoOsApi = {
   
   // sched.h functions:
   .sched_yield = nanoOsSchedYield,
+  
+  // NanoOs-specific functionality
+  .callOverlayFunction = callOverlayFunction,
+  .parseArgs = parseArgs,
+  .getTaskInfo = schedulerGetTaskInfo,
 };
 
