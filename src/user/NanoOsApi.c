@@ -86,8 +86,8 @@ NanoOsApi nanoOsApi = {
   .fgets = nanoOsFGets,
   
   // Direct I/O:
-  .fread = filesystemFRead,
-  .fwrite = filesystemFWrite,
+  .fread = nanoOsFread,
+  .fwrite = nanoOsFwrite,
   
   // Memory management:
   .free = memoryManagerFree,
