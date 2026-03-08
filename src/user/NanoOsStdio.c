@@ -1174,27 +1174,9 @@ int nanoOsFPuts(const char *s, FILE *stream) {
   // just call that.  But, we won't do that because we're concerned about stack
   // space.
   int returnValue = 0;
-  size_t bytesRemaining = strlen(s);
-  size_t bytesWritten = 0;
-
-  while (bytesRemaining > 0) {
-    ConsoleBuffer *nanoOsBuffer = nanoOsGetBuffer();
-    if (nanoOsBuffer == NULL) {
-      // Nothing we can do.  Return what we've written so far.
-      return EOF;
-    }
-
-    size_t bytesToCopy = MIN(bytesRemaining, CONSOLE_BUFFER_SIZE - 1);
-    memcpy(nanoOsBuffer->buffer, s, bytesToCopy);
-    nanoOsBuffer->buffer[bytesToCopy] = '\0';
-    if (nanoOsWriteBuffer(stream, nanoOsBuffer) == 0) {
-      bytesWritten += bytesToCopy;
-      s += bytesToCopy;
-      bytesRemaining -= bytesToCopy;
-    } else {
-      returnValue = EOF;
-      break;
-    }
+  size_t len = strlen(s);
+  if (nanoOsFwrite(s, 1, len, stream) != len) {
+    returnValue = EOF;
   }
 
   return returnValue;
