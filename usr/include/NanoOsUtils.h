@@ -46,6 +46,9 @@ extern "C"
 static inline char** parseArgs(char *command, int *argc) {
   return overlayMap.header.osApi->parseArgs(command, argc);
 }
+static inline size_t getFreeMemory(void) {
+  return overlayMap.header.osApi->getFreeMemory();
+}
 
 #ifdef __cplusplus
 }
