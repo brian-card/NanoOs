@@ -50,6 +50,11 @@ static inline int getpwnam_r(const char *name, struct passwd *pwd,
 ) {
   return overlayMap.header.osApi->getpwnam_r(name, pwd, buf, buflen, result);
 }
+static inline int getpwuid_r(uid_t uid, struct passwd *pwd,
+  char *buf, size_t buflen, struct passwd **result
+) {
+  return overlayMap.header.osApi->getpwuid_r(uid, pwd, buf, buflen, result);
+}
 
 #ifdef __cplusplus
 }
