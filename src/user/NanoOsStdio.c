@@ -831,8 +831,12 @@ ConsoleBuffer* nanoOsWaitForInput(void) {
 char *nanoOsFGets(char *buffer, int size, FILE *stream) {
   char *returnValue = NULL;
 
-  if (nanoOsFread(buffer, 1, size, stream) > 0) {
-    returnValue = buffer;
+  if (size > 0) {
+    size_t bytesRead = nanoOsFread(buffer, 1, size - 1, stream);
+    if (bytesRead > 0) {
+      buffer[bytesRead] = '\0';
+      returnValue = buffer;
+    }
   }
 
   return returnValue;
