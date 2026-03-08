@@ -80,7 +80,7 @@ NanoOsApi nanoOsApi = {
   .vsnprintf = vsnprintf,
   
   // Character I/O:
-  .fputs = nanoOsFPuts,
+  .fputs = NULL,
   .puts = NULL,
   .fgets = nanoOsFGets,
   
