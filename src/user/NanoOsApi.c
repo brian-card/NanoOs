@@ -82,7 +82,7 @@ NanoOsApi nanoOsApi = {
   // Character I/O:
   .fputs = NULL,
   .puts = NULL,
-  .fgets = nanoOsFGets,
+  .fgets = NULL,
   
   // Direct I/O:
   .fread = nanoOsFread,
