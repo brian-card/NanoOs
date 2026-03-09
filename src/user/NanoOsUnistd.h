@@ -34,8 +34,8 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef NANO_OS_UNISTD_H
-#define NANO_OS_UNISTD_H
+#ifndef NANO_OS_USER_UNISTD_H
+#define NANO_OS_USER_UNISTD_H
 
 #ifdef __cplusplus
 extern "C"
@@ -64,5 +64,5 @@ int nanoOsTtyname_r(int fd, char *buf, size_t buflen);
 }
 #endif
 
-#endif // NANO_OS_UNISTD_H
+#endif // NANO_OS_USER_UNISTD_H
 

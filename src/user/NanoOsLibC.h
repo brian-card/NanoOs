@@ -34,11 +34,11 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
-//// #define NANO_OS_DEBUG
+//// #define NANO_OS_USER_DEBUG
 #include "NanoOsErrno.h"
 
-#ifndef NANO_OS_LIB_C_H
-#define NANO_OS_LIB_C_H
+#ifndef NANO_OS_USER_LIB_C_H
+#define NANO_OS_USER_LIB_C_H
 
 // Standard C includes
 #include "limits.h"
@@ -106,4 +106,4 @@ char* nanoOsStrError(int errnum);
 } // extern "C"
 #endif
 
-#endif // NANO_OS_LIB_C_H
+#endif // NANO_OS_USER_LIB_C_H

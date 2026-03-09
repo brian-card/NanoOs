@@ -34,8 +34,8 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef NANO_OS_HARDWARE_H
-#define NANO_OS_HARDWARE_H
+#ifndef NANO_OS_USER_HARDWARE_H
+#define NANO_OS_USER_HARDWARE_H
 
 #ifdef __cplusplus
 extern "C"
@@ -53,11 +53,11 @@ typedef enum NanoOsShutdownType {
   NANO_OS_SHUTDOWN_NUM_TYPES,
 } NanoOsShutdownType;
 
-int nanoOsShutdown(NanoOsShutdownType shutdownType);
+int nanoOsHardwareShutdown(NanoOsShutdownType shutdownType);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // NANO_OS_HARDWARE_H
+#endif // NANO_OS_USER_HARDWARE_H
 

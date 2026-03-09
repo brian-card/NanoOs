@@ -33,8 +33,8 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef NANO_OS_SYS_H
-#define NANO_OS_SYS_H
+#ifndef NANO_OS_USER_SYS_H
+#define NANO_OS_USER_SYS_H
 
 #include "NanoOsUnistd.h"
 
@@ -59,5 +59,5 @@ int nanoOsUname(struct utsname *buf);
 }
 #endif
 
-#endif // NANO_OS_SYS_H
+#endif // NANO_OS_USER_SYS_H
 

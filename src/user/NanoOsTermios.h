@@ -34,8 +34,8 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef NANO_OS_TERMIOS_H
-#define NANO_OS_TERMIOS_H
+#ifndef NANO_OS_USER_TERMIOS_H
+#define NANO_OS_USER_TERMIOS_H
 
 #ifdef __cplusplus
 extern "C"
@@ -111,5 +111,5 @@ int nanoOsTcsetattr(int fd, int optional_actions,
 }
 #endif
 
-#endif // NANO_OS_TERMIOS_H
+#endif // NANO_OS_USER_TERMIOS_H
 

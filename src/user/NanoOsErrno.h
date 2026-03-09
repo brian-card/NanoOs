@@ -34,8 +34,8 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef NANO_OS_ERRNO_H
-#define NANO_OS_ERRNO_H
+#ifndef NANO_OS_USER_ERRNO_H
+#define NANO_OS_USER_ERRNO_H
 
 #ifdef __cplusplus
 extern "C"
@@ -75,4 +75,4 @@ int* errno_(void);
 } // extern "C"
 #endif
 
-#endif // NANO_OS_ERRNO_H
+#endif // NANO_OS_USER_ERRNO_H

@@ -34,8 +34,8 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef NANO_OS_SCHED_H
-#define NANO_OS_SCHED_H
+#ifndef NANO_OS_USER_SCHED_H
+#define NANO_OS_USER_SCHED_H
 
 #include "../kernel/Tasks.h"
 
@@ -51,5 +51,5 @@ int nanoOsSchedYield(void);
 }
 #endif
 
-#endif // NANO_OS_SCHED_H
+#endif // NANO_OS_USER_SCHED_H
 

@@ -33,8 +33,8 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef NANO_OS_STDIO_H
-#define NANO_OS_STDIO_H
+#ifndef NANO_OS_USER_STDIO_H
+#define NANO_OS_USER_STDIO_H
 
 #undef FILE
 
@@ -67,7 +67,7 @@ typedef struct NanoOsFile NanoOsFile;
 #endif // stderr
 #define stderr nanoOsStderr
 
-#ifdef NANO_OS_DEBUG
+#ifdef NANO_OS_USER_DEBUG
 
 /// @def startDebugMessage
 ///
@@ -99,12 +99,12 @@ typedef struct NanoOsFile NanoOsFile;
     printString("\n"); \
   } while (0)
 
-#else // NANO_OS_DEBUG
+#else // NANO_OS_USER_DEBUG
 
 #define startDebugMessage(message) {}
 #define printDebugStackDepth() {}
 
-#endif // NANO_OS_DEBUG
+#endif // NANO_OS_USER_DEBUG
 
 
 #define EOF (-1)
@@ -195,6 +195,6 @@ size_t nanoOsFwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream);
 } // extern "C"
 #endif
 
-#endif // NANO_OS_STDIO_H
+#endif // NANO_OS_USER_STDIO_H
 
 #include "../kernel/Filesystem.h"

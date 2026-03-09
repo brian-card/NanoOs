@@ -35,8 +35,8 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef NANO_OS_UNIX_API_H
-#define NANO_OS_UNIX_API_H
+#ifndef NANO_OS_USER_API_H
+#define NANO_OS_USER_API_H
 
 #undef FILE
 
@@ -190,5 +190,5 @@ extern NanoOsApi nanoOsApi;
 }
 #endif
 
-#endif // NANO_OS_UNIX_API_H
+#endif // NANO_OS_USER_API_H
 

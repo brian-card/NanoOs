@@ -33,8 +33,8 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef NANO_OS_PWD_H
-#define NANO_OS_PWD_H
+#ifndef NANO_OS_USER_PWD_H
+#define NANO_OS_USER_PWD_H
 
 #include <sys/types.h>
 #if defined(__AVR__)
@@ -88,5 +88,5 @@ int nanoOsGetpwuid_r(
 }
 #endif
 
-#endif // NANO_OS_PWD_H
+#endif // NANO_OS_USER_PWD_H
 
