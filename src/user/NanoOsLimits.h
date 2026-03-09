@@ -46,6 +46,7 @@ extern "C"
 #define _POSIX_NAME_MAX 14      // Filename length
 #define _POSIX_OPEN_MAX 20      // Number of open files
 #define _POSIX_PATH_MAX 256     // Path length
+#define _POSIX_RTSIG_MAX 8      // Max realtime signals
 
 // Actual system values.
 #define LOGIN_NAME_MAX _POSIX_LOGIN_NAME_MAX
