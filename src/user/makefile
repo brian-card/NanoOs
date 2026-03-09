@@ -55,7 +55,7 @@ OBJECTS = \
     $(OBJ_DIR)/NanoOsPwd.o \
     $(OBJ_DIR)/NanoOsSched.o \
     $(OBJ_DIR)/NanoOsStdio.o \
-    $(OBJ_DIR)/NanoOsSys.o \
+    $(OBJ_DIR)/NanoOsSysUtsname.o \
     $(OBJ_DIR)/NanoOsTermios.o \
     $(OBJ_DIR)/NanoOsUnistd.o \
 
