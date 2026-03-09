@@ -45,7 +45,6 @@
 #define COROUTINES_H
 
 #include "setjmp.h"
-#include "stdlib.h"
 #include "stdbool.h"
 #include "time.h"
 #include "stdint.h"

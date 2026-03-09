@@ -127,8 +127,9 @@
 // Doxygen marker
 /// @file
 
-#include "string.h"
 #include "stdio.h" // For error messages
+#include "string.h"
+#include "stdlib.h"
 
 #include "Coroutines.h"
 
