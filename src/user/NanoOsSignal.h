@@ -37,6 +37,7 @@
 #define NANO_OS_USER_SIGNALS_H
 
 #include "NanoOsLimits.h"
+#include "NanoOsSysTypes.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -124,6 +125,8 @@ typedef void (*sighandler_t)(int);
 #define SIG_DFL    ((sighandler_t)0)    // Default action for signal
 #define SIG_IGN    ((sighandler_t)1)    // Ignore signal
 #define SIG_ERR    ((sighandler_t)-1)   // Error return from signal(2)
+
+int nanoOsKill(pid_t pid, int sig);
 
 #ifdef __cplusplus
 }
