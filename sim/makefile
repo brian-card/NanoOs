@@ -73,6 +73,7 @@ OS_OBJECTS := \
     $(OBJ_DIR)/NanoOsLibC.o \
     $(OBJ_DIR)/NanoOsPwd.o \
     $(OBJ_DIR)/NanoOsSched.o \
+    $(OBJ_DIR)/NanoOsSignal.o \
     $(OBJ_DIR)/NanoOsStdio.o \
     $(OBJ_DIR)/NanoOsSysUtsname.o \
     $(OBJ_DIR)/NanoOsTermios.o \
