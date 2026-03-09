@@ -44,62 +44,55 @@ extern "C"
 {
 #endif
 
-// Numbering layout:
-//   1–19   POSIX.1-2017 base signals
-//  20–29   XSI extension signals (SUS/Single Unix Specification)
-//  30+     POSIX.1-2001 real-time signals
+// Numeric values follow the conventional Unix/Linux ARM ABI numbering.
+// POSIX does not standardise these values — only the names — but these
+// assignments maximise compatibility with tools, debuggers, and shell
+// builtins (e.g. kill -9 == SIGKILL).
 //
-// POSIX does not standardise numeric values — only the names. These
-// assignments are NanoOS-specific and do not match any host ABI.
+// Gaps in the numbering are where Linux-specific signals (SIGSTKFLT=16,
+// SIGPWR=30) would sit; those are omitted as they are not defined by
+// POSIX or SUS.
 //
 // References:
 //   POSIX.1-2017  <signal.h>  (base standard)
 //   XSI extension             (marked [XSI] below)
 //   POSIX.1-2001              (real-time signals)
 
-// -----------------------------------------------------------------------
-// POSIX.1-2017 base signals (1–19)
-// -----------------------------------------------------------------------
-
 #define SIGHUP      1   // Hangup: controlling terminal closed or
                         //   controlling process died
 #define SIGINT      2   // Interrupt: interactive attention request (Ctrl-C)
 #define SIGQUIT     3   // Quit: like SIGINT but produces a core dump
 #define SIGILL      4   // Illegal instruction
-#define SIGABRT     5   // Abort: sent by abort(3)
-#define SIGFPE      6   // Arithmetic exception (integer or floating-point)
-#define SIGKILL     7   // Kill: cannot be caught, blocked, or ignored
-#define SIGUSR1     8   // User-defined signal 1
-#define SIGSEGV     9   // Segmentation violation: invalid memory reference
-#define SIGUSR2    10   // User-defined signal 2
-#define SIGPIPE    11   // Broken pipe: write to pipe with no readers
-#define SIGALRM    12   // Alarm: sent by alarm(2) when the timer expires
-#define SIGTERM    13   // Termination: polite shutdown request
-#define SIGCHLD    14   // Child process stopped or terminated
-#define SIGCONT    15   // Continue execution if currently stopped
-#define SIGSTOP    16   // Stop: cannot be caught, blocked, or ignored
-#define SIGTSTP    17   // Terminal stop: interactive stop request (Ctrl-Z)
-#define SIGTTIN    18   // Background process attempted read from terminal
-#define SIGTTOU    19   // Background process attempted write to terminal
+#define SIGTRAP     5   // [XSI] Trace/breakpoint trap
+#define SIGABRT     6   // Abort: sent by abort(3)
+#define SIGBUS      7   // [XSI] Bus error: misaligned or nonexistent address
+#define SIGFPE      8   // Arithmetic exception (integer or floating-point)
+#define SIGKILL     9   // Kill: cannot be caught, blocked, or ignored
+#define SIGUSR1    10   // User-defined signal 1
+#define SIGSEGV    11   // Segmentation violation: invalid memory reference
+#define SIGUSR2    12   // User-defined signal 2
+#define SIGPIPE    13   // Broken pipe: write to pipe with no readers
+#define SIGALRM    14   // Alarm: sent by alarm(2) when the timer expires
+#define SIGTERM    15   // Termination: polite shutdown request
+// 16: unassigned (SIGSTKFLT on Linux — not a POSIX/SUS signal)
+#define SIGCHLD    17   // Child process stopped or terminated
+#define SIGCONT    18   // Continue execution if currently stopped
+#define SIGSTOP    19   // Stop: cannot be caught, blocked, or ignored
+#define SIGTSTP    20   // Terminal stop: interactive stop request (Ctrl-Z)
+#define SIGTTIN    21   // Background process attempted read from terminal
+#define SIGTTOU    22   // Background process attempted write to terminal
+#define SIGURG     23   // [XSI] High-bandwidth data available on socket
+#define SIGXCPU    24   // [XSI] CPU time limit exceeded (see setrlimit(2))
+#define SIGXFSZ    25   // [XSI] File size limit exceeded
+#define SIGVTALRM  26   // [XSI] Virtual timer expired (ITIMER_VIRTUAL)
+#define SIGPROF    27   // [XSI] Profiling timer expired (ITIMER_PROF)
+#define SIGWINCH   28   // [XSI] Terminal window size changed
+#define SIGPOLL    29   // [XSI] Pollable event (I/O possible on a descriptor)
+// 30: unassigned (SIGPWR on Linux — not a POSIX/SUS signal)
+#define SIGSYS     31   // [XSI] Bad system call: invalid argument to syscall
 
 // -----------------------------------------------------------------------
-// XSI extension signals (20–29)
-// Required by the X/Open System Interfaces extension to POSIX (SUS).
-// -----------------------------------------------------------------------
-
-#define SIGTRAP    20   // [XSI] Trace/breakpoint trap
-#define SIGBUS     21   // [XSI] Bus error: misaligned or nonexistent address
-#define SIGURG     22   // [XSI] High-bandwidth data available on socket
-#define SIGXCPU    23   // [XSI] CPU time limit exceeded (see setrlimit(2))
-#define SIGXFSZ    24   // [XSI] File size limit exceeded
-#define SIGVTALRM  25   // [XSI] Virtual timer expired (ITIMER_VIRTUAL)
-#define SIGPROF    26   // [XSI] Profiling timer expired (ITIMER_PROF)
-#define SIGWINCH   27   // [XSI] Terminal window size changed
-#define SIGPOLL    28   // [XSI] Pollable event (I/O possible on a descriptor)
-#define SIGSYS     29   // [XSI] Bad system call: invalid argument to syscall
-
-// -----------------------------------------------------------------------
-// POSIX.1-2001 real-time signals (30+)
+// POSIX.1-2001 real-time signals (34+)
 //
 // POSIX requires at least _POSIX_RTSIG_MAX (8) distinct RT signals.
 // RT signals are queued rather than coalesced, carry a sigval payload
@@ -111,7 +104,7 @@ extern "C"
 // RT signal numbers for internal use.
 // -----------------------------------------------------------------------
 
-#define SIGRTMIN   30
+#define SIGRTMIN   34
 #define SIGRTMAX   (SIGRTMIN + _POSIX_RTSIG_MAX - 1)   // minimum range
 
 #define NSIGRT     (SIGRTMAX - SIGRTMIN + 1)
@@ -126,6 +119,7 @@ typedef void (*sighandler_t)(int);
 #define SIG_IGN    ((sighandler_t)1)    // Ignore signal
 #define SIG_ERR    ((sighandler_t)-1)   // Error return from signal(2)
 
+// NanoOs functions
 int nanoOsKill(pid_t pid, int sig);
 
 #ifdef __cplusplus
