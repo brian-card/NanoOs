@@ -37,6 +37,9 @@
 #ifndef NANO_OS_USER_SYS_TYPES_H
 #define NANO_OS_USER_SYS_TYPES_H
 
+#include <stdint.h>
+#include <stddef.h>
+
 #ifdef __cplusplus
 extern "C"
 {
