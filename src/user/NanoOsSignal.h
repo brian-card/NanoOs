@@ -3,7 +3,7 @@
 /// @author            Brian Card
 /// @date              03.08.2026
 ///
-/// @file              NanoOsSignals.h
+/// @file              NanoOsSignal.h
 ///
 /// @brief             Kernel signal number definitions exposed to userspace.
 ///
