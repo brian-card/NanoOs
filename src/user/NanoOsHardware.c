@@ -35,7 +35,7 @@
 // Must come last
 #include "NanoOsStdio.h"
 
-int nanoOsShutdown(NanoOsShutdownType shutdownType) {
+int nanoOsHardwareShutdown(NanoOsShutdownType shutdownType) {
   int returnValue = 0;
   
   switch (shutdownType) {
