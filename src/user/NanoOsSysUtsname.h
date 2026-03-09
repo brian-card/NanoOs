@@ -3,7 +3,7 @@
 /// @author            James Card
 /// @date              10.25.2025
 ///
-/// @file              NanoOsSys.h
+/// @file              NanoOsSysUtsname.h
 ///
 /// @brief             Functionality from the sys/ directory of include files.
 ///

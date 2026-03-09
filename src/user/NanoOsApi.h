@@ -57,7 +57,7 @@ typedef struct TaskInfo TaskInfo;
 
 #include "NanoOsHardware.h"
 #include "NanoOsPwd.h"
-#include "NanoOsSys.h"
+#include "NanoOsSysUtsname.h"
 
 #ifdef __cplusplus
 extern "C"

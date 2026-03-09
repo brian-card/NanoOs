@@ -30,7 +30,7 @@
 
 #include "string.h"
 #include "NanoOsLibC.h"
-#include "NanoOsSys.h"
+#include "NanoOsSysUtsname.h"
 #include "../kernel/Console.h"
 #include "../kernel/NanoOs.h"
 #include "NanoOsTermios.h"
