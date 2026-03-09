@@ -37,7 +37,7 @@
 #define ERRNO_H
 
 #include "NanoOsUser.h"
-#include "NanoOsErrno.h"
+#include "../../src/user/NanoOsErrno.h"
 
 #undef errno
 #define errno \

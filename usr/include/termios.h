@@ -38,7 +38,7 @@
 
 #include "NanoOsUser.h"
 
-#include "NanoOsTermios.h"
+#include "../../src/user/NanoOsTermios.h"
 
 #ifdef __cplusplus
 extern "C"

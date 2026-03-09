@@ -38,7 +38,7 @@
 #define NANO_OS_USER_H
 
 // Header from kernel space.
-#include "NanoOsOverlay.h"
+#include "../../src/kernel/NanoOsOverlay.h"
 
 #ifdef __cplusplus
 extern "C"

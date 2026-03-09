@@ -37,7 +37,7 @@
 #define NANO_OS_TASKS_H
 
 #include "NanoOsUser.h"
-#include "NanoOsTypes.h"
+#include "../../src/kernel/NanoOsTypes.h"
 
 #ifdef __cplusplus
 extern "C"

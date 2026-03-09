@@ -38,7 +38,7 @@
 #define PWD_H
 
 #include "NanoOsUser.h"
-#include "NanoOsPwd.h"
+#include "../../src/user/NanoOsPwd.h"
 
 #ifdef __cplusplus
 extern "C"
