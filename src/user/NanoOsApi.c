@@ -163,5 +163,8 @@ NanoOsApi nanoOsApi = {
   
   // NanoOsTasks.h functions:
   .getTaskInfo = schedulerGetTaskInfo,
+  
+  // NanoOsHardware.h functions:
+  .shutdown = nanoOsShutdown,
 };
 

@@ -55,6 +55,7 @@ typedef struct NanoOsFile NanoOsFile;
 
 typedef struct TaskInfo TaskInfo;
 
+#include "NanoOsHardware.h"
 #include "NanoOsPwd.h"
 #include "NanoOsSys.h"
 
@@ -178,6 +179,9 @@ typedef struct NanoOsApi {
   
   // NanoOsTasks.h functions:
   TaskInfo* (*getTaskInfo)(void);
+  
+  // NanoOsHardware.h functions:
+  int (*shutdown)(NanoOsShutdownType shutdownType);
 } NanoOsApi;
 
 extern NanoOsApi nanoOsApi;
