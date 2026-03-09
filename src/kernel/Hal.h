@@ -56,6 +56,16 @@ extern "C"
 {
 #endif
 
+/// @enum HalShutdownType
+///
+/// @brief Types of shutdowns that can be invoked in the HAL.
+typedef enum HalShutdownType {
+  HAL_SHUTDOWN_OFF,
+  HAL_SHUTDOWN_SUSPEND,
+  HAL_SHUTDOWN_RESET,
+  HAL_SHUTDOWN_NUM_TYPES,
+} HalShutdownType;
+
 typedef struct NanoOsOverlayMap NanoOsOverlayMap;
 
 typedef struct Hal {
@@ -304,24 +314,17 @@ typedef struct Hal {
   /// provided start time on success, -1 on failure.
   int64_t (*getElapsedNanoseconds)(int64_t startTime);
   
-  // Hardware reset and shutdown.
+  // Hardware power
   
-  /// @fn int reset(void)
+  /// @fn int shutdown(HalShutdownType shutdownType)
   ///
-  /// @brief Cause a hardware reset of the OS.  Everything will be
-  /// re-initialized at startup.
+  /// @brief Halt the OS and invoke the specified power action.
   ///
-  /// @return This function does not return on success.  On error, -errno will
+  /// @param shutdownType The power action to be invoked.
+  ///
+  /// @return Does not return or returns 0 on success.  On error, -errno will
   /// be returned.
-  int (*reset)(void);
-  
-  /// @fn int shutdown(void)
-  ///
-  /// @brief Halt the OS and shutdown the hardware (insofar as is possible).
-  ///
-  /// @return This function does not return on success.  On error, -errno will
-  /// be returned.
-  int (*shutdown)(void);
+  int (*shutdown)(HalShutdownType shutdownType);
   
   // Root storage configuration.
   

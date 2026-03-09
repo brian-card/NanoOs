@@ -287,24 +287,29 @@ int64_t posixGetElapsedNanoseconds(int64_t startTime) {
 
 static jmp_buf _resetBuffer;
 
-int posixReset(void) {
-  // Unmap the overlay so that we can map it again when we reset.
-  long pageSize = sysconf(_SC_PAGESIZE);
-  size_t overlayBaseSize
-    = ((size_t) (OVERLAY_OFFSET + OVERLAY_SIZE + (pageSize - 1)))
-    & ~((size_t) (pageSize - 1));
-  
-  if (munmap((void*) OVERLAY_BASE_ADDRESS, overlayBaseSize) < 0) {
-    fprintf(stderr, "ERROR: munmap returned: %s\n", strerror(errno));
-    fprintf(stderr, "Exiting.\n");
-    exit(1);
+int posixShutdown(HalShutdownType shutdownType) {
+  // You can't completely turn off the hardware we're running on.  We're
+  // simulating hardware, so do what the hardware would do, which is the same
+  // set of operations for both off and suspend.
+  if ((shutdownType == HAL_SHUTDOWN_OFF)
+    || (shutdownType == HAL_SHUTDOWN_SUSPEND)
+  ) {
+    exit(0);
+  } else if (shutdownType == HAL_SHUTDOWN_RESET) {
+    // Unmap the overlay so that we can map it again when we reset.
+    long pageSize = sysconf(_SC_PAGESIZE);
+    size_t overlayBaseSize
+      = ((size_t) (OVERLAY_OFFSET + OVERLAY_SIZE + (pageSize - 1)))
+      & ~((size_t) (pageSize - 1));
+    
+    if (munmap((void*) OVERLAY_BASE_ADDRESS, overlayBaseSize) < 0) {
+      fprintf(stderr, "ERROR: munmap returned: %s\n", strerror(errno));
+      fprintf(stderr, "Exiting.\n");
+      exit(1);
+    }
+    longjmp(_resetBuffer, 1);
   }
-  longjmp(_resetBuffer, 1);
-  return 0;
-}
-
-int posixShutdown(void) {
-  exit(0);
+  
   return 0;
 }
 
@@ -708,8 +713,7 @@ static Hal posixHal = {
   .getElapsedMicroseconds = posixGetElapsedMicroseconds,
   .getElapsedNanoseconds = posixGetElapsedNanoseconds,
   
-  // Hardware reset and shutdown.
-  .reset = posixReset,
+  // Hardware power
   .shutdown = posixShutdown,
   
   // Root storage configuration.

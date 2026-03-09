@@ -507,20 +507,25 @@ int64_t arduinoNano33IotGetElapsedNanoseconds(int64_t startTime) {
     startTime / ((int64_t) 1000)) * ((int64_t) 1000);
 }
 
-int arduinoNano33IotReset(void) {
-  NVIC_SystemReset();
-  return 0;
-}
+int arduinoNano33IotShutdown(HalShutdownType shutdownType) {
+  // You can't completely turn off a Nano 33 IoT from software.  The best we
+  // can do is put into a low power state, so do the same set of operations for
+  // both off and suspend.
+  if ((shutdownType == HAL_SHUTDOWN_OFF)
+    || (shutdownType == HAL_SHUTDOWN_SUSPEND)
+  ) {
+    // Configure for standby mode
+    SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk;
+    
+    // Set standby mode in Power Manager
+    PM->SLEEP.reg = PM_SLEEP_IDLE_CPU;
+    
+    __DSB(); // Data Synchronization Barrier
+    __WFI(); // Wait For Interrupt
+  } else if (shutdownType == HAL_SHUTDOWN_RESET) {
+    NVIC_SystemReset();
+  }
 
-int arduinoNano33IotShutdown(void) {
-  // Configure for standby mode
-  SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk;
-  
-  // Set standby mode in Power Manager
-  PM->SLEEP.reg = PM_SLEEP_IDLE_CPU;
-  
-  __DSB(); // Data Synchronization Barrier
-  __WFI(); // Wait For Interrupt
   return 0;
 }
 
@@ -990,8 +995,7 @@ static Hal arduinoNano33IotHal = {
   .getElapsedMicroseconds = arduinoNano33IotGetElapsedMicroseconds,
   .getElapsedNanoseconds = arduinoNano33IotGetElapsedNanoseconds,
   
-  // Hardware reset and shutdown.
-  .reset = arduinoNano33IotReset,
+  // Hardware power
   .shutdown = arduinoNano33IotShutdown,
   
   // Root storage configuration.

@@ -384,41 +384,45 @@ int64_t arduinoNanoEveryGetElapsedNanoseconds(int64_t startTime) {
     startTime / ((int64_t) 1000000)) * ((int64_t) 1000000);
 }
 
-int arduinoNanoEveryReset(void) {
-  _PROTECTED_WRITE(RSTCTRL.SWRR, 1);
-  return 0;
-}
-
-int arduinoNanoEveryShutdown(void) {
-  // 1. Disable ADC
-  ADC0.CTRLA &= ~ADC_ENABLE_bm;
-  
-  // 2. Disable all peripherals via Power Reduction
-  SLPCTRL.CTRLA = SLPCTRL_SMODE_PDOWN_gc;  // Power-down mode
-  
-  // 3. Disable Brown-Out Detection (BOD) during sleep
-  //    This is critical for lowest power!
-  _PROTECTED_WRITE(BOD.CTRLA, BOD_SLEEP_DIS_gc);
-  
-  // 4. Disable all unnecessary peripherals
-  USART0.CTRLB = 0;   // Disable USART
-  USART1.CTRLB = 0;
-  USART2.CTRLB = 0;
-  TWI0.MCTRLA = 0;    // Disable I2C
-  SPI0.CTRLA = 0;     // Disable SPI
-  
-  // 5. Configure all pins to minimize leakage
-  //    Set unused pins as inputs with pullups disabled
-  for (uint8_t pin = 0; pin < NUM_TOTAL_PINS; pin++) {
-    pinMode(pin, INPUT);
-    digitalWrite(pin, LOW);  // Disable pullup
+int arduinoNanoEveryShutdown(HalShutdownType shutdownType) {
+  // You can't completely turn off a Nano 33 IoT from software.  The best we
+  // can do is put into a low power state, so do the same set of operations for
+  // both off and suspend.
+  if ((shutdownType == HAL_SHUTDOWN_OFF)
+    || (shutdownType == HAL_SHUTDOWN_SUSPEND)
+  ) {
+    // 1. Disable ADC
+    ADC0.CTRLA &= ~ADC_ENABLE_bm;
+    
+    // 2. Disable all peripherals via Power Reduction
+    SLPCTRL.CTRLA = SLPCTRL_SMODE_PDOWN_gc;  // Power-down mode
+    
+    // 3. Disable Brown-Out Detection (BOD) during sleep
+    //    This is critical for lowest power!
+    _PROTECTED_WRITE(BOD.CTRLA, BOD_SLEEP_DIS_gc);
+    
+    // 4. Disable all unnecessary peripherals
+    USART0.CTRLB = 0;   // Disable USART
+    USART1.CTRLB = 0;
+    USART2.CTRLB = 0;
+    TWI0.MCTRLA = 0;    // Disable I2C
+    SPI0.CTRLA = 0;     // Disable SPI
+    
+    // 5. Configure all pins to minimize leakage
+    //    Set unused pins as inputs with pullups disabled
+    for (uint8_t pin = 0; pin < NUM_TOTAL_PINS; pin++) {
+      pinMode(pin, INPUT);
+      digitalWrite(pin, LOW);  // Disable pullup
+    }
+    
+    // 6. Enter sleep
+    set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+    sleep_enable();
+    sei();  // Must enable interrupts for wake-up
+    sleep_cpu();
+  } else if (shutdownType == HAL_SHUTDOWN_RESET) {
+    _PROTECTED_WRITE(RSTCTRL.SWRR, 1);
   }
-  
-  // 6. Enter sleep
-  set_sleep_mode(SLEEP_MODE_PWR_DOWN);
-  sleep_enable();
-  sei();  // Must enable interrupts for wake-up
-  sleep_cpu();
   
   return 0;
 }
@@ -561,8 +565,7 @@ static Hal arduinoNanoEveryHal = {
   .getElapsedMicroseconds = arduinoNanoEveryGetElapsedMicroseconds,
   .getElapsedNanoseconds = arduinoNanoEveryGetElapsedNanoseconds,
   
-  // Hardware reset and shutdown.
-  .reset = arduinoNanoEveryReset,
+  // Hardware power
   .shutdown = arduinoNanoEveryShutdown,
   
   // Root storage configuration.

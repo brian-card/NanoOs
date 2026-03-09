@@ -282,7 +282,7 @@ int resetCommandHandler(int argc, char **argv) {
   (void) argc;
   (void) argv;
 
-  HAL->reset();
+  HAL->shutdown(HAL_SHUTDOWN_RESET);
 
   return 0;
 }
@@ -301,7 +301,7 @@ int shutdownCommandHandler(int argc, char **argv) {
   (void) argc;
   (void) argv;
 
-  HAL->shutdown();
+  HAL->shutdown(HAL_SHUTDOWN_OFF);
 
   return 0;
 }
