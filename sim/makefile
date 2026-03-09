@@ -63,6 +63,7 @@ OS_OBJECTS := \
     $(OBJ_DIR)/MemoryManager.o \
     $(OBJ_DIR)/Messages.o \
     $(OBJ_DIR)/NanoOs.o \
+    $(OBJ_DIR)/NanoOsHardware.o \
     $(OBJ_DIR)/NanoOsOverlay.o \
     $(OBJ_DIR)/Tasks.o \
     $(OBJ_DIR)/Scheduler.o \
