@@ -37,6 +37,7 @@ LINKS = \
 
 INCLUDES = \
     -I../kernel \
+    -I../include \
 
 WARNINGS = \
     -Wall \
