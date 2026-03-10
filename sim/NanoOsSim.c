@@ -25,6 +25,9 @@
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 
+// Standard C includes
+#include "string.h"
+
 // NanoOs includes
 #include "NanoOs.h"
 #include "Scheduler.h"
