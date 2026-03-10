@@ -18,11 +18,11 @@ if [ ! -e "${targetDevice}" ]; then
 fi
 
 echo "Building applications..."
-make -C usr/src clean
-make -C usr/src COMPILE=gcc LINK=ld OBJCOPY=objcopy OBJDUMP=objdump SIZE=size \
-	LINKER_SCRIPT=NanoOsSim.ld overlays
-make -C sim clean
-make -C sim
+make -j $(nproc) -C usr/src clean
+make -j $(nproc) -C usr/src COMPILE=gcc LINK=ld OBJCOPY=objcopy \
+	OBJDUMP=objdump SIZE=size LINKER_SCRIPT=NanoOsSim.ld overlays
+make -j $(nproc) -C sim clean
+make -j $(nproc) -C sim
 
 # Make a temporary mountpoint
 mountDir="$(mktemp -d)"
