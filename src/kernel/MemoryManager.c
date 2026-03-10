@@ -28,6 +28,9 @@
 // Doxygen marker
 /// @file
 
+// Standard C includes
+#include "string.h"
+
 // NanoOs includes
 #include "Console.h"
 #include "Hal.h"
