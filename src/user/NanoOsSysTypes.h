@@ -37,19 +37,7 @@
 #ifndef NANO_OS_USER_SYS_TYPES_H
 #define NANO_OS_USER_SYS_TYPES_H
 
-#include <stdint.h>
-#include <stddef.h>
-
-#ifdef __cplusplus
-extern "C"
-{
-#endif
-
-typedef uint8_t pid_t;
-
-#ifdef __cplusplus
-}
-#endif
+#include "../include/sys/types.h"
 
 #endif // NANO_OS_USER_SYS_TYPES_H
 
