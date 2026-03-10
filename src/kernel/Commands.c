@@ -29,11 +29,11 @@
 /// @file
 
 // Standard C includes
-#define FILE C_FILE
-#include "stdio.h"
-#undef FILE
 #include "stdlib.h"
 #include "string.h"
+
+// Prototypes we need from stdio.h because we can't include it directly.
+int sprintf(char *str, const char *format, ...);
 
 // NanoOs includes
 #include "Commands.h"

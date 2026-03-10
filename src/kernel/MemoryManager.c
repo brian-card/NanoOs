@@ -889,7 +889,7 @@ int memoryManagerDumpMemoryAllocations(
     cur = cur->next
   ) {
     printString("  0x");
-    printHex(&cur[1]);
+    printHex((uintptr_t) &cur[1]);
     printString(": ");
     printInt(cur->size);
     printString(" bytes owned by ");
@@ -903,7 +903,7 @@ int memoryManagerDumpMemoryAllocations(
     cur = cur->next
   ) {
     printString("  0x");
-    printHex(&cur[1]);
+    printHex((uintptr_t) &cur[1]);
     printString(": ");
     printInt(cur->size);
     printString(" bytes available\n");

@@ -29,9 +29,12 @@
 /// @file
 
 // Standard C includes
-#define FILE C_FILE
-#include "stdio.h"
-#undef FILE
+#include <stdarg.h>
+#include <stdint.h>
+
+// Types and prototypes we need from stdio.h because we can't include it.
+typedef uintptr_t size_t;
+int vsnprintf(char *str, size_t size, const char *format, va_list ap);
 
 // Must come first
 #include "NanoOsApi.h"

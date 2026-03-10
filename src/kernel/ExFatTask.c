@@ -322,7 +322,7 @@ int exFatTaskDumpOpenFilesCommandHandler(
   ) {
     ExFatFileHandle *exFatFile = (ExFatFileHandle*) nanoOsFile->file;
     printString("0x");
-    printHex(nanoOsFile);
+    printHex((uintptr_t) nanoOsFile);
     printString(": \"");
     printString(exFatFile->fileName);
     printString("\" owned by ");
