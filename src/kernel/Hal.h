@@ -36,18 +36,8 @@
 
 // Standard C includes
 #include "setjmp.h"
-#include "stdarg.h"
 #include "stdbool.h"
 #include "stdint.h"
-#include "string.h"
-
-#if defined(__linux__) || defined(__linux) || defined(_WIN32)
-// We're compiling as an application within another OS
-#include "sys/types.h"
-#endif
-
-// NanoOs includes
-#include "NanoOsTypes.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -64,7 +54,13 @@ typedef enum HalShutdownType {
   HAL_SHUTDOWN_NUM_TYPES,
 } HalShutdownType;
 
+// Standard C types
+typedef intptr_t ssize_t;
+struct timespec;
+
+// NanoOs types
 typedef struct NanoOsOverlayMap NanoOsOverlayMap;
+typedef struct SchedulerState SchedulerState;
 
 typedef struct Hal {
   // Memory definitions.
