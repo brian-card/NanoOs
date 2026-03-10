@@ -58,6 +58,7 @@ typedef struct TaskInfo TaskInfo;
 #include "NanoOsHardware.h"
 #include "NanoOsPwd.h"
 #include "NanoOsSysUtsname.h"
+#include "NanoOsSysTypes.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -166,6 +167,9 @@ typedef struct NanoOsApi {
   
   // sched.h functions:
   int (*sched_yield)(void);
+  
+  // signal.h functions:
+  int (*kill)(pid_t pid, int sig);
   
   // NanoOs-specific functionality
   

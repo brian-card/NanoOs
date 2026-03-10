@@ -39,6 +39,7 @@
 #include "NanoOsLibC.h"
 #include "NanoOsPwd.h"
 #include "NanoOsSched.h"
+#include "NanoOsSignal.h"
 #include "NanoOsTermios.h"
 #include "NanoOsUnistd.h"
 
@@ -151,6 +152,9 @@ NanoOsApi nanoOsApi = {
   
   // sched.h functions:
   .sched_yield = nanoOsSchedYield,
+  
+  // signal.h functions:
+  .kill = nanoOsKill,
   
   // NanoOs-specific functionality
   
