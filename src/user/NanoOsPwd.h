@@ -36,19 +36,12 @@
 #ifndef NANO_OS_USER_PWD_H
 #define NANO_OS_USER_PWD_H
 
-#include <sys/types.h>
-#if defined(__AVR__)
-typedef unsigned int gid_t;
-#endif // __AVR__
+#include "NanoOsSysTypes.h"
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif
-
-#ifndef uid_t
-#define uid_t int16_t
-#endif // uid_t
 
 /// @def NANO_OS_MAX_PASSWORD_LENGTH
 ///
