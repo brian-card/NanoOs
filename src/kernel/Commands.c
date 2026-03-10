@@ -28,6 +28,11 @@
 // Doxygen marker
 /// @file
 
+// Standard C includes
+#include "stdlib.h"
+#include "string.h"
+
+// NanoOs includes
 #include "../user/NanoOsApi.h"
 #include "Commands.h"
 #include "Console.h"
