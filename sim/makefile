@@ -59,6 +59,7 @@ OS_OBJECTS := \
     $(OBJ_DIR)/ExFatTask.o \
     $(OBJ_DIR)/Filesystem.o \
     $(OBJ_DIR)/HalPosix.o \
+    $(OBJ_DIR)/HalPosixImpl.o \
     $(OBJ_DIR)/Link.o \
     $(OBJ_DIR)/MemoryManager.o \
     $(OBJ_DIR)/Messages.o \
@@ -82,6 +83,7 @@ OS_OBJECTS := \
 SIM_OBJECTS := \
     $(OBJ_DIR)/NanoOsSim.o \
     $(OBJ_DIR)/SdCardPosix.o \
+    $(OBJ_DIR)/SdCardPosixImpl.o \
 
 # Default target
 all: $(BINARY)
