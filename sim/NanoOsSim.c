@@ -29,12 +29,7 @@
 #include "string.h"
 
 // NanoOs includes
-#include "NanoOs.h"
 #include "Scheduler.h"
-#include "SdCardPosix.h"
-
-// Has to come last
-#include "NanoOsStdio.h"
 
 // Simulator includes
 #include "HalPosix.h"
@@ -64,6 +59,9 @@
 
 // Standard C includes
 #include <stdio.h>
+
+//// #define printDebug(format, ...) fprintf(stderr, format, ##__VA_ARGS__)
+#define printDebug(format, ...) {}
 
 const Hal *HAL = NULL;
 
@@ -126,9 +124,7 @@ int main(int argc, char **argv) {
   }
   HAL->setNumTimers(ii);
   if (ii != numTimers) {
-    printString("WARNING: Only initialized ");
-    printInt(ii);
-    printString(" timers\n");
+    fprintf(stderr, "WARNING: Only initialized %d timers\n", ii);
   }
 
   // On hardware, we need a "Booting..." message and a delay so that we give
@@ -170,7 +166,7 @@ int main(int argc, char **argv) {
   }
 
   // Enter the scheduler.  This never returns.
-  printDebugString("Starting scheduler.\n");
+  printDebug("Starting scheduler.\n");
   startScheduler(&coroutineStatePointer);
 
   return 0;

@@ -39,8 +39,11 @@
 #undef FILE
 
 // Standard C includes
+#include <stdarg.h>
+#include <stddef.h>
+
 #define FILE C_FILE
-#include "stdio.h"
+//// #include "stdio.h"
 #undef FILE
 
 #define FILE NanoOsFile

@@ -28,7 +28,12 @@
 // Doxygen marker
 /// @file
 
+// Standard C includes
+#define FILE C_FILE
+#include "stdio.h"
+#undef FILE
 #include "string.h"
+
 #include "NanoOsLibC.h"
 #include "NanoOsUnistd.h"
 #include "../kernel/Console.h"

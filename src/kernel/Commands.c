@@ -29,11 +29,13 @@
 /// @file
 
 // Standard C includes
+#define FILE C_FILE
+#include "stdio.h"
+#undef FILE
 #include "stdlib.h"
 #include "string.h"
 
 // NanoOs includes
-#include "../user/NanoOsApi.h"
 #include "Commands.h"
 #include "Console.h"
 #include "Hal.h"
