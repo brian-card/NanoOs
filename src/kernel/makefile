@@ -37,6 +37,7 @@ LINKS = \
 
 INCLUDES = \
     -I../user \
+    -I../include \
 
 WARNINGS = \
     -Wall \
