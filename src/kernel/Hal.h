@@ -35,12 +35,10 @@
 #define HAL_H
 
 // Standard C includes
-#include "limits.h"
 #include "setjmp.h"
 #include "stdarg.h"
 #include "stdbool.h"
 #include "stdint.h"
-#include "stdlib.h"
 #include "string.h"
 
 #if defined(__linux__) || defined(__linux) || defined(_WIN32)
