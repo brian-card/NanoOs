@@ -240,7 +240,7 @@ int scanfParseSignedInt(
   int numParsedValues = 0;
   char *nextBufferChar = NULL;
 
-  long value = strtol(*buffer, &nextBufferChar, 0);
+  long long value = nanoOsStrtoll(*buffer, &nextBufferChar, 0);
   if (nextBufferChar == NULL) {
     // Nothing was parsed.  Bail.
     return numParsedValues; // 0
