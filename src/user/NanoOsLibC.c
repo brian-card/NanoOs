@@ -101,7 +101,7 @@ const int NUM_ERRORS = sizeof(errorStrings) / sizeof(errorStrings[0]);
 /// defined errors, the string "Unknown error" will be returned.
 char* nanoOsStrError(int errnum) {
   if ((errnum < 0) || (errnum >= NUM_ERRORS)) {
-    errnum = EUNKNOWN;
+    errnum = EOTHER;
   }
 
   return (char*) errorStrings[errnum];
@@ -137,5 +137,112 @@ time_t time(time_t *tloc) {
   }
   
   return now;
+}
+
+/// @fn long long nanoOsStrtoll(const char *nptr, char **endptr, int base)
+///
+/// @brief NanoOs implementation of the standard C strtoll function.
+///
+/// @param nptr A pointer to the beginning of a string to convert to an integer
+///   representation.
+/// @param endptr A pointer to a char pointer that will be set to the first
+///   character after the last valid numerical character if endptr is non-NULL.
+/// @param base The base of the numeric string being passed in in thee range 2
+///   through 36, inclusive, or the special value 0 which will determine the
+///   base by the first few digits of the number.
+///
+/// @return On success, the converted number is returned.  If nptr is NULL, 0 is
+/// returned and errno is set to EOTHER.  If base is an invalid value, 0 is
+/// returned and errno is set to EINVAL.  On underflow or overflow, LLONG_MIN or
+/// LLONG_MAX is returned, respectively, and errno is set to ERANGE.
+long long nanoOsStrtoll(const char *nptr, char **endptr, int base) {
+  long long returnValue = 0;
+  long long multiplier = 1;
+  
+  if (nptr == NULL) {
+    // Can't convert a NULL pointer, but there's no standard error for this.
+    errno = EOTHER;
+    return returnValue; // 0
+  } else if ((base < 0) || (base == 1) || (base > 36)) {
+    // Invalid baase.
+    errno = EINVAL;
+    return returnValue; // 0
+  }
+  
+  nptr = &nptr[strspn(nptr, " \t\r\n")];
+  
+  if (*nptr == '-') {
+    multiplier = -1;
+    nptr++;
+  } else if (*nptr == '+') {
+    // No-op
+    nptr++;
+  }
+  
+  // We're at the first character of the number (supposedly).  If the base is 0
+  // then we need to figure out the real base by looking at the fisrt few
+  // digits.
+  if (base == 0) {
+    base = 10; // Until proven otherwise
+    
+    if (*nptr == '0') {
+      // We need to evaluate the next character.
+      char nextChar = nptr[1];
+      if ((nextChar == 'x') || (nextChar == 'X')) {
+        // Hexadecimal number
+        base = 16;
+        nptr = &nptr[2];
+      } else if ((nextChar >= '1') && (nextChar <= '7')) {
+        // Octal number
+        base = 8;
+        nptr = &nptr[1];
+      }
+    }
+  }
+  
+  char c = *nptr;
+  while (c != '\0') {
+    char digit = 0;
+    if ((c >= '0') && (c <= '9')) {
+      digit = c - '0';
+    } else if ((c >= 'a') && (c <= 'z')) {
+      digit = c - 'a';
+    } else if ((c >= 'A') && (c <= 'Z')) {
+      digit = c - 'A';
+    } else {
+      // Not an alpha-numeric character
+      break;
+    }
+    
+    if (digit >= ((char) base)) {
+      // Not a character that's in our base
+      break;
+    }
+    
+    returnValue *= (long long) base;
+    returnValue += (long long) digit;
+    
+    if (returnValue < 0) {
+      // Overflow or underflow.  We have to halt immediately and return the
+      // corresponding value.
+      returnValue = 1 << ((sizeof(long long) << 3) - 1); // LLONG_MIN
+      if (multiplier == 1) {
+        returnValue--; // LLONG_MAX
+      }
+      errno = ERANGE;
+      return returnValue;
+    }
+    
+    nptr++;
+    c = *nptr;
+  }
+  
+  returnValue *= multiplier;
+  
+  if (endptr != NULL) {
+    *endptr = (char*) nptr;
+  }
+  
+  return returnValue;
 }
 
