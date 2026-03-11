@@ -36,6 +36,7 @@
 #ifndef STDLIB_H
 #define STDLIB_H
 
+#include <stdbool.h>
 #include "NanoOsUser.h"
 
 #ifdef __cplusplus
@@ -63,11 +64,23 @@ static inline char *getenv(const char *name) {
     "/usr/lib/stdlib", "getenv", "getenv", (void*) name);
 }
 
-static inline int rand(void) {
-  return overlayMap.header.osApi->rand();
+static inline long strtol(const char *nptr, char **endptr, int base) {
+  unsigned long long returnValue = (unsigned long long)
+    overlayMap.header.osApi->strtoll(nptr, endptr, base);
+
+  unsigned long max = (unsigned long) -1;
+  if (returnValue > max) {
+    bool negative = ((returnValue & (1ULL << ((sizeof(long long) << 3) - 1))));
+    returnValue = 1LL << ((sizeof(long) << 3) - 1); // LONG_MIN
+    if (!negative) {
+      returnValue--; // LONG_MAX
+    }
+  }
+
+  return (long) returnValue;
 }
-static inline void srand(unsigned int seed) {
-  overlayMap.header.osApi->srand(seed);
+static inline long long strtoll(const char *nptr, char **endptr, int base) {
+  return overlayMap.header.osApi->strtoll(nptr, endptr, base);
 }
 
 #ifdef __cplusplus
