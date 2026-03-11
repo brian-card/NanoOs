@@ -225,7 +225,7 @@ long long nanoOsStrtoll(const char *nptr, char **endptr, int base) {
     if (returnValue < 0) {
       // Overflow or underflow.  We have to halt immediately and return the
       // corresponding value.
-      returnValue = 1 << ((sizeof(long long) << 3) - 1); // LLONG_MIN
+      returnValue = 1LL << ((sizeof(long long) << 3) - 1); // LLONG_MIN
       if (multiplier == 1) {
         returnValue--; // LLONG_MAX
       }
