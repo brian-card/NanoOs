@@ -102,6 +102,8 @@ char* nanoOsStrError(int errnum);
 #endif
 #define strerror nanoOsStrError
 
+long long nanoOsStrtoll(const char *nptr, char **endptr, int base);
+
 #ifdef __cplusplus
 } // extern "C"
 #endif
