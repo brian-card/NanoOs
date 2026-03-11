@@ -522,6 +522,7 @@ int arduinoNanoEveryCancelAndGetTimer(int timer,
   void (**callback)(void)
 ) {
   (void) timer;
+  (void) configuredNanoseconds;
   (void) remainingNanoseconds;
   (void) callback;
   
