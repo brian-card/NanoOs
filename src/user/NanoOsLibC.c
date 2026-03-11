@@ -62,7 +62,7 @@ int timespec_get(struct timespec* spec, int base) {
 /// @brief Array of error messages arranged by error code.
 const char *errorStrings[] = {
   "Success",                          // ENOERR
-  "Unknown error",                    // EUNKNOWN
+  "Unspecified error",                // EOTHER
   "Device or resource busy",          // EBUSY
   "Out of memory",                    // ENOMEM
   "Permission denied",                // EACCES

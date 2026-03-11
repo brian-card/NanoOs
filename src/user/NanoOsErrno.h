@@ -46,7 +46,7 @@ extern "C"
 // because most things are defined to be ENOERR.  So, we need to define some of
 // our own.
 #define ENOERR           0      /* Success */
-#define EUNKNOWN         1      /* Unknown error */
+#define EOTHER           1      /* Unspecified error (POSIX.1-2008) */
 #define EBUSY            2      /* Device or resource busy */
 #define ENOMEM           3      /* Out of memory */
 #define EACCES           4      /* Permission denied */
