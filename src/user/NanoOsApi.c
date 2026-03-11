@@ -133,6 +133,7 @@ NanoOsApi nanoOsApi = {
   .getenv = NULL,
   .rand = NULL,
   .srand = NULL,
+  .strtoll = nanoOsStrtoll,
   
   // unistd functions:
   .gethostname = nanoOsGethostname,
