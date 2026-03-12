@@ -65,12 +65,13 @@ static inline char *getenv(const char *name) {
 }
 
 static inline long strtol(const char *nptr, char **endptr, int base) {
-  unsigned long long returnValue = (unsigned long long)
+  long long returnValue = (unsigned long long)
     overlayMap.header.osApi->strtoll(nptr, endptr, base);
 
   if (sizeof(long long) > sizeof(long)) {
-    unsigned long max = (unsigned long) -1;
-    if (returnValue > max) {
+    long min = 1L << ((sizeof(long) << 3) - 1);
+    long max = min - 1;
+    if ((returnValue > (long long) max) || (returnValue < (long long) min)) {
       bool negative
         = ((returnValue & (1ULL << ((sizeof(long long) << 3) - 1))));
       returnValue = 1LL << ((sizeof(long) << 3) - 1); // LONG_MIN
