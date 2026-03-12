@@ -28,6 +28,9 @@
 // Doxygen marker
 /// @file
 
+// Unix includes
+#include "sys/types.h"
+
 // Custom includes
 #include "Console.h"
 #include "ExFatFilesystem.h"
@@ -1341,6 +1344,126 @@ freeExecArgs:
   return -1;
 }
 
+/// @fn int schedulerSpawn(
+///   pid_t *pid, const char *path,
+///   const posix_spawn_file_actions_t *file_actions,
+///   const posix_spawnattr_t *attrp,
+///   char *const argv[], char *const envp[])
+///
+/// @brief NanoOs implementation of Unix posix_spawn function.
+///
+/// @param pathname The full, absolute path on disk to the program to run.
+/// @param argv The NULL-terminated array of arguments for the command.  argv[0]
+///   must be valid and should be the name of the program.
+/// @param envp The NULL-terminated array of environment variables in
+///   "name=value" format.  This array may be NULL.
+///
+/// @return This function will not return to the caller on success.  On failure,
+/// -1 will be returned and the value of errno will be set to indicate the
+/// reason for the failure.
+int schedulerSpawn(
+  pid_t *pid, const char *path,
+  const posix_spawn_file_actions_t *file_actions,
+  const posix_spawnattr_t *attrp,
+  char *const argv[], char *const envp[]
+) {
+  int returnValue = 0;
+  if ((path == NULL) || (argv == NULL) || (argv[0] == NULL)) {
+    return EFAULT;
+  }
+
+  SpawnArgs *spawnArgs = (SpawnArgs*) malloc(sizeof(SpawnArgs));
+  if (spawnArgs == NULL) {
+    return ENOMEM;
+  }
+
+  spawnArgs->newPid = pid;
+
+  spawnArgs->path = (char*) malloc(strlen(path) + 1);
+  if (spawnArgs->path == NULL) {
+    returnValue = ENOMEM;
+    goto freeSpawnArgs;
+  }
+  strcpy(spawnArgs->path, path);
+
+  // Not doing anything intelligent with these two args yet.  We need to make
+  // copies of these rather than casting away the `const` qualifier here if we
+  // ever do use them.
+  spawnArgs->fileActions = (posix_spawn_file_actions_t*) file_actions;
+  spawnArgs->attrp = (posix_spawnattr_t*) attrp;
+
+  size_t argvLen = 0;
+  for (; argv[argvLen] != NULL; argvLen++);
+  argvLen++; // Account for the terminating NULL element
+  spawnArgs->argv = (char**) malloc(argvLen * sizeof(char*));
+  if (spawnArgs->argv == NULL) {
+    returnValue = ENOMEM;
+    goto freeSpawnArgs;
+  }
+
+  // argvLen is guaranteed to always be at least 1, so it's safe to run to
+  // (argvLen - 1) here.
+  size_t ii = 0;
+  for (; ii < (argvLen - 1); ii++) {
+    // We know that argv[ii] isn't NULL because of the calculation for argvLen
+    // above, so it's safe to use strlen.
+    spawnArgs->argv[ii] = (char*) malloc(strlen(argv[ii]) + 1);
+    if (spawnArgs->argv[ii] == NULL) {
+      returnValue = ENOMEM;
+      goto freeSpawnArgs;
+    }
+    strcpy(spawnArgs->argv[ii], argv[ii]);
+  }
+  spawnArgs->argv[ii] = NULL; // NULL-terminate the array
+
+  if (envp != NULL) {
+    size_t envpLen = 0;
+    for (; envp[envpLen] != NULL; envpLen++);
+    envpLen++; // Account for the terminating NULL element
+    spawnArgs->envp = (char**) malloc(envpLen * sizeof(char*));
+    if (spawnArgs->envp == NULL) {
+      returnValue = ENOMEM;
+      goto freeSpawnArgs;
+    }
+
+    // envpLen is guaranteed to always be at least 1, so it's safe to run to
+    // (envpLen - 1) here.
+    for (ii = 0; ii < (envpLen - 1); ii++) {
+      // We know that envp[ii] isn't NULL because of the calculation for envpLen
+      // above, so it's safe to use strlen.
+      spawnArgs->envp[ii] = (char*) malloc(strlen(envp[ii]) + 1);
+      if (spawnArgs->envp[ii] == NULL) {
+        returnValue = ENOMEM;
+        goto freeSpawnArgs;
+      }
+      strcpy(spawnArgs->envp[ii], envp[ii]);
+    }
+    spawnArgs->envp[ii] = NULL; // NULL-terminate the array
+  } else {
+    spawnArgs->envp = NULL;
+  }
+
+  TaskMessage *taskMessage
+    = sendNanoOsMessageToTaskId(
+    NANO_OS_SCHEDULER_TASK_ID, SCHEDULER_SPAWN,
+    /* func= */ 0, /* data= */ (uintptr_t) spawnArgs, true);
+  if (taskMessage == NULL) {
+    // The only way this should be possible is if all available messages are
+    // in use, so use ENOMEM as the errno.
+    errno = ENOMEM;
+    return -1;
+  }
+
+  taskMessageWaitForDone(taskMessage, NULL);
+  returnValue = nanoOsMessageDataValue(taskMessage, int);
+  taskMessageRelease(taskMessage);
+
+freeSpawnArgs:
+  spawnArgs = spawnArgsDestroy(spawnArgs);
+
+  return returnValue;
+}
+
 /// @fn int schedulerAssignMemory(void *ptr)
 ///
 /// @brief Assign a piece of memory to be owned by the scheduler.  This
@@ -2161,6 +2284,7 @@ int schedulerExecveCommandHandler(
     taskMessageSetDone(taskMessage);
     return returnValue; // 0; Don't retry this command
   }
+  nanoOsMessage->data = 0; // Until proven otherwise
   execArgs->callingTaskId = taskId(taskMessageFrom(taskMessage));
 
   char *pathname = execArgs->pathname;
@@ -2365,6 +2489,7 @@ int schedulerSpawnCommandHandler(
     taskMessageSetDone(taskMessage);
     return returnValue; // 0; Don't retry this command
   }
+  nanoOsMessage->data = 0; // Until proven otherwise
 
   char *pathname = spawnArgs->path;
   if (pathname == NULL) {
@@ -2413,7 +2538,9 @@ int schedulerSpawnCommandHandler(
   execArgs->argv = spawnArgs->argv;
   execArgs->envp = spawnArgs->envp;
   execArgs->schedulerState = schedulerState;
+
   schedFree(spawnArgs); spawnArgs = NULL;
+
   if (taskCreate(taskDescriptor, execCommand, execArgs) == taskError) {
     printString(
       "ERROR: Could not configure task handle for new command.\n");
@@ -2469,7 +2596,7 @@ int schedulerSpawnCommandHandler(
   // Put the task on the ready queue.
   taskQueuePush(&schedulerState->ready, taskDescriptor);
 
-  taskMessageRelease(taskMessage);
+  taskMessageSetDone(taskMessage);
 
   return returnValue;
 }
