@@ -257,6 +257,7 @@ TaskMessage* sendNanoOsMessageToTaskId(int taskId, int type,
   NanoOsMessageData func, NanoOsMessageData data, bool waiting);
 void* waitForDataMessage(TaskMessage *sent, int type, const struct timespec *ts);
 ExecArgs* execArgsDestroy(ExecArgs *execArgs);
+SpawnArgs* spawnArgsDestroy(SpawnArgs *spawnArgs);
 char** parseArgs(char *command, int *argc);
 
 #ifdef __cplusplus

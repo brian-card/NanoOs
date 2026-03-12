@@ -90,6 +90,25 @@ ExecArgs* execArgsDestroy(ExecArgs *execArgs) {
   return NULL;
 }
 
+/// @fn SpawnArgs* spawnArgsDestroy(SpawnArgs *execArgs)
+///
+/// @brief Free all of an SpawnArgs structure.
+///
+/// @param spawnArgs A pointer to an SpawnArgs structure.
+///
+/// @return This function always succeeds and always returns NULL.
+SpawnArgs* spawnArgsDestroy(SpawnArgs *spawnArgs) {
+  free(spawnArgs->path);
+
+  spawnArgs->argv = stringArrayDestroy(spawnArgs->argv);
+  spawnArgs->envp = stringArrayDestroy(spawnArgs->envp);
+
+  // We don't need to and SHOULD NOT touch spawnArgs->schedulerState.
+
+  free(spawnArgs);
+  return NULL;
+}
+
 /// @fn int getNumTokens(const char *input)
 ///
 /// @brief Get the number of whitespace-delimited tokens in a string.
