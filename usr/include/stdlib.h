@@ -68,12 +68,15 @@ static inline long strtol(const char *nptr, char **endptr, int base) {
   unsigned long long returnValue = (unsigned long long)
     overlayMap.header.osApi->strtoll(nptr, endptr, base);
 
-  unsigned long max = (unsigned long) -1;
-  if (returnValue > max) {
-    bool negative = ((returnValue & (1ULL << ((sizeof(long long) << 3) - 1))));
-    returnValue = 1LL << ((sizeof(long) << 3) - 1); // LONG_MIN
-    if (!negative) {
-      returnValue--; // LONG_MAX
+  if (sizeof(long long) > sizeof(long)) {
+    unsigned long max = (unsigned long) -1;
+    if (returnValue > max) {
+      bool negative
+        = ((returnValue & (1ULL << ((sizeof(long long) << 3) - 1))));
+      returnValue = 1LL << ((sizeof(long) << 3) - 1); // LONG_MIN
+      if (!negative) {
+        returnValue--; // LONG_MAX
+      }
     }
   }
 
