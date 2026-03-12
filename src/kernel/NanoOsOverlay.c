@@ -28,7 +28,6 @@
 // Doxygen marker
 /// @file
 
-#include "Commands.h"
 #include "Hal.h"
 #include "NanoOs.h"
 #include "NanoOsOverlayFunctions.h"
@@ -308,17 +307,17 @@ exit:
 /// @param envp The array of environment variable strings where each element is
 ///   in "name=value" form.
 ///
-/// @return Returns 0 on success, a valid SUS value on failure.
+/// @return Returns 0 on success, a negative SUS value on failure.
 int runOverlayCommand(const char *commandPath,
   int argc, char **argv, char **envp
 ) {
   int loadStatus = loadOverlay(commandPath, "main", envp);
   if (loadStatus == -ENOENT) {
     // Error message already printed.
-    return COMMAND_NOT_FOUND;
+    return -ENOENT;
   } else if (loadStatus < 0) {
     // Error message already printed.
-    return COMMAND_CANNOT_EXECUTE;
+    return -ENOEXEC;
   }
   printDebugString("Overlay loaded successfully\n");
 
@@ -349,7 +348,7 @@ int runOverlayCommand(const char *commandPath,
   }
   if ((returnValue < 0) || (returnValue > 255)) {
     // Invalid return value.
-    returnValue = COMMAND_EXIT_INVALID;
+    returnValue = -EOTHER;
   }
 
   return returnValue;

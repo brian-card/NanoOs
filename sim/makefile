@@ -52,7 +52,6 @@ TARGET := nano-os-sim
 BINARY := $(BIN_DIR)/$(TARGET)
 
 OS_OBJECTS := \
-    $(OBJ_DIR)/Commands.o \
     $(OBJ_DIR)/Console.o \
     $(OBJ_DIR)/Coroutines.o \
     $(OBJ_DIR)/ExFatFilesystem.o \

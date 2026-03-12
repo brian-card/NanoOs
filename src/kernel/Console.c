@@ -34,7 +34,6 @@
 #undef FILE
 
 #include "Console.h"
-#include "Commands.h"
 #include "Hal.h"
 #include "NanoOs.h"
 #include "Tasks.h"

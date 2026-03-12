@@ -29,7 +29,6 @@
 /// @file
 
 // Custom includes
-#include "Commands.h"
 #include "Console.h"
 #include "ExFatFilesystem.h"
 #include "ExFatTask.h"
@@ -1113,55 +1112,6 @@ int schedulerKillTask(TaskId taskId) {
   return returnValue;
 }
 
-/// @fn int schedulerRunTask(const CommandEntry *commandEntry,
-///   char *consoleInput, int consolePort)
-///
-/// @brief Do all the inter-task communication with the scheduler required
-/// to start a task.
-///
-/// @param commandEntry A pointer to the CommandEntry that describes the command
-///   to run.
-/// @param consoleInput The raw consoleInput that was captured for the command
-///   line.
-/// @param consolePort The index of the console port the task is being
-///   launched from.
-///
-/// @return Returns 0 on success, 1 on failure.
-int schedulerRunTask(const CommandEntry *commandEntry,
-  char *consoleInput, int consolePort
-) {
-  int returnValue = 1;
-  CommandDescriptor *commandDescriptor
-    = (CommandDescriptor*) malloc(sizeof(CommandDescriptor));
-  if (commandDescriptor == NULL) {
-    printString("ERROR: Could not allocate CommandDescriptor.\n");
-    return returnValue; // 1
-  }
-  commandDescriptor->consoleInput = consoleInput;
-  commandDescriptor->consolePort = consolePort;
-  commandDescriptor->callingTask = taskId(getRunningTask());
-
-  TaskMessage *sent = sendNanoOsMessageToTaskId(
-    NANO_OS_SCHEDULER_TASK_ID, SCHEDULER_RUN_TASK,
-    (NanoOsMessageData) ((uintptr_t) commandEntry),
-    (NanoOsMessageData) ((uintptr_t) commandDescriptor),
-    true);
-  if (sent == NULL) {
-    printString("ERROR: Could not communicate with scheduler.\n");
-    return returnValue; // 1
-  }
-  schedulerWaitForTaskComplete();
-
-  if (taskMessageDone(sent) == false) {
-    // The called task was killed.  We need to release the sent message on
-    // its behalf.
-    taskMessageRelease(sent);
-  }
-
-  returnValue = 0;
-  return returnValue;
-}
-
 /// @fn UserId schedulerGetTaskUser(void)
 ///
 /// @brief Get the ID of the user running the current task.
@@ -1429,208 +1379,6 @@ int schedulerAssignMemory(void *ptr) {
 ////////////////////////////////////////////////////////////////////////////////
 // Scheduler command handlers and support functions
 ////////////////////////////////////////////////////////////////////////////////
-
-/// @fn void handleOutOfSlots(TaskMessage *taskMessage, char *commandLine)
-///
-/// @brief Handle the exception case when we're out of free task slots to run
-/// all the commands we've been asked to launch.  Releases all relevant messages
-/// and frees all relevant memory.
-///
-/// @param taskMessage A pointer to the TaskMessage that was received
-///   that contains the information about the task to run and how to run it.
-/// @param commandLine The part of the console input that was being worked on
-///   at the time of the failure.
-///
-/// @return This function returns no value.
-void handleOutOfSlots(TaskMessage *taskMessage, char *commandLine) {
-  CommandDescriptor *commandDescriptor
-    = nanoOsMessageDataPointer(taskMessage, CommandDescriptor*);
-
-  // printf sends synchronous messages to the console, which we can't do.
-  // Use the non-blocking printString instead.
-  printString("Out of task slots to launch task.\n");
-  sendNanoOsMessageToTaskId(commandDescriptor->callingTask,
-    SCHEDULER_TASK_COMPLETE, 0, 0, true);
-  commandLine = stringDestroy(commandLine);
-  free(commandDescriptor); commandDescriptor = NULL;
-  if (taskMessageRelease(taskMessage) != taskSuccess) {
-    printString("ERROR: "
-      "Could not release message from handleSchedulerMessage "
-      "for invalid message type.\n");
-  }
-
-  return;
-}
-
-/// @fn TaskDescriptor* launchTask(SchedulerState *schedulerState,
-///   TaskMessage *taskMessage, CommandDescriptor *commandDescriptor,
-///   TaskDescriptor *taskDescriptor, bool backgroundTask)
-///
-/// @brief Run the specified command line with the specified TaskDescriptor.
-///
-/// @param schedulerState A pointer to the SchedulerState maintained by the
-///   scheduler task.
-/// @param taskMessage A pointer to the TaskMessage that was received
-///   that contains the information about the task to run and how to run it.
-/// @param commandDescriptor The CommandDescriptor that was sent via the
-///   taskMessage to the scueduler.
-/// @param taskDescriptor A pointer to the available taskDescriptor to
-///   run the command with.
-/// @param backgroundTask Whether or not the task is to be launched as a
-///   background task.  If this value is false then it will not be assigned
-///   to a console port.
-///
-/// @return Returns a pointer to the TaskDescriptor used to launch the
-/// task on success, NULL on failure.
-static inline TaskDescriptor* launchTask(SchedulerState *schedulerState,
-  TaskMessage *taskMessage, CommandDescriptor *commandDescriptor,
-  TaskDescriptor *taskDescriptor, bool backgroundTask
-) {
-  TaskDescriptor *returnValue = taskDescriptor;
-  CommandEntry *commandEntry
-    = nanoOsMessageFuncPointer(taskMessage, CommandEntry*);
-
-  if (taskDescriptor != NULL) {
-    taskDescriptor->userId = schedulerState->allTasks[
-      taskId(taskMessageFrom(taskMessage)) - 1].userId;
-    taskDescriptor->numFileDescriptors = NUM_STANDARD_FILE_DESCRIPTORS;
-    taskDescriptor->fileDescriptors
-      = (FileDescriptor*) standardUserFileDescriptors;
-
-    if (taskCreate(taskDescriptor,
-      startCommand, taskMessage) == taskError
-    ) {
-      printString(
-        "ERROR: Could not configure task handle for new command.\n");
-    }
-    if (assignMemory(commandDescriptor->consoleInput,
-      taskDescriptor->taskId) != 0
-    ) {
-      printString(
-        "WARNING: Could not assign console input to new task.\n");
-      printString("Memory leak.\n");
-    }
-    if (assignMemory(commandDescriptor, taskDescriptor->taskId) != 0) {
-      printString(
-        "WARNING: Could not assign command descriptor to new task.\n");
-      printString("Memory leak.\n");
-    }
-
-    taskDescriptor->name = commandEntry->name;
-
-    if (backgroundTask == false) {
-      if (schedulerAssignPortToTaskId(schedulerState,
-        commandDescriptor->consolePort, taskDescriptor->taskId)
-        != taskSuccess
-      ) {
-        printString("WARNING: Could not assign console port to task.\n");
-      }
-    }
-
-    // Resume the coroutine so that it picks up all the pointers it needs
-    // before we release the message we were sent.
-    taskResume(taskDescriptor, NULL);
-
-    // Put the task on the ready queue.
-    taskQueuePush(&schedulerState->ready, taskDescriptor);
-  } else {
-    returnValue = NULL;
-  }
-
-  return returnValue;
-}
-
-/// @fn TaskDescriptor* launchForegroundTask(
-///   SchedulerState *schedulerState, TaskMessage *taskMessage,
-///   CommandDescriptor *commandDescriptor)
-///
-/// @brief Kill the sender of the TaskMessage and use its TaskDescriptor
-/// to run the specified command line.
-///
-/// @param schedulerState A pointer to the SchedulerState maintained by the
-///   scheduler task.
-/// @param taskMessage A pointer to the TaskMessage that was received
-///   that contains the information about the task to run and how to run it.
-/// @param commandDescriptor The CommandDescriptor that was sent via the
-///   taskMessage to the scueduler.
-///
-/// @return Returns a pointer to the TaskDescriptor used to launch the
-/// task on success, NULL on failure.
-static inline TaskDescriptor* launchForegroundTask(
-  SchedulerState *schedulerState, TaskMessage *taskMessage,
-  CommandDescriptor *commandDescriptor
-) {
-  TaskDescriptor *taskDescriptor = &schedulerState->allTasks[
-    taskId(taskMessageFrom(taskMessage)) - 1];
-  // The task should be blocked in taskMessageQueueWaitForType waiting
-  // on a condition with an infinite timeout.  So, it *SHOULD* be on the
-  // waiting queue.  Take no chances, though.
-  if (taskQueueRemove(&schedulerState->waiting, taskDescriptor) != 0) {
-    if (taskQueueRemove(
-      &schedulerState->timedWaiting, taskDescriptor) != 0
-    ) {
-      taskQueueRemove(&schedulerState->ready, taskDescriptor);
-    }
-  }
-
-  // Protect the relevant memory from deletion below.
-  if (assignMemory(commandDescriptor->consoleInput,
-    NANO_OS_SCHEDULER_TASK_ID) != 0
-  ) {
-    printString(
-      "WARNING: Could not protect console input from deletion.\n");
-    printString("Undefined behavior.\n");
-  }
-  if (assignMemory(commandDescriptor, NANO_OS_SCHEDULER_TASK_ID) != 0) {
-    printString(
-      "WARNING: Could not protect command descriptor from deletion.\n");
-    printString("Undefined behavior.\n");
-  }
-
-  // Kill and clear out the calling task.
-  taskTerminate(taskDescriptor);
-  taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
-
-  // We don't want to wait for the memory manager to release the memory.  Make
-  // it do it immediately.
-  if (schedulerSendNanoOsMessageToTaskId(
-    schedulerState, NANO_OS_MEMORY_MANAGER_TASK_ID,
-    MEMORY_MANAGER_FREE_TASK_MEMORY,
-    /* func= */ 0, taskDescriptor->taskId)
-  ) {
-    printString("WARNING: Could not release memory for task ");
-    printInt(taskDescriptor->taskId);
-    printString("\n");
-    printString("Memory leak.\n");
-  }
-
-  return launchTask(schedulerState, taskMessage, commandDescriptor,
-    taskDescriptor, false);
-}
-
-/// @fn TaskDescriptor* launchBackgroundTask(
-///   SchedulerState *schedulerState, TaskMessage *taskMessage,
-///   CommandDescriptor *commandDescriptor)
-///
-/// @brief Pop a task off of the free queue and use it to run the specified
-/// command line.
-///
-/// @param schedulerState A pointer to the SchedulerState maintained by the
-///   scheduler task.
-/// @param taskMessage A pointer to the TaskMessage that was received
-///   that contains the information about the task to run and how to run it.
-/// @param commandDescriptor The CommandDescriptor that was sent via the
-///   taskMessage to the scueduler.
-///
-/// @return Returns a pointer to the TaskDescriptor used to launch the
-/// task on success, NULL on failure.
-static inline TaskDescriptor* launchBackgroundTask(
-  SchedulerState *schedulerState, TaskMessage *taskMessage,
-  CommandDescriptor *commandDescriptor
-) {
-  return launchTask(schedulerState, taskMessage, commandDescriptor,
-    taskQueuePop(&schedulerState->free), true);
-}
 
 /// @fn int closeTaskFileDescriptors(
 ///   SchedulerState *schedulerState, TaskDescriptor *taskDescriptor)
@@ -2042,164 +1790,6 @@ int schedFputs(SchedulerState *schedulerState,
 
   taskMessageRelease(taskMessage);
   return returnValue;
-}
-
-/// @fn int schedulerRunTaskCommandHandler(
-///   SchedulerState *schedulerState, TaskMessage *taskMessage)
-///
-/// @brief Run a task in an appropriate task slot.
-///
-/// @param schedulerState A pointer to the SchedulerState maintained by the
-///   scheduler task.
-/// @param taskMessage A pointer to the TaskMessage that was received
-///   that contains the information about the task to run and how to run it.
-///
-/// @return Returns 0 on success, non-zero error code on failure.
-int schedulerRunTaskCommandHandler(
-  SchedulerState *schedulerState, TaskMessage *taskMessage
-) {
-  if (taskMessage == NULL) {
-    // This should be impossible, but there's nothing to do.  Return good
-    // status.
-    return 0;
-  }
-
-  NanoOsMessage *nanoOsMessage
-    = (NanoOsMessage*) taskMessageData(taskMessage);
-  CommandDescriptor *commandDescriptor
-    = nanoOsMessageDataPointer(taskMessage, CommandDescriptor*);
-  char *consoleInput = commandDescriptor->consoleInput;
-  if (assignMemory(consoleInput, NANO_OS_SCHEDULER_TASK_ID) != 0) {
-    printString("WARNING: Could not assign consoleInput to scheduler.\n");
-    printString("Undefined behavior.\n");
-  }
-  commandDescriptor->schedulerState = schedulerState;
-  bool backgroundTask = false;
-  char *charAt = NULL;
-  TaskDescriptor *curTaskDescriptor = NULL;
-  TaskDescriptor *prevTaskDescriptor = NULL;
-  char *commandLine = NULL;
-
-  if (consoleInput == NULL) {
-    // We can't parse or handle NULL input.  Bail.
-    handleOutOfSlots(taskMessage, consoleInput);
-    free(commandDescriptor); commandDescriptor = NULL;
-    return 0;
-  } else if (getNumPipes(consoleInput)
-    > schedulerState->free.numElements
-  ) {
-    // We've been asked to run more tasks chained together than we can
-    // currently launch.  Fail.
-    handleOutOfSlots(taskMessage, consoleInput);
-    free(commandDescriptor); commandDescriptor = NULL;
-    return 0;
-  }
-
-  charAt = strchr(consoleInput, '&');
-  while (charAt != NULL) {
-    charAt++;
-    if (charAt[strspn(charAt, " \t\r\n")] == '\0') {
-      backgroundTask = true;
-      break;
-    }
-
-    // This '&' wasn't at the end of the line. Find the next one if there is one.
-    charAt = strchr(charAt, '&');
-  }
-
-  while (*consoleInput != '\0') {
-    charAt = strrchr(consoleInput, '|');
-    if (charAt == NULL) {
-      // This is the usual case, so list it first.
-      commandLine = (char*) schedMalloc(strlen(consoleInput) + 1);
-      strcpy(commandLine, consoleInput);
-      *consoleInput = '\0';
-    } else {
-      // This is the last command in a chain of pipes.
-      *charAt = '\0';
-      charAt++;
-      charAt = &charAt[strspn(charAt, " \t\r\n")];
-      commandLine = (char*) schedMalloc(strlen(charAt) + 1);
-      strcpy(commandLine, charAt);
-    }
-
-    const CommandEntry *commandEntry = getCommandEntryFromInput(commandLine);
-    nanoOsMessage->func = (intptr_t) commandEntry;
-    commandDescriptor->consoleInput = commandLine;
-
-    if (backgroundTask == false) {
-      // Task is a foreground task.  We're going to kill the caller and reuse
-      // its task slot.  This is expected to be the usual case, so list it
-      // first.
-      curTaskDescriptor = launchForegroundTask(
-        schedulerState, taskMessage, commandDescriptor);
-
-      // Any task after the first one (if we're connecting pipes) will have
-      // to be a background task, so set backgroundTask to true.
-      backgroundTask = true;
-    } else {
-      // Task is a background task.  Get a task off the free queue.
-      curTaskDescriptor = launchBackgroundTask(
-        schedulerState, taskMessage, commandDescriptor);
-    }
-    if (curTaskDescriptor == NULL) {
-      commandLine = stringDestroy(commandLine);
-      handleOutOfSlots(taskMessage, consoleInput);
-      break;
-    }
-
-    if (prevTaskDescriptor != NULL) {
-      // We're piping two or more commands together and we need to connect the
-      // pipes.
-      FileDescriptor *fileDescriptors = NULL;
-      if (
-        prevTaskDescriptor->fileDescriptors == standardUserFileDescriptors
-      ) {
-        // We need to make a copy of the previous task descriptor's file
-        // descriptors.
-        fileDescriptors = (FileDescriptor*) schedMalloc(
-          NUM_STANDARD_FILE_DESCRIPTORS * sizeof(FileDescriptor));
-        memcpy(fileDescriptors, prevTaskDescriptor->fileDescriptors,
-          NUM_STANDARD_FILE_DESCRIPTORS * sizeof(FileDescriptor));
-        prevTaskDescriptor->fileDescriptors = fileDescriptors;
-      }
-      prevTaskDescriptor->fileDescriptors[
-        STDIN_FILE_DESCRIPTOR_INDEX].inputPipe.taskId
-        = curTaskDescriptor->taskId;
-      prevTaskDescriptor->fileDescriptors[
-        STDIN_FILE_DESCRIPTOR_INDEX].inputPipe.messageType
-        = 0;
-
-      fileDescriptors = (FileDescriptor*) schedMalloc(
-        NUM_STANDARD_FILE_DESCRIPTORS * sizeof(FileDescriptor));
-      memcpy(fileDescriptors, standardUserFileDescriptors,
-        NUM_STANDARD_FILE_DESCRIPTORS * sizeof(FileDescriptor));
-      curTaskDescriptor->fileDescriptors = fileDescriptors;
-      curTaskDescriptor->fileDescriptors[
-        STDOUT_FILE_DESCRIPTOR_INDEX].outputPipe.taskId
-        = prevTaskDescriptor->taskId;
-      curTaskDescriptor->fileDescriptors[
-        STDOUT_FILE_DESCRIPTOR_INDEX].outputPipe.messageType
-        = CONSOLE_RETURNING_INPUT;
-      if (schedulerAssignPortInputToTaskId(schedulerState,
-        commandDescriptor->consolePort, curTaskDescriptor->taskId)
-        != taskSuccess
-      ) {
-        printString(
-          "WARNING: Could not assign console port input to task.\n");
-      }
-    }
-
-    prevTaskDescriptor = curTaskDescriptor;
-  }
-
-  // We're done with our copy of the console input.  The task(es) will free
-  // its/their copy/copies.
-  consoleInput = stringDestroy(consoleInput);
-
-  taskMessageRelease(taskMessage);
-  free(commandDescriptor); commandDescriptor = NULL;
-  return 0;
 }
 
 /// @fn int schedulerKillTaskCommandHandler(
@@ -2746,6 +2336,144 @@ int schedulerExecveCommandHandler(
   return returnValue;
 }
 
+/// @fn int schedulerSpawnCommandHandler(
+///   SchedulerState *schedulerState, TaskMessage *taskMessage)
+///
+/// @brief Spawn a program in a new process.
+///
+/// @param schedulerState A pointer to the SchedulerState maintained by the
+///   scheduler task.
+/// @param taskMessage A pointer to the TaskMessage that was received.
+///
+/// @return Returns 0 on success, non-zero error code on failure.
+int schedulerSpawnCommandHandler(
+  SchedulerState *schedulerState, TaskMessage *taskMessage
+) {
+  int returnValue = 0;
+  if (taskMessage == NULL) {
+    // This should be impossible, but there's nothing to do.  Return good
+    // status.
+    return returnValue; // 0
+  }
+
+  NanoOsMessage *nanoOsMessage
+    = (NanoOsMessage*) taskMessageData(taskMessage);
+  SpawnArgs *spawnArgs = nanoOsMessageDataValue(taskMessage, SpawnArgs*);
+  if (spawnArgs == NULL) {
+    printString("ERROR! spawnArgs provided was NULL.\n");
+    nanoOsMessage->data = EINVAL;
+    taskMessageSetDone(taskMessage);
+    return returnValue; // 0; Don't retry this command
+  }
+
+  char *pathname = spawnArgs->path;
+  if (pathname == NULL) {
+    // Invalid
+    printString("ERROR! pathname provided was NULL.\n");
+    nanoOsMessage->data = EINVAL;
+    taskMessageSetDone(taskMessage);
+    return returnValue; // 0; Don't retry this command
+  }
+  char **argv = spawnArgs->argv;
+  if (argv == NULL) {
+    // Invalid
+    printString("ERROR! argv provided was NULL.\n");
+    nanoOsMessage->data = EINVAL;
+    taskMessageSetDone(taskMessage);
+    return returnValue; // 0; Don't retry this command
+  } else if (argv[0] == NULL) {
+    // Invalid
+    printString("ERROR! argv[0] provided was NULL.\n");
+    nanoOsMessage->data = EINVAL;
+    taskMessageSetDone(taskMessage);
+    return returnValue; // 0; Don't retry this command
+  }
+  char **envp = spawnArgs->envp;
+
+  TaskDescriptor *taskDescriptor = taskQueuePop(&schedulerState->free);
+  if (taskDescriptor == NULL) {
+    printString("Out of task slots to launch task.\n");
+    nanoOsMessage->data = EINVAL;
+    taskMessageSetDone(taskMessage);
+    return returnValue; // 0; Don't retry this command
+  }
+
+  // Initialize the new task.
+  taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
+
+  ExecArgs *execArgs = (ExecArgs*) schedMalloc(sizeof(ExecArgs));
+  if (execArgs == NULL) {
+    printString("Out of memory for ExecArgs.\n");
+    nanoOsMessage->data = EINVAL;
+    taskMessageSetDone(taskMessage);
+    return returnValue; // 0; Don't retry this command
+  }
+  execArgs->callingTaskId = taskId(taskMessageFrom(taskMessage));
+  execArgs->pathname = spawnArgs->path;
+  execArgs->argv = spawnArgs->argv;
+  execArgs->envp = spawnArgs->envp;
+  execArgs->schedulerState = schedulerState;
+  schedFree(spawnArgs); spawnArgs = NULL;
+  if (taskCreate(taskDescriptor, execCommand, execArgs) == taskError) {
+    printString(
+      "ERROR: Could not configure task handle for new command.\n");
+  }
+
+  if (assignMemory(execArgs, taskDescriptor->taskId) != 0) {
+    printString("WARNING: Could not assign execArgs to exec task.\n");
+    printString("Undefined behavior.\n");
+  }
+
+  if (assignMemory(pathname, taskDescriptor->taskId) != 0) {
+    printString("WARNING: Could not assign pathname to exec task.\n");
+    printString("Undefined behavior.\n");
+  }
+
+  if (assignMemory(argv, taskDescriptor->taskId) != 0) {
+    printString("WARNING: Could not assign argv to exec task.\n");
+    printString("Undefined behavior.\n");
+  }
+  for (int ii = 0; argv[ii] != NULL; ii++) {
+    if (assignMemory(argv[ii], taskDescriptor->taskId) != 0) {
+      printString("WARNING: Could not assign argv[");
+      printInt(ii);
+      printString("] to exec task.\n");
+      printString("Undefined behavior.\n");
+    }
+  }
+
+  if (envp != NULL) {
+    if (assignMemory(envp, taskDescriptor->taskId) != 0) {
+      printString("WARNING: Could not assign envp to exec task.\n");
+      printString("Undefined behavior.\n");
+    }
+    for (int ii = 0; envp[ii] != NULL; ii++) {
+      if (assignMemory(envp[ii], taskDescriptor->taskId) != 0) {
+        printString("WARNING: Could not assign envp[");
+        printInt(ii);
+        printString("] to exec task.\n");
+        printString("Undefined behavior.\n");
+      }
+    }
+  }
+
+  taskDescriptor->overlayDir = pathname;
+  taskDescriptor->overlay = "main";
+  taskDescriptor->envp = envp;
+  taskDescriptor->name = argv[0];
+
+  // Resume the coroutine so that it picks up all the pointers it needs before
+  // we release the message we were sent.
+  taskResume(taskDescriptor, NULL);
+
+  // Put the task on the ready queue.
+  taskQueuePush(&schedulerState->ready, taskDescriptor);
+
+  taskMessageRelease(taskMessage);
+
+  return returnValue;
+}
+
 /// @fn int schedulerAssignMemoryCommandHandler(
 ///   SchedulerState *schedulerState, TaskMessage *taskMessage)
 ///
@@ -2794,17 +2522,17 @@ typedef int (*SchedulerCommandHandler)(SchedulerState*, TaskMessage*);
 /// @brief Array of function pointers for commands that are understood by the
 /// message handler for the main loop function.
 const SchedulerCommandHandler schedulerCommandHandlers[] = {
-  schedulerRunTaskCommandHandler,        // SCHEDULER_RUN_TASK
-  schedulerKillTaskCommandHandler,       // SCHEDULER_KILL_TASK
+  schedulerKillTaskCommandHandler,          // SCHEDULER_KILL_TASK
   // SCHEDULER_GET_NUM_RUNNING_TASKS:
   schedulerGetNumTaskDescriptorsCommandHandler,
-  schedulerGetTaskInfoCommandHandler,    // SCHEDULER_GET_TASK_INFO
-  schedulerGetTaskUserCommandHandler,    // SCHEDULER_GET_TASK_USER
-  schedulerSetTaskUserCommandHandler,    // SCHEDULER_SET_TASK_USER
+  schedulerGetTaskInfoCommandHandler,       // SCHEDULER_GET_TASK_INFO
+  schedulerGetTaskUserCommandHandler,       // SCHEDULER_GET_TASK_USER
+  schedulerSetTaskUserCommandHandler,       // SCHEDULER_SET_TASK_USER
   // SCHEDULER_CLOSE_ALL_FILE_DESCRIPTORS:
   schedulerCloseAllFileDescriptorsCommandHandler,
   schedulerGetHostnameCommandHandler,       // SCHEDULER_GET_HOSTNAME
   schedulerExecveCommandHandler,            // SCHEDULER_EXECVE
+  schedulerSpawnCommandHandler,             // SCHEDULER_SPAWN
   schedulerAssignMemoryCommandHandler,      // SCHEDULER_ASSIGN_MEMORY,
 };
 

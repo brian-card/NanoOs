@@ -534,6 +534,39 @@ typedef struct ExecArgs {
   SchedulerState *schedulerState;
 } ExecArgs;
 
+// POSIX-mandated objects require for posix_spawn
+typedef struct posix_spawn_file_actions_t posix_spawn_file_actions_t;
+typedef struct posix_spawnattr_t posix_spawnattr_t;
+
+/// @struct SpawnArgs
+///
+/// @brief Arguments for the standard POSIX posix_spawn call.
+///
+/// @param newPid A pointer to the pid_t that will hold the process ID of the
+///   new process.
+/// @param path The full path to the to the program to execute on disk.
+/// @param fileActions A pointer to the posix_spawn_file_actions_t that
+///   specifies the operations to do on the file descriptors of the new process.
+///   Initialized and populated with posix_spawn_file_actions_init and
+///   posix_spawn_file_actions_* functions before calling the spawn.
+/// @param attrp A pointer to the posix_spawnattr_t that specifies various
+///   attributes of the created child process.  Initialized and populated with
+///   posix_spawnattr_init and posix_spawnattr_* functoions before callin the
+///   spawn.
+/// @param argv The NULL-terminated array of arguments for the command.  argv[0]
+///   must be valid and should be the name of the program.
+/// @param envp The NULL-terminated array of environment variables in
+///   "name=value" format.  This array may be NULL.
+typedef struct SpawnArgs {
+  // Change this type if we change the size of pid_t or TaskId!!!
+  uint8_t *newPid;
+  char *path;
+  posix_spawn_file_actions_t *fileActions;
+  posix_spawnattr_t *attrp;
+  char **argv;
+  char **envp;
+} SpawnArgs;
+
 #ifdef __cplusplus
 } // extern "C"
 #endif

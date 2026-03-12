@@ -58,7 +58,6 @@ typedef struct NanoOsFile NanoOsFile;
 /// message handler.
 typedef enum SchedulerCommandResponse {
   // Commands:
-  SCHEDULER_RUN_TASK,
   SCHEDULER_KILL_TASK,
   SCHEDULER_GET_NUM_RUNNING_TASKS,
   SCHEDULER_GET_TASK_INFO,
@@ -67,6 +66,7 @@ typedef enum SchedulerCommandResponse {
   SCHEDULER_CLOSE_ALL_FILE_DESCRIPTORS,
   SCHEDULER_GET_HOSTNAME,
   SCHEDULER_EXECVE,
+  SCHEDULER_SPAWN,
   SCHEDULER_ASSIGN_MEMORY,
   NUM_SCHEDULER_COMMANDS,
   // Responses:
@@ -81,8 +81,6 @@ int schedulerWaitForTaskComplete(void);
 TaskId schedulerGetNumRunningTasks(struct timespec *timeout);
 TaskInfo* schedulerGetTaskInfo(void);
 int schedulerKillTask(TaskId taskId);
-int schedulerRunTask(
-  const CommandEntry *commandEntry, char *consoleInput, int consolePort);
 UserId schedulerGetTaskUser(void);
 int schedulerSetTaskUser(UserId userId);
 FileDescriptor* schedulerGetFileDescriptor(FILE *stream);
