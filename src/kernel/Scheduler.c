@@ -1329,7 +1329,7 @@ int schedulerExecve(const char *pathname,
     // The only way this should be possible is if all available messages are
     // in use, so use ENOMEM as the errno.
     errno = ENOMEM;
-    return -1;
+    goto freeExecArgs;
   }
 
   taskMessageWaitForDone(taskMessage, NULL);
@@ -1451,7 +1451,7 @@ int schedulerSpawn(
     // The only way this should be possible is if all available messages are
     // in use, so use ENOMEM as the errno.
     errno = ENOMEM;
-    return -1;
+    goto freeSpawnArgs;
   }
 
   taskMessageWaitForDone(taskMessage, NULL);
