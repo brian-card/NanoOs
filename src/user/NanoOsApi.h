@@ -50,11 +50,6 @@
 #undef stdout
 #undef stderr
 
-typedef struct NanoOsFile NanoOsFile;
-#define FILE NanoOsFile
-
-typedef struct TaskInfo TaskInfo;
-
 #include "NanoOsHardware.h"
 #include "NanoOsPwd.h"
 #include "NanoOsSysUtsname.h"
@@ -64,6 +59,15 @@ typedef struct TaskInfo TaskInfo;
 extern "C"
 {
 #endif
+
+typedef struct NanoOsFile NanoOsFile;
+#define FILE NanoOsFile
+
+typedef struct TaskInfo TaskInfo;
+
+// POSIX-mandated objects require for posix_spawn
+typedef struct posix_spawn_file_actions_t posix_spawn_file_actions_t;
+typedef struct posix_spawnattr_t posix_spawnattr_t;
 
 // Forward declarations from other headers.
 struct termios;
@@ -171,6 +175,12 @@ typedef struct NanoOsApi {
   
   // signal.h functions:
   int (*kill)(pid_t pid, int sig);
+  
+  // spawn.h functions:
+  int (*posix_spawn)(pid_t *pid, const char *path,
+    const posix_spawn_file_actions_t *file_actions,
+    const posix_spawnattr_t *attrp,
+    char *const argv[], char *const envp[]);
   
   // NanoOs-specific functionality
   

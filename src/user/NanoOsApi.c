@@ -165,6 +165,9 @@ NanoOsApi nanoOsApi = {
   // signal.h functions:
   .kill = nanoOsKill,
   
+  // spawn.h functions:
+  .posix_spawn = schedulerSpawn,
+  
   // NanoOs-specific functionality
   
   // NanoOsUser.h functions:
