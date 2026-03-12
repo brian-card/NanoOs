@@ -110,17 +110,36 @@ int runFilesystemCommand(char *commandLine) {
   // above, so we can blindly dereference the value returned by strrchr here.
   *strrchr(commandPath, '/') = '\0';
   
-  // Exec the command on the filesystem.
+  // We need to check to see if the task should be run in the background beore
+  // calling parseArgs because that function modifies the string.
+  bool launchBackground = false;
+  if (commandLine[strlen(commandLine) - 1] == '&') {
+    launchBackground = true;
+  }
+  
   char **argv = parseArgs(commandLine, NULL);
   if (argv == NULL) {
     fprintf(stderr, "Failed to parse command line\n");
     free(commandPath); commandPath = NULL;
     return -EINVAL;
   }
-  execve(commandPath, argv, environ);
   
-  // If we made it this far then execve failed and we need to return a negative
-  // errno.  Use the one provided by execve.
+  // Run the command from the filesystem.
+  if (launchBackground == false) {
+    // Run the command in the foreground.  i.e. Replace this shell.  This is
+    // the usual case.
+    execve(commandPath, argv, environ);
+  } else { // launchBackground == true
+    // Spawn a new task in the background.
+    pid_t pid; // We actually don't care about this but it's required.
+    errno = posix_spawn(&pid, commandPath, NULL, NULL, argv, environ);
+  }
+  
+  // We need to return a negative errno from this function.  execve sets the
+  // value of errno on failure, so we don't have to do anything there.  Above,
+  // we set the return value of posix_spawn to errno so that we can just use
+  // whatever the value of errno is here for the return value.  We return a
+  // negative errno on failure, so negate whatever errno is.
   return -errno;
 }
 
