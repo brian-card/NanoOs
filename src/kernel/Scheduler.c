@@ -1458,7 +1458,7 @@ int schedulerSpawn(
   returnValue = nanoOsMessageDataValue(taskMessage, int);
   taskMessageRelease(taskMessage);
 
-  return 0;
+  return returnValue;
 
 freeSpawnArgs:
   spawnArgs = spawnArgsDestroy(spawnArgs);
