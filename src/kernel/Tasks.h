@@ -247,7 +247,6 @@ extern "C"
   ((type) nanoOsMessageDataValue((msg), intptr_t))
 
 // Exported functionality
-void* startCommand(void *args);
 void* execCommand(void *args);
 int sendTaskMessageToTask(
   TaskDescriptor *taskDescriptor, TaskMessage *taskMessage);
