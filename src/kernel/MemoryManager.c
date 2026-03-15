@@ -851,7 +851,19 @@ int memoryManagerAssignMemoryCommandHandler(
     AssignMemoryParams *assignMemoryParams
       = (AssignMemoryParams*) taskMessageData(incoming);
     if (isDynamicPointer(assignMemoryParams->ptr)) {
-      memNode(assignMemoryParams->ptr)->owner = assignMemoryParams->taskId;
+      // Make sure the pointer being assigned is allocated.
+      MemNode *cur = memoryManagerState->allocated;
+      for (; cur != NULL; cur = cur->next) {
+        if (&cur[1] == assignMemoryParams->ptr) {
+          break;
+        }
+      }
+      if (cur != NULL) {
+        cur->owner = assignMemoryParams->taskId;
+      } else {
+        printString("ERROR: Attempt to assign unallocated memory.\n");
+        returnValue = -1;
+      }
     }
   } else {
     printString(
