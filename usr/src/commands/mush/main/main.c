@@ -180,7 +180,7 @@ int main(int argc, char **argv) {
     }
     printDebugString("input is now \"");
     printDebugString(input);
-    printDebugString("\n");
+    printDebugString("\"\n");
     
     // Attempt to process the command line as a built-in first before looking
     // on the filesystem.
