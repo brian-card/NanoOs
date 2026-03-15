@@ -38,6 +38,8 @@
 
 #include "NanoOsUtils.h"
 
+#define printDebug(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__)
+
 extern char **environ;
 
 int runFilesystemCommand(char *commandLine) {
@@ -135,6 +137,10 @@ int runFilesystemCommand(char *commandLine) {
     errno = posix_spawn(&pid, commandPath, NULL, NULL, argv, environ);
   }
   
+  // If we made it this far then we either called posix_spawn or execve failed.
+  // Either way, we need to clean up argv.
+  free(argv); argv = NULL;
+  
   // We need to return a negative errno from this function.  execve sets the
   // value of errno on failure, so we don't have to do anything there.  Above,
   // we set the return value of posix_spawn to errno so that we can just use
@@ -158,11 +164,17 @@ int main(int argc, char **argv) {
   do {
     fputs("$ ", stdout);
     char *input = fgets(buffer, 96, stdin);
-    if ((input != NULL) && (strlen(input) > 0)
-      && (input[strlen(input) - 1] == '\n')
+    printDebug("Read \"%s\" from command line\n", input);
+    printDebug("Read \"%s\" from command line\n", input);
+    printDebug("strlen = %p\n", overlayMap.header.osApi->strlen);
+    size_t inputLength = strlen(input);
+    printDebug("inputLength = %d\n", (int) inputLength);
+    if ((input != NULL) && (inputLength > 0)
+      && (input[inputLength - 1] == '\n')
     ) {
-      input[strlen(input) - 1] = '\0';
+      input[inputLength - 1] = '\0';
     }
+    printDebug("input is now \"%s\"\n", input);
     
     // Attempt to process the command line as a built-in first before looking
     // on the filesystem.
@@ -170,11 +182,13 @@ int main(int argc, char **argv) {
     // The variable 'input' is the same as the variable 'buffer', which is a
     // pointer to dynamic memory.  So, it's safe to pass as a parameter to
     // callOverlayFunction.
+    printDebug("Checking to see if command is a builtin\n");
     returnValue = (intptr_t) callOverlayFunction(
       NULL, "Builtins", "processBuiltin", input);
     if (returnValue < -1)  {
       // The command wasn't processed as a built-in.  Try running it from the
       // filesystem.
+      printDebug("Command is *NOT* a builtin\n");
       returnValue = runFilesystemCommand(input);
     }
   } while (returnValue != -1);
