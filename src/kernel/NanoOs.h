@@ -140,23 +140,6 @@ extern "C"
 /// @brief Convenience macro for the common operation of destroying a string.
 #define stringDestroy(string) ((char*) (free((void*) string), NULL))
 
-#ifdef NANO_OS_DEBUG
-
-/// @def printDebugString
-///
-/// @brief Macro to identify debugging prints when necessary.
-#define printDebugString(msg) printString(msg)
-#define printDebugInt(value) printInt(value)
-#define printDebugHex(value) printHex(value)
-
-#else // NANO_OS_DEBUG
-
-#define printDebugString(msg) {}
-#define printDebugInt(value) {}
-#define printDebugHex(value) {}
-
-#endif // NANO_OS_DEBUG
-
 /// @def STATIC_NANO_OS_MESSAGE
 ///
 /// @brief Helper macro to define and initialize a NanoOs message for local
