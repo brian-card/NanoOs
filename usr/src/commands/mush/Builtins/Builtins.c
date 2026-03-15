@@ -32,7 +32,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define printDebug(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__)
 
 /// @fn void* processBuiltin(void *args)
 ///
@@ -47,7 +46,9 @@
 /// run.
 void* processBuiltin(void *args) {
   char *input = (char*) args;
-  printDebug("Evaluating builtin \"%s\"\n", input);
+  printDebugString("Evaluating builtin ");
+  printDebugString(input);
+  printDebugString("\n");
   
   void *returnValue = (void*) ((intptr_t) 0); // Default to good status.
   if (strcmp(input, "exit") == 0) {

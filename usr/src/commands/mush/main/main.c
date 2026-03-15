@@ -38,8 +38,6 @@
 
 #include "NanoOsUtils.h"
 
-#define printDebug(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__)
-
 extern char **environ;
 
 int runFilesystemCommand(char *commandLine) {
@@ -164,17 +162,27 @@ int main(int argc, char **argv) {
   do {
     fputs("$ ", stdout);
     char *input = fgets(buffer, 96, stdin);
-    printDebug("Read \"%s\" from command line\n", input);
-    printDebug("Read \"%s\" from command line\n", input);
-    printDebug("strlen = %p\n", overlayMap.header.osApi->strlen);
+    printDebugString("Read \"");
+    printDebugString(input);
+    printDebugString("\" from command line\n");
+    printDebugString("Read \"");
+    printDebugString(input);
+    printDebugString("\" from command line\n");
+    printDebugString("strlen = 0x");
+    printDebugHex(overlayMap.header.osApi->strlen);
+    printDebugString("\n");
     size_t inputLength = strlen(input);
-    printDebug("inputLength = %d\n", (int) inputLength);
+    printDebugString("inputLength = ");
+    printDebugInt(inputLength);
+    printDebugString("\n");
     if ((input != NULL) && (inputLength > 0)
       && (input[inputLength - 1] == '\n')
     ) {
       input[inputLength - 1] = '\0';
     }
-    printDebug("input is now \"%s\"\n", input);
+    printDebugString("input is now \"");
+    printDebugString(input);
+    printDebugString("\n");
     
     // Attempt to process the command line as a built-in first before looking
     // on the filesystem.
@@ -182,13 +190,13 @@ int main(int argc, char **argv) {
     // The variable 'input' is the same as the variable 'buffer', which is a
     // pointer to dynamic memory.  So, it's safe to pass as a parameter to
     // callOverlayFunction.
-    printDebug("Checking to see if command is a builtin\n");
+    printDebugString("Checking to see if command is a builtin\n");
     returnValue = (intptr_t) callOverlayFunction(
       NULL, "Builtins", "processBuiltin", input);
     if (returnValue < -1)  {
       // The command wasn't processed as a built-in.  Try running it from the
       // filesystem.
-      printDebug("Command is *NOT* a builtin\n");
+      printDebugString("Command is *NOT* a builtin\n");
       returnValue = runFilesystemCommand(input);
     }
   } while (returnValue != -1);
