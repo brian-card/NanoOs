@@ -37,9 +37,16 @@
 #ifndef NANO_OS_USER_H
 #define NANO_OS_USER_H
 
-// Header from kernel space.
+// Headers from kernel space.
 #include "../../src/kernel/NanoOsOverlay.h"
 #include "../../src/user/NanoOsDebug.h"
+
+#ifdef NANO_OS_USER_DEBUG
+// All of the printDebug* functions print to serial port 0 immediately.  We
+// want to enable a pure, user-space print function that will go through the
+// console as well.
+#define printDebug(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__)
+#endif // NANO_OS_USER_DEBUG
 
 #ifdef __cplusplus
 extern "C"
