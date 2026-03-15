@@ -165,9 +165,7 @@ int main(int argc, char **argv) {
     printDebugString("Read \"");
     printDebugString(input);
     printDebugString("\" from command line\n");
-    printDebugString("Read \"");
-    printDebugString(input);
-    printDebugString("\" from command line\n");
+    printDebug("Read \"%s\" from command line\n", input);
     printDebugString("strlen = 0x");
     printDebugHex(overlayMap.header.osApi->strlen);
     printDebugString("\n");
