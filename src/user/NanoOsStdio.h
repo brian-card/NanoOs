@@ -42,6 +42,9 @@
 #include <stdarg.h>
 #include <stddef.h>
 
+// NanoOs includes
+#include "NanoOsDebug.h"
+
 #define FILE C_FILE
 //// #include "stdio.h"
 #undef FILE
@@ -69,46 +72,6 @@ typedef struct NanoOsFile NanoOsFile;
 #undef stderr
 #endif // stderr
 #define stderr nanoOsStderr
-
-#ifdef NANO_OS_USER_DEBUG
-
-/// @def startDebugMessage
-///
-/// @brief Print a non-newline-terminated debug message.
-#define startDebugMessage(message) \
-  printString("["); \
-  printInt(HAL->getElapsedMicroseconds(0)); \
-  printString(" Task "); \
-  printInt(getRunningTaskId()); \
-  printString(" "); \
-  printString((strrchr(__FILE__, '/')) \
-    ? (strrchr(__FILE__, '/')  + 1) \
-    : __FILE__); \
-  printString(":"); \
-  printString(__func__); \
-  printString("."); \
-  printInt(__LINE__); \
-  printString("] "); \
-  printString(message);
-
-/// @def printDebugStackDepth()
-///
-/// @brief Print the depth of the current coroutine stack.
-#define printDebugStackDepth() \
-  do { \
-    char temp; \
-    printString("Stack depth: "); \
-    printInt(ABS_DIFF((uintptr_t) &temp, (uintptr_t) getRunningCoroutine())); \
-    printString("\n"); \
-  } while (0)
-
-#else // NANO_OS_USER_DEBUG
-
-#define startDebugMessage(message) {}
-#define printDebugStackDepth() {}
-
-#endif // NANO_OS_USER_DEBUG
-
 
 #define EOF (-1)
 
