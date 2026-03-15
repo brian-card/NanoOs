@@ -65,6 +65,11 @@ extern "C"
 /// a task.
 #define SCHEDULER_NUM_TASKS (NANO_OS_NUM_TASKS - 1)
 
+/// @def SCHEDULER_NUM_READY_QUEUES
+///
+/// @brief This is the total number of ready queues managed by the scheduler
+#define SCHEDULER_NUM_READY_QUEUES 2
+
 /// @def CONSOLE_BUFFER_SIZE
 ///
 /// @brief The size, in bytes, of a single console buffer.  This is the number
@@ -83,6 +88,15 @@ extern "C"
 #define CONSOLE_NUM_BUFFERS CONSOLE_NUM_PORTS
 
 // Primitive types
+
+/// @enum SchedulerReadyQueueType
+///
+/// @brief Designations for each of the ready queues.
+typedef enum SchedulerReadyQueueType {
+  SCHEDULER_READY_QUEUE_KERNEL,
+  SCHEDULER_READY_QUEUE_USER,
+  NUM_SCHEDULER_READY_QUEUE_TYPES,
+} SchedulerReadyQueueType;
 
 /// @typedef Task
 ///
@@ -190,6 +204,10 @@ typedef struct TaskQueue TaskQueue;
 ///   used (minus the ".overaly" extension).
 /// @param envp A pointer to the array of NULL-terminated environment variable
 ///   strings.
+/// @param taskQueue The task queue that the descriptor is currently in.  This
+///   will be NULL if the task is currently running (in no queue).
+/// @param readyQueue The ready queue that the descriptor is to be assigned to
+///   when the task transitions to ready.
 typedef struct TaskDescriptor {
   const char      *name;
   TaskHandle       taskHandle;
@@ -201,6 +219,7 @@ typedef struct TaskDescriptor {
   const char      *overlay;
   char           **envp;
   TaskQueue       *taskQueue;
+  TaskQueue       *readyQueue;
 } TaskDescriptor;
 
 /// @struct TaskInfoElement
@@ -271,7 +290,8 @@ typedef struct TaskQueue {
 ///   multitasking.  If this is < 0 then the tasks run in cooperative mode.
 typedef struct SchedulerState {
   TaskDescriptor allTasks[NANO_OS_NUM_TASKS];
-  TaskQueue ready;
+  TaskQueue ready[SCHEDULER_NUM_READY_QUEUES];
+  TaskQueue *currentReady;
   TaskQueue waiting;
   TaskQueue timedWaiting;
   TaskQueue free;

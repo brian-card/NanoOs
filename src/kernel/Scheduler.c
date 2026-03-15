@@ -340,14 +340,14 @@ void coroutineYieldCallback(void *stateData, Coroutine *coroutine) {
 /// lock queue is found in one of the waiting queues, it is removed from the
 /// waiting queue and pushed onto the ready queue.
 void comutexUnlockCallback(void *stateData, Comutex *comutex) {
-  SchedulerState *schedulerState = *((SchedulerState**) stateData);
+  (void) stateData;
   TaskDescriptor *taskDescriptor = coroutineContext(comutex->head);
   if (taskDescriptor == NULL) {
     // Nothing is waiting on this mutex.  Just return.
     return;
   }
   taskQueueRemove(taskDescriptor->taskQueue, taskDescriptor);
-  taskQueuePush(&schedulerState->ready, taskDescriptor);
+  taskQueuePush(taskDescriptor->readyQueue, taskDescriptor);
 
   return;
 }
@@ -367,7 +367,7 @@ void comutexUnlockCallback(void *stateData, Comutex *comutex) {
 /// signal queue is found in one of the waiting queues, it is removed from the
 /// waiting queue and pushed onto the ready queue.
 void coconditionSignalCallback(void *stateData, Cocondition *cocondition) {
-  SchedulerState *schedulerState = *((SchedulerState**) stateData);
+  (void) stateData;
   TaskHandle cur = cocondition->head;
 
   for (int ii = 0; (ii < cocondition->numSignals) && (cur != NULL); ii++) {
@@ -376,7 +376,7 @@ void coconditionSignalCallback(void *stateData, Cocondition *cocondition) {
     // loop if cocondition->numSignals > 0, so there MUST be something waiting
     // on this condition.
     taskQueueRemove(taskDescriptor->taskQueue, taskDescriptor);
-    taskQueuePush(&schedulerState->ready, taskDescriptor);
+    taskQueuePush(taskDescriptor->readyQueue, taskDescriptor);
     cur = cur->nextToSignal;
   }
 
@@ -862,12 +862,17 @@ int schedulerSetPortShell(
 /// @return Returns the number of ports the console is running on success, -1
 /// on failure.
 int schedulerGetNumConsolePorts(SchedulerState *schedulerState) {
+  TaskQueue *currentReady = schedulerState->currentReady;
+  schedulerState->currentReady
+    = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
+
   TaskMessage *messageToSend = getAvailableMessage();
   while (messageToSend == NULL) {
     runScheduler(schedulerState);
     messageToSend = getAvailableMessage();
   }
   int returnValue = -1;
+  schedulerState->currentReady = currentReady;
 
   NanoOsMessage *nanoOsMessage
     = (NanoOsMessage*) taskMessageData(messageToSend);
@@ -1520,6 +1525,10 @@ int schedulerAssignMemory(void *ptr) {
 int closeTaskFileDescriptors(
   SchedulerState *schedulerState, TaskDescriptor *taskDescriptor
 ) {
+  TaskQueue *currentReady = schedulerState->currentReady;
+  schedulerState->currentReady
+    = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
+
   FileDescriptor *fileDescriptors = taskDescriptor->fileDescriptors;
   if (fileDescriptors != standardUserFileDescriptors) {
     TaskMessage *messageToSend = getAvailableMessage();
@@ -1599,6 +1608,7 @@ int closeTaskFileDescriptors(
     schedFree(fileDescriptors); taskDescriptor->fileDescriptors = NULL;
   }
 
+  schedulerState->currentReady = currentReady;
   return 0;
 }
 
@@ -1617,6 +1627,10 @@ int closeTaskFileDescriptors(
 FILE* schedFopen(SchedulerState *schedulerState,
   const char *pathname, const char *mode
 ) {
+  TaskQueue *currentReady = schedulerState->currentReady;
+  schedulerState->currentReady
+    = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
+
   FILE *returnValue = NULL;
   printDebugString("schedFopen: Getting message\n");
   TaskMessage *taskMessage = getAvailableMessage();
@@ -1646,6 +1660,7 @@ FILE* schedFopen(SchedulerState *schedulerState,
   returnValue = nanoOsMessageDataPointer(taskMessage, FILE*);
 
   taskMessageRelease(taskMessage);
+  schedulerState->currentReady = currentReady;
   return returnValue;
 }
 
@@ -1660,6 +1675,10 @@ FILE* schedFopen(SchedulerState *schedulerState,
 /// @return Returns 0 on success, EOF on failure.  On failure, the value of
 /// errno is also set to the appropriate error.
 int schedFclose(SchedulerState *schedulerState, FILE *stream) {
+  TaskQueue *currentReady = schedulerState->currentReady;
+  schedulerState->currentReady
+    = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
+
   int returnValue = 0;
   TaskMessage *taskMessage = getAvailableMessage();
   while (taskMessage == NULL) {
@@ -1688,6 +1707,7 @@ int schedFclose(SchedulerState *schedulerState, FILE *stream) {
   }
 
   taskMessageRelease(taskMessage);
+  schedulerState->currentReady = currentReady;
   return returnValue;
 }
 
@@ -1702,6 +1722,10 @@ int schedFclose(SchedulerState *schedulerState, FILE *stream) {
 ///
 /// @return Returns 0 on success, -1 and sets the value of errno on failure.
 int schedRemove(SchedulerState *schedulerState, const char *pathname) {
+  TaskQueue *currentReady = schedulerState->currentReady;
+  schedulerState->currentReady
+    = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
+
   int returnValue = 0;
   TaskMessage *taskMessage = getAvailableMessage();
   while (taskMessage == NULL) {
@@ -1730,6 +1754,7 @@ int schedRemove(SchedulerState *schedulerState, const char *pathname) {
   }
 
   taskMessageRelease(taskMessage);
+  schedulerState->currentReady = currentReady;
   return returnValue;
 }
 
@@ -1749,6 +1774,10 @@ int schedRemove(SchedulerState *schedulerState, const char *pathname) {
 size_t schedFread(SchedulerState *schedulerState,
   void *ptr, size_t size, size_t nmemb, FILE *stream
 ) {
+  TaskQueue *currentReady = schedulerState->currentReady;
+  schedulerState->currentReady
+    = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
+
   FilesystemIoCommandParameters filesystemIoCommandParameters = {
     .file = stream,
     .buffer = ptr,
@@ -1774,6 +1803,7 @@ size_t schedFread(SchedulerState *schedulerState,
   }
 
   taskMessageRelease(taskMessage);
+  schedulerState->currentReady = currentReady;
   return filesystemIoCommandParameters.length / size;
 }
 
@@ -1793,6 +1823,10 @@ size_t schedFread(SchedulerState *schedulerState,
 size_t schedFwrite(SchedulerState *schedulerState,
   void *ptr, size_t size, size_t nmemb, FILE *stream
 ) {
+  TaskQueue *currentReady = schedulerState->currentReady;
+  schedulerState->currentReady
+    = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
+
   FilesystemIoCommandParameters filesystemIoCommandParameters = {
     .file = stream,
     .buffer = ptr,
@@ -1818,6 +1852,7 @@ size_t schedFwrite(SchedulerState *schedulerState,
   }
 
   taskMessageRelease(taskMessage);
+  schedulerState->currentReady = currentReady;
   return filesystemIoCommandParameters.length / size;
 }
 
@@ -1837,6 +1872,10 @@ size_t schedFwrite(SchedulerState *schedulerState,
 char* schedFgets(SchedulerState *schedulerState,
   char *buffer, int size, FILE *stream
 ) {
+  TaskQueue *currentReady = schedulerState->currentReady;
+  schedulerState->currentReady
+    = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
+
   char *returnValue = NULL;
   FilesystemIoCommandParameters filesystemIoCommandParameters = {
     .file = stream,
@@ -1867,6 +1906,7 @@ char* schedFgets(SchedulerState *schedulerState,
   }
 
   taskMessageRelease(taskMessage);
+  schedulerState->currentReady = currentReady;
   return returnValue;
 }
 
@@ -1885,6 +1925,10 @@ char* schedFgets(SchedulerState *schedulerState,
 int schedFputs(SchedulerState *schedulerState,
   const char *s, FILE *stream
 ) {
+  TaskQueue *currentReady = schedulerState->currentReady;
+  schedulerState->currentReady
+    = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
+
   int returnValue = 0;
   FilesystemIoCommandParameters filesystemIoCommandParameters = {
     .file = stream,
@@ -1914,6 +1958,7 @@ int schedFputs(SchedulerState *schedulerState,
   }
 
   taskMessageRelease(taskMessage);
+  schedulerState->currentReady = currentReady;
   return returnValue;
 }
 
@@ -1969,7 +2014,7 @@ int schedulerKillTaskCommandHandler(
       // long timeout.  So, attempt to remove from the queues in that order.
       if (taskQueueRemove(&schedulerState->waiting, taskDescriptor) != 0
       ) {
-        if (taskQueueRemove(&schedulerState->ready, taskDescriptor) != 0
+        if (taskQueueRemove(taskDescriptor->readyQueue, taskDescriptor) != 0
         ) {
           taskQueueRemove(&schedulerState->timedWaiting, taskDescriptor);
         }
@@ -2017,7 +2062,7 @@ int schedulerKillTaskCommandHandler(
           // However, the scheduler only ever pops anything from the ready
           // queue.  So, push this back onto the ready queue instead of the free
           // queue this time.
-          taskQueuePush(&schedulerState->ready, taskDescriptor);
+          taskQueuePush(taskDescriptor->readyQueue, taskDescriptor);
         }
       } else {
         // Tell the caller that we've failed.
@@ -2360,7 +2405,7 @@ int schedulerExecveCommandHandler(
     if (taskQueueRemove(&schedulerState->timedWaiting, taskDescriptor)
       != 0
     ) {
-      taskQueueRemove(&schedulerState->ready, taskDescriptor);
+      taskQueueRemove(taskDescriptor->readyQueue, taskDescriptor);
     }
   }
 
@@ -2455,7 +2500,7 @@ int schedulerExecveCommandHandler(
   taskResume(taskDescriptor, NULL);
 
   // Put the task on the ready queue.
-  taskQueuePush(&schedulerState->ready, taskDescriptor);
+  taskQueuePush(taskDescriptor->readyQueue, taskDescriptor);
 
   taskMessageRelease(taskMessage);
 
@@ -2596,7 +2641,7 @@ int schedulerSpawnCommandHandler(
   taskResume(taskDescriptor, NULL);
 
   // Put the task on the ready queue.
-  taskQueuePush(&schedulerState->ready, taskDescriptor);
+  taskQueuePush(taskDescriptor->readyQueue, taskDescriptor);
 
   taskMessageSetDone(taskMessage);
 
@@ -2730,12 +2775,12 @@ void checkForTimeouts(SchedulerState *schedulerState) {
       = poppedDescriptor->taskHandle->blockingCocondition;
 
     if ((blockingComutex != NULL) && (now >= blockingComutex->timeoutTime)) {
-      taskQueuePush(&schedulerState->ready, poppedDescriptor);
+      taskQueuePush(poppedDescriptor->readyQueue, poppedDescriptor);
       continue;
     } else if ((blockingCocondition != NULL)
       && (now >= blockingCocondition->timeoutTime)
     ) {
-      taskQueuePush(&schedulerState->ready, poppedDescriptor);
+      taskQueuePush(poppedDescriptor->readyQueue, poppedDescriptor);
       continue;
     }
 
@@ -3170,7 +3215,7 @@ static const char *shellArgs[] = {
 /// @return This function returns no value.
 void runScheduler(SchedulerState *schedulerState) {
   TaskDescriptor *taskDescriptor
-    = taskQueuePop(&schedulerState->ready);
+    = taskQueuePop(schedulerState->currentReady);
 
   if (coroutineCorrupted(taskDescriptor->taskHandle)) {
     removeTask(schedulerState, taskDescriptor, "Task corruption detected");
@@ -3217,7 +3262,7 @@ void runScheduler(SchedulerState *schedulerState) {
     ) {
       // We're not done initializing yet.  Put the task back on the ready
       // queue and try again later.
-      taskQueuePush(&schedulerState->ready, taskDescriptor);
+      taskQueuePush(schedulerState->currentReady, taskDescriptor);
       return;
     }
 
@@ -3287,7 +3332,7 @@ void runScheduler(SchedulerState *schedulerState) {
   } else if (taskFinished(taskDescriptor)) {
     taskQueuePush(&schedulerState->free, taskDescriptor);
   } else { // Task is still running.
-    taskQueuePush(&schedulerState->ready, taskDescriptor);
+    taskQueuePush(schedulerState->currentReady, taskDescriptor);
   }
 
   checkForTimeouts(schedulerState);
@@ -3309,7 +3354,8 @@ __attribute__((noinline)) void startScheduler(
   // Initialize the scheduler's state.
   SchedulerState schedulerState = {0};
   schedulerState.hostname = NULL;
-  schedulerState.ready.name = "ready";
+  schedulerState.ready[SCHEDULER_READY_QUEUE_KERNEL].name = "kernel ready";
+  schedulerState.ready[SCHEDULER_READY_QUEUE_USER].name = "user ready";
   schedulerState.waiting.name = "waiting";
   schedulerState.timedWaiting.name = "timed waiting";
   schedulerState.free.name = "free";
@@ -3509,21 +3555,32 @@ __attribute__((noinline)) void startScheduler(
   }
   printDebugString("Set shells for ports.\n");
 
-  taskQueuePush(&schedulerState.ready,
+  taskQueuePush(&schedulerState.ready[SCHEDULER_READY_QUEUE_KERNEL],
     &allTasks[NANO_OS_MEMORY_MANAGER_TASK_ID - 1]);
-  taskQueuePush(&schedulerState.ready,
+  taskQueuePush(&schedulerState.ready[SCHEDULER_READY_QUEUE_KERNEL],
     &allTasks[NANO_OS_FILESYSTEM_TASK_ID - 1]);
-  taskQueuePush(&schedulerState.ready,
+  taskQueuePush(&schedulerState.ready[SCHEDULER_READY_QUEUE_KERNEL],
     &allTasks[NANO_OS_SD_CARD_TASK_ID - 1]);
-  taskQueuePush(&schedulerState.ready,
+  taskQueuePush(&schedulerState.ready[SCHEDULER_READY_QUEUE_KERNEL],
     &allTasks[NANO_OS_CONSOLE_TASK_ID - 1]);
+  // Mark all the kernel processes as being part of the kernel ready queue.
+  // Skip over the scheduler (task 0).
+  allTasks[0].readyQueue = NULL;
+  for (TaskId ii = 1; ii < NANO_OS_FIRST_USER_TASK_ID; ii++) {
+    allTasks[ii - 1].readyQueue
+      = &schedulerState.ready[SCHEDULER_READY_QUEUE_KERNEL];
+  }
+
   // The scheduler will take care of cleaning up the dummy tasks in the
   // ready queue.
   for (TaskId ii = NANO_OS_FIRST_USER_TASK_ID;
     ii <= NANO_OS_NUM_TASKS;
     ii++
   ) {
-    taskQueuePush(&schedulerState.ready, &allTasks[ii - 1]);
+    taskQueuePush(&schedulerState.ready[SCHEDULER_READY_QUEUE_USER],
+      &allTasks[ii - 1]);
+    allTasks[ii - 1].readyQueue
+      = &schedulerState.ready[SCHEDULER_READY_QUEUE_USER];
   }
   printDebugString("Populated ready queue.\n");
 
@@ -3658,7 +3715,13 @@ __attribute__((noinline)) void startScheduler(
 
   // Run our scheduler.
   while (1) {
-    runScheduler(&schedulerState);
+    for (int ii = 0; ii < SCHEDULER_NUM_READY_QUEUES; ii++) {
+      schedulerState.currentReady = &schedulerState.ready[ii];
+      uint8_t queueSize = schedulerState.currentReady->numElements;
+      for (uint8_t jj = 0; jj < queueSize; jj++) {
+        runScheduler(&schedulerState);
+      }
+    }
   }
 }
 
