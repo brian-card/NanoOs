@@ -38,8 +38,6 @@
 // Must come last
 #include "../user/NanoOsStdio.h"
 
-#define printDebug(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__)
-
 /// @fn int loadOverlay(const char *overlayDir, const char *overlay,
 ///   char **envp)
 ///
@@ -265,7 +263,6 @@ void* callOverlayFunction(const char *overlayDir, const char *overlay,
     runningTask->overlayDir = overlayDirCopy;
   }
   runningTask->overlay = overlayCopy;
-  printDebug("Loading %s/%s\n", runningTask->overlayDir, overlayCopy);
   taskYield();
   
   // If we made it this far, then our new overlay has been successuflly loaded.
