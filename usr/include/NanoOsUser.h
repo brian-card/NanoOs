@@ -39,6 +39,7 @@
 
 // Header from kernel space.
 #include "../../src/kernel/NanoOsOverlay.h"
+#include "../../src/user/NanoOsDebug.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -58,6 +59,23 @@ static inline void* callOverlayFunction(
   return overlayMap.header.osApi->callOverlayFunction(overlayDir, overlay,
     function, args);
 }
+
+// Debug functions
+static inline int printString_(const char *string) {
+  return overlayMap.header.osApi->printString(string);
+}
+#define printString(str) printString_((const char*) (str))
+static inline int printInt_(long long int integer) {
+  return overlayMap.header.osApi->printInt(integer);
+}
+#define printInt(value) printInt_((long long int) (value))
+static inline int printDouble(double floatingPointValue) {
+  return overlayMap.header.osApi->printDouble(floatingPointValue);
+}
+static inline int printHex_(unsigned long long int integer) {
+  return overlayMap.header.osApi->printHex(integer);
+}
+#define printHex(integer) printHex_((unsigned long long int) (integer))
 
 #ifdef __cplusplus
 }
