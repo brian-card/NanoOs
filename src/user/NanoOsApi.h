@@ -197,6 +197,12 @@ typedef struct NanoOsApi {
   
   // NanoOsHardware.h functions:
   int (*shutdown)(NanoOsShutdownType shutdownType);
+  
+  // Debug functions
+  int (*printString)(const char *string);
+  int (*printInt)(long long int integer);
+  int (*printDouble)(double floatingPointValue);
+  int (*printHex)(unsigned long long int integer);
 } NanoOsApi;
 
 extern NanoOsApi nanoOsApi;

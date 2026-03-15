@@ -182,5 +182,11 @@ NanoOsApi nanoOsApi = {
   
   // NanoOsHardware.h functions:
   .shutdown = nanoOsHardwareShutdown,
+  
+  // Debug functions
+  .printString = printString_,
+  .printInt = printInt_,
+  .printDouble = printDouble,
+  .printHex = printHex_,
 };
 
