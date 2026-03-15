@@ -339,8 +339,6 @@ void* execCommand(void *args) {
     free(passwdStringBuffer);
   }
 
-  execArgs = execArgsDestroy(execArgs);
-
   releaseConsole();
 
   schedulerCloseAllFileDescriptors();
@@ -355,6 +353,10 @@ void* execCommand(void *args) {
     msg = taskMessageQueuePop();
   }
 
+  // ***DO NOT*** attempt to free the ExecArgs that were passed in, period.
+  // The memory will be cleaned up by the scheduler after we exit.  Freeing
+  // that memory here can result in nasty consequences if we get preempted
+  // between freeing the memory and returning from this function.
   return (void*) ((intptr_t) returnValue);
 }
 
