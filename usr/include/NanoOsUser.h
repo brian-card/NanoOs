@@ -46,6 +46,8 @@
 // want to enable a pure, user-space print function that will go through the
 // console as well.
 #define printDebug(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__)
+#else
+#define printDebug(fmt, ...) {}
 #endif // NANO_OS_USER_DEBUG
 
 #ifdef __cplusplus
