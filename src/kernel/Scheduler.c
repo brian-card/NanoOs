@@ -3216,6 +3216,10 @@ static const char *shellArgs[] = {
 void runScheduler(SchedulerState *schedulerState) {
   TaskDescriptor *taskDescriptor
     = taskQueuePop(schedulerState->currentReady);
+  if (taskDescriptor == NULL) {
+    // Nothing we can do.
+    return;
+  }
 
   if (coroutineCorrupted(taskDescriptor->taskHandle)) {
     removeTask(schedulerState, taskDescriptor, "Task corruption detected");
@@ -3359,6 +3363,8 @@ __attribute__((noinline)) void startScheduler(
   schedulerState.waiting.name = "waiting";
   schedulerState.timedWaiting.name = "timed waiting";
   schedulerState.free.name = "free";
+  schedulerState.currentReady
+    = &schedulerState.ready[SCHEDULER_READY_QUEUE_KERNEL];
   schedulerState.preemptionTimer
     = (HAL->getNumTimers() > PREEMPTION_TIMER) ? PREEMPTION_TIMER : -1;
   printDebugString("Set scheduler state.\n");
