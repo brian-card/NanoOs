@@ -409,6 +409,9 @@ extern SoftwareTimer softwareTimers[];
 void* timerThreadFunction(void *arg) {
   intptr_t timer = (intptr_t) arg;
   
+  // We want to be able to kill this thread if we need to.
+  pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
+  
   SoftwareTimer *swTimer = &softwareTimers[timer];
   int64_t delay = swTimer->deadline - swTimer->startTime;
   struct timespec ts = {
