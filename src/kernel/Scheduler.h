@@ -36,9 +36,6 @@
 #ifndef SCHEDULER_H
 #define SCHEDULER_H
 
-// Unix includes
-#include "sys/types.h"
-
 // Custom includes
 #include "NanoOsTypes.h"
 
@@ -90,11 +87,6 @@ FileDescriptor* schedulerGetFileDescriptor(FILE *stream);
 int schedulerCloseAllFileDescriptors(void);
 const char* schedulerGetHostname(void);
 int schedulerExecve(const char *pathname,
-  char *const argv[], char *const envp[]);
-int schedulerSpawn(
-  pid_t *pid, const char *path,
-  const posix_spawn_file_actions_t *file_actions,
-  const posix_spawnattr_t *attrp,
   char *const argv[], char *const envp[]);
 int schedulerAssignMemory(void *ptr);
 
