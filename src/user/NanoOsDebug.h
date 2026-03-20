@@ -101,9 +101,5 @@
 #endif // defined(NANO_OS_USER_DEBUG) || defined(NANO_OS_DEBUG)
 
 
-#ifdef __cplusplus
-} // extern "C"
-#endif
-
 #endif // NANO_OS_USER_DEBUG_H
 
