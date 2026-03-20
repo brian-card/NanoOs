@@ -75,6 +75,12 @@ void runScheduler(SchedulerState *schedulerState);
 /// FileDescriptor object that maps to the task's stderr FILE stream.
 #define STDERR_FILE_DESCRIPTOR_INDEX 2
 
+/// @var _functionInProgress
+///
+/// @brief Function that's already in progress that keeps another function from
+/// running.
+const char *_functionInProgress = NULL;
+
 /// @var schedulerTaskHandle
 ///
 /// @brief Pointer to the main task handle that's allocated before the
@@ -1525,90 +1531,102 @@ int schedulerAssignMemory(void *ptr) {
 int closeTaskFileDescriptors(
   SchedulerState *schedulerState, TaskDescriptor *taskDescriptor
 ) {
-  TaskQueue *currentReady = schedulerState->currentReady;
-  schedulerState->currentReady
-    = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
+  if (_functionInProgress == NULL) {
+    _functionInProgress = __func__;
 
-  FileDescriptor *fileDescriptors = taskDescriptor->fileDescriptors;
-  if (fileDescriptors != standardUserFileDescriptors) {
-    TaskMessage *messageToSend = getAvailableMessage();
-    while (messageToSend == NULL) {
-      runScheduler(schedulerState);
-      messageToSend = getAvailableMessage();
-    }
+    TaskQueue *currentReady = schedulerState->currentReady;
+    schedulerState->currentReady
+      = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
 
-    uint8_t numFileDescriptors = taskDescriptor->numFileDescriptors;
-    for (uint8_t ii = 0; ii < numFileDescriptors; ii++) {
-      TaskId waitingOutputTaskId
-        = fileDescriptors[ii].outputPipe.taskId;
-      if ((waitingOutputTaskId != TASK_ID_NOT_SET)
-        && (waitingOutputTaskId != NANO_OS_CONSOLE_TASK_ID)
-      ) {
-        TaskDescriptor *waitingTaskDescriptor
-          = &schedulerState->allTasks[waitingOutputTaskId - 1];
-
-        // Clear the taskId of the waiting task's stdin file descriptor.
-        waitingTaskDescriptor->fileDescriptors[
-          STDIN_FILE_DESCRIPTOR_INDEX].
-          inputPipe.taskId = TASK_ID_NOT_SET;
-
-        // Send an empty message to the waiting task so that it will become
-        // unblocked.
-        taskMessageInit(messageToSend,
-            fileDescriptors[ii].outputPipe.messageType,
-            /*data= */ NULL, /* size= */ 0, /* waiting= */ false);
-        taskMessageQueuePush(waitingTaskDescriptor, messageToSend);
-        // Give the task a chance to unblock.
-        taskResume(waitingTaskDescriptor, NULL);
-
-        // The function that was waiting should have released the message we
-        // sent it.  Get another one.
+    FileDescriptor *fileDescriptors = taskDescriptor->fileDescriptors;
+    if (fileDescriptors != standardUserFileDescriptors) {
+      TaskMessage *messageToSend = getAvailableMessage();
+      while (messageToSend == NULL) {
+        runScheduler(schedulerState);
         messageToSend = getAvailableMessage();
-        while (messageToSend == NULL) {
-          runScheduler(schedulerState);
+      }
+
+      uint8_t numFileDescriptors = taskDescriptor->numFileDescriptors;
+      for (uint8_t ii = 0; ii < numFileDescriptors; ii++) {
+        TaskId waitingOutputTaskId
+          = fileDescriptors[ii].outputPipe.taskId;
+        if ((waitingOutputTaskId != TASK_ID_NOT_SET)
+          && (waitingOutputTaskId != NANO_OS_CONSOLE_TASK_ID)
+        ) {
+          TaskDescriptor *waitingTaskDescriptor
+            = &schedulerState->allTasks[waitingOutputTaskId - 1];
+
+          // Clear the taskId of the waiting task's stdin file descriptor.
+          waitingTaskDescriptor->fileDescriptors[
+            STDIN_FILE_DESCRIPTOR_INDEX].
+            inputPipe.taskId = TASK_ID_NOT_SET;
+
+          // Send an empty message to the waiting task so that it will become
+          // unblocked.
+          taskMessageInit(messageToSend,
+              fileDescriptors[ii].outputPipe.messageType,
+              /*data= */ NULL, /* size= */ 0, /* waiting= */ false);
+          taskMessageQueuePush(waitingTaskDescriptor, messageToSend);
+          // Give the task a chance to unblock.
+          taskResume(waitingTaskDescriptor, NULL);
+
+          // The function that was waiting should have released the message we
+          // sent it.  Get another one.
           messageToSend = getAvailableMessage();
+          while (messageToSend == NULL) {
+            runScheduler(schedulerState);
+            messageToSend = getAvailableMessage();
+          }
+        }
+
+        TaskId waitingInputTaskId
+          = fileDescriptors[ii].inputPipe.taskId;
+        if ((waitingInputTaskId != TASK_ID_NOT_SET)
+          && (waitingInputTaskId != NANO_OS_CONSOLE_TASK_ID)
+        ) {
+          TaskDescriptor *waitingTaskDescriptor
+            = &schedulerState->allTasks[waitingInputTaskId - 1];
+
+          // Clear the taskId of the waiting task's stdin file descriptor.
+          waitingTaskDescriptor->fileDescriptors[
+            STDOUT_FILE_DESCRIPTOR_INDEX].
+            outputPipe.taskId = TASK_ID_NOT_SET;
+
+          // Send an empty message to the waiting task so that it will become
+          // unblocked.
+          taskMessageInit(messageToSend,
+              fileDescriptors[ii].outputPipe.messageType,
+              /*data= */ NULL, /* size= */ 0, /* waiting= */ false);
+          taskMessageQueuePush(waitingTaskDescriptor, messageToSend);
+          // Give the task a chance to unblock.
+          taskResume(waitingTaskDescriptor, NULL);
+
+          // The function that was waiting should have released the message we
+          // sent it.  Get another one.
+          messageToSend = getAvailableMessage();
+          while (messageToSend == NULL) {
+            runScheduler(schedulerState);
+            messageToSend = getAvailableMessage();
+          }
         }
       }
 
-      TaskId waitingInputTaskId
-        = fileDescriptors[ii].inputPipe.taskId;
-      if ((waitingInputTaskId != TASK_ID_NOT_SET)
-        && (waitingInputTaskId != NANO_OS_CONSOLE_TASK_ID)
-      ) {
-        TaskDescriptor *waitingTaskDescriptor
-          = &schedulerState->allTasks[waitingInputTaskId - 1];
-
-        // Clear the taskId of the waiting task's stdin file descriptor.
-        waitingTaskDescriptor->fileDescriptors[
-          STDOUT_FILE_DESCRIPTOR_INDEX].
-          outputPipe.taskId = TASK_ID_NOT_SET;
-
-        // Send an empty message to the waiting task so that it will become
-        // unblocked.
-        taskMessageInit(messageToSend,
-            fileDescriptors[ii].outputPipe.messageType,
-            /*data= */ NULL, /* size= */ 0, /* waiting= */ false);
-        taskMessageQueuePush(waitingTaskDescriptor, messageToSend);
-        // Give the task a chance to unblock.
-        taskResume(waitingTaskDescriptor, NULL);
-
-        // The function that was waiting should have released the message we
-        // sent it.  Get another one.
-        messageToSend = getAvailableMessage();
-        while (messageToSend == NULL) {
-          runScheduler(schedulerState);
-          messageToSend = getAvailableMessage();
-        }
-      }
+      // schedFree will pull an available message.  Release the one we've been
+      // using so that we're guaranteed it will be successful.
+      taskMessageRelease(messageToSend);
+      schedFree(fileDescriptors); taskDescriptor->fileDescriptors = NULL;
     }
 
-    // schedFree will pull an available message.  Release the one we've been
-    // using so that we're guaranteed it will be successful.
-    taskMessageRelease(messageToSend);
-    schedFree(fileDescriptors); taskDescriptor->fileDescriptors = NULL;
+    schedulerState->currentReady = currentReady;
+    _functionInProgress = NULL;
+  } else {
+    printString("ERROR: Cannot execute ");
+    printString(__func__);
+    printString(" because ");
+    printString(_functionInProgress);
+    printString(" is already in progress\n");
+    HAL->shutdown(HAL_SHUTDOWN_OFF);
   }
-
-  schedulerState->currentReady = currentReady;
   return 0;
 }
 
@@ -1627,40 +1645,54 @@ int closeTaskFileDescriptors(
 FILE* schedFopen(SchedulerState *schedulerState,
   const char *pathname, const char *mode
 ) {
-  TaskQueue *currentReady = schedulerState->currentReady;
-  schedulerState->currentReady
-    = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
-
   FILE *returnValue = NULL;
-  printDebugString("schedFopen: Getting message\n");
-  TaskMessage *taskMessage = getAvailableMessage();
-  while (taskMessage == NULL) {
-    runScheduler(schedulerState);
-    taskMessage = getAvailableMessage();
+
+  if (_functionInProgress == NULL) {
+    _functionInProgress = __func__;
+
+    TaskQueue *currentReady = schedulerState->currentReady;
+    schedulerState->currentReady
+      = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
+
+    printDebugString("schedFopen: Getting message\n");
+    TaskMessage *taskMessage = getAvailableMessage();
+    while (taskMessage == NULL) {
+      runScheduler(schedulerState);
+      taskMessage = getAvailableMessage();
+    }
+    printDebugString("schedFopen: Message retrieved\n");
+    NanoOsMessage *nanoOsMessage
+      = (NanoOsMessage*) taskMessageData(taskMessage);
+    nanoOsMessage->func = (intptr_t) mode;
+    nanoOsMessage->data = (intptr_t) pathname;
+    printDebugString("schedFopen: Initializing message\n");
+    taskMessageInit(taskMessage, FILESYSTEM_OPEN_FILE,
+      nanoOsMessage, sizeof(*nanoOsMessage), true);
+    printDebugString("schedFopen: Pushing message\n");
+    taskMessageQueuePush(
+      &schedulerState->allTasks[NANO_OS_FILESYSTEM_TASK_ID - 1],
+      taskMessage);
+
+    printDebugString("schedFopen: Resuming filesystem\n");
+    while (taskMessageDone(taskMessage) == false) {
+      runScheduler(schedulerState);
+    }
+    printDebugString("schedFopen: Filesystem message is done\n");
+
+    returnValue = nanoOsMessageDataPointer(taskMessage, FILE*);
+
+    taskMessageRelease(taskMessage);
+    schedulerState->currentReady = currentReady;
+    _functionInProgress = NULL;
+  } else {
+    printString("ERROR: Cannot execute ");
+    printString(__func__);
+    printString(" because ");
+    printString(_functionInProgress);
+    printString(" is already in progress\n");
+    HAL->shutdown(HAL_SHUTDOWN_OFF);
   }
-  printDebugString("schedFopen: Message retrieved\n");
-  NanoOsMessage *nanoOsMessage
-    = (NanoOsMessage*) taskMessageData(taskMessage);
-  nanoOsMessage->func = (intptr_t) mode;
-  nanoOsMessage->data = (intptr_t) pathname;
-  printDebugString("schedFopen: Initializing message\n");
-  taskMessageInit(taskMessage, FILESYSTEM_OPEN_FILE,
-    nanoOsMessage, sizeof(*nanoOsMessage), true);
-  printDebugString("schedFopen: Pushing message\n");
-  taskMessageQueuePush(
-    &schedulerState->allTasks[NANO_OS_FILESYSTEM_TASK_ID - 1],
-    taskMessage);
 
-  printDebugString("schedFopen: Resuming filesystem\n");
-  while (taskMessageDone(taskMessage) == false) {
-    runScheduler(schedulerState);
-  }
-  printDebugString("schedFopen: Filesystem message is done\n");
-
-  returnValue = nanoOsMessageDataPointer(taskMessage, FILE*);
-
-  taskMessageRelease(taskMessage);
-  schedulerState->currentReady = currentReady;
   return returnValue;
 }
 
@@ -1675,39 +1707,53 @@ FILE* schedFopen(SchedulerState *schedulerState,
 /// @return Returns 0 on success, EOF on failure.  On failure, the value of
 /// errno is also set to the appropriate error.
 int schedFclose(SchedulerState *schedulerState, FILE *stream) {
-  TaskQueue *currentReady = schedulerState->currentReady;
-  schedulerState->currentReady
-    = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
-
   int returnValue = 0;
-  TaskMessage *taskMessage = getAvailableMessage();
-  while (taskMessage == NULL) {
-    runScheduler(schedulerState);
-    taskMessage = getAvailableMessage();
-  }
-  NanoOsMessage *nanoOsMessage
-    = (NanoOsMessage*) taskMessageData(taskMessage);
-  FilesystemFcloseParameters fcloseParameters;
-  fcloseParameters.stream = stream;
-  fcloseParameters.returnValue = 0;
-  nanoOsMessage->data = (intptr_t) &fcloseParameters;
-  taskMessageInit(taskMessage, FILESYSTEM_CLOSE_FILE,
-    nanoOsMessage, sizeof(*nanoOsMessage), true);
-  taskMessageQueuePush(
-    &schedulerState->allTasks[NANO_OS_FILESYSTEM_TASK_ID - 1],
-    taskMessage);
 
-  while (taskMessageDone(taskMessage) == false) {
-    runScheduler(schedulerState);
+  if (_functionInProgress == NULL) {
+    _functionInProgress = __func__;
+
+    TaskQueue *currentReady = schedulerState->currentReady;
+    schedulerState->currentReady
+      = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
+
+    TaskMessage *taskMessage = getAvailableMessage();
+    while (taskMessage == NULL) {
+      runScheduler(schedulerState);
+      taskMessage = getAvailableMessage();
+    }
+    NanoOsMessage *nanoOsMessage
+      = (NanoOsMessage*) taskMessageData(taskMessage);
+    FilesystemFcloseParameters fcloseParameters;
+    fcloseParameters.stream = stream;
+    fcloseParameters.returnValue = 0;
+    nanoOsMessage->data = (intptr_t) &fcloseParameters;
+    taskMessageInit(taskMessage, FILESYSTEM_CLOSE_FILE,
+      nanoOsMessage, sizeof(*nanoOsMessage), true);
+    taskMessageQueuePush(
+      &schedulerState->allTasks[NANO_OS_FILESYSTEM_TASK_ID - 1],
+      taskMessage);
+
+    while (taskMessageDone(taskMessage) == false) {
+      runScheduler(schedulerState);
+    }
+
+    if (fcloseParameters.returnValue != 0) {
+      errno = -fcloseParameters.returnValue;
+      returnValue = EOF;
+    }
+
+    taskMessageRelease(taskMessage);
+    schedulerState->currentReady = currentReady;
+    _functionInProgress = NULL;
+  } else {
+    printString("ERROR: Cannot execute ");
+    printString(__func__);
+    printString(" because ");
+    printString(_functionInProgress);
+    printString(" is already in progress\n");
+    HAL->shutdown(HAL_SHUTDOWN_OFF);
   }
 
-  if (fcloseParameters.returnValue != 0) {
-    errno = -fcloseParameters.returnValue;
-    returnValue = EOF;
-  }
-
-  taskMessageRelease(taskMessage);
-  schedulerState->currentReady = currentReady;
   return returnValue;
 }
 
@@ -1722,39 +1768,53 @@ int schedFclose(SchedulerState *schedulerState, FILE *stream) {
 ///
 /// @return Returns 0 on success, -1 and sets the value of errno on failure.
 int schedRemove(SchedulerState *schedulerState, const char *pathname) {
-  TaskQueue *currentReady = schedulerState->currentReady;
-  schedulerState->currentReady
-    = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
-
   int returnValue = 0;
-  TaskMessage *taskMessage = getAvailableMessage();
-  while (taskMessage == NULL) {
-    runScheduler(schedulerState);
-    taskMessage = getAvailableMessage();
-  }
-  NanoOsMessage *nanoOsMessage
-    = (NanoOsMessage*) taskMessageData(taskMessage);
-  nanoOsMessage->data = (intptr_t) pathname;
-  taskMessageInit(taskMessage, FILESYSTEM_REMOVE_FILE,
-    nanoOsMessage, sizeof(*nanoOsMessage), true);
-  taskMessageQueuePush(
-    &schedulerState->allTasks[NANO_OS_FILESYSTEM_TASK_ID - 1],
-    taskMessage);
 
-  while (taskMessageDone(taskMessage) == false) {
-    runScheduler(schedulerState);
+  if (_functionInProgress == NULL) {
+    _functionInProgress = __func__;
+
+    TaskQueue *currentReady = schedulerState->currentReady;
+    schedulerState->currentReady
+      = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
+
+    TaskMessage *taskMessage = getAvailableMessage();
+    while (taskMessage == NULL) {
+      runScheduler(schedulerState);
+      taskMessage = getAvailableMessage();
+    }
+    NanoOsMessage *nanoOsMessage
+      = (NanoOsMessage*) taskMessageData(taskMessage);
+    nanoOsMessage->data = (intptr_t) pathname;
+    taskMessageInit(taskMessage, FILESYSTEM_REMOVE_FILE,
+      nanoOsMessage, sizeof(*nanoOsMessage), true);
+    taskMessageQueuePush(
+      &schedulerState->allTasks[NANO_OS_FILESYSTEM_TASK_ID - 1],
+      taskMessage);
+
+    while (taskMessageDone(taskMessage) == false) {
+      runScheduler(schedulerState);
+    }
+
+    returnValue = nanoOsMessageDataValue(taskMessage, int);
+    if (returnValue != 0) {
+      // returnValue holds a negative errno.  Set errno for the current task
+      // and return -1 like we're supposed to.
+      errno = -returnValue;
+      returnValue = -1;
+    }
+
+    taskMessageRelease(taskMessage);
+    schedulerState->currentReady = currentReady;
+    _functionInProgress = NULL;
+  } else {
+    printString("ERROR: Cannot execute ");
+    printString(__func__);
+    printString(" because ");
+    printString(_functionInProgress);
+    printString(" is already in progress\n");
+    HAL->shutdown(HAL_SHUTDOWN_OFF);
   }
 
-  returnValue = nanoOsMessageDataValue(taskMessage, int);
-  if (returnValue != 0) {
-    // returnValue holds a negative errno.  Set errno for the current task
-    // and return -1 like we're supposed to.
-    errno = -returnValue;
-    returnValue = -1;
-  }
-
-  taskMessageRelease(taskMessage);
-  schedulerState->currentReady = currentReady;
   return returnValue;
 }
 
@@ -1774,36 +1834,49 @@ int schedRemove(SchedulerState *schedulerState, const char *pathname) {
 size_t schedFread(SchedulerState *schedulerState,
   void *ptr, size_t size, size_t nmemb, FILE *stream
 ) {
-  TaskQueue *currentReady = schedulerState->currentReady;
-  schedulerState->currentReady
-    = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
-
   FilesystemIoCommandParameters filesystemIoCommandParameters = {
     .file = stream,
     .buffer = ptr,
     .length = size * nmemb
   };
 
-  TaskMessage *taskMessage = getAvailableMessage();
-  while (taskMessage == NULL) {
-    runScheduler(schedulerState);
-    taskMessage = getAvailableMessage();
-  }
-  NanoOsMessage *nanoOsMessage
-    = (NanoOsMessage*) taskMessageData(taskMessage);
-  nanoOsMessage->data = (intptr_t) &filesystemIoCommandParameters;
-  taskMessageInit(taskMessage, FILESYSTEM_READ_FILE,
-    nanoOsMessage, sizeof(*nanoOsMessage), true);
-  taskMessageQueuePush(
-    &schedulerState->allTasks[NANO_OS_FILESYSTEM_TASK_ID - 1],
-    taskMessage);
+  if (_functionInProgress == NULL) {
+    _functionInProgress = __func__;
 
-  while (taskMessageDone(taskMessage) == false) {
-    runScheduler(schedulerState);
+    TaskQueue *currentReady = schedulerState->currentReady;
+    schedulerState->currentReady
+      = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
+
+    TaskMessage *taskMessage = getAvailableMessage();
+    while (taskMessage == NULL) {
+      runScheduler(schedulerState);
+      taskMessage = getAvailableMessage();
+    }
+    NanoOsMessage *nanoOsMessage
+      = (NanoOsMessage*) taskMessageData(taskMessage);
+    nanoOsMessage->data = (intptr_t) &filesystemIoCommandParameters;
+    taskMessageInit(taskMessage, FILESYSTEM_READ_FILE,
+      nanoOsMessage, sizeof(*nanoOsMessage), true);
+    taskMessageQueuePush(
+      &schedulerState->allTasks[NANO_OS_FILESYSTEM_TASK_ID - 1],
+      taskMessage);
+
+    while (taskMessageDone(taskMessage) == false) {
+      runScheduler(schedulerState);
+    }
+
+    taskMessageRelease(taskMessage);
+    schedulerState->currentReady = currentReady;
+    _functionInProgress = NULL;
+  } else {
+    printString("ERROR: Cannot execute ");
+    printString(__func__);
+    printString(" because ");
+    printString(_functionInProgress);
+    printString(" is already in progress\n");
+    HAL->shutdown(HAL_SHUTDOWN_OFF);
   }
 
-  taskMessageRelease(taskMessage);
-  schedulerState->currentReady = currentReady;
   return filesystemIoCommandParameters.length / size;
 }
 
@@ -1823,36 +1896,49 @@ size_t schedFread(SchedulerState *schedulerState,
 size_t schedFwrite(SchedulerState *schedulerState,
   void *ptr, size_t size, size_t nmemb, FILE *stream
 ) {
-  TaskQueue *currentReady = schedulerState->currentReady;
-  schedulerState->currentReady
-    = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
-
   FilesystemIoCommandParameters filesystemIoCommandParameters = {
     .file = stream,
     .buffer = ptr,
     .length = size * nmemb
   };
 
-  TaskMessage *taskMessage = getAvailableMessage();
-  while (taskMessage == NULL) {
-    runScheduler(schedulerState);
-    taskMessage = getAvailableMessage();
-  }
-  NanoOsMessage *nanoOsMessage
-    = (NanoOsMessage*) taskMessageData(taskMessage);
-  nanoOsMessage->data = (intptr_t) &filesystemIoCommandParameters;
-  taskMessageInit(taskMessage, FILESYSTEM_WRITE_FILE,
-    nanoOsMessage, sizeof(*nanoOsMessage), true);
-  taskMessageQueuePush(
-    &schedulerState->allTasks[NANO_OS_FILESYSTEM_TASK_ID - 1],
-    taskMessage);
+  if (_functionInProgress == NULL) {
+    _functionInProgress = __func__;
 
-  while (taskMessageDone(taskMessage) == false) {
-    runScheduler(schedulerState);
+    TaskQueue *currentReady = schedulerState->currentReady;
+    schedulerState->currentReady
+      = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
+
+    TaskMessage *taskMessage = getAvailableMessage();
+    while (taskMessage == NULL) {
+      runScheduler(schedulerState);
+      taskMessage = getAvailableMessage();
+    }
+    NanoOsMessage *nanoOsMessage
+      = (NanoOsMessage*) taskMessageData(taskMessage);
+    nanoOsMessage->data = (intptr_t) &filesystemIoCommandParameters;
+    taskMessageInit(taskMessage, FILESYSTEM_WRITE_FILE,
+      nanoOsMessage, sizeof(*nanoOsMessage), true);
+    taskMessageQueuePush(
+      &schedulerState->allTasks[NANO_OS_FILESYSTEM_TASK_ID - 1],
+      taskMessage);
+
+    while (taskMessageDone(taskMessage) == false) {
+      runScheduler(schedulerState);
+    }
+
+    taskMessageRelease(taskMessage);
+    schedulerState->currentReady = currentReady;
+    _functionInProgress = NULL;
+  } else {
+    printString("ERROR: Cannot execute ");
+    printString(__func__);
+    printString(" because ");
+    printString(_functionInProgress);
+    printString(" is already in progress\n");
+    HAL->shutdown(HAL_SHUTDOWN_OFF);
   }
 
-  taskMessageRelease(taskMessage);
-  schedulerState->currentReady = currentReady;
   return filesystemIoCommandParameters.length / size;
 }
 
@@ -1872,41 +1958,55 @@ size_t schedFwrite(SchedulerState *schedulerState,
 char* schedFgets(SchedulerState *schedulerState,
   char *buffer, int size, FILE *stream
 ) {
-  TaskQueue *currentReady = schedulerState->currentReady;
-  schedulerState->currentReady
-    = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
-
   char *returnValue = NULL;
-  FilesystemIoCommandParameters filesystemIoCommandParameters = {
-    .file = stream,
-    .buffer = buffer,
-    .length = (uint32_t) size - 1
-  };
 
-  TaskMessage *taskMessage = getAvailableMessage();
-  while (taskMessage == NULL) {
-    runScheduler(schedulerState);
-    taskMessage = getAvailableMessage();
-  }
-  NanoOsMessage *nanoOsMessage
-    = (NanoOsMessage*) taskMessageData(taskMessage);
-  nanoOsMessage->data = (intptr_t) &filesystemIoCommandParameters;
-  taskMessageInit(taskMessage, FILESYSTEM_READ_FILE,
-    nanoOsMessage, sizeof(*nanoOsMessage), true);
-  taskMessageQueuePush(
-    &schedulerState->allTasks[NANO_OS_FILESYSTEM_TASK_ID - 1],
-    taskMessage);
+  if (_functionInProgress == NULL) {
+    _functionInProgress = __func__;
 
-  while (taskMessageDone(taskMessage) == false) {
-    runScheduler(schedulerState);
-  }
-  if (filesystemIoCommandParameters.length > 0) {
-    buffer[filesystemIoCommandParameters.length] = '\0';
-    returnValue = buffer;
+    TaskQueue *currentReady = schedulerState->currentReady;
+    schedulerState->currentReady
+      = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
+
+    FilesystemIoCommandParameters filesystemIoCommandParameters = {
+      .file = stream,
+      .buffer = buffer,
+      .length = (uint32_t) size - 1
+    };
+
+    TaskMessage *taskMessage = getAvailableMessage();
+    while (taskMessage == NULL) {
+      runScheduler(schedulerState);
+      taskMessage = getAvailableMessage();
+    }
+    NanoOsMessage *nanoOsMessage
+      = (NanoOsMessage*) taskMessageData(taskMessage);
+    nanoOsMessage->data = (intptr_t) &filesystemIoCommandParameters;
+    taskMessageInit(taskMessage, FILESYSTEM_READ_FILE,
+      nanoOsMessage, sizeof(*nanoOsMessage), true);
+    taskMessageQueuePush(
+      &schedulerState->allTasks[NANO_OS_FILESYSTEM_TASK_ID - 1],
+      taskMessage);
+
+    while (taskMessageDone(taskMessage) == false) {
+      runScheduler(schedulerState);
+    }
+    if (filesystemIoCommandParameters.length > 0) {
+      buffer[filesystemIoCommandParameters.length] = '\0';
+      returnValue = buffer;
+    }
+
+    taskMessageRelease(taskMessage);
+    schedulerState->currentReady = currentReady;
+    _functionInProgress = NULL;
+  } else {
+    printString("ERROR: Cannot execute ");
+    printString(__func__);
+    printString(" because ");
+    printString(_functionInProgress);
+    printString(" is already in progress\n");
+    HAL->shutdown(HAL_SHUTDOWN_OFF);
   }
 
-  taskMessageRelease(taskMessage);
-  schedulerState->currentReady = currentReady;
   return returnValue;
 }
 
@@ -1925,40 +2025,54 @@ char* schedFgets(SchedulerState *schedulerState,
 int schedFputs(SchedulerState *schedulerState,
   const char *s, FILE *stream
 ) {
-  TaskQueue *currentReady = schedulerState->currentReady;
-  schedulerState->currentReady
-    = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
-
   int returnValue = 0;
-  FilesystemIoCommandParameters filesystemIoCommandParameters = {
-    .file = stream,
-    .buffer = (void*) s,
-    .length = (uint32_t) strlen(s)
-  };
 
-  TaskMessage *taskMessage = getAvailableMessage();
-  while (taskMessage == NULL) {
-    runScheduler(schedulerState);
-    taskMessage = getAvailableMessage();
-  }
-  NanoOsMessage *nanoOsMessage
-    = (NanoOsMessage*) taskMessageData(taskMessage);
-  nanoOsMessage->data = (intptr_t) &filesystemIoCommandParameters;
-  taskMessageInit(taskMessage, FILESYSTEM_WRITE_FILE,
-    nanoOsMessage, sizeof(*nanoOsMessage), true);
-  taskMessageQueuePush(
-    &schedulerState->allTasks[NANO_OS_FILESYSTEM_TASK_ID - 1],
-    taskMessage);
+  if (_functionInProgress == NULL) {
+    _functionInProgress = __func__;
 
-  while (taskMessageDone(taskMessage) == false) {
-    runScheduler(schedulerState);
-  }
-  if (filesystemIoCommandParameters.length == 0) {
-    returnValue = EOF;
+    TaskQueue *currentReady = schedulerState->currentReady;
+    schedulerState->currentReady
+      = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
+
+    FilesystemIoCommandParameters filesystemIoCommandParameters = {
+      .file = stream,
+      .buffer = (void*) s,
+      .length = (uint32_t) strlen(s)
+    };
+
+    TaskMessage *taskMessage = getAvailableMessage();
+    while (taskMessage == NULL) {
+      runScheduler(schedulerState);
+      taskMessage = getAvailableMessage();
+    }
+    NanoOsMessage *nanoOsMessage
+      = (NanoOsMessage*) taskMessageData(taskMessage);
+    nanoOsMessage->data = (intptr_t) &filesystemIoCommandParameters;
+    taskMessageInit(taskMessage, FILESYSTEM_WRITE_FILE,
+      nanoOsMessage, sizeof(*nanoOsMessage), true);
+    taskMessageQueuePush(
+      &schedulerState->allTasks[NANO_OS_FILESYSTEM_TASK_ID - 1],
+      taskMessage);
+
+    while (taskMessageDone(taskMessage) == false) {
+      runScheduler(schedulerState);
+    }
+    if (filesystemIoCommandParameters.length == 0) {
+      returnValue = EOF;
+    }
+
+    taskMessageRelease(taskMessage);
+    schedulerState->currentReady = currentReady;
+    _functionInProgress = NULL;
+  } else {
+    printString("ERROR: Cannot execute ");
+    printString(__func__);
+    printString(" because ");
+    printString(_functionInProgress);
+    printString(" is already in progress\n");
+    HAL->shutdown(HAL_SHUTDOWN_OFF);
   }
 
-  taskMessageRelease(taskMessage);
-  schedulerState->currentReady = currentReady;
   return returnValue;
 }
 
@@ -2053,17 +2167,16 @@ int schedulerKillTaskCommandHandler(
         taskDescriptor->name = NULL;
         taskDescriptor->userId = NO_USER_ID;
 
-        if (taskId > (NANO_OS_FIRST_SHELL_PID + schedulerState->numShells)) {
-          // The expected case.
-          taskQueuePush(&schedulerState->free, taskDescriptor);
-        } else {
-          // The killed task is a shell command.  The scheduler is
-          // responsible for detecting that it's not running and restarting it.
-          // However, the scheduler only ever pops anything from the ready
-          // queue.  So, push this back onto the ready queue instead of the free
-          // queue this time.
-          taskQueuePush(taskDescriptor->readyQueue, taskDescriptor);
-        }
+        // It's likely (i.e. almost certain) that the killed task was a user
+        // task that was killed by a user task.  That would mean that we were
+        // in the middle of processing a user task queue, the number of items
+        // in which was captured before the runScheduler loop was started.
+        // (See the logic at the end of startScheduler.)  Rather than pushing
+        // the killed task onto the free queue, push it back onto its ready
+        // queue so that we don't try to pop a task from an empty queue.
+        // runScheduler will do the cleanup and put the task onto the free
+        // queue again once it picks back up again.
+        taskQueuePush(taskDescriptor->readyQueue, taskDescriptor);
       } else {
         // Tell the caller that we've failed.
         nanoOsMessage->data = 1;
@@ -3218,6 +3331,9 @@ void runScheduler(SchedulerState *schedulerState) {
     = taskQueuePop(schedulerState->currentReady);
   if (taskDescriptor == NULL) {
     // Nothing we can do.
+    printString("ERROR: No tasks to pop in ");
+    printString(schedulerState->currentReady->name);
+    printString(" task queue\n");
     return;
   }
 
