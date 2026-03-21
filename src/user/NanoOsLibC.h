@@ -36,7 +36,6 @@
 
 //// #define NANO_OS_USER_DEBUG
 #include "NanoOsErrno.h"
-#include "NanoOsLimits.h"
 
 #ifndef NANO_OS_USER_LIB_C_H
 #define NANO_OS_USER_LIB_C_H
