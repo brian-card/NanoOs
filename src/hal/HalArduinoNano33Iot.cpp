@@ -29,7 +29,7 @@
 ///
 /// @brief HAL implementation for an Arduino Nano 33 IoT
 
-#if defined(__arm__)
+#if defined(ARDUINO_SAMD_NANO_33_IOT)
 
 // Base Arduino definitions
 #include <Arduino.h>
@@ -1007,4 +1007,4 @@ const Hal* halArduinoNano33IotInit(void) {
   return &arduinoNano33IotHal;
 }
 
-#endif // __arm__
+#endif // ARDUINO_SAMD_NANO_33_IOT
