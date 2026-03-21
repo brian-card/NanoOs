@@ -237,7 +237,7 @@ msg_t* msg_wait_for_reply_with_type(msg_t *sent,
 // Message element accessors
 void* msg_element(msg_t *msg, msg_element_t msg_element);
 #define msg_type(msg_ptr) \
-  (*((int*) msg_element((msg_ptr), MSG_ELEMENT_TYPE)))
+  (*((int64_t*) msg_element((msg_ptr), MSG_ELEMENT_TYPE)))
 #define msg_data(msg_ptr) \
   (*((void**) msg_element((msg_ptr), MSG_ELEMENT_DATA)))
 #define msg_size(msg_ptr) \
