@@ -423,9 +423,6 @@ int adafruitFeatherM0WifiInitSpiDevice(int spi,
   if ((spi < 0) || (spi >= numArduinoSpis)) {
     // Outside the limit of the devices we support.
     return -ENODEV;
-  } else if (cs >= NUM_DIO_PINS) {
-    // No such DIO pin to configure.
-    return -ERANGE;
   } else if (
        (cs   == SPI_SCK_DIO)
     || (cs   == SPI_COPI_DIO)
