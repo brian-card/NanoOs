@@ -1041,10 +1041,16 @@ const Hal* halArduinoNano33IotInit(void) {
   if (((uintptr_t) &__bss_end__)
     > ((uintptr_t) arduinoNano33IotHal.overlayMap)
   ) {
+    int stackPosition = 0;
     Serial.begin(1000000);
     while (!Serial);
-    Serial.print("ERROR!!! &__bss_end__ > ");
-    Serial.print((uintptr_t) arduinoNano33IotHal.overlayMap);
+    Serial.print("ERROR!!! 0x");
+    Serial.print((uintptr_t) &__bss_end__, HEX);
+    Serial.print(" > 0x");
+    Serial.print((uintptr_t) adafruitFeatherM0WifiHal.overlayMap, HEX);
+    Serial.print("\n");
+    Serial.print("Stack position = 0x");
+    Serial.print((uintptr_t) &stackPosition, HEX);
     Serial.print("\n");
     Serial.print("*******************************************************\n");
     Serial.print("* Running user programs will corrupt system memory!!! *\n");
