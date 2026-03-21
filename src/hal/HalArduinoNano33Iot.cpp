@@ -1041,12 +1041,14 @@ const Hal* halArduinoNano33IotInit(void) {
   if (((uintptr_t) &__bss_end__)
     > ((uintptr_t) arduinoNano33IotHal.overlayMap)
   ) {
-    printString("ERROR!!! &__bss_end__ > ");
-    printInt((uintptr_t) arduinoNano33IotHal.overlayMap);
-    printString("\n");
-    printString("*******************************************************\n");
-    printString("* Running user programs will corrupt system memory!!! *\n");
-    printString("*******************************************************\n");
+    Serial.begin(1000000);
+    while (!Serial);
+    Serial.print("ERROR!!! &__bss_end__ > ");
+    Serial.print((uintptr_t) arduinoNano33IotHal.overlayMap);
+    Serial.print("\n");
+    Serial.print("*******************************************************\n");
+    Serial.print("* Running user programs will corrupt system memory!!! *\n");
+    Serial.print("*******************************************************\n");
   }
   
   __enable_irq();  // Ensure global interrupts are enabled
