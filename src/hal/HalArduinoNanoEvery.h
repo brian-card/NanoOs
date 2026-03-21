@@ -41,33 +41,6 @@ extern "C"
 {
 #endif
 
-/// @def DIO_START
-///
-/// @brief On the Arduino Nano Every, D0 is used for Serial1's RX and D1 is
-/// used for Serial1's TX.  We use expect to use Serial1, so our first usable
-/// DIO is 2.
-#define DIO_START 2
-
-/// @def NUM_DIO_PINS
-///
-/// @brief The number of digital IO pins on the board.  14 on an Arduino Nano.
-#define NUM_DIO_PINS 14
-
-/// @def SPI_COPI_DIO
-///
-/// @brief DIO pin used for SPI COPI on the Arduino Nano Every.
-#define SPI_COPI_DIO 11
-
-/// @def SPI_CIPO_DIO
-///
-/// @brief DIO pin used for SPI CIPO on the Arduino Nano Every.
-#define SPI_CIPO_DIO 12
-
-/// @def SPI_SCK_DIO
-///
-/// @brief DIO pin used for SPI serial clock on the Arduino Nano Every.
-#define SPI_SCK_DIO 13
-
 const Hal* halArduinoNanoEveryInit(void);
 
 #ifdef __cplusplus
