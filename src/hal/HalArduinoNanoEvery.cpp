@@ -29,7 +29,7 @@
 ///
 /// @brief HAL implementation for an Arduino Nano Every
 
-#if defined(__AVR__)
+#if defined(ARDUINO_AVR_NANO_EVERY)
 
 // Base Arduino definitions
 #include <Arduino.h>
@@ -587,5 +587,5 @@ const Hal* halArduinoNanoEveryInit(void) {
   return &arduinoNanoEveryHal;
 }
 
-#endif // __AVR__
+#endif // ARDUINO_AVR_NANO_EVERY
 
