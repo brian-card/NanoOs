@@ -126,7 +126,7 @@ int sdSpiCardInit(SdCardSpiArgs *sdCardSpiArgs) {
     sdCardSpiArgs->spiSckDio,
     sdCardSpiArgs->spiCopiDio,
     sdCardSpiArgs->spiCipoDio,
-    16000000
+    8000000
   );
   if (initStatus != 0) {
     // Just pass the error upward.
@@ -134,7 +134,7 @@ int sdSpiCardInit(SdCardSpiArgs *sdCardSpiArgs) {
   }
   
   // Extended power up sequence - Send more clock cycles
-  for (int ii = 0; ii < 32; ii++) {
+  for (int ii = 0; ii < 128; ii++) {
     HAL->spiTransfer8(SD_CARD_SPI_DEVICE, 0xFF);
   }
   
@@ -147,6 +147,7 @@ int sdSpiCardInit(SdCardSpiArgs *sdCardSpiArgs) {
     response = sdSpiSendCommand(SD_CARD_SPI_DEVICE, CMD0, 0);
     if (--timeoutCount == 0) {
       HAL->endSpiTransfer(SD_CARD_SPI_DEVICE);
+      printString("ERROR! CMD0 timed out\n");
       return -ETIMEDOUT;
     }
   } while (response != R1_IDLE_STATE);
@@ -181,6 +182,7 @@ int sdSpiCardInit(SdCardSpiArgs *sdCardSpiArgs) {
     
     if (--timeoutCount == 0) {
       HAL->endSpiTransfer(SD_CARD_SPI_DEVICE);
+      printString("ERROR! ACMD41 timed out\n");
       return -ETIMEDOUT;
     }
   } while (response != 0);
