@@ -3833,6 +3833,7 @@ __attribute__((noinline)) void startScheduler(
       printDebugString("ERROR: schedRemove failed to remove the \"hello\" file.\n");
     }
   } while (0);
+  printDebugString("Filesystem sanity test complete\n");
 #endif // NANO_OS_DEBUG
 
   // Run our scheduler.
