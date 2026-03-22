@@ -3608,6 +3608,7 @@ __attribute__((noinline)) void startScheduler(
       taskDescriptor->taskHandle, taskDescriptor);
     taskDescriptor->taskId = ii;
     taskDescriptor->userId = NO_USER_ID;
+    taskDescriptor->name = "dummy";
   }
   printDebugString("Created all tasks.\n");
 
@@ -3692,6 +3693,7 @@ __attribute__((noinline)) void startScheduler(
     allTasks[ii - 1].readyQueue
       = &schedulerState.ready[SCHEDULER_READY_QUEUE_KERNEL];
   }
+  printDebugString("Populated kernel ready queue.\n");
 
   // The scheduler will take care of cleaning up the dummy tasks in the
   // ready queue.
@@ -3704,7 +3706,12 @@ __attribute__((noinline)) void startScheduler(
     allTasks[ii - 1].readyQueue
       = &schedulerState.ready[SCHEDULER_READY_QUEUE_USER];
   }
-  printDebugString("Populated ready queue.\n");
+  printDebugString("Populated user ready queue.\n");
+
+  if (HAL->overlayMap != NULL) {
+    // Make sure the overlay map is zeroed out for first use.
+    memset(HAL->overlayMap, 0, sizeof(NanoOsOverlayMap));
+  }
 
   // Get the memory manager and filesystem up and running.
   taskResume(&allTasks[NANO_OS_MEMORY_MANAGER_TASK_ID - 1], NULL);
