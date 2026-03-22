@@ -58,6 +58,7 @@ int posixInitSpiDevice(int spi,
 int posixStartSpiTransfer(int spi);
 int posixEndSpiTransfer(int spi);
 int posixSpiTransfer8(int spi, uint8_t data);
+int posixSpiTransferBytes(int spi, uint8_t *data, uint32_t length);
 int posixSetSystemTime(struct timespec *now);
 int64_t posixGetElapsedMilliseconds(int64_t startTime);
 int64_t posixGetElapsedMicroseconds(int64_t startTime);
@@ -106,6 +107,7 @@ static Hal posixHal = {
   .startSpiTransfer = posixStartSpiTransfer,
   .endSpiTransfer = posixEndSpiTransfer,
   .spiTransfer8 = posixSpiTransfer8,
+  .spiTransferBytes = posixSpiTransferBytes,
   
   // System time functionality.
   .setSystemTime = posixSetSystemTime,

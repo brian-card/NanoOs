@@ -528,7 +528,7 @@ typedef struct BlockStorageDevice {
   int (*readBlocks)(void *context, uint32_t startBlock,
     uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer);
   int (*writeBlocks)(void *context, uint32_t startBlock,
-    uint32_t numBlocks, uint16_t blockSize, const uint8_t *buffer);
+    uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer);
   uint16_t blockSize;
   uint8_t blockBitShift;
   uint8_t partitionNumber;

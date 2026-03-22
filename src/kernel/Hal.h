@@ -248,6 +248,21 @@ typedef struct Hal {
   /// -errno on failure.
   int (*spiTransfer8)(int spi, uint8_t data);
   
+  /// @fn int spiTransferBytes(int spi, uint8_t *data, uint32_t length)
+  ///
+  /// @brief Tranfer a buffer of 8-bit bytes between the SPI controller and a
+  /// peripheral.
+  ///
+  /// @param spi The zero-based index of the SPI device to transfer data with.
+  /// @param data The bufffer of 8-bit values to transfer to the peripheral.
+  /// @param length The number of bytes in the buffer to transfer.
+  ///
+  /// @return On success, 0 is returned and length bytes in the data buffer are
+  /// replaced with the bytes that were transferred from the SPI peripheral.
+  /// -errno is returned and the contents of the data buffer are undefined on
+  /// failure.
+  int (*spiTransferBytes)(int spi, uint8_t *data, uint32_t length);
+  
   // System time functionality.
   
   /// @fn int setSystemTime(struct timespec *ts)

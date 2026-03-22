@@ -491,6 +491,26 @@ int arduinoNano33IotSpiTransfer8(int spi, uint8_t data) {
   return (int) SPI.transfer(data);
 }
 
+int arduinoNano33IotSpiTransferBytes(int spi,
+  uint8_t *data, uint32_t length
+) {
+  if ((spi < 0) || (spi >= numArduinoSpis)
+    || (arduinoSpiDevices[spi].configured == false)
+  ) {
+    // Outside the limit of the devices we support.
+    return -ENODEV;
+  } else if (!arduinoSpiDevices[spi].transferInProgress) {
+    // The only error that arduinoNano33IotStartSpiTransfer can return is
+    // ENODEV and we've already checked for that, so we don't need to check the
+    // return value here.
+    arduinoNano33IotStartSpiTransfer(spi);
+  }
+  
+  SPI.transfer(data, length);
+  
+  return 0;
+}
+
 /// @var baseSystemTimeUs
 ///
 /// @brief The time provided by the user or some other task as a baseline
@@ -1012,6 +1032,7 @@ static Hal arduinoNano33IotHal = {
   .startSpiTransfer = arduinoNano33IotStartSpiTransfer,
   .endSpiTransfer = arduinoNano33IotEndSpiTransfer,
   .spiTransfer8 = arduinoNano33IotSpiTransfer8,
+  .spiTransferBytes = arduinoNano33IotSpiTransferBytes,
   
   // System time functionality.
   .setSystemTime = arduinoNano33IotSetSystemTime,

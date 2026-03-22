@@ -242,8 +242,10 @@ int sdSpiReadBlock(SdCardState *sdCardState,
   }
   
   // Read 512 byte block
-  for (int ii = 0; ii < 512; ii++) {
-    buffer[ii] = HAL->spiTransfer8(SD_CARD_SPI_DEVICE, 0xFF);
+  memset(buffer, 0xFF, 512);
+  if (HAL->spiTransferBytes(SD_CARD_SPI_DEVICE, buffer, 512) != 0) {
+    HAL->endSpiTransfer(SD_CARD_SPI_DEVICE);
+    return EIO; // Command failed
   }
   
   // Read CRC (2 bytes, ignored)
@@ -255,7 +257,7 @@ int sdSpiReadBlock(SdCardState *sdCardState,
 }
 
 /// @fn int sdSpiWriteBlock(SdCardState *sdCardState,
-///   uint32_t blockNumber, const uint8_t *buffer)
+///   uint32_t blockNumber, uint8_t *buffer)
 /// 
 /// @brief Write a 512-byte block to the SD card.
 ///
@@ -263,10 +265,13 @@ int sdSpiReadBlock(SdCardState *sdCardState,
 ///   runSdCard task.
 /// @param blockNumber The logical block number to write from the card.
 /// @param buffer A pointer to a character buffer to write the block from.
+///   NOTE: The contents of this buffer may be modified by this function and
+///   are undefined after it completes irrespective of whether or not this
+///   function succeeds.
 ///
 /// @return Returns 0 on success, error code on failure.
 int sdSpiWriteBlock(SdCardState *sdCardState,
-  uint32_t blockNumber, const uint8_t *buffer
+  uint32_t blockNumber, uint8_t *buffer
 ) {
   if (buffer == NULL) {
     return EINVAL;
@@ -306,8 +311,9 @@ int sdSpiWriteBlock(SdCardState *sdCardState,
   HAL->spiTransfer8(SD_CARD_SPI_DEVICE, 0xFE);
   
   // Write data
-  for (int ii = 0; ii < 512; ii++) {
-    HAL->spiTransfer8(SD_CARD_SPI_DEVICE, buffer[ii]);
+  if (HAL->spiTransferBytes(SD_CARD_SPI_DEVICE, buffer, 512) != 0) {
+    HAL->endSpiTransfer(SD_CARD_SPI_DEVICE);
+    return EIO; // Bad response
   }
   
   // Send dummy CRC

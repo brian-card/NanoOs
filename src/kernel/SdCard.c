@@ -108,7 +108,7 @@ int sdReadBlocks(void *context, uint32_t startBlock,
 }
 
 /// @fn int sdWriteBlocks(void *context, uint32_t startBlock,
-///   uint32_t numBlocks, uint16_t blockSize, const uint8_t *buffer)
+///   uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer)
 ///
 /// @brief Write a specified number of blocks of a given size to the SD card
 /// from a provided buffer.
@@ -124,7 +124,7 @@ int sdReadBlocks(void *context, uint32_t startBlock,
 ///
 /// @return Returns 0 on success, POSIX error code on failure.
 int sdWriteBlocks(void *context, uint32_t startBlock,
-  uint32_t numBlocks, uint16_t blockSize, const uint8_t *buffer
+  uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer
 ) {
   intptr_t sdCardTask = (intptr_t) context;
   SdCommandParams sdCommandParams;

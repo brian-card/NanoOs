@@ -78,7 +78,7 @@ static int readSector(
 ///
 /// @return EXFAT_SUCCESS on success, EXFAT_ERROR on failure
 static int writeSector(
-  ExFatDriverState* driverState, uint32_t sectorNumber, const uint8_t* buffer
+  ExFatDriverState* driverState, uint32_t sectorNumber, uint8_t* buffer
 ) {
   if (driverState == NULL || driverState->filesystemState == NULL || 
       buffer == NULL) {

@@ -523,6 +523,26 @@ int adafruitFeatherM0WifiSpiTransfer8(int spi, uint8_t data) {
   return (int) SPI.transfer(data);
 }
 
+int adafruitFeatherM0WifiSpiTransferBytes(int spi,
+  uint8_t *data, uint32_t length
+) {
+  if ((spi < 0) || (spi >= numArduinoSpis)
+    || (adafruitFeatherM0WifiSpiDevices[spi].configured == false)
+  ) {
+    // Outside the limit of the devices we support.
+    return -ENODEV;
+  } else if (!adafruitFeatherM0WifiSpiDevices[spi].transferInProgress) {
+    // The only error that adafruitFeatherM0WifiStartSpiTransfer can return is
+    // ENODEV and we've already checked for that, so we don't need to check the
+    // return value here.
+    adafruitFeatherM0WifiStartSpiTransfer(spi);
+  }
+  
+  SPI.transfer(data, length);
+  
+  return 0;
+}
+
 /// @var baseSystemTimeUs
 ///
 /// @brief The time provided by the user or some other task as a baseline
@@ -1046,6 +1066,7 @@ static Hal adafruitFeatherM0WifiHal = {
   .startSpiTransfer = adafruitFeatherM0WifiStartSpiTransfer,
   .endSpiTransfer = adafruitFeatherM0WifiEndSpiTransfer,
   .spiTransfer8 = adafruitFeatherM0WifiSpiTransfer8,
+  .spiTransferBytes = adafruitFeatherM0WifiSpiTransferBytes,
   
   // System time functionality.
   .setSystemTime = adafruitFeatherM0WifiSetSystemTime,

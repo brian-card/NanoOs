@@ -373,6 +373,26 @@ int arduinoNanoEverySpiTransfer8(int spi, uint8_t data) {
   return (int) SPI.transfer(data);
 }
 
+int arduinoNanoEverySpiTransferBytes(int spi,
+  uint8_t *data, uint32_t length
+) {
+  if ((spi < 0) || (spi >= numArduinoSpis)
+    || (arduinoSpiDevices[spi].configured == false)
+  ) {
+    // Outside the limit of the devices we support.
+    return -ENODEV;
+  } else if (!arduinoSpiDevices[spi].transferInProgress) {
+    // The only error that arduinoNanoEveryStartSpiTransfer can return is
+    // ENODEV and we've already checked for that, so we don't need to check the
+    // return value here.
+    arduinoNanoEveryStartSpiTransfer(spi);
+  }
+  
+  SPI.transfer(data, length);
+  
+  return 0;
+}
+
 /// @var baseSystemTimeMs
 ///
 /// @brief The time provided by the user or some other task as a baseline
@@ -586,6 +606,7 @@ static Hal arduinoNanoEveryHal = {
   .startSpiTransfer = arduinoNanoEveryStartSpiTransfer,
   .endSpiTransfer = arduinoNanoEveryEndSpiTransfer,
   .spiTransfer8 = arduinoNanoEverySpiTransfer8,
+  .spiTransferBytes = arduinoNanoEverySpiTransferBytes,
   
   // System time functionality.
   .setSystemTime = arduinoNanoEverySetSystemTime,

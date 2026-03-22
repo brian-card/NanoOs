@@ -258,6 +258,14 @@ int posixSpiTransfer8(int spi, uint8_t data) {
   return -ENOSYS;
 }
 
+int posixSpiTransferBytes(int spi, uint8_t *data, uint32_t length) {
+  (void) spi;
+  (void) data;
+  (void) length;
+  
+  return -ENOSYS;
+}
+
 int posixSetSystemTime(struct timespec *now) {
   (void) now;
   
