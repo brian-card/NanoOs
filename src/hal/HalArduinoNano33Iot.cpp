@@ -1047,7 +1047,7 @@ const Hal* halArduinoNano33IotInit(void) {
     Serial.print("ERROR!!! 0x");
     Serial.print((uintptr_t) &__bss_end__, HEX);
     Serial.print(" > 0x");
-    Serial.print((uintptr_t) adafruitFeatherM0WifiHal.overlayMap, HEX);
+    Serial.print((uintptr_t) arduinoNano33IotHal.overlayMap, HEX);
     Serial.print("\n");
     Serial.print("Stack position = 0x");
     Serial.print((uintptr_t) &stackPosition, HEX);
