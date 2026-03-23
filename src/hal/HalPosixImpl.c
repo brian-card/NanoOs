@@ -575,7 +575,7 @@ int posixConfigOneShotTimer(int timer,
     timerThreadFunction, (void*) ((intptr_t) timer));
   pthread_detach(swTimer->timerThread);
   
-  return -ENOTSUP;
+  return 0;
 }
 
 uint64_t posixConfiguredTimerNanoseconds(int timer) {
