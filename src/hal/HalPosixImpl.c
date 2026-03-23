@@ -549,7 +549,14 @@ int posixInitTimer(int timer) {
     return 0;
   }
   
-  signal(swTimer->signal, swTimer->signalHandler);
+  struct sigaction sa;
+  sa.sa_handler = swTimer->signalHandler;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = SA_NODEFER | SA_RESTART;
+  if (sigaction(swTimer->signal, &sa, NULL) < 0) {
+    return -errno;
+  }
+  
   swTimer->initialized = true;
   
   return 0;
