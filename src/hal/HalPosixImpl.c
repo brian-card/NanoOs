@@ -74,7 +74,7 @@
 ///
 /// @brief This is the offset into the allocated and mapped memory that the
 /// overlays will actually be loaded into.
-#define OVERLAY_OFFSET           0x1400
+#define OVERLAY_OFFSET           0x1800
 
 /// @def OVERLAY_SIZE
 ///
@@ -735,7 +735,7 @@ void allocateGlobalStack(jmp_buf returnBuffer, char *topOfStack) {
 }
 
 int halPosixImplInit(jmp_buf resetBuffer, const char *sdCardDevicePath,
-  void **overlayMap, uintptr_t *overlaySize
+  Hal *hal
 ) {
   fprintf(stdout, "Setting _sdCardDevicePath.\n");
   fflush(stdout);
@@ -770,21 +770,21 @@ int halPosixImplInit(jmp_buf resetBuffer, const char *sdCardDevicePath,
     = ((size_t) (OVERLAY_OFFSET + OVERLAY_SIZE + (pageSize - 1)))
     & ~((size_t) (pageSize - 1));
   
-  *overlayMap = mmap((void*) OVERLAY_BASE_ADDRESS,
+  hal->overlayMap = mmap((void*) OVERLAY_BASE_ADDRESS,
     overlayBaseSize, PROT_READ | PROT_WRITE | PROT_EXEC,
     MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED,
     -1, 0);
-  if (*overlayMap == MAP_FAILED) {
+  if (hal->overlayMap == MAP_FAILED) {
     fprintf(stderr, "mmap failed with error: %s\n", strerror(errno));
     return -1;
   }
   
   // The address that the code is built around for both the Cortex-M0 and the
   // simulation code is OVERLAY_OFFSET bytes into the map we just made.
-  *overlayMap = (void*) (OVERLAY_BASE_ADDRESS + OVERLAY_OFFSET);
-  *overlaySize = OVERLAY_SIZE;
+  hal->overlayMap = (void*) (OVERLAY_BASE_ADDRESS + OVERLAY_OFFSET);
+  hal->overlaySize = OVERLAY_SIZE;
   
-  fprintf(stderr, "posixHal.overlayMap = %p\n", (void*) *overlayMap);
+  fprintf(stderr, "posixHal.overlayMap = %p\n", (void*) hal->overlayMap);
   fprintf(stderr, "\n");
   
   _mainThreadId = pthread_self();
@@ -792,6 +792,41 @@ int halPosixImplInit(jmp_buf resetBuffer, const char *sdCardDevicePath,
   *((void**) &realTcgetattr) = dlsym(RTLD_NEXT, "tcgetattr");
   *((void**) &realTcsetattr) = dlsym(RTLD_NEXT, "tcsetattr");
   
+  int numSerialPorts = hal->getNumSerialPorts();
+  if (numSerialPorts <= 0) {
+    // Nothing we can do.  Bail.
+    fprintf(stderr, "hal->getNumSerialPorts() returned %d.\n", numSerialPorts);
+    return -1;
+  }
+  
+  // Set all the serial ports to run at 1000000 baud.
+  if (hal->initSerialPort(0, 1000000) < 0) {
+    // Nothing we can do.  Bail.
+    fprintf(stderr, "Initializing serial port 0 failed.\n");
+    return -1;
+  }
+  int ii = 0;
+  for (ii = 1; ii < numSerialPorts; ii++) {
+    if (hal->initSerialPort(ii, 1000000) < 0) {
+      // We can't support more than the last serial port that was successfully
+      // initialized.
+      fprintf(stderr, "WARNING: Initializing serial port %d failed.\n", ii);
+      break;
+    }
+  }
+  hal->setNumSerialPorts(ii);
+
+  int numTimers = hal->getNumTimers();
+  for (ii = 0; ii < numTimers; ii++) {
+    if (hal->initTimer(ii) < 0) {
+      break;
+    }
+  }
+  hal->setNumTimers(ii);
+  if (ii != numTimers) {
+    fprintf(stderr, "WARNING: Only initialized %d timers\n", ii);
+  }
+
   return 0;
 }
 

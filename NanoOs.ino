@@ -53,51 +53,6 @@ void setup() {
     // Nothing we can do.  Halt.
     while(1);
   }
-
-  int numSerialPorts = HAL->getNumSerialPorts();
-  if (numSerialPorts <= 0) {
-    // Nothing we can do.  Halt.
-    while(1);
-  }
-  
-  // Set all the serial ports to run at 1000000 baud.
-  if (HAL->initSerialPort(0, 1000000) < 0) {
-    // Nothing we can do.  Halt.
-    while(1);
-  }
-  int ii = 0;
-  for (ii = 1; ii < numSerialPorts; ii++) {
-    if (HAL->initSerialPort(ii, 1000000) < 0) {
-      // We can't support more than the last serial port that was successfully
-      // initialized.
-      break;
-    }
-  }
-  HAL->setNumSerialPorts(ii);
-  if (ii != numSerialPorts) {
-    printString("WARNING: Only initialized ");
-    printInt(ii);
-    printString(" serial ports\n");
-  }
-
-  // We need a guard at bootup because if the system crashes in a way that makes
-  // the processor unresponsive, it will be very difficult to load new firmware.
-  // Sleep long enough to begin a firmware upload on reset.
-  printString("\nBooting...\n");
-  msleep(7000);
-  
-  int numTimers = HAL->getNumTimers();
-  for (ii = 0; ii < numTimers; ii++) {
-    if (HAL->initTimer(ii) < 0) {
-      break;
-    }
-  }
-  HAL->setNumTimers(ii);
-  if (ii != numTimers) {
-    printString("WARNING: Only initialized ");
-    printInt(ii);
-    printString(" timers\n");
-  }
 }
 
 // In a normal Arduino sketch, the loop function runs over and over again
@@ -115,7 +70,6 @@ void setup() {
 // we will do all the one-time setup and then run our scheduler loop from
 // within this call.
 void loop() {
-
   // SchedulerState pointer that we will have to populate in startScheduler.
   SchedulerState *coroutineStatePointer = NULL;
 

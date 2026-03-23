@@ -1113,7 +1113,58 @@ const Hal* halAdafruitFeatherM0WifiInit(void) {
   }
   
   __enable_irq();  // Ensure global interrupts are enabled
-  return &adafruitFeatherM0WifiHal;
+  
+  Hal *hal = &adafruitFeatherM0WifiHal;
+  int numSerialPorts = hal->getNumSerialPorts();
+  if (numSerialPorts <= 0) {
+    // Nothing we can do.
+    return NULL;
+  }
+  
+  // Set all the serial ports to run at 1000000 baud.
+  if (hal->initSerialPort(0, 1000000) < 0) {
+    // Nothing we can do.
+    return NULL;
+  }
+  int ii = 0;
+  for (ii = 1; ii < numSerialPorts; ii++) {
+    if (hal->initSerialPort(ii, 1000000) < 0) {
+      // We can't support more than the last serial port that was successfully
+      // initialized.
+      break;
+    }
+  }
+  hal->setNumSerialPorts(ii);
+  if (ii != numSerialPorts) {
+    Serial.begin(1000000);
+    while (!Serial);
+    Serial.print("WARNING: Only initialized ");
+    Serial.print(ii);
+    Serial.print(" serial ports\n");
+  }
+
+  // We need a guard at bootup because if the system crashes in a way that makes
+  // the processor unresponsive, it will be very difficult to load new firmware.
+  // Sleep long enough to begin a firmware upload on reset.
+  printString("\nBooting...\n");
+  msleep(7000);
+  
+  int numTimers = hal->getNumTimers();
+  for (ii = 0; ii < numTimers; ii++) {
+    if (hal->initTimer(ii) < 0) {
+      break;
+    }
+  }
+  hal->setNumTimers(ii);
+  if (ii != numTimers) {
+    Serial.begin(1000000);
+    while (!Serial);
+    Serial.print("WARNING: Only initialized ");
+    Serial.print(ii);
+    Serial.print(" timers\n");
+  }
+  
+  return hal;
 }
 
 #endif // ADAFRUIT_FEATHER_M0

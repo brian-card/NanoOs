@@ -133,12 +133,10 @@ static Hal posixHal = {
 };
 
 const Hal* halPosixImplInit(jmp_buf resetBuffer, const char *sdCardDevicePath,
-  void **overlayMap, uintptr_t *overlaySize);
+  Hal *hal);
 
 const Hal* halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
-  if (halPosixImplInit(resetBuffer, sdCardDevicePath,
-    (void**) &posixHal.overlayMap, &posixHal.overlaySize) != 0
-  ) {
+  if (halPosixImplInit(resetBuffer, sdCardDevicePath, &posixHal) != 0) {
     return NULL;
   }
 

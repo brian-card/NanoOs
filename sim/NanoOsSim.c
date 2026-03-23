@@ -92,41 +92,6 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  int numSerialPorts = HAL->getNumSerialPorts();
-  if (numSerialPorts <= 0) {
-    // Nothing we can do.  Bail.
-    fprintf(stderr, "HAL->getNumSerialPorts() returned %d.\n", numSerialPorts);
-    return 1;
-  }
-  
-  // Set all the serial ports to run at 1000000 baud.
-  if (HAL->initSerialPort(0, 1000000) < 0) {
-    // Nothing we can do.  Bail.
-    fprintf(stderr, "Initializing serial port 0 failed.\n");
-    return 1;
-  }
-  int ii = 0;
-  for (ii = 1; ii < numSerialPorts; ii++) {
-    if (HAL->initSerialPort(ii, 1000000) < 0) {
-      // We can't support more than the last serial port that was successfully
-      // initialized.
-      fprintf(stderr, "WARNING: Initializing serial port %d failed.\n", ii);
-      break;
-    }
-  }
-  HAL->setNumSerialPorts(ii);
-
-  int numTimers = HAL->getNumTimers();
-  for (ii = 0; ii < numTimers; ii++) {
-    if (HAL->initTimer(ii) < 0) {
-      break;
-    }
-  }
-  HAL->setNumTimers(ii);
-  if (ii != numTimers) {
-    fprintf(stderr, "WARNING: Only initialized %d timers\n", ii);
-  }
-
   // On hardware, we need a "Booting..." message and a delay so that we give
   // ourselves enough time to start a firmware update in case we've loaded
   // something that's resulting in bricking the system.  Since the simulator is
