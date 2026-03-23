@@ -53,6 +53,12 @@ void setup() {
     // Nothing we can do.  Halt.
     while(1);
   }
+  
+  // We need a guard at bootup because if the system crashes in a way that makes
+  // the processor unresponsive, it will be very difficult to load new firmware.
+  // Sleep long enough to begin a firmware upload on reset.
+  printString("\nBooting...\n");
+  msleep(7000);
 }
 
 // In a normal Arduino sketch, the loop function runs over and over again

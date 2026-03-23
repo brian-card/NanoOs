@@ -1109,12 +1109,6 @@ const Hal* halArduinoNano33IotInit(void) {
     Serial.print(" serial ports\n");
   }
 
-  // We need a guard at bootup because if the system crashes in a way that makes
-  // the processor unresponsive, it will be very difficult to load new firmware.
-  // Sleep long enough to begin a firmware upload on reset.
-  printString("\nBooting...\n");
-  msleep(7000);
-  
   int numTimers = hal->getNumTimers();
   for (ii = 0; ii < numTimers; ii++) {
     if (hal->initTimer(ii) < 0) {
