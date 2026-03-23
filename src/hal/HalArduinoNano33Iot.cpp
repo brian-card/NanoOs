@@ -1043,9 +1043,6 @@ static Hal arduinoNano33IotHal = {
   // Hardware power
   .shutdown = arduinoNano33IotShutdown,
   
-  // Root storage configuration.
-  .initRootStorage = arduinoNano33IotInitRootStorage,
-  
   // Hardware timers.
   .getNumTimers = arduinoNano33IotGetNumTimers,
   .setNumTimers = arduinoNano33IotSetNumTimers,
@@ -1055,6 +1052,9 @@ static Hal arduinoNano33IotHal = {
   .remainingTimerNanoseconds = arduinoNano33IotRemainingTimerNanoseconds,
   .cancelTimer = arduinoNano33IotCancelTimer,
   .cancelAndGetTimer = arduinoNano33IotCancelAndGetTimer,
+  
+  // Root storage configuration.
+  .initRootStorage = arduinoNano33IotInitRootStorage,
 };
 
 const Hal* halArduinoNano33IotInit(void) {

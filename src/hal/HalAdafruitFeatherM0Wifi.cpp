@@ -1077,9 +1077,6 @@ static Hal adafruitFeatherM0WifiHal = {
   // Hardware power
   .shutdown = adafruitFeatherM0WifiShutdown,
   
-  // Root storage configuration.
-  .initRootStorage = adafruitFeatherM0WifiInitRootStorage,
-  
   // Hardware timers.
   .getNumTimers = adafruitFeatherM0WifiGetNumTimers,
   .setNumTimers = adafruitFeatherM0WifiSetNumTimers,
@@ -1089,6 +1086,9 @@ static Hal adafruitFeatherM0WifiHal = {
   .remainingTimerNanoseconds = adafruitFeatherM0WifiRemainingTimerNanoseconds,
   .cancelTimer = adafruitFeatherM0WifiCancelTimer,
   .cancelAndGetTimer = adafruitFeatherM0WifiCancelAndGetTimer,
+  
+  // Root storage configuration.
+  .initRootStorage = adafruitFeatherM0WifiInitRootStorage,
 };
 
 const Hal* halAdafruitFeatherM0WifiInit(void) {

@@ -617,9 +617,6 @@ static Hal arduinoNanoEveryHal = {
   // Hardware power
   .shutdown = arduinoNanoEveryShutdown,
   
-  // Root storage configuration.
-  .initRootStorage = arduinoNanoEveryInitRootStorage,
-  
   // Hardware timers.
   .getNumTimers = arduinoNanoEveryGetNumTimers,
   .setNumTimers = arduinoNanoEverySetNumTimers,
@@ -629,6 +626,9 @@ static Hal arduinoNanoEveryHal = {
   .remainingTimerNanoseconds = arduinoNanoEveryRemainingTimerNanoseconds,
   .cancelTimer = arduinoNanoEveryCancelTimer,
   .cancelAndGetTimer = arduinoNanoEveryCancelAndGetTimer,
+  
+  // Root storage configuration.
+  .initRootStorage = arduinoNanoEveryInitRootStorage,
 };
 
 const Hal* halArduinoNanoEveryInit(void) {

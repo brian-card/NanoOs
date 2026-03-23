@@ -335,18 +335,6 @@ typedef struct Hal {
   /// be returned.
   int (*shutdown)(HalShutdownType shutdownType);
   
-  // Root storage configuration.
-  
-  /// @fn int initRootStorage(SchedulerState *schedulerState)
-  ///
-  /// @brief Initialize the tasks that operate the root storage system.
-  ///
-  /// @param schedulerState A pointer to the SchedulerState to use to initialize
-  ///   the tasks.
-  ///
-  /// @return Returns 0 on success, -errno on failure.
-  int (*initRootStorage)(SchedulerState *schedulerState);
-  
   // Hardware timers.
   
   /// @fn int getNumTimers(void)
@@ -441,6 +429,18 @@ typedef struct Hal {
   int (*cancelAndGetTimer)(int timer,
     uint64_t *configuredNanoseconds, uint64_t *remainingNanoseconds,
     void (**callback)(void));
+  
+  // Root storage configuration.
+  
+  /// @fn int initRootStorage(SchedulerState *schedulerState)
+  ///
+  /// @brief Initialize the tasks that operate the root storage system.
+  ///
+  /// @param schedulerState A pointer to the SchedulerState to use to initialize
+  ///   the tasks.
+  ///
+  /// @return Returns 0 on success, -errno on failure.
+  int (*initRootStorage)(SchedulerState *schedulerState);
 } Hal;
 
 extern const Hal *HAL;

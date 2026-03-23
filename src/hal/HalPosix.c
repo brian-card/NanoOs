@@ -118,9 +118,6 @@ static Hal posixHal = {
   // Hardware power
   .shutdown = posixShutdown,
   
-  // Root storage configuration.
-  .initRootStorage = posixInitRootStorage,
-  
   // Hardware timers.
   .getNumTimers = posixGetNumTimers,
   .setNumTimers = posixSetNumTimers,
@@ -130,6 +127,9 @@ static Hal posixHal = {
   .remainingTimerNanoseconds = posixRemainingTimerNanoseconds,
   .cancelTimer = posixCancelTimer,
   .cancelAndGetTimer = posixCancelAndGetTimer,
+  
+  // Root storage configuration.
+  .initRootStorage = posixInitRootStorage,
 };
 
 const Hal* halPosixImplInit(jmp_buf resetBuffer, const char *sdCardDevicePath,
