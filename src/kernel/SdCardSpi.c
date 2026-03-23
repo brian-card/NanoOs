@@ -196,30 +196,30 @@ int sdSpiCardInit(SdCardSpiArgs *sdCardSpiArgs) {
   return isSDv2 ? 2 : 1;
 }
 
-/// @fn bool sdSpiReadBlock(SdCardState *sdCardState,
-///   uint32_t blockNumber, uint8_t *buffer)
+/// @fn bool sdSpiReadBlocks(SdCardState *sdCardState,
+///   uint32_t startBlock, uint32_t numBlocks, uint8_t *buffer)
 ///
-/// @brief Read a 512-byte block from the SD card.
+/// @brief Read blocks from an SD card into a buffer.
 ///
 /// @param sdCardState A pointer to the SdCardState object maintained by the
 ///   runSdCard task.
-/// @param blockNumber The logical block number to read from the card.
-/// @param buffer A pointer to a character buffer to read the block into.
+/// @param startBlock The logical block number on the SD card to start from.
+/// @param numBlocks The number of blocks to read from the device.
+/// @param buffer A pointer to a character buffer to read the blocks into.
 ///
 /// @return Returns 0 on success, error code on failure.
-int sdSpiReadBlock(SdCardState *sdCardState,
-  uint32_t blockNumber, uint8_t *buffer
+int sdSpiReadBlocks(SdCardState *sdCardState,
+  uint32_t startBlock, uint32_t numBlocks, uint8_t *buffer
 ) {
   // Check that buffer is not null
   if (buffer == NULL) {
     return EINVAL;
   }
   
-  uint32_t address = blockNumber;
+  uint32_t address = startBlock;
   if (sdCardState->sdCardVersion == 1) {
     address *= sdCardState->blockSize; // Convert to byte address
   }
-  
   
   // Send READ_SINGLE_BLOCK command
   uint8_t response = sdSpiSendCommand(SD_CARD_SPI_DEVICE, CMD17, address);
@@ -241,9 +241,10 @@ int sdSpiReadBlock(SdCardState *sdCardState,
     }
   }
   
-  // Read 512 byte block
-  memset(buffer, 0xFF, 512);
-  if (HAL->spiTransferBytes(SD_CARD_SPI_DEVICE, buffer, 512) != 0) {
+  // Read the blocks
+  uint32_t bufferSize = numBlocks * (uint32_t) sdCardState->blockSize;
+  memset(buffer, 0xFF, bufferSize);
+  if (HAL->spiTransferBytes(SD_CARD_SPI_DEVICE, buffer, bufferSize) != 0) {
     HAL->endSpiTransfer(SD_CARD_SPI_DEVICE);
     return EIO; // Command failed
   }
@@ -256,22 +257,23 @@ int sdSpiReadBlock(SdCardState *sdCardState,
   return 0;
 }
 
-/// @fn int sdSpiWriteBlock(SdCardState *sdCardState,
-///   uint32_t blockNumber, uint8_t *buffer)
+/// @fn int sdSpiWriteBlocks(SdCardState *sdCardState,
+///   uint32_t startBlock, uint32_t numBlocks, uint8_t *buffer)
 /// 
-/// @brief Write a 512-byte block to the SD card.
+/// @brief Write a buffer of blocks to an SD card.
 ///
 /// @param sdCardState A pointer to the SdCardState object maintained by the
 ///   runSdCard task.
-/// @param blockNumber The logical block number to write from the card.
-/// @param buffer A pointer to a character buffer to write the block from.
+/// @param startBlock The logical block number to start the write at.
+/// @param numBlocks The number of blocks to write.
+/// @param buffer A pointer to a character buffer to write the blocks from.
 ///   NOTE: The contents of this buffer may be modified by this function and
 ///   are undefined after it completes irrespective of whether or not this
 ///   function succeeds.
 ///
 /// @return Returns 0 on success, error code on failure.
-int sdSpiWriteBlock(SdCardState *sdCardState,
-  uint32_t blockNumber, uint8_t *buffer
+int sdSpiWriteBlocks(SdCardState *sdCardState,
+  uint32_t startBlock, uint32_t numBlocks, uint8_t *buffer
 ) {
   if (buffer == NULL) {
     return EINVAL;
@@ -285,7 +287,7 @@ int sdSpiWriteBlock(SdCardState *sdCardState,
     return EIO;
   }
   
-  uint32_t address = blockNumber;
+  uint32_t address = startBlock;
   if (sdCardState->sdCardVersion == 1) {
     address *= sdCardState->blockSize; // Convert to byte address
   }
@@ -311,7 +313,8 @@ int sdSpiWriteBlock(SdCardState *sdCardState,
   HAL->spiTransfer8(SD_CARD_SPI_DEVICE, 0xFE);
   
   // Write data
-  if (HAL->spiTransferBytes(SD_CARD_SPI_DEVICE, buffer, 512) != 0) {
+  uint32_t bufferSize = numBlocks * (uint32_t) sdCardState->blockSize;
+  if (HAL->spiTransferBytes(SD_CARD_SPI_DEVICE, buffer, bufferSize) != 0) {
     HAL->endSpiTransfer(SD_CARD_SPI_DEVICE);
     return EIO; // Bad response
   }
@@ -476,14 +479,8 @@ int sdCardReadBlocksCommandHandler(
 
   if (returnValue == 0) {
     uint8_t *buffer = sdCommandParams->buffer;
-
-    for (uint32_t ii = 0; ii < numSdBlocks; ii++) {
-      returnValue = sdSpiReadBlock(sdCardState, startSdBlock + ii, buffer);
-      if (returnValue != 0) {
-        break;
-      }
-      buffer += sdCardState->blockSize;
-    }
+    returnValue = sdSpiReadBlocks(sdCardState,
+      startSdBlock, numSdBlocks, buffer);
   }
 
   NanoOsMessage *nanoOsMessage
@@ -516,14 +513,8 @@ int sdCardWriteBlocksCommandHandler(
 
   if (returnValue == 0) {
     uint8_t *buffer = sdCommandParams->buffer;
-
-    for (uint32_t ii = 0; ii < numSdBlocks; ii++) {
-      returnValue = sdSpiWriteBlock(sdCardState, startSdBlock + ii, buffer);
-      if (returnValue != 0) {
-        break;
-      }
-      buffer += sdCardState->blockSize;
-    }
+    returnValue = sdSpiWriteBlocks(sdCardState,
+      startSdBlock, numSdBlocks, buffer);
   }
 
   NanoOsMessage *nanoOsMessage
