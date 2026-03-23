@@ -302,9 +302,9 @@ int exFatTaskSeekFileCommandHandler(
 /// @fn int exFatTaskDumpOpenFilesCommandHandler(
 ///   ExFatDriverState *driverState, TaskMessage *taskMessage)
 ///
-/// @brief Command handler for the FILESYSTEM_SEEK_FILE command.  Walk the open
-/// files list and display information about all of the files and their owning
-/// processes.
+/// @brief Command handler for the FILESYSTEM_DUMP_OPEN_FILES command.  Walk
+/// the open files list and display information about all of the files and
+/// their owning processes.
 ///
 /// @param driverState A pointer to the FilesystemState object maintained
 ///   by the filesystem task.
@@ -334,6 +334,35 @@ int exFatTaskDumpOpenFilesCommandHandler(
   return 0;
 }
 
+/// @fn int exFatTaskGetFileBlockMetadataCommandHandler(
+///   ExFatDriverState *driverState, TaskMessage *taskMessage)
+///
+/// @brief Command handler for the FILESYSTEM_GET_FILE_BLOCK_METADATA command.
+/// Populate a caller-supplied FileBlockMetadata structure for a given file.
+///
+/// @param driverState A pointer to the FilesystemState object maintained
+///   by the filesystem task.
+/// @param taskMessage A pointer to the TaskMessage that was received by
+///   the filesystem task.
+///
+/// @return Returns 0 on success, a standard POSIX error code on failure.
+int exFatTaskGetFileBlockMetadataCommandHandler(
+  ExFatDriverState *driverState, TaskMessage *taskMessage
+) {
+  GetFileBlockMetadataArgs *args = msg_data(taskMessage);
+  args->metadata->blockDevice = driverState->filesystemState->blockDevice;
+
+  ExFatFileHandle *exFatFile = (ExFatFileHandle*) args->stream->file;
+  args->metadata->startBlock
+    = exFatFile->firstCluster * driverState->sectorsPerCluster;
+  args->metadata->numBlocks
+    = (uint32_t) (exFatFile->fileSize
+    / ((uint64_t) driverState->bytesPerSector));
+
+  taskMessageSetDone(taskMessage);
+  return 0;
+}
+
 /// @var filesystemCommandHandlers
 ///
 /// @brief Array of ExFatCommandHandler function pointers.
@@ -344,7 +373,9 @@ const ExFatCommandHandler filesystemCommandHandlers[] = {
   exFatTaskWriteFileCommandHandler,     // FILESYSTEM_WRITE_FILE
   exFatTaskRemoveFileCommandHandler,    // FILESYSTEM_REMOVE_FILE
   exFatTaskSeekFileCommandHandler,      // FILESYSTEM_SEEK_FILE
-  exFatTaskDumpOpenFilesCommandHandler, // FILESYSTEM_DUMP_OPEN_FILES,
+  exFatTaskDumpOpenFilesCommandHandler, // FILESYSTEM_DUMP_OPEN_FILES
+  // FILESYSTEM_GET_FILE_BLOCK_METADATA:
+  exFatTaskGetFileBlockMetadataCommandHandler,
 };
 
 

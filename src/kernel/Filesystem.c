@@ -294,3 +294,44 @@ size_t filesystemFWrite(
   return returnValue;
 }
 
+/// @fn int getFileBlockMetadata(FILE *stream, FileBlockMetadata *metadata)
+///
+/// @brief Get the block-level metadata for a given file.
+///
+/// @param stream A pointer to a previously-opened FILE.
+/// @param metadata A pointer to a FileBlockMetadata structure the caller wants
+///   populated.
+///
+/// @return Returns 0 on success, -errno on failure.
+int getFileBlockMetadata(FILE *stream, FileBlockMetadata *metadata) {
+  if ((stream == NULL) || (metadata == NULL)) {
+    return -EINVAL;
+  }
+
+  GetFileBlockMetadataArgs args = {
+    .stream = stream,
+    .metadata = metadata,
+  };
+
+  TaskMessage *taskMessage = getAvailableMessage();
+  while (taskMessage == NULL) {
+    taskYield();
+    taskMessage = getAvailableMessage();
+  }
+
+  taskMessageInit(taskMessage, FILESYSTEM_GET_FILE_BLOCK_METADATA,
+    &args, sizeof(args), true);
+  if (sendTaskMessageToTaskId(NANO_OS_FILESYSTEM_TASK_ID, taskMessage)
+    != taskSuccess
+  ) {
+    printString("ERROR! Failed to send message to filesystem to get file "
+      "block metadata\n");
+    taskMessageRelease(taskMessage);
+    return -EIO;
+  }
+  taskMessageWaitForDone(taskMessage, NULL);
+  taskMessageRelease(taskMessage);
+
+  return 0;
+}
+

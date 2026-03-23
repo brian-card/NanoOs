@@ -127,6 +127,35 @@ typedef struct FilesystemFcloseParameters {
   int returnValue;
 } FilesystemFcloseParameters;
 
+/// @struct FileBlockMetadata
+///
+/// @brief Block-level metadata for a file.
+///
+/// @param blockDevice A pointer to the BlockStorageDevice where the file
+///   resides.
+/// @param startBlock The block (LBA) on the block device where the file
+///   begins.
+/// @param numBlocks The number of blocks that the file occupies on the block
+///   device.
+typedef struct FileBlockMetadata {
+  BlockStorageDevice *blockDevice;
+  uint32_t            startBlock;
+  uint32_t            numBlocks;
+} FileBlockMetadata;
+
+/// @struct GetFileBlockMetadataArgs
+///
+/// @brief Function arguments for the FILESYSTEM_GET_FILE_BLOCK_METADATA
+/// command handler.
+///
+/// @param stream A pointer to a FILE the caller wants to find the metadata of.
+/// @param metadata A pointer to a caller-supplied FileBlockMetadata structure
+///   that is to be populated by the command.
+typedef struct GetFileBlockMetadataArgs {
+  FILE              *stream;
+  FileBlockMetadata *metadata;
+} GetFileBlockMetadataArgs;
+
 /// @typedef FilesystemCommandHandler
 ///
 /// @brief Definition of a filesystem command handler function.
@@ -145,6 +174,7 @@ typedef enum FilesystemCommandResponse {
   FILESYSTEM_REMOVE_FILE,
   FILESYSTEM_SEEK_FILE,
   FILESYSTEM_DUMP_OPEN_FILES,
+  FILESYSTEM_GET_FILE_BLOCK_METADATA,
   NUM_FILESYSTEM_COMMANDS,
   // Responses:
 } FilesystemCommandResponse;
@@ -205,6 +235,8 @@ size_t filesystemFWrite(
 /// @param stream A pointer to a previously-opened FILE object.
 #define ftell(stream) \
   (long) stream->currentPosition
+
+int getFileBlockMetadata(FILE *stream, FileBlockMetadata *metadata);
 
 #ifdef __cplusplus
 } // extern "C"
