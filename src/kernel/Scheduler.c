@@ -37,7 +37,7 @@
 #include "ExFatTask.h"
 #include "Hal.h"
 #include "NanoOs.h"
-#include "NanoOsOverlayFunctions.h"
+#include "OverlayFunctions.h"
 #include "Tasks.h"
 #include "Scheduler.h"
 #include "SdCard.h"

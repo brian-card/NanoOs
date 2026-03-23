@@ -38,7 +38,7 @@
 #define NANO_OS_USER_H
 
 // Headers from kernel space.
-#include "../../src/kernel/NanoOsOverlay.h"
+#include "../../src/kernel/Overlay.h"
 #include "../../src/user/NanoOsDebug.h"
 
 #ifdef NANO_OS_USER_DEBUG

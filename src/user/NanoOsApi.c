@@ -52,7 +52,7 @@ int schedulerSpawn(
 
 #include "../kernel/MemoryManager.h"
 #include "../kernel/NanoOs.h"
-#include "../kernel/NanoOsOverlayFunctions.h"
+#include "../kernel/OverlayFunctions.h"
 #include "../kernel/Scheduler.h"
 #include "../kernel/Tasks.h"
 #include "NanoOsLibC.h"

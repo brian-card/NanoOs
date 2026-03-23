@@ -3,7 +3,7 @@
 /// @author            James Card
 /// @date              09.01.2025
 ///
-/// @file              NanoOsOverlay.h
+/// @file              Overlay.h
 ///
 /// @brief             Definitions used for exporting functionality of overlays
 ///                    so that they're accessible from the kernel.
@@ -34,11 +34,11 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef NANO_OS_OVERLAY_FUNCTIONS_H
-#define NANO_OS_OVERLAY_FUNCTIONS_H
+#ifndef OVERLAY_FUNCTIONS_H
+#define OVERLAY_FUNCTIONS_H
 
 // Headers from kernel space.
-#include "NanoOsOverlay.h"
+#include "Overlay.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -56,5 +56,5 @@ int runOverlayCommand(const char *commandPath,
 }
 #endif
 
-#endif // NANO_OS_OVERLAY_FUNCTIONS_H
+#endif // OVERLAY_FUNCTIONS_H
 

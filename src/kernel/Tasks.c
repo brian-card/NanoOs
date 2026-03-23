@@ -31,7 +31,7 @@
 // Custom includes
 #include "Console.h"
 #include "NanoOs.h"
-#include "NanoOsOverlayFunctions.h"
+#include "OverlayFunctions.h"
 #include "Tasks.h"
 #include "Scheduler.h"
 #include "../user/NanoOsLibC.h"

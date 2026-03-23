@@ -3,7 +3,7 @@
 /// @author            James Card
 /// @date              09.01.2025
 ///
-/// @file              NanoOsOverlay.h
+/// @file              Overlay.h
 ///
 /// @brief             Definitions used for exporting functionality of overlays
 ///                    so that they're accessible from the kernel.
@@ -34,8 +34,8 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef NANO_OS_OVERLAY_H
-#define NANO_OS_OVERLAY_H
+#ifndef OVERLAY_H
+#define OVERLAY_H
 
 // Standard includes.
 #include "stdint.h"
@@ -144,5 +144,5 @@ typedef struct MainArgs {
 }
 #endif
 
-#endif // NANO_OS_OVERLAY_H
+#endif // OVERLAY_H
 

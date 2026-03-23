@@ -30,7 +30,7 @@
 
 #include "Hal.h"
 #include "NanoOs.h"
-#include "NanoOsOverlayFunctions.h"
+#include "OverlayFunctions.h"
 #include "../user/NanoOsLibC.h"
 #include "Scheduler.h"
 #include "Tasks.h"
