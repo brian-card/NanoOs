@@ -356,7 +356,7 @@ int exFatTaskGetFileBlockMetadataCommandHandler(
   args->metadata->startBlock
     = exFatFile->firstCluster * driverState->sectorsPerCluster;
   args->metadata->numBlocks
-    = (uint32_t) (exFatFile->fileSize
+    = (uint32_t) ((exFatFile->fileSize + (driverState->bytesPerSector - 1))
     / ((uint64_t) driverState->bytesPerSector));
 
   taskMessageSetDone(taskMessage);
