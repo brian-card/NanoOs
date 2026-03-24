@@ -279,7 +279,7 @@ void* execCommand(void *args) {
   for (; argv[argc] != NULL; argc++);
 
   // Call the task function.
-  int returnValue = runOverlayCommand(pathname, argc, argv, envp);
+  int returnValue = runOverlayCommand(pathname, argc, argv);
 
   TaskDescriptor *taskDescriptor = getRunningTask();
   if (taskDescriptor->userId != NO_USER_ID) {

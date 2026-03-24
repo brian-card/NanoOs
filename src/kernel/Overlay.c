@@ -38,103 +38,6 @@
 // Must come last
 #include "../user/NanoOsStdio.h"
 
-/// @fn int loadOverlay(const char *overlayDir, const char *overlay,
-///   char **envp)
-///
-/// @brief Load and configure an overlay into the overlayMap in memory.
-///
-/// @param overlayDir The full path to the directory of the overlay on the
-///   filesystem.
-/// @param overlay The name of the overlay within the overlayDir to load (minus
-///   the ".overlay" file extension).
-/// @param envp The array of environment variables in "name=value" form.
-///
-/// @return Returns 0 on success, negative error code on failure.
-int loadOverlay(const char *overlayDir, const char *overlay, char **envp) {
-  if ((overlayDir == NULL) || (overlay == NULL)) {
-    // There's no overlay to load.  This isn't really an error, but there's
-    // nothing to do.  Just return 0.
-    return 0;
-  }
-
-  NanoOsOverlayMap *overlayMap = HAL->overlayMap;
-  if ((overlayMap == NULL) || (HAL->overlaySize == 0)) {
-    fprintf(stderr, "No overlay memory available for use.\n");
-    return -ENOMEM;
-  }
-
-  NanoOsOverlayHeader *overlayHeader = &overlayMap->header;
-  if ((overlayHeader->overlayDir != NULL) && (overlayHeader->overlay != NULL)) {
-    if ((strcmp(overlayHeader->overlayDir, overlayDir) == 0)
-      && (strcmp(overlayHeader->overlay, overlay) == 0)
-    ) {
-      // Overlay is already loaded.  Do nothing.
-      return 0;
-    }
-  }
-
-  // We need two extra characters:  One for the '/' that separates the directory
-  // and the file name and one for the terminating NULL byte.
-  char *fullPath = (char*) malloc(
-    strlen(overlayDir) + strlen(overlay) + OVERLAY_EXT_LEN + 2);
-  if (fullPath == NULL) {
-    return -ENOMEM;
-  }
-  strcpy(fullPath, overlayDir);
-  strcat(fullPath, "/");
-  strcat(fullPath, overlay);
-  strcat(fullPath, OVERLAY_EXT);
-  FILE *overlayFile = fopen(fullPath, "r");
-  if (overlayFile == NULL) {
-    fprintf(stderr, "Could not open file \"%s\" from the filesystem.\n",
-      fullPath);
-    free(fullPath); fullPath = NULL;
-    return -ENOENT;
-  }
-
-  printDebugString(__func__);
-  printDebugString(": Reading from overlayFile 0x");
-  printDebugHex((uintptr_t) overlayFile);
-  printDebugString("\n");
-  if (fread(overlayMap, 1, HAL->overlaySize, overlayFile) == 0) {
-    fprintf(stderr, "Could not read overlay from \"%s\" file.\n",
-      fullPath);
-    fclose(overlayFile); overlayFile = NULL;
-    free(fullPath); fullPath = NULL;
-    return -EIO;
-  }
-  printDebugString(__func__);
-  printDebugString(": Closing overlayFile 0x");
-  printDebugHex((uintptr_t) overlayFile);
-  printDebugString("\n");
-  fclose(overlayFile); overlayFile = NULL;
-
-  printDebugString("Verifying overlay magic\n");
-  if (overlayMap->header.magic != NANO_OS_OVERLAY_MAGIC) {
-    fprintf(stderr, "Overlay magic for \"%s\" was not \"NanoOsOL\".\n",
-      fullPath);
-    free(fullPath); fullPath = NULL;
-    return -ENOEXEC;
-  }
-  printDebugString("Verifying overlay version\n");
-  if (overlayMap->header.version != NANO_OS_OVERLAY_VERSION) {
-    fprintf(stderr, "Overlay version is 0x%08x for \"%s\"\n",
-      overlayMap->header.version, fullPath);
-    free(fullPath); fullPath = NULL;
-    return -ENOEXEC;
-  }
-  free(fullPath); fullPath = NULL;
-
-  // Set the pieces of the overlay header that the program needs to run.
-  printDebugString("Configuring overlay environment\n");
-  overlayHeader->osApi = &nanoOsApi;
-  overlayHeader->env = envp;
-  overlayHeader->overlayDir = overlayDir;
-  overlayHeader->overlay = overlay;
-  
-  return 0;
-}
-
 /// @fn OverlayFunction findOverlayFunction(const char *overlayFunctionName)
 ///
 /// @brief Find a function in an overlay that's been previously loaded into RAM.
@@ -296,7 +199,7 @@ exit:
 }
 
 /// @fn int runOverlayCommand(const char *commandPath,
-///   int argc, char **argv, char **envp)
+///   int argc, char **argv)
 ///
 /// @brief Run a command that's in overlay format on the filesystem.
 ///
@@ -304,22 +207,13 @@ exit:
 ///   filesystem.
 /// @param argc The number of arguments from the command line.
 /// @param argv The of arguments from the command line as an array of C strings.
-/// @param envp The array of environment variable strings where each element is
-///   in "name=value" form.
 ///
 /// @return Returns 0 on success, a negative SUS value on failure.
 int runOverlayCommand(const char *commandPath,
-  int argc, char **argv, char **envp
+  int argc, char **argv
 ) {
-  int loadStatus = loadOverlay(commandPath, "main", envp);
-  if (loadStatus == -ENOENT) {
-    // Error message already printed.
-    return -ENOENT;
-  } else if (loadStatus < 0) {
-    // Error message already printed.
-    return -ENOEXEC;
-  }
-  printDebugString("Overlay loaded successfully\n");
+  // The overlay is already loaded by the scheduler, so there's no need to load
+  // it manually.
 
   OverlayFunction _start = findOverlayFunction("_start");
   if (_start == NULL) {
