@@ -236,7 +236,8 @@ size_t filesystemFWrite(
 #define ftell(stream) \
   (long) stream->currentPosition
 
-int getFileBlockMetadata(FILE *stream, FileBlockMetadata *metadata);
+int getFileBlockMetadataFromFile(FILE *stream, FileBlockMetadata *metadata);
+int getFileBlockMetadataFromPath(const char *path, FileBlockMetadata *metadata);
 
 #ifdef __cplusplus
 } // extern "C"

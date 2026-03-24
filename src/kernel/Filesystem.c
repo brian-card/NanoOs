@@ -294,7 +294,8 @@ size_t filesystemFWrite(
   return returnValue;
 }
 
-/// @fn int getFileBlockMetadata(FILE *stream, FileBlockMetadata *metadata)
+/// @fn int getFileBlockMetadataFromFile(FILE *stream,
+///   FileBlockMetadata *metadata)
 ///
 /// @brief Get the block-level metadata for a given file.
 ///
@@ -303,7 +304,7 @@ size_t filesystemFWrite(
 ///   populated.
 ///
 /// @return Returns 0 on success, -errno on failure.
-int getFileBlockMetadata(FILE *stream, FileBlockMetadata *metadata) {
+int getFileBlockMetadataFromFile(FILE *stream, FileBlockMetadata *metadata) {
   if ((stream == NULL) || (metadata == NULL)) {
     return -EINVAL;
   }
@@ -333,5 +334,35 @@ int getFileBlockMetadata(FILE *stream, FileBlockMetadata *metadata) {
   taskMessageRelease(taskMessage);
 
   return 0;
+}
+
+/// @fn int getFileBlockMetadataFromPath(const char *path,
+///   FileBlockMetadata *metadata)
+///
+/// @brief Get the block-level metadata for a given path.
+///
+/// @param path A string representing a path to a file on the filesystem.
+/// @param metadata A pointer to a FileBlockMetadata structure the caller wants
+///   populated.
+///
+/// @return Returns 0 on success, -errno on failure.
+int getFileBlockMetadataFromPath(const char *path,
+  FileBlockMetadata *metadata
+) {
+  if ((path == NULL) || (metadata == NULL)) {
+    return -EINVAL;
+  }
+
+  FILE *stream = fopen(path, "r");
+  if (stream == NULL) {
+    printString("ERROR! Could not open file \"");
+    printString(path);
+    printString("\"\n");
+    return -EIO;
+  }
+  int returnValue = getFileBlockMetadataFromFile(stream, metadata);
+  fclose(stream); stream = NULL;
+
+  return returnValue;
 }
 
