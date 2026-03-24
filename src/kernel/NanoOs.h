@@ -54,44 +54,6 @@ extern "C"
 /// for use by tasks.
 #define NANO_OS_NUM_MESSAGES                              6
 
-/// @def NANO_OS_SCHEDULER_TASK_ID
-///
-/// @brief The task ID (PID) of the task that is reserved for the
-/// scheduler.
-#define NANO_OS_SCHEDULER_TASK_ID                         1
-
-/// @def NANO_OS_CONSOLE_TASK_ID
-///
-/// @brief The task ID (PID) of the task that will run the console.  This
-/// must be the lowest value after the scheduler task (i.e. 2).
-#define NANO_OS_CONSOLE_TASK_ID                           2
-
-/// @def NANO_OS_MEMORY_MANAGER_TASK_ID
-///
-/// @brief The task ID (PID) of the task that will manage memory.
-#define NANO_OS_MEMORY_MANAGER_TASK_ID                    3
-
-/// @def NANO_OS_SD_CARD_TASK_ID
-///
-/// @brief The task ID (PID) of the task that will manage the SD card.
-#define NANO_OS_SD_CARD_TASK_ID                           4
-
-/// @def NANO_OS_FILESYSTEM_TASK_ID
-///
-/// @brief The task ID (PID) of the task that will manage the filesystem.
-#define NANO_OS_FILESYSTEM_TASK_ID                        5
-
-/// @def NANO_OS_FIRST_USER_TASK_ID
-///
-/// @brief The task ID (PID) of the first user task, i.e. the first ID
-/// after the last system task ID.
-#define NANO_OS_FIRST_USER_TASK_ID                        6
-
-/// @def NANO_OS_FIRST_SHELL_PID
-///
-/// @brief The task ID of the first shell on the system.
-#define NANO_OS_FIRST_SHELL_PID                           6
-
 /// @def NANO_OS_MAX_NUM_SHELLS
 ///
 /// @brief The maximum number of shell tasks the system can run.

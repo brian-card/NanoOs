@@ -87,22 +87,17 @@ const char *_functionInProgress = NULL;
 /// scheduler is started.
 TaskHandle schedulerTaskHandle = NULL;
 
-/// @var schedulerTask
-///
-/// @brief Pointer to the scheduler task.
-static TaskDescriptor *schedulerTask = NULL;
-
-/// @var currentTask
-///
-/// @brief Pointer to the task that is currently executing.
-static TaskDescriptor *currentTask = NULL;
-
 /// @var allTasks
 ///
 /// @brief Pointer to the allTasks array that is part of the
 /// SchedulerState object maintained by the scheduler task.  This is needed
 /// in order to do lookups from task IDs to task object pointers.
 static TaskDescriptor *allTasks = NULL;
+
+/// @var SCHEDULER_STATE
+///
+/// @brief Global pointer to the SchedulerState managed by the scheduler task.
+SchedulerState *SCHEDULER_STATE = NULL;
 
 /// @var standardKernelFileDescriptors
 ///
@@ -3483,6 +3478,10 @@ __attribute__((noinline)) void startScheduler(
     = &schedulerState.ready[SCHEDULER_READY_QUEUE_KERNEL];
   schedulerState.preemptionTimer
     = (HAL->getNumTimers() > PREEMPTION_TIMER) ? PREEMPTION_TIMER : -1;
+  schedulerState.schedulerTaskId = 1;
+  schedulerState.consoleTaskId = 2;
+  schedulerState.memoryManagerTaskId = 3;
+  SCHEDULER_STATE = &schedulerState;
   printDebugString("Set scheduler state.\n");
 
   // Initialize the pointer that was used to configure coroutines.
@@ -3504,41 +3503,31 @@ __attribute__((noinline)) void startScheduler(
   allTasks = schedulerState.allTasks;
 
   // Initialize the scheduler in the array of running commands.
-  schedulerTask = &allTasks[NANO_OS_SCHEDULER_TASK_ID - 1];
-  schedulerTask->taskHandle = schedulerTaskHandle;
-  schedulerTask->taskId
-    = NANO_OS_SCHEDULER_TASK_ID;
-  schedulerTask->name = "init";
-  schedulerTask->userId = ROOT_USER_ID;
-  taskHandleSetContext(schedulerTask->taskHandle, schedulerTask);
+  allTasks[schedulerState.schedulerTaskId - 1].taskHandle = schedulerTaskHandle;
+  allTasks[schedulerState.schedulerTaskId - 1].taskId
+    = schedulerState.schedulerTaskId;
+  allTasks[schedulerState.schedulerTaskId - 1].name = "init";
+  allTasks[schedulerState.schedulerTaskId - 1].userId = ROOT_USER_ID;
+  taskHandleSetContext(allTasks[schedulerState.schedulerTaskId - 1].taskHandle,
+    &allTasks[schedulerState.schedulerTaskId - 1]);
 
   // We are not officially running the first task, so make it current.
-  currentTask = schedulerTask;
   printDebugString("Configured scheduler task.\n");
 
-  // Initialize all the kernel task file descriptors.
-  for (TaskId ii = 1; ii <= NANO_OS_FIRST_USER_TASK_ID; ii++) {
-    allTasks[ii - 1].numFileDescriptors = NUM_STANDARD_FILE_DESCRIPTORS;
-    allTasks[ii - 1].fileDescriptors
-      = (FileDescriptor*) standardKernelFileDescriptors;
-  }
-  printDebugString("Initialized kernel task file descriptors.\n");
-
-  // Create the console task.
+  // Create the console task.  We used to have to double the size of the
+  // console's stack, so we create this task before we create anything else.
+  // Leaving it at this point of initialization in case we ever have to come
+  // back to that flow again.
   TaskDescriptor *taskDescriptor
     = &allTasks[NANO_OS_CONSOLE_TASK_ID - 1];
   if (taskCreate(taskDescriptor, runConsole, NULL) != taskSuccess) {
     printString("Could not create console task.\n");
   }
   taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
-  taskDescriptor->taskId = NANO_OS_CONSOLE_TASK_ID;
+  taskDescriptor->taskId = schedulerState.consoleTaskId;
   taskDescriptor->name = "console";
   taskDescriptor->userId = ROOT_USER_ID;
   printDebugString("Created console task.\n");
-
-  // Start the console by calling taskResume.
-  taskResume(&allTasks[NANO_OS_CONSOLE_TASK_ID - 1], NULL);
-  printDebugString("Started console task.\n");
 
   printDebugString("\n");
   printDebugString("sizeof(int) = ");
@@ -3566,6 +3555,28 @@ __attribute__((noinline)) void startScheduler(
   printDebugInt(sizeof(ConsoleState));
   printDebugString(" bytes\n");
 
+  // schedulerState.firstUserTask isn't populated until HAL->initRootStorage
+  // completes, so we need to call that as soon as we can.
+  int rv = HAL->initRootStorage(&schedulerState);
+  if (rv != 0) {
+    printString("ERROR: initRootStorage returned status ");
+    printInt(rv);
+    printString("\n");
+  }
+  printDebugString("Initialized root storage\n");
+
+  // Initialize all the kernel task file descriptors.
+  for (TaskId ii = 1; ii <= schedulerState.firstUserTask; ii++) {
+    allTasks[ii - 1].numFileDescriptors = NUM_STANDARD_FILE_DESCRIPTORS;
+    allTasks[ii - 1].fileDescriptors
+      = (FileDescriptor*) standardKernelFileDescriptors;
+  }
+  printDebugString("Initialized kernel task file descriptors.\n");
+
+  // Start the console by calling taskResume.
+  taskResume(&allTasks[schedulerState.consoleTaskId - 1], NULL);
+  printDebugString("Started console task.\n");
+
   schedulerState.numShells = schedulerGetNumConsolePorts(&schedulerState);
   if (schedulerState.numShells <= 0) {
     // This should be impossible since the HAL was successfully initialized,
@@ -3582,17 +3593,10 @@ __attribute__((noinline)) void startScheduler(
   printDebugInt(schedulerState.numShells);
   printDebugString(" shells\n");
 
-  int rv = HAL->initRootStorage(&schedulerState);
-  if (rv != 0) {
-    printString("ERROR: initRootStorage returned status ");
-    printInt(rv);
-    printString("\n");
-  }
-
   // We need to do an initial population of all the tasks because we need to
   // get to the end of memory to run the memory manager in whatever is left
   // over.
-  for (TaskId ii = NANO_OS_FIRST_USER_TASK_ID;
+  for (TaskId ii = schedulerState.firstUserTaskId;
     ii <= NANO_OS_NUM_TASKS;
     ii++
   ) {
@@ -3612,9 +3616,14 @@ __attribute__((noinline)) void startScheduler(
   }
   printDebugString("Created all tasks.\n");
 
+  // allTasks array is ordered console task, memory manager task, then either
+  // the first block device or the first user process.  So, we want the task
+  // after the memory manager, which would be the value of
+  // NANO_OS_MEMORY_MANAGER_TASK_ID since TaskIds are one-based instead of
+  // zero-based.
   printDebugString("Console stack size = ");
   printDebugInt(ABS_DIFF(
-    ((uintptr_t) allTasks[NANO_OS_SD_CARD_TASK_ID - 1].taskHandle),
+    ((uintptr_t) allTasks[NANO_OS_MEMORY_MANAGER_TASK_ID].taskHandle),
     ((uintptr_t) allTasks[NANO_OS_CONSOLE_TASK_ID - 1].taskHandle))
     - sizeof(Coroutine)
   );
@@ -3622,8 +3631,8 @@ __attribute__((noinline)) void startScheduler(
 
   printDebugString("Coroutine stack size = ");
   printDebugInt(ABS_DIFF(
-    ((uintptr_t) allTasks[NANO_OS_FIRST_USER_TASK_ID - 1].taskHandle),
-    ((uintptr_t) allTasks[NANO_OS_FIRST_USER_TASK_ID].taskHandle))
+    ((uintptr_t) allTasks[schedulerState.firstUserTaskId - 1].taskHandle),
+    ((uintptr_t) allTasks[schedulerState.firstUserTaskId].taskHandle))
     - sizeof(Coroutine)
   );
   printDebugString(" bytes\n");
@@ -3668,7 +3677,7 @@ __attribute__((noinline)) void startScheduler(
   // Set the shells for the ports.
   for (uint8_t ii = 0; ii < schedulerState.numShells; ii++) {
     if (schedulerSetPortShell(&schedulerState,
-      ii, NANO_OS_FIRST_SHELL_PID + ii) != taskSuccess
+      ii, schedulerState.firstShellTask + ii) != taskSuccess
     ) {
       printString("WARNING: Could not set shell for ");
       printString(shellNames[ii]);
@@ -3678,33 +3687,25 @@ __attribute__((noinline)) void startScheduler(
   }
   printDebugString("Set shells for ports.\n");
 
-  taskQueuePush(&schedulerState.ready[SCHEDULER_READY_QUEUE_KERNEL],
-    &allTasks[NANO_OS_MEMORY_MANAGER_TASK_ID - 1]);
-  taskQueuePush(&schedulerState.ready[SCHEDULER_READY_QUEUE_KERNEL],
-    &allTasks[NANO_OS_FILESYSTEM_TASK_ID - 1]);
-  taskQueuePush(&schedulerState.ready[SCHEDULER_READY_QUEUE_KERNEL],
-    &allTasks[NANO_OS_SD_CARD_TASK_ID - 1]);
-  taskQueuePush(&schedulerState.ready[SCHEDULER_READY_QUEUE_KERNEL],
-    &allTasks[NANO_OS_CONSOLE_TASK_ID - 1]);
   // Mark all the kernel processes as being part of the kernel ready queue.
   // Skip over the scheduler (task 0).
   allTasks[0].readyQueue = NULL;
-  for (TaskId ii = 1; ii < NANO_OS_FIRST_USER_TASK_ID; ii++) {
+  for (TaskId ii = 1; ii < schedulerState.firstUserTask; ii++) {
     allTasks[ii - 1].readyQueue
       = &schedulerState.ready[SCHEDULER_READY_QUEUE_KERNEL];
+    taskQueuePush(allTasks[ii - 1].readyQueue, &allTasks[ii - 1]);
   }
   printDebugString("Populated kernel ready queue.\n");
 
   // The scheduler will take care of cleaning up the dummy tasks in the
   // ready queue.
-  for (TaskId ii = NANO_OS_FIRST_USER_TASK_ID;
+  for (TaskId ii = schedulerState.firstUserTask;
     ii <= NANO_OS_NUM_TASKS;
     ii++
   ) {
-    taskQueuePush(&schedulerState.ready[SCHEDULER_READY_QUEUE_USER],
-      &allTasks[ii - 1]);
     allTasks[ii - 1].readyQueue
       = &schedulerState.ready[SCHEDULER_READY_QUEUE_USER];
+    taskQueuePush(allTasks[ii - 1].readyQueue, &allTasks[ii - 1]);
   }
   printDebugString("Populated user ready queue.\n");
 

@@ -73,6 +73,8 @@ typedef enum SchedulerCommandResponse {
   SCHEDULER_TASK_COMPLETE,
 } SchedulerCommand;
 
+extern SchedulerState *SCHEDULER_STATE;
+
 // Exported functionality
 void startScheduler(SchedulerState **coroutineStatePointer);
 TaskDescriptor* schedulerGetTaskById(unsigned int taskId);

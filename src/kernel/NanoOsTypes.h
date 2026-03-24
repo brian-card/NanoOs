@@ -288,6 +288,12 @@ typedef struct TaskQueue {
 ///   running.
 /// @param preemptionTimer The index of the timer used for preemptive
 ///   multitasking.  If this is < 0 then the tasks run in cooperative mode.
+/// @param schedulerTaskId The TaskId of the scheduler.
+/// @param consoleTaskId The TaskId of the console.
+/// @param memoryManagerTaskId The TaskId of the memory manager.
+/// @param rootFsTaskId The TaskId of the root filesystem.
+/// @param firstUserTaskId The TaskId of the first user task.
+/// @param firstShellTaskId The TaskId of the first shell task.
 typedef struct SchedulerState {
   TaskDescriptor allTasks[NANO_OS_NUM_TASKS];
   TaskQueue ready[SCHEDULER_NUM_READY_QUEUES];
@@ -298,6 +304,12 @@ typedef struct SchedulerState {
   char *hostname;
   uint8_t numShells;
   int preemptionTimer;
+  TaskId schedulerTaskId;
+  TaskId consoleTaskId;
+  TaskId memoryManagerTaskId;
+  TaskId rootFsTaskId;
+  TaskId firstUserTaskId;
+  TaskId firstShellTaskId;
 } SchedulerState;
 
 /// @struct CommandDescriptor

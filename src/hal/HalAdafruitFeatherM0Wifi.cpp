@@ -618,7 +618,7 @@ int adafruitFeatherM0WifiInitRootStorage(SchedulerState *schedulerState) {
 
   // Create the SD card task.
   TaskDescriptor *taskDescriptor
-    = &allTasks[NANO_OS_SD_CARD_TASK_ID - 1];
+    = &allTasks[schedulerState->memoryManagerTaskId];
   if (taskCreate(
     taskDescriptor, runSdCardSpi, &sdCardSpiArgs)
     != taskSuccess
@@ -627,7 +627,7 @@ int adafruitFeatherM0WifiInitRootStorage(SchedulerState *schedulerState) {
   }
   printDebugString("Started SD card task.\n");
   taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
-  taskDescriptor->taskId = NANO_OS_SD_CARD_TASK_ID;
+  taskDescriptor->taskId = schedulerState->memoryManagerTaskId + 1;
   taskDescriptor->name = "SD card";
   taskDescriptor->userId = ROOT_USER_ID;
   BlockStorageDevice *sdDevice = (BlockStorageDevice*) coroutineResume(
@@ -636,14 +636,15 @@ int adafruitFeatherM0WifiInitRootStorage(SchedulerState *schedulerState) {
   printDebugString("Configured SD card task.\n");
   
   // Create the filesystem task.
-  taskDescriptor = &allTasks[NANO_OS_FILESYSTEM_TASK_ID - 1];
+  schedulerState->rootFsTaskId = schedulerState->memoryManagerTaskId + 2;
+  taskDescriptor = &allTasks[schedulerState->rootFsTaskId - 1];
   if (taskCreate(taskDescriptor, runExFatFilesystem, sdDevice)
     != taskSuccess
   ) {
     fputs("Could not start filesystem task.\n", stderr);
   }
   taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
-  taskDescriptor->taskId = NANO_OS_FILESYSTEM_TASK_ID;
+  taskDescriptor->taskId = schedulerState->rootFsTaskId;
   taskDescriptor->name = "filesystem";
   taskDescriptor->userId = ROOT_USER_ID;
   printDebugString("Created filesystem task.\n");

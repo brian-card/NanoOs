@@ -190,9 +190,7 @@ extern "C"
 ///
 /// @brief Resume a task and update the currentTask state correctly.
 #define taskResume(taskDescriptor, taskMessage) \
-  currentTask = taskDescriptor; \
   coroutineResume((taskDescriptor)->taskHandle, taskMessage); \
-  currentTask = schedulerTask; \
 
 // Task message accessors
 #define taskMessageType(taskMessagePointer) \
