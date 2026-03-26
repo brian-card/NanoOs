@@ -36,16 +36,27 @@
 #ifndef SCHEDULER_H
 #define SCHEDULER_H
 
-// Custom includes
-#include "NanoOsTypes.h"
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 
+// Forward declarations and typedefs since we can't include NanoOsTypes.h here.
+struct timespec;
+typedef struct Cocondition Cocondition;
+typedef struct Comutex Comutex;
+typedef struct Coroutine Coroutine;
+typedef struct FileDescriptor FileDescriptor;
 typedef struct NanoOsFile NanoOsFile;
 #define FILE NanoOsFile
+typedef struct SchedulerState SchedulerState;
+typedef struct TaskDescriptor TaskDescriptor;
+typedef Coroutine* TaskHandle;
+typedef uint8_t TaskId;
+typedef struct TaskInfo TaskInfo;
+typedef int16_t UserId;
 
 /// @enum SchedulerCommandResponse
 ///
