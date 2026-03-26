@@ -114,7 +114,7 @@ int setTaskStorage_(uint8_t key, void *val, int taskId, ...) {
   }
 
   if (taskId < 0) {
-    if (getRunningTaskId() == NANO_OS_SCHEDULER_TASK_ID) {
+    if (getRunningTaskId() == SCHEDULER_STATE->schedulerTaskId) {
       taskId = (int) getRunningTaskId();
     } else {
       return returnValue; // taskError

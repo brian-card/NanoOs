@@ -37,6 +37,7 @@
 #include "MemoryManager.h"
 #include "NanoOs.h"
 #include "OverlayFunctions.h"
+#include "Scheduler.h"
 #include "Tasks.h"
 #include "../user/NanoOsStdio.h"
 
@@ -799,7 +800,7 @@ int memoryManagerFreeTaskMemoryCommandHandler(
 ) {
   int returnValue = 0;
   NanoOsMessage *nanoOsMessage = (NanoOsMessage*) taskMessageData(incoming);
-  if (taskId(taskMessageFrom(incoming)) == NANO_OS_SCHEDULER_TASK_ID) {
+  if (taskId(taskMessageFrom(incoming)) == SCHEDULER_STATE->schedulerTaskId) {
     TaskId taskId = nanoOsMessageDataValue(incoming, TaskId);
     localFreeTaskMemory(memoryManagerState, taskId);
     nanoOsMessage->data = 0;
@@ -847,7 +848,7 @@ int memoryManagerAssignMemoryCommandHandler(
 ) {
   int returnValue = 0;
   
-  if (taskId(taskMessageFrom(incoming)) == NANO_OS_SCHEDULER_TASK_ID) {
+  if (taskId(taskMessageFrom(incoming)) == SCHEDULER_STATE->schedulerTaskId) {
     AssignMemoryParams *assignMemoryParams
       = (AssignMemoryParams*) taskMessageData(incoming);
     if (isDynamicPointer(assignMemoryParams->ptr)) {

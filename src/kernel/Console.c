@@ -696,7 +696,7 @@ void consoleReleasePidPortCommandHandler(
   ConsoleState *consoleState, TaskMessage *inputMessage
 ) {
   TaskId sender = taskId(taskMessageFrom(inputMessage));
-  if (sender != NANO_OS_SCHEDULER_TASK_ID) {
+  if (sender != SCHEDULER_STATE->schedulerTaskId) {
     // Sender is not the scheduler.  We will ignore this.
     taskMessageSetDone(inputMessage);
     consoleMessageCleanup(inputMessage);
