@@ -47,11 +47,6 @@ extern "C"
 typedef struct NanoOsFile NanoOsFile;
 #define FILE NanoOsFile
 
-/// @def PREEMPTION_TIMER
-///
-/// @brief The index of the timer used for preemption by the scheduler.
-#define PREEMPTION_TIMER 0
-
 /// @enum SchedulerCommandResponse
 ///
 /// @brief Commands and responses understood by the scheduler inter-task
