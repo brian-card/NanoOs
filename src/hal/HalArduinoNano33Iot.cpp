@@ -604,14 +604,14 @@ int arduinoNano33IotInitRootStorage(SchedulerState *schedulerState) {
   printDebugString("Configured SD card task.\n");
   
   // Create the filesystem task.
-  taskDescriptor = &allTasks[NANO_OS_FILESYSTEM_TASK_ID - 1];
+  taskDescriptor = &allTasks[SCHEDULER_STATE->rootFsTaskId - 1];
   if (taskCreate(taskDescriptor, runExFatFilesystem, sdDevice)
     != taskSuccess
   ) {
     fputs("Could not start filesystem task.\n", stderr);
   }
   taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
-  taskDescriptor->taskId = NANO_OS_FILESYSTEM_TASK_ID;
+  taskDescriptor->taskId = SCHEDULER_STATE->rootFsTaskId;
   taskDescriptor->name = "filesystem";
   taskDescriptor->userId = ROOT_USER_ID;
   printDebugString("Created filesystem task.\n");

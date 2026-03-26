@@ -1054,7 +1054,7 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *nanoOsBuffer) {
       .length = (uint32_t) strlen(nanoOsBuffer->buffer)
     };
     TaskMessage *taskMessage = sendNanoOsMessageToTaskId(
-      NANO_OS_FILESYSTEM_TASK_ID,
+      SCHEDULER_STATE->rootFsTaskId,
       FILESYSTEM_WRITE_FILE,
       /* func= */ 0,
       /* data= */ (intptr_t) &filesystemIoCommandParameters,
