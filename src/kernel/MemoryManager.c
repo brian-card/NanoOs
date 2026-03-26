@@ -1168,7 +1168,7 @@ size_t getFreeMemory(void) {
   memset(&sent, 0, sizeof(sent));
   taskMessageInit(&sent, MEMORY_MANAGER_GET_FREE_MEMORY, NULL, 0, true);
   
-  if (sendTaskMessageToTaskId(NANO_OS_MEMORY_MANAGER_TASK_ID, &sent)
+  if (sendTaskMessageToTaskId(SCHEDULER_STATE->memoryManagerTaskId, &sent)
     != taskSuccess
   ) {
     // Nothing more we can do.
@@ -1200,7 +1200,7 @@ void* memoryManagerSendReallocMessage(void *ptr, size_t size) {
   reallocMessage.responseType = MEMORY_MANAGER_RETURNING_POINTER;
   
   TaskMessage *sent
-    = sendNanoOsMessageToTaskId(NANO_OS_MEMORY_MANAGER_TASK_ID,
+    = sendNanoOsMessageToTaskId(SCHEDULER_STATE->memoryManagerTaskId,
     MEMORY_MANAGER_REALLOC, /* func= */ 0,
     (NanoOsMessageData) ((uintptr_t) &reallocMessage),
     true);
@@ -1237,7 +1237,7 @@ void* memoryManagerSendReallocMessage(void *ptr, size_t size) {
 void memoryManagerFree(void *ptr) {
   if (ptr != NULL) {
     sendNanoOsMessageToTaskId(
-      NANO_OS_MEMORY_MANAGER_TASK_ID, MEMORY_MANAGER_FREE,
+      SCHEDULER_STATE->memoryManagerTaskId, MEMORY_MANAGER_FREE,
       (NanoOsMessageData) 0, (NanoOsMessageData) ((intptr_t) ptr), false);
   }
   return;
