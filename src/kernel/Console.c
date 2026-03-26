@@ -1102,7 +1102,7 @@ int printConsoleValue(ConsoleValueType valueType, void *value, size_t length) {
   memcpy(&message, value, length);
 
   printDebugString("Sending message to console task.\n");
-  sendNanoOsMessageToTaskId(NANO_OS_CONSOLE_TASK_ID, CONSOLE_WRITE_VALUE,
+  sendNanoOsMessageToTaskId(SCHEDULER_STATE->consoleTaskId, CONSOLE_WRITE_VALUE,
     valueType, message, false);
 
   printDebugString("Leaving printConsoleValue.\n");
@@ -1161,8 +1161,8 @@ void releaseConsole(void) {
   // from within the console task.  That means we can't do blocking prints
   // from this function.  i.e. We can't use printf here.  Use printConsole
   // instead.
-  sendNanoOsMessageToTaskId(NANO_OS_CONSOLE_TASK_ID, CONSOLE_RELEASE_PORT,
-    /* func= */ 0, /* data= */ 0, false);
+  sendNanoOsMessageToTaskId(SCHEDULER_STATE->consoleTaskId,
+    CONSOLE_RELEASE_PORT, /* func= */ 0, /* data= */ 0, false);
   taskYield();
 }
 
@@ -1174,7 +1174,7 @@ void releaseConsole(void) {
 /// success, -1 on failure.
 int getOwnedConsolePort(void) {
   TaskMessage *sent = sendNanoOsMessageToTaskId(
-    NANO_OS_CONSOLE_TASK_ID, CONSOLE_GET_OWNED_PORT,
+    SCHEDULER_STATE->consoleTaskId, CONSOLE_GET_OWNED_PORT,
     /* func= */ 0, /* data= */ 0, /* waiting= */ true);
 
   // The console will reuse the message we sent, so don't release the message
@@ -1197,7 +1197,7 @@ int getOwnedConsolePort(void) {
 /// otherwise.
 bool getConsoleEcho(void) {
   TaskMessage *sent = sendNanoOsMessageToTaskId(
-    NANO_OS_CONSOLE_TASK_ID, CONSOLE_GET_ECHO_PORT,
+    SCHEDULER_STATE->consoleTaskId, CONSOLE_GET_ECHO_PORT,
     /* func= */ 0, /* data= */ 0, /* waiting= */ true);
 
   // The console will reuse the message we sent.
@@ -1217,7 +1217,7 @@ bool getConsoleEcho(void) {
 /// ports, -1 on failure.
 int setConsoleEcho(bool desiredEchoState) {
   TaskMessage *sent = sendNanoOsMessageToTaskId(
-    NANO_OS_CONSOLE_TASK_ID, CONSOLE_SET_ECHO_PORT,
+    SCHEDULER_STATE->consoleTaskId, CONSOLE_SET_ECHO_PORT,
     /* func= */ 0, /* data= */ desiredEchoState, /* waiting= */ true);
 
   // The console will reuse the message we sent, so don't release the message
@@ -1239,7 +1239,7 @@ int setConsoleEcho(bool desiredEchoState) {
 /// @return Returns the number of ports running on success, -1 on failure.
 int getNumConsolePorts(void) {
   TaskMessage *sent = sendNanoOsMessageToTaskId(
-    NANO_OS_CONSOLE_TASK_ID, CONSOLE_GET_NUM_PORTS,
+    SCHEDULER_STATE->consoleTaskId, CONSOLE_GET_NUM_PORTS,
     /* func= */ 0, /* data= */ 0, /* waiting= */ true);
   if (sent == NULL) {
     return -1;
