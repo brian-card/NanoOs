@@ -102,7 +102,7 @@ SchedulerState *SCHEDULER_STATE = NULL;
 /// @var standardKernelFileDescriptors
 ///
 /// @brief The array of file descriptors that all kernel tasks use.
-static const FileDescriptor standardKernelFileDescriptors[
+static FileDescriptor standardKernelFileDescriptors[
   NUM_STANDARD_FILE_DESCRIPTORS
 ] = {
   {
@@ -110,11 +110,11 @@ static const FileDescriptor standardKernelFileDescriptors[
     // Kernel tasks do not read from stdin, so clear out both pipes.
     .inputPipe = {
       .taskId = TASK_ID_NOT_SET,
-      .messageType = 0,
+      .messageType = -1,
     },
     .outputPipe = {
       .taskId = TASK_ID_NOT_SET,
-      .messageType = 0,
+      .messageType = -1,
     },
   },
   {
@@ -123,11 +123,11 @@ static const FileDescriptor standardKernelFileDescriptors[
     // output pipe to the console.
     .inputPipe = {
       .taskId = TASK_ID_NOT_SET,
-      .messageType = 0,
+      .messageType = -1,
     },
     .outputPipe = {
-      .taskId = NANO_OS_CONSOLE_TASK_ID,
-      .messageType = CONSOLE_WRITE_BUFFER,
+      .taskId = TASK_ID_NOT_SET,
+      .messageType = -1,
     },
   },
   {
@@ -136,11 +136,11 @@ static const FileDescriptor standardKernelFileDescriptors[
     // output pipe to the console.
     .inputPipe = {
       .taskId = TASK_ID_NOT_SET,
-      .messageType = 0,
+      .messageType = -1,
     },
     .outputPipe = {
-      .taskId = NANO_OS_CONSOLE_TASK_ID,
-      .messageType = CONSOLE_WRITE_BUFFER,
+      .taskId = TASK_ID_NOT_SET,
+      .messageType = -1,
     },
   },
 };
@@ -150,7 +150,7 @@ static const FileDescriptor standardKernelFileDescriptors[
 /// @brief Pointer to the array of FileDescriptor objects (declared in the
 /// startScheduler function on the scheduler's stack) that all tasks start
 /// out with.
-static const FileDescriptor standardUserFileDescriptors[
+static FileDescriptor standardUserFileDescriptors[
   NUM_STANDARD_FILE_DESCRIPTORS
 ] = {
   {
@@ -158,12 +158,12 @@ static const FileDescriptor standardUserFileDescriptors[
     // Uni-directional FileDescriptor, so clear the output pipe and direct the
     // input pipe to the console.
     .inputPipe = {
-      .taskId = NANO_OS_CONSOLE_TASK_ID,
-      .messageType = CONSOLE_WAIT_FOR_INPUT,
+      .taskId = TASK_ID_NOT_SET,
+      .messageType = -1,
     },
     .outputPipe = {
       .taskId = TASK_ID_NOT_SET,
-      .messageType = 0,
+      .messageType = -1,
     },
   },
   {
@@ -172,11 +172,11 @@ static const FileDescriptor standardUserFileDescriptors[
     // output pipe to the console.
     .inputPipe = {
       .taskId = TASK_ID_NOT_SET,
-      .messageType = 0,
+      .messageType = -1,
     },
     .outputPipe = {
-      .taskId = NANO_OS_CONSOLE_TASK_ID,
-      .messageType = CONSOLE_WRITE_BUFFER,
+      .taskId = TASK_ID_NOT_SET,
+      .messageType = -1,
     },
   },
   {
@@ -185,11 +185,11 @@ static const FileDescriptor standardUserFileDescriptors[
     // output pipe to the console.
     .inputPipe = {
       .taskId = TASK_ID_NOT_SET,
-      .messageType = 0,
+      .messageType = -1,
     },
     .outputPipe = {
-      .taskId = NANO_OS_CONSOLE_TASK_ID,
-      .messageType = CONSOLE_WRITE_BUFFER,
+      .taskId = TASK_ID_NOT_SET,
+      .messageType = 0,
     },
   },
 };
@@ -619,7 +619,7 @@ void* schedulerResumeReallocMessage(void *ptr, size_t size) {
   // get messed up if we don't.
   msg_from(sent).coro = schedulerTaskHandle;
 
-  taskResume(&allTasks[NANO_OS_MEMORY_MANAGER_TASK_ID - 1], sent);
+  taskResume(&allTasks[SCHEDULER_STATE->memoryManagerTaskId - 1], sent);
   if (taskMessageDone(sent) == true) {
     // The handler set the pointer back in the structure we sent it, so grab it
     // out of the structure we already have.
@@ -711,7 +711,7 @@ void schedFree(void *ptr) {
   // get messed up if we don't.
   msg_from(sent).coro = schedulerTaskHandle;
 
-  taskResume(&allTasks[NANO_OS_MEMORY_MANAGER_TASK_ID - 1], sent);
+  taskResume(&allTasks[SCHEDULER_STATE->memoryManagerTaskId - 1], sent);
   if (taskMessageDone(sent) == false) {
     printString(
       "Warning:  Memory manager did not mark free message done.\n");
@@ -749,7 +749,7 @@ int assignMemory(void *ptr, TaskId taskId) {
   msg_from(sent).coro = schedulerTaskHandle;
 
   int returnValue = 0;
-  taskResume(&allTasks[NANO_OS_MEMORY_MANAGER_TASK_ID - 1], sent);
+  taskResume(&allTasks[SCHEDULER_STATE->memoryManagerTaskId - 1], sent);
   if (taskMessageDone(sent) == false) {
     printString(
       "Warning:  Memory manager did not mark assignMemory message done.\n");
@@ -782,7 +782,7 @@ int schedulerAssignPortToTaskId(
   consolePortPidUnion.consolePortPidAssociation.taskId = owner;
 
   int returnValue = schedulerSendNanoOsMessageToTaskId(schedulerState,
-    NANO_OS_CONSOLE_TASK_ID, CONSOLE_ASSIGN_PORT,
+    SCHEDULER_STATE->consoleTaskId, CONSOLE_ASSIGN_PORT,
     /* func= */ 0, consolePortPidUnion.nanoOsMessageData);
 
   return returnValue;
@@ -810,7 +810,7 @@ int schedulerAssignPortInputToTaskId(
   consolePortPidUnion.consolePortPidAssociation.taskId = owner;
 
   int returnValue = schedulerSendNanoOsMessageToTaskId(schedulerState,
-    NANO_OS_CONSOLE_TASK_ID, CONSOLE_ASSIGN_PORT_INPUT,
+    SCHEDULER_STATE->consoleTaskId, CONSOLE_ASSIGN_PORT_INPUT,
     /* func= */ 0, consolePortPidUnion.nanoOsMessageData);
 
   return returnValue;
@@ -847,7 +847,7 @@ int schedulerSetPortShell(
   consolePortPidUnion.consolePortPidAssociation.taskId = shell;
 
   returnValue = schedulerSendNanoOsMessageToTaskId(schedulerState,
-    NANO_OS_CONSOLE_TASK_ID, CONSOLE_SET_PORT_SHELL,
+    SCHEDULER_STATE->consoleTaskId, CONSOLE_SET_PORT_SHELL,
     /* func= */ 0, consolePortPidUnion.nanoOsMessageData);
 
   return returnValue;
@@ -881,7 +881,7 @@ int schedulerGetNumConsolePorts(SchedulerState *schedulerState) {
     /*data= */ nanoOsMessage, /* size= */ sizeof(NanoOsMessage),
     /* waiting= */ true);
   if (schedulerSendTaskMessageToTaskId(schedulerState,
-    NANO_OS_CONSOLE_TASK_ID, messageToSend) != taskSuccess
+    SCHEDULER_STATE->consoleTaskId, messageToSend) != taskSuccess
   ) {
     printString("ERROR: Could not send CONSOLE_GET_NUM_PORTS to console\n");
     return returnValue; // -1
@@ -945,7 +945,7 @@ TaskId schedulerGetNumRunningTasks(struct timespec *timeout) {
   TaskId numTaskDescriptors = 0;
 
   taskMessage = sendNanoOsMessageToTaskId(
-    NANO_OS_SCHEDULER_TASK_ID, SCHEDULER_GET_NUM_RUNNING_TASKS,
+    SCHEDULER_STATE->schedulerTaskId, SCHEDULER_GET_NUM_RUNNING_TASKS,
     (NanoOsMessageData) 0, (NanoOsMessageData) 0, true);
   if (taskMessage == NULL) {
     printf("ERROR: Could not communicate with scheduler.\n");
@@ -1027,7 +1027,7 @@ TaskInfo* schedulerGetTaskInfo(void) {
   taskInfo->numTasks = numTaskDescriptors;
 
   taskMessage
-    = sendNanoOsMessageToTaskId(NANO_OS_SCHEDULER_TASK_ID,
+    = sendNanoOsMessageToTaskId(SCHEDULER_STATE->schedulerTaskId,
     SCHEDULER_GET_TASK_INFO, /* func= */ 0, (intptr_t) taskInfo, true);
 
   if (taskMessage == NULL) {
@@ -1077,7 +1077,7 @@ exit:
 /// @return Returns 0 on success, 1 on failure.
 int schedulerKillTask(TaskId taskId) {
   TaskMessage *taskMessage = sendNanoOsMessageToTaskId(
-    NANO_OS_SCHEDULER_TASK_ID, SCHEDULER_KILL_TASK,
+    SCHEDULER_STATE->schedulerTaskId, SCHEDULER_KILL_TASK,
     (NanoOsMessageData) 0, (NanoOsMessageData) taskId, true);
   if (taskMessage == NULL) {
     printf("ERROR: Could not communicate with scheduler.\n");
@@ -1131,7 +1131,7 @@ UserId schedulerGetTaskUser(void) {
   UserId userId = -1;
   TaskMessage *taskMessage
     = sendNanoOsMessageToTaskId(
-    NANO_OS_SCHEDULER_TASK_ID, SCHEDULER_GET_TASK_USER,
+    SCHEDULER_STATE->schedulerTaskId, SCHEDULER_GET_TASK_USER,
     /* func= */ 0, /* data= */ 0, true);
   if (taskMessage == NULL) {
     printString("ERROR: Could not communicate with scheduler.\n");
@@ -1154,7 +1154,7 @@ int schedulerSetTaskUser(UserId userId) {
   int returnValue = -1;
   TaskMessage *taskMessage
     = sendNanoOsMessageToTaskId(
-    NANO_OS_SCHEDULER_TASK_ID, SCHEDULER_SET_TASK_USER,
+    SCHEDULER_STATE->schedulerTaskId, SCHEDULER_SET_TASK_USER,
     /* func= */ 0, /* data= */ (UserId) userId, true);
   if (taskMessage == NULL) {
     printString("ERROR: Could not communicate with scheduler.\n");
@@ -1207,7 +1207,7 @@ FileDescriptor* schedulerGetFileDescriptor(FILE *stream) {
 /// @return Returns 0 on success, -1 on failure.
 int schedulerCloseAllFileDescriptors(void) {
   TaskMessage *taskMessage = sendNanoOsMessageToTaskId(
-    NANO_OS_SCHEDULER_TASK_ID, SCHEDULER_CLOSE_ALL_FILE_DESCRIPTORS,
+    SCHEDULER_STATE->schedulerTaskId, SCHEDULER_CLOSE_ALL_FILE_DESCRIPTORS,
     /* func= */ 0, /* data= */ 0, true);
   taskMessageWaitForDone(taskMessage, NULL);
   taskMessageRelease(taskMessage);
@@ -1225,7 +1225,7 @@ const char* schedulerGetHostname(void) {
   const char *hostname = NULL;
   TaskMessage *taskMessage
     = sendNanoOsMessageToTaskId(
-    NANO_OS_SCHEDULER_TASK_ID, SCHEDULER_GET_HOSTNAME,
+    SCHEDULER_STATE->schedulerTaskId, SCHEDULER_GET_HOSTNAME,
     /* func= */ 0, /* data= */ 0, true);
   if (taskMessage == NULL) {
     printString("ERROR: Could not communicate with scheduler.\n");
@@ -1329,7 +1329,7 @@ int schedulerExecve(const char *pathname,
 
   TaskMessage *taskMessage
     = sendNanoOsMessageToTaskId(
-    NANO_OS_SCHEDULER_TASK_ID, SCHEDULER_EXECVE,
+    SCHEDULER_STATE->schedulerTaskId, SCHEDULER_EXECVE,
     /* func= */ 0, /* data= */ (uintptr_t) execArgs, true);
   if (taskMessage == NULL) {
     // The only way this should be possible is if all available messages are
@@ -1451,7 +1451,7 @@ int schedulerSpawn(
 
   TaskMessage *taskMessage
     = sendNanoOsMessageToTaskId(
-    NANO_OS_SCHEDULER_TASK_ID, SCHEDULER_SPAWN,
+    SCHEDULER_STATE->schedulerTaskId, SCHEDULER_SPAWN,
     /* func= */ 0, /* data= */ (uintptr_t) spawnArgs, true);
   if (taskMessage == NULL) {
     // The only way this should be possible is if all available messages are
@@ -1490,7 +1490,7 @@ int schedulerAssignMemory(void *ptr) {
 
   taskMessageInit(taskMessage, SCHEDULER_ASSIGN_MEMORY, ptr, 0, true);
 
-  if (sendTaskMessageToTaskId(NANO_OS_SCHEDULER_TASK_ID, taskMessage)
+  if (sendTaskMessageToTaskId(SCHEDULER_STATE->schedulerTaskId, taskMessage)
     != taskSuccess
   ) {
     taskMessageRelease(taskMessage);
@@ -1546,7 +1546,7 @@ int closeTaskFileDescriptors(
         TaskId waitingOutputTaskId
           = fileDescriptors[ii].outputPipe.taskId;
         if ((waitingOutputTaskId != TASK_ID_NOT_SET)
-          && (waitingOutputTaskId != NANO_OS_CONSOLE_TASK_ID)
+          && (waitingOutputTaskId != SCHEDULER_STATE->consoleTaskId)
         ) {
           TaskDescriptor *waitingTaskDescriptor
             = &schedulerState->allTasks[waitingOutputTaskId - 1];
@@ -1577,7 +1577,7 @@ int closeTaskFileDescriptors(
         TaskId waitingInputTaskId
           = fileDescriptors[ii].inputPipe.taskId;
         if ((waitingInputTaskId != TASK_ID_NOT_SET)
-          && (waitingInputTaskId != NANO_OS_CONSOLE_TASK_ID)
+          && (waitingInputTaskId != SCHEDULER_STATE->consoleTaskId)
         ) {
           TaskDescriptor *waitingTaskDescriptor
             = &schedulerState->allTasks[waitingInputTaskId - 1];
@@ -1665,7 +1665,7 @@ FILE* schedFopen(SchedulerState *schedulerState,
       nanoOsMessage, sizeof(*nanoOsMessage), true);
     printDebugString("schedFopen: Pushing message\n");
     taskMessageQueuePush(
-      &schedulerState->allTasks[NANO_OS_FILESYSTEM_TASK_ID - 1],
+      &schedulerState->allTasks[schedulerState->rootFsTaskId - 1],
       taskMessage);
 
     printDebugString("schedFopen: Resuming filesystem\n");
@@ -1725,7 +1725,7 @@ int schedFclose(SchedulerState *schedulerState, FILE *stream) {
     taskMessageInit(taskMessage, FILESYSTEM_CLOSE_FILE,
       nanoOsMessage, sizeof(*nanoOsMessage), true);
     taskMessageQueuePush(
-      &schedulerState->allTasks[NANO_OS_FILESYSTEM_TASK_ID - 1],
+      &schedulerState->allTasks[schedulerState->rootFsTaskId - 1],
       taskMessage);
 
     while (taskMessageDone(taskMessage) == false) {
@@ -1783,7 +1783,7 @@ int schedRemove(SchedulerState *schedulerState, const char *pathname) {
     taskMessageInit(taskMessage, FILESYSTEM_REMOVE_FILE,
       nanoOsMessage, sizeof(*nanoOsMessage), true);
     taskMessageQueuePush(
-      &schedulerState->allTasks[NANO_OS_FILESYSTEM_TASK_ID - 1],
+      &schedulerState->allTasks[schedulerState->rootFsTaskId - 1],
       taskMessage);
 
     while (taskMessageDone(taskMessage) == false) {
@@ -1853,7 +1853,7 @@ size_t schedFread(SchedulerState *schedulerState,
     taskMessageInit(taskMessage, FILESYSTEM_READ_FILE,
       nanoOsMessage, sizeof(*nanoOsMessage), true);
     taskMessageQueuePush(
-      &schedulerState->allTasks[NANO_OS_FILESYSTEM_TASK_ID - 1],
+      &schedulerState->allTasks[schedulerState->rootFsTaskId - 1],
       taskMessage);
 
     while (taskMessageDone(taskMessage) == false) {
@@ -1915,7 +1915,7 @@ size_t schedFwrite(SchedulerState *schedulerState,
     taskMessageInit(taskMessage, FILESYSTEM_WRITE_FILE,
       nanoOsMessage, sizeof(*nanoOsMessage), true);
     taskMessageQueuePush(
-      &schedulerState->allTasks[NANO_OS_FILESYSTEM_TASK_ID - 1],
+      &schedulerState->allTasks[schedulerState->rootFsTaskId - 1],
       taskMessage);
 
     while (taskMessageDone(taskMessage) == false) {
@@ -1979,7 +1979,7 @@ char* schedFgets(SchedulerState *schedulerState,
     taskMessageInit(taskMessage, FILESYSTEM_READ_FILE,
       nanoOsMessage, sizeof(*nanoOsMessage), true);
     taskMessageQueuePush(
-      &schedulerState->allTasks[NANO_OS_FILESYSTEM_TASK_ID - 1],
+      &schedulerState->allTasks[schedulerState->rootFsTaskId - 1],
       taskMessage);
 
     while (taskMessageDone(taskMessage) == false) {
@@ -2046,7 +2046,7 @@ int schedFputs(SchedulerState *schedulerState,
     taskMessageInit(taskMessage, FILESYSTEM_WRITE_FILE,
       nanoOsMessage, sizeof(*nanoOsMessage), true);
     taskMessageQueuePush(
-      &schedulerState->allTasks[NANO_OS_FILESYSTEM_TASK_ID - 1],
+      &schedulerState->allTasks[schedulerState->rootFsTaskId - 1],
       taskMessage);
 
     while (taskMessageDone(taskMessage) == false) {
@@ -2104,7 +2104,7 @@ int schedulerKillTaskCommandHandler(
   NanoOsMessage *nanoOsMessage
     = (NanoOsMessage*) taskMessageData(taskMessage);
 
-  if ((taskId >= NANO_OS_FIRST_USER_TASK_ID)
+  if ((taskId >= schedulerState->firstUserTaskId)
     && (taskId <= NANO_OS_NUM_TASKS)
     && (taskRunning(&allTasks[taskIndex]))
   ) {
@@ -2137,7 +2137,7 @@ int schedulerKillTaskCommandHandler(
       // there's no shell blocking waiting for the message.
       schedulerSendNanoOsMessageToTaskId(
         schedulerState,
-        NANO_OS_CONSOLE_TASK_ID,
+        SCHEDULER_STATE->consoleTaskId,
         CONSOLE_RELEASE_PID_PORT,
         (intptr_t) schedulerTaskCompleteMessage,
         taskId);
@@ -2148,7 +2148,7 @@ int schedulerKillTaskCommandHandler(
       taskMessageInit(taskMessage, MEMORY_MANAGER_FREE_TASK_MEMORY,
         nanoOsMessage, sizeof(*nanoOsMessage), /* waiting= */ true);
       sendTaskMessageToTask(
-        &schedulerState->allTasks[NANO_OS_MEMORY_MANAGER_TASK_ID - 1],
+        &schedulerState->allTasks[SCHEDULER_STATE->memoryManagerTaskId - 1],
         taskMessage);
 
       // Close the file descriptors before we terminate the task so that
@@ -2466,22 +2466,22 @@ int schedulerExecveCommandHandler(
   }
   char **envp = execArgs->envp;
 
-  if (assignMemory(execArgs, NANO_OS_SCHEDULER_TASK_ID) != 0) {
+  if (assignMemory(execArgs, SCHEDULER_STATE->schedulerTaskId) != 0) {
     printString("WARNING: Could not assign execArgs to scheduler.\n");
     printString("Undefined behavior.\n");
   }
 
-  if (assignMemory(pathname, NANO_OS_SCHEDULER_TASK_ID) != 0) {
+  if (assignMemory(pathname, SCHEDULER_STATE->schedulerTaskId) != 0) {
     printString("WARNING: Could not assign pathname to scheduler.\n");
     printString("Undefined behavior.\n");
   }
 
-  if (assignMemory(argv, NANO_OS_SCHEDULER_TASK_ID) != 0) {
+  if (assignMemory(argv, SCHEDULER_STATE->schedulerTaskId) != 0) {
     printString("WARNING: Could not assign argv to scheduler.\n");
     printString("Undefined behavior.\n");
   }
   for (int ii = 0; argv[ii] != NULL; ii++) {
-    if (assignMemory(argv[ii], NANO_OS_SCHEDULER_TASK_ID) != 0) {
+    if (assignMemory(argv[ii], SCHEDULER_STATE->schedulerTaskId) != 0) {
       printString("WARNING: Could not assign argv[");
       printInt(ii);
       printString("] to scheduler.\n");
@@ -2490,12 +2490,12 @@ int schedulerExecveCommandHandler(
   }
 
   if (envp != NULL) {
-    if (assignMemory(envp, NANO_OS_SCHEDULER_TASK_ID) != 0) {
+    if (assignMemory(envp, SCHEDULER_STATE->schedulerTaskId) != 0) {
       printString("WARNING: Could not assign envp to scheduler.\n");
       printString("Undefined behavior.\n");
     }
     for (int ii = 0; envp[ii] != NULL; ii++) {
-      if (assignMemory(envp[ii], NANO_OS_SCHEDULER_TASK_ID) != 0) {
+      if (assignMemory(envp[ii], SCHEDULER_STATE->schedulerTaskId) != 0) {
         printString("WARNING: Could not assign envp[");
         printInt(ii);
         printString("] to scheduler.\n");
@@ -2524,7 +2524,7 @@ int schedulerExecveCommandHandler(
   // We don't want to wait for the memory manager to release the memory.  Make
   // it do it immediately.
   if (schedulerSendNanoOsMessageToTaskId(
-    schedulerState, NANO_OS_MEMORY_MANAGER_TASK_ID,
+    schedulerState, SCHEDULER_STATE->memoryManagerTaskId,
     MEMORY_MANAGER_FREE_TASK_MEMORY,
     /* func= */ 0, taskDescriptor->taskId)
   ) {
@@ -2778,7 +2778,7 @@ int schedulerAssignMemoryCommandHandler(
   }
 
   void *ptr = taskMessageData(taskMessage);
-  int returnValue = assignMemory(ptr, NANO_OS_SCHEDULER_TASK_ID);
+  int returnValue = assignMemory(ptr, SCHEDULER_STATE->schedulerTaskId);
   if (returnValue == 0) {
     taskMessageInit(taskMessage, 0, (void*) ((intptr_t) 0), 0, true);
   } else {
@@ -2925,7 +2925,7 @@ int schedulerDumpMemoryAllocations(SchedulerState *schedulerState) {
     taskMessageInit(dumpMemoryAllocationsMessage,
       MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS, NULL, 0, true);
     schedulerSendTaskMessageToTask(
-      &schedulerState->allTasks[NANO_OS_MEMORY_MANAGER_TASK_ID - 1],
+      &schedulerState->allTasks[SCHEDULER_STATE->memoryManagerTaskId - 1],
       dumpMemoryAllocationsMessage);
     if (taskMessageDone(dumpMemoryAllocationsMessage) == false) {
       printString("ERROR: dumpMemoryAllocationsMessage is not done!\n");
@@ -2956,7 +2956,7 @@ int schedulerDumpOpenFiles(SchedulerState *schedulerState) {
     taskMessageInit(dumpOpenFilesMessage,
       FILESYSTEM_DUMP_OPEN_FILES, NULL, 0, true);
     schedulerSendTaskMessageToTask(
-      &schedulerState->allTasks[NANO_OS_FILESYSTEM_TASK_ID - 1],
+      &schedulerState->allTasks[schedulerState->rootFsTaskId - 1],
       dumpOpenFilesMessage);
     if (taskMessageDone(dumpOpenFilesMessage) == false) {
       printString("ERROR: dumpOpenFilesMessage is not done!\n");
@@ -3001,7 +3001,7 @@ void removeTask(SchedulerState *schedulerState, TaskDescriptor *taskDescriptor,
   if (consoleReleasePidPortMessage != NULL) {
     schedulerSendNanoOsMessageToTaskId(
       schedulerState,
-      NANO_OS_CONSOLE_TASK_ID,
+      SCHEDULER_STATE->consoleTaskId,
       CONSOLE_RELEASE_PID_PORT,
       (intptr_t) consoleReleasePidPortMessage,
       taskDescriptor->taskId);
@@ -3015,7 +3015,7 @@ void removeTask(SchedulerState *schedulerState, TaskDescriptor *taskDescriptor,
   }
 
   if (schedulerSendNanoOsMessageToTaskId(
-    schedulerState, NANO_OS_MEMORY_MANAGER_TASK_ID,
+    schedulerState, SCHEDULER_STATE->memoryManagerTaskId,
     MEMORY_MANAGER_FREE_TASK_MEMORY,
     /* func= */ 0, taskDescriptor->taskId)
   ) {
@@ -3337,7 +3337,7 @@ void runScheduler(SchedulerState *schedulerState) {
     return;
   }
 
-  if (taskDescriptor->taskId >= NANO_OS_FIRST_USER_TASK_ID) {
+  if (taskDescriptor->taskId >= schedulerState->firstUserTaskId) {
     if (taskRunning(taskDescriptor) == true) {
       // This is a user task, which is in an overlay.  Make sure it's loaded.
       if (schedulerLoadOverlay(schedulerState,
@@ -3362,14 +3362,14 @@ void runScheduler(SchedulerState *schedulerState) {
 
   if (taskRunning(taskDescriptor) == false) {
     schedulerSendNanoOsMessageToTaskId(schedulerState,
-      NANO_OS_MEMORY_MANAGER_TASK_ID, MEMORY_MANAGER_FREE_TASK_MEMORY,
+      SCHEDULER_STATE->memoryManagerTaskId, MEMORY_MANAGER_FREE_TASK_MEMORY,
       /* func= */ 0, /* data= */ taskDescriptor->taskId);
   }
 
   // Check the shells and restart them if needed.
-  if ((taskDescriptor->taskId >= NANO_OS_FIRST_SHELL_PID)
+  if ((taskDescriptor->taskId >= schedulerState->firstShellTaskId)
     && (taskDescriptor->taskId
-      < (NANO_OS_FIRST_SHELL_PID + schedulerState->numShells))
+      < (schedulerState->firstShellTaskId + schedulerState->numShells))
     && (taskRunning(taskDescriptor) == false)
   ) {
     if ((schedulerState->hostname == NULL)
@@ -3476,8 +3476,7 @@ __attribute__((noinline)) void startScheduler(
   schedulerState.free.name = "free";
   schedulerState.currentReady
     = &schedulerState.ready[SCHEDULER_READY_QUEUE_KERNEL];
-  schedulerState.preemptionTimer
-    = (HAL->getNumTimers() > PREEMPTION_TIMER) ? PREEMPTION_TIMER : -1;
+  schedulerState.preemptionTimer = (HAL->getNumTimers() > 0) ? 0 : -1;
   schedulerState.schedulerTaskId = 1;
   schedulerState.consoleTaskId = 2;
   schedulerState.memoryManagerTaskId = 3;
@@ -3514,12 +3513,39 @@ __attribute__((noinline)) void startScheduler(
   // We are not officially running the first task, so make it current.
   printDebugString("Configured scheduler task.\n");
 
+  // Initialize the global file descriptors.
+  // Kernel stdin file descriptor doesn't need an update because they don't
+  // receive stdin.  Direct kernel process stdout and stderr to the console.
+  standardKernelFileDescriptors[1].outputPipe.taskId
+    = schedulerState.consoleTaskId;
+  standardKernelFileDescriptors[1].outputPipe.messageType
+    = CONSOLE_WRITE_BUFFER;
+  standardKernelFileDescriptors[2].outputPipe.taskId
+    = schedulerState.consoleTaskId;
+  standardKernelFileDescriptors[2].outputPipe.messageType
+    = CONSOLE_WRITE_BUFFER;
+
+  // Direct the input pipe of user process stdin to the console.  Direcdt the
+  // output pipes of user process stdout and stderr to the console as well.
+  standardUserFileDescriptors[0].inputPipe.taskId
+    = schedulerState.consoleTaskId;
+  standardUserFileDescriptors[0].inputPipe.messageType
+    = CONSOLE_WAIT_FOR_INPUT;
+  standardUserFileDescriptors[1].outputPipe.taskId
+    = schedulerState.consoleTaskId;
+  standardUserFileDescriptors[1].outputPipe.messageType
+    = CONSOLE_WRITE_BUFFER;
+  standardUserFileDescriptors[2].outputPipe.taskId
+    = schedulerState.consoleTaskId;
+  standardUserFileDescriptors[1].outputPipe.messageType
+    = CONSOLE_WRITE_BUFFER;
+
   // Create the console task.  We used to have to double the size of the
   // console's stack, so we create this task before we create anything else.
   // Leaving it at this point of initialization in case we ever have to come
   // back to that flow again.
   TaskDescriptor *taskDescriptor
-    = &allTasks[NANO_OS_CONSOLE_TASK_ID - 1];
+    = &allTasks[schedulerState.consoleTaskId - 1];
   if (taskCreate(taskDescriptor, runConsole, NULL) != taskSuccess) {
     printString("Could not create console task.\n");
   }
@@ -3539,7 +3565,7 @@ __attribute__((noinline)) void startScheduler(
   printDebugString("Main stack size = ");
   printDebugInt(ABS_DIFF(
     ((intptr_t) schedulerTaskHandle),
-    ((intptr_t) allTasks[NANO_OS_CONSOLE_TASK_ID - 1].taskHandle)
+    ((intptr_t) allTasks[schedulerState.consoleTaskId - 1].taskHandle)
   ));
   printDebugString(" bytes\n");
   printDebugString("schedulerState size = ");
@@ -3555,7 +3581,7 @@ __attribute__((noinline)) void startScheduler(
   printDebugInt(sizeof(ConsoleState));
   printDebugString(" bytes\n");
 
-  // schedulerState.firstUserTask isn't populated until HAL->initRootStorage
+  // schedulerState.firstUserTaskId isn't populated until HAL->initRootStorage
   // completes, so we need to call that as soon as we can.
   int rv = HAL->initRootStorage(&schedulerState);
   if (rv != 0) {
@@ -3566,7 +3592,7 @@ __attribute__((noinline)) void startScheduler(
   printDebugString("Initialized root storage\n");
 
   // Initialize all the kernel task file descriptors.
-  for (TaskId ii = 1; ii <= schedulerState.firstUserTask; ii++) {
+  for (TaskId ii = 1; ii <= schedulerState.firstUserTaskId; ii++) {
     allTasks[ii - 1].numFileDescriptors = NUM_STANDARD_FILE_DESCRIPTORS;
     allTasks[ii - 1].fileDescriptors
       = (FileDescriptor*) standardKernelFileDescriptors;
@@ -3619,12 +3645,12 @@ __attribute__((noinline)) void startScheduler(
   // allTasks array is ordered console task, memory manager task, then either
   // the first block device or the first user process.  So, we want the task
   // after the memory manager, which would be the value of
-  // NANO_OS_MEMORY_MANAGER_TASK_ID since TaskIds are one-based instead of
+  // schedulerState.memoryManagerTaskId since TaskIds are one-based instead of
   // zero-based.
   printDebugString("Console stack size = ");
   printDebugInt(ABS_DIFF(
-    ((uintptr_t) allTasks[NANO_OS_MEMORY_MANAGER_TASK_ID].taskHandle),
-    ((uintptr_t) allTasks[NANO_OS_CONSOLE_TASK_ID - 1].taskHandle))
+    ((uintptr_t) allTasks[schedulerState.memoryManagerTaskId].taskHandle),
+    ((uintptr_t) allTasks[schedulerState.consoleTaskId - 1].taskHandle))
     - sizeof(Coroutine)
   );
   printDebugString(" bytes\n");
@@ -3647,26 +3673,26 @@ __attribute__((noinline)) void startScheduler(
 
   // Create the memory manager task.  : THIS MUST BE THE LAST TASK
   // CREATED BECAUSE WE WANT TO USE THE ENTIRE REST OF MEMORY FOR IT :
-  taskDescriptor = &allTasks[NANO_OS_MEMORY_MANAGER_TASK_ID - 1];
+  taskDescriptor = &allTasks[schedulerState.memoryManagerTaskId - 1];
   if (taskCreate(taskDescriptor,
     runMemoryManager, NULL) != taskSuccess
   ) {
     printString("Could not create memory manager task.\n");
   }
   taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
-  taskDescriptor->taskId = NANO_OS_MEMORY_MANAGER_TASK_ID;
+  taskDescriptor->taskId = schedulerState.memoryManagerTaskId;
   taskDescriptor->name = "memory manager";
   taskDescriptor->userId = ROOT_USER_ID;
   printDebugString("Created memory manager.\n");
 
   // Start the memory manager by calling taskResume.
-  taskResume(&allTasks[NANO_OS_MEMORY_MANAGER_TASK_ID - 1], NULL);
+  taskResume(&allTasks[schedulerState.memoryManagerTaskId - 1], NULL);
   printDebugString("Started memory manager.\n");
 
   // Assign the console ports to it.
   for (uint8_t ii = 0; ii < schedulerState.numShells; ii++) {
     if (schedulerAssignPortToTaskId(&schedulerState,
-      ii, NANO_OS_MEMORY_MANAGER_TASK_ID) != taskSuccess
+      ii, schedulerState.memoryManagerTaskId) != taskSuccess
     ) {
       printString(
         "WARNING: Could not assign console port to memory manager.\n");
@@ -3677,7 +3703,7 @@ __attribute__((noinline)) void startScheduler(
   // Set the shells for the ports.
   for (uint8_t ii = 0; ii < schedulerState.numShells; ii++) {
     if (schedulerSetPortShell(&schedulerState,
-      ii, schedulerState.firstShellTask + ii) != taskSuccess
+      ii, schedulerState.firstShellTaskId + ii) != taskSuccess
     ) {
       printString("WARNING: Could not set shell for ");
       printString(shellNames[ii]);
@@ -3690,7 +3716,7 @@ __attribute__((noinline)) void startScheduler(
   // Mark all the kernel processes as being part of the kernel ready queue.
   // Skip over the scheduler (task 0).
   allTasks[0].readyQueue = NULL;
-  for (TaskId ii = 1; ii < schedulerState.firstUserTask; ii++) {
+  for (TaskId ii = 1; ii < schedulerState.firstUserTaskId; ii++) {
     allTasks[ii - 1].readyQueue
       = &schedulerState.ready[SCHEDULER_READY_QUEUE_KERNEL];
     taskQueuePush(allTasks[ii - 1].readyQueue, &allTasks[ii - 1]);
@@ -3699,7 +3725,7 @@ __attribute__((noinline)) void startScheduler(
 
   // The scheduler will take care of cleaning up the dummy tasks in the
   // ready queue.
-  for (TaskId ii = schedulerState.firstUserTask;
+  for (TaskId ii = schedulerState.firstUserTaskId;
     ii <= NANO_OS_NUM_TASKS;
     ii++
   ) {
@@ -3715,8 +3741,8 @@ __attribute__((noinline)) void startScheduler(
   }
 
   // Get the memory manager and filesystem up and running.
-  taskResume(&allTasks[NANO_OS_MEMORY_MANAGER_TASK_ID - 1], NULL);
-  taskResume(&allTasks[NANO_OS_FILESYSTEM_TASK_ID - 1], NULL);
+  taskResume(&allTasks[schedulerState.memoryManagerTaskId - 1], NULL);
+  taskResume(&allTasks[schedulerState.rootFsTaskId - 1], NULL);
   printDebugString("Started memory manager and filesystem.\n");
 
   // Allocate memory for the hostname.
