@@ -631,7 +631,7 @@ int adafruitFeatherM0WifiInitRootStorage(SchedulerState *schedulerState) {
   taskDescriptor->name = "SD card";
   taskDescriptor->userId = ROOT_USER_ID;
   BlockStorageDevice *sdDevice = (BlockStorageDevice*) coroutineResume(
-    allTasks[NANO_OS_SD_CARD_TASK_ID - 1].taskHandle, NULL);
+    allTasks[schedulerState->memoryManagerTaskId].taskHandle, NULL);
   sdDevice->partitionNumber = 1;
   printDebugString("Configured SD card task.\n");
   
