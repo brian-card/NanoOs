@@ -42,6 +42,7 @@
 #include <stdbool.h>
 
 #include "../../Hal.h"
+#include "../../NanoOsTypes.h"
 #include "../../Scheduler.h"
 
 bool __atomic_compare_exchange_4(void *ptr, void *expected, uint32_t desired,
