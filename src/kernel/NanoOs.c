@@ -66,9 +66,7 @@ TaskId getNumPipes(const char *commandLine) {
 /// @var taskStorage
 ///
 /// @brief File-local variable to hold the per-task storage.
-static void *taskStorage[
-  NANO_OS_NUM_TASKS - (NANO_OS_FIRST_USER_TASK_ID - 1)][
-  NUM_TASK_STORAGE_KEYS] = {0};
+static void *taskStorage[NANO_OS_NUM_TASKS][NUM_TASK_STORAGE_KEYS] = {0};
 
 /// @fn void *getTaskStorage(uint8_t key)
 ///
@@ -84,11 +82,8 @@ void *getTaskStorage(uint8_t key) {
     return returnValue; // NULL
   }
 
-  int taskIndex
-    = ((int) getRunningTaskId()) - NANO_OS_FIRST_USER_TASK_ID;
-  if ((taskIndex >= 0)
-    && (taskIndex < (NANO_OS_NUM_TASKS - (NANO_OS_FIRST_USER_TASK_ID - 1)))
-  ) {
+  int taskIndex = ((int) getRunningTaskId()) - 1;
+  if ((taskIndex >= 0) && (taskIndex < NANO_OS_NUM_TASKS)) {
     // Calling task is not supported and does not have storage.
     returnValue = taskStorage[taskIndex][key];
   }
@@ -120,10 +115,8 @@ int setTaskStorage_(uint8_t key, void *val, int taskId, ...) {
       return returnValue; // taskError
     }
   }
-  int taskIndex = taskId - NANO_OS_FIRST_USER_TASK_ID;
-  if ((taskIndex >= 0)
-    && (taskIndex < (NANO_OS_NUM_TASKS - (NANO_OS_FIRST_USER_TASK_ID - 1)))
-  ) {
+  int taskIndex = taskId - 1;
+  if ((taskIndex >= 0) && (taskIndex < NANO_OS_NUM_TASKS)) {
     // Calling task is not supported and does not have storage.
     taskStorage[taskIndex][key] = val;
     returnValue = taskSuccess;
