@@ -3509,8 +3509,6 @@ __attribute__((noinline)) void startScheduler(
   allTasks[schedulerState.schedulerTaskId - 1].userId = ROOT_USER_ID;
   taskHandleSetContext(allTasks[schedulerState.schedulerTaskId - 1].taskHandle,
     &allTasks[schedulerState.schedulerTaskId - 1]);
-
-  // We are not officially running the first task, so make it current.
   printDebugString("Configured scheduler task.\n");
 
   // Initialize the global file descriptors.
@@ -3716,7 +3714,10 @@ __attribute__((noinline)) void startScheduler(
   // Mark all the kernel processes as being part of the kernel ready queue.
   // Skip over the scheduler (task 0).
   allTasks[0].readyQueue = NULL;
-  for (TaskId ii = 1; ii < schedulerState.firstUserTaskId; ii++) {
+  for (TaskId ii = allTasks[1].taskId;
+    ii < schedulerState.firstUserTaskId;
+    ii++
+  ) {
     allTasks[ii - 1].readyQueue
       = &schedulerState.ready[SCHEDULER_READY_QUEUE_KERNEL];
     taskQueuePush(allTasks[ii - 1].readyQueue, &allTasks[ii - 1]);
