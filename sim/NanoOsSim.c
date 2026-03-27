@@ -29,6 +29,7 @@
 #include "string.h"
 
 // NanoOs includes
+#include "NanoOsTypes.h"
 #include "Scheduler.h"
 
 // Simulator includes
