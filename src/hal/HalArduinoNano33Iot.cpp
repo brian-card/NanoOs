@@ -586,7 +586,7 @@ int arduinoNano33IotInitRootStorage(SchedulerState *schedulerState) {
 
   // Create the SD card task.
   TaskDescriptor *taskDescriptor
-    = &allTasks[NANO_OS_SD_CARD_TASK_ID - 1];
+    = &allTasks[schedulerState->memoryManagerTaskId];
   if (taskCreate(
     taskDescriptor, runSdCardSpi, &sdCardSpiArgs)
     != taskSuccess
@@ -595,26 +595,30 @@ int arduinoNano33IotInitRootStorage(SchedulerState *schedulerState) {
   }
   printDebugString("Started SD card task.\n");
   taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
-  taskDescriptor->taskId = NANO_OS_SD_CARD_TASK_ID;
+  taskDescriptor->taskId = schedulerState->memoryManagerTaskId + 1;
   taskDescriptor->name = "SD card";
   taskDescriptor->userId = ROOT_USER_ID;
   BlockStorageDevice *sdDevice = (BlockStorageDevice*) coroutineResume(
-    allTasks[NANO_OS_SD_CARD_TASK_ID - 1].taskHandle, NULL);
+    allTasks[schedulerState->memoryManagerTaskId].taskHandle, NULL);
   sdDevice->partitionNumber = 1;
   printDebugString("Configured SD card task.\n");
   
   // Create the filesystem task.
-  taskDescriptor = &allTasks[SCHEDULER_STATE->rootFsTaskId - 1];
+  schedulerState->rootFsTaskId = schedulerState->memoryManagerTaskId + 2;
+  taskDescriptor = &allTasks[schedulerState->rootFsTaskId - 1];
   if (taskCreate(taskDescriptor, runExFatFilesystem, sdDevice)
     != taskSuccess
   ) {
     fputs("Could not start filesystem task.\n", stderr);
   }
   taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
-  taskDescriptor->taskId = SCHEDULER_STATE->rootFsTaskId;
+  taskDescriptor->taskId = schedulerState->rootFsTaskId;
   taskDescriptor->name = "filesystem";
   taskDescriptor->userId = ROOT_USER_ID;
   printDebugString("Created filesystem task.\n");
+  
+  schedulerState->firstUserTaskId = schedulerState->rootFsTaskId + 1;
+  schedulerState->firstShellTaskId = schedulerState->firstUserTaskId;
   
   return 0;
 }

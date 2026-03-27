@@ -649,6 +649,9 @@ int adafruitFeatherM0WifiInitRootStorage(SchedulerState *schedulerState) {
   taskDescriptor->userId = ROOT_USER_ID;
   printDebugString("Created filesystem task.\n");
   
+  schedulerState->firstUserTaskId = schedulerState->rootFsTaskId + 1;
+  schedulerState->firstShellTaskId = schedulerState->firstUserTaskId;
+  
   return 0;
 }
 

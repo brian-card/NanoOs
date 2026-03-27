@@ -88,6 +88,9 @@
 /// of errno.h.  (It's a BSD thing...)
 #define ELAST                  EHWPOISON
 
+// Defined in Scheduler.c
+extern SchedulerState *SCHEDULER_STATE;
+
 int (*realTcgetattr)(int fd, struct termios *termios_p) = NULL;
 int (*realTcsetattr)(int fd, int optional_actions,
   const struct termios *termios_p) = NULL;
@@ -337,7 +340,7 @@ int posixInitRootStorage(SchedulerState *schedulerState) {
   
   // Create the SD card task.
   TaskDescriptor *taskDescriptor
-    = &allTasks[NANO_OS_SD_CARD_TASK_ID - 1];
+    = &allTasks[schedulerState->memoryManagerTaskId];
   if (taskCreate(
     taskDescriptor, runSdCardPosix, (void*) _sdCardDevicePath)
     != taskSuccess
@@ -345,14 +348,15 @@ int posixInitRootStorage(SchedulerState *schedulerState) {
     fputs("Could not start SD card task.\n", stderr);
   }
   taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
-  taskDescriptor->taskId = NANO_OS_SD_CARD_TASK_ID;
+  taskDescriptor->taskId = schedulerState->memoryManagerTaskId + 1;
   taskDescriptor->name = "SD card";
   taskDescriptor->userId = ROOT_USER_ID;
   BlockStorageDevice *sdDevice = (BlockStorageDevice*) coroutineResume(
-    allTasks[NANO_OS_SD_CARD_TASK_ID - 1].taskHandle, NULL);
+    allTasks[schedulerState->memoryManagerTaskId].taskHandle, NULL);
   sdDevice->partitionNumber = 1;
   
   // Create the filesystem task.
+  schedulerState->rootFsTaskId = schedulerState->memoryManagerTaskId + 2;
   taskDescriptor = &allTasks[SCHEDULER_STATE->rootFsTaskId - 1];
   if (taskCreate(taskDescriptor, runExFatFilesystem, sdDevice)
     != taskSuccess
@@ -363,6 +367,9 @@ int posixInitRootStorage(SchedulerState *schedulerState) {
   taskDescriptor->taskId = SCHEDULER_STATE->rootFsTaskId;
   taskDescriptor->name = "filesystem";
   taskDescriptor->userId = ROOT_USER_ID;
+  
+  schedulerState->firstUserTaskId = schedulerState->rootFsTaskId + 1;
+  schedulerState->firstShellTaskId = schedulerState->firstUserTaskId;
   
   return 0;
 }
