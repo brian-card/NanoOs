@@ -3535,7 +3535,7 @@ __attribute__((noinline)) void startScheduler(
     = CONSOLE_WRITE_BUFFER;
   standardUserFileDescriptors[2].outputPipe.taskId
     = schedulerState.consoleTaskId;
-  standardUserFileDescriptors[1].outputPipe.messageType
+  standardUserFileDescriptors[2].outputPipe.messageType
     = CONSOLE_WRITE_BUFFER;
 
   // Create the console task.  We used to have to double the size of the
