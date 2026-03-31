@@ -1631,34 +1631,29 @@ int closeTaskFileDescriptors(
   return 0;
 }
 
-/// @fn FILE* schedFopen(SchedulerState *schedulerState,
-///   const char *pathname, const char *mode)
+/// @fn FILE* schedFopen(const char *pathname, const char *mode)
 ///
 /// @brief Version of fopen for the scheduler.
 ///
-/// @param schedulerState A pointer to the SchedulerState object maintained by
-///   the scheduler task.
 /// @param pathname A pointer to the C string with the full path to the file to
 ///   open.
 /// @param mode A pointer to the C string that defines the way to open the file.
 ///
 /// @return Returns a pointer to the opened file on success, NULL on failure.
-FILE* schedFopen(SchedulerState *schedulerState,
-  const char *pathname, const char *mode
-) {
+FILE* schedFopen(const char *pathname, const char *mode) {
   FILE *returnValue = NULL;
 
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    TaskQueue *currentReady = schedulerState->currentReady;
-    schedulerState->currentReady
-      = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
+    TaskQueue *currentReady = SCHEDULER_STATE->currentReady;
+    SCHEDULER_STATE->currentReady
+      = &SCHEDULER_STATE->ready[SCHEDULER_READY_QUEUE_KERNEL];
 
     printDebugString("schedFopen: Getting message\n");
     TaskMessage *taskMessage = getAvailableMessage();
     while (taskMessage == NULL) {
-      runScheduler(schedulerState);
+      runScheduler(SCHEDULER_STATE);
       taskMessage = getAvailableMessage();
     }
     printDebugString("schedFopen: Message retrieved\n");
@@ -1671,19 +1666,19 @@ FILE* schedFopen(SchedulerState *schedulerState,
       nanoOsMessage, sizeof(*nanoOsMessage), true);
     printDebugString("schedFopen: Pushing message\n");
     taskMessageQueuePush(
-      &schedulerState->allTasks[schedulerState->rootFsTaskId - 1],
+      &SCHEDULER_STATE->allTasks[SCHEDULER_STATE->rootFsTaskId - 1],
       taskMessage);
 
     printDebugString("schedFopen: Resuming filesystem\n");
     while (taskMessageDone(taskMessage) == false) {
-      runScheduler(schedulerState);
+      runScheduler(SCHEDULER_STATE);
     }
     printDebugString("schedFopen: Filesystem message is done\n");
 
     returnValue = nanoOsMessageDataPointer(taskMessage, FILE*);
 
     taskMessageRelease(taskMessage);
-    schedulerState->currentReady = currentReady;
+    SCHEDULER_STATE->currentReady = currentReady;
     _functionInProgress = NULL;
   } else {
     printString("ERROR: Cannot execute ");
@@ -1701,29 +1696,27 @@ FILE* schedFopen(SchedulerState *schedulerState,
   return returnValue;
 }
 
-/// @fn int schedFclose(SchedulerState *schedulerState, FILE *stream)
+/// @fn int schedFclose(FILE *stream)
 ///
 /// @brief Version of fclose for the scheduler.
 ///
-/// @param schedulerState A pointer to the SchedulerState object maintained by
-///   the scheduler task.
 /// @param stream A pointer to the FILE object that was previously opened.
 ///
 /// @return Returns 0 on success, EOF on failure.  On failure, the value of
 /// errno is also set to the appropriate error.
-int schedFclose(SchedulerState *schedulerState, FILE *stream) {
+int schedFclose(FILE *stream) {
   int returnValue = 0;
 
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    TaskQueue *currentReady = schedulerState->currentReady;
-    schedulerState->currentReady
-      = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
+    TaskQueue *currentReady = SCHEDULER_STATE->currentReady;
+    SCHEDULER_STATE->currentReady
+      = &SCHEDULER_STATE->ready[SCHEDULER_READY_QUEUE_KERNEL];
 
     TaskMessage *taskMessage = getAvailableMessage();
     while (taskMessage == NULL) {
-      runScheduler(schedulerState);
+      runScheduler(SCHEDULER_STATE);
       taskMessage = getAvailableMessage();
     }
     NanoOsMessage *nanoOsMessage
@@ -1735,11 +1728,11 @@ int schedFclose(SchedulerState *schedulerState, FILE *stream) {
     taskMessageInit(taskMessage, FILESYSTEM_CLOSE_FILE,
       nanoOsMessage, sizeof(*nanoOsMessage), true);
     taskMessageQueuePush(
-      &schedulerState->allTasks[schedulerState->rootFsTaskId - 1],
+      &SCHEDULER_STATE->allTasks[SCHEDULER_STATE->rootFsTaskId - 1],
       taskMessage);
 
     while (taskMessageDone(taskMessage) == false) {
-      runScheduler(schedulerState);
+      runScheduler(SCHEDULER_STATE);
     }
 
     if (fcloseParameters.returnValue != 0) {
@@ -1748,7 +1741,7 @@ int schedFclose(SchedulerState *schedulerState, FILE *stream) {
     }
 
     taskMessageRelease(taskMessage);
-    schedulerState->currentReady = currentReady;
+    SCHEDULER_STATE->currentReady = currentReady;
     _functionInProgress = NULL;
   } else {
     printString("ERROR: Cannot execute ");
@@ -1766,29 +1759,27 @@ int schedFclose(SchedulerState *schedulerState, FILE *stream) {
   return returnValue;
 }
 
-/// @fn int schedRemove(SchedulerState *schedulerState, const char *pathname)
+/// @fn int schedRemove(const char *pathname)
 ///
 /// @brief Version of remove for the scheduler.
 ///
-/// @param schedulerState A pointer to the SchedulerState object maintained by
-///   the scheduler task.
 /// @param pathname A pointer to the C string with the full path to the file to
 ///   remove.
 ///
 /// @return Returns 0 on success, -1 and sets the value of errno on failure.
-int schedRemove(SchedulerState *schedulerState, const char *pathname) {
+int schedRemove(const char *pathname) {
   int returnValue = 0;
 
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    TaskQueue *currentReady = schedulerState->currentReady;
-    schedulerState->currentReady
-      = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
+    TaskQueue *currentReady = SCHEDULER_STATE->currentReady;
+    SCHEDULER_STATE->currentReady
+      = &SCHEDULER_STATE->ready[SCHEDULER_READY_QUEUE_KERNEL];
 
     TaskMessage *taskMessage = getAvailableMessage();
     while (taskMessage == NULL) {
-      runScheduler(schedulerState);
+      runScheduler(SCHEDULER_STATE);
       taskMessage = getAvailableMessage();
     }
     NanoOsMessage *nanoOsMessage
@@ -1797,11 +1788,11 @@ int schedRemove(SchedulerState *schedulerState, const char *pathname) {
     taskMessageInit(taskMessage, FILESYSTEM_REMOVE_FILE,
       nanoOsMessage, sizeof(*nanoOsMessage), true);
     taskMessageQueuePush(
-      &schedulerState->allTasks[schedulerState->rootFsTaskId - 1],
+      &SCHEDULER_STATE->allTasks[SCHEDULER_STATE->rootFsTaskId - 1],
       taskMessage);
 
     while (taskMessageDone(taskMessage) == false) {
-      runScheduler(schedulerState);
+      runScheduler(SCHEDULER_STATE);
     }
 
     returnValue = nanoOsMessageDataValue(taskMessage, int);
@@ -1813,7 +1804,7 @@ int schedRemove(SchedulerState *schedulerState, const char *pathname) {
     }
 
     taskMessageRelease(taskMessage);
-    schedulerState->currentReady = currentReady;
+    SCHEDULER_STATE->currentReady = currentReady;
     _functionInProgress = NULL;
   } else {
     printString("ERROR: Cannot execute ");
@@ -1831,22 +1822,17 @@ int schedRemove(SchedulerState *schedulerState, const char *pathname) {
   return returnValue;
 }
 
-/// @fn size_t schedFread(SchedulerState *schedulerState,
-///   void *ptr, size_t size, size_t nmemb, FILE *stream)
+/// @fn size_t schedFread(void *ptr, size_t size, size_t nmemb, FILE *stream)
 ///
 /// @brief Version of fread for the scheduler.
 ///
-/// @param schedulerState A pointer to the SchedulerState object maintained by
-///   the scheduler task.
 /// @param ptr A pointer to the buffer to read data into.
 /// @param size The size, in bytes, of each item that is to be read in.
 /// @param nmemb The number of items to read from the file.
 /// @param stream A pointer to the open FILE to read data in from.
 ///
 /// @return Returns the number of items successfully read in.
-size_t schedFread(SchedulerState *schedulerState,
-  void *ptr, size_t size, size_t nmemb, FILE *stream
-) {
+size_t schedFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   FilesystemIoCommandParameters filesystemIoCommandParameters = {
     .file = stream,
     .buffer = ptr,
@@ -1856,13 +1842,13 @@ size_t schedFread(SchedulerState *schedulerState,
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    TaskQueue *currentReady = schedulerState->currentReady;
-    schedulerState->currentReady
-      = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
+    TaskQueue *currentReady = SCHEDULER_STATE->currentReady;
+    SCHEDULER_STATE->currentReady
+      = &SCHEDULER_STATE->ready[SCHEDULER_READY_QUEUE_KERNEL];
 
     TaskMessage *taskMessage = getAvailableMessage();
     while (taskMessage == NULL) {
-      runScheduler(schedulerState);
+      runScheduler(SCHEDULER_STATE);
       taskMessage = getAvailableMessage();
     }
     NanoOsMessage *nanoOsMessage
@@ -1871,15 +1857,15 @@ size_t schedFread(SchedulerState *schedulerState,
     taskMessageInit(taskMessage, FILESYSTEM_READ_FILE,
       nanoOsMessage, sizeof(*nanoOsMessage), true);
     taskMessageQueuePush(
-      &schedulerState->allTasks[schedulerState->rootFsTaskId - 1],
+      &SCHEDULER_STATE->allTasks[SCHEDULER_STATE->rootFsTaskId - 1],
       taskMessage);
 
     while (taskMessageDone(taskMessage) == false) {
-      runScheduler(schedulerState);
+      runScheduler(SCHEDULER_STATE);
     }
 
     taskMessageRelease(taskMessage);
-    schedulerState->currentReady = currentReady;
+    SCHEDULER_STATE->currentReady = currentReady;
     _functionInProgress = NULL;
   } else {
     printString("ERROR: Cannot execute ");
@@ -1897,22 +1883,17 @@ size_t schedFread(SchedulerState *schedulerState,
   return filesystemIoCommandParameters.length / size;
 }
 
-/// @fn size_t schedFwrite(SchedulerState *schedulerState,
-///   void *ptr, size_t size, size_t nmemb, FILE *stream)
+/// @fn size_t schedFwrite(void *ptr, size_t size, size_t nmemb, FILE *stream)
 ///
 /// @brief Version of fwrite for the scheduler.
 ///
-/// @param schedulerState A pointer to the SchedulerState object maintained by
-///   the scheduler task.
 /// @param ptr A pointer to the buffer to write data from.
 /// @param size The size, in bytes, of each item that is to be written out.
 /// @param nmemb The number of items to written to the file.
 /// @param stream A pointer to the open FILE to write data out to.
 ///
 /// @return Returns the number of items successfully written out.
-size_t schedFwrite(SchedulerState *schedulerState,
-  void *ptr, size_t size, size_t nmemb, FILE *stream
-) {
+size_t schedFwrite(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   FilesystemIoCommandParameters filesystemIoCommandParameters = {
     .file = stream,
     .buffer = ptr,
@@ -1922,13 +1903,13 @@ size_t schedFwrite(SchedulerState *schedulerState,
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    TaskQueue *currentReady = schedulerState->currentReady;
-    schedulerState->currentReady
-      = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
+    TaskQueue *currentReady = SCHEDULER_STATE->currentReady;
+    SCHEDULER_STATE->currentReady
+      = &SCHEDULER_STATE->ready[SCHEDULER_READY_QUEUE_KERNEL];
 
     TaskMessage *taskMessage = getAvailableMessage();
     while (taskMessage == NULL) {
-      runScheduler(schedulerState);
+      runScheduler(SCHEDULER_STATE);
       taskMessage = getAvailableMessage();
     }
     NanoOsMessage *nanoOsMessage
@@ -1937,15 +1918,15 @@ size_t schedFwrite(SchedulerState *schedulerState,
     taskMessageInit(taskMessage, FILESYSTEM_WRITE_FILE,
       nanoOsMessage, sizeof(*nanoOsMessage), true);
     taskMessageQueuePush(
-      &schedulerState->allTasks[schedulerState->rootFsTaskId - 1],
+      &SCHEDULER_STATE->allTasks[SCHEDULER_STATE->rootFsTaskId - 1],
       taskMessage);
 
     while (taskMessageDone(taskMessage) == false) {
-      runScheduler(schedulerState);
+      runScheduler(SCHEDULER_STATE);
     }
 
     taskMessageRelease(taskMessage);
-    schedulerState->currentReady = currentReady;
+    SCHEDULER_STATE->currentReady = currentReady;
     _functionInProgress = NULL;
   } else {
     printString("ERROR: Cannot execute ");
@@ -1963,30 +1944,25 @@ size_t schedFwrite(SchedulerState *schedulerState,
   return filesystemIoCommandParameters.length / size;
 }
 
-/// @fn int schedFgets(SchedulerState *schedulerState,
-///   char *buffer, int size, FILE *stream)
+/// @fn int schedFgets(char *buffer, int size, FILE *stream)
 ///
 /// @brief Version of fgets for the scheduler.
 ///
-/// @param schedulerState A pointer to the SchedulerState object maintained by
-///   the scheduler task.
 /// @param buffer The character buffer to read the file data into.
 /// @param size The size of the buffer provided, in bytes.
 /// @param stream A pointer to the FILE object that was previously opened.
 ///
 /// @return Returns a pointer to the provided buffer on success, NULL on
 /// failure.
-char* schedFgets(SchedulerState *schedulerState,
-  char *buffer, int size, FILE *stream
-) {
+char* schedFgets(char *buffer, int size, FILE *stream) {
   char *returnValue = NULL;
 
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    TaskQueue *currentReady = schedulerState->currentReady;
-    schedulerState->currentReady
-      = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
+    TaskQueue *currentReady = SCHEDULER_STATE->currentReady;
+    SCHEDULER_STATE->currentReady
+      = &SCHEDULER_STATE->ready[SCHEDULER_READY_QUEUE_KERNEL];
 
     FilesystemIoCommandParameters filesystemIoCommandParameters = {
       .file = stream,
@@ -1996,7 +1972,7 @@ char* schedFgets(SchedulerState *schedulerState,
 
     TaskMessage *taskMessage = getAvailableMessage();
     while (taskMessage == NULL) {
-      runScheduler(schedulerState);
+      runScheduler(SCHEDULER_STATE);
       taskMessage = getAvailableMessage();
     }
     NanoOsMessage *nanoOsMessage
@@ -2005,11 +1981,11 @@ char* schedFgets(SchedulerState *schedulerState,
     taskMessageInit(taskMessage, FILESYSTEM_READ_FILE,
       nanoOsMessage, sizeof(*nanoOsMessage), true);
     taskMessageQueuePush(
-      &schedulerState->allTasks[schedulerState->rootFsTaskId - 1],
+      &SCHEDULER_STATE->allTasks[SCHEDULER_STATE->rootFsTaskId - 1],
       taskMessage);
 
     while (taskMessageDone(taskMessage) == false) {
-      runScheduler(schedulerState);
+      runScheduler(SCHEDULER_STATE);
     }
     if (filesystemIoCommandParameters.length > 0) {
       buffer[filesystemIoCommandParameters.length] = '\0';
@@ -2017,7 +1993,7 @@ char* schedFgets(SchedulerState *schedulerState,
     }
 
     taskMessageRelease(taskMessage);
-    schedulerState->currentReady = currentReady;
+    SCHEDULER_STATE->currentReady = currentReady;
     _functionInProgress = NULL;
   } else {
     printString("ERROR: Cannot execute ");
@@ -2035,29 +2011,24 @@ char* schedFgets(SchedulerState *schedulerState,
   return returnValue;
 }
 
-/// @fn int schedFputs(SchedulerState *schedulerState,
-///   const char *s, FILE *stream)
+/// @fn int schedFputs(const char *s, FILE *stream)
 ///
 /// @brief Version of fputs for the scheduler.
 ///
-/// @param schedulerState A pointer to the SchedulerState object maintained by
-///   the scheduler task.
 /// @param s A pointer to the C string to write to the file.
 /// @param stream A pointer to the FILE object that was previously opened.
 ///
 /// @return Returns 0 on success, EOF on failure.  On failure, the value of
 /// errno is also set to the appropriate error.
-int schedFputs(SchedulerState *schedulerState,
-  const char *s, FILE *stream
-) {
+int schedFputs(const char *s, FILE *stream) {
   int returnValue = 0;
 
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    TaskQueue *currentReady = schedulerState->currentReady;
-    schedulerState->currentReady
-      = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
+    TaskQueue *currentReady = SCHEDULER_STATE->currentReady;
+    SCHEDULER_STATE->currentReady
+      = &SCHEDULER_STATE->ready[SCHEDULER_READY_QUEUE_KERNEL];
 
     FilesystemIoCommandParameters filesystemIoCommandParameters = {
       .file = stream,
@@ -2067,7 +2038,7 @@ int schedFputs(SchedulerState *schedulerState,
 
     TaskMessage *taskMessage = getAvailableMessage();
     while (taskMessage == NULL) {
-      runScheduler(schedulerState);
+      runScheduler(SCHEDULER_STATE);
       taskMessage = getAvailableMessage();
     }
     NanoOsMessage *nanoOsMessage
@@ -2076,18 +2047,18 @@ int schedFputs(SchedulerState *schedulerState,
     taskMessageInit(taskMessage, FILESYSTEM_WRITE_FILE,
       nanoOsMessage, sizeof(*nanoOsMessage), true);
     taskMessageQueuePush(
-      &schedulerState->allTasks[schedulerState->rootFsTaskId - 1],
+      &SCHEDULER_STATE->allTasks[SCHEDULER_STATE->rootFsTaskId - 1],
       taskMessage);
 
     while (taskMessageDone(taskMessage) == false) {
-      runScheduler(schedulerState);
+      runScheduler(SCHEDULER_STATE);
     }
     if (filesystemIoCommandParameters.length == 0) {
       returnValue = EOF;
     }
 
     taskMessageRelease(taskMessage);
-    schedulerState->currentReady = currentReady;
+    SCHEDULER_STATE->currentReady = currentReady;
     _functionInProgress = NULL;
   } else {
     printString("ERROR: Cannot execute ");
@@ -3059,13 +3030,11 @@ void removeTask(SchedulerState *schedulerState, TaskDescriptor *taskDescriptor,
   return;
 }
 
-/// @fn int schedulerLoadOverlay(SchedulerState *schedulerState,
+/// @fn int schedulerLoadOverlay(
 ///   const char *overlayDir, const char *overlay, char **envp)
 ///
 /// @brief Load and configure an overlay into the overlayMap in memory.
 ///
-/// @param schedulerState A pointer to the SchedulerState object maintained by
-///   the scheduler task.
 /// @param overlayDir The full path to the directory of the overlay on the
 ///   filesystem.
 /// @param overlay The name of the overlay within the overlayDir to load (minus
@@ -3073,7 +3042,7 @@ void removeTask(SchedulerState *schedulerState, TaskDescriptor *taskDescriptor,
 /// @param envp The array of environment variables in "name=value" form.
 ///
 /// @return Returns 0 on success, negative error code on failure.
-int schedulerLoadOverlay(SchedulerState *schedulerState,
+int schedulerLoadOverlay(
   const char *overlayDir, const char *overlay, char **envp
 ) {
   if ((overlayDir == NULL) || (overlay == NULL)) {
@@ -3109,7 +3078,7 @@ int schedulerLoadOverlay(SchedulerState *schedulerState,
   strcat(fullPath, "/");
   strcat(fullPath, overlay);
   strcat(fullPath, OVERLAY_EXT);
-  FILE *overlayFile = schedFopen(schedulerState, fullPath, "r");
+  FILE *overlayFile = schedFopen(fullPath, "r");
   if (overlayFile == NULL) {
     printString("Could not open file \"");
     printString(fullPath);
@@ -3122,13 +3091,11 @@ int schedulerLoadOverlay(SchedulerState *schedulerState,
   printDebugString(": Reading from overlayFile 0x");
   printDebugHex((uintptr_t) overlayFile);
   printDebugString("\n");
-  if (schedFread(schedulerState,
-    overlayMap, 1, HAL->overlaySize, overlayFile) == 0
-  ) {
+  if (schedFread(overlayMap, 1, HAL->overlaySize, overlayFile) == 0) {
     printString("Could not read overlay from \"");
     printString(fullPath);
     printString("\" file\n");
-    schedFclose(schedulerState, overlayFile); overlayFile = NULL;
+    schedFclose(overlayFile); overlayFile = NULL;
     schedFree(fullPath); fullPath = NULL;
     return -EIO;
   }
@@ -3136,7 +3103,7 @@ int schedulerLoadOverlay(SchedulerState *schedulerState,
   printDebugString(": Closing overlayFile 0x");
   printDebugHex((uintptr_t) overlayFile);
   printDebugString("\n");
-  schedFclose(schedulerState, overlayFile); overlayFile = NULL;
+  schedFclose(overlayFile); overlayFile = NULL;
 
   printDebugString("Verifying overlay magic\n");
   if (overlayMap->header.magic != NANO_OS_OVERLAY_MAGIC) {
@@ -3374,7 +3341,7 @@ void runScheduler(SchedulerState *schedulerState) {
   if (taskDescriptor->taskId >= schedulerState->firstUserTaskId) {
     if (taskRunning(taskDescriptor) == true) {
       // This is a user task, which is in an overlay.  Make sure it's loaded.
-      if (schedulerLoadOverlay(schedulerState,
+      if (schedulerLoadOverlay(
         taskDescriptor->overlayDir, taskDescriptor->overlay,
         taskDescriptor->envp) != 0
       ) {
@@ -3794,10 +3761,10 @@ __attribute__((noinline)) void startScheduler(
   schedulerState.hostname = (char*) schedCalloc(1, HOST_NAME_MAX + 1);
   printDebugString("Allocated memory for the hostname.\n");
   if (schedulerState.hostname != NULL) {
-    FILE *hostnameFile = schedFopen(&schedulerState, "/etc/hostname", "r");
+    FILE *hostnameFile = schedFopen("/etc/hostname", "r");
     if (hostnameFile != NULL) {
       printDebugString("Opened hostname file.\n");
-      if (schedFgets(&schedulerState,
+      if (schedFgets(
         schedulerState.hostname, HOST_NAME_MAX + 1, hostnameFile)
           != schedulerState.hostname
       ) {
@@ -3810,7 +3777,7 @@ __attribute__((noinline)) void startScheduler(
       } else if (*schedulerState.hostname == '\0') {
         strcpy(schedulerState.hostname, "localhost");
       }
-      schedFclose(&schedulerState, hostnameFile);
+      schedFclose(hostnameFile);
       printDebugString("Closed hostname file.\n");
     } else {
       printString("ERROR! schedFopen of hostname returned NULL!\n");
@@ -3822,35 +3789,35 @@ __attribute__((noinline)) void startScheduler(
 
 #ifdef NANO_OS_DEBUG
   do {
-    FILE *helloFile = schedFopen(&schedulerState, "hello", "w");
+    FILE *helloFile = schedFopen("hello", "w");
     if (helloFile == NULL) {
       printDebugString("ERROR: Could not open hello file for writing!\n");
       break;
     }
     printDebugString("helloFile is non-NULL!\n");
 
-    if (schedFputs(&schedulerState, "world", helloFile) == EOF) {
+    if (schedFputs("world", helloFile) == EOF) {
       printDebugString("ERROR: Could not write to hello file!\n");
-      schedFclose(&schedulerState, helloFile);
+      schedFclose(helloFile);
       break;
     }
-    schedFclose(&schedulerState, helloFile);
+    schedFclose(helloFile);
 
-    helloFile = schedFopen(&schedulerState, "hello", "r");
+    helloFile = schedFopen("hello", "r");
     if (helloFile == NULL) {
       printDebugString("ERROR: Could not open hello file for reading after write!\n");
-      schedRemove(&schedulerState, "hello");
+      schedRemove("hello");
       break;
     }
     printDebugString("Opened helloFile for reading\n");
 
     char worldString[11] = {0};
-    if (schedFgets(&schedulerState,
+    if (schedFgets(
       worldString, sizeof(worldString), helloFile) != worldString
     ) {
       printDebugString("ERROR: Could not read worldString after write!\n");
-      schedFclose(&schedulerState, helloFile);
-      schedRemove(&schedulerState, "hello");
+      schedFclose(helloFile);
+      schedRemove("hello");
       break;
     }
     printDebugString("Read data from helloFile into worldString\n");
@@ -3859,42 +3826,42 @@ __attribute__((noinline)) void startScheduler(
       printDebugString("ERROR: Expected \"world\", read \"");
       printDebugString(worldString);
       printDebugString("\"!\n");
-      schedFclose(&schedulerState, helloFile);
-      schedRemove(&schedulerState, "hello");
+      schedFclose(helloFile);
+      schedRemove("hello");
       break;
     }
     printDebugString("Successfully read \"world\" from \"hello\"!\n");
-    schedFclose(&schedulerState, helloFile);
+    schedFclose(helloFile);
 
-    helloFile = schedFopen(&schedulerState, "hello", "a");
+    helloFile = schedFopen("hello", "a");
     if (helloFile == NULL) {
       printDebugString("ERROR: Could not open hello file for appending!\n");
-      schedRemove(&schedulerState, "hello");
+      schedRemove("hello");
       break;
     }
 
-    if (schedFputs(&schedulerState, "world", helloFile) == EOF) {
+    if (schedFputs("world", helloFile) == EOF) {
       printDebugString("ERROR: Could not append to hello file!\n");
-      schedFclose(&schedulerState, helloFile);
-      schedRemove(&schedulerState, "hello");
+      schedFclose(helloFile);
+      schedRemove("hello");
       break;
     }
-    schedFclose(&schedulerState, helloFile);
+    schedFclose(helloFile);
 
-    helloFile = schedFopen(&schedulerState, "hello", "r");
+    helloFile = schedFopen("hello", "r");
     if (helloFile == NULL) {
       printDebugString(
         "ERROR: Could not open hello file for reading after append!\n");
-      schedRemove(&schedulerState, "hello");
+      schedRemove("hello");
       break;
     }
 
-    if (schedFgets(&schedulerState,
+    if (schedFgets(
       worldString, sizeof(worldString), helloFile) != worldString
     ) {
       printDebugString("ERROR: Could not read worldString after append!\n");
-      schedFclose(&schedulerState, helloFile);
-      schedRemove(&schedulerState, "hello");
+      schedFclose(helloFile);
+      schedRemove("hello");
       break;
     }
 
@@ -3907,8 +3874,8 @@ __attribute__((noinline)) void startScheduler(
       printDebugString("\"!\n");
     }
 
-    schedFclose(&schedulerState, helloFile);
-    if (schedRemove(&schedulerState, "hello") != 0) {
+    schedFclose(helloFile);
+    if (schedRemove("hello") != 0) {
       printDebugString("ERROR: schedRemove failed to remove the \"hello\" file.\n");
     }
   } while (0);
