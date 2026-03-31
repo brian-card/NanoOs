@@ -3522,6 +3522,7 @@ __attribute__((noinline)) void startScheduler(
   schedulerState.consoleTaskId = 2;
   schedulerState.memoryManagerTaskId = 3;
   schedulerState.firstUserTaskId = 4;
+  schedulerState.firstShellTaskId = 4;
   schedulerState.runScheduler = runScheduler;
   SCHEDULER_STATE = &schedulerState;
   printDebugString("Set scheduler state.\n");
