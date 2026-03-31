@@ -38,39 +38,43 @@
 int nanoOsHardwareShutdown(NanoOsShutdownType shutdownType) {
   int returnValue = 0;
   
-  switch (shutdownType) {
-    case NANO_OS_SHUTDOWN_OFF:
-      {
-        HAL->shutdown(HAL_SHUTDOWN_OFF);
-      }
-      break;
-    
-    case NANO_OS_SHUTDOWN_HYBERNATE:
-      {
-        // Store RAM on disk and then power off.
-        // TODO: Store RAM on disk.
-        HAL->shutdown(HAL_SHUTDOWN_OFF);
-      }
-      break;
-    
-    case NANO_OS_SHUTDOWN_SUSPEND:
-      {
-        HAL->shutdown(HAL_SHUTDOWN_SUSPEND);
-      }
-      break;
-    
-    case NANO_OS_SHUTDOWN_RESET:
-      {
-        HAL->shutdown(HAL_SHUTDOWN_RESET);
-      }
-      break;
-    
-    default:
-      {
-        fprintf(stderr, "Error: Invalid shutdown type in nanoOsShutdown.\n");
-        returnValue = -1;
-      }
-      break;
+  if (HAL->powerHal != NULL) {
+    switch (shutdownType) {
+      case NANO_OS_SHUTDOWN_OFF:
+        {
+          HAL->powerHal->shutdown(HAL_SHUTDOWN_OFF);
+        }
+        break;
+      
+      case NANO_OS_SHUTDOWN_HYBERNATE:
+        {
+          // Store RAM on disk and then power off.
+          // TODO: Store RAM on disk.
+          HAL->powerHal->shutdown(HAL_SHUTDOWN_OFF);
+        }
+        break;
+      
+      case NANO_OS_SHUTDOWN_SUSPEND:
+        {
+          HAL->powerHal->shutdown(HAL_SHUTDOWN_SUSPEND);
+        }
+        break;
+      
+      case NANO_OS_SHUTDOWN_RESET:
+        {
+          HAL->powerHal->shutdown(HAL_SHUTDOWN_RESET);
+        }
+        break;
+      
+      default:
+        {
+          fprintf(stderr, "Error: Invalid shutdown type in nanoOsShutdown.\n");
+          returnValue = -1;
+        }
+        break;
+    }
+  } else {
+    fprintf(stderr, "Power HAL not implemented\n");
   }
   
   return returnValue;

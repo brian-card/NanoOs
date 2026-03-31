@@ -62,53 +62,7 @@ struct timespec;
 typedef struct NanoOsOverlayMap NanoOsOverlayMap;
 typedef struct SchedulerState SchedulerState;
 
-typedef struct Hal {
-  // Memory definitions.
-  
-  /// @fn uintptr_t processStackSize(void)
-  ///
-  /// @brief The size of a regular process's stack.
-  ///
-  /// Returns the size of the stack to use for all non-memory manager
-  /// processes in bytes.  This function never fails.
-  uintptr_t (*processStackSize)(void);
-  
-  /// @fn uintptr_t memoryManagerStackSize(bool debug)
-  ///
-  /// @brief The size of the memory manager process's stack.
-  ///
-  /// @param debug Whether or not the memory manager's debug stack size should
-  ///   be used so that debug prints can work correclty without corrupting the
-  ///   stack.
-  ///
-  /// @return Returns the size of the stack to use for the memory manager.
-  /// This call never fails.
-  uintptr_t (*memoryManagerStackSize)(bool debug);
-  
-  /// @fn void* bottomOfHeap(void)
-  ///
-  /// @brief The memmory manager needs to know where the bottom of the heap is
-  /// so that it knows where to start allocating memory.
-  ///
-  /// @return Returns the address of the bottom of the heap.   This call never
-  /// fails.
-  void* (*bottomOfHeap)(void);
-  
-  // Overlay definitions.
-  
-  /// @var overlayMap
-  ///
-  /// @brief Memory address where overlays will be loaded.
-  NanoOsOverlayMap *overlayMap;
-  
-  /// @var overlaySize
-  ///
-  /// @brief The number of bytes available for the overlay.  This may be 0 on
-  /// systems that don't support overlays.
-  uintptr_t overlaySize;
-  
-  // Serial port functionality.
-  
+typedef struct HalSerialPort {
   /// @fn int getNumSerialPorts(void)
   ///
   /// @brief Get the number of addressable and configurable serial ports on the
@@ -163,9 +117,9 @@ typedef struct Hal {
   ///
   /// @return Returns the number of bytes written on success, -errno on failure.
   ssize_t (*writeSerialPort)(int port, const uint8_t *data, ssize_t length);
-  
-  // Digital IO pin functionality.
-  
+} HalSerialPort;
+
+typedef struct HalDio {
   /// @fn int getNumDios(void)
   ///
   /// @brief Get the number of digial IO pins on the system.
@@ -196,9 +150,9 @@ typedef struct Hal {
   ///
   /// @return Returns 0 on success, -errno onfailure.
   int (*writeDio)(int dio, bool high);
-  
-  // SPI functionality.
-  
+} HalDio;
+
+typedef struct HalSpi {
   /// @fn int initSpiDevice(int spi,
   ///   uint8_t cs, uint8_t sck, uint8_t copi, uint8_t cipo);
   ///
@@ -262,9 +216,9 @@ typedef struct Hal {
   /// -errno is returned and the contents of the data buffer are undefined on
   /// failure.
   int (*spiTransferBytes)(int spi, uint8_t *data, uint32_t length);
-  
-  // System time functionality.
-  
+} HalSpi;
+
+typedef struct HalClock {
   /// @fn int setSystemTime(struct timespec *ts)
   ///
   /// @brief Set the current time on the system.
@@ -322,9 +276,9 @@ typedef struct Hal {
   /// @return Returns the number of nanoseconds that have elapsed since the
   /// provided start time on success, -1 on failure.
   int64_t (*getElapsedNanoseconds)(int64_t startTime);
-  
-  // Hardware power
-  
+} HalClock;
+
+typedef struct HalPower {
   /// @fn int shutdown(HalShutdownType shutdownType)
   ///
   /// @brief Halt the OS and invoke the specified power action.
@@ -334,9 +288,9 @@ typedef struct Hal {
   /// @return Does not return or returns 0 on success.  On error, -errno will
   /// be returned.
   int (*shutdown)(HalShutdownType shutdownType);
-  
-  // Hardware timers.
-  
+} HalPower;
+
+typedef struct HalTimer {
   /// @fn int getNumTimers(void)
   ///
   /// @brief Get the number of available hardware timers on the system.
@@ -429,6 +383,88 @@ typedef struct Hal {
   int (*cancelAndGetTimer)(int timer,
     uint64_t *configuredNanoseconds, uint64_t *remainingNanoseconds,
     void (**callback)(void));
+} HalTimer;
+
+typedef struct Hal {
+  // Memory definitions.
+  
+  /// @fn uintptr_t processStackSize(void)
+  ///
+  /// @brief The size of a regular process's stack.
+  ///
+  /// Returns the size of the stack to use for all non-memory manager
+  /// processes in bytes.  This function never fails.
+  uintptr_t (*processStackSize)(void);
+  
+  /// @fn uintptr_t memoryManagerStackSize(bool debug)
+  ///
+  /// @brief The size of the memory manager process's stack.
+  ///
+  /// @param debug Whether or not the memory manager's debug stack size should
+  ///   be used so that debug prints can work correclty without corrupting the
+  ///   stack.
+  ///
+  /// @return Returns the size of the stack to use for the memory manager.
+  /// This call never fails.
+  uintptr_t (*memoryManagerStackSize)(bool debug);
+  
+  /// @fn void* bottomOfHeap(void)
+  ///
+  /// @brief The memmory manager needs to know where the bottom of the heap is
+  /// so that it knows where to start allocating memory.
+  ///
+  /// @return Returns the address of the bottom of the heap.   This call never
+  /// fails.
+  void* (*bottomOfHeap)(void);
+  
+  // Overlay definitions.
+  
+  /// @var overlayMap
+  ///
+  /// @brief Memory address where overlays will be loaded.
+  NanoOsOverlayMap *overlayMap;
+  
+  /// @var overlaySize
+  ///
+  /// @brief The number of bytes available for the overlay.  This may be 0 on
+  /// systems that don't support overlays.
+  uintptr_t overlaySize;
+  
+  /// @var serialPortHal
+  ///
+  /// @brief Pointer to the HalSerialPort managed by the HAL, or NULL if there
+  /// isn't one.
+  HalSerialPort *serialPortHal;
+  
+  /// @var dioHal
+  ///
+  /// @brief Pointer to the HalDio managed by the HAL, or NULL if there isn't
+  /// one.
+  HalDio *dioHal;
+  
+  /// @var spiHal
+  ///
+  /// @brief Pointer to the HalSpi managed by the HAL, or NULL if there isn't
+  /// one.
+  HalSpi *spiHal;
+  
+  /// @var clockHal
+  ///
+  /// @brief Pointer to the HalClock managed by the HAL, or NULL if there isn't
+  /// one.
+  HalClock *clockHal;
+  
+  /// @var powerHal
+  ///
+  /// @brief Pointer to the HalPower managed by the HAL, or NULL if there isn't
+  /// one.
+  HalPower *powerHal;
+  
+  /// @var timerHal
+  ///
+  /// @brief Pointer to the HalTimer managed by HAL, or NULL if there isn't
+  /// one.
+  HalTimer *timerHal;
   
   // Root storage configuration.
   

@@ -66,7 +66,8 @@ extern "C"
 #define ETIMEDOUT       18      /* Operation timed out */
 #define ENOEXEC         19      /* Exec format error */
 #define ENOTSUP         20      /* Operation not supported */
-#define ELAST           20      /* End of error codes */
+#define ENXIO           21      /* No such device or address */
+#define ELAST           21      /* End of error codes */
 
 int* errno_(void);
 #define errno (*errno_())

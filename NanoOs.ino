@@ -93,7 +93,7 @@ void loop() {
     .comutexUnlockCallback = comutexUnlockCallback,
     .coconditionSignalCallback = coconditionSignalCallback,
   };
-  if (HAL->getNumTimers() > 0) {
+  if ((HAL->timerHal != NULL) && (HAL->timerHal->getNumTimers() > 0)) {
     coroutineConfigOptions.coroutineYieldCallback = coroutineYieldCallback;
   }
   if (coroutineConfig(&_mainCoroutine, &coroutineConfigOptions)

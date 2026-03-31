@@ -198,6 +198,14 @@ ssize_t arduinoNanoEveryWriteSerialPort(int port,
   return numBytesWritten;
 }
 
+static HalSerialPort arduinoNanoEverySerialPortHal = {
+  .getNumSerialPorts = arduinoNanoEveryGetNumSerialPorts,
+  .setNumSerialPorts = arduinoNanoEverySetNumSerialPorts,
+  .initSerialPort = arduinoNanoEveryInitSerialPort,
+  .pollSerialPort = arduinoNanoEveryPollSerialPort,
+  .writeSerialPort = arduinoNanoEveryWriteSerialPort,
+};
+
 int arduinoNanoEveryGetNumDios(void) {
   return NUM_DIO_PINS;
 }
@@ -227,6 +235,12 @@ int arduinoNanoEveryWriteDio(int dio, bool high) {
   
   return returnValue;
 }
+
+static HalDio arduinoNanoEveryDioHal = {
+  .getNumDios = arduinoNanoEveryGetNumDios,
+  .configureDio = arduinoNanoEveryConfigureDio,
+  .writeDio = arduinoNanoEveryWriteDio,
+};
 
 /// @var globalSpiConfigured
 ///
@@ -393,6 +407,14 @@ int arduinoNanoEverySpiTransferBytes(int spi,
   return 0;
 }
 
+static HalSpi arduinoNanoEverySpiHal = {
+  .initSpiDevice = arduinoNanoEveryInitSpiDevice,
+  .startSpiTransfer = arduinoNanoEveryStartSpiTransfer,
+  .endSpiTransfer = arduinoNanoEveryEndSpiTransfer,
+  .spiTransfer8 = arduinoNanoEverySpiTransfer8,
+  .spiTransferBytes = arduinoNanoEverySpiTransferBytes,
+};
+
 /// @var baseSystemTimeMs
 ///
 /// @brief The time provided by the user or some other task as a baseline
@@ -430,6 +452,13 @@ int64_t arduinoNanoEveryGetElapsedNanoseconds(int64_t startTime) {
   return arduinoNanoEveryGetElapsedMilliseconds(
     startTime / ((int64_t) 1000000)) * ((int64_t) 1000000);
 }
+
+static HalClock arduinoNanoEveryClockHal = {
+  .setSystemTime = arduinoNanoEverySetSystemTime,
+  .getElapsedMilliseconds = arduinoNanoEveryGetElapsedMilliseconds,
+  .getElapsedMicroseconds = arduinoNanoEveryGetElapsedMicroseconds,
+  .getElapsedNanoseconds = arduinoNanoEveryGetElapsedNanoseconds,
+};
 
 int arduinoNanoEveryShutdown(HalShutdownType shutdownType) {
   // You can't completely turn off a Nano 33 IoT from software.  The best we
@@ -474,55 +503,9 @@ int arduinoNanoEveryShutdown(HalShutdownType shutdownType) {
   return 0;
 }
 
-int arduinoNanoEveryInitRootStorage(SchedulerState *schedulerState) {
-  TaskDescriptor *allTasks = schedulerState->allTasks;
-  
-  // Create the SD card task.
-  SdCardSpiArgs sdCardSpiArgs = {
-    .spiCsDio = SD_CARD_PIN_CHIP_SELECT,
-    .spiCopiDio = SPI_COPI_DIO,
-    .spiCipoDio = SPI_CIPO_DIO,
-    .spiSckDio = SPI_SCK_DIO,
-  };
-
-  // Create the SD card task.
-  TaskDescriptor *taskDescriptor
-    = &allTasks[schedulerState->memoryManagerTaskId];
-  if (taskCreate(
-    taskDescriptor, runSdCardSpi, &sdCardSpiArgs)
-    != taskSuccess
-  ) {
-    fputs("Could not start SD card task.\n", stderr);
-  }
-  printDebugString("Started SD card task.\n");
-  taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
-  taskDescriptor->taskId = schedulerState->memoryManagerTaskId + 1;
-  taskDescriptor->name = "SD card";
-  taskDescriptor->userId = ROOT_USER_ID;
-  BlockStorageDevice *sdDevice = (BlockStorageDevice*) coroutineResume(
-    allTasks[schedulerState->memoryManagerTaskId].taskHandle, NULL);
-  sdDevice->partitionNumber = 1;
-  printDebugString("Configured SD card task.\n");
-  
-  // Create the filesystem task.
-  schedulerState->rootFsTaskId = schedulerState->memoryManagerTaskId + 2;
-  taskDescriptor = &allTasks[schedulerState->rootFsTaskId - 1];
-  if (taskCreate(taskDescriptor, runExFatFilesystem, sdDevice)
-    != taskSuccess
-  ) {
-    fputs("Could not start filesystem task.\n", stderr);
-  }
-  taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
-  taskDescriptor->taskId = schedulerState->rootFsTaskId;
-  taskDescriptor->name = "filesystem";
-  taskDescriptor->userId = ROOT_USER_ID;
-  printDebugString("Created filesystem task.\n");
-  
-  schedulerState->firstUserTaskId = schedulerState->rootFsTaskId + 1;
-  schedulerState->firstShellTaskId = schedulerState->firstUserTaskId;
-  
-  return 0;
-}
+static HalPower arduinoNanoEveryPowerHal = {
+  .shutdown = arduinoNanoEveryShutdown,
+};
 
 int arduinoNanoEveryGetNumTimers(void) {
   return 0;
@@ -580,6 +563,56 @@ int arduinoNanoEveryCancelAndGetTimer(int timer,
   return -ENOTSUP;
 }
 
+int arduinoNanoEveryInitRootStorage(SchedulerState *schedulerState) {
+  TaskDescriptor *allTasks = schedulerState->allTasks;
+  
+  // Create the SD card task.
+  SdCardSpiArgs sdCardSpiArgs = {
+    .spiCsDio = SD_CARD_PIN_CHIP_SELECT,
+    .spiCopiDio = SPI_COPI_DIO,
+    .spiCipoDio = SPI_CIPO_DIO,
+    .spiSckDio = SPI_SCK_DIO,
+  };
+
+  // Create the SD card task.
+  TaskDescriptor *taskDescriptor
+    = &allTasks[schedulerState->firstUserTaskId - 1];
+  if (taskCreate(
+    taskDescriptor, runSdCardSpi, &sdCardSpiArgs)
+    != taskSuccess
+  ) {
+    fputs("Could not start SD card task.\n", stderr);
+  }
+  printDebugString("Started SD card task.\n");
+  taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
+  taskDescriptor->taskId = schedulerState->firstUserTaskId;
+  taskDescriptor->name = "SD card";
+  taskDescriptor->userId = ROOT_USER_ID;
+  BlockStorageDevice *sdDevice = (BlockStorageDevice*) coroutineResume(
+    allTasks[schedulerState->firstUserTaskId - 1].taskHandle, NULL);
+  sdDevice->partitionNumber = 1;
+  printDebugString("Configured SD card task.\n");
+  
+  // Create the filesystem task.
+  schedulerState->rootFsTaskId = schedulerState->firstUserTaskId + 1;
+  taskDescriptor = &allTasks[schedulerState->rootFsTaskId - 1];
+  if (taskCreate(taskDescriptor, runExFatFilesystem, sdDevice)
+    != taskSuccess
+  ) {
+    fputs("Could not start filesystem task.\n", stderr);
+  }
+  taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
+  taskDescriptor->taskId = schedulerState->rootFsTaskId;
+  taskDescriptor->name = "filesystem";
+  taskDescriptor->userId = ROOT_USER_ID;
+  printDebugString("Created filesystem task.\n");
+  
+  schedulerState->firstUserTaskId = schedulerState->rootFsTaskId + 1;
+  schedulerState->firstShellTaskId = schedulerState->firstUserTaskId;
+  
+  return 0;
+}
+
 /// @var arduinoNanoEveryHal
 ///
 /// @brief The implementation of the Hal interface for the Arduino Nano Every.
@@ -593,43 +626,12 @@ static Hal arduinoNanoEveryHal = {
   .overlayMap = NULL,
   .overlaySize = 0,
   
-  // Serial port functionality.
-  .getNumSerialPorts = arduinoNanoEveryGetNumSerialPorts,
-  .setNumSerialPorts = arduinoNanoEverySetNumSerialPorts,
-  .initSerialPort = arduinoNanoEveryInitSerialPort,
-  .pollSerialPort = arduinoNanoEveryPollSerialPort,
-  .writeSerialPort = arduinoNanoEveryWriteSerialPort,
-  
-  // Digital IO pin functionality.
-  .getNumDios = arduinoNanoEveryGetNumDios,
-  .configureDio = arduinoNanoEveryConfigureDio,
-  .writeDio = arduinoNanoEveryWriteDio,
-  
-  // SPI functionality.
-  .initSpiDevice = arduinoNanoEveryInitSpiDevice,
-  .startSpiTransfer = arduinoNanoEveryStartSpiTransfer,
-  .endSpiTransfer = arduinoNanoEveryEndSpiTransfer,
-  .spiTransfer8 = arduinoNanoEverySpiTransfer8,
-  .spiTransferBytes = arduinoNanoEverySpiTransferBytes,
-  
-  // System time functionality.
-  .setSystemTime = arduinoNanoEverySetSystemTime,
-  .getElapsedMilliseconds = arduinoNanoEveryGetElapsedMilliseconds,
-  .getElapsedMicroseconds = arduinoNanoEveryGetElapsedMicroseconds,
-  .getElapsedNanoseconds = arduinoNanoEveryGetElapsedNanoseconds,
-  
-  // Hardware power
-  .shutdown = arduinoNanoEveryShutdown,
-  
-  // Hardware timers.
-  .getNumTimers = arduinoNanoEveryGetNumTimers,
-  .setNumTimers = arduinoNanoEverySetNumTimers,
-  .initTimer = arduinoNanoEveryInitTimer,
-  .configOneShotTimer = arduinoNanoEveryConfigOneShotTimer,
-  .configuredTimerNanoseconds = arduinoNanoEveryConfiguredTimerNanoseconds,
-  .remainingTimerNanoseconds = arduinoNanoEveryRemainingTimerNanoseconds,
-  .cancelTimer = arduinoNanoEveryCancelTimer,
-  .cancelAndGetTimer = arduinoNanoEveryCancelAndGetTimer,
+  .serialPortHal = &arduinoNanoEverySerialPortHal,
+  .dioHal = &arduinoNanoEveryDioHal,
+  .spiHal = &arduinoNanoEverySpiHal,
+  .clockHal = &arduinoNanoEveryClockHal,
+  .powerHal = &arduinoNanoEveryPowerHal,
+  .timerHal = NULL,
   
   // Root storage configuration.
   .initRootStorage = arduinoNanoEveryInitRootStorage,

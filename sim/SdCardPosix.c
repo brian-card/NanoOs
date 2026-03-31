@@ -150,8 +150,8 @@ int sdCardWriteBlocksCommandHandler(
 /// @brief Array of SdCardCommandHandler function pointers to handle commands
 /// received by the runSdCard function.
 SdCardCommandHandler sdCardCommandHandlers[] = {
-  sdCardReadBlocksCommandHandler,  // SD_CARD_READ_BLOCKS
-  sdCardWriteBlocksCommandHandler, // SD_CARD_WRITE_BLOCKS
+  sdCardReadBlocksCommandHandler,         // SD_CARD_READ_BLOCKS
+  sdCardWriteBlocksCommandHandler,        // SD_CARD_WRITE_BLOCKS
 };
 
 /// @fn void handleSdCardMessages(SdCardState *sdCardState)

@@ -322,7 +322,9 @@ void coroutineYieldCallback(void *stateData, Coroutine *coroutine) {
     return;
   }
 
-  HAL->cancelTimer(schedulerState->preemptionTimer);
+  // No need to check HAL->timerHal for NULL.  This function can't be configured
+  // to be called unless it wasn't NULL at boot.
+  HAL->timerHal->cancelTimer(schedulerState->preemptionTimer);
 
   return;
 }
@@ -1620,7 +1622,11 @@ int closeTaskFileDescriptors(
     printString(" because ");
     printString(_functionInProgress);
     printString(" is already in progress\n");
-    HAL->shutdown(HAL_SHUTDOWN_OFF);
+    if (HAL->powerHal != NULL) {
+      HAL->powerHal->shutdown(HAL_SHUTDOWN_OFF);
+    } else {
+      while (1);
+    }
   }
   return 0;
 }
@@ -1685,7 +1691,11 @@ FILE* schedFopen(SchedulerState *schedulerState,
     printString(" because ");
     printString(_functionInProgress);
     printString(" is already in progress\n");
-    HAL->shutdown(HAL_SHUTDOWN_OFF);
+    if (HAL->powerHal != NULL) {
+      HAL->powerHal->shutdown(HAL_SHUTDOWN_OFF);
+    } else {
+      while (1);
+    }
   }
 
   return returnValue;
@@ -1746,7 +1756,11 @@ int schedFclose(SchedulerState *schedulerState, FILE *stream) {
     printString(" because ");
     printString(_functionInProgress);
     printString(" is already in progress\n");
-    HAL->shutdown(HAL_SHUTDOWN_OFF);
+    if (HAL->powerHal != NULL) {
+      HAL->powerHal->shutdown(HAL_SHUTDOWN_OFF);
+    } else {
+      while (1);
+    }
   }
 
   return returnValue;
@@ -1807,7 +1821,11 @@ int schedRemove(SchedulerState *schedulerState, const char *pathname) {
     printString(" because ");
     printString(_functionInProgress);
     printString(" is already in progress\n");
-    HAL->shutdown(HAL_SHUTDOWN_OFF);
+    if (HAL->powerHal != NULL) {
+      HAL->powerHal->shutdown(HAL_SHUTDOWN_OFF);
+    } else {
+      while (1);
+    }
   }
 
   return returnValue;
@@ -1869,7 +1887,11 @@ size_t schedFread(SchedulerState *schedulerState,
     printString(" because ");
     printString(_functionInProgress);
     printString(" is already in progress\n");
-    HAL->shutdown(HAL_SHUTDOWN_OFF);
+    if (HAL->powerHal != NULL) {
+      HAL->powerHal->shutdown(HAL_SHUTDOWN_OFF);
+    } else {
+      while (1);
+    }
   }
 
   return filesystemIoCommandParameters.length / size;
@@ -1931,7 +1953,11 @@ size_t schedFwrite(SchedulerState *schedulerState,
     printString(" because ");
     printString(_functionInProgress);
     printString(" is already in progress\n");
-    HAL->shutdown(HAL_SHUTDOWN_OFF);
+    if (HAL->powerHal != NULL) {
+      HAL->powerHal->shutdown(HAL_SHUTDOWN_OFF);
+    } else {
+      while (1);
+    }
   }
 
   return filesystemIoCommandParameters.length / size;
@@ -1999,7 +2025,11 @@ char* schedFgets(SchedulerState *schedulerState,
     printString(" because ");
     printString(_functionInProgress);
     printString(" is already in progress\n");
-    HAL->shutdown(HAL_SHUTDOWN_OFF);
+    if (HAL->powerHal != NULL) {
+      HAL->powerHal->shutdown(HAL_SHUTDOWN_OFF);
+    } else {
+      while (1);
+    }
   }
 
   return returnValue;
@@ -2065,7 +2095,11 @@ int schedFputs(SchedulerState *schedulerState,
     printString(" because ");
     printString(_functionInProgress);
     printString(" is already in progress\n");
-    HAL->shutdown(HAL_SHUTDOWN_OFF);
+    if (HAL->powerHal != NULL) {
+      HAL->powerHal->shutdown(HAL_SHUTDOWN_OFF);
+    } else {
+      while (1);
+    }
   }
 
   return returnValue;
@@ -3353,11 +3387,15 @@ void runScheduler(SchedulerState *schedulerState) {
     
     // Configure the preemption timer to force the task to yield if it doesn't
     // voluntarily give up control within a reasonable amount of time.
-    HAL->configOneShotTimer(
-      schedulerState->preemptionTimer, 10000000, forceYield);
+    if (schedulerState->preemptionTimer > -1) {
+      // No need to check HAL->timerHal for NULL since it can't be NULL in this
+      // case.
+      HAL->timerHal->configOneShotTimer(
+        schedulerState->preemptionTimer, 10000000, forceYield);
+    }
   }
   taskResume(taskDescriptor, NULL);
-  // No need to call HAL->cancelTimer since that's called by
+  // No need to call HAL->timerHal->cancelTimer since that's called by
   // coroutineYieldCallback if we're running preemptive multitasking.
 
   if (taskRunning(taskDescriptor) == false) {
@@ -3476,10 +3514,14 @@ __attribute__((noinline)) void startScheduler(
   schedulerState.free.name = "free";
   schedulerState.currentReady
     = &schedulerState.ready[SCHEDULER_READY_QUEUE_KERNEL];
-  schedulerState.preemptionTimer = (HAL->getNumTimers() > 0) ? 0 : -1;
+  schedulerState.preemptionTimer = -1;
+  if ((HAL->timerHal != NULL) && (HAL->timerHal->getNumTimers() > 0)) {
+    schedulerState.preemptionTimer = 0;
+  }
   schedulerState.schedulerTaskId = 1;
   schedulerState.consoleTaskId = 2;
   schedulerState.memoryManagerTaskId = 3;
+  schedulerState.firstUserTaskId = 4;
   SCHEDULER_STATE = &schedulerState;
   printDebugString("Set scheduler state.\n");
 

@@ -37,6 +37,9 @@
 #include "../kernel/OverlayFunctions.h"
 #include "../kernel/Scheduler.h"
 
+// Must come last
+#include "NanoOsStdio.h"
+
 /// @fn int timespec_get(struct timespec* spec, int base)
 ///
 /// @brief Get the current time in the form of a struct timespec.
@@ -50,7 +53,12 @@ int timespec_get(struct timespec* spec, int base) {
     return 0;
   }
   
-  int64_t now = HAL->getElapsedNanoseconds(0);
+  int64_t now = 0;
+  if (HAL->clockHal != NULL) {
+    now = HAL->clockHal->getElapsedNanoseconds(0);
+  } else {
+    fprintf(stderr, "timespec_get not implemented\n");
+  }
   spec->tv_sec = (time_t) (now / ((int64_t) 1000000000));
   spec->tv_nsec = now % ((int64_t) 1000000000);
 
@@ -82,6 +90,7 @@ const char *errorStrings[] = {
   "Operation timed out",              // ETIMEDOUT
   "Exec format error",                // ENOEXEC
   "Operation not supported",          // ENOTSUP
+  "No such device or address",        // ENXIO
 };
 
 /// @var NUM_ERRORS
@@ -116,8 +125,12 @@ char* nanoOsStrError(int errnum) {
 ///
 /// @return This function returns no value.
 void msleep(int durationMs) {
-  int64_t start = HAL->getElapsedMilliseconds(0);
-  while (HAL->getElapsedMilliseconds(start) < durationMs);
+  if (HAL->clockHal != NULL) {
+    int64_t start = HAL->clockHal->getElapsedMilliseconds(0);
+    while (HAL->clockHal->getElapsedMilliseconds(start) < durationMs);
+  } else {
+    fprintf(stderr, "msleep not implemented\n");
+  }
 }
 
 /// @fn time_t time(time_t *tloc)
@@ -130,7 +143,12 @@ void msleep(int durationMs) {
 /// @return Returns the number of seconds since midnight, Jan 1, 1970 on
 /// success, (time_t) -1 on error.  On error, the value of errno is also set.
 time_t time(time_t *tloc) {
-  time_t now = ((time_t) HAL->getElapsedMilliseconds(0)) / ((time_t) 1000);
+  time_t now = 0;
+  if (HAL->clockHal != NULL) {
+    now = ((time_t) HAL->clockHal->getElapsedMilliseconds(0)) / ((time_t) 1000);
+  } else {
+    fprintf(stderr, "time not implemented\n");
+  }
   
   if (tloc != NULL) {
     *tloc = now;

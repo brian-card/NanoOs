@@ -161,7 +161,7 @@ void* callOverlayFunction(const char *overlayDir, const char *overlay,
   //     there's nothing to resume.
   //
   // JBC 2025-01-24
-  HAL->cancelTimer(SCHEDULER_STATE->preemptionTimer);
+  HAL->timerHal->cancelTimer(SCHEDULER_STATE->preemptionTimer);
   if (overlayDirCopy != NULL) {
     runningTask->overlayDir = overlayDirCopy;
   }
@@ -180,8 +180,8 @@ void* callOverlayFunction(const char *overlayDir, const char *overlay,
   returnValue = overlayFunction(args);
   
 restorePreviousOverlay:
-  // See note above on use of HAL->cancelTimer.
-  HAL->cancelTimer(SCHEDULER_STATE->preemptionTimer);
+  // See note above on use of HAL->timerHal->cancelTimer.
+  HAL->timerHal->cancelTimer(SCHEDULER_STATE->preemptionTimer);
   runningTask->overlay = previousOverlay;
   if (overlayDirCopy != NULL) {
     runningTask->overlayDir = previousOverlayDir;

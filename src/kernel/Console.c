@@ -881,7 +881,7 @@ void handleConsoleMessages(ConsoleState *consoleState) {
 /// @return Returns the byte read, cast to an int, on success, -1 on failure.
 int readSerialByte(ConsolePort *consolePort) {
   int serialData = -1;
-  serialData = HAL->pollSerialPort((int) consolePort->portId);
+  serialData = HAL->serialPortHal->pollSerialPort((int) consolePort->portId);
   if (serialData > -1) {
     ConsoleBuffer *consoleBuffer = consolePort->consoleBuffer;
     char *buffer = consoleBuffer->buffer;
@@ -892,17 +892,18 @@ int readSerialByte(ConsolePort *consolePort) {
       if (consolePort->echo == true) {
         if ((serialData != ASCII_RETURN) && (serialData != ASCII_NEWLINE)) {
           char serialChar = (char) serialData;
-          HAL->writeSerialPort((int) consolePort->portId,
+          HAL->serialPortHal->writeSerialPort((int) consolePort->portId,
             (uint8_t*) &serialChar, 1);
         } else {
-          HAL->writeSerialPort((int) consolePort->portId, (uint8_t*) "\r\n", 2);
+          HAL->serialPortHal->writeSerialPort(
+            (int) consolePort->portId, (uint8_t*) "\r\n", 2);
         }
       }
       
       if (serialData == ASCII_RETURN) {
         serialData = ASCII_NEWLINE;
         // Some terminals send \r\n.  Read one more character just in case.
-        HAL->pollSerialPort((int) consolePort->portId);
+        HAL->serialPortHal->pollSerialPort((int) consolePort->portId);
       }
       
       if (consolePort->consoleBufferIndex < (CONSOLE_BUFFER_SIZE - 1)) {
@@ -918,9 +919,12 @@ int readSerialByte(ConsolePort *consolePort) {
         if (consolePort->echo == true) {
           uint8_t backspace = ASCII_BACKSPACE;
           uint8_t space = ASCII_SPACE;
-          HAL->writeSerialPort((int) consolePort->portId, &backspace, 1);
-          HAL->writeSerialPort((int) consolePort->portId, &space, 1);
-          HAL->writeSerialPort((int) consolePort->portId, &backspace, 1);
+          HAL->serialPortHal->writeSerialPort(
+            (int) consolePort->portId, &backspace, 1);
+          HAL->serialPortHal->writeSerialPort(
+            (int) consolePort->portId, &space, 1);
+          HAL->serialPortHal->writeSerialPort(
+            (int) consolePort->portId, &backspace, 1);
         }
         
         consolePort->consoleBufferIndex--;
@@ -933,7 +937,8 @@ int readSerialByte(ConsolePort *consolePort) {
           buffer[consolePort->consoleBufferIndex] = (char) serialData;
           consolePort->consoleBufferIndex++;
         }
-        serialData = HAL->pollSerialPort((int) consolePort->portId);
+        serialData = HAL->serialPortHal->pollSerialPort(
+          (int) consolePort->portId);
       } while (serialData > -1);
       
       // In this case, we need to return ASCII_ESCAPE so that the main loop
@@ -970,9 +975,9 @@ int printSerialString(unsigned char serialPort, const char *string) {
     numBytes = (size_t) (((uintptr_t) newlineAt) - ((uintptr_t) string));
   }
   while (newlineAt != NULL) {
-    returnValue += (int) HAL->writeSerialPort(
+    returnValue += (int) HAL->serialPortHal->writeSerialPort(
       (int) serialPort, (uint8_t*) string, numBytes);
-    returnValue += (int) HAL->writeSerialPort(
+    returnValue += (int) HAL->serialPortHal->writeSerialPort(
       (int) serialPort, (uint8_t*) "\r\n", 2);
     string = newlineAt + 1;
     newlineAt = strchr(string, '\n');
@@ -982,7 +987,7 @@ int printSerialString(unsigned char serialPort, const char *string) {
       numBytes = (size_t) (((uintptr_t) newlineAt) - ((uintptr_t) string));
     }
   }
-  returnValue += (int) HAL->writeSerialPort(
+  returnValue += (int) HAL->serialPortHal->writeSerialPort(
     (int) serialPort, (uint8_t*) string, numBytes);
 
   return returnValue;
@@ -1008,8 +1013,10 @@ void* runConsole(void *args) {
   memset(&consoleState, 0, sizeof(ConsoleState));
   TaskMessage *schedulerMessage = NULL;
 
-  consoleState.numConsolePorts
-    = MIN(CONSOLE_NUM_PORTS, HAL->getNumSerialPorts());
+  if (HAL->serialPortHal != NULL) {
+    consoleState.numConsolePorts
+      = MIN(CONSOLE_NUM_PORTS, HAL->serialPortHal->getNumSerialPorts());
+  }
 
   // For each console port, use the console buffer at the corresponding index.
   for (uint8_t ii = 0; ii < consoleState.numConsolePorts; ii++) {

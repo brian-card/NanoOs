@@ -60,11 +60,15 @@ FILE *nanoOsStderr = (FILE*) ((intptr_t) 0x3);
 
 /// @fn int printString_(const char *string)
 ///
-/// @brief C wrapper around HAL->writeSerialPort for a C string.
+/// @brief C wrapper around HAL->serialPortHal->writeSerialPort for a C string.
 ///
-/// @return This function always returns 0;
+/// @return Returns 0 on success, -1 on failure.
 int printString_(const char *string) {
-  HAL->writeSerialPort(0, (uint8_t*) string, strlen(string));
+  if (HAL->serialPortHal != NULL) {
+    HAL->serialPortHal->writeSerialPort(0, (uint8_t*) string, strlen(string));
+  } else {
+    return -1;
+  }
 
   return 0;
 }
@@ -98,62 +102,77 @@ int ullToString(unsigned long long int number, char **nextChar) {
 
 /// @fn int printInt_(long long int integer)
 ///
-/// @brief C wrapper around HAL->writeSerialPort for an integer.
+/// @brief C wrapper around HAL->serialPortHal->writeSerialPort for an integer.
 ///
-/// @return This function always returns 0.
+/// @return Returns 0 on success, -1 on failure.
 int printInt_(long long int integer) {
-  char number[20];
-  number[19] = '\0';
-  char *nextChar = &number[18];
+  if (HAL->serialPortHal != NULL) {
+    char number[20];
+    number[19] = '\0';
+    char *nextChar = &number[18];
 
-  if (integer >= 0) {
-    ullToString((unsigned long long int) integer, &nextChar);
-    nextChar++;
+    if (integer >= 0) {
+      ullToString((unsigned long long int) integer, &nextChar);
+      nextChar++;
+    } else {
+      ullToString((unsigned long long int) -integer, &nextChar);
+      *nextChar = '-';
+    }
+    HAL->serialPortHal->writeSerialPort(
+      0, (uint8_t*) nextChar, strlen(nextChar));
   } else {
-    ullToString((unsigned long long int) -integer, &nextChar);
-    *nextChar = '-';
+    return -1;
   }
-  HAL->writeSerialPort(0, (uint8_t*) nextChar, strlen(nextChar));
 
   return 0;
 }
 
 /// @fn int printDouble(double floatingPointValue)
 ///
-/// @brief C wrapper around HAL->writeSerialPort for a double.
+/// @brief C wrapper around HAL->serialPortHal->writeSerialPort for a double.
 ///
-/// @return This function always returns 0.
+/// @return Returns 0 on success, -1 on failure.
 int printDouble(double floatingPointValue) {
-  char number[20];
-  sprintf(number, "%lf", floatingPointValue);
-  HAL->writeSerialPort(0, (uint8_t*) number, strlen(number));
+  if (HAL->serialPortHal != NULL) {
+    char number[20];
+    sprintf(number, "%lf", floatingPointValue);
+    HAL->serialPortHal->writeSerialPort(0, (uint8_t*) number, strlen(number));
+  } else {
+    return -1;
+  }
 
   return 0;
 }
 
 /// @fn int printHex_(unsigned long long int integer)
 ///
-/// @brief C wrapper around HAL->writeSerialPort for a hexadecimal integer.
+/// @brief C wrapper around HAL->serialPortHal->writeSerialPort for a
+/// hexadecimal integer.
 ///
-/// @return This function always returns 0.
+/// @return Returns 0 on success, -1 on failure.
 int printHex_(unsigned long long int integer) {
-  char number[20];
-  number[19] = '\0';
-  char *nextChar = &number[18];
+  if (HAL->serialPortHal != NULL) {
+    char number[20];
+    number[19] = '\0';
+    char *nextChar = &number[18];
 
-  if (integer > 0) {
-    const char *alphabet = "0123456789abcdef";
-    while (integer > 0) {
-      *nextChar = alphabet[integer & 0xf];
-      nextChar--;
-      integer >>= 4;
+    if (integer > 0) {
+      const char *alphabet = "0123456789abcdef";
+      while (integer > 0) {
+        *nextChar = alphabet[integer & 0xf];
+        nextChar--;
+        integer >>= 4;
+      }
+      nextChar++;
+    } else {
+      *nextChar = '0';
     }
-    nextChar++;
-  } else {
-    *nextChar = '0';
-  }
 
-  HAL->writeSerialPort(0, (uint8_t*) nextChar, strlen(nextChar));
+    HAL->serialPortHal->writeSerialPort(
+      0, (uint8_t*) nextChar, strlen(nextChar));
+  } else {
+    return -1;
+  }
 
   return 0;
 }

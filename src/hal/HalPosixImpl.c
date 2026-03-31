@@ -340,7 +340,7 @@ int posixInitRootStorage(SchedulerState *schedulerState) {
   
   // Create the SD card task.
   TaskDescriptor *taskDescriptor
-    = &allTasks[schedulerState->memoryManagerTaskId];
+    = &allTasks[schedulerState->firstUserTaskId - 1];
   if (taskCreate(
     taskDescriptor, runSdCardPosix, (void*) _sdCardDevicePath)
     != taskSuccess
@@ -348,15 +348,15 @@ int posixInitRootStorage(SchedulerState *schedulerState) {
     fputs("Could not start SD card task.\n", stderr);
   }
   taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
-  taskDescriptor->taskId = schedulerState->memoryManagerTaskId + 1;
+  taskDescriptor->taskId = schedulerState->firstUserTaskId;
   taskDescriptor->name = "SD card";
   taskDescriptor->userId = ROOT_USER_ID;
   BlockStorageDevice *sdDevice = (BlockStorageDevice*) coroutineResume(
-    allTasks[schedulerState->memoryManagerTaskId].taskHandle, NULL);
+    allTasks[schedulerState->firstUserTaskId - 1].taskHandle, NULL);
   sdDevice->partitionNumber = 1;
   
   // Create the filesystem task.
-  schedulerState->rootFsTaskId = schedulerState->memoryManagerTaskId + 2;
+  schedulerState->rootFsTaskId = schedulerState->firstUserTaskId + 1;
   taskDescriptor = &allTasks[SCHEDULER_STATE->rootFsTaskId - 1];
   if (taskCreate(taskDescriptor, runExFatFilesystem, sdDevice)
     != taskSuccess
@@ -806,39 +806,44 @@ int halPosixImplInit(jmp_buf resetBuffer, const char *sdCardDevicePath,
   *((void**) &realTcgetattr) = dlsym(RTLD_NEXT, "tcgetattr");
   *((void**) &realTcsetattr) = dlsym(RTLD_NEXT, "tcsetattr");
   
-  int numSerialPorts = hal->getNumSerialPorts();
-  if (numSerialPorts <= 0) {
-    // Nothing we can do.  Bail.
-    fprintf(stderr, "hal->getNumSerialPorts() returned %d.\n", numSerialPorts);
-    return -1;
-  }
-  
-  // Set all the serial ports to run at 1000000 baud.
-  if (hal->initSerialPort(0, 1000000) < 0) {
-    // Nothing we can do.  Bail.
-    fprintf(stderr, "Initializing serial port 0 failed.\n");
-    return -1;
-  }
   int ii = 0;
-  for (ii = 1; ii < numSerialPorts; ii++) {
-    if (hal->initSerialPort(ii, 1000000) < 0) {
-      // We can't support more than the last serial port that was successfully
-      // initialized.
-      fprintf(stderr, "WARNING: Initializing serial port %d failed.\n", ii);
-      break;
+  if (hal->serialPortHal != NULL) {
+    int numSerialPorts = hal->serialPortHal->getNumSerialPorts();
+    if (numSerialPorts <= 0) {
+      // Nothing we can do.  Bail.
+      fprintf(stderr, "hal->serialPortHal->getNumSerialPorts() returned %d.\n",
+        numSerialPorts);
+      return -1;
     }
+    
+    // Set all the serial ports to run at 1000000 baud.
+    if (hal->serialPortHal->initSerialPort(0, 1000000) < 0) {
+      // Nothing we can do.  Bail.
+      fprintf(stderr, "Initializing serial port 0 failed.\n");
+      return -1;
+    }
+    for (ii = 1; ii < numSerialPorts; ii++) {
+      if (hal->serialPortHal->initSerialPort(ii, 1000000) < 0) {
+        // We can't support more than the last serial port that was successfully
+        // initialized.
+        fprintf(stderr, "WARNING: Initializing serial port %d failed.\n", ii);
+        break;
+      }
+    }
+    hal->serialPortHal->setNumSerialPorts(ii);
   }
-  hal->setNumSerialPorts(ii);
 
-  int numTimers = hal->getNumTimers();
-  for (ii = 0; ii < numTimers; ii++) {
-    if (hal->initTimer(ii) < 0) {
-      break;
+  if (hal->timerHal != NULL) {
+    int numTimers = hal->timerHal->getNumTimers();
+    for (ii = 0; ii < numTimers; ii++) {
+      if (hal->timerHal->initTimer(ii) < 0) {
+        break;
+      }
     }
-  }
-  hal->setNumTimers(ii);
-  if (ii != numTimers) {
-    fprintf(stderr, "WARNING: Only initialized %d timers\n", ii);
+    hal->timerHal->setNumTimers(ii);
+    if (ii != numTimers) {
+      fprintf(stderr, "WARNING: Only initialized %d timers\n", ii);
+    }
   }
 
   return 0;

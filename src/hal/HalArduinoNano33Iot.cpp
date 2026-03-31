@@ -316,6 +316,14 @@ ssize_t arduinoNano33IotWriteSerialPort(int port,
   return numBytesWritten;
 }
 
+static HalSerialPort arduinoNano33IotSerialPortHal = {
+  .getNumSerialPorts = arduinoNano33IotGetNumSerialPorts,
+  .setNumSerialPorts = arduinoNano33IotSetNumSerialPorts,
+  .initSerialPort = arduinoNano33IotInitSerialPort,
+  .pollSerialPort = arduinoNano33IotPollSerialPort,
+  .writeSerialPort = arduinoNano33IotWriteSerialPort,
+};
+
 int arduinoNano33IotGetNumDios(void) {
   return NUM_DIO_PINS;
 }
@@ -345,6 +353,12 @@ int arduinoNano33IotWriteDio(int dio, bool high) {
   
   return returnValue;
 }
+
+static HalDio arduinoNano33IotDioHal = {
+  .getNumDios = arduinoNano33IotGetNumDios,
+  .configureDio = arduinoNano33IotConfigureDio,
+  .writeDio = arduinoNano33IotWriteDio,
+};
 
 /// @var globalSpiConfigured
 ///
@@ -511,6 +525,14 @@ int arduinoNano33IotSpiTransferBytes(int spi,
   return 0;
 }
 
+static HalSpi arduinoNano33IotSpiHal = {
+  .initSpiDevice = arduinoNano33IotInitSpiDevice,
+  .startSpiTransfer = arduinoNano33IotStartSpiTransfer,
+  .endSpiTransfer = arduinoNano33IotEndSpiTransfer,
+  .spiTransfer8 = arduinoNano33IotSpiTransfer8,
+  .spiTransferBytes = arduinoNano33IotSpiTransferBytes,
+};
+
 /// @var baseSystemTimeUs
 ///
 /// @brief The time provided by the user or some other task as a baseline
@@ -551,6 +573,13 @@ int64_t arduinoNano33IotGetElapsedNanoseconds(int64_t startTime) {
     startTime / ((int64_t) 1000)) * ((int64_t) 1000);
 }
 
+static HalClock arduinoNano33IotClockHal = {
+  .setSystemTime = arduinoNano33IotSetSystemTime,
+  .getElapsedMilliseconds = arduinoNano33IotGetElapsedMilliseconds,
+  .getElapsedMicroseconds = arduinoNano33IotGetElapsedMicroseconds,
+  .getElapsedNanoseconds = arduinoNano33IotGetElapsedNanoseconds,
+};
+
 int arduinoNano33IotShutdown(HalShutdownType shutdownType) {
   // You can't completely turn off a Nano 33 IoT from software.  The best we
   // can do is put into a low power state, so do the same set of operations for
@@ -573,55 +602,9 @@ int arduinoNano33IotShutdown(HalShutdownType shutdownType) {
   return 0;
 }
 
-int arduinoNano33IotInitRootStorage(SchedulerState *schedulerState) {
-  TaskDescriptor *allTasks = schedulerState->allTasks;
-  
-  // Create the SD card task.
-  SdCardSpiArgs sdCardSpiArgs = {
-    .spiCsDio = SD_CARD_PIN_CHIP_SELECT,
-    .spiCopiDio = SPI_COPI_DIO,
-    .spiCipoDio = SPI_CIPO_DIO,
-    .spiSckDio = SPI_SCK_DIO,
-  };
-
-  // Create the SD card task.
-  TaskDescriptor *taskDescriptor
-    = &allTasks[schedulerState->memoryManagerTaskId];
-  if (taskCreate(
-    taskDescriptor, runSdCardSpi, &sdCardSpiArgs)
-    != taskSuccess
-  ) {
-    fputs("Could not start SD card task.\n", stderr);
-  }
-  printDebugString("Started SD card task.\n");
-  taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
-  taskDescriptor->taskId = schedulerState->memoryManagerTaskId + 1;
-  taskDescriptor->name = "SD card";
-  taskDescriptor->userId = ROOT_USER_ID;
-  BlockStorageDevice *sdDevice = (BlockStorageDevice*) coroutineResume(
-    allTasks[schedulerState->memoryManagerTaskId].taskHandle, NULL);
-  sdDevice->partitionNumber = 1;
-  printDebugString("Configured SD card task.\n");
-  
-  // Create the filesystem task.
-  schedulerState->rootFsTaskId = schedulerState->memoryManagerTaskId + 2;
-  taskDescriptor = &allTasks[schedulerState->rootFsTaskId - 1];
-  if (taskCreate(taskDescriptor, runExFatFilesystem, sdDevice)
-    != taskSuccess
-  ) {
-    fputs("Could not start filesystem task.\n", stderr);
-  }
-  taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
-  taskDescriptor->taskId = schedulerState->rootFsTaskId;
-  taskDescriptor->name = "filesystem";
-  taskDescriptor->userId = ROOT_USER_ID;
-  printDebugString("Created filesystem task.\n");
-  
-  schedulerState->firstUserTaskId = schedulerState->rootFsTaskId + 1;
-  schedulerState->firstShellTaskId = schedulerState->firstUserTaskId;
-  
-  return 0;
-}
+static HalPower arduinoNano33IotPowerHal = {
+  .shutdown = arduinoNano33IotShutdown,
+};
 
 /// @struct HardwareTimer
 ///
@@ -1005,6 +988,67 @@ void TC4_Handler(void) {
   RETURN_TO_HANDLER(1);
 }
 
+static HalTimer arduinoNano33IotTimerHal = {
+  .getNumTimers = arduinoNano33IotGetNumTimers,
+  .setNumTimers = arduinoNano33IotSetNumTimers,
+  .initTimer = arduinoNano33IotInitTimer,
+  .configOneShotTimer = arduinoNano33IotConfigOneShotTimer,
+  .configuredTimerNanoseconds = arduinoNano33IotConfiguredTimerNanoseconds,
+  .remainingTimerNanoseconds = arduinoNano33IotRemainingTimerNanoseconds,
+  .cancelTimer = arduinoNano33IotCancelTimer,
+  .cancelAndGetTimer = arduinoNano33IotCancelAndGetTimer,
+};
+
+int arduinoNano33IotInitRootStorage(SchedulerState *schedulerState) {
+  TaskDescriptor *allTasks = schedulerState->allTasks;
+  
+  // Create the SD card task.
+  SdCardSpiArgs sdCardSpiArgs = {
+    .spiCsDio = SD_CARD_PIN_CHIP_SELECT,
+    .spiCopiDio = SPI_COPI_DIO,
+    .spiCipoDio = SPI_CIPO_DIO,
+    .spiSckDio = SPI_SCK_DIO,
+  };
+
+  // Create the SD card task.
+  TaskDescriptor *taskDescriptor
+    = &allTasks[schedulerState->firstUserTaskId - 1];
+  if (taskCreate(
+    taskDescriptor, runSdCardSpi, &sdCardSpiArgs)
+    != taskSuccess
+  ) {
+    fputs("Could not start SD card task.\n", stderr);
+  }
+  printDebugString("Started SD card task.\n");
+  taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
+  taskDescriptor->taskId = schedulerState->firstUserTaskId;
+  taskDescriptor->name = "SD card";
+  taskDescriptor->userId = ROOT_USER_ID;
+  BlockStorageDevice *sdDevice = (BlockStorageDevice*) coroutineResume(
+    allTasks[schedulerState->firstUserTaskId - 1].taskHandle, NULL);
+  sdDevice->partitionNumber = 1;
+  printDebugString("Configured SD card task.\n");
+  
+  // Create the filesystem task.
+  schedulerState->rootFsTaskId = schedulerState->firstUserTaskId + 1;
+  taskDescriptor = &allTasks[schedulerState->rootFsTaskId - 1];
+  if (taskCreate(taskDescriptor, runExFatFilesystem, sdDevice)
+    != taskSuccess
+  ) {
+    fputs("Could not start filesystem task.\n", stderr);
+  }
+  taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
+  taskDescriptor->taskId = schedulerState->rootFsTaskId;
+  taskDescriptor->name = "filesystem";
+  taskDescriptor->userId = ROOT_USER_ID;
+  printDebugString("Created filesystem task.\n");
+  
+  schedulerState->firstUserTaskId = schedulerState->rootFsTaskId + 1;
+  schedulerState->firstShellTaskId = schedulerState->firstUserTaskId;
+  
+  return 0;
+}
+
 
 /// @var arduinoNano33IotHal
 ///
@@ -1019,43 +1063,12 @@ static Hal arduinoNano33IotHal = {
   .overlayMap = (NanoOsOverlayMap*) OVERLAY_ADDRESS,
   .overlaySize = OVERLAY_SIZE,
   
-  // Serial port functionality.
-  .getNumSerialPorts = arduinoNano33IotGetNumSerialPorts,
-  .setNumSerialPorts = arduinoNano33IotSetNumSerialPorts,
-  .initSerialPort = arduinoNano33IotInitSerialPort,
-  .pollSerialPort = arduinoNano33IotPollSerialPort,
-  .writeSerialPort = arduinoNano33IotWriteSerialPort,
-  
-  // Digital IO pin functionality.
-  .getNumDios = arduinoNano33IotGetNumDios,
-  .configureDio = arduinoNano33IotConfigureDio,
-  .writeDio = arduinoNano33IotWriteDio,
-  
-  // SPI functionality.
-  .initSpiDevice = arduinoNano33IotInitSpiDevice,
-  .startSpiTransfer = arduinoNano33IotStartSpiTransfer,
-  .endSpiTransfer = arduinoNano33IotEndSpiTransfer,
-  .spiTransfer8 = arduinoNano33IotSpiTransfer8,
-  .spiTransferBytes = arduinoNano33IotSpiTransferBytes,
-  
-  // System time functionality.
-  .setSystemTime = arduinoNano33IotSetSystemTime,
-  .getElapsedMilliseconds = arduinoNano33IotGetElapsedMilliseconds,
-  .getElapsedMicroseconds = arduinoNano33IotGetElapsedMicroseconds,
-  .getElapsedNanoseconds = arduinoNano33IotGetElapsedNanoseconds,
-  
-  // Hardware power
-  .shutdown = arduinoNano33IotShutdown,
-  
-  // Hardware timers.
-  .getNumTimers = arduinoNano33IotGetNumTimers,
-  .setNumTimers = arduinoNano33IotSetNumTimers,
-  .initTimer = arduinoNano33IotInitTimer,
-  .configOneShotTimer = arduinoNano33IotConfigOneShotTimer,
-  .configuredTimerNanoseconds = arduinoNano33IotConfiguredTimerNanoseconds,
-  .remainingTimerNanoseconds = arduinoNano33IotRemainingTimerNanoseconds,
-  .cancelTimer = arduinoNano33IotCancelTimer,
-  .cancelAndGetTimer = arduinoNano33IotCancelAndGetTimer,
+  .serialPortHal = &arduinoNano33IotSerialPortHal,
+  .dioHal = &arduinoNano33IotDioHal,
+  .spiHal = &arduinoNano33IotSpiHal,
+  .clockHal = &arduinoNano33IotClockHal,
+  .powerHal = &arduinoNano33IotPowerHal,
+  .timerHal = &arduinoNano33IotTimerHal,
   
   // Root storage configuration.
   .initRootStorage = arduinoNano33IotInitRootStorage,
@@ -1084,48 +1097,52 @@ const Hal* halArduinoNano33IotInit(void) {
   
   __enable_irq();  // Ensure global interrupts are enabled
   
-  Hal *hal = &arduinoNano33IotHal;
-  int numSerialPorts = hal->getNumSerialPorts();
-  if (numSerialPorts <= 0) {
-    // Nothing we can do.
-    return NULL;
-  }
-  
-  // Set all the serial ports to run at 1000000 baud.
-  if (hal->initSerialPort(0, 1000000) < 0) {
-    // Nothing we can do.
-    return NULL;
-  }
   int ii = 0;
-  for (ii = 1; ii < numSerialPorts; ii++) {
-    if (hal->initSerialPort(ii, 1000000) < 0) {
-      // We can't support more than the last serial port that was successfully
-      // initialized.
-      break;
+  Hal *hal = &arduinoNano33IotHal;
+  if (hal->serialPortHal != NULL) {
+    int numSerialPorts = hal->serialPortHal->getNumSerialPorts();
+    if (numSerialPorts <= 0) {
+      // Nothing we can do.
+      return NULL;
     }
-  }
-  hal->setNumSerialPorts(ii);
-  if (ii != numSerialPorts) {
-    Serial.begin(1000000);
-    while (!Serial);
-    Serial.print("WARNING: Only initialized ");
-    Serial.print(ii);
-    Serial.print(" serial ports\n");
+    
+    // Set all the serial ports to run at 1000000 baud.
+    if (hal->serialPortHal->initSerialPort(0, 1000000) < 0) {
+      // Nothing we can do.
+      return NULL;
+    }
+    for (ii = 1; ii < numSerialPorts; ii++) {
+      if (hal->serialPortHal->initSerialPort(ii, 1000000) < 0) {
+        // We can't support more than the last serial port that was successfully
+        // initialized.
+        break;
+      }
+    }
+    hal->serialPortHal->setNumSerialPorts(ii);
+    if (ii != numSerialPorts) {
+      Serial.begin(1000000);
+      while (!Serial);
+      Serial.print("WARNING: Only initialized ");
+      Serial.print(ii);
+      Serial.print(" serial ports\n");
+    }
   }
 
-  int numTimers = hal->getNumTimers();
-  for (ii = 0; ii < numTimers; ii++) {
-    if (hal->initTimer(ii) < 0) {
-      break;
+  if (hal->timerHal != NULL)  {
+    int numTimers = hal->timerHal->getNumTimers();
+    for (ii = 0; ii < numTimers; ii++) {
+      if (hal->timerHal->initTimer(ii) < 0) {
+        break;
+      }
     }
-  }
-  hal->setNumTimers(ii);
-  if (ii != numTimers) {
-    Serial.begin(1000000);
-    while (!Serial);
-    Serial.print("WARNING: Only initialized ");
-    Serial.print(ii);
-    Serial.print(" timers\n");
+    hal->timerHal->setNumTimers(ii);
+    if (ii != numTimers) {
+      Serial.begin(1000000);
+      while (!Serial);
+      Serial.print("WARNING: Only initialized ");
+      Serial.print(ii);
+      Serial.print(" timers\n");
+    }
   }
   
   return hal;

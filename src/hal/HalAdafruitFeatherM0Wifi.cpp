@@ -361,6 +361,14 @@ ssize_t adafruitFeatherM0WifiWriteSerialPort(int port,
   return numBytesWritten;
 }
 
+static HalSerialPort adafruitFeatherM0WifiSerialPortHal = {
+  .getNumSerialPorts = adafruitFeatherM0WifiGetNumSerialPorts,
+  .setNumSerialPorts = adafruitFeatherM0WifiSetNumSerialPorts,
+  .initSerialPort = adafruitFeatherM0WifiInitSerialPort,
+  .pollSerialPort = adafruitFeatherM0WifiPollSerialPort,
+  .writeSerialPort = adafruitFeatherM0WifiWriteSerialPort,
+};
+
 int adafruitFeatherM0WifiGetNumDios(void) {
   return NUM_DIO_PINS;
 }
@@ -386,6 +394,12 @@ int adafruitFeatherM0WifiWriteDio(int dio, bool high) {
   
   return returnValue;
 }
+
+static HalDio adafruitFeatherM0WifiDioHal = {
+  .getNumDios = adafruitFeatherM0WifiGetNumDios,
+  .configureDio = adafruitFeatherM0WifiConfigureDio,
+  .writeDio = adafruitFeatherM0WifiWriteDio,
+};
 
 /// @var globalSpiConfigured
 ///
@@ -543,6 +557,14 @@ int adafruitFeatherM0WifiSpiTransferBytes(int spi,
   return 0;
 }
 
+static HalSpi adafruitFeatherM0WifiSpiHal = {
+  .initSpiDevice = adafruitFeatherM0WifiInitSpiDevice,
+  .startSpiTransfer = adafruitFeatherM0WifiStartSpiTransfer,
+  .endSpiTransfer = adafruitFeatherM0WifiEndSpiTransfer,
+  .spiTransfer8 = adafruitFeatherM0WifiSpiTransfer8,
+  .spiTransferBytes = adafruitFeatherM0WifiSpiTransferBytes,
+};
+
 /// @var baseSystemTimeUs
 ///
 /// @brief The time provided by the user or some other task as a baseline
@@ -583,6 +605,13 @@ int64_t adafruitFeatherM0WifiGetElapsedNanoseconds(int64_t startTime) {
     startTime / ((int64_t) 1000)) * ((int64_t) 1000);
 }
 
+static HalClock adafruitFeatherM0WifiClockHal = {
+  .setSystemTime = adafruitFeatherM0WifiSetSystemTime,
+  .getElapsedMilliseconds = adafruitFeatherM0WifiGetElapsedMilliseconds,
+  .getElapsedMicroseconds = adafruitFeatherM0WifiGetElapsedMicroseconds,
+  .getElapsedNanoseconds = adafruitFeatherM0WifiGetElapsedNanoseconds,
+};
+
 int adafruitFeatherM0WifiShutdown(HalShutdownType shutdownType) {
   // You can't completely turn off the board from software.  The best we can
   // do is put into a low power state, so do the same set of operations for
@@ -605,55 +634,9 @@ int adafruitFeatherM0WifiShutdown(HalShutdownType shutdownType) {
   return 0;
 }
 
-int adafruitFeatherM0WifiInitRootStorage(SchedulerState *schedulerState) {
-  TaskDescriptor *allTasks = schedulerState->allTasks;
-  
-  // Create the SD card task.
-  SdCardSpiArgs sdCardSpiArgs = {
-    .spiCsDio = SD_CARD_PIN_CHIP_SELECT,
-    .spiCopiDio = SPI_COPI_DIO,
-    .spiCipoDio = SPI_CIPO_DIO,
-    .spiSckDio = SPI_SCK_DIO,
-  };
-
-  // Create the SD card task.
-  TaskDescriptor *taskDescriptor
-    = &allTasks[schedulerState->memoryManagerTaskId];
-  if (taskCreate(
-    taskDescriptor, runSdCardSpi, &sdCardSpiArgs)
-    != taskSuccess
-  ) {
-    fputs("Could not start SD card task.\n", stderr);
-  }
-  printDebugString("Started SD card task.\n");
-  taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
-  taskDescriptor->taskId = schedulerState->memoryManagerTaskId + 1;
-  taskDescriptor->name = "SD card";
-  taskDescriptor->userId = ROOT_USER_ID;
-  BlockStorageDevice *sdDevice = (BlockStorageDevice*) coroutineResume(
-    allTasks[schedulerState->memoryManagerTaskId].taskHandle, NULL);
-  sdDevice->partitionNumber = 1;
-  printDebugString("Configured SD card task.\n");
-  
-  // Create the filesystem task.
-  schedulerState->rootFsTaskId = schedulerState->memoryManagerTaskId + 2;
-  taskDescriptor = &allTasks[schedulerState->rootFsTaskId - 1];
-  if (taskCreate(taskDescriptor, runExFatFilesystem, sdDevice)
-    != taskSuccess
-  ) {
-    fputs("Could not start filesystem task.\n", stderr);
-  }
-  taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
-  taskDescriptor->taskId = schedulerState->rootFsTaskId;
-  taskDescriptor->name = "filesystem";
-  taskDescriptor->userId = ROOT_USER_ID;
-  printDebugString("Created filesystem task.\n");
-  
-  schedulerState->firstUserTaskId = schedulerState->rootFsTaskId + 1;
-  schedulerState->firstShellTaskId = schedulerState->firstUserTaskId;
-  
-  return 0;
-}
+static HalPower adafruitFeatherM0WifiPowerHal = {
+  .shutdown = adafruitFeatherM0WifiShutdown,
+};
 
 /// @struct HardwareTimer
 ///
@@ -1038,6 +1021,67 @@ void TC4_Handler(void) {
   RETURN_TO_HANDLER(1);
 }
 
+static HalTimer adafruitFeatherM0WifiTimerHal = {
+  .getNumTimers = adafruitFeatherM0WifiGetNumTimers,
+  .setNumTimers = adafruitFeatherM0WifiSetNumTimers,
+  .initTimer = adafruitFeatherM0WifiInitTimer,
+  .configOneShotTimer = adafruitFeatherM0WifiConfigOneShotTimer,
+  .configuredTimerNanoseconds = adafruitFeatherM0WifiConfiguredTimerNanoseconds,
+  .remainingTimerNanoseconds = adafruitFeatherM0WifiRemainingTimerNanoseconds,
+  .cancelTimer = adafruitFeatherM0WifiCancelTimer,
+  .cancelAndGetTimer = adafruitFeatherM0WifiCancelAndGetTimer,
+};
+
+int adafruitFeatherM0WifiInitRootStorage(SchedulerState *schedulerState) {
+  TaskDescriptor *allTasks = schedulerState->allTasks;
+  
+  // Create the SD card task.
+  SdCardSpiArgs sdCardSpiArgs = {
+    .spiCsDio = SD_CARD_PIN_CHIP_SELECT,
+    .spiCopiDio = SPI_COPI_DIO,
+    .spiCipoDio = SPI_CIPO_DIO,
+    .spiSckDio = SPI_SCK_DIO,
+  };
+
+  // Create the SD card task.
+  TaskDescriptor *taskDescriptor
+    = &allTasks[schedulerState->firstUserTaskId - 1];
+  if (taskCreate(
+    taskDescriptor, runSdCardSpi, &sdCardSpiArgs)
+    != taskSuccess
+  ) {
+    fputs("Could not start SD card task.\n", stderr);
+  }
+  printDebugString("Started SD card task.\n");
+  taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
+  taskDescriptor->taskId = schedulerState->firstUserTaskId;
+  taskDescriptor->name = "SD card";
+  taskDescriptor->userId = ROOT_USER_ID;
+  BlockStorageDevice *sdDevice = (BlockStorageDevice*) coroutineResume(
+    allTasks[schedulerState->firstUserTaskId - 1].taskHandle, NULL);
+  sdDevice->partitionNumber = 1;
+  printDebugString("Configured SD card task.\n");
+  
+  // Create the filesystem task.
+  schedulerState->rootFsTaskId = schedulerState->firstUserTaskId + 1;
+  taskDescriptor = &allTasks[schedulerState->rootFsTaskId - 1];
+  if (taskCreate(taskDescriptor, runExFatFilesystem, sdDevice)
+    != taskSuccess
+  ) {
+    fputs("Could not start filesystem task.\n", stderr);
+  }
+  taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
+  taskDescriptor->taskId = schedulerState->rootFsTaskId;
+  taskDescriptor->name = "filesystem";
+  taskDescriptor->userId = ROOT_USER_ID;
+  printDebugString("Created filesystem task.\n");
+  
+  schedulerState->firstUserTaskId = schedulerState->rootFsTaskId + 1;
+  schedulerState->firstShellTaskId = schedulerState->firstUserTaskId;
+  
+  return 0;
+}
+
 
 /// @var adafruitFeatherM0WifiHal
 ///
@@ -1053,43 +1097,12 @@ static Hal adafruitFeatherM0WifiHal = {
   .overlayMap = (NanoOsOverlayMap*) OVERLAY_ADDRESS,
   .overlaySize = OVERLAY_SIZE,
   
-  // Serial port functionality.
-  .getNumSerialPorts = adafruitFeatherM0WifiGetNumSerialPorts,
-  .setNumSerialPorts = adafruitFeatherM0WifiSetNumSerialPorts,
-  .initSerialPort = adafruitFeatherM0WifiInitSerialPort,
-  .pollSerialPort = adafruitFeatherM0WifiPollSerialPort,
-  .writeSerialPort = adafruitFeatherM0WifiWriteSerialPort,
-  
-  // Digital IO pin functionality.
-  .getNumDios = adafruitFeatherM0WifiGetNumDios,
-  .configureDio = adafruitFeatherM0WifiConfigureDio,
-  .writeDio = adafruitFeatherM0WifiWriteDio,
-  
-  // SPI functionality.
-  .initSpiDevice = adafruitFeatherM0WifiInitSpiDevice,
-  .startSpiTransfer = adafruitFeatherM0WifiStartSpiTransfer,
-  .endSpiTransfer = adafruitFeatherM0WifiEndSpiTransfer,
-  .spiTransfer8 = adafruitFeatherM0WifiSpiTransfer8,
-  .spiTransferBytes = adafruitFeatherM0WifiSpiTransferBytes,
-  
-  // System time functionality.
-  .setSystemTime = adafruitFeatherM0WifiSetSystemTime,
-  .getElapsedMilliseconds = adafruitFeatherM0WifiGetElapsedMilliseconds,
-  .getElapsedMicroseconds = adafruitFeatherM0WifiGetElapsedMicroseconds,
-  .getElapsedNanoseconds = adafruitFeatherM0WifiGetElapsedNanoseconds,
-  
-  // Hardware power
-  .shutdown = adafruitFeatherM0WifiShutdown,
-  
-  // Hardware timers.
-  .getNumTimers = adafruitFeatherM0WifiGetNumTimers,
-  .setNumTimers = adafruitFeatherM0WifiSetNumTimers,
-  .initTimer = adafruitFeatherM0WifiInitTimer,
-  .configOneShotTimer = adafruitFeatherM0WifiConfigOneShotTimer,
-  .configuredTimerNanoseconds = adafruitFeatherM0WifiConfiguredTimerNanoseconds,
-  .remainingTimerNanoseconds = adafruitFeatherM0WifiRemainingTimerNanoseconds,
-  .cancelTimer = adafruitFeatherM0WifiCancelTimer,
-  .cancelAndGetTimer = adafruitFeatherM0WifiCancelAndGetTimer,
+  .serialPortHal = &adafruitFeatherM0WifiSerialPortHal,
+  .dioHal = &adafruitFeatherM0WifiDioHal,
+  .spiHal = &adafruitFeatherM0WifiSpiHal,
+  .clockHal = &adafruitFeatherM0WifiClockHal,
+  .powerHal = &adafruitFeatherM0WifiPowerHal,
+  .timerHal = &adafruitFeatherM0WifiTimerHal,
   
   // Root storage configuration.
   .initRootStorage = adafruitFeatherM0WifiInitRootStorage,
@@ -1118,48 +1131,52 @@ const Hal* halAdafruitFeatherM0WifiInit(void) {
   
   __enable_irq();  // Ensure global interrupts are enabled
   
-  Hal *hal = &adafruitFeatherM0WifiHal;
-  int numSerialPorts = hal->getNumSerialPorts();
-  if (numSerialPorts <= 0) {
-    // Nothing we can do.
-    return NULL;
-  }
-  
-  // Set all the serial ports to run at 1000000 baud.
-  if (hal->initSerialPort(0, 1000000) < 0) {
-    // Nothing we can do.
-    return NULL;
-  }
   int ii = 0;
-  for (ii = 1; ii < numSerialPorts; ii++) {
-    if (hal->initSerialPort(ii, 1000000) < 0) {
-      // We can't support more than the last serial port that was successfully
-      // initialized.
-      break;
+  Hal *hal = &adafruitFeatherM0WifiHal;
+  if (hal->serialPortHal != NULL) {
+    int numSerialPorts = hal->serialPortHal->getNumSerialPorts();
+    if (numSerialPorts <= 0) {
+      // Nothing we can do.
+      return NULL;
     }
-  }
-  hal->setNumSerialPorts(ii);
-  if (ii != numSerialPorts) {
-    Serial.begin(1000000);
-    while (!Serial);
-    Serial.print("WARNING: Only initialized ");
-    Serial.print(ii);
-    Serial.print(" serial ports\n");
+    
+    // Set all the serial ports to run at 1000000 baud.
+    if (hal->serialPortHal->initSerialPort(0, 1000000) < 0) {
+      // Nothing we can do.
+      return NULL;
+    }
+    for (ii = 1; ii < numSerialPorts; ii++) {
+      if (hal->serialPortHal->initSerialPort(ii, 1000000) < 0) {
+        // We can't support more than the last serial port that was successfully
+        // initialized.
+        break;
+      }
+    }
+    hal->serialPortHal->setNumSerialPorts(ii);
+    if (ii != numSerialPorts) {
+      Serial.begin(1000000);
+      while (!Serial);
+      Serial.print("WARNING: Only initialized ");
+      Serial.print(ii);
+      Serial.print(" serial ports\n");
+    }
   }
 
-  int numTimers = hal->getNumTimers();
-  for (ii = 0; ii < numTimers; ii++) {
-    if (hal->initTimer(ii) < 0) {
-      break;
+  if (hal->timerHal != NULL)  {
+    int numTimers = hal->timerHal->getNumTimers();
+    for (ii = 0; ii < numTimers; ii++) {
+      if (hal->timerHal->initTimer(ii) < 0) {
+        break;
+      }
     }
-  }
-  hal->setNumTimers(ii);
-  if (ii != numTimers) {
-    Serial.begin(1000000);
-    while (!Serial);
-    Serial.print("WARNING: Only initialized ");
-    Serial.print(ii);
-    Serial.print(" timers\n");
+    hal->timerHal->setNumTimers(ii);
+    if (ii != numTimers) {
+      Serial.begin(1000000);
+      while (!Serial);
+      Serial.print("WARNING: Only initialized ");
+      Serial.print(ii);
+      Serial.print(" timers\n");
+    }
   }
   
   return hal;
