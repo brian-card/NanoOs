@@ -294,6 +294,8 @@ typedef struct TaskQueue {
 /// @param rootFsTaskId The TaskId of the root filesystem.
 /// @param firstUserTaskId The TaskId of the first user task.
 /// @param firstShellTaskId The TaskId of the first shell task.
+/// @param runScheduler Function pointer to the runScheduler function in the
+///   Scheduler library.
 typedef struct SchedulerState {
   TaskDescriptor allTasks[NANO_OS_NUM_TASKS];
   TaskQueue ready[SCHEDULER_NUM_READY_QUEUES];
@@ -310,6 +312,7 @@ typedef struct SchedulerState {
   TaskId rootFsTaskId;
   TaskId firstUserTaskId;
   TaskId firstShellTaskId;
+  void (*runScheduler)(struct SchedulerState *schedulerState);
 } SchedulerState;
 
 /// @struct CommandDescriptor
