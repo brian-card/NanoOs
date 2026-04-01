@@ -109,7 +109,9 @@ void* callOverlayFunction(const char *overlayDir, const char *overlay,
     // Out of memory
     goto exit; // return NULL
   }
-  memcpy(&overlayArray[0], &runningTask->overlay, sizeof(runningTask->overlay));
+  overlayArray[0].blockDevice = runningTask->overlay.blockDevice;
+  overlayArray[0].startBlock  = runningTask->overlay.startBlock;
+  overlayArray[0].numBlocks   = runningTask->overlay.numBlocks;
   
   // We have to copy the arguments we were provided into dynamic memory because
   // they may be pointers into the current overlay, which we're about to
@@ -179,20 +181,22 @@ void* callOverlayFunction(const char *overlayDir, const char *overlay,
   //     the scheduler, which is outside the context of this process.  There
   //     are two (2) pieces of information that have to be set:  The path to the
   //     overlay directory and the block information of the overlay.  Because
-  //     there are two operations that have to be done here (one of which is a
-  //     memcpy which takes multiple instructions), we need to make sure the
-  //     preemption timer isn't running and then set both.  We don't have to
-  //     re-enable the timer again after setting the information because we're
-  //     going to then immediately yield after setting it.  So, we can get away
-  //     with just calling cancelTimer instead of cancelAndGetTimer since
-  //     there's nothing to resume.
+  //     there are two operations that have to be done here (one of which takes
+  //     multiple instructions), we need to make sure the preemption timer isn't
+  //     running and then set both.  We don't have to re-enable the timer again
+  //     after setting the information because we're going to then immediately
+  //     yield after setting it.  So, we can get away with just calling
+  //     cancelTimer instead of cancelAndGetTimer since there's nothing to
+  //     resume.
   //
   // JBC 2025-01-24
   HAL->timerHal->cancelTimer(SCHEDULER_STATE->preemptionTimer);
   if (overlayDirCopy != NULL) {
     runningTask->overlayDir = overlayDirCopy;
   }
-  memcpy(&runningTask->overlay, &overlayArray[1], sizeof(runningTask->overlay));
+  runningTask->overlay.blockDevice = overlayArray[1].blockDevice;
+  runningTask->overlay.startBlock  = overlayArray[1].startBlock;
+  runningTask->overlay.numBlocks   = overlayArray[1].numBlocks;
   taskYield();
   
   // If we made it this far, then our new overlay has been successuflly loaded.
@@ -209,7 +213,9 @@ void* callOverlayFunction(const char *overlayDir, const char *overlay,
 restorePreviousOverlay:
   // See note above on use of HAL->timerHal->cancelTimer.
   HAL->timerHal->cancelTimer(SCHEDULER_STATE->preemptionTimer);
-  memcpy(&runningTask->overlay, &overlayArray[0], sizeof(runningTask->overlay));
+  runningTask->overlay.blockDevice = overlayArray[0].blockDevice;
+  runningTask->overlay.startBlock  = overlayArray[0].startBlock;
+  runningTask->overlay.numBlocks   = overlayArray[0].numBlocks;
   if (overlayDirCopy != NULL) {
     runningTask->overlayDir = previousOverlayDir;
   }
