@@ -3094,6 +3094,30 @@ int schedulerLoadOverlay(FileBlockMetadata *overlay, char **envp) {
   printDebugString("Verifying overlay magic\n");
   if (overlayMap->header.magic != NANO_OS_OVERLAY_MAGIC) {
     printString("Overlay magic was not \"NanoOsOL\".\n");
+    printDebugString("Expected 0x");
+    printDebugHex(NANO_OS_OVERLAY_MAGIC);
+    printDebugString("\n");
+
+    printDebugString("overlayMap->header.osApi = 0x");
+    printDebugHex(overlayMap->header.osApi);
+    printDebugString("\noverlayMap->header.env = 0x");
+    printDebugHex(overlayMap->header.env);
+    printDebugString("\noverlayMap->header.overlay.blockDevice = 0x");
+    printDebugHex(overlayMap->header.overlay.blockDevice);
+    printDebugString("\noverlayMap->header.overlay.startBlock = ");
+    printDebugInt(overlayMap->header.overlay.startBlock);
+    printDebugString("\noverlayMap->header.overlay.numBlocks = ");
+    printDebugInt(overlayMap->header.overlay.numBlocks);
+    printDebugString("\noverlayMap->header.version = 0x");
+    printDebugHex(overlayMap->header.version);
+    printDebugString("\noverlayMap->header.magic = 0x");
+    printDebugHex(overlayMap->header.magic);
+    printDebugString("\noverlayMap->exports = 0x");
+    printDebugHex(overlayMap->exports);
+    printDebugString("\noverlayMap->numExports = 0x");
+    printDebugHex(overlayMap->numExports);
+    printDebugString("\n");
+
     return -ENOEXEC;
   }
   printDebugString("Verifying overlay version\n");
