@@ -30,6 +30,7 @@
 
 // Custom includes
 #include "Console.h"
+#include "Hal.h"
 #include "NanoOs.h"
 #include "OverlayFunctions.h"
 #include "Tasks.h"
@@ -278,6 +279,61 @@ void* execCommand(void *args) {
   int argc = 0;
   for (; argv[argc] != NULL; argc++);
 
+  // Load the overlay information into the TaskDescriptor.
+  TaskDescriptor *runningTask = getRunningTask();
+  if (runningTask == NULL) {
+    // This should be impossible.
+    printString("ERROR: No running task.\n");
+    releaseConsole();
+    schedulerCloseAllFileDescriptors();
+    return (void*) ((intptr_t) -1);
+  }
+
+  // We need to construct the full path to the overlay file.  We need the
+  // overlay directory, a slash, the name of the overlay (which is "main" in
+  // this case), the overlay extension and a trailing NULL byte.
+  char *overlayPath
+    = (char*) malloc(strlen(runningTask->overlayDir) + OVERLAY_EXT_LEN + 6);
+  if (overlayPath == NULL) {
+    // Fail.
+    printString("ERROR: malloc failure for overlayPath.\n");
+    releaseConsole();
+    schedulerCloseAllFileDescriptors();
+    return (void*) ((intptr_t) -1);
+  }
+  strcpy(overlayPath, runningTask->overlayDir);
+  strcat(overlayPath, "/main");
+  strcat(overlayPath, OVERLAY_EXT);
+
+  FileBlockMetadata *overlay
+    = (FileBlockMetadata*) malloc(sizeof(FileBlockMetadata));
+  if (overlay == NULL) {
+    // Fail.
+    printString("ERROR: malloc failure for overlayPath.\n");
+    free(overlayPath);
+    releaseConsole();
+    schedulerCloseAllFileDescriptors();
+    return (void*) ((intptr_t) -1);
+  }
+
+  // Get the overlay information we need.
+  if (getFileBlockMetadataFromPath(overlayPath, overlay) != 0) {
+    // We can't proceed
+    printString("ERROR: malloc failure for overlayPath.\n");
+    free(overlay);
+    free(overlayPath);
+    releaseConsole();
+    schedulerCloseAllFileDescriptors();
+    return (void*) ((intptr_t) -1);
+  }
+
+  // Do the copy of the overlay block information.
+  HAL->timerHal->cancelTimer(SCHEDULER_STATE->preemptionTimer);
+  memcpy(&runningTask->overlay, overlay, sizeof(runningTask->overlay));
+
+  // Yield so that the scheduler will load the overlay.
+  taskYield();
+  
   // Call the task function.
   int returnValue = runOverlayCommand(pathname, argc, argv);
 

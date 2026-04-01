@@ -104,6 +104,10 @@ int sdReadBlocks(void *context, uint32_t startBlock,
   uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer);
 int sdWriteBlocks(void *context, uint32_t startBlock,
   uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer);
+int schedSdReadBlocks(void *context, uint32_t startBlock,
+  uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer);
+int schedSdWriteBlocks(void *context, uint32_t startBlock,
+  uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer);
 
 #ifdef __cplusplus
 } // extern "C"

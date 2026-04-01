@@ -588,6 +588,8 @@ void* runSdCardSpi(void *args) {
     .context = (void*) ((intptr_t) getRunningTaskId()),
     .readBlocks = sdReadBlocks,
     .writeBlocks = sdWriteBlocks,
+    .schedReadBlocks = schedSdReadBlocks,
+    .schedWriteBlocks = schedSdWriteBlocks,
     .blockSize = 0,
     .blockBitShift = 0,
     .partitionNumber = 0,

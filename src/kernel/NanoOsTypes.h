@@ -37,6 +37,7 @@
 #define NANO_OS_TYPES_H
 
 // Custom includes
+#include "BlockStorage.h"
 #include "Coroutines.h"
 
 #ifdef __cplusplus
@@ -200,8 +201,8 @@ typedef struct TaskQueue TaskQueue;
 /// @param fileDescriptors Pointer to an array of FileDescriptors that are
 ///   currently in use by the task.
 /// @param overlayDir The base path to the overlays for the task, if any.
-/// @param overlay The name of the current overlay within the overlayDir being
-///   used (minus the ".overaly" extension).
+/// @param overlay The FileBlockMetadata of how to access the overlay from its
+///   block device.
 /// @param envp A pointer to the array of NULL-terminated environment variable
 ///   strings.
 /// @param taskQueue The task queue that the descriptor is currently in.  This
@@ -209,17 +210,17 @@ typedef struct TaskQueue TaskQueue;
 /// @param readyQueue The ready queue that the descriptor is to be assigned to
 ///   when the task transitions to ready.
 typedef struct TaskDescriptor {
-  const char      *name;
-  TaskHandle       taskHandle;
-  TaskId           taskId;
-  UserId           userId;
-  uint8_t          numFileDescriptors;
-  FileDescriptor  *fileDescriptors;
-  const char      *overlayDir;
-  const char      *overlay;
-  char           **envp;
-  TaskQueue       *taskQueue;
-  TaskQueue       *readyQueue;
+  const char         *name;
+  TaskHandle          taskHandle;
+  TaskId              taskId;
+  UserId              userId;
+  uint8_t             numFileDescriptors;
+  FileDescriptor     *fileDescriptors;
+  char               *overlayDir;
+  FileBlockMetadata   overlay;
+  char              **envp;
+  TaskQueue          *taskQueue;
+  TaskQueue          *readyQueue;
 } TaskDescriptor;
 
 /// @struct TaskInfoElement
@@ -312,7 +313,7 @@ typedef struct SchedulerState {
   TaskId rootFsTaskId;
   TaskId firstUserTaskId;
   TaskId firstShellTaskId;
-  void (*runScheduler)(struct SchedulerState *schedulerState);
+  void (*runScheduler)(void);
 } SchedulerState;
 
 /// @struct CommandDescriptor
@@ -522,32 +523,6 @@ typedef struct NanoOsMessage {
   NanoOsMessageData  func;
   NanoOsMessageData  data;
 } NanoOsMessage;
-
-/// @struct BlockStorageDevice
-///
-/// @brief The collection of data and functions needed to interact with a block
-/// storage device.
-///
-/// @param context The device-specific context to pass to the functions.
-/// @param readBlocks Function pointer for the function to read a given number
-///   of blocks from the storage device.
-/// @param writeBlocks Function pointer for the function to write a given number
-///   of blocks to the storage device.
-/// @param blockSize The size, in bytes, of the physical blocks on the device.
-/// @param blockBitShift The number of bits to shift to convert filesystem-level
-///   blocks to physical blocks.
-/// @param partitionNumber The one-based partition index that is to be used by
-///   a filesystem.
-typedef struct BlockStorageDevice {
-  void *context;
-  int (*readBlocks)(void *context, uint32_t startBlock,
-    uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer);
-  int (*writeBlocks)(void *context, uint32_t startBlock,
-    uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer);
-  uint16_t blockSize;
-  uint8_t blockBitShift;
-  uint8_t partitionNumber;
-} BlockStorageDevice;
 
 /// @struct ExecArgs
 ///

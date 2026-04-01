@@ -36,10 +36,12 @@
 #ifndef FILESYSTEM_H
 #define FILESYSTEM_H
 
+// Custom includes
+#include "BlockStorage.h"
+
 #include "stddef.h"
 #include "stdint.h"
 
-typedef struct BlockStorageDevice BlockStorageDevice;
 typedef struct NanoOsFile FILE;
 typedef struct msg_t TaskMessage;
 
@@ -126,22 +128,6 @@ typedef struct FilesystemFcloseParameters {
   FILE *stream;
   int returnValue;
 } FilesystemFcloseParameters;
-
-/// @struct FileBlockMetadata
-///
-/// @brief Block-level metadata for a file.
-///
-/// @param blockDevice A pointer to the BlockStorageDevice where the file
-///   resides.
-/// @param startBlock The block (LBA) on the block device where the file
-///   begins.
-/// @param numBlocks The number of blocks that the file occupies on the block
-///   device.
-typedef struct FileBlockMetadata {
-  BlockStorageDevice *blockDevice;
-  uint32_t            startBlock;
-  uint32_t            numBlocks;
-} FileBlockMetadata;
 
 /// @struct GetFileBlockMetadataArgs
 ///

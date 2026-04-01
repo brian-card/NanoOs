@@ -50,7 +50,7 @@
 #include "../user/NanoOsStdio.h"
 
 // Support prototypes.
-void runScheduler(SchedulerState *schedulerState);
+void runScheduler(void);
 
 /// @def NUM_STANDARD_FILE_DESCRIPTORS
 ///
@@ -871,7 +871,7 @@ int schedulerGetNumConsolePorts(SchedulerState *schedulerState) {
 
   TaskMessage *messageToSend = getAvailableMessage();
   while (messageToSend == NULL) {
-    runScheduler(schedulerState);
+    runScheduler();
     messageToSend = getAvailableMessage();
   }
   int returnValue = -1;
@@ -1539,7 +1539,7 @@ int closeTaskFileDescriptors(
     if (fileDescriptors != standardUserFileDescriptors) {
       TaskMessage *messageToSend = getAvailableMessage();
       while (messageToSend == NULL) {
-        runScheduler(schedulerState);
+        runScheduler();
         messageToSend = getAvailableMessage();
       }
 
@@ -1571,7 +1571,7 @@ int closeTaskFileDescriptors(
           // sent it.  Get another one.
           messageToSend = getAvailableMessage();
           while (messageToSend == NULL) {
-            runScheduler(schedulerState);
+            runScheduler();
             messageToSend = getAvailableMessage();
           }
         }
@@ -1602,7 +1602,7 @@ int closeTaskFileDescriptors(
           // sent it.  Get another one.
           messageToSend = getAvailableMessage();
           while (messageToSend == NULL) {
-            runScheduler(schedulerState);
+            runScheduler();
             messageToSend = getAvailableMessage();
           }
         }
@@ -1653,7 +1653,7 @@ FILE* schedFopen(const char *pathname, const char *mode) {
     printDebugString("schedFopen: Getting message\n");
     TaskMessage *taskMessage = getAvailableMessage();
     while (taskMessage == NULL) {
-      runScheduler(SCHEDULER_STATE);
+      runScheduler();
       taskMessage = getAvailableMessage();
     }
     printDebugString("schedFopen: Message retrieved\n");
@@ -1671,7 +1671,7 @@ FILE* schedFopen(const char *pathname, const char *mode) {
 
     printDebugString("schedFopen: Resuming filesystem\n");
     while (taskMessageDone(taskMessage) == false) {
-      runScheduler(SCHEDULER_STATE);
+      runScheduler();
     }
     printDebugString("schedFopen: Filesystem message is done\n");
 
@@ -1716,7 +1716,7 @@ int schedFclose(FILE *stream) {
 
     TaskMessage *taskMessage = getAvailableMessage();
     while (taskMessage == NULL) {
-      runScheduler(SCHEDULER_STATE);
+      runScheduler();
       taskMessage = getAvailableMessage();
     }
     NanoOsMessage *nanoOsMessage
@@ -1732,7 +1732,7 @@ int schedFclose(FILE *stream) {
       taskMessage);
 
     while (taskMessageDone(taskMessage) == false) {
-      runScheduler(SCHEDULER_STATE);
+      runScheduler();
     }
 
     if (fcloseParameters.returnValue != 0) {
@@ -1779,7 +1779,7 @@ int schedRemove(const char *pathname) {
 
     TaskMessage *taskMessage = getAvailableMessage();
     while (taskMessage == NULL) {
-      runScheduler(SCHEDULER_STATE);
+      runScheduler();
       taskMessage = getAvailableMessage();
     }
     NanoOsMessage *nanoOsMessage
@@ -1792,7 +1792,7 @@ int schedRemove(const char *pathname) {
       taskMessage);
 
     while (taskMessageDone(taskMessage) == false) {
-      runScheduler(SCHEDULER_STATE);
+      runScheduler();
     }
 
     returnValue = nanoOsMessageDataValue(taskMessage, int);
@@ -1848,7 +1848,7 @@ size_t schedFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
 
     TaskMessage *taskMessage = getAvailableMessage();
     while (taskMessage == NULL) {
-      runScheduler(SCHEDULER_STATE);
+      runScheduler();
       taskMessage = getAvailableMessage();
     }
     NanoOsMessage *nanoOsMessage
@@ -1861,7 +1861,7 @@ size_t schedFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
       taskMessage);
 
     while (taskMessageDone(taskMessage) == false) {
-      runScheduler(SCHEDULER_STATE);
+      runScheduler();
     }
 
     taskMessageRelease(taskMessage);
@@ -1909,7 +1909,7 @@ size_t schedFwrite(void *ptr, size_t size, size_t nmemb, FILE *stream) {
 
     TaskMessage *taskMessage = getAvailableMessage();
     while (taskMessage == NULL) {
-      runScheduler(SCHEDULER_STATE);
+      runScheduler();
       taskMessage = getAvailableMessage();
     }
     NanoOsMessage *nanoOsMessage
@@ -1922,7 +1922,7 @@ size_t schedFwrite(void *ptr, size_t size, size_t nmemb, FILE *stream) {
       taskMessage);
 
     while (taskMessageDone(taskMessage) == false) {
-      runScheduler(SCHEDULER_STATE);
+      runScheduler();
     }
 
     taskMessageRelease(taskMessage);
@@ -1972,7 +1972,7 @@ char* schedFgets(char *buffer, int size, FILE *stream) {
 
     TaskMessage *taskMessage = getAvailableMessage();
     while (taskMessage == NULL) {
-      runScheduler(SCHEDULER_STATE);
+      runScheduler();
       taskMessage = getAvailableMessage();
     }
     NanoOsMessage *nanoOsMessage
@@ -1985,7 +1985,7 @@ char* schedFgets(char *buffer, int size, FILE *stream) {
       taskMessage);
 
     while (taskMessageDone(taskMessage) == false) {
-      runScheduler(SCHEDULER_STATE);
+      runScheduler();
     }
     if (filesystemIoCommandParameters.length > 0) {
       buffer[filesystemIoCommandParameters.length] = '\0';
@@ -2038,7 +2038,7 @@ int schedFputs(const char *s, FILE *stream) {
 
     TaskMessage *taskMessage = getAvailableMessage();
     while (taskMessage == NULL) {
-      runScheduler(SCHEDULER_STATE);
+      runScheduler();
       taskMessage = getAvailableMessage();
     }
     NanoOsMessage *nanoOsMessage
@@ -2051,7 +2051,7 @@ int schedFputs(const char *s, FILE *stream) {
       taskMessage);
 
     while (taskMessageDone(taskMessage) == false) {
-      runScheduler(SCHEDULER_STATE);
+      runScheduler();
     }
     if (filesystemIoCommandParameters.length == 0) {
       returnValue = EOF;
@@ -2584,7 +2584,10 @@ int schedulerExecveCommandHandler(
   }
 
   taskDescriptor->overlayDir = pathname;
-  taskDescriptor->overlay = "main";
+  // It's too complicated to try and load the overlay information from the
+  // scheduler.  Do that from within execCommand.  Just zero out the structure
+  // here.
+  memset(&taskDescriptor->overlay, 0, sizeof(taskDescriptor->overlay));
   taskDescriptor->envp = envp;
   taskDescriptor->name = argv[0];
 
@@ -2745,7 +2748,10 @@ int schedulerSpawnCommandHandler(
   }
 
   taskDescriptor->overlayDir = pathname;
-  taskDescriptor->overlay = "main";
+  // It's too complicated to try and load the overlay information from the
+  // scheduler.  Do that from within execCommand.  Just zero out the structure
+  // here.
+  memset(&taskDescriptor->overlay, 0, sizeof(taskDescriptor->overlay));
   taskDescriptor->envp = envp;
   taskDescriptor->name = argv[0];
 
@@ -3030,22 +3036,17 @@ void removeTask(SchedulerState *schedulerState, TaskDescriptor *taskDescriptor,
   return;
 }
 
-/// @fn int schedulerLoadOverlay(
-///   const char *overlayDir, const char *overlay, char **envp)
+/// @fn int schedulerLoadOverlay(FileBlockMetadata *overlay, char **envp)
 ///
 /// @brief Load and configure an overlay into the overlayMap in memory.
 ///
-/// @param overlayDir The full path to the directory of the overlay on the
-///   filesystem.
-/// @param overlay The name of the overlay within the overlayDir to load (minus
-///   the ".overlay" file extension).
+/// @param overlay A pointer to the FileBlockMetadata that describes the overlay
+///   to load.
 /// @param envp The array of environment variables in "name=value" form.
 ///
 /// @return Returns 0 on success, negative error code on failure.
-int schedulerLoadOverlay(
-  const char *overlayDir, const char *overlay, char **envp
-) {
-  if ((overlayDir == NULL) || (overlay == NULL)) {
+int schedulerLoadOverlay(FileBlockMetadata *overlay, char **envp) {
+  if (overlay == NULL) {
     // There's no overlay to load.  This isn't really an error, but there's
     // nothing to do.  Just return 0.
     return 0;
@@ -3058,79 +3059,45 @@ int schedulerLoadOverlay(
   }
 
   NanoOsOverlayHeader *overlayHeader = &overlayMap->header;
-  if ((overlayHeader->overlayDir != NULL) && (overlayHeader->overlay != NULL)) {
-    if ((strcmp(overlayHeader->overlayDir, overlayDir) == 0)
-      && (strcmp(overlayHeader->overlay, overlay) == 0)
-    ) {
-      // Overlay is already loaded.  Do nothing.
-      return 0;
-    }
+  if ((overlayHeader->overlay.blockDevice == overlay->blockDevice)
+    && (overlayHeader->overlay.startBlock == overlay->startBlock)
+    && (overlayHeader->overlay.numBlocks == overlay->numBlocks)
+  ) {
+    // Overlay is already loaded.  Do nothing.
+    return 0;
   }
 
-  // We need two extra characters:  One for the '/' that separates the directory
-  // and the file name and one for the terminating NULL byte.
-  char *fullPath = (char*) schedMalloc(
-    strlen(overlayDir) + strlen(overlay) + OVERLAY_EXT_LEN + 2);
-  if (fullPath == NULL) {
-    return -ENOMEM;
-  }
-  strcpy(fullPath, overlayDir);
-  strcat(fullPath, "/");
-  strcat(fullPath, overlay);
-  strcat(fullPath, OVERLAY_EXT);
-  FILE *overlayFile = schedFopen(fullPath, "r");
-  if (overlayFile == NULL) {
-    printString("Could not open file \"");
-    printString(fullPath);
-    printString("\" from the filesystem.\n");
-    schedFree(fullPath); fullPath = NULL;
-    return -ENOENT;
-  }
-
-  printDebugString(__func__);
-  printDebugString(": Reading from overlayFile 0x");
-  printDebugHex((uintptr_t) overlayFile);
-  printDebugString("\n");
-  if (schedFread(overlayMap, 1, HAL->overlaySize, overlayFile) == 0) {
-    printString("Could not read overlay from \"");
-    printString(fullPath);
-    printString("\" file\n");
-    schedFclose(overlayFile); overlayFile = NULL;
-    schedFree(fullPath); fullPath = NULL;
+  if (overlay->blockDevice->schedReadBlocks(
+    overlay->blockDevice->context,
+    overlay->startBlock,
+    overlay->numBlocks,
+    overlay->blockDevice->blockSize,
+    (uint8_t*) overlayMap) != 0
+  ) {
+    printString("Could not read overlay");
     return -EIO;
   }
-  printDebugString(__func__);
-  printDebugString(": Closing overlayFile 0x");
-  printDebugHex((uintptr_t) overlayFile);
-  printDebugString("\n");
-  schedFclose(overlayFile); overlayFile = NULL;
 
   printDebugString("Verifying overlay magic\n");
   if (overlayMap->header.magic != NANO_OS_OVERLAY_MAGIC) {
-    printString("Overlay magic for \"");
-    printString(fullPath);
-    printString("\" was not \"NanoOsOL\".\n");
-    schedFree(fullPath); fullPath = NULL;
+    printString("Overlay magic was not \"NanoOsOL\".\n");
     return -ENOEXEC;
   }
   printDebugString("Verifying overlay version\n");
   if (overlayMap->header.version != NANO_OS_OVERLAY_VERSION) {
     printString("Overlay version is 0x");
     printHex(overlayMap->header.version);
-    printString(" for \"");
-    printString(fullPath);
-    printString("\"\n");
-    schedFree(fullPath); fullPath = NULL;
+    printString("\n");
     return -ENOEXEC;
   }
-  schedFree(fullPath); fullPath = NULL;
 
   // Set the pieces of the overlay header that the program needs to run.
   printDebugString("Configuring overlay environment\n");
   overlayHeader->osApi = &nanoOsApi;
   overlayHeader->env = envp;
-  overlayHeader->overlayDir = overlayDir;
-  overlayHeader->overlay = overlay;
+  overlayHeader->overlay.blockDevice = overlay->blockDevice;
+  overlayHeader->overlay.startBlock = overlay->startBlock;
+  overlayHeader->overlay.numBlocks = overlay->numBlocks;
   
   return 0;
 }
@@ -3257,7 +3224,10 @@ int schedulerRunOverlayCommand(
   }
 
   taskDescriptor->overlayDir = execArgs->pathname;
-  taskDescriptor->overlay = "main";
+  // It's too complicated to try and load the overlay information from the
+  // scheduler.  Do that from within execCommand.  Just zero out the structure
+  // here.
+  memset(&taskDescriptor->overlay, 0, sizeof(taskDescriptor->overlay));
   taskDescriptor->envp = execArgs->envp;
   taskDescriptor->name = execArgs->argv[0];
 
@@ -3314,51 +3284,48 @@ static const char *shellArgs[] = {
   NULL,
 };
 
-/// @fn void runScheduler(SchedulerState *schedulerState)
+/// @fn void runScheduler(void)
 ///
 /// @brief Run one (1) iteration of the main scheduler loop.
 ///
-/// @param schedulerState A pointer to the SchedulerState object maintained by
-///   the scheduler task.
-///
 /// @return This function returns no value.
-void runScheduler(SchedulerState *schedulerState) {
+void runScheduler(void) {
   TaskDescriptor *taskDescriptor
-    = taskQueuePop(schedulerState->currentReady);
+    = taskQueuePop(SCHEDULER_STATE->currentReady);
   if (taskDescriptor == NULL) {
     // Nothing we can do.
     printString("ERROR: No tasks to pop in ");
-    printString(schedulerState->currentReady->name);
+    printString(SCHEDULER_STATE->currentReady->name);
     printString(" task queue\n");
     return;
   }
 
   if (coroutineCorrupted(taskDescriptor->taskHandle)) {
-    removeTask(schedulerState, taskDescriptor, "Task corruption detected");
+    removeTask(SCHEDULER_STATE, taskDescriptor, "Task corruption detected");
     return;
   }
 
-  if (taskDescriptor->taskId >= schedulerState->firstUserTaskId) {
+  if (taskDescriptor->taskId >= SCHEDULER_STATE->firstUserTaskId) {
     if (taskRunning(taskDescriptor) == true) {
       // This is a user task, which is in an overlay.  Make sure it's loaded.
       if (schedulerLoadOverlay(
-        taskDescriptor->overlayDir, taskDescriptor->overlay,
+        &taskDescriptor->overlay,
         taskDescriptor->envp) != 0
       ) {
-        schedulerDumpMemoryAllocations(schedulerState);
-        schedulerDumpOpenFiles(schedulerState);
-        removeTask(schedulerState, taskDescriptor, "Overlay load failure");
+        schedulerDumpMemoryAllocations(SCHEDULER_STATE);
+        schedulerDumpOpenFiles(SCHEDULER_STATE);
+        removeTask(SCHEDULER_STATE, taskDescriptor, "Overlay load failure");
         return;
       }
     }
     
     // Configure the preemption timer to force the task to yield if it doesn't
     // voluntarily give up control within a reasonable amount of time.
-    if (schedulerState->preemptionTimer > -1) {
+    if (SCHEDULER_STATE->preemptionTimer > -1) {
       // No need to check HAL->timerHal for NULL since it can't be NULL in this
       // case.
       HAL->timerHal->configOneShotTimer(
-        schedulerState->preemptionTimer, 10000000, forceYield);
+        SCHEDULER_STATE->preemptionTimer, 10000000, forceYield);
     }
   }
   taskResume(taskDescriptor, NULL);
@@ -3366,32 +3333,32 @@ void runScheduler(SchedulerState *schedulerState) {
   // coroutineYieldCallback if we're running preemptive multitasking.
 
   if (taskRunning(taskDescriptor) == false) {
-    schedulerSendNanoOsMessageToTaskId(schedulerState,
+    schedulerSendNanoOsMessageToTaskId(SCHEDULER_STATE,
       SCHEDULER_STATE->memoryManagerTaskId, MEMORY_MANAGER_FREE_TASK_MEMORY,
       /* func= */ 0, /* data= */ taskDescriptor->taskId);
   }
 
   // Check the shells and restart them if needed.
-  if ((taskDescriptor->taskId >= schedulerState->firstShellTaskId)
+  if ((taskDescriptor->taskId >= SCHEDULER_STATE->firstShellTaskId)
     && (taskDescriptor->taskId
-      < (schedulerState->firstShellTaskId + schedulerState->numShells))
+      < (SCHEDULER_STATE->firstShellTaskId + SCHEDULER_STATE->numShells))
     && (taskRunning(taskDescriptor) == false)
   ) {
-    if ((schedulerState->hostname == NULL)
-      || (*schedulerState->hostname == '\0')
+    if ((SCHEDULER_STATE->hostname == NULL)
+      || (*SCHEDULER_STATE->hostname == '\0')
     ) {
       // We're not done initializing yet.  Put the task back on the ready
       // queue and try again later.
-      taskQueuePush(schedulerState->currentReady, taskDescriptor);
+      taskQueuePush(SCHEDULER_STATE->currentReady, taskDescriptor);
       return;
     }
 
     if (taskDescriptor->userId == NO_USER_ID) {
       // Login failed.  Re-launch getty.
-      if (schedulerRunOverlayCommand(schedulerState, taskDescriptor,
+      if (schedulerRunOverlayCommand(SCHEDULER_STATE, taskDescriptor,
         "/usr/bin/getty", (char**) gettyArgs, NULL) != 0
       ) {
-        removeTask(schedulerState, taskDescriptor, "Failed to load getty");
+        removeTask(SCHEDULER_STATE, taskDescriptor, "Failed to load getty");
         return;
       }
     } else {
@@ -3427,10 +3394,10 @@ void runScheduler(SchedulerState *schedulerState) {
         // strrchr(pwd->pw_shell, '/') must be non-NULL in order for pw_shell
         // to be valid.
         shellArgs[0] = strrchr(pwd->pw_shell, '/') + 1;
-        if (schedulerRunOverlayCommand(schedulerState, taskDescriptor,
+        if (schedulerRunOverlayCommand(SCHEDULER_STATE, taskDescriptor,
           pwd->pw_shell, (char**) shellArgs, taskDescriptor->envp) != 0
         ) {
-          removeTask(schedulerState, taskDescriptor, "Failed to load mush");
+          removeTask(SCHEDULER_STATE, taskDescriptor, "Failed to load mush");
           schedFree(pwd);
           schedFree(passwdStringBuffer);
           return;
@@ -3444,19 +3411,19 @@ void runScheduler(SchedulerState *schedulerState) {
   if (coroutineState(taskDescriptor->taskHandle)
     == COROUTINE_STATE_WAIT
   ) {
-    taskQueuePush(&schedulerState->waiting, taskDescriptor);
+    taskQueuePush(&SCHEDULER_STATE->waiting, taskDescriptor);
   } else if (coroutineState(taskDescriptor->taskHandle)
     == COROUTINE_STATE_TIMEDWAIT
   ) {
-    taskQueuePush(&schedulerState->timedWaiting, taskDescriptor);
+    taskQueuePush(&SCHEDULER_STATE->timedWaiting, taskDescriptor);
   } else if (taskFinished(taskDescriptor)) {
-    taskQueuePush(&schedulerState->free, taskDescriptor);
+    taskQueuePush(&SCHEDULER_STATE->free, taskDescriptor);
   } else { // Task is still running.
-    taskQueuePush(schedulerState->currentReady, taskDescriptor);
+    taskQueuePush(SCHEDULER_STATE->currentReady, taskDescriptor);
   }
 
-  checkForTimeouts(schedulerState);
-  handleSchedulerMessage(schedulerState);
+  checkForTimeouts(SCHEDULER_STATE);
+  handleSchedulerMessage(SCHEDULER_STATE);
 
   return;
 }
@@ -3888,7 +3855,7 @@ __attribute__((noinline)) void startScheduler(
       schedulerState.currentReady = &schedulerState.ready[ii];
       uint8_t queueSize = schedulerState.currentReady->numElements;
       for (uint8_t jj = 0; jj < queueSize; jj++) {
-        runScheduler(&schedulerState);
+        runScheduler();
       }
     }
   }
