@@ -3067,6 +3067,19 @@ int schedulerLoadOverlay(FileBlockMetadata *overlay, char **envp) {
     return 0;
   }
 
+  printDebugString("Loading ");
+  printDebugInt(overlay->numBlocks);
+  printDebugString(" blocks of ");
+  printDebugInt(overlay->blockDevice->blockSize);
+  printDebugString(" bytes starting at block ");
+  printDebugInt(overlay->startBlock);
+  printDebugString(" from block device 0x");
+  printDebugHex(overlay->blockDevice);
+  printDebugString(" using schedReadBlocks 0x");
+  printDebugHex(overlay->blockDevice->schedReadBlocks);
+  printDebugString(" into overlay (");
+  printDebugInt(overlay->numBlocks * overlay->blockDevice->blockSize);
+  printDebugString(" bytes total)\n");
   if (overlay->blockDevice->schedReadBlocks(
     overlay->blockDevice->context,
     overlay->startBlock,
