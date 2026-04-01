@@ -280,8 +280,8 @@ void* execCommand(void *args) {
   for (; argv[argc] != NULL; argc++);
 
   // Load the overlay information into the TaskDescriptor.
-  TaskDescriptor *runningTask = getRunningTask();
-  if (runningTask == NULL) {
+  TaskDescriptor *taskDescriptor = getRunningTask();
+  if (taskDescriptor == NULL) {
     // This should be impossible.
     printString("ERROR: No running task.\n");
     releaseConsole();
@@ -293,7 +293,7 @@ void* execCommand(void *args) {
   // overlay directory, a slash, the name of the overlay (which is "main" in
   // this case), the overlay extension and a trailing NULL byte.
   char *overlayPath
-    = (char*) malloc(strlen(runningTask->overlayDir) + OVERLAY_EXT_LEN + 6);
+    = (char*) malloc(strlen(taskDescriptor->overlayDir) + OVERLAY_EXT_LEN + 6);
   if (overlayPath == NULL) {
     // Fail.
     printString("ERROR: malloc failure for overlayPath.\n");
@@ -301,7 +301,7 @@ void* execCommand(void *args) {
     schedulerCloseAllFileDescriptors();
     return (void*) ((intptr_t) -1);
   }
-  strcpy(overlayPath, runningTask->overlayDir);
+  strcpy(overlayPath, taskDescriptor->overlayDir);
   strcat(overlayPath, "/main");
   strcat(overlayPath, OVERLAY_EXT);
 
@@ -326,10 +326,16 @@ void* execCommand(void *args) {
     schedulerCloseAllFileDescriptors();
     return (void*) ((intptr_t) -1);
   }
+  printDebugString("Loading overlay prior to task start\n");
 
   // Do the copy of the overlay block information.
   HAL->timerHal->cancelTimer(SCHEDULER_STATE->preemptionTimer);
-  memcpy(&runningTask->overlay, overlay, sizeof(runningTask->overlay));
+  taskDescriptor->overlay.blockDevice = overlay->blockDevice;
+  taskDescriptor->overlay.startBlock  = overlay->startBlock;
+  taskDescriptor->overlay.numBlocks   = overlay->numBlocks;
+
+  free(overlay); overlay = NULL;
+  free(overlayPath); overlayPath = NULL;
 
   // Yield so that the scheduler will load the overlay.
   taskYield();
@@ -337,7 +343,6 @@ void* execCommand(void *args) {
   // Call the task function.
   int returnValue = runOverlayCommand(pathname, argc, argv);
 
-  TaskDescriptor *taskDescriptor = getRunningTask();
   if (taskDescriptor->userId != NO_USER_ID) {
     // If this command was a shell task then we need to clear out the user ID
     // and environment variables.  Check.
