@@ -201,6 +201,8 @@ void* runSdCardPosix(void *args) {
     .context = (void*) ((intptr_t) getRunningTaskId()),
     .readBlocks = sdReadBlocks,
     .writeBlocks = sdWriteBlocks,
+    .schedReadBlocks = schedSdReadBlocks,
+    .schedWriteBlocks = schedSdWriteBlocks,
     .blockSize = 512,
     .blockBitShift = 0,
     .partitionNumber = 0,
