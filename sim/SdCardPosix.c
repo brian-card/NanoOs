@@ -38,9 +38,6 @@
 // Must come last
 #include "../user/NanoOsStdio.h"
 
-//// #define printDebug(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__)
-#define printDebug(fmt, ...) {}
-
 // Implementation prototypes.
 const char* sdCardInit(SdCardState *sdCardState,
   BlockStorageDevice *sdDevice, const char *sdCardDevicePath);
@@ -61,43 +58,46 @@ int sdCardWrite(int devFd, const void *buffer, size_t start, size_t len);
 int sdCardReadBlocksCommandHandler(
   SdCardState *sdCardState, TaskMessage *taskMessage
 ) {
-  printDebug("sdCardReadBlocksCommandHandler: Enter\n");
+  printDebugString("sdCardReadBlocksCommandHandler: Enter\n");
   NanoOsMessage *nanoOsMessage
     = (NanoOsMessage*) taskMessageData(taskMessage);
-  printDebug("sdCardReadBlocksCommandHandler: Got NanoOsMessage\n");
+  printDebugString("sdCardReadBlocksCommandHandler: Got NanoOsMessage\n");
   
   int devFd = (int) ((intptr_t) sdCardState->context);
   if (devFd < 0) {
     // Nothing we can do.
-    printDebug("sdCardReadBlocksCommandHandler: Invalid file descriptor\n");
+    printDebugString(
+      "sdCardReadBlocksCommandHandler: Invalid file descriptor\n");
     nanoOsMessage->data = EIO;
     taskMessageSetDone(taskMessage);
-    printDebug("sdCardReadBlocksCommandHandler: Returning early\n");
+    printDebugString("sdCardReadBlocksCommandHandler: Returning early\n");
     return 0;
   }
-  printDebug("sdCardReadBlocksCommandHandler: context is *NOT* NULL\n");
+  printDebugString("sdCardReadBlocksCommandHandler: context is *NOT* NULL\n");
   
   SdCommandParams *sdCommandParams
     = nanoOsMessageDataPointer(taskMessage, SdCommandParams*);
-  printDebug("sdCardReadBlocksCommandHandler: Got sdCommandParams\n");
+  printDebugString("sdCardReadBlocksCommandHandler: Got sdCommandParams\n");
   uint32_t startSdBlock = 0, numSdBlocks = 0;
   int returnValue = sdCardGetReadWriteParameters(
     sdCardState, sdCommandParams, &startSdBlock, &numSdBlocks);
-  printDebug("sdCardReadBlocksCommandHandler: Got read/write parameters\n");
+  printDebugString(
+    "sdCardReadBlocksCommandHandler: Got read/write parameters\n");
 
   if (returnValue == 0) {
     uint8_t *buffer = sdCommandParams->buffer;
+    printDebugString("Issuing sdCardRead\n");
     returnValue = sdCardRead(devFd, buffer,
       sdCardState->blockSize * startSdBlock,
       sdCardState->blockSize * numSdBlocks);
   }
 
-  printDebug("sdCardReadBlocksCommandHandler: Exiting\n");
+  printDebugString("sdCardReadBlocksCommandHandler: Exiting\n");
   nanoOsMessage->data = returnValue;
-  printDebug("sdCardReadBlocksCommandHandler: Setting message to done\n");
+  printDebugString("sdCardReadBlocksCommandHandler: Setting message to done\n");
   taskMessageSetDone(taskMessage);
 
-  printDebug("sdCardReadBlocksCommandHandler: Returning\n");
+  printDebugString("sdCardReadBlocksCommandHandler: Returning\n");
   return 0;
 }
 
@@ -169,8 +169,9 @@ void handleSdCardMessages(SdCardState *sdCardState) {
     SdCardCommandResponse messageType
       = (SdCardCommandResponse) taskMessageType(taskMessage);
     if (messageType >= NUM_SD_CARD_COMMANDS) {
-      printDebug("handleSdCardMessages: Received invalid messageType %d\n",
-        messageType);
+      printDebugString("handleSdCardMessages: Received invalid messageType ");
+      printDebugInt(messageType);
+      printDebugString("\n");
       taskMessage = taskMessageQueuePop();
       continue;
     }
