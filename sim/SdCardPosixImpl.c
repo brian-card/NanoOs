@@ -54,14 +54,15 @@
 int sdCardRead(int devFd, void *buffer, size_t start, size_t len) {
   int returnValue = 0;
 
-  printDebug("sdCardRead: Calling lseek\n");
+  printDebug("sdCardRead: Calling lseek to %lld\n", (long long int) start);
   if (lseek(devFd, start, SEEK_SET) < 0) {
     printDebug("sdCardReadBlocksCommandHandler: lseek FAILED\n");
     returnValue = errno;
     goto exit;
   }
 
-  printDebug("sdCardRead: Calling read\n");
+  printDebug("sdCardRead: Calling read of %lld bytes\n", (long long int) len);
+  printDebug("sdCardRead: Reading into buffer %p\n", buffer);
   if (read(devFd, buffer, len) <= 0) {
     printDebug("sdCardReadBlocksCommandHandler: read FAILED\n");
     returnValue = errno;
