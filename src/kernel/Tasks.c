@@ -289,58 +289,7 @@ void* execCommand(void *args) {
     return (void*) ((intptr_t) -1);
   }
 
-  // We need to construct the full path to the overlay file.  We need the
-  // overlay directory, a slash, the name of the overlay (which is "main" in
-  // this case), the overlay extension and a trailing NULL byte.
-  char *overlayPath
-    = (char*) malloc(strlen(taskDescriptor->overlayDir) + OVERLAY_EXT_LEN + 6);
-  if (overlayPath == NULL) {
-    // Fail.
-    printString("ERROR: malloc failure for overlayPath.\n");
-    releaseConsole();
-    schedulerCloseAllFileDescriptors();
-    return (void*) ((intptr_t) -1);
-  }
-  strcpy(overlayPath, taskDescriptor->overlayDir);
-  strcat(overlayPath, "/main");
-  strcat(overlayPath, OVERLAY_EXT);
-
-  FileBlockMetadata *overlay
-    = (FileBlockMetadata*) malloc(sizeof(FileBlockMetadata));
-  if (overlay == NULL) {
-    // Fail.
-    printString("ERROR: malloc failure for overlayPath.\n");
-    free(overlayPath);
-    releaseConsole();
-    schedulerCloseAllFileDescriptors();
-    return (void*) ((intptr_t) -1);
-  }
-
-  // Get the overlay information we need.
-  if (getFileBlockMetadataFromPath(overlayPath, overlay) != 0) {
-    // We can't proceed
-    printString("ERROR: malloc failure for overlayPath.\n");
-    free(overlay);
-    free(overlayPath);
-    releaseConsole();
-    schedulerCloseAllFileDescriptors();
-    return (void*) ((intptr_t) -1);
-  }
-  printDebugString("Loading overlay prior to task start\n");
-
-  // Do the copy of the overlay block information.
-  HAL->timerHal->cancelTimer(SCHEDULER_STATE->preemptionTimer);
-  taskDescriptor->overlay.blockDevice = overlay->blockDevice;
-  taskDescriptor->overlay.startBlock  = overlay->startBlock;
-  taskDescriptor->overlay.numBlocks   = overlay->numBlocks;
-
-  free(overlay); overlay = NULL;
-  free(overlayPath); overlayPath = NULL;
-
-  // Yield so that the scheduler will load the overlay.
-  taskYield();
-  
-  // Call the task function.
+  printDebugString("Call the task function\n");
   int returnValue = runOverlayCommand(pathname, argc, argv);
 
   if (taskDescriptor->userId != NO_USER_ID) {
