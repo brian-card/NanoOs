@@ -2076,6 +2076,114 @@ int schedFputs(const char *s, FILE *stream) {
   return returnValue;
 }
 
+/// @fn int schedGetFileBlockMetadataFromFile(FILE *stream,
+///   FileBlockMetadata *metadata)
+///
+/// @brief Get the block-level metadata for a given file.
+///
+/// @param stream A pointer to a previously-opened FILE.
+/// @param metadata A pointer to a FileBlockMetadata structure the caller wants
+///   populated.
+///
+/// @return Returns 0 on success, -errno on failure.
+int schedGetFileBlockMetadataFromFile(
+  FILE *stream, FileBlockMetadata *metadata
+) {
+  if ((stream == NULL) || (metadata == NULL)) {
+    return -EINVAL;
+  }
+
+  TaskQueue *currentReady = SCHEDULER_STATE->currentReady;
+  SCHEDULER_STATE->currentReady
+    = &SCHEDULER_STATE->ready[SCHEDULER_READY_QUEUE_KERNEL];
+
+  GetFileBlockMetadataArgs args = {
+    .stream = stream,
+    .metadata = metadata,
+  };
+
+  TaskMessage *taskMessage = getAvailableMessage();
+  while (taskMessage == NULL) {
+    SCHEDULER_STATE->runScheduler();
+    taskMessage = getAvailableMessage();
+  }
+
+  taskMessageInit(taskMessage, FILESYSTEM_GET_FILE_BLOCK_METADATA,
+    &args, sizeof(args), true);
+  if (sendTaskMessageToTaskId(SCHEDULER_STATE->rootFsTaskId, taskMessage)
+    != taskSuccess
+  ) {
+    printString("ERROR! Failed to send message to filesystem to get file "
+      "block metadata\n");
+    taskMessageRelease(taskMessage);
+    return -EIO;
+  }
+  while (taskMessageDone(taskMessage) == false) {
+    SCHEDULER_STATE->runScheduler();
+  }
+  taskMessageRelease(taskMessage);
+
+  SCHEDULER_STATE->currentReady = currentReady;
+  return 0;
+}
+
+/// @fn int schedGetFileBlockMetadataFromPath(const char *path,
+///   FileBlockMetadata *metadata)
+///
+/// @brief Get the block-level metadata for a given path.
+///
+/// @param path A string representing a path to a file on the filesystem.
+/// @param metadata A pointer to a FileBlockMetadata structure the caller wants
+///   populated.
+///
+/// @return Returns 0 on success, -errno on failure.
+int schedGetFileBlockMetadataFromPath(
+  const char *path, FileBlockMetadata *metadata
+) {
+  if ((path == NULL) || (metadata == NULL)) {
+    return -EINVAL;
+  }
+
+  FILE *stream = schedFopen(path, "r");
+  if (stream == NULL) {
+    printString("ERROR! Could not open file \"");
+    printString(path);
+    printString("\"\n");
+    return -EIO;
+  }
+  int returnValue = schedGetFileBlockMetadataFromFile(stream, metadata);
+  schedFclose(stream); stream = NULL;
+
+  return returnValue;
+}
+
+/// @fn int loadTaskDescriptorOverlayMetadata(TaskDescriptor *taskDescriptor)
+///
+/// @brief Load the FileBlockMetadata for a TaskDescriptor's overlay.
+///
+/// @param taskDescriptor A pointer to the TaskDescriptor to load the
+///   FileBlockMetadata for.
+///
+/// @return Returns 0 on success, -errno on failure.
+int loadTaskDescriptorOverlayMetadata(TaskDescriptor *taskDescriptor) {
+  char *overlayPath = (char*) schedMalloc(
+    strlen(taskDescriptor->overlayDir) + OVERLAY_EXT_LEN + 6);
+  if (overlayPath == NULL) {
+    // Fail.
+    printString("ERROR: malloc failure for overlayPath.\n");
+    return -ENOMEM;
+  }
+  strcpy(overlayPath, taskDescriptor->overlayDir);
+  strcat(overlayPath, "/main");
+  strcat(overlayPath, OVERLAY_EXT);
+
+  schedGetFileBlockMetadataFromPath(overlayPath, &taskDescriptor->overlay);
+
+  schedFree(overlayPath);
+
+  return 0;
+}
+
 /// @fn int schedulerKillTaskCommandHandler(
 ///   SchedulerState *schedulerState, TaskMessage *taskMessage)
 ///
@@ -2584,10 +2692,13 @@ int schedulerExecveCommandHandler(
   }
 
   taskDescriptor->overlayDir = pathname;
-  // It's too complicated to try and load the overlay information from the
-  // scheduler.  Do that from within execCommand.  Just zero out the structure
-  // here.
-  memset(&taskDescriptor->overlay, 0, sizeof(taskDescriptor->overlay));
+  returnValue = loadTaskDescriptorOverlayMetadata(taskDescriptor);
+  if (returnValue != 0) {
+    nanoOsMessage->data = returnValue;
+    returnValue = 0; // Don't retry this command
+    taskMessageSetDone(taskMessage);
+    return returnValue; // 0
+  }
   taskDescriptor->envp = envp;
   taskDescriptor->name = argv[0];
 
@@ -2748,10 +2859,13 @@ int schedulerSpawnCommandHandler(
   }
 
   taskDescriptor->overlayDir = pathname;
-  // It's too complicated to try and load the overlay information from the
-  // scheduler.  Do that from within execCommand.  Just zero out the structure
-  // here.
-  memset(&taskDescriptor->overlay, 0, sizeof(taskDescriptor->overlay));
+  returnValue = loadTaskDescriptorOverlayMetadata(taskDescriptor);
+  if (returnValue != 0) {
+    nanoOsMessage->data = returnValue;
+    returnValue = 0; // Don't retry this command
+    taskMessageSetDone(taskMessage);
+    return returnValue; // 0
+  }
   taskDescriptor->envp = envp;
   taskDescriptor->name = argv[0];
 
@@ -3074,12 +3188,14 @@ int schedulerLoadOverlay(FileBlockMetadata *overlay, char **envp) {
   printDebugString(" bytes starting at block ");
   printDebugInt(overlay->startBlock);
   printDebugString(" from block device 0x");
-  printDebugHex(overlay->blockDevice);
+  printDebugHex((uintptr_t) overlay->blockDevice);
   printDebugString(" using schedReadBlocks 0x");
-  printDebugHex(overlay->blockDevice->schedReadBlocks);
+  printDebugHex((uintptr_t) overlay->blockDevice->schedReadBlocks);
   printDebugString(" into overlay (");
   printDebugInt(overlay->numBlocks * overlay->blockDevice->blockSize);
-  printDebugString(" bytes total)\n");
+  printDebugString(" bytes total) into 0x");
+  printDebugHex((uintptr_t) overlayMap);
+  printDebugString("\n");
   if (overlay->blockDevice->schedReadBlocks(
     overlay->blockDevice->context,
     overlay->startBlock,
@@ -3095,27 +3211,27 @@ int schedulerLoadOverlay(FileBlockMetadata *overlay, char **envp) {
   if (overlayMap->header.magic != NANO_OS_OVERLAY_MAGIC) {
     printString("Overlay magic was not \"NanoOsOL\".\n");
     printDebugString("Expected 0x");
-    printDebugHex(NANO_OS_OVERLAY_MAGIC);
+    printDebugHex((uintptr_t) NANO_OS_OVERLAY_MAGIC);
     printDebugString("\n");
 
     printDebugString("overlayMap->header.osApi = 0x");
-    printDebugHex(overlayMap->header.osApi);
+    printDebugHex((uintptr_t) overlayMap->header.osApi);
     printDebugString("\noverlayMap->header.env = 0x");
-    printDebugHex(overlayMap->header.env);
+    printDebugHex((uintptr_t) overlayMap->header.env);
     printDebugString("\noverlayMap->header.overlay.blockDevice = 0x");
-    printDebugHex(overlayMap->header.overlay.blockDevice);
+    printDebugHex((uintptr_t) overlayMap->header.overlay.blockDevice);
     printDebugString("\noverlayMap->header.overlay.startBlock = ");
     printDebugInt(overlayMap->header.overlay.startBlock);
     printDebugString("\noverlayMap->header.overlay.numBlocks = ");
     printDebugInt(overlayMap->header.overlay.numBlocks);
     printDebugString("\noverlayMap->header.version = 0x");
-    printDebugHex(overlayMap->header.version);
+    printDebugHex((uintptr_t) overlayMap->header.version);
     printDebugString("\noverlayMap->header.magic = 0x");
-    printDebugHex(overlayMap->header.magic);
+    printDebugHex((uintptr_t) overlayMap->header.magic);
     printDebugString("\noverlayMap->exports = 0x");
-    printDebugHex(overlayMap->exports);
+    printDebugHex((uintptr_t) overlayMap->exports);
     printDebugString("\noverlayMap->numExports = 0x");
-    printDebugHex(overlayMap->numExports);
+    printDebugHex((uintptr_t) overlayMap->numExports);
     printDebugString("\n");
 
     return -ENOEXEC;
@@ -3261,10 +3377,10 @@ int schedulerRunOverlayCommand(
   }
 
   taskDescriptor->overlayDir = execArgs->pathname;
-  // It's too complicated to try and load the overlay information from the
-  // scheduler.  Do that from within execCommand.  Just zero out the structure
-  // here.
-  memset(&taskDescriptor->overlay, 0, sizeof(taskDescriptor->overlay));
+  returnValue = loadTaskDescriptorOverlayMetadata(taskDescriptor);
+  if (returnValue != 0) {
+    return returnValue;
+  }
   taskDescriptor->envp = execArgs->envp;
   taskDescriptor->name = execArgs->argv[0];
 
