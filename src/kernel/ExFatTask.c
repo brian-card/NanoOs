@@ -353,8 +353,8 @@ int exFatTaskGetFileBlockMetadataCommandHandler(
   args->metadata->blockDevice = driverState->filesystemState->blockDevice;
 
   ExFatFileHandle *exFatFile = (ExFatFileHandle*) args->stream->file;
-  args->metadata->startBlock
-    = exFatFile->firstCluster * driverState->sectorsPerCluster;
+  args->metadata->startBlock = driverState->clusterHeapStartSector +
+    ((exFatFile->firstCluster - 2) * driverState->sectorsPerCluster);
   args->metadata->numBlocks
     = (uint32_t) ((exFatFile->fileSize + (driverState->bytesPerSector - 1))
     / ((uint64_t) driverState->bytesPerSector));
