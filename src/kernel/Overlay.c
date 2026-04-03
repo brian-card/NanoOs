@@ -60,9 +60,12 @@ OverlayFunction findOverlayFunction(const char *overlayFunctionName) {
     } else if (comp < 0) { // cur < overlayFunctionName
       // Move the left bound to one greater than cur.
       ii = cur + 1;
-    } else { // comp > 0, overlayFunctionName < cur
+    } else if (cur > 0) { // comp > 0, overlayFunctionName < cur
       // Move the right bound to one less than cur.
       jj = cur - 1;
+    } else {
+      // We're out of indexes to search.  overlayFunctionName not found.
+      break;
     }
   }
   
