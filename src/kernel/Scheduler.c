@@ -3899,6 +3899,9 @@ __attribute__((noinline)) void startScheduler(
       }
       schedFclose(hostnameFile);
       printDebugString("Closed hostname file.\n");
+      printDebugString("hostname = ");
+      printDebugString(schedulerState.hostname);
+      printDebugString("\n");
     } else {
       printString("ERROR! schedFopen of hostname returned NULL!\n");
       strcpy(schedulerState.hostname, "localhost");
@@ -3908,10 +3911,12 @@ __attribute__((noinline)) void startScheduler(
   }
 
 #ifdef NANO_OS_DEBUG
+  bool sanityTestFailed = false;
   do {
     FILE *helloFile = schedFopen("hello", "w");
     if (helloFile == NULL) {
       printDebugString("ERROR: Could not open hello file for writing!\n");
+      sanityTestFailed = true;
       break;
     }
     printDebugString("helloFile is non-NULL!\n");
@@ -3919,6 +3924,7 @@ __attribute__((noinline)) void startScheduler(
     if (schedFputs("world", helloFile) == EOF) {
       printDebugString("ERROR: Could not write to hello file!\n");
       schedFclose(helloFile);
+      sanityTestFailed = true;
       break;
     }
     schedFclose(helloFile);
@@ -3927,6 +3933,7 @@ __attribute__((noinline)) void startScheduler(
     if (helloFile == NULL) {
       printDebugString("ERROR: Could not open hello file for reading after write!\n");
       schedRemove("hello");
+      sanityTestFailed = true;
       break;
     }
     printDebugString("Opened helloFile for reading\n");
@@ -3938,6 +3945,7 @@ __attribute__((noinline)) void startScheduler(
       printDebugString("ERROR: Could not read worldString after write!\n");
       schedFclose(helloFile);
       schedRemove("hello");
+      sanityTestFailed = true;
       break;
     }
     printDebugString("Read data from helloFile into worldString\n");
@@ -3948,6 +3956,7 @@ __attribute__((noinline)) void startScheduler(
       printDebugString("\"!\n");
       schedFclose(helloFile);
       schedRemove("hello");
+      sanityTestFailed = true;
       break;
     }
     printDebugString("Successfully read \"world\" from \"hello\"!\n");
@@ -3957,6 +3966,7 @@ __attribute__((noinline)) void startScheduler(
     if (helloFile == NULL) {
       printDebugString("ERROR: Could not open hello file for appending!\n");
       schedRemove("hello");
+      sanityTestFailed = true;
       break;
     }
 
@@ -3964,6 +3974,7 @@ __attribute__((noinline)) void startScheduler(
       printDebugString("ERROR: Could not append to hello file!\n");
       schedFclose(helloFile);
       schedRemove("hello");
+      sanityTestFailed = true;
       break;
     }
     schedFclose(helloFile);
@@ -3973,6 +3984,7 @@ __attribute__((noinline)) void startScheduler(
       printDebugString(
         "ERROR: Could not open hello file for reading after append!\n");
       schedRemove("hello");
+      sanityTestFailed = true;
       break;
     }
 
@@ -3982,6 +3994,7 @@ __attribute__((noinline)) void startScheduler(
       printDebugString("ERROR: Could not read worldString after append!\n");
       schedFclose(helloFile);
       schedRemove("hello");
+      sanityTestFailed = true;
       break;
     }
 
@@ -3992,14 +4005,18 @@ __attribute__((noinline)) void startScheduler(
       printDebugString("ERROR: Expected \"worldworld\", read \"");
       printDebugString(worldString);
       printDebugString("\"!\n");
+      sanityTestFailed = true;
     }
 
     schedFclose(helloFile);
     if (schedRemove("hello") != 0) {
-      printDebugString("ERROR: schedRemove failed to remove the \"hello\" file.\n");
+      printDebugString(
+        "ERROR: schedRemove failed to remove the \"hello\" file.\n");
+      sanityTestFailed = true;
     }
   } while (0);
   printDebugString("Filesystem sanity test complete\n");
+  while (sanityTestFailed == true);
 #endif // NANO_OS_DEBUG
 
   // Run our scheduler.
