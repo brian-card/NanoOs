@@ -3550,7 +3550,7 @@ void runScheduler(void) {
         if (schedulerRunOverlayCommand(SCHEDULER_STATE, taskDescriptor,
           pwd->pw_shell, (char**) shellArgs, taskDescriptor->envp) != 0
         ) {
-          removeTask(SCHEDULER_STATE, taskDescriptor, "Failed to load mush");
+          removeTask(SCHEDULER_STATE, taskDescriptor, "Failed to load shell");
           schedFree(pwd);
           schedFree(passwdStringBuffer);
           return;
