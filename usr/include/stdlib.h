@@ -38,6 +38,7 @@
 
 #include <stdbool.h>
 #include "NanoOsUser.h"
+#include "string.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -58,10 +59,21 @@ static inline void* calloc(size_t nmemb, size_t size) {
 }
 
 static inline char *getenv(const char *name) {
-  // The 'args' parameter of callOverlayFunction is a void* without the 'const'
-  // qualifier, so we have to cast it here to avoid a compiler warning.
-  return overlayMap.header.osApi->callOverlayFunction(
-    "/usr/lib/stdlib", "getenv", "getenv", (void*) name);
+  char **env = overlayMap.header.env;
+  if ((name == NULL) || (*name == '\0') || (env == NULL)) {
+    return NULL;
+  }
+
+  size_t nameLen = strlen(name);
+  char *value = NULL;
+  for (int ii = 0; env[ii] != NULL; ii++) {
+    if ((strncmp(env[ii], name, nameLen) == 0) && env[ii][nameLen] == '=') {
+      value = &env[ii][nameLen + 1];
+      break;
+    }
+  }
+
+  return value;
 }
 
 static inline long strtol(const char *nptr, char **endptr, int base) {
