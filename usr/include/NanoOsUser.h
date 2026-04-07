@@ -86,6 +86,8 @@ static inline int printHex_(unsigned long long int integer) {
 }
 #define printHex(integer) printHex_((unsigned long long int) (integer))
 
+#define environ overlayMap.header.env
+
 #ifdef __cplusplus
 }
 #endif
