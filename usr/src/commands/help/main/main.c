@@ -59,20 +59,14 @@ int main(int argc, char **argv) {
     "kill:       ",
     "Kill a running process.");
   printf("%s %s\n",
-    "logout:     ",
-    "Logout of the system.");
-  printf("%s %s\n",
     "looseLoop:  ",
     "Run a process in a loop that does yield.");
   printf("%s %s\n",
     "ps:         ",
     "List the running processes.");
   printf("%s %s\n",
-    "reset:      ",
-    "Do a hardware reset on the system.");
-  printf("%s %s\n",
     "shutdown:   ",
-    "Shutdown the system.");
+    "Power off or reset the system.");
   printf("%s %s\n",
     "tightLoop:  ",
     "Run a process in a loop that does not yield.");
