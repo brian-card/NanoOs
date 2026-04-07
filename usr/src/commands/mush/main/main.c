@@ -38,8 +38,6 @@
 
 #include "NanoOsUtils.h"
 
-extern char **environ;
-
 int runFilesystemCommand(char *commandLine) {
   const char *charAt = strchr(commandLine, ' ');
   if (charAt == NULL) {
