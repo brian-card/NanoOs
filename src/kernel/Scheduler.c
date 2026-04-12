@@ -108,11 +108,11 @@ static FileDescriptor standardKernelFileDescriptors[
   {
     // stdin
     // Kernel tasks do not read from stdin, so clear out both pipes.
-    .inputPipe = {
+    .inputChannel = {
       .taskId = TASK_ID_NOT_SET,
       .messageType = -1,
     },
-    .outputPipe = {
+    .outputChannel = {
       .taskId = TASK_ID_NOT_SET,
       .messageType = -1,
     },
@@ -121,11 +121,11 @@ static FileDescriptor standardKernelFileDescriptors[
     // stdout
     // Uni-directional FileDescriptor, so clear the input pipe and direct the
     // output pipe to the console.
-    .inputPipe = {
+    .inputChannel = {
       .taskId = TASK_ID_NOT_SET,
       .messageType = -1,
     },
-    .outputPipe = {
+    .outputChannel = {
       .taskId = TASK_ID_NOT_SET,
       .messageType = -1,
     },
@@ -134,11 +134,11 @@ static FileDescriptor standardKernelFileDescriptors[
     // stderr
     // Uni-directional FileDescriptor, so clear the input pipe and direct the
     // output pipe to the console.
-    .inputPipe = {
+    .inputChannel = {
       .taskId = TASK_ID_NOT_SET,
       .messageType = -1,
     },
-    .outputPipe = {
+    .outputChannel = {
       .taskId = TASK_ID_NOT_SET,
       .messageType = -1,
     },
@@ -168,11 +168,11 @@ static FileDescriptor standardUserFileDescriptors[
     // stdin
     // Uni-directional FileDescriptor, so clear the output pipe and direct the
     // input pipe to the console.
-    .inputPipe = {
+    .inputChannel = {
       .taskId = TASK_ID_NOT_SET,
       .messageType = -1,
     },
-    .outputPipe = {
+    .outputChannel = {
       .taskId = TASK_ID_NOT_SET,
       .messageType = -1,
     },
@@ -181,11 +181,11 @@ static FileDescriptor standardUserFileDescriptors[
     // stdout
     // Uni-directional FileDescriptor, so clear the input pipe and direct the
     // output pipe to the console.
-    .inputPipe = {
+    .inputChannel = {
       .taskId = TASK_ID_NOT_SET,
       .messageType = -1,
     },
-    .outputPipe = {
+    .outputChannel = {
       .taskId = TASK_ID_NOT_SET,
       .messageType = -1,
     },
@@ -194,11 +194,11 @@ static FileDescriptor standardUserFileDescriptors[
     // stderr
     // Uni-directional FileDescriptor, so clear the input pipe and direct the
     // output pipe to the console.
-    .inputPipe = {
+    .inputChannel = {
       .taskId = TASK_ID_NOT_SET,
       .messageType = -1,
     },
-    .outputPipe = {
+    .outputChannel = {
       .taskId = TASK_ID_NOT_SET,
       .messageType = 0,
     },
@@ -1557,7 +1557,7 @@ int closeTaskFileDescriptors(
     for (uint8_t ii = 0; ii < numFileDescriptors; ii++) {
       FileDescriptor *fileDescriptor = fileDescriptors[ii];
       TaskId waitingOutputTaskId
-        = fileDescriptor->outputPipe.taskId;
+        = fileDescriptor->outputChannel.taskId;
       if ((waitingOutputTaskId != TASK_ID_NOT_SET)
         && (waitingOutputTaskId != SCHEDULER_STATE->consoleTaskId)
       ) {
@@ -1566,12 +1566,13 @@ int closeTaskFileDescriptors(
 
         // Clear the taskId of the waiting task's stdin file descriptor.
         waitingTaskDescriptor->fileDescriptors[
-          STDIN_FILE_DESCRIPTOR_INDEX]->inputPipe.taskId = TASK_ID_NOT_SET;
+          STDIN_FILE_DESCRIPTOR_INDEX]->inputChannel.taskId = TASK_ID_NOT_SET;
 
         // Send an empty message to the waiting task so that it will become
         // unblocked.
-        taskMessageInit(messageToSend, fileDescriptor->outputPipe.messageType,
-            /*data= */ NULL, /* size= */ 0, /* waiting= */ false);
+        taskMessageInit(messageToSend,
+          fileDescriptor->outputChannel.messageType,
+          /*data= */ NULL, /* size= */ 0, /* waiting= */ false);
         taskMessageQueuePush(waitingTaskDescriptor, messageToSend);
         // Give the task a chance to unblock.
         taskResume(waitingTaskDescriptor, NULL);
@@ -1585,7 +1586,7 @@ int closeTaskFileDescriptors(
         }
       }
 
-      TaskId waitingInputTaskId = fileDescriptor->inputPipe.taskId;
+      TaskId waitingInputTaskId = fileDescriptor->inputChannel.taskId;
       if ((waitingInputTaskId != TASK_ID_NOT_SET)
         && (waitingInputTaskId != SCHEDULER_STATE->consoleTaskId)
       ) {
@@ -1594,12 +1595,13 @@ int closeTaskFileDescriptors(
 
         // Clear the taskId of the waiting task's stdin file descriptor.
         waitingTaskDescriptor->fileDescriptors[
-          STDOUT_FILE_DESCRIPTOR_INDEX]->outputPipe.taskId = TASK_ID_NOT_SET;
+          STDOUT_FILE_DESCRIPTOR_INDEX]->outputChannel.taskId = TASK_ID_NOT_SET;
 
         // Send an empty message to the waiting task so that it will become
         // unblocked.
-        taskMessageInit(messageToSend, fileDescriptor->outputPipe.messageType,
-            /*data= */ NULL, /* size= */ 0, /* waiting= */ false);
+        taskMessageInit(messageToSend,
+          fileDescriptor->outputChannel.messageType,
+          /*data= */ NULL, /* size= */ 0, /* waiting= */ false);
         taskMessageQueuePush(waitingTaskDescriptor, messageToSend);
         // Give the task a chance to unblock.
         taskResume(waitingTaskDescriptor, NULL);
@@ -3685,28 +3687,28 @@ __attribute__((noinline)) void startScheduler(
   // Initialize the global file descriptors.
   // Kernel stdin file descriptor doesn't need an update because they don't
   // receive stdin.  Direct kernel process stdout and stderr to the console.
-  standardKernelFileDescriptors[1].outputPipe.taskId
+  standardKernelFileDescriptors[1].outputChannel.taskId
     = schedulerState.consoleTaskId;
-  standardKernelFileDescriptors[1].outputPipe.messageType
+  standardKernelFileDescriptors[1].outputChannel.messageType
     = CONSOLE_WRITE_BUFFER;
-  standardKernelFileDescriptors[2].outputPipe.taskId
+  standardKernelFileDescriptors[2].outputChannel.taskId
     = schedulerState.consoleTaskId;
-  standardKernelFileDescriptors[2].outputPipe.messageType
+  standardKernelFileDescriptors[2].outputChannel.messageType
     = CONSOLE_WRITE_BUFFER;
 
   // Direct the input pipe of user process stdin to the console.  Direcdt the
   // output pipes of user process stdout and stderr to the console as well.
-  standardUserFileDescriptors[0].inputPipe.taskId
+  standardUserFileDescriptors[0].inputChannel.taskId
     = schedulerState.consoleTaskId;
-  standardUserFileDescriptors[0].inputPipe.messageType
+  standardUserFileDescriptors[0].inputChannel.messageType
     = CONSOLE_WAIT_FOR_INPUT;
-  standardUserFileDescriptors[1].outputPipe.taskId
+  standardUserFileDescriptors[1].outputChannel.taskId
     = schedulerState.consoleTaskId;
-  standardUserFileDescriptors[1].outputPipe.messageType
+  standardUserFileDescriptors[1].outputChannel.messageType
     = CONSOLE_WRITE_BUFFER;
-  standardUserFileDescriptors[2].outputPipe.taskId
+  standardUserFileDescriptors[2].outputChannel.taskId
     = schedulerState.consoleTaskId;
-  standardUserFileDescriptors[2].outputPipe.messageType
+  standardUserFileDescriptors[2].outputChannel.messageType
     = CONSOLE_WRITE_BUFFER;
 
   // Create the console task.  We used to have to double the size of the

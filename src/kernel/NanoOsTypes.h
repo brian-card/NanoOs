@@ -157,30 +157,30 @@ typedef struct NanoOsFile {
   TaskId             owner;
 } NanoOsFile;
 
-/// @struct IoPipe
+/// @struct IoChannel
 ///
 /// @brief Information that can be used to direct the output of one task
 /// into the input of another one.
 ///
 /// @param taskId The task ID (PID) of the destination task.
 /// @param messageType The type of message to send to the task.
-typedef struct IoPipe {
+typedef struct IoChannel {
   TaskId taskId;
   uint8_t messageType;
-} IoPipe;
+} IoChannel;
 
 /// @struct FileDescriptor
 ///
 /// @brief Definition of a file descriptor that a task can use for input
 /// and/or output.
 ///
-/// @param inputPipe An IoPipe object that describes where the file descriptor
-///   gets its input, if any.
-/// @param outputPipe An IoPipe object that describes where the file descriptor
-///   sends its output, if any.
+/// @param inputChannel An IoChannel object that describes where the file
+///   descriptor gets its input, if any.
+/// @param outputChannel An IoChannel object that describes where the file
+///   descriptor sends its output, if any.
 typedef struct FileDescriptor {
-  IoPipe inputPipe;
-  IoPipe outputPipe;
+  IoChannel inputChannel;
+  IoChannel outputChannel;
 } FileDescriptor;
 
 // Forward declaration.  Definition below.

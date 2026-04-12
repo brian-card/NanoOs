@@ -818,14 +818,14 @@ ConsoleBuffer* nanoOsWaitForInput(void) {
     // We can't proceed, so bail.
     return nanoOsBuffer; // NULL
   }
-  IoPipe *inputPipe = &inputFd->inputPipe;
+  IoChannel *inputChannel = &inputFd->inputChannel;
 
-  if (inputPipe->taskId == SCHEDULER_STATE->consoleTaskId) {
-    sendNanoOsMessageToTaskId(inputPipe->taskId, inputPipe->messageType,
+  if (inputChannel->taskId == SCHEDULER_STATE->consoleTaskId) {
+    sendNanoOsMessageToTaskId(inputChannel->taskId, inputChannel->messageType,
       /* func= */ 0, /* data= */ 0, false);
   }
 
-  if (inputPipe->taskId != TASK_ID_NOT_SET) {
+  if (inputChannel->taskId != TASK_ID_NOT_SET) {
     TaskMessage *response
       = taskMessageQueueWaitForType(CONSOLE_RETURNING_INPUT, NULL);
     nanoOsBuffer = nanoOsMessageDataPointer(response, ConsoleBuffer*);
@@ -1025,12 +1025,12 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *nanoOsBuffer) {
       returnValue = EOF;
       return returnValue;
     }
-    IoPipe *outputPipe = &outputFd->outputPipe;
+    IoChannel *outputChannel = &outputFd->outputChannel;
 
-    if ((outputPipe != NULL) && (outputPipe->taskId != TASK_ID_NOT_SET)) {
+    if ((outputChannel != NULL) && (outputChannel->taskId != TASK_ID_NOT_SET)) {
       if ((stream == stdout) || (stream == stderr)) {
         TaskMessage *taskMessage = sendNanoOsMessageToTaskId(
-          outputPipe->taskId, outputPipe->messageType,
+          outputChannel->taskId, outputChannel->messageType,
           0, (intptr_t) nanoOsBuffer, true);
         if (taskMessage != NULL) {
           taskMessageWaitForDone(taskMessage, NULL);
