@@ -597,16 +597,12 @@ typedef struct SpawnArgs {
 ///   "name=value" format.  This array may be NULL.
 /// @param schedulerState A pointer to the SchedulerState managed by the
 ///   scheduler.  This is needed by the execCommand function.
-/// @param fileActions A pointer to the posix_spawn_file_actions_t that
-///   specifies the operations to do on the file descriptors of the new process.
-///   This field may be NULL.
 typedef struct ExecArgs {
   TaskId callingTaskId;
   char *pathname;
   char **argv;
   char **envp;
   SchedulerState *schedulerState;
-  posix_spawn_file_actions_t *fileActions;
 } ExecArgs;
 
 #ifdef __cplusplus
