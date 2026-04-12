@@ -116,6 +116,7 @@ static FileDescriptor standardKernelFileDescriptors[
       .taskId = TASK_ID_NOT_SET,
       .messageType = -1,
     },
+    .pipeEnd = NULL,
   },
   {
     // stdout
@@ -129,6 +130,7 @@ static FileDescriptor standardKernelFileDescriptors[
       .taskId = TASK_ID_NOT_SET,
       .messageType = -1,
     },
+    .pipeEnd = NULL,
   },
   {
     // stderr
@@ -142,6 +144,7 @@ static FileDescriptor standardKernelFileDescriptors[
       .taskId = TASK_ID_NOT_SET,
       .messageType = -1,
     },
+    .pipeEnd = NULL,
   },
 };
 
@@ -176,6 +179,7 @@ static FileDescriptor standardUserFileDescriptors[
       .taskId = TASK_ID_NOT_SET,
       .messageType = -1,
     },
+    .pipeEnd = NULL,
   },
   {
     // stdout
@@ -189,6 +193,7 @@ static FileDescriptor standardUserFileDescriptors[
       .taskId = TASK_ID_NOT_SET,
       .messageType = -1,
     },
+    .pipeEnd = NULL,
   },
   {
     // stderr
@@ -202,6 +207,7 @@ static FileDescriptor standardUserFileDescriptors[
       .taskId = TASK_ID_NOT_SET,
       .messageType = 0,
     },
+    .pipeEnd = NULL,
   },
 };
 

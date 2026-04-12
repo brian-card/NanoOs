@@ -178,9 +178,12 @@ typedef struct IoChannel {
 ///   descriptor gets its input, if any.
 /// @param outputChannel An IoChannel object that describes where the file
 ///   descriptor sends its output, if any.
+/// @param pipeEnd Pointer to the FileDescriptor at the other end of a pipe if
+///   this FileDescriptor is part of a pipe.
 typedef struct FileDescriptor {
   IoChannel inputChannel;
   IoChannel outputChannel;
+  struct FileDescriptor *pipeEnd;
 } FileDescriptor;
 
 // Forward declaration.  Definition below.
