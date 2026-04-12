@@ -43,19 +43,6 @@
 
 /****************** Begin Custom Memory Management Functions ******************/
 
-/// @def memNode
-///
-/// @brief Get a pointer to the MemNode for a memory address.
-#define memNode(ptr) \
-  (((ptr) != NULL) ? &((MemNode*) (ptr))[-1] : NULL)
-
-/// @def sizeOfMemory
-///
-/// @brief Retrieve the size of a block of dynamic memory.  This information is
-/// stored sizeof(MemNode) bytes before the pointer.
-#define sizeOfMemory(ptr) \
-  (((ptr) != NULL) ? ((uint32_t) memNode(ptr)->size) : 0)
-
 /// @def isDynamicPointer
 ///
 /// @brief Determine whether or not a pointer was allocated from the allocators
@@ -63,6 +50,19 @@
 #define isDynamicPointer(ptr) \
   ((((uintptr_t) (ptr)) >= memoryManagerState->start) \
     && (((uintptr_t) (ptr)) <= memoryManagerState->end))
+
+/// @def memNode
+///
+/// @brief Get a pointer to the MemNode for a memory address.
+#define memNode(ptr) \
+  ((isDynamicPointer(ptr) == true) ? &((MemNode*) (ptr))[-1] : NULL)
+
+/// @def sizeOfMemory
+///
+/// @brief Retrieve the size of a block of dynamic memory.  This information is
+/// stored sizeof(MemNode) bytes before the pointer.
+#define sizeOfMemory(ptr) \
+  ((isDynamicPointer(ptr) == true) ? ((uint32_t) memNode(ptr)->size) : 0)
 
 #ifndef NANO_OS_MEM_DEBUG
 
