@@ -2828,6 +2828,9 @@ int schedulerSpawnCommandHandler(
   execArgs->envp = spawnArgs->envp;
   execArgs->schedulerState = schedulerState;
 
+  taskDescriptor->userId
+    = allTasks[taskId(taskMessageFrom(taskMessage)) - 1].userId;
+
   schedFree(spawnArgs); spawnArgs = NULL;
 
   if (taskCreate(taskDescriptor, execCommand, execArgs) == taskError) {
