@@ -145,6 +145,17 @@ static FileDescriptor standardKernelFileDescriptors[
   },
 };
 
+/// @var standardKernelFileDescriptorsPointers
+///
+/// @brief The array of file descriptor pointers that all kernel tasks use.
+static FileDescriptor *standardKernelFileDescriptorsPointers[
+  NUM_STANDARD_FILE_DESCRIPTORS
+] = {
+  &standardKernelFileDescriptors[0],
+  &standardKernelFileDescriptors[1],
+  &standardKernelFileDescriptors[2],
+};
+
 /// @var standardUserFileDescriptors
 ///
 /// @brief Pointer to the array of FileDescriptor objects (declared in the
@@ -1191,7 +1202,7 @@ FileDescriptor* schedulerGetFileDescriptor(FILE *stream) {
   TaskId runningTaskIndex = getRunningTaskId() - 1;
 
   if (fdIndex <= allTasks[runningTaskIndex].numFileDescriptors) {
-    returnValue = &allTasks[runningTaskIndex].fileDescriptors[fdIndex - 1];
+    returnValue = allTasks[runningTaskIndex].fileDescriptors[fdIndex - 1];
   } else {
     printString("ERROR: Received request for unknown stream ");
     printInt((intptr_t) stream);
@@ -1535,84 +1546,80 @@ int closeTaskFileDescriptors(
     schedulerState->currentReady
       = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
 
-    FileDescriptor *fileDescriptors = taskDescriptor->fileDescriptors;
-    if (fileDescriptors != standardUserFileDescriptors) {
-      TaskMessage *messageToSend = getAvailableMessage();
-      while (messageToSend == NULL) {
-        runScheduler();
-        messageToSend = getAvailableMessage();
-      }
-
-      uint8_t numFileDescriptors = taskDescriptor->numFileDescriptors;
-      for (uint8_t ii = 0; ii < numFileDescriptors; ii++) {
-        TaskId waitingOutputTaskId
-          = fileDescriptors[ii].outputPipe.taskId;
-        if ((waitingOutputTaskId != TASK_ID_NOT_SET)
-          && (waitingOutputTaskId != SCHEDULER_STATE->consoleTaskId)
-        ) {
-          TaskDescriptor *waitingTaskDescriptor
-            = &schedulerState->allTasks[waitingOutputTaskId - 1];
-
-          // Clear the taskId of the waiting task's stdin file descriptor.
-          waitingTaskDescriptor->fileDescriptors[
-            STDIN_FILE_DESCRIPTOR_INDEX].
-            inputPipe.taskId = TASK_ID_NOT_SET;
-
-          // Send an empty message to the waiting task so that it will become
-          // unblocked.
-          taskMessageInit(messageToSend,
-              fileDescriptors[ii].outputPipe.messageType,
-              /*data= */ NULL, /* size= */ 0, /* waiting= */ false);
-          taskMessageQueuePush(waitingTaskDescriptor, messageToSend);
-          // Give the task a chance to unblock.
-          taskResume(waitingTaskDescriptor, NULL);
-
-          // The function that was waiting should have released the message we
-          // sent it.  Get another one.
-          messageToSend = getAvailableMessage();
-          while (messageToSend == NULL) {
-            runScheduler();
-            messageToSend = getAvailableMessage();
-          }
-        }
-
-        TaskId waitingInputTaskId
-          = fileDescriptors[ii].inputPipe.taskId;
-        if ((waitingInputTaskId != TASK_ID_NOT_SET)
-          && (waitingInputTaskId != SCHEDULER_STATE->consoleTaskId)
-        ) {
-          TaskDescriptor *waitingTaskDescriptor
-            = &schedulerState->allTasks[waitingInputTaskId - 1];
-
-          // Clear the taskId of the waiting task's stdin file descriptor.
-          waitingTaskDescriptor->fileDescriptors[
-            STDOUT_FILE_DESCRIPTOR_INDEX].
-            outputPipe.taskId = TASK_ID_NOT_SET;
-
-          // Send an empty message to the waiting task so that it will become
-          // unblocked.
-          taskMessageInit(messageToSend,
-              fileDescriptors[ii].outputPipe.messageType,
-              /*data= */ NULL, /* size= */ 0, /* waiting= */ false);
-          taskMessageQueuePush(waitingTaskDescriptor, messageToSend);
-          // Give the task a chance to unblock.
-          taskResume(waitingTaskDescriptor, NULL);
-
-          // The function that was waiting should have released the message we
-          // sent it.  Get another one.
-          messageToSend = getAvailableMessage();
-          while (messageToSend == NULL) {
-            runScheduler();
-            messageToSend = getAvailableMessage();
-          }
-        }
-      }
-
-      // schedFree will pull an available message.  Release the one we've been
-      // using so that we're guaranteed it will be successful.
-      taskMessageRelease(messageToSend);
-      schedFree(fileDescriptors); taskDescriptor->fileDescriptors = NULL;
+    FileDescriptor **fileDescriptors = taskDescriptor->fileDescriptors;
+    TaskMessage *messageToSend = getAvailableMessage();
+    while (messageToSend == NULL) {
+      runScheduler();
+      messageToSend = getAvailableMessage();
     }
+
+    uint8_t numFileDescriptors = taskDescriptor->numFileDescriptors;
+    for (uint8_t ii = 0; ii < numFileDescriptors; ii++) {
+      FileDescriptor *fileDescriptor = fileDescriptors[ii];
+      TaskId waitingOutputTaskId
+        = fileDescriptor->outputPipe.taskId;
+      if ((waitingOutputTaskId != TASK_ID_NOT_SET)
+        && (waitingOutputTaskId != SCHEDULER_STATE->consoleTaskId)
+      ) {
+        TaskDescriptor *waitingTaskDescriptor
+          = &schedulerState->allTasks[waitingOutputTaskId - 1];
+
+        // Clear the taskId of the waiting task's stdin file descriptor.
+        waitingTaskDescriptor->fileDescriptors[
+          STDIN_FILE_DESCRIPTOR_INDEX]->inputPipe.taskId = TASK_ID_NOT_SET;
+
+        // Send an empty message to the waiting task so that it will become
+        // unblocked.
+        taskMessageInit(messageToSend, fileDescriptor->outputPipe.messageType,
+            /*data= */ NULL, /* size= */ 0, /* waiting= */ false);
+        taskMessageQueuePush(waitingTaskDescriptor, messageToSend);
+        // Give the task a chance to unblock.
+        taskResume(waitingTaskDescriptor, NULL);
+
+        // The function that was waiting should have released the message we
+        // sent it.  Get another one.
+        messageToSend = getAvailableMessage();
+        while (messageToSend == NULL) {
+          runScheduler();
+          messageToSend = getAvailableMessage();
+        }
+      }
+
+      TaskId waitingInputTaskId = fileDescriptor->inputPipe.taskId;
+      if ((waitingInputTaskId != TASK_ID_NOT_SET)
+        && (waitingInputTaskId != SCHEDULER_STATE->consoleTaskId)
+      ) {
+        TaskDescriptor *waitingTaskDescriptor
+          = &schedulerState->allTasks[waitingInputTaskId - 1];
+
+        // Clear the taskId of the waiting task's stdin file descriptor.
+        waitingTaskDescriptor->fileDescriptors[
+          STDOUT_FILE_DESCRIPTOR_INDEX]->outputPipe.taskId = TASK_ID_NOT_SET;
+
+        // Send an empty message to the waiting task so that it will become
+        // unblocked.
+        taskMessageInit(messageToSend, fileDescriptor->outputPipe.messageType,
+            /*data= */ NULL, /* size= */ 0, /* waiting= */ false);
+        taskMessageQueuePush(waitingTaskDescriptor, messageToSend);
+        // Give the task a chance to unblock.
+        taskResume(waitingTaskDescriptor, NULL);
+
+        // The function that was waiting should have released the message we
+        // sent it.  Get another one.
+        messageToSend = getAvailableMessage();
+        while (messageToSend == NULL) {
+          runScheduler();
+          messageToSend = getAvailableMessage();
+        }
+      }
+
+      schedFree(fileDescriptors[ii]); fileDescriptors[ii] = NULL;
+    }
+
+    // schedFree will pull an available message.  Release the one we've been
+    // using so that we're guaranteed it will be successful.
+    taskMessageRelease(messageToSend);
+    schedFree(fileDescriptors); taskDescriptor->fileDescriptors = NULL;
 
     schedulerState->currentReady = currentReady;
     _functionInProgress = NULL;
@@ -3363,34 +3370,65 @@ int schedulerRunOverlayCommand(
       if (assignMemory(execArgs->envp[ii], taskDescriptor->taskId) != 0) {
         printString("WARNING: Could not assign execArgs->envp[");
         printInt(ii);
-        printString("] to exec task.\n");
-        printString("Undefined behavior.\n");
+        printString("] to exec task\n");
+        printString("Undefined behavior\n");
       }
     }
   }
 
+  taskDescriptor->numFileDescriptors = NUM_STANDARD_FILE_DESCRIPTORS;
+  // Use calloc for taskDescriptor->fileDescriptors in case we fail to allocate
+  // one of the FileDescriptor pointers later and have to free the elements of
+  // the array.  It's safe to pass NULL to free().
+  taskDescriptor->fileDescriptors = (FileDescriptor**) schedCalloc(1,
+    NUM_STANDARD_FILE_DESCRIPTORS * sizeof(FileDescriptor*));
+  if (taskDescriptor->fileDescriptors == NULL) {
+    printString(
+      "ERROR: Could not allocate file descriptor array for new command\n");
+    returnValue = -ENOMEM;
+    goto freeExecArgs;
+  }
+  for (int ii = 0; ii < taskDescriptor->numFileDescriptors; ii++) {
+    taskDescriptor->fileDescriptors[ii]
+      = (FileDescriptor*) schedMalloc(sizeof(FileDescriptor));
+    if (taskDescriptor->fileDescriptors[ii] == NULL) {
+      printString("ERROR: Could not allocate memory for file descriptor ");
+      printInt(ii);
+      printString(" for new task\n");
+      returnValue = -ENOMEM;
+      goto freeFileDescriptors;
+    }
+    memcpy(
+      taskDescriptor->fileDescriptors[ii],
+      &standardUserFileDescriptors[ii],
+      sizeof(FileDescriptor)
+    );
+  }
+
   if (taskCreate(taskDescriptor, execCommand, execArgs) == taskError) {
     printString(
-      "ERROR: Could not configure task handle for new command.\n");
-    schedFree(execArgs);
-    return -ENOEXEC;
+      "ERROR: Could not configure task handle for new command\n");
+    returnValue = -ENOEXEC;
+    goto freeFileDescriptors;
   }
 
   taskDescriptor->overlayDir = execArgs->pathname;
   returnValue = loadTaskDescriptorOverlayMetadata(taskDescriptor);
   if (returnValue != 0) {
-    return returnValue;
+    goto freeFileDescriptors;
   }
   taskDescriptor->envp = execArgs->envp;
   taskDescriptor->name = execArgs->argv[0];
 
-  taskDescriptor->numFileDescriptors = NUM_STANDARD_FILE_DESCRIPTORS;
-  taskDescriptor->fileDescriptors
-    = (FileDescriptor*) standardUserFileDescriptors;
-
   taskResume(taskDescriptor, NULL);
 
   return returnValue;
+
+freeFileDescriptors:
+  for (int ii = 0; ii < taskDescriptor->numFileDescriptors; ii++) {
+    schedFree(taskDescriptor->fileDescriptors[ii]);
+  }
+  schedFree(taskDescriptor->fileDescriptors);
 
 freeExecArgs:
   schedFree(execArgs->pathname);
@@ -3611,6 +3649,8 @@ __attribute__((noinline)) void startScheduler(
   schedulerState.firstUserTaskId = 4;
   schedulerState.firstShellTaskId = 4;
   schedulerState.runScheduler = runScheduler;
+  schedulerState.numExtraFileDescriptors = 0;
+  schedulerState.extraFileDescriptors = NULL;
   SCHEDULER_STATE = &schedulerState;
   printDebugString("Set scheduler state.\n");
 
@@ -3723,8 +3763,7 @@ __attribute__((noinline)) void startScheduler(
   // Initialize all the kernel task file descriptors.
   for (TaskId ii = 1; ii <= schedulerState.firstUserTaskId; ii++) {
     allTasks[ii - 1].numFileDescriptors = NUM_STANDARD_FILE_DESCRIPTORS;
-    allTasks[ii - 1].fileDescriptors
-      = (FileDescriptor*) standardKernelFileDescriptors;
+    allTasks[ii - 1].fileDescriptors = standardKernelFileDescriptorsPointers;
   }
   printDebugString("Initialized kernel task file descriptors.\n");
 

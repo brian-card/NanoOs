@@ -198,8 +198,8 @@ typedef struct TaskQueue TaskQueue;
 /// @param userId The numerical ID of the user that is running the task.
 /// @param numFileDescriptors The number of FileDescriptor objects contained by
 ///   the fileDescriptors array.
-/// @param fileDescriptors Pointer to an array of FileDescriptors that are
-///   currently in use by the task.
+/// @param fileDescriptors Pointer to an array of FileDescriptor pointers that
+///   are currently in use by the task.
 /// @param overlayDir The base path to the overlays for the task, if any.
 /// @param overlay The FileBlockMetadata of how to access the overlay from its
 ///   block device.
@@ -215,7 +215,7 @@ typedef struct TaskDescriptor {
   TaskId              taskId;
   UserId              userId;
   uint8_t             numFileDescriptors;
-  FileDescriptor     *fileDescriptors;
+  FileDescriptor    **fileDescriptors;
   char               *overlayDir;
   FileBlockMetadata   overlay;
   char              **envp;
@@ -314,6 +314,8 @@ typedef struct SchedulerState {
   TaskId firstUserTaskId;
   TaskId firstShellTaskId;
   void (*runScheduler)(void);
+  uint8_t numExtraFileDescriptors;
+  FileDescriptor *extraFileDescriptors;
 } SchedulerState;
 
 /// @struct CommandDescriptor
@@ -524,28 +526,18 @@ typedef struct NanoOsMessage {
   NanoOsMessageData  data;
 } NanoOsMessage;
 
-/// @struct ExecArgs
+/// @struct posix_spawn_file_actions_t
 ///
-/// @brief Arguments for the standard POSIX execve call.
+/// @brief Description of file-related operations that need to happen during a
+/// posix_spawn call.
 ///
-/// @param callingTaskId The task ID of the process that is execing.
-/// @param pathname The full, absolute path on disk to the program to run.
-/// @param argv The NULL-terminated array of arguments for the command.  argv[0]
-///   must be valid and should be the name of the program.
-/// @param envp The NULL-terminated array of environment variables in
-///   "name=value" format.  This array may be NULL.
-/// @param schedulerState A pointer to the SchedulerState managed by the
-///   scheduler.  This is needed by the execCommand function.
-typedef struct ExecArgs {
-  TaskId callingTaskId;
-  char *pathname;
-  char **argv;
-  char **envp;
-  SchedulerState *schedulerState;
-} ExecArgs;
+/// @param dup2 Array of file descriptors that need to be mapped from one to the
+///   other before the process is started.
+typedef struct posix_spawn_file_actions_t {
+  int dup2[2][2];
+} posix_spawn_file_actions_t;
 
-// POSIX-mandated objects require for posix_spawn
-typedef struct posix_spawn_file_actions_t posix_spawn_file_actions_t;
+// POSIX-mandated object required for posix_spawn
 typedef struct posix_spawnattr_t posix_spawnattr_t;
 
 /// @struct SpawnArgs
@@ -576,6 +568,30 @@ typedef struct SpawnArgs {
   char **argv;
   char **envp;
 } SpawnArgs;
+
+/// @struct ExecArgs
+///
+/// @brief Arguments for the standard POSIX execve call.
+///
+/// @param callingTaskId The task ID of the process that is execing.
+/// @param pathname The full, absolute path on disk to the program to run.
+/// @param argv The NULL-terminated array of arguments for the command.  argv[0]
+///   must be valid and should be the name of the program.
+/// @param envp The NULL-terminated array of environment variables in
+///   "name=value" format.  This array may be NULL.
+/// @param schedulerState A pointer to the SchedulerState managed by the
+///   scheduler.  This is needed by the execCommand function.
+/// @param fileActions A pointer to the posix_spawn_file_actions_t that
+///   specifies the operations to do on the file descriptors of the new process.
+///   This field may be NULL.
+typedef struct ExecArgs {
+  TaskId callingTaskId;
+  char *pathname;
+  char **argv;
+  char **envp;
+  SchedulerState *schedulerState;
+  posix_spawn_file_actions_t *fileActions;
+} ExecArgs;
 
 #ifdef __cplusplus
 } // extern "C"
