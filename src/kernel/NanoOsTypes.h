@@ -195,9 +195,9 @@ typedef struct TaskQueue TaskQueue;
 ///
 /// @param name The name of the command as stored in its CommandEntry or as
 ///   set by the scheduler at launch.
-/// @param task A TaskHandle that manages the running command's execution
+/// @param taskHandle A TaskHandle that manages the running command's execution
 ///   state.
-/// @param 
+/// @param taskId The numerical ID of the task.
 /// @param userId The numerical ID of the user that is running the task.
 /// @param numFileDescriptors The number of FileDescriptor objects contained by
 ///   the fileDescriptors array.
@@ -527,15 +527,30 @@ typedef struct NanoOsMessage {
   NanoOsMessageData  data;
 } NanoOsMessage;
 
+/// @struct Dup2
+///
+/// @brief Information about how to dup a FileDescriptor into the ones managed
+/// by a task.
+///
+/// @param fd The destination index into the task's fileDescriptors array.
+/// @param dup A pointer to the FileDescriptor that is to be used.
+typedef struct Dup2 {
+  int fd;
+  FileDescriptor *dup;
+} Dup2;
+
 /// @struct posix_spawn_file_actions_t
 ///
 /// @brief Description of file-related operations that need to happen during a
 /// posix_spawn call.
 ///
-/// @param dup2 Array of file descriptors that need to be mapped from one to the
-///   other before the process is started.
+/// @param numDup2 The number of dup2 operations that need to happen before the
+///   process begins.
+/// @param dup2 Array of Dup2 objects that specify the FileDescriptors to dup
+///   onto the file descriptors used by the spawned process.
 typedef struct posix_spawn_file_actions_t {
-  int dup2[2][2];
+  uint8_t numDup2;
+  Dup2 dup2[2];
 } posix_spawn_file_actions_t;
 
 // POSIX-mandated object required for posix_spawn
