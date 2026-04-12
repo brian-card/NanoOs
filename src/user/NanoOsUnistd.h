@@ -57,6 +57,7 @@ extern "C"
 #define STDERR_FILENO 2
 
 int nanoOsGethostname(char *name, size_t len);
+int nanoOsPipe(int pipefd[2]);
 int nanoOsSethostname(const char *name, size_t len);
 int nanoOsTtyname_r(int fd, char *buf, size_t buflen);
 

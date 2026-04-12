@@ -39,6 +39,7 @@
 #include "../kernel/Console.h"
 #include "../kernel/NanoOs.h"
 #include "../kernel/Scheduler.h"
+#include "../kernel/Tasks.h"
 
 // Must come last
 #include "NanoOsStdio.h"
@@ -71,6 +72,96 @@ int nanoOsGethostname(char *name, size_t len) {
   }
   strncpy(name, hostname, len);
   
+  return returnValue;
+}
+
+/// @fn int nanoOsPipe(int pipefd[2])
+///
+/// @brief Implementation of the standard Unix pipe() system call.
+///
+/// @param pipefd A two-element array of integers that is to be populated with
+///   the POSIX file descriptor values of the ends of the pipe.  Index 0 is the
+///   read end, index 1 is the write end.
+///
+/// @return Returns 0 on success.  On failure, -1 is returned and errno is set.
+int nanoOsPipe(int pipefd[2]) {
+  int returnValue = 0;
+  
+  TaskDescriptor *taskDescriptor = getRunningTask();
+  if (taskDescriptor == NULL) {
+    // This should be impossible, but check anyway.
+    errno = EOTHER;
+    returnValue = -1;
+    goto exit;
+  }
+  
+  uint8_t numFileDescriptors = taskDescriptor->numFileDescriptors;
+  void *check = realloc(taskDescriptor->fileDescriptors,
+    (numFileDescriptors + 2) * sizeof(FileDescriptor*));
+  if (check == NULL) {
+    errno = ENOMEM;
+    returnValue = -1;
+    goto exit;
+  }
+  taskDescriptor->fileDescriptors = (FileDescriptor**) check;
+  // We need to guarantee that the new slots added start out as NULL.  That way,
+  // if one of the allocations fails, we can pass the pointer into free and not
+  // worry about it.
+  for (int ii = numFileDescriptors; ii < (numFileDescriptors + 2); ii++) {
+    taskDescriptor->fileDescriptors[ii] = NULL;
+  }
+  
+  // Now allocate each one
+  for (int ii = numFileDescriptors; ii < (numFileDescriptors + 2); ii++) {
+    taskDescriptor->fileDescriptors[ii]
+      = (FileDescriptor*) malloc(sizeof(FileDescriptor));
+    if (taskDescriptor->fileDescriptors[ii] == NULL) {
+      errno = ENOMEM;
+      goto freeFileDescriptors;
+    }
+    
+    // Initialize the file descriptor's channels to point to ourself.
+    taskDescriptor->fileDescriptors[ii]->inputChannel.taskId
+      = getRunningTaskId();
+    taskDescriptor->fileDescriptors[ii]->inputChannel.messageType = -1;
+    taskDescriptor->fileDescriptors[ii]->outputChannel.taskId
+      = getRunningTaskId();
+    taskDescriptor->fileDescriptors[ii]->outputChannel.messageType = -1;
+  }
+  
+  // Fix the messages for the relevant channels in the file descriptors.
+  taskDescriptor->fileDescriptors[numFileDescriptors
+    ]->inputChannel.messageType = CONSOLE_WAIT_FOR_INPUT;
+  taskDescriptor->fileDescriptors[numFileDescriptors + 1
+    ]->outputChannel.messageType = CONSOLE_WRITE_BUFFER;
+  
+  // Now point the pipe ends toward each other.
+  taskDescriptor->fileDescriptors[numFileDescriptors]->pipeEnd
+    = taskDescriptor->fileDescriptors[numFileDescriptors + 1];
+  taskDescriptor->fileDescriptors[numFileDescriptors + 1]->pipeEnd
+    = taskDescriptor->fileDescriptors[numFileDescriptors];
+  
+  // Set the values in the array that was provided.
+  pipefd[0] = numFileDescriptors;
+  pipefd[1] = numFileDescriptors + 1;
+  
+  // Lastly, increase the value of taskDescriptor->numFileDescriptors;
+  taskDescriptor->numFileDescriptors += 2;
+  
+  return returnValue;
+  
+freeFileDescriptors:
+  for (int ii = numFileDescriptors; ii < (numFileDescriptors + 2); ii++) {
+    free(taskDescriptor->fileDescriptors[ii]);
+  }
+  // We need to shrink the fileDescriptors array back down to its original size.
+  // Since we're reducing the amount of memory consumed, this is guaranteed to
+  // be successful and not relocate the pointer, so no need to do anything with
+  // the return value.
+  realloc(taskDescriptor->fileDescriptors,
+    numFileDescriptors * sizeof(FileDescriptor*));
+  
+exit:
   return returnValue;
 }
 
