@@ -317,8 +317,6 @@ typedef struct SchedulerState {
   TaskId firstUserTaskId;
   TaskId firstShellTaskId;
   void (*runScheduler)(void);
-  uint8_t numExtraFileDescriptors;
-  FileDescriptor *extraFileDescriptors;
 } SchedulerState;
 
 /// @struct CommandDescriptor

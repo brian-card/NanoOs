@@ -3657,8 +3657,6 @@ __attribute__((noinline)) void startScheduler(
   schedulerState.firstUserTaskId = 4;
   schedulerState.firstShellTaskId = 4;
   schedulerState.runScheduler = runScheduler;
-  schedulerState.numExtraFileDescriptors = 0;
-  schedulerState.extraFileDescriptors = NULL;
   SCHEDULER_STATE = &schedulerState;
   printDebugString("Set scheduler state.\n");
 
