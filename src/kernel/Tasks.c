@@ -100,6 +100,7 @@ ExecArgs* execArgsDestroy(ExecArgs *execArgs) {
 /// @return This function always succeeds and always returns NULL.
 SpawnArgs* spawnArgsDestroy(SpawnArgs *spawnArgs) {
   free(spawnArgs->path);
+  free(spawnArgs->fileActions);
 
   spawnArgs->argv = stringArrayDestroy(spawnArgs->argv);
   spawnArgs->envp = stringArrayDestroy(spawnArgs->envp);
