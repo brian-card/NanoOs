@@ -1397,7 +1397,7 @@ int schedulerSpawn(
     return EFAULT;
   }
 
-  SpawnArgs *spawnArgs = (SpawnArgs*) malloc(sizeof(SpawnArgs));
+  SpawnArgs *spawnArgs = (SpawnArgs*) calloc(1, sizeof(SpawnArgs));
   if (spawnArgs == NULL) {
     return ENOMEM;
   }
@@ -1411,10 +1411,21 @@ int schedulerSpawn(
   }
   strcpy(spawnArgs->path, path);
 
-  // Not doing anything intelligent with these two args yet.  We need to make
-  // copies of these rather than casting away the `const` qualifier here if we
-  // ever do use them.
-  spawnArgs->fileActions = (posix_spawn_file_actions_t*) file_actions;
+  if (file_actions != NULL) {
+    spawnArgs->fileActions = (posix_spawn_file_actions_t*) malloc(
+      sizeof(posix_spawn_file_actions_t));
+    if (spawnArgs->fileActions == NULL) {
+      returnValue = ENOMEM;
+      goto freeSpawnArgs;
+    }
+    memcpy(spawnArgs->fileActions, file_actions, sizeof(*file_actions));
+  } else {
+    spawnArgs->fileActions = NULL;
+  }
+
+
+  // Not doing anything intelligent with this arg yet.  We need to make a copy
+  // rather than casting away the `const` qualifier here if we ever do use it.
   spawnArgs->attrp = (posix_spawnattr_t*) attrp;
 
   size_t argvLen = 0;
