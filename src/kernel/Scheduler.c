@@ -2882,6 +2882,8 @@ int schedulerSpawnCommandHandler(
       // If we made it this far then we need to free the FileDescriptor that's
       // at the specified fd index and set it to the one provided.
       schedFree(taskDescriptor->fileDescriptors[dup2->fd]);
+      dup2->dup->inputChannel.taskId = taskDescriptor->taskId;
+      dup2->dup->outputChannel.taskId = taskDescriptor->taskId;
       taskDescriptor->fileDescriptors[dup2->fd] = dup2->dup;
     }
 
