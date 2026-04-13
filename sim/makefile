@@ -70,6 +70,7 @@ OS_OBJECTS := \
     $(OBJ_DIR)/SdCard.o \
     $(OBJ_DIR)/NanoOsApi.o \
     $(OBJ_DIR)/NanoOsErrno.o \
+    $(OBJ_DIR)/NanoOsFcntl.o \
     $(OBJ_DIR)/NanoOsLibC.o \
     $(OBJ_DIR)/NanoOsPwd.o \
     $(OBJ_DIR)/NanoOsSched.o \

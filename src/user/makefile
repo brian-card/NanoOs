@@ -51,6 +51,7 @@ SOURCES = \
 OBJECTS = \
     $(OBJ_DIR)/NanoOsApi.o \
     $(OBJ_DIR)/NanoOsErrno.o \
+    $(OBJ_DIR)/NanoOsFcntl.o \
     $(OBJ_DIR)/NanoOsHardware.o \
     $(OBJ_DIR)/NanoOsLibC.o \
     $(OBJ_DIR)/NanoOsPwd.o \

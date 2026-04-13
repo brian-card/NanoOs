@@ -183,6 +183,9 @@ typedef struct NanoOsApi {
     const posix_spawnattr_t *attrp,
     char *const argv[], char *const envp[]);
   
+  // fcntl.h functions:
+  int (*fcntl)(int fd, int op, ... /* arg */ );
+  
   // NanoOs-specific functionality
   
   // NanoOsUser.h functions:

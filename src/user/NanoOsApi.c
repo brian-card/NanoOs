@@ -55,6 +55,7 @@ int schedulerSpawn(
 #include "../kernel/OverlayFunctions.h"
 #include "../kernel/Scheduler.h"
 #include "../kernel/Tasks.h"
+#include "NanoOsFcntl.h"
 #include "NanoOsLibC.h"
 #include "NanoOsPwd.h"
 #include "NanoOsSched.h"
@@ -179,6 +180,9 @@ NanoOsApi nanoOsApi = {
   
   // spawn.h functions:
   .posix_spawn = schedulerSpawn,
+  
+  // fcntl.h functions:
+  .fcntl = nanoOsFcntl,
   
   // NanoOs-specific functionality
   
