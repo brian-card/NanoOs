@@ -32,9 +32,10 @@
 #include "NanoOsFcntl.h"
 
 // fcntl is currently a no-op.
-int nanoOsFcntl(int fd, int op, ... /* arg */ ) {
+int nanoOsFcntl(int fd, int op, va_list arg) {
   (void) fd;
   (void) op;
+  (void) arg;
 
   return 0;
 }

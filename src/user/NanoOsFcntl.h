@@ -37,6 +37,8 @@
 #ifndef NANO_OS_USER_FCNTL_H
 #define NANO_OS_USER_FCNTL_H
 
+#include <stdarg.h>
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -100,7 +102,7 @@ extern "C"
 #define F_TLOCK         2
 #define F_TEST          3
 
-int nanoOsFcntl(int fd, int op, ... /* arg */ );
+int nanoOsFcntl(int fd, int op, va_list arg);
 
 #ifdef __cplusplus
 }

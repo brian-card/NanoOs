@@ -184,7 +184,7 @@ typedef struct NanoOsApi {
     char *const argv[], char *const envp[]);
   
   // fcntl.h functions:
-  int (*fcntl)(int fd, int op, ... /* arg */ );
+  int (*fcntl)(int fd, int op, va_list arg);
   
   // NanoOs-specific functionality
   
