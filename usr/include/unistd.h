@@ -62,6 +62,9 @@ static inline int execve(const char *pathname,
 static inline int setuid(uid_t uid) {
   return overlayMap.header.osApi->setuid(uid);
 }
+static inline int pipe(int pipefd[2]) {
+  return overlayMap.header.osApi->pipe(pipefd);
+}
 
 #ifdef __cplusplus
 }
