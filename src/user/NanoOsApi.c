@@ -152,6 +152,7 @@ NanoOsApi nanoOsApi = {
   .ttyname_r = nanoOsTtyname_r,
   .execve = schedulerExecve,
   .setuid = schedulerSetTaskUser,
+  .pipe = nanoOsPipe,
   
   // termios functions:
   .tcgetattr = nanoOsTcgetattr,
