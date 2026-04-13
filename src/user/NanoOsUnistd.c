@@ -121,11 +121,9 @@ int nanoOsPipe(int pipefd[2]) {
     }
     
     // Initialize the file descriptor's channels to point to ourself.
-    taskDescriptor->fileDescriptors[ii]->inputChannel.taskId
-      = getRunningTaskId();
+    taskDescriptor->fileDescriptors[ii]->inputChannel.taskId = -1;
     taskDescriptor->fileDescriptors[ii]->inputChannel.messageType = -1;
-    taskDescriptor->fileDescriptors[ii]->outputChannel.taskId
-      = getRunningTaskId();
+    taskDescriptor->fileDescriptors[ii]->outputChannel.taskId = -1;
     taskDescriptor->fileDescriptors[ii]->outputChannel.messageType = -1;
   }
   
