@@ -290,6 +290,18 @@ void* execCommand(void *args) {
     return (void*) ((intptr_t) -1);
   }
 
+  FileDescriptor **fileDescriptors = taskDescriptor->fileDescriptors;
+  while ((fileDescriptors[0]->inputChannel.taskId == taskDescriptor->taskId)
+   || (fileDescriptors[1]->outputChannel.taskId == taskDescriptor->taskId)
+   || (fileDescriptors[2]->outputChannel.taskId == taskDescriptor->taskId)
+  ) {
+    // We've been spawned via posix_spawn from a command line that contains
+    // pipes and the pipes haven't been setup yet.  We need to wait until that
+    // process completes, otherwise either we'll miss input or the process
+    // downstream will.
+    taskYield();
+  }
+
   printDebugString("Call the task function\n");
   int returnValue = runOverlayCommand(pathname, argc, argv);
 
