@@ -2818,7 +2818,7 @@ int schedulerSpawnCommandHandler(
   ExecArgs *execArgs = (ExecArgs*) schedMalloc(sizeof(ExecArgs));
   if (execArgs == NULL) {
     printString("Out of memory for ExecArgs.\n");
-    nanoOsMessage->data = EINVAL;
+    nanoOsMessage->data = ENOMEM;
     taskMessageSetDone(taskMessage);
     return returnValue; // 0; Don't retry this command
   }
@@ -2830,6 +2830,63 @@ int schedulerSpawnCommandHandler(
 
   taskDescriptor->userId
     = allTasks[taskId(taskMessageFrom(taskMessage)) - 1].userId;
+
+  taskDescriptor->numFileDescriptors = NUM_STANDARD_FILE_DESCRIPTORS;
+  // Use calloc for taskDescriptor->fileDescriptors in case we fail to allocate
+  // one of the FileDescriptor pointers later and have to free the elements of
+  // the array.  It's safe to pass NULL to free().
+  taskDescriptor->fileDescriptors = (FileDescriptor**) schedCalloc(1,
+    NUM_STANDARD_FILE_DESCRIPTORS * sizeof(FileDescriptor*));
+  if (taskDescriptor->fileDescriptors == NULL) {
+    printString(
+      "ERROR: Could not allocate file descriptor array for new command\n");
+    nanoOsMessage->data = ENOMEM;
+    schedFree(execArgs);
+    taskMessageSetDone(taskMessage);
+    return returnValue; // 0; Don't retry this command
+  }
+  for (int ii = 0; ii < taskDescriptor->numFileDescriptors; ii++) {
+    taskDescriptor->fileDescriptors[ii]
+      = (FileDescriptor*) schedMalloc(sizeof(FileDescriptor));
+    if (taskDescriptor->fileDescriptors[ii] == NULL) {
+      printString("ERROR: Could not allocate memory for file descriptor ");
+      printInt(ii);
+      printString(" for new task\n");
+      nanoOsMessage->data = ENOMEM;
+      for (int jj = 0; jj < ii; jj++) {
+        schedFree(taskDescriptor->fileDescriptors[jj]);
+      }
+      schedFree(taskDescriptor->fileDescriptors);
+      schedFree(execArgs);
+      taskMessageSetDone(taskMessage);
+      return returnValue; // 0; Don't retry this command
+    }
+    memcpy(
+      taskDescriptor->fileDescriptors[ii],
+      &standardUserFileDescriptors[ii],
+      sizeof(FileDescriptor)
+    );
+  }
+
+  if (spawnArgs->fileActions != NULL) {
+    for (uint8_t ii = 0; ii < spawnArgs->fileActions->numDup2; ii++) {
+      Dup2 *dup2 = &spawnArgs->fileActions->dup2[ii];
+      if (dup2->fd >= taskDescriptor->numFileDescriptors) {
+        // This is technically legal in Unix, but we're not going to support it.
+        // We're handling a spawn call here, so the only things that it makes
+        // sense to dup are stdin, stdout, and stderr.
+        schedFree(dup2->dup);
+        continue;
+      }
+
+      // If we made it this far then we need to free the FileDescriptor that's
+      // at the specified fd index and set it to the one provided.
+      schedFree(taskDescriptor->fileDescriptors[dup2->fd]);
+      taskDescriptor->fileDescriptors[dup2->fd] = dup2->dup;
+    }
+
+    schedFree(spawnArgs->fileActions); spawnArgs->fileActions = NULL;
+  }
 
   schedFree(spawnArgs); spawnArgs = NULL;
 
