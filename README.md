@@ -92,5 +92,5 @@ For the codebase with a FAT16 filesystem on an SD card and user processes that a
 
 ## Development History
 
-The development history of this work is archived at this repository's [GitHub Pages](https://james-card.github.io/NanoOs/) site.
+The development history of this work is archived at this repository's [GitHub Pages](https://brian-card.github.io/NanoOs/) site.
 
