@@ -45,6 +45,9 @@ extern "C"
 {
 #endif
 
+static inline int dup2(int oldfd, int newfd) {
+  return overlayMap.header.osApi->dup2(oldfd, newfd);
+}
 static inline int gethostname(char *name, size_t len) {
   return overlayMap.header.osApi->gethostname(name, len);
 }
