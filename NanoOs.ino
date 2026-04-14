@@ -26,6 +26,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 // Custom includes
+#include "src/hal/HalSeeedXiaoM0.h"
 #include "src/hal/HalAdafruitFeatherM0Wifi.h"
 #include "src/hal/HalArduinoNano33Iot.h"
 #include "src/hal/HalArduinoNanoEvery.h"
@@ -41,7 +42,9 @@ const Hal *HAL = NULL;
 // is to be used for Arduino-specific setup.  *ANYTHING* that requires use of
 // coroutines needs to be done in the loop function.
 void setup() {
-#if defined(ADAFRUIT_FEATHER_M0)
+#if defined(ARDUINO_SEEED_XIAO_M0)
+  HAL = halSeeedXiaoM0Init();
+#elif defined(ADAFRUIT_FEATHER_M0)
   HAL = halAdafruitFeatherM0WifiInit();
 #elif defined(ARDUINO_SAMD_NANO_33_IOT)
   HAL = halArduinoNano33IotInit();
