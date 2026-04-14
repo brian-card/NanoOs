@@ -50,18 +50,10 @@
 #include "../user/NanoOsErrno.h"
 #include "../user/NanoOsStdio.h"
 
-/// @def DIO_START
-///
-/// @brief On the Adafruit Feather M0 WiFi, there are several digital pins that
-/// are reserved by the system.  We have pins 10 through 12 as pure general-
-/// purpose DIOs.  9 is also an analog input connected to the battery and 13 is
-/// connected to the on-board LED.
-#define DIO_START 10
-
 /// @def NUM_DIO_PINS
 ///
 /// @brief The number of digital IO pins on the board.
-#define NUM_DIO_PINS 3
+#define NUM_DIO_PINS 8
 
 /// @def SPI_COPI_DIO
 ///
