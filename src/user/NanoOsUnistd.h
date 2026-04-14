@@ -56,6 +56,35 @@ extern "C"
 #define STDOUT_FILENO 1
 #define STDERR_FILENO 2
 
+// Declared in NanoOsTypes.h.
+typedef struct FileDescriptor FileDescriptor;
+
+/// @struct Dup2
+///
+/// @brief Information about how to dup a FileDescriptor into the ones managed
+/// by a task.
+///
+/// @param fd The destination index into the task's fileDescriptors array.
+/// @param dup A pointer to the FileDescriptor that is to be used.
+typedef struct Dup2 {
+  int fd;
+  FileDescriptor *dup;
+} Dup2;
+
+/// @struct posix_spawn_file_actions_t
+///
+/// @brief Description of file-related operations that need to happen during a
+/// posix_spawn call.
+///
+/// @param numDup2 The number of dup2 operations that need to happen before the
+///   process begins.
+/// @param dup2 Array of Dup2 objects that specify the FileDescriptors to dup
+///   onto the file descriptors used by the spawned process.
+typedef struct posix_spawn_file_actions_t {
+  uint8_t numDup2;
+  Dup2 dup2[2];
+} posix_spawn_file_actions_t;
+
 int nanoOsDup2(int oldfd, int newfd);
 int nanoOsGethostname(char *name, size_t len);
 int nanoOsPipe(int pipefd[2]);

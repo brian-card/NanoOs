@@ -54,6 +54,7 @@
 #include "NanoOsPwd.h"
 #include "NanoOsSysUtsname.h"
 #include "NanoOsSysTypes.h"
+#include "NanoOsUnistd.h"
 
 #ifdef __cplusplus
 extern "C"
