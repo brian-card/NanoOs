@@ -142,6 +142,7 @@ typedef struct NanoOsApi {
   int (*execve)(const char *pathname, char *const argv[], char *const envp[]);
   int (*setuid)(uid_t uid);
   int (*pipe)(int pipefd[2]);
+  int (*dup2)(int oldfd, int newfd);
   
   // termios functions:
   int (*tcgetattr)(int fd, struct termios *termios_p);
