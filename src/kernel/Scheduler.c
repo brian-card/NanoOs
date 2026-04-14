@@ -2880,6 +2880,7 @@ int schedulerSpawnCommandHandler(
   }
 
   if (spawnArgs->fileActions != NULL) {
+    // Take care of the dup2 file actions.
     for (uint8_t ii = 0; ii < spawnArgs->fileActions->numDup2; ii++) {
       Dup2 *dup2 = &spawnArgs->fileActions->dup2[ii];
       if (dup2->fd >= taskDescriptor->numFileDescriptors) {
@@ -2900,6 +2901,36 @@ int schedulerSpawnCommandHandler(
         dup2->dup->outputChannel.taskId = taskDescriptor->taskId;
       }
       taskDescriptor->fileDescriptors[dup2->fd] = dup2->dup;
+
+      // The dup2->dup FileDescriptor almost certainly has a non-NULL pipeEnd
+      // pointer since we're handling dup2 logic, but guard anyway.
+      if (dup2->dup->pipeEnd != NULL) {
+        if (dup2->fd == STDIN_FILENO) {
+          // We need to set the taskId of the outputChannel of the other end of
+          // the pipe to our ID and the taskId of the inputChannel of this end
+          // of the pipe to the other end's ID.
+          TaskId pipeEndTaskId
+            = dup2->dup->pipeEnd->inputChannel.taskId;
+          dup2->dup->pipeEnd->outputChannel.taskId = getRunningTaskId();
+          if (pipeEndTaskId != ((TaskId) -1)) {
+            // The scheduler has initialized the taskId in the file descriptor.
+            // Use it.
+            dup2->dup->inputChannel.taskId = pipeEndTaskId;
+          }
+        } else if ((dup2->fd == STDOUT_FILENO) || (dup2->fd == STDERR_FILENO)) {
+          // We need to set the taskId of the inputChannel of the other end of
+          // the pipe to our ID and the taskId of the outputChannel of this end
+          // of the pipe to the other end's ID.
+          TaskId pipeEndTaskId
+            = dup2->dup->pipeEnd->outputChannel.taskId;
+          dup2->dup->pipeEnd->inputChannel.taskId = getRunningTaskId();
+          if (pipeEndTaskId != ((TaskId) -1)) {
+            // The scheduler has initialized the taskId in the file descriptor.
+            // Use it.
+            dup2->dup->outputChannel.taskId = pipeEndTaskId;
+          }
+        }
+      }
     }
 
     schedFree(spawnArgs->fileActions); spawnArgs->fileActions = NULL;
