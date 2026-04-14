@@ -44,6 +44,74 @@
 // Must come last
 #include "NanoOsStdio.h"
 
+/// @fn int nanoOsDup2(int oldfd, int newfd)
+///
+/// @brief Implementation of the standard POSIX dup2 function.
+///
+/// @param oldfd The source file descriptor that is to be copied.
+/// @param newfd The destination file descriptor that is to be replaced.
+///
+/// @return On success, the value of newfd is returned.  On failure, -1 is
+/// returned and errno is set.
+int nanoOsDup2(int oldfd, int newfd) {
+  int returnValue = 0;
+  
+  TaskDescriptor *taskDescriptor = getRunningTask();
+  if (taskDescriptor == NULL) {
+    // This should be impossible, but check anyway.
+    errno = EOTHER;
+    returnValue = -1;
+    goto exit;
+  }
+  
+  FileDescriptor *oldFileDescriptor = taskDescriptor->fileDescriptors[oldfd];
+  FileDescriptor *newFileDescriptor = taskDescriptor->fileDescriptors[newfd];
+  if (newFileDescriptor->pipeEnd != NULL) {
+    // We're about to free this FileDescriptor, so terminate the other end of
+    // the pipe.
+    newFileDescriptor->pipeEnd->pipeEnd = NULL;
+  }
+  free(newFileDescriptor); newFileDescriptor = NULL;
+  
+  // Move the old file descriptor into the new one's slot.
+  taskDescriptor->fileDescriptors[newfd] = oldFileDescriptor;
+  
+  // Clear out the entry for oldfd.
+  taskDescriptor->fileDescriptors[oldfd] = NULL;
+  
+  if (oldFileDescriptor->pipeEnd != NULL) {
+    // Check to see if we need to adjust the taskIds for the pipe.
+    if (newfd == STDIN_FILENO) {
+      // We need to set the taskId of the outputChannel of the other end of the
+      // pipe to our ID and the taskId of the inputChannel of this end of the
+      // pipe to the other end's ID.
+      TaskId pipeEndTaskId = oldFileDescriptor->pipeEnd->inputChannel.taskId;
+      oldFileDescriptor->pipeEnd->outputChannel.taskId = getRunningTaskId();
+      if (pipeEndTaskId != -1) {
+        // The scheduler has initialized the taskId in the file descriptor.
+        // Use it.
+        oldFileDescriptor->inputChannel.taskId = pipeEndTaskId;
+      }
+    } else if ((newfd == STDOUT_FILENO) || (newfd == STDERR_FILENO)) {
+      // We need to set the taskId of the inputChannel of the other end of the
+      // pipe to our ID and the taskId of the outputChannel of this end of the
+      // pipe to the other end's ID.
+      TaskId pipeEndTaskId = oldFileDescriptor->pipeEnd->outputChannel.taskId;
+      oldFileDescriptor->pipeEnd->inputChannel.taskId = getRunningTaskId();
+      if (pipeEndTaskId != -1) {
+        // The scheduler has initialized the taskId in the file descriptor.
+        // Use it.
+        oldFileDescriptor->outputChannel.taskId = pipeEndTaskId;
+      }
+    }
+  }
+  
+  returnValue = newfd;
+  
+exit:
+  return returnValue;
+}
+
 /// @fn int nanoOsGethostname(char *name, size_t len)
 ///
 /// @brief Implementation of the standard Unix nanoOsGethostname system call.
