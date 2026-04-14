@@ -87,7 +87,7 @@ int nanoOsDup2(int oldfd, int newfd) {
       // pipe to the other end's ID.
       TaskId pipeEndTaskId = oldFileDescriptor->pipeEnd->inputChannel.taskId;
       oldFileDescriptor->pipeEnd->outputChannel.taskId = getRunningTaskId();
-      if (pipeEndTaskId != -1) {
+      if (pipeEndTaskId != ((TaskId) -1)) {
         // The scheduler has initialized the taskId in the file descriptor.
         // Use it.
         oldFileDescriptor->inputChannel.taskId = pipeEndTaskId;
@@ -98,7 +98,7 @@ int nanoOsDup2(int oldfd, int newfd) {
       // pipe to the other end's ID.
       TaskId pipeEndTaskId = oldFileDescriptor->pipeEnd->outputChannel.taskId;
       oldFileDescriptor->pipeEnd->inputChannel.taskId = getRunningTaskId();
-      if (pipeEndTaskId != -1) {
+      if (pipeEndTaskId != ((TaskId) -1)) {
         // The scheduler has initialized the taskId in the file descriptor.
         // Use it.
         oldFileDescriptor->outputChannel.taskId = pipeEndTaskId;
