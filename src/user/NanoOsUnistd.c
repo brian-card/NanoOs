@@ -1,32 +1,33 @@
 ////////////////////////////////////////////////////////////////////////////////
-//                                                                            //
-//                     Copyright (c) 2012-2025 James Card                     //
-//                                                                            //
-// Permission is hereby granted, free of charge, to any person obtaining a    //
-// copy of this software and associated documentation files (the "Software"), //
-// to deal in the Software without restriction, including without limitation  //
-// the rights to use, copy, modify, merge, publish, distribute, sublicense,   //
-// and/or sell copies of the Software, and to permit persons to whom the      //
-// Software is furnished to do so, subject to the following conditions:       //
-//                                                                            //
-// The above copyright notice and this permission notice shall be included    //
-// in all copies or substantial portions of the Software.                     //
-//                                                                            //
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR //
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,   //
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL    //
-// THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER //
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING    //
-// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER        //
-// DEALINGS IN THE SOFTWARE.                                                  //
-//                                                                            //
-//                                 James Card                                 //
-//                          http://www.jamescard.org                          //
-//                                                                            //
+//
+//                       Copyright (c) 2026 Brian Card
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the
+// Software is furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+// THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// DEALINGS IN THE SOFTWARE.
+//
+//                                 Brian Card
+//                       https://github.com/brian-card
+//
 ////////////////////////////////////////////////////////////////////////////////
 
-// Doxygen marker
-/// @file
+/// @file NanoOsUnistd.c
+///
+/// @brief Kernel-side implementation of Unix unistd functionality.
 
 // Standard C includes
 #define FILE C_FILE
@@ -43,6 +44,46 @@
 
 // Must come last
 #include "NanoOsStdio.h"
+
+/// @fn int nanoOsClose(int fd)
+///
+/// @brief Implementation of the standard POSIX close function.
+///
+/// @param fd The file descriptor to close.
+///
+/// @return On success, 0 is returned.  On error, -1 is returned and the value
+/// of errno is set.
+int nanoOsClose(int fd) {
+  int returnValue = 0;
+  
+  TaskDescriptor *taskDescriptor = getRunningTask();
+  if (taskDescriptor == NULL) {
+    // This should be impossible, but check anyway.
+    errno = EOTHER;
+    returnValue = -1;
+    goto exit;
+  }
+  
+  if ((fd > taskDescriptor->numFileDescriptors)
+    || (taskDescriptor->fileDescriptors[fd] == NULL)
+  ) {
+    errno = EBADF;
+    returnValue = -1;
+    goto exit;
+  }
+  
+  taskDescriptor->fileDescriptors[fd]->refCount--;
+  if (taskDescriptor->fileDescriptors[fd]->refCount == 0) {
+    if (taskDescriptor->fileDescriptors[fd]->pipeEnd != NULL) {
+      taskDescriptor->fileDescriptors[fd]->pipeEnd->pipeEnd = NULL;
+    }
+    free(taskDescriptor->fileDescriptors[fd]);
+    taskDescriptor->fileDescriptors[fd] = NULL;
+  }
+  
+exit:
+  return returnValue;
+}
 
 /// @fn int nanoOsDup2(int oldfd, int newfd)
 ///
