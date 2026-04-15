@@ -143,6 +143,7 @@ NanoOsApi nanoOsApi = {
   .strtoll = nanoOsStrtoll,
   
   // unistd functions:
+  .close = nanoOsClose,
   .gethostname = nanoOsGethostname,
   .sethostname = nanoOsSethostname,
   .ttyname_r = nanoOsTtyname_r,

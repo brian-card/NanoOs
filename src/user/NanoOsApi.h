@@ -137,6 +137,7 @@ typedef struct NanoOsApi {
   long long (*strtoll)(const char *nptr, char **endptr, int base);
   
   // unistd functions:
+  int (*close)(int fd);
   int (*gethostname)(char *name, size_t len);
   int (*sethostname)(const char *name, size_t len);
   int (*ttyname_r)(int fd, char *buf, size_t buflen);
