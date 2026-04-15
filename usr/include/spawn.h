@@ -44,6 +44,24 @@ extern "C"
 {
 #endif
 
+static inline int posix_spawn_file_actions_init(
+  posix_spawn_file_actions_t *file_actions
+) {
+  return overlayMap.header.osApi->posix_spawn_file_actions_init(file_actions);
+}
+static inline int posix_spawn_file_actions_adddup2(
+  posix_spawn_file_actions_t *file_actions,
+  int fildes, int newfildes
+) {
+  return overlayMap.header.osApi->posix_spawn_file_actions_adddup2(
+    file_actions, fildes, newfildes);
+}
+static inline int posix_spawn_file_actions_destroy(
+  posix_spawn_file_actions_t *file_actions
+) {
+  return overlayMap.header.osApi->posix_spawn_file_actions_destroy(
+    file_actions);
+}
 static inline int posix_spawn(pid_t *pid, const char *path,
   const posix_spawn_file_actions_t *file_actions,
   const posix_spawnattr_t *attrp,
