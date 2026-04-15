@@ -180,6 +180,14 @@ typedef struct NanoOsApi {
   int (*kill)(pid_t pid, int sig);
   
   // spawn.h functions:
+  int (*posix_spawn_file_actions_init)(
+    posix_spawn_file_actions_t *file_actions);
+  int (*posix_spawn_file_actions_adddup2)(
+    posix_spawn_file_actions_t *file_actions,
+    int fildes,
+    int newfildes);
+  int (*posix_spawn_file_actions_destroy)(
+    posix_spawn_file_actions_t *file_actions);
   int (*posix_spawn)(pid_t *pid, const char *path,
     const posix_spawn_file_actions_t *file_actions,
     const posix_spawnattr_t *attrp,

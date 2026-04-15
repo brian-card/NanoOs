@@ -41,11 +41,6 @@
 // Types and prototypes we need here because we can't include things directly.
 typedef uintptr_t size_t;
 int vsnprintf(char *str, size_t size, const char *format, va_list ap);
-int schedulerSpawn(
-  pid_t *pid, const char *path,
-  const posix_spawn_file_actions_t *file_actions,
-  const posix_spawnattr_t *attrp,
-  char *const argv[], char *const envp[]);
 
 // Must come first
 #include "NanoOsApi.h"
@@ -180,7 +175,10 @@ NanoOsApi nanoOsApi = {
   .kill = nanoOsKill,
   
   // spawn.h functions:
-  .posix_spawn = schedulerSpawn,
+  .posix_spawn_file_actions_init = nanoOsSpawnFileActionsInit,
+  .posix_spawn_file_actions_adddup2 = nanoOsSpawnFileActionsAdddup2,
+  .posix_spawn_file_actions_destroy = nanoOsSpawnFileActionsDestroy,
+  .posix_spawn = nanoOsSpawn,
   
   // fcntl.h functions:
   .fcntl = nanoOsFcntl,
