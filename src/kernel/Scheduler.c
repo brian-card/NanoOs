@@ -117,6 +117,7 @@ static FileDescriptor standardKernelFileDescriptors[
       .messageType = -1,
     },
     .pipeEnd = NULL,
+    .refCount = 1,
   },
   {
     // stdout
@@ -131,6 +132,7 @@ static FileDescriptor standardKernelFileDescriptors[
       .messageType = -1,
     },
     .pipeEnd = NULL,
+    .refCount = 1,
   },
   {
     // stderr
@@ -145,6 +147,7 @@ static FileDescriptor standardKernelFileDescriptors[
       .messageType = -1,
     },
     .pipeEnd = NULL,
+    .refCount = 1,
   },
 };
 
@@ -180,6 +183,7 @@ static FileDescriptor standardUserFileDescriptors[
       .messageType = -1,
     },
     .pipeEnd = NULL,
+    .refCount = 1,
   },
   {
     // stdout
@@ -194,6 +198,7 @@ static FileDescriptor standardUserFileDescriptors[
       .messageType = -1,
     },
     .pipeEnd = NULL,
+    .refCount = 1,
   },
   {
     // stderr
@@ -208,6 +213,7 @@ static FileDescriptor standardUserFileDescriptors[
       .messageType = 0,
     },
     .pipeEnd = NULL,
+    .refCount = 1,
   },
 };
 
@@ -1369,139 +1375,6 @@ freeExecArgs:
   return -1;
 }
 
-/// @fn int schedulerSpawn(
-///   pid_t *pid, const char *path,
-///   const posix_spawn_file_actions_t *file_actions,
-///   const posix_spawnattr_t *attrp,
-///   char *const argv[], char *const envp[])
-///
-/// @brief NanoOs implementation of Unix posix_spawn function.
-///
-/// @param pathname The full, absolute path on disk to the program to run.
-/// @param argv The NULL-terminated array of arguments for the command.  argv[0]
-///   must be valid and should be the name of the program.
-/// @param envp The NULL-terminated array of environment variables in
-///   "name=value" format.  This array may be NULL.
-///
-/// @return This function will not return to the caller on success.  On failure,
-/// -1 will be returned and the value of errno will be set to indicate the
-/// reason for the failure.
-int schedulerSpawn(
-  pid_t *pid, const char *path,
-  const posix_spawn_file_actions_t *file_actions,
-  const posix_spawnattr_t *attrp,
-  char *const argv[], char *const envp[]
-) {
-  int returnValue = 0;
-  if ((path == NULL) || (argv == NULL) || (argv[0] == NULL)) {
-    return EFAULT;
-  }
-
-  SpawnArgs *spawnArgs = (SpawnArgs*) calloc(1, sizeof(SpawnArgs));
-  if (spawnArgs == NULL) {
-    return ENOMEM;
-  }
-
-  spawnArgs->newPid = pid;
-
-  spawnArgs->path = (char*) malloc(strlen(path) + 1);
-  if (spawnArgs->path == NULL) {
-    returnValue = ENOMEM;
-    goto freeSpawnArgs;
-  }
-  strcpy(spawnArgs->path, path);
-
-  if (file_actions != NULL) {
-    spawnArgs->fileActions = (posix_spawn_file_actions_t*) malloc(
-      sizeof(posix_spawn_file_actions_t));
-    if (spawnArgs->fileActions == NULL) {
-      returnValue = ENOMEM;
-      goto freeSpawnArgs;
-    }
-    memcpy(spawnArgs->fileActions, file_actions, sizeof(*file_actions));
-  } else {
-    spawnArgs->fileActions = NULL;
-  }
-
-
-  // Not doing anything intelligent with this arg yet.  We need to make a copy
-  // rather than casting away the `const` qualifier here if we ever do use it.
-  spawnArgs->attrp = (posix_spawnattr_t*) attrp;
-
-  size_t argvLen = 0;
-  for (; argv[argvLen] != NULL; argvLen++);
-  argvLen++; // Account for the terminating NULL element
-  spawnArgs->argv = (char**) malloc(argvLen * sizeof(char*));
-  if (spawnArgs->argv == NULL) {
-    returnValue = ENOMEM;
-    goto freeSpawnArgs;
-  }
-
-  // argvLen is guaranteed to always be at least 1, so it's safe to run to
-  // (argvLen - 1) here.
-  size_t ii = 0;
-  for (; ii < (argvLen - 1); ii++) {
-    // We know that argv[ii] isn't NULL because of the calculation for argvLen
-    // above, so it's safe to use strlen.
-    spawnArgs->argv[ii] = (char*) malloc(strlen(argv[ii]) + 1);
-    if (spawnArgs->argv[ii] == NULL) {
-      returnValue = ENOMEM;
-      goto freeSpawnArgs;
-    }
-    strcpy(spawnArgs->argv[ii], argv[ii]);
-  }
-  spawnArgs->argv[ii] = NULL; // NULL-terminate the array
-
-  if (envp != NULL) {
-    size_t envpLen = 0;
-    for (; envp[envpLen] != NULL; envpLen++);
-    envpLen++; // Account for the terminating NULL element
-    spawnArgs->envp = (char**) malloc(envpLen * sizeof(char*));
-    if (spawnArgs->envp == NULL) {
-      returnValue = ENOMEM;
-      goto freeSpawnArgs;
-    }
-
-    // envpLen is guaranteed to always be at least 1, so it's safe to run to
-    // (envpLen - 1) here.
-    for (ii = 0; ii < (envpLen - 1); ii++) {
-      // We know that envp[ii] isn't NULL because of the calculation for envpLen
-      // above, so it's safe to use strlen.
-      spawnArgs->envp[ii] = (char*) malloc(strlen(envp[ii]) + 1);
-      if (spawnArgs->envp[ii] == NULL) {
-        returnValue = ENOMEM;
-        goto freeSpawnArgs;
-      }
-      strcpy(spawnArgs->envp[ii], envp[ii]);
-    }
-    spawnArgs->envp[ii] = NULL; // NULL-terminate the array
-  } else {
-    spawnArgs->envp = NULL;
-  }
-
-  TaskMessage *taskMessage
-    = sendNanoOsMessageToTaskId(
-    SCHEDULER_STATE->schedulerTaskId, SCHEDULER_SPAWN,
-    /* func= */ 0, /* data= */ (uintptr_t) spawnArgs, true);
-  if (taskMessage == NULL) {
-    // The only way this should be possible is if all available messages are
-    // in use, so use ENOMEM as the errno.
-    errno = ENOMEM;
-    goto freeSpawnArgs;
-  }
-
-  taskMessageWaitForDone(taskMessage, NULL);
-  returnValue = nanoOsMessageDataValue(taskMessage, int);
-  taskMessageRelease(taskMessage);
-
-  return returnValue;
-
-freeSpawnArgs:
-  spawnArgs = spawnArgsDestroy(spawnArgs);
-
-  return returnValue;
-}
-
 /// @fn int schedulerAssignMemory(void *ptr)
 ///
 /// @brief Assign a piece of memory to be owned by the scheduler.  This
@@ -1632,7 +1505,10 @@ int closeTaskFileDescriptors(
         }
       }
 
-      schedFree(fileDescriptors[ii]); fileDescriptors[ii] = NULL;
+      fileDescriptors[ii]->refCount--;
+      if (fileDescriptors[ii]->refCount == 0) {
+        schedFree(fileDescriptors[ii]); fileDescriptors[ii] = NULL;
+      }
     }
 
     // schedFree will pull an available message.  Release the one we've been
@@ -2901,6 +2777,7 @@ int schedulerSpawnCommandHandler(
         dup2->dup->outputChannel.taskId = taskDescriptor->taskId;
       }
       taskDescriptor->fileDescriptors[dup2->fd] = dup2->dup;
+      dup2->dup->refCount++;
 
       // The dup2->dup FileDescriptor almost certainly has a non-NULL pipeEnd
       // pointer since we're handling dup2 logic, but guard anyway.

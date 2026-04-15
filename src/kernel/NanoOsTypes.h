@@ -180,10 +180,12 @@ typedef struct IoChannel {
 ///   descriptor sends its output, if any.
 /// @param pipeEnd Pointer to the FileDescriptor at the other end of a pipe if
 ///   this FileDescriptor is part of a pipe.
+/// @param refCount The number of references to this FileDescriptor.
 typedef struct FileDescriptor {
   IoChannel inputChannel;
   IoChannel outputChannel;
   struct FileDescriptor *pipeEnd;
+  int refCount;
 } FileDescriptor;
 
 // Forward declaration.  Definition below.

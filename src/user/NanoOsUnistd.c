@@ -75,9 +75,7 @@ int nanoOsDup2(int oldfd, int newfd) {
   
   // Move the old file descriptor into the new one's slot.
   taskDescriptor->fileDescriptors[newfd] = oldFileDescriptor;
-  
-  // Clear out the entry for oldfd.
-  taskDescriptor->fileDescriptors[oldfd] = NULL;
+  oldFileDescriptor->refCount++;
   
   if (oldFileDescriptor->pipeEnd != NULL) {
     // Check to see if we need to adjust the taskIds for the pipe.
