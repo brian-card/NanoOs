@@ -98,6 +98,11 @@ void* processPipes(void *args) {
   posix_spawn(&cmd3Pid, "/path/to/cmd3", &cmd3FileActions, NULL,
     cmd3Argv, environ);
   
+  close(cmd1ToCmd2[0]);
+  close(cmd1ToCmd2[1]);
+  close(cmd2ToCmd3[0]);
+  close(cmd2ToCmd3[1]);
+  
   return NULL;
 }
 
