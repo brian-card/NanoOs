@@ -37,6 +37,8 @@
 #ifndef NANO_OS_USER_SPAWN_H
 #define NANO_OS_USER_SPAWN_H
 
+#include "sys/types.h"
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -45,6 +47,9 @@ extern "C"
 
 // Declared in NanoOsTypes.h.
 typedef struct FileDescriptor FileDescriptor;
+
+// Unimplemented:
+typedef struct posix_spawnattr_t posix_spawnattr_t;
 
 /// @struct Dup2
 ///
@@ -72,13 +77,17 @@ typedef struct posix_spawn_file_actions_t {
   Dup2 dup2[2];
 } posix_spawn_file_actions_t;
 
-int nanoOsPosixSpawnFileActionsInit(posix_spawn_file_actions_t *file_actions);
-int nanoOsPosixSpawnFileActionsAdddup2(
+int nanoOsSpawnFileActionsInit(posix_spawn_file_actions_t *file_actions);
+int nanoOsSpawnFileActionsAdddup2(
   posix_spawn_file_actions_t *file_actions,
   int fildes,
   int newfildes);
-int nanoOsPosixSpawnFileActionsDestroy(
-  posix_spawn_file_actions_t *file_actions);
+int nanoOsSpawnFileActionsDestroy(posix_spawn_file_actions_t *file_actions);
+int nanoOsSpawn(
+  pid_t *pid, const char *path,
+  const posix_spawn_file_actions_t *file_actions,
+  const posix_spawnattr_t *attrp,
+  char *const argv[], char *const envp[]);
 
 #ifdef __cplusplus
 }
