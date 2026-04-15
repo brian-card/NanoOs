@@ -57,23 +57,14 @@ void* processPipes(void *args) {
   
   // PIDs
   pid_t cmd1Pid, cmd2Pid, cmd3Pid;
-  (void) cmd1Pid;
-  (void) cmd2Pid;
-  (void) cmd3Pid;
   
   // File actions
   posix_spawn_file_actions_t cmd1FileActions, cmd2FileActions, cmd3FileActions;
-  (void) cmd1FileActions;
-  (void) cmd2FileActions;
-  (void) cmd3FileActions;
   
   // argv/envp — fill these in for your actual commands
   char *cmd1Argv[] = { "cmd1", NULL };
   char *cmd2Argv[] = { "cmd2", NULL };
   char *cmd3Argv[] = { "cmd3", NULL };
-  (void) cmd1Argv;
-  (void) cmd2Argv;
-  (void) cmd3Argv;
   
   // Create pipes
   pipe(cmd1ToCmd2);
@@ -83,6 +74,29 @@ void* processPipes(void *args) {
   pipe(cmd2ToCmd3);
   fcntl(cmd2ToCmd3[0], F_SETFD, FD_CLOEXEC);
   fcntl(cmd2ToCmd3[1], F_SETFD, FD_CLOEXEC);
+  
+  // Spawn cmd1
+  posix_spawn_file_actions_init(&cmd1FileActions);
+  posix_spawn_file_actions_adddup2(&cmd1FileActions,
+    cmd1ToCmd2[1], STDOUT_FILENO);
+  posix_spawn(&cmd1Pid, "/path/to/cmd1", &cmd1FileActions, NULL,
+    cmd1Argv, environ);
+  
+  // Spawn cmd2
+  posix_spawn_file_actions_init(&cmd2FileActions);
+  posix_spawn_file_actions_adddup2(&cmd2FileActions,
+    cmd1ToCmd2[0], STDIN_FILENO);
+  posix_spawn_file_actions_adddup2(&cmd2FileActions,
+    cmd2ToCmd3[1], STDOUT_FILENO);
+  posix_spawn(&cmd2Pid, "/path/to/cmd2", &cmd2FileActions, NULL,
+    cmd2Argv, environ);
+  
+  // Spawn cmd3
+  posix_spawn_file_actions_init(&cmd3FileActions);
+  posix_spawn_file_actions_adddup2(&cmd3FileActions,
+    cmd2ToCmd3[0], STDIN_FILENO);
+  posix_spawn(&cmd3Pid, "/path/to/cmd3", &cmd3FileActions, NULL,
+    cmd3Argv, environ);
   
   return NULL;
 }
