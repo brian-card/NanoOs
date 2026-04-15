@@ -1507,6 +1507,9 @@ int closeTaskFileDescriptors(
 
       fileDescriptors[ii]->refCount--;
       if (fileDescriptors[ii]->refCount == 0) {
+        if (fileDescriptors[ii]->pipeEnd != NULL) {
+          fileDescriptors[ii]->pipeEnd->pipeEnd = NULL;
+        }
         schedFree(fileDescriptors[ii]); fileDescriptors[ii] = NULL;
       }
     }
