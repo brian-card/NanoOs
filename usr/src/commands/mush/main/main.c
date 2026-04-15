@@ -39,6 +39,7 @@
 #include "NanoOsUtils.h"
 
 int runFilesystemCommand(char *commandLine) {
+  commandLine = &commandLine[strspn(commandLine, " \t")];
   const char *charAt = strchr(commandLine, ' ');
   if (charAt == NULL) {
     charAt = commandLine + strlen(commandLine);
