@@ -29,10 +29,20 @@
 ///
 /// @brief Overlay for handling command lines that include pipes ('|').
 
+// Standard C includes
+#include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+// Unix includes
 #include <spawn.h>
 #include <fcntl.h>
 #include <unistd.h>
+
+// NanoOs includes
+#include "mush.h"
+#include "NanoOsUtils.h"
 
 
 /// @fn void* processPipes(void *args)
@@ -46,63 +56,112 @@
 /// does not return.  On failure, NULL is returned and errno is set.
 void* processPipes(void *args) {
   char *input = (char*) args;
-  (void) input;
   
   printDebugString("Evaluating command line ");
   printDebugString(input);
   printDebugString("\n");
   
-  // Pipes
-  int cmd1ToCmd2[2], cmd2ToCmd3[2];
+  bool firstCommand = true;
+  FsCommandArgs *fsCommandArgs = (FsCommandArgs*) malloc(sizeof(FsCommandArgs));
+  if (fsCommandArgs == NULL) {
+    errno = ENOMEM;
+    goto exit;
+  }
   
-  // PIDs
-  pid_t cmd1Pid, cmd2Pid, cmd3Pid;
+  // Pipe
+  int pipes[2][2];
+  int pipeIndex = 0;
   
   // File actions
-  posix_spawn_file_actions_t cmd1FileActions, cmd2FileActions, cmd3FileActions;
+  posix_spawn_file_actions_t *fileActions
+    = (posix_spawn_file_actions_t*) malloc(sizeof(posix_spawn_file_actions_t));
+  if (fileActions == NULL) {
+    errno = ENOMEM;
+    goto freeFsCommandArgs;
+  }
   
-  // argv/envp — fill these in for your actual commands
-  char *cmd1Argv[] = { "cmd1", NULL };
-  char *cmd2Argv[] = { "cmd2", NULL };
-  char *cmd3Argv[] = { "cmd3", NULL };
+  char *pipeAt = strchr(input, '|');
+  while (pipeAt != NULL) {
+    *pipeAt = '\0';
+    
+    // Create the pipes
+    if (pipe(pipes[pipeIndex]) != 0) {
+      // errno is already set
+      goto freeFileActions;
+    }
+    if (fcntl(pipes[pipeIndex][0], F_SETFD, FD_CLOEXEC) != 0) {
+      // errno is already set
+      goto freeFileActions;
+    }
+    if (fcntl(pipes[pipeIndex][1], F_SETFD, FD_CLOEXEC) != 0) {
+      // errno is already set
+      goto freeFileActions;
+    }
+    
+    // Initialize the fileActions
+    errno = posix_spawn_file_actions_init(fileActions);
+    if (errno != 0) {
+      // errno is already set
+      goto freeFileActions;
+    }
+    if (firstCommand == false) {
+      errno = posix_spawn_file_actions_adddup2(fileActions,
+        pipes[pipeIndex ^ 1][0], STDIN_FILENO);
+      if (errno != 0) {
+        // errno is already set
+        posix_spawn_file_actions_destroy(fileActions);
+        goto freeFileActions;
+      }
+    }
+    errno = posix_spawn_file_actions_adddup2(fileActions,
+      pipes[pipeIndex][1], STDOUT_FILENO);
+    if (errno != 0) {
+      // errno is already set
+      posix_spawn_file_actions_destroy(fileActions);
+      goto freeFileActions;
+    }
+    
+    // Launch the command in the background
+    fsCommandArgs->commandLine = input;
+    fsCommandArgs->launchBackground = true;
+    fsCommandArgs->fileActions = fileActions;
+    if (callOverlayFunction(
+      NULL, "FilesystemCommands", "runFsCommand", &fsCommandArgs) != NULL
+    ) {
+      // errno is already set
+      posix_spawn_file_actions_destroy(fileActions);
+      goto freeFileActions;
+    }
+    
+    // Destroy the fileActions
+    errno = posix_spawn_file_actions_destroy(fileActions);
+    if (errno != 0) {
+      // errno is already set
+      goto freeFileActions;
+    }
+    
+    input = pipeAt + 1;
+    pipeAt = strchr(input, '|');
+    
+    if (firstCommand == false) {
+      // Close the last command's pipe
+      close(pipes[pipeIndex ^ 1][0]);
+      close(pipes[pipeIndex ^ 1][1]);
+    }
+    
+    firstCommand = false;
+    pipeIndex ^= 1;
+  }
   
-  // Create pipes
-  pipe(cmd1ToCmd2);
-  fcntl(cmd1ToCmd2[0], F_SETFD, FD_CLOEXEC);
-  fcntl(cmd1ToCmd2[1], F_SETFD, FD_CLOEXEC);
+  // Launch the last command in the foreground
   
-  pipe(cmd2ToCmd3);
-  fcntl(cmd2ToCmd3[0], F_SETFD, FD_CLOEXEC);
-  fcntl(cmd2ToCmd3[1], F_SETFD, FD_CLOEXEC);
+freeFileActions:
+  free(fileActions); fileActions = NULL;
   
-  // Spawn cmd1
-  posix_spawn_file_actions_init(&cmd1FileActions);
-  posix_spawn_file_actions_adddup2(&cmd1FileActions,
-    cmd1ToCmd2[1], STDOUT_FILENO);
-  posix_spawn(&cmd1Pid, "/path/to/cmd1", &cmd1FileActions, NULL,
-    cmd1Argv, environ);
+freeFsCommandArgs:
+  free(fsCommandArgs); fsCommandArgs = NULL;
   
-  // Spawn cmd2
-  posix_spawn_file_actions_init(&cmd2FileActions);
-  posix_spawn_file_actions_adddup2(&cmd2FileActions,
-    cmd1ToCmd2[0], STDIN_FILENO);
-  posix_spawn_file_actions_adddup2(&cmd2FileActions,
-    cmd2ToCmd3[1], STDOUT_FILENO);
-  posix_spawn(&cmd2Pid, "/path/to/cmd2", &cmd2FileActions, NULL,
-    cmd2Argv, environ);
-  
-  // Spawn cmd3
-  posix_spawn_file_actions_init(&cmd3FileActions);
-  posix_spawn_file_actions_adddup2(&cmd3FileActions,
-    cmd2ToCmd3[0], STDIN_FILENO);
-  posix_spawn(&cmd3Pid, "/path/to/cmd3", &cmd3FileActions, NULL,
-    cmd3Argv, environ);
-  
-  close(cmd1ToCmd2[0]);
-  close(cmd1ToCmd2[1]);
-  close(cmd2ToCmd3[0]);
-  close(cmd2ToCmd3[1]);
-  
+exit:
   return NULL;
 }
 
