@@ -103,6 +103,10 @@ int nanoOsDup2(int oldfd, int newfd) {
     errno = EOTHER;
     returnValue = -1;
     goto exit;
+  } else if (newfd >= taskDescriptor->numFileDescriptors) {
+    errno = EBADF;
+    returnValue = -1;
+    goto exit;
   }
   
   FileDescriptor *oldFileDescriptor = taskDescriptor->fileDescriptors[oldfd];
