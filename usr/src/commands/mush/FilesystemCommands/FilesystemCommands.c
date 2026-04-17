@@ -35,7 +35,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <NanoOsUtils.h>
+
+#include "mush.h"
+#include "NanoOsUtils.h"
 
 
 /// @fn void* runFsCommand(void *args)
@@ -48,7 +50,11 @@
 /// @return On success, this function execs the command line provided and does
 /// not return.  On failure, -errno is returned, cast to a void*.
 void* runFsCommand(void *args) {
-  char *commandLine = (char*) args;
+  FsCommandArgs *fsCommandArgs = (FsCommandArgs*) args;
+  char *commandLine = fsCommandArgs->commandLine;
+  bool launchBackground = fsCommandArgs->launchBackground;
+  posix_spawn_file_actions_t *fileActions = fsCommandArgs->fileActions;
+
   printDebugString("Evaluating command line ");
   printDebugString(commandLine);
   printDebugString("\n");
@@ -127,13 +133,6 @@ void* runFsCommand(void *args) {
   // above, so we can blindly dereference the value returned by strrchr here.
   *strrchr(commandPath, '/') = '\0';
   
-  // We need to check to see if the task should be run in the background beore
-  // calling parseArgs because that function modifies the string.
-  bool launchBackground = false;
-  if (commandLine[strlen(commandLine) - 1] == '&') {
-    launchBackground = true;
-  }
-  
   char **argv = parseArgs(commandLine, NULL);
   if (argv == NULL) {
     fprintf(stderr, "Failed to parse command line\n");
@@ -150,7 +149,7 @@ void* runFsCommand(void *args) {
   } else { // launchBackground == true
     // Spawn a new task in the background.
     pid_t pid; // We actually don't care about this but it's required.
-    errno = posix_spawn(&pid, commandPath, NULL, NULL, argv, environ);
+    errno = posix_spawn(&pid, commandPath, fileActions, NULL, argv, environ);
   }
   
   // If we made it this far then we either called posix_spawn or execve failed.

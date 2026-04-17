@@ -32,6 +32,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "mush.h"
 #include "NanoOsUtils.h"
 
 int main(int argc, char **argv) {
@@ -46,6 +47,7 @@ int main(int argc, char **argv) {
   *buffer = '\0';
   
   intptr_t returnValue = 0;
+  FsCommandArgs fsCommandArgs;
   do {
     fputs("$ ", stdout);
     char *input = fgets(buffer, 96, stdin);
@@ -82,8 +84,15 @@ int main(int argc, char **argv) {
       // The command wasn't processed as a built-in.  Try running it from the
       // filesystem.
       printDebugString("Command is *NOT* a builtin\n");
+      fsCommandArgs.commandLine = input;
+      fsCommandArgs.launchBackground = false;
+      char *ampersandAt = strrchr(input, '&');
+      if ((ampersandAt != NULL) && (ampersandAt[-1] != '&')) {
+        fsCommandArgs.launchBackground = true;
+      }
+      fsCommandArgs.fileActions = NULL;
       returnValue = (intptr_t) callOverlayFunction(
-      NULL, "FilesystemCommands", "runFsCommand", input);
+        NULL, "FilesystemCommands", "runFsCommand", &fsCommandArgs);
     }
   } while (returnValue != -1);
   
