@@ -88,6 +88,7 @@ int main(int argc, char **argv) {
       fsCommandArgs.launchBackground = false;
       char *ampersandAt = strrchr(input, '&');
       if ((ampersandAt != NULL) && (ampersandAt[-1] != '&')) {
+        *ampersandAt = '\0';
         fsCommandArgs.launchBackground = true;
       }
       fsCommandArgs.fileActions = NULL;
