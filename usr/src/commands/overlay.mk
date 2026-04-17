@@ -36,6 +36,7 @@ OBJECTS := $(subst $(OBJ_DIR)/$(TARGET)/$(OVERLAY)/../../../start.o,\
     $(OBJECTS))
 
 INCLUDES += \
+    -I../include \
     -I../../../../include \
 
 # Default target
