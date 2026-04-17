@@ -140,9 +140,6 @@ void* processPipes(void *args) {
       goto freeFileActions;
     }
     
-    input = pipeAt + 1;
-    pipeAt = strchr(input, '|');
-    
     if (firstCommand == false) {
       // Close the last command's pipe
       close(pipes[pipeIndex ^ 1][0]);
@@ -151,9 +148,27 @@ void* processPipes(void *args) {
     
     firstCommand = false;
     pipeIndex ^= 1;
+    
+    input = pipeAt + 1;
+    pipeAt = strchr(input, '|');
   }
   
+  // dup the last command's pipe onto our stdin instead of using file actions
+  if (dup2(pipes[pipeIndex ^ 1][0], STDIN_FILENO) != 0) {
+    // errno is already set
+    goto freeFileActions;
+  }
+  close(pipes[pipeIndex ^ 1][0]);
+  close(pipes[pipeIndex ^ 1][1]);
+  
   // Launch the last command in the foreground
+  fsCommandArgs->commandLine = input;
+  fsCommandArgs->launchBackground = false;
+  fsCommandArgs->fileActions = NULL;
+  callOverlayFunction(
+    NULL, "FilesystemCommands", "runFsCommand", &fsCommandArgs);
+  
+  // If we made it this far then errno is already set
   
 freeFileActions:
   free(fileActions); fileActions = NULL;
