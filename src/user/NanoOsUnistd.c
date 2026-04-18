@@ -236,6 +236,8 @@ int nanoOsPipe(int pipefd[2]) {
     taskDescriptor->fileDescriptors[ii]->inputChannel.messageType = -1;
     taskDescriptor->fileDescriptors[ii]->outputChannel.taskId = -1;
     taskDescriptor->fileDescriptors[ii]->outputChannel.messageType = -1;
+    taskDescriptor->fileDescriptors[ii]->pipeEnd = NULL;
+    taskDescriptor->fileDescriptors[ii]->refCount = 1;
   }
   
   // Fix the messages for the relevant channels in the file descriptors.
