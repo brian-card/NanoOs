@@ -38,6 +38,9 @@
 #include "../kernel/Scheduler.h"
 #include "../kernel/Tasks.h"
 
+// Must come last
+#include "NanoOsStdio.h"
+
 /// @fn int nanoOsSpawnFileActionsInit(posix_spawn_file_actions_t *fileActions)
 ///
 /// @brief NanoOs implementation of posix_spawn_file_actions_init.
