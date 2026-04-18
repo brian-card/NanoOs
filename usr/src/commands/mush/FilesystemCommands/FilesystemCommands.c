@@ -44,11 +44,12 @@
 ///
 /// @brief Run a command from the filesystem.
 ///
-/// @param args A pointer to a C string holding the command line, cast to a
-///   void*.
+/// @param args A pointer to an FsCommandArgs structure containing the arguments
+///   for this function.
 ///
-/// @return On success, this function execs the command line provided and does
-/// not return.  On failure, -errno is returned, cast to a void*.
+/// @return If this function execs the command line provided, it does not
+/// return.  If it spawns a new process, the PID of the spawned process is
+/// returned, cast to a void*.  On failure, -errno is returned, cast to a void*.
 void* runFsCommand(void *args) {
   FsCommandArgs *fsCommandArgs = (FsCommandArgs*) args;
   char *commandLine = fsCommandArgs->commandLine;
@@ -148,20 +149,25 @@ void* runFsCommand(void *args) {
     execve(commandPath, argv, environ);
   } else { // launchBackground == true
     // Spawn a new task in the background.
-    pid_t pid; // We actually don't care about this but it's required.
+    pid_t pid; // We'll return this if posix_spawn is successful.
     errno = posix_spawn(&pid, commandPath, fileActions, NULL, argv, environ);
+    returnValue = (void*) ((intptr_t) pid);
   }
   
   // If we made it this far then we either called posix_spawn or execve failed.
   // Either way, we need to clean up argv.
   free(argv); argv = NULL;
   
-  // We need to return a negative errno from this function.  execve sets the
-  // value of errno on failure, so we don't have to do anything there.  Above,
-  // we set the return value of posix_spawn to errno so that we can just use
-  // whatever the value of errno is here for the return value.  We return a
-  // negative errno on failure, so negate whatever errno is.
-  returnValue = (void*) ((intptr_t) -errno);
+  if (errno != 0) {
+    // We need to return a negative errno from this function.  execve sets the
+    // value of errno on failure, so we don't have to do anything there.  Above,
+    // we set the return value of posix_spawn to errno so that we can just use
+    // whatever the value of errno is here for the return value.  We return a
+    // negative errno on failure, so negate whatever errno is.
+    printString(__func__);
+    printString(" failed\n");
+    returnValue = (void*) ((intptr_t) -errno);
+  }
   
 exit:
   return returnValue;
