@@ -190,7 +190,7 @@ void* processPipes(void *args) {
   fsCommandArgs->launchBackground = false;
   fsCommandArgs->fileActions = NULL;
   callOverlayFunction(
-    NULL, "FilesystemCommands", "runFsCommand", &fsCommandArgs);
+    NULL, "FilesystemCommands", "runFsCommand", fsCommandArgs);
   
   // If we made it this far then errno is already set
   
