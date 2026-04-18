@@ -2701,6 +2701,7 @@ int schedulerSpawnCommandHandler(
     taskMessageSetDone(taskMessage);
     return returnValue; // 0; Don't retry this command
   }
+  *spawnArgs->newPid = taskDescriptor->taskId;
 
   // Initialize the new task.
   taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
