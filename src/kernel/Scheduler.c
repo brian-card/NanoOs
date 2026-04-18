@@ -2979,8 +2979,10 @@ void handleSchedulerMessage(SchedulerState *schedulerState) {
       // back of our own queue again and try again later.
       if (lastReturnValue == 0) {
         // Only print out a message if this is the first time we've failed.
-        printString("Scheduler command handler failed.\n");
-        printString("Pushing message back onto our own queue.\n");
+        printString("Scheduler command handler failed for message ");
+        printInt(messageType);
+        printString("\n");
+        printString("Pushing message back onto our own queue\n");
       }
       taskMessageQueuePush(getRunningTask(), message);
     }
