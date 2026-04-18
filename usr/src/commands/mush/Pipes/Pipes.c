@@ -126,7 +126,7 @@ void* processPipes(void *args) {
     fsCommandArgs->launchBackground = true;
     fsCommandArgs->fileActions = fileActions;
     if (callOverlayFunction(
-      NULL, "FilesystemCommands", "runFsCommand", &fsCommandArgs) != NULL
+      NULL, "FilesystemCommands", "runFsCommand", fsCommandArgs) != NULL
     ) {
       // errno is already set
       posix_spawn_file_actions_destroy(fileActions);
