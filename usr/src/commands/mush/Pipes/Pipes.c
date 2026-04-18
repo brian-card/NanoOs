@@ -36,8 +36,9 @@
 #include <string.h>
 
 // Unix includes
-#include <spawn.h>
 #include <fcntl.h>
+#include <signal.h>
+#include <spawn.h>
 #include <unistd.h>
 
 // NanoOs includes
@@ -55,17 +56,39 @@
 /// @return On success, this function execs the last command in the chain and
 /// does not return.  On failure, NULL is returned and errno is set.
 void* processPipes(void *args) {
+  // Used in the error case at the bottom.
+  int tmpErrno = 0;
+  
   char *input = (char*) args;
   
   printDebugString("Evaluating command line ");
   printDebugString(input);
   printDebugString("\n");
   
+  uint8_t numPipes = 0;
+  char *pipeAt = strchr(input, '|');
+  while (pipeAt != NULL) {
+    numPipes++;
+    pipeAt = pipeAt + 1;
+    pipeAt = strchr(pipeAt, '|');
+  }
+  
+  // We need to keep track of the processes we launch in case something in the
+  // chain fails.  The number of commands we'll launch in the background is the
+  // number of pipes in the command.
+  int *pids = (int*) malloc(sizeof(int) * numPipes);
+  if (pids == NULL) {
+    errno = ENOMEM;
+    goto exit;
+  }
+  // Reset numPipes to use as an index into the pids array below.
+  numPipes = 0;
+  
   bool firstCommand = true;
   FsCommandArgs *fsCommandArgs = (FsCommandArgs*) malloc(sizeof(FsCommandArgs));
   if (fsCommandArgs == NULL) {
     errno = ENOMEM;
-    goto exit;
+    goto freePids;
   }
   
   // Pipe
@@ -80,7 +103,7 @@ void* processPipes(void *args) {
     goto freeFsCommandArgs;
   }
   
-  char *pipeAt = strchr(input, '|');
+  pipeAt = strchr(input, '|');
   while (pipeAt != NULL) {
     *pipeAt = '\0';
     
@@ -125,13 +148,14 @@ void* processPipes(void *args) {
     fsCommandArgs->commandLine = input;
     fsCommandArgs->launchBackground = true;
     fsCommandArgs->fileActions = fileActions;
-    if (callOverlayFunction(
-      NULL, "FilesystemCommands", "runFsCommand", fsCommandArgs) != NULL
-    ) {
+    pids[numPipes] = (int) ((intptr_t) callOverlayFunction(
+      NULL, "FilesystemCommands", "runFsCommand", fsCommandArgs));
+    if (pids[numPipes] < 0) {
       // errno is already set
       posix_spawn_file_actions_destroy(fileActions);
       goto freeFileActions;
     }
+    numPipes++;
     
     // Destroy the fileActions
     errno = posix_spawn_file_actions_destroy(fileActions);
@@ -176,6 +200,16 @@ freeFileActions:
 freeFsCommandArgs:
   free(fsCommandArgs); fsCommandArgs = NULL;
   
+freePids:
+  // kill potentially changes the value of errno.  We want to use the value
+  // that was set from above.
+  tmpErrno = errno;
+  for (int ii = 0; ii < numPipes; ii++) {
+    kill(pids[ii], SIGKILL);
+  }
+  errno = tmpErrno;
+  free(pids); pids = NULL;
+
 exit:
   return NULL;
 }
