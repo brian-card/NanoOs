@@ -2780,7 +2780,6 @@ int schedulerSpawnCommandHandler(
         dup2->dup->outputChannel.taskId = taskDescriptor->taskId;
       }
       taskDescriptor->fileDescriptors[dup2->fd] = dup2->dup;
-      dup2->dup->refCount++;
 
       // The dup2->dup FileDescriptor almost certainly has a non-NULL pipeEnd
       // pointer since we're handling dup2 logic, but guard anyway.

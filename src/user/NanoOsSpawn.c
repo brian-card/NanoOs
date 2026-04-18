@@ -92,6 +92,9 @@ int nanoOsSpawnFileActionsAdddup2(
   fileActions->dup2[fileActions->numDup2].fd = newfildes;
   fileActions->dup2[fileActions->numDup2].dup
     = taskDescriptor->fileDescriptors[fildes];
+  // We have to increment refCount here so that it doesn't get freed if the
+  // caller closes the file descriptor before the scheduler runs again.
+  fileActions->dup2[fileActions->numDup2].dup->refCount++;
   fileActions->numDup2++;
 
 exit:
