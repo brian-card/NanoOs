@@ -842,7 +842,7 @@ ConsoleBuffer* nanoOsWaitForInput(void) {
   return nanoOsBuffer;
 }
 
-/// @fn char *nanoOsFGets(char *buffer, int size, FILE *stream)
+/// @fn char *nanoOsFgets(char *buffer, int size, FILE *stream)
 ///
 /// @brief Custom implementation of fgets for this library.
 ///
@@ -852,7 +852,7 @@ ConsoleBuffer* nanoOsWaitForInput(void) {
 ///   stdin is supported.
 ///
 /// @return Returns the buffer pointer provided on success, NULL on failure.
-char *nanoOsFGets(char *buffer, int size, FILE *stream) {
+char *nanoOsFgets(char *buffer, int size, FILE *stream) {
   char *returnValue = NULL;
 
   if (size > 0) {
@@ -1093,7 +1093,7 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *nanoOsBuffer) {
   return returnValue;
 }
 
-/// @fn int nanoOsFPuts(const char *s, FILE *stream)
+/// @fn int nanoOsFputs(const char *s, FILE *stream)
 ///
 /// @brief Print a raw string to a file stream.
 ///
@@ -1101,7 +1101,7 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *nanoOsBuffer) {
 /// @param stream The file stream to print to.  Ignored by this function.
 ///
 /// @return This function always returns 0.
-int nanoOsFPuts(const char *s, FILE *stream) {
+int nanoOsFputs(const char *s, FILE *stream) {
   // This implementation is almost identical to nanoOsFwrite.  Really, we should
   // just call that.  But, we won't do that because we're concerned about stack
   // space.
