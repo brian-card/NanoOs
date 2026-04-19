@@ -1437,42 +1437,49 @@ int closeTaskFileDescriptors(
       = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
 
     FileDescriptor **fileDescriptors = taskDescriptor->fileDescriptors;
+    if (fileDescriptors == NULL) {
+      // Nothing to do.
+      return 0;
+    }
     TaskMessage *messageToSend = getAvailableMessage();
     while (messageToSend == NULL) {
       runScheduler();
       messageToSend = getAvailableMessage();
     }
-
     uint8_t numFileDescriptors = taskDescriptor->numFileDescriptors;
     for (uint8_t ii = 0; ii < numFileDescriptors; ii++) {
       FileDescriptor *fileDescriptor = fileDescriptors[ii];
       TaskId waitingOutputTaskId
         = fileDescriptor->outputChannel.taskId;
+      
       if ((waitingOutputTaskId != TASK_ID_NOT_SET)
         && (waitingOutputTaskId != SCHEDULER_STATE->consoleTaskId)
       ) {
         TaskDescriptor *waitingTaskDescriptor
           = &schedulerState->allTasks[waitingOutputTaskId - 1];
 
-        // Clear the taskId of the waiting task's stdin file descriptor.
-        waitingTaskDescriptor->fileDescriptors[
-          STDIN_FILE_DESCRIPTOR_INDEX]->inputChannel.taskId = TASK_ID_NOT_SET;
+        if ((waitingTaskDescriptor->fileDescriptors != NULL)
+          && (waitingTaskDescriptor->numFileDescriptors
+            > STDIN_FILE_DESCRIPTOR_INDEX)
+        ) {
+          // Clear the taskId of the waiting task's stdin file descriptor.
+          waitingTaskDescriptor->fileDescriptors[
+            STDIN_FILE_DESCRIPTOR_INDEX]->inputChannel.taskId = TASK_ID_NOT_SET;
 
-        // Send an empty message to the waiting task so that it will become
-        // unblocked.
-        taskMessageInit(messageToSend,
-          fileDescriptor->outputChannel.messageType,
-          /*data= */ NULL, /* size= */ 0, /* waiting= */ false);
-        taskMessageQueuePush(waitingTaskDescriptor, messageToSend);
-        // Give the task a chance to unblock.
-        taskResume(waitingTaskDescriptor, NULL);
+          // Send an empty message to the waiting task so that it will become
+          // unblocked.
+          taskMessageInit(messageToSend,
+            fileDescriptor->outputChannel.messageType,
+            /*data= */ NULL, /* size= */ 0, /* waiting= */ false);
+          taskMessageQueuePush(waitingTaskDescriptor, messageToSend);
 
-        // The function that was waiting should have released the message we
-        // sent it.  Get another one.
-        messageToSend = getAvailableMessage();
-        while (messageToSend == NULL) {
-          runScheduler();
+          // The function that was waiting should have released the message we
+          // sent it.  Get another one.
           messageToSend = getAvailableMessage();
+          while (messageToSend == NULL) {
+            runScheduler();
+            messageToSend = getAvailableMessage();
+          }
         }
       }
 
@@ -1483,25 +1490,29 @@ int closeTaskFileDescriptors(
         TaskDescriptor *waitingTaskDescriptor
           = &schedulerState->allTasks[waitingInputTaskId - 1];
 
-        // Clear the taskId of the waiting task's stdin file descriptor.
-        waitingTaskDescriptor->fileDescriptors[
-          STDOUT_FILE_DESCRIPTOR_INDEX]->outputChannel.taskId = TASK_ID_NOT_SET;
+        if ((waitingTaskDescriptor->fileDescriptors != NULL)
+          && (waitingTaskDescriptor->numFileDescriptors
+            > STDOUT_FILE_DESCRIPTOR_INDEX)
+        ) {
+          // Clear the taskId of the waiting task's stdout file descriptor.
+          waitingTaskDescriptor->fileDescriptors[
+            STDOUT_FILE_DESCRIPTOR_INDEX]->outputChannel.taskId
+            = TASK_ID_NOT_SET;
 
-        // Send an empty message to the waiting task so that it will become
-        // unblocked.
-        taskMessageInit(messageToSend,
-          fileDescriptor->outputChannel.messageType,
-          /*data= */ NULL, /* size= */ 0, /* waiting= */ false);
-        taskMessageQueuePush(waitingTaskDescriptor, messageToSend);
-        // Give the task a chance to unblock.
-        taskResume(waitingTaskDescriptor, NULL);
+          // Send an empty message to the waiting task so that it will become
+          // unblocked.
+          taskMessageInit(messageToSend,
+            fileDescriptor->outputChannel.messageType,
+            /*data= */ NULL, /* size= */ 0, /* waiting= */ false);
+          taskMessageQueuePush(waitingTaskDescriptor, messageToSend);
 
-        // The function that was waiting should have released the message we
-        // sent it.  Get another one.
-        messageToSend = getAvailableMessage();
-        while (messageToSend == NULL) {
-          runScheduler();
+          // The function that was waiting should have released the message we
+          // sent it.  Get another one.
           messageToSend = getAvailableMessage();
+          while (messageToSend == NULL) {
+            runScheduler();
+            messageToSend = getAvailableMessage();
+          }
         }
       }
 
@@ -1518,6 +1529,7 @@ int closeTaskFileDescriptors(
     // using so that we're guaranteed it will be successful.
     taskMessageRelease(messageToSend);
     schedFree(fileDescriptors); taskDescriptor->fileDescriptors = NULL;
+    taskDescriptor->numFileDescriptors = 0;
 
     schedulerState->currentReady = currentReady;
     _functionInProgress = NULL;
@@ -1533,6 +1545,7 @@ int closeTaskFileDescriptors(
       while (1);
     }
   }
+
   return 0;
 }
 
