@@ -106,17 +106,17 @@ int nanoOsFputs(const char *s, FILE *stream);
 #endif
 #define puts(s) nanoOsFputs(s, stdout) nanoOsFputs("\n", stdout)
 
-int nanoOsVFPrintf(FILE *stream, const char *format, va_list args);
+int nanoOsVfprintf(FILE *stream, const char *format, va_list args);
 #ifdef vfprintf
 #undef vfprintf
 #endif
-#define vfprintf nanoOsVFPrintf
+#define vfprintf nanoOsVfprintf
 
-int nanoOsFPrintf(FILE *stream, const char *format, ...);
+int nanoOsFprintf(FILE *stream, const char *format, ...);
 #ifdef fprintf
 #undef fprintf
 #endif
-#define fprintf nanoOsFPrintf
+#define fprintf nanoOsFprintf
 
 int nanoOsPrintf(const char *format, ...);
 #ifdef printf
@@ -130,17 +130,17 @@ char *nanoOsFgets(char *buffer, int size, FILE *stream);
 #endif
 #define fgets nanoOsFgets
 
-int nanoOsVFScanf(FILE *stream, const char *format, va_list ap);
+int nanoOsVfscanf(FILE *stream, const char *format, va_list ap);
 #ifdef vfscanf
 #undef vfscanf
 #endif
-#define vfscanf nanoOsVFScanf
+#define vfscanf nanoOsVfscanf
 
-int nanoOsFScanf(FILE *stream, const char *format, ...);
+int nanoOsFscanf(FILE *stream, const char *format, ...);
 #ifdef fscanf
 #undef fscanf
 #endif
-#define fscanf nanoOsFScanf
+#define fscanf nanoOsFscanf
 
 int nanoOsScanf(const char *format, ...);
 #ifdef scanf

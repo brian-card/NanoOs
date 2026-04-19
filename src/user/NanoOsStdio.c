@@ -826,6 +826,9 @@ ConsoleBuffer* nanoOsWaitForInput(void) {
   }
 
   if (inputChannel->taskId != TASK_ID_NOT_SET) {
+    printString("Waiting for input from task ");
+    printInt(inputChannel->taskId);
+    printString("\n");
     TaskMessage *response
       = taskMessageQueueWaitForType(CONSOLE_RETURNING_INPUT, NULL);
     nanoOsBuffer = nanoOsMessageDataPointer(response, ConsoleBuffer*);
@@ -866,7 +869,7 @@ char *nanoOsFgets(char *buffer, int size, FILE *stream) {
   return returnValue;
 }
 
-/// @fn int nanoOsVFScanf(FILE *stream, const char *format, va_list args)
+/// @fn int nanoOsVfscanf(FILE *stream, const char *format, va_list args)
 ///
 /// @brief Read formatted input from a file stream into arguments provided in
 /// a va_list.
@@ -878,7 +881,7 @@ char *nanoOsFgets(char *buffer, int size, FILE *stream) {
 ///   into.
 ///
 /// @return Returns the number of items parsed on success, EOF on failure.
-int nanoOsVFScanf(FILE *stream, const char *format, va_list args) {
+int nanoOsVfscanf(FILE *stream, const char *format, va_list args) {
   int returnValue = EOF;
 
   if (stream == stdin) {
@@ -897,7 +900,7 @@ int nanoOsVFScanf(FILE *stream, const char *format, va_list args) {
   return returnValue;
 }
 
-/// @fn int nanoOsFScanf(FILE *stream, const char *format, ...)
+/// @fn int nanoOsFscanf(FILE *stream, const char *format, ...)
 ///
 /// @brief Read formatted input from a file stream into provided arguments.
 ///
@@ -907,12 +910,12 @@ int nanoOsVFScanf(FILE *stream, const char *format, va_list args) {
 /// @param ... The arguments to store the parsed values into.
 ///
 /// @return Returns the number of items parsed on success, EOF on failure.
-int nanoOsFScanf(FILE *stream, const char *format, ...) {
+int nanoOsFscanf(FILE *stream, const char *format, ...) {
   int returnValue = EOF;
   va_list args;
 
   va_start(args, format);
-  returnValue = nanoOsVFScanf(stream, format, args);
+  returnValue = nanoOsVfscanf(stream, format, args);
   va_end(args);
 
   return returnValue;
@@ -931,7 +934,7 @@ int nanoOsScanf(const char *format, ...) {
   va_list args;
 
   va_start(args, format);
-  returnValue = nanoOsVFScanf(stdin, format, args);
+  returnValue = nanoOsVfscanf(stdin, format, args);
   va_end(args);
 
   return returnValue;
@@ -1114,7 +1117,7 @@ int nanoOsFputs(const char *s, FILE *stream) {
   return returnValue;
 }
 
-/// @fn int nanoOsVFPrintf(FILE *stream, const char *format, va_list args)
+/// @fn int nanoOsVfprintf(FILE *stream, const char *format, va_list args)
 ///
 /// @brief Print a formatted string to the nanoOs.  Gets a string buffer from
 /// the nanoOs, writes the formatted string to that buffer, then sends a
@@ -1127,7 +1130,7 @@ int nanoOsFputs(const char *s, FILE *stream) {
 ///   higher-level printf functions.
 ///
 /// @return Returns the number of bytes printed on success, -1 on error.
-int nanoOsVFPrintf(FILE *stream, const char *format, va_list args) {
+int nanoOsVfprintf(FILE *stream, const char *format, va_list args) {
   int returnValue = -1;
   ConsoleBuffer *nanoOsBuffer = nanoOsGetBuffer();
   if (nanoOsBuffer == NULL) {
@@ -1144,31 +1147,31 @@ int nanoOsVFPrintf(FILE *stream, const char *format, va_list args) {
   return returnValue;
 }
 
-/// @fn int nanoOsFPrintf(FILE *stream, const char *format, ...)
+/// @fn int nanoOsFprintf(FILE *stream, const char *format, ...)
 ///
 /// @brief Print a formatted string to the nanoOs.  Constructs a va_list from
-/// the arguments provided and then calls nanoOsVFPrintf.
+/// the arguments provided and then calls nanoOsVfprintf.
 ///
 /// @param stream A pointer to the FILE stream to print to (stdout or stderr).
 /// @param format The format string for the printf message.
 /// @param ... Any additional arguments needed by the format string.
 ///
 /// @return Returns the number of bytes printed on success, -1 on error.
-int nanoOsFPrintf(FILE *stream, const char *format, ...) {
+int nanoOsFprintf(FILE *stream, const char *format, ...) {
   int returnValue = 0;
   va_list args;
 
   va_start(args, format);
-  returnValue = nanoOsVFPrintf(stream, format, args);
+  returnValue = nanoOsVfprintf(stream, format, args);
   va_end(args);
 
   return returnValue;
 }
 
-/// @fn int nanoOsFPrintf(FILE *stream, const char *format, ...)
+/// @fn int nanoOsFprintf(FILE *stream, const char *format, ...)
 ///
 /// @brief Print a formatted string to stdout.  Constructs a va_list from the
-/// arguments provided and then calls nanoOsVFPrintf with stdout as the first
+/// arguments provided and then calls nanoOsVfprintf with stdout as the first
 /// parameter.
 ///
 /// @param format The format string for the printf message.
@@ -1180,7 +1183,7 @@ int nanoOsPrintf(const char *format, ...) {
   va_list args;
 
   va_start(args, format);
-  returnValue = nanoOsVFPrintf(stdout, format, args);
+  returnValue = nanoOsVfprintf(stdout, format, args);
   va_end(args);
 
   return returnValue;

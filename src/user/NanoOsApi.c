@@ -94,8 +94,8 @@ NanoOsApi nanoOsApi = {
   
   // Formatted I/O:
   .vsscanf = vsscanf,
-  .vfscanf = nanoOsVFScanf,
-  .vfprintf = nanoOsVFPrintf,
+  .vfscanf = nanoOsVfscanf,
+  .vfprintf = nanoOsVfprintf,
   .vsnprintf = vsnprintf,
   
   // Direct I/O:
