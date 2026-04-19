@@ -826,9 +826,6 @@ ConsoleBuffer* nanoOsWaitForInput(void) {
   }
 
   if (inputChannel->taskId != TASK_ID_NOT_SET) {
-    printString("Waiting for input from task ");
-    printInt(inputChannel->taskId);
-    printString("\n");
     TaskMessage *response
       = taskMessageQueueWaitForType(CONSOLE_RETURNING_INPUT, NULL);
     nanoOsBuffer = nanoOsMessageDataPointer(response, ConsoleBuffer*);
