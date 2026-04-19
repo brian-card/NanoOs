@@ -291,9 +291,9 @@ void* execCommand(void *args) {
   }
 
   FileDescriptor **fileDescriptors = taskDescriptor->fileDescriptors;
-  while ((fileDescriptors[0]->inputChannel.taskId == taskDescriptor->taskId)
-   || (fileDescriptors[1]->outputChannel.taskId == taskDescriptor->taskId)
-   || (fileDescriptors[2]->outputChannel.taskId == taskDescriptor->taskId)
+  while ((fileDescriptors[0]->inputChannel.taskId == TASK_ID_NOT_SET)
+   || (fileDescriptors[1]->outputChannel.taskId == TASK_ID_NOT_SET)
+   || (fileDescriptors[2]->outputChannel.taskId == TASK_ID_NOT_SET)
   ) {
     // We've been spawned via posix_spawn from a command line that contains
     // pipes and the pipes haven't been setup yet.  We need to wait until that
