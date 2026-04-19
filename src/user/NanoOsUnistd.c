@@ -116,7 +116,10 @@ int nanoOsDup2(int oldfd, int newfd) {
     // the pipe.
     newFileDescriptor->pipeEnd->pipeEnd = NULL;
   }
-  free(newFileDescriptor); newFileDescriptor = NULL;
+  newFileDescriptor->refCount--;
+  if (newFileDescriptor->refCount == 0) {
+    free(newFileDescriptor); newFileDescriptor = NULL;
+  }
   
   // Move the old file descriptor into the new one's slot.
   taskDescriptor->fileDescriptors[newfd] = oldFileDescriptor;
