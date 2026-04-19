@@ -210,7 +210,7 @@ static FileDescriptor standardUserFileDescriptors[
     },
     .outputChannel = {
       .taskId = TASK_ID_NOT_SET,
-      .messageType = 0,
+      .messageType = -1,
     },
     .pipeEnd = NULL,
     .refCount = 1,
