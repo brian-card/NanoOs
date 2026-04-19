@@ -2450,6 +2450,10 @@ int schedulerExecveCommandHandler(
 
   NanoOsMessage *nanoOsMessage
     = (NanoOsMessage*) taskMessageData(taskMessage);
+
+  TaskDescriptor *taskDescriptor = &schedulerState->allTasks[
+    taskId(taskMessageFrom(taskMessage)) - 1];
+
   ExecArgs *execArgs = nanoOsMessageDataValue(taskMessage, ExecArgs*);
   if (execArgs == NULL) {
     printString("ERROR! execArgs provided was NULL.\n");
@@ -2522,8 +2526,23 @@ int schedulerExecveCommandHandler(
     }
   }
 
-  TaskDescriptor *taskDescriptor = &schedulerState->allTasks[
-    taskId(taskMessageFrom(taskMessage)) - 1];
+  if (assignMemory(taskDescriptor->fileDescriptors,
+    SCHEDULER_STATE->schedulerTaskId) != 0
+  ) {
+    printString("WARNING: Could not assign fileDescriptors to scheduler.\n");
+    printString("Undefined behavior.\n");
+  }
+  for (int ii = 0; ii < taskDescriptor->numFileDescriptors; ii++) {
+    if (assignMemory(taskDescriptor->fileDescriptors[ii],
+      SCHEDULER_STATE->schedulerTaskId) != 0
+    ) {
+      printString("WARNING: Could not assign fileDescriptors[");
+      printInt(ii);
+      printString("] to scheduler.\n");
+      printString("Undefined behavior.\n");
+    }
+  }
+
   // The task should be blocked in taskMessageQueueWaitForType waiting
   // on a condition with an infinite timeout.  So, it *SHOULD* be on the
   // waiting queue.  Take no chances, though.
@@ -2593,6 +2612,23 @@ int schedulerExecveCommandHandler(
         printString("] to exec task.\n");
         printString("Undefined behavior.\n");
       }
+    }
+  }
+
+  if (assignMemory(taskDescriptor->fileDescriptors,
+    taskDescriptor->taskId) != 0
+  ) {
+    printString("WARNING: Could not assign fileDescriptors to scheduler.\n");
+    printString("Undefined behavior.\n");
+  }
+  for (int ii = 0; ii < taskDescriptor->numFileDescriptors; ii++) {
+    if (assignMemory(taskDescriptor->fileDescriptors[ii],
+      taskDescriptor->taskId) != 0
+    ) {
+      printString("WARNING: Could not assign fileDescriptors[");
+      printInt(ii);
+      printString("] to scheduler.\n");
+      printString("Undefined behavior.\n");
     }
   }
 
