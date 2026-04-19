@@ -92,11 +92,6 @@ typedef struct NanoOsApi {
   int (*vfprintf)(FILE *stream, const char *format, va_list args);
   int (*vsnprintf)(char *str, size_t size, const char *format, va_list ap);
   
-  // Character I/O:
-  int (*fputs)(const char *s, FILE *stream);
-  int (*puts)(const char *s);
-  char* (*fgets)(char *buffer, int size, FILE *stream);
-  
   // Direct I/O:
   size_t (*fread)(void *ptr, size_t size, size_t nmemb, FILE *stream);
   size_t (*fwrite)(const void *ptr, size_t size, size_t nmemb, FILE *stream);
@@ -131,9 +126,6 @@ typedef struct NanoOsApi {
   size_t (*strlen)(const char *s);
   
   // Other stdlib functions:
-  char* (*getenv)(const char *name);
-  int (*rand)(void);
-  void (*srand)(unsigned int seed);
   long long (*strtoll)(const char *nptr, char **endptr, int base);
   
   // unistd functions:

@@ -98,11 +98,6 @@ NanoOsApi nanoOsApi = {
   .vfprintf = nanoOsVFPrintf,
   .vsnprintf = vsnprintf,
   
-  // Character I/O:
-  .fputs = NULL,
-  .puts = NULL,
-  .fgets = NULL,
-  
   // Direct I/O:
   .fread = nanoOsFread,
   .fwrite = nanoOsFwrite,
@@ -137,9 +132,6 @@ NanoOsApi nanoOsApi = {
   .strlen = strlen,
   
   // Other stdlib functions:
-  .getenv = NULL,
-  .rand = NULL,
-  .srand = NULL,
   .strtoll = nanoOsStrtoll,
   
   // unistd functions:
