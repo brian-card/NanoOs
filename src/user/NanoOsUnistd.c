@@ -78,8 +78,8 @@ int nanoOsClose(int fd) {
       taskDescriptor->fileDescriptors[fd]->pipeEnd->pipeEnd = NULL;
     }
     free(taskDescriptor->fileDescriptors[fd]);
-    taskDescriptor->fileDescriptors[fd] = NULL;
   }
+  taskDescriptor->fileDescriptors[fd] = NULL;
   
 exit:
   return returnValue;
