@@ -3257,21 +3257,6 @@ int schedulerLoadOverlay(FileBlockMetadata *overlay, char **envp) {
     return 0;
   }
 
-  printDebugString("Loading ");
-  printDebugInt(overlay->numBlocks);
-  printDebugString(" blocks of ");
-  printDebugInt(overlay->blockDevice->blockSize);
-  printDebugString(" bytes starting at block ");
-  printDebugInt(overlay->startBlock);
-  printDebugString(" from block device 0x");
-  printDebugHex((uintptr_t) overlay->blockDevice);
-  printDebugString(" using schedReadBlocks 0x");
-  printDebugHex((uintptr_t) overlay->blockDevice->schedReadBlocks);
-  printDebugString(" into overlay (");
-  printDebugInt(overlay->numBlocks * overlay->blockDevice->blockSize);
-  printDebugString(" bytes total) into 0x");
-  printDebugHex((uintptr_t) overlayMap);
-  printDebugString("\n");
   if (overlay->blockDevice->schedReadBlocks(
     overlay->blockDevice->context,
     overlay->startBlock,
@@ -3283,7 +3268,6 @@ int schedulerLoadOverlay(FileBlockMetadata *overlay, char **envp) {
     return -EIO;
   }
 
-  printDebugString("Verifying overlay magic\n");
   if (overlayMap->header.magic != NANO_OS_OVERLAY_MAGIC) {
     printString("Overlay magic was not \"NanoOsOL\".\n");
     printDebugString("Expected 0x");
@@ -3312,7 +3296,6 @@ int schedulerLoadOverlay(FileBlockMetadata *overlay, char **envp) {
 
     return -ENOEXEC;
   }
-  printDebugString("Verifying overlay version\n");
   if (overlayMap->header.version != NANO_OS_OVERLAY_VERSION) {
     printString("Overlay version is 0x");
     printHex(overlayMap->header.version);
@@ -3321,7 +3304,6 @@ int schedulerLoadOverlay(FileBlockMetadata *overlay, char **envp) {
   }
 
   // Set the pieces of the overlay header that the program needs to run.
-  printDebugString("Configuring overlay environment\n");
   overlayHeader->osApi = &nanoOsApi;
   overlayHeader->env = envp;
   overlayHeader->overlay.blockDevice = overlay->blockDevice;
