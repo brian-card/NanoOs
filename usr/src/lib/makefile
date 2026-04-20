@@ -1,49 +1,30 @@
-#CC            := arm-none-eabi-g++ -std=gnu++17
-CC            := arm-none-eabi-gcc -std=gnu17
-LD            := arm-none-eabi-ld
-OBJCOPY       := arm-none-eabi-objcopy
-OBJDUMP       := arm-none-eabi-objdump
-SIZE          := arm-none-eabi-size
-ARCHIVE       := arm-none-eabi-ar rcs
+include include.mk
 
-MAKEFILE      := makefile
-EXE_DIR       := ../../exe
-INCLUDE_DIR   := ../../include
-OBJ_DIR       := ../../obj
-EXTRA_FLAGS   := -mcpu=cortex-m0 -Os
-EXTRA_DEFINES := \
+LIBRARIES := $(shell ls | grep -Ev 'makefile|.*\.mk|include')
 
-EXTRA_COMMON_FILES := \
+OBJ_DIR = ../../obj
+BIN_DIR = ../../bin
 
-MKDIR        := mkdir -p
-COPY         := cp
-REMOVE       := rm -f
+.PHONY: all clean overlays
 
-FLAGS := -g $(EXTRA_FLAGS) $(COMMAND_LINE_FLAGS)
+overlays:
+	set -e; \
+	for library in $(LIBRARIES); do \
+		$(MAKE) -C $${library} -f overlay.mk COMPILE=$(COMPILE) \
+			LINK=$(LINK) OBJCOPY=$(OBJCOPY) OBJDUMP=$(OBJDUMP) \
+			SIZE=$(SIZE) TARGET=$${library}; \
+	done
 
-COMMON_FILES := \
+app:
+	set -e; \
+	for library in $(LIBRARIES); do \
+		$(MAKE) -C $${library} -f app.mk COMPILE=$(COMPILE) \
+			LINK=$(LINK) OBJCOPY=$(OBJCOPY) OBJDUMP=$(OBJDUMP) \
+			SIZE=$(SIZE) TARGET=$${library}; \
+	done
 
-SRC_FILES := $(shell ls *.c)
-
-OBJ_FILES :=  $(addprefix $(OBJ_DIR)/,$(patsubst %.c,%.o,$(SRC_FILES)))
-
-INCLUDES := \
-    -I../../.. \
-    -I$(INCLUDE_DIR) \
-
-LINKS := \
-
-WARNINGS := \
-    -Wall \
-    -Wextra \
-    -Werror \
-
-all: $(OBJ_DIR)/libc.a
-
-$(OBJ_DIR)/libc.a: $(OBJ_FILES)
-	@$(MKDIR) $(OBJ_DIR)
-	$(ARCHIVE) $@ $(OBJ_FILES)
-
-$(OBJ_DIR)/%.o: %.c $(INCLUDE_DIR)/%.h $(MAKEFILE)
-	@$(MKDIR) $(OBJ_DIR)
-	$(CC) $(FLAGS) $(INCLUDES) $(DEFINES) $(WARNINGS) -c $< -o $@
+clean:
+	$(RM) $(OBJ_DIR)/start.o
+	for library in $(LIBRARIES); do \
+		$(MAKE) -C $${library} -f overlay.mk clean TARGET=$${library}; \
+	done

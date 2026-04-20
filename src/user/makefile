@@ -31,12 +31,13 @@ endif
 LDFLAGS = 
 
 # Compiler flags
-CFLAGS = $(CPU) -std=gnu17
+CFLAGS = $(CPU) -std=gnu17 -g -rdynamic
 
 LINKS = \
 
 INCLUDES = \
     -I../kernel \
+    -I../include \
 
 WARNINGS = \
     -Wall \
@@ -50,9 +51,16 @@ SOURCES = \
 OBJECTS = \
     $(OBJ_DIR)/NanoOsApi.o \
     $(OBJ_DIR)/NanoOsErrno.o \
+    $(OBJ_DIR)/NanoOsFcntl.o \
+    $(OBJ_DIR)/NanoOsHardware.o \
     $(OBJ_DIR)/NanoOsLibC.o \
+    $(OBJ_DIR)/NanoOsPwd.o \
+    $(OBJ_DIR)/NanoOsSched.o \
+    $(OBJ_DIR)/NanoOsSignal.o \
+    $(OBJ_DIR)/NanoOsSpawn.o \
     $(OBJ_DIR)/NanoOsStdio.o \
-    $(OBJ_DIR)/NanoOsSys.o \
+    $(OBJ_DIR)/NanoOsSysUtsname.o \
+    $(OBJ_DIR)/NanoOsTermios.o \
     $(OBJ_DIR)/NanoOsUnistd.o \
 
 # Default target

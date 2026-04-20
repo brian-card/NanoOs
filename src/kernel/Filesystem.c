@@ -10,6 +10,7 @@
 #include "../user/NanoOsStdio.h"
 #include "Filesystem.h"
 #include "NanoOs.h"
+#include "Scheduler.h"
 #include "Tasks.h"
 
 // Partition table constants
@@ -97,8 +98,8 @@ FILE* filesystemFOpen(const char *pathname, const char *mode) {
     return NULL;
   }
 
-  TaskMessage *msg = sendNanoOsMessageToPid(
-    NANO_OS_FILESYSTEM_TASK_ID, FILESYSTEM_OPEN_FILE,
+  TaskMessage *msg = sendNanoOsMessageToTaskId(
+    SCHEDULER_STATE->rootFsTaskId, FILESYSTEM_OPEN_FILE,
     (intptr_t) mode, (intptr_t) pathname, true);
   taskMessageWaitForDone(msg, NULL);
   FILE *file = nanoOsMessageDataPointer(msg, FILE*);
@@ -121,8 +122,8 @@ int filesystemFClose(FILE *stream) {
     fcloseParameters.stream = stream;
     fcloseParameters.returnValue = 0;
 
-    TaskMessage *msg = sendNanoOsMessageToPid(
-      NANO_OS_FILESYSTEM_TASK_ID, FILESYSTEM_CLOSE_FILE,
+    TaskMessage *msg = sendNanoOsMessageToTaskId(
+      SCHEDULER_STATE->rootFsTaskId, FILESYSTEM_CLOSE_FILE,
       0, (intptr_t) &fcloseParameters, true);
     taskMessageWaitForDone(msg, NULL);
 
@@ -149,8 +150,8 @@ int filesystemFClose(FILE *stream) {
 int filesystemRemove(const char *pathname) {
   int returnValue = 0;
   if ((pathname != NULL) && (*pathname != '\0')) {
-    TaskMessage *msg = sendNanoOsMessageToPid(
-      NANO_OS_FILESYSTEM_TASK_ID, FILESYSTEM_REMOVE_FILE,
+    TaskMessage *msg = sendNanoOsMessageToTaskId(
+      SCHEDULER_STATE->rootFsTaskId, FILESYSTEM_REMOVE_FILE,
       /* func= */ 0, (intptr_t) pathname, true);
     taskMessageWaitForDone(msg, NULL);
     returnValue = nanoOsMessageDataValue(msg, int);
@@ -187,8 +188,8 @@ int filesystemFSeek(FILE *stream, long offset, int whence) {
     .offset = offset,
     .whence = whence,
   };
-  TaskMessage *msg = sendNanoOsMessageToPid(
-    NANO_OS_FILESYSTEM_TASK_ID, FILESYSTEM_REMOVE_FILE,
+  TaskMessage *msg = sendNanoOsMessageToTaskId(
+    SCHEDULER_STATE->rootFsTaskId, FILESYSTEM_REMOVE_FILE,
     /* func= */ 0, (intptr_t) &filesystemSeekParameters, true);
   taskMessageWaitForDone(msg, NULL);
   int returnValue = nanoOsMessageDataValue(msg, int);
@@ -233,8 +234,8 @@ size_t filesystemFRead(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   printDebugHex((uintptr_t) ptr);
   printDebugString("\n");
 
-  TaskMessage *taskMessage = sendNanoOsMessageToPid(
-    NANO_OS_FILESYSTEM_TASK_ID,
+  TaskMessage *taskMessage = sendNanoOsMessageToTaskId(
+    SCHEDULER_STATE->rootFsTaskId,
     FILESYSTEM_READ_FILE,
     /* func= */ 0,
     /* data= */ (intptr_t) &filesystemIoCommandParameters,
@@ -281,8 +282,8 @@ size_t filesystemFWrite(
     .buffer = (void*) ptr,
     .length = (uint32_t) (size * nmemb)
   };
-  TaskMessage *taskMessage = sendNanoOsMessageToPid(
-    NANO_OS_FILESYSTEM_TASK_ID,
+  TaskMessage *taskMessage = sendNanoOsMessageToTaskId(
+    SCHEDULER_STATE->rootFsTaskId,
     FILESYSTEM_WRITE_FILE,
     /* func= */ 0,
     /* data= */ (intptr_t) &filesystemIoCommandParameters,
@@ -290,6 +291,78 @@ size_t filesystemFWrite(
   taskMessageWaitForDone(taskMessage, NULL);
   returnValue = (filesystemIoCommandParameters.length / size);
   taskMessageRelease(taskMessage);
+
+  return returnValue;
+}
+
+/// @fn int getFileBlockMetadataFromFile(FILE *stream,
+///   FileBlockMetadata *metadata)
+///
+/// @brief Get the block-level metadata for a given file.
+///
+/// @param stream A pointer to a previously-opened FILE.
+/// @param metadata A pointer to a FileBlockMetadata structure the caller wants
+///   populated.
+///
+/// @return Returns 0 on success, -errno on failure.
+int getFileBlockMetadataFromFile(FILE *stream, FileBlockMetadata *metadata) {
+  if ((stream == NULL) || (metadata == NULL)) {
+    return -EINVAL;
+  }
+
+  GetFileBlockMetadataArgs args = {
+    .stream = stream,
+    .metadata = metadata,
+  };
+
+  TaskMessage *taskMessage = getAvailableMessage();
+  while (taskMessage == NULL) {
+    taskYield();
+    taskMessage = getAvailableMessage();
+  }
+
+  taskMessageInit(taskMessage, FILESYSTEM_GET_FILE_BLOCK_METADATA,
+    &args, sizeof(args), true);
+  if (sendTaskMessageToTaskId(SCHEDULER_STATE->rootFsTaskId, taskMessage)
+    != taskSuccess
+  ) {
+    printString("ERROR! Failed to send message to filesystem to get file "
+      "block metadata\n");
+    taskMessageRelease(taskMessage);
+    return -EIO;
+  }
+  taskMessageWaitForDone(taskMessage, NULL);
+  taskMessageRelease(taskMessage);
+
+  return 0;
+}
+
+/// @fn int getFileBlockMetadataFromPath(const char *path,
+///   FileBlockMetadata *metadata)
+///
+/// @brief Get the block-level metadata for a given path.
+///
+/// @param path A string representing a path to a file on the filesystem.
+/// @param metadata A pointer to a FileBlockMetadata structure the caller wants
+///   populated.
+///
+/// @return Returns 0 on success, -errno on failure.
+int getFileBlockMetadataFromPath(const char *path,
+  FileBlockMetadata *metadata
+) {
+  if ((path == NULL) || (metadata == NULL)) {
+    return -EINVAL;
+  }
+
+  FILE *stream = fopen(path, "r");
+  if (stream == NULL) {
+    printString("ERROR! Could not open file \"");
+    printString(path);
+    printString("\"\n");
+    return -EIO;
+  }
+  int returnValue = getFileBlockMetadataFromFile(stream, metadata);
+  fclose(stream); stream = NULL;
 
   return returnValue;
 }

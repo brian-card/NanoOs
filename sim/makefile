@@ -27,7 +27,7 @@ ifeq ($(COMPILE),arm-none-eabi-gcc)
 endif
 
 # Compiler flags
-CFLAGS := $(CPU) -std=gnu17
+CFLAGS := $(CPU) -std=gnu17 -g -rdynamic
 
 LINKS := \
 
@@ -52,31 +52,39 @@ TARGET := nano-os-sim
 BINARY := $(BIN_DIR)/$(TARGET)
 
 OS_OBJECTS := \
-    $(OBJ_DIR)/Commands.o \
     $(OBJ_DIR)/Console.o \
     $(OBJ_DIR)/Coroutines.o \
     $(OBJ_DIR)/ExFatFilesystem.o \
     $(OBJ_DIR)/ExFatTask.o \
     $(OBJ_DIR)/Filesystem.o \
     $(OBJ_DIR)/HalPosix.o \
+    $(OBJ_DIR)/HalPosixImpl.o \
     $(OBJ_DIR)/Link.o \
     $(OBJ_DIR)/MemoryManager.o \
     $(OBJ_DIR)/Messages.o \
     $(OBJ_DIR)/NanoOs.o \
-    $(OBJ_DIR)/NanoOsOverlay.o \
+    $(OBJ_DIR)/NanoOsHardware.o \
+    $(OBJ_DIR)/Overlay.o \
     $(OBJ_DIR)/Tasks.o \
     $(OBJ_DIR)/Scheduler.o \
     $(OBJ_DIR)/SdCard.o \
     $(OBJ_DIR)/NanoOsApi.o \
     $(OBJ_DIR)/NanoOsErrno.o \
+    $(OBJ_DIR)/NanoOsFcntl.o \
     $(OBJ_DIR)/NanoOsLibC.o \
+    $(OBJ_DIR)/NanoOsPwd.o \
+    $(OBJ_DIR)/NanoOsSched.o \
+    $(OBJ_DIR)/NanoOsSignal.o \
+    $(OBJ_DIR)/NanoOsSpawn.o \
     $(OBJ_DIR)/NanoOsStdio.o \
-    $(OBJ_DIR)/NanoOsSys.o \
+    $(OBJ_DIR)/NanoOsSysUtsname.o \
+    $(OBJ_DIR)/NanoOsTermios.o \
     $(OBJ_DIR)/NanoOsUnistd.o \
 
 SIM_OBJECTS := \
     $(OBJ_DIR)/NanoOsSim.o \
     $(OBJ_DIR)/SdCardPosix.o \
+    $(OBJ_DIR)/SdCardPosixImpl.o \
 
 # Default target
 all: $(BINARY)

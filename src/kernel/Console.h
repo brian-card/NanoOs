@@ -65,6 +65,7 @@ typedef enum ConsoleCommandResponse {
   CONSOLE_ASSIGN_PORT_INPUT,
   CONSOLE_RELEASE_PORT,
   CONSOLE_GET_OWNED_PORT,
+  CONSOLE_GET_ECHO_PORT,
   CONSOLE_SET_ECHO_PORT,
   CONSOLE_WAIT_FOR_INPUT,
   CONSOLE_RELEASE_PID_PORT,
@@ -96,7 +97,9 @@ typedef enum ConsoleValueType {
 // Support functions
 void releaseConsole(void);
 int getOwnedConsolePort(void);
+bool getConsoleEcho(void);
 int setConsoleEcho(bool desiredEchoState);
+int getNumConsolePorts(void);
 
 // Exported tasks
 void* runConsole(void *args);
@@ -110,7 +113,6 @@ int printConsoleULong(long unsigned int message);
 int printConsoleFloat(float message);
 int printConsoleDouble(double message);
 int printConsoleString(const char *message);
-int getNumConsolePorts(void);
 
 #ifdef __cplusplus
 } // extern "C"

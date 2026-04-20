@@ -34,8 +34,8 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef NANO_OS_ERRNO_H
-#define NANO_OS_ERRNO_H
+#ifndef NANO_OS_USER_ERRNO_H
+#define NANO_OS_USER_ERRNO_H
 
 #ifdef __cplusplus
 extern "C"
@@ -46,7 +46,7 @@ extern "C"
 // because most things are defined to be ENOERR.  So, we need to define some of
 // our own.
 #define ENOERR           0      /* Success */
-#define EUNKNOWN         1      /* Unknown error */
+#define EOTHER           1      /* Unspecified error (POSIX.1-2008) */
 #define EBUSY            2      /* Device or resource busy */
 #define ENOMEM           3      /* Out of memory */
 #define EACCES           4      /* Permission denied */
@@ -66,7 +66,8 @@ extern "C"
 #define ETIMEDOUT       18      /* Operation timed out */
 #define ENOEXEC         19      /* Exec format error */
 #define ENOTSUP         20      /* Operation not supported */
-#define ELAST           20      /* End of error codes */
+#define ENXIO           21      /* No such device or address */
+#define ELAST           21      /* End of error codes */
 
 int* errno_(void);
 #define errno (*errno_())
@@ -75,4 +76,4 @@ int* errno_(void);
 } // extern "C"
 #endif
 
-#endif // NANO_OS_ERRNO_H
+#endif // NANO_OS_USER_ERRNO_H

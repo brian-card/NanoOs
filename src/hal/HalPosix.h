@@ -38,8 +38,7 @@
 
 #include <setjmp.h>
 
-#include "Hal.h"
-
+#include "../kernel/Hal.h"
 
 #ifdef __cplusplus
 extern "C"

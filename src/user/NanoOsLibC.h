@@ -34,14 +34,13 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
-//// #define NANO_OS_DEBUG
+//// #define NANO_OS_USER_DEBUG
 #include "NanoOsErrno.h"
 
-#ifndef NANO_OS_LIB_C_H
-#define NANO_OS_LIB_C_H
+#ifndef NANO_OS_USER_LIB_C_H
+#define NANO_OS_USER_LIB_C_H
 
 // Standard C includes
-#include "limits.h"
 #include "setjmp.h"
 #include "stdarg.h"
 #include "stdbool.h"
@@ -102,14 +101,10 @@ char* nanoOsStrError(int errnum);
 #endif
 #define strerror nanoOsStrError
 
-char* nanoOsGetenv(const char *name);
-#ifdef getenv
-#undef getenv
-#endif
-#define getenv(name) nanoOsGetenv(name)
+long long nanoOsStrtoll(const char *nptr, char **endptr, int base);
 
 #ifdef __cplusplus
 } // extern "C"
 #endif
 
-#endif // NANO_OS_LIB_C_H
+#endif // NANO_OS_USER_LIB_C_H

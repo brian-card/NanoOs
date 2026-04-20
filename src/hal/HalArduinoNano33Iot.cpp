@@ -29,16 +29,13 @@
 ///
 /// @brief HAL implementation for an Arduino Nano 33 IoT
 
-#if defined(__arm__)
+#if defined(ARDUINO_SAMD_NANO_33_IOT)
 
 // Base Arduino definitions
 #include <Arduino.h>
 
 // Basic SPI communication
 #include <SPI.h>
-
-// Standard C includes from the compiler
-#include <limits.h>
 
 #include "HalArduinoNano33Iot.h"
 // Deliberately *NOT* including MemoryManager.h here.  The HAL has to be
@@ -53,6 +50,33 @@
 #include "../user/NanoOsErrno.h"
 #include "../user/NanoOsStdio.h"
 
+/// @def DIO_START
+///
+/// @brief On the Arduino Nano 33 IoT, D0 is used for Serial1's RX and D1 is
+/// used for Serial1's TX.  We use expect to use Serial1, so our first usable
+/// DIO is 2.
+#define DIO_START 2
+
+/// @def NUM_DIO_PINS
+///
+/// @brief The number of digital IO pins on the board.  14 on an Arduino Nano.
+#define NUM_DIO_PINS 14
+
+/// @def SPI_COPI_DIO
+///
+/// @brief DIO pin used for SPI COPI on the Arduino Nano 33 IoT.
+#define SPI_COPI_DIO 11
+
+/// @def SPI_CIPO_DIO
+///
+/// @brief DIO pin used for SPI CIPO on the Arduino Nano 33 IoT.
+#define SPI_CIPO_DIO 12
+
+/// @def SPI_SCK_DIO
+///
+/// @brief DIO pin used for SPI serial clock on the Arduino Nano 33 IoT.
+#define SPI_SCK_DIO 13
+
 /// @def PROCESS_STACK_SIZE
 ///
 /// @brief The size, in bytes, of a regular process's stack.
@@ -62,6 +86,11 @@
 ///
 /// @brief The size, in bytes, of the memory manager process's stack.
 #define MEMORY_MANAGER_STACK_SIZE 192
+
+/// @def OVERLAY_ADDRESS
+///
+/// @brief The address of where the overlay will be placed in memory.
+#define OVERLAY_ADDRESS 0x20001800
 
 /// @def OVERLAY_SIZE
 ///
@@ -216,23 +245,10 @@ uintptr_t arduinoNano33IotMemoryManagerStackSize(bool debug) {
 /// @var _bottomOfStack
 ///
 /// @brief Where the bottom of the stack will be set to be in memory.
-static void *_bottomOfStack = (void*) (0x20001400 + OVERLAY_SIZE);
+static void *_bottomOfHeap = (void*) (OVERLAY_ADDRESS + OVERLAY_SIZE);
 
-void* arduinoNano33IotBottomOfStack(void) {
-  return _bottomOfStack;
-}
-
-/// @var _overlayMap
-///
-/// @brief Where the overlay map is located in memory.
-static NanoOsOverlayMap *_overlayMap = (NanoOsOverlayMap*) 0x20001400;
-
-NanoOsOverlayMap* arduinoNano33IotOverlayMap(void) {
-  return _overlayMap;
-}
-
-uintptr_t arduinoNano33IotOverlaySize(void) {
-  return OVERLAY_SIZE;
+void* arduinoNano33IotBottomOfHeap(void) {
+  return _bottomOfHeap;
 }
 
 /// @var serialPorts
@@ -300,6 +316,14 @@ ssize_t arduinoNano33IotWriteSerialPort(int port,
   return numBytesWritten;
 }
 
+static HalSerialPort arduinoNano33IotSerialPortHal = {
+  .getNumSerialPorts = arduinoNano33IotGetNumSerialPorts,
+  .setNumSerialPorts = arduinoNano33IotSetNumSerialPorts,
+  .initSerialPort = arduinoNano33IotInitSerialPort,
+  .pollSerialPort = arduinoNano33IotPollSerialPort,
+  .writeSerialPort = arduinoNano33IotWriteSerialPort,
+};
+
 int arduinoNano33IotGetNumDios(void) {
   return NUM_DIO_PINS;
 }
@@ -330,11 +354,22 @@ int arduinoNano33IotWriteDio(int dio, bool high) {
   return returnValue;
 }
 
+static HalDio arduinoNano33IotDioHal = {
+  .getNumDios = arduinoNano33IotGetNumDios,
+  .configureDio = arduinoNano33IotConfigureDio,
+  .writeDio = arduinoNano33IotWriteDio,
+};
+
 /// @var globalSpiConfigured
 ///
 /// @brief Whether or not the Arduino's SPI interface has already been
 /// configured.
 static bool globalSpiConfigured = false;
+
+/// @var globalSpiInUse
+///
+/// @brief Whether or not the Arduino's SPI interface is currently in use.
+static bool globalSpiInUse = false;
 
 /// @var arduinoSpiDevices
 ///
@@ -351,9 +386,10 @@ static bool globalSpiConfigured = false;
 /// So, the maximum number of devcies we can support is the number of DIO pins
 /// minus 5.
 static struct ArduinoNano33IotSpi {
-  bool    configured;         // Will default to false
-  uint8_t chipSelect;
-  bool    transferInProgress; // Will default to false
+  bool     configured;         // Will default to false
+  uint8_t  chipSelect;
+  bool     transferInProgress; // Will default to false
+  uint32_t baud;
 } arduinoSpiDevices[NUM_DIO_PINS - 5] = {};
 
 /// @var numArduinoSpis
@@ -363,7 +399,7 @@ static const int numArduinoSpis
   = sizeof(arduinoSpiDevices) / sizeof(arduinoSpiDevices[0]);
 
 int arduinoNano33IotInitSpiDevice(int spi,
-  uint8_t cs, uint8_t sck, uint8_t copi, uint8_t cipo
+  uint8_t cs, uint8_t sck, uint8_t copi, uint8_t cipo, uint32_t baud
 ) {
   if ((spi < 0) || (spi >= numArduinoSpis)) {
     // Outside the limit of the devices we support.
@@ -386,8 +422,8 @@ int arduinoNano33IotInitSpiDevice(int spi,
   
   if (globalSpiConfigured == false) {
     // Set up SPI at the default speed.
-    SPI.begin();
     globalSpiConfigured = true;
+    SPI.begin();
   }
   
   // Configure the chip select DIO for output.
@@ -397,6 +433,7 @@ int arduinoNano33IotInitSpiDevice(int spi,
   
   // Configure our internal metadata for the device.
   arduinoSpiDevices[spi].chipSelect = cs;
+  arduinoSpiDevices[spi].baud = baud;
   arduinoSpiDevices[spi].configured = true;
   
   return 0;
@@ -408,10 +445,20 @@ int arduinoNano33IotStartSpiTransfer(int spi) {
   ) {
     // Outside the limit of the devices we support.
     return -ENODEV;
+  } else if (globalSpiInUse == true) {
+    return -EBUSY;
   }
+  
+  // Mark the interface in use.
+  globalSpiInUse = true;
   
   // Select the chip select pin.
   arduinoNano33IotWriteDio(arduinoSpiDevices[spi].chipSelect, 0);
+  
+  // Begin the transaction
+  SPI.beginTransaction(SPISettings(arduinoSpiDevices[spi].baud,
+    MSBFIRST, SPI_MODE0));
+  
   arduinoSpiDevices[spi].transferInProgress = true;
   
   return 0;
@@ -425,12 +472,19 @@ int arduinoNano33IotEndSpiTransfer(int spi) {
     return -ENODEV;
   }
   
+  arduinoSpiDevices[spi].transferInProgress = false;
+  
+  // End the transaction.
+  SPI.endTransaction();
+  
   // Deselect the chip select pin.
   arduinoNano33IotWriteDio(arduinoSpiDevices[spi].chipSelect, 1);
   for (int ii = 0; ii < 8; ii++) {
     SPI.transfer(0xFF); // 8 clock pulses
   }
-  arduinoSpiDevices[spi].transferInProgress = false;
+  
+  // Mark the interface not in use.
+  globalSpiInUse = false;
   
   return 0;
 }
@@ -450,6 +504,34 @@ int arduinoNano33IotSpiTransfer8(int spi, uint8_t data) {
   
   return (int) SPI.transfer(data);
 }
+
+int arduinoNano33IotSpiTransferBytes(int spi,
+  uint8_t *data, uint32_t length
+) {
+  if ((spi < 0) || (spi >= numArduinoSpis)
+    || (arduinoSpiDevices[spi].configured == false)
+  ) {
+    // Outside the limit of the devices we support.
+    return -ENODEV;
+  } else if (!arduinoSpiDevices[spi].transferInProgress) {
+    // The only error that arduinoNano33IotStartSpiTransfer can return is
+    // ENODEV and we've already checked for that, so we don't need to check the
+    // return value here.
+    arduinoNano33IotStartSpiTransfer(spi);
+  }
+  
+  SPI.transfer(data, length);
+  
+  return 0;
+}
+
+static HalSpi arduinoNano33IotSpiHal = {
+  .initSpiDevice = arduinoNano33IotInitSpiDevice,
+  .startSpiTransfer = arduinoNano33IotStartSpiTransfer,
+  .endSpiTransfer = arduinoNano33IotEndSpiTransfer,
+  .spiTransfer8 = arduinoNano33IotSpiTransfer8,
+  .spiTransferBytes = arduinoNano33IotSpiTransferBytes,
+};
 
 /// @var baseSystemTimeUs
 ///
@@ -491,68 +573,38 @@ int64_t arduinoNano33IotGetElapsedNanoseconds(int64_t startTime) {
     startTime / ((int64_t) 1000)) * ((int64_t) 1000);
 }
 
-int arduinoNano33IotReset(void) {
-  NVIC_SystemReset();
-  return 0;
-}
+static HalClock arduinoNano33IotClockHal = {
+  .setSystemTime = arduinoNano33IotSetSystemTime,
+  .getElapsedMilliseconds = arduinoNano33IotGetElapsedMilliseconds,
+  .getElapsedMicroseconds = arduinoNano33IotGetElapsedMicroseconds,
+  .getElapsedNanoseconds = arduinoNano33IotGetElapsedNanoseconds,
+};
 
-int arduinoNano33IotShutdown(void) {
-  // Configure for standby mode
-  SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk;
-  
-  // Set standby mode in Power Manager
-  PM->SLEEP.reg = PM_SLEEP_IDLE_CPU;
-  
-  __DSB(); // Data Synchronization Barrier
-  __WFI(); // Wait For Interrupt
-  return 0;
-}
-
-int arduinoNano33IotInitRootStorage(SchedulerState *schedulerState) {
-  TaskDescriptor *allTasks = schedulerState->allTasks;
-  
-  // Create the SD card task.
-  SdCardSpiArgs sdCardSpiArgs = {
-    .spiCsDio = SD_CARD_PIN_CHIP_SELECT,
-    .spiCopiDio = SPI_COPI_DIO,
-    .spiCipoDio = SPI_CIPO_DIO,
-    .spiSckDio = SPI_SCK_DIO,
-  };
-
-  // Create the SD card task.
-  TaskDescriptor *taskDescriptor
-    = &allTasks[NANO_OS_SD_CARD_TASK_ID - 1];
-  if (taskCreate(
-    taskDescriptor, runSdCardSpi, &sdCardSpiArgs)
-    != taskSuccess
+int arduinoNano33IotShutdown(HalShutdownType shutdownType) {
+  // You can't completely turn off a Nano 33 IoT from software.  The best we
+  // can do is put into a low power state, so do the same set of operations for
+  // both off and suspend.
+  if ((shutdownType == HAL_SHUTDOWN_OFF)
+    || (shutdownType == HAL_SHUTDOWN_SUSPEND)
   ) {
-    fputs("Could not start SD card task.\n", stderr);
+    // Configure for standby mode
+    SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk;
+    
+    // Set standby mode in Power Manager
+    PM->SLEEP.reg = PM_SLEEP_IDLE_CPU;
+    
+    __DSB(); // Data Synchronization Barrier
+    __WFI(); // Wait For Interrupt
+  } else if (shutdownType == HAL_SHUTDOWN_RESET) {
+    NVIC_SystemReset();
   }
-  printDebugString("Started SD card task.\n");
-  taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
-  taskDescriptor->taskId = NANO_OS_SD_CARD_TASK_ID;
-  taskDescriptor->name = "SD card";
-  taskDescriptor->userId = ROOT_USER_ID;
-  BlockStorageDevice *sdDevice = (BlockStorageDevice*) coroutineResume(
-    allTasks[NANO_OS_SD_CARD_TASK_ID - 1].taskHandle, NULL);
-  sdDevice->partitionNumber = 1;
-  printDebugString("Configured SD card task.\n");
-  
-  // Create the filesystem task.
-  taskDescriptor = &allTasks[NANO_OS_FILESYSTEM_TASK_ID - 1];
-  if (taskCreate(taskDescriptor, runExFatFilesystem, sdDevice)
-    != taskSuccess
-  ) {
-    fputs("Could not start filesystem task.\n", stderr);
-  }
-  taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
-  taskDescriptor->taskId = NANO_OS_FILESYSTEM_TASK_ID;
-  taskDescriptor->name = "filesystem";
-  taskDescriptor->userId = ROOT_USER_ID;
-  printDebugString("Created filesystem task.\n");
-  
+
   return 0;
 }
+
+static HalPower arduinoNano33IotPowerHal = {
+  .shutdown = arduinoNano33IotShutdown,
+};
 
 /// @struct HardwareTimer
 ///
@@ -936,52 +988,7 @@ void TC4_Handler(void) {
   RETURN_TO_HANDLER(1);
 }
 
-
-/// @var arduinoNano33IotHal
-///
-/// @brief The implementation of the Hal interface for the Arduino Nano 33 Iot.
-static Hal arduinoNano33IotHal = {
-  // Memory definitions.
-  .processStackSize = arduinoNano33IotProcessStackSize,
-  .memoryManagerStackSize = arduinoNano33IotMemoryManagerStackSize,
-  .bottomOfStack = arduinoNano33IotBottomOfStack,
-  
-  // Overlay definitions.
-  .overlayMap = arduinoNano33IotOverlayMap,
-  .overlaySize = arduinoNano33IotOverlaySize,
-  
-  // Serial port functionality.
-  .getNumSerialPorts = arduinoNano33IotGetNumSerialPorts,
-  .setNumSerialPorts = arduinoNano33IotSetNumSerialPorts,
-  .initSerialPort = arduinoNano33IotInitSerialPort,
-  .pollSerialPort = arduinoNano33IotPollSerialPort,
-  .writeSerialPort = arduinoNano33IotWriteSerialPort,
-  
-  // Digital IO pin functionality.
-  .getNumDios = arduinoNano33IotGetNumDios,
-  .configureDio = arduinoNano33IotConfigureDio,
-  .writeDio = arduinoNano33IotWriteDio,
-  
-  // SPI functionality.
-  .initSpiDevice = arduinoNano33IotInitSpiDevice,
-  .startSpiTransfer = arduinoNano33IotStartSpiTransfer,
-  .endSpiTransfer = arduinoNano33IotEndSpiTransfer,
-  .spiTransfer8 = arduinoNano33IotSpiTransfer8,
-  
-  // System time functionality.
-  .setSystemTime = arduinoNano33IotSetSystemTime,
-  .getElapsedMilliseconds = arduinoNano33IotGetElapsedMilliseconds,
-  .getElapsedMicroseconds = arduinoNano33IotGetElapsedMicroseconds,
-  .getElapsedNanoseconds = arduinoNano33IotGetElapsedNanoseconds,
-  
-  // Hardware reset and shutdown.
-  .reset = arduinoNano33IotReset,
-  .shutdown = arduinoNano33IotShutdown,
-  
-  // Root storage configuration.
-  .initRootStorage = arduinoNano33IotInitRootStorage,
-  
-  // Hardware timers.
+static HalTimer arduinoNano33IotTimerHal = {
   .getNumTimers = arduinoNano33IotGetNumTimers,
   .setNumTimers = arduinoNano33IotSetNumTimers,
   .initTimer = arduinoNano33IotInitTimer,
@@ -992,19 +999,153 @@ static Hal arduinoNano33IotHal = {
   .cancelAndGetTimer = arduinoNano33IotCancelAndGetTimer,
 };
 
+int arduinoNano33IotInitRootStorage(SchedulerState *schedulerState) {
+  TaskDescriptor *allTasks = schedulerState->allTasks;
+  
+  // Create the SD card task.
+  SdCardSpiArgs sdCardSpiArgs = {
+    .spiCsDio = SD_CARD_PIN_CHIP_SELECT,
+    .spiCopiDio = SPI_COPI_DIO,
+    .spiCipoDio = SPI_CIPO_DIO,
+    .spiSckDio = SPI_SCK_DIO,
+  };
+
+  // Create the SD card task.
+  TaskDescriptor *taskDescriptor
+    = &allTasks[schedulerState->firstUserTaskId - 1];
+  if (taskCreate(
+    taskDescriptor, runSdCardSpi, &sdCardSpiArgs)
+    != taskSuccess
+  ) {
+    fputs("Could not start SD card task.\n", stderr);
+  }
+  printDebugString("Started SD card task.\n");
+  taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
+  taskDescriptor->taskId = schedulerState->firstUserTaskId;
+  taskDescriptor->name = "SD card";
+  taskDescriptor->userId = ROOT_USER_ID;
+  BlockStorageDevice *sdDevice = (BlockStorageDevice*) coroutineResume(
+    allTasks[schedulerState->firstUserTaskId - 1].taskHandle, NULL);
+  sdDevice->partitionNumber = 1;
+  printDebugString("Configured SD card task.\n");
+  
+  // Create the filesystem task.
+  schedulerState->rootFsTaskId = schedulerState->firstUserTaskId + 1;
+  taskDescriptor = &allTasks[schedulerState->rootFsTaskId - 1];
+  if (taskCreate(taskDescriptor, runExFatFilesystem, sdDevice)
+    != taskSuccess
+  ) {
+    fputs("Could not start filesystem task.\n", stderr);
+  }
+  taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
+  taskDescriptor->taskId = schedulerState->rootFsTaskId;
+  taskDescriptor->name = "filesystem";
+  taskDescriptor->userId = ROOT_USER_ID;
+  printDebugString("Created filesystem task.\n");
+  
+  schedulerState->firstUserTaskId = schedulerState->rootFsTaskId + 1;
+  schedulerState->firstShellTaskId = schedulerState->firstUserTaskId;
+  
+  return 0;
+}
+
+
+/// @var arduinoNano33IotHal
+///
+/// @brief The implementation of the Hal interface for the Arduino Nano 33 Iot.
+static Hal arduinoNano33IotHal = {
+  // Memory definitions.
+  .processStackSize = arduinoNano33IotProcessStackSize,
+  .memoryManagerStackSize = arduinoNano33IotMemoryManagerStackSize,
+  .bottomOfHeap = arduinoNano33IotBottomOfHeap,
+  
+  // Overlay definitions.
+  .overlayMap = (NanoOsOverlayMap*) OVERLAY_ADDRESS,
+  .overlaySize = OVERLAY_SIZE,
+  
+  .serialPortHal = &arduinoNano33IotSerialPortHal,
+  .dioHal = &arduinoNano33IotDioHal,
+  .spiHal = &arduinoNano33IotSpiHal,
+  .clockHal = &arduinoNano33IotClockHal,
+  .powerHal = &arduinoNano33IotPowerHal,
+  .timerHal = &arduinoNano33IotTimerHal,
+  
+  // Root storage configuration.
+  .initRootStorage = arduinoNano33IotInitRootStorage,
+};
+
 const Hal* halArduinoNano33IotInit(void) {
   extern char __bss_end__;
-  if (((uintptr_t) &__bss_end__) > ((uintptr_t) _overlayMap)) {
-    printString("ERROR!!! &__bss_end__ > ");
-    printInt((uintptr_t) HAL->overlayMap());
-    printString("\n");
-    printString("*******************************************************\n");
-    printString("* Running user programs will corrupt system memory!!! *\n");
-    printString("*******************************************************\n");
+  if (((uintptr_t) &__bss_end__)
+    > ((uintptr_t) arduinoNano33IotHal.overlayMap)
+  ) {
+    int stackPosition = 0;
+    Serial.begin(1000000);
+    while (!Serial);
+    Serial.print("ERROR!!! 0x");
+    Serial.print((uintptr_t) &__bss_end__, HEX);
+    Serial.print(" > 0x");
+    Serial.print((uintptr_t) arduinoNano33IotHal.overlayMap, HEX);
+    Serial.print("\n");
+    Serial.print("Stack position = 0x");
+    Serial.print((uintptr_t) &stackPosition, HEX);
+    Serial.print("\n");
+    Serial.print("*******************************************************\n");
+    Serial.print("* Running user programs will corrupt system memory!!! *\n");
+    Serial.print("*******************************************************\n");
   }
   
   __enable_irq();  // Ensure global interrupts are enabled
-  return &arduinoNano33IotHal;
+  
+  int ii = 0;
+  Hal *hal = &arduinoNano33IotHal;
+  if (hal->serialPortHal != NULL) {
+    int numSerialPorts = hal->serialPortHal->getNumSerialPorts();
+    if (numSerialPorts <= 0) {
+      // Nothing we can do.
+      return NULL;
+    }
+    
+    // Set all the serial ports to run at 1000000 baud.
+    if (hal->serialPortHal->initSerialPort(0, 1000000) < 0) {
+      // Nothing we can do.
+      return NULL;
+    }
+    for (ii = 1; ii < numSerialPorts; ii++) {
+      if (hal->serialPortHal->initSerialPort(ii, 1000000) < 0) {
+        // We can't support more than the last serial port that was successfully
+        // initialized.
+        break;
+      }
+    }
+    hal->serialPortHal->setNumSerialPorts(ii);
+    if (ii != numSerialPorts) {
+      Serial.begin(1000000);
+      while (!Serial);
+      Serial.print("WARNING: Only initialized ");
+      Serial.print(ii);
+      Serial.print(" serial ports\n");
+    }
+  }
+
+  if (hal->timerHal != NULL)  {
+    int numTimers = hal->timerHal->getNumTimers();
+    for (ii = 0; ii < numTimers; ii++) {
+      if (hal->timerHal->initTimer(ii) < 0) {
+        break;
+      }
+    }
+    hal->timerHal->setNumTimers(ii);
+    if (ii != numTimers) {
+      Serial.begin(1000000);
+      while (!Serial);
+      Serial.print("WARNING: Only initialized ");
+      Serial.print(ii);
+      Serial.print(" timers\n");
+    }
+  }
+  
+  return hal;
 }
 
-#endif // __arm__
+#endif // ARDUINO_SAMD_NANO_33_IOT

@@ -33,14 +33,20 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef NANO_OS_STDIO_H
-#define NANO_OS_STDIO_H
+#ifndef NANO_OS_USER_STDIO_H
+#define NANO_OS_USER_STDIO_H
 
 #undef FILE
 
 // Standard C includes
+#include <stdarg.h>
+#include <stddef.h>
+
+// NanoOs includes
+#include "NanoOsDebug.h"
+
 #define FILE C_FILE
-#include "stdio.h"
+//// #include "stdio.h"
 #undef FILE
 
 #define FILE NanoOsFile
@@ -67,44 +73,6 @@ typedef struct NanoOsFile NanoOsFile;
 #endif // stderr
 #define stderr nanoOsStderr
 
-#ifdef NANO_OS_DEBUG
-
-/// @def startDebugMessage
-///
-/// @brief Print a non-newline-terminated debug message.
-#define startDebugMessage(message) \
-  printString("["); \
-  printLongLong(HAL->getElapsedMilliseconds(0)); \
-  printString(" Task "); \
-  printUInt(coroutineId(getRunningCoroutine())); \
-  printString(" "); \
-  printString((strrchr(__FILE__, '/') + 1)); \
-  printString(":"); \
-  printString(__func__); \
-  printString("."); \
-  printULong(__LINE__); \
-  printString("] "); \
-  printString(message);
-
-/// @def printDebugStackDepth()
-///
-/// @brief Print the depth of the current coroutine stack.
-#define printDebugStackDepth() \
-  do { \
-    char temp; \
-    printString("Stack depth: "); \
-    printInt(ABS_DIFF((uintptr_t) &temp, (uintptr_t) getRunningCoroutine())); \
-    printString("\n"); \
-  } while (0)
-
-#else // NANO_OS_DEBUG
-
-#define startDebugMessage(message) {}
-#define printDebugStackDepth() {}
-
-#endif // NANO_OS_DEBUG
-
-
 #define EOF (-1)
 
 extern FILE *nanoOsStdin;
@@ -127,29 +95,28 @@ int vsscanf(const char *buffer, const char *format, va_list args);
 int sscanf(const char *buffer, const char *format, ...);
 
 // Exported IO functions
-int nanoOsFPuts(const char *s, FILE *stream);
+int nanoOsFputs(const char *s, FILE *stream);
 #ifdef fputs
 #undef fputs
 #endif
-#define fputs nanoOsFPuts
+#define fputs nanoOsFputs
 
-int nanoOsPuts(const char *s);
 #ifdef puts
 #undef puts
 #endif
-#define puts nanoOsPuts
+#define puts(s) nanoOsFputs(s, stdout) nanoOsFputs("\n", stdout)
 
-int nanoOsVFPrintf(FILE *stream, const char *format, va_list args);
+int nanoOsVfprintf(FILE *stream, const char *format, va_list args);
 #ifdef vfprintf
 #undef vfprintf
 #endif
-#define vfprintf nanoOsVFPrintf
+#define vfprintf nanoOsVfprintf
 
-int nanoOsFPrintf(FILE *stream, const char *format, ...);
+int nanoOsFprintf(FILE *stream, const char *format, ...);
 #ifdef fprintf
 #undef fprintf
 #endif
-#define fprintf nanoOsFPrintf
+#define fprintf nanoOsFprintf
 
 int nanoOsPrintf(const char *format, ...);
 #ifdef printf
@@ -157,23 +124,23 @@ int nanoOsPrintf(const char *format, ...);
 #endif
 #define printf nanoOsPrintf
 
-char *nanoOsFGets(char *buffer, int size, FILE *stream);
+char *nanoOsFgets(char *buffer, int size, FILE *stream);
 #ifdef fgets
 #undef fgets
 #endif
-#define fgets nanoOsFGets
+#define fgets nanoOsFgets
 
-int nanoOsVFScanf(FILE *stream, const char *format, va_list ap);
+int nanoOsVfscanf(FILE *stream, const char *format, va_list ap);
 #ifdef vfscanf
 #undef vfscanf
 #endif
-#define vfscanf nanoOsVFScanf
+#define vfscanf nanoOsVfscanf
 
-int nanoOsFScanf(FILE *stream, const char *format, ...);
+int nanoOsFscanf(FILE *stream, const char *format, ...);
 #ifdef fscanf
 #undef fscanf
 #endif
-#define fscanf nanoOsFScanf
+#define fscanf nanoOsFscanf
 
 int nanoOsScanf(const char *format, ...);
 #ifdef scanf
@@ -187,10 +154,13 @@ int nanoOsFileno(FILE *stream);
 #endif
 #define fileno nanoOsFileno
 
+size_t nanoOsFread(void *ptr, size_t size, size_t nmemb, FILE *stream);
+size_t nanoOsFwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream);
+
 #ifdef __cplusplus
 } // extern "C"
 #endif
 
-#endif // NANO_OS_STDIO_H
+#endif // NANO_OS_USER_STDIO_H
 
 #include "../kernel/Filesystem.h"

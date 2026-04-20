@@ -38,7 +38,6 @@
 
 #include "stdint.h"
 #include "stdbool.h"
-#include "stdlib.h"
 #include "time.h"
 
 // Do forward declarations before including headers from this library to avoid

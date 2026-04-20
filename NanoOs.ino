@@ -26,6 +26,8 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 // Custom includes
+#include "src/hal/HalSeeedXiaoM0.h"
+#include "src/hal/HalAdafruitFeatherM0Wifi.h"
 #include "src/hal/HalArduinoNano33Iot.h"
 #include "src/hal/HalArduinoNanoEvery.h"
 #include "src/kernel/NanoOs.h"
@@ -40,61 +42,26 @@ const Hal *HAL = NULL;
 // is to be used for Arduino-specific setup.  *ANYTHING* that requires use of
 // coroutines needs to be done in the loop function.
 void setup() {
-#if defined(__arm__)
+#if defined(ARDUINO_SEEED_XIAO_M0)
+  HAL = halSeeedXiaoM0Init();
+#elif defined(ADAFRUIT_FEATHER_M0)
+  HAL = halAdafruitFeatherM0WifiInit();
+#elif defined(ARDUINO_SAMD_NANO_33_IOT)
   HAL = halArduinoNano33IotInit();
-#elif defined(__AVR__)
+#elif defined(ARDUINO_AVR_NANO_EVERY)
   HAL = halArduinoNanoEveryInit();
-#endif // __arm__
+#endif
 
   if (HAL == NULL) {
     // Nothing we can do.  Halt.
     while(1);
   }
-
-  int numSerialPorts = HAL->getNumSerialPorts();
-  if (numSerialPorts <= 0) {
-    // Nothing we can do.  Halt.
-    while(1);
-  }
   
-  // Set all the serial ports to run at 1000000 baud.
-  if (HAL->initSerialPort(0, 1000000) < 0) {
-    // Nothing we can do.  Halt.
-    while(1);
-  }
-  int ii = 0;
-  for (ii = 1; ii < numSerialPorts; ii++) {
-    if (HAL->initSerialPort(ii, 1000000) < 0) {
-      // We can't support more than the last serial port that was successfully
-      // initialized.
-      break;
-    }
-  }
-  HAL->setNumSerialPorts(ii);
-  if (ii != numSerialPorts) {
-    printString("WARNING: Only initialized ");
-    printInt(ii);
-    printString(" serial ports\n");
-  }
-
   // We need a guard at bootup because if the system crashes in a way that makes
   // the processor unresponsive, it will be very difficult to load new firmware.
   // Sleep long enough to begin a firmware upload on reset.
   printString("\nBooting...\n");
   msleep(7000);
-  
-  int numTimers = HAL->getNumTimers();
-  for (ii = 0; ii < numTimers; ii++) {
-    if (HAL->initTimer(ii) < 0) {
-      break;
-    }
-  }
-  HAL->setNumTimers(ii);
-  if (ii != numTimers) {
-    printString("WARNING: Only initialized ");
-    printInt(ii);
-    printString(" timers\n");
-  }
 }
 
 // In a normal Arduino sketch, the loop function runs over and over again
@@ -112,7 +79,6 @@ void setup() {
 // we will do all the one-time setup and then run our scheduler loop from
 // within this call.
 void loop() {
-
   // SchedulerState pointer that we will have to populate in startScheduler.
   SchedulerState *coroutineStatePointer = NULL;
 
@@ -130,7 +96,7 @@ void loop() {
     .comutexUnlockCallback = comutexUnlockCallback,
     .coconditionSignalCallback = coconditionSignalCallback,
   };
-  if (HAL->getNumTimers() > 0) {
+  if ((HAL->timerHal != NULL) && (HAL->timerHal->getNumTimers() > 0)) {
     coroutineConfigOptions.coroutineYieldCallback = coroutineYieldCallback;
   }
   if (coroutineConfig(&_mainCoroutine, &coroutineConfigOptions)

@@ -31,12 +31,13 @@ endif
 LDFLAGS = 
 
 # Compiler flags
-CFLAGS = $(CPU) -std=gnu17
+CFLAGS = $(CPU) -std=gnu17 -g -rdynamic
 
 LINKS = \
 
 INCLUDES = \
     -I../user \
+    -I../include \
 
 WARNINGS = \
     -Wall \
@@ -47,7 +48,6 @@ WARNINGS = \
 SOURCES = \
 
 OBJECTS = \
-    $(OBJ_DIR)/Commands.o \
     $(OBJ_DIR)/Console.o \
     $(OBJ_DIR)/Coroutines.o \
     $(OBJ_DIR)/ExFatFilesystem.o \
@@ -57,7 +57,7 @@ OBJECTS = \
     $(OBJ_DIR)/MemoryManager.o \
     $(OBJ_DIR)/Messages.o \
     $(OBJ_DIR)/NanoOs.o \
-    $(OBJ_DIR)/NanoOsOverlay.o \
+    $(OBJ_DIR)/Overlay.o \
     $(OBJ_DIR)/Tasks.o \
     $(OBJ_DIR)/Scheduler.o \
     $(OBJ_DIR)/SdCard.o \

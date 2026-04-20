@@ -42,6 +42,7 @@
 #include <stdbool.h>
 
 #include "../../Hal.h"
+#include "../../NanoOsTypes.h"
 #include "../../Scheduler.h"
 
 bool __atomic_compare_exchange_4(void *ptr, void *expected, uint32_t desired,
@@ -53,8 +54,11 @@ bool __atomic_compare_exchange_4(void *ptr, void *expected, uint32_t desired,
   
   uint64_t remainingNanoseconds;
   void (*callback)(void);
-  int cancelStatus = HAL->cancelAndGetTimer(
-    PREEMPTION_TIMER, NULL, &remainingNanoseconds, &callback);
+  int cancelStatus = -1;
+  if (HAL->timerHal != NULL) {
+    cancelStatus = HAL->timerHal->cancelAndGetTimer(
+      SCHEDULER_STATE->preemptionTimer, NULL, &remainingNanoseconds, &callback);
+  }
   
   bool success = false;
   if (*((uint32_t*) ptr) == *((uint32_t*) expected)) {
@@ -66,7 +70,8 @@ bool __atomic_compare_exchange_4(void *ptr, void *expected, uint32_t desired,
   
   if (cancelStatus == 0) {
     // A timer was active when we were called.  Restore it.
-    HAL->configOneShotTimer(PREEMPTION_TIMER, remainingNanoseconds, callback);
+    HAL->timerHal->configOneShotTimer(SCHEDULER_STATE->preemptionTimer,
+      remainingNanoseconds, callback);
   }
   
   return success;

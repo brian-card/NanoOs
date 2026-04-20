@@ -30,29 +30,40 @@
 
 #include "string.h"
 #include "NanoOsLibC.h"
-#include "NanoOsSys.h"
+#include "NanoOsSysUtsname.h"
+#include "../kernel/Console.h"
 #include "../kernel/NanoOs.h"
+#include "NanoOsTermios.h"
 #include "NanoOsUnistd.h"
 
-/// @fn int uname(struct utsname *buf)
-///
-/// @brief Get information about the system.
-///
-/// @param buf A pointer to a struct utsname to be populated.
-///
-/// @return Returns 0 on success, -1 on failure.  On failure, the value of
-/// errno is also set.
-int uname(struct utsname *buf) {
-  if (buf == NULL) {
-    errno = EFAULT;
+int nanoOsTcgetattr(int fd, struct termios *termios) {
+  if ((termios == NULL) || (fd != STDIN_FILENO)) {
+    // Unsupported right now.
+    errno = EINVAL;
     return -1;
   }
   
-  strncpy(buf->sysname, "NanoOs", sizeof(buf->sysname));
-  gethostname(buf->nodename, sizeof(buf->nodename));
-  strncpy(buf->release, "0.2.0", sizeof(buf->release));
-  strncpy(buf->version, "", sizeof(buf->version));
-  strncpy(buf->machine, "arm", sizeof(buf->machine));
+  memset(termios, 0, sizeof(struct termios));
+  if (getConsoleEcho()) {
+    termios->c_lflag |= ECHO;
+  }
+  
+  return 0;
+}
+
+int nanoOsTcsetattr(int fd, int optionalActions,
+  const struct termios *termios
+) {
+  if ((termios == NULL) || (fd != STDIN_FILENO)) {
+    // Unsupported right now.
+    errno = EINVAL;
+    return -1;
+  }
+  
+  (void) optionalActions; // Ignored for now.
+  
+  bool echo = ((termios->c_lflag & ECHO));
+  setConsoleEcho(echo);
   
   return 0;
 }

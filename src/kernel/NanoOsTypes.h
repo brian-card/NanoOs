@@ -37,6 +37,7 @@
 #define NANO_OS_TYPES_H
 
 // Custom includes
+#include "BlockStorage.h"
 #include "Coroutines.h"
 
 #ifdef __cplusplus
@@ -65,6 +66,11 @@ extern "C"
 /// a task.
 #define SCHEDULER_NUM_TASKS (NANO_OS_NUM_TASKS - 1)
 
+/// @def SCHEDULER_NUM_READY_QUEUES
+///
+/// @brief This is the total number of ready queues managed by the scheduler
+#define SCHEDULER_NUM_READY_QUEUES 2
+
 /// @def CONSOLE_BUFFER_SIZE
 ///
 /// @brief The size, in bytes, of a single console buffer.  This is the number
@@ -82,14 +88,16 @@ extern "C"
 /// console task's stack.
 #define CONSOLE_NUM_BUFFERS CONSOLE_NUM_PORTS
 
-// Task status values
-#define taskSuccess  coroutineSuccess
-#define taskBusy     coroutineBusy
-#define taskError    coroutineError
-#define taskNomem    coroutineNomem
-#define taskTimedout coroutineTimedout
-
 // Primitive types
+
+/// @enum SchedulerReadyQueueType
+///
+/// @brief Designations for each of the ready queues.
+typedef enum SchedulerReadyQueueType {
+  SCHEDULER_READY_QUEUE_KERNEL,
+  SCHEDULER_READY_QUEUE_USER,
+  NUM_SCHEDULER_READY_QUEUE_TYPES,
+} SchedulerReadyQueueType;
 
 /// @typedef Task
 ///
@@ -135,38 +143,49 @@ typedef intptr_t ssize_t;
 /// @brief Definition of the FILE structure used internally to NanoOs.
 ///
 /// @param file Pointer to the real file metadata.
+/// @param next A pointer to the next open NanoOsFile.
+/// @param prev A pointer to the previous open NanoOsFile.
 /// @param currentPosition The current position within the file.
 /// @param fd The numeric file descriptor for the file.
+/// @param owner The TaskId of the process that owns the file.
 typedef struct NanoOsFile {
-  void     *file;
-  uint32_t  currentPosition;
-  int       fd;
+  void              *file;
+  struct NanoOsFile *next;
+  struct NanoOsFile *prev;
+  uint32_t           currentPosition;
+  int                fd;
+  TaskId             owner;
 } NanoOsFile;
 
-/// @struct IoPipe
+/// @struct IoChannel
 ///
 /// @brief Information that can be used to direct the output of one task
 /// into the input of another one.
 ///
 /// @param taskId The task ID (PID) of the destination task.
 /// @param messageType The type of message to send to the task.
-typedef struct IoPipe {
+typedef struct IoChannel {
   TaskId taskId;
   uint8_t messageType;
-} IoPipe;
+} IoChannel;
 
 /// @struct FileDescriptor
 ///
 /// @brief Definition of a file descriptor that a task can use for input
 /// and/or output.
 ///
-/// @param inputPipe An IoPipe object that describes where the file descriptor
-///   gets its input, if any.
-/// @param outputPipe An IoPipe object that describes where the file descriptor
-///   sends its output, if any.
+/// @param inputChannel An IoChannel object that describes where the file
+///   descriptor gets its input, if any.
+/// @param outputChannel An IoChannel object that describes where the file
+///   descriptor sends its output, if any.
+/// @param pipeEnd Pointer to the FileDescriptor at the other end of a pipe if
+///   this FileDescriptor is part of a pipe.
+/// @param refCount The number of references to this FileDescriptor.
 typedef struct FileDescriptor {
-  IoPipe inputPipe;
-  IoPipe outputPipe;
+  IoChannel inputChannel;
+  IoChannel outputChannel;
+  struct FileDescriptor *pipeEnd;
+  int refCount;
 } FileDescriptor;
 
 // Forward declaration.  Definition below.
@@ -178,30 +197,35 @@ typedef struct TaskQueue TaskQueue;
 ///
 /// @param name The name of the command as stored in its CommandEntry or as
 ///   set by the scheduler at launch.
-/// @param task A TaskHandle that manages the running command's execution
+/// @param taskHandle A TaskHandle that manages the running command's execution
 ///   state.
-/// @param 
+/// @param taskId The numerical ID of the task.
 /// @param userId The numerical ID of the user that is running the task.
 /// @param numFileDescriptors The number of FileDescriptor objects contained by
 ///   the fileDescriptors array.
-/// @param fileDescriptors Pointer to an array of FileDescriptors that are
-///   currently in use by the task.
+/// @param fileDescriptors Pointer to an array of FileDescriptor pointers that
+///   are currently in use by the task.
 /// @param overlayDir The base path to the overlays for the task, if any.
-/// @param overlay The name of the current overlay within the overlayDir being
-///   used (minus the ".overaly" extension).
+/// @param overlay The FileBlockMetadata of how to access the overlay from its
+///   block device.
 /// @param envp A pointer to the array of NULL-terminated environment variable
 ///   strings.
+/// @param taskQueue The task queue that the descriptor is currently in.  This
+///   will be NULL if the task is currently running (in no queue).
+/// @param readyQueue The ready queue that the descriptor is to be assigned to
+///   when the task transitions to ready.
 typedef struct TaskDescriptor {
-  const char      *name;
-  TaskHandle       taskHandle;
-  TaskId           taskId;
-  UserId           userId;
-  uint8_t          numFileDescriptors;
-  FileDescriptor  *fileDescriptors;
-  const char      *overlayDir;
-  const char      *overlay;
-  char           **envp;
-  TaskQueue       *taskQueue;
+  const char         *name;
+  TaskHandle          taskHandle;
+  TaskId              taskId;
+  UserId              userId;
+  uint8_t             numFileDescriptors;
+  FileDescriptor    **fileDescriptors;
+  char               *overlayDir;
+  FileBlockMetadata   overlay;
+  char              **envp;
+  TaskQueue          *taskQueue;
+  TaskQueue          *readyQueue;
 } TaskDescriptor;
 
 /// @struct TaskInfoElement
@@ -270,15 +294,31 @@ typedef struct TaskQueue {
 ///   running.
 /// @param preemptionTimer The index of the timer used for preemptive
 ///   multitasking.  If this is < 0 then the tasks run in cooperative mode.
+/// @param schedulerTaskId The TaskId of the scheduler.
+/// @param consoleTaskId The TaskId of the console.
+/// @param memoryManagerTaskId The TaskId of the memory manager.
+/// @param rootFsTaskId The TaskId of the root filesystem.
+/// @param firstUserTaskId The TaskId of the first user task.
+/// @param firstShellTaskId The TaskId of the first shell task.
+/// @param runScheduler Function pointer to the runScheduler function in the
+///   Scheduler library.
 typedef struct SchedulerState {
   TaskDescriptor allTasks[NANO_OS_NUM_TASKS];
-  TaskQueue ready;
+  TaskQueue ready[SCHEDULER_NUM_READY_QUEUES];
+  TaskQueue *currentReady;
   TaskQueue waiting;
   TaskQueue timedWaiting;
   TaskQueue free;
   char *hostname;
   uint8_t numShells;
   int preemptionTimer;
+  TaskId schedulerTaskId;
+  TaskId consoleTaskId;
+  TaskId memoryManagerTaskId;
+  TaskId rootFsTaskId;
+  TaskId firstUserTaskId;
+  TaskId firstShellTaskId;
+  void (*runScheduler)(void);
 } SchedulerState;
 
 /// @struct CommandDescriptor
@@ -424,20 +464,45 @@ typedef struct ReallocMessage {
   int responseType;
 } ReallocMessage;
 
+/// @struct MemNode
+///
+/// @brief Metadata for a single block of memory managed by the memory manager.
+///
+/// @param next Pointer to the next block of memory in the list.
+/// @param prev Pointer to the previous block of memory in the list.
+/// @param size The number of bytes allocated at this pointer.
+/// @param owner The TaskId of the owner of this block of memory.
+typedef struct MemNode {
+  struct MemNode *next;
+  struct MemNode *prev;
+  size_t          size;
+  TaskId          owner;
+} MemNode;
+
 /// @struct MemoryManagerState
 ///
 /// @brief State metadata the memory manager task uses for allocations and
 /// deallocations.
 ///
-/// @param mallocNext A pointer to the next free piece of memory.
-/// @param mallocStart The numeric value of the first address available to
-///   allocate memory from.
-/// @param mallocEnd The numeric value of the last address available to allocate
-///   memory from.
+/// @param start Address of the first byte of memory managed by the memory
+///   manager.
+/// @param end Address of the last byte of memory managed by the memory
+///   manager.
+/// @param bytesFree The total number of bytes available to allocate.
+/// @param firstFree Pointer to the MemNode that represents the first free
+///   block of memory managed by the memory manager.
+/// @param lastFree Pointer to the MemNode that represents the last free block
+///   of memory managed by the memory manager.  This block will always hold all
+///   of the remaining non-fragmented memory.
+/// @param allocated Pointer to the MemNode that represents the first allocated
+///   block of memory managed by the memory manager.
 typedef struct MemoryManagerState {
-  char *mallocNext;
-  uintptr_t mallocStart;
-  uintptr_t mallocEnd;
+  uintptr_t start;
+  uintptr_t end;
+  size_t    bytesFree;
+  MemNode  *firstFree;
+  MemNode  *lastFree;
+  MemNode  *allocated;
 } MemoryManagerState;
 
 /// @struct User
@@ -464,31 +529,38 @@ typedef struct NanoOsMessage {
   NanoOsMessageData  data;
 } NanoOsMessage;
 
-/// @struct BlockStorageDevice
+// POSIX-mandated objects required for posix_spawn.
+typedef struct posix_spawn_file_actions_t posix_spawn_file_actions_t;
+typedef struct posix_spawnattr_t posix_spawnattr_t;
+
+/// @struct SpawnArgs
 ///
-/// @brief The collection of data and functions needed to interact with a block
-/// storage device.
+/// @brief Arguments for the standard POSIX posix_spawn call.
 ///
-/// @param context The device-specific context to pass to the functions.
-/// @param readBlocks Function pointer for the function to read a given number
-///   of blocks from the storage device.
-/// @param writeBlocks Function pointer for the function to write a given number
-///   of blocks to the storage device.
-/// @param blockSize The size, in bytes, of the physical blocks on the device.
-/// @param blockBitShift The number of bits to shift to convert filesystem-level
-///   blocks to physical blocks.
-/// @param partitionNumber The one-based partition index that is to be used by
-///   a filesystem.
-typedef struct BlockStorageDevice {
-  void *context;
-  int (*readBlocks)(void *context, uint32_t startBlock,
-    uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer);
-  int (*writeBlocks)(void *context, uint32_t startBlock,
-    uint32_t numBlocks, uint16_t blockSize, const uint8_t *buffer);
-  uint16_t blockSize;
-  uint8_t blockBitShift;
-  uint8_t partitionNumber;
-} BlockStorageDevice;
+/// @param newPid A pointer to the pid_t that will hold the process ID of the
+///   new process.
+/// @param path The full path to the to the program to execute on disk.
+/// @param fileActions A pointer to the posix_spawn_file_actions_t that
+///   specifies the operations to do on the file descriptors of the new process.
+///   Initialized and populated with posix_spawn_file_actions_init and
+///   posix_spawn_file_actions_* functions before calling the spawn.
+/// @param attrp A pointer to the posix_spawnattr_t that specifies various
+///   attributes of the created child process.  Initialized and populated with
+///   posix_spawnattr_init and posix_spawnattr_* functoions before callin the
+///   spawn.
+/// @param argv The NULL-terminated array of arguments for the command.  argv[0]
+///   must be valid and should be the name of the program.
+/// @param envp The NULL-terminated array of environment variables in
+///   "name=value" format.  This array may be NULL.
+typedef struct SpawnArgs {
+  // Change this type if we change the size of pid_t or TaskId!!!
+  uint8_t *newPid;
+  char *path;
+  posix_spawn_file_actions_t *fileActions;
+  posix_spawnattr_t *attrp;
+  char **argv;
+  char **envp;
+} SpawnArgs;
 
 /// @struct ExecArgs
 ///

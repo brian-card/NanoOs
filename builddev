@@ -2,36 +2,35 @@
 
 set -e
 
-targetDevice="${1}"
-hostname="${2}"
-if [[ "${targetDevice}" = "" || "${hostname}" = "" ]]; then
-	echo "Usage ${0} <target device> <hostname>" >&2
+hostname="${1}"
+targetDevice="${2}"
+if [ "${hostname}" = "" ]; then
+	echo "Usage ${0} <hostname> [target device]" >&2
 	exit 1
 fi
 
 echo "Building applications..."
-make -C usr/src clean
-make -C usr/src COMPILE=arm-none-eabi-gcc LINK=arm-none-eabi-ld \
+make -j $(nproc) -C usr/src clean
+make -j $(nproc) -C usr/src COMPILE=arm-none-eabi-gcc LINK=arm-none-eabi-ld \
 	OBJCOPY=arm-none-eabi-objcopy OBJDUMP=arm-none-eabi-objdump \
 	SIZE=arm-none-eabi-size LINKER_SCRIPT=NanoOs.ld overlays
-
-# Make a temporary mountpoint
-mountDir="$(mktemp -d)"
-trap "rm -rf \"${mountDir}\"" ERR EXIT
 
 echo ""
 echo "Build complete."
 
-sudo mkfs.exfat "${targetDevice}" -L NanoOs
-sudo mount "${targetDevice}" "${mountDir}"
-sudo mkdir -p "${mountDir}/etc"
-sudo mkdir -p "${mountDir}/usr/bin"
-pushd usr/bin
-for dir in *; do
-	sudo cp -r "${dir}" "${mountDir}/usr/bin"
-done
-popd
-sudo bash -c "printf \"${hostname}\" >\"${mountDir}/etc/hostname\""
-sudo bash -c "printf '\\s \\\r \\\n \\l\n\n' >\"${mountDir}/etc/issue\""
-sudo umount "${mountDir}"
+if [ "${targetDevice}" != "" ]; then
+	# Make a temporary mountpoint
+	mountDir="$(mktemp -d)"
+	trap "rm -rf \"${mountDir}\"" ERR EXIT
+
+	sudo mkfs.exfat "${targetDevice}" -L NanoOs
+	sudo mount "${targetDevice}" "${mountDir}"
+	sudo mkdir -p "${mountDir}/usr"
+	sudo cp -r usr/bin "${mountDir}/usr"
+	sudo cp -r usr/lib "${mountDir}/usr"
+	sudo mkdir -p "${mountDir}/etc"
+	sudo bash -c "printf \"${hostname}\" >\"${mountDir}/etc/hostname\""
+	sudo bash -c "printf '\\s \\\r \\\n \\l\n\n' >\"${mountDir}/etc/issue\""
+	sudo umount "${mountDir}"
+fi
 

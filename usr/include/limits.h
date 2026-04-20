@@ -37,18 +37,7 @@
 #define LIMITS_H
 
 #include "NanoOsUser.h"
-
-// POSIX definitions for the minimum values that must be supported
-#define _POSIX_LOGIN_NAME_MAX 9 // 8 usable characters + null
-#define _POSIX_NAME_MAX 14      // Filename length
-#define _POSIX_OPEN_MAX 20      // Number of open files
-#define _POSIX_PATH_MAX 256     // Path length
-
-// Actual system values.
-#define LOGIN_NAME_MAX _POSIX_LOGIN_NAME_MAX
-#define NAME_MAX       32
-#define OPEN_MAX       _POSIX_OPEN_MAX
-#define PATH_MAX       _POSIX_PATH_MAX
+#include "../../src/user/NanoOsLimits.h"
 
 #endif // LIMITS_H
 

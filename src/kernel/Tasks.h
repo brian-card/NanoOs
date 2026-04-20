@@ -44,6 +44,13 @@ extern "C"
 {
 #endif
 
+// Task status values.
+#define taskSuccess  coroutineSuccess
+#define taskBusy     coroutineBusy
+#define taskError    coroutineError
+#define taskNomem    coroutineNomem
+#define taskTimedout coroutineTimedout
+
 /// @def TASK_ID_NOT_SET
 ///
 /// @brief Value to be used to indicate that a task ID has not been set for
@@ -101,6 +108,12 @@ extern "C"
 /// @brief Call to yield the processor to another task.
 #define taskYield() \
   coroutineYield(NULL, COROUTINE_STATE_BLOCKED)
+
+/// @def taskYieldValue
+///
+/// @brief Yield a value back to the scheduler.
+#define taskYieldValue(value) \
+  coroutineYield(value, COROUTINE_STATE_BLOCKED)
 
 /// @def taskTerminate
 ///
@@ -177,9 +190,7 @@ extern "C"
 ///
 /// @brief Resume a task and update the currentTask state correctly.
 #define taskResume(taskDescriptor, taskMessage) \
-  currentTask = taskDescriptor; \
   coroutineResume((taskDescriptor)->taskHandle, taskMessage); \
-  currentTask = schedulerTask; \
 
 // Task message accessors
 #define taskMessageType(taskMessagePointer) \
@@ -197,7 +208,7 @@ extern "C"
 #define taskMessageFrom(taskMessagePointer) \
   ((TaskDescriptor*) coroutineContext(msg_from(taskMessagePointer).coro))
 #define taskMessageTo(taskMessagePointer) \
-  msg_to(taskMessagePointer).coro
+  ((TaskDescriptor*) coroutineContext(msg_to(taskMessagePointer).coro))
 #define taskMessageConfigured(taskMessagePointer) \
   msg_configured(taskMessagePointer)
 
@@ -234,16 +245,17 @@ extern "C"
   ((type) nanoOsMessageDataValue((msg), intptr_t))
 
 // Exported functionality
-void* startCommand(void *args);
 void* execCommand(void *args);
 int sendTaskMessageToTask(
   TaskDescriptor *taskDescriptor, TaskMessage *taskMessage);
-int sendTaskMessageToPid(unsigned int pid, TaskMessage *taskMessage);
+int sendTaskMessageToTaskId(unsigned int taskId, TaskMessage *taskMessage);
 TaskMessage* getAvailableMessage(void);
-TaskMessage* sendNanoOsMessageToPid(int pid, int type,
+TaskMessage* sendNanoOsMessageToTaskId(int taskId, int type,
   NanoOsMessageData func, NanoOsMessageData data, bool waiting);
 void* waitForDataMessage(TaskMessage *sent, int type, const struct timespec *ts);
 ExecArgs* execArgsDestroy(ExecArgs *execArgs);
+SpawnArgs* spawnArgsDestroy(SpawnArgs *spawnArgs);
+char** parseArgs(char *command, int *argc);
 
 #ifdef __cplusplus
 } // extern "C"

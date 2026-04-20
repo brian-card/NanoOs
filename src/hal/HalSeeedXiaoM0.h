@@ -1,14 +1,15 @@
 ///////////////////////////////////////////////////////////////////////////////
 ///
-/// @author            James Card
-/// @date              10.25.2025
+/// @author            Brian Card
+/// @date              03.21.2026
 ///
-/// @file              NanoOsSys.h
+/// @file              HalSeeedXiaoM0.h
 ///
-/// @brief             Functionality from the sys/ directory of include files.
+/// @brief             Header for the Adafruit Feather M0 WiFi HAL
+///                    implementation.
 ///
 /// @copyright
-///                   Copyright (c) 2012-2025 James Card
+///                      Copyright (c) 2026 Brian Card
 ///
 /// Permission is hereby granted, free of charge, to any person obtaining a
 /// copy of this software and associated documentation files (the "Software"),
@@ -28,36 +29,27 @@
 /// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 /// DEALINGS IN THE SOFTWARE.
 ///
-///                                James Card
-///                         http://www.jamescard.org
+///                                Brian Card
+///                      https://github.com/brian-card
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef NANO_OS_SYS_H
-#define NANO_OS_SYS_H
+#ifndef HAL_ADAFRUIT_FEATHER_M0_WIFI_H
+#define HAL_ADAFRUIT_FEATHER_M0_WIFI_H
 
-#include "NanoOsUnistd.h"
+#include "../kernel/Hal.h"
+
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 
-struct utsname {
-  char sysname[7];                /* Operating system name (e.g., "NanoOs") */
-  char nodename[HOST_NAME_MAX];   /* Name within communications network
-                                     to which the node is attached, if any */
-  char release[16];               /* Operating system release
-                                   (e.g., "2.6.28") */
-  char version[32];               /* Operating system version */
-  char machine[16];               /* Hardware type identifier */
-};
-
-int uname(struct utsname *buf);
+const Hal* halSeeedXiaoM0Init(void);
 
 #ifdef __cplusplus
-}
+} // extern "C"
 #endif
 
-#endif // NANO_OS_SYS_H
+#endif // HAL_ADAFRUIT_FEATHER_M0_WIFI_H
 

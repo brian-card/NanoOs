@@ -37,7 +37,7 @@
 #define SD_CARD_POSIX_H
 
 // Custom includes
-#include "SdCard.h"
+#include "kernel/SdCard.h"
 
 #ifdef __cplusplus
 extern "C"

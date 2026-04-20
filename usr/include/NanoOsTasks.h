@@ -1,14 +1,14 @@
 ///////////////////////////////////////////////////////////////////////////////
 ///
-/// @author            James Card
-/// @date              11.21.2024
+/// @author            Brian Card
+/// @date              03.08.2026
 ///
-/// @file              Commands.h
+/// @file              NanoOsTasks.h
 ///
-/// @brief             Commands library for NanoOs.
+/// @brief             Exposed NanoOs kernel functionality related to tasks.
 ///
 /// @copyright
-///                   Copyright (c) 2012-2025 James Card
+///                      Copyright (c) 2026 Brian Card
 ///
 /// Permission is hereby granted, free of charge, to any person obtaining a
 /// copy of this software and associated documentation files (the "Software"),
@@ -28,36 +28,29 @@
 /// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 /// DEALINGS IN THE SOFTWARE.
 ///
-///                                James Card
-///                         http://www.jamescard.org
+///                                Brian Card
+///                      https://github.com/brian-card
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
-// #ifndef has to come after includes for this file.
-#ifndef COMMANDS_H
-#define COMMANDS_H
+#ifndef NANO_OS_TASKS_H
+#define NANO_OS_TASKS_H
 
-#include "NanoOsTypes.h"
+#include "NanoOsUser.h"
+#include "../../src/kernel/NanoOsTypes.h"
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 
-// Special exit statuses
-#define COMMAND_CANNOT_EXECUTE 126
-#define COMMAND_NOT_FOUND      127
-#define COMMAND_EXIT_INVALID   128
-
-// Exported support functions
-const CommandEntry* getCommandEntryFromInput(char *consoleInput);
-int handleCommand(int consolePort, char *consoleInput);
-
-// Exported tasks
-void* runShell(void *args);
+static inline TaskInfo* getTaskInfo(void) {
+  return overlayMap.header.osApi->getTaskInfo();
+}
 
 #ifdef __cplusplus
-} // extern "C"
+}
 #endif
 
-#endif // COMMANDS_H
+#endif // NANO_OS_TASKS_H
+

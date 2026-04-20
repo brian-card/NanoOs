@@ -37,8 +37,6 @@ LINKS = \
 
 INCLUDES = \
     -I../../sim \
-    -I../kernel \
-    -I../user \
 
 WARNINGS = \
     -Wall \
@@ -50,6 +48,7 @@ SOURCES = \
 
 OBJECTS = \
     $(OBJ_DIR)/HalPosix.o \
+    $(OBJ_DIR)/HalPosixImpl.o \
 
 # Default target
 all: $(OBJECTS)

@@ -30,11 +30,13 @@
 
 // Custom includes
 #include "Console.h"
+#include "Hal.h"
 #include "NanoOs.h"
-#include "NanoOsOverlay.h"
+#include "OverlayFunctions.h"
 #include "Tasks.h"
 #include "Scheduler.h"
 #include "../user/NanoOsLibC.h"
+#include "../user/NanoOsPwd.h"
 
 // Must come last
 #include "../user/NanoOsStdio.h"
@@ -51,6 +53,25 @@ TaskMessage *messages = NULL;
 /// scheduler function's stack.
 NanoOsMessage *nanoOsMessages = NULL;
 
+/// @fn char** stringArrayDestroy(char **stringArray)
+///
+/// @brief Destroy a NULL-terminated array of C strings.
+///
+/// @param stringArray An array of C strings that's terminated with a NULl
+///   pointer.  This parameter may be NULL.
+///
+/// @return This function always succeeds and always returns NULL.
+char** stringArrayDestroy(char **stringArray) {
+  if (stringArray != NULL) {
+    for (int ii = 0; stringArray[ii] != NULL; ii++) {
+      free(stringArray[ii]);
+    }
+    free(stringArray);
+  }
+  
+  return NULL;
+}
+
 /// @fn ExecArgs* execArgsDestroy(ExecArgs *execArgs)
 ///
 /// @brief Free all of an ExecArgs structure.
@@ -61,26 +82,32 @@ NanoOsMessage *nanoOsMessages = NULL;
 ExecArgs* execArgsDestroy(ExecArgs *execArgs) {
   free(execArgs->pathname);
 
-  char **argv = execArgs->argv;
-  // argv *SHOULD* never be NULL, but check just in case.
-  if (argv != NULL) {
-    for (int ii = 0; argv[ii] != NULL; ii++) {
-      free(argv[ii]);
-    }
-    free(argv);
-  }
-
-  char **envp = execArgs->envp;
-  if (envp != NULL) {
-    for (int ii = 0; envp[ii] != NULL; ii++) {
-      free(envp[ii]);
-    }
-    free(envp);
-  }
+  execArgs->argv = stringArrayDestroy(execArgs->argv);
+  execArgs->envp = stringArrayDestroy(execArgs->envp);
 
   // We don't need to and SHOULD NOT touch execArgs->schedulerState.
 
   free(execArgs);
+  return NULL;
+}
+
+/// @fn SpawnArgs* spawnArgsDestroy(SpawnArgs *execArgs)
+///
+/// @brief Free all of an SpawnArgs structure.
+///
+/// @param spawnArgs A pointer to an SpawnArgs structure.
+///
+/// @return This function always succeeds and always returns NULL.
+SpawnArgs* spawnArgsDestroy(SpawnArgs *spawnArgs) {
+  free(spawnArgs->path);
+  free(spawnArgs->fileActions);
+
+  spawnArgs->argv = stringArrayDestroy(spawnArgs->argv);
+  spawnArgs->envp = stringArrayDestroy(spawnArgs->envp);
+
+  // We don't need to and SHOULD NOT touch spawnArgs->schedulerState.
+
+  free(spawnArgs);
   return NULL;
 }
 
@@ -145,33 +172,32 @@ char *findEndQuote(char *input, char quote) {
   return quoteAt;
 }
 
-/// @fn char** parseArgs(char *consoleInput, int *argc)
+/// @fn char** parseArgs(char *command, int *argc)
 ///
 /// @brief Parse a raw input string from the console into an array of individual
 /// strings to pass as the argv array to a command function.
 ///
-/// @param consoleInput The raw string of data read from the user's input by the
-///   console.
+/// @param command The raw string of data read from the user's input by the
+///   console.  The string is modified in place by this function.
 /// @param argc A pointer to the integer where the number of parsed arguments
 ///   will be stored.
 ///
 /// @return Returns a pointer to an array of strings on success, NULL on
 /// failure.
-char** parseArgs(char *consoleInput, int *argc) {
+char** parseArgs(char *command, int *argc) {
   char **argv = NULL;
 
-  if ((consoleInput == NULL) || (argc == NULL)) {
+  if (command == NULL) {
     // Failure.
     return argv; // NULL
   }
-  *argc = 0;
-  char *endOfInput = &consoleInput[strlen(consoleInput)];
+  char *endOfInput = &command[strlen(command)];
 
   // First, we need to declare an array that will hold all our arguments.  In
   // order to do this, we need to know the maximum number of arguments we'll be
   // working with.  That will be the number of tokens separated by whitespace.
-  int maxNumArgs = getNumTokens(consoleInput);
-  argv = (char**) malloc(maxNumArgs * sizeof(char*));
+  int maxNumArgs = getNumTokens(command);
+  argv = (char**) malloc((maxNumArgs + 1) * sizeof(char*));
   if (argv == NULL) {
     // Nothing we can do.  Fail.
     return argv; // NULL
@@ -182,128 +208,40 @@ char** parseArgs(char *consoleInput, int *argc) {
   // of each argument.
   int numArgs = 0;
   char *endOfArg = NULL;
-  while ((consoleInput != endOfInput) && (*consoleInput != '\0')) {
-    if (*consoleInput == '"') {
-      consoleInput++;
-      endOfArg = findEndQuote(consoleInput, '"');
-    } else if (*consoleInput == '\'') {
-      consoleInput++;
-      endOfArg = findEndQuote(consoleInput, '\'');
+  while ((command != endOfInput) && (*command != '\0')) {
+    if (*command == '"') {
+      command++;
+      endOfArg = findEndQuote(command, '"');
+    } else if (*command == '\'') {
+      command++;
+      endOfArg = findEndQuote(command, '\'');
     } else {
-      endOfArg = &consoleInput[strcspn(consoleInput, " \t\r\n")];
+      endOfArg = &command[strcspn(command, " \t\r\n")];
     }
 
-    argv[numArgs] = consoleInput;
+    argv[numArgs] = command;
     numArgs++;
 
     if (endOfArg != NULL) {
       *endOfArg = '\0';
       if (endOfArg != endOfInput) {
-        consoleInput = endOfArg + 1;
+        command = endOfArg + 1;
       } else {
-        consoleInput = endOfInput;
+        command = endOfInput;
       }
     } else {
-      consoleInput += strlen(consoleInput);
+      command += strlen(command);
     }
 
-    consoleInput = &consoleInput[strspn(consoleInput, " \t\r\n")];
+    command = &command[strspn(command, " \t\r\n")];
+  }
+  argv[numArgs] = NULL;
+
+  if (argc != NULL) {
+    *argc = numArgs;
   }
 
-  *argc = numArgs;
   return argv;
-}
-
-/// @fn void* startCommand(void *args)
-///
-/// @brief Wrapper task function that calls a command function.
-///
-/// @param args The message received from the console task that describes
-///   the command to run, cast to a void*.
-///
-/// @return If the comamnd is run, returns the result of the command cast to a
-/// void*.  If the command is not run, returns -1 cast to a void*.
-void* startCommand(void *args) {
-  // The scheduler may be suspended because of launching this task.
-  // Immediately call taskYield as a best practice to make sure the scheduler
-  // goes back to its work.
-  TaskMessage *taskMessage = (TaskMessage*) args;
-  if (taskMessage == NULL) {
-    printString("ERROR: No arguments message provided to startCommand.\n");
-    releaseConsole();
-    schedulerCloseAllFileDescriptors();
-    return (void*) ((intptr_t) -1);
-  }
-  CommandEntry *commandEntry
-    = nanoOsMessageFuncPointer(taskMessage, CommandEntry*);
-  CommandDescriptor *commandDescriptor
-    = nanoOsMessageDataPointer(taskMessage, CommandDescriptor*);
-  char *consoleInput = commandDescriptor->consoleInput;
-  TaskId callingTaskId = commandDescriptor->callingTask;
-  SchedulerState *schedulerState = commandDescriptor->schedulerState;
-  taskYield();
-
-  int argc = 0;
-  char **argv = NULL;
-
-  argv = parseArgs(consoleInput, &argc);
-  if (argv == NULL) {
-    // Fail.
-    printString("ERROR: Could not parse input into argc and argv.\n");
-    printString("Received consoleInput:  \"");
-    printString(consoleInput);
-    printString("\"\n");
-    consoleInput = stringDestroy(consoleInput);
-    releaseConsole();
-    schedulerCloseAllFileDescriptors();
-    return (void*) ((intptr_t) -1);
-  }
-  consoleInput = stringDestroy(consoleInput);
-
-  bool backgroundTask = false;
-  char *ampersandAt = strchr(argv[argc - 1], '&');
-  if (ampersandAt != NULL) {
-    ampersandAt++;
-    if (ampersandAt[strspn(ampersandAt, " \t\r\n")] == '\0') {
-      backgroundTask = true;
-      releaseConsole();
-      schedulerNotifyTaskComplete(callingTaskId);
-    }
-  }
-
-  // Call the task function.
-  int returnValue = commandEntry->func(argc, argv);
-  free(argv); argv = NULL;
-
-  if (callingTaskId != getRunningTaskId()) {
-    // This command did NOT replace a shell task.
-    releaseConsole();
-    if (backgroundTask == false) {
-      // The caller is still running and waiting to be told it can resume.
-      // Notify it via a message.
-      schedulerNotifyTaskComplete(callingTaskId);
-    }
-    schedulerState->allTasks[
-      taskId(getRunningTask())].userId = NO_USER_ID;
-  } else {
-    // This is a foreground task that replaced the shell.  Just release the
-    // console.
-    releaseConsole();
-  }
-
-  schedulerCloseAllFileDescriptors();
-
-  // Gracefully clear out our message queue.  We have to do this after closing
-  // our file descriptors (which is a blocking call) because some other task
-  // may be in the middle of sending us data and if we were to do this first,
-  // it could turn around and send us more data again.
-  msg_t *msg = taskMessageQueuePop();
-  while (msg != NULL) {
-    taskMessageSetDone(msg);
-    msg = taskMessageQueuePop();
-  }
-
-  return (void*) ((intptr_t) returnValue);
 }
 
 /// @fn void* execCommand(void *args)
@@ -331,7 +269,6 @@ void* execCommand(void *args) {
   char *pathname = execArgs->pathname;
   char **argv = execArgs->argv;
   char **envp = execArgs->envp;
-  SchedulerState *schedulerState = execArgs->schedulerState;
 
   if ((argv == NULL) || (argv[0] == NULL)) {
     // Fail.
@@ -343,17 +280,87 @@ void* execCommand(void *args) {
   int argc = 0;
   for (; argv[argc] != NULL; argc++);
 
-  // Call the task function.
-  int returnValue = runOverlayCommand(pathname, argc, argv, envp);
-
-  if (execArgs->callingTaskId != getRunningTaskId()) {
-    // This command did NOT replace a shell task.  Mark its slot in the
-    // task table as unowned.
-    schedulerState->allTasks[
-      taskId(getRunningTask()) - 1].userId = NO_USER_ID;
+  // Load the overlay information into the TaskDescriptor.
+  TaskDescriptor *taskDescriptor = getRunningTask();
+  if (taskDescriptor == NULL) {
+    // This should be impossible.
+    printString("ERROR: No running task.\n");
+    releaseConsole();
+    schedulerCloseAllFileDescriptors();
+    return (void*) ((intptr_t) -1);
   }
 
-  execArgs = execArgsDestroy(execArgs);
+  FileDescriptor **fileDescriptors = taskDescriptor->fileDescriptors;
+  while ((fileDescriptors[0]->inputChannel.taskId == TASK_ID_NOT_SET)
+   || (fileDescriptors[1]->outputChannel.taskId == TASK_ID_NOT_SET)
+   || (fileDescriptors[2]->outputChannel.taskId == TASK_ID_NOT_SET)
+  ) {
+    // We've been spawned via posix_spawn from a command line that contains
+    // pipes and the pipes haven't been setup yet.  We need to wait until that
+    // process completes, otherwise either we'll miss input or the process
+    // downstream will.
+    taskYield();
+  }
+
+  printDebugString("Call the task function\n");
+  int returnValue = runOverlayCommand(pathname, argc, argv);
+
+  if (taskDescriptor->userId != NO_USER_ID) {
+    // If this command was a shell task then we need to clear out the user ID
+    // and environment variables.  Check.
+    char *passwdStringBuffer = NULL;
+    struct passwd *pwd = NULL;
+    do {
+      passwdStringBuffer = (char*) malloc(NANO_OS_PASSWD_STRING_BUF_SIZE);
+      if (passwdStringBuffer == NULL) {
+        fprintf(stderr,
+          "ERROR! Could not allocate space for passwdStringBuffer in %s.\n",
+          argv[0]);
+        break;
+      }
+      
+      pwd = (struct passwd*) malloc(sizeof(struct passwd));
+      if (pwd == NULL) {
+        fprintf(stderr,
+          "ERROR! Could not allocate space for pwd in %s.\n", argv[0]);
+        break;
+      }
+      
+      struct passwd *result = NULL;
+      nanoOsGetpwuid_r(taskDescriptor->userId, pwd,
+        passwdStringBuffer, NANO_OS_PASSWD_STRING_BUF_SIZE, &result);
+      if (result == NULL) {
+        fprintf(stderr,
+          "Could not find passwd info for uid %d\n", taskDescriptor->userId);
+        break;
+      }
+      
+      if (strcmp(pwd->pw_shell, taskDescriptor->overlayDir) != 0) {
+        // The task exiting is not the user's shell.  We want to keep the
+        // environment variables from being destroyed.
+        if (envp != NULL) {
+          execArgs->envp = NULL;
+          if (schedulerAssignMemory(envp) != 0) {
+            fprintf(stderr, "WARNING: Could not assign envp to scheduler\n");
+            fprintf(stderr, "Undefined behavior\n");
+          }
+
+          for (int ii = 0; envp[ii] != NULL; ii++) {
+            if (schedulerAssignMemory(envp[ii]) != 0) {
+              fprintf(stderr,
+                "WARNING: Could not assign envp[%d] to scheduler\n", ii);
+              fprintf(stderr, "Undefined behavior\n");
+            }
+          }
+        }
+      } else {
+        // This is the user's shell exiting.  Clear the tasks's user ID.
+        taskDescriptor->userId = NO_USER_ID;
+      }
+    } while (0);
+    free(pwd);
+    free(passwdStringBuffer);
+  }
 
   releaseConsole();
 
@@ -369,6 +376,10 @@ void* execCommand(void *args) {
     msg = taskMessageQueuePop();
   }
 
+  // ***DO NOT*** attempt to free the ExecArgs that were passed in, period.
+  // The memory will be cleaned up by the scheduler after we exit.  Freeing
+  // that memory here can result in nasty consequences if we get preempted
+  // between freeing the memory and returning from this function.
   return (void*) ((intptr_t) returnValue);
 }
 
@@ -407,17 +418,18 @@ int sendTaskMessageToTask(
   return returnValue;
 }
 
-/// @fn int sendTaskMessageToPid(unsigned int pid, TaskMessage *taskMessage)
+/// @fn int sendTaskMessageToTaskId(unsigned int taskId,
+///   TaskMessage *taskMessage)
 ///
 /// @brief Look up a task by its PID and send a message to it.
 ///
-/// @param pid The ID of the task to send the message to.
+/// @param taskId The ID of the task to send the message to.
 /// @param taskMessage A pointer to the message to send to the destination
 ///   task.
 ///
 /// @return Returns taskSuccess on success, taskError on failure.
-int sendTaskMessageToPid(unsigned int pid, TaskMessage *taskMessage) {
-  TaskDescriptor *taskDescriptor = schedulerGetTaskByPid(pid);
+int sendTaskMessageToTaskId(unsigned int taskId, TaskMessage *taskMessage) {
+  TaskDescriptor *taskDescriptor = schedulerGetTaskById(taskId);
 
   // If taskDescriptoris NULL, it will be detected as not running by
   // sendTaskMessageToTask, so there's no real point in checking for NULL
@@ -450,9 +462,10 @@ TaskMessage* getAvailableMessage(void) {
 ///   TaskDescriptor *taskDescriptor, int type,
 ///   NanoOsMessageData func, NanoOsMessageData data, bool waiting)
 ///
-/// @brief Send a NanoOsMessage to another task identified by its Coroutine.
+/// @brief Send a NanoOsMessage to another task identified by its
+/// TaskDescriptor.
 ///
-/// @param pid The task ID of the destination task.
+/// @param task A pointer to the TaskDescriptor for the task.
 /// @param type The type of the message to send to the destination task.
 /// @param func The function information to send to the destination task,
 ///   cast to a NanoOsMessageData.
@@ -513,14 +526,14 @@ TaskMessage* sendNanoOsMessageToTask(
   return taskMessage;
 }
 
-/// @fn TaskMessage* sendNanoOsMessageToPid(int pid, int type,
+/// @fn TaskMessage* sendNanoOsMessageToTaskId(int taskId, int type,
 ///   NanoOsMessageData func, NanoOsMessageData data, bool waiting)
 ///
-/// @brief Send a NanoOsMessage to another task identified by its PID. Looks
+/// @brief Send a NanoOsMessage to another task identified by its task ID. Looks
 /// up the task's Coroutine by its PID and then calls
 /// sendNanoOsMessageToTask.
 ///
-/// @param pid The task ID of the destination task.
+/// @param taskId The task ID of the destination task.
 /// @param type The type of the message to send to the destination task.
 /// @param func The function information to send to the destination task,
 ///   cast to a NanoOsMessageData.
@@ -529,25 +542,26 @@ TaskMessage* sendNanoOsMessageToTask(
 /// @param waiting Whether or not the sender is waiting on a response from the
 ///   destination task.
 ///
-/// @return Returns a pointer to the sent TaskMessage on success, NULL on failure.
-TaskMessage* sendNanoOsMessageToPid(int pid, int type,
+/// @return Returns a pointer to the sent TaskMessage on success, NULL on
+/// failure.
+TaskMessage* sendNanoOsMessageToTaskId(int taskId, int type,
   NanoOsMessageData func, NanoOsMessageData data, bool waiting
 ) {
   TaskMessage *taskMessage = NULL;
-  if (pid >= NANO_OS_NUM_TASKS) {
+  if (taskId >= NANO_OS_NUM_TASKS) {
     // Not a valid PID.  Fail.
     printString("ERROR: ");
-    printInt(pid);
+    printInt(taskId);
     printString(" is not a valid PID.\n");
     return taskMessage; // NULL
   }
 
-  TaskDescriptor *task = schedulerGetTaskByPid(pid);
+  TaskDescriptor *task = schedulerGetTaskById(taskId);
   taskMessage
     = sendNanoOsMessageToTask(task, type, func, data, waiting);
   if (taskMessage == NULL) {
     printString("ERROR: Could not send NanoOs message to task ");
-    printInt(pid);
+    printInt(taskId);
     printString("\n");
   }
   return taskMessage;

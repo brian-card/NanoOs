@@ -3,7 +3,7 @@
 /// @author            James Card
 /// @date              09.01.2025
 ///
-/// @file              NanoOsOverlay.h
+/// @file              Overlay.h
 ///
 /// @brief             Definitions used for exporting functionality of overlays
 ///                    so that they're accessible from the kernel.
@@ -34,13 +34,14 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef NANO_OS_OVERLAY_H
-#define NANO_OS_OVERLAY_H
+#ifndef OVERLAY_H
+#define OVERLAY_H
 
 // Standard includes.
 #include "stdint.h"
 
 // Headers from kernel space.
+#include "BlockStorage.h"
 #include "../user/NanoOsApi.h"
 
 #ifdef __cplusplus
@@ -98,10 +99,8 @@ typedef struct NanoOsOverlayExport {
 ///   manages all the standard C API interfaces.
 /// @param env The array of NULL-terminated environment variables for the
 ///   running program.
-/// @param overlayDir The directory on the filesystem where the overlay is
-///   stored.
-/// @param overlay The name of the overlay within the overlayDir, minus the
-///   ".overlay" file extension.
+/// @param overlay The FileBlockMetadata that points to the location of the
+///   overlay on disk.
 /// @param version The version of the overlay header.  Format will be:
 ///   (major << 24) | (minor << 16) | (revision << 8) | (build << 0).
 /// @param magic The value of NANO_OS_OVERLAY_MAGIC to identify that this is a
@@ -109,8 +108,7 @@ typedef struct NanoOsOverlayExport {
 typedef struct NanoOsOverlayHeader {
   NanoOsApi *osApi;
   char **env;
-  const char *overlayDir;
-  const char *overlay;
+  FileBlockMetadata overlay;
   uint32_t version;
   uint64_t magic;
 } NanoOsOverlayHeader;
@@ -140,14 +138,9 @@ typedef struct MainArgs {
   char **argv;
 } MainArgs;
 
-int loadOverlay(const char *overlayDir, const char *overlay, char **envp);
-OverlayFunction findOverlayFunction(const char *overlayFunctionName);
-int runOverlayCommand(const char *commandPath,
-  int argc, char **argv, char **envp);
-
 #ifdef __cplusplus
 }
 #endif
 
-#endif // NANO_OS_OVERLAY_H
+#endif // OVERLAY_H
 

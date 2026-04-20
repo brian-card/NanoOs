@@ -29,7 +29,7 @@
 ///
 /// @brief HAL implementation for an Arduino Nano Every
 
-#if defined(__AVR__)
+#if defined(ARDUINO_AVR_NANO_EVERY)
 
 // Base Arduino definitions
 #include <Arduino.h>
@@ -51,6 +51,33 @@
 #include "../kernel/SdCardSpi.h"
 #include "../user/NanoOsErrno.h"
 #include "../user/NanoOsStdio.h"
+
+/// @def DIO_START
+///
+/// @brief On the Arduino Nano Every, D0 is used for Serial1's RX and D1 is
+/// used for Serial1's TX.  We use expect to use Serial1, so our first usable
+/// DIO is 2.
+#define DIO_START 2
+
+/// @def NUM_DIO_PINS
+///
+/// @brief The number of digital IO pins on the board.  14 on an Arduino Nano.
+#define NUM_DIO_PINS 14
+
+/// @def SPI_COPI_DIO
+///
+/// @brief DIO pin used for SPI COPI on the Arduino Nano Every.
+#define SPI_COPI_DIO 11
+
+/// @def SPI_CIPO_DIO
+///
+/// @brief DIO pin used for SPI CIPO on the Arduino Nano Every.
+#define SPI_CIPO_DIO 12
+
+/// @def SPI_SCK_DIO
+///
+/// @brief DIO pin used for SPI serial clock on the Arduino Nano Every.
+#define SPI_SCK_DIO 13
 
 /// @def PROCESS_STACK_SIZE
 ///
@@ -100,18 +127,10 @@ uintptr_t arduinoNanoEveryMemoryManagerStackSize(bool debug) {
   }
 }
 
-void* arduinoNanoEveryBottomOfStack(void) {
+void* arduinoNanoEveryBottomOfHeap(void) {
   extern int __heap_start;
   extern char *__brkval;
   return (__brkval == NULL) ? (char*) &__heap_start : __brkval;
-}
-
-NanoOsOverlayMap* arduinoNanoEveryOverlayMap(void) {
-  return NULL;
-}
-
-uintptr_t arduinoNanoEveryOverlaySize(void) {
-  return 0;
 }
 
 /// @var serialPorts
@@ -179,6 +198,14 @@ ssize_t arduinoNanoEveryWriteSerialPort(int port,
   return numBytesWritten;
 }
 
+static HalSerialPort arduinoNanoEverySerialPortHal = {
+  .getNumSerialPorts = arduinoNanoEveryGetNumSerialPorts,
+  .setNumSerialPorts = arduinoNanoEverySetNumSerialPorts,
+  .initSerialPort = arduinoNanoEveryInitSerialPort,
+  .pollSerialPort = arduinoNanoEveryPollSerialPort,
+  .writeSerialPort = arduinoNanoEveryWriteSerialPort,
+};
+
 int arduinoNanoEveryGetNumDios(void) {
   return NUM_DIO_PINS;
 }
@@ -209,11 +236,22 @@ int arduinoNanoEveryWriteDio(int dio, bool high) {
   return returnValue;
 }
 
+static HalDio arduinoNanoEveryDioHal = {
+  .getNumDios = arduinoNanoEveryGetNumDios,
+  .configureDio = arduinoNanoEveryConfigureDio,
+  .writeDio = arduinoNanoEveryWriteDio,
+};
+
 /// @var globalSpiConfigured
 ///
 /// @brief Whether or not the Arduino's SPI interface has already been
 /// configured.
 static bool globalSpiConfigured = false;
+
+/// @var globalSpiInUse
+///
+/// @brief Whether or not the Arduino's SPI interface is currently in use.
+static bool globalSpiInUse = false;
 
 /// @var arduinoSpiDevices
 ///
@@ -230,9 +268,10 @@ static bool globalSpiConfigured = false;
 /// So, the maximum number of devcies we can support is the number of DIO pins
 /// minus 5.
 static struct ArduinoNanoEverySpi {
-  bool    configured;         // Will default to false
-  uint8_t chipSelect;
-  bool    transferInProgress; // Will default to false
+  bool     configured;         // Will default to false
+  uint8_t  chipSelect;
+  bool     transferInProgress; // Will default to false
+  uint32_t baud;
 } arduinoSpiDevices[NUM_DIO_PINS - 5] = {};
 
 /// @var numArduinoSpis
@@ -242,7 +281,7 @@ static const int numArduinoSpis
   = sizeof(arduinoSpiDevices) / sizeof(arduinoSpiDevices[0]);
 
 int arduinoNanoEveryInitSpiDevice(int spi,
-  uint8_t cs, uint8_t sck, uint8_t copi, uint8_t cipo
+  uint8_t cs, uint8_t sck, uint8_t copi, uint8_t cipo, uint32_t baud
 ) {
   if ((spi < 0) || (spi >= numArduinoSpis)) {
     // Outside the limit of the devices we support.
@@ -265,8 +304,8 @@ int arduinoNanoEveryInitSpiDevice(int spi,
   
   if (globalSpiConfigured == false) {
     // Set up SPI at the default speed.
-    SPI.begin();
     globalSpiConfigured = true;
+    SPI.begin();
   }
   
   // Configure the chip select DIO for output.
@@ -276,6 +315,7 @@ int arduinoNanoEveryInitSpiDevice(int spi,
   
   // Configure our internal metadata for the device.
   arduinoSpiDevices[spi].chipSelect = cs;
+  arduinoSpiDevices[spi].baud = baud;
   arduinoSpiDevices[spi].configured = true;
   
   return 0;
@@ -287,10 +327,20 @@ int arduinoNanoEveryStartSpiTransfer(int spi) {
   ) {
     // Outside the limit of the devices we support.
     return -ENODEV;
+  } else if (globalSpiInUse == true) {
+    return -EBUSY;
   }
+  
+  // Mark the interface in use.
+  globalSpiInUse = true;
   
   // Select the chip select pin.
   arduinoNanoEveryWriteDio(arduinoSpiDevices[spi].chipSelect, 0);
+  
+  // Begin the transaction
+  SPI.beginTransaction(SPISettings(arduinoSpiDevices[spi].baud,
+    MSBFIRST, SPI_MODE0));
+  
   arduinoSpiDevices[spi].transferInProgress = true;
   
   return 0;
@@ -304,12 +354,19 @@ int arduinoNanoEveryEndSpiTransfer(int spi) {
     return -ENODEV;
   }
   
+  arduinoSpiDevices[spi].transferInProgress = false;
+  
+  // End the transaction.
+  SPI.endTransaction();
+  
   // Deselect the chip select pin.
   arduinoNanoEveryWriteDio(arduinoSpiDevices[spi].chipSelect, 1);
   for (int ii = 0; ii < 8; ii++) {
     SPI.transfer(0xFF); // 8 clock pulses
   }
-  arduinoSpiDevices[spi].transferInProgress = false;
+  
+  // Mark the interface not in use.
+  globalSpiInUse = false;
   
   return 0;
 }
@@ -329,6 +386,34 @@ int arduinoNanoEverySpiTransfer8(int spi, uint8_t data) {
   
   return (int) SPI.transfer(data);
 }
+
+int arduinoNanoEverySpiTransferBytes(int spi,
+  uint8_t *data, uint32_t length
+) {
+  if ((spi < 0) || (spi >= numArduinoSpis)
+    || (arduinoSpiDevices[spi].configured == false)
+  ) {
+    // Outside the limit of the devices we support.
+    return -ENODEV;
+  } else if (!arduinoSpiDevices[spi].transferInProgress) {
+    // The only error that arduinoNanoEveryStartSpiTransfer can return is
+    // ENODEV and we've already checked for that, so we don't need to check the
+    // return value here.
+    arduinoNanoEveryStartSpiTransfer(spi);
+  }
+  
+  SPI.transfer(data, length);
+  
+  return 0;
+}
+
+static HalSpi arduinoNanoEverySpiHal = {
+  .initSpiDevice = arduinoNanoEveryInitSpiDevice,
+  .startSpiTransfer = arduinoNanoEveryStartSpiTransfer,
+  .endSpiTransfer = arduinoNanoEveryEndSpiTransfer,
+  .spiTransfer8 = arduinoNanoEverySpiTransfer8,
+  .spiTransferBytes = arduinoNanoEverySpiTransferBytes,
+};
 
 /// @var baseSystemTimeMs
 ///
@@ -368,90 +453,59 @@ int64_t arduinoNanoEveryGetElapsedNanoseconds(int64_t startTime) {
     startTime / ((int64_t) 1000000)) * ((int64_t) 1000000);
 }
 
-int arduinoNanoEveryReset(void) {
-  _PROTECTED_WRITE(RSTCTRL.SWRR, 1);
-  return 0;
-}
+static HalClock arduinoNanoEveryClockHal = {
+  .setSystemTime = arduinoNanoEverySetSystemTime,
+  .getElapsedMilliseconds = arduinoNanoEveryGetElapsedMilliseconds,
+  .getElapsedMicroseconds = arduinoNanoEveryGetElapsedMicroseconds,
+  .getElapsedNanoseconds = arduinoNanoEveryGetElapsedNanoseconds,
+};
 
-int arduinoNanoEveryShutdown(void) {
-  // 1. Disable ADC
-  ADC0.CTRLA &= ~ADC_ENABLE_bm;
-  
-  // 2. Disable all peripherals via Power Reduction
-  SLPCTRL.CTRLA = SLPCTRL_SMODE_PDOWN_gc;  // Power-down mode
-  
-  // 3. Disable Brown-Out Detection (BOD) during sleep
-  //    This is critical for lowest power!
-  _PROTECTED_WRITE(BOD.CTRLA, BOD_SLEEP_DIS_gc);
-  
-  // 4. Disable all unnecessary peripherals
-  USART0.CTRLB = 0;   // Disable USART
-  USART1.CTRLB = 0;
-  USART2.CTRLB = 0;
-  TWI0.MCTRLA = 0;    // Disable I2C
-  SPI0.CTRLA = 0;     // Disable SPI
-  
-  // 5. Configure all pins to minimize leakage
-  //    Set unused pins as inputs with pullups disabled
-  for (uint8_t pin = 0; pin < NUM_TOTAL_PINS; pin++) {
-    pinMode(pin, INPUT);
-    digitalWrite(pin, LOW);  // Disable pullup
-  }
-  
-  // 6. Enter sleep
-  set_sleep_mode(SLEEP_MODE_PWR_DOWN);
-  sleep_enable();
-  sei();  // Must enable interrupts for wake-up
-  sleep_cpu();
-  
-  return 0;
-}
-
-int arduinoNanoEveryInitRootStorage(SchedulerState *schedulerState) {
-  TaskDescriptor *allTasks = schedulerState->allTasks;
-  
-  // Create the SD card task.
-  SdCardSpiArgs sdCardSpiArgs = {
-    .spiCsDio = SD_CARD_PIN_CHIP_SELECT,
-    .spiCopiDio = SPI_COPI_DIO,
-    .spiCipoDio = SPI_CIPO_DIO,
-    .spiSckDio = SPI_SCK_DIO,
-  };
-
-  // Create the SD card task.
-  TaskDescriptor *taskDescriptor
-    = &allTasks[NANO_OS_SD_CARD_TASK_ID];
-  if (taskCreate(
-    taskDescriptor, runSdCardSpi, &sdCardSpiArgs)
-    != taskSuccess
+int arduinoNanoEveryShutdown(HalShutdownType shutdownType) {
+  // You can't completely turn off a Nano 33 IoT from software.  The best we
+  // can do is put into a low power state, so do the same set of operations for
+  // both off and suspend.
+  if ((shutdownType == HAL_SHUTDOWN_OFF)
+    || (shutdownType == HAL_SHUTDOWN_SUSPEND)
   ) {
-    fputs("Could not start SD card task.\n", stderr);
+    // 1. Disable ADC
+    ADC0.CTRLA &= ~ADC_ENABLE_bm;
+    
+    // 2. Disable all peripherals via Power Reduction
+    SLPCTRL.CTRLA = SLPCTRL_SMODE_PDOWN_gc;  // Power-down mode
+    
+    // 3. Disable Brown-Out Detection (BOD) during sleep
+    //    This is critical for lowest power!
+    _PROTECTED_WRITE(BOD.CTRLA, BOD_SLEEP_DIS_gc);
+    
+    // 4. Disable all unnecessary peripherals
+    USART0.CTRLB = 0;   // Disable USART
+    USART1.CTRLB = 0;
+    USART2.CTRLB = 0;
+    TWI0.MCTRLA = 0;    // Disable I2C
+    SPI0.CTRLA = 0;     // Disable SPI
+    
+    // 5. Configure all pins to minimize leakage
+    //    Set unused pins as inputs with pullups disabled
+    for (uint8_t pin = 0; pin < NUM_TOTAL_PINS; pin++) {
+      pinMode(pin, INPUT);
+      digitalWrite(pin, LOW);  // Disable pullup
+    }
+    
+    // 6. Enter sleep
+    set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+    sleep_enable();
+    sei();  // Must enable interrupts for wake-up
+    sleep_cpu();
+  } else if (shutdownType == HAL_SHUTDOWN_RESET) {
+    _PROTECTED_WRITE(RSTCTRL.SWRR, 1);
   }
-  printDebugString("Started SD card task.\n");
-  taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
-  taskDescriptor->taskId = NANO_OS_SD_CARD_TASK_ID;
-  taskDescriptor->name = "SD card";
-  taskDescriptor->userId = ROOT_USER_ID;
-  BlockStorageDevice *sdDevice = (BlockStorageDevice*) coroutineResume(
-    allTasks[NANO_OS_SD_CARD_TASK_ID].taskHandle, NULL);
-  sdDevice->partitionNumber = 1;
-  printDebugString("Configured SD card task.\n");
-  
-  // Create the filesystem task.
-  taskDescriptor = &allTasks[NANO_OS_FILESYSTEM_TASK_ID];
-  if (taskCreate(taskDescriptor, runExFatFilesystem, sdDevice)
-    != taskSuccess
-  ) {
-    fputs("Could not start filesystem task.\n", stderr);
-  }
-  taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
-  taskDescriptor->taskId = NANO_OS_FILESYSTEM_TASK_ID;
-  taskDescriptor->name = "filesystem";
-  taskDescriptor->userId = ROOT_USER_ID;
-  printDebugString("Created filesystem task.\n");
   
   return 0;
 }
+
+static HalPower arduinoNanoEveryPowerHal = {
+  .shutdown = arduinoNanoEveryShutdown,
+};
 
 int arduinoNanoEveryGetNumTimers(void) {
   return 0;
@@ -502,10 +556,61 @@ int arduinoNanoEveryCancelAndGetTimer(int timer,
   void (**callback)(void)
 ) {
   (void) timer;
+  (void) configuredNanoseconds;
   (void) remainingNanoseconds;
   (void) callback;
   
   return -ENOTSUP;
+}
+
+int arduinoNanoEveryInitRootStorage(SchedulerState *schedulerState) {
+  TaskDescriptor *allTasks = schedulerState->allTasks;
+  
+  // Create the SD card task.
+  SdCardSpiArgs sdCardSpiArgs = {
+    .spiCsDio = SD_CARD_PIN_CHIP_SELECT,
+    .spiCopiDio = SPI_COPI_DIO,
+    .spiCipoDio = SPI_CIPO_DIO,
+    .spiSckDio = SPI_SCK_DIO,
+  };
+
+  // Create the SD card task.
+  TaskDescriptor *taskDescriptor
+    = &allTasks[schedulerState->firstUserTaskId - 1];
+  if (taskCreate(
+    taskDescriptor, runSdCardSpi, &sdCardSpiArgs)
+    != taskSuccess
+  ) {
+    fputs("Could not start SD card task.\n", stderr);
+  }
+  printDebugString("Started SD card task.\n");
+  taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
+  taskDescriptor->taskId = schedulerState->firstUserTaskId;
+  taskDescriptor->name = "SD card";
+  taskDescriptor->userId = ROOT_USER_ID;
+  BlockStorageDevice *sdDevice = (BlockStorageDevice*) coroutineResume(
+    allTasks[schedulerState->firstUserTaskId - 1].taskHandle, NULL);
+  sdDevice->partitionNumber = 1;
+  printDebugString("Configured SD card task.\n");
+  
+  // Create the filesystem task.
+  schedulerState->rootFsTaskId = schedulerState->firstUserTaskId + 1;
+  taskDescriptor = &allTasks[schedulerState->rootFsTaskId - 1];
+  if (taskCreate(taskDescriptor, runExFatFilesystem, sdDevice)
+    != taskSuccess
+  ) {
+    fputs("Could not start filesystem task.\n", stderr);
+  }
+  taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
+  taskDescriptor->taskId = schedulerState->rootFsTaskId;
+  taskDescriptor->name = "filesystem";
+  taskDescriptor->userId = ROOT_USER_ID;
+  printDebugString("Created filesystem task.\n");
+  
+  schedulerState->firstUserTaskId = schedulerState->rootFsTaskId + 1;
+  schedulerState->firstShellTaskId = schedulerState->firstUserTaskId;
+  
+  return 0;
 }
 
 /// @var arduinoNanoEveryHal
@@ -515,57 +620,26 @@ static Hal arduinoNanoEveryHal = {
   // Memory definitions.
   .processStackSize = arduinoNanoEveryProcessStackSize,
   .memoryManagerStackSize = arduinoNanoEveryMemoryManagerStackSize,
-  .bottomOfStack = arduinoNanoEveryBottomOfStack,
+  .bottomOfHeap = arduinoNanoEveryBottomOfHeap,
   
   // Overlay definitions.
-  .overlayMap = arduinoNanoEveryOverlayMap,
-  .overlaySize = arduinoNanoEveryOverlaySize,
+  .overlayMap = NULL,
+  .overlaySize = 0,
   
-  // Serial port functionality.
-  .getNumSerialPorts = arduinoNanoEveryGetNumSerialPorts,
-  .setNumSerialPorts = arduinoNanoEverySetNumSerialPorts,
-  .initSerialPort = arduinoNanoEveryInitSerialPort,
-  .pollSerialPort = arduinoNanoEveryPollSerialPort,
-  .writeSerialPort = arduinoNanoEveryWriteSerialPort,
-  
-  // Digital IO pin functionality.
-  .getNumDios = arduinoNanoEveryGetNumDios,
-  .configureDio = arduinoNanoEveryConfigureDio,
-  .writeDio = arduinoNanoEveryWriteDio,
-  
-  // SPI functionality.
-  .initSpiDevice = arduinoNanoEveryInitSpiDevice,
-  .startSpiTransfer = arduinoNanoEveryStartSpiTransfer,
-  .endSpiTransfer = arduinoNanoEveryEndSpiTransfer,
-  .spiTransfer8 = arduinoNanoEverySpiTransfer8,
-  
-  // System time functionality.
-  .setSystemTime = arduinoNanoEverySetSystemTime,
-  .getElapsedMilliseconds = arduinoNanoEveryGetElapsedMilliseconds,
-  .getElapsedMicroseconds = arduinoNanoEveryGetElapsedMicroseconds,
-  .getElapsedNanoseconds = arduinoNanoEveryGetElapsedNanoseconds,
-  
-  // Hardware reset and shutdown.
-  .reset = arduinoNanoEveryReset,
-  .shutdown = arduinoNanoEveryShutdown,
+  .serialPortHal = &arduinoNanoEverySerialPortHal,
+  .dioHal = &arduinoNanoEveryDioHal,
+  .spiHal = &arduinoNanoEverySpiHal,
+  .clockHal = &arduinoNanoEveryClockHal,
+  .powerHal = &arduinoNanoEveryPowerHal,
+  .timerHal = NULL,
   
   // Root storage configuration.
   .initRootStorage = arduinoNanoEveryInitRootStorage,
-  
-  // Hardware timers.
-  .getNumTimers = arduinoNanoEveryGetNumTimers,
-  .setNumTimers = arduinoNanoEverySetNumTimers,
-  .initTimer = arduinoNanoEveryInitTimer,
-  .configOneShotTimer = arduinoNanoEveryConfigOneShotTimer,
-  .configuredTimerNanoseconds = arduinoNanoEveryConfiguredTimerNanoseconds,
-  .remainingTimerNanoseconds = arduinoNanoEveryRemainingTimerNanoseconds,
-  .cancelTimer = arduinoNanoEveryCancelTimer,
-  .cancelAndGetTimer = arduinoNanoEveryCancelAndGetTimer,
 };
 
 const Hal* halArduinoNanoEveryInit(void) {
   return &arduinoNanoEveryHal;
 }
 
-#endif // __AVR__
+#endif // ARDUINO_AVR_NANO_EVERY
 

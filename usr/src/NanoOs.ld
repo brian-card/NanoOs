@@ -6,7 +6,7 @@
  *  @file              NanoOs.ld
  * 
  *  @brief             Linker script for ARM-compiled NanoOs user-space
- *                     applications organized at base address 0x20001400.
+ *                     applications organized at base address 0x20001800.
  *                     For use with arm-none-eabi-gcc.
  * 
  *  @copyright
@@ -36,12 +36,12 @@
  */
 
 /* Overlay Linker Script for ARM Cortex-M0 */
-/* Overlay loads at RAM address 0x20001400 */
+/* Overlay loads at RAM address 0x20001800 */
 
 MEMORY
 {
     /* Overlay RAM region - adjust size as needed */
-    OVERLAY_RAM (rwx) : ORIGIN = 0x20001400, LENGTH = 8K
+    OVERLAY_RAM (rwx) : ORIGIN = 0x20001800, LENGTH = 8K
 }
 
 /* Entry point - not critical for overlays but good practice */
@@ -50,7 +50,7 @@ ENTRY(_start)
 SECTIONS
 {
     /* Overlay header must be first - contains export table info */
-    .overlay_header 0x20001400 :
+    .overlay_header 0x20001800 :
     {
         KEEP(*(.overlay_header))
         . = ALIGN(4);
