@@ -3279,7 +3279,7 @@ int schedulerLoadOverlay(FileBlockMetadata *overlay, char **envp) {
     overlay->blockDevice->blockSize,
     (uint8_t*) overlayMap) != 0
   ) {
-    printString("Could not read overlay");
+    printString("Could not read overlay\n");
     return -EIO;
   }
 
