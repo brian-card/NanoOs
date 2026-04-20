@@ -1449,6 +1449,11 @@ int closeTaskFileDescriptors(
     uint8_t numFileDescriptors = taskDescriptor->numFileDescriptors;
     for (uint8_t ii = 0; ii < numFileDescriptors; ii++) {
       FileDescriptor *fileDescriptor = fileDescriptors[ii];
+      if (fileDescriptor == NULL) {
+        // This file descriptor was previously closed.  Move on.
+        continue;
+      }
+
       TaskId waitingOutputTaskId
         = fileDescriptor->outputChannel.taskId;
       
@@ -2873,40 +2878,57 @@ int schedulerSpawnCommandHandler(
   }
 
   if (assignMemory(execArgs, taskDescriptor->taskId) != 0) {
-    printString("WARNING: Could not assign execArgs to exec task.\n");
+    printString("WARNING: Could not assign execArgs to spawn task.\n");
     printString("Undefined behavior.\n");
   }
 
   if (assignMemory(pathname, taskDescriptor->taskId) != 0) {
-    printString("WARNING: Could not assign pathname to exec task.\n");
+    printString("WARNING: Could not assign pathname to spawn task.\n");
     printString("Undefined behavior.\n");
   }
 
   if (assignMemory(argv, taskDescriptor->taskId) != 0) {
-    printString("WARNING: Could not assign argv to exec task.\n");
+    printString("WARNING: Could not assign argv to spawn task.\n");
     printString("Undefined behavior.\n");
   }
   for (int ii = 0; argv[ii] != NULL; ii++) {
     if (assignMemory(argv[ii], taskDescriptor->taskId) != 0) {
       printString("WARNING: Could not assign argv[");
       printInt(ii);
-      printString("] to exec task.\n");
+      printString("] to spawn task.\n");
       printString("Undefined behavior.\n");
     }
   }
 
   if (envp != NULL) {
     if (assignMemory(envp, taskDescriptor->taskId) != 0) {
-      printString("WARNING: Could not assign envp to exec task.\n");
+      printString("WARNING: Could not assign envp to spawn task.\n");
       printString("Undefined behavior.\n");
     }
     for (int ii = 0; envp[ii] != NULL; ii++) {
       if (assignMemory(envp[ii], taskDescriptor->taskId) != 0) {
         printString("WARNING: Could not assign envp[");
         printInt(ii);
-        printString("] to exec task.\n");
+        printString("] to spawn task.\n");
         printString("Undefined behavior.\n");
       }
+    }
+  }
+
+  if (assignMemory(taskDescriptor->fileDescriptors,
+    taskDescriptor->taskId) != 0
+  ) {
+    printString("WARNING: Could not assign fileDescriptors to spawn task.\n");
+    printString("Undefined behavior.\n");
+  }
+  for (int ii = 0; ii < taskDescriptor->numFileDescriptors; ii++) {
+    if (assignMemory(taskDescriptor->fileDescriptors[ii],
+      taskDescriptor->taskId) != 0
+    ) {
+      printString("WARNING: Could not assign fileDescriptors[");
+      printInt(ii);
+      printString("] to spawn task.\n");
+      printString("Undefined behavior.\n");
     }
   }
 
