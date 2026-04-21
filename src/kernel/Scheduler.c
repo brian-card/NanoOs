@@ -1469,6 +1469,8 @@ int closeTaskFileDescriptors(
         ) {
           // Clear the taskId of the waiting task's stdin file descriptor.
           waitingTaskDescriptor->fileDescriptors[
+            STDIN_FILE_DESCRIPTOR_INDEX]->pipeEnd = NULL;
+          waitingTaskDescriptor->fileDescriptors[
             STDIN_FILE_DESCRIPTOR_INDEX]->inputChannel.taskId = TASK_ID_NOT_SET;
 
           // Send an empty message to the waiting task so that it will become
@@ -1500,6 +1502,8 @@ int closeTaskFileDescriptors(
             > STDOUT_FILE_DESCRIPTOR_INDEX)
         ) {
           // Clear the taskId of the waiting task's stdout file descriptor.
+          waitingTaskDescriptor->fileDescriptors[
+            STDOUT_FILE_DESCRIPTOR_INDEX]->pipeEnd = NULL;
           waitingTaskDescriptor->fileDescriptors[
             STDOUT_FILE_DESCRIPTOR_INDEX]->outputChannel.taskId
             = TASK_ID_NOT_SET;
