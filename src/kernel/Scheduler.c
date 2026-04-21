@@ -2104,11 +2104,12 @@ int loadTaskDescriptorOverlayMetadata(TaskDescriptor *taskDescriptor) {
   strcat(overlayPath, "/main");
   strcat(overlayPath, OVERLAY_EXT);
 
-  schedGetFileBlockMetadataFromPath(overlayPath, &taskDescriptor->overlay);
+  int returnValue
+    = schedGetFileBlockMetadataFromPath(overlayPath, &taskDescriptor->overlay);
 
   schedFree(overlayPath);
 
-  return 0;
+  return returnValue;
 }
 
 /// @fn int schedulerKillTaskCommandHandler(
