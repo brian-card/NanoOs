@@ -287,11 +287,6 @@ void consoleGetBufferCommandHandler(
     nanoOsMessage->data = (intptr_t) returnValue;
     taskMessageInit(returnMessage, CONSOLE_RETURNING_BUFFER,
       nanoOsMessage, sizeof(*nanoOsMessage), true);
-    if (taskMessageQueuePush(taskMessageFrom(inputMessage), returnMessage)
-      != taskSuccess
-    ) {
-      returnValue->inUse = false;
-    }
   }
 
   // Whether we were able to grab a buffer or not, we're now done with this
@@ -860,6 +855,16 @@ void handleConsoleMessages(ConsoleState *consoleState) {
     ConsoleCommand messageType = (ConsoleCommand) taskMessageType(message);
     if (messageType >= NUM_CONSOLE_COMMANDS) {
       // Invalid.
+      printInt(getRunningTaskId());
+      printString(": ");
+      printString(__func__);
+      printString(": ");
+      printInt(__LINE__);
+      printString(": Invalid message type ");
+      printInt(messageType);
+      printString("\n");
+
+      taskMessageRelease(message);
       message = taskMessageQueuePop();
       continue;
     }

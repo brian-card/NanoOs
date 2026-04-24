@@ -948,7 +948,6 @@ int nanoOsScanf(const char *format, ...) {
 /// success, NULL on failure.
 ConsoleBuffer* nanoOsGetBuffer(void) {
   ConsoleBuffer *returnValue = NULL;
-  struct timespec ts = {0, 0};
 
   // It's possible that all the nanoOs buffers are in use at the time this call
   // is made, so we may have to try multiple times.  Do a while loop until we
@@ -965,20 +964,6 @@ ConsoleBuffer* nanoOsGetBuffer(void) {
     if (taskMessageWaitForDone(taskMessage, NULL) != taskSuccess) {
       // Something is wrong.  Bail.
       taskMessageRelease(taskMessage);
-      break; // will return returnValue, which is NULL
-    }
-    taskMessageRelease(taskMessage);
-
-    // The handler only marks the message as done if it has successfully sent
-    // us a reply or if there was an error and it could not send a reply.  So,
-    // we don't want an infinite timeout to waitForDataMessage, we want zero
-    // wait.  That's why we need the zeroed timespec above and we want to
-    // manually wait for done above.
-    taskMessage
-      = taskMessageQueueWaitForType(CONSOLE_RETURNING_BUFFER, &ts);
-    if (taskMessage == NULL) {
-      // The handler marked the sent message done but did not send a reply.
-      // That means something is wrong internally to it.  Bail.
       break; // will return returnValue, which is NULL
     }
 
