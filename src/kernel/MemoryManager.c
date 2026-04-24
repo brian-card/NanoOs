@@ -661,6 +661,9 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
 
 /******************* End Custom Memory Management Functions *******************/
 
+int memoryManagerDumpMemoryAllocations(
+  MemoryManagerState *memoryManagerState, TaskMessage *incoming
+);
 /// @fn int memoryManagerReallocCommandHandler(
 ///   MemoryManagerState *memoryManagerState, TaskMessage *incoming)
 ///
@@ -687,11 +690,31 @@ int memoryManagerReallocCommandHandler(
     = localRealloc(memoryManagerState,
       reallocMessage->ptr, reallocMessage->size,
       taskId(taskMessageFrom(incoming)));
-  reallocMessage->ptr = clientReturnValue;
-  reallocMessage->size = 0;
   if (clientReturnValue != NULL) {
     reallocMessage->size = sizeOfMemory(clientReturnValue);
+  } else if ((reallocMessage->size > 0)
+    && (taskId(taskMessageFrom(incoming)) != SCHEDULER_STATE->schedulerTaskId)
+  ) {
+    memoryManagerDumpMemoryAllocations(memoryManagerState, incoming);
+    do {
+      break;
+      TaskMessage *filesystemCommand = getAvailableMessage();
+      if (filesystemCommand == NULL) {
+        printString("ERROR: Could not get filesystemCommand message\n");
+        break;
+      }
+      taskMessageInit(filesystemCommand,
+        FILESYSTEM_DUMP_OPEN_FILES, NULL, 0, true);
+      sendTaskMessageToTask(
+        &SCHEDULER_STATE->allTasks[SCHEDULER_STATE->rootFsTaskId - 1],
+        filesystemCommand);
+      taskMessageRelease(filesystemCommand);
+    } while (0);
+    reallocMessage->size = 0;
+  } else {
+    reallocMessage->size = 0;
   }
+  reallocMessage->ptr = clientReturnValue;
   
   TaskDescriptor *from = taskMessageFrom(incoming);
   NanoOsMessage *nanoOsMessage = (NanoOsMessage*) taskMessageData(incoming);
@@ -704,8 +727,8 @@ int memoryManagerReallocCommandHandler(
     returnValue = -1;
   }
   
-  // The client is waiting on us.  Mark the incoming message done now.  Do *NOT*
-  // release it since the client is still using it.
+  // The client is waiting on us.  Mark the incoming message done now.  Do
+  // *NOT* release it since the client is still using it.
   if (taskMessageSetDone(incoming) != taskSuccess) {
     returnValue = -1;
   }
@@ -965,6 +988,16 @@ void handleMemoryManagerMessages(MemoryManagerState *memoryManagerState) {
     MemoryManagerCommand messageType
       = (MemoryManagerCommand) taskMessageType(taskMessage);
     if (messageType >= NUM_MEMORY_MANAGER_COMMANDS) {
+      printInt(getRunningTaskId());
+      printString(": ");
+      printString(__func__);
+      printString(": ");
+      printInt(__LINE__);
+      printString(": Unrecognized message type ");
+      printInt(messageType);
+      printString("\n");
+
+      taskMessageRelease(taskMessage);
       taskMessage = taskMessageQueuePop();
       continue;
     }
