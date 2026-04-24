@@ -566,6 +566,15 @@ void handleSdCardMessages(SdCardState *sdCardState) {
     SdCardCommandResponse messageType
       = (SdCardCommandResponse) taskMessageType(taskMessage);
     if (messageType >= NUM_SD_CARD_COMMANDS) {
+      printString(": ");
+      printString(__func__);
+      printString(": ");
+      printInt(__LINE__);
+      printString(": Invalid message type");
+      printInt(messageType);
+      printString("\n");
+
+      taskMessageRelease(taskMessage);
       taskMessage = taskMessageQueuePop();
       continue;
     }
