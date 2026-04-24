@@ -129,26 +129,12 @@ int nanoOsDup2(int oldfd, int newfd) {
     // Check to see if we need to adjust the taskIds for the pipe.
     if (newfd == STDIN_FILENO) {
       // We need to set the taskId of the outputChannel of the other end of the
-      // pipe to our ID and the taskId of the inputChannel of this end of the
-      // pipe to the other end's ID.
-      TaskId pipeEndTaskId = oldFileDescriptor->pipeEnd->inputChannel.taskId;
+      // pipe to our ID.
       oldFileDescriptor->pipeEnd->outputChannel.taskId = getRunningTaskId();
-      if (pipeEndTaskId != TASK_ID_NOT_SET) {
-        // The scheduler has initialized the taskId in the file descriptor.
-        // Use it.
-        oldFileDescriptor->inputChannel.taskId = pipeEndTaskId;
-      }
     } else if ((newfd == STDOUT_FILENO) || (newfd == STDERR_FILENO)) {
       // We need to set the taskId of the inputChannel of the other end of the
-      // pipe to our ID and the taskId of the outputChannel of this end of the
-      // pipe to the other end's ID.
-      TaskId pipeEndTaskId = oldFileDescriptor->pipeEnd->outputChannel.taskId;
+      // pipe to our ID.
       oldFileDescriptor->pipeEnd->inputChannel.taskId = getRunningTaskId();
-      if (pipeEndTaskId != TASK_ID_NOT_SET) {
-        // The scheduler has initialized the taskId in the file descriptor.
-        // Use it.
-        oldFileDescriptor->outputChannel.taskId = pipeEndTaskId;
-      }
     }
   }
   

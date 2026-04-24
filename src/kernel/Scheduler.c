@@ -2843,12 +2843,6 @@ int schedulerSpawnCommandHandler(
       // If we made it this far then we need to free the FileDescriptor that's
       // at the specified fd index and set it to the one provided.
       schedFree(taskDescriptor->fileDescriptors[dup2->fd]);
-      if (dup2->dup->inputChannel.taskId == TASK_ID_NOT_SET) {
-        dup2->dup->inputChannel.taskId = taskDescriptor->taskId;
-      }
-      if (dup2->dup->outputChannel.taskId == TASK_ID_NOT_SET) {
-        dup2->dup->outputChannel.taskId = taskDescriptor->taskId;
-      }
       taskDescriptor->fileDescriptors[dup2->fd] = dup2->dup;
 
       // The dup2->dup FileDescriptor almost certainly has a non-NULL pipeEnd
@@ -2856,28 +2850,12 @@ int schedulerSpawnCommandHandler(
       if (dup2->dup->pipeEnd != NULL) {
         if (dup2->fd == STDIN_FILENO) {
           // We need to set the taskId of the outputChannel of the other end of
-          // the pipe to our ID and the taskId of the inputChannel of this end
-          // of the pipe to the other end's ID.
-          TaskId pipeEndTaskId
-            = dup2->dup->pipeEnd->inputChannel.taskId;
-          dup2->dup->pipeEnd->outputChannel.taskId = pipeEndTaskId;
-          if (pipeEndTaskId != TASK_ID_NOT_SET) {
-            // The scheduler has initialized the taskId in the file descriptor.
-            // Use it.
-            dup2->dup->inputChannel.taskId = pipeEndTaskId;
-          }
+          // the pipe to our ID.
+          dup2->dup->pipeEnd->outputChannel.taskId = taskDescriptor->taskId;
         } else if ((dup2->fd == STDOUT_FILENO) || (dup2->fd == STDERR_FILENO)) {
           // We need to set the taskId of the inputChannel of the other end of
-          // the pipe to our ID and the taskId of the outputChannel of this end
-          // of the pipe to the other end's ID.
-          TaskId pipeEndTaskId
-            = dup2->dup->pipeEnd->outputChannel.taskId;
-          dup2->dup->pipeEnd->inputChannel.taskId = pipeEndTaskId;
-          if (pipeEndTaskId != TASK_ID_NOT_SET) {
-            // The scheduler has initialized the taskId in the file descriptor.
-            // Use it.
-            dup2->dup->outputChannel.taskId = pipeEndTaskId;
-          }
+          // the pipe to our ID.
+          dup2->dup->pipeEnd->inputChannel.taskId = taskDescriptor->taskId;
         }
       }
     }
