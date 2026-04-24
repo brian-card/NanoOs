@@ -1464,6 +1464,8 @@ int closeTaskFileDescriptors(
           = &schedulerState->allTasks[waitingOutputTaskId - 1];
 
         if ((waitingTaskDescriptor->fileDescriptors != NULL)
+          && (waitingTaskDescriptor->fileDescriptors[
+            STDIN_FILE_DESCRIPTOR_INDEX] != NULL)
           && (waitingTaskDescriptor->numFileDescriptors
             > STDIN_FILE_DESCRIPTOR_INDEX)
         ) {
@@ -1498,6 +1500,8 @@ int closeTaskFileDescriptors(
           = &schedulerState->allTasks[waitingInputTaskId - 1];
 
         if ((waitingTaskDescriptor->fileDescriptors != NULL)
+          && (waitingTaskDescriptor->fileDescriptors[
+            STDOUT_FILE_DESCRIPTOR_INDEX] != NULL)
           && (waitingTaskDescriptor->numFileDescriptors
             > STDOUT_FILE_DESCRIPTOR_INDEX)
         ) {
