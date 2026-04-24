@@ -53,6 +53,12 @@
 #include "kernel/NanoOs.h"
 #include "kernel/Tasks.h"
 
+/// @def DEBUG_MULTIPLIER
+///
+/// @brief Multiplier to use for stack/heap size during debugging.  When not
+/// debugging, this value should be 1.
+#define DEBUG_MULTIPLIER 1
+
 /// @def PROCESS_STACK_SIZE
 ///
 /// @brief The size, in bytes, of a regular process's stack.
@@ -96,15 +102,15 @@ int (*realTcsetattr)(int fd, int optional_actions,
   const struct termios *termios_p) = NULL;
 
 uintptr_t posixProcessStackSize(void) {
-  return PROCESS_STACK_SIZE;
+  return PROCESS_STACK_SIZE * DEBUG_MULTIPLIER;
 }
 
 uintptr_t posixMemoryManagerStackSize(bool debug) {
   if (debug == false) {
     // This is the expected case, so list it first.
-    return MEMORY_MANAGER_STACK_SIZE;
+    return MEMORY_MANAGER_STACK_SIZE * DEBUG_MULTIPLIER;
   } else {
-    return MEMORY_MANAGER_DEBUG_STACK_SIZE;
+    return MEMORY_MANAGER_DEBUG_STACK_SIZE * DEBUG_MULTIPLIER;
   }
 }
 
@@ -767,7 +773,7 @@ int halPosixImplInit(jmp_buf resetBuffer, const char *sdCardDevicePath,
   
   // Simulate having a total of 64 KB available for dynamic memory.
   _bottomOfHeap = (void*) (((uintptr_t) &topOfStack)
-    - ((uintptr_t) (65536 - 11456)));
+    - ((uintptr_t) ((65536 * DEBUG_MULTIPLIER) - 11456)));
   fprintf(stderr, "Bottom of stack     = %p\n", (void*) _bottomOfHeap);
   jmp_buf returnBuffer;
   if (setjmp(returnBuffer) == 0) {
