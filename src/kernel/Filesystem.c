@@ -356,7 +356,10 @@ int getFileBlockMetadataFromPath(const char *path,
 
   FILE *stream = fopen(path, "r");
   if (stream == NULL) {
-    printString("ERROR! Could not open file \"");
+    printInt(getRunningTaskId());
+    printString(": ");
+    printString(__func__);
+    printString(": ERROR! Could not open file \"");
     printString(path);
     printString("\"\n");
     return -EIO;
