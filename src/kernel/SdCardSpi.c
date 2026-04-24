@@ -574,7 +574,6 @@ void handleSdCardMessages(SdCardState *sdCardState) {
       printInt(messageType);
       printString("\n");
 
-      taskMessageRelease(taskMessage);
       taskMessage = taskMessageQueuePop();
       continue;
     }

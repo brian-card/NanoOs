@@ -997,7 +997,6 @@ void handleMemoryManagerMessages(MemoryManagerState *memoryManagerState) {
       printInt(messageType);
       printString("\n");
 
-      taskMessageRelease(taskMessage);
       taskMessage = taskMessageQueuePop();
       continue;
     }

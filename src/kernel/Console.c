@@ -864,7 +864,6 @@ void handleConsoleMessages(ConsoleState *consoleState) {
       printInt(messageType);
       printString("\n");
 
-      taskMessageRelease(message);
       message = taskMessageQueuePop();
       continue;
     }

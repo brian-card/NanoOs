@@ -3057,12 +3057,7 @@ void handleSchedulerMessage(SchedulerState *schedulerState) {
       printInt(messageType);
       printString(" from task ");
       printInt(taskId(taskMessageFrom(message)));
-      printString("; releasing\n");
-      if (taskMessageRelease(message) != taskSuccess) {
-        printString("ERROR: "
-          "Could not release message from handleSchedulerMessage "
-          "for invalid message type.\n");
-      }
+      printString("\n");
       return;
     }
 
