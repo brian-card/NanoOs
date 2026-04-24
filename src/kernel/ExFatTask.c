@@ -88,7 +88,11 @@ int exFatTaskOpenFileCommandHandler(
       } else {
         exFatFclose(driverState, exFatFile);
       }
+    } else {
+      printString("ERROR: exFatOpenFile returned NULL\n");
     }
+  } else {
+    printString("ERROR: driverState is not valid!\n");
   }
 
   NanoOsMessage *nanoOsMessage
@@ -399,7 +403,12 @@ static void exFatHandleFilesystemMessages(ExFatDriverState *driverState) {
       printDebugString("\n");
       filesystemCommandHandlers[type](driverState, msg);
     } else {
-      printString("ERROR! Received unknown filesystem message type ");
+      printInt(getRunningTaskId());
+      printString(": ");
+      printString(__func__);
+      printString(": ");
+      printInt(__LINE__);
+      printString(": ERROR! Received unknown filesystem message type ");
       printInt(type);
       printString("\n");
     }
