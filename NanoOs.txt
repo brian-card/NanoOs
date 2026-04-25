@@ -1,1 +1,1 @@
-A multitasking nanokernel OS for embedded systems.
+A multitasking nanokernel OS for embedded or small devices.
