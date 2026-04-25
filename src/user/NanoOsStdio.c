@@ -830,7 +830,7 @@ ConsoleBuffer* nanoOsWaitForInput(void) {
   if (inputChannel->taskId != TASK_ID_NOT_SET) {
     TaskMessage *response
       = taskMessageQueueWaitForType(CONSOLE_RETURNING_INPUT, NULL);
-    nanoOsBuffer = nanoOsMessageDataPointer(response, ConsoleBuffer*);
+    nanoOsBuffer = (ConsoleBuffer*) taskMessageData(response);
 
     if (taskMessageWaiting(response) == false) {
       // The usual case.
