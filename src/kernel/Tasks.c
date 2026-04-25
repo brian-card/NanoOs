@@ -433,11 +433,15 @@ int sendTaskMessageToTask(
 ///
 /// @return Returns taskSuccess on success, taskError on failure.
 int sendTaskMessageToTaskId(unsigned int taskId, TaskMessage *taskMessage) {
-  TaskDescriptor *taskDescriptor = schedulerGetTaskById(taskId);
+  if ((taskId <= 0) || (taskId > NANO_OS_NUM_TASKS)) {
+    // Not a valid PID.  Fail.
+    printString("ERROR: ");
+    printInt(taskId);
+    printString(" is not a valid task ID.\n");
+    return taskError;
+  }
 
-  // If taskDescriptoris NULL, it will be detected as not running by
-  // sendTaskMessageToTask, so there's no real point in checking for NULL
-  // here.
+  TaskDescriptor *taskDescriptor = &SCHEDULER_STATE->allTasks[taskId - 1];
   return sendTaskMessageToTask(taskDescriptor, taskMessage);
 }
 
