@@ -556,7 +556,7 @@ TaskMessage* sendNanoOsMessageToTaskId(int taskId, int type,
   NanoOsMessageData func, NanoOsMessageData data, bool waiting
 ) {
   TaskMessage *taskMessage = NULL;
-  if (taskId >= NANO_OS_NUM_TASKS) {
+  if ((taskId < 0) || (taskId > NANO_OS_NUM_TASKS)) {
     // Not a valid PID.  Fail.
     printString("ERROR: ");
     printInt(taskId);
@@ -564,7 +564,7 @@ TaskMessage* sendNanoOsMessageToTaskId(int taskId, int type,
     return taskMessage; // NULL
   }
 
-  TaskDescriptor *task = schedulerGetTaskById(taskId);
+  TaskDescriptor *task = &SCHEDULER_STATE->allTasks[taskId - 1];
   taskMessage
     = sendNanoOsMessageToTask(task, type, func, data, waiting);
   if (taskMessage == NULL) {
