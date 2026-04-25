@@ -389,7 +389,7 @@ void* execCommand(void *args) {
 
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
-/////////// NOTHING BELOW THIS LINE MAY CALL sendNanoOsMessageTo*: ///////////
+/////////// NOTHING BELOW THIS LINE MAY CALL initSendTaskMessageTo*: ///////////
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -475,26 +475,24 @@ TaskMessage* getAvailableMessage(void) {
   return availableMessage;
 }
 
-/// @fn TaskMessage* sendNanoOsMessageToTask(
+/// @fn TaskMessage* initSendTaskMessageToTask(
 ///   TaskDescriptor *taskDescriptor, int type,
-///   NanoOsMessageData func, NanoOsMessageData data, bool waiting)
+///   void *data, size_t size, bool waiting)
 ///
 /// @brief Send a NanoOsMessage to another task identified by its
 /// TaskDescriptor.
 ///
 /// @param task A pointer to the TaskDescriptor for the task.
 /// @param type The type of the message to send to the destination task.
-/// @param func The function information to send to the destination task,
-///   cast to a NanoOsMessageData.
-/// @param data The data to send to the destination task, cast to a
-///   NanoOsMessageData.
+/// @param data The data to send to the destination task, cast to a void*.
+/// @param size The number of bytes at the data pointer.
 /// @param waiting Whether or not the sender is waiting on a response from the
 ///   destination task.
 ///
 /// @return Returns a pointer to the sent TaskMessage on success, NULL on failure.
-TaskMessage* sendNanoOsMessageToTask(
+TaskMessage* initSendTaskMessageToTask(
   TaskDescriptor *taskDescriptor, int type,
-  NanoOsMessageData func, NanoOsMessageData data, bool waiting
+  void *data, size_t size, bool waiting
 ) {
   TaskMessage *taskMessage = NULL;
   if (taskDescriptor == NULL) {
@@ -532,20 +530,14 @@ TaskMessage* sendNanoOsMessageToTask(
     return taskMessage; // NULL
   }
 
-  NanoOsMessage *nanoOsMessage
-    = (NanoOsMessage*) taskMessageData(taskMessage);
-  nanoOsMessage->func = func;
-  nanoOsMessage->data = data;
-
-  taskMessageInit(taskMessage, type,
-    nanoOsMessage, sizeof(*nanoOsMessage), waiting);
+  taskMessageInit(taskMessage, type, data, size, waiting);
 
   if (sendTaskMessageToTask(taskDescriptor, taskMessage)
     != taskSuccess
   ) {
     if (taskMessageRelease(taskMessage) != taskSuccess) {
       printString("ERROR: "
-        "Could not release message from sendNanoOsMessageToTask.\n");
+        "Could not release message from initSendTaskMessageToTask.\n");
     }
     taskMessage = NULL;
   }
@@ -553,26 +545,24 @@ TaskMessage* sendNanoOsMessageToTask(
   return taskMessage;
 }
 
-/// @fn TaskMessage* sendNanoOsMessageToTaskId(int taskId, int type,
-///   NanoOsMessageData func, NanoOsMessageData data, bool waiting)
+/// @fn TaskMessage* initSendTaskMessageToTaskId(int taskId, int type,
+///   void *data, size_t size, bool waiting)
 ///
 /// @brief Send a NanoOsMessage to another task identified by its task ID. Looks
 /// up the task's Coroutine by its PID and then calls
-/// sendNanoOsMessageToTask.
+/// initSendTaskMessageToTask.
 ///
 /// @param taskId The task ID of the destination task.
 /// @param type The type of the message to send to the destination task.
-/// @param func The function information to send to the destination task,
-///   cast to a NanoOsMessageData.
-/// @param data The data to send to the destination task, cast to a
-///   NanoOsMessageData.
+/// @param data The data to send to the destination task, cast to a void*.
+/// @param size The number of bytes at the data pointer.
 /// @param waiting Whether or not the sender is waiting on a response from the
 ///   destination task.
 ///
 /// @return Returns a pointer to the sent TaskMessage on success, NULL on
 /// failure.
-TaskMessage* sendNanoOsMessageToTaskId(int taskId, int type,
-  NanoOsMessageData func, NanoOsMessageData data, bool waiting
+TaskMessage* initSendTaskMessageToTaskId(int taskId, int type,
+  void *data, size_t size, bool waiting
 ) {
   TaskMessage *taskMessage = NULL;
   if ((taskId < 0) || (taskId > NANO_OS_NUM_TASKS)) {
@@ -584,8 +574,7 @@ TaskMessage* sendNanoOsMessageToTaskId(int taskId, int type,
   }
 
   TaskDescriptor *task = &SCHEDULER_STATE->allTasks[taskId - 1];
-  taskMessage
-    = sendNanoOsMessageToTask(task, type, func, data, waiting);
+  taskMessage = initSendTaskMessageToTask(task, type, data, size, waiting);
   if (taskMessage == NULL) {
     printString("ERROR: Could not send NanoOs message to task ");
     printInt(taskId);

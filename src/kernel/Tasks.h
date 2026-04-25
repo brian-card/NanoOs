@@ -212,46 +212,14 @@ extern "C"
 #define taskMessageConfigured(taskMessagePointer) \
   msg_configured(taskMessagePointer)
 
-/// @def nanoOsMessageFuncValue
-///
-/// @brief Given a pointer to a thrd_msg_t, extract the underlying function
-/// value and cast it to the specified type.
-#define nanoOsMessageFuncValue(msg, type) \
-  (((msg)->data) \
-    ? ((type) ((uintptr_t) ((NanoOsMessage*) (msg)->data)->func)) \
-    : ((type) 0))
-
-/// @def nanoOsMessageFuncPointer
-///
-/// @brief Given a pointer to a thrd_msg_t, extract the underlying function
-/// value and cast it to the provided function pointer.
-#define nanoOsMessageFuncPointer(msg, type) \
-  ((type) nanoOsMessageFuncValue((msg), intptr_t))
-
-/// @def nanoOsMessageDataValue
-///
-/// @brief Given a pointer to a thrd_msg_t, extract the underlying function
-/// value and cast it to the specified type.
-#define nanoOsMessageDataValue(msg, type) \
-  (((msg)->data) \
-    ? ((type) ((uintptr_t) ((NanoOsMessage*) (msg)->data)->data)) \
-    : ((type) 0))
-
-/// @def nanoOsMessageDataPointer
-///
-/// @brief Given a pointer to a thrd_msg_t, extract the underlying function
-/// value and cast it to the provided function pointer.
-#define nanoOsMessageDataPointer(msg, type) \
-  ((type) nanoOsMessageDataValue((msg), intptr_t))
-
 // Exported functionality
 void* execCommand(void *args);
 int sendTaskMessageToTask(
   TaskDescriptor *taskDescriptor, TaskMessage *taskMessage);
 int sendTaskMessageToTaskId(unsigned int taskId, TaskMessage *taskMessage);
 TaskMessage* getAvailableMessage(void);
-TaskMessage* sendNanoOsMessageToTaskId(int taskId, int type,
-  NanoOsMessageData func, NanoOsMessageData data, bool waiting);
+TaskMessage* initSendTaskMessageToTaskId(int taskId, int type,
+  void *data, size_t size, bool waiting);
 void* waitForDataMessage(TaskMessage *sent, int type, const struct timespec *ts);
 ExecArgs* execArgsDestroy(ExecArgs *execArgs);
 SpawnArgs* spawnArgsDestroy(SpawnArgs *spawnArgs);

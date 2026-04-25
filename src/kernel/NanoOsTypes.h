@@ -131,30 +131,12 @@ typedef int (*CommandFunction)(int argc, char **argv);
 /// @brief The type to use to represent a numeric user ID.
 typedef int16_t UserId;
 
-/// @typedef NanoOsMessageData
-///
-/// @brief Data type used in a NanoOsMessage.
-typedef unsigned long long int NanoOsMessageData;
-
 /// @typedef ssize_t
 ///
 /// @brief Signed, register-width integer.
 typedef intptr_t ssize_t;
 
 // Composite types
-
-/// @struct NanoOsMessage
-///
-/// @brief A generic message that can be exchanged between tasks.
-///
-/// @param func Information about the function to run, cast to an unsigned long
-///   long int.
-/// @param data Information about the data to use, cast to an unsigned long
-///   long int.
-typedef struct NanoOsMessage {
-  NanoOsMessageData  func;
-  NanoOsMessageData  data;
-} NanoOsMessage;
 
 /// @struct NanoOsFile
 ///
@@ -234,8 +216,6 @@ typedef struct TaskQueue TaskQueue;
 ///   when the task transitions to ready.
 /// @param message The default, statically-allocated message for the task to use
 ///   to send to other tasks.
-/// @param nanoOsMessage The default, statically-allocated NanoOsMessage for the
-///   task to use to send to other tasks.
 typedef struct TaskDescriptor {
   const char         *name;
   TaskHandle          taskHandle;
@@ -249,7 +229,6 @@ typedef struct TaskDescriptor {
   TaskQueue          *taskQueue;
   TaskQueue          *readyQueue;
   TaskMessage         message;
-  NanoOsMessage       nanoOsMessage;
 } TaskDescriptor;
 
 /// @struct TaskInfoElement

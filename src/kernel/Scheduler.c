@@ -2909,22 +2909,20 @@ int schedulerSpawnCommandHandler(
     return returnValue; // 0
   }
 
-  NanoOsMessage *nanoOsMessage
-    = (NanoOsMessage*) taskMessageData(taskMessage);
-  SpawnArgs *spawnArgs = nanoOsMessageDataValue(taskMessage, SpawnArgs*);
+  SpawnArgs *spawnArgs = (SpawnArgs*) taskMessageData(taskMessage);
+  taskMessageData(taskMessage) = (void*) ((uintptr_t) 0);
   if (spawnArgs == NULL) {
     printString("ERROR! spawnArgs provided was NULL.\n");
-    nanoOsMessage->data = EINVAL;
+    taskMessageData(taskMessage) = (void*) ((uintptr_t) EINVAL);
     taskMessageSetDone(taskMessage);
     return returnValue; // 0; Don't retry this command
   }
-  nanoOsMessage->data = 0; // Until proven otherwise
 
   char *pathname = spawnArgs->path;
   if (pathname == NULL) {
     // Invalid
     printString("ERROR! pathname provided was NULL.\n");
-    nanoOsMessage->data = EINVAL;
+    taskMessageData(taskMessage) = (void*) ((uintptr_t) EINVAL);
     taskMessageSetDone(taskMessage);
     return returnValue; // 0; Don't retry this command
   }
@@ -2932,13 +2930,13 @@ int schedulerSpawnCommandHandler(
   if (argv == NULL) {
     // Invalid
     printString("ERROR! argv provided was NULL.\n");
-    nanoOsMessage->data = EINVAL;
+    taskMessageData(taskMessage) = (void*) ((uintptr_t) EINVAL);
     taskMessageSetDone(taskMessage);
     return returnValue; // 0; Don't retry this command
   } else if (argv[0] == NULL) {
     // Invalid
     printString("ERROR! argv[0] provided was NULL.\n");
-    nanoOsMessage->data = EINVAL;
+    taskMessageData(taskMessage) = (void*) ((uintptr_t) EINVAL);
     taskMessageSetDone(taskMessage);
     return returnValue; // 0; Don't retry this command
   }
@@ -2947,7 +2945,7 @@ int schedulerSpawnCommandHandler(
   TaskDescriptor *taskDescriptor = taskQueuePop(&schedulerState->free);
   if (taskDescriptor == NULL) {
     printString("Out of task slots to launch task.\n");
-    nanoOsMessage->data = EINVAL;
+    taskMessageData(taskMessage) = (void*) ((uintptr_t) EINVAL);
     taskMessageSetDone(taskMessage);
     return returnValue; // 0; Don't retry this command
   }
@@ -2959,7 +2957,7 @@ int schedulerSpawnCommandHandler(
   ExecArgs *execArgs = (ExecArgs*) schedMalloc(sizeof(ExecArgs));
   if (execArgs == NULL) {
     printString("Out of memory for ExecArgs.\n");
-    nanoOsMessage->data = ENOMEM;
+    taskMessageData(taskMessage) = (void*) ((uintptr_t) ENOMEM);
     taskMessageSetDone(taskMessage);
     return returnValue; // 0; Don't retry this command
   }
@@ -2981,7 +2979,7 @@ int schedulerSpawnCommandHandler(
   if (taskDescriptor->fileDescriptors == NULL) {
     printString(
       "ERROR: Could not allocate file descriptor array for new command\n");
-    nanoOsMessage->data = ENOMEM;
+    taskMessageData(taskMessage) = (void*) ((uintptr_t) ENOMEM);
     schedFree(execArgs);
     taskMessageSetDone(taskMessage);
     return returnValue; // 0; Don't retry this command
@@ -2993,7 +2991,7 @@ int schedulerSpawnCommandHandler(
       printString("ERROR: Could not allocate memory for file descriptor ");
       printInt(ii);
       printString(" for new task\n");
-      nanoOsMessage->data = ENOMEM;
+      taskMessageData(taskMessage) = (void*) ((uintptr_t) ENOMEM);
       for (int jj = 0; jj < ii; jj++) {
         schedFree(taskDescriptor->fileDescriptors[jj]);
       }
@@ -3109,7 +3107,7 @@ int schedulerSpawnCommandHandler(
   taskDescriptor->overlayDir = pathname;
   returnValue = loadTaskDescriptorOverlayMetadata(taskDescriptor);
   if (returnValue != 0) {
-    nanoOsMessage->data = returnValue;
+    taskMessageData(taskMessage) = (void*) ((uintptr_t) returnValue);
     returnValue = 0; // Don't retry this command
     taskMessageSetDone(taskMessage);
 

@@ -274,19 +274,15 @@ void consoleGetBufferCommandHandler(
 ) {
   // We're going to reuse the input message as the return message.
   TaskMessage *returnMessage = inputMessage;
-  NanoOsMessage *nanoOsMessage
-    = (NanoOsMessage*) taskMessageData(returnMessage);
-  nanoOsMessage->func = 0;
-  nanoOsMessage->data = (intptr_t) NULL;
+  taskMessageData(returnMessage) = NULL;
   TaskId callingPid = taskId(taskMessageFrom(inputMessage));
 
   ConsoleBuffer *returnValue
     = getAvailableConsoleBuffer(consoleState, callingPid);
   if (returnValue != NULL) {
     // Send the buffer back to the caller via the message we allocated earlier.
-    nanoOsMessage->data = (intptr_t) returnValue;
     taskMessageInit(returnMessage, CONSOLE_RETURNING_BUFFER,
-      nanoOsMessage, sizeof(*nanoOsMessage), true);
+      returnValue, sizeof(*returnValue), true);
   }
 
   // Whether we were able to grab a buffer or not, we're now done with this
@@ -788,14 +784,13 @@ void consoleReleaseBufferCommandHandler(
   (void) consoleState;
 
   ConsoleBuffer *consoleBuffers = consoleState->consoleBuffers;
-  ConsoleBuffer *consoleBuffer
-    = nanoOsMessageDataPointer(inputMessage, ConsoleBuffer*);
+  ConsoleBuffer *consoleBuffer = (ConsoleBuffer*) taskMessageData(inputMessage);
   if (consoleBuffer != NULL) {
     for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
       if (consoleBuffer == &consoleBuffers[ii]) {
         // The buffer being released is one of the buffers dedicated to a port.
-        // *DO NOT* mark it as not being in use because it is always in use.
-        // Just release the message and return.
+        // *DO NOT* free it because it is always in use.  Just release the
+        // message and return.
         taskMessageRelease(inputMessage);
         return;
       }

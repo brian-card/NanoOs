@@ -231,9 +231,9 @@ int nanoOsSpawn(
   }
 
   TaskMessage *taskMessage
-    = sendNanoOsMessageToTaskId(
+    = initSendTaskMessageToTaskId(
     SCHEDULER_STATE->schedulerTaskId, SCHEDULER_SPAWN,
-    /* func= */ 0, /* data= */ (uintptr_t) spawnArgs, true);
+    spawnArgs, sizeof(*spawnArgs), true);
   if (taskMessage == NULL) {
     // The only way this should be possible is if all available messages are
     // in use, so use ENOMEM as the errno.
@@ -242,7 +242,7 @@ int nanoOsSpawn(
   }
 
   taskMessageWaitForDone(taskMessage, NULL);
-  returnValue = nanoOsMessageDataValue(taskMessage, int);
+  returnValue = (int) ((intptr_t) taskMessageData(taskMessage));
   taskMessageRelease(taskMessage);
 
   return returnValue;
