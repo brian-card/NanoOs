@@ -143,6 +143,19 @@ typedef intptr_t ssize_t;
 
 // Composite types
 
+/// @struct NanoOsMessage
+///
+/// @brief A generic message that can be exchanged between tasks.
+///
+/// @param func Information about the function to run, cast to an unsigned long
+///   long int.
+/// @param data Information about the data to use, cast to an unsigned long
+///   long int.
+typedef struct NanoOsMessage {
+  NanoOsMessageData  func;
+  NanoOsMessageData  data;
+} NanoOsMessage;
+
 /// @struct NanoOsFile
 ///
 /// @brief Definition of the FILE structure used internally to NanoOs.
@@ -520,19 +533,6 @@ typedef struct User {
   const char   *username;
   unsigned int  checksum;
 } User;
-
-/// @struct NanoOsMessage
-///
-/// @brief A generic message that can be exchanged between tasks.
-///
-/// @param func Information about the function to run, cast to an unsigned long
-///   long int.
-/// @param data Information about the data to use, cast to an unsigned long
-///   long int.
-typedef struct NanoOsMessage {
-  NanoOsMessageData  func;
-  NanoOsMessageData  data;
-} NanoOsMessage;
 
 // POSIX-mandated objects required for posix_spawn.
 typedef struct posix_spawn_file_actions_t posix_spawn_file_actions_t;
