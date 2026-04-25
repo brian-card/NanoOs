@@ -705,9 +705,15 @@ int memoryManagerReallocCommandHandler(
       }
       taskMessageInit(filesystemCommand,
         FILESYSTEM_DUMP_OPEN_FILES, NULL, 0, true);
-      sendTaskMessageToTask(
+      if (sendTaskMessageToTask(
         &SCHEDULER_STATE->allTasks[SCHEDULER_STATE->rootFsTaskId - 1],
-        filesystemCommand);
+        filesystemCommand) != taskSuccess
+      ) {
+        printString("ERROR: Could not send FILESYSTEM_DUMP_OPEN_FILES ");
+        printString("message to root FS task ");
+        printInt(SCHEDULER_STATE->rootFsTaskId);
+        printString("\n");
+      }
       taskMessageRelease(filesystemCommand);
     } while (0);
     reallocMessage->size = 0;
@@ -1268,9 +1274,14 @@ void* memoryManagerSendReallocMessage(void *ptr, size_t size) {
 /// @return This function always succeeds and returns no value.
 void memoryManagerFree(void *ptr) {
   if (ptr != NULL) {
-    sendNanoOsMessageToTaskId(
+    if (sendNanoOsMessageToTaskId(
       SCHEDULER_STATE->memoryManagerTaskId, MEMORY_MANAGER_FREE,
-      (NanoOsMessageData) 0, (NanoOsMessageData) ((intptr_t) ptr), false);
+      (NanoOsMessageData) 0, (NanoOsMessageData) ((intptr_t) ptr), false)
+      == NULL
+    ) {
+      printString("ERROR: Could not send MEMORY_MANAGER_FREE message to ");
+      printString("memory manager; memory leak\n");
+    }
   }
   return;
 }

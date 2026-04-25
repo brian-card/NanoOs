@@ -62,3 +62,5 @@ This work started out as an experiment to see if I could implement an operating 
 
 [2026-02-16: New Memory Manager](2026-02-16_New-Memory-Manager.md)
 
+[2026-04-27: Overlay Userspace](2026-04-27_Overlay-Userspace.md)
+

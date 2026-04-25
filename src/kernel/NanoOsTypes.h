@@ -55,7 +55,7 @@ extern "C"
 /// @note If this value is increased beyond 15, the number of bits used to store
 /// the owner in a MemNode in MemoryManager.cpp must be extended and the value
 /// of TASK_ID_NOT_SET must be changed in Tasks.h.  If this value is
-/// increased beyond 255, then the type defined by TaskId below m ust also
+/// increased beyond 255, then the type defined by TaskId below must also
 /// be extended.
 #define NANO_OS_NUM_TASKS                             9
 
@@ -115,6 +115,11 @@ typedef uint8_t TaskId;
 /// inter-task communication.
 typedef msg_t TaskMessage;
 
+/// @typedef TaskMessageQueue
+///
+/// @brief Type to use for inter-task message queues.
+typedef msg_q_t TaskMessageQueue;
+
 /// @typedef CommandFunction
 ///
 /// @brief Type definition for the function signature that NanoOs commands must
@@ -137,6 +142,19 @@ typedef unsigned long long int NanoOsMessageData;
 typedef intptr_t ssize_t;
 
 // Composite types
+
+/// @struct NanoOsMessage
+///
+/// @brief A generic message that can be exchanged between tasks.
+///
+/// @param func Information about the function to run, cast to an unsigned long
+///   long int.
+/// @param data Information about the data to use, cast to an unsigned long
+///   long int.
+typedef struct NanoOsMessage {
+  NanoOsMessageData  func;
+  NanoOsMessageData  data;
+} NanoOsMessage;
 
 /// @struct NanoOsFile
 ///
@@ -214,6 +232,10 @@ typedef struct TaskQueue TaskQueue;
 ///   will be NULL if the task is currently running (in no queue).
 /// @param readyQueue The ready queue that the descriptor is to be assigned to
 ///   when the task transitions to ready.
+/// @param message The default, statically-allocated message for the task to use
+///   to send to other tasks.
+/// @param nanoOsMessage The default, statically-allocated NanoOsMessage for the
+///   task to use to send to other tasks.
 typedef struct TaskDescriptor {
   const char         *name;
   TaskHandle          taskHandle;
@@ -226,6 +248,8 @@ typedef struct TaskDescriptor {
   char              **envp;
   TaskQueue          *taskQueue;
   TaskQueue          *readyQueue;
+  TaskMessage         message;
+  NanoOsMessage       nanoOsMessage;
 } TaskDescriptor;
 
 /// @struct TaskInfoElement
@@ -515,19 +539,6 @@ typedef struct User {
   const char   *username;
   unsigned int  checksum;
 } User;
-
-/// @struct NanoOsMessage
-///
-/// @brief A generic message that can be exchanged between tasks.
-///
-/// @param func Information about the function to run, cast to an unsigned long
-///   long int.
-/// @param data Information about the data to use, cast to an unsigned long
-///   long int.
-typedef struct NanoOsMessage {
-  NanoOsMessageData  func;
-  NanoOsMessageData  data;
-} NanoOsMessage;
 
 // POSIX-mandated objects required for posix_spawn.
 typedef struct posix_spawn_file_actions_t posix_spawn_file_actions_t;

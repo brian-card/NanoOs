@@ -175,9 +175,19 @@ int schedSdReadBlocks(void *context, uint32_t startBlock,
     = &SCHEDULER_STATE->ready[SCHEDULER_READY_QUEUE_KERNEL];
 
   TaskMessage *taskMessage = getAvailableMessage();
-  while (taskMessage == NULL) {
+  for (int ii = 0;
+    (ii < MAX_GET_MESSAGE_RETRIES) && (taskMessage == NULL);
+    ii++
+  ) {
     SCHEDULER_STATE->runScheduler();
     taskMessage = getAvailableMessage();
+  }
+  if (taskMessage == NULL) {
+    printInt(getRunningTaskId());
+    printString(": ");
+    printString(__func__);
+    printString(": ERROR: Out of task messages\n");
+    return -ENOMEM;
   }
 
   NanoOsMessage *nanoOsMessage
@@ -231,9 +241,19 @@ int schedSdWriteBlocks(void *context, uint32_t startBlock,
     = &SCHEDULER_STATE->ready[SCHEDULER_READY_QUEUE_KERNEL];
 
   TaskMessage *taskMessage = getAvailableMessage();
-  while (taskMessage == NULL) {
+  for (int ii = 0;
+    (ii < MAX_GET_MESSAGE_RETRIES) && (taskMessage == NULL);
+    ii++
+  ) {
     SCHEDULER_STATE->runScheduler();
     taskMessage = getAvailableMessage();
+  }
+  if (taskMessage == NULL) {
+    printInt(getRunningTaskId());
+    printString(": ");
+    printString(__func__);
+    printString(": ERROR: Out of task messages\n");
+    return -ENOMEM;
   }
 
   NanoOsMessage *nanoOsMessage

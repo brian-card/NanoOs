@@ -2361,7 +2361,9 @@ msg_t* comessageQueueWaitForType(int64_t type, const struct timespec *ts) {
 int comessageQueuePush(Coroutine *coroutine, msg_t *msg) {
   int returnValue = coroutineError;
 
-  if ((coroutine == NULL) || (msg == NULL)) {
+  if ((coroutine == NULL) || (coroutine->state == COROUTINE_STATE_NOT_RUNNING)
+    || (msg == NULL)
+  ) {
     // This is invalid.
     return returnValue; // coroutineError
   }

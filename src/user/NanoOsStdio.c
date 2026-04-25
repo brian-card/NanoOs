@@ -821,7 +821,9 @@ ConsoleBuffer* nanoOsWaitForInput(void) {
   IoChannel *inputChannel = &inputFd->inputChannel;
 
   if (inputChannel->taskId == SCHEDULER_STATE->consoleTaskId) {
-    sendNanoOsMessageToTaskId(inputChannel->taskId, inputChannel->messageType,
+    // Tell the console that we're waiting for input.  Fire and forget.
+    (void) sendNanoOsMessageToTaskId(
+      inputChannel->taskId, inputChannel->messageType,
       /* func= */ 0, /* data= */ 0, false);
   }
 
@@ -888,8 +890,8 @@ int nanoOsVfscanf(FILE *stream, const char *format, va_list args) {
     }
 
     returnValue = vsscanf(nanoOsBuffer->buffer, format, args);
-    // Release the buffer.
-    sendNanoOsMessageToTaskId(
+    // Release the buffer.  Fire and forget.
+    (void) sendNanoOsMessageToTaskId(
       SCHEDULER_STATE->consoleTaskId, CONSOLE_RELEASE_BUFFER,
       /* func= */ 0, /* data= */ (intptr_t) nanoOsBuffer, false);
   }
@@ -1001,8 +1003,8 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *nanoOsBuffer) {
       printInt((intptr_t) stream);
       printString(".\n");
 
-      // Release the buffer to avoid creating a leak.
-      sendNanoOsMessageToTaskId(
+      // Release the buffer to avoid creating a leak.  Fire and forget.
+      (void) sendNanoOsMessageToTaskId(
         SCHEDULER_STATE->consoleTaskId, CONSOLE_RELEASE_BUFFER,
         /* func= */ 0, /* data= */ (intptr_t) nanoOsBuffer, false);
 
@@ -1030,8 +1032,8 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *nanoOsBuffer) {
         printInt(getRunningTaskId());
         printString(".\n");
 
-        // Release the buffer to avoid creating a leak.
-        sendNanoOsMessageToTaskId(
+        // Release the buffer to avoid creating a leak.  Fire and forget.
+        (void) sendNanoOsMessageToTaskId(
           SCHEDULER_STATE->consoleTaskId, CONSOLE_RELEASE_BUFFER,
           /* func= */ 0, /* data= */ (intptr_t) nanoOsBuffer, false);
 
@@ -1043,8 +1045,8 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *nanoOsBuffer) {
       printInt(getRunningTaskId());
       printString(".\n");
 
-      // Release the buffer to avoid creating a leak.
-      sendNanoOsMessageToTaskId(
+      // Release the buffer to avoid creating a leak.  Fire and forget.
+      (void) sendNanoOsMessageToTaskId(
         SCHEDULER_STATE->consoleTaskId, CONSOLE_RELEASE_BUFFER,
         /* func= */ 0, /* data= */ (intptr_t) nanoOsBuffer, false);
 
@@ -1069,8 +1071,8 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *nanoOsBuffer) {
     }
     taskMessageRelease(taskMessage);
 
-    // Release the buffer to avoid creating a leak.
-    sendNanoOsMessageToTaskId(
+    // Release the buffer to avoid creating a leak.  Fire and forget.
+    (void) sendNanoOsMessageToTaskId(
       SCHEDULER_STATE->consoleTaskId, CONSOLE_RELEASE_BUFFER,
       /* func= */ 0, /* data= */ (intptr_t) nanoOsBuffer, false);
   }
@@ -1274,8 +1276,8 @@ size_t nanoOsFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
         numBytesToCopy);
       numBytesReceived += numBytesToCopy;
       charBuffer[numBytesReceived] = '\0';
-      // Release the buffer.
-      sendNanoOsMessageToTaskId(
+      // Release the buffer.  Fire and forget.
+      (void) sendNanoOsMessageToTaskId(
         SCHEDULER_STATE->consoleTaskId, CONSOLE_RELEASE_BUFFER,
         /* func= */ 0, /* data= */ (uintptr_t) nanoOsBuffer, false);
 

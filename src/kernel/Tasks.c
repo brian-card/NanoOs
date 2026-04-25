@@ -433,11 +433,15 @@ int sendTaskMessageToTask(
 ///
 /// @return Returns taskSuccess on success, taskError on failure.
 int sendTaskMessageToTaskId(unsigned int taskId, TaskMessage *taskMessage) {
-  TaskDescriptor *taskDescriptor = schedulerGetTaskById(taskId);
+  if ((taskId <= 0) || (taskId > NANO_OS_NUM_TASKS)) {
+    // Not a valid PID.  Fail.
+    printString("ERROR: ");
+    printInt(taskId);
+    printString(" is not a valid task ID.\n");
+    return taskError;
+  }
 
-  // If taskDescriptoris NULL, it will be detected as not running by
-  // sendTaskMessageToTask, so there's no real point in checking for NULL
-  // here.
+  TaskDescriptor *taskDescriptor = &SCHEDULER_STATE->allTasks[taskId - 1];
   return sendTaskMessageToTask(taskDescriptor, taskMessage);
 }
 
@@ -450,12 +454,21 @@ int sendTaskMessageToTaskId(unsigned int taskId, TaskMessage *taskMessage) {
 TaskMessage* getAvailableMessage(void) {
   TaskMessage *availableMessage = NULL;
 
-  for (int ii = 0; ii < NANO_OS_NUM_MESSAGES; ii++) {
-    if (msg_in_use(&messages[ii]) == false) {
-      availableMessage = &messages[ii];
-      taskMessageInit(availableMessage, 0,
-        &nanoOsMessages[ii], sizeof(nanoOsMessages[ii]), false);
-      break;
+  TaskDescriptor *taskDescriptor = getRunningTask();
+  if (taskMessageInUse(&taskDescriptor->message) == false) {
+    availableMessage = &taskDescriptor->message;
+    taskMessageInit(availableMessage, 0,
+      &taskDescriptor->nanoOsMessage, sizeof(NanoOsMessage), false);
+  }
+
+  if (availableMessage == NULL) {
+    for (int ii = 0; ii < NANO_OS_NUM_MESSAGES; ii++) {
+      if (taskMessageInUse(&messages[ii]) == false) {
+        availableMessage = &messages[ii];
+        taskMessageInit(availableMessage, 0,
+          &nanoOsMessages[ii], sizeof(nanoOsMessages[ii]), false);
+        break;
+      }
     }
   }
 
@@ -504,9 +517,19 @@ TaskMessage* sendNanoOsMessageToTask(
   }
 
   taskMessage = getAvailableMessage();
-  while (taskMessage == NULL) {
+  for (int ii = 0;
+    (ii < MAX_GET_MESSAGE_RETRIES) && (taskMessage == NULL);
+    ii++
+  ) {
     taskYield();
     taskMessage = getAvailableMessage();
+  }
+  if (taskMessage == NULL) {
+    printInt(getRunningTaskId());
+    printString(": ");
+    printString(__func__);
+    printString(": ERROR: Out of task messages\n");
+    return taskMessage; // NULL
   }
 
   NanoOsMessage *nanoOsMessage
@@ -552,7 +575,7 @@ TaskMessage* sendNanoOsMessageToTaskId(int taskId, int type,
   NanoOsMessageData func, NanoOsMessageData data, bool waiting
 ) {
   TaskMessage *taskMessage = NULL;
-  if (taskId >= NANO_OS_NUM_TASKS) {
+  if ((taskId < 0) || (taskId > NANO_OS_NUM_TASKS)) {
     // Not a valid PID.  Fail.
     printString("ERROR: ");
     printInt(taskId);
@@ -560,7 +583,7 @@ TaskMessage* sendNanoOsMessageToTaskId(int taskId, int type,
     return taskMessage; // NULL
   }
 
-  TaskDescriptor *task = schedulerGetTaskById(taskId);
+  TaskDescriptor *task = &SCHEDULER_STATE->allTasks[taskId - 1];
   taskMessage
     = sendNanoOsMessageToTask(task, type, func, data, waiting);
   if (taskMessage == NULL) {

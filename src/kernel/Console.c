@@ -538,9 +538,15 @@ void consoleGetOwnedPortCommandHandler(
   nanoOsMessage->data = (intptr_t) ownedPort;
   taskMessageInit(returnMessage, CONSOLE_RETURNING_PORT,
     nanoOsMessage, sizeof(*nanoOsMessage), true);
-  sendTaskMessageToTaskId(owner, inputMessage);
+  if (sendTaskMessageToTaskId(owner, inputMessage) == taskSuccess) {
+    // This is the usual case.
+    taskMessageSetDone(inputMessage);
+  } else {
+    // There is a problem with the process.  Most likely, it's crashed and is
+    // unable to receive messages.
+    taskMessageRelease(inputMessage);
+  }
 
-  taskMessageSetDone(inputMessage);
   consoleMessageCleanup(inputMessage);
 
   return;
@@ -632,8 +638,14 @@ void consoleSetEchoCommandHandler(
 
   taskMessageInit(returnMessage, CONSOLE_RETURNING_PORT,
     nanoOsMessage, sizeof(*nanoOsMessage), true);
-  sendTaskMessageToTaskId(owner, inputMessage);
-  taskMessageSetDone(inputMessage);
+  if (sendTaskMessageToTaskId(owner, inputMessage) == taskSuccess) {
+    // This is the usual case.
+    taskMessageSetDone(inputMessage);
+  } else {
+    // There is a problem with the process.  Most likely, it's crashed and
+    // unable to receive messages.
+    taskMessageRelease(inputMessage);
+  }
   consoleMessageCleanup(inputMessage);
 
   return;
@@ -715,7 +727,13 @@ void consoleReleasePidPortCommandHandler(
       // all the shells will release the message.  In reality, one task
       // almost never owns multiple ports.  The only exception is during boot.
       if (owner != consolePorts[ii].shell) {
-        sendTaskMessageToTaskId(consolePorts[ii].shell, taskMessage);
+        if (sendTaskMessageToTaskId(consolePorts[ii].shell, taskMessage)
+          != taskSuccess
+        ) {
+          // There's a problem with the process.  Most likely, it's crashed and
+          // unable to receive messages.
+          releaseMessage = true;
+        }
       } else {
         // The shell is being restarted.  It won't be able to receive the
         // message if we send it, so we need to go ahead and release it.
@@ -1055,9 +1073,15 @@ void* runConsole(void *args) {
           consolePort->consoleBuffer->buffer[consolePort->consoleBufferIndex]
             = '\0';
           consolePort->consoleBufferIndex = 0;
-          sendNanoOsMessageToTaskId(
+          if (sendNanoOsMessageToTaskId(
             consolePort->inputOwner, CONSOLE_RETURNING_INPUT,
-            /* func= */ 0, (intptr_t) consolePort->consoleBuffer, false);
+            /* func= */ 0, (intptr_t) consolePort->consoleBuffer, false) == NULL
+          ) {
+            printString(
+              "ERROR: Could not send CONSOLE_RETURNING_INPUT to task ID ");
+            printInt(consolePort->inputOwner);
+            printString("\n");
+          }
           consolePort->waitingForInput = false;
         } else {
           // Console port is either not owned or owning task is not waiting
@@ -1113,8 +1137,12 @@ int printConsoleValue(ConsoleValueType valueType, void *value, size_t length) {
   memcpy(&message, value, length);
 
   printDebugString("Sending message to console task.\n");
-  sendNanoOsMessageToTaskId(SCHEDULER_STATE->consoleTaskId, CONSOLE_WRITE_VALUE,
-    valueType, message, false);
+  if (sendNanoOsMessageToTaskId(SCHEDULER_STATE->consoleTaskId,
+    CONSOLE_WRITE_VALUE, valueType, message, false) == NULL
+  ) {
+    printString(
+      "ERROR: Could not send CONSOLE_WRITE_VALUE message to console task\n");
+  }
 
   printDebugString("Leaving printConsoleValue.\n");
   return 0;
@@ -1172,8 +1200,12 @@ void releaseConsole(void) {
   // from within the console task.  That means we can't do blocking prints
   // from this function.  i.e. We can't use printf here.  Use printConsole
   // instead.
-  sendNanoOsMessageToTaskId(SCHEDULER_STATE->consoleTaskId,
-    CONSOLE_RELEASE_PORT, /* func= */ 0, /* data= */ 0, false);
+  if (sendNanoOsMessageToTaskId(SCHEDULER_STATE->consoleTaskId,
+    CONSOLE_RELEASE_PORT, /* func= */ 0, /* data= */ 0, false) == NULL
+  ) {
+    printString(
+      "ERROR: Could not send CONSOLE_RELEASE_PORT message to console task\n");
+  }
   taskYield();
 }
 

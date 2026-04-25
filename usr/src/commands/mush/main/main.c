@@ -51,6 +51,10 @@ int main(int argc, char **argv) {
   do {
     fputs("$ ", stdout);
     char *input = fgets(buffer, 96, stdin);
+    if (input == NULL) {
+      // Our stdin file descriptor has been closed.  Bail.
+      break;
+    }
     printDebugString("Read \"");
     printDebugString(input);
     printDebugString("\" from command line\n");
