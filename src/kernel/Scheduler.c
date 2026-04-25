@@ -1234,6 +1234,12 @@ int schedulerCloseAllFileDescriptors(void) {
   TaskMessage *taskMessage = sendNanoOsMessageToTaskId(
     SCHEDULER_STATE->schedulerTaskId, SCHEDULER_CLOSE_ALL_FILE_DESCRIPTORS,
     /* func= */ 0, /* data= */ 0, true);
+  if (taskMessage == NULL) {
+    printString("ERROR: Could not send SCHEDULER_CLOSE_ALL_FILE_DESCRIPTORS ");
+    printString("message to scheduler task\n");
+    return -1;
+  }
+
   taskMessageWaitForDone(taskMessage, NULL);
   taskMessageRelease(taskMessage);
 
@@ -2183,21 +2189,34 @@ int schedulerKillTaskCommandHandler(
       // the task because, in the event the task we're terminating is one
       // of the shell task slots, the message won't get released because
       // there's no shell blocking waiting for the message.
-      schedulerSendNanoOsMessageToTaskId(
+      if (schedulerSendNanoOsMessageToTaskId(
         schedulerState,
         SCHEDULER_STATE->consoleTaskId,
         CONSOLE_RELEASE_PID_PORT,
         (intptr_t) schedulerTaskCompleteMessage,
-        taskId);
+        taskId) != taskSuccess
+      ) {
+        printString("ERROR: Could not send CONSOLE_RELEASE_PID_PORT message ");
+        printString("to console process\n");
+      }
 
       // Forward the message on to the memory manager to have it clean up the
       // task's memory.  *DO NOT* mark the message as done.  The memory
       // manager will do that.
       taskMessageInit(taskMessage, MEMORY_MANAGER_FREE_TASK_MEMORY,
         nanoOsMessage, sizeof(*nanoOsMessage), /* waiting= */ true);
-      sendTaskMessageToTask(
+      if (sendTaskMessageToTask(
         &schedulerState->allTasks[SCHEDULER_STATE->memoryManagerTaskId - 1],
-        taskMessage);
+        taskMessage) != taskSuccess
+      ) {
+        printString("ERROR: Could not send MEMORY_MANAGER_FREE_TASK_MEMORY ");
+        printString("message to memory manager\n");
+        nanoOsMessage->data = 1;
+        if (taskMessageSetDone(taskMessage) != taskSuccess) {
+          printString("ERROR: Could not mark message done in "
+            "schedulerKillTaskCommandHandler.\n");
+        }
+      }
 
       // Close the file descriptors before we terminate the task so that
       // anything that gets sent to the task's queue gets cleaned up when
@@ -3125,9 +3144,14 @@ int schedulerDumpMemoryAllocations(SchedulerState *schedulerState) {
   if (dumpMemoryAllocationsMessage != NULL) {
     taskMessageInit(dumpMemoryAllocationsMessage,
       MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS, NULL, 0, true);
-    schedulerSendTaskMessageToTask(
+    if (schedulerSendTaskMessageToTask(
       &schedulerState->allTasks[SCHEDULER_STATE->memoryManagerTaskId - 1],
-      dumpMemoryAllocationsMessage);
+      dumpMemoryAllocationsMessage) != taskSuccess
+    ) {
+      printString("ERROR: Could not send message ");
+      printString("MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS to memory manager\n");
+      taskMessageRelease(dumpMemoryAllocationsMessage);
+    }
     if (taskMessageDone(dumpMemoryAllocationsMessage) == false) {
       printString("ERROR: dumpMemoryAllocationsMessage is not done!\n");
     }
@@ -3156,9 +3180,15 @@ int schedulerDumpOpenFiles(SchedulerState *schedulerState) {
   if (dumpOpenFilesMessage != NULL) {
     taskMessageInit(dumpOpenFilesMessage,
       FILESYSTEM_DUMP_OPEN_FILES, NULL, 0, true);
-    schedulerSendTaskMessageToTask(
+    if (schedulerSendTaskMessageToTask(
       &schedulerState->allTasks[schedulerState->rootFsTaskId - 1],
-      dumpOpenFilesMessage);
+      dumpOpenFilesMessage) != taskSuccess
+    ) {
+      printString("ERROR: Could not send FILESYSTEM_DUMP_OPEN_FILES message ");
+      printString("to root FS task ID ");
+      printInt(schedulerState->rootFsTaskId);
+      printString("\n");
+    }
     if (taskMessageDone(dumpOpenFilesMessage) == false) {
       printString("ERROR: dumpOpenFilesMessage is not done!\n");
     }
@@ -3200,12 +3230,16 @@ void removeTask(SchedulerState *schedulerState, TaskDescriptor *taskDescriptor,
 
   TaskMessage *consoleReleasePidPortMessage = getAvailableMessage();
   if (consoleReleasePidPortMessage != NULL) {
-    schedulerSendNanoOsMessageToTaskId(
+    if (schedulerSendNanoOsMessageToTaskId(
       schedulerState,
       SCHEDULER_STATE->consoleTaskId,
       CONSOLE_RELEASE_PID_PORT,
       (intptr_t) consoleReleasePidPortMessage,
-      taskDescriptor->taskId);
+      taskDescriptor->taskId) != taskSuccess
+    ) {
+      printString("ERROR: Could not send CONSOLE_RELEASE_PID_PORT message ");
+      printString("to console task\n");
+    }
     taskMessageRelease(consoleReleasePidPortMessage);
   } else {
     printString("WARNING: Could not allocate "
@@ -3218,7 +3252,7 @@ void removeTask(SchedulerState *schedulerState, TaskDescriptor *taskDescriptor,
   if (schedulerSendNanoOsMessageToTaskId(
     schedulerState, SCHEDULER_STATE->memoryManagerTaskId,
     MEMORY_MANAGER_FREE_TASK_MEMORY,
-    /* func= */ 0, taskDescriptor->taskId)
+    /* func= */ 0, taskDescriptor->taskId) != taskSuccess
   ) {
     printString("ERROR: Could not free task memory. Memory leak.\n");
   }
@@ -3575,9 +3609,13 @@ void runScheduler(void) {
   // coroutineYieldCallback if we're running preemptive multitasking.
 
   if (taskRunning(taskDescriptor) == false) {
-    schedulerSendNanoOsMessageToTaskId(SCHEDULER_STATE,
+    if (schedulerSendNanoOsMessageToTaskId(SCHEDULER_STATE,
       SCHEDULER_STATE->memoryManagerTaskId, MEMORY_MANAGER_FREE_TASK_MEMORY,
-      /* func= */ 0, /* data= */ taskDescriptor->taskId);
+      /* func= */ 0, /* data= */ taskDescriptor->taskId) != taskSuccess
+    ) {
+      printString("ERROR: Could not send MEMORY_MANAGER_FREE_TASK_MEMORY ");
+      printString("message to memory manager\n");
+    }
 
     // Terminate the task so that any lingering messages in its message queue
     // get released.
