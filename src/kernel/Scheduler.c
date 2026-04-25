@@ -3578,6 +3578,11 @@ void runScheduler(void) {
     schedulerSendNanoOsMessageToTaskId(SCHEDULER_STATE,
       SCHEDULER_STATE->memoryManagerTaskId, MEMORY_MANAGER_FREE_TASK_MEMORY,
       /* func= */ 0, /* data= */ taskDescriptor->taskId);
+
+    // Terminate the task so that any lingering messages in its message queue
+    // get released.
+    taskTerminate(taskDescriptor);
+    taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
   }
 
   // Check the shells and restart them if needed.
