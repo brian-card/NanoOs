@@ -49,6 +49,9 @@ OverlayFunction findOverlayFunction(const char *overlayFunctionName) {
   uint16_t cur = 0;
   int comp = 0;
   OverlayFunction overlayFunction = NULL;
+  if (overlayFunctionName == NULL) {
+    return overlayFunction; // NULL
+  }
   
   NanoOsOverlayMap *overlayMap = HAL->overlayMap;
   for (uint16_t ii = 0, jj = overlayMap->numExports - 1; ii <= jj;) {
