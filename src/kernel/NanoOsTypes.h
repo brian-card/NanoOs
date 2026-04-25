@@ -55,7 +55,7 @@ extern "C"
 /// @note If this value is increased beyond 15, the number of bits used to store
 /// the owner in a MemNode in MemoryManager.cpp must be extended and the value
 /// of TASK_ID_NOT_SET must be changed in Tasks.h.  If this value is
-/// increased beyond 255, then the type defined by TaskId below m ust also
+/// increased beyond 255, then the type defined by TaskId below must also
 /// be extended.
 #define NANO_OS_NUM_TASKS                             9
 
@@ -114,6 +114,11 @@ typedef uint8_t TaskId;
 /// @brief Definition of the TaskMessage object that tasks will use for
 /// inter-task communication.
 typedef msg_t TaskMessage;
+
+/// @typedef TaskMessageQueue
+///
+/// @brief Type to use for inter-task message queues.
+typedef msg_q_t TaskMessageQueue;
 
 /// @typedef CommandFunction
 ///

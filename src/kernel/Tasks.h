@@ -121,11 +121,6 @@ extern "C"
 #define taskTerminate(taskDescriptor) \
   coroutineTerminate((taskDescriptor)->taskHandle, NULL)
 
-/// @typedef TaskMessage
-///
-/// @brief Type to use for inter-task messages.
-typedef msg_t TaskMessage;
-
 /// @def taskMessageInit
 ///
 /// @brief Function macro to initialize a task message.
@@ -156,11 +151,6 @@ typedef msg_t TaskMessage;
 /// @brief Function macro to wait on a reply to a message with a specified type.
 #define taskMessageWaitForReplyWithType(sent, releaseAfterDone, type, ts) \
   msg_wait_for_reply_with_type(sent, releaseAfterDone, type, ts)
-
-/// @typedef TaskMessageQueue
-///
-/// @brief Type to use for inter-task message queues.
-typedef msg_q_t TaskMessageQueue;
 
 /// @def taskMessageQueueWaitForType
 ///
