@@ -454,12 +454,21 @@ int sendTaskMessageToTaskId(unsigned int taskId, TaskMessage *taskMessage) {
 TaskMessage* getAvailableMessage(void) {
   TaskMessage *availableMessage = NULL;
 
-  for (int ii = 0; ii < NANO_OS_NUM_MESSAGES; ii++) {
-    if (msg_in_use(&messages[ii]) == false) {
-      availableMessage = &messages[ii];
-      taskMessageInit(availableMessage, 0,
-        &nanoOsMessages[ii], sizeof(nanoOsMessages[ii]), false);
-      break;
+  TaskDescriptor *taskDescriptor = getRunningTask();
+  if (taskMessageInUse(&taskDescriptor->message) == false) {
+    availableMessage = &taskDescriptor->message;
+    taskMessageInit(availableMessage, 0,
+      &taskDescriptor->nanoOsMessage, sizeof(NanoOsMessage), false);
+  }
+
+  if (availableMessage == NULL) {
+    for (int ii = 0; ii < NANO_OS_NUM_MESSAGES; ii++) {
+      if (taskMessageInUse(&messages[ii]) == false) {
+        availableMessage = &messages[ii];
+        taskMessageInit(availableMessage, 0,
+          &nanoOsMessages[ii], sizeof(nanoOsMessages[ii]), false);
+        break;
+      }
     }
   }
 
