@@ -3788,7 +3788,7 @@ void runScheduler(void) {
     // get released.
     taskTerminate(taskDescriptor);
     taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
-    memset(&taskDescriptor->message, 0 sizeof(TaskMessage));
+    memset(&taskDescriptor->message, 0, sizeof(TaskMessage));
   }
 
   // Check the shells and restart them if needed.
