@@ -892,12 +892,22 @@ int schedulerGetNumConsolePorts(SchedulerState *schedulerState) {
   schedulerState->currentReady
     = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
 
+  int returnValue = -1;
   TaskMessage *messageToSend = getAvailableMessage();
-  while (messageToSend == NULL) {
+  for (int ii = 0;
+    (ii < MAX_GET_MESSAGE_RETRIES) && (messageToSend == NULL);
+    ii++
+  ) {
     runScheduler();
     messageToSend = getAvailableMessage();
   }
-  int returnValue = -1;
+  if (messageToSend == NULL) {
+    printInt(getRunningTaskId());
+    printString(": ");
+    printString(__func__);
+    printString(": ERROR: Out of messages\n");
+    return returnValue; // -1
+  }
   schedulerState->currentReady = currentReady;
 
   NanoOsMessage *nanoOsMessage
@@ -1392,9 +1402,19 @@ freeExecArgs:
 /// @return Returns 0 on success, -errno on failure.
 int schedulerAssignMemory(void *ptr) {
   TaskMessage *taskMessage = getAvailableMessage();
-  while (taskMessage == NULL) {
+  for (int ii = 0;
+    (ii < MAX_GET_MESSAGE_RETRIES) && (taskMessage == NULL);
+    ii++
+  ) {
     taskYield();
     taskMessage = getAvailableMessage();
+  }
+  if (taskMessage == NULL) {
+    printInt(getRunningTaskId());
+    printString(": ");
+    printString(__func__);
+    printString(": ERROR: Out of task messages\n");
+    return -ENOMEM;
   }
 
   taskMessageInit(taskMessage, SCHEDULER_ASSIGN_MEMORY, ptr, 0, true);
@@ -1448,9 +1468,21 @@ int closeTaskFileDescriptors(
       return 0;
     }
     TaskMessage *messageToSend = getAvailableMessage();
-    while (messageToSend == NULL) {
+    for (int ii = 0;
+      (ii < MAX_GET_MESSAGE_RETRIES) && (messageToSend == NULL);
+      ii++
+    ) {
       runScheduler();
       messageToSend = getAvailableMessage();
+    }
+    if (messageToSend == NULL) {
+      printInt(getRunningTaskId());
+      printString(": ");
+      printString(__func__);
+      printString(": ");
+      printInt(__LINE__);
+      printString(": ERROR: Out of task messages\n");
+      return -1;
     }
     uint8_t numFileDescriptors = taskDescriptor->numFileDescriptors;
     for (uint8_t ii = 0; ii < numFileDescriptors; ii++) {
@@ -1481,19 +1513,33 @@ int closeTaskFileDescriptors(
           waitingTaskDescriptor->fileDescriptors[
             STDIN_FILE_DESCRIPTOR_INDEX]->inputChannel.taskId = TASK_ID_NOT_SET;
 
-          // Send an empty message to the waiting task so that it will become
-          // unblocked.
-          taskMessageInit(messageToSend,
-            fileDescriptor->outputChannel.messageType,
-            /*data= */ NULL, /* size= */ 0, /* waiting= */ false);
-          taskMessageQueuePush(waitingTaskDescriptor, messageToSend);
+          if (taskRunning(waitingTaskDescriptor)) {
+            // Send an empty message to the waiting task so that it will become
+            // unblocked.
+            taskMessageInit(messageToSend,
+              fileDescriptor->outputChannel.messageType,
+              /*data= */ NULL, /* size= */ 0, /* waiting= */ false);
+            taskMessageQueuePush(waitingTaskDescriptor, messageToSend);
 
-          // The function that was waiting should have released the message we
-          // sent it.  Get another one.
-          messageToSend = getAvailableMessage();
-          while (messageToSend == NULL) {
-            runScheduler();
+            // The function that was waiting should have released the message we
+            // sent it.  Get another one.
             messageToSend = getAvailableMessage();
+            for (int jj = 0;
+              (jj < MAX_GET_MESSAGE_RETRIES) && (messageToSend == NULL);
+              jj++
+            ) {
+              runScheduler();
+              messageToSend = getAvailableMessage();
+            }
+            if (messageToSend == NULL) {
+              printInt(getRunningTaskId());
+              printString(": ");
+              printString(__func__);
+              printString(": ");
+              printInt(__LINE__);
+              printString(": ERROR: Out of task messages\n");
+              return -1;
+            }
           }
         }
       }
@@ -1518,19 +1564,33 @@ int closeTaskFileDescriptors(
             STDOUT_FILE_DESCRIPTOR_INDEX]->outputChannel.taskId
             = TASK_ID_NOT_SET;
 
-          // Send an empty message to the waiting task so that it will become
-          // unblocked.
-          taskMessageInit(messageToSend,
-            fileDescriptor->outputChannel.messageType,
-            /*data= */ NULL, /* size= */ 0, /* waiting= */ false);
-          taskMessageQueuePush(waitingTaskDescriptor, messageToSend);
+          if (taskRunning(waitingTaskDescriptor)) {
+            // Send an empty message to the waiting task so that it will become
+            // unblocked.
+            taskMessageInit(messageToSend,
+              fileDescriptor->outputChannel.messageType,
+              /*data= */ NULL, /* size= */ 0, /* waiting= */ false);
+            taskMessageQueuePush(waitingTaskDescriptor, messageToSend);
 
-          // The function that was waiting should have released the message we
-          // sent it.  Get another one.
-          messageToSend = getAvailableMessage();
-          while (messageToSend == NULL) {
-            runScheduler();
+            // The function that was waiting should have released the message we
+            // sent it.  Get another one.
             messageToSend = getAvailableMessage();
+            for (int jj = 0;
+              (jj < MAX_GET_MESSAGE_RETRIES) && (messageToSend == NULL);
+              jj++
+            ) {
+              runScheduler();
+              messageToSend = getAvailableMessage();
+            }
+            if (messageToSend == NULL) {
+              printInt(getRunningTaskId());
+              printString(": ");
+              printString(__func__);
+              printString(": ");
+              printInt(__LINE__);
+              printString(": ERROR: Out of task messages\n");
+              return -1;
+            }
           }
         }
       }
@@ -1589,9 +1649,21 @@ FILE* schedFopen(const char *pathname, const char *mode) {
 
     printDebugString("schedFopen: Getting message\n");
     TaskMessage *taskMessage = getAvailableMessage();
-    while (taskMessage == NULL) {
+    for (int ii = 0;
+      (ii < MAX_GET_MESSAGE_RETRIES) && (taskMessage == NULL);
+      ii++
+    ) {
       runScheduler();
       taskMessage = getAvailableMessage();
+    }
+    if (taskMessage == NULL) {
+      printInt(getRunningTaskId());
+      printString(": ");
+      printString(__func__);
+      printString(": ");
+      printInt(__LINE__);
+      printString(": ERROR: Out of task messages\n");
+      return NULL;
     }
     printDebugString("schedFopen: Message retrieved\n");
     NanoOsMessage *nanoOsMessage
@@ -1652,9 +1724,22 @@ int schedFclose(FILE *stream) {
       = &SCHEDULER_STATE->ready[SCHEDULER_READY_QUEUE_KERNEL];
 
     TaskMessage *taskMessage = getAvailableMessage();
-    while (taskMessage == NULL) {
+    for (int ii = 0;
+      (ii < MAX_GET_MESSAGE_RETRIES) && (taskMessage == NULL);
+      ii++
+    ) {
       runScheduler();
       taskMessage = getAvailableMessage();
+    }
+    if (taskMessage == NULL) {
+      printInt(getRunningTaskId());
+      printString(": ");
+      printString(__func__);
+      printString(": ");
+      printInt(__LINE__);
+      printString(": ERROR: Out of task messages\n");
+      errno = ENOMEM;
+      return EOF;
     }
     NanoOsMessage *nanoOsMessage
       = (NanoOsMessage*) taskMessageData(taskMessage);
@@ -1715,9 +1800,22 @@ int schedRemove(const char *pathname) {
       = &SCHEDULER_STATE->ready[SCHEDULER_READY_QUEUE_KERNEL];
 
     TaskMessage *taskMessage = getAvailableMessage();
-    while (taskMessage == NULL) {
+    for (int ii = 0;
+      (ii < MAX_GET_MESSAGE_RETRIES) && (taskMessage == NULL);
+      ii++
+    ) {
       runScheduler();
       taskMessage = getAvailableMessage();
+    }
+    if (taskMessage == NULL) {
+      printInt(getRunningTaskId());
+      printString(": ");
+      printString(__func__);
+      printString(": ");
+      printInt(__LINE__);
+      printString(": ERROR: Out of task messages\n");
+      errno = ENOMEM;
+      return -1;
     }
     NanoOsMessage *nanoOsMessage
       = (NanoOsMessage*) taskMessageData(taskMessage);
@@ -1784,9 +1882,22 @@ size_t schedFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
       = &SCHEDULER_STATE->ready[SCHEDULER_READY_QUEUE_KERNEL];
 
     TaskMessage *taskMessage = getAvailableMessage();
-    while (taskMessage == NULL) {
+    for (int ii = 0;
+      (ii < MAX_GET_MESSAGE_RETRIES) && (taskMessage == NULL);
+      ii++
+    ) {
       runScheduler();
       taskMessage = getAvailableMessage();
+    }
+    if (taskMessage == NULL) {
+      printInt(getRunningTaskId());
+      printString(": ");
+      printString(__func__);
+      printString(": ");
+      printInt(__LINE__);
+      printString(": ERROR: Out of task messages\n");
+      errno = ENOMEM;
+      return 0;
     }
     NanoOsMessage *nanoOsMessage
       = (NanoOsMessage*) taskMessageData(taskMessage);
@@ -1845,9 +1956,22 @@ size_t schedFwrite(void *ptr, size_t size, size_t nmemb, FILE *stream) {
       = &SCHEDULER_STATE->ready[SCHEDULER_READY_QUEUE_KERNEL];
 
     TaskMessage *taskMessage = getAvailableMessage();
-    while (taskMessage == NULL) {
+    for (int ii = 0;
+      (ii < MAX_GET_MESSAGE_RETRIES) && (taskMessage == NULL);
+      ii++
+    ) {
       runScheduler();
       taskMessage = getAvailableMessage();
+    }
+    if (taskMessage == NULL) {
+      printInt(getRunningTaskId());
+      printString(": ");
+      printString(__func__);
+      printString(": ");
+      printInt(__LINE__);
+      printString(": ERROR: Out of task messages\n");
+      errno = ENOMEM;
+      return 0;
     }
     NanoOsMessage *nanoOsMessage
       = (NanoOsMessage*) taskMessageData(taskMessage);
@@ -1908,9 +2032,22 @@ char* schedFgets(char *buffer, int size, FILE *stream) {
     };
 
     TaskMessage *taskMessage = getAvailableMessage();
-    while (taskMessage == NULL) {
+    for (int ii = 0;
+      (ii < MAX_GET_MESSAGE_RETRIES) && (taskMessage == NULL);
+      ii++
+    ) {
       runScheduler();
       taskMessage = getAvailableMessage();
+    }
+    if (taskMessage == NULL) {
+      printInt(getRunningTaskId());
+      printString(": ");
+      printString(__func__);
+      printString(": ");
+      printInt(__LINE__);
+      printString(": ERROR: Out of task messages\n");
+      errno = ENOMEM;
+      return NULL;
     }
     NanoOsMessage *nanoOsMessage
       = (NanoOsMessage*) taskMessageData(taskMessage);
@@ -1974,9 +2111,22 @@ int schedFputs(const char *s, FILE *stream) {
     };
 
     TaskMessage *taskMessage = getAvailableMessage();
-    while (taskMessage == NULL) {
+    for (int ii = 0;
+      (ii < MAX_GET_MESSAGE_RETRIES) && (taskMessage == NULL);
+      ii++
+    ) {
       runScheduler();
       taskMessage = getAvailableMessage();
+    }
+    if (taskMessage == NULL) {
+      printInt(getRunningTaskId());
+      printString(": ");
+      printString(__func__);
+      printString(": ");
+      printInt(__LINE__);
+      printString(": ERROR: Out of task messages\n");
+      errno = ENOMEM;
+      return EOF;
     }
     NanoOsMessage *nanoOsMessage
       = (NanoOsMessage*) taskMessageData(taskMessage);
@@ -2040,9 +2190,21 @@ int schedGetFileBlockMetadataFromFile(
   };
 
   TaskMessage *taskMessage = getAvailableMessage();
-  while (taskMessage == NULL) {
+  for (int ii = 0;
+    (ii < MAX_GET_MESSAGE_RETRIES) && (taskMessage == NULL);
+    ii++
+  ) {
     SCHEDULER_STATE->runScheduler();
     taskMessage = getAvailableMessage();
+  }
+  if (taskMessage == NULL) {
+    printInt(getRunningTaskId());
+    printString(": ");
+    printString(__func__);
+    printString(": ");
+    printInt(__LINE__);
+    printString(": ERROR: Out of task messages\n");
+    return -ENOMEM;
   }
 
   taskMessageInit(taskMessage, FILESYSTEM_GET_FILE_BLOCK_METADATA,
@@ -2950,6 +3112,11 @@ int schedulerSpawnCommandHandler(
     nanoOsMessage->data = returnValue;
     returnValue = 0; // Don't retry this command
     taskMessageSetDone(taskMessage);
+
+    // We have to terminate the task because something may have pushed a message
+    // onto its message queue.
+    taskTerminate(taskDescriptor);
+    taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
     return returnValue; // 0
   }
   taskDescriptor->envp = envp;

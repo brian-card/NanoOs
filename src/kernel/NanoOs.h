@@ -84,6 +84,13 @@ extern "C"
 /// @brief Per-task storage key for the consoleBufer pointer in consoleFGets.
 #define FGETS_CONSOLE_BUFFER_KEY                          0
 
+/// @def MAX_GET_MESSAGE_RETRIES
+///
+/// @brief The maximum number of times we should attempt calling
+/// getAvailableMessage before concluding that there are no more messages and
+/// giving up.
+#define MAX_GET_MESSAGE_RETRIES                           3
+
 /// @def floatToInts
 ///
 /// @brief Break a floating-point number into two integer values that represent

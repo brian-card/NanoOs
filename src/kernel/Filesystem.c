@@ -316,9 +316,19 @@ int getFileBlockMetadataFromFile(FILE *stream, FileBlockMetadata *metadata) {
   };
 
   TaskMessage *taskMessage = getAvailableMessage();
-  while (taskMessage == NULL) {
+  for (int ii = 0;
+    (ii < MAX_GET_MESSAGE_RETRIES) && (taskMessage == NULL);
+    ii++
+  ) {
     taskYield();
     taskMessage = getAvailableMessage();
+  }
+  if (taskMessage == NULL) {
+    printInt(getRunningTaskId());
+    printString(": ");
+    printString(__func__);
+    printString(": ERROR: Out of task messages\n");
+    return -ENOMEM;
   }
 
   taskMessageInit(taskMessage, FILESYSTEM_GET_FILE_BLOCK_METADATA,
