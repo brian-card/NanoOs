@@ -35,8 +35,8 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef NANO_OS_UNIX_API_H
-#define NANO_OS_UNIX_API_H
+#ifndef NANO_OS_USER_API_H
+#define NANO_OS_USER_API_H
 
 #undef FILE
 
@@ -50,15 +50,28 @@
 #undef stdout
 #undef stderr
 
-typedef struct NanoOsFile NanoOsFile;
-#define FILE NanoOsFile
-
-#include "NanoOsSys.h"
+#include "NanoOsHardware.h"
+#include "NanoOsPwd.h"
+#include "NanoOsSpawn.h"
+#include "NanoOsSysUtsname.h"
+#include "NanoOsSysTypes.h"
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif
+
+typedef struct NanoOsFile NanoOsFile;
+#define FILE NanoOsFile
+
+typedef struct TaskInfo TaskInfo;
+
+// POSIX-mandated objects require for posix_spawn
+typedef struct posix_spawn_file_actions_t posix_spawn_file_actions_t;
+typedef struct posix_spawnattr_t posix_spawnattr_t;
+
+// Forward declarations from other headers.
+struct termios;
 
 typedef struct NanoOsApi {
   // Standard streams:
@@ -75,22 +88,9 @@ typedef struct NanoOsApi {
   
   // Formatted I/O:
   int (*vsscanf)(const char *buffer, const char *format, va_list args);
-  int (*sscanf)(const char *buffer, const char *format, ...);
   int (*vfscanf)(FILE *stream, const char *format, va_list ap);
-  int (*fscanf)(FILE *stream, const char *format, ...);
-  int (*scanf)(const char *format, ...);
   int (*vfprintf)(FILE *stream, const char *format, va_list args);
-  int (*fprintf)(FILE *stream, const char *format, ...);
-  int (*printf)(const char *format, ...);
-  int (*vsprintf)(char *str, const char *format, va_list ap);
   int (*vsnprintf)(char *str, size_t size, const char *format, va_list ap);
-  int (*sprintf)(char *str, const char *format, ...);
-  int (*snprintf)(char *str, size_t size, const char *format, ...);
-  
-  // Character I/O:
-  int (*fputs)(const char *s, FILE *stream);
-  int (*puts)(const char *s);
-  char* (*fgets)(char *buffer, int size, FILE *stream);
   
   // Direct I/O:
   size_t (*fread)(void *ptr, size_t size, size_t nmemb, FILE *stream);
@@ -126,15 +126,22 @@ typedef struct NanoOsApi {
   size_t (*strlen)(const char *s);
   
   // Other stdlib functions:
-  char* (*getenv)(const char *name);
-  int (*rand)(void);
-  void (*srand)(unsigned int seed);
+  long long (*strtoll)(const char *nptr, char **endptr, int base);
   
   // unistd functions:
+  int (*close)(int fd);
+  int (*dup2)(int oldfd, int newfd);
   int (*gethostname)(char *name, size_t len);
   int (*sethostname)(const char *name, size_t len);
   int (*ttyname_r)(int fd, char *buf, size_t buflen);
   int (*execve)(const char *pathname, char *const argv[], char *const envp[]);
+  int (*setuid)(uid_t uid);
+  int (*pipe)(int pipefd[2]);
+  
+  // termios functions:
+  int (*tcgetattr)(int fd, struct termios *termios_p);
+  int (*tcsetattr)(int fd, int optional_actions,
+    const struct termios *termios_p);
   
   // errno functions:
   int* (*errno_)(void);
@@ -145,8 +152,64 @@ typedef struct NanoOsApi {
   // time.h functions:
   time_t (*time)(time_t *tloc);
   
+  // pwd.h functions:
+  int (*getpwnam_r)(
+    const char *name,
+    struct passwd *pwd,
+    char *buf,
+    size_t buflen,
+    struct passwd **result);
+  int (*getpwuid_r)(
+    uid_t uid,
+    struct passwd *pwd,
+    char *buf,
+    size_t buflen,
+    struct passwd **result);
+  
+  // sched.h functions:
+  int (*sched_yield)(void);
+  
+  // signal.h functions:
+  int (*kill)(pid_t pid, int sig);
+  
+  // spawn.h functions:
+  int (*posix_spawn_file_actions_init)(
+    posix_spawn_file_actions_t *file_actions);
+  int (*posix_spawn_file_actions_adddup2)(
+    posix_spawn_file_actions_t *file_actions,
+    int fildes,
+    int newfildes);
+  int (*posix_spawn_file_actions_destroy)(
+    posix_spawn_file_actions_t *file_actions);
+  int (*posix_spawn)(pid_t *pid, const char *path,
+    const posix_spawn_file_actions_t *file_actions,
+    const posix_spawnattr_t *attrp,
+    char *const argv[], char *const envp[]);
+  
+  // fcntl.h functions:
+  int (*fcntl)(int fd, int op, va_list arg);
+  
   // NanoOs-specific functionality
-  void* (*callOverlayFunction)(void*);
+  
+  // NanoOsUser.h functions:
+  void* (*callOverlayFunction)(const char *overlayPath, const char *overlay,
+    const char *function, void *args);
+  
+  // NanoOsUtils.h functions:
+  char** (*parseArgs)(char *command, int *argc);
+  size_t (*getFreeMemory)(void);
+  
+  // NanoOsTasks.h functions:
+  TaskInfo* (*getTaskInfo)(void);
+  
+  // NanoOsHardware.h functions:
+  int (*shutdown)(NanoOsShutdownType shutdownType);
+  
+  // Debug functions
+  int (*printString)(const char *string);
+  int (*printInt)(long long int integer);
+  int (*printDouble)(double floatingPointValue);
+  int (*printHex)(unsigned long long int integer);
 } NanoOsApi;
 
 extern NanoOsApi nanoOsApi;
@@ -155,5 +218,5 @@ extern NanoOsApi nanoOsApi;
 }
 #endif
 
-#endif // NANO_OS_UNIX_API_H
+#endif // NANO_OS_USER_API_H
 

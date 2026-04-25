@@ -25,13 +25,12 @@
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 
-// NanoOs includes
-#include "NanoOs.h"
-#include "Scheduler.h"
-#include "SdCardPosix.h"
+// Standard C includes
+#include "string.h"
 
-// Has to come last
-#include "NanoOsStdio.h"
+// NanoOs includes
+#include "NanoOsTypes.h"
+#include "Scheduler.h"
 
 // Simulator includes
 #include "HalPosix.h"
@@ -62,6 +61,9 @@
 // Standard C includes
 #include <stdio.h>
 
+//// #define printDebug(format, ...) fprintf(stderr, format, ##__VA_ARGS__)
+#define printDebug(format, ...) {}
+
 const Hal *HAL = NULL;
 
 void usage(const char *argv0) {
@@ -91,43 +93,6 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  int numSerialPorts = HAL->getNumSerialPorts();
-  if (numSerialPorts <= 0) {
-    // Nothing we can do.  Bail.
-    fprintf(stderr, "HAL->getNumSerialPorts() returned %d.\n", numSerialPorts);
-    return 1;
-  }
-  
-  // Set all the serial ports to run at 1000000 baud.
-  if (HAL->initSerialPort(0, 1000000) < 0) {
-    // Nothing we can do.  Bail.
-    fprintf(stderr, "Initializing serial port 0 failed.\n");
-    return 1;
-  }
-  int ii = 0;
-  for (ii = 1; ii < numSerialPorts; ii++) {
-    if (HAL->initSerialPort(ii, 1000000) < 0) {
-      // We can't support more than the last serial port that was successfully
-      // initialized.
-      fprintf(stderr, "WARNING: Initializing serial port %d failed.\n", ii);
-      break;
-    }
-  }
-  HAL->setNumSerialPorts(ii);
-
-  int numTimers = HAL->getNumTimers();
-  for (ii = 0; ii < numTimers; ii++) {
-    if (HAL->initTimer(ii) < 0) {
-      break;
-    }
-  }
-  HAL->setNumTimers(ii);
-  if (ii != numTimers) {
-    printString("WARNING: Only initialized ");
-    printInt(ii);
-    printString(" timers\n");
-  }
-
   // On hardware, we need a "Booting..." message and a delay so that we give
   // ourselves enough time to start a firmware update in case we've loaded
   // something that's resulting in bricking the system.  Since the simulator is
@@ -147,9 +112,13 @@ int main(int argc, char **argv) {
   CoroutineConfigOptions coroutineConfigOptions = {
     .stackSize = HAL->processStackSize(),
     .stateData = &coroutineStatePointer,
+    .coroutineYieldCallback = NULL,
     .comutexUnlockCallback = comutexUnlockCallback,
     .coconditionSignalCallback = coconditionSignalCallback,
   };
+  if ((HAL->timerHal != NULL) && (HAL->timerHal->getNumTimers() > 0)) {
+    coroutineConfigOptions.coroutineYieldCallback = coroutineYieldCallback;
+  }
   if (coroutineConfig(&_mainCoroutine, &coroutineConfigOptions)
     != coroutineSuccess
   ) {
@@ -163,7 +132,7 @@ int main(int argc, char **argv) {
   }
 
   // Enter the scheduler.  This never returns.
-  printDebugString("Starting scheduler.\n");
+  printDebug("Starting scheduler.\n");
   startScheduler(&coroutineStatePointer);
 
   return 0;

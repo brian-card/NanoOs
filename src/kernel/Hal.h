@@ -35,82 +35,34 @@
 #define HAL_H
 
 // Standard C includes
-#include "limits.h"
 #include "setjmp.h"
-#include "stdarg.h"
 #include "stdbool.h"
 #include "stdint.h"
-#include "stdlib.h"
-#include "string.h"
-
-#if defined(__linux__) || defined(__linux) || defined(_WIN32)
-// We're compiling as an application within another OS
-#include "sys/types.h"
-#endif
-
-// NanoOs includes
-#include "NanoOsTypes.h"
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 
-typedef struct NanoOsOverlayMap NanoOsOverlayMap;
+/// @enum HalShutdownType
+///
+/// @brief Types of shutdowns that can be invoked in the HAL.
+typedef enum HalShutdownType {
+  HAL_SHUTDOWN_OFF,
+  HAL_SHUTDOWN_SUSPEND,
+  HAL_SHUTDOWN_RESET,
+  HAL_SHUTDOWN_NUM_TYPES,
+} HalShutdownType;
 
-typedef struct Hal {
-  // Memory definitions.
-  
-  /// @fn uintptr_t processStackSize(void)
-  ///
-  /// @brief The size of a regular process's stack.
-  ///
-  /// Returns the size of the stack to use for all non-memory manager
-  /// processes in bytes.  This function never fails.
-  uintptr_t (*processStackSize)(void);
-  
-  /// @fn uintptr_t memoryManagerStackSize(bool debug)
-  ///
-  /// @brief The size of the memory manager process's stack.
-  ///
-  /// @param debug Whether or not the memory manager's debug stack size should
-  ///   be used so that debug prints can work correclty without corrupting the
-  ///   stack.
-  ///
-  /// @return Returns the size of the stack to use for the memory manager.
-  /// This call never fails.
-  uintptr_t (*memoryManagerStackSize)(bool debug);
-  
-  /// @fn void* bottomOfStack(void)
-  ///
-  /// @brief The memmory manager uses stack memory for dynamic memory
-  /// allocation and needs to know where the bottom of it is so that it doesn't
-  /// overallocate.
-  ///
-  /// @return Returns the address of the bottom of the stack.   This call never
-  /// fails.
-  void* (*bottomOfStack)(void);
-  
-  // Overlay definitions.
-  
-  /// @fn NanoOsOverlayMap* overlayMap(void)
-  ///
-  /// @brief Memory address where overlays will be loaded.
-  ///
-  /// @return Returns the address of the overlay map in memory.  This call
-  /// never fails.
-  NanoOsOverlayMap* (*overlayMap)(void);
-  
-  /// @fn uintptr_t overlaySize(void)
-  ///
-  /// @brief The number of bytes available for the overlay.
-  ///
-  /// @return Returns the number of bytes in the overlay.   This call never
-  /// fails, but may return 0 on systems that don't support overlays.
-  uintptr_t (*overlaySize)(void);
-  
-  // Serial port functionality.
-  
+// Standard C types
+typedef intptr_t ssize_t;
+struct timespec;
+
+// NanoOs types
+typedef struct NanoOsOverlayMap NanoOsOverlayMap;
+typedef struct SchedulerState SchedulerState;
+
+typedef struct HalSerialPort {
   /// @fn int getNumSerialPorts(void)
   ///
   /// @brief Get the number of addressable and configurable serial ports on the
@@ -165,9 +117,9 @@ typedef struct Hal {
   ///
   /// @return Returns the number of bytes written on success, -errno on failure.
   ssize_t (*writeSerialPort)(int port, const uint8_t *data, ssize_t length);
-  
-  // Digital IO pin functionality.
-  
+} HalSerialPort;
+
+typedef struct HalDio {
   /// @fn int getNumDios(void)
   ///
   /// @brief Get the number of digial IO pins on the system.
@@ -198,20 +150,24 @@ typedef struct Hal {
   ///
   /// @return Returns 0 on success, -errno onfailure.
   int (*writeDio)(int dio, bool high);
-  
-  // SPI functionality.
-  
+} HalDio;
+
+typedef struct HalSpi {
   /// @fn int initSpiDevice(int spi,
   ///   uint8_t cs, uint8_t sck, uint8_t copi, uint8_t cipo);
   ///
   /// @brief Initialize a SPI device on the system.
   ///
   /// @param spi The zero-based index of the SPI device to initialize.
-  /// @param chipSelect The DIO to use as the chip-select line.
+  /// @param cs The DIO to use as the chip-select line.
+  /// @param sck The DIO to use as the clock line.
+  /// @param copi The DIO to use as the COPI line.
+  /// @param cipo The DIO to use as the CIPO line.
+  /// @param baud The baud rate the SPI is to run at.
   ///
   /// @return Returns 0 on success, -errno on failure.
   int (*initSpiDevice)(int spi,
-    uint8_t cs, uint8_t sck, uint8_t copi, uint8_t cipo);
+    uint8_t cs, uint8_t sck, uint8_t copi, uint8_t cipo, uint32_t baud);
   
   /// @fn int startSpiTransfer(int spi)
   ///
@@ -246,8 +202,23 @@ typedef struct Hal {
   /// -errno on failure.
   int (*spiTransfer8)(int spi, uint8_t data);
   
-  // System time functionality.
-  
+  /// @fn int spiTransferBytes(int spi, uint8_t *data, uint32_t length)
+  ///
+  /// @brief Tranfer a buffer of 8-bit bytes between the SPI controller and a
+  /// peripheral.
+  ///
+  /// @param spi The zero-based index of the SPI device to transfer data with.
+  /// @param data The bufffer of 8-bit values to transfer to the peripheral.
+  /// @param length The number of bytes in the buffer to transfer.
+  ///
+  /// @return On success, 0 is returned and length bytes in the data buffer are
+  /// replaced with the bytes that were transferred from the SPI peripheral.
+  /// -errno is returned and the contents of the data buffer are undefined on
+  /// failure.
+  int (*spiTransferBytes)(int spi, uint8_t *data, uint32_t length);
+} HalSpi;
+
+typedef struct HalClock {
   /// @fn int setSystemTime(struct timespec *ts)
   ///
   /// @brief Set the current time on the system.
@@ -305,40 +276,21 @@ typedef struct Hal {
   /// @return Returns the number of nanoseconds that have elapsed since the
   /// provided start time on success, -1 on failure.
   int64_t (*getElapsedNanoseconds)(int64_t startTime);
-  
-  // Hardware reset and shutdown.
-  
-  /// @fn int reset(void)
+} HalClock;
+
+typedef struct HalPower {
+  /// @fn int shutdown(HalShutdownType shutdownType)
   ///
-  /// @brief Cause a hardware reset of the OS.  Everything will be
-  /// re-initialized at startup.
+  /// @brief Halt the OS and invoke the specified power action.
   ///
-  /// @return This function does not return on success.  On error, -errno will
+  /// @param shutdownType The power action to be invoked.
+  ///
+  /// @return Does not return or returns 0 on success.  On error, -errno will
   /// be returned.
-  int (*reset)(void);
-  
-  /// @fn int shutdown(void)
-  ///
-  /// @brief Halt the OS and shutdown the hardware (insofar as is possible).
-  ///
-  /// @return This function does not return on success.  On error, -errno will
-  /// be returned.
-  int (*shutdown)(void);
-  
-  // Root storage configuration.
-  
-  /// @fn int initRootStorage(SchedulerState *schedulerState)
-  ///
-  /// @brief Initialize the tasks that operate the root storage system.
-  ///
-  /// @param schedulerState A pointer to the SchedulerState to use to initialize
-  ///   the tasks.
-  ///
-  /// @return Returns 0 on success, -errno on failure.
-  int (*initRootStorage)(SchedulerState *schedulerState);
-  
-  // Hardware timers.
-  
+  int (*shutdown)(HalShutdownType shutdownType);
+} HalPower;
+
+typedef struct HalTimer {
   /// @fn int getNumTimers(void)
   ///
   /// @brief Get the number of available hardware timers on the system.
@@ -431,6 +383,100 @@ typedef struct Hal {
   int (*cancelAndGetTimer)(int timer,
     uint64_t *configuredNanoseconds, uint64_t *remainingNanoseconds,
     void (**callback)(void));
+} HalTimer;
+
+typedef struct Hal {
+  // Memory definitions.
+  
+  /// @fn uintptr_t processStackSize(void)
+  ///
+  /// @brief The size of a regular process's stack.
+  ///
+  /// Returns the size of the stack to use for all non-memory manager
+  /// processes in bytes.  This function never fails.
+  uintptr_t (*processStackSize)(void);
+  
+  /// @fn uintptr_t memoryManagerStackSize(bool debug)
+  ///
+  /// @brief The size of the memory manager process's stack.
+  ///
+  /// @param debug Whether or not the memory manager's debug stack size should
+  ///   be used so that debug prints can work correclty without corrupting the
+  ///   stack.
+  ///
+  /// @return Returns the size of the stack to use for the memory manager.
+  /// This call never fails.
+  uintptr_t (*memoryManagerStackSize)(bool debug);
+  
+  /// @fn void* bottomOfHeap(void)
+  ///
+  /// @brief The memmory manager needs to know where the bottom of the heap is
+  /// so that it knows where to start allocating memory.
+  ///
+  /// @return Returns the address of the bottom of the heap.   This call never
+  /// fails.
+  void* (*bottomOfHeap)(void);
+  
+  // Overlay definitions.
+  
+  /// @var overlayMap
+  ///
+  /// @brief Memory address where overlays will be loaded.
+  NanoOsOverlayMap *overlayMap;
+  
+  /// @var overlaySize
+  ///
+  /// @brief The number of bytes available for the overlay.  This may be 0 on
+  /// systems that don't support overlays.
+  uintptr_t overlaySize;
+  
+  /// @var serialPortHal
+  ///
+  /// @brief Pointer to the HalSerialPort managed by the HAL, or NULL if there
+  /// isn't one.
+  HalSerialPort *serialPortHal;
+  
+  /// @var dioHal
+  ///
+  /// @brief Pointer to the HalDio managed by the HAL, or NULL if there isn't
+  /// one.
+  HalDio *dioHal;
+  
+  /// @var spiHal
+  ///
+  /// @brief Pointer to the HalSpi managed by the HAL, or NULL if there isn't
+  /// one.
+  HalSpi *spiHal;
+  
+  /// @var clockHal
+  ///
+  /// @brief Pointer to the HalClock managed by the HAL, or NULL if there isn't
+  /// one.
+  HalClock *clockHal;
+  
+  /// @var powerHal
+  ///
+  /// @brief Pointer to the HalPower managed by the HAL, or NULL if there isn't
+  /// one.
+  HalPower *powerHal;
+  
+  /// @var timerHal
+  ///
+  /// @brief Pointer to the HalTimer managed by HAL, or NULL if there isn't
+  /// one.
+  HalTimer *timerHal;
+  
+  // Root storage configuration.
+  
+  /// @fn int initRootStorage(SchedulerState *schedulerState)
+  ///
+  /// @brief Initialize the tasks that operate the root storage system.
+  ///
+  /// @param schedulerState A pointer to the SchedulerState to use to initialize
+  ///   the tasks.
+  ///
+  /// @return Returns 0 on success, -errno on failure.
+  int (*initRootStorage)(SchedulerState *schedulerState);
 } Hal;
 
 extern const Hal *HAL;

@@ -38,14 +38,43 @@
 
 #include "NanoOsUser.h"
 
-#define gethostname(name, len) \
-  overlayMap.header.osApi->gethostname(name, len)
-#define sethostname(name, len) \
-  overlayMap.header.osApi->sethostname(name, len)
-#define ttyname_r(fd, buf, buflen) \
-  overlayMap.header.osApi->ttyname_r(fd, buf, buflen)
-#define execve(pathname, argv, envp) \
-  overlayMap.header.osApi->execve(pathname, argv, envp)
+#include "../../src/user/NanoOsUnistd.h"
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
+static inline int close(int fd) {
+  return overlayMap.header.osApi->close(fd);
+}
+static inline int dup2(int oldfd, int newfd) {
+  return overlayMap.header.osApi->dup2(oldfd, newfd);
+}
+static inline int gethostname(char *name, size_t len) {
+  return overlayMap.header.osApi->gethostname(name, len);
+}
+static inline int sethostname(const char *name, size_t len) {
+  return overlayMap.header.osApi->sethostname(name, len);
+}
+static inline int ttyname_r(int fd, char buf[], size_t buflen) {
+  return overlayMap.header.osApi->ttyname_r(fd, buf, buflen);
+}
+static inline int execve(const char *pathname,
+  char *const argv[], char *const envp[]
+) {
+  return overlayMap.header.osApi->execve(pathname, argv, envp);
+}
+static inline int setuid(uid_t uid) {
+  return overlayMap.header.osApi->setuid(uid);
+}
+static inline int pipe(int pipefd[2]) {
+  return overlayMap.header.osApi->pipe(pipefd);
+}
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // UNISTD_H
 

@@ -37,8 +37,18 @@
 #ifndef NANO_OS_USER_H
 #define NANO_OS_USER_H
 
-// Header from kernel space.
-#include "NanoOsOverlay.h"
+// Headers from kernel space.
+#include "../../src/kernel/Overlay.h"
+#include "../../src/user/NanoOsDebug.h"
+
+#ifdef NANO_OS_USER_DEBUG
+// All of the printDebug* functions print to serial port 0 immediately.  We
+// want to enable a pure, user-space print function that will go through the
+// console as well.
+#define printDebug(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__)
+#else
+#define printDebug(fmt, ...) {}
+#endif // NANO_OS_USER_DEBUG
 
 #ifdef __cplusplus
 extern "C"
@@ -50,6 +60,33 @@ extern "C"
 /// @brief Global variable that will enable access to the Kernel's std C API
 /// implementation.
 extern NanoOsOverlayMap overlayMap;
+
+
+static inline void* callOverlayFunction(
+  const char *overlayDir, const char *overlay, const char *function, void *args
+) {
+  return overlayMap.header.osApi->callOverlayFunction(overlayDir, overlay,
+    function, args);
+}
+
+// Debug functions
+static inline int printString_(const char *string) {
+  return overlayMap.header.osApi->printString(string);
+}
+#define printString(str) printString_((const char*) (str))
+static inline int printInt_(long long int integer) {
+  return overlayMap.header.osApi->printInt(integer);
+}
+#define printInt(value) printInt_((long long int) (value))
+static inline int printDouble(double floatingPointValue) {
+  return overlayMap.header.osApi->printDouble(floatingPointValue);
+}
+static inline int printHex_(unsigned long long int integer) {
+  return overlayMap.header.osApi->printHex(integer);
+}
+#define printHex(integer) printHex_((unsigned long long int) (integer))
+
+#define environ overlayMap.header.env
 
 #ifdef __cplusplus
 }

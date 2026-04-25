@@ -41,6 +41,7 @@
 #include <stdbool.h>
 
 #include "../../Hal.h"
+#include "../../NanoOsTypes.h"
 #include "../../Scheduler.h"
 
 bool __atomic_compare_exchange_2(void *ptr, void *expected, uint16_t desired,
@@ -52,8 +53,11 @@ bool __atomic_compare_exchange_2(void *ptr, void *expected, uint16_t desired,
   
   uint64_t remainingNanoseconds;
   void (*callback)(void);
-  int cancelStatus = HAL->cancelAndGetTimer(
-    PREEMPTION_TIMER, NULL, &remainingNanoseconds, &callback);
+  int cancelStatus = -1;
+  if (HAL->timerHal != NULL) {
+    cancelStatus = HAL->timerHal->cancelAndGetTimer(
+      SCHEDULER_STATE->preemptionTimer, NULL, &remainingNanoseconds, &callback);
+  }
   
   bool success = false;
   if (*((uint16_t*) ptr) == *((uint16_t*) expected)) {
@@ -65,7 +69,8 @@ bool __atomic_compare_exchange_2(void *ptr, void *expected, uint16_t desired,
   
   if (cancelStatus == 0) {
     // A timer was active when we were called.  Restore it.
-    HAL->configOneShotTimer(PREEMPTION_TIMER, remainingNanoseconds, callback);
+    HAL->timerHal->configOneShotTimer(SCHEDULER_STATE->preemptionTimer,
+      remainingNanoseconds, callback);
   }
   
   return success;
@@ -76,14 +81,18 @@ void __atomic_store_2(void *ptr, uint16_t val, int memorder) {
   
   uint64_t remainingNanoseconds;
   void (*callback)(void);
-  int cancelStatus = HAL->cancelAndGetTimer(
-    PREEMPTION_TIMER, NULL, &remainingNanoseconds, &callback);
+  int cancelStatus = -1;
+  if (HAL->timerHal != NULL) {
+    cancelStatus = HAL->timerHal->cancelAndGetTimer(
+      SCHEDULER_STATE->preemptionTimer, NULL, &remainingNanoseconds, &callback);
+  }
   
   *((uint16_t*) ptr) = val;
   
   if (cancelStatus == 0) {
     // A timer was active when we were called.  Restore it.
-    HAL->configOneShotTimer(PREEMPTION_TIMER, remainingNanoseconds, callback);
+    HAL->timerHal->configOneShotTimer(SCHEDULER_STATE->preemptionTimer,
+      remainingNanoseconds, callback);
   }
 }
 
@@ -92,14 +101,18 @@ uint16_t __atomic_load_2(const void *ptr, int memorder) {
   
   uint64_t remainingNanoseconds;
   void (*callback)(void);
-  int cancelStatus = HAL->cancelAndGetTimer(
-    PREEMPTION_TIMER, NULL, &remainingNanoseconds, &callback);
+  int cancelStatus = -1;
+  if (HAL->timerHal != NULL) {
+    cancelStatus = HAL->timerHal->cancelAndGetTimer(
+      SCHEDULER_STATE->preemptionTimer, NULL, &remainingNanoseconds, &callback);
+  }
   
   uint16_t returnValue = *((uint16_t*) ptr);
   
   if (cancelStatus == 0) {
     // A timer was active when we were called.  Restore it.
-    HAL->configOneShotTimer(PREEMPTION_TIMER, remainingNanoseconds, callback);
+    HAL->timerHal->configOneShotTimer(SCHEDULER_STATE->preemptionTimer,
+      remainingNanoseconds, callback);
   }
   
   return returnValue;

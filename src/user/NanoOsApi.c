@@ -28,13 +28,34 @@
 // Doxygen marker
 /// @file
 
+// Standard C includes
+#include <stdarg.h>
+#include <stdint.h>
+
+// Unix includes
+#include "sys/types.h"
+
+// NanoOs includes
+#include "../kernel/NanoOsTypes.h"
+
+// Types and prototypes we need here because we can't include things directly.
+typedef uintptr_t size_t;
+int vsnprintf(char *str, size_t size, const char *format, va_list ap);
+
 // Must come first
 #include "NanoOsApi.h"
 
 #include "../kernel/MemoryManager.h"
 #include "../kernel/NanoOs.h"
+#include "../kernel/OverlayFunctions.h"
 #include "../kernel/Scheduler.h"
+#include "../kernel/Tasks.h"
+#include "NanoOsFcntl.h"
 #include "NanoOsLibC.h"
+#include "NanoOsPwd.h"
+#include "NanoOsSched.h"
+#include "NanoOsSignal.h"
+#include "NanoOsTermios.h"
 #include "NanoOsUnistd.h"
 
 // Must come last
@@ -48,13 +69,8 @@
 #undef remove
 #undef fseek
 #undef vfscanf
-#undef fscanf
-#undef scanf
 #undef vfprintf
-#undef fprintf
-#undef printf
 #undef fputs
-#undef puts
 #undef fgets
 #undef fread
 #undef fwrite
@@ -62,6 +78,8 @@
 #undef fileno
 
 NanoOsApi nanoOsApi = {
+  // Standard Unix functionality
+  
   // Standard streams:
   .stdin  = (FILE*) ((intptr_t) 0x1),
   .stdout = (FILE*) ((intptr_t) 0x2),
@@ -76,26 +94,13 @@ NanoOsApi nanoOsApi = {
   
   // Formatted I/O:
   .vsscanf = vsscanf,
-  .sscanf = sscanf,
-  .vfscanf = nanoOsVFScanf,
-  .fscanf = nanoOsFScanf,
-  .scanf = nanoOsScanf,
-  .vfprintf = nanoOsVFPrintf,
-  .fprintf = nanoOsFPrintf,
-  .printf = nanoOsPrintf,
-  .vsprintf = vsprintf,
+  .vfscanf = nanoOsVfscanf,
+  .vfprintf = nanoOsVfprintf,
   .vsnprintf = vsnprintf,
-  .sprintf = sprintf,
-  .snprintf = snprintf,
-  
-  // Character I/O:
-  .fputs = nanoOsFPuts,
-  .puts = nanoOsPuts,
-  .fgets = nanoOsFGets,
   
   // Direct I/O:
-  .fread = filesystemFRead,
-  .fwrite = filesystemFWrite,
+  .fread = nanoOsFread,
+  .fwrite = nanoOsFwrite,
   
   // Memory management:
   .free = memoryManagerFree,
@@ -127,26 +132,69 @@ NanoOsApi nanoOsApi = {
   .strlen = strlen,
   
   // Other stdlib functions:
-  .getenv = nanoOsGetenv,
-  .rand = rand,
-  .srand = srand,
+  .strtoll = nanoOsStrtoll,
   
   // unistd functions:
-  .gethostname = gethostname,
-  .sethostname = sethostname,
-  .ttyname_r = ttyname_r,
+  .close = nanoOsClose,
+  .dup2 = nanoOsDup2,
+  .gethostname = nanoOsGethostname,
+  .sethostname = nanoOsSethostname,
+  .ttyname_r = nanoOsTtyname_r,
   .execve = schedulerExecve,
+  .setuid = schedulerSetTaskUser,
+  .pipe = nanoOsPipe,
+  
+  // termios functions:
+  .tcgetattr = nanoOsTcgetattr,
+  .tcsetattr = nanoOsTcsetattr,
   
   // errno functions:
   .errno_ = errno_,
   
   // sys/*.h functions:
-  .uname = uname,
+  .uname = nanoOsUname,
   
   // time.h functions:
   .time = time,
   
+  // pwd.h functions:
+  .getpwnam_r = nanoOsGetpwnam_r,
+  .getpwuid_r = nanoOsGetpwuid_r,
+  
+  // sched.h functions:
+  .sched_yield = nanoOsSchedYield,
+  
+  // signal.h functions:
+  .kill = nanoOsKill,
+  
+  // spawn.h functions:
+  .posix_spawn_file_actions_init = nanoOsSpawnFileActionsInit,
+  .posix_spawn_file_actions_adddup2 = nanoOsSpawnFileActionsAdddup2,
+  .posix_spawn_file_actions_destroy = nanoOsSpawnFileActionsDestroy,
+  .posix_spawn = nanoOsSpawn,
+  
+  // fcntl.h functions:
+  .fcntl = nanoOsFcntl,
+  
   // NanoOs-specific functionality
-  .callOverlayFunction = NULL,
+  
+  // NanoOsUser.h functions:
+  .callOverlayFunction = callOverlayFunction,
+  
+  // NanoOsUtils.h functions:
+  .parseArgs = parseArgs,
+  .getFreeMemory = getFreeMemory,
+  
+  // NanoOsTasks.h functions:
+  .getTaskInfo = schedulerGetTaskInfo,
+  
+  // NanoOsHardware.h functions:
+  .shutdown = nanoOsHardwareShutdown,
+  
+  // Debug functions
+  .printString = printString_,
+  .printInt = printInt_,
+  .printDouble = printDouble,
+  .printHex = printHex_,
 };
 

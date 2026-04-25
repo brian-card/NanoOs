@@ -36,21 +36,27 @@
 #ifndef SCHEDULER_H
 #define SCHEDULER_H
 
-// Custom includes
-#include "NanoOsTypes.h"
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 
+// Forward declarations and typedefs since we can't include NanoOsTypes.h here.
+struct timespec;
+typedef struct Cocondition Cocondition;
+typedef struct Comutex Comutex;
+typedef struct Coroutine Coroutine;
+typedef struct FileDescriptor FileDescriptor;
 typedef struct NanoOsFile NanoOsFile;
 #define FILE NanoOsFile
-
-/// @def PREEMPTION_TIMER
-///
-/// @brief The index of the timer used for preemption by the scheduler.
-#define PREEMPTION_TIMER 0
+typedef struct SchedulerState SchedulerState;
+typedef struct TaskDescriptor TaskDescriptor;
+typedef Coroutine* TaskHandle;
+typedef uint8_t TaskId;
+typedef struct TaskInfo TaskInfo;
+typedef int16_t UserId;
 
 /// @enum SchedulerCommandResponse
 ///
@@ -58,7 +64,6 @@ typedef struct NanoOsFile NanoOsFile;
 /// message handler.
 typedef enum SchedulerCommandResponse {
   // Commands:
-  SCHEDULER_RUN_TASK,
   SCHEDULER_KILL_TASK,
   SCHEDULER_GET_NUM_RUNNING_TASKS,
   SCHEDULER_GET_TASK_INFO,
@@ -67,21 +72,23 @@ typedef enum SchedulerCommandResponse {
   SCHEDULER_CLOSE_ALL_FILE_DESCRIPTORS,
   SCHEDULER_GET_HOSTNAME,
   SCHEDULER_EXECVE,
+  SCHEDULER_SPAWN,
+  SCHEDULER_ASSIGN_MEMORY,
   NUM_SCHEDULER_COMMANDS,
   // Responses:
   SCHEDULER_TASK_COMPLETE,
 } SchedulerCommand;
 
+extern SchedulerState *SCHEDULER_STATE;
+
 // Exported functionality
 void startScheduler(SchedulerState **coroutineStatePointer);
-TaskDescriptor* schedulerGetTaskByPid(unsigned int pid);
+TaskDescriptor* schedulerGetTaskById(unsigned int taskId);
 int schedulerNotifyTaskComplete(TaskId taskId);
 int schedulerWaitForTaskComplete(void);
 TaskId schedulerGetNumRunningTasks(struct timespec *timeout);
 TaskInfo* schedulerGetTaskInfo(void);
 int schedulerKillTask(TaskId taskId);
-int schedulerRunTask(
-  const CommandEntry *commandEntry, char *consoleInput, int consolePort);
 UserId schedulerGetTaskUser(void);
 int schedulerSetTaskUser(UserId userId);
 FileDescriptor* schedulerGetFileDescriptor(FILE *stream);
@@ -89,6 +96,7 @@ int schedulerCloseAllFileDescriptors(void);
 const char* schedulerGetHostname(void);
 int schedulerExecve(const char *pathname,
   char *const argv[], char *const envp[]);
+int schedulerAssignMemory(void *ptr);
 
 // Coroutine setup functions used in the loader.
 void coroutineYieldCallback(void *stateData, Coroutine *coroutine);

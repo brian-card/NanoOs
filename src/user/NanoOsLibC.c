@@ -34,8 +34,11 @@
 #include "../kernel/Filesystem.h"
 #include "../kernel/Hal.h"
 #include "../kernel/NanoOs.h"
-#include "../kernel/NanoOsOverlay.h"
+#include "../kernel/OverlayFunctions.h"
 #include "../kernel/Scheduler.h"
+
+// Must come last
+#include "NanoOsStdio.h"
 
 /// @fn int timespec_get(struct timespec* spec, int base)
 ///
@@ -50,7 +53,12 @@ int timespec_get(struct timespec* spec, int base) {
     return 0;
   }
   
-  int64_t now = HAL->getElapsedNanoseconds(0);
+  int64_t now = 0;
+  if (HAL->clockHal != NULL) {
+    now = HAL->clockHal->getElapsedNanoseconds(0);
+  } else {
+    fprintf(stderr, "timespec_get not implemented\n");
+  }
   spec->tv_sec = (time_t) (now / ((int64_t) 1000000000));
   spec->tv_nsec = now % ((int64_t) 1000000000);
 
@@ -62,7 +70,7 @@ int timespec_get(struct timespec* spec, int base) {
 /// @brief Array of error messages arranged by error code.
 const char *errorStrings[] = {
   "Success",                          // ENOERR
-  "Unknown error",                    // EUNKNOWN
+  "Unspecified error",                // EOTHER
   "Device or resource busy",          // EBUSY
   "Out of memory",                    // ENOMEM
   "Permission denied",                // EACCES
@@ -82,6 +90,7 @@ const char *errorStrings[] = {
   "Operation timed out",              // ETIMEDOUT
   "Exec format error",                // ENOEXEC
   "Operation not supported",          // ENOTSUP
+  "No such device or address",        // ENXIO
 };
 
 /// @var NUM_ERRORS
@@ -101,7 +110,7 @@ const int NUM_ERRORS = sizeof(errorStrings) / sizeof(errorStrings[0]);
 /// defined errors, the string "Unknown error" will be returned.
 char* nanoOsStrError(int errnum) {
   if ((errnum < 0) || (errnum >= NUM_ERRORS)) {
-    errnum = EUNKNOWN;
+    errnum = EOTHER;
   }
 
   return (char*) errorStrings[errnum];
@@ -116,34 +125,12 @@ char* nanoOsStrError(int errnum) {
 ///
 /// @return This function returns no value.
 void msleep(int durationMs) {
-  int64_t start = HAL->getElapsedMilliseconds(0);
-  while (HAL->getElapsedMilliseconds(start) < durationMs);
-}
-
-/// @fn char* nanoOsGetenv(const char *name)
-///
-/// @brief Implementation of the standard C getenv fundtion for NanoOs.
-///
-/// @param name The name of the environment variable to retrive.
-///
-/// @return Returns a pointer to the value of the named environment variable on
-/// success, NULL on failure.
-char* nanoOsGetenv(const char *name) {
-  char **env = HAL->overlayMap()->header.env;
-  if ((name == NULL) || (*name == '\0') || (env == NULL)) {
-    return NULL;
+  if (HAL->clockHal != NULL) {
+    int64_t start = HAL->clockHal->getElapsedMilliseconds(0);
+    while (HAL->clockHal->getElapsedMilliseconds(start) < durationMs);
+  } else {
+    fprintf(stderr, "msleep not implemented\n");
   }
-
-  size_t nameLen = strlen(name);
-  char *value = NULL;
-  for (int ii = 0; env[ii] != NULL; ii++) {
-    if ((strncmp(env[ii], name, nameLen) == 0) && env[ii][nameLen] == '=') {
-      value = &env[ii][nameLen + 1];
-      break;
-    }
-  }
-
-  return value;
 }
 
 /// @fn time_t time(time_t *tloc)
@@ -156,12 +143,124 @@ char* nanoOsGetenv(const char *name) {
 /// @return Returns the number of seconds since midnight, Jan 1, 1970 on
 /// success, (time_t) -1 on error.  On error, the value of errno is also set.
 time_t time(time_t *tloc) {
-  time_t now = ((time_t) HAL->getElapsedMilliseconds(0)) / ((time_t) 1000);
+  time_t now = 0;
+  if (HAL->clockHal != NULL) {
+    now = ((time_t) HAL->clockHal->getElapsedMilliseconds(0)) / ((time_t) 1000);
+  } else {
+    fprintf(stderr, "time not implemented\n");
+  }
   
   if (tloc != NULL) {
     *tloc = now;
   }
   
   return now;
+}
+
+/// @fn long long nanoOsStrtoll(const char *nptr, char **endptr, int base)
+///
+/// @brief NanoOs implementation of the standard C strtoll function.
+///
+/// @param nptr A pointer to the beginning of a string to convert to an integer
+///   representation.
+/// @param endptr A pointer to a char pointer that will be set to the first
+///   character after the last valid numerical character if endptr is non-NULL.
+/// @param base The base of the numeric string being passed in in thee range 2
+///   through 36, inclusive, or the special value 0 which will determine the
+///   base by the first few digits of the number.
+///
+/// @return On success, the converted number is returned.  If nptr is NULL, 0 is
+/// returned and errno is set to EOTHER.  If base is an invalid value, 0 is
+/// returned and errno is set to EINVAL.  On underflow or overflow, LLONG_MIN or
+/// LLONG_MAX is returned, respectively, and errno is set to ERANGE.
+long long nanoOsStrtoll(const char *nptr, char **endptr, int base) {
+  long long returnValue = 0;
+  long long multiplier = 1;
+  
+  if (nptr == NULL) {
+    // Can't convert a NULL pointer, but there's no standard error for this.
+    errno = EOTHER;
+    return returnValue; // 0
+  } else if ((base < 0) || (base == 1) || (base > 36)) {
+    // Invalid baase.
+    errno = EINVAL;
+    return returnValue; // 0
+  }
+  
+  nptr = &nptr[strspn(nptr, " \t\r\n")];
+  
+  if (*nptr == '-') {
+    multiplier = -1;
+    nptr++;
+  } else if (*nptr == '+') {
+    // No-op
+    nptr++;
+  }
+  
+  // We're at the first character of the number (supposedly).  If the base is 0
+  // then we need to figure out the real base by looking at the fisrt few
+  // digits.
+  if (base == 0) {
+    base = 10; // Until proven otherwise
+    
+    if (*nptr == '0') {
+      // We need to evaluate the next character.
+      char nextChar = nptr[1];
+      if ((nextChar == 'x') || (nextChar == 'X')) {
+        // Hexadecimal number
+        base = 16;
+        nptr = &nptr[2];
+      } else if ((nextChar >= '1') && (nextChar <= '7')) {
+        // Octal number
+        base = 8;
+        nptr = &nptr[1];
+      }
+    }
+  }
+  
+  char c = *nptr;
+  while (c != '\0') {
+    char digit = 0;
+    if ((c >= '0') && (c <= '9')) {
+      digit = c - '0';
+    } else if ((c >= 'a') && (c <= 'z')) {
+      digit = c - 'a';
+    } else if ((c >= 'A') && (c <= 'Z')) {
+      digit = c - 'A';
+    } else {
+      // Not an alpha-numeric character
+      break;
+    }
+    
+    if (digit >= ((char) base)) {
+      // Not a character that's in our base
+      break;
+    }
+    
+    returnValue *= (long long) base;
+    returnValue += (long long) digit;
+    
+    if (returnValue < 0) {
+      // Overflow or underflow.  We have to halt immediately and return the
+      // corresponding value.
+      returnValue = 1LL << ((sizeof(long long) << 3) - 1); // LLONG_MIN
+      if (multiplier == 1) {
+        returnValue--; // LLONG_MAX
+      }
+      errno = ERANGE;
+      return returnValue;
+    }
+    
+    nptr++;
+    c = *nptr;
+  }
+  
+  returnValue *= multiplier;
+  
+  if (endptr != NULL) {
+    *endptr = (char*) nptr;
+  }
+  
+  return returnValue;
 }
 

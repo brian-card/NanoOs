@@ -36,24 +36,72 @@
 #ifndef STDLIB_H
 #define STDLIB_H
 
+#include <stdbool.h>
 #include "NanoOsUser.h"
+#include "string.h"
 
-#define free(ptr) \
-  overlayMap.header.osApi->free(ptr)
-#define realloc(ptr, size) \
-  overlayMap.header.osApi->realloc(ptr, size)
-#define malloc(size) \
-  overlayMap.header.osApi->malloc(size)
-#define calloc(nmemb, size) \
-  overlayMap.header.osApi->calloc(nmemb, size)
+#ifdef __cplusplus
+extern "C"
+{
+#endif
 
-#define getenv(s) \
-  overlayMap.header.osApi->getenv(s)
+static inline void free(void *ptr) {
+  overlayMap.header.osApi->free(ptr);
+}
+static inline void* realloc(void *ptr, size_t size) {
+  return overlayMap.header.osApi->realloc(ptr, size);
+}
+static inline void* malloc(size_t size) {
+  return overlayMap.header.osApi->malloc(size);
+}
+static inline void* calloc(size_t nmemb, size_t size) {
+  return overlayMap.header.osApi->calloc(nmemb, size);
+}
 
-#define rand() \
-  overlayMap.header.osApi->rand()
-#define srand(seed) \
-  overlayMap.header.osApi->srand(seed)
+static inline char *getenv(const char *name) {
+  char **env = overlayMap.header.env;
+  if ((name == NULL) || (*name == '\0') || (env == NULL)) {
+    return NULL;
+  }
+
+  size_t nameLen = strlen(name);
+  char *value = NULL;
+  for (int ii = 0; env[ii] != NULL; ii++) {
+    if ((strncmp(env[ii], name, nameLen) == 0) && env[ii][nameLen] == '=') {
+      value = &env[ii][nameLen + 1];
+      break;
+    }
+  }
+
+  return value;
+}
+
+static inline long strtol(const char *nptr, char **endptr, int base) {
+  long long returnValue = (unsigned long long)
+    overlayMap.header.osApi->strtoll(nptr, endptr, base);
+
+  if (sizeof(long long) > sizeof(long)) {
+    long min = 1L << ((sizeof(long) << 3) - 1);
+    long max = min - 1;
+    if ((returnValue > (long long) max) || (returnValue < (long long) min)) {
+      bool negative
+        = ((returnValue & (1ULL << ((sizeof(long long) << 3) - 1))));
+      returnValue = 1LL << ((sizeof(long) << 3) - 1); // LONG_MIN
+      if (!negative) {
+        returnValue--; // LONG_MAX
+      }
+    }
+  }
+
+  return (long) returnValue;
+}
+static inline long long strtoll(const char *nptr, char **endptr, int base) {
+  return overlayMap.header.osApi->strtoll(nptr, endptr, base);
+}
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // STDLIB_H
 

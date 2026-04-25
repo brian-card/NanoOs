@@ -66,9 +66,7 @@ TaskId getNumPipes(const char *commandLine) {
 /// @var taskStorage
 ///
 /// @brief File-local variable to hold the per-task storage.
-static void *taskStorage[
-  NANO_OS_NUM_TASKS - (NANO_OS_FIRST_USER_TASK_ID - 1)][
-  NUM_TASK_STORAGE_KEYS] = {0};
+static void *taskStorage[NANO_OS_NUM_TASKS][NUM_TASK_STORAGE_KEYS] = {0};
 
 /// @fn void *getTaskStorage(uint8_t key)
 ///
@@ -84,11 +82,8 @@ void *getTaskStorage(uint8_t key) {
     return returnValue; // NULL
   }
 
-  int taskIndex
-    = ((int) getRunningTaskId()) - NANO_OS_FIRST_USER_TASK_ID;
-  if ((taskIndex >= 0)
-    && (taskIndex < (NANO_OS_NUM_TASKS - (NANO_OS_FIRST_USER_TASK_ID - 1)))
-  ) {
+  int taskIndex = ((int) getRunningTaskId()) - 1;
+  if ((taskIndex >= 0) && (taskIndex < NANO_OS_NUM_TASKS)) {
     // Calling task is not supported and does not have storage.
     returnValue = taskStorage[taskIndex][key];
   }
@@ -105,28 +100,26 @@ void *getTaskStorage(uint8_t key) {
 /// @param taskId The ID of the task to set.  This value may only be set
 ///   by the scheduler.
 ///
-/// @return Returns coroutineSuccess on success, coroutineError on failure.
+/// @return Returns taskSuccess on success, taskError on failure.
 int setTaskStorage_(uint8_t key, void *val, int taskId, ...) {
-  int returnValue = coroutineError;
+  int returnValue = taskError;
   if (key >= NUM_TASK_STORAGE_KEYS) {
     // Key is out of range.
-    return returnValue; // coroutineError
+    return returnValue; // taskError
   }
 
   if (taskId < 0) {
-    if (getRunningTaskId() == NANO_OS_SCHEDULER_TASK_ID) {
+    if (getRunningTaskId() == SCHEDULER_STATE->schedulerTaskId) {
       taskId = (int) getRunningTaskId();
     } else {
-      return returnValue; // coroutineError
+      return returnValue; // taskError
     }
   }
-  int taskIndex = taskId - NANO_OS_FIRST_USER_TASK_ID;
-  if ((taskIndex >= 0)
-    && (taskIndex < (NANO_OS_NUM_TASKS - (NANO_OS_FIRST_USER_TASK_ID - 1)))
-  ) {
+  int taskIndex = taskId - 1;
+  if ((taskIndex >= 0) && (taskIndex < NANO_OS_NUM_TASKS)) {
     // Calling task is not supported and does not have storage.
     taskStorage[taskIndex][key] = val;
-    returnValue = coroutineSuccess;
+    returnValue = taskSuccess;
   }
 
   return returnValue;
@@ -219,93 +212,6 @@ UserId getUserIdByUsername(const char *username) {
   }
 
   return userId;
-}
-
-/// @def USERNAME_BUFFER_SIZE
-///
-/// @brief Size to use for the username buffer in the login function.
-#define USERNAME_BUFFER_SIZE 16
-
-/// @def PASSWORD_BUFFER_SIZE
-///
-/// @brief Size to use for the password buffer in the login function.
-#define PASSWORD_BUFFER_SIZE 16
-
-/// @fn void login(void)
-///
-/// @brief Authenticate a user for login.  Sets the owner of the current task
-/// to the ID of the authenticated user before returning.
-///
-/// @param This function returns no value.
-void login(void) {
-  UserId userId = NO_USER_ID;
-
-  char *username = (char*) malloc(USERNAME_BUFFER_SIZE);
-  char *password = (char*) malloc(PASSWORD_BUFFER_SIZE);
-  char *newlineAt = NULL;
-  size_t usernameLength = 0, passwordLength = 0, ii = 0;
-
-  while (userId == NO_USER_ID) {
-    unsigned int checksum = 0;
-
-    fputs("login: ", stdout);
-    fgets(username, USERNAME_BUFFER_SIZE, stdin);
-    setConsoleEcho(false);
-    fputs("Password: ", stdout);
-    fgets(password, PASSWORD_BUFFER_SIZE, stdin);
-    setConsoleEcho(true);
-    fputs("\n\n", stdout);
-
-    newlineAt = strchr(username, '\r');
-    if (newlineAt == NULL) {
-      newlineAt = strchr(username, '\n');
-    }
-    if (newlineAt != NULL) {
-      // Terminate the string at the newline.
-      *newlineAt = '\0';
-    }
-    usernameLength = strlen(username);
-    for (ii = 0; ii < usernameLength; ii++) {
-      checksum += (unsigned int) username[ii];
-    }
-
-    newlineAt = strchr(password, '\r');
-    if (newlineAt == NULL) {
-      newlineAt = strchr(password, '\n');
-    }
-    if (newlineAt != NULL) {
-      // Terminate the string at the newline.
-      *newlineAt = '\0';
-    }
-    passwordLength = strlen(password);
-    for (ii = 0; ii < passwordLength; ii++) {
-      checksum += (unsigned int) password[ii];
-    }
-
-    for (int ii = 0; ii < NUM_USERS; ii++) {
-      if (strcmp(users[ii].username, username) == 0) {
-        if (users[ii].checksum == checksum) {
-          userId = users[ii].userId;
-        }
-        break;
-      }
-    }
-
-    if (userId == NO_USER_ID) {
-      fputs("Login incorrect\n", stderr);
-    }
-  }
-
-  username = stringDestroy(username);
-  password = stringDestroy(password);
-
-  if (schedulerSetTaskUser(userId) != 0) {
-    fputs("WARNING: "
-      "Could not set owner of current task to authenticated user.\n",
-      stderr);
-  }
-
-  return;
 }
 
 /// @var users

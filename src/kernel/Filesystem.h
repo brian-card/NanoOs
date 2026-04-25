@@ -36,10 +36,12 @@
 #ifndef FILESYSTEM_H
 #define FILESYSTEM_H
 
+// Custom includes
+#include "BlockStorage.h"
+
 #include "stddef.h"
 #include "stdint.h"
 
-typedef struct BlockStorageDevice BlockStorageDevice;
 typedef struct NanoOsFile FILE;
 typedef struct msg_t TaskMessage;
 
@@ -72,13 +74,15 @@ extern "C"
 /// @param endLba The address of the last block of the filesystem.
 /// @param numOpenFiles The number of files currently open by the filesystem.
 ///   If this number is zero then the blockBuffer pointer may be NULL.
+/// @param openFiles A pointer to the first FILE that's open.
 typedef struct FilesystemState {
   BlockStorageDevice *blockDevice;
-  uint16_t blockSize;
-  uint8_t *blockBuffer;
-  uint32_t startLba;
-  uint32_t endLba;
-  uint8_t  numOpenFiles;
+  uint16_t  blockSize;
+  uint8_t  *blockBuffer;
+  uint32_t  startLba;
+  uint32_t  endLba;
+  uint8_t   numOpenFiles;
+  FILE     *openFiles;
 } FilesystemState;
 
 /// @struct FilesystemIoCommandParameters
@@ -125,6 +129,19 @@ typedef struct FilesystemFcloseParameters {
   int returnValue;
 } FilesystemFcloseParameters;
 
+/// @struct GetFileBlockMetadataArgs
+///
+/// @brief Function arguments for the FILESYSTEM_GET_FILE_BLOCK_METADATA
+/// command handler.
+///
+/// @param stream A pointer to a FILE the caller wants to find the metadata of.
+/// @param metadata A pointer to a caller-supplied FileBlockMetadata structure
+///   that is to be populated by the command.
+typedef struct GetFileBlockMetadataArgs {
+  FILE              *stream;
+  FileBlockMetadata *metadata;
+} GetFileBlockMetadataArgs;
+
 /// @typedef FilesystemCommandHandler
 ///
 /// @brief Definition of a filesystem command handler function.
@@ -142,6 +159,8 @@ typedef enum FilesystemCommandResponse {
   FILESYSTEM_WRITE_FILE,
   FILESYSTEM_REMOVE_FILE,
   FILESYSTEM_SEEK_FILE,
+  FILESYSTEM_DUMP_OPEN_FILES,
+  FILESYSTEM_GET_FILE_BLOCK_METADATA,
   NUM_FILESYSTEM_COMMANDS,
   // Responses:
 } FilesystemCommandResponse;
@@ -202,6 +221,9 @@ size_t filesystemFWrite(
 /// @param stream A pointer to a previously-opened FILE object.
 #define ftell(stream) \
   (long) stream->currentPosition
+
+int getFileBlockMetadataFromFile(FILE *stream, FileBlockMetadata *metadata);
+int getFileBlockMetadataFromPath(const char *path, FileBlockMetadata *metadata);
 
 #ifdef __cplusplus
 } // extern "C"

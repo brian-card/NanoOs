@@ -32,6 +32,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "mush.h"
+#include "NanoOsUtils.h"
 
 int main(int argc, char **argv) {
   (void) argc;
@@ -44,25 +46,62 @@ int main(int argc, char **argv) {
   }
   *buffer = '\0';
   
+  intptr_t returnValue = 0;
+  FsCommandArgs fsCommandArgs;
   do {
     fputs("$ ", stdout);
     char *input = fgets(buffer, 96, stdin);
-    if ((input != NULL) && (strlen(input) > 0)
-      && (input[strlen(input) - 1] == '\n')
+    printDebugString("Read \"");
+    printDebugString(input);
+    printDebugString("\" from command line\n");
+    printDebug("Read \"%s\" from command line\n", input);
+    printDebugString("strlen = 0x");
+    printDebugHex(overlayMap.header.osApi->strlen);
+    printDebugString("\n");
+    size_t inputLength = strlen(input);
+    printDebugString("inputLength = ");
+    printDebugInt(inputLength);
+    printDebugString("\n");
+    if ((input != NULL) && (inputLength > 0)
+      && (input[inputLength - 1] == '\n')
     ) {
-      input[strlen(input) - 1] = '\0';
+      input[inputLength - 1] = '\0';
     }
+    printDebugString("input is now \"");
+    printDebugString(input);
+    printDebugString("\"\n");
     
-    if (strcmp(input, "exit") == 0) {
-      // Do nothing.  We'll just exit the loop below.
-    } else if (strcmp(input, "pwd") == 0) {
-      fputs(getenv("PWD"), stdout);
-      fputs("\n", stdout);
-    } else {
-      fputs(input, stdout);
-      fputs(": command not found\n", stdout);
+    // Attempt to process the command line as a built-in first before looking
+    // on the filesystem.
+    //
+    // The variable 'input' is the same as the variable 'buffer', which is a
+    // pointer to dynamic memory.  So, it's safe to pass as a parameter to
+    // callOverlayFunction.
+    printDebugString("Checking to see if command is a builtin\n");
+    returnValue = (intptr_t) callOverlayFunction(
+      NULL, "Builtins", "processBuiltin", input);
+    if (returnValue < -1)  {
+      // The command wasn't processed as a built-in.  Try running it from the
+      // filesystem.
+      printDebugString("Command is *NOT* a builtin\n");
+      if (strchr(input, '|')) {
+        // Command line contains pipes.  Process it that way.
+        returnValue = (intptr_t) callOverlayFunction(
+          NULL, "Pipes", "processPipes", input);
+      } else {
+        fsCommandArgs.commandLine = input;
+        fsCommandArgs.launchBackground = false;
+        char *ampersandAt = strrchr(input, '&');
+        if ((ampersandAt != NULL) && (ampersandAt[-1] != '&')) {
+          *ampersandAt = '\0';
+          fsCommandArgs.launchBackground = true;
+        }
+        fsCommandArgs.fileActions = NULL;
+        returnValue = (intptr_t) callOverlayFunction(
+          NULL, "FilesystemCommands", "runFsCommand", &fsCommandArgs);
+      }
     }
-  } while (strcmp(buffer, "exit") != 0);
+  } while (returnValue != -1);
   
   free(buffer);
   

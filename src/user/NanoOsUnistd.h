@@ -1,15 +1,15 @@
 ///////////////////////////////////////////////////////////////////////////////
 ///
-/// @author            James Card
+/// @author            Brian Card
 /// @date              10.22.2025
 ///
 /// @file              NanoOsUnistd.h
 ///
-/// @brief             Functionality from unistd.h to be exported to user
-///                    programs.
+/// @brief             Definitions in support of the standard POSIX unistd.h
+///                    functionality to be exported to user programs.
 ///
 /// @copyright
-///                   Copyright (c) 2012-2025 James Card
+///                      Copyright (c) 2026 Brian Card
 ///
 /// Permission is hereby granted, free of charge, to any person obtaining a
 /// copy of this software and associated documentation files (the "Software"),
@@ -29,22 +29,18 @@
 /// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 /// DEALINGS IN THE SOFTWARE.
 ///
-///                                James Card
-///                         http://www.jamescard.org
+///                                Brian Card
+///                      https://github.com/brian-card
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef NANO_OS_UNISTD_H
-#define NANO_OS_UNISTD_H
+#ifndef NANO_OS_USER_UNISTD_H
+#define NANO_OS_USER_UNISTD_H
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif
-
-int gethostname(char *name, size_t len);
-int sethostname(const char *name, size_t len);
-int ttyname_r(int fd, char *buf, size_t buflen);
 
 #define _POSIX_HOST_NAME_MAX 255
 
@@ -56,9 +52,20 @@ int ttyname_r(int fd, char *buf, size_t buflen);
 #error "HOST_NAME_MAX cannot exceed _POSIX_HOST_NAME_MAX"
 #endif // HOST_NAME_MAX > _POSIX_HOST_NAME_MAX
 
+#define STDIN_FILENO  0
+#define STDOUT_FILENO 1
+#define STDERR_FILENO 2
+
+int nanoOsClose(int fd);
+int nanoOsDup2(int oldfd, int newfd);
+int nanoOsGethostname(char *name, size_t len);
+int nanoOsPipe(int pipefd[2]);
+int nanoOsSethostname(const char *name, size_t len);
+int nanoOsTtyname_r(int fd, char *buf, size_t buflen);
+
 #ifdef __cplusplus
 }
 #endif
 
-#endif // NANO_OS_UNISTD_H
+#endif // NANO_OS_USER_UNISTD_H
 

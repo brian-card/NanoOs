@@ -75,11 +75,24 @@ int exFatTaskOpenFileCommandHandler(
     ExFatFileHandle *exFatFile = exFatOpenFile(driverState, pathname, mode);
     if (exFatFile != NULL) {
       nanoOsFile = (NanoOsFile*) malloc(sizeof(NanoOsFile));
-      nanoOsFile->file = exFatFile;
-      nanoOsFile->currentPosition = exFatFile->currentPosition;
-      nanoOsFile->fd = driverState->filesystemState->numOpenFiles + 3;
-      driverState->filesystemState->numOpenFiles++;
+      if (nanoOsFile != NULL) {
+        nanoOsFile->file = exFatFile;
+        nanoOsFile->currentPosition = exFatFile->currentPosition;
+        nanoOsFile->fd = driverState->filesystemState->numOpenFiles + 3;
+        nanoOsFile->owner = taskId(taskMessageFrom(taskMessage));
+        driverState->filesystemState->numOpenFiles++;
+
+        nanoOsFile->next = driverState->filesystemState->openFiles;
+        nanoOsFile->prev = NULL;
+        driverState->filesystemState->openFiles = nanoOsFile;
+      } else {
+        exFatFclose(driverState, exFatFile);
+      }
+    } else {
+      printString("ERROR: exFatOpenFile returned NULL\n");
     }
+  } else {
+    printString("ERROR: driverState is not valid!\n");
   }
 
   NanoOsMessage *nanoOsMessage
@@ -105,16 +118,35 @@ int exFatTaskCloseFileCommandHandler(
 ) {
   (void) driverState;
 
+  // A note about the way this function is written:
+  //
+  // I used to have sensible variables in this function.  That worked fine most
+  // of the time.  However, I was getting stack corruptions when debug messages
+  // were enabled.  So, I had to reduce the number of variables declared here.
+  // I know it's tempting, but *DO NOT* declare more variables in this function.
+  // Yes, it would definitely be more clear if there were proper variables
+  // declared and used in this function, but functionality comes first.
+  //
+  // JBC 2026-02-17
   FilesystemFcloseParameters *fcloseParameters
     = nanoOsMessageDataPointer(taskMessage, FilesystemFcloseParameters*);
-  ExFatFileHandle *exFatFile = (ExFatFileHandle*) fcloseParameters->stream->file;
-  free(fcloseParameters->stream);
   if (driverState->driverStateValid) {
-    fcloseParameters->returnValue = exFatFclose(driverState, exFatFile);
+    fcloseParameters->returnValue = exFatFclose(
+      driverState, (ExFatFileHandle*) fcloseParameters->stream->file);
     if (driverState->filesystemState->numOpenFiles > 0) {
       driverState->filesystemState->numOpenFiles--;
     }
+    if (fcloseParameters->stream->next != NULL) {
+      fcloseParameters->stream->next->prev = fcloseParameters->stream->prev;
+    }
+    if (fcloseParameters->stream->prev != NULL) {
+      fcloseParameters->stream->prev->next = fcloseParameters->stream->next;
+    }
+    if (fcloseParameters->stream == driverState->filesystemState->openFiles) {
+      driverState->filesystemState->openFiles = fcloseParameters->stream->next;
+    }
   }
+  free(fcloseParameters->stream);
 
   taskMessageSetDone(taskMessage);
   return 0;
@@ -271,16 +303,83 @@ int exFatTaskSeekFileCommandHandler(
   return 0;
 }
 
+/// @fn int exFatTaskDumpOpenFilesCommandHandler(
+///   ExFatDriverState *driverState, TaskMessage *taskMessage)
+///
+/// @brief Command handler for the FILESYSTEM_DUMP_OPEN_FILES command.  Walk
+/// the open files list and display information about all of the files and
+/// their owning processes.
+///
+/// @param driverState A pointer to the FilesystemState object maintained
+///   by the filesystem task.
+/// @param taskMessage A pointer to the TaskMessage that was received by
+///   the filesystem task.
+///
+/// @return Returns 0 on success, a standard POSIX error code on failure.
+int exFatTaskDumpOpenFilesCommandHandler(
+  ExFatDriverState *driverState, TaskMessage *taskMessage
+) {
+  printString("Open files:\n");
+  for (NanoOsFile *nanoOsFile = driverState->filesystemState->openFiles;
+    nanoOsFile != NULL;
+    nanoOsFile = nanoOsFile->next
+  ) {
+    ExFatFileHandle *exFatFile = (ExFatFileHandle*) nanoOsFile->file;
+    printString("0x");
+    printHex((uintptr_t) nanoOsFile);
+    printString(": \"");
+    printString(exFatFile->fileName);
+    printString("\" owned by ");
+    printInt(nanoOsFile->owner);
+    printString("\n");
+  }
+
+  taskMessageSetDone(taskMessage);
+  return 0;
+}
+
+/// @fn int exFatTaskGetFileBlockMetadataCommandHandler(
+///   ExFatDriverState *driverState, TaskMessage *taskMessage)
+///
+/// @brief Command handler for the FILESYSTEM_GET_FILE_BLOCK_METADATA command.
+/// Populate a caller-supplied FileBlockMetadata structure for a given file.
+///
+/// @param driverState A pointer to the FilesystemState object maintained
+///   by the filesystem task.
+/// @param taskMessage A pointer to the TaskMessage that was received by
+///   the filesystem task.
+///
+/// @return Returns 0 on success, a standard POSIX error code on failure.
+int exFatTaskGetFileBlockMetadataCommandHandler(
+  ExFatDriverState *driverState, TaskMessage *taskMessage
+) {
+  GetFileBlockMetadataArgs *args = msg_data(taskMessage);
+  args->metadata->blockDevice = driverState->filesystemState->blockDevice;
+
+  ExFatFileHandle *exFatFile = (ExFatFileHandle*) args->stream->file;
+  args->metadata->startBlock = driverState->clusterHeapStartSector +
+    ((exFatFile->firstCluster - 2) * driverState->sectorsPerCluster);
+  args->metadata->numBlocks
+    = (uint32_t) ((exFatFile->fileSize + (driverState->bytesPerSector - 1))
+    / ((uint64_t) driverState->bytesPerSector));
+
+  taskMessageSetDone(taskMessage);
+  return 0;
+}
+
 /// @var filesystemCommandHandlers
 ///
 /// @brief Array of ExFatCommandHandler function pointers.
 const ExFatCommandHandler filesystemCommandHandlers[] = {
-  exFatTaskOpenFileCommandHandler,   // FILESYSTEM_OPEN_FILE
-  exFatTaskCloseFileCommandHandler,  // FILESYSTEM_CLOSE_FILE
-  exFatTaskReadFileCommandHandler,   // FILESYSTEM_READ_FILE
-  exFatTaskWriteFileCommandHandler,  // FILESYSTEM_WRITE_FILE
-  exFatTaskRemoveFileCommandHandler, // FILESYSTEM_REMOVE_FILE
-  exFatTaskSeekFileCommandHandler,   // FILESYSTEM_SEEK_FILE
+  exFatTaskOpenFileCommandHandler,      // FILESYSTEM_OPEN_FILE
+  exFatTaskCloseFileCommandHandler,     // FILESYSTEM_CLOSE_FILE
+  exFatTaskReadFileCommandHandler,      // FILESYSTEM_READ_FILE
+  exFatTaskWriteFileCommandHandler,     // FILESYSTEM_WRITE_FILE
+  exFatTaskRemoveFileCommandHandler,    // FILESYSTEM_REMOVE_FILE
+  exFatTaskSeekFileCommandHandler,      // FILESYSTEM_SEEK_FILE
+  exFatTaskDumpOpenFilesCommandHandler, // FILESYSTEM_DUMP_OPEN_FILES
+  // FILESYSTEM_GET_FILE_BLOCK_METADATA:
+  exFatTaskGetFileBlockMetadataCommandHandler,
 };
 
 
@@ -304,7 +403,12 @@ static void exFatHandleFilesystemMessages(ExFatDriverState *driverState) {
       printDebugString("\n");
       filesystemCommandHandlers[type](driverState, msg);
     } else {
-      printString("ERROR! Received unknown filesystem message type ");
+      printInt(getRunningTaskId());
+      printString(": ");
+      printString(__func__);
+      printString(": ");
+      printInt(__LINE__);
+      printString(": ERROR! Received unknown filesystem message type ");
       printInt(type);
       printString("\n");
     }

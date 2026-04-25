@@ -78,7 +78,7 @@ static int readSector(
 ///
 /// @return EXFAT_SUCCESS on success, EXFAT_ERROR on failure
 static int writeSector(
-  ExFatDriverState* driverState, uint32_t sectorNumber, const uint8_t* buffer
+  ExFatDriverState* driverState, uint32_t sectorNumber, uint8_t* buffer
 ) {
   if (driverState == NULL || driverState->filesystemState == NULL || 
       buffer == NULL) {
@@ -1213,6 +1213,11 @@ static int searchDirectory(
     EXFAT_MAX_FILENAME_LENGTH * sizeof(uint16_t)
   );
   if (searchName == NULL) {
+    printDebugString(__func__);
+    printDebugInt(__LINE__);
+    printDebugString(": Could not allocate ");
+    printDebugInt(EXFAT_MAX_FILENAME_LENGTH * sizeof(uint16_t));
+    printDebugString(" bytes\n");
     return EXFAT_NO_MEMORY;
   }
 
@@ -1222,6 +1227,11 @@ static int searchDirectory(
   );
   if (fullName == NULL) {
     free(searchName);
+    printDebugString(__func__);
+    printDebugInt(__LINE__);
+    printDebugString(": Could not allocate ");
+    printDebugInt(EXFAT_MAX_FILENAME_LENGTH * sizeof(uint16_t));
+    printDebugString(" bytes\n");
     return EXFAT_NO_MEMORY;
   }
 
@@ -1231,6 +1241,11 @@ static int searchDirectory(
   if (tempFileEntry == NULL) {
     free(fullName);
     free(searchName);
+    printDebugString(__func__);
+    printDebugInt(__LINE__);
+    printDebugString(": Could not allocate ");
+    printDebugInt(sizeof(ExFatFileDirectoryEntry));
+    printDebugString(" bytes\n");
     return EXFAT_NO_MEMORY;
   }
 
@@ -1241,6 +1256,11 @@ static int searchDirectory(
     free(tempFileEntry);
     free(fullName);
     free(searchName);
+    printDebugString(__func__);
+    printDebugInt(__LINE__);
+    printDebugString(": Could not allocate ");
+    printDebugInt(sizeof(ExFatStreamExtensionEntry));
+    printDebugString(" bytes\n");
     return EXFAT_NO_MEMORY;
   }
 
@@ -1252,6 +1272,11 @@ static int searchDirectory(
     free(tempFileEntry);
     free(fullName);
     free(searchName);
+    printDebugString(__func__);
+    printDebugInt(__LINE__);
+    printDebugString(": Could not allocate ");
+    printDebugInt(sizeof(ExFatFileNameEntry));
+    printDebugString(" bytes\n");
     return EXFAT_NO_MEMORY;
   }
 
@@ -1479,6 +1504,11 @@ static int navigateToDirectory(
   // Allocate component buffer
   char* component = (char*) malloc(EXFAT_MAX_FILENAME_LENGTH + 1);
   if (component == NULL) {
+    printDebugString(__func__);
+    printDebugInt(__LINE__);
+    printDebugString(": Could not allocate ");
+    printDebugInt(EXFAT_MAX_FILENAME_LENGTH + 1);
+    printDebugString(" bytes\n");
     return EXFAT_NO_MEMORY;
   }
 
@@ -1487,6 +1517,11 @@ static int navigateToDirectory(
     (ExFatFileDirectoryEntry*) malloc(sizeof(ExFatFileDirectoryEntry));
   if (dirEntry == NULL) {
     free(component);
+    printDebugString(__func__);
+    printDebugInt(__LINE__);
+    printDebugString(": Could not allocate ");
+    printDebugInt(sizeof(ExFatFileDirectoryEntry));
+    printDebugString(" bytes\n");
     return EXFAT_NO_MEMORY;
   }
 
@@ -1496,6 +1531,11 @@ static int navigateToDirectory(
   if (streamEntry == NULL) {
     free(dirEntry);
     free(component);
+    printDebugString(__func__);
+    printDebugInt(__LINE__);
+    printDebugString(": Could not allocate ");
+    printDebugInt(sizeof(ExFatStreamExtensionEntry));
+    printDebugString(" bytes\n");
     return EXFAT_NO_MEMORY;
   }
 
@@ -1593,6 +1633,9 @@ ExFatFileHandle* exFatOpenFile(
     || (filePath == NULL) || (*filePath == '\0')
     || (mode == NULL) || (*mode == '\0')
   ) {
+    printDebugString(__func__);
+    printDebugInt(__LINE__);
+    printDebugString(": return NULL\n");
     return NULL;
   }
 
@@ -1622,6 +1665,9 @@ ExFatFileHandle* exFatOpenFile(
       read = true;
     }
   } else {
+    printDebugString(__func__);
+    printDebugInt(__LINE__);
+    printDebugString(": return NULL\n");
     return NULL;
   }
 
@@ -1632,6 +1678,9 @@ ExFatFileHandle* exFatOpenFile(
     sizeof(ExFatFileHandle)
   );
   if (handle == NULL) {
+    printDebugString(__func__);
+    printDebugInt(__LINE__);
+    printDebugString(": return NULL\n");
     return NULL;
   }
 
@@ -1639,6 +1688,9 @@ ExFatFileHandle* exFatOpenFile(
   char* fileName = (char*) malloc(EXFAT_MAX_FILENAME_LENGTH + 1);
   if (fileName == NULL) {
     free(handle);
+    printDebugString(__func__);
+    printDebugInt(__LINE__);
+    printDebugString(": return NULL\n");
     return NULL;
   }
 
@@ -1648,6 +1700,9 @@ ExFatFileHandle* exFatOpenFile(
   if (fileEntry == NULL) {
     free(fileName);
     free(handle);
+    printDebugString(__func__);
+    printDebugInt(__LINE__);
+    printDebugString(": return NULL\n");
     return NULL;
   }
 
@@ -1658,6 +1713,9 @@ ExFatFileHandle* exFatOpenFile(
     free(fileEntry);
     free(fileName);
     free(handle);
+    printDebugString(__func__);
+    printDebugInt(__LINE__);
+    printDebugString(": return NULL\n");
     return NULL;
   }
 
@@ -1673,6 +1731,11 @@ ExFatFileHandle* exFatOpenFile(
     free(fileEntry);
     free(fileName);
     free(handle);
+    printDebugString(__func__);
+    printDebugInt(__LINE__);
+    printDebugString(": result = ");
+    printDebugInt(result);
+    printDebugString("\n");
     return NULL;
   }
 
@@ -1691,6 +1754,9 @@ ExFatFileHandle* exFatOpenFile(
       free(fileEntry);
       free(fileName);
       free(handle);
+      printDebugString(__func__);
+      printDebugInt(__LINE__);
+      printDebugString(": return NULL\n");
       return NULL;
     }
 
@@ -1704,6 +1770,9 @@ ExFatFileHandle* exFatOpenFile(
       free(fileEntry);
       free(fileName);
       free(handle);
+      printDebugString(__func__);
+      printDebugInt(__LINE__);
+      printDebugString(": return NULL\n");
       return NULL;
     }
   } else if (result != EXFAT_SUCCESS) {
@@ -1711,6 +1780,9 @@ ExFatFileHandle* exFatOpenFile(
     free(fileEntry);
     free(fileName);
     free(handle);
+    printDebugString(__func__);
+    printDebugInt(__LINE__);
+    printDebugString(": return NULL\n");
     return NULL;
   }
 
@@ -1723,6 +1795,9 @@ ExFatFileHandle* exFatOpenFile(
     free(fileEntry);
     free(fileName);
     free(handle);
+    printDebugString(__func__);
+    printDebugInt(__LINE__);
+    printDebugString(": return NULL\n");
     return NULL;  // Cannot open read-only file for writing
   }
 

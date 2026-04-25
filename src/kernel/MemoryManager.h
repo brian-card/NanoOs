@@ -61,6 +61,17 @@ extern "C"
 /// possible while still allowing debug prints to work.
 #define MEMORY_MANAGER_DEBUG_STACK_SIZE 768
 
+/// @struct AssignMemoryParams
+///
+/// @brief Functional parameters to the MEMORY_MANAGER_ASSIGN_MEMORY command.
+///
+/// @param ptr A pointer to the memory to assign.
+/// @param taskId The TaskId of the task to assign the memory to.
+typedef struct AssignMemoryParams {
+  void *ptr;
+  TaskId taskId;
+} AssignMemoryParams;
+
 /// @enum MemoryManagerCommandResponse
 ///
 /// @brief Commands and responses recognized by the memory manager.
@@ -70,6 +81,8 @@ typedef enum MemoryManagerCommandResponse {
   MEMORY_MANAGER_FREE,
   MEMORY_MANAGER_GET_FREE_MEMORY,
   MEMORY_MANAGER_FREE_TASK_MEMORY,
+  MEMORY_MANAGER_ASSIGN_MEMORY,
+  MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS,
   NUM_MEMORY_MANAGER_COMMANDS,
   // Responses:
   MEMORY_MANAGER_RETURNING_POINTER,
@@ -104,7 +117,6 @@ void* memoryManagerCalloc(size_t nmemb, size_t size);
 #define calloc(nmemb, size) memoryManagerCalloc(nmemb, size)
 
 size_t getFreeMemory(void);
-int assignMemory(void *ptr, TaskId pid);
 
 
 #ifdef __cplusplus

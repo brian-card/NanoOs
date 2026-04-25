@@ -39,6 +39,14 @@
 
 #include "NanoOsUser.h"
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
+// C defines:
+#define EOF (-1)
+
 // Standard streams:
 #define stdin \
   overlayMap.header.osApi->stdin
@@ -48,56 +56,131 @@
   overlayMap.header.osApi->stderr
 
 // File operations:
-#define fopen(pathname, mode) \
-  overlayMap.header.osApi->fopen(pathname, mode)
-#define fclose(stream) \
-  overlayMap.header.osApi->fclose(stream)
-#define remove(pathname) \
-  overlayMap.header.osApi->remove(pathname)
-#define fseek(stream, offset, whence) \
-  overlayMap.header.osApi->fseek(stream, offset, whence)
-#define fileno(stream) \
-  overlayMap.header.osApi->fileno(stream)
+static inline FILE* fopen(const char *pathname, const char *mode) {
+  return overlayMap.header.osApi->fopen(pathname, mode);
+}
+static inline int fclose(FILE *stream) {
+  return overlayMap.header.osApi->fclose(stream);
+}
+static inline int remove(const char *pathname) {
+  return overlayMap.header.osApi->remove(pathname);
+}
+static inline int fseek(FILE *stream, long offset, int whence) {
+  return overlayMap.header.osApi->fseek(stream, offset, whence);
+}
+static inline int fileno(FILE *stream) {
+  return overlayMap.header.osApi->fileno(stream);
+}
 
 // Formatted I/O:
-#define vsscanf(buffer, format, args) \
-  overlayMap.header.osApi->vsscanf(buffer, format, args)
-#define sscanf(buffer, ...) \
-  overlayMap.header.osApi->sscanf(buffer, __VA_ARGS__)
-#define vfscanf(stream, format, ap) \
-  overlayMap.header.osApi->vfscanf(stream, format, ap)
-#define fscanf(stream, ...) \
-  overlayMap.header.osApi->fscanf(stream, __VA_ARGS__)
-#define scanf(...) \
-  overlayMap.header.osApi->scanf(__VA_ARGS__)
-#define vfprintf(stream, format, args) \
-  overlayMap.header.osApi->vfprintf(stream, format, args)
-#define fprintf(stream, ...) \
-  overlayMap.header.osApi->fprintf(stream, __VA_ARGS__)
-#define printf(...) \
-  overlayMap.header.osApi->printf(__VA_ARGS__)
-#define vsprintf(str, format, ap) \
-  overlayMap.header.osApi->vsprintf(str, format, ap)
-#define vsnprintf(str, size, format, ap) \
-  overlayMap.header.osApi->vsnprintf(str, size, format, ap)
-#define sprintf(str, ...) \
-  overlayMap.header.osApi->sprintf(str, __VA_ARGS__)
-#define snprintf(str, size, ...) \
-  overlayMap.header.osApi->snprintf(str, size, __VA_ARGS__)
+static inline int vsscanf(const char *str, const char *format, va_list ap) {
+  return overlayMap.header.osApi->vsscanf(str, format, ap);
+}
+static inline int sscanf(const char *str, const char *format, ...) {
+  va_list ap;
+  va_start(ap, format);
+  int returnValue = overlayMap.header.osApi->vsscanf(str, format, ap);
+  va_end(ap);
+  return returnValue;
+}
+static inline int vfscanf(FILE *stream, const char *format, va_list ap) {
+  return overlayMap.header.osApi->vfscanf(stream, format, ap);
+}
+static inline int fscanf(FILE *stream, const char *format, ...) {
+  va_list ap;
+  va_start(ap, format);
+  int returnValue = overlayMap.header.osApi->vfscanf(stream, format, ap);
+  va_end(ap);
+  return returnValue;
+}
+static inline int scanf(const char *format, ...) {
+  va_list ap;
+  va_start(ap, format);
+  int returnValue = overlayMap.header.osApi->vfscanf(stdin, format, ap);
+  va_end(ap);
+  return returnValue;
+}
+static inline int vfprintf(FILE *stream, const char *format, va_list ap) {
+  return overlayMap.header.osApi->vfprintf(stream, format, ap);
+}
+static inline int fprintf(FILE *stream, const char *format, ...) {
+  va_list ap;
+  va_start(ap, format);
+  int returnValue = overlayMap.header.osApi->vfprintf(stream, format, ap);
+  va_end(ap);
+  return returnValue;
+}
+static inline int printf(const char *format, ...) {
+  va_list ap;
+  va_start(ap, format);
+  int returnValue = overlayMap.header.osApi->vfprintf(stdout, format, ap);
+  va_end(ap);
+  return returnValue;
+}
+static inline int vsnprintf(char *str, size_t size,
+  const char *format, va_list ap
+) {
+  return overlayMap.header.osApi->vsnprintf(str, size, format, ap);
+}
+static inline int vsprintf(char *str, const char *format, va_list ap) {
+  return overlayMap.header.osApi->vsnprintf(str, (size_t) -1, format, ap);
+}
+static inline int snprintf(char *str, size_t size, const char *format, ...) {
+  va_list ap;
+  va_start(ap, format);
+  int returnValue = overlayMap.header.osApi->vsnprintf(str, size, format, ap);
+  va_end(ap);
+  return returnValue;
+}
+static inline int sprintf(char *str, const char *format, ...) {
+  va_list ap;
+  va_start(ap, format);
+  int returnValue
+    = overlayMap.header.osApi->vsnprintf(str, (size_t) -1, format, ap);
+  va_end(ap);
+  return returnValue;
+}
 
 // Character I/O:
-#define fputs(s, stream) \
-  overlayMap.header.osApi->fputs(s, stream)
-#define puts(s) \
-  overlayMap.header.osApi->puts(s)
-#define fgets(buffer, size, stream) \
-  overlayMap.header.osApi->fgets(buffer, size, stream)
+static inline int fputs(const char *s, FILE *stream) {
+  int returnValue = 0;
+  size_t len = overlayMap.header.osApi->strlen(s);
+  if (overlayMap.header.osApi->fwrite(s, 1, len, stream) != len) {
+    returnValue = EOF;
+  }
+  return returnValue;
+}
+static inline int puts(const char *s) {
+  if (fputs(s, stdout) != 0) {
+    return EOF;
+  }
+  return fputs("\n", stdout);
+}
+static inline char *fgets(char *s, int size, FILE *stream) {
+  char *returnValue = NULL;
+  if (size > 0) {
+    size_t bytesRead = overlayMap.header.osApi->fread(s, 1, size - 1, stream);
+    if (bytesRead > 0) {
+      s[bytesRead] = '\0';
+      returnValue = s;
+    }
+  }
+  return returnValue;
+}
 
 // Direct I/O:
-#define fread(ptr, size, nmemb, stream) \
-  overlayMap.header.osApi->fread(ptr, size, nmemb, stream)
-#define fwrite(ptr, size, nmemb, stream) \
-  overlayMap.header.osApi->fwrite(ptr, size, nmemb, stream)
+static inline size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
+  return overlayMap.header.osApi->fread(ptr, size, nmemb, stream);
+}
+static inline size_t fwrite(
+  void *ptr, size_t size, size_t nmemb, FILE *stream
+) {
+  return overlayMap.header.osApi->fwrite(ptr, size, nmemb, stream);
+}
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // STDIO_H
 
