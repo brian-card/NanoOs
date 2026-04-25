@@ -232,6 +232,10 @@ typedef struct TaskQueue TaskQueue;
 ///   will be NULL if the task is currently running (in no queue).
 /// @param readyQueue The ready queue that the descriptor is to be assigned to
 ///   when the task transitions to ready.
+/// @param message The default, statically-allocated message for the task to use
+///   to send to other tasks.
+/// @param nanoOsMessage The default, statically-allocated NanoOsMessage for the
+///   task to use to send to other tasks.
 typedef struct TaskDescriptor {
   const char         *name;
   TaskHandle          taskHandle;
@@ -244,6 +248,8 @@ typedef struct TaskDescriptor {
   char              **envp;
   TaskQueue          *taskQueue;
   TaskQueue          *readyQueue;
+  TaskMessage         message;
+  NanoOsMessage       nanoOsMessage;
 } TaskDescriptor;
 
 /// @struct TaskInfoElement
