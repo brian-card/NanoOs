@@ -617,11 +617,8 @@ void* schedulerResumeReallocMessage(void *ptr, size_t size) {
     return returnValue;
   }
 
-  NanoOsMessage *nanoOsMessage
-    = (NanoOsMessage*) taskMessageData(sent);
-  nanoOsMessage->data = (NanoOsMessageData) ((uintptr_t) &reallocMessage);
   taskMessageInit(sent, MEMORY_MANAGER_REALLOC,
-    nanoOsMessage, sizeof(*nanoOsMessage), true);
+    &reallocMessage, sizeof(reallocMessage), true);
   // sent->from would normally be set during taskMessageQueuePush.  We're
   // not using that mechanism here, so we have to do it manually.  Things will
   // get messed up if we don't.
@@ -709,11 +706,7 @@ void schedFree(void *ptr) {
     return;
   }
 
-  NanoOsMessage *nanoOsMessage
-    = (NanoOsMessage*) taskMessageData(sent);
-  nanoOsMessage->data = (NanoOsMessageData) ((intptr_t) ptr);
-  taskMessageInit(sent, MEMORY_MANAGER_FREE,
-    nanoOsMessage, sizeof(*nanoOsMessage), true);
+  taskMessageInit(sent, MEMORY_MANAGER_FREE, ptr, 0, true);
   // sent->from would normally be set during taskMessageQueuePush.  We're
   // not using that mechanism here, so we have to do it manually.  Things will
   // get messed up if we don't.
@@ -886,11 +879,8 @@ int schedulerGetNumConsolePorts(SchedulerState *schedulerState) {
   }
   schedulerState->currentReady = currentReady;
 
-  NanoOsMessage *nanoOsMessage
-    = (NanoOsMessage*) taskMessageData(messageToSend);
   taskMessageInit(messageToSend, CONSOLE_GET_NUM_PORTS,
-    /*data= */ nanoOsMessage, /* size= */ sizeof(NanoOsMessage),
-    /* waiting= */ true);
+    /*data= */ 0, /* size= */ 0, /* waiting= */ true);
   if (schedulerSendTaskMessageToTaskId(schedulerState,
     SCHEDULER_STATE->consoleTaskId, messageToSend) != taskSuccess
   ) {
@@ -1605,13 +1595,13 @@ FILE* schedFopen(const char *pathname, const char *mode) {
       return NULL;
     }
     printDebugString("schedFopen: Message retrieved\n");
-    NanoOsMessage *nanoOsMessage
-      = (NanoOsMessage*) taskMessageData(taskMessage);
-    nanoOsMessage->func = (intptr_t) mode;
-    nanoOsMessage->data = (intptr_t) pathname;
+    FilesystemFopenParameters fopenParameters = {
+      .pathname = pathname,
+      .mode = mode,
+    };
     printDebugString("schedFopen: Initializing message\n");
     taskMessageInit(taskMessage, FILESYSTEM_OPEN_FILE,
-      nanoOsMessage, sizeof(*nanoOsMessage), true);
+      &fopenParameters, sizeof(fopenParameters), true);
     printDebugString("schedFopen: Pushing message\n");
     taskMessageQueuePush(
       &SCHEDULER_STATE->allTasks[SCHEDULER_STATE->rootFsTaskId - 1],
@@ -1680,14 +1670,11 @@ int schedFclose(FILE *stream) {
       errno = ENOMEM;
       return EOF;
     }
-    NanoOsMessage *nanoOsMessage
-      = (NanoOsMessage*) taskMessageData(taskMessage);
     FilesystemFcloseParameters fcloseParameters;
     fcloseParameters.stream = stream;
     fcloseParameters.returnValue = 0;
-    nanoOsMessage->data = (intptr_t) &fcloseParameters;
     taskMessageInit(taskMessage, FILESYSTEM_CLOSE_FILE,
-      nanoOsMessage, sizeof(*nanoOsMessage), true);
+      &fcloseParameters, sizeof(fcloseParameters), true);
     taskMessageQueuePush(
       &SCHEDULER_STATE->allTasks[SCHEDULER_STATE->rootFsTaskId - 1],
       taskMessage);
@@ -1756,11 +1743,8 @@ int schedRemove(const char *pathname) {
       errno = ENOMEM;
       return -1;
     }
-    NanoOsMessage *nanoOsMessage
-      = (NanoOsMessage*) taskMessageData(taskMessage);
-    nanoOsMessage->data = (intptr_t) pathname;
     taskMessageInit(taskMessage, FILESYSTEM_REMOVE_FILE,
-      nanoOsMessage, sizeof(*nanoOsMessage), true);
+      (void*) pathname, strlen(pathname) + 1, true);
     taskMessageQueuePush(
       &SCHEDULER_STATE->allTasks[SCHEDULER_STATE->rootFsTaskId - 1],
       taskMessage);
@@ -1838,11 +1822,9 @@ size_t schedFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
       errno = ENOMEM;
       return 0;
     }
-    NanoOsMessage *nanoOsMessage
-      = (NanoOsMessage*) taskMessageData(taskMessage);
-    nanoOsMessage->data = (intptr_t) &filesystemIoCommandParameters;
     taskMessageInit(taskMessage, FILESYSTEM_READ_FILE,
-      nanoOsMessage, sizeof(*nanoOsMessage), true);
+      &filesystemIoCommandParameters, sizeof(filesystemIoCommandParameters),
+      true);
     taskMessageQueuePush(
       &SCHEDULER_STATE->allTasks[SCHEDULER_STATE->rootFsTaskId - 1],
       taskMessage);
@@ -1912,11 +1894,9 @@ size_t schedFwrite(void *ptr, size_t size, size_t nmemb, FILE *stream) {
       errno = ENOMEM;
       return 0;
     }
-    NanoOsMessage *nanoOsMessage
-      = (NanoOsMessage*) taskMessageData(taskMessage);
-    nanoOsMessage->data = (intptr_t) &filesystemIoCommandParameters;
     taskMessageInit(taskMessage, FILESYSTEM_WRITE_FILE,
-      nanoOsMessage, sizeof(*nanoOsMessage), true);
+      filesystemIoCommandParameters, sizeof(filesystemIoCommandParameters),
+      true);
     taskMessageQueuePush(
       &SCHEDULER_STATE->allTasks[SCHEDULER_STATE->rootFsTaskId - 1],
       taskMessage);
@@ -1988,11 +1968,9 @@ char* schedFgets(char *buffer, int size, FILE *stream) {
       errno = ENOMEM;
       return NULL;
     }
-    NanoOsMessage *nanoOsMessage
-      = (NanoOsMessage*) taskMessageData(taskMessage);
-    nanoOsMessage->data = (intptr_t) &filesystemIoCommandParameters;
     taskMessageInit(taskMessage, FILESYSTEM_READ_FILE,
-      nanoOsMessage, sizeof(*nanoOsMessage), true);
+      &filesystemIoCommandParameters, sizeof(filesystemIoCommandParameters),
+      true);
     taskMessageQueuePush(
       &SCHEDULER_STATE->allTasks[SCHEDULER_STATE->rootFsTaskId - 1],
       taskMessage);
@@ -2067,11 +2045,9 @@ int schedFputs(const char *s, FILE *stream) {
       errno = ENOMEM;
       return EOF;
     }
-    NanoOsMessage *nanoOsMessage
-      = (NanoOsMessage*) taskMessageData(taskMessage);
-    nanoOsMessage->data = (intptr_t) &filesystemIoCommandParameters;
     taskMessageInit(taskMessage, FILESYSTEM_WRITE_FILE,
-      nanoOsMessage, sizeof(*nanoOsMessage), true);
+      filesystemIoCommandParameters, sizeof(filesystemIoCommandParameters),
+      true);
     taskMessageQueuePush(
       &SCHEDULER_STATE->allTasks[SCHEDULER_STATE->rootFsTaskId - 1],
       taskMessage);
@@ -3812,11 +3788,6 @@ __attribute__((noinline)) void startScheduler(
   TaskMessage messagesStorage[NANO_OS_NUM_MESSAGES] = {0};
   extern TaskMessage *messages;
   messages = messagesStorage;
-
-  // Initialize the static NanoOsMessage storage.
-  NanoOsMessage nanoOsMessagesStorage[NANO_OS_NUM_MESSAGES] = {0};
-  extern NanoOsMessage *nanoOsMessages;
-  nanoOsMessages = nanoOsMessagesStorage;
   printDebugString("Allocated messages storage.\n");
 
   // Initialize the allTasks pointer.  The tasks are all zeroed because
@@ -3893,9 +3864,6 @@ __attribute__((noinline)) void startScheduler(
   printDebugString(" bytes\n");
   printDebugString("messagesStorage size = ");
   printDebugInt(sizeof(TaskMessage) * NANO_OS_NUM_MESSAGES);
-  printDebugString(" bytes\n");
-  printDebugString("nanoOsMessagesStorage size = ");
-  printDebugInt(sizeof(NanoOsMessage) * NANO_OS_NUM_MESSAGES);
   printDebugString(" bytes\n");
   printDebugString("ConsoleState size = ");
   printDebugInt(sizeof(ConsoleState));
