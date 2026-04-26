@@ -261,7 +261,7 @@ int schedSdWriteBlocks(void *context, uint32_t startBlock,
   while (taskMessageDone(taskMessage) == false) {
     SCHEDULER_STATE->runScheduler();
   }
-  int returnValue = nanoOsMessageDataValue(taskMessage, int);
+  int returnValue = (int) ((intptr_t) taskMessageData(taskMessage));
   taskMessageRelease(taskMessage);
 
   SCHEDULER_STATE->currentReady = currentReady;
