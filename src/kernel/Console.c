@@ -1054,7 +1054,7 @@ void* runConsole(void *args) {
 ///   displayed.
 /// @param value A pointer to the value to send as data.
 /// @param length The length of the data at the address provided by the value
-///   pointer.  Will be truncated to the size of NanoOsMessageData if needed.
+///   pointer.  Will be truncated to the size of uintptr_t if needed.
 ///
 /// @return This function is non-blocking, always succeeds, and always returns
 /// 0.
