@@ -59,14 +59,14 @@ int sdCardReadBlocksCommandHandler(
   SdCardState *sdCardState, TaskMessage *taskMessage
 ) {
   printDebugString("sdCardReadBlocksCommandHandler: Enter\n");
-  printDebugString("sdCardReadBlocksCommandHandler: Got NanoOsMessage\n");
+  printDebugString("sdCardReadBlocksCommandHandler: Got TaskMessage\n");
   
   int devFd = (int) ((intptr_t) sdCardState->context);
   if (devFd < 0) {
     // Nothing we can do.
     printDebugString(
       "sdCardReadBlocksCommandHandler: Invalid file descriptor\n");
-    nanoOsMessage->data = EIO;
+    taskMessageData(taskMessage) = (void*) ((intptr_t) EIO);
     taskMessageSetDone(taskMessage);
     printDebugString("sdCardReadBlocksCommandHandler: Returning early\n");
     return 0;
@@ -116,7 +116,7 @@ int sdCardWriteBlocksCommandHandler(
   int devFd = (int) ((intptr_t) sdCardState->context);
   if (devFd < 0) {
     // Nothing we can do.
-    nanoOsMessage->data = EIO;
+    taskMessageData(taskMessage) = (void*) ((intptr_t) EIO);
     taskMessageSetDone(taskMessage);
     return 0;
   }
