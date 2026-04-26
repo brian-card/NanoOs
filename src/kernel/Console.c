@@ -310,8 +310,7 @@ void consoleWriteBufferCommandHandler(
 ) {
   (void) consoleState;
 
-  ConsoleBuffer *consoleBuffer
-    = nanoOsMessageDataPointer(inputMessage, ConsoleBuffer*);
+  ConsoleBuffer *consoleBuffer = (ConsoleBuffer*) taskMessageData(inputMessage);
   if (consoleBuffer != NULL) {
     const char *message = consoleBuffer->buffer;
     if (message != NULL) {
@@ -603,7 +602,6 @@ void consoleSetEchoCommandHandler(
   }
 
   taskMessageData(inputMessage) = (void*) ((intptr_t) 0);
-  int callerReturnValue = 0;
   if (portFound == false) {
     printString("WARNING: Request to set echo from non-owning task ");
     printInt(owner);
@@ -678,22 +676,13 @@ void consoleReleasePidPortCommandHandler(
 
   TaskId owner = (TaskId) ((intptr_t) taskMessageData(inputMessage));
   ConsolePort *consolePorts = consoleState->consolePorts;
-  bool releaseMessage = false;
 
-  bool portFound = false;
   for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
     if (consolePorts[ii].inputOwner == owner) {
       consolePorts[ii].inputOwner = consolePorts[ii].shell;
-      portFound = true;
     }
     if (consolePorts[ii].outputOwner == owner) {
       consolePorts[ii].outputOwner = consolePorts[ii].shell;
-      if (owner == consolePorts[ii].shell) {
-        // The shell is being restarted.  It won't be able to receive the
-        // message if we send it, so we need to go ahead and release it.
-        releaseMessage = true;
-      }
-      portFound = true;
     }
   }
 
@@ -1159,7 +1148,7 @@ int getOwnedConsolePort(void) {
     SCHEDULER_STATE->consoleTaskId, CONSOLE_GET_OWNED_PORT,
     /* data= */ 0, /* size= */ 0, /* waiting= */ true);
 
-  taskMessageWaitForDone(sent);
+  taskMessageWaitForDone(sent, NULL);
 
   int returnValue = (int) ((intptr_t) taskMessageData(sent));
   taskMessageRelease(sent);
@@ -1196,11 +1185,12 @@ bool getConsoleEcho(void) {
 int setConsoleEcho(bool desiredEchoState) {
   TaskMessage *sent = initSendTaskMessageToTaskId(
     SCHEDULER_STATE->consoleTaskId, CONSOLE_SET_ECHO_PORT,
-    /* data= */ desiredEchoState, /* size= */ 0, /* waiting= */ true);
+    /* data= */ (void*) ((uintptr_t) desiredEchoState), /* size= */ 0,
+    /* waiting= */ true);
 
-  taskMessageWaitForDone(sent);
+  taskMessageWaitForDone(sent, NULL);
 
-  int returnValue = (int) ((intptr_t) taskMessageData(sent);
+  int returnValue = (int) ((intptr_t) taskMessageData(sent));
   taskMessageRelease(sent);
 
   return returnValue;
