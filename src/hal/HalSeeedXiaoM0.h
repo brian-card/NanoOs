@@ -34,8 +34,8 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef HAL_ADAFRUIT_FEATHER_M0_WIFI_H
-#define HAL_ADAFRUIT_FEATHER_M0_WIFI_H
+#ifndef HAL_SEEED_XIAO_M0_H
+#define HAL_SEEED_XIAO_M0_H
 
 #include "../kernel/Hal.h"
 
@@ -51,5 +51,5 @@ const Hal* halSeeedXiaoM0Init(void);
 } // extern "C"
 #endif
 
-#endif // HAL_ADAFRUIT_FEATHER_M0_WIFI_H
+#endif // HAL_SEEED_XIAO_M0_H
 
