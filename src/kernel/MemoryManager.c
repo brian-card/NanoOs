@@ -745,7 +745,7 @@ int memoryManagerFreeCommandHandler(
 ) {
   int returnValue = 0;
 
-  void *ptr = nanoOsMessageDataPointer(incoming, void*);
+  void *ptr = taskMessageData(incoming);
   localFree(memoryManagerState, ptr);
   if (taskMessageRelease(incoming) != taskSuccess) {
     printString("ERROR: "
@@ -1229,7 +1229,7 @@ void* memoryManagerSendReallocMessage(void *ptr, size_t size) {
     return returnValue; // NULL
   }
   
-  taskMessageWaitForDone(sent);
+  taskMessageWaitForDone(sent, NULL);
   
   // The handler set the pointer back in the structure we sent it, so grab it
   // out of the structure we already have.
