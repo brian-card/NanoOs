@@ -435,28 +435,6 @@ void consoleAssignPortCommandHandler(
   return;
 }
 
-/// @fn void consoleAssignPortInputCommandHandler(
-///   ConsoleState *consoleState, TaskMessage *inputMessage)
-///
-/// @brief Assign a console port's input to a running task.
-///
-/// @param consoleState A pointer to the ConsoleState being maintained by the
-///   runConsole function that's running.
-/// @param inputMessage A pointer to the TaskMessage with the received
-///   command.  This contains a NanoOsMessage that contains a
-///   ConsolePortPidAssociation that will associate the port's input with the
-///   task if this function succeeds.
-///
-/// @return This function returns no value, but it marks the inputMessage as
-/// being 'done' on success and does *NOT* mark it on failure.
-void consoleAssignPortInputCommandHandler(
-  ConsoleState *consoleState, TaskMessage *inputMessage
-) {
-  consoleAssignPortHelper(consoleState, inputMessage, false);
-
-  return;
-}
-
 /// @fn void consoleReleasePortCommandHandler(
 ///   ConsoleState *consoleState, TaskMessage *inputMessage)
 ///
@@ -776,7 +754,6 @@ const ConsoleCommandHandler consoleCommandHandlers[] = {
   consoleWriteBufferCommandHandler,     // CONSOLE_WRITE_BUFFER
   consoleSetPortShellCommandHandler,    // CONSOLE_SET_PORT_SHELL
   consoleAssignPortCommandHandler,      // CONSOLE_ASSIGN_PORT
-  consoleAssignPortInputCommandHandler, // CONSOLE_ASSIGN_PORT_INPUT
   consoleReleasePortCommandHandler,     // CONSOLE_RELEASE_PORT
   consoleGetOwnedPortCommandHandler,    // CONSOLE_GET_OWNED_PORT
   consoleGetEchoCommandHandler,         // CONSOLE_GET_ECHO_PORT,
