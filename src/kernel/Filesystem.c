@@ -80,7 +80,7 @@ int getPartitionInfo(FilesystemState *fs) {
   return -3;
 }
 
-/// @fn FILE* filesystemFOpen(const char *pathname, const char *mode)
+/// @fn FILE* filesystemFopen(const char *pathname, const char *mode)
 ///
 /// @brief Implementation of the standard C fopen call.
 ///
@@ -91,7 +91,7 @@ int getPartitionInfo(FilesystemState *fs) {
 ///
 /// @return Returns a pointer to an initialized FILE object on success, NULL on
 /// failure.
-FILE* filesystemFOpen(const char *pathname, const char *mode) {
+FILE* filesystemFopen(const char *pathname, const char *mode) {
   if ((pathname == NULL) || (*pathname == '\0')
     || (mode == NULL) || (*mode == '\0')
   ) {

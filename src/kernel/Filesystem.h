@@ -179,11 +179,11 @@ typedef enum FilesystemCommandResponse {
 // Exported functionality
 int getPartitionInfo(FilesystemState *fs);
 
-FILE* filesystemFOpen(const char *pathname, const char *mode);
+FILE* filesystemFopen(const char *pathname, const char *mode);
 #ifdef fopen
 #undef fopen
 #endif // fopen
-#define fopen filesystemFOpen
+#define fopen filesystemFopen
 
 int filesystemFClose(FILE *stream);
 #ifdef fclose

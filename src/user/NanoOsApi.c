@@ -86,7 +86,7 @@ NanoOsApi nanoOsApi = {
   .stderr = (FILE*) ((intptr_t) 0x3),
   
   // File operations:
-  .fopen = filesystemFOpen,
+  .fopen = filesystemFopen,
   .fclose = filesystemFClose,
   .remove = filesystemRemove,
   .fseek = filesystemFSeek,
