@@ -47,12 +47,6 @@
 /// scheduler function's stack.
 TaskMessage *messages = NULL;
 
-/// @var nanoOsMessages
-///
-/// @brief Pointer to the array of NanoOsMessages that will be stored in the
-/// scheduler function's stack.
-NanoOsMessage *nanoOsMessages = NULL;
-
 /// @fn char** stringArrayDestroy(char **stringArray)
 ///
 /// @brief Destroy a NULL-terminated array of C strings.
@@ -457,8 +451,7 @@ TaskMessage* getAvailableMessage(void) {
   TaskDescriptor *taskDescriptor = getRunningTask();
   if (taskMessageInUse(&taskDescriptor->message) == false) {
     availableMessage = &taskDescriptor->message;
-    taskMessageInit(availableMessage, 0,
-      &taskDescriptor->nanoOsMessage, sizeof(NanoOsMessage), false);
+    taskMessageInit(availableMessage, 0, NULL, 0, false);
   }
 
   if (availableMessage == NULL) {
@@ -479,7 +472,7 @@ TaskMessage* getAvailableMessage(void) {
 ///   TaskDescriptor *taskDescriptor, int type,
 ///   void *data, size_t size, bool waiting)
 ///
-/// @brief Send a NanoOsMessage to another task identified by its
+/// @brief Send a TaskMessage to another task identified by its
 /// TaskDescriptor.
 ///
 /// @param task A pointer to the TaskDescriptor for the task.
@@ -548,7 +541,7 @@ TaskMessage* initSendTaskMessageToTask(
 /// @fn TaskMessage* initSendTaskMessageToTaskId(int taskId, int type,
 ///   void *data, size_t size, bool waiting)
 ///
-/// @brief Send a NanoOsMessage to another task identified by its task ID. Looks
+/// @brief Send a TaskMessage to another task identified by its task ID. Looks
 /// up the task's Coroutine by its PID and then calls
 /// initSendTaskMessageToTask.
 ///
