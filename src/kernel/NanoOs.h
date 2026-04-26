@@ -109,20 +109,6 @@ extern "C"
 /// @brief Convenience macro for the common operation of destroying a string.
 #define stringDestroy(string) ((char*) (free((void*) string), NULL))
 
-/// @def STATIC_NANO_OS_MESSAGE
-///
-/// @brief Helper macro to define and initialize a NanoOs message for local
-/// use.
-#define STATIC_NANO_OS_MESSAGE( \
-  variableName, type, funcValue, dataValue, waiting \
-) \
-  NanoOsMessage __nanoOsMessage; \
-  TaskMessage variableName = {}; \
-  __nanoOsMessage.func = funcValue; \
-  __nanoOsMessage.data = dataValue; \
-  taskMessageInit( \
-    &variableName, type, &__nanoOsMessage, sizeof(__nanoOsMessage), waiting)
-
 /// @def copyBytes
 ///
 /// @brief Copy a specified number of bytes from a source to a destination one
