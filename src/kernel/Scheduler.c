@@ -609,7 +609,6 @@ void* schedulerResumeReallocMessage(void *ptr, size_t size) {
   ReallocMessage reallocMessage;
   reallocMessage.ptr = ptr;
   reallocMessage.size = size;
-  reallocMessage.responseType = MEMORY_MANAGER_RETURNING_POINTER;
   
   TaskMessage *sent = getAvailableMessage();
   if (sent == NULL) {
@@ -761,22 +760,15 @@ int assignMemory(void *ptr, TaskId taskId) {
   return returnValue;
 }
 
-/// @fn int schedulerAssignPortToTaskId(
-///   SchedulerState *schedulerState,
-///   uint8_t consolePort, TaskId owner)
+/// @fn int schedulerAssignPortToTaskId(uint8_t consolePort, TaskId owner)
 ///
 /// @brief Assign a console port to a task ID.
 ///
-/// @param schedulerState A pointer to the SchedulerState object maintainted by
-///   the scheduler.
 /// @param consolePort The ID of the consolePort to assign.
 /// @param owner The ID of the task to assign the port to.
 ///
 /// @return Returns taskSuccess on success, taskError on failure.
-int schedulerAssignPortToTaskId(
-  SchedulerState *schedulerState,
-  uint8_t consolePort, TaskId owner
-) {
+int schedulerAssignPortToTaskId(uint8_t consolePort, TaskId owner) {
   ConsolePortPidUnion consolePortPidUnion;
   consolePortPidUnion.consolePortPidAssociation.consolePort
     = consolePort;
@@ -784,34 +776,6 @@ int schedulerAssignPortToTaskId(
 
   int returnValue = schedulerInitSendMessageToTaskId(
     SCHEDULER_STATE->consoleTaskId, CONSOLE_ASSIGN_PORT,
-    (void*) ((uintptr_t) consolePortPidUnion.nanoOsMessageData), /* size= */ 0);
-
-  return returnValue;
-}
-
-/// @fn int schedulerAssignPortInputToTaskId(
-///   SchedulerState *schedulerState,
-///   uint8_t consolePort, TaskId owner)
-///
-/// @brief Assign a console port to a task ID.
-///
-/// @param schedulerState A pointer to the SchedulerState object maintainted by
-///   the scheduler.
-/// @param consolePort The ID of the consolePort to assign.
-/// @param owner The ID of the task to assign the port to.
-///
-/// @return Returns taskSuccess on success, taskError on failure.
-int schedulerAssignPortInputToTaskId(
-  SchedulerState *schedulerState,
-  uint8_t consolePort, TaskId owner
-) {
-  ConsolePortPidUnion consolePortPidUnion;
-  consolePortPidUnion.consolePortPidAssociation.consolePort
-    = consolePort;
-  consolePortPidUnion.consolePortPidAssociation.taskId = owner;
-
-  int returnValue = schedulerInitSendMessageToTaskId(
-    SCHEDULER_STATE->consoleTaskId, CONSOLE_ASSIGN_PORT_INPUT,
     (void*) ((uintptr_t) consolePortPidUnion.nanoOsMessageData), /* size= */ 0);
 
   return returnValue;
@@ -888,7 +852,7 @@ int schedulerGetNumConsolePorts(SchedulerState *schedulerState) {
     return returnValue; // -1
   }
 
-  returnValue = nanoOsMessageDataValue(messageToSend, int);
+  returnValue = (int) ((intptr_t) taskMessageData(messageToSend));
   taskMessageRelease(messageToSend);
 
   return returnValue;
@@ -1059,7 +1023,7 @@ int schedulerKillTask(TaskId taskId) {
   int waitStatus = taskMessageWaitForDone(taskMessage, &ts);
   int returnValue = 0;
   if (waitStatus == taskSuccess) {
-    returnValue = (int) ((intptr_t) messageData(taskMessage));
+    returnValue = (int) ((intptr_t) taskMessageData(taskMessage));
     if (returnValue == 0) {
       printf("Termination successful.\n");
     } else {
@@ -1118,7 +1082,7 @@ int schedulerSetTaskUser(UserId userId) {
   TaskMessage *taskMessage
     = initSendTaskMessageToTaskId(
     SCHEDULER_STATE->schedulerTaskId, SCHEDULER_SET_TASK_USER,
-    /* data= */ (void*) ((intptr_t) userId) /* size= */ 0, true);
+    /* data= */ (void*) ((intptr_t) userId), /* size= */ 0, true);
   if (taskMessage == NULL) {
     printString("ERROR: Could not communicate with scheduler.\n");
     return returnValue; // -1
@@ -1613,7 +1577,7 @@ FILE* schedFopen(const char *pathname, const char *mode) {
     }
     printDebugString("schedFopen: Filesystem message is done\n");
 
-    returnValue = nanoOsMessageDataPointer(taskMessage, FILE*);
+    returnValue = (FILE*) taskMessageData(taskMessage);
 
     taskMessageRelease(taskMessage);
     SCHEDULER_STATE->currentReady = currentReady;
@@ -1753,7 +1717,7 @@ int schedRemove(const char *pathname) {
       runScheduler();
     }
 
-    returnValue = nanoOsMessageDataValue(taskMessage, int);
+    returnValue = (int) ((intptr_t) taskMessageData(taskMessage));
     if (returnValue != 0) {
       // returnValue holds a negative errno.  Set errno for the current task
       // and return -1 like we're supposed to.
@@ -1895,7 +1859,7 @@ size_t schedFwrite(void *ptr, size_t size, size_t nmemb, FILE *stream) {
       return 0;
     }
     taskMessageInit(taskMessage, FILESYSTEM_WRITE_FILE,
-      filesystemIoCommandParameters, sizeof(filesystemIoCommandParameters),
+      &filesystemIoCommandParameters, sizeof(filesystemIoCommandParameters),
       true);
     taskMessageQueuePush(
       &SCHEDULER_STATE->allTasks[SCHEDULER_STATE->rootFsTaskId - 1],
@@ -2046,7 +2010,7 @@ int schedFputs(const char *s, FILE *stream) {
       return EOF;
     }
     taskMessageInit(taskMessage, FILESYSTEM_WRITE_FILE,
-      filesystemIoCommandParameters, sizeof(filesystemIoCommandParameters),
+      &filesystemIoCommandParameters, sizeof(filesystemIoCommandParameters),
       true);
     taskMessageQueuePush(
       &SCHEDULER_STATE->allTasks[SCHEDULER_STATE->rootFsTaskId - 1],
@@ -2275,7 +2239,7 @@ int schedulerKillTaskCommandHandler(
       ) {
         printString("ERROR: Could not send MEMORY_MANAGER_FREE_TASK_MEMORY ");
         printString("message to memory manager\n");
-        nanoOsMessage->data = 1;
+        taskMessageData(taskMessage) = (void*) ((intptr_t) 1);
         if (taskMessageSetDone(taskMessage) != taskSuccess) {
           printString("ERROR: Could not mark message done in "
             "schedulerKillTaskCommandHandler.\n");
@@ -2749,7 +2713,7 @@ int schedulerExecveCommandHandler(
    * JBC 14-Nov-2025
    */
   if (false) {
-    if (schedulerAssignPortToTaskId(schedulerState,
+    if (schedulerAssignPortToTaskId(
       /*commandDescriptor->consolePort*/ 255, taskDescriptor->taskId)
       != taskSuccess
     ) {
@@ -3246,22 +3210,18 @@ int schedulerDumpOpenFiles(SchedulerState *schedulerState) {
   return returnValue;
 }
 
-/// @fn void removeTask(SchedulerState *schedulerState,
+/// @fn void removeTask(
 ///   TaskDescriptor *taskDescriptor, const char *errorMessage)
 ///
 /// @brief Clean up all of a task's resources so that it can be removed from
 /// the scheduler's task queues.
 ///
-/// @param schedulerState A pointer to the SchedulerState managed by the
-///   scheduler.
 /// @param taskDescriptor A pointer to the TaskDescriptor to clean up.
 /// @param errorMessage A string containing the message to display to the user
 ///   to indicate the reason this task is being remoevd.
 ///
 /// @return This function returns no value.
-void removeTask(SchedulerState *schedulerState, TaskDescriptor *taskDescriptor,
-  const char *errorMessage
-) {
+void removeTask(TaskDescriptor *taskDescriptor, const char *errorMessage) {
   printString("ERROR: ");
   printString(errorMessage);
   printString("\n");
@@ -3276,7 +3236,7 @@ void removeTask(SchedulerState *schedulerState, TaskDescriptor *taskDescriptor,
   if (schedulerInitSendMessageToTaskId(
     SCHEDULER_STATE->consoleTaskId,
     CONSOLE_RELEASE_PID_PORT,
-    /* data= */ (void*) ((intptr_t) taskDescriptor->taskId)
+    /* data= */ (void*) ((intptr_t) taskDescriptor->taskId),
     /* size= */ 0) != taskSuccess
   ) {
     printString("ERROR: Could not send CONSOLE_RELEASE_PID_PORT message ");
@@ -3611,7 +3571,7 @@ void runScheduler(void) {
   }
 
   if (coroutineCorrupted(taskDescriptor->taskHandle)) {
-    removeTask(SCHEDULER_STATE, taskDescriptor, "Task corruption detected");
+    removeTask(taskDescriptor, "Task corruption detected");
     return;
   }
 
@@ -3624,7 +3584,7 @@ void runScheduler(void) {
       ) {
         schedulerDumpMemoryAllocations(SCHEDULER_STATE);
         schedulerDumpOpenFiles(SCHEDULER_STATE);
-        removeTask(SCHEDULER_STATE, taskDescriptor, "Overlay load failure");
+        removeTask(taskDescriptor, "Overlay load failure");
         return;
       }
     }
@@ -3678,7 +3638,7 @@ void runScheduler(void) {
       if (schedulerRunOverlayCommand(SCHEDULER_STATE, taskDescriptor,
         "/usr/bin/getty", (char**) gettyArgs, NULL) != 0
       ) {
-        removeTask(SCHEDULER_STATE, taskDescriptor, "Failed to load getty");
+        removeTask(taskDescriptor, "Failed to load getty");
         return;
       }
     } else {
@@ -3717,7 +3677,7 @@ void runScheduler(void) {
         if (schedulerRunOverlayCommand(SCHEDULER_STATE, taskDescriptor,
           pwd->pw_shell, (char**) shellArgs, taskDescriptor->envp) != 0
         ) {
-          removeTask(SCHEDULER_STATE, taskDescriptor, "Failed to load shell");
+          removeTask(taskDescriptor, "Failed to load shell");
           schedFree(pwd);
           schedFree(passwdStringBuffer);
           return;
@@ -3978,7 +3938,7 @@ __attribute__((noinline)) void startScheduler(
 
   // Assign the console ports to it.
   for (uint8_t ii = 0; ii < schedulerState.numShells; ii++) {
-    if (schedulerAssignPortToTaskId(&schedulerState,
+    if (schedulerAssignPortToTaskId(
       ii, schedulerState.memoryManagerTaskId) != taskSuccess
     ) {
       printString(
