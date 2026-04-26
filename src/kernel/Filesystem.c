@@ -98,7 +98,7 @@ FILE* filesystemFOpen(const char *pathname, const char *mode) {
     return NULL;
   }
   FilesystemFopenParameters fopenParameters = {
-    .patahname = pathname,
+    .pathname = pathname,
     .mode = mode,
   };
 
