@@ -128,7 +128,7 @@ int exFatTaskCloseFileCommandHandler(
   //
   // JBC 2026-02-17
   FilesystemFcloseParameters *fcloseParameters
-    = (FilesystemFcloseParameters*) taskMessageData(taskMessage*);
+    = (FilesystemFcloseParameters*) taskMessageData(taskMessage);
   if (driverState->driverStateValid) {
     fcloseParameters->returnValue = exFatFclose(
       driverState, (ExFatFileHandle*) fcloseParameters->stream->file);
