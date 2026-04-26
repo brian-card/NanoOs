@@ -458,8 +458,7 @@ TaskMessage* getAvailableMessage(void) {
     for (int ii = 0; ii < NANO_OS_NUM_MESSAGES; ii++) {
       if (taskMessageInUse(&messages[ii]) == false) {
         availableMessage = &messages[ii];
-        taskMessageInit(availableMessage, 0,
-          &nanoOsMessages[ii], sizeof(nanoOsMessages[ii]), false);
+        taskMessageInit(availableMessage, 0, NULL, 0, false);
         break;
       }
     }
@@ -596,7 +595,7 @@ void* waitForDataMessage(TaskMessage *sent, int type, const struct timespec *ts)
 
   TaskMessage *incoming = taskMessageWaitForReplyWithType(sent, true, type, ts);
   if (incoming != NULL)  {
-    returnValue = nanoOsMessageDataPointer(incoming, void*);
+    returnValue = taskMessageData(incoming);
     if (taskMessageRelease(incoming) != taskSuccess) {
       printString("ERROR: "
         "Could not release incoming message from waitForDataMessage.\n");
