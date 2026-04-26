@@ -5,8 +5,7 @@
 ///
 /// @file              HalSeeedXiaoM0.h
 ///
-/// @brief             Header for the Adafruit Feather M0 WiFi HAL
-///                    implementation.
+/// @brief             Header for the Seeed Xiao M0 HAL implementation.
 ///
 /// @copyright
 ///                      Copyright (c) 2026 Brian Card
