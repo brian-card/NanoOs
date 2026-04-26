@@ -2270,7 +2270,7 @@ int schedulerKillTaskCommandHandler(
       } else {
         // Tell the caller that we've failed.
         printString("Failed to terminate task; marking message 0x");
-        printHex(taskMessage);
+        printHex((uintptr_t) taskMessage);
         printString(" done\n");
         taskMessageData(taskMessage) = (void*) ((intptr_t) 1);
         if (taskMessageSetDone(taskMessage) != taskSuccess) {
@@ -3062,7 +3062,7 @@ void handleSchedulerMessage(SchedulerState *schedulerState) {
       printString(": ");
       printInt(__LINE__);
       printString(": Received invalid message 0x");
-      printHex(message);
+      printHex((uintptr_t) message);
       printString(" of type ");
       printInt(messageType);
       printString(" from task ");
