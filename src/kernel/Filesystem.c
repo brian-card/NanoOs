@@ -157,7 +157,7 @@ int filesystemRemove(const char *pathname) {
   if ((pathname != NULL) && (*pathname != '\0')) {
     TaskMessage *msg = initSendTaskMessageToTaskId(
       SCHEDULER_STATE->rootFsTaskId, FILESYSTEM_REMOVE_FILE,
-      pathname, strlen(pathname) + 1, true);
+      (void*) pathname, strlen(pathname) + 1, true);
     taskMessageWaitForDone(msg, NULL);
     returnValue = (int) ((intptr_t) taskMessageData(msg));
     if (returnValue != 0) {
