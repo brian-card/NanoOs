@@ -117,6 +117,17 @@ typedef struct FilesystemSeekParameters {
   int whence;
 } FilesystemSeekParameters;
 
+/// @struct FilesystemFopenParameters
+///
+/// @brief Function parameters and return value for an fopen call.
+///
+/// @param pathname A string containing the full path to the file.
+/// @param mode A string containing the mode to open the file with.
+typedef struct FilesystemFopenParameters {
+  const char *patahname;
+  const char *mode;
+} FilesystemFopenParameters;
+
 /// @struct FilesystemFcloseParameters
 ///
 /// @brief Function parameters and return value for an fclose call.

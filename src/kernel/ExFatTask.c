@@ -62,8 +62,8 @@ int exFatTaskOpenFileCommandHandler(
   ExFatDriverState *driverState, TaskMessage *taskMessage
 ) {
   NanoOsFile *nanoOsFile = NULL;
-  const char *pathname = nanoOsMessageDataPointer(taskMessage, char*);
-  const char *mode = nanoOsMessageFuncPointer(taskMessage, char*);
+  FilesystemFopenParameters *fopenParameters
+    = (FilesystemFopenParameters*) taskMessageData(taskMessage);
 
   printDebugString("Opening file \"");
   printDebugString(pathname);
@@ -72,7 +72,8 @@ int exFatTaskOpenFileCommandHandler(
   printDebugString("\"\n");
 
   if (driverState->driverStateValid) {
-    ExFatFileHandle *exFatFile = exFatOpenFile(driverState, pathname, mode);
+    ExFatFileHandle *exFatFile = exFatOpenFile(driverState,
+      fopenParameters->pathname, fopenParameters->mode);
     if (exFatFile != NULL) {
       nanoOsFile = (NanoOsFile*) malloc(sizeof(NanoOsFile));
       if (nanoOsFile != NULL) {
@@ -95,9 +96,7 @@ int exFatTaskOpenFileCommandHandler(
     printString("ERROR: driverState is not valid!\n");
   }
 
-  NanoOsMessage *nanoOsMessage
-    = (NanoOsMessage*) taskMessageData(taskMessage);
-  nanoOsMessage->data = (intptr_t) nanoOsFile;
+  taskMessageData(taskMessage) = nanoOsFile;
   taskMessageSetDone(taskMessage);
   return 0;
 }
@@ -129,7 +128,7 @@ int exFatTaskCloseFileCommandHandler(
   //
   // JBC 2026-02-17
   FilesystemFcloseParameters *fcloseParameters
-    = nanoOsMessageDataPointer(taskMessage, FilesystemFcloseParameters*);
+    = (FilesystemFcloseParameters*) taskMessageData(taskMessage*);
   if (driverState->driverStateValid) {
     fcloseParameters->returnValue = exFatFclose(
       driverState, (ExFatFileHandle*) fcloseParameters->stream->file);
@@ -167,7 +166,7 @@ int exFatTaskReadFileCommandHandler(
   ExFatDriverState *driverState, TaskMessage *taskMessage
 ) {
   FilesystemIoCommandParameters *filesystemIoCommandParameters
-    = nanoOsMessageDataPointer(taskMessage, FilesystemIoCommandParameters*);
+    = (FilesystemIoCommandParameters*) taskMessageData(taskMessage);
   int32_t returnValue = 0;
   if (driverState->driverStateValid) {
     uint32_t length = filesystemIoCommandParameters->length;
@@ -212,7 +211,7 @@ int exFatTaskWriteFileCommandHandler(
   ExFatDriverState *driverState, TaskMessage *taskMessage
 ) {
   FilesystemIoCommandParameters *filesystemIoCommandParameters
-    = nanoOsMessageDataPointer(taskMessage, FilesystemIoCommandParameters*);
+    = (FilesystemIoCommandParameters*) taskMessageData(taskMessage);
   int32_t returnValue = 0;
   if (driverState->driverStateValid) {
     uint32_t length = filesystemIoCommandParameters->length;
@@ -257,15 +256,13 @@ int exFatTaskWriteFileCommandHandler(
 int exFatTaskRemoveFileCommandHandler(
   ExFatDriverState *driverState, TaskMessage *taskMessage
 ) {
-  const char *pathname = nanoOsMessageDataPointer(taskMessage, char*);
+  const char *pathname = (const char*) taskMessageData(taskMessage);
   int returnValue = 0;
   if (driverState->driverStateValid) {
     returnValue = exFatRemove(driverState, pathname);
   }
 
-  NanoOsMessage *nanoOsMessage
-    = (NanoOsMessage*) taskMessageData(taskMessage);
-  nanoOsMessage->data = (intptr_t) returnValue;
+  taskMessageData(taskMessage) = (void*) ((intptr_t) returnValue);
   taskMessageSetDone(taskMessage);
   return 0;
 }
@@ -285,7 +282,7 @@ int exFatTaskSeekFileCommandHandler(
   ExFatDriverState *driverState, TaskMessage *taskMessage
 ) {
   FilesystemSeekParameters *filesystemSeekParameters
-    = nanoOsMessageDataPointer(taskMessage, FilesystemSeekParameters*);
+    = (FilesystemSeekParameters*) taskMessageData(taskMessage);
   int returnValue = 0;
   if (driverState->driverStateValid) {
     NanoOsFile *nanoOsFile = filesystemSeekParameters->stream;
@@ -296,9 +293,7 @@ int exFatTaskSeekFileCommandHandler(
     nanoOsFile->currentPosition = exFatFile->currentPosition;
   }
 
-  NanoOsMessage *nanoOsMessage
-    = (NanoOsMessage*) taskMessageData(taskMessage);
-  nanoOsMessage->data = (intptr_t) returnValue;
+  taskMessageData(taskMessage) = (void*) ((intptr_t) returnValue);
   taskMessageSetDone(taskMessage);
   return 0;
 }

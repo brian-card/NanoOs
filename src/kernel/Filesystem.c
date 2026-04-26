@@ -97,13 +97,18 @@ FILE* filesystemFOpen(const char *pathname, const char *mode) {
   ) {
     return NULL;
   }
+  FilesystemFopenParameters fopenParameters = {
+    .patahname = pathname,
+    .mode = mode,
+  };
 
-  TaskMessage *msg = sendNanoOsMessageToTaskId(
+  TaskMessage *msg = initSendTaskMessageToTaskId(
     SCHEDULER_STATE->rootFsTaskId, FILESYSTEM_OPEN_FILE,
-    (intptr_t) mode, (intptr_t) pathname, true);
+    &fopenParameters, sizeof(fopenParameters), true);
   taskMessageWaitForDone(msg, NULL);
-  FILE *file = nanoOsMessageDataPointer(msg, FILE*);
+  FILE *file = (FILE*) taskMessageData(msg);
   taskMessageRelease(msg);
+
   return file;
 }
 
@@ -122,9 +127,9 @@ int filesystemFClose(FILE *stream) {
     fcloseParameters.stream = stream;
     fcloseParameters.returnValue = 0;
 
-    TaskMessage *msg = sendNanoOsMessageToTaskId(
+    TaskMessage *msg = initSendTaskMessageToTaskId(
       SCHEDULER_STATE->rootFsTaskId, FILESYSTEM_CLOSE_FILE,
-      0, (intptr_t) &fcloseParameters, true);
+      &fcloseParameters, sizeof(fcloseParameters), true);
     taskMessageWaitForDone(msg, NULL);
 
     if (fcloseParameters.returnValue != 0) {
@@ -150,11 +155,11 @@ int filesystemFClose(FILE *stream) {
 int filesystemRemove(const char *pathname) {
   int returnValue = 0;
   if ((pathname != NULL) && (*pathname != '\0')) {
-    TaskMessage *msg = sendNanoOsMessageToTaskId(
+    TaskMessage *msg = initSendTaskMessageToTaskId(
       SCHEDULER_STATE->rootFsTaskId, FILESYSTEM_REMOVE_FILE,
-      /* func= */ 0, (intptr_t) pathname, true);
+      pathname, strlen(pathname) + 1, true);
     taskMessageWaitForDone(msg, NULL);
-    returnValue = nanoOsMessageDataValue(msg, int);
+    returnValue = (int) ((intptr_t) taskMessageData(msg));
     if (returnValue != 0) {
       // returnValue holds a negative errno.  Set errno for the current task
       // and return -1 like we're supposed to.
@@ -188,11 +193,11 @@ int filesystemFSeek(FILE *stream, long offset, int whence) {
     .offset = offset,
     .whence = whence,
   };
-  TaskMessage *msg = sendNanoOsMessageToTaskId(
-    SCHEDULER_STATE->rootFsTaskId, FILESYSTEM_REMOVE_FILE,
-    /* func= */ 0, (intptr_t) &filesystemSeekParameters, true);
+  TaskMessage *msg = initSendTaskMessageToTaskId(
+    SCHEDULER_STATE->rootFsTaskId, FILESYSTEM_SEEK_FILE,
+    &filesystemSeekParameters, sizeof(filesystemSeekParameters), true);
   taskMessageWaitForDone(msg, NULL);
-  int returnValue = nanoOsMessageDataValue(msg, int);
+  int returnValue = (int) ((intptr_t) taskMessageData(msg));
   taskMessageRelease(msg);
   return returnValue;
 }
@@ -234,11 +239,11 @@ size_t filesystemFRead(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   printDebugHex((uintptr_t) ptr);
   printDebugString("\n");
 
-  TaskMessage *taskMessage = sendNanoOsMessageToTaskId(
+  TaskMessage *taskMessage = initSendTaskMessageToTaskId(
     SCHEDULER_STATE->rootFsTaskId,
     FILESYSTEM_READ_FILE,
-    /* func= */ 0,
-    /* data= */ (intptr_t) &filesystemIoCommandParameters,
+    /* data= */ &filesystemIoCommandParameters,
+    /* size= */ sizeof(filesystemIoCommandParameters),
     true);
   taskMessageWaitForDone(taskMessage, NULL);
   returnValue = (filesystemIoCommandParameters.length / size);
@@ -282,11 +287,11 @@ size_t filesystemFWrite(
     .buffer = (void*) ptr,
     .length = (uint32_t) (size * nmemb)
   };
-  TaskMessage *taskMessage = sendNanoOsMessageToTaskId(
+  TaskMessage *taskMessage = initSendTaskMessageToTaskId(
     SCHEDULER_STATE->rootFsTaskId,
     FILESYSTEM_WRITE_FILE,
-    /* func= */ 0,
-    /* data= */ (intptr_t) &filesystemIoCommandParameters,
+    /* data= */ &filesystemIoCommandParameters,
+    /* size= */ sizeof(filesystemIoCommandParameters),
     true);
   taskMessageWaitForDone(taskMessage, NULL);
   returnValue = (filesystemIoCommandParameters.length / size);
