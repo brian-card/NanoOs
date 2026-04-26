@@ -460,11 +460,9 @@ typedef union ConsolePortPidUnion {
 ///   memory will be allocated.
 /// @param size The number of bytes to allocate.  If this value is 0, the memory
 ///   at ptr will be freed.
-/// @param responseType The response type the caller is waiting for.
 typedef struct ReallocMessage {
   void *ptr;
   size_t size;
-  int responseType;
 } ReallocMessage;
 
 /// @struct MemNode

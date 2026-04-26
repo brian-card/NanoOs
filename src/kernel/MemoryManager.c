@@ -680,12 +680,8 @@ int memoryManagerDumpMemoryAllocations(
 int memoryManagerReallocCommandHandler(
   MemoryManagerState *memoryManagerState, TaskMessage *incoming
 ) {
-  // We're going to reuse the incoming message as the outgoing message.
-  TaskMessage *response = incoming;
-
   int returnValue = 0;
-  ReallocMessage *reallocMessage
-    = nanoOsMessageDataPointer(incoming, ReallocMessage*);
+  ReallocMessage *reallocMessage = (ReallocMessage*) taskMessageData(incoming);
   void *clientReturnValue
     = localRealloc(memoryManagerState,
       reallocMessage->ptr, reallocMessage->size,
@@ -695,7 +691,7 @@ int memoryManagerReallocCommandHandler(
   } else if ((reallocMessage->size > 0)
     && (taskId(taskMessageFrom(incoming)) != SCHEDULER_STATE->schedulerTaskId)
   ) {
-    memoryManagerDumpMemoryAllocations(memoryManagerState, incoming);
+    memoryManagerDumpMemoryAllocations(memoryManagerState, NULL);
     do {
       break;
       TaskMessage *filesystemCommand = getAvailableMessage();
@@ -721,17 +717,6 @@ int memoryManagerReallocCommandHandler(
     reallocMessage->size = 0;
   }
   reallocMessage->ptr = clientReturnValue;
-  
-  TaskDescriptor *from = taskMessageFrom(incoming);
-  NanoOsMessage *nanoOsMessage = (NanoOsMessage*) taskMessageData(incoming);
-  
-  // We need to mark waiting as true here so that taskMessageSetDone signals
-  // the client side correctly.
-  taskMessageInit(response, reallocMessage->responseType,
-    nanoOsMessage, sizeof(*nanoOsMessage), true);
-  if (taskMessageQueuePush(from, response) != taskSuccess) {
-    returnValue = -1;
-  }
   
   // The client is waiting on us.  Mark the incoming message done now.  Do
   // *NOT* release it since the client is still using it.
@@ -1235,25 +1220,17 @@ void* memoryManagerSendReallocMessage(void *ptr, size_t size) {
   ReallocMessage reallocMessage;
   reallocMessage.ptr = ptr;
   reallocMessage.size = size;
-  reallocMessage.responseType = MEMORY_MANAGER_RETURNING_POINTER;
   
   TaskMessage *sent
-    = sendNanoOsMessageToTaskId(SCHEDULER_STATE->memoryManagerTaskId,
-    MEMORY_MANAGER_REALLOC, /* func= */ 0,
-    (NanoOsMessageData) ((uintptr_t) &reallocMessage),
-    true);
+    = initSendTaskMessageToTaskId(SCHEDULER_STATE->memoryManagerTaskId,
+    MEMORY_MANAGER_REALLOC, &reallocMessage, sizeof(reallocMessage), true);
   
   if (sent == NULL) {
     // Nothing more we can do.
     return returnValue; // NULL
   }
   
-  TaskMessage *response = taskMessageWaitForReplyWithType(sent, false,
-    MEMORY_MANAGER_RETURNING_POINTER, NULL);
-  if (response == NULL) {
-    // Something is wrong.  Fail.
-    return returnValue; // NULL
-  }
+  taskMessageWaitForDone(sent);
   
   // The handler set the pointer back in the structure we sent it, so grab it
   // out of the structure we already have.
@@ -1274,10 +1251,9 @@ void* memoryManagerSendReallocMessage(void *ptr, size_t size) {
 /// @return This function always succeeds and returns no value.
 void memoryManagerFree(void *ptr) {
   if (ptr != NULL) {
-    if (sendNanoOsMessageToTaskId(
+    if (initSendTaskMessageToTaskId(
       SCHEDULER_STATE->memoryManagerTaskId, MEMORY_MANAGER_FREE,
-      (NanoOsMessageData) 0, (NanoOsMessageData) ((intptr_t) ptr), false)
-      == NULL
+      /* data= */ ptr, /* size= */ 0, false) == NULL
     ) {
       printString("ERROR: Could not send MEMORY_MANAGER_FREE message to ");
       printString("memory manager; memory leak\n");
