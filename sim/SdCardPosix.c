@@ -59,8 +59,6 @@ int sdCardReadBlocksCommandHandler(
   SdCardState *sdCardState, TaskMessage *taskMessage
 ) {
   printDebugString("sdCardReadBlocksCommandHandler: Enter\n");
-  NanoOsMessage *nanoOsMessage
-    = (NanoOsMessage*) taskMessageData(taskMessage);
   printDebugString("sdCardReadBlocksCommandHandler: Got NanoOsMessage\n");
   
   int devFd = (int) ((intptr_t) sdCardState->context);
@@ -76,7 +74,7 @@ int sdCardReadBlocksCommandHandler(
   printDebugString("sdCardReadBlocksCommandHandler: context is *NOT* NULL\n");
   
   SdCommandParams *sdCommandParams
-    = nanoOsMessageDataPointer(taskMessage, SdCommandParams*);
+    = (SdCommandParams*) taskMessageData(taskMessage);
   printDebugString("sdCardReadBlocksCommandHandler: Got sdCommandParams\n");
   uint32_t startSdBlock = 0, numSdBlocks = 0;
   int returnValue = sdCardGetReadWriteParameters(
@@ -93,7 +91,7 @@ int sdCardReadBlocksCommandHandler(
   }
 
   printDebugString("sdCardReadBlocksCommandHandler: Exiting\n");
-  nanoOsMessage->data = returnValue;
+  taskMessageData(taskMessage) = (void*) ((intptr_t) returnValue);
   printDebugString("sdCardReadBlocksCommandHandler: Setting message to done\n");
   taskMessageSetDone(taskMessage);
 
@@ -115,9 +113,6 @@ int sdCardReadBlocksCommandHandler(
 int sdCardWriteBlocksCommandHandler(
   SdCardState *sdCardState, TaskMessage *taskMessage
 ) {
-  NanoOsMessage *nanoOsMessage
-    = (NanoOsMessage*) taskMessageData(taskMessage);
-  
   int devFd = (int) ((intptr_t) sdCardState->context);
   if (devFd < 0) {
     // Nothing we can do.
@@ -127,7 +122,7 @@ int sdCardWriteBlocksCommandHandler(
   }
   
   SdCommandParams *sdCommandParams
-    = nanoOsMessageDataPointer(taskMessage, SdCommandParams*);
+    = (SdCommandParams*) taskMessageData(taskMessage);
   uint32_t startSdBlock = 0, numSdBlocks = 0;
   int returnValue = sdCardGetReadWriteParameters(
     sdCardState, sdCommandParams, &startSdBlock, &numSdBlocks);
@@ -139,7 +134,7 @@ int sdCardWriteBlocksCommandHandler(
       sdCardState->blockSize * numSdBlocks);
   }
 
-  nanoOsMessage->data = returnValue;
+  taskMessageData(taskMessage) = (void*) ((intptr_t) returnValue);
   taskMessageSetDone(taskMessage);
 
   return 0;

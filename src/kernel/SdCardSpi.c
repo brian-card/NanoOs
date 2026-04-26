@@ -489,7 +489,7 @@ int sdCardReadBlocksCommandHandler(
   SdCardState *sdCardState, TaskMessage *taskMessage
 ) {
   SdCommandParams *sdCommandParams
-    = nanoOsMessageDataPointer(taskMessage, SdCommandParams*);
+    = (SdCommandParams*) taskMessageData(taskMessage);
   uint32_t startSdBlock = 0, numSdBlocks = 0;
   int returnValue = sdCardGetReadWriteParameters(
     sdCardState, sdCommandParams, &startSdBlock, &numSdBlocks);
@@ -500,9 +500,7 @@ int sdCardReadBlocksCommandHandler(
       startSdBlock, numSdBlocks, buffer);
   }
 
-  NanoOsMessage *nanoOsMessage
-    = (NanoOsMessage*) taskMessageData(taskMessage);
-  nanoOsMessage->data = returnValue;
+  taskMessageData(taskMessage) = (void*) ((intptr_t) returnValue);
   taskMessageSetDone(taskMessage);
 
   return 0;
@@ -523,7 +521,7 @@ int sdCardWriteBlocksCommandHandler(
   SdCardState *sdCardState, TaskMessage *taskMessage
 ) {
   SdCommandParams *sdCommandParams
-    = nanoOsMessageDataPointer(taskMessage, SdCommandParams*);
+    = (SdCommandParams*) taskMessageData(taskMessage);
   uint32_t startSdBlock = 0, numSdBlocks = 0;
   int returnValue = sdCardGetReadWriteParameters(
     sdCardState, sdCommandParams, &startSdBlock, &numSdBlocks);
@@ -534,9 +532,7 @@ int sdCardWriteBlocksCommandHandler(
       startSdBlock, numSdBlocks, buffer);
   }
 
-  NanoOsMessage *nanoOsMessage
-    = (NanoOsMessage*) taskMessageData(taskMessage);
-  nanoOsMessage->data = returnValue;
+  taskMessageData(taskMessage) = (void*) ((intptr_t) returnValue);
   taskMessageSetDone(taskMessage);
 
   return 0;

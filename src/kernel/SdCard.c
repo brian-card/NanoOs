@@ -98,11 +98,11 @@ int sdReadBlocks(void *context, uint32_t startBlock,
   sdCommandParams.blockSize = blockSize;
   sdCommandParams.buffer = buffer;
 
-  TaskMessage *taskMessage = sendNanoOsMessageToTaskId(
+  TaskMessage *taskMessage = initSendTaskMessageToTaskId(
     sdCardTask, SD_CARD_READ_BLOCKS,
-    /* func= */ 0, /* data= */ (intptr_t) &sdCommandParams, true);
+    /* data= */ &sdCommandParams, sizeof(sdCommandParams), true);
   taskMessageWaitForDone(taskMessage, NULL);
-  int returnValue = nanoOsMessageDataValue(taskMessage, int);
+  int returnValue = (int) ((intptr_t) taskMessageData(taskMessage));
   taskMessageRelease(taskMessage);
 
   return returnValue;
@@ -134,11 +134,11 @@ int sdWriteBlocks(void *context, uint32_t startBlock,
   sdCommandParams.blockSize = blockSize;
   sdCommandParams.buffer = (uint8_t*) buffer;
 
-  TaskMessage *taskMessage = sendNanoOsMessageToTaskId(
+  TaskMessage *taskMessage = initSendTaskMessageToTaskId(
     sdCardTask, SD_CARD_WRITE_BLOCKS,
-    /* func= */ 0, /* data= */ (intptr_t) &sdCommandParams, true);
+    /* data= */ &sdCommandParams, /* size= */ sizeof(sdCommandParams), true);
   taskMessageWaitForDone(taskMessage, NULL);
-  int returnValue = nanoOsMessageDataValue(taskMessage, int);
+  int returnValue = (int) ((intptr_t) taskMessageData(taskMessage));
   taskMessageRelease(taskMessage);
 
   return returnValue;
@@ -190,12 +190,8 @@ int schedSdReadBlocks(void *context, uint32_t startBlock,
     return -ENOMEM;
   }
 
-  NanoOsMessage *nanoOsMessage
-    = (NanoOsMessage*) taskMessageData(taskMessage);
-  nanoOsMessage->func = 0;
-  nanoOsMessage->data = (intptr_t) &sdCommandParams;
   taskMessageInit(taskMessage, SD_CARD_READ_BLOCKS,
-    nanoOsMessage, sizeof(*nanoOsMessage), true);
+    &sdCommandParams, sizeof(sdCommandParams), true);
   if (sendTaskMessageToTaskId(sdCardTask, taskMessage) != taskSuccess) {
     return -ENXIO;
   }
@@ -203,7 +199,7 @@ int schedSdReadBlocks(void *context, uint32_t startBlock,
   while (taskMessageDone(taskMessage) == false) {
     SCHEDULER_STATE->runScheduler();
   }
-  int returnValue = nanoOsMessageDataValue(taskMessage, int);
+  int returnValue = (int) ((intptr_t) taskMessageData(taskMessage));
   taskMessageRelease(taskMessage);
 
   SCHEDULER_STATE->currentReady = currentReady;
@@ -256,12 +252,8 @@ int schedSdWriteBlocks(void *context, uint32_t startBlock,
     return -ENOMEM;
   }
 
-  NanoOsMessage *nanoOsMessage
-    = (NanoOsMessage*) taskMessageData(taskMessage);
-  nanoOsMessage->func = 0;
-  nanoOsMessage->data = (intptr_t) &sdCommandParams;
   taskMessageInit(taskMessage, SD_CARD_WRITE_BLOCKS,
-    nanoOsMessage, sizeof(*nanoOsMessage), true);
+    &sdCommandParams, sizeof(sdCommandParams), true);
   if (sendTaskMessageToTaskId(sdCardTask, taskMessage) != taskSuccess) {
     return -ENXIO;
   }
