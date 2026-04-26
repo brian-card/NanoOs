@@ -133,77 +133,77 @@ void* arduinoNanoEveryBottomOfHeap(void) {
   return (__brkval == NULL) ? (char*) &__heap_start : __brkval;
 }
 
-/// @var serialPorts
+/// @var uarts
 ///
 /// @brief Array of serial ports on the system.  Index 0 is the main port,
 /// which is the USB serial port.
-static HardwareSerial *serialPorts[] = {
+static HardwareSerial *uarts[] = {
   &Serial,
   &Serial1,
 };
 
-/// @var _numSerialPorts
+/// @var _numUarts
 ///
 /// @brief The number of serial ports we support on the Arduino Nano Every.
-static int _numSerialPorts = sizeof(serialPorts) / sizeof(serialPorts[0]);
+static int _numUarts = sizeof(uarts) / sizeof(uarts[0]);
 
-int arduinoNanoEveryGetNumSerialPorts(void) {
-  return _numSerialPorts;
+int arduinoNanoEveryGetNumUarts(void) {
+  return _numUarts;
 }
 
-int arduinoNanoEverySetNumSerialPorts(int numSerialPorts) {
-  if (numSerialPorts > ((int) (sizeof(serialPorts) / sizeof(serialPorts[0])))) {
+int arduinoNanoEverySetNumUarts(int numUarts) {
+  if (numUarts > ((int) (sizeof(uarts) / sizeof(uarts[0])))) {
     return -ERANGE;
-  } else if (numSerialPorts < -ELAST) {
+  } else if (numUarts < -ELAST) {
     return -ERANGE;
   }
   
-  _numSerialPorts = numSerialPorts;
+  _numUarts = numUarts;
   
   return 0;
 }
 
-int arduinoNanoEveryInitSerialPort(int port, int32_t baud) {
+int arduinoNanoEveryInitUart(int port, int32_t baud) {
   int returnValue = -ERANGE;
   
-  if ((port >= 0) && (port < _numSerialPorts)) {
-    serialPorts[port]->begin(baud);
+  if ((port >= 0) && (port < _numUarts)) {
+    uarts[port]->begin(baud);
     // wait for serial port to connect.
-    while (!(*serialPorts[port]));
+    while (!(*uarts[port]));
     returnValue = 0;
   }
   
   return returnValue;
 }
 
-int arduinoNanoEveryPollSerialPort(int port) {
+int arduinoNanoEveryPollUart(int port) {
   int serialData = -ERANGE;
   
-  if ((port >= 0) && (port < _numSerialPorts)) {
-    serialData = serialPorts[port]->read();
+  if ((port >= 0) && (port < _numUarts)) {
+    serialData = uarts[port]->read();
   }
   
   return serialData;
 }
 
-ssize_t arduinoNanoEveryWriteSerialPort(int port,
+ssize_t arduinoNanoEveryWriteUart(int port,
   const uint8_t *data, ssize_t length
 ) {
   ssize_t numBytesWritten = -ERANGE;
   
-  if ((port >= 0) && (port < _numSerialPorts) && (length >= 0)) {
-    numBytesWritten = serialPorts[port]->write(data, length);
+  if ((port >= 0) && (port < _numUarts) && (length >= 0)) {
+    numBytesWritten = uarts[port]->write(data, length);
   }
   
   return numBytesWritten;
 }
 
-static HalSerialPort arduinoNanoEverySerialPortHal = {
-  .getNumSerialPorts = arduinoNanoEveryGetNumSerialPorts,
-  .setNumSerialPorts = arduinoNanoEverySetNumSerialPorts,
-  .initSerialPort = arduinoNanoEveryInitSerialPort,
-  .pollSerialPort = arduinoNanoEveryPollSerialPort,
-  .writeSerialPort = arduinoNanoEveryWriteSerialPort,
+static HalUart arduinoNanoEveryUartHal = {
+  .getNumUarts = arduinoNanoEveryGetNumUarts,
+  .setNumUarts = arduinoNanoEverySetNumUarts,
+  .initUart = arduinoNanoEveryInitUart,
+  .pollUart = arduinoNanoEveryPollUart,
+  .writeUart = arduinoNanoEveryWriteUart,
 };
 
 int arduinoNanoEveryGetNumDios(void) {
@@ -626,7 +626,7 @@ static Hal arduinoNanoEveryHal = {
   .overlayMap = NULL,
   .overlaySize = 0,
   
-  .serialPortHal = &arduinoNanoEverySerialPortHal,
+  .uartHal = &arduinoNanoEveryUartHal,
   .dioHal = &arduinoNanoEveryDioHal,
   .spiHal = &arduinoNanoEverySpiHal,
   .clockHal = &arduinoNanoEveryClockHal,

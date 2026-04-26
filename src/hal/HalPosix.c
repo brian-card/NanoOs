@@ -46,17 +46,17 @@ uintptr_t posixProcessStackSize(void);
 uintptr_t posixMemoryManagerStackSize(bool debug);
 void* posixBottomOfHeap(void);
 
-int posixGetNumSerialPorts(void);
-int posixSetNumSerialPorts(int numSerialPorts);
-int posixInitSerialPort(int port, int32_t baud);
-int posixPollSerialPort(int port);
-ssize_t posixWriteSerialPort(int port, const uint8_t *data, ssize_t length);
-static HalSerialPort posixSerialPortHal = {
-  .getNumSerialPorts = posixGetNumSerialPorts,
-  .setNumSerialPorts = posixSetNumSerialPorts,
-  .initSerialPort = posixInitSerialPort,
-  .pollSerialPort = posixPollSerialPort,
-  .writeSerialPort = posixWriteSerialPort,
+int posixGetNumUarts(void);
+int posixSetNumUarts(int numUarts);
+int posixInitUart(int port, int32_t baud);
+int posixPollUart(int port);
+ssize_t posixWriteUart(int port, const uint8_t *data, ssize_t length);
+static HalUart posixUartHal = {
+  .getNumUarts = posixGetNumUarts,
+  .setNumUarts = posixSetNumUarts,
+  .initUart = posixInitUart,
+  .pollUart = posixPollUart,
+  .writeUart = posixWriteUart,
 };
 
 int posixGetNumDios(void);
@@ -135,7 +135,7 @@ static Hal posixHal = {
   .overlayMap = NULL,
   .overlaySize = 0,
   
-  .serialPortHal = &posixSerialPortHal,
+  .uartHal = &posixUartHal,
   .dioHal = &posixDioHal,
   .spiHal = &posixSpiHal,
   .clockHal = &posixClockHal,

@@ -123,36 +123,36 @@ void* posixBottomOfHeap(void) {
   return _bottomOfHeap;
 }
 
-/// @var serialPorts
+/// @var uarts
 ///
 /// @brief Array of serial ports on the system.  Index 0 is the main port,
 /// which is the USB serial port.
-static FILE **serialPorts[] = {
+static FILE **uarts[] = {
   &stderr,
 };
 
-/// @var _numSerialPorts
+/// @var _numUarts
 ///
 /// @brief The number of serial ports we support on the Arduino Nano 33 IoT.
-static int _numSerialPorts = sizeof(serialPorts) / sizeof(serialPorts[0]);
+static int _numUarts = sizeof(uarts) / sizeof(uarts[0]);
 
-int posixGetNumSerialPorts(void) {
-  return _numSerialPorts;
+int posixGetNumUarts(void) {
+  return _numUarts;
 }
 
-int posixSetNumSerialPorts(int numSerialPorts) {
-  if (numSerialPorts > ((int) (sizeof(serialPorts) / sizeof(serialPorts[0])))) {
+int posixSetNumUarts(int numUarts) {
+  if (numUarts > ((int) (sizeof(uarts) / sizeof(uarts[0])))) {
     return -ERANGE;
-  } else if (numSerialPorts < -ELAST) {
+  } else if (numUarts < -ELAST) {
     return -ERANGE;
   }
   
-  _numSerialPorts = numSerialPorts;
+  _numUarts = numUarts;
   
   return 0;
 }
 
-int posixInitSerialPort(int port, int32_t baud) {
+int posixInitUart(int port, int32_t baud) {
   (void) baud;
   
   if (port != 0) {
@@ -189,7 +189,7 @@ int posixInitSerialPort(int port, int32_t baud) {
   return 0;
 }
 
-int posixPollSerialPort(int port) {
+int posixPollUart(int port) {
   int serialData = -1;
   
   // While we'll support two outputs, we will only support one input to keep
@@ -204,14 +204,14 @@ int posixPollSerialPort(int port) {
   return serialData;
 }
 
-ssize_t posixWriteSerialPort(int port,
+ssize_t posixWriteUart(int port,
   const uint8_t *data, ssize_t length
 ) {
   ssize_t numBytesWritten = -ERANGE;
   
-  if ((port >= 0) && (port < _numSerialPorts) && (length >= 0)) {
-    numBytesWritten = fwrite(data, 1, length, *serialPorts[port]);
-    fflush(*serialPorts[port]);
+  if ((port >= 0) && (port < _numUarts) && (length >= 0)) {
+    numBytesWritten = fwrite(data, 1, length, *uarts[port]);
+    fflush(*uarts[port]);
   }
   
   return numBytesWritten;
@@ -813,30 +813,30 @@ int halPosixImplInit(jmp_buf resetBuffer, const char *sdCardDevicePath,
   *((void**) &realTcsetattr) = dlsym(RTLD_NEXT, "tcsetattr");
   
   int ii = 0;
-  if (hal->serialPortHal != NULL) {
-    int numSerialPorts = hal->serialPortHal->getNumSerialPorts();
-    if (numSerialPorts <= 0) {
+  if (hal->uartHal != NULL) {
+    int numUarts = hal->uartHal->getNumUarts();
+    if (numUarts <= 0) {
       // Nothing we can do.  Bail.
-      fprintf(stderr, "hal->serialPortHal->getNumSerialPorts() returned %d.\n",
-        numSerialPorts);
+      fprintf(stderr, "hal->uartHal->getNumUarts() returned %d.\n",
+        numUarts);
       return -1;
     }
     
     // Set all the serial ports to run at 1000000 baud.
-    if (hal->serialPortHal->initSerialPort(0, 1000000) < 0) {
+    if (hal->uartHal->initUart(0, 1000000) < 0) {
       // Nothing we can do.  Bail.
       fprintf(stderr, "Initializing serial port 0 failed.\n");
       return -1;
     }
-    for (ii = 1; ii < numSerialPorts; ii++) {
-      if (hal->serialPortHal->initSerialPort(ii, 1000000) < 0) {
+    for (ii = 1; ii < numUarts; ii++) {
+      if (hal->uartHal->initUart(ii, 1000000) < 0) {
         // We can't support more than the last serial port that was successfully
         // initialized.
         fprintf(stderr, "WARNING: Initializing serial port %d failed.\n", ii);
         break;
       }
     }
-    hal->serialPortHal->setNumSerialPorts(ii);
+    hal->uartHal->setNumUarts(ii);
   }
 
   if (hal->timerHal != NULL) {

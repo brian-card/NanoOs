@@ -273,29 +273,29 @@ void* adafruitFeatherM0WifiBottomOfHeap(void) {
 /// this HAL.
 #define SERIAL_PORT_UART 1
 
-/// @var _numSerialPorts
+/// @var _numUarts
 ///
 /// @brief The number of serial ports we support on the Adafruit Feather M0
 /// WiFi.
-static int _numSerialPorts = MAX_SERIAL_PORTS;
+static int _numUarts = MAX_SERIAL_PORTS;
 
-int adafruitFeatherM0WifiGetNumSerialPorts(void) {
-  return _numSerialPorts;
+int adafruitFeatherM0WifiGetNumUarts(void) {
+  return _numUarts;
 }
 
-int adafruitFeatherM0WifiSetNumSerialPorts(int numSerialPorts) {
-  if (numSerialPorts > MAX_SERIAL_PORTS) {
+int adafruitFeatherM0WifiSetNumUarts(int numUarts) {
+  if (numUarts > MAX_SERIAL_PORTS) {
     return -ERANGE;
-  } else if (numSerialPorts < -ELAST) {
+  } else if (numUarts < -ELAST) {
     return -EINVAL;
   }
   
-  _numSerialPorts = numSerialPorts;
+  _numUarts = numUarts;
   
   return 0;
 }
 
-int adafruitFeatherM0WifiInitSerialPort(int port, int32_t baud) {
+int adafruitFeatherM0WifiInitUart(int port, int32_t baud) {
   int returnValue = -ERANGE;
   
   switch (port) {
@@ -319,7 +319,7 @@ int adafruitFeatherM0WifiInitSerialPort(int port, int32_t baud) {
   return returnValue;
 }
 
-int adafruitFeatherM0WifiPollSerialPort(int port) {
+int adafruitFeatherM0WifiPollUart(int port) {
   int serialData = -ERANGE;
   
   switch (port) {
@@ -339,7 +339,7 @@ int adafruitFeatherM0WifiPollSerialPort(int port) {
   return serialData;
 }
 
-ssize_t adafruitFeatherM0WifiWriteSerialPort(int port,
+ssize_t adafruitFeatherM0WifiWriteUart(int port,
   const uint8_t *data, ssize_t length
 ) {
   ssize_t numBytesWritten = -ERANGE;
@@ -361,12 +361,12 @@ ssize_t adafruitFeatherM0WifiWriteSerialPort(int port,
   return numBytesWritten;
 }
 
-static HalSerialPort adafruitFeatherM0WifiSerialPortHal = {
-  .getNumSerialPorts = adafruitFeatherM0WifiGetNumSerialPorts,
-  .setNumSerialPorts = adafruitFeatherM0WifiSetNumSerialPorts,
-  .initSerialPort = adafruitFeatherM0WifiInitSerialPort,
-  .pollSerialPort = adafruitFeatherM0WifiPollSerialPort,
-  .writeSerialPort = adafruitFeatherM0WifiWriteSerialPort,
+static HalUart adafruitFeatherM0WifiUartHal = {
+  .getNumUarts = adafruitFeatherM0WifiGetNumUarts,
+  .setNumUarts = adafruitFeatherM0WifiSetNumUarts,
+  .initUart = adafruitFeatherM0WifiInitUart,
+  .pollUart = adafruitFeatherM0WifiPollUart,
+  .writeUart = adafruitFeatherM0WifiWriteUart,
 };
 
 int adafruitFeatherM0WifiGetNumDios(void) {
@@ -1097,7 +1097,7 @@ static Hal adafruitFeatherM0WifiHal = {
   .overlayMap = (NanoOsOverlayMap*) OVERLAY_ADDRESS,
   .overlaySize = OVERLAY_SIZE,
   
-  .serialPortHal = &adafruitFeatherM0WifiSerialPortHal,
+  .uartHal = &adafruitFeatherM0WifiUartHal,
   .dioHal = &adafruitFeatherM0WifiDioHal,
   .spiHal = &adafruitFeatherM0WifiSpiHal,
   .clockHal = &adafruitFeatherM0WifiClockHal,
@@ -1133,27 +1133,27 @@ const Hal* halAdafruitFeatherM0WifiInit(void) {
   
   int ii = 0;
   Hal *hal = &adafruitFeatherM0WifiHal;
-  if (hal->serialPortHal != NULL) {
-    int numSerialPorts = hal->serialPortHal->getNumSerialPorts();
-    if (numSerialPorts <= 0) {
+  if (hal->uartHal != NULL) {
+    int numUarts = hal->uartHal->getNumUarts();
+    if (numUarts <= 0) {
       // Nothing we can do.
       return NULL;
     }
     
     // Set all the serial ports to run at 1000000 baud.
-    if (hal->serialPortHal->initSerialPort(0, 1000000) < 0) {
+    if (hal->uartHal->initUart(0, 1000000) < 0) {
       // Nothing we can do.
       return NULL;
     }
-    for (ii = 1; ii < numSerialPorts; ii++) {
-      if (hal->serialPortHal->initSerialPort(ii, 1000000) < 0) {
+    for (ii = 1; ii < numUarts; ii++) {
+      if (hal->uartHal->initUart(ii, 1000000) < 0) {
         // We can't support more than the last serial port that was successfully
         // initialized.
         break;
       }
     }
-    hal->serialPortHal->setNumSerialPorts(ii);
-    if (ii != numSerialPorts) {
+    hal->uartHal->setNumUarts(ii);
+    if (ii != numUarts) {
       Serial.begin(1000000);
       while (!Serial);
       Serial.print("WARNING: Only initialized ");

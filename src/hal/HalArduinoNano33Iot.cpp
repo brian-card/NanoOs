@@ -251,77 +251,77 @@ void* arduinoNano33IotBottomOfHeap(void) {
   return _bottomOfHeap;
 }
 
-/// @var serialPorts
+/// @var uarts
 ///
 /// @brief Array of serial ports on the system.  Index 0 is the main port,
 /// which is the USB serial port.
-static HardwareSerial *serialPorts[] = {
+static HardwareSerial *uarts[] = {
   &Serial,
   &Serial1,
 };
 
-/// @var _numSerialPorts
+/// @var _numUarts
 ///
 /// @brief The number of serial ports we support on the Arduino Nano 33 IoT.
-static int _numSerialPorts = sizeof(serialPorts) / sizeof(serialPorts[0]);
+static int _numUarts = sizeof(uarts) / sizeof(uarts[0]);
 
-int arduinoNano33IotGetNumSerialPorts(void) {
-  return _numSerialPorts;
+int arduinoNano33IotGetNumUarts(void) {
+  return _numUarts;
 }
 
-int arduinoNano33IotSetNumSerialPorts(int numSerialPorts) {
-  if (numSerialPorts > ((int) (sizeof(serialPorts) / sizeof(serialPorts[0])))) {
+int arduinoNano33IotSetNumUarts(int numUarts) {
+  if (numUarts > ((int) (sizeof(uarts) / sizeof(uarts[0])))) {
     return -ERANGE;
-  } else if (numSerialPorts < -ELAST) {
+  } else if (numUarts < -ELAST) {
     return -EINVAL;
   }
   
-  _numSerialPorts = numSerialPorts;
+  _numUarts = numUarts;
   
   return 0;
 }
 
-int arduinoNano33IotInitSerialPort(int port, int32_t baud) {
+int arduinoNano33IotInitUart(int port, int32_t baud) {
   int returnValue = -ERANGE;
   
-  if ((port >= 0) && (port < _numSerialPorts)) {
-    serialPorts[port]->begin(baud);
+  if ((port >= 0) && (port < _numUarts)) {
+    uarts[port]->begin(baud);
     // wait for serial port to connect.
-    while (!(*serialPorts[port]));
+    while (!(*uarts[port]));
     returnValue = 0;
   }
   
   return returnValue;
 }
 
-int arduinoNano33IotPollSerialPort(int port) {
+int arduinoNano33IotPollUart(int port) {
   int serialData = -ERANGE;
   
-  if ((port >= 0) && (port < _numSerialPorts)) {
-    serialData = serialPorts[port]->read();
+  if ((port >= 0) && (port < _numUarts)) {
+    serialData = uarts[port]->read();
   }
   
   return serialData;
 }
 
-ssize_t arduinoNano33IotWriteSerialPort(int port,
+ssize_t arduinoNano33IotWriteUart(int port,
   const uint8_t *data, ssize_t length
 ) {
   ssize_t numBytesWritten = -ERANGE;
   
-  if ((port >= 0) && (port < _numSerialPorts) && (length >= 0)) {
-    numBytesWritten = serialPorts[port]->write(data, length);
+  if ((port >= 0) && (port < _numUarts) && (length >= 0)) {
+    numBytesWritten = uarts[port]->write(data, length);
   }
   
   return numBytesWritten;
 }
 
-static HalSerialPort arduinoNano33IotSerialPortHal = {
-  .getNumSerialPorts = arduinoNano33IotGetNumSerialPorts,
-  .setNumSerialPorts = arduinoNano33IotSetNumSerialPorts,
-  .initSerialPort = arduinoNano33IotInitSerialPort,
-  .pollSerialPort = arduinoNano33IotPollSerialPort,
-  .writeSerialPort = arduinoNano33IotWriteSerialPort,
+static HalUart arduinoNano33IotUartHal = {
+  .getNumUarts = arduinoNano33IotGetNumUarts,
+  .setNumUarts = arduinoNano33IotSetNumUarts,
+  .initUart = arduinoNano33IotInitUart,
+  .pollUart = arduinoNano33IotPollUart,
+  .writeUart = arduinoNano33IotWriteUart,
 };
 
 int arduinoNano33IotGetNumDios(void) {
@@ -1063,7 +1063,7 @@ static Hal arduinoNano33IotHal = {
   .overlayMap = (NanoOsOverlayMap*) OVERLAY_ADDRESS,
   .overlaySize = OVERLAY_SIZE,
   
-  .serialPortHal = &arduinoNano33IotSerialPortHal,
+  .uartHal = &arduinoNano33IotUartHal,
   .dioHal = &arduinoNano33IotDioHal,
   .spiHal = &arduinoNano33IotSpiHal,
   .clockHal = &arduinoNano33IotClockHal,
@@ -1099,27 +1099,27 @@ const Hal* halArduinoNano33IotInit(void) {
   
   int ii = 0;
   Hal *hal = &arduinoNano33IotHal;
-  if (hal->serialPortHal != NULL) {
-    int numSerialPorts = hal->serialPortHal->getNumSerialPorts();
-    if (numSerialPorts <= 0) {
+  if (hal->uartHal != NULL) {
+    int numUarts = hal->uartHal->getNumUarts();
+    if (numUarts <= 0) {
       // Nothing we can do.
       return NULL;
     }
     
     // Set all the serial ports to run at 1000000 baud.
-    if (hal->serialPortHal->initSerialPort(0, 1000000) < 0) {
+    if (hal->uartHal->initUart(0, 1000000) < 0) {
       // Nothing we can do.
       return NULL;
     }
-    for (ii = 1; ii < numSerialPorts; ii++) {
-      if (hal->serialPortHal->initSerialPort(ii, 1000000) < 0) {
+    for (ii = 1; ii < numUarts; ii++) {
+      if (hal->uartHal->initUart(ii, 1000000) < 0) {
         // We can't support more than the last serial port that was successfully
         // initialized.
         break;
       }
     }
-    hal->serialPortHal->setNumSerialPorts(ii);
-    if (ii != numSerialPorts) {
+    hal->uartHal->setNumUarts(ii);
+    if (ii != numUarts) {
       Serial.begin(1000000);
       while (!Serial);
       Serial.print("WARNING: Only initialized ");

@@ -93,7 +93,7 @@ void consoleMessageCleanup(TaskMessage *inputMessage) {
   if (taskMessageWaiting(inputMessage) == false) {
     if (taskMessageRelease(inputMessage) != taskSuccess) {
       // printSerialString is defined below.  Provide the prototype.
-      int printSerialString(unsigned char serialPort, const char *string);
+      int printSerialString(unsigned char uart, const char *string);
       printSerialString(0, "ERROR: Could not release inputMessage from ");
       printSerialString(0, __func__);
       printSerialString(0, "\n");
@@ -808,7 +808,7 @@ void handleConsoleMessages(ConsoleState *consoleState) {
 /// @return Returns the byte read, cast to an int, on success, -1 on failure.
 int readSerialByte(ConsolePort *consolePort) {
   int serialData = -1;
-  serialData = HAL->serialPortHal->pollSerialPort((int) consolePort->portId);
+  serialData = HAL->uartHal->pollUart((int) consolePort->portId);
   if (serialData > -1) {
     ConsoleBuffer *consoleBuffer = consolePort->consoleBuffer;
     char *buffer = consoleBuffer->buffer;
@@ -819,10 +819,10 @@ int readSerialByte(ConsolePort *consolePort) {
       if (consolePort->echo == true) {
         if ((serialData != ASCII_RETURN) && (serialData != ASCII_NEWLINE)) {
           char serialChar = (char) serialData;
-          HAL->serialPortHal->writeSerialPort((int) consolePort->portId,
+          HAL->uartHal->writeUart((int) consolePort->portId,
             (uint8_t*) &serialChar, 1);
         } else {
-          HAL->serialPortHal->writeSerialPort(
+          HAL->uartHal->writeUart(
             (int) consolePort->portId, (uint8_t*) "\r\n", 2);
         }
       }
@@ -830,7 +830,7 @@ int readSerialByte(ConsolePort *consolePort) {
       if (serialData == ASCII_RETURN) {
         serialData = ASCII_NEWLINE;
         // Some terminals send \r\n.  Read one more character just in case.
-        HAL->serialPortHal->pollSerialPort((int) consolePort->portId);
+        HAL->uartHal->pollUart((int) consolePort->portId);
       }
       
       if (consolePort->consoleBufferIndex < (CONSOLE_BUFFER_SIZE - 1)) {
@@ -846,11 +846,11 @@ int readSerialByte(ConsolePort *consolePort) {
         if (consolePort->echo == true) {
           uint8_t backspace = ASCII_BACKSPACE;
           uint8_t space = ASCII_SPACE;
-          HAL->serialPortHal->writeSerialPort(
+          HAL->uartHal->writeUart(
             (int) consolePort->portId, &backspace, 1);
-          HAL->serialPortHal->writeSerialPort(
+          HAL->uartHal->writeUart(
             (int) consolePort->portId, &space, 1);
-          HAL->serialPortHal->writeSerialPort(
+          HAL->uartHal->writeUart(
             (int) consolePort->portId, &backspace, 1);
         }
         
@@ -864,7 +864,7 @@ int readSerialByte(ConsolePort *consolePort) {
           buffer[consolePort->consoleBufferIndex] = (char) serialData;
           consolePort->consoleBufferIndex++;
         }
-        serialData = HAL->serialPortHal->pollSerialPort(
+        serialData = HAL->uartHal->pollUart(
           (int) consolePort->portId);
       } while (serialData > -1);
       
@@ -882,15 +882,15 @@ int readSerialByte(ConsolePort *consolePort) {
   return serialData;
 }
 
-/// @fn int printSerialString(unsigned char serialPort, const char *string)
+/// @fn int printSerialString(unsigned char uart, const char *string)
 ///
 /// @brief Print a string to the default serial port.
 ///
-/// @param serialPort The numerical ID of the serial port to read a byte from.
+/// @param uart The numerical ID of the serial port to read a byte from.
 /// @param string A pointer to the string to print.
 ///
 /// @return Returns the number of bytes written to the serial port.
-int printSerialString(unsigned char serialPort, const char *string) {
+int printSerialString(unsigned char uart, const char *string) {
   int returnValue = 0;
   size_t numBytes = 0;
 
@@ -902,10 +902,10 @@ int printSerialString(unsigned char serialPort, const char *string) {
     numBytes = (size_t) (((uintptr_t) newlineAt) - ((uintptr_t) string));
   }
   while (newlineAt != NULL) {
-    returnValue += (int) HAL->serialPortHal->writeSerialPort(
-      (int) serialPort, (uint8_t*) string, numBytes);
-    returnValue += (int) HAL->serialPortHal->writeSerialPort(
-      (int) serialPort, (uint8_t*) "\r\n", 2);
+    returnValue += (int) HAL->uartHal->writeUart(
+      (int) uart, (uint8_t*) string, numBytes);
+    returnValue += (int) HAL->uartHal->writeUart(
+      (int) uart, (uint8_t*) "\r\n", 2);
     string = newlineAt + 1;
     newlineAt = strchr(string, '\n');
     if (newlineAt == NULL) {
@@ -914,8 +914,8 @@ int printSerialString(unsigned char serialPort, const char *string) {
       numBytes = (size_t) (((uintptr_t) newlineAt) - ((uintptr_t) string));
     }
   }
-  returnValue += (int) HAL->serialPortHal->writeSerialPort(
-    (int) serialPort, (uint8_t*) string, numBytes);
+  returnValue += (int) HAL->uartHal->writeUart(
+    (int) uart, (uint8_t*) string, numBytes);
 
   return returnValue;
 }
@@ -940,9 +940,9 @@ void* runConsole(void *args) {
   memset(&consoleState, 0, sizeof(ConsoleState));
   TaskMessage *schedulerMessage = NULL;
 
-  if (HAL->serialPortHal != NULL) {
+  if (HAL->uartHal != NULL) {
     consoleState.numConsolePorts
-      = MIN(CONSOLE_NUM_PORTS, HAL->serialPortHal->getNumSerialPorts());
+      = MIN(CONSOLE_NUM_PORTS, HAL->uartHal->getNumUarts());
   }
 
   // For each console port, use the console buffer at the corresponding index.

@@ -265,29 +265,29 @@ void* seeedXiaoM0BottomOfHeap(void) {
 /// this HAL.
 #define SERIAL_PORT_UART 1
 
-/// @var _numSerialPorts
+/// @var _numUarts
 ///
 /// @brief The number of serial ports we support on the Adafruit Feather M0
 /// WiFi.
-static int _numSerialPorts = MAX_SERIAL_PORTS;
+static int _numUarts = MAX_SERIAL_PORTS;
 
-int seeedXiaoM0GetNumSerialPorts(void) {
-  return _numSerialPorts;
+int seeedXiaoM0GetNumUarts(void) {
+  return _numUarts;
 }
 
-int seeedXiaoM0SetNumSerialPorts(int numSerialPorts) {
-  if (numSerialPorts > MAX_SERIAL_PORTS) {
+int seeedXiaoM0SetNumUarts(int numUarts) {
+  if (numUarts > MAX_SERIAL_PORTS) {
     return -ERANGE;
-  } else if (numSerialPorts < -ELAST) {
+  } else if (numUarts < -ELAST) {
     return -EINVAL;
   }
   
-  _numSerialPorts = numSerialPorts;
+  _numUarts = numUarts;
   
   return 0;
 }
 
-int seeedXiaoM0InitSerialPort(int port, int32_t baud) {
+int seeedXiaoM0InitUart(int port, int32_t baud) {
   int returnValue = -ERANGE;
   
   switch (port) {
@@ -311,7 +311,7 @@ int seeedXiaoM0InitSerialPort(int port, int32_t baud) {
   return returnValue;
 }
 
-int seeedXiaoM0PollSerialPort(int port) {
+int seeedXiaoM0PollUart(int port) {
   int serialData = -ERANGE;
   
   switch (port) {
@@ -331,7 +331,7 @@ int seeedXiaoM0PollSerialPort(int port) {
   return serialData;
 }
 
-ssize_t seeedXiaoM0WriteSerialPort(int port,
+ssize_t seeedXiaoM0WriteUart(int port,
   const uint8_t *data, ssize_t length
 ) {
   ssize_t numBytesWritten = -ERANGE;
@@ -353,12 +353,12 @@ ssize_t seeedXiaoM0WriteSerialPort(int port,
   return numBytesWritten;
 }
 
-static HalSerialPort seeedXiaoM0SerialPortHal = {
-  .getNumSerialPorts = seeedXiaoM0GetNumSerialPorts,
-  .setNumSerialPorts = seeedXiaoM0SetNumSerialPorts,
-  .initSerialPort = seeedXiaoM0InitSerialPort,
-  .pollSerialPort = seeedXiaoM0PollSerialPort,
-  .writeSerialPort = seeedXiaoM0WriteSerialPort,
+static HalUart seeedXiaoM0UartHal = {
+  .getNumUarts = seeedXiaoM0GetNumUarts,
+  .setNumUarts = seeedXiaoM0SetNumUarts,
+  .initUart = seeedXiaoM0InitUart,
+  .pollUart = seeedXiaoM0PollUart,
+  .writeUart = seeedXiaoM0WriteUart,
 };
 
 int seeedXiaoM0GetNumDios(void) {
@@ -1089,7 +1089,7 @@ static Hal seeedXiaoM0Hal = {
   .overlayMap = (NanoOsOverlayMap*) OVERLAY_ADDRESS,
   .overlaySize = OVERLAY_SIZE,
   
-  .serialPortHal = &seeedXiaoM0SerialPortHal,
+  .uartHal = &seeedXiaoM0UartHal,
   .dioHal = &seeedXiaoM0DioHal,
   .spiHal = &seeedXiaoM0SpiHal,
   .clockHal = &seeedXiaoM0ClockHal,
@@ -1125,27 +1125,27 @@ const Hal* halSeeedXiaoM0Init(void) {
   
   int ii = 0;
   Hal *hal = &seeedXiaoM0Hal;
-  if (hal->serialPortHal != NULL) {
-    int numSerialPorts = hal->serialPortHal->getNumSerialPorts();
-    if (numSerialPorts <= 0) {
+  if (hal->uartHal != NULL) {
+    int numUarts = hal->uartHal->getNumUarts();
+    if (numUarts <= 0) {
       // Nothing we can do.
       return NULL;
     }
     
     // Set all the serial ports to run at 1000000 baud.
-    if (hal->serialPortHal->initSerialPort(0, 1000000) < 0) {
+    if (hal->uartHal->initUart(0, 1000000) < 0) {
       // Nothing we can do.
       return NULL;
     }
-    for (ii = 1; ii < numSerialPorts; ii++) {
-      if (hal->serialPortHal->initSerialPort(ii, 1000000) < 0) {
+    for (ii = 1; ii < numUarts; ii++) {
+      if (hal->uartHal->initUart(ii, 1000000) < 0) {
         // We can't support more than the last serial port that was successfully
         // initialized.
         break;
       }
     }
-    hal->serialPortHal->setNumSerialPorts(ii);
-    if (ii != numSerialPorts) {
+    hal->uartHal->setNumUarts(ii);
+    if (ii != numUarts) {
       Serial.begin(1000000);
       while (!Serial);
       Serial.print("WARNING: Only initialized ");

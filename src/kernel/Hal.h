@@ -62,30 +62,30 @@ struct timespec;
 typedef struct NanoOsOverlayMap NanoOsOverlayMap;
 typedef struct SchedulerState SchedulerState;
 
-typedef struct HalSerialPort {
-  /// @fn int getNumSerialPorts(void)
+typedef struct HalUart {
+  /// @fn int getNumUarts(void)
   ///
   /// @brief Get the number of addressable and configurable serial ports on the
   /// system.
   ///
   /// @return Returns the number of serial ports on the system (which may be 0)
   /// on success, -errno on failure.
-  int (*getNumSerialPorts)(void);
+  int (*getNumUarts)(void);
   
-  /// @fn int setNumSerialPorts(int numSerialPorts)
+  /// @fn int setNumUarts(int numUarts)
   ///
   /// @brief Set the number of serial ports that is to be returned by
-  /// getNumSerialPorts.
+  /// getNumUarts.
   ///
-  /// @param numSerialPorts The value to be returned by getNumSerialPorts.
+  /// @param numUarts The value to be returned by getNumUarts.
   ///   This may be a non-negative value that is less-than or equal-to the
-  ///   value initially returned by getNumSerialPorts or a -errno value that
+  ///   value initially returned by getNumUarts or a -errno value that
   ///   the function is to return.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int (*setNumSerialPorts)(int numSerialPorts);
+  int (*setNumUarts)(int numUarts);
   
-  /// @fn initSerialPort(int port, int32_t baud)
+  /// @fn initUart(int port, int32_t baud)
   ///
   /// @brief Initialize a hardware serial port.
   ///
@@ -93,9 +93,9 @@ typedef struct HalSerialPort {
   /// @param baud The desired baud rate of the port.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int (*initSerialPort)(int port, int32_t baud);
+  int (*initUart)(int port, int32_t baud);
   
-  /// @fn int pollSerialPort(int port)
+  /// @fn int pollUart(int port)
   ///
   /// @brief Poll a serial port for a single byte of data.
   ///
@@ -103,9 +103,9 @@ typedef struct HalSerialPort {
   ///
   /// @return Returns the byte read, cast to an int, on success, -errno on
   /// failure.
-  int (*pollSerialPort)(int port);
+  int (*pollUart)(int port);
   
-  /// @fn ssize_t writeSerialPort(int port, const uint8_t *data, ssize_t length)
+  /// @fn ssize_t writeUart(int port, const uint8_t *data, ssize_t length)
   ///
   /// @brief Write data to a serial port.
   ///
@@ -116,8 +116,8 @@ typedef struct HalSerialPort {
   ///   data pointer.
   ///
   /// @return Returns the number of bytes written on success, -errno on failure.
-  ssize_t (*writeSerialPort)(int port, const uint8_t *data, ssize_t length);
-} HalSerialPort;
+  ssize_t (*writeUart)(int port, const uint8_t *data, ssize_t length);
+} HalUart;
 
 typedef struct HalDio {
   /// @fn int getNumDios(void)
@@ -430,11 +430,11 @@ typedef struct Hal {
   /// systems that don't support overlays.
   uintptr_t overlaySize;
   
-  /// @var serialPortHal
+  /// @var uartHal
   ///
-  /// @brief Pointer to the HalSerialPort managed by the HAL, or NULL if there
+  /// @brief Pointer to the HalUart managed by the HAL, or NULL if there
   /// isn't one.
-  HalSerialPort *serialPortHal;
+  HalUart *uartHal;
   
   /// @var dioHal
   ///
