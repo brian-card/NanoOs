@@ -155,14 +155,13 @@ void consoleWriteValueCommandHandler(
   ConsoleState *consoleState, TaskMessage *inputMessage
 ) {
   char staticBuffer[19]; // max length of a 64-bit value is 18 digits plus NULL.
-  ConsoleValueType valueType
-    = nanoOsMessageFuncValue(inputMessage, ConsoleValueType);
+  ConsoleValueType valueType = (ConsoleValueType) taskMessageSize(inputMessage);
   const char *message = NULL;
 
   switch (valueType) {
     case CONSOLE_VALUE_CHAR:
       {
-        char value = nanoOsMessageDataValue(inputMessage, char);
+        char value = (char) ((uintptr_t) taskMessageData(inputMessage));
         sprintf(staticBuffer, "%c", value);
         message = staticBuffer;
       }
@@ -171,7 +170,7 @@ void consoleWriteValueCommandHandler(
     case CONSOLE_VALUE_UCHAR:
       {
         unsigned char value
-          = nanoOsMessageDataValue(inputMessage, unsigned char);
+          = (unsigned char) ((uintptr_t) taskMessageData(inputMessage));
         sprintf(staticBuffer, "%u", value);
         message = staticBuffer;
       }
@@ -179,7 +178,7 @@ void consoleWriteValueCommandHandler(
 
     case CONSOLE_VALUE_INT:
       {
-        int value = nanoOsMessageDataValue(inputMessage, int);
+        int value = (int) ((uintptr_t) taskMessageData(inputMessage));
         sprintf(staticBuffer, "%d", value);
         message = staticBuffer;
       }
@@ -188,7 +187,7 @@ void consoleWriteValueCommandHandler(
     case CONSOLE_VALUE_UINT:
       {
         unsigned int value
-          = nanoOsMessageDataValue(inputMessage, unsigned int);
+          = (unsigned int) ((uintptr_t) taskMessageData(inputMessage));
         sprintf(staticBuffer, "%u", value);
         message = staticBuffer;
       }
@@ -196,7 +195,7 @@ void consoleWriteValueCommandHandler(
 
     case CONSOLE_VALUE_LONG_INT:
       {
-        long int value = nanoOsMessageDataValue(inputMessage, long int);
+        long int value = (long int) ((uintptr_t) taskMessageData(inputMessage));
         sprintf(staticBuffer, "%ld", value);
         message = staticBuffer;
       }
@@ -205,7 +204,7 @@ void consoleWriteValueCommandHandler(
     case CONSOLE_VALUE_LONG_UINT:
       {
         long unsigned int value
-          = nanoOsMessageDataValue(inputMessage, long unsigned int);
+          = (long unsigned int) ((uintptr_t) taskMessageData(inputMessage));
         sprintf(staticBuffer, "%lu", value);
         message = staticBuffer;
       }
@@ -213,7 +212,7 @@ void consoleWriteValueCommandHandler(
 
     case CONSOLE_VALUE_FLOAT:
       {
-        float value = nanoOsMessageDataValue(inputMessage, float);
+        float value = (float) ((uintptr_t) taskMessageData(inputMessage));
         sprintf(staticBuffer, "%f", (double) value);
         message = staticBuffer;
       }
@@ -221,7 +220,7 @@ void consoleWriteValueCommandHandler(
 
     case CONSOLE_VALUE_DOUBLE:
       {
-        double value = nanoOsMessageDataValue(inputMessage, double);
+        double value = (double) ((uintptr_t) taskMessageData(inputMessage));
         sprintf(staticBuffer, "%lf", value);
         message = staticBuffer;
       }
@@ -229,7 +228,7 @@ void consoleWriteValueCommandHandler(
 
     case CONSOLE_VALUE_STRING:
       {
-        message = nanoOsMessageDataPointer(inputMessage, const char*);
+        message = (const char*) taskMessageData(inputMessage);
       }
       break;
 
@@ -515,7 +514,6 @@ void consoleGetOwnedPortCommandHandler(
 ) {
   TaskId owner = taskId(taskMessageFrom(inputMessage));
   ConsolePort *consolePorts = consoleState->consolePorts;
-  TaskMessage *returnMessage = inputMessage;
 
   int ownedPort = -1;
   for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
@@ -528,20 +526,8 @@ void consoleGetOwnedPortCommandHandler(
     }
   }
 
-  NanoOsMessage *nanoOsMessage
-    = (NanoOsMessage*) taskMessageData(returnMessage);
-  nanoOsMessage->func = 0;
-  nanoOsMessage->data = (intptr_t) ownedPort;
-  taskMessageInit(returnMessage, CONSOLE_RETURNING_PORT,
-    nanoOsMessage, sizeof(*nanoOsMessage), true);
-  if (sendTaskMessageToTaskId(owner, inputMessage) == taskSuccess) {
-    // This is the usual case.
-    taskMessageSetDone(inputMessage);
-  } else {
-    // There is a problem with the process.  Most likely, it's crashed and is
-    // unable to receive messages.
-    taskMessageRelease(inputMessage);
-  }
+  taskMessageData(inputMessage) = (void*) ((intptr_t) ownedPort);
+  taskMessageSetDone(inputMessage);
 
   consoleMessageCleanup(inputMessage);
 
@@ -566,10 +552,6 @@ void consoleGetEchoCommandHandler(
   TaskId owner = taskId(taskMessageFrom(inputMessage));
   ConsolePort *consolePorts = consoleState->consolePorts;
   TaskMessage *returnMessage = inputMessage;
-  NanoOsMessage *nanoOsMessage
-    = (NanoOsMessage*) taskMessageData(returnMessage);
-  nanoOsMessage->func = 0;
-  nanoOsMessage->data = 0;
 
   bool portFound = false;
   bool echoing = false;
@@ -581,7 +563,7 @@ void consoleGetEchoCommandHandler(
   }
 
   if (portFound == true) {
-    nanoOsMessage->data = (uintptr_t) echoing;
+    taskMessageData(returnMessage) = (void*) ((uintptr_t) echoing);
   } else {
     printString("WARNING: Request to get echo from non-owning task ");
     printInt(owner);
@@ -610,12 +592,7 @@ void consoleSetEchoCommandHandler(
 ) {
   TaskId owner = taskId(taskMessageFrom(inputMessage));
   ConsolePort *consolePorts = consoleState->consolePorts;
-  TaskMessage *returnMessage = inputMessage;
-  bool desiredEchoState = nanoOsMessageDataValue(inputMessage, bool);
-  NanoOsMessage *nanoOsMessage
-    = (NanoOsMessage*) taskMessageData(returnMessage);
-  nanoOsMessage->func = 0;
-  nanoOsMessage->data = 0;
+  bool desiredEchoState = (bool) ((uintptr_t) taskMessageData(inputMessage));
 
   bool portFound = false;
   for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
@@ -625,23 +602,16 @@ void consoleSetEchoCommandHandler(
     }
   }
 
+  taskMessageData(inputMessage) = (void*) ((intptr_t) 0);
+  int callerReturnValue = 0;
   if (portFound == false) {
     printString("WARNING: Request to set echo from non-owning task ");
     printInt(owner);
     printString("\n");
-    nanoOsMessage->data = (intptr_t) -1;
+    taskMessageData(inputMessage) = (void*) ((intptr_t) -1);
   }
 
-  taskMessageInit(returnMessage, CONSOLE_RETURNING_PORT,
-    nanoOsMessage, sizeof(*nanoOsMessage), true);
-  if (sendTaskMessageToTaskId(owner, inputMessage) == taskSuccess) {
-    // This is the usual case.
-    taskMessageSetDone(inputMessage);
-  } else {
-    // There is a problem with the process.  Most likely, it's crashed and
-    // unable to receive messages.
-    taskMessageRelease(inputMessage);
-  }
+  taskMessageSetDone(inputMessage);
   consoleMessageCleanup(inputMessage);
 
   return;
@@ -821,9 +791,8 @@ void consoleReleaseBufferCommandHandler(
 void consoleGetNumPortsCommandHandler(
   ConsoleState *consoleState, TaskMessage *inputMessage
 ) {
-  NanoOsMessage *nanoOsMessage
-    = (NanoOsMessage*) taskMessageData(inputMessage);
-  nanoOsMessage->data = (intptr_t) consoleState->numConsolePorts;
+  taskMessageData(inputMessage)
+    = (void*) ((intptr_t) consoleState->numConsolePorts);
   taskMessageSetDone(inputMessage);
 
   return;
@@ -1068,9 +1037,9 @@ void* runConsole(void *args) {
           consolePort->consoleBuffer->buffer[consolePort->consoleBufferIndex]
             = '\0';
           consolePort->consoleBufferIndex = 0;
-          if (sendNanoOsMessageToTaskId(
+          if (initSendTaskMessageToTaskId(
             consolePort->inputOwner, CONSOLE_RETURNING_INPUT,
-            /* func= */ 0, (intptr_t) consolePort->consoleBuffer, false) == NULL
+            consolePort->consoleBuffer, sizeof(ConsoleBuffer), false) == NULL
           ) {
             printString(
               "ERROR: Could not send CONSOLE_RETURNING_INPUT to task ID ");
@@ -1127,13 +1096,13 @@ void* runConsole(void *args) {
 /// 0.
 int printConsoleValue(ConsoleValueType valueType, void *value, size_t length) {
   printDebugString("Entering printConsoleValue.\n");
-  NanoOsMessageData message = 0;
+  uintptr_t message = 0;
   length = (length <= sizeof(message)) ? length : sizeof(message);
   memcpy(&message, value, length);
 
   printDebugString("Sending message to console task.\n");
-  if (sendNanoOsMessageToTaskId(SCHEDULER_STATE->consoleTaskId,
-    CONSOLE_WRITE_VALUE, valueType, message, false) == NULL
+  if (initSendTaskMessageToTaskId(SCHEDULER_STATE->consoleTaskId,
+    CONSOLE_WRITE_VALUE, (void*) message, (size_t) valueType, false) == NULL
   ) {
     printString(
       "ERROR: Could not send CONSOLE_WRITE_VALUE message to console task\n");
@@ -1195,8 +1164,8 @@ void releaseConsole(void) {
   // from within the console task.  That means we can't do blocking prints
   // from this function.  i.e. We can't use printf here.  Use printConsole
   // instead.
-  if (sendNanoOsMessageToTaskId(SCHEDULER_STATE->consoleTaskId,
-    CONSOLE_RELEASE_PORT, /* func= */ 0, /* data= */ 0, false) == NULL
+  if (initSendTaskMessageToTaskId(SCHEDULER_STATE->consoleTaskId,
+    CONSOLE_RELEASE_PORT, /* data= */ 0, /* size= */ 0, false) == NULL
   ) {
     printString(
       "ERROR: Could not send CONSOLE_RELEASE_PORT message to console task\n");
@@ -1211,18 +1180,14 @@ void releaseConsole(void) {
 /// @return Returns the numerical index of the console port the task owns on
 /// success, -1 on failure.
 int getOwnedConsolePort(void) {
-  TaskMessage *sent = sendNanoOsMessageToTaskId(
+  TaskMessage *sent = initSendTaskMessageToTaskId(
     SCHEDULER_STATE->consoleTaskId, CONSOLE_GET_OWNED_PORT,
-    /* func= */ 0, /* data= */ 0, /* waiting= */ true);
+    /* data= */ 0, /* size= */ 0, /* waiting= */ true);
 
-  // The console will reuse the message we sent, so don't release the message
-  // in taskMessageWaitForReplyWithType.
-  TaskMessage *reply = taskMessageWaitForReplyWithType(
-    sent, /* releaseAfterDone= */ false,
-    CONSOLE_RETURNING_PORT, NULL);
+  taskMessageWaitForDone(sent);
 
-  int returnValue = nanoOsMessageDataValue(reply, int);
-  taskMessageRelease(reply);
+  int returnValue = (int) ((intptr_t) taskMessageData(sent));
+  taskMessageRelease(sent);
 
   return returnValue;
 }
@@ -1234,14 +1199,14 @@ int getOwnedConsolePort(void) {
 /// @return Returns true if the console for the process is echoing, false
 /// otherwise.
 bool getConsoleEcho(void) {
-  TaskMessage *sent = sendNanoOsMessageToTaskId(
+  TaskMessage *sent = initSendTaskMessageToTaskId(
     SCHEDULER_STATE->consoleTaskId, CONSOLE_GET_ECHO_PORT,
-    /* func= */ 0, /* data= */ 0, /* waiting= */ true);
+    /* data= */ 0, /* size= */ 0, /* waiting= */ true);
 
   // The console will reuse the message we sent.
   taskMessageWaitForDone(sent, NULL);
 
-  bool returnValue = nanoOsMessageDataValue(sent, bool);
+  bool returnValue = (bool) ((uintptr_t) taskMessageData(sent));
   taskMessageRelease(sent);
 
   return returnValue;
@@ -1254,18 +1219,14 @@ bool getConsoleEcho(void) {
 /// @return Returns 0 if the echo state was set for the current task's
 /// ports, -1 on failure.
 int setConsoleEcho(bool desiredEchoState) {
-  TaskMessage *sent = sendNanoOsMessageToTaskId(
+  TaskMessage *sent = initSendTaskMessageToTaskId(
     SCHEDULER_STATE->consoleTaskId, CONSOLE_SET_ECHO_PORT,
-    /* func= */ 0, /* data= */ desiredEchoState, /* waiting= */ true);
+    /* data= */ desiredEchoState, /* size= */ 0, /* waiting= */ true);
 
-  // The console will reuse the message we sent, so don't release the message
-  // in taskMessageWaitForReplyWithType.
-  TaskMessage *reply = taskMessageWaitForReplyWithType(
-    sent, /* releaseAfterDone= */ false,
-    CONSOLE_RETURNING_PORT, NULL);
+  taskMessageWaitForDone(sent);
 
-  int returnValue = nanoOsMessageDataValue(reply, int);
-  taskMessageRelease(reply);
+  int returnValue = (int) ((intptr_t) taskMessageData(sent);
+  taskMessageRelease(sent);
 
   return returnValue;
 }
@@ -1276,15 +1237,15 @@ int setConsoleEcho(bool desiredEchoState) {
 ///
 /// @return Returns the number of ports running on success, -1 on failure.
 int getNumConsolePorts(void) {
-  TaskMessage *sent = sendNanoOsMessageToTaskId(
+  TaskMessage *sent = initSendTaskMessageToTaskId(
     SCHEDULER_STATE->consoleTaskId, CONSOLE_GET_NUM_PORTS,
-    /* func= */ 0, /* data= */ 0, /* waiting= */ true);
+    /* data= */ 0, /* size= */ 0, /* waiting= */ true);
   if (sent == NULL) {
     return -1;
   }
 
   taskMessageWaitForDone(sent, NULL);
-  int returnValue = nanoOsMessageDataValue(sent, int);
+  int returnValue = (int) ((intptr_t) taskMessageData(sent));
   taskMessageRelease(sent);
 
   return returnValue;

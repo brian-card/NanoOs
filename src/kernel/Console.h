@@ -74,7 +74,6 @@ typedef enum ConsoleCommandResponse {
   NUM_CONSOLE_COMMANDS,
   // Responses:
   CONSOLE_RETURNING_BUFFER,
-  CONSOLE_RETURNING_PORT,
   CONSOLE_RETURNING_INPUT,
 } ConsoleCommand;
 
