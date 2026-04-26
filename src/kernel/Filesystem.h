@@ -124,7 +124,7 @@ typedef struct FilesystemSeekParameters {
 /// @param pathname A string containing the full path to the file.
 /// @param mode A string containing the mode to open the file with.
 typedef struct FilesystemFopenParameters {
-  const char *patahname;
+  const char *pathname;
   const char *mode;
 } FilesystemFopenParameters;
 
