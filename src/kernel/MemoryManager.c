@@ -813,15 +813,14 @@ int memoryManagerFreeTaskMemoryCommandHandler(
   MemoryManagerState *memoryManagerState, TaskMessage *incoming
 ) {
   int returnValue = 0;
-  NanoOsMessage *nanoOsMessage = (NanoOsMessage*) taskMessageData(incoming);
   if (taskId(taskMessageFrom(incoming)) == SCHEDULER_STATE->schedulerTaskId) {
-    TaskId taskId = nanoOsMessageDataValue(incoming, TaskId);
+    TaskId taskId = (TaskId) ((uintptr_t) taskMessageData(incoming));
     localFreeTaskMemory(memoryManagerState, taskId);
-    nanoOsMessage->data = 0;
+    taskMessageData(incoming) = (void*) ((uintptr_t) 0);
   } else {
     printString(
       "ERROR: Only the scheduler may free another task's memory.\n");
-    nanoOsMessage->data = 1;
+    taskMessageData(incoming) = (void*) ((uintptr_t) 1);
     returnValue = -1;
   }
   

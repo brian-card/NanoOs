@@ -448,7 +448,7 @@ typedef struct ConsolePortPidAssociation {
 /// @param nanoOsMessageData The NanoOsMessageData part.
 typedef union ConsolePortPidUnion {
   ConsolePortPidAssociation consolePortPidAssociation;
-  NanoOsMessageData         nanoOsMessageData;
+  uintptr_t                 nanoOsMessageData;
 } ConsolePortPidUnion;
 
 /// @struct ReallocMessage

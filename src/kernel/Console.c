@@ -343,7 +343,7 @@ void consoleSetPortShellCommandHandler(
 ) {
   ConsolePortPidUnion consolePortPidUnion;
   consolePortPidUnion.nanoOsMessageData
-    = nanoOsMessageDataValue(inputMessage, NanoOsMessageData);
+    = (uintptr_t) taskMessageData(inputMessage);
   ConsolePortPidAssociation *consolePortPidAssociation
     = &consolePortPidUnion.consolePortPidAssociation;
 
@@ -358,9 +358,9 @@ void consoleSetPortShellCommandHandler(
     printString("ERROR: Request to assign ownership of non-existent port ");
     printInt(consolePort);
     printString("\n");
-    // *DON'T* call taskMessageRelease or taskMessageSetDone here.  The lack of the
-    // message being done will indicate to the caller that there was a problem
-    // servicing the command.
+    // *DON'T* call taskMessageRelease or taskMessageSetDone here.  The lack of
+    // the message being done will indicate to the caller that there was a
+    // problem servicing the command.
   }
 
   return;
@@ -388,7 +388,7 @@ void consoleAssignPortHelper(
 ) {
   ConsolePortPidUnion consolePortPidUnion;
   consolePortPidUnion.nanoOsMessageData
-    = nanoOsMessageDataValue(inputMessage, NanoOsMessageData);
+    = (uintptr_t) taskMessageData(inputMessage);
   ConsolePortPidAssociation *consolePortPidAssociation
     = &consolePortPidUnion.consolePortPidAssociation;
 
@@ -676,35 +676,14 @@ void consoleReleasePidPortCommandHandler(
     return;
   }
 
-  TaskId owner
-    = nanoOsMessageDataValue(inputMessage, TaskId);
+  TaskId owner = (TaskId) ((intptr_t) taskMessageData(inputMessage));
   ConsolePort *consolePorts = consoleState->consolePorts;
-  TaskMessage *taskMessage
-    = nanoOsMessageFuncPointer(inputMessage, TaskMessage*);
   bool releaseMessage = false;
 
   bool portFound = false;
   for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
     if (consolePorts[ii].inputOwner == owner) {
       consolePorts[ii].inputOwner = consolePorts[ii].shell;
-      // NOTE:  By calling sendTaskMessageToTaskId from within the for loop, we
-      // run the risk of sending the same message to multiple shells.  That's
-      // irrelevant in this case since nothing is waiting for the message and
-      // all the shells will release the message.  In reality, one task
-      // almost never owns multiple ports.  The only exception is during boot.
-      if (owner != consolePorts[ii].shell) {
-        if (sendTaskMessageToTaskId(consolePorts[ii].shell, taskMessage)
-          != taskSuccess
-        ) {
-          // There's a problem with the process.  Most likely, it's crashed and
-          // unable to receive messages.
-          releaseMessage = true;
-        }
-      } else {
-        // The shell is being restarted.  It won't be able to receive the
-        // message if we send it, so we need to go ahead and release it.
-        releaseMessage = true;
-      }
       portFound = true;
     }
     if (consolePorts[ii].outputOwner == owner) {
@@ -716,10 +695,6 @@ void consoleReleasePidPortCommandHandler(
       }
       portFound = true;
     }
-  }
-
-  if ((releaseMessage == true) || (portFound == false)) {
-    taskMessageRelease(taskMessage);
   }
 
   taskMessageSetDone(inputMessage);

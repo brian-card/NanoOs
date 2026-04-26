@@ -84,8 +84,6 @@ extern SchedulerState *SCHEDULER_STATE;
 // Exported functionality
 void startScheduler(SchedulerState **coroutineStatePointer);
 TaskDescriptor* schedulerGetTaskById(unsigned int taskId);
-int schedulerNotifyTaskComplete(TaskId taskId);
-int schedulerWaitForTaskComplete(void);
 TaskId schedulerGetNumRunningTasks(struct timespec *timeout);
 TaskInfo* schedulerGetTaskInfo(void);
 int schedulerKillTask(TaskId taskId);
