@@ -441,11 +441,11 @@ typedef struct ConsolePortPidAssociation {
 
 /// @union ConsolePortPidUnion
 ///
-/// @brief Union of a ConsolePortPidAssociation and a NanoOsMessageData to
+/// @brief Union of a ConsolePortPidAssociation and a uintptr_t to
 /// allow for easy conversion between the two.
 ///
 /// @param consolePortPidAssociation The ConsolePortPidAssociation part.
-/// @param nanoOsMessageData The NanoOsMessageData part.
+/// @param nanoOsMessageData The uintptr_t part.
 typedef union ConsolePortPidUnion {
   ConsolePortPidAssociation consolePortPidAssociation;
   uintptr_t                 nanoOsMessageData;
