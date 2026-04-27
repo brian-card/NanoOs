@@ -252,39 +252,39 @@ void* adafruitFeatherM0WifiBottomOfHeap(void) {
   return _bottomOfHeap;
 }
 
-/// @def MAX_SERIAL_PORTS
+/// @def MAX_UARTS
 ///
 /// @brief The maximum number of serial ports we can support on the board.
 ///
 /// @note Due to the implementation of the Adafruit version of libraries, we
 /// can't create two instances of the same base serial port class.  So, we'll
 /// have to use switch statements throughout the serial port code.
-#define MAX_SERIAL_PORTS 2
+#define MAX_UARTS 2
 
-/// @def SERIAL_PORT_USB
+/// @def UART_USB
 ///
 /// @brief The numerical ID that will correspond to the USB serial port in this
 /// HAL.
-#define SERIAL_PORT_USB 0
+#define UART_USB 0
 
-/// @def SERIAL_PORT_UART
+/// @def UART_UART
 ///
 /// @brief The numerical ID that will correspond to the UART serial port in
 /// this HAL.
-#define SERIAL_PORT_UART 1
+#define UART_UART 1
 
 /// @var _numUarts
 ///
 /// @brief The number of serial ports we support on the Adafruit Feather M0
 /// WiFi.
-static int _numUarts = MAX_SERIAL_PORTS;
+static int _numUarts = MAX_UARTS;
 
 int adafruitFeatherM0WifiGetNumUarts(void) {
   return _numUarts;
 }
 
 int adafruitFeatherM0WifiSetNumUarts(int numUarts) {
-  if (numUarts > MAX_SERIAL_PORTS) {
+  if (numUarts > MAX_UARTS) {
     return -ERANGE;
   } else if (numUarts < -ELAST) {
     return -EINVAL;
@@ -299,7 +299,7 @@ int adafruitFeatherM0WifiInitUart(int port, int32_t baud) {
   int returnValue = -ERANGE;
   
   switch (port) {
-    case SERIAL_PORT_USB:
+    case UART_USB:
       {
         Serial.begin(baud);
         while (!Serial);
@@ -307,7 +307,7 @@ int adafruitFeatherM0WifiInitUart(int port, int32_t baud) {
         break;
       }
     
-    case SERIAL_PORT_UART:
+    case UART_UART:
       {
         Serial1.begin(baud);
         while (!Serial1);
@@ -323,13 +323,13 @@ int adafruitFeatherM0WifiPollUart(int port) {
   int serialData = -ERANGE;
   
   switch (port) {
-    case SERIAL_PORT_USB:
+    case UART_USB:
       {
         serialData = Serial.read();
         break;
       }
     
-    case SERIAL_PORT_UART:
+    case UART_UART:
       {
         serialData = Serial1.read();
         break;
@@ -345,13 +345,13 @@ ssize_t adafruitFeatherM0WifiWriteUart(int port,
   ssize_t numBytesWritten = -ERANGE;
   
   switch (port) {
-    case SERIAL_PORT_USB:
+    case UART_USB:
       {
         numBytesWritten = Serial.write(data, length);
         break;
       }
     
-    case SERIAL_PORT_UART:
+    case UART_UART:
       {
         numBytesWritten = Serial1.write(data, length);
         break;
