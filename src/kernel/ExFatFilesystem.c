@@ -2985,3 +2985,19 @@ int exFatGetFileBlockMetadata(void *ds, void *fileHandle,
   return 0;
 }
 
+/// const char *exFatGetFilename(void *fileHandle)
+///
+/// @brief Get the filename managed by an exFAT file handle.
+///
+/// @param fileHandle A pointer to an ExFatFileHandle, cast to a void*.
+///
+/// @return Returns a pointer to the filename on success, NULL on failure.
+const char *exFatGetFilename(void *fileHandle) {
+  if (fileHandle == NULL) {
+    return NULL;
+  }
+  
+  ExFatFileHandle *exFatFile = (ExFatFileHandle*) fileHandle;
+  return exFatFile->fileName;
+}
+

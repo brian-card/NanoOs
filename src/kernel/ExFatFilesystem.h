@@ -209,6 +209,7 @@ int exFatRemove(void* driverState, const char* pathname);
 int exFatSeek(void* driverState, void* fileHandle, long offset, int whence);
 int exFatGetFileBlockMetadata(void *ds, void *fileHandle,
   uint32_t *startBlock, uint32_t *numBlocks);
+const char *exFatGetFilename(void *fileHandle);
 
 #ifdef __cplusplus
 } // extern "C"
