@@ -219,14 +219,14 @@ static SavedContext _savedContext;
   _savedContext.sp = (uint32_t) &returnAddressAt[2]; \
    \
   *returnAddressAt \
-    = (uint32_t) seeedXiaoM0TimerInterruptHandler ## handlerIndex; \
+    = (uint32_t) adafruitTrinketM0TimerInterruptHandler ## handlerIndex; \
   return
 
-uintptr_t seeedXiaoM0ProcessStackSize(void) {
+uintptr_t adafruitTrinketM0ProcessStackSize(void) {
   return PROCESS_STACK_SIZE;
 }
 
-uintptr_t seeedXiaoM0MemoryManagerStackSize(bool debug) {
+uintptr_t adafruitTrinketM0MemoryManagerStackSize(bool debug) {
   if (debug == false) {
     // This is the expected case, so list it first.
     return MEMORY_MANAGER_STACK_SIZE;
@@ -240,7 +240,7 @@ uintptr_t seeedXiaoM0MemoryManagerStackSize(bool debug) {
 /// @brief Where the bottom of the stack will be set to be in memory.
 static void *_bottomOfHeap = (void*) (OVERLAY_ADDRESS + OVERLAY_SIZE);
 
-void* seeedXiaoM0BottomOfHeap(void) {
+void* adafruitTrinketM0BottomOfHeap(void) {
   return _bottomOfHeap;
 }
 
@@ -271,11 +271,11 @@ void* seeedXiaoM0BottomOfHeap(void) {
 /// WiFi.
 static int _numUarts = MAX_SERIAL_PORTS;
 
-int seeedXiaoM0GetNumUarts(void) {
+int adafruitTrinketM0GetNumUarts(void) {
   return _numUarts;
 }
 
-int seeedXiaoM0SetNumUarts(int numUarts) {
+int adafruitTrinketM0SetNumUarts(int numUarts) {
   if (numUarts > MAX_SERIAL_PORTS) {
     return -ERANGE;
   } else if (numUarts < -ELAST) {
@@ -287,7 +287,7 @@ int seeedXiaoM0SetNumUarts(int numUarts) {
   return 0;
 }
 
-int seeedXiaoM0InitUart(int port, int32_t baud) {
+int adafruitTrinketM0InitUart(int port, int32_t baud) {
   int returnValue = -ERANGE;
   
   switch (port) {
@@ -311,7 +311,7 @@ int seeedXiaoM0InitUart(int port, int32_t baud) {
   return returnValue;
 }
 
-int seeedXiaoM0PollUart(int port) {
+int adafruitTrinketM0PollUart(int port) {
   int serialData = -ERANGE;
   
   switch (port) {
@@ -331,7 +331,7 @@ int seeedXiaoM0PollUart(int port) {
   return serialData;
 }
 
-ssize_t seeedXiaoM0WriteUart(int port,
+ssize_t adafruitTrinketM0WriteUart(int port,
   const uint8_t *data, ssize_t length
 ) {
   ssize_t numBytesWritten = -ERANGE;
@@ -353,19 +353,19 @@ ssize_t seeedXiaoM0WriteUart(int port,
   return numBytesWritten;
 }
 
-static HalUart seeedXiaoM0UartHal = {
-  .getNumUarts = seeedXiaoM0GetNumUarts,
-  .setNumUarts = seeedXiaoM0SetNumUarts,
-  .initUart = seeedXiaoM0InitUart,
-  .pollUart = seeedXiaoM0PollUart,
-  .writeUart = seeedXiaoM0WriteUart,
+static HalUart adafruitTrinketM0UartHal = {
+  .getNumUarts = adafruitTrinketM0GetNumUarts,
+  .setNumUarts = adafruitTrinketM0SetNumUarts,
+  .initUart = adafruitTrinketM0InitUart,
+  .pollUart = adafruitTrinketM0PollUart,
+  .writeUart = adafruitTrinketM0WriteUart,
 };
 
-int seeedXiaoM0GetNumDios(void) {
+int adafruitTrinketM0GetNumDios(void) {
   return NUM_DIO_PINS;
 }
 
-int seeedXiaoM0ConfigureDio(int dio, bool output) {
+int adafruitTrinketM0ConfigureDio(int dio, bool output) {
   int returnValue = -ERANGE;
   
   uint8_t modes[2] = { INPUT, OUTPUT };
@@ -376,7 +376,7 @@ int seeedXiaoM0ConfigureDio(int dio, bool output) {
   return returnValue;
 }
 
-int seeedXiaoM0WriteDio(int dio, bool high) {
+int adafruitTrinketM0WriteDio(int dio, bool high) {
   int returnValue = -ERANGE;
   
   uint8_t levels[2] = { LOW, HIGH };
@@ -387,10 +387,10 @@ int seeedXiaoM0WriteDio(int dio, bool high) {
   return returnValue;
 }
 
-static HalDio seeedXiaoM0DioHal = {
-  .getNumDios = seeedXiaoM0GetNumDios,
-  .configureDio = seeedXiaoM0ConfigureDio,
-  .writeDio = seeedXiaoM0WriteDio,
+static HalDio adafruitTrinketM0DioHal = {
+  .getNumDios = adafruitTrinketM0GetNumDios,
+  .configureDio = adafruitTrinketM0ConfigureDio,
+  .writeDio = adafruitTrinketM0WriteDio,
 };
 
 /// @var globalSpiConfigured
@@ -404,7 +404,7 @@ static bool globalSpiConfigured = false;
 /// @brief Whether or not the Arduino's SPI interface is currently in use.
 static bool globalSpiInUse = false;
 
-/// @var seeedXiaoM0SpiDevices
+/// @var adafruitTrinketM0SpiDevices
 ///
 /// @brief Array of structures that will hold the information about SPI
 /// connections.
@@ -413,17 +413,17 @@ static struct AdafruitTrinketM0Spi {
   uint8_t  chipSelect;
   bool     transferInProgress; // Will default to false
   uint32_t baud;
-} seeedXiaoM0SpiDevices[NUM_DIO_PINS] = {};
+} adafruitTrinketM0SpiDevices[NUM_DIO_PINS] = {};
 
 /// @var numArduinoSpis
 ///
 /// @brief The number of devices we support in the
-/// seeedXiaoM0SpiDevices array.
+/// adafruitTrinketM0SpiDevices array.
 static const int numArduinoSpis
-  = sizeof(seeedXiaoM0SpiDevices)
-  / sizeof(seeedXiaoM0SpiDevices[0]);
+  = sizeof(adafruitTrinketM0SpiDevices)
+  / sizeof(adafruitTrinketM0SpiDevices[0]);
 
-int seeedXiaoM0InitSpiDevice(int spi,
+int adafruitTrinketM0InitSpiDevice(int spi,
   uint8_t cs, uint8_t sck, uint8_t copi, uint8_t cipo, uint32_t baud
 ) {
   if ((spi < 0) || (spi >= numArduinoSpis)) {
@@ -438,7 +438,7 @@ int seeedXiaoM0InitSpiDevice(int spi,
     || (cipo != SPI_CIPO_DIO)
   ) {
     return -EINVAL;
-  } else if (seeedXiaoM0SpiDevices[spi].configured == true) {
+  } else if (adafruitTrinketM0SpiDevices[spi].configured == true) {
     return -EBUSY;
   }
   
@@ -449,21 +449,21 @@ int seeedXiaoM0InitSpiDevice(int spi,
   }
   
   // Configure the chip select DIO for output.
-  seeedXiaoM0ConfigureDio(cs, 1);
+  adafruitTrinketM0ConfigureDio(cs, 1);
   // Deselect the chip select pin.
-  seeedXiaoM0WriteDio(cs, 1);
+  adafruitTrinketM0WriteDio(cs, 1);
   
   // Configure our internal metadata for the device.
-  seeedXiaoM0SpiDevices[spi].chipSelect = cs;
-  seeedXiaoM0SpiDevices[spi].baud = baud;
-  seeedXiaoM0SpiDevices[spi].configured = true;
+  adafruitTrinketM0SpiDevices[spi].chipSelect = cs;
+  adafruitTrinketM0SpiDevices[spi].baud = baud;
+  adafruitTrinketM0SpiDevices[spi].configured = true;
   
   return 0;
 }
 
-int seeedXiaoM0StartSpiTransfer(int spi) {
+int adafruitTrinketM0StartSpiTransfer(int spi) {
   if ((spi < 0) || (spi >= numArduinoSpis)
-    || (seeedXiaoM0SpiDevices[spi].configured == false)
+    || (adafruitTrinketM0SpiDevices[spi].configured == false)
   ) {
     // Outside the limit of the devices we support.
     return -ENODEV;
@@ -475,34 +475,34 @@ int seeedXiaoM0StartSpiTransfer(int spi) {
   globalSpiInUse = true;
   
   // Select the chip select pin.
-  seeedXiaoM0WriteDio(
-    seeedXiaoM0SpiDevices[spi].chipSelect, 0);
+  adafruitTrinketM0WriteDio(
+    adafruitTrinketM0SpiDevices[spi].chipSelect, 0);
   
   // Begin the transaction
-  SPI.beginTransaction(SPISettings(seeedXiaoM0SpiDevices[spi].baud,
+  SPI.beginTransaction(SPISettings(adafruitTrinketM0SpiDevices[spi].baud,
     MSBFIRST, SPI_MODE0));
   
-  seeedXiaoM0SpiDevices[spi].transferInProgress = true;
+  adafruitTrinketM0SpiDevices[spi].transferInProgress = true;
   
   return 0;
 }
 
-int seeedXiaoM0EndSpiTransfer(int spi) {
+int adafruitTrinketM0EndSpiTransfer(int spi) {
   if ((spi < 0) || (spi >= numArduinoSpis)
-    || (seeedXiaoM0SpiDevices[spi].configured == false)
+    || (adafruitTrinketM0SpiDevices[spi].configured == false)
   ) {
     // Outside the limit of the devices we support.
     return -ENODEV;
   }
   
-  seeedXiaoM0SpiDevices[spi].transferInProgress = false;
+  adafruitTrinketM0SpiDevices[spi].transferInProgress = false;
   
   // End the transaction.
   SPI.endTransaction();
   
   // Deselect the chip select pin.
-  seeedXiaoM0WriteDio(
-    seeedXiaoM0SpiDevices[spi].chipSelect, 1);
+  adafruitTrinketM0WriteDio(
+    adafruitTrinketM0SpiDevices[spi].chipSelect, 1);
   for (int ii = 0; ii < 8; ii++) {
     SPI.transfer(0xFF); // 8 clock pulses
   }
@@ -513,35 +513,35 @@ int seeedXiaoM0EndSpiTransfer(int spi) {
   return 0;
 }
 
-int seeedXiaoM0SpiTransfer8(int spi, uint8_t data) {
+int adafruitTrinketM0SpiTransfer8(int spi, uint8_t data) {
   if ((spi < 0) || (spi >= numArduinoSpis)
-    || (seeedXiaoM0SpiDevices[spi].configured == false)
+    || (adafruitTrinketM0SpiDevices[spi].configured == false)
   ) {
     // Outside the limit of the devices we support.
     return -ENODEV;
-  } else if (!seeedXiaoM0SpiDevices[spi].transferInProgress) {
-    // The only error that seeedXiaoM0StartSpiTransfer can return is
+  } else if (!adafruitTrinketM0SpiDevices[spi].transferInProgress) {
+    // The only error that adafruitTrinketM0StartSpiTransfer can return is
     // ENODEV and we've already checked for that, so we don't need to check the
     // return value here.
-    seeedXiaoM0StartSpiTransfer(spi);
+    adafruitTrinketM0StartSpiTransfer(spi);
   }
   
   return (int) SPI.transfer(data);
 }
 
-int seeedXiaoM0SpiTransferBytes(int spi,
+int adafruitTrinketM0SpiTransferBytes(int spi,
   uint8_t *data, uint32_t length
 ) {
   if ((spi < 0) || (spi >= numArduinoSpis)
-    || (seeedXiaoM0SpiDevices[spi].configured == false)
+    || (adafruitTrinketM0SpiDevices[spi].configured == false)
   ) {
     // Outside the limit of the devices we support.
     return -ENODEV;
-  } else if (!seeedXiaoM0SpiDevices[spi].transferInProgress) {
-    // The only error that seeedXiaoM0StartSpiTransfer can return is
+  } else if (!adafruitTrinketM0SpiDevices[spi].transferInProgress) {
+    // The only error that adafruitTrinketM0StartSpiTransfer can return is
     // ENODEV and we've already checked for that, so we don't need to check the
     // return value here.
-    seeedXiaoM0StartSpiTransfer(spi);
+    adafruitTrinketM0StartSpiTransfer(spi);
   }
   
   SPI.transfer(data, length);
@@ -549,12 +549,12 @@ int seeedXiaoM0SpiTransferBytes(int spi,
   return 0;
 }
 
-static HalSpi seeedXiaoM0SpiHal = {
-  .initSpiDevice = seeedXiaoM0InitSpiDevice,
-  .startSpiTransfer = seeedXiaoM0StartSpiTransfer,
-  .endSpiTransfer = seeedXiaoM0EndSpiTransfer,
-  .spiTransfer8 = seeedXiaoM0SpiTransfer8,
-  .spiTransferBytes = seeedXiaoM0SpiTransferBytes,
+static HalSpi adafruitTrinketM0SpiHal = {
+  .initSpiDevice = adafruitTrinketM0InitSpiDevice,
+  .startSpiTransfer = adafruitTrinketM0StartSpiTransfer,
+  .endSpiTransfer = adafruitTrinketM0EndSpiTransfer,
+  .spiTransfer8 = adafruitTrinketM0SpiTransfer8,
+  .spiTransferBytes = adafruitTrinketM0SpiTransferBytes,
 };
 
 /// @var baseSystemTimeUs
@@ -563,7 +563,7 @@ static HalSpi seeedXiaoM0SpiHal = {
 /// time for the system.
 static int64_t baseSystemTimeUs = 0;
 
-int seeedXiaoM0SetSystemTime(struct timespec *now) {
+int adafruitTrinketM0SetSystemTime(struct timespec *now) {
   if (now == NULL) {
     return -EINVAL;
   }
@@ -575,14 +575,14 @@ int seeedXiaoM0SetSystemTime(struct timespec *now) {
   return 0;
 }
 
-int64_t seeedXiaoM0GetElapsedMicroseconds(int64_t startTime);
+int64_t adafruitTrinketM0GetElapsedMicroseconds(int64_t startTime);
 
-int64_t seeedXiaoM0GetElapsedMilliseconds(int64_t startTime) {
-  return seeedXiaoM0GetElapsedMicroseconds(
+int64_t adafruitTrinketM0GetElapsedMilliseconds(int64_t startTime) {
+  return adafruitTrinketM0GetElapsedMicroseconds(
     startTime * ((int64_t) 1000)) / ((int64_t) 1000);
 }
 
-int64_t seeedXiaoM0GetElapsedMicroseconds(int64_t startTime) {
+int64_t adafruitTrinketM0GetElapsedMicroseconds(int64_t startTime) {
   int64_t now = baseSystemTimeUs + micros();
 
   if (now < startTime) {
@@ -592,19 +592,19 @@ int64_t seeedXiaoM0GetElapsedMicroseconds(int64_t startTime) {
   return now - startTime;
 }
 
-int64_t seeedXiaoM0GetElapsedNanoseconds(int64_t startTime) {
-  return seeedXiaoM0GetElapsedMicroseconds(
+int64_t adafruitTrinketM0GetElapsedNanoseconds(int64_t startTime) {
+  return adafruitTrinketM0GetElapsedMicroseconds(
     startTime / ((int64_t) 1000)) * ((int64_t) 1000);
 }
 
-static HalClock seeedXiaoM0ClockHal = {
-  .setSystemTime = seeedXiaoM0SetSystemTime,
-  .getElapsedMilliseconds = seeedXiaoM0GetElapsedMilliseconds,
-  .getElapsedMicroseconds = seeedXiaoM0GetElapsedMicroseconds,
-  .getElapsedNanoseconds = seeedXiaoM0GetElapsedNanoseconds,
+static HalClock adafruitTrinketM0ClockHal = {
+  .setSystemTime = adafruitTrinketM0SetSystemTime,
+  .getElapsedMilliseconds = adafruitTrinketM0GetElapsedMilliseconds,
+  .getElapsedMicroseconds = adafruitTrinketM0GetElapsedMicroseconds,
+  .getElapsedNanoseconds = adafruitTrinketM0GetElapsedNanoseconds,
 };
 
-int seeedXiaoM0Shutdown(HalShutdownType shutdownType) {
+int adafruitTrinketM0Shutdown(HalShutdownType shutdownType) {
   // You can't completely turn off the board from software.  The best we can
   // do is put into a low power state, so do the same set of operations for
   // both off and suspend.
@@ -626,8 +626,8 @@ int seeedXiaoM0Shutdown(HalShutdownType shutdownType) {
   return 0;
 }
 
-static HalPower seeedXiaoM0PowerHal = {
-  .shutdown = seeedXiaoM0Shutdown,
+static HalPower adafruitTrinketM0PowerHal = {
+  .shutdown = adafruitTrinketM0Shutdown,
 };
 
 /// @struct HardwareTimer
@@ -681,16 +681,16 @@ static HardwareTimer hardwareTimers[] = {
 
 /// @var _numTimers
 ///
-/// @brief The number of timers returned by seeedXiaoM0GetNumTimers.  This
+/// @brief The number of timers returned by adafruitTrinketM0GetNumTimers.  This
 /// is initialized to the number of timers supported, but may be overridden by
-/// a call to seeedXiaoM0SetNumTimers.
+/// a call to adafruitTrinketM0SetNumTimers.
 static int _numTimers = sizeof(hardwareTimers) / sizeof(hardwareTimers[0]);
 
-int seeedXiaoM0GetNumTimers(void) {
+int adafruitTrinketM0GetNumTimers(void) {
   return _numTimers;
 }
 
-int seeedXiaoM0SetNumTimers(int numTimers) {
+int adafruitTrinketM0SetNumTimers(int numTimers) {
   if (
     numTimers > ((int) (sizeof(hardwareTimers) / sizeof(hardwareTimers[0])))
   ) {
@@ -704,7 +704,7 @@ int seeedXiaoM0SetNumTimers(int numTimers) {
   return 0;
 }
 
-int seeedXiaoM0InitTimer(int timer) {
+int adafruitTrinketM0InitTimer(int timer) {
   if ((timer < 0) || (timer >= _numTimers)) {
     return -ERANGE;
   }
@@ -749,7 +749,7 @@ int seeedXiaoM0InitTimer(int timer) {
   return 0;
 }
 
-int seeedXiaoM0ConfigOneShotTimer(int timer,
+int adafruitTrinketM0ConfigOneShotTimer(int timer,
     uint64_t nanoseconds, void (*callback)(void)
 ) {
   if ((timer < 0) || (timer >= _numTimers)) {
@@ -762,8 +762,8 @@ int seeedXiaoM0ConfigOneShotTimer(int timer,
   }
   
   // Cancel any existing timer
-  int seeedXiaoM0CancelTimer(int);
-  seeedXiaoM0CancelTimer(timer);
+  int adafruitTrinketM0CancelTimer(int);
+  adafruitTrinketM0CancelTimer(timer);
   
   // We take a number of nanoseconds for HAL compatibility, but our timers
   // don't support that resolution.  Convert to microseconds.
@@ -823,13 +823,13 @@ int seeedXiaoM0ConfigOneShotTimer(int timer,
   // Enable timer
   hwTimer->tc->COUNT16.CTRLA.reg |= TC_CTRLA_ENABLE;
   while (hwTimer->tc->COUNT16.STATUS.bit.SYNCBUSY);
-  hwTimer->startTime = seeedXiaoM0GetElapsedNanoseconds(0);
+  hwTimer->startTime = adafruitTrinketM0GetElapsedNanoseconds(0);
   hwTimer->deadline = hwTimer->startTime + (microseconds * ((uint64_t) 1000));
   
   return 0;
 }
 
-uint64_t seeedXiaoM0ConfiguredTimerNanoseconds(int timer) {
+uint64_t adafruitTrinketM0ConfiguredTimerNanoseconds(int timer) {
   if ((timer < 0) || (timer >= _numTimers)) {
     return 0;
   }
@@ -842,7 +842,7 @@ uint64_t seeedXiaoM0ConfiguredTimerNanoseconds(int timer) {
   return hwTimer->deadline - hwTimer->startTime;
 }
 
-uint64_t seeedXiaoM0RemainingTimerNanoseconds(int timer) {
+uint64_t adafruitTrinketM0RemainingTimerNanoseconds(int timer) {
   if ((timer < 0) || (timer >= _numTimers)) {
     return 0;
   }
@@ -852,7 +852,7 @@ uint64_t seeedXiaoM0RemainingTimerNanoseconds(int timer) {
     return 0;
   }
   
-  int64_t now = seeedXiaoM0GetElapsedNanoseconds(0);
+  int64_t now = adafruitTrinketM0GetElapsedNanoseconds(0);
   if (now > hwTimer->deadline) {
     return 0;
   }
@@ -860,7 +860,7 @@ uint64_t seeedXiaoM0RemainingTimerNanoseconds(int timer) {
   return hwTimer->deadline - now;
 }
 
-int seeedXiaoM0CancelTimer(int timer) {
+int adafruitTrinketM0CancelTimer(int timer) {
   if ((timer < 0) || (timer >= _numTimers)) {
     return -ERANGE;
   }
@@ -888,13 +888,13 @@ int seeedXiaoM0CancelTimer(int timer) {
   return 0;
 }
 
-int seeedXiaoM0CancelAndGetTimer(int timer,
+int adafruitTrinketM0CancelAndGetTimer(int timer,
   uint64_t *configuredNanoseconds, uint64_t *remainingNanoseconds,
   void (**callback)(void)
 ) {
   // We need to get `now` as close to the beginning of this function call as
   // possible so that any call to reconfigure the timer later is correct.
-  // Don't call seeedXiaoM0GetElapsedNanoseconds, just compute
+  // Don't call adafruitTrinketM0GetElapsedNanoseconds, just compute
   // directly.
   int64_t now = micros() * 1000;
   
@@ -910,7 +910,7 @@ int seeedXiaoM0CancelAndGetTimer(int timer,
     return -EINVAL;
   }
   
-  // ***DO NOT*** call seeedXiaoM0CancelTimer.  It's expected that
+  // ***DO NOT*** call adafruitTrinketM0CancelTimer.  It's expected that
   // this function is in the critical path.  Time is of the essence, so inline
   // the logic.
   
@@ -949,14 +949,14 @@ int seeedXiaoM0CancelAndGetTimer(int timer,
   return 0;
 }
 
-/// @fn void seeedXiaoM0TimerInterruptHandler(int timer)
+/// @fn void adafruitTrinketM0TimerInterruptHandler(int timer)
 ///
 /// @brief Base implementation for the Timer/Counter interrupt handlers.
 ///
 /// @param timer The zero-based index of the timer to handle.
 ///
 /// @return This function returns no value.
-void seeedXiaoM0TimerInterruptHandler(int timer) {
+void adafruitTrinketM0TimerInterruptHandler(int timer) {
   // This function is only called from one of the real interrupt handlers, so
   // we're guaranteed that the timer parameter is good.  Skip validation.
   HardwareTimer *hwTimer = &hardwareTimers[timer];
@@ -971,27 +971,27 @@ void seeedXiaoM0TimerInterruptHandler(int timer) {
   }
 }
 
-/// @fn void seeedXiaoM0TimerInterruptHandler0()
+/// @fn void adafruitTrinketM0TimerInterruptHandler0()
 ///
-/// @brief Call seeedXiaoM0TimerInterruptHandler with a value of 0.  This
+/// @brief Call adafruitTrinketM0TimerInterruptHandler with a value of 0.  This
 /// effectively replaces TC3_Handler.
 ///
 /// @return This function returns no value.
-void seeedXiaoM0TimerInterruptHandler0() {
+void adafruitTrinketM0TimerInterruptHandler0() {
   SAVE_CONTEXT();
-  seeedXiaoM0TimerInterruptHandler(0);
+  adafruitTrinketM0TimerInterruptHandler(0);
   RESTORE_CONTEXT();
 }
 
-/// @fn void seeedXiaoM0TimerInterruptHandler1()
+/// @fn void adafruitTrinketM0TimerInterruptHandler1()
 ///
-/// @brief Call seeedXiaoM0TimerInterruptHandler with a value of 1.  This
+/// @brief Call adafruitTrinketM0TimerInterruptHandler with a value of 1.  This
 /// effectively replaces TC4_Handler.
 ///
 /// @return This function returns no value.
-void seeedXiaoM0TimerInterruptHandler1() {
+void adafruitTrinketM0TimerInterruptHandler1() {
   SAVE_CONTEXT();
-  seeedXiaoM0TimerInterruptHandler(1);
+  adafruitTrinketM0TimerInterruptHandler(1);
   RESTORE_CONTEXT();
 }
 
@@ -1013,18 +1013,18 @@ void TC4_Handler(void) {
   RETURN_TO_HANDLER(1);
 }
 
-static HalTimer seeedXiaoM0TimerHal = {
-  .getNumTimers = seeedXiaoM0GetNumTimers,
-  .setNumTimers = seeedXiaoM0SetNumTimers,
-  .initTimer = seeedXiaoM0InitTimer,
-  .configOneShotTimer = seeedXiaoM0ConfigOneShotTimer,
-  .configuredTimerNanoseconds = seeedXiaoM0ConfiguredTimerNanoseconds,
-  .remainingTimerNanoseconds = seeedXiaoM0RemainingTimerNanoseconds,
-  .cancelTimer = seeedXiaoM0CancelTimer,
-  .cancelAndGetTimer = seeedXiaoM0CancelAndGetTimer,
+static HalTimer adafruitTrinketM0TimerHal = {
+  .getNumTimers = adafruitTrinketM0GetNumTimers,
+  .setNumTimers = adafruitTrinketM0SetNumTimers,
+  .initTimer = adafruitTrinketM0InitTimer,
+  .configOneShotTimer = adafruitTrinketM0ConfigOneShotTimer,
+  .configuredTimerNanoseconds = adafruitTrinketM0ConfiguredTimerNanoseconds,
+  .remainingTimerNanoseconds = adafruitTrinketM0RemainingTimerNanoseconds,
+  .cancelTimer = adafruitTrinketM0CancelTimer,
+  .cancelAndGetTimer = adafruitTrinketM0CancelAndGetTimer,
 };
 
-int seeedXiaoM0InitRootStorage(SchedulerState *schedulerState) {
+int adafruitTrinketM0InitRootStorage(SchedulerState *schedulerState) {
   TaskDescriptor *allTasks = schedulerState->allTasks;
   
   // Create the SD card task.
@@ -1075,35 +1075,35 @@ int seeedXiaoM0InitRootStorage(SchedulerState *schedulerState) {
 }
 
 
-/// @var seeedXiaoM0Hal
+/// @var adafruitTrinketM0Hal
 ///
 /// @brief The implementation of the Hal interface for the Adafruit Feather M0
 /// WiFi.
-static Hal seeedXiaoM0Hal = {
+static Hal adafruitTrinketM0Hal = {
   // Memory definitions.
-  .processStackSize = seeedXiaoM0ProcessStackSize,
-  .memoryManagerStackSize = seeedXiaoM0MemoryManagerStackSize,
-  .bottomOfHeap = seeedXiaoM0BottomOfHeap,
+  .processStackSize = adafruitTrinketM0ProcessStackSize,
+  .memoryManagerStackSize = adafruitTrinketM0MemoryManagerStackSize,
+  .bottomOfHeap = adafruitTrinketM0BottomOfHeap,
   
   // Overlay definitions.
   .overlayMap = (NanoOsOverlayMap*) OVERLAY_ADDRESS,
   .overlaySize = OVERLAY_SIZE,
   
-  .uartHal = &seeedXiaoM0UartHal,
-  .dioHal = &seeedXiaoM0DioHal,
-  .spiHal = &seeedXiaoM0SpiHal,
-  .clockHal = &seeedXiaoM0ClockHal,
-  .powerHal = &seeedXiaoM0PowerHal,
-  .timerHal = &seeedXiaoM0TimerHal,
+  .uartHal = &adafruitTrinketM0UartHal,
+  .dioHal = &adafruitTrinketM0DioHal,
+  .spiHal = &adafruitTrinketM0SpiHal,
+  .clockHal = &adafruitTrinketM0ClockHal,
+  .powerHal = &adafruitTrinketM0PowerHal,
+  .timerHal = &adafruitTrinketM0TimerHal,
   
   // Root storage configuration.
-  .initRootStorage = seeedXiaoM0InitRootStorage,
+  .initRootStorage = adafruitTrinketM0InitRootStorage,
 };
 
 const Hal* halAdafruitTrinketM0Init(void) {
   extern char __bss_end__;
   if (((uintptr_t) &__bss_end__)
-    > ((uintptr_t) seeedXiaoM0Hal.overlayMap)
+    > ((uintptr_t) adafruitTrinketM0Hal.overlayMap)
   ) {
     int stackPosition = 0;
     Serial.begin(1000000);
@@ -1111,7 +1111,7 @@ const Hal* halAdafruitTrinketM0Init(void) {
     Serial.print("ERROR!!! 0x");
     Serial.print((uintptr_t) &__bss_end__, HEX);
     Serial.print(" > 0x");
-    Serial.print((uintptr_t) seeedXiaoM0Hal.overlayMap, HEX);
+    Serial.print((uintptr_t) adafruitTrinketM0Hal.overlayMap, HEX);
     Serial.print("\n");
     Serial.print("Stack position = 0x");
     Serial.print((uintptr_t) &stackPosition, HEX);
@@ -1124,7 +1124,7 @@ const Hal* halAdafruitTrinketM0Init(void) {
   __enable_irq();  // Ensure global interrupts are enabled
   
   int ii = 0;
-  Hal *hal = &seeedXiaoM0Hal;
+  Hal *hal = &adafruitTrinketM0Hal;
   if (hal->uartHal != NULL) {
     int numUarts = hal->uartHal->getNumUarts();
     if (numUarts <= 0) {
