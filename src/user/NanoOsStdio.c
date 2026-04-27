@@ -64,7 +64,7 @@ FILE *nanoOsStderr = (FILE*) ((intptr_t) 0x3);
 ///
 /// @return Returns 0 on success, -1 on failure.
 int printString_(const char *string) {
-  if (HAL->uartHal != NULL) {
+  if ((string != NULL) && (HAL->uartHal != NULL)) {
     HAL->uartHal->writeUart(0, (uint8_t*) string, strlen(string));
   } else {
     return -1;
