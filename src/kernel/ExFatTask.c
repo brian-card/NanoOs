@@ -45,10 +45,10 @@
 /// @typedef ExFatCommandHandler
 ///
 /// @brief Definition of a filesystem command handler function.
-typedef int (*ExFatCommandHandler)(ExFatDriverState*, TaskMessage*);
+typedef int (*ExFatCommandHandler)(FilesystemState*, TaskMessage*);
 
 /// @fn int exFatTaskOpenFileCommandHandler(
-///   ExFatDriverState *driverState, TaskMessage *taskMessage)
+///   FilesystemState *filesystemState, TaskMessage *taskMessage)
 ///
 /// @brief Command handler for FILESYSTEM_OPEN_FILE command.
 ///
@@ -59,7 +59,7 @@ typedef int (*ExFatCommandHandler)(ExFatDriverState*, TaskMessage*);
 ///
 /// @return Returns 0 on success, a standard POSIX error code on failure.
 int exFatTaskOpenFileCommandHandler(
-  ExFatDriverState *driverState, TaskMessage *taskMessage
+  FilesystemState *filesystemState, TaskMessage *taskMessage
 ) {
   NanoOsFile *nanoOsFile = NULL;
   FilesystemFopenParameters *fopenParameters
@@ -71,23 +71,23 @@ int exFatTaskOpenFileCommandHandler(
   printDebugString(mode);
   printDebugString("\"\n");
 
-  if (driverState->driverStateValid) {
-    ExFatFileHandle *exFatFile = exFatOpenFile(driverState,
+  if (filesystemState->driverState != NULL) {
+    void *exFatFile = exFatOpenFile(filesystemState->driverState,
       fopenParameters->pathname, fopenParameters->mode);
     if (exFatFile != NULL) {
       nanoOsFile = (NanoOsFile*) malloc(sizeof(NanoOsFile));
       if (nanoOsFile != NULL) {
         nanoOsFile->file = exFatFile;
-        nanoOsFile->currentPosition = exFatFile->currentPosition;
-        nanoOsFile->fd = driverState->filesystemState->numOpenFiles + 3;
+        nanoOsFile->currentPosition = 0;
+        nanoOsFile->fd = filesystemState->numOpenFiles + 3;
         nanoOsFile->owner = taskId(taskMessageFrom(taskMessage));
-        driverState->filesystemState->numOpenFiles++;
+        filesystemState->numOpenFiles++;
 
-        nanoOsFile->next = driverState->filesystemState->openFiles;
+        nanoOsFile->next = filesystemState->openFiles;
         nanoOsFile->prev = NULL;
-        driverState->filesystemState->openFiles = nanoOsFile;
+        filesystemState->openFiles = nanoOsFile;
       } else {
-        exFatFclose(driverState, exFatFile);
+        exFatFclose(filesystemState->driverState, exFatFile);
       }
     } else {
       printString("ERROR: exFatOpenFile returned NULL\n");
@@ -102,21 +102,19 @@ int exFatTaskOpenFileCommandHandler(
 }
 
 /// @fn int exFatTaskCloseFileCommandHandler(
-///   ExFatDriverState *driverState, TaskMessage *taskMessage)
+///   FilesystemState *filesystemState, TaskMessage *taskMessage)
 ///
 /// @brief Command handler for FILESYSTEM_CLOSE_FILE command.
 ///
-/// @param driverState A pointer to the FilesystemState object maintained
+/// @param filesystemState A pointer to the FilesystemState object maintained
 ///   by the filesystem task.
 /// @param taskMessage A pointer to the TaskMessage that was received by
 ///   the filesystem task.
 ///
 /// @return Returns 0 on success, a standard POSIX error code on failure.
 int exFatTaskCloseFileCommandHandler(
-  ExFatDriverState *driverState, TaskMessage *taskMessage
+  FilesystemState *filesystemState, TaskMessage *taskMessage
 ) {
-  (void) driverState;
-
   // A note about the way this function is written:
   //
   // I used to have sensible variables in this function.  That worked fine most
@@ -129,11 +127,11 @@ int exFatTaskCloseFileCommandHandler(
   // JBC 2026-02-17
   FilesystemFcloseParameters *fcloseParameters
     = (FilesystemFcloseParameters*) taskMessageData(taskMessage);
-  if (driverState->driverStateValid) {
+  if (filesystemState->driverState != NULL) {
     fcloseParameters->returnValue = exFatFclose(
-      driverState, (ExFatFileHandle*) fcloseParameters->stream->file);
-    if (driverState->filesystemState->numOpenFiles > 0) {
-      driverState->filesystemState->numOpenFiles--;
+      filesystemState->driverState, fcloseParameters->stream->file);
+    if (filesystemState->numOpenFiles > 0) {
+      filesystemState->numOpenFiles--;
     }
     if (fcloseParameters->stream->next != NULL) {
       fcloseParameters->stream->next->prev = fcloseParameters->stream->prev;
@@ -141,8 +139,8 @@ int exFatTaskCloseFileCommandHandler(
     if (fcloseParameters->stream->prev != NULL) {
       fcloseParameters->stream->prev->next = fcloseParameters->stream->next;
     }
-    if (fcloseParameters->stream == driverState->filesystemState->openFiles) {
-      driverState->filesystemState->openFiles = fcloseParameters->stream->next;
+    if (fcloseParameters->stream == filesystemState->openFiles) {
+      filesystemState->openFiles = fcloseParameters->stream->next;
     }
   }
   free(fcloseParameters->stream);
@@ -152,36 +150,35 @@ int exFatTaskCloseFileCommandHandler(
 }
 
 /// @fn int exFatTaskReadFileCommandHandler(
-///   ExFatDriverState *driverState, TaskMessage *taskMessage)
+///   FilesystemState *filesystemState, TaskMessage *taskMessage)
 ///
 /// @brief Command handler for FILESYSTEM_READ_FILE command.
 ///
-/// @param driverState A pointer to the FilesystemState object maintained
+/// @param filesystemState A pointer to the FilesystemState object maintained
 ///   by the filesystem task.
 /// @param taskMessage A pointer to the TaskMessage that was received by
 ///   the filesystem task.
 ///
 /// @return Returns 0 on success, a standard POSIX error code on failure.
 int exFatTaskReadFileCommandHandler(
-  ExFatDriverState *driverState, TaskMessage *taskMessage
+  FilesystemState *filesystemState, TaskMessage *taskMessage
 ) {
   FilesystemIoCommandParameters *filesystemIoCommandParameters
     = (FilesystemIoCommandParameters*) taskMessageData(taskMessage);
   int32_t returnValue = 0;
-  if (driverState->driverStateValid) {
+  if (filesystemState->driverState != NULL) {
     uint32_t length = filesystemIoCommandParameters->length;
     if (length > 0x7fffffff) {
       // Make sure we don't overflow the maximum value of a signed 32-bit int.
       length = 0x7fffffff;
     }
     NanoOsFile *nanoOsFile = filesystemIoCommandParameters->file;
-    ExFatFileHandle *exFatFile = (ExFatFileHandle*) nanoOsFile->file;
-    returnValue = exFatRead(driverState,
-      filesystemIoCommandParameters->buffer, length, exFatFile);
-    nanoOsFile->currentPosition = exFatFile->currentPosition;
+    returnValue = exFatRead(filesystemState->driverState,
+      filesystemIoCommandParameters->buffer, length, nanoOsFile->file);
     if (returnValue >= 0) {
       // Return value is the number of bytes read.  Set the length variable to
       // it and set it to 0 to indicate good status.
+      nanoOsFile->currentPosition += returnValue;
       filesystemIoCommandParameters->length = returnValue;
       returnValue = 0;
     } else {
@@ -197,37 +194,36 @@ int exFatTaskReadFileCommandHandler(
 }
 
 /// @fn int exFatTaskWriteFileCommandHandler(
-///   ExFatDriverState *driverState, TaskMessage *taskMessage)
+///   FilesystemState *filesystemState, TaskMessage *taskMessage)
 ///
 /// @brief Command handler for FILESYSTEM_WRITE_FILE command.
 ///
-/// @param driverState A pointer to the FilesystemState object maintained
+/// @param filesystemState A pointer to the FilesystemState object maintained
 ///   by the filesystem task.
 /// @param taskMessage A pointer to the TaskMessage that was received by
 ///   the filesystem task.
 ///
 /// @return Returns 0 on success, a standard POSIX error code on failure.
 int exFatTaskWriteFileCommandHandler(
-  ExFatDriverState *driverState, TaskMessage *taskMessage
+  FilesystemState *filesystemState, TaskMessage *taskMessage
 ) {
   FilesystemIoCommandParameters *filesystemIoCommandParameters
     = (FilesystemIoCommandParameters*) taskMessageData(taskMessage);
   int32_t returnValue = 0;
-  if (driverState->driverStateValid) {
+  if (filesystemState->driverState != NULL) {
     uint32_t length = filesystemIoCommandParameters->length;
     if (length > 0x7fffffff) {
       // Make sure we don't overflow the maximum value of a signed 32-bit int.
       length = 0x7fffffff;
     }
     NanoOsFile *nanoOsFile = filesystemIoCommandParameters->file;
-    ExFatFileHandle *exFatFile = (ExFatFileHandle*) nanoOsFile->file;
-    returnValue = exFatWrite(driverState,
+    returnValue = exFatWrite(filesystemState->driverState,
       filesystemIoCommandParameters->buffer,
-      length, exFatFile);
-    nanoOsFile->currentPosition = exFatFile->currentPosition;
+      length, nanoOsFile->file);
     if (returnValue >= 0) {
       // Return value is the number of bytes written.  Set the length variable
       // to it and set it to 0 to indicate good status.
+      nanoOsFile->currentPosition += returnValue;
       filesystemIoCommandParameters->length = returnValue;
       returnValue = 0;
     } else {
@@ -243,23 +239,23 @@ int exFatTaskWriteFileCommandHandler(
 }
 
 /// @fn int exFatTaskRemoveFileCommandHandler(
-///   ExFatDriverState *driverState, TaskMessage *taskMessage)
+///   FilesystemState *filesystemState, TaskMessage *taskMessage)
 ///
 /// @brief Command handler for FILESYSTEM_REMOVE_FILE command.
 ///
-/// @param driverState A pointer to the FilesystemState object maintained
+/// @param filesystemState A pointer to the FilesystemState object maintained
 ///   by the filesystem task.
 /// @param taskMessage A pointer to the TaskMessage that was received by
 ///   the filesystem task.
 ///
 /// @return Returns 0 on success, a standard POSIX error code on failure.
 int exFatTaskRemoveFileCommandHandler(
-  ExFatDriverState *driverState, TaskMessage *taskMessage
+  FilesystemState *filesystemState, TaskMessage *taskMessage
 ) {
   const char *pathname = (const char*) taskMessageData(taskMessage);
   int returnValue = 0;
-  if (driverState->driverStateValid) {
-    returnValue = exFatRemove(driverState, pathname);
+  if (filesystemState->driverState != NULL) {
+    returnValue = exFatRemove(filesystemState->driverState, pathname);
   }
 
   taskMessageData(taskMessage) = (void*) ((intptr_t) returnValue);
@@ -268,29 +264,30 @@ int exFatTaskRemoveFileCommandHandler(
 }
 
 /// @fn int exFatTaskSeekFileCommandHandler(
-///   ExFatDriverState *driverState, TaskMessage *taskMessage)
+///   FilesystemState *filesystemState, TaskMessage *taskMessage)
 ///
 /// @brief Command handler for FILESYSTEM_SEEK_FILE command.
 ///
-/// @param driverState A pointer to the FilesystemState object maintained
+/// @param filesystemState A pointer to the FilesystemState object maintained
 ///   by the filesystem task.
 /// @param taskMessage A pointer to the TaskMessage that was received by
 ///   the filesystem task.
 ///
 /// @return Returns 0 on success, a standard POSIX error code on failure.
 int exFatTaskSeekFileCommandHandler(
-  ExFatDriverState *driverState, TaskMessage *taskMessage
+  FilesystemState *filesystemState, TaskMessage *taskMessage
 ) {
   FilesystemSeekParameters *filesystemSeekParameters
     = (FilesystemSeekParameters*) taskMessageData(taskMessage);
   int returnValue = 0;
-  if (driverState->driverStateValid) {
+  if (filesystemState->driverState != NULL) {
     NanoOsFile *nanoOsFile = filesystemSeekParameters->stream;
-    ExFatFileHandle *exFatFile = (ExFatFileHandle*) nanoOsFile->file;
-    returnValue = exFatSeek(driverState, exFatFile,
+    returnValue = exFatSeek(filesystemState->driverState, nanoOsFile->file,
       filesystemSeekParameters->offset,
       filesystemSeekParameters->whence);
-    nanoOsFile->currentPosition = exFatFile->currentPosition;
+    if (returnValue >= 0) {
+      nanoOsFile->currentPosition = returnValue;
+    }
   }
 
   taskMessageData(taskMessage) = (void*) ((intptr_t) returnValue);
@@ -299,23 +296,23 @@ int exFatTaskSeekFileCommandHandler(
 }
 
 /// @fn int exFatTaskDumpOpenFilesCommandHandler(
-///   ExFatDriverState *driverState, TaskMessage *taskMessage)
+///   FilesystemState *filesystemState, TaskMessage *taskMessage)
 ///
 /// @brief Command handler for the FILESYSTEM_DUMP_OPEN_FILES command.  Walk
 /// the open files list and display information about all of the files and
 /// their owning processes.
 ///
-/// @param driverState A pointer to the FilesystemState object maintained
+/// @param filesystemState A pointer to the FilesystemState object maintained
 ///   by the filesystem task.
 /// @param taskMessage A pointer to the TaskMessage that was received by
 ///   the filesystem task.
 ///
 /// @return Returns 0 on success, a standard POSIX error code on failure.
 int exFatTaskDumpOpenFilesCommandHandler(
-  ExFatDriverState *driverState, TaskMessage *taskMessage
+  FilesystemState *filesystemState, TaskMessage *taskMessage
 ) {
   printString("Open files:\n");
-  for (NanoOsFile *nanoOsFile = driverState->filesystemState->openFiles;
+  for (NanoOsFile *nanoOsFile = filesystemState->openFiles;
     nanoOsFile != NULL;
     nanoOsFile = nanoOsFile->next
   ) {
@@ -334,29 +331,25 @@ int exFatTaskDumpOpenFilesCommandHandler(
 }
 
 /// @fn int exFatTaskGetFileBlockMetadataCommandHandler(
-///   ExFatDriverState *driverState, TaskMessage *taskMessage)
+///   FilesystemState *filesystemState, TaskMessage *taskMessage)
 ///
 /// @brief Command handler for the FILESYSTEM_GET_FILE_BLOCK_METADATA command.
 /// Populate a caller-supplied FileBlockMetadata structure for a given file.
 ///
-/// @param driverState A pointer to the FilesystemState object maintained
+/// @param filesystemState A pointer to the FilesystemState object maintained
 ///   by the filesystem task.
 /// @param taskMessage A pointer to the TaskMessage that was received by
 ///   the filesystem task.
 ///
 /// @return Returns 0 on success, a standard POSIX error code on failure.
 int exFatTaskGetFileBlockMetadataCommandHandler(
-  ExFatDriverState *driverState, TaskMessage *taskMessage
+  FilesystemState *filesystemState, TaskMessage *taskMessage
 ) {
   GetFileBlockMetadataArgs *args = msg_data(taskMessage);
-  args->metadata->blockDevice = driverState->filesystemState->blockDevice;
+  args->metadata->blockDevice = filesystemState->blockDevice;
 
-  ExFatFileHandle *exFatFile = (ExFatFileHandle*) args->stream->file;
-  args->metadata->startBlock = driverState->clusterHeapStartSector +
-    ((exFatFile->firstCluster - 2) * driverState->sectorsPerCluster);
-  args->metadata->numBlocks
-    = (uint32_t) ((exFatFile->fileSize + (driverState->bytesPerSector - 1))
-    / ((uint64_t) driverState->bytesPerSector));
+  exFatGetFileBlockMetadata(filesystemState->driverState, args->stream->file,
+    &args->metadata->startBlock, &args->metadata->numBlocks);
 
   taskMessageSetDone(taskMessage);
   return 0;
@@ -387,7 +380,7 @@ const ExFatCommandHandler filesystemCommandHandlers[] = {
 ///   filesystem task.
 ///
 /// @return This function returns no value.
-static void exFatHandleFilesystemMessages(ExFatDriverState *driverState) {
+static void exFatHandleFilesystemMessages(FilesystemState *filesystemState) {
   TaskMessage *msg = taskMessageQueuePop();
   while (msg != NULL) {
     FilesystemCommandResponse type = 
@@ -396,7 +389,7 @@ static void exFatHandleFilesystemMessages(ExFatDriverState *driverState) {
       printDebugString("Handling filesystem message type ");
       printDebugInt(type);
       printDebugString("\n");
-      filesystemCommandHandlers[type](driverState, msg);
+      filesystemCommandHandlers[type](filesystemState, msg);
     } else {
       printInt(getRunningTaskId());
       printString(": ");
@@ -424,8 +417,6 @@ void* runExFatFilesystem(void *args) {
   printDebugString("runExFatFilesystem: Allocating FilesystemState\n");
   FilesystemState *fs = (FilesystemState*) calloc(1, sizeof(FilesystemState));
   printDebugString("runExFatFilesystem: Allocating ExFatDriverState\n");
-  ExFatDriverState *driverState
-    = (ExFatDriverState*) calloc(1, sizeof(ExFatDriverState));
   fs->blockDevice = (BlockStorageDevice*) args;
   fs->blockSize = fs->blockDevice->blockSize;
   
@@ -434,7 +425,7 @@ void* runExFatFilesystem(void *args) {
   printDebugString("runExFatFilesystem: Getting partition info\n");
   getPartitionInfo(fs);
   printDebugString("runExFatFilesystem: Initiallizing driverState\n");
-  exFatInitialize(driverState, fs);
+  exFatInitialize(fs);
   printDebugString("runExFatFilesystem: Initialization complete\n");
   
   TaskMessage *msg = NULL;
@@ -444,10 +435,10 @@ void* runExFatFilesystem(void *args) {
       FilesystemCommandResponse type = 
         (FilesystemCommandResponse) taskMessageType(msg);
       if (type < NUM_FILESYSTEM_COMMANDS) {
-        filesystemCommandHandlers[type](driverState, msg);
+        filesystemCommandHandlers[type](fs, msg);
       }
     } else {
-      exFatHandleFilesystemMessages(driverState);
+      exFatHandleFilesystemMessages(fs);
     }
   }
   return NULL;

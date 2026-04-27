@@ -192,26 +192,23 @@ typedef struct ExFatDriverState {
   uint32_t          clusterHeapStartSector; // Cluster heap start sector
   uint32_t          rootDirectoryCluster;   // Root directory cluster
   uint32_t          clusterCount;           // Number of clusters
-  bool              driverStateValid;       // Whether or not state is valid
 } ExFatDriverState;
 
 // Function declarations
-int exFatInitialize(
-  ExFatDriverState* driverState, FilesystemState* filesystemState);
-ExFatFileHandle* exFatOpenFile(
-  ExFatDriverState* driverState, const char* filePath, const char* mode);
+int exFatInitialize(FilesystemState* filesystemState);
+void* exFatOpenFile(
+  void* driverState, const char* filePath, const char* mode);
 int32_t exFatRead(
-  ExFatDriverState* driverState, void* ptr, uint32_t length,
-  ExFatFileHandle* file);
+  void* driverState, void* ptr, uint32_t length,
+  void* fileHandle);
 int32_t exFatWrite(
-  ExFatDriverState* driverState, void* ptr, uint32_t length,
-  ExFatFileHandle* file);
-int exFatFclose(
-  ExFatDriverState* driverState, ExFatFileHandle* exFatFile);
-int exFatRemove(ExFatDriverState* driverState, const char* pathname);
-int exFatSeek(
-  ExFatDriverState* driverState, ExFatFileHandle* file, long offset,
-  int whence);
+  void* driverState, void* ptr, uint32_t length,
+  void* fileHandle);
+int exFatFclose(void* driverState, void* exFatFile);
+int exFatRemove(void* driverState, const char* pathname);
+int exFatSeek(void* driverState, void* fileHandle, long offset, int whence);
+int exFatGetFileBlockMetadata(void *ds, void *fileHandle,
+  uint32_t *startBlock, uint32_t *numBlocks);
 
 #ifdef __cplusplus
 } // extern "C"

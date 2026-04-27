@@ -65,6 +65,7 @@ extern "C"
 /// @brief State metadata the filesystem task uses to provide access to
 /// files.
 ///
+/// @param driverState A pointer to the internal driver's state.
 /// @param blockDevice A pointer to an allocated and initialized
 ///   BlockStorageDevice to use for reading and writing blocks.
 /// @param blockSize The size of a block as it is known to the filesystem.
@@ -76,13 +77,14 @@ extern "C"
 ///   If this number is zero then the blockBuffer pointer may be NULL.
 /// @param openFiles A pointer to the first FILE that's open.
 typedef struct FilesystemState {
+  void               *driverState;
   BlockStorageDevice *blockDevice;
-  uint16_t  blockSize;
-  uint8_t  *blockBuffer;
-  uint32_t  startLba;
-  uint32_t  endLba;
-  uint8_t   numOpenFiles;
-  FILE     *openFiles;
+  uint16_t            blockSize;
+  uint8_t            *blockBuffer;
+  uint32_t            startLba;
+  uint32_t            endLba;
+  uint8_t             numOpenFiles;
+  FILE               *openFiles;
 } FilesystemState;
 
 /// @struct FilesystemIoCommandParameters

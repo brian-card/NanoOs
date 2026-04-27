@@ -100,20 +100,23 @@ static int writeSector(
 ///////////////////////////////////////////////////////////////////////////////
 /// @brief Initialize an exFAT driver state
 ///
-/// @param driverState Pointer to allocated and zeroed ExFatDriverState struct
 /// @param filesystemState Pointer to initialized FilesystemState struct
 ///
 /// @return EXFAT_SUCCESS on success, error code on failure
 ///////////////////////////////////////////////////////////////////////////////
-int exFatInitialize(
-  ExFatDriverState* driverState, FilesystemState* filesystemState
-) {
-  if (driverState == NULL || filesystemState == NULL) {
+int exFatInitialize(FilesystemState* filesystemState) {
+  if (filesystemState == NULL) {
     return EXFAT_INVALID_PARAMETER;
   }
+  ExFatDriverState *driverState
+    = (ExFatDriverState*) calloc(1, sizeof(ExFatDriverState));
+  if (driverState == NULL) {
+    return EXFAT_NO_MEMORY;
+  }
 
-  if (filesystemState->blockDevice == NULL ||
-      filesystemState->blockBuffer == NULL) {
+  if ((filesystemState->blockDevice == NULL)
+    || (filesystemState->blockBuffer == NULL)
+  ) {
     return EXFAT_INVALID_PARAMETER;
   }
 
@@ -189,7 +192,9 @@ int exFatInitialize(
   driverState->clusterHeapStartSector = clusterHeapOffset;
   driverState->rootDirectoryCluster = rootDirectoryCluster;
   driverState->clusterCount = clusterCount;
-  driverState->driverStateValid = true;
+
+  // Initialize the filesystem state's driver state with our state
+  filesystemState->driverState = driverState;
 
   return EXFAT_SUCCESS;
 }
@@ -1620,17 +1625,18 @@ cleanup:
 ///////////////////////////////////////////////////////////////////////////////
 /// @brief Open or create an exFAT file
 ///
-/// @param driverState Pointer to the exFAT driver state
+/// @param ds Pointer to the exFAT driver state, cast to a void*
 /// @param filePath Path to the file
 /// @param mode File open mode (same as fopen: "r", "w", "a", etc.)
 ///
-/// @return Pointer to ExFatFileHandle on success, NULL on failure
+/// @return Pointer to ExFatFileHandle cast to a void* on success, NULL on
+/// failure
 ///////////////////////////////////////////////////////////////////////////////
-ExFatFileHandle* exFatOpenFile(
-  ExFatDriverState* driverState, const char* filePath, const char* mode
+void* exFatOpenFile(
+  void* ds, const char* filePath, const char* mode
 ) {
-  if ((driverState == NULL) || (!driverState->driverStateValid)
-    || (filePath == NULL) || (*filePath == '\0')
+  ExFatDriverState *driverState = (ExFatDriverState*) ds;
+  if ((driverState == NULL) || (filePath == NULL) || (*filePath == '\0')
     || (mode == NULL) || (*mode == '\0')
   ) {
     printDebugString(__func__);
@@ -1875,22 +1881,17 @@ ExFatFileHandle* exFatOpenFile(
 ///////////////////////////////////////////////////////////////////////////////
 /// @brief Read data from an exFAT file
 ///
-/// @param driverState Pointer to the exFAT driver state
+/// @param ds Pointer to the exFAT driver state, cast to a void*
 /// @param ptr Pointer to buffer to store read data
 /// @param length Maximum number of bytes to read
-/// @param file Pointer to the file handle
+/// @param fileHandle Pointer to the file handle, cast to a void*
 ///
 /// @return Number of bytes read on success, negative errno on failure
 ///////////////////////////////////////////////////////////////////////////////
-int32_t exFatRead(
-  ExFatDriverState* driverState, void* ptr, uint32_t length,
-  ExFatFileHandle* file
-) {
+int32_t exFatRead(void* ds, void* ptr, uint32_t length, void* fileHandle) {
+  ExFatDriverState *driverState = (ExFatDriverState*) ds;
+  ExFatFileHandle *file = (ExFatFileHandle*) fileHandle;
   if (driverState == NULL || ptr == NULL || file == NULL) {
-    return -EINVAL;
-  }
-
-  if (!driverState->driverStateValid) {
     return -EINVAL;
   }
 
@@ -2144,22 +2145,19 @@ static int updateDirectoryEntry(
 ///////////////////////////////////////////////////////////////////////////////
 /// @brief Write data to an exFAT file
 ///
-/// @param driverState Pointer to the exFAT driver state
+/// @param ds Pointer to the exFAT driver state, cast to a void*
 /// @param ptr Pointer to buffer containing data to write
 /// @param length Number of bytes to write
-/// @param file Pointer to the file handle
+/// @param fileHandle Pointer to the file handle, cast to a void*
 ///
 /// @return Number of bytes written on success, negative errno on failure
 ///////////////////////////////////////////////////////////////////////////////
 int32_t exFatWrite(
-  ExFatDriverState* driverState, void* ptr, uint32_t length,
-  ExFatFileHandle* file
+  void* ds, void* ptr, uint32_t length, void* fileHandle
 ) {
+  ExFatDriverState *driverState = (ExFatDriverState*) ds;
+  ExFatFileHandle *file = (ExFatFileHandle*) fileHandle;
   if (driverState == NULL || ptr == NULL || file == NULL) {
-    return -EINVAL;
-  }
-
-  if (!driverState->driverStateValid) {
     return -EINVAL;
   }
 
@@ -2316,19 +2314,15 @@ int32_t exFatWrite(
 /// the file handle structure. If the file was opened for writing, the
 /// directory entry is updated with the final file size and timestamps.
 ///
-/// @param driverState Pointer to the exFAT driver state
-/// @param exFatFile Pointer to the file handle to close
+/// @param ds Pointer to the exFAT driver state, cast to a void*
+/// @param fileHandle Pointer to the file handle to close, cast to a void*
 ///
 /// @return 0 on success, negative errno on failure
 ///////////////////////////////////////////////////////////////////////////////
-int exFatFclose(
-  ExFatDriverState* driverState, ExFatFileHandle* exFatFile
-) {
+int exFatFclose(void* ds, void* fileHandle) {
+  ExFatDriverState *driverState = (ExFatDriverState*) ds;
+  ExFatFileHandle *exFatFile = (ExFatFileHandle*) fileHandle;
   if ((driverState == NULL) || (exFatFile == NULL)) {
-    return -EINVAL;
-  }
-
-  if (!driverState->driverStateValid) {
     return -EINVAL;
   }
 
@@ -2584,19 +2578,16 @@ static int isDirectoryEmpty(
 /// directory hierarchy to find the target and updates all relevant metadata
 /// including directory entries, FAT, and allocation bitmap.
 ///
-/// @param driverState Pointer to the initialized exFAT driver state
+/// @param ds Pointer to the initialized exFAT driver state, cast to a void*
 /// @param pathname Path to the file or directory to remove
 ///
 /// @return 0 on success, negative errno on failure (-ENOENT if not found,
 ///         -ENOTEMPTY if directory not empty, -EINVAL for invalid parameters,
 ///         -EIO for I/O errors)
 ///////////////////////////////////////////////////////////////////////////////
-int exFatRemove(ExFatDriverState* driverState, const char* pathname) {
+int exFatRemove(void* ds, const char* pathname) {
+  ExFatDriverState *driverState = (ExFatDriverState*) ds;
   if (driverState == NULL || pathname == NULL || *pathname == '\0') {
-    return -EINVAL;
-  }
-  
-  if (!driverState->driverStateValid) {
     return -EINVAL;
   }
   
@@ -2734,25 +2725,21 @@ int exFatRemove(ExFatDriverState* driverState, const char* pathname) {
 /// for the new position. When seeking beyond allocated clusters in write mode,
 /// it allocates and links all necessary clusters to reach the target position.
 ///
-/// @param driverState Pointer to the initialized exFAT driver state
-/// @param file Pointer to the file handle to seek within
-/// @param offset Number of bytes to offset from the position specified by whence
+/// @param ds Pointer to the initialized exFAT driver state, cast to a void*
+/// @param fileHandle Pointer to the file handle to seek within, cast to a void*
+/// @param offset Number of bytes to offset from the position specified by
+///   whence
 /// @param whence Position from which offset is applied (SEEK_SET, SEEK_CUR, 
 ///               or SEEK_END)
 ///
-/// @return 0 on success, negative errno on failure (-EINVAL for invalid
-///         parameters, -EIO for I/O errors, -EOVERFLOW for position overflow,
-///         -ENOSPC if out of disk space)
+/// @return The new position on success, negative errno on failure (-EINVAL for
+/// invalid parameters, -EIO for I/O errors, -EOVERFLOW for position overflow,
+/// -ENOSPC if out of disk space)
 ///////////////////////////////////////////////////////////////////////////////
-int exFatSeek(
-  ExFatDriverState* driverState, ExFatFileHandle* file, long offset,
-  int whence
-) {
+int exFatSeek(void* ds, void* fileHandle, long offset, int whence) {
+  ExFatDriverState *driverState = (ExFatDriverState*) ds;
+  ExFatFileHandle *file = (ExFatFileHandle*) fileHandle;
   if (driverState == NULL || file == NULL) {
-    return -EINVAL;
-  }
-
-  if (!driverState->driverStateValid) {
     return -EINVAL;
   }
 
@@ -2790,7 +2777,7 @@ int exFatSeek(
 
   // If the new position is the same as current, nothing to do
   if (newPosition == file->currentPosition) {
-    return 0;
+    return file->currentPosition;
   }
 
   // Handle special case of seeking to position 0
@@ -2799,9 +2786,9 @@ int exFatSeek(
     file->currentCluster = file->firstCluster;
     if (file->currentCluster == 0 && file->canWrite && file->fileSize == 0) {
       // Empty file opened for writing, cluster will be allocated on write
-      return 0;
+      return file->currentPosition;
     }
-    return 0;
+    return file->currentPosition;
   }
 
   // If file has no clusters yet and we're seeking beyond 0
@@ -2962,6 +2949,38 @@ int exFatSeek(
     file->fileSize = newPosition;
     // Note: Directory entry will be updated on close or flush
   }
+  
+  return file->currentPosition;
+}
+
+/// @fn int exFatGetFileBlockMetadata(void *ds, void *fileHandle,
+///   uint32_t *startBlock, uint32_t *numBlocks)
+///
+/// @brief Get the block-level metadata associated with a file.
+///
+/// @param ds A pointer to an ExFatDriverState, cast to a void*.
+/// @param fileHandle A pointer to an ExFatFileHandle, cast to a void*.
+/// @param startBlock A pointer to a uint32_t to store the start block in.
+/// @param numBlocks A pointer to a uint32_t to store the number of blocks in.
+///
+/// @return Returns 0 on success, -errno on failure.
+int exFatGetFileBlockMetadata(void *ds, void *fileHandle,
+  uint32_t *startBlock, uint32_t *numBlocks
+) {
+  if ((ds == NULL) || (fileHandle == NULL)
+    || (startBlock == NULL) || (numBlocks == NULL)
+  ) {
+    return -EINVAL;
+  }
+  
+  ExFatDriverState *driverState = (ExFatDriverState*) ds;
+  ExFatFileHandle *exFatFile = (ExFatFileHandle*) fileHandle;
+  
+  *startBlock = driverState->clusterHeapStartSector +
+    ((exFatFile->firstCluster - 2) * driverState->sectorsPerCluster);
+  *numBlocks
+    = (uint32_t) ((exFatFile->fileSize + (driverState->bytesPerSector - 1))
+    / ((uint64_t) driverState->bytesPerSector));
   
   return 0;
 }
