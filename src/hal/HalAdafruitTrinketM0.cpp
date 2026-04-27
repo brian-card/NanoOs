@@ -251,7 +251,7 @@ void* adafruitTrinketM0BottomOfHeap(void) {
 /// @note Due to the implementation of the Adafruit version of libraries, we
 /// can't create two instances of the same base serial port class.  So, we'll
 /// have to use switch statements throughout the serial port code.
-#define MAX_SERIAL_PORTS 2
+#define MAX_SERIAL_PORTS 1
 
 /// @def SERIAL_PORT_USB
 ///
