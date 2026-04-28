@@ -474,7 +474,7 @@ int32_t sdSpiGetBlockCount(int sdCardSpiDevice) {
   return (int32_t) blockCount;
 }
 
-/// @fn int sdCardReadBlocksCommandHandler(
+/// @fn int sdCardSpiReadBlocksCommandHandler(
 ///   SdCardState *sdCardState, TaskMessage *taskMessage)
 ///
 /// @brief Command handler for the SD_CARD_READ_BLOCKS command.
@@ -485,7 +485,7 @@ int32_t sdSpiGetBlockCount(int sdCardSpiDevice) {
 ///   the SD card task.
 ///
 /// @return Returns 0 on success, a standard POSIX error code on failure.
-int sdCardReadBlocksCommandHandler(
+int sdCardSpiReadBlocksCommandHandler(
   SdCardState *sdCardState, TaskMessage *taskMessage
 ) {
   SdCommandParams *sdCommandParams
@@ -506,7 +506,7 @@ int sdCardReadBlocksCommandHandler(
   return 0;
 }
 
-/// @fn int sdCardWriteBlocksCommandHandler(
+/// @fn int sdCardSpiWriteBlocksCommandHandler(
 ///   SdCardState *sdCardState, TaskMessage *taskMessage)
 ///
 /// @brief Command handler for the SD_CARD_WRITE_BLOCKS command.
@@ -517,7 +517,7 @@ int sdCardReadBlocksCommandHandler(
 ///   the SD card task.
 ///
 /// @return Returns 0 on success, a standard POSIX error code on failure.
-int sdCardWriteBlocksCommandHandler(
+int sdCardSpiWriteBlocksCommandHandler(
   SdCardState *sdCardState, TaskMessage *taskMessage
 ) {
   SdCommandParams *sdCommandParams
@@ -538,16 +538,16 @@ int sdCardWriteBlocksCommandHandler(
   return 0;
 }
 
-/// @var sdCardCommandHandlers
+/// @var sdCardSpiCommandHandlers
 ///
 /// @brief Array of SdCardCommandHandler function pointers to handle commands
 /// received by the runSdCard function.
-SdCardCommandHandler sdCardCommandHandlers[] = {
-  sdCardReadBlocksCommandHandler,         // SD_CARD_READ_BLOCKS
-  sdCardWriteBlocksCommandHandler,        // SD_CARD_WRITE_BLOCKS
+SdCardCommandHandler sdCardSpiCommandHandlers[] = {
+  sdCardSpiReadBlocksCommandHandler,         // SD_CARD_READ_BLOCKS
+  sdCardSpiWriteBlocksCommandHandler,        // SD_CARD_WRITE_BLOCKS
 };
 
-/// @fn void handleSdCardMessages(SdCardState *sdCardState)
+/// @fn void handleSdCardSpiMessages(SdCardState *sdCardState)
 ///
 /// @brief Handle sdCard messages from the task's queue until there are no
 /// more waiting.
@@ -556,7 +556,7 @@ SdCardCommandHandler sdCardCommandHandlers[] = {
 ///   sdCard task.
 ///
 /// @return This function returns no value.
-void handleSdCardMessages(SdCardState *sdCardState) {
+void handleSdCardSpiMessages(SdCardState *sdCardState) {
   TaskMessage *taskMessage = taskMessageQueuePop();
   while (taskMessage != NULL) {
     SdCardCommandResponse messageType
@@ -574,7 +574,7 @@ void handleSdCardMessages(SdCardState *sdCardState) {
       continue;
     }
     
-    sdCardCommandHandlers[messageType](sdCardState, taskMessage);
+    sdCardSpiCommandHandlers[messageType](sdCardState, taskMessage);
     taskMessage = taskMessageQueuePop();
   }
   
@@ -644,14 +644,14 @@ void* runSdCardSpi(void *args) {
       SdCardCommandResponse messageType
         = (SdCardCommandResponse) taskMessageType(schedulerMessage);
       if (messageType < NUM_SD_CARD_COMMANDS) {
-        sdCardCommandHandlers[messageType](&sdCardState, schedulerMessage);
+        sdCardSpiCommandHandlers[messageType](&sdCardState, schedulerMessage);
       } else {
         printString("ERROR: Received unknown sdCard command ");
         printInt(messageType);
         printString(" from scheduler.\n");
       }
     } else {
-      handleSdCardMessages(&sdCardState);
+      handleSdCardSpiMessages(&sdCardState);
     }
   }
 
