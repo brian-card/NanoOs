@@ -419,24 +419,12 @@ static void exFatHandleFilesystemMessages(FilesystemState *filesystemState) {
 /// @return This function never returns, but would return NULL if it did.
 void* runExFatFilesystem(void *args) {
   FilesystemState fs;
-  memset(&fs, 0, sizeof(fs));
+  memcpy(&fs, args, sizeof(fs));
   taskYield();
   printDebugString("runExFatFilesystem: Allocating FilesystemState\n");
   printDebugString("runExFatFilesystem: Allocating ExFatDriverState\n");
-  fs.blockDevice = (BlockStorageDevice*) args;
-  fs.blockSize = fs.blockDevice->blockSize;
   printDebugString("runExFatFilesystem: Allocating fs.blockSize\n");
   fs.blockBuffer = (uint8_t*) malloc(fs.blockSize);
-  
-  fs.driverInit = exFatInitialize;
-  fs.driverOpenFile = exFatOpenFile;
-  fs.driverRead = exFatRead;
-  fs.driverWrite = exFatWrite;
-  fs.driverFclose = exFatFclose;
-  fs.driverRemove = exFatRemove;
-  fs.driverSeek = exFatSeek;
-  fs.driverGetFileBlockMetadata = exFatGetFileBlockMetadata;
-  fs.driverGetFilename = exFatGetFilename;
   
   printDebugString("runExFatFilesystem: Getting partition info\n");
   getPartitionInfo(&fs);

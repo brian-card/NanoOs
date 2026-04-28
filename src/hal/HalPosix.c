@@ -31,16 +31,20 @@
 
 #ifdef __x86_64__
 
+#include <string.h>
 
 #include "HalPosix.h"
+#include "SdCardPosix.h"
 #include "user/NanoOsErrno.h"
-#include "kernel/NanoOs.h"
-/*
-#include "kernel/SdCardPosix.h"
+#include "kernel/ExFatFilesystem.h"
 #include "kernel/ExFatTask.h"
-#include "kernel/MemoryManager.h"
+#include "kernel/Filesystem.h"
+#include "kernel/NanoOs.h"
+#include "kernel/Scheduler.h"
 #include "kernel/Tasks.h"
-*/
+
+// Must come last
+#include "user/NanoOsStdio.h"
 
 uintptr_t posixProcessStackSize(void);
 uintptr_t posixMemoryManagerStackSize(bool debug);
@@ -120,7 +124,66 @@ static HalTimer posixTimerHal = {
   .cancelAndGetTimer = posixCancelAndGetTimer,
 };
 
-int posixInitRootStorage(SchedulerState *schedulerState);
+/// @var _sdCardDevicePath
+///
+/// @brief Path to the device node to connect to for the SdCardSim task.
+static const char *_sdCardDevicePath = NULL;
+
+int posixInitRootStorage(SchedulerState *schedulerState) {
+  TaskDescriptor *allTasks = schedulerState->allTasks;
+  
+  // Create the SD card task.
+  TaskDescriptor *taskDescriptor
+    = &allTasks[schedulerState->firstUserTaskId - 1];
+  if (taskCreate(
+    taskDescriptor, runSdCardPosix, (void*) _sdCardDevicePath)
+    != taskSuccess
+  ) {
+    printString("Could not start SD card task.\n");
+  }
+  taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
+  taskDescriptor->taskId = schedulerState->firstUserTaskId;
+  taskDescriptor->name = "SD card";
+  taskDescriptor->userId = ROOT_USER_ID;
+  BlockStorageDevice *sdDevice = (BlockStorageDevice*) coroutineResume(
+    allTasks[schedulerState->firstUserTaskId - 1].taskHandle, NULL);
+  sdDevice->partitionNumber = 1;
+  
+  FilesystemState fs;
+  memset(&fs, 0, sizeof(fs));
+  fs.blockDevice = sdDevice;
+  fs.blockSize = fs.blockDevice->blockSize;
+  fs.driverInit = exFatInitialize;
+  fs.driverOpenFile = exFatOpenFile;
+  fs.driverRead = exFatRead;
+  fs.driverWrite = exFatWrite;
+  fs.driverFclose = exFatFclose;
+  fs.driverRemove = exFatRemove;
+  fs.driverSeek = exFatSeek;
+  fs.driverGetFileBlockMetadata = exFatGetFileBlockMetadata;
+  fs.driverGetFilename = exFatGetFilename;
+  
+  // Create the filesystem task.
+  schedulerState->rootFsTaskId = schedulerState->firstUserTaskId + 1;
+  taskDescriptor = &allTasks[SCHEDULER_STATE->rootFsTaskId - 1];
+  if (taskCreate(taskDescriptor, runExFatFilesystem, &fs)
+    != taskSuccess
+  ) {
+    printString("Could not start filesystem task.\n");
+  }
+  taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
+  taskDescriptor->taskId = SCHEDULER_STATE->rootFsTaskId;
+  taskDescriptor->name = "filesystem";
+  taskDescriptor->userId = ROOT_USER_ID;
+  // Let it pick up the arguments
+  taskResume(taskDescriptor, NULL);
+  
+  schedulerState->firstUserTaskId = schedulerState->rootFsTaskId + 1;
+  schedulerState->firstShellTaskId = schedulerState->firstUserTaskId;
+  
+  return 0;
+}
+
 
 /// @var posixHal
 ///
@@ -146,11 +209,11 @@ static Hal posixHal = {
   .initRootStorage = posixInitRootStorage,
 };
 
-const Hal* halPosixImplInit(jmp_buf resetBuffer, const char *sdCardDevicePath,
-  Hal *hal);
+const Hal* halPosixImplInit(jmp_buf resetBuffer, Hal *hal);
 
 const Hal* halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
-  if (halPosixImplInit(resetBuffer, sdCardDevicePath, &posixHal) != 0) {
+  _sdCardDevicePath = sdCardDevicePath;
+  if (halPosixImplInit(resetBuffer, &posixHal) != 0) {
     return NULL;
   }
 

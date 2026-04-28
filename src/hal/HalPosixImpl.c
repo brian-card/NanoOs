@@ -46,8 +46,6 @@
 #include <termios.h>
 #include <unistd.h>
 
-#include "SdCardPosix.h"
-#include "kernel/ExFatTask.h"
 #include "kernel/Hal.h"
 #include "kernel/MemoryManager.h"
 #include "kernel/NanoOs.h"
@@ -332,50 +330,6 @@ int posixShutdown(HalShutdownType shutdownType) {
     }
     longjmp(_resetBuffer, 1);
   }
-  
-  return 0;
-}
-
-/// @var _sdCardDevicePath
-///
-/// @brief Path to the device node to connect to for the SdCardSim task.
-static const char *_sdCardDevicePath = NULL;
-
-int posixInitRootStorage(SchedulerState *schedulerState) {
-  TaskDescriptor *allTasks = schedulerState->allTasks;
-  
-  // Create the SD card task.
-  TaskDescriptor *taskDescriptor
-    = &allTasks[schedulerState->firstUserTaskId - 1];
-  if (taskCreate(
-    taskDescriptor, runSdCardPosix, (void*) _sdCardDevicePath)
-    != taskSuccess
-  ) {
-    fputs("Could not start SD card task.\n", stderr);
-  }
-  taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
-  taskDescriptor->taskId = schedulerState->firstUserTaskId;
-  taskDescriptor->name = "SD card";
-  taskDescriptor->userId = ROOT_USER_ID;
-  BlockStorageDevice *sdDevice = (BlockStorageDevice*) coroutineResume(
-    allTasks[schedulerState->firstUserTaskId - 1].taskHandle, NULL);
-  sdDevice->partitionNumber = 1;
-  
-  // Create the filesystem task.
-  schedulerState->rootFsTaskId = schedulerState->firstUserTaskId + 1;
-  taskDescriptor = &allTasks[SCHEDULER_STATE->rootFsTaskId - 1];
-  if (taskCreate(taskDescriptor, runExFatFilesystem, sdDevice)
-    != taskSuccess
-  ) {
-    fputs("Could not start filesystem task.\n", stderr);
-  }
-  taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
-  taskDescriptor->taskId = SCHEDULER_STATE->rootFsTaskId;
-  taskDescriptor->name = "filesystem";
-  taskDescriptor->userId = ROOT_USER_ID;
-  
-  schedulerState->firstUserTaskId = schedulerState->rootFsTaskId + 1;
-  schedulerState->firstShellTaskId = schedulerState->firstUserTaskId;
   
   return 0;
 }
@@ -754,16 +708,8 @@ void allocateGlobalStack(jmp_buf returnBuffer, char *topOfStack) {
   returnToTop(returnBuffer, topOfStack);
 }
 
-int halPosixImplInit(jmp_buf resetBuffer, const char *sdCardDevicePath,
-  Hal *hal
-) {
-  fprintf(stdout, "Setting _sdCardDevicePath.\n");
-  fflush(stdout);
-  _sdCardDevicePath = sdCardDevicePath;
-  fprintf(stdout, "_sdCardDevicePath set.\n");
-  fflush(stdout);
-
-  // Saver our reset context for later.
+int halPosixImplInit(jmp_buf resetBuffer, Hal *hal) {
+  // Save our reset context for later.
   memcpy(_resetBuffer, resetBuffer, sizeof(jmp_buf));
   fprintf(stdout, "resetBuffer copied.\n");
   fflush(stdout);
