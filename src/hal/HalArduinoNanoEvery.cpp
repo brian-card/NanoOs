@@ -600,6 +600,10 @@ static Hal arduinoNanoEveryHal = {
 };
 
 const Hal* halArduinoNanoEveryInit(void) {
+  if (halCommonInit(&arduinoNanoEveryHal) != 0) {
+    return NULL;
+  }
+
   return &arduinoNanoEveryHal;
 }
 
