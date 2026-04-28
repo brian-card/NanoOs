@@ -104,7 +104,7 @@ int halCommonInitRootFilesystem(BlockStorageDevice *blockDevice) {
   SCHEDULER_STATE->rootFsTaskId = SCHEDULER_STATE->firstUserTaskId;
   TaskDescriptor *allTasks = SCHEDULER_STATE->allTasks;
   TaskDescriptor *taskDescriptor = &allTasks[SCHEDULER_STATE->rootFsTaskId - 1];
-  if (taskCreate(taskDescriptor, runExFatFilesystem, &fs)
+  if (taskCreate(taskDescriptor, runFilesystem, &fs)
     != taskSuccess
   ) {
     printString("Could not start filesystem task\n");
