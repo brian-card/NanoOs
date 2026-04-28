@@ -68,23 +68,34 @@ extern "C"
 /// @param driverState A pointer to the internal driver's state.
 /// @param blockDevice A pointer to an allocated and initialized
 ///   BlockStorageDevice to use for reading and writing blocks.
+/// @param blockBuffer A pointer to to a dynamically-allocated block of memory
+///   blockSize bytes in size.
 /// @param blockSize The size of a block as it is known to the filesystem.
-/// @param blockBuffer A pointer to the read/write buffer that is blockSize
-///   bytes in length.
-/// @param startLba The address of the first block of the filesystem.
-/// @param endLba The address of the last block of the filesystem.
 /// @param numOpenFiles The number of files currently open by the filesystem.
 ///   If this number is zero then the blockBuffer pointer may be NULL.
 /// @param openFiles A pointer to the first FILE that's open.
+/// @param startLba The address of the first block of the filesystem.
+/// @param endLba The address of the last block of the filesystem.
+/// @param driverInit Pointer to the driver initialization function.
+/// @param driverOpenFile Pointer to the driver function to open a file.
+/// @param driverRead Pointer to the driver function to read a file.
+/// @param driverWrite Pointer to the driver function to write a file.
+/// @param driverFclose Pointer to the driver function to close a file.
+/// @param driverRemove Pointer to the driver function to remove a file.
+/// @param driverSeek Pointer to the driver function to seek within a file.
+/// @param driverGetFileBlockMetadata Pointer to the driver function to get the
+///   block-level metadata of a file.
+/// @param driverGetFilename Pointer to the driver function to get the name of
+///   a file given its file handle.
 typedef struct FilesystemState {
   void               *driverState;
   BlockStorageDevice *blockDevice;
-  uint16_t            blockSize;
   uint8_t            *blockBuffer;
-  uint32_t            startLba;
-  uint32_t            endLba;
+  uint16_t            blockSize;
   uint8_t             numOpenFiles;
   FILE               *openFiles;
+  uint32_t            startLba;
+  uint32_t            endLba;
   int (*driverInit)(struct FilesystemState* filesystemState);
   void* (*driverOpenFile)(
     void *driverState, const char *filePath, const char *mode);
