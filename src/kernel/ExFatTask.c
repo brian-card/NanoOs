@@ -33,6 +33,8 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
+#include <string.h>
+
 #include "ExFatTask.h"
 #include "ExFatFilesystem.h"
 #include "NanoOs.h"
@@ -416,29 +418,30 @@ static void exFatHandleFilesystemMessages(FilesystemState *filesystemState) {
 ///
 /// @return This function never returns, but would return NULL if it did.
 void* runExFatFilesystem(void *args) {
+  FilesystemState fs;
+  memset(&fs, 0, sizeof(fs));
   taskYield();
   printDebugString("runExFatFilesystem: Allocating FilesystemState\n");
-  FilesystemState *fs = (FilesystemState*) calloc(1, sizeof(FilesystemState));
   printDebugString("runExFatFilesystem: Allocating ExFatDriverState\n");
-  fs->blockDevice = (BlockStorageDevice*) args;
-  fs->blockSize = fs->blockDevice->blockSize;
-  printDebugString("runExFatFilesystem: Allocating fs->blockSize\n");
-  fs->blockBuffer = (uint8_t*) malloc(fs->blockSize);
+  fs.blockDevice = (BlockStorageDevice*) args;
+  fs.blockSize = fs.blockDevice->blockSize;
+  printDebugString("runExFatFilesystem: Allocating fs.blockSize\n");
+  fs.blockBuffer = (uint8_t*) malloc(fs.blockSize);
   
-  fs->driverInit = exFatInitialize;
-  fs->driverOpenFile = exFatOpenFile;
-  fs->driverRead = exFatRead;
-  fs->driverWrite = exFatWrite;
-  fs->driverFclose = exFatFclose;
-  fs->driverRemove = exFatRemove;
-  fs->driverSeek = exFatSeek;
-  fs->driverGetFileBlockMetadata = exFatGetFileBlockMetadata;
-  fs->driverGetFilename = exFatGetFilename;
+  fs.driverInit = exFatInitialize;
+  fs.driverOpenFile = exFatOpenFile;
+  fs.driverRead = exFatRead;
+  fs.driverWrite = exFatWrite;
+  fs.driverFclose = exFatFclose;
+  fs.driverRemove = exFatRemove;
+  fs.driverSeek = exFatSeek;
+  fs.driverGetFileBlockMetadata = exFatGetFileBlockMetadata;
+  fs.driverGetFilename = exFatGetFilename;
   
   printDebugString("runExFatFilesystem: Getting partition info\n");
-  getPartitionInfo(fs);
+  getPartitionInfo(&fs);
   printDebugString("runExFatFilesystem: Initiallizing driverState\n");
-  fs->driverInit(fs);
+  fs.driverInit(&fs);
   printDebugString("runExFatFilesystem: Initialization complete\n");
   
   TaskMessage *msg = NULL;
@@ -448,10 +451,10 @@ void* runExFatFilesystem(void *args) {
       FilesystemCommandResponse type = 
         (FilesystemCommandResponse) taskMessageType(msg);
       if (type < NUM_FILESYSTEM_COMMANDS) {
-        filesystemCommandHandlers[type](fs, msg);
+        filesystemCommandHandlers[type](&fs, msg);
       }
     } else {
-      exFatHandleFilesystemMessages(fs);
+      exFatHandleFilesystemMessages(&fs);
     }
   }
   return NULL;
