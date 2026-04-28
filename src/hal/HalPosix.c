@@ -34,6 +34,7 @@
 #include <string.h>
 
 #include "HalPosix.h"
+#include "HalCommon.h"
 #include "SdCardPosix.h"
 #include "user/NanoOsErrno.h"
 #include "kernel/ExFatFilesystem.h"
@@ -151,39 +152,7 @@ int posixInitRootStorage(SchedulerState *schedulerState) {
   schedulerState->firstUserTaskId++;
   schedulerState->firstShellTaskId = schedulerState->firstUserTaskId;
   
-  FilesystemState fs;
-  memset(&fs, 0, sizeof(fs));
-  fs.blockDevice = sdDevice;
-  fs.blockSize = fs.blockDevice->blockSize;
-  fs.driverInit = exFatInitialize;
-  fs.driverOpenFile = exFatOpenFile;
-  fs.driverRead = exFatRead;
-  fs.driverWrite = exFatWrite;
-  fs.driverFclose = exFatFclose;
-  fs.driverRemove = exFatRemove;
-  fs.driverSeek = exFatSeek;
-  fs.driverGetFileBlockMetadata = exFatGetFileBlockMetadata;
-  fs.driverGetFilename = exFatGetFilename;
-  
-  // Create the filesystem task.
-  schedulerState->rootFsTaskId = schedulerState->firstUserTaskId;
-  taskDescriptor = &allTasks[SCHEDULER_STATE->rootFsTaskId - 1];
-  if (taskCreate(taskDescriptor, runExFatFilesystem, &fs)
-    != taskSuccess
-  ) {
-    printString("Could not start filesystem task.\n");
-  }
-  taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
-  taskDescriptor->taskId = SCHEDULER_STATE->rootFsTaskId;
-  taskDescriptor->name = "filesystem";
-  taskDescriptor->userId = ROOT_USER_ID;
-  // Let it pick up the arguments
-  taskResume(taskDescriptor, NULL);
-  
-  schedulerState->firstUserTaskId = schedulerState->rootFsTaskId + 1;
-  schedulerState->firstShellTaskId = schedulerState->firstUserTaskId;
-  
-  return 0;
+  return halCommonInitRootFilesystem(sdDevice);
 }
 
 
