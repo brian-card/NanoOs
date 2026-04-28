@@ -264,6 +264,7 @@ size_t filesystemFWrite(
 
 int getFileBlockMetadataFromFile(FILE *stream, FileBlockMetadata *metadata);
 int getFileBlockMetadataFromPath(const char *path, FileBlockMetadata *metadata);
+void* runFilesystem(void *args);
 
 #ifdef __cplusplus
 } // extern "C"
