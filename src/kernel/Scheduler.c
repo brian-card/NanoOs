@@ -34,7 +34,6 @@
 // Custom includes
 #include "Console.h"
 #include "ExFatFilesystem.h"
-#include "ExFatTask.h"
 #include "Hal.h"
 #include "NanoOs.h"
 #include "OverlayFunctions.h"

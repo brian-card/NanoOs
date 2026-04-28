@@ -55,7 +55,6 @@ OS_OBJECTS := \
     $(OBJ_DIR)/Console.o \
     $(OBJ_DIR)/Coroutines.o \
     $(OBJ_DIR)/ExFatFilesystem.o \
-    $(OBJ_DIR)/ExFatTask.o \
     $(OBJ_DIR)/Filesystem.o \
     $(OBJ_DIR)/HalCommon.o \
     $(OBJ_DIR)/HalPosix.o \

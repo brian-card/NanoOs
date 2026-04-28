@@ -45,7 +45,6 @@
 // Deliberately *NOT* including MemoryManager.h here.  The HAL has to be
 // operational prior to the memory manager and really should be completely
 // independent of it.
-#include "../kernel/ExFatTask.h"
 #include "../kernel/NanoOs.h"
 #include "../kernel/Tasks.h"
 #include "../kernel/SdCardSpi.h"

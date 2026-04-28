@@ -38,7 +38,6 @@
 #include "SdCardPosix.h"
 #include "user/NanoOsErrno.h"
 #include "kernel/ExFatFilesystem.h"
-#include "kernel/ExFatTask.h"
 #include "kernel/Filesystem.h"
 #include "kernel/NanoOs.h"
 #include "kernel/Scheduler.h"
