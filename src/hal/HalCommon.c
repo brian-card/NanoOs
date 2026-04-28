@@ -34,7 +34,8 @@
 // Must come last
 #include "../user/NanoOsStdio.h"
 
-/// @fn int halCommonInitRootSdSpiStorage(SdCardSpiArgs *sdCardSpiArgs)
+/// @fn BlockStorageDevice* halCommonInitRootSdSpiStorage(
+///   SdCardSpiArgs *sdCardSpiArgs)
 ///
 /// @brief Common routine for initializing root storage using an SD card over
 /// SPI.
@@ -43,7 +44,9 @@
 ///   the values to pass to runSdCardSpi.
 ///
 /// @return Returns 0 on success, -errno on failure.
-int halCommonInitRootSdSpiStorage(SdCardSpiArgs *sdCardSpiArgs) {
+BlockStorageDevice* halCommonInitRootSdSpiStorage(
+  SdCardSpiArgs *sdCardSpiArgs
+) {
   TaskDescriptor *allTasks = SCHEDULER_STATE->allTasks;
   
   // Create the SD card task.
@@ -53,8 +56,8 @@ int halCommonInitRootSdSpiStorage(SdCardSpiArgs *sdCardSpiArgs) {
     taskDescriptor, runSdCardSpi, sdCardSpiArgs)
     != taskSuccess
   ) {
-    printString("Could not start SD card task.\n");
-    return -ENOMEM;
+    printString("Could not start SD card task\n");
+    return NULL;
   }
   taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
   taskDescriptor->taskId = SCHEDULER_STATE->firstUserTaskId;
@@ -66,9 +69,26 @@ int halCommonInitRootSdSpiStorage(SdCardSpiArgs *sdCardSpiArgs) {
   SCHEDULER_STATE->firstUserTaskId++;
   SCHEDULER_STATE->firstShellTaskId = SCHEDULER_STATE->firstUserTaskId;
   
+  return sdDevice;
+}
+
+/// @fn int halCommonInitRootFilesystem(BlockStorageDevice *blockDevice)
+///
+/// @brief Common initialization for the root filesystem process.
+///
+/// @param blockDevice A pointer to a BlockStorageDevice initialized by a
+///   block storage process.
+///
+/// @return Returns 0 on success, -errno on failure.
+int halCommonInitRootFilesystem(BlockStorageDevice *blockDevice) {
+  if (blockDevice == NULL) {
+    printString("No BlockStorageDevice provided\n");
+    return -ENODEV;
+  }
+  
   FilesystemState fs;
   memset(&fs, 0, sizeof(fs));
-  fs.blockDevice = sdDevice;
+  fs.blockDevice = blockDevice;
   fs.blockSize = fs.blockDevice->blockSize;
   fs.driverInit = exFatInitialize;
   fs.driverOpenFile = exFatOpenFile;
@@ -82,11 +102,12 @@ int halCommonInitRootSdSpiStorage(SdCardSpiArgs *sdCardSpiArgs) {
   
   // Create the filesystem task.
   SCHEDULER_STATE->rootFsTaskId = SCHEDULER_STATE->firstUserTaskId;
-  taskDescriptor = &allTasks[SCHEDULER_STATE->rootFsTaskId - 1];
+  TaskDescriptor *allTasks = SCHEDULER_STATE->allTasks;
+  TaskDescriptor *taskDescriptor = &allTasks[SCHEDULER_STATE->rootFsTaskId - 1];
   if (taskCreate(taskDescriptor, runExFatFilesystem, &fs)
     != taskSuccess
   ) {
-    printString("Could not start filesystem task.\n");
+    printString("Could not start filesystem task\n");
     return -ENOMEM;
   }
   taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);

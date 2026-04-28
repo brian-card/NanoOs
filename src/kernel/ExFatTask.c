@@ -360,10 +360,10 @@ int exFatTaskGetFileBlockMetadataCommandHandler(
   return 0;
 }
 
-/// @var filesystemCommandHandlers
+/// @var exFatCommandHandlers
 ///
 /// @brief Array of ExFatCommandHandler function pointers.
-const ExFatCommandHandler filesystemCommandHandlers[] = {
+const ExFatCommandHandler exFatCommandHandlers[] = {
   exFatTaskOpenFileCommandHandler,      // FILESYSTEM_OPEN_FILE
   exFatTaskCloseFileCommandHandler,     // FILESYSTEM_CLOSE_FILE
   exFatTaskReadFileCommandHandler,      // FILESYSTEM_READ_FILE
@@ -394,7 +394,7 @@ static void exFatHandleFilesystemMessages(FilesystemState *filesystemState) {
       printDebugString("Handling filesystem message type ");
       printDebugInt(type);
       printDebugString("\n");
-      filesystemCommandHandlers[type](filesystemState, msg);
+      exFatCommandHandlers[type](filesystemState, msg);
     } else {
       printInt(getRunningTaskId());
       printString(": ");
@@ -439,7 +439,7 @@ void* runExFatFilesystem(void *args) {
       FilesystemCommandResponse type = 
         (FilesystemCommandResponse) taskMessageType(msg);
       if (type < NUM_FILESYSTEM_COMMANDS) {
-        filesystemCommandHandlers[type](&fs, msg);
+        exFatCommandHandlers[type](&fs, msg);
       }
     } else {
       exFatHandleFilesystemMessages(&fs);

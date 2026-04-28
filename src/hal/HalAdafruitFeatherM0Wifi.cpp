@@ -1041,7 +1041,8 @@ int adafruitFeatherM0WifiInitRootStorage(SchedulerState *schedulerState) {
     .spiSckDio = SPI_SCK_DIO,
   };
 
-  return halCommonInitRootSdSpiStorage(&sdCardSpiArgs);
+  return halCommonInitRootFilesystem(
+    halCommonInitRootSdSpiStorage(&sdCardSpiArgs));
 }
 
 

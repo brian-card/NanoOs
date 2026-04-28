@@ -58,7 +58,8 @@ extern "C"
 {
 #endif
 
-int halCommonInitRootSdSpiStorage(SdCardSpiArgs *sdCardSpiArgs);
+BlockStorageDevice* halCommonInitRootSdSpiStorage(SdCardSpiArgs *sdCardSpiArgs);
+int halCommonInitRootFilesystem(BlockStorageDevice *blockDevice);
 int halCommonInit(Hal *hal);
 
 #ifdef __cplusplus

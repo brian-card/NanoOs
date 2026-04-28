@@ -25,6 +25,408 @@
 #define PARTITION_LBA_OFFSET 8
 #define PARTITION_SECTORS_OFFSET 12
 
+/// @typedef FilesystemCommandHandler
+///
+/// @brief Definition of a filesystem command handler function.
+typedef int (*FilesystemCommandHandler)(FilesystemState*, TaskMessage*);
+
+/// @fn int filesystemOpenFileCommandHandler(
+///   FilesystemState *filesystemState, TaskMessage *taskMessage)
+///
+/// @brief Command handler for FILESYSTEM_OPEN_FILE command.
+///
+/// @param filesystemState A pointer to the FilesystemState object maintained
+///   by the filesystem task.
+/// @param taskMessage A pointer to the TaskMessage that was received by
+///   the filesystem task.
+///
+/// @return Returns 0 on success, a standard POSIX error code on failure.
+int filesystemOpenFileCommandHandler(
+  FilesystemState *filesystemState, TaskMessage *taskMessage
+) {
+  NanoOsFile *nanoOsFile = NULL;
+  FilesystemFopenParameters *fopenParameters
+    = (FilesystemFopenParameters*) taskMessageData(taskMessage);
+
+  printDebugString("Opening file \"");
+  printDebugString(pathname);
+  printDebugString("\" in mode \"");
+  printDebugString(mode);
+  printDebugString("\"\n");
+
+  if (filesystemState->driverState != NULL) {
+    void *fileHandle = filesystemState->driverOpenFile(
+      filesystemState->driverState,
+      fopenParameters->pathname, fopenParameters->mode);
+    if (fileHandle != NULL) {
+      nanoOsFile = (NanoOsFile*) malloc(sizeof(NanoOsFile));
+      if (nanoOsFile != NULL) {
+        nanoOsFile->file = fileHandle;
+        nanoOsFile->currentPosition = 0;
+        nanoOsFile->fd = filesystemState->numOpenFiles + 3;
+        nanoOsFile->owner = taskId(taskMessageFrom(taskMessage));
+        filesystemState->numOpenFiles++;
+
+        nanoOsFile->next = filesystemState->openFiles;
+        nanoOsFile->prev = NULL;
+        filesystemState->openFiles = nanoOsFile;
+      } else {
+        filesystemState->driverFclose(filesystemState->driverState, fileHandle);
+      }
+    } else {
+      printString("ERROR: driverOpenFile returned NULL\n");
+    }
+  } else {
+    printString("ERROR: driverState is not valid!\n");
+  }
+
+  taskMessageData(taskMessage) = nanoOsFile;
+  taskMessageSetDone(taskMessage);
+  return 0;
+}
+
+/// @fn int filesystemCloseFileCommandHandler(
+///   FilesystemState *filesystemState, TaskMessage *taskMessage)
+///
+/// @brief Command handler for FILESYSTEM_CLOSE_FILE command.
+///
+/// @param filesystemState A pointer to the FilesystemState object maintained
+///   by the filesystem task.
+/// @param taskMessage A pointer to the TaskMessage that was received by
+///   the filesystem task.
+///
+/// @return Returns 0 on success, a standard POSIX error code on failure.
+int filesystemCloseFileCommandHandler(
+  FilesystemState *filesystemState, TaskMessage *taskMessage
+) {
+  // A note about the way this function is written:
+  //
+  // I used to have sensible variables in this function.  That worked fine most
+  // of the time.  However, I was getting stack corruptions when debug messages
+  // were enabled.  So, I had to reduce the number of variables declared here.
+  // I know it's tempting, but *DO NOT* declare more variables in this function.
+  // Yes, it would definitely be more clear if there were proper variables
+  // declared and used in this function, but functionality comes first.
+  //
+  // JBC 2026-02-17
+  FilesystemFcloseParameters *fcloseParameters
+    = (FilesystemFcloseParameters*) taskMessageData(taskMessage);
+  if (filesystemState->driverState != NULL) {
+    fcloseParameters->returnValue = filesystemState->driverFclose(
+      filesystemState->driverState, fcloseParameters->stream->file);
+    if (filesystemState->numOpenFiles > 0) {
+      filesystemState->numOpenFiles--;
+    }
+    if (fcloseParameters->stream->next != NULL) {
+      fcloseParameters->stream->next->prev = fcloseParameters->stream->prev;
+    }
+    if (fcloseParameters->stream->prev != NULL) {
+      fcloseParameters->stream->prev->next = fcloseParameters->stream->next;
+    }
+    if (fcloseParameters->stream == filesystemState->openFiles) {
+      filesystemState->openFiles = fcloseParameters->stream->next;
+    }
+  }
+  free(fcloseParameters->stream);
+
+  taskMessageSetDone(taskMessage);
+  return 0;
+}
+
+/// @fn int filesystemReadFileCommandHandler(
+///   FilesystemState *filesystemState, TaskMessage *taskMessage)
+///
+/// @brief Command handler for FILESYSTEM_READ_FILE command.
+///
+/// @param filesystemState A pointer to the FilesystemState object maintained
+///   by the filesystem task.
+/// @param taskMessage A pointer to the TaskMessage that was received by
+///   the filesystem task.
+///
+/// @return Returns 0 on success, a standard POSIX error code on failure.
+int filesystemReadFileCommandHandler(
+  FilesystemState *filesystemState, TaskMessage *taskMessage
+) {
+  FilesystemIoCommandParameters *filesystemIoCommandParameters
+    = (FilesystemIoCommandParameters*) taskMessageData(taskMessage);
+  int32_t returnValue = 0;
+  if (filesystemState->driverState != NULL) {
+    uint32_t length = filesystemIoCommandParameters->length;
+    if (length > 0x7fffffff) {
+      // Make sure we don't overflow the maximum value of a signed 32-bit int.
+      length = 0x7fffffff;
+    }
+    NanoOsFile *nanoOsFile = filesystemIoCommandParameters->file;
+    returnValue = filesystemState->driverRead(filesystemState->driverState,
+      filesystemIoCommandParameters->buffer, length, nanoOsFile->file);
+    if (returnValue >= 0) {
+      // Return value is the number of bytes read.  Set the length variable to
+      // it and set it to 0 to indicate good status.
+      nanoOsFile->currentPosition += returnValue;
+      filesystemIoCommandParameters->length = returnValue;
+      returnValue = 0;
+    } else {
+      // Return value is a negative error code.  Negate it.
+      returnValue = -returnValue;
+      // Tell the caller that we read nothing.
+      filesystemIoCommandParameters->length = 0;
+    }
+  }
+
+  taskMessageSetDone(taskMessage);
+  return returnValue;
+}
+
+/// @fn int filesystemWriteFileCommandHandler(
+///   FilesystemState *filesystemState, TaskMessage *taskMessage)
+///
+/// @brief Command handler for FILESYSTEM_WRITE_FILE command.
+///
+/// @param filesystemState A pointer to the FilesystemState object maintained
+///   by the filesystem task.
+/// @param taskMessage A pointer to the TaskMessage that was received by
+///   the filesystem task.
+///
+/// @return Returns 0 on success, a standard POSIX error code on failure.
+int filesystemWriteFileCommandHandler(
+  FilesystemState *filesystemState, TaskMessage *taskMessage
+) {
+  FilesystemIoCommandParameters *filesystemIoCommandParameters
+    = (FilesystemIoCommandParameters*) taskMessageData(taskMessage);
+  int32_t returnValue = 0;
+  if (filesystemState->driverState != NULL) {
+    uint32_t length = filesystemIoCommandParameters->length;
+    if (length > 0x7fffffff) {
+      // Make sure we don't overflow the maximum value of a signed 32-bit int.
+      length = 0x7fffffff;
+    }
+    NanoOsFile *nanoOsFile = filesystemIoCommandParameters->file;
+    returnValue = filesystemState->driverWrite(filesystemState->driverState,
+      filesystemIoCommandParameters->buffer,
+      length, nanoOsFile->file);
+    if (returnValue >= 0) {
+      // Return value is the number of bytes written.  Set the length variable
+      // to it and set it to 0 to indicate good status.
+      nanoOsFile->currentPosition += returnValue;
+      filesystemIoCommandParameters->length = returnValue;
+      returnValue = 0;
+    } else {
+      // Return value is a negative error code.  Negate it.
+      returnValue = -returnValue;
+      // Tell the caller that we wrote nothing.
+      filesystemIoCommandParameters->length = 0;
+    }
+  }
+
+  taskMessageSetDone(taskMessage);
+  return returnValue;
+}
+
+/// @fn int filesystemRemoveFileCommandHandler(
+///   FilesystemState *filesystemState, TaskMessage *taskMessage)
+///
+/// @brief Command handler for FILESYSTEM_REMOVE_FILE command.
+///
+/// @param filesystemState A pointer to the FilesystemState object maintained
+///   by the filesystem task.
+/// @param taskMessage A pointer to the TaskMessage that was received by
+///   the filesystem task.
+///
+/// @return Returns 0 on success, a standard POSIX error code on failure.
+int filesystemRemoveFileCommandHandler(
+  FilesystemState *filesystemState, TaskMessage *taskMessage
+) {
+  const char *pathname = (const char*) taskMessageData(taskMessage);
+  int returnValue = 0;
+  if (filesystemState->driverState != NULL) {
+    returnValue = filesystemState->driverRemove(
+      filesystemState->driverState, pathname);
+  }
+
+  taskMessageData(taskMessage) = (void*) ((intptr_t) returnValue);
+  taskMessageSetDone(taskMessage);
+  return 0;
+}
+
+/// @fn int filesystemSeekFileCommandHandler(
+///   FilesystemState *filesystemState, TaskMessage *taskMessage)
+///
+/// @brief Command handler for FILESYSTEM_SEEK_FILE command.
+///
+/// @param filesystemState A pointer to the FilesystemState object maintained
+///   by the filesystem task.
+/// @param taskMessage A pointer to the TaskMessage that was received by
+///   the filesystem task.
+///
+/// @return Returns 0 on success, a standard POSIX error code on failure.
+int filesystemSeekFileCommandHandler(
+  FilesystemState *filesystemState, TaskMessage *taskMessage
+) {
+  FilesystemSeekParameters *filesystemSeekParameters
+    = (FilesystemSeekParameters*) taskMessageData(taskMessage);
+  int returnValue = 0;
+  if (filesystemState->driverState != NULL) {
+    NanoOsFile *nanoOsFile = filesystemSeekParameters->stream;
+    returnValue = filesystemState->driverSeek(
+      filesystemState->driverState, nanoOsFile->file,
+      filesystemSeekParameters->offset,
+      filesystemSeekParameters->whence);
+    if (returnValue >= 0) {
+      nanoOsFile->currentPosition = returnValue;
+    }
+  }
+
+  taskMessageData(taskMessage) = (void*) ((intptr_t) returnValue);
+  taskMessageSetDone(taskMessage);
+  return 0;
+}
+
+/// @fn int filesystemDumpOpenFilesCommandHandler(
+///   FilesystemState *filesystemState, TaskMessage *taskMessage)
+///
+/// @brief Command handler for the FILESYSTEM_DUMP_OPEN_FILES command.  Walk
+/// the open files list and display information about all of the files and
+/// their owning processes.
+///
+/// @param filesystemState A pointer to the FilesystemState object maintained
+///   by the filesystem task.
+/// @param taskMessage A pointer to the TaskMessage that was received by
+///   the filesystem task.
+///
+/// @return Returns 0 on success, a standard POSIX error code on failure.
+int filesystemDumpOpenFilesCommandHandler(
+  FilesystemState *filesystemState, TaskMessage *taskMessage
+) {
+  printString("Open files:\n");
+  for (NanoOsFile *nanoOsFile = filesystemState->openFiles;
+    nanoOsFile != NULL;
+    nanoOsFile = nanoOsFile->next
+  ) {
+    printString("0x");
+    printHex((uintptr_t) nanoOsFile);
+    printString(": \"");
+    printString(filesystemState->driverGetFilename(nanoOsFile->file));
+    printString("\" owned by ");
+    printInt(nanoOsFile->owner);
+    printString("\n");
+  }
+
+  taskMessageSetDone(taskMessage);
+  return 0;
+}
+
+/// @fn int filesystemGetFileBlockMetadataCommandHandler(
+///   FilesystemState *filesystemState, TaskMessage *taskMessage)
+///
+/// @brief Command handler for the FILESYSTEM_GET_FILE_BLOCK_METADATA command.
+/// Populate a caller-supplied FileBlockMetadata structure for a given file.
+///
+/// @param filesystemState A pointer to the FilesystemState object maintained
+///   by the filesystem task.
+/// @param taskMessage A pointer to the TaskMessage that was received by
+///   the filesystem task.
+///
+/// @return Returns 0 on success, a standard POSIX error code on failure.
+int filesystemGetFileBlockMetadataCommandHandler(
+  FilesystemState *filesystemState, TaskMessage *taskMessage
+) {
+  GetFileBlockMetadataArgs *args = msg_data(taskMessage);
+  args->metadata->blockDevice = filesystemState->blockDevice;
+
+  filesystemState->driverGetFileBlockMetadata(
+    filesystemState->driverState, args->stream->file,
+    &args->metadata->startBlock, &args->metadata->numBlocks);
+
+  taskMessageSetDone(taskMessage);
+  return 0;
+}
+
+/// @var filesystemCommandHandlers
+///
+/// @brief Array of FilesystemCommandHandler function pointers.
+const FilesystemCommandHandler filesystemCommandHandlers[] = {
+  filesystemOpenFileCommandHandler,      // FILESYSTEM_OPEN_FILE
+  filesystemCloseFileCommandHandler,     // FILESYSTEM_CLOSE_FILE
+  filesystemReadFileCommandHandler,      // FILESYSTEM_READ_FILE
+  filesystemWriteFileCommandHandler,     // FILESYSTEM_WRITE_FILE
+  filesystemRemoveFileCommandHandler,    // FILESYSTEM_REMOVE_FILE
+  filesystemSeekFileCommandHandler,      // FILESYSTEM_SEEK_FILE
+  filesystemDumpOpenFilesCommandHandler, // FILESYSTEM_DUMP_OPEN_FILES
+  // FILESYSTEM_GET_FILE_BLOCK_METADATA:
+  filesystemGetFileBlockMetadataCommandHandler,
+};
+
+
+/// @fn static void handleFilesystemMessages(FilesystemState *fs)
+///
+/// @brief Pop and handle all messages in the filesystem task's message
+/// queue until there are no more.
+///
+/// @param fs A pointer to the FilesystemState object maintained by the
+///   filesystem task.
+///
+/// @return This function returns no value.
+static void handleFilesystemMessages(FilesystemState *filesystemState) {
+  TaskMessage *msg = taskMessageQueuePop();
+  while (msg != NULL) {
+    FilesystemCommandResponse type = 
+      (FilesystemCommandResponse) taskMessageType(msg);
+    if (type < NUM_FILESYSTEM_COMMANDS) {
+      printDebugString("Handling filesystem message type ");
+      printDebugInt(type);
+      printDebugString("\n");
+      filesystemCommandHandlers[type](filesystemState, msg);
+    } else {
+      printInt(getRunningTaskId());
+      printString(": ");
+      printString(__func__);
+      printString(": ");
+      printInt(__LINE__);
+      printString(": ERROR! Received unknown filesystem message type ");
+      printInt(type);
+      printString("\n");
+    }
+    msg = taskMessageQueuePop();
+  }
+}
+
+/// @fn void* runFilesystem(void *args)
+///
+/// @brief Main task entry point for the FAT16 filesystem task.
+///
+/// @param args A pointer to an initialized BlockStorageDevice structure cast
+///   to a void*.
+///
+/// @return This function never returns, but would return NULL if it did.
+void* runFilesystem(void *args) {
+  FilesystemState fs;
+  memcpy(&fs, args, sizeof(fs));
+  taskYield();
+  printDebugString("runFilesystem: Allocating fs.blockBuffer\n");
+  fs.blockBuffer = (uint8_t*) malloc(fs.blockSize);
+  
+  printDebugString("runFilesystem: Getting partition info\n");
+  getPartitionInfo(&fs);
+  printDebugString("runFilesystem: Initiallizing driverState\n");
+  fs.driverInit(&fs);
+  printDebugString("runFilesystem: Initialization complete\n");
+  
+  TaskMessage *msg = NULL;
+  while (1) {
+    msg = (TaskMessage*) taskYield();
+    if (msg) {
+      FilesystemCommandResponse type = 
+        (FilesystemCommandResponse) taskMessageType(msg);
+      if (type < NUM_FILESYSTEM_COMMANDS) {
+        filesystemCommandHandlers[type](&fs, msg);
+      }
+    } else {
+      handleFilesystemMessages(&fs);
+    }
+  }
+  return NULL;
+}
+
 /// @fn int getPartitionInfo(FilesystemState *fs)
 ///
 /// @brief Get information about the partition for the provided filesystem.
