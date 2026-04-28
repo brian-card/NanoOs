@@ -102,3 +102,69 @@ int halCommonInitRootSdSpiStorage(SdCardSpiArgs *sdCardSpiArgs) {
   return 0;
 }
 
+/// @fn int halCommonInit(Hal *hal)
+///
+/// @brief Initialization function common to multiple HAL implementations.
+///
+/// @param hal A pointer to an initialized Hal structure.
+///
+/// @return Returns 0 on success, -errno on failure.
+int halCommonInit(Hal *hal) {
+  int ii = 0;
+  char num = '\0';
+  
+  if (hal->uartHal != NULL) {
+    int numUarts = hal->uartHal->getNumUarts();
+    if (numUarts <= 0) {
+      // Nothing we can do.
+      return -ENOTTY;
+    }
+    
+    // Set all the serial ports to run at 1000000 baud.
+    if (hal->uartHal->initUart(0, 1000000) < 0) {
+      // Nothing we can do.
+      return -EIO;
+    }
+    for (ii = 1; ii < numUarts; ii++) {
+      if (hal->uartHal->initUart(ii, 1000000) < 0) {
+        // We can't support more than the last serial port that was successfully
+        // initialized.
+        break;
+      }
+    }
+    hal->uartHal->setNumUarts(ii);
+    if (ii != numUarts) {
+      hal->uartHal->writeUart(0,
+        (uint8_t*) "WARNING: Only initialized ",
+        strlen("WARNING: Only initialized "));
+      num = '0' + ((char) ii);
+      hal->uartHal->writeUart(0, &num, 1);
+      hal->uartHal->writeUart(0,
+        (uint8_t*) " serial ports\n",
+        strlen(" serial ports\n"));
+    }
+  }
+
+  if (hal->timerHal != NULL)  {
+    int numTimers = hal->timerHal->getNumTimers();
+    for (ii = 0; ii < numTimers; ii++) {
+      if (hal->timerHal->initTimer(ii) < 0) {
+        break;
+      }
+    }
+    hal->timerHal->setNumTimers(ii);
+    if (ii != numTimers) {
+      hal->uartHal->writeUart(0,
+        (uint8_t*) "WARNING: Only initialized ",
+        strlen("WARNING: Only initialized "));
+      num = '0' + ((char) ii);
+      hal->uartHal->writeUart(0, &num, 1);
+      hal->uartHal->writeUart(0,
+        (uint8_t*) " timers\n",
+        strlen(" timers\n"));
+    }
+  }
+  
+  return 0;
+}
+

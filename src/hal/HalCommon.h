@@ -59,6 +59,7 @@ extern "C"
 #endif
 
 int halCommonInitRootSdSpiStorage(SdCardSpiArgs *sdCardSpiArgs);
+int halCommonInit(Hal *hal);
 
 #ifdef __cplusplus
 } // extern "C"
