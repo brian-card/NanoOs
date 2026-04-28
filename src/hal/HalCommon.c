@@ -134,6 +134,10 @@ int halCommonInit(Hal *hal) {
     }
     hal->uartHal->setNumUarts(ii);
     if (ii != numUarts) {
+      // NOTE:  We can't use printString and printInt here because those
+      // functions rely on the global HAL pointer, which is not initialized at
+      // the time this function is called.  So, we have to do things a little
+      // more manually here.
       hal->uartHal->writeUart(0,
         (uint8_t*) "WARNING: Only initialized ",
         strlen("WARNING: Only initialized "));
