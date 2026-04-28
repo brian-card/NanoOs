@@ -85,6 +85,22 @@ typedef struct FilesystemState {
   uint32_t            endLba;
   uint8_t             numOpenFiles;
   FILE               *openFiles;
+  int (*driverInit)(struct FilesystemState* filesystemState);
+  void* (*driverOpenFile)(
+    void *driverState, const char *filePath, const char *mode);
+  int32_t (*driverRead)(
+    void *driverState, void *ptr, uint32_t length,
+    void *fileHandle);
+  int32_t (*driverWrite)(
+    void *driverState, void *ptr, uint32_t length,
+    void *fileHandle);
+  int (*driverFclose)(void *driverState, void *fileHandle);
+  int (*driverRemove)(void *driverState, const char *pathname);
+  int (*driverSeek)(void *driverState,
+    void *fileHandle, long offset, int whence);
+  int (*driverGetFileBlockMetadata)(void *ds, void *fileHandle,
+    uint32_t *startBlock, uint32_t *numBlocks);
+  const char* (*driverGetFilename)(void *fileHandle);
 } FilesystemState;
 
 /// @struct FilesystemIoCommandParameters
