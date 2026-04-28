@@ -41,11 +41,11 @@
 #include <limits.h>
 
 #include "HalArduinoNanoEvery.h"
+#include "HalCommon.h"
 // Deliberately *NOT* including MemoryManager.h here.  The HAL has to be
 // operational prior to the memory manager and really should be completely
 // independent of it.
 #include "../kernel/ExFatTask.h"
-#include "../kernel/MemoryManager.h"
 #include "../kernel/NanoOs.h"
 #include "../kernel/Tasks.h"
 #include "../kernel/SdCardSpi.h"
@@ -564,8 +564,6 @@ int arduinoNanoEveryCancelAndGetTimer(int timer,
 }
 
 int arduinoNanoEveryInitRootStorage(SchedulerState *schedulerState) {
-  TaskDescriptor *allTasks = schedulerState->allTasks;
-  
   // Create the SD card task.
   SdCardSpiArgs sdCardSpiArgs = {
     .spiCsDio = SD_CARD_PIN_CHIP_SELECT,
@@ -574,43 +572,7 @@ int arduinoNanoEveryInitRootStorage(SchedulerState *schedulerState) {
     .spiSckDio = SPI_SCK_DIO,
   };
 
-  // Create the SD card task.
-  TaskDescriptor *taskDescriptor
-    = &allTasks[schedulerState->firstUserTaskId - 1];
-  if (taskCreate(
-    taskDescriptor, runSdCardSpi, &sdCardSpiArgs)
-    != taskSuccess
-  ) {
-    fputs("Could not start SD card task.\n", stderr);
-  }
-  printDebugString("Started SD card task.\n");
-  taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
-  taskDescriptor->taskId = schedulerState->firstUserTaskId;
-  taskDescriptor->name = "SD card";
-  taskDescriptor->userId = ROOT_USER_ID;
-  BlockStorageDevice *sdDevice = (BlockStorageDevice*) coroutineResume(
-    allTasks[schedulerState->firstUserTaskId - 1].taskHandle, NULL);
-  sdDevice->partitionNumber = 1;
-  printDebugString("Configured SD card task.\n");
-  
-  // Create the filesystem task.
-  schedulerState->rootFsTaskId = schedulerState->firstUserTaskId + 1;
-  taskDescriptor = &allTasks[schedulerState->rootFsTaskId - 1];
-  if (taskCreate(taskDescriptor, runExFatFilesystem, sdDevice)
-    != taskSuccess
-  ) {
-    fputs("Could not start filesystem task.\n", stderr);
-  }
-  taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
-  taskDescriptor->taskId = schedulerState->rootFsTaskId;
-  taskDescriptor->name = "filesystem";
-  taskDescriptor->userId = ROOT_USER_ID;
-  printDebugString("Created filesystem task.\n");
-  
-  schedulerState->firstUserTaskId = schedulerState->rootFsTaskId + 1;
-  schedulerState->firstShellTaskId = schedulerState->firstUserTaskId;
-  
-  return 0;
+  return halCommonInitRootSdSpiStorage(&sdCardSpiArgs);
 }
 
 /// @var arduinoNanoEveryHal
