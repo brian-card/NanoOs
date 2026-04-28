@@ -1059,55 +1059,11 @@ const Hal* halArduinoNano33IotInit(void) {
   
   __enable_irq();  // Ensure global interrupts are enabled
   
-  int ii = 0;
-  Hal *hal = &arduinoNano33IotHal;
-  if (hal->uartHal != NULL) {
-    int numUarts = hal->uartHal->getNumUarts();
-    if (numUarts <= 0) {
-      // Nothing we can do.
-      return NULL;
-    }
-    
-    // Set all the serial ports to run at 1000000 baud.
-    if (hal->uartHal->initUart(0, 1000000) < 0) {
-      // Nothing we can do.
-      return NULL;
-    }
-    for (ii = 1; ii < numUarts; ii++) {
-      if (hal->uartHal->initUart(ii, 1000000) < 0) {
-        // We can't support more than the last serial port that was successfully
-        // initialized.
-        break;
-      }
-    }
-    hal->uartHal->setNumUarts(ii);
-    if (ii != numUarts) {
-      Serial.begin(1000000);
-      while (!Serial);
-      Serial.print("WARNING: Only initialized ");
-      Serial.print(ii);
-      Serial.print(" serial ports\n");
-    }
+  if (halCommonInit(&arduinoNano33IotHal) != 0) {
+    return NULL;
   }
 
-  if (hal->timerHal != NULL)  {
-    int numTimers = hal->timerHal->getNumTimers();
-    for (ii = 0; ii < numTimers; ii++) {
-      if (hal->timerHal->initTimer(ii) < 0) {
-        break;
-      }
-    }
-    hal->timerHal->setNumTimers(ii);
-    if (ii != numTimers) {
-      Serial.begin(1000000);
-      while (!Serial);
-      Serial.print("WARNING: Only initialized ");
-      Serial.print(ii);
-      Serial.print(" timers\n");
-    }
-  }
-  
-  return hal;
+  return &arduinoNano33IotHal;
 }
 
 #endif // ARDUINO_SAMD_NANO_33_IOT
