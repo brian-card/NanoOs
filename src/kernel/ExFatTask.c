@@ -72,7 +72,8 @@ int exFatTaskOpenFileCommandHandler(
   printDebugString("\"\n");
 
   if (filesystemState->driverState != NULL) {
-    void *exFatFile = exFatOpenFile(filesystemState->driverState,
+    void *exFatFile = filesystemState->driverOpenFile(
+      filesystemState->driverState,
       fopenParameters->pathname, fopenParameters->mode);
     if (exFatFile != NULL) {
       nanoOsFile = (NanoOsFile*) malloc(sizeof(NanoOsFile));
@@ -87,10 +88,10 @@ int exFatTaskOpenFileCommandHandler(
         nanoOsFile->prev = NULL;
         filesystemState->openFiles = nanoOsFile;
       } else {
-        exFatFclose(filesystemState->driverState, exFatFile);
+        filesystemState->driverFclose(filesystemState->driverState, exFatFile);
       }
     } else {
-      printString("ERROR: exFatOpenFile returned NULL\n");
+      printString("ERROR: driverOpenFile returned NULL\n");
     }
   } else {
     printString("ERROR: driverState is not valid!\n");
@@ -128,7 +129,7 @@ int exFatTaskCloseFileCommandHandler(
   FilesystemFcloseParameters *fcloseParameters
     = (FilesystemFcloseParameters*) taskMessageData(taskMessage);
   if (filesystemState->driverState != NULL) {
-    fcloseParameters->returnValue = exFatFclose(
+    fcloseParameters->returnValue = filesystemState->driverFclose(
       filesystemState->driverState, fcloseParameters->stream->file);
     if (filesystemState->numOpenFiles > 0) {
       filesystemState->numOpenFiles--;
@@ -173,7 +174,7 @@ int exFatTaskReadFileCommandHandler(
       length = 0x7fffffff;
     }
     NanoOsFile *nanoOsFile = filesystemIoCommandParameters->file;
-    returnValue = exFatRead(filesystemState->driverState,
+    returnValue = filesystemState->driverRead(filesystemState->driverState,
       filesystemIoCommandParameters->buffer, length, nanoOsFile->file);
     if (returnValue >= 0) {
       // Return value is the number of bytes read.  Set the length variable to
@@ -217,7 +218,7 @@ int exFatTaskWriteFileCommandHandler(
       length = 0x7fffffff;
     }
     NanoOsFile *nanoOsFile = filesystemIoCommandParameters->file;
-    returnValue = exFatWrite(filesystemState->driverState,
+    returnValue = filesystemState->driverWrite(filesystemState->driverState,
       filesystemIoCommandParameters->buffer,
       length, nanoOsFile->file);
     if (returnValue >= 0) {
@@ -255,7 +256,8 @@ int exFatTaskRemoveFileCommandHandler(
   const char *pathname = (const char*) taskMessageData(taskMessage);
   int returnValue = 0;
   if (filesystemState->driverState != NULL) {
-    returnValue = exFatRemove(filesystemState->driverState, pathname);
+    returnValue = filesystemState->driverRemove(
+      filesystemState->driverState, pathname);
   }
 
   taskMessageData(taskMessage) = (void*) ((intptr_t) returnValue);
@@ -282,7 +284,8 @@ int exFatTaskSeekFileCommandHandler(
   int returnValue = 0;
   if (filesystemState->driverState != NULL) {
     NanoOsFile *nanoOsFile = filesystemSeekParameters->stream;
-    returnValue = exFatSeek(filesystemState->driverState, nanoOsFile->file,
+    returnValue = filesystemState->driverSeek(
+      filesystemState->driverState, nanoOsFile->file,
       filesystemSeekParameters->offset,
       filesystemSeekParameters->whence);
     if (returnValue >= 0) {
@@ -319,7 +322,7 @@ int exFatTaskDumpOpenFilesCommandHandler(
     printString("0x");
     printHex((uintptr_t) nanoOsFile);
     printString(": \"");
-    printString(exFatGetFilename(nanoOsFile->file));
+    printString(filesystemState->driverGetFilename(nanoOsFile->file));
     printString("\" owned by ");
     printInt(nanoOsFile->owner);
     printString("\n");
@@ -347,7 +350,8 @@ int exFatTaskGetFileBlockMetadataCommandHandler(
   GetFileBlockMetadataArgs *args = msg_data(taskMessage);
   args->metadata->blockDevice = filesystemState->blockDevice;
 
-  exFatGetFileBlockMetadata(filesystemState->driverState, args->stream->file,
+  filesystemState->driverGetFileBlockMetadata(
+    filesystemState->driverState, args->stream->file,
     &args->metadata->startBlock, &args->metadata->numBlocks);
 
   taskMessageSetDone(taskMessage);
@@ -418,13 +422,23 @@ void* runExFatFilesystem(void *args) {
   printDebugString("runExFatFilesystem: Allocating ExFatDriverState\n");
   fs->blockDevice = (BlockStorageDevice*) args;
   fs->blockSize = fs->blockDevice->blockSize;
-  
   printDebugString("runExFatFilesystem: Allocating fs->blockSize\n");
   fs->blockBuffer = (uint8_t*) malloc(fs->blockSize);
+  
+  fs->driverInit = exFatInitialize;
+  fs->driverOpenFile = exFatOpenFile;
+  fs->driverRead = exFatRead;
+  fs->driverWrite = exFatWrite;
+  fs->driverFclose = exFatFclose;
+  fs->driverRemove = exFatRemove;
+  fs->driverSeek = exFatSeek;
+  fs->driverGetFileBlockMetadata = exFatGetFileBlockMetadata;
+  fs->driverGetFilename = exFatGetFilename;
+  
   printDebugString("runExFatFilesystem: Getting partition info\n");
   getPartitionInfo(fs);
   printDebugString("runExFatFilesystem: Initiallizing driverState\n");
-  exFatInitialize(fs);
+  fs->driverInit(fs);
   printDebugString("runExFatFilesystem: Initialization complete\n");
   
   TaskMessage *msg = NULL;
