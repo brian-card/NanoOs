@@ -148,6 +148,8 @@ int posixInitRootStorage(SchedulerState *schedulerState) {
   BlockStorageDevice *sdDevice = (BlockStorageDevice*) coroutineResume(
     allTasks[schedulerState->firstUserTaskId - 1].taskHandle, NULL);
   sdDevice->partitionNumber = 1;
+  schedulerState->firstUserTaskId++;
+  schedulerState->firstShellTaskId = schedulerState->firstUserTaskId;
   
   FilesystemState fs;
   memset(&fs, 0, sizeof(fs));
@@ -164,7 +166,7 @@ int posixInitRootStorage(SchedulerState *schedulerState) {
   fs.driverGetFilename = exFatGetFilename;
   
   // Create the filesystem task.
-  schedulerState->rootFsTaskId = schedulerState->firstUserTaskId + 1;
+  schedulerState->rootFsTaskId = schedulerState->firstUserTaskId;
   taskDescriptor = &allTasks[SCHEDULER_STATE->rootFsTaskId - 1];
   if (taskCreate(taskDescriptor, runExFatFilesystem, &fs)
     != taskSuccess
