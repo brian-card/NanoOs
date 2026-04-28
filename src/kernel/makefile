@@ -61,6 +61,7 @@ OBJECTS = \
     $(OBJ_DIR)/Tasks.o \
     $(OBJ_DIR)/Scheduler.o \
     $(OBJ_DIR)/SdCard.o \
+    $(OBJ_DIR)/SdCardSpi.o \
 
 # Default target
 all: $(OBJECTS)
