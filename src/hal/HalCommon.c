@@ -163,7 +163,7 @@ int halCommonInit(Hal *hal) {
         (uint8_t*) "WARNING: Only initialized ",
         strlen("WARNING: Only initialized "));
       num = '0' + ((char) ii);
-      hal->uartHal->writeUart(0, &num, 1);
+      hal->uartHal->writeUart(0, (uint8_t*) &num, 1);
       hal->uartHal->writeUart(0,
         (uint8_t*) " serial ports\n",
         strlen(" serial ports\n"));
@@ -183,7 +183,7 @@ int halCommonInit(Hal *hal) {
         (uint8_t*) "WARNING: Only initialized ",
         strlen("WARNING: Only initialized "));
       num = '0' + ((char) ii);
-      hal->uartHal->writeUart(0, &num, 1);
+      hal->uartHal->writeUart(0, (uint8_t*) &num, 1);
       hal->uartHal->writeUart(0,
         (uint8_t*) " timers\n",
         strlen(" timers\n"));
