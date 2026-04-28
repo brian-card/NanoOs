@@ -47,6 +47,7 @@ WARNINGS = \
 SOURCES = \
 
 OBJECTS = \
+    $(OBJ_DIR)/HalCommon.o \
     $(OBJ_DIR)/HalPosix.o \
     $(OBJ_DIR)/HalPosixImpl.o \
 

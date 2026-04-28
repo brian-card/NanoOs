@@ -57,6 +57,7 @@ OS_OBJECTS := \
     $(OBJ_DIR)/ExFatFilesystem.o \
     $(OBJ_DIR)/ExFatTask.o \
     $(OBJ_DIR)/Filesystem.o \
+    $(OBJ_DIR)/HalCommon.o \
     $(OBJ_DIR)/HalPosix.o \
     $(OBJ_DIR)/HalPosixImpl.o \
     $(OBJ_DIR)/Link.o \
@@ -68,6 +69,7 @@ OS_OBJECTS := \
     $(OBJ_DIR)/Tasks.o \
     $(OBJ_DIR)/Scheduler.o \
     $(OBJ_DIR)/SdCard.o \
+    $(OBJ_DIR)/SdCardSpi.o \
     $(OBJ_DIR)/NanoOsApi.o \
     $(OBJ_DIR)/NanoOsErrno.o \
     $(OBJ_DIR)/NanoOsFcntl.o \
