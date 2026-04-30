@@ -29,10 +29,11 @@
 ///
 /// @brief Low-level implementation of the FAT32 driver.
 
-// Standard C includes
-
 // NanoOs includes
+#include "BlockStorage.h"
 #include "Fat32Filesystem.h"
+#include "Filesystem.h"
+#include "MemoryManager.h"
 
 ///////////////////////////////////////////////////////////////////////////////
 ///
