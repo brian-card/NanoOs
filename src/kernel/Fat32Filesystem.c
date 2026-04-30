@@ -1043,13 +1043,17 @@ int fat32CreateFileEntry(
 /// @brief Allocate and populate a Fat32FileHandle from a resolved directory
 ///        entry and parsed mode flags.
 ///
+/// @param ds            Pointer to an initialized Fat32DriverState.  Required
+///                      so that the cluster chain can be walked when the file
+///                      is opened in append mode.
 /// @param searchResult  The directory search result for the file.
 /// @param modeFlags     The parsed open-mode flags.
 ///
 /// @return A pointer to a heap-allocated Fat32FileHandle, or NULL if the
-///         allocation failed.
+///         allocation failed or a cluster-chain walk failed.
 ///
 Fat32FileHandle* fat32CreateFileHandle(
+    Fat32DriverState *ds,
     const Fat32DirSearchResult *searchResult,
     const Fat32OpenMode *modeFlags) {
   Fat32FileHandle *handle =
@@ -1070,8 +1074,24 @@ Fat32FileHandle* fat32CreateFileHandle(
   handle->canWrite         = modeFlags->canWrite;
   handle->appendMode       = modeFlags->appendMode;
 
-  if (modeFlags->appendMode) {
+  if (modeFlags->appendMode && (handle->fileSize > 0)) {
     handle->currentPosition = handle->fileSize;
+
+    // Walk the cluster chain so that currentCluster points to the cluster
+    // that contains the last byte of the file.  Without this, a subsequent
+    // write would target the first cluster instead of appending at the end.
+    uint32_t clustersToSkip =
+      (handle->fileSize - 1) / ds->bytesPerCluster;
+    uint32_t cluster = handle->firstCluster;
+    for (uint32_t i = 0; i < clustersToSkip; i++) {
+      uint32_t next;
+      if (fat32ReadFatEntry(ds, cluster, &next) != FAT32_SUCCESS) {
+        free(handle);
+        return NULL;
+      }
+      cluster = next;
+    }
+    handle->currentCluster = cluster;
   } else {
     handle->currentPosition = 0;
   }
@@ -1135,8 +1155,9 @@ int fat32Initialize(FilesystemState *filesystemState) {
       || (bpb->rootEntryCount != 0)) {
     return FAT32_INVALID_FILESYSTEM;
   }
-  if ((bpb->bytesPerSector < FAT32_CLUSTER_SIZE_MIN)
-      || (bpb->sectorsPerCluster == 0)) {
+  if ((bpb->bytesPerSector < FAT32_SECTOR_SIZE)
+      || (bpb->sectorsPerCluster == 0)
+      || ((bpb->sectorsPerCluster & (bpb->sectorsPerCluster - 1)) != 0)) {
     return FAT32_INVALID_FILESYSTEM;
   }
 
@@ -1276,9 +1297,82 @@ void* fat32OpenFile(
   }
 
   // ---- Build the file handle ----
-  Fat32FileHandle *handle = fat32CreateFileHandle(searchResult, &modeFlags);
+  Fat32FileHandle *handle = fat32CreateFileHandle(ds, searchResult, &modeFlags);
   free(searchResult);
 
   return (void *) handle;
 }
 
+///////////////////////////////////////////////////////////////////////////////
+///
+/// @brief Close a previously-opened FAT32 file handle.
+///
+/// @details If the file was opened for writing, the directory entry on disk
+///          is updated with the current file size and first-cluster fields
+///          from the handle so that the on-disk metadata reflects any writes
+///          that occurred while the file was open.  The handle and its
+///          associated file-name buffer are then freed.
+///
+/// @param driverState  Pointer to a Fat32DriverState (passed as void*).
+/// @param fileHandle   Pointer to the Fat32FileHandle to close (passed as
+///                     void*).
+///
+/// @return FAT32_SUCCESS on success, FAT32_INVALID_PARAMETER if either
+///         argument is NULL, or FAT32_ERROR on an I/O failure while flushing
+///         the directory entry.
+///
+int fat32Fclose(void *driverState, void *fileHandle) {
+  Fat32DriverState *ds     = (Fat32DriverState *) driverState;
+  Fat32FileHandle  *handle = (Fat32FileHandle *)  fileHandle;
+
+  if ((ds == NULL) || (handle == NULL)) {
+    return FAT32_INVALID_PARAMETER;
+  }
+
+  int result = FAT32_SUCCESS;
+
+  // If the file was writable, flush the authoritative size (and first-cluster
+  // fields, which may have changed if the file was originally empty) back to
+  // the on-disk directory entry.
+  if (handle->canWrite) {
+    FilesystemState    *fs = ds->filesystemState;
+    BlockStorageDevice *bd = fs->blockDevice;
+
+    // Compute the sector that contains the short directory entry.
+    uint32_t sectorIndex =
+      handle->directoryOffset / ds->bytesPerSector;
+    uint32_t offsetInSector =
+      handle->directoryOffset % ds->bytesPerSector;
+    uint32_t lba =
+      fat32ClusterToLba(ds, handle->directoryCluster) + sectorIndex;
+
+    // Read the sector, patch the entry, and write it back.
+    int ioResult = bd->readBlocks(
+      bd->context, lba, 1, bd->blockSize, fs->blockBuffer);
+    if (ioResult != 0) {
+      result = FAT32_ERROR;
+    } else {
+      Fat32DirectoryEntry *entry =
+        (Fat32DirectoryEntry *) (fs->blockBuffer + offsetInSector);
+
+      entry->fileSize         = handle->fileSize;
+      entry->firstClusterHigh =
+        (uint16_t) (handle->firstCluster >> 16);
+      entry->firstClusterLow  =
+        (uint16_t) (handle->firstCluster & 0xFFFF);
+
+      ioResult = bd->writeBlocks(
+        bd->context, lba, 1, bd->blockSize, fs->blockBuffer);
+      if (ioResult != 0) {
+        result = FAT32_ERROR;
+      }
+    }
+  }
+
+  // Free the handle regardless of whether the flush succeeded — the caller
+  // must not use this handle again.
+  free(handle->fileName);
+  free(handle);
+
+  return result;
+}
