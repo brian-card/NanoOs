@@ -569,7 +569,8 @@ int fat32ResolveParentDirectory(
     Fat32DriverState *ds,
     const char *filePath,
     uint32_t *parentCluster,
-    const char **fileNameOut) {
+    const char **fileNameOut
+) {
   // Locate the last path separator.
   const char *lastSlash = NULL;
   for (const char *p = filePath; *p != '\0'; p++) {
@@ -1198,8 +1199,12 @@ int fat32Initialize(FilesystemState *filesystemState) {
 void* fat32OpenFile(
     void *driverState,
     const char *filePath,
-    const char *mode) {
+    const char *mode
+) {
   Fat32DriverState *ds = (Fat32DriverState *) driverState;
+  if ((ds == NULL) || (filePath == NULL) || (mode == NULL)) {
+    return NULL;
+  }
 
   // ---- Parse the mode string ----
   Fat32OpenMode modeFlags;
