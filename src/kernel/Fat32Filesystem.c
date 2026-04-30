@@ -76,7 +76,8 @@ typedef struct Fat32DirSearchResult {
 ///
 uint32_t fat32ClusterToLba(
     const Fat32DriverState *ds,
-    uint32_t cluster) {
+    uint32_t cluster
+) {
   return ds->dataStartSector
     + (cluster - FAT32_CLUSTER_FIRST_VALID)
     * (uint32_t) ds->sectorsPerCluster;
@@ -98,7 +99,8 @@ uint32_t fat32ClusterToLba(
 int fat32ReadFatEntry(
     Fat32DriverState *ds,
     uint32_t cluster,
-    uint32_t *value) {
+    uint32_t *value
+) {
   FilesystemState    *fs = ds->filesystemState;
   BlockStorageDevice *bd = fs->blockDevice;
 
@@ -136,7 +138,8 @@ int fat32ReadFatEntry(
 int fat32WriteFatEntry(
     Fat32DriverState *ds,
     uint32_t cluster,
-    uint32_t value) {
+    uint32_t value
+) {
   FilesystemState    *fs = ds->filesystemState;
   BlockStorageDevice *bd = fs->blockDevice;
 
@@ -197,7 +200,8 @@ int fat32WriteFatEntry(
 ///
 int fat32FreeClusterChain(
     Fat32DriverState *ds,
-    uint32_t firstCluster) {
+    uint32_t firstCluster
+) {
   uint32_t current = firstCluster;
 
   while ((current >= FAT32_CLUSTER_FIRST_VALID)
@@ -254,7 +258,8 @@ int fat32StrcaseCmp(const char *a, const char *b) {
 ///
 void fat32FormatShortName(
     const uint8_t *raw,
-    char *formatted) {
+    char *formatted
+) {
   int pos = 0;
 
   // Copy the base name (first 8 bytes), trimming trailing spaces.
@@ -302,7 +307,8 @@ void fat32FormatShortName(
 ///
 void fat32AssembleLfnEntry(
     const Fat32LfnEntry *lfn,
-    char *lfnBuffer) {
+    char *lfnBuffer
+) {
   uint8_t ordinal  = lfn->ordinal & FAT32_LFN_ORDINAL_MASK;
   int     baseIndex = (ordinal - 1) * FAT32_LFN_CHARS_PER_ENTRY;
 
@@ -378,7 +384,8 @@ int fat32SearchDirectory(
     Fat32DriverState *ds,
     uint32_t dirCluster,
     const char *name,
-    Fat32DirSearchResult *result) {
+    Fat32DirSearchResult *result
+) {
   FilesystemState    *fs = ds->filesystemState;
   BlockStorageDevice *bd = fs->blockDevice;
 
@@ -660,7 +667,8 @@ int fat32WriteDirectoryEntry(
     Fat32DriverState *ds,
     uint32_t dirCluster,
     uint32_t offsetInCluster,
-    const Fat32DirectoryEntry *entry) {
+    const Fat32DirectoryEntry *entry
+) {
   FilesystemState    *fs = ds->filesystemState;
   BlockStorageDevice *bd = fs->blockDevice;
 
@@ -701,7 +709,8 @@ int fat32WriteDirectoryEntry(
 ///
 int fat32TruncateFile(
     Fat32DriverState *ds,
-    Fat32DirSearchResult *searchResult) {
+    Fat32DirSearchResult *searchResult
+) {
   uint32_t firstCluster =
     ((uint32_t) searchResult->entry.firstClusterHigh << 16)
     | (uint32_t) searchResult->entry.firstClusterLow;
@@ -740,7 +749,8 @@ int fat32TruncateFile(
 ///
 void fat32GenerateShortName(
     const char *longName,
-    uint8_t *shortName) {
+    uint8_t *shortName
+) {
   memset(shortName, ' ', FAT32_SHORT_NAME_LENGTH);
 
   // Locate the last dot to split base from extension.
@@ -833,7 +843,8 @@ int fat32FindFreeDirectorySlots(
     uint32_t dirCluster,
     uint32_t slotsNeeded,
     uint32_t *foundCluster,
-    uint32_t *foundOffset) {
+    uint32_t *foundOffset
+) {
   FilesystemState    *fs = ds->filesystemState;
   BlockStorageDevice *bd = fs->blockDevice;
 
@@ -910,7 +921,8 @@ int fat32CreateFileEntry(
     Fat32DriverState *ds,
     uint32_t parentCluster,
     const char *fileName,
-    Fat32DirSearchResult *result) {
+    Fat32DirSearchResult *result
+) {
   // Generate the 8.3 short name and compute the LFN checksum.
   uint8_t shortName[FAT32_SHORT_NAME_LENGTH];
   fat32GenerateShortName(fileName, shortName);
@@ -1055,7 +1067,8 @@ int fat32CreateFileEntry(
 Fat32FileHandle* fat32CreateFileHandle(
     Fat32DriverState *ds,
     const Fat32DirSearchResult *searchResult,
-    const Fat32OpenMode *modeFlags) {
+    const Fat32OpenMode *modeFlags
+) {
   Fat32FileHandle *handle =
     (Fat32FileHandle *) calloc(1, sizeof(Fat32FileHandle));
   if (handle == NULL) {
@@ -1376,3 +1389,4 @@ int fat32Fclose(void *driverState, void *fileHandle) {
 
   return result;
 }
+
