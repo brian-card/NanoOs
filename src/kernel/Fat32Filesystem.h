@@ -207,7 +207,7 @@ typedef struct Fat32FileHandle {
   uint32_t  currentPosition;       // Current position in file
   uint32_t  fileSize;              // File size in bytes (FAT32: max 4 GiB)
   uint8_t   attributes;            // File attributes
-  char      fileName[FAT32_MAX_FILENAME_LENGTH + 1]; // File name
+  char      *fileName;             // File name
   uint32_t  directoryCluster;      // Directory containing this file
   uint32_t  directoryOffset;       // Offset in directory
   bool      canRead;               // Whether file is open for reading

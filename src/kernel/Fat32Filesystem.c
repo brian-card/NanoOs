@@ -1076,9 +1076,12 @@ Fat32FileHandle* fat32CreateFileHandle(
     handle->currentPosition = 0;
   }
 
-  strncpy(handle->fileName, searchResult->longName,
-    FAT32_MAX_FILENAME_LENGTH);
-  handle->fileName[FAT32_MAX_FILENAME_LENGTH] = '\0';
+  handle->fileName = (char*) malloc(strlen(searchResult->longName) + 1);
+  if (handle->fileName != NULL) {
+    strcpy(handle->fileName, searchResult->longName);
+  } else {
+    free(handle); handle = NULL;
+  }
 
   return handle;
 }
