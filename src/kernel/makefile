@@ -51,6 +51,7 @@ OBJECTS = \
     $(OBJ_DIR)/Console.o \
     $(OBJ_DIR)/Coroutines.o \
     $(OBJ_DIR)/ExFatFilesystem.o \
+    $(OBJ_DIR)/Fat32Filesystem.o \
     $(OBJ_DIR)/Filesystem.o \
     $(OBJ_DIR)/Link.o \
     $(OBJ_DIR)/MemoryManager.o \
