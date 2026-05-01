@@ -2026,6 +2026,70 @@ int fat32Fseek(
 
 ///////////////////////////////////////////////////////////////////////////////
 ///
+/// @brief Retrieve the block-level location and extent of an open file.
+///
+/// @details The LBA (Logical Block Address) of the file's first data sector
+///          is written to @p startBlock and the number of sectors required to
+///          hold the file's contents (rounded up from the file size) is
+///          written to @p numBlocks.  Both values describe the file identified
+///          by @p fileHandle, not the filesystem partition as a whole.
+///
+///          For an empty file (zero bytes, no allocated clusters) both outputs
+///          are set to zero.
+///
+/// @note    The sector count is derived from the logical file size.  If the
+///          file's cluster chain is fragmented the sectors beyond the first
+///          cluster are not necessarily contiguous from @p startBlock.
+///          Callers that intend to perform raw block reads spanning the full
+///          file should verify contiguity or fall back to the filesystem's
+///          normal read path.
+///
+/// @param ds          Pointer to a Fat32DriverState (passed as void*).
+/// @param fileHandle  Pointer to the Fat32FileHandle (passed as void*).
+/// @param startBlock  [out] Receives the LBA of the first sector of the
+///                    file's first cluster.
+/// @param numBlocks   [out] Receives the total number of sectors the file
+///                    occupies.
+///
+/// @return FAT32_SUCCESS on success, or FAT32_INVALID_PARAMETER if any
+///         argument is NULL.
+///
+int fat32GetFileBlockMetadata(
+    void *ds,
+    void *fileHandle,
+    uint32_t *startBlock,
+    uint32_t *numBlocks
+) {
+  Fat32DriverState *driverState = (Fat32DriverState *) ds;
+  Fat32FileHandle  *handle      = (Fat32FileHandle *)  fileHandle;
+
+  if ((driverState == NULL) || (handle == NULL)
+      || (startBlock == NULL) || (numBlocks == NULL)) {
+    return FAT32_INVALID_PARAMETER;
+  }
+
+  // An empty file that has never been written to has no allocated clusters.
+  if (handle->firstCluster < FAT32_CLUSTER_FIRST_VALID) {
+    *startBlock = 0;
+    *numBlocks  = 0;
+    return FAT32_SUCCESS;
+  }
+
+  *startBlock = fat32ClusterToLba(driverState, handle->firstCluster);
+
+  if (handle->fileSize == 0) {
+    *numBlocks = 0;
+  } else {
+    // Round up to a whole number of sectors.
+    *numBlocks = (handle->fileSize + driverState->bytesPerSector - 1)
+      / driverState->bytesPerSector;
+  }
+
+  return FAT32_SUCCESS;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+///
 /// @brief Remove (delete) a file from a FAT32 filesystem.
 ///
 /// @details The full path is resolved to locate the file's parent directory
