@@ -245,7 +245,7 @@ int32_t fat32Fwrite(
   void* driverState, void* ptr, uint32_t length,
   void* fileHandle);
 int fat32Remove(void* driverState, const char* pathname);
-int fat32Seek(void* driverState, void* fileHandle, long offset, int whence);
+int fat32Fseek(void* driverState, void* fileHandle, long offset, int whence);
 int fat32GetFileBlockMetadata(void *ds, void *fileHandle,
   uint32_t *startBlock, uint32_t *numBlocks);
 const char *fat32GetFilename(void *fileHandle);
