@@ -1119,6 +1119,66 @@ Fat32FileHandle* fat32CreateFileHandle(
   return handle;
 }
 
+///////////////////////////////////////////////////////////////////////////////
+///
+/// @brief Allocate a single free cluster from the FAT.
+///
+/// @details The FAT is scanned linearly starting from cluster 2 until a free
+///          entry is found.  The newly-allocated cluster is marked as
+///          end-of-chain (EOC).  If @p previousCluster is a valid cluster
+///          number its FAT entry is updated to point to the new cluster,
+///          extending the chain.
+///
+/// @param ds               Pointer to an initialized Fat32DriverState.
+/// @param previousCluster  The last cluster of the chain to extend, or 0 if
+///                         no chaining is desired (i.e. the first cluster of
+///                         a new file).
+/// @param newCluster       [out] The cluster number that was allocated.
+///
+/// @return FAT32_SUCCESS on success, FAT32_DISK_FULL if no free cluster
+///         exists, or FAT32_ERROR on an I/O failure.
+///
+int fat32AllocateCluster(
+    Fat32DriverState *ds,
+    uint32_t previousCluster,
+    uint32_t *newCluster
+) {
+  // Linear scan — simple and correct.  The FSInfo hint could speed this up,
+  // but the added complexity is not warranted for NanoOs at this stage.
+  for (uint32_t candidate = FAT32_CLUSTER_FIRST_VALID;
+      candidate < FAT32_CLUSTER_FIRST_VALID + ds->totalDataClusters;
+      candidate++) {
+    uint32_t entry;
+    int result = fat32ReadFatEntry(ds, candidate, &entry);
+    if (result != FAT32_SUCCESS) {
+      return FAT32_ERROR;
+    }
+
+    if (entry == FAT32_CLUSTER_FREE) {
+      // Mark the new cluster as end-of-chain.
+      result = fat32WriteFatEntry(ds, candidate, FAT32_CLUSTER_EOC);
+      if (result != FAT32_SUCCESS) {
+        return FAT32_ERROR;
+      }
+
+      // Chain from the previous cluster if one was supplied.
+      if (previousCluster >= FAT32_CLUSTER_FIRST_VALID) {
+        result = fat32WriteFatEntry(ds, previousCluster, candidate);
+        if (result != FAT32_SUCCESS) {
+          // Roll back: free the cluster we just marked.
+          fat32WriteFatEntry(ds, candidate, FAT32_CLUSTER_FREE);
+          return FAT32_ERROR;
+        }
+      }
+
+      *newCluster = candidate;
+      return FAT32_SUCCESS;
+    }
+  }
+
+  return FAT32_DISK_FULL;
+}
+
 
 ///////////////////////////////////////////////////////////////////////////////
 //
@@ -1513,5 +1573,167 @@ int32_t fat32Fread(
   }
 
   return (int32_t) totalRead;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+///
+/// @brief Write data to a previously-opened FAT32 file.
+///
+/// @details Starting at the handle's current position (or at end-of-file when
+///          the file was opened in append mode), up to @p length bytes are
+///          written from the caller-supplied buffer to disk.  New clusters are
+///          allocated as needed when the write extends beyond the current
+///          allocation.  Partial-sector writes are performed as read-modify-
+///          write cycles so that surrounding data within the sector is
+///          preserved.
+///
+///          The handle's currentPosition, currentCluster, firstCluster, and
+///          fileSize fields are updated to reflect the state after the write.
+///          The on-disk directory entry is NOT flushed here; that is deferred
+///          to fat32Fclose so that multiple writes do not each incur the
+///          overhead of a directory-entry update.
+///
+/// @param driverState  Pointer to a Fat32DriverState (passed as void*).
+/// @param ptr          Source buffer containing the data to write.
+/// @param length       Number of bytes to write.
+/// @param fileHandle   Pointer to the Fat32FileHandle (passed as void*).
+///
+/// @return The number of bytes actually written (>= 0), or a negative FAT32
+///         error code on failure.
+///
+int32_t fat32Fwrite(
+    void *driverState,
+    void *ptr,
+    uint32_t length,
+    void *fileHandle
+) {
+  Fat32DriverState *ds     = (Fat32DriverState *) driverState;
+  Fat32FileHandle  *handle = (Fat32FileHandle *)  fileHandle;
+
+  if ((ds == NULL) || (handle == NULL) || (ptr == NULL)) {
+    return FAT32_INVALID_PARAMETER;
+  }
+
+  if (!handle->canWrite) {
+    return FAT32_INVALID_PARAMETER;
+  }
+
+  if (length == 0) {
+    return 0;
+  }
+
+  // In append mode every write begins at the current end-of-file.
+  if (handle->appendMode) {
+    handle->currentPosition = handle->fileSize;
+
+    // Ensure currentCluster points to the last cluster of the file (or
+    // stays at firstCluster if the file is still empty).
+    if (handle->fileSize > 0) {
+      // Walk from firstCluster to the cluster that contains the last byte.
+      uint32_t clustersToSkip =
+        (handle->fileSize - 1) / ds->bytesPerCluster;
+      uint32_t cluster = handle->firstCluster;
+      for (uint32_t i = 0; i < clustersToSkip; i++) {
+        uint32_t next;
+        if (fat32ReadFatEntry(ds, cluster, &next) != FAT32_SUCCESS) {
+          return FAT32_ERROR;
+        }
+        if (next >= FAT32_CLUSTER_EOC_MIN) {
+          break;
+        }
+        cluster = next;
+      }
+      handle->currentCluster = cluster;
+    }
+  }
+
+  FilesystemState    *fs = ds->filesystemState;
+  BlockStorageDevice *bd = fs->blockDevice;
+
+  const uint8_t *src          = (const uint8_t *) ptr;
+  uint32_t       totalWritten = 0;
+
+  while (totalWritten < length) {
+    // ---- Ensure we have a cluster to write into ----
+    if (handle->currentCluster < FAT32_CLUSTER_FIRST_VALID) {
+      // The file has no clusters yet — allocate the first one.
+      uint32_t newCluster;
+      int allocResult = fat32AllocateCluster(ds, 0, &newCluster);
+      if (allocResult != FAT32_SUCCESS) {
+        return (totalWritten > 0) ? (int32_t) totalWritten : allocResult;
+      }
+      handle->firstCluster   = newCluster;
+      handle->currentCluster = newCluster;
+    }
+
+    // If we are exactly on a cluster boundary and still have data to write,
+    // we need the next cluster in the chain (or a freshly-allocated one).
+    if ((handle->currentPosition != 0)
+        && ((handle->currentPosition % ds->bytesPerCluster) == 0)) {
+      uint32_t nextCluster;
+      int fatResult =
+        fat32ReadFatEntry(ds, handle->currentCluster, &nextCluster);
+      if (fatResult != FAT32_SUCCESS) {
+        return (totalWritten > 0) ? (int32_t) totalWritten : FAT32_ERROR;
+      }
+
+      if (nextCluster >= FAT32_CLUSTER_EOC_MIN
+          || nextCluster < FAT32_CLUSTER_FIRST_VALID) {
+        // End of chain — extend with a new cluster.
+        fatResult = fat32AllocateCluster(
+          ds, handle->currentCluster, &nextCluster);
+        if (fatResult != FAT32_SUCCESS) {
+          return (totalWritten > 0) ? (int32_t) totalWritten : fatResult;
+        }
+      }
+
+      handle->currentCluster = nextCluster;
+    }
+
+    // ---- Compute the sector and offset within the current cluster ----
+    uint32_t offsetInCluster =
+      handle->currentPosition % ds->bytesPerCluster;
+    uint32_t sectorInCluster = offsetInCluster / ds->bytesPerSector;
+    uint32_t offsetInSector  = offsetInCluster % ds->bytesPerSector;
+
+    uint32_t lba =
+      fat32ClusterToLba(ds, handle->currentCluster) + sectorInCluster;
+
+    // Determine how many bytes to write within this sector.
+    uint32_t bytesLeftInSector = ds->bytesPerSector - offsetInSector;
+    uint32_t toCopy = length - totalWritten;
+    if (toCopy > bytesLeftInSector) {
+      toCopy = bytesLeftInSector;
+    }
+
+    // If the write does not cover the entire sector we must preserve the
+    // existing content by reading the sector first.
+    if ((offsetInSector != 0) || (toCopy < ds->bytesPerSector)) {
+      int ioResult = bd->readBlocks(
+        bd->context, lba, 1, bd->blockSize, fs->blockBuffer);
+      if (ioResult != 0) {
+        return (totalWritten > 0) ? (int32_t) totalWritten : FAT32_ERROR;
+      }
+    }
+
+    // Copy the caller's data into the block buffer and write the sector.
+    memcpy(fs->blockBuffer + offsetInSector, src + totalWritten, toCopy);
+
+    int ioResult = bd->writeBlocks(
+      bd->context, lba, 1, bd->blockSize, fs->blockBuffer);
+    if (ioResult != 0) {
+      return (totalWritten > 0) ? (int32_t) totalWritten : FAT32_ERROR;
+    }
+
+    totalWritten             += toCopy;
+    handle->currentPosition  += toCopy;
+
+    // Extend the logical file size if we have written past the old end.
+    if (handle->currentPosition > handle->fileSize) {
+      handle->fileSize = handle->currentPosition;
+    }
+  }
+
+  return (int32_t) totalWritten;
 }
 
