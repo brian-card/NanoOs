@@ -40,7 +40,6 @@
 #include <string.h>
 
 #include "../kernel/Hal.h"
-#include "../kernel/ExFatFilesystem.h"
 #include "../kernel/Filesystem.h"
 // Deliberately *NOT* including MemoryManager.h here.  The HAL has to be
 // operational prior to the memory manager and really should be completely

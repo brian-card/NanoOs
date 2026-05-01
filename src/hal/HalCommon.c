@@ -30,6 +30,7 @@
 /// @brief HAL routines that are common to multiple implementations.
 
 #include "HalCommon.h"
+#include "../kernel/Fat32Filesystem.h"
 
 // Must come last
 #include "../user/NanoOsStdio.h"
@@ -90,15 +91,15 @@ int halCommonInitRootFilesystem(BlockStorageDevice *blockDevice) {
   memset(&fs, 0, sizeof(fs));
   fs.blockDevice = blockDevice;
   fs.blockSize = fs.blockDevice->blockSize;
-  fs.driverInit = exFatInitialize;
-  fs.driverFopen = exFatOpenFile;
-  fs.driverFread = exFatRead;
-  fs.driverFwrite = exFatWrite;
-  fs.driverFclose = exFatFclose;
-  fs.driverRemove = exFatRemove;
-  fs.driverFseek = exFatSeek;
-  fs.driverGetFileBlockMetadata = exFatGetFileBlockMetadata;
-  fs.driverGetFilename = exFatGetFilename;
+  fs.driverInit = fat32Initialize;
+  fs.driverFopen = fat32Fopen;
+  fs.driverFread = fat32Fread;
+  fs.driverFwrite = fat32Fwrite;
+  fs.driverFclose = fat32Fclose;
+  fs.driverRemove = fat32Remove;
+  fs.driverFseek = fat32Fseek;
+  fs.driverGetFileBlockMetadata = fat32GetFileBlockMetadata;
+  fs.driverGetFilename = fat32GetFilename;
   
   // Create the filesystem task.
   SCHEDULER_STATE->rootFsTaskId = SCHEDULER_STATE->firstUserTaskId;

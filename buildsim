@@ -32,7 +32,7 @@ if [ "${targetDevice}" != "" ]; then
 	mountDir="$(mktemp -d)"
 	trap "rm -rf \"${mountDir}\"" ERR EXIT
 
-	sudo mkfs.exfat "${targetDevice}" -L NanoOs
+	sudo mkfs.vfat -F 32 "${targetDevice}" -n NanoOs
 	sudo mount "${targetDevice}" "${mountDir}"
 	sudo mkdir -p "${mountDir}/usr"
 	sudo cp -r usr/bin "${mountDir}/usr"
