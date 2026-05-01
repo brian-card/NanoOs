@@ -2173,3 +2173,22 @@ int fat32Remove(void *driverState, const char *pathname) {
   free(searchResult);
   return result;
 }
+
+///////////////////////////////////////////////////////////////////////////////
+///
+/// @brief Get the filename of a provided file handle.
+///
+/// @param fileHandle A pointer to a Fat32FileHandle cast to a void*
+///
+/// @return Returns then filename embedded in the file handle on success, NULL
+///         on failure.
+///
+const char *fat32GetFilename(void *fileHandle) {
+  Fat32FileHandle *handle = (Fat32FileHandle*) fileHandle;
+  if (handle == NULL) {
+    return NULL;
+  }
+
+  return handle->fileName;
+}
+
