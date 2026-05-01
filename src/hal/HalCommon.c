@@ -96,7 +96,7 @@ int halCommonInitRootFilesystem(BlockStorageDevice *blockDevice) {
   fs.driverFwrite = exFatWrite;
   fs.driverFclose = exFatFclose;
   fs.driverRemove = exFatRemove;
-  fs.driverSeek = exFatSeek;
+  fs.driverFseek = exFatSeek;
   fs.driverGetFileBlockMetadata = exFatGetFileBlockMetadata;
   fs.driverGetFilename = exFatGetFilename;
   

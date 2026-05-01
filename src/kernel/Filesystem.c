@@ -267,7 +267,7 @@ int filesystemSeekFileCommandHandler(
   int returnValue = 0;
   if (filesystemState->driverState != NULL) {
     NanoOsFile *nanoOsFile = filesystemSeekParameters->stream;
-    returnValue = filesystemState->driverSeek(
+    returnValue = filesystemState->driverFseek(
       filesystemState->driverState, nanoOsFile->file,
       filesystemSeekParameters->offset,
       filesystemSeekParameters->whence);

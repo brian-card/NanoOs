@@ -82,7 +82,7 @@ extern "C"
 /// @param driverFwrite Pointer to the driver function to write a file.
 /// @param driverFclose Pointer to the driver function to close a file.
 /// @param driverRemove Pointer to the driver function to remove a file.
-/// @param driverSeek Pointer to the driver function to seek within a file.
+/// @param driverFseek Pointer to the driver function to seek within a file.
 /// @param driverGetFileBlockMetadata Pointer to the driver function to get the
 ///   block-level metadata of a file.
 /// @param driverGetFilename Pointer to the driver function to get the name of
@@ -107,7 +107,7 @@ typedef struct FilesystemState {
     void *fileHandle);
   int (*driverFclose)(void *driverState, void *fileHandle);
   int (*driverRemove)(void *driverState, const char *pathname);
-  int (*driverSeek)(void *driverState,
+  int (*driverFseek)(void *driverState,
     void *fileHandle, long offset, int whence);
   int (*driverGetFileBlockMetadata)(void *ds, void *fileHandle,
     uint32_t *startBlock, uint32_t *numBlocks);
