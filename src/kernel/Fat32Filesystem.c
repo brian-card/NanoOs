@@ -1622,8 +1622,11 @@ int32_t fat32Fwrite(
     return 0;
   }
 
-  // In append mode every write begins at the current end-of-file.
-  if (handle->appendMode) {
+  // In append mode every write begins at the current end-of-file.  Skip
+  // the seek if we are already positioned there to avoid an unnecessary
+  // cluster-chain walk.
+  if (handle->appendMode
+      && (handle->currentPosition != handle->fileSize)) {
     handle->currentPosition = handle->fileSize;
 
     // Ensure currentCluster points to the last cluster of the file (or
