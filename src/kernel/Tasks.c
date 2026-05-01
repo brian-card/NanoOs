@@ -483,7 +483,7 @@ TaskMessage* getAvailableMessage(void) {
 ///
 /// @return Returns a pointer to the sent TaskMessage on success, NULL on failure.
 TaskMessage* initSendTaskMessageToTask(
-  TaskDescriptor *taskDescriptor, int type,
+  TaskDescriptor *taskDescriptor, int64_t type,
   void *data, size_t size, bool waiting
 ) {
   TaskMessage *taskMessage = NULL;
@@ -537,7 +537,7 @@ TaskMessage* initSendTaskMessageToTask(
   return taskMessage;
 }
 
-/// @fn TaskMessage* initSendTaskMessageToTaskId(int taskId, int type,
+/// @fn TaskMessage* initSendTaskMessageToTaskId(int taskId, int64_t type,
 ///   void *data, size_t size, bool waiting)
 ///
 /// @brief Send a TaskMessage to another task identified by its task ID. Looks
@@ -553,7 +553,7 @@ TaskMessage* initSendTaskMessageToTask(
 ///
 /// @return Returns a pointer to the sent TaskMessage on success, NULL on
 /// failure.
-TaskMessage* initSendTaskMessageToTaskId(int taskId, int type,
+TaskMessage* initSendTaskMessageToTaskId(int taskId, int64_t type,
   void *data, size_t size, bool waiting
 ) {
   TaskMessage *taskMessage = NULL;

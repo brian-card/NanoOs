@@ -218,7 +218,7 @@ int sendTaskMessageToTask(
   TaskDescriptor *taskDescriptor, TaskMessage *taskMessage);
 int sendTaskMessageToTaskId(unsigned int taskId, TaskMessage *taskMessage);
 TaskMessage* getAvailableMessage(void);
-TaskMessage* initSendTaskMessageToTaskId(int taskId, int type,
+TaskMessage* initSendTaskMessageToTaskId(int taskId, int64_t type,
   void *data, size_t size, bool waiting);
 void* waitForDataMessage(TaskMessage *sent, int type, const struct timespec *ts);
 ExecArgs* execArgsDestroy(ExecArgs *execArgs);
