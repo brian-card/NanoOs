@@ -237,13 +237,13 @@ typedef struct Fat32DriverState {
 int fat32Initialize(FilesystemState* filesystemState);
 void* fat32Fopen(
   void* driverState, const char* filePath, const char* mode);
+int fat32Fclose(void* driverState, void* fileHandle);
 int32_t fat32Fread(
   void* driverState, void* ptr, uint32_t length,
   void* fileHandle);
 int32_t fat32Fwrite(
   void* driverState, void* ptr, uint32_t length,
   void* fileHandle);
-int fat32Fclose(void* driverState, void* fileHandle);
 int fat32Remove(void* driverState, const char* pathname);
 int fat32Seek(void* driverState, void* fileHandle, long offset, int whence);
 int fat32GetFileBlockMetadata(void *ds, void *fileHandle,
