@@ -235,12 +235,12 @@ typedef struct Fat32DriverState {
 
 // Function declarations
 int fat32Initialize(FilesystemState* filesystemState);
-void* fat32OpenFile(
+void* fat32Fopen(
   void* driverState, const char* filePath, const char* mode);
-int32_t fat32Read(
+int32_t fat32Fread(
   void* driverState, void* ptr, uint32_t length,
   void* fileHandle);
-int32_t fat32Write(
+int32_t fat32Fwrite(
   void* driverState, void* ptr, uint32_t length,
   void* fileHandle);
 int fat32Fclose(void* driverState, void* fileHandle);

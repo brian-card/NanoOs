@@ -45,7 +45,7 @@
 //
 ///////////////////////////////////////////////////////////////////////////////
 
-// Mode-string parsing flags used by fat32OpenFile.
+// Mode-string parsing flags used by fat32Fopen.
 typedef struct Fat32OpenMode {
   bool canRead;
   bool canWrite;
@@ -1233,7 +1233,7 @@ int fat32Initialize(FilesystemState *filesystemState) {
 /// @return A pointer to a heap-allocated Fat32FileHandle on success, or NULL
 ///         on failure.
 ///
-void* fat32OpenFile(
+void* fat32Fopen(
     void *driverState,
     const char *filePath,
     const char *mode
