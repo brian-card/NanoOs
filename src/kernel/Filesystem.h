@@ -77,9 +77,9 @@ extern "C"
 /// @param startLba The address of the first block of the filesystem.
 /// @param endLba The address of the last block of the filesystem.
 /// @param driverInit Pointer to the driver initialization function.
-/// @param driverOpenFile Pointer to the driver function to open a file.
-/// @param driverRead Pointer to the driver function to read a file.
-/// @param driverWrite Pointer to the driver function to write a file.
+/// @param driverFopen Pointer to the driver function to open a file.
+/// @param driverFread Pointer to the driver function to read a file.
+/// @param driverFwrite Pointer to the driver function to write a file.
 /// @param driverFclose Pointer to the driver function to close a file.
 /// @param driverRemove Pointer to the driver function to remove a file.
 /// @param driverSeek Pointer to the driver function to seek within a file.
@@ -97,12 +97,12 @@ typedef struct FilesystemState {
   uint32_t            startLba;
   uint32_t            endLba;
   int (*driverInit)(struct FilesystemState* filesystemState);
-  void* (*driverOpenFile)(
+  void* (*driverFopen)(
     void *driverState, const char *filePath, const char *mode);
-  int32_t (*driverRead)(
+  int32_t (*driverFread)(
     void *driverState, void *ptr, uint32_t length,
     void *fileHandle);
-  int32_t (*driverWrite)(
+  int32_t (*driverFwrite)(
     void *driverState, void *ptr, uint32_t length,
     void *fileHandle);
   int (*driverFclose)(void *driverState, void *fileHandle);

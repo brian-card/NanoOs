@@ -55,7 +55,7 @@ int filesystemOpenFileCommandHandler(
   printDebugString("\"\n");
 
   if (filesystemState->driverState != NULL) {
-    void *fileHandle = filesystemState->driverOpenFile(
+    void *fileHandle = filesystemState->driverFopen(
       filesystemState->driverState,
       fopenParameters->pathname, fopenParameters->mode);
     if (fileHandle != NULL) {
@@ -74,7 +74,7 @@ int filesystemOpenFileCommandHandler(
         filesystemState->driverFclose(filesystemState->driverState, fileHandle);
       }
     } else {
-      printString("ERROR: driverOpenFile returned NULL\n");
+      printString("ERROR: driverFopen returned NULL\n");
     }
   } else {
     printString("ERROR: driverState is not valid!\n");
@@ -157,7 +157,7 @@ int filesystemReadFileCommandHandler(
       length = 0x7fffffff;
     }
     NanoOsFile *nanoOsFile = filesystemIoCommandParameters->file;
-    returnValue = filesystemState->driverRead(filesystemState->driverState,
+    returnValue = filesystemState->driverFread(filesystemState->driverState,
       filesystemIoCommandParameters->buffer, length, nanoOsFile->file);
     if (returnValue >= 0) {
       // Return value is the number of bytes read.  Set the length variable to
@@ -201,7 +201,7 @@ int filesystemWriteFileCommandHandler(
       length = 0x7fffffff;
     }
     NanoOsFile *nanoOsFile = filesystemIoCommandParameters->file;
-    returnValue = filesystemState->driverWrite(filesystemState->driverState,
+    returnValue = filesystemState->driverFwrite(filesystemState->driverState,
       filesystemIoCommandParameters->buffer,
       length, nanoOsFile->file);
     if (returnValue >= 0) {
