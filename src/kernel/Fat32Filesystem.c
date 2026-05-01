@@ -205,7 +205,8 @@ int fat32FreeClusterChain(
   uint32_t current = firstCluster;
 
   while ((current >= FAT32_CLUSTER_FIRST_VALID)
-      && (current < FAT32_CLUSTER_EOC_MIN)) {
+      && (current < FAT32_CLUSTER_EOC_MIN)
+  ) {
     uint32_t next;
     int result = fat32ReadFatEntry(ds, current, &next);
     if (result != FAT32_SUCCESS) {
@@ -401,7 +402,8 @@ int fat32SearchDirectory(
 
   while (!done
       && (currentCluster >= FAT32_CLUSTER_FIRST_VALID)
-      && (currentCluster < FAT32_CLUSTER_EOC_MIN)) {
+      && (currentCluster < FAT32_CLUSTER_EOC_MIN)
+  ) {
 
     uint32_t clusterLba = fat32ClusterToLba(ds, currentCluster);
 
@@ -859,7 +861,8 @@ int fat32FindFreeDirectorySlots(
   uint32_t currentCluster = dirCluster;
 
   while ((currentCluster >= FAT32_CLUSTER_FIRST_VALID)
-      && (currentCluster < FAT32_CLUSTER_EOC_MIN)) {
+      && (currentCluster < FAT32_CLUSTER_EOC_MIN)
+  ) {
 
     uint32_t clusterLba = fat32ClusterToLba(ds, currentCluster);
 
@@ -881,7 +884,8 @@ int fat32FindFreeDirectorySlots(
         uint8_t marker = fs->blockBuffer[i * FAT32_DIRECTORY_ENTRY_SIZE];
 
         if ((marker == FAT32_ENTRY_FREE)
-            || (marker == FAT32_ENTRY_END_OF_DIR)) {
+            || (marker == FAT32_ENTRY_END_OF_DIR)
+        ) {
           if (runCount == 0) {
             runCluster = currentCluster;
             runStart   = byteOffset;
@@ -1251,7 +1255,8 @@ int fat32InvalidateDirectoryEntries(
 
   while (!done
       && (currentCluster >= FAT32_CLUSTER_FIRST_VALID)
-      && (currentCluster < FAT32_CLUSTER_EOC_MIN)) {
+      && (currentCluster < FAT32_CLUSTER_EOC_MIN)
+  ) {
 
     uint32_t clusterLba = fat32ClusterToLba(ds, currentCluster);
 
@@ -1303,8 +1308,8 @@ int fat32InvalidateDirectoryEntries(
 
           if (lfn->checksum == checksum) {
             if (runCount
-                < (FAT32_MAX_FILENAME_LENGTH / FAT32_LFN_CHARS_PER_ENTRY
-                  + 1)) {
+                < (FAT32_MAX_FILENAME_LENGTH / FAT32_LFN_CHARS_PER_ENTRY + 1)
+            ) {
               runClusters[runCount] = currentCluster;
               runOffsets[runCount]  = offsetInCluster;
               runCount++;
@@ -1319,7 +1324,8 @@ int fat32InvalidateDirectoryEntries(
 
         // ---- Short entry ----
         if ((currentCluster == target->dirCluster)
-            && (offsetInCluster == target->offsetInCluster)) {
+            && (offsetInCluster == target->offsetInCluster)
+        ) {
           // This is the target.  Mark it as deleted in the buffer that is
           // still loaded from the most recent readBlocks.
           fs->blockBuffer[entryByteOffset] = FAT32_ENTRY_FREE;
@@ -1422,12 +1428,14 @@ int fat32Initialize(FilesystemState *filesystemState) {
   }
   if ((bpb->fatSize16 != 0)
       || (bpb->fatSize32 == 0)
-      || (bpb->rootEntryCount != 0)) {
+      || (bpb->rootEntryCount != 0)
+  ) {
     return FAT32_INVALID_FILESYSTEM;
   }
   if ((bpb->bytesPerSector < FAT32_SECTOR_SIZE)
       || (bpb->sectorsPerCluster == 0)
-      || ((bpb->sectorsPerCluster & (bpb->sectorsPerCluster - 1)) != 0)) {
+      || ((bpb->sectorsPerCluster & (bpb->sectorsPerCluster - 1)) != 0)
+  ) {
     return FAT32_INVALID_FILESYSTEM;
   }
 
@@ -1750,8 +1758,9 @@ int32_t fat32Fread(
     handle->currentPosition  += toCopy;
 
     // ---- Advance to the next cluster if we have reached the boundary ----
-    if ((handle->currentPosition % ds->bytesPerCluster) == 0
-        && (totalRead < length)) {
+    if (((handle->currentPosition % ds->bytesPerCluster) == 0)
+        && (totalRead < length)
+    ) {
       uint32_t nextCluster;
       int fatResult =
         fat32ReadFatEntry(ds, handle->currentCluster, &nextCluster);
@@ -1822,8 +1831,7 @@ int32_t fat32Fwrite(
   // In append mode every write begins at the current end-of-file.  Skip
   // the seek if we are already positioned there to avoid an unnecessary
   // cluster-chain walk.
-  if (handle->appendMode
-      && (handle->currentPosition != handle->fileSize)) {
+  if (handle->appendMode && (handle->currentPosition != handle->fileSize)) {
     handle->currentPosition = handle->fileSize;
 
     // Ensure currentCluster points to the last cluster of the file (or
@@ -1869,7 +1877,8 @@ int32_t fat32Fwrite(
     // If we are exactly on a cluster boundary and still have data to write,
     // we need the next cluster in the chain (or a freshly-allocated one).
     if ((handle->currentPosition != 0)
-        && ((handle->currentPosition % ds->bytesPerCluster) == 0)) {
+        && ((handle->currentPosition % ds->bytesPerCluster) == 0)
+    ) {
       uint32_t nextCluster;
       int fatResult =
         fat32ReadFatEntry(ds, handle->currentCluster, &nextCluster);
@@ -2010,7 +2019,8 @@ int fat32Fseek(
   // If the file has no clusters (empty and never written to) or the new
   // position is zero, reset to firstCluster — no chain walk needed.
   if ((pos == 0)
-      || (handle->firstCluster < FAT32_CLUSTER_FIRST_VALID)) {
+      || (handle->firstCluster < FAT32_CLUSTER_FIRST_VALID)
+  ) {
     handle->currentCluster = handle->firstCluster;
   } else {
     // Compute how many cluster links to follow from firstCluster.
@@ -2083,7 +2093,8 @@ int fat32GetFileBlockMetadata(
   Fat32FileHandle  *handle      = (Fat32FileHandle *)  fileHandle;
 
   if ((driverState == NULL) || (handle == NULL)
-      || (startBlock == NULL) || (numBlocks == NULL)) {
+      || (startBlock == NULL) || (numBlocks == NULL)
+  ) {
     return FAT32_INVALID_PARAMETER;
   }
 
