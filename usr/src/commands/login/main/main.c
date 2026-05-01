@@ -142,11 +142,14 @@ int main(int argc, char **argv) {
     input[strlen(input) - 1] = '\0';
   }
   
-  if (strcmp(userPassword, pwd->pw_passwd) == 0) {
+  if (result == NULL) {
+    fputs("Login failed!\n", stderr);
+    returnValue = 1;
+    goto freeNew;
+  } else if (strcmp(userPassword, pwd->pw_passwd) == 0) {
     fputs("Login successful!\n", stderr);
   } else {
     fputs("Login failed!\n", stderr);
-    fprintf(stderr, "Expected \"%s\", got \"%s\"\n", argv[1], userPassword);
     returnValue = 1;
     goto freeNew;
   }
