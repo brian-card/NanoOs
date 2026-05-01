@@ -276,11 +276,6 @@ int runOverlayCommand(const char *commandPath,
   printDebugString("Got return value ");
   printDebugInt(returnValue);
   printDebugString(" from _start function\n");
-  if (returnValue != ENOERR) {
-    fprintf(stderr,
-      "Got unexpected return value %d from _start in \"%s\"\n",
-      returnValue, commandPath);
-  }
   if ((returnValue < 0) || (returnValue > 255)) {
     // Invalid return value.
     returnValue = -EOTHER;
