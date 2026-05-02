@@ -69,7 +69,13 @@ extern "C"
 ///
 /// @brief Function macro to create a new task.
 #define taskCreate(taskDescriptor, func, arg) \
-  coroutineCreate(&(taskDescriptor)->taskHandle, func, arg)
+  coroutineCreate( \
+    ((taskDescriptor != NULL) \
+      ? &(((TaskDescriptor*) taskDescriptor))->taskHandle \
+      : NULL \
+    ), \
+    func, \
+    arg)
 
 /// @def taskRunning
 ///
