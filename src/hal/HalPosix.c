@@ -45,9 +45,20 @@
 // Must come last
 #include "user/NanoOsStdio.h"
 
-uintptr_t posixProcessStackSize(void);
+uintptr_t posixProcessStackSize(bool debug);
 uintptr_t posixMemoryManagerStackSize(bool debug);
-void* posixBottomOfHeap(void);
+void* posixBottomOfHeap(bool debug);
+uint8_t posixNumExtraSchedulerStacks(bool debug);
+uint8_t posixNumExtraConsoleStacks(bool debug);
+static HalMemory posixMemoryHal = {
+  .processStackSize = posixProcessStackSize,
+  .memoryManagerStackSize = posixMemoryManagerStackSize,
+  .bottomOfHeap = posixBottomOfHeap,
+  .numExtraSchedulerStacks = posixNumExtraSchedulerStacks,
+  .numExtraConsoleStacks = posixNumExtraConsoleStacks,
+  .overlayMap = NULL,
+  .overlaySize = 0,
+};
 
 int posixGetNumUarts(void);
 int posixSetNumUarts(int numUarts);
@@ -158,15 +169,7 @@ int posixInitRootStorage(SchedulerState *schedulerState) {
 ///
 /// @brief The implementation of the Hal interface for the Arduino Nano 33 Iot.
 static Hal posixHal = {
-  // Memory definitions.
-  .processStackSize = posixProcessStackSize,
-  .memoryManagerStackSize = posixMemoryManagerStackSize,
-  .bottomOfHeap = posixBottomOfHeap,
-  
-  // Overlay definitions.
-  .overlayMap = NULL,
-  .overlaySize = 0,
-  
+  .memory = &posixMemoryHal,
   .uart = &posixUartHal,
   .dio = &posixDioHal,
   .spi = &posixSpiHal,

@@ -110,13 +110,13 @@ int main(int argc, char **argv) {
   Coroutine _mainCoroutine;
   schedulerTaskHandle = &_mainCoroutine;
   CoroutineConfigOptions coroutineConfigOptions = {
-    .stackSize = HAL->processStackSize(),
+    .stackSize = HAL->memory->processStackSize(false),
     .stateData = &coroutineStatePointer,
     .coroutineYieldCallback = NULL,
     .comutexUnlockCallback = comutexUnlockCallback,
     .coconditionSignalCallback = coconditionSignalCallback,
   };
-  if ((HAL->timerHal != NULL) && (HAL->timerHal->getNumTimers() > 0)) {
+  if ((HAL->timer != NULL) && (HAL->timer->getNumTimers() > 0)) {
     coroutineConfigOptions.coroutineYieldCallback = coroutineYieldCallback;
   }
   if (coroutineConfig(&_mainCoroutine, &coroutineConfigOptions)

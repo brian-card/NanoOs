@@ -99,7 +99,8 @@ int (*realTcgetattr)(int fd, struct termios *termios_p) = NULL;
 int (*realTcsetattr)(int fd, int optional_actions,
   const struct termios *termios_p) = NULL;
 
-uintptr_t posixProcessStackSize(void) {
+uintptr_t posixProcessStackSize(bool debug) {
+  (void) debug;
   return PROCESS_STACK_SIZE * DEBUG_MULTIPLIER;
 }
 
@@ -117,8 +118,19 @@ uintptr_t posixMemoryManagerStackSize(bool debug) {
 /// @brief Where the bottom of the heap will be set to be in memory.
 static void *_bottomOfHeap = NULL;
 
-void* posixBottomOfHeap(void) {
+void* posixBottomOfHeap(bool debug) {
+  (void) debug;
   return _bottomOfHeap;
+}
+
+uint8_t posixNumExtraSchedulerStacks(bool debug) {
+  (void) debug;
+  return 0;
+}
+
+uint8_t posixNumExtraConsoleStacks(bool debug) {
+  (void) debug;
+  return 0;
 }
 
 /// @var uarts
@@ -736,21 +748,22 @@ int halPosixImplInit(jmp_buf resetBuffer, Hal *hal) {
     = ((size_t) (OVERLAY_OFFSET + OVERLAY_SIZE + (pageSize - 1)))
     & ~((size_t) (pageSize - 1));
   
-  hal->overlayMap = mmap((void*) OVERLAY_BASE_ADDRESS,
+  hal->memory->overlayMap = mmap((void*) OVERLAY_BASE_ADDRESS,
     overlayBaseSize, PROT_READ | PROT_WRITE | PROT_EXEC,
     MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED,
     -1, 0);
-  if (hal->overlayMap == MAP_FAILED) {
+  if (hal->memory->overlayMap == MAP_FAILED) {
     fprintf(stderr, "mmap failed with error: %s\n", strerror(errno));
     return -1;
   }
   
   // The address that the code is built around for both the Cortex-M0 and the
   // simulation code is OVERLAY_OFFSET bytes into the map we just made.
-  hal->overlayMap = (void*) (OVERLAY_BASE_ADDRESS + OVERLAY_OFFSET);
-  hal->overlaySize = OVERLAY_SIZE;
+  hal->memory->overlayMap = (void*) (OVERLAY_BASE_ADDRESS + OVERLAY_OFFSET);
+  hal->memory->overlaySize = OVERLAY_SIZE;
   
-  fprintf(stderr, "posixHal.overlayMap = %p\n", (void*) hal->overlayMap);
+  fprintf(stderr, "posixHal.overlayMap = %p\n",
+    (void*) hal->memory->overlayMap);
   fprintf(stderr, "\n");
   
   _mainThreadId = pthread_self();
