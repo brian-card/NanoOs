@@ -133,6 +133,11 @@ int halCommonInitRootFilesystem(BlockStorageDevice *blockDevice) {
 ///
 /// @return Returns 0 on success, -errno on failure.
 int halCommonInit(Hal *hal) {
+  if (hal == NULL) {
+    // Invalid parameter.
+    return -EINVAL;
+  }
+  
   int ii = 0;
   char num = '\0';
   
