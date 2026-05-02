@@ -3789,8 +3789,13 @@ __attribute__((noinline)) void startScheduler(
   standardUserFileDescriptors[2].outputChannel.messageType
     = CONSOLE_WRITE_BUFFER;
 
-  if (taskHandleProvision(NULL, dummyTask, NULL) == NULL) {
-    printString("Could not increase scheduler task's stack size.\n");
+  for (uint8_t ii = 0;
+    ii < HAL->memory->numExtraSchedulerStacks(USE_HAL_MEMORY_DEBUG);
+    ii++
+  ) {
+    if (taskHandleProvision(NULL, dummyTask, NULL) == NULL) {
+      printString("Could not increase scheduler task's stack size.\n");
+    }
   }
 
   // Create the console task.  We used to have to double the size of the
@@ -3807,6 +3812,15 @@ __attribute__((noinline)) void startScheduler(
   taskDescriptor->name = "console";
   taskDescriptor->userId = ROOT_USER_ID;
   printDebugString("Created console task.\n");
+
+  for (uint8_t ii = 0;
+    ii < HAL->memory->numExtraConsoleStacks(USE_HAL_MEMORY_DEBUG);
+    ii++
+  ) {
+    if (taskHandleProvision(NULL, dummyTask, NULL) == NULL) {
+      printString("Could not increase console task's stack size.\n");
+    }
+  }
 
   printDebugString("\n");
   printDebugString("sizeof(int) = ");
