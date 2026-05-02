@@ -91,6 +91,16 @@ extern "C"
 /// giving up.
 #define MAX_GET_MESSAGE_RETRIES                           3
 
+/// @def USE_HAL_MEMORY_DEBUG
+///
+/// @brief Constant to pass into HAL memory routines that vary their output
+/// depending on whether or not we're in a debug build.
+#ifdef NANO_OS_DEBUG
+#define USE_HAL_MEMORY_DEBUG true
+#else
+#define USE_HAL_MEMORY_DEBUG false
+#endif
+
 /// @def floatToInts
 ///
 /// @brief Break a floating-point number into two integer values that represent
