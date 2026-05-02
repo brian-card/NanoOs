@@ -60,7 +60,7 @@
 /// @brief Pin to use for the MicroSD card reader's SPI chip select line.
 #define SD_CARD_PIN_CHIP_SELECT 7
 
-const Hal* halInit(void) {
+const Hal* halAdafruitItsyBitsyM0Init(void) {
   HalArduinoSamD21x18AInitArgs args = {
     .numDioPins          = NUM_DIO_PINS,
     .spiCopiDio          = SPI_COPI_DIO,
