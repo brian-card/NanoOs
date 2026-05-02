@@ -47,7 +47,7 @@ extern "C"
 typedef struct HalArduinoSamD21x18AInitArgs {
   uint8_t numDioPins;
   uint8_t spiCopiDio;
-  uint8_t spiCpioDio;
+  uint8_t spiCipoDio;
   uint8_t spiSckDio;
   uint8_t sdCardPinChipSelect;
 } HalArduinoSamD21x18AInitArgs;

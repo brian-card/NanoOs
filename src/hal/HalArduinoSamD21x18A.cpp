@@ -87,10 +87,10 @@ static uint8_t _numDioPins = 0;
 /// @brief DIO pin used for SPI COPI.
 static uint8_t _spiCopiDio = DIO_PIN_UNDEFINED;
 
-/// @var _spiCpioDio
+/// @var _spiCipoDio
 ///
 /// @brief DIO pin used for SPI CIPO.
-static uint8_t _spiCpioDio = DIO_PIN_UNDEFINED;
+static uint8_t _spiCipoDio = DIO_PIN_UNDEFINED;
 
 /// @var _spiSckDio
 ///
@@ -438,10 +438,10 @@ int arduinoSamD21x18AInitSpiDevice(int spi,
   } else if (
        (cs   == _spiSckDio)
     || (cs   == _spiCopiDio)
-    || (cs   == _spiCpioDio)
+    || (cs   == _spiCipoDio)
     || (sck  != _spiSckDio)
     || (copi != _spiCopiDio)
-    || (cipo != _spiCpioDio)
+    || (cipo != _spiCipoDio)
   ) {
     return -EINVAL;
   } else if (arduinoSamD21x18ASpiDevices[spi].configured == true) {
@@ -1035,7 +1035,7 @@ int arduinoSamD21x18AInitRootStorage(SchedulerState *schedulerState) {
   SdCardSpiArgs sdCardSpiArgs = {
     .spiCsDio   = _sdCardPinChipSelect,
     .spiCopiDio = _spiCopiDio,
-    .spiCipoDio = _spiCpioDio,
+    .spiCipoDio = _spiCipoDio,
     .spiSckDio  = _spiSckDio,
   };
 
@@ -1071,7 +1071,7 @@ static Hal arduinoSamD21x18AHal = {
 const Hal* halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
   _numDioPins = args->numDioPins;
   _spiCopiDio = args->spiCopiDio;
-  _spiCpioDio = args->spiCpioDio;
+  _spiCipoDio = args->spiCipoDio;
   _spiSckDio = args->spiSckDio;
   _sdCardPinChipSelect = args->sdCardPinChipSelect;
 
