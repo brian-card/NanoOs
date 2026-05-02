@@ -53,6 +53,7 @@ typedef struct HalArduinoSamD21x18AInitArgs {
 } HalArduinoSamD21x18AInitArgs;
 
 const Hal* halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args);
+const Hal* halArduinoSamD21x18AImplInit(void);
 
 #ifdef __cplusplus
 } // extern "C"

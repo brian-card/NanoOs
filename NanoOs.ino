@@ -26,11 +26,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 // Custom includes
-#include "src/hal/HalAdafruitItsyBitsyM0.h"
-#include "src/hal/HalAdafruitTrinketM0.h"
-#include "src/hal/HalSeeedXiaoM0.h"
-#include "src/hal/HalAdafruitFeatherM0Wifi.h"
-#include "src/hal/HalArduinoNano33Iot.h"
+#include "src/hal/HalArduinoSamD21x18A.h"
 #include "src/hal/HalArduinoNanoEvery.h"
 #include "src/kernel/NanoOs.h"
 #include "src/kernel/Scheduler.h"
@@ -44,16 +40,8 @@ const Hal *HAL = NULL;
 // is to be used for Arduino-specific setup.  *ANYTHING* that requires use of
 // coroutines needs to be done in the loop function.
 void setup() {
-#if defined(ADAFRUIT_ITSYBITSY_M0)
-  HAL = halAdafruitItsyBitsyM0Init();
-#elif defined(ADAFRUIT_TRINKET_M0)
-  HAL = halAdafruitTrinketM0Init();
-#elif defined(ARDUINO_SEEED_XIAO_M0)
-  HAL = halSeeedXiaoM0Init();
-#elif defined(ADAFRUIT_FEATHER_M0)
-  HAL = halAdafruitFeatherM0WifiInit();
-#elif defined(ARDUINO_SAMD_NANO_33_IOT)
-  HAL = halArduinoNano33IotInit();
+#if defined(__SAMD21G18A__) || defined(__SAMD21E18A__)
+  HAL = halArduinoSamD21x18AImplInit();
 #elif defined(ARDUINO_AVR_NANO_EVERY)
   HAL = halArduinoNanoEveryInit();
 #endif

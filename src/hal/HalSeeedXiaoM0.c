@@ -61,7 +61,7 @@
 #define SD_CARD_PIN_CHIP_SELECT 7
 
 
-const Hal* halSeeedXiaoM0Init(void) {
+const Hal* halArduinoSamD21x18AImplInit(void) {
   HalArduinoSamD21x18AInitArgs args = {
     .numDioPins          = NUM_DIO_PINS,
     .spiCopiDio          = SPI_COPI_DIO,
