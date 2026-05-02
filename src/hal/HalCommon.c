@@ -31,6 +31,7 @@
 
 #include "HalCommon.h"
 #include "../kernel/Fat32Filesystem.h"
+#include "../kernel/Filesystem.h"
 
 // Must come last
 #include "../user/NanoOsStdio.h"
