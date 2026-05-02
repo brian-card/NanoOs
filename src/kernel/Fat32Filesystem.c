@@ -314,10 +314,16 @@ void fat32AssembleLfnEntry(
   int     baseIndex = (ordinal - 1) * FAT32_LFN_CHARS_PER_ENTRY;
 
   // Gather all 13 code units into a flat array for uniform processing.
+  // Use byte-level offsets so that we never form a pointer to an unaligned
+  // packed member on architectures with strict alignment requirements.
   uint16_t chars[FAT32_LFN_CHARS_PER_ENTRY];
-  memcpy(&chars[0],  lfn->name1, 5 * sizeof(uint16_t));
-  memcpy(&chars[5],  lfn->name2, 6 * sizeof(uint16_t));
-  memcpy(&chars[11], lfn->name3, 2 * sizeof(uint16_t));
+  const uint8_t *lfnBytes = (const uint8_t *) lfn;
+  memcpy(&chars[0],  lfnBytes + offsetof(Fat32LfnEntry, name1),
+    5 * sizeof(uint16_t));
+  memcpy(&chars[5],  lfnBytes + offsetof(Fat32LfnEntry, name2),
+    6 * sizeof(uint16_t));
+  memcpy(&chars[11], lfnBytes + offsetof(Fat32LfnEntry, name3),
+    2 * sizeof(uint16_t));
 
   for (int j = 0; j < FAT32_LFN_CHARS_PER_ENTRY; j++) {
     int pos = baseIndex + j;
@@ -642,9 +648,15 @@ int fat32ResolveParentDirectory(
       break;
     }
 
+    uint16_t clusterHigh;
+    uint16_t clusterLow;
+    memcpy(&clusterHigh, &searchResult->entry.firstClusterHigh,
+      sizeof(uint16_t));
+    memcpy(&clusterLow, &searchResult->entry.firstClusterLow,
+      sizeof(uint16_t));
     currentCluster =
-      ((uint32_t) searchResult->entry.firstClusterHigh << 16)
-      | (uint32_t) searchResult->entry.firstClusterLow;
+      ((uint32_t) clusterHigh << 16)
+      | (uint32_t) clusterLow;
 
     start = end;
     if (*start == '/') {
@@ -718,9 +730,15 @@ int fat32TruncateFile(
     Fat32DriverState *ds,
     Fat32DirSearchResult *searchResult
 ) {
+  uint16_t clusterHigh;
+  uint16_t clusterLow;
+  memcpy(&clusterHigh, &searchResult->entry.firstClusterHigh,
+    sizeof(uint16_t));
+  memcpy(&clusterLow, &searchResult->entry.firstClusterLow,
+    sizeof(uint16_t));
   uint32_t firstCluster =
-    ((uint32_t) searchResult->entry.firstClusterHigh << 16)
-    | (uint32_t) searchResult->entry.firstClusterLow;
+    ((uint32_t) clusterHigh << 16)
+    | (uint32_t) clusterLow;
 
   if (firstCluster >= FAT32_CLUSTER_FIRST_VALID) {
     int result = fat32FreeClusterChain(ds, firstCluster);
@@ -729,9 +747,15 @@ int fat32TruncateFile(
     }
   }
 
-  searchResult->entry.firstClusterHigh = 0;
-  searchResult->entry.firstClusterLow  = 0;
-  searchResult->entry.fileSize         = 0;
+  clusterHigh = 0;
+  clusterLow  = 0;
+  uint32_t fileSize = 0;
+  memcpy(&searchResult->entry.firstClusterHigh, &clusterHigh,
+    sizeof(uint16_t));
+  memcpy(&searchResult->entry.firstClusterLow, &clusterLow,
+    sizeof(uint16_t));
+  memcpy(&searchResult->entry.fileSize, &fileSize,
+    sizeof(uint32_t));
 
   return fat32WriteDirectoryEntry(ds,
     searchResult->dirCluster,
@@ -1000,7 +1024,10 @@ int fat32CreateFileEntry(
       lfn->attributes     = FAT32_LFN_ENTRY_ATTR;
       lfn->type           = 0;
       lfn->checksum       = checksum;
-      lfn->firstClusterLow = 0;
+      {
+        uint16_t zero16 = 0;
+        memcpy(&lfn->firstClusterLow, &zero16, sizeof(uint16_t));
+      }
 
       // Build all 13 UTF-16LE code units in a flat, aligned array and then
       // copy them into the three packed name fragments with memcpy so that
@@ -1021,9 +1048,15 @@ int fat32CreateFileEntry(
         }
       }
 
-      memcpy(lfn->name1, &chars[0],  5 * sizeof(uint16_t));
-      memcpy(lfn->name2, &chars[5],  6 * sizeof(uint16_t));
-      memcpy(lfn->name3, &chars[11], 2 * sizeof(uint16_t));
+      {
+        uint8_t *lfnBytes = (uint8_t *) lfn;
+        memcpy(lfnBytes + offsetof(Fat32LfnEntry, name1),
+          &chars[0],  5 * sizeof(uint16_t));
+        memcpy(lfnBytes + offsetof(Fat32LfnEntry, name2),
+          &chars[5],  6 * sizeof(uint16_t));
+        memcpy(lfnBytes + offsetof(Fat32LfnEntry, name3),
+          &chars[11], 2 * sizeof(uint16_t));
+      }
 
       memcpy(fs->blockBuffer + offsetInSector, lfn, sizeof(Fat32LfnEntry));
     } else {
@@ -1031,9 +1064,13 @@ int fat32CreateFileEntry(
       memset(shortEntry, 0, sizeof(Fat32DirectoryEntry));
       memcpy(shortEntry->name, shortName, FAT32_SHORT_NAME_LENGTH);
       shortEntry->attributes      = FAT32_ATTR_ARCHIVE;
-      shortEntry->firstClusterHigh = 0;
-      shortEntry->firstClusterLow  = 0;
-      shortEntry->fileSize         = 0;
+      {
+        uint16_t zero16 = 0;
+        uint32_t zero32 = 0;
+        memcpy(&shortEntry->firstClusterHigh, &zero16, sizeof(uint16_t));
+        memcpy(&shortEntry->firstClusterLow, &zero16, sizeof(uint16_t));
+        memcpy(&shortEntry->fileSize, &zero32, sizeof(uint32_t));
+      }
 
       memcpy(fs->blockBuffer + offsetInSector,
         shortEntry, sizeof(Fat32DirectoryEntry));
@@ -1098,11 +1135,21 @@ Fat32FileHandle* fat32CreateFileHandle(
     return NULL;
   }
 
+  uint16_t clusterHigh;
+  uint16_t clusterLow;
+  uint32_t fileSize;
+  memcpy(&clusterHigh, &searchResult->entry.firstClusterHigh,
+    sizeof(uint16_t));
+  memcpy(&clusterLow, &searchResult->entry.firstClusterLow,
+    sizeof(uint16_t));
+  memcpy(&fileSize, &searchResult->entry.fileSize,
+    sizeof(uint32_t));
+
   handle->firstCluster =
-    ((uint32_t) searchResult->entry.firstClusterHigh << 16)
-    | (uint32_t) searchResult->entry.firstClusterLow;
+    ((uint32_t) clusterHigh << 16)
+    | (uint32_t) clusterLow;
   handle->currentCluster   = handle->firstCluster;
-  handle->fileSize         = searchResult->entry.fileSize;
+  handle->fileSize         = fileSize;
   handle->attributes       = searchResult->entry.attributes;
   handle->directoryCluster = searchResult->dirCluster;
   handle->directoryOffset  = searchResult->offsetInCluster;
@@ -1422,17 +1469,40 @@ int fat32Initialize(FilesystemState *filesystemState) {
   Fat32BiosParameterBlock *bpb =
     (Fat32BiosParameterBlock *) filesystemState->blockBuffer;
 
+  // --- Copy multi-byte BPB fields into aligned local variables ---
+  uint16_t bpbSignatureWord;
+  uint16_t bpbFatSize16;
+  uint32_t bpbFatSize32;
+  uint16_t bpbRootEntryCount;
+  uint16_t bpbBytesPerSector;
+  uint16_t bpbReservedSectorCount;
+  uint32_t bpbRootCluster;
+  uint16_t bpbFsInfoSector;
+  uint32_t bpbTotalSectors32;
+  uint16_t bpbTotalSectors16;
+
+  memcpy(&bpbSignatureWord,      &bpb->signatureWord,      sizeof(uint16_t));
+  memcpy(&bpbFatSize16,          &bpb->fatSize16,          sizeof(uint16_t));
+  memcpy(&bpbFatSize32,          &bpb->fatSize32,          sizeof(uint32_t));
+  memcpy(&bpbRootEntryCount,     &bpb->rootEntryCount,     sizeof(uint16_t));
+  memcpy(&bpbBytesPerSector,     &bpb->bytesPerSector,     sizeof(uint16_t));
+  memcpy(&bpbReservedSectorCount,&bpb->reservedSectorCount,sizeof(uint16_t));
+  memcpy(&bpbRootCluster,        &bpb->rootCluster,        sizeof(uint32_t));
+  memcpy(&bpbFsInfoSector,       &bpb->fsInfoSector,       sizeof(uint16_t));
+  memcpy(&bpbTotalSectors32,     &bpb->totalSectors32,     sizeof(uint32_t));
+  memcpy(&bpbTotalSectors16,     &bpb->totalSectors16,     sizeof(uint16_t));
+
   // --- Validate the BPB ---
-  if (bpb->signatureWord != 0xAA55) {
+  if (bpbSignatureWord != 0xAA55) {
     return FAT32_INVALID_FILESYSTEM;
   }
-  if ((bpb->fatSize16 != 0)
-      || (bpb->fatSize32 == 0)
-      || (bpb->rootEntryCount != 0)
+  if ((bpbFatSize16 != 0)
+      || (bpbFatSize32 == 0)
+      || (bpbRootEntryCount != 0)
   ) {
     return FAT32_INVALID_FILESYSTEM;
   }
-  if ((bpb->bytesPerSector < FAT32_SECTOR_SIZE)
+  if ((bpbBytesPerSector < FAT32_SECTOR_SIZE)
       || (bpb->sectorsPerCluster == 0)
       || ((bpb->sectorsPerCluster & (bpb->sectorsPerCluster - 1)) != 0)
   ) {
@@ -1447,25 +1517,25 @@ int fat32Initialize(FilesystemState *filesystemState) {
   }
 
   driverState->filesystemState     = filesystemState;
-  driverState->bytesPerSector      = bpb->bytesPerSector;
+  driverState->bytesPerSector      = bpbBytesPerSector;
   driverState->sectorsPerCluster   = bpb->sectorsPerCluster;
   driverState->bytesPerCluster     =
-    (uint32_t) bpb->sectorsPerCluster * (uint32_t) bpb->bytesPerSector;
-  driverState->reservedSectorCount = bpb->reservedSectorCount;
+    (uint32_t) bpb->sectorsPerCluster * (uint32_t) bpbBytesPerSector;
+  driverState->reservedSectorCount = bpbReservedSectorCount;
   driverState->numberOfFats        = bpb->numberOfFats;
-  driverState->fatSizeInSectors    = bpb->fatSize32;
-  driverState->rootDirectoryCluster = bpb->rootCluster;
-  driverState->fsInfoSector        = bpb->fsInfoSector;
+  driverState->fatSizeInSectors    = bpbFatSize32;
+  driverState->rootDirectoryCluster = bpbRootCluster;
+  driverState->fsInfoSector        = bpbFsInfoSector;
 
   driverState->fatStartSector =
-    filesystemState->startLba + bpb->reservedSectorCount;
+    filesystemState->startLba + bpbReservedSectorCount;
 
   driverState->dataStartSector = driverState->fatStartSector
-    + ((uint32_t) bpb->numberOfFats * bpb->fatSize32);
+    + ((uint32_t) bpb->numberOfFats * bpbFatSize32);
 
-  uint32_t totalSectors = (bpb->totalSectors32 != 0)
-    ? bpb->totalSectors32
-    : (uint32_t) bpb->totalSectors16;
+  uint32_t totalSectors = (bpbTotalSectors32 != 0)
+    ? bpbTotalSectors32
+    : (uint32_t) bpbTotalSectors16;
   uint32_t dataSectors = totalSectors
     - (driverState->dataStartSector - filesystemState->startLba);
   driverState->totalDataClusters =
@@ -1633,11 +1703,16 @@ int fat32Fclose(void *driverState, void *fileHandle) {
       Fat32DirectoryEntry *entry =
         (Fat32DirectoryEntry *) (fs->blockBuffer + offsetInSector);
 
-      entry->fileSize         = handle->fileSize;
-      entry->firstClusterHigh =
+      uint32_t entryFileSize = handle->fileSize;
+      uint16_t entryClusterHigh =
         (uint16_t) (handle->firstCluster >> 16);
-      entry->firstClusterLow  =
+      uint16_t entryClusterLow =
         (uint16_t) (handle->firstCluster & 0xFFFF);
+      memcpy(&entry->fileSize, &entryFileSize, sizeof(uint32_t));
+      memcpy(&entry->firstClusterHigh, &entryClusterHigh,
+        sizeof(uint16_t));
+      memcpy(&entry->firstClusterLow, &entryClusterLow,
+        sizeof(uint16_t));
 
       ioResult = bd->writeBlocks(
         bd->context, lba, 1, bd->blockSize, fs->blockBuffer);
@@ -2184,9 +2259,15 @@ int fat32Remove(void *driverState, const char *pathname) {
   }
 
   // ---- Free the file's cluster chain ----
+  uint16_t removeClusterHigh;
+  uint16_t removeClusterLow;
+  memcpy(&removeClusterHigh, &searchResult->entry.firstClusterHigh,
+    sizeof(uint16_t));
+  memcpy(&removeClusterLow, &searchResult->entry.firstClusterLow,
+    sizeof(uint16_t));
   uint32_t firstCluster =
-    ((uint32_t) searchResult->entry.firstClusterHigh << 16)
-    | (uint32_t) searchResult->entry.firstClusterLow;
+    ((uint32_t) removeClusterHigh << 16)
+    | (uint32_t) removeClusterLow;
 
   if (firstCluster >= FAT32_CLUSTER_FIRST_VALID) {
     result = fat32FreeClusterChain(ds, firstCluster);
