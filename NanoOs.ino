@@ -84,7 +84,7 @@ void loop() {
   Coroutine _mainCoroutine;
   schedulerTaskHandle = &_mainCoroutine;
   CoroutineConfigOptions coroutineConfigOptions = {
-    .stackSize = HAL->memory->processStackSize(false),
+    .stackSize = HAL->memory->processStackSize(USE_HAL_MEMORY_DEBUG),
     .stateData = &coroutineStatePointer,
     .coroutineYieldCallback = NULL,
     .comutexUnlockCallback = comutexUnlockCallback,
