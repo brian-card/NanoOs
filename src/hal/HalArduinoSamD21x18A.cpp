@@ -29,6 +29,8 @@
 ///
 /// @brief HAL implementation for a SAMD21x18A Arduino-based board.
 
+#if defined(__SAMD21G18A__) || defined(__SAMD21E18A__)
+
 // Base Arduino definitions
 #include <Arduino.h>
 
@@ -1103,4 +1105,6 @@ const Hal* halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
 
   return &arduinoSamD21x18AHal;
 }
+
+#endif // defined(__SAMD21G18A__) || defined(__SAMD21E18A__)
 
