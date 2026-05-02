@@ -113,7 +113,8 @@
 #include <avr/sleep.h>
 #include <avr/interrupt.h>
 
-uintptr_t arduinoNanoEveryProcessStackSize(void) {
+uintptr_t arduinoNanoEveryProcessStackSize(bool debug) {
+  (void) debug;
   return PROCESS_STACK_SIZE;
 }
 
@@ -126,11 +127,32 @@ uintptr_t arduinoNanoEveryMemoryManagerStackSize(bool debug) {
   }
 }
 
-void* arduinoNanoEveryBottomOfHeap(void) {
+void* arduinoNanoEveryBottomOfHeap(bool debug) {
+  (void) debug;
   extern int __heap_start;
   extern char *__brkval;
   return (__brkval == NULL) ? (char*) &__heap_start : __brkval;
 }
+
+uint8_t arduinoNanoEveryNumExtraSchedulerStacks(bool debug) {
+  (void) debug;
+  return 1;
+}
+
+uint8_t arduinoNanoEveryNumExtraConsoleStacks(bool debug) {
+  (void) debug;
+  return 1;
+}
+
+static HalMemory arduinoNanoEveryMemoryHal = {
+  .processStackSize = arduinoNanoEveryProcessStackSize,
+  .memoryManagerStackSize = arduinoNanoEveryMemoryManagerStackSize,
+  .bottomOfHeap = arduinoNanoEveryBottomOfHeap,
+  .numExtraSchedulerStacks = arduinoNanoEveryNumExtraSchedulerStacks,
+  .numExtraConsoleStacks = arduinoNanoEveryNumExtraConsoleStacks,
+  .overlayMap = NULL,
+  .overlaySize = 0,
+};
 
 /// @var uarts
 ///
@@ -580,14 +602,7 @@ int arduinoNanoEveryInitRootStorage(SchedulerState *schedulerState) {
 /// @brief The implementation of the Hal interface for the Arduino Nano Every.
 static Hal arduinoNanoEveryHal = {
   // Memory definitions.
-  .processStackSize = arduinoNanoEveryProcessStackSize,
-  .memoryManagerStackSize = arduinoNanoEveryMemoryManagerStackSize,
-  .bottomOfHeap = arduinoNanoEveryBottomOfHeap,
-  
-  // Overlay definitions.
-  .overlayMap = NULL,
-  .overlaySize = 0,
-  
+  .memory = &arduinoNanoEveryMemoryHal,
   .uart = &arduinoNanoEveryUartHal,
   .dio = &arduinoNanoEveryDioHal,
   .spi = &arduinoNanoEverySpiHal,
