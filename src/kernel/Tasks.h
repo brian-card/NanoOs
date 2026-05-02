@@ -77,6 +77,12 @@ extern "C"
     func, \
     arg)
 
+/// @def taskHandleProvision
+///
+/// @brief Provision a TaskHandle.
+#define taskHandleProvision(handle, func, arg) \
+  coroutineInit(handle, func, arg)
+
 /// @def taskRunning
 ///
 /// @brief Function macro to determine whether or not a given task is
