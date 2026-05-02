@@ -125,14 +125,14 @@ int halCommonInitRootFilesystem(BlockStorageDevice *blockDevice) {
   return 0;
 }
 
-/// @fn int halCommonInit(Hal *hal)
+/// @fn int halCommonInit(const Hal *hal)
 ///
 /// @brief Initialization function common to multiple HAL implementations.
 ///
 /// @param hal A pointer to an initialized Hal structure.
 ///
 /// @return Returns 0 on success, -errno on failure.
-int halCommonInit(Hal *hal) {
+int halCommonInit(const Hal *hal) {
   if (hal == NULL) {
     // Invalid parameter.
     return -EINVAL;
