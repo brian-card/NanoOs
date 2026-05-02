@@ -343,9 +343,9 @@ void coroutineYieldCallback(void *stateData, Coroutine *coroutine) {
     return;
   }
 
-  // No need to check HAL->timerHal for NULL.  This function can't be configured
+  // No need to check HAL->timer for NULL.  This function can't be configured
   // to be called unless it wasn't NULL at boot.
-  HAL->timerHal->cancelTimer(schedulerState->preemptionTimer);
+  HAL->timer->cancelTimer(schedulerState->preemptionTimer);
 
   return;
 }
@@ -1509,8 +1509,8 @@ int closeTaskFileDescriptors(
     printString(" because ");
     printString(_functionInProgress);
     printString(" is already in progress\n");
-    if (HAL->powerHal != NULL) {
-      HAL->powerHal->shutdown(HAL_SHUTDOWN_OFF);
+    if (HAL->power != NULL) {
+      HAL->power->shutdown(HAL_SHUTDOWN_OFF);
     } else {
       while (1);
     }
@@ -1586,8 +1586,8 @@ FILE* schedFopen(const char *pathname, const char *mode) {
     printString(" because ");
     printString(_functionInProgress);
     printString(" is already in progress\n");
-    if (HAL->powerHal != NULL) {
-      HAL->powerHal->shutdown(HAL_SHUTDOWN_OFF);
+    if (HAL->power != NULL) {
+      HAL->power->shutdown(HAL_SHUTDOWN_OFF);
     } else {
       while (1);
     }
@@ -1659,8 +1659,8 @@ int schedFclose(FILE *stream) {
     printString(" because ");
     printString(_functionInProgress);
     printString(" is already in progress\n");
-    if (HAL->powerHal != NULL) {
-      HAL->powerHal->shutdown(HAL_SHUTDOWN_OFF);
+    if (HAL->power != NULL) {
+      HAL->power->shutdown(HAL_SHUTDOWN_OFF);
     } else {
       while (1);
     }
@@ -1732,8 +1732,8 @@ int schedRemove(const char *pathname) {
     printString(" because ");
     printString(_functionInProgress);
     printString(" is already in progress\n");
-    if (HAL->powerHal != NULL) {
-      HAL->powerHal->shutdown(HAL_SHUTDOWN_OFF);
+    if (HAL->power != NULL) {
+      HAL->power->shutdown(HAL_SHUTDOWN_OFF);
     } else {
       while (1);
     }
@@ -1804,8 +1804,8 @@ size_t schedFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     printString(" because ");
     printString(_functionInProgress);
     printString(" is already in progress\n");
-    if (HAL->powerHal != NULL) {
-      HAL->powerHal->shutdown(HAL_SHUTDOWN_OFF);
+    if (HAL->power != NULL) {
+      HAL->power->shutdown(HAL_SHUTDOWN_OFF);
     } else {
       while (1);
     }
@@ -1876,8 +1876,8 @@ size_t schedFwrite(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     printString(" because ");
     printString(_functionInProgress);
     printString(" is already in progress\n");
-    if (HAL->powerHal != NULL) {
-      HAL->powerHal->shutdown(HAL_SHUTDOWN_OFF);
+    if (HAL->power != NULL) {
+      HAL->power->shutdown(HAL_SHUTDOWN_OFF);
     } else {
       while (1);
     }
@@ -1954,8 +1954,8 @@ char* schedFgets(char *buffer, int size, FILE *stream) {
     printString(" because ");
     printString(_functionInProgress);
     printString(" is already in progress\n");
-    if (HAL->powerHal != NULL) {
-      HAL->powerHal->shutdown(HAL_SHUTDOWN_OFF);
+    if (HAL->power != NULL) {
+      HAL->power->shutdown(HAL_SHUTDOWN_OFF);
     } else {
       while (1);
     }
@@ -2030,8 +2030,8 @@ int schedFputs(const char *s, FILE *stream) {
     printString(" because ");
     printString(_functionInProgress);
     printString(" is already in progress\n");
-    if (HAL->powerHal != NULL) {
-      HAL->powerHal->shutdown(HAL_SHUTDOWN_OFF);
+    if (HAL->power != NULL) {
+      HAL->power->shutdown(HAL_SHUTDOWN_OFF);
     } else {
       while (1);
     }
@@ -3268,8 +3268,8 @@ int schedulerLoadOverlay(FileBlockMetadata *overlay, char **envp) {
     return 0;
   }
 
-  NanoOsOverlayMap *overlayMap = HAL->overlayMap;
-  if ((overlayMap == NULL) || (HAL->overlaySize == 0)) {
+  NanoOsOverlayMap *overlayMap = HAL->memory->overlayMap;
+  if ((overlayMap == NULL) || (HAL->memory->overlaySize == 0)) {
     printString("No overlay memory available for use.\n");
     return -ENOMEM;
   }
@@ -3590,14 +3590,14 @@ void runScheduler(void) {
     // Configure the preemption timer to force the task to yield if it doesn't
     // voluntarily give up control within a reasonable amount of time.
     if (SCHEDULER_STATE->preemptionTimer > -1) {
-      // No need to check HAL->timerHal for NULL since it can't be NULL in this
+      // No need to check HAL->timer for NULL since it can't be NULL in this
       // case.
-      HAL->timerHal->configOneShotTimer(
+      HAL->timer->configOneShotTimer(
         SCHEDULER_STATE->preemptionTimer, 10000000, forceYield);
     }
   }
   taskResume(taskDescriptor, NULL);
-  // No need to call HAL->timerHal->cancelTimer since that's called by
+  // No need to call HAL->timer->cancelTimer since that's called by
   // coroutineYieldCallback if we're running preemptive multitasking.
 
   if (taskRunning(taskDescriptor) == false) {
@@ -3727,7 +3727,7 @@ __attribute__((noinline)) void startScheduler(
   schedulerState.currentReady
     = &schedulerState.ready[SCHEDULER_READY_QUEUE_KERNEL];
   schedulerState.preemptionTimer = -1;
-  if ((HAL->timerHal != NULL) && (HAL->timerHal->getNumTimers() > 0)) {
+  if ((HAL->timer != NULL) && (HAL->timer->getNumTimers() > 0)) {
     schedulerState.preemptionTimer = 0;
   }
   schedulerState.schedulerTaskId = 1;
@@ -3788,6 +3788,10 @@ __attribute__((noinline)) void startScheduler(
     = schedulerState.consoleTaskId;
   standardUserFileDescriptors[2].outputChannel.messageType
     = CONSOLE_WRITE_BUFFER;
+
+  if (taskHandleProvision(NULL, dummyTask, NULL) == NULL) {
+    printString("Could not increase scheduler task's stack size.\n");
+  }
 
   // Create the console task.  We used to have to double the size of the
   // console's stack, so we create this task before we create anything else.
@@ -3983,9 +3987,9 @@ __attribute__((noinline)) void startScheduler(
   }
   printDebugString("Populated user ready queue.\n");
 
-  if (HAL->overlayMap != NULL) {
+  if (HAL->memory->overlayMap != NULL) {
     // Make sure the overlay map is zeroed out for first use.
-    memset(HAL->overlayMap, 0, sizeof(NanoOsOverlayMap));
+    memset(HAL->memory->overlayMap, 0, sizeof(NanoOsOverlayMap));
   }
 
   // Get the memory manager and filesystem up and running.

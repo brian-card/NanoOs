@@ -759,40 +759,40 @@ int halPosixImplInit(jmp_buf resetBuffer, Hal *hal) {
   *((void**) &realTcsetattr) = dlsym(RTLD_NEXT, "tcsetattr");
   
   int ii = 0;
-  if (hal->uartHal != NULL) {
-    int numUarts = hal->uartHal->getNumUarts();
+  if (hal->uart != NULL) {
+    int numUarts = hal->uart->getNum();
     if (numUarts <= 0) {
       // Nothing we can do.  Bail.
-      fprintf(stderr, "hal->uartHal->getNumUarts() returned %d.\n",
+      fprintf(stderr, "hal->uart->getNum() returned %d.\n",
         numUarts);
       return -1;
     }
     
     // Set all the serial ports to run at 1000000 baud.
-    if (hal->uartHal->initUart(0, 1000000) < 0) {
+    if (hal->uart->init(0, 1000000) < 0) {
       // Nothing we can do.  Bail.
       fprintf(stderr, "Initializing serial port 0 failed.\n");
       return -1;
     }
     for (ii = 1; ii < numUarts; ii++) {
-      if (hal->uartHal->initUart(ii, 1000000) < 0) {
+      if (hal->uart->init(ii, 1000000) < 0) {
         // We can't support more than the last serial port that was successfully
         // initialized.
         fprintf(stderr, "WARNING: Initializing serial port %d failed.\n", ii);
         break;
       }
     }
-    hal->uartHal->setNumUarts(ii);
+    hal->uart->setNum(ii);
   }
 
-  if (hal->timerHal != NULL) {
-    int numTimers = hal->timerHal->getNumTimers();
+  if (hal->timer != NULL) {
+    int numTimers = hal->timer->getNumTimers();
     for (ii = 0; ii < numTimers; ii++) {
-      if (hal->timerHal->initTimer(ii) < 0) {
+      if (hal->timer->initTimer(ii) < 0) {
         break;
       }
     }
-    hal->timerHal->setNumTimers(ii);
+    hal->timer->setNumTimers(ii);
     if (ii != numTimers) {
       fprintf(stderr, "WARNING: Only initialized %d timers\n", ii);
     }

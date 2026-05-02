@@ -53,7 +53,7 @@ OverlayFunction findOverlayFunction(const char *overlayFunctionName) {
     return overlayFunction; // NULL
   }
   
-  NanoOsOverlayMap *overlayMap = HAL->overlayMap;
+  NanoOsOverlayMap *overlayMap = HAL->memory->overlayMap;
   for (uint16_t ii = 0, jj = overlayMap->numExports - 1; ii <= jj;) {
     cur = (ii + jj) >> 1;
     comp = strcmp(overlayMap->exports[cur].name, overlayFunctionName);
@@ -196,7 +196,7 @@ void* callOverlayFunction(const char *overlayDir, const char *overlay,
   //     resume.
   //
   // JBC 2025-01-24
-  HAL->timerHal->cancelTimer(SCHEDULER_STATE->preemptionTimer);
+  HAL->timer->cancelTimer(SCHEDULER_STATE->preemptionTimer);
   if (overlayDirCopy != NULL) {
     runningTask->overlayDir = overlayDirCopy;
   }
@@ -217,8 +217,8 @@ void* callOverlayFunction(const char *overlayDir, const char *overlay,
   returnValue = overlayFunction(args);
   
 restorePreviousOverlay:
-  // See note above on use of HAL->timerHal->cancelTimer.
-  HAL->timerHal->cancelTimer(SCHEDULER_STATE->preemptionTimer);
+  // See note above on use of HAL->timer->cancelTimer.
+  HAL->timer->cancelTimer(SCHEDULER_STATE->preemptionTimer);
   runningTask->overlay.blockDevice = overlayArray[0].blockDevice;
   runningTask->overlay.startBlock  = overlayArray[0].startBlock;
   runningTask->overlay.numBlocks   = overlayArray[0].numBlocks;

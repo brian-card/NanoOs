@@ -55,11 +55,11 @@ int posixInitUart(int port, int32_t baud);
 int posixPollUart(int port);
 ssize_t posixWriteUart(int port, const uint8_t *data, ssize_t length);
 static HalUart posixUartHal = {
-  .getNumUarts = posixGetNumUarts,
-  .setNumUarts = posixSetNumUarts,
-  .initUart = posixInitUart,
-  .pollUart = posixPollUart,
-  .writeUart = posixWriteUart,
+  .getNum = posixGetNumUarts,
+  .setNum = posixSetNumUarts,
+  .init = posixInitUart,
+  .poll = posixPollUart,
+  .write = posixWriteUart,
 };
 
 int posixGetNumDios(void);
@@ -167,12 +167,12 @@ static Hal posixHal = {
   .overlayMap = NULL,
   .overlaySize = 0,
   
-  .uartHal = &posixUartHal,
-  .dioHal = &posixDioHal,
-  .spiHal = &posixSpiHal,
-  .clockHal = &posixClockHal,
-  .powerHal = &posixPowerHal,
-  .timerHal = &posixTimerHal,
+  .uart = &posixUartHal,
+  .dio = &posixDioHal,
+  .spi = &posixSpiHal,
+  .clock = &posixClockHal,
+  .power = &posixPowerHal,
+  .timer = &posixTimerHal,
   
   // Root storage configuration.
   .initRootStorage = posixInitRootStorage,

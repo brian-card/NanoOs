@@ -141,57 +141,57 @@ int halCommonInit(const Hal *hal) {
   int ii = 0;
   char num = '\0';
   
-  if (hal->uartHal != NULL) {
-    int numUarts = hal->uartHal->getNumUarts();
+  if (hal->uart != NULL) {
+    int numUarts = hal->uart->getNum();
     if (numUarts <= 0) {
       // Nothing we can do.
       return -ENOTTY;
     }
     
     // Set all the serial ports to run at 1000000 baud.
-    if (hal->uartHal->initUart(0, 1000000) < 0) {
+    if (hal->uart->init(0, 1000000) < 0) {
       // Nothing we can do.
       return -EIO;
     }
     for (ii = 1; ii < numUarts; ii++) {
-      if (hal->uartHal->initUart(ii, 1000000) < 0) {
+      if (hal->uart->init(ii, 1000000) < 0) {
         // We can't support more than the last serial port that was successfully
         // initialized.
         break;
       }
     }
-    hal->uartHal->setNumUarts(ii);
+    hal->uart->setNum(ii);
     if (ii != numUarts) {
       // NOTE:  We can't use printString and printInt here because those
       // functions rely on the global HAL pointer, which is not initialized at
       // the time this function is called.  So, we have to do things a little
       // more manually here.
-      hal->uartHal->writeUart(0,
+      hal->uart->write(0,
         (uint8_t*) "WARNING: Only initialized ",
         strlen("WARNING: Only initialized "));
       num = '0' + ((char) ii);
-      hal->uartHal->writeUart(0, (uint8_t*) &num, 1);
-      hal->uartHal->writeUart(0,
+      hal->uart->write(0, (uint8_t*) &num, 1);
+      hal->uart->write(0,
         (uint8_t*) " serial ports\n",
         strlen(" serial ports\n"));
     }
   }
 
-  if (hal->timerHal != NULL)  {
-    int numTimers = hal->timerHal->getNumTimers();
+  if (hal->timer != NULL)  {
+    int numTimers = hal->timer->getNumTimers();
     for (ii = 0; ii < numTimers; ii++) {
-      if (hal->timerHal->initTimer(ii) < 0) {
+      if (hal->timer->initTimer(ii) < 0) {
         break;
       }
     }
-    hal->timerHal->setNumTimers(ii);
+    hal->timer->setNumTimers(ii);
     if (ii != numTimers) {
-      hal->uartHal->writeUart(0,
+      hal->uart->write(0,
         (uint8_t*) "WARNING: Only initialized ",
         strlen("WARNING: Only initialized "));
       num = '0' + ((char) ii);
-      hal->uartHal->writeUart(0, (uint8_t*) &num, 1);
-      hal->uartHal->writeUart(0,
+      hal->uart->write(0, (uint8_t*) &num, 1);
+      hal->uart->write(0,
         (uint8_t*) " timers\n",
         strlen(" timers\n"));
     }

@@ -63,12 +63,12 @@ void setup() {
 // we want to do everything related to coroutines in this stack.  The reason
 // we want to do this is because we want to hide as much of the coroutine
 // metadata storage as we can within the stack of the main loop.  Every stack,
-// including the stack for the main loop, is HAL->processStackSize() bytes in
-// size.  If we declare no variables in this stack, we're just wasting space.
-// Also, making the storage for the metadata global consumes precious memory.
-// It's much more efficient to just store the pointers in the global address
-// space and put the real storage in the main loop's stack.  However, that
-// means that we have to do all the one-time setup from within the main
+// including the stack for the main loop, is HAL->memory->processStackSize()
+// bytes in size.  If we declare no variables in this stack, we're just wasting
+// space.  Also, making the storage for the metadata global consumes precious
+// memory.  It's much more efficient to just store the pointers in the global
+// address space and put the real storage in the main loop's stack.  However,
+// that means that we have to do all the one-time setup from within the main
 // function.  That, in turn, means that we can never exit this function.  So,
 // we will do all the one-time setup and then run our scheduler loop from
 // within this call.
@@ -84,13 +84,13 @@ void loop() {
   Coroutine _mainCoroutine;
   schedulerTaskHandle = &_mainCoroutine;
   CoroutineConfigOptions coroutineConfigOptions = {
-    .stackSize = HAL->processStackSize(),
+    .stackSize = HAL->memory->processStackSize(false),
     .stateData = &coroutineStatePointer,
     .coroutineYieldCallback = NULL,
     .comutexUnlockCallback = comutexUnlockCallback,
     .coconditionSignalCallback = coconditionSignalCallback,
   };
-  if ((HAL->timerHal != NULL) && (HAL->timerHal->getNumTimers() > 0)) {
+  if ((HAL->timer != NULL) && (HAL->timer->getNumTimers() > 0)) {
     coroutineConfigOptions.coroutineYieldCallback = coroutineYieldCallback;
   }
   if (coroutineConfig(&_mainCoroutine, &coroutineConfigOptions)

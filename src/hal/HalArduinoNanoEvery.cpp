@@ -198,11 +198,11 @@ ssize_t arduinoNanoEveryWriteUart(int port,
 }
 
 static HalUart arduinoNanoEveryUartHal = {
-  .getNumUarts = arduinoNanoEveryGetNumUarts,
-  .setNumUarts = arduinoNanoEverySetNumUarts,
-  .initUart = arduinoNanoEveryInitUart,
-  .pollUart = arduinoNanoEveryPollUart,
-  .writeUart = arduinoNanoEveryWriteUart,
+  .getNum = arduinoNanoEveryGetNumUarts,
+  .setNum = arduinoNanoEverySetNumUarts,
+  .init = arduinoNanoEveryInitUart,
+  .poll = arduinoNanoEveryPollUart,
+  .write = arduinoNanoEveryWriteUart,
 };
 
 int arduinoNanoEveryGetNumDios(void) {
@@ -588,12 +588,12 @@ static Hal arduinoNanoEveryHal = {
   .overlayMap = NULL,
   .overlaySize = 0,
   
-  .uartHal = &arduinoNanoEveryUartHal,
-  .dioHal = &arduinoNanoEveryDioHal,
-  .spiHal = &arduinoNanoEverySpiHal,
-  .clockHal = &arduinoNanoEveryClockHal,
-  .powerHal = &arduinoNanoEveryPowerHal,
-  .timerHal = NULL,
+  .uart = &arduinoNanoEveryUartHal,
+  .dio = &arduinoNanoEveryDioHal,
+  .spi = &arduinoNanoEverySpiHal,
+  .clock = &arduinoNanoEveryClockHal,
+  .power = &arduinoNanoEveryPowerHal,
+  .timer = NULL,
   
   // Root storage configuration.
   .initRootStorage = arduinoNanoEveryInitRootStorage,

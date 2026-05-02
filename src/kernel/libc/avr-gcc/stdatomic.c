@@ -54,8 +54,8 @@ bool __atomic_compare_exchange_2(void *ptr, void *expected, uint16_t desired,
   uint64_t remainingNanoseconds;
   void (*callback)(void);
   int cancelStatus = -1;
-  if (HAL->timerHal != NULL) {
-    cancelStatus = HAL->timerHal->cancelAndGetTimer(
+  if (HAL->timer != NULL) {
+    cancelStatus = HAL->timer->cancelAndGetTimer(
       SCHEDULER_STATE->preemptionTimer, NULL, &remainingNanoseconds, &callback);
   }
   
@@ -69,7 +69,7 @@ bool __atomic_compare_exchange_2(void *ptr, void *expected, uint16_t desired,
   
   if (cancelStatus == 0) {
     // A timer was active when we were called.  Restore it.
-    HAL->timerHal->configOneShotTimer(SCHEDULER_STATE->preemptionTimer,
+    HAL->timer->configOneShotTimer(SCHEDULER_STATE->preemptionTimer,
       remainingNanoseconds, callback);
   }
   
@@ -82,8 +82,8 @@ void __atomic_store_2(void *ptr, uint16_t val, int memorder) {
   uint64_t remainingNanoseconds;
   void (*callback)(void);
   int cancelStatus = -1;
-  if (HAL->timerHal != NULL) {
-    cancelStatus = HAL->timerHal->cancelAndGetTimer(
+  if (HAL->timer != NULL) {
+    cancelStatus = HAL->timer->cancelAndGetTimer(
       SCHEDULER_STATE->preemptionTimer, NULL, &remainingNanoseconds, &callback);
   }
   
@@ -91,7 +91,7 @@ void __atomic_store_2(void *ptr, uint16_t val, int memorder) {
   
   if (cancelStatus == 0) {
     // A timer was active when we were called.  Restore it.
-    HAL->timerHal->configOneShotTimer(SCHEDULER_STATE->preemptionTimer,
+    HAL->timer->configOneShotTimer(SCHEDULER_STATE->preemptionTimer,
       remainingNanoseconds, callback);
   }
 }
@@ -102,8 +102,8 @@ uint16_t __atomic_load_2(const void *ptr, int memorder) {
   uint64_t remainingNanoseconds;
   void (*callback)(void);
   int cancelStatus = -1;
-  if (HAL->timerHal != NULL) {
-    cancelStatus = HAL->timerHal->cancelAndGetTimer(
+  if (HAL->timer != NULL) {
+    cancelStatus = HAL->timer->cancelAndGetTimer(
       SCHEDULER_STATE->preemptionTimer, NULL, &remainingNanoseconds, &callback);
   }
   
@@ -111,7 +111,7 @@ uint16_t __atomic_load_2(const void *ptr, int memorder) {
   
   if (cancelStatus == 0) {
     // A timer was active when we were called.  Restore it.
-    HAL->timerHal->configOneShotTimer(SCHEDULER_STATE->preemptionTimer,
+    HAL->timer->configOneShotTimer(SCHEDULER_STATE->preemptionTimer,
       remainingNanoseconds, callback);
   }
   

@@ -231,7 +231,8 @@ static SavedContext _savedContext;
     = (uint32_t) arduinoSamD21x18ATimerInterruptHandler ## handlerIndex; \
   return
 
-uintptr_t arduinoSamD21x18AProcessStackSize(void) {
+uintptr_t arduinoSamD21x18AProcessStackSize(bool debug) {
+  (void) debug;
   return PROCESS_STACK_SIZE;
 }
 
@@ -244,14 +245,30 @@ uintptr_t arduinoSamD21x18AMemoryManagerStackSize(bool debug) {
   }
 }
 
-/// @var _bottomOfStack
-///
-/// @brief Where the bottom of the stack will be set to be in memory.
-static void *_bottomOfHeap = (void*) (OVERLAY_ADDRESS + OVERLAY_SIZE);
-
-void* arduinoSamD21x18ABottomOfHeap(void) {
-  return _bottomOfHeap;
+void* arduinoSamD21x18ABottomOfHeap(bool debug) {
+  (void) debug;
+  return (void*) (OVERLAY_ADDRESS + OVERLAY_SIZE);
 }
+
+uint8_t arduinoSamD21x18ANumExtraSchedulerStacks(bool debug) {
+  (void) debug;
+  return 1;
+}
+
+uint8_t arduinoSamD21x18ANumExtraConsoleStacks(bool debug) {
+  (void) debug;
+  return 0;
+}
+
+static HalMemory arduinoSamD21x18AMemoryHal = {
+  .processStackSize = arduinoSamD21x18AProcessStackSize,
+  .memoryManagerStackSize = arduinoSamD21x18AMemoryManagerStackSize,
+  .bottomOfHeap = arduinoSamD21x18ABottomOfHeap,
+  .numExtraSchedulerStacks = arduinoSamD21x18ANumExtraSchedulerStacks,
+  .numExtraConsoleStacks = arduinoSamD21x18ANumExtraConsoleStacks,
+  .overlayMap = (NanoOsOverlayMap*) OVERLAY_ADDRESS,
+  .overlaySize = OVERLAY_SIZE,
+};
 
 /// @def MAX_UARTS
 ///
@@ -362,11 +379,11 @@ ssize_t arduinoSamD21x18AWriteUart(int port,
 }
 
 static HalUart arduinoSamD21x18AUartHal = {
-  .getNumUarts = arduinoSamD21x18AGetNumUarts,
-  .setNumUarts = arduinoSamD21x18ASetNumUarts,
-  .initUart = arduinoSamD21x18AInitUart,
-  .pollUart = arduinoSamD21x18APollUart,
-  .writeUart = arduinoSamD21x18AWriteUart,
+  .getNum = arduinoSamD21x18AGetNumUarts,
+  .setNum = arduinoSamD21x18ASetNumUarts,
+  .init = arduinoSamD21x18AInitUart,
+  .poll = arduinoSamD21x18APollUart,
+  .write = arduinoSamD21x18AWriteUart,
 };
 
 int arduinoSamD21x18AGetNumDios(void) {
@@ -1050,21 +1067,13 @@ int arduinoSamD21x18AInitRootStorage(SchedulerState *schedulerState) {
 ///
 /// @brief The implementation of the Hal interface.
 static Hal arduinoSamD21x18AHal = {
-  // Memory definitions.
-  .processStackSize = arduinoSamD21x18AProcessStackSize,
-  .memoryManagerStackSize = arduinoSamD21x18AMemoryManagerStackSize,
-  .bottomOfHeap = arduinoSamD21x18ABottomOfHeap,
-  
-  // Overlay definitions.
-  .overlayMap = (NanoOsOverlayMap*) OVERLAY_ADDRESS,
-  .overlaySize = OVERLAY_SIZE,
-  
-  .uartHal = &arduinoSamD21x18AUartHal,
-  .dioHal = &arduinoSamD21x18ADioHal,
-  .spiHal = &arduinoSamD21x18ASpiHal,
-  .clockHal = &arduinoSamD21x18AClockHal,
-  .powerHal = &arduinoSamD21x18APowerHal,
-  .timerHal = &arduinoSamD21x18ATimerHal,
+  .memory = &arduinoSamD21x18AMemoryHal,
+  .uart = &arduinoSamD21x18AUartHal,
+  .dio = &arduinoSamD21x18ADioHal,
+  .spi = &arduinoSamD21x18ASpiHal,
+  .clock = &arduinoSamD21x18AClockHal,
+  .power = &arduinoSamD21x18APowerHal,
+  .timer = &arduinoSamD21x18ATimerHal,
   
   // Root storage configuration.
   .initRootStorage = arduinoSamD21x18AInitRootStorage,
@@ -1079,7 +1088,7 @@ const Hal* halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
 
   extern char __bss_end__;
   if (((uintptr_t) &__bss_end__)
-    > ((uintptr_t) arduinoSamD21x18AHal.overlayMap)
+    > ((uintptr_t) arduinoSamD21x18AHal.memory->overlayMap)
   ) {
     int stackPosition = 0;
     Serial.begin(1000000);
@@ -1087,7 +1096,7 @@ const Hal* halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
     Serial.print("ERROR!!! 0x");
     Serial.print((uintptr_t) &__bss_end__, HEX);
     Serial.print(" > 0x");
-    Serial.print((uintptr_t) arduinoSamD21x18AHal.overlayMap, HEX);
+    Serial.print((uintptr_t) arduinoSamD21x18AHal.memory->overlayMap, HEX);
     Serial.print("\n");
     Serial.print("Stack position = 0x");
     Serial.print((uintptr_t) &stackPosition, HEX);

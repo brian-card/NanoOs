@@ -62,17 +62,90 @@ struct timespec;
 typedef struct NanoOsOverlayMap NanoOsOverlayMap;
 typedef struct SchedulerState SchedulerState;
 
+typedef struct HalMemory {
+  /// @fn uintptr_t processStackSize(bool debug)
+  ///
+  /// @brief The size of a regular process's stack.
+  ///
+  /// @param debug Whether or not the debug stack size for processes should
+  ///   be used.
+  ///
+  /// Returns the size of the stack to use for all non-memory manager
+  /// processes in bytes.  This function never fails.
+  uintptr_t (*processStackSize)(bool debug);
+  
+  /// @fn uintptr_t memoryManagerStackSize(bool debug)
+  ///
+  /// @brief The size of the memory manager process's stack.
+  ///
+  /// @param debug Whether or not the memory manager's debug stack size should
+  ///   be used so that debug prints can work correclty without corrupting the
+  ///   stack.
+  ///
+  /// @return Returns the size of the stack to use for the memory manager.
+  /// This call never fails.
+  uintptr_t (*memoryManagerStackSize)(bool debug);
+  
+  /// @fn void* bottomOfHeap(void)
+  ///
+  /// @brief The memmory manager needs to know where the bottom of the heap is
+  /// so that it knows where to start allocating memory.
+  ///
+  /// @param debug Whether or not the debug bottom of heap should be used.
+  ///
+  /// @return Returns the address of the bottom of the heap.   This call never
+  /// fails.
+  void* (*bottomOfHeap)(bool debug);
+  
+  /// @fn uint8_t numExtraSchedulerStacks(bool debug)
+  ///
+  /// @brief Get the number of extra scheduler stacks that need to be
+  /// provisioned during startup.
+  ///
+  /// @param debug Whether or not the debug number of extra scheduler stacks
+  ///   should be used.
+  ///
+  /// Returns the number of extra scheduler stacks that need to be provisioned
+  /// when starting the scheduler.  This function never fails.
+  uint8_t (*numExtraSchedulerStacks)(bool debug);
+  
+  /// @fn uint8_t numExtraConsoleStacks(bool debug)
+  ///
+  /// @brief Get the number of extra console stacks that need to be provisioned
+  /// during startup.
+  ///
+  /// @param debug Whether or not the debug number of extra console stacks
+  ///   should be used.
+  ///
+  /// Returns the number of extra console stacks that need to be provisioned
+  /// when starting the scheduler.  This function never fails.
+  uint8_t (*numExtraConsoleStacks)(bool debug);
+  
+  // Overlay definitions.
+  
+  /// @var overlayMap
+  ///
+  /// @brief Memory address where overlays will be loaded.
+  NanoOsOverlayMap *overlayMap;
+  
+  /// @var overlaySize
+  ///
+  /// @brief The number of bytes available for the overlay.  This may be 0 on
+  /// systems that don't support overlays.
+  uintptr_t overlaySize;
+} HalMemory;
+  
 typedef struct HalUart {
-  /// @fn int getNumUarts(void)
+  /// @fn int getNum(void)
   ///
   /// @brief Get the number of addressable and configurable serial ports on the
   /// system.
   ///
   /// @return Returns the number of serial ports on the system (which may be 0)
   /// on success, -errno on failure.
-  int (*getNumUarts)(void);
+  int (*getNum)(void);
   
-  /// @fn int setNumUarts(int numUarts)
+  /// @fn int setNum(int numUarts)
   ///
   /// @brief Set the number of serial ports that is to be returned by
   /// getNumUarts.
@@ -83,9 +156,9 @@ typedef struct HalUart {
   ///   the function is to return.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int (*setNumUarts)(int numUarts);
+  int (*setNum)(int numUarts);
   
-  /// @fn initUart(int port, int32_t baud)
+  /// @fn init(int port, int32_t baud)
   ///
   /// @brief Initialize a hardware serial port.
   ///
@@ -93,9 +166,9 @@ typedef struct HalUart {
   /// @param baud The desired baud rate of the port.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int (*initUart)(int port, int32_t baud);
+  int (*init)(int port, int32_t baud);
   
-  /// @fn int pollUart(int port)
+  /// @fn int poll(int port)
   ///
   /// @brief Poll a serial port for a single byte of data.
   ///
@@ -103,9 +176,9 @@ typedef struct HalUart {
   ///
   /// @return Returns the byte read, cast to an int, on success, -errno on
   /// failure.
-  int (*pollUart)(int port);
+  int (*poll)(int port);
   
-  /// @fn ssize_t writeUart(int port, const uint8_t *data, ssize_t length)
+  /// @fn ssize_t write(int port, const uint8_t *data, ssize_t length)
   ///
   /// @brief Write data to a serial port.
   ///
@@ -116,7 +189,7 @@ typedef struct HalUart {
   ///   data pointer.
   ///
   /// @return Returns the number of bytes written on success, -errno on failure.
-  ssize_t (*writeUart)(int port, const uint8_t *data, ssize_t length);
+  ssize_t (*write)(int port, const uint8_t *data, ssize_t length);
 } HalUart;
 
 typedef struct HalDio {
@@ -386,85 +459,47 @@ typedef struct HalTimer {
 } HalTimer;
 
 typedef struct Hal {
-  // Memory definitions.
+  /// @var memory
+  ///
+  /// @brief Pointer to the HalMemory managed by the HAL, or NULL if there isn't
+  /// one.  In the case of this HAL, there should always be one.
+  HalMemory *memory;
   
-  /// @fn uintptr_t processStackSize(void)
-  ///
-  /// @brief The size of a regular process's stack.
-  ///
-  /// Returns the size of the stack to use for all non-memory manager
-  /// processes in bytes.  This function never fails.
-  uintptr_t (*processStackSize)(void);
-  
-  /// @fn uintptr_t memoryManagerStackSize(bool debug)
-  ///
-  /// @brief The size of the memory manager process's stack.
-  ///
-  /// @param debug Whether or not the memory manager's debug stack size should
-  ///   be used so that debug prints can work correclty without corrupting the
-  ///   stack.
-  ///
-  /// @return Returns the size of the stack to use for the memory manager.
-  /// This call never fails.
-  uintptr_t (*memoryManagerStackSize)(bool debug);
-  
-  /// @fn void* bottomOfHeap(void)
-  ///
-  /// @brief The memmory manager needs to know where the bottom of the heap is
-  /// so that it knows where to start allocating memory.
-  ///
-  /// @return Returns the address of the bottom of the heap.   This call never
-  /// fails.
-  void* (*bottomOfHeap)(void);
-  
-  // Overlay definitions.
-  
-  /// @var overlayMap
-  ///
-  /// @brief Memory address where overlays will be loaded.
-  NanoOsOverlayMap *overlayMap;
-  
-  /// @var overlaySize
-  ///
-  /// @brief The number of bytes available for the overlay.  This may be 0 on
-  /// systems that don't support overlays.
-  uintptr_t overlaySize;
-  
-  /// @var uartHal
+  /// @var uart
   ///
   /// @brief Pointer to the HalUart managed by the HAL, or NULL if there
   /// isn't one.
-  HalUart *uartHal;
+  HalUart *uart;
   
-  /// @var dioHal
+  /// @var dio
   ///
   /// @brief Pointer to the HalDio managed by the HAL, or NULL if there isn't
   /// one.
-  HalDio *dioHal;
+  HalDio *dio;
   
-  /// @var spiHal
+  /// @var spi
   ///
   /// @brief Pointer to the HalSpi managed by the HAL, or NULL if there isn't
   /// one.
-  HalSpi *spiHal;
+  HalSpi *spi;
   
-  /// @var clockHal
+  /// @var clock
   ///
   /// @brief Pointer to the HalClock managed by the HAL, or NULL if there isn't
   /// one.
-  HalClock *clockHal;
+  HalClock *clock;
   
-  /// @var powerHal
+  /// @var power
   ///
   /// @brief Pointer to the HalPower managed by the HAL, or NULL if there isn't
   /// one.
-  HalPower *powerHal;
+  HalPower *power;
   
-  /// @var timerHal
+  /// @var timer
   ///
   /// @brief Pointer to the HalTimer managed by HAL, or NULL if there isn't
   /// one.
-  HalTimer *timerHal;
+  HalTimer *timer;
   
   // Root storage configuration.
   

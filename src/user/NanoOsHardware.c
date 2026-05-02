@@ -38,11 +38,11 @@
 int nanoOsHardwareShutdown(NanoOsShutdownType shutdownType) {
   int returnValue = 0;
   
-  if (HAL->powerHal != NULL) {
+  if (HAL->power != NULL) {
     switch (shutdownType) {
       case NANO_OS_SHUTDOWN_OFF:
         {
-          HAL->powerHal->shutdown(HAL_SHUTDOWN_OFF);
+          HAL->power->shutdown(HAL_SHUTDOWN_OFF);
         }
         break;
       
@@ -50,19 +50,19 @@ int nanoOsHardwareShutdown(NanoOsShutdownType shutdownType) {
         {
           // Store RAM on disk and then power off.
           // TODO: Store RAM on disk.
-          HAL->powerHal->shutdown(HAL_SHUTDOWN_OFF);
+          HAL->power->shutdown(HAL_SHUTDOWN_OFF);
         }
         break;
       
       case NANO_OS_SHUTDOWN_SUSPEND:
         {
-          HAL->powerHal->shutdown(HAL_SHUTDOWN_SUSPEND);
+          HAL->power->shutdown(HAL_SHUTDOWN_SUSPEND);
         }
         break;
       
       case NANO_OS_SHUTDOWN_RESET:
         {
-          HAL->powerHal->shutdown(HAL_SHUTDOWN_RESET);
+          HAL->power->shutdown(HAL_SHUTDOWN_RESET);
         }
         break;
       
