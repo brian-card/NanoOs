@@ -37,7 +37,6 @@
 #include "HalCommon.h"
 #include "SdCardPosix.h"
 #include "user/NanoOsErrno.h"
-#include "kernel/ExFatFilesystem.h"
 #include "kernel/Filesystem.h"
 #include "kernel/NanoOs.h"
 #include "kernel/Scheduler.h"
