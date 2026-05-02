@@ -31,7 +31,7 @@
 
 #if defined(ADAFRUIT_ITSYBITSY_M0)
 
-#include "../kernel/Hal.h"
+#include "HalAdafruitItsyBitsyM0.h"
 #include "HalArduinoSamD21x18A.h"
 #include "HalCommon.h"
 
