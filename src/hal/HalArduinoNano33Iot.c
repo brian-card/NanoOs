@@ -31,7 +31,6 @@
 
 #if defined(ARDUINO_SAMD_NANO_33_IOT)
 
-#include "HalArduinoNano33Iot.h"
 #include "HalArduinoSamD21x18A.h"
 #include "HalCommon.h"
 

@@ -31,7 +31,6 @@
 
 #if defined(ARDUINO_SEEED_XIAO_M0)
 
-#include "HalSeeedXiaoM0.h"
 #include "HalArduinoSamD21x18A.h"
 #include "HalCommon.h"
 

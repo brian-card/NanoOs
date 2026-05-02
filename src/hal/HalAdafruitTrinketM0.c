@@ -31,7 +31,6 @@
 
 #if defined(ADAFRUIT_TRINKET_M0)
 
-#include "HalAdafruitTrinketM0.h"
 #include "HalArduinoSamD21x18A.h"
 #include "HalCommon.h"
 

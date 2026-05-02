@@ -31,7 +31,6 @@
 
 #if defined(ADAFRUIT_FEATHER_M0)
 
-#include "HalAdafruitFeatherM0Wifi.h"
 #include "HalArduinoSamD21x18A.h"
 #include "HalCommon.h"
 
