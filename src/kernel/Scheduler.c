@@ -2813,9 +2813,9 @@ int schedulerSpawnCommandHandler(
     = allProcesses[pid(processMessageFrom(processMessage)) - 1].userId;
 
   processDescriptor->numFileDescriptors = NUM_STANDARD_FILE_DESCRIPTORS;
-  // Use calloc for processDescriptor->fileDescriptors in case we fail to allocate
-  // one of the FileDescriptor pointers later and have to free the elements of
-  // the array.  It's safe to pass NULL to free().
+  // Use calloc for processDescriptor->fileDescriptors in case we fail to
+  // allocate one of the FileDescriptor pointers later and have to free the
+  // elements of the array.  It's safe to pass NULL to free().
   processDescriptor->fileDescriptors = (FileDescriptor**) schedCalloc(1,
     NUM_STANDARD_FILE_DESCRIPTORS * sizeof(FileDescriptor*));
   if (processDescriptor->fileDescriptors == NULL) {
@@ -3454,9 +3454,9 @@ int schedulerRunOverlayCommand(
   }
 
   processDescriptor->numFileDescriptors = NUM_STANDARD_FILE_DESCRIPTORS;
-  // Use calloc for processDescriptor->fileDescriptors in case we fail to allocate
-  // one of the FileDescriptor pointers later and have to free the elements of
-  // the array.  It's safe to pass NULL to free().
+  // Use calloc for processDescriptor->fileDescriptors in case we fail to
+  // allocate one of the FileDescriptor pointers later and have to free the
+  // elements of the array.  It's safe to pass NULL to free().
   processDescriptor->fileDescriptors = (FileDescriptor**) schedCalloc(1,
     NUM_STANDARD_FILE_DESCRIPTORS * sizeof(FileDescriptor*));
   if (processDescriptor->fileDescriptors == NULL) {
