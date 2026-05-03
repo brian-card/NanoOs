@@ -48,8 +48,11 @@
 #define CMD8    0x48  // SEND_IF_COND
 #define CMD9    0x49  // SEND_CSD
 #define CMD16   0x50  // SET_BLOCKLEN
+#define CMD12   0x4C  // STOP_TRANSMISSION
 #define CMD17   0x51  // READ_SINGLE_BLOCK
+#define CMD18   0x52  // READ_MULTIPLE_BLOCK
 #define CMD24   0x58  // WRITE_BLOCK
+#define CMD25   0x59  // WRITE_MULTIPLE_BLOCK
 #define CMD58   0x7A  // READ_OCR
 #define CMD55   0x77  // APP_CMD
 #define ACMD41  0x69  // SD_SEND_OP_COND
@@ -201,10 +204,15 @@ int sdSpiCardInit(SdCardSpiArgs *sdCardSpiArgs) {
   return isSDv2 ? 2 : 1;
 }
 
-/// @fn bool sdSpiReadBlocks(SdCardState *sdCardState,
+/// @fn int sdSpiReadBlocks(SdCardState *sdCardState,
 ///   uint32_t startBlock, uint32_t numBlocks, uint8_t *buffer)
 ///
 /// @brief Read blocks from an SD card into a buffer.
+///
+/// @details For single-block reads this function uses CMD17
+/// (READ_SINGLE_BLOCK).  For multi-block reads it issues CMD18
+/// (READ_MULTIPLE_BLOCK) once and terminates the transfer with CMD12
+/// (STOP_TRANSMISSION), avoiding per-block command overhead.
 ///
 /// @param sdCardState A pointer to the SdCardState object maintained by the
 ///   runSdCard task.
@@ -221,19 +229,20 @@ int sdSpiReadBlocks(SdCardState *sdCardState,
     return EINVAL;
   }
   
+  uint32_t address = startBlock;
+  if (sdCardState->sdCardVersion == 1) {
+    address *= sdCardState->blockSize; // Convert to byte address
+  }
+  
+  // Choose the appropriate read command.
+  uint8_t readCmd = (numBlocks == 1) ? CMD17 : CMD18;
+  uint8_t response = sdSpiSendCommand(SD_CARD_SPI_DEVICE, readCmd, address);
+  if (response != 0x00) {
+    HAL->spi->endTransfer(SD_CARD_SPI_DEVICE);
+    return EIO; // Command failed
+  }
+  
   for (uint32_t ii = 0; ii < numBlocks; ii++) {
-    uint32_t address = startBlock;
-    if (sdCardState->sdCardVersion == 1) {
-      address *= sdCardState->blockSize; // Convert to byte address
-    }
-    
-    // Send READ_SINGLE_BLOCK command
-    uint8_t response = sdSpiSendCommand(SD_CARD_SPI_DEVICE, CMD17, address);
-    if (response != 0x00) {
-      HAL->spi->endTransfer(SD_CARD_SPI_DEVICE);
-      return EIO; // Command failed
-    }
-    
     // Wait for data token (0xFE)
     uint16_t timeout = 10000;
     while (timeout--) {
@@ -242,6 +251,12 @@ int sdSpiReadBlocks(SdCardState *sdCardState,
         break;
       }
       if (timeout == 0) {
+        // On a multi-block read we must still try to stop transmission.
+        if (numBlocks > 1) {
+          sdSpiSendCommand(SD_CARD_SPI_DEVICE, CMD12, 0);
+          // Discard the stuff byte that follows the CMD12 response.
+          HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFF);
+        }
         HAL->spi->endTransfer(SD_CARD_SPI_DEVICE);
         return EIO;  // Timeout waiting for data
       }
@@ -252,8 +267,12 @@ int sdSpiReadBlocks(SdCardState *sdCardState,
     if (HAL->spi->transferBytes(
       SD_CARD_SPI_DEVICE, buffer, sdCardState->blockSize) != 0
     ) {
+      if (numBlocks > 1) {
+        sdSpiSendCommand(SD_CARD_SPI_DEVICE, CMD12, 0);
+        HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFF);
+      }
       HAL->spi->endTransfer(SD_CARD_SPI_DEVICE);
-      return EIO; // Command failed
+      return EIO; // Transfer failed
     }
     
     // Read CRC (2 bytes, ignored)
@@ -261,7 +280,13 @@ int sdSpiReadBlocks(SdCardState *sdCardState,
     HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFF);
     
     buffer += sdCardState->blockSize;
-    startBlock++;
+  }
+  
+  // For multi-block reads, send CMD12 (STOP_TRANSMISSION) to end the stream.
+  if (numBlocks > 1) {
+    response = sdSpiSendCommand(SD_CARD_SPI_DEVICE, CMD12, 0);
+    // Discard the stuff byte that follows the CMD12 response.
+    HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFF);
   }
   
   HAL->spi->endTransfer(SD_CARD_SPI_DEVICE);
@@ -272,6 +297,11 @@ int sdSpiReadBlocks(SdCardState *sdCardState,
 ///   uint32_t startBlock, uint32_t numBlocks, uint8_t *buffer)
 /// 
 /// @brief Write a buffer of blocks to an SD card.
+///
+/// @details For single-block writes this function uses CMD24 (WRITE_BLOCK).
+/// For multi-block writes it issues CMD25 (WRITE_MULTIPLE_BLOCK) once and
+/// terminates the transfer with a Stop Tran token (0xFD), avoiding per-block
+/// command overhead.
 ///
 /// @param sdCardState A pointer to the SdCardState object maintained by the
 ///   runSdCard task.
@@ -298,36 +328,49 @@ int sdSpiWriteBlocks(SdCardState *sdCardState,
     return EIO;
   }
   
+  uint32_t address = startBlock;
+  if (sdCardState->sdCardVersion == 1) {
+    address *= sdCardState->blockSize; // Convert to byte address
+  }
+  
+  // Choose the appropriate write command and data token.
+  uint8_t writeCmd = (numBlocks == 1) ? CMD24 : CMD25;
+  // CMD24 uses 0xFE as the start token; CMD25 uses 0xFC.
+  uint8_t startToken = (numBlocks == 1) ? 0xFE : 0xFC;
+  
+  response = sdSpiSendCommand(SD_CARD_SPI_DEVICE, writeCmd, address);
+  if (response != 0x00) {
+    HAL->spi->endTransfer(SD_CARD_SPI_DEVICE);
+    return EIO; // Command failed
+  }
+  
   for (uint32_t ii = 0; ii < numBlocks; ii++) {
-    uint32_t address = startBlock;
-    if (sdCardState->sdCardVersion == 1) {
-      address *= sdCardState->blockSize; // Convert to byte address
-    }
-    
-    // Send WRITE_BLOCK command
-    response = sdSpiSendCommand(SD_CARD_SPI_DEVICE, CMD24, address);
-    if (response != 0x00) {
-      HAL->spi->endTransfer(SD_CARD_SPI_DEVICE);
-      return EIO; // Command failed
-    }
-    
     // Wait for card to be ready before sending data
     uint16_t timeout = 10000;
     do {
       response = HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFF);
       if (--timeout == 0) {
+        if (numBlocks > 1) {
+          // Send Stop Tran token to abort the multi-block write.
+          HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFD);
+          HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFF);
+        }
         HAL->spi->endTransfer(SD_CARD_SPI_DEVICE);
         return EIO;
       }
     } while (response != 0xFF);
     
     // Send start token
-    HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFE);
+    HAL->spi->transfer8(SD_CARD_SPI_DEVICE, startToken);
     
     // Write data
     if (HAL->spi->transferBytes(
       SD_CARD_SPI_DEVICE, buffer, sdCardState->blockSize) != 0
     ) {
+      if (numBlocks > 1) {
+        HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFD);
+        HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFF);
+      }
       HAL->spi->endTransfer(SD_CARD_SPI_DEVICE);
       return EIO; // Bad response
     }
@@ -339,24 +382,48 @@ int sdSpiWriteBlocks(SdCardState *sdCardState,
     // Get data response
     response = HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFF);
     if ((response & 0x1F) != 0x05) {
+      if (numBlocks > 1) {
+        HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFD);
+        HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFF);
+      }
       HAL->spi->endTransfer(SD_CARD_SPI_DEVICE);
       return EIO; // Bad response
     }
     
-    // Wait for write to complete
+    // Wait for write to complete (card holds MISO low while busy)
     timeout = 10000;
     while (timeout--) {
       if (HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFF) != 0x00) {
         break;
       }
       if (timeout == 0) {
+        if (numBlocks > 1) {
+          HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFD);
+          HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFF);
+        }
         HAL->spi->endTransfer(SD_CARD_SPI_DEVICE);
         return EIO; // Write timeout
       }
     }
     
     buffer += sdCardState->blockSize;
-    startBlock++;
+  }
+  
+  // For multi-block writes, send the Stop Tran token (0xFD) and wait for the
+  // card to finish programming.
+  if (numBlocks > 1) {
+    HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFD);
+    // Wait for card to leave busy state.
+    uint16_t timeout = 10000;
+    while (timeout--) {
+      if (HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFF) != 0x00) {
+        break;
+      }
+      if (timeout == 0) {
+        HAL->spi->endTransfer(SD_CARD_SPI_DEVICE);
+        return EIO;
+      }
+    }
   }
   
   HAL->spi->endTransfer(SD_CARD_SPI_DEVICE);
