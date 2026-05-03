@@ -157,7 +157,7 @@ typedef union CoroutineFuncData {
 ///
 /// @param guard1 A well-known value to check for state corruption (stack
 ///   overflow).
-/// @param nextInList Pointer to the next Coroutine in the list.
+/// @param nextInStack Pointer to the next Coroutine in the list.
 /// @param context The jmp_buf to hold the context of the coroutine.
 /// @param priv Any private context for the Coroutine.
 /// @param state The state of the coroutine.  (See enum above.)
@@ -180,7 +180,7 @@ typedef union CoroutineFuncData {
 ///   overflow).
 typedef struct Coroutine {
   uint32_t guard1;
-  struct Coroutine *nextInList;
+  struct Coroutine *nextInStack;
   jmp_buf context;
   void *priv;
   CoroutineState state;
@@ -232,7 +232,7 @@ int64_t coroutineGetNanoseconds(const struct timespec *ts);
 /// @return Returns false when the coroutine has run to completion or when it is
 /// blocked inside coroutineResume() and true otherwise.
 #define coroutineResumable(coroutinePointer) \
-  (((coroutinePointer) != NULL) && ((coroutinePointer)->nextInList == NULL))
+  (((coroutinePointer) != NULL) && ((coroutinePointer)->nextInStack == NULL))
 
 /// @def coroutineFinished(coroutinePointer)
 ///

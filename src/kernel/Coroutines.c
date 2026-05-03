@@ -237,7 +237,7 @@ int64_t coroutineGetNanoseconds(const struct timespec *ts) {
 /// @param Returns the previous head of the list.
 void coroutineGlobalPush(Coroutine** list, Coroutine* coroutine) {
   if ((list != NULL) && (coroutine != NULL)) {
-    coroutine->nextInList = *list;
+    coroutine->nextInStack = *list;
     *list = coroutine;
   }
 }
@@ -254,8 +254,8 @@ Coroutine* coroutineGlobalPop(Coroutine** list) {
 
   if (list != NULL) {
     coroutine = *list;
-    *list = coroutine->nextInList;
-    coroutine->nextInList = NULL;
+    *list = coroutine->nextInStack;
+    coroutine->nextInStack = NULL;
   }
 
   return coroutine;
@@ -277,26 +277,26 @@ Coroutine* coroutineGlobalPopAndReplace(Coroutine** list, Coroutine *newHead) {
   if ((list != NULL) && (coroutine != NULL)) {
     coroutine = *list;
 
-    if (coroutine->nextInList == newHead) {
+    if (coroutine->nextInStack == newHead) {
       // The expected usual case.
-      *list = coroutine->nextInList;
+      *list = coroutine->nextInStack;
     } else {
-      Coroutine **prev = &coroutine->nextInList;
-      Coroutine *cur = coroutine->nextInList;
+      Coroutine **prev = &coroutine->nextInStack;
+      Coroutine *cur = coroutine->nextInStack;
       while ((cur != NULL) && (cur != newHead)) {
-        prev = &cur->nextInList;
-        cur = cur->nextInList;
+        prev = &cur->nextInStack;
+        cur = cur->nextInStack;
       }
       if (cur != NULL) {
-        *prev = cur->nextInList;
-        cur->nextInList = coroutine->nextInList;
+        *prev = cur->nextInStack;
+        cur->nextInStack = coroutine->nextInStack;
         *list = cur;
       } else {
-        *list = coroutine->nextInList;
+        *list = coroutine->nextInStack;
       }
     }
 
-    coroutine->nextInList = NULL;
+    coroutine->nextInStack = NULL;
   }
 
   return coroutine;
@@ -509,7 +509,7 @@ bool coroutineInitializeThreadMetadata(Coroutine *first) {
 /// @param Returns the previous head of the list.
 void coroutineTssPush(tss_t* list, Coroutine* coroutine) {
   if ((list != NULL) && (coroutine != NULL)) {
-    coroutine->nextInList = (Coroutine*) tss_get(*list);
+    coroutine->nextInStack = (Coroutine*) tss_get(*list);
     tss_set(*list, coroutine);
   }
 }
@@ -526,8 +526,8 @@ Coroutine* coroutineTssPop(tss_t* list) {
 
   if (list != NULL) {
     coroutine = (Coroutine*) tss_get(*list);
-    tss_set(*list, coroutine->nextInList);
-    coroutine->nextInList = NULL;
+    tss_set(*list, coroutine->nextInStack);
+    coroutine->nextInStack = NULL;
   }
 
   return coroutine;
@@ -548,27 +548,27 @@ Coroutine* coroutineTssPopAndReplace(tss_t* list, Coroutine *coroutine) {
   if ((list != NULL) && (coroutine != NULL)) {
     coroutine = (Coroutine*) tss_get(*list);
 
-    if (coroutine->nextInList == newHead) {
+    if (coroutine->nextInStack == newHead) {
       // The expected usual case.
-      tss_set(*list, coroutine->nextInList);
+      tss_set(*list, coroutine->nextInStack);
     } else {
-      Coroutine **prev = &coroutine->nextInList;
-      Coroutine *cur = coroutine->nextInList;
+      Coroutine **prev = &coroutine->nextInStack;
+      Coroutine *cur = coroutine->nextInStack;
       while ((cur != NULL) && (cur != newHead)) {
-        prev = &cur->nextInList;
-        cur = cur->nextInList;
+        prev = &cur->nextInStack;
+        cur = cur->nextInStack;
       }
       if (cur != NULL) {
-        *prev = cur->nextInList;
-        cur->nextInList = coroutine->nextInList;
+        *prev = cur->nextInStack;
+        cur->nextInStack = coroutine->nextInStack;
         tss_set(*list, cur);
       } else {
-        *list = coroutine->nextInList;
-        tss_set(*list, coroutine->nextInList);
+        *list = coroutine->nextInStack;
+        tss_set(*list, coroutine->nextInStack);
       }
     }
 
-    coroutine->nextInList = NULL;
+    coroutine->nextInStack = NULL;
   }
 
   return coroutine;
@@ -999,9 +999,9 @@ Coroutine* coroutineInit(Coroutine *userCoroutine,
     if (idle != userCoroutine) {
       // Go through the list until we find the couroutine and adjust
       // accordingly.
-      for (Coroutine *cur = idle; cur != NULL; cur = cur->nextInList) {
-        if (cur->nextInList == userCoroutine) {
-          cur->nextInList = userCoroutine->nextInList;
+      for (Coroutine *cur = idle; cur != NULL; cur = cur->nextInStack) {
+        if (cur->nextInStack == userCoroutine) {
+          cur->nextInStack = userCoroutine->nextInStack;
           found = true;
           break;
         }
@@ -1357,10 +1357,10 @@ int coroutineTerminate(Coroutine *targetCoroutine, Comutex **mutexes) {
   }
 
   Coroutine* prev = NULL;
-  for (; running != NULL; running = running->nextInList) {
+  for (; running != NULL; running = running->nextInStack) {
     if (running == targetCoroutine) {
       if (prev != NULL) {
-        prev->nextInList = targetCoroutine->nextInList;
+        prev->nextInStack = targetCoroutine->nextInStack;
       } else {
         // The target coroutine is the top of the running stack.
         coroutinePopRunning();
