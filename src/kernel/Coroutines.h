@@ -196,28 +196,28 @@ typedef struct Coroutine {
   uint32_t guard2;
 } Coroutine, coro_s, *coro_t;
 
-/// @struct CoroutineConfigOptions
+/// @struct CoroutinesConfigOptions
 ///
-/// @brief Configuration options for coroutineConfig().
+/// @brief Configuration options for coroutinesConfig().
 ///
 /// @param stackSize The desired minimum size, in bytes, of each coroutine's
 ///   stack.  Actual size will be slightly larger than this.  If this value is
 ///   < COROUTINE_STACK_CHUNK_SIZE, COROUTINE_DEFAULT_STACK_SIZE will be used.
 /// @param stateData A pointer to arbitrary state data that will be passed to
 ///   the callbacks.  This parameter is optional and may be NULL.
-/// @param coroutineYieldCallback A function to call when a coroutine yields.
+/// @param yieldCallback A function to call when a coroutine yields.  This
+///   parameter is optional and may be NULL.
+/// @param unlockCallback A function to call when a comutex is unlocked.  This
+///   parameter is optional and may be NULL.
+/// @param signalCallback A function to call when a cocondition is signaled.
 ///   This parameter is optional and may be NULL.
-/// @param comutexUnlockCallback A function to call when a comutex is unlocked.
-///   This parameter is optional and may be NULL.
-/// @param coconditionSignalCallback A function to call when a cocondition is
-///   signalled.  This parameter is optional and may be NULL.
-typedef struct CoroutineConfigOptions {
+typedef struct CoroutinesConfigOptions {
   uintptr_t stackSize;
   void *stateData;
-  CoroutineYieldCallback coroutineYieldCallback;
-  ComutexUnlockCallback comutexUnlockCallback;
-  CoconditionSignalCallback coconditionSignalCallback;
-} CoroutineConfigOptions;
+  CoroutineYieldCallback yieldCallback;
+  ComutexUnlockCallback unlockCallback;
+  CoconditionSignalCallback signalCallback;
+} CoroutinesConfigOptions;
 
 // Support functions
 int64_t coroutineGetNanoseconds(const struct timespec *ts);
@@ -284,7 +284,7 @@ int64_t coroutineGetNanoseconds(const struct timespec *ts);
   coroutineContext(getRunningCoroutine())
 
 // Coroutine function prototypes.  Doxygen inline in source file.
-int coroutineConfig(Coroutine *first, CoroutineConfigOptions *options);
+int coroutinesConfig(Coroutine *first, CoroutinesConfigOptions *options);
 Coroutine* coroutineInit(Coroutine *userCoroutine,
   CoroutineFunction func, void *arg);
 int coroutineCreate(Coroutine **coroutine, CoroutineFunction func, void *arg);

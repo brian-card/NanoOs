@@ -102,7 +102,7 @@ typedef enum SchedulerReadyQueueType {
 /// @typedef Process
 ///
 /// @brief Definition of the Process object used by the OS.
-typedef Coroutine* Thread;
+typedef Coroutine Thread;
 
 /// @typedef ProcessId
 ///
@@ -197,8 +197,8 @@ typedef struct ProcessQueue ProcessQueue;
 ///
 /// @param name The name of the command as stored in its CommandEntry or as
 ///   set by the scheduler at launch.
-/// @param mainThread A Thread that manages the running command's execution
-///   state.
+/// @param mainThread A pointer to a Thread that manages the running command's
+///   execution state.
 /// @param pid The numerical ID of the process.
 /// @param userId The numerical ID of the user that is running the process.
 /// @param numFileDescriptors The number of FileDescriptor objects contained by
@@ -210,25 +210,25 @@ typedef struct ProcessQueue ProcessQueue;
 ///   block device.
 /// @param envp A pointer to the array of NULL-terminated environment variable
 ///   strings.
-/// @param processQueue The process queue that the descriptor is currently in.  This
-///   will be NULL if the process is currently running (in no queue).
+/// @param processQueue The process queue that the descriptor is currently in.
+///   This will be NULL if the process is currently running (in no queue).
 /// @param readyQueue The ready queue that the descriptor is to be assigned to
 ///   when the process transitions to ready.
 /// @param message The default, statically-allocated message for the process to use
 ///   to send to other processes.
 typedef struct ProcessDescriptor {
   const char         *name;
-  Thread              mainThread;
-  ProcessId              pid;
+  Thread             *mainThread;
+  ProcessId           pid;
   UserId              userId;
   uint8_t             numFileDescriptors;
   FileDescriptor    **fileDescriptors;
   char               *overlayDir;
   FileBlockMetadata   overlay;
   char              **envp;
-  ProcessQueue          *processQueue;
-  ProcessQueue          *readyQueue;
-  ProcessMessage         message;
+  ProcessQueue       *processQueue;
+  ProcessQueue       *readyQueue;
+  ProcessMessage      message;
 } ProcessDescriptor;
 
 /// @struct ProcessInfoElement

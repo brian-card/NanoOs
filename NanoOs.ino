@@ -29,6 +29,7 @@
 #include "src/hal/HalArduinoSamD21x18A.h"
 #include "src/hal/HalArduinoNanoEvery.h"
 #include "src/kernel/NanoOs.h"
+#include "src/kernel/Processes.h"
 #include "src/kernel/Scheduler.h"
 #include "src/kernel/SdCardSpi.h"
 #include "src/user/NanoOsLibC.h"
@@ -38,7 +39,7 @@ const Hal *HAL = NULL;
 
 // The setup function runs once when you press reset or power the board.  This
 // is to be used for Arduino-specific setup.  *ANYTHING* that requires use of
-// coroutines needs to be done in the loop function.
+// threads needs to be done in the loop function.
 void setup() {
 #if defined(__SAMD21G18A__) || defined(__SAMD21E18A__)
   HAL = halArduinoSamD21x18AImplInit();
@@ -60,8 +61,8 @@ void setup() {
 
 // In a normal Arduino sketch, the loop function runs over and over again
 // forever.  For NanoOs, it will be called once and never exit.  This is because
-// we want to do everything related to coroutines in this stack.  The reason
-// we want to do this is because we want to hide as much of the coroutine
+// we want to do everything related to threads in this stack.  The reason
+// we want to do this is because we want to hide as much of the thread
 // metadata storage as we can within the stack of the main loop.  Every stack,
 // including the stack for the main loop, is HAL->memory->processStackSize()
 // bytes in size.  If we declare no variables in this stack, we're just wasting
@@ -74,39 +75,37 @@ void setup() {
 // within this call.
 void loop() {
   // SchedulerState pointer that we will have to populate in startScheduler.
-  SchedulerState *coroutineStatePointer = NULL;
+  SchedulerState *threadStatePointer = NULL;
 
-  // We want the address of the first coroutine to be as close to the base as
+  // We want the address of the first thread to be as close to the base as
   // possible.  Because of that, we need to create the first one before we enter
-  // the scheduler.  That means we need to allocate the main coroutine here,
+  // the scheduler.  That means we need to allocate the main thread here,
   // configure it, and then create and run one before we ever enter the
   // scheduler.
-  Coroutine _mainCoroutine;
-  schedulerThread = &_mainCoroutine;
-  CoroutineConfigOptions coroutineConfigOptions = {
+  Thread _mainThread;
+  schedulerThread = &_mainThread;
+  ThreadsConfigOptions threadsConfigOptions = {
     .stackSize = HAL->memory->processStackSize(USE_HAL_MEMORY_DEBUG),
-    .stateData = &coroutineStatePointer,
-    .coroutineYieldCallback = NULL,
-    .comutexUnlockCallback = comutexUnlockCallback,
-    .coconditionSignalCallback = coconditionSignalCallback,
+    .stateData = &threadStatePointer,
+    .yieldCallback = NULL,
+    .unlockCallback = unlockCallback,
+    .signalCallback = signalCallback,
   };
   if ((HAL->timer != NULL) && (HAL->timer->getNum() > 0)) {
-    coroutineConfigOptions.coroutineYieldCallback = coroutineYieldCallback;
+    threadsConfigOptions.yieldCallback = yieldCallback;
   }
-  if (coroutineConfig(&_mainCoroutine, &coroutineConfigOptions)
-    != coroutineSuccess
-  ) {
-    printString("coroutineConfig failed.\n");
+  if (threadsConfig(&_mainThread, &threadsConfigOptions) != processSuccess) {
+    printString("threadConfig failed.\n");
     while(1);
   }
   // Create but *DO NOT* resume one dummy process.  This will set the size of
   // the main stack.
-  if (coroutineInit(NULL, dummyProcess, NULL) == NULL) {
+  if (threadProvision(NULL, dummyProcess, NULL) == NULL) {
     printString("Could not set scheduler process's stack size.\n");
   }
 
   // Enter the scheduler.  This never returns.
   printDebugString("Starting scheduler.\n");
-  startScheduler(&coroutineStatePointer);
+  startScheduler(&threadStatePointer);
 }
 

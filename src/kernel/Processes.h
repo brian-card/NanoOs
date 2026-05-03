@@ -98,6 +98,22 @@ extern "C"
 #define threadProvision(handle, func, arg) \
   coroutineInit(handle, func, arg)
 
+/// @def threadSetContext
+///
+/// @brief Function macro to set the context of a process handle.
+#define threadSetContext(thread, context) \
+  coroutineSetContext(thread, context)
+
+/// @def threadContext
+///
+/// @brief Get the context previously set on a thread.
+#define threadContext(thread) coroutineContext(thread)
+
+/// @def threadsConfig
+///
+/// @brief Configure the threads library.
+#define threadsConfig(first, options) coroutinesConfig(first, options)
+
 /// @def processCorrupted
 ///
 /// @brief Determine whether or not a process has become corrupted.
@@ -129,12 +145,6 @@ extern "C"
 /// @brief Function macro to get the state of a process given its handle.
 #define processState(processDescriptor) \
   coroutineState((processDescriptor)->mainThread)
-
-/// @def processSetContext
-///
-/// @brief Function macro to set the context of a process handle.
-#define threadSetContext(thread, context) \
-  coroutineSetContext(thread, context)
 
 /// @def processYield
 ///
@@ -250,6 +260,8 @@ extern "C"
   ((ProcessDescriptor*) coroutineContext(msg_to(processMessagePointer).coro))
 #define processMessageConfigured(processMessagePointer) \
   msg_configured(processMessagePointer)
+
+typedef CoroutinesConfigOptions ThreadsConfigOptions;
 
 // Exported functionality
 void* execCommand(void *args);

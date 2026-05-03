@@ -34,8 +34,8 @@
  * explanation.
  *
  * This approach makes use of two stacks:  A stack of running coroutines and a
- * stack of idle coroutines.  Prior to coroutineConfig being called, both stacks
- * are empty.  coroutineConfig initializes the running stack to the Coroutine
+ * stack of idle coroutines.  Prior to coroutinesConfig being called, both stacks
+ * are empty.  coroutinesConfig initializes the running stack to the Coroutine
  * passed in and sets the stack size that is to be used, but leaves the idle
  * stack alone.  The idle stack is not modified until the first call to
  * coroutineInit is made.  From that point on, there is always at least one
@@ -45,7 +45,7 @@
  * there is anything available.  The only time there won't be anything available
  * is on the first time this function is called (per thread).  If nothing is
  * available, coroutineAllocateStack is called with the stack size that was
- * provided to coroutineConfig.  This will allocate the remainder of the stack
+ * provided to coroutinesConfig.  This will allocate the remainder of the stack
  * for the main function, allocate a Coroutine structure, push a pointer to it
  * onto the idle stack, and then resume execution in coroutineInit.  If a
  * Coroutine is available when coroutineInit does its check, it simply pops
@@ -109,11 +109,11 @@
  * is achieved by recursively calling a function with a character buffer, which
  * means that the memory in those stacks will be touched during this process.
  * Effectively, the first time that coroutineInit is called, a little over 2X
- * the stack size provided to coroutineConfig is touched.  This can result in
+ * the stack size provided to coroutinesConfig is touched.  This can result in
  * a nasty surprise (i.e. a crash) in severely memory-constrained environments.
  *
  * One requirement of this system is that all the stacks must be the same size.
- * The stack size provided to coroutineConfig cannot be changed once the first
+ * The stack size provided to coroutinesConfig cannot be changed once the first
  * Coroutine has been created with coroutineInit.  This is because the size
  * of a stack for a Coroutine is actually provided to coroutineAllocateStack on
  * the call prior to the call that returns a usable Coroutine.  It would be very
@@ -1363,7 +1363,7 @@ bool coroutineThreadingSupportEnabled() {
 
 #endif // THREAD_SAFE_COROUTINES
 
-/// @fn int coroutineConfig(Coroutine *first, CoroutineConfigOptions *options)
+/// @fn int coroutinesConfig(Coroutine *first, CoroutinesConfigOptions *options)
 ///
 /// @brief Configure the global or thread-specific defaults for all coroutines
 /// allocated by the current thread.
@@ -1375,9 +1375,9 @@ bool coroutineThreadingSupportEnabled() {
 ///   NULL.  See the Doxygen for the structure in Coroutines.h for more details.
 ///
 /// @return Returns coroutineSuccess on success, coroutineError on error.
-int coroutineConfig(Coroutine *first, CoroutineConfigOptions *options) {
+int coroutinesConfig(Coroutine *first, CoroutinesConfigOptions *options) {
   if (first == NULL) {
-    fprintf(stderr, "NULL first provided to coroutineConfig.\n");
+    fprintf(stderr, "NULL first provided to coroutinesConfig.\n");
     return coroutineError;
   }
   
@@ -1406,32 +1406,32 @@ int coroutineConfig(Coroutine *first, CoroutineConfigOptions *options) {
 #ifdef THREAD_SAFE_COROUTINES
   if (_coroutineThreadingSupportEnabled) {
     if (tss_get(_tssFirst) != NULL) {
-      // coroutineConfig was already called once.  Everything has already been
+      // coroutinesConfig was already called once.  Everything has already been
       // configured, so we just need to reset _tssFirst and _tssRunning.
       if (first != NULL) {
         int status = tss_set(_tssFirst, first);
         if (status != thrd_success) {
           fprintf(stderr,
-            "Could not set _tssFirst to first in coroutineConfig.\n");
+            "Could not set _tssFirst to first in coroutinesConfig.\n");
           return coroutineError;
         }
         status = tss_set(_tssRunning, first);
         if (status != thrd_success) {
           fprintf(stderr,
-            "Could not set _tssRunning to first in coroutineConfig.\n");
+            "Could not set _tssRunning to first in coroutinesConfig.\n");
           return coroutineError;
         }
       }
     } else if (!coroutineInitializeThreadMetadata(first)) {
       fprintf(stderr,
-        "Could not initialize thread metadata in coroutineConfig.\n");
+        "Could not initialize thread metadata in coroutinesConfig.\n");
         return coroutineError;
     }
 
     tss_set(_tssStackSize, (void*) ((intptr_t) stackSize));
     if (options != NULL) {
       tss_set(_tssStateData, options->stateData);
-      if (options->coroutineYieldCallback != NULL) {
+      if (options->yieldCallback != NULL) {
         free(tss_get(_tssCoroutineYieldCallback));
         CoroutineYieldCallback *coroutineYieldCallbackPointer
           = (CoroutineYieldCallback*) malloc(sizeof(CoroutineYieldCallback));
@@ -1441,7 +1441,7 @@ int coroutineConfig(Coroutine *first, CoroutineConfigOptions *options) {
         tss_set(_tssCoroutineYieldCallback, NULL);
       }
 
-      if (options->comutexUnlockCallback != NULL) {
+      if (options->unlockCallback != NULL) {
         free(tss_get(_tssComutexUnlockCallback));
         ComutexUnlockCallback *comutexUnlockCallbackPointer
           = (ComutexUnlockCallback*) malloc(sizeof(ComutexUnlockCallback));
@@ -1451,7 +1451,7 @@ int coroutineConfig(Coroutine *first, CoroutineConfigOptions *options) {
         tss_set(_tssComutexUnlockCallback, NULL);
       }
 
-      if (options->coconditionSignalCallback != NULL) {
+      if (options->signalCallback != NULL) {
         free(tss_get(_tssCoconditionSignalCallback));
         CoconditionSignalCallback *coconditionSignalCallbackPointer
           = (CoconditionSignalCallback*)
@@ -1496,9 +1496,9 @@ int coroutineConfig(Coroutine *first, CoroutineConfigOptions *options) {
   _globalStackSize = stackSize;
   if (options != NULL) {
     _globalStateData = options->stateData;
-    _globalCoroutineYieldCallback = options->coroutineYieldCallback;
-    _globalComutexUnlockCallback = options->comutexUnlockCallback;
-    _globalCoconditionSignalCallback = options->coconditionSignalCallback;
+    _globalCoroutineYieldCallback = options->yieldCallback;
+    _globalComutexUnlockCallback = options->unlockCallback;
+    _globalCoconditionSignalCallback = options->signalCallback;
   } else {
     _globalStateData = NULL;
     _globalCoroutineYieldCallback = NULL;

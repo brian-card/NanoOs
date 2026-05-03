@@ -83,7 +83,7 @@ const char *_functionInProgress = NULL;
 ///
 /// @brief Pointer to the main process handle that's allocated before the
 /// scheduler is started.
-Thread schedulerThread = NULL;
+Thread *schedulerThread = NULL;
 
 /// @var allProcesses
 ///
@@ -313,28 +313,28 @@ int processQueueRemove(
   return returnValue;
 }
 
-// Coroutine callbacks.  ***DO NOT** do parameter validation.  These callbacks
-// are set when coroutineConfig is called.  If these callbacks are called at
+// Thread callbacks.  ***DO NOT** do parameter validation.  These callbacks
+// are set when threadConfig is called.  If these callbacks are called at
 // all (which they should be), then we should assume that things are configured
 // correctly.  This is in kernel space code, which we have full control over,
 // so we should assume that things are setup correctly.  If they're not setup
 // correctly, we should fix the configuration, not do parameter validation.
-// These callbacks - especially coroutineYieldCallback - are in the critical
+// These callbacks - especially yieldCallback - are in the critical
 // path.  Single cycles matter.  Don't waste more time than we need to.
 
-/// @fn void coroutineYieldCallback(void *stateData, Coroutine *coroutine)
+/// @fn void yieldCallback(void *stateData, Thread *thread)
 ///
-/// @brief Function to be called right before a coroutine yields.
+/// @brief Function to be called right before a thread yields.
 ///
-/// @param stateData The coroutine state pointer provided when coroutineConfig
+/// @param stateData The thread state pointer provided when threadConfig
 ///   was called.
-/// @param coroutine A pointer to the Coroutine structure representing the
-///   coroutine that's about to yield.  This parameter is unused by this
+/// @param thread A pointer to the Thread structure representing the
+///   thread that's about to yield.  This parameter is unused by this
 ///   function.
 ///
 /// @Return This function returns no value.
-void coroutineYieldCallback(void *stateData, Coroutine *coroutine) {
-  (void) coroutine;
+void yieldCallback(void *stateData, Thread *thread) {
+  (void) thread;
   SchedulerState *schedulerState = *((SchedulerState**) stateData);
   if (schedulerState == NULL) {
     // We're being called before the scheduler has been started.  This is
@@ -350,22 +350,22 @@ void coroutineYieldCallback(void *stateData, Coroutine *coroutine) {
   return;
 }
 
-/// @fn void comutexUnlockCallback(void *stateData, Comutex *comutex)
+/// @fn void unlockCallback(void *stateData, Comutex *comutex)
 ///
 /// @brief Function to be called when a mutex (Comutex) is unlocked.
 ///
-/// @param stateData The coroutine state pointer provided when coroutineConfig
+/// @param stateData The thread state pointer provided when threadConfig
 ///   was called.
 /// @param comutex A pointer to the Comutex object that has been unlocked.  At
 ///   the time this callback is called, the mutex has been unlocked but its
-///   coroutine pointer has not been cleared.
+///   thread pointer has not been cleared.
 ///
 /// @return This function returns no value, but if the head of the Comutex's
 /// lock queue is found in one of the waiting queues, it is removed from the
 /// waiting queue and pushed onto the ready queue.
-void comutexUnlockCallback(void *stateData, Comutex *comutex) {
+void unlockCallback(void *stateData, Comutex *comutex) {
   (void) stateData;
-  ProcessDescriptor *processDescriptor = coroutineContext(comutex->head);
+  ProcessDescriptor *processDescriptor = threadContext(comutex->head);
   if (processDescriptor == NULL) {
     // Nothing is waiting on this mutex.  Just return.
     return;
@@ -376,12 +376,12 @@ void comutexUnlockCallback(void *stateData, Comutex *comutex) {
   return;
 }
 
-/// @fn void coconditionSignalCallback(
+/// @fn void signalCallback(
 ///   void *stateData, Cocondition *cocondition)
 ///
 /// @brief Function to be called when a condition (Cocondition) is signalled.
 ///
-/// @param stateData The coroutine state pointer provided when coroutineConfig
+/// @param stateData The thread state pointer provided when threadConfig
 ///   was called.
 /// @param cocondition A pointer to the Cocondition object that has been
 ///   signalled.  At the time this callback is called, the number of signals has
@@ -390,12 +390,12 @@ void comutexUnlockCallback(void *stateData, Comutex *comutex) {
 /// @return This function returns no value, but if the head of the Cocondition's
 /// signal queue is found in one of the waiting queues, it is removed from the
 /// waiting queue and pushed onto the ready queue.
-void coconditionSignalCallback(void *stateData, Cocondition *cocondition) {
+void signalCallback(void *stateData, Cocondition *cocondition) {
   (void) stateData;
-  Thread cur = cocondition->head;
+  Thread *cur = cocondition->head;
 
   for (int ii = 0; (ii < cocondition->numSignals) && (cur != NULL); ii++) {
-    ProcessDescriptor *processDescriptor = coroutineContext(cur);
+    ProcessDescriptor *processDescriptor = threadContext(cur);
     // It's not possible for processDescriptor to be NULL.  We only enter this
     // loop if cocondition->numSignals > 0, so there MUST be something waiting
     // on this condition.
@@ -926,7 +926,7 @@ ProcessInfo* schedulerGetProcessInfo(void) {
   timespec_get(&timeout, TIME_UTC);
   timeout.tv_nsec += 100000000;
 
-  // Because the scheduler runs on the main coroutine, it doesn't have the
+  // Because the scheduler runs on the main thread, it doesn't have the
   // ability to yield.  That means it can't do anything that requires a
   // synchronus message exchange, i.e. allocating memory.  So, we need to
   // allocate memory from the current process and then pass that back to the
@@ -2719,7 +2719,7 @@ int schedulerExecveCommandHandler(
     }
   }
 
-  // Resume the coroutine so that it picks up all the pointers it needs before
+  // Resume the thread so that it picks up all the pointers it needs before
   // we release the message we were sent.
   processResume(processDescriptor, NULL);
 
@@ -2962,7 +2962,7 @@ int schedulerSpawnCommandHandler(
   processDescriptor->envp = envp;
   processDescriptor->name = argv[0];
 
-  // Resume the coroutine so that it picks up all the pointers it needs before
+  // Resume the thread so that it picks up all the pointers it needs before
   // we release the message we were sent.
   processResume(processDescriptor, NULL);
 
@@ -3598,7 +3598,7 @@ void runScheduler(void) {
   }
   processResume(processDescriptor, NULL);
   // No need to call HAL->timer->cancel since that's called by
-  // coroutineYieldCallback if we're running preemptive multiprocessing.
+  // yieldCallback if we're running preemptive multiprocessing.
 
   if (processRunning(processDescriptor) == false) {
     if (schedulerInitSendMessageToProcessId(
@@ -3702,13 +3702,13 @@ void runScheduler(void) {
   return;
 }
 
-/// @fn void startScheduler(SchedulerState **coroutineStatePointer)
+/// @fn void startScheduler(SchedulerState **threadStatePointer)
 ///
 /// @brief Initialize and run the round-robin scheduler.
 ///
 /// @return This function returns no value and, in fact, never returns at all.
 __attribute__((noinline)) void startScheduler(
-  SchedulerState **coroutineStatePointer
+  SchedulerState **threadStatePointer
 ) {
   printDebugString("Starting scheduler in debug mode...\n");
 
@@ -3735,8 +3735,8 @@ __attribute__((noinline)) void startScheduler(
   SCHEDULER_STATE = &schedulerState;
   printDebugString("Set scheduler state.\n");
 
-  // Initialize the pointer that was used to configure coroutines.
-  *coroutineStatePointer = &schedulerState;
+  // Initialize the pointer that was used to configure threads.
+  *threadStatePointer = &schedulerState;
 
   // Initialize the static ProcessMessage storage.
   ProcessMessage messagesStorage[NANO_OS_NUM_MESSAGES] = {0};
@@ -3910,20 +3910,20 @@ __attribute__((noinline)) void startScheduler(
   printDebugInt(ABS_DIFF(
     ((uintptr_t) allProcesses[schedulerState.memoryManagerProcessId].mainThread),
     ((uintptr_t) allProcesses[schedulerState.consoleProcessId - 1].mainThread))
-    - sizeof(Coroutine)
+    - sizeof(Thread)
   );
   printDebugString(" bytes\n");
 
-  printDebugString("Coroutine stack size = ");
+  printDebugString("Thread stack size = ");
   printDebugInt(ABS_DIFF(
     ((uintptr_t) allProcesses[schedulerState.firstUserProcessId - 1].mainThread),
     ((uintptr_t) allProcesses[schedulerState.firstUserProcessId].mainThread))
-    - sizeof(Coroutine)
+    - sizeof(Thread)
   );
   printDebugString(" bytes\n");
 
-  printDebugString("Coroutine size = ");
-  printDebugInt(sizeof(Coroutine));
+  printDebugString("Thread size = ");
+  printDebugInt(sizeof(Thread));
   printDebugString("\n");
 
   printDebugString("standardKernelFileDescriptors size = ");
