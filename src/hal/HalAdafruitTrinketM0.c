@@ -34,10 +34,10 @@
 #include "HalArduinoSamD21x18A.h"
 #include "HalCommon.h"
 
-/// @def MAX_UARTS
+/// @def NUM_UARTS
 ///
 /// @brief The maximum number of serial ports we can support on the board.
-#define MAX_UARTS 1
+#define NUM_UARTS 1
 
 /// @def NUM_DIO_PINS
 ///
@@ -67,7 +67,7 @@
 
 const Hal* halArduinoSamD21x18AImplInit(void) {
   HalArduinoSamD21x18AInitArgs args = {
-    .numUarts            = MAX_UARTS,
+    .numUarts            = NUM_UARTS,
     .numDioPins          = NUM_DIO_PINS,
     .spiCopiDio          = SPI_COPI_DIO,
     .spiCipoDio          = SPI_CIPO_DIO,
