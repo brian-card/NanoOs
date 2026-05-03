@@ -479,7 +479,7 @@ int schedulerSendTaskMessageToTask(
   // comessageQueuePush.
   taskMessage->msg_sync = &msg_sync_array[MSG_CORO_SAFE];
 
-  if (coroutineCorrupted(taskDescriptor->taskHandle)) {
+  if (taskCorrupted(taskDescriptor)) {
     printString("ERROR: Called task is corrupted:\n");
     returnValue = taskError;
     return returnValue;
@@ -3100,7 +3100,7 @@ void handleSchedulerMessage(SchedulerState *schedulerState) {
 void checkForTimeouts(SchedulerState *schedulerState) {
   TaskQueue *timedWaiting = &schedulerState->timedWaiting;
   uint8_t numElements = timedWaiting->numElements;
-  int64_t now = coroutineGetNanoseconds(NULL);
+  int64_t now = taskGetNanoseconds(NULL);
 
   for (uint8_t ii = 0; ii < numElements; ii++) {
     TaskDescriptor *poppedDescriptor = taskQueuePop(timedWaiting);
@@ -3229,7 +3229,7 @@ void removeTask(TaskDescriptor *taskDescriptor, const char *errorMessage) {
 
   taskDescriptor->name = NULL;
   taskDescriptor->userId = NO_USER_ID;
-  taskDescriptor->taskHandle->state = COROUTINE_STATE_NOT_RUNNING;
+  taskDescriptor->taskHandle->state = TASK_STATE_NOT_RUNNING;
 
   if (schedulerInitSendMessageToTaskId(
     SCHEDULER_STATE->consoleTaskId,
@@ -3568,7 +3568,7 @@ void runScheduler(void) {
     return;
   }
 
-  if (coroutineCorrupted(taskDescriptor->taskHandle)) {
+  if (taskCorrupted(taskDescriptor)) {
     removeTask(taskDescriptor, "Task corruption detected");
     return;
   }
@@ -3686,13 +3686,9 @@ void runScheduler(void) {
     }
   }
 
-  if (coroutineState(taskDescriptor->taskHandle)
-    == COROUTINE_STATE_WAIT
-  ) {
+  if (taskState(taskDescriptor) == TASK_STATE_WAIT) {
     taskQueuePush(&SCHEDULER_STATE->waiting, taskDescriptor);
-  } else if (coroutineState(taskDescriptor->taskHandle)
-    == COROUTINE_STATE_TIMEDWAIT
-  ) {
+  } else if (taskState(taskDescriptor) == TASK_STATE_TIMEDWAIT) {
     taskQueuePush(&SCHEDULER_STATE->timedWaiting, taskDescriptor);
   } else if (taskFinished(taskDescriptor)) {
     taskQueuePush(&SCHEDULER_STATE->free, taskDescriptor);
