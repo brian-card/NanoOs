@@ -277,7 +277,7 @@ static HalMemory arduinoSamD21x18AMemoryHal = {
 /// @note Due to the implementation of some versions of the version of Arduino
 /// libraries, we can't create two instances of the same base serial port class.
 ///  So, we'll have to use switch statements throughout the serial port code.
-#define MAX_UARTS 1
+#define MAX_UARTS 2
 
 /// @def UART_USB
 ///
@@ -294,10 +294,10 @@ static HalMemory arduinoSamD21x18AMemoryHal = {
 /// @var _numUarts
 ///
 /// @brief The number of serial ports we support on the board.
-static int _numUarts = MAX_UARTS;
+static uint8_t _numUarts = MAX_UARTS;
 
 int arduinoSamD21x18AGetNumUarts(void) {
-  return _numUarts;
+  return (int) _numUarts;
 }
 
 int arduinoSamD21x18ASetNumUarts(int numUarts) {
@@ -1080,6 +1080,7 @@ static Hal arduinoSamD21x18AHal = {
 };
 
 const Hal* halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
+  _numUarts = args->numUarts;
   _numDioPins = args->numDioPins;
   _spiCopiDio = args->spiCopiDio;
   _spiCipoDio = args->spiCipoDio;
