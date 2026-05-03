@@ -139,6 +139,7 @@ uint8_t posixNumExtraConsoleStacks(bool debug) {
 /// which is the USB serial port.
 static FILE **uarts[] = {
   &stderr,
+  &stderr,
 };
 
 /// @var _numUarts
@@ -165,7 +166,7 @@ int posixSetNumUarts(int numUarts) {
 int posixInitUart(int port, int32_t baud) {
   (void) baud;
   
-  if (port != 0) {
+  if (port > 1) {
     return -ERANGE;
   }
   
@@ -204,7 +205,7 @@ int posixPollUart(int port) {
   
   // While we'll support two outputs, we will only support one input to keep
   // things simple in the simulator.
-  if (port == 0) {
+  if (port == 1) {
     serialData = getchar();
     if (serialData == EOF) {
       serialData = -1;
@@ -228,8 +229,11 @@ ssize_t posixWriteUart(int port,
 }
 
 bool posixIsUartConsole(int port) {
-  (void) port;
-  return true;
+  if (port == 1) {
+    return true;
+  }
+
+  return false;
 }
 
 int posixGetNumDios(void) {
