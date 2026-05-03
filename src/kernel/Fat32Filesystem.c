@@ -58,7 +58,9 @@ typedef struct Fat32OpenMode {
 // entry plus enough bookkeeping to update it in place later.
 typedef struct Fat32DirSearchResult {
   Fat32DirectoryEntry entry;        // Copy of the short directory entry.
-  char  longName[FAT32_MAX_FILENAME_LENGTH + 1]; // Assembled LFN or "".
+  char    *longName;                // Heap-allocated LFN (or formatted 8.3).
+                                    // The caller must free() this when done.
+                                    // NULL when no name was resolved.
   uint32_t dirCluster;              // Cluster that contains this entry.
   uint32_t offsetInCluster;         // Byte offset within that cluster.
 } Fat32DirSearchResult;
@@ -473,9 +475,19 @@ int fat32SearchDirectory(
           memcpy(&result->entry, entry, sizeof(Fat32DirectoryEntry));
 
           if (lfnBuffer[0] != '\0') {
-            memcpy(result->longName, lfnBuffer,
-              FAT32_MAX_FILENAME_LENGTH + 1);
+            // Transfer ownership of the heap-allocated lfnBuffer.
+            result->longName = lfnBuffer;
+            lfnBuffer = NULL;
           } else {
+            // Allocate a small buffer for the formatted 8.3 name (max 13
+            // characters including the dot and null terminator).
+            result->longName = (char *) malloc(13);
+            if (result->longName == NULL) {
+              status = FAT32_NO_MEMORY;
+              done = true;
+              lfnBuffer[0] = '\0';
+              continue;
+            }
             fat32FormatShortName(entry->name, result->longName);
           }
 
@@ -487,7 +499,9 @@ int fat32SearchDirectory(
           done = true;
         }
 
-        lfnBuffer[0] = '\0';
+        if (lfnBuffer != NULL) {
+          lfnBuffer[0] = '\0';
+        }
       }
     }
 
@@ -612,11 +626,7 @@ int fat32ResolveParentDirectory(
     return FAT32_NO_MEMORY;
   }
 
-  Fat32DirSearchResult *searchResult
-    = (Fat32DirSearchResult*) malloc(sizeof(Fat32DirSearchResult));
-  if (searchResult == NULL) {
-    return FAT32_NO_MEMORY;
-  }
+  Fat32DirSearchResult searchResult;
 
   int result = FAT32_SUCCESS;
   while (start < lastSlash) {
@@ -633,26 +643,32 @@ int fat32ResolveParentDirectory(
     memcpy(component, start, len);
     component[len] = '\0';
 
+    searchResult.longName = NULL;
     result = fat32SearchDirectory(
-      ds, currentCluster, component, searchResult);
+      ds, currentCluster, component, &searchResult);
     if (result != FAT32_SUCCESS) {
+      free(searchResult.longName);
       break;
     }
 
-    if (!(searchResult->entry.attributes & FAT32_ATTR_DIRECTORY)) {
+    if (!(searchResult.entry.attributes & FAT32_ATTR_DIRECTORY)) {
+      free(searchResult.longName);
       result = FAT32_FILE_NOT_FOUND;
       break;
     }
 
     uint16_t clusterHigh;
     uint16_t clusterLow;
-    memcpy(&clusterHigh, &searchResult->entry.firstClusterHigh,
+    memcpy(&clusterHigh, &searchResult.entry.firstClusterHigh,
       sizeof(uint16_t));
-    memcpy(&clusterLow, &searchResult->entry.firstClusterLow,
+    memcpy(&clusterLow, &searchResult.entry.firstClusterLow,
       sizeof(uint16_t));
     currentCluster =
       ((uint32_t) clusterHigh << 16)
       | (uint32_t) clusterLow;
+
+    // The long name is not needed during path traversal.
+    free(searchResult.longName);
 
     start = end;
     if (*start == '/') {
@@ -660,7 +676,6 @@ int fat32ResolveParentDirectory(
     }
   }
 
-  free(searchResult);
   free(component);
   *parentCluster = currentCluster;
   return result;
@@ -1071,8 +1086,16 @@ int fat32CreateFileEntry(
       memcpy(&result->entry, shortEntry, sizeof(Fat32DirectoryEntry));
       result->dirCluster       = writeCluster;
       result->offsetInCluster  = writeOffset;
-      strncpy(result->longName, fileName, FAT32_MAX_FILENAME_LENGTH);
-      result->longName[FAT32_MAX_FILENAME_LENGTH] = '\0';
+
+      size_t nameBytes = strlen(fileName) + 1;
+      result->longName = (char *) malloc(nameBytes);
+      if (result->longName != NULL) {
+        memcpy(result->longName, fileName, nameBytes);
+      } else {
+        free(lfn);
+        free(shortEntry);
+        return FAT32_NO_MEMORY;
+      }
     }
 
     ioResult = bd->writeBlocks(
@@ -1098,6 +1121,7 @@ int fat32CreateFileEntry(
     }
   }
 
+  free(shortEntry);
   free(lfn);
   return returnValue;
 }
@@ -1590,28 +1614,25 @@ void* fat32Fopen(
   }
 
   // ---- Search for the file in the parent directory ----
-  Fat32DirSearchResult *searchResult =
-    (Fat32DirSearchResult *) malloc(sizeof(Fat32DirSearchResult));
-  if (searchResult == NULL) {
-    return NULL;
-  }
+  Fat32DirSearchResult searchResult;
+  searchResult.longName = NULL;
 
   int searchStatus = fat32SearchDirectory(
-    ds, parentCluster, fileName, searchResult);
+    ds, parentCluster, fileName, &searchResult);
 
   if (searchStatus == FAT32_SUCCESS) {
     // File exists.
 
     // Reject attempts to open a directory as a regular file.
-    if (searchResult->entry.attributes & FAT32_ATTR_DIRECTORY) {
-      free(searchResult);
+    if (searchResult.entry.attributes & FAT32_ATTR_DIRECTORY) {
+      free(searchResult.longName);
       return NULL;
     }
 
     // "w" / "w+" — truncate the existing file to zero length.
     if (modeFlags.truncate) {
-      if (fat32TruncateFile(ds, searchResult) != FAT32_SUCCESS) {
-        free(searchResult);
+      if (fat32TruncateFile(ds, &searchResult) != FAT32_SUCCESS) {
+        free(searchResult.longName);
         return NULL;
       }
     }
@@ -1620,25 +1641,25 @@ void* fat32Fopen(
 
     if (modeFlags.mustExist) {
       // "r" / "r+" — the file must already be present.
-      free(searchResult);
+      free(searchResult.longName);
       return NULL;
     }
 
     // "w", "w+", "a", "a+" — create a new, empty file.
-    if (fat32CreateFileEntry(ds, parentCluster, fileName, searchResult)
+    if (fat32CreateFileEntry(ds, parentCluster, fileName, &searchResult)
         != FAT32_SUCCESS) {
-      free(searchResult);
+      free(searchResult.longName);
       return NULL;
     }
   } else {
     // An I/O or allocation error occurred during the search.
-    free(searchResult);
+    free(searchResult.longName);
     return NULL;
   }
 
   // ---- Build the file handle ----
-  Fat32FileHandle *handle = fat32CreateFileHandle(ds, searchResult, &modeFlags);
-  free(searchResult);
+  Fat32FileHandle *handle = fat32CreateFileHandle(ds, &searchResult, &modeFlags);
+  free(searchResult.longName);
 
   return (void *) handle;
 }
@@ -2230,32 +2251,29 @@ int fat32Remove(void *driverState, const char *pathname) {
   }
 
   // ---- Search for the file in the parent directory ----
-  Fat32DirSearchResult *searchResult =
-    (Fat32DirSearchResult *) malloc(sizeof(Fat32DirSearchResult));
-  if (searchResult == NULL) {
-    return FAT32_NO_MEMORY;
-  }
+  Fat32DirSearchResult searchResult;
+  searchResult.longName = NULL;
 
   result = fat32SearchDirectory(
-    ds, parentCluster, fileName, searchResult);
+    ds, parentCluster, fileName, &searchResult);
   if (result != FAT32_SUCCESS) {
-    free(searchResult);
+    free(searchResult.longName);
     return result;
   }
 
   // Directories must not be removed with this call (use a dedicated rmdir
   // operation if one is added later).
-  if (searchResult->entry.attributes & FAT32_ATTR_DIRECTORY) {
-    free(searchResult);
+  if (searchResult.entry.attributes & FAT32_ATTR_DIRECTORY) {
+    free(searchResult.longName);
     return FAT32_INVALID_PARAMETER;
   }
 
   // ---- Free the file's cluster chain ----
   uint16_t removeClusterHigh;
   uint16_t removeClusterLow;
-  memcpy(&removeClusterHigh, &searchResult->entry.firstClusterHigh,
+  memcpy(&removeClusterHigh, &searchResult.entry.firstClusterHigh,
     sizeof(uint16_t));
-  memcpy(&removeClusterLow, &searchResult->entry.firstClusterLow,
+  memcpy(&removeClusterLow, &searchResult.entry.firstClusterLow,
     sizeof(uint16_t));
   uint32_t firstCluster =
     ((uint32_t) removeClusterHigh << 16)
@@ -2264,16 +2282,16 @@ int fat32Remove(void *driverState, const char *pathname) {
   if (firstCluster >= FAT32_CLUSTER_FIRST_VALID) {
     result = fat32FreeClusterChain(ds, firstCluster);
     if (result != FAT32_SUCCESS) {
-      free(searchResult);
+      free(searchResult.longName);
       return result;
     }
   }
 
   // ---- Invalidate the directory entries (LFN + short) ----
   result = fat32InvalidateDirectoryEntries(
-    ds, parentCluster, searchResult);
+    ds, parentCluster, &searchResult);
 
-  free(searchResult);
+  free(searchResult.longName);
   return result;
 }
 
