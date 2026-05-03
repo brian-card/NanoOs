@@ -52,7 +52,7 @@
 /// @def PROCESS_STACK_SIZE
 ///
 /// @brief The size, in bytes, of a regular process's stack.
-#define PROCESS_STACK_SIZE 1024
+#define PROCESS_STACK_SIZE 960
 
 /// @def MEMORY_MANAGER_STACK_SIZE
 ///
