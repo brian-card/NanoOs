@@ -58,6 +58,21 @@ extern "C"
 #define TASK_ID_NOT_SET \
   ((uint8_t) 0x0f)
 
+/// @def TASK_STATE_WAIT
+///
+/// @brief State a task is in when waiting indefinitely.
+#define TASK_STATE_WAIT COROUTINE_STATE_WAIT
+
+/// @def TASK_STATE_TIMEDWAIT
+///
+/// @brief State a task is in when waiing for a limited amount of time.
+#define TASK_STATE_TIMEDWAIT COROUTINE_STATE_TIMEDWAIT
+
+/// @def TASK_STATE_NOT_RUNNING
+///
+/// @brief State a task is in when it is not running.
+#define TASK_STATE_NOT_RUNNING COROUTINE_STATE_NOT_RUNNING
+
 /// @def getRunningTask
 ///
 /// @brief Function macro to get the pointer to the currently running Task
@@ -82,6 +97,12 @@ extern "C"
 /// @brief Provision a TaskHandle.
 #define taskHandleProvision(handle, func, arg) \
   coroutineInit(handle, func, arg)
+
+/// @def taskCorrupted
+///
+/// @brief Determine whether or not a task has become corrupted.
+#define taskCorrupted(taskDescriptor) \
+  coroutineCorrupted((taskDescriptor)->taskHandle)
 
 /// @def taskRunning
 ///
@@ -132,6 +153,12 @@ extern "C"
 /// @brief Function macro to terminate a running task.
 #define taskTerminate(taskDescriptor) \
   coroutineTerminate((taskDescriptor)->taskHandle, NULL)
+
+/// @def taskGetNanoseconds
+///
+/// @brief Task-specific call to get the nanoseconds from midnight, Jan 1, 1970
+/// given a pointer to a struct timespec.
+#define taskGetNanoseconds(ts) coroutineGetNanoseconds((ts))
 
 /// @def taskMessageInit
 ///
