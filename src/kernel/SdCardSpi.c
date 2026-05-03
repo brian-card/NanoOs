@@ -204,6 +204,48 @@ int sdSpiCardInit(SdCardSpiArgs *sdCardSpiArgs) {
   return isSDv2 ? 2 : 1;
 }
 
+/// @fn void sdSpiSendCmd12Inline(int sdCardSpiDevice)
+///
+/// @brief Send CMD12 (STOP_TRANSMISSION) on an already-active SPI transfer.
+///
+/// @details Unlike sdSpiSendCommand, this function does NOT call
+/// startTransfer.  It is intended for use during a CMD18 or CMD25 multi-block
+/// operation where the chip-select line is already asserted and must stay low
+/// until the entire sequence is complete.
+///
+/// @param sdCardSpiDevice The zero-based SPI device ID to use.
+static void sdSpiSendCmd12Inline(int sdCardSpiDevice) {
+  // Command byte
+  HAL->spi->transfer8(sdCardSpiDevice, CMD12 | 0x40);
+  
+  // Argument (0x00000000)
+  HAL->spi->transfer8(sdCardSpiDevice, 0x00);
+  HAL->spi->transfer8(sdCardSpiDevice, 0x00);
+  HAL->spi->transfer8(sdCardSpiDevice, 0x00);
+  HAL->spi->transfer8(sdCardSpiDevice, 0x00);
+  
+  // CRC (don't care)
+  HAL->spi->transfer8(sdCardSpiDevice, 0xFF);
+  
+  // Discard the stuff byte that follows a CMD12 response.
+  HAL->spi->transfer8(sdCardSpiDevice, 0xFF);
+  
+  // Wait for the R1 response.
+  for (int ii = 0; ii < 10; ii++) {
+    uint8_t response = HAL->spi->transfer8(sdCardSpiDevice, 0xFF);
+    if ((response & 0x80) == 0) {
+      break;
+    }
+  }
+  
+  // Consume any remaining busy bytes (card holds MISO low).
+  for (int ii = 0; ii < 10000; ii++) {
+    if (HAL->spi->transfer8(sdCardSpiDevice, 0xFF) == 0xFF) {
+      break;
+    }
+  }
+}
+
 /// @fn int sdSpiReadBlocks(SdCardState *sdCardState,
 ///   uint32_t startBlock, uint32_t numBlocks, uint8_t *buffer)
 ///
@@ -251,11 +293,11 @@ int sdSpiReadBlocks(SdCardState *sdCardState,
         break;
       }
       if (timeout == 0) {
-        // On a multi-block read we must still try to stop transmission.
+        // On a multi-block read we must still stop transmission.  Send CMD12
+        // inline — we cannot use sdSpiSendCommand here because it would call
+        // startTransfer again on an already-active SPI transfer.
         if (numBlocks > 1) {
-          sdSpiSendCommand(SD_CARD_SPI_DEVICE, CMD12, 0);
-          // Discard the stuff byte that follows the CMD12 response.
-          HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFF);
+          sdSpiSendCmd12Inline(SD_CARD_SPI_DEVICE);
         }
         HAL->spi->endTransfer(SD_CARD_SPI_DEVICE);
         return EIO;  // Timeout waiting for data
@@ -268,8 +310,7 @@ int sdSpiReadBlocks(SdCardState *sdCardState,
       SD_CARD_SPI_DEVICE, buffer, sdCardState->blockSize) != 0
     ) {
       if (numBlocks > 1) {
-        sdSpiSendCommand(SD_CARD_SPI_DEVICE, CMD12, 0);
-        HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFF);
+        sdSpiSendCmd12Inline(SD_CARD_SPI_DEVICE);
       }
       HAL->spi->endTransfer(SD_CARD_SPI_DEVICE);
       return EIO; // Transfer failed
@@ -284,9 +325,7 @@ int sdSpiReadBlocks(SdCardState *sdCardState,
   
   // For multi-block reads, send CMD12 (STOP_TRANSMISSION) to end the stream.
   if (numBlocks > 1) {
-    response = sdSpiSendCommand(SD_CARD_SPI_DEVICE, CMD12, 0);
-    // Discard the stuff byte that follows the CMD12 response.
-    HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFF);
+    sdSpiSendCmd12Inline(SD_CARD_SPI_DEVICE);
   }
   
   HAL->spi->endTransfer(SD_CARD_SPI_DEVICE);
