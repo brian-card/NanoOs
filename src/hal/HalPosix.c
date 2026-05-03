@@ -89,11 +89,11 @@ int posixEndSpiTransfer(int spi);
 int posixSpiTransfer8(int spi, uint8_t data);
 int posixSpiTransferBytes(int spi, uint8_t *data, uint32_t length);
 static HalSpi posixSpiHal = {
-  .initSpiDevice = posixInitSpiDevice,
-  .startSpiTransfer = posixStartSpiTransfer,
-  .endSpiTransfer = posixEndSpiTransfer,
-  .spiTransfer8 = posixSpiTransfer8,
-  .spiTransferBytes = posixSpiTransferBytes,
+  .initDevice = posixInitSpiDevice,
+  .startTransfer = posixStartSpiTransfer,
+  .endTransfer = posixEndSpiTransfer,
+  .transfer8 = posixSpiTransfer8,
+  .transferBytes = posixSpiTransferBytes,
 };
 
 int posixSetSystemTime(struct timespec *now);

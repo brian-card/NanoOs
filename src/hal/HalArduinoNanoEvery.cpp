@@ -429,11 +429,11 @@ int arduinoNanoEverySpiTransferBytes(int spi,
 }
 
 static HalSpi arduinoNanoEverySpiHal = {
-  .initSpiDevice = arduinoNanoEveryInitSpiDevice,
-  .startSpiTransfer = arduinoNanoEveryStartSpiTransfer,
-  .endSpiTransfer = arduinoNanoEveryEndSpiTransfer,
-  .spiTransfer8 = arduinoNanoEverySpiTransfer8,
-  .spiTransferBytes = arduinoNanoEverySpiTransferBytes,
+  .initDevice = arduinoNanoEveryInitSpiDevice,
+  .startTransfer = arduinoNanoEveryStartSpiTransfer,
+  .endTransfer = arduinoNanoEveryEndSpiTransfer,
+  .transfer8 = arduinoNanoEverySpiTransfer8,
+  .transferBytes = arduinoNanoEverySpiTransferBytes,
 };
 
 /// @var baseSystemTimeMs

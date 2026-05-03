@@ -226,7 +226,7 @@ typedef struct HalDio {
 } HalDio;
 
 typedef struct HalSpi {
-  /// @fn int initSpiDevice(int spi,
+  /// @fn int initDevice(int spi,
   ///   uint8_t cs, uint8_t sck, uint8_t copi, uint8_t cipo);
   ///
   /// @brief Initialize a SPI device on the system.
@@ -239,10 +239,10 @@ typedef struct HalSpi {
   /// @param baud The baud rate the SPI is to run at.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int (*initSpiDevice)(int spi,
+  int (*initDevice)(int spi,
     uint8_t cs, uint8_t sck, uint8_t copi, uint8_t cipo, uint32_t baud);
   
-  /// @fn int startSpiTransfer(int spi)
+  /// @fn int startTransfer(int spi)
   ///
   /// @brief Begin a transfer with a SPI device.
   ///
@@ -250,9 +250,9 @@ typedef struct HalSpi {
   /// data with.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int (*startSpiTransfer)(int spi);
+  int (*startTransfer)(int spi);
   
-  /// @fn int endSpiTransfer(int spi)
+  /// @fn int endTransfer(int spi)
   ///
   /// @brief End a transfer with a SPI device.
   ///
@@ -260,9 +260,9 @@ typedef struct HalSpi {
   /// data with.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int (*endSpiTransfer)(int spi);
+  int (*endTransfer)(int spi);
   
-  /// @fn int spiTransfer8(int spi, uint8_t data)
+  /// @fn int transfer8(int spi, uint8_t data)
   ///
   /// @brief Tranfer 8 bits (1 byte) between the SPI controller and a
   /// peripheral.
@@ -273,9 +273,9 @@ typedef struct HalSpi {
   /// @return Returns a value in the range 0x00000000 to 0x000000ff
   /// corresponding to the 8 bits transferred from the device on success,
   /// -errno on failure.
-  int (*spiTransfer8)(int spi, uint8_t data);
+  int (*transfer8)(int spi, uint8_t data);
   
-  /// @fn int spiTransferBytes(int spi, uint8_t *data, uint32_t length)
+  /// @fn int transferBytes(int spi, uint8_t *data, uint32_t length)
   ///
   /// @brief Tranfer a buffer of 8-bit bytes between the SPI controller and a
   /// peripheral.
@@ -288,7 +288,7 @@ typedef struct HalSpi {
   /// replaced with the bytes that were transferred from the SPI peripheral.
   /// -errno is returned and the contents of the data buffer are undefined on
   /// failure.
-  int (*spiTransferBytes)(int spi, uint8_t *data, uint32_t length);
+  int (*transferBytes)(int spi, uint8_t *data, uint32_t length);
 } HalSpi;
 
 typedef struct HalClock {

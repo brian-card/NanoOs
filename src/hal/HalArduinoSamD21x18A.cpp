@@ -575,11 +575,11 @@ int arduinoSamD21x18ASpiTransferBytes(int spi,
 }
 
 static HalSpi arduinoSamD21x18ASpiHal = {
-  .initSpiDevice = arduinoSamD21x18AInitSpiDevice,
-  .startSpiTransfer = arduinoSamD21x18AStartSpiTransfer,
-  .endSpiTransfer = arduinoSamD21x18AEndSpiTransfer,
-  .spiTransfer8 = arduinoSamD21x18ASpiTransfer8,
-  .spiTransferBytes = arduinoSamD21x18ASpiTransferBytes,
+  .initDevice = arduinoSamD21x18AInitSpiDevice,
+  .startTransfer = arduinoSamD21x18AStartSpiTransfer,
+  .endTransfer = arduinoSamD21x18AEndSpiTransfer,
+  .transfer8 = arduinoSamD21x18ASpiTransfer8,
+  .transferBytes = arduinoSamD21x18ASpiTransferBytes,
 };
 
 /// @var baseSystemTimeUs
