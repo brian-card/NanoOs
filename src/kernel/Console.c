@@ -952,18 +952,26 @@ void* runConsole(void *args) {
     consoleState.consolePorts[ii].consoleBuffer->inUse = true;
   }
 
+  int port = 0;
   for (int ii = 0; ii < consoleState.numConsolePorts; ii++) {
+    if (HAL->uart->isConsole(ii) == false) {
+      // This is not a console-capable UART.  Skip it.
+      continue;
+    }
+
     // Set the port-specific data.
-    consoleState.consolePorts[ii].portId = ii;
-    consoleState.consolePorts[ii].consoleBufferIndex = 0;
-    consoleState.consolePorts[ii].inputOwner = TASK_ID_NOT_SET;
-    consoleState.consolePorts[ii].outputOwner = TASK_ID_NOT_SET;
-    consoleState.consolePorts[ii].shell = TASK_ID_NOT_SET;
-    consoleState.consolePorts[ii].waitingForInput = false;
-    consoleState.consolePorts[ii].readByte = readSerialByte;
-    consoleState.consolePorts[ii].echo = true;
-    consoleState.consolePorts[ii].consolePrintString = printSerialString;
+    consoleState.consolePorts[port].portId = ii;
+    consoleState.consolePorts[port].consoleBufferIndex = 0;
+    consoleState.consolePorts[port].inputOwner = TASK_ID_NOT_SET;
+    consoleState.consolePorts[port].outputOwner = TASK_ID_NOT_SET;
+    consoleState.consolePorts[port].shell = TASK_ID_NOT_SET;
+    consoleState.consolePorts[port].waitingForInput = false;
+    consoleState.consolePorts[port].readByte = readSerialByte;
+    consoleState.consolePorts[port].echo = true;
+    consoleState.consolePorts[port].consolePrintString = printSerialString;
+    port++;
   }
+  consoleState.numConsolePorts = port;
 
   while (1) {
     for (uint8_t ii = 0; ii < consoleState.numConsolePorts; ii++) {
