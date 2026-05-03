@@ -261,6 +261,47 @@ Coroutine* coroutineGlobalPop(Coroutine** list) {
   return coroutine;
 }
 
+/// @fn Coroutine* coroutineGlobalPopAndReplace(
+///   Coroutine** list, Coroutine *newHead)
+///
+/// @brief Remove a coroutine from a thread-specific storage list and return it.
+///
+/// @param list The Coroutine list to pop from.
+/// @param newHead The new Coroutine to put at the top of the list.
+///
+/// @return Returns a pointer to the provided Coroutine on success, NULL on
+/// failure.
+Coroutine* coroutineGlobalPopAndReplace(Coroutine** list, Coroutine *newHead) {
+  Coroutine *coroutine = NULL;
+
+  if ((list != NULL) && (coroutine != NULL)) {
+    coroutine = *list;
+
+    if (coroutine->nextInList == newHead) {
+      // The expected usual case.
+      *list = coroutine->nextInList;
+    } else {
+      Coroutine **prev = &coroutine->nextInList;
+      Coroutine *cur = coroutine->nextInList;
+      while ((cur != NULL) && (cur != newHead)) {
+        prev = &cur->nextInList;
+        cur = cur->nextInList;
+      }
+      if (cur != NULL) {
+        *prev = cur->nextInList;
+        cur->nextInList = coroutine->nextInList;
+        *list = cur;
+      } else {
+        *list = coroutine->nextInList;
+      }
+    }
+
+    coroutine->nextInList = NULL;
+  }
+
+  return coroutine;
+}
+
 #ifdef THREAD_SAFE_COROUTINES
 // Use dynamic memory and C threads mechanisms.
 
@@ -492,6 +533,47 @@ Coroutine* coroutineTssPop(tss_t* list) {
   return coroutine;
 }
 
+/// @fn Coroutine* coroutineTssPopAndReplace(tss_t* list, Coroutine *coroutine)
+///
+/// @brief Remove a coroutine from a thread-specific storage list and return it.
+///
+/// @param list The Coroutine list to pop from.
+/// @param coroutine The Coroutine to pop.
+///
+/// @return Returns a pointer to the provided Coroutine on success, NULL on
+/// failure.
+Coroutine* coroutineTssPopAndReplace(tss_t* list, Coroutine *coroutine) {
+  Coroutine *coroutine = NULL;
+
+  if ((list != NULL) && (coroutine != NULL)) {
+    coroutine = (Coroutine*) tss_get(*list);
+
+    if (coroutine->nextInList == newHead) {
+      // The expected usual case.
+      tss_set(*list, coroutine->nextInList);
+    } else {
+      Coroutine **prev = &coroutine->nextInList;
+      Coroutine *cur = coroutine->nextInList;
+      while ((cur != NULL) && (cur != newHead)) {
+        prev = &cur->nextInList;
+        cur = cur->nextInList;
+      }
+      if (cur != NULL) {
+        *prev = cur->nextInList;
+        cur->nextInList = coroutine->nextInList;
+        tss_set(*list, cur);
+      } else {
+        *list = coroutine->nextInList;
+        tss_set(*list, coroutine->nextInList);
+      }
+    }
+
+    coroutine->nextInList = NULL;
+  }
+
+  return coroutine;
+}
+
 #endif // THREAD_SAFE_COROUTINES
 
 /// @def coroutinePushRunning
@@ -542,6 +624,23 @@ Coroutine* coroutineTssPop(tss_t* list) {
 
 #define coroutinePopRunning() \
   coroutineGlobalPop(&_globalRunning);
+
+#endif // THREAD_SAFE_COROUTINES coroutinePopRunning
+
+/// @def coroutinePopRunningAndReplace
+///
+/// @brief Pop a specific coroutine from the appropriate running stack.
+#ifdef THREAD_SAFE_COROUTINES
+
+#define coroutinePopRunningAndReplace(newHead) \
+  ((_coroutineThreadingSupportEnabled) \
+  ? coroutineTssPopAndReplace(&_tssRunning, newHead) \
+  : coroutineGlobalPopAndReplace(&_globalRunning, newHead))
+
+#else
+
+#define coroutinePopRunningAndReplace(newHead) \
+  coroutineGlobalPopAndReplace(&_globalRunning, newHead);
 
 #endif // THREAD_SAFE_COROUTINES coroutinePopRunning
 
@@ -756,6 +855,62 @@ void* coroutineYield_(void *arg, CoroutineState state) {
 
   Coroutine *currentCoroutine = coroutinePopRunning();
   currentCoroutine->state = state;
+  CoroutineFuncData funcData;
+  funcData.data = arg;
+  funcData = coroutinePass(currentCoroutine, funcData);
+  currentCoroutine->state = COROUTINE_STATE_RUNNING;
+  returnValue = funcData.data;
+
+  return returnValue;
+}
+
+/// @fn void* coroutineYieldTo_(Coroutine *to, void *arg, CoroutineState state)
+///
+/// @brief Transfer control to a specified Coroutine on the running stack.  A
+/// coroutine that is blocked inside coroutineYieldTo() may be resumed by any
+/// other coroutine.
+///
+/// @param to A pointer to the Coroutine to transfer control to.
+/// @param arg Value that will be returned by coroutineResume().
+/// @param state The state to set the coroutine to before control is returned
+///   to the caller.
+///
+/// @note This function is wrapped by a function macro of the same name (minus
+/// the trailing underscore) that automatically casts the state parameter to
+/// a CoroutineState so that integers may be used for the parameter.
+///
+/// @return Returns the value passed into the next call to coroutineResume()
+/// for this coroutine.
+void* coroutineYieldTo_(Coroutine *to, void *arg, CoroutineState state) {
+  void *returnValue = NULL;
+  Coroutine* first = _globalFirst;
+#ifdef THREAD_SAFE_COROUTINES
+  if (_coroutineThreadingSupportEnabled) {
+    call_once(&_threadMetadataSetup, coroutineSetupThreadMetadata);
+    if (!coroutineInitializeThreadMetadata(NULL)) {
+      return NULL;
+    }
+    first = (Coroutine*) tss_get(_tssFirst);
+  }
+#endif
+
+  Coroutine *running = getRunningCoroutine();
+  if (running == first) {
+    // Can't yield from the main coroutine.  Return NULL.
+    return NULL;
+  } else if (running == NULL) {
+    // The running stack hasn't been setup yet.  Bail.
+    return NULL;
+  }
+
+  callCoroutineYieldCallback(running);
+
+  if (state >= COROUTINE_STATE_NOT_RUNNING) {
+    // This is not a state that's settable by the user.
+    state = COROUTINE_STATE_BLOCKED;
+  }
+
+  Coroutine *currentCoroutine = coroutinePopRunningAndReplace(to);
   CoroutineFuncData funcData;
   funcData.data = arg;
   funcData = coroutinePass(currentCoroutine, funcData);
