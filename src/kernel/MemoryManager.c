@@ -693,7 +693,9 @@ int memoryManagerReallocCommandHandler(
   ) {
     printString("Failed to allocate ");
     printInt(reallocMessage->size);
-    printString(" bytes\n");
+    printString(" bytes for process ");
+    printInt(pid(processMessageFrom(incoming)));
+    printString("\n");
     memoryManagerDumpMemoryAllocations(memoryManagerState, NULL);
     do {
       break;
