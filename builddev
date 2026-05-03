@@ -23,8 +23,9 @@ if [ "${targetDevice}" != "" ]; then
 	mountDir="$(mktemp -d)"
 	trap "rm -rf \"${mountDir}\"" ERR EXIT
 
-	sudo mkfs.vfat -F 32 "${targetDevice}" -n NanoOs
-	sudo mount "${targetDevice}" "${mountDir}"
+	echo '2048,,0c' | sudo sfdisk "${targetDevice}"
+	sudo mkfs.vfat -F 32 "${targetDevice}p1" -n NanoOs
+	sudo mount "${targetDevice}p1" "${mountDir}"
 	sudo mkdir -p "${mountDir}/usr"
 	sudo cp -r usr/bin "${mountDir}/usr"
 	sudo cp -r usr/lib "${mountDir}/usr"
