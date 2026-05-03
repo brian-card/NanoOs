@@ -153,12 +153,12 @@ int posixInitRootStorage(SchedulerState *schedulerState) {
   ) {
     printString("Could not start SD card task.\n");
   }
-  taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
+  threadSetContext(taskDescriptor->thread, taskDescriptor);
   taskDescriptor->taskId = schedulerState->firstUserTaskId;
   taskDescriptor->name = "SD card";
   taskDescriptor->userId = ROOT_USER_ID;
   BlockStorageDevice *sdDevice = (BlockStorageDevice*) coroutineResume(
-    allTasks[schedulerState->firstUserTaskId - 1].taskHandle, NULL);
+    allTasks[schedulerState->firstUserTaskId - 1].thread, NULL);
   sdDevice->partitionNumber = 1;
   schedulerState->firstUserTaskId++;
   schedulerState->firstShellTaskId = schedulerState->firstUserTaskId;

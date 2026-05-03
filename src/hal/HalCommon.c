@@ -61,12 +61,12 @@ BlockStorageDevice* halCommonInitRootSdSpiStorage(
     printString("Could not start SD card task\n");
     return NULL;
   }
-  taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
+  threadSetContext(taskDescriptor->thread, taskDescriptor);
   taskDescriptor->taskId = SCHEDULER_STATE->firstUserTaskId;
   taskDescriptor->name = "SD card";
   taskDescriptor->userId = ROOT_USER_ID;
   BlockStorageDevice *sdDevice = (BlockStorageDevice*) coroutineResume(
-    allTasks[SCHEDULER_STATE->firstUserTaskId - 1].taskHandle, NULL);
+    allTasks[SCHEDULER_STATE->firstUserTaskId - 1].thread, NULL);
   sdDevice->partitionNumber = 1;
   SCHEDULER_STATE->firstUserTaskId++;
   SCHEDULER_STATE->firstShellTaskId = SCHEDULER_STATE->firstUserTaskId;
@@ -112,7 +112,7 @@ int halCommonInitRootFilesystem(BlockStorageDevice *blockDevice) {
     printString("Could not start filesystem task\n");
     return -ENOMEM;
   }
-  taskHandleSetContext(taskDescriptor->taskHandle, taskDescriptor);
+  threadSetContext(taskDescriptor->thread, taskDescriptor);
   taskDescriptor->taskId = SCHEDULER_STATE->rootFsTaskId;
   taskDescriptor->name = "filesystem";
   taskDescriptor->userId = ROOT_USER_ID;

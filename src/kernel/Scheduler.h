@@ -53,7 +53,7 @@ typedef struct NanoOsFile NanoOsFile;
 #define FILE NanoOsFile
 typedef struct SchedulerState SchedulerState;
 typedef struct TaskDescriptor TaskDescriptor;
-typedef Coroutine* TaskHandle;
+typedef Coroutine* Thread;
 typedef uint8_t TaskId;
 typedef struct TaskInfo TaskInfo;
 typedef int16_t UserId;
@@ -102,8 +102,8 @@ void comutexUnlockCallback(void *stateData, Comutex *comutex);
 void coconditionSignalCallback(void *stateData, Cocondition *cocondition);
 void* dummyTask(void *args);
 
-// TaskHandle that will be used to represent the scheduler.
-extern TaskHandle schedulerTaskHandle;
+// Thread that will be used to represent the scheduler.
+extern Thread schedulerThread;
 
 #ifdef __cplusplus
 } // extern "C"

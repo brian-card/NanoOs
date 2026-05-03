@@ -86,37 +86,37 @@ extern "C"
 #define taskCreate(taskDescriptor, func, arg) \
   coroutineCreate( \
     ((taskDescriptor != NULL) \
-      ? &(((TaskDescriptor*) taskDescriptor))->taskHandle \
+      ? &(((TaskDescriptor*) taskDescriptor))->thread \
       : NULL \
     ), \
     func, \
     arg)
 
-/// @def taskHandleProvision
+/// @def threadProvision
 ///
-/// @brief Provision a TaskHandle.
-#define taskHandleProvision(handle, func, arg) \
+/// @brief Provision a Thread.
+#define threadProvision(handle, func, arg) \
   coroutineInit(handle, func, arg)
 
 /// @def taskCorrupted
 ///
 /// @brief Determine whether or not a task has become corrupted.
 #define taskCorrupted(taskDescriptor) \
-  coroutineCorrupted((taskDescriptor)->taskHandle)
+  coroutineCorrupted((taskDescriptor)->thread)
 
 /// @def taskRunning
 ///
 /// @brief Function macro to determine whether or not a given task is
 /// currently running.
 #define taskRunning(taskDescriptor) \
-  coroutineRunning((taskDescriptor)->taskHandle)
+  coroutineRunning((taskDescriptor)->thread)
 
 /// @def taskFinished
 ///
 /// @brief Function macro to determine whether or not a given task has
 /// finished
 #define taskFinished(taskDescriptor) \
-  coroutineFinished((taskDescriptor)->taskHandle)
+  coroutineFinished((taskDescriptor)->thread)
 
 /// @def taskId
 ///
@@ -128,13 +128,13 @@ extern "C"
 ///
 /// @brief Function macro to get the state of a task given its handle.
 #define taskState(taskDescriptor) \
-  coroutineState((taskDescriptor)->taskHandle)
+  coroutineState((taskDescriptor)->thread)
 
 /// @def taskSetContext
 ///
 /// @brief Function macro to set the context of a task handle.
-#define taskHandleSetContext(taskHandle, context) \
-  coroutineSetContext(taskHandle, context)
+#define threadSetContext(thread, context) \
+  coroutineSetContext(thread, context)
 
 /// @def taskYield
 ///
@@ -152,7 +152,7 @@ extern "C"
 ///
 /// @brief Function macro to terminate a running task.
 #define taskTerminate(taskDescriptor) \
-  coroutineTerminate((taskDescriptor)->taskHandle, NULL)
+  coroutineTerminate((taskDescriptor)->thread, NULL)
 
 /// @def taskGetNanoseconds
 ///
@@ -210,7 +210,7 @@ extern "C"
 /// @brief Function macro to push a task message on to a task's message
 /// queue.
 #define taskMessageQueuePush(taskDescriptor, message) \
-  comessageQueuePush((taskDescriptor)->taskHandle, message)
+  comessageQueuePush((taskDescriptor)->thread, message)
 
 /// @def taskMessageQueuePop
 ///
@@ -229,7 +229,7 @@ extern "C"
 ///
 /// @brief Resume a task and update the currentTask state correctly.
 #define taskResume(taskDescriptor, taskMessage) \
-  coroutineResume((taskDescriptor)->taskHandle, taskMessage); \
+  coroutineResume((taskDescriptor)->thread, taskMessage); \
 
 // Task message accessors
 #define taskMessageType(taskMessagePointer) \

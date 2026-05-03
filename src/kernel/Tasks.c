@@ -403,7 +403,7 @@ int sendTaskMessageToTask(
   TaskDescriptor *taskDescriptor, TaskMessage *taskMessage
 ) {
   int returnValue = taskSuccess;
-  if ((taskDescriptor == NULL) || (taskDescriptor->taskHandle == NULL)
+  if ((taskDescriptor == NULL) || (taskDescriptor->thread == NULL)
     || (taskMessage == NULL)
   ) {
     // Invalid.
@@ -494,8 +494,8 @@ TaskMessage* initSendTaskMessageToTask(
     printString("ERROR: Could not send message from task ");
     printInt(taskId(getRunningTask()));
     printString("\n");
-    if (taskDescriptor->taskHandle == NULL) {
-      printString("ERROR: taskHandle is NULL\n");
+    if (taskDescriptor->thread == NULL) {
+      printString("ERROR: thread is NULL\n");
     } else {
       printString("ERROR: Task ");
       printInt(taskId(taskDescriptor));

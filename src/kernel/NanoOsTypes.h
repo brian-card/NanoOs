@@ -102,7 +102,7 @@ typedef enum SchedulerReadyQueueType {
 /// @typedef Task
 ///
 /// @brief Definition of the Task object used by the OS.
-typedef Coroutine* TaskHandle;
+typedef Coroutine* Thread;
 
 /// @typedef TaskId
 ///
@@ -197,7 +197,7 @@ typedef struct TaskQueue TaskQueue;
 ///
 /// @param name The name of the command as stored in its CommandEntry or as
 ///   set by the scheduler at launch.
-/// @param taskHandle A TaskHandle that manages the running command's execution
+/// @param thread A Thread that manages the running command's execution
 ///   state.
 /// @param taskId The numerical ID of the task.
 /// @param userId The numerical ID of the user that is running the task.
@@ -218,7 +218,7 @@ typedef struct TaskQueue TaskQueue;
 ///   to send to other tasks.
 typedef struct TaskDescriptor {
   const char         *name;
-  TaskHandle          taskHandle;
+  Thread          thread;
   TaskId              taskId;
   UserId              userId;
   uint8_t             numFileDescriptors;

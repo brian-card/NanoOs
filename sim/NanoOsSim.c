@@ -108,7 +108,7 @@ int main(int argc, char **argv) {
   // configure it, and then create and run one before we ever enter the
   // scheduler.
   Coroutine _mainCoroutine;
-  schedulerTaskHandle = &_mainCoroutine;
+  schedulerThread = &_mainCoroutine;
   CoroutineConfigOptions coroutineConfigOptions = {
     .stackSize = HAL->memory->processStackSize(false),
     .stateData = &coroutineStatePointer,
