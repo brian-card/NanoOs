@@ -1017,15 +1017,8 @@ int fat32CreateFileEntry(
   uint32_t writeCluster = slotCluster;
   uint32_t writeOffset  = slotOffset;
 
-  Fat32LfnEntry *lfn = (Fat32LfnEntry*) malloc(sizeof(Fat32LfnEntry));
-  if (lfn == NULL) {
-    return FAT32_NO_MEMORY;
-  }
-  Fat32DirectoryEntry *shortEntry
-    = (Fat32DirectoryEntry*) malloc(sizeof(Fat32DirectoryEntry));
-  if (shortEntry == NULL) {
-    return FAT32_NO_MEMORY;
-  }
+  Fat32LfnEntry lfn;
+  Fat32DirectoryEntry shortEntry;
 
   int returnValue = FAT32_SUCCESS;
   for (uint32_t slot = 0; slot < totalSlots; slot++) {
@@ -1044,18 +1037,18 @@ int fat32CreateFileEntry(
       // LFN entry.  Ordinal 1 is the last slot we write (closest to the
       // short entry); ordinal N is the first slot.
       uint32_t ordinal = lfnEntries - slot;
-      memset(lfn, 0xFF, sizeof(Fat32LfnEntry));
+      memset(&lfn, 0xFF, sizeof(Fat32LfnEntry));
 
-      lfn->ordinal = (uint8_t) ordinal;
+      lfn.ordinal = (uint8_t) ordinal;
       if (slot == 0) {
-        lfn->ordinal |= FAT32_LFN_LAST_ENTRY_MASK;
+        lfn.ordinal |= FAT32_LFN_LAST_ENTRY_MASK;
       }
-      lfn->attributes     = FAT32_LFN_ENTRY_ATTR;
-      lfn->type           = 0;
-      lfn->checksum       = checksum;
+      lfn.attributes     = FAT32_LFN_ENTRY_ATTR;
+      lfn.type           = 0;
+      lfn.checksum       = checksum;
       {
         uint16_t zero16 = 0;
-        memcpy(&lfn->firstClusterLow, &zero16, sizeof(uint16_t));
+        memcpy(&lfn.firstClusterLow, &zero16, sizeof(uint16_t));
       }
 
       // Build all 13 UTF-16LE code units in a flat, aligned array and then
@@ -1078,30 +1071,30 @@ int fat32CreateFileEntry(
       }
 
       {
-        memcpy(lfn->name1, &chars[0],  5 * sizeof(uint16_t));
-        memcpy(lfn->name2, &chars[5],  6 * sizeof(uint16_t));
-        memcpy(lfn->name3, &chars[11], 2 * sizeof(uint16_t));
+        memcpy(lfn.name1, &chars[0],  5 * sizeof(uint16_t));
+        memcpy(lfn.name2, &chars[5],  6 * sizeof(uint16_t));
+        memcpy(lfn.name3, &chars[11], 2 * sizeof(uint16_t));
       }
 
-      memcpy(fs->blockBuffer + offsetInSector, lfn, sizeof(Fat32LfnEntry));
+      memcpy(fs->blockBuffer + offsetInSector, &lfn, sizeof(Fat32LfnEntry));
     } else {
       // Short directory entry.
-      memset(shortEntry, 0, sizeof(Fat32DirectoryEntry));
-      memcpy(shortEntry->name, shortName, FAT32_SHORT_NAME_LENGTH);
-      shortEntry->attributes      = FAT32_ATTR_ARCHIVE;
+      memset(&shortEntry, 0, sizeof(Fat32DirectoryEntry));
+      memcpy(shortEntry.name, shortName, FAT32_SHORT_NAME_LENGTH);
+      shortEntry.attributes      = FAT32_ATTR_ARCHIVE;
       {
         uint16_t zero16 = 0;
         uint32_t zero32 = 0;
-        memcpy(&shortEntry->firstClusterHigh, &zero16, sizeof(uint16_t));
-        memcpy(&shortEntry->firstClusterLow, &zero16, sizeof(uint16_t));
-        memcpy(&shortEntry->fileSize, &zero32, sizeof(uint32_t));
+        memcpy(&shortEntry.firstClusterHigh, &zero16, sizeof(uint16_t));
+        memcpy(&shortEntry.firstClusterLow, &zero16, sizeof(uint16_t));
+        memcpy(&shortEntry.fileSize, &zero32, sizeof(uint32_t));
       }
 
       memcpy(fs->blockBuffer + offsetInSector,
-        shortEntry, sizeof(Fat32DirectoryEntry));
+        &shortEntry, sizeof(Fat32DirectoryEntry));
 
       // Capture the result for the caller.
-      memcpy(&result->entry, shortEntry, sizeof(Fat32DirectoryEntry));
+      memcpy(&result->entry, &shortEntry, sizeof(Fat32DirectoryEntry));
       result->dirCluster       = writeCluster;
       result->offsetInCluster  = writeOffset;
 
@@ -1110,8 +1103,6 @@ int fat32CreateFileEntry(
       if (result->longName != NULL) {
         memcpy(result->longName, fileName, nameBytes);
       } else {
-        free(lfn);
-        free(shortEntry);
         return FAT32_NO_MEMORY;
       }
     }
@@ -1139,8 +1130,6 @@ int fat32CreateFileEntry(
     }
   }
 
-  free(shortEntry);
-  free(lfn);
   return returnValue;
 }
 
