@@ -166,16 +166,17 @@ void* callOverlayFunction(const char *overlayDir, const char *overlay,
   // there, but we want to give other processes some time to run, too.  Also,
   // loading the overlay is an operation that shouldn't be interrupted.   The
   // scheduler will automatically load the correct overlay before a process is
-  // resumed, so just set the information for the process's overlay and then yield.
+  // resumed, so just set the information for the process's overlay and then
+  // yield.
   //
   // A few things of note:
   //
   // 1.  Because the scheduler will automatically load the correct overlay
   //     before a process is resumed, it's technically permissible to set the
-  //     process's overlay information and then load the overlay, however, that's
-  //     redundant.  It would *NOT* be permissible to load the overlay and then
-  //     set the information as that could create an overlay of mixed content if
-  //     loading the overlay was preempted.
+  //     process's overlay information and then load the overlay, however,
+  //     that's redundant.  It would *NOT* be permissible to load the overlay
+  //     and then set the information as that could create an overlay of mixed
+  //     content if loading the overlay was preempted.
   //
   // 2.  Setting the information for the overlay has to be an atomic operation.
   //     The reason it has to be atomic is because the information is used by
