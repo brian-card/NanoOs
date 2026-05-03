@@ -109,12 +109,7 @@ void* callOverlayFunction(const char *overlayDir, const char *overlay,
   
   // Keep track of the overlay that's currently running and the one we need.
   char *previousOverlayDir = runningProcess->overlayDir;
-  FileBlockMetadata *overlayArray
-    = (FileBlockMetadata*) malloc(sizeof(FileBlockMetadata) * 2);
-  if (overlayArray == NULL) {
-    // Out of memory
-    goto exit; // return NULL
-  }
+  FileBlockMetadata overlayArray[2];
   overlayArray[0].blockDevice = runningProcess->overlay.blockDevice;
   overlayArray[0].startBlock  = runningProcess->overlay.startBlock;
   overlayArray[0].numBlocks   = runningProcess->overlay.numBlocks;
@@ -128,7 +123,7 @@ void* callOverlayFunction(const char *overlayDir, const char *overlay,
     overlayPathDir = overlayDir;
     overlayDirCopy = (char*) malloc(strlen(overlayDir) + 1);
     if (overlayDirCopy == NULL) {
-      goto freeOverlayArray;
+      goto exit;
     }
     strcpy(overlayDirCopy, overlayDir);
   }
@@ -233,8 +228,6 @@ freeOverlayPath:
   free(overlayPath);
 freeOverlayDir:
   free(overlayDirCopy);
-freeOverlayArray:
-  free(overlayArray);
 exit:
   return returnValue;
 }
