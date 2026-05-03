@@ -231,7 +231,7 @@ int arduinoNanoEveryGetNumDios(void) {
   return NUM_DIO_PINS;
 }
 
-int arduinoNanoEveryConfigureDio(int dio, bool output) {
+int arduinoNanoEveryInitDio(int dio, bool output) {
   int returnValue = -ERANGE;
   
   if ((dio >= DIO_START) && (dio < NUM_DIO_PINS)) {
@@ -258,9 +258,9 @@ int arduinoNanoEveryWriteDio(int dio, bool high) {
 }
 
 static HalDio arduinoNanoEveryDioHal = {
-  .getNumDios = arduinoNanoEveryGetNumDios,
-  .configureDio = arduinoNanoEveryConfigureDio,
-  .writeDio = arduinoNanoEveryWriteDio,
+  .getNum = arduinoNanoEveryGetNumDios,
+  .init = arduinoNanoEveryInitDio,
+  .write = arduinoNanoEveryWriteDio,
 };
 
 /// @var globalSpiConfigured
@@ -330,7 +330,7 @@ int arduinoNanoEveryInitSpiDevice(int spi,
   }
   
   // Configure the chip select DIO for output.
-  arduinoNanoEveryConfigureDio(cs, 1);
+  arduinoNanoEveryInitDio(cs, 1);
   // Deselect the chip select pin.
   arduinoNanoEveryWriteDio(cs, 1);
   

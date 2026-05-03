@@ -231,7 +231,7 @@ int posixGetNumDios(void) {
   return -ENOSYS;
 }
 
-int posixConfigureDio(int dio, bool output) {
+int posixInitDio(int dio, bool output) {
   (void) dio;
   (void) output;
   

@@ -193,15 +193,15 @@ typedef struct HalUart {
 } HalUart;
 
 typedef struct HalDio {
-  /// @fn int getNumDios(void)
+  /// @fn int getNum(void)
   ///
   /// @brief Get the number of digial IO pins on the system.
   ///
   /// @return Returns the number of digital IO pins on success, -errno on
   /// failure.
-  int (*getNumDios)(void);
+  int (*getNum)(void);
   
-  /// @fn int configureDio(int dio, bool output)
+  /// @fn int init(int dio, bool output)
   ///
   /// @brief Configure a DIO for either input or output.
   ///
@@ -210,9 +210,9 @@ typedef struct HalDio {
   ///   input (false).
   ///
   /// @return Returns 0 on success, -errno onfailure.
-  int (*configureDio)(int dio, bool output);
+  int (*init)(int dio, bool output);
   
-  /// @fn int writeDio(int dio, bool high)
+  /// @fn int write(int dio, bool high)
   ///
   /// @brief Write either a high or low value to a DIO.  The DIO must be
   /// configured for output.
@@ -222,7 +222,7 @@ typedef struct HalDio {
   ///   (true) or low (false).
   ///
   /// @return Returns 0 on success, -errno onfailure.
-  int (*writeDio)(int dio, bool high);
+  int (*write)(int dio, bool high);
 } HalDio;
 
 typedef struct HalSpi {

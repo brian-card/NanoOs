@@ -390,7 +390,7 @@ int arduinoSamD21x18AGetNumDios(void) {
   return _numDioPins;
 }
 
-int arduinoSamD21x18AConfigureDio(int dio, bool output) {
+int arduinoSamD21x18AInitDio(int dio, bool output) {
   int returnValue = -ERANGE;
   
   uint8_t modes[2] = { INPUT, OUTPUT };
@@ -413,9 +413,9 @@ int arduinoSamD21x18AWriteDio(int dio, bool high) {
 }
 
 static HalDio arduinoSamD21x18ADioHal = {
-  .getNumDios = arduinoSamD21x18AGetNumDios,
-  .configureDio = arduinoSamD21x18AConfigureDio,
-  .writeDio = arduinoSamD21x18AWriteDio,
+  .getNum = arduinoSamD21x18AGetNumDios,
+  .init = arduinoSamD21x18AInitDio,
+  .write = arduinoSamD21x18AWriteDio,
 };
 
 /// @var globalSpiConfigured
@@ -474,7 +474,7 @@ int arduinoSamD21x18AInitSpiDevice(int spi,
   }
   
   // Configure the chip select DIO for output.
-  arduinoSamD21x18AConfigureDio(cs, 1);
+  arduinoSamD21x18AInitDio(cs, 1);
   // Deselect the chip select pin.
   arduinoSamD21x18AWriteDio(cs, 1);
   

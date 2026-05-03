@@ -74,12 +74,12 @@ static HalUart posixUartHal = {
 };
 
 int posixGetNumDios(void);
-int posixConfigureDio(int dio, bool output);
+int posixInitDio(int dio, bool output);
 int posixWriteDio(int dio, bool high);
 static HalDio posixDioHal = {
-  .getNumDios = posixGetNumDios,
-  .configureDio = posixConfigureDio,
-  .writeDio = posixWriteDio,
+  .getNum = posixGetNumDios,
+  .init = posixInitDio,
+  .write = posixWriteDio,
 };
 
 int posixInitSpiDevice(int spi,
