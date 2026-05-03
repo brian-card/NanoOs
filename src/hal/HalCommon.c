@@ -178,13 +178,13 @@ int halCommonInit(const Hal *hal) {
   }
 
   if (hal->timer != NULL)  {
-    int numTimers = hal->timer->getNumTimers();
+    int numTimers = hal->timer->getNum();
     for (ii = 0; ii < numTimers; ii++) {
-      if (hal->timer->initTimer(ii) < 0) {
+      if (hal->timer->init(ii) < 0) {
         break;
       }
     }
-    hal->timer->setNumTimers(ii);
+    hal->timer->setNum(ii);
     if (ii != numTimers) {
       hal->uart->write(0,
         (uint8_t*) "WARNING: Only initialized ",

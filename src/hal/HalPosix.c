@@ -124,14 +124,14 @@ int posixCancelAndGetTimer(int timer,
   uint64_t *configuredNanoseconds, uint64_t *remainingNanoseconds,
   void (**callback)(void));
 static HalTimer posixTimerHal = {
-  .getNumTimers = posixGetNumTimers,
-  .setNumTimers = posixSetNumTimers,
-  .initTimer = posixInitTimer,
-  .configOneShotTimer = posixConfigOneShotTimer,
-  .configuredTimerNanoseconds = posixConfiguredTimerNanoseconds,
-  .remainingTimerNanoseconds = posixRemainingTimerNanoseconds,
-  .cancelTimer = posixCancelTimer,
-  .cancelAndGetTimer = posixCancelAndGetTimer,
+  .getNum = posixGetNumTimers,
+  .setNum = posixSetNumTimers,
+  .init = posixInitTimer,
+  .configOneShot = posixConfigOneShotTimer,
+  .configuredNanoseconds = posixConfiguredTimerNanoseconds,
+  .remainingNanoseconds = posixRemainingTimerNanoseconds,
+  .cancel = posixCancelTimer,
+  .cancelAndGet = posixCancelAndGetTimer,
 };
 
 /// @var _sdCardDevicePath

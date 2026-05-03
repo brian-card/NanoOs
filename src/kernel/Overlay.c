@@ -192,11 +192,11 @@ void* callOverlayFunction(const char *overlayDir, const char *overlay,
   //     running and then set both.  We don't have to re-enable the timer again
   //     after setting the information because we're going to then immediately
   //     yield after setting it.  So, we can get away with just calling
-  //     cancelTimer instead of cancelAndGetTimer since there's nothing to
+  //     cancel instead of cancelAndGetTimer since there's nothing to
   //     resume.
   //
   // JBC 2025-01-24
-  HAL->timer->cancelTimer(SCHEDULER_STATE->preemptionTimer);
+  HAL->timer->cancel(SCHEDULER_STATE->preemptionTimer);
   if (overlayDirCopy != NULL) {
     runningTask->overlayDir = overlayDirCopy;
   }
@@ -217,8 +217,8 @@ void* callOverlayFunction(const char *overlayDir, const char *overlay,
   returnValue = overlayFunction(args);
   
 restorePreviousOverlay:
-  // See note above on use of HAL->timer->cancelTimer.
-  HAL->timer->cancelTimer(SCHEDULER_STATE->preemptionTimer);
+  // See note above on use of HAL->timer->cancel.
+  HAL->timer->cancel(SCHEDULER_STATE->preemptionTimer);
   runningTask->overlay.blockDevice = overlayArray[0].blockDevice;
   runningTask->overlay.startBlock  = overlayArray[0].startBlock;
   runningTask->overlay.numBlocks   = overlayArray[0].numBlocks;

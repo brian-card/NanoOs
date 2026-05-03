@@ -345,7 +345,7 @@ void coroutineYieldCallback(void *stateData, Coroutine *coroutine) {
 
   // No need to check HAL->timer for NULL.  This function can't be configured
   // to be called unless it wasn't NULL at boot.
-  HAL->timer->cancelTimer(schedulerState->preemptionTimer);
+  HAL->timer->cancel(schedulerState->preemptionTimer);
 
   return;
 }
@@ -3592,12 +3592,12 @@ void runScheduler(void) {
     if (SCHEDULER_STATE->preemptionTimer > -1) {
       // No need to check HAL->timer for NULL since it can't be NULL in this
       // case.
-      HAL->timer->configOneShotTimer(
+      HAL->timer->configOneShot(
         SCHEDULER_STATE->preemptionTimer, 10000000, forceYield);
     }
   }
   taskResume(taskDescriptor, NULL);
-  // No need to call HAL->timer->cancelTimer since that's called by
+  // No need to call HAL->timer->cancel since that's called by
   // coroutineYieldCallback if we're running preemptive multitasking.
 
   if (taskRunning(taskDescriptor) == false) {
@@ -3727,7 +3727,7 @@ __attribute__((noinline)) void startScheduler(
   schedulerState.currentReady
     = &schedulerState.ready[SCHEDULER_READY_QUEUE_KERNEL];
   schedulerState.preemptionTimer = -1;
-  if ((HAL->timer != NULL) && (HAL->timer->getNumTimers() > 0)) {
+  if ((HAL->timer != NULL) && (HAL->timer->getNum() > 0)) {
     schedulerState.preemptionTimer = 0;
   }
   schedulerState.schedulerTaskId = 1;

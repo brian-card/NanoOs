@@ -1039,14 +1039,14 @@ void TC4_Handler(void) {
 }
 
 static HalTimer arduinoSamD21x18ATimerHal = {
-  .getNumTimers = arduinoSamD21x18AGetNumTimers,
-  .setNumTimers = arduinoSamD21x18ASetNumTimers,
-  .initTimer = arduinoSamD21x18AInitTimer,
-  .configOneShotTimer = arduinoSamD21x18AConfigOneShotTimer,
-  .configuredTimerNanoseconds = arduinoSamD21x18AConfiguredTimerNanoseconds,
-  .remainingTimerNanoseconds = arduinoSamD21x18ARemainingTimerNanoseconds,
-  .cancelTimer = arduinoSamD21x18ACancelTimer,
-  .cancelAndGetTimer = arduinoSamD21x18ACancelAndGetTimer,
+  .getNum = arduinoSamD21x18AGetNumTimers,
+  .setNum = arduinoSamD21x18ASetNumTimers,
+  .init = arduinoSamD21x18AInitTimer,
+  .configOneShot = arduinoSamD21x18AConfigOneShotTimer,
+  .configuredNanoseconds = arduinoSamD21x18AConfiguredTimerNanoseconds,
+  .remainingNanoseconds = arduinoSamD21x18ARemainingTimerNanoseconds,
+  .cancel = arduinoSamD21x18ACancelTimer,
+  .cancelAndGet = arduinoSamD21x18ACancelAndGetTimer,
 };
 
 int arduinoSamD21x18AInitRootStorage(SchedulerState *schedulerState) {
