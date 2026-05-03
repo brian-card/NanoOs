@@ -317,13 +317,9 @@ void fat32AssembleLfnEntry(
   // Use byte-level offsets so that we never form a pointer to an unaligned
   // packed member on architectures with strict alignment requirements.
   uint16_t chars[FAT32_LFN_CHARS_PER_ENTRY];
-  const uint8_t *lfnBytes = (const uint8_t *) lfn;
-  memcpy(&chars[0],  lfnBytes + offsetof(Fat32LfnEntry, name1),
-    5 * sizeof(uint16_t));
-  memcpy(&chars[5],  lfnBytes + offsetof(Fat32LfnEntry, name2),
-    6 * sizeof(uint16_t));
-  memcpy(&chars[11], lfnBytes + offsetof(Fat32LfnEntry, name3),
-    2 * sizeof(uint16_t));
+  memcpy(&chars[0],  lfn->name1, 5 * sizeof(uint16_t));
+  memcpy(&chars[5],  lfn->name2, 6 * sizeof(uint16_t));
+  memcpy(&chars[11], lfn->name3, 2 * sizeof(uint16_t));
 
   for (int j = 0; j < FAT32_LFN_CHARS_PER_ENTRY; j++) {
     int pos = baseIndex + j;
@@ -1049,13 +1045,9 @@ int fat32CreateFileEntry(
       }
 
       {
-        uint8_t *lfnBytes = (uint8_t *) lfn;
-        memcpy(lfnBytes + offsetof(Fat32LfnEntry, name1),
-          &chars[0],  5 * sizeof(uint16_t));
-        memcpy(lfnBytes + offsetof(Fat32LfnEntry, name2),
-          &chars[5],  6 * sizeof(uint16_t));
-        memcpy(lfnBytes + offsetof(Fat32LfnEntry, name3),
-          &chars[11], 2 * sizeof(uint16_t));
+        memcpy(lfn->name1, &chars[0],  5 * sizeof(uint16_t));
+        memcpy(lfn->name2, &chars[5],  6 * sizeof(uint16_t));
+        memcpy(lfn->name3, &chars[11], 2 * sizeof(uint16_t));
       }
 
       memcpy(fs->blockBuffer + offsetInSector, lfn, sizeof(Fat32LfnEntry));
