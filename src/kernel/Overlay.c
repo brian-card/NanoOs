@@ -114,49 +114,41 @@ void* callOverlayFunction(const char *overlayDir, const char *overlay,
   overlayArray[0].startBlock  = runningProcess->overlay.startBlock;
   overlayArray[0].numBlocks   = runningProcess->overlay.numBlocks;
   
-  // We have to copy the arguments we were provided into dynamic memory because
-  // they may be pointers into the current overlay, which we're about to
-  // replace.
-  const char *overlayPathDir = runningProcess->overlayDir;
-  char *overlayDirCopy = NULL;
-  if (overlayDir != NULL) {
-    overlayPathDir = overlayDir;
-    overlayDirCopy = (char*) malloc(strlen(overlayDir) + 1);
-    if (overlayDirCopy == NULL) {
-      goto exit;
-    }
-    strcpy(overlayDirCopy, overlayDir);
+  // Keep track of what the original overlay directory was.
+  char *originalOverlayDir = runningProcess->overlayDir;
+  
+  // We need to allocate enough space for all of the strings we need.  We need
+  // the overlay directory, a slash, the name of the overlay, the overlay
+  // extension, a NULL byte, the function name, and a trailing NULL byte.
+  char *overlayInfo = (char*) malloc(
+    ((overlayDir == NULL) ? strlen(originalOverlayDir) : strlen(overlayDir))
+    + 1
+    + strlen(overlay)
+    + OVERLAY_EXT_LEN
+    + 1
+    + strlen(function)
+    + 1);
+  if (overlayInfo == NULL) {
+    goto exit;
   }
   
-  // We need to construct the full path to the overlay file.  We need the
-  // overlay directory, a slash, the name of the overlay, the overlay extension
-  // and a trailing NULL byte.
-  char *overlayPath = (char*) malloc(strlen(overlayPathDir) + strlen(overlay)
-    + OVERLAY_EXT_LEN + 2);
-  if (overlayPath == NULL) {
-    goto freeOverlayDir;
-  }
-  strcpy(overlayPath, overlayPathDir);
-  strcat(overlayPath, "/");
-  strcat(overlayPath, overlay);
-  strcat(overlayPath, OVERLAY_EXT);
+  strcpy(overlayInfo, (overlayDir == NULL) ? originalOverlayDir : overlayDir);
+  strcat(overlayInfo, "/");
+  strcat(overlayInfo, overlay);
+  strcat(overlayInfo, OVERLAY_EXT);
   
   // Get the overlay information we need.
-  if (getFileBlockMetadataFromPath(overlayPath, &overlayArray[1]) != 0) {
+  if (getFileBlockMetadataFromPath(overlayInfo, &overlayArray[1]) != 0) {
     // We can't proceed
-    goto freeOverlayPath;
+    goto freeOverlayInfo;
   }
   
-  // We don't need overlayPath anymore, so free the memory.  overlayPath will be
-  // freed again at the end of the function, but if we set the pointer to NULL,
-  // that will become a no-op and we don't care.
-  free(overlayPath); overlayPath = NULL;
-  
-  char *functionCopy = (char*) malloc(strlen(function) + 1);
-  if (functionCopy == NULL) {
-    goto freeOverlayPath;
-  }
+  char *functionCopy = overlayInfo + strlen(overlayInfo) + 1;
   strcpy(functionCopy, function);
+  
+  // Terminate the overlayInfo string at the end of the directory path.
+  overlayInfo[strlen((overlayDir == NULL) ? originalOverlayDir : overlayDir)]
+    = '\0';
   
   // args does not get copied.  We have no way of knowing what the proper way
   // to copy the data would be.  The caller is responsible for allocating data
@@ -193,8 +185,8 @@ void* callOverlayFunction(const char *overlayDir, const char *overlay,
   //
   // JBC 2025-01-24
   HAL->timer->cancel(SCHEDULER_STATE->preemptionTimer);
-  if (overlayDirCopy != NULL) {
-    runningProcess->overlayDir = overlayDirCopy;
+  if (overlayDir != NULL) {
+    runningProcess->overlayDir = overlayInfo;
   }
   runningProcess->overlay.blockDevice = overlayArray[1].blockDevice;
   runningProcess->overlay.startBlock  = overlayArray[1].startBlock;
@@ -218,17 +210,14 @@ restorePreviousOverlay:
   runningProcess->overlay.blockDevice = overlayArray[0].blockDevice;
   runningProcess->overlay.startBlock  = overlayArray[0].startBlock;
   runningProcess->overlay.numBlocks   = overlayArray[0].numBlocks;
-  if (overlayDirCopy != NULL) {
+  if (overlayDir != NULL) {
     runningProcess->overlayDir = previousOverlayDir;
   }
   processYield();
   
   // Release all the memory for the copies.
-  free(functionCopy);
-freeOverlayPath:
-  free(overlayPath);
-freeOverlayDir:
-  free(overlayDirCopy);
+freeOverlayInfo:
+  free(overlayInfo);
 exit:
   return returnValue;
 }
