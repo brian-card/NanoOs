@@ -3132,7 +3132,7 @@ void checkForTimeouts(SchedulerState *schedulerState) {
 ///
 /// @return This function returns no value.
 void forceYield(void) {
-  processYield();
+  processYieldTo(&allProcesses[SCHEDULER_STATE->schedulerProcessId - 1]);
 }
 
 /// @fn int schedulerDumpMemoryAllocations(SchedulerState *schedulerState)
