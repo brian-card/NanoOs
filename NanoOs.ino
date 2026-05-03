@@ -82,7 +82,7 @@ void loop() {
   // configure it, and then create and run one before we ever enter the
   // scheduler.
   Coroutine _mainCoroutine;
-  schedulerTaskHandle = &_mainCoroutine;
+  schedulerThread = &_mainCoroutine;
   CoroutineConfigOptions coroutineConfigOptions = {
     .stackSize = HAL->memory->processStackSize(USE_HAL_MEMORY_DEBUG),
     .stateData = &coroutineStatePointer,

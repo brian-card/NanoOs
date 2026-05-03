@@ -197,7 +197,7 @@ typedef struct TaskQueue TaskQueue;
 ///
 /// @param name The name of the command as stored in its CommandEntry or as
 ///   set by the scheduler at launch.
-/// @param thread A Thread that manages the running command's execution
+/// @param mainThread A Thread that manages the running command's execution
 ///   state.
 /// @param taskId The numerical ID of the task.
 /// @param userId The numerical ID of the user that is running the task.
@@ -218,7 +218,7 @@ typedef struct TaskQueue TaskQueue;
 ///   to send to other tasks.
 typedef struct TaskDescriptor {
   const char         *name;
-  Thread          thread;
+  Thread              mainThread;
   TaskId              taskId;
   UserId              userId;
   uint8_t             numFileDescriptors;

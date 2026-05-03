@@ -457,7 +457,7 @@ int schedulerSendTaskMessageToTask(
 ) {
   int returnValue = taskSuccess;
   if ((taskDescriptor == NULL)
-    || (taskDescriptor->thread == NULL)
+    || (taskDescriptor->mainThread == NULL)
   ) {
     printString(
       "ERROR: Attempt to send scheduler taskMessage to NULL task.\n");
@@ -2250,7 +2250,7 @@ int schedulerKillTaskCommandHandler(
       closeTaskFileDescriptors(schedulerState, taskDescriptor);
 
       if (taskTerminate(taskDescriptor) == taskSuccess) {
-        threadSetContext(taskDescriptor->thread,
+        threadSetContext(taskDescriptor->mainThread,
           taskDescriptor);
         taskDescriptor->name = NULL;
         taskDescriptor->userId = NO_USER_ID;
@@ -2612,7 +2612,7 @@ int schedulerExecveCommandHandler(
 
   // Kill and clear out the calling task.
   taskTerminate(taskDescriptor);
-  threadSetContext(taskDescriptor->thread, taskDescriptor);
+  threadSetContext(taskDescriptor->mainThread, taskDescriptor);
 
   // We don't want to wait for the memory manager to release the memory.  Make
   // it do it immediately.
@@ -2794,7 +2794,7 @@ int schedulerSpawnCommandHandler(
   *spawnArgs->newPid = taskDescriptor->taskId;
 
   // Initialize the new task.
-  threadSetContext(taskDescriptor->thread, taskDescriptor);
+  threadSetContext(taskDescriptor->mainThread, taskDescriptor);
 
   ExecArgs *execArgs = (ExecArgs*) schedMalloc(sizeof(ExecArgs));
   if (execArgs == NULL) {
@@ -2956,7 +2956,7 @@ int schedulerSpawnCommandHandler(
     // We have to terminate the task because something may have pushed a message
     // onto its message queue.
     taskTerminate(taskDescriptor);
-    threadSetContext(taskDescriptor->thread, taskDescriptor);
+    threadSetContext(taskDescriptor->mainThread, taskDescriptor);
     return returnValue; // 0
   }
   taskDescriptor->envp = envp;
@@ -3105,9 +3105,9 @@ void checkForTimeouts(SchedulerState *schedulerState) {
   for (uint8_t ii = 0; ii < numElements; ii++) {
     TaskDescriptor *poppedDescriptor = taskQueuePop(timedWaiting);
     Comutex *blockingComutex
-      = poppedDescriptor->thread->blockingComutex;
+      = poppedDescriptor->mainThread->blockingComutex;
     Cocondition *blockingCocondition
-      = poppedDescriptor->thread->blockingCocondition;
+      = poppedDescriptor->mainThread->blockingCocondition;
 
     if ((blockingComutex != NULL) && (now >= blockingComutex->timeoutTime)) {
       taskQueuePush(poppedDescriptor->readyQueue, poppedDescriptor);
@@ -3229,7 +3229,7 @@ void removeTask(TaskDescriptor *taskDescriptor, const char *errorMessage) {
 
   taskDescriptor->name = NULL;
   taskDescriptor->userId = NO_USER_ID;
-  taskDescriptor->thread->state = TASK_STATE_NOT_RUNNING;
+  taskDescriptor->mainThread->state = TASK_STATE_NOT_RUNNING;
 
   if (schedulerInitSendMessageToTaskId(
     SCHEDULER_STATE->consoleTaskId,
@@ -3612,7 +3612,7 @@ void runScheduler(void) {
     // Terminate the task so that any lingering messages in its message queue
     // get released.
     taskTerminate(taskDescriptor);
-    threadSetContext(taskDescriptor->thread, taskDescriptor);
+    threadSetContext(taskDescriptor->mainThread, taskDescriptor);
     memset(&taskDescriptor->message, 0, sizeof(TaskMessage));
   }
 
@@ -3749,12 +3749,12 @@ __attribute__((noinline)) void startScheduler(
   allTasks = schedulerState.allTasks;
 
   // Initialize the scheduler in the array of running commands.
-  allTasks[schedulerState.schedulerTaskId - 1].thread = schedulerThread;
+  allTasks[schedulerState.schedulerTaskId - 1].mainThread = schedulerThread;
   allTasks[schedulerState.schedulerTaskId - 1].taskId
     = schedulerState.schedulerTaskId;
   allTasks[schedulerState.schedulerTaskId - 1].name = "init";
   allTasks[schedulerState.schedulerTaskId - 1].userId = ROOT_USER_ID;
-  threadSetContext(allTasks[schedulerState.schedulerTaskId - 1].thread,
+  threadSetContext(allTasks[schedulerState.schedulerTaskId - 1].mainThread,
     &allTasks[schedulerState.schedulerTaskId - 1]);
   printDebugString("Configured scheduler task.\n");
 
@@ -3803,7 +3803,7 @@ __attribute__((noinline)) void startScheduler(
   if (taskCreate(taskDescriptor, runConsole, NULL) != taskSuccess) {
     printString("Could not create console task.\n");
   }
-  threadSetContext(taskDescriptor->thread, taskDescriptor);
+  threadSetContext(taskDescriptor->mainThread, taskDescriptor);
   taskDescriptor->taskId = schedulerState.consoleTaskId;
   taskDescriptor->name = "console";
   taskDescriptor->userId = ROOT_USER_ID;
@@ -3828,7 +3828,7 @@ __attribute__((noinline)) void startScheduler(
   printDebugString("Main stack size = ");
   printDebugInt(ABS_DIFF(
     ((intptr_t) schedulerThread),
-    ((intptr_t) allTasks[schedulerState.consoleTaskId - 1].thread)
+    ((intptr_t) allTasks[schedulerState.consoleTaskId - 1].mainThread)
   ));
   printDebugString(" bytes\n");
   printDebugString("schedulerState size = ");
@@ -3894,7 +3894,7 @@ __attribute__((noinline)) void startScheduler(
       printString(".\n");
     }
     threadSetContext(
-      taskDescriptor->thread, taskDescriptor);
+      taskDescriptor->mainThread, taskDescriptor);
     taskDescriptor->taskId = ii;
     taskDescriptor->userId = NO_USER_ID;
     taskDescriptor->name = "dummy";
@@ -3908,16 +3908,16 @@ __attribute__((noinline)) void startScheduler(
   // zero-based.
   printDebugString("Console stack size = ");
   printDebugInt(ABS_DIFF(
-    ((uintptr_t) allTasks[schedulerState.memoryManagerTaskId].thread),
-    ((uintptr_t) allTasks[schedulerState.consoleTaskId - 1].thread))
+    ((uintptr_t) allTasks[schedulerState.memoryManagerTaskId].mainThread),
+    ((uintptr_t) allTasks[schedulerState.consoleTaskId - 1].mainThread))
     - sizeof(Coroutine)
   );
   printDebugString(" bytes\n");
 
   printDebugString("Coroutine stack size = ");
   printDebugInt(ABS_DIFF(
-    ((uintptr_t) allTasks[schedulerState.firstUserTaskId - 1].thread),
-    ((uintptr_t) allTasks[schedulerState.firstUserTaskId].thread))
+    ((uintptr_t) allTasks[schedulerState.firstUserTaskId - 1].mainThread),
+    ((uintptr_t) allTasks[schedulerState.firstUserTaskId].mainThread))
     - sizeof(Coroutine)
   );
   printDebugString(" bytes\n");
@@ -3938,7 +3938,7 @@ __attribute__((noinline)) void startScheduler(
   ) {
     printString("Could not create memory manager task.\n");
   }
-  threadSetContext(taskDescriptor->thread, taskDescriptor);
+  threadSetContext(taskDescriptor->mainThread, taskDescriptor);
   taskDescriptor->taskId = schedulerState.memoryManagerTaskId;
   taskDescriptor->name = "memory manager";
   taskDescriptor->userId = ROOT_USER_ID;
