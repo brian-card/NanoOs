@@ -691,6 +691,9 @@ int memoryManagerReallocCommandHandler(
   } else if ((reallocMessage->size > 0)
     && (pid(processMessageFrom(incoming)) != SCHEDULER_STATE->schedulerProcessId)
   ) {
+    printString("Failed to allocate ");
+    printInt(reallocMessage->size);
+    printString(" bytes\n");
     memoryManagerDumpMemoryAllocations(memoryManagerState, NULL);
     do {
       break;
