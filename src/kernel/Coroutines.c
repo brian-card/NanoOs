@@ -675,6 +675,40 @@ void* coroutineResume(Coroutine *targetCoroutine, void *arg) {
   return COROUTINE_ERROR;
 }
 
+/// @fn void callCoroutineYieldCallback(Coroutine *running)
+///
+/// @brief Call the set CoroutineYieldCallback if there is one.
+///
+/// @param running A pointer to the Coroutine currently running.
+///
+/// @return This function returns no value.
+void callCoroutineYieldCallback(Coroutine *running) {
+  CoroutineYieldCallback coroutineYieldCallback
+    = _globalCoroutineYieldCallback;
+#ifdef THREAD_SAFE_COROUTINES
+  if (_coroutineThreadingSupportEnabled) {
+    // No need to call coroutineSetupThreadMetadata or
+    // coroutineInitializeThreadMetadata this time since we did that above.
+    CoroutineYieldCallback *possibleCallback
+      = (CoroutineYieldCallback*) tss_get(_tssCoroutineYieldCallback);
+    if (possibleCallback != NULL) {
+      coroutineYieldCallback = *possibleCallback;
+    }
+  }
+#endif
+  if (coroutineYieldCallback != NULL) {
+    // coroutineYield is in the critical path of everything, so we only want to
+    // get the state data if there's a function to call.
+    void *stateData = _globalStateData;
+#ifdef THREAD_SAFE_COROUTINES
+    if (_coroutineThreadingSupportEnabled) {
+      stateData = tss_get(_tssStateData);
+    }
+#endif
+    coroutineYieldCallback(stateData, running);
+  }
+}
+
 /// @fn void* coroutineYield_(void *arg, CoroutineState state)
 ///
 /// @brief Transfer control back to the coroutine that resumed this one.  A
@@ -713,30 +747,7 @@ void* coroutineYield_(void *arg, CoroutineState state) {
     return NULL;
   }
 
-  CoroutineYieldCallback coroutineYieldCallback
-    = _globalCoroutineYieldCallback;
-#ifdef THREAD_SAFE_COROUTINES
-  if (_coroutineThreadingSupportEnabled) {
-    // No need to call coroutineSetupThreadMetadata or
-    // coroutineInitializeThreadMetadata this time since we did that above.
-    CoroutineYieldCallback *possibleCallback
-      = (CoroutineYieldCallback*) tss_get(_tssCoroutineYieldCallback);
-    if (possibleCallback != NULL) {
-      coroutineYieldCallback = *possibleCallback;
-    }
-  }
-#endif
-  if (coroutineYieldCallback != NULL) {
-    // coroutineYield is in the critical path of everything, so we only want to
-    // get the state data if there's a function to call.
-    void *stateData = _globalStateData;
-#ifdef THREAD_SAFE_COROUTINES
-    if (_coroutineThreadingSupportEnabled) {
-      stateData = tss_get(_tssStateData);
-    }
-#endif
-    coroutineYieldCallback(stateData, running);
-  }
+  callCoroutineYieldCallback(running);
 
   if (state >= COROUTINE_STATE_NOT_RUNNING) {
     // This is not a state that's settable by the user.
