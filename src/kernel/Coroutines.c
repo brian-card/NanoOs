@@ -274,26 +274,30 @@ Coroutine* coroutineGlobalPop(Coroutine** list) {
 Coroutine* coroutineGlobalPopAndReplace(Coroutine** list, Coroutine *newHead) {
   Coroutine *coroutine = NULL;
 
-  if ((list != NULL) && (coroutine != NULL)) {
+  if (list != NULL) {
     coroutine = *list;
 
-    if (coroutine->nextInStack == newHead) {
-      // The expected usual case.
-      *list = coroutine->nextInStack;
-    } else {
-      Coroutine **prev = &coroutine->nextInStack;
-      Coroutine *cur = coroutine->nextInStack;
-      while ((cur != NULL) && (cur != newHead)) {
-        prev = &cur->nextInStack;
-        cur = cur->nextInStack;
-      }
-      if (cur != NULL) {
-        *prev = cur->nextInStack;
-        cur->nextInStack = coroutine->nextInStack;
-        *list = cur;
-      } else {
+    if (newHead != NULL) {
+      if (coroutine->nextInStack == newHead) {
+        // The expected usual case.
         *list = coroutine->nextInStack;
+      } else {
+        Coroutine **prev = &coroutine->nextInStack;
+        Coroutine *cur = coroutine->nextInStack;
+        while ((cur != NULL) && (cur != newHead)) {
+          prev = &cur->nextInStack;
+          cur = cur->nextInStack;
+        }
+        if (cur != NULL) {
+          *prev = cur->nextInStack;
+          cur->nextInStack = coroutine->nextInStack;
+          *list = cur;
+        } else {
+          *list = coroutine->nextInStack;
+        }
       }
+    } else {
+      *list = coroutine->nextInStack;
     }
 
     coroutine->nextInStack = NULL;
@@ -545,27 +549,31 @@ Coroutine* coroutineTssPop(tss_t* list) {
 Coroutine* coroutineTssPopAndReplace(tss_t* list, Coroutine *coroutine) {
   Coroutine *coroutine = NULL;
 
-  if ((list != NULL) && (coroutine != NULL)) {
+  if (list != NULL) {
     coroutine = (Coroutine*) tss_get(*list);
 
-    if (coroutine->nextInStack == newHead) {
-      // The expected usual case.
-      tss_set(*list, coroutine->nextInStack);
-    } else {
-      Coroutine **prev = &coroutine->nextInStack;
-      Coroutine *cur = coroutine->nextInStack;
-      while ((cur != NULL) && (cur != newHead)) {
-        prev = &cur->nextInStack;
-        cur = cur->nextInStack;
-      }
-      if (cur != NULL) {
-        *prev = cur->nextInStack;
-        cur->nextInStack = coroutine->nextInStack;
-        tss_set(*list, cur);
-      } else {
-        *list = coroutine->nextInStack;
+    if (newHead != NULL) {
+      if (coroutine->nextInStack == newHead) {
+        // The expected usual case.
         tss_set(*list, coroutine->nextInStack);
+      } else {
+        Coroutine **prev = &coroutine->nextInStack;
+        Coroutine *cur = coroutine->nextInStack;
+        while ((cur != NULL) && (cur != newHead)) {
+          prev = &cur->nextInStack;
+          cur = cur->nextInStack;
+        }
+        if (cur != NULL) {
+          *prev = cur->nextInStack;
+          cur->nextInStack = coroutine->nextInStack;
+          tss_set(*list, cur);
+        } else {
+          *list = coroutine->nextInStack;
+          tss_set(*list, coroutine->nextInStack);
+        }
       }
+    } else {
+      tss_set(*list, coroutine->nextInStack);
     }
 
     coroutine->nextInStack = NULL;
