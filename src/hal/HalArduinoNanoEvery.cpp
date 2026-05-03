@@ -219,12 +219,18 @@ ssize_t arduinoNanoEveryWriteUart(int port,
   return numBytesWritten;
 }
 
+bool arduinoNanoEveryIsUartConsole(int port) {
+  (void) port;
+  return true;
+}
+
 static HalUart arduinoNanoEveryUartHal = {
   .getNum = arduinoNanoEveryGetNumUarts,
   .setNum = arduinoNanoEverySetNumUarts,
   .init = arduinoNanoEveryInitUart,
   .poll = arduinoNanoEveryPollUart,
   .write = arduinoNanoEveryWriteUart,
+  .isConsole = arduinoNanoEveryIsUartConsole,
 };
 
 int arduinoNanoEveryGetNumDios(void) {

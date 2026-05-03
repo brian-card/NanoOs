@@ -227,6 +227,11 @@ ssize_t posixWriteUart(int port,
   return numBytesWritten;
 }
 
+bool posixIsUartConsole(int port) {
+  (void) port;
+  return true;
+}
+
 int posixGetNumDios(void) {
   return -ENOSYS;
 }

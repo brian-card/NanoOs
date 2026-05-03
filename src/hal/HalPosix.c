@@ -65,12 +65,14 @@ int posixSetNumUarts(int numUarts);
 int posixInitUart(int port, int32_t baud);
 int posixPollUart(int port);
 ssize_t posixWriteUart(int port, const uint8_t *data, ssize_t length);
+bool posixIsUartConsole(int port);
 static HalUart posixUartHal = {
   .getNum = posixGetNumUarts,
   .setNum = posixSetNumUarts,
   .init = posixInitUart,
   .poll = posixPollUart,
   .write = posixWriteUart,
+  .isConsole = posixIsUartConsole,
 };
 
 int posixGetNumDios(void);

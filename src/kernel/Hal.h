@@ -190,6 +190,15 @@ typedef struct HalUart {
   ///
   /// @return Returns the number of bytes written on success, -errno on failure.
   ssize_t (*write)(int port, const uint8_t *data, ssize_t length);
+  
+  /// @fn bool isConsole(int port);
+  ///
+  /// @brief Determine whether or not a given UART port functions as a console.
+  ///
+  /// @param port The zero-based index of the port to read from.
+  ///
+  /// @return Returns true if the UART is a console, false if not.
+  bool (*isConsole)(int port);
 } HalUart;
 
 typedef struct HalDio {

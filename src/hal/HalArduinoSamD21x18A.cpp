@@ -378,12 +378,18 @@ ssize_t arduinoSamD21x18AWriteUart(int port,
   return numBytesWritten;
 }
 
+bool arduinoSamD21x18AIsUartConsole(int port) {
+  (void) port;
+  return true;
+}
+
 static HalUart arduinoSamD21x18AUartHal = {
   .getNum = arduinoSamD21x18AGetNumUarts,
   .setNum = arduinoSamD21x18ASetNumUarts,
   .init = arduinoSamD21x18AInitUart,
   .poll = arduinoSamD21x18APollUart,
   .write = arduinoSamD21x18AWriteUart,
+  .isConsole = arduinoSamD21x18AIsUartConsole,
 };
 
 int arduinoSamD21x18AGetNumDios(void) {
