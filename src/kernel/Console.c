@@ -133,7 +133,14 @@ ConsoleBuffer* getAvailableConsoleBuffer(
   }
 
   if (returnValue == NULL) {
-    returnValue = (ConsoleBuffer*) malloc(sizeof(ConsoleBuffer));
+    for (int ii = consoleState->numConsolePorts;
+      ii < CONSOLE_NUM_BUFFERS;
+      ii++
+    ) {
+      if (consoleBuffers[ii].inUse == false) {
+        returnValue = &consoleBuffers[ii];
+      }
+    }
   }
 
   return returnValue;
@@ -282,13 +289,15 @@ void consoleGetBufferCommandHandler(
     // Send the buffer back to the caller via the message we allocated earlier.
     processMessageInit(returnMessage, CONSOLE_RETURNING_BUFFER,
       returnValue, sizeof(*returnValue), true);
-  }
 
-  // Whether we were able to grab a buffer or not, we're now done with this
-  // call, so mark the input message handled.  This is a synchronous call and
-  // the caller is waiting on our response, so *DO NOT* release it.  The caller
-  // is responsible for releasing it when they've received the response.
-  processMessageSetDone(inputMessage);
+    // Mark the input message handled.  This is a synchronous call and the
+    // caller is waiting on our response, so *DO NOT* release it.  The caller
+    // is responsible for releasing it when they've received the response.
+    processMessageSetDone(inputMessage);
+  }
+  // else:  Do nothing.  This will cause the message to be pushed back onto our
+  // own message queue so that we can pick it up for processing again later.
+
   return;
 }
 
@@ -691,30 +700,21 @@ void consoleReleasePidPortCommandHandler(
 void consoleReleaseBufferCommandHandler(
   ConsoleState *consoleState, ProcessMessage *inputMessage
 ) {
-  // We don't need to examine consoleState since the caller has provided us
-  // with the pointer we can use directly.
-  (void) consoleState;
+  ConsoleBuffer *consoleBuffer
+    = (ConsoleBuffer*) processMessageData(inputMessage);
 
-  ConsoleBuffer *consoleBuffers = consoleState->consoleBuffers;
-  ConsoleBuffer *consoleBuffer = (ConsoleBuffer*) processMessageData(inputMessage);
-  if (consoleBuffer != NULL) {
-    for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
-      if (consoleBuffer == &consoleBuffers[ii]) {
-        // The buffer being released is one of the buffers dedicated to a port.
-        // *DO NOT* free it because it is always in use.  Just release the
-        // message and return.
-        processMessageRelease(inputMessage);
-        return;
-      }
+  // Check to see if the returned buffer belongs to one of the ports.
+  ConsolePort *consolePorts = consoleState->consolePorts;
+  for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
+    if (consolePorts[ii].consoleBuffer == consoleBuffer) {
+      // Buffer belongs to a port.  Do nothing since it's in use.
+      processMessageRelease(inputMessage);
+      return;
     }
-
-    free(consoleBuffer); consoleBuffer = NULL;
   }
 
-  // Whether we were able to grab a buffer or not, we're now done with this
-  // call, so mark the input message handled.  This is a synchronous call and
-  // the caller is waiting on our response, so *DO NOT* release it.  The caller
-  // is responsible for releasing it when they've received the response.
+  // Buffer doesn't belong to a port, so release it.
+  consoleBuffer->inUse = false;
   processMessageRelease(inputMessage);
   return;
 }
@@ -774,6 +774,7 @@ const ConsoleCommandHandler consoleCommandHandlers[] = {
 /// @return This function returns no value.
 void handleConsoleMessages(ConsoleState *consoleState) {
   ProcessMessage *message = processMessageQueuePop();
+  ProcessMessage *firstMessage = message;
   while (message != NULL) {
     ConsoleCommand messageType = (ConsoleCommand) processMessageType(message);
     if (messageType >= NUM_CONSOLE_COMMANDS) {
@@ -792,7 +793,22 @@ void handleConsoleMessages(ConsoleState *consoleState) {
     }
 
     consoleCommandHandlers[messageType](consoleState, message);
+
+    if (processMessageDone(message) == true) {
+      // This is the usual case, so list it first.
+      firstMessage = NULL;
+    } else {
+      // We had a problem processing this message.  Push it back onto our queue.
+      processMessageQueuePush(getRunningProcess(), message);
+    }
     message = processMessageQueuePop();
+    if (firstMessage == NULL) {
+      // The ususal case.
+      firstMessage = message;
+    } else if (message == firstMessage) {
+      // We're back to processing a message we've already seen before.  Bail.
+      break;
+    }
   }
 
   return;
@@ -941,8 +957,7 @@ void* runConsole(void *args) {
   ProcessMessage *schedulerMessage = NULL;
 
   if (HAL->uart != NULL) {
-    consoleState.numConsolePorts
-      = MIN(CONSOLE_NUM_PORTS, HAL->uart->getNum());
+    consoleState.numConsolePorts = CONSOLE_NUM_PORTS;
   }
 
   // For each console port, use the console buffer at the corresponding index.

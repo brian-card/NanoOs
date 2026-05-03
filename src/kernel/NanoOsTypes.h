@@ -86,7 +86,7 @@ extern "C"
 ///
 /// @brief The number of console buffers that will be allocated within the main
 /// console process's stack.
-#define CONSOLE_NUM_BUFFERS CONSOLE_NUM_PORTS
+#define CONSOLE_NUM_BUFFERS 4
 
 // Primitive types
 
@@ -399,14 +399,14 @@ typedef struct ConsolePort {
   unsigned char       portId;
   ConsoleBuffer      *consoleBuffer;
   unsigned char       consoleBufferIndex;
-  ProcessId              outputOwner;
-  ProcessId              inputOwner;
-  ProcessId              shell;
+  ProcessId           outputOwner;
+  ProcessId           inputOwner;
+  ProcessId           shell;
   bool                waitingForInput;
   int               (*readByte)(struct ConsolePort *consolePort);
   bool                echo;
   int               (*consolePrintString)(unsigned char port,
-                        const char *string);
+                      const char *string);
 } ConsolePort;
 
 /// @struct ConsoleState
