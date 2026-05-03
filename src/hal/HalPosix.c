@@ -40,7 +40,7 @@
 #include "kernel/Filesystem.h"
 #include "kernel/NanoOs.h"
 #include "kernel/Scheduler.h"
-#include "kernel/Tasks.h"
+#include "kernel/Processes.h"
 
 // Must come last
 #include "user/NanoOsStdio.h"
@@ -138,30 +138,30 @@ static HalTimer posixTimerHal = {
 
 /// @var _sdCardDevicePath
 ///
-/// @brief Path to the device node to connect to for the SdCardSim task.
+/// @brief Path to the device node to connect to for the SdCardSim process.
 static const char *_sdCardDevicePath = NULL;
 
 int posixInitRootStorage(SchedulerState *schedulerState) {
-  TaskDescriptor *allTasks = schedulerState->allTasks;
+  ProcessDescriptor *allProcesses = schedulerState->allProcesses;
   
-  // Create the SD card task.
-  TaskDescriptor *taskDescriptor
-    = &allTasks[schedulerState->firstUserTaskId - 1];
-  if (taskCreate(
-    taskDescriptor, runSdCardPosix, (void*) _sdCardDevicePath)
-    != taskSuccess
+  // Create the SD card process.
+  ProcessDescriptor *processDescriptor
+    = &allProcesses[schedulerState->firstUserProcessId - 1];
+  if (processCreate(
+    processDescriptor, runSdCardPosix, (void*) _sdCardDevicePath)
+    != processSuccess
   ) {
-    printString("Could not start SD card task.\n");
+    printString("Could not start SD card process.\n");
   }
-  threadSetContext(taskDescriptor->mainThread, taskDescriptor);
-  taskDescriptor->taskId = schedulerState->firstUserTaskId;
-  taskDescriptor->name = "SD card";
-  taskDescriptor->userId = ROOT_USER_ID;
+  threadSetContext(processDescriptor->mainThread, processDescriptor);
+  processDescriptor->pid = schedulerState->firstUserProcessId;
+  processDescriptor->name = "SD card";
+  processDescriptor->userId = ROOT_USER_ID;
   BlockStorageDevice *sdDevice = (BlockStorageDevice*) coroutineResume(
-    allTasks[schedulerState->firstUserTaskId - 1].mainThread, NULL);
+    allProcesses[schedulerState->firstUserProcessId - 1].mainThread, NULL);
   sdDevice->partitionNumber = 1;
-  schedulerState->firstUserTaskId++;
-  schedulerState->firstShellTaskId = schedulerState->firstUserTaskId;
+  schedulerState->firstUserProcessId++;
+  schedulerState->firstShellProcessId = schedulerState->firstUserProcessId;
   
   return halCommonInitRootFilesystem(sdDevice);
 }

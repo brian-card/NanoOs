@@ -37,7 +37,7 @@
 #include "SdCardSpi.h"
 #include "Hal.h"
 #include "NanoOs.h"
-#include "Tasks.h"
+#include "Processes.h"
 #include "../user/NanoOsLibC.h"
 
 // Must come last
@@ -257,7 +257,7 @@ static void sdSpiSendCmd12Inline(int sdCardSpiDevice) {
 /// (STOP_TRANSMISSION), avoiding per-block command overhead.
 ///
 /// @param sdCardState A pointer to the SdCardState object maintained by the
-///   runSdCard task.
+///   runSdCard process.
 /// @param startBlock The logical block number on the SD card to start from.
 /// @param numBlocks The number of blocks to read from the device.
 /// @param buffer A pointer to a character buffer to read the blocks into.
@@ -343,7 +343,7 @@ int sdSpiReadBlocks(SdCardState *sdCardState,
 /// command overhead.
 ///
 /// @param sdCardState A pointer to the SdCardState object maintained by the
-///   runSdCard task.
+///   runSdCard process.
 /// @param startBlock The logical block number to start the write at.
 /// @param numBlocks The number of blocks to write.
 /// @param buffer A pointer to a character buffer to write the blocks from.
@@ -581,21 +581,21 @@ int32_t sdSpiGetBlockCount(int sdCardSpiDevice) {
 }
 
 /// @fn int sdCardSpiReadBlocksCommandHandler(
-///   SdCardState *sdCardState, TaskMessage *taskMessage)
+///   SdCardState *sdCardState, ProcessMessage *processMessage)
 ///
 /// @brief Command handler for the SD_CARD_READ_BLOCKS command.
 ///
 /// @param sdCardState A pointer to the SdCardState object maintained by the
-///   SD card task.
-/// @param taskMessage A pointer to the TaskMessage that was received by
-///   the SD card task.
+///   SD card process.
+/// @param processMessage A pointer to the ProcessMessage that was received by
+///   the SD card process.
 ///
 /// @return Returns 0 on success, a standard POSIX error code on failure.
 int sdCardSpiReadBlocksCommandHandler(
-  SdCardState *sdCardState, TaskMessage *taskMessage
+  SdCardState *sdCardState, ProcessMessage *processMessage
 ) {
   SdCommandParams *sdCommandParams
-    = (SdCommandParams*) taskMessageData(taskMessage);
+    = (SdCommandParams*) processMessageData(processMessage);
   uint32_t startSdBlock = 0, numSdBlocks = 0;
   int returnValue = sdCardGetReadWriteParameters(
     sdCardState, sdCommandParams, &startSdBlock, &numSdBlocks);
@@ -606,28 +606,28 @@ int sdCardSpiReadBlocksCommandHandler(
       startSdBlock, numSdBlocks, buffer);
   }
 
-  taskMessageData(taskMessage) = (void*) ((intptr_t) returnValue);
-  taskMessageSetDone(taskMessage);
+  processMessageData(processMessage) = (void*) ((intptr_t) returnValue);
+  processMessageSetDone(processMessage);
 
   return 0;
 }
 
 /// @fn int sdCardSpiWriteBlocksCommandHandler(
-///   SdCardState *sdCardState, TaskMessage *taskMessage)
+///   SdCardState *sdCardState, ProcessMessage *processMessage)
 ///
 /// @brief Command handler for the SD_CARD_WRITE_BLOCKS command.
 ///
 /// @param sdCardState A pointer to the SdCardState object maintained by the
-///   SD card task.
-/// @param taskMessage A pointer to the TaskMessage that was received by
-///   the SD card task.
+///   SD card process.
+/// @param processMessage A pointer to the ProcessMessage that was received by
+///   the SD card process.
 ///
 /// @return Returns 0 on success, a standard POSIX error code on failure.
 int sdCardSpiWriteBlocksCommandHandler(
-  SdCardState *sdCardState, TaskMessage *taskMessage
+  SdCardState *sdCardState, ProcessMessage *processMessage
 ) {
   SdCommandParams *sdCommandParams
-    = (SdCommandParams*) taskMessageData(taskMessage);
+    = (SdCommandParams*) processMessageData(processMessage);
   uint32_t startSdBlock = 0, numSdBlocks = 0;
   int returnValue = sdCardGetReadWriteParameters(
     sdCardState, sdCommandParams, &startSdBlock, &numSdBlocks);
@@ -638,8 +638,8 @@ int sdCardSpiWriteBlocksCommandHandler(
       startSdBlock, numSdBlocks, buffer);
   }
 
-  taskMessageData(taskMessage) = (void*) ((intptr_t) returnValue);
-  taskMessageSetDone(taskMessage);
+  processMessageData(processMessage) = (void*) ((intptr_t) returnValue);
+  processMessageSetDone(processMessage);
 
   return 0;
 }
@@ -655,18 +655,18 @@ SdCardCommandHandler sdCardSpiCommandHandlers[] = {
 
 /// @fn void handleSdCardSpiMessages(SdCardState *sdCardState)
 ///
-/// @brief Handle sdCard messages from the task's queue until there are no
+/// @brief Handle sdCard messages from the process's queue until there are no
 /// more waiting.
 ///
 /// @param sdCardState A pointer to the SdCardState structure maintained by the
-///   sdCard task.
+///   sdCard process.
 ///
 /// @return This function returns no value.
 void handleSdCardSpiMessages(SdCardState *sdCardState) {
-  TaskMessage *taskMessage = taskMessageQueuePop();
-  while (taskMessage != NULL) {
+  ProcessMessage *processMessage = processMessageQueuePop();
+  while (processMessage != NULL) {
     SdCardCommandResponse messageType
-      = (SdCardCommandResponse) taskMessageType(taskMessage);
+      = (SdCardCommandResponse) processMessageType(processMessage);
     if (messageType >= NUM_SD_CARD_COMMANDS) {
       printString(": ");
       printString(__func__);
@@ -676,12 +676,12 @@ void handleSdCardSpiMessages(SdCardState *sdCardState) {
       printInt(messageType);
       printString("\n");
 
-      taskMessage = taskMessageQueuePop();
+      processMessage = processMessageQueuePop();
       continue;
     }
     
-    sdCardSpiCommandHandlers[messageType](sdCardState, taskMessage);
-    taskMessage = taskMessageQueuePop();
+    sdCardSpiCommandHandlers[messageType](sdCardState, processMessage);
+    processMessage = processMessageQueuePop();
   }
   
   return;
@@ -689,7 +689,7 @@ void handleSdCardSpiMessages(SdCardState *sdCardState) {
 
 /// @fn void* runSdCardSpi(void *args)
 ///
-/// @brief Task entry-point for the SD card task.  Sets up and
+/// @brief Process entry-point for the SD card process.  Sets up and
 /// configures access to the SD card reader and then enters an infinite loop
 /// for processing commands.
 ///
@@ -703,7 +703,7 @@ void* runSdCardSpi(void *args) {
   SdCardState sdCardState;
   memset(&sdCardState, 0, sizeof(sdCardState));
   BlockStorageDevice blockStorageDevice = {
-    .context = (void*) ((intptr_t) getRunningTaskId()),
+    .context = (void*) ((intptr_t) getRunningProcessId()),
     .readBlocks = sdReadBlocks,
     .writeBlocks = sdWriteBlocks,
     .schedReadBlocks = schedSdReadBlocks,
@@ -738,17 +738,17 @@ void* runSdCardSpi(void *args) {
     printString(strerror(-sdCardState.sdCardVersion));
     printString("\n");
   }
-  taskYieldValue(&blockStorageDevice);
+  processYieldValue(&blockStorageDevice);
 
-  TaskMessage *schedulerMessage = NULL;
+  ProcessMessage *schedulerMessage = NULL;
   while (1) {
-    schedulerMessage = (TaskMessage*) taskYield();
+    schedulerMessage = (ProcessMessage*) processYield();
     if (schedulerMessage != NULL) {
-      // We have a message from the scheduler that we need to task.  This
+      // We have a message from the scheduler that we need to process.  This
       // is not the expected case, but it's the priority case, so we need to
       // list it first.
       SdCardCommandResponse messageType
-        = (SdCardCommandResponse) taskMessageType(schedulerMessage);
+        = (SdCardCommandResponse) processMessageType(schedulerMessage);
       if (messageType < NUM_SD_CARD_COMMANDS) {
         sdCardSpiCommandHandlers[messageType](&sdCardState, schedulerMessage);
       } else {

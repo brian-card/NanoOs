@@ -30,7 +30,7 @@
 
 // NanoOs includes
 #include "NanoOsLibC.h"
-#include "Tasks.h"
+#include "Processes.h"
 
 // Simulator includes
 #include "SdCardPosix.h"
@@ -45,36 +45,36 @@ int sdCardRead(int devFd, void *buffer, size_t start, size_t len);
 int sdCardWrite(int devFd, const void *buffer, size_t start, size_t len);
 
 /// @fn int sdCardPosixReadBlocksCommandHandler(
-///   SdCardState *sdCardState, TaskMessage *taskMessage)
+///   SdCardState *sdCardState, ProcessMessage *processMessage)
 ///
 /// @brief Command handler for the SD_CARD_READ_BLOCKS command.
 ///
 /// @param sdCardState A pointer to the SdCardState object maintained by the
-///   SD card task.
-/// @param taskMessage A pointer to the TaskMessage that was received by
-///   the SD card task.
+///   SD card process.
+/// @param processMessage A pointer to the ProcessMessage that was received by
+///   the SD card process.
 ///
 /// @return Returns 0 on success, a standard POSIX error code on failure.
 int sdCardPosixReadBlocksCommandHandler(
-  SdCardState *sdCardState, TaskMessage *taskMessage
+  SdCardState *sdCardState, ProcessMessage *processMessage
 ) {
   printDebugString("sdCardPosixReadBlocksCommandHandler: Enter\n");
-  printDebugString("sdCardPosixReadBlocksCommandHandler: Got TaskMessage\n");
+  printDebugString("sdCardPosixReadBlocksCommandHandler: Got ProcessMessage\n");
   
   int devFd = (int) ((intptr_t) sdCardState->context);
   if (devFd < 0) {
     // Nothing we can do.
     printDebugString(
       "sdCardPosixReadBlocksCommandHandler: Invalid file descriptor\n");
-    taskMessageData(taskMessage) = (void*) ((intptr_t) EIO);
-    taskMessageSetDone(taskMessage);
+    processMessageData(processMessage) = (void*) ((intptr_t) EIO);
+    processMessageSetDone(processMessage);
     printDebugString("sdCardPosixReadBlocksCommandHandler: Returning early\n");
     return 0;
   }
   printDebugString("sdCardPosixReadBlocksCommandHandler: context is *NOT* NULL\n");
   
   SdCommandParams *sdCommandParams
-    = (SdCommandParams*) taskMessageData(taskMessage);
+    = (SdCommandParams*) processMessageData(processMessage);
   printDebugString("sdCardPosixReadBlocksCommandHandler: Got sdCommandParams\n");
   uint32_t startSdBlock = 0, numSdBlocks = 0;
   int returnValue = sdCardGetReadWriteParameters(
@@ -91,38 +91,38 @@ int sdCardPosixReadBlocksCommandHandler(
   }
 
   printDebugString("sdCardPosixReadBlocksCommandHandler: Exiting\n");
-  taskMessageData(taskMessage) = (void*) ((intptr_t) returnValue);
+  processMessageData(processMessage) = (void*) ((intptr_t) returnValue);
   printDebugString("sdCardPosixReadBlocksCommandHandler: Setting message to done\n");
-  taskMessageSetDone(taskMessage);
+  processMessageSetDone(processMessage);
 
   printDebugString("sdCardPosixReadBlocksCommandHandler: Returning\n");
   return 0;
 }
 
 /// @fn int sdCardPosixWriteBlocksCommandHandler(
-///   SdCardState *sdCardState, TaskMessage *taskMessage)
+///   SdCardState *sdCardState, ProcessMessage *processMessage)
 ///
 /// @brief Command handler for the SD_CARD_WRITE_BLOCKS command.
 ///
 /// @param sdCardState A pointer to the SdCardState object maintained by the
-///   SD card task.
-/// @param taskMessage A pointer to the TaskMessage that was received by
-///   the SD card task.
+///   SD card process.
+/// @param processMessage A pointer to the ProcessMessage that was received by
+///   the SD card process.
 ///
 /// @return Returns 0 on success, a standard POSIX error code on failure.
 int sdCardPosixWriteBlocksCommandHandler(
-  SdCardState *sdCardState, TaskMessage *taskMessage
+  SdCardState *sdCardState, ProcessMessage *processMessage
 ) {
   int devFd = (int) ((intptr_t) sdCardState->context);
   if (devFd < 0) {
     // Nothing we can do.
-    taskMessageData(taskMessage) = (void*) ((intptr_t) EIO);
-    taskMessageSetDone(taskMessage);
+    processMessageData(processMessage) = (void*) ((intptr_t) EIO);
+    processMessageSetDone(processMessage);
     return 0;
   }
   
   SdCommandParams *sdCommandParams
-    = (SdCommandParams*) taskMessageData(taskMessage);
+    = (SdCommandParams*) processMessageData(processMessage);
   uint32_t startSdBlock = 0, numSdBlocks = 0;
   int returnValue = sdCardGetReadWriteParameters(
     sdCardState, sdCommandParams, &startSdBlock, &numSdBlocks);
@@ -134,8 +134,8 @@ int sdCardPosixWriteBlocksCommandHandler(
       sdCardState->blockSize * numSdBlocks);
   }
 
-  taskMessageData(taskMessage) = (void*) ((intptr_t) returnValue);
-  taskMessageSetDone(taskMessage);
+  processMessageData(processMessage) = (void*) ((intptr_t) returnValue);
+  processMessageSetDone(processMessage);
 
   return 0;
 }
@@ -151,28 +151,28 @@ SdCardCommandHandler sdCardPosixCommandHandlers[] = {
 
 /// @fn void handleSdCardPosixMessages(SdCardState *sdCardState)
 ///
-/// @brief Handle sdCard messages from the task's queue until there are no
+/// @brief Handle sdCard messages from the process's queue until there are no
 /// more waiting.
 ///
 /// @param sdCardState A pointer to the SdCardState structure maintained by the
-///   sdCard task.
+///   sdCard process.
 ///
 /// @return This function returns no value.
 void handleSdCardPosixMessages(SdCardState *sdCardState) {
-  TaskMessage *taskMessage = taskMessageQueuePop();
-  while (taskMessage != NULL) {
+  ProcessMessage *processMessage = processMessageQueuePop();
+  while (processMessage != NULL) {
     SdCardCommandResponse messageType
-      = (SdCardCommandResponse) taskMessageType(taskMessage);
+      = (SdCardCommandResponse) processMessageType(processMessage);
     if (messageType >= NUM_SD_CARD_COMMANDS) {
       printDebugString("handleSdCardPosixMessages: Received invalid messageType ");
       printDebugInt(messageType);
       printDebugString("\n");
-      taskMessage = taskMessageQueuePop();
+      processMessage = processMessageQueuePop();
       continue;
     }
     
-    sdCardPosixCommandHandlers[messageType](sdCardState, taskMessage);
-    taskMessage = taskMessageQueuePop();
+    sdCardPosixCommandHandlers[messageType](sdCardState, processMessage);
+    processMessage = processMessageQueuePop();
   }
   
   return;
@@ -180,7 +180,7 @@ void handleSdCardPosixMessages(SdCardState *sdCardState) {
 
 /// @fn void* runSdCardPosix(void *args)
 ///
-/// @brief Task entry-point for the SD card task.  Sets up and
+/// @brief Process entry-point for the SD card process.  Sets up and
 /// configures access to the SD card reader and then enters an infinite loop
 /// for processing commands.
 ///
@@ -194,7 +194,7 @@ void* runSdCardPosix(void *args) {
   SdCardState sdCardState;
   memset(&sdCardState, 0, sizeof(sdCardState));
   BlockStorageDevice sdDevice = {
-    .context = (void*) ((intptr_t) getRunningTaskId()),
+    .context = (void*) ((intptr_t) getRunningProcessId()),
     .readBlocks = sdReadBlocks,
     .writeBlocks = sdWriteBlocks,
     .schedReadBlocks = schedSdReadBlocks,
@@ -205,22 +205,22 @@ void* runSdCardPosix(void *args) {
   };
   const char *openError = sdCardInit(&sdCardState, &sdDevice, sdCardDevicePath);
 
-  taskYieldValue(&sdDevice);
+  processYieldValue(&sdDevice);
   if (((intptr_t) sdCardState.context) < 0) {
     fprintf(stderr, "ERROR: Failed to open sdCardDevicePath \"%s\"\n",
       sdCardDevicePath);
     fprintf(stderr, "Error returned: %s\n", openError);
   }
 
-  TaskMessage *schedulerMessage = NULL;
+  ProcessMessage *schedulerMessage = NULL;
   while (1) {
-    schedulerMessage = (TaskMessage*) taskYield();
+    schedulerMessage = (ProcessMessage*) processYield();
     if (schedulerMessage != NULL) {
-      // We have a message from the scheduler that we need to task.  This
+      // We have a message from the scheduler that we need to process.  This
       // is not the expected case, but it's the priority case, so we need to
       // list it first.
       SdCardCommandResponse messageType
-        = (SdCardCommandResponse) taskMessageType(schedulerMessage);
+        = (SdCardCommandResponse) processMessageType(schedulerMessage);
       if (messageType < NUM_SD_CARD_COMMANDS) {
         sdCardPosixCommandHandlers[messageType](&sdCardState, schedulerMessage);
       } else {

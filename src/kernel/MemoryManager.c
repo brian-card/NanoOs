@@ -38,7 +38,7 @@
 #include "NanoOs.h"
 #include "OverlayFunctions.h"
 #include "Scheduler.h"
-#include "Tasks.h"
+#include "Processes.h"
 #include "../user/NanoOsStdio.h"
 
 /****************** Begin Custom Memory Management Functions ******************/
@@ -319,23 +319,23 @@ void localFree(MemoryManagerState *memoryManagerState, void *ptr) {
   return;
 }
 
-/// @fn void localFreeTaskMemory(
-///   MemoryManagerState *memoryManagerState, TaskId taskId)
+/// @fn void localFreeProcessMemory(
+///   MemoryManagerState *memoryManagerState, ProcessId pid)
 ///
-/// @brief Free *ALL* the memory owned by a task given its task ID.
+/// @brief Free *ALL* the memory owned by a process given its process ID.
 ///
 /// @param memoryManagerState A pointer to the MemoryManagerState
 ///   structure that holds the values used for memory allocation and
 ///   deallocation.
-/// @param taskIUd The ID of the task to free the memory of.
+/// @param processIUd The ID of the process to free the memory of.
 ///
 /// @return This function always succeeds and returns no value.
-void localFreeTaskMemory(
-  MemoryManagerState *memoryManagerState, TaskId taskId
+void localFreeProcessMemory(
+  MemoryManagerState *memoryManagerState, ProcessId pid
 ) {
   for (MemNode *cur = memoryManagerState->allocated; cur != NULL; ) {
     MemNode *next = cur->next;
-    if (cur->owner == taskId) {
+    if (cur->owner == pid) {
       localFree(memoryManagerState, &cur[1]);
     }
     cur = next;
@@ -345,7 +345,7 @@ void localFreeTaskMemory(
 }
 
 /// @fn void* localRealloc(MemoryManagerState *memoryManagerState,
-///   void *ptr, size_t size, TaskId taskId)
+///   void *ptr, size_t size, ProcessId pid)
 ///
 /// @brief Reallocate a provided pointer to a new size.
 ///
@@ -356,12 +356,12 @@ void localFreeTaskMemory(
 ///   is NULL, new memory will be allocated.
 /// @param size The new size desired for the memory block at ptr.  If this value
 ///   is 0, the provided pointer will be freed.
-/// @param taskId The ID of the task making the request.
+/// @param pid The ID of the process making the request.
 ///
 /// @return Returns a pointer to size-adjusted memory on success, NULL on
 /// failure or on free.
 void* localRealloc(MemoryManagerState *memoryManagerState,
-  void *ptr, size_t size, TaskId taskId
+  void *ptr, size_t size, ProcessId pid
 ) {
   startDebugMessage("In localRealloc\n");
   // We need to fix the size to be aligned with our memory model.
@@ -623,7 +623,7 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
     memoryManagerState->allocated = cur;
     
     // Set the owner for the memory.
-    cur->owner = taskId;
+    cur->owner = pid;
     
     // Reduce system memory.
     startDebugMessage("Updating memoryManagerState->bytesFree from ");
@@ -662,10 +662,10 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
 /******************* End Custom Memory Management Functions *******************/
 
 int memoryManagerDumpMemoryAllocations(
-  MemoryManagerState *memoryManagerState, TaskMessage *incoming
+  MemoryManagerState *memoryManagerState, ProcessMessage *incoming
 );
 /// @fn int memoryManagerReallocCommandHandler(
-///   MemoryManagerState *memoryManagerState, TaskMessage *incoming)
+///   MemoryManagerState *memoryManagerState, ProcessMessage *incoming)
 ///
 /// @brief Command handler for a MEMORY_MANAGER_REALLOC command.  Extracts the
 /// ReallocMessage from the message and passes the parameters to localRealloc.
@@ -674,43 +674,43 @@ int memoryManagerDumpMemoryAllocations(
 ///   structure that holds the values used for memory allocation and
 ///   deallocation.
 /// @param incoming A pointer to the message received from the requesting
-///   task.
+///   process.
 ///
 /// @return Returns 0 on success, error code on failure.
 int memoryManagerReallocCommandHandler(
-  MemoryManagerState *memoryManagerState, TaskMessage *incoming
+  MemoryManagerState *memoryManagerState, ProcessMessage *incoming
 ) {
   int returnValue = 0;
-  ReallocMessage *reallocMessage = (ReallocMessage*) taskMessageData(incoming);
+  ReallocMessage *reallocMessage = (ReallocMessage*) processMessageData(incoming);
   void *clientReturnValue
     = localRealloc(memoryManagerState,
       reallocMessage->ptr, reallocMessage->size,
-      taskId(taskMessageFrom(incoming)));
+      pid(processMessageFrom(incoming)));
   if (clientReturnValue != NULL) {
     reallocMessage->size = sizeOfMemory(clientReturnValue);
   } else if ((reallocMessage->size > 0)
-    && (taskId(taskMessageFrom(incoming)) != SCHEDULER_STATE->schedulerTaskId)
+    && (pid(processMessageFrom(incoming)) != SCHEDULER_STATE->schedulerProcessId)
   ) {
     memoryManagerDumpMemoryAllocations(memoryManagerState, NULL);
     do {
       break;
-      TaskMessage *filesystemCommand = getAvailableMessage();
+      ProcessMessage *filesystemCommand = getAvailableMessage();
       if (filesystemCommand == NULL) {
         printString("ERROR: Could not get filesystemCommand message\n");
         break;
       }
-      taskMessageInit(filesystemCommand,
+      processMessageInit(filesystemCommand,
         FILESYSTEM_DUMP_OPEN_FILES, NULL, 0, true);
-      if (sendTaskMessageToTask(
-        &SCHEDULER_STATE->allTasks[SCHEDULER_STATE->rootFsTaskId - 1],
-        filesystemCommand) != taskSuccess
+      if (sendProcessMessageToProcess(
+        &SCHEDULER_STATE->allProcesses[SCHEDULER_STATE->rootFsProcessId - 1],
+        filesystemCommand) != processSuccess
       ) {
         printString("ERROR: Could not send FILESYSTEM_DUMP_OPEN_FILES ");
-        printString("message to root FS task ");
-        printInt(SCHEDULER_STATE->rootFsTaskId);
+        printString("message to root FS process ");
+        printInt(SCHEDULER_STATE->rootFsProcessId);
         printString("\n");
       }
-      taskMessageRelease(filesystemCommand);
+      processMessageRelease(filesystemCommand);
     } while (0);
     reallocMessage->size = 0;
   } else {
@@ -720,7 +720,7 @@ int memoryManagerReallocCommandHandler(
   
   // The client is waiting on us.  Mark the incoming message done now.  Do
   // *NOT* release it since the client is still using it.
-  if (taskMessageSetDone(incoming) != taskSuccess) {
+  if (processMessageSetDone(incoming) != processSuccess) {
     returnValue = -1;
   }
   
@@ -728,7 +728,7 @@ int memoryManagerReallocCommandHandler(
 }
 
 /// @fn int memoryManagerFreeCommandHandler(
-///   MemoryManagerState *memoryManagerState, TaskMessage *incoming)
+///   MemoryManagerState *memoryManagerState, ProcessMessage *incoming)
 ///
 /// @brief Command handler for a MEMORY_MANAGER_FREE command.  Extracts the
 /// pointer to free from the message and then calls localFree.
@@ -737,17 +737,17 @@ int memoryManagerReallocCommandHandler(
 ///   structure that holds the values used for memory allocation and
 ///   deallocation.
 /// @param incoming A pointer to the message received from the requesting
-///   task.
+///   process.
 ///
 /// @return Returns 0 on success, error code on failure.
 int memoryManagerFreeCommandHandler(
-  MemoryManagerState *memoryManagerState, TaskMessage *incoming
+  MemoryManagerState *memoryManagerState, ProcessMessage *incoming
 ) {
   int returnValue = 0;
 
-  void *ptr = taskMessageData(incoming);
+  void *ptr = processMessageData(incoming);
   localFree(memoryManagerState, ptr);
-  if (taskMessageRelease(incoming) != taskSuccess) {
+  if (processMessageRelease(incoming) != processSuccess) {
     printString("ERROR: "
       "Could not release message from memoryManagerFreeCommandHandler.\n");
     returnValue = -1;
@@ -757,7 +757,7 @@ int memoryManagerFreeCommandHandler(
 }
 
 /// @fn int memoryManagerGetFreeMemoryCommandHandler(
-///   MemoryManagerState *memoryManagerState, TaskMessage *incoming)
+///   MemoryManagerState *memoryManagerState, ProcessMessage *incoming)
 ///
 /// @brief Command handler for MEMORY_MANAGER_GET_FREE_MEMORY.  Gets the amount
 /// of free dynamic memory left in the system.
@@ -766,85 +766,85 @@ int memoryManagerFreeCommandHandler(
 ///   structure that holds the values used for memory allocation and
 ///   deallocation.
 /// @param incoming A pointer to the message received from the requesting
-///   task.
+///   process.
 ///
 /// @return Returns 0 on success, error code on failure.
 int memoryManagerGetFreeMemoryCommandHandler(
-  MemoryManagerState *memoryManagerState, TaskMessage *incoming
+  MemoryManagerState *memoryManagerState, ProcessMessage *incoming
 ) {
   // We're going to reuse the incoming message as the outgoing message.
-  TaskMessage *response = incoming;
+  ProcessMessage *response = incoming;
 
   int returnValue = 0;
   
-  TaskDescriptor *from = taskMessageFrom(incoming);
-  // We need to mark waiting as true here so that taskMessageSetDone signals the
+  ProcessDescriptor *from = processMessageFrom(incoming);
+  // We need to mark waiting as true here so that processMessageSetDone signals the
   // client side correctly.
-  taskMessageInit(response, MEMORY_MANAGER_RETURNING_FREE_MEMORY,
+  processMessageInit(response, MEMORY_MANAGER_RETURNING_FREE_MEMORY,
     NULL, memoryManagerState->bytesFree, true);
-  if (taskMessageQueuePush(from, response) != taskSuccess) {
+  if (processMessageQueuePush(from, response) != processSuccess) {
     returnValue = -1;
   }
   
   // The client is waiting on us.  Mark the incoming message done now.  Do *NOT*
   // release it since the client is still using it.
-  if (taskMessageSetDone(incoming) != taskSuccess) {
+  if (processMessageSetDone(incoming) != processSuccess) {
     returnValue = -1;
   }
   
   return returnValue;
 }
 
-/// @fn int memoryManagerFreeTaskMemoryCommandHandler(
-///   MemoryManagerState *memoryManagerState, TaskMessage *incoming)
+/// @fn int memoryManagerFreeProcessMemoryCommandHandler(
+///   MemoryManagerState *memoryManagerState, ProcessMessage *incoming)
 ///
 /// @brief Command handler for a MEMORY_MANAGER_FREE_TASK_MEMORY command.
-/// Extracts the task ID from the message and then calls
-/// localFreeTaskMemory.
+/// Extracts the process ID from the message and then calls
+/// localFreeProcessMemory.
 ///
 /// @param memoryManagerState A pointer to the MemoryManagerState
 ///   structure that holds the values used for memory allocation and
 ///   deallocation.
 /// @param incoming A pointer to the message received from the requesting
-///   task.
+///   process.
 ///
 /// @return Returns 0 on success, error code on failure.
-int memoryManagerFreeTaskMemoryCommandHandler(
-  MemoryManagerState *memoryManagerState, TaskMessage *incoming
+int memoryManagerFreeProcessMemoryCommandHandler(
+  MemoryManagerState *memoryManagerState, ProcessMessage *incoming
 ) {
   int returnValue = 0;
-  if (taskId(taskMessageFrom(incoming)) == SCHEDULER_STATE->schedulerTaskId) {
-    TaskId taskId = (TaskId) ((uintptr_t) taskMessageData(incoming));
-    localFreeTaskMemory(memoryManagerState, taskId);
-    taskMessageData(incoming) = (void*) ((uintptr_t) 0);
+  if (pid(processMessageFrom(incoming)) == SCHEDULER_STATE->schedulerProcessId) {
+    ProcessId pid = (ProcessId) ((uintptr_t) processMessageData(incoming));
+    localFreeProcessMemory(memoryManagerState, pid);
+    processMessageData(incoming) = (void*) ((uintptr_t) 0);
   } else {
     printString(
-      "ERROR: Only the scheduler may free another task's memory.\n");
-    taskMessageData(incoming) = (void*) ((uintptr_t) 1);
+      "ERROR: Only the scheduler may free another process's memory.\n");
+    processMessageData(incoming) = (void*) ((uintptr_t) 1);
     returnValue = -1;
   }
   
-  if (taskMessageWaiting(incoming) == true) {
+  if (processMessageWaiting(incoming) == true) {
     // The client is waiting on us.  Mark the message as done.
-    if (taskMessageSetDone(incoming) != taskSuccess) {
+    if (processMessageSetDone(incoming) != processSuccess) {
       printString("ERROR: Could not mark message done in "
-        "memoryManagerFreeTaskMemoryCommandHandler.\n");
+        "memoryManagerFreeProcessMemoryCommandHandler.\n");
       returnValue = -1;
     }
   } else {
     // the client is *NOT* waiting on us.  Release the message.
-    taskMessageRelease(incoming);
+    processMessageRelease(incoming);
   }
   
   return returnValue;
 }
 
 /// @fn int memoryManagerAssignMemoryCommandHandler(
-///   MemoryManagerState *memoryManagerState, TaskMessage *incoming)
+///   MemoryManagerState *memoryManagerState, ProcessMessage *incoming)
 ///
 /// @brief Command handler for the MEMORY_MANAGER_ASSIGN_MEMORY command. Makes
 /// sure that the memory falls in the range of dynamic memory and, if so,
-/// assigns it to the specified task ID.  If the provided pointer is not in the
+/// assigns it to the specified process ID.  If the provided pointer is not in the
 /// range of dynamic memory, no action is taken.
 ///
 /// @note This function can only be called from the scheduler.
@@ -853,17 +853,17 @@ int memoryManagerFreeTaskMemoryCommandHandler(
 ///   structure that holds the values used for memory allocation and
 ///   deallocation.
 /// @param incoming A pointer to the message received from the requesting
-///   task.
+///   process.
 ///
 /// @return Returns 0 on success, error code on failure.
 int memoryManagerAssignMemoryCommandHandler(
-  MemoryManagerState *memoryManagerState, TaskMessage *incoming
+  MemoryManagerState *memoryManagerState, ProcessMessage *incoming
 ) {
   int returnValue = 0;
   
-  if (taskId(taskMessageFrom(incoming)) == SCHEDULER_STATE->schedulerTaskId) {
+  if (pid(processMessageFrom(incoming)) == SCHEDULER_STATE->schedulerProcessId) {
     AssignMemoryParams *assignMemoryParams
-      = (AssignMemoryParams*) taskMessageData(incoming);
+      = (AssignMemoryParams*) processMessageData(incoming);
     if (isDynamicPointer(assignMemoryParams->ptr)) {
       // Make sure the pointer being assigned is allocated.
       MemNode *cur = memoryManagerState->allocated;
@@ -873,7 +873,7 @@ int memoryManagerAssignMemoryCommandHandler(
         }
       }
       if (cur != NULL) {
-        cur->owner = assignMemoryParams->taskId;
+        cur->owner = assignMemoryParams->pid;
       } else {
         printString("ERROR: Attempt to assign unallocated memory.\n");
         returnValue = -1;
@@ -881,17 +881,17 @@ int memoryManagerAssignMemoryCommandHandler(
     }
   } else {
     printString(
-      "ERROR: Only the scheduler may assign memory to another task.\n");
+      "ERROR: Only the scheduler may assign memory to another process.\n");
     returnValue = -1;
   }
   
-  taskMessageSetDone(incoming);
+  processMessageSetDone(incoming);
   
   return returnValue;
 }
 
 /// @fn int memoryManagerDumpMemoryAllocations(
-///   MemoryManagerState *memoryManagerState, TaskMessage *incoming)
+///   MemoryManagerState *memoryManagerState, ProcessMessage *incoming)
 ///
 /// @brief Command handler for MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS.  Walk
 /// the memory allocation list and display information about all of the
@@ -901,11 +901,11 @@ int memoryManagerAssignMemoryCommandHandler(
 ///   structure that holds the values used for memory allocation and
 ///   deallocation.
 /// @param incoming A pointer to the message received from the requesting
-///   task.
+///   process.
 ///
 /// @return Returns 0 on success, error code on failure.
 int memoryManagerDumpMemoryAllocations(
-  MemoryManagerState *memoryManagerState, TaskMessage *incoming
+  MemoryManagerState *memoryManagerState, ProcessMessage *incoming
 ) {
   int returnValue = 0;
   
@@ -935,7 +935,7 @@ int memoryManagerDumpMemoryAllocations(
     printString(" bytes available\n");
   }
   
-  taskMessageSetDone(incoming);
+  processMessageSetDone(incoming);
   
   return returnValue;
 }
@@ -944,7 +944,7 @@ int memoryManagerDumpMemoryAllocations(
 ///
 /// @brief Signature of command handler for a memory manager command.
 typedef int (*MemoryManagerCommandHandler)(
-  MemoryManagerState *memoryManagerState, TaskMessage *incoming);
+  MemoryManagerState *memoryManagerState, ProcessMessage *incoming);
 
 /// @var memoryManagerCommandHandlers
 ///
@@ -955,7 +955,7 @@ const MemoryManagerCommandHandler memoryManagerCommandHandlers[] = {
   memoryManagerFreeCommandHandler,          // MEMORY_MANAGER_FREE
   memoryManagerGetFreeMemoryCommandHandler, // MEMORY_MANAGER_GET_FREE_MEMORY
   // MEMORY_MANAGER_FREE_TASK_MEMORY:
-  memoryManagerFreeTaskMemoryCommandHandler,
+  memoryManagerFreeProcessMemoryCommandHandler,
   memoryManagerAssignMemoryCommandHandler,  // MEMORY_MANAGER_ASSIGN_MEMORY
   // MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS:
   memoryManagerDumpMemoryAllocations,
@@ -964,7 +964,7 @@ const MemoryManagerCommandHandler memoryManagerCommandHandlers[] = {
 /// @fn void handleMemoryManagerMessages(
 ///   MemoryManagerState *memoryManagerState)
 ///
-/// @brief Handle memory manager messages from the task's queue until there
+/// @brief Handle memory manager messages from the process's queue until there
 /// are no more waiting.
 ///
 /// @param memoryManagerState A pointer to the MemoryManagerState
@@ -973,12 +973,12 @@ const MemoryManagerCommandHandler memoryManagerCommandHandlers[] = {
 ///
 /// @return This function returns no value.
 void handleMemoryManagerMessages(MemoryManagerState *memoryManagerState) {
-  TaskMessage *taskMessage = taskMessageQueuePop();
-  while (taskMessage != NULL) {
+  ProcessMessage *processMessage = processMessageQueuePop();
+  while (processMessage != NULL) {
     MemoryManagerCommand messageType
-      = (MemoryManagerCommand) taskMessageType(taskMessage);
+      = (MemoryManagerCommand) processMessageType(processMessage);
     if (messageType >= NUM_MEMORY_MANAGER_COMMANDS) {
-      printInt(getRunningTaskId());
+      printInt(getRunningProcessId());
       printString(": ");
       printString(__func__);
       printString(": ");
@@ -987,14 +987,14 @@ void handleMemoryManagerMessages(MemoryManagerState *memoryManagerState) {
       printInt(messageType);
       printString("\n");
 
-      taskMessage = taskMessageQueuePop();
+      processMessage = processMessageQueuePop();
       continue;
     }
     
     memoryManagerCommandHandlers[messageType](
-      memoryManagerState, taskMessage);
+      memoryManagerState, processMessage);
     
-    taskMessage = taskMessageQueuePop();
+    processMessage = processMessageQueuePop();
   }
   
   return;
@@ -1004,13 +1004,13 @@ void handleMemoryManagerMessages(MemoryManagerState *memoryManagerState) {
 ///   jmp_buf returnBuffer, char *stack)
 ///
 /// @brief Initialize the global variables that will be needed by the memory
-/// management functions and then resume execution in the main task function.
+/// management functions and then resume execution in the main process function.
 ///
 /// @param memoryManagerState A pointer to the MemoryManagerState
 ///   structure that holds the values used for memory allocation and
 ///   deallocation.
 /// @param returnBuffer The jmp_buf that will be used to resume execution in the
-///   main task function.
+///   main process function.
 /// @param stack A pointer to the stack in allocateMemoryManagerStack.  Passed
 ///   just so that the compiler doesn't optimize it out.
 ///
@@ -1050,8 +1050,8 @@ void initializeGlobals(MemoryManagerState *memoryManagerState,
 /// @fn void allocateMemoryManagerStack(MemoryManagerState *memoryManagerState,
 ///   jmp_buf returnBuffer, int stackSize, char *topOfStack)
 ///
-/// @brief Allocate space on the stack for the main task and then call
-/// initializeGlobals to finish the initialization task.
+/// @brief Allocate space on the stack for the main process and then call
+/// initializeGlobals to finish the initialization process.
 ///
 /// @details
 /// This function is way more involved than it should be.  It really should just
@@ -1064,7 +1064,7 @@ void initializeGlobals(MemoryManagerState *memoryManagerState,
 ///   structure that holds the values used for memory allocation and
 ///   deallocation.
 /// @param returnBuffer The jmp_buf that will be used to resume execution in the
-///   main task function.
+///   main process function.
 /// @param stackSize The desired stack size to allocate.
 /// @param topOfStack A pointer to the first stack pointer that gets created.
 ///
@@ -1095,7 +1095,7 @@ void allocateMemoryManagerStack(MemoryManagerState *memoryManagerState,
 //// /// @brief Debugging function to print all the values of the MemoryManagerState.
 //// ///
 //// /// @param memoryManagerState A pointer to the MemoryManagerState maintained by
-//// ///   the task.
+//// ///   the process.
 //// ///
 //// /// @return This function returns no value.
 //// void printMemoryManagerState(MemoryManagerState *memoryManagerState) {
@@ -1121,7 +1121,7 @@ void allocateMemoryManagerStack(MemoryManagerState *memoryManagerState,
 
 /// @fn void* runMemoryManager(void *args)
 ///
-/// @brief Main task for the memory manager that will configure all the
+/// @brief Main process for the memory manager that will configure all the
 /// variables and be responsible for handling the messages.
 ///
 /// @param args Any arguments passed by the scheduler.  Ignored by this
@@ -1134,7 +1134,7 @@ void* runMemoryManager(void *args) {
   printConsoleString("\n");
   
   MemoryManagerState memoryManagerState;
-  TaskMessage *schedulerMessage = NULL;
+  ProcessMessage *schedulerMessage = NULL;
   jmp_buf returnBuffer;
   if (setjmp(returnBuffer) == 0) {
     allocateMemoryManagerStack(&memoryManagerState, returnBuffer,
@@ -1152,13 +1152,13 @@ void* runMemoryManager(void *args) {
   releaseConsole();
   
   while (1) {
-    schedulerMessage = (TaskMessage*) taskYield();
+    schedulerMessage = (ProcessMessage*) processYield();
     if (schedulerMessage != NULL) {
-      // We have a message from the scheduler that we need to task.  This
+      // We have a message from the scheduler that we need to process.  This
       // is not the expected case, but it's the priority case, so we need to
       // list it first.
       MemoryManagerCommand messageType
-        = (MemoryManagerCommand) taskMessageType(schedulerMessage);
+        = (MemoryManagerCommand) processMessageType(schedulerMessage);
       if (messageType < NUM_MEMORY_MANAGER_COMMANDS) {
         memoryManagerCommandHandlers[messageType](
           &memoryManagerState, schedulerMessage);
@@ -1168,7 +1168,7 @@ void* runMemoryManager(void *args) {
         printString(" from scheduler.\n");
       }
     } else {
-      // No message from the scheduler.  Handle any user task messages in
+      // No message from the scheduler.  Handle any user process messages in
       // our message queue.
       handleMemoryManagerMessages(&memoryManagerState);
     }
@@ -1180,38 +1180,38 @@ void* runMemoryManager(void *args) {
 /// @fn size_t getFreeMemory(void)
 ///
 /// @brief Send a MEMORY_MANAGER_GET_FREE_MEMORY command to the memory manager
-/// task and wait for a reply.
+/// process and wait for a reply.
 ///
 /// @return Returns the size, in bytes, of available dynamic memory on success,
 /// 0 on failure.
 size_t getFreeMemory(void) {
   size_t returnValue = 0;
   
-  TaskMessage sent;
+  ProcessMessage sent;
   memset(&sent, 0, sizeof(sent));
-  taskMessageInit(&sent, MEMORY_MANAGER_GET_FREE_MEMORY, NULL, 0, true);
+  processMessageInit(&sent, MEMORY_MANAGER_GET_FREE_MEMORY, NULL, 0, true);
   
-  if (sendTaskMessageToTaskId(SCHEDULER_STATE->memoryManagerTaskId, &sent)
-    != taskSuccess
+  if (sendProcessMessageToProcessId(SCHEDULER_STATE->memoryManagerProcessId, &sent)
+    != processSuccess
   ) {
     // Nothing more we can do.
     return returnValue;
   }
   
-  TaskMessage *response = taskMessageWaitForReplyWithType(&sent, false,
+  ProcessMessage *response = processMessageWaitForReplyWithType(&sent, false,
     MEMORY_MANAGER_RETURNING_FREE_MEMORY, NULL);
-  returnValue = taskMessageSize(response);
+  returnValue = processMessageSize(response);
   
   return returnValue;
 }
 
 /// @fn void* memoryManagerSendReallocMessage(void *ptr, size_t size)
 ///
-/// @brief Send a MEMORY_MANAGER_REALLOC command to the memory manager task
+/// @brief Send a MEMORY_MANAGER_REALLOC command to the memory manager process
 /// and wait for a reply.
 ///
-/// @param ptr The pointer to send to the task.
-/// @param size The size to send to the task.
+/// @param ptr The pointer to send to the process.
+/// @param size The size to send to the process.
 ///
 /// @return Returns the data pointer returned in the reply.
 void* memoryManagerSendReallocMessage(void *ptr, size_t size) {
@@ -1221,8 +1221,8 @@ void* memoryManagerSendReallocMessage(void *ptr, size_t size) {
   reallocMessage.ptr = ptr;
   reallocMessage.size = size;
   
-  TaskMessage *sent
-    = initSendTaskMessageToTaskId(SCHEDULER_STATE->memoryManagerTaskId,
+  ProcessMessage *sent
+    = initSendProcessMessageToProcessId(SCHEDULER_STATE->memoryManagerProcessId,
     MEMORY_MANAGER_REALLOC, &reallocMessage, sizeof(reallocMessage), true);
   
   if (sent == NULL) {
@@ -1230,12 +1230,12 @@ void* memoryManagerSendReallocMessage(void *ptr, size_t size) {
     return returnValue; // NULL
   }
   
-  taskMessageWaitForDone(sent, NULL);
+  processMessageWaitForDone(sent, NULL);
   
   // The handler set the pointer back in the structure we sent it, so grab it
   // out of the structure we already have.
   returnValue = reallocMessage.ptr;
-  taskMessageRelease(sent);
+  processMessageRelease(sent);
   
   return returnValue;
 }
@@ -1251,8 +1251,8 @@ void* memoryManagerSendReallocMessage(void *ptr, size_t size) {
 /// @return This function always succeeds and returns no value.
 void memoryManagerFree(void *ptr) {
   if (ptr != NULL) {
-    if (initSendTaskMessageToTaskId(
-      SCHEDULER_STATE->memoryManagerTaskId, MEMORY_MANAGER_FREE,
+    if (initSendProcessMessageToProcessId(
+      SCHEDULER_STATE->memoryManagerProcessId, MEMORY_MANAGER_FREE,
       /* data= */ ptr, /* size= */ 0, false) == NULL
     ) {
       printString("ERROR: Could not send MEMORY_MANAGER_FREE message to ");

@@ -45,7 +45,7 @@ extern "C"
 
 /// @def MEMORY_MANAGER_TASK_STACK_CHUNK_SIZE
 ///
-/// @brief The size, in bytes, of one chunk of the main memory task's stack.
+/// @brief The size, in bytes, of one chunk of the main memory process's stack.
 #define MEMORY_MANAGER_TASK_STACK_CHUNK_SIZE 32
 
 /// @def MEMORY_MANAGER_DEBUG
@@ -56,7 +56,7 @@ extern "C"
 
 /// @def MEMORY_MANAGER_DEBUG_STACK_SIZE
 ///
-/// @brief The stack size, in bytes, of the main memory manager task that
+/// @brief The stack size, in bytes, of the main memory manager process that
 /// will handle messages when in debug mode.  This needs to be as small as
 /// possible while still allowing debug prints to work.
 #define MEMORY_MANAGER_DEBUG_STACK_SIZE 768
@@ -66,10 +66,10 @@ extern "C"
 /// @brief Functional parameters to the MEMORY_MANAGER_ASSIGN_MEMORY command.
 ///
 /// @param ptr A pointer to the memory to assign.
-/// @param taskId The TaskId of the task to assign the memory to.
+/// @param pid The ProcessId of the process to assign the memory to.
 typedef struct AssignMemoryParams {
   void *ptr;
-  TaskId taskId;
+  ProcessId pid;
 } AssignMemoryParams;
 
 /// @enum MemoryManagerCommandResponse

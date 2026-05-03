@@ -40,7 +40,7 @@
 #include "../kernel/Console.h"
 #include "../kernel/NanoOs.h"
 #include "../kernel/Scheduler.h"
-#include "../kernel/Tasks.h"
+#include "../kernel/Processes.h"
 
 // Must come last
 #include "NanoOsStdio.h"
@@ -56,30 +56,30 @@
 int nanoOsClose(int fd) {
   int returnValue = 0;
   
-  TaskDescriptor *taskDescriptor = getRunningTask();
-  if (taskDescriptor == NULL) {
+  ProcessDescriptor *processDescriptor = getRunningProcess();
+  if (processDescriptor == NULL) {
     // This should be impossible, but check anyway.
     errno = EOTHER;
     returnValue = -1;
     goto exit;
   }
   
-  if ((fd > taskDescriptor->numFileDescriptors)
-    || (taskDescriptor->fileDescriptors[fd] == NULL)
+  if ((fd > processDescriptor->numFileDescriptors)
+    || (processDescriptor->fileDescriptors[fd] == NULL)
   ) {
     errno = EBADF;
     returnValue = -1;
     goto exit;
   }
   
-  taskDescriptor->fileDescriptors[fd]->refCount--;
-  if (taskDescriptor->fileDescriptors[fd]->refCount == 0) {
-    if (taskDescriptor->fileDescriptors[fd]->pipeEnd != NULL) {
-      taskDescriptor->fileDescriptors[fd]->pipeEnd->pipeEnd = NULL;
+  processDescriptor->fileDescriptors[fd]->refCount--;
+  if (processDescriptor->fileDescriptors[fd]->refCount == 0) {
+    if (processDescriptor->fileDescriptors[fd]->pipeEnd != NULL) {
+      processDescriptor->fileDescriptors[fd]->pipeEnd->pipeEnd = NULL;
     }
-    free(taskDescriptor->fileDescriptors[fd]);
+    free(processDescriptor->fileDescriptors[fd]);
   }
-  taskDescriptor->fileDescriptors[fd] = NULL;
+  processDescriptor->fileDescriptors[fd] = NULL;
   
 exit:
   return returnValue;
@@ -97,20 +97,20 @@ exit:
 int nanoOsDup2(int oldfd, int newfd) {
   int returnValue = 0;
   
-  TaskDescriptor *taskDescriptor = getRunningTask();
-  if (taskDescriptor == NULL) {
+  ProcessDescriptor *processDescriptor = getRunningProcess();
+  if (processDescriptor == NULL) {
     // This should be impossible, but check anyway.
     errno = EOTHER;
     returnValue = -1;
     goto exit;
-  } else if (newfd >= taskDescriptor->numFileDescriptors) {
+  } else if (newfd >= processDescriptor->numFileDescriptors) {
     errno = EBADF;
     returnValue = -1;
     goto exit;
   }
   
-  FileDescriptor *oldFileDescriptor = taskDescriptor->fileDescriptors[oldfd];
-  FileDescriptor *newFileDescriptor = taskDescriptor->fileDescriptors[newfd];
+  FileDescriptor *oldFileDescriptor = processDescriptor->fileDescriptors[oldfd];
+  FileDescriptor *newFileDescriptor = processDescriptor->fileDescriptors[newfd];
   if (newFileDescriptor->pipeEnd != NULL) {
     // We're about to free this FileDescriptor, so terminate the other end of
     // the pipe.
@@ -122,19 +122,19 @@ int nanoOsDup2(int oldfd, int newfd) {
   }
   
   // Move the old file descriptor into the new one's slot.
-  taskDescriptor->fileDescriptors[newfd] = oldFileDescriptor;
+  processDescriptor->fileDescriptors[newfd] = oldFileDescriptor;
   oldFileDescriptor->refCount++;
   
   if (oldFileDescriptor->pipeEnd != NULL) {
-    // Check to see if we need to adjust the taskIds for the pipe.
+    // Check to see if we need to adjust the pids for the pipe.
     if (newfd == STDIN_FILENO) {
-      // We need to set the taskId of the outputChannel of the other end of the
+      // We need to set the pid of the outputChannel of the other end of the
       // pipe to our ID.
-      oldFileDescriptor->pipeEnd->outputChannel.taskId = getRunningTaskId();
+      oldFileDescriptor->pipeEnd->outputChannel.pid = getRunningProcessId();
     } else if ((newfd == STDOUT_FILENO) || (newfd == STDERR_FILENO)) {
-      // We need to set the taskId of the inputChannel of the other end of the
+      // We need to set the pid of the inputChannel of the other end of the
       // pipe to our ID.
-      oldFileDescriptor->pipeEnd->inputChannel.taskId = getRunningTaskId();
+      oldFileDescriptor->pipeEnd->inputChannel.pid = getRunningProcessId();
     }
   }
   
@@ -187,78 +187,78 @@ int nanoOsGethostname(char *name, size_t len) {
 int nanoOsPipe(int pipefd[2]) {
   int returnValue = 0;
   
-  TaskDescriptor *taskDescriptor = getRunningTask();
-  if (taskDescriptor == NULL) {
+  ProcessDescriptor *processDescriptor = getRunningProcess();
+  if (processDescriptor == NULL) {
     // This should be impossible, but check anyway.
     errno = EOTHER;
     returnValue = -1;
     goto exit;
   }
   
-  uint8_t numFileDescriptors = taskDescriptor->numFileDescriptors;
-  void *check = realloc(taskDescriptor->fileDescriptors,
+  uint8_t numFileDescriptors = processDescriptor->numFileDescriptors;
+  void *check = realloc(processDescriptor->fileDescriptors,
     (numFileDescriptors + 2) * sizeof(FileDescriptor*));
   if (check == NULL) {
     errno = ENOMEM;
     returnValue = -1;
     goto exit;
   }
-  taskDescriptor->fileDescriptors = (FileDescriptor**) check;
+  processDescriptor->fileDescriptors = (FileDescriptor**) check;
   // We need to guarantee that the new slots added start out as NULL.  That way,
   // if one of the allocations fails, we can pass the pointer into free and not
   // worry about it.
   for (int ii = numFileDescriptors; ii < (numFileDescriptors + 2); ii++) {
-    taskDescriptor->fileDescriptors[ii] = NULL;
+    processDescriptor->fileDescriptors[ii] = NULL;
   }
   
   // Now allocate each one
   for (int ii = numFileDescriptors; ii < (numFileDescriptors + 2); ii++) {
-    taskDescriptor->fileDescriptors[ii]
+    processDescriptor->fileDescriptors[ii]
       = (FileDescriptor*) malloc(sizeof(FileDescriptor));
-    if (taskDescriptor->fileDescriptors[ii] == NULL) {
+    if (processDescriptor->fileDescriptors[ii] == NULL) {
       errno = ENOMEM;
       goto freeFileDescriptors;
     }
     
     // Initialize the file descriptor's channels to point to ourself.
-    taskDescriptor->fileDescriptors[ii]->inputChannel.taskId = TASK_ID_NOT_SET;
-    taskDescriptor->fileDescriptors[ii]->inputChannel.messageType = -1;
-    taskDescriptor->fileDescriptors[ii]->outputChannel.taskId = TASK_ID_NOT_SET;
-    taskDescriptor->fileDescriptors[ii]->outputChannel.messageType = -1;
-    taskDescriptor->fileDescriptors[ii]->pipeEnd = NULL;
-    taskDescriptor->fileDescriptors[ii]->refCount = 1;
+    processDescriptor->fileDescriptors[ii]->inputChannel.pid = TASK_ID_NOT_SET;
+    processDescriptor->fileDescriptors[ii]->inputChannel.messageType = -1;
+    processDescriptor->fileDescriptors[ii]->outputChannel.pid = TASK_ID_NOT_SET;
+    processDescriptor->fileDescriptors[ii]->outputChannel.messageType = -1;
+    processDescriptor->fileDescriptors[ii]->pipeEnd = NULL;
+    processDescriptor->fileDescriptors[ii]->refCount = 1;
   }
   
   // Fix the messages for the relevant channels in the file descriptors.
-  taskDescriptor->fileDescriptors[numFileDescriptors
+  processDescriptor->fileDescriptors[numFileDescriptors
     ]->inputChannel.messageType = CONSOLE_RETURNING_INPUT;
-  taskDescriptor->fileDescriptors[numFileDescriptors + 1
+  processDescriptor->fileDescriptors[numFileDescriptors + 1
     ]->outputChannel.messageType = CONSOLE_RETURNING_INPUT;
   
   // Now point the pipe ends toward each other.
-  taskDescriptor->fileDescriptors[numFileDescriptors]->pipeEnd
-    = taskDescriptor->fileDescriptors[numFileDescriptors + 1];
-  taskDescriptor->fileDescriptors[numFileDescriptors + 1]->pipeEnd
-    = taskDescriptor->fileDescriptors[numFileDescriptors];
+  processDescriptor->fileDescriptors[numFileDescriptors]->pipeEnd
+    = processDescriptor->fileDescriptors[numFileDescriptors + 1];
+  processDescriptor->fileDescriptors[numFileDescriptors + 1]->pipeEnd
+    = processDescriptor->fileDescriptors[numFileDescriptors];
   
   // Set the values in the array that was provided.
   pipefd[0] = numFileDescriptors;
   pipefd[1] = numFileDescriptors + 1;
   
-  // Lastly, increase the value of taskDescriptor->numFileDescriptors;
-  taskDescriptor->numFileDescriptors += 2;
+  // Lastly, increase the value of processDescriptor->numFileDescriptors;
+  processDescriptor->numFileDescriptors += 2;
   
   return returnValue;
   
 freeFileDescriptors:
   for (int ii = numFileDescriptors; ii < (numFileDescriptors + 2); ii++) {
-    free(taskDescriptor->fileDescriptors[ii]);
+    free(processDescriptor->fileDescriptors[ii]);
   }
   // We need to shrink the fileDescriptors array back down to its original size.
   // Since we're reducing the amount of memory consumed, this is guaranteed to
   // be successful and not relocate the pointer, so no need to do anything with
   // the return value.
-  realloc(taskDescriptor->fileDescriptors,
+  realloc(processDescriptor->fileDescriptors,
     numFileDescriptors * sizeof(FileDescriptor*));
   
 exit:

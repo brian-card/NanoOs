@@ -35,7 +35,7 @@
 #include <pwd.h>
 
 // NanoOs includes
-#include "NanoOsTasks.h"
+#include "NanoOsProcesses.h"
 #include "NanoOsUtils.h"
 
 int main(int argc, char **argv) {
@@ -60,13 +60,13 @@ int main(int argc, char **argv) {
     goto freePasswdStringBuffer;
   }
   
-  TaskInfo *taskInfo = getTaskInfo();
-  if (taskInfo != NULL) {
-    uint8_t numRunningTasks = taskInfo->numTasks;
-    TaskInfoElement *tasks = taskInfo->tasks;
-    for (uint8_t ii = 0; ii < numRunningTasks; ii++) {
+  ProcessInfo *processInfo = getProcessInfo();
+  if (processInfo != NULL) {
+    uint8_t numRunningProcesses = processInfo->numProcesses;
+    ProcessInfoElement *processes = processInfo->processes;
+    for (uint8_t ii = 0; ii < numRunningProcesses; ii++) {
       struct passwd *result = NULL;
-      returnValue = getpwuid_r(tasks[ii].userId, pwd,
+      returnValue = getpwuid_r(processes[ii].userId, pwd,
         passwdStringBuffer, NANO_OS_PASSWD_STRING_BUF_SIZE, &result);
       if (returnValue != 0) {
         fprintf(stderr, "getpwnam_r returned status %d\n", returnValue);
@@ -81,11 +81,11 @@ int main(int argc, char **argv) {
       }
       
       printf("%d  %s %s\n",
-        tasks[ii].pid,
+        processes[ii].pid,
         pwd->pw_name,
-        tasks[ii].name);
+        processes[ii].name);
     }
-    free(taskInfo); taskInfo = NULL;
+    free(processInfo); processInfo = NULL;
   } else {
     printf("ERROR: Could not get process information from scheduler.\n");
   }

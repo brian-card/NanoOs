@@ -37,7 +37,7 @@
 #include "../kernel/Console.h"
 #include "../kernel/Hal.h"
 #include "../kernel/NanoOs.h"
-#include "../kernel/Tasks.h"
+#include "../kernel/Processes.h"
 #include "../kernel/Scheduler.h"
 
 // Must come last
@@ -246,7 +246,7 @@ typedef enum TypeModifier {
 /// @brief Parse a signed integer value and store it in a variable at a provided
 /// pointer.
 ///
-/// @param buffer A pointer to the character buffer that is in the task of
+/// @param buffer A pointer to the character buffer that is in the process of
 ///   being parsed.  This value will be updated on success.
 /// @param typeModifier The TypeModifier value that specifies the size of the
 ///   variable being stored.
@@ -358,7 +358,7 @@ int scanfParseSignedInt(
 /// @brief Parse an unsigned integer value and store it in a variable at a
 /// provided pointer.
 ///
-/// @param buffer A pointer to the character buffer that is in the task of
+/// @param buffer A pointer to the character buffer that is in the process of
 ///   being parsed.  This value will be updated on success.
 /// @param typeModifier The TypeModifier value that specifies the size of the
 ///   variable being stored.
@@ -460,7 +460,7 @@ int scanfParseUnsignedInt(
 /// @brief Parse an floating-point value and store it in a variable at a
 /// provided pointer.
 ///
-/// @param buffer A pointer to the character buffer that is in the task of
+/// @param buffer A pointer to the character buffer that is in the process of
 ///   being parsed.  This value will be updated on success.
 /// @param typeModifier The TypeModifier value that specifies the size of the
 ///   variable being stored.
@@ -527,7 +527,7 @@ int scanfParseFloat(
 /// @brief Parse a string value and store it in a variable at a provided
 /// pointer.
 ///
-/// @param buffer A pointer to the character buffer that is in the task of
+/// @param buffer A pointer to the character buffer that is in the process of
 ///   being parsed.  This value will be updated on success.
 /// @param numBytes The number of bytes to read from the buffer.
 /// @param addNullByte Whether or not to add a terminating NULL byte to the end
@@ -801,7 +801,7 @@ int sscanf(const char *buffer, const char *format, ...) {
 
 /// @fn ConsoleBuffer* nanoOsWaitForInput(void)
 ///
-/// @brief Wait for input from the nanoOs port owned by the current task.
+/// @brief Wait for input from the nanoOs port owned by the current process.
 ///
 /// @return Returns a pointer to the input retrieved on success, NULL on
 /// failure.
@@ -809,8 +809,8 @@ ConsoleBuffer* nanoOsWaitForInput(void) {
   ConsoleBuffer *nanoOsBuffer = NULL;
   FileDescriptor *inputFd = schedulerGetFileDescriptor(stdin);
   if (inputFd == NULL) {
-    printString("ERROR: Could not get input file descriptor for task ");
-    printInt(getRunningTaskId());
+    printString("ERROR: Could not get input file descriptor for process ");
+    printInt(getRunningProcessId());
     printString(" and stream ");
     printInt((intptr_t) stdin);
     printString(".\n");
@@ -820,24 +820,24 @@ ConsoleBuffer* nanoOsWaitForInput(void) {
   }
   IoChannel *inputChannel = &inputFd->inputChannel;
 
-  if (inputChannel->taskId == SCHEDULER_STATE->consoleTaskId) {
+  if (inputChannel->pid == SCHEDULER_STATE->consoleProcessId) {
     // Tell the console that we're waiting for input.  Fire and forget.
-    (void) initSendTaskMessageToTaskId(
-      inputChannel->taskId, inputChannel->messageType,
+    (void) initSendProcessMessageToProcessId(
+      inputChannel->pid, inputChannel->messageType,
       /* data= */ 0, /* size= */ 0, false);
   }
 
-  if (inputChannel->taskId != TASK_ID_NOT_SET) {
-    TaskMessage *response
-      = taskMessageQueueWaitForType(CONSOLE_RETURNING_INPUT, NULL);
-    nanoOsBuffer = (ConsoleBuffer*) taskMessageData(response);
+  if (inputChannel->pid != TASK_ID_NOT_SET) {
+    ProcessMessage *response
+      = processMessageQueueWaitForType(CONSOLE_RETURNING_INPUT, NULL);
+    nanoOsBuffer = (ConsoleBuffer*) processMessageData(response);
 
-    if (taskMessageWaiting(response) == false) {
+    if (processMessageWaiting(response) == false) {
       // The usual case.
-      taskMessageRelease(response);
+      processMessageRelease(response);
     } else {
       // Just tell the sender that we're done.
-      taskMessageSetDone(response);
+      processMessageSetDone(response);
     }
   }
 
@@ -891,8 +891,8 @@ int nanoOsVfscanf(FILE *stream, const char *format, va_list args) {
 
     returnValue = vsscanf(nanoOsBuffer->buffer, format, args);
     // Release the buffer.  Fire and forget.
-    (void) initSendTaskMessageToTaskId(
-      SCHEDULER_STATE->consoleTaskId, CONSOLE_RELEASE_BUFFER,
+    (void) initSendProcessMessageToProcessId(
+      SCHEDULER_STATE->consoleProcessId, CONSOLE_RELEASE_BUFFER,
       /* data= */ nanoOsBuffer, /* size= */ sizeof(*nanoOsBuffer), false);
   }
 
@@ -943,10 +943,10 @@ int nanoOsScanf(const char *format, ...) {
 
 /// @fn ConsoleBuffer* nanoOsGetBuffer(void)
 ///
-/// @brief Get a buffer from the runConsole task by sending it a command
+/// @brief Get a buffer from the runConsole process by sending it a command
 /// message and getting its response.
 ///
-/// @return Returns a pointer to a ConsoleBuffer from the runConsole task on
+/// @return Returns a pointer to a ConsoleBuffer from the runConsole process on
 /// success, NULL on failure.
 ConsoleBuffer* nanoOsGetBuffer(void) {
   ConsoleBuffer *returnValue = NULL;
@@ -955,26 +955,26 @@ ConsoleBuffer* nanoOsGetBuffer(void) {
   // is made, so we may have to try multiple times.  Do a while loop until we
   // get a buffer back or until an error occurs.
   while (returnValue == NULL) {
-    TaskMessage *taskMessage = initSendTaskMessageToTaskId(
-      SCHEDULER_STATE->consoleTaskId, CONSOLE_GET_BUFFER, 0, 0, true);
-    if (taskMessage == NULL) {
+    ProcessMessage *processMessage = initSendProcessMessageToProcessId(
+      SCHEDULER_STATE->consoleProcessId, CONSOLE_GET_BUFFER, 0, 0, true);
+    if (processMessage == NULL) {
       break; // will return returnValue, which is NULL
     }
 
     // We want to make sure the handler is done processing the message before
     // we wait for a reply.  Do a blocking wait.
-    if (taskMessageWaitForDone(taskMessage, NULL) != taskSuccess) {
+    if (processMessageWaitForDone(processMessage, NULL) != processSuccess) {
       // Something is wrong.  Bail.
-      taskMessageRelease(taskMessage);
+      processMessageRelease(processMessage);
       break; // will return returnValue, which is NULL
     }
 
-    returnValue = (ConsoleBuffer*) taskMessageData(taskMessage);
-    taskMessageRelease(taskMessage);
+    returnValue = (ConsoleBuffer*) processMessageData(processMessage);
+    processMessageRelease(processMessage);
     if (returnValue == NULL) {
       // Yield control to give the OS a chance to get done processing the
       // buffers that are in use.
-      taskYield();
+      processYield();
     }
   }
 
@@ -983,7 +983,7 @@ ConsoleBuffer* nanoOsGetBuffer(void) {
 
 /// @fn int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *nanoOsBuffer)
 ///
-/// @brief Send a CONSOLE_WRITE_BUFFER command to the nanoOs task.
+/// @brief Send a CONSOLE_WRITE_BUFFER command to the nanoOs process.
 ///
 /// @param stream A pointer to a FILE object designating which file to output
 ///   to (stdout or stderr).
@@ -997,15 +997,15 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *nanoOsBuffer) {
     FileDescriptor *outputFd = schedulerGetFileDescriptor(stream);
     if (outputFd == NULL) {
       printString(
-        "ERROR: Could not get output file descriptor for task ");
-      printInt(getRunningTaskId());
+        "ERROR: Could not get output file descriptor for process ");
+      printInt(getRunningProcessId());
       printString(" and stream ");
       printInt((intptr_t) stream);
       printString(".\n");
 
       // Release the buffer to avoid creating a leak.  Fire and forget.
-      (void) initSendTaskMessageToTaskId(
-        SCHEDULER_STATE->consoleTaskId, CONSOLE_RELEASE_BUFFER,
+      (void) initSendProcessMessageToProcessId(
+        SCHEDULER_STATE->consoleProcessId, CONSOLE_RELEASE_BUFFER,
         /* data= */ nanoOsBuffer, /* size= */ sizeof(*nanoOsBuffer), false);
 
       // We can't proceed, so bail.
@@ -1014,40 +1014,40 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *nanoOsBuffer) {
     }
     IoChannel *outputChannel = &outputFd->outputChannel;
 
-    if ((outputChannel != NULL) && (outputChannel->taskId != TASK_ID_NOT_SET)) {
+    if ((outputChannel != NULL) && (outputChannel->pid != TASK_ID_NOT_SET)) {
       if ((stream == stdout) || (stream == stderr)) {
-        TaskMessage *taskMessage = initSendTaskMessageToTaskId(
-          outputChannel->taskId, outputChannel->messageType,
+        ProcessMessage *processMessage = initSendProcessMessageToProcessId(
+          outputChannel->pid, outputChannel->messageType,
           /* data= */ nanoOsBuffer, /* size= */ sizeof(*nanoOsBuffer), true);
-        if (taskMessage != NULL) {
-          taskMessageWaitForDone(taskMessage, NULL);
-          taskMessageRelease(taskMessage);
+        if (processMessage != NULL) {
+          processMessageWaitForDone(processMessage, NULL);
+          processMessageRelease(processMessage);
         } else {
           returnValue = EOF;
         }
       } else {
         printString("ERROR: Request to write to invalid stream ");
         printInt((intptr_t) stream);
-        printString(" from task ");
-        printInt(getRunningTaskId());
+        printString(" from process ");
+        printInt(getRunningProcessId());
         printString(".\n");
 
         // Release the buffer to avoid creating a leak.  Fire and forget.
-        (void) initSendTaskMessageToTaskId(
-          SCHEDULER_STATE->consoleTaskId, CONSOLE_RELEASE_BUFFER,
+        (void) initSendProcessMessageToProcessId(
+          SCHEDULER_STATE->consoleProcessId, CONSOLE_RELEASE_BUFFER,
           /* data= */ nanoOsBuffer, /* size= */ sizeof(*nanoOsBuffer), false);
 
         returnValue = EOF;
       }
     } else {
       printString(
-        "ERROR: Request to write with no output pipe set from task ");
-      printInt(getRunningTaskId());
+        "ERROR: Request to write with no output pipe set from process ");
+      printInt(getRunningProcessId());
       printString(".\n");
 
       // Release the buffer to avoid creating a leak.  Fire and forget.
-      (void) initSendTaskMessageToTaskId(
-        SCHEDULER_STATE->consoleTaskId, CONSOLE_RELEASE_BUFFER,
+      (void) initSendProcessMessageToProcessId(
+        SCHEDULER_STATE->consoleProcessId, CONSOLE_RELEASE_BUFFER,
         /* data= */ nanoOsBuffer, /* size= */ sizeof(*nanoOsBuffer), false);
 
       returnValue = EOF;
@@ -1059,21 +1059,21 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *nanoOsBuffer) {
       .buffer = nanoOsBuffer->buffer,
       .length = (uint32_t) strlen(nanoOsBuffer->buffer)
     };
-    TaskMessage *taskMessage = initSendTaskMessageToTaskId(
-      SCHEDULER_STATE->rootFsTaskId,
+    ProcessMessage *processMessage = initSendProcessMessageToProcessId(
+      SCHEDULER_STATE->rootFsProcessId,
       FILESYSTEM_WRITE_FILE,
       /* data= */ &filesystemIoCommandParameters,
       /* size= */ sizeof(filesystemIoCommandParameters),
       true);
-    taskMessageWaitForDone(taskMessage, NULL);
+    processMessageWaitForDone(processMessage, NULL);
     if (filesystemIoCommandParameters.length == 0) {
       returnValue = EOF;
     }
-    taskMessageRelease(taskMessage);
+    processMessageRelease(processMessage);
 
     // Release the buffer to avoid creating a leak.  Fire and forget.
-    (void) initSendTaskMessageToTaskId(
-      SCHEDULER_STATE->consoleTaskId, CONSOLE_RELEASE_BUFFER,
+    (void) initSendProcessMessageToProcessId(
+      SCHEDULER_STATE->consoleProcessId, CONSOLE_RELEASE_BUFFER,
       /* data= */ nanoOsBuffer, /* size= */ sizeof(*nanoOsBuffer), false);
   }
 
@@ -1214,7 +1214,7 @@ size_t nanoOsFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   size_t returnValue = 0;
   char *charBuffer = (char*) ptr;
   ConsoleBuffer *nanoOsBuffer
-    = (ConsoleBuffer*) getTaskStorage(FGETS_CONSOLE_BUFFER_KEY);
+    = (ConsoleBuffer*) getProcessStorage(FGETS_CONSOLE_BUFFER_KEY);
   size_t numBytesReceived = 0;
   char *newlineAt = NULL;
   int numBytesToCopy = 0;
@@ -1231,7 +1231,7 @@ size_t nanoOsFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     // 4. We reach bufferSize - 1 bytes received from the stream.
     if (nanoOsBuffer == NULL) {
       nanoOsBuffer = nanoOsWaitForInput();
-      setTaskStorage(FGETS_CONSOLE_BUFFER_KEY, nanoOsBuffer);
+      setProcessStorage(FGETS_CONSOLE_BUFFER_KEY, nanoOsBuffer);
     } else {
       // We're continuing to read from a buffer that contained a newline plus
       // something else after it.
@@ -1277,8 +1277,8 @@ size_t nanoOsFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
       numBytesReceived += numBytesToCopy;
       charBuffer[numBytesReceived] = '\0';
       // Release the buffer.  Fire and forget.
-      (void) initSendTaskMessageToTaskId(
-        SCHEDULER_STATE->consoleTaskId, CONSOLE_RELEASE_BUFFER,
+      (void) initSendProcessMessageToProcessId(
+        SCHEDULER_STATE->consoleProcessId, CONSOLE_RELEASE_BUFFER,
         /* data= */ nanoOsBuffer, /* size= */ sizeof(*nanoOsBuffer), false);
 
       if ((newlineAt != NULL) || (strchr(nanoOsBuffer->buffer, ASCII_ESCAPE))) {
@@ -1291,7 +1291,7 @@ size_t nanoOsFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
         bufferIndex = 0;
       }
 
-      setTaskStorage(FGETS_CONSOLE_BUFFER_KEY, nanoOsBuffer);
+      setProcessStorage(FGETS_CONSOLE_BUFFER_KEY, nanoOsBuffer);
     }
     returnValue = numBytesReceived;
   } else {

@@ -52,15 +52,15 @@ typedef struct FileDescriptor FileDescriptor;
 typedef struct NanoOsFile NanoOsFile;
 #define FILE NanoOsFile
 typedef struct SchedulerState SchedulerState;
-typedef struct TaskDescriptor TaskDescriptor;
+typedef struct ProcessDescriptor ProcessDescriptor;
 typedef Coroutine* Thread;
-typedef uint8_t TaskId;
-typedef struct TaskInfo TaskInfo;
+typedef uint8_t ProcessId;
+typedef struct ProcessInfo ProcessInfo;
 typedef int16_t UserId;
 
 /// @enum SchedulerCommandResponse
 ///
-/// @brief Commands and responses understood by the scheduler inter-task
+/// @brief Commands and responses understood by the scheduler inter-process
 /// message handler.
 typedef enum SchedulerCommandResponse {
   // Commands:
@@ -83,12 +83,12 @@ extern SchedulerState *SCHEDULER_STATE;
 
 // Exported functionality
 void startScheduler(SchedulerState **coroutineStatePointer);
-TaskDescriptor* schedulerGetTaskById(unsigned int taskId);
-TaskId schedulerGetNumRunningTasks(struct timespec *timeout);
-TaskInfo* schedulerGetTaskInfo(void);
-int schedulerKillTask(TaskId taskId);
-UserId schedulerGetTaskUser(void);
-int schedulerSetTaskUser(UserId userId);
+ProcessDescriptor* schedulerGetProcessById(unsigned int pid);
+ProcessId schedulerGetNumRunningProcesses(struct timespec *timeout);
+ProcessInfo* schedulerGetProcessInfo(void);
+int schedulerKillProcess(ProcessId pid);
+UserId schedulerGetProcessUser(void);
+int schedulerSetProcessUser(UserId userId);
 FileDescriptor* schedulerGetFileDescriptor(FILE *stream);
 int schedulerCloseAllFileDescriptors(void);
 const char* schedulerGetHostname(void);
@@ -100,7 +100,7 @@ int schedulerAssignMemory(void *ptr);
 void coroutineYieldCallback(void *stateData, Coroutine *coroutine);
 void comutexUnlockCallback(void *stateData, Comutex *comutex);
 void coconditionSignalCallback(void *stateData, Cocondition *cocondition);
-void* dummyTask(void *args);
+void* dummyProcess(void *args);
 
 // Thread that will be used to represent the scheduler.
 extern Thread schedulerThread;

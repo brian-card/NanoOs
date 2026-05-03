@@ -32,7 +32,7 @@
 #include "NanoOsSched.h"
 
 int nanoOsSchedYield(void) {
-  taskYield();
+  processYield();
 
   return 0;
 }

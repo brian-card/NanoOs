@@ -514,10 +514,10 @@ typedef struct Hal {
   
   /// @fn int initRootStorage(SchedulerState *schedulerState)
   ///
-  /// @brief Initialize the tasks that operate the root storage system.
+  /// @brief Initialize the processes that operate the root storage system.
   ///
   /// @param schedulerState A pointer to the SchedulerState to use to initialize
-  ///   the tasks.
+  ///   the processes.
   ///
   /// @return Returns 0 on success, -errno on failure.
   int (*initRootStorage)(SchedulerState *schedulerState);

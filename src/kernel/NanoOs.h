@@ -50,13 +50,13 @@ extern "C"
 
 /// @def NANO_OS_NUM_MESSAGES
 ///
-/// @brief The total number of inter-task messages that will be available
-/// for use by tasks.
+/// @brief The total number of inter-process messages that will be available
+/// for use by processes.
 #define NANO_OS_NUM_MESSAGES                              6
 
 /// @def NANO_OS_MAX_NUM_SHELLS
 ///
-/// @brief The maximum number of shell tasks the system can run.
+/// @brief The maximum number of shell processes the system can run.
 #define NANO_OS_MAX_NUM_SHELLS                            2
 
 /// @def NANO_OS_VERSION
@@ -71,17 +71,17 @@ extern "C"
 
 /// @def NO_USER_ID
 ///
-/// @brief The numerical value that indicates that a task is not owned.
+/// @brief The numerical value that indicates that a process is not owned.
 #define NO_USER_ID                                       -1
 
 /// @def NUM_TASK_STORAGE_KEYS
 ///
-/// @brief The total number of keys supported by the per-task storage.
+/// @brief The total number of keys supported by the per-process storage.
 #define NUM_TASK_STORAGE_KEYS                             1
 
 /// @def FGETS_CONSOLE_BUFFER_KEY
 ///
-/// @brief Per-task storage key for the consoleBufer pointer in consoleFGets.
+/// @brief Per-process storage key for the consoleBufer pointer in consoleFGets.
 #define FGETS_CONSOLE_BUFFER_KEY                          0
 
 /// @def MAX_GET_MESSAGE_RETRIES
@@ -157,16 +157,16 @@ extern "C"
 #define writeBytes(dst, src) copyBytes(dst, src, sizeof(*(src)))
 
 // Support functions
-TaskId getNumPipes(const char *commandLine);
+ProcessId getNumPipes(const char *commandLine);
 void timespecFromDelay(struct timespec *ts, long int delayMs);
 unsigned int raiseUInt(unsigned int x, unsigned int y);
 const char* getUsernameByUserId(UserId userId);
 UserId getUserIdByUsername(const char *username);
 void login(void);
-void *getTaskStorage(uint8_t key);
-int setTaskStorage_(uint8_t key, void *val, int taskId, ...);
-#define setTaskStorage(key, val, ...) \
-  setTaskStorage_(key, val, ##__VA_ARGS__, -1)
+void *getProcessStorage(uint8_t key);
+int setProcessStorage_(uint8_t key, void *val, int pid, ...);
+#define setProcessStorage(key, val, ...) \
+  setProcessStorage_(key, val, ##__VA_ARGS__, -1)
 
 #ifdef __cplusplus
 } // extern "C"

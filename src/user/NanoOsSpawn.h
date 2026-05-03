@@ -54,9 +54,9 @@ typedef struct posix_spawnattr_t posix_spawnattr_t;
 /// @struct Dup2
 ///
 /// @brief Information about how to dup a FileDescriptor into the ones managed
-/// by a task.
+/// by a process.
 ///
-/// @param fd The destination index into the task's fileDescriptors array.
+/// @param fd The destination index into the process's fileDescriptors array.
 /// @param dup A pointer to the FileDescriptor that is to be used.
 typedef struct Dup2 {
   int fd;

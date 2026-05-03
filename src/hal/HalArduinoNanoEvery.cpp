@@ -46,7 +46,7 @@
 // operational prior to the memory manager and really should be completely
 // independent of it.
 #include "../kernel/NanoOs.h"
-#include "../kernel/Tasks.h"
+#include "../kernel/Processes.h"
 #include "../kernel/SdCardSpi.h"
 #include "../user/NanoOsErrno.h"
 #include "../user/NanoOsStdio.h"
@@ -444,7 +444,7 @@ static HalSpi arduinoNanoEverySpiHal = {
 
 /// @var baseSystemTimeMs
 ///
-/// @brief The time provided by the user or some other task as a baseline
+/// @brief The time provided by the user or some other process as a baseline
 /// time for the system.
 static int64_t baseSystemTimeMs = 0;
 
@@ -591,7 +591,7 @@ int arduinoNanoEveryCancelAndGetTimer(int timer,
 }
 
 int arduinoNanoEveryInitRootStorage(SchedulerState *schedulerState) {
-  // Create the SD card task.
+  // Create the SD card process.
   SdCardSpiArgs sdCardSpiArgs = {
     .spiCsDio = SD_CARD_PIN_CHIP_SELECT,
     .spiCopiDio = SPI_COPI_DIO,

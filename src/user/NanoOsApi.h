@@ -64,7 +64,7 @@ extern "C"
 typedef struct NanoOsFile NanoOsFile;
 #define FILE NanoOsFile
 
-typedef struct TaskInfo TaskInfo;
+typedef struct ProcessInfo ProcessInfo;
 
 // POSIX-mandated objects require for posix_spawn
 typedef struct posix_spawn_file_actions_t posix_spawn_file_actions_t;
@@ -199,8 +199,8 @@ typedef struct NanoOsApi {
   char** (*parseArgs)(char *command, int *argc);
   size_t (*getFreeMemory)(void);
   
-  // NanoOsTasks.h functions:
-  TaskInfo* (*getTaskInfo)(void);
+  // NanoOsProcesses.h functions:
+  ProcessInfo* (*getProcessInfo)(void);
   
   // NanoOsHardware.h functions:
   int (*shutdown)(NanoOsShutdownType shutdownType);

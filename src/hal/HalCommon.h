@@ -44,7 +44,7 @@
 // operational prior to the memory manager and really should be completely
 // independent of it.
 #include "../kernel/NanoOs.h"
-#include "../kernel/Tasks.h"
+#include "../kernel/Processes.h"
 #include "../kernel/Scheduler.h"
 #include "../kernel/SdCardSpi.h"
 #include "../user/NanoOsErrno.h"

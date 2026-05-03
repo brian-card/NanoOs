@@ -32,7 +32,7 @@
 #include "Scheduler.h"
 #include "SdCard.h"
 #include "NanoOs.h"
-#include "Tasks.h"
+#include "Processes.h"
 #include "../user/NanoOsLibC.h"
 
 // Must come last
@@ -46,7 +46,7 @@
 /// operation on the SD card.
 ///
 /// @param sdCardState A pointer to the SdCardState object maintained by the
-///   SD card task.
+///   SD card process.
 /// @param sdCommandParams A pointer to the SdCommandParams structure passed in
 ///   by the client function.
 /// @param startSdBlock A pointer to the uint32_t variable that will hold the
@@ -78,7 +78,7 @@ int sdCardGetReadWriteParameters(
 /// @brief Read a specified number of blocks of a given size from the SD card
 /// into a provided buffer.
 ///
-/// @param context The task ID of the SD card task to read from, cast to
+/// @param context The process ID of the SD card process to read from, cast to
 ///   a void*.
 /// @param startBlock The start block to read from in terms of the caller's
 ///   context.
@@ -91,19 +91,19 @@ int sdCardGetReadWriteParameters(
 int sdReadBlocks(void *context, uint32_t startBlock,
   uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer
 ) {
-  intptr_t sdCardTask = (intptr_t) context;
+  intptr_t sdCardProcess = (intptr_t) context;
   SdCommandParams sdCommandParams;
   sdCommandParams.startBlock = startBlock;
   sdCommandParams.numBlocks = numBlocks;
   sdCommandParams.blockSize = blockSize;
   sdCommandParams.buffer = buffer;
 
-  TaskMessage *taskMessage = initSendTaskMessageToTaskId(
-    sdCardTask, SD_CARD_READ_BLOCKS,
+  ProcessMessage *processMessage = initSendProcessMessageToProcessId(
+    sdCardProcess, SD_CARD_READ_BLOCKS,
     /* data= */ &sdCommandParams, sizeof(sdCommandParams), true);
-  taskMessageWaitForDone(taskMessage, NULL);
-  int returnValue = (int) ((intptr_t) taskMessageData(taskMessage));
-  taskMessageRelease(taskMessage);
+  processMessageWaitForDone(processMessage, NULL);
+  int returnValue = (int) ((intptr_t) processMessageData(processMessage));
+  processMessageRelease(processMessage);
 
   return returnValue;
 }
@@ -114,7 +114,7 @@ int sdReadBlocks(void *context, uint32_t startBlock,
 /// @brief Write a specified number of blocks of a given size to the SD card
 /// from a provided buffer.
 ///
-/// @param context The task ID of the SD card task to write to, cast to
+/// @param context The process ID of the SD card process to write to, cast to
 ///   a void*.
 /// @param startBlock The start block to write to in terms of the caller's
 ///   context.
@@ -127,19 +127,19 @@ int sdReadBlocks(void *context, uint32_t startBlock,
 int sdWriteBlocks(void *context, uint32_t startBlock,
   uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer
 ) {
-  intptr_t sdCardTask = (intptr_t) context;
+  intptr_t sdCardProcess = (intptr_t) context;
   SdCommandParams sdCommandParams;
   sdCommandParams.startBlock = startBlock;
   sdCommandParams.numBlocks = numBlocks;
   sdCommandParams.blockSize = blockSize;
   sdCommandParams.buffer = (uint8_t*) buffer;
 
-  TaskMessage *taskMessage = initSendTaskMessageToTaskId(
-    sdCardTask, SD_CARD_WRITE_BLOCKS,
+  ProcessMessage *processMessage = initSendProcessMessageToProcessId(
+    sdCardProcess, SD_CARD_WRITE_BLOCKS,
     /* data= */ &sdCommandParams, /* size= */ sizeof(sdCommandParams), true);
-  taskMessageWaitForDone(taskMessage, NULL);
-  int returnValue = (int) ((intptr_t) taskMessageData(taskMessage));
-  taskMessageRelease(taskMessage);
+  processMessageWaitForDone(processMessage, NULL);
+  int returnValue = (int) ((intptr_t) processMessageData(processMessage));
+  processMessageRelease(processMessage);
 
   return returnValue;
 }
@@ -150,7 +150,7 @@ int sdWriteBlocks(void *context, uint32_t startBlock,
 /// @brief Scheduler-specific implementation to read a specified number of
 /// blocks of a given size from the SD card into a provided buffer.
 ///
-/// @param context The task ID of the SD card task to read from, cast to
+/// @param context The process ID of the SD card process to read from, cast to
 ///   a void*.
 /// @param startBlock The start block to read from in terms of the caller's
 ///   context.
@@ -163,44 +163,44 @@ int sdWriteBlocks(void *context, uint32_t startBlock,
 int schedSdReadBlocks(void *context, uint32_t startBlock,
   uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer
 ) {
-  intptr_t sdCardTask = (intptr_t) context;
+  intptr_t sdCardProcess = (intptr_t) context;
   SdCommandParams sdCommandParams;
   sdCommandParams.startBlock = startBlock;
   sdCommandParams.numBlocks = numBlocks;
   sdCommandParams.blockSize = blockSize;
   sdCommandParams.buffer = buffer;
 
-  TaskQueue *currentReady = SCHEDULER_STATE->currentReady;
+  ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
   SCHEDULER_STATE->currentReady
     = &SCHEDULER_STATE->ready[SCHEDULER_READY_QUEUE_KERNEL];
 
-  TaskMessage *taskMessage = getAvailableMessage();
+  ProcessMessage *processMessage = getAvailableMessage();
   for (int ii = 0;
-    (ii < MAX_GET_MESSAGE_RETRIES) && (taskMessage == NULL);
+    (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
     ii++
   ) {
     SCHEDULER_STATE->runScheduler();
-    taskMessage = getAvailableMessage();
+    processMessage = getAvailableMessage();
   }
-  if (taskMessage == NULL) {
-    printInt(getRunningTaskId());
+  if (processMessage == NULL) {
+    printInt(getRunningProcessId());
     printString(": ");
     printString(__func__);
-    printString(": ERROR: Out of task messages\n");
+    printString(": ERROR: Out of process messages\n");
     return -ENOMEM;
   }
 
-  taskMessageInit(taskMessage, SD_CARD_READ_BLOCKS,
+  processMessageInit(processMessage, SD_CARD_READ_BLOCKS,
     &sdCommandParams, sizeof(sdCommandParams), true);
-  if (sendTaskMessageToTaskId(sdCardTask, taskMessage) != taskSuccess) {
+  if (sendProcessMessageToProcessId(sdCardProcess, processMessage) != processSuccess) {
     return -ENXIO;
   }
 
-  while (taskMessageDone(taskMessage) == false) {
+  while (processMessageDone(processMessage) == false) {
     SCHEDULER_STATE->runScheduler();
   }
-  int returnValue = (int) ((intptr_t) taskMessageData(taskMessage));
-  taskMessageRelease(taskMessage);
+  int returnValue = (int) ((intptr_t) processMessageData(processMessage));
+  processMessageRelease(processMessage);
 
   SCHEDULER_STATE->currentReady = currentReady;
   return returnValue;
@@ -212,7 +212,7 @@ int schedSdReadBlocks(void *context, uint32_t startBlock,
 /// @brief Scheduler-specific implementation to write a specified number of
 /// blocks of a given size to the SD card from a provided buffer.
 ///
-/// @param context The task ID of the SD card task to write to, cast to
+/// @param context The process ID of the SD card process to write to, cast to
 ///   a void*.
 /// @param startBlock The start block to write to in terms of the caller's
 ///   context.
@@ -225,44 +225,44 @@ int schedSdReadBlocks(void *context, uint32_t startBlock,
 int schedSdWriteBlocks(void *context, uint32_t startBlock,
   uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer
 ) {
-  intptr_t sdCardTask = (intptr_t) context;
+  intptr_t sdCardProcess = (intptr_t) context;
   SdCommandParams sdCommandParams;
   sdCommandParams.startBlock = startBlock;
   sdCommandParams.numBlocks = numBlocks;
   sdCommandParams.blockSize = blockSize;
   sdCommandParams.buffer = (uint8_t*) buffer;
 
-  TaskQueue *currentReady = SCHEDULER_STATE->currentReady;
+  ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
   SCHEDULER_STATE->currentReady
     = &SCHEDULER_STATE->ready[SCHEDULER_READY_QUEUE_KERNEL];
 
-  TaskMessage *taskMessage = getAvailableMessage();
+  ProcessMessage *processMessage = getAvailableMessage();
   for (int ii = 0;
-    (ii < MAX_GET_MESSAGE_RETRIES) && (taskMessage == NULL);
+    (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
     ii++
   ) {
     SCHEDULER_STATE->runScheduler();
-    taskMessage = getAvailableMessage();
+    processMessage = getAvailableMessage();
   }
-  if (taskMessage == NULL) {
-    printInt(getRunningTaskId());
+  if (processMessage == NULL) {
+    printInt(getRunningProcessId());
     printString(": ");
     printString(__func__);
-    printString(": ERROR: Out of task messages\n");
+    printString(": ERROR: Out of process messages\n");
     return -ENOMEM;
   }
 
-  taskMessageInit(taskMessage, SD_CARD_WRITE_BLOCKS,
+  processMessageInit(processMessage, SD_CARD_WRITE_BLOCKS,
     &sdCommandParams, sizeof(sdCommandParams), true);
-  if (sendTaskMessageToTaskId(sdCardTask, taskMessage) != taskSuccess) {
+  if (sendProcessMessageToProcessId(sdCardProcess, processMessage) != processSuccess) {
     return -ENXIO;
   }
 
-  while (taskMessageDone(taskMessage) == false) {
+  while (processMessageDone(processMessage) == false) {
     SCHEDULER_STATE->runScheduler();
   }
-  int returnValue = (int) ((intptr_t) taskMessageData(taskMessage));
-  taskMessageRelease(taskMessage);
+  int returnValue = (int) ((intptr_t) processMessageData(processMessage));
+  processMessageRelease(processMessage);
 
   SCHEDULER_STATE->currentReady = currentReady;
   return returnValue;

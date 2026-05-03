@@ -54,7 +54,7 @@ extern "C"
 /// @enum ConsoleCommandResponse
 ///
 /// @brief The commands and responses that the console understands via
-/// inter-task messages.
+/// inter-process messages.
 typedef enum ConsoleCommandResponse {
   // Commands:
   CONSOLE_WRITE_VALUE,
@@ -99,7 +99,7 @@ bool getConsoleEcho(void);
 int setConsoleEcho(bool desiredEchoState);
 int getNumConsolePorts(void);
 
-// Exported tasks
+// Exported processes
 void* runConsole(void *args);
 
 int printConsoleChar(char message);

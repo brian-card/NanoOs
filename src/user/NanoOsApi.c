@@ -49,7 +49,7 @@ int vsnprintf(char *str, size_t size, const char *format, va_list ap);
 #include "../kernel/NanoOs.h"
 #include "../kernel/OverlayFunctions.h"
 #include "../kernel/Scheduler.h"
-#include "../kernel/Tasks.h"
+#include "../kernel/Processes.h"
 #include "NanoOsFcntl.h"
 #include "NanoOsLibC.h"
 #include "NanoOsPwd.h"
@@ -141,7 +141,7 @@ NanoOsApi nanoOsApi = {
   .sethostname = nanoOsSethostname,
   .ttyname_r = nanoOsTtyname_r,
   .execve = schedulerExecve,
-  .setuid = schedulerSetTaskUser,
+  .setuid = schedulerSetProcessUser,
   .pipe = nanoOsPipe,
   
   // termios functions:
@@ -185,8 +185,8 @@ NanoOsApi nanoOsApi = {
   .parseArgs = parseArgs,
   .getFreeMemory = getFreeMemory,
   
-  // NanoOsTasks.h functions:
-  .getTaskInfo = schedulerGetTaskInfo,
+  // NanoOsProcesses.h functions:
+  .getProcessInfo = schedulerGetProcessInfo,
   
   // NanoOsHardware.h functions:
   .shutdown = nanoOsHardwareShutdown,

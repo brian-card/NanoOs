@@ -31,7 +31,7 @@
 // Custom includes
 #include "Console.h"
 #include "NanoOs.h"
-#include "Tasks.h"
+#include "Processes.h"
 #include "Scheduler.h"
 #include "../user/NanoOsLibC.h"
 
@@ -41,15 +41,15 @@
 extern const User users[];
 extern const int NUM_USERS;
 
-/// @fn TaskId getNumPipes(const char *commandLine)
+/// @fn ProcessId getNumPipes(const char *commandLine)
 ///
 /// @brief Get the number of pipes in a commandLine.
 ///
 /// @param commandLine The command line as read in from a console port.
 ///
 /// @return Returns the number of pipe characters found in the command line.
-TaskId getNumPipes(const char *commandLine) {
-  TaskId numPipes = 0;
+ProcessId getNumPipes(const char *commandLine) {
+  ProcessId numPipes = 0;
   const char *pipeAt = NULL;
 
   do {
@@ -63,63 +63,63 @@ TaskId getNumPipes(const char *commandLine) {
   return numPipes;
 }
 
-/// @var taskStorage
+/// @var processStorage
 ///
-/// @brief File-local variable to hold the per-task storage.
-static void *taskStorage[NANO_OS_NUM_TASKS][NUM_TASK_STORAGE_KEYS] = {0};
+/// @brief File-local variable to hold the per-process storage.
+static void *processStorage[NANO_OS_NUM_TASKS][NUM_TASK_STORAGE_KEYS] = {0};
 
-/// @fn void *getTaskStorage(uint8_t key)
+/// @fn void *getProcessStorage(uint8_t key)
 ///
-/// @brief Get a previously-set value from per-task storage.
+/// @brief Get a previously-set value from per-process storage.
 ///
-/// @param key The index into the task's per-task storage to retrieve.
+/// @param key The index into the process's per-process storage to retrieve.
 ///
 /// @return Returns the previously-set value on success, NULL on failure.
-void *getTaskStorage(uint8_t key) {
+void *getProcessStorage(uint8_t key) {
   void *returnValue = NULL;
   if (key >= NUM_TASK_STORAGE_KEYS) {
     // Key is out of range.
     return returnValue; // NULL
   }
 
-  int taskIndex = ((int) getRunningTaskId()) - 1;
-  if ((taskIndex >= 0) && (taskIndex < NANO_OS_NUM_TASKS)) {
-    // Calling task is not supported and does not have storage.
-    returnValue = taskStorage[taskIndex][key];
+  int processIndex = ((int) getRunningProcessId()) - 1;
+  if ((processIndex >= 0) && (processIndex < NANO_OS_NUM_TASKS)) {
+    // Calling process is not supported and does not have storage.
+    returnValue = processStorage[processIndex][key];
   }
 
   return returnValue;
 }
 
-/// @fn int setTaskStorage_(uint8_t key, void *val, int taskId, ...)
+/// @fn int setProcessStorage_(uint8_t key, void *val, int pid, ...)
 ///
-/// @brief Set the value of a piece of per-task storage.
+/// @brief Set the value of a piece of per-process storage.
 ///
-/// @param key The index into the task's per-task storage to retrieve.
+/// @param key The index into the process's per-process storage to retrieve.
 /// @param val The pointer value to set for the storage.
-/// @param taskId The ID of the task to set.  This value may only be set
+/// @param pid The ID of the process to set.  This value may only be set
 ///   by the scheduler.
 ///
-/// @return Returns taskSuccess on success, taskError on failure.
-int setTaskStorage_(uint8_t key, void *val, int taskId, ...) {
-  int returnValue = taskError;
+/// @return Returns processSuccess on success, processError on failure.
+int setProcessStorage_(uint8_t key, void *val, int pid, ...) {
+  int returnValue = processError;
   if (key >= NUM_TASK_STORAGE_KEYS) {
     // Key is out of range.
-    return returnValue; // taskError
+    return returnValue; // processError
   }
 
-  if (taskId < 0) {
-    if (getRunningTaskId() == SCHEDULER_STATE->schedulerTaskId) {
-      taskId = (int) getRunningTaskId();
+  if (pid < 0) {
+    if (getRunningProcessId() == SCHEDULER_STATE->schedulerProcessId) {
+      pid = (int) getRunningProcessId();
     } else {
-      return returnValue; // taskError
+      return returnValue; // processError
     }
   }
-  int taskIndex = taskId - 1;
-  if ((taskIndex >= 0) && (taskIndex < NANO_OS_NUM_TASKS)) {
-    // Calling task is not supported and does not have storage.
-    taskStorage[taskIndex][key] = val;
-    returnValue = taskSuccess;
+  int processIndex = pid - 1;
+  if ((processIndex >= 0) && (processIndex < NANO_OS_NUM_TASKS)) {
+    // Calling process is not supported and does not have storage.
+    processStorage[processIndex][key] = val;
+    returnValue = processSuccess;
   }
 
   return returnValue;

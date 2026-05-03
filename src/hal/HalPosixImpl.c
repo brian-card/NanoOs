@@ -49,7 +49,7 @@
 #include "kernel/Hal.h"
 #include "kernel/MemoryManager.h"
 #include "kernel/NanoOs.h"
-#include "kernel/Tasks.h"
+#include "kernel/Processes.h"
 
 /// @def DEBUG_MULTIPLIER
 ///

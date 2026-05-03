@@ -33,7 +33,7 @@
 #include "OverlayFunctions.h"
 #include "../user/NanoOsLibC.h"
 #include "Scheduler.h"
-#include "Tasks.h"
+#include "Processes.h"
 
 // Must come last
 #include "../user/NanoOsStdio.h"
@@ -84,7 +84,7 @@ OverlayFunction findOverlayFunction(const char *overlayFunctionName) {
 /// @param overlayDir The path to the overlay on the filesystem.  If this
 ///   parameter is NULL then this means the overlay path currently in use.
 /// @param overlay The name of the overlay minus the ".overlay" file extension
-///   that is local to getRunningTask()->overlayDir.
+///   that is local to getRunningProcess()->overlayDir.
 /// @param function The name of the function exported by the overlay.
 /// @param args Any arguments to be passed to the function in the overlay, cast
 ///   to a void*.  This parameter may be NULL.
@@ -101,28 +101,28 @@ void* callOverlayFunction(const char *overlayDir, const char *overlay,
     goto exit; // return NULL
   }
   
-  TaskDescriptor *runningTask = getRunningTask();
-  if (runningTask == NULL) {
+  ProcessDescriptor *runningProcess = getRunningProcess();
+  if (runningProcess == NULL) {
     // This should be impossible.
     goto exit; // return NULL
   }
   
   // Keep track of the overlay that's currently running and the one we need.
-  char *previousOverlayDir = runningTask->overlayDir;
+  char *previousOverlayDir = runningProcess->overlayDir;
   FileBlockMetadata *overlayArray
     = (FileBlockMetadata*) malloc(sizeof(FileBlockMetadata) * 2);
   if (overlayArray == NULL) {
     // Out of memory
     goto exit; // return NULL
   }
-  overlayArray[0].blockDevice = runningTask->overlay.blockDevice;
-  overlayArray[0].startBlock  = runningTask->overlay.startBlock;
-  overlayArray[0].numBlocks   = runningTask->overlay.numBlocks;
+  overlayArray[0].blockDevice = runningProcess->overlay.blockDevice;
+  overlayArray[0].startBlock  = runningProcess->overlay.startBlock;
+  overlayArray[0].numBlocks   = runningProcess->overlay.numBlocks;
   
   // We have to copy the arguments we were provided into dynamic memory because
   // they may be pointers into the current overlay, which we're about to
   // replace.
-  const char *overlayPathDir = runningTask->overlayDir;
+  const char *overlayPathDir = runningProcess->overlayDir;
   char *overlayDirCopy = NULL;
   if (overlayDir != NULL) {
     overlayPathDir = overlayDir;
@@ -171,13 +171,13 @@ void* callOverlayFunction(const char *overlayDir, const char *overlay,
   // there, but we want to give other processes some time to run, too.  Also,
   // loading the overlay is an operation that shouldn't be interrupted.   The
   // scheduler will automatically load the correct overlay before a process is
-  // resumed, so just set the information for the task's overlay and then yield.
+  // resumed, so just set the information for the process's overlay and then yield.
   //
   // A few things of note:
   //
   // 1.  Because the scheduler will automatically load the correct overlay
-  //     before a task is resumed, it's technically permissible to set the
-  //     task's overlay information and then load the overlay, however, that's
+  //     before a process is resumed, it's technically permissible to set the
+  //     process's overlay information and then load the overlay, however, that's
   //     redundant.  It would *NOT* be permissible to load the overlay and then
   //     set the information as that could create an overlay of mixed content if
   //     loading the overlay was preempted.
@@ -198,12 +198,12 @@ void* callOverlayFunction(const char *overlayDir, const char *overlay,
   // JBC 2025-01-24
   HAL->timer->cancel(SCHEDULER_STATE->preemptionTimer);
   if (overlayDirCopy != NULL) {
-    runningTask->overlayDir = overlayDirCopy;
+    runningProcess->overlayDir = overlayDirCopy;
   }
-  runningTask->overlay.blockDevice = overlayArray[1].blockDevice;
-  runningTask->overlay.startBlock  = overlayArray[1].startBlock;
-  runningTask->overlay.numBlocks   = overlayArray[1].numBlocks;
-  taskYield();
+  runningProcess->overlay.blockDevice = overlayArray[1].blockDevice;
+  runningProcess->overlay.startBlock  = overlayArray[1].startBlock;
+  runningProcess->overlay.numBlocks   = overlayArray[1].numBlocks;
+  processYield();
   
   // If we made it this far, then our new overlay has been successuflly loaded.
   OverlayFunction overlayFunction = findOverlayFunction(functionCopy);
@@ -219,13 +219,13 @@ void* callOverlayFunction(const char *overlayDir, const char *overlay,
 restorePreviousOverlay:
   // See note above on use of HAL->timer->cancel.
   HAL->timer->cancel(SCHEDULER_STATE->preemptionTimer);
-  runningTask->overlay.blockDevice = overlayArray[0].blockDevice;
-  runningTask->overlay.startBlock  = overlayArray[0].startBlock;
-  runningTask->overlay.numBlocks   = overlayArray[0].numBlocks;
+  runningProcess->overlay.blockDevice = overlayArray[0].blockDevice;
+  runningProcess->overlay.startBlock  = overlayArray[0].startBlock;
+  runningProcess->overlay.numBlocks   = overlayArray[0].numBlocks;
   if (overlayDirCopy != NULL) {
-    runningTask->overlayDir = previousOverlayDir;
+    runningProcess->overlayDir = previousOverlayDir;
   }
-  taskYield();
+  processYield();
   
   // Release all the memory for the copies.
   free(functionCopy);

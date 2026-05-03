@@ -36,7 +36,7 @@
 #include "Console.h"
 #include "Hal.h"
 #include "NanoOs.h"
-#include "Tasks.h"
+#include "Processes.h"
 #include "Scheduler.h"
 #include "../user/NanoOsLibC.h"
 
@@ -44,22 +44,22 @@
 #include "../user/NanoOsStdio.h"
 
 /// @fn int consolePrintMessage(ConsoleState *consoleState,
-///   TaskMessage *inputMessage, const char *message)
+///   ProcessMessage *inputMessage, const char *message)
 ///
-/// @brief Print a message to all console ports that are owned by a task.
+/// @brief Print a message to all console ports that are owned by a process.
 ///
 /// @param consoleState The ConsoleState being maintained by the runConsole
 ///   function.
-/// @param inputMessage The message received from the task printing the
+/// @param inputMessage The message received from the process printing the
 ///   message.
 /// @param message The formatted string message to print.
 ///
-/// @return Returns taskSuccess on success, taskError on failure.
+/// @return Returns processSuccess on success, processError on failure.
 int consolePrintMessage(
-  ConsoleState *consoleState, TaskMessage *inputMessage, const char *message
+  ConsoleState *consoleState, ProcessMessage *inputMessage, const char *message
 ) {
-  int returnValue = taskSuccess;
-  TaskId owner = taskId(taskMessageFrom(inputMessage));
+  int returnValue = processSuccess;
+  ProcessId owner = pid(processMessageFrom(inputMessage));
   ConsolePort *consolePorts = consoleState->consolePorts;
 
   bool portFound = false;
@@ -73,25 +73,25 @@ int consolePrintMessage(
   if (portFound == false) {
     printString("WARNING: Request to print message \"");
     printString(message);
-    printString("\" from non-owning task ");
+    printString("\" from non-owning process ");
     printInt(owner);
     printString("\n");
-    returnValue = taskError;
+    returnValue = processError;
   }
 
   return returnValue;
 }
 
-/// @fn void consoleMessageCleanup(TaskMessage *inputMessage)
+/// @fn void consoleMessageCleanup(ProcessMessage *inputMessage)
 ///
-/// @brief Release an input TaskMessage if there are no waiters for the message.
+/// @brief Release an input ProcessMessage if there are no waiters for the message.
 ///
-/// @param inputMessage A pointer to the TaskMessage to cleanup.
+/// @param inputMessage A pointer to the ProcessMessage to cleanup.
 ///
 /// @return This function returns no value.
-void consoleMessageCleanup(TaskMessage *inputMessage) {
-  if (taskMessageWaiting(inputMessage) == false) {
-    if (taskMessageRelease(inputMessage) != taskSuccess) {
+void consoleMessageCleanup(ProcessMessage *inputMessage) {
+  if (processMessageWaiting(inputMessage) == false) {
+    if (processMessageRelease(inputMessage) != processSuccess) {
       // printSerialString is defined below.  Provide the prototype.
       int printSerialString(unsigned char uart, const char *string);
       printSerialString(0, "ERROR: Could not release inputMessage from ");
@@ -102,29 +102,29 @@ void consoleMessageCleanup(TaskMessage *inputMessage) {
 }
 
 /// @fn ConsoleBuffer* getAvailableConsoleBuffer(
-///   ConsoleState *consoleState, TaskId taskId)
+///   ConsoleState *consoleState, ProcessId pid)
 ///
 /// @brief Get an available console buffer and mark it as being in use.
 ///
 /// @param consoleState A pointer to the ConsoleState structure held by the
-///   runConsole task.  The buffers in this state will be searched for
-/// @param taskId The numerical ID of the task (PID) making the request
+///   runConsole process.  The buffers in this state will be searched for
+/// @param pid The numerical ID of the process (PID) making the request
 ///   for a buffer (if any).
 ///
 /// @return Returns a pointer to the available ConsoleBuffer on success, NULL
 /// on failure.
 ConsoleBuffer* getAvailableConsoleBuffer(
-  ConsoleState *consoleState, TaskId taskId
+  ConsoleState *consoleState, ProcessId pid
 ) {
   ConsoleBuffer *consoleBuffers = consoleState->consoleBuffers;
   ConsoleBuffer *returnValue = NULL;
 
-  // Check to see if the requesting task owns one of the ports for output.
+  // Check to see if the requesting process owns one of the ports for output.
   // Use the buffer for that port if so.
   ConsolePort *consolePorts = consoleState->consolePorts;
   for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
-    if ((consolePorts[ii].outputOwner == taskId)
-      || (consolePorts[ii].inputOwner == taskId)
+    if ((consolePorts[ii].outputOwner == pid)
+      || (consolePorts[ii].inputOwner == pid)
     ) {
       returnValue = &consoleBuffers[ii];
       // returnValue->inUse is already set to true, so no need to set it.
@@ -140,28 +140,28 @@ ConsoleBuffer* getAvailableConsoleBuffer(
 }
 
 /// @fn void consoleWriteValueCommandHandler(
-///   ConsoleState *consoleState, TaskMessage *inputMessage)
+///   ConsoleState *consoleState, ProcessMessage *inputMessage)
 ///
 /// @brief Command handler for the CONSOLE_WRITE_VALUE command.
 ///
 /// @param consoleState A pointer to the ConsoleState structure held by the
-///   runConsole task.  Unused by this function.
-/// @param inputMessage A pointer to the TaskMessage that was received from
-///   the task that sent the command.
+///   runConsole process.  Unused by this function.
+/// @param inputMessage A pointer to the ProcessMessage that was received from
+///   the process that sent the command.
 ///
 /// @return This function returns no value but does set the inputMessage to
-/// done so that the calling task knows that we've handled the message.
+/// done so that the calling process knows that we've handled the message.
 void consoleWriteValueCommandHandler(
-  ConsoleState *consoleState, TaskMessage *inputMessage
+  ConsoleState *consoleState, ProcessMessage *inputMessage
 ) {
   char staticBuffer[19]; // max length of a 64-bit value is 18 digits plus NULL.
-  ConsoleValueType valueType = (ConsoleValueType) taskMessageSize(inputMessage);
+  ConsoleValueType valueType = (ConsoleValueType) processMessageSize(inputMessage);
   const char *message = NULL;
 
   switch (valueType) {
     case CONSOLE_VALUE_CHAR:
       {
-        char value = (char) ((uintptr_t) taskMessageData(inputMessage));
+        char value = (char) ((uintptr_t) processMessageData(inputMessage));
         sprintf(staticBuffer, "%c", value);
         message = staticBuffer;
       }
@@ -170,7 +170,7 @@ void consoleWriteValueCommandHandler(
     case CONSOLE_VALUE_UCHAR:
       {
         unsigned char value
-          = (unsigned char) ((uintptr_t) taskMessageData(inputMessage));
+          = (unsigned char) ((uintptr_t) processMessageData(inputMessage));
         sprintf(staticBuffer, "%u", value);
         message = staticBuffer;
       }
@@ -178,7 +178,7 @@ void consoleWriteValueCommandHandler(
 
     case CONSOLE_VALUE_INT:
       {
-        int value = (int) ((uintptr_t) taskMessageData(inputMessage));
+        int value = (int) ((uintptr_t) processMessageData(inputMessage));
         sprintf(staticBuffer, "%d", value);
         message = staticBuffer;
       }
@@ -187,7 +187,7 @@ void consoleWriteValueCommandHandler(
     case CONSOLE_VALUE_UINT:
       {
         unsigned int value
-          = (unsigned int) ((uintptr_t) taskMessageData(inputMessage));
+          = (unsigned int) ((uintptr_t) processMessageData(inputMessage));
         sprintf(staticBuffer, "%u", value);
         message = staticBuffer;
       }
@@ -195,7 +195,7 @@ void consoleWriteValueCommandHandler(
 
     case CONSOLE_VALUE_LONG_INT:
       {
-        long int value = (long int) ((uintptr_t) taskMessageData(inputMessage));
+        long int value = (long int) ((uintptr_t) processMessageData(inputMessage));
         sprintf(staticBuffer, "%ld", value);
         message = staticBuffer;
       }
@@ -204,7 +204,7 @@ void consoleWriteValueCommandHandler(
     case CONSOLE_VALUE_LONG_UINT:
       {
         long unsigned int value
-          = (long unsigned int) ((uintptr_t) taskMessageData(inputMessage));
+          = (long unsigned int) ((uintptr_t) processMessageData(inputMessage));
         sprintf(staticBuffer, "%lu", value);
         message = staticBuffer;
       }
@@ -212,7 +212,7 @@ void consoleWriteValueCommandHandler(
 
     case CONSOLE_VALUE_FLOAT:
       {
-        float value = (float) ((uintptr_t) taskMessageData(inputMessage));
+        float value = (float) ((uintptr_t) processMessageData(inputMessage));
         sprintf(staticBuffer, "%f", (double) value);
         message = staticBuffer;
       }
@@ -220,7 +220,7 @@ void consoleWriteValueCommandHandler(
 
     case CONSOLE_VALUE_DOUBLE:
       {
-        double value = (double) ((uintptr_t) taskMessageData(inputMessage));
+        double value = (double) ((uintptr_t) processMessageData(inputMessage));
         sprintf(staticBuffer, "%lf", value);
         message = staticBuffer;
       }
@@ -228,7 +228,7 @@ void consoleWriteValueCommandHandler(
 
     case CONSOLE_VALUE_STRING:
       {
-        message = (const char*) taskMessageData(inputMessage);
+        message = (const char*) processMessageData(inputMessage);
       }
       break;
 
@@ -244,43 +244,43 @@ void consoleWriteValueCommandHandler(
     consolePrintMessage(consoleState, inputMessage, message);
   }
 
-  taskMessageSetDone(inputMessage);
+  processMessageSetDone(inputMessage);
   consoleMessageCleanup(inputMessage);
 
   return;
 }
 
 /// @fn void consoleGetBufferCommandHandler(
-///   ConsoleState *consoleState, TaskMessage *inputMessage)
+///   ConsoleState *consoleState, ProcessMessage *inputMessage)
 ///
 /// @brief Command handler for the CONSOLE_GET_BUFFER command.  Gets a free
 /// buffer from the provided ConsoleState and replies to the message sender with
 /// a pointer to the buffer structure.
 ///
 /// @param consoleState A pointer to the ConsoleState structure held by the
-///   runConsole task.  The buffers in this state will be searched for
+///   runConsole process.  The buffers in this state will be searched for
 ///   something available to return to the message sender.
-/// @param inputMessage A pointer to the TaskMessage that was received from
-///   the task that sent the command.
+/// @param inputMessage A pointer to the ProcessMessage that was received from
+///   the process that sent the command.
 ///
 /// @return This function returns no value but does set the inputMessage to
-/// done so that the calling task knows that we've handled the message.
+/// done so that the calling process knows that we've handled the message.
 /// Since this is a synchronous call, it also pushes a message onto the message
 /// sender's queue with the free buffer on success.  On failure, the
 /// inputMessage is marked as done but no response is sent.
 void consoleGetBufferCommandHandler(
-  ConsoleState *consoleState, TaskMessage *inputMessage
+  ConsoleState *consoleState, ProcessMessage *inputMessage
 ) {
   // We're going to reuse the input message as the return message.
-  TaskMessage *returnMessage = inputMessage;
-  taskMessageData(returnMessage) = NULL;
-  TaskId callingPid = taskId(taskMessageFrom(inputMessage));
+  ProcessMessage *returnMessage = inputMessage;
+  processMessageData(returnMessage) = NULL;
+  ProcessId callingPid = pid(processMessageFrom(inputMessage));
 
   ConsoleBuffer *returnValue
     = getAvailableConsoleBuffer(consoleState, callingPid);
   if (returnValue != NULL) {
     // Send the buffer back to the caller via the message we allocated earlier.
-    taskMessageInit(returnMessage, CONSOLE_RETURNING_BUFFER,
+    processMessageInit(returnMessage, CONSOLE_RETURNING_BUFFER,
       returnValue, sizeof(*returnValue), true);
   }
 
@@ -288,76 +288,76 @@ void consoleGetBufferCommandHandler(
   // call, so mark the input message handled.  This is a synchronous call and
   // the caller is waiting on our response, so *DO NOT* release it.  The caller
   // is responsible for releasing it when they've received the response.
-  taskMessageSetDone(inputMessage);
+  processMessageSetDone(inputMessage);
   return;
 }
 
 /// @fn void consoleWriteBufferCommandHandler(
-///   ConsoleState *consoleState, TaskMessage *inputMessage)
+///   ConsoleState *consoleState, ProcessMessage *inputMessage)
 ///
 /// @brief Command handler for the CONSOLE_WRITE_BUFFER command.  Writes the
 /// contents of the sent buffer to the console and then clears its inUse flag.
 ///
 /// @param consoleState A pointer to the ConsoleState structure held by the
-///   runConsole task.  Unused by this function.
-/// @param inputMessage A pointer to the TaskMessage that was received from
-///   the task that sent the command.
+///   runConsole process.  Unused by this function.
+/// @param inputMessage A pointer to the ProcessMessage that was received from
+///   the process that sent the command.
 ///
 /// @return This function returns no value but does set the inputMessage to
-/// done so that the calling task knows that we've handled the message.
+/// done so that the calling process knows that we've handled the message.
 void consoleWriteBufferCommandHandler(
-  ConsoleState *consoleState, TaskMessage *inputMessage
+  ConsoleState *consoleState, ProcessMessage *inputMessage
 ) {
   (void) consoleState;
 
-  ConsoleBuffer *consoleBuffer = (ConsoleBuffer*) taskMessageData(inputMessage);
+  ConsoleBuffer *consoleBuffer = (ConsoleBuffer*) processMessageData(inputMessage);
   if (consoleBuffer != NULL) {
     const char *message = consoleBuffer->buffer;
     if (message != NULL) {
       consolePrintMessage(consoleState, inputMessage, message);
     }
   }
-  taskMessageSetDone(inputMessage);
+  processMessageSetDone(inputMessage);
   consoleMessageCleanup(inputMessage);
 
   return;
 }
 
 /// @fn void consoleSetPortShellCommandHandler(
-///   ConsoleState *consoleState, TaskMessage *inputMessage)
+///   ConsoleState *consoleState, ProcessMessage *inputMessage)
 ///
-/// @brief Set the designated shell task ID for a port.
+/// @brief Set the designated shell process ID for a port.
 ///
 /// @param consoleState A pointer to the ConsoleState being maintained by the
 ///   runConsole function that's running.
-/// @param inputMessage A pointer to the TaskMessage with the received
+/// @param inputMessage A pointer to the ProcessMessage with the received
 ///   command.  This contains a NanoOsMessage that contains a
-///   ConsolePortPidAssociation that will associate the port with the task
+///   ConsolePortPidAssociation that will associate the port with the process
 ///   if this function succeeds.
 ///
 /// @return This function returns no value, but it marks the inputMessage as
 /// being 'done' on success and does *NOT* mark it on failure.
 void consoleSetPortShellCommandHandler(
-  ConsoleState *consoleState, TaskMessage *inputMessage
+  ConsoleState *consoleState, ProcessMessage *inputMessage
 ) {
   ConsolePortPidUnion consolePortPidUnion;
   consolePortPidUnion.nanoOsMessageData
-    = (uintptr_t) taskMessageData(inputMessage);
+    = (uintptr_t) processMessageData(inputMessage);
   ConsolePortPidAssociation *consolePortPidAssociation
     = &consolePortPidUnion.consolePortPidAssociation;
 
   uint8_t consolePort = consolePortPidAssociation->consolePort;
-  TaskId taskId = consolePortPidAssociation->taskId;
+  ProcessId pid = consolePortPidAssociation->pid;
 
   if (consolePort < consoleState->numConsolePorts) {
-    consoleState->consolePorts[consolePort].shell = taskId;
-    taskMessageSetDone(inputMessage);
+    consoleState->consolePorts[consolePort].shell = pid;
+    processMessageSetDone(inputMessage);
     consoleMessageCleanup(inputMessage);
   } else {
     printString("ERROR: Request to assign ownership of non-existent port ");
     printInt(consolePort);
     printString("\n");
-    // *DON'T* call taskMessageRelease or taskMessageSetDone here.  The lack of
+    // *DON'T* call processMessageRelease or processMessageSetDone here.  The lack of
     // the message being done will indicate to the caller that there was a
     // problem servicing the command.
   }
@@ -366,46 +366,46 @@ void consoleSetPortShellCommandHandler(
 }
 
 /// @fn void consoleAssignPortHelper(
-///   ConsoleState *consoleState, TaskMessage *inputMessage)
+///   ConsoleState *consoleState, ProcessMessage *inputMessage)
 ///
 /// @brief Assign a console port's input and possibly output to a running
-/// task.
+/// process.
 ///
 /// @param consoleState A pointer to the ConsoleState being maintained by the
 ///   runConsole function that's running.
-/// @param inputMessage A pointer to the TaskMessage with the received
+/// @param inputMessage A pointer to the ProcessMessage with the received
 ///   command.  This contains a NanoOsMessage that contains a
 ///   ConsolePortPidAssociation that will associate the port's input with the
-///   task if this function succeeds.
+///   process if this function succeeds.
 /// @param assignOutput Whether or not to assign the output as well as the
 ///   input.
 ///
 /// @return This function returns no value, but it marks the inputMessage as
 /// being 'done' on success and does *NOT* mark it on failure.
 void consoleAssignPortHelper(
-  ConsoleState *consoleState, TaskMessage *inputMessage, bool assignOutput
+  ConsoleState *consoleState, ProcessMessage *inputMessage, bool assignOutput
 ) {
   ConsolePortPidUnion consolePortPidUnion;
   consolePortPidUnion.nanoOsMessageData
-    = (uintptr_t) taskMessageData(inputMessage);
+    = (uintptr_t) processMessageData(inputMessage);
   ConsolePortPidAssociation *consolePortPidAssociation
     = &consolePortPidUnion.consolePortPidAssociation;
 
   uint8_t consolePort = consolePortPidAssociation->consolePort;
-  TaskId taskId = consolePortPidAssociation->taskId;
+  ProcessId pid = consolePortPidAssociation->pid;
 
   if (consolePort < consoleState->numConsolePorts) {
     if (assignOutput == true) {
-      consoleState->consolePorts[consolePort].outputOwner = taskId;
+      consoleState->consolePorts[consolePort].outputOwner = pid;
     }
-    consoleState->consolePorts[consolePort].inputOwner = taskId;
-    taskMessageSetDone(inputMessage);
+    consoleState->consolePorts[consolePort].inputOwner = pid;
+    processMessageSetDone(inputMessage);
     consoleMessageCleanup(inputMessage);
   } else {
     printString("ERROR: Request to assign ownership of non-existent port ");
     printInt(consolePort);
     printString("\n");
-    // *DON'T* call taskMessageRelease or taskMessageSetDone here.  The
+    // *DON'T* call processMessageRelease or processMessageSetDone here.  The
     // lack of the message being done will indicate to the caller that there
     // was a problem servicing the command.
   }
@@ -414,21 +414,21 @@ void consoleAssignPortHelper(
 }
 
 /// @fn void consoleAssignPortCommandHandler(
-///   ConsoleState *consoleState, TaskMessage *inputMessage)
+///   ConsoleState *consoleState, ProcessMessage *inputMessage)
 ///
-/// @brief Assign a console port's input and output to a running task.
+/// @brief Assign a console port's input and output to a running process.
 ///
 /// @param consoleState A pointer to the ConsoleState being maintained by the
 ///   runConsole function that's running.
-/// @param inputMessage A pointer to the TaskMessage with the received
+/// @param inputMessage A pointer to the ProcessMessage with the received
 ///   command.  This contains a NanoOsMessage that contains a
 ///   ConsolePortPidAssociation that will associate the port's input and output
-///   with the task if this function succeeds.
+///   with the process if this function succeeds.
 ///
 /// @return This function returns no value, but it marks the inputMessage as
 /// being 'done' on success and does *NOT* mark it on failure.
 void consoleAssignPortCommandHandler(
-  ConsoleState *consoleState, TaskMessage *inputMessage
+  ConsoleState *consoleState, ProcessMessage *inputMessage
 ) {
   consoleAssignPortHelper(consoleState, inputMessage, true);
 
@@ -436,20 +436,20 @@ void consoleAssignPortCommandHandler(
 }
 
 /// @fn void consoleReleasePortCommandHandler(
-///   ConsoleState *consoleState, TaskMessage *inputMessage)
+///   ConsoleState *consoleState, ProcessMessage *inputMessage)
 ///
-/// @brief Release all the ports currently owned by a task.
+/// @brief Release all the ports currently owned by a process.
 ///
 /// @param consoleState A pointer to the ConsoleState being maintained by the
 ///   runConsole function that's running.
-/// @param inputMessage A pointer to the TaskMessage with the received
+/// @param inputMessage A pointer to the ProcessMessage with the received
 ///   command.
 ///
 /// @return This function returns no value.
 void consoleReleasePortCommandHandler(
-  ConsoleState *consoleState, TaskMessage *inputMessage
+  ConsoleState *consoleState, ProcessMessage *inputMessage
 ) {
-  TaskId owner = taskId(taskMessageFrom(inputMessage));
+  ProcessId owner = pid(processMessageFrom(inputMessage));
   ConsolePort *consolePorts = consoleState->consolePorts;
 
   for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
@@ -464,32 +464,32 @@ void consoleReleasePortCommandHandler(
   // Since piped commands still attempt to release a port on completion, we
   // will not print a warning if we didn't successfully release anything.
 
-  taskMessageSetDone(inputMessage);
+  processMessageSetDone(inputMessage);
   consoleMessageCleanup(inputMessage);
 
   return;
 }
 
 /// @fn void consoleGetOwnedPortCommandHandler(
-///   ConsoleState *consoleState, TaskMessage *inputMessage)
+///   ConsoleState *consoleState, ProcessMessage *inputMessage)
 ///
-/// @brief Get the first port currently owned by a task.
+/// @brief Get the first port currently owned by a process.
 ///
-/// @note While it is technically possible for a single task to own multiple
-/// ports, the expectation here is that this call is made by a task that is
+/// @note While it is technically possible for a single process to own multiple
+/// ports, the expectation here is that this call is made by a process that is
 /// only expecting to own one.  This is mostly for the purposes of transferring
-/// ownership of the port from one task to another.
+/// ownership of the port from one process to another.
 ///
 /// @param consoleState A pointer to the ConsoleState being maintained by the
 ///   runConsole function that's running.
-/// @param inputMessage A pointer to the TaskMessage with the received
+/// @param inputMessage A pointer to the ProcessMessage with the received
 ///   command.
 ///
 /// @return This function returns no value.
 void consoleGetOwnedPortCommandHandler(
-  ConsoleState *consoleState, TaskMessage *inputMessage
+  ConsoleState *consoleState, ProcessMessage *inputMessage
 ) {
-  TaskId owner = taskId(taskMessageFrom(inputMessage));
+  ProcessId owner = pid(processMessageFrom(inputMessage));
   ConsolePort *consolePorts = consoleState->consolePorts;
 
   int ownedPort = -1;
@@ -503,8 +503,8 @@ void consoleGetOwnedPortCommandHandler(
     }
   }
 
-  taskMessageData(inputMessage) = (void*) ((intptr_t) ownedPort);
-  taskMessageSetDone(inputMessage);
+  processMessageData(inputMessage) = (void*) ((intptr_t) ownedPort);
+  processMessageSetDone(inputMessage);
 
   consoleMessageCleanup(inputMessage);
 
@@ -512,23 +512,23 @@ void consoleGetOwnedPortCommandHandler(
 }
 
 /// @fn void consoleGetEchoCommandHandler(
-///   ConsoleState *consoleState, TaskMessage *inputMessage)
+///   ConsoleState *consoleState, ProcessMessage *inputMessage)
 ///
 /// @brief Get whether or not input is echoed back to any console ports owned
-/// by a task.
+/// by a process.
 ///
 /// @param consoleState A pointer to the ConsoleState being maintained by the
 ///   runConsole function that's running.
-/// @param inputMessage A pointer to the TaskMessage with the received
+/// @param inputMessage A pointer to the ProcessMessage with the received
 ///   command.
 ///
 /// @return This function returns no value.
 void consoleGetEchoCommandHandler(
-  ConsoleState *consoleState, TaskMessage *inputMessage
+  ConsoleState *consoleState, ProcessMessage *inputMessage
 ) {
-  TaskId owner = taskId(taskMessageFrom(inputMessage));
+  ProcessId owner = pid(processMessageFrom(inputMessage));
   ConsolePort *consolePorts = consoleState->consolePorts;
-  TaskMessage *returnMessage = inputMessage;
+  ProcessMessage *returnMessage = inputMessage;
 
   bool portFound = false;
   bool echoing = false;
@@ -540,36 +540,36 @@ void consoleGetEchoCommandHandler(
   }
 
   if (portFound == true) {
-    taskMessageData(returnMessage) = (void*) ((uintptr_t) echoing);
+    processMessageData(returnMessage) = (void*) ((uintptr_t) echoing);
   } else {
-    printString("WARNING: Request to get echo from non-owning task ");
+    printString("WARNING: Request to get echo from non-owning process ");
     printInt(owner);
     printString("\n");
   }
 
-  taskMessageSetDone(inputMessage);
+  processMessageSetDone(inputMessage);
 
   return;
 }
 
 /// @fn void consoleSetEchoCommandHandler(
-///   ConsoleState *consoleState, TaskMessage *inputMessage)
+///   ConsoleState *consoleState, ProcessMessage *inputMessage)
 ///
 /// @brief Set whether or not input is echoed back to all console ports owned
-/// by a task.
+/// by a process.
 ///
 /// @param consoleState A pointer to the ConsoleState being maintained by the
 ///   runConsole function that's running.
-/// @param inputMessage A pointer to the TaskMessage with the received
+/// @param inputMessage A pointer to the ProcessMessage with the received
 ///   command.
 ///
 /// @return This function returns no value.
 void consoleSetEchoCommandHandler(
-  ConsoleState *consoleState, TaskMessage *inputMessage
+  ConsoleState *consoleState, ProcessMessage *inputMessage
 ) {
-  TaskId owner = taskId(taskMessageFrom(inputMessage));
+  ProcessId owner = pid(processMessageFrom(inputMessage));
   ConsolePort *consolePorts = consoleState->consolePorts;
-  bool desiredEchoState = (bool) ((uintptr_t) taskMessageData(inputMessage));
+  bool desiredEchoState = (bool) ((uintptr_t) processMessageData(inputMessage));
 
   bool portFound = false;
   for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
@@ -579,35 +579,35 @@ void consoleSetEchoCommandHandler(
     }
   }
 
-  taskMessageData(inputMessage) = (void*) ((intptr_t) 0);
+  processMessageData(inputMessage) = (void*) ((intptr_t) 0);
   if (portFound == false) {
-    printString("WARNING: Request to set echo from non-owning task ");
+    printString("WARNING: Request to set echo from non-owning process ");
     printInt(owner);
     printString("\n");
-    taskMessageData(inputMessage) = (void*) ((intptr_t) -1);
+    processMessageData(inputMessage) = (void*) ((intptr_t) -1);
   }
 
-  taskMessageSetDone(inputMessage);
+  processMessageSetDone(inputMessage);
   consoleMessageCleanup(inputMessage);
 
   return;
 }
 
 /// @fn void consoleWaitForInputCommandHandler(
-///   ConsoleState *consoleState, TaskMessage *inputMessage)
+///   ConsoleState *consoleState, ProcessMessage *inputMessage)
 ///
-/// @brief Wait for input from any of the console ports owned by a task.
+/// @brief Wait for input from any of the console ports owned by a process.
 ///
 /// @param consoleState A pointer to the ConsoleState being maintained by the
 ///   runConsole function that's running.
-/// @param inputMessage A pointer to the TaskMessage with the received
+/// @param inputMessage A pointer to the ProcessMessage with the received
 ///   command.
 ///
 /// @return This function returns no value.
 void consoleWaitForInputCommandHandler(
-  ConsoleState *consoleState, TaskMessage *inputMessage
+  ConsoleState *consoleState, ProcessMessage *inputMessage
 ) {
-  TaskId owner = taskId(taskMessageFrom(inputMessage));
+  ProcessId owner = pid(processMessageFrom(inputMessage));
   ConsolePort *consolePorts = consoleState->consolePorts;
 
   bool portFound = false;
@@ -619,40 +619,40 @@ void consoleWaitForInputCommandHandler(
   }
 
   if (portFound == false) {
-    printString("WARNING: Request to wait for input from non-owning task ");
+    printString("WARNING: Request to wait for input from non-owning process ");
     printInt(owner);
     printString("\n");
   }
 
-  taskMessageSetDone(inputMessage);
+  processMessageSetDone(inputMessage);
   consoleMessageCleanup(inputMessage);
 
   return;
 }
 
 /// @fn void consoleReleasePidPortCommandHandler(
-///   ConsoleState *consoleState, TaskMessage *inputMessage)
+///   ConsoleState *consoleState, ProcessMessage *inputMessage)
 ///
-/// @brief Release all the ports currently owned by a task.
+/// @brief Release all the ports currently owned by a process.
 ///
 /// @param consoleState A pointer to the ConsoleState being maintained by the
 ///   runConsole function that's running.
-/// @param inputMessage A pointer to the TaskMessage with the received
+/// @param inputMessage A pointer to the ProcessMessage with the received
 ///   command.
 ///
 /// @return This function returns no value.
 void consoleReleasePidPortCommandHandler(
-  ConsoleState *consoleState, TaskMessage *inputMessage
+  ConsoleState *consoleState, ProcessMessage *inputMessage
 ) {
-  TaskId sender = taskId(taskMessageFrom(inputMessage));
-  if (sender != SCHEDULER_STATE->schedulerTaskId) {
+  ProcessId sender = pid(processMessageFrom(inputMessage));
+  if (sender != SCHEDULER_STATE->schedulerProcessId) {
     // Sender is not the scheduler.  We will ignore this.
-    taskMessageSetDone(inputMessage);
+    processMessageSetDone(inputMessage);
     consoleMessageCleanup(inputMessage);
     return;
   }
 
-  TaskId owner = (TaskId) ((intptr_t) taskMessageData(inputMessage));
+  ProcessId owner = (ProcessId) ((intptr_t) processMessageData(inputMessage));
   ConsolePort *consolePorts = consoleState->consolePorts;
 
   for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
@@ -664,46 +664,46 @@ void consoleReleasePidPortCommandHandler(
     }
   }
 
-  taskMessageSetDone(inputMessage);
+  processMessageSetDone(inputMessage);
   consoleMessageCleanup(inputMessage);
 
   return;
 }
 
 /// @fn void consoleReleaseBufferCommandHandler(
-///   ConsoleState *consoleState, TaskMessage *inputMessage)
+///   ConsoleState *consoleState, ProcessMessage *inputMessage)
 ///
 /// @brief Command handler for the CONSOLE_RELEASE_BUFFER command.  Releases a
 /// buffer that was previously returned by the CONSOLE_GET_BUFFER command.
 /// a pointer to the buffer structure.
 ///
 /// @param consoleState A pointer to the ConsoleState structure held by the
-///   runConsole task.  One of the buffers in this state will have its inUse
+///   runConsole process.  One of the buffers in this state will have its inUse
 ///   member set to false.
-/// @param inputMessage A pointer to the TaskMessage that was received from
-///   the task that sent the command.
+/// @param inputMessage A pointer to the ProcessMessage that was received from
+///   the process that sent the command.
 ///
 /// @return This function returns no value but does set the inputMessage to
-/// done so that the calling task knows that we've handled the message.
+/// done so that the calling process knows that we've handled the message.
 /// Since this is a synchronous call, it also pushes a message onto the message
 /// sender's queue with the free buffer on success.  On failure, the
 /// inputMessage is marked as done but no response is sent.
 void consoleReleaseBufferCommandHandler(
-  ConsoleState *consoleState, TaskMessage *inputMessage
+  ConsoleState *consoleState, ProcessMessage *inputMessage
 ) {
   // We don't need to examine consoleState since the caller has provided us
   // with the pointer we can use directly.
   (void) consoleState;
 
   ConsoleBuffer *consoleBuffers = consoleState->consoleBuffers;
-  ConsoleBuffer *consoleBuffer = (ConsoleBuffer*) taskMessageData(inputMessage);
+  ConsoleBuffer *consoleBuffer = (ConsoleBuffer*) processMessageData(inputMessage);
   if (consoleBuffer != NULL) {
     for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
       if (consoleBuffer == &consoleBuffers[ii]) {
         // The buffer being released is one of the buffers dedicated to a port.
         // *DO NOT* free it because it is always in use.  Just release the
         // message and return.
-        taskMessageRelease(inputMessage);
+        processMessageRelease(inputMessage);
         return;
       }
     }
@@ -715,27 +715,27 @@ void consoleReleaseBufferCommandHandler(
   // call, so mark the input message handled.  This is a synchronous call and
   // the caller is waiting on our response, so *DO NOT* release it.  The caller
   // is responsible for releasing it when they've received the response.
-  taskMessageRelease(inputMessage);
+  processMessageRelease(inputMessage);
   return;
 }
 
 /// @fn void consoleGetNumPortsCommandHandler(
-///   ConsoleState *consoleState, TaskMessage *inputMessage)
+///   ConsoleState *consoleState, ProcessMessage *inputMessage)
 ///
 /// @brief Get the number of running console ports.
 ///
 /// @param consoleState A pointer to the ConsoleState being maintained by the
 ///   runConsole function that's running.
-/// @param inputMessage A pointer to the TaskMessage with the received
+/// @param inputMessage A pointer to the ProcessMessage with the received
 ///   command.
 ///
 /// @return This function returns no value.
 void consoleGetNumPortsCommandHandler(
-  ConsoleState *consoleState, TaskMessage *inputMessage
+  ConsoleState *consoleState, ProcessMessage *inputMessage
 ) {
-  taskMessageData(inputMessage)
+  processMessageData(inputMessage)
     = (void*) ((intptr_t) consoleState->numConsolePorts);
-  taskMessageSetDone(inputMessage);
+  processMessageSetDone(inputMessage);
 
   return;
 }
@@ -743,7 +743,7 @@ void consoleGetNumPortsCommandHandler(
 /// @typedef ConsoleCommandHandler
 ///
 /// @brief Signature of command handler for a console command.
-typedef void (*ConsoleCommandHandler)(ConsoleState*, TaskMessage*);
+typedef void (*ConsoleCommandHandler)(ConsoleState*, ProcessMessage*);
 
 /// @var consoleCommandHandlers
 ///
@@ -766,19 +766,19 @@ const ConsoleCommandHandler consoleCommandHandlers[] = {
 
 /// @fn void handleConsoleMessages(ConsoleState *consoleState)
 ///
-/// @brief Handle all messages currently in the console task's message queue.
+/// @brief Handle all messages currently in the console process's message queue.
 ///
 /// @param consoleState A pointer to the ConsoleState structure maintained by
-///   the runConsole task.
+///   the runConsole process.
 ///
 /// @return This function returns no value.
 void handleConsoleMessages(ConsoleState *consoleState) {
-  TaskMessage *message = taskMessageQueuePop();
+  ProcessMessage *message = processMessageQueuePop();
   while (message != NULL) {
-    ConsoleCommand messageType = (ConsoleCommand) taskMessageType(message);
+    ConsoleCommand messageType = (ConsoleCommand) processMessageType(message);
     if (messageType >= NUM_CONSOLE_COMMANDS) {
       // Invalid.
-      printInt(getRunningTaskId());
+      printInt(getRunningProcessId());
       printString(": ");
       printString(__func__);
       printString(": ");
@@ -787,12 +787,12 @@ void handleConsoleMessages(ConsoleState *consoleState) {
       printInt(messageType);
       printString("\n");
 
-      message = taskMessageQueuePop();
+      message = processMessageQueuePop();
       continue;
     }
 
     consoleCommandHandlers[messageType](consoleState, message);
-    message = taskMessageQueuePop();
+    message = processMessageQueuePop();
   }
 
   return;
@@ -869,8 +869,8 @@ int readSerialByte(ConsolePort *consolePort) {
       } while (serialData > -1);
       
       // In this case, we need to return ASCII_ESCAPE so that the main loop
-      // knows to forward this to the waiting task.  Handling escape
-      // sequences is task specific.
+      // knows to forward this to the waiting process.  Handling escape
+      // sequences is process specific.
       serialData = ASCII_ESCAPE;
     } else {
       printDebugString("Received unhandled character ");
@@ -922,14 +922,14 @@ int printSerialString(unsigned char uart, const char *string) {
 
 /// @fn void* runConsole(void *args)
 ///
-/// @brief Main task for managing console input and output.  Runs in an
+/// @brief Main process for managing console input and output.  Runs in an
 /// infinite loop and never exits.  Every iteration, it checks the serial
 /// connection for a byte and adds it to the buffer if there is anything,
 /// handles the user command if the incoming byte is a newline, and handles any
-/// messages that were sent to this task.
+/// messages that were sent to this process.
 ///
 /// @param args Any arguments provided by the scheduler.  Ignored by this
-///   task.
+///   process.
 ///
 /// @return This function never returns, but would return NULL if it did.
 void* runConsole(void *args) {
@@ -938,7 +938,7 @@ void* runConsole(void *args) {
   int byteRead = -1;
   ConsoleState consoleState;
   memset(&consoleState, 0, sizeof(ConsoleState));
-  TaskMessage *schedulerMessage = NULL;
+  ProcessMessage *schedulerMessage = NULL;
 
   if (HAL->uart != NULL) {
     consoleState.numConsolePorts
@@ -986,32 +986,32 @@ void* runConsole(void *args) {
           consolePort->consoleBuffer->buffer[consolePort->consoleBufferIndex]
             = '\0';
           consolePort->consoleBufferIndex = 0;
-          if (initSendTaskMessageToTaskId(
+          if (initSendProcessMessageToProcessId(
             consolePort->inputOwner, CONSOLE_RETURNING_INPUT,
             consolePort->consoleBuffer, sizeof(ConsoleBuffer), false) == NULL
           ) {
             printString(
-              "ERROR: Could not send CONSOLE_RETURNING_INPUT to task ID ");
+              "ERROR: Could not send CONSOLE_RETURNING_INPUT to process ID ");
             printInt(consolePort->inputOwner);
             printString("\n");
           }
           consolePort->waitingForInput = false;
         } else {
-          // Console port is either not owned or owning task is not waiting
+          // Console port is either not owned or owning process is not waiting
           // for input.  Reset our buffer and do nothing.
           consolePort->consoleBufferIndex = 0;
         }
       }
     }
 
-    schedulerMessage = (TaskMessage*) taskYield();
+    schedulerMessage = (ProcessMessage*) processYield();
 
     if (schedulerMessage != NULL) {
-      // We have a message from the scheduler that we need to task.  This
+      // We have a message from the scheduler that we need to process.  This
       // is not the expected case, but it's the priority case, so we need to
       // list it first.
       ConsoleCommand messageType
-        = (ConsoleCommand) taskMessageType(schedulerMessage);
+        = (ConsoleCommand) processMessageType(schedulerMessage);
       if (messageType < NUM_CONSOLE_COMMANDS) {
         consoleCommandHandlers[messageType](&consoleState, schedulerMessage);
       } else {
@@ -1020,7 +1020,7 @@ void* runConsole(void *args) {
         printString(" from scheduler.\n");
       }
     } else {
-      // No message from the scheduler.  Handle any user task messages in
+      // No message from the scheduler.  Handle any user process messages in
       // our message queue.
       handleConsoleMessages(&consoleState);
     }
@@ -1049,12 +1049,12 @@ int printConsoleValue(ConsoleValueType valueType, void *value, size_t length) {
   length = (length <= sizeof(message)) ? length : sizeof(message);
   memcpy(&message, value, length);
 
-  printDebugString("Sending message to console task.\n");
-  if (initSendTaskMessageToTaskId(SCHEDULER_STATE->consoleTaskId,
+  printDebugString("Sending message to console process.\n");
+  if (initSendProcessMessageToProcessId(SCHEDULER_STATE->consoleProcessId,
     CONSOLE_WRITE_VALUE, (void*) message, (size_t) valueType, false) == NULL
   ) {
     printString(
-      "ERROR: Could not send CONSOLE_WRITE_VALUE message to console task\n");
+      "ERROR: Could not send CONSOLE_WRITE_VALUE message to console process\n");
   }
 
   printDebugString("Leaving printConsoleValue.\n");
@@ -1110,73 +1110,73 @@ int printConsoleString(const char *message) {
 /// @return This function returns no value.
 void releaseConsole(void) {
   // releaseConsole is sometimes called from within handleCommand, which runs
-  // from within the console task.  That means we can't do blocking prints
+  // from within the console process.  That means we can't do blocking prints
   // from this function.  i.e. We can't use printf here.  Use printConsole
   // instead.
-  if (initSendTaskMessageToTaskId(SCHEDULER_STATE->consoleTaskId,
+  if (initSendProcessMessageToProcessId(SCHEDULER_STATE->consoleProcessId,
     CONSOLE_RELEASE_PORT, /* data= */ 0, /* size= */ 0, false) == NULL
   ) {
     printString(
-      "ERROR: Could not send CONSOLE_RELEASE_PORT message to console task\n");
+      "ERROR: Could not send CONSOLE_RELEASE_PORT message to console process\n");
   }
-  taskYield();
+  processYield();
 }
 
 /// @fn int getOwnedConsolePort(void)
 ///
-/// @brief Get the first port owned by the running task.
+/// @brief Get the first port owned by the running process.
 ///
-/// @return Returns the numerical index of the console port the task owns on
+/// @return Returns the numerical index of the console port the process owns on
 /// success, -1 on failure.
 int getOwnedConsolePort(void) {
-  TaskMessage *sent = initSendTaskMessageToTaskId(
-    SCHEDULER_STATE->consoleTaskId, CONSOLE_GET_OWNED_PORT,
+  ProcessMessage *sent = initSendProcessMessageToProcessId(
+    SCHEDULER_STATE->consoleProcessId, CONSOLE_GET_OWNED_PORT,
     /* data= */ 0, /* size= */ 0, /* waiting= */ true);
 
-  taskMessageWaitForDone(sent, NULL);
+  processMessageWaitForDone(sent, NULL);
 
-  int returnValue = (int) ((intptr_t) taskMessageData(sent));
-  taskMessageRelease(sent);
+  int returnValue = (int) ((intptr_t) processMessageData(sent));
+  processMessageRelease(sent);
 
   return returnValue;
 }
 
 /// @fn bool getConsoleEcho(void)
 ///
-/// @brief Get the echo state for all ports owned by the current task.
+/// @brief Get the echo state for all ports owned by the current process.
 ///
 /// @return Returns true if the console for the process is echoing, false
 /// otherwise.
 bool getConsoleEcho(void) {
-  TaskMessage *sent = initSendTaskMessageToTaskId(
-    SCHEDULER_STATE->consoleTaskId, CONSOLE_GET_ECHO_PORT,
+  ProcessMessage *sent = initSendProcessMessageToProcessId(
+    SCHEDULER_STATE->consoleProcessId, CONSOLE_GET_ECHO_PORT,
     /* data= */ 0, /* size= */ 0, /* waiting= */ true);
 
   // The console will reuse the message we sent.
-  taskMessageWaitForDone(sent, NULL);
+  processMessageWaitForDone(sent, NULL);
 
-  bool returnValue = (bool) ((uintptr_t) taskMessageData(sent));
-  taskMessageRelease(sent);
+  bool returnValue = (bool) ((uintptr_t) processMessageData(sent));
+  processMessageRelease(sent);
 
   return returnValue;
 }
 
 /// @fn int setConsoleEcho(bool desiredEchoState)
 ///
-/// @brief Set the echo state for all ports owned by the current task.
+/// @brief Set the echo state for all ports owned by the current process.
 ///
-/// @return Returns 0 if the echo state was set for the current task's
+/// @return Returns 0 if the echo state was set for the current process's
 /// ports, -1 on failure.
 int setConsoleEcho(bool desiredEchoState) {
-  TaskMessage *sent = initSendTaskMessageToTaskId(
-    SCHEDULER_STATE->consoleTaskId, CONSOLE_SET_ECHO_PORT,
+  ProcessMessage *sent = initSendProcessMessageToProcessId(
+    SCHEDULER_STATE->consoleProcessId, CONSOLE_SET_ECHO_PORT,
     /* data= */ (void*) ((uintptr_t) desiredEchoState), /* size= */ 0,
     /* waiting= */ true);
 
-  taskMessageWaitForDone(sent, NULL);
+  processMessageWaitForDone(sent, NULL);
 
-  int returnValue = (int) ((intptr_t) taskMessageData(sent));
-  taskMessageRelease(sent);
+  int returnValue = (int) ((intptr_t) processMessageData(sent));
+  processMessageRelease(sent);
 
   return returnValue;
 }
@@ -1187,16 +1187,16 @@ int setConsoleEcho(bool desiredEchoState) {
 ///
 /// @return Returns the number of ports running on success, -1 on failure.
 int getNumConsolePorts(void) {
-  TaskMessage *sent = initSendTaskMessageToTaskId(
-    SCHEDULER_STATE->consoleTaskId, CONSOLE_GET_NUM_PORTS,
+  ProcessMessage *sent = initSendProcessMessageToProcessId(
+    SCHEDULER_STATE->consoleProcessId, CONSOLE_GET_NUM_PORTS,
     /* data= */ 0, /* size= */ 0, /* waiting= */ true);
   if (sent == NULL) {
     return -1;
   }
 
-  taskMessageWaitForDone(sent, NULL);
-  int returnValue = (int) ((intptr_t) taskMessageData(sent));
-  taskMessageRelease(sent);
+  processMessageWaitForDone(sent, NULL);
+  int returnValue = (int) ((intptr_t) processMessageData(sent));
+  processMessageRelease(sent);
 
   return returnValue;
 }

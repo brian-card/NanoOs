@@ -36,7 +36,7 @@
 #include "Hal.h"
 #include "NanoOs.h"
 #include "OverlayFunctions.h"
-#include "Tasks.h"
+#include "Processes.h"
 #include "Scheduler.h"
 #include "SdCard.h"
 
@@ -52,25 +52,25 @@ void runScheduler(void);
 
 /// @def NUM_STANDARD_FILE_DESCRIPTORS
 ///
-/// @brief The number of file descriptors a task usually starts out with.
+/// @brief The number of file descriptors a process usually starts out with.
 #define NUM_STANDARD_FILE_DESCRIPTORS 3
 
 /// @def STDIN_FILE_DESCRIPTOR_INDEX
 ///
-/// @brief Index into a TaskDescriptor's fileDescriptors array that holds the
-/// FileDescriptor object that maps to the task's stdin FILE stream.
+/// @brief Index into a ProcessDescriptor's fileDescriptors array that holds the
+/// FileDescriptor object that maps to the process's stdin FILE stream.
 #define STDIN_FILE_DESCRIPTOR_INDEX 0
 
 /// @def STDOUT_FILE_DESCRIPTOR_INDEX
 ///
-/// @brief Index into a TaskDescriptor's fileDescriptors array that holds the
-/// FileDescriptor object that maps to the task's stdout FILE stream.
+/// @brief Index into a ProcessDescriptor's fileDescriptors array that holds the
+/// FileDescriptor object that maps to the process's stdout FILE stream.
 #define STDOUT_FILE_DESCRIPTOR_INDEX 1
 
 /// @def STDERR_FILE_DESCRIPTOR_INDEX
 ///
-/// @brief Index into a TaskDescriptor's fileDescriptors array that holds the
-/// FileDescriptor object that maps to the task's stderr FILE stream.
+/// @brief Index into a ProcessDescriptor's fileDescriptors array that holds the
+/// FileDescriptor object that maps to the process's stderr FILE stream.
 #define STDERR_FILE_DESCRIPTOR_INDEX 2
 
 /// @var _functionInProgress
@@ -81,37 +81,37 @@ const char *_functionInProgress = NULL;
 
 /// @var schedulerThread
 ///
-/// @brief Pointer to the main task handle that's allocated before the
+/// @brief Pointer to the main process handle that's allocated before the
 /// scheduler is started.
 Thread schedulerThread = NULL;
 
-/// @var allTasks
+/// @var allProcesses
 ///
-/// @brief Pointer to the allTasks array that is part of the
-/// SchedulerState object maintained by the scheduler task.  This is needed
-/// in order to do lookups from task IDs to task object pointers.
-static TaskDescriptor *allTasks = NULL;
+/// @brief Pointer to the allProcesses array that is part of the
+/// SchedulerState object maintained by the scheduler process.  This is needed
+/// in order to do lookups from process IDs to process object pointers.
+static ProcessDescriptor *allProcesses = NULL;
 
 /// @var SCHEDULER_STATE
 ///
-/// @brief Global pointer to the SchedulerState managed by the scheduler task.
+/// @brief Global pointer to the SchedulerState managed by the scheduler process.
 SchedulerState *SCHEDULER_STATE = NULL;
 
 /// @var standardKernelFileDescriptors
 ///
-/// @brief The array of file descriptors that all kernel tasks use.
+/// @brief The array of file descriptors that all kernel processes use.
 static FileDescriptor standardKernelFileDescriptors[
   NUM_STANDARD_FILE_DESCRIPTORS
 ] = {
   {
     // stdin
-    // Kernel tasks do not read from stdin, so clear out both pipes.
+    // Kernel processes do not read from stdin, so clear out both pipes.
     .inputChannel = {
-      .taskId = TASK_ID_NOT_SET,
+      .pid = TASK_ID_NOT_SET,
       .messageType = -1,
     },
     .outputChannel = {
-      .taskId = TASK_ID_NOT_SET,
+      .pid = TASK_ID_NOT_SET,
       .messageType = -1,
     },
     .pipeEnd = NULL,
@@ -122,11 +122,11 @@ static FileDescriptor standardKernelFileDescriptors[
     // Uni-directional FileDescriptor, so clear the input pipe and direct the
     // output pipe to the console.
     .inputChannel = {
-      .taskId = TASK_ID_NOT_SET,
+      .pid = TASK_ID_NOT_SET,
       .messageType = -1,
     },
     .outputChannel = {
-      .taskId = TASK_ID_NOT_SET,
+      .pid = TASK_ID_NOT_SET,
       .messageType = -1,
     },
     .pipeEnd = NULL,
@@ -137,11 +137,11 @@ static FileDescriptor standardKernelFileDescriptors[
     // Uni-directional FileDescriptor, so clear the input pipe and direct the
     // output pipe to the console.
     .inputChannel = {
-      .taskId = TASK_ID_NOT_SET,
+      .pid = TASK_ID_NOT_SET,
       .messageType = -1,
     },
     .outputChannel = {
-      .taskId = TASK_ID_NOT_SET,
+      .pid = TASK_ID_NOT_SET,
       .messageType = -1,
     },
     .pipeEnd = NULL,
@@ -151,7 +151,7 @@ static FileDescriptor standardKernelFileDescriptors[
 
 /// @var standardKernelFileDescriptorsPointers
 ///
-/// @brief The array of file descriptor pointers that all kernel tasks use.
+/// @brief The array of file descriptor pointers that all kernel processes use.
 static FileDescriptor *standardKernelFileDescriptorsPointers[
   NUM_STANDARD_FILE_DESCRIPTORS
 ] = {
@@ -163,7 +163,7 @@ static FileDescriptor *standardKernelFileDescriptorsPointers[
 /// @var standardUserFileDescriptors
 ///
 /// @brief Pointer to the array of FileDescriptor objects (declared in the
-/// startScheduler function on the scheduler's stack) that all tasks start
+/// startScheduler function on the scheduler's stack) that all processes start
 /// out with.
 static FileDescriptor standardUserFileDescriptors[
   NUM_STANDARD_FILE_DESCRIPTORS
@@ -173,11 +173,11 @@ static FileDescriptor standardUserFileDescriptors[
     // Uni-directional FileDescriptor, so clear the output pipe and direct the
     // input pipe to the console.
     .inputChannel = {
-      .taskId = TASK_ID_NOT_SET,
+      .pid = TASK_ID_NOT_SET,
       .messageType = -1,
     },
     .outputChannel = {
-      .taskId = TASK_ID_NOT_SET,
+      .pid = TASK_ID_NOT_SET,
       .messageType = -1,
     },
     .pipeEnd = NULL,
@@ -188,11 +188,11 @@ static FileDescriptor standardUserFileDescriptors[
     // Uni-directional FileDescriptor, so clear the input pipe and direct the
     // output pipe to the console.
     .inputChannel = {
-      .taskId = TASK_ID_NOT_SET,
+      .pid = TASK_ID_NOT_SET,
       .messageType = -1,
     },
     .outputChannel = {
-      .taskId = TASK_ID_NOT_SET,
+      .pid = TASK_ID_NOT_SET,
       .messageType = -1,
     },
     .pipeEnd = NULL,
@@ -203,11 +203,11 @@ static FileDescriptor standardUserFileDescriptors[
     // Uni-directional FileDescriptor, so clear the input pipe and direct the
     // output pipe to the console.
     .inputChannel = {
-      .taskId = TASK_ID_NOT_SET,
+      .pid = TASK_ID_NOT_SET,
       .messageType = -1,
     },
     .outputChannel = {
-      .taskId = TASK_ID_NOT_SET,
+      .pid = TASK_ID_NOT_SET,
       .messageType = -1,
     },
     .pipeEnd = NULL,
@@ -217,97 +217,97 @@ static FileDescriptor standardUserFileDescriptors[
 
 /// @var shellNames
 ///
-/// @brief The names of the shells as they will appear in the task table.
+/// @brief The names of the shells as they will appear in the process table.
 static const char* const shellNames[NANO_OS_MAX_NUM_SHELLS] = {
   "shell 0",
   "shell 1",
 };
 
-/// @fn int taskQueuePush(
-///   TaskQueue *taskQueue, TaskDescriptor *taskDescriptor)
+/// @fn int processQueuePush(
+///   ProcessQueue *processQueue, ProcessDescriptor *processDescriptor)
 ///
-/// @brief Push a pointer to a TaskDescriptor onto a TaskQueue.
+/// @brief Push a pointer to a ProcessDescriptor onto a ProcessQueue.
 ///
-/// @param taskQueue A pointer to a TaskQueue to push the pointer to.
-/// @param taskDescriptor A pointer to a TaskDescriptor to push onto the
+/// @param processQueue A pointer to a ProcessQueue to push the pointer to.
+/// @param processDescriptor A pointer to a ProcessDescriptor to push onto the
 ///   queue.
 ///
 /// @return Returns 0 on success, ENOMEM on failure.
-int taskQueuePush(
-  TaskQueue *taskQueue, TaskDescriptor *taskDescriptor
+int processQueuePush(
+  ProcessQueue *processQueue, ProcessDescriptor *processDescriptor
 ) {
-  if ((taskQueue == NULL)
-    || (taskQueue->numElements >= SCHEDULER_NUM_TASKS)
+  if ((processQueue == NULL)
+    || (processQueue->numElements >= SCHEDULER_NUM_TASKS)
   ) {
-    printString("ERROR: Could not push task ");
-    printInt(taskDescriptor->taskId);
+    printString("ERROR: Could not push process ");
+    printInt(processDescriptor->pid);
     printString(" onto ");
-    printString(taskQueue->name);
+    printString(processQueue->name);
     printString(" queue:\n");
     return ENOMEM;
   }
 
-  taskQueue->tasks[taskQueue->tail] = taskDescriptor;
-  taskQueue->tail++;
-  taskQueue->tail %= SCHEDULER_NUM_TASKS;
-  taskQueue->numElements++;
-  taskDescriptor->taskQueue = taskQueue;
+  processQueue->processes[processQueue->tail] = processDescriptor;
+  processQueue->tail++;
+  processQueue->tail %= SCHEDULER_NUM_TASKS;
+  processQueue->numElements++;
+  processDescriptor->processQueue = processQueue;
 
   return 0;
 }
 
-/// @fn TaskDescriptor* taskQueuePop(TaskQueue *taskQueue)
+/// @fn ProcessDescriptor* processQueuePop(ProcessQueue *processQueue)
 ///
-/// @brief Pop a pointer to a TaskDescriptor from a TaskQueue.
+/// @brief Pop a pointer to a ProcessDescriptor from a ProcessQueue.
 ///
-/// @param taskQueue A pointer to a TaskQueue to pop the pointer from.
+/// @param processQueue A pointer to a ProcessQueue to pop the pointer from.
 ///
-/// @return Returns a pointer to a TaskDescriptor on success, NULL on
+/// @return Returns a pointer to a ProcessDescriptor on success, NULL on
 /// failure.
-TaskDescriptor* taskQueuePop(TaskQueue *taskQueue) {
-  TaskDescriptor *taskDescriptor = NULL;
-  if ((taskQueue == NULL) || (taskQueue->numElements == 0)) {
-    return taskDescriptor; // NULL
+ProcessDescriptor* processQueuePop(ProcessQueue *processQueue) {
+  ProcessDescriptor *processDescriptor = NULL;
+  if ((processQueue == NULL) || (processQueue->numElements == 0)) {
+    return processDescriptor; // NULL
   }
 
-  taskDescriptor = taskQueue->tasks[taskQueue->head];
-  taskQueue->head++;
-  taskQueue->head %= SCHEDULER_NUM_TASKS;
-  taskQueue->numElements--;
-  taskDescriptor->taskQueue = NULL;
+  processDescriptor = processQueue->processes[processQueue->head];
+  processQueue->head++;
+  processQueue->head %= SCHEDULER_NUM_TASKS;
+  processQueue->numElements--;
+  processDescriptor->processQueue = NULL;
 
-  return taskDescriptor;
+  return processDescriptor;
 }
 
-/// @fn int taskQueueRemove(
-///   TaskQueue *taskQueue, TaskDescriptor *taskDescriptor)
+/// @fn int processQueueRemove(
+///   ProcessQueue *processQueue, ProcessDescriptor *processDescriptor)
 ///
-/// @brief Remove a pointer to a TaskDescriptor from a TaskQueue.
+/// @brief Remove a pointer to a ProcessDescriptor from a ProcessQueue.
 ///
-/// @param taskQueue A pointer to a TaskQueue to remove the pointer from.
-/// @param taskDescriptor A pointer to a TaskDescriptor to remove from the
+/// @param processQueue A pointer to a ProcessQueue to remove the pointer from.
+/// @param processDescriptor A pointer to a ProcessDescriptor to remove from the
 ///   queue.
 ///
 /// @return Returns 0 on success, ENOMEM on failure.
-int taskQueueRemove(
-  TaskQueue *taskQueue, TaskDescriptor *taskDescriptor
+int processQueueRemove(
+  ProcessQueue *processQueue, ProcessDescriptor *processDescriptor
 ) {
   int returnValue = EINVAL;
-  if ((taskQueue == NULL) || (taskQueue->numElements == 0)) {
+  if ((processQueue == NULL) || (processQueue->numElements == 0)) {
     // Nothing to do.
     return returnValue; // EINVAL
   }
 
-  TaskDescriptor *poppedDescriptor = NULL;
-  for (uint8_t ii = 0; ii < taskQueue->numElements; ii++) {
-    poppedDescriptor = taskQueuePop(taskQueue);
-    if (poppedDescriptor == taskDescriptor) {
+  ProcessDescriptor *poppedDescriptor = NULL;
+  for (uint8_t ii = 0; ii < processQueue->numElements; ii++) {
+    poppedDescriptor = processQueuePop(processQueue);
+    if (poppedDescriptor == processDescriptor) {
       returnValue = ENOERR;
-      taskDescriptor->taskQueue = NULL;
+      processDescriptor->processQueue = NULL;
       break;
     }
     // This is not what we're looking for.  Put it back.
-    taskQueuePush(taskQueue, poppedDescriptor);
+    processQueuePush(processQueue, poppedDescriptor);
   }
 
   return returnValue;
@@ -365,13 +365,13 @@ void coroutineYieldCallback(void *stateData, Coroutine *coroutine) {
 /// waiting queue and pushed onto the ready queue.
 void comutexUnlockCallback(void *stateData, Comutex *comutex) {
   (void) stateData;
-  TaskDescriptor *taskDescriptor = coroutineContext(comutex->head);
-  if (taskDescriptor == NULL) {
+  ProcessDescriptor *processDescriptor = coroutineContext(comutex->head);
+  if (processDescriptor == NULL) {
     // Nothing is waiting on this mutex.  Just return.
     return;
   }
-  taskQueueRemove(taskDescriptor->taskQueue, taskDescriptor);
-  taskQueuePush(taskDescriptor->readyQueue, taskDescriptor);
+  processQueueRemove(processDescriptor->processQueue, processDescriptor);
+  processQueuePush(processDescriptor->readyQueue, processDescriptor);
 
   return;
 }
@@ -395,210 +395,210 @@ void coconditionSignalCallback(void *stateData, Cocondition *cocondition) {
   Thread cur = cocondition->head;
 
   for (int ii = 0; (ii < cocondition->numSignals) && (cur != NULL); ii++) {
-    TaskDescriptor *taskDescriptor = coroutineContext(cur);
-    // It's not possible for taskDescriptor to be NULL.  We only enter this
+    ProcessDescriptor *processDescriptor = coroutineContext(cur);
+    // It's not possible for processDescriptor to be NULL.  We only enter this
     // loop if cocondition->numSignals > 0, so there MUST be something waiting
     // on this condition.
-    taskQueueRemove(taskDescriptor->taskQueue, taskDescriptor);
-    taskQueuePush(taskDescriptor->readyQueue, taskDescriptor);
+    processQueueRemove(processDescriptor->processQueue, processDescriptor);
+    processQueuePush(processDescriptor->readyQueue, processDescriptor);
     cur = cur->nextToSignal;
   }
 
   return;
 }
 
-/// @fn TaskDescriptor* schedulerGetTaskById(unsigned int taskId)
+/// @fn ProcessDescriptor* schedulerGetProcessById(unsigned int pid)
 ///
-/// @brief Look up a task for a running command given its task ID.
+/// @brief Look up a process for a running command given its process ID.
 ///
 /// @note This function is meant to be called from outside of the scheduler's
 /// running state.  That's why there's no SchedulerState pointer in the
 /// parameters.
 ///
-/// @param taskId The integer ID for the task.
+/// @param pid The integer ID for the process.
 ///
-/// @return Returns the found task descriptor on success, NULL on failure.
-TaskDescriptor* schedulerGetTaskById(unsigned int taskId) {
-  TaskDescriptor *taskDescriptor = NULL;
-  if ((taskId > 0) && (taskId <= NANO_OS_NUM_TASKS)) {
-    taskDescriptor = &allTasks[taskId - 1];
+/// @return Returns the found process descriptor on success, NULL on failure.
+ProcessDescriptor* schedulerGetProcessById(unsigned int pid) {
+  ProcessDescriptor *processDescriptor = NULL;
+  if ((pid > 0) && (pid <= NANO_OS_NUM_TASKS)) {
+    processDescriptor = &allProcesses[pid - 1];
   }
 
-  return taskDescriptor;
+  return processDescriptor;
 }
 
-/// @fn void* dummyTask(void *args)
+/// @fn void* dummyProcess(void *args)
 ///
-/// @brief Dummy task that's loaded at startup to prepopulate the task
-/// array with tasks.
+/// @brief Dummy process that's loaded at startup to prepopulate the process
+/// array with processes.
 ///
 /// @param args Any arguments passed to this function.  Ignored.
 ///
 /// @return This function always returns NULL.
-void* dummyTask(void *args) {
+void* dummyProcess(void *args) {
   (void) args;
   return NULL;
 }
 
-/// @fn int schedulerSendTaskMessageToTask(
-///   TaskDescriptor *taskDescriptor, TaskMessage *taskMessage)
+/// @fn int schedulerSendProcessMessageToProcess(
+///   ProcessDescriptor *processDescriptor, ProcessMessage *processMessage)
 ///
-/// @brief Get an available TaskMessage, populate it with the specified data,
-/// and push it onto a destination task's queue.
+/// @brief Get an available ProcessMessage, populate it with the specified data,
+/// and push it onto a destination process's queue.
 ///
-/// @param taskDescriptor A pointer to the TaskDescriptor that manages
-///   the task to send a message to.
-/// @param taskMessage A pointer to the message to send to the destination
-///   task.
+/// @param processDescriptor A pointer to the ProcessDescriptor that manages
+///   the process to send a message to.
+/// @param processMessage A pointer to the message to send to the destination
+///   process.
 ///
-/// @return Returns taskSuccess on success, taskError on failure.
-int schedulerSendTaskMessageToTask(
-  TaskDescriptor *taskDescriptor, TaskMessage *taskMessage
+/// @return Returns processSuccess on success, processError on failure.
+int schedulerSendProcessMessageToProcess(
+  ProcessDescriptor *processDescriptor, ProcessMessage *processMessage
 ) {
-  int returnValue = taskSuccess;
-  if ((taskDescriptor == NULL)
-    || (taskDescriptor->mainThread == NULL)
+  int returnValue = processSuccess;
+  if ((processDescriptor == NULL)
+    || (processDescriptor->mainThread == NULL)
   ) {
     printString(
-      "ERROR: Attempt to send scheduler taskMessage to NULL task.\n");
-    returnValue = taskError;
+      "ERROR: Attempt to send scheduler processMessage to NULL process.\n");
+    returnValue = processError;
     return returnValue;
-  } else if (taskMessage == NULL) {
+  } else if (processMessage == NULL) {
     printString(
-      "ERROR: Attempt to send NULL scheduler taskMessage to task.\n");
-    returnValue = taskError;
+      "ERROR: Attempt to send NULL scheduler processMessage to process.\n");
+    returnValue = processError;
     return returnValue;
   }
-  // taskMessage->from would normally be set when we do a
-  // taskMessageQueuePush. We're not using that mechanism here, so we have
+  // processMessage->from would normally be set when we do a
+  // processMessageQueuePush. We're not using that mechanism here, so we have
   // to do it manually.  If we don't do this, then commands that validate that
   // the message came from the scheduler will fail.
-  msg_from(taskMessage).coro = schedulerThread;
+  msg_from(processMessage).coro = schedulerThread;
 
   // Have to set the endpoint type manually since we're not using
   // comessageQueuePush.
-  taskMessage->msg_sync = &msg_sync_array[MSG_CORO_SAFE];
+  processMessage->msg_sync = &msg_sync_array[MSG_CORO_SAFE];
 
-  if (taskCorrupted(taskDescriptor)) {
-    printString("ERROR: Called task is corrupted:\n");
-    returnValue = taskError;
+  if (processCorrupted(processDescriptor)) {
+    printString("ERROR: Called process is corrupted:\n");
+    returnValue = processError;
     return returnValue;
   }
-  taskResume(taskDescriptor, taskMessage);
+  processResume(processDescriptor, processMessage);
 
-  if (taskMessageDone(taskMessage) != true) {
-    // This is our only indication from the called task that something went
+  if (processMessageDone(processMessage) != true) {
+    // This is our only indication from the called process that something went
     // wrong.  Return an error status here.
-    printString("ERROR: Task ");
-    printInt(taskDescriptor->taskId);
+    printString("ERROR: Process ");
+    printInt(processDescriptor->pid);
     printString(" did not mark sent message done.\n");
-    returnValue = taskError;
+    returnValue = processError;
   }
 
   return returnValue;
 }
 
-/// @fn int schedulerSendTaskMessageToTaskId(SchedulerState *schedulerState,
-///   unsigned int pid, TaskMessage *taskMessage)
+/// @fn int schedulerSendProcessMessageToProcessId(SchedulerState *schedulerState,
+///   unsigned int pid, ProcessMessage *processMessage)
 ///
-/// @brief Look up a task by its PID and send a message to it.
+/// @brief Look up a process by its PID and send a message to it.
 ///
 /// @param schedulerState A pointer to the SchedulerState maintained by the
-///   scheduler task.
-/// @param pid The ID of the task to send the message to.
-/// @param taskMessage A pointer to the message to send to the destination
-///   task.
+///   scheduler process.
+/// @param pid The ID of the process to send the message to.
+/// @param processMessage A pointer to the message to send to the destination
+///   process.
 ///
-/// @return Returns taskSuccess on success, taskError on failure.
-int schedulerSendTaskMessageToTaskId(SchedulerState *schedulerState,
-  unsigned int pid, TaskMessage *taskMessage
+/// @return Returns processSuccess on success, processError on failure.
+int schedulerSendProcessMessageToProcessId(SchedulerState *schedulerState,
+  unsigned int pid, ProcessMessage *processMessage
 ) {
-  int returnValue = taskError;
+  int returnValue = processError;
   if ((pid <= 0) || (pid > NANO_OS_NUM_TASKS)) {
     // Not a valid PID.  Fail.
     printString("ERROR: ");
     printInt(pid);
     printString(" is not a valid PID.\n");
-    return returnValue; // taskError
+    return returnValue; // processError
   }
 
-  TaskDescriptor *taskDescriptor = &schedulerState->allTasks[pid - 1];
-  // If taskDescriptor is NULL, it will be detected as not running by
-  // schedulerSendTaskMessageToTask, so there's no real point in
+  ProcessDescriptor *processDescriptor = &schedulerState->allProcesses[pid - 1];
+  // If processDescriptor is NULL, it will be detected as not running by
+  // schedulerSendProcessMessageToProcess, so there's no real point in
   //  checking for NULL here.
-  return schedulerSendTaskMessageToTask(
-    taskDescriptor, taskMessage);
+  return schedulerSendProcessMessageToProcess(
+    processDescriptor, processMessage);
 }
 
-/// @fn int schedulerInitSendMessageToTask(
-///   TaskDescriptor *taskDescriptor, int type,
+/// @fn int schedulerInitSendMessageToProcess(
+///   ProcessDescriptor *processDescriptor, int type,
 ///   void *data, size_t size)
 ///
-/// @brief Send a TaskMessage to another task identified by its TaskDescriptor.
+/// @brief Send a ProcessMessage to another process identified by its ProcessDescriptor.
 ///
-/// @param taskDescriptor A pointer to the TaskDescriptor that holds the
-///   metadata for the task.
-/// @param type The type of the message to send to the destination task.
+/// @param processDescriptor A pointer to the ProcessDescriptor that holds the
+///   metadata for the process.
+/// @param type The type of the message to send to the destination process.
 /// @param data A pointer to the data to send, cast to a void*.
 /// @param size The number of bytes the data at the data pointer consumes.
 ///
-/// @return Returns taskSuccess on success, a different task status
+/// @return Returns processSuccess on success, a different process status
 /// on failure.
-int schedulerInitSendMessageToTask(TaskDescriptor *taskDescriptor,
+int schedulerInitSendMessageToProcess(ProcessDescriptor *processDescriptor,
   int type, void *data, size_t size
 ) {
-  TaskMessage taskMessage;
-  memset(&taskMessage, 0, sizeof(taskMessage));
+  ProcessMessage processMessage;
+  memset(&processMessage, 0, sizeof(processMessage));
 
   // These messages are always waiting for done from the caller, so hardcode
   // the waiting parameter to true here.
-  taskMessageInit(&taskMessage, type, data, size, true);
+  processMessageInit(&processMessage, type, data, size, true);
 
-  int returnValue = schedulerSendTaskMessageToTask(
-    taskDescriptor, &taskMessage);
+  int returnValue = schedulerSendProcessMessageToProcess(
+    processDescriptor, &processMessage);
 
   return returnValue;
 }
 
-/// @fn int schedulerInitSendMessageToTaskId(
+/// @fn int schedulerInitSendMessageToProcessId(
 ///   int pid, int type, void *data, size_t size)
 ///
-/// @brief Send a TaskMessage to another task identified by its PID. Looks
-/// up the task's TaskDescriptor by its PID and then calls
-/// schedulerInitSendMessageToTask.
+/// @brief Send a ProcessMessage to another process identified by its PID. Looks
+/// up the process's ProcessDescriptor by its PID and then calls
+/// schedulerInitSendMessageToProcess.
 ///
-/// @param pid The task ID of the destination task.
-/// @param type The type of the message to send to the destination task.
+/// @param pid The process ID of the destination process.
+/// @param type The type of the message to send to the destination process.
 /// @param data A pointer to the data to send, cast to a void*.
 /// @param size The number of bytes the data at the data pointer consumes.
 ///
-/// @return Returns taskSuccess on success, a different task status
+/// @return Returns processSuccess on success, a different process status
 /// on failure.
-int schedulerInitSendMessageToTaskId(
+int schedulerInitSendMessageToProcessId(
   int pid, int type, void *data, size_t size
 ) {
-  int returnValue = taskError;
+  int returnValue = processError;
   if ((pid <= 0) || (pid > NANO_OS_NUM_TASKS)) {
     // Not a valid PID.  Fail.
     printString("ERROR: ");
     printInt(pid);
     printString(" is not a valid PID.\n");
-    return returnValue; // taskError
+    return returnValue; // processError
   }
 
-  TaskDescriptor *taskDescriptor = &SCHEDULER_STATE->allTasks[pid - 1];
-  returnValue = schedulerInitSendMessageToTask(
-    taskDescriptor, type, data, size);
+  ProcessDescriptor *processDescriptor = &SCHEDULER_STATE->allProcesses[pid - 1];
+  returnValue = schedulerInitSendMessageToProcess(
+    processDescriptor, type, data, size);
   return returnValue;
 }
 
 /// @fn void* schedulerResumeReallocMessage(void *ptr, size_t size)
 ///
-/// @brief Send a MEMORY_MANAGER_REALLOC command to the memory manager task
+/// @brief Send a MEMORY_MANAGER_REALLOC command to the memory manager process
 /// by resuming it with the message and get a reply.
 ///
-/// @param ptr The pointer to send to the task.
-/// @param size The size to send to the task.
+/// @param ptr The pointer to send to the process.
+/// @param size The size to send to the process.
 ///
 /// @return Returns the data pointer returned in the reply.
 void* schedulerResumeReallocMessage(void *ptr, size_t size) {
@@ -608,21 +608,21 @@ void* schedulerResumeReallocMessage(void *ptr, size_t size) {
   reallocMessage.ptr = ptr;
   reallocMessage.size = size;
   
-  TaskMessage *sent = getAvailableMessage();
+  ProcessMessage *sent = getAvailableMessage();
   if (sent == NULL) {
     // Nothing we can do.  The scheduler can't yield.  Bail.
     return returnValue;
   }
 
-  taskMessageInit(sent, MEMORY_MANAGER_REALLOC,
+  processMessageInit(sent, MEMORY_MANAGER_REALLOC,
     &reallocMessage, sizeof(reallocMessage), true);
-  // sent->from would normally be set during taskMessageQueuePush.  We're
+  // sent->from would normally be set during processMessageQueuePush.  We're
   // not using that mechanism here, so we have to do it manually.  Things will
   // get messed up if we don't.
   msg_from(sent).coro = schedulerThread;
 
-  taskResume(&allTasks[SCHEDULER_STATE->memoryManagerTaskId - 1], sent);
-  if (taskMessageDone(sent) == true) {
+  processResume(&allProcesses[SCHEDULER_STATE->memoryManagerProcessId - 1], sent);
+  if (processMessageDone(sent) == true) {
     // The handler set the pointer back in the structure we sent it, so grab it
     // out of the structure we already have.
     returnValue = reallocMessage.ptr;
@@ -632,11 +632,11 @@ void* schedulerResumeReallocMessage(void *ptr, size_t size) {
   }
   // The handler pushes the message back onto our queue, which is not what we
   // want.  Pop it off again.
-  taskMessageQueuePop();
-  taskMessageRelease(sent);
+  processMessageQueuePop();
+  processMessageRelease(sent);
 
   // The message that was sent to us is the one that we allocated on the stack,
-  // so, there's no reason to call taskMessageRelease here.
+  // so, there's no reason to call processMessageRelease here.
   
   return returnValue;
 }
@@ -697,38 +697,38 @@ void* schedCalloc(size_t nmemb, size_t size) {
 ///
 /// @return This function returns no value.
 void schedFree(void *ptr) {
-  TaskMessage *sent = getAvailableMessage();
+  ProcessMessage *sent = getAvailableMessage();
   if (sent == NULL) {
     // Nothing we can do.  The scheduler can't yield.  Bail.
     return;
   }
 
-  taskMessageInit(sent, MEMORY_MANAGER_FREE, ptr, 0, true);
-  // sent->from would normally be set during taskMessageQueuePush.  We're
+  processMessageInit(sent, MEMORY_MANAGER_FREE, ptr, 0, true);
+  // sent->from would normally be set during processMessageQueuePush.  We're
   // not using that mechanism here, so we have to do it manually.  Things will
   // get messed up if we don't.
   msg_from(sent).coro = schedulerThread;
 
-  taskResume(&allTasks[SCHEDULER_STATE->memoryManagerTaskId - 1], sent);
-  if (taskMessageDone(sent) == false) {
+  processResume(&allProcesses[SCHEDULER_STATE->memoryManagerProcessId - 1], sent);
+  if (processMessageDone(sent) == false) {
     printString(
       "Warning:  Memory manager did not mark free message done.\n");
   }
-  taskMessageRelease(sent);
+  processMessageRelease(sent);
 
   return;
 }
 
-/// @fn int assignMemory(void *ptr, TaskId taskId) {
+/// @fn int assignMemory(void *ptr, ProcessId pid) {
 ///
-/// @brief Assign a piece of memory to a specific task.
+/// @brief Assign a piece of memory to a specific process.
 ///
 /// @param ptr The pointer to the memory to assign.
-/// @param taskId The ID of the task to assign the memory to.
+/// @param pid The ID of the process to assign the memory to.
 ///
 /// @return Returns 0 on success, -errno on failure.
-int assignMemory(void *ptr, TaskId taskId) {
-  TaskMessage *sent = getAvailableMessage();
+int assignMemory(void *ptr, ProcessId pid) {
+  ProcessMessage *sent = getAvailableMessage();
   if (sent == NULL) {
     // Nothing we can do.  The scheduler can't yield.  Bail.
     return -ENOMEM;
@@ -736,74 +736,74 @@ int assignMemory(void *ptr, TaskId taskId) {
   
   AssignMemoryParams assignMemoryParams = {
     .ptr = ptr,
-    .taskId = taskId,
+    .pid = pid,
   };
-  taskMessageInit(sent, MEMORY_MANAGER_ASSIGN_MEMORY,
+  processMessageInit(sent, MEMORY_MANAGER_ASSIGN_MEMORY,
     &assignMemoryParams, sizeof(assignMemoryParams), true);
 
-  // sent->from would normally be set during taskMessageQueuePush.  We're
+  // sent->from would normally be set during processMessageQueuePush.  We're
   // not using that mechanism here, so we have to do it manually.  Things will
   // get messed up if we don't.
   msg_from(sent).coro = schedulerThread;
 
   int returnValue = 0;
-  taskResume(&allTasks[SCHEDULER_STATE->memoryManagerTaskId - 1], sent);
-  if (taskMessageDone(sent) == false) {
+  processResume(&allProcesses[SCHEDULER_STATE->memoryManagerProcessId - 1], sent);
+  if (processMessageDone(sent) == false) {
     printString(
       "Warning:  Memory manager did not mark assignMemory message done.\n");
     returnValue = -ETIMEDOUT;
   }
-  taskMessageRelease(sent);
+  processMessageRelease(sent);
 
   return returnValue;
 }
 
-/// @fn int schedulerAssignPortToTaskId(uint8_t consolePort, TaskId owner)
+/// @fn int schedulerAssignPortToProcessId(uint8_t consolePort, ProcessId owner)
 ///
-/// @brief Assign a console port to a task ID.
+/// @brief Assign a console port to a process ID.
 ///
 /// @param consolePort The ID of the consolePort to assign.
-/// @param owner The ID of the task to assign the port to.
+/// @param owner The ID of the process to assign the port to.
 ///
-/// @return Returns taskSuccess on success, taskError on failure.
-int schedulerAssignPortToTaskId(uint8_t consolePort, TaskId owner) {
+/// @return Returns processSuccess on success, processError on failure.
+int schedulerAssignPortToProcessId(uint8_t consolePort, ProcessId owner) {
   ConsolePortPidUnion consolePortPidUnion;
   consolePortPidUnion.consolePortPidAssociation.consolePort
     = consolePort;
-  consolePortPidUnion.consolePortPidAssociation.taskId = owner;
+  consolePortPidUnion.consolePortPidAssociation.pid = owner;
 
-  int returnValue = schedulerInitSendMessageToTaskId(
-    SCHEDULER_STATE->consoleTaskId, CONSOLE_ASSIGN_PORT,
+  int returnValue = schedulerInitSendMessageToProcessId(
+    SCHEDULER_STATE->consoleProcessId, CONSOLE_ASSIGN_PORT,
     (void*) ((uintptr_t) consolePortPidUnion.nanoOsMessageData), /* size= */ 0);
 
   return returnValue;
 }
 
-/// @fn int schedulerSetPortShell(uint8_t consolePort, TaskId shell)
+/// @fn int schedulerSetPortShell(uint8_t consolePort, ProcessId shell)
 ///
-/// @brief Assign a console port to a task ID.
+/// @brief Assign a console port to a process ID.
 ///
 /// @param consolePort The ID of the consolePort to set the shell for.
-/// @param shell The ID of the shell task for the port.
+/// @param shell The ID of the shell process for the port.
 ///
-/// @return Returns taskSuccess on success, taskError on failure.
-int schedulerSetPortShell(uint8_t consolePort, TaskId shell) {
-  int returnValue = taskError;
+/// @return Returns processSuccess on success, processError on failure.
+int schedulerSetPortShell(uint8_t consolePort, ProcessId shell) {
+  int returnValue = processError;
 
   if (shell >= NANO_OS_NUM_TASKS) {
     printString("ERROR: schedulerSetPortShell called with invalid shell PID ");
     printInt(shell);
     printString("\n");
-    return returnValue; // taskError
+    return returnValue; // processError
   }
 
   ConsolePortPidUnion consolePortPidUnion;
   consolePortPidUnion.consolePortPidAssociation.consolePort
     = consolePort;
-  consolePortPidUnion.consolePortPidAssociation.taskId = shell;
+  consolePortPidUnion.consolePortPidAssociation.pid = shell;
 
-  returnValue = schedulerInitSendMessageToTaskId(
-    SCHEDULER_STATE->consoleTaskId, CONSOLE_SET_PORT_SHELL,
+  returnValue = schedulerInitSendMessageToProcessId(
+    SCHEDULER_STATE->consoleProcessId, CONSOLE_SET_PORT_SHELL,
     (void*) ((uintptr_t) consolePortPidUnion.nanoOsMessageData), /* size= */ 0);
 
   return returnValue;
@@ -819,12 +819,12 @@ int schedulerSetPortShell(uint8_t consolePort, TaskId shell) {
 /// @return Returns the number of ports the console is running on success, -1
 /// on failure.
 int schedulerGetNumConsolePorts(SchedulerState *schedulerState) {
-  TaskQueue *currentReady = schedulerState->currentReady;
+  ProcessQueue *currentReady = schedulerState->currentReady;
   schedulerState->currentReady
     = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
 
   int returnValue = -1;
-  TaskMessage *messageToSend = getAvailableMessage();
+  ProcessMessage *messageToSend = getAvailableMessage();
   for (int ii = 0;
     (ii < MAX_GET_MESSAGE_RETRIES) && (messageToSend == NULL);
     ii++
@@ -833,7 +833,7 @@ int schedulerGetNumConsolePorts(SchedulerState *schedulerState) {
     messageToSend = getAvailableMessage();
   }
   if (messageToSend == NULL) {
-    printInt(getRunningTaskId());
+    printInt(getRunningProcessId());
     printString(": ");
     printString(__func__);
     printString(": ERROR: Out of messages\n");
@@ -841,83 +841,83 @@ int schedulerGetNumConsolePorts(SchedulerState *schedulerState) {
   }
   schedulerState->currentReady = currentReady;
 
-  taskMessageInit(messageToSend, CONSOLE_GET_NUM_PORTS,
+  processMessageInit(messageToSend, CONSOLE_GET_NUM_PORTS,
     /*data= */ 0, /* size= */ 0, /* waiting= */ true);
-  if (schedulerSendTaskMessageToTaskId(schedulerState,
-    SCHEDULER_STATE->consoleTaskId, messageToSend) != taskSuccess
+  if (schedulerSendProcessMessageToProcessId(schedulerState,
+    SCHEDULER_STATE->consoleProcessId, messageToSend) != processSuccess
   ) {
     printString("ERROR: Could not send CONSOLE_GET_NUM_PORTS to console\n");
     return returnValue; // -1
   }
 
-  returnValue = (int) ((intptr_t) taskMessageData(messageToSend));
-  taskMessageRelease(messageToSend);
+  returnValue = (int) ((intptr_t) processMessageData(messageToSend));
+  processMessageRelease(messageToSend);
 
   return returnValue;
 }
 
-/// @fn TaskId schedulerGetNumRunningTasks(struct timespec *timeout)
+/// @fn ProcessId schedulerGetNumRunningProcesses(struct timespec *timeout)
 ///
-/// @brief Get the number of running tasks from the scheduler.
+/// @brief Get the number of running processes from the scheduler.
 ///
 /// @param timeout A pointer to a struct timespec with the end time for the
 ///   timeout.
 ///
-/// @return Returns the number of running tasks on success, 0 on failure.
-/// There is no way for the number of running tasks to exceed the maximum
-/// value of a TaskId type, so it's used here as the return type.
-TaskId schedulerGetNumRunningTasks(struct timespec *timeout) {
-  TaskMessage *taskMessage = NULL;
-  int waitStatus = taskSuccess;
-  TaskId numTaskDescriptors = 0;
+/// @return Returns the number of running processes on success, 0 on failure.
+/// There is no way for the number of running processes to exceed the maximum
+/// value of a ProcessId type, so it's used here as the return type.
+ProcessId schedulerGetNumRunningProcesses(struct timespec *timeout) {
+  ProcessMessage *processMessage = NULL;
+  int waitStatus = processSuccess;
+  ProcessId numProcessDescriptors = 0;
 
-  taskMessage = initSendTaskMessageToTaskId(
-    SCHEDULER_STATE->schedulerTaskId, SCHEDULER_GET_NUM_RUNNING_TASKS,
+  processMessage = initSendProcessMessageToProcessId(
+    SCHEDULER_STATE->schedulerProcessId, SCHEDULER_GET_NUM_RUNNING_TASKS,
     /* data= */  0, /* size= */ 0, true);
-  if (taskMessage == NULL) {
+  if (processMessage == NULL) {
     printf("ERROR: Could not communicate with scheduler.\n");
     goto exit;
   }
 
-  waitStatus = taskMessageWaitForDone(taskMessage, timeout);
-  if (waitStatus != taskSuccess) {
-    if (waitStatus == taskTimedout) {
-      printf("Command to get the number of running tasks timed out.\n");
+  waitStatus = processMessageWaitForDone(processMessage, timeout);
+  if (waitStatus != processSuccess) {
+    if (waitStatus == processTimedout) {
+      printf("Command to get the number of running processes timed out.\n");
     } else {
-      printf("Command to get the number of running tasks failed.\n");
+      printf("Command to get the number of running processes failed.\n");
     }
 
-    // Without knowing how many tasks there are, we can't continue.  Bail.
+    // Without knowing how many processes there are, we can't continue.  Bail.
     goto releaseMessage;
   }
 
-  numTaskDescriptors = (TaskId) ((uintptr_t) taskMessageData(taskMessage));
-  if (numTaskDescriptors == 0) {
-    printf("ERROR: Number of running tasks returned from the "
+  numProcessDescriptors = (ProcessId) ((uintptr_t) processMessageData(processMessage));
+  if (numProcessDescriptors == 0) {
+    printf("ERROR: Number of running processes returned from the "
       "scheduler is 0.\n");
     goto releaseMessage;
   }
 
 releaseMessage:
-  if (taskMessageRelease(taskMessage) != taskSuccess) {
+  if (processMessageRelease(processMessage) != processSuccess) {
     printf("ERROR: Could not release message sent to scheduler for "
-      "getting the number of running tasks.\n");
+      "getting the number of running processes.\n");
   }
 
 exit:
-  return numTaskDescriptors;
+  return numProcessDescriptors;
 }
 
-/// @fn TaskInfo* schedulerGetTaskInfo(void)
+/// @fn ProcessInfo* schedulerGetProcessInfo(void)
 ///
-/// @brief Get information about all tasks running in the system from the
+/// @brief Get information about all processes running in the system from the
 /// scheduler.
 ///
-/// @return Returns a populated, dynamically-allocated TaskInfo object on
+/// @return Returns a populated, dynamically-allocated ProcessInfo object on
 /// success, NULL on failure.
-TaskInfo* schedulerGetTaskInfo(void) {
-  TaskMessage *taskMessage = NULL;
-  int waitStatus = taskSuccess;
+ProcessInfo* schedulerGetProcessInfo(void) {
+  ProcessMessage *processMessage = NULL;
+  int waitStatus = processSuccess;
 
   // We don't know where our messages to the scheduler will be in its queue, so
   // we can't assume they will be processed immediately, but we can't wait
@@ -929,84 +929,84 @@ TaskInfo* schedulerGetTaskInfo(void) {
   // Because the scheduler runs on the main coroutine, it doesn't have the
   // ability to yield.  That means it can't do anything that requires a
   // synchronus message exchange, i.e. allocating memory.  So, we need to
-  // allocate memory from the current task and then pass that back to the
-  // scheduler to populate.  That means we first need to know how many tasks
+  // allocate memory from the current process and then pass that back to the
+  // scheduler to populate.  That means we first need to know how many processes
   // are running so that we know how much space to allocate.  So, get that
   // first.
-  TaskId numTaskDescriptors = schedulerGetNumRunningTasks(&timeout);
+  ProcessId numProcessDescriptors = schedulerGetNumRunningProcesses(&timeout);
 
-  // We need numTaskDescriptors rows.
-  TaskInfo *taskInfo = (TaskInfo*) malloc(sizeof(TaskInfo)
-    + ((numTaskDescriptors - 1) * sizeof(TaskInfoElement)));
-  if (taskInfo == NULL) {
+  // We need numProcessDescriptors rows.
+  ProcessInfo *processInfo = (ProcessInfo*) malloc(sizeof(ProcessInfo)
+    + ((numProcessDescriptors - 1) * sizeof(ProcessInfoElement)));
+  if (processInfo == NULL) {
     printf(
-      "ERROR: Could not allocate memory for taskInfo in getTaskInfo.\n");
+      "ERROR: Could not allocate memory for processInfo in getProcessInfo.\n");
     goto exit;
   }
 
-  // It is possible, although unlikely, that an additional task is started
+  // It is possible, although unlikely, that an additional process is started
   // between the time we made the call above and the time that our message gets
   // handled below.  We allocated our return value based upon the size that was
   // returned above and, if we're not careful, it will be possible to overflow
-  // the array.  Initialize taskInfo->numTasks so that
-  // schedulerGetTaskInfoCommandHandler knows the maximum number of
-  // TaskInfoElements it can populated.
-  taskInfo->numTasks = numTaskDescriptors;
+  // the array.  Initialize processInfo->numProcesses so that
+  // schedulerGetProcessInfoCommandHandler knows the maximum number of
+  // ProcessInfoElements it can populated.
+  processInfo->numProcesses = numProcessDescriptors;
 
-  taskMessage
-    = initSendTaskMessageToTaskId(SCHEDULER_STATE->schedulerTaskId,
-    SCHEDULER_GET_TASK_INFO, taskInfo, sizeof(*taskInfo), true);
+  processMessage
+    = initSendProcessMessageToProcessId(SCHEDULER_STATE->schedulerProcessId,
+    SCHEDULER_GET_TASK_INFO, processInfo, sizeof(*processInfo), true);
 
-  if (taskMessage == NULL) {
-    printf("ERROR: Could not send scheduler message to get task info.\n");
+  if (processMessage == NULL) {
+    printf("ERROR: Could not send scheduler message to get process info.\n");
     goto freeMemory;
   }
 
-  waitStatus = taskMessageWaitForDone(taskMessage, &timeout);
-  if (waitStatus != taskSuccess) {
-    if (waitStatus == taskTimedout) {
-      printf("Command to get task information timed out.\n");
+  waitStatus = processMessageWaitForDone(processMessage, &timeout);
+  if (waitStatus != processSuccess) {
+    if (waitStatus == processTimedout) {
+      printf("Command to get process information timed out.\n");
     } else {
-      printf("Command to get task information failed.\n");
+      printf("Command to get process information failed.\n");
     }
 
-    // Without knowing the data for the tasks, we can't display them.  Bail.
+    // Without knowing the data for the processes, we can't display them.  Bail.
     goto releaseMessage;
   }
 
-  if (taskMessageRelease(taskMessage) != taskSuccess) {
+  if (processMessageRelease(processMessage) != processSuccess) {
     printf("ERROR: Could not release message sent to scheduler for "
-      "getting the number of running tasks.\n");
+      "getting the number of running processes.\n");
   }
 
-  return taskInfo;
+  return processInfo;
 
 releaseMessage:
-  if (taskMessageRelease(taskMessage) != taskSuccess) {
+  if (processMessageRelease(processMessage) != processSuccess) {
     printf("ERROR: Could not release message sent to scheduler for "
-      "getting the number of running tasks.\n");
+      "getting the number of running processes.\n");
   }
 
 freeMemory:
-  free(taskInfo); taskInfo = NULL;
+  free(processInfo); processInfo = NULL;
 
 exit:
-  return taskInfo;
+  return processInfo;
 }
 
-/// @fn int schedulerKillTask(TaskId taskId)
+/// @fn int schedulerKillProcess(ProcessId pid)
 ///
-/// @brief Do all the inter-task communication with the scheduler required
-/// to kill a running task.
+/// @brief Do all the inter-process communication with the scheduler required
+/// to kill a running process.
 ///
-/// @param taskId The ID of the task to kill.
+/// @param pid The ID of the process to kill.
 ///
 /// @return Returns 0 on success, 1 on failure.
-int schedulerKillTask(TaskId taskId) {
-  TaskMessage *taskMessage = initSendTaskMessageToTaskId(
-    SCHEDULER_STATE->schedulerTaskId, SCHEDULER_KILL_TASK,
-    (void*) ((uintptr_t) taskId), /* size= */ 0, true);
-  if (taskMessage == NULL) {
+int schedulerKillProcess(ProcessId pid) {
+  ProcessMessage *processMessage = initSendProcessMessageToProcessId(
+    SCHEDULER_STATE->schedulerProcessId, SCHEDULER_KILL_TASK,
+    (void*) ((uintptr_t) pid), /* size= */ 0, true);
+  if (processMessage == NULL) {
     printf("ERROR: Could not communicate with scheduler.\n");
     return 1;
   }
@@ -1018,26 +1018,26 @@ int schedulerKillTask(TaskId taskId) {
   timespec_get(&ts, TIME_UTC);
   ts.tv_nsec += 100000000;
 
-  int waitStatus = taskMessageWaitForDone(taskMessage, &ts);
+  int waitStatus = processMessageWaitForDone(processMessage, &ts);
   int returnValue = 0;
-  if (waitStatus == taskSuccess) {
-    returnValue = (int) ((intptr_t) taskMessageData(taskMessage));
+  if (waitStatus == processSuccess) {
+    returnValue = (int) ((intptr_t) processMessageData(processMessage));
     if (returnValue == 0) {
       printf("Termination successful.\n");
     } else {
-      printf("Task termination returned status \"%s\".\n",
+      printf("Process termination returned status \"%s\".\n",
         strerror(returnValue));
     }
   } else {
     returnValue = 1;
-    if (waitStatus == taskTimedout) {
-      printf("Command to kill PID %d timed out.\n", taskId);
+    if (waitStatus == processTimedout) {
+      printf("Command to kill PID %d timed out.\n", pid);
     } else {
-      printf("Command to kill PID %d failed.\n", taskId);
+      printf("Command to kill PID %d failed.\n", pid);
     }
   }
 
-  if (taskMessageRelease(taskMessage) != taskSuccess) {
+  if (processMessageRelease(processMessage) != processSuccess) {
     returnValue = 1;
     printf("ERROR: "
       "Could not release message sent to scheduler for kill command.\n");
@@ -1046,52 +1046,52 @@ int schedulerKillTask(TaskId taskId) {
   return returnValue;
 }
 
-/// @fn UserId schedulerGetTaskUser(void)
+/// @fn UserId schedulerGetProcessUser(void)
 ///
-/// @brief Get the ID of the user running the current task.
+/// @brief Get the ID of the user running the current process.
 ///
-/// @return Returns the ID of the user running the current task on success,
+/// @return Returns the ID of the user running the current process on success,
 /// -1 on failure.
-UserId schedulerGetTaskUser(void) {
+UserId schedulerGetProcessUser(void) {
   UserId userId = -1;
-  TaskMessage *taskMessage
-    = initSendTaskMessageToTaskId(
-    SCHEDULER_STATE->schedulerTaskId, SCHEDULER_GET_TASK_USER,
+  ProcessMessage *processMessage
+    = initSendProcessMessageToProcessId(
+    SCHEDULER_STATE->schedulerProcessId, SCHEDULER_GET_TASK_USER,
     /* data= */ 0, /* size= */ 0, true);
-  if (taskMessage == NULL) {
+  if (processMessage == NULL) {
     printString("ERROR: Could not communicate with scheduler.\n");
     return userId; // -1
   }
 
-  taskMessageWaitForDone(taskMessage, NULL);
-  userId = (UserId) ((intptr_t) taskMessageData(taskMessage));
-  taskMessageRelease(taskMessage);
+  processMessageWaitForDone(processMessage, NULL);
+  userId = (UserId) ((intptr_t) processMessageData(processMessage));
+  processMessageRelease(processMessage);
 
   return userId;
 }
 
-/// @fn int schedulerSetTaskUser(UserId userId)
+/// @fn int schedulerSetProcessUser(UserId userId)
 ///
-/// @brief Set the user ID of the current task to the specified user ID.
+/// @brief Set the user ID of the current process to the specified user ID.
 ///
 /// @return Returns 0 on success, -1 on failure.
-int schedulerSetTaskUser(UserId userId) {
+int schedulerSetProcessUser(UserId userId) {
   int returnValue = -1;
-  TaskMessage *taskMessage
-    = initSendTaskMessageToTaskId(
-    SCHEDULER_STATE->schedulerTaskId, SCHEDULER_SET_TASK_USER,
+  ProcessMessage *processMessage
+    = initSendProcessMessageToProcessId(
+    SCHEDULER_STATE->schedulerProcessId, SCHEDULER_SET_TASK_USER,
     /* data= */ (void*) ((intptr_t) userId), /* size= */ 0, true);
-  if (taskMessage == NULL) {
+  if (processMessage == NULL) {
     printString("ERROR: Could not communicate with scheduler.\n");
     return returnValue; // -1
   }
 
-  taskMessageWaitForDone(taskMessage, NULL);
-  returnValue = (int) ((intptr_t) taskMessageData(taskMessage));
-  taskMessageRelease(taskMessage);
+  processMessageWaitForDone(processMessage, NULL);
+  returnValue = (int) ((intptr_t) processMessageData(processMessage));
+  processMessageRelease(processMessage);
 
   if (returnValue != 0) {
-    printf("Scheduler returned \"%s\" for setTaskUser.\n",
+    printf("Scheduler returned \"%s\" for setProcessUser.\n",
       strerror(returnValue));
   }
 
@@ -1100,21 +1100,21 @@ int schedulerSetTaskUser(UserId userId) {
 
 /// @fn FileDescriptor* schedulerGetFileDescriptor(FILE *stream)
 ///
-/// @brief Get the IoPipe object for a task given a pointer to the FILE
+/// @brief Get the IoPipe object for a process given a pointer to the FILE
 ///   stream to write to.
 ///
 /// @param stream A pointer to the desired FILE output stream (stdout or
 ///   stderr).
 ///
 /// @return Returns the appropriate FileDescriptor object for the current
-/// task on success, NULL on failure.
+/// process on success, NULL on failure.
 FileDescriptor* schedulerGetFileDescriptor(FILE *stream) {
   FileDescriptor *returnValue = NULL;
   uintptr_t fdIndex = (uintptr_t) stream;
-  TaskId runningTaskIndex = getRunningTaskId() - 1;
+  ProcessId runningProcessIndex = getRunningProcessId() - 1;
 
-  if (fdIndex <= allTasks[runningTaskIndex].numFileDescriptors) {
-    returnValue = allTasks[runningTaskIndex].fileDescriptors[fdIndex - 1];
+  if (fdIndex <= allProcesses[runningProcessIndex].numFileDescriptors) {
+    returnValue = allProcesses[runningProcessIndex].fileDescriptors[fdIndex - 1];
   } else {
     printString("ERROR: Received request for unknown stream ");
     printInt((intptr_t) stream);
@@ -1127,21 +1127,21 @@ FileDescriptor* schedulerGetFileDescriptor(FILE *stream) {
 /// @fn int schedulerCloseAllFileDescriptors(void)
 ///
 /// @brief Close all the open file descriptors for the currently-running
-/// task.
+/// process.
 ///
 /// @return Returns 0 on success, -1 on failure.
 int schedulerCloseAllFileDescriptors(void) {
-  TaskMessage *taskMessage = initSendTaskMessageToTaskId(
-    SCHEDULER_STATE->schedulerTaskId, SCHEDULER_CLOSE_ALL_FILE_DESCRIPTORS,
+  ProcessMessage *processMessage = initSendProcessMessageToProcessId(
+    SCHEDULER_STATE->schedulerProcessId, SCHEDULER_CLOSE_ALL_FILE_DESCRIPTORS,
     /* data= */ 0, /* size= */ 0, true);
-  if (taskMessage == NULL) {
+  if (processMessage == NULL) {
     printString("ERROR: Could not send SCHEDULER_CLOSE_ALL_FILE_DESCRIPTORS ");
-    printString("message to scheduler task\n");
+    printString("message to scheduler process\n");
     return -1;
   }
 
-  taskMessageWaitForDone(taskMessage, NULL);
-  taskMessageRelease(taskMessage);
+  processMessageWaitForDone(processMessage, NULL);
+  processMessageRelease(processMessage);
 
   return 0;
 }
@@ -1154,18 +1154,18 @@ int schedulerCloseAllFileDescriptors(void) {
 /// failure.
 const char* schedulerGetHostname(void) {
   const char *hostname = NULL;
-  TaskMessage *taskMessage
-    = initSendTaskMessageToTaskId(
-    SCHEDULER_STATE->schedulerTaskId, SCHEDULER_GET_HOSTNAME,
+  ProcessMessage *processMessage
+    = initSendProcessMessageToProcessId(
+    SCHEDULER_STATE->schedulerProcessId, SCHEDULER_GET_HOSTNAME,
     /* data= */ 0, /* size= */ 0, true);
-  if (taskMessage == NULL) {
+  if (processMessage == NULL) {
     printString("ERROR: Could not communicate with scheduler.\n");
     return hostname; // NULL
   }
 
-  taskMessageWaitForDone(taskMessage, NULL);
-  hostname = (const char*) taskMessageData(taskMessage);
-  taskMessageRelease(taskMessage);
+  processMessageWaitForDone(processMessage, NULL);
+  hostname = (const char*) processMessageData(processMessage);
+  processMessageRelease(processMessage);
 
   return hostname;
 }
@@ -1258,23 +1258,23 @@ int schedulerExecve(const char *pathname,
 
   execArgs->schedulerState = NULL; // Set by the scheduler
 
-  TaskMessage *taskMessage
-    = initSendTaskMessageToTaskId(
-    SCHEDULER_STATE->schedulerTaskId, SCHEDULER_EXECVE,
+  ProcessMessage *processMessage
+    = initSendProcessMessageToProcessId(
+    SCHEDULER_STATE->schedulerProcessId, SCHEDULER_EXECVE,
     /* data= */ execArgs, /* size= */ sizeof(*execArgs), true);
-  if (taskMessage == NULL) {
+  if (processMessage == NULL) {
     // The only way this should be possible is if all available messages are
     // in use, so use ENOMEM as the errno.
     errno = ENOMEM;
     goto freeExecArgs;
   }
 
-  taskMessageWaitForDone(taskMessage, NULL);
+  processMessageWaitForDone(processMessage, NULL);
 
   // If we got this far then the exec failed for some reason.  The error will
   // be in the data portion of the message we sent to the scheduler.
-  errno = (int) ((intptr_t) taskMessageData(taskMessage));
-  taskMessageRelease(taskMessage);
+  errno = (int) ((intptr_t) processMessageData(processMessage));
+  processMessageRelease(processMessage);
 
 freeExecArgs:
   execArgs = execArgsDestroy(execArgs);
@@ -1292,37 +1292,37 @@ freeExecArgs:
 ///
 /// @return Returns 0 on success, -errno on failure.
 int schedulerAssignMemory(void *ptr) {
-  TaskMessage *taskMessage = getAvailableMessage();
+  ProcessMessage *processMessage = getAvailableMessage();
   for (int ii = 0;
-    (ii < MAX_GET_MESSAGE_RETRIES) && (taskMessage == NULL);
+    (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
     ii++
   ) {
-    taskYield();
-    taskMessage = getAvailableMessage();
+    processYield();
+    processMessage = getAvailableMessage();
   }
-  if (taskMessage == NULL) {
-    printInt(getRunningTaskId());
+  if (processMessage == NULL) {
+    printInt(getRunningProcessId());
     printString(": ");
     printString(__func__);
-    printString(": ERROR: Out of task messages\n");
+    printString(": ERROR: Out of process messages\n");
     return -ENOMEM;
   }
 
-  taskMessageInit(taskMessage, SCHEDULER_ASSIGN_MEMORY, ptr, 0, true);
+  processMessageInit(processMessage, SCHEDULER_ASSIGN_MEMORY, ptr, 0, true);
 
-  if (sendTaskMessageToTaskId(SCHEDULER_STATE->schedulerTaskId, taskMessage)
-    != taskSuccess
+  if (sendProcessMessageToProcessId(SCHEDULER_STATE->schedulerProcessId, processMessage)
+    != processSuccess
   ) {
-    taskMessageRelease(taskMessage);
+    processMessageRelease(processMessage);
     fprintf(stderr,
       "ERROR: Could not send SCHEDULER_ASSIGN_MEMORY message to scheduler\n");
     return -EIO;
   }
 
-  taskMessageWaitForDone(taskMessage, NULL);
+  processMessageWaitForDone(processMessage, NULL);
 
-  int returnValue = (int) ((intptr_t) taskMessageData(taskMessage));
-  taskMessageRelease(taskMessage);
+  int returnValue = (int) ((intptr_t) processMessageData(processMessage));
+  processMessageRelease(processMessage);
 
   return returnValue;
 }
@@ -1331,34 +1331,34 @@ int schedulerAssignMemory(void *ptr) {
 // Scheduler command handlers and support functions
 ////////////////////////////////////////////////////////////////////////////////
 
-/// @fn int closeTaskFileDescriptors(
-///   SchedulerState *schedulerState, TaskDescriptor *taskDescriptor)
+/// @fn int closeProcessFileDescriptors(
+///   SchedulerState *schedulerState, ProcessDescriptor *processDescriptor)
 ///
-/// @brief Helper function to close out the file descriptors owned by a task
+/// @brief Helper function to close out the file descriptors owned by a process
 /// when it exits or is killed.
 ///
 /// @param schedulerState A pointer to the SchedulerState maintained by the
-///   scheduler task.
-/// @param taskDescriptor A pointer to the TaskDescriptor that holds the
+///   scheduler process.
+/// @param processDescriptor A pointer to the ProcessDescriptor that holds the
 ///   fileDescriptors array to close.
 ///
 /// @return Returns 0 on success, -1 on failure.
-int closeTaskFileDescriptors(
-  SchedulerState *schedulerState, TaskDescriptor *taskDescriptor
+int closeProcessFileDescriptors(
+  SchedulerState *schedulerState, ProcessDescriptor *processDescriptor
 ) {
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    TaskQueue *currentReady = schedulerState->currentReady;
+    ProcessQueue *currentReady = schedulerState->currentReady;
     schedulerState->currentReady
       = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
 
-    FileDescriptor **fileDescriptors = taskDescriptor->fileDescriptors;
+    FileDescriptor **fileDescriptors = processDescriptor->fileDescriptors;
     if (fileDescriptors == NULL) {
       // Nothing to do.
       return 0;
     }
-    TaskMessage *messageToSend = getAvailableMessage();
+    ProcessMessage *messageToSend = getAvailableMessage();
     for (int ii = 0;
       (ii < MAX_GET_MESSAGE_RETRIES) && (messageToSend == NULL);
       ii++
@@ -1367,15 +1367,15 @@ int closeTaskFileDescriptors(
       messageToSend = getAvailableMessage();
     }
     if (messageToSend == NULL) {
-      printInt(getRunningTaskId());
+      printInt(getRunningProcessId());
       printString(": ");
       printString(__func__);
       printString(": ");
       printInt(__LINE__);
-      printString(": ERROR: Out of task messages\n");
+      printString(": ERROR: Out of process messages\n");
       return -1;
     }
-    uint8_t numFileDescriptors = taskDescriptor->numFileDescriptors;
+    uint8_t numFileDescriptors = processDescriptor->numFileDescriptors;
     for (uint8_t ii = 0; ii < numFileDescriptors; ii++) {
       FileDescriptor *fileDescriptor = fileDescriptors[ii];
       if (fileDescriptor == NULL) {
@@ -1383,34 +1383,34 @@ int closeTaskFileDescriptors(
         continue;
       }
 
-      TaskId waitingOutputTaskId
-        = fileDescriptor->outputChannel.taskId;
+      ProcessId waitingOutputProcessId
+        = fileDescriptor->outputChannel.pid;
       
-      if ((waitingOutputTaskId != TASK_ID_NOT_SET)
-        && (waitingOutputTaskId != SCHEDULER_STATE->consoleTaskId)
+      if ((waitingOutputProcessId != TASK_ID_NOT_SET)
+        && (waitingOutputProcessId != SCHEDULER_STATE->consoleProcessId)
       ) {
-        TaskDescriptor *waitingTaskDescriptor
-          = &schedulerState->allTasks[waitingOutputTaskId - 1];
+        ProcessDescriptor *waitingProcessDescriptor
+          = &schedulerState->allProcesses[waitingOutputProcessId - 1];
 
-        if ((waitingTaskDescriptor->fileDescriptors != NULL)
-          && (waitingTaskDescriptor->fileDescriptors[
+        if ((waitingProcessDescriptor->fileDescriptors != NULL)
+          && (waitingProcessDescriptor->fileDescriptors[
             STDIN_FILE_DESCRIPTOR_INDEX] != NULL)
-          && (waitingTaskDescriptor->numFileDescriptors
+          && (waitingProcessDescriptor->numFileDescriptors
             > STDIN_FILE_DESCRIPTOR_INDEX)
         ) {
-          // Clear the taskId of the waiting task's stdin file descriptor.
-          waitingTaskDescriptor->fileDescriptors[
+          // Clear the pid of the waiting process's stdin file descriptor.
+          waitingProcessDescriptor->fileDescriptors[
             STDIN_FILE_DESCRIPTOR_INDEX]->pipeEnd = NULL;
-          waitingTaskDescriptor->fileDescriptors[
-            STDIN_FILE_DESCRIPTOR_INDEX]->inputChannel.taskId = TASK_ID_NOT_SET;
+          waitingProcessDescriptor->fileDescriptors[
+            STDIN_FILE_DESCRIPTOR_INDEX]->inputChannel.pid = TASK_ID_NOT_SET;
 
-          if (taskRunning(waitingTaskDescriptor)) {
-            // Send an empty message to the waiting task so that it will become
+          if (processRunning(waitingProcessDescriptor)) {
+            // Send an empty message to the waiting process so that it will become
             // unblocked.
-            taskMessageInit(messageToSend,
+            processMessageInit(messageToSend,
               fileDescriptor->outputChannel.messageType,
               /*data= */ NULL, /* size= */ 0, /* waiting= */ false);
-            taskMessageQueuePush(waitingTaskDescriptor, messageToSend);
+            processMessageQueuePush(waitingProcessDescriptor, messageToSend);
 
             // The function that was waiting should have released the message we
             // sent it.  Get another one.
@@ -1423,45 +1423,45 @@ int closeTaskFileDescriptors(
               messageToSend = getAvailableMessage();
             }
             if (messageToSend == NULL) {
-              printInt(getRunningTaskId());
+              printInt(getRunningProcessId());
               printString(": ");
               printString(__func__);
               printString(": ");
               printInt(__LINE__);
-              printString(": ERROR: Out of task messages\n");
+              printString(": ERROR: Out of process messages\n");
               return -1;
             }
           }
         }
       }
 
-      TaskId waitingInputTaskId = fileDescriptor->inputChannel.taskId;
-      if ((waitingInputTaskId != TASK_ID_NOT_SET)
-        && (waitingInputTaskId != SCHEDULER_STATE->consoleTaskId)
+      ProcessId waitingInputProcessId = fileDescriptor->inputChannel.pid;
+      if ((waitingInputProcessId != TASK_ID_NOT_SET)
+        && (waitingInputProcessId != SCHEDULER_STATE->consoleProcessId)
       ) {
-        TaskDescriptor *waitingTaskDescriptor
-          = &schedulerState->allTasks[waitingInputTaskId - 1];
+        ProcessDescriptor *waitingProcessDescriptor
+          = &schedulerState->allProcesses[waitingInputProcessId - 1];
 
-        if ((waitingTaskDescriptor->fileDescriptors != NULL)
-          && (waitingTaskDescriptor->fileDescriptors[
+        if ((waitingProcessDescriptor->fileDescriptors != NULL)
+          && (waitingProcessDescriptor->fileDescriptors[
             STDOUT_FILE_DESCRIPTOR_INDEX] != NULL)
-          && (waitingTaskDescriptor->numFileDescriptors
+          && (waitingProcessDescriptor->numFileDescriptors
             > STDOUT_FILE_DESCRIPTOR_INDEX)
         ) {
-          // Clear the taskId of the waiting task's stdout file descriptor.
-          waitingTaskDescriptor->fileDescriptors[
+          // Clear the pid of the waiting process's stdout file descriptor.
+          waitingProcessDescriptor->fileDescriptors[
             STDOUT_FILE_DESCRIPTOR_INDEX]->pipeEnd = NULL;
-          waitingTaskDescriptor->fileDescriptors[
-            STDOUT_FILE_DESCRIPTOR_INDEX]->outputChannel.taskId
+          waitingProcessDescriptor->fileDescriptors[
+            STDOUT_FILE_DESCRIPTOR_INDEX]->outputChannel.pid
             = TASK_ID_NOT_SET;
 
-          if (taskRunning(waitingTaskDescriptor)) {
-            // Send an empty message to the waiting task so that it will become
+          if (processRunning(waitingProcessDescriptor)) {
+            // Send an empty message to the waiting process so that it will become
             // unblocked.
-            taskMessageInit(messageToSend,
+            processMessageInit(messageToSend,
               fileDescriptor->outputChannel.messageType,
               /*data= */ NULL, /* size= */ 0, /* waiting= */ false);
-            taskMessageQueuePush(waitingTaskDescriptor, messageToSend);
+            processMessageQueuePush(waitingProcessDescriptor, messageToSend);
 
             // The function that was waiting should have released the message we
             // sent it.  Get another one.
@@ -1474,12 +1474,12 @@ int closeTaskFileDescriptors(
               messageToSend = getAvailableMessage();
             }
             if (messageToSend == NULL) {
-              printInt(getRunningTaskId());
+              printInt(getRunningProcessId());
               printString(": ");
               printString(__func__);
               printString(": ");
               printInt(__LINE__);
-              printString(": ERROR: Out of task messages\n");
+              printString(": ERROR: Out of process messages\n");
               return -1;
             }
           }
@@ -1497,9 +1497,9 @@ int closeTaskFileDescriptors(
 
     // schedFree will pull an available message.  Release the one we've been
     // using so that we're guaranteed it will be successful.
-    taskMessageRelease(messageToSend);
-    schedFree(fileDescriptors); taskDescriptor->fileDescriptors = NULL;
-    taskDescriptor->numFileDescriptors = 0;
+    processMessageRelease(messageToSend);
+    schedFree(fileDescriptors); processDescriptor->fileDescriptors = NULL;
+    processDescriptor->numFileDescriptors = 0;
 
     schedulerState->currentReady = currentReady;
     _functionInProgress = NULL;
@@ -1534,26 +1534,26 @@ FILE* schedFopen(const char *pathname, const char *mode) {
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    TaskQueue *currentReady = SCHEDULER_STATE->currentReady;
+    ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
     SCHEDULER_STATE->currentReady
       = &SCHEDULER_STATE->ready[SCHEDULER_READY_QUEUE_KERNEL];
 
     printDebugString("schedFopen: Getting message\n");
-    TaskMessage *taskMessage = getAvailableMessage();
+    ProcessMessage *processMessage = getAvailableMessage();
     for (int ii = 0;
-      (ii < MAX_GET_MESSAGE_RETRIES) && (taskMessage == NULL);
+      (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
       ii++
     ) {
       runScheduler();
-      taskMessage = getAvailableMessage();
+      processMessage = getAvailableMessage();
     }
-    if (taskMessage == NULL) {
-      printInt(getRunningTaskId());
+    if (processMessage == NULL) {
+      printInt(getRunningProcessId());
       printString(": ");
       printString(__func__);
       printString(": ");
       printInt(__LINE__);
-      printString(": ERROR: Out of task messages\n");
+      printString(": ERROR: Out of process messages\n");
       return NULL;
     }
     printDebugString("schedFopen: Message retrieved\n");
@@ -1562,22 +1562,22 @@ FILE* schedFopen(const char *pathname, const char *mode) {
       .mode = mode,
     };
     printDebugString("schedFopen: Initializing message\n");
-    taskMessageInit(taskMessage, FILESYSTEM_OPEN_FILE,
+    processMessageInit(processMessage, FILESYSTEM_OPEN_FILE,
       &fopenParameters, sizeof(fopenParameters), true);
     printDebugString("schedFopen: Pushing message\n");
-    taskMessageQueuePush(
-      &SCHEDULER_STATE->allTasks[SCHEDULER_STATE->rootFsTaskId - 1],
-      taskMessage);
+    processMessageQueuePush(
+      &SCHEDULER_STATE->allProcesses[SCHEDULER_STATE->rootFsProcessId - 1],
+      processMessage);
 
     printDebugString("schedFopen: Resuming filesystem\n");
-    while (taskMessageDone(taskMessage) == false) {
+    while (processMessageDone(processMessage) == false) {
       runScheduler();
     }
     printDebugString("schedFopen: Filesystem message is done\n");
 
-    returnValue = (FILE*) taskMessageData(taskMessage);
+    returnValue = (FILE*) processMessageData(processMessage);
 
-    taskMessageRelease(taskMessage);
+    processMessageRelease(processMessage);
     SCHEDULER_STATE->currentReady = currentReady;
     _functionInProgress = NULL;
   } else {
@@ -1610,38 +1610,38 @@ int schedFclose(FILE *stream) {
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    TaskQueue *currentReady = SCHEDULER_STATE->currentReady;
+    ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
     SCHEDULER_STATE->currentReady
       = &SCHEDULER_STATE->ready[SCHEDULER_READY_QUEUE_KERNEL];
 
-    TaskMessage *taskMessage = getAvailableMessage();
+    ProcessMessage *processMessage = getAvailableMessage();
     for (int ii = 0;
-      (ii < MAX_GET_MESSAGE_RETRIES) && (taskMessage == NULL);
+      (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
       ii++
     ) {
       runScheduler();
-      taskMessage = getAvailableMessage();
+      processMessage = getAvailableMessage();
     }
-    if (taskMessage == NULL) {
-      printInt(getRunningTaskId());
+    if (processMessage == NULL) {
+      printInt(getRunningProcessId());
       printString(": ");
       printString(__func__);
       printString(": ");
       printInt(__LINE__);
-      printString(": ERROR: Out of task messages\n");
+      printString(": ERROR: Out of process messages\n");
       errno = ENOMEM;
       return EOF;
     }
     FilesystemFcloseParameters fcloseParameters;
     fcloseParameters.stream = stream;
     fcloseParameters.returnValue = 0;
-    taskMessageInit(taskMessage, FILESYSTEM_CLOSE_FILE,
+    processMessageInit(processMessage, FILESYSTEM_CLOSE_FILE,
       &fcloseParameters, sizeof(fcloseParameters), true);
-    taskMessageQueuePush(
-      &SCHEDULER_STATE->allTasks[SCHEDULER_STATE->rootFsTaskId - 1],
-      taskMessage);
+    processMessageQueuePush(
+      &SCHEDULER_STATE->allProcesses[SCHEDULER_STATE->rootFsProcessId - 1],
+      processMessage);
 
-    while (taskMessageDone(taskMessage) == false) {
+    while (processMessageDone(processMessage) == false) {
       runScheduler();
     }
 
@@ -1650,7 +1650,7 @@ int schedFclose(FILE *stream) {
       returnValue = EOF;
     }
 
-    taskMessageRelease(taskMessage);
+    processMessageRelease(processMessage);
     SCHEDULER_STATE->currentReady = currentReady;
     _functionInProgress = NULL;
   } else {
@@ -1683,47 +1683,47 @@ int schedRemove(const char *pathname) {
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    TaskQueue *currentReady = SCHEDULER_STATE->currentReady;
+    ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
     SCHEDULER_STATE->currentReady
       = &SCHEDULER_STATE->ready[SCHEDULER_READY_QUEUE_KERNEL];
 
-    TaskMessage *taskMessage = getAvailableMessage();
+    ProcessMessage *processMessage = getAvailableMessage();
     for (int ii = 0;
-      (ii < MAX_GET_MESSAGE_RETRIES) && (taskMessage == NULL);
+      (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
       ii++
     ) {
       runScheduler();
-      taskMessage = getAvailableMessage();
+      processMessage = getAvailableMessage();
     }
-    if (taskMessage == NULL) {
-      printInt(getRunningTaskId());
+    if (processMessage == NULL) {
+      printInt(getRunningProcessId());
       printString(": ");
       printString(__func__);
       printString(": ");
       printInt(__LINE__);
-      printString(": ERROR: Out of task messages\n");
+      printString(": ERROR: Out of process messages\n");
       errno = ENOMEM;
       return -1;
     }
-    taskMessageInit(taskMessage, FILESYSTEM_REMOVE_FILE,
+    processMessageInit(processMessage, FILESYSTEM_REMOVE_FILE,
       (void*) pathname, strlen(pathname) + 1, true);
-    taskMessageQueuePush(
-      &SCHEDULER_STATE->allTasks[SCHEDULER_STATE->rootFsTaskId - 1],
-      taskMessage);
+    processMessageQueuePush(
+      &SCHEDULER_STATE->allProcesses[SCHEDULER_STATE->rootFsProcessId - 1],
+      processMessage);
 
-    while (taskMessageDone(taskMessage) == false) {
+    while (processMessageDone(processMessage) == false) {
       runScheduler();
     }
 
-    returnValue = (int) ((intptr_t) taskMessageData(taskMessage));
+    returnValue = (int) ((intptr_t) processMessageData(processMessage));
     if (returnValue != 0) {
-      // returnValue holds a negative errno.  Set errno for the current task
+      // returnValue holds a negative errno.  Set errno for the current process
       // and return -1 like we're supposed to.
       errno = -returnValue;
       returnValue = -1;
     }
 
-    taskMessageRelease(taskMessage);
+    processMessageRelease(processMessage);
     SCHEDULER_STATE->currentReady = currentReady;
     _functionInProgress = NULL;
   } else {
@@ -1762,40 +1762,40 @@ size_t schedFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    TaskQueue *currentReady = SCHEDULER_STATE->currentReady;
+    ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
     SCHEDULER_STATE->currentReady
       = &SCHEDULER_STATE->ready[SCHEDULER_READY_QUEUE_KERNEL];
 
-    TaskMessage *taskMessage = getAvailableMessage();
+    ProcessMessage *processMessage = getAvailableMessage();
     for (int ii = 0;
-      (ii < MAX_GET_MESSAGE_RETRIES) && (taskMessage == NULL);
+      (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
       ii++
     ) {
       runScheduler();
-      taskMessage = getAvailableMessage();
+      processMessage = getAvailableMessage();
     }
-    if (taskMessage == NULL) {
-      printInt(getRunningTaskId());
+    if (processMessage == NULL) {
+      printInt(getRunningProcessId());
       printString(": ");
       printString(__func__);
       printString(": ");
       printInt(__LINE__);
-      printString(": ERROR: Out of task messages\n");
+      printString(": ERROR: Out of process messages\n");
       errno = ENOMEM;
       return 0;
     }
-    taskMessageInit(taskMessage, FILESYSTEM_READ_FILE,
+    processMessageInit(processMessage, FILESYSTEM_READ_FILE,
       &filesystemIoCommandParameters, sizeof(filesystemIoCommandParameters),
       true);
-    taskMessageQueuePush(
-      &SCHEDULER_STATE->allTasks[SCHEDULER_STATE->rootFsTaskId - 1],
-      taskMessage);
+    processMessageQueuePush(
+      &SCHEDULER_STATE->allProcesses[SCHEDULER_STATE->rootFsProcessId - 1],
+      processMessage);
 
-    while (taskMessageDone(taskMessage) == false) {
+    while (processMessageDone(processMessage) == false) {
       runScheduler();
     }
 
-    taskMessageRelease(taskMessage);
+    processMessageRelease(processMessage);
     SCHEDULER_STATE->currentReady = currentReady;
     _functionInProgress = NULL;
   } else {
@@ -1834,40 +1834,40 @@ size_t schedFwrite(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    TaskQueue *currentReady = SCHEDULER_STATE->currentReady;
+    ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
     SCHEDULER_STATE->currentReady
       = &SCHEDULER_STATE->ready[SCHEDULER_READY_QUEUE_KERNEL];
 
-    TaskMessage *taskMessage = getAvailableMessage();
+    ProcessMessage *processMessage = getAvailableMessage();
     for (int ii = 0;
-      (ii < MAX_GET_MESSAGE_RETRIES) && (taskMessage == NULL);
+      (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
       ii++
     ) {
       runScheduler();
-      taskMessage = getAvailableMessage();
+      processMessage = getAvailableMessage();
     }
-    if (taskMessage == NULL) {
-      printInt(getRunningTaskId());
+    if (processMessage == NULL) {
+      printInt(getRunningProcessId());
       printString(": ");
       printString(__func__);
       printString(": ");
       printInt(__LINE__);
-      printString(": ERROR: Out of task messages\n");
+      printString(": ERROR: Out of process messages\n");
       errno = ENOMEM;
       return 0;
     }
-    taskMessageInit(taskMessage, FILESYSTEM_WRITE_FILE,
+    processMessageInit(processMessage, FILESYSTEM_WRITE_FILE,
       &filesystemIoCommandParameters, sizeof(filesystemIoCommandParameters),
       true);
-    taskMessageQueuePush(
-      &SCHEDULER_STATE->allTasks[SCHEDULER_STATE->rootFsTaskId - 1],
-      taskMessage);
+    processMessageQueuePush(
+      &SCHEDULER_STATE->allProcesses[SCHEDULER_STATE->rootFsProcessId - 1],
+      processMessage);
 
-    while (taskMessageDone(taskMessage) == false) {
+    while (processMessageDone(processMessage) == false) {
       runScheduler();
     }
 
-    taskMessageRelease(taskMessage);
+    processMessageRelease(processMessage);
     SCHEDULER_STATE->currentReady = currentReady;
     _functionInProgress = NULL;
   } else {
@@ -1902,7 +1902,7 @@ char* schedFgets(char *buffer, int size, FILE *stream) {
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    TaskQueue *currentReady = SCHEDULER_STATE->currentReady;
+    ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
     SCHEDULER_STATE->currentReady
       = &SCHEDULER_STATE->ready[SCHEDULER_READY_QUEUE_KERNEL];
 
@@ -1912,32 +1912,32 @@ char* schedFgets(char *buffer, int size, FILE *stream) {
       .length = (uint32_t) size - 1
     };
 
-    TaskMessage *taskMessage = getAvailableMessage();
+    ProcessMessage *processMessage = getAvailableMessage();
     for (int ii = 0;
-      (ii < MAX_GET_MESSAGE_RETRIES) && (taskMessage == NULL);
+      (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
       ii++
     ) {
       runScheduler();
-      taskMessage = getAvailableMessage();
+      processMessage = getAvailableMessage();
     }
-    if (taskMessage == NULL) {
-      printInt(getRunningTaskId());
+    if (processMessage == NULL) {
+      printInt(getRunningProcessId());
       printString(": ");
       printString(__func__);
       printString(": ");
       printInt(__LINE__);
-      printString(": ERROR: Out of task messages\n");
+      printString(": ERROR: Out of process messages\n");
       errno = ENOMEM;
       return NULL;
     }
-    taskMessageInit(taskMessage, FILESYSTEM_READ_FILE,
+    processMessageInit(processMessage, FILESYSTEM_READ_FILE,
       &filesystemIoCommandParameters, sizeof(filesystemIoCommandParameters),
       true);
-    taskMessageQueuePush(
-      &SCHEDULER_STATE->allTasks[SCHEDULER_STATE->rootFsTaskId - 1],
-      taskMessage);
+    processMessageQueuePush(
+      &SCHEDULER_STATE->allProcesses[SCHEDULER_STATE->rootFsProcessId - 1],
+      processMessage);
 
-    while (taskMessageDone(taskMessage) == false) {
+    while (processMessageDone(processMessage) == false) {
       runScheduler();
     }
     if (filesystemIoCommandParameters.length > 0) {
@@ -1945,7 +1945,7 @@ char* schedFgets(char *buffer, int size, FILE *stream) {
       returnValue = buffer;
     }
 
-    taskMessageRelease(taskMessage);
+    processMessageRelease(processMessage);
     SCHEDULER_STATE->currentReady = currentReady;
     _functionInProgress = NULL;
   } else {
@@ -1979,7 +1979,7 @@ int schedFputs(const char *s, FILE *stream) {
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    TaskQueue *currentReady = SCHEDULER_STATE->currentReady;
+    ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
     SCHEDULER_STATE->currentReady
       = &SCHEDULER_STATE->ready[SCHEDULER_READY_QUEUE_KERNEL];
 
@@ -1989,39 +1989,39 @@ int schedFputs(const char *s, FILE *stream) {
       .length = (uint32_t) strlen(s)
     };
 
-    TaskMessage *taskMessage = getAvailableMessage();
+    ProcessMessage *processMessage = getAvailableMessage();
     for (int ii = 0;
-      (ii < MAX_GET_MESSAGE_RETRIES) && (taskMessage == NULL);
+      (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
       ii++
     ) {
       runScheduler();
-      taskMessage = getAvailableMessage();
+      processMessage = getAvailableMessage();
     }
-    if (taskMessage == NULL) {
-      printInt(getRunningTaskId());
+    if (processMessage == NULL) {
+      printInt(getRunningProcessId());
       printString(": ");
       printString(__func__);
       printString(": ");
       printInt(__LINE__);
-      printString(": ERROR: Out of task messages\n");
+      printString(": ERROR: Out of process messages\n");
       errno = ENOMEM;
       return EOF;
     }
-    taskMessageInit(taskMessage, FILESYSTEM_WRITE_FILE,
+    processMessageInit(processMessage, FILESYSTEM_WRITE_FILE,
       &filesystemIoCommandParameters, sizeof(filesystemIoCommandParameters),
       true);
-    taskMessageQueuePush(
-      &SCHEDULER_STATE->allTasks[SCHEDULER_STATE->rootFsTaskId - 1],
-      taskMessage);
+    processMessageQueuePush(
+      &SCHEDULER_STATE->allProcesses[SCHEDULER_STATE->rootFsProcessId - 1],
+      processMessage);
 
-    while (taskMessageDone(taskMessage) == false) {
+    while (processMessageDone(processMessage) == false) {
       runScheduler();
     }
     if (filesystemIoCommandParameters.length == 0) {
       returnValue = EOF;
     }
 
-    taskMessageRelease(taskMessage);
+    processMessageRelease(processMessage);
     SCHEDULER_STATE->currentReady = currentReady;
     _functionInProgress = NULL;
   } else {
@@ -2057,7 +2057,7 @@ int schedGetFileBlockMetadataFromFile(
     return -EINVAL;
   }
 
-  TaskQueue *currentReady = SCHEDULER_STATE->currentReady;
+  ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
   SCHEDULER_STATE->currentReady
     = &SCHEDULER_STATE->ready[SCHEDULER_READY_QUEUE_KERNEL];
 
@@ -2066,38 +2066,38 @@ int schedGetFileBlockMetadataFromFile(
     .metadata = metadata,
   };
 
-  TaskMessage *taskMessage = getAvailableMessage();
+  ProcessMessage *processMessage = getAvailableMessage();
   for (int ii = 0;
-    (ii < MAX_GET_MESSAGE_RETRIES) && (taskMessage == NULL);
+    (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
     ii++
   ) {
     SCHEDULER_STATE->runScheduler();
-    taskMessage = getAvailableMessage();
+    processMessage = getAvailableMessage();
   }
-  if (taskMessage == NULL) {
-    printInt(getRunningTaskId());
+  if (processMessage == NULL) {
+    printInt(getRunningProcessId());
     printString(": ");
     printString(__func__);
     printString(": ");
     printInt(__LINE__);
-    printString(": ERROR: Out of task messages\n");
+    printString(": ERROR: Out of process messages\n");
     return -ENOMEM;
   }
 
-  taskMessageInit(taskMessage, FILESYSTEM_GET_FILE_BLOCK_METADATA,
+  processMessageInit(processMessage, FILESYSTEM_GET_FILE_BLOCK_METADATA,
     &args, sizeof(args), true);
-  if (sendTaskMessageToTaskId(SCHEDULER_STATE->rootFsTaskId, taskMessage)
-    != taskSuccess
+  if (sendProcessMessageToProcessId(SCHEDULER_STATE->rootFsProcessId, processMessage)
+    != processSuccess
   ) {
     printString("ERROR! Failed to send message to filesystem to get file "
       "block metadata\n");
-    taskMessageRelease(taskMessage);
+    processMessageRelease(processMessage);
     return -EIO;
   }
-  while (taskMessageDone(taskMessage) == false) {
+  while (processMessageDone(processMessage) == false) {
     SCHEDULER_STATE->runScheduler();
   }
-  taskMessageRelease(taskMessage);
+  processMessageRelease(processMessage);
 
   SCHEDULER_STATE->currentReady = currentReady;
   return 0;
@@ -2122,7 +2122,7 @@ int schedGetFileBlockMetadataFromPath(
 
   FILE *stream = schedFopen(path, "r");
   if (stream == NULL) {
-    printInt(getRunningTaskId());
+    printInt(getRunningProcessId());
     printString(": ");
     printString(__func__);
     printString(": ERROR! Could not open file \"");
@@ -2136,63 +2136,63 @@ int schedGetFileBlockMetadataFromPath(
   return returnValue;
 }
 
-/// @fn int loadTaskDescriptorOverlayMetadata(TaskDescriptor *taskDescriptor)
+/// @fn int loadProcessDescriptorOverlayMetadata(ProcessDescriptor *processDescriptor)
 ///
-/// @brief Load the FileBlockMetadata for a TaskDescriptor's overlay.
+/// @brief Load the FileBlockMetadata for a ProcessDescriptor's overlay.
 ///
-/// @param taskDescriptor A pointer to the TaskDescriptor to load the
+/// @param processDescriptor A pointer to the ProcessDescriptor to load the
 ///   FileBlockMetadata for.
 ///
 /// @return Returns 0 on success, -errno on failure.
-int loadTaskDescriptorOverlayMetadata(TaskDescriptor *taskDescriptor) {
+int loadProcessDescriptorOverlayMetadata(ProcessDescriptor *processDescriptor) {
   char *overlayPath = (char*) schedMalloc(
-    strlen(taskDescriptor->overlayDir) + OVERLAY_EXT_LEN + 6);
+    strlen(processDescriptor->overlayDir) + OVERLAY_EXT_LEN + 6);
   if (overlayPath == NULL) {
     // Fail.
     printString("ERROR: malloc failure for overlayPath.\n");
     return -ENOMEM;
   }
-  strcpy(overlayPath, taskDescriptor->overlayDir);
+  strcpy(overlayPath, processDescriptor->overlayDir);
   strcat(overlayPath, "/main");
   strcat(overlayPath, OVERLAY_EXT);
 
   int returnValue
-    = schedGetFileBlockMetadataFromPath(overlayPath, &taskDescriptor->overlay);
+    = schedGetFileBlockMetadataFromPath(overlayPath, &processDescriptor->overlay);
 
   schedFree(overlayPath);
 
   return returnValue;
 }
 
-/// @fn int schedulerKillTaskCommandHandler(
-///   SchedulerState *schedulerState, TaskMessage *taskMessage)
+/// @fn int schedulerKillProcessCommandHandler(
+///   SchedulerState *schedulerState, ProcessMessage *processMessage)
 ///
-/// @brief Kill a task identified by its task ID.
+/// @brief Kill a process identified by its process ID.
 ///
 /// @param schedulerState A pointer to the SchedulerState maintained by the
-///   scheduler task.
-/// @param taskMessage A pointer to the TaskMessage that was received that contains
-///   the information about the task to kill.
+///   scheduler process.
+/// @param processMessage A pointer to the ProcessMessage that was received that contains
+///   the information about the process to kill.
 ///
 /// @return Returns 0 on success, non-zero error code on failure.
-int schedulerKillTaskCommandHandler(
-  SchedulerState *schedulerState, TaskMessage *taskMessage
+int schedulerKillProcessCommandHandler(
+  SchedulerState *schedulerState, ProcessMessage *processMessage
 ) {
   int returnValue = 0;
 
   UserId callingUserId
-    = allTasks[taskId(taskMessageFrom(taskMessage)) - 1].userId;
-  TaskId taskId = (TaskId) ((uintptr_t) taskMessageData(taskMessage));
-  int taskIndex = taskId - 1;
+    = allProcesses[pid(processMessageFrom(processMessage)) - 1].userId;
+  ProcessId pid = (ProcessId) ((uintptr_t) processMessageData(processMessage));
+  int processIndex = pid - 1;
 
-  if ((taskId >= schedulerState->firstUserTaskId)
-    && (taskId <= NANO_OS_NUM_TASKS)
-    && (taskRunning(&allTasks[taskIndex]))
+  if ((pid >= schedulerState->firstUserProcessId)
+    && (pid <= NANO_OS_NUM_TASKS)
+    && (processRunning(&allProcesses[processIndex]))
   ) {
-    if ((allTasks[taskIndex].userId == callingUserId)
+    if ((allProcesses[processIndex].userId == callingUserId)
       || (callingUserId == ROOT_USER_ID)
     ) {
-      TaskDescriptor *taskDescriptor = &allTasks[taskIndex];
+      ProcessDescriptor *processDescriptor = &allProcesses[processIndex];
       // Regardless of whether or not we succeed at terminating it, we have
       // to remove it from its queue.  We don't know which queue it's on,
       // though.  The fact that we're killing it makes it likely that it's hung.
@@ -2202,98 +2202,98 @@ int schedulerKillTaskCommandHandler(
       // ready queue is the second-most-likely place it could be.  The least-
       // likely place for it to be would be the timed waiting queue with a very
       // long timeout.  So, attempt to remove from the queues in that order.
-      if (taskQueueRemove(&schedulerState->waiting, taskDescriptor) != 0
+      if (processQueueRemove(&schedulerState->waiting, processDescriptor) != 0
       ) {
-        if (taskQueueRemove(taskDescriptor->readyQueue, taskDescriptor) != 0
+        if (processQueueRemove(processDescriptor->readyQueue, processDescriptor) != 0
         ) {
-          taskQueueRemove(&schedulerState->timedWaiting, taskDescriptor);
+          processQueueRemove(&schedulerState->timedWaiting, processDescriptor);
         }
       }
 
       // Tell the console to release the port for us.  We will forward it
       // the message we acquired above, which it will use to send to the
       // correct shell to unblock it.  We need to do this before terminating
-      // the task because, in the event the task we're terminating is one
-      // of the shell task slots, the message won't get released because
+      // the process because, in the event the process we're terminating is one
+      // of the shell process slots, the message won't get released because
       // there's no shell blocking waiting for the message.
-      if (schedulerInitSendMessageToTaskId(
-        SCHEDULER_STATE->consoleTaskId,
+      if (schedulerInitSendMessageToProcessId(
+        SCHEDULER_STATE->consoleProcessId,
         CONSOLE_RELEASE_PID_PORT,
-        /* data= */ (void*) ((intptr_t) taskId),
-        /* size= */ 0) != taskSuccess
+        /* data= */ (void*) ((intptr_t) pid),
+        /* size= */ 0) != processSuccess
       ) {
         printString("ERROR: Could not send CONSOLE_RELEASE_PID_PORT message ");
         printString("to console process\n");
       }
 
       // Forward the message on to the memory manager to have it clean up the
-      // task's memory.  *DO NOT* mark the message as done.  The memory
+      // process's memory.  *DO NOT* mark the message as done.  The memory
       // manager will do that.
-      taskMessageInit(taskMessage, MEMORY_MANAGER_FREE_TASK_MEMORY,
-        (void*) ((uintptr_t) taskId), /* size= */ 0, /* waiting= */ true);
-      if (sendTaskMessageToTask(
-        &schedulerState->allTasks[SCHEDULER_STATE->memoryManagerTaskId - 1],
-        taskMessage) != taskSuccess
+      processMessageInit(processMessage, MEMORY_MANAGER_FREE_TASK_MEMORY,
+        (void*) ((uintptr_t) pid), /* size= */ 0, /* waiting= */ true);
+      if (sendProcessMessageToProcess(
+        &schedulerState->allProcesses[SCHEDULER_STATE->memoryManagerProcessId - 1],
+        processMessage) != processSuccess
       ) {
         printString("ERROR: Could not send MEMORY_MANAGER_FREE_TASK_MEMORY ");
         printString("message to memory manager\n");
-        taskMessageData(taskMessage) = (void*) ((intptr_t) 1);
-        if (taskMessageSetDone(taskMessage) != taskSuccess) {
+        processMessageData(processMessage) = (void*) ((intptr_t) 1);
+        if (processMessageSetDone(processMessage) != processSuccess) {
           printString("ERROR: Could not mark message done in "
-            "schedulerKillTaskCommandHandler.\n");
+            "schedulerKillProcessCommandHandler.\n");
         }
       }
 
-      // Close the file descriptors before we terminate the task so that
-      // anything that gets sent to the task's queue gets cleaned up when
+      // Close the file descriptors before we terminate the process so that
+      // anything that gets sent to the process's queue gets cleaned up when
       // we terminate it.
-      closeTaskFileDescriptors(schedulerState, taskDescriptor);
+      closeProcessFileDescriptors(schedulerState, processDescriptor);
 
-      if (taskTerminate(taskDescriptor) == taskSuccess) {
-        threadSetContext(taskDescriptor->mainThread,
-          taskDescriptor);
-        taskDescriptor->name = NULL;
-        taskDescriptor->userId = NO_USER_ID;
+      if (processTerminate(processDescriptor) == processSuccess) {
+        threadSetContext(processDescriptor->mainThread,
+          processDescriptor);
+        processDescriptor->name = NULL;
+        processDescriptor->userId = NO_USER_ID;
 
-        // It's likely (i.e. almost certain) that the killed task was a user
-        // task that was killed by a user task.  That would mean that we were
-        // in the middle of processing a user task queue, the number of items
+        // It's likely (i.e. almost certain) that the killed process was a user
+        // process that was killed by a user process.  That would mean that we were
+        // in the middle of processing a user process queue, the number of items
         // in which was captured before the runScheduler loop was started.
         // (See the logic at the end of startScheduler.)  Rather than pushing
-        // the killed task onto the free queue, push it back onto its ready
-        // queue so that we don't try to pop a task from an empty queue.
-        // runScheduler will do the cleanup and put the task onto the free
+        // the killed process onto the free queue, push it back onto its ready
+        // queue so that we don't try to pop a process from an empty queue.
+        // runScheduler will do the cleanup and put the process onto the free
         // queue again once it picks back up again.
-        taskQueuePush(taskDescriptor->readyQueue, taskDescriptor);
+        processQueuePush(processDescriptor->readyQueue, processDescriptor);
       } else {
         // Tell the caller that we've failed.
-        printString("Failed to terminate task; marking message 0x");
-        printHex((uintptr_t) taskMessage);
+        printString("Failed to terminate process; marking message 0x");
+        printHex((uintptr_t) processMessage);
         printString(" done\n");
-        taskMessageData(taskMessage) = (void*) ((intptr_t) 1);
-        if (taskMessageSetDone(taskMessage) != taskSuccess) {
+        processMessageData(processMessage) = (void*) ((intptr_t) 1);
+        if (processMessageSetDone(processMessage) != processSuccess) {
           printString("ERROR: Could not mark message done in "
-            "schedulerKillTaskCommandHandler.\n");
+            "schedulerKillProcessCommandHandler.\n");
         }
 
-        // Do *NOT* push the task back onto the free queue in this case.
+        // Do *NOT* push the process back onto the free queue in this case.
         // If we couldn't terminate it, it's not valid to try and reuse it for
-        // another task.
+        // another process.
       }
     } else {
       // Tell the caller that we've failed.
-      taskMessageData(taskMessage) = (void*) ((intptr_t) EACCES);
-      if (taskMessageSetDone(taskMessage) != taskSuccess) {
+      processMessageData(processMessage) = (void*) ((intptr_t) EACCES);
+      if (processMessageSetDone(processMessage) != processSuccess) {
         printString("ERROR: Could not mark message done in "
-          "schedulerKillTaskCommandHandler.\n");
+          "schedulerKillProcessCommandHandler.\n");
       }
     }
   } else {
     // Tell the caller that we've failed.
-    taskMessageData(taskMessage) = (void*) ((intptr_t) EINVAL);
-    if (taskMessageSetDone(taskMessage) != taskSuccess) {
+    processMessageData(processMessage) = (void*) ((intptr_t) EINVAL);
+    if (processMessageSetDone(processMessage) != processSuccess) {
       printString("ERROR: "
-        "Could not mark message done in schedulerKillTaskCommandHandler.\n");
+        "Could not mark message done in schedulerKillProcessCommandHandler.\n");
     }
   }
 
@@ -2302,140 +2302,140 @@ int schedulerKillTaskCommandHandler(
   return returnValue;
 }
 
-/// @fn int schedulerGetNumTaskDescriptorsCommandHandler(
-///   SchedulerState *schedulerState, TaskMessage *taskMessage)
+/// @fn int schedulerGetNumProcessDescriptorsCommandHandler(
+///   SchedulerState *schedulerState, ProcessMessage *processMessage)
 ///
-/// @brief Get the number of tasks that are currently running in the system.
+/// @brief Get the number of processes that are currently running in the system.
 ///
 /// @param schedulerState A pointer to the SchedulerState maintained by the
-///   scheduler task.
-/// @param taskMessage A pointer to the TaskMessage that was received.  This will be
+///   scheduler process.
+/// @param processMessage A pointer to the ProcessMessage that was received.  This will be
 ///   reused for the reply.
 ///
 /// @return Returns 0 on success, non-zero error code on failure.
-int schedulerGetNumTaskDescriptorsCommandHandler(
-  SchedulerState *schedulerState, TaskMessage *taskMessage
+int schedulerGetNumProcessDescriptorsCommandHandler(
+  SchedulerState *schedulerState, ProcessMessage *processMessage
 ) {
   int returnValue = 0;
 
-  uint8_t numTaskDescriptors = 0;
+  uint8_t numProcessDescriptors = 0;
   for (int ii = 1; ii <= NANO_OS_NUM_TASKS; ii++) {
-    if (taskRunning(&schedulerState->allTasks[ii - 1])) {
-      numTaskDescriptors++;
+    if (processRunning(&schedulerState->allProcesses[ii - 1])) {
+      numProcessDescriptors++;
     }
   }
-  taskMessageData(taskMessage) = (void*) ((uintptr_t) numTaskDescriptors);
+  processMessageData(processMessage) = (void*) ((uintptr_t) numProcessDescriptors);
 
-  taskMessageSetDone(taskMessage);
+  processMessageSetDone(processMessage);
 
   // DO NOT release the message since the caller is waiting on the response.
 
   return returnValue;
 }
 
-/// @fn int schedulerGetTaskInfoCommandHandler(
-///   SchedulerState *schedulerState, TaskMessage *taskMessage)
+/// @fn int schedulerGetProcessInfoCommandHandler(
+///   SchedulerState *schedulerState, ProcessMessage *processMessage)
 ///
 /// @brief Fill in a provided array with information about the currently-running
-/// tasks.
+/// processes.
 ///
 /// @param schedulerState A pointer to the SchedulerState maintained by the
-///   scheduler task.
-/// @param taskMessage A pointer to the TaskMessage that was received.  This will be
+///   scheduler process.
+/// @param processMessage A pointer to the ProcessMessage that was received.  This will be
 ///   reused for the reply.
 ///
 /// @return Returns 0 on success, non-zero error code on failure.
-int schedulerGetTaskInfoCommandHandler(
-  SchedulerState *schedulerState, TaskMessage *taskMessage
+int schedulerGetProcessInfoCommandHandler(
+  SchedulerState *schedulerState, ProcessMessage *processMessage
 ) {
   int returnValue = 0;
 
-  TaskInfo *taskInfo = (TaskInfo*) taskMessageData(taskMessage);
-  int maxTasks = taskInfo->numTasks;
-  TaskInfoElement *tasks = taskInfo->tasks;
+  ProcessInfo *processInfo = (ProcessInfo*) processMessageData(processMessage);
+  int maxProcesses = processInfo->numProcesses;
+  ProcessInfoElement *processes = processInfo->processes;
   int idx = 0;
-  for (int ii = 1; (ii <= NANO_OS_NUM_TASKS) && (idx < maxTasks); ii++) {
-    if (taskRunning(&schedulerState->allTasks[ii - 1])) {
-      tasks[idx].pid = (int) schedulerState->allTasks[ii - 1].taskId;
-      tasks[idx].name = schedulerState->allTasks[ii - 1].name;
-      tasks[idx].userId = schedulerState->allTasks[ii - 1].userId;
+  for (int ii = 1; (ii <= NANO_OS_NUM_TASKS) && (idx < maxProcesses); ii++) {
+    if (processRunning(&schedulerState->allProcesses[ii - 1])) {
+      processes[idx].pid = (int) schedulerState->allProcesses[ii - 1].pid;
+      processes[idx].name = schedulerState->allProcesses[ii - 1].name;
+      processes[idx].userId = schedulerState->allProcesses[ii - 1].userId;
       idx++;
     }
   }
 
-  // It's possible that a task completed between the time that taskInfo
-  // was allocated and now, so set the value of numTasks to the value of
+  // It's possible that a process completed between the time that processInfo
+  // was allocated and now, so set the value of numProcesses to the value of
   // idx.
-  taskInfo->numTasks = idx;
+  processInfo->numProcesses = idx;
 
-  taskMessageSetDone(taskMessage);
+  processMessageSetDone(processMessage);
 
   // DO NOT release the message since the caller is waiting on the response.
 
   return returnValue;
 }
 
-/// @fn int schedulerGetTaskUserCommandHandler(
-///   SchedulerState *schedulerState, TaskMessage *taskMessage)
+/// @fn int schedulerGetProcessUserCommandHandler(
+///   SchedulerState *schedulerState, ProcessMessage *processMessage)
 ///
-/// @brief Get the number of tasks that are currently running in the system.
+/// @brief Get the number of processes that are currently running in the system.
 ///
 /// @param schedulerState A pointer to the SchedulerState maintained by the
-///   scheduler task.
-/// @param taskMessage A pointer to the TaskMessage that was received.  This will be
+///   scheduler process.
+/// @param processMessage A pointer to the ProcessMessage that was received.  This will be
 ///   reused for the reply.
 ///
 /// @return Returns 0 on success, non-zero error code on failure.
-int schedulerGetTaskUserCommandHandler(
-  SchedulerState *schedulerState, TaskMessage *taskMessage
+int schedulerGetProcessUserCommandHandler(
+  SchedulerState *schedulerState, ProcessMessage *processMessage
 ) {
   int returnValue = 0;
-  TaskId callingTaskId = taskId(taskMessageFrom(taskMessage));
-  if ((callingTaskId > 0) && (callingTaskId <= NANO_OS_NUM_TASKS)) {
-    taskMessageData(taskMessage)
-      = (void*) ((intptr_t) schedulerState->allTasks[callingTaskId - 1].userId);
+  ProcessId callingProcessId = pid(processMessageFrom(processMessage));
+  if ((callingProcessId > 0) && (callingProcessId <= NANO_OS_NUM_TASKS)) {
+    processMessageData(processMessage)
+      = (void*) ((intptr_t) schedulerState->allProcesses[callingProcessId - 1].userId);
   } else {
-    taskMessageData(taskMessage) = (void*) ((intptr_t) -1);
+    processMessageData(processMessage) = (void*) ((intptr_t) -1);
   }
 
-  taskMessageSetDone(taskMessage);
+  processMessageSetDone(processMessage);
 
   // DO NOT release the message since the caller is waiting on the response.
 
   return returnValue;
 }
 
-/// @fn int schedulerSetTaskUserCommandHandler(
-///   SchedulerState *schedulerState, TaskMessage *taskMessage)
+/// @fn int schedulerSetProcessUserCommandHandler(
+///   SchedulerState *schedulerState, ProcessMessage *processMessage)
 ///
-/// @brief Get the number of tasks that are currently running in the system.
+/// @brief Get the number of processes that are currently running in the system.
 ///
 /// @param schedulerState A pointer to the SchedulerState maintained by the
-///   scheduler task.
-/// @param taskMessage A pointer to the TaskMessage that was received.
+///   scheduler process.
+/// @param processMessage A pointer to the ProcessMessage that was received.
 ///   This will be reused for the reply.
 ///
 /// @return Returns 0 on success, non-zero error code on failure.
-int schedulerSetTaskUserCommandHandler(
-  SchedulerState *schedulerState, TaskMessage *taskMessage
+int schedulerSetProcessUserCommandHandler(
+  SchedulerState *schedulerState, ProcessMessage *processMessage
 ) {
   int returnValue = 0;
-  TaskId callingTaskId = taskId(taskMessageFrom(taskMessage));
-  UserId userId = (UserId) ((intptr_t) taskMessageData(taskMessage));
-  taskMessageData(taskMessage) = (void*) ((intptr_t) -1);
+  ProcessId callingProcessId = pid(processMessageFrom(processMessage));
+  UserId userId = (UserId) ((intptr_t) processMessageData(processMessage));
+  processMessageData(processMessage) = (void*) ((intptr_t) -1);
 
-  if ((callingTaskId > 0) && (callingTaskId <= NANO_OS_NUM_TASKS)) {
-    if ((schedulerState->allTasks[callingTaskId - 1].userId == -1)
+  if ((callingProcessId > 0) && (callingProcessId <= NANO_OS_NUM_TASKS)) {
+    if ((schedulerState->allProcesses[callingProcessId - 1].userId == -1)
       || (userId == -1)
     ) {
-      schedulerState->allTasks[callingTaskId - 1].userId = userId;
-      taskMessageData(taskMessage) = (void*) ((intptr_t) 0);
+      schedulerState->allProcesses[callingProcessId - 1].userId = userId;
+      processMessageData(processMessage) = (void*) ((intptr_t) 0);
     } else {
-      taskMessageData(taskMessage) = (void*) ((intptr_t) EACCES);
+      processMessageData(processMessage) = (void*) ((intptr_t) EACCES);
     }
   }
 
-  taskMessageSetDone(taskMessage);
+  processMessageSetDone(processMessage);
 
   // DO NOT release the message since the caller is waiting on the response.
 
@@ -2443,123 +2443,123 @@ int schedulerSetTaskUserCommandHandler(
 }
 
 /// @fn int schedulerCloseAllFileDescriptorsCommandHandler(
-///   SchedulerState *schedulerState, TaskMessage *taskMessage)
+///   SchedulerState *schedulerState, ProcessMessage *processMessage)
 ///
-/// @brief Get the number of tasks that are currently running in the system.
+/// @brief Get the number of processes that are currently running in the system.
 ///
 /// @param schedulerState A pointer to the SchedulerState maintained by the
-///   scheduler task.
-/// @param taskMessage A pointer to the TaskMessage that was received.
+///   scheduler process.
+/// @param processMessage A pointer to the ProcessMessage that was received.
 ///
 /// @return Returns 0 on success, non-zero error code on failure.
 int schedulerCloseAllFileDescriptorsCommandHandler(
-  SchedulerState *schedulerState, TaskMessage *taskMessage
+  SchedulerState *schedulerState, ProcessMessage *processMessage
 ) {
   int returnValue = 0;
-  TaskId callingTaskId = taskId(taskMessageFrom(taskMessage));
-  TaskDescriptor *taskDescriptor
-    = &schedulerState->allTasks[callingTaskId - 1];
-  closeTaskFileDescriptors(schedulerState, taskDescriptor);
+  ProcessId callingProcessId = pid(processMessageFrom(processMessage));
+  ProcessDescriptor *processDescriptor
+    = &schedulerState->allProcesses[callingProcessId - 1];
+  closeProcessFileDescriptors(schedulerState, processDescriptor);
 
-  taskMessageSetDone(taskMessage);
+  processMessageSetDone(processMessage);
 
   return returnValue;
 }
 
 /// @fn int schedulerGetHostnameCommandHandler(
-///   SchedulerState *schedulerState, TaskMessage *taskMessage)
+///   SchedulerState *schedulerState, ProcessMessage *processMessage)
 ///
 /// @brief Get the hostname that's read when the scheduler starts.
 ///
 /// @param schedulerState A pointer to the SchedulerState maintained by the
-///   scheduler task.
-/// @param taskMessage A pointer to the TaskMessage that was received.
+///   scheduler process.
+/// @param processMessage A pointer to the ProcessMessage that was received.
 ///
 /// @return Returns 0 on success, non-zero error code on failure.
 int schedulerGetHostnameCommandHandler(
-  SchedulerState *schedulerState, TaskMessage *taskMessage
+  SchedulerState *schedulerState, ProcessMessage *processMessage
 ) {
   int returnValue = 0;
 
-  taskMessageData(taskMessage) = schedulerState->hostname;
-  taskMessageSetDone(taskMessage);
+  processMessageData(processMessage) = schedulerState->hostname;
+  processMessageSetDone(processMessage);
 
   return returnValue;
 }
 
 /// @fn int schedulerExecveCommandHandler(
-///   SchedulerState *schedulerState, TaskMessage *taskMessage)
+///   SchedulerState *schedulerState, ProcessMessage *processMessage)
 ///
 /// @brief Exec a new program in place of a running program.
 ///
 /// @param schedulerState A pointer to the SchedulerState maintained by the
-///   scheduler task.
-/// @param taskMessage A pointer to the TaskMessage that was received.
+///   scheduler process.
+/// @param processMessage A pointer to the ProcessMessage that was received.
 ///
 /// @return Returns 0 on success, non-zero error code on failure.
 int schedulerExecveCommandHandler(
-  SchedulerState *schedulerState, TaskMessage *taskMessage
+  SchedulerState *schedulerState, ProcessMessage *processMessage
 ) {
   int returnValue = 0;
-  if (taskMessage == NULL) {
+  if (processMessage == NULL) {
     // This should be impossible, but there's nothing to do.  Return good
     // status.
     return returnValue; // 0
   }
 
-  TaskDescriptor *taskDescriptor = &schedulerState->allTasks[
-    taskId(taskMessageFrom(taskMessage)) - 1];
+  ProcessDescriptor *processDescriptor = &schedulerState->allProcesses[
+    pid(processMessageFrom(processMessage)) - 1];
 
-  ExecArgs *execArgs = (ExecArgs*) taskMessageData(taskMessage);
+  ExecArgs *execArgs = (ExecArgs*) processMessageData(processMessage);
   if (execArgs == NULL) {
     printString("ERROR! execArgs provided was NULL.\n");
-    taskMessageData(taskMessage) = (void*) ((intptr_t) EINVAL);
-    taskMessageSetDone(taskMessage);
+    processMessageData(processMessage) = (void*) ((intptr_t) EINVAL);
+    processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
   }
-  taskMessageData(taskMessage) = (void*) ((intptr_t) 0);
-  execArgs->callingTaskId = taskId(taskMessageFrom(taskMessage));
+  processMessageData(processMessage) = (void*) ((intptr_t) 0);
+  execArgs->callingProcessId = pid(processMessageFrom(processMessage));
 
   char *pathname = execArgs->pathname;
   if (pathname == NULL) {
     // Invalid
     printString("ERROR! pathname provided was NULL.\n");
-    taskMessageData(taskMessage) = (void*) ((intptr_t) EINVAL);
-    taskMessageSetDone(taskMessage);
+    processMessageData(processMessage) = (void*) ((intptr_t) EINVAL);
+    processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
   }
   char **argv = execArgs->argv;
   if (argv == NULL) {
     // Invalid
     printString("ERROR! argv provided was NULL.\n");
-    taskMessageData(taskMessage) = (void*) ((intptr_t) EINVAL);
-    taskMessageSetDone(taskMessage);
+    processMessageData(processMessage) = (void*) ((intptr_t) EINVAL);
+    processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
   } else if (argv[0] == NULL) {
     // Invalid
     printString("ERROR! argv[0] provided was NULL.\n");
-    taskMessageData(taskMessage) = (void*) ((intptr_t) EINVAL);
-    taskMessageSetDone(taskMessage);
+    processMessageData(processMessage) = (void*) ((intptr_t) EINVAL);
+    processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
   }
   char **envp = execArgs->envp;
 
-  if (assignMemory(execArgs, SCHEDULER_STATE->schedulerTaskId) != 0) {
+  if (assignMemory(execArgs, SCHEDULER_STATE->schedulerProcessId) != 0) {
     printString("WARNING: Could not assign execArgs to scheduler.\n");
     printString("Undefined behavior.\n");
   }
 
-  if (assignMemory(pathname, SCHEDULER_STATE->schedulerTaskId) != 0) {
+  if (assignMemory(pathname, SCHEDULER_STATE->schedulerProcessId) != 0) {
     printString("WARNING: Could not assign pathname to scheduler.\n");
     printString("Undefined behavior.\n");
   }
 
-  if (assignMemory(argv, SCHEDULER_STATE->schedulerTaskId) != 0) {
+  if (assignMemory(argv, SCHEDULER_STATE->schedulerProcessId) != 0) {
     printString("WARNING: Could not assign argv to scheduler.\n");
     printString("Undefined behavior.\n");
   }
   for (int ii = 0; argv[ii] != NULL; ii++) {
-    if (assignMemory(argv[ii], SCHEDULER_STATE->schedulerTaskId) != 0) {
+    if (assignMemory(argv[ii], SCHEDULER_STATE->schedulerProcessId) != 0) {
       printString("WARNING: Could not assign argv[");
       printInt(ii);
       printString("] to scheduler.\n");
@@ -2568,12 +2568,12 @@ int schedulerExecveCommandHandler(
   }
 
   if (envp != NULL) {
-    if (assignMemory(envp, SCHEDULER_STATE->schedulerTaskId) != 0) {
+    if (assignMemory(envp, SCHEDULER_STATE->schedulerProcessId) != 0) {
       printString("WARNING: Could not assign envp to scheduler.\n");
       printString("Undefined behavior.\n");
     }
     for (int ii = 0; envp[ii] != NULL; ii++) {
-      if (assignMemory(envp[ii], SCHEDULER_STATE->schedulerTaskId) != 0) {
+      if (assignMemory(envp[ii], SCHEDULER_STATE->schedulerProcessId) != 0) {
         printString("WARNING: Could not assign envp[");
         printInt(ii);
         printString("] to scheduler.\n");
@@ -2582,15 +2582,15 @@ int schedulerExecveCommandHandler(
     }
   }
 
-  if (assignMemory(taskDescriptor->fileDescriptors,
-    SCHEDULER_STATE->schedulerTaskId) != 0
+  if (assignMemory(processDescriptor->fileDescriptors,
+    SCHEDULER_STATE->schedulerProcessId) != 0
   ) {
     printString("WARNING: Could not assign fileDescriptors to scheduler.\n");
     printString("Undefined behavior.\n");
   }
-  for (int ii = 0; ii < taskDescriptor->numFileDescriptors; ii++) {
-    if (assignMemory(taskDescriptor->fileDescriptors[ii],
-      SCHEDULER_STATE->schedulerTaskId) != 0
+  for (int ii = 0; ii < processDescriptor->numFileDescriptors; ii++) {
+    if (assignMemory(processDescriptor->fileDescriptors[ii],
+      SCHEDULER_STATE->schedulerProcessId) != 0
     ) {
       printString("WARNING: Could not assign fileDescriptors[");
       printInt(ii);
@@ -2599,87 +2599,87 @@ int schedulerExecveCommandHandler(
     }
   }
 
-  // The task should be blocked in taskMessageQueueWaitForType waiting
+  // The process should be blocked in processMessageQueueWaitForType waiting
   // on a condition with an infinite timeout.  So, it *SHOULD* be on the
   // waiting queue.  Take no chances, though.
-  if (taskQueueRemove(&schedulerState->waiting, taskDescriptor) != 0) {
-    if (taskQueueRemove(&schedulerState->timedWaiting, taskDescriptor)
+  if (processQueueRemove(&schedulerState->waiting, processDescriptor) != 0) {
+    if (processQueueRemove(&schedulerState->timedWaiting, processDescriptor)
       != 0
     ) {
-      taskQueueRemove(taskDescriptor->readyQueue, taskDescriptor);
+      processQueueRemove(processDescriptor->readyQueue, processDescriptor);
     }
   }
 
-  // Kill and clear out the calling task.
-  taskTerminate(taskDescriptor);
-  threadSetContext(taskDescriptor->mainThread, taskDescriptor);
+  // Kill and clear out the calling process.
+  processTerminate(processDescriptor);
+  threadSetContext(processDescriptor->mainThread, processDescriptor);
 
   // We don't want to wait for the memory manager to release the memory.  Make
   // it do it immediately.
-  if (schedulerInitSendMessageToTaskId(
-    SCHEDULER_STATE->memoryManagerTaskId,
+  if (schedulerInitSendMessageToProcessId(
+    SCHEDULER_STATE->memoryManagerProcessId,
     MEMORY_MANAGER_FREE_TASK_MEMORY,
-    (void*) ((uintptr_t) taskDescriptor->taskId), /* size= */ 0)
+    (void*) ((uintptr_t) processDescriptor->pid), /* size= */ 0)
   ) {
-    printString("WARNING: Could not release memory for task ");
-    printInt(taskDescriptor->taskId);
+    printString("WARNING: Could not release memory for process ");
+    printInt(processDescriptor->pid);
     printString("\n");
     printString("Memory leak.\n");
   }
 
   execArgs->schedulerState = schedulerState;
-  if (taskCreate(taskDescriptor, execCommand, execArgs) == taskError) {
+  if (processCreate(processDescriptor, execCommand, execArgs) == processError) {
     printString(
-      "ERROR: Could not configure task handle for new command.\n");
+      "ERROR: Could not configure process handle for new command.\n");
   }
 
-  if (assignMemory(execArgs, taskDescriptor->taskId) != 0) {
-    printString("WARNING: Could not assign execArgs to exec task.\n");
+  if (assignMemory(execArgs, processDescriptor->pid) != 0) {
+    printString("WARNING: Could not assign execArgs to exec process.\n");
     printString("Undefined behavior.\n");
   }
 
-  if (assignMemory(pathname, taskDescriptor->taskId) != 0) {
-    printString("WARNING: Could not assign pathname to exec task.\n");
+  if (assignMemory(pathname, processDescriptor->pid) != 0) {
+    printString("WARNING: Could not assign pathname to exec process.\n");
     printString("Undefined behavior.\n");
   }
 
-  if (assignMemory(argv, taskDescriptor->taskId) != 0) {
-    printString("WARNING: Could not assign argv to exec task.\n");
+  if (assignMemory(argv, processDescriptor->pid) != 0) {
+    printString("WARNING: Could not assign argv to exec process.\n");
     printString("Undefined behavior.\n");
   }
   for (int ii = 0; argv[ii] != NULL; ii++) {
-    if (assignMemory(argv[ii], taskDescriptor->taskId) != 0) {
+    if (assignMemory(argv[ii], processDescriptor->pid) != 0) {
       printString("WARNING: Could not assign argv[");
       printInt(ii);
-      printString("] to exec task.\n");
+      printString("] to exec process.\n");
       printString("Undefined behavior.\n");
     }
   }
 
   if (envp != NULL) {
-    if (assignMemory(envp, taskDescriptor->taskId) != 0) {
-      printString("WARNING: Could not assign envp to exec task.\n");
+    if (assignMemory(envp, processDescriptor->pid) != 0) {
+      printString("WARNING: Could not assign envp to exec process.\n");
       printString("Undefined behavior.\n");
     }
     for (int ii = 0; envp[ii] != NULL; ii++) {
-      if (assignMemory(envp[ii], taskDescriptor->taskId) != 0) {
+      if (assignMemory(envp[ii], processDescriptor->pid) != 0) {
         printString("WARNING: Could not assign envp[");
         printInt(ii);
-        printString("] to exec task.\n");
+        printString("] to exec process.\n");
         printString("Undefined behavior.\n");
       }
     }
   }
 
-  if (assignMemory(taskDescriptor->fileDescriptors,
-    taskDescriptor->taskId) != 0
+  if (assignMemory(processDescriptor->fileDescriptors,
+    processDescriptor->pid) != 0
   ) {
     printString("WARNING: Could not assign fileDescriptors to scheduler.\n");
     printString("Undefined behavior.\n");
   }
-  for (int ii = 0; ii < taskDescriptor->numFileDescriptors; ii++) {
-    if (assignMemory(taskDescriptor->fileDescriptors[ii],
-      taskDescriptor->taskId) != 0
+  for (int ii = 0; ii < processDescriptor->numFileDescriptors; ii++) {
+    if (assignMemory(processDescriptor->fileDescriptors[ii],
+      processDescriptor->pid) != 0
     ) {
       printString("WARNING: Could not assign fileDescriptors[");
       printInt(ii);
@@ -2688,75 +2688,75 @@ int schedulerExecveCommandHandler(
     }
   }
 
-  taskDescriptor->overlayDir = pathname;
-  returnValue = loadTaskDescriptorOverlayMetadata(taskDescriptor);
+  processDescriptor->overlayDir = pathname;
+  returnValue = loadProcessDescriptorOverlayMetadata(processDescriptor);
   if (returnValue != 0) {
-    taskMessageData(taskMessage) = (void*) ((intptr_t) returnValue);
+    processMessageData(processMessage) = (void*) ((intptr_t) returnValue);
     returnValue = 0; // Don't retry this command
-    taskMessageSetDone(taskMessage);
+    processMessageSetDone(processMessage);
     return returnValue; // 0
   }
-  taskDescriptor->envp = envp;
-  taskDescriptor->name = argv[0];
+  processDescriptor->envp = envp;
+  processDescriptor->name = argv[0];
 
   /*
    * This shouldn't be necessary.  In hindsight, perhaps I shouldn't be
-   * assigning a port to a task at all.  That's not the way Unix works.  I
+   * assigning a port to a process at all.  That's not the way Unix works.  I
    * should probably remove the ability to exclusively assign a port to a
-   * task at some point in the future.  Delete this if I haven't found a
-   * good reason to continue granting exclusive access to a task by then.
+   * process at some point in the future.  Delete this if I haven't found a
+   * good reason to continue granting exclusive access to a process by then.
    * Leaving it uncommented in an if (false) so that compilation will fail
    * if/when I delete the functionality.
    *
    * JBC 14-Nov-2025
    */
   if (false) {
-    if (schedulerAssignPortToTaskId(
-      /*commandDescriptor->consolePort*/ 255, taskDescriptor->taskId)
-      != taskSuccess
+    if (schedulerAssignPortToProcessId(
+      /*commandDescriptor->consolePort*/ 255, processDescriptor->pid)
+      != processSuccess
     ) {
-      printString("WARNING: Could not assign console port to task.\n");
+      printString("WARNING: Could not assign console port to process.\n");
     }
   }
 
   // Resume the coroutine so that it picks up all the pointers it needs before
   // we release the message we were sent.
-  taskResume(taskDescriptor, NULL);
+  processResume(processDescriptor, NULL);
 
-  // Put the task on the ready queue.
-  taskQueuePush(taskDescriptor->readyQueue, taskDescriptor);
+  // Put the process on the ready queue.
+  processQueuePush(processDescriptor->readyQueue, processDescriptor);
 
-  taskMessageRelease(taskMessage);
+  processMessageRelease(processMessage);
 
   return returnValue;
 }
 
 /// @fn int schedulerSpawnCommandHandler(
-///   SchedulerState *schedulerState, TaskMessage *taskMessage)
+///   SchedulerState *schedulerState, ProcessMessage *processMessage)
 ///
 /// @brief Spawn a program in a new process.
 ///
 /// @param schedulerState A pointer to the SchedulerState maintained by the
-///   scheduler task.
-/// @param taskMessage A pointer to the TaskMessage that was received.
+///   scheduler process.
+/// @param processMessage A pointer to the ProcessMessage that was received.
 ///
 /// @return Returns 0 on success, non-zero error code on failure.
 int schedulerSpawnCommandHandler(
-  SchedulerState *schedulerState, TaskMessage *taskMessage
+  SchedulerState *schedulerState, ProcessMessage *processMessage
 ) {
   int returnValue = 0;
-  if (taskMessage == NULL) {
+  if (processMessage == NULL) {
     // This should be impossible, but there's nothing to do.  Return good
     // status.
     return returnValue; // 0
   }
 
-  SpawnArgs *spawnArgs = (SpawnArgs*) taskMessageData(taskMessage);
-  taskMessageData(taskMessage) = (void*) ((uintptr_t) 0);
+  SpawnArgs *spawnArgs = (SpawnArgs*) processMessageData(processMessage);
+  processMessageData(processMessage) = (void*) ((uintptr_t) 0);
   if (spawnArgs == NULL) {
     printString("ERROR! spawnArgs provided was NULL.\n");
-    taskMessageData(taskMessage) = (void*) ((uintptr_t) EINVAL);
-    taskMessageSetDone(taskMessage);
+    processMessageData(processMessage) = (void*) ((uintptr_t) EINVAL);
+    processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
   }
 
@@ -2764,86 +2764,86 @@ int schedulerSpawnCommandHandler(
   if (pathname == NULL) {
     // Invalid
     printString("ERROR! pathname provided was NULL.\n");
-    taskMessageData(taskMessage) = (void*) ((uintptr_t) EINVAL);
-    taskMessageSetDone(taskMessage);
+    processMessageData(processMessage) = (void*) ((uintptr_t) EINVAL);
+    processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
   }
   char **argv = spawnArgs->argv;
   if (argv == NULL) {
     // Invalid
     printString("ERROR! argv provided was NULL.\n");
-    taskMessageData(taskMessage) = (void*) ((uintptr_t) EINVAL);
-    taskMessageSetDone(taskMessage);
+    processMessageData(processMessage) = (void*) ((uintptr_t) EINVAL);
+    processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
   } else if (argv[0] == NULL) {
     // Invalid
     printString("ERROR! argv[0] provided was NULL.\n");
-    taskMessageData(taskMessage) = (void*) ((uintptr_t) EINVAL);
-    taskMessageSetDone(taskMessage);
+    processMessageData(processMessage) = (void*) ((uintptr_t) EINVAL);
+    processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
   }
   char **envp = spawnArgs->envp;
 
-  TaskDescriptor *taskDescriptor = taskQueuePop(&schedulerState->free);
-  if (taskDescriptor == NULL) {
-    printString("Out of task slots to launch task.\n");
-    taskMessageData(taskMessage) = (void*) ((uintptr_t) EINVAL);
-    taskMessageSetDone(taskMessage);
+  ProcessDescriptor *processDescriptor = processQueuePop(&schedulerState->free);
+  if (processDescriptor == NULL) {
+    printString("Out of process slots to launch process.\n");
+    processMessageData(processMessage) = (void*) ((uintptr_t) EINVAL);
+    processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
   }
-  *spawnArgs->newPid = taskDescriptor->taskId;
+  *spawnArgs->newPid = processDescriptor->pid;
 
-  // Initialize the new task.
-  threadSetContext(taskDescriptor->mainThread, taskDescriptor);
+  // Initialize the new process.
+  threadSetContext(processDescriptor->mainThread, processDescriptor);
 
   ExecArgs *execArgs = (ExecArgs*) schedMalloc(sizeof(ExecArgs));
   if (execArgs == NULL) {
     printString("Out of memory for ExecArgs.\n");
-    taskMessageData(taskMessage) = (void*) ((uintptr_t) ENOMEM);
-    taskMessageSetDone(taskMessage);
+    processMessageData(processMessage) = (void*) ((uintptr_t) ENOMEM);
+    processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
   }
-  execArgs->callingTaskId = taskId(taskMessageFrom(taskMessage));
+  execArgs->callingProcessId = pid(processMessageFrom(processMessage));
   execArgs->pathname = spawnArgs->path;
   execArgs->argv = spawnArgs->argv;
   execArgs->envp = spawnArgs->envp;
   execArgs->schedulerState = schedulerState;
 
-  taskDescriptor->userId
-    = allTasks[taskId(taskMessageFrom(taskMessage)) - 1].userId;
+  processDescriptor->userId
+    = allProcesses[pid(processMessageFrom(processMessage)) - 1].userId;
 
-  taskDescriptor->numFileDescriptors = NUM_STANDARD_FILE_DESCRIPTORS;
-  // Use calloc for taskDescriptor->fileDescriptors in case we fail to allocate
+  processDescriptor->numFileDescriptors = NUM_STANDARD_FILE_DESCRIPTORS;
+  // Use calloc for processDescriptor->fileDescriptors in case we fail to allocate
   // one of the FileDescriptor pointers later and have to free the elements of
   // the array.  It's safe to pass NULL to free().
-  taskDescriptor->fileDescriptors = (FileDescriptor**) schedCalloc(1,
+  processDescriptor->fileDescriptors = (FileDescriptor**) schedCalloc(1,
     NUM_STANDARD_FILE_DESCRIPTORS * sizeof(FileDescriptor*));
-  if (taskDescriptor->fileDescriptors == NULL) {
+  if (processDescriptor->fileDescriptors == NULL) {
     printString(
       "ERROR: Could not allocate file descriptor array for new command\n");
-    taskMessageData(taskMessage) = (void*) ((uintptr_t) ENOMEM);
+    processMessageData(processMessage) = (void*) ((uintptr_t) ENOMEM);
     schedFree(execArgs);
-    taskMessageSetDone(taskMessage);
+    processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
   }
-  for (int ii = 0; ii < taskDescriptor->numFileDescriptors; ii++) {
-    taskDescriptor->fileDescriptors[ii]
+  for (int ii = 0; ii < processDescriptor->numFileDescriptors; ii++) {
+    processDescriptor->fileDescriptors[ii]
       = (FileDescriptor*) schedMalloc(sizeof(FileDescriptor));
-    if (taskDescriptor->fileDescriptors[ii] == NULL) {
+    if (processDescriptor->fileDescriptors[ii] == NULL) {
       printString("ERROR: Could not allocate memory for file descriptor ");
       printInt(ii);
-      printString(" for new task\n");
-      taskMessageData(taskMessage) = (void*) ((uintptr_t) ENOMEM);
+      printString(" for new process\n");
+      processMessageData(processMessage) = (void*) ((uintptr_t) ENOMEM);
       for (int jj = 0; jj < ii; jj++) {
-        schedFree(taskDescriptor->fileDescriptors[jj]);
+        schedFree(processDescriptor->fileDescriptors[jj]);
       }
-      schedFree(taskDescriptor->fileDescriptors);
+      schedFree(processDescriptor->fileDescriptors);
       schedFree(execArgs);
-      taskMessageSetDone(taskMessage);
+      processMessageSetDone(processMessage);
       return returnValue; // 0; Don't retry this command
     }
     memcpy(
-      taskDescriptor->fileDescriptors[ii],
+      processDescriptor->fileDescriptors[ii],
       &standardUserFileDescriptors[ii],
       sizeof(FileDescriptor)
     );
@@ -2853,7 +2853,7 @@ int schedulerSpawnCommandHandler(
     // Take care of the dup2 file actions.
     for (uint8_t ii = 0; ii < spawnArgs->fileActions->numDup2; ii++) {
       Dup2 *dup2 = &spawnArgs->fileActions->dup2[ii];
-      if (dup2->fd >= taskDescriptor->numFileDescriptors) {
+      if (dup2->fd >= processDescriptor->numFileDescriptors) {
         // This is technically legal in Unix, but we're not going to support it.
         // We're handling a spawn call here, so the only things that it makes
         // sense to dup are stdin, stdout, and stderr.
@@ -2863,20 +2863,20 @@ int schedulerSpawnCommandHandler(
 
       // If we made it this far then we need to free the FileDescriptor that's
       // at the specified fd index and set it to the one provided.
-      schedFree(taskDescriptor->fileDescriptors[dup2->fd]);
-      taskDescriptor->fileDescriptors[dup2->fd] = dup2->dup;
+      schedFree(processDescriptor->fileDescriptors[dup2->fd]);
+      processDescriptor->fileDescriptors[dup2->fd] = dup2->dup;
 
       // The dup2->dup FileDescriptor almost certainly has a non-NULL pipeEnd
       // pointer since we're handling dup2 logic, but guard anyway.
       if (dup2->dup->pipeEnd != NULL) {
         if (dup2->fd == STDIN_FILENO) {
-          // We need to set the taskId of the outputChannel of the other end of
+          // We need to set the pid of the outputChannel of the other end of
           // the pipe to our ID.
-          dup2->dup->pipeEnd->outputChannel.taskId = taskDescriptor->taskId;
+          dup2->dup->pipeEnd->outputChannel.pid = processDescriptor->pid;
         } else if ((dup2->fd == STDOUT_FILENO) || (dup2->fd == STDERR_FILENO)) {
-          // We need to set the taskId of the inputChannel of the other end of
+          // We need to set the pid of the inputChannel of the other end of
           // the pipe to our ID.
-          dup2->dup->pipeEnd->inputChannel.taskId = taskDescriptor->taskId;
+          dup2->dup->pipeEnd->inputChannel.pid = processDescriptor->pid;
         }
       }
     }
@@ -2886,128 +2886,128 @@ int schedulerSpawnCommandHandler(
 
   schedFree(spawnArgs); spawnArgs = NULL;
 
-  if (taskCreate(taskDescriptor, execCommand, execArgs) == taskError) {
+  if (processCreate(processDescriptor, execCommand, execArgs) == processError) {
     printString(
-      "ERROR: Could not configure task handle for new command.\n");
+      "ERROR: Could not configure process handle for new command.\n");
   }
 
-  if (assignMemory(execArgs, taskDescriptor->taskId) != 0) {
-    printString("WARNING: Could not assign execArgs to spawn task.\n");
+  if (assignMemory(execArgs, processDescriptor->pid) != 0) {
+    printString("WARNING: Could not assign execArgs to spawn process.\n");
     printString("Undefined behavior.\n");
   }
 
-  if (assignMemory(pathname, taskDescriptor->taskId) != 0) {
-    printString("WARNING: Could not assign pathname to spawn task.\n");
+  if (assignMemory(pathname, processDescriptor->pid) != 0) {
+    printString("WARNING: Could not assign pathname to spawn process.\n");
     printString("Undefined behavior.\n");
   }
 
-  if (assignMemory(argv, taskDescriptor->taskId) != 0) {
-    printString("WARNING: Could not assign argv to spawn task.\n");
+  if (assignMemory(argv, processDescriptor->pid) != 0) {
+    printString("WARNING: Could not assign argv to spawn process.\n");
     printString("Undefined behavior.\n");
   }
   for (int ii = 0; argv[ii] != NULL; ii++) {
-    if (assignMemory(argv[ii], taskDescriptor->taskId) != 0) {
+    if (assignMemory(argv[ii], processDescriptor->pid) != 0) {
       printString("WARNING: Could not assign argv[");
       printInt(ii);
-      printString("] to spawn task.\n");
+      printString("] to spawn process.\n");
       printString("Undefined behavior.\n");
     }
   }
 
   if (envp != NULL) {
-    if (assignMemory(envp, taskDescriptor->taskId) != 0) {
-      printString("WARNING: Could not assign envp to spawn task.\n");
+    if (assignMemory(envp, processDescriptor->pid) != 0) {
+      printString("WARNING: Could not assign envp to spawn process.\n");
       printString("Undefined behavior.\n");
     }
     for (int ii = 0; envp[ii] != NULL; ii++) {
-      if (assignMemory(envp[ii], taskDescriptor->taskId) != 0) {
+      if (assignMemory(envp[ii], processDescriptor->pid) != 0) {
         printString("WARNING: Could not assign envp[");
         printInt(ii);
-        printString("] to spawn task.\n");
+        printString("] to spawn process.\n");
         printString("Undefined behavior.\n");
       }
     }
   }
 
-  if (assignMemory(taskDescriptor->fileDescriptors,
-    taskDescriptor->taskId) != 0
+  if (assignMemory(processDescriptor->fileDescriptors,
+    processDescriptor->pid) != 0
   ) {
-    printString("WARNING: Could not assign fileDescriptors to spawn task.\n");
+    printString("WARNING: Could not assign fileDescriptors to spawn process.\n");
     printString("Undefined behavior.\n");
   }
-  for (int ii = 0; ii < taskDescriptor->numFileDescriptors; ii++) {
-    if (assignMemory(taskDescriptor->fileDescriptors[ii],
-      taskDescriptor->taskId) != 0
+  for (int ii = 0; ii < processDescriptor->numFileDescriptors; ii++) {
+    if (assignMemory(processDescriptor->fileDescriptors[ii],
+      processDescriptor->pid) != 0
     ) {
       printString("WARNING: Could not assign fileDescriptors[");
       printInt(ii);
-      printString("] to spawn task.\n");
+      printString("] to spawn process.\n");
       printString("Undefined behavior.\n");
     }
   }
 
-  taskDescriptor->overlayDir = pathname;
-  returnValue = loadTaskDescriptorOverlayMetadata(taskDescriptor);
+  processDescriptor->overlayDir = pathname;
+  returnValue = loadProcessDescriptorOverlayMetadata(processDescriptor);
   if (returnValue != 0) {
-    taskMessageData(taskMessage) = (void*) ((uintptr_t) returnValue);
+    processMessageData(processMessage) = (void*) ((uintptr_t) returnValue);
     returnValue = 0; // Don't retry this command
-    taskMessageSetDone(taskMessage);
+    processMessageSetDone(processMessage);
 
-    // We have to terminate the task because something may have pushed a message
+    // We have to terminate the process because something may have pushed a message
     // onto its message queue.
-    taskTerminate(taskDescriptor);
-    threadSetContext(taskDescriptor->mainThread, taskDescriptor);
+    processTerminate(processDescriptor);
+    threadSetContext(processDescriptor->mainThread, processDescriptor);
     return returnValue; // 0
   }
-  taskDescriptor->envp = envp;
-  taskDescriptor->name = argv[0];
+  processDescriptor->envp = envp;
+  processDescriptor->name = argv[0];
 
   // Resume the coroutine so that it picks up all the pointers it needs before
   // we release the message we were sent.
-  taskResume(taskDescriptor, NULL);
+  processResume(processDescriptor, NULL);
 
-  // Put the task on the ready queue.
-  taskQueuePush(taskDescriptor->readyQueue, taskDescriptor);
+  // Put the process on the ready queue.
+  processQueuePush(processDescriptor->readyQueue, processDescriptor);
 
-  taskMessageSetDone(taskMessage);
+  processMessageSetDone(processMessage);
 
   return returnValue;
 }
 
 /// @fn int schedulerAssignMemoryCommandHandler(
-///   SchedulerState *schedulerState, TaskMessage *taskMessage)
+///   SchedulerState *schedulerState, ProcessMessage *processMessage)
 ///
 /// @brief Assign a piece of memory to the scheduler for ownership.
 ///
 /// @param schedulerState A pointer to the SchedulerState maintained by the
-///   scheduler task.
-/// @param taskMessage A pointer to the TaskMessage that was received.
+///   scheduler process.
+/// @param processMessage A pointer to the ProcessMessage that was received.
 ///
 /// @return Returns 0 on success, non-zero error code on failure.
 int schedulerAssignMemoryCommandHandler(
-  SchedulerState *schedulerState, TaskMessage *taskMessage
+  SchedulerState *schedulerState, ProcessMessage *processMessage
 ) {
   (void) schedulerState;
 
-  if (taskMessage == NULL) {
+  if (processMessage == NULL) {
     // This should be impossible, but there's nothing to do.  Return good
     // status.
     return 0;
   }
 
-  void *ptr = taskMessageData(taskMessage);
-  int returnValue = assignMemory(ptr, SCHEDULER_STATE->schedulerTaskId);
+  void *ptr = processMessageData(processMessage);
+  int returnValue = assignMemory(ptr, SCHEDULER_STATE->schedulerProcessId);
   if (returnValue == 0) {
-    taskMessageInit(taskMessage, 0, (void*) ((intptr_t) 0), 0, true);
+    processMessageInit(processMessage, 0, (void*) ((intptr_t) 0), 0, true);
   } else {
-    printString("WARNING: Could not assign memory from task ");
-    printInt(taskId(taskMessageFrom(taskMessage)));
+    printString("WARNING: Could not assign memory from process ");
+    printInt(pid(processMessageFrom(processMessage)));
     printString(" to the scheduler\n");
     printString("Undefined behavior.\n");
-    taskMessageInit(taskMessage, 0, (void*) ((intptr_t) returnValue), 0, true);
+    processMessageInit(processMessage, 0, (void*) ((intptr_t) returnValue), 0, true);
   }
 
-  taskMessageSetDone(taskMessage);
+  processMessageSetDone(processMessage);
 
   return 0;
 }
@@ -3015,19 +3015,19 @@ int schedulerAssignMemoryCommandHandler(
 /// @typedef SchedulerCommandHandler
 ///
 /// @brief Signature of command handler for a scheduler command.
-typedef int (*SchedulerCommandHandler)(SchedulerState*, TaskMessage*);
+typedef int (*SchedulerCommandHandler)(SchedulerState*, ProcessMessage*);
 
 /// @var schedulerCommandHandlers
 ///
 /// @brief Array of function pointers for commands that are understood by the
 /// message handler for the main loop function.
 const SchedulerCommandHandler schedulerCommandHandlers[] = {
-  schedulerKillTaskCommandHandler,          // SCHEDULER_KILL_TASK
+  schedulerKillProcessCommandHandler,          // SCHEDULER_KILL_TASK
   // SCHEDULER_GET_NUM_RUNNING_TASKS:
-  schedulerGetNumTaskDescriptorsCommandHandler,
-  schedulerGetTaskInfoCommandHandler,       // SCHEDULER_GET_TASK_INFO
-  schedulerGetTaskUserCommandHandler,       // SCHEDULER_GET_TASK_USER
-  schedulerSetTaskUserCommandHandler,       // SCHEDULER_SET_TASK_USER
+  schedulerGetNumProcessDescriptorsCommandHandler,
+  schedulerGetProcessInfoCommandHandler,       // SCHEDULER_GET_TASK_INFO
+  schedulerGetProcessUserCommandHandler,       // SCHEDULER_GET_TASK_USER
+  schedulerSetProcessUserCommandHandler,       // SCHEDULER_SET_TASK_USER
   // SCHEDULER_CLOSE_ALL_FILE_DESCRIPTORS:
   schedulerCloseAllFileDescriptorsCommandHandler,
   schedulerGetHostnameCommandHandler,       // SCHEDULER_GET_HOSTNAME
@@ -3043,18 +3043,18 @@ const SchedulerCommandHandler schedulerCommandHandlers[] = {
 /// end of our message queue.
 ///
 /// @param schedulerState A pointer to the SchedulerState object maintained by
-///   the scheduler task.
+///   the scheduler process.
 ///
 /// @return This function returns no value.
 void handleSchedulerMessage(SchedulerState *schedulerState) {
   static int lastReturnValue = 0;
-  TaskMessage *message = taskMessageQueuePop();
+  ProcessMessage *message = processMessageQueuePop();
   if (message != NULL) {
     SchedulerCommand messageType
-      = (SchedulerCommand) taskMessageType(message);
+      = (SchedulerCommand) processMessageType(message);
     if (messageType >= NUM_SCHEDULER_COMMANDS) {
       // Invalid.  Purge the message.
-      printInt(getRunningTaskId());
+      printInt(getRunningProcessId());
       printString(": ");
       printString(__func__);
       printString(": ");
@@ -3063,8 +3063,8 @@ void handleSchedulerMessage(SchedulerState *schedulerState) {
       printHex((uintptr_t) message);
       printString(" of type ");
       printInt(messageType);
-      printString(" from task ");
-      printInt(taskId(taskMessageFrom(message)));
+      printString(" from process ");
+      printInt(pid(processMessageFrom(message)));
       printString("\n");
       return;
     }
@@ -3072,7 +3072,7 @@ void handleSchedulerMessage(SchedulerState *schedulerState) {
     int returnValue = schedulerCommandHandlers[messageType](
       schedulerState, message);
     if (returnValue != 0) {
-      // Tasking the message failed.  We can't release it.  Put it on the
+      // Processing the message failed.  We can't release it.  Put it on the
       // back of our own queue again and try again later.
       if (lastReturnValue == 0) {
         // Only print out a message if this is the first time we've failed.
@@ -3081,7 +3081,7 @@ void handleSchedulerMessage(SchedulerState *schedulerState) {
         printString("\n");
         printString("Pushing message back onto our own queue\n");
       }
-      taskMessageQueuePush(getRunningTask(), message);
+      processMessageQueuePush(getRunningProcess(), message);
     }
     lastReturnValue = returnValue;
   }
@@ -3094,32 +3094,32 @@ void handleSchedulerMessage(SchedulerState *schedulerState) {
 /// @brief Check for anything that's timed out on the timedWaiting queue.
 ///
 /// @param schedulerState A pointer to the SchedulerState object maintained by
-///   the scheduler task.
+///   the scheduler process.
 ///
 /// @return This function returns no value.
 void checkForTimeouts(SchedulerState *schedulerState) {
-  TaskQueue *timedWaiting = &schedulerState->timedWaiting;
+  ProcessQueue *timedWaiting = &schedulerState->timedWaiting;
   uint8_t numElements = timedWaiting->numElements;
-  int64_t now = taskGetNanoseconds(NULL);
+  int64_t now = processGetNanoseconds(NULL);
 
   for (uint8_t ii = 0; ii < numElements; ii++) {
-    TaskDescriptor *poppedDescriptor = taskQueuePop(timedWaiting);
+    ProcessDescriptor *poppedDescriptor = processQueuePop(timedWaiting);
     Comutex *blockingComutex
       = poppedDescriptor->mainThread->blockingComutex;
     Cocondition *blockingCocondition
       = poppedDescriptor->mainThread->blockingCocondition;
 
     if ((blockingComutex != NULL) && (now >= blockingComutex->timeoutTime)) {
-      taskQueuePush(poppedDescriptor->readyQueue, poppedDescriptor);
+      processQueuePush(poppedDescriptor->readyQueue, poppedDescriptor);
       continue;
     } else if ((blockingCocondition != NULL)
       && (now >= blockingCocondition->timeoutTime)
     ) {
-      taskQueuePush(poppedDescriptor->readyQueue, poppedDescriptor);
+      processQueuePush(poppedDescriptor->readyQueue, poppedDescriptor);
       continue;
     }
 
-    taskQueuePush(timedWaiting, poppedDescriptor);
+    processQueuePush(timedWaiting, poppedDescriptor);
   }
 
   return;
@@ -3128,11 +3128,11 @@ void checkForTimeouts(SchedulerState *schedulerState) {
 /// @fn void forceYield(void)
 ///
 /// @brief Callback that's invoked when the preemption timer fires.  Wrapper
-///   for taskYield.  Does nothing else.
+///   for processYield.  Does nothing else.
 ///
 /// @return This function returns no value.
 void forceYield(void) {
-  taskYield();
+  processYield();
 }
 
 /// @fn int schedulerDumpMemoryAllocations(SchedulerState *schedulerState)
@@ -3147,22 +3147,22 @@ void forceYield(void) {
 int schedulerDumpMemoryAllocations(SchedulerState *schedulerState) {
   int returnValue = 0;
   
-  TaskMessage *dumpMemoryAllocationsMessage = getAvailableMessage();
+  ProcessMessage *dumpMemoryAllocationsMessage = getAvailableMessage();
   if (dumpMemoryAllocationsMessage != NULL) {
-    taskMessageInit(dumpMemoryAllocationsMessage,
+    processMessageInit(dumpMemoryAllocationsMessage,
       MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS, NULL, 0, true);
-    if (schedulerSendTaskMessageToTask(
-      &schedulerState->allTasks[SCHEDULER_STATE->memoryManagerTaskId - 1],
-      dumpMemoryAllocationsMessage) != taskSuccess
+    if (schedulerSendProcessMessageToProcess(
+      &schedulerState->allProcesses[SCHEDULER_STATE->memoryManagerProcessId - 1],
+      dumpMemoryAllocationsMessage) != processSuccess
     ) {
       printString("ERROR: Could not send message ");
       printString("MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS to memory manager\n");
-      taskMessageRelease(dumpMemoryAllocationsMessage);
+      processMessageRelease(dumpMemoryAllocationsMessage);
     }
-    if (taskMessageDone(dumpMemoryAllocationsMessage) == false) {
+    if (processMessageDone(dumpMemoryAllocationsMessage) == false) {
       printString("ERROR: dumpMemoryAllocationsMessage is not done!\n");
     }
-    taskMessageRelease(dumpMemoryAllocationsMessage);
+    processMessageRelease(dumpMemoryAllocationsMessage);
   } else {
     printString("WARNING: Could not allocate dumpMemoryAllocationsMessage.\n");
     returnValue = -1;
@@ -3183,23 +3183,23 @@ int schedulerDumpMemoryAllocations(SchedulerState *schedulerState) {
 int schedulerDumpOpenFiles(SchedulerState *schedulerState) {
   int returnValue = 0;
   
-  TaskMessage *dumpOpenFilesMessage = getAvailableMessage();
+  ProcessMessage *dumpOpenFilesMessage = getAvailableMessage();
   if (dumpOpenFilesMessage != NULL) {
-    taskMessageInit(dumpOpenFilesMessage,
+    processMessageInit(dumpOpenFilesMessage,
       FILESYSTEM_DUMP_OPEN_FILES, NULL, 0, true);
-    if (schedulerSendTaskMessageToTask(
-      &schedulerState->allTasks[schedulerState->rootFsTaskId - 1],
-      dumpOpenFilesMessage) != taskSuccess
+    if (schedulerSendProcessMessageToProcess(
+      &schedulerState->allProcesses[schedulerState->rootFsProcessId - 1],
+      dumpOpenFilesMessage) != processSuccess
     ) {
       printString("ERROR: Could not send FILESYSTEM_DUMP_OPEN_FILES message ");
-      printString("to root FS task ID ");
-      printInt(schedulerState->rootFsTaskId);
+      printString("to root FS process ID ");
+      printInt(schedulerState->rootFsProcessId);
       printString("\n");
     }
-    if (taskMessageDone(dumpOpenFilesMessage) == false) {
+    if (processMessageDone(dumpOpenFilesMessage) == false) {
       printString("ERROR: dumpOpenFilesMessage is not done!\n");
     }
-    taskMessageRelease(dumpOpenFilesMessage);
+    processMessageRelease(dumpOpenFilesMessage);
   } else {
     printString("WARNING: Could not allocate dumpOpenFilesMessage.\n");
     returnValue = -1;
@@ -3208,45 +3208,45 @@ int schedulerDumpOpenFiles(SchedulerState *schedulerState) {
   return returnValue;
 }
 
-/// @fn void removeTask(
-///   TaskDescriptor *taskDescriptor, const char *errorMessage)
+/// @fn void removeProcess(
+///   ProcessDescriptor *processDescriptor, const char *errorMessage)
 ///
-/// @brief Clean up all of a task's resources so that it can be removed from
-/// the scheduler's task queues.
+/// @brief Clean up all of a process's resources so that it can be removed from
+/// the scheduler's process queues.
 ///
-/// @param taskDescriptor A pointer to the TaskDescriptor to clean up.
+/// @param processDescriptor A pointer to the ProcessDescriptor to clean up.
 /// @param errorMessage A string containing the message to display to the user
-///   to indicate the reason this task is being remoevd.
+///   to indicate the reason this process is being remoevd.
 ///
 /// @return This function returns no value.
-void removeTask(TaskDescriptor *taskDescriptor, const char *errorMessage) {
+void removeProcess(ProcessDescriptor *processDescriptor, const char *errorMessage) {
   printString("ERROR: ");
   printString(errorMessage);
   printString("\n");
-  printString("       Removing task ");
-  printInt(taskDescriptor->taskId);
-  printString(" from task queues\n");
+  printString("       Removing process ");
+  printInt(processDescriptor->pid);
+  printString(" from process queues\n");
 
-  taskDescriptor->name = NULL;
-  taskDescriptor->userId = NO_USER_ID;
-  taskDescriptor->mainThread->state = TASK_STATE_NOT_RUNNING;
+  processDescriptor->name = NULL;
+  processDescriptor->userId = NO_USER_ID;
+  processDescriptor->mainThread->state = TASK_STATE_NOT_RUNNING;
 
-  if (schedulerInitSendMessageToTaskId(
-    SCHEDULER_STATE->consoleTaskId,
+  if (schedulerInitSendMessageToProcessId(
+    SCHEDULER_STATE->consoleProcessId,
     CONSOLE_RELEASE_PID_PORT,
-    /* data= */ (void*) ((intptr_t) taskDescriptor->taskId),
-    /* size= */ 0) != taskSuccess
+    /* data= */ (void*) ((intptr_t) processDescriptor->pid),
+    /* size= */ 0) != processSuccess
   ) {
     printString("ERROR: Could not send CONSOLE_RELEASE_PID_PORT message ");
-    printString("to console task\n");
+    printString("to console process\n");
   }
 
-  if (schedulerInitSendMessageToTaskId(
-    SCHEDULER_STATE->memoryManagerTaskId,
+  if (schedulerInitSendMessageToProcessId(
+    SCHEDULER_STATE->memoryManagerProcessId,
     MEMORY_MANAGER_FREE_TASK_MEMORY,
-    (void*) ((uintptr_t) taskDescriptor->taskId), /* size= */ 0) != taskSuccess
+    (void*) ((uintptr_t) processDescriptor->pid), /* size= */ 0) != processSuccess
   ) {
-    printString("ERROR: Could not free task memory. Memory leak.\n");
+    printString("ERROR: Could not free process memory. Memory leak.\n");
   }
 
   return;
@@ -3340,14 +3340,14 @@ int schedulerLoadOverlay(FileBlockMetadata *overlay, char **envp) {
 }
 
 /// @fn int schedulerRunOverlayCommand(
-///   SchedulerState *schedulerState, TaskDescriptor *taskDescriptor,
+///   SchedulerState *schedulerState, ProcessDescriptor *processDescriptor,
 ///   const char *commandPath, int argc, const char **argv, const char **envp)
 ///
 /// @brief Launch a command that's in overlay format on the filesystem.
 ///
 /// @param schedulerState A pointer to the SchedulerState object maintained by
-///   the scheduler task.
-/// @param taskDescriptor A pointer to the TaskDescriptor that will be
+///   the scheduler process.
+/// @param processDescriptor A pointer to the ProcessDescriptor that will be
 ///   populated with the overlay command.
 /// @param commandPath The full path to the command overlay file on the
 ///   filesystem.
@@ -3358,7 +3358,7 @@ int schedulerLoadOverlay(FileBlockMetadata *overlay, char **envp) {
 ///
 /// @return Returns 0 on success, -errno on failure.
 int schedulerRunOverlayCommand(
-  SchedulerState *schedulerState, TaskDescriptor *taskDescriptor,
+  SchedulerState *schedulerState, ProcessDescriptor *processDescriptor,
   char *commandPath, char **argv, char **envp
 ) {
   int returnValue = 0;
@@ -3369,7 +3369,7 @@ int schedulerRunOverlayCommand(
     returnValue = -ENOMEM;
     goto exit;
   }
-  execArgs->callingTaskId = taskDescriptor->taskId;
+  execArgs->callingProcessId = processDescriptor->pid;
 
   execArgs->pathname = (char*) schedMalloc(strlen(commandPath) + 1);
   if (execArgs->pathname == NULL) {
@@ -3403,109 +3403,109 @@ int schedulerRunOverlayCommand(
   execArgs->argv[ii] = NULL; // NULL-terminate the array
 
   // There are two possibilities for how this function is called:  Either envp
-  // is NULL or it's the envp that already existed for the taskDescriptor.  So,
+  // is NULL or it's the envp that already existed for the processDescriptor.  So,
   // either there is no envp or it is already the one we should be using for
-  // the task.  We do *NOT* want to make a copy of it.  Just assign it direclty
+  // the process.  We do *NOT* want to make a copy of it.  Just assign it direclty
   // here.  The logic below will take care of memory ownership.
   execArgs->envp = envp;
 
   execArgs->schedulerState = schedulerState;
 
-  if (assignMemory(execArgs, taskDescriptor->taskId) != 0) {
-    printString("WARNING: Could not assign execArgs to exec task.\n");
+  if (assignMemory(execArgs, processDescriptor->pid) != 0) {
+    printString("WARNING: Could not assign execArgs to exec process.\n");
     printString("Undefined behavior.\n");
   }
 
-  if (assignMemory(execArgs->pathname, taskDescriptor->taskId) != 0) {
-    printString("WARNING: Could not assign execArgs->pathname to exec task.\n");
+  if (assignMemory(execArgs->pathname, processDescriptor->pid) != 0) {
+    printString("WARNING: Could not assign execArgs->pathname to exec process.\n");
     printString("Undefined behavior.\n");
   }
 
   if (execArgs->argv != NULL) {
-    if (assignMemory(execArgs->argv, taskDescriptor->taskId) != 0) {
-      printString("WARNING: Could not assign argv to exec task.\n");
+    if (assignMemory(execArgs->argv, processDescriptor->pid) != 0) {
+      printString("WARNING: Could not assign argv to exec process.\n");
       printString("Undefined behavior.\n");
     }
 
     for (int ii = 0; execArgs->argv[ii] != NULL; ii++) {
-      if (assignMemory(execArgs->argv[ii], taskDescriptor->taskId) != 0) {
+      if (assignMemory(execArgs->argv[ii], processDescriptor->pid) != 0) {
         printString("WARNING: Could not assign execArgs->argv[");
         printInt(ii);
-        printString("] to exec task.\n");
+        printString("] to exec process.\n");
         printString("Undefined behavior.\n");
       }
     }
   }
 
   if (execArgs->envp != NULL) {
-    if (assignMemory(execArgs->envp, taskDescriptor->taskId) != 0) {
-      printString("WARNING: Could not assign execArgs->envp to exec task.\n");
+    if (assignMemory(execArgs->envp, processDescriptor->pid) != 0) {
+      printString("WARNING: Could not assign execArgs->envp to exec process.\n");
       printString("Undefined behavior.\n");
     }
 
     for (int ii = 0; execArgs->envp[ii] != NULL; ii++) {
-      if (assignMemory(execArgs->envp[ii], taskDescriptor->taskId) != 0) {
+      if (assignMemory(execArgs->envp[ii], processDescriptor->pid) != 0) {
         printString("WARNING: Could not assign execArgs->envp[");
         printInt(ii);
-        printString("] to exec task\n");
+        printString("] to exec process\n");
         printString("Undefined behavior\n");
       }
     }
   }
 
-  taskDescriptor->numFileDescriptors = NUM_STANDARD_FILE_DESCRIPTORS;
-  // Use calloc for taskDescriptor->fileDescriptors in case we fail to allocate
+  processDescriptor->numFileDescriptors = NUM_STANDARD_FILE_DESCRIPTORS;
+  // Use calloc for processDescriptor->fileDescriptors in case we fail to allocate
   // one of the FileDescriptor pointers later and have to free the elements of
   // the array.  It's safe to pass NULL to free().
-  taskDescriptor->fileDescriptors = (FileDescriptor**) schedCalloc(1,
+  processDescriptor->fileDescriptors = (FileDescriptor**) schedCalloc(1,
     NUM_STANDARD_FILE_DESCRIPTORS * sizeof(FileDescriptor*));
-  if (taskDescriptor->fileDescriptors == NULL) {
+  if (processDescriptor->fileDescriptors == NULL) {
     printString(
       "ERROR: Could not allocate file descriptor array for new command\n");
     returnValue = -ENOMEM;
     goto freeExecArgs;
   }
-  for (int ii = 0; ii < taskDescriptor->numFileDescriptors; ii++) {
-    taskDescriptor->fileDescriptors[ii]
+  for (int ii = 0; ii < processDescriptor->numFileDescriptors; ii++) {
+    processDescriptor->fileDescriptors[ii]
       = (FileDescriptor*) schedMalloc(sizeof(FileDescriptor));
-    if (taskDescriptor->fileDescriptors[ii] == NULL) {
+    if (processDescriptor->fileDescriptors[ii] == NULL) {
       printString("ERROR: Could not allocate memory for file descriptor ");
       printInt(ii);
-      printString(" for new task\n");
+      printString(" for new process\n");
       returnValue = -ENOMEM;
       goto freeFileDescriptors;
     }
     memcpy(
-      taskDescriptor->fileDescriptors[ii],
+      processDescriptor->fileDescriptors[ii],
       &standardUserFileDescriptors[ii],
       sizeof(FileDescriptor)
     );
   }
 
-  if (taskCreate(taskDescriptor, execCommand, execArgs) == taskError) {
+  if (processCreate(processDescriptor, execCommand, execArgs) == processError) {
     printString(
-      "ERROR: Could not configure task handle for new command\n");
+      "ERROR: Could not configure process handle for new command\n");
     returnValue = -ENOEXEC;
     goto freeFileDescriptors;
   }
 
-  taskDescriptor->overlayDir = execArgs->pathname;
-  returnValue = loadTaskDescriptorOverlayMetadata(taskDescriptor);
+  processDescriptor->overlayDir = execArgs->pathname;
+  returnValue = loadProcessDescriptorOverlayMetadata(processDescriptor);
   if (returnValue != 0) {
     goto freeFileDescriptors;
   }
-  taskDescriptor->envp = execArgs->envp;
-  taskDescriptor->name = execArgs->argv[0];
+  processDescriptor->envp = execArgs->envp;
+  processDescriptor->name = execArgs->argv[0];
 
-  taskResume(taskDescriptor, NULL);
+  processResume(processDescriptor, NULL);
 
   return returnValue;
 
 freeFileDescriptors:
-  for (int ii = 0; ii < taskDescriptor->numFileDescriptors; ii++) {
-    schedFree(taskDescriptor->fileDescriptors[ii]);
+  for (int ii = 0; ii < processDescriptor->numFileDescriptors; ii++) {
+    schedFree(processDescriptor->fileDescriptors[ii]);
   }
-  schedFree(taskDescriptor->fileDescriptors);
+  schedFree(processDescriptor->fileDescriptors);
 
 freeExecArgs:
   schedFree(execArgs->pathname);
@@ -3558,36 +3558,36 @@ static const char *shellArgs[] = {
 ///
 /// @return This function returns no value.
 void runScheduler(void) {
-  TaskDescriptor *taskDescriptor
-    = taskQueuePop(SCHEDULER_STATE->currentReady);
-  if (taskDescriptor == NULL) {
+  ProcessDescriptor *processDescriptor
+    = processQueuePop(SCHEDULER_STATE->currentReady);
+  if (processDescriptor == NULL) {
     // Nothing we can do.
-    printString("ERROR: No tasks to pop in ");
+    printString("ERROR: No processes to pop in ");
     printString(SCHEDULER_STATE->currentReady->name);
-    printString(" task queue\n");
+    printString(" process queue\n");
     return;
   }
 
-  if (taskCorrupted(taskDescriptor)) {
-    removeTask(taskDescriptor, "Task corruption detected");
+  if (processCorrupted(processDescriptor)) {
+    removeProcess(processDescriptor, "Process corruption detected");
     return;
   }
 
-  if (taskDescriptor->taskId >= SCHEDULER_STATE->firstUserTaskId) {
-    if (taskRunning(taskDescriptor) == true) {
-      // This is a user task, which is in an overlay.  Make sure it's loaded.
+  if (processDescriptor->pid >= SCHEDULER_STATE->firstUserProcessId) {
+    if (processRunning(processDescriptor) == true) {
+      // This is a user process, which is in an overlay.  Make sure it's loaded.
       if (schedulerLoadOverlay(
-        &taskDescriptor->overlay,
-        taskDescriptor->envp) != 0
+        &processDescriptor->overlay,
+        processDescriptor->envp) != 0
       ) {
         schedulerDumpMemoryAllocations(SCHEDULER_STATE);
         schedulerDumpOpenFiles(SCHEDULER_STATE);
-        removeTask(taskDescriptor, "Overlay load failure");
+        removeProcess(processDescriptor, "Overlay load failure");
         return;
       }
     }
     
-    // Configure the preemption timer to force the task to yield if it doesn't
+    // Configure the preemption timer to force the process to yield if it doesn't
     // voluntarily give up control within a reasonable amount of time.
     if (SCHEDULER_STATE->preemptionTimer > -1) {
       // No need to check HAL->timer for NULL since it can't be NULL in this
@@ -3596,51 +3596,51 @@ void runScheduler(void) {
         SCHEDULER_STATE->preemptionTimer, 10000000, forceYield);
     }
   }
-  taskResume(taskDescriptor, NULL);
+  processResume(processDescriptor, NULL);
   // No need to call HAL->timer->cancel since that's called by
-  // coroutineYieldCallback if we're running preemptive multitasking.
+  // coroutineYieldCallback if we're running preemptive multiprocessing.
 
-  if (taskRunning(taskDescriptor) == false) {
-    if (schedulerInitSendMessageToTaskId(
-      SCHEDULER_STATE->memoryManagerTaskId, MEMORY_MANAGER_FREE_TASK_MEMORY,
-      (void*) ((uintptr_t) taskDescriptor->taskId), 0) != taskSuccess
+  if (processRunning(processDescriptor) == false) {
+    if (schedulerInitSendMessageToProcessId(
+      SCHEDULER_STATE->memoryManagerProcessId, MEMORY_MANAGER_FREE_TASK_MEMORY,
+      (void*) ((uintptr_t) processDescriptor->pid), 0) != processSuccess
     ) {
       printString("ERROR: Could not send MEMORY_MANAGER_FREE_TASK_MEMORY ");
       printString("message to memory manager\n");
     }
 
-    // Terminate the task so that any lingering messages in its message queue
+    // Terminate the process so that any lingering messages in its message queue
     // get released.
-    taskTerminate(taskDescriptor);
-    threadSetContext(taskDescriptor->mainThread, taskDescriptor);
-    memset(&taskDescriptor->message, 0, sizeof(TaskMessage));
+    processTerminate(processDescriptor);
+    threadSetContext(processDescriptor->mainThread, processDescriptor);
+    memset(&processDescriptor->message, 0, sizeof(ProcessMessage));
   }
 
   // Check the shells and restart them if needed.
-  if ((taskDescriptor->taskId >= SCHEDULER_STATE->firstShellTaskId)
-    && (taskDescriptor->taskId
-      < (SCHEDULER_STATE->firstShellTaskId + SCHEDULER_STATE->numShells))
-    && (taskRunning(taskDescriptor) == false)
+  if ((processDescriptor->pid >= SCHEDULER_STATE->firstShellProcessId)
+    && (processDescriptor->pid
+      < (SCHEDULER_STATE->firstShellProcessId + SCHEDULER_STATE->numShells))
+    && (processRunning(processDescriptor) == false)
   ) {
     if ((SCHEDULER_STATE->hostname == NULL)
       || (*SCHEDULER_STATE->hostname == '\0')
     ) {
-      // We're not done initializing yet.  Put the task back on the ready
+      // We're not done initializing yet.  Put the process back on the ready
       // queue and try again later.
-      taskQueuePush(SCHEDULER_STATE->currentReady, taskDescriptor);
+      processQueuePush(SCHEDULER_STATE->currentReady, processDescriptor);
       return;
     }
 
-    if (taskDescriptor->userId == NO_USER_ID) {
+    if (processDescriptor->userId == NO_USER_ID) {
       // Login failed.  Re-launch getty.
-      if (schedulerRunOverlayCommand(SCHEDULER_STATE, taskDescriptor,
+      if (schedulerRunOverlayCommand(SCHEDULER_STATE, processDescriptor,
         "/usr/bin/getty", (char**) gettyArgs, NULL) != 0
       ) {
-        removeTask(taskDescriptor, "Failed to load getty");
+        removeProcess(processDescriptor, "Failed to load getty");
         return;
       }
     } else {
-      // User task exited.  Re-launch the shell.
+      // User process exited.  Re-launch the shell.
       char *passwdStringBuffer = NULL;
       struct passwd *pwd = NULL;
       do {
@@ -3661,21 +3661,21 @@ void runScheduler(void) {
         }
         
         struct passwd *result = NULL;
-        nanoOsGetpwuid_r(taskDescriptor->userId, pwd,
+        nanoOsGetpwuid_r(processDescriptor->userId, pwd,
           passwdStringBuffer, NANO_OS_PASSWD_STRING_BUF_SIZE, &result);
         if (result == NULL) {
           fprintf(stderr,
-            "Could not find passwd info for uid %d\n", taskDescriptor->userId);
+            "Could not find passwd info for uid %d\n", processDescriptor->userId);
           break;
         }
         
         // strrchr(pwd->pw_shell, '/') must be non-NULL in order for pw_shell
         // to be valid.
         shellArgs[0] = strrchr(pwd->pw_shell, '/') + 1;
-        if (schedulerRunOverlayCommand(SCHEDULER_STATE, taskDescriptor,
-          pwd->pw_shell, (char**) shellArgs, taskDescriptor->envp) != 0
+        if (schedulerRunOverlayCommand(SCHEDULER_STATE, processDescriptor,
+          pwd->pw_shell, (char**) shellArgs, processDescriptor->envp) != 0
         ) {
-          removeTask(taskDescriptor, "Failed to load shell");
+          removeProcess(processDescriptor, "Failed to load shell");
           schedFree(pwd);
           schedFree(passwdStringBuffer);
           return;
@@ -3686,14 +3686,14 @@ void runScheduler(void) {
     }
   }
 
-  if (taskState(taskDescriptor) == TASK_STATE_WAIT) {
-    taskQueuePush(&SCHEDULER_STATE->waiting, taskDescriptor);
-  } else if (taskState(taskDescriptor) == TASK_STATE_TIMEDWAIT) {
-    taskQueuePush(&SCHEDULER_STATE->timedWaiting, taskDescriptor);
-  } else if (taskFinished(taskDescriptor)) {
-    taskQueuePush(&SCHEDULER_STATE->free, taskDescriptor);
-  } else { // Task is still running.
-    taskQueuePush(SCHEDULER_STATE->currentReady, taskDescriptor);
+  if (processState(processDescriptor) == TASK_STATE_WAIT) {
+    processQueuePush(&SCHEDULER_STATE->waiting, processDescriptor);
+  } else if (processState(processDescriptor) == TASK_STATE_TIMEDWAIT) {
+    processQueuePush(&SCHEDULER_STATE->timedWaiting, processDescriptor);
+  } else if (processFinished(processDescriptor)) {
+    processQueuePush(&SCHEDULER_STATE->free, processDescriptor);
+  } else { // Process is still running.
+    processQueuePush(SCHEDULER_STATE->currentReady, processDescriptor);
   }
 
   checkForTimeouts(SCHEDULER_STATE);
@@ -3726,11 +3726,11 @@ __attribute__((noinline)) void startScheduler(
   if ((HAL->timer != NULL) && (HAL->timer->getNum() > 0)) {
     schedulerState.preemptionTimer = 0;
   }
-  schedulerState.schedulerTaskId = 1;
-  schedulerState.consoleTaskId = 2;
-  schedulerState.memoryManagerTaskId = 3;
-  schedulerState.firstUserTaskId = 4;
-  schedulerState.firstShellTaskId = 4;
+  schedulerState.schedulerProcessId = 1;
+  schedulerState.consoleProcessId = 2;
+  schedulerState.memoryManagerProcessId = 3;
+  schedulerState.firstUserProcessId = 4;
+  schedulerState.firstShellProcessId = 4;
   schedulerState.runScheduler = runScheduler;
   SCHEDULER_STATE = &schedulerState;
   printDebugString("Set scheduler state.\n");
@@ -3738,50 +3738,50 @@ __attribute__((noinline)) void startScheduler(
   // Initialize the pointer that was used to configure coroutines.
   *coroutineStatePointer = &schedulerState;
 
-  // Initialize the static TaskMessage storage.
-  TaskMessage messagesStorage[NANO_OS_NUM_MESSAGES] = {0};
-  extern TaskMessage *messages;
+  // Initialize the static ProcessMessage storage.
+  ProcessMessage messagesStorage[NANO_OS_NUM_MESSAGES] = {0};
+  extern ProcessMessage *messages;
   messages = messagesStorage;
   printDebugString("Allocated messages storage.\n");
 
-  // Initialize the allTasks pointer.  The tasks are all zeroed because
+  // Initialize the allProcesses pointer.  The processes are all zeroed because
   // we zeroed the entire schedulerState when we declared it.
-  allTasks = schedulerState.allTasks;
+  allProcesses = schedulerState.allProcesses;
 
   // Initialize the scheduler in the array of running commands.
-  allTasks[schedulerState.schedulerTaskId - 1].mainThread = schedulerThread;
-  allTasks[schedulerState.schedulerTaskId - 1].taskId
-    = schedulerState.schedulerTaskId;
-  allTasks[schedulerState.schedulerTaskId - 1].name = "init";
-  allTasks[schedulerState.schedulerTaskId - 1].userId = ROOT_USER_ID;
-  threadSetContext(allTasks[schedulerState.schedulerTaskId - 1].mainThread,
-    &allTasks[schedulerState.schedulerTaskId - 1]);
-  printDebugString("Configured scheduler task.\n");
+  allProcesses[schedulerState.schedulerProcessId - 1].mainThread = schedulerThread;
+  allProcesses[schedulerState.schedulerProcessId - 1].pid
+    = schedulerState.schedulerProcessId;
+  allProcesses[schedulerState.schedulerProcessId - 1].name = "init";
+  allProcesses[schedulerState.schedulerProcessId - 1].userId = ROOT_USER_ID;
+  threadSetContext(allProcesses[schedulerState.schedulerProcessId - 1].mainThread,
+    &allProcesses[schedulerState.schedulerProcessId - 1]);
+  printDebugString("Configured scheduler process.\n");
 
   // Initialize the global file descriptors.
   // Kernel stdin file descriptor doesn't need an update because they don't
   // receive stdin.  Direct kernel process stdout and stderr to the console.
-  standardKernelFileDescriptors[1].outputChannel.taskId
-    = schedulerState.consoleTaskId;
+  standardKernelFileDescriptors[1].outputChannel.pid
+    = schedulerState.consoleProcessId;
   standardKernelFileDescriptors[1].outputChannel.messageType
     = CONSOLE_WRITE_BUFFER;
-  standardKernelFileDescriptors[2].outputChannel.taskId
-    = schedulerState.consoleTaskId;
+  standardKernelFileDescriptors[2].outputChannel.pid
+    = schedulerState.consoleProcessId;
   standardKernelFileDescriptors[2].outputChannel.messageType
     = CONSOLE_WRITE_BUFFER;
 
   // Direct the input pipe of user process stdin to the console.  Direcdt the
   // output pipes of user process stdout and stderr to the console as well.
-  standardUserFileDescriptors[0].inputChannel.taskId
-    = schedulerState.consoleTaskId;
+  standardUserFileDescriptors[0].inputChannel.pid
+    = schedulerState.consoleProcessId;
   standardUserFileDescriptors[0].inputChannel.messageType
     = CONSOLE_WAIT_FOR_INPUT;
-  standardUserFileDescriptors[1].outputChannel.taskId
-    = schedulerState.consoleTaskId;
+  standardUserFileDescriptors[1].outputChannel.pid
+    = schedulerState.consoleProcessId;
   standardUserFileDescriptors[1].outputChannel.messageType
     = CONSOLE_WRITE_BUFFER;
-  standardUserFileDescriptors[2].outputChannel.taskId
-    = schedulerState.consoleTaskId;
+  standardUserFileDescriptors[2].outputChannel.pid
+    = schedulerState.consoleProcessId;
   standardUserFileDescriptors[2].outputChannel.messageType
     = CONSOLE_WRITE_BUFFER;
 
@@ -3789,32 +3789,32 @@ __attribute__((noinline)) void startScheduler(
     ii < HAL->memory->numExtraSchedulerStacks(USE_HAL_MEMORY_DEBUG);
     ii++
   ) {
-    if (threadProvision(NULL, dummyTask, NULL) == NULL) {
-      printString("Could not increase scheduler task's stack size.\n");
+    if (threadProvision(NULL, dummyProcess, NULL) == NULL) {
+      printString("Could not increase scheduler process's stack size.\n");
     }
   }
 
-  // Create the console task.  We used to have to double the size of the
-  // console's stack, so we create this task before we create anything else.
+  // Create the console process.  We used to have to double the size of the
+  // console's stack, so we create this process before we create anything else.
   // Leaving it at this point of initialization in case we ever have to come
   // back to that flow again.
-  TaskDescriptor *taskDescriptor
-    = &allTasks[schedulerState.consoleTaskId - 1];
-  if (taskCreate(taskDescriptor, runConsole, NULL) != taskSuccess) {
-    printString("Could not create console task.\n");
+  ProcessDescriptor *processDescriptor
+    = &allProcesses[schedulerState.consoleProcessId - 1];
+  if (processCreate(processDescriptor, runConsole, NULL) != processSuccess) {
+    printString("Could not create console process.\n");
   }
-  threadSetContext(taskDescriptor->mainThread, taskDescriptor);
-  taskDescriptor->taskId = schedulerState.consoleTaskId;
-  taskDescriptor->name = "console";
-  taskDescriptor->userId = ROOT_USER_ID;
-  printDebugString("Created console task.\n");
+  threadSetContext(processDescriptor->mainThread, processDescriptor);
+  processDescriptor->pid = schedulerState.consoleProcessId;
+  processDescriptor->name = "console";
+  processDescriptor->userId = ROOT_USER_ID;
+  printDebugString("Created console process.\n");
 
   for (uint8_t ii = 0;
     ii < HAL->memory->numExtraConsoleStacks(USE_HAL_MEMORY_DEBUG);
     ii++
   ) {
-    if (threadProvision(NULL, dummyTask, NULL) == NULL) {
-      printString("Could not increase console task's stack size.\n");
+    if (threadProvision(NULL, dummyProcess, NULL) == NULL) {
+      printString("Could not increase console process's stack size.\n");
     }
   }
 
@@ -3828,20 +3828,20 @@ __attribute__((noinline)) void startScheduler(
   printDebugString("Main stack size = ");
   printDebugInt(ABS_DIFF(
     ((intptr_t) schedulerThread),
-    ((intptr_t) allTasks[schedulerState.consoleTaskId - 1].mainThread)
+    ((intptr_t) allProcesses[schedulerState.consoleProcessId - 1].mainThread)
   ));
   printDebugString(" bytes\n");
   printDebugString("schedulerState size = ");
   printDebugInt(sizeof(SchedulerState));
   printDebugString(" bytes\n");
   printDebugString("messagesStorage size = ");
-  printDebugInt(sizeof(TaskMessage) * NANO_OS_NUM_MESSAGES);
+  printDebugInt(sizeof(ProcessMessage) * NANO_OS_NUM_MESSAGES);
   printDebugString(" bytes\n");
   printDebugString("ConsoleState size = ");
   printDebugInt(sizeof(ConsoleState));
   printDebugString(" bytes\n");
 
-  // schedulerState.firstUserTaskId isn't populated until HAL->initRootStorage
+  // schedulerState.firstUserProcessId isn't populated until HAL->initRootStorage
   // completes, so we need to call that as soon as we can.
   int rv = HAL->initRootStorage(&schedulerState);
   if (rv != 0) {
@@ -3851,16 +3851,16 @@ __attribute__((noinline)) void startScheduler(
   }
   printDebugString("Initialized root storage\n");
 
-  // Initialize all the kernel task file descriptors.
-  for (TaskId ii = 1; ii <= schedulerState.firstUserTaskId; ii++) {
-    allTasks[ii - 1].numFileDescriptors = NUM_STANDARD_FILE_DESCRIPTORS;
-    allTasks[ii - 1].fileDescriptors = standardKernelFileDescriptorsPointers;
+  // Initialize all the kernel process file descriptors.
+  for (ProcessId ii = 1; ii <= schedulerState.firstUserProcessId; ii++) {
+    allProcesses[ii - 1].numFileDescriptors = NUM_STANDARD_FILE_DESCRIPTORS;
+    allProcesses[ii - 1].fileDescriptors = standardKernelFileDescriptorsPointers;
   }
-  printDebugString("Initialized kernel task file descriptors.\n");
+  printDebugString("Initialized kernel process file descriptors.\n");
 
-  // Start the console by calling taskResume.
-  taskResume(&allTasks[schedulerState.consoleTaskId - 1], NULL);
-  printDebugString("Started console task.\n");
+  // Start the console by calling processResume.
+  processResume(&allProcesses[schedulerState.consoleProcessId - 1], NULL);
+  printDebugString("Started console process.\n");
 
   schedulerState.numShells = schedulerGetNumConsolePorts(&schedulerState);
   if (schedulerState.numShells <= 0) {
@@ -3870,7 +3870,7 @@ __attribute__((noinline)) void startScheduler(
     while(1);
   }
   // Irrespective of how many ports the console may be running, we can't run
-  // more shell tasks than what we're configured for.  Make sure we set a
+  // more shell processes than what we're configured for.  Make sure we set a
   // sensible limit.
   schedulerState.numShells
     = MIN(schedulerState.numShells, NANO_OS_MAX_NUM_SHELLS);
@@ -3878,46 +3878,46 @@ __attribute__((noinline)) void startScheduler(
   printDebugInt(schedulerState.numShells);
   printDebugString(" shells\n");
 
-  // We need to do an initial population of all the tasks because we need to
+  // We need to do an initial population of all the processes because we need to
   // get to the end of memory to run the memory manager in whatever is left
   // over.
-  for (TaskId ii = schedulerState.firstUserTaskId;
+  for (ProcessId ii = schedulerState.firstUserProcessId;
     ii <= NANO_OS_NUM_TASKS;
     ii++
   ) {
-    taskDescriptor = &allTasks[ii - 1];
-    if (taskCreate(taskDescriptor,
-      dummyTask, NULL) != taskSuccess
+    processDescriptor = &allProcesses[ii - 1];
+    if (processCreate(processDescriptor,
+      dummyProcess, NULL) != processSuccess
     ) {
-      printString("Could not create task ");
+      printString("Could not create process ");
       printInt(ii);
       printString(".\n");
     }
     threadSetContext(
-      taskDescriptor->mainThread, taskDescriptor);
-    taskDescriptor->taskId = ii;
-    taskDescriptor->userId = NO_USER_ID;
-    taskDescriptor->name = "dummy";
+      processDescriptor->mainThread, processDescriptor);
+    processDescriptor->pid = ii;
+    processDescriptor->userId = NO_USER_ID;
+    processDescriptor->name = "dummy";
   }
-  printDebugString("Created all tasks.\n");
+  printDebugString("Created all processes.\n");
 
-  // allTasks array is ordered console task, memory manager task, then either
-  // the first block device or the first user process.  So, we want the task
+  // allProcesses array is ordered console process, memory manager process, then either
+  // the first block device or the first user process.  So, we want the process
   // after the memory manager, which would be the value of
-  // schedulerState.memoryManagerTaskId since TaskIds are one-based instead of
+  // schedulerState.memoryManagerProcessId since ProcessIds are one-based instead of
   // zero-based.
   printDebugString("Console stack size = ");
   printDebugInt(ABS_DIFF(
-    ((uintptr_t) allTasks[schedulerState.memoryManagerTaskId].mainThread),
-    ((uintptr_t) allTasks[schedulerState.consoleTaskId - 1].mainThread))
+    ((uintptr_t) allProcesses[schedulerState.memoryManagerProcessId].mainThread),
+    ((uintptr_t) allProcesses[schedulerState.consoleProcessId - 1].mainThread))
     - sizeof(Coroutine)
   );
   printDebugString(" bytes\n");
 
   printDebugString("Coroutine stack size = ");
   printDebugInt(ABS_DIFF(
-    ((uintptr_t) allTasks[schedulerState.firstUserTaskId - 1].mainThread),
-    ((uintptr_t) allTasks[schedulerState.firstUserTaskId].mainThread))
+    ((uintptr_t) allProcesses[schedulerState.firstUserProcessId - 1].mainThread),
+    ((uintptr_t) allProcesses[schedulerState.firstUserProcessId].mainThread))
     - sizeof(Coroutine)
   );
   printDebugString(" bytes\n");
@@ -3930,28 +3930,28 @@ __attribute__((noinline)) void startScheduler(
   printDebugInt(sizeof(standardKernelFileDescriptors));
   printDebugString("\n");
 
-  // Create the memory manager task.  : THIS MUST BE THE LAST TASK
+  // Create the memory manager process.  : THIS MUST BE THE LAST TASK
   // CREATED BECAUSE WE WANT TO USE THE ENTIRE REST OF MEMORY FOR IT :
-  taskDescriptor = &allTasks[schedulerState.memoryManagerTaskId - 1];
-  if (taskCreate(taskDescriptor,
-    runMemoryManager, NULL) != taskSuccess
+  processDescriptor = &allProcesses[schedulerState.memoryManagerProcessId - 1];
+  if (processCreate(processDescriptor,
+    runMemoryManager, NULL) != processSuccess
   ) {
-    printString("Could not create memory manager task.\n");
+    printString("Could not create memory manager process.\n");
   }
-  threadSetContext(taskDescriptor->mainThread, taskDescriptor);
-  taskDescriptor->taskId = schedulerState.memoryManagerTaskId;
-  taskDescriptor->name = "memory manager";
-  taskDescriptor->userId = ROOT_USER_ID;
+  threadSetContext(processDescriptor->mainThread, processDescriptor);
+  processDescriptor->pid = schedulerState.memoryManagerProcessId;
+  processDescriptor->name = "memory manager";
+  processDescriptor->userId = ROOT_USER_ID;
   printDebugString("Created memory manager.\n");
 
-  // Start the memory manager by calling taskResume.
-  taskResume(&allTasks[schedulerState.memoryManagerTaskId - 1], NULL);
+  // Start the memory manager by calling processResume.
+  processResume(&allProcesses[schedulerState.memoryManagerProcessId - 1], NULL);
   printDebugString("Started memory manager.\n");
 
   // Assign the console ports to it.
   for (uint8_t ii = 0; ii < schedulerState.numShells; ii++) {
-    if (schedulerAssignPortToTaskId(
-      ii, schedulerState.memoryManagerTaskId) != taskSuccess
+    if (schedulerAssignPortToProcessId(
+      ii, schedulerState.memoryManagerProcessId) != processSuccess
     ) {
       printString(
         "WARNING: Could not assign console port to memory manager.\n");
@@ -3961,8 +3961,8 @@ __attribute__((noinline)) void startScheduler(
 
   // Set the shells for the ports.
   for (uint8_t ii = 0; ii < schedulerState.numShells; ii++) {
-    if (schedulerSetPortShell(ii, schedulerState.firstShellTaskId + ii)
-      != taskSuccess
+    if (schedulerSetPortShell(ii, schedulerState.firstShellProcessId + ii)
+      != processSuccess
     ) {
       printString("WARNING: Could not set shell for ");
       printString(shellNames[ii]);
@@ -3973,27 +3973,27 @@ __attribute__((noinline)) void startScheduler(
   printDebugString("Set shells for ports.\n");
 
   // Mark all the kernel processes as being part of the kernel ready queue.
-  // Skip over the scheduler (task 0).
-  allTasks[0].readyQueue = NULL;
-  for (TaskId ii = allTasks[1].taskId;
-    ii < schedulerState.firstUserTaskId;
+  // Skip over the scheduler (process 0).
+  allProcesses[0].readyQueue = NULL;
+  for (ProcessId ii = allProcesses[1].pid;
+    ii < schedulerState.firstUserProcessId;
     ii++
   ) {
-    allTasks[ii - 1].readyQueue
+    allProcesses[ii - 1].readyQueue
       = &schedulerState.ready[SCHEDULER_READY_QUEUE_KERNEL];
-    taskQueuePush(allTasks[ii - 1].readyQueue, &allTasks[ii - 1]);
+    processQueuePush(allProcesses[ii - 1].readyQueue, &allProcesses[ii - 1]);
   }
   printDebugString("Populated kernel ready queue.\n");
 
-  // The scheduler will take care of cleaning up the dummy tasks in the
+  // The scheduler will take care of cleaning up the dummy processes in the
   // ready queue.
-  for (TaskId ii = schedulerState.firstUserTaskId;
+  for (ProcessId ii = schedulerState.firstUserProcessId;
     ii <= NANO_OS_NUM_TASKS;
     ii++
   ) {
-    allTasks[ii - 1].readyQueue
+    allProcesses[ii - 1].readyQueue
       = &schedulerState.ready[SCHEDULER_READY_QUEUE_USER];
-    taskQueuePush(allTasks[ii - 1].readyQueue, &allTasks[ii - 1]);
+    processQueuePush(allProcesses[ii - 1].readyQueue, &allProcesses[ii - 1]);
   }
   printDebugString("Populated user ready queue.\n");
 
@@ -4003,8 +4003,8 @@ __attribute__((noinline)) void startScheduler(
   }
 
   // Get the memory manager and filesystem up and running.
-  taskResume(&allTasks[schedulerState.memoryManagerTaskId - 1], NULL);
-  taskResume(&allTasks[schedulerState.rootFsTaskId - 1], NULL);
+  processResume(&allProcesses[schedulerState.memoryManagerProcessId - 1], NULL);
+  processResume(&allProcesses[schedulerState.rootFsProcessId - 1], NULL);
   printDebugString("Started memory manager and filesystem.\n");
 
   // Allocate memory for the hostname.

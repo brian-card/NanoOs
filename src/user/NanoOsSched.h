@@ -37,7 +37,7 @@
 #ifndef NANO_OS_USER_SCHED_H
 #define NANO_OS_USER_SCHED_H
 
-#include "../kernel/Tasks.h"
+#include "../kernel/Processes.h"
 
 #ifdef __cplusplus
 extern "C"

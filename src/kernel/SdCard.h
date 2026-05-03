@@ -47,7 +47,7 @@ typedef struct BlockStorageDevice BlockStorageDevice;
 
 /// @struct SdCardState
 ///
-/// @brief State maintained by an SdCard task.
+/// @brief State maintained by an SdCard process.
 ///
 /// @param context A pointer to any implementation-specific context.
 /// @param blockSize The number of bytes per block on the SD card as presented
@@ -79,7 +79,7 @@ typedef struct SdCommandParams {
 
 /// @enum SdCardCommandResponse
 ///
-/// @brief Commands and responses understood by the SD card inter-task
+/// @brief Commands and responses understood by the SD card inter-process
 /// message handler.
 typedef enum SdCardCommandResponse {
   // Commands:
@@ -90,12 +90,12 @@ typedef enum SdCardCommandResponse {
 } SdCardCommandResponse;
 
 // Forward declaration to enable the rest of the type definitions.
-typedef struct msg_t TaskMessage;
+typedef struct msg_t ProcessMessage;
 
 /// @typedef SdCardCommandHandler
 ///
 /// @brief Definition of a filesystem command handler function.
-typedef int (*SdCardCommandHandler)(SdCardState*, TaskMessage*);
+typedef int (*SdCardCommandHandler)(SdCardState*, ProcessMessage*);
 
 int sdCardGetReadWriteParameters(
   SdCardState *sdCardState, SdCommandParams *sdCommandParams,

@@ -65,7 +65,7 @@ OS_OBJECTS := \
     $(OBJ_DIR)/NanoOs.o \
     $(OBJ_DIR)/NanoOsHardware.o \
     $(OBJ_DIR)/Overlay.o \
-    $(OBJ_DIR)/Tasks.o \
+    $(OBJ_DIR)/Processes.o \
     $(OBJ_DIR)/Scheduler.o \
     $(OBJ_DIR)/SdCard.o \
     $(OBJ_DIR)/SdCardSpi.o \

@@ -45,8 +45,8 @@
 #define startDebugMessage(message) \
   printString("["); \
   printInt(HAL->getElapsedMicroseconds(0)); \
-  printString(" Task "); \
-  printInt(getRunningTaskId()); \
+  printString(" Process "); \
+  printInt(getRunningProcessId()); \
   printString(" "); \
   printString((strrchr(__FILE__, '/')) \
     ? (strrchr(__FILE__, '/')  + 1) \

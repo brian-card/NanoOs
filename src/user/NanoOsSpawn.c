@@ -36,7 +36,7 @@
 #include "../kernel/MemoryManager.h"
 #include "../kernel/NanoOsTypes.h"
 #include "../kernel/Scheduler.h"
-#include "../kernel/Tasks.h"
+#include "../kernel/Processes.h"
 
 // Must come last
 #include "NanoOsStdio.h"
@@ -77,8 +77,8 @@ int nanoOsSpawnFileActionsAdddup2(
 ) {
   int returnValue = 0;
   
-  TaskDescriptor *taskDescriptor = getRunningTask();
-  if (taskDescriptor == NULL) {
+  ProcessDescriptor *processDescriptor = getRunningProcess();
+  if (processDescriptor == NULL) {
     // This should be impossible, but check anyway.
     returnValue = EOTHER;
     goto exit;
@@ -94,7 +94,7 @@ int nanoOsSpawnFileActionsAdddup2(
 
   fileActions->dup2[fileActions->numDup2].fd = newfildes;
   fileActions->dup2[fileActions->numDup2].dup
-    = taskDescriptor->fileDescriptors[fildes];
+    = processDescriptor->fileDescriptors[fildes];
   // We have to increment refCount here so that it doesn't get freed if the
   // caller closes the file descriptor before the scheduler runs again.
   fileActions->dup2[fileActions->numDup2].dup->refCount++;
@@ -230,20 +230,20 @@ int nanoOsSpawn(
     spawnArgs->envp = NULL;
   }
 
-  TaskMessage *taskMessage
-    = initSendTaskMessageToTaskId(
-    SCHEDULER_STATE->schedulerTaskId, SCHEDULER_SPAWN,
+  ProcessMessage *processMessage
+    = initSendProcessMessageToProcessId(
+    SCHEDULER_STATE->schedulerProcessId, SCHEDULER_SPAWN,
     spawnArgs, sizeof(*spawnArgs), true);
-  if (taskMessage == NULL) {
+  if (processMessage == NULL) {
     // The only way this should be possible is if all available messages are
     // in use, so use ENOMEM as the errno.
     errno = ENOMEM;
     goto freeSpawnArgs;
   }
 
-  taskMessageWaitForDone(taskMessage, NULL);
-  returnValue = (int) ((intptr_t) taskMessageData(taskMessage));
-  taskMessageRelease(taskMessage);
+  processMessageWaitForDone(processMessage, NULL);
+  returnValue = (int) ((intptr_t) processMessageData(processMessage));
+  processMessageRelease(processMessage);
 
   return returnValue;
 

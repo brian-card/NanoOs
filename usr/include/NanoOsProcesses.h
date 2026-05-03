@@ -3,9 +3,9 @@
 /// @author            Brian Card
 /// @date              03.08.2026
 ///
-/// @file              NanoOsTasks.h
+/// @file              NanoOsProcesses.h
 ///
-/// @brief             Exposed NanoOs kernel functionality related to tasks.
+/// @brief             Exposed NanoOs kernel functionality related to processes.
 ///
 /// @copyright
 ///                      Copyright (c) 2026 Brian Card
@@ -33,8 +33,8 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef NANO_OS_TASKS_H
-#define NANO_OS_TASKS_H
+#ifndef NANO_OS_PROCESSES_H
+#define NANO_OS_PROCESSES_H
 
 #include "NanoOsUser.h"
 #include "../../src/kernel/NanoOsTypes.h"
@@ -44,13 +44,13 @@ extern "C"
 {
 #endif
 
-static inline TaskInfo* getTaskInfo(void) {
-  return overlayMap.header.osApi->getTaskInfo();
+static inline ProcessInfo* getProcessInfo(void) {
+  return overlayMap.header.osApi->getProcessInfo();
 }
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // NANO_OS_TASKS_H
+#endif // NANO_OS_PROCESSES_H
 

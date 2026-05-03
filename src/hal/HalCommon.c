@@ -49,27 +49,27 @@
 BlockStorageDevice* halCommonInitRootSdSpiStorage(
   SdCardSpiArgs *sdCardSpiArgs
 ) {
-  TaskDescriptor *allTasks = SCHEDULER_STATE->allTasks;
+  ProcessDescriptor *allProcesses = SCHEDULER_STATE->allProcesses;
   
-  // Create the SD card task.
-  TaskDescriptor *taskDescriptor
-    = &allTasks[SCHEDULER_STATE->firstUserTaskId - 1];
-  if (taskCreate(
-    taskDescriptor, runSdCardSpi, sdCardSpiArgs)
-    != taskSuccess
+  // Create the SD card process.
+  ProcessDescriptor *processDescriptor
+    = &allProcesses[SCHEDULER_STATE->firstUserProcessId - 1];
+  if (processCreate(
+    processDescriptor, runSdCardSpi, sdCardSpiArgs)
+    != processSuccess
   ) {
-    printString("Could not start SD card task\n");
+    printString("Could not start SD card process\n");
     return NULL;
   }
-  threadSetContext(taskDescriptor->mainThread, taskDescriptor);
-  taskDescriptor->taskId = SCHEDULER_STATE->firstUserTaskId;
-  taskDescriptor->name = "SD card";
-  taskDescriptor->userId = ROOT_USER_ID;
+  threadSetContext(processDescriptor->mainThread, processDescriptor);
+  processDescriptor->pid = SCHEDULER_STATE->firstUserProcessId;
+  processDescriptor->name = "SD card";
+  processDescriptor->userId = ROOT_USER_ID;
   BlockStorageDevice *sdDevice = (BlockStorageDevice*) coroutineResume(
-    allTasks[SCHEDULER_STATE->firstUserTaskId - 1].mainThread, NULL);
+    allProcesses[SCHEDULER_STATE->firstUserProcessId - 1].mainThread, NULL);
   sdDevice->partitionNumber = 1;
-  SCHEDULER_STATE->firstUserTaskId++;
-  SCHEDULER_STATE->firstShellTaskId = SCHEDULER_STATE->firstUserTaskId;
+  SCHEDULER_STATE->firstUserProcessId++;
+  SCHEDULER_STATE->firstShellProcessId = SCHEDULER_STATE->firstUserProcessId;
   
   return sdDevice;
 }
@@ -102,25 +102,25 @@ int halCommonInitRootFilesystem(BlockStorageDevice *blockDevice) {
   fs.driverGetFileBlockMetadata = fat32GetFileBlockMetadata;
   fs.driverGetFilename = fat32GetFilename;
   
-  // Create the filesystem task.
-  SCHEDULER_STATE->rootFsTaskId = SCHEDULER_STATE->firstUserTaskId;
-  TaskDescriptor *allTasks = SCHEDULER_STATE->allTasks;
-  TaskDescriptor *taskDescriptor = &allTasks[SCHEDULER_STATE->rootFsTaskId - 1];
-  if (taskCreate(taskDescriptor, runFilesystem, &fs)
-    != taskSuccess
+  // Create the filesystem process.
+  SCHEDULER_STATE->rootFsProcessId = SCHEDULER_STATE->firstUserProcessId;
+  ProcessDescriptor *allProcesses = SCHEDULER_STATE->allProcesses;
+  ProcessDescriptor *processDescriptor = &allProcesses[SCHEDULER_STATE->rootFsProcessId - 1];
+  if (processCreate(processDescriptor, runFilesystem, &fs)
+    != processSuccess
   ) {
-    printString("Could not start filesystem task\n");
+    printString("Could not start filesystem process\n");
     return -ENOMEM;
   }
-  threadSetContext(taskDescriptor->mainThread, taskDescriptor);
-  taskDescriptor->taskId = SCHEDULER_STATE->rootFsTaskId;
-  taskDescriptor->name = "filesystem";
-  taskDescriptor->userId = ROOT_USER_ID;
+  threadSetContext(processDescriptor->mainThread, processDescriptor);
+  processDescriptor->pid = SCHEDULER_STATE->rootFsProcessId;
+  processDescriptor->name = "filesystem";
+  processDescriptor->userId = ROOT_USER_ID;
   // Let it pick up the arguments
-  taskResume(taskDescriptor, NULL);
+  processResume(processDescriptor, NULL);
   
-  SCHEDULER_STATE->firstUserTaskId = SCHEDULER_STATE->rootFsTaskId + 1;
-  SCHEDULER_STATE->firstShellTaskId = SCHEDULER_STATE->firstUserTaskId;
+  SCHEDULER_STATE->firstUserProcessId = SCHEDULER_STATE->rootFsProcessId + 1;
+  SCHEDULER_STATE->firstShellProcessId = SCHEDULER_STATE->firstUserProcessId;
   
   return 0;
 }

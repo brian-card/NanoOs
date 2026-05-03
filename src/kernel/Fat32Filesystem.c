@@ -2205,7 +2205,7 @@ int fat32GetFileBlockMetadata(
 ///          the space can be reclaimed by future allocations.
 ///
 ///          This function does not check whether the file is currently open.
-///          The caller (typically the filesystem task) is responsible for
+///          The caller (typically the filesystem process) is responsible for
 ///          ensuring that no open handles reference the file being removed.
 ///
 /// @param driverState  Pointer to a Fat32DriverState (passed as void*).
