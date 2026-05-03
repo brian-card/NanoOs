@@ -154,7 +154,7 @@ void* callOverlayFunction(const char *overlayDir, const char *overlay,
   
   char *functionCopy = (char*) malloc(strlen(function) + 1);
   if (functionCopy == NULL) {
-    goto freeOverlayDir;
+    goto freeOverlayPath;
   }
   strcpy(functionCopy, function);
   
