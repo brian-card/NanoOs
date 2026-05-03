@@ -152,6 +152,13 @@ extern "C"
 #define processYield() \
   coroutineYield(NULL, COROUTINE_STATE_BLOCKED)
 
+/// @def processYieldTo
+///
+/// @brief Call to yield the processor to a specific process.
+#define processYieldTo(processDescriptor) \
+  coroutineYieldTo((processDescriptor)->mainThread, \
+    NULL, COROUTINE_STATE_BLOCKED)
+
 /// @def processYieldValue
 ///
 /// @brief Yield a value back to the scheduler.
