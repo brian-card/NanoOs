@@ -394,11 +394,10 @@ int fat32SearchDirectory(
   FilesystemState    *fs = ds->filesystemState;
   BlockStorageDevice *bd = fs->blockDevice;
 
-  char *lfnBuffer = (char *) malloc(FAT32_MAX_FILENAME_LENGTH + 1);
-  if (lfnBuffer == NULL) {
-    return FAT32_NO_MEMORY;
-  }
-  lfnBuffer[0] = '\0';
+  // The LFN assembly buffer is allocated on demand when the first fragment
+  // of a long-name sequence is encountered, and sized to exactly
+  // (ordinal * 13 + 1) bytes rather than the full 256-byte maximum.
+  char *lfnBuffer = NULL;
 
   uint32_t currentCluster = dirCluster;
   int      status = FAT32_FILE_NOT_FOUND;
@@ -438,9 +437,10 @@ int fat32SearchDirectory(
           break;
         }
 
-        // Deleted entry — reset LFN state and move on.
+        // Deleted entry — discard any in-progress LFN assembly.
         if (entry->name[0] == FAT32_ENTRY_FREE) {
-          lfnBuffer[0] = '\0';
+          free(lfnBuffer);
+          lfnBuffer = NULL;
           continue;
         }
 
@@ -449,9 +449,24 @@ int fat32SearchDirectory(
             == FAT32_ATTR_LONG_NAME) {
           Fat32LfnEntry *lfn = (Fat32LfnEntry *) entry;
           if (lfn->ordinal & FAT32_LFN_LAST_ENTRY_MASK) {
-            memset(lfnBuffer, 0, FAT32_MAX_FILENAME_LENGTH + 1);
+            // First on-disk entry of a new LFN sequence (highest ordinal).
+            // Allocate a buffer sized to exactly this name's length.
+            free(lfnBuffer);
+            uint8_t ordinal =
+              lfn->ordinal & FAT32_LFN_ORDINAL_MASK;
+            uint32_t bufSize =
+              (uint32_t) ordinal * FAT32_LFN_CHARS_PER_ENTRY + 1;
+            lfnBuffer = (char *) malloc(bufSize);
+            if (lfnBuffer == NULL) {
+              status = FAT32_NO_MEMORY;
+              done = true;
+              break;
+            }
+            memset(lfnBuffer, 0, bufSize);
           }
-          fat32AssembleLfnEntry(lfn, lfnBuffer);
+          if (lfnBuffer != NULL) {
+            fat32AssembleLfnEntry(lfn, lfnBuffer);
+          }
           continue;
         }
 
@@ -460,7 +475,7 @@ int fat32SearchDirectory(
         bool match = false;
 
         // Try the assembled LFN first.
-        if (lfnBuffer[0] != '\0') {
+        if ((lfnBuffer != NULL) && (lfnBuffer[0] != '\0')) {
           match = (fat32StrcaseCmp(lfnBuffer, name) == 0);
         }
 
@@ -474,8 +489,8 @@ int fat32SearchDirectory(
         if (match) {
           memcpy(&result->entry, entry, sizeof(Fat32DirectoryEntry));
 
-          if (lfnBuffer[0] != '\0') {
-            // Transfer ownership of the heap-allocated lfnBuffer.
+          if ((lfnBuffer != NULL) && (lfnBuffer[0] != '\0')) {
+            // Transfer ownership of the right-sized lfnBuffer.
             result->longName = lfnBuffer;
             lfnBuffer = NULL;
           } else {
@@ -485,8 +500,7 @@ int fat32SearchDirectory(
             if (result->longName == NULL) {
               status = FAT32_NO_MEMORY;
               done = true;
-              lfnBuffer[0] = '\0';
-              continue;
+              break;
             }
             fat32FormatShortName(entry->name, result->longName);
           }
@@ -499,8 +513,10 @@ int fat32SearchDirectory(
           done = true;
         }
 
-        if (lfnBuffer != NULL) {
-          lfnBuffer[0] = '\0';
+        // Reset LFN state between short entries.
+        if (!done) {
+          free(lfnBuffer);
+          lfnBuffer = NULL;
         }
       }
     }
@@ -621,11 +637,6 @@ int fat32ResolveParentDirectory(
     start++;
   }
 
-  char *component = (char *) malloc(FAT32_MAX_FILENAME_LENGTH + 1);
-  if (component == NULL) {
-    return FAT32_NO_MEMORY;
-  }
-
   Fat32DirSearchResult searchResult;
 
   int result = FAT32_SUCCESS;
@@ -640,12 +651,20 @@ int fat32ResolveParentDirectory(
     if (len > FAT32_MAX_FILENAME_LENGTH) {
       len = FAT32_MAX_FILENAME_LENGTH;
     }
+
+    char *component = (char *) malloc(len + 1);
+    if (component == NULL) {
+      result = FAT32_NO_MEMORY;
+      break;
+    }
     memcpy(component, start, len);
     component[len] = '\0';
 
     searchResult.longName = NULL;
     result = fat32SearchDirectory(
       ds, currentCluster, component, &searchResult);
+    free(component);
+
     if (result != FAT32_SUCCESS) {
       free(searchResult.longName);
       break;
@@ -676,7 +695,6 @@ int fat32ResolveParentDirectory(
     }
   }
 
-  free(component);
   *parentCluster = currentCluster;
   return result;
 }
