@@ -2551,6 +2551,12 @@ int schedulerExecveCommandHandler(
   // The arguments provided to this command are going to replace the ones that
   // spawned the original.  We need to free the original envp if there was one.
   if (processDescriptor->envp != NULL) {
+    printString(__func__);
+    printString(": ");
+    printInt(__LINE__);
+    printString(": Freeing processDescriptor->envp = 0x");
+    printHex((uintptr_t) processDescriptor->envp);
+    printString("\n");
     for (int ii = 0; processDescriptor->envp[ii] != NULL; ii++)  {
       schedFree(processDescriptor->envp[ii]);
     }
@@ -2582,6 +2588,12 @@ int schedulerExecveCommandHandler(
   }
 
   if (envp != NULL) {
+    printString(__func__);
+    printString(": ");
+    printInt(__LINE__);
+    printString(": Assigning envp = 0x");
+    printHex((uintptr_t) envp);
+    printString(" to scheduler\n");
     if (assignMemory(envp, SCHEDULER_STATE->schedulerProcessId) != 0) {
       printString(__func__);
       printString(": ");
@@ -2695,6 +2707,14 @@ int schedulerExecveCommandHandler(
   }
 
   if (envp != NULL) {
+    printString(__func__);
+    printString(": ");
+    printInt(__LINE__);
+    printString(": Assigning envp = 0x");
+    printHex((uintptr_t) envp);
+    printString(" to process ");
+    printInt(processDescriptor->pid);
+    printString("\n");
     if (assignMemory(envp, processDescriptor->pid) != 0) {
       printString(__func__);
       printString(": ");
@@ -3599,6 +3619,12 @@ freeExecArgs:
   }
 
   if (execArgs->envp != NULL) {
+    printString(__func__);
+    printString(": ");
+    printInt(__LINE__);
+    printString(": Freeing execArgs->envp = 0x");
+    printHex((uintptr_t) processDescriptor->envp);
+    printString("\n");
     for (int ii = 0; execArgs->envp[ii] != NULL; ii++) {
       schedFree(execArgs->envp[ii]);
     }
@@ -3761,6 +3787,12 @@ void runScheduler(void) {
           schedFree(pwd);
           schedFree(passwdStringBuffer);
           if (processDescriptor->envp != NULL) {
+            printString(__func__);
+            printString(": ");
+            printInt(__LINE__);
+            printString(": Freeing processDescriptor->envp = 0x");
+            printHex((uintptr_t) processDescriptor->envp);
+            printString("\n");
             for (int ii = 0; processDescriptor->envp[ii] != NULL; ii++) {
               schedFree(processDescriptor->envp[ii]);
             }
@@ -3772,6 +3804,16 @@ void runScheduler(void) {
       } while (0);
       schedFree(pwd);
       schedFree(passwdStringBuffer);
+    }
+  } else if (processRunning(processDescriptor) == false) {
+    // The process is no longer running, but it wasn't a shell process.  That
+    // means its envp isn't going to be reused.  Free it.
+    if (processDescriptor->envp != NULL) {
+      for (int ii = 0; processDescriptor->envp[ii] != NULL; ii++) {
+        schedFree(processDescriptor->envp[ii]);
+      }
+      schedFree(processDescriptor->envp);
+      processDescriptor->envp = NULL;
     }
   }
 
