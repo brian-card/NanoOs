@@ -2548,6 +2548,15 @@ int schedulerExecveCommandHandler(
   }
   char **envp = execArgs->envp;
 
+  // The arguments provided to this command are going to replace the ones that
+  // spawned the original.  We need to free the original envp if there was one.
+  if (processDescriptor->envp != NULL) {
+    for (int ii = 0; processDescriptor->envp[ii] != NULL; ii++)  {
+      schedFree(processDescriptor->envp[ii]);
+    }
+    schedFree(processDescriptor->envp);
+  }
+
   if (assignMemory(execArgs, SCHEDULER_STATE->schedulerProcessId) != 0) {
     printString("WARNING: Could not assign execArgs to scheduler.\n");
     printString("Undefined behavior.\n");
@@ -2573,11 +2582,19 @@ int schedulerExecveCommandHandler(
 
   if (envp != NULL) {
     if (assignMemory(envp, SCHEDULER_STATE->schedulerProcessId) != 0) {
+      printString(__func__);
+      printString(": ");
+      printInt(__LINE__);
+      printString(": ");
       printString("WARNING: Could not assign envp to scheduler.\n");
       printString("Undefined behavior.\n");
     }
     for (int ii = 0; envp[ii] != NULL; ii++) {
       if (assignMemory(envp[ii], SCHEDULER_STATE->schedulerProcessId) != 0) {
+        printString(__func__);
+        printString(": ");
+        printInt(__LINE__);
+        printString(": ");
         printString("WARNING: Could not assign envp[");
         printInt(ii);
         printString("] to scheduler.\n");
@@ -2662,11 +2679,19 @@ int schedulerExecveCommandHandler(
 
   if (envp != NULL) {
     if (assignMemory(envp, processDescriptor->pid) != 0) {
+      printString(__func__);
+      printString(": ");
+      printInt(__LINE__);
+      printString(": ");
       printString("WARNING: Could not assign envp to exec process.\n");
       printString("Undefined behavior.\n");
     }
     for (int ii = 0; envp[ii] != NULL; ii++) {
       if (assignMemory(envp[ii], processDescriptor->pid) != 0) {
+        printString(__func__);
+        printString(": ");
+        printInt(__LINE__);
+        printString(": ");
         printString("WARNING: Could not assign envp[");
         printInt(ii);
         printString("] to exec process.\n");
@@ -2920,11 +2945,19 @@ int schedulerSpawnCommandHandler(
 
   if (envp != NULL) {
     if (assignMemory(envp, processDescriptor->pid) != 0) {
+      printString(__func__);
+      printString(": ");
+      printInt(__LINE__);
+      printString(": ");
       printString("WARNING: Could not assign envp to spawn process.\n");
       printString("Undefined behavior.\n");
     }
     for (int ii = 0; envp[ii] != NULL; ii++) {
       if (assignMemory(envp[ii], processDescriptor->pid) != 0) {
+        printString(__func__);
+        printString(": ");
+        printInt(__LINE__);
+        printString(": ");
         printString("WARNING: Could not assign envp[");
         printInt(ii);
         printString("] to spawn process.\n");
@@ -3008,7 +3041,8 @@ int schedulerAssignMemoryCommandHandler(
     printInt(pid(processMessageFrom(processMessage)));
     printString(" to the scheduler\n");
     printString("Undefined behavior.\n");
-    processMessageInit(processMessage, 0, (void*) ((intptr_t) returnValue), 0, true);
+    processMessageInit(processMessage, 0,
+      (void*) ((intptr_t) returnValue), 0, true);
   }
 
   processMessageSetDone(processMessage);
