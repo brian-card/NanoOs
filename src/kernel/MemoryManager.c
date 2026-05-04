@@ -866,7 +866,9 @@ int memoryManagerAssignMemoryCommandHandler(
 ) {
   int returnValue = 0;
   
-  if (pid(processMessageFrom(incoming)) == SCHEDULER_STATE->schedulerProcessId) {
+  if (pid(processMessageFrom(incoming))
+    == SCHEDULER_STATE->schedulerProcessId
+  ) {
     AssignMemoryParams *assignMemoryParams
       = (AssignMemoryParams*) processMessageData(incoming);
     if (isDynamicPointer(assignMemoryParams->ptr)) {
@@ -880,7 +882,9 @@ int memoryManagerAssignMemoryCommandHandler(
       if (cur != NULL) {
         cur->owner = assignMemoryParams->pid;
       } else {
-        printString("ERROR: Attempt to assign unallocated memory.\n");
+        printString("ERROR: Attempt to assign unallocated memory 0x");
+        printHex((uintptr_t) assignMemoryParams->ptr);
+        printString("\n");
         returnValue = -1;
       }
     }
@@ -890,6 +894,7 @@ int memoryManagerAssignMemoryCommandHandler(
     returnValue = -1;
   }
   
+  processMessageData(incoming) = (void*) ((intptr_t) returnValue);
   processMessageSetDone(incoming);
   
   return returnValue;
