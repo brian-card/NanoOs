@@ -2555,6 +2555,7 @@ int schedulerExecveCommandHandler(
       schedFree(processDescriptor->envp[ii]);
     }
     schedFree(processDescriptor->envp);
+    processDescriptor->envp = NULL;
   }
 
   if (assignMemory(execArgs, SCHEDULER_STATE->schedulerProcessId) != 0) {
@@ -2655,21 +2656,37 @@ int schedulerExecveCommandHandler(
   }
 
   if (assignMemory(execArgs, processDescriptor->pid) != 0) {
+    printString(__func__);
+    printString(": ");
+    printInt(__LINE__);
+    printString(": ");
     printString("WARNING: Could not assign execArgs to exec process.\n");
     printString("Undefined behavior.\n");
   }
 
   if (assignMemory(pathname, processDescriptor->pid) != 0) {
+    printString(__func__);
+    printString(": ");
+    printInt(__LINE__);
+    printString(": ");
     printString("WARNING: Could not assign pathname to exec process.\n");
     printString("Undefined behavior.\n");
   }
 
   if (assignMemory(argv, processDescriptor->pid) != 0) {
+    printString(__func__);
+    printString(": ");
+    printInt(__LINE__);
+    printString(": ");
     printString("WARNING: Could not assign argv to exec process.\n");
     printString("Undefined behavior.\n");
   }
   for (int ii = 0; argv[ii] != NULL; ii++) {
     if (assignMemory(argv[ii], processDescriptor->pid) != 0) {
+      printString(__func__);
+      printString(": ");
+      printInt(__LINE__);
+      printString(": ");
       printString("WARNING: Could not assign argv[");
       printInt(ii);
       printString("] to exec process.\n");
@@ -3450,23 +3467,40 @@ int schedulerRunOverlayCommand(
   execArgs->schedulerState = schedulerState;
 
   if (assignMemory(execArgs, processDescriptor->pid) != 0) {
+    printString(__func__);
+    printString(": ");
+    printInt(__LINE__);
+    printString(": ");
     printString("WARNING: Could not assign execArgs to exec process.\n");
     printString("Undefined behavior.\n");
   }
 
   if (assignMemory(execArgs->pathname, processDescriptor->pid) != 0) {
-    printString("WARNING: Could not assign execArgs->pathname to exec process.\n");
+    printString(__func__);
+    printString(": ");
+    printInt(__LINE__);
+    printString(": ");
+    printString(
+      "WARNING: Could not assign execArgs->pathname to exec process.\n");
     printString("Undefined behavior.\n");
   }
 
   if (execArgs->argv != NULL) {
     if (assignMemory(execArgs->argv, processDescriptor->pid) != 0) {
+      printString(__func__);
+      printString(": ");
+      printInt(__LINE__);
+      printString(": ");
       printString("WARNING: Could not assign argv to exec process.\n");
       printString("Undefined behavior.\n");
     }
 
     for (int ii = 0; execArgs->argv[ii] != NULL; ii++) {
       if (assignMemory(execArgs->argv[ii], processDescriptor->pid) != 0) {
+        printString(__func__);
+        printString(": ");
+        printInt(__LINE__);
+        printString(": ");
         printString("WARNING: Could not assign execArgs->argv[");
         printInt(ii);
         printString("] to exec process.\n");
@@ -3477,6 +3511,10 @@ int schedulerRunOverlayCommand(
 
   if (execArgs->envp != NULL) {
     if (assignMemory(execArgs->envp, processDescriptor->pid) != 0) {
+      printString(__func__);
+      printString(": ");
+      printInt(__LINE__);
+      printString(": ");
       printString(
         "WARNING: Could not assign execArgs->envp to exec process.\n");
       printString("Undefined behavior.\n");
@@ -3484,6 +3522,10 @@ int schedulerRunOverlayCommand(
 
     for (int ii = 0; execArgs->envp[ii] != NULL; ii++) {
       if (assignMemory(execArgs->envp[ii], processDescriptor->pid) != 0) {
+        printString(__func__);
+        printString(": ");
+        printInt(__LINE__);
+        printString(": ");
         printString("WARNING: Could not assign execArgs->envp[");
         printInt(ii);
         printString("] to exec process\n");
@@ -3686,16 +3728,16 @@ void runScheduler(void) {
         passwdStringBuffer
           = (char*) schedMalloc(NANO_OS_PASSWD_STRING_BUF_SIZE);
         if (passwdStringBuffer == NULL) {
-          fprintf(stderr,
-            "ERROR! Could not allocate space for passwdStringBuffer in %s.\n",
-            "runScheduler");
+          printString(
+            "ERROR! Could not allocate space for passwdStringBuffer in "
+            "runScheduler\n");
           break;
         }
         
         pwd = (struct passwd*) schedMalloc(sizeof(struct passwd));
         if (pwd == NULL) {
-          fprintf(stderr,
-            "ERROR! Could not allocate space for pwd in %s.\n", "runScheduler");
+          printString("ERROR! Could not allocate space for pwd in "
+            "runScheduler\n");
           break;
         }
         
@@ -3703,8 +3745,9 @@ void runScheduler(void) {
         nanoOsGetpwuid_r(processDescriptor->userId, pwd,
           passwdStringBuffer, NANO_OS_PASSWD_STRING_BUF_SIZE, &result);
         if (result == NULL) {
-          fprintf(stderr,
-            "Could not find passwd info for uid %d\n", processDescriptor->userId);
+          printString("Could not find passwd info for uid ");
+          printInt(processDescriptor->userId);
+          printString("\n");
           break;
         }
         
@@ -3722,6 +3765,7 @@ void runScheduler(void) {
               schedFree(processDescriptor->envp[ii]);
             }
             schedFree(processDescriptor->envp);
+            processDescriptor->envp = NULL;
           }
           return;
         }
