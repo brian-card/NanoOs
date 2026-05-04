@@ -191,7 +191,7 @@ char** parseArgs(char *command, int *argc) {
   // order to do this, we need to know the maximum number of arguments we'll be
   // working with.  That will be the number of tokens separated by whitespace.
   int maxNumArgs = getNumTokens(command);
-  argv = (char**) malloc((maxNumArgs + 1) * sizeof(char*));
+  argv = (char**) calloc(1, (maxNumArgs + 1) * sizeof(char*));
   if (argv == NULL) {
     // Nothing we can do.  Fail.
     return argv; // NULL

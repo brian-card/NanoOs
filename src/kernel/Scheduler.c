@@ -3456,7 +3456,7 @@ int schedulerRunOverlayCommand(
   size_t argvLen = 0;
   for (; argv[argvLen] != NULL; argvLen++);
   argvLen++; // Account for the terminating NULL element
-  execArgs->argv = (char**) schedMalloc(argvLen * sizeof(char*));
+  execArgs->argv = (char**) schedCalloc(1, argvLen * sizeof(char*));
   if (execArgs->argv == NULL) {
     returnValue = -ENOMEM;
     goto freeExecArgs;
