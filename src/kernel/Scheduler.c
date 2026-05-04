@@ -1196,7 +1196,7 @@ int schedulerExecve(const char *pathname,
     return -1;
   }
 
-  ExecArgs *execArgs = (ExecArgs*) malloc(sizeof(ExecArgs));
+  ExecArgs *execArgs = (ExecArgs*) calloc(1, sizeof(ExecArgs));
   if (execArgs == NULL) {
     errno = ENOMEM;
     return -1;
@@ -1212,7 +1212,7 @@ int schedulerExecve(const char *pathname,
   size_t argvLen = 0;
   for (; argv[argvLen] != NULL; argvLen++);
   argvLen++; // Account for the terminating NULL element
-  execArgs->argv = (char**) malloc(argvLen * sizeof(char*));
+  execArgs->argv = (char**) calloc(1, argvLen * sizeof(char*));
   if (execArgs->argv == NULL) {
     errno = ENOMEM;
     goto freeExecArgs;
@@ -1237,7 +1237,7 @@ int schedulerExecve(const char *pathname,
     size_t envpLen = 0;
     for (; envp[envpLen] != NULL; envpLen++);
     envpLen++; // Account for the terminating NULL element
-    execArgs->envp = (char**) malloc(envpLen * sizeof(char*));
+    execArgs->envp = (char**) calloc(1, envpLen * sizeof(char*));
     if (execArgs->envp == NULL) {
       errno = ENOMEM;
       goto freeExecArgs;
