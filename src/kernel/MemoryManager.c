@@ -818,7 +818,9 @@ int memoryManagerFreeProcessMemoryCommandHandler(
   MemoryManagerState *memoryManagerState, ProcessMessage *incoming
 ) {
   int returnValue = 0;
-  if (pid(processMessageFrom(incoming)) == SCHEDULER_STATE->schedulerProcessId) {
+  if (pid(processMessageFrom(incoming))
+    == SCHEDULER_STATE->schedulerProcessId
+  ) {
     ProcessId pid = (ProcessId) ((uintptr_t) processMessageData(incoming));
     localFreeProcessMemory(memoryManagerState, pid);
     processMessageData(incoming) = (void*) ((uintptr_t) 0);
@@ -886,6 +888,7 @@ int memoryManagerAssignMemoryCommandHandler(
         printHex((uintptr_t) assignMemoryParams->ptr);
         printString("\n");
         returnValue = -1;
+        memoryManagerDumpMemoryAllocations(memoryManagerState, NULL);
       }
     }
   } else {
@@ -920,6 +923,7 @@ int memoryManagerDumpMemoryAllocations(
   int returnValue = 0;
   
   printString("Outstanding allocations:\n");
+  MemNode *prev = NULL;
   for (MemNode *cur = memoryManagerState->allocated;
     cur != NULL;
     cur = cur->next
@@ -931,9 +935,16 @@ int memoryManagerDumpMemoryAllocations(
     printString(" bytes owned by ");
     printInt(cur->owner);
     printString("\n");
+    if (cur->prev != prev) {
+      printString("  - cur->prev = 0x");
+      printHex((uintptr_t) &cur->prev[1]);
+      printString("\n");
+    }
+    prev = cur;
   }
   
   printString("Available memory blocks:\n");
+  prev = NULL;
   for (MemNode *cur = memoryManagerState->firstFree;
     cur != NULL;
     cur = cur->next
@@ -943,6 +954,12 @@ int memoryManagerDumpMemoryAllocations(
     printString(": ");
     printInt(cur->size);
     printString(" bytes available\n");
+    if (cur->prev != prev) {
+      printString("  - cur->prev = 0x");
+      printHex((uintptr_t) &cur->prev[1]);
+      printString("\n");
+    }
+    prev = cur;
   }
   
   processMessageSetDone(incoming);
