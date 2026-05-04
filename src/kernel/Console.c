@@ -977,9 +977,9 @@ void* runConsole(void *args) {
     // Set the port-specific data.
     consoleState.consolePorts[port].portId = ii;
     consoleState.consolePorts[port].consoleBufferIndex = 0;
-    consoleState.consolePorts[port].inputOwner = TASK_ID_NOT_SET;
-    consoleState.consolePorts[port].outputOwner = TASK_ID_NOT_SET;
-    consoleState.consolePorts[port].shell = TASK_ID_NOT_SET;
+    consoleState.consolePorts[port].inputOwner = PROCESS_ID_NOT_SET;
+    consoleState.consolePorts[port].outputOwner = PROCESS_ID_NOT_SET;
+    consoleState.consolePorts[port].shell = PROCESS_ID_NOT_SET;
     consoleState.consolePorts[port].waitingForInput = false;
     consoleState.consolePorts[port].readByte = readSerialByte;
     consoleState.consolePorts[port].echo = true;
@@ -995,7 +995,7 @@ void* runConsole(void *args) {
       if ((byteRead == ASCII_NEWLINE) || (byteRead == ASCII_RETURN)
         || (byteRead == ASCII_ESCAPE)
       ) {
-        if ((consolePort->inputOwner != TASK_ID_NOT_SET)
+        if ((consolePort->inputOwner != PROCESS_ID_NOT_SET)
           && (consolePort->waitingForInput == true)
         ) {
           consolePort->consoleBuffer->buffer[consolePort->consoleBufferIndex]

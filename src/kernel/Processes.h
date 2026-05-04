@@ -33,8 +33,8 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef TASKS_H
-#define TASKS_H
+#ifndef PROCESSES_H
+#define PROCESSES_H
 
 // Custom includes
 #include "NanoOsTypes.h"
@@ -51,27 +51,27 @@ extern "C"
 #define processNomem    coroutineNomem
 #define processTimedout coroutineTimedout
 
-/// @def TASK_ID_NOT_SET
+/// @def PROCESS_ID_NOT_SET
 ///
 /// @brief Value to be used to indicate that a process ID has not been set for
 /// a ProcessDescriptor object.
-#define TASK_ID_NOT_SET \
+#define PROCESS_ID_NOT_SET \
   ((uint8_t) 0x0f)
 
-/// @def TASK_STATE_WAIT
+/// @def PROCESS_STATE_WAIT
 ///
 /// @brief State a process is in when waiting indefinitely.
-#define TASK_STATE_WAIT COROUTINE_STATE_WAIT
+#define PROCESS_STATE_WAIT COROUTINE_STATE_WAIT
 
-/// @def TASK_STATE_TIMEDWAIT
+/// @def PROCESS_STATE_TIMEDWAIT
 ///
 /// @brief State a process is in when waiing for a limited amount of time.
-#define TASK_STATE_TIMEDWAIT COROUTINE_STATE_TIMEDWAIT
+#define PROCESS_STATE_TIMEDWAIT COROUTINE_STATE_TIMEDWAIT
 
-/// @def TASK_STATE_NOT_RUNNING
+/// @def PROCESS_STATE_NOT_RUNNING
 ///
 /// @brief State a process is in when it is not running.
-#define TASK_STATE_NOT_RUNNING COROUTINE_STATE_NOT_RUNNING
+#define PROCESS_STATE_NOT_RUNNING COROUTINE_STATE_NOT_RUNNING
 
 /// @def getRunningProcess
 ///
@@ -287,4 +287,4 @@ char** parseArgs(char *command, int *argc);
 } // extern "C"
 #endif
 
-#endif // TASKS_H
+#endif // PROCESSES_H

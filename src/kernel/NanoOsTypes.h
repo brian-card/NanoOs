@@ -47,24 +47,24 @@ extern "C"
 
 // Constants
 
-/// @def NANO_OS_NUM_TASKS
+/// @def NANO_OS_NUM_PROCESSES
 ///
 /// @brief The total number of concurrent processes that can be run by the OS,
 /// including the scheduler.
 ///
 /// @note If this value is increased beyond 15, the number of bits used to store
 /// the owner in a MemNode in MemoryManager.cpp must be extended and the value
-/// of TASK_ID_NOT_SET must be changed in Processes.h.  If this value is
+/// of PROCESS_ID_NOT_SET must be changed in Processes.h.  If this value is
 /// increased beyond 255, then the type defined by ProcessId below must also
 /// be extended.
-#define NANO_OS_NUM_TASKS                             9
+#define NANO_OS_NUM_PROCESSES                             9
 
-/// @def SCHEDULER_NUM_TASKS
+/// @def SCHEDULER_NUM_PROCESSES
 ///
 /// @brief The number of processes managed by the scheduler.  This is one fewer
 /// than the total number of processes managed by NanoOs since the scheduler is
 /// a process.
-#define SCHEDULER_NUM_TASKS (NANO_OS_NUM_TASKS - 1)
+#define SCHEDULER_NUM_PROCESSES (NANO_OS_NUM_PROCESSES - 1)
 
 /// @def SCHEDULER_NUM_READY_QUEUES
 ///
@@ -269,7 +269,7 @@ typedef struct ProcessInfo {
 /// @param numElements The number of elements currently in the queue.
 typedef struct ProcessQueue {
   const char *name;
-  ProcessDescriptor *processes[SCHEDULER_NUM_TASKS];
+  ProcessDescriptor *processes[SCHEDULER_NUM_PROCESSES];
   uint8_t head:4;
   uint8_t tail:4;
   uint8_t numElements:4;
@@ -306,7 +306,7 @@ typedef struct ProcessQueue {
 /// @param runScheduler Function pointer to the runScheduler function in the
 ///   Scheduler library.
 typedef struct SchedulerState {
-  ProcessDescriptor allProcesses[NANO_OS_NUM_TASKS];
+  ProcessDescriptor allProcesses[NANO_OS_NUM_PROCESSES];
   ProcessQueue ready[SCHEDULER_NUM_READY_QUEUES];
   ProcessQueue *currentReady;
   ProcessQueue waiting;

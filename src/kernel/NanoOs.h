@@ -74,10 +74,10 @@ extern "C"
 /// @brief The numerical value that indicates that a process is not owned.
 #define NO_USER_ID                                       -1
 
-/// @def NUM_TASK_STORAGE_KEYS
+/// @def NUM_PROCESS_STORAGE_KEYS
 ///
 /// @brief The total number of keys supported by the per-process storage.
-#define NUM_TASK_STORAGE_KEYS                             1
+#define NUM_PROCESS_STORAGE_KEYS                             1
 
 /// @def FGETS_CONSOLE_BUFFER_KEY
 ///

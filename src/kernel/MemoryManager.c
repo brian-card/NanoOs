@@ -803,7 +803,7 @@ int memoryManagerGetFreeMemoryCommandHandler(
 /// @fn int memoryManagerFreeProcessMemoryCommandHandler(
 ///   MemoryManagerState *memoryManagerState, ProcessMessage *incoming)
 ///
-/// @brief Command handler for a MEMORY_MANAGER_FREE_TASK_MEMORY command.
+/// @brief Command handler for a MEMORY_MANAGER_FREE_PROCESS_MEMORY command.
 /// Extracts the process ID from the message and then calls
 /// localFreeProcessMemory.
 ///
@@ -981,7 +981,7 @@ const MemoryManagerCommandHandler memoryManagerCommandHandlers[] = {
   memoryManagerReallocCommandHandler,       // MEMORY_MANAGER_REALLOC
   memoryManagerFreeCommandHandler,          // MEMORY_MANAGER_FREE
   memoryManagerGetFreeMemoryCommandHandler, // MEMORY_MANAGER_GET_FREE_MEMORY
-  // MEMORY_MANAGER_FREE_TASK_MEMORY:
+  // MEMORY_MANAGER_FREE_PROCESS_MEMORY:
   memoryManagerFreeProcessMemoryCommandHandler,
   memoryManagerAssignMemoryCommandHandler,  // MEMORY_MANAGER_ASSIGN_MEMORY
   // MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS:
@@ -1068,7 +1068,7 @@ void initializeGlobals(MemoryManagerState *memoryManagerState,
   memoryManagerState->firstFree->next = NULL;
   memoryManagerState->firstFree->prev = NULL;
   memoryManagerState->firstFree->size = memoryManagerState->bytesFree;
-  memoryManagerState->firstFree->owner = TASK_ID_NOT_SET;
+  memoryManagerState->firstFree->owner = PROCESS_ID_NOT_SET;
   
   printDebugString("Leaving initializeGlobals in MemoryManager.c\n");
   longjmp(returnBuffer, (int) ((intptr_t) stack));
@@ -1099,18 +1099,18 @@ void initializeGlobals(MemoryManagerState *memoryManagerState,
 void allocateMemoryManagerStack(MemoryManagerState *memoryManagerState,
   jmp_buf returnBuffer, int stackSize, char *topOfStack
 ) {
-  char stack[MEMORY_MANAGER_TASK_STACK_CHUNK_SIZE];
-  memset(stack, 0, MEMORY_MANAGER_TASK_STACK_CHUNK_SIZE);
+  char stack[MEMORY_MANAGER_PROCESS_STACK_CHUNK_SIZE];
+  memset(stack, 0, MEMORY_MANAGER_PROCESS_STACK_CHUNK_SIZE);
   
   if (topOfStack == NULL) {
     topOfStack = stack;
   }
   
-  if (stackSize > MEMORY_MANAGER_TASK_STACK_CHUNK_SIZE) {
+  if (stackSize > MEMORY_MANAGER_PROCESS_STACK_CHUNK_SIZE) {
     allocateMemoryManagerStack(
       memoryManagerState,
       returnBuffer,
-      stackSize - MEMORY_MANAGER_TASK_STACK_CHUNK_SIZE,
+      stackSize - MEMORY_MANAGER_PROCESS_STACK_CHUNK_SIZE,
       topOfStack);
   }
   

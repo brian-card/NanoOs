@@ -221,9 +221,9 @@ int nanoOsPipe(int pipefd[2]) {
     }
     
     // Initialize the file descriptor's channels to point to ourself.
-    processDescriptor->fileDescriptors[ii]->inputChannel.pid = TASK_ID_NOT_SET;
+    processDescriptor->fileDescriptors[ii]->inputChannel.pid = PROCESS_ID_NOT_SET;
     processDescriptor->fileDescriptors[ii]->inputChannel.messageType = -1;
-    processDescriptor->fileDescriptors[ii]->outputChannel.pid = TASK_ID_NOT_SET;
+    processDescriptor->fileDescriptors[ii]->outputChannel.pid = PROCESS_ID_NOT_SET;
     processDescriptor->fileDescriptors[ii]->outputChannel.messageType = -1;
     processDescriptor->fileDescriptors[ii]->pipeEnd = NULL;
     processDescriptor->fileDescriptors[ii]->refCount = 1;

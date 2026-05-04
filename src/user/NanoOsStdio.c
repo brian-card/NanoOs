@@ -827,7 +827,7 @@ ConsoleBuffer* nanoOsWaitForInput(void) {
       /* data= */ 0, /* size= */ 0, false);
   }
 
-  if (inputChannel->pid != TASK_ID_NOT_SET) {
+  if (inputChannel->pid != PROCESS_ID_NOT_SET) {
     ProcessMessage *response
       = processMessageQueueWaitForType(CONSOLE_RETURNING_INPUT, NULL);
     nanoOsBuffer = (ConsoleBuffer*) processMessageData(response);
@@ -1014,7 +1014,7 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *nanoOsBuffer) {
     }
     IoChannel *outputChannel = &outputFd->outputChannel;
 
-    if ((outputChannel != NULL) && (outputChannel->pid != TASK_ID_NOT_SET)) {
+    if ((outputChannel != NULL) && (outputChannel->pid != PROCESS_ID_NOT_SET)) {
       if ((stream == stdout) || (stream == stderr)) {
         ProcessMessage *processMessage = initSendProcessMessageToProcessId(
           outputChannel->pid, outputChannel->messageType,

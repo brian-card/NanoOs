@@ -287,11 +287,11 @@ void* execCommand(void *args) {
   FileDescriptor **fileDescriptors = processDescriptor->fileDescriptors;
   while (
       ((fileDescriptors[0]->pipeEnd != NULL)
-      && (fileDescriptors[0]->inputChannel.pid == TASK_ID_NOT_SET))
+      && (fileDescriptors[0]->inputChannel.pid == PROCESS_ID_NOT_SET))
     || ((fileDescriptors[1]->pipeEnd != NULL)
-      && (fileDescriptors[1]->outputChannel.pid == TASK_ID_NOT_SET))
+      && (fileDescriptors[1]->outputChannel.pid == PROCESS_ID_NOT_SET))
     || ((fileDescriptors[2]->pipeEnd != NULL)
-      && (fileDescriptors[2]->outputChannel.pid == TASK_ID_NOT_SET))
+      && (fileDescriptors[2]->outputChannel.pid == PROCESS_ID_NOT_SET))
   ) {
     // We've been spawned via posix_spawn from a command line that contains
     // pipes and the pipes haven't been setup yet.  We need to wait until that
@@ -429,7 +429,7 @@ int sendProcessMessageToProcess(
 ///
 /// @return Returns processSuccess on success, processError on failure.
 int sendProcessMessageToProcessId(unsigned int pid, ProcessMessage *processMessage) {
-  if ((pid <= 0) || (pid > NANO_OS_NUM_TASKS)) {
+  if ((pid <= 0) || (pid > NANO_OS_NUM_PROCESSES)) {
     // Not a valid PID.  Fail.
     printString("ERROR: ");
     printInt(pid);
@@ -559,7 +559,7 @@ ProcessMessage* initSendProcessMessageToProcessId(int pid, int64_t type,
   void *data, size_t size, bool waiting
 ) {
   ProcessMessage *processMessage = NULL;
-  if ((pid < 0) || (pid > NANO_OS_NUM_TASKS)) {
+  if ((pid < 0) || (pid > NANO_OS_NUM_PROCESSES)) {
     // Not a valid PID.  Fail.
     printString("ERROR: ");
     printInt(pid);
