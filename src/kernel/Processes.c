@@ -339,12 +339,14 @@ void* execCommand(void *args) {
         if (envp != NULL) {
           execArgs->envp = NULL;
           if (schedulerAssignMemory(envp) != 0) {
+            fprintf(stderr, "%s: %d: ", __func__, __LINE__);
             fprintf(stderr, "WARNING: Could not assign envp to scheduler\n");
             fprintf(stderr, "Undefined behavior\n");
           }
 
           for (int ii = 0; envp[ii] != NULL; ii++) {
             if (schedulerAssignMemory(envp[ii]) != 0) {
+              fprintf(stderr, "%s: %d: ", __func__, __LINE__);
               fprintf(stderr,
                 "WARNING: Could not assign envp[%d] to scheduler\n", ii);
               fprintf(stderr, "Undefined behavior\n");
