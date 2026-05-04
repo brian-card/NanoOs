@@ -182,7 +182,7 @@ int nanoOsSpawn(
   size_t argvLen = 0;
   for (; argv[argvLen] != NULL; argvLen++);
   argvLen++; // Account for the terminating NULL element
-  spawnArgs->argv = (char**) malloc(argvLen * sizeof(char*));
+  spawnArgs->argv = (char**) calloc(1, argvLen * sizeof(char*));
   if (spawnArgs->argv == NULL) {
     returnValue = ENOMEM;
     goto freeSpawnArgs;
@@ -207,7 +207,7 @@ int nanoOsSpawn(
     size_t envpLen = 0;
     for (; envp[envpLen] != NULL; envpLen++);
     envpLen++; // Account for the terminating NULL element
-    spawnArgs->envp = (char**) malloc(envpLen * sizeof(char*));
+    spawnArgs->envp = (char**) calloc(1, envpLen * sizeof(char*));
     if (spawnArgs->envp == NULL) {
       returnValue = ENOMEM;
       goto freeSpawnArgs;
