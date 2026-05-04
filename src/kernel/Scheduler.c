@@ -747,8 +747,12 @@ int assignMemory(void *ptr, ProcessId pid) {
   msg_from(sent).coro = schedulerThread;
 
   int returnValue = 0;
-  processResume(&allProcesses[SCHEDULER_STATE->memoryManagerProcessId - 1], sent);
-  if (processMessageDone(sent) == false) {
+  processResume(&allProcesses[SCHEDULER_STATE->memoryManagerProcessId - 1],
+    sent);
+  if (processMessageDone(sent) == true) {
+    // The usual case.
+    returnValue = (int) ((intptr_t) processMessageData(sent));
+  } else {
     printString(
       "Warning:  Memory manager did not mark assignMemory message done.\n");
     returnValue = -ETIMEDOUT;
@@ -1310,8 +1314,8 @@ int schedulerAssignMemory(void *ptr) {
 
   processMessageInit(processMessage, SCHEDULER_ASSIGN_MEMORY, ptr, 0, true);
 
-  if (sendProcessMessageToProcessId(SCHEDULER_STATE->schedulerProcessId, processMessage)
-    != processSuccess
+  if (sendProcessMessageToProcessId(SCHEDULER_STATE->schedulerProcessId,
+    processMessage) != processSuccess
   ) {
     processMessageRelease(processMessage);
     fprintf(stderr,
@@ -3403,10 +3407,10 @@ int schedulerRunOverlayCommand(
   execArgs->argv[ii] = NULL; // NULL-terminate the array
 
   // There are two possibilities for how this function is called:  Either envp
-  // is NULL or it's the envp that already existed for the processDescriptor.  So,
-  // either there is no envp or it is already the one we should be using for
-  // the process.  We do *NOT* want to make a copy of it.  Just assign it direclty
-  // here.  The logic below will take care of memory ownership.
+  // is NULL or it's the envp that already existed for the processDescriptor.
+  // So, either there is no envp or it is already the one we should be using for
+  // the process.  We do *NOT* want to make a copy of it.  Just assign it
+  // direclty here.  The logic below will take care of memory ownership.
   execArgs->envp = envp;
 
   execArgs->schedulerState = schedulerState;
@@ -3439,7 +3443,8 @@ int schedulerRunOverlayCommand(
 
   if (execArgs->envp != NULL) {
     if (assignMemory(execArgs->envp, processDescriptor->pid) != 0) {
-      printString("WARNING: Could not assign execArgs->envp to exec process.\n");
+      printString(
+        "WARNING: Could not assign execArgs->envp to exec process.\n");
       printString("Undefined behavior.\n");
     }
 
@@ -3587,8 +3592,8 @@ void runScheduler(void) {
       }
     }
     
-    // Configure the preemption timer to force the process to yield if it doesn't
-    // voluntarily give up control within a reasonable amount of time.
+    // Configure the preemption timer to force the process to yield if it
+    // doesn't voluntarily give up control within a reasonable amount of time.
     if (SCHEDULER_STATE->preemptionTimer > -1) {
       // No need to check HAL->timer for NULL since it can't be NULL in this
       // case.
@@ -3678,6 +3683,12 @@ void runScheduler(void) {
           removeProcess(processDescriptor, "Failed to load shell");
           schedFree(pwd);
           schedFree(passwdStringBuffer);
+          if (processDescriptor->envp != NULL) {
+            for (int ii = 0; processDescriptor->envp[ii] != NULL; ii++) {
+              schedFree(processDescriptor->envp[ii]);
+            }
+            schedFree(processDescriptor->envp);
+          }
           return;
         }
       } while (0);
