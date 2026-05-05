@@ -1286,51 +1286,6 @@ freeExecArgs:
   return -1;
 }
 
-/// @fn int schedulerAssignMemory(void *ptr)
-///
-/// @brief Assign a piece of memory to be owned by the scheduler.  This
-/// protects the memory from being automatically deleted when the process
-/// exits.
-///
-/// @param ptr A pointer to the block of memory to assign to the scheduler.
-///
-/// @return Returns 0 on success, -errno on failure.
-int schedulerAssignMemory(void *ptr) {
-  ProcessMessage *processMessage = getAvailableMessage();
-  for (int ii = 0;
-    (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
-    ii++
-  ) {
-    processYield();
-    processMessage = getAvailableMessage();
-  }
-  if (processMessage == NULL) {
-    printInt(getRunningPid());
-    printString(": ");
-    printString(__func__);
-    printString(": ERROR: Out of process messages\n");
-    return -ENOMEM;
-  }
-
-  processMessageInit(processMessage, SCHEDULER_ASSIGN_MEMORY, ptr, 0, true);
-
-  if (sendProcessMessageToPid(SCHEDULER_STATE->schedulerPid,
-    processMessage) != processSuccess
-  ) {
-    processMessageRelease(processMessage);
-    fprintf(stderr,
-      "ERROR: Could not send SCHEDULER_ASSIGN_MEMORY message to scheduler\n");
-    return -EIO;
-  }
-
-  processMessageWaitForDone(processMessage, NULL);
-
-  int returnValue = (int) ((intptr_t) processMessageData(processMessage));
-  processMessageRelease(processMessage);
-
-  return returnValue;
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 // Scheduler command handlers and support functions
 ////////////////////////////////////////////////////////////////////////////////
@@ -3028,45 +2983,6 @@ int schedulerSpawnCommandHandler(
   return returnValue;
 }
 
-/// @fn int schedulerAssignMemoryCommandHandler(
-///   SchedulerState *schedulerState, ProcessMessage *processMessage)
-///
-/// @brief Assign a piece of memory to the scheduler for ownership.
-///
-/// @param schedulerState A pointer to the SchedulerState maintained by the
-///   scheduler process.
-/// @param processMessage A pointer to the ProcessMessage that was received.
-///
-/// @return Returns 0 on success, non-zero error code on failure.
-int schedulerAssignMemoryCommandHandler(
-  SchedulerState *schedulerState, ProcessMessage *processMessage
-) {
-  (void) schedulerState;
-
-  if (processMessage == NULL) {
-    // This should be impossible, but there's nothing to do.  Return good
-    // status.
-    return 0;
-  }
-
-  void *ptr = processMessageData(processMessage);
-  int returnValue = assignMemory(ptr, SCHEDULER_STATE->schedulerPid);
-  if (returnValue == 0) {
-    processMessageInit(processMessage, 0, (void*) ((intptr_t) 0), 0, true);
-  } else {
-    printString("WARNING: Could not assign memory from process ");
-    printInt(pid(processMessageFrom(processMessage)));
-    printString(" to the scheduler\n");
-    printString("Undefined behavior.\n");
-    processMessageInit(processMessage, 0,
-      (void*) ((intptr_t) returnValue), 0, true);
-  }
-
-  processMessageSetDone(processMessage);
-
-  return 0;
-}
-
 /// @typedef SchedulerCommandHandler
 ///
 /// @brief Signature of command handler for a scheduler command.
@@ -3088,7 +3004,6 @@ const SchedulerCommandHandler schedulerCommandHandlers[] = {
   schedulerGetHostnameCommandHandler,       // SCHEDULER_GET_HOSTNAME
   schedulerExecveCommandHandler,            // SCHEDULER_EXECVE
   schedulerSpawnCommandHandler,             // SCHEDULER_SPAWN
-  schedulerAssignMemoryCommandHandler,      // SCHEDULER_ASSIGN_MEMORY,
 };
 
 /// @fn void handleSchedulerMessage(SchedulerState *schedulerState)
