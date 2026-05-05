@@ -41,15 +41,15 @@
 extern const User users[];
 extern const int NUM_USERS;
 
-/// @fn ProcessId getNumPipes(const char *commandLine)
+/// @fn Pid getNumPipes(const char *commandLine)
 ///
 /// @brief Get the number of pipes in a commandLine.
 ///
 /// @param commandLine The command line as read in from a console port.
 ///
 /// @return Returns the number of pipe characters found in the command line.
-ProcessId getNumPipes(const char *commandLine) {
-  ProcessId numPipes = 0;
+Pid getNumPipes(const char *commandLine) {
+  Pid numPipes = 0;
   const char *pipeAt = NULL;
 
   do {
@@ -82,7 +82,7 @@ void *getProcessStorage(uint8_t key) {
     return returnValue; // NULL
   }
 
-  int processIndex = ((int) getRunningProcessId()) - 1;
+  int processIndex = ((int) getRunningPid()) - 1;
   if ((processIndex >= 0) && (processIndex < NANO_OS_NUM_PROCESSES)) {
     // Calling process is not supported and does not have storage.
     returnValue = processStorage[processIndex][key];
@@ -109,8 +109,8 @@ int setProcessStorage_(uint8_t key, void *val, int pid, ...) {
   }
 
   if (pid < 0) {
-    if (getRunningProcessId() == SCHEDULER_STATE->schedulerProcessId) {
-      pid = (int) getRunningProcessId();
+    if (getRunningPid() == SCHEDULER_STATE->schedulerPid) {
+      pid = (int) getRunningPid();
     } else {
       return returnValue; // processError
     }

@@ -53,7 +53,7 @@ BlockStorageDevice* halCommonInitRootSdSpiStorage(
   
   // Create the SD card process.
   ProcessDescriptor *processDescriptor
-    = &allProcesses[SCHEDULER_STATE->firstUserProcessId - 1];
+    = &allProcesses[SCHEDULER_STATE->firstUserPid - 1];
   if (processCreate(
     processDescriptor, runSdCardSpi, sdCardSpiArgs)
     != processSuccess
@@ -62,14 +62,14 @@ BlockStorageDevice* halCommonInitRootSdSpiStorage(
     return NULL;
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
-  processDescriptor->pid = SCHEDULER_STATE->firstUserProcessId;
+  processDescriptor->pid = SCHEDULER_STATE->firstUserPid;
   processDescriptor->name = "SD card";
   processDescriptor->userId = ROOT_USER_ID;
   BlockStorageDevice *sdDevice = (BlockStorageDevice*) coroutineResume(
-    allProcesses[SCHEDULER_STATE->firstUserProcessId - 1].mainThread, NULL);
+    allProcesses[SCHEDULER_STATE->firstUserPid - 1].mainThread, NULL);
   sdDevice->partitionNumber = 1;
-  SCHEDULER_STATE->firstUserProcessId++;
-  SCHEDULER_STATE->firstShellProcessId = SCHEDULER_STATE->firstUserProcessId;
+  SCHEDULER_STATE->firstUserPid++;
+  SCHEDULER_STATE->firstShellPid = SCHEDULER_STATE->firstUserPid;
   
   return sdDevice;
 }
@@ -103,9 +103,9 @@ int halCommonInitRootFilesystem(BlockStorageDevice *blockDevice) {
   fs.driverGetFilename = fat32GetFilename;
   
   // Create the filesystem process.
-  SCHEDULER_STATE->rootFsProcessId = SCHEDULER_STATE->firstUserProcessId;
+  SCHEDULER_STATE->rootFsPid = SCHEDULER_STATE->firstUserPid;
   ProcessDescriptor *allProcesses = SCHEDULER_STATE->allProcesses;
-  ProcessDescriptor *processDescriptor = &allProcesses[SCHEDULER_STATE->rootFsProcessId - 1];
+  ProcessDescriptor *processDescriptor = &allProcesses[SCHEDULER_STATE->rootFsPid - 1];
   if (processCreate(processDescriptor, runFilesystem, &fs)
     != processSuccess
   ) {
@@ -113,14 +113,14 @@ int halCommonInitRootFilesystem(BlockStorageDevice *blockDevice) {
     return -ENOMEM;
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
-  processDescriptor->pid = SCHEDULER_STATE->rootFsProcessId;
+  processDescriptor->pid = SCHEDULER_STATE->rootFsPid;
   processDescriptor->name = "filesystem";
   processDescriptor->userId = ROOT_USER_ID;
   // Let it pick up the arguments
   processResume(processDescriptor, NULL);
   
-  SCHEDULER_STATE->firstUserProcessId = SCHEDULER_STATE->rootFsProcessId + 1;
-  SCHEDULER_STATE->firstShellProcessId = SCHEDULER_STATE->firstUserProcessId;
+  SCHEDULER_STATE->firstUserPid = SCHEDULER_STATE->rootFsPid + 1;
+  SCHEDULER_STATE->firstShellPid = SCHEDULER_STATE->firstUserPid;
   
   return 0;
 }

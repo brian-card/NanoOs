@@ -130,11 +130,11 @@ int nanoOsDup2(int oldfd, int newfd) {
     if (newfd == STDIN_FILENO) {
       // We need to set the pid of the outputChannel of the other end of the
       // pipe to our ID.
-      oldFileDescriptor->pipeEnd->outputChannel.pid = getRunningProcessId();
+      oldFileDescriptor->pipeEnd->outputChannel.pid = getRunningPid();
     } else if ((newfd == STDOUT_FILENO) || (newfd == STDERR_FILENO)) {
       // We need to set the pid of the inputChannel of the other end of the
       // pipe to our ID.
-      oldFileDescriptor->pipeEnd->inputChannel.pid = getRunningProcessId();
+      oldFileDescriptor->pipeEnd->inputChannel.pid = getRunningPid();
     }
   }
   

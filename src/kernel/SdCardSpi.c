@@ -703,7 +703,7 @@ void* runSdCardSpi(void *args) {
   SdCardState sdCardState;
   memset(&sdCardState, 0, sizeof(sdCardState));
   BlockStorageDevice blockStorageDevice = {
-    .context = (void*) ((intptr_t) getRunningProcessId()),
+    .context = (void*) ((intptr_t) getRunningPid()),
     .readBlocks = sdReadBlocks,
     .writeBlocks = sdWriteBlocks,
     .schedReadBlocks = schedSdReadBlocks,

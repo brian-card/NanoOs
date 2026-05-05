@@ -136,7 +136,7 @@ extern "C"
 
 /// @def pid
 ///
-/// @brief Function macro to get the numeric ProcessId given its descriptor.
+/// @brief Function macro to get the numeric Pid given its descriptor.
 #define pid(processDescriptor) \
   (processDescriptor)->pid
 
@@ -236,10 +236,10 @@ extern "C"
 #define processMessageQueuePop() \
   comessageQueuePop()
 
-/// @def getRunningProcessId
+/// @def getRunningPid
 ///
 /// @brief Get the process ID for the currently-running process.
-#define getRunningProcessId() \
+#define getRunningPid() \
   (getRunningProcess()->pid)
 
 /// @def processResume
@@ -274,9 +274,9 @@ typedef CoroutinesConfigOptions ThreadsConfigOptions;
 void* execCommand(void *args);
 int sendProcessMessageToProcess(
   ProcessDescriptor *processDescriptor, ProcessMessage *processMessage);
-int sendProcessMessageToProcessId(unsigned int pid, ProcessMessage *processMessage);
+int sendProcessMessageToPid(unsigned int pid, ProcessMessage *processMessage);
 ProcessMessage* getAvailableMessage(void);
-ProcessMessage* initSendProcessMessageToProcessId(int pid, int64_t type,
+ProcessMessage* initSendProcessMessageToPid(int pid, int64_t type,
   void *data, size_t size, bool waiting);
 void* waitForDataMessage(ProcessMessage *sent, int type, const struct timespec *ts);
 ExecArgs* execArgsDestroy(ExecArgs *execArgs);

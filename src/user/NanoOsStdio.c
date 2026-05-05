@@ -810,7 +810,7 @@ ConsoleBuffer* nanoOsWaitForInput(void) {
   FileDescriptor *inputFd = schedulerGetFileDescriptor(stdin);
   if (inputFd == NULL) {
     printString("ERROR: Could not get input file descriptor for process ");
-    printInt(getRunningProcessId());
+    printInt(getRunningPid());
     printString(" and stream ");
     printInt((intptr_t) stdin);
     printString(".\n");
@@ -820,9 +820,9 @@ ConsoleBuffer* nanoOsWaitForInput(void) {
   }
   IoChannel *inputChannel = &inputFd->inputChannel;
 
-  if (inputChannel->pid == SCHEDULER_STATE->consoleProcessId) {
+  if (inputChannel->pid == SCHEDULER_STATE->consolePid) {
     // Tell the console that we're waiting for input.  Fire and forget.
-    (void) initSendProcessMessageToProcessId(
+    (void) initSendProcessMessageToPid(
       inputChannel->pid, inputChannel->messageType,
       /* data= */ 0, /* size= */ 0, false);
   }
@@ -891,8 +891,8 @@ int nanoOsVfscanf(FILE *stream, const char *format, va_list args) {
 
     returnValue = vsscanf(nanoOsBuffer->buffer, format, args);
     // Release the buffer.  Fire and forget.
-    (void) initSendProcessMessageToProcessId(
-      SCHEDULER_STATE->consoleProcessId, CONSOLE_RELEASE_BUFFER,
+    (void) initSendProcessMessageToPid(
+      SCHEDULER_STATE->consolePid, CONSOLE_RELEASE_BUFFER,
       /* data= */ nanoOsBuffer, /* size= */ sizeof(*nanoOsBuffer), false);
   }
 
@@ -955,8 +955,8 @@ ConsoleBuffer* nanoOsGetBuffer(void) {
   // is made, so we may have to try multiple times.  Do a while loop until we
   // get a buffer back or until an error occurs.
   while (returnValue == NULL) {
-    ProcessMessage *processMessage = initSendProcessMessageToProcessId(
-      SCHEDULER_STATE->consoleProcessId, CONSOLE_GET_BUFFER, 0, 0, true);
+    ProcessMessage *processMessage = initSendProcessMessageToPid(
+      SCHEDULER_STATE->consolePid, CONSOLE_GET_BUFFER, 0, 0, true);
     if (processMessage == NULL) {
       break; // will return returnValue, which is NULL
     }
@@ -998,14 +998,14 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *nanoOsBuffer) {
     if (outputFd == NULL) {
       printString(
         "ERROR: Could not get output file descriptor for process ");
-      printInt(getRunningProcessId());
+      printInt(getRunningPid());
       printString(" and stream ");
       printInt((intptr_t) stream);
       printString(".\n");
 
       // Release the buffer to avoid creating a leak.  Fire and forget.
-      (void) initSendProcessMessageToProcessId(
-        SCHEDULER_STATE->consoleProcessId, CONSOLE_RELEASE_BUFFER,
+      (void) initSendProcessMessageToPid(
+        SCHEDULER_STATE->consolePid, CONSOLE_RELEASE_BUFFER,
         /* data= */ nanoOsBuffer, /* size= */ sizeof(*nanoOsBuffer), false);
 
       // We can't proceed, so bail.
@@ -1016,7 +1016,7 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *nanoOsBuffer) {
 
     if ((outputChannel != NULL) && (outputChannel->pid != PROCESS_ID_NOT_SET)) {
       if ((stream == stdout) || (stream == stderr)) {
-        ProcessMessage *processMessage = initSendProcessMessageToProcessId(
+        ProcessMessage *processMessage = initSendProcessMessageToPid(
           outputChannel->pid, outputChannel->messageType,
           /* data= */ nanoOsBuffer, /* size= */ sizeof(*nanoOsBuffer), true);
         if (processMessage != NULL) {
@@ -1029,12 +1029,12 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *nanoOsBuffer) {
         printString("ERROR: Request to write to invalid stream ");
         printInt((intptr_t) stream);
         printString(" from process ");
-        printInt(getRunningProcessId());
+        printInt(getRunningPid());
         printString(".\n");
 
         // Release the buffer to avoid creating a leak.  Fire and forget.
-        (void) initSendProcessMessageToProcessId(
-          SCHEDULER_STATE->consoleProcessId, CONSOLE_RELEASE_BUFFER,
+        (void) initSendProcessMessageToPid(
+          SCHEDULER_STATE->consolePid, CONSOLE_RELEASE_BUFFER,
           /* data= */ nanoOsBuffer, /* size= */ sizeof(*nanoOsBuffer), false);
 
         returnValue = EOF;
@@ -1042,12 +1042,12 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *nanoOsBuffer) {
     } else {
       printString(
         "ERROR: Request to write with no output pipe set from process ");
-      printInt(getRunningProcessId());
+      printInt(getRunningPid());
       printString(".\n");
 
       // Release the buffer to avoid creating a leak.  Fire and forget.
-      (void) initSendProcessMessageToProcessId(
-        SCHEDULER_STATE->consoleProcessId, CONSOLE_RELEASE_BUFFER,
+      (void) initSendProcessMessageToPid(
+        SCHEDULER_STATE->consolePid, CONSOLE_RELEASE_BUFFER,
         /* data= */ nanoOsBuffer, /* size= */ sizeof(*nanoOsBuffer), false);
 
       returnValue = EOF;
@@ -1059,8 +1059,8 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *nanoOsBuffer) {
       .buffer = nanoOsBuffer->buffer,
       .length = (uint32_t) strlen(nanoOsBuffer->buffer)
     };
-    ProcessMessage *processMessage = initSendProcessMessageToProcessId(
-      SCHEDULER_STATE->rootFsProcessId,
+    ProcessMessage *processMessage = initSendProcessMessageToPid(
+      SCHEDULER_STATE->rootFsPid,
       FILESYSTEM_WRITE_FILE,
       /* data= */ &filesystemIoCommandParameters,
       /* size= */ sizeof(filesystemIoCommandParameters),
@@ -1072,8 +1072,8 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *nanoOsBuffer) {
     processMessageRelease(processMessage);
 
     // Release the buffer to avoid creating a leak.  Fire and forget.
-    (void) initSendProcessMessageToProcessId(
-      SCHEDULER_STATE->consoleProcessId, CONSOLE_RELEASE_BUFFER,
+    (void) initSendProcessMessageToPid(
+      SCHEDULER_STATE->consolePid, CONSOLE_RELEASE_BUFFER,
       /* data= */ nanoOsBuffer, /* size= */ sizeof(*nanoOsBuffer), false);
   }
 
@@ -1277,8 +1277,8 @@ size_t nanoOsFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
       numBytesReceived += numBytesToCopy;
       charBuffer[numBytesReceived] = '\0';
       // Release the buffer.  Fire and forget.
-      (void) initSendProcessMessageToProcessId(
-        SCHEDULER_STATE->consoleProcessId, CONSOLE_RELEASE_BUFFER,
+      (void) initSendProcessMessageToPid(
+        SCHEDULER_STATE->consolePid, CONSOLE_RELEASE_BUFFER,
         /* data= */ nanoOsBuffer, /* size= */ sizeof(*nanoOsBuffer), false);
 
       if ((newlineAt != NULL) || (strchr(nanoOsBuffer->buffer, ASCII_ESCAPE))) {

@@ -194,7 +194,7 @@ void* runSdCardPosix(void *args) {
   SdCardState sdCardState;
   memset(&sdCardState, 0, sizeof(sdCardState));
   BlockStorageDevice sdDevice = {
-    .context = (void*) ((intptr_t) getRunningProcessId()),
+    .context = (void*) ((intptr_t) getRunningPid()),
     .readBlocks = sdReadBlocks,
     .writeBlocks = sdWriteBlocks,
     .schedReadBlocks = schedSdReadBlocks,

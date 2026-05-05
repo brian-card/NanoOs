@@ -320,7 +320,7 @@ void localFree(MemoryManagerState *memoryManagerState, void *ptr) {
 }
 
 /// @fn void localFreeProcessMemory(
-///   MemoryManagerState *memoryManagerState, ProcessId pid)
+///   MemoryManagerState *memoryManagerState, Pid pid)
 ///
 /// @brief Free *ALL* the memory owned by a process given its process ID.
 ///
@@ -331,7 +331,7 @@ void localFree(MemoryManagerState *memoryManagerState, void *ptr) {
 ///
 /// @return This function always succeeds and returns no value.
 void localFreeProcessMemory(
-  MemoryManagerState *memoryManagerState, ProcessId pid
+  MemoryManagerState *memoryManagerState, Pid pid
 ) {
   for (MemNode *cur = memoryManagerState->allocated; cur != NULL; ) {
     MemNode *next = cur->next;
@@ -345,7 +345,7 @@ void localFreeProcessMemory(
 }
 
 /// @fn void* localRealloc(MemoryManagerState *memoryManagerState,
-///   void *ptr, size_t size, ProcessId pid)
+///   void *ptr, size_t size, Pid pid)
 ///
 /// @brief Reallocate a provided pointer to a new size.
 ///
@@ -361,7 +361,7 @@ void localFreeProcessMemory(
 /// @return Returns a pointer to size-adjusted memory on success, NULL on
 /// failure or on free.
 void* localRealloc(MemoryManagerState *memoryManagerState,
-  void *ptr, size_t size, ProcessId pid
+  void *ptr, size_t size, Pid pid
 ) {
   startDebugMessage("In localRealloc\n");
   // We need to fix the size to be aligned with our memory model.
@@ -689,7 +689,7 @@ int memoryManagerReallocCommandHandler(
   if (clientReturnValue != NULL) {
     reallocMessage->size = sizeOfMemory(clientReturnValue);
   } else if ((reallocMessage->size > 0)
-    && (pid(processMessageFrom(incoming)) != SCHEDULER_STATE->schedulerProcessId)
+    && (pid(processMessageFrom(incoming)) != SCHEDULER_STATE->schedulerPid)
   ) {
     printString("Failed to allocate ");
     printInt(reallocMessage->size);
@@ -707,12 +707,12 @@ int memoryManagerReallocCommandHandler(
       processMessageInit(filesystemCommand,
         FILESYSTEM_DUMP_OPEN_FILES, NULL, 0, true);
       if (sendProcessMessageToProcess(
-        &SCHEDULER_STATE->allProcesses[SCHEDULER_STATE->rootFsProcessId - 1],
+        &SCHEDULER_STATE->allProcesses[SCHEDULER_STATE->rootFsPid - 1],
         filesystemCommand) != processSuccess
       ) {
         printString("ERROR: Could not send FILESYSTEM_DUMP_OPEN_FILES ");
         printString("message to root FS process ");
-        printInt(SCHEDULER_STATE->rootFsProcessId);
+        printInt(SCHEDULER_STATE->rootFsPid);
         printString("\n");
       }
       processMessageRelease(filesystemCommand);
@@ -819,9 +819,9 @@ int memoryManagerFreeProcessMemoryCommandHandler(
 ) {
   int returnValue = 0;
   if (pid(processMessageFrom(incoming))
-    == SCHEDULER_STATE->schedulerProcessId
+    == SCHEDULER_STATE->schedulerPid
   ) {
-    ProcessId pid = (ProcessId) ((uintptr_t) processMessageData(incoming));
+    Pid pid = (Pid) ((uintptr_t) processMessageData(incoming));
     localFreeProcessMemory(memoryManagerState, pid);
     processMessageData(incoming) = (void*) ((uintptr_t) 0);
   } else {
@@ -869,7 +869,7 @@ int memoryManagerAssignMemoryCommandHandler(
   int returnValue = 0;
   
   if (pid(processMessageFrom(incoming))
-    == SCHEDULER_STATE->schedulerProcessId
+    == SCHEDULER_STATE->schedulerPid
   ) {
     AssignMemoryParams *assignMemoryParams
       = (AssignMemoryParams*) processMessageData(incoming);
@@ -1005,7 +1005,7 @@ void handleMemoryManagerMessages(MemoryManagerState *memoryManagerState) {
     MemoryManagerCommand messageType
       = (MemoryManagerCommand) processMessageType(processMessage);
     if (messageType >= NUM_MEMORY_MANAGER_COMMANDS) {
-      printInt(getRunningProcessId());
+      printInt(getRunningPid());
       printString(": ");
       printString(__func__);
       printString(": ");
@@ -1218,7 +1218,7 @@ size_t getFreeMemory(void) {
   memset(&sent, 0, sizeof(sent));
   processMessageInit(&sent, MEMORY_MANAGER_GET_FREE_MEMORY, NULL, 0, true);
   
-  if (sendProcessMessageToProcessId(SCHEDULER_STATE->memoryManagerProcessId, &sent)
+  if (sendProcessMessageToPid(SCHEDULER_STATE->memoryManagerPid, &sent)
     != processSuccess
   ) {
     // Nothing more we can do.
@@ -1249,7 +1249,7 @@ void* memoryManagerSendReallocMessage(void *ptr, size_t size) {
   reallocMessage.size = size;
   
   ProcessMessage *sent
-    = initSendProcessMessageToProcessId(SCHEDULER_STATE->memoryManagerProcessId,
+    = initSendProcessMessageToPid(SCHEDULER_STATE->memoryManagerPid,
     MEMORY_MANAGER_REALLOC, &reallocMessage, sizeof(reallocMessage), true);
   
   if (sent == NULL) {
@@ -1278,8 +1278,8 @@ void* memoryManagerSendReallocMessage(void *ptr, size_t size) {
 /// @return This function always succeeds and returns no value.
 void memoryManagerFree(void *ptr) {
   if (ptr != NULL) {
-    if (initSendProcessMessageToProcessId(
-      SCHEDULER_STATE->memoryManagerProcessId, MEMORY_MANAGER_FREE,
+    if (initSendProcessMessageToPid(
+      SCHEDULER_STATE->memoryManagerPid, MEMORY_MANAGER_FREE,
       /* data= */ ptr, /* size= */ 0, false) == NULL
     ) {
       printString("ERROR: Could not send MEMORY_MANAGER_FREE message to ");

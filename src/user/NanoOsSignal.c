@@ -36,7 +36,7 @@ int nanoOsKill(pid_t pid, int sig) {
   int returnValue = 0;
   
   if (sig == SIGKILL) {
-    returnValue = schedulerKillProcess((ProcessId) pid);
+    returnValue = schedulerKillProcess((Pid) pid);
     if (returnValue != 0) {
       returnValue = -1;
     }

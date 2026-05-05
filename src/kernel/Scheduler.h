@@ -54,7 +54,7 @@ typedef struct NanoOsFile NanoOsFile;
 typedef struct SchedulerState SchedulerState;
 typedef struct ProcessDescriptor ProcessDescriptor;
 typedef Coroutine Thread;
-typedef uint8_t ProcessId;
+typedef uint8_t Pid;
 typedef struct ProcessInfo ProcessInfo;
 typedef int16_t UserId;
 
@@ -84,9 +84,9 @@ extern SchedulerState *SCHEDULER_STATE;
 // Exported functionality
 void startScheduler(SchedulerState **coroutineStatePointer);
 ProcessDescriptor* schedulerGetProcessById(unsigned int pid);
-ProcessId schedulerGetNumRunningProcesses(struct timespec *timeout);
+Pid schedulerGetNumRunningProcesses(struct timespec *timeout);
 ProcessInfo* schedulerGetProcessInfo(void);
-int schedulerKillProcess(ProcessId pid);
+int schedulerKillProcess(Pid pid);
 UserId schedulerGetProcessUser(void);
 int schedulerSetProcessUser(UserId userId);
 FileDescriptor* schedulerGetFileDescriptor(FILE *stream);

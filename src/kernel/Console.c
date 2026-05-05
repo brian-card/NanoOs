@@ -59,7 +59,7 @@ int consolePrintMessage(
   ConsoleState *consoleState, ProcessMessage *inputMessage, const char *message
 ) {
   int returnValue = processSuccess;
-  ProcessId owner = pid(processMessageFrom(inputMessage));
+  Pid owner = pid(processMessageFrom(inputMessage));
   ConsolePort *consolePorts = consoleState->consolePorts;
 
   bool portFound = false;
@@ -102,7 +102,7 @@ void consoleMessageCleanup(ProcessMessage *inputMessage) {
 }
 
 /// @fn ConsoleBuffer* getAvailableConsoleBuffer(
-///   ConsoleState *consoleState, ProcessId pid)
+///   ConsoleState *consoleState, Pid pid)
 ///
 /// @brief Get an available console buffer and mark it as being in use.
 ///
@@ -114,7 +114,7 @@ void consoleMessageCleanup(ProcessMessage *inputMessage) {
 /// @return Returns a pointer to the available ConsoleBuffer on success, NULL
 /// on failure.
 ConsoleBuffer* getAvailableConsoleBuffer(
-  ConsoleState *consoleState, ProcessId pid
+  ConsoleState *consoleState, Pid pid
 ) {
   ConsoleBuffer *consoleBuffers = consoleState->consoleBuffers;
   ConsoleBuffer *returnValue = NULL;
@@ -281,7 +281,7 @@ void consoleGetBufferCommandHandler(
   // We're going to reuse the input message as the return message.
   ProcessMessage *returnMessage = inputMessage;
   processMessageData(returnMessage) = NULL;
-  ProcessId callingPid = pid(processMessageFrom(inputMessage));
+  Pid callingPid = pid(processMessageFrom(inputMessage));
 
   ConsoleBuffer *returnValue
     = getAvailableConsoleBuffer(consoleState, callingPid);
@@ -356,7 +356,7 @@ void consoleSetPortShellCommandHandler(
     = &consolePortPidUnion.consolePortPidAssociation;
 
   uint8_t consolePort = consolePortPidAssociation->consolePort;
-  ProcessId pid = consolePortPidAssociation->pid;
+  Pid pid = consolePortPidAssociation->pid;
 
   if (consolePort < consoleState->numConsolePorts) {
     consoleState->consolePorts[consolePort].shell = pid;
@@ -401,7 +401,7 @@ void consoleAssignPortHelper(
     = &consolePortPidUnion.consolePortPidAssociation;
 
   uint8_t consolePort = consolePortPidAssociation->consolePort;
-  ProcessId pid = consolePortPidAssociation->pid;
+  Pid pid = consolePortPidAssociation->pid;
 
   if (consolePort < consoleState->numConsolePorts) {
     if (assignOutput == true) {
@@ -458,7 +458,7 @@ void consoleAssignPortCommandHandler(
 void consoleReleasePortCommandHandler(
   ConsoleState *consoleState, ProcessMessage *inputMessage
 ) {
-  ProcessId owner = pid(processMessageFrom(inputMessage));
+  Pid owner = pid(processMessageFrom(inputMessage));
   ConsolePort *consolePorts = consoleState->consolePorts;
 
   for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
@@ -498,7 +498,7 @@ void consoleReleasePortCommandHandler(
 void consoleGetOwnedPortCommandHandler(
   ConsoleState *consoleState, ProcessMessage *inputMessage
 ) {
-  ProcessId owner = pid(processMessageFrom(inputMessage));
+  Pid owner = pid(processMessageFrom(inputMessage));
   ConsolePort *consolePorts = consoleState->consolePorts;
 
   int ownedPort = -1;
@@ -535,7 +535,7 @@ void consoleGetOwnedPortCommandHandler(
 void consoleGetEchoCommandHandler(
   ConsoleState *consoleState, ProcessMessage *inputMessage
 ) {
-  ProcessId owner = pid(processMessageFrom(inputMessage));
+  Pid owner = pid(processMessageFrom(inputMessage));
   ConsolePort *consolePorts = consoleState->consolePorts;
   ProcessMessage *returnMessage = inputMessage;
 
@@ -576,7 +576,7 @@ void consoleGetEchoCommandHandler(
 void consoleSetEchoCommandHandler(
   ConsoleState *consoleState, ProcessMessage *inputMessage
 ) {
-  ProcessId owner = pid(processMessageFrom(inputMessage));
+  Pid owner = pid(processMessageFrom(inputMessage));
   ConsolePort *consolePorts = consoleState->consolePorts;
   bool desiredEchoState = (bool) ((uintptr_t) processMessageData(inputMessage));
 
@@ -616,7 +616,7 @@ void consoleSetEchoCommandHandler(
 void consoleWaitForInputCommandHandler(
   ConsoleState *consoleState, ProcessMessage *inputMessage
 ) {
-  ProcessId owner = pid(processMessageFrom(inputMessage));
+  Pid owner = pid(processMessageFrom(inputMessage));
   ConsolePort *consolePorts = consoleState->consolePorts;
 
   bool portFound = false;
@@ -653,15 +653,15 @@ void consoleWaitForInputCommandHandler(
 void consoleReleasePidPortCommandHandler(
   ConsoleState *consoleState, ProcessMessage *inputMessage
 ) {
-  ProcessId sender = pid(processMessageFrom(inputMessage));
-  if (sender != SCHEDULER_STATE->schedulerProcessId) {
+  Pid sender = pid(processMessageFrom(inputMessage));
+  if (sender != SCHEDULER_STATE->schedulerPid) {
     // Sender is not the scheduler.  We will ignore this.
     processMessageSetDone(inputMessage);
     consoleMessageCleanup(inputMessage);
     return;
   }
 
-  ProcessId owner = (ProcessId) ((intptr_t) processMessageData(inputMessage));
+  Pid owner = (Pid) ((intptr_t) processMessageData(inputMessage));
   ConsolePort *consolePorts = consoleState->consolePorts;
 
   for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
@@ -779,7 +779,7 @@ void handleConsoleMessages(ConsoleState *consoleState) {
     ConsoleCommand messageType = (ConsoleCommand) processMessageType(message);
     if (messageType >= NUM_CONSOLE_COMMANDS) {
       // Invalid.
-      printInt(getRunningProcessId());
+      printInt(getRunningPid());
       printString(": ");
       printString(__func__);
       printString(": ");
@@ -1001,7 +1001,7 @@ void* runConsole(void *args) {
           consolePort->consoleBuffer->buffer[consolePort->consoleBufferIndex]
             = '\0';
           consolePort->consoleBufferIndex = 0;
-          if (initSendProcessMessageToProcessId(
+          if (initSendProcessMessageToPid(
             consolePort->inputOwner, CONSOLE_RETURNING_INPUT,
             consolePort->consoleBuffer, sizeof(ConsoleBuffer), false) == NULL
           ) {
@@ -1065,7 +1065,7 @@ int printConsoleValue(ConsoleValueType valueType, void *value, size_t length) {
   memcpy(&message, value, length);
 
   printDebugString("Sending message to console process.\n");
-  if (initSendProcessMessageToProcessId(SCHEDULER_STATE->consoleProcessId,
+  if (initSendProcessMessageToPid(SCHEDULER_STATE->consolePid,
     CONSOLE_WRITE_VALUE, (void*) message, (size_t) valueType, false) == NULL
   ) {
     printString(
@@ -1128,7 +1128,7 @@ void releaseConsole(void) {
   // from within the console process.  That means we can't do blocking prints
   // from this function.  i.e. We can't use printf here.  Use printConsole
   // instead.
-  if (initSendProcessMessageToProcessId(SCHEDULER_STATE->consoleProcessId,
+  if (initSendProcessMessageToPid(SCHEDULER_STATE->consolePid,
     CONSOLE_RELEASE_PORT, /* data= */ 0, /* size= */ 0, false) == NULL
   ) {
     printString(
@@ -1144,8 +1144,8 @@ void releaseConsole(void) {
 /// @return Returns the numerical index of the console port the process owns on
 /// success, -1 on failure.
 int getOwnedConsolePort(void) {
-  ProcessMessage *sent = initSendProcessMessageToProcessId(
-    SCHEDULER_STATE->consoleProcessId, CONSOLE_GET_OWNED_PORT,
+  ProcessMessage *sent = initSendProcessMessageToPid(
+    SCHEDULER_STATE->consolePid, CONSOLE_GET_OWNED_PORT,
     /* data= */ 0, /* size= */ 0, /* waiting= */ true);
 
   processMessageWaitForDone(sent, NULL);
@@ -1163,8 +1163,8 @@ int getOwnedConsolePort(void) {
 /// @return Returns true if the console for the process is echoing, false
 /// otherwise.
 bool getConsoleEcho(void) {
-  ProcessMessage *sent = initSendProcessMessageToProcessId(
-    SCHEDULER_STATE->consoleProcessId, CONSOLE_GET_ECHO_PORT,
+  ProcessMessage *sent = initSendProcessMessageToPid(
+    SCHEDULER_STATE->consolePid, CONSOLE_GET_ECHO_PORT,
     /* data= */ 0, /* size= */ 0, /* waiting= */ true);
 
   // The console will reuse the message we sent.
@@ -1183,8 +1183,8 @@ bool getConsoleEcho(void) {
 /// @return Returns 0 if the echo state was set for the current process's
 /// ports, -1 on failure.
 int setConsoleEcho(bool desiredEchoState) {
-  ProcessMessage *sent = initSendProcessMessageToProcessId(
-    SCHEDULER_STATE->consoleProcessId, CONSOLE_SET_ECHO_PORT,
+  ProcessMessage *sent = initSendProcessMessageToPid(
+    SCHEDULER_STATE->consolePid, CONSOLE_SET_ECHO_PORT,
     /* data= */ (void*) ((uintptr_t) desiredEchoState), /* size= */ 0,
     /* waiting= */ true);
 
@@ -1202,8 +1202,8 @@ int setConsoleEcho(bool desiredEchoState) {
 ///
 /// @return Returns the number of ports running on success, -1 on failure.
 int getNumConsolePorts(void) {
-  ProcessMessage *sent = initSendProcessMessageToProcessId(
-    SCHEDULER_STATE->consoleProcessId, CONSOLE_GET_NUM_PORTS,
+  ProcessMessage *sent = initSendProcessMessageToPid(
+    SCHEDULER_STATE->consolePid, CONSOLE_GET_NUM_PORTS,
     /* data= */ 0, /* size= */ 0, /* waiting= */ true);
   if (sent == NULL) {
     return -1;

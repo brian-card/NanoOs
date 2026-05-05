@@ -418,7 +418,7 @@ int sendProcessMessageToProcess(
   return returnValue;
 }
 
-/// @fn int sendProcessMessageToProcessId(unsigned int pid,
+/// @fn int sendProcessMessageToPid(unsigned int pid,
 ///   ProcessMessage *processMessage)
 ///
 /// @brief Look up a process by its PID and send a message to it.
@@ -428,7 +428,7 @@ int sendProcessMessageToProcess(
 ///   process.
 ///
 /// @return Returns processSuccess on success, processError on failure.
-int sendProcessMessageToProcessId(unsigned int pid, ProcessMessage *processMessage) {
+int sendProcessMessageToPid(unsigned int pid, ProcessMessage *processMessage) {
   if ((pid <= 0) || (pid > NANO_OS_NUM_PROCESSES)) {
     // Not a valid PID.  Fail.
     printString("ERROR: ");
@@ -517,7 +517,7 @@ ProcessMessage* initSendProcessMessageToProcess(
     processMessage = getAvailableMessage();
   }
   if (processMessage == NULL) {
-    printInt(getRunningProcessId());
+    printInt(getRunningPid());
     printString(": ");
     printString(__func__);
     printString(": ERROR: Out of process messages\n");
@@ -539,7 +539,7 @@ ProcessMessage* initSendProcessMessageToProcess(
   return processMessage;
 }
 
-/// @fn ProcessMessage* initSendProcessMessageToProcessId(int pid, int64_t type,
+/// @fn ProcessMessage* initSendProcessMessageToPid(int pid, int64_t type,
 ///   void *data, size_t size, bool waiting)
 ///
 /// @brief Send a ProcessMessage to another process identified by its process ID. Looks
@@ -555,7 +555,7 @@ ProcessMessage* initSendProcessMessageToProcess(
 ///
 /// @return Returns a pointer to the sent ProcessMessage on success, NULL on
 /// failure.
-ProcessMessage* initSendProcessMessageToProcessId(int pid, int64_t type,
+ProcessMessage* initSendProcessMessageToPid(int pid, int64_t type,
   void *data, size_t size, bool waiting
 ) {
   ProcessMessage *processMessage = NULL;

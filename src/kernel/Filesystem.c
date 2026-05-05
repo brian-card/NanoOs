@@ -377,7 +377,7 @@ static void handleFilesystemMessages(FilesystemState *filesystemState) {
       printDebugString("\n");
       filesystemCommandHandlers[type](filesystemState, msg);
     } else {
-      printInt(getRunningProcessId());
+      printInt(getRunningPid());
       printString(": ");
       printString(__func__);
       printString(": ");
@@ -504,8 +504,8 @@ FILE* filesystemFopen(const char *pathname, const char *mode) {
     .mode = mode,
   };
 
-  ProcessMessage *msg = initSendProcessMessageToProcessId(
-    SCHEDULER_STATE->rootFsProcessId, FILESYSTEM_OPEN_FILE,
+  ProcessMessage *msg = initSendProcessMessageToPid(
+    SCHEDULER_STATE->rootFsPid, FILESYSTEM_OPEN_FILE,
     &fopenParameters, sizeof(fopenParameters), true);
   processMessageWaitForDone(msg, NULL);
   FILE *file = (FILE*) processMessageData(msg);
@@ -529,8 +529,8 @@ int filesystemFClose(FILE *stream) {
     fcloseParameters.stream = stream;
     fcloseParameters.returnValue = 0;
 
-    ProcessMessage *msg = initSendProcessMessageToProcessId(
-      SCHEDULER_STATE->rootFsProcessId, FILESYSTEM_CLOSE_FILE,
+    ProcessMessage *msg = initSendProcessMessageToPid(
+      SCHEDULER_STATE->rootFsPid, FILESYSTEM_CLOSE_FILE,
       &fcloseParameters, sizeof(fcloseParameters), true);
     processMessageWaitForDone(msg, NULL);
 
@@ -557,8 +557,8 @@ int filesystemFClose(FILE *stream) {
 int filesystemRemove(const char *pathname) {
   int returnValue = 0;
   if ((pathname != NULL) && (*pathname != '\0')) {
-    ProcessMessage *msg = initSendProcessMessageToProcessId(
-      SCHEDULER_STATE->rootFsProcessId, FILESYSTEM_REMOVE_FILE,
+    ProcessMessage *msg = initSendProcessMessageToPid(
+      SCHEDULER_STATE->rootFsPid, FILESYSTEM_REMOVE_FILE,
       (void*) pathname, strlen(pathname) + 1, true);
     processMessageWaitForDone(msg, NULL);
     returnValue = (int) ((intptr_t) processMessageData(msg));
@@ -595,8 +595,8 @@ int filesystemFSeek(FILE *stream, long offset, int whence) {
     .offset = offset,
     .whence = whence,
   };
-  ProcessMessage *msg = initSendProcessMessageToProcessId(
-    SCHEDULER_STATE->rootFsProcessId, FILESYSTEM_SEEK_FILE,
+  ProcessMessage *msg = initSendProcessMessageToPid(
+    SCHEDULER_STATE->rootFsPid, FILESYSTEM_SEEK_FILE,
     &filesystemSeekParameters, sizeof(filesystemSeekParameters), true);
   processMessageWaitForDone(msg, NULL);
   int returnValue = (int) ((intptr_t) processMessageData(msg));
@@ -641,8 +641,8 @@ size_t filesystemFRead(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   printDebugHex((uintptr_t) ptr);
   printDebugString("\n");
 
-  ProcessMessage *processMessage = initSendProcessMessageToProcessId(
-    SCHEDULER_STATE->rootFsProcessId,
+  ProcessMessage *processMessage = initSendProcessMessageToPid(
+    SCHEDULER_STATE->rootFsPid,
     FILESYSTEM_READ_FILE,
     /* data= */ &filesystemIoCommandParameters,
     /* size= */ sizeof(filesystemIoCommandParameters),
@@ -689,8 +689,8 @@ size_t filesystemFWrite(
     .buffer = (void*) ptr,
     .length = (uint32_t) (size * nmemb)
   };
-  ProcessMessage *processMessage = initSendProcessMessageToProcessId(
-    SCHEDULER_STATE->rootFsProcessId,
+  ProcessMessage *processMessage = initSendProcessMessageToPid(
+    SCHEDULER_STATE->rootFsPid,
     FILESYSTEM_WRITE_FILE,
     /* data= */ &filesystemIoCommandParameters,
     /* size= */ sizeof(filesystemIoCommandParameters),
@@ -731,7 +731,7 @@ int getFileBlockMetadataFromFile(FILE *stream, FileBlockMetadata *metadata) {
     processMessage = getAvailableMessage();
   }
   if (processMessage == NULL) {
-    printInt(getRunningProcessId());
+    printInt(getRunningPid());
     printString(": ");
     printString(__func__);
     printString(": ERROR: Out of process messages\n");
@@ -740,7 +740,7 @@ int getFileBlockMetadataFromFile(FILE *stream, FileBlockMetadata *metadata) {
 
   processMessageInit(processMessage, FILESYSTEM_GET_FILE_BLOCK_METADATA,
     &args, sizeof(args), true);
-  if (sendProcessMessageToProcessId(SCHEDULER_STATE->rootFsProcessId, processMessage)
+  if (sendProcessMessageToPid(SCHEDULER_STATE->rootFsPid, processMessage)
     != processSuccess
   ) {
     printString("ERROR! Failed to send message to filesystem to get file "
@@ -773,7 +773,7 @@ int getFileBlockMetadataFromPath(const char *path,
 
   FILE *stream = fopen(path, "r");
   if (stream == NULL) {
-    printInt(getRunningProcessId());
+    printInt(getRunningPid());
     printString(": ");
     printString(__func__);
     printString(": ERROR! Could not open file \"");

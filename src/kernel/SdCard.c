@@ -98,7 +98,7 @@ int sdReadBlocks(void *context, uint32_t startBlock,
   sdCommandParams.blockSize = blockSize;
   sdCommandParams.buffer = buffer;
 
-  ProcessMessage *processMessage = initSendProcessMessageToProcessId(
+  ProcessMessage *processMessage = initSendProcessMessageToPid(
     sdCardProcess, SD_CARD_READ_BLOCKS,
     /* data= */ &sdCommandParams, sizeof(sdCommandParams), true);
   processMessageWaitForDone(processMessage, NULL);
@@ -134,7 +134,7 @@ int sdWriteBlocks(void *context, uint32_t startBlock,
   sdCommandParams.blockSize = blockSize;
   sdCommandParams.buffer = (uint8_t*) buffer;
 
-  ProcessMessage *processMessage = initSendProcessMessageToProcessId(
+  ProcessMessage *processMessage = initSendProcessMessageToPid(
     sdCardProcess, SD_CARD_WRITE_BLOCKS,
     /* data= */ &sdCommandParams, /* size= */ sizeof(sdCommandParams), true);
   processMessageWaitForDone(processMessage, NULL);
@@ -183,7 +183,7 @@ int schedSdReadBlocks(void *context, uint32_t startBlock,
     processMessage = getAvailableMessage();
   }
   if (processMessage == NULL) {
-    printInt(getRunningProcessId());
+    printInt(getRunningPid());
     printString(": ");
     printString(__func__);
     printString(": ERROR: Out of process messages\n");
@@ -192,7 +192,7 @@ int schedSdReadBlocks(void *context, uint32_t startBlock,
 
   processMessageInit(processMessage, SD_CARD_READ_BLOCKS,
     &sdCommandParams, sizeof(sdCommandParams), true);
-  if (sendProcessMessageToProcessId(sdCardProcess, processMessage) != processSuccess) {
+  if (sendProcessMessageToPid(sdCardProcess, processMessage) != processSuccess) {
     return -ENXIO;
   }
 
@@ -245,7 +245,7 @@ int schedSdWriteBlocks(void *context, uint32_t startBlock,
     processMessage = getAvailableMessage();
   }
   if (processMessage == NULL) {
-    printInt(getRunningProcessId());
+    printInt(getRunningPid());
     printString(": ");
     printString(__func__);
     printString(": ERROR: Out of process messages\n");
@@ -254,7 +254,7 @@ int schedSdWriteBlocks(void *context, uint32_t startBlock,
 
   processMessageInit(processMessage, SD_CARD_WRITE_BLOCKS,
     &sdCommandParams, sizeof(sdCommandParams), true);
-  if (sendProcessMessageToProcessId(sdCardProcess, processMessage) != processSuccess) {
+  if (sendProcessMessageToPid(sdCardProcess, processMessage) != processSuccess) {
     return -ENXIO;
   }
 

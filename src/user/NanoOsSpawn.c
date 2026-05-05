@@ -231,8 +231,8 @@ int nanoOsSpawn(
   }
 
   ProcessMessage *processMessage
-    = initSendProcessMessageToProcessId(
-    SCHEDULER_STATE->schedulerProcessId, SCHEDULER_SPAWN,
+    = initSendProcessMessageToPid(
+    SCHEDULER_STATE->schedulerPid, SCHEDULER_SPAWN,
     spawnArgs, sizeof(*spawnArgs), true);
   if (processMessage == NULL) {
     // The only way this should be possible is if all available messages are

@@ -55,7 +55,7 @@ extern "C"
 /// @note If this value is increased beyond 15, the number of bits used to store
 /// the owner in a MemNode in MemoryManager.cpp must be extended and the value
 /// of PROCESS_ID_NOT_SET must be changed in Processes.h.  If this value is
-/// increased beyond 255, then the type defined by ProcessId below must also
+/// increased beyond 255, then the type defined by Pid below must also
 /// be extended.
 #define NANO_OS_NUM_PROCESSES                             9
 
@@ -104,10 +104,10 @@ typedef enum SchedulerReadyQueueType {
 /// @brief Definition of the Process object used by the OS.
 typedef Coroutine Thread;
 
-/// @typedef ProcessId
+/// @typedef Pid
 ///
 /// @brief Definition of the type to use for a process ID.
-typedef uint8_t ProcessId;
+typedef uint8_t Pid;
 
 /// @typedef ProcessMessage
 ///
@@ -147,14 +147,14 @@ typedef intptr_t ssize_t;
 /// @param prev A pointer to the previous open NanoOsFile.
 /// @param currentPosition The current position within the file.
 /// @param fd The numeric file descriptor for the file.
-/// @param owner The ProcessId of the process that owns the file.
+/// @param owner The Pid of the process that owns the file.
 typedef struct NanoOsFile {
   void              *file;
   struct NanoOsFile *next;
   struct NanoOsFile *prev;
   uint32_t           currentPosition;
   int                fd;
-  ProcessId             owner;
+  Pid             owner;
 } NanoOsFile;
 
 /// @struct IoChannel
@@ -165,7 +165,7 @@ typedef struct NanoOsFile {
 /// @param pid The process ID (PID) of the destination process.
 /// @param messageType The type of message to send to the process.
 typedef struct IoChannel {
-  ProcessId pid;
+  Pid pid;
   uint8_t messageType;
 } IoChannel;
 
@@ -219,7 +219,7 @@ typedef struct ProcessQueue ProcessQueue;
 typedef struct ProcessDescriptor {
   const char         *name;
   Thread             *mainThread;
-  ProcessId           pid;
+  Pid           pid;
   UserId              userId;
   uint8_t             numFileDescriptors;
   FileDescriptor    **fileDescriptors;
@@ -297,12 +297,12 @@ typedef struct ProcessQueue {
 ///   running.
 /// @param preemptionTimer The index of the timer used for preemptive
 ///   multiprocessing.  If this is < 0 then the processes run in cooperative mode.
-/// @param schedulerProcessId The ProcessId of the scheduler.
-/// @param consoleProcessId The ProcessId of the console.
-/// @param memoryManagerProcessId The ProcessId of the memory manager.
-/// @param rootFsProcessId The ProcessId of the root filesystem.
-/// @param firstUserProcessId The ProcessId of the first user process.
-/// @param firstShellProcessId The ProcessId of the first shell process.
+/// @param schedulerPid The Pid of the scheduler.
+/// @param consolePid The Pid of the console.
+/// @param memoryManagerPid The Pid of the memory manager.
+/// @param rootFsPid The Pid of the root filesystem.
+/// @param firstUserPid The Pid of the first user process.
+/// @param firstShellPid The Pid of the first shell process.
 /// @param runScheduler Function pointer to the runScheduler function in the
 ///   Scheduler library.
 typedef struct SchedulerState {
@@ -315,12 +315,12 @@ typedef struct SchedulerState {
   char *hostname;
   uint8_t numShells;
   int preemptionTimer;
-  ProcessId schedulerProcessId;
-  ProcessId consoleProcessId;
-  ProcessId memoryManagerProcessId;
-  ProcessId rootFsProcessId;
-  ProcessId firstUserProcessId;
-  ProcessId firstShellProcessId;
+  Pid schedulerPid;
+  Pid consolePid;
+  Pid memoryManagerPid;
+  Pid rootFsPid;
+  Pid firstUserPid;
+  Pid firstShellPid;
   void (*runScheduler)(void);
 } SchedulerState;
 
@@ -337,7 +337,7 @@ typedef struct SchedulerState {
 typedef struct CommandDescriptor {
   int                consolePort;
   char              *consoleInput;
-  ProcessId             callingProcess;
+  Pid             callingProcess;
   SchedulerState    *schedulerState;
 } CommandDescriptor;
 
@@ -399,9 +399,9 @@ typedef struct ConsolePort {
   unsigned char       portId;
   ConsoleBuffer      *consoleBuffer;
   unsigned char       consoleBufferIndex;
-  ProcessId           outputOwner;
-  ProcessId           inputOwner;
-  ProcessId           shell;
+  Pid           outputOwner;
+  Pid           inputOwner;
+  Pid           shell;
   bool                waitingForInput;
   int               (*readByte)(struct ConsolePort *consolePort);
   bool                echo;
@@ -436,7 +436,7 @@ typedef struct ConsoleState {
 /// @param pid The process ID associated with the port.
 typedef struct ConsolePortPidAssociation {
   uint8_t        consolePort;
-  ProcessId         pid;
+  Pid         pid;
 } ConsolePortPidAssociation;
 
 /// @union ConsolePortPidUnion
@@ -472,12 +472,12 @@ typedef struct ReallocMessage {
 /// @param next Pointer to the next block of memory in the list.
 /// @param prev Pointer to the previous block of memory in the list.
 /// @param size The number of bytes allocated at this pointer.
-/// @param owner The ProcessId of the owner of this block of memory.
+/// @param owner The Pid of the owner of this block of memory.
 typedef struct MemNode {
   struct MemNode *next;
   struct MemNode *prev;
   size_t          size;
-  ProcessId          owner;
+  Pid          owner;
 } MemNode;
 
 /// @struct MemoryManagerState
@@ -541,7 +541,7 @@ typedef struct posix_spawnattr_t posix_spawnattr_t;
 /// @param envp The NULL-terminated array of environment variables in
 ///   "name=value" format.  This array may be NULL.
 typedef struct SpawnArgs {
-  // Change this type if we change the size of pid_t or ProcessId!!!
+  // Change this type if we change the size of pid_t or Pid!!!
   uint8_t *newPid;
   char *path;
   posix_spawn_file_actions_t *fileActions;
@@ -554,7 +554,7 @@ typedef struct SpawnArgs {
 ///
 /// @brief Arguments for the standard POSIX execve call.
 ///
-/// @param callingProcessId The process ID of the process that is execing.
+/// @param callingPid The process ID of the process that is execing.
 /// @param pathname The full, absolute path on disk to the program to run.
 /// @param argv The NULL-terminated array of arguments for the command.  argv[0]
 ///   must be valid and should be the name of the program.
@@ -563,7 +563,7 @@ typedef struct SpawnArgs {
 /// @param schedulerState A pointer to the SchedulerState managed by the
 ///   scheduler.  This is needed by the execCommand function.
 typedef struct ExecArgs {
-  ProcessId callingProcessId;
+  Pid callingPid;
   char *pathname;
   char **argv;
   char **envp;

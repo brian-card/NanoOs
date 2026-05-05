@@ -157,7 +157,7 @@ extern "C"
 #define writeBytes(dst, src) copyBytes(dst, src, sizeof(*(src)))
 
 // Support functions
-ProcessId getNumPipes(const char *commandLine);
+Pid getNumPipes(const char *commandLine);
 void timespecFromDelay(struct timespec *ts, long int delayMs);
 unsigned int raiseUInt(unsigned int x, unsigned int y);
 const char* getUsernameByUserId(UserId userId);

@@ -146,7 +146,7 @@ int posixInitRootStorage(SchedulerState *schedulerState) {
   
   // Create the SD card process.
   ProcessDescriptor *processDescriptor
-    = &allProcesses[schedulerState->firstUserProcessId - 1];
+    = &allProcesses[schedulerState->firstUserPid - 1];
   if (processCreate(
     processDescriptor, runSdCardPosix, (void*) _sdCardDevicePath)
     != processSuccess
@@ -154,14 +154,14 @@ int posixInitRootStorage(SchedulerState *schedulerState) {
     printString("Could not start SD card process.\n");
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
-  processDescriptor->pid = schedulerState->firstUserProcessId;
+  processDescriptor->pid = schedulerState->firstUserPid;
   processDescriptor->name = "SD card";
   processDescriptor->userId = ROOT_USER_ID;
   BlockStorageDevice *sdDevice = (BlockStorageDevice*) coroutineResume(
-    allProcesses[schedulerState->firstUserProcessId - 1].mainThread, NULL);
+    allProcesses[schedulerState->firstUserPid - 1].mainThread, NULL);
   sdDevice->partitionNumber = 1;
-  schedulerState->firstUserProcessId++;
-  schedulerState->firstShellProcessId = schedulerState->firstUserProcessId;
+  schedulerState->firstUserPid++;
+  schedulerState->firstShellPid = schedulerState->firstUserPid;
   
   return halCommonInitRootFilesystem(sdDevice);
 }

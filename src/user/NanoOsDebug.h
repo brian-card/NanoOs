@@ -46,7 +46,7 @@
   printString("["); \
   printInt(HAL->getElapsedMicroseconds(0)); \
   printString(" Process "); \
-  printInt(getRunningProcessId()); \
+  printInt(getRunningPid()); \
   printString(" "); \
   printString((strrchr(__FILE__, '/')) \
     ? (strrchr(__FILE__, '/')  + 1) \
