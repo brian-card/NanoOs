@@ -154,7 +154,7 @@ typedef struct NanoOsFile {
   struct NanoOsFile *prev;
   uint32_t           currentPosition;
   int                fd;
-  Pid             owner;
+  Pid                owner;
 } NanoOsFile;
 
 /// @struct IoChannel
@@ -165,7 +165,7 @@ typedef struct NanoOsFile {
 /// @param pid The process ID (PID) of the destination process.
 /// @param messageType The type of message to send to the process.
 typedef struct IoChannel {
-  Pid pid;
+  Pid     pid;
   uint8_t messageType;
 } IoChannel;
 
@@ -182,10 +182,10 @@ typedef struct IoChannel {
 ///   this FileDescriptor is part of a pipe.
 /// @param refCount The number of references to this FileDescriptor.
 typedef struct FileDescriptor {
-  IoChannel inputChannel;
-  IoChannel outputChannel;
+  IoChannel              inputChannel;
+  IoChannel              outputChannel;
   struct FileDescriptor *pipeEnd;
-  int refCount;
+  int                    refCount;
 } FileDescriptor;
 
 // Forward declaration.  Definition below.
@@ -219,7 +219,7 @@ typedef struct ProcessQueue ProcessQueue;
 typedef struct ProcessDescriptor {
   const char         *name;
   Thread             *mainThread;
-  Pid           pid;
+  Pid                 pid;
   UserId              userId;
   uint8_t             numFileDescriptors;
   FileDescriptor    **fileDescriptors;
@@ -240,9 +240,9 @@ typedef struct ProcessDescriptor {
 /// @param name The name of the process.
 /// @param userId The UserId of the user that owns the process.
 typedef struct ProcessInfoElement {
-  int pid;
+  int         pid;
   const char *name;
-  UserId userId;
+  UserId      userId;
 } ProcessInfoElement;
 
 /// @struct ProcessInfo
@@ -253,7 +253,7 @@ typedef struct ProcessInfoElement {
 /// @param processes The array of ProcessInfoElements that describe the
 ///   processes.
 typedef struct ProcessInfo {
-  uint8_t numProcesses;
+  uint8_t            numProcesses;
   ProcessInfoElement processes[1];
 } ProcessInfo;
 
@@ -268,11 +268,11 @@ typedef struct ProcessInfo {
 /// @param tail The index of the tail of the queue.
 /// @param numElements The number of elements currently in the queue.
 typedef struct ProcessQueue {
-  const char *name;
+  const char        *name;
   ProcessDescriptor *processes[SCHEDULER_NUM_PROCESSES];
-  uint8_t head:4;
-  uint8_t tail:4;
-  uint8_t numElements:4;
+  uint8_t            head:4;
+  uint8_t            tail:4;
+  uint8_t            numElements:4;
 } ProcessQueue;
 
 /// @struct SchedulerState
@@ -306,22 +306,22 @@ typedef struct ProcessQueue {
 /// @param runScheduler Function pointer to the runScheduler function in the
 ///   Scheduler library.
 typedef struct SchedulerState {
-  ProcessDescriptor allProcesses[NANO_OS_NUM_PROCESSES];
-  ProcessQueue ready[SCHEDULER_NUM_READY_QUEUES];
-  ProcessQueue *currentReady;
-  ProcessQueue waiting;
-  ProcessQueue timedWaiting;
-  ProcessQueue free;
-  char *hostname;
-  uint8_t numShells;
-  int preemptionTimer;
-  Pid schedulerPid;
-  Pid consolePid;
-  Pid memoryManagerPid;
-  Pid rootFsPid;
-  Pid firstUserPid;
-  Pid firstShellPid;
-  void (*runScheduler)(void);
+  ProcessDescriptor   allProcesses[NANO_OS_NUM_PROCESSES];
+  ProcessQueue        ready[SCHEDULER_NUM_READY_QUEUES];
+  ProcessQueue       *currentReady;
+  ProcessQueue        waiting;
+  ProcessQueue        timedWaiting;
+  ProcessQueue        free;
+  char               *hostname;
+  uint8_t             numShells;
+  int                 preemptionTimer;
+  Pid                 schedulerPid;
+  Pid                 consolePid;
+  Pid                 memoryManagerPid;
+  Pid                 rootFsPid;
+  Pid                 firstUserPid;
+  Pid                 firstShellPid;
+  void              (*runScheduler)(void);
 } SchedulerState;
 
 /// @struct CommandDescriptor
@@ -337,7 +337,7 @@ typedef struct SchedulerState {
 typedef struct CommandDescriptor {
   int                consolePort;
   char              *consoleInput;
-  Pid             callingProcess;
+  Pid                callingProcess;
   SchedulerState    *schedulerState;
 } CommandDescriptor;
 
@@ -399,9 +399,9 @@ typedef struct ConsolePort {
   unsigned char       portId;
   ConsoleBuffer      *consoleBuffer;
   unsigned char       consoleBufferIndex;
-  Pid           outputOwner;
-  Pid           inputOwner;
-  Pid           shell;
+  Pid                 outputOwner;
+  Pid                 inputOwner;
+  Pid                 shell;
   bool                waitingForInput;
   int               (*readByte)(struct ConsolePort *consolePort);
   bool                echo;
@@ -420,10 +420,9 @@ typedef struct ConsolePort {
 ///   the console ports for input and by processes for output.
 /// @param numConsolePorts The number of active console ports.
 typedef struct ConsoleState {
-  ConsolePort consolePorts[CONSOLE_NUM_PORTS];
-  // consoleBuffers needs to come at the end.
+  ConsolePort   consolePorts[CONSOLE_NUM_PORTS];
   ConsoleBuffer consoleBuffers[CONSOLE_NUM_BUFFERS];
-  int numConsolePorts;
+  int           numConsolePorts;
 } ConsoleState;
 
 /// @struct ConsolePortPidAssociation
@@ -435,8 +434,8 @@ typedef struct ConsoleState {
 ///   object.
 /// @param pid The process ID associated with the port.
 typedef struct ConsolePortPidAssociation {
-  uint8_t        consolePort;
-  Pid         pid;
+  uint8_t consolePort;
+  Pid     pid;
 } ConsolePortPidAssociation;
 
 /// @union ConsolePortPidUnion
@@ -461,8 +460,8 @@ typedef union ConsolePortPidUnion {
 /// @param size The number of bytes to allocate.  If this value is 0, the memory
 ///   at ptr will be freed.
 typedef struct ReallocMessage {
-  void *ptr;
-  size_t size;
+  void   *ptr;
+  size_t  size;
 } ReallocMessage;
 
 /// @struct MemNode
@@ -477,7 +476,7 @@ typedef struct MemNode {
   struct MemNode *next;
   struct MemNode *prev;
   size_t          size;
-  Pid          owner;
+  Pid             owner;
 } MemNode;
 
 /// @struct MemoryManagerState
@@ -498,12 +497,12 @@ typedef struct MemNode {
 /// @param allocated Pointer to the MemNode that represents the first allocated
 ///   block of memory managed by the memory manager.
 typedef struct MemoryManagerState {
-  uintptr_t start;
-  uintptr_t end;
-  size_t    bytesFree;
-  MemNode  *firstFree;
-  MemNode  *lastFree;
-  MemNode  *allocated;
+  uintptr_t  start;
+  uintptr_t  end;
+  size_t     bytesFree;
+  MemNode   *firstFree;
+  MemNode   *lastFree;
+  MemNode   *allocated;
 } MemoryManagerState;
 
 /// @struct User
@@ -542,12 +541,12 @@ typedef struct posix_spawnattr_t posix_spawnattr_t;
 ///   "name=value" format.  This array may be NULL.
 typedef struct SpawnArgs {
   // Change this type if we change the size of pid_t or Pid!!!
-  uint8_t *newPid;
-  char *path;
-  posix_spawn_file_actions_t *fileActions;
-  posix_spawnattr_t *attrp;
-  char **argv;
-  char **envp;
+  uint8_t                     *newPid;
+  char                        *path;
+  posix_spawn_file_actions_t  *fileActions;
+  posix_spawnattr_t           *attrp;
+  char                       **argv;
+  char                       **envp;
 } SpawnArgs;
 
 /// @struct ExecArgs
@@ -563,11 +562,11 @@ typedef struct SpawnArgs {
 /// @param schedulerState A pointer to the SchedulerState managed by the
 ///   scheduler.  This is needed by the execCommand function.
 typedef struct ExecArgs {
-  Pid callingPid;
-  char *pathname;
-  char **argv;
-  char **envp;
-  SchedulerState *schedulerState;
+  Pid              callingPid;
+  char            *pathname;
+  char           **argv;
+  char           **envp;
+  SchedulerState  *schedulerState;
 } ExecArgs;
 
 #ifdef __cplusplus
