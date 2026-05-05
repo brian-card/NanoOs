@@ -3688,6 +3688,34 @@ void runScheduler(void) {
   // yieldCallback if we're running preemptive multiprocessing.
 
   if (processRunning(processDescriptor) == false) {
+    if (processDescriptor->envp != NULL) {
+      if (assignMemory(processDescriptor->envp,
+        SCHEDULER_STATE->schedulerPid) != 0
+      ) {
+        printString(__func__);
+        printString(": ");
+        printString(__LINE__);
+        printString(": ");
+        printString("WARNING: Could not assign envp to scheduler\n");
+        printString("Undefined behavior\n");
+      }
+
+      for (int ii = 0; processDescriptor->envp[ii] != NULL; ii++) {
+        if (assignMemory(processDescriptor->envp[ii],
+          SCHEDULER_STATE->schedulerPid) != 0
+        ) {
+          printString(__func__);
+          printString(": ");
+          printString(__LINE__);
+          printString(": ");
+          printString("WARNING: Could not assign envp[");
+          printInt(ii);
+          printString("] to scheduler\n");
+          printString("Undefined behavior\n");
+        }
+      }
+    }
+
     if (schedulerInitSendMessageToPid(
       SCHEDULER_STATE->memoryManagerPid, MEMORY_MANAGER_FREE_PROCESS_MEMORY,
       (void*) ((uintptr_t) processDescriptor->pid), 0) != processSuccess
@@ -3719,7 +3747,17 @@ void runScheduler(void) {
     }
 
     if (processDescriptor->userId == NO_USER_ID) {
-      // Login failed.  Re-launch getty.
+      // The shell process is not running and has no user ID set.  That means
+      // its envp isn't going to be reused.  Free it if it exists.
+      if (processDescriptor->envp != NULL) {
+        for (int ii = 0; processDescriptor->envp[ii] != NULL; ii++) {
+          schedFree(processDescriptor->envp[ii]);
+        }
+        schedFree(processDescriptor->envp);
+        processDescriptor->envp = NULL;
+      }
+
+      // Re-launch getty.
       if (schedulerRunOverlayCommand(SCHEDULER_STATE, processDescriptor,
         "/usr/bin/getty", (char**) gettyArgs, NULL) != 0
       ) {

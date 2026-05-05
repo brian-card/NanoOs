@@ -262,7 +262,6 @@ void* execCommand(void *args) {
   processYield();
   char *pathname = execArgs->pathname;
   char **argv = execArgs->argv;
-  char **envp = execArgs->envp;
 
   if ((argv == NULL) || (argv[0] == NULL)) {
     // Fail.
@@ -328,32 +327,15 @@ void* execCommand(void *args) {
       nanoOsGetpwuid_r(processDescriptor->userId, pwd,
         passwdStringBuffer, NANO_OS_PASSWD_STRING_BUF_SIZE, &result);
       if (result == NULL) {
-        fprintf(stderr,
-          "Could not find passwd info for uid %d\n", processDescriptor->userId);
+        fprintf(stderr, "Could not find passwd info for uid %d\n",
+          processDescriptor->userId);
+        // Assume this is the user's shell exiting.
+        // Clear the processes's user ID.
+        processDescriptor->userId = NO_USER_ID;
         break;
       }
       
-      if (strcmp(pwd->pw_shell, processDescriptor->overlayDir) != 0) {
-        // The process exiting is not the user's shell.  We want to keep the
-        // environment variables from being destroyed.
-        if (envp != NULL) {
-          execArgs->envp = NULL;
-          if (schedulerAssignMemory(envp) != 0) {
-            fprintf(stderr, "%s: %d: ", __func__, __LINE__);
-            fprintf(stderr, "WARNING: Could not assign envp to scheduler\n");
-            fprintf(stderr, "Undefined behavior\n");
-          }
-
-          for (int ii = 0; envp[ii] != NULL; ii++) {
-            if (schedulerAssignMemory(envp[ii]) != 0) {
-              fprintf(stderr, "%s: %d: ", __func__, __LINE__);
-              fprintf(stderr,
-                "WARNING: Could not assign envp[%d] to scheduler\n", ii);
-              fprintf(stderr, "Undefined behavior\n");
-            }
-          }
-        }
-      } else {
+      if (strcmp(pwd->pw_shell, processDescriptor->overlayDir) == 0) {
         // This is the user's shell exiting.  Clear the processes's user ID.
         processDescriptor->userId = NO_USER_ID;
       }
@@ -366,16 +348,6 @@ void* execCommand(void *args) {
 
   schedulerCloseAllFileDescriptors();
 
-  // Gracefully clear out our message queue.  We have to do this after closing
-  // our file descriptors (which is a blocking call) because some other process
-  // may be in the middle of sending us data and if we were to do this first,
-  // it could turn around and send us more data again.
-  msg_t *msg = processMessageQueuePop();
-  while (msg != NULL) {
-    processMessageSetDone(msg);
-    msg = processMessageQueuePop();
-  }
-
   // ***DO NOT*** attempt to free the ExecArgs that were passed in, period.
   // The memory will be cleaned up by the scheduler after we exit.  Freeing
   // that memory here can result in nasty consequences if we get preempted
@@ -385,7 +357,7 @@ void* execCommand(void *args) {
 
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
-/////////// NOTHING BELOW THIS LINE MAY CALL initSendProcessMessageTo*: ///////////
+///////// NOTHING BELOW THIS LINE MAY CALL initSendProcessMessageTo*: //////////
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
