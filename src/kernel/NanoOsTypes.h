@@ -57,7 +57,7 @@ extern "C"
 /// of PROCESS_ID_NOT_SET must be changed in Processes.h.  If this value is
 /// increased beyond 255, then the type defined by Pid below must also
 /// be extended.
-#define NANO_OS_NUM_PROCESSES                             9
+#define NANO_OS_NUM_PROCESSES 9
 
 /// @def SCHEDULER_NUM_PROCESSES
 ///
@@ -69,7 +69,7 @@ extern "C"
 /// @def SCHEDULER_NUM_READY_QUEUES
 ///
 /// @brief This is the total number of ready queues managed by the scheduler
-#define SCHEDULER_NUM_READY_QUEUES 2
+#define SCHEDULER_NUM_READY_QUEUES 4
 
 /// @def CONSOLE_BUFFER_SIZE
 ///
@@ -90,14 +90,16 @@ extern "C"
 
 // Primitive types
 
-/// @enum SchedulerReadyQueueType
+/// @enum PrivelegeLevel
 ///
-/// @brief Designations for each of the ready queues.
-typedef enum SchedulerReadyQueueType {
-  SCHEDULER_READY_QUEUE_KERNEL,
-  SCHEDULER_READY_QUEUE_USER,
+/// @brief Privelege level designations for processes.
+typedef enum PrivelegeLevel {
+  PRIVELEGE_LEVEL_KERNEL,
+  PRIVELEGE_LEVEL_EXECUTIVE,
+  PRIVELEGE_LEVEL_SUPERVISOR,
+  PRIVELEGE_LEVEL_USER,
   NUM_SCHEDULER_READY_QUEUE_TYPES,
-} SchedulerReadyQueueType;
+} PrivelegeLevel;
 
 /// @typedef Process
 ///
@@ -203,6 +205,7 @@ typedef struct ProcessQueue ProcessQueue;
 /// @param userId The numerical ID of the user that is running the process.
 /// @param numFileDescriptors The number of FileDescriptor objects contained by
 ///   the fileDescriptors array.
+/// @param privelegeLevel The PrivelegeLevel of the process.
 /// @param fileDescriptors Pointer to an array of FileDescriptor pointers that
 ///   are currently in use by the process.
 /// @param overlayDir The base path to the overlays for the process, if any.
@@ -214,14 +217,15 @@ typedef struct ProcessQueue ProcessQueue;
 ///   This will be NULL if the process is currently running (in no queue).
 /// @param readyQueue The ready queue that the descriptor is to be assigned to
 ///   when the process transitions to ready.
-/// @param message The default, statically-allocated message for the process to use
-///   to send to other processes.
+/// @param message The default, statically-allocated message for the process to
+///   use to send to other processes.
 typedef struct ProcessDescriptor {
   const char         *name;
   Thread             *mainThread;
   Pid                 pid;
   UserId              userId;
   uint8_t             numFileDescriptors;
+  PrivelegeLevel      privelegeLevel;
   FileDescriptor    **fileDescriptors;
   char               *overlayDir;
   FileBlockMetadata   overlay;

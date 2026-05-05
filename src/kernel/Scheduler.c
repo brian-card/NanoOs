@@ -825,7 +825,7 @@ int schedulerSetPortShell(uint8_t consolePort, Pid shell) {
 int schedulerGetNumConsolePorts(SchedulerState *schedulerState) {
   ProcessQueue *currentReady = schedulerState->currentReady;
   schedulerState->currentReady
-    = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
+    = &schedulerState->ready[PRIVELEGE_LEVEL_KERNEL];
 
   int returnValue = -1;
   ProcessMessage *messageToSend = getAvailableMessage();
@@ -1310,7 +1310,7 @@ int closeProcessFileDescriptors(
 
     ProcessQueue *currentReady = schedulerState->currentReady;
     schedulerState->currentReady
-      = &schedulerState->ready[SCHEDULER_READY_QUEUE_KERNEL];
+      = &schedulerState->ready[PRIVELEGE_LEVEL_KERNEL];
 
     FileDescriptor **fileDescriptors = processDescriptor->fileDescriptors;
     if (fileDescriptors == NULL) {
@@ -1495,7 +1495,7 @@ FILE* schedFopen(const char *pathname, const char *mode) {
 
     ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
     SCHEDULER_STATE->currentReady
-      = &SCHEDULER_STATE->ready[SCHEDULER_READY_QUEUE_KERNEL];
+      = &SCHEDULER_STATE->ready[PRIVELEGE_LEVEL_KERNEL];
 
     printDebugString("schedFopen: Getting message\n");
     ProcessMessage *processMessage = getAvailableMessage();
@@ -1571,7 +1571,7 @@ int schedFclose(FILE *stream) {
 
     ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
     SCHEDULER_STATE->currentReady
-      = &SCHEDULER_STATE->ready[SCHEDULER_READY_QUEUE_KERNEL];
+      = &SCHEDULER_STATE->ready[PRIVELEGE_LEVEL_KERNEL];
 
     ProcessMessage *processMessage = getAvailableMessage();
     for (int ii = 0;
@@ -1644,7 +1644,7 @@ int schedRemove(const char *pathname) {
 
     ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
     SCHEDULER_STATE->currentReady
-      = &SCHEDULER_STATE->ready[SCHEDULER_READY_QUEUE_KERNEL];
+      = &SCHEDULER_STATE->ready[PRIVELEGE_LEVEL_KERNEL];
 
     ProcessMessage *processMessage = getAvailableMessage();
     for (int ii = 0;
@@ -1723,7 +1723,7 @@ size_t schedFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
 
     ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
     SCHEDULER_STATE->currentReady
-      = &SCHEDULER_STATE->ready[SCHEDULER_READY_QUEUE_KERNEL];
+      = &SCHEDULER_STATE->ready[PRIVELEGE_LEVEL_KERNEL];
 
     ProcessMessage *processMessage = getAvailableMessage();
     for (int ii = 0;
@@ -1795,7 +1795,7 @@ size_t schedFwrite(void *ptr, size_t size, size_t nmemb, FILE *stream) {
 
     ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
     SCHEDULER_STATE->currentReady
-      = &SCHEDULER_STATE->ready[SCHEDULER_READY_QUEUE_KERNEL];
+      = &SCHEDULER_STATE->ready[PRIVELEGE_LEVEL_KERNEL];
 
     ProcessMessage *processMessage = getAvailableMessage();
     for (int ii = 0;
@@ -1863,7 +1863,7 @@ char* schedFgets(char *buffer, int size, FILE *stream) {
 
     ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
     SCHEDULER_STATE->currentReady
-      = &SCHEDULER_STATE->ready[SCHEDULER_READY_QUEUE_KERNEL];
+      = &SCHEDULER_STATE->ready[PRIVELEGE_LEVEL_KERNEL];
 
     FilesystemIoCommandParameters filesystemIoCommandParameters = {
       .file = stream,
@@ -1940,7 +1940,7 @@ int schedFputs(const char *s, FILE *stream) {
 
     ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
     SCHEDULER_STATE->currentReady
-      = &SCHEDULER_STATE->ready[SCHEDULER_READY_QUEUE_KERNEL];
+      = &SCHEDULER_STATE->ready[PRIVELEGE_LEVEL_KERNEL];
 
     FilesystemIoCommandParameters filesystemIoCommandParameters = {
       .file = stream,
@@ -2018,7 +2018,7 @@ int schedGetFileBlockMetadataFromFile(
 
   ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
   SCHEDULER_STATE->currentReady
-    = &SCHEDULER_STATE->ready[SCHEDULER_READY_QUEUE_KERNEL];
+    = &SCHEDULER_STATE->ready[PRIVELEGE_LEVEL_KERNEL];
 
   GetFileBlockMetadataArgs args = {
     .stream = stream,
@@ -3779,13 +3779,13 @@ __attribute__((noinline)) void startScheduler(
   // Initialize the scheduler's state.
   SchedulerState schedulerState = {0};
   schedulerState.hostname = NULL;
-  schedulerState.ready[SCHEDULER_READY_QUEUE_KERNEL].name = "kernel ready";
-  schedulerState.ready[SCHEDULER_READY_QUEUE_USER].name = "user ready";
+  schedulerState.ready[PRIVELEGE_LEVEL_KERNEL].name = "kernel ready";
+  schedulerState.ready[PRIVELEGE_LEVEL_USER].name = "user ready";
   schedulerState.waiting.name = "waiting";
   schedulerState.timedWaiting.name = "timed waiting";
   schedulerState.free.name = "free";
   schedulerState.currentReady
-    = &schedulerState.ready[SCHEDULER_READY_QUEUE_KERNEL];
+    = &schedulerState.ready[PRIVELEGE_LEVEL_KERNEL];
   schedulerState.preemptionTimer = -1;
   if ((HAL->timer != NULL) && (HAL->timer->getNum() > 0)) {
     schedulerState.preemptionTimer = 0;
@@ -4044,7 +4044,7 @@ __attribute__((noinline)) void startScheduler(
     ii++
   ) {
     allProcesses[ii - 1].readyQueue
-      = &schedulerState.ready[SCHEDULER_READY_QUEUE_KERNEL];
+      = &schedulerState.ready[PRIVELEGE_LEVEL_KERNEL];
     processQueuePush(allProcesses[ii - 1].readyQueue, &allProcesses[ii - 1]);
   }
   printDebugString("Populated kernel ready queue.\n");
@@ -4056,7 +4056,7 @@ __attribute__((noinline)) void startScheduler(
     ii++
   ) {
     allProcesses[ii - 1].readyQueue
-      = &schedulerState.ready[SCHEDULER_READY_QUEUE_USER];
+      = &schedulerState.ready[PRIVELEGE_LEVEL_USER];
     processQueuePush(allProcesses[ii - 1].readyQueue, &allProcesses[ii - 1]);
   }
   printDebugString("Populated user ready queue.\n");

@@ -172,7 +172,7 @@ int schedSdReadBlocks(void *context, uint32_t startBlock,
 
   ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
   SCHEDULER_STATE->currentReady
-    = &SCHEDULER_STATE->ready[SCHEDULER_READY_QUEUE_KERNEL];
+    = &SCHEDULER_STATE->ready[PRIVELEGE_LEVEL_KERNEL];
 
   ProcessMessage *processMessage = getAvailableMessage();
   for (int ii = 0;
@@ -234,7 +234,7 @@ int schedSdWriteBlocks(void *context, uint32_t startBlock,
 
   ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
   SCHEDULER_STATE->currentReady
-    = &SCHEDULER_STATE->ready[SCHEDULER_READY_QUEUE_KERNEL];
+    = &SCHEDULER_STATE->ready[PRIVELEGE_LEVEL_KERNEL];
 
   ProcessMessage *processMessage = getAvailableMessage();
   for (int ii = 0;
