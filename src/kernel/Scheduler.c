@@ -3609,7 +3609,7 @@ void runScheduler(void) {
       ) {
         printString(__func__);
         printString(": ");
-        printString(__LINE__);
+        printInt(__LINE__);
         printString(": ");
         printString("WARNING: Could not assign envp to scheduler\n");
         printString("Undefined behavior\n");
@@ -3621,7 +3621,7 @@ void runScheduler(void) {
         ) {
           printString(__func__);
           printString(": ");
-          printString(__LINE__);
+          printInt(__LINE__);
           printString(": ");
           printString("WARNING: Could not assign envp[");
           printInt(ii);
