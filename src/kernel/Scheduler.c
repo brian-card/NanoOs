@@ -2513,65 +2513,61 @@ int schedulerExecveCommandHandler(
     processDescriptor->envp = NULL;
   }
 
-  if (assignMemory(execArgs, SCHEDULER_STATE->schedulerPid) != 0) {
-    printString("WARNING: Could not assign execArgs to scheduler.\n");
+  if (assignMemory(execArgs, 0) != 0) {
+    printString("WARNING: Could not protect execArgs memory.\n");
     printString("Undefined behavior.\n");
   }
 
-  if (assignMemory(pathname, SCHEDULER_STATE->schedulerPid) != 0) {
-    printString("WARNING: Could not assign pathname to scheduler.\n");
+  if (assignMemory(pathname, 0) != 0) {
+    printString("WARNING: Could not protect pathname memory.\n");
     printString("Undefined behavior.\n");
   }
 
-  if (assignMemory(argv, SCHEDULER_STATE->schedulerPid) != 0) {
-    printString("WARNING: Could not assign argv to scheduler.\n");
+  if (assignMemory(argv, 0) != 0) {
+    printString("WARNING: Could not protect argv memory.\n");
     printString("Undefined behavior.\n");
   }
   for (int ii = 0; argv[ii] != NULL; ii++) {
-    if (assignMemory(argv[ii], SCHEDULER_STATE->schedulerPid) != 0) {
-      printString("WARNING: Could not assign argv[");
+    if (assignMemory(argv[ii], 0) != 0) {
+      printString("WARNING: Could not protect argv[");
       printInt(ii);
-      printString("] to scheduler.\n");
+      printString("] memory.\n");
       printString("Undefined behavior.\n");
     }
   }
 
   if (envp != NULL) {
-    if (assignMemory(envp, SCHEDULER_STATE->schedulerPid) != 0) {
+    if (assignMemory(envp, 0) != 0) {
       printString(__func__);
       printString(": ");
       printInt(__LINE__);
       printString(": ");
-      printString("WARNING: Could not assign envp to scheduler.\n");
+      printString("WARNING: Could not protect envp memory.\n");
       printString("Undefined behavior.\n");
     }
     for (int ii = 0; envp[ii] != NULL; ii++) {
-      if (assignMemory(envp[ii], SCHEDULER_STATE->schedulerPid) != 0) {
+      if (assignMemory(envp[ii], 0) != 0) {
         printString(__func__);
         printString(": ");
         printInt(__LINE__);
         printString(": ");
-        printString("WARNING: Could not assign envp[");
+        printString("WARNING: Could not protect envp[");
         printInt(ii);
-        printString("] to scheduler.\n");
+        printString("] memory.\n");
         printString("Undefined behavior.\n");
       }
     }
   }
 
-  if (assignMemory(processDescriptor->fileDescriptors,
-    SCHEDULER_STATE->schedulerPid) != 0
-  ) {
-    printString("WARNING: Could not assign fileDescriptors to scheduler.\n");
+  if (assignMemory(processDescriptor->fileDescriptors, 0) != 0) {
+    printString("WARNING: Could not protect fileDescriptors memory.\n");
     printString("Undefined behavior.\n");
   }
   for (int ii = 0; ii < processDescriptor->numFileDescriptors; ii++) {
-    if (assignMemory(processDescriptor->fileDescriptors[ii],
-      SCHEDULER_STATE->schedulerPid) != 0
-    ) {
-      printString("WARNING: Could not assign fileDescriptors[");
+    if (assignMemory(processDescriptor->fileDescriptors[ii], 0) != 0) {
+      printString("WARNING: Could not protect fileDescriptors[");
       printInt(ii);
-      printString("] to scheduler.\n");
+      printString("] memory.\n");
       printString("Undefined behavior.\n");
     }
   }
@@ -3604,28 +3600,24 @@ void runScheduler(void) {
 
   if (processRunning(processDescriptor) == false) {
     if (processDescriptor->envp != NULL) {
-      if (assignMemory(processDescriptor->envp,
-        SCHEDULER_STATE->schedulerPid) != 0
-      ) {
+      if (assignMemory(processDescriptor->envp, 0) != 0) {
         printString(__func__);
         printString(": ");
         printInt(__LINE__);
         printString(": ");
-        printString("WARNING: Could not assign envp to scheduler\n");
+        printString("WARNING: Could not protect envp memory\n");
         printString("Undefined behavior\n");
       }
 
       for (int ii = 0; processDescriptor->envp[ii] != NULL; ii++) {
-        if (assignMemory(processDescriptor->envp[ii],
-          SCHEDULER_STATE->schedulerPid) != 0
-        ) {
+        if (assignMemory(processDescriptor->envp[ii], 0) != 0) {
           printString(__func__);
           printString(": ");
           printInt(__LINE__);
           printString(": ");
-          printString("WARNING: Could not assign envp[");
+          printString("WARNING: Could not protect envp[");
           printInt(ii);
-          printString("] to scheduler\n");
+          printString("] memory\n");
           printString("Undefined behavior\n");
         }
       }
