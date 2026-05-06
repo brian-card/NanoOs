@@ -62,7 +62,7 @@ extern "C"
 /// @def NANO_OS_VERSION
 ///
 /// @brief The version string for NanoOs
-#define NANO_OS_VERSION                             "0.1.0"
+#define NANO_OS_VERSION                             "0.2.0"
 
 /// @def ROOT_USER_ID
 ///
