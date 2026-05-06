@@ -84,7 +84,8 @@ extern "C"
 {
 #endif
 
-/// @fn void localFree(MemoryManagerState *memoryManagerState, void *ptr)
+/// @fn void localFree(MemoryManagerState *memoryManagerState,
+///   void *ptr, Pid callingPid)
 ///
 /// @brief Free a previously-allocated block of memory.
 ///
@@ -92,9 +93,14 @@ extern "C"
 ///   structure that holds the values used for memory allocation and
 ///   deallocation.
 /// @param ptr A pointer to the block of memory to free.
+/// @param callingPid The PID of the process freeing the memory.
 ///
 /// @return This function always succeeds and returns no value.
-void localFree(MemoryManagerState *memoryManagerState, void *ptr) {
+void localFree(MemoryManagerState *memoryManagerState,
+  void *ptr, Pid callingPid
+) {
+  (void) callingPid; // Used for debugging, so make the compiler ignore it.
+  
   startDebugMessage("In localFree\n");
   if (isDynamicPointer(ptr)) {
     MemNode *memNode = memNode(ptr);
@@ -320,23 +326,24 @@ void localFree(MemoryManagerState *memoryManagerState, void *ptr) {
 }
 
 /// @fn void localFreeProcessMemory(
-///   MemoryManagerState *memoryManagerState, Pid pid)
+///   MemoryManagerState *memoryManagerState, Pid pid, Pid callingPid)
 ///
 /// @brief Free *ALL* the memory owned by a process given its process ID.
 ///
 /// @param memoryManagerState A pointer to the MemoryManagerState
 ///   structure that holds the values used for memory allocation and
 ///   deallocation.
-/// @param processIUd The ID of the process to free the memory of.
+/// @param pid The ID of the process to free the memory of.
+/// @param callingPid The ID of the process making the call.
 ///
 /// @return This function always succeeds and returns no value.
 void localFreeProcessMemory(
-  MemoryManagerState *memoryManagerState, Pid pid
+  MemoryManagerState *memoryManagerState, Pid pid, Pid callingPid
 ) {
   for (MemNode *cur = memoryManagerState->allocated; cur != NULL; ) {
     MemNode *next = cur->next;
     if (cur->owner == pid) {
-      localFree(memoryManagerState, &cur[1]);
+      localFree(memoryManagerState, &cur[1], callingPid);
     }
     cur = next;
   }
@@ -371,7 +378,7 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
   if (size == 0) {
     // In this case, there's no point in going through any path below.  Just
     // free it, return NULL, and be done with it.
-    localFree(memoryManagerState, ptr);
+    localFree(memoryManagerState, ptr, pid);
     return NULL;
   } else if ((size + sizeof(MemNode)) > memoryManagerState->bytesFree) {
     // Sanity test failed.  We're being asked for more memory than is available
@@ -649,7 +656,7 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
     // memory.
     startDebugMessage("Copying old memory to new memory\n");
     memcpy(returnValue, ptr, sizeOfMemory(ptr));
-    localFree(memoryManagerState, ptr);
+    localFree(memoryManagerState, ptr, pid);
   }
   
   return returnValue;
@@ -751,7 +758,7 @@ int memoryManagerFreeCommandHandler(
   int returnValue = 0;
 
   void *ptr = processMessageData(incoming);
-  localFree(memoryManagerState, ptr);
+  localFree(memoryManagerState, ptr, processPid(processMessageFrom(incoming)));
   if (processMessageRelease(incoming) != processSuccess) {
     printString("ERROR: "
       "Could not release message from memoryManagerFreeCommandHandler.\n");
@@ -822,7 +829,8 @@ int memoryManagerFreeProcessMemoryCommandHandler(
     == SCHEDULER_STATE->schedulerPid
   ) {
     Pid pid = (Pid) ((uintptr_t) processMessageData(incoming));
-    localFreeProcessMemory(memoryManagerState, pid);
+    localFreeProcessMemory(memoryManagerState,
+      pid, processPid(processMessageFrom(incoming)));
     processMessageData(incoming) = (void*) ((uintptr_t) 0);
   } else {
     printString(
