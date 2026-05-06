@@ -81,7 +81,7 @@ extern "C"
 
 /// @def FGETS_CONSOLE_BUFFER_KEY
 ///
-/// @brief Per-process storage key for the consoleBufer pointer in consoleFGets.
+/// @brief Per-process storage key for the consoleBufer pointer in nanoOsFgets.
 #define FGETS_CONSOLE_BUFFER_KEY                          0
 
 /// @def MAX_GET_MESSAGE_RETRIES
