@@ -740,7 +740,7 @@ int halPosixImplInit(jmp_buf resetBuffer, Hal *hal) {
   
   // Simulate having a total of 64 KB available for dynamic memory.
   _bottomOfHeap = (void*) (((uintptr_t) &topOfStack)
-    - ((uintptr_t) ((65536 * DEBUG_MULTIPLIER) - 13608)));
+    - ((uintptr_t) ((65536 * DEBUG_MULTIPLIER) - 13600)));
   fprintf(stderr, "Bottom of stack     = %p\n", (void*) _bottomOfHeap);
   jmp_buf returnBuffer;
   if (setjmp(returnBuffer) == 0) {
