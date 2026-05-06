@@ -466,13 +466,13 @@ ProcessMessage* initSendProcessMessageToProcess(
   } else if (!processRunning(processDescriptor)) {
     // Can't send to a non-running process.
     printString("ERROR: Could not send message from process ");
-    printInt(pid(getRunningProcess()));
+    printInt(processPid(getRunningProcess()));
     printString("\n");
     if (processDescriptor->mainThread == NULL) {
       printString("ERROR: thread is NULL\n");
     } else {
       printString("ERROR: Process ");
-      printInt(pid(processDescriptor));
+      printInt(processPid(processDescriptor));
       printString(" is in state ");
       printInt(processState(processDescriptor));
       printString("\n");

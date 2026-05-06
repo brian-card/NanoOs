@@ -685,16 +685,16 @@ int memoryManagerReallocCommandHandler(
   void *clientReturnValue
     = localRealloc(memoryManagerState,
       reallocMessage->ptr, reallocMessage->size,
-      pid(processMessageFrom(incoming)));
+      processPid(processMessageFrom(incoming)));
   if (clientReturnValue != NULL) {
     reallocMessage->size = sizeOfMemory(clientReturnValue);
   } else if ((reallocMessage->size > 0)
-    && (pid(processMessageFrom(incoming)) != SCHEDULER_STATE->schedulerPid)
+    && (processPid(processMessageFrom(incoming)) != SCHEDULER_STATE->schedulerPid)
   ) {
     printString("Failed to allocate ");
     printInt(reallocMessage->size);
     printString(" bytes for process ");
-    printInt(pid(processMessageFrom(incoming)));
+    printInt(processPid(processMessageFrom(incoming)));
     printString("\n");
     memoryManagerDumpMemoryAllocations(memoryManagerState, NULL);
     do {
@@ -818,7 +818,7 @@ int memoryManagerFreeProcessMemoryCommandHandler(
   MemoryManagerState *memoryManagerState, ProcessMessage *incoming
 ) {
   int returnValue = 0;
-  if (pid(processMessageFrom(incoming))
+  if (processPid(processMessageFrom(incoming))
     == SCHEDULER_STATE->schedulerPid
   ) {
     Pid pid = (Pid) ((uintptr_t) processMessageData(incoming));
@@ -868,7 +868,7 @@ int memoryManagerAssignMemoryCommandHandler(
 ) {
   int returnValue = 0;
   
-  if (pid(processMessageFrom(incoming))
+  if (processPid(processMessageFrom(incoming))
     == SCHEDULER_STATE->schedulerPid
   ) {
     AssignMemoryParams *assignMemoryParams

@@ -137,7 +137,7 @@ extern "C"
 /// @def pid
 ///
 /// @brief Function macro to get the numeric Pid given its descriptor.
-#define pid(processDescriptor) \
+#define processPid(processDescriptor) \
   (processDescriptor)->pid
 
 /// @def processState

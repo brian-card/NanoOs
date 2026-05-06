@@ -64,7 +64,7 @@ int filesystemOpenFileCommandHandler(
         nanoOsFile->file = fileHandle;
         nanoOsFile->currentPosition = 0;
         nanoOsFile->fd = filesystemState->numOpenFiles + 3;
-        nanoOsFile->owner = pid(processMessageFrom(processMessage));
+        nanoOsFile->owner = processPid(processMessageFrom(processMessage));
         filesystemState->numOpenFiles++;
 
         nanoOsFile->next = filesystemState->openFiles;

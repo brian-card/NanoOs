@@ -2140,7 +2140,7 @@ int schedulerKillProcessCommandHandler(
   int returnValue = 0;
 
   UserId callingUserId
-    = allProcesses[pid(processMessageFrom(processMessage)) - 1].userId;
+    = allProcesses[processPid(processMessageFrom(processMessage)) - 1].userId;
   Pid pid = (Pid) ((uintptr_t) processMessageData(processMessage));
   int processIndex = pid - 1;
 
@@ -2349,7 +2349,7 @@ int schedulerGetProcessUserCommandHandler(
   SchedulerState *schedulerState, ProcessMessage *processMessage
 ) {
   int returnValue = 0;
-  Pid callingPid = pid(processMessageFrom(processMessage));
+  Pid callingPid = processPid(processMessageFrom(processMessage));
   if ((callingPid > 0) && (callingPid <= NANO_OS_NUM_PROCESSES)) {
     processMessageData(processMessage)
       = (void*) ((intptr_t) schedulerState->allProcesses[callingPid - 1].userId);
@@ -2379,7 +2379,7 @@ int schedulerSetProcessUserCommandHandler(
   SchedulerState *schedulerState, ProcessMessage *processMessage
 ) {
   int returnValue = 0;
-  Pid callingPid = pid(processMessageFrom(processMessage));
+  Pid callingPid = processPid(processMessageFrom(processMessage));
   UserId userId = (UserId) ((intptr_t) processMessageData(processMessage));
   processMessageData(processMessage) = (void*) ((intptr_t) -1);
 
@@ -2415,7 +2415,7 @@ int schedulerCloseAllFileDescriptorsCommandHandler(
   SchedulerState *schedulerState, ProcessMessage *processMessage
 ) {
   int returnValue = 0;
-  Pid callingPid = pid(processMessageFrom(processMessage));
+  Pid callingPid = processPid(processMessageFrom(processMessage));
   ProcessDescriptor *processDescriptor
     = &schedulerState->allProcesses[callingPid - 1];
   closeProcessFileDescriptors(schedulerState, processDescriptor);
@@ -2467,7 +2467,7 @@ int schedulerExecveCommandHandler(
   }
 
   ProcessDescriptor *processDescriptor = &schedulerState->allProcesses[
-    pid(processMessageFrom(processMessage)) - 1];
+    processPid(processMessageFrom(processMessage)) - 1];
 
   ExecArgs *execArgs = (ExecArgs*) processMessageData(processMessage);
   if (execArgs == NULL) {
@@ -2477,7 +2477,7 @@ int schedulerExecveCommandHandler(
     return returnValue; // 0; Don't retry this command
   }
   processMessageData(processMessage) = (void*) ((intptr_t) 0);
-  execArgs->callingPid = pid(processMessageFrom(processMessage));
+  execArgs->callingPid = processPid(processMessageFrom(processMessage));
 
   char *pathname = execArgs->pathname;
   if (pathname == NULL) {
@@ -2800,14 +2800,14 @@ int schedulerSpawnCommandHandler(
     processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
   }
-  execArgs->callingPid = pid(processMessageFrom(processMessage));
+  execArgs->callingPid = processPid(processMessageFrom(processMessage));
   execArgs->pathname = spawnArgs->path;
   execArgs->argv = spawnArgs->argv;
   execArgs->envp = spawnArgs->envp;
   execArgs->schedulerState = schedulerState;
 
   processDescriptor->userId
-    = allProcesses[pid(processMessageFrom(processMessage)) - 1].userId;
+    = allProcesses[processPid(processMessageFrom(processMessage)) - 1].userId;
 
   processDescriptor->numFileDescriptors = NUM_STANDARD_FILE_DESCRIPTORS;
   // Use calloc for processDescriptor->fileDescriptors in case we fail to
@@ -3030,7 +3030,7 @@ void handleSchedulerMessage(SchedulerState *schedulerState) {
       printString(" of type ");
       printInt(messageType);
       printString(" from process ");
-      printInt(pid(processMessageFrom(message)));
+      printInt(processPid(processMessageFrom(message)));
       printString("\n");
       return;
     }
