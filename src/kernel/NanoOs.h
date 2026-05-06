@@ -77,7 +77,7 @@ extern "C"
 /// @def NUM_PROCESS_STORAGE_KEYS
 ///
 /// @brief The total number of keys supported by the per-process storage.
-#define NUM_PROCESS_STORAGE_KEYS                             1
+#define NUM_PROCESS_STORAGE_KEYS                          1
 
 /// @def FGETS_CONSOLE_BUFFER_KEY
 ///
@@ -119,25 +119,6 @@ extern "C"
 /// @brief Convenience macro for the common operation of destroying a string.
 #define stringDestroy(string) ((char*) (free((void*) string), NULL))
 
-/// @def copyBytes
-///
-/// @brief Copy a specified number of bytes from a source to a destination one
-/// byte at a time.  The source and destination may be at unaligned memory
-/// addresses.
-///
-/// @param dst A pointer to the destination memory.
-/// @param src A pointer to the source memory.
-/// @param len The number of bytes to copy from the source to the destination.
-#define copyBytes(dst, src, len) \
-  do { \
-    unsigned char *dstBytes = (unsigned char*) (dst); \
-    unsigned char *srcBytes = (unsigned char*) (src); \
-    size_t copyLength = (size_t) (len); \
-    for (size_t ii = 0; ii < copyLength; ii++) { \
-      dstBytes[ii] = srcBytes[ii]; \
-    } \
-  } while (0)
-
 /// @def readBytes
 ///
 /// @brief Read a value from a memory address that may be unaligned.
@@ -145,7 +126,7 @@ extern "C"
 /// @param dst A pointer to the destination memory.  This is expected to be a
 ///   multi-byte type.
 /// @param src A pointer to the source memory.
-#define readBytes(dst, src) copyBytes(dst, src, sizeof(*(dst)))
+#define readBytes(dst, src) memcpy(dst, src, sizeof(*(dst)))
 
 /// @def writeBytes
 ///
@@ -154,7 +135,7 @@ extern "C"
 /// @param dst A pointer to the destination memory.
 /// @param src A pointer to the source memory.  This is expected to be a
 ///   multi-byte type.
-#define writeBytes(dst, src) copyBytes(dst, src, sizeof(*(src)))
+#define writeBytes(dst, src) memcpy(dst, src, sizeof(*(src)))
 
 // Support functions
 Pid getNumPipes(const char *commandLine);
