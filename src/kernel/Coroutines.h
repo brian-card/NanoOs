@@ -301,7 +301,8 @@ CoroutineState coroutineState(Coroutine *coroutine);
 void coroutineSetThreadingSupportEnabled(bool state);
 bool coroutineThreadingSupportEnabled();
 #endif
-int coroutineTerminate(Coroutine *targetCoroutine, Comutex **mutexes);
+int coroutineTerminate(Coroutine *targetCoroutine, Comutex **mutexes,
+  bool keepMessageQueue);
 Coroutine* getRunningCoroutine(void);
 bool coroutineDeadlocked(Coroutine *coroutine);
 

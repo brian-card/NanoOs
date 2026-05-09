@@ -1333,20 +1333,25 @@ void coroutineAllocateStack(int stackSize) {
   }
 }
 
-/// @fn int coroutineTerminate(Coroutine *targetCoroutine, Comutex **mutexes)
+/// @fn int coroutineTerminate(Coroutine *targetCoroutine, Comutex **mutexes,
+///   bool keepMessageQueue)
 ///
 /// @brief Kill a coroutine that's currently in progress.
 ///
 /// @param targetCoroutine A pointer to the Coroutine to terminate.
 /// @param mutextes A one-dimensional, NULL-terminated array of mutexes to check
 ///   and unlock if they're locked by the Coroutine.
+/// @param keepMessageQueue Whether or not the message queue should be left
+///   intact at the end of the termination.
 ///
 /// @note A Coroutine can only be blocked on a single Cocondition and the
 /// information for that Cocondition is contained in the Coroutine structure, so
 /// there's no need to pass in Coconditions to check.
 ///
 /// @return Returns coroutineSuccess on success, coroutineError on error.
-int coroutineTerminate(Coroutine *targetCoroutine, Comutex **mutexes) {
+int coroutineTerminate(Coroutine *targetCoroutine, Comutex **mutexes,
+  bool keepMessageQueue
+) {
   if (targetCoroutine == NULL) {
     return coroutineError;
   }
@@ -1446,13 +1451,16 @@ int coroutineTerminate(Coroutine *targetCoroutine, Comutex **mutexes) {
   targetCoroutine->prevToLock = NULL;
   targetCoroutine->blockingComutex = NULL;
 
-  // Destroy any messages that were sent.
-  // NOTE:  This must be done after we've taken care of the signals and mutexes
-  // above because the coroutine may have been waiting on a message, in which
-  // case its message queue mutex and condition will have been in use.
-  comessageQueueDestroy(targetCoroutine);
-  // Re-initialize the queue.
-  comessageQueueCreate(targetCoroutine);
+  if (keepMessageQueue == false) {
+    // Destroy any messages that were sent.
+    // NOTE:  This must be done after we've taken care of the signals and
+    // mutexes above because the coroutine may have been waiting on a message,
+    // in which case its message queue mutex and condition will have been in
+    // use.
+    comessageQueueDestroy(targetCoroutine);
+    // Re-initialize the queue.
+    comessageQueueCreate(targetCoroutine);
+  }
 
   return coroutineSuccess;
 }
