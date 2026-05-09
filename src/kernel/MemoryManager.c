@@ -696,7 +696,9 @@ int memoryManagerReallocCommandHandler(
   if (clientReturnValue != NULL) {
     reallocMessage->size = sizeOfMemory(clientReturnValue);
   } else if ((reallocMessage->size > 0)
-    && (processPid(processMessageFrom(incoming)) != SCHEDULER_STATE->schedulerPid)
+    && (processPid(processMessageFrom(incoming))
+      != SCHEDULER_STATE->schedulerPid
+    )
   ) {
     printString("Failed to allocate ");
     printInt(reallocMessage->size);
@@ -790,8 +792,8 @@ int memoryManagerGetFreeMemoryCommandHandler(
   int returnValue = 0;
   
   ProcessDescriptor *from = processMessageFrom(incoming);
-  // We need to mark waiting as true here so that processMessageSetDone signals the
-  // client side correctly.
+  // We need to mark waiting as true here so that processMessageSetDone signals
+  // the client side correctly.
   processMessageInit(response, MEMORY_MANAGER_RETURNING_FREE_MEMORY,
     NULL, memoryManagerState->bytesFree, true);
   if (processMessageQueuePush(from, response) != processSuccess) {
@@ -898,6 +900,11 @@ int memoryManagerAssignMemoryCommandHandler(
         returnValue = -1;
         memoryManagerDumpMemoryAllocations(memoryManagerState, NULL);
       }
+    } else {
+      printString("WARNING: Attempt to assign non-dynamic memory 0x");
+      printHex((uintptr_t) assignMemoryParams->ptr);
+      printString("\n");
+      returnValue = -1;
     }
   } else {
     printString(
