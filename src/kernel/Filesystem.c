@@ -69,6 +69,9 @@ int filesystemOpenFileCommandHandler(
 
         nanoOsFile->next = filesystemState->openFiles;
         nanoOsFile->prev = NULL;
+        if (filesystemState->openFiles != NULL) {
+          filesystemState->openFiles->prev = nanoOsFile;
+        }
         filesystemState->openFiles = nanoOsFile;
       } else {
         filesystemState->driverFclose(filesystemState->driverState, fileHandle);
