@@ -1198,12 +1198,22 @@ int schedulerExecve(const char *pathname,
 
   ExecArgs *execArgs = (ExecArgs*) calloc(1, sizeof(ExecArgs));
   if (execArgs == NULL) {
+    printString(__func__);
+    printString(": ");
+    printInt(__LINE__);
+    printString(": ");
+    printString("Allocating execArgs failed\n");
     errno = ENOMEM;
     return -1;
   }
 
   execArgs->pathname = (char*) malloc(strlen(pathname) + 1);
   if (execArgs->pathname == NULL) {
+    printString(__func__);
+    printString(": ");
+    printInt(__LINE__);
+    printString(": ");
+    printString("Allocating execArgs->pathname failed\n");
     errno = ENOMEM;
     goto freeExecArgs;
   }
@@ -1214,6 +1224,11 @@ int schedulerExecve(const char *pathname,
   argvLen++; // Account for the terminating NULL element
   execArgs->argv = (char**) calloc(1, argvLen * sizeof(char*));
   if (execArgs->argv == NULL) {
+    printString(__func__);
+    printString(": ");
+    printInt(__LINE__);
+    printString(": ");
+    printString("Allocating execArgs->argv failed\n");
     errno = ENOMEM;
     goto freeExecArgs;
   }
@@ -1226,6 +1241,13 @@ int schedulerExecve(const char *pathname,
     // above, so it's safe to use strlen.
     execArgs->argv[ii] = (char*) malloc(strlen(argv[ii]) + 1);
     if (execArgs->argv[ii] == NULL) {
+      printString(__func__);
+      printString(": ");
+      printInt(__LINE__);
+      printString(": ");
+      printString("Allocating execArgs->argv[");
+      printInt(ii);
+      printString("] failed\n");
       errno = ENOMEM;
       goto freeExecArgs;
     }
@@ -1239,6 +1261,11 @@ int schedulerExecve(const char *pathname,
     envpLen++; // Account for the terminating NULL element
     execArgs->envp = (char**) calloc(1, envpLen * sizeof(char*));
     if (execArgs->envp == NULL) {
+      printString(__func__);
+      printString(": ");
+      printInt(__LINE__);
+      printString(": ");
+      printString("Allocating execArgs->envp failed\n");
       errno = ENOMEM;
       goto freeExecArgs;
     }
@@ -1250,6 +1277,13 @@ int schedulerExecve(const char *pathname,
       // above, so it's safe to use strlen.
       execArgs->envp[ii] = (char*) malloc(strlen(envp[ii]) + 1);
       if (execArgs->envp[ii] == NULL) {
+        printString(__func__);
+        printString(": ");
+        printInt(__LINE__);
+        printString(": ");
+        printString("Allocating execArgs->envp[");
+        printInt(ii);
+        printString("] failed\n");
         errno = ENOMEM;
         goto freeExecArgs;
       }
@@ -1591,6 +1625,7 @@ int schedFclose(FILE *stream) {
       errno = ENOMEM;
       return EOF;
     }
+  
     FilesystemFcloseParameters fcloseParameters;
     fcloseParameters.stream = stream;
     fcloseParameters.returnValue = 0;
@@ -2116,8 +2151,8 @@ int loadProcessDescriptorOverlayMetadata(ProcessDescriptor *processDescriptor) {
   strcat(overlayPath, OVERLAY_EXT);
 
   int returnValue
-    = schedGetFileBlockMetadataFromPath(overlayPath, &processDescriptor->overlay);
-
+    = schedGetFileBlockMetadataFromPath(overlayPath,
+      &processDescriptor->overlay);
   schedFree(overlayPath);
 
   return returnValue;
