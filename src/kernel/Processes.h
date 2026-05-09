@@ -168,8 +168,8 @@ extern "C"
 /// @def processTerminate
 ///
 /// @brief Function macro to terminate a running process.
-#define processTerminate(processDescriptor) \
-  coroutineTerminate((processDescriptor)->mainThread, NULL)
+#define processTerminate(processDescriptor, keepMessageQueue) \
+  coroutineTerminate((processDescriptor)->mainThread, NULL, keepMessageQueue)
 
 /// @def processGetNanoseconds
 ///

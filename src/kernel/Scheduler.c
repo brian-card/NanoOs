@@ -2198,7 +2198,8 @@ int schedulerKillProcessCommandHandler(
       // long timeout.  So, attempt to remove from the queues in that order.
       if (processQueueRemove(&schedulerState->waiting, processDescriptor) != 0
       ) {
-        if (processQueueRemove(processDescriptor->readyQueue, processDescriptor) != 0
+        if (processQueueRemove(processDescriptor->readyQueue,
+          processDescriptor) != 0
         ) {
           processQueueRemove(&schedulerState->timedWaiting, processDescriptor);
         }
@@ -2243,7 +2244,8 @@ int schedulerKillProcessCommandHandler(
       // we terminate it.
       closeProcessFileDescriptors(schedulerState, processDescriptor);
 
-      if (processTerminate(processDescriptor) == processSuccess) {
+      // Terminate the process and make sure its message queue gets flushed.
+      if (processTerminate(processDescriptor, false) == processSuccess) {
         threadSetContext(processDescriptor->mainThread,
           processDescriptor);
         processDescriptor->name = NULL;
@@ -2621,8 +2623,11 @@ int schedulerExecveCommandHandler(
     }
   }
 
-  // Kill and clear out the calling process.
-  processTerminate(processDescriptor);
+  // Kill and clear out the calling process.  We're reusing this process,
+  // though, and if we're using pipes, something may have already sent us a
+  // message that the replacement is expected to process.  So, keep the message
+  // queue (set the second argument to true).
+  processTerminate(processDescriptor, true);
   threadSetContext(processDescriptor->mainThread, processDescriptor);
 
   // We don't want to wait for the memory manager to release the memory.  Make
@@ -3003,9 +3008,10 @@ int schedulerSpawnCommandHandler(
     returnValue = 0; // Don't retry this command
     processMessageSetDone(processMessage);
 
-    // We have to terminate the process because something may have pushed a message
-    // onto its message queue.
-    processTerminate(processDescriptor);
+    // We have to terminate the process because something may have pushed a
+    // message onto its message queue.  Set the second parametr to false to make
+    // sure that the message queue is purged.
+    processTerminate(processDescriptor, false);
     threadSetContext(processDescriptor->mainThread, processDescriptor);
     return returnValue; // 0
   }
@@ -3677,8 +3683,9 @@ void runScheduler(void) {
     }
 
     // Terminate the process so that any lingering messages in its message queue
-    // get released.
-    processTerminate(processDescriptor);
+    // get released.  Set the second parameter to false to make sure that
+    // happens.
+    processTerminate(processDescriptor, false);
     threadSetContext(processDescriptor->mainThread, processDescriptor);
     memset(&processDescriptor->message, 0, sizeof(ProcessMessage));
   }
