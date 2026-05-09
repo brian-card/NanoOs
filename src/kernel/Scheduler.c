@@ -2599,6 +2599,9 @@ int schedulerExecveCommandHandler(
     printString("Undefined behavior.\n");
   }
   for (int ii = 0; ii < processDescriptor->numFileDescriptors; ii++) {
+    if (processDescriptor->fileDescriptors[ii] == NULL) {
+      continue;
+    }
     if (assignMemory(processDescriptor->fileDescriptors[ii], 0) != 0) {
       printString("WARNING: Could not protect fileDescriptors[");
       printInt(ii);
@@ -2710,6 +2713,9 @@ int schedulerExecveCommandHandler(
     printString("Undefined behavior.\n");
   }
   for (int ii = 0; ii < processDescriptor->numFileDescriptors; ii++) {
+    if (processDescriptor->fileDescriptors[ii] == NULL) {
+      continue;
+    }
     if (assignMemory(processDescriptor->fileDescriptors[ii],
       processDescriptor->pid) != 0
     ) {
@@ -2972,10 +2978,14 @@ int schedulerSpawnCommandHandler(
   if (assignMemory(processDescriptor->fileDescriptors,
     processDescriptor->pid) != 0
   ) {
-    printString("WARNING: Could not assign fileDescriptors to spawn process.\n");
+    printString(
+      "WARNING: Could not assign fileDescriptors to spawn process.\n");
     printString("Undefined behavior.\n");
   }
   for (int ii = 0; ii < processDescriptor->numFileDescriptors; ii++) {
+    if (processDescriptor->fileDescriptors[ii] == NULL) {
+      continue;
+    }
     if (assignMemory(processDescriptor->fileDescriptors[ii],
       processDescriptor->pid) != 0
     ) {
