@@ -307,7 +307,7 @@ typedef struct ProcessQueue {
 /// @param rootFsPid The Pid of the root filesystem.
 /// @param firstUserPid The Pid of the first user process.
 /// @param firstShellPid The Pid of the first shell process.
-/// @param runScheduler Function pointer to the runScheduler function in the
+/// @param runKernelExecutive Function pointer to the runKernelExecutive function in the
 ///   Scheduler library.
 typedef struct SchedulerState {
   ProcessDescriptor   allProcesses[NANO_OS_NUM_PROCESSES];
@@ -325,7 +325,7 @@ typedef struct SchedulerState {
   Pid                 rootFsPid;
   Pid                 firstUserPid;
   Pid                 firstShellPid;
-  void              (*runScheduler)(void);
+  void              (*runKernelExecutive)(void);
 } SchedulerState;
 
 /// @struct CommandDescriptor

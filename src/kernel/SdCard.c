@@ -170,16 +170,12 @@ int schedSdReadBlocks(void *context, uint32_t startBlock,
   sdCommandParams.blockSize = blockSize;
   sdCommandParams.buffer = buffer;
 
-  ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
-  SCHEDULER_STATE->currentReady
-    = &SCHEDULER_STATE->ready[PRIVELEGE_LEVEL_KERNEL];
-
   ProcessMessage *processMessage = getAvailableMessage();
   for (int ii = 0;
     (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
     ii++
   ) {
-    SCHEDULER_STATE->runScheduler();
+    SCHEDULER_STATE->runKernelExecutive();
     processMessage = getAvailableMessage();
   }
   if (processMessage == NULL) {
@@ -192,17 +188,18 @@ int schedSdReadBlocks(void *context, uint32_t startBlock,
 
   processMessageInit(processMessage, SD_CARD_READ_BLOCKS,
     &sdCommandParams, sizeof(sdCommandParams), true);
-  if (sendProcessMessageToPid(sdCardProcess, processMessage) != processSuccess) {
+  if (sendProcessMessageToPid(sdCardProcess, processMessage)
+    != processSuccess
+  ) {
     return -ENXIO;
   }
 
   while (processMessageDone(processMessage) == false) {
-    SCHEDULER_STATE->runScheduler();
+    SCHEDULER_STATE->runKernelExecutive();
   }
   int returnValue = (int) ((intptr_t) processMessageData(processMessage));
   processMessageRelease(processMessage);
 
-  SCHEDULER_STATE->currentReady = currentReady;
   return returnValue;
 }
 
@@ -232,16 +229,12 @@ int schedSdWriteBlocks(void *context, uint32_t startBlock,
   sdCommandParams.blockSize = blockSize;
   sdCommandParams.buffer = (uint8_t*) buffer;
 
-  ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
-  SCHEDULER_STATE->currentReady
-    = &SCHEDULER_STATE->ready[PRIVELEGE_LEVEL_KERNEL];
-
   ProcessMessage *processMessage = getAvailableMessage();
   for (int ii = 0;
     (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
     ii++
   ) {
-    SCHEDULER_STATE->runScheduler();
+    SCHEDULER_STATE->runKernelExecutive();
     processMessage = getAvailableMessage();
   }
   if (processMessage == NULL) {
@@ -254,17 +247,18 @@ int schedSdWriteBlocks(void *context, uint32_t startBlock,
 
   processMessageInit(processMessage, SD_CARD_WRITE_BLOCKS,
     &sdCommandParams, sizeof(sdCommandParams), true);
-  if (sendProcessMessageToPid(sdCardProcess, processMessage) != processSuccess) {
+  if (sendProcessMessageToPid(sdCardProcess, processMessage)
+    != processSuccess
+  ) {
     return -ENXIO;
   }
 
   while (processMessageDone(processMessage) == false) {
-    SCHEDULER_STATE->runScheduler();
+    SCHEDULER_STATE->runKernelExecutive();
   }
   int returnValue = (int) ((intptr_t) processMessageData(processMessage));
   processMessageRelease(processMessage);
 
-  SCHEDULER_STATE->currentReady = currentReady;
   return returnValue;
 }
 

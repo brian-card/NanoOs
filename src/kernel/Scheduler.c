@@ -223,6 +223,26 @@ static const char* const shellNames[NANO_OS_MAX_NUM_SHELLS] = {
   "shell 1",
 };
 
+/// @fn void runKernelExecutive(void)
+///
+/// @brief Make one pass through all the PRIVELEGE_LEVEL_KERNEL and
+/// PRIVELEGE_LEVEL_SUPERVISOR processes.
+///
+/// @return This function returns no value.
+void runKernelExecutive(void) {
+  ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
+
+  for (int ii = 0; ii < PRIVELEGE_LEVEL_SUPERVISOR; ii++) {
+    SCHEDULER_STATE->currentReady = &SCHEDULER_STATE->ready[ii];
+    uint8_t queueSize = SCHEDULER_STATE->currentReady->numElements;
+    for (uint8_t jj = 0; jj < queueSize; jj++) {
+      runScheduler();
+    }
+  }
+
+  SCHEDULER_STATE->currentReady = currentReady;
+}
+
 /// @fn int processQueuePush(
 ///   ProcessQueue *processQueue, ProcessDescriptor *processDescriptor)
 ///
@@ -823,17 +843,13 @@ int schedulerSetPortShell(uint8_t consolePort, Pid shell) {
 /// @return Returns the number of ports the console is running on success, -1
 /// on failure.
 int schedulerGetNumConsolePorts(SchedulerState *schedulerState) {
-  ProcessQueue *currentReady = schedulerState->currentReady;
-  schedulerState->currentReady
-    = &schedulerState->ready[PRIVELEGE_LEVEL_KERNEL];
-
   int returnValue = -1;
   ProcessMessage *messageToSend = getAvailableMessage();
   for (int ii = 0;
     (ii < MAX_GET_MESSAGE_RETRIES) && (messageToSend == NULL);
     ii++
   ) {
-    runScheduler();
+    runKernelExecutive();
     messageToSend = getAvailableMessage();
   }
   if (messageToSend == NULL) {
@@ -843,7 +859,6 @@ int schedulerGetNumConsolePorts(SchedulerState *schedulerState) {
     printString(": ERROR: Out of messages\n");
     return returnValue; // -1
   }
-  schedulerState->currentReady = currentReady;
 
   processMessageInit(messageToSend, CONSOLE_GET_NUM_PORTS,
     /*data= */ 0, /* size= */ 0, /* waiting= */ true);
@@ -1342,10 +1357,6 @@ int closeProcessFileDescriptors(
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    ProcessQueue *currentReady = schedulerState->currentReady;
-    schedulerState->currentReady
-      = &schedulerState->ready[PRIVELEGE_LEVEL_KERNEL];
-
     FileDescriptor **fileDescriptors = processDescriptor->fileDescriptors;
     if (fileDescriptors == NULL) {
       // Nothing to do.
@@ -1356,7 +1367,7 @@ int closeProcessFileDescriptors(
       (ii < MAX_GET_MESSAGE_RETRIES) && (messageToSend == NULL);
       ii++
     ) {
-      runScheduler();
+      runKernelExecutive();
       messageToSend = getAvailableMessage();
     }
     if (messageToSend == NULL) {
@@ -1398,8 +1409,8 @@ int closeProcessFileDescriptors(
             STDIN_FILE_DESCRIPTOR_INDEX]->inputChannel.pid = PROCESS_ID_NOT_SET;
 
           if (processRunning(waitingProcessDescriptor)) {
-            // Send an empty message to the waiting process so that it will become
-            // unblocked.
+            // Send an empty message to the waiting process so that it will
+            // become unblocked.
             processMessageInit(messageToSend,
               fileDescriptor->outputChannel.messageType,
               /*data= */ NULL, /* size= */ 0, /* waiting= */ false);
@@ -1412,7 +1423,7 @@ int closeProcessFileDescriptors(
               (jj < MAX_GET_MESSAGE_RETRIES) && (messageToSend == NULL);
               jj++
             ) {
-              runScheduler();
+              runKernelExecutive();
               messageToSend = getAvailableMessage();
             }
             if (messageToSend == NULL) {
@@ -1449,8 +1460,8 @@ int closeProcessFileDescriptors(
             = PROCESS_ID_NOT_SET;
 
           if (processRunning(waitingProcessDescriptor)) {
-            // Send an empty message to the waiting process so that it will become
-            // unblocked.
+            // Send an empty message to the waiting process so that it will
+            // become unblocked.
             processMessageInit(messageToSend,
               fileDescriptor->outputChannel.messageType,
               /*data= */ NULL, /* size= */ 0, /* waiting= */ false);
@@ -1463,7 +1474,7 @@ int closeProcessFileDescriptors(
               (jj < MAX_GET_MESSAGE_RETRIES) && (messageToSend == NULL);
               jj++
             ) {
-              runScheduler();
+              runKernelExecutive();
               messageToSend = getAvailableMessage();
             }
             if (messageToSend == NULL) {
@@ -1494,7 +1505,6 @@ int closeProcessFileDescriptors(
     schedFree(fileDescriptors); processDescriptor->fileDescriptors = NULL;
     processDescriptor->numFileDescriptors = 0;
 
-    schedulerState->currentReady = currentReady;
     _functionInProgress = NULL;
   } else {
     printString("ERROR: Cannot execute ");
@@ -1527,17 +1537,13 @@ FILE* schedFopen(const char *pathname, const char *mode) {
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
-    SCHEDULER_STATE->currentReady
-      = &SCHEDULER_STATE->ready[PRIVELEGE_LEVEL_KERNEL];
-
     printDebugString("schedFopen: Getting message\n");
     ProcessMessage *processMessage = getAvailableMessage();
     for (int ii = 0;
       (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
       ii++
     ) {
-      runScheduler();
+      runKernelExecutive();
       processMessage = getAvailableMessage();
     }
     if (processMessage == NULL) {
@@ -1564,14 +1570,13 @@ FILE* schedFopen(const char *pathname, const char *mode) {
 
     printDebugString("schedFopen: Resuming filesystem\n");
     while (processMessageDone(processMessage) == false) {
-      runScheduler();
+      runKernelExecutive();
     }
     printDebugString("schedFopen: Filesystem message is done\n");
 
     returnValue = (FILE*) processMessageData(processMessage);
 
     processMessageRelease(processMessage);
-    SCHEDULER_STATE->currentReady = currentReady;
     _functionInProgress = NULL;
   } else {
     printString("ERROR: Cannot execute ");
@@ -1603,16 +1608,12 @@ int schedFclose(FILE *stream) {
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
-    SCHEDULER_STATE->currentReady
-      = &SCHEDULER_STATE->ready[PRIVELEGE_LEVEL_KERNEL];
-
     ProcessMessage *processMessage = getAvailableMessage();
     for (int ii = 0;
       (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
       ii++
     ) {
-      runScheduler();
+      runKernelExecutive();
       processMessage = getAvailableMessage();
     }
     if (processMessage == NULL) {
@@ -1636,7 +1637,7 @@ int schedFclose(FILE *stream) {
       processMessage);
 
     while (processMessageDone(processMessage) == false) {
-      runScheduler();
+      runKernelExecutive();
     }
 
     if (fcloseParameters.returnValue != 0) {
@@ -1645,7 +1646,6 @@ int schedFclose(FILE *stream) {
     }
 
     processMessageRelease(processMessage);
-    SCHEDULER_STATE->currentReady = currentReady;
     _functionInProgress = NULL;
   } else {
     printString("ERROR: Cannot execute ");
@@ -1677,16 +1677,12 @@ int schedRemove(const char *pathname) {
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
-    SCHEDULER_STATE->currentReady
-      = &SCHEDULER_STATE->ready[PRIVELEGE_LEVEL_KERNEL];
-
     ProcessMessage *processMessage = getAvailableMessage();
     for (int ii = 0;
       (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
       ii++
     ) {
-      runScheduler();
+      runKernelExecutive();
       processMessage = getAvailableMessage();
     }
     if (processMessage == NULL) {
@@ -1706,7 +1702,7 @@ int schedRemove(const char *pathname) {
       processMessage);
 
     while (processMessageDone(processMessage) == false) {
-      runScheduler();
+      runKernelExecutive();
     }
 
     returnValue = (int) ((intptr_t) processMessageData(processMessage));
@@ -1718,7 +1714,6 @@ int schedRemove(const char *pathname) {
     }
 
     processMessageRelease(processMessage);
-    SCHEDULER_STATE->currentReady = currentReady;
     _functionInProgress = NULL;
   } else {
     printString("ERROR: Cannot execute ");
@@ -1756,16 +1751,12 @@ size_t schedFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
-    SCHEDULER_STATE->currentReady
-      = &SCHEDULER_STATE->ready[PRIVELEGE_LEVEL_KERNEL];
-
     ProcessMessage *processMessage = getAvailableMessage();
     for (int ii = 0;
       (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
       ii++
     ) {
-      runScheduler();
+      runKernelExecutive();
       processMessage = getAvailableMessage();
     }
     if (processMessage == NULL) {
@@ -1786,11 +1777,10 @@ size_t schedFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
       processMessage);
 
     while (processMessageDone(processMessage) == false) {
-      runScheduler();
+      runKernelExecutive();
     }
 
     processMessageRelease(processMessage);
-    SCHEDULER_STATE->currentReady = currentReady;
     _functionInProgress = NULL;
   } else {
     printString("ERROR: Cannot execute ");
@@ -1828,16 +1818,12 @@ size_t schedFwrite(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
-    SCHEDULER_STATE->currentReady
-      = &SCHEDULER_STATE->ready[PRIVELEGE_LEVEL_KERNEL];
-
     ProcessMessage *processMessage = getAvailableMessage();
     for (int ii = 0;
       (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
       ii++
     ) {
-      runScheduler();
+      runKernelExecutive();
       processMessage = getAvailableMessage();
     }
     if (processMessage == NULL) {
@@ -1858,11 +1844,10 @@ size_t schedFwrite(void *ptr, size_t size, size_t nmemb, FILE *stream) {
       processMessage);
 
     while (processMessageDone(processMessage) == false) {
-      runScheduler();
+      runKernelExecutive();
     }
 
     processMessageRelease(processMessage);
-    SCHEDULER_STATE->currentReady = currentReady;
     _functionInProgress = NULL;
   } else {
     printString("ERROR: Cannot execute ");
@@ -1896,10 +1881,6 @@ char* schedFgets(char *buffer, int size, FILE *stream) {
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
-    SCHEDULER_STATE->currentReady
-      = &SCHEDULER_STATE->ready[PRIVELEGE_LEVEL_KERNEL];
-
     FilesystemIoCommandParameters filesystemIoCommandParameters = {
       .file = stream,
       .buffer = buffer,
@@ -1911,7 +1892,7 @@ char* schedFgets(char *buffer, int size, FILE *stream) {
       (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
       ii++
     ) {
-      runScheduler();
+      runKernelExecutive();
       processMessage = getAvailableMessage();
     }
     if (processMessage == NULL) {
@@ -1932,7 +1913,7 @@ char* schedFgets(char *buffer, int size, FILE *stream) {
       processMessage);
 
     while (processMessageDone(processMessage) == false) {
-      runScheduler();
+      runKernelExecutive();
     }
     if (filesystemIoCommandParameters.length > 0) {
       buffer[filesystemIoCommandParameters.length] = '\0';
@@ -1940,7 +1921,6 @@ char* schedFgets(char *buffer, int size, FILE *stream) {
     }
 
     processMessageRelease(processMessage);
-    SCHEDULER_STATE->currentReady = currentReady;
     _functionInProgress = NULL;
   } else {
     printString("ERROR: Cannot execute ");
@@ -1973,10 +1953,6 @@ int schedFputs(const char *s, FILE *stream) {
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
-    SCHEDULER_STATE->currentReady
-      = &SCHEDULER_STATE->ready[PRIVELEGE_LEVEL_KERNEL];
-
     FilesystemIoCommandParameters filesystemIoCommandParameters = {
       .file = stream,
       .buffer = (void*) s,
@@ -1988,7 +1964,7 @@ int schedFputs(const char *s, FILE *stream) {
       (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
       ii++
     ) {
-      runScheduler();
+      runKernelExecutive();
       processMessage = getAvailableMessage();
     }
     if (processMessage == NULL) {
@@ -2009,14 +1985,13 @@ int schedFputs(const char *s, FILE *stream) {
       processMessage);
 
     while (processMessageDone(processMessage) == false) {
-      runScheduler();
+      runKernelExecutive();
     }
     if (filesystemIoCommandParameters.length == 0) {
       returnValue = EOF;
     }
 
     processMessageRelease(processMessage);
-    SCHEDULER_STATE->currentReady = currentReady;
     _functionInProgress = NULL;
   } else {
     printString("ERROR: Cannot execute ");
@@ -2051,10 +2026,6 @@ int schedGetFileBlockMetadataFromFile(
     return -EINVAL;
   }
 
-  ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
-  SCHEDULER_STATE->currentReady
-    = &SCHEDULER_STATE->ready[PRIVELEGE_LEVEL_KERNEL];
-
   GetFileBlockMetadataArgs args = {
     .stream = stream,
     .metadata = metadata,
@@ -2065,7 +2036,7 @@ int schedGetFileBlockMetadataFromFile(
     (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
     ii++
   ) {
-    SCHEDULER_STATE->runScheduler();
+    runKernelExecutive();
     processMessage = getAvailableMessage();
   }
   if (processMessage == NULL) {
@@ -2089,11 +2060,10 @@ int schedGetFileBlockMetadataFromFile(
     return -EIO;
   }
   while (processMessageDone(processMessage) == false) {
-    SCHEDULER_STATE->runScheduler();
+    runKernelExecutive();
   }
   processMessageRelease(processMessage);
 
-  SCHEDULER_STATE->currentReady = currentReady;
   return 0;
 }
 
@@ -3847,7 +3817,7 @@ __attribute__((noinline)) void startScheduler(
   schedulerState.memoryManagerPid = 3;
   schedulerState.firstUserPid = 4;
   schedulerState.firstShellPid = 4;
-  schedulerState.runScheduler = runScheduler;
+  schedulerState.runKernelExecutive = runKernelExecutive;
   SCHEDULER_STATE = &schedulerState;
   printDebugString("Set scheduler state.\n");
 
