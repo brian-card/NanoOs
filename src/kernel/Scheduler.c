@@ -2230,7 +2230,8 @@ int schedulerKillProcessCommandHandler(
         &schedulerState->allProcesses[SCHEDULER_STATE->memoryManagerPid - 1],
         processMessage) != processSuccess
       ) {
-        printString("ERROR: Could not send MEMORY_MANAGER_FREE_PROCESS_MEMORY ");
+        printString(
+          "ERROR: Could not send MEMORY_MANAGER_FREE_PROCESS_MEMORY ");
         printString("message to memory manager\n");
         processMessageData(processMessage) = (void*) ((intptr_t) 1);
         if (processMessageSetDone(processMessage) != processSuccess) {
@@ -2238,6 +2239,9 @@ int schedulerKillProcessCommandHandler(
             "schedulerKillProcessCommandHandler.\n");
         }
       }
+      // MEMORY_MANAGER_FREE_PROCESS_MEMORY will have freed envp if it existed,
+      // so make sure it's NULL now.
+      processDescriptor->envp = NULL;
 
       // Close the file descriptors before we terminate the process so that
       // anything that gets sent to the process's queue gets cleaned up when
@@ -3656,7 +3660,9 @@ void runScheduler(void) {
         printString(": ");
         printInt(__LINE__);
         printString(": ");
-        printString("WARNING: Could not protect envp memory\n");
+        printString("WARNING: Could not protect envp memory from process ");
+        printInt(processDescriptor->pid);
+        printString("\n");
         printString("Undefined behavior\n");
       }
 
@@ -3668,7 +3674,9 @@ void runScheduler(void) {
           printString(": ");
           printString("WARNING: Could not protect envp[");
           printInt(ii);
-          printString("] memory\n");
+          printString("] memory from process ");
+          printInt(processDescriptor->pid);
+          printString("\n");
           printString("Undefined behavior\n");
         }
       }
