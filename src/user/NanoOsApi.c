@@ -179,7 +179,7 @@ NanoOsApi nanoOsApi = {
   // NanoOs-specific functionality
   
   // NanoOsUser.h functions:
-  .callOverlayFunction = callOverlayFunction,
+  .callOverlayFunction = callOverlayFunctionFromFile,
   
   // NanoOsUtils.h functions:
   .parseArgs = parseArgs,

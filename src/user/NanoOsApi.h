@@ -192,7 +192,8 @@ typedef struct NanoOsApi {
   // NanoOs-specific functionality
   
   // NanoOsUser.h functions:
-  void* (*callOverlayFunction)(const char *overlayPath, const char *overlay,
+  void* (*callOverlayFunction)(
+    const void *overlayNamespace, const void *overlay,
     const char *function, void *args);
   
   // NanoOsUtils.h functions:

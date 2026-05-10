@@ -75,29 +75,31 @@ OverlayFunction findOverlayFunction(const char *overlayFunctionName) {
   return overlayFunction;
 }
 
-/// @fn void* callOverlayFunction(const char *overlayDir, const char *overlay,
+/// @fn void* callOverlayFunctionFromFile(const void *od, const void *o,
 ///   const char *function, void *args)
 ///
 /// @brief Kernel function to load an overlay into memory, find a designated
 /// function, call it with the provided arguments, and return the return value.
 ///
-/// @param overlayDir The path to the overlay on the filesystem.  If this
+/// @param od The path to the overlay on the filesystem.  If this
 ///   parameter is NULL then this means the overlay path currently in use.
-/// @param overlay The name of the overlay minus the ".overlay" file extension
-///   that is local to getRunningProcess()->overlayDir.
+/// @param o The name of the overlay minus the ".overlay" file extension
+///   that is local to the overlay directory.
 /// @param function The name of the function exported by the overlay.
 /// @param args Any arguments to be passed to the function in the overlay, cast
 ///   to a void*.  This parameter may be NULL.
 ///
 /// @return Returns the value returned by the overlay function on success, NULL
 /// on failure.
-void* callOverlayFunction(const char *overlayDir, const char *overlay,
+void* callOverlayFunctionFromFile(const void *od, const void *o,
   const char *function, void *args
 ) {
+  const char *overlayDir = (const char*) od;
+  const char *overlay = (const char*) o;
   void *returnValue = NULL;
   if ((overlay == NULL) || (function == NULL)) {
-    fprintf(stderr,
-      "ERROR: One or more NULL arguments provided to callOverlayFunction\n");
+    fprintf(stderr, "ERROR: One or more NULL arguments provided to "
+      "callOverlayFunctionFromFile\n");
     goto exit; // return NULL
   }
   

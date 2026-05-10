@@ -63,10 +63,11 @@ extern NanoOsOverlayMap overlayMap;
 
 
 static inline void* callOverlayFunction(
-  const char *overlayDir, const char *overlay, const char *function, void *args
+  const void *overlayNamespace, const void *overlay,
+  const char *function, void *args
 ) {
-  return overlayMap.header.osApi->callOverlayFunction(overlayDir, overlay,
-    function, args);
+  return overlayMap.header.osApi->callOverlayFunction(
+    overlayNamespace, overlay, function, args);
 }
 
 // Debug functions

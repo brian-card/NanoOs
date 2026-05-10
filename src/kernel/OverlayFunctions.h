@@ -46,7 +46,7 @@ extern "C"
 #endif
 
 OverlayFunction findOverlayFunction(const char *overlayFunctionName);
-void* callOverlayFunction(const char *overlayDir, const char *overlay,
+void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
   const char *function, void *args);
 int runOverlayCommand(const char *commandPath, int argc, char **argv);
 
