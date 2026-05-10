@@ -219,6 +219,8 @@ typedef struct ProcessQueue ProcessQueue;
 ///   when the process transitions to ready.
 /// @param message The default, statically-allocated message for the process to
 ///   use to send to other processes.
+/// @param callOverlayFunction The function that the process should use to call
+///   into a function in an overlay.
 typedef struct ProcessDescriptor {
   const char         *name;
   Thread             *mainThread;
@@ -233,6 +235,9 @@ typedef struct ProcessDescriptor {
   ProcessQueue       *processQueue;
   ProcessQueue       *readyQueue;
   ProcessMessage      message;
+  void*             (*callOverlayFunction)(
+                      const void *overlayNamespace, const void *overlay,
+                      const char *function, void *args);
 } ProcessDescriptor;
 
 /// @struct ProcessInfoElement

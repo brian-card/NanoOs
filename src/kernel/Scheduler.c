@@ -3243,17 +3243,18 @@ void removeProcess(ProcessDescriptor *processDescriptor, const char *errorMessag
   return;
 }
 
-/// @fn int schedulerLoadOverlay(FileBlockMetadata *overlay, char **envp)
+/// @fn int schedulerLoadOverlay(
+///   ProcessDescriptor *processDescriptor, char **envp)
 ///
 /// @brief Load and configure an overlay into the overlayMap in memory.
 ///
-/// @param overlay A pointer to the FileBlockMetadata that describes the overlay
-///   to load.
+/// @param processDescriptor A pointer to the ProcessDescriptor that describes
+///   the overlay to load.
 /// @param envp The array of environment variables in "name=value" form.
 ///
 /// @return Returns 0 on success, negative error code on failure.
-int schedulerLoadOverlay(FileBlockMetadata *overlay, char **envp) {
-  if (overlay == NULL) {
+int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp) {
+  if (processDescriptor == NULL) {
     // There's no overlay to load.  This isn't really an error, but there's
     // nothing to do.  Just return 0.
     return 0;
@@ -3266,19 +3267,22 @@ int schedulerLoadOverlay(FileBlockMetadata *overlay, char **envp) {
   }
 
   NanoOsOverlayHeader *overlayHeader = &overlayMap->header;
-  if ((overlayHeader->overlay.blockDevice == overlay->blockDevice)
-    && (overlayHeader->overlay.startBlock == overlay->startBlock)
-    && (overlayHeader->overlay.numBlocks == overlay->numBlocks)
+  if ((overlayHeader->overlay.blockDevice
+      == processDescriptor->overlay.blockDevice)
+    && (overlayHeader->overlay.startBlock
+      == processDescriptor->overlay.startBlock)
+    && (overlayHeader->overlay.numBlocks
+      == processDescriptor->overlay.numBlocks)
   ) {
     // Overlay is already loaded.  Do nothing.
     return 0;
   }
 
-  if (overlay->blockDevice->schedReadBlocks(
-    overlay->blockDevice->context,
-    overlay->startBlock,
-    overlay->numBlocks,
-    overlay->blockDevice->blockSize,
+  if (processDescriptor->overlay.blockDevice->schedReadBlocks(
+    processDescriptor->overlay.blockDevice->context,
+    processDescriptor->overlay.startBlock,
+    processDescriptor->overlay.numBlocks,
+    processDescriptor->overlay.blockDevice->blockSize,
     (uint8_t*) overlayMap) != 0
   ) {
     printString("Could not read overlay\n");
@@ -3322,10 +3326,12 @@ int schedulerLoadOverlay(FileBlockMetadata *overlay, char **envp) {
 
   // Set the pieces of the overlay header that the program needs to run.
   overlayHeader->osApi = &nanoOsApi;
+  overlayHeader->osApi->callOverlayFunction
+    = processDescriptor->callOverlayFunction;
   overlayHeader->env = envp;
-  overlayHeader->overlay.blockDevice = overlay->blockDevice;
-  overlayHeader->overlay.startBlock = overlay->startBlock;
-  overlayHeader->overlay.numBlocks = overlay->numBlocks;
+  overlayHeader->overlay.blockDevice = processDescriptor->overlay.blockDevice;
+  overlayHeader->overlay.startBlock = processDescriptor->overlay.startBlock;
+  overlayHeader->overlay.numBlocks = processDescriptor->overlay.numBlocks;
   
   return 0;
 }
@@ -3600,7 +3606,7 @@ void runScheduler(void) {
     if (processRunning(processDescriptor) == true) {
       // This is a user process, which is in an overlay.  Make sure it's loaded.
       if (schedulerLoadOverlay(
-        &processDescriptor->overlay,
+        processDescriptor,
         processDescriptor->envp) != 0
       ) {
         schedulerDumpMemoryAllocations(SCHEDULER_STATE);
@@ -3940,7 +3946,8 @@ __attribute__((noinline)) void startScheduler(
   // Initialize all the kernel process file descriptors.
   for (Pid ii = 1; ii <= schedulerState.firstUserPid; ii++) {
     allProcesses[ii - 1].numFileDescriptors = NUM_STANDARD_FILE_DESCRIPTORS;
-    allProcesses[ii - 1].fileDescriptors = standardKernelFileDescriptorsPointers;
+    allProcesses[ii - 1].fileDescriptors
+      = standardKernelFileDescriptorsPointers;
   }
   printDebugString("Initialized kernel process file descriptors.\n");
 
@@ -3984,12 +3991,13 @@ __attribute__((noinline)) void startScheduler(
     processDescriptor->pid = ii;
     processDescriptor->userId = NO_USER_ID;
     processDescriptor->name = "dummy";
+    processDescriptor->callOverlayFunction = callOverlayFunctionFromFile;
   }
   printDebugString("Created all processes.\n");
 
-  // allProcesses array is ordered console process, memory manager process, then either
-  // the first block device or the first user process.  So, we want the process
-  // after the memory manager, which would be the value of
+  // allProcesses array is ordered console process, memory manager process, then
+  // either the first block device or the first user process.  So, we want the
+  // process after the memory manager, which would be the value of
   // schedulerState.memoryManagerPid since Pids are one-based instead of
   // zero-based.
   printDebugString("Console stack size = ");
