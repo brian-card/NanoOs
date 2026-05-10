@@ -104,6 +104,16 @@ void loop() {
     printString("Could not set scheduler process's stack size.\n");
   }
 
+  printDebugString("Extending scheduler stack.\n");
+  for (uint8_t ii = 0;
+    ii < HAL->memory->numExtraSchedulerStacks(USE_HAL_MEMORY_DEBUG);
+    ii++
+  ) {
+    if (threadProvision(NULL, dummyProcess, NULL) == NULL) {
+      printString("Could not increase scheduler process's stack size.\n");
+    }
+  }
+
   // Enter the scheduler.  This never returns.
   printDebugString("Starting scheduler.\n");
   startScheduler(&threadStatePointer);

@@ -3877,19 +3877,11 @@ __attribute__((noinline)) void startScheduler(
   standardUserFileDescriptors[2].outputChannel.messageType
     = CONSOLE_WRITE_BUFFER;
 
-  for (uint8_t ii = 0;
-    ii < HAL->memory->numExtraSchedulerStacks(USE_HAL_MEMORY_DEBUG);
-    ii++
-  ) {
-    if (threadProvision(NULL, dummyProcess, NULL) == NULL) {
-      printString("Could not increase scheduler process's stack size.\n");
-    }
-  }
-
   // Create the console process.  We used to have to double the size of the
   // console's stack, so we create this process before we create anything else.
   // Leaving it at this point of initialization in case we ever have to come
   // back to that flow again.
+  printDebugString("Creating console process.\n");
   ProcessDescriptor *processDescriptor
     = &allProcesses[schedulerState.consolePid - 1];
   if (processCreate(processDescriptor, runConsole, NULL) != processSuccess) {
