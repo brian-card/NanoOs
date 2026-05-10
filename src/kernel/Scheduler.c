@@ -1027,7 +1027,7 @@ int schedulerKillProcess(Pid pid) {
   if (waitStatus == processSuccess) {
     returnValue = (int) ((intptr_t) processMessageData(processMessage));
     if (returnValue == 0) {
-      printf("Termination successful.\n");
+      printf("Termination of process %d successful.\n", pid);
     } else {
       printf("Process termination returned status \"%s\".\n",
         strerror(returnValue));
