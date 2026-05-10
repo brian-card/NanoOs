@@ -153,6 +153,7 @@ void* processPipes(void *args) {
     if (pids[numPipes] < 0) {
       // errno is already set
       fprintf(stderr, "Launching \"%s\" failed\n", fsCommandArgs->commandLine);
+      close(pipes[pipeIndex ^ 1][1]);
       posix_spawn_file_actions_destroy(fileActions);
       goto freeFileActions;
     }
