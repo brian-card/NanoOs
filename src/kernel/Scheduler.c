@@ -2252,9 +2252,9 @@ int schedulerKillProcessCommandHandler(
         processDescriptor->userId = NO_USER_ID;
 
         // It's likely (i.e. almost certain) that the killed process was a user
-        // process that was killed by a user process.  That would mean that we were
-        // in the middle of processing a user process queue, the number of items
-        // in which was captured before the runScheduler loop was started.
+        // process that was killed by a user process.  That would mean that we
+        // were in the middle of processing a user process queue, the number of
+        // items in which was captured before the runScheduler loop was started.
         // (See the logic at the end of startScheduler.)  Rather than pushing
         // the killed process onto the free queue, push it back onto its ready
         // queue so that we don't try to pop a process from an empty queue.
