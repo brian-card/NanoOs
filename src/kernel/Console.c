@@ -739,7 +739,9 @@ void consoleReleaseBufferCommandHandler(
 ) {
   ConsoleBuffer *consoleBuffer
     = (ConsoleBuffer*) processMessageData(inputMessage);
-  releaseConsoleBuffer(consoleState, consoleBuffer);
+  if (consoleBuffer != NULL) {
+    releaseConsoleBuffer(consoleState, consoleBuffer);
+  }
   processMessageRelease(inputMessage);
 
   return;
