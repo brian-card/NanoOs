@@ -366,13 +366,12 @@ typedef struct CommandEntry {
 /// sender of a CONSOLE_GET_BUFFER command via a CONSOLE_RETURNING_BUFFER
 /// response.
 ///
-/// @param inUse Whether or not this buffer is in use by a process.  Set by the
-///   consoleGetBuffer function when getting a buffer for a caller and cleared
-///   by the caller when no longer being used.
+/// @param owner Pid of the process that owned or checked out the buffer.  Set
+///   to PROCESS_ID_NOT_SET when not in use.
 /// @param buffer The array of CONSOLE_BUFFER_SIZE characters that the calling
 ///   process can use.
 typedef struct ConsoleBuffer {
-  bool inUse;
+  Pid  owner;
   char buffer[CONSOLE_BUFFER_SIZE];
 } ConsoleBuffer;
 

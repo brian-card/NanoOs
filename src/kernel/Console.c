@@ -127,7 +127,7 @@ ConsoleBuffer* getAvailableConsoleBuffer(
       || (consolePorts[ii].inputOwner == pid)
     ) {
       returnValue = &consoleBuffers[ii];
-      // returnValue->inUse is already set to true, so no need to set it.
+      // returnValue->owner is already set, so no need to set it.
       break;
     }
   }
@@ -137,13 +137,44 @@ ConsoleBuffer* getAvailableConsoleBuffer(
       ii < CONSOLE_NUM_BUFFERS;
       ii++
     ) {
-      if (consoleBuffers[ii].inUse == false) {
+      if ((consoleBuffers[ii].owner == PROCESS_ID_NOT_SET)
+        || (consoleBuffers[ii].owner == pid)
+      ) {
+        consoleBuffers[ii].owner = pid;
         returnValue = &consoleBuffers[ii];
       }
     }
   }
 
   return returnValue;
+}
+
+/// @fn int releaseConsoleBuffer(
+///   ConsoleState *consoleState, ConsoleBuffer *consoleBuffer)
+///
+/// @brief Helper function to safely release a console buffer.
+///
+/// @param consoleState A pointer to the ConsoleState structure held by the
+///   runConsole process.  One of the buffers in this state will be the
+///   ConsoleBuffer provided.
+/// @param consoleBuffer A pointer to the ConsoleBuffer to release.
+///
+/// @return Returns 0 on success, -errno on failure.
+int releaseConsoleBuffer(
+  ConsoleState *consoleState, ConsoleBuffer *consoleBuffer
+) {
+  // Check to see if the returned buffer belongs to one of the ports.
+  ConsolePort *consolePorts = consoleState->consolePorts;
+  for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
+    if (consolePorts[ii].consoleBuffer == consoleBuffer) {
+      // Buffer belongs to a port.  Do nothing since it's in use.
+      return 0;
+    }
+  }
+
+  // Buffer doesn't belong to a port, so release it.
+  consoleBuffer->owner = PROCESS_ID_NOT_SET;
+  return 0;
 }
 
 /// @fn void consoleWriteValueCommandHandler(
@@ -305,7 +336,7 @@ void consoleGetBufferCommandHandler(
 ///   ConsoleState *consoleState, ProcessMessage *inputMessage)
 ///
 /// @brief Command handler for the CONSOLE_WRITE_BUFFER command.  Writes the
-/// contents of the sent buffer to the console and then clears its inUse flag.
+/// contents of the sent buffer to the console and then clears its owner flag.
 ///
 /// @param consoleState A pointer to the ConsoleState structure held by the
 ///   runConsole process.  Unused by this function.
@@ -319,12 +350,17 @@ void consoleWriteBufferCommandHandler(
 ) {
   (void) consoleState;
 
-  ConsoleBuffer *consoleBuffer = (ConsoleBuffer*) processMessageData(inputMessage);
+  ConsoleBuffer *consoleBuffer
+    = (ConsoleBuffer*) processMessageData(inputMessage);
   if (consoleBuffer != NULL) {
     const char *message = consoleBuffer->buffer;
     if (message != NULL) {
       consolePrintMessage(consoleState, inputMessage, message);
     }
+
+    // This function is the termination of a chain of commands to write output.
+    // We're expected to return the buffer back to the pool.
+    releaseConsoleBuffer(consoleState, consoleBuffer);
   }
   processMessageSetDone(inputMessage);
   consoleMessageCleanup(inputMessage);
@@ -408,6 +444,7 @@ void consoleAssignPortHelper(
       consoleState->consolePorts[consolePort].outputOwner = pid;
     }
     consoleState->consolePorts[consolePort].inputOwner = pid;
+    consoleState->consolePorts[consolePort].consoleBuffer->owner = pid;
     processMessageSetDone(inputMessage);
     consoleMessageCleanup(inputMessage);
   } else {
@@ -687,8 +724,8 @@ void consoleReleasePidPortCommandHandler(
 /// a pointer to the buffer structure.
 ///
 /// @param consoleState A pointer to the ConsoleState structure held by the
-///   runConsole process.  One of the buffers in this state will have its inUse
-///   member set to false.
+///   runConsole process.  One of the buffers in this state will have its owner
+///   member set to the Pid of the owning process.
 /// @param inputMessage A pointer to the ProcessMessage that was received from
 ///   the process that sent the command.
 ///
@@ -702,20 +739,9 @@ void consoleReleaseBufferCommandHandler(
 ) {
   ConsoleBuffer *consoleBuffer
     = (ConsoleBuffer*) processMessageData(inputMessage);
-
-  // Check to see if the returned buffer belongs to one of the ports.
-  ConsolePort *consolePorts = consoleState->consolePorts;
-  for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
-    if (consolePorts[ii].consoleBuffer == consoleBuffer) {
-      // Buffer belongs to a port.  Do nothing since it's in use.
-      processMessageRelease(inputMessage);
-      return;
-    }
-  }
-
-  // Buffer doesn't belong to a port, so release it.
-  consoleBuffer->inUse = false;
+  releaseConsoleBuffer(consoleState, consoleBuffer);
   processMessageRelease(inputMessage);
+
   return;
 }
 
@@ -964,7 +990,7 @@ void* runConsole(void *args) {
   for (uint8_t ii = 0; ii < consoleState.numConsolePorts; ii++) {
     consoleState.consolePorts[ii].consoleBuffer
       = &consoleState.consoleBuffers[ii];
-    consoleState.consolePorts[ii].consoleBuffer->inUse = true;
+    consoleState.consolePorts[ii].consoleBuffer->owner = PROCESS_ID_NOT_SET;
   }
 
   int port = 0;

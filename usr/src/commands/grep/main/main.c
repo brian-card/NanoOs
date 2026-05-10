@@ -43,7 +43,15 @@ int main(int argc, char **argv) {
 
   while (fgets(buffer, sizeof(buffer), stdin)) {
     if (strstr(buffer, argv[1])) {
-      fputs(buffer, stdout);
+      if (fputs(buffer, stdout) == EOF) {
+        printString("ERROR: Could not fputs buffer\n");
+      }
+    } else {
+      printString("\"");
+      printString(buffer);
+      printString("\" does not contain \"");
+      printString(argv[1]);
+      printString("\n");
     }
   }
 
