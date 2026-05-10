@@ -1001,7 +1001,7 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *nanoOsBuffer) {
       printInt(getRunningPid());
       printString(" and stream ");
       printInt((intptr_t) stream);
-      printString(".\n");
+      printString("\n");
 
       // Release the buffer to avoid creating a leak.  Fire and forget.
       (void) initSendProcessMessageToPid(
