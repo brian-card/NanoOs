@@ -119,30 +119,13 @@ ConsoleBuffer* getAvailableConsoleBuffer(
   ConsoleBuffer *consoleBuffers = consoleState->consoleBuffers;
   ConsoleBuffer *returnValue = NULL;
 
-  // Check to see if the requesting process owns one of the ports for output.
-  // Use the buffer for that port if so.
-  ConsolePort *consolePorts = consoleState->consolePorts;
-  for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
-    if ((consolePorts[ii].outputOwner == pid)
-      || (consolePorts[ii].inputOwner == pid)
+  for (int ii = 0; ii < CONSOLE_NUM_BUFFERS; ii++) {
+    if ((consoleBuffers[ii].owner == PROCESS_ID_NOT_SET)
+      || (consoleBuffers[ii].owner == pid)
     ) {
+      consoleBuffers[ii].owner = pid;
       returnValue = &consoleBuffers[ii];
-      // returnValue->owner is already set, so no need to set it.
       break;
-    }
-  }
-
-  if (returnValue == NULL) {
-    for (int ii = consoleState->numConsolePorts;
-      ii < CONSOLE_NUM_BUFFERS;
-      ii++
-    ) {
-      if ((consoleBuffers[ii].owner == PROCESS_ID_NOT_SET)
-        || (consoleBuffers[ii].owner == pid)
-      ) {
-        consoleBuffers[ii].owner = pid;
-        returnValue = &consoleBuffers[ii];
-      }
     }
   }
 
@@ -167,7 +150,8 @@ int releaseConsoleBuffer(
   ConsolePort *consolePorts = consoleState->consolePorts;
   for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
     if (consolePorts[ii].consoleBuffer == consoleBuffer) {
-      // Buffer belongs to a port.  Do nothing since it's in use.
+      // Buffer belongs to a port.  Restore its owner back to the port's shell.
+      consoleBuffer->owner = consolePorts[ii].shell;
       return 0;
     }
   }
@@ -402,9 +386,9 @@ void consoleSetPortShellCommandHandler(
     printString("ERROR: Request to assign ownership of non-existent port ");
     printInt(consolePort);
     printString("\n");
-    // *DON'T* call processMessageRelease or processMessageSetDone here.  The lack of
-    // the message being done will indicate to the caller that there was a
-    // problem servicing the command.
+    // *DON'T* call processMessageRelease or processMessageSetDone here.  The
+    // lack of the message being done will indicate to the caller that there
+    // was a problem servicing the command.
   }
 
   return;
@@ -501,9 +485,11 @@ void consoleReleasePortCommandHandler(
   for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
     if (consolePorts[ii].outputOwner == owner) {
       consolePorts[ii].outputOwner = consolePorts[ii].shell;
+      consolePorts[ii].consoleBuffer->owner = consolePorts[ii].shell;
     }
     if (consolePorts[ii].inputOwner == owner) {
       consolePorts[ii].inputOwner = consolePorts[ii].shell;
+      consolePorts[ii].consoleBuffer->owner = consolePorts[ii].shell;
     }
   }
 
@@ -993,6 +979,12 @@ void* runConsole(void *args) {
     consoleState.consolePorts[ii].consoleBuffer
       = &consoleState.consoleBuffers[ii];
     consoleState.consolePorts[ii].consoleBuffer->owner = PROCESS_ID_NOT_SET;
+  }
+  for (uint8_t ii = consoleState.numConsolePorts;
+    ii < CONSOLE_NUM_BUFFERS;
+    ii++
+  ) {
+    consoleState.consoleBuffers[ii].owner = PROCESS_ID_NOT_SET;
   }
 
   int port = 0;
