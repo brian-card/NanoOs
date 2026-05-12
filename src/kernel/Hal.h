@@ -44,6 +44,16 @@ extern "C"
 {
 #endif
 
+/// @def online
+///
+/// @brief Function macro to determine whether or not an individual device
+/// within a HAL subsystem is online.
+///
+/// @param hal Pointer to a HAL subsystem pointer.
+/// @param deviceId The zero-based index of the device to check.
+#define online(hal, deviceId) \
+  (((((uint32_t) 1) << (deviceId & 31)) & hal->online[deviceId >> 5]) != 0)
+  
 /// @enum HalShutdownType
 ///
 /// @brief Types of shutdowns that can be invoked in the HAL.
@@ -134,39 +144,37 @@ typedef struct HalMemory {
   /// systems that don't support overlays.
   uintptr_t overlaySize;
 } HalMemory;
-  
+
 typedef struct HalUart {
-  /// @fn int getNum(void)
+  /// @var numSupported
   ///
-  /// @brief Get the number of addressable and configurable serial ports on the
-  /// system.
-  ///
-  /// @return Returns the number of serial ports on the system (which may be 0)
-  /// on success, -errno on failure.
-  int (*getNum)(void);
+  /// @brief The number of UART devices that are supported on the hardware.
+  uint32_t numSupported;
   
-  /// @fn int setNum(int numUarts)
+  /// @var online
   ///
-  /// @brief Set the number of serial ports that is to be returned by
-  /// getNumUarts.
+  /// @brief Bitmask array indicating which of the supported UARTs are online.
+  /// Whether or not an individual UART is online can be found by:
   ///
-  /// @param numUarts The value to be returned by getNumUarts.
-  ///   This may be a non-negative value that is less-than or equal-to the
-  ///   value initially returned by getNumUarts or a -errno value that
-  ///   the function is to return.
+  /// online(HAL->uart, uartId)
+  uint32_t *online;
+  
+  /// @fn int32_t init(void)
+  ///
+  /// @brief Initialize the UART subsystem.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int (*setNum)(int numUarts);
+  int32_t init(void);
   
-  /// @fn init(int port, int32_t baud)
+  /// @fn configure(int32_t port, uint32_t baud)
   ///
-  /// @brief Initialize a hardware serial port.
+  /// @brief Configure a UART device.
   ///
   /// @param port The zero-based index of the port to initialize.
   /// @param baud The desired baud rate of the port.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int (*init)(int port, int32_t baud);
+  int32_t (*configure)(int32_t port, uint32_t baud);
   
   /// @fn int poll(int port)
   ///
