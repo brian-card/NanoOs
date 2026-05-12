@@ -166,47 +166,46 @@ typedef struct HalUart {
   /// @return Returns 0 on success, -errno on failure.
   int32_t init(void);
   
-  /// @fn configure(int32_t port, uint32_t baud)
+  /// @fn configure(int32_t deviceId, uint32_t baud)
   ///
   /// @brief Configure a UART device.
   ///
-  /// @param port The zero-based index of the port to initialize.
-  /// @param baud The desired baud rate of the port.
+  /// @param device ID The zero-based ID of the UART to configure.
+  /// @param baud The desired baud rate of the UART.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int32_t (*configure)(int32_t port, uint32_t baud);
+  int32_t (*configure)(int32_t deviceId, uint32_t baud);
   
-  /// @fn int poll(int port)
+  /// @fn int poll(int32_t deviceId)
   ///
-  /// @brief Poll a serial port for a single byte of data.
+  /// @brief Poll a UART for a single byte of data.
   ///
-  /// @param port The zero-based index of the port to read from.
+  /// @param deviceId The zero-based ID of the UART to read from.
   ///
   /// @return Returns the byte read, cast to an int, on success, -errno on
   /// failure.
-  int (*poll)(int port);
+  int (*poll)(int32_t deviceId);
   
-  /// @fn ssize_t write(int port, const uint8_t *data, ssize_t length)
+  /// @fn ssize_t write(int32_t deviceId, const uint8_t *data, ssize_t length)
   ///
-  /// @brief Write data to a serial port.
+  /// @brief Write data to a UART.
   ///
-  /// @param port The zero-based index of the port to read from.
-  /// @param data A pointer to arbitrary bytes of data to write to the serial
-  ///   port.
-  /// @param length The number of bytes to write to the serial port from the
-  ///   data pointer.
+  /// @param deviceId The zero-based ID of the UART to read from.
+  /// @param data A pointer to arbitrary bytes of data to write to the UART.
+  /// @param length The number of bytes to write to the UART from the data
+  ///   pointer.
   ///
   /// @return Returns the number of bytes written on success, -errno on failure.
-  ssize_t (*write)(int port, const uint8_t *data, ssize_t length);
+  ssize_t (*write)(int32_t deviceId, const uint8_t *data, ssize_t length);
   
-  /// @fn bool isConsole(int port);
+  /// @fn bool isConsole(int32_t deviceId);
   ///
-  /// @brief Determine whether or not a given UART port functions as a console.
+  /// @brief Determine whether or not a given UART functions as a console.
   ///
-  /// @param port The zero-based index of the port to read from.
+  /// @param deviceId The zero-based ID of the UART to test.
   ///
   /// @return Returns true if the UART is a console, false if not.
-  bool (*isConsole)(int port);
+  bool (*isConsole)(int32_t deviceId);
 } HalUart;
 
 typedef struct HalDio {
