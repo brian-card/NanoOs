@@ -45,12 +45,13 @@ extern "C"
 #endif
 
 typedef struct HalArduinoSamD21x18AInitArgs {
-  uint8_t numUarts;
-  uint8_t numDioPins;
-  uint8_t spiCopiDio;
-  uint8_t spiCipoDio;
-  uint8_t spiSckDio;
-  uint8_t sdCardPinChipSelect;
+  uint32_t  numUartsSupported;
+  uint32_t *uartsOnline;
+  uint8_t   numDioPins;
+  uint8_t   spiCopiDio;
+  uint8_t   spiCipoDio;
+  uint8_t   spiSckDio;
+  uint8_t   sdCardPinChipSelect;
 } HalArduinoSamD21x18AInitArgs;
 
 const Hal* halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args);

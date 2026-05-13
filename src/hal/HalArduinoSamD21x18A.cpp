@@ -231,12 +231,12 @@ static SavedContext _savedContext;
     = (uint32_t) arduinoSamD21x18ATimerInterruptHandler ## handlerIndex; \
   return
 
-uintptr_t arduinoSamD21x18AProcessStackSize(bool debug) {
+size_t arduinoSamD21x18AProcessStackSize(bool debug) {
   (void) debug;
   return PROCESS_STACK_SIZE;
 }
 
-uintptr_t arduinoSamD21x18AMemoryManagerStackSize(bool debug) {
+size_t arduinoSamD21x18AMemoryManagerStackSize(bool debug) {
   if (debug == false) {
     // This is the expected case, so list it first.
     return MEMORY_MANAGER_STACK_SIZE;
@@ -291,31 +291,15 @@ static HalMemory arduinoSamD21x18AMemoryHal = {
 /// this HAL.
 #define BOARD_UART 1
 
-/// @var _numUarts
-///
-/// @brief The number of serial ports we support on the board.
-static uint8_t _numUarts = MAX_UARTS;
-
-int arduinoSamD21x18AGetNumUarts(void) {
-  return (int) _numUarts;
-}
-
-int arduinoSamD21x18ASetNumUarts(int numUarts) {
-  if (numUarts > MAX_UARTS) {
-    return -ERANGE;
-  } else if (numUarts < -ELAST) {
-    return -EINVAL;
-  }
-  
-  _numUarts = numUarts;
-  
+int32_t arduinoSamD21x18AInitUart(void) {
+  // Nothing really to do on this platform.  Just return.
   return 0;
 }
 
-int arduinoSamD21x18AInitUart(int port, int32_t baud) {
+int32_t arduinoSamD21x18AConfigureUart(int32_t deviceId, uint32_t baud) {
   int returnValue = -ERANGE;
   
-  switch (port) {
+  switch (deviceId) {
     case UART_USB:
       {
         Serial.begin(baud);
@@ -336,10 +320,10 @@ int arduinoSamD21x18AInitUart(int port, int32_t baud) {
   return returnValue;
 }
 
-int arduinoSamD21x18APollUart(int port) {
+int32_t arduinoSamD21x18APollUart(int32_t deviceId) {
   int serialData = -ERANGE;
   
-  switch (port) {
+  switch (deviceId) {
     case UART_USB:
       {
         serialData = Serial.read();
@@ -356,12 +340,12 @@ int arduinoSamD21x18APollUart(int port) {
   return serialData;
 }
 
-ssize_t arduinoSamD21x18AWriteUart(int port,
+ssize_t arduinoSamD21x18AWriteUart(int32_t deviceId,
   const uint8_t *data, ssize_t length
 ) {
   ssize_t numBytesWritten = -ERANGE;
   
-  switch (port) {
+  switch (deviceId) {
     case UART_USB:
       {
         numBytesWritten = Serial.write(data, length);
@@ -378,15 +362,16 @@ ssize_t arduinoSamD21x18AWriteUart(int port,
   return numBytesWritten;
 }
 
-bool arduinoSamD21x18AIsUartConsole(int port) {
-  (void) port;
+bool arduinoSamD21x18AIsUartConsole(int32_t deviceId) {
+  (void) deviceId;
   return true;
 }
 
 static HalUart arduinoSamD21x18AUartHal = {
-  .getNum = arduinoSamD21x18AGetNumUarts,
-  .setNum = arduinoSamD21x18ASetNumUarts,
+  .numSupported = 0,
+  .online = NULL,
   .init = arduinoSamD21x18AInitUart,
+  .configure = arduinoSamD21x18AConfigureUart,
   .poll = arduinoSamD21x18APollUart,
   .write = arduinoSamD21x18AWriteUart,
   .isConsole = arduinoSamD21x18AIsUartConsole,
@@ -1086,7 +1071,8 @@ static Hal arduinoSamD21x18AHal = {
 };
 
 const Hal* halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
-  _numUarts = args->numUarts;
+  arduinoSamD21x18AHal.uart->numSupported = args->numUartsSupported;
+  arduinoSamD21x18AHal.uart->online = args->uartsOnline;
   _numDioPins = args->numDioPins;
   _spiCopiDio = args->spiCopiDio;
   _spiCipoDio = args->spiCipoDio;

@@ -45,8 +45,8 @@
 // Must come last
 #include "user/NanoOsStdio.h"
 
-uintptr_t posixProcessStackSize(bool debug);
-uintptr_t posixMemoryManagerStackSize(bool debug);
+size_t posixProcessStackSize(bool debug);
+size_t posixMemoryManagerStackSize(bool debug);
 void* posixBottomOfHeap(bool debug);
 uint8_t posixNumExtraSchedulerStacks(bool debug);
 uint8_t posixNumExtraConsoleStacks(bool debug);
@@ -60,16 +60,20 @@ static HalMemory posixMemoryHal = {
   .overlaySize = 0,
 };
 
-int posixGetNumUarts(void);
-int posixSetNumUarts(int numUarts);
-int posixInitUart(int port, int32_t baud);
-int posixPollUart(int port);
-ssize_t posixWriteUart(int port, const uint8_t *data, ssize_t length);
-bool posixIsUartConsole(int port);
+static uint32_t posixUartOnline[] = {
+  0x00000002,
+};
+int32_t posixInitUart(void);
+int32_t posixConfigureUart(int32_t port, uint32_t baud);
+int posixPollUart(int32_t port);
+ssize_t posixWriteUart(int32_t port, const uint8_t *data, ssize_t length);
+bool posixIsUartConsole(int32_t port);
+
 static HalUart posixUartHal = {
-  .getNum = posixGetNumUarts,
-  .setNum = posixSetNumUarts,
+  .numSupported = 2,
+  .online = posixUartOnline,
   .init = posixInitUart,
+  .configure = posixConfigureUart,
   .poll = posixPollUart,
   .write = posixWriteUart,
   .isConsole = posixIsUartConsole,

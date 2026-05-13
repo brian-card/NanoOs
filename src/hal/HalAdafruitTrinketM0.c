@@ -65,9 +65,17 @@
 #define SD_CARD_PIN_CHIP_SELECT 0
 
 
+/// @var halArduinoSamD21x18AImplUartsOnline
+///
+/// @brief Bitmask array of online UARTs.
+static uint32_t halArduinoSamD21x18AImplUartsOnline[] = {
+  0x00000001,
+};
+
 const Hal* halArduinoSamD21x18AImplInit(void) {
   HalArduinoSamD21x18AInitArgs args = {
-    .numUarts            = NUM_UARTS,
+    .numUartsSupported   = NUM_UARTS,
+    .uartsOnline         = halArduinoSamD21x18AImplUartsOnline,
     .numDioPins          = NUM_DIO_PINS,
     .spiCopiDio          = SPI_COPI_DIO,
     .spiCipoDio          = SPI_CIPO_DIO,

@@ -99,12 +99,12 @@ int (*realTcgetattr)(int fd, struct termios *termios_p) = NULL;
 int (*realTcsetattr)(int fd, int optional_actions,
   const struct termios *termios_p) = NULL;
 
-uintptr_t posixProcessStackSize(bool debug) {
+size_t posixProcessStackSize(bool debug) {
   (void) debug;
   return PROCESS_STACK_SIZE * DEBUG_MULTIPLIER;
 }
 
-uintptr_t posixMemoryManagerStackSize(bool debug) {
+size_t posixMemoryManagerStackSize(bool debug) {
   if (debug == false) {
     // This is the expected case, so list it first.
     return MEMORY_MANAGER_STACK_SIZE * DEBUG_MULTIPLIER;
@@ -147,27 +147,17 @@ static FILE **uarts[] = {
 /// @brief The number of serial ports we support on the Arduino Nano 33 IoT.
 static int _numUarts = sizeof(uarts) / sizeof(uarts[0]);
 
-int posixGetNumUarts(void) {
-  return _numUarts;
-}
-
-int posixSetNumUarts(int numUarts) {
-  if (numUarts > ((int) (sizeof(uarts) / sizeof(uarts[0])))) {
-    return -ERANGE;
-  } else if (numUarts < -ELAST) {
-    return -ERANGE;
-  }
-  
-  _numUarts = numUarts;
-  
+int32_t posixInitUart(void) {
   return 0;
 }
 
-int posixInitUart(int port, int32_t baud) {
+int32_t posixConfigureUart(int32_t deviceId, uint32_t baud) {
   (void) baud;
   
-  if (port > 1) {
+  if (deviceId > 1) {
     return -ERANGE;
+  } else if (deviceId != 1) {
+    return -ENOTTY;
   }
   
   // We don't actually need to do anything to stdout or stderr, but we do need
@@ -200,12 +190,12 @@ int posixInitUart(int port, int32_t baud) {
   return 0;
 }
 
-int posixPollUart(int port) {
+int32_t posixPollUart(int32_t deviceId) {
   int serialData = -1;
   
   // While we'll support two outputs, we will only support one input to keep
   // things simple in the simulator.
-  if (port == 1) {
+  if (deviceId == 1) {
     serialData = getchar();
     if (serialData == EOF) {
       serialData = -1;
@@ -215,21 +205,21 @@ int posixPollUart(int port) {
   return serialData;
 }
 
-ssize_t posixWriteUart(int port,
+ssize_t posixWriteUart(int32_t deviceId,
   const uint8_t *data, ssize_t length
 ) {
   ssize_t numBytesWritten = -ERANGE;
   
-  if ((port >= 0) && (port < _numUarts) && (length >= 0)) {
-    numBytesWritten = fwrite(data, 1, length, *uarts[port]);
-    fflush(*uarts[port]);
+  if ((deviceId >= 0) && (deviceId < _numUarts) && (length >= 0)) {
+    numBytesWritten = fwrite(data, 1, length, *uarts[deviceId]);
+    fflush(*uarts[deviceId]);
   }
   
   return numBytesWritten;
 }
 
-bool posixIsUartConsole(int port) {
-  if (port == 1) {
+bool posixIsUartConsole(int32_t deviceId) {
+  if (deviceId == 1) {
     return true;
   }
 
@@ -781,30 +771,24 @@ int halPosixImplInit(jmp_buf resetBuffer, Hal *hal) {
   *((void**) &realTcsetattr) = dlsym(RTLD_NEXT, "tcsetattr");
   
   int ii = 0;
+  
   if (hal->uart != NULL) {
-    int numUarts = hal->uart->getNum();
+    if (hal->uart->init() < 0) {
+      return -ENOTTY;
+    }
+    int numUarts = hal->uart->numSupported;
     if (numUarts <= 0) {
-      // Nothing we can do.  Bail.
-      fprintf(stderr, "hal->uart->getNum() returned %d.\n",
-        numUarts);
-      return -1;
+      // Nothing we can do.
+      return -ENOTTY;
     }
     
-    // Set all the serial ports to run at 1000000 baud.
-    if (hal->uart->init(0, 1000000) < 0) {
-      // Nothing we can do.  Bail.
-      fprintf(stderr, "Initializing serial port 0 failed.\n");
-      return -1;
-    }
-    for (ii = 1; ii < numUarts; ii++) {
-      if (hal->uart->init(ii, 1000000) < 0) {
-        // We can't support more than the last serial port that was successfully
-        // initialized.
-        fprintf(stderr, "WARNING: Initializing serial port %d failed.\n", ii);
-        break;
+    for (ii = 0; ii < numUarts; ii++) {
+      if (online(hal->uart, ii)) {
+        if (hal->uart->configure(ii, 1000000) != 0) {
+          setOffline(hal->uart, ii);
+        }
       }
     }
-    hal->uart->setNum(ii);
   }
 
   if (hal->timer != NULL) {

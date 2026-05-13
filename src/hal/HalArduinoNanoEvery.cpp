@@ -166,68 +166,64 @@ static HardwareSerial *uarts[] = {
 /// @var _numUarts
 ///
 /// @brief The number of serial ports we support on the Arduino Nano Every.
-static int _numUarts = sizeof(uarts) / sizeof(uarts[0]);
+static const int _numUarts = sizeof(uarts) / sizeof(uarts[0]);
 
-int arduinoNanoEveryGetNumUarts(void) {
-  return _numUarts;
-}
-
-int arduinoNanoEverySetNumUarts(int numUarts) {
-  if (numUarts > ((int) (sizeof(uarts) / sizeof(uarts[0])))) {
-    return -ERANGE;
-  } else if (numUarts < -ELAST) {
-    return -ERANGE;
-  }
-  
-  _numUarts = numUarts;
-  
+int32_t arduinoNanoEveryInitUart(void) {
   return 0;
 }
 
-int arduinoNanoEveryInitUart(int port, int32_t baud) {
+int32_t arduinoNanoEveryConfigureUart(int32_t deviceId, uint32_t baud) {
   int returnValue = -ERANGE;
   
-  if ((port >= 0) && (port < _numUarts)) {
-    uarts[port]->begin(baud);
-    // wait for serial port to connect.
-    while (!(*uarts[port]));
+  if ((deviceId >= 0) && (deviceId < _numUarts)) {
+    uarts[deviceId]->begin(baud);
+    // wait for serial deviceId to connect.
+    while (!(*uarts[deviceId]));
     returnValue = 0;
   }
   
   return returnValue;
 }
 
-int arduinoNanoEveryPollUart(int port) {
+int32_t arduinoNanoEveryPollUart(int32_t deviceId) {
   int serialData = -ERANGE;
   
-  if ((port >= 0) && (port < _numUarts)) {
-    serialData = uarts[port]->read();
+  if ((deviceId >= 0) && (deviceId < _numUarts)) {
+    serialData = uarts[deviceId]->read();
   }
   
   return serialData;
 }
 
-ssize_t arduinoNanoEveryWriteUart(int port,
+ssize_t arduinoNanoEveryWriteUart(int32_t deviceId,
   const uint8_t *data, ssize_t length
 ) {
   ssize_t numBytesWritten = -ERANGE;
   
-  if ((port >= 0) && (port < _numUarts) && (length >= 0)) {
-    numBytesWritten = uarts[port]->write(data, length);
+  if ((deviceId >= 0) && (deviceId < _numUarts) && (length >= 0)) {
+    numBytesWritten = uarts[deviceId]->write(data, length);
   }
   
   return numBytesWritten;
 }
 
-bool arduinoNanoEveryIsUartConsole(int port) {
-  (void) port;
+bool arduinoNanoEveryIsUartConsole(int32_t deviceId) {
+  (void) deviceId;
   return true;
 }
 
+/// @var halArduinoNanoEveryUartsOnline
+///
+/// @brief Bitmask array of online UARTs.
+static uint32_t halArduinoNanoEveryUartsOnline[] = {
+  0x00000003,
+};
+
 static HalUart arduinoNanoEveryUartHal = {
-  .getNum = arduinoNanoEveryGetNumUarts,
-  .setNum = arduinoNanoEverySetNumUarts,
+  .numSupported = _numUarts,
+  .online = halArduinoNanoEveryUartsOnline,
   .init = arduinoNanoEveryInitUart,
+  .configure = arduinoNanoEveryConfigureUart,
   .poll = arduinoNanoEveryPollUart,
   .write = arduinoNanoEveryWriteUart,
   .isConsole = arduinoNanoEveryIsUartConsole,

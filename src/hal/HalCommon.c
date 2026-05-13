@@ -138,42 +138,32 @@ int halCommonInit(const Hal *hal) {
     return -EINVAL;
   }
   
-  int ii = 0;
+  int32_t ii = 0;
+  int32_t defaultUart = -1;
   char num = '\0';
   
   if (hal->uart != NULL) {
-    int numUarts = hal->uart->getNum();
+    if (hal->uart->init() < 0) {
+      return -ENOTTY;
+    }
+    int numUarts = hal->uart->numSupported;
     if (numUarts <= 0) {
       // Nothing we can do.
       return -ENOTTY;
     }
     
-    // Set all the serial ports to run at 1000000 baud.
-    if (hal->uart->init(0, 1000000) < 0) {
-      // Nothing we can do.
-      return -EIO;
-    }
-    for (ii = 1; ii < numUarts; ii++) {
-      if (hal->uart->init(ii, 1000000) < 0) {
-        // We can't support more than the last serial port that was successfully
-        // initialized.
-        break;
+    for (ii = 0; ii < numUarts; ii++) {
+      if (!online(hal->uart, ii)) {
+        continue;
       }
-    }
-    hal->uart->setNum(ii);
-    if (ii != numUarts) {
-      // NOTE:  We can't use printString and printInt here because those
-      // functions rely on the global HAL pointer, which is not initialized at
-      // the time this function is called.  So, we have to do things a little
-      // more manually here.
-      hal->uart->write(0,
-        (uint8_t*) "WARNING: Only initialized ",
-        strlen("WARNING: Only initialized "));
-      num = '0' + ((char) ii);
-      hal->uart->write(0, (uint8_t*) &num, 1);
-      hal->uart->write(0,
-        (uint8_t*) " serial ports\n",
-        strlen(" serial ports\n"));
+      
+      if (hal->uart->configure(ii, 1000000) == 0) {
+        if (defaultUart < 0) {
+          defaultUart = ii;
+        }
+      } else {
+        setOffline(hal->uart, ii);
+      }
     }
   }
 
@@ -186,14 +176,16 @@ int halCommonInit(const Hal *hal) {
     }
     hal->timer->setNum(ii);
     if (ii != numTimers) {
-      hal->uart->write(0,
-        (uint8_t*) "WARNING: Only initialized ",
-        strlen("WARNING: Only initialized "));
-      num = '0' + ((char) ii);
-      hal->uart->write(0, (uint8_t*) &num, 1);
-      hal->uart->write(0,
-        (uint8_t*) " timers\n",
-        strlen(" timers\n"));
+      if (hal->uart != NULL) {
+        hal->uart->write(defaultUart,
+          (uint8_t*) "WARNING: Only initialized ",
+          strlen("WARNING: Only initialized "));
+        num = '0' + ((char) ii);
+        hal->uart->write(defaultUart, (uint8_t*) &num, 1);
+        hal->uart->write(defaultUart,
+          (uint8_t*) " timers\n",
+          strlen(" timers\n"));
+      }
     }
   }
   

@@ -53,6 +53,24 @@ extern "C"
 /// @param deviceId The zero-based index of the device to check.
 #define online(hal, deviceId) \
   (((((uint32_t) 1) << (deviceId & 31)) & hal->online[deviceId >> 5]) != 0)
+
+/// @def setOnline
+///
+/// @brief Mark a device ID as being online within a HAL subsystem.
+///
+/// @param hal Pointer to a HAL subsystem pointer.
+/// @param deviceId The zero-based index of the device to mark online.
+#define setOnline(hal, deviceId) \
+  hal->online[deviceId >> 5] |= (((uint32_t) 1) << (deviceId & 31))
+
+/// @def setOffline
+///
+/// @brief Mark a device ID as being offline within a HAL subsystem.
+///
+/// @param hal Pointer to a HAL subsystem pointer.
+/// @param deviceId The zero-based index of the device to mark offline.
+#define setOffline(hal, deviceId) \
+  hal->online[deviceId >> 5] &= ~(((uint32_t) 1) << (deviceId & 31))
   
 /// @enum HalShutdownType
 ///
@@ -66,6 +84,7 @@ typedef enum HalShutdownType {
 
 // Standard C types
 typedef intptr_t ssize_t;
+typedef uintptr_t size_t;
 struct timespec;
 
 // NanoOs types
@@ -73,7 +92,7 @@ typedef struct NanoOsOverlayMap NanoOsOverlayMap;
 typedef struct SchedulerState SchedulerState;
 
 typedef struct HalMemory {
-  /// @fn uintptr_t processStackSize(bool debug)
+  /// @fn size_t processStackSize(bool debug)
   ///
   /// @brief The size of a regular process's stack.
   ///
@@ -82,9 +101,9 @@ typedef struct HalMemory {
   ///
   /// Returns the size of the stack to use for all non-memory manager
   /// processes in bytes.  This function never fails.
-  uintptr_t (*processStackSize)(bool debug);
+  size_t (*processStackSize)(bool debug);
   
-  /// @fn uintptr_t memoryManagerStackSize(bool debug)
+  /// @fn size_t memoryManagerStackSize(bool debug)
   ///
   /// @brief The size of the memory manager process's stack.
   ///
@@ -94,7 +113,7 @@ typedef struct HalMemory {
   ///
   /// @return Returns the size of the stack to use for the memory manager.
   /// This call never fails.
-  uintptr_t (*memoryManagerStackSize)(bool debug);
+  size_t (*memoryManagerStackSize)(bool debug);
   
   /// @fn void* bottomOfHeap(void)
   ///
@@ -142,7 +161,7 @@ typedef struct HalMemory {
   ///
   /// @brief The number of bytes available for the overlay.  This may be 0 on
   /// systems that don't support overlays.
-  uintptr_t overlaySize;
+  size_t overlaySize;
 } HalMemory;
 
 typedef struct HalUart {
@@ -164,7 +183,7 @@ typedef struct HalUart {
   /// @brief Initialize the UART subsystem.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int32_t init(void);
+  int32_t (*init)(void);
   
   /// @fn configure(int32_t deviceId, uint32_t baud)
   ///
@@ -182,9 +201,9 @@ typedef struct HalUart {
   ///
   /// @param deviceId The zero-based ID of the UART to read from.
   ///
-  /// @return Returns the byte read, cast to an int, on success, -errno on
+  /// @return Returns the byte read, cast to an int32_t, on success, -errno on
   /// failure.
-  int (*poll)(int32_t deviceId);
+  int32_t (*poll)(int32_t deviceId);
   
   /// @fn ssize_t write(int32_t deviceId, const uint8_t *data, ssize_t length)
   ///
