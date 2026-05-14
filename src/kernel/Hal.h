@@ -283,7 +283,7 @@ typedef struct HalSpi {
   /// @brief Bitmask array indicating which of the supported SPIs are online.
   /// Whether or not an individual SPI is online can be found by:
   ///
-  /// online(HAL->deviceId, deviceId)
+  /// online(HAL->spi, deviceId)
   uint32_t *online;
   
   /// @fn int32_t init(void)
