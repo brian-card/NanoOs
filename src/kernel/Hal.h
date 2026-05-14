@@ -343,7 +343,8 @@ typedef struct HalSpi {
   /// -errno on failure.
   int32_t (*transfer8)(int32_t deviceId, uint8_t data);
   
-  /// @fn int32_t transferBytes(int32_t deviceId, uint8_t *data, uint32_t length)
+  /// @fn int32_t transferBytes(int32_t deviceId,
+  ///   uint8_t *data, uint32_t length)
   ///
   /// @brief Tranfer a buffer of 8-bit bytes between the SPI controller and a
   /// peripheral.
