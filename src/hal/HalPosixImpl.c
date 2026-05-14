@@ -333,15 +333,15 @@ int64_t posixGetElapsedNanoseconds(int64_t startTime) {
 /// simulation.
 static jmp_buf _resetBuffer;
 
-int posixShutdown(HalShutdownType shutdownType) {
+int32_t posixEnterPowerMode(HalPowerMode powerMode) {
   // You can't completely turn off the hardware we're running on.  We're
   // simulating hardware, so do what the hardware would do, which is the same
   // set of operations for both off and suspend.
-  if ((shutdownType == HAL_SHUTDOWN_OFF)
-    || (shutdownType == HAL_SHUTDOWN_SUSPEND)
+  if ((powerMode == HAL_POWER_MODE_OFF)
+    || (powerMode == HAL_POWER_MODE_SUSPEND)
   ) {
     exit(0);
-  } else if (shutdownType == HAL_SHUTDOWN_RESET) {
+  } else if (powerMode == HAL_POWER_MODE_RESET) {
     // Unmap the overlay so that we can map it again when we reset.
     long pageSize = sysconf(_SC_PAGESIZE);
     size_t overlayBaseSize

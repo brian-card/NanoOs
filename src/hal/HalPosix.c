@@ -127,9 +127,9 @@ static HalClock posixClockHal = {
   .getElapsedNanoseconds = posixGetElapsedNanoseconds,
 };
 
-int posixShutdown(HalShutdownType shutdownType);
+int posixEnterPowerMode(HalPowerMode powerMode);
 static HalPower posixPowerHal = {
-  .shutdown = posixShutdown,
+  .enterMode = posixEnterPowerMode,
 };
 
 int posixGetNumTimers(void);

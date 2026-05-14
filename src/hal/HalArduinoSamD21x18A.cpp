@@ -640,12 +640,12 @@ static HalClock arduinoSamD21x18AClockHal = {
   .getElapsedNanoseconds = arduinoSamD21x18AGetElapsedNanoseconds,
 };
 
-int arduinoSamD21x18AShutdown(HalShutdownType shutdownType) {
+int32_t arduinoSamD21x18AEnterMode(HalPowerMode powerMode) {
   // You can't completely turn off the board from software.  The best we can
   // do is put into a low power state, so do the same set of operations for
   // both off and suspend.
-  if ((shutdownType == HAL_SHUTDOWN_OFF)
-    || (shutdownType == HAL_SHUTDOWN_SUSPEND)
+  if ((powerMode == HAL_POWER_MODE_OFF)
+    || (powerMode == HAL_POWER_MODE_SUSPEND)
   ) {
     // Configure for standby mode
     SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk;
@@ -655,7 +655,7 @@ int arduinoSamD21x18AShutdown(HalShutdownType shutdownType) {
     
     __DSB(); // Data Synchronization Barrier
     __WFI(); // Wait For Interrupt
-  } else if (shutdownType == HAL_SHUTDOWN_RESET) {
+  } else if (powerMode == HAL_POWER_MODE_RESET) {
     NVIC_SystemReset();
   }
 
@@ -663,7 +663,7 @@ int arduinoSamD21x18AShutdown(HalShutdownType shutdownType) {
 }
 
 static HalPower arduinoSamD21x18APowerHal = {
-  .shutdown = arduinoSamD21x18AShutdown,
+  .enterMode = arduinoSamD21x18AEnterMode,
 };
 
 /// @struct HardwareTimer

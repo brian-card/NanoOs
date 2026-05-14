@@ -72,15 +72,15 @@ extern "C"
 #define setOffline(hal, deviceId) \
   hal->online[deviceId >> 5] &= ~(((uint32_t) 1) << (deviceId & 31))
   
-/// @enum HalShutdownType
+/// @enum HalPowerMode
 ///
-/// @brief Types of shutdowns that can be invoked in the HAL.
-typedef enum HalShutdownType {
-  HAL_SHUTDOWN_OFF,
-  HAL_SHUTDOWN_SUSPEND,
-  HAL_SHUTDOWN_RESET,
-  HAL_SHUTDOWN_NUM_TYPES,
-} HalShutdownType;
+/// @brief Power modes that can be entered by the HAL.
+typedef enum HalPowerMode {
+  HAL_POWER_MODE_OFF,
+  HAL_POWER_MODE_SUSPEND,
+  HAL_POWER_MODE_RESET,
+  HAL_POWER_MODE_NUM_TYPES,
+} HalPowerMode;
 
 // Standard C types
 typedef intptr_t ssize_t;
@@ -429,15 +429,15 @@ typedef struct HalClock {
 } HalClock;
 
 typedef struct HalPower {
-  /// @fn int shutdown(HalShutdownType shutdownType)
+  /// @fn int32_t enterMode(HalPowerMode powerMode)
   ///
-  /// @brief Halt the OS and invoke the specified power action.
+  /// @brief Enter a given power mode for the system.
   ///
-  /// @param shutdownType The power action to be invoked.
+  /// @param powerMode The power mode to be entered.
   ///
-  /// @return Does not return or returns 0 on success.  On error, -errno will
-  /// be returned.
-  int (*shutdown)(HalShutdownType shutdownType);
+  /// @return On success, either does not return or blocks until the mode is
+  /// exited.  On error, -errno will be returned.
+  int32_t (*enterMode)(HalPowerMode powerMode);
 } HalPower;
 
 typedef struct HalTimer {

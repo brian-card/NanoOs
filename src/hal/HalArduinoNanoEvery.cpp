@@ -520,12 +520,12 @@ static HalClock arduinoNanoEveryClockHal = {
   .getElapsedNanoseconds = arduinoNanoEveryGetElapsedNanoseconds,
 };
 
-int arduinoNanoEveryShutdown(HalShutdownType shutdownType) {
+int32_t arduinoNanoEveryEnterPowerMode(HalPowerMode powerMode) {
   // You can't completely turn off a Nano 33 IoT from software.  The best we
   // can do is put into a low power state, so do the same set of operations for
   // both off and suspend.
-  if ((shutdownType == HAL_SHUTDOWN_OFF)
-    || (shutdownType == HAL_SHUTDOWN_SUSPEND)
+  if ((powerMode == HAL_POWER_MODE_OFF)
+    || (powerMode == HAL_POWER_MODE_SUSPEND)
   ) {
     // 1. Disable ADC
     ADC0.CTRLA &= ~ADC_ENABLE_bm;
@@ -556,7 +556,7 @@ int arduinoNanoEveryShutdown(HalShutdownType shutdownType) {
     sleep_enable();
     sei();  // Must enable interrupts for wake-up
     sleep_cpu();
-  } else if (shutdownType == HAL_SHUTDOWN_RESET) {
+  } else if (powerMode == HAL_POWER_MODE_RESET) {
     _PROTECTED_WRITE(RSTCTRL.SWRR, 1);
   }
   
@@ -564,7 +564,7 @@ int arduinoNanoEveryShutdown(HalShutdownType shutdownType) {
 }
 
 static HalPower arduinoNanoEveryPowerHal = {
-  .shutdown = arduinoNanoEveryShutdown,
+  .enterMode = arduinoNanoEveryEnterPowerMode,
 };
 
 int arduinoNanoEveryGetNumTimers(void) {

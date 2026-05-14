@@ -1513,7 +1513,7 @@ int closeProcessFileDescriptors(
     printString(_functionInProgress);
     printString(" is already in progress\n");
     if (HAL->power != NULL) {
-      HAL->power->shutdown(HAL_SHUTDOWN_OFF);
+      HAL->power->enterMode(HAL_POWER_MODE_OFF);
     } else {
       while (1);
     }
@@ -1585,7 +1585,7 @@ FILE* schedFopen(const char *pathname, const char *mode) {
     printString(_functionInProgress);
     printString(" is already in progress\n");
     if (HAL->power != NULL) {
-      HAL->power->shutdown(HAL_SHUTDOWN_OFF);
+      HAL->power->enterMode(HAL_POWER_MODE_OFF);
     } else {
       while (1);
     }
@@ -1654,7 +1654,7 @@ int schedFclose(FILE *stream) {
     printString(_functionInProgress);
     printString(" is already in progress\n");
     if (HAL->power != NULL) {
-      HAL->power->shutdown(HAL_SHUTDOWN_OFF);
+      HAL->power->enterMode(HAL_POWER_MODE_OFF);
     } else {
       while (1);
     }
@@ -1722,7 +1722,7 @@ int schedRemove(const char *pathname) {
     printString(_functionInProgress);
     printString(" is already in progress\n");
     if (HAL->power != NULL) {
-      HAL->power->shutdown(HAL_SHUTDOWN_OFF);
+      HAL->power->enterMode(HAL_POWER_MODE_OFF);
     } else {
       while (1);
     }
@@ -1789,7 +1789,7 @@ size_t schedFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     printString(_functionInProgress);
     printString(" is already in progress\n");
     if (HAL->power != NULL) {
-      HAL->power->shutdown(HAL_SHUTDOWN_OFF);
+      HAL->power->enterMode(HAL_POWER_MODE_OFF);
     } else {
       while (1);
     }
@@ -1856,7 +1856,7 @@ size_t schedFwrite(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     printString(_functionInProgress);
     printString(" is already in progress\n");
     if (HAL->power != NULL) {
-      HAL->power->shutdown(HAL_SHUTDOWN_OFF);
+      HAL->power->enterMode(HAL_POWER_MODE_OFF);
     } else {
       while (1);
     }
@@ -1929,7 +1929,7 @@ char* schedFgets(char *buffer, int size, FILE *stream) {
     printString(_functionInProgress);
     printString(" is already in progress\n");
     if (HAL->power != NULL) {
-      HAL->power->shutdown(HAL_SHUTDOWN_OFF);
+      HAL->power->enterMode(HAL_POWER_MODE_OFF);
     } else {
       while (1);
     }
@@ -2000,7 +2000,7 @@ int schedFputs(const char *s, FILE *stream) {
     printString(_functionInProgress);
     printString(" is already in progress\n");
     if (HAL->power != NULL) {
-      HAL->power->shutdown(HAL_SHUTDOWN_OFF);
+      HAL->power->enterMode(HAL_POWER_MODE_OFF);
     } else {
       while (1);
     }
