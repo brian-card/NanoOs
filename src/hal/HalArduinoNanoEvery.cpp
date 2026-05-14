@@ -63,6 +63,11 @@
 /// @brief The number of digital IO pins on the board.  14 on an Arduino Nano.
 #define NUM_DIO_PINS 14
 
+/// @def MAX_SPI_DEVICES
+///
+/// @brief The maximum number of SPI devices the system can support.
+#define MAX_SPI_DEVICES 2
+
 /// @def SPI_COPI_DIO
 ///
 /// @brief DIO pin used for SPI COPI on the Arduino Nano Every.
@@ -229,16 +234,16 @@ static HalUart arduinoNanoEveryUartHal = {
   .isConsole = arduinoNanoEveryIsUartConsole,
 };
 
-int arduinoNanoEveryGetNumDios(void) {
-  return NUM_DIO_PINS;
-}
+int32_t arduinoNanoEveryInitDio(void) {
+  return 0;
+};
 
-int arduinoNanoEveryInitDio(int dio, bool output) {
-  int returnValue = -ERANGE;
+int32_t arduinoNanoEveryConfigureDio(int32_t deviceId, bool output) {
+  int32_t returnValue = -ERANGE;
   
-  if ((dio >= DIO_START) && (dio < NUM_DIO_PINS)) {
+  if ((deviceId >= DIO_START) && (deviceId < NUM_DIO_PINS)) {
     uint8_t modes[2] = { INPUT, OUTPUT };
-    pinMode(dio, modes[output]);
+    pinMode(deviceId, modes[output]);
     
     returnValue = 0;
   }
@@ -246,22 +251,31 @@ int arduinoNanoEveryInitDio(int dio, bool output) {
   return returnValue;
 }
 
-int arduinoNanoEveryWriteDio(int dio, bool high) {
-  int returnValue = -ERANGE;
+int32_t arduinoNanoEveryWriteDio(int32_t deviceId, bool high) {
+  int32_t returnValue = -ERANGE;
   
-  if ((dio >= DIO_START) && (dio < NUM_DIO_PINS)) {
+  if ((deviceId >= DIO_START) && (deviceId < NUM_DIO_PINS)) {
     uint8_t levels[2] = { LOW, HIGH };
-    digitalWrite(dio, levels[high]);
+    digitalWrite(deviceId, levels[high]);
     
     returnValue = 0;
   }
   
   return returnValue;
 }
+
+/// @var halArduinoSamD21x18AImplDiosOnline
+///
+/// @brief Bitmask array of online UARTs.
+static uint32_t halArduinoNanoEveryDiosOnline[] = {
+  0x00003fff,
+};
 
 static HalDio arduinoNanoEveryDioHal = {
-  .getNum = arduinoNanoEveryGetNumDios,
+  .numSupported = NUM_DIO_PINS,
+  .online = halArduinoNanoEveryDiosOnline,
   .init = arduinoNanoEveryInitDio,
+  .configure = arduinoNanoEveryConfigureDio,
   .write = arduinoNanoEveryWriteDio,
 };
 
@@ -295,7 +309,7 @@ static struct ArduinoNanoEverySpi {
   uint8_t  chipSelect;
   bool     transferInProgress; // Will default to false
   uint32_t baud;
-} arduinoSpiDevices[NUM_DIO_PINS - 5] = {};
+} arduinoSpiDevices[MAX_SPI_DEVICES] = {};
 
 /// @var numArduinoSpis
 ///
@@ -332,7 +346,7 @@ int arduinoNanoEveryInitSpiDevice(int spi,
   }
   
   // Configure the chip select DIO for output.
-  arduinoNanoEveryInitDio(cs, 1);
+  arduinoNanoEveryConfigureDio(cs, 1);
   // Deselect the chip select pin.
   arduinoNanoEveryWriteDio(cs, 1);
   

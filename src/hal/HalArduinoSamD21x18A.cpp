@@ -69,20 +69,15 @@
 /// @brief The size, in bytes, of the overlay supported by the board.
 #define OVERLAY_SIZE 8192
 
-/// @def MAX_DIO_PINS
-///
-/// @brief The maximum number of DIO pins the system can support.
-#define MAX_DIO_PINS 14
-
 /// @def DIO_PIN_UNDEFINED
 ///
 /// @brief Value to indicate that the value of a specific pin is undefined.
 #define DIO_PIN_UNDEFINED 255
 
-/// @var _numDioPins
+/// @def MAX_SPI_DEVICES
 ///
-/// @brief The number of digital IO pins on the board.
-static uint8_t _numDioPins = 0;
+/// @brief The maximum number of SPI devices the system can support.
+#define MAX_SPI_DEVICES 2
 
 /// @var _spiCopiDio
 ///
@@ -377,12 +372,12 @@ static HalUart arduinoSamD21x18AUartHal = {
   .isConsole = arduinoSamD21x18AIsUartConsole,
 };
 
-int arduinoSamD21x18AGetNumDios(void) {
-  return _numDioPins;
+int32_t arduinoSamD21x18AInitDio(void) {
+  return 0;
 }
 
-int arduinoSamD21x18AInitDio(int dio, bool output) {
-  int returnValue = -ERANGE;
+int32_t arduinoSamD21x18AConfigureDio(int32_t dio, bool output) {
+  int32_t returnValue = -ERANGE;
   
   uint8_t modes[2] = { INPUT, OUTPUT };
   pinMode(dio, modes[output]);
@@ -392,8 +387,8 @@ int arduinoSamD21x18AInitDio(int dio, bool output) {
   return returnValue;
 }
 
-int arduinoSamD21x18AWriteDio(int dio, bool high) {
-  int returnValue = -ERANGE;
+int32_t arduinoSamD21x18AWriteDio(int32_t dio, bool high) {
+  int32_t returnValue = -ERANGE;
   
   uint8_t levels[2] = { LOW, HIGH };
   digitalWrite(dio, levels[high]);
@@ -404,8 +399,10 @@ int arduinoSamD21x18AWriteDio(int dio, bool high) {
 }
 
 static HalDio arduinoSamD21x18ADioHal = {
-  .getNum = arduinoSamD21x18AGetNumDios,
+  .numSupported = 0,
+  .online = NULL,
   .init = arduinoSamD21x18AInitDio,
+  .configure = arduinoSamD21x18AConfigureDio,
   .write = arduinoSamD21x18AWriteDio,
 };
 
@@ -429,7 +426,7 @@ static struct ArduinoSamD21x18ASpi {
   uint8_t  chipSelect;
   bool     transferInProgress; // Will default to false
   uint32_t baud;
-} arduinoSamD21x18ASpiDevices[MAX_DIO_PINS] = {};
+} arduinoSamD21x18ASpiDevices[MAX_SPI_DEVICES] = {};
 
 /// @var numArduinoSpis
 ///
@@ -465,7 +462,7 @@ int arduinoSamD21x18AInitSpiDevice(int spi,
   }
   
   // Configure the chip select DIO for output.
-  arduinoSamD21x18AInitDio(cs, 1);
+  arduinoSamD21x18AConfigureDio(cs, 1);
   // Deselect the chip select pin.
   arduinoSamD21x18AWriteDio(cs, 1);
   
@@ -1073,7 +1070,8 @@ static Hal arduinoSamD21x18AHal = {
 const Hal* halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
   arduinoSamD21x18AHal.uart->numSupported = args->numUartsSupported;
   arduinoSamD21x18AHal.uart->online = args->uartsOnline;
-  _numDioPins = args->numDioPins;
+  arduinoSamD21x18AHal.dio->numSupported = args->numDiosSupported;
+  arduinoSamD21x18AHal.dio->online = args->diosOnline;
   _spiCopiDio = args->spiCopiDio;
   _spiCipoDio = args->spiCipoDio;
   _spiSckDio = args->spiSckDio;

@@ -42,21 +42,21 @@
 /// @def NUM_DIO_PINS
 ///
 /// @brief The number of digital IO pins on the board.
-#define NUM_DIO_PINS 1
+#define NUM_DIO_PINS 38
 
 /// @def SPI_COPI_DIO
 ///
-/// @brief DIO pin used for SPI COPI on the Adafruit Feather M0 WiFi.
+/// @brief DIO pin used for SPI COPI on the Adafruit Trinket M0.
 #define SPI_COPI_DIO 4
 
 /// @def SPI_CIPO_DIO
 ///
-/// @brief DIO pin used for SPI CIPO on the Adafruit Feather M0 WiFi.
+/// @brief DIO pin used for SPI CIPO on the Adafruit Trinket M0.
 #define SPI_CIPO_DIO 2
 
 /// @def SPI_SCK_DIO
 ///
-/// @brief DIO pin used for SPI serial clock on the Adafruit Feather M0 WiFi.
+/// @brief DIO pin used for SPI serial clock on the Adafruit Trinket M0.
 #define SPI_SCK_DIO 3
 
 /// @def SD_CARD_PIN_CHIP_SELECT
@@ -72,11 +72,20 @@ static uint32_t halArduinoSamD21x18AImplUartsOnline[] = {
   0x00000001,
 };
 
+/// @var halArduinoSamD21x18AImplDiosOnline
+///
+/// @brief Bitmask array of online UARTs.
+static uint32_t halArduinoSamD21x18AImplDiosOnline[] = {
+  0xffffffff,
+  0x0000003f
+};
+
 const Hal* halArduinoSamD21x18AImplInit(void) {
   HalArduinoSamD21x18AInitArgs args = {
     .numUartsSupported   = NUM_UARTS,
     .uartsOnline         = halArduinoSamD21x18AImplUartsOnline,
-    .numDioPins          = NUM_DIO_PINS,
+    .numDiosSupported    = NUM_DIO_PINS,
+    .diosOnline          = halArduinoSamD21x18AImplDiosOnline,
     .spiCopiDio          = SPI_COPI_DIO,
     .spiCipoDio          = SPI_CIPO_DIO,
     .spiSckDio           = SPI_SCK_DIO,

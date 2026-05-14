@@ -39,17 +39,10 @@
 /// @brief The maximum number of serial ports we can support on the board.
 #define NUM_UARTS 2
 
-/// @def DIO_START
-///
-/// @brief On the Arduino Nano 33 IoT, D0 is used for Serial1's RX and D1 is
-/// used for Serial1's TX.  We use expect to use Serial1, so our first usable
-/// DIO is 2.
-#define DIO_START 2
-
 /// @def NUM_DIO_PINS
 ///
-/// @brief The number of digital IO pins on the board.  14 on an Arduino Nano.
-#define NUM_DIO_PINS 14
+/// @brief The number of digital IO pins on the board.
+#define NUM_DIO_PINS 38
 
 /// @def SPI_COPI_DIO
 ///
@@ -79,11 +72,20 @@ static uint32_t halArduinoSamD21x18AImplUartsOnline[] = {
   0x00000003,
 };
 
+/// @var halArduinoSamD21x18AImplDiosOnline
+///
+/// @brief Bitmask array of online UARTs.
+static uint32_t halArduinoSamD21x18AImplDiosOnline[] = {
+  0xffffffff,
+  0x0000003f
+};
+
 const Hal* halArduinoSamD21x18AImplInit(void) {
   HalArduinoSamD21x18AInitArgs args = {
     .numUartsSupported   = NUM_UARTS,
     .uartsOnline         = halArduinoSamD21x18AImplUartsOnline,
-    .numDioPins          = NUM_DIO_PINS,
+    .numDiosSupported    = NUM_DIO_PINS,
+    .diosOnline          = halArduinoSamD21x18AImplDiosOnline,
     .spiCopiDio          = SPI_COPI_DIO,
     .spiCipoDio          = SPI_CIPO_DIO,
     .spiSckDio           = SPI_SCK_DIO,

@@ -42,7 +42,7 @@
 /// @def NUM_DIO_PINS
 ///
 /// @brief The number of digital IO pins on the board.
-#define NUM_DIO_PINS 13
+#define NUM_DIO_PINS 38
 
 /// @def SPI_COPI_DIO
 ///
@@ -72,11 +72,20 @@ static uint32_t halArduinoSamD21x18AImplUartsOnline[] = {
   0x00000003,
 };
 
+/// @var halArduinoSamD21x18AImplDiosOnline
+///
+/// @brief Bitmask array of online UARTs.
+static uint32_t halArduinoSamD21x18AImplDiosOnline[] = {
+  0xffffffff,
+  0x0000003f
+};
+
 const Hal* halArduinoSamD21x18AImplInit(void) {
   HalArduinoSamD21x18AInitArgs args = {
     .numUartsSupported   = NUM_UARTS,
     .uartsOnline         = halArduinoSamD21x18AImplUartsOnline,
-    .numDioPins          = NUM_DIO_PINS,
+    .numDiosSupported    = NUM_DIO_PINS,
+    .diosOnline          = halArduinoSamD21x18AImplDiosOnline,
     .spiCopiDio          = SPI_COPI_DIO,
     .spiCipoDio          = SPI_CIPO_DIO,
     .spiSckDio           = SPI_SCK_DIO,

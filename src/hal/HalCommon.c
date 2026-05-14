@@ -105,7 +105,8 @@ int halCommonInitRootFilesystem(BlockStorageDevice *blockDevice) {
   // Create the filesystem process.
   SCHEDULER_STATE->rootFsPid = SCHEDULER_STATE->firstUserPid;
   ProcessDescriptor *allProcesses = SCHEDULER_STATE->allProcesses;
-  ProcessDescriptor *processDescriptor = &allProcesses[SCHEDULER_STATE->rootFsPid - 1];
+  ProcessDescriptor *processDescriptor
+    = &allProcesses[SCHEDULER_STATE->rootFsPid - 1];
   if (processCreate(processDescriptor, runFilesystem, &fs)
     != processSuccess
   ) {

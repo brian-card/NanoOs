@@ -60,7 +60,7 @@ static HalMemory posixMemoryHal = {
   .overlaySize = 0,
 };
 
-static uint32_t posixUartOnline[] = {
+static uint32_t posixUartsOnline[] = {
   0x00000002,
 };
 int32_t posixInitUart(void);
@@ -71,7 +71,7 @@ bool posixIsUartConsole(int32_t port);
 
 static HalUart posixUartHal = {
   .numSupported = 2,
-  .online = posixUartOnline,
+  .online = posixUartsOnline,
   .init = posixInitUart,
   .configure = posixConfigureUart,
   .poll = posixPollUart,
@@ -79,12 +79,17 @@ static HalUart posixUartHal = {
   .isConsole = posixIsUartConsole,
 };
 
-int posixGetNumDios(void);
-int posixInitDio(int dio, bool output);
+static uint32_t posixDiosOnline[] = {
+  0x00000000,
+};
+int posixInitDio(void);
+int posixConfigureDio(int dio, bool output);
 int posixWriteDio(int dio, bool high);
 static HalDio posixDioHal = {
-  .getNum = posixGetNumDios,
+  .numSupported = 0,
+  .online = posixDiosOnline,
   .init = posixInitDio,
+  .configure = posixConfigureDio,
   .write = posixWriteDio,
 };
 

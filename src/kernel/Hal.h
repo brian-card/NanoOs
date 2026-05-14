@@ -175,7 +175,7 @@ typedef struct HalUart {
   /// @brief Bitmask array indicating which of the supported UARTs are online.
   /// Whether or not an individual UART is online can be found by:
   ///
-  /// online(HAL->uart, uartId)
+  /// online(HAL->uart, deviceId)
   uint32_t *online;
   
   /// @fn int32_t init(void)
@@ -228,36 +228,48 @@ typedef struct HalUart {
 } HalUart;
 
 typedef struct HalDio {
-  /// @fn int getNum(void)
+  /// @var numSupported
   ///
-  /// @brief Get the number of digial IO pins on the system.
-  ///
-  /// @return Returns the number of digital IO pins on success, -errno on
-  /// failure.
-  int (*getNum)(void);
+  /// @brief The number of DIO devices that are supported on the hardware.
+  uint32_t numSupported;
   
-  /// @fn int init(int dio, bool output)
+  /// @var online
+  ///
+  /// @brief Bitmask array indicating which of the supported DIOs are online.
+  /// Whether or not an individual DIO is online can be found by:
+  ///
+  /// online(HAL->dio, deviceId)
+  uint32_t *online;
+  
+  /// @fn int32_t init(void)
+  ///
+  /// @brief Initialize the DIO subsystem.
+  ///
+  /// @return Returns 0 on success, -errno on failure.
+  int32_t (*init)(void);
+  
+  /// @fn int32_t configure(int32_t deviceId, bool output)
   ///
   /// @brief Configure a DIO for either input or output.
   ///
-  /// @param dio An integer indicating the DIO to configure.
+  /// @param deviceId An integer indicating the DIO to configure.
   /// @param output Whether the DIO should be configured for output (true) or
   ///   input (false).
   ///
   /// @return Returns 0 on success, -errno onfailure.
-  int (*init)(int dio, bool output);
+  int32_t (*configure)(int32_t deviceId, bool output);
   
-  /// @fn int write(int dio, bool high)
+  /// @fn int32_t write(int32_t deviceId, bool high)
   ///
   /// @brief Write either a high or low value to a DIO.  The DIO must be
   /// configured for output.
   ///
-  /// @param dio An integer indicating the DIO to write the value to.
+  /// @param deviceId An integer indicating the DIO to write the value to.
   /// @param high Whether the value to be written to the DIO should be high
   ///   (true) or low (false).
   ///
   /// @return Returns 0 on success, -errno onfailure.
-  int (*write)(int dio, bool high);
+  int32_t (*write)(int32_t deviceId, bool high);
 } HalDio;
 
 typedef struct HalSpi {

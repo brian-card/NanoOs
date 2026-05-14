@@ -47,6 +47,8 @@ extern "C"
 typedef struct HalArduinoSamD21x18AInitArgs {
   uint32_t  numUartsSupported;
   uint32_t *uartsOnline;
+  uint32_t  numDiosSupported;
+  uint32_t *diosOnline;
   uint8_t   numDioPins;
   uint8_t   spiCopiDio;
   uint8_t   spiCipoDio;
