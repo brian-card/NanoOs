@@ -184,6 +184,14 @@ int halCommonInit(const Hal *hal) {
     }
   }
 
+  if (hal->clock != NULL) {
+    if (hal->clock->init() != 0) {
+      hal->uart->write(defaultUart,
+        (uint8_t*) "WARNING: Failed to initialize clock subsystem\n",
+        strlen("WARNING: Failed to initialize clock subsystem\n"));
+    }
+  }
+
   if (hal->timer != NULL)  {
     int numTimers = hal->timer->getNum();
     for (ii = 0; ii < numTimers; ii++) {
