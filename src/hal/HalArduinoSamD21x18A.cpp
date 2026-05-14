@@ -436,10 +436,20 @@ static const int numArduinoSpis
   = sizeof(arduinoSamD21x18ASpiDevices)
   / sizeof(arduinoSamD21x18ASpiDevices[0]);
 
-int arduinoSamD21x18AInitSpiDevice(int spi,
+int32_t arduinoSamD21x18AInitSpi(void) {
+  if (globalSpiConfigured == false) {
+    // Set up SPI at the default speed.
+    globalSpiConfigured = true;
+    SPI.begin();
+  }
+  
+  return 0;
+}
+
+int32_t arduinoSamD21x18AConfigureSpi(int32_t deviceId,
   uint8_t cs, uint8_t sck, uint8_t copi, uint8_t cipo, uint32_t baud
 ) {
-  if ((spi < 0) || (spi >= numArduinoSpis)) {
+  if ((deviceId < 0) || (deviceId >= numArduinoSpis)) {
     // Outside the limit of the devices we support.
     return -ENODEV;
   } else if (
@@ -451,14 +461,12 @@ int arduinoSamD21x18AInitSpiDevice(int spi,
     || (cipo != _spiCipoDio)
   ) {
     return -EINVAL;
-  } else if (arduinoSamD21x18ASpiDevices[spi].configured == true) {
+  } else if (arduinoSamD21x18ASpiDevices[deviceId].configured == true) {
     return -EBUSY;
   }
   
-  if (globalSpiConfigured == false) {
-    // Set up SPI at the default speed.
-    globalSpiConfigured = true;
-    SPI.begin();
+  if (arduinoSamD21x18AInitSpi() != 0) {
+    return -ENODEV;
   }
   
   // Configure the chip select DIO for output.
@@ -467,16 +475,16 @@ int arduinoSamD21x18AInitSpiDevice(int spi,
   arduinoSamD21x18AWriteDio(cs, 1);
   
   // Configure our internal metadata for the device.
-  arduinoSamD21x18ASpiDevices[spi].chipSelect = cs;
-  arduinoSamD21x18ASpiDevices[spi].baud = baud;
-  arduinoSamD21x18ASpiDevices[spi].configured = true;
+  arduinoSamD21x18ASpiDevices[deviceId].chipSelect = cs;
+  arduinoSamD21x18ASpiDevices[deviceId].baud = baud;
+  arduinoSamD21x18ASpiDevices[deviceId].configured = true;
   
   return 0;
 }
 
-int arduinoSamD21x18AStartSpiTransfer(int spi) {
-  if ((spi < 0) || (spi >= numArduinoSpis)
-    || (arduinoSamD21x18ASpiDevices[spi].configured == false)
+int32_t arduinoSamD21x18AStartSpiTransfer(int32_t deviceId) {
+  if ((deviceId < 0) || (deviceId >= numArduinoSpis)
+    || (arduinoSamD21x18ASpiDevices[deviceId].configured == false)
   ) {
     // Outside the limit of the devices we support.
     return -ENODEV;
@@ -489,33 +497,33 @@ int arduinoSamD21x18AStartSpiTransfer(int spi) {
   
   // Select the chip select pin.
   arduinoSamD21x18AWriteDio(
-    arduinoSamD21x18ASpiDevices[spi].chipSelect, 0);
+    arduinoSamD21x18ASpiDevices[deviceId].chipSelect, 0);
   
   // Begin the transaction
-  SPI.beginTransaction(SPISettings(arduinoSamD21x18ASpiDevices[spi].baud,
+  SPI.beginTransaction(SPISettings(arduinoSamD21x18ASpiDevices[deviceId].baud,
     MSBFIRST, SPI_MODE0));
   
-  arduinoSamD21x18ASpiDevices[spi].transferInProgress = true;
+  arduinoSamD21x18ASpiDevices[deviceId].transferInProgress = true;
   
   return 0;
 }
 
-int arduinoSamD21x18AEndSpiTransfer(int spi) {
-  if ((spi < 0) || (spi >= numArduinoSpis)
-    || (arduinoSamD21x18ASpiDevices[spi].configured == false)
+int32_t arduinoSamD21x18AEndSpiTransfer(int32_t deviceId) {
+  if ((deviceId < 0) || (deviceId >= numArduinoSpis)
+    || (arduinoSamD21x18ASpiDevices[deviceId].configured == false)
   ) {
     // Outside the limit of the devices we support.
     return -ENODEV;
   }
   
-  arduinoSamD21x18ASpiDevices[spi].transferInProgress = false;
+  arduinoSamD21x18ASpiDevices[deviceId].transferInProgress = false;
   
   // End the transaction.
   SPI.endTransaction();
   
   // Deselect the chip select pin.
   arduinoSamD21x18AWriteDio(
-    arduinoSamD21x18ASpiDevices[spi].chipSelect, 1);
+    arduinoSamD21x18ASpiDevices[deviceId].chipSelect, 1);
   for (int ii = 0; ii < 8; ii++) {
     SPI.transfer(0xFF); // 8 clock pulses
   }
@@ -526,35 +534,35 @@ int arduinoSamD21x18AEndSpiTransfer(int spi) {
   return 0;
 }
 
-int arduinoSamD21x18ASpiTransfer8(int spi, uint8_t data) {
-  if ((spi < 0) || (spi >= numArduinoSpis)
-    || (arduinoSamD21x18ASpiDevices[spi].configured == false)
+int32_t arduinoSamD21x18ASpiTransfer8(int32_t deviceId, uint8_t data) {
+  if ((deviceId < 0) || (deviceId >= numArduinoSpis)
+    || (arduinoSamD21x18ASpiDevices[deviceId].configured == false)
   ) {
     // Outside the limit of the devices we support.
     return -ENODEV;
-  } else if (!arduinoSamD21x18ASpiDevices[spi].transferInProgress) {
+  } else if (!arduinoSamD21x18ASpiDevices[deviceId].transferInProgress) {
     // The only error that arduinoSamD21x18AStartSpiTransfer can return is
     // ENODEV and we've already checked for that, so we don't need to check the
     // return value here.
-    arduinoSamD21x18AStartSpiTransfer(spi);
+    arduinoSamD21x18AStartSpiTransfer(deviceId);
   }
   
-  return (int) SPI.transfer(data);
+  return (int32_t) SPI.transfer(data);
 }
 
-int arduinoSamD21x18ASpiTransferBytes(int spi,
+int32_t arduinoSamD21x18ASpiTransferBytes(int32_t deviceId,
   uint8_t *data, uint32_t length
 ) {
-  if ((spi < 0) || (spi >= numArduinoSpis)
-    || (arduinoSamD21x18ASpiDevices[spi].configured == false)
+  if ((deviceId < 0) || (deviceId >= numArduinoSpis)
+    || (arduinoSamD21x18ASpiDevices[deviceId].configured == false)
   ) {
     // Outside the limit of the devices we support.
     return -ENODEV;
-  } else if (!arduinoSamD21x18ASpiDevices[spi].transferInProgress) {
+  } else if (!arduinoSamD21x18ASpiDevices[deviceId].transferInProgress) {
     // The only error that arduinoSamD21x18AStartSpiTransfer can return is
     // ENODEV and we've already checked for that, so we don't need to check the
     // return value here.
-    arduinoSamD21x18AStartSpiTransfer(spi);
+    arduinoSamD21x18AStartSpiTransfer(deviceId);
   }
   
   SPI.transfer(data, length);
@@ -562,8 +570,18 @@ int arduinoSamD21x18ASpiTransferBytes(int spi,
   return 0;
 }
 
+/// @var halArduinoSamD21x18ASpisOnline
+///
+/// @brief Bitmask array of online SPIs.
+static uint32_t halArduinoSamD21x18ASpisOnline[] = {
+  0x00000003,
+};
+
 static HalSpi arduinoSamD21x18ASpiHal = {
-  .initDevice = arduinoSamD21x18AInitSpiDevice,
+  .numSupported = MAX_SPI_DEVICES,
+  .online = halArduinoSamD21x18ASpisOnline,
+  .init = arduinoSamD21x18AInitSpi,
+  .configure = arduinoSamD21x18AConfigureSpi,
   .startTransfer = arduinoSamD21x18AStartSpiTransfer,
   .endTransfer = arduinoSamD21x18AEndSpiTransfer,
   .transfer8 = arduinoSamD21x18ASpiTransfer8,

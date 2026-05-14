@@ -317,10 +317,20 @@ static struct ArduinoNanoEverySpi {
 static const int numArduinoSpis
   = sizeof(arduinoSpiDevices) / sizeof(arduinoSpiDevices[0]);
 
-int arduinoNanoEveryInitSpiDevice(int spi,
+int32_t arduinoNanoEveryInitSpi(void) {
+  if (globalSpiConfigured == false) {
+    // Set up SPI at the default speed.
+    globalSpiConfigured = true;
+    SPI.begin();
+  }
+  
+  return 0;
+}
+
+int32_t arduinoNanoEveryConfigureSpiDevice(int32_t deviceId,
   uint8_t cs, uint8_t sck, uint8_t copi, uint8_t cipo, uint32_t baud
 ) {
-  if ((spi < 0) || (spi >= numArduinoSpis)) {
+  if ((deviceId < 0) || (deviceId >= numArduinoSpis)) {
     // Outside the limit of the devices we support.
     return -ENODEV;
   } else if ((cs < DIO_START) || (cs >= NUM_DIO_PINS)) {
@@ -335,14 +345,12 @@ int arduinoNanoEveryInitSpiDevice(int spi,
     || (cipo != SPI_CIPO_DIO)
   ) {
     return -EINVAL;
-  } else if (arduinoSpiDevices[spi].configured == true) {
+  } else if (arduinoSpiDevices[deviceId].configured == true) {
     return -EBUSY;
   }
   
-  if (globalSpiConfigured == false) {
-    // Set up SPI at the default speed.
-    globalSpiConfigured = true;
-    SPI.begin();
+  if (arduinoNanoEveryInitSpi() != 0) {
+    return -ENODEV;
   }
   
   // Configure the chip select DIO for output.
@@ -351,16 +359,16 @@ int arduinoNanoEveryInitSpiDevice(int spi,
   arduinoNanoEveryWriteDio(cs, 1);
   
   // Configure our internal metadata for the device.
-  arduinoSpiDevices[spi].chipSelect = cs;
-  arduinoSpiDevices[spi].baud = baud;
-  arduinoSpiDevices[spi].configured = true;
+  arduinoSpiDevices[deviceId].chipSelect = cs;
+  arduinoSpiDevices[deviceId].baud = baud;
+  arduinoSpiDevices[deviceId].configured = true;
   
   return 0;
 }
 
-int arduinoNanoEveryStartSpiTransfer(int spi) {
-  if ((spi < 0) || (spi >= numArduinoSpis)
-    || (arduinoSpiDevices[spi].configured == false)
+int32_t arduinoNanoEveryStartSpiTransfer(int32_t deviceId) {
+  if ((deviceId < 0) || (deviceId >= numArduinoSpis)
+    || (arduinoSpiDevices[deviceId].configured == false)
   ) {
     // Outside the limit of the devices we support.
     return -ENODEV;
@@ -372,32 +380,32 @@ int arduinoNanoEveryStartSpiTransfer(int spi) {
   globalSpiInUse = true;
   
   // Select the chip select pin.
-  arduinoNanoEveryWriteDio(arduinoSpiDevices[spi].chipSelect, 0);
+  arduinoNanoEveryWriteDio(arduinoSpiDevices[deviceId].chipSelect, 0);
   
   // Begin the transaction
-  SPI.beginTransaction(SPISettings(arduinoSpiDevices[spi].baud,
+  SPI.beginTransaction(SPISettings(arduinoSpiDevices[deviceId].baud,
     MSBFIRST, SPI_MODE0));
   
-  arduinoSpiDevices[spi].transferInProgress = true;
+  arduinoSpiDevices[deviceId].transferInProgress = true;
   
   return 0;
 }
 
-int arduinoNanoEveryEndSpiTransfer(int spi) {
-  if ((spi < 0) || (spi >= numArduinoSpis)
-    || (arduinoSpiDevices[spi].configured == false)
+int32_t arduinoNanoEveryEndSpiTransfer(int32_t deviceId) {
+  if ((deviceId < 0) || (deviceId >= numArduinoSpis)
+    || (arduinoSpiDevices[deviceId].configured == false)
   ) {
     // Outside the limit of the devices we support.
     return -ENODEV;
   }
   
-  arduinoSpiDevices[spi].transferInProgress = false;
+  arduinoSpiDevices[deviceId].transferInProgress = false;
   
   // End the transaction.
   SPI.endTransaction();
   
   // Deselect the chip select pin.
-  arduinoNanoEveryWriteDio(arduinoSpiDevices[spi].chipSelect, 1);
+  arduinoNanoEveryWriteDio(arduinoSpiDevices[deviceId].chipSelect, 1);
   for (int ii = 0; ii < 8; ii++) {
     SPI.transfer(0xFF); // 8 clock pulses
   }
@@ -408,35 +416,35 @@ int arduinoNanoEveryEndSpiTransfer(int spi) {
   return 0;
 }
 
-int arduinoNanoEverySpiTransfer8(int spi, uint8_t data) {
-  if ((spi < 0) || (spi >= numArduinoSpis)
-    || (arduinoSpiDevices[spi].configured == false)
+int32_t arduinoNanoEverySpiTransfer8(int32_t deviceId, uint8_t data) {
+  if ((deviceId < 0) || (deviceId >= numArduinoSpis)
+    || (arduinoSpiDevices[deviceId].configured == false)
   ) {
     // Outside the limit of the devices we support.
     return -ENODEV;
-  } else if (!arduinoSpiDevices[spi].transferInProgress) {
+  } else if (!arduinoSpiDevices[deviceId].transferInProgress) {
     // The only error that arduinoNanoEveryStartSpiTransfer can return is
     // ENODEV and we've already checked for that, so we don't need to check the
     // return value here.
-    arduinoNanoEveryStartSpiTransfer(spi);
+    arduinoNanoEveryStartSpiTransfer(deviceId);
   }
   
   return (int) SPI.transfer(data);
 }
 
-int arduinoNanoEverySpiTransferBytes(int spi,
+int32_t arduinoNanoEverySpiTransferBytes(int32_t deviceId,
   uint8_t *data, uint32_t length
 ) {
-  if ((spi < 0) || (spi >= numArduinoSpis)
-    || (arduinoSpiDevices[spi].configured == false)
+  if ((deviceId < 0) || (deviceId >= numArduinoSpis)
+    || (arduinoSpiDevices[deviceId].configured == false)
   ) {
     // Outside the limit of the devices we support.
     return -ENODEV;
-  } else if (!arduinoSpiDevices[spi].transferInProgress) {
+  } else if (!arduinoSpiDevices[deviceId].transferInProgress) {
     // The only error that arduinoNanoEveryStartSpiTransfer can return is
     // ENODEV and we've already checked for that, so we don't need to check the
     // return value here.
-    arduinoNanoEveryStartSpiTransfer(spi);
+    arduinoNanoEveryStartSpiTransfer(deviceId);
   }
   
   SPI.transfer(data, length);
@@ -444,8 +452,18 @@ int arduinoNanoEverySpiTransferBytes(int spi,
   return 0;
 }
 
+/// @var halArduinoNanoEverySpisOnline
+///
+/// @brief Bitmask array of online SPIs.
+static uint32_t halArduinoNanoEverySpisOnline[] = {
+  0x00000003,
+};
+
 static HalSpi arduinoNanoEverySpiHal = {
-  .initDevice = arduinoNanoEveryInitSpiDevice,
+  .numSupported = MAX_SPI_DEVICES,
+  .online = halArduinoNanoEverySpisOnline,
+  .init = arduinoNanoEveryInitSpi,
+  .configure = arduinoNanoEveryConfigureSpiDevice,
   .startTransfer = arduinoNanoEveryStartSpiTransfer,
   .endTransfer = arduinoNanoEveryEndSpiTransfer,
   .transfer8 = arduinoNanoEverySpiTransfer8,

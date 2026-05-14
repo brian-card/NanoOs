@@ -234,24 +234,28 @@ int posixInitDio(void) {
   return -ENOSYS;
 }
 
-int posixConfigureDio(int dio, bool output) {
-  (void) dio;
+int32_t posixConfigureDio(int32_t deviceId, bool output) {
+  (void) deviceId;
   (void) output;
   
   return -ENOSYS;
 }
 
-int posixWriteDio(int dio, bool high) {
-  (void) dio;
+int32_t posixWriteDio(int32_t deviceId, bool high) {
+  (void) deviceId;
   (void) high;
   
   return -ENOSYS;
 }
 
-int posixInitSpiDevice(int spi,
+int32_t posixInitSpi(void) {
+  return -ENOSYS;
+}
+
+int32_t posixConfigureSpiDevice(int32_t deviceId,
   uint8_t cs, uint8_t sck, uint8_t copi, uint8_t cipo, uint32_t baud
 ) {
-  (void) spi;
+  (void) deviceId;
   (void) cs;
   (void) sck;
   (void) copi;
@@ -261,27 +265,29 @@ int posixInitSpiDevice(int spi,
   return -ENOSYS;
 }
 
-int posixStartSpiTransfer(int spi) {
-  (void) spi;
+int32_t posixStartSpiTransfer(int32_t deviceId) {
+  (void) deviceId;
   
   return -ENOSYS;
 }
 
-int posixEndSpiTransfer(int spi) {
-  (void) spi;
+int32_t posixEndSpiTransfer(int32_t deviceId) {
+  (void) deviceId;
   
   return -ENOSYS;
 }
 
-int posixSpiTransfer8(int spi, uint8_t data) {
-  (void) spi;
+int32_t posixSpiTransfer8(int32_t deviceId, uint8_t data) {
+  (void) deviceId;
   (void) data;
   
   return -ENOSYS;
 }
 
-int posixSpiTransferBytes(int spi, uint8_t *data, uint32_t length) {
-  (void) spi;
+int32_t posixSpiTransferBytes(int32_t deviceId,
+  uint8_t *data, uint32_t length
+) {
+  (void) deviceId;
   (void) data;
   (void) length;
   

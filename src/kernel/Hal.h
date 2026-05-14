@@ -273,12 +273,32 @@ typedef struct HalDio {
 } HalDio;
 
 typedef struct HalSpi {
-  /// @fn int initDevice(int spi,
+  /// @var numSupported
+  ///
+  /// @brief The number of SPI devices that are supported on the hardware.
+  uint32_t numSupported;
+  
+  /// @var online
+  ///
+  /// @brief Bitmask array indicating which of the supported SPIs are online.
+  /// Whether or not an individual SPI is online can be found by:
+  ///
+  /// online(HAL->deviceId, deviceId)
+  uint32_t *online;
+  
+  /// @fn int32_t init(void)
+  ///
+  /// @brief Initialize the SPI subsystem.
+  ///
+  /// @return Returns 0 on success, -errno on failure.
+  int32_t (*init)(void);
+  
+  /// @fn int32_t configure(int32_t deviceId,
   ///   uint8_t cs, uint8_t sck, uint8_t copi, uint8_t cipo);
   ///
   /// @brief Initialize a SPI device on the system.
   ///
-  /// @param spi The zero-based index of the SPI device to initialize.
+  /// @param deviceId The zero-based index of the SPI device to initialize.
   /// @param cs The DIO to use as the chip-select line.
   /// @param sck The DIO to use as the clock line.
   /// @param copi The DIO to use as the COPI line.
@@ -286,48 +306,50 @@ typedef struct HalSpi {
   /// @param baud The baud rate the SPI is to run at.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int (*initDevice)(int spi,
+  int32_t (*configure)(int32_t deviceId,
     uint8_t cs, uint8_t sck, uint8_t copi, uint8_t cipo, uint32_t baud);
   
-  /// @fn int startTransfer(int spi)
+  /// @fn int startTransfer(int deviceId)
   ///
   /// @brief Begin a transfer with a SPI device.
   ///
-  /// @param spi The zero-based index of the SPI device to begin transferring
-  /// data with.
+  /// @param deviceId The zero-based index of the SPI device to begin
+  ///   transferring data with.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int (*startTransfer)(int spi);
+  int32_t (*startTransfer)(int32_t deviceId);
   
-  /// @fn int endTransfer(int spi)
+  /// @fn int32_t endTransfer(int32_t deviceId)
   ///
   /// @brief End a transfer with a SPI device.
   ///
-  /// @param spi The zero-based index of the SPI device to halt transferring
-  /// data with.
+  /// @param deviceId The zero-based index of the SPI device to halt
+  ///   transferring data with.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int (*endTransfer)(int spi);
+  int32_t (*endTransfer)(int32_t deviceId);
   
-  /// @fn int transfer8(int spi, uint8_t data)
+  /// @fn int32_t transfer8(int32_t deviceId, uint8_t data)
   ///
   /// @brief Tranfer 8 bits (1 byte) between the SPI controller and a
   /// peripheral.
   ///
-  /// @param spi The zero-based index of the SPI device to transfer data with.
+  /// @param deviceId The zero-based index of the SPI device to transfer data
+  ///   with.
   /// @param data The 8-bit value to transfer to the peripheral.
   ///
   /// @return Returns a value in the range 0x00000000 to 0x000000ff
   /// corresponding to the 8 bits transferred from the device on success,
   /// -errno on failure.
-  int (*transfer8)(int spi, uint8_t data);
+  int32_t (*transfer8)(int32_t deviceId, uint8_t data);
   
-  /// @fn int transferBytes(int spi, uint8_t *data, uint32_t length)
+  /// @fn int32_t transferBytes(int32_t deviceId, uint8_t *data, uint32_t length)
   ///
   /// @brief Tranfer a buffer of 8-bit bytes between the SPI controller and a
   /// peripheral.
   ///
-  /// @param spi The zero-based index of the SPI device to transfer data with.
+  /// @param deviceId The zero-based index of the SPI device to transfer data
+  ///   with.
   /// @param data The bufffer of 8-bit values to transfer to the peripheral.
   /// @param length The number of bytes in the buffer to transfer.
   ///
@@ -335,7 +357,7 @@ typedef struct HalSpi {
   /// replaced with the bytes that were transferred from the SPI peripheral.
   /// -errno is returned and the contents of the data buffer are undefined on
   /// failure.
-  int (*transferBytes)(int spi, uint8_t *data, uint32_t length);
+  int32_t (*transferBytes)(int32_t deviceId, uint8_t *data, uint32_t length);
 } HalSpi;
 
 typedef struct HalClock {

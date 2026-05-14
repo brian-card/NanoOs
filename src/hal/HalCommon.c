@@ -168,6 +168,22 @@ int halCommonInit(const Hal *hal) {
     }
   }
 
+  if (hal->dio != NULL) {
+    if (hal->dio->init() != 0) {
+      hal->uart->write(defaultUart,
+        (uint8_t*) "WARNING: Failed to initialize DIO subsystem\n",
+        strlen("WARNING: Failed to initialize DIO subsystem\n"));
+    }
+  }
+
+  if (hal->spi != NULL) {
+    if (hal->spi->init() != 0) {
+      hal->uart->write(defaultUart,
+        (uint8_t*) "WARNING: Failed to initialize SPI subsystem\n",
+        strlen("WARNING: Failed to initialize SPI subsystem\n"));
+    }
+  }
+
   if (hal->timer != NULL)  {
     int numTimers = hal->timer->getNum();
     for (ii = 0; ii < numTimers; ii++) {

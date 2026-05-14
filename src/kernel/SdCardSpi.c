@@ -129,7 +129,7 @@ int sdSpiCardInit(SdCardSpiArgs *sdCardSpiArgs) {
   bool isSDv2 = false;
   
   // Set up SPI at the default speed
-  int initStatus = HAL->spi->initDevice(SD_CARD_SPI_DEVICE,
+  int32_t initStatus = HAL->spi->configure(SD_CARD_SPI_DEVICE,
     sdCardSpiArgs->spiCsDio,
     sdCardSpiArgs->spiSckDio,
     sdCardSpiArgs->spiCopiDio,

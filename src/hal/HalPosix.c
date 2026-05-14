@@ -82,9 +82,9 @@ static HalUart posixUartHal = {
 static uint32_t posixDiosOnline[] = {
   0x00000000,
 };
-int posixInitDio(void);
-int posixConfigureDio(int dio, bool output);
-int posixWriteDio(int dio, bool high);
+int32_t posixInitDio(void);
+int32_t posixConfigureDio(int32_t deviceId, bool output);
+int32_t posixWriteDio(int32_t deviceId, bool high);
 static HalDio posixDioHal = {
   .numSupported = 0,
   .online = posixDiosOnline,
@@ -93,14 +93,21 @@ static HalDio posixDioHal = {
   .write = posixWriteDio,
 };
 
-int posixInitSpiDevice(int spi,
+static uint32_t posixSpisOnline[] = {
+  0x00000000,
+};
+int32_t posixInitSpi(void);
+int32_t posixConfigureSpiDevice(int32_t deviceId,
   uint8_t cs, uint8_t sck, uint8_t copi, uint8_t cipo, uint32_t baud);
-int posixStartSpiTransfer(int spi);
-int posixEndSpiTransfer(int spi);
-int posixSpiTransfer8(int spi, uint8_t data);
-int posixSpiTransferBytes(int spi, uint8_t *data, uint32_t length);
+int32_t posixStartSpiTransfer(int32_t deviceId);
+int32_t posixEndSpiTransfer(int32_t deviceId);
+int32_t posixSpiTransfer8(int32_t deviceId, uint8_t data);
+int32_t posixSpiTransferBytes(int32_t deviceId, uint8_t *data, uint32_t length);
 static HalSpi posixSpiHal = {
-  .initDevice = posixInitSpiDevice,
+  .numSupported = 0,
+  .online = posixSpisOnline,
+  .init = posixInitSpi,
+  .configure = posixConfigureSpiDevice,
   .startTransfer = posixStartSpiTransfer,
   .endTransfer = posixEndSpiTransfer,
   .transfer8 = posixSpiTransfer8,
