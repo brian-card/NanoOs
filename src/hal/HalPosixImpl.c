@@ -294,7 +294,11 @@ int32_t posixSpiTransferBytes(int32_t deviceId,
   return -ENOSYS;
 }
 
-int posixSetSystemTime(struct timespec *now) {
+int32_t posixTimeInit(void) {
+  return 0;
+}
+
+int32_t posixSetSystemTime(struct timespec *now) {
   (void) now;
   
   return 0;

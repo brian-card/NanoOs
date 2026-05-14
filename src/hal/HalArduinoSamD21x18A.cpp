@@ -594,7 +594,11 @@ static HalSpi arduinoSamD21x18ASpiHal = {
 /// time for the system.
 static int64_t baseSystemTimeUs = 0;
 
-int arduinoSamD21x18ASetSystemTime(struct timespec *now) {
+int32_t arduinoSamD21x18ATimeInit(void) {
+  return 0;
+}
+
+int32_t arduinoSamD21x18ASetSystemTime(struct timespec *now) {
   if (now == NULL) {
     return -EINVAL;
   }
@@ -629,6 +633,7 @@ int64_t arduinoSamD21x18AGetElapsedNanoseconds(int64_t startTime) {
 }
 
 static HalClock arduinoSamD21x18AClockHal = {
+  .init = arduinoSamD21x18ATimeInit,
   .setSystemTime = arduinoSamD21x18ASetSystemTime,
   .getElapsedMilliseconds = arduinoSamD21x18AGetElapsedMilliseconds,
   .getElapsedMicroseconds = arduinoSamD21x18AGetElapsedMicroseconds,

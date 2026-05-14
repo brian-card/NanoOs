@@ -114,11 +114,13 @@ static HalSpi posixSpiHal = {
   .transferBytes = posixSpiTransferBytes,
 };
 
-int posixSetSystemTime(struct timespec *now);
+int32_t posixTimeInit(void);
+int32_t posixSetSystemTime(struct timespec *now);
 int64_t posixGetElapsedMilliseconds(int64_t startTime);
 int64_t posixGetElapsedMicroseconds(int64_t startTime);
 int64_t posixGetElapsedNanoseconds(int64_t startTime);
 static HalClock posixClockHal = {
+  .init = posixTimeInit,
   .setSystemTime = posixSetSystemTime,
   .getElapsedMilliseconds = posixGetElapsedMilliseconds,
   .getElapsedMicroseconds = posixGetElapsedMicroseconds,

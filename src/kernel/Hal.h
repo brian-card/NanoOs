@@ -362,7 +362,14 @@ typedef struct HalSpi {
 } HalSpi;
 
 typedef struct HalClock {
-  /// @fn int setSystemTime(struct timespec *ts)
+  /// @fn int32_t init(void)
+  ///
+  /// @brief Initialize the time subsystem.
+  ///
+  /// @return Returns 0 on success, -errno on failure.
+  int32_t (*init)(void);
+  
+  /// @fn int32_t setSystemTime(struct timespec *ts)
   ///
   /// @brief Set the current time on the system.
   ///
@@ -370,7 +377,7 @@ typedef struct HalClock {
   ///   nanoseconds since the epoch.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int (*setSystemTime)(struct timespec *ts);
+  int32_t (*setSystemTime)(struct timespec *ts);
   
   /// @fn int64_t getElapsedMilliseconds(int64_t startTime)
   ///

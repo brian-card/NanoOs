@@ -476,7 +476,11 @@ static HalSpi arduinoNanoEverySpiHal = {
 /// time for the system.
 static int64_t baseSystemTimeMs = 0;
 
-int arduinoNanoEverySetSystemTime(struct timespec *now) {
+int32_t arduinoNanoEveryTimeInit(void) {
+  return 0;
+}
+
+int32_t arduinoNanoEverySetSystemTime(struct timespec *now) {
   if (now == NULL) {
     return -EINVAL;
   }
@@ -509,6 +513,7 @@ int64_t arduinoNanoEveryGetElapsedNanoseconds(int64_t startTime) {
 }
 
 static HalClock arduinoNanoEveryClockHal = {
+  .init = arduinoNanoEveryTimeInit,
   .setSystemTime = arduinoNanoEverySetSystemTime,
   .getElapsedMilliseconds = arduinoNanoEveryGetElapsedMilliseconds,
   .getElapsedMicroseconds = arduinoNanoEveryGetElapsedMicroseconds,
