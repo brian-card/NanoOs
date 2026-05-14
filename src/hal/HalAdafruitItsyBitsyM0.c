@@ -74,7 +74,7 @@ static uint32_t halArduinoSamD21x18AImplUartsOnline[] = {
 
 /// @var halArduinoSamD21x18AImplDiosOnline
 ///
-/// @brief Bitmask array of online UARTs.
+/// @brief Bitmask array of online DIOs.
 static uint32_t halArduinoSamD21x18AImplDiosOnline[] = {
   0xffffffff,
   0x0000003f
