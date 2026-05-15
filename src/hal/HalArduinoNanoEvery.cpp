@@ -567,62 +567,6 @@ static HalPower arduinoNanoEveryPowerHal = {
   .enterMode = arduinoNanoEveryEnterPowerMode,
 };
 
-int arduinoNanoEveryGetNumTimers(void) {
-  return 0;
-}
- 
-int arduinoNanoEverySetNumTimers(int numTimers) {
-  (void) numTimers;
-  
-  return -ENOTSUP;
-}
-
-int arduinoNanoEveryInitTimer(int timer) {
-  (void) timer;
-  
-  return -ENOTSUP;
-}
-
-int arduinoNanoEveryConfigOneShotTimer(int timer,
-    uint64_t nanoseconds, void (*callback)(void)
-) {
-  (void) timer;
-  (void) nanoseconds;
-  (void) callback;
-  
-  return -ENOTSUP;
-}
-
-uint64_t arduinoNanoEveryConfiguredTimerNanoseconds(int timer) {
-  (void) timer;
-  
-  return 0;
-}
-
-uint64_t arduinoNanoEveryRemainingTimerNanoseconds(int timer) {
-  (void) timer;
-  
-  return 0;
-}
-
-int arduinoNanoEveryCancelTimer(int timer) {
-  (void) timer;
-  
-  return -ENOTSUP;
-}
-
-int arduinoNanoEveryCancelAndGetTimer(int timer,
-  uint64_t *configuredNanoseconds, uint64_t *remainingNanoseconds,
-  void (**callback)(void)
-) {
-  (void) timer;
-  (void) configuredNanoseconds;
-  (void) remainingNanoseconds;
-  (void) callback;
-  
-  return -ENOTSUP;
-}
-
 int arduinoNanoEveryInitRootStorage(SchedulerState *schedulerState) {
   // Create the SD card process.
   SdCardSpiArgs sdCardSpiArgs = {

@@ -441,79 +441,78 @@ typedef struct HalPower {
 } HalPower;
 
 typedef struct HalTimer {
-  /// @fn int getNum(void)
+  /// @var numSupported
   ///
-  /// @brief Get the number of available hardware timers on the system.
-  ///
-  /// @return Returns the number of available hardware timers on success,
-  /// -errno on failure.
-  int (*getNum)(void);
+  /// @brief The number of timer devices that are supported on the hardware.
+  uint32_t numSupported;
   
-  /// @fn int setNum(int numTimers)
+  /// @var online
   ///
-  /// @brief Set the number of hardware timers that is to be returned by
-  /// getNumTimers.
+  /// @brief Bitmask array indicating which of the supported timers are online.
+  /// Whether or not an individual timer is online can be found by:
   ///
-  /// @param numTimers The value to be returned by getNumTimers.
-  ///   This may be a non-negative value that is less-than or equal-to the
-  ///   value initially returned by getNumTimers or a -errno value that
-  ///   the function is to return.
+  /// online(HAL->timer, deviceId)
+  uint32_t *online;
+  
+  /// @fn int32_t init(void)
+  ///
+  /// @brief Initialize the timer subsystem.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int (*setNum)(int numTimers);
+  int32_t (*init)(void);
   
-  /// @fn int init(int timer)
+  /// @fn int32_t initDevice(int32_t deviceId)
   ///
   /// @brief Initialize one of the system timers.
   ///
-  /// @param timer The zero-based index of the timer to initialize.
+  /// @param deviceId The zero-based ID of the timer to initialize.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int (*init)(int timer);
+  int32_t (*initDevice)(int32_t deviceId);
   
-  /// @fn int configOneShot(int timer,
+  /// @fn int32_t configOneShot(int32_t deviceId,
   ///   uint64_t nanoseconds, void (*callback)(void))
   ///
   /// @brief Configure a hardware timer to fire at some point in the future and
   /// call a callback.
   ///
-  /// @param timer The zero-based index of the timer to configure.
+  /// @param deviceId The zero-based ID of the timer to configure.
   /// @param nanoseconds The number of nanoseconds in the future the timer
   ///   should fire.
   /// @param callback The function to call when the timer fires.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int (*configOneShot)(int timer,
+  int32_t (*configOneShot)(int32_t deviceId,
     uint64_t nanoseconds, void (*callback)(void));
   
-  /// @fn uint64_t configuredNanoseconds(int timer)
+  /// @fn uint64_t configuredNanoseconds(int32_t deviceId)
   ///
   /// @brief Get the number of nanoseconds a timer is configured to wait.
   ///
-  /// @param timer The zero-based index of the timer to interrogate.
+  /// @param deviceId The zero-based ID of the timer to interrogate.
   ///
   /// @return Returns the number of nanoseconds configured for a timer.
-  uint64_t (*configuredNanoseconds)(int timer);
+  uint64_t (*configuredNanoseconds)(int32_t deviceId);
   
-  /// @fn uint64_t remainingNanoseconds(int timer)
+  /// @fn uint64_t remainingNanoseconds(int32_t deviceId)
   ///
   /// @brief Get the remaining number of nanoseconds before a timer fires.
   ///
-  /// @param timer The zero-based index of the timer to interrogate.
+  /// @param deviceId The zero-based ID of the timer to interrogate.
   ///
   /// @return Returns the number of nanoseconds remaining for a timer.
-  uint64_t (*remainingNanoseconds)(int timer);
+  uint64_t (*remainingNanoseconds)(int32_t deviceId);
   
-  /// @fn int cancel(int timer)
+  /// @fn int32_t cancel(int32_t deviceId)
   ///
   /// @brief Cancel a timer that's currently configured.
   ///
-  /// @param timer The zero-based index of the timer to cancel.
+  /// @param deviceId The zero-based ID of the timer to cancel.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int (*cancel)(int timer);
+  int32_t (*cancel)(int32_t deviceId);
   
-  /// @fn int cancelAndGet(int timer,
+  /// @fn int32_t cancelAndGet(int32_t deviceId,
   ///   uint64_t *configuredNanoseconds, uint64_t *remainingNanoseconds,
   ///   void (**callback)(void))
   ///
@@ -521,7 +520,7 @@ typedef struct HalTimer {
   /// is to be called in order to make sure that an operation is atomic and
   /// that the caller will call configTimer after doing its work.
   ///
-  /// @param timer The zero-based index of the timer to cancel and retrieve.
+  /// @param deviceId The zero-based ID of the timer to cancel and retrieve.
   /// @param configuredNanoseconds A pointer to a uint64_t that will hold the
   ///   number of nanoseconds the timer is configured for, if any.
   /// @param remainingNanoseconds A pointer to a uint64_t that will hold the
@@ -530,7 +529,7 @@ typedef struct HalTimer {
   ///   populated with the callback that the timer was going to call, if any.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int (*cancelAndGet)(int timer,
+  int32_t (*cancelAndGet)(int32_t deviceId,
     uint64_t *configuredNanoseconds, uint64_t *remainingNanoseconds,
     void (**callback)(void));
 } HalTimer;

@@ -717,35 +717,29 @@ static HardwareTimer hardwareTimers[] = {
 
 /// @var _numTimers
 ///
-/// @brief The number of timers returned by arduinoSamD21x18AGetNumTimers.  This
+/// @brief The number of timers returned by HAL->timer->numSupported.  This
 /// is initialized to the number of timers supported, but may be overridden by
 /// a call to arduinoSamD21x18ASetNumTimers.
-static int _numTimers = sizeof(hardwareTimers) / sizeof(hardwareTimers[0]);
+static const int _numTimers
+  = sizeof(hardwareTimers) / sizeof(hardwareTimers[0]);
 
-int arduinoSamD21x18AGetNumTimers(void) {
-  return _numTimers;
-}
+/// @var halArduinoSamD21x18AImplUartsOnline
+///
+/// @brief Bitmask array of online UARTs.
+static uint32_t halArduinoSamD21x18ATimersOnline[] = {
+  0x00000003,
+};
 
-int arduinoSamD21x18ASetNumTimers(int numTimers) {
-  if (
-    numTimers > ((int) (sizeof(hardwareTimers) / sizeof(hardwareTimers[0])))
-  ) {
-    return -ERANGE;
-  } else if (numTimers < -ELAST) {
-    return -EINVAL;
-  }
-  
-  _numTimers = numTimers;
-  
+int32_t arduinoSamD21x18AInitTimer(void) {
   return 0;
 }
 
-int arduinoSamD21x18AInitTimer(int timer) {
-  if ((timer < 0) || (timer >= _numTimers)) {
+int32_t arduinoSamD21x18AInitTimerDevice(int32_t deviceId) {
+  if ((deviceId < 0) || (deviceId >= _numTimers)) {
     return -ERANGE;
   }
   
-  HardwareTimer *hwTimer = &hardwareTimers[timer];
+  HardwareTimer *hwTimer = &hardwareTimers[deviceId];
   if (hwTimer->initialized) {
     // Nothing to do
     return 0;
@@ -785,21 +779,21 @@ int arduinoSamD21x18AInitTimer(int timer) {
   return 0;
 }
 
-int arduinoSamD21x18AConfigOneShotTimer(int timer,
+int32_t arduinoSamD21x18AConfigOneShotTimer(int32_t deviceId,
     uint64_t nanoseconds, void (*callback)(void)
 ) {
-  if ((timer < 0) || (timer >= _numTimers)) {
+  if ((deviceId < 0) || (deviceId >= _numTimers)) {
     return -ERANGE;
   }
   
-  HardwareTimer *hwTimer = &hardwareTimers[timer];
+  HardwareTimer *hwTimer = &hardwareTimers[deviceId];
   if (!hwTimer->initialized) {
     return -EINVAL;
   }
   
   // Cancel any existing timer
-  int arduinoSamD21x18ACancelTimer(int);
-  arduinoSamD21x18ACancelTimer(timer);
+  int32_t arduinoSamD21x18ACancelTimer(int32_t);
+  arduinoSamD21x18ACancelTimer(deviceId);
   
   // We take a number of nanoseconds for HAL compatibility, but our timers
   // don't support that resolution.  Convert to microseconds.
@@ -865,12 +859,12 @@ int arduinoSamD21x18AConfigOneShotTimer(int timer,
   return 0;
 }
 
-uint64_t arduinoSamD21x18AConfiguredTimerNanoseconds(int timer) {
-  if ((timer < 0) || (timer >= _numTimers)) {
+uint64_t arduinoSamD21x18AConfiguredTimerNanoseconds(int32_t deviceId) {
+  if ((deviceId < 0) || (deviceId >= _numTimers)) {
     return 0;
   }
   
-  HardwareTimer *hwTimer = &hardwareTimers[timer];
+  HardwareTimer *hwTimer = &hardwareTimers[deviceId];
   if ((!hwTimer->initialized) || (!hwTimer->active)) {
     return 0;
   }
@@ -878,12 +872,12 @@ uint64_t arduinoSamD21x18AConfiguredTimerNanoseconds(int timer) {
   return hwTimer->deadline - hwTimer->startTime;
 }
 
-uint64_t arduinoSamD21x18ARemainingTimerNanoseconds(int timer) {
-  if ((timer < 0) || (timer >= _numTimers)) {
+uint64_t arduinoSamD21x18ARemainingTimerNanoseconds(int32_t deviceId) {
+  if ((deviceId < 0) || (deviceId >= _numTimers)) {
     return 0;
   }
   
-  HardwareTimer *hwTimer = &hardwareTimers[timer];
+  HardwareTimer *hwTimer = &hardwareTimers[deviceId];
   if ((!hwTimer->initialized) || (!hwTimer->active)) {
     return 0;
   }
@@ -896,12 +890,12 @@ uint64_t arduinoSamD21x18ARemainingTimerNanoseconds(int timer) {
   return hwTimer->deadline - now;
 }
 
-int arduinoSamD21x18ACancelTimer(int timer) {
-  if ((timer < 0) || (timer >= _numTimers)) {
+int32_t arduinoSamD21x18ACancelTimer(int32_t deviceId) {
+  if ((deviceId < 0) || (deviceId >= _numTimers)) {
     return -ERANGE;
   }
   
-  HardwareTimer *hwTimer = &hardwareTimers[timer];
+  HardwareTimer *hwTimer = &hardwareTimers[deviceId];
   if (!hwTimer->initialized) {
     return -EINVAL;
   } else if (!hwTimer->active) {
@@ -924,7 +918,7 @@ int arduinoSamD21x18ACancelTimer(int timer) {
   return 0;
 }
 
-int arduinoSamD21x18ACancelAndGetTimer(int timer,
+int32_t arduinoSamD21x18ACancelAndGetTimer(int32_t deviceId,
   uint64_t *configuredNanoseconds, uint64_t *remainingNanoseconds,
   void (**callback)(void)
 ) {
@@ -934,11 +928,11 @@ int arduinoSamD21x18ACancelAndGetTimer(int timer,
   // directly.
   int64_t now = micros() * 1000;
   
-  if ((timer < 0) || (timer >= _numTimers)) {
+  if ((deviceId < 0) || (deviceId >= _numTimers)) {
     return -ERANGE;
   }
   
-  HardwareTimer *hwTimer = &hardwareTimers[timer];
+  HardwareTimer *hwTimer = &hardwareTimers[deviceId];
   if ((!hwTimer->initialized) || (!hwTimer->active)) {
     // We cannot populate the provided pointers, so we will error here.  This
     // also signals to the caller that there's no need to call configTimer
@@ -985,17 +979,17 @@ int arduinoSamD21x18ACancelAndGetTimer(int timer,
   return 0;
 }
 
-/// @fn void arduinoSamD21x18ATimerInterruptHandler(int timer)
+/// @fn void arduinoSamD21x18ATimerInterruptHandler(int32_t deviceId)
 ///
 /// @brief Base implementation for the Timer/Counter interrupt handlers.
 ///
-/// @param timer The zero-based index of the timer to handle.
+/// @param deviceId The zero-based ID of the timer to handle.
 ///
 /// @return This function returns no value.
-void arduinoSamD21x18ATimerInterruptHandler(int timer) {
+void arduinoSamD21x18ATimerInterruptHandler(int32_t deviceId) {
   // This function is only called from one of the real interrupt handlers, so
   // we're guaranteed that the timer parameter is good.  Skip validation.
-  HardwareTimer *hwTimer = &hardwareTimers[timer];
+  HardwareTimer *hwTimer = &hardwareTimers[deviceId];
   
   hwTimer->active = false;
   hwTimer->startTime = 0;
@@ -1050,9 +1044,10 @@ void TC4_Handler(void) {
 }
 
 static HalTimer arduinoSamD21x18ATimerHal = {
-  .getNum = arduinoSamD21x18AGetNumTimers,
-  .setNum = arduinoSamD21x18ASetNumTimers,
+  .numSupported = _numTimers,
+  .online = halArduinoSamD21x18ATimersOnline,
   .init = arduinoSamD21x18AInitTimer,
+  .initDevice = arduinoSamD21x18AInitTimerDevice,
   .configOneShot = arduinoSamD21x18AConfigOneShotTimer,
   .configuredNanoseconds = arduinoSamD21x18AConfiguredTimerNanoseconds,
   .remainingNanoseconds = arduinoSamD21x18ARemainingTimerNanoseconds,

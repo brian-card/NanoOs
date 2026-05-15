@@ -193,25 +193,33 @@ int halCommonInit(const Hal *hal) {
   }
 
   if (hal->timer != NULL)  {
-    int numTimers = hal->timer->getNum();
-    for (ii = 0; ii < numTimers; ii++) {
-      if (hal->timer->init(ii) < 0) {
+    do {
+      if (hal->timer->init() != 0) {
+        hal->uart->write(defaultUart,
+          (uint8_t*) "WARNING: Failed to initialize timer subsystem\n",
+          strlen("WARNING: Failed to initialize timer subsystem\n"));
         break;
       }
-    }
-    hal->timer->setNum(ii);
-    if (ii != numTimers) {
-      if (hal->uart != NULL) {
-        hal->uart->write(defaultUart,
-          (uint8_t*) "WARNING: Only initialized ",
-          strlen("WARNING: Only initialized "));
-        num = '0' + ((char) ii);
-        hal->uart->write(defaultUart, (uint8_t*) &num, 1);
-        hal->uart->write(defaultUart,
-          (uint8_t*) " timers\n",
-          strlen(" timers\n"));
+      
+      uint32_t online = hal->timer->online[0];
+      for (ii = 0; ii < hal->timer->numSupported; ii++) {
+        if (online(hal->timer, ii) == false) {
+          continue;
+        }
+        
+        if (hal->timer->initDevice(ii) < 0) {
+          setOffline(hal->timer, ii);
+        }
       }
-    }
+      
+      if (hal->timer->online[0] != online) {
+        if (hal->uart != NULL) {
+          hal->uart->write(defaultUart,
+            (uint8_t*) "WARNING: Did not initialize all timers\n",
+            strlen("WARNING: Did not initialize all timers\n"));
+        }
+      }
+    } while (0);
   }
   
   return 0;

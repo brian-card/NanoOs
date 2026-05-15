@@ -512,30 +512,16 @@ SoftwareTimer softwareTimers[] = {
 /// call to posixSetNumTimers.
 static int _numTimers = sizeof(softwareTimers) / sizeof(softwareTimers[0]);
 
-int posixGetNumTimers(void) {
-  return _numTimers;
-}
-
-int posixSetNumTimers(int numTimers) {
-  if (numTimers
-    > ((int) (sizeof(softwareTimers) / sizeof(softwareTimers[0])))
-  ) {
-    return -ERANGE;
-  } else if (numTimers < -ELAST) {
-    return -EINVAL;
-  }
-  
-  _numTimers = numTimers;
-  
+int32_t posixInitTimer(void) {
   return 0;
 }
 
-int posixInitTimer(int timer) {
-  if (timer >= _numTimers) {
+int32_t posixInitTimerDevice(int32_t deviceId) {
+  if (deviceId >= _numTimers) {
     return -ERANGE;
   }
   
-  SoftwareTimer *swTimer = &softwareTimers[timer];
+  SoftwareTimer *swTimer = &softwareTimers[deviceId];
   if (swTimer->initialized) {
     // Nothing to do
     return 0;
@@ -554,14 +540,14 @@ int posixInitTimer(int timer) {
   return 0;
 }
 
-int posixConfigOneShotTimer(int timer,
+int32_t posixConfigOneShotTimer(int32_t deviceId,
     uint64_t nanoseconds, void (*callback)(void)
 ) {
-  if (timer >= _numTimers) {
+  if (deviceId >= _numTimers) {
     return -ERANGE;
   }
   
-  SoftwareTimer *swTimer = &softwareTimers[timer];
+  SoftwareTimer *swTimer = &softwareTimers[deviceId];
   if (!swTimer->initialized) {
     return -EINVAL;
   }
@@ -571,18 +557,18 @@ int posixConfigOneShotTimer(int timer,
   swTimer->startTime = posixGetElapsedNanoseconds(0);
   swTimer->deadline = swTimer->startTime + nanoseconds;
   pthread_create(&swTimer->timerThread, NULL,
-    timerThreadFunction, (void*) ((intptr_t) timer));
+    timerThreadFunction, (void*) ((intptr_t) deviceId));
   pthread_detach(swTimer->timerThread);
   
   return 0;
 }
 
-uint64_t posixConfiguredTimerNanoseconds(int timer) {
-  if (timer >= _numTimers) {
+uint64_t posixConfiguredTimerNanoseconds(int32_t deviceId) {
+  if (deviceId >= _numTimers) {
     return 0;
   }
   
-  SoftwareTimer *swTimer = &softwareTimers[timer];
+  SoftwareTimer *swTimer = &softwareTimers[deviceId];
   if ((!swTimer->initialized) || (!swTimer->active)) {
     return 0;
   }
@@ -590,12 +576,12 @@ uint64_t posixConfiguredTimerNanoseconds(int timer) {
   return swTimer->deadline - swTimer->startTime;
 }
 
-uint64_t posixRemainingTimerNanoseconds(int timer) {
-  if (timer >= _numTimers) {
+uint64_t posixRemainingTimerNanoseconds(int32_t deviceId) {
+  if (deviceId >= _numTimers) {
     return 0;
   }
   
-  SoftwareTimer *swTimer = &softwareTimers[timer];
+  SoftwareTimer *swTimer = &softwareTimers[deviceId];
   if ((!swTimer->initialized) || (!swTimer->active)) {
     return 0;
   }
@@ -608,12 +594,12 @@ uint64_t posixRemainingTimerNanoseconds(int timer) {
   return swTimer->deadline - now;
 }
 
-int posixCancelTimer(int timer) {
-  if (timer >= _numTimers) {
+int32_t posixCancelTimer(int32_t deviceId) {
+  if (deviceId >= _numTimers) {
     return -ERANGE;
   }
   
-  SoftwareTimer *swTimer = &softwareTimers[timer];
+  SoftwareTimer *swTimer = &softwareTimers[deviceId];
   if (!swTimer->initialized) {
     return -EINVAL;
   }
@@ -633,7 +619,7 @@ int posixCancelTimer(int timer) {
   return 0;
 }
 
-int posixCancelAndGetTimer(int timer,
+int32_t posixCancelAndGetTimer(int32_t deviceId,
   uint64_t *configuredNanoseconds, uint64_t *remainingNanoseconds,
   void (**callback)(void)
 ) {
@@ -641,11 +627,11 @@ int posixCancelAndGetTimer(int timer,
   // possible so that any call to reconfigure the timer later is correct.
   int64_t now = posixGetElapsedNanoseconds(0);
   
-  if ((timer < 0) || (timer >= _numTimers)) {
+  if ((deviceId < 0) || (deviceId >= _numTimers)) {
     return -ERANGE;
   }
   
-  SoftwareTimer *swTimer = &softwareTimers[timer];
+  SoftwareTimer *swTimer = &softwareTimers[deviceId];
   if ((!swTimer->initialized) || (!swTimer->active)) {
     // We cannot populate the provided pointers, so we will error here.  This
     // also signals to the caller that there's no need to call configTimer
@@ -784,13 +770,13 @@ int halPosixImplInit(jmp_buf resetBuffer, Hal *hal) {
   *((void**) &realTcgetattr) = dlsym(RTLD_NEXT, "tcgetattr");
   *((void**) &realTcsetattr) = dlsym(RTLD_NEXT, "tcsetattr");
   
-  int ii = 0;
+  uint32_t ii = 0;
   
   if (hal->uart != NULL) {
     if (hal->uart->init() < 0) {
       return -ENOTTY;
     }
-    int numUarts = hal->uart->numSupported;
+    uint32_t numUarts = hal->uart->numSupported;
     if (numUarts <= 0) {
       // Nothing we can do.
       return -ENOTTY;
@@ -806,16 +792,27 @@ int halPosixImplInit(jmp_buf resetBuffer, Hal *hal) {
   }
 
   if (hal->timer != NULL) {
-    int numTimers = hal->timer->getNum();
-    for (ii = 0; ii < numTimers; ii++) {
-      if (hal->timer->init(ii) < 0) {
+    do {
+      if (hal->timer->init() != 0) {
+        fprintf(stderr, "WARNING: Could not initialize timer subsystem");
         break;
       }
-    }
-    hal->timer->setNum(ii);
-    if (ii != numTimers) {
-      fprintf(stderr, "WARNING: Only initialized %d timers\n", ii);
-    }
+      
+      uint32_t online = hal->timer->online[0];
+      for (ii = 0; ii < hal->timer->numSupported; ii++) {
+        fprintf(stdout, "Initializing timer %u\n", ii);
+        if (!online(hal->timer, ii)) {
+          continue;
+        }
+        
+        if (hal->timer->initDevice(ii) < 0) {
+          setOffline(hal->timer, ii);
+        }
+      }
+      if (hal->timer->online[0] != online) {
+        fprintf(stderr, "WARNING: Did not initialize all timers\n");
+      }
+    } while (0);
   }
 
   return 0;

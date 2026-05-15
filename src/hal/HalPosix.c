@@ -132,9 +132,11 @@ static HalPower posixPowerHal = {
   .enterMode = posixEnterPowerMode,
 };
 
-int posixGetNumTimers(void);
-int posixSetNumTimers(int numTimers);
-int posixInitTimer(int timer);
+static uint32_t posixTimersOnline[] = {
+  0x00000003,
+};
+int posixInitTimer(void);
+int posixInitTimerDevice(int timer);
 int posixConfigOneShotTimer(int timer,
     uint64_t nanoseconds, void (*callback)(void));
 uint64_t posixConfiguredTimerNanoseconds(int timer);
@@ -144,9 +146,10 @@ int posixCancelAndGetTimer(int timer,
   uint64_t *configuredNanoseconds, uint64_t *remainingNanoseconds,
   void (**callback)(void));
 static HalTimer posixTimerHal = {
-  .getNum = posixGetNumTimers,
-  .setNum = posixSetNumTimers,
+  .numSupported = 2,
+  .online = posixTimersOnline,
   .init = posixInitTimer,
+  .initDevice = posixInitTimerDevice,
   .configOneShot = posixConfigOneShotTimer,
   .configuredNanoseconds = posixConfiguredTimerNanoseconds,
   .remainingNanoseconds = posixRemainingTimerNanoseconds,
