@@ -52,7 +52,7 @@
 /// @def PROCESS_STACK_SIZE
 ///
 /// @brief The size, in bytes, of a regular process's stack.
-#define PROCESS_STACK_SIZE 960
+#define PROCESS_STACK_SIZE 832
 
 /// @def MEMORY_MANAGER_STACK_SIZE
 ///
@@ -252,7 +252,7 @@ uint8_t arduinoSamD21x18ANumExtraSchedulerStacks(bool debug) {
 
 uint8_t arduinoSamD21x18ANumExtraConsoleStacks(bool debug) {
   (void) debug;
-  return 0;
+  return 1;
 }
 
 static HalMemory arduinoSamD21x18AMemoryHal = {
