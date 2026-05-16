@@ -101,6 +101,12 @@ extern "C"
 #define USE_HAL_MEMORY_DEBUG false
 #endif
 
+/// @def KEEP_IN_FLASH
+///
+/// @brief Compiler directive to keep an individual global variable in part of
+/// the build that is guaranteed to be in flash and not stripped out later.
+#define KEEP_IN_FLASH __attribute__((section(".text")))
+
 /// @def floatToInts
 ///
 /// @brief Break a floating-point number into two integer values that represent

@@ -347,6 +347,7 @@ int filesystemGetFileBlockMetadataCommandHandler(
 /// @var filesystemCommandHandlers
 ///
 /// @brief Array of FilesystemCommandHandler function pointers.
+KEEP_IN_FLASH
 const FilesystemCommandHandler filesystemCommandHandlers[] = {
   filesystemOpenFileCommandHandler,      // FILESYSTEM_OPEN_FILE
   filesystemCloseFileCommandHandler,     // FILESYSTEM_CLOSE_FILE

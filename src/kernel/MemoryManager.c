@@ -992,6 +992,7 @@ typedef int (*MemoryManagerCommandHandler)(
 ///
 /// @brief Array of function pointers for handlers for commands that are
 /// understood by this library.
+KEEP_IN_FLASH
 const MemoryManagerCommandHandler memoryManagerCommandHandlers[] = {
   memoryManagerReallocCommandHandler,       // MEMORY_MANAGER_REALLOC
   memoryManagerFreeCommandHandler,          // MEMORY_MANAGER_FREE

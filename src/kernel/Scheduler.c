@@ -3013,6 +3013,7 @@ typedef int (*SchedulerCommandHandler)(SchedulerState*, ProcessMessage*);
 ///
 /// @brief Array of function pointers for commands that are understood by the
 /// message handler for the main loop function.
+KEEP_IN_FLASH
 const SchedulerCommandHandler schedulerCommandHandlers[] = {
   schedulerKillProcessCommandHandler,          // SCHEDULER_KILL_PROCESS
   // SCHEDULER_GET_NUM_RUNNING_PROCESSES:

@@ -762,6 +762,7 @@ typedef void (*ConsoleCommandHandler)(ConsoleState*, ProcessMessage*);
 /// @var consoleCommandHandlers
 ///
 /// @brief Array of handlers for console command messages.
+KEEP_IN_FLASH
 const ConsoleCommandHandler consoleCommandHandlers[] = {
   consoleWriteValueCommandHandler,      // CONSOLE_WRITE_VALUE
   consoleGetBufferCommandHandler,       // CONSOLE_GET_BUFFER
