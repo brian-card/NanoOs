@@ -37,7 +37,7 @@
 #define FILESYSTEM_H
 
 // Custom includes
-#include "BlockStorage.h"
+#include "BlockDevice.h"
 
 #include "stddef.h"
 #include "stdint.h"
@@ -67,7 +67,7 @@ extern "C"
 ///
 /// @param driverState A pointer to the internal driver's state.
 /// @param blockDevice A pointer to an allocated and initialized
-///   BlockStorageDevice to use for reading and writing blocks.
+///   BlockDevice to use for reading and writing blocks.
 /// @param blockBuffer A pointer to to a dynamically-allocated block of memory
 ///   blockSize bytes in size.
 /// @param blockSize The size of a block as it is known to the filesystem.
@@ -89,7 +89,7 @@ extern "C"
 ///   a file given its file handle.
 typedef struct FilesystemState {
   void               *driverState;
-  BlockStorageDevice *blockDevice;
+  BlockDevice *blockDevice;
   uint8_t            *blockBuffer;
   uint16_t            blockSize;
   uint8_t             numOpenFiles;

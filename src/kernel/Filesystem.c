@@ -398,7 +398,7 @@ static void handleFilesystemMessages(FilesystemState *filesystemState) {
 ///
 /// @brief Main process entry point for the FAT16 filesystem process.
 ///
-/// @param args A pointer to an initialized BlockStorageDevice structure cast
+/// @param args A pointer to an initialized BlockDevice structure cast
 ///   to a void*.
 ///
 /// @return This function never returns, but would return NULL if it did.

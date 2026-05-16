@@ -1,12 +1,15 @@
 ///////////////////////////////////////////////////////////////////////////////
 ///
+/// @author            Brian Card
+/// @date              05.16.2026
+///
 /// @file              Hal.h
 ///
 /// @brief             Definitions common to all hardware abstraction layer
 ///                    (HAL)implementations.
 ///
 /// @copyright
-///                   Copyright (c) 2012-2025 James Card
+///                      Copyright (c) 2026 Brian Card
 ///
 /// Permission is hereby granted, free of charge, to any person obtaining a
 /// copy of this software and associated documentation files (the "Software"),
@@ -26,8 +29,8 @@
 /// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 /// DEALINGS IN THE SOFTWARE.
 ///
-///                                James Card
-///                         http://www.jamescard.org
+///                                Brian Card
+///                      https://github.com/brian-card
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -38,6 +41,9 @@
 #include "setjmp.h"
 #include "stdbool.h"
 #include "stdint.h"
+
+// NanoOs includes
+#include "BlockDevice.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -534,6 +540,39 @@ typedef struct HalTimer {
     void (**callback)(void));
 } HalTimer;
 
+typedef struct HalBlockDevice {
+  /// @var numSupported
+  ///
+  /// @brief The number of block devices that are supported on the hardware.
+  uint32_t numSupported;
+  
+  /// @var online
+  ///
+  /// @brief Bitmask array indicating which of the supported block devices are
+  /// online. Whether or not an individual block device is online can be found
+  /// by:
+  ///
+  /// online(HAL->blockDevice, deviceId)
+  uint32_t *online;
+  
+  /// @fn int32_t init(void)
+  ///
+  /// @brief Initialize the block device subsystem.
+  ///
+  /// @return Returns 0 on success, -errno on failure.
+  int32_t (*init)(void);
+  
+  /// @fn BlockDevice* get(int32_t deviceId)
+  ///
+  /// @brief Get one of the block devices managed by the HAL.
+  ///
+  /// @param deviceId The zero-based ID of the block device to get.
+  ///
+  /// @return Returns a pointer to the BlockDevice on success, NULL on
+  /// failure.
+  BlockDevice* (*get)(int32_t deviceId);
+} HalBlockDevice;
+
 typedef struct Hal {
   /// @var memory
   ///
@@ -576,6 +615,12 @@ typedef struct Hal {
   /// @brief Pointer to the HalTimer managed by HAL, or NULL if there isn't
   /// one.
   HalTimer *timer;
+  
+  /// @var blockDevice
+  ///
+  /// @brief Pointer to the HalBlockDevice managed by the HAL, or NULL if there
+  /// isn't one.
+  HalBlockDevice *blockDevice;
   
   // Root storage configuration.
   

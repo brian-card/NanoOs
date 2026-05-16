@@ -43,7 +43,7 @@ extern "C"
 {
 #endif
 
-typedef struct BlockStorageDevice BlockStorageDevice;
+typedef struct BlockDevice BlockDevice;
 
 /// @struct SdCardState
 ///
@@ -54,14 +54,14 @@ typedef struct BlockStorageDevice BlockStorageDevice;
 ///   to the host.
 /// @param numBlocks The total number of blocks available on the SD card.
 /// @param sdCardVersion The version of the card (1 or 2).
-/// @param bsDevice A pointer to the BlockStorageDevice that abstracts this
+/// @param bsDevice A pointer to the BlockDevice that abstracts this
 ///   card.
 typedef struct SdCardState {
   void *context;
   uint16_t blockSize;
   uint32_t numBlocks;
   int sdCardVersion;
-  BlockStorageDevice *bsDevice;
+  BlockDevice *bsDevice;
 } SdCardState;
 
 /// @struct SdCommandParams

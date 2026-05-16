@@ -178,7 +178,7 @@ int posixInitRootStorage(SchedulerState *schedulerState) {
   processDescriptor->pid = schedulerState->firstUserPid;
   processDescriptor->name = "SD card";
   processDescriptor->userId = ROOT_USER_ID;
-  BlockStorageDevice *sdDevice = (BlockStorageDevice*) coroutineResume(
+  BlockDevice *sdDevice = (BlockDevice*) coroutineResume(
     allProcesses[schedulerState->firstUserPid - 1].mainThread, NULL);
   sdDevice->partitionNumber = 1;
   schedulerState->firstUserPid++;

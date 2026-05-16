@@ -36,7 +36,7 @@
 // Must come last
 #include "../user/NanoOsStdio.h"
 
-/// @fn BlockStorageDevice* halCommonInitRootSdSpiStorage(
+/// @fn BlockDevice* halCommonInitRootSdSpiStorage(
 ///   SdCardSpiArgs *sdCardSpiArgs)
 ///
 /// @brief Common routine for initializing root storage using an SD card over
@@ -46,7 +46,7 @@
 ///   the values to pass to runSdCardSpi.
 ///
 /// @return Returns 0 on success, -errno on failure.
-BlockStorageDevice* halCommonInitRootSdSpiStorage(
+BlockDevice* halCommonInitRootSdSpiStorage(
   SdCardSpiArgs *sdCardSpiArgs
 ) {
   ProcessDescriptor *allProcesses = SCHEDULER_STATE->allProcesses;
@@ -65,7 +65,7 @@ BlockStorageDevice* halCommonInitRootSdSpiStorage(
   processDescriptor->pid = SCHEDULER_STATE->firstUserPid;
   processDescriptor->name = "SD card";
   processDescriptor->userId = ROOT_USER_ID;
-  BlockStorageDevice *sdDevice = (BlockStorageDevice*) coroutineResume(
+  BlockDevice *sdDevice = (BlockDevice*) coroutineResume(
     allProcesses[SCHEDULER_STATE->firstUserPid - 1].mainThread, NULL);
   sdDevice->partitionNumber = 1;
   SCHEDULER_STATE->firstUserPid++;
@@ -74,17 +74,17 @@ BlockStorageDevice* halCommonInitRootSdSpiStorage(
   return sdDevice;
 }
 
-/// @fn int halCommonInitRootFilesystem(BlockStorageDevice *blockDevice)
+/// @fn int halCommonInitRootFilesystem(BlockDevice *blockDevice)
 ///
 /// @brief Common initialization for the root filesystem process.
 ///
-/// @param blockDevice A pointer to a BlockStorageDevice initialized by a
+/// @param blockDevice A pointer to a BlockDevice initialized by a
 ///   block storage process.
 ///
 /// @return Returns 0 on success, -errno on failure.
-int halCommonInitRootFilesystem(BlockStorageDevice *blockDevice) {
+int halCommonInitRootFilesystem(BlockDevice *blockDevice) {
   if (blockDevice == NULL) {
-    printString("No BlockStorageDevice provided\n");
+    printString("No BlockDevice provided\n");
     return -ENODEV;
   }
   

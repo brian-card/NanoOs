@@ -41,7 +41,7 @@
 #include "stdint.h"
 
 // Headers from kernel space.
-#include "BlockStorage.h"
+#include "BlockDevice.h"
 #include "../user/NanoOsApi.h"
 
 #ifdef __cplusplus

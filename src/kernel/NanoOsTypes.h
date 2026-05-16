@@ -37,7 +37,7 @@
 #define NANO_OS_TYPES_H
 
 // Custom includes
-#include "BlockStorage.h"
+#include "BlockDevice.h"
 #include "Coroutines.h"
 
 #ifdef __cplusplus

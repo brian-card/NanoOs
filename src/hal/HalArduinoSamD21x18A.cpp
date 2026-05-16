@@ -99,6 +99,14 @@ static uint8_t _spiSckDio = DIO_PIN_UNDEFINED;
 /// @brief Pin to use for the MicroSD card reader's SPI chip select line.
 static uint8_t _sdCardPinChipSelect = DIO_PIN_UNDEFINED;
 
+/// @var arduinoSamD21x18AHalPtr
+///
+/// @brief C++ won't let you do a forward-declaration of a static variable, nor
+/// will it let you forward-declare a static variable using the extern keyword.
+/// So, we'll have a pointer to the HAL declared and initialized after the HAL
+/// itself and declare an extern for the pointer here.
+extern Hal *arduinoSamD21x18AHalPtr;
+
 // The fact that we've included Arduino.h in this file means that the memory
 // management functions from its library are available in this file.  That's a
 // problem.  (a) We can't allow dynamic memory at the HAL level and (b) if we
@@ -723,7 +731,7 @@ static HardwareTimer hardwareTimers[] = {
 static const int _numTimers
   = sizeof(hardwareTimers) / sizeof(hardwareTimers[0]);
 
-/// @var halArduinoSamD21x18AImplUartsOnline
+/// @var halArduinoSamD21x18ATimersOnline
 ///
 /// @brief Bitmask array of online UARTs.
 static uint32_t halArduinoSamD21x18ATimersOnline[] = {
@@ -1055,7 +1063,28 @@ static HalTimer arduinoSamD21x18ATimerHal = {
   .cancelAndGet = arduinoSamD21x18ACancelAndGetTimer,
 };
 
-int arduinoSamD21x18AInitRootStorage(SchedulerState *schedulerState) {
+/// @var blockDevices
+///
+/// @brief Array of BlockDevice pointers that are managed by the driver
+/// processes.
+static BlockDevice *blockDevices[] = {
+  NULL,
+};
+
+/// @var _numBlockDevices
+///
+/// @brief Number of BlockDevices that can be managed by the HAL.
+static uint32_t _numBlockDevices
+  = sizeof(blockDevices) / sizeof(blockDevices[0]);
+
+/// @var halArduinoSamD21x18ABlockDevicesOnline
+///
+/// @brief Bitmask array of online block devices.
+static uint32_t halArduinoSamD21x18ABlockDevicesOnline[] = {
+  0x00000000,
+};
+
+int32_t arduinoSamD21x18AInitBlockDevice(void) {
   // Create the SD card process.
   SdCardSpiArgs sdCardSpiArgs = {
     .spiCsDio   = _sdCardPinChipSelect,
@@ -1064,10 +1093,33 @@ int arduinoSamD21x18AInitRootStorage(SchedulerState *schedulerState) {
     .spiSckDio  = _spiSckDio,
   };
 
-  return halCommonInitRootFilesystem(
-    halCommonInitRootSdSpiStorage(&sdCardSpiArgs));
+  blockDevices[0] = halCommonInitRootSdSpiStorage(&sdCardSpiArgs);
+  if (blockDevices[0] == NULL) {
+    return -ENODEV;
+  }
+  setOnline(arduinoSamD21x18AHalPtr->blockDevice, 0);
+  
+  return 0;
 }
 
+BlockDevice* arduinoSamD21x18AGetBlockDevice(int32_t deviceId) {
+  if ((deviceId < 0) || (deviceId >= _numBlockDevices)) {
+    return NULL;
+  }
+  
+  return blockDevices[deviceId];
+}
+
+static HalBlockDevice arduinoSamD21x18ABlockDeviceHal = {
+  .numSupported = _numBlockDevices,
+  .online = halArduinoSamD21x18ABlockDevicesOnline,
+  .init = arduinoSamD21x18AInitBlockDevice,
+  .get = arduinoSamD21x18AGetBlockDevice,
+};
+
+int arduinoSamD21x18AInitRootStorage(SchedulerState *schedulerState) {
+  return halCommonInitRootFilesystem(arduinoSamD21x18AGetBlockDevice(0));
+}
 
 /// @var arduinoSamD21x18AHal
 ///
@@ -1080,10 +1132,12 @@ static Hal arduinoSamD21x18AHal = {
   .clock = &arduinoSamD21x18AClockHal,
   .power = &arduinoSamD21x18APowerHal,
   .timer = &arduinoSamD21x18ATimerHal,
+  .blockDevice = &arduinoSamD21x18ABlockDeviceHal,
   
   // Root storage configuration.
   .initRootStorage = arduinoSamD21x18AInitRootStorage,
 };
+Hal *arduinoSamD21x18AHalPtr = &arduinoSamD21x18AHal;
 
 const Hal* halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
   arduinoSamD21x18AHal.uart->numSupported = args->numUartsSupported;

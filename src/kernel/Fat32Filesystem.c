@@ -33,7 +33,7 @@
 #include "string.h"
 
 // NanoOs includes
-#include "BlockStorage.h"
+#include "BlockDevice.h"
 #include "Fat32Filesystem.h"
 #include "Filesystem.h"
 #include "MemoryManager.h"
@@ -104,7 +104,7 @@ int fat32ReadFatEntry(
     uint32_t *value
 ) {
   FilesystemState    *fs = ds->filesystemState;
-  BlockStorageDevice *bd = fs->blockDevice;
+  BlockDevice *bd = fs->blockDevice;
 
   uint32_t fatByteOffset = cluster * sizeof(uint32_t);
   uint32_t fatSector = ds->fatStartSector
@@ -143,7 +143,7 @@ int fat32WriteFatEntry(
     uint32_t value
 ) {
   FilesystemState    *fs = ds->filesystemState;
-  BlockStorageDevice *bd = fs->blockDevice;
+  BlockDevice *bd = fs->blockDevice;
 
   uint32_t fatByteOffset = cluster * sizeof(uint32_t);
   uint32_t fatSector = ds->fatStartSector
@@ -392,7 +392,7 @@ int fat32SearchDirectory(
     Fat32DirSearchResult *result
 ) {
   FilesystemState    *fs = ds->filesystemState;
-  BlockStorageDevice *bd = fs->blockDevice;
+  BlockDevice *bd = fs->blockDevice;
 
   // The LFN assembly buffer is allocated on demand when the first fragment
   // of a long-name sequence is encountered, and sized to exactly
@@ -718,7 +718,7 @@ int fat32WriteDirectoryEntry(
     const Fat32DirectoryEntry *entry
 ) {
   FilesystemState    *fs = ds->filesystemState;
-  BlockStorageDevice *bd = fs->blockDevice;
+  BlockDevice *bd = fs->blockDevice;
 
   uint32_t sectorIndex   = offsetInCluster / ds->bytesPerSector;
   uint32_t offsetInSector = offsetInCluster % ds->bytesPerSector;
@@ -906,7 +906,7 @@ int fat32FindFreeDirectorySlots(
     uint32_t *foundOffset
 ) {
   FilesystemState    *fs = ds->filesystemState;
-  BlockStorageDevice *bd = fs->blockDevice;
+  BlockDevice *bd = fs->blockDevice;
 
   uint32_t runStart       = 0;
   uint32_t runCluster     = dirCluster;
@@ -1008,7 +1008,7 @@ int fat32CreateFileEntry(
 
   // --- Write the LFN entries (highest ordinal first) ---
   FilesystemState    *fs = ds->filesystemState;
-  BlockStorageDevice *bd = fs->blockDevice;
+  BlockDevice *bd = fs->blockDevice;
 
   // We need to write totalSlots consecutive 32-byte entries starting at
   // (slotCluster, slotOffset).  Iterate entry by entry, reading the sector
@@ -1309,7 +1309,7 @@ int fat32InvalidateDirectoryEntries(
   uint8_t checksum = fat32ShortNameChecksum(target->entry.name);
 
   FilesystemState    *fs = ds->filesystemState;
-  BlockStorageDevice *bd = fs->blockDevice;
+  BlockDevice *bd = fs->blockDevice;
 
   // A 255-character file name requires at most ceil(255 / 13) = 20 LFN
   // entries.  We track their (cluster, offsetInCluster) positions so that
@@ -1476,7 +1476,7 @@ int fat32InvalidateDirectoryEntries(
 ///         failure.
 ///
 int fat32Initialize(FilesystemState *filesystemState) {
-  BlockStorageDevice *blockDevice = filesystemState->blockDevice;
+  BlockDevice *blockDevice = filesystemState->blockDevice;
 
   // Read the partition's boot sector into the pre-allocated block buffer.
   int returnValue = blockDevice->readBlocks(
@@ -1704,7 +1704,7 @@ int fat32Fclose(void *driverState, void *fileHandle) {
   // the on-disk directory entry.
   if (handle->canWrite) {
     FilesystemState    *fs = ds->filesystemState;
-    BlockStorageDevice *bd = fs->blockDevice;
+    BlockDevice *bd = fs->blockDevice;
 
     // Compute the sector that contains the short directory entry.
     uint32_t sectorIndex =
@@ -1805,7 +1805,7 @@ int32_t fat32Fread(
   }
 
   FilesystemState    *fs = ds->filesystemState;
-  BlockStorageDevice *bd = fs->blockDevice;
+  BlockDevice *bd = fs->blockDevice;
 
   uint8_t  *dest      = (uint8_t *) ptr;
   uint32_t  totalRead = 0;
@@ -1951,7 +1951,7 @@ int32_t fat32Fwrite(
   }
 
   FilesystemState    *fs = ds->filesystemState;
-  BlockStorageDevice *bd = fs->blockDevice;
+  BlockDevice *bd = fs->blockDevice;
 
   const uint8_t *src          = (const uint8_t *) ptr;
   uint32_t       totalWritten = 0;

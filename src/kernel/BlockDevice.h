@@ -3,9 +3,9 @@
 /// @author            Brian Card
 /// @date              04.01.2026
 ///
-/// @file              BlockStorage.h
+/// @file              BlockDevice.h
 ///
-/// @brief             Definitions needed in support of block storage and
+/// @brief             Definitions needed in support of block devices and
 ///                    access.
 ///
 /// @copyright
@@ -34,8 +34,8 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef BLOCK_STORAGE_H
-#define BLOCK_STORAGE_H
+#ifndef BLOCK_DEVICE_H
+#define BLOCK_DEVICE_H
 
 #include "stdint.h"
 
@@ -44,7 +44,7 @@ extern "C"
 {
 #endif
 
-/// @struct BlockStorageDevice
+/// @struct BlockDevice
 ///
 /// @brief The collection of data and functions needed to interact with a block
 /// storage device.
@@ -59,7 +59,7 @@ extern "C"
 ///   blocks to physical blocks.
 /// @param partitionNumber The one-based partition index that is to be used by
 ///   a filesystem.
-typedef struct BlockStorageDevice {
+typedef struct BlockDevice {
   void *context;
   int (*readBlocks)(void *context, uint32_t startBlock,
     uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer);
@@ -72,27 +72,26 @@ typedef struct BlockStorageDevice {
   uint16_t blockSize;
   uint8_t blockBitShift;
   uint8_t partitionNumber;
-} BlockStorageDevice;
+} BlockDevice;
 
 /// @struct FileBlockMetadata
 ///
 /// @brief Block-level metadata for a file.
 ///
-/// @param blockDevice A pointer to the BlockStorageDevice where the file
-///   resides.
+/// @param blockDevice A pointer to the BlockDevice where the file resides.
 /// @param startBlock The block (LBA) on the block device where the file
 ///   begins.
 /// @param numBlocks The number of blocks that the file occupies on the block
 ///   device.
 typedef struct FileBlockMetadata {
-  BlockStorageDevice *blockDevice;
-  uint32_t            startBlock;
-  uint32_t            numBlocks;
+  BlockDevice *blockDevice;
+  uint32_t     startBlock;
+  uint32_t     numBlocks;
 } FileBlockMetadata;
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // BLOCK_STORAGE_H
+#endif // BLOCK_DEVICE_H
 
