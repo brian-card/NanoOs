@@ -84,10 +84,12 @@ int halCommonInitRootFilesystem(void) {
   
   if (rootBlockDevice == NULL) {
     if (HAL->blockDevice == NULL) {
+      printString("ERROR! HAL->blockDevice is NULL\n");
       return -ENODEV;
     }
     
     if (HAL->blockDevice->init() != 0) {
+      printString("ERROR! HAL->blockDevice->init() failed\n");
       return -ENODEV;
     }
     
@@ -95,7 +97,7 @@ int halCommonInitRootFilesystem(void) {
   }
   
   if (rootBlockDevice == NULL) {
-    printString("No BlockDevice provided\n");
+    printString("ERROR! No rootBlockDevice available\n");
     return -ENODEV;
   }
   
