@@ -1,0 +1,448 @@
+# =============================================================================
+# NanoOS Makefile for SAMD21 targets
+#
+# Supported boards (pass BOARD= on the command line):
+#   itsybitsy_m0    - Adafruit ItsyBitsy M0 Express (default)
+#   feather_m0_wifi - Adafruit Feather M0 WiFi
+#   trinket_m0      - Adafruit Trinket M0
+#   nano_33_iot     - Arduino Nano 33 IoT
+#   xiao_m0         - Seeed XIAO M0 (Seeeduino)
+#
+# Usage:
+#   make                          - Build default board (itsybitsy_m0)
+#   make BOARD=feather_m0_wifi    - Build for Feather M0 WiFi
+#   make BOARD=nano_33_iot flash  - Build and flash stripped binary
+#   make flash-full               - Build and flash full binary (with .rodata)
+#   make boards                   - List supported boards
+#   make size                     - Show section sizes
+#   make clean                    - Remove build directory for current board
+#   make clean-all                - Remove all build directories
+#
+# Produces (under build/<board>/):
+#   NanoOs.elf           - Full ELF (keep for host-side string resolution)
+#   NanoOs_full.bin      - Full flat binary (includes .rodata)
+#   NanoOs_full.uf2      - UF2 of full binary (for testing data layout)
+#   NanoOs_stripped.bin  - Stripped binary (no .rodata, for production)
+#   NanoOs_stripped.uf2  - UF2 of stripped binary (for production flashing)
+# =============================================================================
+
+# ---- Board selection (override on command line) ------------------------------
+
+BOARD ?= itsybitsy_m0
+
+# ---- Platform package paths (adjust versions to match your installation) -----
+
+ARDUINO_HOME     := $(HOME)/.arduino15
+TOOLCHAIN_DIR    := $(ARDUINO_HOME)/packages/adafruit/tools/arm-none-eabi-gcc/9-2019q4
+CMSIS            := $(ARDUINO_HOME)/packages/adafruit/tools/CMSIS/5.4.0
+CMSIS_ATMEL      := $(ARDUINO_HOME)/packages/adafruit/tools/CMSIS-Atmel/1.2.2
+
+ADAFRUIT_SAMD    := $(ARDUINO_HOME)/packages/adafruit/hardware/samd/1.7.17
+ARDUINO_SAMD     := $(ARDUINO_HOME)/packages/arduino/hardware/samd/1.8.13
+SEEED_SAMD       := $(ARDUINO_HOME)/packages/Seeeduino/hardware/samd/1.8.5
+
+# ---- Per-board configuration -------------------------------------------------
+#
+# Each board defines:
+#   BOARD_PLATFORM    - Path to the board's platform package
+#   BOARD_VARIANT     - Variant subdirectory name
+#   BOARD_DEFINES     - Board-specific preprocessor defines
+#   BOARD_USB_VID     - USB Vendor ID
+#   BOARD_USB_PID     - USB Product ID
+#   BOARD_USB_MFR     - USB manufacturer string
+#   BOARD_USB_PRODUCT - USB product string
+#   BOARD_UF2_VOLUME  - Name of the UF2 bootloader mass-storage volume
+#   BOARD_EXTRA_LIBS  - Any extra Arduino library source files needed
+#
+# All boards share the same SAMD21 memory layout (256KB flash, 8KB bootloader,
+# 32KB RAM) and use the same linker script.
+#
+# The Adafruit toolchain and CMSIS headers are used for all boards.  The
+# variant (pin map) comes from each board's own platform package.  Core
+# sources default to the Adafruit platform; change CORE_PLATFORM below if
+# you prefer each board's native core.
+# ------------------------------------------------------------------------------
+
+ifeq ($(BOARD),itsybitsy_m0)
+  BOARD_PLATFORM    := $(ADAFRUIT_SAMD)
+  BOARD_VARIANT     := itsybitsy_m0
+  BOARD_DEFINES     := -D__SAMD21G18A__ -DARDUINO_ITSYBITSY_M0 -DADAFRUIT_ITSYBITSY_M0
+  BOARD_USB_VID     := 0x239A
+  BOARD_USB_PID     := 0x800F
+  BOARD_USB_MFR     := Adafruit
+  BOARD_USB_PRODUCT := ItsyBitsy M0 Express
+  BOARD_UF2_VOLUME  := ITSYBOOT
+  BOARD_EXTRA_LIBS  :=
+
+else ifeq ($(BOARD),feather_m0_wifi)
+  BOARD_PLATFORM    := $(ADAFRUIT_SAMD)
+  BOARD_VARIANT     := feather_m0
+  BOARD_DEFINES     := -D__SAMD21G18A__ -DARDUINO_SAMD_FEATHER_M0 -DADAFRUIT_FEATHER_M0
+  BOARD_USB_VID     := 0x239A
+  BOARD_USB_PID     := 0x800B
+  BOARD_USB_MFR     := Adafruit
+  BOARD_USB_PRODUCT := Feather M0
+  BOARD_UF2_VOLUME  := FEATHERBOOT
+  BOARD_EXTRA_LIBS  :=
+
+else ifeq ($(BOARD),trinket_m0)
+  BOARD_PLATFORM    := $(ADAFRUIT_SAMD)
+  BOARD_VARIANT     := trinket_m0
+  BOARD_DEFINES     := -D__SAMD21E18A__ -DARDUINO_TRINKET_M0 -DADAFRUIT_TRINKET_M0
+  BOARD_USB_VID     := 0x239A
+  BOARD_USB_PID     := 0x801E
+  BOARD_USB_MFR     := Adafruit
+  BOARD_USB_PRODUCT := Trinket M0
+  BOARD_UF2_VOLUME  := TRINKETBOOT
+  BOARD_EXTRA_LIBS  :=
+
+else ifeq ($(BOARD),nano_33_iot)
+  BOARD_PLATFORM    := $(ARDUINO_SAMD)
+  BOARD_VARIANT     := nano_33_iot
+  BOARD_DEFINES     := -D__SAMD21G18A__ -DARDUINO_SAMD_NANO_33_IOT
+  BOARD_USB_VID     := 0x2341
+  BOARD_USB_PID     := 0x8057
+  BOARD_USB_MFR     := Arduino
+  BOARD_USB_PRODUCT := Arduino NANO 33 IoT
+  BOARD_UF2_VOLUME  := NANO33BOOT
+  BOARD_EXTRA_LIBS  :=
+
+else ifeq ($(BOARD),xiao_m0)
+  BOARD_PLATFORM    := $(SEEED_SAMD)
+  BOARD_VARIANT     := XIAO_m0
+  BOARD_DEFINES     := -D__SAMD21G18A__ -DARDUINO_SEEED_XIAO_M0 -DSEEED_XIAO_M0
+  BOARD_USB_VID     := 0x2886
+  BOARD_USB_PID     := 0x802F
+  BOARD_USB_MFR     := Seeed
+  BOARD_USB_PRODUCT := Seeed XIAO M0
+  BOARD_UF2_VOLUME  := Arduino
+  BOARD_EXTRA_LIBS  :=
+
+else
+  $(error Unknown BOARD '$(BOARD)'. Run 'make boards' for the list.)
+endif
+
+# ---- Derived paths -----------------------------------------------------------
+
+# Variant directory comes from the board's own platform (pin maps etc.)
+VARIANT_DIR := $(BOARD_PLATFORM)/variants/$(BOARD_VARIANT)
+
+# Core sources always come from the Adafruit platform (superset of upstream).
+# Change this to $(BOARD_PLATFORM) if you prefer each board's native core.
+CORE_PLATFORM := $(ADAFRUIT_SAMD)
+CORE_DIR      := $(CORE_PLATFORM)/cores/arduino
+
+# Libraries come from the Adafruit platform
+LIB_PLATFORM := $(ADAFRUIT_SAMD)
+
+# ---- Build directory (per-board) ---------------------------------------------
+
+BUILD_DIR := build/$(BOARD)
+
+# Built from source
+CORE_A := $(BUILD_DIR)/core/core.a
+
+# ---- UF2 tools ---------------------------------------------------------------
+
+# UF2 converter (auto-detected; clone https://github.com/microsoft/uf2 if not found)
+UF2CONV    := $(shell find $(HOME) -name 'uf2conv.py' -type f 2>/dev/null | head -1)
+
+# All SAMD21 boards in this list use an 8KB bootloader at flash base
+BOOT_SIZE  := 0x2000
+
+# UF2 volume mount point
+UF2_VOLUME := /media/$(USER)/$(BOARD_UF2_VOLUME)
+
+# ---- Sketch source directory -------------------------------------------------
+
+SKETCH_DIR := .
+
+# ---- Toolchain ---------------------------------------------------------------
+
+PREFIX  := $(TOOLCHAIN_DIR)/bin/arm-none-eabi-
+CC      := $(PREFIX)gcc
+CXX     := $(PREFIX)g++
+LD      := $(PREFIX)g++
+OBJCOPY := $(PREFIX)objcopy
+OBJDUMP := $(PREFIX)objdump
+SIZE    := $(PREFIX)size
+READELF := $(PREFIX)readelf
+AR      := $(PREFIX)ar
+
+# ---- Linker script -----------------------------------------------------------
+
+LINKER_DIR    := ld
+LINKER_SCRIPT := $(LINKER_DIR)/ArduinoSamd21FlashWithBootloader.ld
+
+# ---- Flags -------------------------------------------------------------------
+
+ARCH_FLAGS := -mcpu=cortex-m0plus -mthumb
+
+# Preprocessor defines: common + board-specific
+DEFINES := \
+	-DF_CPU=48000000L \
+	-DARDUINO=10607 \
+	-DARDUINO_ARCH_SAMD \
+	-DARDUINO_SAMD_ADAFRUIT \
+	-DCRYSTALLESS \
+	-DARM_MATH_CM0PLUS \
+	-DUSB_VID=$(BOARD_USB_VID) \
+	-DUSB_PID=$(BOARD_USB_PID) \
+	-DUSBCON \
+	-DUSB_CONFIG_POWER=100 \
+	-DUSB_MANUFACTURER='"$(BOARD_USB_MFR)"' \
+	-DUSB_PRODUCT='"$(BOARD_USB_PRODUCT)"' \
+	$(BOARD_DEFINES)
+
+# Include paths
+INCLUDES := \
+	-I$(LIB_PLATFORM)/libraries/Adafruit_TinyUSB_Arduino/src/arduino \
+	-I$(CMSIS)/CMSIS/Core/Include \
+	-I$(CMSIS)/CMSIS/DSP/Include \
+	-I$(CMSIS_ATMEL)/CMSIS/Device/ATMEL \
+	-I$(CORE_DIR) \
+	-I$(VARIANT_DIR) \
+	-I$(LIB_PLATFORM)/libraries/SPI \
+	-I$(LIB_PLATFORM)/libraries/Adafruit_ZeroDMA
+
+# Common compiler flags
+COMMON_FLAGS := \
+	$(ARCH_FLAGS) \
+	-g -Os \
+	-Werror=return-type \
+	-ffunction-sections \
+	-fdata-sections \
+	-fno-jump-tables \
+	-nostdlib \
+	--param max-inline-insns-single=500 \
+	-MMD \
+	$(DEFINES) \
+	$(INCLUDES)
+
+CFLAGS   := $(COMMON_FLAGS) -std=gnu11
+CXXFLAGS := $(COMMON_FLAGS) -std=gnu++11 -fno-threadsafe-statics -fno-rtti -fno-exceptions
+ASFLAGS  := $(ARCH_FLAGS) -g -x assembler-with-cpp $(DEFINES) $(INCLUDES)
+
+# Linker flags
+LDFLAGS := \
+	$(ARCH_FLAGS) \
+	-Os \
+	-Wl,--gc-sections \
+	-T$(LINKER_SCRIPT) \
+	-Wl,-Map,$(BUILD_DIR)/NanoOs.map \
+	--specs=nano.specs \
+	--specs=nosys.specs \
+	-Wl,--cref \
+	-Wl,--check-sections \
+	-Wl,--unresolved-symbols=report-all \
+	-Wl,--warn-common \
+	-Wl,--warn-section-align
+
+LDLIBS := \
+	-Wl,--start-group \
+	-L$(CMSIS)/CMSIS/Lib/GCC/ -larm_cortexM0l_math \
+	-L$(VARIANT_DIR) \
+	-lm \
+	$(CORE_A) \
+	-Wl,--end-group
+
+# ---- Source file discovery ---------------------------------------------------
+
+INO_SRC         := $(SKETCH_DIR)/NanoOs.ino
+SKETCH_C_SRCS   := $(shell find $(SKETCH_DIR)/src -name '*.c' 2>/dev/null)
+SKETCH_CXX_SRCS := $(shell find $(SKETCH_DIR)/src -name '*.cpp' 2>/dev/null)
+
+# Arduino library sources
+LIB_CXX_SRCS := \
+	$(LIB_PLATFORM)/libraries/SPI/SPI.cpp \
+	$(LIB_PLATFORM)/libraries/Adafruit_ZeroDMA/Adafruit_ZeroDMA.cpp \
+	$(BOARD_EXTRA_LIBS)
+
+# Board variant
+VARIANT_CXX_SRCS := $(VARIANT_DIR)/variant.cpp
+
+# Arduino core sources
+CORE_C_SRCS   := $(shell find $(CORE_DIR) -name '*.c' 2>/dev/null)
+CORE_CXX_SRCS := $(shell find $(CORE_DIR) -name '*.cpp' 2>/dev/null)
+CORE_S_SRCS   := $(shell find $(CORE_DIR) -name '*.S' 2>/dev/null)
+
+# ---- Object file paths -------------------------------------------------------
+
+INO_OBJ         := $(BUILD_DIR)/sketch/NanoOs.ino.cpp.o
+SKETCH_C_OBJS   := $(patsubst %,$(BUILD_DIR)/sketch/%.o,$(SKETCH_C_SRCS))
+SKETCH_CXX_OBJS := $(patsubst %,$(BUILD_DIR)/sketch/%.o,$(SKETCH_CXX_SRCS))
+LIB_CXX_OBJS    := $(patsubst $(LIB_PLATFORM)/libraries/%,$(BUILD_DIR)/libraries/%.o,$(LIB_CXX_SRCS))
+VARIANT_OBJ     := $(BUILD_DIR)/core/variant.cpp.o
+
+CORE_C_OBJS   := $(patsubst $(CORE_DIR)/%,$(BUILD_DIR)/core/%.o,$(CORE_C_SRCS))
+CORE_CXX_OBJS := $(patsubst $(CORE_DIR)/%,$(BUILD_DIR)/core/%.o,$(CORE_CXX_SRCS))
+CORE_S_OBJS   := $(patsubst $(CORE_DIR)/%,$(BUILD_DIR)/core/%.o,$(CORE_S_SRCS))
+CORE_ALL_OBJS := $(CORE_C_OBJS) $(CORE_CXX_OBJS) $(CORE_S_OBJS)
+
+ALL_OBJS := $(INO_OBJ) $(SKETCH_C_OBJS) $(SKETCH_CXX_OBJS) $(LIB_CXX_OBJS) $(VARIANT_OBJ)
+
+DEPS := $(ALL_OBJS:.o=.d) $(CORE_ALL_OBJS:.o=.d)
+
+# ---- Output files ------------------------------------------------------------
+
+ELF          := $(BUILD_DIR)/NanoOs.elf
+FULL_BIN     := $(BUILD_DIR)/NanoOs_full.bin
+FULL_UF2     := $(BUILD_DIR)/NanoOs_full.uf2
+STRIPPED_BIN := $(BUILD_DIR)/NanoOs_stripped.bin
+STRIPPED_UF2 := $(BUILD_DIR)/NanoOs_stripped.uf2
+
+# ---- Targets -----------------------------------------------------------------
+
+.PHONY: all flash flash-full size sections clean clean-all boards
+
+all: $(FULL_BIN) $(FULL_UF2) $(STRIPPED_BIN) $(STRIPPED_UF2)
+	@echo ""
+	@echo "  Built for: $(BOARD)"
+	@echo "  Output:    $(BUILD_DIR)/"
+
+# ---- Link --------------------------------------------------------------------
+
+$(ELF): $(ALL_OBJS) $(CORE_A) $(LINKER_SCRIPT)
+	@echo "  LINK    $@"
+	@$(LD) $(LDFLAGS) -o $@ $(ALL_OBJS) $(LDLIBS)
+
+# ---- Binary outputs ----------------------------------------------------------
+
+$(FULL_BIN): $(ELF)
+	@echo "  OBJCOPY $@ (full, with .rodata)"
+	@$(OBJCOPY) -O binary $< $@
+
+$(FULL_UF2): $(FULL_BIN)
+	@if [ -z "$(UF2CONV)" ]; then \
+		echo "ERROR: uf2conv.py not found under $(HOME)."; \
+		echo "Clone https://github.com/microsoft/uf2 and re-run make."; \
+		exit 1; \
+	fi
+	@echo "  UF2CONV $@ (full)"
+	@python3 $(UF2CONV) -c -b $(BOOT_SIZE) -o $@ $<
+
+$(STRIPPED_BIN): $(ELF)
+	@echo "  OBJCOPY $@ (stripped, no .rodata)"
+	@$(OBJCOPY) -O binary -R .rodata $< $@
+
+$(STRIPPED_UF2): $(STRIPPED_BIN)
+	@if [ -z "$(UF2CONV)" ]; then \
+		echo "ERROR: uf2conv.py not found under $(HOME)."; \
+		echo "Clone https://github.com/microsoft/uf2 and re-run make."; \
+		exit 1; \
+	fi
+	@echo "  UF2CONV $@"
+	@python3 $(UF2CONV) -c -b $(BOOT_SIZE) -o $@ $<
+
+# ---- Compile: sketch ---------------------------------------------------------
+
+# .ino file -> compiled as C++.  The Arduino IDE auto-injects
+# '#include <Arduino.h>' and generates function prototypes before
+# compiling; -include Arduino.h replicates the header injection.
+$(INO_OBJ): $(INO_SRC)
+	@mkdir -p $(dir $@)
+	@echo "  CXX     $<"
+	@$(CXX) $(CXXFLAGS) -x c++ -include Arduino.h -c $< -o $@
+
+$(BUILD_DIR)/sketch/%.c.o: %.c
+	@mkdir -p $(dir $@)
+	@echo "  CC      $<"
+	@$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/sketch/%.cpp.o: %.cpp
+	@mkdir -p $(dir $@)
+	@echo "  CXX     $<"
+	@$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# ---- Compile: Arduino libraries ----------------------------------------------
+
+$(BUILD_DIR)/libraries/%.o: $(LIB_PLATFORM)/libraries/%
+	@mkdir -p $(dir $@)
+	@echo "  CXX     $<"
+	@$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# ---- Compile: board variant --------------------------------------------------
+
+$(VARIANT_OBJ): $(VARIANT_DIR)/variant.cpp
+	@mkdir -p $(dir $@)
+	@echo "  CXX     $<"
+	@$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# ---- Compile: Arduino core (archived into core.a) ----------------------------
+
+$(BUILD_DIR)/core/%.c.o: $(CORE_DIR)/%.c
+	@mkdir -p $(dir $@)
+	@echo "  CC      $< (core)"
+	@$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/core/%.cpp.o: $(CORE_DIR)/%.cpp
+	@mkdir -p $(dir $@)
+	@echo "  CXX     $< (core)"
+	@$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/core/%.S.o: $(CORE_DIR)/%.S
+	@mkdir -p $(dir $@)
+	@echo "  AS      $< (core)"
+	@$(CC) $(ASFLAGS) -c $< -o $@
+
+$(CORE_A): $(CORE_ALL_OBJS)
+	@echo "  AR      $@"
+	@rm -f $@
+	@$(AR) rcs $@ $^
+
+# ---- Utility targets ---------------------------------------------------------
+
+flash: $(STRIPPED_UF2)
+	@if [ -d "$(UF2_VOLUME)" ]; then \
+		echo "  FLASH   Copying stripped UF2 to $(UF2_VOLUME) ($(BOARD))"; \
+		cp $(STRIPPED_UF2) $(UF2_VOLUME)/; \
+	else \
+		echo "ERROR: $(UF2_VOLUME) not found."; \
+		echo "Double-tap reset to enter bootloader mode."; \
+		echo "(Expected volume: $(BOARD_UF2_VOLUME))"; \
+		exit 1; \
+	fi
+
+flash-full: $(FULL_UF2)
+	@if [ -d "$(UF2_VOLUME)" ]; then \
+		echo "  FLASH   Copying full UF2 to $(UF2_VOLUME) ($(BOARD))"; \
+		cp $(FULL_UF2) $(UF2_VOLUME)/; \
+	else \
+		echo "ERROR: $(UF2_VOLUME) not found."; \
+		echo "Double-tap reset to enter bootloader mode."; \
+		echo "(Expected volume: $(BOARD_UF2_VOLUME))"; \
+		exit 1; \
+	fi
+
+size: $(ELF)
+	@echo ""
+	@echo "=== $(BOARD): Section sizes ==="
+	@$(SIZE) -A $(ELF)
+	@echo ""
+	@echo "=== Flash usage breakdown ==="
+	@echo -n "  .text (code):          "; $(SIZE) -A $(ELF) | awk '/^\.text / {print $$2 " bytes"}'
+	@echo -n "  .rodata (strings/ro):  "; $(SIZE) -A $(ELF) | awk '/^\.rodata / {print $$2 " bytes"}'
+	@echo -n "  .data (init values):   "; $(SIZE) -A $(ELF) | awk '/^\.data / {print $$2 " bytes"}'
+	@echo ""
+	@echo -n "  Stripped binary size:  "; stat -c%s $(STRIPPED_BIN) 2>/dev/null || echo "(build first)"
+	@echo -n "  Full binary size:      "; stat -c%s $(FULL_BIN) 2>/dev/null || echo "(build first)"
+	@echo ""
+
+sections: $(ELF)
+	@$(OBJDUMP) -h $(ELF)
+
+boards:
+	@echo "Supported boards (pass BOARD= on the command line):"
+	@echo "  itsybitsy_m0     Adafruit ItsyBitsy M0 Express  (default)"
+	@echo "  feather_m0_wifi  Adafruit Feather M0 WiFi"
+	@echo "  trinket_m0       Adafruit Trinket M0"
+	@echo "  nano_33_iot      Arduino Nano 33 IoT"
+	@echo "  xiao_m0          Seeed XIAO M0"
+
+clean:
+	rm -rf $(BUILD_DIR)
+
+clean-all:
+	rm -rf build
+
+-include $(DEPS)
