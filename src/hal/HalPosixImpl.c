@@ -353,6 +353,12 @@ int32_t posixEnterPowerMode(HalPowerMode powerMode) {
       fprintf(stderr, "Exiting.\n");
       exit(1);
     }
+    
+    // Reset the block storage device online map so that initialization works
+    // properly on reset.
+    if (HAL->blockDevice != NULL) {
+      HAL->blockDevice->online[0] = 0;
+    }
     longjmp(_resetBuffer, 1);
   }
   
