@@ -1,8 +1,14 @@
 /*
   Based on the Adafruit ItsyBitsy M0 Express linker script.
-  Modified for NanoOS: .rodata is split out of .text and placed at the end
-  of flash (after .data's LMA) so it can be stripped from the flash binary
-  while remaining available in the full ELF for host-side string resolution.
+  Modified for NanoOS: sketch .rodata (mainly strings) is placed at the end
+  of flash so it can be stripped from the binary, while Arduino core,
+  library, and toolchain C library .rodata stays in .text where the CPU
+  can access it at runtime.
+
+  To strip sketch strings from the flash binary:
+    arm-none-eabi-objcopy -O binary -R .rodata NanoOs.elf NanoOs_stripped.bin
+
+  The full ELF retains .rodata for host-side string address resolution.
 
   Original copyright:
   Copyright (c) 2014-2015 Arduino LLC.  All right reserved.
@@ -46,7 +52,34 @@ SECTIONS
  		*(SORT(.dtors.*))
  		*(.dtors)
 
-		/* NOTE: .rodata has been moved to its own section below */
+		/*
+		 * Keep Arduino core, library, and toolchain C library .rodata
+		 * here in .text.  These contain runtime-essential const data
+		 * (Serial, Uart, sercomData, USB descriptors, _ctype_ table,
+		 * printf float tables, locale data, stdio FILE structs, etc.)
+		 * that the CPU must be able to read from flash at all times.
+		 *
+		 * The linker claims each input section on first match, so
+		 * anything matched here will NOT appear in the strippable
+		 * .rodata section below.
+		 *
+		 * If you add new Arduino libraries, add their .rodata here.
+		 */
+
+		/* Arduino core and libraries */
+		*/core.a:(.rodata*)
+		*/SPI.cpp.o(.rodata*)
+		*/Adafruit_ZeroDMA.cpp.o(.rodata*)
+		*/variant.cpp.o(.rodata*)
+
+		/* Toolchain C library, math library, and runtime support */
+		*/libc.a:(.rodata*)
+		*/libc_nano.a:(.rodata*)
+		*/libm.a:(.rodata*)
+		*/libg.a:(.rodata*)
+		*/libg_nano.a:(.rodata*)
+		*/libgcc.a:(.rodata*)
+		*/libnosys.a:(.rodata*)
 
 		KEEP(*(.eh_frame*))
 	} > FLASH
@@ -100,15 +133,25 @@ SECTIONS
 	} > RAM
 
 	/*
-	 * .rodata is placed in FLASH after .data's LMA (load image).
-	 * This allows it to be stripped from the flash binary via:
-	 *   arm-none-eabi-objcopy -O binary -R .rodata NanoOs.elf NanoOs_stripped.bin
+	 * Sketch .rodata — placed after .data's LMA (load image) in flash.
 	 *
-	 * The full ELF retains .rodata for host-side string address resolution.
+	 * By this point the Arduino core, library, and toolchain .rodata has
+	 * been claimed by .text above, so only sketch object .rodata lands
+	 * here.  This is predominantly string literals (__func__, log
+	 * messages, format strings, etc.) and any const data from your
+	 * NanoOS source files.
 	 *
-	 * VMA and LMA are both in FLASH at (__etext + SIZEOF(.data)), so the
-	 * CPU reads .rodata directly from flash at runtime (in the full build)
-	 * and the section sits contiguously after .data's initial values.
+	 * Strippable via:  objcopy -O binary -R .rodata NanoOs.elf NanoOs_stripped.bin
+	 *
+	 * IMPORTANT: if any of YOUR code has const data the CPU dereferences
+	 * at runtime (function pointer tables, const struct instances, lookup
+	 * tables), either:
+	 *   (a) remove the const qualifier (moves it to .data / RAM), or
+	 *   (b) tag it with __attribute__((section(".text"))) to keep it
+	 *       in the non-strippable code section, e.g.:
+	 *
+	 *       #define KEEP_IN_FLASH __attribute__((section(".text")))
+	 *       KEEP_IN_FLASH const CommandHandler handlers[] = { ... };
 	 */
 	.rodata (__etext + SIZEOF(.data)) :
 	{
