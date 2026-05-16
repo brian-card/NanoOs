@@ -99,12 +99,12 @@ exit:
 }
 
 /// @fn const char* sdCardInit(SdCardState *sdCardState,
-///   BlockStorageDevice *sdDevice, const char *sdCardDevicePath)
+///   BlockDevice *sdDevice, const char *sdCardDevicePath)
 ///
 /// @brief Initialize the components of an SdCardState object.
 ///
 /// @param sdCardState A pointer to the SdCardState object to initialize.
-/// @param sdDevice A pointer to the generic BlockStorageDevice that will be
+/// @param sdDevice A pointer to the generic BlockDevice that will be
 ///   handed off to the filesystem process.
 /// @param sdCardDevicePath A C string holding the path to the device node on
 ///   the host OS where NanoOs's block device simulation lives.
@@ -112,7 +112,7 @@ exit:
 /// @return Returns the string representation of the errno produced as a result
 ///   of the call to open.
 const char* sdCardInit(SdCardState *sdCardState,
-  BlockStorageDevice *sdDevice, const char *sdCardDevicePath
+  BlockDevice *sdDevice, const char *sdCardDevicePath
 ) {
   errno = 0;
 

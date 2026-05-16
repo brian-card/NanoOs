@@ -40,7 +40,7 @@
 
 // Implementation prototypes.
 const char* sdCardInit(SdCardState *sdCardState,
-  BlockStorageDevice *sdDevice, const char *sdCardDevicePath);
+  BlockDevice *sdDevice, const char *sdCardDevicePath);
 int sdCardRead(int devFd, void *buffer, size_t start, size_t len);
 int sdCardWrite(int devFd, const void *buffer, size_t start, size_t len);
 
@@ -193,7 +193,7 @@ void* runSdCardPosix(void *args) {
 
   SdCardState sdCardState;
   memset(&sdCardState, 0, sizeof(sdCardState));
-  BlockStorageDevice sdDevice = {
+  BlockDevice sdDevice = {
     .context = (void*) ((intptr_t) getRunningPid()),
     .readBlocks = sdReadBlocks,
     .writeBlocks = sdWriteBlocks,
