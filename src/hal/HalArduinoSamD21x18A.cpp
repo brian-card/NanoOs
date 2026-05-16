@@ -99,14 +99,6 @@ static uint8_t _spiSckDio = DIO_PIN_UNDEFINED;
 /// @brief Pin to use for the MicroSD card reader's SPI chip select line.
 static uint8_t _sdCardPinChipSelect = DIO_PIN_UNDEFINED;
 
-/// @var arduinoSamD21x18AHalPtr
-///
-/// @brief C++ won't let you do a forward-declaration of a static variable, nor
-/// will it let you forward-declare a static variable using the extern keyword.
-/// So, we'll have a pointer to the HAL declared and initialized after the HAL
-/// itself and declare an extern for the pointer here.
-extern Hal *arduinoSamD21x18AHalPtr;
-
 // The fact that we've included Arduino.h in this file means that the memory
 // management functions from its library are available in this file.  That's a
 // problem.  (a) We can't allow dynamic memory at the HAL level and (b) if we
@@ -1074,7 +1066,7 @@ static BlockDevice *blockDevices[] = {
 /// @var _numBlockDevices
 ///
 /// @brief Number of BlockDevices that can be managed by the HAL.
-static uint32_t _numBlockDevices
+static const uint32_t _numBlockDevices
   = sizeof(blockDevices) / sizeof(blockDevices[0]);
 
 /// @var halArduinoSamD21x18ABlockDevicesOnline
@@ -1097,13 +1089,13 @@ int32_t arduinoSamD21x18AInitBlockDevice(void) {
   if (blockDevices[0] == NULL) {
     return -ENODEV;
   }
-  setOnline(arduinoSamD21x18AHalPtr->blockDevice, 0);
+  setOnline(HAL->blockDevice, 0);
   
   return 0;
 }
 
 BlockDevice* arduinoSamD21x18AGetBlockDevice(int32_t deviceId) {
-  if ((deviceId < 0) || (deviceId >= _numBlockDevices)) {
+  if (!online(HAL->blockDevice, deviceId)) {
     return NULL;
   }
   
@@ -1116,10 +1108,6 @@ static HalBlockDevice arduinoSamD21x18ABlockDeviceHal = {
   .init = arduinoSamD21x18AInitBlockDevice,
   .get = arduinoSamD21x18AGetBlockDevice,
 };
-
-int arduinoSamD21x18AInitRootStorage(SchedulerState *schedulerState) {
-  return halCommonInitRootFilesystem(arduinoSamD21x18AGetBlockDevice(0));
-}
 
 /// @var arduinoSamD21x18AHal
 ///
@@ -1135,9 +1123,8 @@ static Hal arduinoSamD21x18AHal = {
   .blockDevice = &arduinoSamD21x18ABlockDeviceHal,
   
   // Root storage configuration.
-  .initRootStorage = arduinoSamD21x18AInitRootStorage,
+  .initRootStorage = halCommonInitRootFilesystem,
 };
-Hal *arduinoSamD21x18AHalPtr = &arduinoSamD21x18AHal;
 
 const Hal* halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
   arduinoSamD21x18AHal.uart->numSupported = args->numUartsSupported;

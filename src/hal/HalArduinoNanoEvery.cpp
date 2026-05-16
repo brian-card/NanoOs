@@ -264,7 +264,7 @@ int32_t arduinoNanoEveryWriteDio(int32_t deviceId, bool high) {
   return returnValue;
 }
 
-/// @var halArduinoSamD21x18AImplDiosOnline
+/// @var arduinoNanoEveryImplDiosOnline
 ///
 /// @brief Bitmask array of online UARTs.
 static uint32_t halArduinoNanoEveryDiosOnline[] = {
@@ -567,7 +567,28 @@ static HalPower arduinoNanoEveryPowerHal = {
   .enterMode = arduinoNanoEveryEnterPowerMode,
 };
 
-int arduinoNanoEveryInitRootStorage(SchedulerState *schedulerState) {
+/// @var blockDevices
+///
+/// @brief Array of BlockDevice pointers that are managed by the driver
+/// processes.
+static BlockDevice *blockDevices[] = {
+  NULL,
+};
+
+/// @var _numBlockDevices
+///
+/// @brief Number of BlockDevices that can be managed by the HAL.
+static const uint32_t _numBlockDevices
+  = sizeof(blockDevices) / sizeof(blockDevices[0]);
+
+/// @var arduinoNanoEveryBlockDevicesOnline
+///
+/// @brief Bitmask array of online block devices.
+static uint32_t arduinoNanoEveryBlockDevicesOnline[] = {
+  0x00000000,
+};
+
+int32_t arduinoNanoEveryInitBlockDevice(void) {
   // Create the SD card process.
   SdCardSpiArgs sdCardSpiArgs = {
     .spiCsDio = SD_CARD_PIN_CHIP_SELECT,
@@ -576,9 +597,29 @@ int arduinoNanoEveryInitRootStorage(SchedulerState *schedulerState) {
     .spiSckDio = SPI_SCK_DIO,
   };
 
-  return halCommonInitRootFilesystem(
-    halCommonInitRootSdSpiStorage(&sdCardSpiArgs));
+  blockDevices[0] = halCommonInitRootSdSpiStorage(&sdCardSpiArgs);
+  if (blockDevices[0] == NULL) {
+    return -ENODEV;
+  }
+  setOnline(HAL->blockDevice, 0);
+  
+  return 0;
 }
+
+BlockDevice* arduinoNanoEveryGetBlockDevice(int32_t deviceId) {
+  if (!online(HAL->blockDevice, deviceId)) {
+    return NULL;
+  }
+  
+  return blockDevices[deviceId];
+}
+
+static HalBlockDevice arduinoNanoEveryBlockDeviceHal = {
+  .numSupported = _numBlockDevices,
+  .online = arduinoNanoEveryBlockDevicesOnline,
+  .init = arduinoNanoEveryInitBlockDevice,
+  .get = arduinoNanoEveryGetBlockDevice,
+};
 
 /// @var arduinoNanoEveryHal
 ///
@@ -592,9 +633,10 @@ static Hal arduinoNanoEveryHal = {
   .clock = &arduinoNanoEveryClockHal,
   .power = &arduinoNanoEveryPowerHal,
   .timer = NULL,
+  .blockDevice = &arduinoNanoEveryBlockDeviceHal,
   
   // Root storage configuration.
-  .initRootStorage = arduinoNanoEveryInitRootStorage,
+  .initRootStorage = halCommonInitRootFilesystem,
 };
 
 const Hal* halArduinoNanoEveryInit(void) {

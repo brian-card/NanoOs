@@ -162,12 +162,33 @@ static HalTimer posixTimerHal = {
 /// @brief Path to the device node to connect to for the SdCardSim process.
 static const char *_sdCardDevicePath = NULL;
 
-int posixInitRootStorage(SchedulerState *schedulerState) {
-  ProcessDescriptor *allProcesses = schedulerState->allProcesses;
+/// @var blockDevices
+///
+/// @brief Array of BlockDevice pointers that are managed by the driver
+/// processes.
+static BlockDevice *blockDevices[] = {
+  NULL,
+};
+
+/// @var _numBlockDevices
+///
+/// @brief Number of BlockDevices that can be managed by the HAL.
+static const uint32_t _numBlockDevices
+  = sizeof(blockDevices) / sizeof(blockDevices[0]);
+
+/// @var posixBlockDevicesOnline
+///
+/// @brief Bitmask array of online block devices.
+static uint32_t posixBlockDevicesOnline[] = {
+  0x00000000,
+};
+
+int32_t posixInitBlockDevice(void) {
+  ProcessDescriptor *allProcesses = SCHEDULER_STATE->allProcesses;
   
   // Create the SD card process.
   ProcessDescriptor *processDescriptor
-    = &allProcesses[schedulerState->firstUserPid - 1];
+    = &allProcesses[SCHEDULER_STATE->firstUserPid - 1];
   if (processCreate(
     processDescriptor, runSdCardPosix, (void*) _sdCardDevicePath)
     != processSuccess
@@ -175,18 +196,34 @@ int posixInitRootStorage(SchedulerState *schedulerState) {
     printString("Could not start SD card process.\n");
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
-  processDescriptor->pid = schedulerState->firstUserPid;
+  processDescriptor->pid = SCHEDULER_STATE->firstUserPid;
   processDescriptor->name = "SD card";
   processDescriptor->userId = ROOT_USER_ID;
   BlockDevice *sdDevice = (BlockDevice*) coroutineResume(
-    allProcesses[schedulerState->firstUserPid - 1].mainThread, NULL);
+    allProcesses[SCHEDULER_STATE->firstUserPid - 1].mainThread, NULL);
   sdDevice->partitionNumber = 1;
-  schedulerState->firstUserPid++;
-  schedulerState->firstShellPid = schedulerState->firstUserPid;
+  SCHEDULER_STATE->firstUserPid++;
+  SCHEDULER_STATE->firstShellPid = SCHEDULER_STATE->firstUserPid;
+  blockDevices[0] = sdDevice;
+  setOnline(HAL->blockDevice, 0);
   
-  return halCommonInitRootFilesystem(sdDevice);
+  return 0;
 }
 
+BlockDevice* posixGetBlockDevice(int32_t deviceId) {
+  if (!online(HAL->blockDevice, deviceId)) {
+    return NULL;
+  }
+  
+  return blockDevices[deviceId];
+}
+
+static HalBlockDevice posixBlockDeviceHal = {
+  .numSupported = _numBlockDevices,
+  .online = posixBlockDevicesOnline,
+  .init = posixInitBlockDevice,
+  .get = posixGetBlockDevice,
+};
 
 /// @var posixHal
 ///
@@ -199,9 +236,10 @@ static Hal posixHal = {
   .clock = &posixClockHal,
   .power = &posixPowerHal,
   .timer = &posixTimerHal,
+  .blockDevice = &posixBlockDeviceHal,
   
   // Root storage configuration.
-  .initRootStorage = posixInitRootStorage,
+  .initRootStorage = halCommonInitRootFilesystem,
 };
 
 const Hal* halPosixImplInit(jmp_buf resetBuffer, Hal *hal);

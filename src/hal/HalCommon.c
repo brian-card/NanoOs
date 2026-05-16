@@ -74,23 +74,34 @@ BlockDevice* halCommonInitRootSdSpiStorage(
   return sdDevice;
 }
 
-/// @fn int halCommonInitRootFilesystem(BlockDevice *blockDevice)
+/// @fn int halCommonInitRootFilesystem(void)
 ///
 /// @brief Common initialization for the root filesystem process.
 ///
-/// @param blockDevice A pointer to a BlockDevice initialized by a
-///   block storage process.
-///
 /// @return Returns 0 on success, -errno on failure.
-int halCommonInitRootFilesystem(BlockDevice *blockDevice) {
-  if (blockDevice == NULL) {
+int halCommonInitRootFilesystem(void) {
+  BlockDevice *rootBlockDevice = HAL->blockDevice->get(0);
+  
+  if (rootBlockDevice == NULL) {
+    if (HAL->blockDevice == NULL) {
+      return -ENODEV;
+    }
+    
+    if (HAL->blockDevice->init() != 0) {
+      return -ENODEV;
+    }
+    
+    rootBlockDevice = HAL->blockDevice->get(0);
+  }
+  
+  if (rootBlockDevice == NULL) {
     printString("No BlockDevice provided\n");
     return -ENODEV;
   }
   
   FilesystemState fs;
   memset(&fs, 0, sizeof(fs));
-  fs.blockDevice = blockDevice;
+  fs.blockDevice = rootBlockDevice;
   fs.blockSize = fs.blockDevice->blockSize;
   fs.driverInit = fat32Initialize;
   fs.driverFopen = fat32Fopen;
@@ -139,15 +150,14 @@ int halCommonInit(const Hal *hal) {
     return -EINVAL;
   }
   
-  int32_t ii = 0;
+  uint32_t ii = 0;
   int32_t defaultUart = -1;
-  char num = '\0';
   
   if (hal->uart != NULL) {
     if (hal->uart->init() < 0) {
       return -ENOTTY;
     }
-    int numUarts = hal->uart->numSupported;
+    uint32_t numUarts = hal->uart->numSupported;
     if (numUarts <= 0) {
       // Nothing we can do.
       return -ENOTTY;

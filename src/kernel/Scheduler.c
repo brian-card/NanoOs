@@ -3933,7 +3933,7 @@ __attribute__((noinline)) void startScheduler(
 
   // schedulerState.firstUserPid isn't populated until HAL->initRootStorage
   // completes, so we need to call that as soon as we can.
-  int rv = HAL->initRootStorage(&schedulerState);
+  int rv = HAL->initRootStorage();
   if (rv != 0) {
     printString("ERROR: initRootStorage returned status ");
     printInt(rv);
