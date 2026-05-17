@@ -144,6 +144,7 @@ extern "C"
 #define writeBytes(dst, src) memcpy(dst, src, sizeof(*(src)))
 
 // Support functions
+void nanoOsStart(void);
 Pid getNumPipes(const char *commandLine);
 void timespecFromDelay(struct timespec *ts, long int delayMs);
 unsigned int raiseUInt(unsigned int x, unsigned int y);

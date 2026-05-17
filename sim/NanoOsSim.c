@@ -29,6 +29,7 @@
 #include "string.h"
 
 // NanoOs includes
+#include "NanoOs.h"
 #include "NanoOsTypes.h"
 #include "Processes.h"
 #include "Scheduler.h"
@@ -100,39 +101,7 @@ int main(int argc, char **argv) {
   // just an application running in its own virtual memory sandbox, we don't
   // need that here, so skipping it.
 
-  // SchedulerState pointer that we will have to populate in startScheduler.
-  SchedulerState *threadStatePointer = NULL;
-
-  // We want the address of the first thread to be as close to the base as
-  // possible.  Because of that, we need to create the first one before we enter
-  // the scheduler.  That means we need to allocate the main thread here,
-  // configure it, and then create and run one before we ever enter the
-  // scheduler.
-  Thread _mainThread;
-  schedulerThread = &_mainThread;
-  ThreadsConfigOptions threadsConfigOptions = {
-    .stackSize = HAL->memory->processStackSize(false),
-    .stateData = &threadStatePointer,
-    .yieldCallback = NULL,
-    .unlockCallback = unlockCallback,
-    .signalCallback = signalCallback,
-  };
-  if ((HAL->timer != NULL) && (HAL->timer->numSupported > 0)) {
-    threadsConfigOptions.yieldCallback = yieldCallback;
-  }
-  if (threadsConfig(&_mainThread, &threadsConfigOptions) != processSuccess) {
-    fputs("threadsConfig failed.\n", stderr);
-    return 1;
-  }
-  // Create but *DO NOT* resume one dummy process.  This will set the size of
-  // the main stack.
-  if (threadProvision(NULL, dummyProcess, NULL) == NULL) {
-    fputs("Could not set scheduler process's stack size.\n", stderr);
-  }
-
-  // Enter the scheduler.  This never returns.
-  printDebug("Starting scheduler.\n");
-  startScheduler(&threadStatePointer);
+  nanoOsStart();
 
   return 0;
 }

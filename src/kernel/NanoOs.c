@@ -28,19 +28,92 @@
 // Doxygen marker
 /// @file
 
-// Custom includes
+// NanoOs includes
 #include "Console.h"
+#include "Hal.h"
 #include "NanoOs.h"
 #include "Processes.h"
 #include "Scheduler.h"
 #include "../user/NanoOsLibC.h"
 
+// Must come last
 #include "../user/NanoOsStdio.h"
 
 // Externs
 extern const User users[];
 extern const int NUM_USERS;
 
+/// @fn void nanoOsStart(void)
+///
+/// @brief Main entrypoint for the OS that is to be called from whatever the
+/// bootloader's entrypoint is.
+///
+/// @return This function returns no value and never returns.
+void nanoOsStart(void) {
+  // SchedulerState pointer that we will have to populate in startScheduler.
+  SchedulerState *threadStatePointer = NULL;
+
+  // We want the address of the first thread to be as close to the base as
+  // possible.  Because of that, we need to create the first one before we enter
+  // the scheduler.  That means we need to allocate the main thread here,
+  // configure it, and then create and run one before we ever enter the
+  // scheduler.
+  Thread _mainThread;
+  schedulerThread = &_mainThread;
+  ThreadsConfigOptions threadsConfigOptions = {
+    .stackSize = HAL->memory->processStackSize(USE_HAL_MEMORY_DEBUG),
+    .stateData = &threadStatePointer,
+    .yieldCallback = NULL,
+    .unlockCallback = unlockCallback,
+    .signalCallback = signalCallback,
+  };
+  if ((HAL->timer != NULL) && (HAL->timer->numSupported > 0)) {
+    threadsConfigOptions.yieldCallback = yieldCallback;
+  }
+  if (threadsConfig(&_mainThread, &threadsConfigOptions) != processSuccess) {
+    printChar('t');
+    printChar('h');
+    printChar('r');
+    printChar('e');
+    printChar('a');
+    printChar('d');
+    printChar('s');
+    printChar('C');
+    printChar('o');
+    printChar('n');
+    printChar('f');
+    printChar('i');
+    printChar('g');
+    printChar(' ');
+    printChar('f');
+    printChar('a');
+    printChar('i');
+    printChar('l');
+    printChar('e');
+    printChar('d');
+    printChar('\n');
+    while(1);
+  }
+  // Create but *DO NOT* resume one dummy process.  This will set the size of
+  // the main stack.
+  if (threadProvision(NULL, dummyProcess, NULL) == NULL) {
+    printString("Could not set scheduler process's stack size.\n");
+  }
+
+  printDebugString("Extending scheduler stack.\n");
+  for (uint8_t ii = 0;
+    ii < HAL->memory->numExtraSchedulerStacks(USE_HAL_MEMORY_DEBUG);
+    ii++
+  ) {
+    if (threadProvision(NULL, dummyProcess, NULL) == NULL) {
+      printString("Could not increase scheduler process's stack size.\n");
+    }
+  }
+
+  // Enter the scheduler.  This never returns.
+  printDebugString("Starting scheduler.\n");
+  startScheduler(&threadStatePointer);
+}
 /// @fn Pid getNumPipes(const char *commandLine)
 ///
 /// @brief Get the number of pipes in a commandLine.

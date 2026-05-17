@@ -85,68 +85,6 @@ void setup() {
 // we will do all the one-time setup and then run our scheduler loop from
 // within this call.
 void loop() {
-  // SchedulerState pointer that we will have to populate in startScheduler.
-  SchedulerState *threadStatePointer = NULL;
-
-  // We want the address of the first thread to be as close to the base as
-  // possible.  Because of that, we need to create the first one before we enter
-  // the scheduler.  That means we need to allocate the main thread here,
-  // configure it, and then create and run one before we ever enter the
-  // scheduler.
-  Thread _mainThread;
-  schedulerThread = &_mainThread;
-  ThreadsConfigOptions threadsConfigOptions = {
-    .stackSize = HAL->memory->processStackSize(USE_HAL_MEMORY_DEBUG),
-    .stateData = &threadStatePointer,
-    .yieldCallback = NULL,
-    .unlockCallback = unlockCallback,
-    .signalCallback = signalCallback,
-  };
-  if ((HAL->timer != NULL) && (HAL->timer->numSupported > 0)) {
-    threadsConfigOptions.yieldCallback = yieldCallback;
-  }
-  if (threadsConfig(&_mainThread, &threadsConfigOptions) != processSuccess) {
-    printChar('t');
-    printChar('h');
-    printChar('r');
-    printChar('e');
-    printChar('a');
-    printChar('d');
-    printChar('s');
-    printChar('C');
-    printChar('o');
-    printChar('n');
-    printChar('f');
-    printChar('i');
-    printChar('g');
-    printChar(' ');
-    printChar('f');
-    printChar('a');
-    printChar('i');
-    printChar('l');
-    printChar('e');
-    printChar('d');
-    printChar('\n');
-    while(1);
-  }
-  // Create but *DO NOT* resume one dummy process.  This will set the size of
-  // the main stack.
-  if (threadProvision(NULL, dummyProcess, NULL) == NULL) {
-    printString("Could not set scheduler process's stack size.\n");
-  }
-
-  printDebugString("Extending scheduler stack.\n");
-  for (uint8_t ii = 0;
-    ii < HAL->memory->numExtraSchedulerStacks(USE_HAL_MEMORY_DEBUG);
-    ii++
-  ) {
-    if (threadProvision(NULL, dummyProcess, NULL) == NULL) {
-      printString("Could not increase scheduler process's stack size.\n");
-    }
-  }
-
-  // Enter the scheduler.  This never returns.
-  printDebugString("Starting scheduler.\n");
-  startScheduler(&threadStatePointer);
+  nanoOsStart();
 }
 
