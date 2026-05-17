@@ -271,10 +271,11 @@ void* callOverlayFunctionFromBlockDevice(
   overlayArray[0].startBlock  = runningProcess->overlay.startBlock;
   overlayArray[0].numBlocks   = runningProcess->overlay.numBlocks;
   
-  overlayArray[1].blockDevice = HAL->blockDevice->get(
-    (deviceId == OVERLAY_SAME_NAMESPACE)
-    ? ((int) ((intptr_t) runningProcess->overlayNamespace))
-    : ((int) ((intptr_t) deviceId)));
+  overlayArray[1].blockDevice = runningProcess->overlay.blockDevice;
+  if (deviceId != OVERLAY_SAME_NAMESPACE) {
+    overlayArray[1].blockDevice = HAL->blockDevice->get(
+      (int) ((intptr_t) deviceId));
+  }
   size_t blocksPerOverlay
     = ((size_t) HAL->memory->overlaySize)
     / overlayArray[1].blockDevice->blockSize;
