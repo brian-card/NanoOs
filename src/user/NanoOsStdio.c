@@ -58,19 +58,34 @@ FILE *nanoOsStdout = (FILE*) ((intptr_t) 0x2);
 /// @brief Implementation of nanoOsStderr which is the define value for stderr.
 FILE *nanoOsStderr = (FILE*) ((intptr_t) 0x3);
 
-/// @fn int printString_(const char *string)
+/// @fn int printChar_(char character)
 ///
-/// @brief C wrapper around HAL->uart->write for a C string.
+/// @brief Wrapper around HAL->uart->write for a single C character.
 ///
-/// @return Returns 0 on success, -1 on failure.
-int printString_(const char *string) {
-  if ((string != NULL) && (HAL->uart != NULL)) {
-    HAL->uart->write(0, (uint8_t*) string, strlen(string));
-  } else {
-    return -1;
+/// @param character The single char value to print.
+///
+/// @return Returns the number of bytes written on success, -errno on failure.
+int printChar_(char character) {
+  if (HAL->uart == NULL) {
+    return -ENODEV;
   }
 
-  return 0;
+  return HAL->uart->write(0, (uint8_t*) &character, 1);
+}
+
+/// @fn int printString_(const char *string)
+///
+/// @brief Wrapper around HAL->uart->write for a C string.
+///
+/// @return Returns the number of bytes written on success, -errno on failure.
+int printString_(const char *string) {
+  if (string == NULL) {
+    return -EINVAL;
+  } else if (HAL->uart == NULL) {
+    return -ENODEV;
+  }
+
+  return HAL->uart->write(0, (uint8_t*) string, strlen(string));
 }
 
 /// @fn int ullToString(unsigned long long int number, char **nextChar)
@@ -81,6 +96,8 @@ int printString_(const char *string) {
 /// @param number The non-negative number to convert.
 /// @param nextChar A double pointer to the next character in the buffer to
 ///   populate.
+///
+/// @return Returns 0 on success, -errno on failure.
 int ullToString(unsigned long long int number, char **nextChar) {
   if (number == 0) {
     **nextChar = '0';
@@ -104,77 +121,75 @@ int ullToString(unsigned long long int number, char **nextChar) {
 ///
 /// @brief C wrapper around HAL->uart->write for an integer.
 ///
-/// @return Returns 0 on success, -1 on failure.
+/// @param integer The integer value to print.
+///
+/// @return Returns the number of bytes written on success, -errno on failure.
 int printInt_(long long int integer) {
-  if (HAL->uart != NULL) {
-    char number[20];
-    number[19] = '\0';
-    char *nextChar = &number[18];
-
-    if (integer >= 0) {
-      ullToString((unsigned long long int) integer, &nextChar);
-      nextChar++;
-    } else {
-      ullToString((unsigned long long int) -integer, &nextChar);
-      *nextChar = '-';
-    }
-    HAL->uart->write(
-      0, (uint8_t*) nextChar, strlen(nextChar));
-  } else {
-    return -1;
+  if (HAL->uart == NULL) {
+    return -ENODEV;
   }
 
-  return 0;
+  char number[20];
+  number[19] = '\0';
+  char *nextChar = &number[18];
+
+  if (integer >= 0) {
+    ullToString((unsigned long long int) integer, &nextChar);
+    nextChar++;
+  } else {
+    ullToString((unsigned long long int) -integer, &nextChar);
+    *nextChar = '-';
+  }
+
+  return HAL->uart->write(0, (uint8_t*) nextChar, strlen(nextChar));
 }
 
 /// @fn int printDouble(double floatingPointValue)
 ///
 /// @brief C wrapper around HAL->uart->write for a double.
 ///
-/// @return Returns 0 on success, -1 on failure.
+/// @param floatingPointValue The double value to print.
+///
+/// @return Returns the number of bytes written on success, -errno on failure.
 int printDouble(double floatingPointValue) {
-  if (HAL->uart != NULL) {
-    char number[20];
-    sprintf(number, "%lf", floatingPointValue);
-    HAL->uart->write(0, (uint8_t*) number, strlen(number));
-  } else {
-    return -1;
+  if (HAL->uart == NULL) {
+    return -ENODEV;
   }
 
-  return 0;
+  char number[20];
+  sprintf(number, "%lf", floatingPointValue);
+  return HAL->uart->write(0, (uint8_t*) number, strlen(number));
 }
 
 /// @fn int printHex_(unsigned long long int integer)
 ///
-/// @brief C wrapper around HAL->uart->write for a
-/// hexadecimal integer.
+/// @brief C wrapper around HAL->uart->write for a hexadecimal integer.
 ///
-/// @return Returns 0 on success, -1 on failure.
+/// @param integer The integer value to print in hexadecimal format.
+///
+/// @return Returns the number of bytes written on success, -errno on failure.
 int printHex_(unsigned long long int integer) {
-  if (HAL->uart != NULL) {
-    char number[20];
-    number[19] = '\0';
-    char *nextChar = &number[18];
-
-    if (integer > 0) {
-      const char *alphabet = "0123456789abcdef";
-      while (integer > 0) {
-        *nextChar = alphabet[integer & 0xf];
-        nextChar--;
-        integer >>= 4;
-      }
-      nextChar++;
-    } else {
-      *nextChar = '0';
-    }
-
-    HAL->uart->write(
-      0, (uint8_t*) nextChar, strlen(nextChar));
-  } else {
-    return -1;
+  if (HAL->uart == NULL) {
+    return -ENODEV;
   }
 
-  return 0;
+  char number[20];
+  number[19] = '\0';
+  char *nextChar = &number[18];
+
+  if (integer > 0) {
+    const char *alphabet = "0123456789abcdef";
+    while (integer > 0) {
+      *nextChar = alphabet[integer & 0xf];
+      nextChar--;
+      integer >>= 4;
+    }
+    nextChar++;
+  } else {
+    *nextChar = '0';
+  }
+
+  return HAL->uart->write(0, (uint8_t*) nextChar, strlen(nextChar));
 }
 
 /// @fn int printList_(const char *firstString, ...)
@@ -185,7 +200,7 @@ int printHex_(unsigned long long int integer) {
 /// @param firstString The first string value to print.
 /// @param ... All following parameters are in (type, value) format.
 ///
-/// @return Returns 0 on success, -1 on failure.
+/// @return Returns the number of bytes written on success, -errno on failure.
 int printList_(const char *firstString, ...) {
   int returnValue = 0;
   TypeDescriptor *type = NULL;
@@ -193,8 +208,7 @@ int printList_(const char *firstString, ...) {
 
   if (firstString == NULL) {
     // Invalid.
-    returnValue = -1;
-    return returnValue;
+    return -EINVAL;
   }
   printString(firstString);
 
@@ -204,15 +218,23 @@ int printList_(const char *firstString, ...) {
   while (type != STOP) {
     if (type == typeInt) {
       int value = va_arg(args, int);
-      printInt(value);
+      int rv = printInt(value);
+      if (rv < 0) {
+        return rv;
+      }
+      returnValue += rv;
     } else if (type == typeString) {
       char *value = va_arg(args, char*);
-      printString(value);
+      int rv = printString(value);
+      if (rv < 0) {
+        return rv;
+      }
+      returnValue += rv;
     } else {
       printString("Invalid type ");
       printInt((intptr_t) type);
       printString(".  Exiting parsing.\n");
-      returnValue = -1;
+      returnValue = -EINVAL;
       break;
     }
 

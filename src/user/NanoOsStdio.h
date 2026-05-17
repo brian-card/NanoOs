@@ -79,7 +79,9 @@ extern FILE *nanoOsStdin;
 extern FILE *nanoOsStdout;
 extern FILE *nanoOsStderr;
 
-// Debug functions
+// Raw print functions
+int printChar_(char character);
+#define printChar(character) printChar_((char) (character))
 int printString_(const char *string);
 #define printString(str) printString_((const char*) (str))
 int printInt_(long long int integer);
