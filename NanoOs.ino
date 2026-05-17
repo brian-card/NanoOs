@@ -55,7 +55,18 @@ void setup() {
   // We need a guard at bootup because if the system crashes in a way that makes
   // the processor unresponsive, it will be very difficult to load new firmware.
   // Sleep long enough to begin a firmware upload on reset.
-  printString("\nBooting...\n");
+  printChar('\n');
+  printChar('B');
+  printChar('o');
+  printChar('o');
+  printChar('t');
+  printChar('i');
+  printChar('n');
+  printChar('g');
+  printChar('.');
+  printChar('.');
+  printChar('.');
+  printChar('\n');
   msleep(7000);
 }
 
@@ -95,7 +106,27 @@ void loop() {
     threadsConfigOptions.yieldCallback = yieldCallback;
   }
   if (threadsConfig(&_mainThread, &threadsConfigOptions) != processSuccess) {
-    printString("threadConfig failed.\n");
+    printChar('t');
+    printChar('h');
+    printChar('r');
+    printChar('e');
+    printChar('a');
+    printChar('d');
+    printChar('s');
+    printChar('C');
+    printChar('o');
+    printChar('n');
+    printChar('f');
+    printChar('i');
+    printChar('g');
+    printChar(' ');
+    printChar('f');
+    printChar('a');
+    printChar('i');
+    printChar('l');
+    printChar('e');
+    printChar('d');
+    printChar('\n');
     while(1);
   }
   // Create but *DO NOT* resume one dummy process.  This will set the size of
