@@ -335,7 +335,9 @@ void* execCommand(void *args) {
         break;
       }
       
-      if (strcmp(pwd->pw_shell, processDescriptor->overlayDir) == 0) {
+      if (strcmp(pwd->pw_shell,
+        (char*) processDescriptor->overlayNamespace) == 0
+      ) {
         // This is the user's shell exiting.  Clear the processes's user ID.
         processDescriptor->userId = NO_USER_ID;
       }

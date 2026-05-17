@@ -208,7 +208,10 @@ typedef struct ProcessQueue ProcessQueue;
 /// @param privelegeLevel The PrivelegeLevel of the process.
 /// @param fileDescriptors Pointer to an array of FileDescriptor pointers that
 ///   are currently in use by the process.
-/// @param overlayDir The base path to the overlays for the process, if any.
+/// @param overlayNamespace The namespace that the overlay is in if this is a
+///   user process.  This is the path to the overlay's directory for a file-
+///   based overlay or the zero-based index of the block device for a block-
+///   based overaly.
 /// @param overlay The FileBlockMetadata of how to access the overlay from its
 ///   block device.
 /// @param envp A pointer to the array of NULL-terminated environment variable
@@ -229,7 +232,7 @@ typedef struct ProcessDescriptor {
   uint8_t             numFileDescriptors;
   PrivelegeLevel      privelegeLevel;
   FileDescriptor    **fileDescriptors;
-  char               *overlayDir;
+  void               *overlayNamespace;
   FileBlockMetadata   overlay;
   char              **envp;
   ProcessQueue       *processQueue;

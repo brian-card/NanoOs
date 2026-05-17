@@ -80,6 +80,10 @@ BlockDevice* halCommonInitRootSdSpiStorage(
 ///
 /// @return Returns 0 on success, -errno on failure.
 int halCommonInitRootFilesystem(void) {
+  if (SCHEDULER_STATE == NULL) {
+    return -EBUSY;
+  }
+  
   BlockDevice *rootBlockDevice = HAL->blockDevice->get(0);
   
   if (rootBlockDevice == NULL) {

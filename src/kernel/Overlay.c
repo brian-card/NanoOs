@@ -110,14 +110,14 @@ void* callOverlayFunctionFromFile(const void *od, const void *o,
   }
   
   // Keep track of the overlay that's currently running and the one we need.
-  char *previousOverlayDir = runningProcess->overlayDir;
+  char *previousOverlayDir = (char*) runningProcess->overlayNamespace;
   FileBlockMetadata overlayArray[2];
   overlayArray[0].blockDevice = runningProcess->overlay.blockDevice;
   overlayArray[0].startBlock  = runningProcess->overlay.startBlock;
   overlayArray[0].numBlocks   = runningProcess->overlay.numBlocks;
   
   // Keep track of what the original overlay directory was.
-  char *originalOverlayDir = runningProcess->overlayDir;
+  char *originalOverlayDir = (char*) runningProcess->overlayNamespace;
   
   // We need to allocate enough space for all of the strings we need.  We need
   // the overlay directory, a slash, the name of the overlay, the overlay
@@ -193,7 +193,7 @@ void* callOverlayFunctionFromFile(const void *od, const void *o,
   // JBC 2025-01-24
   HAL->timer->cancel(SCHEDULER_STATE->preemptionTimer);
   if (overlayDir != OVERLAY_SAME_NAMESPACE) {
-    runningProcess->overlayDir = overlayInfo;
+    runningProcess->overlayNamespace = overlayInfo;
   }
   runningProcess->overlay.blockDevice = overlayArray[1].blockDevice;
   runningProcess->overlay.startBlock  = overlayArray[1].startBlock;
@@ -218,7 +218,7 @@ restorePreviousOverlay:
   runningProcess->overlay.startBlock  = overlayArray[0].startBlock;
   runningProcess->overlay.numBlocks   = overlayArray[0].numBlocks;
   if (overlayDir != OVERLAY_SAME_NAMESPACE) {
-    runningProcess->overlayDir = previousOverlayDir;
+    runningProcess->overlayNamespace = previousOverlayDir;
   }
   processYield();
   

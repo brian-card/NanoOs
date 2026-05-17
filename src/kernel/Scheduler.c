@@ -2110,13 +2110,13 @@ int schedGetFileBlockMetadataFromPath(
 /// @return Returns 0 on success, -errno on failure.
 int loadProcessDescriptorOverlayMetadata(ProcessDescriptor *processDescriptor) {
   char *overlayPath = (char*) schedMalloc(
-    strlen(processDescriptor->overlayDir) + OVERLAY_EXT_LEN + 6);
+    strlen((char*) processDescriptor->overlayNamespace) + OVERLAY_EXT_LEN + 6);
   if (overlayPath == NULL) {
     // Fail.
     printString("ERROR: malloc failure for overlayPath.\n");
     return -ENOMEM;
   }
-  strcpy(overlayPath, processDescriptor->overlayDir);
+  strcpy(overlayPath, (char*) processDescriptor->overlayNamespace);
   strcat(overlayPath, "/main");
   strcat(overlayPath, OVERLAY_EXT);
 
@@ -2705,7 +2705,7 @@ int schedulerExecveCommandHandler(
     }
   }
 
-  processDescriptor->overlayDir = pathname;
+  processDescriptor->overlayNamespace = pathname;
   returnValue = loadProcessDescriptorOverlayMetadata(processDescriptor);
   if (returnValue != 0) {
     processMessageData(processMessage) = (void*) ((intptr_t) returnValue);
@@ -2975,7 +2975,7 @@ int schedulerSpawnCommandHandler(
     }
   }
 
-  processDescriptor->overlayDir = pathname;
+  processDescriptor->overlayNamespace = pathname;
   returnValue = loadProcessDescriptorOverlayMetadata(processDescriptor);
   if (returnValue != 0) {
     processMessageData(processMessage) = (void*) ((uintptr_t) returnValue);
@@ -3513,7 +3513,7 @@ int schedulerRunOverlayCommand(
     goto freeFileDescriptors;
   }
 
-  processDescriptor->overlayDir = execArgs->pathname;
+  processDescriptor->overlayNamespace = execArgs->pathname;
   returnValue = loadProcessDescriptorOverlayMetadata(processDescriptor);
   if (returnValue != 0) {
     goto freeFileDescriptors;
