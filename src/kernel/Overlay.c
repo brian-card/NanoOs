@@ -123,7 +123,10 @@ void* callOverlayFunctionFromFile(const void *od, const void *o,
   // the overlay directory, a slash, the name of the overlay, the overlay
   // extension, a NULL byte, the function name, and a trailing NULL byte.
   char *overlayInfo = (char*) malloc(
-    ((overlayDir == NULL) ? strlen(originalOverlayDir) : strlen(overlayDir))
+    ((overlayDir == OVERLAY_SAME_NAMESPACE)
+      ? strlen(originalOverlayDir)
+      : strlen(overlayDir)
+    )
     + 1
     + strlen(overlay)
     + OVERLAY_EXT_LEN
@@ -134,7 +137,8 @@ void* callOverlayFunctionFromFile(const void *od, const void *o,
     goto exit;
   }
   
-  strcpy(overlayInfo, (overlayDir == NULL) ? originalOverlayDir : overlayDir);
+  strcpy(overlayInfo,
+    (overlayDir == OVERLAY_SAME_NAMESPACE) ? originalOverlayDir : overlayDir);
   strcat(overlayInfo, "/");
   strcat(overlayInfo, overlay);
   strcat(overlayInfo, OVERLAY_EXT);
@@ -149,7 +153,8 @@ void* callOverlayFunctionFromFile(const void *od, const void *o,
   strcpy(functionCopy, function);
   
   // Terminate the overlayInfo string at the end of the directory path.
-  overlayInfo[strlen((overlayDir == NULL) ? originalOverlayDir : overlayDir)]
+  overlayInfo[strlen(
+    (overlayDir == OVERLAY_SAME_NAMESPACE) ? originalOverlayDir : overlayDir)]
     = '\0';
   
   // args does not get copied.  We have no way of knowing what the proper way
@@ -187,7 +192,7 @@ void* callOverlayFunctionFromFile(const void *od, const void *o,
   //
   // JBC 2025-01-24
   HAL->timer->cancel(SCHEDULER_STATE->preemptionTimer);
-  if (overlayDir != NULL) {
+  if (overlayDir != OVERLAY_SAME_NAMESPACE) {
     runningProcess->overlayDir = overlayInfo;
   }
   runningProcess->overlay.blockDevice = overlayArray[1].blockDevice;
@@ -212,7 +217,7 @@ restorePreviousOverlay:
   runningProcess->overlay.blockDevice = overlayArray[0].blockDevice;
   runningProcess->overlay.startBlock  = overlayArray[0].startBlock;
   runningProcess->overlay.numBlocks   = overlayArray[0].numBlocks;
-  if (overlayDir != NULL) {
+  if (overlayDir != OVERLAY_SAME_NAMESPACE) {
     runningProcess->overlayDir = previousOverlayDir;
   }
   processYield();

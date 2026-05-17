@@ -149,7 +149,8 @@ void* processPipes(void *args) {
     fsCommandArgs->launchBackground = true;
     fsCommandArgs->fileActions = fileActions;
     pids[numPipes] = (int) ((intptr_t) callOverlayFunction(
-      NULL, "FilesystemCommands", "runFsCommand", fsCommandArgs));
+      OVERLAY_SAME_NAMESPACE, "FilesystemCommands", "runFsCommand",
+      fsCommandArgs));
     if (pids[numPipes] < 0) {
       // errno is already set
       fprintf(stderr, "Launching \"%s\" failed\n", fsCommandArgs->commandLine);
@@ -192,7 +193,8 @@ void* processPipes(void *args) {
   fsCommandArgs->launchBackground = false;
   fsCommandArgs->fileActions = NULL;
   callOverlayFunction(
-    NULL, "FilesystemCommands", "runFsCommand", fsCommandArgs);
+    OVERLAY_SAME_NAMESPACE, "FilesystemCommands", "runFsCommand",
+    fsCommandArgs);
   fprintf(stderr, "Launching \"%s\" failed\n", fsCommandArgs->commandLine);
   
   // If we made it this far then errno is already set

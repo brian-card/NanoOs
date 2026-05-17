@@ -83,7 +83,7 @@ int main(int argc, char **argv) {
     // callOverlayFunction.
     printDebugString("Checking to see if command is a builtin\n");
     returnValue = (intptr_t) callOverlayFunction(
-      NULL, "Builtins", "processBuiltin", input);
+      OVERLAY_SAME_NAMESPACE, "Builtins", "processBuiltin", input);
     if (returnValue < -1)  {
       // The command wasn't processed as a built-in.  Try running it from the
       // filesystem.
@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
       if (strchr(input, '|')) {
         // Command line contains pipes.  Process it that way.
         returnValue = (intptr_t) callOverlayFunction(
-          NULL, "Pipes", "processPipes", input);
+          OVERLAY_SAME_NAMESPACE, "Pipes", "processPipes", input);
       } else {
         fsCommandArgs.commandLine = input;
         fsCommandArgs.launchBackground = false;
@@ -102,7 +102,8 @@ int main(int argc, char **argv) {
         }
         fsCommandArgs.fileActions = NULL;
         returnValue = (intptr_t) callOverlayFunction(
-          NULL, "FilesystemCommands", "runFsCommand", &fsCommandArgs);
+          OVERLAY_SAME_NAMESPACE, "FilesystemCommands", "runFsCommand",
+          &fsCommandArgs);
       }
     }
   } while (returnValue != -1);

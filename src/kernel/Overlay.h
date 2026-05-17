@@ -74,6 +74,14 @@ extern "C"
 /// @brief The number of characters in OVERLAY_EXT.
 #define OVERLAY_EXT_LEN 8
 
+/// @def OVERLAY_SAME_NAMESPACE
+///
+/// @brief Marker to be passed into the overlayNamespace parameter of
+/// callOverlayFunction implementations to indicate that the same namespace as
+/// the one that's already being used for the process should be used in the
+/// lookup.
+#define OVERLAY_SAME_NAMESPACE ((void*) -1)
+
 /// @type OverlayFunction
 ///
 /// @brief Function pointer for a function that can be called in an overlay from
