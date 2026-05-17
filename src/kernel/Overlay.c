@@ -78,11 +78,13 @@ OverlayFunction findOverlayFunction(const char *overlayFunctionName) {
 /// @fn void* callOverlayFunctionFromFile(const void *od, const void *o,
 ///   const char *function, void *args)
 ///
-/// @brief Kernel function to load an overlay into memory, find a designated
-/// function, call it with the provided arguments, and return the return value.
+/// @brief Kernel function to load an overlay from a file into memory, find a
+/// designated function, call it with the provided arguments, and return the
+/// return value.
 ///
-/// @param od The path to the overlay on the filesystem.  If this
-///   parameter is NULL then this means the overlay path currently in use.
+/// @param od The path to the overlay directory on the filesystem.  If this
+///   parameter is OVERLAY_SAME_NAMESPACE then the overlay path currently in
+///   use will be used.
 /// @param o The name of the overlay minus the ".overlay" file extension
 ///   that is local to the overlay directory.
 /// @param function The name of the function exported by the overlay.
@@ -116,15 +118,12 @@ void* callOverlayFunctionFromFile(const void *od, const void *o,
   overlayArray[0].startBlock  = runningProcess->overlay.startBlock;
   overlayArray[0].numBlocks   = runningProcess->overlay.numBlocks;
   
-  // Keep track of what the original overlay directory was.
-  char *originalOverlayDir = (char*) runningProcess->overlayNamespace;
-  
   // We need to allocate enough space for all of the strings we need.  We need
   // the overlay directory, a slash, the name of the overlay, the overlay
   // extension, a NULL byte, the function name, and a trailing NULL byte.
   char *overlayInfo = (char*) malloc(
     ((overlayDir == OVERLAY_SAME_NAMESPACE)
-      ? strlen(originalOverlayDir)
+      ? strlen(previousOverlayDir)
       : strlen(overlayDir)
     )
     + 1
@@ -138,7 +137,7 @@ void* callOverlayFunctionFromFile(const void *od, const void *o,
   }
   
   strcpy(overlayInfo,
-    (overlayDir == OVERLAY_SAME_NAMESPACE) ? originalOverlayDir : overlayDir);
+    (overlayDir == OVERLAY_SAME_NAMESPACE) ? previousOverlayDir : overlayDir);
   strcat(overlayInfo, "/");
   strcat(overlayInfo, overlay);
   strcat(overlayInfo, OVERLAY_EXT);
@@ -154,7 +153,7 @@ void* callOverlayFunctionFromFile(const void *od, const void *o,
   
   // Terminate the overlayInfo string at the end of the directory path.
   overlayInfo[strlen(
-    (overlayDir == OVERLAY_SAME_NAMESPACE) ? originalOverlayDir : overlayDir)]
+    (overlayDir == OVERLAY_SAME_NAMESPACE) ? previousOverlayDir : overlayDir)]
     = '\0';
   
   // args does not get copied.  We have no way of knowing what the proper way
@@ -225,6 +224,104 @@ restorePreviousOverlay:
   // Release all the memory for the copies.
 freeOverlayInfo:
   free(overlayInfo);
+exit:
+  return returnValue;
+}
+
+/// @fn void* callOverlayFunctionFromBlockDevice(
+///   const void *deviceId, const void *overlay,
+///   const char *function, void *args)
+///
+/// @brief Kernel function to load an overlay from blocks on a device into
+/// memory, find a designated function, call it with the provided arguments,
+/// and return the return value.
+///
+/// @param deviceId The zero-based index of the block device the overlay is on,
+///   cast to a void*.  If this parameter is OVERLAY_SAME_NAMESPACE then the
+///   device currently in use will be used.
+/// @param overlay The zero-based index of the block-based overlay on the
+///   device, cast to a void*.
+/// @param function The name of the function exported by the overlay.
+/// @param args Any arguments to be passed to the function in the overlay, cast
+///   to a void*.  This parameter may be NULL.
+///
+/// @return Returns the value returned by the overlay function on success, NULL
+/// on failure.
+void* callOverlayFunctionFromBlockDevice(
+  const void *deviceId, const void *overlay,
+  const char *function, void *args
+) {
+  void *returnValue = NULL;
+  if (function == NULL) {
+    fprintf(stderr, "ERROR: One or more NULL arguments provided to "
+      "callOverlayFunctionFromBlockDevice\n");
+    goto exit; // return NULL
+  }
+  
+  ProcessDescriptor *runningProcess = getRunningProcess();
+  if (runningProcess == NULL) {
+    // This should be impossible.
+    goto exit; // return NULL
+  }
+  
+  // Keep track of the overlay that's currently running and the one we need.
+  void *previousOverlayDevice = runningProcess->overlayNamespace;
+  FileBlockMetadata overlayArray[2];
+  overlayArray[0].blockDevice = runningProcess->overlay.blockDevice;
+  overlayArray[0].startBlock  = runningProcess->overlay.startBlock;
+  overlayArray[0].numBlocks   = runningProcess->overlay.numBlocks;
+  
+  overlayArray[1].blockDevice = HAL->blockDevice->get(
+    (deviceId == OVERLAY_SAME_NAMESPACE)
+    ? ((int) ((intptr_t) runningProcess->overlayNamespace))
+    : ((int) ((intptr_t) deviceId)));
+  size_t blocksPerOverlay
+    = ((size_t) HAL->memory->overlaySize)
+    / overlayArray[1].blockDevice->blockSize;
+  overlayArray[1].startBlock  = (((uintptr_t) overlay) * blocksPerOverlay) + 1;
+  overlayArray[1].numBlocks   = blocksPerOverlay;
+  
+  char *functionCopy = (char*) malloc(strlen(function) + 1);
+  if (functionCopy == NULL) {
+    // Out of memory.  Bail.
+    goto exit;
+  }
+  strcpy(functionCopy, function);
+  
+  // See comment in callOverlayFunctionFromFile about this logic.
+  HAL->timer->cancel(SCHEDULER_STATE->preemptionTimer);
+  if (deviceId != OVERLAY_SAME_NAMESPACE) {
+    runningProcess->overlayNamespace = (void*) deviceId;
+  }
+  runningProcess->overlay.blockDevice = overlayArray[1].blockDevice;
+  runningProcess->overlay.startBlock  = overlayArray[1].startBlock;
+  runningProcess->overlay.numBlocks   = overlayArray[1].numBlocks;
+  processYield();
+  
+  // If we made it this far, then our new overlay has been successuflly loaded.
+  OverlayFunction overlayFunction = findOverlayFunction(functionCopy);
+  if (overlayFunction == NULL) {
+    fprintf(stderr, "ERROR: Could not find overlay function \"%s\"\n",
+      functionCopy);
+    goto restorePreviousOverlay;
+  }
+  
+  // The overlay function was found.  Get our return value.
+  returnValue = overlayFunction(args);
+  
+restorePreviousOverlay:
+  // See note above on use of HAL->timer->cancel.
+  HAL->timer->cancel(SCHEDULER_STATE->preemptionTimer);
+  runningProcess->overlay.blockDevice = overlayArray[0].blockDevice;
+  runningProcess->overlay.startBlock  = overlayArray[0].startBlock;
+  runningProcess->overlay.numBlocks   = overlayArray[0].numBlocks;
+  if (deviceId != OVERLAY_SAME_NAMESPACE) {
+    runningProcess->overlayNamespace = previousOverlayDevice;
+  }
+  processYield();
+  
+  // Release all the memory for the copies.
+  free(functionCopy);
 exit:
   return returnValue;
 }

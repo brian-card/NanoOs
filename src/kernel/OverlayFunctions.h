@@ -48,6 +48,9 @@ extern "C"
 OverlayFunction findOverlayFunction(const char *overlayFunctionName);
 void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
   const char *function, void *args);
+void* callOverlayFunctionFromBlockDevice(
+  const void *deviceId, const void *overlay,
+  const char *function, void *args);
 int runOverlayCommand(const char *commandPath, int argc, char **argv);
 
 #ifdef __cplusplus
