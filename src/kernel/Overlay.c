@@ -275,6 +275,10 @@ void* callOverlayFunctionFromBlockDevice(
   if (deviceId != OVERLAY_SAME_NAMESPACE) {
     overlayArray[1].blockDevice = HAL->blockDevice->get(
       (int) ((intptr_t) deviceId));
+    if (overlayArray[1].blockDevice == NULL) {
+      // No such block device.
+      goto exit; // return NULL
+    }
   }
   size_t blocksPerOverlay
     = ((size_t) HAL->memory->overlaySize)
@@ -285,7 +289,7 @@ void* callOverlayFunctionFromBlockDevice(
   char *functionCopy = (char*) malloc(strlen(function) + 1);
   if (functionCopy == NULL) {
     // Out of memory.  Bail.
-    goto exit;
+    goto exit; // return NULL
   }
   strcpy(functionCopy, function);
   
