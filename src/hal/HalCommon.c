@@ -152,14 +152,14 @@ int halCommonInit(const Hal *hal) {
     return -EINVAL;
   }
   
-  uint32_t ii = 0;
+  int32_t ii = 0;
   int32_t defaultUart = -1;
   
   if (hal->uart != NULL) {
     if (hal->uart->init() < 0) {
       return -ENOTTY;
     }
-    uint32_t numUarts = hal->uart->numSupported;
+    int32_t numUarts = hal->uart->numSupported;
     if (numUarts <= 0) {
       // Nothing we can do.
       return -ENOTTY;
@@ -214,7 +214,7 @@ int halCommonInit(const Hal *hal) {
       }
       
       uint32_t online = hal->timer->online[0];
-      for (ii = 0; ii < hal->timer->numSupported; ii++) {
+      for (ii = 0; ii < (int32_t) hal->timer->numSupported; ii++) {
         if (online(hal->timer, ii) == false) {
           continue;
         }

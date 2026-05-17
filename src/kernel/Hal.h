@@ -57,8 +57,10 @@ extern "C"
 ///
 /// @param hal Pointer to a HAL subsystem pointer.
 /// @param deviceId The zero-based index of the device to check.
-#define online(hal, deviceId) \
-  (((((uint32_t) 1) << (deviceId & 31)) & hal->online[deviceId >> 5]) != 0)
+#define online(hal, deviceId) ( \
+  ((deviceId >= 0) && (deviceId < ((int32_t) hal->numSupported))) \
+  ? (((((uint32_t) 1) << (deviceId & 31)) & hal->online[deviceId >> 5]) != 0) \
+  : false)
 
 /// @def setOnline
 ///

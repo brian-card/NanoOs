@@ -3817,7 +3817,7 @@ __attribute__((noinline)) void startScheduler(
     = &schedulerState.ready[PRIVELEGE_LEVEL_KERNEL];
   schedulerState.preemptionTimer = -1;
   if ((HAL->timer != NULL) && (HAL->timer->numSupported > 0)) {
-    for (uint32_t ii = 0; ii < HAL->timer->numSupported; ii++) {
+    for (int32_t ii = 0; ii < ((int32_t) HAL->timer->numSupported); ii++) {
       if (online(HAL->timer, ii)) {
         schedulerState.preemptionTimer = ii;
         break;

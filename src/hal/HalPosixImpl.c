@@ -776,13 +776,13 @@ int halPosixImplInit(jmp_buf resetBuffer, Hal *hal) {
   *((void**) &realTcgetattr) = dlsym(RTLD_NEXT, "tcgetattr");
   *((void**) &realTcsetattr) = dlsym(RTLD_NEXT, "tcsetattr");
   
-  uint32_t ii = 0;
+  int32_t ii = 0;
   
   if (hal->uart != NULL) {
     if (hal->uart->init() < 0) {
       return -ENOTTY;
     }
-    uint32_t numUarts = hal->uart->numSupported;
+    int32_t numUarts = hal->uart->numSupported;
     if (numUarts <= 0) {
       // Nothing we can do.
       return -ENOTTY;
@@ -805,7 +805,7 @@ int halPosixImplInit(jmp_buf resetBuffer, Hal *hal) {
       }
       
       uint32_t online = hal->timer->online[0];
-      for (ii = 0; ii < hal->timer->numSupported; ii++) {
+      for (ii = 0; ii < (int32_t) hal->timer->numSupported; ii++) {
         fprintf(stdout, "Initializing timer %u\n", ii);
         if (!online(hal->timer, ii)) {
           continue;
