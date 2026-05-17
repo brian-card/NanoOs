@@ -1077,6 +1077,10 @@ static uint32_t halArduinoSamD21x18ABlockDevicesOnline[] = {
 };
 
 int32_t arduinoSamD21x18AInitBlockDevice(void) {
+  if (SCHEDULER_STATE == NULL) {
+    return -EBUSY;
+  }
+  
   // Create the SD card process.
   SdCardSpiArgs sdCardSpiArgs = {
     .spiCsDio   = _sdCardPinChipSelect,

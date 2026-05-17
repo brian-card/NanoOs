@@ -589,6 +589,10 @@ static uint32_t arduinoNanoEveryBlockDevicesOnline[] = {
 };
 
 int32_t arduinoNanoEveryInitBlockDevice(void) {
+  if (SCHEDULER_STATE == NULL) {
+    return -EBUSY;
+  }
+  
   // Create the SD card process.
   SdCardSpiArgs sdCardSpiArgs = {
     .spiCsDio = SD_CARD_PIN_CHIP_SELECT,

@@ -184,6 +184,10 @@ static uint32_t posixBlockDevicesOnline[] = {
 };
 
 int32_t posixInitBlockDevice(void) {
+  if (SCHEDULER_STATE == NULL) {
+    return -EBUSY;
+  }
+  
   ProcessDescriptor *allProcesses = SCHEDULER_STATE->allProcesses;
   
   // Create the SD card process.
