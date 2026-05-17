@@ -34,6 +34,7 @@
 #include "NanoOs.h"
 #include "Processes.h"
 #include "Scheduler.h"
+#include "../user/NanoOsApi.h"
 #include "../user/NanoOsLibC.h"
 
 // Must come last
@@ -50,6 +51,9 @@ extern const int NUM_USERS;
 ///
 /// @return This function returns no value and never returns.
 void nanoOsStart(void) {
+  // Set the HAL pointer in the userspace API.
+  nanoOsApi.hal = HAL;
+
   // SchedulerState pointer that we will have to populate in startScheduler.
   SchedulerState *threadStatePointer = NULL;
 

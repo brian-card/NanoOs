@@ -55,6 +55,7 @@
 #include "NanoOsSpawn.h"
 #include "NanoOsSysUtsname.h"
 #include "NanoOsSysTypes.h"
+#include "../kernel/Hal.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -74,6 +75,9 @@ typedef struct posix_spawnattr_t posix_spawnattr_t;
 struct termios;
 
 typedef struct NanoOsApi {
+  // HAL access:
+  const Hal *hal;
+  
   // Standard streams:
   FILE *stdin;
   FILE *stdout;

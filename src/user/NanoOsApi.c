@@ -78,6 +78,9 @@ int vsnprintf(char *str, size_t size, const char *format, va_list ap);
 #undef fileno
 
 NanoOsApi nanoOsApi = {
+  // HAL access:
+  .hal = NULL,
+  
   // Standard Unix functionality
   
   // Standard streams:
