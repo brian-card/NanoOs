@@ -64,3 +64,5 @@ This work started out as an experiment to see if I could implement an operating 
 
 [2026-04-27: Overlay Userspace](2026-04-27_Overlay-Userspace.md)
 
+[2026-05-19: Refactoring and Stabilization](2026-05-19_Refactoring-and-Stabilization.md)
+
