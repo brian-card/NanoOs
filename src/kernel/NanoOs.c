@@ -67,6 +67,7 @@ void nanoOsStart(void) {
   ThreadsConfigOptions threadsConfigOptions = {
     .stackSize = HAL->memory->processStackSize(USE_HAL_MEMORY_DEBUG),
     .stateData = &threadStatePointer,
+    .resumeCallback = NULL,
     .yieldCallback = NULL,
     .unlockCallback = unlockCallback,
     .signalCallback = signalCallback,

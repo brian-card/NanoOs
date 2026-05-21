@@ -190,6 +190,11 @@ static int _globalStackSize = COROUTINE_DEFAULT_STACK_SIZE;
 /// @brief Global state data provided to the global callbacks.
 static void *_globalStateData = NULL;
 
+/// @var static CoroutineResumeCallback _globalCoroutineResumeCallback
+///
+/// @brief Global callback to call when a comutex is unlocked.
+static CoroutineResumeCallback _globalCoroutineResumeCallback = NULL;
+
 /// @var static CoroutineYieldCallback _globalCoroutineYieldCallback
 ///
 /// @brief Global callback to call when a comutex is unlocked.
@@ -782,6 +787,35 @@ void* coroutineResume(Coroutine *targetCoroutine, void *arg) {
   return COROUTINE_ERROR;
 }
 
+/// @fn void* callCoroutineResumeCallback(void *arg)
+///
+/// @brief Call the set CoroutineResumeCallback if there is one.
+///
+/// @param arg The arg pointer that was passed into coroutineResume.
+///
+/// @return Returns the value returned by the callback if there is one, arg
+/// otherwise.
+void* callCoroutineResumeCallback(void *arg) {
+  CoroutineResumeCallback coroutineResumeCallback
+    = _globalCoroutineResumeCallback;
+#ifdef THREAD_SAFE_COROUTINES
+  if (_coroutineThreadingSupportEnabled) {
+    // No need to call coroutineSetupThreadMetadata or
+    // coroutineInitializeThreadMetadata this time since we did that above.
+    CoroutineResumeCallback *possibleCallback
+      = (CoroutineResumeCallback*) tss_get(_tssCoroutineResumeCallback);
+    if (possibleCallback != NULL) {
+      coroutineResumeCallback = *possibleCallback;
+    }
+  }
+#endif
+  if (coroutineResumeCallback != NULL) {
+    arg = coroutineResumeCallback(arg);
+  }
+
+  return arg;
+}
+
 /// @fn void callCoroutineYieldCallback(Coroutine *running)
 ///
 /// @brief Call the set CoroutineYieldCallback if there is one.
@@ -868,6 +902,9 @@ void* coroutineYield_(void *arg, CoroutineState state) {
   funcData = coroutinePass(currentCoroutine, funcData);
   currentCoroutine->state = COROUTINE_STATE_RUNNING;
   returnValue = funcData.data;
+  if (returnValue != NULL) {
+    returnValue = callCoroutineResumeCallback(returnValue);
+  }
 
   return returnValue;
 }
@@ -1613,6 +1650,16 @@ int coroutinesConfig(Coroutine *first, CoroutinesConfigOptions *options) {
     tss_set(_tssStackSize, (void*) ((intptr_t) stackSize));
     if (options != NULL) {
       tss_set(_tssStateData, options->stateData);
+      if (options->resumeCallback != NULL) {
+        free(tss_get(_tssCoroutineResumeCallback));
+        CoroutineResumeCallback *coroutineResumeCallbackPointer
+          = (CoroutineResumeCallback*) malloc(sizeof(CoroutineResumeCallback));
+        *coroutineResumeCallbackPointer = options->coroutineResumeCallback;
+        tss_set(_tssCoroutineResumeCallback, coroutineResumeCallbackPointer);
+      } else {
+        tss_set(_tssCoroutineResumeCallback, NULL);
+      }
+
       if (options->yieldCallback != NULL) {
         free(tss_get(_tssCoroutineYieldCallback));
         CoroutineYieldCallback *coroutineYieldCallbackPointer
@@ -1678,11 +1725,13 @@ int coroutinesConfig(Coroutine *first, CoroutinesConfigOptions *options) {
   _globalStackSize = stackSize;
   if (options != NULL) {
     _globalStateData = options->stateData;
+    _globalCoroutineResumeCallback = options->resumeCallback;
     _globalCoroutineYieldCallback = options->yieldCallback;
     _globalComutexUnlockCallback = options->unlockCallback;
     _globalCoconditionSignalCallback = options->signalCallback;
   } else {
     _globalStateData = NULL;
+    _globalCoroutineResumeCallback = NULL;
     _globalCoroutineYieldCallback = NULL;
     _globalComutexUnlockCallback = NULL;
     _globalCoconditionSignalCallback = NULL;

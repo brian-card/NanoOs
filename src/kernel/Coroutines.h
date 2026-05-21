@@ -114,6 +114,12 @@ typedef enum CoroutineState {
 /// @brief Function signature that can be used as a coroutine.
 typedef void* (*CoroutineFunction)(void *arg);
 
+/// @typedef CoroutineResumeCallback
+///
+/// @brief Function signature that can be used as a callback when a coroutine
+/// resumes.
+typedef void* (*CoroutineResumeCallback)(void *arg);
+
 /// @typedef CoroutineYieldCallback
 ///
 /// @brief Function signature that can be used as a callback when a coroutine
@@ -205,6 +211,8 @@ typedef struct Coroutine {
 ///   < COROUTINE_STACK_CHUNK_SIZE, COROUTINE_DEFAULT_STACK_SIZE will be used.
 /// @param stateData A pointer to arbitrary state data that will be passed to
 ///   the callbacks.  This parameter is optional and may be NULL.
+/// @param resumeCallback A function to call when a coroutine resumes.  This
+///   parameter is optional and may be NULL.
 /// @param yieldCallback A function to call when a coroutine yields.  This
 ///   parameter is optional and may be NULL.
 /// @param unlockCallback A function to call when a comutex is unlocked.  This
@@ -214,6 +222,7 @@ typedef struct Coroutine {
 typedef struct CoroutinesConfigOptions {
   uintptr_t stackSize;
   void *stateData;
+  CoroutineResumeCallback resumeCallback;
   CoroutineYieldCallback yieldCallback;
   ComutexUnlockCallback unlockCallback;
   CoconditionSignalCallback signalCallback;
