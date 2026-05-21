@@ -152,9 +152,11 @@ typedef struct FilesystemSeekParameters {
 ///
 /// @param pathname A string containing the full path to the file.
 /// @param mode A string containing the mode to open the file with.
+/// @param fd The numeric file descriptor to use for the file.
 typedef struct FilesystemFopenParameters {
   const char *pathname;
   const char *mode;
+  int         fd;
 } FilesystemFopenParameters;
 
 /// @struct FilesystemFcloseParameters
@@ -214,11 +216,11 @@ FILE* filesystemFopen(const char *pathname, const char *mode);
 #endif // fopen
 #define fopen filesystemFopen
 
-int filesystemFClose(FILE *stream);
+int filesystemFclose(FILE *stream);
 #ifdef fclose
 #undef fclose
 #endif // fclose
-#define fclose filesystemFClose
+#define fclose filesystemFclose
 
 int filesystemRemove(const char *pathname);
 #ifdef remove

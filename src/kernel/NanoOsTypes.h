@@ -183,11 +183,14 @@ typedef struct IoChannel {
 /// @param pipeEnd Pointer to the FileDescriptor at the other end of a pipe if
 ///   this FileDescriptor is part of a pipe.
 /// @param refCount The number of references to this FileDescriptor.
+/// @param file Pointer to the actual NanoOsFile object if this is a file-backed
+///   file descriptor.
 typedef struct FileDescriptor {
   IoChannel              inputChannel;
   IoChannel              outputChannel;
   struct FileDescriptor *pipeEnd;
   int                    refCount;
+  NanoOsFile            *file;
 } FileDescriptor;
 
 // Forward declaration.  Definition below.

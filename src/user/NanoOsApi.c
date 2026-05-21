@@ -90,7 +90,7 @@ NanoOsApi nanoOsApi = {
   
   // File operations:
   .fopen = filesystemFopen,
-  .fclose = filesystemFClose,
+  .fclose = filesystemFclose,
   .remove = filesystemRemove,
   .fseek = filesystemFSeek,
   .fileno = nanoOsFileno,

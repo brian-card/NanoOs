@@ -72,14 +72,20 @@ int nanoOsClose(int fd) {
     goto exit;
   }
   
-  processDescriptor->fileDescriptors[fd]->refCount--;
-  if (processDescriptor->fileDescriptors[fd]->refCount == 0) {
-    if (processDescriptor->fileDescriptors[fd]->pipeEnd != NULL) {
-      processDescriptor->fileDescriptors[fd]->pipeEnd->pipeEnd = NULL;
+  if (processDescriptor->fileDescriptors[fd]->file != NULL) {
+    // filesystemFclose will manage the refCount and freeing the FileDescriptor
+    returnValue = filesystemFclose(
+      processDescriptor->fileDescriptors[fd]->file);
+  } else {
+    processDescriptor->fileDescriptors[fd]->refCount--;
+    if (processDescriptor->fileDescriptors[fd]->refCount == 0) {
+      if (processDescriptor->fileDescriptors[fd]->pipeEnd != NULL) {
+        processDescriptor->fileDescriptors[fd]->pipeEnd->pipeEnd = NULL;
+      }
+      free(processDescriptor->fileDescriptors[fd]);
     }
-    free(processDescriptor->fileDescriptors[fd]);
+    processDescriptor->fileDescriptors[fd] = NULL;
   }
-  processDescriptor->fileDescriptors[fd] = NULL;
   
 exit:
   return returnValue;
@@ -116,9 +122,14 @@ int nanoOsDup2(int oldfd, int newfd) {
     // the pipe.
     newFileDescriptor->pipeEnd->pipeEnd = NULL;
   }
-  newFileDescriptor->refCount--;
-  if (newFileDescriptor->refCount == 0) {
-    free(newFileDescriptor); newFileDescriptor = NULL;
+  if (newFileDescriptor->file != NULL) {
+    // filesystemFclose will manage the refCount and freeing the file descriptor
+    filesystemFclose(newFileDescriptor->file);
+  } else {
+    newFileDescriptor->refCount--;
+    if (newFileDescriptor->refCount == 0) {
+      free(newFileDescriptor); newFileDescriptor = NULL;
+    }
   }
   
   // Move the old file descriptor into the new one's slot.
@@ -214,16 +225,18 @@ int nanoOsPipe(int pipefd[2]) {
   // Now allocate each one
   for (int ii = numFileDescriptors; ii < (numFileDescriptors + 2); ii++) {
     processDescriptor->fileDescriptors[ii]
-      = (FileDescriptor*) malloc(sizeof(FileDescriptor));
+      = (FileDescriptor*) calloc(1, sizeof(FileDescriptor));
     if (processDescriptor->fileDescriptors[ii] == NULL) {
       errno = ENOMEM;
       goto freeFileDescriptors;
     }
     
     // Initialize the file descriptor's channels to point to ourself.
-    processDescriptor->fileDescriptors[ii]->inputChannel.pid = PROCESS_ID_NOT_SET;
+    processDescriptor->fileDescriptors[ii]->inputChannel.pid
+      = PROCESS_ID_NOT_SET;
     processDescriptor->fileDescriptors[ii]->inputChannel.messageType = -1;
-    processDescriptor->fileDescriptors[ii]->outputChannel.pid = PROCESS_ID_NOT_SET;
+    processDescriptor->fileDescriptors[ii]->outputChannel.pid
+      = PROCESS_ID_NOT_SET;
     processDescriptor->fileDescriptors[ii]->outputChannel.messageType = -1;
     processDescriptor->fileDescriptors[ii]->pipeEnd = NULL;
     processDescriptor->fileDescriptors[ii]->refCount = 1;
@@ -253,6 +266,7 @@ int nanoOsPipe(int pipefd[2]) {
 freeFileDescriptors:
   for (int ii = numFileDescriptors; ii < (numFileDescriptors + 2); ii++) {
     free(processDescriptor->fileDescriptors[ii]);
+    processDescriptor->fileDescriptors[ii] = NULL;
   }
   // We need to shrink the fileDescriptors array back down to its original size.
   // Since we're reducing the amount of memory consumed, this is guaranteed to

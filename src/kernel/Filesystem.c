@@ -63,7 +63,7 @@ int filesystemOpenFileCommandHandler(
       if (nanoOsFile != NULL) {
         nanoOsFile->file = fileHandle;
         nanoOsFile->currentPosition = 0;
-        nanoOsFile->fd = filesystemState->numOpenFiles + 3;
+        nanoOsFile->fd = fopenParameters->fd;
         nanoOsFile->owner = processPid(processMessageFrom(processMessage));
         filesystemState->numOpenFiles++;
 
@@ -498,37 +498,115 @@ int getPartitionInfo(FilesystemState *fs) {
 /// @return Returns a pointer to an initialized FILE object on success, NULL on
 /// failure.
 FILE* filesystemFopen(const char *pathname, const char *mode) {
+  FILE *file = NULL;
+
+  ProcessDescriptor *processDescriptor = getRunningProcess();
+  if (processDescriptor == NULL) {
+    // This should be impossible, but check anyway.
+    errno = EOTHER;
+    goto exit; // return NULL
+  }
+  
   if ((pathname == NULL) || (*pathname == '\0')
     || (mode == NULL) || (*mode == '\0')
   ) {
-    return NULL;
+    errno = EINVAL;
+    goto exit; // return NULL
   }
+
+  uint8_t numFileDescriptors = processDescriptor->numFileDescriptors;
+  void *check = realloc(processDescriptor->fileDescriptors,
+    (numFileDescriptors + 1) * sizeof(FileDescriptor*));
+  if (check == NULL) {
+    errno = ENOMEM;
+    goto exit; // return NULL
+  }
+  processDescriptor->fileDescriptors = (FileDescriptor**) check;
+  processDescriptor->fileDescriptors[numFileDescriptors]
+    = (FileDescriptor*) calloc(1, sizeof(FileDescriptor));
+  if (processDescriptor->fileDescriptors[numFileDescriptors] == NULL) {
+    errno = ENOMEM;
+    goto freeFileDescriptor;
+  }
+
   FilesystemFopenParameters fopenParameters = {
     .pathname = pathname,
     .mode = mode,
+    .fd = numFileDescriptors,
   };
 
   ProcessMessage *msg = initSendProcessMessageToPid(
     SCHEDULER_STATE->rootFsPid, FILESYSTEM_OPEN_FILE,
     &fopenParameters, sizeof(fopenParameters), true);
   processMessageWaitForDone(msg, NULL);
-  FILE *file = (FILE*) processMessageData(msg);
+  file = (FILE*) processMessageData(msg);
   processMessageRelease(msg);
+  if (file == NULL) {
+    goto freeFileDescriptor;
+  }
 
+  processDescriptor->fileDescriptors[numFileDescriptors]->file = file;
+  processDescriptor->fileDescriptors[numFileDescriptors]->refCount = 1;
+  processDescriptor->numFileDescriptors = numFileDescriptors + 1;
+
+  goto exit;
+
+freeFileDescriptor:
+  free(processDescriptor->fileDescriptors[numFileDescriptors]);
+  processDescriptor->fileDescriptors[numFileDescriptors] = NULL;
+  // We need to shrink the fileDescriptors array back down to its original size.
+  // Since we're reducing the amount of memory consumed, this is guaranteed to
+  // be successful and not relocate the pointer, so no need to do anything with
+  // the return value.
+  realloc(processDescriptor->fileDescriptors,
+    numFileDescriptors * sizeof(FileDescriptor*));
+
+exit:
   return file;
 }
 
-/// @fn int filesystemFClose(FILE *stream)
+/// @fn int filesystemFclose(FILE *stream)
 ///
 /// @brief Implementation of the standard C fclose call.
 ///
 /// @param stream A pointer to a previously-opened FILE object.
 ///
 /// @return This function always succeeds and always returns 0.
-int filesystemFClose(FILE *stream) {
+int filesystemFclose(FILE *stream) {
   int returnValue = 0;
 
-  if (stream != NULL) {
+  ProcessDescriptor *processDescriptor = getRunningProcess();
+  if (processDescriptor == NULL) {
+    // This should be impossible, but check anyway.
+    errno = EOTHER;
+    returnValue = EOF;
+    goto exit; // return NULL
+  }
+
+  if (stream == NULL) {
+    errno = EBADF;
+    returnValue = EOF;
+    goto exit;
+  }
+
+  if (stream->fd >= processDescriptor->numFileDescriptors) {
+    errno = EBADF;
+    returnValue = EOF;
+    goto exit;
+  }
+
+  FileDescriptor *fileDescriptor
+    = processDescriptor->fileDescriptors[stream->fd];
+  if (fileDescriptor == NULL) {
+    errno = EBADF;
+    returnValue = EOF;
+    goto exit;
+  }
+
+  fileDescriptor->refCount--;
+  if (fileDescriptor->refCount == 0) {
+    int fd = stream->fd;
+
     FilesystemFcloseParameters fcloseParameters;
     fcloseParameters.stream = stream;
     fcloseParameters.returnValue = 0;
@@ -544,8 +622,12 @@ int filesystemFClose(FILE *stream) {
     }
 
     processMessageRelease(msg);
+
+    free(fileDescriptor); fileDescriptor = NULL;
+    processDescriptor->fileDescriptors[fd] = NULL;
   }
 
+exit:
   return returnValue;
 }
 
