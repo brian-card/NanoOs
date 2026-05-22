@@ -583,6 +583,25 @@ typedef struct ExecArgs {
   SchedulerState  *schedulerState;
 } ExecArgs;
 
+/// @def SIGNAL_SIGNATURE
+///
+/// @brief The 64-bit signature to indicate that a signal callback is to be
+/// used.
+#define SIGNAL_SIGNATURE 0x42434C414E474953 // "SIGNALCB"
+
+/// @struct SignalCallback
+///
+/// @brief Definition for specifying that a process should call the signal
+/// callback to process a signal.
+///
+/// @param signature The 64-bit SIGNAL_SIGNATURE value to designate this as a
+///   signal callback.
+/// @param signum The integer signal number to use.
+typedef struct SignalCallback {
+  uint64_t signature;
+  int      signum;
+} SignalCallback;
+
 #ifdef __cplusplus
 } // extern "C"
 #endif
