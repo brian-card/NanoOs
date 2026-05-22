@@ -53,6 +53,7 @@ typedef struct NanoOsFile NanoOsFile;
 #define FILE NanoOsFile
 typedef struct SchedulerState SchedulerState;
 typedef struct ProcessDescriptor ProcessDescriptor;
+typedef struct ProcessQueue ProcessQueue;
 typedef Coroutine Thread;
 typedef uint8_t Pid;
 typedef struct ProcessInfo ProcessInfo;
@@ -94,11 +95,13 @@ const char* schedulerGetHostname(void);
 int schedulerExecve(const char *pathname,
   char *const argv[], char *const envp[]);
 int schedulerAssignMemory(void *ptr);
+int processQueuePush(
+  ProcessQueue *processQueue, ProcessDescriptor *processDescriptor);
+ProcessDescriptor* processQueuePop(ProcessQueue *processQueue);
+int processQueueRemove(
+  ProcessQueue *processQueue, ProcessDescriptor *processDescriptor);
 
 // Coroutine setup functions used in the loader.
-void yieldCallback(void *stateData, Coroutine *coroutine);
-void unlockCallback(void *stateData, Comutex *comutex);
-void signalCallback(void *stateData, Cocondition *cocondition);
 void* dummyProcess(void *args);
 
 // Thread that will be used to represent the scheduler.

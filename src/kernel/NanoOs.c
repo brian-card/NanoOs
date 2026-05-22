@@ -44,6 +44,100 @@
 extern const User users[];
 extern const int NUM_USERS;
 
+// Thread callbacks.  ***DO NOT** do parameter validation.  These callbacks
+// are set when threadConfig is called.  If these callbacks are called at
+// all (which they should be), then we should assume that things are configured
+// correctly.  This is in kernel space code, which we have full control over,
+// so we should assume that things are setup correctly.  If they're not setup
+// correctly, we should fix the configuration, not do parameter validation.
+// These callbacks - especially yieldCallback - are in the critical
+// path.  Single cycles matter.  Don't waste more time than we need to.
+
+/// @fn void yieldCallback(void *stateData, Thread *thread)
+///
+/// @brief Function to be called right before a thread yields.
+///
+/// @param stateData The thread state pointer provided when threadConfig
+///   was called.
+/// @param thread A pointer to the Thread structure representing the
+///   thread that's about to yield.  This parameter is unused by this
+///   function.
+///
+/// @Return This function returns no value.
+void yieldCallback(void *stateData, Thread *thread) {
+  (void) thread;
+  SchedulerState *schedulerState = *((SchedulerState**) stateData);
+  if (schedulerState == NULL) {
+    // We're being called before the scheduler has been started.  This is
+    // sometimes done to fix the stack size of the scheduler itself before
+    // starting it.  Just return.
+    return;
+  }
+
+  // No need to check HAL->timer for NULL.  This function can't be configured
+  // to be called unless it wasn't NULL at boot.
+  HAL->timer->cancel(schedulerState->preemptionTimer);
+
+  return;
+}
+
+/// @fn void unlockCallback(void *stateData, Comutex *comutex)
+///
+/// @brief Function to be called when a mutex (Comutex) is unlocked.
+///
+/// @param stateData The thread state pointer provided when threadConfig
+///   was called.
+/// @param comutex A pointer to the Comutex object that has been unlocked.  At
+///   the time this callback is called, the mutex has been unlocked but its
+///   thread pointer has not been cleared.
+///
+/// @return This function returns no value, but if the head of the Comutex's
+/// lock queue is found in one of the waiting queues, it is removed from the
+/// waiting queue and pushed onto the ready queue.
+void unlockCallback(void *stateData, Comutex *comutex) {
+  (void) stateData;
+  ProcessDescriptor *processDescriptor = threadContext(comutex->head);
+  if (processDescriptor == NULL) {
+    // Nothing is waiting on this mutex.  Just return.
+    return;
+  }
+  processQueueRemove(processDescriptor->processQueue, processDescriptor);
+  processQueuePush(processDescriptor->readyQueue, processDescriptor);
+
+  return;
+}
+
+/// @fn void signalCallback(
+///   void *stateData, Cocondition *cocondition)
+///
+/// @brief Function to be called when a condition (Cocondition) is signalled.
+///
+/// @param stateData The thread state pointer provided when threadConfig
+///   was called.
+/// @param cocondition A pointer to the Cocondition object that has been
+///   signalled.  At the time this callback is called, the number of signals has
+///   been set to the number of waiters that will be signalled.
+///
+/// @return This function returns no value, but if the head of the Cocondition's
+/// signal queue is found in one of the waiting queues, it is removed from the
+/// waiting queue and pushed onto the ready queue.
+void signalCallback(void *stateData, Cocondition *cocondition) {
+  (void) stateData;
+  Thread *cur = cocondition->head;
+
+  for (int ii = 0; (ii < cocondition->numSignals) && (cur != NULL); ii++) {
+    ProcessDescriptor *processDescriptor = threadContext(cur);
+    // It's not possible for processDescriptor to be NULL.  We only enter this
+    // loop if cocondition->numSignals > 0, so there MUST be something waiting
+    // on this condition.
+    processQueueRemove(processDescriptor->processQueue, processDescriptor);
+    processQueuePush(processDescriptor->readyQueue, processDescriptor);
+    cur = cur->nextToSignal;
+  }
+
+  return;
+}
+
 /// @fn void nanoOsStart(void)
 ///
 /// @brief Main entrypoint for the OS that is to be called from whatever the
