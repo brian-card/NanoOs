@@ -53,6 +53,44 @@ extern const int NUM_USERS;
 // These callbacks - especially yieldCallback - are in the critical
 // path.  Single cycles matter.  Don't waste more time than we need to.
 
+/// @fn void defaultSignalHandler(int signum)
+///
+/// @brief sighandler_t-compliant default signal handler for when a signal
+/// callback is processed by resumeCallback.
+///
+/// @param signum The integer signal number that was sent.
+///
+/// @return This function returns no value.
+void defaultSignalHandler(int signum) {
+  (void) signum;
+}
+
+/// @fn void* resumeCallback(void *arg)
+///
+/// @brief Callback to be called when a thread is resumed with a non-NULL
+/// argument.
+///
+/// @param arg The argument that the thread is resumed with.
+///
+/// @return Returns a pointer to whatever value was processed by the appropriate
+/// callback on successful parsing, the provied arg if nothing matched.
+void* resumeCallback(void *arg) {
+  void *returnValue = arg;
+  uint64_t *signature = (uint64_t*) arg;
+
+  switch (*signature) {
+    case SIGNAL_SIGNATURE:
+      {
+        SignalCallback *signalCallback = (SignalCallback*) arg;
+        defaultSignalHandler(signalCallback->signum);
+        returnValue = NULL;
+        break;
+      }
+  }
+
+  return returnValue;
+}
+
 /// @fn void yieldCallback(void *stateData, Thread *thread)
 ///
 /// @brief Function to be called right before a thread yields.
@@ -161,7 +199,7 @@ void nanoOsStart(void) {
   ThreadsConfigOptions threadsConfigOptions = {
     .stackSize = HAL->memory->processStackSize(USE_HAL_MEMORY_DEBUG),
     .stateData = &threadStatePointer,
-    .resumeCallback = NULL,
+    .resumeCallback = resumeCallback,
     .yieldCallback = NULL,
     .unlockCallback = unlockCallback,
     .signalCallback = signalCallback,
