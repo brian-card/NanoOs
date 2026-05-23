@@ -75,9 +75,6 @@ typedef struct posix_spawnattr_t posix_spawnattr_t;
 struct termios;
 
 typedef struct NanoOsApi {
-  // HAL access:
-  const Hal *hal;
-  
   // Standard streams:
   FILE *stdin;
   FILE *stdout;
@@ -210,11 +207,14 @@ typedef struct NanoOsApi {
   // NanoOsHardware.h functions:
   int (*shutdown)(NanoOsShutdownType shutdownType);
   
-  // Debug functions
+  // Debug functions:
   int (*printString)(const char *string);
   int (*printInt)(long long int integer);
   int (*printDouble)(double floatingPointValue);
   int (*printHex)(unsigned long long int integer);
+  
+  // Limited HAL access:
+  HalBlockDevice *blockDevice;
 } NanoOsApi;
 
 extern NanoOsApi nanoOsApi;
