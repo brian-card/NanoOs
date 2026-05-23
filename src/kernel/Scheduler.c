@@ -2211,7 +2211,10 @@ int schedulerKillProcessCommandHandler(
     }
   }
 
-  // DO NOT release the message since that's done by the caller.
+  if (processMessageWaiting(processMessage) == false) {
+    processMessageRelease(processMessage);
+  }
+  // else DO NOT release the message since that's done by the caller.
 
   return returnValue;
 }
