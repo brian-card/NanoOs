@@ -91,6 +91,8 @@ const char *errorStrings[] = {
   "Exec format error",                // ENOEXEC
   "Operation not supported",          // ENOTSUP
   "No such device or address",        // ENXIO
+  "Operation not permitted",          // EPERM
+  "No such process",                  // ESRCH
 };
 
 /// @var NUM_ERRORS

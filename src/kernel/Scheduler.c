@@ -971,6 +971,44 @@ int schedulerKillProcess(Pid pid) {
   return returnValue;
 }
 
+/// @fn int schedulerSendSignal(Pid pid, int signal)
+///
+/// @brief Send a signal to a process.
+///
+/// @param pid The process ID of the process to send the signal to.
+/// @param signal The integer signal to send to the process.
+///
+/// @return On success, 0 is returned.  On failure, -1 is returned and errno is
+/// set appropriately.
+int schedulerSendSignal(Pid pid, int signal) {
+  int returnValue = -1;
+
+  SchedulerSendSignalArgs sendSignalArgs = {
+    .signature = SCHEDULER_COMMAND_SIGNATURE,
+    .pid = pid,
+    .signal = signal,
+    .returnValue = 0,
+    .errorNumber = 0,
+  };
+  ProcessMessage *processMessage
+    = initSendProcessMessageToPid(
+    SCHEDULER_STATE->schedulerPid, SCHEDULER_SEND_SIGNAL,
+    /* data= */ &sendSignalArgs, /* size= */ sizeof(sendSignalArgs), true);
+  if (processMessage == NULL) {
+    printString("ERROR: Could not communicate with scheduler.\n");
+    errno = EOTHER;
+    return returnValue; // -1
+  }
+
+  processMessageWaitForDone(processMessage, NULL);
+  processMessageRelease(processMessage);
+
+  returnValue = sendSignalArgs.returnValue;
+  errno = sendSignalArgs.errorNumber;
+
+  return returnValue;
+}
+
 /// @fn UserId schedulerGetProcessUser(void)
 ///
 /// @brief Get the ID of the user running the current process.
@@ -2910,6 +2948,96 @@ int schedulerSpawnCommandHandler(
   return returnValue;
 }
 
+/// @fn int schedulerSendSignalCommandHandler(
+///   SchedulerState *schedulerState, ProcessMessage *processMessage)
+///
+/// @brief Send a signal to a process.
+///
+/// @param schedulerState A pointer to the SchedulerState maintained by the
+///   scheduler process.
+/// @param processMessage A pointer to the ProcessMessage that was received.
+///
+/// @return Returns 0 on success, non-zero error code on failure.
+int schedulerSendSignalCommandHandler(
+  SchedulerState *schedulerState, ProcessMessage *processMessage
+) {
+  (void) schedulerState;
+
+  int returnValue = 0;
+  if (processMessage == NULL) {
+    // This should be impossible, but there's nothing to do.  Print an error
+    // and return good status.
+    printString("ERROR: NULL message provided to ");
+    printString(__func__);
+    printString("\n");
+    return returnValue; // 0
+  }
+
+  SchedulerSendSignalArgs *sendSignalArgs
+    = (SchedulerSendSignalArgs*) processMessageData(processMessage);
+  if (sendSignalArgs == NULL) {
+    // Nothing we can do.  Just return good status so that we don't attempt to
+    // process this message again.
+    printString("ERROR: NULL sendSignalArgs provided to ");
+    printString(__func__);
+    printString("\n");
+    processMessageSetDone(processMessage);
+    return returnValue; // 0
+  }
+
+  if (sendSignalArgs->signature != SCHEDULER_COMMAND_SIGNATURE) {
+    // We don't know what this is, so don't attempt to set any part of the
+    // structure.
+    printString("ERROR: Invalid signature in ");
+    printString(__func__);
+    printString("\n");
+    processMessageSetDone(processMessage);
+    return returnValue; // 0
+  }
+
+  Pid pid = sendSignalArgs->pid;
+  if ((pid < 2)
+    || (pid > NANO_OS_NUM_PROCESSES)
+    || (processRunning(&allProcesses[pid - 1]) == false)
+  ) {
+    sendSignalArgs->returnValue = -1;
+    sendSignalArgs->errorNumber = ESRCH;
+    printString("ERROR: Invalid process ID specified in ");
+    printString(__func__);
+    printString("\n");
+    processMessageSetDone(processMessage);
+    return returnValue; // 0
+  }
+
+  if (sendSignalArgs->signal < 0) {
+    sendSignalArgs->returnValue = -1;
+    sendSignalArgs->errorNumber = EINVAL;
+    printString("ERROR: Invalid signal specified in ");
+    printString(__func__);
+    printString("\n");
+    processMessageSetDone(processMessage);
+    return returnValue; // 0
+  }
+
+  if (sendSignalArgs->signal == 0) {
+    // Per POSIX, no signal is sent, but checks are done.  We did the checks
+    // above, so just return good status here.
+    sendSignalArgs->returnValue = 0;
+    sendSignalArgs->errorNumber = 0;
+    return returnValue; // 0
+  }
+
+  SignalCallback signalCallback = {
+    .signature = SIGNAL_SIGNATURE,
+    .signum = sendSignalArgs->signal,
+  };
+  processResume(&allProcesses[pid - 1], &signalCallback);
+
+  sendSignalArgs->returnValue = 0;
+  sendSignalArgs->errorNumber = 0;
+  return returnValue;
+}
+
 /// @typedef SchedulerCommandHandler
 ///
 /// @brief Signature of command handler for a scheduler command.
@@ -2932,6 +3060,7 @@ const SchedulerCommandHandler schedulerCommandHandlers[] = {
   schedulerGetHostnameCommandHandler,       // SCHEDULER_GET_HOSTNAME
   schedulerExecveCommandHandler,            // SCHEDULER_EXECVE
   schedulerSpawnCommandHandler,             // SCHEDULER_SPAWN
+  schedulerSendSignalCommandHandler,        // SCHEDULER_SEND_SIGNAL
 };
 
 /// @fn void handleSchedulerMessage(SchedulerState *schedulerState)

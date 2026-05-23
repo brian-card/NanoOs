@@ -43,6 +43,12 @@ extern "C"
 {
 #endif
 
+/// @def SCHEDULER_COMMAND_SIGNATURE
+///
+/// @brief Signature to be used in scheduler commands that take argument
+/// structures.  "SCHEDCMD" expressed as a 64-bit, little-endian value.
+#define SCHEDULER_COMMAND_SIGNATURE ((int64_t) 0x444D434445484353)
+
 // Forward declarations and typedefs since we can't include NanoOsTypes.h here.
 struct timespec;
 typedef struct Cocondition Cocondition;
@@ -59,6 +65,24 @@ typedef uint8_t Pid;
 typedef struct ProcessInfo ProcessInfo;
 typedef int16_t UserId;
 
+/// @struct SchedulerSendSignalArgs
+///
+/// @brief Arguments and return value for the SCHEDULER_SEND_SIGNAL command.
+///
+/// @param signature The 64-bit signature for a scheduler command.  This should
+///   always be SCHEDULER_COMMAND_SIGNATURE.
+/// @param pid The process ID of the process to send the signal to.
+/// @param signal The integer signal to send.
+/// @param returnValue The returnValue of the command handler.
+/// @param errorNumber The errno value to set in the calling process.
+typedef struct SchedulerSendSignalArgs {
+  int64_t signature;
+  Pid pid;
+  int signal;
+  int returnValue;
+  int errorNumber;
+} SchedulerSendSignalArgs;
+
 /// @enum SchedulerCommandResponse
 ///
 /// @brief Commands and responses understood by the scheduler inter-process
@@ -74,6 +98,7 @@ typedef enum SchedulerCommandResponse {
   SCHEDULER_GET_HOSTNAME,
   SCHEDULER_EXECVE,
   SCHEDULER_SPAWN,
+  SCHEDULER_SEND_SIGNAL,
   NUM_SCHEDULER_COMMANDS,
   // Responses:
   SCHEDULER_PROCESS_COMPLETE,
@@ -87,6 +112,7 @@ ProcessDescriptor* schedulerGetProcessById(unsigned int pid);
 Pid schedulerGetNumRunningProcesses(struct timespec *timeout);
 ProcessInfo* schedulerGetProcessInfo(void);
 int schedulerKillProcess(Pid pid);
+int schedulerSendSignal(Pid pid, int signal);
 UserId schedulerGetProcessUser(void);
 int schedulerSetProcessUser(UserId userId);
 FileDescriptor* schedulerGetFileDescriptor(FILE *stream);
