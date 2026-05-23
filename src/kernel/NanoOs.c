@@ -36,6 +36,7 @@
 #include "Scheduler.h"
 #include "../user/NanoOsApi.h"
 #include "../user/NanoOsLibC.h"
+#include "../user/NanoOsSignal.h"
 
 // Must come last
 #include "../user/NanoOsStdio.h"
@@ -62,7 +63,18 @@ extern const int NUM_USERS;
 ///
 /// @return This function returns no value.
 void defaultSignalHandler(int signum) {
-  (void) signum;
+  if ((signum == SIGINT) || (signum == SIGTERM)) {
+    // Kill this process.  Send a message to the scheduler and then yield
+    // immediately.
+    ProcessMessage *processMessage = initSendProcessMessageToPid(
+      SCHEDULER_STATE->schedulerPid, SCHEDULER_KILL_PROCESS,
+      (void*) ((uintptr_t) getRunningPid()), /* size= */ 0, false);
+    if (processMessage == NULL) {
+      printf("ERROR: Could not communicate with scheduler.\n");
+      return;
+    }
+    processYield();
+  }
 }
 
 /// @fn void* resumeCallback(void *arg)
