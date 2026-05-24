@@ -39,6 +39,7 @@
 #include "OverlayFunctions.h"
 #include "Scheduler.h"
 #include "Processes.h"
+#include "../user/NanoOsErrno.h"
 #include "../user/NanoOsStdio.h"
 
 /****************** Begin Custom Memory Management Functions ******************/
@@ -688,7 +689,25 @@ int memoryManagerReallocCommandHandler(
   MemoryManagerState *memoryManagerState, ProcessMessage *incoming
 ) {
   int returnValue = 0;
-  ReallocMessage *reallocMessage = (ReallocMessage*) processMessageData(incoming);
+  
+  ReallocMessage *reallocMessage
+    = (ReallocMessage*) processMessageData(incoming);
+  if (reallocMessage == NULL) {
+    ProcessDescriptor *processDescriptor = processMessageFrom(incoming);
+    if (processDescriptor == NULL) {
+      printString("ERROR! Received MEMORY_MANAGER_REALLOC message from "
+        "unknown process\n");
+      returnValue = -EINVAL;
+      goto exit;
+    }
+    
+    printString("ERROR! Process ");
+    printInt(processPid(processDescriptor));
+    printString(" sent NULL ReallocMessage\n");
+    returnValue = -EINVAL;
+    goto exit;
+  }
+  
   void *clientReturnValue
     = localRealloc(memoryManagerState,
       reallocMessage->ptr, reallocMessage->size,
@@ -738,6 +757,7 @@ int memoryManagerReallocCommandHandler(
     returnValue = -1;
   }
   
+exit:
   return returnValue;
 }
 
@@ -861,8 +881,8 @@ int memoryManagerFreeProcessMemoryCommandHandler(
 ///
 /// @brief Command handler for the MEMORY_MANAGER_ASSIGN_MEMORY command. Makes
 /// sure that the memory falls in the range of dynamic memory and, if so,
-/// assigns it to the specified process ID.  If the provided pointer is not in the
-/// range of dynamic memory, no action is taken.
+/// assigns it to the specified process ID.  If the provided pointer is not in
+/// the range of dynamic memory, no action is taken.
 ///
 /// @note This function can only be called from the scheduler.
 ///
