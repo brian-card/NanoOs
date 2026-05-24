@@ -2115,6 +2115,11 @@ int schedulerKillProcessCommandHandler(
   int processIndex = pid - 1;
   processMessageData(processMessage) = (void*) ((intptr_t) 0);
 
+  bool selfKill = false;
+  if (processPid(processMessageFrom(processMessage)) == pid) {
+    selfKill = true;
+  }
+
   if ((pid >= schedulerState->firstUserPid)
     && (pid <= NANO_OS_NUM_PROCESSES)
     && (processRunning(&allProcesses[processIndex]))
@@ -2141,54 +2146,53 @@ int schedulerKillProcessCommandHandler(
         }
       }
 
-      // Tell the console to release the port for us.  We will forward it
-      // the message we acquired above, which it will use to send to the
-      // correct shell to unblock it.  We need to do this before terminating
-      // the process because, in the event the process we're terminating is one
-      // of the shell process slots, the message won't get released because
-      // there's no shell blocking waiting for the message.
-      if (schedulerInitSendMessageToPid(
-        SCHEDULER_STATE->consolePid,
-        CONSOLE_RELEASE_PID_PORT,
-        /* data= */ (void*) ((intptr_t) pid),
-        /* size= */ 0) != processSuccess
-      ) {
-        printString("ERROR: Could not send CONSOLE_RELEASE_PID_PORT message ");
-        printString("to console process\n");
-        processMessageData(processMessage) = (void*) ((intptr_t) 1);
+      if (selfKill == false) {
+        // Tell the console to release the port for us.  We will forward it
+        // the message we acquired above, which it will use to send to the
+        // correct shell to unblock it.  We need to do this before terminating
+        // the process because, in the event the process we're terminating is
+        // one of the shell process slots, the message won't get released
+        // because there's no shell blocking waiting for the message.
+        if (schedulerInitSendMessageToPid(
+          SCHEDULER_STATE->consolePid,
+          CONSOLE_RELEASE_PID_PORT,
+          /* data= */ (void*) ((intptr_t) pid),
+          /* size= */ 0) != processSuccess
+        ) {
+          printString(
+            "ERROR: Could not send CONSOLE_RELEASE_PID_PORT message ");
+          printString("to console process\n");
+          processMessageData(processMessage) = (void*) ((intptr_t) 1);
+        }
+
+        // Close the file descriptors before we terminate the process so that
+        // anything that gets sent to the process's queue gets cleaned up when
+        // we terminate it.
+        closeProcessFileDescriptors(schedulerState, processDescriptor);
+
+        if (schedulerInitSendMessageToPid(
+          SCHEDULER_STATE->memoryManagerPid,
+          MEMORY_MANAGER_FREE_PROCESS_MEMORY,
+          /* data= */ (void*) ((intptr_t) pid),
+          /* size= */ 0) != processSuccess
+        ) {
+          printString(
+            "ERROR: Could not send MEMORY_MANAGER_FREE_PROCESS_MEMORY");
+          printString("message to memory manager process\n");
+          processMessageData(processMessage) = (void*) ((intptr_t) 1);
+        }
+
+        // MEMORY_MANAGER_FREE_PROCESS_MEMORY will have freed envp if it
+        // existed, so make sure it's NULL now.
+        processDescriptor->envp = NULL;
+        processDescriptor->name = NULL;
+        processDescriptor->userId = NO_USER_ID;
       }
-
-      // Close the file descriptors before we terminate the process so that
-      // anything that gets sent to the process's queue gets cleaned up when
-      // we terminate it.
-      closeProcessFileDescriptors(schedulerState, processDescriptor);
-
-      if (schedulerInitSendMessageToPid(
-        SCHEDULER_STATE->memoryManagerPid,
-        MEMORY_MANAGER_FREE_PROCESS_MEMORY,
-        /* data= */ (void*) ((intptr_t) pid),
-        /* size= */ 0) != processSuccess
-      ) {
-        printString("ERROR: Could not send MEMORY_MANAGER_FREE_PROCESS_MEMORY");
-        printString("message to memory manager process\n");
-        processMessageData(processMessage) = (void*) ((intptr_t) 1);
-      }
-
-      if (processMessageSetDone(processMessage) != processSuccess) {
-        printString("ERROR: Could not mark message done in "
-          "schedulerKillProcessCommandHandler.\n");
-      }
-
-      // MEMORY_MANAGER_FREE_PROCESS_MEMORY will have freed envp if it existed,
-      // so make sure it's NULL now.
-      processDescriptor->envp = NULL;
 
       // Terminate the process and make sure its message queue gets flushed.
       if (processTerminate(processDescriptor, false) == processSuccess) {
         threadSetContext(processDescriptor->mainThread,
           processDescriptor);
-        processDescriptor->name = NULL;
-        processDescriptor->userId = NO_USER_ID;
 
         // It's likely (i.e. almost certain) that the killed process was a user
         // process that was killed by a user process.  That would mean that we
@@ -2206,14 +2210,15 @@ int schedulerKillProcessCommandHandler(
         printHex((uintptr_t) processMessage);
         printString(" done\n");
         processMessageData(processMessage) = (void*) ((intptr_t) 1);
-        if (processMessageSetDone(processMessage) != processSuccess) {
-          printString("ERROR: Could not mark message done in "
-            "schedulerKillProcessCommandHandler.\n");
-        }
 
         // Do *NOT* push the process back onto the free queue in this case.
         // If we couldn't terminate it, it's not valid to try and reuse it for
         // another process.
+      }
+
+      if (processMessageSetDone(processMessage) != processSuccess) {
+        printString("ERROR: Could not mark message done in "
+          "schedulerKillProcessCommandHandler.\n");
       }
     } else {
       // Tell the caller that we've failed.
