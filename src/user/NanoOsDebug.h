@@ -44,7 +44,7 @@
 /// @brief Print a non-newline-terminated debug message.
 #define startDebugMessage(message) \
   printString("["); \
-  printInt(HAL->getElapsedMicroseconds(0)); \
+  printInt(HAL->clock->getElapsedMicroseconds(0)); \
   printString(" Process "); \
   printInt(getRunningPid()); \
   printString(" "); \
