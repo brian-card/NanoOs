@@ -385,15 +385,17 @@ int schedulerSendProcessMessageToProcess(
   if ((processDescriptor == NULL)
     || (processDescriptor->mainThread == NULL)
   ) {
-    printString(
-      "ERROR: Attempt to send scheduler processMessage to NULL process.\n");
+    printString(__func__);
+    printString(": ERROR: Attempt to send processMessage to NULL process.\n");
     returnValue = processError;
-    return returnValue;
+    goto exit;
   } else if (processMessage == NULL) {
-    printString(
-      "ERROR: Attempt to send NULL scheduler processMessage to process.\n");
+    printString(__func__);
+    printString(": ERROR: Attempt to send NULL processMessage to process ");
+    printInt(processDescriptor->pid);
+    printString(".\n");
     returnValue = processError;
-    return returnValue;
+    goto exit;
   }
   // processMessage->from would normally be set when we do a
   // processMessageQueuePush. We're not using that mechanism here, so we have
@@ -405,22 +407,39 @@ int schedulerSendProcessMessageToProcess(
   // comessageQueuePush.
   processMessage->msg_sync = &msg_sync_array[MSG_CORO_SAFE];
 
+  // Sanity checks
   if (processCorrupted(processDescriptor)) {
-    printString("ERROR: Called process is corrupted:\n");
-    returnValue = processError;
-    return returnValue;
-  }
-  processResume(processDescriptor, processMessage);
-
-  if (processMessageDone(processMessage) != true) {
-    // This is our only indication from the called process that something went
-    // wrong.  Return an error status here.
-    printString("ERROR: Process ");
+    printString(__func__);
+    printString(": ERROR: Process ");
     printInt(processDescriptor->pid);
-    printString(" did not mark sent message done.\n");
+    printString(" is corrupted\n");
     returnValue = processError;
+    goto exit;
+  }
+  if (processRunning(processDescriptor) == false) {
+    printString(__func__);
+    printString(": ERROR: Process ");
+    printInt(processDescriptor->pid);
+    printString(" is not running\n");
+    returnValue = processError;
+    goto exit;
   }
 
+  returnValue = processMessageQueuePush(processDescriptor, processMessage);
+  if (returnValue != processSuccess) {
+    printString(__func__);
+    printString(": ERROR: Could not push message onto process ");
+    printInt(processDescriptor->pid);
+    printString("'s message queue\n");
+    // returnValue is already set.  Don't modify it.
+    goto exit;
+  }
+
+  while (processMessageDone(processMessage) == false) {
+    runKernelExecutive();
+  }
+
+exit:
   return returnValue;
 }
 
@@ -512,7 +531,8 @@ int schedulerInitSendMessageToPid(
     return returnValue; // processError
   }
 
-  ProcessDescriptor *processDescriptor = &SCHEDULER_STATE->allProcesses[pid - 1];
+  ProcessDescriptor *processDescriptor
+    = &SCHEDULER_STATE->allProcesses[pid - 1];
   returnValue = schedulerInitSendMessageToProcess(
     processDescriptor, type, data, size);
   return returnValue;
@@ -2092,6 +2112,7 @@ int schedulerKillProcessCommandHandler(
     = allProcesses[processPid(processMessageFrom(processMessage)) - 1].userId;
   Pid pid = (Pid) ((uintptr_t) processMessageData(processMessage));
   int processIndex = pid - 1;
+  processMessageData(processMessage) = (void*) ((intptr_t) 0);
 
   if ((pid >= schedulerState->firstUserPid)
     && (pid <= NANO_OS_NUM_PROCESSES)
@@ -2133,26 +2154,25 @@ int schedulerKillProcessCommandHandler(
       ) {
         printString("ERROR: Could not send CONSOLE_RELEASE_PID_PORT message ");
         printString("to console process\n");
+        processMessageData(processMessage) = (void*) ((intptr_t) 1);
       }
 
-      // Forward the message on to the memory manager to have it clean up the
-      // process's memory.  *DO NOT* mark the message as done.  The memory
-      // manager will do that.
-      processMessageInit(processMessage, MEMORY_MANAGER_FREE_PROCESS_MEMORY,
-        (void*) ((uintptr_t) pid), /* size= */ 0, /* waiting= */ true);
-      if (sendProcessMessageToProcess(
-        &schedulerState->allProcesses[SCHEDULER_STATE->memoryManagerPid - 1],
-        processMessage) != processSuccess
+      if (schedulerInitSendMessageToPid(
+        SCHEDULER_STATE->memoryManagerPid,
+        MEMORY_MANAGER_FREE_PROCESS_MEMORY,
+        /* data= */ (void*) ((intptr_t) pid),
+        /* size= */ 0) != processSuccess
       ) {
-        printString(
-          "ERROR: Could not send MEMORY_MANAGER_FREE_PROCESS_MEMORY ");
-        printString("message to memory manager\n");
+        printString("ERROR: Could not send MEMORY_MANAGER_FREE_PROCESS_MEMORY");
+        printString("message to memory manager process\n");
         processMessageData(processMessage) = (void*) ((intptr_t) 1);
-        if (processMessageSetDone(processMessage) != processSuccess) {
-          printString("ERROR: Could not mark message done in "
-            "schedulerKillProcessCommandHandler.\n");
-        }
       }
+
+      if (processMessageSetDone(processMessage) != processSuccess) {
+        printString("ERROR: Could not mark message done in "
+          "schedulerKillProcessCommandHandler.\n");
+      }
+
       // MEMORY_MANAGER_FREE_PROCESS_MEMORY will have freed envp if it existed,
       // so make sure it's NULL now.
       processDescriptor->envp = NULL;
@@ -3038,6 +3058,12 @@ int schedulerSendSignalCommandHandler(
 
   sendSignalArgs->returnValue = 0;
   sendSignalArgs->errorNumber = 0;
+
+  if (processMessageWaiting(processMessage) == false) {
+    processMessageRelease(processMessage);
+  }
+  // else DO NOT release the message since that's done by the caller.
+
   return returnValue;
 }
 
@@ -3274,7 +3300,8 @@ void removeProcess(ProcessDescriptor *processDescriptor, const char *errorMessag
   if (schedulerInitSendMessageToPid(
     SCHEDULER_STATE->memoryManagerPid,
     MEMORY_MANAGER_FREE_PROCESS_MEMORY,
-    (void*) ((uintptr_t) processDescriptor->pid), /* size= */ 0) != processSuccess
+    /* data= */ (void*) ((uintptr_t) processDescriptor->pid),
+    /* size= */ 0) != processSuccess
   ) {
     printString("ERROR: Could not free process memory. Memory leak.\n");
   }
@@ -3990,6 +4017,11 @@ __attribute__((noinline)) void startScheduler(
   // Start the console by calling processResume.
   processResume(&allProcesses[schedulerState.consolePid - 1], NULL);
   printDebugString("Started console process.\n");
+  // Put the console process on the ready queue.
+  allProcesses[schedulerState.consolePid - 1].readyQueue
+    = &schedulerState.ready[PRIVELEGE_LEVEL_KERNEL];
+  processQueuePush(allProcesses[schedulerState.consolePid - 1].readyQueue,
+    &allProcesses[schedulerState.consolePid - 1]);
 
   schedulerState.numShells = schedulerGetNumConsolePorts(&schedulerState);
   if (schedulerState.numShells <= 0) {
@@ -4074,10 +4106,6 @@ __attribute__((noinline)) void startScheduler(
   processDescriptor->userId = ROOT_USER_ID;
   printDebugString("Created memory manager.\n");
 
-  // Start the memory manager by calling processResume.
-  processResume(&allProcesses[schedulerState.memoryManagerPid - 1], NULL);
-  printDebugString("Started memory manager.\n");
-
   // Assign the console ports to it.
   for (uint8_t ii = 0; ii < schedulerState.numShells; ii++) {
     if (schedulerAssignPortToPid(
@@ -4102,10 +4130,14 @@ __attribute__((noinline)) void startScheduler(
   }
   printDebugString("Set shells for ports.\n");
 
+  // Start the memory manager by calling processResume.
+  processResume(&allProcesses[schedulerState.memoryManagerPid - 1], NULL);
+  printDebugString("Started memory manager.\n");
+
   // Mark all the kernel processes as being part of the kernel ready queue.
   // Skip over the scheduler (process 0).
   allProcesses[0].readyQueue = NULL;
-  for (Pid ii = allProcesses[1].pid;
+  for (Pid ii = allProcesses[2].pid;
     ii < schedulerState.firstUserPid;
     ii++
   ) {
