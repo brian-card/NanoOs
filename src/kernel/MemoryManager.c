@@ -103,223 +103,225 @@ void localFree(MemoryManagerState *memoryManagerState,
   (void) callingPid; // Used for debugging, so make the compiler ignore it.
   
   startDebugMessage("In localFree\n");
-  if (isDynamicPointer(ptr)) {
-    MemNode *memNode = memNode(ptr);
-    
-    // This is memory that was previously allocated from one of our allocators.
-    startDebugMessage("Freeing ");
-    printDebugInt(memNode->size);
-    printDebugString(" bytes at 0x");
-    printDebugHex(ptr);
-    printDebugString(" from process ");
-    printDebugInt(memNode->owner);
-    printDebugString("\n");
-    startDebugMessage("memNode = 0x");
-    printDebugHex(memNode);
-    printDebugString("\n");
-    
-    // Splice out memNode from the allocated list.
-    if (memNode->prev != NULL) {
-#ifdef NANO_OS_MEM_DEBUG
-      MemNode *cur;
-      for (cur = memoryManagerState->allocated; cur != NULL; cur = cur->next) {
-        if (cur == memNode->prev) {
-          break;
-        }
-      }
-      if (cur == NULL) {
-        startDebugMessage("ERROR!!!  memNode->prev is not allocated!!\n");
-        exit(1);
-      }
-#endif // NANO_OS_MEM_DEBUG
-      startDebugMessage("Updating memNode->prev->next\n");
-      memNode->prev->next = memNode->next;
-    }
-    if (memNode->next != NULL) {
-      startDebugMessage("Updating memNode->next->prev\n");
-      memNode->next->prev = memNode->prev;
-    }
-    if (memoryManagerState->allocated == memNode) {
-      startDebugMessage("Updating memoryManagerState->allocated\n");
-      memoryManagerState->allocated = memNode->next;
-    }
-    
-    // Put the memNode in the right place in the free list.
-    startDebugMessage("Searching free list in reverse order\n");
-    MemNode *cur = memoryManagerState->lastFree;
-#ifdef NANO_OS_MEM_DEBUG
-    if (((uintptr_t) cur) < ((uintptr_t) memNode)) {
-      // This should be impossible.
-      startDebugMessage("ERROR!!! cur (0x");
-      printDebugHex(cur);
-      printDebugString(") < memNode (0x");
-      printDebugHex(memNode);
-      printDebugString(")\n");
-      exit(1);
-    }
-#endif // NANO_OS_MEM_DEBUG
-    while (((uintptr_t) cur->prev) > ((uintptr_t) memNode)) {
-      cur = cur->prev;
-    }
-    startDebugMessage("cur = ");
-    printDebugHex(cur);
-    printDebugString("\n");
-    
-#ifdef NANO_OS_MEM_DEBUG
-    if (((uintptr_t) cur) < ((uintptr_t) memNode)) {
-      // This should be impossible.
-      startDebugMessage("ERROR!!! cur (0x");
-      printDebugHex(cur);
-      printDebugString(") < memNode (0x");
-      printDebugHex(memNode);
-      printDebugString(")\n");
-      exit(1);
-    }
-#endif // NANO_OS_MEM_DEBUG
-    memNode->next = cur;
-    startDebugMessage("memNode->next = 0x");
-    printDebugHex(memNode->next);
-    printDebugString("\n");
-    
-    memNode->prev = cur->prev;
-    startDebugMessage("memNode->prev = 0x");
-    printDebugHex(memNode->prev);
-    printDebugString("\n");
-    
-    startDebugMessage("Increasing memoryManagerState->bytesFree from ");
-    printDebugInt(memoryManagerState->bytesFree);
-    memoryManagerState->bytesFree += memNode->size;
-    printDebugString(" to ");
-    printDebugInt(memoryManagerState->bytesFree);
-    printDebugString("\n");
-    
-    MemNode *next
-      = (MemNode*) (((uint8_t*) memNode) + memNode->size + sizeof(MemNode));
-    
-    if (next != cur) {
-      startDebugMessage("next != cur\n");
-      startDebugMessage("Setting cur->prev to 0x");
-      printDebugHex(memNode);
-      printDebugString("\n");
-      
-      cur->prev = memNode;
-    } else {
-      // Do memory compaction between memNode and cur.
-      startDebugMessage("next == cur\n");
-      startDebugMessage("Doing memory compaction\n");
-      
-      memNode->size += cur->size + sizeof(MemNode);
-#ifdef NANO_OS_MEM_DEBUG
-      if ((cur->next != NULL)
-        && (((uintptr_t) cur->next) < ((uintptr_t) memNode))
-      ) {
-        // This should be impossible.
-        startDebugMessage("ERROR!!! cur->next (0x");
-        printDebugHex(cur->next);
-        printDebugString(") < memNode (0x");
-        printDebugHex(memNode);
-        printDebugString(")\n");
-        exit(1);
-      }
-#endif // NANO_OS_MEM_DEBUG
-      memNode->next = cur->next;
-      if (memNode->next != NULL) {
-        memNode->next->prev = memNode;
-      }
-      if (memoryManagerState->lastFree == cur) {
-        startDebugMessage("Setting memoryManagerState->lastFree to memNode\n");
-        memoryManagerState->lastFree = memNode;
-      }
-      
-      startDebugMessage("Increasing memoryManagerState->bytesFree from ");
-      printDebugInt(memoryManagerState->bytesFree);
-      memoryManagerState->bytesFree += sizeof(MemNode);
-      printDebugString(" to ");
-      printDebugInt(memoryManagerState->bytesFree);
-      printDebugString("\n");
-    }
-    
-    if (memNode->prev != NULL) {
-      startDebugMessage("memNode->prev != NULL\n");
-      
-      MemNode *prev = memNode->prev;
-      startDebugMessage("prev = 0x");
-      printDebugHex(prev);
-      printDebugString("\n");
-      
-      next = (MemNode*) (((uint8_t*) prev) + prev->size + sizeof(MemNode));
-      startDebugMessage("next = 0x");
-      printDebugHex(next);
-      printDebugString("\n");
-      
-      if (next != memNode) {
-        startDebugMessage("next != memNode\n");
-        startDebugMessage("Setting prev->next to memNode\n");
-        
-#ifdef NANO_OS_MEM_DEBUG
-        if (((uintptr_t) memNode) < ((uintptr_t) prev)) {
-          // This should be impossible.
-          startDebugMessage("ERROR!!! memNode (0x");
-          printDebugHex(memNode);
-          printDebugString(") < prev (0x");
-          printDebugHex(prev);
-          printDebugString(")\n");
-          exit(1);
-        }
-#endif // NANO_OS_MEM_DEBUG
-        prev->next = memNode;
-      } else {
-        // Do memory compaction between prev and memNode.
-        startDebugMessage("next == memNode\n");
-        startDebugMessage("Doing memory compaction\n");
-        
-        prev->size += memNode->size + sizeof(MemNode);
-        startDebugMessage("prev->size = ");
-        printDebugInt(prev->size);
-        printDebugString("\n");
-        
-#ifdef NANO_OS_MEM_DEBUG
-        if ((memNode->next != NULL)
-          && (((uintptr_t) memNode->next) < ((uintptr_t) prev))
-        ) {
-          // This should be impossible.
-          startDebugMessage("ERROR!!! memNode->next (0x");
-          printDebugHex(memNode->next);
-          printDebugString(") < prev (0x");
-          printDebugHex(prev);
-          printDebugString(")\n");
-          exit(1);
-        }
-#endif // NANO_OS_MEM_DEBUG
-        prev->next = memNode->next;
-        if (prev->next != NULL) {
-          prev->next->prev = prev;
-        }
-        startDebugMessage("prev->next = 0x");
-        printDebugHex(prev->next);
-        printDebugString("\n");
-        
-        if (memoryManagerState->lastFree == memNode) {
-          startDebugMessage("Setting memoryManagerState->lastFree to prev\n");
-          memoryManagerState->lastFree = prev;
-        }
-        
-        startDebugMessage("Increasing memoryManagerState->bytesFree from ");
-        printDebugInt(memoryManagerState->bytesFree);
-        memoryManagerState->bytesFree += sizeof(MemNode);
-        printDebugString(" to ");
-        printDebugInt(memoryManagerState->bytesFree);
-        printDebugString("\n");
-      }
-    } else {
-      startDebugMessage("memNode->prev == NULL\n");
-      startDebugMessage("Setting memoryManagerState->firstFree to memNode\n");
-      memoryManagerState->firstFree = memNode;
-    }
-  } else {
+  if (!isDynamicPointer(ptr)) {
     // This is not something we can free.  Ignore it.
     startDebugMessage("Error: Request to free non-dynamic memory 0x");
     printDebugHex(ptr);
+    printDebugString("\n");
+    return;
+  }
+  
+  MemNode *memNode = memNode(ptr);
+  
+  // This is memory that was previously allocated from one of our allocators.
+  startDebugMessage("Freeing ");
+  printDebugInt(memNode->size);
+  printDebugString(" bytes at 0x");
+  printDebugHex(ptr);
+  printDebugString(" from process ");
+  printDebugInt(memNode->owner);
+  printDebugString("\n");
+  startDebugMessage("memNode = 0x");
+  printDebugHex(memNode);
+  printDebugString("\n");
+  
+  // Splice out memNode from the allocated list.
+  if (memNode->prev != NULL) {
+#ifdef NANO_OS_MEM_DEBUG
+    MemNode *cur;
+    for (cur = memoryManagerState->allocated; cur != NULL; cur = cur->next) {
+      if (cur == memNode->prev) {
+        break;
+      }
+    }
+    if (cur == NULL) {
+      startDebugMessage("ERROR!!!  memNode->prev is not allocated!!\n");
+      exit(1);
+    }
+#endif // NANO_OS_MEM_DEBUG
+    startDebugMessage("Updating memNode->prev->next\n");
+    memNode->prev->next = memNode->next;
+  }
+  if (memNode->next != NULL) {
+    startDebugMessage("Updating memNode->next->prev\n");
+    memNode->next->prev = memNode->prev;
+  }
+  if (memoryManagerState->allocated == memNode) {
+    startDebugMessage("Updating memoryManagerState->allocated\n");
+    memoryManagerState->allocated = memNode->next;
+  }
+  
+  // Put the memNode in the right place in the free list.
+  startDebugMessage("Searching free list in reverse order\n");
+  MemNode *cur = memoryManagerState->lastFree;
+#ifdef NANO_OS_MEM_DEBUG
+  if (((uintptr_t) cur) < ((uintptr_t) memNode)) {
+    // This should be impossible.
+    startDebugMessage("ERROR!!! cur (0x");
+    printDebugHex(cur);
+    printDebugString(") < memNode (0x");
+    printDebugHex(memNode);
+    printDebugString(")\n");
+    exit(1);
+  }
+#endif // NANO_OS_MEM_DEBUG
+  while (((uintptr_t) cur->prev) > ((uintptr_t) memNode)) {
+    cur = cur->prev;
+  }
+  startDebugMessage("cur = ");
+  printDebugHex(cur);
+  printDebugString("\n");
+  
+#ifdef NANO_OS_MEM_DEBUG
+  if (((uintptr_t) cur) < ((uintptr_t) memNode)) {
+    // This should be impossible.
+    startDebugMessage("ERROR!!! cur (0x");
+    printDebugHex(cur);
+    printDebugString(") < memNode (0x");
+    printDebugHex(memNode);
+    printDebugString(")\n");
+    exit(1);
+  }
+#endif // NANO_OS_MEM_DEBUG
+  memNode->next = cur;
+  startDebugMessage("memNode->next = 0x");
+  printDebugHex(memNode->next);
+  printDebugString("\n");
+  
+  memNode->prev = cur->prev;
+  startDebugMessage("memNode->prev = 0x");
+  printDebugHex(memNode->prev);
+  printDebugString("\n");
+  
+  startDebugMessage("Increasing memoryManagerState->bytesFree from ");
+  printDebugInt(memoryManagerState->bytesFree);
+  memoryManagerState->bytesFree += memNode->size;
+  printDebugString(" to ");
+  printDebugInt(memoryManagerState->bytesFree);
+  printDebugString("\n");
+  
+  MemNode *next
+    = (MemNode*) (((uint8_t*) memNode) + memNode->size + sizeof(MemNode));
+  
+  if (next != cur) {
+    startDebugMessage("next != cur\n");
+    startDebugMessage("Setting cur->prev to 0x");
+    printDebugHex(memNode);
+    printDebugString("\n");
+    
+    cur->prev = memNode;
+  } else {
+    // Do memory compaction between memNode and cur.
+    startDebugMessage("next == cur\n");
+    startDebugMessage("Doing memory compaction\n");
+    
+    memNode->size += cur->size + sizeof(MemNode);
+#ifdef NANO_OS_MEM_DEBUG
+    if ((cur->next != NULL)
+      && (((uintptr_t) cur->next) < ((uintptr_t) memNode))
+    ) {
+      // This should be impossible.
+      startDebugMessage("ERROR!!! cur->next (0x");
+      printDebugHex(cur->next);
+      printDebugString(") < memNode (0x");
+      printDebugHex(memNode);
+      printDebugString(")\n");
+      exit(1);
+    }
+#endif // NANO_OS_MEM_DEBUG
+    memNode->next = cur->next;
+    if (memNode->next != NULL) {
+      memNode->next->prev = memNode;
+    }
+    if (memoryManagerState->lastFree == cur) {
+      startDebugMessage("Setting memoryManagerState->lastFree to memNode\n");
+      memoryManagerState->lastFree = memNode;
+    }
+    
+    startDebugMessage("Increasing memoryManagerState->bytesFree from ");
+    printDebugInt(memoryManagerState->bytesFree);
+    memoryManagerState->bytesFree += sizeof(MemNode);
+    printDebugString(" to ");
+    printDebugInt(memoryManagerState->bytesFree);
+    printDebugString("\n");
+  }
+  
+  if (memNode->prev == NULL) {
+    startDebugMessage("memNode->prev == NULL\n");
+    startDebugMessage("Setting memoryManagerState->firstFree to memNode\n");
+    memoryManagerState->firstFree = memNode;
+    return;
+  }
+  
+  startDebugMessage("memNode->prev != NULL\n");
+  
+  MemNode *prev = memNode->prev;
+  startDebugMessage("prev = 0x");
+  printDebugHex(prev);
+  printDebugString("\n");
+  
+  next = (MemNode*) (((uint8_t*) prev) + prev->size + sizeof(MemNode));
+  startDebugMessage("next = 0x");
+  printDebugHex(next);
+  printDebugString("\n");
+  
+  if (next != memNode) {
+    startDebugMessage("next != memNode\n");
+    startDebugMessage("Setting prev->next to memNode\n");
+    
+#ifdef NANO_OS_MEM_DEBUG
+    if (((uintptr_t) memNode) < ((uintptr_t) prev)) {
+      // This should be impossible.
+      startDebugMessage("ERROR!!! memNode (0x");
+      printDebugHex(memNode);
+      printDebugString(") < prev (0x");
+      printDebugHex(prev);
+      printDebugString(")\n");
+      exit(1);
+    }
+#endif // NANO_OS_MEM_DEBUG
+    prev->next = memNode;
+  } else {
+    // Do memory compaction between prev and memNode.
+    startDebugMessage("next == memNode\n");
+    startDebugMessage("Doing memory compaction\n");
+    
+    prev->size += memNode->size + sizeof(MemNode);
+    startDebugMessage("prev->size = ");
+    printDebugInt(prev->size);
+    printDebugString("\n");
+    
+#ifdef NANO_OS_MEM_DEBUG
+    if ((memNode->next != NULL)
+      && (((uintptr_t) memNode->next) < ((uintptr_t) prev))
+    ) {
+      // This should be impossible.
+      startDebugMessage("ERROR!!! memNode->next (0x");
+      printDebugHex(memNode->next);
+      printDebugString(") < prev (0x");
+      printDebugHex(prev);
+      printDebugString(")\n");
+      exit(1);
+    }
+#endif // NANO_OS_MEM_DEBUG
+    prev->next = memNode->next;
+    if (prev->next != NULL) {
+      prev->next->prev = prev;
+    }
+    startDebugMessage("prev->next = 0x");
+    printDebugHex(prev->next);
+    printDebugString("\n");
+    
+    if (memoryManagerState->lastFree == memNode) {
+      startDebugMessage("Setting memoryManagerState->lastFree to prev\n");
+      memoryManagerState->lastFree = prev;
+    }
+    
+    startDebugMessage("Increasing memoryManagerState->bytesFree from ");
+    printDebugInt(memoryManagerState->bytesFree);
+    memoryManagerState->bytesFree += sizeof(MemNode);
+    printDebugString(" to ");
+    printDebugInt(memoryManagerState->bytesFree);
     printDebugString("\n");
   }
   
