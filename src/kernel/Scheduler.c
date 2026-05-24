@@ -573,15 +573,14 @@ void* schedulerResumeReallocMessage(void *ptr, size_t size) {
   // get messed up if we don't.
   msg_from(sent).coro = schedulerThread;
 
-  processResume(&allProcesses[SCHEDULER_STATE->memoryManagerPid - 1], sent);
-  if (processMessageDone(sent) == true) {
-    // The handler set the pointer back in the structure we sent it, so grab it
-    // out of the structure we already have.
-    returnValue = reallocMessage.ptr;
-  } else {
-    printString(
-      "Warning:  Memory manager did not mark realloc message done.\n");
+  processMessageQueuePush(
+    &allProcesses[SCHEDULER_STATE->memoryManagerPid - 1], sent);
+  while (processMessageDone(sent) == false) {
+    runKernelExecutive();
   }
+  // The handler set the pointer back in the structure we sent it, so grab it
+  // out of the structure we already have.
+  returnValue = reallocMessage.ptr;
   // The handler pushes the message back onto our queue, which is not what we
   // want.  Pop it off again.
   processMessageQueuePop();
@@ -661,10 +660,10 @@ void schedFree(void *ptr) {
   // get messed up if we don't.
   msg_from(sent).coro = schedulerThread;
 
-  processResume(&allProcesses[SCHEDULER_STATE->memoryManagerPid - 1], sent);
-  if (processMessageDone(sent) == false) {
-    printString(
-      "Warning:  Memory manager did not mark free message done.\n");
+  processMessageQueuePush(
+    &allProcesses[SCHEDULER_STATE->memoryManagerPid - 1], sent);
+  while (processMessageDone(sent) == false) {
+    runKernelExecutive();
   }
   processMessageRelease(sent);
 
@@ -699,16 +698,12 @@ int assignMemory(void *ptr, Pid pid) {
   msg_from(sent).coro = schedulerThread;
 
   int returnValue = 0;
-  processResume(&allProcesses[SCHEDULER_STATE->memoryManagerPid - 1],
-    sent);
-  if (processMessageDone(sent) == true) {
-    // The usual case.
-    returnValue = (int) ((intptr_t) processMessageData(sent));
-  } else {
-    printString(
-      "Warning:  Memory manager did not mark assignMemory message done.\n");
-    returnValue = -ETIMEDOUT;
+  processMessageQueuePush(
+    &allProcesses[SCHEDULER_STATE->memoryManagerPid - 1], sent);
+  while (processMessageDone(sent) == false) {
+    runKernelExecutive();
   }
+  returnValue = (int) ((intptr_t) processMessageData(sent));
   processMessageRelease(sent);
 
   return returnValue;
