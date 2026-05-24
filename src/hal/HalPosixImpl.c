@@ -130,7 +130,7 @@ uint8_t posixNumExtraSchedulerStacks(bool debug) {
 
 uint8_t posixNumExtraConsoleStacks(bool debug) {
   (void) debug;
-  return 0;
+  return 1;
 }
 
 /// @var uarts
@@ -725,7 +725,25 @@ void allocateGlobalStack(jmp_buf returnBuffer, char *topOfStack) {
   returnToTop(returnBuffer, topOfStack);
 }
 
+/// @fn void sigintHandler(int signal)
+///
+/// @brief Handler for SIGINT.
+///
+/// @param signal The numeric value of the signal.  This should always be
+/// SIGINT.
+///
+/// @return This function returns no value.
+void sigintHandler(int signal) {
+  if (signal == SIGINT) {
+    ungetc(0x03, stdin);
+  }
+}
+
 int halPosixImplInit(jmp_buf resetBuffer, Hal *hal) {
+  // Set the handler for sigint so that it's passed to the running process in
+  // NanoOs instead of the simulator.
+  signal(SIGINT, sigintHandler);
+
   // Save our reset context for later.
   memcpy(_resetBuffer, resetBuffer, sizeof(jmp_buf));
   fprintf(stdout, "resetBuffer copied.\n");
@@ -736,7 +754,7 @@ int halPosixImplInit(jmp_buf resetBuffer, Hal *hal) {
   
   // Simulate having a total of 64 KB available for dynamic memory.
   _bottomOfHeap = (void*) (((uintptr_t) &topOfStack)
-    - ((uintptr_t) ((65536 * DEBUG_MULTIPLIER) - 11600)));
+    - ((uintptr_t) ((65536 * DEBUG_MULTIPLIER) - 6500)));
   fprintf(stderr, "Bottom of stack     = %p\n", (void*) _bottomOfHeap);
   jmp_buf returnBuffer;
   if (setjmp(returnBuffer) == 0) {
