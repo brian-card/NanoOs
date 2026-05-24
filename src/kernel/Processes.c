@@ -542,7 +542,8 @@ ProcessMessage* initSendProcessMessageToPid(int pid, int64_t type,
   }
 
   ProcessDescriptor *process = &SCHEDULER_STATE->allProcesses[pid - 1];
-  processMessage = initSendProcessMessageToProcess(process, type, data, size, waiting);
+  processMessage
+    = initSendProcessMessageToProcess(process, type, data, size, waiting);
   if (processMessage == NULL) {
     printString("ERROR: Could not send NanoOs message to process ");
     printInt(pid);
