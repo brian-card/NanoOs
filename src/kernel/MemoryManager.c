@@ -116,7 +116,9 @@ void localFree(MemoryManagerState *memoryManagerState,
   MemNode *memNode = memNode(ptr);
   
   // This is memory that was previously allocated from one of our allocators.
-  startDebugMessage("Freeing ");
+  startDebugMessage("Process ");
+  printDebugInt(callingPid);
+  printDebugString(" freeing ");
   printDebugInt(memNode->size);
   printDebugString(" bytes at 0x");
   printDebugHex(ptr);
@@ -127,10 +129,22 @@ void localFree(MemoryManagerState *memoryManagerState,
   printDebugHex(memNode);
   printDebugString("\n");
   
+  MemNode *cur = NULL;
+#ifdef NANO_OS_MEM_DEBUG
+  for (cur = memoryManagerState->allocated; cur != NULL; cur = cur->next) {
+    if (cur == memNode) {
+      break;
+    }
+  }
+  if (cur == NULL) {
+    startDebugMessage("ERROR!!!  memNode is not allocated!!\n");
+    HAL->power->enterMode(HAL_POWER_MODE_OFF);
+  }
+#endif // NANO_OS_MEM_DEBUG
+  
   // Splice out memNode from the allocated list.
   if (memNode->prev != NULL) {
 #ifdef NANO_OS_MEM_DEBUG
-    MemNode *cur;
     for (cur = memoryManagerState->allocated; cur != NULL; cur = cur->next) {
       if (cur == memNode->prev) {
         break;
@@ -138,6 +152,9 @@ void localFree(MemoryManagerState *memoryManagerState,
     }
     if (cur == NULL) {
       startDebugMessage("ERROR!!!  memNode->prev is not allocated!!\n");
+      startDebugMessage("memNode->prev = 0x");
+      printHex((uintptr_t) memNode->prev);
+      printString("\n");
       HAL->power->enterMode(HAL_POWER_MODE_OFF);
     }
 #endif // NANO_OS_MEM_DEBUG
@@ -155,7 +172,7 @@ void localFree(MemoryManagerState *memoryManagerState,
   
   // Put the memNode in the right place in the free list.
   startDebugMessage("Searching free list in reverse order\n");
-  MemNode *cur = memoryManagerState->lastFree;
+  cur = memoryManagerState->lastFree;
 #ifdef NANO_OS_MEM_DEBUG
   if (((uintptr_t) cur) < ((uintptr_t) memNode)) {
     // This should be impossible.
@@ -170,7 +187,7 @@ void localFree(MemoryManagerState *memoryManagerState,
   while (((uintptr_t) cur->prev) > ((uintptr_t) memNode)) {
     cur = cur->prev;
   }
-  startDebugMessage("cur = ");
+  startDebugMessage("cur = 0x");
   printDebugHex(cur);
   printDebugString("\n");
   
@@ -348,6 +365,9 @@ void localFreeProcessMemory(
   for (MemNode *cur = memoryManagerState->allocated; cur != NULL; ) {
     MemNode *next = cur->next;
     if (cur->owner == pid) {
+      startDebugMessage("Freeing 0x");
+      printDebugHex((uintptr_t) &cur[1]);
+      printDebugString("\n");
       localFree(memoryManagerState, &cur[1], callingPid);
     }
     cur = next;
