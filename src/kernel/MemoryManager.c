@@ -1,3 +1,5 @@
+#define NANO_OS_MEM_DEBUG
+#define NANO_OS_DEBUG
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
 //                     Copyright (c) 2012-2025 James Card                     //
@@ -136,7 +138,7 @@ void localFree(MemoryManagerState *memoryManagerState,
     }
     if (cur == NULL) {
       startDebugMessage("ERROR!!!  memNode->prev is not allocated!!\n");
-      exit(1);
+      HAL->power->enterMode(HAL_POWER_MODE_OFF);
     }
 #endif // NANO_OS_MEM_DEBUG
     startDebugMessage("Updating memNode->prev->next\n");
@@ -162,7 +164,7 @@ void localFree(MemoryManagerState *memoryManagerState,
     printDebugString(") < memNode (0x");
     printDebugHex(memNode);
     printDebugString(")\n");
-    exit(1);
+    HAL->power->enterMode(HAL_POWER_MODE_OFF);
   }
 #endif // NANO_OS_MEM_DEBUG
   while (((uintptr_t) cur->prev) > ((uintptr_t) memNode)) {
@@ -180,7 +182,7 @@ void localFree(MemoryManagerState *memoryManagerState,
     printDebugString(") < memNode (0x");
     printDebugHex(memNode);
     printDebugString(")\n");
-    exit(1);
+    HAL->power->enterMode(HAL_POWER_MODE_OFF);
   }
 #endif // NANO_OS_MEM_DEBUG
   memNode->next = cur;
@@ -226,7 +228,7 @@ void localFree(MemoryManagerState *memoryManagerState,
       printDebugString(") < memNode (0x");
       printDebugHex(memNode);
       printDebugString(")\n");
-      exit(1);
+      HAL->power->enterMode(HAL_POWER_MODE_OFF);
     }
 #endif // NANO_OS_MEM_DEBUG
     memNode->next = cur->next;
@@ -277,7 +279,7 @@ void localFree(MemoryManagerState *memoryManagerState,
       printDebugString(") < prev (0x");
       printDebugHex(prev);
       printDebugString(")\n");
-      exit(1);
+      HAL->power->enterMode(HAL_POWER_MODE_OFF);
     }
 #endif // NANO_OS_MEM_DEBUG
     prev->next = memNode;
@@ -301,7 +303,7 @@ void localFree(MemoryManagerState *memoryManagerState,
       printDebugString(") < prev (0x");
       printDebugHex(prev);
       printDebugString(")\n");
-      exit(1);
+      HAL->power->enterMode(HAL_POWER_MODE_OFF);
     }
 #endif // NANO_OS_MEM_DEBUG
     prev->next = memNode->next;
@@ -428,7 +430,7 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
             printDebugString(") < next->prev (0x");
             printDebugHex(next->prev);
             printDebugString(")\n");
-            exit(1);
+            HAL->power->enterMode(HAL_POWER_MODE_OFF);
           }
 #endif // NANO_OS_MEM_DEBUG
           next->prev->next = next;
@@ -469,7 +471,7 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
       printDebugString(") >= cur (0x");
       printDebugHex(cur);
       printDebugString(")\n");
-      exit(1);
+      HAL->power->enterMode(HAL_POWER_MODE_OFF);
     }
     
     if ((cur->next == NULL) && (cur == memoryManagerState->lastFree)) {
@@ -480,7 +482,7 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
       printDebugString(") <= cur (0x");
       printDebugHex(cur);
       printDebugString(")\n");
-      exit(1);
+      HAL->power->enterMode(HAL_POWER_MODE_OFF);
     }
 #endif // NANO_OS_MEM_DEBUG
     
@@ -552,7 +554,7 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
         printDebugString(") < next->prev (0x");
         printDebugHex(next->prev);
         printDebugString(")\n");
-        exit(1);
+        HAL->power->enterMode(HAL_POWER_MODE_OFF);
       }
 #endif // NANO_OS_MEM_DEBUG
       next->prev->next = next;
@@ -575,7 +577,7 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
         printDebugString(") < next (0x");
         printDebugHex(next);
         printDebugString(")\n");
-        exit(1);
+        HAL->power->enterMode(HAL_POWER_MODE_OFF);
       }
 #endif // NANO_OS_MEM_DEBUG
       next->next = cur->next;
