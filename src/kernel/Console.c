@@ -1055,6 +1055,7 @@ void* runConsole(void *args) {
           if (processMessage == NULL) {
             printString("ERROR: Could not communicate with scheduler.\n");
           }
+          consolePort->consolePrintString(consolePort->portId, "^C\n");
         }
       }
     }
