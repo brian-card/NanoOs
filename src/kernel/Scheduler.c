@@ -2157,6 +2157,11 @@ int schedulerKillProcessCommandHandler(
         processMessageData(processMessage) = (void*) ((intptr_t) 1);
       }
 
+      // Close the file descriptors before we terminate the process so that
+      // anything that gets sent to the process's queue gets cleaned up when
+      // we terminate it.
+      closeProcessFileDescriptors(schedulerState, processDescriptor);
+
       if (schedulerInitSendMessageToPid(
         SCHEDULER_STATE->memoryManagerPid,
         MEMORY_MANAGER_FREE_PROCESS_MEMORY,
@@ -2176,11 +2181,6 @@ int schedulerKillProcessCommandHandler(
       // MEMORY_MANAGER_FREE_PROCESS_MEMORY will have freed envp if it existed,
       // so make sure it's NULL now.
       processDescriptor->envp = NULL;
-
-      // Close the file descriptors before we terminate the process so that
-      // anything that gets sent to the process's queue gets cleaned up when
-      // we terminate it.
-      closeProcessFileDescriptors(schedulerState, processDescriptor);
 
       // Terminate the process and make sure its message queue gets flushed.
       if (processTerminate(processDescriptor, false) == processSuccess) {
