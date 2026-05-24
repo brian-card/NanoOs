@@ -39,6 +39,7 @@
 #include "Processes.h"
 #include "Scheduler.h"
 #include "../user/NanoOsLibC.h"
+#include "../user/NanoOsSignal.h"
 
 // Must come last
 #include "../user/NanoOsStdio.h"
@@ -966,6 +967,7 @@ int printSerialString(unsigned char uart, const char *string) {
 void* runConsole(void *args) {
   (void) args;
 
+  SchedulerSendSignalArgs sendSignalArgs; // For sending Ctrl-C to processes
   int byteRead = -1;
   ConsoleState consoleState;
   memset(&consoleState, 0, sizeof(ConsoleState));
@@ -1036,6 +1038,23 @@ void* runConsole(void *args) {
           // Console port is either not owned or owning process is not waiting
           // for input.  Reset our buffer and do nothing.
           consolePort->consoleBufferIndex = 0;
+        }
+      } else if (byteRead == 0x03) {
+        // The user hit Ctrl-C on the keyboard.  Send SIGINT to the input owner.
+        if (consolePort->inputOwner != PROCESS_ID_NOT_SET) {
+          sendSignalArgs.signature = SCHEDULER_COMMAND_SIGNATURE;
+          sendSignalArgs.pid = consolePort->inputOwner;
+          sendSignalArgs.signal = SIGINT;
+          sendSignalArgs.returnValue = 0;
+          sendSignalArgs.errorNumber = 0;
+          ProcessMessage *processMessage
+            = initSendProcessMessageToPid(
+            SCHEDULER_STATE->schedulerPid, SCHEDULER_SEND_SIGNAL,
+            /* data= */ &sendSignalArgs, /* size= */ sizeof(sendSignalArgs),
+            false);
+          if (processMessage == NULL) {
+            printString("ERROR: Could not communicate with scheduler.\n");
+          }
         }
       }
     }
