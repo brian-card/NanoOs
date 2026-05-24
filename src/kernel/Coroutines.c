@@ -961,6 +961,9 @@ void* coroutineYieldTo_(Coroutine *to, void *arg, CoroutineState state) {
   funcData = coroutinePass(currentCoroutine, funcData);
   currentCoroutine->state = COROUTINE_STATE_RUNNING;
   returnValue = funcData.data;
+  if (returnValue != NULL) {
+    returnValue = callCoroutineResumeCallback(returnValue);
+  }
 
   return returnValue;
 }
