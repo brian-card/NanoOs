@@ -1,5 +1,3 @@
-#define NANO_OS_MEM_DEBUG
-#define NANO_OS_DEBUG
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
 //                     Copyright (c) 2012-2025 James Card                     //
