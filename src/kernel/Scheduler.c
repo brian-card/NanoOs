@@ -49,6 +49,12 @@
 
 // Support prototypes.
 void runScheduler(void);
+int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp);
+int schedulerDumpMemoryAllocations(SchedulerState *schedulerState);
+int schedulerDumpOpenFiles(SchedulerState *schedulerState);
+void removeProcess(
+  ProcessDescriptor *processDescriptor, const char *errorMessage);
+void forceYield(void);
 
 /// @def NUM_STANDARD_FILE_DESCRIPTORS
 ///
@@ -3005,7 +3011,7 @@ int schedulerSendSignalCommandHandler(
     printString(__func__);
     printString("\n");
     processMessageSetDone(processMessage);
-    return returnValue; // 0
+    goto exit; // return 0
   }
 
   if (sendSignalArgs->signature != SCHEDULER_COMMAND_SIGNATURE) {
@@ -3015,13 +3021,14 @@ int schedulerSendSignalCommandHandler(
     printString(__func__);
     printString("\n");
     processMessageSetDone(processMessage);
-    return returnValue; // 0
+    goto exit; // return 0
   }
 
   Pid pid = sendSignalArgs->pid;
+  ProcessDescriptor *processDescriptor = &allProcesses[pid - 1];
   if ((pid < 2)
     || (pid > NANO_OS_NUM_PROCESSES)
-    || (processRunning(&allProcesses[pid - 1]) == false)
+    || (processRunning(processDescriptor) == false)
   ) {
     sendSignalArgs->returnValue = -1;
     sendSignalArgs->errorNumber = ESRCH;
@@ -3029,7 +3036,7 @@ int schedulerSendSignalCommandHandler(
     printString(__func__);
     printString("\n");
     processMessageSetDone(processMessage);
-    return returnValue; // 0
+    goto exit; // return 0
   }
 
   if (sendSignalArgs->signal < 0) {
@@ -3039,7 +3046,7 @@ int schedulerSendSignalCommandHandler(
     printString(__func__);
     printString("\n");
     processMessageSetDone(processMessage);
-    return returnValue; // 0
+    goto exit; // return 0
   }
 
   if (sendSignalArgs->signal == 0) {
@@ -3047,18 +3054,45 @@ int schedulerSendSignalCommandHandler(
     // above, so just return good status here.
     sendSignalArgs->returnValue = 0;
     sendSignalArgs->errorNumber = 0;
-    return returnValue; // 0
+    goto exit; // return 0
   }
 
   SignalCallback signalCallback = {
     .signature = SIGNAL_SIGNATURE,
     .signum = sendSignalArgs->signal,
   };
-  processResume(&allProcesses[pid - 1], &signalCallback);
+  if (pid >= SCHEDULER_STATE->firstUserPid) {
+    if (processRunning(processDescriptor) == true) {
+      // This is a user process, which is in an overlay.  Make sure it's loaded.
+      if (schedulerLoadOverlay(
+        processDescriptor,
+        processDescriptor->envp) != 0
+      ) {
+        // We can't deliver the signal to the process.
+        sendSignalArgs->returnValue = -1;
+        sendSignalArgs->errorNumber = ESRCH; // Closest POSIX-compliant value
+        schedulerDumpMemoryAllocations(SCHEDULER_STATE);
+        schedulerDumpOpenFiles(SCHEDULER_STATE);
+        removeProcess(processDescriptor, "Overlay load failure");
+        goto exit; // return 0
+      }
+    }
+    
+    // Configure the preemption timer to force the process to yield if it
+    // doesn't voluntarily give up control within a reasonable amount of time.
+    if (SCHEDULER_STATE->preemptionTimer > -1) {
+      // No need to check HAL->timer for NULL since it can't be NULL in this
+      // case.
+      HAL->timer->configOneShot(
+        SCHEDULER_STATE->preemptionTimer, 10000000, forceYield);
+    }
+  }
+  processResume(processDescriptor, &signalCallback);
 
   sendSignalArgs->returnValue = 0;
   sendSignalArgs->errorNumber = 0;
 
+exit:
   if (processMessageWaiting(processMessage) == false) {
     processMessageRelease(processMessage);
   }
@@ -3275,7 +3309,9 @@ int schedulerDumpOpenFiles(SchedulerState *schedulerState) {
 ///   to indicate the reason this process is being remoevd.
 ///
 /// @return This function returns no value.
-void removeProcess(ProcessDescriptor *processDescriptor, const char *errorMessage) {
+void removeProcess(
+  ProcessDescriptor *processDescriptor, const char *errorMessage
+) {
   printString("ERROR: ");
   printString(errorMessage);
   printString("\n");
