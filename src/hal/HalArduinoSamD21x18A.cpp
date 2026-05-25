@@ -247,7 +247,7 @@ void* arduinoSamD21x18ABottomOfHeap(bool debug) {
 
 uint8_t arduinoSamD21x18ANumExtraSchedulerStacks(bool debug) {
   (void) debug;
-  return 1;
+  return 2;
 }
 
 uint8_t arduinoSamD21x18ANumExtraConsoleStacks(bool debug) {
