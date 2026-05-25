@@ -91,6 +91,56 @@ exit:
   return returnValue;
 }
 
+/// @fn int nanoOsDup(int oldfd)
+///
+/// @brief Implementation of the standard POSIX dup function.
+///
+/// @param oldfd The source file descriptor that is to be copied.
+///
+/// @return On success, the value of the new file descriptor is returned.  On
+/// failure, -1 is returned and errno is set.  The new file descriptor is
+/// guaranteed to be the lowest numbered one available if valid.
+int nanoOsDup(int oldfd) {
+  int returnValue = -1;
+  
+  ProcessDescriptor *processDescriptor = getRunningProcess();
+  if (processDescriptor == NULL) {
+    // This should be impossible, but check anyway.
+    errno = EOTHER;
+    goto exit;
+  }
+  
+  FileDescriptor *oldFileDescriptor = processDescriptor->fileDescriptors[oldfd];
+  int newfd = 0;
+  for (; newfd < processDescriptor->numFileDescriptors; newfd++) {
+    if (processDescriptor->fileDescriptors[newfd] == NULL) {
+      break;
+    }
+  }
+  if (newfd == processDescriptor->numFileDescriptors) {
+    // Nothing closed available.  Extend the array.
+    void *check = realloc(processDescriptor->fileDescriptors,
+      sizeof(FileDescriptor*) * (processDescriptor->numFileDescriptors + 1));
+    if (check == NULL) {
+      errno = ENOMEM;
+      goto exit;
+    }
+    
+    processDescriptor->fileDescriptors = (FileDescriptor**) check;
+    newfd = processDescriptor->numFileDescriptors;
+    processDescriptor->numFileDescriptors++;
+  }
+  
+  // Copy the old file descriptor into the new one's slot.
+  processDescriptor->fileDescriptors[newfd] = oldFileDescriptor;
+  oldFileDescriptor->refCount++;
+  
+  returnValue = newfd;
+  
+exit:
+  return returnValue;
+}
+
 /// @fn int nanoOsDup2(int oldfd, int newfd)
 ///
 /// @brief Implementation of the standard POSIX dup2 function.
@@ -101,17 +151,15 @@ exit:
 /// @return On success, the value of newfd is returned.  On failure, -1 is
 /// returned and errno is set.
 int nanoOsDup2(int oldfd, int newfd) {
-  int returnValue = 0;
+  int returnValue = -1;
   
   ProcessDescriptor *processDescriptor = getRunningProcess();
   if (processDescriptor == NULL) {
     // This should be impossible, but check anyway.
     errno = EOTHER;
-    returnValue = -1;
     goto exit;
   } else if (newfd >= processDescriptor->numFileDescriptors) {
     errno = EBADF;
-    returnValue = -1;
     goto exit;
   }
   
