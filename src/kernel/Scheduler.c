@@ -1390,11 +1390,6 @@ FILE* schedFopen(const char *pathname, const char *mode) {
     printString(" because ");
     printString(_functionInProgress);
     printString(" is already in progress\n");
-    if (HAL->power != NULL) {
-      HAL->power->enterMode(HAL_POWER_MODE_OFF);
-    } else {
-      while (1);
-    }
   }
 
   return returnValue;
