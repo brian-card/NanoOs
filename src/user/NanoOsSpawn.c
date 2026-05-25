@@ -245,6 +245,10 @@ int nanoOsSpawn(
   returnValue = (int) ((intptr_t) processMessageData(processMessage));
   processMessageRelease(processMessage);
 
+  if (returnValue != 0) {
+    goto freeSpawnArgs;
+  }
+
   return returnValue;
 
 freeSpawnArgs:
