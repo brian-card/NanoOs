@@ -136,6 +136,7 @@ NanoOsApi nanoOsApi = {
   
   // unistd functions:
   .close = nanoOsClose,
+  .dup = nanoOsDup,
   .dup2 = nanoOsDup2,
   .gethostname = nanoOsGethostname,
   .sethostname = nanoOsSethostname,

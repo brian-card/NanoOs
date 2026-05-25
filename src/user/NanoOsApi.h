@@ -131,6 +131,7 @@ typedef struct NanoOsApi {
   
   // unistd functions:
   int (*close)(int fd);
+  int (*dup)(int oldfd);
   int (*dup2)(int oldfd, int newfd);
   int (*gethostname)(char *name, size_t len);
   int (*sethostname)(const char *name, size_t len);
