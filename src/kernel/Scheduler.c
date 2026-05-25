@@ -1388,6 +1388,7 @@ FILE* schedFopen(const char *pathname, const char *mode) {
     printString(" because ");
     printString(_functionInProgress);
     printString(" is already in progress\n");
+    errno = EBUSY;
   }
 
   return returnValue;
@@ -1760,6 +1761,9 @@ int loadProcessDescriptorOverlayMetadata(ProcessDescriptor *processDescriptor) {
   int returnValue
     = schedGetFileBlockMetadataFromPath(overlayPath,
       &processDescriptor->overlay);
+  if ((returnValue == -EIO) && (errno == EBUSY)) {
+    returnValue = -EBUSY;
+  }
   schedFree(overlayPath);
 
   return returnValue;
@@ -2149,7 +2153,6 @@ int schedulerExecveCommandHandler(
     processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
   }
-  processMessageData(processMessage) = (void*) ((intptr_t) 0);
   execArgs->callingPid = processPid(processMessageFrom(processMessage));
 
   char *pathname = execArgs->pathname;
@@ -2369,7 +2372,12 @@ int schedulerExecveCommandHandler(
 
   processDescriptor->overlayNamespace = pathname;
   returnValue = loadProcessDescriptorOverlayMetadata(processDescriptor);
-  if (returnValue != 0) {
+  if (returnValue == -EBUSY) {
+    // We're in the middle of a filesystem operation already and can't access
+    // a file right now.  Return error status and try again later.  DO NOT
+    // set the message done or alter its value.
+    return returnValue; // -EBUSY
+  } else if (returnValue != 0) {
     processMessageData(processMessage) = (void*) ((intptr_t) returnValue);
     returnValue = 0; // Don't retry this command
     processMessageSetDone(processMessage);
@@ -2431,7 +2439,6 @@ int schedulerSpawnCommandHandler(
   }
 
   SpawnArgs *spawnArgs = (SpawnArgs*) processMessageData(processMessage);
-  processMessageData(processMessage) = (void*) ((uintptr_t) 0);
   if (spawnArgs == NULL) {
     printString("ERROR! spawnArgs provided was NULL.\n");
     processMessageData(processMessage) = (void*) ((uintptr_t) EINVAL);
@@ -2639,14 +2646,19 @@ int schedulerSpawnCommandHandler(
 
   processDescriptor->overlayNamespace = pathname;
   returnValue = loadProcessDescriptorOverlayMetadata(processDescriptor);
-  if (returnValue != 0) {
+  if (returnValue == -EBUSY) {
+    // We're in the middle of a filesystem operation already and can't access
+    // a file right now.  Return error status and try again later.  DO NOT
+    // set the message done or alter its value.
+    return returnValue; // -EBUSY
+  } else if (returnValue != 0) {
     processMessageData(processMessage) = (void*) ((uintptr_t) returnValue);
     returnValue = 0; // Don't retry this command
     processMessageSetDone(processMessage);
 
     // We have to terminate the process because something may have pushed a
-    // message onto its message queue.  Set the second parametr to false to make
-    // sure that the message queue is purged.
+    // message onto its message queue.  Set the second parameter to false to
+    // make sure that the message queue is purged.
     processTerminate(processDescriptor, false);
     threadSetContext(processDescriptor->mainThread, processDescriptor);
     return returnValue; // 0
@@ -2661,6 +2673,7 @@ int schedulerSpawnCommandHandler(
   // Put the process on the ready queue.
   processQueuePush(processDescriptor->readyQueue, processDescriptor);
 
+  processMessageData(processMessage) = (void*) ((uintptr_t) 0);
   processMessageSetDone(processMessage);
 
   return returnValue;
@@ -3100,14 +3113,11 @@ int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp) {
   return 0;
 }
 
-/// @fn int schedulerRunOverlayCommand(
-///   SchedulerState *schedulerState, ProcessDescriptor *processDescriptor,
+/// @fn int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
 ///   const char *commandPath, int argc, const char **argv, const char **envp)
 ///
 /// @brief Launch a command that's in overlay format on the filesystem.
 ///
-/// @param schedulerState A pointer to the SchedulerState object maintained by
-///   the scheduler process.
 /// @param processDescriptor A pointer to the ProcessDescriptor that will be
 ///   populated with the overlay command.
 /// @param commandPath The full path to the command overlay file on the
@@ -3118,8 +3128,7 @@ int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp) {
 ///   in "name=value" form.
 ///
 /// @return Returns 0 on success, -errno on failure.
-int schedulerRunOverlayCommand(
-  SchedulerState *schedulerState, ProcessDescriptor *processDescriptor,
+int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
   char *commandPath, char **argv, char **envp
 ) {
   int returnValue = 0;
@@ -3170,7 +3179,7 @@ int schedulerRunOverlayCommand(
   // direclty here.  The logic below will take care of memory ownership.
   execArgs->envp = envp;
 
-  execArgs->schedulerState = schedulerState;
+  execArgs->schedulerState = SCHEDULER_STATE;
 
   if (assignMemory(execArgs, processDescriptor->pid) != 0) {
     printString(__func__);
@@ -3278,7 +3287,11 @@ int schedulerRunOverlayCommand(
 
   processDescriptor->overlayNamespace = execArgs->pathname;
   returnValue = loadProcessDescriptorOverlayMetadata(processDescriptor);
-  if (returnValue != 0) {
+  if (returnValue == -EBUSY) {
+    // We're in the middle of a filesystem operation already and can't access
+    // a file right now.  Return error status and try again later.
+    return returnValue; // -EBUSY
+  } else if (returnValue != 0) {
     goto freeFileDescriptors;
   }
   processDescriptor->envp = execArgs->envp;
@@ -3465,9 +3478,13 @@ void runScheduler(void) {
       }
 
       // Re-launch getty.
-      if (schedulerRunOverlayCommand(SCHEDULER_STATE, processDescriptor,
-        "/usr/bin/getty", (char**) gettyArgs, NULL) != 0
-      ) {
+      int returnValue = schedulerRunOverlayCommand(processDescriptor,
+        "/usr/bin/getty", (char**) gettyArgs, NULL);
+      if (returnValue == -EBUSY) {
+        // We're in the middle of a file operation already.  Just try again
+        // later.
+        return;
+      } else if (returnValue != 0) {
         removeProcess(processDescriptor, "Failed to load getty");
         return;
       }
@@ -3505,9 +3522,15 @@ void runScheduler(void) {
         // strrchr(pwd->pw_shell, '/') must be non-NULL in order for pw_shell
         // to be valid.
         shellArgs[0] = strrchr(pwd->pw_shell, '/') + 1;
-        if (schedulerRunOverlayCommand(SCHEDULER_STATE, processDescriptor,
-          pwd->pw_shell, (char**) shellArgs, processDescriptor->envp) != 0
-        ) {
+        int returnValue = schedulerRunOverlayCommand(processDescriptor,
+          pwd->pw_shell, (char**) shellArgs, processDescriptor->envp);
+        if (returnValue == -EBUSY) {
+          // We're in the middle of a file operation already.  Just free our
+          // dynamic memory and try again later.
+          schedFree(pwd);
+          schedFree(passwdStringBuffer);
+          return;
+        } else if (returnValue != 0) {
           removeProcess(processDescriptor, "Failed to load shell");
           schedFree(pwd);
           schedFree(passwdStringBuffer);
