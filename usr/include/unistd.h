@@ -48,6 +48,9 @@ extern "C"
 static inline int close(int fd) {
   return overlayMap.header.osApi->close(fd);
 }
+static inline int dup(int oldfd) {
+  return overlayMap.header.osApi->dup(oldfd);
+}
 static inline int dup2(int oldfd, int newfd) {
   return overlayMap.header.osApi->dup2(oldfd, newfd);
 }
