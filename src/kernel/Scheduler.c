@@ -897,7 +897,11 @@ int schedulerKillProcess(Pid pid) {
   // either.  Set a 100 ms timeout.
   struct timespec ts = { 0, 0 };
   timespec_get(&ts, TIME_UTC);
-  ts.tv_nsec += 100000000;
+  int64_t timeout = (((int64_t) ts.tv_sec) * ((int64_t) 1000000000))
+    + ts.tv_nsec;
+  timeout += 100000000;
+  ts.tv_sec = timeout / ((int64_t) 1000000000);
+  ts.tv_nsec = timeout % ((int64_t) 1000000000);
 
   int waitStatus = processMessageWaitForDone(processMessage, &ts);
   int returnValue = 0;
@@ -914,7 +918,7 @@ int schedulerKillProcess(Pid pid) {
     if (waitStatus == processTimedout) {
       printf("Command to kill PID %d timed out.\n", pid);
     } else {
-      printf("Command to kill PID %d failed.\n", pid);
+      printf("Command to kill PID %d returned status %d.\n", pid, waitStatus);
     }
   }
 
