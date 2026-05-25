@@ -208,9 +208,14 @@ void* processPipes(void *args) {
   if (dup2(stdinDup, STDIN_FILENO) != STDIN_FILENO) {
     fprintf(stderr, "ERROR: dup2 of stdinDup onto STDIN_FILENO failed\n");
   }
+  tmpErrno = errno;
   close(stdinDup);
+  errno = tmpErrno;
   
 freeFileActions:
+  tmpErrno = errno;
+  posix_spawn_file_actions_destroy(fileActions);
+  errno = tmpErrno;
   free(fileActions); fileActions = NULL;
   
 freeFsCommandArgs:
