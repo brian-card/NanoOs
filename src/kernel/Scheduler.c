@@ -1284,40 +1284,42 @@ int closeProcessFileDescriptors(
         fileDescriptor->pipeEnd->inputChannel.pid = PROCESS_ID_NOT_SET;
 
         Pid waitingOutputPid = fileDescriptor->outputChannel.pid;
-        ProcessDescriptor *waitingProcessDescriptor
-          = &schedulerState->allProcesses[waitingOutputPid - 1];
-        if (processState(waitingProcessDescriptor) == PROCESS_STATE_WAIT) {
-          // Send an empty message to the waiting process so that it will
-          // become unblocked.
-          if (processMessageInit(&processMessage,
-            fileDescriptor->outputChannel.messageType, NULL, 0, true
-            ) != processSuccess
-          ) {
-            // Nothing we can do.
-            return -EOTHER;
-          }
-          if (processMessageQueuePush(waitingProcessDescriptor,
-            &processMessage) != processSuccess
-          ) {
-            // Nothing we can do.
-            return -EOTHER;
-          }
-          ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
-          int64_t startTime = HAL->clock->getElapsedMicroseconds(0);
-          // schedulerKillProcess times out after 100 milliseconds, so
-          // timeout after 50 milliseconds.
-          while ((processMessageDone(&processMessage) == false)
-            && (HAL->clock->getElapsedMicroseconds(startTime) < 50000)
-          ) {
-            for (int ii = 0; ii < NUM_SCHEDULER_READY_QUEUE_TYPES; ii++) {
-              SCHEDULER_STATE->currentReady = &SCHEDULER_STATE->ready[ii];
-              uint8_t queueSize = SCHEDULER_STATE->currentReady->numElements;
-              for (uint8_t jj = 0; jj < queueSize; jj++) {
-                runScheduler();
+        if (waitingOutputPid != PROCESS_ID_NOT_SET) {
+          ProcessDescriptor *waitingProcessDescriptor
+            = &schedulerState->allProcesses[waitingOutputPid - 1];
+          if (processState(waitingProcessDescriptor) == PROCESS_STATE_WAIT) {
+            // Send an empty message to the waiting process so that it will
+            // become unblocked.
+            if (processMessageInit(&processMessage,
+              fileDescriptor->outputChannel.messageType, NULL, 0, true
+              ) != processSuccess
+            ) {
+              // Nothing we can do.
+              return -EOTHER;
+            }
+            if (processMessageQueuePush(waitingProcessDescriptor,
+              &processMessage) != processSuccess
+            ) {
+              // Nothing we can do.
+              return -EOTHER;
+            }
+            ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
+            int64_t startTime = HAL->clock->getElapsedMicroseconds(0);
+            // schedulerKillProcess times out after 100 milliseconds, so
+            // timeout after 50 milliseconds.
+            while ((processMessageDone(&processMessage) == false)
+              && (HAL->clock->getElapsedMicroseconds(startTime) < 50000)
+            ) {
+              for (int ii = 0; ii < NUM_SCHEDULER_READY_QUEUE_TYPES; ii++) {
+                SCHEDULER_STATE->currentReady = &SCHEDULER_STATE->ready[ii];
+                uint8_t queueSize = SCHEDULER_STATE->currentReady->numElements;
+                for (uint8_t jj = 0; jj < queueSize; jj++) {
+                  runScheduler();
+                }
               }
             }
+            SCHEDULER_STATE->currentReady = currentReady;
           }
-          SCHEDULER_STATE->currentReady = currentReady;
         }
       }
 
