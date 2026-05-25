@@ -44,45 +44,35 @@ int main(int argc, char **argv) {
   int returnValue = 0;
 
   printf("- Dynamic memory left: %d\n", getFreeMemory());
-  char *passwdStringBuffer = (char*) malloc(NANO_OS_PASSWD_STRING_BUF_SIZE);
-  if (passwdStringBuffer == NULL) {
-    fprintf(stderr,
-      "ERROR! Could not allocate space for passwdStringBuffer in %s.\n",
-      argv[0]);
-    return 1;
-  }
+  // NANO_OS_PASSWD_STRING_BUF_SIZE is only 96 bytes, so put it on the stack.
+  char passwdStringBuffer[NANO_OS_PASSWD_STRING_BUF_SIZE];
   
-  struct passwd *pwd = (struct passwd*) malloc(sizeof(struct passwd));
-  if (pwd == NULL) {
-    fprintf(stderr,
-      "ERROR! Could not allocate space for pwd in %s.\n", argv[0]);
-    returnValue = 1;
-    goto freePasswdStringBuffer;
-  }
-  
+  // struct passwd is smaller than the size of a MemNode, so put it on the
+  // stack, too.
+  struct passwd pwd;
   ProcessInfo *processInfo = getProcessInfo();
   if (processInfo != NULL) {
     uint8_t numRunningProcesses = processInfo->numProcesses;
     ProcessInfoElement *processes = processInfo->processes;
     for (uint8_t ii = 0; ii < numRunningProcesses; ii++) {
       struct passwd *result = NULL;
-      returnValue = getpwuid_r(processes[ii].userId, pwd,
+      returnValue = getpwuid_r(processes[ii].userId, &pwd,
         passwdStringBuffer, NANO_OS_PASSWD_STRING_BUF_SIZE, &result);
       if (returnValue != 0) {
         fprintf(stderr, "getpwnam_r returned status %d\n", returnValue);
         returnValue = 1;
-        goto freePwd;
+        goto exit;
       } else if (result == NULL) {
         // returnValue is 0 but the result passwd struct is NULL.  This means
         // that the function completed successfully but that there's no such
         // user.  This is not an error for the function but we need to have
         // something to show for this user.  Set it to "unknown".
-        pwd->pw_name = "unknown";
+        pwd.pw_name = "unknown";
       }
       
       printf("%d  %s %s\n",
         processes[ii].pid,
-        pwd->pw_name,
+        pwd.pw_name,
         processes[ii].name);
     }
     free(processInfo); processInfo = NULL;
@@ -90,12 +80,7 @@ int main(int argc, char **argv) {
     printf("ERROR: Could not get process information from scheduler.\n");
   }
 
-freePwd:
-  free(pwd);
-
-freePasswdStringBuffer:
-  free(passwdStringBuffer);
-
+exit:
   printf("- Dynamic memory left: %d\n", getFreeMemory());
   return returnValue;
 }
