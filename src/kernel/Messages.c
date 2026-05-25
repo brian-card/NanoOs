@@ -417,6 +417,7 @@ int msg_wait_for_done(msg_t *msg, const struct timespec *ts) {
       if (wait_status != msg_success) {
         // Either we timed out or there's a problem with the condition.  Again,
         // we don't want to proceed like this.
+        return_value = wait_status;
         break;
       }
     }
