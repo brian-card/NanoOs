@@ -153,10 +153,13 @@ typedef struct FilesystemSeekParameters {
 /// @param pathname A string containing the full path to the file.
 /// @param mode A string containing the mode to open the file with.
 /// @param fd The numeric file descriptor to use for the file.
+/// @param returnValue A pointer to the FILE that's opened on success, NULL
+///   on failure.
 typedef struct FilesystemFopenParameters {
   const char *pathname;
   const char *mode;
   int         fd;
+  FILE       *returnValue;
 } FilesystemFopenParameters;
 
 /// @struct FilesystemFcloseParameters
@@ -170,6 +173,18 @@ typedef struct FilesystemFcloseParameters {
   FILE *stream;
   int returnValue;
 } FilesystemFcloseParameters;
+
+/// @struct FilesystemRemoveParameters
+///
+/// @brief Function parameters and return value for a remove call.
+///
+/// @param pathname The path to the file to remove.
+/// @param returnValue The return value of the operation that will be passed
+///   back to the handler.  This value will be set to the process's errno value.
+typedef struct FilesystemRemoveParameters {
+  const char *pathname;
+  int returnValue;
+} FilesystemRemoveParameters;
 
 /// @struct GetFileBlockMetadataArgs
 ///

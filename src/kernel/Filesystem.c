@@ -83,7 +83,7 @@ int filesystemOpenFileCommandHandler(
     printString("ERROR: driverState is not valid!\n");
   }
 
-  processMessageData(processMessage) = nanoOsFile;
+  fopenParameters->returnValue = nanoOsFile;
   processMessageSetDone(processMessage);
   return 0;
 }
@@ -239,14 +239,15 @@ int filesystemWriteFileCommandHandler(
 int filesystemRemoveFileCommandHandler(
   FilesystemState *filesystemState, ProcessMessage *processMessage
 ) {
-  const char *pathname = (const char*) processMessageData(processMessage);
+  FilesystemRemoveParameters *filesystemRemoveParameters
+    = (FilesystemRemoveParameters*) processMessageData(processMessage);
   int returnValue = 0;
   if (filesystemState->driverState != NULL) {
     returnValue = filesystemState->driverRemove(
-      filesystemState->driverState, pathname);
+      filesystemState->driverState, filesystemRemoveParameters->pathname);
   }
 
-  processMessageData(processMessage) = (void*) ((intptr_t) returnValue);
+  filesystemRemoveParameters->returnValue = returnValue;
   processMessageSetDone(processMessage);
   return 0;
 }
@@ -539,7 +540,7 @@ FILE* filesystemFopen(const char *pathname, const char *mode) {
     SCHEDULER_STATE->rootFsPid, FILESYSTEM_OPEN_FILE,
     &fopenParameters, sizeof(fopenParameters), true);
   processMessageWaitForDone(msg, NULL);
-  file = (FILE*) processMessageData(msg);
+  file = fopenParameters.returnValue;
   processMessageRelease(msg);
   if (file == NULL) {
     goto freeFileDescriptor;
@@ -643,11 +644,16 @@ exit:
 int filesystemRemove(const char *pathname) {
   int returnValue = 0;
   if ((pathname != NULL) && (*pathname != '\0')) {
+    FilesystemRemoveParameters filesystemRemoveParameters = {
+      .pathname = pathname,
+      .returnValue = 0,
+    };
+
     ProcessMessage *msg = initSendProcessMessageToPid(
       SCHEDULER_STATE->rootFsPid, FILESYSTEM_REMOVE_FILE,
-      (void*) pathname, strlen(pathname) + 1, true);
+      &filesystemRemoveParameters, sizeof(filesystemRemoveParameters), true);
     processMessageWaitForDone(msg, NULL);
-    returnValue = (int) ((intptr_t) processMessageData(msg));
+    returnValue = filesystemRemoveParameters.returnValue;
     if (returnValue != 0) {
       // returnValue holds a negative errno.  Set errno for the current process
       // and return -1 like we're supposed to.

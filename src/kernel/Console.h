@@ -37,6 +37,7 @@
 #define CONSOLE_H
 
 #include "stdbool.h"
+#include "stdint.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -50,6 +51,24 @@ extern "C"
 #define ASCII_ESCAPE   27
 #define ASCII_SPACE    32
 #define ASCII_DELETE  127
+
+/// @def CONSOLE_COMMAND_SIGNATURE
+///
+/// @brief The 64-bit signature used to validate that a command is a console
+/// command.  "CONSLCMD" as a little-endian value.
+#define CONSOLE_COMMAND_SIGNATURE ((uint64_t) 0x444D434C534E4F43)
+
+/// @struct ConsoleGetNumPortsParameters
+///
+/// @brief Parameters and return value for the CONSOLE_GET_NUM_PORTS command.
+///
+/// @param signature The 64-bit signature for console commands.  This should
+///   always be the value CONSOLE_COMMAND_SIGNATURE.
+/// @param numPorts The number of ports returned from the command.
+typedef struct ConsoleGetNumPortsParameters {
+  uint64_t signature;
+  int numPorts;
+} ConsoleGetNumPortsParameters;
 
 /// @enum ConsoleCommandResponse
 ///

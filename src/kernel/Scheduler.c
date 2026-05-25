@@ -50,8 +50,8 @@
 // Support prototypes.
 void runScheduler(void);
 int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp);
-int schedulerDumpMemoryAllocations(SchedulerState *schedulerState);
-int schedulerDumpOpenFiles(SchedulerState *schedulerState);
+int schedulerDumpMemoryAllocations();
+int schedulerDumpOpenFiles();
 void removeProcess(
   ProcessDescriptor *processDescriptor, const char *errorMessage);
 void forceYield(void);
@@ -560,31 +560,16 @@ void* schedulerResumeReallocMessage(void *ptr, size_t size) {
   reallocMessage.ptr = ptr;
   reallocMessage.size = size;
   
-  ProcessMessage *sent = getAvailableMessage();
-  if (sent == NULL) {
-    // Nothing we can do.  The scheduler can't yield.  Bail.
-    return returnValue;
-  }
-
-  processMessageInit(sent, MEMORY_MANAGER_REALLOC,
-    &reallocMessage, sizeof(reallocMessage), true);
-  // sent->from would normally be set during processMessageQueuePush.  We're
-  // not using that mechanism here, so we have to do it manually.  Things will
-  // get messed up if we don't.
-  msg_from(sent).coro = schedulerThread;
-
-  processMessageQueuePush(
-    &allProcesses[SCHEDULER_STATE->memoryManagerPid - 1], sent);
-  while (processMessageDone(sent) == false) {
-    runKernelExecutive();
+  if (schedulerInitSendMessageToPid(SCHEDULER_STATE->memoryManagerPid,
+    MEMORY_MANAGER_REALLOC, &reallocMessage, sizeof(reallocMessage)
+    ) != processSuccess
+  ) {
+    // Nothing we can do.
+    return returnValue; // NULL
   }
   // The handler set the pointer back in the structure we sent it, so grab it
   // out of the structure we already have.
   returnValue = reallocMessage.ptr;
-  // The handler pushes the message back onto our queue, which is not what we
-  // want.  Pop it off again.
-  processMessageQueuePop();
-  processMessageRelease(sent);
 
   // The message that was sent to us is the one that we allocated on the stack,
   // so, there's no reason to call processMessageRelease here.
@@ -648,25 +633,10 @@ void* schedCalloc(size_t nmemb, size_t size) {
 ///
 /// @return This function returns no value.
 void schedFree(void *ptr) {
-  ProcessMessage *sent = getAvailableMessage();
-  if (sent == NULL) {
-    // Nothing we can do.  The scheduler can't yield.  Bail.
-    return;
-  }
-
-  processMessageInit(sent, MEMORY_MANAGER_FREE, ptr, 0, true);
-  // sent->from would normally be set during processMessageQueuePush.  We're
-  // not using that mechanism here, so we have to do it manually.  Things will
-  // get messed up if we don't.
-  msg_from(sent).coro = schedulerThread;
-
-  processMessageQueuePush(
-    &allProcesses[SCHEDULER_STATE->memoryManagerPid - 1], sent);
-  while (processMessageDone(sent) == false) {
-    runKernelExecutive();
-  }
-  processMessageRelease(sent);
-
+  // No need to check the return value here.  There's nothing we can do if we
+  // fail to send the message for some reason.
+  schedulerInitSendMessageToPid(SCHEDULER_STATE->memoryManagerPid,
+    MEMORY_MANAGER_FREE, ptr, 0);
   return;
 }
 
@@ -679,32 +649,19 @@ void schedFree(void *ptr) {
 ///
 /// @return Returns 0 on success, -errno on failure.
 int assignMemory(void *ptr, Pid pid) {
-  ProcessMessage *sent = getAvailableMessage();
-  if (sent == NULL) {
-    // Nothing we can do.  The scheduler can't yield.  Bail.
-    return -ENOMEM;
-  }
-  
   AssignMemoryParams assignMemoryParams = {
     .ptr = ptr,
     .pid = pid,
   };
-  processMessageInit(sent, MEMORY_MANAGER_ASSIGN_MEMORY,
-    &assignMemoryParams, sizeof(assignMemoryParams), true);
-
-  // sent->from would normally be set during processMessageQueuePush.  We're
-  // not using that mechanism here, so we have to do it manually.  Things will
-  // get messed up if we don't.
-  msg_from(sent).coro = schedulerThread;
 
   int returnValue = 0;
-  processMessageQueuePush(
-    &allProcesses[SCHEDULER_STATE->memoryManagerPid - 1], sent);
-  while (processMessageDone(sent) == false) {
-    runKernelExecutive();
+  if (schedulerInitSendMessageToPid(SCHEDULER_STATE->memoryManagerPid,
+    MEMORY_MANAGER_ASSIGN_MEMORY,
+    &assignMemoryParams, sizeof(assignMemoryParams)) != processSuccess
+  ) {
+    // Nothing we can do.
+    returnValue = -ENOMEM;
   }
-  returnValue = (int) ((intptr_t) processMessageData(sent));
-  processMessageRelease(sent);
 
   return returnValue;
 }
@@ -760,44 +717,30 @@ int schedulerSetPortShell(uint8_t consolePort, Pid shell) {
   return returnValue;
 }
 
-/// @fn int schedulerGetNumConsolePorts(SchedulerState *schedulerState)
+/// @fn int schedulerGetNumConsolePorts(void)
 ///
 /// @brief Get the number of ports the console is running.
 ///
-/// @param schedulerState A pointer to the SchedulerState object maintainted by
-///   the scheduler.
-///
 /// @return Returns the number of ports the console is running on success, -1
 /// on failure.
-int schedulerGetNumConsolePorts(SchedulerState *schedulerState) {
+int schedulerGetNumConsolePorts(void) {
   int returnValue = -1;
-  ProcessMessage *messageToSend = getAvailableMessage();
-  for (int ii = 0;
-    (ii < MAX_GET_MESSAGE_RETRIES) && (messageToSend == NULL);
-    ii++
-  ) {
-    runKernelExecutive();
-    messageToSend = getAvailableMessage();
-  }
-  if (messageToSend == NULL) {
-    printInt(getRunningPid());
-    printString(": ");
-    printString(__func__);
-    printString(": ERROR: Out of messages\n");
-    return returnValue; // -1
-  }
 
-  processMessageInit(messageToSend, CONSOLE_GET_NUM_PORTS,
-    /*data= */ 0, /* size= */ 0, /* waiting= */ true);
-  if (schedulerSendProcessMessageToPid(schedulerState,
-    SCHEDULER_STATE->consolePid, messageToSend) != processSuccess
+  ConsoleGetNumPortsParameters consoleGetNumPortsParameters = {
+    .signature = CONSOLE_COMMAND_SIGNATURE,
+    .numPorts = 0,
+  };
+  if (schedulerInitSendMessageToPid(
+    SCHEDULER_STATE->consolePid,
+    CONSOLE_GET_NUM_PORTS,
+    /* data= */ &consoleGetNumPortsParameters,
+    /* size= */ sizeof(consoleGetNumPortsParameters)) != processSuccess
   ) {
     printString("ERROR: Could not send CONSOLE_GET_NUM_PORTS to console\n");
     return returnValue; // -1
   }
 
-  returnValue = (int) ((intptr_t) processMessageData(messageToSend));
-  processMessageRelease(messageToSend);
+  returnValue = consoleGetNumPortsParameters.numPorts;
 
   return returnValue;
 }
@@ -837,7 +780,8 @@ Pid schedulerGetNumRunningProcesses(struct timespec *timeout) {
     goto releaseMessage;
   }
 
-  numProcessDescriptors = (Pid) ((uintptr_t) processMessageData(processMessage));
+  numProcessDescriptors
+    = (Pid) ((uintptr_t) processMessageData(processMessage));
   if (numProcessDescriptors == 0) {
     printf("ERROR: Number of running processes returned from the "
       "scheduler is 0.\n");
@@ -1502,46 +1446,22 @@ FILE* schedFopen(const char *pathname, const char *mode) {
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    printDebugString("schedFopen: Getting message\n");
-    ProcessMessage *processMessage = getAvailableMessage();
-    for (int ii = 0;
-      (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
-      ii++
-    ) {
-      runKernelExecutive();
-      processMessage = getAvailableMessage();
-    }
-    if (processMessage == NULL) {
-      printInt(getRunningPid());
-      printString(": ");
-      printString(__func__);
-      printString(": ");
-      printInt(__LINE__);
-      printString(": ERROR: Out of process messages\n");
-      return NULL;
-    }
-    printDebugString("schedFopen: Message retrieved\n");
     FilesystemFopenParameters fopenParameters = {
       .pathname = pathname,
       .mode = mode,
+      .fd = 0, // We don't care
     };
-    printDebugString("schedFopen: Initializing message\n");
-    processMessageInit(processMessage, FILESYSTEM_OPEN_FILE,
-      &fopenParameters, sizeof(fopenParameters), true);
-    printDebugString("schedFopen: Pushing message\n");
-    processMessageQueuePush(
-      &SCHEDULER_STATE->allProcesses[SCHEDULER_STATE->rootFsPid - 1],
-      processMessage);
-
-    printDebugString("schedFopen: Resuming filesystem\n");
-    while (processMessageDone(processMessage) == false) {
-      runKernelExecutive();
+    printDebugString("schedFopen: Sending message\n");
+    if (schedulerInitSendMessageToPid(SCHEDULER_STATE->rootFsPid,
+      FILESYSTEM_OPEN_FILE, &fopenParameters, sizeof(fopenParameters)
+      ) != processSuccess
+    ) {
+      // Nothing we can do.
+      return returnValue; // NULL
     }
-    printDebugString("schedFopen: Filesystem message is done\n");
 
-    returnValue = (FILE*) processMessageData(processMessage);
+    returnValue = fopenParameters.returnValue;
 
-    processMessageRelease(processMessage);
     _functionInProgress = NULL;
   } else {
     printString("ERROR: Cannot execute ");
@@ -1573,36 +1493,17 @@ int schedFclose(FILE *stream) {
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    ProcessMessage *processMessage = getAvailableMessage();
-    for (int ii = 0;
-      (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
-      ii++
-    ) {
-      runKernelExecutive();
-      processMessage = getAvailableMessage();
-    }
-    if (processMessage == NULL) {
-      printInt(getRunningPid());
-      printString(": ");
-      printString(__func__);
-      printString(": ");
-      printInt(__LINE__);
-      printString(": ERROR: Out of process messages\n");
-      errno = ENOMEM;
-      return EOF;
-    }
-  
     FilesystemFcloseParameters fcloseParameters;
     fcloseParameters.stream = stream;
     fcloseParameters.returnValue = 0;
-    processMessageInit(processMessage, FILESYSTEM_CLOSE_FILE,
-      &fcloseParameters, sizeof(fcloseParameters), true);
-    processMessageQueuePush(
-      &SCHEDULER_STATE->allProcesses[SCHEDULER_STATE->rootFsPid - 1],
-      processMessage);
 
-    while (processMessageDone(processMessage) == false) {
-      runKernelExecutive();
+    if (schedulerInitSendMessageToPid(SCHEDULER_STATE->rootFsPid,
+      FILESYSTEM_CLOSE_FILE, &fcloseParameters, sizeof(fcloseParameters)
+      ) != processSuccess
+    ) {
+      // Nothing we can do.
+      errno = EOTHER;
+      return EOF;
     }
 
     if (fcloseParameters.returnValue != 0) {
@@ -1610,7 +1511,6 @@ int schedFclose(FILE *stream) {
       returnValue = EOF;
     }
 
-    processMessageRelease(processMessage);
     _functionInProgress = NULL;
   } else {
     printString("ERROR: Cannot execute ");
@@ -1642,43 +1542,28 @@ int schedRemove(const char *pathname) {
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    ProcessMessage *processMessage = getAvailableMessage();
-    for (int ii = 0;
-      (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
-      ii++
+    FilesystemRemoveParameters filesystemRemoveParameters = {
+      .pathname = pathname,
+      .returnValue = 0,
+    };
+
+    if (schedulerInitSendMessageToPid(SCHEDULER_STATE->rootFsPid,
+      FILESYSTEM_REMOVE_FILE,
+      &filesystemRemoveParameters, sizeof(filesystemRemoveParameters)
+      ) != processSuccess
     ) {
-      runKernelExecutive();
-      processMessage = getAvailableMessage();
-    }
-    if (processMessage == NULL) {
-      printInt(getRunningPid());
-      printString(": ");
-      printString(__func__);
-      printString(": ");
-      printInt(__LINE__);
-      printString(": ERROR: Out of process messages\n");
-      errno = ENOMEM;
+      // Nothing we can do.
+      errno = EOTHER;
       return -1;
     }
-    processMessageInit(processMessage, FILESYSTEM_REMOVE_FILE,
-      (void*) pathname, strlen(pathname) + 1, true);
-    processMessageQueuePush(
-      &SCHEDULER_STATE->allProcesses[SCHEDULER_STATE->rootFsPid - 1],
-      processMessage);
 
-    while (processMessageDone(processMessage) == false) {
-      runKernelExecutive();
-    }
-
-    returnValue = (int) ((intptr_t) processMessageData(processMessage));
-    if (returnValue != 0) {
+    if (filesystemRemoveParameters.returnValue != 0) {
       // returnValue holds a negative errno.  Set errno for the current process
       // and return -1 like we're supposed to.
-      errno = -returnValue;
+      errno = -filesystemRemoveParameters.returnValue;
       returnValue = -1;
     }
 
-    processMessageRelease(processMessage);
     _functionInProgress = NULL;
   } else {
     printString("ERROR: Cannot execute ");
@@ -1716,36 +1601,15 @@ size_t schedFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    ProcessMessage *processMessage = getAvailableMessage();
-    for (int ii = 0;
-      (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
-      ii++
+    if (schedulerInitSendMessageToPid(SCHEDULER_STATE->rootFsPid,
+      FILESYSTEM_READ_FILE,
+      &filesystemIoCommandParameters, sizeof(filesystemIoCommandParameters)
+      ) != processSuccess
     ) {
-      runKernelExecutive();
-      processMessage = getAvailableMessage();
-    }
-    if (processMessage == NULL) {
-      printInt(getRunningPid());
-      printString(": ");
-      printString(__func__);
-      printString(": ");
-      printInt(__LINE__);
-      printString(": ERROR: Out of process messages\n");
-      errno = ENOMEM;
+      // Nothing we can do.
       return 0;
     }
-    processMessageInit(processMessage, FILESYSTEM_READ_FILE,
-      &filesystemIoCommandParameters, sizeof(filesystemIoCommandParameters),
-      true);
-    processMessageQueuePush(
-      &SCHEDULER_STATE->allProcesses[SCHEDULER_STATE->rootFsPid - 1],
-      processMessage);
 
-    while (processMessageDone(processMessage) == false) {
-      runKernelExecutive();
-    }
-
-    processMessageRelease(processMessage);
     _functionInProgress = NULL;
   } else {
     printString("ERROR: Cannot execute ");
@@ -1783,36 +1647,15 @@ size_t schedFwrite(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    ProcessMessage *processMessage = getAvailableMessage();
-    for (int ii = 0;
-      (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
-      ii++
+    if (schedulerInitSendMessageToPid(SCHEDULER_STATE->rootFsPid,
+      FILESYSTEM_WRITE_FILE,
+      &filesystemIoCommandParameters, sizeof(filesystemIoCommandParameters)
+      ) != processSuccess
     ) {
-      runKernelExecutive();
-      processMessage = getAvailableMessage();
-    }
-    if (processMessage == NULL) {
-      printInt(getRunningPid());
-      printString(": ");
-      printString(__func__);
-      printString(": ");
-      printInt(__LINE__);
-      printString(": ERROR: Out of process messages\n");
-      errno = ENOMEM;
+      // Nothing we can do.
       return 0;
     }
-    processMessageInit(processMessage, FILESYSTEM_WRITE_FILE,
-      &filesystemIoCommandParameters, sizeof(filesystemIoCommandParameters),
-      true);
-    processMessageQueuePush(
-      &SCHEDULER_STATE->allProcesses[SCHEDULER_STATE->rootFsPid - 1],
-      processMessage);
 
-    while (processMessageDone(processMessage) == false) {
-      runKernelExecutive();
-    }
-
-    processMessageRelease(processMessage);
     _functionInProgress = NULL;
   } else {
     printString("ERROR: Cannot execute ");
@@ -1852,40 +1695,19 @@ char* schedFgets(char *buffer, int size, FILE *stream) {
       .length = (uint32_t) size - 1
     };
 
-    ProcessMessage *processMessage = getAvailableMessage();
-    for (int ii = 0;
-      (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
-      ii++
+    if (schedulerInitSendMessageToPid(SCHEDULER_STATE->rootFsPid,
+      FILESYSTEM_READ_FILE,
+      &filesystemIoCommandParameters, sizeof(filesystemIoCommandParameters)
+      ) != processSuccess
     ) {
-      runKernelExecutive();
-      processMessage = getAvailableMessage();
-    }
-    if (processMessage == NULL) {
-      printInt(getRunningPid());
-      printString(": ");
-      printString(__func__);
-      printString(": ");
-      printInt(__LINE__);
-      printString(": ERROR: Out of process messages\n");
-      errno = ENOMEM;
+      // Nothing we can do.
       return NULL;
-    }
-    processMessageInit(processMessage, FILESYSTEM_READ_FILE,
-      &filesystemIoCommandParameters, sizeof(filesystemIoCommandParameters),
-      true);
-    processMessageQueuePush(
-      &SCHEDULER_STATE->allProcesses[SCHEDULER_STATE->rootFsPid - 1],
-      processMessage);
-
-    while (processMessageDone(processMessage) == false) {
-      runKernelExecutive();
     }
     if (filesystemIoCommandParameters.length > 0) {
       buffer[filesystemIoCommandParameters.length] = '\0';
       returnValue = buffer;
     }
 
-    processMessageRelease(processMessage);
     _functionInProgress = NULL;
   } else {
     printString("ERROR: Cannot execute ");
@@ -1924,39 +1746,18 @@ int schedFputs(const char *s, FILE *stream) {
       .length = (uint32_t) strlen(s)
     };
 
-    ProcessMessage *processMessage = getAvailableMessage();
-    for (int ii = 0;
-      (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
-      ii++
+    if (schedulerInitSendMessageToPid(SCHEDULER_STATE->rootFsPid,
+      FILESYSTEM_WRITE_FILE,
+      &filesystemIoCommandParameters, sizeof(filesystemIoCommandParameters)
+      ) != processSuccess
     ) {
-      runKernelExecutive();
-      processMessage = getAvailableMessage();
-    }
-    if (processMessage == NULL) {
-      printInt(getRunningPid());
-      printString(": ");
-      printString(__func__);
-      printString(": ");
-      printInt(__LINE__);
-      printString(": ERROR: Out of process messages\n");
-      errno = ENOMEM;
+      // Nothing we can do.
       return EOF;
-    }
-    processMessageInit(processMessage, FILESYSTEM_WRITE_FILE,
-      &filesystemIoCommandParameters, sizeof(filesystemIoCommandParameters),
-      true);
-    processMessageQueuePush(
-      &SCHEDULER_STATE->allProcesses[SCHEDULER_STATE->rootFsPid - 1],
-      processMessage);
-
-    while (processMessageDone(processMessage) == false) {
-      runKernelExecutive();
     }
     if (filesystemIoCommandParameters.length == 0) {
       returnValue = EOF;
     }
 
-    processMessageRelease(processMessage);
     _functionInProgress = NULL;
   } else {
     printString("ERROR: Cannot execute ");
@@ -1996,38 +1797,13 @@ int schedGetFileBlockMetadataFromFile(
     .metadata = metadata,
   };
 
-  ProcessMessage *processMessage = getAvailableMessage();
-  for (int ii = 0;
-    (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
-    ii++
+  if (schedulerInitSendMessageToPid(SCHEDULER_STATE->rootFsPid,
+    FILESYSTEM_GET_FILE_BLOCK_METADATA, &args, sizeof(args)
+    ) != processSuccess
   ) {
-    runKernelExecutive();
-    processMessage = getAvailableMessage();
-  }
-  if (processMessage == NULL) {
-    printInt(getRunningPid());
-    printString(": ");
-    printString(__func__);
-    printString(": ");
-    printInt(__LINE__);
-    printString(": ERROR: Out of process messages\n");
-    return -ENOMEM;
-  }
-
-  processMessageInit(processMessage, FILESYSTEM_GET_FILE_BLOCK_METADATA,
-    &args, sizeof(args), true);
-  if (sendProcessMessageToPid(SCHEDULER_STATE->rootFsPid, processMessage)
-    != processSuccess
-  ) {
-    printString("ERROR! Failed to send message to filesystem to get file "
-      "block metadata\n");
-    processMessageRelease(processMessage);
+    // Nothing we can do.
     return -EIO;
   }
-  while (processMessageDone(processMessage) == false) {
-    runKernelExecutive();
-  }
-  processMessageRelease(processMessage);
 
   return 0;
 }
@@ -2267,7 +2043,8 @@ int schedulerGetNumProcessDescriptorsCommandHandler(
       numProcessDescriptors++;
     }
   }
-  processMessageData(processMessage) = (void*) ((uintptr_t) numProcessDescriptors);
+  processMessageData(processMessage)
+    = (void*) ((uintptr_t) numProcessDescriptors);
 
   processMessageSetDone(processMessage);
 
@@ -2297,7 +2074,10 @@ int schedulerGetProcessInfoCommandHandler(
   int maxProcesses = processInfo->numProcesses;
   ProcessInfoElement *processes = processInfo->processes;
   int idx = 0;
-  for (int ii = 1; (ii <= NANO_OS_NUM_PROCESSES) && (idx < maxProcesses); ii++) {
+  for (int ii = 1;
+    (ii <= NANO_OS_NUM_PROCESSES) && (idx < maxProcesses);
+    ii++
+  ) {
     if (processRunning(&schedulerState->allProcesses[ii - 1])) {
       processes[idx].pid = (int) schedulerState->allProcesses[ii - 1].pid;
       processes[idx].name = schedulerState->allProcesses[ii - 1].name;
@@ -2336,7 +2116,8 @@ int schedulerGetProcessUserCommandHandler(
   Pid callingPid = processPid(processMessageFrom(processMessage));
   if ((callingPid > 0) && (callingPid <= NANO_OS_NUM_PROCESSES)) {
     processMessageData(processMessage)
-      = (void*) ((intptr_t) schedulerState->allProcesses[callingPid - 1].userId);
+      = (void*) ((intptr_t) schedulerState->allProcesses[
+        callingPid - 1].userId);
   } else {
     processMessageData(processMessage) = (void*) ((intptr_t) -1);
   }
@@ -3071,8 +2852,8 @@ int schedulerSendSignalCommandHandler(
         // We can't deliver the signal to the process.
         sendSignalArgs->returnValue = -1;
         sendSignalArgs->errorNumber = ESRCH; // Closest POSIX-compliant value
-        schedulerDumpMemoryAllocations(SCHEDULER_STATE);
-        schedulerDumpOpenFiles(SCHEDULER_STATE);
+        schedulerDumpMemoryAllocations();
+        schedulerDumpOpenFiles();
         removeProcess(processDescriptor, "Overlay load failure");
         goto exit; // return 0
       }
@@ -3225,74 +3006,47 @@ void forceYield(void) {
   processYieldTo(&allProcesses[SCHEDULER_STATE->schedulerPid - 1]);
 }
 
-/// @fn int schedulerDumpMemoryAllocations(SchedulerState *schedulerState)
+/// @fn int schedulerDumpMemoryAllocations(void)
 ///
 /// @brief Make the memory manager dump metadata about all its outstanding
 /// allocations.
 ///
-/// @param schedulerState A pointer to the SchedulerState managed by the
-///   scheduler.
-///
 /// @return Returns 0 on success, -1 on failure.
-int schedulerDumpMemoryAllocations(SchedulerState *schedulerState) {
+int schedulerDumpMemoryAllocations(void) {
   int returnValue = 0;
   
-  ProcessMessage *dumpMemoryAllocationsMessage = getAvailableMessage();
-  if (dumpMemoryAllocationsMessage != NULL) {
-    processMessageInit(dumpMemoryAllocationsMessage,
-      MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS, NULL, 0, true);
-    if (schedulerSendProcessMessageToProcess(
-      &schedulerState->allProcesses[SCHEDULER_STATE->memoryManagerPid - 1],
-      dumpMemoryAllocationsMessage) != processSuccess
-    ) {
-      printString("ERROR: Could not send message ");
-      printString("MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS to memory manager\n");
-      processMessageRelease(dumpMemoryAllocationsMessage);
-    }
-    if (processMessageDone(dumpMemoryAllocationsMessage) == false) {
-      printString("ERROR: dumpMemoryAllocationsMessage is not done!\n");
-    }
-    processMessageRelease(dumpMemoryAllocationsMessage);
-  } else {
-    printString("WARNING: Could not allocate dumpMemoryAllocationsMessage.\n");
-    returnValue = -1;
+  if (schedulerInitSendMessageToPid(
+    SCHEDULER_STATE->memoryManagerPid,
+    MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS,
+    /* data= */ NULL,
+    /* size= */ 0) != processSuccess
+  ) { 
+    printString("ERROR: Could not send message ");
+    printString("MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS to memory manager\n");
   }
   
   return returnValue;
 }
 
-/// @fn int schedulerDumpOpenFiles(SchedulerState *schedulerState)
+/// @fn int schedulerDumpOpenFiles(void)
 ///
 /// @brief Make the memory manager dump metadata about all its outstanding
 /// allocations.
 ///
-/// @param schedulerState A pointer to the SchedulerState managed by the
-///   scheduler.
-///
 /// @return Returns 0 on success, -1 on failure.
-int schedulerDumpOpenFiles(SchedulerState *schedulerState) {
+int schedulerDumpOpenFiles(void) {
   int returnValue = 0;
   
-  ProcessMessage *dumpOpenFilesMessage = getAvailableMessage();
-  if (dumpOpenFilesMessage != NULL) {
-    processMessageInit(dumpOpenFilesMessage,
-      FILESYSTEM_DUMP_OPEN_FILES, NULL, 0, true);
-    if (schedulerSendProcessMessageToProcess(
-      &schedulerState->allProcesses[schedulerState->rootFsPid - 1],
-      dumpOpenFilesMessage) != processSuccess
-    ) {
-      printString("ERROR: Could not send FILESYSTEM_DUMP_OPEN_FILES message ");
-      printString("to root FS process ID ");
-      printInt(schedulerState->rootFsPid);
-      printString("\n");
-    }
-    if (processMessageDone(dumpOpenFilesMessage) == false) {
-      printString("ERROR: dumpOpenFilesMessage is not done!\n");
-    }
-    processMessageRelease(dumpOpenFilesMessage);
-  } else {
-    printString("WARNING: Could not allocate dumpOpenFilesMessage.\n");
-    returnValue = -1;
+  if (schedulerInitSendMessageToPid(
+    SCHEDULER_STATE->rootFsPid,
+    FILESYSTEM_DUMP_OPEN_FILES,
+    /* data= */ NULL,
+    /* size= */ 0) != processSuccess
+  ) { 
+    printString("ERROR: Could not send FILESYSTEM_DUMP_OPEN_FILES message ");
+    printString("to root FS process ID ");
+    printInt(SCHEDULER_STATE->rootFsPid);
+    printString("\n");
   }
   
   return returnValue;
@@ -3711,8 +3465,8 @@ void runScheduler(void) {
         processDescriptor,
         processDescriptor->envp) != 0
       ) {
-        schedulerDumpMemoryAllocations(SCHEDULER_STATE);
-        schedulerDumpOpenFiles(SCHEDULER_STATE);
+        schedulerDumpMemoryAllocations();
+        schedulerDumpOpenFiles();
         removeProcess(processDescriptor, "Overlay load failure");
         return;
       }
@@ -4059,7 +3813,7 @@ __attribute__((noinline)) void startScheduler(
   processQueuePush(allProcesses[schedulerState.consolePid - 1].readyQueue,
     &allProcesses[schedulerState.consolePid - 1]);
 
-  schedulerState.numShells = schedulerGetNumConsolePorts(&schedulerState);
+  schedulerState.numShells = schedulerGetNumConsolePorts();
   if (schedulerState.numShells <= 0) {
     // This should be impossible since the HAL was successfully initialized,
     // but take no chances.
