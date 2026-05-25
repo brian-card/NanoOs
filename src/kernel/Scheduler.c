@@ -3371,12 +3371,12 @@ void runScheduler(void) {
     printString("ERROR: No processes to pop in ");
     printString(SCHEDULER_STATE->currentReady->name);
     printString(" process queue\n");
-    return;
+    goto exit;
   }
 
   if (processCorrupted(processDescriptor)) {
     removeProcess(processDescriptor, "Process corruption detected");
-    return;
+    goto exit;
   }
 
   if (processDescriptor->pid >= SCHEDULER_STATE->firstUserPid) {
@@ -3389,7 +3389,7 @@ void runScheduler(void) {
         schedulerDumpMemoryAllocations();
         schedulerDumpOpenFiles();
         removeProcess(processDescriptor, "Overlay load failure");
-        return;
+        goto exit;
       }
     }
     
@@ -3463,7 +3463,7 @@ void runScheduler(void) {
       // We're not done initializing yet.  Put the process back on the ready
       // queue and try again later.
       processQueuePush(SCHEDULER_STATE->currentReady, processDescriptor);
-      return;
+      goto exit;
     }
 
     if (processDescriptor->userId == NO_USER_ID) {
@@ -3483,10 +3483,11 @@ void runScheduler(void) {
       if (returnValue == -EBUSY) {
         // We're in the middle of a file operation already.  Just try again
         // later.
-        return;
+        processQueuePush(SCHEDULER_STATE->currentReady, processDescriptor);
+        goto exit;
       } else if (returnValue != 0) {
         removeProcess(processDescriptor, "Failed to load getty");
-        return;
+        goto exit;
       }
     } else {
       // User process exited.  Re-launch the shell.
@@ -3529,7 +3530,8 @@ void runScheduler(void) {
           // dynamic memory and try again later.
           schedFree(pwd);
           schedFree(passwdStringBuffer);
-          return;
+          processQueuePush(SCHEDULER_STATE->currentReady, processDescriptor);
+          goto exit;
         } else if (returnValue != 0) {
           removeProcess(processDescriptor, "Failed to load shell");
           schedFree(pwd);
@@ -3547,7 +3549,7 @@ void runScheduler(void) {
             schedFree(processDescriptor->envp);
             processDescriptor->envp = NULL;
           }
-          return;
+          goto exit;
         }
       } while (0);
       schedFree(pwd);
@@ -3575,6 +3577,7 @@ void runScheduler(void) {
     processQueuePush(SCHEDULER_STATE->currentReady, processDescriptor);
   }
 
+exit:
   checkForTimeouts(SCHEDULER_STATE);
   handleSchedulerMessage(SCHEDULER_STATE);
 
