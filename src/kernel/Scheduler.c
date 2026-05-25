@@ -403,15 +403,6 @@ int schedulerSendProcessMessageToProcess(
     returnValue = processError;
     goto exit;
   }
-  // processMessage->from would normally be set when we do a
-  // processMessageQueuePush. We're not using that mechanism here, so we have
-  // to do it manually.  If we don't do this, then commands that validate that
-  // the message came from the scheduler will fail.
-  msg_from(processMessage).coro = schedulerThread;
-
-  // Have to set the endpoint type manually since we're not using
-  // comessageQueuePush.
-  processMessage->msg_sync = &msg_sync_array[MSG_CORO_SAFE];
 
   // Sanity checks
   if (processCorrupted(processDescriptor)) {
@@ -1263,6 +1254,9 @@ freeExecArgs:
 int closeProcessFileDescriptors(
   SchedulerState *schedulerState, ProcessDescriptor *processDescriptor
 ) {
+  ProcessMessage processMessage;
+  memset(&processMessage, 0, sizeof(processMessage));
+
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
@@ -1270,23 +1264,6 @@ int closeProcessFileDescriptors(
     if (fileDescriptors == NULL) {
       // Nothing to do.
       return 0;
-    }
-    ProcessMessage *messageToSend = getAvailableMessage();
-    for (int ii = 0;
-      (ii < MAX_GET_MESSAGE_RETRIES) && (messageToSend == NULL);
-      ii++
-    ) {
-      runKernelExecutive();
-      messageToSend = getAvailableMessage();
-    }
-    if (messageToSend == NULL) {
-      printInt(getRunningPid());
-      printString(": ");
-      printString(__func__);
-      printString(": ");
-      printInt(__LINE__);
-      printString(": ERROR: Out of process messages\n");
-      return -1;
     }
     uint8_t numFileDescriptors = processDescriptor->numFileDescriptors;
     for (uint8_t ii = 0; ii < numFileDescriptors; ii++) {
@@ -1296,9 +1273,7 @@ int closeProcessFileDescriptors(
         continue;
       }
 
-      Pid waitingOutputPid
-        = fileDescriptor->outputChannel.pid;
-      
+      Pid waitingOutputPid = fileDescriptor->outputChannel.pid;
       if ((waitingOutputPid != PROCESS_ID_NOT_SET)
         && (waitingOutputPid != SCHEDULER_STATE->consolePid)
       ) {
@@ -1317,84 +1292,33 @@ int closeProcessFileDescriptors(
           waitingProcessDescriptor->fileDescriptors[
             STDIN_FILE_DESCRIPTOR_INDEX]->inputChannel.pid = PROCESS_ID_NOT_SET;
 
-          if (processRunning(waitingProcessDescriptor)) {
+          if (processState(waitingProcessDescriptor) == PROCESS_STATE_WAIT) {
             // Send an empty message to the waiting process so that it will
             // become unblocked.
-            processMessageInit(messageToSend,
-              fileDescriptor->outputChannel.messageType,
-              /*data= */ NULL, /* size= */ 0, /* waiting= */ false);
-            processMessageQueuePush(waitingProcessDescriptor, messageToSend);
-
-            // The function that was waiting should have released the message we
-            // sent it.  Get another one.
-            messageToSend = getAvailableMessage();
-            for (int jj = 0;
-              (jj < MAX_GET_MESSAGE_RETRIES) && (messageToSend == NULL);
-              jj++
+            if (processMessageInit(&processMessage,
+              fileDescriptor->outputChannel.messageType, NULL, 0, true
+              ) != processSuccess
             ) {
-              runKernelExecutive();
-              messageToSend = getAvailableMessage();
-            }
-            if (messageToSend == NULL) {
-              printInt(getRunningPid());
-              printString(": ");
-              printString(__func__);
-              printString(": ");
-              printInt(__LINE__);
-              printString(": ERROR: Out of process messages\n");
+              // Nothing we can do.
               return -1;
             }
-          }
-        }
-      }
-
-      Pid waitingInputPid = fileDescriptor->inputChannel.pid;
-      if ((waitingInputPid != PROCESS_ID_NOT_SET)
-        && (waitingInputPid != SCHEDULER_STATE->consolePid)
-      ) {
-        ProcessDescriptor *waitingProcessDescriptor
-          = &schedulerState->allProcesses[waitingInputPid - 1];
-
-        if ((waitingProcessDescriptor->fileDescriptors != NULL)
-          && (waitingProcessDescriptor->fileDescriptors[
-            STDOUT_FILE_DESCRIPTOR_INDEX] != NULL)
-          && (waitingProcessDescriptor->numFileDescriptors
-            > STDOUT_FILE_DESCRIPTOR_INDEX)
-        ) {
-          // Clear the pid of the waiting process's stdout file descriptor.
-          waitingProcessDescriptor->fileDescriptors[
-            STDOUT_FILE_DESCRIPTOR_INDEX]->pipeEnd = NULL;
-          waitingProcessDescriptor->fileDescriptors[
-            STDOUT_FILE_DESCRIPTOR_INDEX]->outputChannel.pid
-            = PROCESS_ID_NOT_SET;
-
-          if (processRunning(waitingProcessDescriptor)) {
-            // Send an empty message to the waiting process so that it will
-            // become unblocked.
-            processMessageInit(messageToSend,
-              fileDescriptor->outputChannel.messageType,
-              /*data= */ NULL, /* size= */ 0, /* waiting= */ false);
-            processMessageQueuePush(waitingProcessDescriptor, messageToSend);
-
-            // The function that was waiting should have released the message we
-            // sent it.  Get another one.
-            messageToSend = getAvailableMessage();
-            for (int jj = 0;
-              (jj < MAX_GET_MESSAGE_RETRIES) && (messageToSend == NULL);
-              jj++
+            if (processMessageQueuePush(waitingProcessDescriptor,
+              &processMessage) != processSuccess
             ) {
-              runKernelExecutive();
-              messageToSend = getAvailableMessage();
-            }
-            if (messageToSend == NULL) {
-              printInt(getRunningPid());
-              printString(": ");
-              printString(__func__);
-              printString(": ");
-              printInt(__LINE__);
-              printString(": ERROR: Out of process messages\n");
+              // Nothing we can do.
               return -1;
             }
+            ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
+            while (processMessageDone(&processMessage) == false) {
+              for (int ii = 0; ii < NUM_SCHEDULER_READY_QUEUE_TYPES; ii++) {
+                SCHEDULER_STATE->currentReady = &SCHEDULER_STATE->ready[ii];
+                uint8_t queueSize = SCHEDULER_STATE->currentReady->numElements;
+                for (uint8_t jj = 0; jj < queueSize; jj++) {
+                  runScheduler();
+                }
+              }
+            }
+            SCHEDULER_STATE->currentReady = currentReady;
           }
         }
       }
@@ -1410,7 +1334,6 @@ int closeProcessFileDescriptors(
 
     // schedFree will pull an available message.  Release the one we've been
     // using so that we're guaranteed it will be successful.
-    processMessageRelease(messageToSend);
     schedFree(fileDescriptors); processDescriptor->fileDescriptors = NULL;
     processDescriptor->numFileDescriptors = 0;
 
