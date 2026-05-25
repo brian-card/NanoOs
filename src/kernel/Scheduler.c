@@ -1430,11 +1430,8 @@ int schedFclose(FILE *stream) {
     printString(" because ");
     printString(_functionInProgress);
     printString(" is already in progress\n");
-    if (HAL->power != NULL) {
-      HAL->power->enterMode(HAL_POWER_MODE_OFF);
-    } else {
-      while (1);
-    }
+    errno = EBUSY;
+    returnValue = EOF;
   }
 
   return returnValue;
@@ -1483,11 +1480,8 @@ int schedRemove(const char *pathname) {
     printString(" because ");
     printString(_functionInProgress);
     printString(" is already in progress\n");
-    if (HAL->power != NULL) {
-      HAL->power->enterMode(HAL_POWER_MODE_OFF);
-    } else {
-      while (1);
-    }
+    errno = EBUSY;
+    returnValue = -1;
   }
 
   return returnValue;
@@ -1529,11 +1523,8 @@ size_t schedFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     printString(" because ");
     printString(_functionInProgress);
     printString(" is already in progress\n");
-    if (HAL->power != NULL) {
-      HAL->power->enterMode(HAL_POWER_MODE_OFF);
-    } else {
-      while (1);
-    }
+    errno = EBUSY;
+    return 0;
   }
 
   return filesystemIoCommandParameters.length / size;
@@ -1575,11 +1566,8 @@ size_t schedFwrite(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     printString(" because ");
     printString(_functionInProgress);
     printString(" is already in progress\n");
-    if (HAL->power != NULL) {
-      HAL->power->enterMode(HAL_POWER_MODE_OFF);
-    } else {
-      while (1);
-    }
+    errno = EBUSY;
+    return 0;
   }
 
   return filesystemIoCommandParameters.length / size;
@@ -1627,11 +1615,8 @@ char* schedFgets(char *buffer, int size, FILE *stream) {
     printString(" because ");
     printString(_functionInProgress);
     printString(" is already in progress\n");
-    if (HAL->power != NULL) {
-      HAL->power->enterMode(HAL_POWER_MODE_OFF);
-    } else {
-      while (1);
-    }
+    errno = EBUSY;
+    // returnValue is already NULL.
   }
 
   return returnValue;
@@ -1677,11 +1662,8 @@ int schedFputs(const char *s, FILE *stream) {
     printString(" because ");
     printString(_functionInProgress);
     printString(" is already in progress\n");
-    if (HAL->power != NULL) {
-      HAL->power->enterMode(HAL_POWER_MODE_OFF);
-    } else {
-      while (1);
-    }
+    errno = EBUSY;
+    returnValue = EOF;
   }
 
   return returnValue;
