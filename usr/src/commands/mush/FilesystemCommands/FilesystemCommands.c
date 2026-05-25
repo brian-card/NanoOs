@@ -156,6 +156,7 @@ void* runFsCommand(void *args) {
   
   // If we made it this far then we either called posix_spawn or execve failed.
   // Either way, we need to clean up argv.
+  free(commandPath); commandPath = NULL;
   free(argv); argv = NULL;
   
   if (errno != 0) {
