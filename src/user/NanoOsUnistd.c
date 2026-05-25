@@ -127,7 +127,7 @@ int nanoOsDup(int oldfd) {
     }
     
     processDescriptor->fileDescriptors = (FileDescriptor**) check;
-    newfd = processDescriptor->numFileDescriptors;
+    // newfd is already processDescriptor->numFileDescriptors;
     processDescriptor->numFileDescriptors++;
   }
   
