@@ -1313,7 +1313,12 @@ int closeProcessFileDescriptors(
               return -1;
             }
             ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
-            while (processMessageDone(&processMessage) == false) {
+            int64_t startTime = HAL->clock->getElapsedMicroseconds(0);
+            // schedulerKillProcess times out after 100 milliseconds, so
+            // timeout after 50 milliseconds.
+            while ((processMessageDone(&processMessage) == false)
+              && (HAL->clock->getElapsedMicroseconds(startTime) < 50000)
+            ) {
               for (int ii = 0; ii < NUM_SCHEDULER_READY_QUEUE_TYPES; ii++) {
                 SCHEDULER_STATE->currentReady = &SCHEDULER_STATE->ready[ii];
                 uint8_t queueSize = SCHEDULER_STATE->currentReady->numElements;
