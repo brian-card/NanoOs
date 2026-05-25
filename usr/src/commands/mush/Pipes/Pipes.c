@@ -180,6 +180,12 @@ void* processPipes(void *args) {
     pipeAt = strchr(input, '|');
   }
   
+  // Make a backup copy of our stdin in case something goes wrong.
+  int stdinDup = dup(STDIN_FILENO);
+  if (stdinDup < 0) {
+    fprintf(stderr, "ERROR: dup of STDIN_FILENO returned %d\n", stdinDup);
+  }
+  
   // dup the last command's pipe onto our stdin instead of using file actions
   if (dup2(pipes[pipeIndex ^ 1][0], STDIN_FILENO) != 0) {
     // errno is already set
@@ -197,7 +203,12 @@ void* processPipes(void *args) {
     fsCommandArgs);
   fprintf(stderr, "Launching \"%s\" failed\n", fsCommandArgs->commandLine);
   
-  // If we made it this far then errno is already set
+  // If we made it this far then errno is already set.
+  // Copy our backup stdin back to STDIN_FILENO and close the dup.
+  if (dup2(stdinDup, STDIN_FILENO) != STDIN_FILENO) {
+    fprintf(stderr, "ERROR: dup2 of stdinDup onto STDIN_FILENO failed\n");
+  }
+  close(stdinDup);
   
 freeFileActions:
   free(fileActions); fileActions = NULL;
