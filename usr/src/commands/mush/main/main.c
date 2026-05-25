@@ -38,12 +38,7 @@
 int main(int argc, char **argv) {
   (void) argc;
   
-  char *buffer = (char*) malloc(96);
-  if (buffer == NULL) {
-    fprintf(stderr, "ERROR! Could not allocate space for buffer in %s.\n",
-      argv[0]);
-    return 1;
-  }
+  char buffer[96];
   *buffer = '\0';
   
   intptr_t returnValue = 0;
@@ -107,8 +102,6 @@ int main(int argc, char **argv) {
       }
     }
   } while (returnValue != -1);
-  
-  free(buffer);
   
   printf("Gracefully exiting %s\n", argv[0]);
   return 0;
