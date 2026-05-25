@@ -1255,7 +1255,7 @@ freeExecArgs:
 /// @param processDescriptor A pointer to the ProcessDescriptor that holds the
 ///   fileDescriptors array to close.
 ///
-/// @return Returns 0 on success, -1 on failure.
+/// @return Returns 0 on success, -errno on failure.
 int closeProcessFileDescriptors(
   SchedulerState *schedulerState, ProcessDescriptor *processDescriptor
 ) {
@@ -1294,13 +1294,13 @@ int closeProcessFileDescriptors(
             ) != processSuccess
           ) {
             // Nothing we can do.
-            return -1;
+            return -EOTHER;
           }
           if (processMessageQueuePush(waitingProcessDescriptor,
             &processMessage) != processSuccess
           ) {
             // Nothing we can do.
-            return -1;
+            return -EOTHER;
           }
           ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
           int64_t startTime = HAL->clock->getElapsedMicroseconds(0);
@@ -1342,11 +1342,7 @@ int closeProcessFileDescriptors(
     printString(" because ");
     printString(_functionInProgress);
     printString(" is already in progress\n");
-    if (HAL->power != NULL) {
-      HAL->power->enterMode(HAL_POWER_MODE_OFF);
-    } else {
-      while (1);
-    }
+    return -EBUSY;
   }
 
   return 0;
@@ -1860,7 +1856,14 @@ int schedulerKillProcessCommandHandler(
         // Close the file descriptors before we terminate the process so that
         // anything that gets sent to the process's queue gets cleaned up when
         // we terminate it.
-        closeProcessFileDescriptors(schedulerState, processDescriptor);
+        if (closeProcessFileDescriptors(schedulerState, processDescriptor)
+          != 0
+        ) {
+          // DO NOT mark the message done or release it.  Return an error status
+          // immediately so that we push the message back onto our queue and
+          // try it again later.
+          return -EBUSY;
+        }
 
         if (schedulerInitSendMessageToPid(
           SCHEDULER_STATE->memoryManagerPid,
@@ -2099,7 +2102,12 @@ int schedulerCloseAllFileDescriptorsCommandHandler(
   Pid callingPid = processPid(processMessageFrom(processMessage));
   ProcessDescriptor *processDescriptor
     = &schedulerState->allProcesses[callingPid - 1];
-  closeProcessFileDescriptors(schedulerState, processDescriptor);
+  if (closeProcessFileDescriptors(schedulerState, processDescriptor) != 0) {
+    // DO NOT mark the message done or release it.  Return an error status
+    // immediately so that we push the message back onto our queue and
+    // try it again later.
+    return -EBUSY;
+  }
 
   processMessageSetDone(processMessage);
 
