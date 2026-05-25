@@ -691,7 +691,7 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
 
 /******************* End Custom Memory Management Functions *******************/
 
-int memoryManagerDumpMemoryAllocations(
+int memoryManagerDumpMemoryAllocationsCommandHandler(
   MemoryManagerState *memoryManagerState, ProcessMessage *incoming
 );
 /// @fn int memoryManagerReallocCommandHandler(
@@ -746,7 +746,7 @@ int memoryManagerReallocCommandHandler(
     printString(" bytes for process ");
     printInt(processPid(processMessageFrom(incoming)));
     printString("\n");
-    memoryManagerDumpMemoryAllocations(memoryManagerState, NULL);
+    memoryManagerDumpMemoryAllocationsCommandHandler(memoryManagerState, NULL);
     do {
       break;
       ProcessMessage *filesystemCommand = getAvailableMessage();
@@ -940,7 +940,8 @@ int memoryManagerAssignMemoryCommandHandler(
         printHex((uintptr_t) assignMemoryParams->ptr);
         printString("\n");
         returnValue = -1;
-        memoryManagerDumpMemoryAllocations(memoryManagerState, NULL);
+        memoryManagerDumpMemoryAllocationsCommandHandler(
+          memoryManagerState, NULL);
       }
     } else {
       printString("WARNING: Attempt to assign non-dynamic memory 0x");
@@ -960,7 +961,7 @@ int memoryManagerAssignMemoryCommandHandler(
   return returnValue;
 }
 
-/// @fn int memoryManagerDumpMemoryAllocations(
+/// @fn int memoryManagerDumpMemoryAllocationsCommandHandler(
 ///   MemoryManagerState *memoryManagerState, ProcessMessage *incoming)
 ///
 /// @brief Command handler for MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS.  Walk
@@ -974,7 +975,7 @@ int memoryManagerAssignMemoryCommandHandler(
 ///   process.
 ///
 /// @return Returns 0 on success, error code on failure.
-int memoryManagerDumpMemoryAllocations(
+int memoryManagerDumpMemoryAllocationsCommandHandler(
   MemoryManagerState *memoryManagerState, ProcessMessage *incoming
 ) {
   int returnValue = 0;
@@ -1043,7 +1044,7 @@ const MemoryManagerCommandHandler memoryManagerCommandHandlers[] = {
   memoryManagerFreeProcessMemoryCommandHandler,
   memoryManagerAssignMemoryCommandHandler,  // MEMORY_MANAGER_ASSIGN_MEMORY
   // MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS:
-  memoryManagerDumpMemoryAllocations,
+  memoryManagerDumpMemoryAllocationsCommandHandler,
 };
 
 /// @fn void handleMemoryManagerMessages(
