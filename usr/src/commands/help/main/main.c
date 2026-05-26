@@ -38,37 +38,40 @@ int main(int argc, char **argv) {
   int returnValue = 0;
 
   printf("%s %-2s\n",
-    "echo:       ",
+    "dumpMemoryAllocations:  ",
+    "Dump information about all dynamic memory allocations.");
+  printf("%s %-2s\n",
+    "echo:                   ",
     "Echo a string back to the console.");
   printf("%s %s\n",
-    "exit:       ",
+    "exit:                   ",
     "Exit the current shell.");
   printf("%s %s\n",
-    "getty:      ",
+    "getty:                  ",
     "Run the getty application.");
   printf("%s %s\n",
-    "grep:       ",
+    "grep:                   ",
     "Find text in piped output.");
   printf("%s %s\n",
-    "helloworld: ",
+    "helloworld:             ",
     "Run the \"helloworld\" command from the filesystem.");
   printf("%s %s\n",
-    "help:       ",
+    "help:                   ",
     "Print this help message.");
   printf("%s %s\n",
-    "kill:       ",
+    "kill:                   ",
     "Kill a running process.");
   printf("%s %s\n",
-    "looseLoop:  ",
+    "looseLoop:              ",
     "Run a process in a loop that does yield.");
   printf("%s %s\n",
-    "ps:         ",
+    "ps:                     ",
     "List the running processes.");
   printf("%s %s\n",
-    "shutdown:   ",
+    "shutdown:               ",
     "Power off or reset the system.");
   printf("%s %s\n",
-    "tightLoop:  ",
+    "tightLoop:              ",
     "Run a process in a loop that does not yield.");
 
   return returnValue;
