@@ -80,6 +80,10 @@ int nanoOsClose(int fd) {
     processDescriptor->fileDescriptors[fd]->refCount--;
     if (processDescriptor->fileDescriptors[fd]->refCount == 0) {
       if (processDescriptor->fileDescriptors[fd]->pipeEnd != NULL) {
+        processDescriptor->fileDescriptors[fd]->pipeEnd->inputChannel.pid
+          = PROCESS_ID_NOT_SET;
+        processDescriptor->fileDescriptors[fd]->pipeEnd->outputChannel.pid
+          = PROCESS_ID_NOT_SET;
         processDescriptor->fileDescriptors[fd]->pipeEnd->pipeEnd = NULL;
       }
       free(processDescriptor->fileDescriptors[fd]);
@@ -384,3 +388,12 @@ int nanoOsTtyname_r(int fd, char *buf, size_t buflen) {
   return 0;
 }
 
+/// @fn pid_t nanoOsGetpid(void)
+///
+/// @brief Get the process ID of the currently-executing process.
+///
+/// @return This function always succeeds and always returns the process ID of
+/// the currently-running process.
+pid_t nanoOsGetpid(void) {
+  return getRunningPid();
+}
