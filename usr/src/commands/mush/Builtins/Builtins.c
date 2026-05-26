@@ -51,9 +51,7 @@ void* processBuiltin(void *args) {
   printDebugString("\n");
   
   void *returnValue = (void*) ((intptr_t) 0); // Default to good status.
-  if (strcmp(input, "exit") == 0) {
-    returnValue = (void*) ((intptr_t) -1);
-  } else if (strcmp(input, "pwd") == 0) {
+  if (strcmp(input, "pwd") == 0) {
     fputs(getenv("PWD"), stdout);
     fputs("\n", stdout);
   } else {

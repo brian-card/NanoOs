@@ -70,6 +70,14 @@ int main(int argc, char **argv) {
     printDebugString(input);
     printDebugString("\"\n");
     
+    // We need to check for exit outside of processing it as a built-in.  This
+    // is because, if the system gets into a bad state, we can fail to load
+    // overlays.  We should always be able to exit and release all the process
+    // resources.
+    if (strcmp(input, "exit") == 0) {
+      break;
+    }
+    
     // Attempt to process the command line as a built-in first before looking
     // on the filesystem.
     //
