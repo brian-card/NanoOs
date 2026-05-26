@@ -117,6 +117,7 @@ void* memoryManagerCalloc(size_t nmemb, size_t size);
 #define calloc(nmemb, size) memoryManagerCalloc(nmemb, size)
 
 size_t getFreeMemory(void);
+int dumpMemoryAllocations(void);
 
 
 #ifdef __cplusplus

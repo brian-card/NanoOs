@@ -1394,3 +1394,26 @@ void* memoryManagerCalloc(size_t nmemb, size_t size) {
   return returnValue;
 }
 
+/// @fn int dumpMemoryAllocations(void)
+///
+/// @brief Make the memory manager dump metadata about all its outstanding
+/// allocations.
+///
+/// @return Returns 0 on success, -errno on failure.
+int dumpMemoryAllocations(void) {
+  ProcessMessage *processMessage = initSendProcessMessageToPid(
+    SCHEDULER_STATE->memoryManagerPid,
+    MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS,
+    /* data= */ NULL, /* size= */ 0, /* waiting= */ true);
+  if (processMessage == NULL) { 
+    fprintf(stderr, "ERROR: Could not send message "
+      "MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS to memory manager\n");
+    return -EBUSY;
+  }
+  
+  processMessageWaitForDone(processMessage, NULL);
+  processMessageRelease(processMessage);
+  
+  return 0;
+}
+
