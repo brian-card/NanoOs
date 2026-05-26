@@ -139,6 +139,7 @@ NanoOsApi nanoOsApi = {
   .dup = nanoOsDup,
   .dup2 = nanoOsDup2,
   .gethostname = nanoOsGethostname,
+  .getpid = nanoOsGetpid,
   .sethostname = nanoOsSethostname,
   .ttyname_r = nanoOsTtyname_r,
   .execve = schedulerExecve,
@@ -185,6 +186,7 @@ NanoOsApi nanoOsApi = {
   // NanoOsUtils.h functions:
   .parseArgs = parseArgs,
   .getFreeMemory = getFreeMemory,
+  .dumpMemoryAllocations = dumpMemoryAllocations,
   
   // NanoOsProcesses.h functions:
   .getProcessInfo = schedulerGetProcessInfo,

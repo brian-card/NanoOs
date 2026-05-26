@@ -134,6 +134,7 @@ typedef struct NanoOsApi {
   int (*dup)(int oldfd);
   int (*dup2)(int oldfd, int newfd);
   int (*gethostname)(char *name, size_t len);
+  pid_t (*getpid)(void);
   int (*sethostname)(const char *name, size_t len);
   int (*ttyname_r)(int fd, char *buf, size_t buflen);
   int (*execve)(const char *pathname, char *const argv[], char *const envp[]);
@@ -201,6 +202,7 @@ typedef struct NanoOsApi {
   // NanoOsUtils.h functions:
   char** (*parseArgs)(char *command, int *argc);
   size_t (*getFreeMemory)(void);
+  int (*dumpMemoryAllocations)(void);
   
   // NanoOsProcesses.h functions:
   ProcessInfo* (*getProcessInfo)(void);
