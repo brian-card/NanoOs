@@ -76,7 +76,7 @@ void* processPipes(void *args) {
   // We need to keep track of the processes we launch in case something in the
   // chain fails.  The number of commands we'll launch in the background is the
   // number of pipes in the command.
-  int *pids = (int*) malloc(sizeof(int) * numPipes);
+  int *pids = (int*) calloc(1, sizeof(int) * numPipes);
   if (pids == NULL) {
     errno = ENOMEM;
     goto exit;
@@ -151,7 +151,7 @@ void* processPipes(void *args) {
     pids[numPipes] = (int) ((intptr_t) callOverlayFunction(
       OVERLAY_SAME_NAMESPACE, "FilesystemCommands", "runFsCommand",
       fsCommandArgs));
-    if (pids[numPipes] < 0) {
+    if (pids[numPipes] <= 0) {
       // errno is already set
       fprintf(stderr, "Launching \"%s\" failed\n", fsCommandArgs->commandLine);
       close(pipes[pipeIndex ^ 1][1]);
@@ -232,6 +232,18 @@ freePids:
   free(pids); pids = NULL;
 
 exit:
+  // The fact that we failed likely means that there wasn't enough contiguous
+  // memory in the system to start a process.  Even if that's not true (because,
+  // for instance, maybe we just ran out of process slots), we definitely
+  // allocated and then deallocated a bunch of values while attempting to
+  // set things up.  So, either way, memory is fragmented now.  If we return
+  // normally, the memory will remain fragmented.  What we really want to do is
+  // to exit, thereby releasing all of our allocations and invoking memory
+  // compaction.  But, if we exit normally, the user will go back to logging in.
+  // BUT! if we kill ourselves, the scheduler will detect a "self-kill", do the
+  // cleanup, and then start the shell again.  Do that instead.
+  kill(getpid(), SIGKILL);
+  
   return NULL;
 }
 
