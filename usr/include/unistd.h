@@ -57,6 +57,9 @@ static inline int dup2(int oldfd, int newfd) {
 static inline int gethostname(char *name, size_t len) {
   return overlayMap.header.osApi->gethostname(name, len);
 }
+static inline int getpid(void) {
+  return overlayMap.header.osApi->getpid();
+}
 static inline int sethostname(const char *name, size_t len) {
   return overlayMap.header.osApi->sethostname(name, len);
 }
