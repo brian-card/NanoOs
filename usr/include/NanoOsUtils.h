@@ -49,6 +49,9 @@ static inline char** parseArgs(char *command, int *argc) {
 static inline size_t getFreeMemory(void) {
   return overlayMap.header.osApi->getFreeMemory();
 }
+static inline int dumpMemoryAllocations(void) {
+  return overlayMap.header.osApi->dumpMemoryAllocations();
+}
 
 #ifdef __cplusplus
 }
