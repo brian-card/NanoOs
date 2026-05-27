@@ -1232,9 +1232,6 @@ freeExecArgs:
 ///
 /// @return Returns 0 on success, -errno on failure.
 int closeProcessFileDescriptors(ProcessDescriptor *processDescriptor) {
-  printString("Freeing file descriptors for process ");
-  printInt(processDescriptor->pid);
-  printString("\n");
   ProcessMessage processMessage;
   memset(&processMessage, 0, sizeof(processMessage));
 
@@ -1263,9 +1260,6 @@ int closeProcessFileDescriptors(ProcessDescriptor *processDescriptor) {
       // This file descriptor was previously closed.  Move on.
       continue;
     }
-    printString("Freeing file descriptor ");
-    printInt(ii);
-    printString("\n");
 
     if (fileDescriptor->pipeEnd != NULL) {
       // Clear the pid of the waiting process's stdin file descriptor.
@@ -1330,7 +1324,6 @@ int closeProcessFileDescriptors(ProcessDescriptor *processDescriptor) {
 
 exit:
   _functionInProgress = NULL;
-  printString("Returning from closeProcessFileDescriptors\n");
   return returnValue;
 }
 
