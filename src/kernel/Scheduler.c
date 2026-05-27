@@ -1048,28 +1048,6 @@ FileDescriptor* schedulerGetFileDescriptor(FILE *stream) {
   return returnValue;
 }
 
-/// @fn int schedulerCloseAllFileDescriptors(void)
-///
-/// @brief Close all the open file descriptors for the currently-running
-/// process.
-///
-/// @return Returns 0 on success, -1 on failure.
-int schedulerCloseAllFileDescriptors(void) {
-  ProcessMessage *processMessage = initSendProcessMessageToPid(
-    SCHEDULER_STATE->schedulerPid, SCHEDULER_CLOSE_ALL_FILE_DESCRIPTORS,
-    /* data= */ 0, /* size= */ 0, true);
-  if (processMessage == NULL) {
-    printString("ERROR: Could not send SCHEDULER_CLOSE_ALL_FILE_DESCRIPTORS ");
-    printString("message to scheduler process\n");
-    return -1;
-  }
-
-  processMessageWaitForDone(processMessage, NULL);
-  processMessageRelease(processMessage);
-
-  return 0;
-}
-
 /// @fn char* schedulerGetHostname(void)
 ///
 /// @brief Get the hostname that's read during startup.
@@ -1244,101 +1222,23 @@ freeExecArgs:
 // Scheduler command handlers and support functions
 ////////////////////////////////////////////////////////////////////////////////
 
-/// @fn int closeProcessFileDescriptors(
-///   SchedulerState *schedulerState, ProcessDescriptor *processDescriptor)
+/// @fn int closeProcessFileDescriptors(ProcessDescriptor *processDescriptor)
 ///
 /// @brief Helper function to close out the file descriptors owned by a process
 /// when it exits or is killed.
 ///
-/// @param schedulerState A pointer to the SchedulerState maintained by the
-///   scheduler process.
 /// @param processDescriptor A pointer to the ProcessDescriptor that holds the
 ///   fileDescriptors array to close.
 ///
 /// @return Returns 0 on success, -errno on failure.
-int closeProcessFileDescriptors(
-  SchedulerState *schedulerState, ProcessDescriptor *processDescriptor
-) {
+int closeProcessFileDescriptors(ProcessDescriptor *processDescriptor) {
+  printString("Freeing file descriptors for process ");
+  printInt(processDescriptor->pid);
+  printString("\n");
   ProcessMessage processMessage;
   memset(&processMessage, 0, sizeof(processMessage));
 
-  if (_functionInProgress == NULL) {
-    _functionInProgress = __func__;
-
-    FileDescriptor **fileDescriptors = processDescriptor->fileDescriptors;
-    if (fileDescriptors == NULL) {
-      // Nothing to do.
-      return 0;
-    }
-    uint8_t numFileDescriptors = processDescriptor->numFileDescriptors;
-    for (uint8_t ii = 0; ii < numFileDescriptors; ii++) {
-      FileDescriptor *fileDescriptor = fileDescriptors[ii];
-      if (fileDescriptor == NULL) {
-        // This file descriptor was previously closed.  Move on.
-        continue;
-      }
-
-      if (fileDescriptor->pipeEnd != NULL) {
-        // Clear the pid of the waiting process's stdin file descriptor.
-        fileDescriptor->pipeEnd->pipeEnd = NULL;
-        fileDescriptor->pipeEnd->inputChannel.pid = PROCESS_ID_NOT_SET;
-
-        Pid waitingOutputPid = fileDescriptor->outputChannel.pid;
-        if (waitingOutputPid != PROCESS_ID_NOT_SET) {
-          ProcessDescriptor *waitingProcessDescriptor
-            = &schedulerState->allProcesses[waitingOutputPid - 1];
-          if (processState(waitingProcessDescriptor) == PROCESS_STATE_WAIT) {
-            // Send an empty message to the waiting process so that it will
-            // become unblocked.
-            if (processMessageInit(&processMessage,
-              fileDescriptor->outputChannel.messageType, NULL, 0, true
-              ) != processSuccess
-            ) {
-              // Nothing we can do.
-              return -EOTHER;
-            }
-            if (processMessageQueuePush(waitingProcessDescriptor,
-              &processMessage) != processSuccess
-            ) {
-              // Nothing we can do.
-              return -EOTHER;
-            }
-            ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
-            int64_t startTime = HAL->clock->getElapsedMicroseconds(0);
-            // schedulerKillProcess times out after 100 milliseconds, so
-            // timeout after 50 milliseconds.
-            while ((processMessageDone(&processMessage) == false)
-              && (HAL->clock->getElapsedMicroseconds(startTime) < 50000)
-            ) {
-              for (int ii = 0; ii < NUM_SCHEDULER_READY_QUEUE_TYPES; ii++) {
-                SCHEDULER_STATE->currentReady = &SCHEDULER_STATE->ready[ii];
-                uint8_t queueSize = SCHEDULER_STATE->currentReady->numElements;
-                for (uint8_t jj = 0; jj < queueSize; jj++) {
-                  runScheduler();
-                }
-              }
-            }
-            SCHEDULER_STATE->currentReady = currentReady;
-          }
-        }
-      }
-
-      fileDescriptors[ii]->refCount--;
-      if (fileDescriptors[ii]->refCount == 0) {
-        if (fileDescriptors[ii]->pipeEnd != NULL) {
-          fileDescriptors[ii]->pipeEnd->pipeEnd = NULL;
-        }
-        schedFree(fileDescriptors[ii]); fileDescriptors[ii] = NULL;
-      }
-    }
-
-    // schedFree will pull an available message.  Release the one we've been
-    // using so that we're guaranteed it will be successful.
-    schedFree(fileDescriptors); processDescriptor->fileDescriptors = NULL;
-    processDescriptor->numFileDescriptors = 0;
-
-    _functionInProgress = NULL;
-  } else {
+  if (_functionInProgress != NULL) {
     printString("ERROR: Cannot execute ");
     printString(__func__);
     printString(" because ");
@@ -1347,7 +1247,91 @@ int closeProcessFileDescriptors(
     return -EBUSY;
   }
 
-  return 0;
+  int returnValue = 0;
+  _functionInProgress = __func__;
+
+  FileDescriptor **fileDescriptors = processDescriptor->fileDescriptors;
+  if (fileDescriptors == NULL) {
+    // Nothing to do.
+    goto exit; // return 0
+  }
+
+  uint8_t numFileDescriptors = processDescriptor->numFileDescriptors;
+  for (uint8_t ii = 0; ii < numFileDescriptors; ii++) {
+    FileDescriptor *fileDescriptor = fileDescriptors[ii];
+    if (fileDescriptor == NULL) {
+      // This file descriptor was previously closed.  Move on.
+      continue;
+    }
+    printString("Freeing file descriptor ");
+    printInt(ii);
+    printString("\n");
+
+    if (fileDescriptor->pipeEnd != NULL) {
+      // Clear the pid of the waiting process's stdin file descriptor.
+      fileDescriptor->pipeEnd->pipeEnd = NULL;
+      fileDescriptor->pipeEnd->inputChannel.pid = PROCESS_ID_NOT_SET;
+
+      Pid waitingOutputPid = fileDescriptor->outputChannel.pid;
+      if (waitingOutputPid != PROCESS_ID_NOT_SET) {
+        ProcessDescriptor *waitingProcessDescriptor
+          = &SCHEDULER_STATE->allProcesses[waitingOutputPid - 1];
+        if (processState(waitingProcessDescriptor) == PROCESS_STATE_WAIT) {
+          // Send an empty message to the waiting process so that it will
+          // become unblocked.
+          if (processMessageInit(&processMessage,
+            fileDescriptor->outputChannel.messageType, NULL, 0, true
+            ) != processSuccess
+          ) {
+            // Nothing we can do.
+            returnValue = -EOTHER;
+            goto exit;
+          }
+          if (processMessageQueuePush(waitingProcessDescriptor,
+            &processMessage) != processSuccess
+          ) {
+            // Nothing we can do.
+            returnValue = -EOTHER;
+            goto exit;
+          }
+          ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
+          int64_t startTime = HAL->clock->getElapsedMicroseconds(0);
+          // schedulerKillProcess times out after 100 milliseconds, so
+          // timeout after 50 milliseconds.
+          while ((processMessageDone(&processMessage) == false)
+            && (HAL->clock->getElapsedMicroseconds(startTime) < 50000)
+          ) {
+            for (int ii = 0; ii < NUM_SCHEDULER_READY_QUEUE_TYPES; ii++) {
+              SCHEDULER_STATE->currentReady = &SCHEDULER_STATE->ready[ii];
+              uint8_t queueSize = SCHEDULER_STATE->currentReady->numElements;
+              for (uint8_t jj = 0; jj < queueSize; jj++) {
+                runScheduler();
+              }
+            }
+          }
+          SCHEDULER_STATE->currentReady = currentReady;
+        }
+      }
+    }
+
+    fileDescriptors[ii]->refCount--;
+    if (fileDescriptors[ii]->refCount == 0) {
+      if (fileDescriptors[ii]->pipeEnd != NULL) {
+        fileDescriptors[ii]->pipeEnd->pipeEnd = NULL;
+      }
+      schedFree(fileDescriptors[ii]); fileDescriptors[ii] = NULL;
+    }
+  }
+
+  // schedFree will pull an available message.  Release the one we've been
+  // using so that we're guaranteed it will be successful.
+  schedFree(fileDescriptors); processDescriptor->fileDescriptors = NULL;
+  processDescriptor->numFileDescriptors = 0;
+
+exit:
+  _functionInProgress = NULL;
+  printString("Returning from closeProcessFileDescriptors\n");
+  return returnValue;
 }
 
 /// @fn FILE* schedFopen(const char *pathname, const char *mode)
@@ -1788,6 +1772,9 @@ int schedulerKillProcessCommandHandler(
   UserId callingUserId
     = allProcesses[processPid(processMessageFrom(processMessage)) - 1].userId;
   Pid pid = (Pid) ((uintptr_t) processMessageData(processMessage));
+  printString("Killing process ");
+  printInt(pid);
+  printString("\n");
   int processIndex = pid - 1;
   processMessageData(processMessage) = (void*) ((intptr_t) 0);
 
@@ -1844,9 +1831,7 @@ int schedulerKillProcessCommandHandler(
         // Close the file descriptors before we terminate the process so that
         // anything that gets sent to the process's queue gets cleaned up when
         // we terminate it.
-        if (closeProcessFileDescriptors(schedulerState, processDescriptor)
-          != 0
-        ) {
+        if (closeProcessFileDescriptors(processDescriptor) != 0) {
           // DO NOT mark the message done or release it.  Return an error status
           // immediately so that we push the message back onto our queue and
           // try it again later.
@@ -2069,35 +2054,6 @@ int schedulerSetProcessUserCommandHandler(
   processMessageSetDone(processMessage);
 
   // DO NOT release the message since the caller is waiting on the response.
-
-  return returnValue;
-}
-
-/// @fn int schedulerCloseAllFileDescriptorsCommandHandler(
-///   SchedulerState *schedulerState, ProcessMessage *processMessage)
-///
-/// @brief Get the number of processes that are currently running in the system.
-///
-/// @param schedulerState A pointer to the SchedulerState maintained by the
-///   scheduler process.
-/// @param processMessage A pointer to the ProcessMessage that was received.
-///
-/// @return Returns 0 on success, non-zero error code on failure.
-int schedulerCloseAllFileDescriptorsCommandHandler(
-  SchedulerState *schedulerState, ProcessMessage *processMessage
-) {
-  int returnValue = 0;
-  Pid callingPid = processPid(processMessageFrom(processMessage));
-  ProcessDescriptor *processDescriptor
-    = &schedulerState->allProcesses[callingPid - 1];
-  if (closeProcessFileDescriptors(schedulerState, processDescriptor) != 0) {
-    // DO NOT mark the message done or release it.  Return an error status
-    // immediately so that we push the message back onto our queue and
-    // try it again later.
-    return -EBUSY;
-  }
-
-  processMessageSetDone(processMessage);
 
   return returnValue;
 }
@@ -2820,8 +2776,6 @@ const SchedulerCommandHandler schedulerCommandHandlers[] = {
   schedulerGetProcessInfoCommandHandler,       // SCHEDULER_GET_PROCESS_INFO
   schedulerGetProcessUserCommandHandler,       // SCHEDULER_GET_PROCESS_USER
   schedulerSetProcessUserCommandHandler,       // SCHEDULER_SET_PROCESS_USER
-  // SCHEDULER_CLOSE_ALL_FILE_DESCRIPTORS:
-  schedulerCloseAllFileDescriptorsCommandHandler,
   schedulerGetHostnameCommandHandler,       // SCHEDULER_GET_HOSTNAME
   schedulerExecveCommandHandler,            // SCHEDULER_EXECVE
   schedulerSpawnCommandHandler,             // SCHEDULER_SPAWN
@@ -3435,6 +3389,14 @@ void runScheduler(void) {
       }
     }
 
+    int returnValue = closeProcessFileDescriptors(processDescriptor);
+    if (returnValue == -EBUSY) {
+      processQueuePush(SCHEDULER_STATE->currentReady, processDescriptor);
+      // DON'T goto exit.  We're in the middle of a loop inside
+      // closeProcessFileDescriptors, so just return immediately.
+      return;
+    }
+
     if (schedulerInitSendMessageToPid(
       SCHEDULER_STATE->memoryManagerPid, MEMORY_MANAGER_FREE_PROCESS_MEMORY,
       (void*) ((uintptr_t) processDescriptor->pid), 0) != processSuccess
@@ -3947,7 +3909,8 @@ __attribute__((noinline)) void startScheduler(
 
     helloFile = schedFopen("hello", "r");
     if (helloFile == NULL) {
-      printDebugString("ERROR: Could not open hello file for reading after write!\n");
+      printDebugString(
+        "ERROR: Could not open hello file for reading after write!\n");
       schedRemove("hello");
       sanityTestFailed = true;
       break;

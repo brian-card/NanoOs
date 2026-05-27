@@ -255,7 +255,6 @@ void* execCommand(void *args) {
   if (execArgs == NULL) {
     printString("ERROR: No arguments message provided to execCommand.\n");
     releaseConsole();
-    schedulerCloseAllFileDescriptors();
     return (void*) ((intptr_t) -1);
   }
   // Let the caller finish its work.
@@ -267,7 +266,6 @@ void* execCommand(void *args) {
     // Fail.
     printString("ERROR: Invalid argv.\n");
     releaseConsole();
-    schedulerCloseAllFileDescriptors();
     return (void*) ((intptr_t) -1);
   }
   int argc = 0;
@@ -279,7 +277,6 @@ void* execCommand(void *args) {
     // This should be impossible.
     printString("ERROR: No running process.\n");
     releaseConsole();
-    schedulerCloseAllFileDescriptors();
     return (void*) ((intptr_t) -1);
   }
 
@@ -347,8 +344,6 @@ void* execCommand(void *args) {
   }
 
   releaseConsole();
-
-  schedulerCloseAllFileDescriptors();
 
   // ***DO NOT*** attempt to free the ExecArgs that were passed in, period.
   // The memory will be cleaned up by the scheduler after we exit.  Freeing
