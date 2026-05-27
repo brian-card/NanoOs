@@ -37,6 +37,8 @@
 #ifndef NANO_OS_USER_UNISTD_H
 #define NANO_OS_USER_UNISTD_H
 
+#include "sys/types.h"
+
 #ifdef __cplusplus
 extern "C"
 {
