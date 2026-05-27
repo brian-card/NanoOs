@@ -74,7 +74,9 @@ int main(int argc, char **argv) {
     // is because, if the system gets into a bad state, we can fail to load
     // overlays.  We should always be able to exit and release all the process
     // resources.
-    if (strcmp(input, "exit") == 0) {
+    if (*input == '\0') {
+      continue;
+    } else if (strcmp(input, "exit") == 0) {
       break;
     }
     
