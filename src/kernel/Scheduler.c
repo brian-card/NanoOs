@@ -1898,7 +1898,7 @@ int schedulerKillProcessCommandHandler(
     }
   }
 
-  if (processMessageWaiting(processMessage) == false) {
+  if ((processMessageWaiting(processMessage) == false) || (selfKill == true)) {
     processMessageRelease(processMessage);
   }
   // else DO NOT release the message since that's done by the caller.
