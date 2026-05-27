@@ -118,13 +118,15 @@ typedef void* (*CoroutineFunction)(void *arg);
 ///
 /// @brief Function signature that can be used as a callback when a coroutine
 /// resumes.
-typedef void* (*CoroutineResumeCallback)(void *arg);
+typedef void* (*CoroutineResumeCallback)(
+  void *stateData, Coroutine *coroutine, void *arg);
 
 /// @typedef CoroutineYieldCallback
 ///
 /// @brief Function signature that can be used as a callback when a coroutine
 /// yields.
-typedef void (*CoroutineYieldCallback)(void *stateData, Coroutine *coroutine);
+typedef void* (*CoroutineYieldCallback)(
+  void *stateData, Coroutine *coroutine, void *arg);
 
 /// @typedef ComutexUnlockCallback
 ///

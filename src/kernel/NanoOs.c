@@ -77,17 +77,27 @@ void defaultSignalHandler(int signum) {
   }
 }
 
-/// @fn void* resumeCallback(void *arg)
+/// @fn void* resumeCallback(void *stateData, Thread *thread, void *arg) {
 ///
-/// @brief Callback to be called when a thread is resumed with a non-NULL
-/// argument.
+/// @brief Callback to be called when a thread is resumed.
 ///
-/// @param arg The argument that the thread is resumed with.
+/// @param stateData The thread state pointer provided when threadConfig
+///   was called.  This parameter is unused by this function.
+/// @param thread A pointer to the Thread structure representing the
+///   thread that's about to resume.  This parameter is unused by this
+///   function.
+/// @param arg The argument that the thread is resumed with, if any.
 ///
 /// @return Returns a pointer to whatever value was processed by the appropriate
 /// callback on successful parsing, the provied arg if nothing matched.
-void* resumeCallback(void *arg) {
+void* resumeCallback(void *stateData, Thread *thread, void *arg) {
+  (void) stateData;
+  (void) thread;
   void *returnValue = arg;
+  if (returnValue == NULL) {
+    return returnValue; // NULL
+  }
+
   uint64_t *signature = (uint64_t*) arg;
 
   switch (*signature) {
@@ -103,7 +113,7 @@ void* resumeCallback(void *arg) {
   return returnValue;
 }
 
-/// @fn void yieldCallback(void *stateData, Thread *thread)
+/// @fn void* yieldCallback(void *stateData, Thread *thread, void *arg)
 ///
 /// @brief Function to be called right before a thread yields.
 ///
@@ -112,23 +122,24 @@ void* resumeCallback(void *arg) {
 /// @param thread A pointer to the Thread structure representing the
 ///   thread that's about to yield.  This parameter is unused by this
 ///   function.
+/// @param arg The argument passed to threadYieldValue, if any.
 ///
 /// @Return This function returns no value.
-void yieldCallback(void *stateData, Thread *thread) {
+void* yieldCallback(void *stateData, Thread *thread, void *arg) {
   (void) thread;
   SchedulerState *schedulerState = *((SchedulerState**) stateData);
   if (schedulerState == NULL) {
     // We're being called before the scheduler has been started.  This is
     // sometimes done to fix the stack size of the scheduler itself before
     // starting it.  Just return.
-    return;
+    return arg;
   }
 
   // No need to check HAL->timer for NULL.  This function can't be configured
   // to be called unless it wasn't NULL at boot.
   HAL->timer->cancel(schedulerState->preemptionTimer);
 
-  return;
+  return arg;
 }
 
 /// @fn void unlockCallback(void *stateData, Comutex *comutex)

@@ -787,15 +787,16 @@ void* coroutineResume(Coroutine *targetCoroutine, void *arg) {
   return COROUTINE_ERROR;
 }
 
-/// @fn void* callCoroutineResumeCallback(void *arg)
+/// @fn void* callCoroutineResumeCallback(Coroutine *running, void *arg)
 ///
 /// @brief Call the set CoroutineResumeCallback if there is one.
 ///
+/// @param running A pointer to the Coroutine currently running.
 /// @param arg The arg pointer that was passed into coroutineResume.
 ///
 /// @return Returns the value returned by the callback if there is one, arg
 /// otherwise.
-void* callCoroutineResumeCallback(void *arg) {
+void* callCoroutineResumeCallback(Coroutine *running, void *arg) {
   CoroutineResumeCallback coroutineResumeCallback
     = _globalCoroutineResumeCallback;
 #ifdef THREAD_SAFE_COROUTINES
@@ -810,20 +811,29 @@ void* callCoroutineResumeCallback(void *arg) {
   }
 #endif
   if (coroutineResumeCallback != NULL) {
-    arg = coroutineResumeCallback(arg);
+    // coroutineResume is in the critical path of everything, so we only want to
+    // get the state data if there's a function to call.
+    void *stateData = _globalStateData;
+#ifdef THREAD_SAFE_COROUTINES
+    if (_coroutineThreadingSupportEnabled) {
+      stateData = tss_get(_tssStateData);
+    }
+#endif
+    arg = coroutineResumeCallback(stateData, running, arg);
   }
 
   return arg;
 }
 
-/// @fn void callCoroutineYieldCallback(Coroutine *running)
+/// @fn void* callCoroutineYieldCallback(Coroutine *running, void *arg)
 ///
 /// @brief Call the set CoroutineYieldCallback if there is one.
 ///
 /// @param running A pointer to the Coroutine currently running.
+/// @param arg The void* arg passed into coroutineYield.
 ///
 /// @return This function returns no value.
-void callCoroutineYieldCallback(Coroutine *running) {
+void* callCoroutineYieldCallback(Coroutine *running, void *arg) {
   CoroutineYieldCallback coroutineYieldCallback
     = _globalCoroutineYieldCallback;
 #ifdef THREAD_SAFE_COROUTINES
@@ -846,8 +856,10 @@ void callCoroutineYieldCallback(Coroutine *running) {
       stateData = tss_get(_tssStateData);
     }
 #endif
-    coroutineYieldCallback(stateData, running);
+    arg = coroutineYieldCallback(stateData, running, arg);
   }
+
+  return arg;
 }
 
 /// @fn void* coroutineYield_(void *arg, CoroutineState state)
@@ -888,7 +900,7 @@ void* coroutineYield_(void *arg, CoroutineState state) {
     return NULL;
   }
 
-  callCoroutineYieldCallback(running);
+  arg = callCoroutineYieldCallback(running, arg);
 
   if (state >= COROUTINE_STATE_NOT_RUNNING) {
     // This is not a state that's settable by the user.
@@ -902,9 +914,7 @@ void* coroutineYield_(void *arg, CoroutineState state) {
   funcData = coroutinePass(currentCoroutine, funcData);
   currentCoroutine->state = COROUTINE_STATE_RUNNING;
   returnValue = funcData.data;
-  if (returnValue != NULL) {
-    returnValue = callCoroutineResumeCallback(returnValue);
-  }
+  returnValue = callCoroutineResumeCallback(running, returnValue);
 
   return returnValue;
 }
@@ -948,7 +958,7 @@ void* coroutineYieldTo_(Coroutine *to, void *arg, CoroutineState state) {
     return NULL;
   }
 
-  callCoroutineYieldCallback(running);
+  arg = callCoroutineYieldCallback(running, arg);
 
   if (state >= COROUTINE_STATE_NOT_RUNNING) {
     // This is not a state that's settable by the user.
@@ -961,9 +971,7 @@ void* coroutineYieldTo_(Coroutine *to, void *arg, CoroutineState state) {
   funcData = coroutinePass(currentCoroutine, funcData);
   currentCoroutine->state = COROUTINE_STATE_RUNNING;
   returnValue = funcData.data;
-  if (returnValue != NULL) {
-    returnValue = callCoroutineResumeCallback(returnValue);
-  }
+  returnValue = callCoroutineResumeCallback(running, returnValue);
 
   return returnValue;
 }
