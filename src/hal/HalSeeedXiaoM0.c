@@ -79,7 +79,7 @@ static uint32_t halArduinoSamD21x18AImplDiosOnline[] = {
   0x03ffffff,
 };
 
-const Hal* halArduinoSamD21x18AImplInit(void) {
+const Hal* halArduinoInit(void) {
   HalArduinoSamD21x18AInitArgs args = {
     .numUartsSupported   = NUM_UARTS,
     .uartsOnline         = halArduinoSamD21x18AImplUartsOnline,

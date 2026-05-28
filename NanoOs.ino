@@ -41,11 +41,7 @@ const Hal *HAL = NULL;
 // is to be used for Arduino-specific setup.  *ANYTHING* that requires use of
 // threads needs to be done in the loop function.
 void setup() {
-#if defined(__SAMD21G18A__) || defined(__SAMD21E18A__)
-  HAL = halArduinoSamD21x18AImplInit();
-#elif defined(ARDUINO_AVR_NANO_EVERY)
-  HAL = halArduinoNanoEveryInit();
-#endif
+  HAL = halArduinoInit();
 
   if (HAL == NULL) {
     // Nothing we can do.  Halt.

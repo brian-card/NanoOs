@@ -643,7 +643,7 @@ static Hal arduinoNanoEveryHal = {
   .initRootStorage = halCommonInitRootFilesystem,
 };
 
-const Hal* halArduinoNanoEveryInit(void) {
+const Hal* halArduinoInit(void) {
   if (halCommonInit(&arduinoNanoEveryHal) != 0) {
     return NULL;
   }
