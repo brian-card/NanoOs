@@ -47,7 +47,7 @@ extern "C"
 ///
 /// @brief Signature to be used in scheduler commands that take argument
 /// structures.  "SCHEDCMD" expressed as a 64-bit, little-endian value.
-#define SCHEDULER_COMMAND_SIGNATURE ((int64_t) 0x444D434445484353)
+#define SCHEDULER_COMMAND_SIGNATURE ((uint64_t) 0x444D434445484353)
 
 // Forward declarations and typedefs since we can't include NanoOsTypes.h here.
 struct timespec;
