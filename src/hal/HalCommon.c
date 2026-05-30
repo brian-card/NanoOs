@@ -62,7 +62,7 @@ BlockDevice* halCommonInitRootSdSpiStorage(
     return NULL;
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
-  processDescriptor->pid = SCHEDULER_STATE->firstUserPid;
+  processDescriptor->processId = SCHEDULER_STATE->firstUserPid;
   processDescriptor->name = "SD card";
   processDescriptor->userId = ROOT_USER_ID;
   BlockDevice *sdDevice = (BlockDevice*) coroutineResume(
@@ -131,7 +131,7 @@ int halCommonInitRootFilesystem(void) {
     return -ENOMEM;
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
-  processDescriptor->pid = SCHEDULER_STATE->rootFsPid;
+  processDescriptor->processId = SCHEDULER_STATE->rootFsPid;
   processDescriptor->name = "filesystem";
   processDescriptor->userId = ROOT_USER_ID;
   // Let it pick up the arguments

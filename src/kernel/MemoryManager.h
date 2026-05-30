@@ -66,10 +66,10 @@ extern "C"
 /// @brief Functional parameters to the MEMORY_MANAGER_ASSIGN_MEMORY command.
 ///
 /// @param ptr A pointer to the memory to assign.
-/// @param pid The Pid of the process to assign the memory to.
+/// @param pid The ProcessId of the process to assign the memory to.
 typedef struct AssignMemoryArgs {
   void *ptr;
-  Pid pid;
+  ProcessId pid;
 } AssignMemoryArgs;
 
 /// @enum MemoryManagerCommandResponse

@@ -66,9 +66,15 @@ void defaultSignalHandler(int signum) {
   if ((signum == SIGINT) || (signum == SIGTERM)) {
     // Kill this process.  Send a message to the scheduler and then yield
     // immediately.
+    SchedulerKillProcessArgs schedulerKillProcessArgs = {
+      .signature = SCHEDULER_COMMAND_SIGNATURE,
+      .pid = getRunningPid(),
+      .returnValue = 0,
+      .errorNumber = 0,
+    };
     ProcessMessage *processMessage = initSendProcessMessageToPid(
       SCHEDULER_STATE->schedulerPid, SCHEDULER_KILL_PROCESS,
-      (void*) ((uintptr_t) getRunningPid()), /* size= */ 0, false);
+      &schedulerKillProcessArgs, sizeof(schedulerKillProcessArgs), false);
     if (processMessage == NULL) {
       printf("ERROR: Could not communicate with scheduler.\n");
       return;
@@ -274,15 +280,15 @@ void nanoOsStart(void) {
   printDebugString("Starting scheduler.\n");
   startScheduler(&threadStatePointer);
 }
-/// @fn Pid getNumPipes(const char *commandLine)
+/// @fn ProcessId getNumPipes(const char *commandLine)
 ///
 /// @brief Get the number of pipes in a commandLine.
 ///
 /// @param commandLine The command line as read in from a console port.
 ///
 /// @return Returns the number of pipe characters found in the command line.
-Pid getNumPipes(const char *commandLine) {
-  Pid numPipes = 0;
+ProcessId getNumPipes(const char *commandLine) {
+  ProcessId numPipes = 0;
   const char *pipeAt = NULL;
 
   do {

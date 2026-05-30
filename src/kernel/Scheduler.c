@@ -266,7 +266,7 @@ int processQueuePush(
     || (processQueue->numElements >= SCHEDULER_NUM_PROCESSES)
   ) {
     printString("ERROR: Could not push process ");
-    printInt(processDescriptor->pid);
+    printInt(processDescriptor->processId);
     printString(" onto ");
     printString(processQueue->name);
     printString(" queue:\n");
@@ -398,7 +398,7 @@ int schedulerSendProcessMessageToProcess(
   } else if (processMessage == NULL) {
     printString(__func__);
     printString(": ERROR: Attempt to send NULL processMessage to process ");
-    printInt(processDescriptor->pid);
+    printInt(processDescriptor->processId);
     printString(".\n");
     returnValue = processError;
     goto exit;
@@ -408,7 +408,7 @@ int schedulerSendProcessMessageToProcess(
   if (processCorrupted(processDescriptor)) {
     printString(__func__);
     printString(": ERROR: Process ");
-    printInt(processDescriptor->pid);
+    printInt(processDescriptor->processId);
     printString(" is corrupted\n");
     returnValue = processError;
     goto exit;
@@ -416,7 +416,7 @@ int schedulerSendProcessMessageToProcess(
   if (processRunning(processDescriptor) == false) {
     printString(__func__);
     printString(": ERROR: Process ");
-    printInt(processDescriptor->pid);
+    printInt(processDescriptor->processId);
     printString(" is not running\n");
     returnValue = processError;
     goto exit;
@@ -426,7 +426,7 @@ int schedulerSendProcessMessageToProcess(
   if (returnValue != processSuccess) {
     printString(__func__);
     printString(": ERROR: Could not push message onto process ");
-    printInt(processDescriptor->pid);
+    printInt(processDescriptor->processId);
     printString("'s message queue\n");
     // returnValue is already set.  Don't modify it.
     goto exit;
@@ -631,7 +631,7 @@ void schedFree(void *ptr) {
   return;
 }
 
-/// @fn int assignMemory(void *ptr, Pid pid) {
+/// @fn int assignMemory(void *ptr, ProcessId pid) {
 ///
 /// @brief Assign a piece of memory to a specific process.
 ///
@@ -639,7 +639,7 @@ void schedFree(void *ptr) {
 /// @param pid The ID of the process to assign the memory to.
 ///
 /// @return Returns 0 on success, -errno on failure.
-int assignMemory(void *ptr, Pid pid) {
+int assignMemory(void *ptr, ProcessId pid) {
   AssignMemoryArgs assignMemoryArgs = {
     .ptr = ptr,
     .pid = pid,
@@ -657,7 +657,7 @@ int assignMemory(void *ptr, Pid pid) {
   return returnValue;
 }
 
-/// @fn int schedulerAssignPortToPid(uint8_t consolePort, Pid owner)
+/// @fn int schedulerAssignPortToPid(uint8_t consolePort, ProcessId owner)
 ///
 /// @brief Assign a console port to a process ID.
 ///
@@ -665,7 +665,7 @@ int assignMemory(void *ptr, Pid pid) {
 /// @param owner The ID of the process to assign the port to.
 ///
 /// @return Returns processSuccess on success, processError on failure.
-int schedulerAssignPortToPid(uint8_t consolePort, Pid owner) {
+int schedulerAssignPortToPid(uint8_t consolePort, ProcessId owner) {
   ConsolePortPidUnion consolePortPidUnion;
   consolePortPidUnion.consolePortPidAssociation.consolePort
     = consolePort;
@@ -678,7 +678,7 @@ int schedulerAssignPortToPid(uint8_t consolePort, Pid owner) {
   return returnValue;
 }
 
-/// @fn int schedulerSetPortShell(uint8_t consolePort, Pid shell)
+/// @fn int schedulerSetPortShell(uint8_t consolePort, ProcessId shell)
 ///
 /// @brief Assign a console port to a process ID.
 ///
@@ -686,7 +686,7 @@ int schedulerAssignPortToPid(uint8_t consolePort, Pid owner) {
 /// @param shell The ID of the shell process for the port.
 ///
 /// @return Returns processSuccess on success, processError on failure.
-int schedulerSetPortShell(uint8_t consolePort, Pid shell) {
+int schedulerSetPortShell(uint8_t consolePort, ProcessId shell) {
   int returnValue = processError;
 
   if (shell >= NANO_OS_NUM_PROCESSES) {
@@ -736,7 +736,7 @@ int schedulerGetNumConsolePorts(void) {
   return returnValue;
 }
 
-/// @fn Pid schedulerGetNumRunningProcesses(struct timespec *timeout)
+/// @fn ProcessId schedulerGetNumRunningProcesses(struct timespec *timeout)
 ///
 /// @brief Get the number of running processes from the scheduler.
 ///
@@ -745,11 +745,11 @@ int schedulerGetNumConsolePorts(void) {
 ///
 /// @return Returns the number of running processes on success, 0 on failure.
 /// There is no way for the number of running processes to exceed the maximum
-/// value of a Pid type, so it's used here as the return type.
-Pid schedulerGetNumRunningProcesses(struct timespec *timeout) {
+/// value of a ProcessId type, so it's used here as the return type.
+ProcessId schedulerGetNumRunningProcesses(struct timespec *timeout) {
   ProcessMessage *processMessage = NULL;
   int waitStatus = processSuccess;
-  Pid numProcessDescriptors = 0;
+  ProcessId numProcessDescriptors = 0;
 
   SchedulerGetNumRunningProcessesArgs schedulerGetNumRunningProcessesArgs = {
     .signature = SCHEDULER_COMMAND_SIGNATURE,
@@ -820,7 +820,7 @@ ProcessInfo* schedulerGetProcessInfo(void) {
   // scheduler to populate.  That means we first need to know how many processes
   // are running so that we know how much space to allocate.  So, get that
   // first.
-  Pid numProcessDescriptors = schedulerGetNumRunningProcesses(&timeout);
+  ProcessId numProcessDescriptors = schedulerGetNumRunningProcesses(&timeout);
 
   // We need numProcessDescriptors rows.
   ProcessInfo *processInfo = (ProcessInfo*) malloc(sizeof(ProcessInfo)
@@ -894,7 +894,7 @@ exit:
   return processInfo;
 }
 
-/// @fn int schedulerKillProcess(Pid pid)
+/// @fn int schedulerKillProcess(ProcessId pid)
 ///
 /// @brief Do all the inter-process communication with the scheduler required
 /// to kill a running process.
@@ -902,7 +902,7 @@ exit:
 /// @param pid The ID of the process to kill.
 ///
 /// @return Returns 0 on success, 1 on failure.
-int schedulerKillProcess(Pid pid) {
+int schedulerKillProcess(ProcessId pid) {
   SchedulerKillProcessArgs schedulerKillProcessArgs = {
     .signature = SCHEDULER_COMMAND_SIGNATURE,
     .pid = pid,
@@ -957,7 +957,7 @@ int schedulerKillProcess(Pid pid) {
   return returnValue;
 }
 
-/// @fn int schedulerSendSignal(Pid pid, int signal)
+/// @fn int schedulerSendSignal(ProcessId pid, int signal)
 ///
 /// @brief Send a signal to a process.
 ///
@@ -966,7 +966,7 @@ int schedulerKillProcess(Pid pid) {
 ///
 /// @return On success, 0 is returned.  On failure, -1 is returned and errno is
 /// set appropriately.
-int schedulerSendSignal(Pid pid, int signal) {
+int schedulerSendSignal(ProcessId pid, int signal) {
   int returnValue = -1;
 
   SchedulerSendSignalArgs sendSignalArgs = {
@@ -1036,7 +1036,7 @@ int schedulerSetProcessUser(UserId userId) {
 FileDescriptor* schedulerGetFileDescriptor(FILE *stream) {
   FileDescriptor *returnValue = NULL;
   uintptr_t fdIndex = (uintptr_t) stream;
-  Pid runningProcessIndex = getRunningPid() - 1;
+  ProcessId runningProcessIndex = getRunningPid() - 1;
 
   if (fdIndex <= allProcesses[runningProcessIndex].numFileDescriptors) {
     returnValue
@@ -1268,7 +1268,7 @@ int closeProcessFileDescriptors(ProcessDescriptor *processDescriptor) {
       fileDescriptor->pipeEnd->pipeEnd = NULL;
       fileDescriptor->pipeEnd->inputChannel.pid = PROCESS_ID_NOT_SET;
 
-      Pid waitingOutputPid = fileDescriptor->outputChannel.pid;
+      ProcessId waitingOutputPid = fileDescriptor->outputChannel.pid;
       if (waitingOutputPid != PROCESS_ID_NOT_SET) {
         ProcessDescriptor *waitingProcessDescriptor
           = &SCHEDULER_STATE->allProcesses[waitingOutputPid - 1];
@@ -1767,6 +1767,12 @@ int schedulerKillProcessCommandHandler(
   UserId callingUserId = processMessageFrom(processMessage)->userId;
   SchedulerKillProcessArgs *schedulerKillProcessArgs
     = (SchedulerKillProcessArgs*) processMessageData(processMessage);
+  if (schedulerKillProcessArgs == NULL) {
+    printString("ERROR: schedulerKillProcessCommandHandler received "
+      "NULL data from process ");
+    printInt(processPid(processMessageFrom(processMessage)));
+    printString("\n");
+  }
   if (schedulerKillProcessArgs->signature != SCHEDULER_COMMAND_SIGNATURE) {
     printString("ERROR: schedulerKillProcessCommandHandler received "
       "unknown signature 0x");
@@ -1776,7 +1782,7 @@ int schedulerKillProcessCommandHandler(
     // further.
     return returnValue; // 0 - don't re-attempt this command
   }
-  Pid pid = schedulerKillProcessArgs->pid;
+  ProcessId pid = schedulerKillProcessArgs->pid;
   printString("Killing process ");
   printInt(pid);
   printString("\n");
@@ -2006,7 +2012,7 @@ int schedulerGetProcessInfoCommandHandler(
       continue;
     }
 
-    processes[idx].pid = (int) schedulerState->allProcesses[ii - 1].pid;
+    processes[idx].pid = (int) schedulerState->allProcesses[ii - 1].processId;
     processes[idx].name = schedulerState->allProcesses[ii - 1].name;
     processes[idx].userId = schedulerState->allProcesses[ii - 1].userId;
     idx++;
@@ -2041,7 +2047,7 @@ int schedulerSetProcessUserCommandHandler(
   SchedulerState *schedulerState, ProcessMessage *processMessage
 ) {
   int returnValue = 0;
-  Pid callingPid = processPid(processMessageFrom(processMessage));
+  ProcessId callingPid = processPid(processMessageFrom(processMessage));
   UserId userId = (UserId) ((intptr_t) processMessageData(processMessage));
   processMessageData(processMessage) = (void*) ((intptr_t) -1);
 
@@ -2235,10 +2241,10 @@ int schedulerExecveCommandHandler(
   if (schedulerInitSendMessageToPid(
     SCHEDULER_STATE->memoryManagerPid,
     MEMORY_MANAGER_FREE_PROCESS_MEMORY,
-    (void*) ((uintptr_t) processDescriptor->pid), /* size= */ 0)
+    (void*) ((uintptr_t) processDescriptor->processId), /* size= */ 0)
   ) {
     printString("WARNING: Could not release memory for process ");
-    printInt(processDescriptor->pid);
+    printInt(processDescriptor->processId);
     printString("\n");
     printString("Memory leak.\n");
   }
@@ -2249,7 +2255,7 @@ int schedulerExecveCommandHandler(
       "ERROR: Could not configure process handle for new command.\n");
   }
 
-  if (assignMemory(execArgs, processDescriptor->pid) != 0) {
+  if (assignMemory(execArgs, processDescriptor->processId) != 0) {
     printString(__func__);
     printString(": ");
     printInt(__LINE__);
@@ -2258,7 +2264,7 @@ int schedulerExecveCommandHandler(
     printString("Undefined behavior.\n");
   }
 
-  if (assignMemory(pathname, processDescriptor->pid) != 0) {
+  if (assignMemory(pathname, processDescriptor->processId) != 0) {
     printString(__func__);
     printString(": ");
     printInt(__LINE__);
@@ -2267,7 +2273,7 @@ int schedulerExecveCommandHandler(
     printString("Undefined behavior.\n");
   }
 
-  if (assignMemory(argv, processDescriptor->pid) != 0) {
+  if (assignMemory(argv, processDescriptor->processId) != 0) {
     printString(__func__);
     printString(": ");
     printInt(__LINE__);
@@ -2276,7 +2282,7 @@ int schedulerExecveCommandHandler(
     printString("Undefined behavior.\n");
   }
   for (int ii = 0; argv[ii] != NULL; ii++) {
-    if (assignMemory(argv[ii], processDescriptor->pid) != 0) {
+    if (assignMemory(argv[ii], processDescriptor->processId) != 0) {
       printString(__func__);
       printString(": ");
       printInt(__LINE__);
@@ -2289,7 +2295,7 @@ int schedulerExecveCommandHandler(
   }
 
   if (envp != NULL) {
-    if (assignMemory(envp, processDescriptor->pid) != 0) {
+    if (assignMemory(envp, processDescriptor->processId) != 0) {
       printString(__func__);
       printString(": ");
       printInt(__LINE__);
@@ -2298,7 +2304,7 @@ int schedulerExecveCommandHandler(
       printString("Undefined behavior.\n");
     }
     for (int ii = 0; envp[ii] != NULL; ii++) {
-      if (assignMemory(envp[ii], processDescriptor->pid) != 0) {
+      if (assignMemory(envp[ii], processDescriptor->processId) != 0) {
         printString(__func__);
         printString(": ");
         printInt(__LINE__);
@@ -2312,7 +2318,7 @@ int schedulerExecveCommandHandler(
   }
 
   if (assignMemory(processDescriptor->fileDescriptors,
-    processDescriptor->pid) != 0
+    processDescriptor->processId) != 0
   ) {
     printString("WARNING: Could not assign fileDescriptors to scheduler.\n");
     printString("Undefined behavior.\n");
@@ -2322,7 +2328,7 @@ int schedulerExecveCommandHandler(
       continue;
     }
     if (assignMemory(processDescriptor->fileDescriptors[ii],
-      processDescriptor->pid) != 0
+      processDescriptor->processId) != 0
     ) {
       printString("WARNING: Could not assign fileDescriptors[");
       printInt(ii);
@@ -2360,7 +2366,7 @@ int schedulerExecveCommandHandler(
    */
   if (false) {
     if (schedulerAssignPortToPid(
-      /*commandDescriptor->consolePort*/ 255, processDescriptor->pid)
+      /*commandDescriptor->consolePort*/ 255, processDescriptor->processId)
       != processSuccess
     ) {
       printString("WARNING: Could not assign console port to process.\n");
@@ -2438,7 +2444,7 @@ int schedulerSpawnCommandHandler(
     processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
   }
-  *spawnArgs->newPid = processDescriptor->pid;
+  *spawnArgs->newPid = processDescriptor->processId;
 
   // Initialize the new process.
   threadSetContext(processDescriptor->mainThread, processDescriptor);
@@ -2519,11 +2525,11 @@ int schedulerSpawnCommandHandler(
         if (dup2->fd == STDIN_FILENO) {
           // We need to set the pid of the outputChannel of the other end of
           // the pipe to our ID.
-          dup2->dup->pipeEnd->outputChannel.pid = processDescriptor->pid;
+          dup2->dup->pipeEnd->outputChannel.pid = processDescriptor->processId;
         } else if ((dup2->fd == STDOUT_FILENO) || (dup2->fd == STDERR_FILENO)) {
           // We need to set the pid of the inputChannel of the other end of
           // the pipe to our ID.
-          dup2->dup->pipeEnd->inputChannel.pid = processDescriptor->pid;
+          dup2->dup->pipeEnd->inputChannel.pid = processDescriptor->processId;
         }
       }
     }
@@ -2538,22 +2544,22 @@ int schedulerSpawnCommandHandler(
       "ERROR: Could not configure process handle for new command.\n");
   }
 
-  if (assignMemory(execArgs, processDescriptor->pid) != 0) {
+  if (assignMemory(execArgs, processDescriptor->processId) != 0) {
     printString("WARNING: Could not assign execArgs to spawn process.\n");
     printString("Undefined behavior.\n");
   }
 
-  if (assignMemory(pathname, processDescriptor->pid) != 0) {
+  if (assignMemory(pathname, processDescriptor->processId) != 0) {
     printString("WARNING: Could not assign pathname to spawn process.\n");
     printString("Undefined behavior.\n");
   }
 
-  if (assignMemory(argv, processDescriptor->pid) != 0) {
+  if (assignMemory(argv, processDescriptor->processId) != 0) {
     printString("WARNING: Could not assign argv to spawn process.\n");
     printString("Undefined behavior.\n");
   }
   for (int ii = 0; argv[ii] != NULL; ii++) {
-    if (assignMemory(argv[ii], processDescriptor->pid) != 0) {
+    if (assignMemory(argv[ii], processDescriptor->processId) != 0) {
       printString("WARNING: Could not assign argv[");
       printInt(ii);
       printString("] to spawn process.\n");
@@ -2562,7 +2568,7 @@ int schedulerSpawnCommandHandler(
   }
 
   if (envp != NULL) {
-    if (assignMemory(envp, processDescriptor->pid) != 0) {
+    if (assignMemory(envp, processDescriptor->processId) != 0) {
       printString(__func__);
       printString(": ");
       printInt(__LINE__);
@@ -2571,7 +2577,7 @@ int schedulerSpawnCommandHandler(
       printString("Undefined behavior.\n");
     }
     for (int ii = 0; envp[ii] != NULL; ii++) {
-      if (assignMemory(envp[ii], processDescriptor->pid) != 0) {
+      if (assignMemory(envp[ii], processDescriptor->processId) != 0) {
         printString(__func__);
         printString(": ");
         printInt(__LINE__);
@@ -2585,7 +2591,7 @@ int schedulerSpawnCommandHandler(
   }
 
   if (assignMemory(processDescriptor->fileDescriptors,
-    processDescriptor->pid) != 0
+    processDescriptor->processId) != 0
   ) {
     printString(
       "WARNING: Could not assign fileDescriptors to spawn process.\n");
@@ -2596,7 +2602,7 @@ int schedulerSpawnCommandHandler(
       continue;
     }
     if (assignMemory(processDescriptor->fileDescriptors[ii],
-      processDescriptor->pid) != 0
+      processDescriptor->processId) != 0
     ) {
       printString("WARNING: Could not assign fileDescriptors[");
       printInt(ii);
@@ -2687,7 +2693,7 @@ int schedulerSendSignalCommandHandler(
     goto exit; // return 0
   }
 
-  Pid pid = sendSignalArgs->pid;
+  ProcessId pid = sendSignalArgs->pid;
   ProcessDescriptor *processDescriptor = &allProcesses[pid - 1];
   if ((pid < 2)
     || (pid > NANO_OS_NUM_PROCESSES)
@@ -2949,7 +2955,7 @@ void removeProcess(
   printString(errorMessage);
   printString("\n");
   printString("       Removing process ");
-  printInt(processDescriptor->pid);
+  printInt(processDescriptor->processId);
   printString(" from process queues\n");
 
   processDescriptor->name = NULL;
@@ -2959,7 +2965,7 @@ void removeProcess(
   if (schedulerInitSendMessageToPid(
     SCHEDULER_STATE->consolePid,
     CONSOLE_RELEASE_PID_PORT,
-    /* data= */ (void*) ((intptr_t) processDescriptor->pid),
+    /* data= */ (void*) ((intptr_t) processDescriptor->processId),
     /* size= */ 0) != processSuccess
   ) {
     printString("ERROR: Could not send CONSOLE_RELEASE_PID_PORT message ");
@@ -2969,7 +2975,7 @@ void removeProcess(
   if (schedulerInitSendMessageToPid(
     SCHEDULER_STATE->memoryManagerPid,
     MEMORY_MANAGER_FREE_PROCESS_MEMORY,
-    /* data= */ (void*) ((uintptr_t) processDescriptor->pid),
+    /* data= */ (void*) ((uintptr_t) processDescriptor->processId),
     /* size= */ 0) != processSuccess
   ) {
     printString("ERROR: Could not free process memory. Memory leak.\n");
@@ -3097,7 +3103,7 @@ int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
     returnValue = -ENOMEM;
     goto exit;
   }
-  execArgs->callingPid = processDescriptor->pid;
+  execArgs->callingPid = processDescriptor->processId;
 
   execArgs->pathname = (char*) schedMalloc(strlen(commandPath) + 1);
   if (execArgs->pathname == NULL) {
@@ -3139,7 +3145,7 @@ int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
 
   execArgs->schedulerState = SCHEDULER_STATE;
 
-  if (assignMemory(execArgs, processDescriptor->pid) != 0) {
+  if (assignMemory(execArgs, processDescriptor->processId) != 0) {
     printString(__func__);
     printString(": ");
     printInt(__LINE__);
@@ -3148,7 +3154,7 @@ int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
     printString("Undefined behavior.\n");
   }
 
-  if (assignMemory(execArgs->pathname, processDescriptor->pid) != 0) {
+  if (assignMemory(execArgs->pathname, processDescriptor->processId) != 0) {
     printString(__func__);
     printString(": ");
     printInt(__LINE__);
@@ -3159,7 +3165,7 @@ int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
   }
 
   if (execArgs->argv != NULL) {
-    if (assignMemory(execArgs->argv, processDescriptor->pid) != 0) {
+    if (assignMemory(execArgs->argv, processDescriptor->processId) != 0) {
       printString(__func__);
       printString(": ");
       printInt(__LINE__);
@@ -3169,7 +3175,7 @@ int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
     }
 
     for (int ii = 0; execArgs->argv[ii] != NULL; ii++) {
-      if (assignMemory(execArgs->argv[ii], processDescriptor->pid) != 0) {
+      if (assignMemory(execArgs->argv[ii], processDescriptor->processId) != 0) {
         printString(__func__);
         printString(": ");
         printInt(__LINE__);
@@ -3183,7 +3189,7 @@ int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
   }
 
   if (execArgs->envp != NULL) {
-    if (assignMemory(execArgs->envp, processDescriptor->pid) != 0) {
+    if (assignMemory(execArgs->envp, processDescriptor->processId) != 0) {
       printString(__func__);
       printString(": ");
       printInt(__LINE__);
@@ -3194,7 +3200,7 @@ int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
     }
 
     for (int ii = 0; execArgs->envp[ii] != NULL; ii++) {
-      if (assignMemory(execArgs->envp[ii], processDescriptor->pid) != 0) {
+      if (assignMemory(execArgs->envp[ii], processDescriptor->processId) != 0) {
         printString(__func__);
         printString(": ");
         printInt(__LINE__);
@@ -3337,7 +3343,7 @@ void runScheduler(void) {
     goto exit;
   }
 
-  if (processDescriptor->pid >= SCHEDULER_STATE->firstUserPid) {
+  if (processDescriptor->processId >= SCHEDULER_STATE->firstUserPid) {
     if (processRunning(processDescriptor) == true) {
       // This is a user process, which is in an overlay.  Make sure it's loaded.
       if (schedulerLoadOverlay(
@@ -3372,7 +3378,7 @@ void runScheduler(void) {
         printInt(__LINE__);
         printString(": ");
         printString("WARNING: Could not protect envp memory from process ");
-        printInt(processDescriptor->pid);
+        printInt(processDescriptor->processId);
         printString("\n");
         printString("Undefined behavior\n");
       }
@@ -3386,7 +3392,7 @@ void runScheduler(void) {
           printString("WARNING: Could not protect envp[");
           printInt(ii);
           printString("] memory from process ");
-          printInt(processDescriptor->pid);
+          printInt(processDescriptor->processId);
           printString("\n");
           printString("Undefined behavior\n");
         }
@@ -3403,7 +3409,7 @@ void runScheduler(void) {
 
     if (schedulerInitSendMessageToPid(
       SCHEDULER_STATE->memoryManagerPid, MEMORY_MANAGER_FREE_PROCESS_MEMORY,
-      (void*) ((uintptr_t) processDescriptor->pid), 0) != processSuccess
+      (void*) ((uintptr_t) processDescriptor->processId), 0) != processSuccess
     ) {
       printString("ERROR: Could not send MEMORY_MANAGER_FREE_PROCESS_MEMORY ");
       printString("message to memory manager\n");
@@ -3418,8 +3424,8 @@ void runScheduler(void) {
   }
 
   // Check the shells and restart them if needed.
-  if ((processDescriptor->pid >= SCHEDULER_STATE->firstShellPid)
-    && (processDescriptor->pid
+  if ((processDescriptor->processId >= SCHEDULER_STATE->firstShellPid)
+    && (processDescriptor->processId
       < (SCHEDULER_STATE->firstShellPid + SCHEDULER_STATE->numShells))
     && (processRunning(processDescriptor) == false)
   ) {
@@ -3603,7 +3609,7 @@ __attribute__((noinline)) void startScheduler(
 
   // Initialize the scheduler in the array of running commands.
   allProcesses[schedulerState.schedulerPid - 1].mainThread = schedulerThread;
-  allProcesses[schedulerState.schedulerPid - 1].pid
+  allProcesses[schedulerState.schedulerPid - 1].processId
     = schedulerState.schedulerPid;
   allProcesses[schedulerState.schedulerPid - 1].name = "init";
   allProcesses[schedulerState.schedulerPid - 1].userId = ROOT_USER_ID;
@@ -3649,7 +3655,7 @@ __attribute__((noinline)) void startScheduler(
     printString("Could not create console process.\n");
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
-  processDescriptor->pid = schedulerState.consolePid;
+  processDescriptor->processId = schedulerState.consolePid;
   processDescriptor->name = "console";
   processDescriptor->userId = ROOT_USER_ID;
   printDebugString("Created console process.\n");
@@ -3697,7 +3703,7 @@ __attribute__((noinline)) void startScheduler(
   printDebugString("Initialized root storage\n");
 
   // Initialize all the kernel process file descriptors.
-  for (Pid ii = 1; ii <= schedulerState.firstUserPid; ii++) {
+  for (ProcessId ii = 1; ii <= schedulerState.firstUserPid; ii++) {
     allProcesses[ii - 1].numFileDescriptors = NUM_STANDARD_FILE_DESCRIPTORS;
     allProcesses[ii - 1].fileDescriptors
       = standardKernelFileDescriptorsPointers;
@@ -3732,7 +3738,7 @@ __attribute__((noinline)) void startScheduler(
   // We need to do an initial population of all the processes because we need to
   // get to the end of memory to run the memory manager in whatever is left
   // over.
-  for (Pid ii = schedulerState.firstUserPid;
+  for (ProcessId ii = schedulerState.firstUserPid;
     ii <= NANO_OS_NUM_PROCESSES;
     ii++
   ) {
@@ -3746,7 +3752,7 @@ __attribute__((noinline)) void startScheduler(
     }
     threadSetContext(
       processDescriptor->mainThread, processDescriptor);
-    processDescriptor->pid = ii;
+    processDescriptor->processId = ii;
     processDescriptor->userId = NO_USER_ID;
     processDescriptor->name = "dummy";
     processDescriptor->callOverlayFunction = callOverlayFunctionFromFile;
@@ -3791,7 +3797,7 @@ __attribute__((noinline)) void startScheduler(
     printString("Could not create memory manager process.\n");
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
-  processDescriptor->pid = schedulerState.memoryManagerPid;
+  processDescriptor->processId = schedulerState.memoryManagerPid;
   processDescriptor->name = "memory manager";
   processDescriptor->userId = ROOT_USER_ID;
   printDebugString("Created memory manager.\n");
@@ -3827,7 +3833,7 @@ __attribute__((noinline)) void startScheduler(
   // Mark all the kernel processes as being part of the kernel ready queue.
   // Skip over the scheduler (process 0).
   allProcesses[0].readyQueue = NULL;
-  for (Pid ii = allProcesses[2].pid;
+  for (ProcessId ii = allProcesses[2].processId;
     ii < schedulerState.firstUserPid;
     ii++
   ) {
@@ -3839,7 +3845,7 @@ __attribute__((noinline)) void startScheduler(
 
   // The scheduler will take care of cleaning up the dummy processes in the
   // ready queue.
-  for (Pid ii = schedulerState.firstUserPid;
+  for (ProcessId ii = schedulerState.firstUserPid;
     ii <= NANO_OS_NUM_PROCESSES;
     ii++
   ) {

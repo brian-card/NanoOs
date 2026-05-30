@@ -145,7 +145,7 @@ extern "C"
 
 // Support functions
 void nanoOsStart(void);
-Pid getNumPipes(const char *commandLine);
+ProcessId getNumPipes(const char *commandLine);
 void timespecFromDelay(struct timespec *ts, long int delayMs);
 unsigned int raiseUInt(unsigned int x, unsigned int y);
 const char* getUsernameByUserId(UserId userId);

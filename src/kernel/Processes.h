@@ -84,7 +84,7 @@ extern "C"
 ///
 /// @brief Get the process ID for the currently-running process.
 #define getRunningPid() \
-  (getRunningProcess()->pid)
+  (getRunningProcess()->processId)
 
 /// @def getRunningUid
 ///
@@ -150,7 +150,7 @@ extern "C"
 ///
 /// @brief Function macro to get the numeric Pid given its descriptor.
 #define processPid(processDescriptor) \
-  (processDescriptor)->pid
+  (processDescriptor)->processId
 
 /// @def processState
 ///

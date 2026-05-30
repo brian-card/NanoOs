@@ -47,7 +47,7 @@ static int processErrorNumbers[NANO_OS_NUM_PROCESSES + 1];
 /// the current process ID, a pointer to a default "scratch" storage space will
 /// be returned instead of the pointer to the current process's storage.
 int* errno_(void) {
-  Pid currentPid = getRunningPid();
+  ProcessId currentPid = getRunningPid();
   if (currentPid > NANO_OS_NUM_PROCESSES) {
     // This isn't valid.  This shouldn't happen but that doesn't mean it won't.
     // Use the last index of the array as scratch storage.  This will prevent

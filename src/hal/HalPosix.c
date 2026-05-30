@@ -200,7 +200,7 @@ int32_t posixInitBlockDevice(void) {
     printString("Could not start SD card process.\n");
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
-  processDescriptor->pid = SCHEDULER_STATE->firstUserPid;
+  processDescriptor->processId = SCHEDULER_STATE->firstUserPid;
   processDescriptor->name = "SD card";
   processDescriptor->userId = ROOT_USER_ID;
   BlockDevice *sdDevice = (BlockDevice*) coroutineResume(

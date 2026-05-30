@@ -86,7 +86,7 @@ extern "C"
 #endif
 
 /// @fn void localFree(MemoryManagerState *memoryManagerState,
-///   void *ptr, Pid callingPid)
+///   void *ptr, ProcessId callingPid)
 ///
 /// @brief Free a previously-allocated block of memory.
 ///
@@ -98,7 +98,7 @@ extern "C"
 ///
 /// @return This function always succeeds and returns no value.
 void localFree(MemoryManagerState *memoryManagerState,
-  void *ptr, Pid callingPid
+  void *ptr, ProcessId callingPid
 ) {
   (void) callingPid; // Used for debugging, so make the compiler ignore it.
   
@@ -346,7 +346,8 @@ void localFree(MemoryManagerState *memoryManagerState,
 }
 
 /// @fn void localFreeProcessMemory(
-///   MemoryManagerState *memoryManagerState, Pid pid, Pid callingPid)
+///   MemoryManagerState *memoryManagerState, ProcessId pid,
+///   ProcessId callingPid)
 ///
 /// @brief Free *ALL* the memory owned by a process given its process ID.
 ///
@@ -358,7 +359,7 @@ void localFree(MemoryManagerState *memoryManagerState,
 ///
 /// @return This function always succeeds and returns no value.
 void localFreeProcessMemory(
-  MemoryManagerState *memoryManagerState, Pid pid, Pid callingPid
+  MemoryManagerState *memoryManagerState, ProcessId pid, ProcessId callingPid
 ) {
   for (MemNode *cur = memoryManagerState->allocated; cur != NULL; ) {
     MemNode *next = cur->next;
@@ -375,7 +376,7 @@ void localFreeProcessMemory(
 }
 
 /// @fn void* localRealloc(MemoryManagerState *memoryManagerState,
-///   void *ptr, size_t size, Pid pid)
+///   void *ptr, size_t size, Processid pid)
 ///
 /// @brief Reallocate a provided pointer to a new size.
 ///
@@ -391,7 +392,7 @@ void localFreeProcessMemory(
 /// @return Returns a pointer to size-adjusted memory on success, NULL on
 /// failure or on free.
 void* localRealloc(MemoryManagerState *memoryManagerState,
-  void *ptr, size_t size, Pid pid
+  void *ptr, size_t size, ProcessId pid
 ) {
   startDebugMessage("In localRealloc\n");
   // We need to fix the size to be aligned with our memory model.
@@ -872,7 +873,7 @@ int memoryManagerFreeProcessMemoryCommandHandler(
   if (processPid(processMessageFrom(incoming))
     == SCHEDULER_STATE->schedulerPid
   ) {
-    Pid pid = (Pid) ((uintptr_t) processMessageData(incoming));
+    ProcessId pid = (ProcessId) ((uintptr_t) processMessageData(incoming));
     localFreeProcessMemory(memoryManagerState,
       pid, processPid(processMessageFrom(incoming)));
     processMessageData(incoming) = (void*) ((uintptr_t) 0);

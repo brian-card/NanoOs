@@ -61,7 +61,7 @@ typedef struct SchedulerState SchedulerState;
 typedef struct ProcessDescriptor ProcessDescriptor;
 typedef struct ProcessQueue ProcessQueue;
 typedef Coroutine Thread;
-typedef uint8_t Pid;
+typedef uint8_t ProcessId;
 typedef struct ProcessInfo ProcessInfo;
 typedef int16_t UserId;
 
@@ -76,7 +76,7 @@ typedef int16_t UserId;
 /// @param errorNumber The errno value to set in the calling process.
 typedef struct SchedulerKillProcessArgs {
   int64_t signature;
-  Pid pid;
+  ProcessId pid;
   int returnValue;
   int errorNumber;
 } SchedulerKillProcessArgs;
@@ -88,12 +88,12 @@ typedef struct SchedulerKillProcessArgs {
 ///
 /// @param signature The 64-bit signature for a scheduler command.  This should
 ///   always be SCHEDULER_COMMAND_SIGNATURE.
-/// @param returnValue A Pid value containing the number of processes currently
-///   running in the system.
+/// @param returnValue A ProcessId value containing the number of processes
+///   currently running in the system.
 /// @param errorNum The errno value set by the command in the scheduler, if any.
 typedef struct SchedulerGetNumRunningProcessesArgs {
   int64_t signature;
-  Pid returnValue;
+  ProcessId returnValue;
   int errorNumber;
 } SchedulerGetNumRunningProcessesArgs;
 
@@ -109,7 +109,7 @@ typedef struct SchedulerGetNumRunningProcessesArgs {
 /// @param errorNumber The errno value to set in the calling process.
 typedef struct SchedulerSendSignalArgs {
   int64_t signature;
-  Pid pid;
+  ProcessId pid;
   int signal;
   int returnValue;
   int errorNumber;
@@ -157,10 +157,10 @@ extern SchedulerState *SCHEDULER_STATE;
 // Exported functionality
 void startScheduler(SchedulerState **coroutineStatePointer);
 ProcessDescriptor* schedulerGetProcessById(unsigned int pid);
-Pid schedulerGetNumRunningProcesses(struct timespec *timeout);
+ProcessId schedulerGetNumRunningProcesses(struct timespec *timeout);
 ProcessInfo* schedulerGetProcessInfo(void);
-int schedulerKillProcess(Pid pid);
-int schedulerSendSignal(Pid pid, int signal);
+int schedulerKillProcess(ProcessId pid);
+int schedulerSendSignal(ProcessId pid, int signal);
 int schedulerSetProcessUser(UserId userId);
 FileDescriptor* schedulerGetFileDescriptor(FILE *stream);
 int schedulerCloseAllFileDescriptors(void);
