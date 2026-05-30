@@ -80,6 +80,18 @@ extern "C"
 #define getRunningProcess() \
   ((ProcessDescriptor*) getRunningCoroutineContext())
 
+/// @def getRunningPid
+///
+/// @brief Get the process ID for the currently-running process.
+#define getRunningPid() \
+  (getRunningProcess()->pid)
+
+/// @def getRunningUid
+///
+/// @brief Get the user ID for the currently-running process.
+#define getRunningUid() \
+  (getRunningProcess()->userId)
+
 /// @def processCreate
 ///
 /// @brief Function macro to create a new process.
@@ -235,12 +247,6 @@ extern "C"
 /// message queue.
 #define processMessageQueuePop() \
   comessageQueuePop()
-
-/// @def getRunningPid
-///
-/// @brief Get the process ID for the currently-running process.
-#define getRunningPid() \
-  (getRunningProcess()->pid)
 
 /// @def processResume
 ///
