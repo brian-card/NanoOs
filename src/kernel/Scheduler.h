@@ -99,24 +99,6 @@ typedef struct SchedulerGetNumRunningProcessesArgs {
   int errorNumber;
 } SchedulerGetNumRunningProcessesArgs;
 
-/// @struct SchedulerSendSignalArgs
-///
-/// @brief Arguments and return values for the SCHEDULER_SEND_SIGNAL command.
-///
-/// @param signature The 64-bit signature for a scheduler command.  This should
-///   always be SCHEDULER_COMMAND_SIGNATURE.
-/// @param pid The process ID of the process to send the signal to.
-/// @param signal The integer signal to send.
-/// @param returnValue The returnValue of the command handler.
-/// @param errorNumber The errno value to set in the calling process.
-typedef struct SchedulerSendSignalArgs {
-  int64_t signature;
-  ProcessId pid;
-  int signal;
-  int returnValue;
-  int errorNumber;
-} SchedulerSendSignalArgs;
-
 /// @struct SchedulerGetProcessInfoArgs
 ///
 /// @brief Arguments and return values for the SCHEDULER_GET_PROCESS_INFO
@@ -195,6 +177,24 @@ typedef struct SchedulerSpawnArgs {
   SpawnArgs *spawnArgs;
   int errorNumber;
 } SchedulerSpawnArgs;
+
+/// @struct SchedulerSendSignalArgs
+///
+/// @brief Arguments and return values for the SCHEDULER_SEND_SIGNAL command.
+///
+/// @param signature The 64-bit signature for a scheduler command.  This should
+///   always be SCHEDULER_COMMAND_SIGNATURE.
+/// @param pid The process ID of the process to send the signal to.
+/// @param signal The integer signal to send.
+/// @param returnValue The returnValue of the command handler.
+/// @param errorNumber The errno value to set in the calling process.
+typedef struct SchedulerSendSignalArgs {
+  int64_t signature;
+  ProcessId pid;
+  int signal;
+  int returnValue;
+  int errorNumber;
+} SchedulerSendSignalArgs;
 
 /// @enum SchedulerCommandResponse
 ///
