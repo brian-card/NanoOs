@@ -93,6 +93,7 @@ int sdReadBlocks(void *context, uint32_t startBlock,
 ) {
   intptr_t sdCardProcess = (intptr_t) context;
   SdCommandArgs sdCommandArgs;
+  sdCommandArgs.signature = SD_CARD_COMMAND_SIGNATURE;
   sdCommandArgs.startBlock = startBlock;
   sdCommandArgs.numBlocks = numBlocks;
   sdCommandArgs.blockSize = blockSize;
@@ -129,6 +130,7 @@ int sdWriteBlocks(void *context, uint32_t startBlock,
 ) {
   intptr_t sdCardProcess = (intptr_t) context;
   SdCommandArgs sdCommandArgs;
+  sdCommandArgs.signature = SD_CARD_COMMAND_SIGNATURE;
   sdCommandArgs.startBlock = startBlock;
   sdCommandArgs.numBlocks = numBlocks;
   sdCommandArgs.blockSize = blockSize;
@@ -165,6 +167,7 @@ int schedSdReadBlocks(void *context, uint32_t startBlock,
 ) {
   intptr_t sdCardProcess = (intptr_t) context;
   SdCommandArgs sdCommandArgs;
+  sdCommandArgs.signature = SD_CARD_COMMAND_SIGNATURE;
   sdCommandArgs.startBlock = startBlock;
   sdCommandArgs.numBlocks = numBlocks;
   sdCommandArgs.blockSize = blockSize;
@@ -224,6 +227,7 @@ int schedSdWriteBlocks(void *context, uint32_t startBlock,
 ) {
   intptr_t sdCardProcess = (intptr_t) context;
   SdCommandArgs sdCommandArgs;
+  sdCommandArgs.signature = SD_CARD_COMMAND_SIGNATURE;
   sdCommandArgs.startBlock = startBlock;
   sdCommandArgs.numBlocks = numBlocks;
   sdCommandArgs.blockSize = blockSize;
