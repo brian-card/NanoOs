@@ -594,14 +594,14 @@ int32_t sdSpiGetBlockCount(int sdCardSpiDevice) {
 int sdCardSpiReadBlocksCommandHandler(
   SdCardState *sdCardState, ProcessMessage *processMessage
 ) {
-  SdCommandParams *sdCommandParams
-    = (SdCommandParams*) processMessageData(processMessage);
+  SdCommandArgs *sdCommandArgs
+    = (SdCommandArgs*) processMessageData(processMessage);
   uint32_t startSdBlock = 0, numSdBlocks = 0;
   int returnValue = sdCardGetReadWriteParameters(
-    sdCardState, sdCommandParams, &startSdBlock, &numSdBlocks);
+    sdCardState, sdCommandArgs, &startSdBlock, &numSdBlocks);
 
   if (returnValue == 0) {
-    uint8_t *buffer = sdCommandParams->buffer;
+    uint8_t *buffer = sdCommandArgs->buffer;
     returnValue = sdSpiReadBlocks(sdCardState,
       startSdBlock, numSdBlocks, buffer);
   }
@@ -626,14 +626,14 @@ int sdCardSpiReadBlocksCommandHandler(
 int sdCardSpiWriteBlocksCommandHandler(
   SdCardState *sdCardState, ProcessMessage *processMessage
 ) {
-  SdCommandParams *sdCommandParams
-    = (SdCommandParams*) processMessageData(processMessage);
+  SdCommandArgs *sdCommandArgs
+    = (SdCommandArgs*) processMessageData(processMessage);
   uint32_t startSdBlock = 0, numSdBlocks = 0;
   int returnValue = sdCardGetReadWriteParameters(
-    sdCardState, sdCommandParams, &startSdBlock, &numSdBlocks);
+    sdCardState, sdCommandArgs, &startSdBlock, &numSdBlocks);
 
   if (returnValue == 0) {
-    uint8_t *buffer = sdCommandParams->buffer;
+    uint8_t *buffer = sdCommandArgs->buffer;
     returnValue = sdSpiWriteBlocks(sdCardState,
       startSdBlock, numSdBlocks, buffer);
   }

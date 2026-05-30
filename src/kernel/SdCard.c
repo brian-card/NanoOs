@@ -39,7 +39,7 @@
 #include "../user/NanoOsStdio.h"
 
 /// @fn int sdCardGetReadWriteParameters(
-///   SdCardState *sdCardState, SdCommandParams *sdCommandParams,
+///   SdCardState *sdCardState, SdCommandArgs *sdCommandArgs,
 ///   uint32_t *startSdBlock, uint32_t *numSdBlocks)
 ///
 /// @brief Get the startSdBlock and numSdBlocks parameters for a read or write
@@ -47,7 +47,7 @@
 ///
 /// @param sdCardState A pointer to the SdCardState object maintained by the
 ///   SD card process.
-/// @param sdCommandParams A pointer to the SdCommandParams structure passed in
+/// @param sdCommandArgs A pointer to the SdCommandArgs structure passed in
 ///   by the client function.
 /// @param startSdBlock A pointer to the uint32_t variable that will hold the
 ///   first block of the SD card to read from or write to.
@@ -56,12 +56,12 @@
 ///
 /// @return Returns 0 on success, EINVAL on failure.
 int sdCardGetReadWriteParameters(
-  SdCardState *sdCardState, SdCommandParams *sdCommandParams,
+  SdCardState *sdCardState, SdCommandArgs *sdCommandArgs,
   uint32_t *startSdBlock, uint32_t *numSdBlocks
 ) {
-  *startSdBlock = sdCommandParams->startBlock
+  *startSdBlock = sdCommandArgs->startBlock
     << sdCardState->bsDevice->blockBitShift;
-  *numSdBlocks = sdCommandParams->numBlocks
+  *numSdBlocks = sdCommandArgs->numBlocks
     << sdCardState->bsDevice->blockBitShift;
   if ((*startSdBlock + *numSdBlocks) > sdCardState->numBlocks) {
     printString(__func__);
@@ -92,15 +92,15 @@ int sdReadBlocks(void *context, uint32_t startBlock,
   uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer
 ) {
   intptr_t sdCardProcess = (intptr_t) context;
-  SdCommandParams sdCommandParams;
-  sdCommandParams.startBlock = startBlock;
-  sdCommandParams.numBlocks = numBlocks;
-  sdCommandParams.blockSize = blockSize;
-  sdCommandParams.buffer = buffer;
+  SdCommandArgs sdCommandArgs;
+  sdCommandArgs.startBlock = startBlock;
+  sdCommandArgs.numBlocks = numBlocks;
+  sdCommandArgs.blockSize = blockSize;
+  sdCommandArgs.buffer = buffer;
 
   ProcessMessage *processMessage = initSendProcessMessageToPid(
     sdCardProcess, SD_CARD_READ_BLOCKS,
-    /* data= */ &sdCommandParams, sizeof(sdCommandParams), true);
+    /* data= */ &sdCommandArgs, sizeof(sdCommandArgs), true);
   processMessageWaitForDone(processMessage, NULL);
   int returnValue = (int) ((intptr_t) processMessageData(processMessage));
   processMessageRelease(processMessage);
@@ -128,15 +128,15 @@ int sdWriteBlocks(void *context, uint32_t startBlock,
   uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer
 ) {
   intptr_t sdCardProcess = (intptr_t) context;
-  SdCommandParams sdCommandParams;
-  sdCommandParams.startBlock = startBlock;
-  sdCommandParams.numBlocks = numBlocks;
-  sdCommandParams.blockSize = blockSize;
-  sdCommandParams.buffer = (uint8_t*) buffer;
+  SdCommandArgs sdCommandArgs;
+  sdCommandArgs.startBlock = startBlock;
+  sdCommandArgs.numBlocks = numBlocks;
+  sdCommandArgs.blockSize = blockSize;
+  sdCommandArgs.buffer = (uint8_t*) buffer;
 
   ProcessMessage *processMessage = initSendProcessMessageToPid(
     sdCardProcess, SD_CARD_WRITE_BLOCKS,
-    /* data= */ &sdCommandParams, /* size= */ sizeof(sdCommandParams), true);
+    /* data= */ &sdCommandArgs, /* size= */ sizeof(sdCommandArgs), true);
   processMessageWaitForDone(processMessage, NULL);
   int returnValue = (int) ((intptr_t) processMessageData(processMessage));
   processMessageRelease(processMessage);
@@ -164,11 +164,11 @@ int schedSdReadBlocks(void *context, uint32_t startBlock,
   uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer
 ) {
   intptr_t sdCardProcess = (intptr_t) context;
-  SdCommandParams sdCommandParams;
-  sdCommandParams.startBlock = startBlock;
-  sdCommandParams.numBlocks = numBlocks;
-  sdCommandParams.blockSize = blockSize;
-  sdCommandParams.buffer = buffer;
+  SdCommandArgs sdCommandArgs;
+  sdCommandArgs.startBlock = startBlock;
+  sdCommandArgs.numBlocks = numBlocks;
+  sdCommandArgs.blockSize = blockSize;
+  sdCommandArgs.buffer = buffer;
 
   ProcessMessage *processMessage = getAvailableMessage();
   for (int ii = 0;
@@ -187,7 +187,7 @@ int schedSdReadBlocks(void *context, uint32_t startBlock,
   }
 
   processMessageInit(processMessage, SD_CARD_READ_BLOCKS,
-    &sdCommandParams, sizeof(sdCommandParams), true);
+    &sdCommandArgs, sizeof(sdCommandArgs), true);
   if (sendProcessMessageToPid(sdCardProcess, processMessage)
     != processSuccess
   ) {
@@ -223,11 +223,11 @@ int schedSdWriteBlocks(void *context, uint32_t startBlock,
   uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer
 ) {
   intptr_t sdCardProcess = (intptr_t) context;
-  SdCommandParams sdCommandParams;
-  sdCommandParams.startBlock = startBlock;
-  sdCommandParams.numBlocks = numBlocks;
-  sdCommandParams.blockSize = blockSize;
-  sdCommandParams.buffer = (uint8_t*) buffer;
+  SdCommandArgs sdCommandArgs;
+  sdCommandArgs.startBlock = startBlock;
+  sdCommandArgs.numBlocks = numBlocks;
+  sdCommandArgs.blockSize = blockSize;
+  sdCommandArgs.buffer = (uint8_t*) buffer;
 
   ProcessMessage *processMessage = getAvailableMessage();
   for (int ii = 0;
@@ -246,7 +246,7 @@ int schedSdWriteBlocks(void *context, uint32_t startBlock,
   }
 
   processMessageInit(processMessage, SD_CARD_WRITE_BLOCKS,
-    &sdCommandParams, sizeof(sdCommandParams), true);
+    &sdCommandArgs, sizeof(sdCommandArgs), true);
   if (sendProcessMessageToPid(sdCardProcess, processMessage)
     != processSuccess
   ) {

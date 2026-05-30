@@ -64,18 +64,18 @@ typedef struct SdCardState {
   BlockDevice *bsDevice;
 } SdCardState;
 
-/// @struct SdCommandParams
+/// @struct SdCommandArgs
 ///
 /// @param startBlock The block number to start the command on.
 /// @param numBlocks The number of blocks to perform the command on.
 /// @param blockSize The number of bytes in each block.
 /// @param buffer A pointer to the memory to read from or write to.
-typedef struct SdCommandParams {
+typedef struct SdCommandArgs {
   uint32_t startBlock;
   uint32_t numBlocks;
   uint16_t blockSize;
   uint8_t *buffer;
-} SdCommandParams;
+} SdCommandArgs;
 
 /// @enum SdCardCommandResponse
 ///
@@ -98,7 +98,7 @@ typedef struct msg_t ProcessMessage;
 typedef int (*SdCardCommandHandler)(SdCardState*, ProcessMessage*);
 
 int sdCardGetReadWriteParameters(
-  SdCardState *sdCardState, SdCommandParams *sdCommandParams,
+  SdCardState *sdCardState, SdCommandArgs *sdCommandArgs,
   uint32_t *startSdBlock, uint32_t *numSdBlocks);
 int sdReadBlocks(void *context, uint32_t startBlock,
   uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer);

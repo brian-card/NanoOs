@@ -640,7 +640,7 @@ void schedFree(void *ptr) {
 ///
 /// @return Returns 0 on success, -errno on failure.
 int assignMemory(void *ptr, Pid pid) {
-  AssignMemoryParams assignMemoryParams = {
+  AssignMemoryArgs assignMemoryArgs = {
     .ptr = ptr,
     .pid = pid,
   };
@@ -648,7 +648,7 @@ int assignMemory(void *ptr, Pid pid) {
   int returnValue = 0;
   if (schedulerInitSendMessageToPid(SCHEDULER_STATE->memoryManagerPid,
     MEMORY_MANAGER_ASSIGN_MEMORY,
-    &assignMemoryParams, sizeof(assignMemoryParams)) != processSuccess
+    &assignMemoryArgs, sizeof(assignMemoryArgs)) != processSuccess
   ) {
     // Nothing we can do.
     returnValue = -ENOMEM;

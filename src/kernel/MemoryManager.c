@@ -923,21 +923,21 @@ int memoryManagerAssignMemoryCommandHandler(
   if (processPid(processMessageFrom(incoming))
     == SCHEDULER_STATE->schedulerPid
   ) {
-    AssignMemoryParams *assignMemoryParams
-      = (AssignMemoryParams*) processMessageData(incoming);
-    if (isDynamicPointer(assignMemoryParams->ptr)) {
+    AssignMemoryArgs *assignMemoryArgs
+      = (AssignMemoryArgs*) processMessageData(incoming);
+    if (isDynamicPointer(assignMemoryArgs->ptr)) {
       // Make sure the pointer being assigned is allocated.
       MemNode *cur = memoryManagerState->allocated;
       for (; cur != NULL; cur = cur->next) {
-        if (&cur[1] == assignMemoryParams->ptr) {
+        if (&cur[1] == assignMemoryArgs->ptr) {
           break;
         }
       }
       if (cur != NULL) {
-        cur->owner = assignMemoryParams->pid;
+        cur->owner = assignMemoryArgs->pid;
       } else {
         printString("ERROR: Attempt to assign unallocated memory 0x");
-        printHex((uintptr_t) assignMemoryParams->ptr);
+        printHex((uintptr_t) assignMemoryArgs->ptr);
         printString("\n");
         returnValue = -1;
         memoryManagerDumpMemoryAllocationsCommandHandler(
@@ -945,7 +945,7 @@ int memoryManagerAssignMemoryCommandHandler(
       }
     } else {
       printString("WARNING: Attempt to assign non-dynamic memory 0x");
-      printHex((uintptr_t) assignMemoryParams->ptr);
+      printHex((uintptr_t) assignMemoryArgs->ptr);
       printString("\n");
       returnValue = -1;
     }

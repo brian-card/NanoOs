@@ -61,16 +61,16 @@ extern "C"
 /// possible while still allowing debug prints to work.
 #define MEMORY_MANAGER_DEBUG_STACK_SIZE 768
 
-/// @struct AssignMemoryParams
+/// @struct AssignMemoryArgs
 ///
 /// @brief Functional parameters to the MEMORY_MANAGER_ASSIGN_MEMORY command.
 ///
 /// @param ptr A pointer to the memory to assign.
 /// @param pid The Pid of the process to assign the memory to.
-typedef struct AssignMemoryParams {
+typedef struct AssignMemoryArgs {
   void *ptr;
   Pid pid;
-} AssignMemoryParams;
+} AssignMemoryArgs;
 
 /// @enum MemoryManagerCommandResponse
 ///

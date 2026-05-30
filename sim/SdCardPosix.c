@@ -73,17 +73,17 @@ int sdCardPosixReadBlocksCommandHandler(
   }
   printDebugString("sdCardPosixReadBlocksCommandHandler: context is *NOT* NULL\n");
   
-  SdCommandParams *sdCommandParams
-    = (SdCommandParams*) processMessageData(processMessage);
-  printDebugString("sdCardPosixReadBlocksCommandHandler: Got sdCommandParams\n");
+  SdCommandArgs *sdCommandArgs
+    = (SdCommandArgs*) processMessageData(processMessage);
+  printDebugString("sdCardPosixReadBlocksCommandHandler: Got sdCommandArgs\n");
   uint32_t startSdBlock = 0, numSdBlocks = 0;
   int returnValue = sdCardGetReadWriteParameters(
-    sdCardState, sdCommandParams, &startSdBlock, &numSdBlocks);
+    sdCardState, sdCommandArgs, &startSdBlock, &numSdBlocks);
   printDebugString(
     "sdCardPosixReadBlocksCommandHandler: Got read/write parameters\n");
 
   if (returnValue == 0) {
-    uint8_t *buffer = sdCommandParams->buffer;
+    uint8_t *buffer = sdCommandArgs->buffer;
     printDebugString("Issuing sdCardRead\n");
     returnValue = sdCardRead(devFd, buffer,
       sdCardState->blockSize * startSdBlock,
@@ -121,14 +121,14 @@ int sdCardPosixWriteBlocksCommandHandler(
     return 0;
   }
   
-  SdCommandParams *sdCommandParams
-    = (SdCommandParams*) processMessageData(processMessage);
+  SdCommandArgs *sdCommandArgs
+    = (SdCommandArgs*) processMessageData(processMessage);
   uint32_t startSdBlock = 0, numSdBlocks = 0;
   int returnValue = sdCardGetReadWriteParameters(
-    sdCardState, sdCommandParams, &startSdBlock, &numSdBlocks);
+    sdCardState, sdCommandArgs, &startSdBlock, &numSdBlocks);
 
   if (returnValue == 0) {
-    uint8_t *buffer = sdCommandParams->buffer;
+    uint8_t *buffer = sdCommandArgs->buffer;
     returnValue = sdCardWrite(devFd, buffer,
       sdCardState->blockSize * startSdBlock,
       sdCardState->blockSize * numSdBlocks);
