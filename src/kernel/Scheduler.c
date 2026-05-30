@@ -1064,21 +1064,27 @@ FileDescriptor* schedulerGetFileDescriptor(FILE *stream) {
 /// @return Returns the hostname that's read during startup on success, NULL on
 /// failure.
 const char* schedulerGetHostname(void) {
-  const char *hostname = NULL;
+  SchedulerGetHostnameArgs schedulerGetHostnameArgs = {
+    .signature = SCHEDULER_COMMAND_SIGNATURE,
+    .hostname = NULL,
+    .errorNumber = 0,
+  };
   ProcessMessage *processMessage
     = initSendProcessMessageToPid(
     SCHEDULER_STATE->schedulerPid, SCHEDULER_GET_HOSTNAME,
-    /* data= */ 0, /* size= */ 0, true);
+    &schedulerGetHostnameArgs, sizeof(schedulerGetHostnameArgs), true);
   if (processMessage == NULL) {
     printString("ERROR: Could not communicate with scheduler.\n");
-    return hostname; // NULL
+    return schedulerGetHostnameArgs.hostname; // NULL
   }
 
   processMessageWaitForDone(processMessage, NULL);
-  hostname = (const char*) processMessageData(processMessage);
+  if (schedulerGetHostnameArgs.errorNumber != 0) {
+    errno = schedulerGetHostnameArgs.errorNumber;
+  }
   processMessageRelease(processMessage);
 
-  return hostname;
+  return schedulerGetHostnameArgs.hostname;
 }
 
 /// @fn int schedulerExecve(const char *pathname,
@@ -2103,9 +2109,22 @@ int schedulerGetHostnameCommandHandler(
 ) {
   int returnValue = 0;
 
-  processMessageData(processMessage) = schedulerState->hostname;
-  processMessageSetDone(processMessage);
+  SchedulerGetHostnameArgs *schedulerGetHostnameArgs
+    = (SchedulerGetHostnameArgs*) processMessageData(processMessage);
+  if (schedulerGetHostnameArgs->signature != SCHEDULER_COMMAND_SIGNATURE) {
+    printString("ERROR: schedulerGetHostnameCommandHandler received "
+      "unknown signature 0x");
+    printHex(schedulerGetHostnameArgs->signature);
+    printString("\n");
+    // We don't know what this is, so don't attempt to access the other members
+    // of the struct.
+    return returnValue; // 0 - Don't attempt to process this command again.
+  }
 
+  schedulerGetHostnameArgs->hostname = schedulerState->hostname;
+  schedulerGetHostnameArgs->errorNumber = 0;
+
+  processMessageSetDone(processMessage);
   return returnValue;
 }
 

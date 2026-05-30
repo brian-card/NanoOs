@@ -150,6 +150,20 @@ typedef struct SchedulerSetProcessUserArgs {
   int errorNumber;
 } SchedulerSetProcessUserArgs;
 
+/// @struct SchedulerGetHostnameArgs
+///
+/// @brief Arguments and return values for the SCHEDULER_GET_HOSTNAME command.
+///
+/// @param signature The 64-bit signature for a scheduler command.  This should
+///   always be SCHEDULER_COMMAND_SIGNATURE.
+/// @param hostname The hostname string returned by the scheduler.
+/// @param errorNumber The errno value to set in the calling process.
+typedef struct SchedulerGetHostnameArgs {
+  int64_t signature;
+  const char *hostname;
+  int errorNumber;
+} SchedulerGetHostnameArgs;
+
 /// @enum SchedulerCommandResponse
 ///
 /// @brief Commands and responses understood by the scheduler inter-process
