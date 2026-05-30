@@ -1785,21 +1785,7 @@ int schedulerKillProcessCommandHandler(
   UserId callingUserId = processMessageFrom(processMessage)->userId;
   SchedulerKillProcessArgs *schedulerKillProcessArgs
     = (SchedulerKillProcessArgs*) processMessageData(processMessage);
-  if (schedulerKillProcessArgs == NULL) {
-    printString("ERROR: schedulerKillProcessCommandHandler received "
-      "NULL data from process ");
-    printInt(processPid(processMessageFrom(processMessage)));
-    printString("\n");
-  }
-  if (schedulerKillProcessArgs->signature != SCHEDULER_COMMAND_SIGNATURE) {
-    printString("ERROR: schedulerKillProcessCommandHandler received "
-      "unknown signature 0x");
-    printHex(schedulerKillProcessArgs->signature);
-    printString("\n");
-    // We don't know what this payload is, so don't attempt to process it
-    // further.
-    return returnValue; // 0 - don't re-attempt this command
-  }
+
   ProcessId pid = schedulerKillProcessArgs->pid;
   printString("Killing process ");
   printInt(pid);
@@ -1963,16 +1949,6 @@ int schedulerGetNumProcessDescriptorsCommandHandler(
   int returnValue = 0;
   SchedulerGetNumRunningProcessesArgs *schedulerGetNumRunningProcessesArgs
     = (SchedulerGetNumRunningProcessesArgs*) processMessageData(processMessage);
-  if (schedulerGetNumRunningProcessesArgs->signature
-    != SCHEDULER_COMMAND_SIGNATURE
-  ) {
-    printString("ERROR: Received unknown signature 0x");
-    printHex(schedulerGetNumRunningProcessesArgs->signature);
-    printString(" in schedulerGetNumProcessDescriptorsCommandHandler\n");
-    // We don't know what this is, so don't try to access any other parts of the
-    // structure.
-    return returnValue; // 0 - Don't try to process this command again.
-  }
 
   uint8_t numProcessDescriptors = 0;
   for (int ii = 1; ii <= NANO_OS_NUM_PROCESSES; ii++) {
@@ -2009,18 +1985,10 @@ int schedulerGetProcessInfoCommandHandler(
 
   SchedulerGetProcessInfoArgs *schedulerGetProcessInfoArgs =
     (SchedulerGetProcessInfoArgs*) processMessageData(processMessage);
-  if (schedulerGetProcessInfoArgs->signature != SCHEDULER_COMMAND_SIGNATURE) {
-    printString("ERROR: Received unknown signature 0x");
-    printHex(schedulerGetProcessInfoArgs->signature);
-    printString(" in schedulerGetProcessInfoCommandHandler\n");
-    // We don't know what this message is, so don't attempt to access any other
-    // elements of the structure.
-    return returnValue; // 0 - Don't attempt to process this command again.
-  }
-
   int maxProcesses = schedulerGetProcessInfoArgs->processInfo->numProcesses;
   ProcessInfoElement *processes
     = schedulerGetProcessInfoArgs->processInfo->processes;
+
   int idx = 0;
   for (int ii = 1;
     (ii <= NANO_OS_NUM_PROCESSES) && (idx < maxProcesses);
@@ -2067,15 +2035,6 @@ int schedulerSetProcessUserCommandHandler(
   int returnValue = 0;
   SchedulerSetProcessUserArgs *schedulerSetProcessUserArgs
     = (SchedulerSetProcessUserArgs*) processMessageData(processMessage);
-  if (schedulerSetProcessUserArgs->signature != SCHEDULER_COMMAND_SIGNATURE) {
-    printString("ERROR: schedulerSetProcessUserCommandHandler received "
-      "unknown signature 0x");
-    printHex(schedulerSetProcessUserArgs->signature);
-    printString("\n");
-    // We don't know what this message is, so don't attempt to access any other
-    // elements of the structure.
-    return returnValue; // 0 - Don't attempt to process this command again.
-  }
   ProcessId callingPid = processPid(processMessageFrom(processMessage));
 
   if ((callingPid > 0) && (callingPid <= NANO_OS_NUM_PROCESSES)) {
@@ -2116,15 +2075,6 @@ int schedulerGetHostnameCommandHandler(
 
   SchedulerGetHostnameArgs *schedulerGetHostnameArgs
     = (SchedulerGetHostnameArgs*) processMessageData(processMessage);
-  if (schedulerGetHostnameArgs->signature != SCHEDULER_COMMAND_SIGNATURE) {
-    printString("ERROR: schedulerGetHostnameCommandHandler received "
-      "unknown signature 0x");
-    printHex(schedulerGetHostnameArgs->signature);
-    printString("\n");
-    // We don't know what this is, so don't attempt to access the other members
-    // of the struct.
-    return returnValue; // 0 - Don't attempt to process this command again.
-  }
 
   schedulerGetHostnameArgs->hostname = schedulerState->hostname;
   schedulerGetHostnameArgs->errorNumber = 0;
@@ -2157,16 +2107,6 @@ int schedulerExecveCommandHandler(
 
   SchedulerExecveArgs *schedulerExecveArgs
     = (SchedulerExecveArgs*) processMessageData(processMessage);
-  if (schedulerExecveArgs->signature != SCHEDULER_COMMAND_SIGNATURE) {
-    printString("ERROR: schedulerExecveCommandHandler received "
-      "unknown signature 0x");
-    printHex(schedulerExecveArgs->signature);
-    printString("\n");
-    // We don't know what this is, so don't attempt to access any members of
-    // the struct.
-    return returnValue; // 0 - Don't attempt to process this command again.
-  };
-
   ExecArgs *execArgs = schedulerExecveArgs->execArgs;
   if (execArgs == NULL) {
     printString("ERROR! execArgs provided was NULL.\n");
@@ -2461,12 +2401,6 @@ int schedulerSpawnCommandHandler(
 
   SchedulerSpawnArgs *schedulerSpawnArgs
     = (SchedulerSpawnArgs*) processMessageData(processMessage);
-  if (schedulerSpawnArgs->signature != SCHEDULER_COMMAND_SIGNATURE) {
-    printString("ERROR: schedulerSpawnCommandHandler received unknown "
-      "signature 0x");
-    printHex(schedulerSpawnArgs->signature);
-    printString("\n");
-  };
   SpawnArgs *spawnArgs = schedulerSpawnArgs->spawnArgs;
   if (spawnArgs == NULL) {
     printString("ERROR! spawnArgs provided was NULL.\n");
@@ -2735,25 +2669,6 @@ int schedulerSendSignalCommandHandler(
 
   SchedulerSendSignalArgs *sendSignalArgs
     = (SchedulerSendSignalArgs*) processMessageData(processMessage);
-  if (sendSignalArgs == NULL) {
-    // Nothing we can do.  Just return good status so that we don't attempt to
-    // process this message again.
-    printString("ERROR: NULL sendSignalArgs provided to ");
-    printString(__func__);
-    printString("\n");
-    processMessageSetDone(processMessage);
-    goto exit; // return 0
-  }
-
-  if (sendSignalArgs->signature != SCHEDULER_COMMAND_SIGNATURE) {
-    // We don't know what this is, so don't attempt to set any part of the
-    // structure.
-    printString("ERROR: Invalid signature in ");
-    printString(__func__);
-    printString("\n");
-    processMessageSetDone(processMessage);
-    goto exit; // return 0
-  }
 
   ProcessId pid = sendSignalArgs->pid;
   ProcessDescriptor *processDescriptor = &allProcesses[pid - 1];
