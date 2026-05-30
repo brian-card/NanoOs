@@ -51,6 +51,7 @@ void setup() {
   // We need a guard at bootup because if the system crashes in a way that makes
   // the processor unresponsive, it will be very difficult to load new firmware.
   // Sleep long enough to begin a firmware upload on reset.
+  printChar('\r');
   printChar('\n');
   printChar('B');
   printChar('o');
