@@ -81,6 +81,22 @@ typedef struct SchedulerKillProcessArgs {
   int errorNumber;
 } SchedulerKillProcessArgs;
 
+/// @struct SchedulerGetNumRunningProcessesArgs
+///
+/// @brief Arguments and return values for the
+/// SCHEDULER_GET_NUM_RUNNING_PROCESSES command.
+///
+/// @param signature The 64-bit signature for a scheduler command.  This should
+///   always be SCHEDULER_COMMAND_SIGNATURE.
+/// @param returnValue A Pid value containing the number of processes currently
+///   running in the system.
+/// @param errorNum The errno value set by the command in the scheduler, if any.
+typedef struct SchedulerGetNumRunningProcessesArgs {
+  int64_t signature;
+  Pid returnValue;
+  int errorNumber;
+} SchedulerGetNumRunningProcessesArgs;
+
 /// @struct SchedulerSendSignalArgs
 ///
 /// @brief Arguments and return value for the SCHEDULER_SEND_SIGNAL command.

@@ -751,9 +751,15 @@ Pid schedulerGetNumRunningProcesses(struct timespec *timeout) {
   int waitStatus = processSuccess;
   Pid numProcessDescriptors = 0;
 
+  SchedulerGetNumRunningProcessesArgs schedulerGetNumRunningProcessesArgs = {
+    .signature = SCHEDULER_COMMAND_SIGNATURE,
+    .returnValue = 0,
+    .errorNumber = 0,
+  };
   processMessage = initSendProcessMessageToPid(
     SCHEDULER_STATE->schedulerPid, SCHEDULER_GET_NUM_RUNNING_PROCESSES,
-    /* data= */  0, /* size= */ 0, true);
+    &schedulerGetNumRunningProcessesArgs,
+    sizeof(schedulerGetNumRunningProcessesArgs), true);
   if (processMessage == NULL) {
     printf("ERROR: Could not communicate with scheduler.\n");
     goto exit;
@@ -771,11 +777,11 @@ Pid schedulerGetNumRunningProcesses(struct timespec *timeout) {
     goto releaseMessage;
   }
 
-  numProcessDescriptors
-    = (Pid) ((uintptr_t) processMessageData(processMessage));
+  numProcessDescriptors = schedulerGetNumRunningProcessesArgs.returnValue;
   if (numProcessDescriptors == 0) {
     printf("ERROR: Number of running processes returned from the "
       "scheduler is 0.\n");
+    errno = schedulerGetNumRunningProcessesArgs.errorNumber;
     goto releaseMessage;
   }
 
@@ -1943,6 +1949,18 @@ int schedulerGetNumProcessDescriptorsCommandHandler(
   SchedulerState *schedulerState, ProcessMessage *processMessage
 ) {
   int returnValue = 0;
+  SchedulerGetNumRunningProcessesArgs *schedulerGetNumRunningProcessesArgs
+    = (SchedulerGetNumRunningProcessesArgs*) processMessageData(processMessage);
+  if (schedulerGetNumRunningProcessesArgs->signature
+    != SCHEDULER_COMMAND_SIGNATURE
+  ) {
+    printString("ERROR: Received unknown signature 0x");
+    printHex(schedulerGetNumRunningProcessesArgs->signature);
+    printString(" in schedulerGetNumProcessDescriptorsCommandHandler\n");
+    // We don't know what this is, so don't try to access any other parts of the
+    // structure.
+    return returnValue; // 0 - Don't try to process this command again.
+  }
 
   uint8_t numProcessDescriptors = 0;
   for (int ii = 1; ii <= NANO_OS_NUM_PROCESSES; ii++) {
@@ -1950,8 +1968,8 @@ int schedulerGetNumProcessDescriptorsCommandHandler(
       numProcessDescriptors++;
     }
   }
-  processMessageData(processMessage)
-    = (void*) ((uintptr_t) numProcessDescriptors);
+  schedulerGetNumRunningProcessesArgs->returnValue = numProcessDescriptors;
+  schedulerGetNumRunningProcessesArgs->errorNumber = 0;
 
   processMessageSetDone(processMessage);
 
