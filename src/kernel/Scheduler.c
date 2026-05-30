@@ -1209,10 +1209,15 @@ int schedulerExecve(const char *pathname,
 
   execArgs->schedulerState = NULL; // Set by the scheduler
 
+  SchedulerExecveArgs schedulerExecveArgs = {
+    .signature = SCHEDULER_COMMAND_SIGNATURE,
+    .execArgs = execArgs,
+    .errorNumber = 0,
+  };
   ProcessMessage *processMessage
     = initSendProcessMessageToPid(
     SCHEDULER_STATE->schedulerPid, SCHEDULER_EXECVE,
-    /* data= */ execArgs, /* size= */ sizeof(*execArgs), true);
+    &schedulerExecveArgs, sizeof(schedulerExecveArgs), true);
   if (processMessage == NULL) {
     // The only way this should be possible is if all available messages are
     // in use, so use ENOMEM as the errno.
@@ -1224,7 +1229,7 @@ int schedulerExecve(const char *pathname,
 
   // If we got this far then the exec failed for some reason.  The error will
   // be in the data portion of the message we sent to the scheduler.
-  errno = (int) ((intptr_t) processMessageData(processMessage));
+  errno = schedulerExecveArgs.errorNumber;
   processMessageRelease(processMessage);
 
 freeExecArgs:
@@ -2148,13 +2153,24 @@ int schedulerExecveCommandHandler(
     return returnValue; // 0
   }
 
-  ProcessDescriptor *processDescriptor = &schedulerState->allProcesses[
-    processPid(processMessageFrom(processMessage)) - 1];
+  ProcessDescriptor *processDescriptor = processMessageFrom(processMessage);
 
-  ExecArgs *execArgs = (ExecArgs*) processMessageData(processMessage);
+  SchedulerExecveArgs *schedulerExecveArgs
+    = (SchedulerExecveArgs*) processMessageData(processMessage);
+  if (schedulerExecveArgs->signature != SCHEDULER_COMMAND_SIGNATURE) {
+    printString("ERROR: schedulerExecveCommandHandler received "
+      "unknown signature 0x");
+    printHex(schedulerExecveArgs->signature);
+    printString("\n");
+    // We don't know what this is, so don't attempt to access any members of
+    // the struct.
+    return returnValue; // 0 - Don't attempt to process this command again.
+  };
+
+  ExecArgs *execArgs = schedulerExecveArgs->execArgs;
   if (execArgs == NULL) {
     printString("ERROR! execArgs provided was NULL.\n");
-    processMessageData(processMessage) = (void*) ((intptr_t) EINVAL);
+    schedulerExecveArgs->errorNumber = EINVAL;
     processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
   }
@@ -2164,7 +2180,7 @@ int schedulerExecveCommandHandler(
   if (pathname == NULL) {
     // Invalid
     printString("ERROR! pathname provided was NULL.\n");
-    processMessageData(processMessage) = (void*) ((intptr_t) EINVAL);
+    schedulerExecveArgs->errorNumber = EINVAL;
     processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
   }
@@ -2172,13 +2188,13 @@ int schedulerExecveCommandHandler(
   if (argv == NULL) {
     // Invalid
     printString("ERROR! argv provided was NULL.\n");
-    processMessageData(processMessage) = (void*) ((intptr_t) EINVAL);
+    schedulerExecveArgs->errorNumber = EINVAL;
     processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
   } else if (argv[0] == NULL) {
     // Invalid
     printString("ERROR! argv[0] provided was NULL.\n");
-    processMessageData(processMessage) = (void*) ((intptr_t) EINVAL);
+    schedulerExecveArgs->errorNumber = EINVAL;
     processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
   }
@@ -2383,7 +2399,7 @@ int schedulerExecveCommandHandler(
     // set the message done or alter its value.
     return returnValue; // -EBUSY
   } else if (returnValue != 0) {
-    processMessageData(processMessage) = (void*) ((intptr_t) returnValue);
+    schedulerExecveArgs->errorNumber = returnValue;
     returnValue = 0; // Don't retry this command
     processMessageSetDone(processMessage);
     return returnValue; // 0

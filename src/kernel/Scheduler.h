@@ -64,6 +64,7 @@ typedef Coroutine Thread;
 typedef uint8_t ProcessId;
 typedef struct ProcessInfo ProcessInfo;
 typedef int16_t UserId;
+typedef struct ExecArgs ExecArgs;
 
 /// @struct SchedulerKillProcessArgs
 ///
@@ -163,6 +164,21 @@ typedef struct SchedulerGetHostnameArgs {
   const char *hostname;
   int errorNumber;
 } SchedulerGetHostnameArgs;
+
+/// @struct SchedulerExecveArgs
+///
+/// Arguments and return values for the SCHEDULER_EXECVE command.
+///
+/// @param signature The 64-bit signature for a scheduler command.  This should
+///   always be SCHEDULER_COMMAND_SIGNATURE.
+/// @param execArgs A pointer to the ExecArgs structure that contains the
+///   arguments to execve.
+/// @param errorNumber The errno value to set in the calling process.
+typedef struct SchedulerExecveArgs {
+  int64_t signature;
+  ExecArgs *execArgs;
+  int errorNumber;
+} SchedulerExecveArgs;
 
 /// @enum SchedulerCommandResponse
 ///
