@@ -65,6 +65,22 @@ typedef uint8_t Pid;
 typedef struct ProcessInfo ProcessInfo;
 typedef int16_t UserId;
 
+/// @struct SchedulerKillProcessArgs
+///
+/// @brief Arguments and return values for the SCHEDULER_KILL_PROCESS command.
+///
+/// @param signature The 64-bit signature for a scheduler command.  This should
+///   always be SCHEDULER_COMMAND_SIGNATURE.
+/// @param pid The process ID of the process to kill.
+/// @param returnValue The returnValue of the command handler.
+/// @param errorNumber The errno value to set in the calling process.
+typedef struct SchedulerKillProcessArgs {
+  int64_t signature;
+  Pid pid;
+  int returnValue;
+  int errorNumber;
+} SchedulerKillProcessArgs;
+
 /// @struct SchedulerSendSignalArgs
 ///
 /// @brief Arguments and return value for the SCHEDULER_SEND_SIGNAL command.

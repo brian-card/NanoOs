@@ -884,9 +884,15 @@ exit:
 ///
 /// @return Returns 0 on success, 1 on failure.
 int schedulerKillProcess(Pid pid) {
+  SchedulerKillProcessArgs schedulerKillProcessArgs = {
+    .signature = SCHEDULER_COMMAND_SIGNATURE,
+    .pid = pid,
+    .returnValue = 0,
+    .errorNumber = 0,
+  };
   ProcessMessage *processMessage = initSendProcessMessageToPid(
     SCHEDULER_STATE->schedulerPid, SCHEDULER_KILL_PROCESS,
-    (void*) ((uintptr_t) pid), /* size= */ 0, true);
+    &schedulerKillProcessArgs, sizeof(schedulerKillProcessArgs), true);
   if (processMessage == NULL) {
     printf("ERROR: Could not communicate with scheduler.\n");
     return 1;
@@ -906,12 +912,13 @@ int schedulerKillProcess(Pid pid) {
   int waitStatus = processMessageWaitForDone(processMessage, &ts);
   int returnValue = 0;
   if (waitStatus == processSuccess) {
-    returnValue = (int) ((intptr_t) processMessageData(processMessage));
+    returnValue = schedulerKillProcessArgs.returnValue;
     if (returnValue == 0) {
       printf("Termination of process %d successful.\n", pid);
     } else {
       printf("Process termination returned status \"%s\".\n",
-        strerror(returnValue));
+        strerror(schedulerKillProcessArgs.errorNumber));
+      errno = schedulerKillProcessArgs.errorNumber;
     }
   } else {
     returnValue = 1;
@@ -1764,12 +1771,22 @@ int schedulerKillProcessCommandHandler(
 
   UserId callingUserId
     = allProcesses[processPid(processMessageFrom(processMessage)) - 1].userId;
-  Pid pid = (Pid) ((uintptr_t) processMessageData(processMessage));
+  SchedulerKillProcessArgs *schedulerKillProcessArgs
+    = (SchedulerKillProcessArgs*) processMessageData(processMessage);
+  if (schedulerKillProcessArgs->signature != SCHEDULER_COMMAND_SIGNATURE) {
+    printString("ERROR: schedulerKillProcessCommandHandler received "
+      "unknown signature 0x");
+    printHex(schedulerKillProcessArgs->signature);
+    printString("\n");
+    // We don't know what this payload is, so don't attempt to process it
+    // further.
+    return returnValue; // 0 - don't re-attempt this command
+  }
+  Pid pid = schedulerKillProcessArgs->pid;
   printString("Killing process ");
   printInt(pid);
   printString("\n");
   int processIndex = pid - 1;
-  processMessageData(processMessage) = (void*) ((intptr_t) 0);
 
   bool selfKill = false;
   if (processPid(processMessageFrom(processMessage)) == pid) {
@@ -1818,7 +1835,8 @@ int schedulerKillProcessCommandHandler(
           printString(
             "ERROR: Could not send CONSOLE_RELEASE_PID_PORT message ");
           printString("to console process\n");
-          processMessageData(processMessage) = (void*) ((intptr_t) 1);
+          schedulerKillProcessArgs->returnValue = 1;
+          schedulerKillProcessArgs->errorNumber = EBUSY;
         }
 
         // Close the file descriptors before we terminate the process so that
@@ -1840,7 +1858,8 @@ int schedulerKillProcessCommandHandler(
           printString(
             "ERROR: Could not send MEMORY_MANAGER_FREE_PROCESS_MEMORY");
           printString("message to memory manager process\n");
-          processMessageData(processMessage) = (void*) ((intptr_t) 1);
+          schedulerKillProcessArgs->returnValue = 1;
+          schedulerKillProcessArgs->errorNumber = EBUSY;
         }
 
         // MEMORY_MANAGER_FREE_PROCESS_MEMORY will have freed envp if it
@@ -1870,7 +1889,8 @@ int schedulerKillProcessCommandHandler(
         printString("Failed to terminate process; marking message 0x");
         printHex((uintptr_t) processMessage);
         printString(" done\n");
-        processMessageData(processMessage) = (void*) ((intptr_t) 1);
+        schedulerKillProcessArgs->returnValue = 1;
+        schedulerKillProcessArgs->errorNumber = EOTHER;
 
         // Do *NOT* push the process back onto the free queue in this case.
         // If we couldn't terminate it, it's not valid to try and reuse it for
@@ -1883,7 +1903,8 @@ int schedulerKillProcessCommandHandler(
       }
     } else {
       // Tell the caller that we've failed.
-      processMessageData(processMessage) = (void*) ((intptr_t) EACCES);
+      schedulerKillProcessArgs->returnValue = 1;
+      schedulerKillProcessArgs->errorNumber = EACCES;
       if (processMessageSetDone(processMessage) != processSuccess) {
         printString("ERROR: Could not mark message done in "
           "schedulerKillProcessCommandHandler.\n");
@@ -1891,7 +1912,8 @@ int schedulerKillProcessCommandHandler(
     }
   } else {
     // Tell the caller that we've failed.
-    processMessageData(processMessage) = (void*) ((intptr_t) EINVAL);
+    schedulerKillProcessArgs->returnValue = 1;
+    schedulerKillProcessArgs->errorNumber = EINVAL;
     if (processMessageSetDone(processMessage) != processSuccess) {
       printString("ERROR: "
         "Could not mark message done in schedulerKillProcessCommandHandler.\n");
