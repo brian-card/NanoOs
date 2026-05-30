@@ -587,7 +587,7 @@ typedef struct ExecArgs {
 ///
 /// @brief The 64-bit signature to indicate that a signal callback is to be
 /// used.  This is the value "SIGNALCB" in little-endian format.
-#define SIGNAL_SIGNATURE 0x42434c414e474953
+#define SIGNAL_SIGNATURE ((uint64_t) 0x42434c414e474953)
 
 /// @struct SignalCallback
 ///
