@@ -995,30 +995,6 @@ int schedulerSendSignal(Pid pid, int signal) {
   return returnValue;
 }
 
-/// @fn UserId schedulerGetProcessUser(void)
-///
-/// @brief Get the ID of the user running the current process.
-///
-/// @return Returns the ID of the user running the current process on success,
-/// -1 on failure.
-UserId schedulerGetProcessUser(void) {
-  UserId userId = -1;
-  ProcessMessage *processMessage
-    = initSendProcessMessageToPid(
-    SCHEDULER_STATE->schedulerPid, SCHEDULER_GET_PROCESS_USER,
-    /* data= */ 0, /* size= */ 0, true);
-  if (processMessage == NULL) {
-    printString("ERROR: Could not communicate with scheduler.\n");
-    return userId; // -1
-  }
-
-  processMessageWaitForDone(processMessage, NULL);
-  userId = (UserId) ((intptr_t) processMessageData(processMessage));
-  processMessageRelease(processMessage);
-
-  return userId;
-}
-
 /// @fn int schedulerSetProcessUser(UserId userId)
 ///
 /// @brief Set the user ID of the current process to the specified user ID.
@@ -2050,37 +2026,6 @@ int schedulerGetProcessInfoCommandHandler(
   return returnValue;
 }
 
-/// @fn int schedulerGetProcessUserCommandHandler(
-///   SchedulerState *schedulerState, ProcessMessage *processMessage)
-///
-/// @brief Get the number of processes that are currently running in the system.
-///
-/// @param schedulerState A pointer to the SchedulerState maintained by the
-///   scheduler process.
-/// @param processMessage A pointer to the ProcessMessage that was received.  This will be
-///   reused for the reply.
-///
-/// @return Returns 0 on success, non-zero error code on failure.
-int schedulerGetProcessUserCommandHandler(
-  SchedulerState *schedulerState, ProcessMessage *processMessage
-) {
-  int returnValue = 0;
-  Pid callingPid = processPid(processMessageFrom(processMessage));
-  if ((callingPid > 0) && (callingPid <= NANO_OS_NUM_PROCESSES)) {
-    processMessageData(processMessage)
-      = (void*) ((intptr_t) schedulerState->allProcesses[
-        callingPid - 1].userId);
-  } else {
-    processMessageData(processMessage) = (void*) ((intptr_t) -1);
-  }
-
-  processMessageSetDone(processMessage);
-
-  // DO NOT release the message since the caller is waiting on the response.
-
-  return returnValue;
-}
-
 /// @fn int schedulerSetProcessUserCommandHandler(
 ///   SchedulerState *schedulerState, ProcessMessage *processMessage)
 ///
@@ -2834,7 +2779,6 @@ const SchedulerCommandHandler schedulerCommandHandlers[] = {
   // SCHEDULER_GET_NUM_RUNNING_PROCESSES:
   schedulerGetNumProcessDescriptorsCommandHandler,
   schedulerGetProcessInfoCommandHandler,    // SCHEDULER_GET_PROCESS_INFO
-  schedulerGetProcessUserCommandHandler,    // SCHEDULER_GET_PROCESS_USER
   schedulerSetProcessUserCommandHandler,    // SCHEDULER_SET_PROCESS_USER
   schedulerGetHostnameCommandHandler,       // SCHEDULER_GET_HOSTNAME
   schedulerExecveCommandHandler,            // SCHEDULER_EXECVE

@@ -142,7 +142,6 @@ typedef enum SchedulerCommandResponse {
   SCHEDULER_KILL_PROCESS,
   SCHEDULER_GET_NUM_RUNNING_PROCESSES,
   SCHEDULER_GET_PROCESS_INFO,
-  SCHEDULER_GET_PROCESS_USER,
   SCHEDULER_SET_PROCESS_USER,
   SCHEDULER_GET_HOSTNAME,
   SCHEDULER_EXECVE,
@@ -162,7 +161,6 @@ Pid schedulerGetNumRunningProcesses(struct timespec *timeout);
 ProcessInfo* schedulerGetProcessInfo(void);
 int schedulerKillProcess(Pid pid);
 int schedulerSendSignal(Pid pid, int signal);
-UserId schedulerGetProcessUser(void);
 int schedulerSetProcessUser(UserId userId);
 FileDescriptor* schedulerGetFileDescriptor(FILE *stream);
 int schedulerCloseAllFileDescriptors(void);
