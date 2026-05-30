@@ -43,6 +43,12 @@ extern "C"
 {
 #endif
 
+/// @def SD_CARD_COMMAND_SIGNATURE
+///
+/// @brief Signature to be used in SD card commands that take argument
+/// structures.  "SDCRDCMD" expressed as a 64-bit, little-endian value.
+#define SD_CARD_COMMAND_SIGNATURE ((uint64_t) 0x444D434443524353)
+
 typedef struct BlockDevice BlockDevice;
 
 /// @struct SdCardState
