@@ -133,6 +133,23 @@ typedef struct SchedulerGetProcessInfoArgs {
   int errorNumber;
 } SchedulerGetProcessInfoArgs;
 
+/// @struct SchedulerSetProcessUserArgs
+///
+/// @brief Arguments and return values for the SCHEDULER_SET_PROCESS_USER
+/// command.
+///
+/// @param signature The 64-bit signature for a scheduler command.  This should
+///   always be SCHEDULER_COMMAND_SIGNATURE.
+/// @param userId The UserId that should be associated with the process.
+/// @param returnValue The returnValue of the command handler.
+/// @param errorNumber The errno value to set in the calling process.
+typedef struct SchedulerSetProcessUserArgs {
+  int64_t signature;
+  UserId userId;
+  int returnValue;
+  int errorNumber;
+} SchedulerSetProcessUserArgs;
+
 /// @enum SchedulerCommandResponse
 ///
 /// @brief Commands and responses understood by the scheduler inter-process

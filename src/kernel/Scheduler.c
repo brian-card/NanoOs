@@ -1002,22 +1002,29 @@ int schedulerSendSignal(ProcessId pid, int signal) {
 /// @return Returns 0 on success, -1 on failure.
 int schedulerSetProcessUser(UserId userId) {
   int returnValue = -1;
+  SchedulerSetProcessUserArgs schedulerSetProcessUserArgs = {
+    .signature = SCHEDULER_COMMAND_SIGNATURE,
+    .userId = userId,
+    .returnValue = returnValue,
+    .errorNumber = 0,
+  };
   ProcessMessage *processMessage
     = initSendProcessMessageToPid(
     SCHEDULER_STATE->schedulerPid, SCHEDULER_SET_PROCESS_USER,
-    /* data= */ (void*) ((intptr_t) userId), /* size= */ 0, true);
+    &schedulerSetProcessUserArgs, sizeof(schedulerSetProcessUserArgs), true);
   if (processMessage == NULL) {
     printString("ERROR: Could not communicate with scheduler.\n");
     return returnValue; // -1
   }
 
   processMessageWaitForDone(processMessage, NULL);
-  returnValue = (int) ((intptr_t) processMessageData(processMessage));
+  returnValue = schedulerSetProcessUserArgs.returnValue;
   processMessageRelease(processMessage);
 
   if (returnValue != 0) {
+    errno = schedulerSetProcessUserArgs.errorNumber;
     printf("Scheduler returned \"%s\" for setProcessUser.\n",
-      strerror(returnValue));
+      strerror(errno));
   }
 
   return returnValue;
@@ -2047,18 +2054,30 @@ int schedulerSetProcessUserCommandHandler(
   SchedulerState *schedulerState, ProcessMessage *processMessage
 ) {
   int returnValue = 0;
+  SchedulerSetProcessUserArgs *schedulerSetProcessUserArgs
+    = (SchedulerSetProcessUserArgs*) processMessageData(processMessage);
+  if (schedulerSetProcessUserArgs->signature != SCHEDULER_COMMAND_SIGNATURE) {
+    printString("ERROR: schedulerSetProcessUserCommandHandler received "
+      "unknown signature 0x");
+    printHex(schedulerSetProcessUserArgs->signature);
+    printString("\n");
+    // We don't know what this message is, so don't attempt to access any other
+    // elements of the structure.
+    return returnValue; // 0 - Don't attempt to process this command again.
+  }
   ProcessId callingPid = processPid(processMessageFrom(processMessage));
-  UserId userId = (UserId) ((intptr_t) processMessageData(processMessage));
-  processMessageData(processMessage) = (void*) ((intptr_t) -1);
 
   if ((callingPid > 0) && (callingPid <= NANO_OS_NUM_PROCESSES)) {
     if ((schedulerState->allProcesses[callingPid - 1].userId == -1)
-      || (userId == -1)
+      || (schedulerSetProcessUserArgs->userId == -1)
     ) {
-      schedulerState->allProcesses[callingPid - 1].userId = userId;
-      processMessageData(processMessage) = (void*) ((intptr_t) 0);
+      schedulerState->allProcesses[callingPid - 1].userId
+        = schedulerSetProcessUserArgs->userId;
+      schedulerSetProcessUserArgs->returnValue = 0;
+      schedulerSetProcessUserArgs->errorNumber = 0;
     } else {
-      processMessageData(processMessage) = (void*) ((intptr_t) EACCES);
+      schedulerSetProcessUserArgs->returnValue = -1;
+      schedulerSetProcessUserArgs->errorNumber = EACCES;
     }
   }
 
