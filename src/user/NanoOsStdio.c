@@ -85,7 +85,33 @@ int printString_(const char *string) {
     return -ENODEV;
   }
 
-  return HAL->uart->write(0, (uint8_t*) string, strlen(string));
+  bool printReturnNewline = false;
+  size_t stringLength = strlen(string);
+  char *newlineAt = strchr(string, '\n');
+  if ((newlineAt != NULL)
+    && ((newlineAt == string) || (newlineAt[-1] != '\r'))
+  ) {
+    printReturnNewline = true;
+    stringLength--;
+  }
+
+  int bytesWritten = HAL->uart->write(0, (uint8_t*) string, stringLength);
+  if (bytesWritten < 0) {
+    // Bail.
+    return bytesWritten;
+  }
+
+  if (printReturnNewline == true) {
+    int rv = HAL->uart->write(0, (uint8_t*) "\r\n", 2);
+    if (rv >= 0) {
+      // The usual case.
+      bytesWritten += rv;
+    } else {
+      bytesWritten = rv;
+    }
+  }
+
+  return bytesWritten;
 }
 
 /// @fn int ullToString(unsigned long long int number, char **nextChar)
