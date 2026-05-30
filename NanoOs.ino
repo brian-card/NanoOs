@@ -62,6 +62,7 @@ void setup() {
   printChar('.');
   printChar('.');
   printChar('.');
+  printChar('\r');
   printChar('\n');
   msleep(7000);
 }
