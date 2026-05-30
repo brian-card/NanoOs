@@ -2868,6 +2868,18 @@ void handleSchedulerMessage(SchedulerState *schedulerState) {
   static int lastReturnValue = 0;
   ProcessMessage *message = processMessageQueuePop();
   if (message != NULL) {
+    uint64_t *signature = (uint64_t*) processMessageData(message);
+    if ((signature == NULL) || (*signature != SCHEDULER_COMMAND_SIGNATURE)) {
+      printString("ERROR: ");
+      printString(__func__);
+      printString(" received unknown signature 0x");
+      printHex(*signature);
+      printString("\n");
+      // Don't attempt to process this message further and don't put it back on
+      // our message queue.  Just return immediately.
+      return;
+    }
+
     SchedulerCommand messageType
       = (SchedulerCommand) processMessageType(message);
     if (messageType >= NUM_SCHEDULER_COMMANDS) {
