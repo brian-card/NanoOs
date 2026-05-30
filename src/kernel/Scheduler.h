@@ -65,6 +65,7 @@ typedef uint8_t ProcessId;
 typedef struct ProcessInfo ProcessInfo;
 typedef int16_t UserId;
 typedef struct ExecArgs ExecArgs;
+typedef struct SpawnArgs SpawnArgs;
 
 /// @struct SchedulerKillProcessArgs
 ///
@@ -179,6 +180,21 @@ typedef struct SchedulerExecveArgs {
   ExecArgs *execArgs;
   int errorNumber;
 } SchedulerExecveArgs;
+
+/// @struct SchedulerSpawnArgs
+///
+/// Arguments and return values for the SCHEDULER_SPAWN command.
+///
+/// @param signature The 64-bit signature for a scheduler command.  This should
+///   always be SCHEDULER_COMMAND_SIGNATURE.
+/// @param spawnArgs A pointer to the SpawnArgs structure that contains the
+///   arguments to posix_spawn.
+/// @param errorNumber The errno value to return as the userspace return value.
+typedef struct SchedulerSpawnArgs {
+  int64_t signature;
+  SpawnArgs *spawnArgs;
+  int errorNumber;
+} SchedulerSpawnArgs;
 
 /// @enum SchedulerCommandResponse
 ///

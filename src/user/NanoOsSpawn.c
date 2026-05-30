@@ -230,10 +230,15 @@ int nanoOsSpawn(
     spawnArgs->envp = NULL;
   }
 
+  SchedulerSpawnArgs schedulerSpawnArgs = {
+    .signature = SCHEDULER_COMMAND_SIGNATURE,
+    .spawnArgs = spawnArgs,
+    .errorNumber = 0,
+  };
   ProcessMessage *processMessage
     = initSendProcessMessageToPid(
     SCHEDULER_STATE->schedulerPid, SCHEDULER_SPAWN,
-    spawnArgs, sizeof(*spawnArgs), true);
+    &schedulerSpawnArgs, sizeof(schedulerSpawnArgs), true);
   if (processMessage == NULL) {
     // The only way this should be possible is if all available messages are
     // in use, so use ENOMEM as the errno.
@@ -242,7 +247,7 @@ int nanoOsSpawn(
   }
 
   processMessageWaitForDone(processMessage, NULL);
-  returnValue = (int) ((intptr_t) processMessageData(processMessage));
+  returnValue = schedulerSpawnArgs.errorNumber;
   processMessageRelease(processMessage);
 
   if (returnValue != 0) {

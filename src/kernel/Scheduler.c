@@ -2459,10 +2459,18 @@ int schedulerSpawnCommandHandler(
     return returnValue; // 0
   }
 
-  SpawnArgs *spawnArgs = (SpawnArgs*) processMessageData(processMessage);
+  SchedulerSpawnArgs *schedulerSpawnArgs
+    = (SchedulerSpawnArgs*) processMessageData(processMessage);
+  if (schedulerSpawnArgs->signature != SCHEDULER_COMMAND_SIGNATURE) {
+    printString("ERROR: schedulerSpawnCommandHandler received unknown "
+      "signature 0x");
+    printHex(schedulerSpawnArgs->signature);
+    printString("\n");
+  };
+  SpawnArgs *spawnArgs = schedulerSpawnArgs->spawnArgs;
   if (spawnArgs == NULL) {
     printString("ERROR! spawnArgs provided was NULL.\n");
-    processMessageData(processMessage) = (void*) ((uintptr_t) EINVAL);
+    schedulerSpawnArgs->errorNumber = EINVAL;
     processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
   }
@@ -2471,7 +2479,7 @@ int schedulerSpawnCommandHandler(
   if (pathname == NULL) {
     // Invalid
     printString("ERROR! pathname provided was NULL.\n");
-    processMessageData(processMessage) = (void*) ((uintptr_t) EINVAL);
+    schedulerSpawnArgs->errorNumber = EINVAL;
     processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
   }
@@ -2479,13 +2487,13 @@ int schedulerSpawnCommandHandler(
   if (argv == NULL) {
     // Invalid
     printString("ERROR! argv provided was NULL.\n");
-    processMessageData(processMessage) = (void*) ((uintptr_t) EINVAL);
+    schedulerSpawnArgs->errorNumber = EINVAL;
     processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
   } else if (argv[0] == NULL) {
     // Invalid
     printString("ERROR! argv[0] provided was NULL.\n");
-    processMessageData(processMessage) = (void*) ((uintptr_t) EINVAL);
+    schedulerSpawnArgs->errorNumber = EINVAL;
     processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
   }
@@ -2494,7 +2502,7 @@ int schedulerSpawnCommandHandler(
   ProcessDescriptor *processDescriptor = processQueuePop(&schedulerState->free);
   if (processDescriptor == NULL) {
     printString("Out of process slots to launch process.\n");
-    processMessageData(processMessage) = (void*) ((uintptr_t) EINVAL);
+    schedulerSpawnArgs->errorNumber = EINVAL;
     processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
   }
@@ -2506,7 +2514,7 @@ int schedulerSpawnCommandHandler(
   ExecArgs *execArgs = (ExecArgs*) schedMalloc(sizeof(ExecArgs));
   if (execArgs == NULL) {
     printString("Out of memory for ExecArgs.\n");
-    processMessageData(processMessage) = (void*) ((uintptr_t) ENOMEM);
+    schedulerSpawnArgs->errorNumber = ENOMEM;
     processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
   }
@@ -2528,7 +2536,7 @@ int schedulerSpawnCommandHandler(
   if (processDescriptor->fileDescriptors == NULL) {
     printString(
       "ERROR: Could not allocate file descriptor array for new command\n");
-    processMessageData(processMessage) = (void*) ((uintptr_t) ENOMEM);
+    schedulerSpawnArgs->errorNumber = ENOMEM;
     schedFree(execArgs);
     processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
@@ -2540,7 +2548,7 @@ int schedulerSpawnCommandHandler(
       printString("ERROR: Could not allocate memory for file descriptor ");
       printInt(ii);
       printString(" for new process\n");
-      processMessageData(processMessage) = (void*) ((uintptr_t) ENOMEM);
+      schedulerSpawnArgs->errorNumber = ENOMEM;
       for (int jj = 0; jj < ii; jj++) {
         schedFree(processDescriptor->fileDescriptors[jj]);
       }
@@ -2673,7 +2681,7 @@ int schedulerSpawnCommandHandler(
     // set the message done or alter its value.
     return returnValue; // -EBUSY
   } else if (returnValue != 0) {
-    processMessageData(processMessage) = (void*) ((uintptr_t) returnValue);
+    schedulerSpawnArgs->errorNumber = returnValue;
     returnValue = 0; // Don't retry this command
     processMessageSetDone(processMessage);
 
@@ -2694,7 +2702,7 @@ int schedulerSpawnCommandHandler(
   // Put the process on the ready queue.
   processQueuePush(processDescriptor->readyQueue, processDescriptor);
 
-  processMessageData(processMessage) = (void*) ((uintptr_t) 0);
+  schedulerSpawnArgs->errorNumber = 0;
   processMessageSetDone(processMessage);
 
   return returnValue;
