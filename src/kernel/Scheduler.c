@@ -840,9 +840,16 @@ ProcessInfo* schedulerGetProcessInfo(void) {
   // ProcessInfoElements it can populated.
   processInfo->numProcesses = numProcessDescriptors;
 
+  SchedulerGetProcessInfoArgs schedulerGetProcessInfoArgs = {
+    .signature = SCHEDULER_COMMAND_SIGNATURE,
+    .processInfo = processInfo,
+    .returnValue = 0,
+    .errorNumber = 0,
+  };
   processMessage
     = initSendProcessMessageToPid(SCHEDULER_STATE->schedulerPid,
-    SCHEDULER_GET_PROCESS_INFO, processInfo, sizeof(*processInfo), true);
+    SCHEDULER_GET_PROCESS_INFO, &schedulerGetProcessInfoArgs,
+    sizeof(schedulerGetProcessInfoArgs), true);
 
   if (processMessage == NULL) {
     printf("ERROR: Could not send scheduler message to get process info.\n");
@@ -858,6 +865,12 @@ ProcessInfo* schedulerGetProcessInfo(void) {
     }
 
     // Without knowing the data for the processes, we can't display them.  Bail.
+    goto releaseMessage;
+  }
+
+  if (schedulerGetProcessInfoArgs.returnValue != 0) {
+    errno = schedulerGetProcessInfoArgs.errorNumber;
+    fprintf(stderr, "ERROR: Scheduler returned status: %s\n", strerror(errno));
     goto releaseMessage;
   }
 
@@ -1994,26 +2007,41 @@ int schedulerGetProcessInfoCommandHandler(
 ) {
   int returnValue = 0;
 
-  ProcessInfo *processInfo = (ProcessInfo*) processMessageData(processMessage);
-  int maxProcesses = processInfo->numProcesses;
-  ProcessInfoElement *processes = processInfo->processes;
+  SchedulerGetProcessInfoArgs *schedulerGetProcessInfoArgs =
+    (SchedulerGetProcessInfoArgs*) processMessageData(processMessage);
+  if (schedulerGetProcessInfoArgs->signature != SCHEDULER_COMMAND_SIGNATURE) {
+    printString("ERROR: Received unknown signature 0x");
+    printHex(schedulerGetProcessInfoArgs->signature);
+    printString(" in schedulerGetProcessInfoCommandHandler\n");
+    // We don't know what this message is, so don't attempt to access any other
+    // elements of the structure.
+    return returnValue; // 0 - Don't attempt to process this command again.
+  }
+
+  int maxProcesses = schedulerGetProcessInfoArgs->processInfo->numProcesses;
+  ProcessInfoElement *processes
+    = schedulerGetProcessInfoArgs->processInfo->processes;
   int idx = 0;
   for (int ii = 1;
     (ii <= NANO_OS_NUM_PROCESSES) && (idx < maxProcesses);
     ii++
   ) {
-    if (processRunning(&schedulerState->allProcesses[ii - 1])) {
-      processes[idx].pid = (int) schedulerState->allProcesses[ii - 1].pid;
-      processes[idx].name = schedulerState->allProcesses[ii - 1].name;
-      processes[idx].userId = schedulerState->allProcesses[ii - 1].userId;
-      idx++;
+    if (processRunning(&schedulerState->allProcesses[ii - 1]) == false) {
+      continue;
     }
+
+    processes[idx].pid = (int) schedulerState->allProcesses[ii - 1].pid;
+    processes[idx].name = schedulerState->allProcesses[ii - 1].name;
+    processes[idx].userId = schedulerState->allProcesses[ii - 1].userId;
+    idx++;
   }
 
   // It's possible that a process completed between the time that processInfo
   // was allocated and now, so set the value of numProcesses to the value of
   // idx.
-  processInfo->numProcesses = idx;
+  schedulerGetProcessInfoArgs->processInfo->numProcesses = idx;
+  schedulerGetProcessInfoArgs->returnValue = 0;
+  schedulerGetProcessInfoArgs->errorNumber = 0;
 
   processMessageSetDone(processMessage);
 
@@ -2802,12 +2830,12 @@ typedef int (*SchedulerCommandHandler)(SchedulerState*, ProcessMessage*);
 /// message handler for the main loop function.
 KEEP_IN_FLASH
 const SchedulerCommandHandler schedulerCommandHandlers[] = {
-  schedulerKillProcessCommandHandler,          // SCHEDULER_KILL_PROCESS
+  schedulerKillProcessCommandHandler,       // SCHEDULER_KILL_PROCESS
   // SCHEDULER_GET_NUM_RUNNING_PROCESSES:
   schedulerGetNumProcessDescriptorsCommandHandler,
-  schedulerGetProcessInfoCommandHandler,       // SCHEDULER_GET_PROCESS_INFO
-  schedulerGetProcessUserCommandHandler,       // SCHEDULER_GET_PROCESS_USER
-  schedulerSetProcessUserCommandHandler,       // SCHEDULER_SET_PROCESS_USER
+  schedulerGetProcessInfoCommandHandler,    // SCHEDULER_GET_PROCESS_INFO
+  schedulerGetProcessUserCommandHandler,    // SCHEDULER_GET_PROCESS_USER
+  schedulerSetProcessUserCommandHandler,    // SCHEDULER_SET_PROCESS_USER
   schedulerGetHostnameCommandHandler,       // SCHEDULER_GET_HOSTNAME
   schedulerExecveCommandHandler,            // SCHEDULER_EXECVE
   schedulerSpawnCommandHandler,             // SCHEDULER_SPAWN

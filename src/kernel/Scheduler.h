@@ -99,7 +99,7 @@ typedef struct SchedulerGetNumRunningProcessesArgs {
 
 /// @struct SchedulerSendSignalArgs
 ///
-/// @brief Arguments and return value for the SCHEDULER_SEND_SIGNAL command.
+/// @brief Arguments and return values for the SCHEDULER_SEND_SIGNAL command.
 ///
 /// @param signature The 64-bit signature for a scheduler command.  This should
 ///   always be SCHEDULER_COMMAND_SIGNATURE.
@@ -114,6 +114,24 @@ typedef struct SchedulerSendSignalArgs {
   int returnValue;
   int errorNumber;
 } SchedulerSendSignalArgs;
+
+/// @struct SchedulerGetProcessInfoArgs
+///
+/// @brief Arguments and return values for the SCHEDULER_GET_PROCESS_INFO
+/// command.
+///
+/// @param signature The 64-bit signature for a scheduler command.  This should
+///   always be SCHEDULER_COMMAND_SIGNATURE.
+/// @param processInfo A pointer to the process's ProcessInfo structure that
+///   the command is to populate.
+/// @param returnValue The returnValue of the command handler.
+/// @param errorNumber The errno value to set in the calling process.
+typedef struct SchedulerGetProcessInfoArgs {
+  int64_t signature;
+  ProcessInfo *processInfo;
+  int returnValue;
+  int errorNumber;
+} SchedulerGetProcessInfoArgs;
 
 /// @enum SchedulerCommandResponse
 ///
