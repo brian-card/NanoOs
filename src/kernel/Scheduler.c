@@ -1775,8 +1775,7 @@ int schedulerKillProcessCommandHandler(
 ) {
   int returnValue = 0;
 
-  UserId callingUserId
-    = allProcesses[processPid(processMessageFrom(processMessage)) - 1].userId;
+  UserId callingUserId = processMessageFrom(processMessage)->userId;
   SchedulerKillProcessArgs *schedulerKillProcessArgs
     = (SchedulerKillProcessArgs*) processMessageData(processMessage);
   if (schedulerKillProcessArgs->signature != SCHEDULER_COMMAND_SIGNATURE) {
