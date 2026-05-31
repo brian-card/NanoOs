@@ -432,18 +432,9 @@ void* runFilesystem(void *args) {
   fs.driverInit(&fs);
   printDebugString("runFilesystem: Initialization complete\n");
   
-  ProcessMessage *msg = NULL;
   while (1) {
-    msg = (ProcessMessage*) processYield();
-    if (msg) {
-      FilesystemCommandResponse type = 
-        (FilesystemCommandResponse) processMessageType(msg);
-      if (type < NUM_FILESYSTEM_COMMANDS) {
-        filesystemCommandHandlers[type](&fs, msg);
-      }
-    } else {
-      handleFilesystemMessages(&fs);
-    }
+    processYield();
+    handleFilesystemMessages(&fs);
   }
   return NULL;
 }
