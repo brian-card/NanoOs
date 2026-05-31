@@ -159,7 +159,7 @@ SdCardCommandHandler sdCardPosixCommandHandlers[] = {
 ///
 /// @return This function returns no value.
 void handleSdCardPosixMessages(SdCardState *sdCardState) {
-  ProcessMessage *processMessage = processMessageQueuePop();
+  ProcessMessage *processMessage = processMessageQueueWait(NULL);
   while (processMessage != NULL) {
     uint64_t *signature = (uint64_t*) processMessageData(processMessage);
     if ((signature == NULL) || (*signature != SD_CARD_COMMAND_SIGNATURE)) {
