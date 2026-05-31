@@ -831,19 +831,10 @@ int memoryManagerFreeCommandHandler(
 int memoryManagerGetFreeMemoryCommandHandler(
   MemoryManagerState *memoryManagerState, ProcessMessage *incoming
 ) {
-  // We're going to reuse the incoming message as the outgoing message.
-  ProcessMessage *response = incoming;
-
   int returnValue = 0;
-  
-  ProcessDescriptor *from = processMessageFrom(incoming);
-  // We need to mark waiting as true here so that processMessageSetDone signals
-  // the client side correctly.
-  processMessageInit(response, MEMORY_MANAGER_RETURNING_FREE_MEMORY,
-    NULL, memoryManagerState->bytesFree, true);
-  if (processMessageQueuePush(from, response) != processSuccess) {
-    returnValue = -1;
-  }
+  MemoryManagerGetFreeMemoryArgs *memoryManagerGetFreeMemoryArgs
+    = (MemoryManagerGetFreeMemoryArgs*) processMessageData(incoming);
+  memoryManagerGetFreeMemoryArgs->bytesFree = memoryManagerState->bytesFree;
   
   // The client is waiting on us.  Mark the incoming message done now.  Do *NOT*
   // release it since the client is still using it.
@@ -1276,22 +1267,25 @@ void* runMemoryManager(void *args) {
 size_t getFreeMemory(void) {
   size_t returnValue = 0;
   
-  ProcessMessage sent;
-  memset(&sent, 0, sizeof(sent));
-  processMessageInit(&sent, MEMORY_MANAGER_GET_FREE_MEMORY, NULL, 0, true);
-  
-  if (sendProcessMessageToPid(SCHEDULER_STATE->memoryManagerPid, &sent)
-    != processSuccess
-  ) {
-    // Nothing more we can do.
-    return returnValue;
+  MemoryManagerGetFreeMemoryArgs memoryManagerGetFreeMemoryArgs = {
+    .signature = MEMORY_MANAGER_COMMAND_SIGNATURE,
+    .bytesFree = 0,
+  };
+
+  ProcessMessage *sent
+    = initSendProcessMessageToPid(SCHEDULER_STATE->memoryManagerPid,
+    MEMORY_MANAGER_GET_FREE_MEMORY,
+    &memoryManagerGetFreeMemoryArgs,
+    sizeof(memoryManagerGetFreeMemoryArgs), true);
+  if (sent == NULL) {
+    printString(__func__);
+    printString(": ERROR: initSendProcessMessageToPid returned NULL\n");
+    return returnValue; // 0
   }
-  
-  ProcessMessage *response = processMessageWaitForReplyWithType(&sent, false,
-    MEMORY_MANAGER_RETURNING_FREE_MEMORY, NULL);
-  returnValue = processMessageSize(response);
-  
-  return returnValue;
+
+  processMessageWaitForDone(sent, NULL);
+  processMessageRelease(sent);
+  return memoryManagerGetFreeMemoryArgs.bytesFree;
 }
 
 /// @fn void* memoryManagerSendReallocMessage(void *ptr, size_t size)
