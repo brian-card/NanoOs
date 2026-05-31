@@ -60,6 +60,12 @@ extern "C"
 /// @brief Maximum length of a full path on the filesystem.
 #define MAX_PATH_LENGTH 255
 
+/// @def FILESYSTEM_COMMAND_SIGNATURE
+///
+/// @brief Signature used in command structures sent to the filesystem process.
+/// "FILESCMD" as a 64-bit, little-endian value.
+#define FILESYSTEM_COMMAND_SIGNATURE ((uint64_t) 0x444D4353454C4946)
+
 /// @struct FilesystemState
 ///
 /// @brief State metadata the filesystem process uses to provide access to
