@@ -2911,8 +2911,7 @@ int schedulerDumpMemoryAllocations(void) {
 
 /// @fn int schedulerDumpOpenFiles(void)
 ///
-/// @brief Make the memory manager dump metadata about all its outstanding
-/// allocations.
+/// @brief Make the filesystem process dump metadata about all its open files.
 ///
 /// @return Returns 0 on success, -1 on failure.
 int schedulerDumpOpenFiles(void) {
