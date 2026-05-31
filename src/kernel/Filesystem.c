@@ -686,6 +686,7 @@ int filesystemFSeek(FILE *stream, long offset, int whence) {
   }
 
   FilesystemSeekArgs filesystemSeekArgs = {
+    .signature = FILESYSTEM_COMMAND_SIGNATURE,
     .stream = stream,
     .offset = offset,
     .whence = whence,

@@ -143,6 +143,9 @@ typedef struct FilesystemIoCommandArgs {
 ///
 /// @brief Arguments needed for an fseek function call on a file.
 ///
+/// @param signature A uint64_t value to designate this as a command structure
+///   to the filesystem process.  This should always be the value
+///   FILESYSTEM_COMMAND_SIGNATURE.
 /// @param stream A pointer to the FILE object to adjust the position indicator
 ///   of.
 /// @param offset The offset to apply to the position specified by the whence
@@ -151,9 +154,10 @@ typedef struct FilesystemIoCommandArgs {
 ///   of SEEK_SET (beginning of the file), SEEK_CUR (the current position of
 ///   the file) or SEEK_END (the end of the file).
 typedef struct FilesystemSeekArgs {
-  FILE *stream;
-  long offset;
-  int whence;
+  uint64_t  signature;
+  FILE     *stream;
+  long      offset;
+  int       whence;
 } FilesystemSeekArgs;
 
 /// @struct FilesystemFopenArgs
