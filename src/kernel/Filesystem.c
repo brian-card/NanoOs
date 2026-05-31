@@ -375,39 +375,41 @@ const FilesystemCommandHandler filesystemCommandHandlers[] = {
 /// @param fs A pointer to the FilesystemState object maintained by the
 ///   filesystem process.
 ///
-/// @return This function returns no value.
+/// @return This function never returns.
 static void handleFilesystemMessages(FilesystemState *filesystemState) {
-  ProcessMessage *msg = processMessageQueuePop();
-  while (msg != NULL) {
-    uint64_t *signature = (uint64_t*) processMessageData(msg);
-    if (*signature != FILESYSTEM_COMMAND_SIGNATURE) {
-      printString("Error: ");
-      printString(__func__);
-      printString(" received unknown signature 0x");
-      printHex(*signature);
-      printString(" from process ");
-      printInt(processPid(processMessageFrom(msg)));
-      printString("\n");
-      msg = processMessageQueuePop();
-      continue;
-    }
+  while (1) {
+    ProcessMessage *msg = processMessageQueueWait(NULL);
+    while (msg != NULL) {
+      uint64_t *signature = (uint64_t*) processMessageData(msg);
+      if (*signature != FILESYSTEM_COMMAND_SIGNATURE) {
+        printString("Error: ");
+        printString(__func__);
+        printString(" received unknown signature 0x");
+        printHex(*signature);
+        printString(" from process ");
+        printInt(processPid(processMessageFrom(msg)));
+        printString("\n");
+        msg = processMessageQueuePop();
+        continue;
+      }
 
-    FilesystemCommandResponse type = 
-      (FilesystemCommandResponse) processMessageType(msg);
-    if (type < NUM_FILESYSTEM_COMMANDS) {
-      printDebugString("Handling filesystem message type ");
-      printDebugInt(type);
-      printDebugString("\n");
-      filesystemCommandHandlers[type](filesystemState, msg);
-    } else {
-      printString(__func__);
-      printString(": ERROR! Received unknown filesystem message type ");
-      printInt(type);
-      printString(" from process ");
-      printInt(processPid(processMessageFrom(msg)));
-      printString("\n");
+      FilesystemCommandResponse type = 
+        (FilesystemCommandResponse) processMessageType(msg);
+      if (type < NUM_FILESYSTEM_COMMANDS) {
+        printDebugString("Handling filesystem message type ");
+        printDebugInt(type);
+        printDebugString("\n");
+        filesystemCommandHandlers[type](filesystemState, msg);
+      } else {
+        printString(__func__);
+        printString(": ERROR! Received unknown filesystem message type ");
+        printInt(type);
+        printString(" from process ");
+        printInt(processPid(processMessageFrom(msg)));
+        printString("\n");
+      }
+      msg = processMessageQueuePop();
     }
-    msg = processMessageQueuePop();
   }
 }
 
@@ -432,10 +434,7 @@ void* runFilesystem(void *args) {
   fs.driverInit(&fs);
   printDebugString("runFilesystem: Initialization complete\n");
   
-  while (1) {
-    processYield();
-    handleFilesystemMessages(&fs);
-  }
+  handleFilesystemMessages(&fs);
   return NULL;
 }
 
