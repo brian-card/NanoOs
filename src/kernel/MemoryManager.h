@@ -86,6 +86,19 @@ typedef struct ReallocMessage {
   size_t    size;
 } ReallocMessage;
 
+/// @struct MemoryManagerFreeArgs
+///
+/// @brief Structure that holds the data to request to free an existing pointer.
+///
+/// @param signature The 64-bit signature that indicates that this is a memory
+///   management command.  This should always be the value
+///   MEMORY_MANAGER_COMMAND_SIGNATURE.
+/// @param ptr The pointer to be freed.
+typedef struct MemoryManagerFreeArgs {
+  uint64_t  signature;
+  void     *ptr;
+} MemoryManagerFreeArgs;
+
 /// @struct AssignMemoryArgs
 ///
 /// @brief Functional parameters to the MEMORY_MANAGER_ASSIGN_MEMORY command.

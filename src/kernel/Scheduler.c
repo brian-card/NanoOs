@@ -627,8 +627,12 @@ void* schedCalloc(size_t nmemb, size_t size) {
 void schedFree(void *ptr) {
   // No need to check the return value here.  There's nothing we can do if we
   // fail to send the message for some reason.
+  MemoryManagerFreeArgs memoryManagerFreeArgs = {
+    .signature = MEMORY_MANAGER_COMMAND_SIGNATURE,
+    .ptr = ptr,
+  };
   schedulerInitSendMessageToPid(SCHEDULER_STATE->memoryManagerPid,
-    MEMORY_MANAGER_FREE, ptr, 0);
+    MEMORY_MANAGER_FREE, &memoryManagerFreeArgs, sizeof(memoryManagerFreeArgs));
   return;
 }
 

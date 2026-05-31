@@ -802,11 +802,13 @@ int memoryManagerFreeCommandHandler(
 ) {
   int returnValue = 0;
 
-  void *ptr = processMessageData(incoming);
-  localFree(memoryManagerState, ptr, processPid(processMessageFrom(incoming)));
-  if (processMessageRelease(incoming) != processSuccess) {
+  MemoryManagerFreeArgs *memoryManagerFreeArgs
+    = (MemoryManagerFreeArgs*) processMessageData(incoming);
+  localFree(memoryManagerState, memoryManagerFreeArgs->ptr,
+    processPid(processMessageFrom(incoming)));
+  if (processMessageSetDone(incoming) != processSuccess) {
     printString("ERROR: "
-      "Could not release message from memoryManagerFreeCommandHandler.\n");
+      "Could not set message done from memoryManagerFreeCommandHandler.\n");
     returnValue = -1;
   }
 
@@ -1338,15 +1340,26 @@ void* memoryManagerSendReallocMessage(void *ptr, size_t size) {
 ///
 /// @return This function always succeeds and returns no value.
 void memoryManagerFree(void *ptr) {
-  if (ptr != NULL) {
-    if (initSendProcessMessageToPid(
-      SCHEDULER_STATE->memoryManagerPid, MEMORY_MANAGER_FREE,
-      /* data= */ ptr, /* size= */ 0, false) == NULL
-    ) {
-      printString("ERROR: Could not send MEMORY_MANAGER_FREE message to ");
-      printString("memory manager; memory leak\n");
-    }
+  if (ptr == NULL) {
+    return;
   }
+
+  MemoryManagerFreeArgs memoryManagerFreeArgs = {
+    .signature = MEMORY_MANAGER_COMMAND_SIGNATURE,
+    .ptr = ptr,
+  };
+  ProcessMessage *processMessage = initSendProcessMessageToPid(
+    SCHEDULER_STATE->memoryManagerPid, MEMORY_MANAGER_FREE,
+    &memoryManagerFreeArgs, sizeof(memoryManagerFreeArgs), false);
+  if (processMessage == NULL) {
+    printString("ERROR: Could not send MEMORY_MANAGER_FREE message to ");
+    printString("memory manager; memory leak\n");
+    return;
+  }
+
+  processMessageWaitForDone(processMessage, NULL);
+  processMessageRelease(processMessage);
+
   return;
 }
 
