@@ -1305,6 +1305,7 @@ void* memoryManagerSendReallocMessage(void *ptr, size_t size) {
   void *returnValue = NULL;
   
   ReallocMessage reallocMessage;
+  reallocMessage.signature = MEMORY_MANAGER_COMMAND_SIGNATURE;
   reallocMessage.ptr = ptr;
   reallocMessage.size = size;
   
