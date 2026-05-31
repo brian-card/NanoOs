@@ -379,6 +379,18 @@ const FilesystemCommandHandler filesystemCommandHandlers[] = {
 static void handleFilesystemMessages(FilesystemState *filesystemState) {
   ProcessMessage *msg = processMessageQueuePop();
   while (msg != NULL) {
+    uint64_t *signature = (uint64_t*) processMessageData(msg);
+    if (*signature != FILESYSTEM_COMMAND_SIGNATURE) {
+      printString(__func__);
+      printString(": Error: Received unknown signature 0x");
+      printHex(*signature);
+      printString(" from process ");
+      printInt(processPid(processMessageFrom(msg)));
+      printString("\n");
+      msg = processMessageQueuePop();
+      continue;
+    }
+
     FilesystemCommandResponse type = 
       (FilesystemCommandResponse) processMessageType(msg);
     if (type < NUM_FILESYSTEM_COMMANDS) {
@@ -387,13 +399,11 @@ static void handleFilesystemMessages(FilesystemState *filesystemState) {
       printDebugString("\n");
       filesystemCommandHandlers[type](filesystemState, msg);
     } else {
-      printInt(getRunningPid());
-      printString(": ");
       printString(__func__);
-      printString(": ");
-      printInt(__LINE__);
       printString(": ERROR! Received unknown filesystem message type ");
       printInt(type);
+      printString(" from process ");
+      printInt(processPid(processMessageFrom(msg)));
       printString("\n");
     }
     msg = processMessageQueuePop();
