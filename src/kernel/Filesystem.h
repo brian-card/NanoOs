@@ -196,12 +196,16 @@ typedef struct FilesystemFcloseArgs {
 ///
 /// @brief Function parameters and return value for a remove call.
 ///
+/// @param signature A uint64_t value to designate this as a command structure
+///   to the filesystem process.  This should always be the value
+///   FILESYSTEM_COMMAND_SIGNATURE.
 /// @param pathname The path to the file to remove.
 /// @param returnValue The return value of the operation that will be passed
 ///   back to the handler.  This value will be set to the process's errno value.
 typedef struct FilesystemRemoveArgs {
+  uint64_t    signature;
   const char *pathname;
-  int returnValue;
+  int         returnValue;
 } FilesystemRemoveArgs;
 
 /// @struct GetFileBlockMetadataArgs

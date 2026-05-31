@@ -1454,6 +1454,7 @@ int schedRemove(const char *pathname) {
     _functionInProgress = __func__;
 
     FilesystemRemoveArgs filesystemRemoveArgs = {
+      .signature = FILESYSTEM_COMMAND_SIGNATURE,
       .pathname = pathname,
       .returnValue = 0,
     };

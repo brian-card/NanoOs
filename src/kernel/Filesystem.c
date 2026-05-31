@@ -647,6 +647,7 @@ int filesystemRemove(const char *pathname) {
   int returnValue = 0;
   if ((pathname != NULL) && (*pathname != '\0')) {
     FilesystemRemoveArgs filesystemRemoveArgs = {
+      .signature = FILESYSTEM_COMMAND_SIGNATURE,
       .pathname = pathname,
       .returnValue = 0,
     };
