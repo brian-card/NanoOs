@@ -77,7 +77,7 @@ int sdCardPosixReadBlocksCommandHandler(
     = (SdCommandArgs*) processMessageData(processMessage);
   printDebugString("sdCardPosixReadBlocksCommandHandler: Got sdCommandArgs\n");
   uint32_t startSdBlock = 0, numSdBlocks = 0;
-  int returnValue = sdCardGetReadWriteParameters(
+  int returnValue = sdCardGetReadWriteArgs(
     sdCardState, sdCommandArgs, &startSdBlock, &numSdBlocks);
   printDebugString(
     "sdCardPosixReadBlocksCommandHandler: Got read/write parameters\n");
@@ -124,7 +124,7 @@ int sdCardPosixWriteBlocksCommandHandler(
   SdCommandArgs *sdCommandArgs
     = (SdCommandArgs*) processMessageData(processMessage);
   uint32_t startSdBlock = 0, numSdBlocks = 0;
-  int returnValue = sdCardGetReadWriteParameters(
+  int returnValue = sdCardGetReadWriteArgs(
     sdCardState, sdCommandArgs, &startSdBlock, &numSdBlocks);
 
   if (returnValue == 0) {
