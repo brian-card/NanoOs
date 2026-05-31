@@ -134,11 +134,15 @@ typedef struct MemoryManagerFreeProcessMemoryArgs {
 ///
 /// @brief Functional parameters to the MEMORY_MANAGER_ASSIGN_MEMORY command.
 ///
+/// @param signature The 64-bit signature that indicates that this is a memory
+///   management command.  This should always be the value
+///   MEMORY_MANAGER_COMMAND_SIGNATURE.
 /// @param ptr A pointer to the memory to assign.
 /// @param pid The ProcessId of the process to assign the memory to.
 typedef struct AssignMemoryArgs {
-  void *ptr;
-  ProcessId pid;
+  uint64_t   signature;
+  void      *ptr;
+  ProcessId  pid;
 } AssignMemoryArgs;
 
 /// @enum MemoryManagerCommandResponse
