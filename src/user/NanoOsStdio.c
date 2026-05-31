@@ -1102,7 +1102,7 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *nanoOsBuffer) {
     }
   } else {
     // stream is a regular FILE.
-    FilesystemIoCommandParameters filesystemIoCommandParameters = {
+    FilesystemIoCommandArgs filesystemIoCommandArgs = {
       .file = stream,
       .buffer = nanoOsBuffer->buffer,
       .length = (uint32_t) strlen(nanoOsBuffer->buffer)
@@ -1110,11 +1110,11 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *nanoOsBuffer) {
     ProcessMessage *processMessage = initSendProcessMessageToPid(
       SCHEDULER_STATE->rootFsPid,
       FILESYSTEM_WRITE_FILE,
-      /* data= */ &filesystemIoCommandParameters,
-      /* size= */ sizeof(filesystemIoCommandParameters),
+      /* data= */ &filesystemIoCommandArgs,
+      /* size= */ sizeof(filesystemIoCommandArgs),
       true);
     processMessageWaitForDone(processMessage, NULL);
-    if (filesystemIoCommandParameters.length == 0) {
+    if (filesystemIoCommandArgs.length == 0) {
       returnValue = EOF;
     }
     processMessageRelease(processMessage);

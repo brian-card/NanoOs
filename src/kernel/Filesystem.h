@@ -114,24 +114,24 @@ typedef struct FilesystemState {
   const char* (*driverGetFilename)(void *fileHandle);
 } FilesystemState;
 
-/// @struct FilesystemIoCommandParameters
+/// @struct FilesystemIoCommandArgs
 ///
-/// @brief Parameters needed for an I/O command in a filesystem.
+/// @brief Arguments needed for an I/O command in a filesystem.
 ///
 /// @param file A pointer to the FILE object returned from a call to fopen.
 /// @param buffer A pointer to the memory that is either to be read from or
 ///   written to.
 /// @param length The number of bytes to read into the buffer or write from the
 ///   buffer.
-typedef struct FilesystemIoCommandParameters {
+typedef struct FilesystemIoCommandArgs {
   FILE *file;
   void *buffer;
   uint32_t length;
-} FilesystemIoCommandParameters;
+} FilesystemIoCommandArgs;
 
-/// @struct FilesystemSeekParameters
+/// @struct FilesystemSeekArgs
 ///
-/// @brief Parameters needed for an fseek function call on a file.
+/// @brief Arguments needed for an fseek function call on a file.
 ///
 /// @param stream A pointer to the FILE object to adjust the position indicator
 ///   of.
@@ -140,13 +140,13 @@ typedef struct FilesystemIoCommandParameters {
 /// @param whence The position the offset is understood to be relative to.  One
 ///   of SEEK_SET (beginning of the file), SEEK_CUR (the current position of
 ///   the file) or SEEK_END (the end of the file).
-typedef struct FilesystemSeekParameters {
+typedef struct FilesystemSeekArgs {
   FILE *stream;
   long offset;
   int whence;
-} FilesystemSeekParameters;
+} FilesystemSeekArgs;
 
-/// @struct FilesystemFopenParameters
+/// @struct FilesystemFopenArgs
 ///
 /// @brief Function parameters and return value for an fopen call.
 ///
@@ -155,36 +155,36 @@ typedef struct FilesystemSeekParameters {
 /// @param fd The numeric file descriptor to use for the file.
 /// @param returnValue A pointer to the FILE that's opened on success, NULL
 ///   on failure.
-typedef struct FilesystemFopenParameters {
+typedef struct FilesystemFopenArgs {
   const char *pathname;
   const char *mode;
   int         fd;
   FILE       *returnValue;
-} FilesystemFopenParameters;
+} FilesystemFopenArgs;
 
-/// @struct FilesystemFcloseParameters
+/// @struct FilesystemFcloseArgs
 ///
 /// @brief Function parameters and return value for an fclose call.
 ///
 /// @param stream A pointer to the FILE to close.
 /// @param returnValue The return value of the operation that will be passed
 ///   back to the handler.  This value will be set to the process's errno value.
-typedef struct FilesystemFcloseParameters {
+typedef struct FilesystemFcloseArgs {
   FILE *stream;
   int returnValue;
-} FilesystemFcloseParameters;
+} FilesystemFcloseArgs;
 
-/// @struct FilesystemRemoveParameters
+/// @struct FilesystemRemoveArgs
 ///
 /// @brief Function parameters and return value for a remove call.
 ///
 /// @param pathname The path to the file to remove.
 /// @param returnValue The return value of the operation that will be passed
 ///   back to the handler.  This value will be set to the process's errno value.
-typedef struct FilesystemRemoveParameters {
+typedef struct FilesystemRemoveArgs {
   const char *pathname;
   int returnValue;
-} FilesystemRemoveParameters;
+} FilesystemRemoveArgs;
 
 /// @struct GetFileBlockMetadataArgs
 ///

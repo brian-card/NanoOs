@@ -38,7 +38,7 @@
 // Must come last
 #include "../user/NanoOsStdio.h"
 
-/// @fn int sdCardGetReadWriteParameters(
+/// @fn int sdCardGetReadWriteArgs(
 ///   SdCardState *sdCardState, SdCommandArgs *sdCommandArgs,
 ///   uint32_t *startSdBlock, uint32_t *numSdBlocks)
 ///
@@ -55,7 +55,7 @@
 ///   number of blocks on the SD card to read or write.
 ///
 /// @return Returns 0 on success, EINVAL on failure.
-int sdCardGetReadWriteParameters(
+int sdCardGetReadWriteArgs(
   SdCardState *sdCardState, SdCommandArgs *sdCommandArgs,
   uint32_t *startSdBlock, uint32_t *numSdBlocks
 ) {

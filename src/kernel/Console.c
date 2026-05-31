@@ -754,18 +754,18 @@ void consoleReleaseBufferCommandHandler(
 void consoleGetNumPortsCommandHandler(
   ConsoleState *consoleState, ProcessMessage *inputMessage
 ) {
-  ConsoleGetNumPortsParameters *consoleGetNumPortsParameters
-    = (ConsoleGetNumPortsParameters*) processMessageData(inputMessage);
-  if (consoleGetNumPortsParameters->signature != CONSOLE_COMMAND_SIGNATURE) {
+  ConsoleGetNumPortsArgs *consoleGetNumPortsArgs
+    = (ConsoleGetNumPortsArgs*) processMessageData(inputMessage);
+  if (consoleGetNumPortsArgs->signature != CONSOLE_COMMAND_SIGNATURE) {
     printString(__func__);
     printString(": ERROR: Received unrecognized signature 0x");
-    printHex(consoleGetNumPortsParameters->signature);
+    printHex(consoleGetNumPortsArgs->signature);
     printString("\n");
-    // Don't attempt to set consoleGetNumPortsParameters->numPorts since we
+    // Don't attempt to set consoleGetNumPortsArgs->numPorts since we
     // don't know what this is.
     return;
   }
-  consoleGetNumPortsParameters->numPorts = consoleState->numConsolePorts;
+  consoleGetNumPortsArgs->numPorts = consoleState->numConsolePorts;
   processMessageSetDone(inputMessage);
 
   return;
@@ -1259,21 +1259,21 @@ int setConsoleEcho(bool desiredEchoState) {
 ///
 /// @return Returns the number of ports running on success, -1 on failure.
 int getNumConsolePorts(void) {
-  ConsoleGetNumPortsParameters consoleGetNumPortsParameters = {
+  ConsoleGetNumPortsArgs consoleGetNumPortsArgs = {
     .signature = CONSOLE_COMMAND_SIGNATURE,
     .numPorts = 0,
   };
   ProcessMessage *sent = initSendProcessMessageToPid(
     SCHEDULER_STATE->consolePid, CONSOLE_GET_NUM_PORTS,
-    /* data= */ &consoleGetNumPortsParameters,
-    /* size= */ sizeof(consoleGetNumPortsParameters),
+    /* data= */ &consoleGetNumPortsArgs,
+    /* size= */ sizeof(consoleGetNumPortsArgs),
     /* waiting= */ true);
   if (sent == NULL) {
     return -1;
   }
 
   processMessageWaitForDone(sent, NULL);
-  int returnValue = consoleGetNumPortsParameters.numPorts;
+  int returnValue = consoleGetNumPortsArgs.numPorts;
   processMessageRelease(sent);
 
   return returnValue;

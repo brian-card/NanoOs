@@ -597,7 +597,7 @@ int sdCardSpiReadBlocksCommandHandler(
   SdCommandArgs *sdCommandArgs
     = (SdCommandArgs*) processMessageData(processMessage);
   uint32_t startSdBlock = 0, numSdBlocks = 0;
-  int returnValue = sdCardGetReadWriteParameters(
+  int returnValue = sdCardGetReadWriteArgs(
     sdCardState, sdCommandArgs, &startSdBlock, &numSdBlocks);
 
   if (returnValue == 0) {
@@ -629,7 +629,7 @@ int sdCardSpiWriteBlocksCommandHandler(
   SdCommandArgs *sdCommandArgs
     = (SdCommandArgs*) processMessageData(processMessage);
   uint32_t startSdBlock = 0, numSdBlocks = 0;
-  int returnValue = sdCardGetReadWriteParameters(
+  int returnValue = sdCardGetReadWriteArgs(
     sdCardState, sdCommandArgs, &startSdBlock, &numSdBlocks);
 
   if (returnValue == 0) {

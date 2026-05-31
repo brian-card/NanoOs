@@ -717,21 +717,21 @@ int schedulerSetPortShell(uint8_t consolePort, ProcessId shell) {
 int schedulerGetNumConsolePorts(void) {
   int returnValue = -1;
 
-  ConsoleGetNumPortsParameters consoleGetNumPortsParameters = {
+  ConsoleGetNumPortsArgs consoleGetNumPortsArgs = {
     .signature = CONSOLE_COMMAND_SIGNATURE,
     .numPorts = 0,
   };
   if (schedulerInitSendMessageToPid(
     SCHEDULER_STATE->consolePid,
     CONSOLE_GET_NUM_PORTS,
-    /* data= */ &consoleGetNumPortsParameters,
-    /* size= */ sizeof(consoleGetNumPortsParameters)) != processSuccess
+    /* data= */ &consoleGetNumPortsArgs,
+    /* size= */ sizeof(consoleGetNumPortsArgs)) != processSuccess
   ) {
     printString("ERROR: Could not send CONSOLE_GET_NUM_PORTS to console\n");
     return returnValue; // -1
   }
 
-  returnValue = consoleGetNumPortsParameters.numPorts;
+  returnValue = consoleGetNumPortsArgs.numPorts;
 
   return returnValue;
 }
@@ -1362,21 +1362,21 @@ FILE* schedFopen(const char *pathname, const char *mode) {
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    FilesystemFopenParameters fopenParameters = {
+    FilesystemFopenArgs fopenArgs = {
       .pathname = pathname,
       .mode = mode,
       .fd = 0, // We don't care
     };
     printDebugString("schedFopen: Sending message\n");
     if (schedulerInitSendMessageToPid(SCHEDULER_STATE->rootFsPid,
-      FILESYSTEM_OPEN_FILE, &fopenParameters, sizeof(fopenParameters)
+      FILESYSTEM_OPEN_FILE, &fopenArgs, sizeof(fopenArgs)
       ) != processSuccess
     ) {
       // Nothing we can do.
       return returnValue; // NULL
     }
 
-    returnValue = fopenParameters.returnValue;
+    returnValue = fopenArgs.returnValue;
 
     _functionInProgress = NULL;
   } else {
@@ -1405,12 +1405,12 @@ int schedFclose(FILE *stream) {
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    FilesystemFcloseParameters fcloseParameters;
-    fcloseParameters.stream = stream;
-    fcloseParameters.returnValue = 0;
+    FilesystemFcloseArgs fcloseArgs;
+    fcloseArgs.stream = stream;
+    fcloseArgs.returnValue = 0;
 
     if (schedulerInitSendMessageToPid(SCHEDULER_STATE->rootFsPid,
-      FILESYSTEM_CLOSE_FILE, &fcloseParameters, sizeof(fcloseParameters)
+      FILESYSTEM_CLOSE_FILE, &fcloseArgs, sizeof(fcloseArgs)
       ) != processSuccess
     ) {
       // Nothing we can do.
@@ -1418,8 +1418,8 @@ int schedFclose(FILE *stream) {
       return EOF;
     }
 
-    if (fcloseParameters.returnValue != 0) {
-      errno = -fcloseParameters.returnValue;
+    if (fcloseArgs.returnValue != 0) {
+      errno = -fcloseArgs.returnValue;
       returnValue = EOF;
     }
 
@@ -1451,14 +1451,14 @@ int schedRemove(const char *pathname) {
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    FilesystemRemoveParameters filesystemRemoveParameters = {
+    FilesystemRemoveArgs filesystemRemoveArgs = {
       .pathname = pathname,
       .returnValue = 0,
     };
 
     if (schedulerInitSendMessageToPid(SCHEDULER_STATE->rootFsPid,
       FILESYSTEM_REMOVE_FILE,
-      &filesystemRemoveParameters, sizeof(filesystemRemoveParameters)
+      &filesystemRemoveArgs, sizeof(filesystemRemoveArgs)
       ) != processSuccess
     ) {
       // Nothing we can do.
@@ -1466,10 +1466,10 @@ int schedRemove(const char *pathname) {
       return -1;
     }
 
-    if (filesystemRemoveParameters.returnValue != 0) {
+    if (filesystemRemoveArgs.returnValue != 0) {
       // returnValue holds a negative errno.  Set errno for the current process
       // and return -1 like we're supposed to.
-      errno = -filesystemRemoveParameters.returnValue;
+      errno = -filesystemRemoveArgs.returnValue;
       returnValue = -1;
     }
 
@@ -1498,7 +1498,7 @@ int schedRemove(const char *pathname) {
 ///
 /// @return Returns the number of items successfully read in.
 size_t schedFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
-  FilesystemIoCommandParameters filesystemIoCommandParameters = {
+  FilesystemIoCommandArgs filesystemIoCommandArgs = {
     .file = stream,
     .buffer = ptr,
     .length = size * nmemb
@@ -1509,7 +1509,7 @@ size_t schedFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
 
     if (schedulerInitSendMessageToPid(SCHEDULER_STATE->rootFsPid,
       FILESYSTEM_READ_FILE,
-      &filesystemIoCommandParameters, sizeof(filesystemIoCommandParameters)
+      &filesystemIoCommandArgs, sizeof(filesystemIoCommandArgs)
       ) != processSuccess
     ) {
       // Nothing we can do.
@@ -1527,7 +1527,7 @@ size_t schedFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     return 0;
   }
 
-  return filesystemIoCommandParameters.length / size;
+  return filesystemIoCommandArgs.length / size;
 }
 
 /// @fn size_t schedFwrite(void *ptr, size_t size, size_t nmemb, FILE *stream)
@@ -1541,7 +1541,7 @@ size_t schedFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
 ///
 /// @return Returns the number of items successfully written out.
 size_t schedFwrite(void *ptr, size_t size, size_t nmemb, FILE *stream) {
-  FilesystemIoCommandParameters filesystemIoCommandParameters = {
+  FilesystemIoCommandArgs filesystemIoCommandArgs = {
     .file = stream,
     .buffer = ptr,
     .length = size * nmemb
@@ -1552,7 +1552,7 @@ size_t schedFwrite(void *ptr, size_t size, size_t nmemb, FILE *stream) {
 
     if (schedulerInitSendMessageToPid(SCHEDULER_STATE->rootFsPid,
       FILESYSTEM_WRITE_FILE,
-      &filesystemIoCommandParameters, sizeof(filesystemIoCommandParameters)
+      &filesystemIoCommandArgs, sizeof(filesystemIoCommandArgs)
       ) != processSuccess
     ) {
       // Nothing we can do.
@@ -1570,7 +1570,7 @@ size_t schedFwrite(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     return 0;
   }
 
-  return filesystemIoCommandParameters.length / size;
+  return filesystemIoCommandArgs.length / size;
 }
 
 /// @fn int schedFgets(char *buffer, int size, FILE *stream)
@@ -1589,7 +1589,7 @@ char* schedFgets(char *buffer, int size, FILE *stream) {
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    FilesystemIoCommandParameters filesystemIoCommandParameters = {
+    FilesystemIoCommandArgs filesystemIoCommandArgs = {
       .file = stream,
       .buffer = buffer,
       .length = (uint32_t) size - 1
@@ -1597,14 +1597,14 @@ char* schedFgets(char *buffer, int size, FILE *stream) {
 
     if (schedulerInitSendMessageToPid(SCHEDULER_STATE->rootFsPid,
       FILESYSTEM_READ_FILE,
-      &filesystemIoCommandParameters, sizeof(filesystemIoCommandParameters)
+      &filesystemIoCommandArgs, sizeof(filesystemIoCommandArgs)
       ) != processSuccess
     ) {
       // Nothing we can do.
       return NULL;
     }
-    if (filesystemIoCommandParameters.length > 0) {
-      buffer[filesystemIoCommandParameters.length] = '\0';
+    if (filesystemIoCommandArgs.length > 0) {
+      buffer[filesystemIoCommandArgs.length] = '\0';
       returnValue = buffer;
     }
 
@@ -1637,7 +1637,7 @@ int schedFputs(const char *s, FILE *stream) {
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    FilesystemIoCommandParameters filesystemIoCommandParameters = {
+    FilesystemIoCommandArgs filesystemIoCommandArgs = {
       .file = stream,
       .buffer = (void*) s,
       .length = (uint32_t) strlen(s)
@@ -1645,13 +1645,13 @@ int schedFputs(const char *s, FILE *stream) {
 
     if (schedulerInitSendMessageToPid(SCHEDULER_STATE->rootFsPid,
       FILESYSTEM_WRITE_FILE,
-      &filesystemIoCommandParameters, sizeof(filesystemIoCommandParameters)
+      &filesystemIoCommandArgs, sizeof(filesystemIoCommandArgs)
       ) != processSuccess
     ) {
       // Nothing we can do.
       return EOF;
     }
-    if (filesystemIoCommandParameters.length == 0) {
+    if (filesystemIoCommandArgs.length == 0) {
       returnValue = EOF;
     }
 

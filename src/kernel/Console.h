@@ -58,17 +58,17 @@ extern "C"
 /// command.  "CONSLCMD" as a little-endian value.
 #define CONSOLE_COMMAND_SIGNATURE ((uint64_t) 0x444D434C534E4F43)
 
-/// @struct ConsoleGetNumPortsParameters
+/// @struct ConsoleGetNumPortsArgs
 ///
-/// @brief Parameters and return value for the CONSOLE_GET_NUM_PORTS command.
+/// @brief Arguments and return value for the CONSOLE_GET_NUM_PORTS command.
 ///
 /// @param signature The 64-bit signature for console commands.  This should
 ///   always be the value CONSOLE_COMMAND_SIGNATURE.
 /// @param numPorts The number of ports returned from the command.
-typedef struct ConsoleGetNumPortsParameters {
+typedef struct ConsoleGetNumPortsArgs {
   uint64_t signature;
   int numPorts;
-} ConsoleGetNumPortsParameters;
+} ConsoleGetNumPortsArgs;
 
 /// @enum ConsoleCommandResponse
 ///

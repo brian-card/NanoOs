@@ -45,8 +45,8 @@ int filesystemOpenFileCommandHandler(
   FilesystemState *filesystemState, ProcessMessage *processMessage
 ) {
   NanoOsFile *nanoOsFile = NULL;
-  FilesystemFopenParameters *fopenParameters
-    = (FilesystemFopenParameters*) processMessageData(processMessage);
+  FilesystemFopenArgs *fopenArgs
+    = (FilesystemFopenArgs*) processMessageData(processMessage);
 
   printDebugString("Opening file \"");
   printDebugString(pathname);
@@ -57,13 +57,13 @@ int filesystemOpenFileCommandHandler(
   if (filesystemState->driverState != NULL) {
     void *fileHandle = filesystemState->driverFopen(
       filesystemState->driverState,
-      fopenParameters->pathname, fopenParameters->mode);
+      fopenArgs->pathname, fopenArgs->mode);
     if (fileHandle != NULL) {
       nanoOsFile = (NanoOsFile*) malloc(sizeof(NanoOsFile));
       if (nanoOsFile != NULL) {
         nanoOsFile->file = fileHandle;
         nanoOsFile->currentPosition = 0;
-        nanoOsFile->fd = fopenParameters->fd;
+        nanoOsFile->fd = fopenArgs->fd;
         nanoOsFile->owner = processPid(processMessageFrom(processMessage));
         filesystemState->numOpenFiles++;
 
@@ -83,7 +83,7 @@ int filesystemOpenFileCommandHandler(
     printString("ERROR: driverState is not valid!\n");
   }
 
-  fopenParameters->returnValue = nanoOsFile;
+  fopenArgs->returnValue = nanoOsFile;
   processMessageSetDone(processMessage);
   return 0;
 }
@@ -112,25 +112,25 @@ int filesystemCloseFileCommandHandler(
   // declared and used in this function, but functionality comes first.
   //
   // JBC 2026-02-17
-  FilesystemFcloseParameters *fcloseParameters
-    = (FilesystemFcloseParameters*) processMessageData(processMessage);
+  FilesystemFcloseArgs *fcloseArgs
+    = (FilesystemFcloseArgs*) processMessageData(processMessage);
   if (filesystemState->driverState != NULL) {
-    fcloseParameters->returnValue = filesystemState->driverFclose(
-      filesystemState->driverState, fcloseParameters->stream->file);
+    fcloseArgs->returnValue = filesystemState->driverFclose(
+      filesystemState->driverState, fcloseArgs->stream->file);
     if (filesystemState->numOpenFiles > 0) {
       filesystemState->numOpenFiles--;
     }
-    if (fcloseParameters->stream->next != NULL) {
-      fcloseParameters->stream->next->prev = fcloseParameters->stream->prev;
+    if (fcloseArgs->stream->next != NULL) {
+      fcloseArgs->stream->next->prev = fcloseArgs->stream->prev;
     }
-    if (fcloseParameters->stream->prev != NULL) {
-      fcloseParameters->stream->prev->next = fcloseParameters->stream->next;
+    if (fcloseArgs->stream->prev != NULL) {
+      fcloseArgs->stream->prev->next = fcloseArgs->stream->next;
     }
-    if (fcloseParameters->stream == filesystemState->openFiles) {
-      filesystemState->openFiles = fcloseParameters->stream->next;
+    if (fcloseArgs->stream == filesystemState->openFiles) {
+      filesystemState->openFiles = fcloseArgs->stream->next;
     }
   }
-  free(fcloseParameters->stream);
+  free(fcloseArgs->stream);
 
   processMessageSetDone(processMessage);
   return 0;
@@ -150,29 +150,29 @@ int filesystemCloseFileCommandHandler(
 int filesystemReadFileCommandHandler(
   FilesystemState *filesystemState, ProcessMessage *processMessage
 ) {
-  FilesystemIoCommandParameters *filesystemIoCommandParameters
-    = (FilesystemIoCommandParameters*) processMessageData(processMessage);
+  FilesystemIoCommandArgs *filesystemIoCommandArgs
+    = (FilesystemIoCommandArgs*) processMessageData(processMessage);
   int32_t returnValue = 0;
   if (filesystemState->driverState != NULL) {
-    uint32_t length = filesystemIoCommandParameters->length;
+    uint32_t length = filesystemIoCommandArgs->length;
     if (length > 0x7fffffff) {
       // Make sure we don't overflow the maximum value of a signed 32-bit int.
       length = 0x7fffffff;
     }
-    NanoOsFile *nanoOsFile = filesystemIoCommandParameters->file;
+    NanoOsFile *nanoOsFile = filesystemIoCommandArgs->file;
     returnValue = filesystemState->driverFread(filesystemState->driverState,
-      filesystemIoCommandParameters->buffer, length, nanoOsFile->file);
+      filesystemIoCommandArgs->buffer, length, nanoOsFile->file);
     if (returnValue >= 0) {
       // Return value is the number of bytes read.  Set the length variable to
       // it and set it to 0 to indicate good status.
       nanoOsFile->currentPosition += returnValue;
-      filesystemIoCommandParameters->length = returnValue;
+      filesystemIoCommandArgs->length = returnValue;
       returnValue = 0;
     } else {
       // Return value is a negative error code.  Negate it.
       returnValue = -returnValue;
       // Tell the caller that we read nothing.
-      filesystemIoCommandParameters->length = 0;
+      filesystemIoCommandArgs->length = 0;
     }
   }
 
@@ -194,30 +194,30 @@ int filesystemReadFileCommandHandler(
 int filesystemWriteFileCommandHandler(
   FilesystemState *filesystemState, ProcessMessage *processMessage
 ) {
-  FilesystemIoCommandParameters *filesystemIoCommandParameters
-    = (FilesystemIoCommandParameters*) processMessageData(processMessage);
+  FilesystemIoCommandArgs *filesystemIoCommandArgs
+    = (FilesystemIoCommandArgs*) processMessageData(processMessage);
   int32_t returnValue = 0;
   if (filesystemState->driverState != NULL) {
-    uint32_t length = filesystemIoCommandParameters->length;
+    uint32_t length = filesystemIoCommandArgs->length;
     if (length > 0x7fffffff) {
       // Make sure we don't overflow the maximum value of a signed 32-bit int.
       length = 0x7fffffff;
     }
-    NanoOsFile *nanoOsFile = filesystemIoCommandParameters->file;
+    NanoOsFile *nanoOsFile = filesystemIoCommandArgs->file;
     returnValue = filesystemState->driverFwrite(filesystemState->driverState,
-      filesystemIoCommandParameters->buffer,
+      filesystemIoCommandArgs->buffer,
       length, nanoOsFile->file);
     if (returnValue >= 0) {
       // Return value is the number of bytes written.  Set the length variable
       // to it and set it to 0 to indicate good status.
       nanoOsFile->currentPosition += returnValue;
-      filesystemIoCommandParameters->length = returnValue;
+      filesystemIoCommandArgs->length = returnValue;
       returnValue = 0;
     } else {
       // Return value is a negative error code.  Negate it.
       returnValue = -returnValue;
       // Tell the caller that we wrote nothing.
-      filesystemIoCommandParameters->length = 0;
+      filesystemIoCommandArgs->length = 0;
     }
   }
 
@@ -239,15 +239,15 @@ int filesystemWriteFileCommandHandler(
 int filesystemRemoveFileCommandHandler(
   FilesystemState *filesystemState, ProcessMessage *processMessage
 ) {
-  FilesystemRemoveParameters *filesystemRemoveParameters
-    = (FilesystemRemoveParameters*) processMessageData(processMessage);
+  FilesystemRemoveArgs *filesystemRemoveArgs
+    = (FilesystemRemoveArgs*) processMessageData(processMessage);
   int returnValue = 0;
   if (filesystemState->driverState != NULL) {
     returnValue = filesystemState->driverRemove(
-      filesystemState->driverState, filesystemRemoveParameters->pathname);
+      filesystemState->driverState, filesystemRemoveArgs->pathname);
   }
 
-  filesystemRemoveParameters->returnValue = returnValue;
+  filesystemRemoveArgs->returnValue = returnValue;
   processMessageSetDone(processMessage);
   return 0;
 }
@@ -266,15 +266,15 @@ int filesystemRemoveFileCommandHandler(
 int filesystemSeekFileCommandHandler(
   FilesystemState *filesystemState, ProcessMessage *processMessage
 ) {
-  FilesystemSeekParameters *filesystemSeekParameters
-    = (FilesystemSeekParameters*) processMessageData(processMessage);
+  FilesystemSeekArgs *filesystemSeekArgs
+    = (FilesystemSeekArgs*) processMessageData(processMessage);
   int returnValue = 0;
   if (filesystemState->driverState != NULL) {
-    NanoOsFile *nanoOsFile = filesystemSeekParameters->stream;
+    NanoOsFile *nanoOsFile = filesystemSeekArgs->stream;
     returnValue = filesystemState->driverFseek(
       filesystemState->driverState, nanoOsFile->file,
-      filesystemSeekParameters->offset,
-      filesystemSeekParameters->whence);
+      filesystemSeekArgs->offset,
+      filesystemSeekArgs->whence);
     if (returnValue >= 0) {
       nanoOsFile->currentPosition = returnValue;
     }
@@ -530,7 +530,7 @@ FILE* filesystemFopen(const char *pathname, const char *mode) {
     goto freeFileDescriptor;
   }
 
-  FilesystemFopenParameters fopenParameters = {
+  FilesystemFopenArgs fopenArgs = {
     .pathname = pathname,
     .mode = mode,
     .fd = numFileDescriptors,
@@ -538,9 +538,9 @@ FILE* filesystemFopen(const char *pathname, const char *mode) {
 
   ProcessMessage *msg = initSendProcessMessageToPid(
     SCHEDULER_STATE->rootFsPid, FILESYSTEM_OPEN_FILE,
-    &fopenParameters, sizeof(fopenParameters), true);
+    &fopenArgs, sizeof(fopenArgs), true);
   processMessageWaitForDone(msg, NULL);
-  file = fopenParameters.returnValue;
+  file = fopenArgs.returnValue;
   processMessageRelease(msg);
   if (file == NULL) {
     goto freeFileDescriptor;
@@ -608,17 +608,17 @@ int filesystemFclose(FILE *stream) {
   if (fileDescriptor->refCount == 0) {
     int fd = stream->fd;
 
-    FilesystemFcloseParameters fcloseParameters;
-    fcloseParameters.stream = stream;
-    fcloseParameters.returnValue = 0;
+    FilesystemFcloseArgs fcloseArgs;
+    fcloseArgs.stream = stream;
+    fcloseArgs.returnValue = 0;
 
     ProcessMessage *msg = initSendProcessMessageToPid(
       SCHEDULER_STATE->rootFsPid, FILESYSTEM_CLOSE_FILE,
-      &fcloseParameters, sizeof(fcloseParameters), true);
+      &fcloseArgs, sizeof(fcloseArgs), true);
     processMessageWaitForDone(msg, NULL);
 
-    if (fcloseParameters.returnValue != 0) {
-      errno = -fcloseParameters.returnValue;
+    if (fcloseArgs.returnValue != 0) {
+      errno = -fcloseArgs.returnValue;
       returnValue = EOF;
     }
 
@@ -644,16 +644,16 @@ exit:
 int filesystemRemove(const char *pathname) {
   int returnValue = 0;
   if ((pathname != NULL) && (*pathname != '\0')) {
-    FilesystemRemoveParameters filesystemRemoveParameters = {
+    FilesystemRemoveArgs filesystemRemoveArgs = {
       .pathname = pathname,
       .returnValue = 0,
     };
 
     ProcessMessage *msg = initSendProcessMessageToPid(
       SCHEDULER_STATE->rootFsPid, FILESYSTEM_REMOVE_FILE,
-      &filesystemRemoveParameters, sizeof(filesystemRemoveParameters), true);
+      &filesystemRemoveArgs, sizeof(filesystemRemoveArgs), true);
     processMessageWaitForDone(msg, NULL);
-    returnValue = filesystemRemoveParameters.returnValue;
+    returnValue = filesystemRemoveArgs.returnValue;
     if (returnValue != 0) {
       // returnValue holds a negative errno.  Set errno for the current process
       // and return -1 like we're supposed to.
@@ -682,14 +682,14 @@ int filesystemFSeek(FILE *stream, long offset, int whence) {
     return -1;
   }
 
-  FilesystemSeekParameters filesystemSeekParameters = {
+  FilesystemSeekArgs filesystemSeekArgs = {
     .stream = stream,
     .offset = offset,
     .whence = whence,
   };
   ProcessMessage *msg = initSendProcessMessageToPid(
     SCHEDULER_STATE->rootFsPid, FILESYSTEM_SEEK_FILE,
-    &filesystemSeekParameters, sizeof(filesystemSeekParameters), true);
+    &filesystemSeekArgs, sizeof(filesystemSeekArgs), true);
   processMessageWaitForDone(msg, NULL);
   int returnValue = (int) ((intptr_t) processMessageData(msg));
   processMessageRelease(msg);
@@ -716,7 +716,7 @@ size_t filesystemFRead(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     return returnValue; // 0
   }
 
-  FilesystemIoCommandParameters filesystemIoCommandParameters = {
+  FilesystemIoCommandArgs filesystemIoCommandArgs = {
     .file = stream,
     .buffer = ptr,
     .length = (uint32_t) (size * nmemb)
@@ -736,20 +736,20 @@ size_t filesystemFRead(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   ProcessMessage *processMessage = initSendProcessMessageToPid(
     SCHEDULER_STATE->rootFsPid,
     FILESYSTEM_READ_FILE,
-    /* data= */ &filesystemIoCommandParameters,
-    /* size= */ sizeof(filesystemIoCommandParameters),
+    /* data= */ &filesystemIoCommandArgs,
+    /* size= */ sizeof(filesystemIoCommandArgs),
     true);
   processMessageWaitForDone(processMessage, NULL);
-  returnValue = (filesystemIoCommandParameters.length / size);
+  returnValue = (filesystemIoCommandArgs.length / size);
   processMessageRelease(processMessage);
 
   printDebugString(__func__);
   printDebugString(": Returning ");
   printDebugInt(returnValue);
   printDebugString(" from read of file 0x");
-  printDebugHex((uintptr_t) filesystemIoCommandParameters.file);
+  printDebugHex((uintptr_t) filesystemIoCommandArgs.file);
   printDebugString(" into address 0x");
-  printDebugHex((uintptr_t) filesystemIoCommandParameters.buffer);
+  printDebugHex((uintptr_t) filesystemIoCommandArgs.buffer);
   printDebugString("\n");
   return returnValue;
 }
@@ -776,7 +776,7 @@ size_t filesystemFWrite(
     return returnValue; // 0
   }
 
-  FilesystemIoCommandParameters filesystemIoCommandParameters = {
+  FilesystemIoCommandArgs filesystemIoCommandArgs = {
     .file = stream,
     .buffer = (void*) ptr,
     .length = (uint32_t) (size * nmemb)
@@ -784,11 +784,11 @@ size_t filesystemFWrite(
   ProcessMessage *processMessage = initSendProcessMessageToPid(
     SCHEDULER_STATE->rootFsPid,
     FILESYSTEM_WRITE_FILE,
-    /* data= */ &filesystemIoCommandParameters,
-    /* size= */ sizeof(filesystemIoCommandParameters),
+    /* data= */ &filesystemIoCommandArgs,
+    /* size= */ sizeof(filesystemIoCommandArgs),
     true);
   processMessageWaitForDone(processMessage, NULL);
-  returnValue = (filesystemIoCommandParameters.length / size);
+  returnValue = (filesystemIoCommandArgs.length / size);
   processMessageRelease(processMessage);
 
   return returnValue;
