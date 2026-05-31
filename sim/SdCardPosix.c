@@ -168,9 +168,9 @@ void handleSdCardPosixMessages(SdCardState *sdCardState) {
       printString(" received unknown signature 0x");
       printHex(*signature);
       printString("\n");
-      // Don't attempt to process this message further and don't put it back on
-      // our message queue.  Just return immediately.
-      return;
+      // Don't attempt to process this message further.
+      processMessage = processMessageQueuePop();
+      continue;
     }
 
     SdCardCommandResponse messageType
