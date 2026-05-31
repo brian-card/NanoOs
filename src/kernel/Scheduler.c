@@ -1866,11 +1866,17 @@ int schedulerKillProcessCommandHandler(
           return -EBUSY;
         }
 
+        MemoryManagerFreeProcessMemoryArgs memoryManagerFreeProcessMemoryArgs
+        = {
+          .signature = MEMORY_MANAGER_COMMAND_SIGNATURE,
+          .pid = pid,
+          .returnValue = 0,
+        };
         if (schedulerInitSendMessageToPid(
           SCHEDULER_STATE->memoryManagerPid,
           MEMORY_MANAGER_FREE_PROCESS_MEMORY,
-          /* data= */ (void*) ((intptr_t) pid),
-          /* size= */ 0) != processSuccess
+          &memoryManagerFreeProcessMemoryArgs,
+          sizeof(memoryManagerFreeProcessMemoryArgs)) != processSuccess
         ) {
           printString(
             "ERROR: Could not send MEMORY_MANAGER_FREE_PROCESS_MEMORY");
@@ -2245,10 +2251,16 @@ int schedulerExecveCommandHandler(
 
   // We don't want to wait for the memory manager to release the memory.  Make
   // it do it immediately.
+  MemoryManagerFreeProcessMemoryArgs memoryManagerFreeProcessMemoryArgs = {
+    .signature = MEMORY_MANAGER_COMMAND_SIGNATURE,
+    .pid = processDescriptor->processId,
+    .returnValue = 0,
+  };
   if (schedulerInitSendMessageToPid(
     SCHEDULER_STATE->memoryManagerPid,
     MEMORY_MANAGER_FREE_PROCESS_MEMORY,
-    (void*) ((uintptr_t) processDescriptor->processId), /* size= */ 0)
+    &memoryManagerFreeProcessMemoryArgs,
+    sizeof(memoryManagerFreeProcessMemoryArgs))
   ) {
     printString("WARNING: Could not release memory for process ");
     printInt(processDescriptor->processId);
@@ -2978,11 +2990,16 @@ void removeProcess(
     printString("to console process\n");
   }
 
+  MemoryManagerFreeProcessMemoryArgs memoryManagerFreeProcessMemoryArgs = {
+    .signature = MEMORY_MANAGER_COMMAND_SIGNATURE,
+    .pid = processDescriptor->processId,
+    .returnValue = 0,
+  };
   if (schedulerInitSendMessageToPid(
     SCHEDULER_STATE->memoryManagerPid,
     MEMORY_MANAGER_FREE_PROCESS_MEMORY,
-    /* data= */ (void*) ((uintptr_t) processDescriptor->processId),
-    /* size= */ 0) != processSuccess
+    &memoryManagerFreeProcessMemoryArgs,
+    sizeof(memoryManagerFreeProcessMemoryArgs)) != processSuccess
   ) {
     printString("ERROR: Could not free process memory. Memory leak.\n");
   }
@@ -3413,9 +3430,15 @@ void runScheduler(void) {
       return;
     }
 
+    MemoryManagerFreeProcessMemoryArgs memoryManagerFreeProcessMemoryArgs = {
+      .signature = MEMORY_MANAGER_COMMAND_SIGNATURE,
+      .pid = processDescriptor->processId,
+      .returnValue = 0,
+    };
     if (schedulerInitSendMessageToPid(
       SCHEDULER_STATE->memoryManagerPid, MEMORY_MANAGER_FREE_PROCESS_MEMORY,
-      (void*) ((uintptr_t) processDescriptor->processId), 0) != processSuccess
+      &memoryManagerFreeProcessMemoryArgs,
+      sizeof(memoryManagerFreeProcessMemoryArgs)) != processSuccess
     ) {
       printString("ERROR: Could not send MEMORY_MANAGER_FREE_PROCESS_MEMORY ");
       printString("message to memory manager\n");

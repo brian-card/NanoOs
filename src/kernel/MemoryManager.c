@@ -863,17 +863,19 @@ int memoryManagerFreeProcessMemoryCommandHandler(
   MemoryManagerState *memoryManagerState, ProcessMessage *incoming
 ) {
   int returnValue = 0;
+  MemoryManagerFreeProcessMemoryArgs *memoryManagerFreeProcessMemoryArgs
+    = (MemoryManagerFreeProcessMemoryArgs*) processMessageData(incoming);
   if (processPid(processMessageFrom(incoming))
     == SCHEDULER_STATE->schedulerPid
   ) {
-    ProcessId pid = (ProcessId) ((uintptr_t) processMessageData(incoming));
     localFreeProcessMemory(memoryManagerState,
-      pid, processPid(processMessageFrom(incoming)));
-    processMessageData(incoming) = (void*) ((uintptr_t) 0);
+      memoryManagerFreeProcessMemoryArgs->pid,
+      processPid(processMessageFrom(incoming)));
+    memoryManagerFreeProcessMemoryArgs->returnValue = 0;
   } else {
     printString(
       "ERROR: Only the scheduler may free another process's memory.\n");
-    processMessageData(incoming) = (void*) ((uintptr_t) 1);
+    memoryManagerFreeProcessMemoryArgs->returnValue = 1;
     returnValue = -1;
   }
   

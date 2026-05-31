@@ -114,6 +114,22 @@ typedef struct MemoryManagerGetFreeMemoryArgs {
   size_t   bytesFree;
 } MemoryManagerGetFreeMemoryArgs;
 
+/// @struct MemoryManagerFreeProcessMemoryArgs
+///
+/// @brief Arguments and return value for the MEMORY_MANAGER_FREE_PROCESS_MEMORY
+/// command.
+///
+/// @param signature The 64-bit signature that indicates that this is a memory
+///   management command.  This should always be the value
+///   MEMORY_MANAGER_COMMAND_SIGNATURE.
+/// @param pid The ID of the process to free memory for.
+/// @param returnValue The integer return value of the command.
+typedef struct MemoryManagerFreeProcessMemoryArgs {
+  uint64_t  signature;
+  ProcessId pid;
+  int       returnValue;
+} MemoryManagerFreeProcessMemoryArgs;
+
 /// @struct AssignMemoryArgs
 ///
 /// @brief Functional parameters to the MEMORY_MANAGER_ASSIGN_MEMORY command.
