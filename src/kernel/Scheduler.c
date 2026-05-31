@@ -1407,6 +1407,7 @@ int schedFclose(FILE *stream) {
     _functionInProgress = __func__;
 
     FilesystemFcloseArgs fcloseArgs;
+    fcloseArgs.signature = FILESYSTEM_COMMAND_SIGNATURE,
     fcloseArgs.stream = stream;
     fcloseArgs.returnValue = 0;
 

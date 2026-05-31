@@ -176,12 +176,16 @@ typedef struct FilesystemFopenArgs {
 ///
 /// @brief Function parameters and return value for an fclose call.
 ///
+/// @param signature A uint64_t value to designate this as a command structure
+///   to the filesystem process.  This should always be the value
+///   FILESYSTEM_COMMAND_SIGNATURE.
 /// @param stream A pointer to the FILE to close.
 /// @param returnValue The return value of the operation that will be passed
 ///   back to the handler.  This value will be set to the process's errno value.
 typedef struct FilesystemFcloseArgs {
-  FILE *stream;
-  int returnValue;
+  uint64_t  signature;
+  FILE     *stream;
+  int       returnValue;
 } FilesystemFcloseArgs;
 
 /// @struct FilesystemRemoveArgs

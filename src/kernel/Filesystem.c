@@ -610,6 +610,7 @@ int filesystemFclose(FILE *stream) {
     int fd = stream->fd;
 
     FilesystemFcloseArgs fcloseArgs;
+    fcloseArgs.signature = FILESYSTEM_COMMAND_SIGNATURE,
     fcloseArgs.stream = stream;
     fcloseArgs.returnValue = 0;
 
