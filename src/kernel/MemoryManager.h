@@ -43,6 +43,13 @@ extern "C"
 {
 #endif
 
+/// @def MEMORY_MANAGER_COMMAND_SIGNATURE
+///
+/// @brief 64-bit, little-endian value to use as a signature to indicate to the
+/// memory manager process that the command is intended for it.  This is
+/// "MEMRYCMD" expressed as a little-endian value.
+#define MEMORY_MANAGER_COMMAND_SIGNATURE ((uint64_t) 0x444D4359524D454D)
+
 /// @def MEMORY_MANAGER_PROCESS_STACK_CHUNK_SIZE
 ///
 /// @brief The size, in bytes, of one chunk of the main memory process's stack.
