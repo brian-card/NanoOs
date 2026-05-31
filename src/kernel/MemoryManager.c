@@ -1057,6 +1057,22 @@ const MemoryManagerCommandHandler memoryManagerCommandHandlers[] = {
 void handleMemoryManagerMessages(MemoryManagerState *memoryManagerState) {
   ProcessMessage *processMessage = processMessageQueuePop();
   while (processMessage != NULL) {
+    uint64_t *signature = (uint64_t*) processMessageData(processMessage);
+    if ((signature == NULL)
+      || (*signature != MEMORY_MANAGER_COMMAND_SIGNATURE)
+    ) {
+      printString("ERROR: ");
+      printString(__func__);
+      printString(" received unknown signature 0x");
+      printHex(*signature);
+      printString(" from process ");
+      printInt(processPid(processMessageFrom(processMessage)));
+      printString("\n");
+      // Don't attempt to process this message further.
+      processMessage = processMessageQueuePop();
+      continue;
+    }
+
     MemoryManagerCommand messageType
       = (MemoryManagerCommand) processMessageType(processMessage);
     if (messageType >= NUM_MEMORY_MANAGER_COMMANDS) {
@@ -1216,7 +1232,6 @@ void* runMemoryManager(void *args) {
   printConsoleString("\n");
   
   MemoryManagerState memoryManagerState;
-  ProcessMessage *schedulerMessage = NULL;
   jmp_buf returnBuffer;
   if (setjmp(returnBuffer) == 0) {
     allocateMemoryManagerStack(&memoryManagerState, returnBuffer,
@@ -1234,26 +1249,8 @@ void* runMemoryManager(void *args) {
   releaseConsole();
   
   while (1) {
-    schedulerMessage = (ProcessMessage*) processYield();
-    if (schedulerMessage != NULL) {
-      // We have a message from the scheduler that we need to process.  This
-      // is not the expected case, but it's the priority case, so we need to
-      // list it first.
-      MemoryManagerCommand messageType
-        = (MemoryManagerCommand) processMessageType(schedulerMessage);
-      if (messageType < NUM_MEMORY_MANAGER_COMMANDS) {
-        memoryManagerCommandHandlers[messageType](
-          &memoryManagerState, schedulerMessage);
-      } else {
-        printString("ERROR: Received unknown memory manager command ");
-        printInt(messageType);
-        printString(" from scheduler.\n");
-      }
-    } else {
-      // No message from the scheduler.  Handle any user process messages in
-      // our message queue.
-      handleMemoryManagerMessages(&memoryManagerState);
-    }
+    processYield();
+    handleMemoryManagerMessages(&memoryManagerState);
   }
   
   return NULL;
