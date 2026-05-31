@@ -752,25 +752,9 @@ void* runSdCardSpi(void *args) {
   }
   processYieldValue(&blockStorageDevice);
 
-  ProcessMessage *schedulerMessage = NULL;
   while (1) {
-    schedulerMessage = (ProcessMessage*) processYield();
-    if (schedulerMessage != NULL) {
-      // We have a message from the scheduler that we need to process.  This
-      // is not the expected case, but it's the priority case, so we need to
-      // list it first.
-      SdCardCommandResponse messageType
-        = (SdCardCommandResponse) processMessageType(schedulerMessage);
-      if (messageType < NUM_SD_CARD_COMMANDS) {
-        sdCardSpiCommandHandlers[messageType](&sdCardState, schedulerMessage);
-      } else {
-        printString("ERROR: Received unknown sdCard command ");
-        printInt(messageType);
-        printString(" from scheduler.\n");
-      }
-    } else {
-      handleSdCardSpiMessages(&sdCardState);
-    }
+    processYield();
+    handleSdCardSpiMessages(&sdCardState);
   }
 
   return NULL;
