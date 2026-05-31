@@ -68,6 +68,24 @@ extern "C"
 /// possible while still allowing debug prints to work.
 #define MEMORY_MANAGER_DEBUG_STACK_SIZE 768
 
+/// @struct ReallocMessage
+///
+/// @brief Structure that holds the data needed to make a request to reallocate
+/// an existing pointer.
+///
+/// @param signature The 64-bit signature that indicates that this is a memory
+///   management command.  This should always be the value
+///   MEMORY_MANAGER_COMMAND_SIGNATURE.
+/// @param ptr The pointer to be reallocated.  If this value is NULL, new
+///   memory will be allocated.
+/// @param size The number of bytes to allocate.  If this value is 0, the memory
+///   at ptr will be freed.
+typedef struct ReallocMessage {
+  uint64_t  signature;
+  void     *ptr;
+  size_t    size;
+} ReallocMessage;
+
 /// @struct AssignMemoryArgs
 ///
 /// @brief Functional parameters to the MEMORY_MANAGER_ASSIGN_MEMORY command.
