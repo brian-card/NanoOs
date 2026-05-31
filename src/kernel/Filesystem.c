@@ -719,6 +719,7 @@ size_t filesystemFRead(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   }
 
   FilesystemIoCommandArgs filesystemIoCommandArgs = {
+    .signature = FILESYSTEM_COMMAND_SIGNATURE,
     .file = stream,
     .buffer = ptr,
     .length = (uint32_t) (size * nmemb)
@@ -779,6 +780,7 @@ size_t filesystemFWrite(
   }
 
   FilesystemIoCommandArgs filesystemIoCommandArgs = {
+    .signature = FILESYSTEM_COMMAND_SIGNATURE,
     .file = stream,
     .buffer = (void*) ptr,
     .length = (uint32_t) (size * nmemb)

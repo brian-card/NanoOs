@@ -124,15 +124,19 @@ typedef struct FilesystemState {
 ///
 /// @brief Arguments needed for an I/O command in a filesystem.
 ///
+/// @param signature A uint64_t value to designate this as a command structure
+///   to the filesystem process.  This should always be the value
+///   FILESYSTEM_COMMAND_SIGNATURE.
 /// @param file A pointer to the FILE object returned from a call to fopen.
 /// @param buffer A pointer to the memory that is either to be read from or
 ///   written to.
 /// @param length The number of bytes to read into the buffer or write from the
 ///   buffer.
 typedef struct FilesystemIoCommandArgs {
-  FILE *file;
-  void *buffer;
-  uint32_t length;
+  uint64_t  signature;
+  FILE     *file;
+  void     *buffer;
+  uint32_t  length;
 } FilesystemIoCommandArgs;
 
 /// @struct FilesystemSeekArgs

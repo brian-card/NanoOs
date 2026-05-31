@@ -1501,6 +1501,7 @@ int schedRemove(const char *pathname) {
 /// @return Returns the number of items successfully read in.
 size_t schedFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   FilesystemIoCommandArgs filesystemIoCommandArgs = {
+    .signature = FILESYSTEM_COMMAND_SIGNATURE,
     .file = stream,
     .buffer = ptr,
     .length = size * nmemb
@@ -1544,6 +1545,7 @@ size_t schedFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
 /// @return Returns the number of items successfully written out.
 size_t schedFwrite(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   FilesystemIoCommandArgs filesystemIoCommandArgs = {
+    .signature = FILESYSTEM_COMMAND_SIGNATURE,
     .file = stream,
     .buffer = ptr,
     .length = size * nmemb
@@ -1592,6 +1594,7 @@ char* schedFgets(char *buffer, int size, FILE *stream) {
     _functionInProgress = __func__;
 
     FilesystemIoCommandArgs filesystemIoCommandArgs = {
+      .signature = FILESYSTEM_COMMAND_SIGNATURE,
       .file = stream,
       .buffer = buffer,
       .length = (uint32_t) size - 1
@@ -1640,6 +1643,7 @@ int schedFputs(const char *s, FILE *stream) {
     _functionInProgress = __func__;
 
     FilesystemIoCommandArgs filesystemIoCommandArgs = {
+      .signature = FILESYSTEM_COMMAND_SIGNATURE,
       .file = stream,
       .buffer = (void*) s,
       .length = (uint32_t) strlen(s)

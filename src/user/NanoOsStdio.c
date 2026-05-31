@@ -1103,6 +1103,7 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *nanoOsBuffer) {
   } else {
     // stream is a regular FILE.
     FilesystemIoCommandArgs filesystemIoCommandArgs = {
+      .signature = FILESYSTEM_COMMAND_SIGNATURE,
       .file = stream,
       .buffer = nanoOsBuffer->buffer,
       .length = (uint32_t) strlen(nanoOsBuffer->buffer)
