@@ -1055,7 +1055,7 @@ const MemoryManagerCommandHandler memoryManagerCommandHandlers[] = {
 ///
 /// @return This function returns no value.
 void handleMemoryManagerMessages(MemoryManagerState *memoryManagerState) {
-  ProcessMessage *processMessage = processMessageQueuePop();
+  ProcessMessage *processMessage = processMessageQueueWait(NULL);
   while (processMessage != NULL) {
     uint64_t *signature = (uint64_t*) processMessageData(processMessage);
     if ((signature == NULL)
