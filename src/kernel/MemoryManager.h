@@ -169,8 +169,6 @@ typedef enum MemoryManagerCommandResponse {
   MEMORY_MANAGER_ASSIGN_MEMORY,
   MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS,
   NUM_MEMORY_MANAGER_COMMANDS,
-  // Responses:
-  MEMORY_MANAGER_RETURNING_FREE_MEMORY,
 } MemoryManagerCommand;
 
 // Function prototypes
