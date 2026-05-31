@@ -1694,6 +1694,7 @@ int schedGetFileBlockMetadataFromFile(
   }
 
   GetFileBlockMetadataArgs args = {
+    .signature = FILESYSTEM_COMMAND_SIGNATURE,
     .stream = stream,
     .metadata = metadata,
   };

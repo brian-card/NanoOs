@@ -338,7 +338,8 @@ int filesystemDumpOpenFilesCommandHandler(
 int filesystemGetFileBlockMetadataCommandHandler(
   FilesystemState *filesystemState, ProcessMessage *processMessage
 ) {
-  GetFileBlockMetadataArgs *args = msg_data(processMessage);
+  GetFileBlockMetadataArgs *args
+    = (GetFileBlockMetadataArgs*) processMessageData(processMessage);
   args->metadata->blockDevice = filesystemState->blockDevice;
 
   filesystemState->driverGetFileBlockMetadata(
@@ -820,6 +821,7 @@ int getFileBlockMetadataFromFile(FILE *stream, FileBlockMetadata *metadata) {
   }
 
   GetFileBlockMetadataArgs args = {
+    .signature = FILESYSTEM_COMMAND_SIGNATURE,
     .stream = stream,
     .metadata = metadata,
   };

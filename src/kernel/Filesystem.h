@@ -231,10 +231,14 @@ typedef struct FilesystemDumpOpenFilesArgs {
 /// @brief Function arguments for the FILESYSTEM_GET_FILE_BLOCK_METADATA
 /// command handler.
 ///
+/// @param signature A uint64_t value to designate this as a command structure
+///   to the filesystem process.  This should always be the value
+///   FILESYSTEM_COMMAND_SIGNATURE.
 /// @param stream A pointer to a FILE the caller wants to find the metadata of.
 /// @param metadata A pointer to a caller-supplied FileBlockMetadata structure
 ///   that is to be populated by the command.
 typedef struct GetFileBlockMetadataArgs {
+  uint64_t           signature;
   FILE              *stream;
   FileBlockMetadata *metadata;
 } GetFileBlockMetadataArgs;
