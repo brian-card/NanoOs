@@ -2797,6 +2797,8 @@ void handleSchedulerMessage(SchedulerState *schedulerState) {
       printString(__func__);
       printString(" received unknown signature 0x");
       printHex(*signature);
+      printString(" from process ");
+      printInt(processPid(processMessageFrom(message)));
       printString("\n");
       // Don't attempt to process this message further and don't put it back on
       // our message queue.  Just return immediately.

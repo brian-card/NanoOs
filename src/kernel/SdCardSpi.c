@@ -671,6 +671,8 @@ void handleSdCardSpiMessages(SdCardState *sdCardState) {
       printString(__func__);
       printString(" received unknown signature 0x");
       printHex(*signature);
+      printString(" from process ");
+      printInt(processPid(processMessageFrom(processMessage)));
       printString("\n");
       // Don't attempt to process this message further.
       processMessage = processMessageQueuePop();

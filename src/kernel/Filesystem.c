@@ -381,8 +381,9 @@ static void handleFilesystemMessages(FilesystemState *filesystemState) {
   while (msg != NULL) {
     uint64_t *signature = (uint64_t*) processMessageData(msg);
     if (*signature != FILESYSTEM_COMMAND_SIGNATURE) {
+      printString("Error: ");
       printString(__func__);
-      printString(": Error: Received unknown signature 0x");
+      printString(" received unknown signature 0x");
       printHex(*signature);
       printString(" from process ");
       printInt(processPid(processMessageFrom(msg)));
