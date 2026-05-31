@@ -1363,6 +1363,7 @@ FILE* schedFopen(const char *pathname, const char *mode) {
     _functionInProgress = __func__;
 
     FilesystemFopenArgs fopenArgs = {
+      .signature = FILESYSTEM_COMMAND_SIGNATURE,
       .pathname = pathname,
       .mode = mode,
       .fd = 0, // We don't care

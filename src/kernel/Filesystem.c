@@ -531,6 +531,7 @@ FILE* filesystemFopen(const char *pathname, const char *mode) {
   }
 
   FilesystemFopenArgs fopenArgs = {
+    .signature = FILESYSTEM_COMMAND_SIGNATURE,
     .pathname = pathname,
     .mode = mode,
     .fd = numFileDescriptors,

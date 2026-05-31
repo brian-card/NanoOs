@@ -156,12 +156,16 @@ typedef struct FilesystemSeekArgs {
 ///
 /// @brief Function parameters and return value for an fopen call.
 ///
+/// @param signature A uint64_t value to designate this as a command structure
+///   to the filesystem process.  This should always be the value
+///   FILESYSTEM_COMMAND_SIGNATURE.
 /// @param pathname A string containing the full path to the file.
 /// @param mode A string containing the mode to open the file with.
 /// @param fd The numeric file descriptor to use for the file.
 /// @param returnValue A pointer to the FILE that's opened on success, NULL
 ///   on failure.
 typedef struct FilesystemFopenArgs {
+  uint64_t    signature;
   const char *pathname;
   const char *mode;
   int         fd;
