@@ -145,6 +145,18 @@ typedef struct AssignMemoryArgs {
   ProcessId  pid;
 } AssignMemoryArgs;
 
+/// @struct MemoryManagerDumpMemoryAllocationsArgs
+///
+/// @brief Arguments required for the MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS
+/// command.
+///
+/// @param signature The 64-bit signature that indicates that this is a memory
+///   management command.  This should always be the value
+///   MEMORY_MANAGER_COMMAND_SIGNATURE.
+typedef struct MemoryManagerDumpMemoryAllocationsArgs {
+  uint64_t signature;
+} MemoryManagerDumpMemoryAllocationsArgs;
+
 /// @enum MemoryManagerCommandResponse
 ///
 /// @brief Commands and responses recognized by the memory manager.

@@ -646,6 +646,7 @@ void schedFree(void *ptr) {
 /// @return Returns 0 on success, -errno on failure.
 int assignMemory(void *ptr, ProcessId pid) {
   AssignMemoryArgs assignMemoryArgs = {
+    .signature = MEMORY_MANAGER_COMMAND_SIGNATURE,
     .ptr = ptr,
     .pid = pid,
   };
@@ -2916,11 +2917,15 @@ void forceYield(void) {
 int schedulerDumpMemoryAllocations(void) {
   int returnValue = 0;
   
+  MemoryManagerDumpMemoryAllocationsArgs
+    memoryManagerDumpMemoryAllocationsArgs = {
+    .signature = MEMORY_MANAGER_COMMAND_SIGNATURE,
+  };
   if (schedulerInitSendMessageToPid(
     SCHEDULER_STATE->memoryManagerPid,
     MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS,
-    /* data= */ NULL,
-    /* size= */ 0) != processSuccess
+    &memoryManagerDumpMemoryAllocationsArgs,
+    sizeof(memoryManagerDumpMemoryAllocationsArgs)) != processSuccess
   ) { 
     printString("ERROR: Could not send message ");
     printString("MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS to memory manager\n");

@@ -1412,10 +1412,16 @@ void* memoryManagerCalloc(size_t nmemb, size_t size) {
 ///
 /// @return Returns 0 on success, -errno on failure.
 int dumpMemoryAllocations(void) {
+  MemoryManagerDumpMemoryAllocationsArgs
+    memoryManagerDumpMemoryAllocationsArgs = {
+    .signature = MEMORY_MANAGER_COMMAND_SIGNATURE,
+  };
   ProcessMessage *processMessage = initSendProcessMessageToPid(
     SCHEDULER_STATE->memoryManagerPid,
     MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS,
-    /* data= */ NULL, /* size= */ 0, /* waiting= */ true);
+    &memoryManagerDumpMemoryAllocationsArgs,
+    sizeof(memoryManagerDumpMemoryAllocationsArgs),
+    /* waiting= */ true);
   if (processMessage == NULL) { 
     fprintf(stderr, "ERROR: Could not send message "
       "MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS to memory manager\n");
