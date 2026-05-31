@@ -212,6 +212,20 @@ typedef struct FilesystemRemoveArgs {
   int         returnValue;
 } FilesystemRemoveArgs;
 
+/// @struct FilesystemDumpOpenFilesArgs
+///
+/// @brief Function parameters and return value for FILESYSTEM_DUMP_OPEN_FILES.
+///
+/// @param signature A uint64_t value to designate this as a command structure
+///   to the filesystem process.  This should always be the value
+///   FILESYSTEM_COMMAND_SIGNATURE.
+/// @param returnValue The return value of the operation that will be passed
+///   back to the handler.
+typedef struct FilesystemDumpOpenFilesArgs {
+  uint64_t signature;
+  int      returnValue;
+} FilesystemDumpOpenFilesArgs;
+
 /// @struct GetFileBlockMetadataArgs
 ///
 /// @brief Function arguments for the FILESYSTEM_GET_FILE_BLOCK_METADATA

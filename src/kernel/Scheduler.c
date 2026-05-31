@@ -2915,13 +2915,16 @@ int schedulerDumpMemoryAllocations(void) {
 ///
 /// @return Returns 0 on success, -1 on failure.
 int schedulerDumpOpenFiles(void) {
-  int returnValue = 0;
+  FilesystemDumpOpenFilesArgs filesystemDumpOpenFilesArgs = {
+    .signature = FILESYSTEM_COMMAND_SIGNATURE,
+    .returnValue = 0,
+  };
   
   if (schedulerInitSendMessageToPid(
     SCHEDULER_STATE->rootFsPid,
     FILESYSTEM_DUMP_OPEN_FILES,
-    /* data= */ NULL,
-    /* size= */ 0) != processSuccess
+    /* data= */ &filesystemDumpOpenFilesArgs,
+    /* size= */ sizeof(filesystemDumpOpenFilesArgs)) != processSuccess
   ) { 
     printString("ERROR: Could not send FILESYSTEM_DUMP_OPEN_FILES message ");
     printString("to root FS process ID ");
@@ -2929,7 +2932,7 @@ int schedulerDumpOpenFiles(void) {
     printString("\n");
   }
   
-  return returnValue;
+  return filesystemDumpOpenFilesArgs.returnValue;
 }
 
 /// @fn void removeProcess(

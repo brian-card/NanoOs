@@ -301,6 +301,9 @@ int filesystemSeekFileCommandHandler(
 int filesystemDumpOpenFilesCommandHandler(
   FilesystemState *filesystemState, ProcessMessage *processMessage
 ) {
+  FilesystemDumpOpenFilesArgs *filesystemDumpOpenFilesArgs
+    = (FilesystemDumpOpenFilesArgs*) processMessageData(processMessage);
+
   printString("Open files:\n");
   for (NanoOsFile *nanoOsFile = filesystemState->openFiles;
     nanoOsFile != NULL;
@@ -315,6 +318,7 @@ int filesystemDumpOpenFilesCommandHandler(
     printString("\n");
   }
 
+  filesystemDumpOpenFilesArgs->returnValue = 0;
   processMessageSetDone(processMessage);
   return 0;
 }
