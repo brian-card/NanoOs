@@ -46,8 +46,8 @@ extern "C"
 /// @def SD_CARD_COMMAND_SIGNATURE
 ///
 /// @brief Signature to be used in SD card commands that take argument
-/// structures.  "SDCRDCMD" expressed as a 64-bit, little-endian value.
-#define SD_CARD_COMMAND_SIGNATURE ((uint64_t) 0x444D434443524353)
+/// structures.  "\0SDCARDC" expressed as a 64-bit, little-endian value.
+#define SD_CARD_COMMAND_SIGNATURE ((int64_t) 0x4344524143445300)
 
 typedef struct BlockDevice BlockDevice;
 
@@ -72,15 +72,11 @@ typedef struct SdCardState {
 
 /// @struct SdCommandArgs
 ///
-/// @param signature The 64-bit signature that identifies this as an SD card
-///   command to the SD card process.  This value should always be set to
-///   SD_CARD_COMMAND_SIGNATURE.
 /// @param startBlock The block number to start the command on.
 /// @param numBlocks The number of blocks to perform the command on.
 /// @param blockSize The number of bytes in each block.
 /// @param buffer A pointer to the memory to read from or write to.
 typedef struct SdCommandArgs {
-  uint64_t signature;
   uint32_t startBlock;
   uint32_t numBlocks;
   uint16_t blockSize;

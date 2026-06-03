@@ -231,13 +231,13 @@ int nanoOsSpawn(
   }
 
   SchedulerSpawnArgs schedulerSpawnArgs = {
-    .signature = SCHEDULER_COMMAND_SIGNATURE,
     .spawnArgs = spawnArgs,
     .errorNumber = 0,
   };
   ProcessMessage *processMessage
     = initSendProcessMessageToPid(
-    SCHEDULER_STATE->schedulerPid, SCHEDULER_SPAWN,
+    SCHEDULER_STATE->schedulerPid,
+    SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_SPAWN,
     &schedulerSpawnArgs, sizeof(schedulerSpawnArgs), true);
   if (processMessage == NULL) {
     // The only way this should be possible is if all available messages are

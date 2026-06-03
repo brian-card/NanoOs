@@ -1058,14 +1058,14 @@ void* runConsole(void *args) {
       } else if (byteRead == 0x03) {
         // The user hit Ctrl-C on the keyboard.  Send SIGINT to the input owner.
         if (consolePort->inputOwner != PROCESS_ID_NOT_SET) {
-          sendSignalArgs.signature = SCHEDULER_COMMAND_SIGNATURE;
           sendSignalArgs.pid = consolePort->inputOwner;
           sendSignalArgs.signal = SIGINT;
           sendSignalArgs.returnValue = 0;
           sendSignalArgs.errorNumber = 0;
           ProcessMessage *processMessage
             = initSendProcessMessageToPid(
-            SCHEDULER_STATE->schedulerPid, SCHEDULER_SEND_SIGNAL,
+            SCHEDULER_STATE->schedulerPid,
+            SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_SEND_SIGNAL,
             /* data= */ &sendSignalArgs, /* size= */ sizeof(sendSignalArgs),
             false);
           if (processMessage == NULL) {

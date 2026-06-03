@@ -55,8 +55,8 @@ extern "C"
 /// @def CONSOLE_COMMAND_SIGNATURE
 ///
 /// @brief The 64-bit signature used to validate that a command is a console
-/// command.  "CONSLCMD" as a little-endian value.
-#define CONSOLE_COMMAND_SIGNATURE ((uint64_t) 0x444D434C534E4F43)
+/// command.  "\0CONSOLE" as a little-endian value.
+#define CONSOLE_COMMAND_SIGNATURE ((int64_t) 0x454C4F534E4F4300)
 
 /// @struct ConsoleGetNumPortsArgs
 ///

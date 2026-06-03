@@ -47,8 +47,8 @@ extern "C"
 ///
 /// @brief 64-bit, little-endian value to use as a signature to indicate to the
 /// memory manager process that the command is intended for it.  This is
-/// "MEMRYCMD" expressed as a little-endian value.
-#define MEMORY_MANAGER_COMMAND_SIGNATURE ((uint64_t) 0x444D4359524D454D)
+/// "\0MEMMNGR" expressed as a little-endian value.
+#define MEMORY_MANAGER_COMMAND_SIGNATURE ((int64_t) 0x52474E4D4D454D00)
 
 /// @def MEMORY_MANAGER_PROCESS_STACK_CHUNK_SIZE
 ///
@@ -73,15 +73,11 @@ extern "C"
 /// @brief Structure that holds the data needed to make a request to reallocate
 /// an existing pointer.
 ///
-/// @param signature The 64-bit signature that indicates that this is a memory
-///   management command.  This should always be the value
-///   MEMORY_MANAGER_COMMAND_SIGNATURE.
 /// @param ptr The pointer to be reallocated.  If this value is NULL, new
 ///   memory will be allocated.
 /// @param size The number of bytes to allocate.  If this value is 0, the memory
 ///   at ptr will be freed.
 typedef struct ReallocMessage {
-  uint64_t  signature;
   void     *ptr;
   size_t    size;
 } ReallocMessage;
@@ -90,12 +86,8 @@ typedef struct ReallocMessage {
 ///
 /// @brief Structure that holds the data to request to free an existing pointer.
 ///
-/// @param signature The 64-bit signature that indicates that this is a memory
-///   management command.  This should always be the value
-///   MEMORY_MANAGER_COMMAND_SIGNATURE.
 /// @param ptr The pointer to be freed.
 typedef struct MemoryManagerFreeArgs {
-  uint64_t  signature;
   void     *ptr;
 } MemoryManagerFreeArgs;
 
@@ -104,13 +96,9 @@ typedef struct MemoryManagerFreeArgs {
 /// @brief Arguments and return value for the MEMORY_MANAGER_GET_FREE_MEMORY
 /// command.
 ///
-/// @param signature The 64-bit signature that indicates that this is a memory
-///   management command.  This should always be the value
-///   MEMORY_MANAGER_COMMAND_SIGNATURE.
 /// @param bytesFree The number of bytes free returned by the memory manager
 ///   process.
 typedef struct MemoryManagerGetFreeMemoryArgs {
-  uint64_t signature;
   size_t   bytesFree;
 } MemoryManagerGetFreeMemoryArgs;
 
@@ -119,13 +107,9 @@ typedef struct MemoryManagerGetFreeMemoryArgs {
 /// @brief Arguments and return value for the MEMORY_MANAGER_FREE_PROCESS_MEMORY
 /// command.
 ///
-/// @param signature The 64-bit signature that indicates that this is a memory
-///   management command.  This should always be the value
-///   MEMORY_MANAGER_COMMAND_SIGNATURE.
 /// @param pid The ID of the process to free memory for.
 /// @param returnValue The integer return value of the command.
 typedef struct MemoryManagerFreeProcessMemoryArgs {
-  uint64_t  signature;
   ProcessId pid;
   int       returnValue;
 } MemoryManagerFreeProcessMemoryArgs;
@@ -134,28 +118,12 @@ typedef struct MemoryManagerFreeProcessMemoryArgs {
 ///
 /// @brief Functional parameters to the MEMORY_MANAGER_ASSIGN_MEMORY command.
 ///
-/// @param signature The 64-bit signature that indicates that this is a memory
-///   management command.  This should always be the value
-///   MEMORY_MANAGER_COMMAND_SIGNATURE.
 /// @param ptr A pointer to the memory to assign.
 /// @param pid The ProcessId of the process to assign the memory to.
 typedef struct AssignMemoryArgs {
-  uint64_t   signature;
   void      *ptr;
   ProcessId  pid;
 } AssignMemoryArgs;
-
-/// @struct MemoryManagerDumpMemoryAllocationsArgs
-///
-/// @brief Arguments required for the MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS
-/// command.
-///
-/// @param signature The 64-bit signature that indicates that this is a memory
-///   management command.  This should always be the value
-///   MEMORY_MANAGER_COMMAND_SIGNATURE.
-typedef struct MemoryManagerDumpMemoryAllocationsArgs {
-  uint64_t signature;
-} MemoryManagerDumpMemoryAllocationsArgs;
 
 /// @enum MemoryManagerCommandResponse
 ///

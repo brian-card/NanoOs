@@ -161,12 +161,13 @@ SdCardCommandHandler sdCardPosixCommandHandlers[] = {
 void handleSdCardPosixMessages(SdCardState *sdCardState) {
   ProcessMessage *processMessage = processMessageQueueWait(NULL);
   while (processMessage != NULL) {
-    uint64_t *signature = (uint64_t*) processMessageData(processMessage);
-    if ((signature == NULL) || (*signature != SD_CARD_COMMAND_SIGNATURE)) {
+    if ((processMessageType(processMessage) & 0xffffffffffffff00)
+      != SD_CARD_COMMAND_SIGNATURE
+    ) {
       printString("ERROR: ");
       printString(__func__);
       printString(" received unknown signature 0x");
-      printHex(*signature);
+      printHex(processMessageType(processMessage) & 0xffffffffffffff00);
       printString(" from process ");
       printInt(processPid(processMessageFrom(processMessage)));
       printString("\n");
@@ -176,7 +177,7 @@ void handleSdCardPosixMessages(SdCardState *sdCardState) {
     }
 
     SdCardCommandResponse messageType
-      = (SdCardCommandResponse) processMessageType(processMessage);
+      = (SdCardCommandResponse) (processMessageType(processMessage) & 0xff);
     if (messageType >= NUM_SD_CARD_COMMANDS) {
       printDebugString(
         "handleSdCardPosixMessages: Received invalid messageType ");

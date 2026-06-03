@@ -1057,14 +1057,13 @@ const MemoryManagerCommandHandler memoryManagerCommandHandlers[] = {
 void handleMemoryManagerMessages(MemoryManagerState *memoryManagerState) {
   ProcessMessage *processMessage = processMessageQueueWait(NULL);
   while (processMessage != NULL) {
-    uint64_t *signature = (uint64_t*) processMessageData(processMessage);
-    if ((signature == NULL)
-      || (*signature != MEMORY_MANAGER_COMMAND_SIGNATURE)
+    if ((processMessageType(processMessage) & 0xffffffffffffff00)
+      != MEMORY_MANAGER_COMMAND_SIGNATURE
     ) {
       printString("ERROR: ");
       printString(__func__);
       printString(" received unknown signature 0x");
-      printHex(*signature);
+      printHex(processMessageType(processMessage) & 0xffffffffffffff00);
       printString(" from process ");
       printInt(processPid(processMessageFrom(processMessage)));
       printString("\n");
@@ -1074,7 +1073,7 @@ void handleMemoryManagerMessages(MemoryManagerState *memoryManagerState) {
     }
 
     MemoryManagerCommand messageType
-      = (MemoryManagerCommand) processMessageType(processMessage);
+      = (MemoryManagerCommand) (processMessageType(processMessage) & 0xff);
     if (messageType >= NUM_MEMORY_MANAGER_COMMANDS) {
       printInt(getRunningPid());
       printString(": ");
@@ -1267,13 +1266,12 @@ size_t getFreeMemory(void) {
   size_t returnValue = 0;
   
   MemoryManagerGetFreeMemoryArgs memoryManagerGetFreeMemoryArgs = {
-    .signature = MEMORY_MANAGER_COMMAND_SIGNATURE,
     .bytesFree = 0,
   };
 
   ProcessMessage *sent
     = initSendProcessMessageToPid(SCHEDULER_STATE->memoryManagerPid,
-    MEMORY_MANAGER_GET_FREE_MEMORY,
+    MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_GET_FREE_MEMORY,
     &memoryManagerGetFreeMemoryArgs,
     sizeof(memoryManagerGetFreeMemoryArgs), true);
   if (sent == NULL) {
@@ -1300,13 +1298,13 @@ void* memoryManagerSendReallocMessage(void *ptr, size_t size) {
   void *returnValue = NULL;
   
   ReallocMessage reallocMessage;
-  reallocMessage.signature = MEMORY_MANAGER_COMMAND_SIGNATURE;
   reallocMessage.ptr = ptr;
   reallocMessage.size = size;
   
   ProcessMessage *sent
     = initSendProcessMessageToPid(SCHEDULER_STATE->memoryManagerPid,
-    MEMORY_MANAGER_REALLOC, &reallocMessage, sizeof(reallocMessage), true);
+    MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_REALLOC,
+    &reallocMessage, sizeof(reallocMessage), true);
   
   if (sent == NULL) {
     // Nothing more we can do.
@@ -1338,11 +1336,11 @@ void memoryManagerFree(void *ptr) {
   }
 
   MemoryManagerFreeArgs memoryManagerFreeArgs = {
-    .signature = MEMORY_MANAGER_COMMAND_SIGNATURE,
     .ptr = ptr,
   };
   ProcessMessage *processMessage = initSendProcessMessageToPid(
-    SCHEDULER_STATE->memoryManagerPid, MEMORY_MANAGER_FREE,
+    SCHEDULER_STATE->memoryManagerPid,
+    MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_FREE,
     &memoryManagerFreeArgs, sizeof(memoryManagerFreeArgs), false);
   if (processMessage == NULL) {
     printString("ERROR: Could not send MEMORY_MANAGER_FREE message to ");
@@ -1409,16 +1407,10 @@ void* memoryManagerCalloc(size_t nmemb, size_t size) {
 ///
 /// @return Returns 0 on success, -errno on failure.
 int dumpMemoryAllocations(void) {
-  MemoryManagerDumpMemoryAllocationsArgs
-    memoryManagerDumpMemoryAllocationsArgs = {
-    .signature = MEMORY_MANAGER_COMMAND_SIGNATURE,
-  };
   ProcessMessage *processMessage = initSendProcessMessageToPid(
     SCHEDULER_STATE->memoryManagerPid,
-    MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS,
-    &memoryManagerDumpMemoryAllocationsArgs,
-    sizeof(memoryManagerDumpMemoryAllocationsArgs),
-    /* waiting= */ true);
+    MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS,
+    NULL, 0, /* waiting= */ true);
   if (processMessage == NULL) { 
     fprintf(stderr, "ERROR: Could not send message "
       "MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS to memory manager\n");

@@ -46,8 +46,8 @@ extern "C"
 /// @def SCHEDULER_COMMAND_SIGNATURE
 ///
 /// @brief Signature to be used in scheduler commands that take argument
-/// structures.  "SCHEDCMD" expressed as a 64-bit, little-endian value.
-#define SCHEDULER_COMMAND_SIGNATURE ((uint64_t) 0x444D434445484353)
+/// structures.  "\0SCHEDLR" expressed as a 64-bit, little-endian value.
+#define SCHEDULER_COMMAND_SIGNATURE ((int64_t) 0x524C444548435300)
 
 // Forward declarations and typedefs since we can't include NanoOsTypes.h here.
 struct timespec;
@@ -71,13 +71,10 @@ typedef struct SpawnArgs SpawnArgs;
 ///
 /// @brief Arguments and return values for the SCHEDULER_KILL_PROCESS command.
 ///
-/// @param signature The 64-bit signature for a scheduler command.  This should
-///   always be SCHEDULER_COMMAND_SIGNATURE.
 /// @param pid The process ID of the process to kill.
 /// @param returnValue The returnValue of the command handler.
 /// @param errorNumber The errno value to set in the calling process.
 typedef struct SchedulerKillProcessArgs {
-  int64_t signature;
   ProcessId pid;
   int returnValue;
   int errorNumber;
@@ -88,13 +85,10 @@ typedef struct SchedulerKillProcessArgs {
 /// @brief Arguments and return values for the
 /// SCHEDULER_GET_NUM_RUNNING_PROCESSES command.
 ///
-/// @param signature The 64-bit signature for a scheduler command.  This should
-///   always be SCHEDULER_COMMAND_SIGNATURE.
 /// @param returnValue A ProcessId value containing the number of processes
 ///   currently running in the system.
 /// @param errorNum The errno value set by the command in the scheduler, if any.
 typedef struct SchedulerGetNumRunningProcessesArgs {
-  int64_t signature;
   ProcessId returnValue;
   int errorNumber;
 } SchedulerGetNumRunningProcessesArgs;
@@ -104,14 +98,11 @@ typedef struct SchedulerGetNumRunningProcessesArgs {
 /// @brief Arguments and return values for the SCHEDULER_GET_PROCESS_INFO
 /// command.
 ///
-/// @param signature The 64-bit signature for a scheduler command.  This should
-///   always be SCHEDULER_COMMAND_SIGNATURE.
 /// @param processInfo A pointer to the process's ProcessInfo structure that
 ///   the command is to populate.
 /// @param returnValue The returnValue of the command handler.
 /// @param errorNumber The errno value to set in the calling process.
 typedef struct SchedulerGetProcessInfoArgs {
-  int64_t signature;
   ProcessInfo *processInfo;
   int returnValue;
   int errorNumber;
@@ -122,13 +113,10 @@ typedef struct SchedulerGetProcessInfoArgs {
 /// @brief Arguments and return values for the SCHEDULER_SET_PROCESS_USER
 /// command.
 ///
-/// @param signature The 64-bit signature for a scheduler command.  This should
-///   always be SCHEDULER_COMMAND_SIGNATURE.
 /// @param userId The UserId that should be associated with the process.
 /// @param returnValue The returnValue of the command handler.
 /// @param errorNumber The errno value to set in the calling process.
 typedef struct SchedulerSetProcessUserArgs {
-  int64_t signature;
   UserId userId;
   int returnValue;
   int errorNumber;
@@ -138,12 +126,9 @@ typedef struct SchedulerSetProcessUserArgs {
 ///
 /// @brief Arguments and return values for the SCHEDULER_GET_HOSTNAME command.
 ///
-/// @param signature The 64-bit signature for a scheduler command.  This should
-///   always be SCHEDULER_COMMAND_SIGNATURE.
 /// @param hostname The hostname string returned by the scheduler.
 /// @param errorNumber The errno value to set in the calling process.
 typedef struct SchedulerGetHostnameArgs {
-  int64_t signature;
   const char *hostname;
   int errorNumber;
 } SchedulerGetHostnameArgs;
@@ -152,13 +137,10 @@ typedef struct SchedulerGetHostnameArgs {
 ///
 /// Arguments and return values for the SCHEDULER_EXECVE command.
 ///
-/// @param signature The 64-bit signature for a scheduler command.  This should
-///   always be SCHEDULER_COMMAND_SIGNATURE.
 /// @param execArgs A pointer to the ExecArgs structure that contains the
 ///   arguments to execve.
 /// @param errorNumber The errno value to set in the calling process.
 typedef struct SchedulerExecveArgs {
-  int64_t signature;
   ExecArgs *execArgs;
   int errorNumber;
 } SchedulerExecveArgs;
@@ -167,13 +149,10 @@ typedef struct SchedulerExecveArgs {
 ///
 /// Arguments and return values for the SCHEDULER_SPAWN command.
 ///
-/// @param signature The 64-bit signature for a scheduler command.  This should
-///   always be SCHEDULER_COMMAND_SIGNATURE.
 /// @param spawnArgs A pointer to the SpawnArgs structure that contains the
 ///   arguments to posix_spawn.
 /// @param errorNumber The errno value to return as the userspace return value.
 typedef struct SchedulerSpawnArgs {
-  int64_t signature;
   SpawnArgs *spawnArgs;
   int errorNumber;
 } SchedulerSpawnArgs;
@@ -182,14 +161,11 @@ typedef struct SchedulerSpawnArgs {
 ///
 /// @brief Arguments and return values for the SCHEDULER_SEND_SIGNAL command.
 ///
-/// @param signature The 64-bit signature for a scheduler command.  This should
-///   always be SCHEDULER_COMMAND_SIGNATURE.
 /// @param pid The process ID of the process to send the signal to.
 /// @param signal The integer signal to send.
 /// @param returnValue The returnValue of the command handler.
 /// @param errorNumber The errno value to set in the calling process.
 typedef struct SchedulerSendSignalArgs {
-  int64_t signature;
   ProcessId pid;
   int signal;
   int returnValue;

@@ -63,8 +63,8 @@ extern "C"
 /// @def FILESYSTEM_COMMAND_SIGNATURE
 ///
 /// @brief Signature used in command structures sent to the filesystem process.
-/// "FILESCMD" as a 64-bit, little-endian value.
-#define FILESYSTEM_COMMAND_SIGNATURE ((uint64_t) 0x444D4353454C4946)
+/// "\0FILESYS" as a 64-bit, little-endian value.
+#define FILESYSTEM_COMMAND_SIGNATURE ((int64_t) 0x535953454C494600)
 
 /// @struct FilesystemState
 ///
@@ -124,16 +124,12 @@ typedef struct FilesystemState {
 ///
 /// @brief Arguments needed for an I/O command in a filesystem.
 ///
-/// @param signature A uint64_t value to designate this as a command structure
-///   to the filesystem process.  This should always be the value
-///   FILESYSTEM_COMMAND_SIGNATURE.
 /// @param file A pointer to the FILE object returned from a call to fopen.
 /// @param buffer A pointer to the memory that is either to be read from or
 ///   written to.
 /// @param length The number of bytes to read into the buffer or write from the
 ///   buffer.
 typedef struct FilesystemIoCommandArgs {
-  uint64_t  signature;
   FILE     *file;
   void     *buffer;
   uint32_t  length;
@@ -143,9 +139,6 @@ typedef struct FilesystemIoCommandArgs {
 ///
 /// @brief Arguments needed for an fseek function call on a file.
 ///
-/// @param signature A uint64_t value to designate this as a command structure
-///   to the filesystem process.  This should always be the value
-///   FILESYSTEM_COMMAND_SIGNATURE.
 /// @param stream A pointer to the FILE object to adjust the position indicator
 ///   of.
 /// @param offset The offset to apply to the position specified by the whence
@@ -154,7 +147,6 @@ typedef struct FilesystemIoCommandArgs {
 ///   of SEEK_SET (beginning of the file), SEEK_CUR (the current position of
 ///   the file) or SEEK_END (the end of the file).
 typedef struct FilesystemSeekArgs {
-  uint64_t  signature;
   FILE     *stream;
   long      offset;
   int       whence;
@@ -164,16 +156,12 @@ typedef struct FilesystemSeekArgs {
 ///
 /// @brief Function parameters and return value for an fopen call.
 ///
-/// @param signature A uint64_t value to designate this as a command structure
-///   to the filesystem process.  This should always be the value
-///   FILESYSTEM_COMMAND_SIGNATURE.
 /// @param pathname A string containing the full path to the file.
 /// @param mode A string containing the mode to open the file with.
 /// @param fd The numeric file descriptor to use for the file.
 /// @param returnValue A pointer to the FILE that's opened on success, NULL
 ///   on failure.
 typedef struct FilesystemFopenArgs {
-  uint64_t    signature;
   const char *pathname;
   const char *mode;
   int         fd;
@@ -184,14 +172,10 @@ typedef struct FilesystemFopenArgs {
 ///
 /// @brief Function parameters and return value for an fclose call.
 ///
-/// @param signature A uint64_t value to designate this as a command structure
-///   to the filesystem process.  This should always be the value
-///   FILESYSTEM_COMMAND_SIGNATURE.
 /// @param stream A pointer to the FILE to close.
 /// @param returnValue The return value of the operation that will be passed
 ///   back to the handler.  This value will be set to the process's errno value.
 typedef struct FilesystemFcloseArgs {
-  uint64_t  signature;
   FILE     *stream;
   int       returnValue;
 } FilesystemFcloseArgs;
@@ -200,14 +184,10 @@ typedef struct FilesystemFcloseArgs {
 ///
 /// @brief Function parameters and return value for a remove call.
 ///
-/// @param signature A uint64_t value to designate this as a command structure
-///   to the filesystem process.  This should always be the value
-///   FILESYSTEM_COMMAND_SIGNATURE.
 /// @param pathname The path to the file to remove.
 /// @param returnValue The return value of the operation that will be passed
 ///   back to the handler.  This value will be set to the process's errno value.
 typedef struct FilesystemRemoveArgs {
-  uint64_t    signature;
   const char *pathname;
   int         returnValue;
 } FilesystemRemoveArgs;
@@ -216,13 +196,9 @@ typedef struct FilesystemRemoveArgs {
 ///
 /// @brief Function parameters and return value for FILESYSTEM_DUMP_OPEN_FILES.
 ///
-/// @param signature A uint64_t value to designate this as a command structure
-///   to the filesystem process.  This should always be the value
-///   FILESYSTEM_COMMAND_SIGNATURE.
 /// @param returnValue The return value of the operation that will be passed
 ///   back to the handler.
 typedef struct FilesystemDumpOpenFilesArgs {
-  uint64_t signature;
   int      returnValue;
 } FilesystemDumpOpenFilesArgs;
 
@@ -231,14 +207,10 @@ typedef struct FilesystemDumpOpenFilesArgs {
 /// @brief Function arguments for the FILESYSTEM_GET_FILE_BLOCK_METADATA
 /// command handler.
 ///
-/// @param signature A uint64_t value to designate this as a command structure
-///   to the filesystem process.  This should always be the value
-///   FILESYSTEM_COMMAND_SIGNATURE.
 /// @param stream A pointer to a FILE the caller wants to find the metadata of.
 /// @param metadata A pointer to a caller-supplied FileBlockMetadata structure
 ///   that is to be populated by the command.
 typedef struct GetFileBlockMetadataArgs {
-  uint64_t           signature;
   FILE              *stream;
   FileBlockMetadata *metadata;
 } GetFileBlockMetadataArgs;

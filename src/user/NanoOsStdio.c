@@ -1103,14 +1103,13 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *nanoOsBuffer) {
   } else {
     // stream is a regular FILE.
     FilesystemIoCommandArgs filesystemIoCommandArgs = {
-      .signature = FILESYSTEM_COMMAND_SIGNATURE,
       .file = stream,
       .buffer = nanoOsBuffer->buffer,
       .length = (uint32_t) strlen(nanoOsBuffer->buffer)
     };
     ProcessMessage *processMessage = initSendProcessMessageToPid(
       SCHEDULER_STATE->rootFsPid,
-      FILESYSTEM_WRITE_FILE,
+      FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_WRITE_FILE,
       /* data= */ &filesystemIoCommandArgs,
       /* size= */ sizeof(filesystemIoCommandArgs),
       true);

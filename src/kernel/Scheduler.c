@@ -473,7 +473,7 @@ int schedulerSendProcessMessageToPid(SchedulerState *schedulerState,
 }
 
 /// @fn int schedulerInitSendMessageToProcess(
-///   ProcessDescriptor *processDescriptor, int type,
+///   ProcessDescriptor *processDescriptor, int64_t type,
 ///   void *data, size_t size)
 ///
 /// @brief Send a ProcessMessage to another process identified by its ProcessDescriptor.
@@ -487,7 +487,7 @@ int schedulerSendProcessMessageToPid(SchedulerState *schedulerState,
 /// @return Returns processSuccess on success, a different process status
 /// on failure.
 int schedulerInitSendMessageToProcess(ProcessDescriptor *processDescriptor,
-  int type, void *data, size_t size
+  int64_t type, void *data, size_t size
 ) {
   ProcessMessage processMessage;
   memset(&processMessage, 0, sizeof(processMessage));
@@ -503,7 +503,7 @@ int schedulerInitSendMessageToProcess(ProcessDescriptor *processDescriptor,
 }
 
 /// @fn int schedulerInitSendMessageToPid(
-///   int pid, int type, void *data, size_t size)
+///   int pid, int64_t type, void *data, size_t size)
 ///
 /// @brief Send a ProcessMessage to another process identified by its PID. Looks
 /// up the process's ProcessDescriptor by its PID and then calls
@@ -517,7 +517,7 @@ int schedulerInitSendMessageToProcess(ProcessDescriptor *processDescriptor,
 /// @return Returns processSuccess on success, a different process status
 /// on failure.
 int schedulerInitSendMessageToPid(
-  int pid, int type, void *data, size_t size
+  int pid, int64_t type, void *data, size_t size
 ) {
   int returnValue = processError;
   if ((pid <= 0) || (pid > NANO_OS_NUM_PROCESSES)) {
@@ -548,12 +548,12 @@ void* schedulerResumeReallocMessage(void *ptr, size_t size) {
   void *returnValue = NULL;
   
   ReallocMessage reallocMessage;
-  reallocMessage.signature = MEMORY_MANAGER_COMMAND_SIGNATURE;
   reallocMessage.ptr = ptr;
   reallocMessage.size = size;
   
   if (schedulerInitSendMessageToPid(SCHEDULER_STATE->memoryManagerPid,
-    MEMORY_MANAGER_REALLOC, &reallocMessage, sizeof(reallocMessage)
+    MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_REALLOC,
+    &reallocMessage, sizeof(reallocMessage)
     ) != processSuccess
   ) {
     // Nothing we can do.
@@ -628,11 +628,11 @@ void schedFree(void *ptr) {
   // No need to check the return value here.  There's nothing we can do if we
   // fail to send the message for some reason.
   MemoryManagerFreeArgs memoryManagerFreeArgs = {
-    .signature = MEMORY_MANAGER_COMMAND_SIGNATURE,
     .ptr = ptr,
   };
   schedulerInitSendMessageToPid(SCHEDULER_STATE->memoryManagerPid,
-    MEMORY_MANAGER_FREE, &memoryManagerFreeArgs, sizeof(memoryManagerFreeArgs));
+    MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_FREE,
+    &memoryManagerFreeArgs, sizeof(memoryManagerFreeArgs));
   return;
 }
 
@@ -646,14 +646,13 @@ void schedFree(void *ptr) {
 /// @return Returns 0 on success, -errno on failure.
 int assignMemory(void *ptr, ProcessId pid) {
   AssignMemoryArgs assignMemoryArgs = {
-    .signature = MEMORY_MANAGER_COMMAND_SIGNATURE,
     .ptr = ptr,
     .pid = pid,
   };
 
   int returnValue = 0;
   if (schedulerInitSendMessageToPid(SCHEDULER_STATE->memoryManagerPid,
-    MEMORY_MANAGER_ASSIGN_MEMORY,
+    MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_ASSIGN_MEMORY,
     &assignMemoryArgs, sizeof(assignMemoryArgs)) != processSuccess
   ) {
     // Nothing we can do.
@@ -758,12 +757,12 @@ ProcessId schedulerGetNumRunningProcesses(struct timespec *timeout) {
   ProcessId numProcessDescriptors = 0;
 
   SchedulerGetNumRunningProcessesArgs schedulerGetNumRunningProcessesArgs = {
-    .signature = SCHEDULER_COMMAND_SIGNATURE,
     .returnValue = 0,
     .errorNumber = 0,
   };
   processMessage = initSendProcessMessageToPid(
-    SCHEDULER_STATE->schedulerPid, SCHEDULER_GET_NUM_RUNNING_PROCESSES,
+    SCHEDULER_STATE->schedulerPid,
+    SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_GET_NUM_RUNNING_PROCESSES,
     &schedulerGetNumRunningProcessesArgs,
     sizeof(schedulerGetNumRunningProcessesArgs), true);
   if (processMessage == NULL) {
@@ -847,14 +846,14 @@ ProcessInfo* schedulerGetProcessInfo(void) {
   processInfo->numProcesses = numProcessDescriptors;
 
   SchedulerGetProcessInfoArgs schedulerGetProcessInfoArgs = {
-    .signature = SCHEDULER_COMMAND_SIGNATURE,
     .processInfo = processInfo,
     .returnValue = 0,
     .errorNumber = 0,
   };
   processMessage
     = initSendProcessMessageToPid(SCHEDULER_STATE->schedulerPid,
-    SCHEDULER_GET_PROCESS_INFO, &schedulerGetProcessInfoArgs,
+    SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_GET_PROCESS_INFO,
+    &schedulerGetProcessInfoArgs,
     sizeof(schedulerGetProcessInfoArgs), true);
 
   if (processMessage == NULL) {
@@ -910,13 +909,13 @@ exit:
 /// @return Returns 0 on success, 1 on failure.
 int schedulerKillProcess(ProcessId pid) {
   SchedulerKillProcessArgs schedulerKillProcessArgs = {
-    .signature = SCHEDULER_COMMAND_SIGNATURE,
     .pid = pid,
     .returnValue = 0,
     .errorNumber = 0,
   };
   ProcessMessage *processMessage = initSendProcessMessageToPid(
-    SCHEDULER_STATE->schedulerPid, SCHEDULER_KILL_PROCESS,
+    SCHEDULER_STATE->schedulerPid,
+    SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_KILL_PROCESS,
     &schedulerKillProcessArgs, sizeof(schedulerKillProcessArgs), true);
   if (processMessage == NULL) {
     printf("ERROR: Could not communicate with scheduler.\n");
@@ -976,7 +975,6 @@ int schedulerSendSignal(ProcessId pid, int signal) {
   int returnValue = -1;
 
   SchedulerSendSignalArgs sendSignalArgs = {
-    .signature = SCHEDULER_COMMAND_SIGNATURE,
     .pid = pid,
     .signal = signal,
     .returnValue = 0,
@@ -984,7 +982,8 @@ int schedulerSendSignal(ProcessId pid, int signal) {
   };
   ProcessMessage *processMessage
     = initSendProcessMessageToPid(
-    SCHEDULER_STATE->schedulerPid, SCHEDULER_SEND_SIGNAL,
+    SCHEDULER_STATE->schedulerPid,
+    SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_SEND_SIGNAL,
     /* data= */ &sendSignalArgs, /* size= */ sizeof(sendSignalArgs), true);
   if (processMessage == NULL) {
     printString("ERROR: Could not communicate with scheduler.\n");
@@ -1009,14 +1008,14 @@ int schedulerSendSignal(ProcessId pid, int signal) {
 int schedulerSetProcessUser(UserId userId) {
   int returnValue = -1;
   SchedulerSetProcessUserArgs schedulerSetProcessUserArgs = {
-    .signature = SCHEDULER_COMMAND_SIGNATURE,
     .userId = userId,
     .returnValue = returnValue,
     .errorNumber = 0,
   };
   ProcessMessage *processMessage
     = initSendProcessMessageToPid(
-    SCHEDULER_STATE->schedulerPid, SCHEDULER_SET_PROCESS_USER,
+    SCHEDULER_STATE->schedulerPid,
+    SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_SET_PROCESS_USER,
     &schedulerSetProcessUserArgs, sizeof(schedulerSetProcessUserArgs), true);
   if (processMessage == NULL) {
     printString("ERROR: Could not communicate with scheduler.\n");
@@ -1071,13 +1070,13 @@ FileDescriptor* schedulerGetFileDescriptor(FILE *stream) {
 /// failure.
 const char* schedulerGetHostname(void) {
   SchedulerGetHostnameArgs schedulerGetHostnameArgs = {
-    .signature = SCHEDULER_COMMAND_SIGNATURE,
     .hostname = NULL,
     .errorNumber = 0,
   };
   ProcessMessage *processMessage
     = initSendProcessMessageToPid(
-    SCHEDULER_STATE->schedulerPid, SCHEDULER_GET_HOSTNAME,
+    SCHEDULER_STATE->schedulerPid,
+    SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_GET_HOSTNAME,
     &schedulerGetHostnameArgs, sizeof(schedulerGetHostnameArgs), true);
   if (processMessage == NULL) {
     printString("ERROR: Could not communicate with scheduler.\n");
@@ -1216,13 +1215,13 @@ int schedulerExecve(const char *pathname,
   execArgs->schedulerState = NULL; // Set by the scheduler
 
   SchedulerExecveArgs schedulerExecveArgs = {
-    .signature = SCHEDULER_COMMAND_SIGNATURE,
     .execArgs = execArgs,
     .errorNumber = 0,
   };
   ProcessMessage *processMessage
     = initSendProcessMessageToPid(
-    SCHEDULER_STATE->schedulerPid, SCHEDULER_EXECVE,
+    SCHEDULER_STATE->schedulerPid,
+    SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_EXECVE,
     &schedulerExecveArgs, sizeof(schedulerExecveArgs), true);
   if (processMessage == NULL) {
     // The only way this should be possible is if all available messages are
@@ -1369,14 +1368,14 @@ FILE* schedFopen(const char *pathname, const char *mode) {
     _functionInProgress = __func__;
 
     FilesystemFopenArgs fopenArgs = {
-      .signature = FILESYSTEM_COMMAND_SIGNATURE,
       .pathname = pathname,
       .mode = mode,
       .fd = 0, // We don't care
     };
     printDebugString("schedFopen: Sending message\n");
     if (schedulerInitSendMessageToPid(SCHEDULER_STATE->rootFsPid,
-      FILESYSTEM_OPEN_FILE, &fopenArgs, sizeof(fopenArgs)
+      FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_OPEN_FILE,
+      &fopenArgs, sizeof(fopenArgs)
       ) != processSuccess
     ) {
       // Nothing we can do.
@@ -1413,12 +1412,12 @@ int schedFclose(FILE *stream) {
     _functionInProgress = __func__;
 
     FilesystemFcloseArgs fcloseArgs;
-    fcloseArgs.signature = FILESYSTEM_COMMAND_SIGNATURE,
     fcloseArgs.stream = stream;
     fcloseArgs.returnValue = 0;
 
     if (schedulerInitSendMessageToPid(SCHEDULER_STATE->rootFsPid,
-      FILESYSTEM_CLOSE_FILE, &fcloseArgs, sizeof(fcloseArgs)
+      FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_CLOSE_FILE,
+      &fcloseArgs, sizeof(fcloseArgs)
       ) != processSuccess
     ) {
       // Nothing we can do.
@@ -1460,13 +1459,12 @@ int schedRemove(const char *pathname) {
     _functionInProgress = __func__;
 
     FilesystemRemoveArgs filesystemRemoveArgs = {
-      .signature = FILESYSTEM_COMMAND_SIGNATURE,
       .pathname = pathname,
       .returnValue = 0,
     };
 
     if (schedulerInitSendMessageToPid(SCHEDULER_STATE->rootFsPid,
-      FILESYSTEM_REMOVE_FILE,
+      FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_REMOVE_FILE,
       &filesystemRemoveArgs, sizeof(filesystemRemoveArgs)
       ) != processSuccess
     ) {
@@ -1508,7 +1506,6 @@ int schedRemove(const char *pathname) {
 /// @return Returns the number of items successfully read in.
 size_t schedFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   FilesystemIoCommandArgs filesystemIoCommandArgs = {
-    .signature = FILESYSTEM_COMMAND_SIGNATURE,
     .file = stream,
     .buffer = ptr,
     .length = size * nmemb
@@ -1518,7 +1515,7 @@ size_t schedFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     _functionInProgress = __func__;
 
     if (schedulerInitSendMessageToPid(SCHEDULER_STATE->rootFsPid,
-      FILESYSTEM_READ_FILE,
+      FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_READ_FILE,
       &filesystemIoCommandArgs, sizeof(filesystemIoCommandArgs)
       ) != processSuccess
     ) {
@@ -1552,7 +1549,6 @@ size_t schedFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
 /// @return Returns the number of items successfully written out.
 size_t schedFwrite(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   FilesystemIoCommandArgs filesystemIoCommandArgs = {
-    .signature = FILESYSTEM_COMMAND_SIGNATURE,
     .file = stream,
     .buffer = ptr,
     .length = size * nmemb
@@ -1562,7 +1558,7 @@ size_t schedFwrite(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     _functionInProgress = __func__;
 
     if (schedulerInitSendMessageToPid(SCHEDULER_STATE->rootFsPid,
-      FILESYSTEM_WRITE_FILE,
+      FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_WRITE_FILE,
       &filesystemIoCommandArgs, sizeof(filesystemIoCommandArgs)
       ) != processSuccess
     ) {
@@ -1601,14 +1597,13 @@ char* schedFgets(char *buffer, int size, FILE *stream) {
     _functionInProgress = __func__;
 
     FilesystemIoCommandArgs filesystemIoCommandArgs = {
-      .signature = FILESYSTEM_COMMAND_SIGNATURE,
       .file = stream,
       .buffer = buffer,
       .length = (uint32_t) size - 1
     };
 
     if (schedulerInitSendMessageToPid(SCHEDULER_STATE->rootFsPid,
-      FILESYSTEM_READ_FILE,
+      FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_READ_FILE,
       &filesystemIoCommandArgs, sizeof(filesystemIoCommandArgs)
       ) != processSuccess
     ) {
@@ -1650,14 +1645,13 @@ int schedFputs(const char *s, FILE *stream) {
     _functionInProgress = __func__;
 
     FilesystemIoCommandArgs filesystemIoCommandArgs = {
-      .signature = FILESYSTEM_COMMAND_SIGNATURE,
       .file = stream,
       .buffer = (void*) s,
       .length = (uint32_t) strlen(s)
     };
 
     if (schedulerInitSendMessageToPid(SCHEDULER_STATE->rootFsPid,
-      FILESYSTEM_WRITE_FILE,
+      FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_WRITE_FILE,
       &filesystemIoCommandArgs, sizeof(filesystemIoCommandArgs)
       ) != processSuccess
     ) {
@@ -1700,13 +1694,13 @@ int schedGetFileBlockMetadataFromFile(
   }
 
   GetFileBlockMetadataArgs args = {
-    .signature = FILESYSTEM_COMMAND_SIGNATURE,
     .stream = stream,
     .metadata = metadata,
   };
 
   if (schedulerInitSendMessageToPid(SCHEDULER_STATE->rootFsPid,
-    FILESYSTEM_GET_FILE_BLOCK_METADATA, &args, sizeof(args)
+    FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_GET_FILE_BLOCK_METADATA,
+    &args, sizeof(args)
     ) != processSuccess
   ) {
     // Nothing we can do.
@@ -1869,13 +1863,12 @@ int schedulerKillProcessCommandHandler(
 
         MemoryManagerFreeProcessMemoryArgs memoryManagerFreeProcessMemoryArgs
         = {
-          .signature = MEMORY_MANAGER_COMMAND_SIGNATURE,
           .pid = pid,
           .returnValue = 0,
         };
         if (schedulerInitSendMessageToPid(
           SCHEDULER_STATE->memoryManagerPid,
-          MEMORY_MANAGER_FREE_PROCESS_MEMORY,
+          MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_FREE_PROCESS_MEMORY,
           &memoryManagerFreeProcessMemoryArgs,
           sizeof(memoryManagerFreeProcessMemoryArgs)) != processSuccess
         ) {
@@ -2253,13 +2246,12 @@ int schedulerExecveCommandHandler(
   // We don't want to wait for the memory manager to release the memory.  Make
   // it do it immediately.
   MemoryManagerFreeProcessMemoryArgs memoryManagerFreeProcessMemoryArgs = {
-    .signature = MEMORY_MANAGER_COMMAND_SIGNATURE,
     .pid = processDescriptor->processId,
     .returnValue = 0,
   };
   if (schedulerInitSendMessageToPid(
     SCHEDULER_STATE->memoryManagerPid,
-    MEMORY_MANAGER_FREE_PROCESS_MEMORY,
+    MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_FREE_PROCESS_MEMORY,
     &memoryManagerFreeProcessMemoryArgs,
     sizeof(memoryManagerFreeProcessMemoryArgs))
   ) {
@@ -2809,12 +2801,13 @@ void handleSchedulerMessage(SchedulerState *schedulerState) {
   static int lastReturnValue = 0;
   ProcessMessage *message = processMessageQueuePop();
   if (message != NULL) {
-    uint64_t *signature = (uint64_t*) processMessageData(message);
-    if ((signature == NULL) || (*signature != SCHEDULER_COMMAND_SIGNATURE)) {
+    if ((processMessageType(message) & 0xffffffffffffff00)
+      != SCHEDULER_COMMAND_SIGNATURE
+    ) {
       printString("ERROR: ");
       printString(__func__);
       printString(" received unknown signature 0x");
-      printHex(*signature);
+      printHex(processMessageType(message) & 0xffffffffffffff00);
       printString(" from process ");
       printInt(processPid(processMessageFrom(message)));
       printString("\n");
@@ -2824,7 +2817,7 @@ void handleSchedulerMessage(SchedulerState *schedulerState) {
     }
 
     SchedulerCommand messageType
-      = (SchedulerCommand) processMessageType(message);
+      = (SchedulerCommand) (processMessageType(message) & 0xff);
     if (messageType >= NUM_SCHEDULER_COMMANDS) {
       // Invalid.  Purge the message.
       printInt(getRunningPid());
@@ -2917,15 +2910,10 @@ void forceYield(void) {
 int schedulerDumpMemoryAllocations(void) {
   int returnValue = 0;
   
-  MemoryManagerDumpMemoryAllocationsArgs
-    memoryManagerDumpMemoryAllocationsArgs = {
-    .signature = MEMORY_MANAGER_COMMAND_SIGNATURE,
-  };
   if (schedulerInitSendMessageToPid(
     SCHEDULER_STATE->memoryManagerPid,
-    MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS,
-    &memoryManagerDumpMemoryAllocationsArgs,
-    sizeof(memoryManagerDumpMemoryAllocationsArgs)) != processSuccess
+    MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS,
+    NULL, 0) != processSuccess
   ) { 
     printString("ERROR: Could not send message ");
     printString("MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS to memory manager\n");
@@ -2941,13 +2929,12 @@ int schedulerDumpMemoryAllocations(void) {
 /// @return Returns 0 on success, -1 on failure.
 int schedulerDumpOpenFiles(void) {
   FilesystemDumpOpenFilesArgs filesystemDumpOpenFilesArgs = {
-    .signature = FILESYSTEM_COMMAND_SIGNATURE,
     .returnValue = 0,
   };
   
   if (schedulerInitSendMessageToPid(
     SCHEDULER_STATE->rootFsPid,
-    FILESYSTEM_DUMP_OPEN_FILES,
+    FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_DUMP_OPEN_FILES,
     /* data= */ &filesystemDumpOpenFilesArgs,
     /* size= */ sizeof(filesystemDumpOpenFilesArgs)) != processSuccess
   ) { 
@@ -2996,13 +2983,12 @@ void removeProcess(
   }
 
   MemoryManagerFreeProcessMemoryArgs memoryManagerFreeProcessMemoryArgs = {
-    .signature = MEMORY_MANAGER_COMMAND_SIGNATURE,
     .pid = processDescriptor->processId,
     .returnValue = 0,
   };
   if (schedulerInitSendMessageToPid(
     SCHEDULER_STATE->memoryManagerPid,
-    MEMORY_MANAGER_FREE_PROCESS_MEMORY,
+    MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_FREE_PROCESS_MEMORY,
     &memoryManagerFreeProcessMemoryArgs,
     sizeof(memoryManagerFreeProcessMemoryArgs)) != processSuccess
   ) {
@@ -3436,12 +3422,12 @@ void runScheduler(void) {
     }
 
     MemoryManagerFreeProcessMemoryArgs memoryManagerFreeProcessMemoryArgs = {
-      .signature = MEMORY_MANAGER_COMMAND_SIGNATURE,
       .pid = processDescriptor->processId,
       .returnValue = 0,
     };
     if (schedulerInitSendMessageToPid(
-      SCHEDULER_STATE->memoryManagerPid, MEMORY_MANAGER_FREE_PROCESS_MEMORY,
+      SCHEDULER_STATE->memoryManagerPid,
+      MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_FREE_PROCESS_MEMORY,
       &memoryManagerFreeProcessMemoryArgs,
       sizeof(memoryManagerFreeProcessMemoryArgs)) != processSuccess
     ) {

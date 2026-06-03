@@ -93,14 +93,14 @@ int sdReadBlocks(void *context, uint32_t startBlock,
 ) {
   intptr_t sdCardProcess = (intptr_t) context;
   SdCommandArgs sdCommandArgs;
-  sdCommandArgs.signature = SD_CARD_COMMAND_SIGNATURE;
   sdCommandArgs.startBlock = startBlock;
   sdCommandArgs.numBlocks = numBlocks;
   sdCommandArgs.blockSize = blockSize;
   sdCommandArgs.buffer = buffer;
 
   ProcessMessage *processMessage = initSendProcessMessageToPid(
-    sdCardProcess, SD_CARD_READ_BLOCKS,
+    sdCardProcess,
+    SD_CARD_COMMAND_SIGNATURE | SD_CARD_READ_BLOCKS,
     /* data= */ &sdCommandArgs, sizeof(sdCommandArgs), true);
   processMessageWaitForDone(processMessage, NULL);
   int returnValue = (int) ((intptr_t) processMessageData(processMessage));
@@ -130,14 +130,14 @@ int sdWriteBlocks(void *context, uint32_t startBlock,
 ) {
   intptr_t sdCardProcess = (intptr_t) context;
   SdCommandArgs sdCommandArgs;
-  sdCommandArgs.signature = SD_CARD_COMMAND_SIGNATURE;
   sdCommandArgs.startBlock = startBlock;
   sdCommandArgs.numBlocks = numBlocks;
   sdCommandArgs.blockSize = blockSize;
   sdCommandArgs.buffer = (uint8_t*) buffer;
 
   ProcessMessage *processMessage = initSendProcessMessageToPid(
-    sdCardProcess, SD_CARD_WRITE_BLOCKS,
+    sdCardProcess,
+    SD_CARD_COMMAND_SIGNATURE | SD_CARD_WRITE_BLOCKS,
     /* data= */ &sdCommandArgs, /* size= */ sizeof(sdCommandArgs), true);
   processMessageWaitForDone(processMessage, NULL);
   int returnValue = (int) ((intptr_t) processMessageData(processMessage));
@@ -167,7 +167,6 @@ int schedSdReadBlocks(void *context, uint32_t startBlock,
 ) {
   intptr_t sdCardProcess = (intptr_t) context;
   SdCommandArgs sdCommandArgs;
-  sdCommandArgs.signature = SD_CARD_COMMAND_SIGNATURE;
   sdCommandArgs.startBlock = startBlock;
   sdCommandArgs.numBlocks = numBlocks;
   sdCommandArgs.blockSize = blockSize;
@@ -189,7 +188,8 @@ int schedSdReadBlocks(void *context, uint32_t startBlock,
     return -ENOMEM;
   }
 
-  processMessageInit(processMessage, SD_CARD_READ_BLOCKS,
+  processMessageInit(processMessage,
+    SD_CARD_COMMAND_SIGNATURE | SD_CARD_READ_BLOCKS,
     &sdCommandArgs, sizeof(sdCommandArgs), true);
   if (sendProcessMessageToPid(sdCardProcess, processMessage)
     != processSuccess
@@ -227,7 +227,6 @@ int schedSdWriteBlocks(void *context, uint32_t startBlock,
 ) {
   intptr_t sdCardProcess = (intptr_t) context;
   SdCommandArgs sdCommandArgs;
-  sdCommandArgs.signature = SD_CARD_COMMAND_SIGNATURE;
   sdCommandArgs.startBlock = startBlock;
   sdCommandArgs.numBlocks = numBlocks;
   sdCommandArgs.blockSize = blockSize;
@@ -249,7 +248,8 @@ int schedSdWriteBlocks(void *context, uint32_t startBlock,
     return -ENOMEM;
   }
 
-  processMessageInit(processMessage, SD_CARD_WRITE_BLOCKS,
+  processMessageInit(processMessage,
+    SD_CARD_COMMAND_SIGNATURE | SD_CARD_WRITE_BLOCKS,
     &sdCommandArgs, sizeof(sdCommandArgs), true);
   if (sendProcessMessageToPid(sdCardProcess, processMessage)
     != processSuccess

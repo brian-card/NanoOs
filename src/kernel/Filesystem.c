@@ -380,12 +380,13 @@ static void handleFilesystemMessages(FilesystemState *filesystemState) {
   while (1) {
     ProcessMessage *msg = processMessageQueueWait(NULL);
     while (msg != NULL) {
-      uint64_t *signature = (uint64_t*) processMessageData(msg);
-      if (*signature != FILESYSTEM_COMMAND_SIGNATURE) {
+      if ((processMessageType(msg) & 0xffffffffffffff00)
+        != FILESYSTEM_COMMAND_SIGNATURE
+      ) {
         printString("Error: ");
         printString(__func__);
         printString(" received unknown signature 0x");
-        printHex(*signature);
+        printHex(processMessageType(msg) & 0xffffffffffffff00);
         printString(" from process ");
         printInt(processPid(processMessageFrom(msg)));
         printString("\n");
@@ -394,13 +395,8 @@ static void handleFilesystemMessages(FilesystemState *filesystemState) {
       }
 
       FilesystemCommandResponse type = 
-        (FilesystemCommandResponse) processMessageType(msg);
-      if (type < NUM_FILESYSTEM_COMMANDS) {
-        printDebugString("Handling filesystem message type ");
-        printDebugInt(type);
-        printDebugString("\n");
-        filesystemCommandHandlers[type](filesystemState, msg);
-      } else {
+        (FilesystemCommandResponse) (processMessageType(msg) & 0xff);
+      if (type >= NUM_FILESYSTEM_COMMANDS) {
         printString(__func__);
         printString(": ERROR! Received unknown filesystem message type ");
         printInt(type);
@@ -408,6 +404,12 @@ static void handleFilesystemMessages(FilesystemState *filesystemState) {
         printInt(processPid(processMessageFrom(msg)));
         printString("\n");
       }
+
+      printDebugString("Handling filesystem message type ");
+      printDebugInt(type);
+      printDebugString("\n");
+      filesystemCommandHandlers[type](filesystemState, msg);
+
       msg = processMessageQueuePop();
     }
   }
@@ -537,14 +539,14 @@ FILE* filesystemFopen(const char *pathname, const char *mode) {
   }
 
   FilesystemFopenArgs fopenArgs = {
-    .signature = FILESYSTEM_COMMAND_SIGNATURE,
     .pathname = pathname,
     .mode = mode,
     .fd = numFileDescriptors,
   };
 
   ProcessMessage *msg = initSendProcessMessageToPid(
-    SCHEDULER_STATE->rootFsPid, FILESYSTEM_OPEN_FILE,
+    SCHEDULER_STATE->rootFsPid,
+    FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_OPEN_FILE,
     &fopenArgs, sizeof(fopenArgs), true);
   processMessageWaitForDone(msg, NULL);
   file = fopenArgs.returnValue;
@@ -616,12 +618,12 @@ int filesystemFclose(FILE *stream) {
     int fd = stream->fd;
 
     FilesystemFcloseArgs fcloseArgs;
-    fcloseArgs.signature = FILESYSTEM_COMMAND_SIGNATURE,
     fcloseArgs.stream = stream;
     fcloseArgs.returnValue = 0;
 
     ProcessMessage *msg = initSendProcessMessageToPid(
-      SCHEDULER_STATE->rootFsPid, FILESYSTEM_CLOSE_FILE,
+      SCHEDULER_STATE->rootFsPid,
+      FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_CLOSE_FILE,
       &fcloseArgs, sizeof(fcloseArgs), true);
     processMessageWaitForDone(msg, NULL);
 
@@ -653,13 +655,13 @@ int filesystemRemove(const char *pathname) {
   int returnValue = 0;
   if ((pathname != NULL) && (*pathname != '\0')) {
     FilesystemRemoveArgs filesystemRemoveArgs = {
-      .signature = FILESYSTEM_COMMAND_SIGNATURE,
       .pathname = pathname,
       .returnValue = 0,
     };
 
     ProcessMessage *msg = initSendProcessMessageToPid(
-      SCHEDULER_STATE->rootFsPid, FILESYSTEM_REMOVE_FILE,
+      SCHEDULER_STATE->rootFsPid,
+      FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_REMOVE_FILE,
       &filesystemRemoveArgs, sizeof(filesystemRemoveArgs), true);
     processMessageWaitForDone(msg, NULL);
     returnValue = filesystemRemoveArgs.returnValue;
@@ -692,13 +694,13 @@ int filesystemFSeek(FILE *stream, long offset, int whence) {
   }
 
   FilesystemSeekArgs filesystemSeekArgs = {
-    .signature = FILESYSTEM_COMMAND_SIGNATURE,
     .stream = stream,
     .offset = offset,
     .whence = whence,
   };
   ProcessMessage *msg = initSendProcessMessageToPid(
-    SCHEDULER_STATE->rootFsPid, FILESYSTEM_SEEK_FILE,
+    SCHEDULER_STATE->rootFsPid,
+    FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_SEEK_FILE,
     &filesystemSeekArgs, sizeof(filesystemSeekArgs), true);
   processMessageWaitForDone(msg, NULL);
   int returnValue = (int) ((intptr_t) processMessageData(msg));
@@ -727,7 +729,6 @@ size_t filesystemFRead(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   }
 
   FilesystemIoCommandArgs filesystemIoCommandArgs = {
-    .signature = FILESYSTEM_COMMAND_SIGNATURE,
     .file = stream,
     .buffer = ptr,
     .length = (uint32_t) (size * nmemb)
@@ -746,7 +747,7 @@ size_t filesystemFRead(void *ptr, size_t size, size_t nmemb, FILE *stream) {
 
   ProcessMessage *processMessage = initSendProcessMessageToPid(
     SCHEDULER_STATE->rootFsPid,
-    FILESYSTEM_READ_FILE,
+    FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_READ_FILE,
     /* data= */ &filesystemIoCommandArgs,
     /* size= */ sizeof(filesystemIoCommandArgs),
     true);
@@ -788,14 +789,13 @@ size_t filesystemFWrite(
   }
 
   FilesystemIoCommandArgs filesystemIoCommandArgs = {
-    .signature = FILESYSTEM_COMMAND_SIGNATURE,
     .file = stream,
     .buffer = (void*) ptr,
     .length = (uint32_t) (size * nmemb)
   };
   ProcessMessage *processMessage = initSendProcessMessageToPid(
     SCHEDULER_STATE->rootFsPid,
-    FILESYSTEM_WRITE_FILE,
+    FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_WRITE_FILE,
     /* data= */ &filesystemIoCommandArgs,
     /* size= */ sizeof(filesystemIoCommandArgs),
     true);
@@ -822,7 +822,6 @@ int getFileBlockMetadataFromFile(FILE *stream, FileBlockMetadata *metadata) {
   }
 
   GetFileBlockMetadataArgs args = {
-    .signature = FILESYSTEM_COMMAND_SIGNATURE,
     .stream = stream,
     .metadata = metadata,
   };
@@ -843,7 +842,8 @@ int getFileBlockMetadataFromFile(FILE *stream, FileBlockMetadata *metadata) {
     return -ENOMEM;
   }
 
-  processMessageInit(processMessage, FILESYSTEM_GET_FILE_BLOCK_METADATA,
+  processMessageInit(processMessage,
+    FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_GET_FILE_BLOCK_METADATA,
     &args, sizeof(args), true);
   if (sendProcessMessageToPid(SCHEDULER_STATE->rootFsPid, processMessage)
     != processSuccess

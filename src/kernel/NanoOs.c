@@ -67,13 +67,13 @@ void defaultSignalHandler(int signum) {
     // Kill this process.  Send a message to the scheduler and then yield
     // immediately.
     SchedulerKillProcessArgs schedulerKillProcessArgs = {
-      .signature = SCHEDULER_COMMAND_SIGNATURE,
       .pid = getRunningPid(),
       .returnValue = 0,
       .errorNumber = 0,
     };
     ProcessMessage *processMessage = initSendProcessMessageToPid(
-      SCHEDULER_STATE->schedulerPid, SCHEDULER_KILL_PROCESS,
+      SCHEDULER_STATE->schedulerPid,
+      SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_KILL_PROCESS,
       &schedulerKillProcessArgs, sizeof(schedulerKillProcessArgs), false);
     if (processMessage == NULL) {
       printf("ERROR: Could not communicate with scheduler.\n");
