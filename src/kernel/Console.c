@@ -808,7 +808,8 @@ void handleConsoleMessages(ConsoleState *consoleState) {
   ProcessMessage *message = processMessageQueuePop();
   ProcessMessage *firstMessage = message;
   while (message != NULL) {
-    ConsoleCommand messageType = (ConsoleCommand) processMessageType(message);
+    ConsoleCommand messageType
+      = (ConsoleCommand) (processMessageType(message) & 0xff);
     if (messageType >= NUM_CONSOLE_COMMANDS) {
       // Invalid.
       printInt(getRunningPid());
