@@ -1124,7 +1124,8 @@ int printConsoleValue(ConsoleValueType valueType, void *value, size_t length) {
 
   printDebugString("Sending message to console process.\n");
   if (initSendProcessMessageToPid(SCHEDULER_STATE->consolePid,
-    CONSOLE_WRITE_VALUE, (void*) message, (size_t) valueType, false) == NULL
+    CONSOLE_COMMAND_SIGNATURE | CONSOLE_WRITE_VALUE,
+    (void*) message, (size_t) valueType, false) == NULL
   ) {
     printString(
       "ERROR: Could not send CONSOLE_WRITE_VALUE message to console process\n");
