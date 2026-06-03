@@ -58,6 +58,19 @@ extern "C"
 /// command.  "\0CONSOLE" as a little-endian value.
 #define CONSOLE_COMMAND_SIGNATURE ((int64_t) 0x454C4F534E4F4300)
 
+// Forward declarations.
+typedef struct ConsoleBuffer ConsoleBuffer;
+
+/// @struct ConsoleGetBufferArgs
+///
+/// @brief Arguments and return value for the CONSOLE_GET_BUFFER command.
+///
+/// @param returnValue Pointer to the ConsoleBuffer provided by the console
+///   process.
+typedef struct ConsoleGetBufferArgs {
+  ConsoleBuffer *returnValue;
+} ConsoleGetBufferArgs;
+
 /// @struct ConsoleGetNumPortsArgs
 ///
 /// @brief Arguments and return value for the CONSOLE_GET_NUM_PORTS command.
@@ -91,7 +104,6 @@ typedef enum ConsoleCommandResponse {
   CONSOLE_GET_NUM_PORTS,
   NUM_CONSOLE_COMMANDS,
   // Responses:
-  CONSOLE_RETURNING_BUFFER,
   CONSOLE_RETURNING_INPUT,
 } ConsoleCommand;
 

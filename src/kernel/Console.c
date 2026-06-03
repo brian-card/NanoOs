@@ -301,17 +301,13 @@ void consoleGetBufferCommandHandler(
   ConsoleState *consoleState, ProcessMessage *inputMessage
 ) {
   // We're going to reuse the input message as the return message.
-  ProcessMessage *returnMessage = inputMessage;
-  processMessageData(returnMessage) = NULL;
+  ConsoleGetBufferArgs *consoleGetBufferArgs
+    = (ConsoleGetBufferArgs*) processMessageData(inputMessage);
   ProcessId callingPid = processPid(processMessageFrom(inputMessage));
 
-  ConsoleBuffer *returnValue
+  consoleGetBufferArgs->returnValue
     = getAvailableConsoleBuffer(consoleState, callingPid);
-  if (returnValue != NULL) {
-    // Send the buffer back to the caller via the message we allocated earlier.
-    processMessageInit(returnMessage, CONSOLE_RETURNING_BUFFER,
-      returnValue, sizeof(*returnValue), true);
-
+  if (consoleGetBufferArgs->returnValue != NULL) {
     // Mark the input message handled.  This is a synchronous call and the
     // caller is waiting on our response, so *DO NOT* release it.  The caller
     // is responsible for releasing it when they've received the response.

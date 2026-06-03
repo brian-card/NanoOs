@@ -997,14 +997,18 @@ int nanoOsScanf(const char *format, ...) {
 /// @return Returns a pointer to a ConsoleBuffer from the runConsole process on
 /// success, NULL on failure.
 ConsoleBuffer* nanoOsGetBuffer(void) {
-  ConsoleBuffer *returnValue = NULL;
+  ConsoleGetBufferArgs consoleGetBufferArgs = {
+    .returnValue = NULL,
+  };
 
   // It's possible that all the nanoOs buffers are in use at the time this call
   // is made, so we may have to try multiple times.  Do a while loop until we
   // get a buffer back or until an error occurs.
-  while (returnValue == NULL) {
+  while (consoleGetBufferArgs.returnValue == NULL) {
     ProcessMessage *processMessage = initSendProcessMessageToPid(
-      SCHEDULER_STATE->consolePid, CONSOLE_GET_BUFFER, 0, 0, true);
+      SCHEDULER_STATE->consolePid,
+      CONSOLE_COMMAND_SIGNATURE | CONSOLE_GET_BUFFER,
+      &consoleGetBufferArgs, sizeof(consoleGetBufferArgs), true);
     if (processMessage == NULL) {
       break; // will return returnValue, which is NULL
     }
@@ -1017,16 +1021,15 @@ ConsoleBuffer* nanoOsGetBuffer(void) {
       break; // will return returnValue, which is NULL
     }
 
-    returnValue = (ConsoleBuffer*) processMessageData(processMessage);
     processMessageRelease(processMessage);
-    if (returnValue == NULL) {
+    if (consoleGetBufferArgs.returnValue == NULL) {
       // Yield control to give the OS a chance to get done processing the
       // buffers that are in use.
       processYield();
     }
   }
 
-  return returnValue;
+  return consoleGetBufferArgs.returnValue;
 }
 
 /// @fn int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *nanoOsBuffer)
