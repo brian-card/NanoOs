@@ -61,16 +61,15 @@ extern "C"
 // Forward declarations.
 typedef struct ConsoleBuffer ConsoleBuffer;
 
-/// @struct ConsoleBufferArgs
+/// @struct ConsoleGetBufferArgs
 ///
-/// @brief Arguments and return value for the CONSOLE_GET_BUFFER and
-/// CONSOLE_WRITE_BUFFER commands.
+/// @brief Arguments and return value for the CONSOLE_GET_BUFFER command.
 ///
 /// @param consoleBuffer Pointer to the ConsoleBuffer provided by the console
 ///   process.
-typedef struct ConsoleBufferArgs {
+typedef struct ConsoleGetBufferArgs {
   ConsoleBuffer *consoleBuffer;
-} ConsoleBufferArgs;
+} ConsoleGetBufferArgs;
 
 /// @struct ConsoleGetNumPortsArgs
 ///
