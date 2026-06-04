@@ -335,8 +335,6 @@ void consoleGetBufferCommandHandler(
 void consoleWriteBufferCommandHandler(
   ConsoleState *consoleState, ProcessMessage *inputMessage
 ) {
-  (void) consoleState;
-
   ConsoleBuffer *consoleBuffer
     = (ConsoleBuffer*) processMessageData(inputMessage);
   if (consoleBuffer != NULL) {
