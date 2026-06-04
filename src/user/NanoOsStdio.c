@@ -854,7 +854,7 @@ int sscanf(const char *buffer, const char *format, ...) {
 /// @return Returns a pointer to the input retrieved on success, NULL on
 /// failure.
 ConsoleBuffer* nanoOsWaitForInput(void) {
-  ConsoleBuffer *nanoOsBuffer = NULL;
+  ConsoleBuffer *consoleBuffer = NULL;
   FileDescriptor *inputFd = schedulerGetFileDescriptor(stdin);
   if (inputFd == NULL) {
     printString("ERROR: Could not get input file descriptor for process ");
@@ -864,7 +864,7 @@ ConsoleBuffer* nanoOsWaitForInput(void) {
     printString(".\n");
 
     // We can't proceed, so bail.
-    return nanoOsBuffer; // NULL
+    return consoleBuffer; // NULL
   }
   IoChannel *inputChannel = &inputFd->inputChannel;
 
@@ -878,7 +878,7 @@ ConsoleBuffer* nanoOsWaitForInput(void) {
   if (inputChannel->pid != PROCESS_ID_NOT_SET) {
     ProcessMessage *response
       = processMessageQueueWaitForType(CONSOLE_RETURNING_INPUT, NULL);
-    nanoOsBuffer = (ConsoleBuffer*) processMessageData(response);
+    consoleBuffer = (ConsoleBuffer*) processMessageData(response);
 
     if (processMessageWaiting(response) == false) {
       // The usual case.
@@ -889,7 +889,7 @@ ConsoleBuffer* nanoOsWaitForInput(void) {
     }
   }
 
-  return nanoOsBuffer;
+  return consoleBuffer;
 }
 
 /// @fn char *nanoOsFgets(char *buffer, int size, FILE *stream)
@@ -932,16 +932,16 @@ int nanoOsVfscanf(FILE *stream, const char *format, va_list args) {
   int returnValue = EOF;
 
   if (stream == stdin) {
-    ConsoleBuffer *nanoOsBuffer = nanoOsWaitForInput();
-    if (nanoOsBuffer == NULL) {
+    ConsoleBuffer *consoleBuffer = nanoOsWaitForInput();
+    if (consoleBuffer == NULL) {
       return returnValue; // EOF
     }
 
-    returnValue = vsscanf(nanoOsBuffer->buffer, format, args);
+    returnValue = vsscanf(consoleBuffer->buffer, format, args);
     // Release the buffer.  Fire and forget.
     (void) initSendProcessMessageToPid(
       SCHEDULER_STATE->consolePid, CONSOLE_RELEASE_BUFFER,
-      /* data= */ nanoOsBuffer, /* size= */ sizeof(*nanoOsBuffer), false);
+      /* data= */ consoleBuffer, /* size= */ sizeof(*consoleBuffer), false);
   }
 
   return returnValue;
@@ -1032,17 +1032,17 @@ ConsoleBuffer* nanoOsGetBuffer(void) {
   return consoleGetBufferArgs.consoleBuffer;
 }
 
-/// @fn int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *nanoOsBuffer)
+/// @fn int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *consoleBuffer)
 ///
 /// @brief Send a CONSOLE_WRITE_BUFFER command to the nanoOs process.
 ///
 /// @param stream A pointer to a FILE object designating which file to output
 ///   to (stdout or stderr).
-/// @param nanoOsBuffer A pointer to a ConsoleBuffer previously returned from
+/// @param consoleBuffer A pointer to a ConsoleBuffer previously returned from
 ///   a call to nanoOsGetBuffer.
 ///
 /// @return Returns 0 on success, EOF on failure.
-int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *nanoOsBuffer) {
+int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *consoleBuffer) {
   int returnValue = 0;
   if ((stream == stdout) || (stream == stderr)) {
     FileDescriptor *outputFd = schedulerGetFileDescriptor(stream);
@@ -1057,7 +1057,7 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *nanoOsBuffer) {
       // Release the buffer to avoid creating a leak.  Fire and forget.
       (void) initSendProcessMessageToPid(
         SCHEDULER_STATE->consolePid, CONSOLE_RELEASE_BUFFER,
-        /* data= */ nanoOsBuffer, /* size= */ sizeof(*nanoOsBuffer), false);
+        /* data= */ consoleBuffer, /* size= */ sizeof(*consoleBuffer), false);
 
       // We can't proceed, so bail.
       returnValue = EOF;
@@ -1068,8 +1068,9 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *nanoOsBuffer) {
     if ((outputChannel != NULL) && (outputChannel->pid != PROCESS_ID_NOT_SET)) {
       if ((stream == stdout) || (stream == stderr)) {
         ProcessMessage *processMessage = initSendProcessMessageToPid(
-          outputChannel->pid, outputChannel->messageType,
-          /* data= */ nanoOsBuffer, /* size= */ sizeof(*nanoOsBuffer), true);
+          outputChannel->pid,
+          CONSOLE_COMMAND_SIGNATURE | outputChannel->messageType,
+          /* data= */ consoleBuffer, /* size= */ sizeof(*consoleBuffer), true);
         if (processMessage != NULL) {
           processMessageWaitForDone(processMessage, NULL);
           processMessageRelease(processMessage);
@@ -1086,7 +1087,7 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *nanoOsBuffer) {
         // Release the buffer to avoid creating a leak.  Fire and forget.
         (void) initSendProcessMessageToPid(
           SCHEDULER_STATE->consolePid, CONSOLE_RELEASE_BUFFER,
-          /* data= */ nanoOsBuffer, /* size= */ sizeof(*nanoOsBuffer), false);
+          /* data= */ consoleBuffer, /* size= */ sizeof(*consoleBuffer), false);
 
         returnValue = EOF;
       }
@@ -1099,7 +1100,7 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *nanoOsBuffer) {
       // Release the buffer to avoid creating a leak.  Fire and forget.
       (void) initSendProcessMessageToPid(
         SCHEDULER_STATE->consolePid, CONSOLE_RELEASE_BUFFER,
-        /* data= */ nanoOsBuffer, /* size= */ sizeof(*nanoOsBuffer), false);
+        /* data= */ consoleBuffer, /* size= */ sizeof(*consoleBuffer), false);
 
       returnValue = EOF;
     }
@@ -1107,8 +1108,8 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *nanoOsBuffer) {
     // stream is a regular FILE.
     FilesystemIoCommandArgs filesystemIoCommandArgs = {
       .file = stream,
-      .buffer = nanoOsBuffer->buffer,
-      .length = (uint32_t) strlen(nanoOsBuffer->buffer)
+      .buffer = consoleBuffer->buffer,
+      .length = (uint32_t) strlen(consoleBuffer->buffer)
     };
     ProcessMessage *processMessage = initSendProcessMessageToPid(
       SCHEDULER_STATE->rootFsPid,
@@ -1125,7 +1126,7 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *nanoOsBuffer) {
     // Release the buffer to avoid creating a leak.  Fire and forget.
     (void) initSendProcessMessageToPid(
       SCHEDULER_STATE->consolePid, CONSOLE_RELEASE_BUFFER,
-      /* data= */ nanoOsBuffer, /* size= */ sizeof(*nanoOsBuffer), false);
+      /* data= */ consoleBuffer, /* size= */ sizeof(*consoleBuffer), false);
   }
 
   return returnValue;
@@ -1167,15 +1168,15 @@ int nanoOsFputs(const char *s, FILE *stream) {
 /// @return Returns the number of bytes printed on success, -1 on error.
 int nanoOsVfprintf(FILE *stream, const char *format, va_list args) {
   int returnValue = -1;
-  ConsoleBuffer *nanoOsBuffer = nanoOsGetBuffer();
-  if (nanoOsBuffer == NULL) {
+  ConsoleBuffer *consoleBuffer = nanoOsGetBuffer();
+  if (consoleBuffer == NULL) {
     // Nothing we can do.
     return returnValue;
   }
 
   returnValue
-    = vsnprintf(nanoOsBuffer->buffer, CONSOLE_BUFFER_SIZE, format, args);
-  if (nanoOsWriteBuffer(stream, nanoOsBuffer) == EOF) {
+    = vsnprintf(consoleBuffer->buffer, CONSOLE_BUFFER_SIZE, format, args);
+  if (nanoOsWriteBuffer(stream, consoleBuffer) == EOF) {
     returnValue = -1;
   }
 
@@ -1264,7 +1265,7 @@ int nanoOsFileno(FILE *stream) {
 size_t nanoOsFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   size_t returnValue = 0;
   char *charBuffer = (char*) ptr;
-  ConsoleBuffer *nanoOsBuffer
+  ConsoleBuffer *consoleBuffer
     = (ConsoleBuffer*) getProcessStorage(FGETS_CONSOLE_BUFFER_KEY);
   size_t numBytesReceived = 0;
   char *newlineAt = NULL;
@@ -1280,19 +1281,19 @@ size_t nanoOsFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     // 2. We read a newline.
     // 3. We read an escape sequence.
     // 4. We reach bufferSize - 1 bytes received from the stream.
-    if (nanoOsBuffer == NULL) {
-      nanoOsBuffer = nanoOsWaitForInput();
-      setProcessStorage(FGETS_CONSOLE_BUFFER_KEY, nanoOsBuffer);
+    if (consoleBuffer == NULL) {
+      consoleBuffer = nanoOsWaitForInput();
+      setProcessStorage(FGETS_CONSOLE_BUFFER_KEY, consoleBuffer);
     } else {
       // We're continuing to read from a buffer that contained a newline plus
       // something else after it.
-      newlineAt = strchr(nanoOsBuffer->buffer, ASCII_NEWLINE);
+      newlineAt = strchr(consoleBuffer->buffer, ASCII_NEWLINE);
       if (newlineAt == NULL) {
-        newlineAt = strchr(nanoOsBuffer->buffer, ASCII_RETURN);
+        newlineAt = strchr(consoleBuffer->buffer, ASCII_RETURN);
       }
       if (newlineAt != NULL) {
         bufferIndex = (((uintptr_t) newlineAt)
-          - ((uintptr_t) nanoOsBuffer->buffer)) + 1;
+          - ((uintptr_t) consoleBuffer->buffer)) + 1;
       } else {
         // This should be impossible given the algorithm below, but assume
         // nothing.
@@ -1300,49 +1301,49 @@ size_t nanoOsFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     }
 
     while (
-      (nanoOsBuffer != NULL)
+      (consoleBuffer != NULL)
       && (newlineAt == NULL)
       && (numBytesReceived < bufferSize)
     ) {
-      newlineAt = strchr(&nanoOsBuffer->buffer[bufferIndex], '\n');
+      newlineAt = strchr(&consoleBuffer->buffer[bufferIndex], '\n');
       if (newlineAt == NULL) {
-        newlineAt = strchr(nanoOsBuffer->buffer, '\r');
+        newlineAt = strchr(consoleBuffer->buffer, '\r');
       }
 
       if ((newlineAt == NULL) || (newlineAt[1] == '\0')) {
         // The usual case.
-        nanoOsInputLength = (int) strlen(&nanoOsBuffer->buffer[bufferIndex]);
+        nanoOsInputLength = (int) strlen(&consoleBuffer->buffer[bufferIndex]);
       } else {
         // We've received a buffer that contains a newline plus something after
         // it.  Copy everything up to and including the newline.  Return what
         // we copy and leave the pointer alone so that it's picked up on the
         // next call.
         nanoOsInputLength = (int) (((uintptr_t) newlineAt)
-          - ((uintptr_t) &nanoOsBuffer->buffer[bufferIndex]));
+          - ((uintptr_t) &consoleBuffer->buffer[bufferIndex]));
       }
 
       numBytesToCopy
         = MIN((bufferSize - numBytesReceived), nanoOsInputLength);
-      memcpy(&charBuffer[numBytesReceived], &nanoOsBuffer->buffer[bufferIndex],
+      memcpy(&charBuffer[numBytesReceived], &consoleBuffer->buffer[bufferIndex],
         numBytesToCopy);
       numBytesReceived += numBytesToCopy;
       charBuffer[numBytesReceived] = '\0';
       // Release the buffer.  Fire and forget.
       (void) initSendProcessMessageToPid(
         SCHEDULER_STATE->consolePid, CONSOLE_RELEASE_BUFFER,
-        /* data= */ nanoOsBuffer, /* size= */ sizeof(*nanoOsBuffer), false);
+        /* data= */ consoleBuffer, /* size= */ sizeof(*consoleBuffer), false);
 
-      if ((newlineAt != NULL) || (strchr(nanoOsBuffer->buffer, ASCII_ESCAPE))) {
+      if ((newlineAt != NULL) || (strchr(consoleBuffer->buffer, ASCII_ESCAPE))) {
         // We've reached one of the stop cases, so we're not going to attempt
         // to receive any more data from the file descriptor.
-        nanoOsBuffer = NULL;
+        consoleBuffer = NULL;
       } else {
         // There was no newline in this message.  We need to get another one.
-        nanoOsBuffer = nanoOsWaitForInput();
+        consoleBuffer = nanoOsWaitForInput();
         bufferIndex = 0;
       }
 
-      setProcessStorage(FGETS_CONSOLE_BUFFER_KEY, nanoOsBuffer);
+      setProcessStorage(FGETS_CONSOLE_BUFFER_KEY, consoleBuffer);
     }
     returnValue = numBytesReceived;
   } else {
@@ -1372,16 +1373,16 @@ size_t nanoOsFwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream) {
   const char *charPointer = (const char*) ptr;
 
   while (bytesRemaining > 0) {
-    ConsoleBuffer *nanoOsBuffer = nanoOsGetBuffer();
-    if (nanoOsBuffer == NULL) {
+    ConsoleBuffer *consoleBuffer = nanoOsGetBuffer();
+    if (consoleBuffer == NULL) {
       // Nothing we can do.  Return what we've written so far.
       return bytesWritten / size;
     }
 
     size_t bytesToCopy = MIN(bytesRemaining, CONSOLE_BUFFER_SIZE - 1);
-    memcpy(nanoOsBuffer->buffer, charPointer, bytesToCopy);
-    nanoOsBuffer->buffer[bytesToCopy] = '\0';
-    if (nanoOsWriteBuffer(stream, nanoOsBuffer) == 0) {
+    memcpy(consoleBuffer->buffer, charPointer, bytesToCopy);
+    consoleBuffer->buffer[bytesToCopy] = '\0';
+    if (nanoOsWriteBuffer(stream, consoleBuffer) == 0) {
       bytesWritten += bytesToCopy;
       charPointer += bytesToCopy;
       bytesRemaining -= bytesToCopy;
