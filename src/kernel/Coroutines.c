@@ -1176,6 +1176,23 @@ int coroutineCreate(Coroutine **coroutine, CoroutineFunction func, void *arg) {
 ///
 /// @return This function returns no value and, in fact, never returns.
 void coroutineMain(void *stack) {
+  uint64_t endOfStack = COROUTINE_STACK_END_VALUE;
+  Coroutine* idle = _globalIdle;
+#ifdef THREAD_SAFE_COROUTINES
+  if (_coroutineThreadingSupportEnabled) {
+    idle = (Coroutine*) tss_get(_tssIdle);
+  }
+#endif
+  if (idle == NULL) {
+    idle = _globalFirst;
+#ifdef THREAD_SAFE_COROUTINES
+    if (_coroutineThreadingSupportEnabled) {
+      idle = tss_get(_tssFirst);
+    }
+#endif
+  }
+  idle->endOfStack = &endOfStack;
+
   ZEROINIT(Coroutine me);
   me.guard1 = COROUTINE_GUARD_VALUE;
   me.guard2 = COROUTINE_GUARD_VALUE;
@@ -2441,6 +2458,21 @@ bool coroutineDeadlocked(Coroutine *coroutine) {
   }
 
   return returnValue;
+}
+
+/// @fn bool coroutineStackOverflowed(Coroutine *coroutine)
+///
+/// @brief Determine whether or not a coroutine has overflowed its stack.
+///
+/// @param coroutine A pointer to the coroutine to examine.
+///
+/// @return Returns true if stack overflow is detected, false if not.
+bool coroutineStackOverflowed(Coroutine *coroutine) {
+  if ((coroutine == NULL) || (coroutine->endOfStack == NULL)) {
+    return false;
+  }
+
+  return *coroutine->endOfStack != COROUTINE_STACK_END_VALUE;
 }
 
 /// @fn int comessageQueueCreate(Coroutine *coroutine)

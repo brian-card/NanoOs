@@ -84,6 +84,12 @@ extern "C"
 /// attempted.
 #define COROUTINE_GUARD_VALUE 0x4abc4abc
 
+/// @def COROUTINE_STACK_END_VALUE
+///
+/// @brief The value to set at the end of a coroutine's stack so that we can
+/// detect stack overflow.
+#define COROUTINE_STACK_END_VALUE ((uint64_t) 0x444E454B43415453)
+
 /// @def COROUTINE_STACK_CHUNK_SIZE
 ///
 /// @brief The size of a single chunk of the stack allocated by
@@ -184,6 +190,8 @@ typedef union CoroutineFuncData {
 ///   is currently waiting to lock.
 /// @param blockingCocondition A pointer to a condition (Cocondition) that the
 ///   coroutine is currently waiting on to be signalled.
+/// @param endOfStack A pointer to a uint64_t that marks the end of the stack
+///   for this coroutine.
 /// @param guard2 A well-known value to check for state corruption (stack
 ///   overflow).
 typedef struct Coroutine {
@@ -201,6 +209,7 @@ typedef struct Coroutine {
   msg_q_t messageQueue;
   Comutex *blockingComutex;
   Cocondition *blockingCocondition;
+  uint64_t *endOfStack;
   uint32_t guard2;
 } Coroutine, coro_s, *coro_t;
 
@@ -316,6 +325,7 @@ int coroutineTerminate(Coroutine *targetCoroutine, Comutex **mutexes,
   bool keepMessageQueue);
 Coroutine* getRunningCoroutine(void);
 bool coroutineDeadlocked(Coroutine *coroutine);
+bool coroutineStackOverflowed(Coroutine *coroutine);
 
 
 // Message queue functions
