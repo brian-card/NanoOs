@@ -209,7 +209,7 @@ typedef struct Coroutine {
   msg_q_t messageQueue;
   Comutex *blockingComutex;
   Cocondition *blockingCocondition;
-  const uint64_t *stackEnd;
+  uint64_t *stackEnd;
   uint32_t guard2;
 } Coroutine, coro_s, *coro_t;
 
@@ -326,8 +326,8 @@ int coroutineTerminate(Coroutine *targetCoroutine, Comutex **mutexes,
 Coroutine* getRunningCoroutine(void);
 bool coroutineDeadlocked(Coroutine *coroutine);
 bool coroutineStackOverflowed(Coroutine *coroutine);
-const uint64_t *coroutineStackEnd(Coroutine *coroutine);
-int coroutineSetStackEnd(Coroutine *coroutine, const uint64_t *stackEnd);
+uint64_t *coroutineStackEnd(Coroutine *coroutine);
+int coroutineSetStackEnd(Coroutine *coroutine, uint64_t *stackEnd);
 
 
 // Message queue functions
