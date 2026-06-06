@@ -126,6 +126,18 @@ extern "C"
 /// @brief Configure the threads library.
 #define threadsConfig(first, options) coroutinesConfig(first, options)
 
+/// @def threadStackEnd
+///
+/// @brief Get the address of the end of a thread's stack.
+#define threadStackEnd(thread) coroutineStackEnd(thread)
+
+/// @def threadSetStackEnd
+///
+/// @brief Set the end address of a thread's stack to the end address of an
+/// adjoining thread's stack.
+#define threadSetStackEnd(thread, stackEnd) \
+  coroutineSetStackEnd(thread, stackEnd)
+
 /// @def processCorrupted
 ///
 /// @brief Determine whether or not a process has become corrupted.
@@ -280,6 +292,7 @@ extern "C"
 #define processMessageConfigured(processMessagePointer) \
   msg_configured(processMessagePointer)
 
+typedef Coroutine Thread;
 typedef CoroutinesConfigOptions ThreadsConfigOptions;
 
 // Exported functionality
