@@ -132,6 +132,12 @@ extern "C"
 #define processCorrupted(processDescriptor) \
   coroutineCorrupted((processDescriptor)->mainThread)
 
+/// @def processStackOverflowed
+///
+/// @brief Determine whether or not a process has overflowed its stack.
+#define processStackOverflowed(processDescriptor) \
+  coroutineStackOverflowed((processDescriptor)->mainThread)
+
 /// @def processRunning
 ///
 /// @brief Function macro to determine whether or not a given process is
