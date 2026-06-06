@@ -1047,7 +1047,8 @@ void* runConsole(void *args) {
             = '\0';
           consolePort->consoleBufferIndex = 0;
           if (initSendProcessMessageToPid(
-            consolePort->inputOwner, CONSOLE_RETURNING_INPUT,
+            consolePort->inputOwner,
+            CONSOLE_COMMAND_SIGNATURE | CONSOLE_RETURNING_INPUT,
             consolePort->consoleBuffer, sizeof(ConsoleBuffer), false) == NULL
           ) {
             printString(

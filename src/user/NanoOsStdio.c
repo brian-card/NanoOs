@@ -878,7 +878,8 @@ ConsoleBuffer* nanoOsWaitForInput(void) {
 
   if (inputChannel->pid != PROCESS_ID_NOT_SET) {
     ProcessMessage *response
-      = processMessageQueueWaitForType(CONSOLE_RETURNING_INPUT, NULL);
+      = processMessageQueueWaitForType(
+      CONSOLE_COMMAND_SIGNATURE | CONSOLE_RETURNING_INPUT, NULL);
     consoleBuffer = (ConsoleBuffer*) processMessageData(response);
 
     if (processMessageWaiting(response) == false) {
