@@ -1176,7 +1176,7 @@ int coroutineCreate(Coroutine **coroutine, CoroutineFunction func, void *arg) {
 ///
 /// @return This function returns no value and, in fact, never returns.
 void coroutineMain(void *stack) {
-  uint64_t endOfStack = COROUTINE_STACK_END_VALUE;
+  uint64_t stackEnd = COROUTINE_STACK_END_VALUE;
   Coroutine* idle = _globalIdle;
 #ifdef THREAD_SAFE_COROUTINES
   if (_coroutineThreadingSupportEnabled) {
@@ -1191,7 +1191,7 @@ void coroutineMain(void *stack) {
     }
 #endif
   }
-  idle->endOfStack = &endOfStack;
+  idle->stackEnd = &stackEnd;
 
   ZEROINIT(Coroutine me);
   me.guard1 = COROUTINE_GUARD_VALUE;
@@ -2468,11 +2468,52 @@ bool coroutineDeadlocked(Coroutine *coroutine) {
 ///
 /// @return Returns true if stack overflow is detected, false if not.
 bool coroutineStackOverflowed(Coroutine *coroutine) {
-  if ((coroutine == NULL) || (coroutine->endOfStack == NULL)) {
+  if ((coroutine == NULL) || (coroutine->stackEnd == NULL)) {
     return false;
   }
 
-  return *coroutine->endOfStack != COROUTINE_STACK_END_VALUE;
+  return *coroutine->stackEnd != COROUTINE_STACK_END_VALUE;
+}
+
+/// @fn const uint64_t *coroutineStackEnd(Coroutine *coroutine)
+///
+/// @brief Get the address of the end of a coroutine's stack.
+///
+/// @param coroutine A pointer to the coroutine to inquisition.
+/// 
+/// @return Returns a pointer to the end of the coroutine's stack on success,
+/// NULL on failure.
+const uint64_t *coroutineStackEnd(Coroutine *coroutine) {
+  if (coroutine == NULL) {
+    return NULL;
+  }
+
+  return coroutine->stackEnd;
+}
+
+/// @fn int coroutineSetStackEnd(Coroutine *coroutine, const uint64_t *stackEnd)
+///
+/// @brief Set the end address of a coroutine's stack.  This is to be used when
+/// joining two contiguous coroutines to form one stack.
+///
+/// @param coroutine The pointer of the coroutine whose stack end is to be set.
+/// @param stackEnd The pointer to the end of the stack of an adjoining
+///   coroutine to use as the end of the stack for the provided coroutine.
+///
+/// @return Returns coroutineSuccess on success, coroutineError on failure.
+int coroutineSetStackEnd(Coroutine *coroutine, const uint64_t *stackEnd) {
+  int returnValue = coroutineError;
+
+  if ((coroutine == NULL)
+    || (stackEnd == NULL) || (*stackEnd != COROUTINE_STACK_END_VALUE)
+  ) {
+    return returnValue; // coroutineError
+  }
+
+  coroutine->stackEnd = stackEnd;
+  returnValue = coroutineSuccess;
+
+  return returnValue;
 }
 
 /// @fn int comessageQueueCreate(Coroutine *coroutine)

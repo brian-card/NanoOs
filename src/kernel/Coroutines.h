@@ -190,7 +190,7 @@ typedef union CoroutineFuncData {
 ///   is currently waiting to lock.
 /// @param blockingCocondition A pointer to a condition (Cocondition) that the
 ///   coroutine is currently waiting on to be signalled.
-/// @param endOfStack A pointer to a uint64_t that marks the end of the stack
+/// @param stackEnd A pointer to a uint64_t that marks the end of the stack
 ///   for this coroutine.
 /// @param guard2 A well-known value to check for state corruption (stack
 ///   overflow).
@@ -209,7 +209,7 @@ typedef struct Coroutine {
   msg_q_t messageQueue;
   Comutex *blockingComutex;
   Cocondition *blockingCocondition;
-  uint64_t *endOfStack;
+  const uint64_t *stackEnd;
   uint32_t guard2;
 } Coroutine, coro_s, *coro_t;
 
@@ -326,6 +326,8 @@ int coroutineTerminate(Coroutine *targetCoroutine, Comutex **mutexes,
 Coroutine* getRunningCoroutine(void);
 bool coroutineDeadlocked(Coroutine *coroutine);
 bool coroutineStackOverflowed(Coroutine *coroutine);
+const uint64_t *coroutineStackEnd(Coroutine *coroutine);
+int coroutineSetStackEnd(Coroutine *coroutine, const uint64_t *stackEnd);
 
 
 // Message queue functions
