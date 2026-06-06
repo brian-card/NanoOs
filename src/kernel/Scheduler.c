@@ -3725,7 +3725,7 @@ __attribute__((noinline)) void startScheduler(
   printDebugString("Main stack size = ");
   printDebugInt(ABS_DIFF(
     ((intptr_t) schedulerThread),
-    ((intptr_t) threadStackEnd(allProcesses[0].mainThread))
+    ((intptr_t) threadStackEnd(schedulerThread))
   ));
   printDebugString(" bytes\n");
   printDebugString("schedulerState size = ");
