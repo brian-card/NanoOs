@@ -3399,8 +3399,10 @@ void runScheduler(void) {
   // yieldCallback if we're running preemptive multiprocessing.
 
   if (processStackOverflowed(processDescriptor)) {
-    removeProcess(processDescriptor, "Stack overflow detected");
-    goto exit;
+    processTerminate(processDescriptor, false);
+    threadSetContext(processDescriptor->mainThread, processDescriptor);
+    memset(&processDescriptor->message, 0, sizeof(ProcessMessage));
+    processResetStack(processDescriptor);
   }
 
   if (processRunning(processDescriptor) == false) {
