@@ -262,8 +262,15 @@ void nanoOsStart(void) {
   }
   // Create but *DO NOT* resume one dummy process.  This will set the size of
   // the main stack.
-  if (threadProvision(NULL, dummyProcess, NULL) == NULL) {
-    printString("Could not set scheduler process's stack size.\n");
+  Thread *thread = threadProvision(NULL, dummyProcess, NULL);
+  if (thread != NULL) {
+    if (threadSetStackEnd(
+      &_mainThread, threadStackEnd(thread)) != processSuccess
+    ) {
+      printString("Could not set scheduler process's stack size.\n");
+    }
+  } else {
+    printString("Could not increase scheduler process's stack size.\n");
   }
 
   printDebugString("Extending scheduler stack.\n");
@@ -271,8 +278,15 @@ void nanoOsStart(void) {
     ii < HAL->memory->numExtraSchedulerStacks(USE_HAL_MEMORY_DEBUG);
     ii++
   ) {
-    if (threadProvision(NULL, dummyProcess, NULL) == NULL) {
+    thread = threadProvision(NULL, dummyProcess, NULL);
+    if (thread == NULL) {
       printString("Could not increase scheduler process's stack size.\n");
+      break;
+    }
+    if (threadSetStackEnd(
+      &_mainThread, threadStackEnd(thread)) != processSuccess
+    ) {
+      printString("Could not set scheduler process's stack size.\n");
     }
   }
 
