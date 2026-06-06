@@ -66,3 +66,5 @@ This work started out as an experiment to see if I could implement an operating 
 
 [2026-05-19: Refactoring and Stabilization](2026-05-19_Refactoring-and-Stabilization.md)
 
+[2026-06-06: Signals, Signatures, and Stack Overflows](2026-06-06_Signals-Signatures-and-Stack-Overflows.md)
+
