@@ -2471,7 +2471,7 @@ bool coroutineStackOverflowed(Coroutine *coroutine) {
 /// @brief Get the address of the end of a coroutine's stack.
 ///
 /// @param coroutine A pointer to the coroutine to inquisition.
-/// 
+///
 /// @return Returns a pointer to the end of the coroutine's stack on success,
 /// NULL on failure.
 const uint64_t *coroutineStackEnd(Coroutine *coroutine) {
