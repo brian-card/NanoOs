@@ -787,7 +787,7 @@ const ConsoleCommandHandler consoleCommandHandlers[] = {
   consoleReleasePortCommandHandler,     // CONSOLE_RELEASE_PORT
   consoleGetOwnedPortCommandHandler,    // CONSOLE_GET_OWNED_PORT
   consoleGetEchoCommandHandler,         // CONSOLE_GET_ECHO,
-  consoleSetEchoCommandHandler,         // CONSOLE_SET_ECHO_PORT
+  consoleSetEchoCommandHandler,         // CONSOLE_SET_ECHO
   consoleWaitForInputCommandHandler,    // CONSOLE_WAIT_FOR_INPUT
   consoleReleasePidPortCommandHandler,  // CONSOLE_RELEASE_PID_PORT
   consoleReleaseBufferCommandHandler,   // CONSOLE_RELEASE_BUFFER
@@ -1253,7 +1253,7 @@ bool getConsoleEcho(void) {
 /// ports, -1 on failure.
 int setConsoleEcho(bool desiredEchoState) {
   ProcessMessage *sent = initSendProcessMessageToPid(
-    SCHEDULER_STATE->consolePid, CONSOLE_SET_ECHO_PORT,
+    SCHEDULER_STATE->consolePid, CONSOLE_SET_ECHO,
     /* data= */ (void*) ((uintptr_t) desiredEchoState), /* size= */ 0,
     /* waiting= */ true);
 
