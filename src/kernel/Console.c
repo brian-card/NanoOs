@@ -1188,7 +1188,8 @@ void releaseConsole(void) {
   // from this function.  i.e. We can't use printf here.  Use printConsole
   // instead.
   if (initSendProcessMessageToPid(SCHEDULER_STATE->consolePid,
-    CONSOLE_RELEASE_PORT, /* data= */ 0, /* size= */ 0, false) == NULL
+    CONSOLE_COMMAND_SIGNATURE | CONSOLE_RELEASE_PORT,
+    /* data= */ 0, /* size= */ 0, false) == NULL
   ) {
     printString("ERROR: Could not send CONSOLE_RELEASE_PORT message to "
       "console process\n");
