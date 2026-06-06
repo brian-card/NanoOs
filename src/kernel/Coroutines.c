@@ -269,13 +269,13 @@ Coroutine* coroutineGlobalPop(Coroutine** list) {
 /// @fn Coroutine* coroutineGlobalPopAndReplace(
 ///   Coroutine** list, Coroutine *newHead)
 ///
-/// @brief Remove a coroutine from a thread-specific storage list and return it.
+/// @brief Pop a coroutine from a global list and replace it.
 ///
 /// @param list The Coroutine list to pop from.
 /// @param newHead The new Coroutine to put at the top of the list.
 ///
-/// @return Returns a pointer to the provided Coroutine on success, NULL on
-/// failure.
+/// @return Returns a pointer to the previous top of the list on success,
+/// NULL on failure.
 Coroutine* coroutineGlobalPopAndReplace(Coroutine** list, Coroutine *newHead) {
   Coroutine *coroutine = NULL;
 
@@ -356,9 +356,14 @@ ZEROINIT(static tss_t _tssStackSize);
 /// @brief Thread-specific state data provided to the thread-specific callbacks.
 ZEROINIT(static tss_t _tssStateData);
 
+/// @var static tss_t _tssCoroutineResumeCallback
+///
+/// @brief Thread-specific callback to call right after a coroutine is resumed.
+ZEROINIT(static tss_t _tssCoroutineResumeCallback);
+
 /// @var static tss_t _tssCoroutineYieldCallback
 ///
-/// @brief Thread-specific callback to call when a cocondition is signalled.
+/// @brief Thread-specific callback to call right before a coroutine yields.
 ZEROINIT(static tss_t _tssCoroutineYieldCallback);
 
 /// @var static tss_t _tssComutexUnlockCallback
@@ -542,16 +547,16 @@ Coroutine* coroutineTssPop(tss_t* list) {
   return coroutine;
 }
 
-/// @fn Coroutine* coroutineTssPopAndReplace(tss_t* list, Coroutine *coroutine)
+/// @fn Coroutine* coroutineTssPopAndReplace(tss_t* list, Coroutine *newHead)
 ///
-/// @brief Remove a coroutine from a thread-specific storage list and return it.
+/// @brief Pop a coroutine from a thread-specific storage list and replace it.
 ///
 /// @param list The Coroutine list to pop from.
-/// @param coroutine The Coroutine to pop.
+/// @param newHead The new Coroutine to put at the top of the list.
 ///
-/// @return Returns a pointer to the provided Coroutine on success, NULL on
-/// failure.
-Coroutine* coroutineTssPopAndReplace(tss_t* list, Coroutine *coroutine) {
+/// @return Returns a pointer to the previous top of the list on success,
+/// NULL on failure.
+Coroutine* coroutineTssPopAndReplace(tss_t* list, Coroutine *newHead) {
   Coroutine *coroutine = NULL;
 
   if (list != NULL) {
@@ -573,7 +578,6 @@ Coroutine* coroutineTssPopAndReplace(tss_t* list, Coroutine *coroutine) {
           cur->nextInStack = coroutine->nextInStack;
           tss_set(*list, cur);
         } else {
-          *list = coroutine->nextInStack;
           tss_set(*list, coroutine->nextInStack);
         }
       }
@@ -1665,7 +1669,7 @@ int coroutinesConfig(Coroutine *first, CoroutinesConfigOptions *options) {
         free(tss_get(_tssCoroutineResumeCallback));
         CoroutineResumeCallback *coroutineResumeCallbackPointer
           = (CoroutineResumeCallback*) malloc(sizeof(CoroutineResumeCallback));
-        *coroutineResumeCallbackPointer = options->coroutineResumeCallback;
+        *coroutineResumeCallbackPointer = options->resumeCallback;
         tss_set(_tssCoroutineResumeCallback, coroutineResumeCallbackPointer);
       } else {
         tss_set(_tssCoroutineResumeCallback, NULL);
@@ -1675,7 +1679,7 @@ int coroutinesConfig(Coroutine *first, CoroutinesConfigOptions *options) {
         free(tss_get(_tssCoroutineYieldCallback));
         CoroutineYieldCallback *coroutineYieldCallbackPointer
           = (CoroutineYieldCallback*) malloc(sizeof(CoroutineYieldCallback));
-        *coroutineYieldCallbackPointer = options->coroutineYieldCallback;
+        *coroutineYieldCallbackPointer = options->yieldCallback;
         tss_set(_tssCoroutineYieldCallback, coroutineYieldCallbackPointer);
       } else {
         tss_set(_tssCoroutineYieldCallback, NULL);
@@ -1685,7 +1689,7 @@ int coroutinesConfig(Coroutine *first, CoroutinesConfigOptions *options) {
         free(tss_get(_tssComutexUnlockCallback));
         ComutexUnlockCallback *comutexUnlockCallbackPointer
           = (ComutexUnlockCallback*) malloc(sizeof(ComutexUnlockCallback));
-        *comutexUnlockCallbackPointer = options->comutexUnlockCallback;
+        *comutexUnlockCallbackPointer = options->unlockCallback;
         tss_set(_tssComutexUnlockCallback, comutexUnlockCallbackPointer);
       } else {
         tss_set(_tssComutexUnlockCallback, NULL);
@@ -1696,7 +1700,7 @@ int coroutinesConfig(Coroutine *first, CoroutinesConfigOptions *options) {
         CoconditionSignalCallback *coconditionSignalCallbackPointer
           = (CoconditionSignalCallback*)
             malloc(sizeof(CoconditionSignalCallback));
-        *coconditionSignalCallbackPointer = options->coconditionSignalCallback;
+        *coconditionSignalCallbackPointer = options->signalCallback;
         tss_set(_tssCoconditionSignalCallback,
           coconditionSignalCallbackPointer);
       } else {
