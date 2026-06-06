@@ -690,14 +690,15 @@ void consoleReleasePidPortCommandHandler(
     return;
   }
 
-  ProcessId owner = (ProcessId) ((intptr_t) processMessageData(inputMessage));
+  ConsoleReleasePidPortArgs *consoleReleasePidPortArgs
+    = (ConsoleReleasePidPortArgs*) processMessageData(inputMessage);
   ConsolePort *consolePorts = consoleState->consolePorts;
 
   for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
-    if (consolePorts[ii].inputOwner == owner) {
+    if (consolePorts[ii].inputOwner == consoleReleasePidPortArgs->processId) {
       consolePorts[ii].inputOwner = consolePorts[ii].shell;
     }
-    if (consolePorts[ii].outputOwner == owner) {
+    if (consolePorts[ii].outputOwner == consoleReleasePidPortArgs->processId) {
       consolePorts[ii].outputOwner = consolePorts[ii].shell;
     }
   }

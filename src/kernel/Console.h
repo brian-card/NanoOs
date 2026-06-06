@@ -39,6 +39,8 @@
 #include "stdbool.h"
 #include "stdint.h"
 
+#include "NanoOsTypes.h"
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -112,6 +114,15 @@ typedef struct ConsoleSetEchoArgs {
   bool desiredEchoState;
   int returnValue;
 } ConsoleSetEchoArgs;
+
+/// @struct ConsoleReleasePidPortArgs
+///
+/// @param Arguments and return value for the CONSOLE_RELEASE_PID_PORT command.
+///
+/// @param processId Process ID of the process to release the port of.
+typedef struct ConsoleReleasePidPortArgs {
+  ProcessId processId;
+} ConsoleReleasePidPortArgs;
 
 /// @enum ConsoleCommandResponse
 ///

@@ -1840,11 +1840,14 @@ int schedulerKillProcessCommandHandler(
         // the process because, in the event the process we're terminating is
         // one of the shell process slots, the message won't get released
         // because there's no shell blocking waiting for the message.
+        ConsoleReleasePidPortArgs consoleReleasePidPortArgs = {
+          .processId = pid,
+        };
         if (schedulerInitSendMessageToPid(
           SCHEDULER_STATE->consolePid,
           CONSOLE_RELEASE_PID_PORT,
-          /* data= */ (void*) ((intptr_t) pid),
-          /* size= */ 0) != processSuccess
+          /* data= */ &consoleReleasePidPortArgs,
+          /* size= */ sizeof(consoleReleasePidPortArgs)) != processSuccess
         ) {
           printString(
             "ERROR: Could not send CONSOLE_RELEASE_PID_PORT message ");
@@ -2974,11 +2977,14 @@ void removeProcess(
   processDescriptor->userId = NO_USER_ID;
   processDescriptor->mainThread->state = PROCESS_STATE_NOT_RUNNING;
 
+  ConsoleReleasePidPortArgs consoleReleasePidPortArgs = {
+    .processId = processDescriptor->processId,
+  };
   if (schedulerInitSendMessageToPid(
     SCHEDULER_STATE->consolePid,
     CONSOLE_RELEASE_PID_PORT,
-    /* data= */ (void*) ((intptr_t) processDescriptor->processId),
-    /* size= */ 0) != processSuccess
+    /* data= */ &consoleReleasePidPortArgs,
+    /* size= */ sizeof(consoleReleasePidPortArgs)) != processSuccess
   ) {
     printString("ERROR: Could not send CONSOLE_RELEASE_PID_PORT message ");
     printString("to console process\n");
