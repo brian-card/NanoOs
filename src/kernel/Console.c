@@ -604,24 +604,25 @@ void consoleGetEchoCommandHandler(
 void consoleSetEchoCommandHandler(
   ConsoleState *consoleState, ProcessMessage *inputMessage
 ) {
+  ConsoleSetEchoArgs *consoleSetEchoArgs
+    = (ConsoleSetEchoArgs*) processMessageData(inputMessage);
   ProcessId owner = processPid(processMessageFrom(inputMessage));
   ConsolePort *consolePorts = consoleState->consolePorts;
-  bool desiredEchoState = (bool) ((uintptr_t) processMessageData(inputMessage));
 
   bool portFound = false;
   for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
     if (consolePorts[ii].outputOwner == owner) {
-      consolePorts[ii].echo = desiredEchoState;
+      consolePorts[ii].echo = consoleSetEchoArgs->desiredEchoState;
       portFound = true;
     }
   }
 
-  processMessageData(inputMessage) = (void*) ((intptr_t) 0);
+  consoleSetEchoArgs->returnValue = 0;
   if (portFound == false) {
     printString("WARNING: Request to set echo from non-owning process ");
     printInt(owner);
     printString("\n");
-    processMessageData(inputMessage) = (void*) ((intptr_t) -1);
+    consoleSetEchoArgs->returnValue = -1;
   }
 
   processMessageSetDone(inputMessage);
@@ -1252,14 +1253,19 @@ bool getConsoleEcho(void) {
 /// @return Returns 0 if the echo state was set for the current process's
 /// ports, -1 on failure.
 int setConsoleEcho(bool desiredEchoState) {
+  ConsoleSetEchoArgs consoleSetEchoArgs = {
+    .desiredEchoState = desiredEchoState,
+    .returnValue = 0,
+  };
   ProcessMessage *sent = initSendProcessMessageToPid(
     SCHEDULER_STATE->consolePid, CONSOLE_SET_ECHO,
-    /* data= */ (void*) ((uintptr_t) desiredEchoState), /* size= */ 0,
+    /* data= */ &consoleSetEchoArgs,
+    /* size= */ sizeof(consoleSetEchoArgs),
     /* waiting= */ true);
 
   processMessageWaitForDone(sent, NULL);
 
-  int returnValue = (int) ((intptr_t) processMessageData(sent));
+  int returnValue = consoleSetEchoArgs.returnValue;
   processMessageRelease(sent);
 
   return returnValue;

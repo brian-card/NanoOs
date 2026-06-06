@@ -101,6 +101,18 @@ typedef struct ConsoleGetEchoArgs {
   bool echoing;
 } ConsoleGetEchoArgs;
 
+/// @struct ConsoleSetEchoArgs
+///
+/// @brief Arguments and return value for the CONSOLE_SET_ECHO command.
+///
+/// @param desiredEchoState The desired echo state for the port.
+/// @param returnValue The return value for the command from the console
+///   process.
+typedef struct ConsoleSetEchoArgs {
+  bool desiredEchoState;
+  int returnValue;
+} ConsoleSetEchoArgs;
+
 /// @enum ConsoleCommandResponse
 ///
 /// @brief The commands and responses that the console understands via
