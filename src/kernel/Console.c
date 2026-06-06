@@ -1184,8 +1184,8 @@ void releaseConsole(void) {
   if (initSendProcessMessageToPid(SCHEDULER_STATE->consolePid,
     CONSOLE_RELEASE_PORT, /* data= */ 0, /* size= */ 0, false) == NULL
   ) {
-    printString(
-      "ERROR: Could not send CONSOLE_RELEASE_PORT message to console process\n");
+    printString("ERROR: Could not send CONSOLE_RELEASE_PORT message to "
+      "console process\n");
   }
   processYield();
 }
