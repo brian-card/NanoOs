@@ -138,6 +138,14 @@ extern "C"
 #define threadSetStackEnd(thread, stackEnd) \
   coroutineSetStackEnd(thread, stackEnd)
 
+/// @def processResetStack
+///
+/// @brief Reset the stack of the main thread of a process back to a working
+/// state.
+#define processResetStack(processDescriptor) \
+  *coroutineStackEnd((processDescriptor)->mainThread) \
+    = COROUTINE_STACK_END_VALUE
+
 /// @def processCorrupted
 ///
 /// @brief Determine whether or not a process has become corrupted.
