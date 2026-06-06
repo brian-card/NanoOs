@@ -73,18 +73,6 @@ typedef struct ConsoleGetBufferArgs {
   ConsoleBuffer *consoleBuffer;
 } ConsoleGetBufferArgs;
 
-/// @struct ConsoleGetNumPortsArgs
-///
-/// @brief Arguments and return value for the CONSOLE_GET_NUM_PORTS command.
-///
-/// @param signature The 64-bit signature for console commands.  This should
-///   always be the value CONSOLE_COMMAND_SIGNATURE.
-/// @param numPorts The number of ports returned from the command.
-typedef struct ConsoleGetNumPortsArgs {
-  uint64_t signature;
-  int numPorts;
-} ConsoleGetNumPortsArgs;
-
 /// @struct ConsoleGetOwnedPortArgs
 ///
 /// @brief Arguments and return value for the CONSOLE_GET_OWNED_PORT command.
@@ -123,6 +111,15 @@ typedef struct ConsoleSetEchoArgs {
 typedef struct ConsoleReleasePidPortArgs {
   ProcessId processId;
 } ConsoleReleasePidPortArgs;
+
+/// @struct ConsoleGetNumPortsArgs
+///
+/// @brief Arguments and return value for the CONSOLE_GET_NUM_PORTS command.
+///
+/// @param numPorts The number of ports returned from the command.
+typedef struct ConsoleGetNumPortsArgs {
+  int numPorts;
+} ConsoleGetNumPortsArgs;
 
 /// @enum ConsoleCommandResponse
 ///

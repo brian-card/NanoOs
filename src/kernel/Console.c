@@ -756,15 +756,6 @@ void consoleGetNumPortsCommandHandler(
 ) {
   ConsoleGetNumPortsArgs *consoleGetNumPortsArgs
     = (ConsoleGetNumPortsArgs*) processMessageData(inputMessage);
-  if (consoleGetNumPortsArgs->signature != CONSOLE_COMMAND_SIGNATURE) {
-    printString(__func__);
-    printString(": ERROR: Received unrecognized signature 0x");
-    printHex(consoleGetNumPortsArgs->signature);
-    printString("\n");
-    // Don't attempt to set consoleGetNumPortsArgs->numPorts since we
-    // don't know what this is.
-    return;
-  }
   consoleGetNumPortsArgs->numPorts = consoleState->numConsolePorts;
   processMessageSetDone(inputMessage);
 
@@ -1281,11 +1272,11 @@ int setConsoleEcho(bool desiredEchoState) {
 /// @return Returns the number of ports running on success, -1 on failure.
 int getNumConsolePorts(void) {
   ConsoleGetNumPortsArgs consoleGetNumPortsArgs = {
-    .signature = CONSOLE_COMMAND_SIGNATURE,
     .numPorts = 0,
   };
   ProcessMessage *sent = initSendProcessMessageToPid(
-    SCHEDULER_STATE->consolePid, CONSOLE_GET_NUM_PORTS,
+    SCHEDULER_STATE->consolePid,
+    CONSOLE_COMMAND_SIGNATURE | CONSOLE_GET_NUM_PORTS,
     /* data= */ &consoleGetNumPortsArgs,
     /* size= */ sizeof(consoleGetNumPortsArgs),
     /* waiting= */ true);

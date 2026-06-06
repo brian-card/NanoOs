@@ -725,12 +725,11 @@ int schedulerGetNumConsolePorts(void) {
   int returnValue = -1;
 
   ConsoleGetNumPortsArgs consoleGetNumPortsArgs = {
-    .signature = CONSOLE_COMMAND_SIGNATURE,
     .numPorts = 0,
   };
   if (schedulerInitSendMessageToPid(
     SCHEDULER_STATE->consolePid,
-    CONSOLE_GET_NUM_PORTS,
+    CONSOLE_COMMAND_SIGNATURE | CONSOLE_GET_NUM_PORTS,
     /* data= */ &consoleGetNumPortsArgs,
     /* size= */ sizeof(consoleGetNumPortsArgs)) != processSuccess
   ) {
