@@ -3391,6 +3391,11 @@ void runScheduler(void) {
   // No need to call HAL->timer->cancel since that's called by
   // yieldCallback if we're running preemptive multiprocessing.
 
+  if (processStackOverflowed(processDescriptor)) {
+    removeProcess(processDescriptor, "Stack overflow detected");
+    goto exit;
+  }
+
   if (processRunning(processDescriptor) == false) {
     if (processDescriptor->envp != NULL) {
       if (assignMemory(processDescriptor->envp, 0) != 0) {
