@@ -1177,21 +1177,10 @@ int coroutineCreate(Coroutine **coroutine, CoroutineFunction func, void *arg) {
 /// @return This function returns no value and, in fact, never returns.
 void coroutineMain(void *stack) {
   uint64_t stackEnd = COROUTINE_STACK_END_VALUE;
-  Coroutine* idle = _globalIdle;
-#ifdef THREAD_SAFE_COROUTINES
-  if (_coroutineThreadingSupportEnabled) {
-    idle = (Coroutine*) tss_get(_tssIdle);
+  Coroutine *running = getRunningCoroutine();
+  if (running->stackEnd == NULL) {
+    running->stackEnd = &stackEnd;
   }
-#endif
-  if (idle == NULL) {
-    idle = _globalFirst;
-#ifdef THREAD_SAFE_COROUTINES
-    if (_coroutineThreadingSupportEnabled) {
-      idle = tss_get(_tssFirst);
-    }
-#endif
-  }
-  idle->stackEnd = &stackEnd;
 
   ZEROINIT(Coroutine me);
   me.guard1 = COROUTINE_GUARD_VALUE;
@@ -1224,7 +1213,7 @@ void coroutineMain(void *stack) {
   // we're about to set is for ourself.  The call to coroutineAllocateStack here
   // will allocate the next Coroutine on the idle list to be used in the next
   // call to the constructor.
-  Coroutine *running = getRunningCoroutine();
+  running = getRunningCoroutine();
   int stackSize = _globalStackSize;
 #ifdef THREAD_SAFE_COROUTINES
   if (_coroutineThreadingSupportEnabled) {
