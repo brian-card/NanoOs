@@ -1334,7 +1334,9 @@ size_t nanoOsFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
         SCHEDULER_STATE->consolePid, CONSOLE_RELEASE_BUFFER,
         /* data= */ consoleBuffer, /* size= */ sizeof(*consoleBuffer), false);
 
-      if ((newlineAt != NULL) || (strchr(consoleBuffer->buffer, ASCII_ESCAPE))) {
+      if ((newlineAt != NULL)
+        || (strchr(consoleBuffer->buffer, ASCII_ESCAPE))
+      ) {
         // We've reached one of the stop cases, so we're not going to attempt
         // to receive any more data from the file descriptor.
         consoleBuffer = NULL;
