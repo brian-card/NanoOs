@@ -1739,6 +1739,8 @@ int coroutinesConfig(Coroutine *first, CoroutinesConfigOptions *options) {
   // to by the first pointer), so by definition, it's running.  Mark it as
   // such.
   first->state = COROUTINE_STATE_RUNNING;
+  first->guard1 = COROUTINE_GUARD_VALUE;
+  first->guard2 = COROUTINE_GUARD_VALUE;
 
   _globalFirst = first;
   _globalRunning = first;
