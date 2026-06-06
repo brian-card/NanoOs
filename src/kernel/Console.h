@@ -83,6 +83,15 @@ typedef struct ConsoleGetNumPortsArgs {
   int numPorts;
 } ConsoleGetNumPortsArgs;
 
+/// @struct ConsoleGetOwnedPortArgs
+///
+/// @brief Arguments and return value for the CONSOLE_GET_OWNED_PORT command.
+///
+/// @param ownedPort The port that's owned by the caller process.
+typedef struct ConsoleGetOwnedPortArgs {
+  int ownedPort;
+} ConsoleGetOwnedPortArgs;
+
 /// @enum ConsoleCommandResponse
 ///
 /// @brief The commands and responses that the console understands via

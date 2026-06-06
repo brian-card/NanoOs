@@ -522,6 +522,8 @@ void consoleReleasePortCommandHandler(
 void consoleGetOwnedPortCommandHandler(
   ConsoleState *consoleState, ProcessMessage *inputMessage
 ) {
+  ConsoleGetOwnedPortArgs *consoleGetOwnedPortArgs
+    = (ConsoleGetOwnedPortArgs*) processMessageData(inputMessage);
   ProcessId owner = processPid(processMessageFrom(inputMessage));
   ConsolePort *consolePorts = consoleState->consolePorts;
 
@@ -531,7 +533,7 @@ void consoleGetOwnedPortCommandHandler(
     // set separately later if the commands are being piped together.
     // Therefore, checking inputOwner checks both of them.
     if (consolePorts[ii].inputOwner == owner) {
-      ownedPort = ii;
+      consoleGetOwnedPortArgs->ownedPort = ii;
       break;
     }
   }
@@ -1197,13 +1199,19 @@ void releaseConsole(void) {
 /// @return Returns the numerical index of the console port the process owns on
 /// success, -1 on failure.
 int getOwnedConsolePort(void) {
+  ConsoleGetOwnedPortArgs consoleGetOwnedPortArgs = {
+    .ownedPort = -1,
+  };
   ProcessMessage *sent = initSendProcessMessageToPid(
-    SCHEDULER_STATE->consolePid, CONSOLE_GET_OWNED_PORT,
-    /* data= */ 0, /* size= */ 0, /* waiting= */ true);
+    SCHEDULER_STATE->consolePid,
+    CONSOLE_COMMAND_SIGNATURE | CONSOLE_GET_OWNED_PORT,
+    /* data= */ &consoleGetOwnedPortArgs,
+    /* size= */ sizeof(consoleGetOwnedPortArgs),
+    /* waiting= */ true);
 
   processMessageWaitForDone(sent, NULL);
 
-  int returnValue = (int) ((intptr_t) processMessageData(sent));
+  int returnValue = consoleGetOwnedPortArgs.ownedPort;
   processMessageRelease(sent);
 
   return returnValue;
