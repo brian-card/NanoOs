@@ -871,8 +871,7 @@ ConsoleBuffer* nanoOsWaitForInput(void) {
   if (inputChannel->pid == SCHEDULER_STATE->consolePid) {
     // Tell the console that we're waiting for input.  Fire and forget.
     (void) initSendProcessMessageToPid(
-      inputChannel->pid,
-      CONSOLE_COMMAND_SIGNATURE | inputChannel->messageType,
+      inputChannel->pid, inputChannel->messageType,
       /* data= */ 0, /* size= */ 0, false);
   }
 
@@ -1072,8 +1071,7 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *consoleBuffer) {
     if ((outputChannel != NULL) && (outputChannel->pid != PROCESS_ID_NOT_SET)) {
       if ((stream == stdout) || (stream == stderr)) {
         ProcessMessage *processMessage = initSendProcessMessageToPid(
-          outputChannel->pid,
-          CONSOLE_COMMAND_SIGNATURE | outputChannel->messageType,
+          outputChannel->pid, outputChannel->messageType,
           /* data= */ consoleBuffer, /* size= */ sizeof(*consoleBuffer), true);
         if (processMessage != NULL) {
           processMessageWaitForDone(processMessage, NULL);

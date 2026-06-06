@@ -3655,26 +3655,26 @@ __attribute__((noinline)) void startScheduler(
   standardKernelFileDescriptors[1].outputChannel.pid
     = schedulerState.consolePid;
   standardKernelFileDescriptors[1].outputChannel.messageType
-    = CONSOLE_WRITE_BUFFER;
+    = CONSOLE_COMMAND_SIGNATURE | CONSOLE_WRITE_BUFFER;
   standardKernelFileDescriptors[2].outputChannel.pid
     = schedulerState.consolePid;
   standardKernelFileDescriptors[2].outputChannel.messageType
-    = CONSOLE_WRITE_BUFFER;
+    = CONSOLE_COMMAND_SIGNATURE | CONSOLE_WRITE_BUFFER;
 
   // Direct the input pipe of user process stdin to the console.  Direcdt the
   // output pipes of user process stdout and stderr to the console as well.
   standardUserFileDescriptors[0].inputChannel.pid
     = schedulerState.consolePid;
   standardUserFileDescriptors[0].inputChannel.messageType
-    = CONSOLE_WAIT_FOR_INPUT;
+    = CONSOLE_COMMAND_SIGNATURE | CONSOLE_WAIT_FOR_INPUT;
   standardUserFileDescriptors[1].outputChannel.pid
     = schedulerState.consolePid;
   standardUserFileDescriptors[1].outputChannel.messageType
-    = CONSOLE_WRITE_BUFFER;
+    = CONSOLE_COMMAND_SIGNATURE | CONSOLE_WRITE_BUFFER;
   standardUserFileDescriptors[2].outputChannel.pid
     = schedulerState.consolePid;
   standardUserFileDescriptors[2].outputChannel.messageType
-    = CONSOLE_WRITE_BUFFER;
+    = CONSOLE_COMMAND_SIGNATURE | CONSOLE_WRITE_BUFFER;
 
   // Create the console process.  We used to have to double the size of the
   // console's stack, so we create this process before we create anything else.
