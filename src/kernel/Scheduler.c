@@ -707,7 +707,8 @@ int schedulerSetPortShell(uint8_t consolePort, ProcessId shell) {
   consolePortPidUnion.consolePortPidAssociation.pid = shell;
 
   returnValue = schedulerInitSendMessageToPid(
-    SCHEDULER_STATE->consolePid, CONSOLE_SET_PORT_SHELL,
+    SCHEDULER_STATE->consolePid,
+    CONSOLE_COMMAND_SIGNATURE | CONSOLE_SET_PORT_SHELL,
     (void*) ((uintptr_t) consolePortPidUnion.nanoOsMessageData), /* size= */ 0);
 
   return returnValue;
