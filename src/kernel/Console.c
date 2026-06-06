@@ -1258,7 +1258,8 @@ int setConsoleEcho(bool desiredEchoState) {
     .returnValue = 0,
   };
   ProcessMessage *sent = initSendProcessMessageToPid(
-    SCHEDULER_STATE->consolePid, CONSOLE_SET_ECHO,
+    SCHEDULER_STATE->consolePid,
+    CONSOLE_COMMAND_SIGNATURE | CONSOLE_SET_ECHO,
     /* data= */ &consoleSetEchoArgs,
     /* size= */ sizeof(consoleSetEchoArgs),
     /* waiting= */ true);
