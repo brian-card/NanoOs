@@ -1845,7 +1845,7 @@ int schedulerKillProcessCommandHandler(
         };
         if (schedulerInitSendMessageToPid(
           SCHEDULER_STATE->consolePid,
-          CONSOLE_RELEASE_PID_PORT,
+          CONSOLE_COMMAND_SIGNATURE | CONSOLE_RELEASE_PID_PORT,
           /* data= */ &consoleReleasePidPortArgs,
           /* size= */ sizeof(consoleReleasePidPortArgs)) != processSuccess
         ) {
@@ -2982,7 +2982,7 @@ void removeProcess(
   };
   if (schedulerInitSendMessageToPid(
     SCHEDULER_STATE->consolePid,
-    CONSOLE_RELEASE_PID_PORT,
+    CONSOLE_COMMAND_SIGNATURE | CONSOLE_RELEASE_PID_PORT,
     /* data= */ &consoleReleasePidPortArgs,
     /* size= */ sizeof(consoleReleasePidPortArgs)) != processSuccess
   ) {
