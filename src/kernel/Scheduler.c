@@ -3349,6 +3349,13 @@ static const char *shellArgs[] = {
 ///
 /// @return This function returns no value.
 void runScheduler(void) {
+  if (processStackOverflowed(
+    &allProcesses[SCHEDULER_STATE->schedulerPid - 1])
+  ) {
+    printString("Scheduler stack overflow detected");
+    HAL->power->enterMode(HAL_POWER_MODE_OFF);
+  }
+
   ProcessDescriptor *processDescriptor
     = processQueuePop(SCHEDULER_STATE->currentReady);
   if (processDescriptor == NULL) {
@@ -3696,8 +3703,15 @@ __attribute__((noinline)) void startScheduler(
     ii < HAL->memory->numExtraConsoleStacks(USE_HAL_MEMORY_DEBUG);
     ii++
   ) {
-    if (threadProvision(NULL, dummyProcess, NULL) == NULL) {
+    Thread *thread = threadProvision(NULL, dummyProcess, NULL);
+    if (thread == NULL) {
       printString("Could not increase console process's stack size.\n");
+      break;
+    }
+    if (threadSetStackEnd(
+      processDescriptor->mainThread, threadStackEnd(thread)) != processSuccess
+    ) {
+      printString("Could not set console process's stack size.\n");
     }
   }
 
