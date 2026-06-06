@@ -901,7 +901,7 @@ msg_t* msg_q_wait_for_type_(msg_q_t *queue, int64_t *type,
   msg_t **prev_next = &queue->head;
   int lock_status = msg_success;
   int wait_status = msg_success;
-  int search_type = 0;
+  int64_t search_type = 0;
 
   if (queue == NULL) {
     return return_value; // NULL
