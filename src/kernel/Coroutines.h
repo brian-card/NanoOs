@@ -87,7 +87,7 @@ extern "C"
 /// @def COROUTINE_STACK_END_VALUE
 ///
 /// @brief The value to set at the end of a coroutine's stack so that we can
-/// detect stack overflow.
+/// detect stack overflow.  This is "STACKEND" as a 64-bit, little-endian value.
 #define COROUTINE_STACK_END_VALUE ((uint64_t) 0x444E454B43415453)
 
 /// @def COROUTINE_STACK_CHUNK_SIZE
