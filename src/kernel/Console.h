@@ -92,6 +92,15 @@ typedef struct ConsoleGetOwnedPortArgs {
   int ownedPort;
 } ConsoleGetOwnedPortArgs;
 
+/// @struct ConsoleGetEchoArgs
+///
+/// @brief Arguments and return value for the CONSOLE_GET_ECHO command.
+///
+/// @param echoing Whether or not the port is currently echoing.
+typedef struct ConsoleGetEchoArgs {
+  bool echoing;
+} ConsoleGetEchoArgs;
+
 /// @enum ConsoleCommandResponse
 ///
 /// @brief The commands and responses that the console understands via
@@ -105,7 +114,7 @@ typedef enum ConsoleCommandResponse {
   CONSOLE_ASSIGN_PORT,
   CONSOLE_RELEASE_PORT,
   CONSOLE_GET_OWNED_PORT,
-  CONSOLE_GET_ECHO_PORT,
+  CONSOLE_GET_ECHO,
   CONSOLE_SET_ECHO_PORT,
   CONSOLE_WAIT_FOR_INPUT,
   CONSOLE_RELEASE_PID_PORT,

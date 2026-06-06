@@ -561,6 +561,8 @@ void consoleGetOwnedPortCommandHandler(
 void consoleGetEchoCommandHandler(
   ConsoleState *consoleState, ProcessMessage *inputMessage
 ) {
+  ConsoleGetEchoArgs *consoleGetEchoArgs
+    = (ConsoleGetEchoArgs*) processMessageData(inputMessage);
   ProcessId owner = processPid(processMessageFrom(inputMessage));
   ConsolePort *consolePorts = consoleState->consolePorts;
   ProcessMessage *returnMessage = inputMessage;
@@ -569,7 +571,7 @@ void consoleGetEchoCommandHandler(
   bool echoing = false;
   for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
     if (consolePorts[ii].outputOwner == owner) {
-      echoing |= consolePorts[ii].echo;
+      consoleGetEchoArgs->echoing |= consolePorts[ii].echo;
       portFound = true;
     }
   }
@@ -784,7 +786,7 @@ const ConsoleCommandHandler consoleCommandHandlers[] = {
   consoleAssignPortCommandHandler,      // CONSOLE_ASSIGN_PORT
   consoleReleasePortCommandHandler,     // CONSOLE_RELEASE_PORT
   consoleGetOwnedPortCommandHandler,    // CONSOLE_GET_OWNED_PORT
-  consoleGetEchoCommandHandler,         // CONSOLE_GET_ECHO_PORT,
+  consoleGetEchoCommandHandler,         // CONSOLE_GET_ECHO,
   consoleSetEchoCommandHandler,         // CONSOLE_SET_ECHO_PORT
   consoleWaitForInputCommandHandler,    // CONSOLE_WAIT_FOR_INPUT
   consoleReleasePidPortCommandHandler,  // CONSOLE_RELEASE_PID_PORT
@@ -1224,14 +1226,20 @@ int getOwnedConsolePort(void) {
 /// @return Returns true if the console for the process is echoing, false
 /// otherwise.
 bool getConsoleEcho(void) {
+  ConsoleGetEchoArgs consoleGetEchoArgs = {
+    .echoing = false,
+  };
   ProcessMessage *sent = initSendProcessMessageToPid(
-    SCHEDULER_STATE->consolePid, CONSOLE_GET_ECHO_PORT,
-    /* data= */ 0, /* size= */ 0, /* waiting= */ true);
+    SCHEDULER_STATE->consolePid,
+    CONSOLE_COMMAND_SIGNATURE | CONSOLE_GET_ECHO,
+    /* data= */ &consoleGetEchoArgs,
+    /* size= */ sizeof(consoleGetEchoArgs),
+    /* waiting= */ true);
 
   // The console will reuse the message we sent.
   processMessageWaitForDone(sent, NULL);
 
-  bool returnValue = (bool) ((uintptr_t) processMessageData(sent));
+  bool returnValue = consoleGetEchoArgs.echoing;
   processMessageRelease(sent);
 
   return returnValue;
