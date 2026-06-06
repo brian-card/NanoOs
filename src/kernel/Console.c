@@ -799,6 +799,21 @@ void handleConsoleMessages(ConsoleState *consoleState) {
   ProcessMessage *message = processMessageQueuePop();
   ProcessMessage *firstMessage = message;
   while (message != NULL) {
+    if ((processMessageType(message) & 0xffffffffffffff00)
+      != CONSOLE_COMMAND_SIGNATURE
+    ) {
+      printString("ERROR: ");
+      printString(__func__);
+      printString(" received unknown signature 0x");
+      printHex(processMessageType(message) & 0xffffffffffffff00);
+      printString(" from process ");
+      printInt(processPid(processMessageFrom(message)));
+      printString("\n");
+      // Don't attempt to process this message further.
+      message = processMessageQueuePop();
+      continue;
+    }
+
     ConsoleCommand messageType
       = (ConsoleCommand) (processMessageType(message) & 0xff);
     if (messageType >= NUM_CONSOLE_COMMANDS) {
@@ -979,7 +994,6 @@ void* runConsole(void *args) {
   int byteRead = -1;
   ConsoleState consoleState;
   memset(&consoleState, 0, sizeof(ConsoleState));
-  ProcessMessage *schedulerMessage = NULL;
 
   if (HAL->uart != NULL) {
     consoleState.numConsolePorts = CONSOLE_NUM_PORTS;
@@ -1068,26 +1082,8 @@ void* runConsole(void *args) {
       }
     }
 
-    schedulerMessage = (ProcessMessage*) processYield();
-
-    if (schedulerMessage != NULL) {
-      // We have a message from the scheduler that we need to process.  This
-      // is not the expected case, but it's the priority case, so we need to
-      // list it first.
-      ConsoleCommand messageType
-        = (ConsoleCommand) processMessageType(schedulerMessage);
-      if (messageType < NUM_CONSOLE_COMMANDS) {
-        consoleCommandHandlers[messageType](&consoleState, schedulerMessage);
-      } else {
-        printString("ERROR: Received unknown console command ");
-        printInt(messageType);
-        printString(" from scheduler.\n");
-      }
-    } else {
-      // No message from the scheduler.  Handle any user process messages in
-      // our message queue.
-      handleConsoleMessages(&consoleState);
-    }
+    processYield();
+    handleConsoleMessages(&consoleState);
   }
 
   return NULL;
