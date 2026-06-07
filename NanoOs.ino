@@ -38,7 +38,7 @@
 const Hal *HAL = NULL;
 
 KEEP_IN_FLASH
-char const bootMessage[] = "\r\nBooting...\r\n";
+const char bootMessage[] = "\r\nBooting...\r\n";
 
 // The setup function runs once when you press reset or power the board.  This
 // is to be used for Arduino-specific setup.  *ANYTHING* that requires use of
