@@ -319,7 +319,6 @@ ProcessMessage* initSendProcessMessageToPid(int pid, int64_t type,
 void* waitForDataMessage(ProcessMessage *sent, int type, const struct timespec *ts);
 ExecArgs* execArgsDestroy(ExecArgs *execArgs);
 SpawnArgs* spawnArgsDestroy(SpawnArgs *spawnArgs);
-char** parseArgs(char *command, int *argc);
 
 #ifdef __cplusplus
 } // extern "C"

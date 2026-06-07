@@ -41,6 +41,7 @@
 // Types and prototypes we need here because we can't include things directly.
 typedef uintptr_t size_t;
 int vsnprintf(char *str, size_t size, const char *format, va_list ap);
+char** parseArgs(char *command, int *argc);
 
 // Must come first
 #include "NanoOsApi.h"
