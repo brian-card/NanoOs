@@ -1115,6 +1115,17 @@ void handleMemoryManagerMessages(MemoryManagerState *memoryManagerState) {
 void initializeGlobals(MemoryManagerState *memoryManagerState,
   jmp_buf returnBuffer, char *stack
 ) {
+  // We can't leave the memory manager's stack end where it is because we will
+  // overwrite it the contents of dynamically allocated memory.  Set it to our
+  // boundary here.
+  uint64_t stackEnd = THREAD_STACK_END_VALUE;
+  if (threadSetStackEnd(getRunningProcess()->mainThread, &stackEnd)
+    != processSuccess
+  ) {
+    printString(__func__);
+    printString(": ERROR: Could not set stack end for memory manager\n");
+  }
+  
   // The buffer needs to be machine-width aligned, so we need to use a pointer
   // as the placeholder value.  This ensures that the compiler puts it at a
   // valid (aligned) address.

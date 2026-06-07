@@ -3848,14 +3848,6 @@ __attribute__((noinline)) void startScheduler(
   processDescriptor->processId = schedulerState.memoryManagerPid;
   processDescriptor->name = "memory manager";
   processDescriptor->userId = ROOT_USER_ID;
-  // We can't leave the memory manager's stack end where it is because we will
-  // overwrite it the contents of dynamically allocated memory.  Set it to the
-  // stack end of the scheduler process.  That way, the memory manager's stack
-  // only gets "overflowed" if the scheduler's does, in which case the whole
-  // system is HOSED anyway.
-  threadSetStackEnd(processDescriptor->mainThread,
-    threadStackEnd(schedulerThread));
-  printDebugString("Created memory manager.\n");
 
   // Assign the console ports to it.
   for (uint8_t ii = 0; ii < schedulerState.numShells; ii++) {
