@@ -34,6 +34,7 @@
 #include <string.h>
 
 // NanoOs includes
+#include "KernelProcesses.h"
 #include "NanoOsUtils.h"
 #include "Fat32.h"
 
