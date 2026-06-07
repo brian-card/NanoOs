@@ -38,7 +38,8 @@ OBJECTS := $(subst $(OBJ_DIR)/$(TARGET)/$(OVERLAY)/../../../start.o,\
 INCLUDES += \
     -I../../../../../src/kernel \
     -I../../../../../src/user \
-    -I../../include \
+    -I../../../../include \
+    -I../include \
 
 # Default target
 all: $(BINARY)
