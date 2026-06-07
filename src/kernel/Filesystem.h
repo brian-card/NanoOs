@@ -95,29 +95,29 @@ extern "C"
 ///   a file given its file handle.
 typedef struct FilesystemState {
   void               *driverState;
-  BlockDevice *blockDevice;
+  BlockDevice        *blockDevice;
   uint8_t            *blockBuffer;
   uint16_t            blockSize;
   uint8_t             numOpenFiles;
   FILE               *openFiles;
   uint32_t            startLba;
   uint32_t            endLba;
-  int (*driverInit)(struct FilesystemState* filesystemState);
-  void* (*driverFopen)(
+  int               (*driverInit)(struct FilesystemState* filesystemState);
+  void*             (*driverFopen)(
     void *driverState, const char *filePath, const char *mode);
-  int32_t (*driverFread)(
+  int32_t           (*driverFread)(
     void *driverState, void *ptr, uint32_t length,
     void *fileHandle);
-  int32_t (*driverFwrite)(
+  int32_t           (*driverFwrite)(
     void *driverState, void *ptr, uint32_t length,
     void *fileHandle);
-  int (*driverFclose)(void *driverState, void *fileHandle);
-  int (*driverRemove)(void *driverState, const char *pathname);
-  int (*driverFseek)(void *driverState,
+  int               (*driverFclose)(void *driverState, void *fileHandle);
+  int               (*driverRemove)(void *driverState, const char *pathname);
+  int               (*driverFseek)(void *driverState,
     void *fileHandle, long offset, int whence);
-  int (*driverGetFileBlockMetadata)(void *ds, void *fileHandle,
+  int               (*driverGetFileBlockMetadata)(void *ds, void *fileHandle,
     uint32_t *startBlock, uint32_t *numBlocks);
-  const char* (*driverGetFilename)(void *fileHandle);
+  const char*       (*driverGetFilename)(void *fileHandle);
 } FilesystemState;
 
 /// @struct FilesystemIoCommandArgs
