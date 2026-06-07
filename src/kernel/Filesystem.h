@@ -93,6 +93,8 @@ extern "C"
 ///   block-level metadata of a file.
 /// @param driverGetFilename Pointer to the driver function to get the name of
 ///   a file given its file handle.
+/// @param args A pointer to one of the command arguments structures, cast to a
+///   void*.
 typedef struct FilesystemState {
   void               *driverState;
   BlockDevice        *blockDevice;
@@ -118,6 +120,7 @@ typedef struct FilesystemState {
   int               (*driverGetFileBlockMetadata)(void *ds, void *fileHandle,
     uint32_t *startBlock, uint32_t *numBlocks);
   const char*       (*driverGetFilename)(void *fileHandle);
+  void               *args;
 } FilesystemState;
 
 /// @struct FilesystemIoCommandArgs
@@ -214,11 +217,6 @@ typedef struct GetFileBlockMetadataArgs {
   FILE              *stream;
   FileBlockMetadata *metadata;
 } GetFileBlockMetadataArgs;
-
-/// @typedef FilesystemCommandHandler
-///
-/// @brief Definition of a filesystem command handler function.
-typedef int (*FilesystemCommandHandler)(FilesystemState*, ProcessMessage*);
 
 /// @enum FilesystemCommandResponse
 ///
