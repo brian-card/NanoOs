@@ -3,9 +3,10 @@
 /// @author            Brian Card
 /// @date              03.08.2026
 ///
-/// @file              NanoOsProcesses.h
+/// @file              UserProcesses.h
 ///
-/// @brief             Exposed NanoOs kernel functionality related to processes.
+/// @brief             Exposed NanoOs kernel functionality related to user
+///                    processes.
 ///
 /// @copyright
 ///                      Copyright (c) 2026 Brian Card
@@ -33,8 +34,8 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef NANO_OS_PROCESSES_H
-#define NANO_OS_PROCESSES_H
+#ifndef USER_PROCESSES_H
+#define USER_PROCESSES_H
 
 #include "NanoOsUser.h"
 #include "../../src/kernel/NanoOsTypes.h"
@@ -52,5 +53,5 @@ static inline ProcessInfo* getProcessInfo(void) {
 }
 #endif
 
-#endif // NANO_OS_PROCESSES_H
+#endif // USER_PROCESSES_H
 

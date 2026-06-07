@@ -35,7 +35,7 @@
 #include <pwd.h>
 
 // NanoOs includes
-#include "NanoOsProcesses.h"
+#include "UserProcesses.h"
 #include "NanoOsUtils.h"
 
 int main(int argc, char **argv) {
