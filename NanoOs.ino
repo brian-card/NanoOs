@@ -37,6 +37,9 @@
 
 const Hal *HAL = NULL;
 
+KEEP_IN_FLASH
+char const bootMessage[] = "\r\nBooting...\r\n";
+
 // The setup function runs once when you press reset or power the board.  This
 // is to be used for Arduino-specific setup.  *ANYTHING* that requires use of
 // threads needs to be done in the loop function.
@@ -47,24 +50,12 @@ void setup() {
     // Nothing we can do.  Halt.
     while(1);
   }
-  
+
+  printString(bootMessage);
+
   // We need a guard at bootup because if the system crashes in a way that makes
   // the processor unresponsive, it will be very difficult to load new firmware.
   // Sleep long enough to begin a firmware upload on reset.
-  printChar('\r');
-  printChar('\n');
-  printChar('B');
-  printChar('o');
-  printChar('o');
-  printChar('t');
-  printChar('i');
-  printChar('n');
-  printChar('g');
-  printChar('.');
-  printChar('.');
-  printChar('.');
-  printChar('\r');
-  printChar('\n');
   msleep(7000);
 }
 
