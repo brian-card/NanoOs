@@ -73,6 +73,11 @@ extern "C"
 /// @brief State a process is in when it is not running.
 #define PROCESS_STATE_NOT_RUNNING COROUTINE_STATE_NOT_RUNNING
 
+/// @def THREAD_STACK_END_VALUE
+///
+/// @brief The value used to mark the end of a thread's stack.
+#define THREAD_STACK_END_VALUE COROUTINE_STACK_END_VALUE
+
 /// @def getRunningProcess
 ///
 /// @brief Function macro to get the pointer to the currently running Process
