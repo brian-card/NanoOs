@@ -27,7 +27,7 @@
 
 /// @file main.c
 ///
-/// @brief Entrypoint into the looseLoop program.
+/// @brief Entrypoint into the tightLoop program.
 
 // Standard C includes
 
