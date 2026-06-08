@@ -310,49 +310,45 @@ static inline bool processStackOverflowed(
 
 /// @fn static inline void* processYield(void)
 ///
-/// @brief Call to yield the processor to another process.
+/// @brief Yield the processor back to the scheduler.
 ///
-/// @return Returns the value that the parent process calls processResume with.
+/// @return Returns the value that the scheduler calls processResume with.
 static inline void* processYield(void) {
   return overlayMap.header.osApi->coroutineYield(NULL, COROUTINE_STATE_BLOCKED);
 }
 
-/// @fn static inline void* processYieldTo(ProcessDescriptor *processDescriptor)
+/// @fn static inline void* processYieldValue(void *value)
 ///
-/// @brief Call to yield the processor to a specific process.
+/// @brief Yield the processor back to the scheduler and pass it a value.
 ///
-/// @param processDescriptor A pointer to the ProcessDescriptor to yield
-///   execution to.  (i.e. The next process that should run.)
+/// @param value The value to pass back to the scheduler.  This will be the
+///   return value of processResume() in the scheduler.
 ///
-/// @return Returns the value that the parent process calls processResume with.
-static inline void* processYieldTo(ProcessDescriptor *processDescriptor) {
-  return overlayMap.header.osApi->coroutineYieldTo(
-    processDescriptor->mainThread, NULL, COROUTINE_STATE_BLOCKED);
+/// @return Returns the value that the scheduler calls processResume with.
+static inline void* processYieldValue(void *value) {
+  return overlayMap.header.osApi->coroutineYield(
+    value, COROUTINE_STATE_BLOCKED);
 }
 
-/// @def processYieldValue
+/// @fn static inline int processMessageInit(ProcessMessage *processMessage,
+///   int64_t type, void *data, size_t size, bool waiting)
 ///
-/// @brief Yield a value back to the scheduler.
-#define processYieldValue(value) \
-  coroutineYield(value, COROUTINE_STATE_BLOCKED)
-
-/// @def processTerminate
+/// @brief Initialize a process message.
 ///
-/// @brief Function macro to terminate a running process.
-#define processTerminate(processDescriptor, keepMessageQueue) \
-  coroutineTerminate((processDescriptor)->mainThread, NULL, keepMessageQueue)
-
-/// @def processGetNanoseconds
+/// @param processMessage A pointer to the ProcessMessage to initialize.
+/// @param type The 64-bit value to use as the message's type.
+/// @param data A pointer to the data payload of the message.
+/// @param size The size, in bytes, of the data payload.
+/// @param waiting Whether or not the initializating process will be waiting on
+///   the message to be marked "done".
 ///
-/// @brief Process-specific call to get the nanoseconds from midnight, Jan 1, 1970
-/// given a pointer to a struct timespec.
-#define processGetNanoseconds(ts) coroutineGetNanoseconds((ts))
-
-/// @def processMessageInit
-///
-/// @brief Function macro to initialize a process message.
-#define processMessageInit(processMessage, type, data, size, waiting) \
-  msg_init(processMessage, MSG_CORO_SAFE, type, data, size, waiting)
+/// @return Returns processSuccess on success, process error code on failure.
+static inline int processMessageInit(ProcessMessage *processMessage,
+  int64_t type, void *data, size_t size, bool waiting
+) {
+  return overlayMap.header.osApi->processMessageInit(
+    processMessage, MSG_CORO_SAFE, type, data, size, waiting);
+}
 
 /// @def processMessageSetDone
 ///
