@@ -54,6 +54,22 @@ extern "C"
 #define processNomem    coroutineNomem
 #define processTimedout coroutineTimedout
 
+/// @typedef ThreadFunction
+///
+/// @brief Function signature that can be used as a process thread.
+typedef CoroutineFunction ThreadFunction;
+
+/// @typedef Thread
+///
+/// @brief Base type to hold the metadata for a thread.
+typedef Coroutine Thread;
+
+/// @typedef ThreadsConfigOptions
+///
+/// @brief Type that holds the options to be used to initially configure threads
+/// for the system.
+typedef CoroutinesConfigOptions ThreadsConfigOptions;
+
 /// @def PROCESS_ID_NOT_SET
 ///
 /// @brief Value to be used to indicate that a process ID has not been set for
@@ -81,7 +97,7 @@ extern "C"
 /// @brief The value used to mark the end of a thread's stack.
 #define THREAD_STACK_END_VALUE COROUTINE_STACK_END_VALUE
 
-/// @def getRunningProcess
+/// @fn static inline ProcessDescriptor* getRunningProcess(void)
 ///
 /// @brief Inline function to get the pointer to the currently running
 /// ProcessDescriptor object.
@@ -92,7 +108,7 @@ static inline ProcessDescriptor* getRunningProcess(void) {
   return overlayMap.header.osApi->getRunningCoroutineContext();
 }
 
-/// @def getRunningPid
+/// @fn static inline ProcessId getRunningPid(void)
 ///
 /// @brief Get the process ID for the currently-running process.
 ///
@@ -101,65 +117,134 @@ static inline ProcessId getRunningPid(void) {
   return getRunningProcess()->processId;
 }
 
-/// @def getRunningUid
+/// @fn static inline UserId getRunningUid(void)
 ///
 /// @brief Get the user ID for the currently-running process.
-#define getRunningUid() \
-  (getRunningProcess()->userId)
-
-/// @def processCreate
 ///
-/// @brief Function macro to create a new process.
-#define processCreate(processDescriptor, func, arg) \
-  coroutineCreate( \
-    ((processDescriptor != NULL) \
-      ? &(((ProcessDescriptor*) processDescriptor))->mainThread \
-      : NULL \
-    ), \
-    func, \
-    arg)
+/// @return Returns the ID of the user running the process currently executing.
+static inline UserId getRunningUid(void) {
+  return getRunningProcess()->userId;
+}
 
-/// @def threadProvision
+/// @fn static inline int processCreate(ProcessDescriptor *processDescriptor,
+///   ThreadFunction *func, void *arg)
 ///
-/// @brief Provision a Thread.
-#define threadProvision(handle, func, arg) \
-  coroutineInit(handle, func, arg)
-
-/// @def threadSetContext
+/// @brief Create a new process.
 ///
-/// @brief Function macro to set the context of a process handle.
-#define threadSetContext(thread, context) \
-  coroutineSetContext(thread, context)
+/// @param processDescriptor A pointer to the ProcessDescriptor to populate with
+///   the new process.
+/// @param func The ThreadFunction to use as the main entrypoint for the main
+///   thread of the process.
+/// @param arg Any argument that is to be passed to the new process, cast to a
+///   void*.
+///
+/// @return Returns processSuccess on success, error code on failure.
+static inline int processCreate(ProcessDescriptor *processDescriptor,
+  ThreadFunction *func, void *arg
+) {
+  return overlayMap.header.osApi->coroutineCreate(
+    ((processDescriptor != NULL)
+      ? &(((ProcessDescriptor*) processDescriptor))->mainThread
+      : NULL
+    ),
+    func,
+    arg);
+}
 
-/// @def threadContext
+/// @fn static inline Thread* threadProvision(Thread *thread,
+///   ThreadFunction func, void *arg)
+///
+/// @brief Provision a Thread for execution.
+///
+/// @param thread A pointer to a Thread that has previously been provisioned.
+///   This parameter may be NULL to provision a new one.
+/// @param func The ThreadFunction to use as the main entrypoint for the thread.
+/// @param arg Any argument that is to be passed to the new process, cast to a
+///   void*.
+///
+/// @return Returns a pointer to the newly-provisioned Thread on success, NULL
+///   on failure.
+static inline Thread* threadProvision(Thread *thread,
+  ThreadFunction func, void *arg
+) {
+  return overlayMap.header.osApi->coroutineInit(thread, func, arg);
+}
+
+/// @fn static inline int threadSetContext(Thread *thread, void *context)
+///
+/// @brief Set the context of a thread.
+///
+/// @param thread A pointer to the Thread object to set the context of.
+/// @param context A pointer to whatever context should be set for the Thread.
+///
+/// @return Returns processSuccess on success, error status on failure.
+static inline int threadSetContext(Thread *thread, void *context) {
+  return overlayMap.header.osApi->coroutineSetContext(thread, context);
+}
+
+/// @fn static inline void* threadContext(Thread *thread)
 ///
 /// @brief Get the context previously set on a thread.
-#define threadContext(thread) coroutineContext(thread)
+///
+/// @param thread A pointer to the Thread object to get the context of.
+///
+/// @return Returns a pointer to the thread's context on success, NULL on
+/// failure.
+static inline void* threadContext(Thread *thread) {
+  return overlayMap.header.osApi->coroutineContext(thread);
+}
 
-/// @def threadsConfig
+/// @fn int threadsConfig(Thread *first, ThreadsConfigOptions *options)
 ///
 /// @brief Configure the threads library.
-#define threadsConfig(first, options) coroutinesConfig(first, options)
+///
+/// @param first A pointer to an allocated Thread.
+/// @param options A pointer to a ThreadsConfigOptions structure with the
+///   optional parameters to use for configuring threads.
+///
+/// @return Returns processSuccess on success, error code on failure.
+int threadsConfig(Thread *first, ThreadsConfigOptions *options) {
+  return overlayMap.header.osApi->coroutinesConfig(first, options);
+}
 
-/// @def threadStackEnd
+/// @fn uint64_t* threadStackEnd(Thread *thread)
 ///
 /// @brief Get the address of the end of a thread's stack.
-#define threadStackEnd(thread) coroutineStackEnd(thread)
-
-/// @def threadSetStackEnd
 ///
-/// @brief Set the end address of a thread's stack to the end address of an
-/// adjoining thread's stack.
-#define threadSetStackEnd(thread, stackEnd) \
-  coroutineSetStackEnd(thread, stackEnd)
+/// @param thread A pointer to the Thread to get the stack end of.
+///
+/// @return Returns a pointer to the uint64_t at the end of the thread's stack
+///   on success, NULL on failure.
+uint64_t* threadStackEnd(Thread *thread) {
+  return overlayMap.header.osApi->coroutineStackEnd(thread);
+}
 
-/// @def processResetStack
+/// @fn int threadSetStackEnd(Thread *thread, uint64_t *stackEnd)
+///
+/// @brief Set the end address of a thread's stack.
+///
+/// @param thread A pointer to the Thread object to set the stack end of.
+/// @param stackEnd A pointer to the uint64_t to use as the thread's stack end.
+///   The value of the variable pointed to must be THREAD_STACK_END_VALUE.
+///
+/// @return Returns processSuccess on success, process error code on failure.
+int threadSetStackEnd(Thread *thread, uint64_t *stackEnd) {
+  return overlayMap.header.osApi->coroutineSetStackEnd(thread, stackEnd);
+}
+
+/// @fn int processResetStack(ProcessDescriptor *processDescriptor)
 ///
 /// @brief Reset the stack of the main thread of a process back to a working
 /// state.
-#define processResetStack(processDescriptor) \
-  *coroutineStackEnd((processDescriptor)->mainThread) \
-    = COROUTINE_STACK_END_VALUE
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor to reset the
+///   stack of.
+///
+/// @return This function always succeeds and always returns processSuccess.
+int processResetStack(ProcessDescriptor *processDescriptor) {
+  *threadStackEnd(processDescriptor->mainThread) = THREAD_STACK_END_VALUE;
+  return processSuccess;
+}
 
 /// @def processCorrupted
 ///
@@ -314,9 +399,6 @@ static inline ProcessId getRunningPid(void) {
   ((ProcessDescriptor*) coroutineContext(msg_to(processMessagePointer).coro))
 #define processMessageConfigured(processMessagePointer) \
   msg_configured(processMessagePointer)
-
-typedef Coroutine Thread;
-typedef CoroutinesConfigOptions ThreadsConfigOptions;
 
 // Exported functionality
 void* execCommand(void *args);
