@@ -118,6 +118,13 @@ extern "C" {
 #endif
 
 
+/// @def GFX_COMMAND_SIGNATURE
+///
+/// @brief 64-bit, little-endian value to use as a signature to indicate to the
+/// graphics driver process that the command is intended for it.  This is
+/// "\0GRAPHIX" expressed as a little-endian value.
+#define GFX_COMMAND_SIGNATURE ((int64_t) 0x5849485041524700)
+
 // Function pointer type for the HAL sendMessage call.
 // Stored in GfxCtx so that Graphics.h does not depend on HAL struct layout.
 typedef ProcessMessage *(*GfxSendMessageFn)(int deviceId, int64_t type,
