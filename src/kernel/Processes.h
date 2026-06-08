@@ -138,8 +138,7 @@ extern "C"
 
 /// @def threadSetStackEnd
 ///
-/// @brief Set the end address of a thread's stack to the end address of an
-/// adjoining thread's stack.
+/// @brief Set the end address of a thread's stack.
 #define threadSetStackEnd(thread, stackEnd) \
   coroutineSetStackEnd(thread, stackEnd)
 

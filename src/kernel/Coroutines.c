@@ -2485,7 +2485,8 @@ uint64_t *coroutineStackEnd(Coroutine *coroutine) {
 /// @fn int coroutineSetStackEnd(Coroutine *coroutine, uint64_t *stackEnd)
 ///
 /// @brief Set the end address of a coroutine's stack.  This is to be used when
-/// joining two contiguous coroutines to form one stack.
+/// joining two contiguous coroutines to form one stack, or when shrinking a
+/// process's stack.
 ///
 /// @param coroutine The pointer of the coroutine whose stack end is to be set.
 /// @param stackEnd The pointer to the end of the stack of an adjoining
