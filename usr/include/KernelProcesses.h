@@ -194,7 +194,8 @@ static inline void* threadContext(Thread *thread) {
   return overlayMap.header.osApi->coroutineContext(thread);
 }
 
-/// @fn int threadsConfig(Thread *first, ThreadsConfigOptions *options)
+/// @fn int static inline threadsConfig(Thread *first,
+///   ThreadsConfigOptions *options)
 ///
 /// @brief Configure the threads library.
 ///
@@ -203,11 +204,11 @@ static inline void* threadContext(Thread *thread) {
 ///   optional parameters to use for configuring threads.
 ///
 /// @return Returns processSuccess on success, error code on failure.
-int threadsConfig(Thread *first, ThreadsConfigOptions *options) {
+static inline int threadsConfig(Thread *first, ThreadsConfigOptions *options) {
   return overlayMap.header.osApi->coroutinesConfig(first, options);
 }
 
-/// @fn uint64_t* threadStackEnd(Thread *thread)
+/// @fn static inline uint64_t* threadStackEnd(Thread *thread)
 ///
 /// @brief Get the address of the end of a thread's stack.
 ///
@@ -215,11 +216,11 @@ int threadsConfig(Thread *first, ThreadsConfigOptions *options) {
 ///
 /// @return Returns a pointer to the uint64_t at the end of the thread's stack
 ///   on success, NULL on failure.
-uint64_t* threadStackEnd(Thread *thread) {
+static inline uint64_t* threadStackEnd(Thread *thread) {
   return overlayMap.header.osApi->coroutineStackEnd(thread);
 }
 
-/// @fn int threadSetStackEnd(Thread *thread, uint64_t *stackEnd)
+/// @fn static inline int threadSetStackEnd(Thread *thread, uint64_t *stackEnd)
 ///
 /// @brief Set the end address of a thread's stack.
 ///
@@ -228,11 +229,12 @@ uint64_t* threadStackEnd(Thread *thread) {
 ///   The value of the variable pointed to must be THREAD_STACK_END_VALUE.
 ///
 /// @return Returns processSuccess on success, process error code on failure.
-int threadSetStackEnd(Thread *thread, uint64_t *stackEnd) {
+static inline int threadSetStackEnd(Thread *thread, uint64_t *stackEnd) {
   return overlayMap.header.osApi->coroutineSetStackEnd(thread, stackEnd);
 }
 
-/// @fn int processResetStack(ProcessDescriptor *processDescriptor)
+/// @fn static inline int processResetStack(
+///   ProcessDescriptor *processDescriptor)
 ///
 /// @brief Reset the stack of the main thread of a process back to a working
 /// state.
@@ -241,61 +243,92 @@ int threadSetStackEnd(Thread *thread, uint64_t *stackEnd) {
 ///   stack of.
 ///
 /// @return This function always succeeds and always returns processSuccess.
-int processResetStack(ProcessDescriptor *processDescriptor) {
+static inline int processResetStack(ProcessDescriptor *processDescriptor) {
   *threadStackEnd(processDescriptor->mainThread) = THREAD_STACK_END_VALUE;
   return processSuccess;
 }
 
-/// @def processCorrupted
+/// @def processCorrupted(processDescriptor)
 ///
 /// @brief Determine whether or not a process has become corrupted.
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor to investigate.
+///
+/// @return Returns true if the process's state was detected to be corrupt,
+/// false otherwise.
 #define processCorrupted(processDescriptor) \
-  coroutineCorrupted((processDescriptor)->mainThread)
+  coroutineCorrupted(processDescriptor->mainThread)
 
-/// @def processStackOverflowed
+/// @fn static inline bool processStackOverflowed(
+///   ProcessDescriptor *processDescriptor)
 ///
 /// @brief Determine whether or not a process has overflowed its stack.
-#define processStackOverflowed(processDescriptor) \
-  coroutineStackOverflowed((processDescriptor)->mainThread)
-
-/// @def processRunning
 ///
-/// @brief Function macro to determine whether or not a given process is
-/// currently running.
+/// @param processDescriptor A pointer to the ProcessDescriptor to investigate.
+///
+/// @return Returns true if the process's stack has overflowed, false otherwise.
+static inline bool processStackOverflowed(
+  ProcessDescriptor *processDescriptor
+) {
+  return overlayMap.header.osApi->coroutineStackOverflowed(
+    processDescriptor->mainThread);
+}
+
+/// @def processRunning(processDescriptor)
+///
+/// @brief Determine whether or not a given process is currently running.
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor to investigate.
+/// 
+/// @return Returns true if the process has an active function associated with
+/// it, false otherwise.
 #define processRunning(processDescriptor) \
   coroutineRunning((processDescriptor)->mainThread)
 
-/// @def processFinished
+/// @fn processFinished(processDescriptor)
 ///
-/// @brief Function macro to determine whether or not a given process has
-/// finished
+/// @brief Determine whether or not a given process has finished
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor to investigate.
+/// 
+/// @return Returns true if the process does *NOT* have an active function
+/// associated with it, false otherwise.
 #define processFinished(processDescriptor) \
-  coroutineFinished((processDescriptor)->mainThread)
+  coroutineFinished(processDescriptor->mainThread)
 
-/// @def pid
+/// @def processPid(processDescriptor)
 ///
-/// @brief Function macro to get the numeric Pid given its descriptor.
+/// @brief Get the numeric ProcessId given a process's descriptor.
 #define processPid(processDescriptor) \
   (processDescriptor)->processId
 
-/// @def processState
+/// @def processState(processDescriptor)
 ///
-/// @brief Function macro to get the state of a process given its handle.
+/// @brief Get the state of a process given a pointer to its ProcessDescriptor.
 #define processState(processDescriptor) \
   coroutineState((processDescriptor)->mainThread)
 
-/// @def processYield
+/// @fn static inline void* processYield(void)
 ///
 /// @brief Call to yield the processor to another process.
-#define processYield() \
-  coroutineYield(NULL, COROUTINE_STATE_BLOCKED)
+///
+/// @return Returns the value that the parent process calls processResume with.
+static inline void* processYield(void) {
+  return overlayMap.header.osApi->coroutineYield(NULL, COROUTINE_STATE_BLOCKED);
+}
 
-/// @def processYieldTo
+/// @fn static inline void* processYieldTo(ProcessDescriptor *processDescriptor)
 ///
 /// @brief Call to yield the processor to a specific process.
-#define processYieldTo(processDescriptor) \
-  coroutineYieldTo((processDescriptor)->mainThread, \
-    NULL, COROUTINE_STATE_BLOCKED)
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor to yield
+///   execution to.  (i.e. The next process that should run.)
+///
+/// @return Returns the value that the parent process calls processResume with.
+static inline void* processYieldTo(ProcessDescriptor *processDescriptor) {
+  return overlayMap.header.osApi->coroutineYieldTo(
+    processDescriptor->mainThread, NULL, COROUTINE_STATE_BLOCKED);
+}
 
 /// @def processYieldValue
 ///
