@@ -105,7 +105,8 @@ typedef CoroutinesConfigOptions ThreadsConfigOptions;
 /// @return Returns a pointer to the ProcessDescriptor for the process currently
 /// executing.
 static inline ProcessDescriptor* getRunningProcess(void) {
-  return overlayMap.header.osApi->getRunningCoroutineContext();
+  return (ProcessDescriptor*) overlayMap.header.osApi->coroutineContext(
+    overlayMap.header.osApi->getRunningCoroutine());
 }
 
 /// @fn static inline ProcessId getRunningPid(void)
@@ -124,50 +125,6 @@ static inline ProcessId getRunningPid(void) {
 /// @return Returns the ID of the user running the process currently executing.
 static inline UserId getRunningUid(void) {
   return getRunningProcess()->userId;
-}
-
-/// @fn static inline int processCreate(ProcessDescriptor *processDescriptor,
-///   ThreadFunction *func, void *arg)
-///
-/// @brief Create a new process.
-///
-/// @param processDescriptor A pointer to the ProcessDescriptor to populate with
-///   the new process.
-/// @param func The ThreadFunction to use as the main entrypoint for the main
-///   thread of the process.
-/// @param arg Any argument that is to be passed to the new process, cast to a
-///   void*.
-///
-/// @return Returns processSuccess on success, error code on failure.
-static inline int processCreate(ProcessDescriptor *processDescriptor,
-  ThreadFunction *func, void *arg
-) {
-  return overlayMap.header.osApi->coroutineCreate(
-    ((processDescriptor != NULL)
-      ? &(((ProcessDescriptor*) processDescriptor))->mainThread
-      : NULL
-    ),
-    func,
-    arg);
-}
-
-/// @fn static inline Thread* threadProvision(Thread *thread,
-///   ThreadFunction func, void *arg)
-///
-/// @brief Provision a Thread for execution.
-///
-/// @param thread A pointer to a Thread that has previously been provisioned.
-///   This parameter may be NULL to provision a new one.
-/// @param func The ThreadFunction to use as the main entrypoint for the thread.
-/// @param arg Any argument that is to be passed to the new process, cast to a
-///   void*.
-///
-/// @return Returns a pointer to the newly-provisioned Thread on success, NULL
-///   on failure.
-static inline Thread* threadProvision(Thread *thread,
-  ThreadFunction func, void *arg
-) {
-  return overlayMap.header.osApi->coroutineInit(thread, func, arg);
 }
 
 /// @fn static inline int threadSetContext(Thread *thread, void *context)
@@ -192,20 +149,6 @@ static inline int threadSetContext(Thread *thread, void *context) {
 /// failure.
 static inline void* threadContext(Thread *thread) {
   return overlayMap.header.osApi->coroutineContext(thread);
-}
-
-/// @fn int static inline threadsConfig(Thread *first,
-///   ThreadsConfigOptions *options)
-///
-/// @brief Configure the threads library.
-///
-/// @param first A pointer to an allocated Thread.
-/// @param options A pointer to a ThreadsConfigOptions structure with the
-///   optional parameters to use for configuring threads.
-///
-/// @return Returns processSuccess on success, error code on failure.
-static inline int threadsConfig(Thread *first, ThreadsConfigOptions *options) {
-  return overlayMap.header.osApi->coroutinesConfig(first, options);
 }
 
 /// @fn static inline uint64_t* threadStackEnd(Thread *thread)
