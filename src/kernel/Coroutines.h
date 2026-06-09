@@ -106,14 +106,19 @@ extern "C"
 /// @enum CoroutineState
 ///
 /// @brief States that a Coroutine can be in.
-typedef enum CoroutineState {
-  COROUTINE_STATE_BLOCKED = 0,
-  COROUTINE_STATE_TIMEDWAIT,
-  COROUTINE_STATE_WAIT,
-  COROUTINE_STATE_NOT_RUNNING,
-  COROUTINE_STATE_RUNNING,
-  NUM_COROUTINE_STATES
-} CoroutineState;
+///
+/// @note ISO C forbids forward references to an enum.  That means that if
+/// something else can't directly include this header, it wouldn't be able to
+/// define the CoroutineState type without also defining all the values, which
+/// we don't want.  Because of that, we will define it to be a uint8_t here and
+/// use define constants for the values.
+typedef uint8_t CoroutineState;
+#define COROUTINE_STATE_BLOCKED     0
+#define COROUTINE_STATE_TIMEDWAIT   1
+#define COROUTINE_STATE_WAIT        2
+#define COROUTINE_STATE_NOT_RUNNING 3
+#define COROUTINE_STATE_RUNNING     4
+#define NUM_COROUTINE_STATES        5
 
 /// @typedef CoroutineFunction
 ///
