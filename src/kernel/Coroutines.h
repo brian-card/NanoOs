@@ -326,7 +326,7 @@ int coroutineTerminate(Coroutine *targetCoroutine, Comutex **mutexes,
 Coroutine* getRunningCoroutine(void);
 bool coroutineDeadlocked(Coroutine *coroutine);
 bool coroutineStackOverflowed(Coroutine *coroutine);
-uint64_t *coroutineStackEnd(Coroutine *coroutine);
+uint64_t* coroutineStackEnd(Coroutine *coroutine);
 int coroutineSetStackEnd(Coroutine *coroutine, uint64_t *stackEnd);
 
 

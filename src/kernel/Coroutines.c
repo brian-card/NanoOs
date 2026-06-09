@@ -2466,7 +2466,7 @@ bool coroutineStackOverflowed(Coroutine *coroutine) {
   return *coroutine->stackEnd != COROUTINE_STACK_END_VALUE;
 }
 
-/// @fn uint64_t *coroutineStackEnd(Coroutine *coroutine)
+/// @fn uint64_t* coroutineStackEnd(Coroutine *coroutine)
 ///
 /// @brief Get the address of the end of a coroutine's stack.
 ///
@@ -2474,7 +2474,7 @@ bool coroutineStackOverflowed(Coroutine *coroutine) {
 ///
 /// @return Returns a pointer to the end of the coroutine's stack on success,
 /// NULL on failure.
-uint64_t *coroutineStackEnd(Coroutine *coroutine) {
+uint64_t* coroutineStackEnd(Coroutine *coroutine) {
   if (coroutine == NULL) {
     return NULL;
   }
