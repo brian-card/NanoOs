@@ -301,8 +301,6 @@ extern "C"
   ((ProcessDescriptor*) coroutineContext(msg_from(processMessagePointer).coro))
 #define processMessageTo(processMessagePointer) \
   ((ProcessDescriptor*) coroutineContext(msg_to(processMessagePointer).coro))
-#define processMessageConfigured(processMessagePointer) \
-  msg_configured(processMessagePointer)
 
 typedef Coroutine Thread;
 typedef CoroutinesConfigOptions ThreadsConfigOptions;
