@@ -314,11 +314,8 @@ Coroutine* coroutineInit(Coroutine *userCoroutine,
   CoroutineFunction func, void *arg);
 int coroutineCreate(Coroutine **coroutine, CoroutineFunction func, void *arg);
 void* coroutineResume(Coroutine *targetCoroutine, void *arg);
-void* coroutineYield_(void *arg, CoroutineState state);
-#define coroutineYield(arg, state) coroutineYield_(arg, (CoroutineState) state)
-void* coroutineYieldTo_(Coroutine *to, void *arg, CoroutineState state);
-#define coroutineYieldTo(to, arg, state) \
-  coroutineYieldTo_(to, arg, (CoroutineState) state)
+void* coroutineYield(void *arg, CoroutineState state);
+void* coroutineYieldTo(Coroutine *to, void *arg, CoroutineState state);
 int coroutineSetContext(Coroutine *coroutine, void *context);
 void* coroutineContext(Coroutine *coroutine);
 CoroutineState coroutineState(Coroutine *coroutine);

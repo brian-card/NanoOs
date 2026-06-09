@@ -866,7 +866,7 @@ void* callCoroutineYieldCallback(Coroutine *running, void *arg) {
   return arg;
 }
 
-/// @fn void* coroutineYield_(void *arg, CoroutineState state)
+/// @fn void* coroutineYield(void *arg, CoroutineState state)
 ///
 /// @brief Transfer control back to the coroutine that resumed this one.  A
 /// coroutine that is blocked inside coroutineYield() may be resumed by any
@@ -882,7 +882,7 @@ void* callCoroutineYieldCallback(Coroutine *running, void *arg) {
 ///
 /// @return Returns the value passed into the next call to coroutineResume()
 /// for this coroutine.
-void* coroutineYield_(void *arg, CoroutineState state) {
+void* coroutineYield(void *arg, CoroutineState state) {
   void *returnValue = NULL;
   Coroutine* first = _globalFirst;
 #ifdef THREAD_SAFE_COROUTINES
@@ -923,7 +923,7 @@ void* coroutineYield_(void *arg, CoroutineState state) {
   return returnValue;
 }
 
-/// @fn void* coroutineYieldTo_(Coroutine *to, void *arg, CoroutineState state)
+/// @fn void* coroutineYieldTo(Coroutine *to, void *arg, CoroutineState state)
 ///
 /// @brief Transfer control to a specified Coroutine on the running stack.  A
 /// coroutine that is blocked inside coroutineYieldTo() may be resumed by any
@@ -940,7 +940,7 @@ void* coroutineYield_(void *arg, CoroutineState state) {
 ///
 /// @return Returns the value passed into the next call to coroutineResume()
 /// for this coroutine.
-void* coroutineYieldTo_(Coroutine *to, void *arg, CoroutineState state) {
+void* coroutineYieldTo(Coroutine *to, void *arg, CoroutineState state) {
   void *returnValue = NULL;
   Coroutine* first = _globalFirst;
 #ifdef THREAD_SAFE_COROUTINES
