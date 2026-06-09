@@ -62,6 +62,9 @@ extern "C"
 {
 #endif
 
+typedef struct Coroutine Coroutine;
+typedef uint8_t CoroutineState;
+
 typedef struct NanoOsFile NanoOsFile;
 #define FILE NanoOsFile
 
@@ -218,6 +221,15 @@ typedef struct NanoOsApi {
   
   // Limited HAL access:
   HalBlockDevice *blockDevice;
+  
+  // Kernel process functions:
+  Coroutine* (*getRunningCoroutine)(void);
+  void* (*coroutineContext)(Coroutine *coroutine);
+  int (*coroutineSetContext)(Coroutine *coroutine, void *context);
+  uint64_t* (*coroutineStackEnd)(Coroutine *coroutine);
+  int (*coroutineSetStackEnd)(Coroutine *coroutine, uint64_t *stackEnd);
+  bool (*coroutineStackOverflowed)(Coroutine *coroutine);
+  void* (*coroutineYield)(void *arg, CoroutineState state);
 } NanoOsApi;
 
 extern NanoOsApi nanoOsApi;

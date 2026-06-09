@@ -46,6 +46,7 @@ char** parseArgs(char *command, int *argc);
 // Must come first
 #include "NanoOsApi.h"
 
+#include "../kernel/Coroutines.h"
 #include "../kernel/MemoryManager.h"
 #include "../kernel/NanoOs.h"
 #include "../kernel/OverlayFunctions.h"
@@ -203,5 +204,14 @@ NanoOsApi nanoOsApi = {
   
   // Limited HAL access:
   .blockDevice = NULL,
+  
+  // Kernel process functions:
+  .getRunningCoroutine = getRunningCoroutine,
+  .coroutineContext = coroutineContext,
+  .coroutineSetContext = coroutineSetContext,
+  .coroutineStackEnd = coroutineStackEnd,
+  .coroutineSetStackEnd = coroutineSetStackEnd,
+  .coroutineStackOverflowed = coroutineStackOverflowed,
+  .coroutineYield = coroutineYield_,
 };
 
