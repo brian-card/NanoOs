@@ -350,96 +350,150 @@ static inline int processMessageInit(ProcessMessage *processMessage,
     processMessage, MSG_CORO_SAFE, type, data, size, waiting);
 }
 
-/// @def processMessageSetDone
+/// @fn static inline int processMessageSetDone(ProcessMessage *processMessage)
 ///
-/// @brief Function macro to set a process message to the 'done' state.
-#define processMessageSetDone(processMessage) \
-  msg_set_done(processMessage)
+/// @brief Set a process message to the 'done' state.  If a process is waiting
+/// for the message to be marked done, it will be signaled as a result of this
+/// call.
+///
+/// @param processMessage A pointer to the ProcessMessage to mark done.
+///
+/// @return Returns processSuccess on success, process error code on failure.
+static inline int processMessageSetDone(ProcessMessage *processMessage) {
+  return overlayMap.header.osApi->processMessageSetDone(processMessage);
+}
 
-/// @def processMessageRelease
+/// @fn static inline int processMessageRelease(ProcessMessage *processMessage)
 ///
-/// @brief Function macro to release a process message.
-#define processMessageRelease(processMessage) \
-  msg_release(processMessage)
+/// @brief Release but do not deallocate a process message.
+///
+/// @param processMessage A pointer to the ProcessMessage to release.
+///
+/// @return Returns processSuccess on success, process error code on failure.
+static inline int processMessageRelease(ProcessMessage *processMessage) {
+  return overlayMap.header.osApi->processMessageRelease(processMessage);
+}
 
-/// @def processMessageWaitForDone
+/// @fn static inline int processMessageWaitForDone(
+///   ProcessMessage *processMessage, struct timespec *ts)
 ///
-/// @brief Function macro to wait for a process message to enter the 'done'
-/// state.
-#define processMessageWaitForDone(processMessage, ts) \
-  msg_wait_for_done(processMessage, ts)
+/// @brief Wait for a process message to enter the 'done' state.
+///
+/// @param processMessage A pointer to the ProcessMessage to wait for.
+/// @param ts A pointer to a struct timespec containing a future time to timeout
+///   if the message is not marked as done by then.
+///
+/// @return Returns processSuccess on success, process error code on failure.
+static inline int processMessageWaitForDone(
+  ProcessMessage *processMessage, struct timespec *ts
+) {
+  return overlayMap.header.osApi->processMessageWaitForDone(processMessage, ts);
+}
 
-/// @def processMessageWaitForReplyWithType
+/// @fn static inline ProcessMessage* processMessageQueueWaitForType(
+///   int64_t type, struct timespec *ts)
 ///
-/// @brief Function macro to wait on a reply to a message with a specified type.
-#define processMessageWaitForReplyWithType(sent, releaseAfterDone, type, ts) \
-  msg_wait_for_reply_with_type(sent, releaseAfterDone, type, ts)
-
-/// @def processMessageQueueWaitForType
-///
-/// @brief Function macro to wait for a message of a specific type to be pushed
-/// onto the running process's message queue.
-#define processMessageQueueWaitForType(type, ts) \
-  comessageQueueWaitForType(type, ts)
-
-/// @def processMessageQueueWait
-///
-/// @brief Function macro to wait for a message to be pushed onto the running
+/// @brief Wait for a message of a specific type to be pushed onto the running
 /// process's message queue.
-#define processMessageQueueWait(ts) \
-  comessageQueueWait(ts)
-
-/// @def processMessageQueuePush
 ///
-/// @brief Function macro to push a process message on to a process's message
-/// queue.
-#define processMessageQueuePush(processDescriptor, message) \
-  comessageQueuePush((processDescriptor)->mainThread, message)
-
-/// @def processMessageQueuePop
+/// @param type An int64_t type of message to wait for.
+/// @param ts A pointer to a struct timespec containing a future time to timeout
+///   if a message of the specified type is not received by then.
 ///
-/// @brief Function macro to pop a process message from the running process's
-/// message queue.
-#define processMessageQueuePop() \
-  comessageQueuePop()
+/// @return Returns a pointer to a popped message of the specified type on
+/// success, NULL on failure.
+static inline ProcessMessage* processMessageQueueWaitForType(
+  int64_t type, struct timespec *ts
+) {
+  return overlayMap.header.osApi->comessageQueueWaitForType(type, ts);
+}
 
-/// @def processResume
+/// @fn static inline ProcessMessage* processMessageQueueWait(
+///   struct timespec *ts)
 ///
-/// @brief Resume a process and update the currentProcess state correctly.
-#define processResume(processDescriptor, processMessage) \
-  coroutineResume((processDescriptor)->mainThread, processMessage); \
+/// @brief Wait for a message of any type to be pushed onto the running
+/// process's message queue.
+///
+/// @param ts A pointer to a struct timespec containing a future time to timeout
+///   if a message is not received by then.
+///
+/// @return Returns a pointer to a popped message of the specified type on
+/// success, NULL on failure.
+static inline ProcessMessage* processMessageQueueWait(struct timespec *ts) {
+  return overlayMap.header.osApi->comessageQueueWait(ts);
+}
+
+/// @fn static inline int processMessageQueuePush(
+///   ProcessDescriptor *processDescriptor, ProcessMessage *message)
+///
+/// @brief Push a process message on to a process's message queue.
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor to push the
+///   message onto.
+/// @param message A pointer to the ProcessMessage to push.
+///
+/// @return Returns processSuccess on success, process error code on failure.
+static inline int processMessageQueuePush(
+  ProcessDescriptor *processDescriptor, ProcessMessage *message
+) {
+  return overlayMap.header.osApi->comessageQueuePush(
+    processDescriptor->mainThread, message);
+}
+
+/// @fn static inline ProcessMessage* processMessageQueuePop(void)
+///
+/// @brief Pop a process message from the running process's message queue.
+///
+/// @return Returns a pointer to a popped ProcessMessage on success, NULL on
+/// failure.
+static inline ProcessMessage* processMessageQueuePop(void) {
+  return overlayMap.header.osApi->comessageQueuePop();
+}
+
+/// @typedef ProcessMessageElement
+///
+/// @brief Enum mapping the elements of a ProcessMessage.
+typedef msg_element_t ProcessMessageElement;
+
+/// @fn static inline void* processMessageElement(
+///   ProcessMessage *message, ProcessMessageElement element)
+///
+/// @brief Get a pointer to a member element of a ProcessMessage.
+///
+/// @param processMessage A pointer to the ProcessMessage to get the element of.
+/// @param element A ProcessMessageElement value specifying which element to
+///   get.
+///
+/// @return Returns a pointer to the specified element of the provided message
+/// on success, NULL on failure.
+static inline void* processMessageElement(
+  ProcessMessage *processMessage, ProcessMessageElement element
+) {
+  return overlayMap.header.osApi->processMessageElement(
+    processMessage, element);
+}
 
 // Process message accessors
-#define processMessageType(processMessagePointer) \
-  msg_type(processMessagePointer)
-#define processMessageData(processMessagePointer) \
-  msg_data(processMessagePointer)
-#define processMessageSize(processMessagePointer) \
-  msg_size(processMessagePointer)
-#define processMessageWaiting(processMessagePointer) \
-  msg_waiting(processMessagePointer)
-#define processMessageDone(processMessagePointer) \
-  msg_done(processMessagePointer)
-#define processMessageInUse(processMessagePointer) \
-  msg_in_use(processMessagePointer)
-#define processMessageFrom(processMessagePointer) \
-  ((ProcessDescriptor*) coroutineContext(msg_from(processMessagePointer).coro))
-#define processMessageTo(processMessagePointer) \
-  ((ProcessDescriptor*) coroutineContext(msg_to(processMessagePointer).coro))
-#define processMessageConfigured(processMessagePointer) \
-  msg_configured(processMessagePointer)
-
-// Exported functionality
-void* execCommand(void *args);
-int sendProcessMessageToProcess(
-  ProcessDescriptor *processDescriptor, ProcessMessage *processMessage);
-int sendProcessMessageToPid(unsigned int pid, ProcessMessage *processMessage);
-ProcessMessage* getAvailableMessage(void);
-ProcessMessage* initSendProcessMessageToPid(int pid, int64_t type,
-  void *data, size_t size, bool waiting);
-void* waitForDataMessage(ProcessMessage *sent, int type, const struct timespec *ts);
-ExecArgs* execArgsDestroy(ExecArgs *execArgs);
-SpawnArgs* spawnArgsDestroy(SpawnArgs *spawnArgs);
+#define processMessageType(message) \
+  (*((int64_t*) processMessageElement((message), MSG_ELEMENT_TYPE)))
+#define processMessageData(message) \
+  (*((void**) processMessageElement((message), MSG_ELEMENT_DATA)))
+#define processMessageSize(message) \
+  (*((size_t*) processMessageElement((message), MSG_ELEMENT_SIZE)))
+#define processMessageWaiting(message) \
+  (*((bool*) processMessageElement((message), MSG_ELEMENT_WAITING)))
+#define processMessageDone(message) \
+  (*((bool*) processMessageElement((message), MSG_ELEMENT_DONE)))
+#define processMessageInUse(message) \
+  (*((bool*) processMessageElement((message), MSG_ELEMENT_IN_USE)))
+#define processMessageFrom(message) \
+  ((ProcessDescriptor*) overlayMap.header.osApi->coroutineContext((*( \
+    (msg_endpoint_t*) processMessageElement((message), \
+    MSG_ELEMENT_FROM))).coro))
+#define processMessageTo(message) \
+  ((ProcessDescriptor*) overlayMap.header.osApi->coroutineContext((*( \
+    (msg_endpoint_t*) processMessageElement((message), \
+    MSG_ELEMENT_TO))).coro))
 
 #ifdef __cplusplus
 }
