@@ -214,17 +214,22 @@ typedef struct msg_q_t {
 /// @enum msg_element_t
 ///
 /// @brief Enumeration of member elements of msg_t that are user-accessible.
-typedef enum msg_element_t {
-  MSG_ELEMENT_TYPE,
-  MSG_ELEMENT_DATA,
-  MSG_ELEMENT_SIZE,
-  MSG_ELEMENT_WAITING,
-  MSG_ELEMENT_DONE,
-  MSG_ELEMENT_IN_USE,
-  MSG_ELEMENT_FROM,
-  MSG_ELEMENT_TO,
-  NUM_MSG_ELEMENTS
-} msg_element_t;
+///
+/// @note ISO C forbids forward references to an enum.  That means that if
+/// something else can't directly include this header, it wouldn't be able to
+/// define the msg_element_t type without also defining all the values, which
+/// we don't want.  Because of that, we will define it to be a uint8_t here and
+/// use define constants for the values.
+typedef uint8_t msg_element_t;
+#define MSG_ELEMENT_TYPE    0
+#define MSG_ELEMENT_DATA    1
+#define MSG_ELEMENT_SIZE    2
+#define MSG_ELEMENT_WAITING 3
+#define MSG_ELEMENT_DONE    4
+#define MSG_ELEMENT_IN_USE  5
+#define MSG_ELEMENT_FROM    6
+#define MSG_ELEMENT_TO      7
+#define NUM_MSG_ELEMENTS    8
 
 // Message functions
 msg_t* msg_create(msg_safety_t msg_safety);
