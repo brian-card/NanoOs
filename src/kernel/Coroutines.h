@@ -113,12 +113,12 @@ extern "C"
 /// we don't want.  Because of that, we will define it to be a uint8_t here and
 /// use define constants for the values.
 typedef uint8_t CoroutineState;
-#define COROUTINE_STATE_BLOCKED     0
-#define COROUTINE_STATE_TIMEDWAIT   1
-#define COROUTINE_STATE_WAIT        2
-#define COROUTINE_STATE_NOT_RUNNING 3
-#define COROUTINE_STATE_RUNNING     4
-#define NUM_COROUTINE_STATES        5
+#define COROUTINE_STATE_BLOCKED     ((CoroutineState) 0)
+#define COROUTINE_STATE_TIMEDWAIT   ((CoroutineState) 1)
+#define COROUTINE_STATE_WAIT        ((CoroutineState) 2)
+#define COROUTINE_STATE_NOT_RUNNING ((CoroutineState) 3)
+#define COROUTINE_STATE_RUNNING     ((CoroutineState) 4)
+#define NUM_COROUTINE_STATES        ((CoroutineState) 5)
 
 /// @typedef CoroutineFunction
 ///

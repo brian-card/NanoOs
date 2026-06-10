@@ -76,9 +76,9 @@ extern "C"
 /// we don't want.  Because of that, we will define it to be a uint8_t here and
 /// use define constants for the values.
 typedef uint8_t msg_safety_t;
-#define MSG_CORO_SAFE 0
+#define MSG_CORO_SAFE ((msg_safety_t) 0)
 #ifdef THREAD_SAFE_COROUTINES
-#define MSG_THRD_SAFE 1
+#define MSG_THRD_SAFE ((msg_safety_t) 1)
 #endif // THREAD_SAFE_COROUTINES
 
 // Forward declarations so that the function pointer typedefs will work.
@@ -221,15 +221,15 @@ typedef struct msg_q_t {
 /// we don't want.  Because of that, we will define it to be a uint8_t here and
 /// use define constants for the values.
 typedef uint8_t msg_element_t;
-#define MSG_ELEMENT_TYPE    0
-#define MSG_ELEMENT_DATA    1
-#define MSG_ELEMENT_SIZE    2
-#define MSG_ELEMENT_WAITING 3
-#define MSG_ELEMENT_DONE    4
-#define MSG_ELEMENT_IN_USE  5
-#define MSG_ELEMENT_FROM    6
-#define MSG_ELEMENT_TO      7
-#define NUM_MSG_ELEMENTS    8
+#define MSG_ELEMENT_TYPE    ((msg_element_t) 0)
+#define MSG_ELEMENT_DATA    ((msg_element_t) 1)
+#define MSG_ELEMENT_SIZE    ((msg_element_t) 2)
+#define MSG_ELEMENT_WAITING ((msg_element_t) 3)
+#define MSG_ELEMENT_DONE    ((msg_element_t) 4)
+#define MSG_ELEMENT_IN_USE  ((msg_element_t) 5)
+#define MSG_ELEMENT_FROM    ((msg_element_t) 6)
+#define MSG_ELEMENT_TO      ((msg_element_t) 7)
+#define NUM_MSG_ELEMENTS    ((msg_element_t) 8)
 
 // Message functions
 msg_t* msg_create(msg_safety_t msg_safety);
