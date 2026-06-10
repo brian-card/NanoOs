@@ -64,6 +64,8 @@ extern "C"
 
 typedef struct Coroutine Coroutine;
 typedef uint8_t CoroutineState;
+typedef struct msg_t msg_t;
+typedef uint8_t msg_safety_t;
 
 typedef struct NanoOsFile NanoOsFile;
 #define FILE NanoOsFile
@@ -230,6 +232,10 @@ typedef struct NanoOsApi {
   int (*coroutineSetStackEnd)(Coroutine *coroutine, uint64_t *stackEnd);
   bool (*coroutineStackOverflowed)(Coroutine *coroutine);
   void* (*coroutineYield)(void *arg, CoroutineState state);
+  
+  // Kernel message functions:
+  int (*processMessageInit)(msg_t *msg, msg_safety_t msg_safety,
+    int64_t type, void *data, size_t size, bool waiting);
 } NanoOsApi;
 
 extern NanoOsApi nanoOsApi;

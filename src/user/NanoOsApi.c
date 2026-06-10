@@ -213,5 +213,8 @@ NanoOsApi nanoOsApi = {
   .coroutineSetStackEnd = coroutineSetStackEnd,
   .coroutineStackOverflowed = coroutineStackOverflowed,
   .coroutineYield = coroutineYield_,
+  
+  // Kernel message functions:
+  .processMessageInit = msg_init,
 };
 
