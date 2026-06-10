@@ -66,6 +66,7 @@ typedef struct Coroutine Coroutine;
 typedef uint8_t CoroutineState;
 typedef struct msg_t msg_t;
 typedef uint8_t msg_safety_t;
+typedef uint8_t msg_element_t;
 
 typedef struct NanoOsFile NanoOsFile;
 #define FILE NanoOsFile
