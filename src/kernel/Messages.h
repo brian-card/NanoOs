@@ -69,12 +69,17 @@ extern "C"
 ///
 /// @brief Indicator of what level of safety to employ with message operations
 /// (process, thread, or coroutine).
-typedef enum msg_safety_t {
+///
+/// @note ISO C forbids forward references to an enum.  That means that if
+/// something else can't directly include this header, it wouldn't be able to
+/// define the msg_safety_t type without also defining all the values, which
+/// we don't want.  Because of that, we will define it to be a uint8_t here and
+/// use define constants for the values.
+typedef uint8_t msg_safety_t;
+#define MSG_CORO_SAFE 0
 #ifdef THREAD_SAFE_COROUTINES
-  MSG_THRD_SAFE,
+#define MSG_THRD_SAFE 1
 #endif // THREAD_SAFE_COROUTINES
-  MSG_CORO_SAFE,
-} msg_safety_t;
 
 // Forward declarations so that the function pointer typedefs will work.
 typedef struct msg_t msg_t;
