@@ -1,11 +1,11 @@
 ///////////////////////////////////////////////////////////////////////////////
 ///
 /// @author            Brian Card
-/// @date              06.07.2026
+/// @date              06.11.2026
 ///
-/// @file              Fat32.h
+/// @file              Filesystem.h
 ///
-/// @brief             Definitions in support of the FAT32 overlay driver.
+/// @brief             Definitions in support of the filesystem overlay driver.
 ///
 /// @copyright
 ///                      Copyright (c) 2026 Brian Card
@@ -33,10 +33,10 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef OVERLAY_FAT32_H
-#define OVERLAY_FAT32_H
+#ifndef OVERLAY_FILESYSTEM_H
+#define OVERLAY_FILESYSTEM_H
 
-#include "../../src/kernel/Filesystem.h"
+#include "../../../../../src/kernel/Filesystem.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -49,5 +49,5 @@ extern "C"
 }
 #endif
 
-#endif // OVERLAY_FAT32_H
+#endif // OVERLAY_FILESYSTEM_H
 

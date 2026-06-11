@@ -36,7 +36,7 @@
 // NanoOs includes
 #include "KernelProcesses.h"
 #include "NanoOsUtils.h"
-#include "Fat32.h"
+#include "Filesystem.h"
 
 /// @typedef FilesystemCommandHandler
 ///
@@ -51,21 +51,21 @@ typedef struct FilesystemCommandHandler {
 /// @brief Array of FilesystemCommandHandler metadata.
 const FilesystemCommandHandler filesystemCommandHandlers[] = {
   // FILESYSTEM_OPEN_FILE:
-  {((void*) 3), "filesystemOpenFileCommandHandler"},
+  {((void*) 3), "openFile"},
   // FILESYSTEM_CLOSE_FILE:
-  {((void*) 4), "filesystemCloseFileCommandHandler"},
+  {((void*) 4), "closeFile"},
   // FILESYSTEM_READ_FILE:
-  {((void*) 5), "filesystemReadFileCommandHandler"},
+  {((void*) 5), "readFile"},
   // FILESYSTEM_WRITE_FILE:
-  {((void*) 6), "filesystemWriteFileCommandHandler"},
+  {((void*) 6), "writeFile"},
   // FILESYSTEM_REMOVE_FILE:
-  {((void*) 7), "filesystemRemoveFileCommandHandler"},
+  {((void*) 7), "removeFile"},
   // FILESYSTEM_SEEK_FILE:
-  {((void*) 8), "filesystemSeekFileCommandHandler"},
+  {((void*) 8), "seekFile"},
   // FILESYSTEM_DUMP_OPEN_FILES:
-  {((void*) 9), "filesystemDumpOpenFilesCommandHandler"},
+  {((void*) 9), "dumpOpenFiles"},
   // FILESYSTEM_GET_FILE_BLOCK_METADATA:
-  {((void*) 10), "filesystemGetFileBlockMetadataCommandHandler"},
+  {((void*) 10), "getFileBlockMetadata"},
 };
 
 void* main(void *args) {
