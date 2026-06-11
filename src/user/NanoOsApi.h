@@ -237,6 +237,18 @@ typedef struct NanoOsApi {
   // Kernel message functions:
   int (*processMessageInit)(msg_t *msg, msg_safety_t msg_safety,
     int64_t type, void *data, size_t size, bool waiting);
+  int (*processMessageRelease)(msg_t *msg);
+  int (*processMessageSetDone)(msg_t *msg);
+  int (*processMessageWaitForDone)(msg_t *msg, const struct timespec *ts);
+  void* (*processMessageElement)(msg_t *msg, msg_element_t msg_element);
+  
+  // Kernel message queue functions:
+  msg_t* (*comessageQueuePeek)(void);
+  msg_t* (*comessageQueuePop)(void);
+  msg_t* (*comessageQueuePopType)(int type);
+  msg_t* (*comessageQueueWait)(const struct timespec *ts);
+  msg_t* (*comessageQueueWaitForType)(int64_t type, const struct timespec *ts);
+  int (*comessageQueuePush)(Coroutine *coroutine, msg_t *comessage);
 } NanoOsApi;
 
 extern NanoOsApi nanoOsApi;

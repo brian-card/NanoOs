@@ -212,9 +212,21 @@ NanoOsApi nanoOsApi = {
   .coroutineStackEnd = coroutineStackEnd,
   .coroutineSetStackEnd = coroutineSetStackEnd,
   .coroutineStackOverflowed = coroutineStackOverflowed,
-  .coroutineYield = coroutineYield_,
+  .coroutineYield = coroutineYield,
   
   // Kernel message functions:
   .processMessageInit = msg_init,
+  .processMessageRelease = msg_release,
+  .processMessageSetDone = msg_set_done,
+  .processMessageWaitForDone = msg_wait_for_done,
+  .processMessageElement = msg_element,
+  
+  // Kernel message queue functions:
+  .comessageQueuePeek = comessageQueuePeek,
+  .comessageQueuePop = comessageQueuePop,
+  .comessageQueuePopType = comessageQueuePopType,
+  .comessageQueueWait = comessageQueueWait,
+  .comessageQueueWaitForType = comessageQueueWaitForType,
+  .comessageQueuePush = comessageQueuePush,
 };
 
