@@ -47,6 +47,12 @@ extern "C"
 {
 #endif
 
+/// @def blockOverlayId
+///
+/// Format a block overlay's ID into a format that can be used to load an
+/// overlay.
+#define blockOverlayId(id) ((void*) id)
+
 // Process status values.
 #define processSuccess  coroutineSuccess
 #define processBusy     coroutineBusy
