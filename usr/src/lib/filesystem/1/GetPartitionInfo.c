@@ -38,9 +38,9 @@
 #include "NanoOsUtils.h"
 #include "Filesystem.h"
 
-void* getPartitionInfo(void *args) {
+void* GetPartitionInfo(void *args) {
   FilesystemState *fs = (FilesystemState*) args;
-  
+  (void) fs;
 
   return 0;
 }
