@@ -51,21 +51,21 @@ typedef struct FilesystemCommandHandler {
 /// @brief Array of FilesystemCommandHandler metadata.
 const FilesystemCommandHandler filesystemCommandHandlers[] = {
   // FILESYSTEM_OPEN_FILE:
-  {((void*) 3), "openFile"},
+  {((void*) 3), "OpenFile"},
   // FILESYSTEM_CLOSE_FILE:
-  {((void*) 4), "closeFile"},
+  {((void*) 4), "CloseFile"},
   // FILESYSTEM_READ_FILE:
-  {((void*) 5), "readFile"},
+  {((void*) 5), "ReadFile"},
   // FILESYSTEM_WRITE_FILE:
-  {((void*) 6), "writeFile"},
+  {((void*) 6), "WriteFile"},
   // FILESYSTEM_REMOVE_FILE:
-  {((void*) 7), "removeFile"},
+  {((void*) 7), "RemoveFile"},
   // FILESYSTEM_SEEK_FILE:
-  {((void*) 8), "seekFile"},
+  {((void*) 8), "SeekFile"},
   // FILESYSTEM_DUMP_OPEN_FILES:
-  {((void*) 9), "dumpOpenFiles"},
+  {((void*) 9), "DumpOpenFiles"},
   // FILESYSTEM_GET_FILE_BLOCK_METADATA:
-  {((void*) 10), "getFileBlockMetadata"},
+  {((void*) 10), "GetFileBlockMeta"},
 };
 
 void* main(void *args) {
@@ -77,10 +77,10 @@ void* main(void *args) {
   
   printDebugString("runFilesystem: Getting partition info\n");
   callOverlayFunction(OVERLAY_SAME_NAMESPACE, ((void*) 1),
-    "getPartitionInfo", &fs);
+    "GetPartitionInfo", &fs);
   printDebugString("runFilesystem: Initiallizing driverState\n");
   callOverlayFunction(OVERLAY_SAME_NAMESPACE, ((void*) 2),
-    "driverInit", &fs);
+    "DriverInit", &fs);
   printDebugString("runFilesystem: Initialization complete\n");
   
   while (1) {
