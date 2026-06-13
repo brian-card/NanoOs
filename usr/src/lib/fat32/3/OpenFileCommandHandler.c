@@ -25,9 +25,9 @@
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-/// @file OpenFile.c
+/// @file OpenFileCommandHandler.c
 ///
-/// @brief Overlay implementation of fopen for FAT32.
+/// @brief Overlay implementation of an fopen command handler.
 
 // Standard C includes
 #include <stdlib.h>
@@ -49,7 +49,7 @@ void* fopenImplementation(
 /// @brief Overlay implementation of a FAT32 fopen function.
 ///
 /// @param args A pointer to a FilesystemState, cast to a void*.  The args
-///   member variable is a pointer to a FilesystemFopenArgs.
+///   member variable is a pointer to a ProcessMessage.
 ///
 /// @return Sets the returnValue member of the provided FilesystemFopenArgs
 /// to a valid FILE pointer on success, sets it to NULL on failure.  This

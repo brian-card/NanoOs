@@ -25,7 +25,7 @@
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-/// @file OpenFile.c
+/// @file OpenFileImplementation.c
 ///
 /// @brief Overlay implementation of fopen for FAT32.
 
