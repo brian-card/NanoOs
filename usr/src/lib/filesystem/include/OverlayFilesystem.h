@@ -43,7 +43,23 @@ extern "C"
 {
 #endif
 
+/// @def readBytes
+///
+/// @brief Read a value from a memory address that may be unaligned.
+///
+/// @param dst A pointer to the destination memory.  This is expected to be a
+///   multi-byte type.
+/// @param src A pointer to the source memory.
+#define readBytes(dst, src) memcpy(dst, src, sizeof(*(dst)))
 
+/// @def writeBytes
+///
+/// @brief Write a value to a memory address that may be unaligned.
+///
+/// @param dst A pointer to the destination memory.
+/// @param src A pointer to the source memory.  This is expected to be a
+///   multi-byte type.
+#define writeBytes(dst, src) memcpy(dst, src, sizeof(*(src)))
 
 #ifdef __cplusplus
 }
