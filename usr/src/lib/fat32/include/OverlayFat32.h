@@ -3,7 +3,7 @@
 /// @author            Brian Card
 /// @date              06.07.2026
 ///
-/// @file              Fat32.h
+/// @file              OverlayFat32.h
 ///
 /// @brief             Definitions in support of the FAT32 overlay driver.
 ///
@@ -36,7 +36,7 @@
 #ifndef OVERLAY_FAT32_H
 #define OVERLAY_FAT32_H
 
-#include "../../src/kernel/Filesystem.h"
+#include "../../OverlayFilesystem.h"
 
 #ifdef __cplusplus
 extern "C"
