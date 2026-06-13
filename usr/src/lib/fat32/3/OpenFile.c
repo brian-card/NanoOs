@@ -88,19 +88,41 @@ int fat32ParseMode(const char *mode, Fat32OpenMode *flags) {
   return FAT32_SUCCESS;
 }
 
-void* OpenFile(void *args) {
-  FilesystemState *filesystemState = (FilesystemState*) args;
-  Fat32DriverState *ds = (Fat32DriverState *) filesystemState->driverState;
-  FilesystemFopenArgs *fopenArgs = (FilesystemFopenArgs*) filesystemState->args;
-  if ((ds == NULL) || (fopenArgs == NULL) || (fopenArgs->pathname == NULL)
-    || (fopenArgs->mode == NULL)
-  ) {
+///////////////////////////////////////////////////////////////////////////////
+///
+/// @brief Open a file on a FAT32 filesystem.
+///
+/// @details Resolves the full path by walking intermediate directories,
+///          searches the target directory for the file name, and applies the
+///          semantics of the C standard library mode string:
+///
+///          "r"  — open for reading; file must exist.
+///          "r+" — open for reading and writing; file must exist.
+///          "w"  — open for writing; create or truncate.
+///          "w+" — open for reading and writing; create or truncate.
+///          "a"  — open for appending; create if absent.
+///          "a+" — open for reading and appending; create if absent.
+///
+/// @param driverState  Pointer to a Fat32DriverState (passed as void*).
+/// @param filePath     The null-terminated path to the file.
+/// @param mode         The null-terminated C fopen mode string.
+///
+/// @return A pointer to a heap-allocated Fat32FileHandle on success, or NULL
+///         on failure.
+///
+void* fat32Fopen(
+    void *driverState,
+    const char *filePath,
+    const char *mode
+) {
+  Fat32DriverState *ds = (Fat32DriverState *) driverState;
+  if ((ds == NULL) || (filePath == NULL) || (mode == NULL)) {
     return NULL;
   }
 
   // ---- Parse the mode string ----
   Fat32OpenMode modeFlags;
-  if (fat32ParseMode(fopenArgs->mode, &modeFlags) != FAT32_SUCCESS) {
+  if (fat32ParseMode(mode, &modeFlags) != FAT32_SUCCESS) {
     return NULL;
   }
 
@@ -108,8 +130,7 @@ void* OpenFile(void *args) {
   uint32_t    parentCluster;
   const char *fileName = NULL;
 
-  if (fat32ResolveParentDirectory(
-    ds, fopenArgs->pathname, &parentCluster, &fileName)
+  if (fat32ResolveParentDirectory(ds, filePath, &parentCluster, &fileName)
       != FAT32_SUCCESS) {
     return NULL;
   }
@@ -168,6 +189,62 @@ void* OpenFile(void *args) {
   free(searchResult.longName);
 
   return (void *) handle;
+}
+
+/// @fn void* OpenFile(void *args)
+///
+/// @brief Overlay implementation of a FAT32 fopen function.
+///
+/// @param args A pointer to a FilesystemState, cast to a void*.  The args
+///   member variable is a pointer to a FilesystemFopenArgs.
+///
+/// @return Sets the returnValue member of the provided FilesystemFopenArgs
+/// to a valid FILE pointer on success, sets it to NULL on failure.  This
+/// function always returns the filesystemState pointer provided as args.
+void* OpenFile(void *args) {
+  FilesystemState *filesystemState = (FilesystemState*) args;
+  NanoOsFile *nanoOsFile = NULL;
+  ProcessMessage *processMessage = (ProcessMessage*) filesystemState->args;
+  FilesystemFopenArgs *fopenArgs
+    = (FilesystemFopenArgs*) processMessageData(processMessage);
+
+  printDebugString("Opening file \"");
+  printDebugString(pathname);
+  printDebugString("\" in mode \"");
+  printDebugString(mode);
+  printDebugString("\"\n");
+
+  if (filesystemState->driverState != NULL) {
+    void *fileHandle = fat32Fopen(
+      filesystemState->driverState,
+      fopenArgs->pathname, fopenArgs->mode);
+    if (fileHandle != NULL) {
+      nanoOsFile = (NanoOsFile*) malloc(sizeof(NanoOsFile));
+      if (nanoOsFile != NULL) {
+        nanoOsFile->file = fileHandle;
+        nanoOsFile->currentPosition = 0;
+        nanoOsFile->fd = fopenArgs->fd;
+        nanoOsFile->owner = processPid(processMessageFrom(processMessage));
+        filesystemState->numOpenFiles++;
+
+        nanoOsFile->next = filesystemState->openFiles;
+        nanoOsFile->prev = NULL;
+        if (filesystemState->openFiles != NULL) {
+          filesystemState->openFiles->prev = nanoOsFile;
+        }
+        filesystemState->openFiles = nanoOsFile;
+      } else {
+        filesystemState->driverFclose(filesystemState->driverState, fileHandle);
+      }
+    } else {
+      printString("ERROR: driverFopen returned NULL\n");
+    }
+  } else {
+    printString("ERROR: driverState is not valid!\n");
+  }
+
+  fopenArgs->returnValue = nanoOsFile;
+  processMessageSetDone(processMessage);
   return filesystemState;
 }
 
