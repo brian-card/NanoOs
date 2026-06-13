@@ -2460,6 +2460,15 @@ int fat32Format(
   uint32_t bytesPerCluster =
     (uint32_t) sectorsPerCluster * (uint32_t) bytesPerSector;
 
+  // Verify the resolved cluster size is within FAT32 bounds.  This catches
+  // the case where a large bytesPerSector causes the default or caller-
+  // supplied sectorsPerCluster to produce an out-of-range result.
+  if ((bytesPerCluster < FAT32_CLUSTER_SIZE_MIN)
+      || (bytesPerCluster > FAT32_CLUSTER_SIZE_MAX)
+  ) {
+    return FAT32_INVALID_PARAMETER;
+  }
+
   // ---- Compute FAT layout ----
   //
   // The standard reserved sector count for FAT32 is 32; this places the BPB
@@ -2539,9 +2548,9 @@ int fat32Format(
   bpb->numberOfFats = numberOfFats;
   {
     uint16_t zero16 = 0;
-    memcpy(&bpb->rootEntryCount,  &zero16, sizeof(uint16_t));
-    memcpy(&bpb->totalSectors16,  &zero16, sizeof(uint16_t));
-    memcpy(&bpb->fatSize16,       &zero16, sizeof(uint16_t));
+    memcpy(&bpb->rootEntryCount, &zero16, sizeof(uint16_t));
+    memcpy(&bpb->totalSectors16, &zero16, sizeof(uint16_t));
+    memcpy(&bpb->fatSize16,      &zero16, sizeof(uint16_t));
   }
   bpb->mediaType = 0xF8;  // Fixed disk
   {
@@ -2585,9 +2594,9 @@ int fat32Format(
     memcpy(&bpb->backupBootSector, &bbs, sizeof(uint16_t));
   }
   memset(bpb->reserved,  0, sizeof(bpb->reserved));
-  bpb->driveNumber    = 0x80;
-  bpb->reserved1      = 0x00;
-  bpb->bootSignature  = 0x29;
+  bpb->driveNumber   = 0x80;
+  bpb->reserved1     = 0x00;
+  bpb->bootSignature = 0x29;
   {
     // A trivial but non-zero serial number derived from geometry.
     uint32_t vsn = totalSectors ^ ((uint32_t) bytesPerSector << 16);
@@ -2700,9 +2709,9 @@ int fat32Format(
         uint32_t entry0 = 0x0FFFFF00UL | 0xF8UL;  // Media byte
         uint32_t entry1 = FAT32_CLUSTER_EOC;
         uint32_t entry2 = FAT32_CLUSTER_EOC;       // Root directory
-        memcpy(filesystemState->blockBuffer + 0,  &entry0, sizeof(uint32_t));
-        memcpy(filesystemState->blockBuffer + 4,  &entry1, sizeof(uint32_t));
-        memcpy(filesystemState->blockBuffer + 8,  &entry2, sizeof(uint32_t));
+        memcpy(filesystemState->blockBuffer + 0, &entry0, sizeof(uint32_t));
+        memcpy(filesystemState->blockBuffer + 4, &entry1, sizeof(uint32_t));
+        memcpy(filesystemState->blockBuffer + 8, &entry2, sizeof(uint32_t));
       }
 
       result = bd->writeBlocks(
