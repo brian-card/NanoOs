@@ -89,7 +89,7 @@ void* main(void *args) {
       if ((processMessageType(msg) & 0xffffffffffffff00)
         != FILESYSTEM_COMMAND_SIGNATURE
       ) {
-        printString("Error: ");
+        printString("ERROR: ");
         printString(__func__);
         printString(" received unknown signature 0x");
         printHex(processMessageType(msg) & 0xffffffffffffff00);
@@ -104,7 +104,7 @@ void* main(void *args) {
         (FilesystemCommandResponse) (processMessageType(msg) & 0xff);
       if (type >= NUM_FILESYSTEM_COMMANDS) {
         printString(__func__);
-        printString(": ERROR! Received unknown filesystem message type ");
+        printString(": ERROR: Received unknown filesystem message type ");
         printInt(type);
         printString(" from process ");
         printInt(processPid(processMessageFrom(msg)));
@@ -116,11 +116,17 @@ void* main(void *args) {
       printDebugString("\n");
 
       fs.args = processMessageData(msg);
-      callOverlayFunction(
+      if (callOverlayFunction(
         OVERLAY_SAME_NAMESPACE,
         filesystemCommandHandlers[type].overlay,
         filesystemCommandHandlers[type].function,
-        &fs);
+        &fs) != &fs
+      ) {
+        printString(__func__);
+        printString("ERROR: Calling the ");
+        printString(filesystemCommandHandlers[type].function);
+        printString(" overlay function failed\n");
+      }
 
       msg = processMessageQueuePop();
     }
