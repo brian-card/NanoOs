@@ -115,7 +115,7 @@ void* main(void *args) {
       printDebugInt(type);
       printDebugString("\n");
 
-      fs.args = processMessageData(msg);
+      fs.args = msg;
       if (callOverlayFunction(
         OVERLAY_SAME_NAMESPACE,
         filesystemCommandHandlers[type].overlay,
