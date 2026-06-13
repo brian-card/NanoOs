@@ -142,8 +142,8 @@ int fat32WriteFatEntry(
     uint32_t cluster,
     uint32_t value
 ) {
-  FilesystemState    *fs = ds->filesystemState;
-  BlockDevice *bd = fs->blockDevice;
+  FilesystemState *fs = ds->filesystemState;
+  BlockDevice     *bd = fs->blockDevice;
 
   uint32_t fatByteOffset = cluster * sizeof(uint32_t);
   uint32_t fatSector = ds->fatStartSector
@@ -717,8 +717,8 @@ int fat32WriteDirectoryEntry(
     uint32_t offsetInCluster,
     const Fat32DirectoryEntry *entry
 ) {
-  FilesystemState    *fs = ds->filesystemState;
-  BlockDevice *bd = fs->blockDevice;
+  FilesystemState *fs = ds->filesystemState;
+  BlockDevice     *bd = fs->blockDevice;
 
   uint32_t sectorIndex   = offsetInCluster / ds->bytesPerSector;
   uint32_t offsetInSector = offsetInCluster % ds->bytesPerSector;
@@ -905,8 +905,8 @@ int fat32FindFreeDirectorySlots(
     uint32_t *foundCluster,
     uint32_t *foundOffset
 ) {
-  FilesystemState    *fs = ds->filesystemState;
-  BlockDevice *bd = fs->blockDevice;
+  FilesystemState *fs = ds->filesystemState;
+  BlockDevice     *bd = fs->blockDevice;
 
   uint32_t runStart       = 0;
   uint32_t runCluster     = dirCluster;
