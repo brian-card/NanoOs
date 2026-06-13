@@ -249,6 +249,8 @@ int fat32Fseek(void* driverState, void* fileHandle, long offset, int whence);
 int fat32GetFileBlockMetadata(void *ds, void *fileHandle,
   uint32_t *startBlock, uint32_t *numBlocks);
 const char *fat32GetFilename(void *fileHandle);
+int fat32Format(FilesystemState *filesystemState, const char *volumeLabel,
+  uint32_t clusterSize);
 
 #ifdef __cplusplus
 } // extern "C"
