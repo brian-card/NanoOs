@@ -36,7 +36,7 @@
 // NanoOs includes
 #include "KernelProcesses.h"
 #include "NanoOsUtils.h"
-#include "Filesystem.h"
+#include "OverlayFilesystem.h"
 
 /// @typedef FilesystemCommandHandler
 ///
@@ -51,21 +51,21 @@ typedef struct FilesystemCommandHandler {
 /// @brief Array of FilesystemCommandHandler metadata.
 const FilesystemCommandHandler filesystemCommandHandlers[] = {
   // FILESYSTEM_OPEN_FILE:
-  {blockOverlayId(3), "OpenFile"},
+  {OPEN_FILE_OVERLAY, "OpenFile"},
   // FILESYSTEM_CLOSE_FILE:
-  {blockOverlayId(4), "CloseFile"},
+  {CLOSE_FILE_OVERLAY, "CloseFile"},
   // FILESYSTEM_READ_FILE:
-  {blockOverlayId(5), "ReadFile"},
+  {READ_FILE_OVERLAY, "ReadFile"},
   // FILESYSTEM_WRITE_FILE:
-  {blockOverlayId(6), "WriteFile"},
+  {WRITE_FILE_OVERLAY, "WriteFile"},
   // FILESYSTEM_REMOVE_FILE:
-  {blockOverlayId(7), "RemoveFile"},
+  {REMOVE_FILE_OVERLAY, "RemoveFile"},
   // FILESYSTEM_SEEK_FILE:
-  {blockOverlayId(8), "SeekFile"},
+  {SEEK_FILE_OVERLAY, "SeekFile"},
   // FILESYSTEM_DUMP_OPEN_FILES:
-  {blockOverlayId(9), "DumpOpenFiles"},
+  {DUMP_OPEN_FILES_OVERLAY, "DumpOpenFiles"},
   // FILESYSTEM_GET_FILE_BLOCK_METADATA:
-  {blockOverlayId(10), "GetFileBlockMeta"},
+  {GET_FILE_BLOCK_META_OVERLAY, "GetFileBlockMeta"},
 };
 
 void* main(void *args) {
@@ -76,11 +76,11 @@ void* main(void *args) {
   fs.blockBuffer = (uint8_t*) malloc(fs.blockSize);
   
   printDebugString("runFilesystem: Getting partition info\n");
-  callOverlayFunction(OVERLAY_SAME_NAMESPACE, blockOverlayId(1),
-    "GetPartitionInfo", &fs);
+  callOverlayFunction(OVERLAY_SAME_NAMESPACE,
+    GET_PARTITION_INFO_OVERLAY, "GetPartitionInfo", &fs);
   printDebugString("runFilesystem: Initiallizing driverState\n");
-  callOverlayFunction(OVERLAY_SAME_NAMESPACE, blockOverlayId(2),
-    "DriverInit", &fs);
+  callOverlayFunction(OVERLAY_SAME_NAMESPACE,
+    DRIVER_INIT_OVERLAY, "DriverInit", &fs);
   printDebugString("runFilesystem: Initialization complete\n");
   
   while (1) {
