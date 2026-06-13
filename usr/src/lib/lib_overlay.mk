@@ -3,7 +3,7 @@ include ../include.mk
 OBJ_DIR = ../../../obj
 BIN_DIR = ../../../lib
 
-OVERLAYS := $(shell ls | grep -Ev 'makefile|.*\.mk|include')
+OVERLAYS := $(shell ls | grep -Ev 'makefile|.*\.mk|include|handlers')
 
 .PHONY: all clean $(OVERLAYS)
 
