@@ -36,7 +36,7 @@
 #ifndef OVERLAY_FAT32_H
 #define OVERLAY_FAT32_H
 
-#include "../../OverlayFilesystem.h"
+#include "../../filesystem/include/OverlayFilesystem.h"
 
 #ifdef __cplusplus
 extern "C"
