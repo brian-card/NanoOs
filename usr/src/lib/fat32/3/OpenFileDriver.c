@@ -110,7 +110,7 @@ int fat32ParseMode(const char *mode, Fat32OpenMode *flags) {
 /// @return A pointer to a heap-allocated Fat32FileHandle on success, or NULL
 ///         on failure.
 ///
-void* fopenImplementation(
+void* driverFopen(
     void *driverState,
     const char *filePath,
     const char *mode

@@ -39,7 +39,7 @@
 #include "../../filesystem/include/OverlayFilesystem.h"
 
 // Prototypes used by this overlay.
-void* fopenImplementation(
+void* driverFopen(
     void *driverState,
     const char *filePath,
     const char *mode);
@@ -68,7 +68,7 @@ void* OpenFile(void *args) {
   printDebugString("\"\n");
 
   if (filesystemState->driverState != NULL) {
-    void *fileHandle = fopenImplementation(
+    void *fileHandle = driverFopen(
       filesystemState->driverState,
       fopenArgs->pathname, fopenArgs->mode);
     if (fileHandle != NULL) {
