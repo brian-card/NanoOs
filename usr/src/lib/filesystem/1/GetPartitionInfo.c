@@ -25,9 +25,9 @@
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-/// @file main.c
+/// @file GetPartitionInfo.c
 ///
-/// @brief Entrypoint into the FAT32 filesystem driver.
+/// @brief Overlay implementation of GetPartitionInfo.
 
 // Partition table constants
 #define PARTITION_TABLE_OFFSET 0x1BE

@@ -25,9 +25,9 @@
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-/// @file main.c
+/// @file DriverInit.c
 ///
-/// @brief Entrypoint into the FAT32 filesystem driver.
+/// @brief Overlay implementation of DriverInit for the FAT32 filesystem driver.
 
 // Standard C includes
 #include <stdlib.h>

@@ -27,7 +27,7 @@
 
 /// @file main.c
 ///
-/// @brief Entrypoint into the FAT32 filesystem driver.
+/// @brief Entrypoint into the overlay filesystem driver.
 
 // Standard C includes
 #include <stdlib.h>
