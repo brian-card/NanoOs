@@ -41,7 +41,7 @@
 MEMORY
 {
     /* Overlay RAM region - adjust size as needed */
-    OVERLAY_RAM (rwx) : ORIGIN = 0x20001800, LENGTH = 8K
+    OVERLAY_RAM (rwx) : ORIGIN = 0x20001800, LENGTH = 4K
 }
 
 /* Entry point - not critical for overlays but good practice */
