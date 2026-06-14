@@ -48,7 +48,7 @@ int driverFclose(void *driverState, void *fileHandle);
 /// @param args A pointer to a FilesystemState, cast to a void*.  The args
 ///   member variable is a pointer to a ProcessMessage.
 ///
-/// @return Sets the returnValue member of the provided FilesystemFopenArgs
+/// @return Sets the returnValue member of the provided FilesystemFcloseArgs
 /// to the errno for this operation.  This function always returns the
 /// filesystemState pointer provided as args.
 void* CloseFile(void *args) {
