@@ -45,15 +45,15 @@ int32_t driverFread(
     uint32_t length,
     void *fileHandle);
 
-/// @fn void* CloseFile(void *args)
+/// @fn void* ReadFile(void *args)
 ///
 /// @brief Overlay implementation of an fclose command handler.
 ///
 /// @param args A pointer to a FilesystemState, cast to a void*.  The args
 ///   member variable is a pointer to a ProcessMessage.
 ///
-/// @return Sets the returnValue member of the provided FilesystemFopenArgs
-/// to the errno for this operation.  This function always returns the
+/// @return Sets the length member of the provided FilesystemIoCommandArgs
+/// to the number of bytes successfully read.  This function always returns the
 /// filesystemState pointer provided as args.
 void* ReadFile(void *args) {
   FilesystemState *filesystemState = (FilesystemState*) args;
