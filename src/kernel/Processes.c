@@ -253,7 +253,7 @@ void* execCommand(void *args) {
   // goes back to its work.
   ExecArgs *execArgs = (ExecArgs*) args;
   if (execArgs == NULL) {
-    printString("ERROR: No arguments message provided to execCommand.\n");
+    printString("ERROR: No arguments provided to execCommand.\n");
     releaseConsole();
     return (void*) ((intptr_t) -1);
   }
@@ -350,6 +350,49 @@ void* execCommand(void *args) {
   // that memory here can result in nasty consequences if we get preempted
   // between freeing the memory and returning from this function.
   return (void*) ((intptr_t) returnValue);
+}
+
+/// @fn void* runBlockOverlay(void *args)
+///
+/// @brief Wrapper process function that calls a command function.
+///
+/// @param args The message received from the console process that describes
+///   the command to run, cast to a void*.
+///
+/// @return If the comamnd is run, returns the result of the command cast to a
+/// void*.  If the command is not run, returns -1 cast to a void*.
+void* runBlockOverlay(void *args) {
+  if (args == NULL) {
+    printString("ERROR: No arguments provided to runBlockOverlay.\n");
+    return (void*) ((intptr_t) -1);
+  }
+
+  BlockOverlayArgs blockOverlayArgs;
+  memcpy(&blockOverlayArgs, args, sizeof(blockOverlayArgs));
+  // The scheduler may be suspended because of launching this process.
+  // Immediately call processYield as a best practice to make sure the scheduler
+  // goes back to its work.
+  processYield();
+
+  // Load the overlay information into the ProcessDescriptor.
+  ProcessDescriptor *processDescriptor = getRunningProcess();
+  if (processDescriptor == NULL) {
+    // This should be impossible.
+    printString("ERROR: No running process.\n");
+    releaseConsole();
+    return (void*) ((intptr_t) -1);
+  }
+
+  processDescriptor->overlay.blockDevice = blockOverlayArgs.blockDevice;
+  processDescriptor->overlay.startBlock = blockOverlayArgs.startBlock;
+  processDescriptor->overlay.numBlocks = HAL->memory->overlaySize
+    / blockOverlayArgs.blockDevice->blockSize;
+  // Yield so that the scheduler will load our overlay into memory.
+  processYield();
+
+  printDebugString("Call the block overlay function\n");
+
+  return NULL;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
