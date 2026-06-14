@@ -146,6 +146,22 @@ typedef struct MainArgs {
   char **argv;
 } MainArgs;
 
+/// @struct BlockOverlayArgs
+///
+/// @brief Structure to hold the arguments that need to be passed to load an
+/// overlay off of a block device based only on the block address and not the
+/// overlay's filename (because there is none).
+///
+/// @param blockDevice A pointer to the BlockDevice that the overlay is on.
+/// @param startBlock The block address that the overlay begins at.
+/// @param args A pointer to any arguments that should be passed to the
+///   overlay's main function.
+typedef struct BlockOverlayArgs {
+  BlockDevice *blockDevice;
+  uint32_t startBlock;
+  void *args;
+} BlockOverlayArgs;
+
 #ifdef __cplusplus
 }
 #endif
