@@ -50,9 +50,9 @@ const char *driverGetFilename(void *fileHandle);
 ///   member variable is a pointer to a ProcessMessage.
 ///
 /// @return Sets the returnValue values of the provided
-/// FilesystemDumpOpenFilesArgs FilesystemSeekArgs to the value that is to be
-/// used by the calling process.  This function always returns the
-/// filesystemState pointer provided as args.
+/// FilesystemDumpOpenFilesArgs to the value that is to be used by the calling
+/// process.  This function always returns the filesystemState pointer provided
+/// as args.
 void* DumpOpenFiles(void *args) {
   FilesystemState *filesystemState = (FilesystemState*) args;
   ProcessMessage *processMessage = (ProcessMessage*) filesystemState->args;
