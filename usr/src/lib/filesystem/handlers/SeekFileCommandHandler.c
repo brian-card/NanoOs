@@ -56,7 +56,7 @@ int driverFseek(
 /// @return Sets the returnValue and errorNumber values of the provided
 /// FilesystemSeekArgs to the values that are to be used by the calling process.
 /// This function always returns the filesystemState pointer provided as args.
-void* RemoveFile(void *args) {
+void* SeekFile(void *args) {
   FilesystemState *filesystemState = (FilesystemState*) args;
   ProcessMessage *processMessage = (ProcessMessage*) filesystemState->args;
   FilesystemSeekArgs *filesystemSeekArgs
