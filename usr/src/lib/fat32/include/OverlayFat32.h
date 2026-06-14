@@ -1406,6 +1406,185 @@ static inline int fat32AllocateCluster(
   return FAT32_DISK_FULL;
 }
 
+///////////////////////////////////////////////////////////////////////////////
+///
+/// @brief Scan a directory's cluster chain, locate the short directory entry
+///        at a known position, and mark it — along with all of its preceding
+///        LFN entries — as deleted (0xE5).
+///
+/// @details The directory is scanned forward from its first cluster.  LFN
+///          entries whose checksum matches the target short name are
+///          accumulated in a run.  When the short entry at the target position
+///          is reached the entire run (plus the short entry itself) is
+///          invalidated with read-modify-write cycles.
+///
+///          A run is reset whenever a deleted entry, a short entry belonging to
+///          a different file, or an LFN entry with a non-matching checksum is
+///          encountered, so only entries that genuinely belong to the target
+///          file are affected.
+///
+/// @param ds               Pointer to an initialized Fat32DriverState.
+/// @param dirFirstCluster  The first cluster of the directory that contains
+///                         the target entry.
+/// @param target           The search result produced by fat32SearchDirectory
+///                         for the file being removed.
+///
+/// @return FAT32_SUCCESS on success, FAT32_ERROR on an I/O failure, or
+///         FAT32_FILE_NOT_FOUND if the target entry was not encountered
+///         (should not happen when the caller has already confirmed the file
+///         exists).
+///
+static inline int fat32InvalidateDirectoryEntries(
+    Fat32DriverState *ds,
+    uint32_t dirFirstCluster,
+    const Fat32DirSearchResult *target
+) {
+  uint8_t checksum = fat32ShortNameChecksum(target->entry.name);
+
+  FilesystemState    *fs = ds->filesystemState;
+  BlockDevice *bd = fs->blockDevice;
+
+  // A 255-character file name requires at most ceil(255 / 13) = 20 LFN
+  // entries.  We track their (cluster, offsetInCluster) positions so that
+  // we can mark them as deleted once the matching short entry is confirmed.
+  uint32_t runClusters[FAT32_MAX_FILENAME_LENGTH / FAT32_LFN_CHARS_PER_ENTRY
+    + 1];
+  uint32_t runOffsets[FAT32_MAX_FILENAME_LENGTH / FAT32_LFN_CHARS_PER_ENTRY
+    + 1];
+  uint32_t runCount = 0;
+
+  uint32_t currentCluster = dirFirstCluster;
+  bool     done = false;
+
+  while (!done
+      && (currentCluster >= FAT32_CLUSTER_FIRST_VALID)
+      && (currentCluster < FAT32_CLUSTER_EOC_MIN)
+  ) {
+
+    uint32_t clusterLba = fat32ClusterToLba(ds, currentCluster);
+
+    for (uint8_t sector = 0;
+        (sector < ds->sectorsPerCluster) && !done;
+        sector++) {
+
+      int ioResult = bd->readBlocks(
+        bd->context, clusterLba + sector, 1,
+        bd->blockSize, fs->blockBuffer);
+      if (ioResult != 0) {
+        return FAT32_ERROR;
+      }
+
+      uint32_t entriesPerSector =
+        ds->bytesPerSector / FAT32_DIRECTORY_ENTRY_SIZE;
+
+      for (uint32_t i = 0; (i < entriesPerSector) && !done; i++) {
+        uint32_t entryByteOffset = i * FAT32_DIRECTORY_ENTRY_SIZE;
+        uint32_t offsetInCluster =
+          (uint32_t) sector * ds->bytesPerSector + entryByteOffset;
+
+        Fat32DirectoryEntry *entry =
+          (Fat32DirectoryEntry *) (fs->blockBuffer + entryByteOffset);
+
+        // End-of-directory sentinel — the target must have already been
+        // encountered if it exists.
+        if (entry->name[0] == FAT32_ENTRY_END_OF_DIR) {
+          done = true;
+          break;
+        }
+
+        // Deleted entry — break the current LFN run.
+        if (entry->name[0] == FAT32_ENTRY_FREE) {
+          runCount = 0;
+          continue;
+        }
+
+        // ---- LFN fragment ----
+        if ((entry->attributes & FAT32_ATTR_LONG_NAME)
+            == FAT32_ATTR_LONG_NAME) {
+          Fat32LfnEntry *lfn = (Fat32LfnEntry *) entry;
+
+          // A "last" LFN entry (highest ordinal) marks the start of a new
+          // on-disk sequence.
+          if (lfn->ordinal & FAT32_LFN_LAST_ENTRY_MASK) {
+            runCount = 0;
+          }
+
+          if (lfn->checksum == checksum) {
+            if (runCount
+                < (FAT32_MAX_FILENAME_LENGTH / FAT32_LFN_CHARS_PER_ENTRY + 1)
+            ) {
+              runClusters[runCount] = currentCluster;
+              runOffsets[runCount]  = offsetInCluster;
+              runCount++;
+            }
+          } else {
+            // Checksum mismatch — these LFN entries belong to a different
+            // file; discard the run.
+            runCount = 0;
+          }
+          continue;
+        }
+
+        // ---- Short entry ----
+        if ((currentCluster == target->dirCluster)
+            && (offsetInCluster == target->offsetInCluster)
+        ) {
+          // This is the target.  Mark it as deleted in the buffer that is
+          // still loaded from the most recent readBlocks.
+          fs->blockBuffer[entryByteOffset] = FAT32_ENTRY_FREE;
+          ioResult = bd->writeBlocks(
+            bd->context, clusterLba + sector, 1,
+            bd->blockSize, fs->blockBuffer);
+          if (ioResult != 0) {
+            return FAT32_ERROR;
+          }
+
+          // Now mark each preceding LFN entry as deleted.
+          for (uint32_t li = 0; li < runCount; li++) {
+            uint32_t lfnSectorIdx =
+              runOffsets[li] / ds->bytesPerSector;
+            uint32_t lfnOffInSec =
+              runOffsets[li] % ds->bytesPerSector;
+            uint32_t lfnLba =
+              fat32ClusterToLba(ds, runClusters[li]) + lfnSectorIdx;
+
+            ioResult = bd->readBlocks(
+              bd->context, lfnLba, 1, bd->blockSize, fs->blockBuffer);
+            if (ioResult != 0) {
+              return FAT32_ERROR;
+            }
+
+            fs->blockBuffer[lfnOffInSec] = FAT32_ENTRY_FREE;
+
+            ioResult = bd->writeBlocks(
+              bd->context, lfnLba, 1, bd->blockSize, fs->blockBuffer);
+            if (ioResult != 0) {
+              return FAT32_ERROR;
+            }
+          }
+
+          return FAT32_SUCCESS;
+        }
+
+        // A short entry for a different file — reset the LFN run.
+        runCount = 0;
+      }
+    }
+
+    // Follow the directory's cluster chain.
+    if (!done) {
+      uint32_t nextCluster;
+      if (fat32ReadFatEntry(ds, currentCluster, &nextCluster)
+          != FAT32_SUCCESS) {
+        return FAT32_ERROR;
+      }
+      currentCluster = nextCluster;
+    }
+  }
+
+  return FAT32_FILE_NOT_FOUND;
+}
+
 #ifdef __cplusplus
 }
 #endif
