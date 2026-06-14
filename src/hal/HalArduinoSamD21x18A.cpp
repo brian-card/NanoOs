@@ -67,7 +67,7 @@
 /// @def OVERLAY_SIZE
 ///
 /// @brief The size, in bytes, of the overlay supported by the board.
-#define OVERLAY_SIZE 8192
+#define OVERLAY_SIZE 4096
 
 /// @def DIO_PIN_UNDEFINED
 ///
