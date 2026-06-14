@@ -149,10 +149,16 @@ typedef struct FilesystemIoCommandArgs {
 /// @param whence The position the offset is understood to be relative to.  One
 ///   of SEEK_SET (beginning of the file), SEEK_CUR (the current position of
 ///   the file) or SEEK_END (the end of the file).
+/// @param returnValue The return value that should be used for the calling
+///   process.
+/// @param errorNumber The errno value that should be set for the calling
+///   process.
 typedef struct FilesystemSeekArgs {
-  FILE     *stream;
-  long      offset;
-  int       whence;
+  FILE *stream;
+  long  offset;
+  int   whence;
+  int   returnValue;
+  int   errorNumber;
 } FilesystemSeekArgs;
 
 /// @struct FilesystemFopenArgs

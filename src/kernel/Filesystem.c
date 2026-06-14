@@ -271,6 +271,7 @@ int filesystemSeekFileCommandHandler(
   int returnValue = 0;
   if (filesystemState->driverState != NULL) {
     NanoOsFile *nanoOsFile = filesystemSeekArgs->stream;
+    errno = 0;
     returnValue = filesystemState->driverFseek(
       filesystemState->driverState, nanoOsFile->file,
       filesystemSeekArgs->offset,
@@ -280,7 +281,8 @@ int filesystemSeekFileCommandHandler(
     }
   }
 
-  processMessageData(processMessage) = (void*) ((intptr_t) returnValue);
+  filesystemSeekArgs->returnValue = returnValue;
+  filesystemSeekArgs->errorNumber = errno;
   processMessageSetDone(processMessage);
   return 0;
 }
@@ -697,13 +699,16 @@ int filesystemFSeek(FILE *stream, long offset, int whence) {
     .stream = stream,
     .offset = offset,
     .whence = whence,
+    .returnValue = 0,
+    .errorNumber = 0,
   };
   ProcessMessage *msg = initSendProcessMessageToPid(
     SCHEDULER_STATE->rootFsPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_SEEK_FILE,
     &filesystemSeekArgs, sizeof(filesystemSeekArgs), true);
   processMessageWaitForDone(msg, NULL);
-  int returnValue = (int) ((intptr_t) processMessageData(msg));
+  int returnValue = filesystemSeekArgs.returnValue;
+  errno = filesystemSeekArgs.errorNumber;
   processMessageRelease(msg);
   return returnValue;
 }
