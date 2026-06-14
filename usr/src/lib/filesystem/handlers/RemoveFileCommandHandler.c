@@ -48,8 +48,8 @@ int driverRemove(void *driverState, const char *pathname);
 /// @param args A pointer to a FilesystemState, cast to a void*.  The args
 ///   member variable is a pointer to a ProcessMessage.
 ///
-/// @return Sets the remove member of the provided FilesystemRemoveArgs to the
-/// value that is to be used for the process's errno value.  This function
+/// @return Sets the returnValue member of the provided FilesystemRemoveArgs to
+/// the value that is to be used for the process's errno value.  This function
 /// always returns the filesystemState pointer provided as args.
 void* RemoveFile(void *args) {
   FilesystemState *filesystemState = (FilesystemState*) args;
