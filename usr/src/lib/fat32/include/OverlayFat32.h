@@ -1346,6 +1346,66 @@ Fat32FileHandle* fat32CreateFileHandle(
   return handle;
 }
 
+///////////////////////////////////////////////////////////////////////////////
+///
+/// @brief Allocate a single free cluster from the FAT.
+///
+/// @details The FAT is scanned linearly starting from cluster 2 until a free
+///          entry is found.  The newly-allocated cluster is marked as
+///          end-of-chain (EOC).  If @p previousCluster is a valid cluster
+///          number its FAT entry is updated to point to the new cluster,
+///          extending the chain.
+///
+/// @param ds               Pointer to an initialized Fat32DriverState.
+/// @param previousCluster  The last cluster of the chain to extend, or 0 if
+///                         no chaining is desired (i.e. the first cluster of
+///                         a new file).
+/// @param newCluster       [out] The cluster number that was allocated.
+///
+/// @return FAT32_SUCCESS on success, FAT32_DISK_FULL if no free cluster
+///         exists, or FAT32_ERROR on an I/O failure.
+///
+static inline int fat32AllocateCluster(
+    Fat32DriverState *ds,
+    uint32_t previousCluster,
+    uint32_t *newCluster
+) {
+  // Linear scan — simple and correct.  The FSInfo hint could speed this up,
+  // but the added complexity is not warranted for NanoOs at this stage.
+  for (uint32_t candidate = FAT32_CLUSTER_FIRST_VALID;
+      candidate < FAT32_CLUSTER_FIRST_VALID + ds->totalDataClusters;
+      candidate++) {
+    uint32_t entry;
+    int result = fat32ReadFatEntry(ds, candidate, &entry);
+    if (result != FAT32_SUCCESS) {
+      return FAT32_ERROR;
+    }
+
+    if (entry == FAT32_CLUSTER_FREE) {
+      // Mark the new cluster as end-of-chain.
+      result = fat32WriteFatEntry(ds, candidate, FAT32_CLUSTER_EOC);
+      if (result != FAT32_SUCCESS) {
+        return FAT32_ERROR;
+      }
+
+      // Chain from the previous cluster if one was supplied.
+      if (previousCluster >= FAT32_CLUSTER_FIRST_VALID) {
+        result = fat32WriteFatEntry(ds, previousCluster, candidate);
+        if (result != FAT32_SUCCESS) {
+          // Roll back: free the cluster we just marked.
+          fat32WriteFatEntry(ds, candidate, FAT32_CLUSTER_FREE);
+          return FAT32_ERROR;
+        }
+      }
+
+      *newCluster = candidate;
+      return FAT32_SUCCESS;
+    }
+  }
+
+  return FAT32_DISK_FULL;
+}
+
 #ifdef __cplusplus
 }
 #endif
