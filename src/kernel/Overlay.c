@@ -280,11 +280,12 @@ void* callOverlayFunctionFromBlockDevice(
       goto exit; // return NULL
     }
   }
-  size_t blocksPerOverlay
-    = ((size_t) HAL->memory->overlaySize)
-    / overlayArray[1].blockDevice->blockSize;
-  overlayArray[1].startBlock  = (((uintptr_t) overlay) * blocksPerOverlay) + 1;
-  overlayArray[1].numBlocks   = blocksPerOverlay;
+  
+  // The number of blocks in block-based overlays always have to be the same.
+  // So, just copy what we're already using.
+  overlayArray[1].numBlocks = runningProcess->overlay.numBlocks;
+  overlayArray[1].startBlock
+    = (((uintptr_t) overlay) * overlayArray[1].numBlocks) + 1;
   
   char *functionCopy = (char*) malloc(strlen(function) + 1);
   if (functionCopy == NULL) {
