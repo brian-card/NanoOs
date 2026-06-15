@@ -363,7 +363,7 @@ void* execCommand(void *args) {
 /// void*.  If the command is not run, returns -1 cast to a void*.
 void* runBlockOverlay(void *args) {
   if (args == NULL) {
-    printString("ERROR: No arguments provided to runBlockOverlay.\n");
+    printString("ERROR: No arguments provided to runBlockOverlay\n");
     return (void*) ((intptr_t) -1);
   }
 
@@ -378,8 +378,7 @@ void* runBlockOverlay(void *args) {
   ProcessDescriptor *processDescriptor = getRunningProcess();
   if (processDescriptor == NULL) {
     // This should be impossible.
-    printString("ERROR: No running process.\n");
-    releaseConsole();
+    printString("ERROR: No running process\n");
     return (void*) ((intptr_t) -1);
   }
 
@@ -391,8 +390,12 @@ void* runBlockOverlay(void *args) {
   processYield();
 
   printDebugString("Call the block overlay function\n");
-
-  return NULL;
+  OverlayFunction main = findOverlayFunction("main");
+  if (main == NULL) {
+    printString("ERROR: No main function in block overlay\n");
+    return (void*) ((intptr_t) -1);
+  }
+  return main(blockOverlayArgs.args);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
