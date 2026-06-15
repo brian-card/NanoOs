@@ -381,7 +381,8 @@ void* runBlockOverlay(void *args) {
     printString("ERROR: No running process\n");
     return (void*) ((intptr_t) -1);
   }
-
+  // Cancel the preemption timer to make sure the load is atomic.
+  HAL->timer->cancel(SCHEDULER_STATE->preemptionTimer);
   processDescriptor->overlay.blockDevice = blockOverlayArgs.blockDevice;
   processDescriptor->overlay.startBlock = blockOverlayArgs.startBlock;
   processDescriptor->overlay.numBlocks = HAL->memory->overlaySize
