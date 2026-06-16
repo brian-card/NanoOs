@@ -3343,6 +3343,103 @@ static const char *shellArgs[] = {
   NULL,
 };
 
+int restartConsole(ProcessDescriptor *processDescriptor) {
+  if (processCreate(processDescriptor, runConsole, NULL) != processSuccess) {
+    printString("Could not restart console process.\n");
+    return -ENOMEM;
+  }
+  threadSetContext(processDescriptor->mainThread, processDescriptor);
+  processDescriptor->name = "console";
+  processDescriptor->userId = ROOT_USER_ID;
+  return 0;
+}
+
+int restartMemoryManager(ProcessDescriptor *processDescriptor) {
+  if (processCreate(processDescriptor, runMemoryManager, NULL) != processSuccess) {
+    printString("Could not restart memory manager process.\n");
+    return -ENOMEM;
+  }
+  threadSetContext(processDescriptor->mainThread, processDescriptor);
+  processDescriptor->name = "memory manager";
+  processDescriptor->userId = ROOT_USER_ID;
+  return 0;
+}
+
+int restartShell(ProcessDescriptor *processDescriptor) {
+  if ((SCHEDULER_STATE->hostname == NULL)
+    || (*SCHEDULER_STATE->hostname == '\0')
+  ) {
+    return -EAGAIN;
+  }
+
+  if (processDescriptor->userId == NO_USER_ID) {
+    if (processDescriptor->envp != NULL) {
+      for (int ii = 0; processDescriptor->envp[ii] != NULL; ii++) {
+        schedFree(processDescriptor->envp[ii]);
+      }
+      schedFree(processDescriptor->envp);
+      processDescriptor->envp = NULL;
+    }
+
+    int returnValue = schedulerRunOverlayCommand(processDescriptor,
+      "/usr/bin/getty", (char**) gettyArgs, NULL);
+    if (returnValue == -EBUSY) {
+      return -EAGAIN;
+    }
+    return returnValue;
+  }
+
+  // User process exited.  Re-launch the shell.
+  int returnValue = 0;
+  char *passwdStringBuffer
+    = (char*) schedMalloc(NANO_OS_PASSWD_STRING_BUF_SIZE);
+  if (passwdStringBuffer == NULL) {
+    printString(
+      "ERROR! Could not allocate space for passwdStringBuffer in "
+      "restartShell\n");
+    return -ENOMEM;
+  }
+
+  struct passwd *pwd = (struct passwd*) schedMalloc(sizeof(struct passwd));
+  if (pwd == NULL) {
+    printString("ERROR! Could not allocate space for pwd in restartShell\n");
+    schedFree(passwdStringBuffer);
+    return -ENOMEM;
+  }
+
+  do {
+    struct passwd *result = NULL;
+    nanoOsGetpwuid_r(processDescriptor->userId, pwd,
+      passwdStringBuffer, NANO_OS_PASSWD_STRING_BUF_SIZE, &result);
+    if (result == NULL) {
+      printString("Could not find passwd info for uid ");
+      printInt(processDescriptor->userId);
+      printString("\n");
+      returnValue = -ENOENT;
+      break;
+    }
+
+    shellArgs[0] = strrchr(pwd->pw_shell, '/') + 1;
+    returnValue = schedulerRunOverlayCommand(processDescriptor,
+      pwd->pw_shell, (char**) shellArgs, processDescriptor->envp);
+    if (returnValue == -EBUSY) {
+      returnValue = -EAGAIN;
+    } else if (returnValue != 0) {
+      if (processDescriptor->envp != NULL) {
+        for (int ii = 0; processDescriptor->envp[ii] != NULL; ii++) {
+          schedFree(processDescriptor->envp[ii]);
+        }
+        schedFree(processDescriptor->envp);
+        processDescriptor->envp = NULL;
+      }
+    }
+  } while (0);
+
+  schedFree(pwd);
+  schedFree(passwdStringBuffer);
+  return returnValue;
+}
+
 /// @fn void runScheduler(void)
 ///
 /// @brief Run one (1) iteration of the main scheduler loop.

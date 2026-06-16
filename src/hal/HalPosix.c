@@ -222,11 +222,39 @@ BlockDevice* posixGetBlockDevice(int32_t deviceId) {
   return blockDevices[deviceId];
 }
 
+int posixRestartBlockDevice(ProcessDescriptor *processDescriptor) {
+  int32_t deviceId = (int32_t) (intptr_t) processDescriptor->restartArgs;
+
+  if (processCreate(
+    processDescriptor, runSdCardPosix, (void*) _sdCardDevicePath)
+    != processSuccess
+  ) {
+    printString("Could not restart SD card process.\n");
+    return -ENOMEM;
+  }
+  threadSetContext(processDescriptor->mainThread, processDescriptor);
+  processDescriptor->name = "SD card";
+  processDescriptor->userId = ROOT_USER_ID;
+
+  BlockDevice *sdDevice
+    = (BlockDevice*) coroutineResume(processDescriptor->mainThread, NULL);
+  if (sdDevice == NULL) {
+    printString("SD card restart returned NULL.\n");
+    return -ENODEV;
+  }
+  sdDevice->partitionNumber = 1;
+  blockDevices[deviceId] = sdDevice;
+  setOnline(HAL->blockDevice, deviceId);
+
+  return 0;
+}
+
 static HalBlockDevice posixBlockDeviceHal = {
   .numSupported = _numBlockDevices,
   .online = posixBlockDevicesOnline,
   .init = posixInitBlockDevice,
   .get = posixGetBlockDevice,
+  .restart = posixRestartBlockDevice,
 };
 
 /// @var posixHal

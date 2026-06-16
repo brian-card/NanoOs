@@ -143,6 +143,47 @@ int halCommonInitRootFilesystem(void) {
   return 0;
 }
 
+/// @fn int restartFilesystem(ProcessDescriptor *processDescriptor)
+///
+/// @brief Restart the filesystem process using the existing root block device.
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor of the
+///   filesystem process to restart.
+///
+/// @return Returns 0 on success, -errno on failure.
+int restartFilesystem(ProcessDescriptor *processDescriptor) {
+  BlockDevice *rootBlockDevice = HAL->blockDevice->get(0);
+  if (rootBlockDevice == NULL) {
+    return -ENODEV;
+  }
+
+  FilesystemState fs;
+  memset(&fs, 0, sizeof(fs));
+  fs.blockDevice = rootBlockDevice;
+  fs.blockSize = fs.blockDevice->blockSize;
+  fs.driverInit = fat32Initialize;
+  fs.driverFopen = fat32Fopen;
+  fs.driverFread = fat32Fread;
+  fs.driverFwrite = fat32Fwrite;
+  fs.driverFclose = fat32Fclose;
+  fs.driverRemove = fat32Remove;
+  fs.driverFseek = fat32Fseek;
+  fs.driverGetFileBlockMetadata = fat32GetFileBlockMetadata;
+  fs.driverGetFilename = fat32GetFilename;
+
+  if (processCreate(processDescriptor, runFilesystem, &fs) != processSuccess) {
+    printString("Could not restart filesystem process.\n");
+    return -ENOMEM;
+  }
+  threadSetContext(processDescriptor->mainThread, processDescriptor);
+  processDescriptor->name = "filesystem";
+  processDescriptor->userId = ROOT_USER_ID;
+  // Let it copy the FilesystemState off our stack before we return.
+  processResume(processDescriptor, NULL);
+
+  return 0;
+}
+
 /// @fn int halCommonInit(const Hal *hal)
 ///
 /// @brief Initialization function common to multiple HAL implementations.

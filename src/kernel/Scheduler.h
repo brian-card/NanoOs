@@ -216,6 +216,11 @@ int processQueueRemove(
 // Coroutine setup functions used in the loader.
 void* dummyProcess(void *args);
 
+// Process restart functions.
+int restartConsole(ProcessDescriptor *processDescriptor);
+int restartMemoryManager(ProcessDescriptor *processDescriptor);
+int restartShell(ProcessDescriptor *processDescriptor);
+
 // Thread that will be used to represent the scheduler.
 extern Thread *schedulerThread;
 

@@ -618,11 +618,45 @@ BlockDevice* arduinoNanoEveryGetBlockDevice(int32_t deviceId) {
   return blockDevices[deviceId];
 }
 
+int arduinoNanoEveryRestartBlockDevice(ProcessDescriptor *processDescriptor) {
+  int32_t deviceId = (int32_t) (intptr_t) processDescriptor->restartArgs;
+
+  SdCardSpiArgs sdCardSpiArgs = {
+    .spiCsDio   = SD_CARD_PIN_CHIP_SELECT,
+    .spiCopiDio = SPI_COPI_DIO,
+    .spiCipoDio = SPI_CIPO_DIO,
+    .spiSckDio  = SPI_SCK_DIO,
+  };
+
+  if (processCreate(processDescriptor, runSdCardSpi, &sdCardSpiArgs)
+    != processSuccess
+  ) {
+    printString("Could not restart SD card process\n");
+    return -ENOMEM;
+  }
+  threadSetContext(processDescriptor->mainThread, processDescriptor);
+  processDescriptor->name = "SD card";
+  processDescriptor->userId = ROOT_USER_ID;
+
+  BlockDevice *sdDevice
+    = (BlockDevice*) coroutineResume(processDescriptor->mainThread, NULL);
+  if (sdDevice == NULL) {
+    printString("SD card restart returned NULL\n");
+    return -ENODEV;
+  }
+  sdDevice->partitionNumber = 1;
+  blockDevices[deviceId] = sdDevice;
+  setOnline(HAL->blockDevice, deviceId);
+
+  return 0;
+}
+
 static HalBlockDevice arduinoNanoEveryBlockDeviceHal = {
   .numSupported = _numBlockDevices,
   .online = arduinoNanoEveryBlockDevicesOnline,
   .init = arduinoNanoEveryInitBlockDevice,
   .get = arduinoNanoEveryGetBlockDevice,
+  .restart = arduinoNanoEveryRestartBlockDevice,
 };
 
 /// @var arduinoNanoEveryHal

@@ -227,6 +227,12 @@ typedef struct ProcessQueue ProcessQueue;
 ///   use to send to other processes.
 /// @param callOverlayFunction The function that the process should use to call
 ///   into a function in an overlay.
+/// @param restartFunction A pointer to the function that will be called by the
+///   scheduler to restart this process when it exits.  If this is NULL, the
+///   process will not be restarted and its slot will be added to the free queue
+///   for use by a future process.
+/// @param restartArgs A void pointer to any process-specific arguments needed
+///   by restartFunction.
 typedef struct ProcessDescriptor {
   const char         *name;
   Thread             *mainThread;
@@ -244,6 +250,8 @@ typedef struct ProcessDescriptor {
   void*             (*callOverlayFunction)(
                       const void *overlayNamespace, const void *overlay,
                       const char *function, void *args);
+  int               (*restartFunction)(struct ProcessDescriptor *self);
+  void               *restartArgs;
 } ProcessDescriptor;
 
 /// @struct ProcessInfoElement

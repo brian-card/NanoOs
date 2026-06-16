@@ -97,6 +97,7 @@ struct timespec;
 
 // NanoOs types
 typedef struct NanoOsOverlayMap NanoOsOverlayMap;
+typedef struct ProcessDescriptor ProcessDescriptor;
 typedef struct SchedulerState SchedulerState;
 
 typedef struct HalMemory {
@@ -573,6 +574,18 @@ typedef struct HalBlockDevice {
   /// @return Returns a pointer to the BlockDevice on success, NULL on
   /// failure.
   BlockDevice* (*get)(int32_t deviceId);
+
+  /// @fn int restart(ProcessDescriptor *processDescriptor)
+  ///
+  /// @brief Restart the block device process associated with the given
+  /// ProcessDescriptor.  The zero-based device ID to restart is taken from
+  /// processDescriptor->restartArgs, cast to an intptr_t.
+  ///
+  /// @param processDescriptor A pointer to the ProcessDescriptor of the block
+  ///   device process to restart.
+  ///
+  /// @return Returns 0 on success, -errno on failure.
+  int (*restart)(ProcessDescriptor *processDescriptor);
 } HalBlockDevice;
 
 typedef struct Hal {

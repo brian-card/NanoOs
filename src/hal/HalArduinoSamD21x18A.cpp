@@ -1102,8 +1102,41 @@ BlockDevice* arduinoSamD21x18AGetBlockDevice(int32_t deviceId) {
   if (!online(HAL->blockDevice, deviceId)) {
     return NULL;
   }
-  
+
   return blockDevices[deviceId];
+}
+
+int arduinoSamD21x18ARestartBlockDevice(ProcessDescriptor *processDescriptor) {
+  int32_t deviceId = (int32_t) (intptr_t) processDescriptor->restartArgs;
+
+  SdCardSpiArgs sdCardSpiArgs = {
+    .spiCsDio   = _sdCardPinChipSelect,
+    .spiCopiDio = _spiCopiDio,
+    .spiCipoDio = _spiCipoDio,
+    .spiSckDio  = _spiSckDio,
+  };
+
+  if (processCreate(processDescriptor, runSdCardSpi, &sdCardSpiArgs)
+    != processSuccess
+  ) {
+    printString("Could not restart SD card process\n");
+    return -ENOMEM;
+  }
+  threadSetContext(processDescriptor->mainThread, processDescriptor);
+  processDescriptor->name = "SD card";
+  processDescriptor->userId = ROOT_USER_ID;
+
+  BlockDevice *sdDevice
+    = (BlockDevice*) coroutineResume(processDescriptor->mainThread, NULL);
+  if (sdDevice == NULL) {
+    printString("SD card restart returned NULL\n");
+    return -ENODEV;
+  }
+  sdDevice->partitionNumber = 1;
+  blockDevices[deviceId] = sdDevice;
+  setOnline(HAL->blockDevice, deviceId);
+
+  return 0;
 }
 
 static HalBlockDevice arduinoSamD21x18ABlockDeviceHal = {
@@ -1111,6 +1144,7 @@ static HalBlockDevice arduinoSamD21x18ABlockDeviceHal = {
   .online = halArduinoSamD21x18ABlockDevicesOnline,
   .init = arduinoSamD21x18AInitBlockDevice,
   .get = arduinoSamD21x18AGetBlockDevice,
+  .restart = arduinoSamD21x18ARestartBlockDevice,
 };
 
 /// @var arduinoSamD21x18AHal
