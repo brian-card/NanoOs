@@ -65,6 +65,9 @@ BlockDevice* halCommonInitRootSdSpiStorage(
   processDescriptor->processId = SCHEDULER_STATE->firstUserPid;
   processDescriptor->name = "SD card";
   processDescriptor->userId = ROOT_USER_ID;
+  processDescriptor->privelegeLevel = PRIVELEGE_LEVEL_KERNEL;
+  processDescriptor->restartFunction = HAL->blockDevice->restart;
+  processDescriptor->restartArgs = (void*)(intptr_t)0;
   BlockDevice *sdDevice = (BlockDevice*) coroutineResume(
     allProcesses[SCHEDULER_STATE->firstUserPid - 1].mainThread, NULL);
   sdDevice->partitionNumber = 1;
@@ -134,6 +137,8 @@ int halCommonInitRootFilesystem(void) {
   processDescriptor->processId = SCHEDULER_STATE->rootFsPid;
   processDescriptor->name = "filesystem";
   processDescriptor->userId = ROOT_USER_ID;
+  processDescriptor->privelegeLevel = PRIVELEGE_LEVEL_EXECUTIVE;
+  processDescriptor->restartFunction = restartFilesystem;
   // Let it pick up the arguments
   processResume(processDescriptor, NULL);
   
