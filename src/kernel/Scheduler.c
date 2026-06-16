@@ -3022,6 +3022,13 @@ int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp) {
     return 0;
   }
 
+  if (processDescriptor->overlay.blockDevice == NULL) {
+    // This process has no overlay metadata set yet (e.g. a dummy process slot
+    // or a runBlockOverlay process before its first self-configuration yield).
+    // Nothing to load.
+    return 0;
+  }
+
   NanoOsOverlayMap *overlayMap = HAL->memory->overlayMap;
   if ((overlayMap == NULL) || (HAL->memory->overlaySize == 0)) {
     printString("No overlay memory available for use.\n");
@@ -3343,6 +3350,15 @@ static const char *shellArgs[] = {
   NULL,
 };
 
+/// @fn int restartConsole(ProcessDescriptor *processDescriptor)
+///
+/// @brief Implementation of restartFunction to re-launch the console process if
+/// it dies.
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor that manages the
+///   process's state.
+///
+/// @return Returns 0 on sucess, -errno onfailure.
 int restartConsole(ProcessDescriptor *processDescriptor) {
   if (processCreate(processDescriptor, runConsole, NULL) != processSuccess) {
     printString("Could not restart console process.\n");
@@ -3354,6 +3370,15 @@ int restartConsole(ProcessDescriptor *processDescriptor) {
   return 0;
 }
 
+/// @fn int restartMemoryManager(ProcessDescriptor *processDescriptor)
+///
+/// @brief Implementation of restartFunction to re-launch the memory manager
+/// process if it dies.
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor that manages the
+///   process's state.
+///
+/// @return Returns 0 on sucess, -errno onfailure.
 int restartMemoryManager(ProcessDescriptor *processDescriptor) {
   if (processCreate(processDescriptor, runMemoryManager, NULL) != processSuccess) {
     printString("Could not restart memory manager process.\n");
@@ -3365,10 +3390,21 @@ int restartMemoryManager(ProcessDescriptor *processDescriptor) {
   return 0;
 }
 
+/// @fn int restartShell(ProcessDescriptor *processDescriptor)
+///
+/// @brief Implementation of restartFunction to re-launch a shell if one dies or
+/// a process that occupied its slot exits.
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor that manages the
+///   process's state.
+///
+/// @return Returns 0 on sucess, -errno onfailure.
 int restartShell(ProcessDescriptor *processDescriptor) {
+  printDebugString("In restartShell\n");
   if ((SCHEDULER_STATE->hostname == NULL)
     || (*SCHEDULER_STATE->hostname == '\0')
   ) {
+    printDebugString("restartShell: scheduler not up.  Returning -EAGAIN\n");
     return -EAGAIN;
   }
 
@@ -3381,15 +3417,19 @@ int restartShell(ProcessDescriptor *processDescriptor) {
       processDescriptor->envp = NULL;
     }
 
+    printDebugString("restartShell: Starting getty\n");
     int returnValue = schedulerRunOverlayCommand(processDescriptor,
       "/usr/bin/getty", (char**) gettyArgs, NULL);
     if (returnValue == -EBUSY) {
+      printDebugString(
+        "restartShell: Starting getty failed.  Returning -EAGAIN\n");
       return -EAGAIN;
     }
     return returnValue;
   }
 
   // User process exited.  Re-launch the shell.
+  printDebugString("restartShell: Restarting shell\n");
   int returnValue = 0;
   char *passwdStringBuffer
     = (char*) schedMalloc(NANO_OS_PASSWD_STRING_BUF_SIZE);
@@ -3468,9 +3508,15 @@ void runScheduler(void) {
     goto exit;
   }
 
-  if (processDescriptor->processId >= SCHEDULER_STATE->firstUserPid) {
+  startDebugMessage("Loading process ");
+  printDebugString(processDescriptor->name);
+  printDebugString(" with privelege level ");
+  printDebugInt(processDescriptor->privelegeLevel);
+  printDebugString("\n");
+  if (processDescriptor->privelegeLevel != PRIVELEGE_LEVEL_KERNEL) {
     if (processRunning(processDescriptor) == true) {
-      // This is a user process, which is in an overlay.  Make sure it's loaded.
+      // This is a non-kernel process running from an overlay.  Make sure it's
+      // loaded.
       if (schedulerLoadOverlay(
         processDescriptor,
         processDescriptor->envp) != 0
@@ -3481,7 +3527,7 @@ void runScheduler(void) {
         goto exit;
       }
     }
-    
+
     // Configure the preemption timer to force the process to yield if it
     // doesn't voluntarily give up control within a reasonable amount of time.
     if (SCHEDULER_STATE->preemptionTimer > -1) {
@@ -3491,9 +3537,17 @@ void runScheduler(void) {
         SCHEDULER_STATE->preemptionTimer, 10000000, forceYield);
     }
   }
+  startDebugMessage("Resuming process ");
+  printDebugString(processDescriptor->name);
+  printDebugString(" with privelege level ");
+  printDebugInt(processDescriptor->privelegeLevel);
+  printDebugString("\n");
   processResume(processDescriptor, NULL);
   // No need to call HAL->timer->cancel since that's called by
   // yieldCallback if we're running preemptive multiprocessing.
+  startDebugMessage("Returned from process ");
+  printDebugString(processDescriptor->name);
+  printDebugString("\n");
 
   if (processStackOverflowed(processDescriptor)) {
     processTerminate(processDescriptor, false);
@@ -3559,26 +3613,22 @@ void runScheduler(void) {
     processTerminate(processDescriptor, false);
     threadSetContext(processDescriptor->mainThread, processDescriptor);
     memset(&processDescriptor->message, 0, sizeof(ProcessMessage));
-  }
 
-  // Check the shells and restart them if needed.
-  if ((processDescriptor->processId >= SCHEDULER_STATE->firstShellPid)
-    && (processDescriptor->processId
-      < (SCHEDULER_STATE->firstShellPid + SCHEDULER_STATE->numShells))
-    && (processRunning(processDescriptor) == false)
-  ) {
-    if ((SCHEDULER_STATE->hostname == NULL)
-      || (*SCHEDULER_STATE->hostname == '\0')
-    ) {
-      // We're not done initializing yet.  Put the process back on the ready
-      // queue and try again later.
-      processQueuePush(SCHEDULER_STATE->currentReady, processDescriptor);
-      goto exit;
-    }
-
-    if (processDescriptor->userId == NO_USER_ID) {
-      // The shell process is not running and has no user ID set.  That means
-      // its envp isn't going to be reused.  Free it if it exists.
+    if (processDescriptor->restartFunction != NULL) {
+      startDebugMessage("Process ");
+      printDebugInt(processDescriptor->processId);
+      printDebugString(" has exited.  Restarting.\n");
+      int returnValue = processDescriptor->restartFunction(processDescriptor);
+      if (returnValue == -EAGAIN) {
+        startDebugMessage(
+          "processDescriptor->restartFunction returned -EAGAIN\n");
+        processQueuePush(SCHEDULER_STATE->currentReady, processDescriptor);
+        goto exit;
+      } else if (returnValue != 0) {
+        removeProcess(processDescriptor, "Process restart failed");
+        goto exit;
+      }
+    } else {
       if (processDescriptor->envp != NULL) {
         for (int ii = 0; processDescriptor->envp[ii] != NULL; ii++) {
           schedFree(processDescriptor->envp[ii]);
@@ -3586,94 +3636,6 @@ void runScheduler(void) {
         schedFree(processDescriptor->envp);
         processDescriptor->envp = NULL;
       }
-
-      // Re-launch getty.
-      int returnValue = schedulerRunOverlayCommand(processDescriptor,
-        "/usr/bin/getty", (char**) gettyArgs, NULL);
-      if (returnValue == -EBUSY) {
-        // We're in the middle of a file operation already.  Just try again
-        // later.
-        processQueuePush(SCHEDULER_STATE->currentReady, processDescriptor);
-        goto exit;
-      } else if (returnValue != 0) {
-        removeProcess(processDescriptor, "Failed to load getty");
-        goto exit;
-      }
-    } else {
-      // User process exited.  Re-launch the shell.
-      char *passwdStringBuffer = NULL;
-      struct passwd *pwd = NULL;
-      do {
-        passwdStringBuffer
-          = (char*) schedMalloc(NANO_OS_PASSWD_STRING_BUF_SIZE);
-        if (passwdStringBuffer == NULL) {
-          printString(
-            "ERROR! Could not allocate space for passwdStringBuffer in "
-            "runScheduler\n");
-          break;
-        }
-        
-        pwd = (struct passwd*) schedMalloc(sizeof(struct passwd));
-        if (pwd == NULL) {
-          printString("ERROR! Could not allocate space for pwd in "
-            "runScheduler\n");
-          break;
-        }
-        
-        struct passwd *result = NULL;
-        nanoOsGetpwuid_r(processDescriptor->userId, pwd,
-          passwdStringBuffer, NANO_OS_PASSWD_STRING_BUF_SIZE, &result);
-        if (result == NULL) {
-          printString("Could not find passwd info for uid ");
-          printInt(processDescriptor->userId);
-          printString("\n");
-          break;
-        }
-        
-        // strrchr(pwd->pw_shell, '/') must be non-NULL in order for pw_shell
-        // to be valid.
-        shellArgs[0] = strrchr(pwd->pw_shell, '/') + 1;
-        int returnValue = schedulerRunOverlayCommand(processDescriptor,
-          pwd->pw_shell, (char**) shellArgs, processDescriptor->envp);
-        if (returnValue == -EBUSY) {
-          // We're in the middle of a file operation already.  Just free our
-          // dynamic memory and try again later.
-          schedFree(pwd);
-          schedFree(passwdStringBuffer);
-          processQueuePush(SCHEDULER_STATE->currentReady, processDescriptor);
-          goto exit;
-        } else if (returnValue != 0) {
-          removeProcess(processDescriptor, "Failed to load shell");
-          schedFree(pwd);
-          schedFree(passwdStringBuffer);
-          if (processDescriptor->envp != NULL) {
-            printString(__func__);
-            printString(": ");
-            printInt(__LINE__);
-            printString(": Freeing processDescriptor->envp = 0x");
-            printHex((uintptr_t) processDescriptor->envp);
-            printString("\n");
-            for (int ii = 0; processDescriptor->envp[ii] != NULL; ii++) {
-              schedFree(processDescriptor->envp[ii]);
-            }
-            schedFree(processDescriptor->envp);
-            processDescriptor->envp = NULL;
-          }
-          goto exit;
-        }
-      } while (0);
-      schedFree(pwd);
-      schedFree(passwdStringBuffer);
-    }
-  } else if (processRunning(processDescriptor) == false) {
-    // The process is no longer running, but it wasn't a shell process.  That
-    // means its envp isn't going to be reused.  Free it.
-    if (processDescriptor->envp != NULL) {
-      for (int ii = 0; processDescriptor->envp[ii] != NULL; ii++) {
-        schedFree(processDescriptor->envp[ii]);
-      }
-      schedFree(processDescriptor->envp);
-      processDescriptor->envp = NULL;
     }
   }
 
@@ -3708,6 +3670,8 @@ __attribute__((noinline)) void startScheduler(
   SchedulerState schedulerState = {0};
   schedulerState.hostname = NULL;
   schedulerState.ready[PRIVELEGE_LEVEL_KERNEL].name = "kernel ready";
+  schedulerState.ready[PRIVELEGE_LEVEL_EXECUTIVE].name = "executive ready";
+  schedulerState.ready[PRIVELEGE_LEVEL_SUPERVISOR].name = "supervisor ready";
   schedulerState.ready[PRIVELEGE_LEVEL_USER].name = "user ready";
   schedulerState.waiting.name = "waiting";
   schedulerState.timedWaiting.name = "timed waiting";
@@ -3751,6 +3715,8 @@ __attribute__((noinline)) void startScheduler(
     = schedulerState.schedulerPid;
   allProcesses[schedulerState.schedulerPid - 1].name = "init";
   allProcesses[schedulerState.schedulerPid - 1].userId = ROOT_USER_ID;
+  allProcesses[schedulerState.schedulerPid - 1].privelegeLevel
+    = PRIVELEGE_LEVEL_KERNEL;
   threadSetContext(allProcesses[schedulerState.schedulerPid - 1].mainThread,
     &allProcesses[schedulerState.schedulerPid - 1]);
   printDebugString("Configured scheduler process.\n");
@@ -3796,6 +3762,8 @@ __attribute__((noinline)) void startScheduler(
   processDescriptor->processId = schedulerState.consolePid;
   processDescriptor->name = "console";
   processDescriptor->userId = ROOT_USER_ID;
+  processDescriptor->privelegeLevel = PRIVELEGE_LEVEL_KERNEL;
+  processDescriptor->restartFunction = restartConsole;
   printDebugString("Created console process.\n");
 
   for (uint8_t ii = 0;
@@ -3848,7 +3816,7 @@ __attribute__((noinline)) void startScheduler(
   printDebugString("Initialized root storage\n");
 
   // Initialize all the kernel process file descriptors.
-  for (ProcessId ii = 1; ii <= schedulerState.firstUserPid; ii++) {
+  for (ProcessId ii = 1; ii < schedulerState.firstUserPid; ii++) {
     allProcesses[ii - 1].numFileDescriptors = NUM_STANDARD_FILE_DESCRIPTORS;
     allProcesses[ii - 1].fileDescriptors
       = standardKernelFileDescriptorsPointers;
@@ -3893,7 +3861,7 @@ __attribute__((noinline)) void startScheduler(
     ) {
       printString("Could not create process ");
       printInt(ii);
-      printString(".\n");
+      printString("\n");
     }
     threadSetContext(
       processDescriptor->mainThread, processDescriptor);
@@ -3901,6 +3869,13 @@ __attribute__((noinline)) void startScheduler(
     processDescriptor->userId = NO_USER_ID;
     processDescriptor->name = "dummy";
     processDescriptor->callOverlayFunction = callOverlayFunctionFromFile;
+    if ((ii - schedulerState.firstShellPid) < schedulerState.numShells) {
+      processDescriptor->privelegeLevel = PRIVELEGE_LEVEL_SUPERVISOR;
+      processDescriptor->restartFunction = restartShell;
+    } else {
+      processDescriptor->privelegeLevel = PRIVELEGE_LEVEL_USER;
+      processDescriptor->restartFunction = NULL;
+    }
   }
   printDebugString("Created all processes.\n");
 
@@ -3945,6 +3920,8 @@ __attribute__((noinline)) void startScheduler(
   processDescriptor->processId = schedulerState.memoryManagerPid;
   processDescriptor->name = "memory manager";
   processDescriptor->userId = ROOT_USER_ID;
+  processDescriptor->privelegeLevel = PRIVELEGE_LEVEL_KERNEL;
+  processDescriptor->restartFunction = restartMemoryManager;
 
   // Assign the console ports to it.
   for (uint8_t ii = 0; ii < schedulerState.numShells; ii++) {
@@ -3982,10 +3959,10 @@ __attribute__((noinline)) void startScheduler(
     ii++
   ) {
     allProcesses[ii - 1].readyQueue
-      = &schedulerState.ready[PRIVELEGE_LEVEL_KERNEL];
+      = &schedulerState.ready[allProcesses[ii - 1].privelegeLevel];
     processQueuePush(allProcesses[ii - 1].readyQueue, &allProcesses[ii - 1]);
   }
-  printDebugString("Populated kernel ready queue.\n");
+  printDebugString("Populated kernel/executive ready queues.\n");
 
   // The scheduler will take care of cleaning up the dummy processes in the
   // ready queue.
@@ -3994,10 +3971,10 @@ __attribute__((noinline)) void startScheduler(
     ii++
   ) {
     allProcesses[ii - 1].readyQueue
-      = &schedulerState.ready[PRIVELEGE_LEVEL_USER];
+      = &schedulerState.ready[allProcesses[ii - 1].privelegeLevel];
     processQueuePush(allProcesses[ii - 1].readyQueue, &allProcesses[ii - 1]);
   }
-  printDebugString("Populated user ready queue.\n");
+  printDebugString("Populated supervisor/user ready queues.\n");
 
   if (HAL->memory->overlayMap != NULL) {
     // Make sure the overlay map is zeroed out for first use.
