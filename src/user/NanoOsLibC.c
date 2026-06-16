@@ -93,6 +93,7 @@ const char *errorStrings[] = {
   "No such device or address",        // ENXIO
   "Operation not permitted",          // EPERM
   "No such process",                  // ESRCH
+  "Try again",                        // EAGAIN
 };
 
 /// @var NUM_ERRORS

@@ -69,7 +69,8 @@ extern "C"
 #define ENXIO           21      /* No such device or address */
 #define EPERM           22      /* Operation not permitted */
 #define ESRCH           23      /* No such process */
-#define ELAST           23      /* End of error codes */
+#define EAGAIN          24      /* Try again */
+#define ELAST           24      /* End of error codes */
 
 int* errno_(void);
 #define errno (*errno_())
