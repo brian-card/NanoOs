@@ -27,7 +27,7 @@
 
 /// @file SeekFileCommandHandler.c
 ///
-/// @brief Overlay implementation of an fseek command handler.
+/// @brief Overlay implementation of a FILESYSTEM_SEEK_FILE command handler.
 
 // Standard C includes
 #include <errno.h>
@@ -48,7 +48,7 @@ int driverFseek(
 
 /// @fn void* SeekFile(void *args)
 ///
-/// @brief Overlay implementation of an fseek command handler.
+/// @brief Overlay implementation of an fseek function.
 ///
 /// @param args A pointer to a FilesystemState, cast to a void*.  The args
 ///   member variable is a pointer to a ProcessMessage.

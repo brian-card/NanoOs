@@ -27,7 +27,7 @@
 
 /// @file WriteFileCommandHandler.c
 ///
-/// @brief Overlay implementation of an fwrite command handler.
+/// @brief Overlay implementation of a FILESYSTEM_WRITE_FILE command handler.
 
 // Standard C includes
 #include <stdlib.h>
@@ -47,7 +47,7 @@ int32_t driverFwrite(
 
 /// @fn void* WriteFile(void *args)
 ///
-/// @brief Overlay implementation of an fwrite command handler.
+/// @brief Overlay implementation of an fwrite function.
 ///
 /// @param args A pointer to a FilesystemState, cast to a void*.  The args
 ///   member variable is a pointer to a ProcessMessage.

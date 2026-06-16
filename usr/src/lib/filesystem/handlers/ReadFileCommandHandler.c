@@ -27,7 +27,7 @@
 
 /// @file ReadFileCommandHandler.c
 ///
-/// @brief Overlay implementation of an fread command handler.
+/// @brief Overlay implementation of a FILESYSTEM_READ_FILE command handler.
 
 // Standard C includes
 #include <stdlib.h>
@@ -47,7 +47,7 @@ int32_t driverFread(
 
 /// @fn void* ReadFile(void *args)
 ///
-/// @brief Overlay implementation of an fclose command handler.
+/// @brief Overlay implementation of an fread function.
 ///
 /// @param args A pointer to a FilesystemState, cast to a void*.  The args
 ///   member variable is a pointer to a ProcessMessage.

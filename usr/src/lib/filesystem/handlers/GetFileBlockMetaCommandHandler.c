@@ -27,7 +27,8 @@
 
 /// @file GetFileBlockMetaCommandHandler.c
 ///
-/// @brief Overlay implementation of a getFileBlockMetadata command handler.
+/// @brief Overlay implementation of a FILESYSTEM_GET_FILE_BLOCK_METADATA
+/// command handler.
 
 // Standard C includes
 #include <errno.h>
@@ -48,7 +49,7 @@ int driverGetFileBlockMetadata(
 
 /// @fn void* GetFileBlockMeta(void *args)
 ///
-/// @brief Overlay implementation of a getFileBlockMetadata command handler.
+/// @brief Overlay implementation of a getFileBlockMetadata function.
 ///
 /// @param args A pointer to a FilesystemState, cast to a void*.  The args
 ///   member variable is a pointer to a ProcessMessage.

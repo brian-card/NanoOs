@@ -27,7 +27,7 @@
 
 /// @file OpenFileCommandHandler.c
 ///
-/// @brief Overlay implementation of an fopen command handler.
+/// @brief Overlay implementation of a FILESYSTEM_OPEN_FILE command handler.
 
 // Standard C includes
 #include <stdlib.h>
@@ -46,7 +46,7 @@ void* driverFopen(
 
 /// @fn void* OpenFile(void *args)
 ///
-/// @brief Overlay implementation of a FAT32 fopen function.
+/// @brief Overlay implementation of an fopen function.
 ///
 /// @param args A pointer to a FilesystemState, cast to a void*.  The args
 ///   member variable is a pointer to a ProcessMessage.

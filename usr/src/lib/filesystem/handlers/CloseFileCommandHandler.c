@@ -27,7 +27,7 @@
 
 /// @file CloseFileCommandHandler.c
 ///
-/// @brief Overlay implementation of an fclose command handler.
+/// @brief Overlay implementation of a FILESYSTEM_CLOSE_FILE command handler.
 
 // Standard C includes
 #include <stdlib.h>
@@ -43,7 +43,7 @@ int driverFclose(void *driverState, void *fileHandle);
 
 /// @fn void* CloseFile(void *args)
 ///
-/// @brief Overlay implementation of an fclose command handler.
+/// @brief Overlay implementation of an fclose function.
 ///
 /// @param args A pointer to a FilesystemState, cast to a void*.  The args
 ///   member variable is a pointer to a ProcessMessage.

@@ -27,7 +27,8 @@
 
 /// @file DumpOpenFilesCommandHandler.c
 ///
-/// @brief Overlay implementation of a dumpOpenFiles command handler.
+/// @brief Overlay implementation of a FILESYSTEM_DUMP_OPEN_FILES command
+/// handler.
 
 // Standard C includes
 #include <errno.h>
@@ -44,7 +45,7 @@ const char *driverGetFilename(void *fileHandle);
 
 /// @fn void* DumpOpenFiles(void *args)
 ///
-/// @brief Overlay implementation of a dumpOpenFiles command handler.
+/// @brief Overlay implementation of a dumpOpenFiles function.
 ///
 /// @param args A pointer to a FilesystemState, cast to a void*.  The args
 ///   member variable is a pointer to a ProcessMessage.

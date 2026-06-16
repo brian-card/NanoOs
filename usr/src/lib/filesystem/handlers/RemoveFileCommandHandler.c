@@ -27,7 +27,7 @@
 
 /// @file RemoveFileCommandHandler.c
 ///
-/// @brief Overlay implementation of a remove command handler.
+/// @brief Overlay implementation of a FILESYSTEM_REMOVE_FILE command handler.
 
 // Standard C includes
 #include <stdlib.h>
@@ -43,7 +43,7 @@ int driverRemove(void *driverState, const char *pathname);
 
 /// @fn void* RemoveFile(void *args)
 ///
-/// @brief Overlay implementation of a remove command handler.
+/// @brief Overlay implementation of a remove function.
 ///
 /// @param args A pointer to a FilesystemState, cast to a void*.  The args
 ///   member variable is a pointer to a ProcessMessage.
