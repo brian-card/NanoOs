@@ -3970,7 +3970,7 @@ __attribute__((noinline)) void startScheduler(
 
   // Get the memory manager and filesystem up and running.
   processResume(&allProcesses[schedulerState.memoryManagerPid - 1], NULL);
-  processResume(&allProcesses[schedulerState.rootFsPid - 1], NULL);
+  runKernelExecutive();
   printDebugString("Started memory manager and filesystem.\n");
 
   // Allocate memory for the hostname.
