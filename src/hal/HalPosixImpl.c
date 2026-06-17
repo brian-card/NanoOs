@@ -60,7 +60,7 @@
 /// @def PROCESS_STACK_SIZE
 ///
 /// @brief The size, in bytes, of a regular process's stack.
-#define PROCESS_STACK_SIZE (4 * 1024)
+#define PROCESS_STACK_SIZE (5 * 1024)
 
 /// @def MEMORY_MANAGER_STACK_SIZE
 ///
@@ -754,7 +754,7 @@ int halPosixImplInit(jmp_buf resetBuffer, Hal *hal) {
   
   // Simulate having a total of 64 KB available for dynamic memory.
   _bottomOfHeap = (void*) (((uintptr_t) &topOfStack)
-    - ((uintptr_t) ((65536 * DEBUG_MULTIPLIER) - 6500)));
+    - ((uintptr_t) (((96 * 1024) * DEBUG_MULTIPLIER) - 0)));
   fprintf(stderr, "Bottom of stack     = %p\n", (void*) _bottomOfHeap);
   jmp_buf returnBuffer;
   if (setjmp(returnBuffer) == 0) {
