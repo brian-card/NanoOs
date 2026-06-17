@@ -307,6 +307,7 @@ typedef CoroutinesConfigOptions ThreadsConfigOptions;
 
 // Exported functionality
 void* execCommand(void *args);
+void* runBlockOverlay(void *args);
 int sendProcessMessageToProcess(
   ProcessDescriptor *processDescriptor, ProcessMessage *processMessage);
 int sendProcessMessageToPid(unsigned int pid, ProcessMessage *processMessage);
