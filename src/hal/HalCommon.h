@@ -43,7 +43,18 @@
 // Deliberately *NOT* including MemoryManager.h here.  The HAL has to be
 // operational prior to the memory manager and really should be completely
 // independent of it.
+#include "../kernel/Filesystem.h"
 #include "../kernel/NanoOs.h"
+#define FILE C_FILE
+#define gid_t C_gid_t
+#define uid_t C_uid_t
+#define pid_t C_pid_t
+#include "../kernel/Overlay.h"
+#include "../kernel/OverlayFunctions.h"
+#undef FILE
+#undef gid_t
+#undef uid_t
+#undef pid_t
 #include "../kernel/Processes.h"
 #include "../kernel/Scheduler.h"
 #include "../kernel/SdCardSpi.h"

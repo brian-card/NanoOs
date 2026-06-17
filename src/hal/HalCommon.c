@@ -30,8 +30,6 @@
 /// @brief HAL routines that are common to multiple implementations.
 
 #include "HalCommon.h"
-#include "../kernel/Fat32Filesystem.h"
-#include "../kernel/Filesystem.h"
 
 // Must come last
 #include "../user/NanoOsStdio.h"
@@ -108,29 +106,13 @@ int halCommonInitRootFilesystem(void) {
     return -ENODEV;
   }
   
-  FilesystemState fs;
-  memset(&fs, 0, sizeof(fs));
-  fs.blockDevice = rootBlockDevice;
-  fs.blockSize = fs.blockDevice->blockSize;
-  fs.driverInit = fat32Initialize;
-  fs.driverFopen = fat32Fopen;
-  fs.driverFread = fat32Fread;
-  fs.driverFwrite = fat32Fwrite;
-  fs.driverFclose = fat32Fclose;
-  fs.driverRemove = fat32Remove;
-  fs.driverFseek = fat32Fseek;
-  fs.driverGetFileBlockMetadata = fat32GetFileBlockMetadata;
-  fs.driverGetFilename = fat32GetFilename;
-  
-  // Create the filesystem process.
+  // Allocate the filesystem process.
   SCHEDULER_STATE->rootFsPid = SCHEDULER_STATE->firstUserPid;
   ProcessDescriptor *allProcesses = SCHEDULER_STATE->allProcesses;
   ProcessDescriptor *processDescriptor
     = &allProcesses[SCHEDULER_STATE->rootFsPid - 1];
-  if (processCreate(processDescriptor, runFilesystem, &fs)
-    != processSuccess
-  ) {
-    printString("Could not start filesystem process\n");
+  if (processCreate(processDescriptor, dummyProcess, NULL) != processSuccess) {
+    printString("Could not allocate filesystem process\n");
     return -ENOMEM;
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
@@ -139,8 +121,7 @@ int halCommonInitRootFilesystem(void) {
   processDescriptor->userId = ROOT_USER_ID;
   processDescriptor->privelegeLevel = PRIVELEGE_LEVEL_EXECUTIVE;
   processDescriptor->restartFunction = restartFilesystem;
-  // Let it pick up the arguments
-  processResume(processDescriptor, NULL);
+  // DO NOT resume the process yet.  Let the scheduler take care of that.
   
   SCHEDULER_STATE->firstUserPid = SCHEDULER_STATE->rootFsPid + 1;
   SCHEDULER_STATE->firstShellPid = SCHEDULER_STATE->firstUserPid;
@@ -166,25 +147,30 @@ int restartFilesystem(ProcessDescriptor *processDescriptor) {
   memset(&fs, 0, sizeof(fs));
   fs.blockDevice = rootBlockDevice;
   fs.blockSize = fs.blockDevice->blockSize;
-  fs.driverInit = fat32Initialize;
-  fs.driverFopen = fat32Fopen;
-  fs.driverFread = fat32Fread;
-  fs.driverFwrite = fat32Fwrite;
-  fs.driverFclose = fat32Fclose;
-  fs.driverRemove = fat32Remove;
-  fs.driverFseek = fat32Fseek;
-  fs.driverGetFileBlockMetadata = fat32GetFileBlockMetadata;
-  fs.driverGetFilename = fat32GetFilename;
 
-  if (processCreate(processDescriptor, runFilesystem, &fs) != processSuccess) {
+  BlockOverlayArgs blockOverlayArgs = {
+    .blockDevice = rootBlockDevice,
+    .startBlock = 1,
+    .args = &fs,
+  };
+
+  if (processCreate(processDescriptor, runBlockOverlay, &blockOverlayArgs)
+    != processSuccess
+  ) {
     printString("Could not restart filesystem process.\n");
     return -ENOMEM;
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
   processDescriptor->name = "filesystem";
   processDescriptor->userId = ROOT_USER_ID;
-  // Let it copy the FilesystemState off our stack before we return.
-  processResume(processDescriptor, NULL);
+  processDescriptor->privelegeLevel = PRIVELEGE_LEVEL_EXECUTIVE;
+  processDescriptor->restartFunction = restartFilesystem;
+  processDescriptor->callOverlayFunction = callOverlayFunctionFromBlockDevice;
+  processQueuePush(processDescriptor->readyQueue, processDescriptor);
+  // Let the filesystem process initialize before we return.
+  while (fs.driverState == NULL) {
+    SCHEDULER_STATE->runKernelExecutive();
+  }
 
   return 0;
 }
