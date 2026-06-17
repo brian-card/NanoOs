@@ -3508,11 +3508,6 @@ void runScheduler(void) {
     goto exit;
   }
 
-  startDebugMessage("Loading process ");
-  printDebugString(processDescriptor->name);
-  printDebugString(" with privelege level ");
-  printDebugInt(processDescriptor->privelegeLevel);
-  printDebugString("\n");
   if (processDescriptor->privelegeLevel != PRIVELEGE_LEVEL_KERNEL) {
     if (processRunning(processDescriptor) == true) {
       // This is a non-kernel process running from an overlay.  Make sure it's
@@ -3537,17 +3532,9 @@ void runScheduler(void) {
         SCHEDULER_STATE->preemptionTimer, 10000000, forceYield);
     }
   }
-  startDebugMessage("Resuming process ");
-  printDebugString(processDescriptor->name);
-  printDebugString(" with privelege level ");
-  printDebugInt(processDescriptor->privelegeLevel);
-  printDebugString("\n");
   processResume(processDescriptor, NULL);
   // No need to call HAL->timer->cancel since that's called by
   // yieldCallback if we're running preemptive multiprocessing.
-  startDebugMessage("Returned from process ");
-  printDebugString(processDescriptor->name);
-  printDebugString("\n");
 
   if (processStackOverflowed(processDescriptor)) {
     processTerminate(processDescriptor, false);
