@@ -43,17 +43,17 @@ extern "C"
 {
 #endif
 
-#define GET_PARTITION_INFO_OVERLAY  blockOverlayId(1)
-#define DRIVER_INIT_OVERLAY         blockOverlayId(2)
-#define OPEN_FILE_OVERLAY           blockOverlayId(3)
-#define CLOSE_FILE_OVERLAY          blockOverlayId(4)
-#define READ_FILE_OVERLAY           blockOverlayId(5)
-#define WRITE_FILE_OVERLAY          blockOverlayId(6)
-#define REMOVE_FILE_OVERLAY         blockOverlayId(7)
-#define SEEK_FILE_OVERLAY           blockOverlayId(8)
-#define DUMP_OPEN_FILES_OVERLAY     blockOverlayId(9)
-#define GET_FILE_BLOCK_META_OVERLAY blockOverlayId(10)
-#define FIRST_FS_OVERLAY_ID         11
+#define GET_PARTITION_INFO_OVERLAY      blockOverlayId(1)
+#define DRIVER_INIT_OVERLAY             blockOverlayId(2)
+#define OPEN_FILE_OVERLAY               blockOverlayId(3)
+#define CLOSE_FILE_OVERLAY              blockOverlayId(4)
+#define READ_FILE_OVERLAY               blockOverlayId(5)
+#define WRITE_FILE_OVERLAY              blockOverlayId(6)
+#define REMOVE_FILE_OVERLAY             blockOverlayId(7)
+#define SEEK_FILE_OVERLAY               blockOverlayId(8)
+#define DUMP_OPEN_FILES_OVERLAY         blockOverlayId(9)
+#define GET_FILE_BLOCK_METADATA_OVERLAY blockOverlayId(10)
+#define FIRST_FS_OVERLAY_ID             11
 
 /// @def readBytes
 ///

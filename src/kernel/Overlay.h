@@ -95,7 +95,7 @@ typedef void* (*OverlayFunction)(void*);
 /// @param name The string name of the overlay function.
 /// @param fn A pointer to the function within the overlay.
 typedef struct NanoOsOverlayExport {
-  const char name[16];
+  const char name[24];
   OverlayFunction fn;
 } NanoOsOverlayExport;
 

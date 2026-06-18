@@ -47,7 +47,7 @@ int driverGetFileBlockMetadata(
     uint32_t *startBlock,
     uint32_t *numBlocks);
 
-/// @fn void* GetFileBlockMeta(void *args)
+/// @fn void* GetFileBlockMetadata(void *args)
 ///
 /// @brief Overlay implementation of a getFileBlockMetadata function.
 ///
@@ -57,7 +57,7 @@ int driverGetFileBlockMetadata(
 /// @return Sets the metadata value of the provided GetFileBlockMetadataArgs to
 //  the value that is to be used by the calling process.  This function always
 /// returns the filesystemState pointer provided as args.
-void* GetFileBlockMeta(void *args) {
+void* GetFileBlockMetadata(void *args) {
   FilesystemState *filesystemState = (FilesystemState*) args;
   ProcessMessage *processMessage = (ProcessMessage*) filesystemState->args;
   GetFileBlockMetadataArgs *metadataArgs
