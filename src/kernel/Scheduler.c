@@ -1369,8 +1369,8 @@ FILE* schedFopen(const char *pathname, const char *mode) {
     _functionInProgress = __func__;
 
     FilesystemFopenArgs fopenArgs = {
-      .pathname = pathname,
-      .mode = mode,
+      .pathname = (char*) pathname,
+      .mode = (char*) mode,
       .fd = 0, // We don't care
     };
     printDebugString("schedFopen: Sending message\n");
@@ -1460,7 +1460,7 @@ int schedRemove(const char *pathname) {
     _functionInProgress = __func__;
 
     FilesystemRemoveArgs filesystemRemoveArgs = {
-      .pathname = pathname,
+      .pathname = (char*) pathname,
       .returnValue = 0,
     };
 

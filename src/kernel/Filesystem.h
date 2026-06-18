@@ -171,10 +171,10 @@ typedef struct FilesystemSeekArgs {
 /// @param returnValue A pointer to the FILE that's opened on success, NULL
 ///   on failure.
 typedef struct FilesystemFopenArgs {
-  const char *pathname;
-  const char *mode;
-  int         fd;
-  FILE       *returnValue;
+  char *pathname;
+  char *mode;
+  int   fd;
+  FILE *returnValue;
 } FilesystemFopenArgs;
 
 /// @struct FilesystemFcloseArgs
@@ -197,8 +197,8 @@ typedef struct FilesystemFcloseArgs {
 /// @param returnValue The return value of the operation that will be passed
 ///   back to the handler.  This value will be set to the process's errno value.
 typedef struct FilesystemRemoveArgs {
-  const char *pathname;
-  int         returnValue;
+  char *pathname;
+  int   returnValue;
 } FilesystemRemoveArgs;
 
 /// @struct FilesystemDumpOpenFilesArgs

@@ -540,17 +540,30 @@ FILE* filesystemFopen(const char *pathname, const char *mode) {
     goto freeFileDescriptor;
   }
 
-  FilesystemFopenArgs fopenArgs = {
-    .pathname = pathname,
-    .mode = mode,
-    .fd = numFileDescriptors,
-  };
+  FilesystemFopenArgs fopenArgs;
+  memset(&fopenArgs, 0, sizeof(fopenArgs));
+  fopenArgs.pathname = (char*) malloc(strlen(pathname) + 1);
+  if (fopenArgs.pathname == NULL) {
+    goto freeFileDescriptor;
+  }
+  strcpy(fopenArgs.pathname, pathname);
+
+  fopenArgs.mode = (char*) malloc(strlen(mode) + 1);
+  if (fopenArgs.mode == NULL) {
+    goto freePathname;
+  }
+  strcpy(fopenArgs.mode, mode);
+
+  fopenArgs.fd = numFileDescriptors;
 
   ProcessMessage *msg = initSendProcessMessageToPid(
     SCHEDULER_STATE->rootFsPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_OPEN_FILE,
     &fopenArgs, sizeof(fopenArgs), true);
   processMessageWaitForDone(msg, NULL);
+  free(fopenArgs.mode);
+  free(fopenArgs.pathname);
+
   file = fopenArgs.returnValue;
   processMessageRelease(msg);
   if (file == NULL) {
@@ -562,6 +575,9 @@ FILE* filesystemFopen(const char *pathname, const char *mode) {
   processDescriptor->numFileDescriptors = numFileDescriptors + 1;
 
   goto exit;
+
+freePathname:
+  free(fopenArgs.pathname);
 
 freeFileDescriptor:
   free(processDescriptor->fileDescriptors[numFileDescriptors]);
@@ -656,16 +672,21 @@ exit:
 int filesystemRemove(const char *pathname) {
   int returnValue = 0;
   if ((pathname != NULL) && (*pathname != '\0')) {
-    FilesystemRemoveArgs filesystemRemoveArgs = {
-      .pathname = pathname,
-      .returnValue = 0,
-    };
+    FilesystemRemoveArgs filesystemRemoveArgs;
+    memset(&filesystemRemoveArgs, 0, sizeof(filesystemRemoveArgs));
+    filesystemRemoveArgs.pathname = (char*) malloc(strlen(pathname) + 1);
+    if (filesystemRemoveArgs.pathname == NULL) {
+      errno = ENOMEM;
+      return -1;
+    }
+    strcpy(filesystemRemoveArgs.pathname, pathname);
 
     ProcessMessage *msg = initSendProcessMessageToPid(
       SCHEDULER_STATE->rootFsPid,
       FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_REMOVE_FILE,
       &filesystemRemoveArgs, sizeof(filesystemRemoveArgs), true);
     processMessageWaitForDone(msg, NULL);
+    free(filesystemRemoveArgs.pathname); filesystemRemoveArgs.pathname = NULL;
     returnValue = filesystemRemoveArgs.returnValue;
     if (returnValue != 0) {
       // returnValue holds a negative errno.  Set errno for the current process
