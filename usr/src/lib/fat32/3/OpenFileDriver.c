@@ -116,13 +116,25 @@ void* driverFopen(
     const char *mode
 ) {
   Fat32DriverState *ds = (Fat32DriverState *) driverState;
-  if ((ds == NULL) || (filePath == NULL) || (mode == NULL)) {
+  if (ds == NULL) {
+    printString("driverFopen: ds is NULL\n");
+    return NULL;
+  }
+  if (filePath == NULL) {
+    printString("driverFopen: filePath is NULL\n");
+    return NULL;
+  }
+  if (mode == NULL) {
+    printString("driverFopen: mode is NULL\n");
     return NULL;
   }
 
   // ---- Parse the mode string ----
   Fat32OpenMode modeFlags;
   if (fat32ParseMode(mode, &modeFlags) != FAT32_SUCCESS) {
+    printString("driverFopen: fat32ParseMode failed for mode=\"");
+    printString(mode);
+    printString("\"\n");
     return NULL;
   }
 
@@ -130,8 +142,14 @@ void* driverFopen(
   uint32_t    parentCluster;
   const char *fileName = NULL;
 
-  if (fat32ResolveParentDirectory(ds, filePath, &parentCluster, &fileName)
-      != FAT32_SUCCESS) {
+  int resolveResult = fat32ResolveParentDirectory(
+    ds, filePath, &parentCluster, &fileName);
+  if (resolveResult != FAT32_SUCCESS) {
+    printString("driverFopen: resolveParent failed for \"");
+    printString(filePath);
+    printString("\" result=");
+    printInt(resolveResult);
+    printString("\n");
     return NULL;
   }
 
@@ -145,6 +163,15 @@ void* driverFopen(
 
   int searchStatus = fat32SearchDirectory(
     ds, parentCluster, fileName, &searchResult);
+  if (searchStatus != FAT32_SUCCESS) {
+    printString("driverFopen: searchDir failed for \"");
+    printString(fileName);
+    printString("\" in cluster=");
+    printInt((int) parentCluster);
+    printString(" result=");
+    printInt(searchStatus);
+    printString("\n");
+  }
 
   if (searchStatus == FAT32_SUCCESS) {
     // File exists.
