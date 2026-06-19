@@ -163,15 +163,6 @@ void* driverFopen(
 
   int searchStatus = fat32SearchDirectory(
     ds, parentCluster, fileName, &searchResult);
-  if (searchStatus != FAT32_SUCCESS) {
-    printString("driverFopen: searchDir failed for \"");
-    printString(fileName);
-    printString("\" in cluster=");
-    printInt((int) parentCluster);
-    printString(" result=");
-    printInt(searchStatus);
-    printString("\n");
-  }
 
   if (searchStatus == FAT32_SUCCESS) {
     // File exists.
