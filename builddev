@@ -4,6 +4,9 @@ set -e
 
 hostname="${1}"
 targetDevice="${2}"
+filesystem="fat32"
+blocksPerOverlay=8
+
 if [ "${hostname}" = "" ]; then
 	echo "Usage ${0} <hostname> [target device]" >&2
 	exit 1
@@ -35,3 +38,10 @@ if [ "${targetDevice}" != "" ]; then
 	sudo umount "${mountDir}"
 fi
 
+blockOverlays="$(ls usr/lib/{filesystem,${filesystem}}/*)"
+for blockOverlay in ${blockOverlays}; do
+	overlayId="$(basename "${blockOverlay}" .overlay)"
+	startBlock=$(( (overlayId * blocksPerOverlay) + 1 ))
+	sudo dd if="${blockOverlay}" of="${targetDevice}" bs=512 \
+		seek=${startBlock}
+done
