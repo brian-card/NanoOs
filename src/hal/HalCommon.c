@@ -63,7 +63,7 @@ BlockDevice* halCommonInitRootSdSpiStorage(
   processDescriptor->processId = SCHEDULER_STATE->firstUserPid;
   processDescriptor->name = "SD card";
   processDescriptor->userId = ROOT_USER_ID;
-  processDescriptor->privelegeLevel = PRIVELEGE_LEVEL_KERNEL;
+  processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_KERNEL;
   processDescriptor->restartFunction = HAL->blockDevice->restart;
   processDescriptor->restartArgs = (void*)(intptr_t)0;
   BlockDevice *sdDevice = (BlockDevice*) coroutineResume(
@@ -119,7 +119,7 @@ int halCommonInitRootFilesystem(void) {
   processDescriptor->processId = SCHEDULER_STATE->rootFsPid;
   processDescriptor->name = "filesystem";
   processDescriptor->userId = ROOT_USER_ID;
-  processDescriptor->privelegeLevel = PRIVELEGE_LEVEL_EXECUTIVE;
+  processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
   processDescriptor->restartFunction = restartFilesystem;
   // DO NOT resume the process yet.  Let the scheduler take care of that.
   
@@ -163,13 +163,13 @@ int restartFilesystem(ProcessDescriptor *processDescriptor) {
   threadSetContext(processDescriptor->mainThread, processDescriptor);
   processDescriptor->name = "filesystem";
   processDescriptor->userId = ROOT_USER_ID;
-  processDescriptor->privelegeLevel = PRIVELEGE_LEVEL_EXECUTIVE;
+  processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
   processDescriptor->restartFunction = restartFilesystem;
   processDescriptor->callOverlayFunction = callOverlayFunctionFromBlockDevice;
   processQueuePush(processDescriptor->readyQueue, processDescriptor);
   // Let the filesystem process initialize before we return.
   while (fs.driverState == NULL) {
-    SCHEDULER_STATE->runSchedulerQueues(PRIVELEGE_LEVEL_SUPERVISOR);
+    SCHEDULER_STATE->runSchedulerQueues(PRIVILEGE_LEVEL_SUPERVISOR);
   }
 
   return 0;

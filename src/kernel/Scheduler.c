@@ -229,20 +229,20 @@ static const char* const shellNames[NANO_OS_MAX_NUM_SHELLS] = {
   "shell 1",
 };
 
-/// @fn void runSchedulerQueues(PrivelegeLevel privelegeLevelBound)
+/// @fn void runSchedulerQueues(PrivilegeLevel privilegeLevelBound)
 ///
 /// @brief Make one pass through all the process queues less than the provided
 /// bound.
 ///
-/// @param privelegeLevelBound The upper bound for the privelege level queues.
+/// @param privilegeLevelBound The upper bound for the privilege level queues.
 ///   The queues less than this value will be run.
 ///
 /// @return This function returns no value.
-void runSchedulerQueues(PrivelegeLevel privelegeLevelBound) {
+void runSchedulerQueues(PrivilegeLevel privilegeLevelBound) {
   ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
 
-  for (PrivelegeLevel ii = PRIVELEGE_LEVEL_KERNEL;
-    ii < privelegeLevelBound;
+  for (PrivilegeLevel ii = PRIVILEGE_LEVEL_KERNEL;
+    ii < privilegeLevelBound;
     ii++
   ) {
     SCHEDULER_STATE->currentReady = &SCHEDULER_STATE->ready[ii];
@@ -439,7 +439,7 @@ int schedulerSendProcessMessageToProcess(
   }
 
   while (processMessageDone(processMessage) == false) {
-    runSchedulerQueues(PRIVELEGE_LEVEL_SUPERVISOR);
+    runSchedulerQueues(PRIVILEGE_LEVEL_SUPERVISOR);
   }
 
 exit:
@@ -1327,7 +1327,7 @@ int closeProcessFileDescriptors(ProcessDescriptor *processDescriptor) {
           while ((processMessageDone(&processMessage) == false)
             && (HAL->clock->getElapsedMicroseconds(startTime) < 50000)
           ) {
-            for (int ii = 0; ii < NUM_PRIVELEGE_LEVELS; ii++) {
+            for (int ii = 0; ii < NUM_PRIVILEGE_LEVELS; ii++) {
               SCHEDULER_STATE->currentReady = &SCHEDULER_STATE->ready[ii];
               uint8_t queueSize = SCHEDULER_STATE->currentReady->numElements;
               for (uint8_t jj = 0; jj < queueSize; jj++) {
@@ -3514,7 +3514,7 @@ void runScheduler(void) {
     goto exit;
   }
 
-  if (processDescriptor->privelegeLevel != PRIVELEGE_LEVEL_KERNEL) {
+  if (processDescriptor->privilegeLevel != PRIVILEGE_LEVEL_KERNEL) {
     if (processRunning(processDescriptor) == true) {
       // This is a non-kernel process running from an overlay.  Make sure it's
       // loaded.
@@ -3662,15 +3662,15 @@ __attribute__((noinline)) void startScheduler(
   // Initialize the scheduler's state.
   SchedulerState schedulerState = {0};
   schedulerState.hostname = NULL;
-  schedulerState.ready[PRIVELEGE_LEVEL_KERNEL].name = "kernel ready";
-  schedulerState.ready[PRIVELEGE_LEVEL_EXECUTIVE].name = "executive ready";
-  schedulerState.ready[PRIVELEGE_LEVEL_SUPERVISOR].name = "supervisor ready";
-  schedulerState.ready[PRIVELEGE_LEVEL_USER].name = "user ready";
+  schedulerState.ready[PRIVILEGE_LEVEL_KERNEL].name = "kernel ready";
+  schedulerState.ready[PRIVILEGE_LEVEL_EXECUTIVE].name = "executive ready";
+  schedulerState.ready[PRIVILEGE_LEVEL_SUPERVISOR].name = "supervisor ready";
+  schedulerState.ready[PRIVILEGE_LEVEL_USER].name = "user ready";
   schedulerState.waiting.name = "waiting";
   schedulerState.timedWaiting.name = "timed waiting";
   schedulerState.free.name = "free";
   schedulerState.currentReady
-    = &schedulerState.ready[PRIVELEGE_LEVEL_KERNEL];
+    = &schedulerState.ready[PRIVILEGE_LEVEL_KERNEL];
   schedulerState.preemptionTimer = -1;
   if ((HAL->timer != NULL) && (HAL->timer->numSupported > 0)) {
     for (int32_t ii = 0; ii < ((int32_t) HAL->timer->numSupported); ii++) {
@@ -3708,8 +3708,8 @@ __attribute__((noinline)) void startScheduler(
     = schedulerState.schedulerPid;
   allProcesses[schedulerState.schedulerPid - 1].name = "init";
   allProcesses[schedulerState.schedulerPid - 1].userId = ROOT_USER_ID;
-  allProcesses[schedulerState.schedulerPid - 1].privelegeLevel
-    = PRIVELEGE_LEVEL_KERNEL;
+  allProcesses[schedulerState.schedulerPid - 1].privilegeLevel
+    = PRIVILEGE_LEVEL_KERNEL;
   threadSetContext(allProcesses[schedulerState.schedulerPid - 1].mainThread,
     &allProcesses[schedulerState.schedulerPid - 1]);
   printDebugString("Configured scheduler process.\n");
@@ -3755,7 +3755,7 @@ __attribute__((noinline)) void startScheduler(
   processDescriptor->processId = schedulerState.consolePid;
   processDescriptor->name = "console";
   processDescriptor->userId = ROOT_USER_ID;
-  processDescriptor->privelegeLevel = PRIVELEGE_LEVEL_KERNEL;
+  processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_KERNEL;
   processDescriptor->restartFunction = restartConsole;
   printDebugString("Created console process.\n");
 
@@ -3821,7 +3821,7 @@ __attribute__((noinline)) void startScheduler(
   printDebugString("Started console process.\n");
   // Put the console process on the ready queue.
   allProcesses[schedulerState.consolePid - 1].readyQueue
-    = &schedulerState.ready[PRIVELEGE_LEVEL_KERNEL];
+    = &schedulerState.ready[PRIVILEGE_LEVEL_KERNEL];
   processQueuePush(allProcesses[schedulerState.consolePid - 1].readyQueue,
     &allProcesses[schedulerState.consolePid - 1]);
 
@@ -3863,10 +3863,10 @@ __attribute__((noinline)) void startScheduler(
     processDescriptor->name = "dummy";
     processDescriptor->callOverlayFunction = callOverlayFunctionFromFile;
     if ((ii - schedulerState.firstShellPid) < schedulerState.numShells) {
-      processDescriptor->privelegeLevel = PRIVELEGE_LEVEL_SUPERVISOR;
+      processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_SUPERVISOR;
       processDescriptor->restartFunction = restartShell;
     } else {
-      processDescriptor->privelegeLevel = PRIVELEGE_LEVEL_USER;
+      processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_USER;
       processDescriptor->restartFunction = NULL;
     }
   }
@@ -3913,7 +3913,7 @@ __attribute__((noinline)) void startScheduler(
   processDescriptor->processId = schedulerState.memoryManagerPid;
   processDescriptor->name = "memory manager";
   processDescriptor->userId = ROOT_USER_ID;
-  processDescriptor->privelegeLevel = PRIVELEGE_LEVEL_KERNEL;
+  processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_KERNEL;
   processDescriptor->restartFunction = restartMemoryManager;
 
   // Assign the console ports to it.
@@ -3952,7 +3952,7 @@ __attribute__((noinline)) void startScheduler(
     ii++
   ) {
     allProcesses[ii - 1].readyQueue
-      = &schedulerState.ready[allProcesses[ii - 1].privelegeLevel];
+      = &schedulerState.ready[allProcesses[ii - 1].privilegeLevel];
     processQueuePush(allProcesses[ii - 1].readyQueue, &allProcesses[ii - 1]);
   }
   printDebugString("Populated kernel/executive ready queues.\n");
@@ -3964,7 +3964,7 @@ __attribute__((noinline)) void startScheduler(
     ii++
   ) {
     allProcesses[ii - 1].readyQueue
-      = &schedulerState.ready[allProcesses[ii - 1].privelegeLevel];
+      = &schedulerState.ready[allProcesses[ii - 1].privilegeLevel];
     processQueuePush(allProcesses[ii - 1].readyQueue, &allProcesses[ii - 1]);
   }
   printDebugString("Populated supervisor/user ready queues.\n");
@@ -3976,7 +3976,7 @@ __attribute__((noinline)) void startScheduler(
 
   // Get the memory manager and filesystem up and running.
   processResume(&allProcesses[schedulerState.memoryManagerPid - 1], NULL);
-  runSchedulerQueues(PRIVELEGE_LEVEL_SUPERVISOR);
+  runSchedulerQueues(PRIVILEGE_LEVEL_SUPERVISOR);
   printDebugString("Started memory manager and filesystem.\n");
 
   // Allocate memory for the hostname.

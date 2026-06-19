@@ -90,16 +90,16 @@ extern "C"
 
 // Primitive types
 
-/// @enum PrivelegeLevel
+/// @enum PrivilegeLevel
 ///
-/// @brief Privelege level designations for processes.
-typedef enum PrivelegeLevel {
-  PRIVELEGE_LEVEL_KERNEL,
-  PRIVELEGE_LEVEL_EXECUTIVE,
-  PRIVELEGE_LEVEL_SUPERVISOR,
-  PRIVELEGE_LEVEL_USER,
-  NUM_PRIVELEGE_LEVELS,
-} PrivelegeLevel;
+/// @brief Privilege level designations for processes.
+typedef enum PrivilegeLevel {
+  PRIVILEGE_LEVEL_KERNEL,
+  PRIVILEGE_LEVEL_EXECUTIVE,
+  PRIVILEGE_LEVEL_SUPERVISOR,
+  PRIVILEGE_LEVEL_USER,
+  NUM_PRIVILEGE_LEVELS,
+} PrivilegeLevel;
 
 /// @typedef Process
 ///
@@ -208,7 +208,7 @@ typedef struct ProcessQueue ProcessQueue;
 /// @param userId The numerical ID of the user that is running the process.
 /// @param numFileDescriptors The number of FileDescriptor objects contained by
 ///   the fileDescriptors array.
-/// @param privelegeLevel The PrivelegeLevel of the process.
+/// @param privilegeLevel The PrivilegeLevel of the process.
 /// @param fileDescriptors Pointer to an array of FileDescriptor pointers that
 ///   are currently in use by the process.
 /// @param overlayNamespace The namespace that the overlay is in if this is a
@@ -239,7 +239,7 @@ typedef struct ProcessDescriptor {
   ProcessId           processId;
   UserId              userId;
   uint8_t             numFileDescriptors;
-  PrivelegeLevel      privelegeLevel;
+  PrivilegeLevel      privilegeLevel;
   FileDescriptor    **fileDescriptors;
   void               *overlayNamespace;
   FileBlockMetadata   overlay;
@@ -344,7 +344,7 @@ typedef struct SchedulerState {
   ProcessId           rootFsPid;
   ProcessId           firstUserPid;
   ProcessId           firstShellPid;
-  void              (*runSchedulerQueues)(PrivelegeLevel);
+  void              (*runSchedulerQueues)(PrivilegeLevel);
 } SchedulerState;
 
 /// @struct CommandDescriptor
