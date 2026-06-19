@@ -32,7 +32,15 @@
 #if defined(__SAMD21G18A__) || defined(__SAMD21E18A__)
 
 // Base Arduino definitions
+#define FILE  Arduino_FILE
+#define gid_t Arduino_gid_t
+#define uid_t Arduino_uid_t
+#define pid_t Arduino_pid_t
 #include <Arduino.h>
+#undef FILE
+#undef gid_t
+#undef uid_t
+#undef pid_t
 
 // Basic SPI communication
 #include <SPI.h>
