@@ -126,6 +126,19 @@ int halCommonInitRootFilesystem(void) {
   SCHEDULER_STATE->firstUserPid = SCHEDULER_STATE->rootFsPid + 1;
   SCHEDULER_STATE->firstShellPid = SCHEDULER_STATE->firstUserPid;
   
+  // The filesystem runs as an overlay, which increases the depth of the call
+  // stack.  Double the stack size for it.
+  Thread *thread = threadProvision(NULL, dummyProcess, NULL);
+  if (thread == NULL) {
+    printString("Could not increase filesystem process's stack size.\n");
+    return -ENOMEM;
+  }
+  if (threadSetStackEnd(
+    processDescriptor->mainThread, threadStackEnd(thread)) != processSuccess
+  ) {
+    printString("Could not set filesystem process's stack size.\n");
+  }
+  
   return 0;
 }
 
