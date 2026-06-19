@@ -98,7 +98,7 @@ typedef enum PrivelegeLevel {
   PRIVELEGE_LEVEL_EXECUTIVE,
   PRIVELEGE_LEVEL_SUPERVISOR,
   PRIVELEGE_LEVEL_USER,
-  NUM_SCHEDULER_READY_QUEUE_TYPES,
+  NUM_PRIVELEGE_LEVELS,
 } PrivelegeLevel;
 
 /// @typedef Process
@@ -326,8 +326,8 @@ typedef struct ProcessQueue {
 /// @param rootFsProcessId The ProcessId of the root filesystem.
 /// @param firstUserProcessId The ProcessId of the first user process.
 /// @param firstShellProcessId The ProcessId of the first shell process.
-/// @param runKernelExecutive Function pointer to the runKernelExecutive function in the
-///   Scheduler library.
+/// @param runSchedulerQueues Function pointer to the runSchedulerQueues
+///   function in the Scheduler library.
 typedef struct SchedulerState {
   ProcessDescriptor   allProcesses[NANO_OS_NUM_PROCESSES];
   ProcessQueue        ready[SCHEDULER_NUM_READY_QUEUES];
@@ -344,7 +344,7 @@ typedef struct SchedulerState {
   ProcessId           rootFsPid;
   ProcessId           firstUserPid;
   ProcessId           firstShellPid;
-  void              (*runKernelExecutive)(void);
+  void              (*runSchedulerQueues)(PrivelegeLevel);
 } SchedulerState;
 
 /// @struct CommandDescriptor

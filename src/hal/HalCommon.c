@@ -169,7 +169,7 @@ int restartFilesystem(ProcessDescriptor *processDescriptor) {
   processQueuePush(processDescriptor->readyQueue, processDescriptor);
   // Let the filesystem process initialize before we return.
   while (fs.driverState == NULL) {
-    SCHEDULER_STATE->runKernelExecutive();
+    SCHEDULER_STATE->runSchedulerQueues(PRIVELEGE_LEVEL_SUPERVISOR);
   }
 
   return 0;

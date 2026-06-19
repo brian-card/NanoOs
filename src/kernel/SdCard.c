@@ -177,7 +177,7 @@ int schedSdReadBlocks(void *context, uint32_t startBlock,
     (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
     ii++
   ) {
-    SCHEDULER_STATE->runKernelExecutive();
+    SCHEDULER_STATE->runSchedulerQueues(PRIVELEGE_LEVEL_EXECUTIVE);
     processMessage = getAvailableMessage();
   }
   if (processMessage == NULL) {
@@ -198,7 +198,7 @@ int schedSdReadBlocks(void *context, uint32_t startBlock,
   }
 
   while (processMessageDone(processMessage) == false) {
-    SCHEDULER_STATE->runKernelExecutive();
+    SCHEDULER_STATE->runSchedulerQueues(PRIVELEGE_LEVEL_EXECUTIVE);
   }
   int returnValue = (int) ((intptr_t) processMessageData(processMessage));
   processMessageRelease(processMessage);
@@ -237,7 +237,7 @@ int schedSdWriteBlocks(void *context, uint32_t startBlock,
     (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
     ii++
   ) {
-    SCHEDULER_STATE->runKernelExecutive();
+    SCHEDULER_STATE->runSchedulerQueues(PRIVELEGE_LEVEL_EXECUTIVE);
     processMessage = getAvailableMessage();
   }
   if (processMessage == NULL) {
@@ -258,7 +258,7 @@ int schedSdWriteBlocks(void *context, uint32_t startBlock,
   }
 
   while (processMessageDone(processMessage) == false) {
-    SCHEDULER_STATE->runKernelExecutive();
+    SCHEDULER_STATE->runSchedulerQueues(PRIVELEGE_LEVEL_EXECUTIVE);
   }
   int returnValue = (int) ((intptr_t) processMessageData(processMessage));
   processMessageRelease(processMessage);

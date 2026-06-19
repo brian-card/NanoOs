@@ -229,16 +229,22 @@ static const char* const shellNames[NANO_OS_MAX_NUM_SHELLS] = {
   "shell 1",
 };
 
-/// @fn void runKernelExecutive(void)
+/// @fn void runSchedulerQueues(PrivelegeLevel privelegeLevelBound)
 ///
-/// @brief Make one pass through all the PRIVELEGE_LEVEL_KERNEL and
-/// PRIVELEGE_LEVEL_SUPERVISOR processes.
+/// @brief Make one pass through all the process queues less than the provided
+/// bound.
+///
+/// @param privelegeLevelBound The upper bound for the privelege level queues.
+///   The queues less than this value will be run.
 ///
 /// @return This function returns no value.
-void runKernelExecutive(void) {
+void runSchedulerQueues(PrivelegeLevel privelegeLevelBound) {
   ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
 
-  for (int ii = 0; ii < PRIVELEGE_LEVEL_SUPERVISOR; ii++) {
+  for (PrivelegeLevel ii = PRIVELEGE_LEVEL_KERNEL;
+    ii < privelegeLevelBound;
+    ii++
+  ) {
     SCHEDULER_STATE->currentReady = &SCHEDULER_STATE->ready[ii];
     uint8_t queueSize = SCHEDULER_STATE->currentReady->numElements;
     for (uint8_t jj = 0; jj < queueSize; jj++) {
@@ -433,7 +439,7 @@ int schedulerSendProcessMessageToProcess(
   }
 
   while (processMessageDone(processMessage) == false) {
-    runKernelExecutive();
+    runSchedulerQueues(PRIVELEGE_LEVEL_SUPERVISOR);
   }
 
 exit:
@@ -1321,7 +1327,7 @@ int closeProcessFileDescriptors(ProcessDescriptor *processDescriptor) {
           while ((processMessageDone(&processMessage) == false)
             && (HAL->clock->getElapsedMicroseconds(startTime) < 50000)
           ) {
-            for (int ii = 0; ii < NUM_SCHEDULER_READY_QUEUE_TYPES; ii++) {
+            for (int ii = 0; ii < NUM_PRIVELEGE_LEVELS; ii++) {
               SCHEDULER_STATE->currentReady = &SCHEDULER_STATE->ready[ii];
               uint8_t queueSize = SCHEDULER_STATE->currentReady->numElements;
               for (uint8_t jj = 0; jj < queueSize; jj++) {
@@ -3679,7 +3685,7 @@ __attribute__((noinline)) void startScheduler(
   schedulerState.memoryManagerPid = 3;
   schedulerState.firstUserPid = 4;
   schedulerState.firstShellPid = 4;
-  schedulerState.runKernelExecutive = runKernelExecutive;
+  schedulerState.runSchedulerQueues = runSchedulerQueues;
   SCHEDULER_STATE = &schedulerState;
   printDebugString("Set scheduler state.\n");
 
@@ -3970,7 +3976,7 @@ __attribute__((noinline)) void startScheduler(
 
   // Get the memory manager and filesystem up and running.
   processResume(&allProcesses[schedulerState.memoryManagerPid - 1], NULL);
-  runKernelExecutive();
+  runSchedulerQueues(PRIVELEGE_LEVEL_SUPERVISOR);
   printDebugString("Started memory manager and filesystem.\n");
 
   // Allocate memory for the hostname.
