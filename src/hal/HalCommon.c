@@ -30,6 +30,7 @@
 /// @brief HAL routines that are common to multiple implementations.
 
 #include "HalCommon.h"
+#include "../kernel/Fat32Filesystem.h"
 
 // Must come last
 #include "../user/NanoOsStdio.h"
@@ -160,19 +161,34 @@ int restartFilesystem(ProcessDescriptor *processDescriptor) {
   memset(&fs, 0, sizeof(fs));
   fs.blockDevice = rootBlockDevice;
   fs.blockSize = fs.blockDevice->blockSize;
+  fs.driverInit = fat32Initialize;
+  fs.driverFopen = fat32Fopen;
+  fs.driverFread = fat32Fread;
+  fs.driverFwrite = fat32Fwrite;
+  fs.driverFclose = fat32Fclose;
+  fs.driverRemove = fat32Remove;
+  fs.driverFseek = fat32Fseek;
+  fs.driverGetFileBlockMetadata = fat32GetFileBlockMetadata;
+  fs.driverGetFilename = fat32GetFilename;
 
-  BlockOverlayArgs blockOverlayArgs = {
-    .blockDevice = rootBlockDevice,
-    .startBlock = 1,
-    .args = &fs,
-  };
-
-  if (processCreate(processDescriptor, runBlockOverlay, &blockOverlayArgs)
+  //// BlockOverlayArgs blockOverlayArgs = {
+  ////   .blockDevice = rootBlockDevice,
+  ////   .startBlock = 1,
+  ////   .args = &fs,
+  //// };
+  //// if (processCreate(processDescriptor, runBlockOverlay, &blockOverlayArgs)
+  ////   != processSuccess
+  //// ) {
+  ////   printString("Could not restart filesystem process.\n");
+  ////   return -ENOMEM;
+  //// }
+  if (processCreate(processDescriptor, runFilesystem, &fs)
     != processSuccess
   ) {
     printString("Could not restart filesystem process.\n");
     return -ENOMEM;
   }
+
   threadSetContext(processDescriptor->mainThread, processDescriptor);
   processDescriptor->name = "filesystem";
   processDescriptor->userId = ROOT_USER_ID;
