@@ -428,6 +428,7 @@ static void handleFilesystemMessages(FilesystemState *filesystemState) {
 void* runFilesystem(void *args) {
   FilesystemState fs;
   memcpy(&fs, args, sizeof(fs));
+  ((FilesystemState*) args)->driverState = (void*) ((intptr_t) 1);
   processYield();
   printDebugString("runFilesystem: Allocating fs.blockBuffer\n");
   fs.blockBuffer = (uint8_t*) malloc(fs.blockSize);
