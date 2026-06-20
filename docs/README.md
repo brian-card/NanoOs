@@ -68,3 +68,5 @@ This work started out as an experiment to see if I could implement an operating 
 
 [2026-06-06: Signals, Signatures, and Stack Overflows](2026-06-06_Signals-Signatures-and-Stack-Overflows.md)
 
+[2026-06-20: Overlay Filesystem](2026-06-20_Overlay-Filesystem.md)
+
