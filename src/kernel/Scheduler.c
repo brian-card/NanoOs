@@ -1321,11 +1321,14 @@ int closeProcessFileDescriptors(ProcessDescriptor *processDescriptor) {
             goto exit;
           }
           ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
-          int64_t startTime = HAL->clock->getElapsedMicroseconds(0);
+          int64_t startTime = 0;
+          HAL->clock->getElapsedMicroseconds(0, &startTime);
           // schedulerKillProcess times out after 100 milliseconds, so
           // timeout after 50 milliseconds.
+          int64_t elapsedUs = 0;
           while ((processMessageDone(&processMessage) == false)
-            && (HAL->clock->getElapsedMicroseconds(startTime) < 50000)
+            && (HAL->clock->getElapsedMicroseconds(startTime, &elapsedUs),
+              elapsedUs < 50000)
           ) {
             for (int ii = 0; ii < NUM_PRIVILEGE_LEVELS; ii++) {
               SCHEDULER_STATE->currentReady = &SCHEDULER_STATE->ready[ii];
@@ -3759,10 +3762,10 @@ __attribute__((noinline)) void startScheduler(
   processDescriptor->restartFunction = restartConsole;
   printDebugString("Created console process.\n");
 
-  for (uint8_t ii = 0;
-    ii < HAL->memory->numExtraConsoleStacks(USE_HAL_MEMORY_DEBUG);
-    ii++
-  ) {
+  uint8_t numExtraConsoleStacksVal = 0;
+  HAL->memory->numExtraConsoleStacks(
+    USE_HAL_MEMORY_DEBUG, &numExtraConsoleStacksVal);
+  for (uint8_t ii = 0; ii < numExtraConsoleStacksVal; ii++) {
     Thread *thread = threadProvision(NULL, dummyProcess, NULL);
     if (thread == NULL) {
       printString("Could not increase console process's stack size.\n");

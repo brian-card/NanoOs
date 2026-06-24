@@ -99,18 +99,20 @@ int (*realTcgetattr)(int fd, struct termios *termios_p) = NULL;
 int (*realTcsetattr)(int fd, int optional_actions,
   const struct termios *termios_p) = NULL;
 
-size_t posixProcessStackSize(bool debug) {
+int32_t posixProcessStackSize(bool debug, size_t *returnValue) {
   (void) debug;
-  return PROCESS_STACK_SIZE * DEBUG_MULTIPLIER;
+  *returnValue = PROCESS_STACK_SIZE * DEBUG_MULTIPLIER;
+  return 0;
 }
 
-size_t posixMemoryManagerStackSize(bool debug) {
+int32_t posixMemoryManagerStackSize(bool debug, size_t *returnValue) {
   if (debug == false) {
     // This is the expected case, so list it first.
-    return MEMORY_MANAGER_STACK_SIZE * DEBUG_MULTIPLIER;
+    *returnValue = MEMORY_MANAGER_STACK_SIZE * DEBUG_MULTIPLIER;
   } else {
-    return MEMORY_MANAGER_DEBUG_STACK_SIZE * DEBUG_MULTIPLIER;
+    *returnValue = MEMORY_MANAGER_DEBUG_STACK_SIZE * DEBUG_MULTIPLIER;
   }
+  return 0;
 }
 
 /// @var _bottomOfHeap
@@ -118,19 +120,22 @@ size_t posixMemoryManagerStackSize(bool debug) {
 /// @brief Where the bottom of the heap will be set to be in memory.
 static void *_bottomOfHeap = NULL;
 
-void* posixBottomOfHeap(bool debug) {
+int32_t posixBottomOfHeap(bool debug, void **returnValue) {
   (void) debug;
-  return _bottomOfHeap;
-}
-
-uint8_t posixNumExtraSchedulerStacks(bool debug) {
-  (void) debug;
+  *returnValue = _bottomOfHeap;
   return 0;
 }
 
-uint8_t posixNumExtraConsoleStacks(bool debug) {
+int32_t posixNumExtraSchedulerStacks(bool debug, uint8_t *returnValue) {
   (void) debug;
-  return 1;
+  *returnValue = 0;
+  return 0;
+}
+
+int32_t posixNumExtraConsoleStacks(bool debug, uint8_t *returnValue) {
+  (void) debug;
+  *returnValue = 1;
+  return 0;
 }
 
 /// @var uarts
@@ -205,25 +210,27 @@ int32_t posixPollUart(int32_t deviceId) {
   return serialData;
 }
 
-ssize_t posixWriteUart(int32_t deviceId,
-  const uint8_t *data, ssize_t length
+int32_t posixWriteUart(int32_t deviceId,
+  const uint8_t *data, ssize_t length, ssize_t *returnValue
 ) {
   ssize_t numBytesWritten = -ERANGE;
-  
+
   if ((deviceId >= 0) && (deviceId < _numUarts) && (length >= 0)) {
     numBytesWritten = fwrite(data, 1, length, *uarts[deviceId]);
     fflush(*uarts[deviceId]);
   }
-  
-  return numBytesWritten;
+
+  if (returnValue != NULL) {
+    *returnValue = numBytesWritten;
+  }
+  return (numBytesWritten >= 0) ? 0 : (int32_t) numBytesWritten;
 }
 
-bool posixIsUartConsole(int32_t deviceId) {
-  if (deviceId == 1) {
-    return true;
+int32_t posixIsUartConsole(int32_t deviceId, bool *returnValue) {
+  if (returnValue != NULL) {
+    *returnValue = (deviceId == 1);
   }
-
-  return false;
+  return 0;
 }
 
 int posixGetNumDios(void) {
@@ -306,24 +313,37 @@ int32_t posixSetSystemTime(struct timespec *now) {
 
 // posixGetElapsedNanoseconds is used as the base implementation, so declare
 // its prototype here.
-int64_t posixGetElapsedNanoseconds(int64_t startTime);
+int32_t posixGetElapsedNanoseconds(int64_t startTime, int64_t *returnValue);
 
-int64_t posixGetElapsedMilliseconds(int64_t startTime) {
-  return posixGetElapsedNanoseconds(
-    startTime * ((int64_t) 1000000)) / ((int64_t) 1000000);
+int32_t posixGetElapsedMilliseconds(int64_t startTime, int64_t *returnValue) {
+  int64_t nanoseconds = 0;
+  int32_t rv = posixGetElapsedNanoseconds(
+    startTime * ((int64_t) 1000000), &nanoseconds);
+  if (returnValue != NULL) {
+    *returnValue = nanoseconds / ((int64_t) 1000000);
+  }
+  return rv;
 }
 
-int64_t posixGetElapsedMicroseconds(int64_t startTime) {
-  return posixGetElapsedNanoseconds(
-    startTime * ((int64_t) 1000)) / ((int64_t) 1000);
+int32_t posixGetElapsedMicroseconds(int64_t startTime, int64_t *returnValue) {
+  int64_t nanoseconds = 0;
+  int32_t rv = posixGetElapsedNanoseconds(
+    startTime * ((int64_t) 1000), &nanoseconds);
+  if (returnValue != NULL) {
+    *returnValue = nanoseconds / ((int64_t) 1000);
+  }
+  return rv;
 }
 
-int64_t posixGetElapsedNanoseconds(int64_t startTime) {
+int32_t posixGetElapsedNanoseconds(int64_t startTime, int64_t *returnValue) {
   #include <time.h>
   struct timespec spec;
   clock_gettime(CLOCK_REALTIME, &spec);
-  return ((((int64_t) spec.tv_sec) * ((int64_t) 1000000000))
-    + ((int64_t) spec.tv_nsec)) - startTime;
+  if (returnValue != NULL) {
+    *returnValue = ((((int64_t) spec.tv_sec) * ((int64_t) 1000000000))
+      + ((int64_t) spec.tv_nsec)) - startTime;
+  }
+  return 0;
 }
 
 /// @var _resetBuffer
@@ -560,7 +580,7 @@ int32_t posixConfigOneShotTimer(int32_t deviceId,
   
   swTimer->callback = callback;
   swTimer->active = true;
-  swTimer->startTime = posixGetElapsedNanoseconds(0);
+  posixGetElapsedNanoseconds(0, &swTimer->startTime);
   swTimer->deadline = swTimer->startTime + nanoseconds;
   pthread_create(&swTimer->timerThread, NULL,
     timerThreadFunction, (void*) ((intptr_t) deviceId));
@@ -569,35 +589,52 @@ int32_t posixConfigOneShotTimer(int32_t deviceId,
   return 0;
 }
 
-uint64_t posixConfiguredTimerNanoseconds(int32_t deviceId) {
-  if (deviceId >= _numTimers) {
-    return 0;
+int32_t posixConfiguredTimerNanoseconds(int32_t deviceId,
+  uint64_t *returnValue
+) {
+  if (returnValue != NULL) {
+    *returnValue = 0;
   }
-  
+  if (deviceId >= _numTimers) {
+    return -ERANGE;
+  }
+
   SoftwareTimer *swTimer = &softwareTimers[deviceId];
   if ((!swTimer->initialized) || (!swTimer->active)) {
-    return 0;
+    return -EINVAL;
   }
-  
-  return swTimer->deadline - swTimer->startTime;
+
+  if (returnValue != NULL) {
+    *returnValue = swTimer->deadline - swTimer->startTime;
+  }
+  return 0;
 }
 
-uint64_t posixRemainingTimerNanoseconds(int32_t deviceId) {
-  if (deviceId >= _numTimers) {
-    return 0;
+int32_t posixRemainingTimerNanoseconds(int32_t deviceId,
+  uint64_t *returnValue
+) {
+  if (returnValue != NULL) {
+    *returnValue = 0;
   }
-  
+  if (deviceId >= _numTimers) {
+    return -ERANGE;
+  }
+
   SoftwareTimer *swTimer = &softwareTimers[deviceId];
   if ((!swTimer->initialized) || (!swTimer->active)) {
-    return 0;
+    return -EINVAL;
   }
-  
-  int64_t now = posixGetElapsedNanoseconds(0);
+
+  int64_t now = 0;
+  posixGetElapsedNanoseconds(0, &now);
   if (now > swTimer->deadline) {
     return 0;
   }
-  
-  return swTimer->deadline - now;
+
+  if (returnValue != NULL) {
+    *returnValue = swTimer->deadline - now;
+  }
+  return 0;
 }
 
 int32_t posixCancelTimer(int32_t deviceId) {
@@ -631,7 +668,8 @@ int32_t posixCancelAndGetTimer(int32_t deviceId,
 ) {
   // We need to get `now` as close to the beginning of this function call as
   // possible so that any call to reconfigure the timer later is correct.
-  int64_t now = posixGetElapsedNanoseconds(0);
+  int64_t now = 0;
+  posixGetElapsedNanoseconds(0, &now);
   
   if ((deviceId < 0) || (deviceId >= _numTimers)) {
     return -ERANGE;

@@ -55,7 +55,7 @@ int timespec_get(struct timespec* spec, int base) {
   
   int64_t now = 0;
   if (HAL->clock != NULL) {
-    now = HAL->clock->getElapsedNanoseconds(0);
+    HAL->clock->getElapsedNanoseconds(0, &now);
   } else {
     fprintf(stderr, "timespec_get not implemented\n");
   }
@@ -129,8 +129,12 @@ char* nanoOsStrError(int errnum) {
 /// @return This function returns no value.
 void msleep(int durationMs) {
   if (HAL->clock != NULL) {
-    int64_t start = HAL->clock->getElapsedMilliseconds(0);
-    while (HAL->clock->getElapsedMilliseconds(start) < durationMs);
+    int64_t start = 0;
+    HAL->clock->getElapsedMilliseconds(0, &start);
+    int64_t elapsed = 0;
+    do {
+      HAL->clock->getElapsedMilliseconds(start, &elapsed);
+    } while (elapsed < durationMs);
   } else {
     fprintf(stderr, "msleep not implemented\n");
   }
@@ -148,7 +152,9 @@ void msleep(int durationMs) {
 time_t time(time_t *tloc) {
   time_t now = 0;
   if (HAL->clock != NULL) {
-    now = ((time_t) HAL->clock->getElapsedMilliseconds(0)) / ((time_t) 1000);
+    int64_t nowMs = 0;
+    HAL->clock->getElapsedMilliseconds(0, &nowMs);
+    now = ((time_t) nowMs) / ((time_t) 1000);
   } else {
     fprintf(stderr, "time not implemented\n");
   }

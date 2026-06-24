@@ -101,63 +101,68 @@ typedef struct ProcessDescriptor ProcessDescriptor;
 typedef struct SchedulerState SchedulerState;
 
 typedef struct HalMemory {
-  /// @fn size_t processStackSize(bool debug)
+  /// @fn int32_t processStackSize(bool debug, size_t *returnValue)
   ///
   /// @brief The size of a regular process's stack.
   ///
   /// @param debug Whether or not the debug stack size for processes should
   ///   be used.
+  /// @param returnValue A pointer to a size_t that will hold the stack size
+  ///   on success.
   ///
-  /// Returns the size of the stack to use for all non-memory manager
-  /// processes in bytes.  This function never fails.
-  size_t (*processStackSize)(bool debug);
-  
-  /// @fn size_t memoryManagerStackSize(bool debug)
+  /// @return Returns 0 on success, -errno on failure.
+  int32_t (*processStackSize)(bool debug, size_t *returnValue);
+
+  /// @fn int32_t memoryManagerStackSize(bool debug, size_t *returnValue)
   ///
   /// @brief The size of the memory manager process's stack.
   ///
   /// @param debug Whether or not the memory manager's debug stack size should
   ///   be used so that debug prints can work correclty without corrupting the
   ///   stack.
+  /// @param returnValue A pointer to a size_t that will hold the stack size
+  ///   on success.
   ///
-  /// @return Returns the size of the stack to use for the memory manager.
-  /// This call never fails.
-  size_t (*memoryManagerStackSize)(bool debug);
-  
-  /// @fn void* bottomOfHeap(void)
+  /// @return Returns 0 on success, -errno on failure.
+  int32_t (*memoryManagerStackSize)(bool debug, size_t *returnValue);
+
+  /// @fn int32_t bottomOfHeap(bool debug, void **returnValue)
   ///
   /// @brief The memmory manager needs to know where the bottom of the heap is
   /// so that it knows where to start allocating memory.
   ///
   /// @param debug Whether or not the debug bottom of heap should be used.
+  /// @param returnValue A pointer to a void* that will hold the heap bottom
+  ///   address on success.
   ///
-  /// @return Returns the address of the bottom of the heap.   This call never
-  /// fails.
-  void* (*bottomOfHeap)(bool debug);
-  
-  /// @fn uint8_t numExtraSchedulerStacks(bool debug)
+  /// @return Returns 0 on success, -errno on failure.
+  int32_t (*bottomOfHeap)(bool debug, void **returnValue);
+
+  /// @fn int32_t numExtraSchedulerStacks(bool debug, uint8_t *returnValue)
   ///
   /// @brief Get the number of extra scheduler stacks that need to be
   /// provisioned during startup.
   ///
   /// @param debug Whether or not the debug number of extra scheduler stacks
   ///   should be used.
+  /// @param returnValue A pointer to a uint8_t that will hold the count on
+  ///   success.
   ///
-  /// Returns the number of extra scheduler stacks that need to be provisioned
-  /// when starting the scheduler.  This function never fails.
-  uint8_t (*numExtraSchedulerStacks)(bool debug);
-  
-  /// @fn uint8_t numExtraConsoleStacks(bool debug)
+  /// @return Returns 0 on success, -errno on failure.
+  int32_t (*numExtraSchedulerStacks)(bool debug, uint8_t *returnValue);
+
+  /// @fn int32_t numExtraConsoleStacks(bool debug, uint8_t *returnValue)
   ///
   /// @brief Get the number of extra console stacks that need to be provisioned
   /// during startup.
   ///
   /// @param debug Whether or not the debug number of extra console stacks
   ///   should be used.
+  /// @param returnValue A pointer to a uint8_t that will hold the count on
+  ///   success.
   ///
-  /// Returns the number of extra console stacks that need to be provisioned
-  /// when starting the scheduler.  This function never fails.
-  uint8_t (*numExtraConsoleStacks)(bool debug);
+  /// @return Returns 0 on success, -errno on failure.
+  int32_t (*numExtraConsoleStacks)(bool debug, uint8_t *returnValue);
   
   // Overlay definitions.
   
@@ -214,7 +219,8 @@ typedef struct HalUart {
   /// failure.
   int32_t (*poll)(int32_t deviceId);
   
-  /// @fn ssize_t write(int32_t deviceId, const uint8_t *data, ssize_t length)
+  /// @fn int32_t write(int32_t deviceId, const uint8_t *data, ssize_t length,
+  ///   ssize_t *returnValue)
   ///
   /// @brief Write data to a UART.
   ///
@@ -222,18 +228,23 @@ typedef struct HalUart {
   /// @param data A pointer to arbitrary bytes of data to write to the UART.
   /// @param length The number of bytes to write to the UART from the data
   ///   pointer.
+  /// @param returnValue A pointer to a ssize_t that will hold the number of
+  ///   bytes written on success.
   ///
-  /// @return Returns the number of bytes written on success, -errno on failure.
-  ssize_t (*write)(int32_t deviceId, const uint8_t *data, ssize_t length);
-  
-  /// @fn bool isConsole(int32_t deviceId);
+  /// @return Returns 0 on success, -errno on failure.
+  int32_t (*write)(int32_t deviceId, const uint8_t *data, ssize_t length,
+    ssize_t *returnValue);
+
+  /// @fn int32_t isConsole(int32_t deviceId, bool *returnValue)
   ///
   /// @brief Determine whether or not a given UART functions as a console.
   ///
   /// @param deviceId The zero-based ID of the UART to test.
+  /// @param returnValue A pointer to a bool that will be set to true if the
+  ///   UART is a console, false if not.
   ///
-  /// @return Returns true if the UART is a console, false if not.
-  bool (*isConsole)(int32_t deviceId);
+  /// @return Returns 0 on success, -errno on failure.
+  int32_t (*isConsole)(int32_t deviceId, bool *returnValue);
 } HalUart;
 
 typedef struct HalDio {
@@ -388,7 +399,7 @@ typedef struct HalClock {
   /// @return Returns 0 on success, -errno on failure.
   int32_t (*setSystemTime)(struct timespec *ts);
   
-  /// @fn int64_t getElapsedMilliseconds(int64_t startTime)
+  /// @fn int32_t getElapsedMilliseconds(int64_t startTime, int64_t *returnValue)
   ///
   /// @brief Get the number of milliseconds that have elapsed since the
   /// provided start time.
@@ -399,12 +410,13 @@ typedef struct HalClock {
   ///   the system time has not yet been set then providing a startTime of 0
   ///   will yield the number of milliseconds that the system has been up
   ///   instead of the number of milliseconds since the start of the epoch.
+  /// @param returnValue A pointer to an int64_t that will hold the elapsed
+  ///   milliseconds on success.
   ///
-  /// @return Returns the number of milliseconds that have elapsed since the
-  /// provided start time on success, -1 on failure.
-  int64_t (*getElapsedMilliseconds)(int64_t startTime);
-  
-  /// @fn int64_t getElapsedMicroseconds(int64_t startTime)
+  /// @return Returns 0 on success, -errno on failure.
+  int32_t (*getElapsedMilliseconds)(int64_t startTime, int64_t *returnValue);
+
+  /// @fn int32_t getElapsedMicroseconds(int64_t startTime, int64_t *returnValue)
   ///
   /// @brief Get the number of microseconds that have elapsed since the
   /// provided start time.
@@ -415,12 +427,13 @@ typedef struct HalClock {
   ///   the system time has not yet been set then providing a startTime of 0
   ///   will yield the number of microseconds that the system has been up
   ///   instead of the number of microseconds since the start of the epoch.
+  /// @param returnValue A pointer to an int64_t that will hold the elapsed
+  ///   microseconds on success.
   ///
-  /// @return Returns the number of microseconds that have elapsed since the
-  /// provided start time on success, -1 on failure.
-  int64_t (*getElapsedMicroseconds)(int64_t startTime);
-  
-  /// @fn int64_t getElapsedNanoseconds(int64_t startTime)
+  /// @return Returns 0 on success, -errno on failure.
+  int32_t (*getElapsedMicroseconds)(int64_t startTime, int64_t *returnValue);
+
+  /// @fn int32_t getElapsedNanoseconds(int64_t startTime, int64_t *returnValue)
   ///
   /// @brief Get the number of nanoseconds that have elapsed since the
   /// provided start time.
@@ -431,10 +444,11 @@ typedef struct HalClock {
   ///   the system time has not yet been set then providing a startTime of 0
   ///   will yield the number of nanoseconds that the system has been up
   ///   instead of the number of nanoseconds since the start of the epoch.
+  /// @param returnValue A pointer to an int64_t that will hold the elapsed
+  ///   nanoseconds on success.
   ///
-  /// @return Returns the number of nanoseconds that have elapsed since the
-  /// provided start time on success, -1 on failure.
-  int64_t (*getElapsedNanoseconds)(int64_t startTime);
+  /// @return Returns 0 on success, -errno on failure.
+  int32_t (*getElapsedNanoseconds)(int64_t startTime, int64_t *returnValue);
 } HalClock;
 
 typedef struct HalPower {
@@ -494,23 +508,27 @@ typedef struct HalTimer {
   int32_t (*configOneShot)(int32_t deviceId,
     uint64_t nanoseconds, void (*callback)(void));
   
-  /// @fn uint64_t configuredNanoseconds(int32_t deviceId)
+  /// @fn int32_t configuredNanoseconds(int32_t deviceId, uint64_t *returnValue)
   ///
   /// @brief Get the number of nanoseconds a timer is configured to wait.
   ///
   /// @param deviceId The zero-based ID of the timer to interrogate.
+  /// @param returnValue A pointer to a uint64_t that will hold the configured
+  ///   nanoseconds on success.
   ///
-  /// @return Returns the number of nanoseconds configured for a timer.
-  uint64_t (*configuredNanoseconds)(int32_t deviceId);
-  
-  /// @fn uint64_t remainingNanoseconds(int32_t deviceId)
+  /// @return Returns 0 on success, -errno on failure.
+  int32_t (*configuredNanoseconds)(int32_t deviceId, uint64_t *returnValue);
+
+  /// @fn int32_t remainingNanoseconds(int32_t deviceId, uint64_t *returnValue)
   ///
   /// @brief Get the remaining number of nanoseconds before a timer fires.
   ///
   /// @param deviceId The zero-based ID of the timer to interrogate.
+  /// @param returnValue A pointer to a uint64_t that will hold the remaining
+  ///   nanoseconds on success.
   ///
-  /// @return Returns the number of nanoseconds remaining for a timer.
-  uint64_t (*remainingNanoseconds)(int32_t deviceId);
+  /// @return Returns 0 on success, -errno on failure.
+  int32_t (*remainingNanoseconds)(int32_t deviceId, uint64_t *returnValue);
   
   /// @fn int32_t cancel(int32_t deviceId)
   ///
@@ -565,15 +583,16 @@ typedef struct HalBlockDevice {
   /// @return Returns 0 on success, -errno on failure.
   int32_t (*init)(void);
   
-  /// @fn BlockDevice* get(int32_t deviceId)
+  /// @fn int32_t get(int32_t deviceId, BlockDevice **returnValue)
   ///
   /// @brief Get one of the block devices managed by the HAL.
   ///
   /// @param deviceId The zero-based ID of the block device to get.
+  /// @param returnValue A pointer to a BlockDevice* that will hold the device
+  ///   pointer on success.
   ///
-  /// @return Returns a pointer to the BlockDevice on success, NULL on
-  /// failure.
-  BlockDevice* (*get)(int32_t deviceId);
+  /// @return Returns 0 on success, -errno on failure.
+  int32_t (*get)(int32_t deviceId, BlockDevice **returnValue);
 
   /// @fn int restart(ProcessDescriptor *processDescriptor)
   ///

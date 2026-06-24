@@ -43,20 +43,24 @@
 ///
 /// @brief Print a non-newline-terminated debug message.
 #define startDebugMessage(message) \
-  printString("["); \
-  printInt(HAL->clock->getElapsedMicroseconds(0)); \
-  printString(" Process "); \
-  printInt(getRunningPid()); \
-  printString(" "); \
-  printString((strrchr(__FILE__, '/')) \
-    ? (strrchr(__FILE__, '/')  + 1) \
-    : __FILE__); \
-  printString(":"); \
-  printString(__func__); \
-  printString("."); \
-  printInt(__LINE__); \
-  printString("] "); \
-  printString(message);
+  do { \
+    int64_t _nanoOsDebugTs = 0; \
+    HAL->clock->getElapsedMicroseconds(0, &_nanoOsDebugTs); \
+    printString("["); \
+    printInt(_nanoOsDebugTs); \
+    printString(" Process "); \
+    printInt(getRunningPid()); \
+    printString(" "); \
+    printString((strrchr(__FILE__, '/')) \
+      ? (strrchr(__FILE__, '/')  + 1) \
+      : __FILE__); \
+    printString(":"); \
+    printString(__func__); \
+    printString("."); \
+    printInt(__LINE__); \
+    printString("] "); \
+    printString(message); \
+  } while (0)
 
 /// @def printDebugStackDepth()
 ///

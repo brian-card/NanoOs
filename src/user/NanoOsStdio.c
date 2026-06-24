@@ -70,7 +70,9 @@ int printChar_(char character) {
     return -ENODEV;
   }
 
-  return HAL->uart->write(0, (uint8_t*) &character, 1);
+  ssize_t written = 0;
+  HAL->uart->write(0, (uint8_t*) &character, 1, &written);
+  return (int) written;
 }
 
 /// @fn int printString_(const char *string)
@@ -95,17 +97,19 @@ int printString_(const char *string) {
     stringLength--;
   }
 
-  int bytesWritten = HAL->uart->write(0, (uint8_t*) string, stringLength);
-  if (bytesWritten < 0) {
+  ssize_t written = 0;
+  int32_t rv = HAL->uart->write(0, (uint8_t*) string, stringLength, &written);
+  if (rv < 0) {
     // Bail.
-    return bytesWritten;
+    return rv;
   }
+  int bytesWritten = (int) written;
 
   if (printReturnNewline == true) {
-    int rv = HAL->uart->write(0, (uint8_t*) "\r\n", 2);
-    if (rv >= 0) {
+    rv = HAL->uart->write(0, (uint8_t*) "\r\n", 2, &written);
+    if (rv == 0) {
       // The usual case.
-      bytesWritten += rv;
+      bytesWritten += (int) written;
     } else {
       bytesWritten = rv;
     }
@@ -167,7 +171,9 @@ int printInt_(long long int integer) {
     *nextChar = '-';
   }
 
-  return HAL->uart->write(0, (uint8_t*) nextChar, strlen(nextChar));
+  ssize_t written = 0;
+  HAL->uart->write(0, (uint8_t*) nextChar, strlen(nextChar), &written);
+  return (int) written;
 }
 
 /// @fn int printDouble(double floatingPointValue)
@@ -184,7 +190,9 @@ int printDouble(double floatingPointValue) {
 
   char number[20];
   sprintf(number, "%lf", floatingPointValue);
-  return HAL->uart->write(0, (uint8_t*) number, strlen(number));
+  ssize_t written = 0;
+  HAL->uart->write(0, (uint8_t*) number, strlen(number), &written);
+  return (int) written;
 }
 
 /// @fn int printHex_(unsigned long long int integer)
@@ -215,7 +223,9 @@ int printHex_(unsigned long long int integer) {
     *nextChar = '0';
   }
 
-  return HAL->uart->write(0, (uint8_t*) nextChar, strlen(nextChar));
+  ssize_t written = 0;
+  HAL->uart->write(0, (uint8_t*) nextChar, strlen(nextChar), &written);
+  return (int) written;
 }
 
 /// @fn int printList_(const char *firstString, ...)

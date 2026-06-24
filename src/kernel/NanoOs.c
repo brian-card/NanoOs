@@ -225,8 +225,10 @@ void nanoOsStart(void) {
   // scheduler.
   Thread _mainThread;
   schedulerThread = &_mainThread;
+  size_t processStackSizeVal = 0;
+  HAL->memory->processStackSize(USE_HAL_MEMORY_DEBUG, &processStackSizeVal);
   ThreadsConfigOptions threadsConfigOptions = {
-    .stackSize = HAL->memory->processStackSize(USE_HAL_MEMORY_DEBUG),
+    .stackSize = processStackSizeVal,
     .stateData = &threadStatePointer,
     .resumeCallback = resumeCallback,
     .yieldCallback = NULL,
@@ -274,10 +276,10 @@ void nanoOsStart(void) {
   }
 
   printDebugString("Extending scheduler stack.\n");
-  for (uint8_t ii = 0;
-    ii < HAL->memory->numExtraSchedulerStacks(USE_HAL_MEMORY_DEBUG);
-    ii++
-  ) {
+  uint8_t numExtraSchedulerStacksVal = 0;
+  HAL->memory->numExtraSchedulerStacks(
+    USE_HAL_MEMORY_DEBUG, &numExtraSchedulerStacksVal);
+  for (uint8_t ii = 0; ii < numExtraSchedulerStacksVal; ii++) {
     thread = threadProvision(NULL, dummyProcess, NULL);
     if (thread == NULL) {
       printString("Could not increase scheduler process's stack size.\n");

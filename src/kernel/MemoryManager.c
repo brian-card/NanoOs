@@ -1132,8 +1132,9 @@ void initializeGlobals(MemoryManagerState *memoryManagerState,
   char *mallocBufferEnd = NULL;
   
   // Set up the memory manager's state.
-  memoryManagerState->start
-    = (uintptr_t) HAL->memory->bottomOfHeap(MEMORY_MANAGER_DEBUG);
+  void *bottomOfHeapVal = NULL;
+  HAL->memory->bottomOfHeap(MEMORY_MANAGER_DEBUG, &bottomOfHeapVal);
+  memoryManagerState->start = (uintptr_t) bottomOfHeapVal;
   memoryManagerState->end = (uintptr_t) &mallocBufferEnd;
   memoryManagerState->bytesFree
     = ((size_t) memoryManagerState->end)
@@ -1244,8 +1245,10 @@ void* runMemoryManager(void *args) {
   MemoryManagerState memoryManagerState;
   jmp_buf returnBuffer;
   if (setjmp(returnBuffer) == 0) {
+    size_t mmStackSize = 0;
+    HAL->memory->memoryManagerStackSize(MEMORY_MANAGER_DEBUG, &mmStackSize);
     allocateMemoryManagerStack(&memoryManagerState, returnBuffer,
-      HAL->memory->memoryManagerStackSize(MEMORY_MANAGER_DEBUG), NULL);
+      mmStackSize, NULL);
   }
   printDebugString("Returned from allocateMemoryManagerStack.\n");
   

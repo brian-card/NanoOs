@@ -86,20 +86,21 @@ int32_t halCommonInitRootFilesystem(void) {
     return -EBUSY;
   }
   
-  BlockDevice *rootBlockDevice = HAL->blockDevice->get(0);
-  
+  BlockDevice *rootBlockDevice = NULL;
+  HAL->blockDevice->get(0, &rootBlockDevice);
+
   if (rootBlockDevice == NULL) {
     if (HAL->blockDevice == NULL) {
       printString("ERROR! HAL->blockDevice is NULL\n");
       return -ENODEV;
     }
-    
+
     if (HAL->blockDevice->init() != 0) {
       printString("ERROR! HAL->blockDevice->init() failed\n");
       return -ENODEV;
     }
-    
-    rootBlockDevice = HAL->blockDevice->get(0);
+
+    HAL->blockDevice->get(0, &rootBlockDevice);
   }
   
   if (rootBlockDevice == NULL) {
@@ -152,7 +153,8 @@ int32_t halCommonInitRootFilesystem(void) {
 ///
 /// @return Returns 0 on success, -errno on failure.
 int32_t restartFilesystem(ProcessDescriptor *processDescriptor) {
-  BlockDevice *rootBlockDevice = HAL->blockDevice->get(0);
+  BlockDevice *rootBlockDevice = NULL;
+  HAL->blockDevice->get(0, &rootBlockDevice);
   if (rootBlockDevice == NULL) {
     return -ENODEV;
   }
@@ -249,7 +251,7 @@ int halCommonInit(const Hal *hal) {
     if (hal->dio->init() != 0) {
       hal->uart->write(defaultUart,
         (uint8_t*) "WARNING: Failed to initialize DIO subsystem\n",
-        strlen("WARNING: Failed to initialize DIO subsystem\n"));
+        strlen("WARNING: Failed to initialize DIO subsystem\n"), NULL);
     }
   }
 
@@ -257,7 +259,7 @@ int halCommonInit(const Hal *hal) {
     if (hal->spi->init() != 0) {
       hal->uart->write(defaultUart,
         (uint8_t*) "WARNING: Failed to initialize SPI subsystem\n",
-        strlen("WARNING: Failed to initialize SPI subsystem\n"));
+        strlen("WARNING: Failed to initialize SPI subsystem\n"), NULL);
     }
   }
 
@@ -265,7 +267,7 @@ int halCommonInit(const Hal *hal) {
     if (hal->clock->init() != 0) {
       hal->uart->write(defaultUart,
         (uint8_t*) "WARNING: Failed to initialize clock subsystem\n",
-        strlen("WARNING: Failed to initialize clock subsystem\n"));
+        strlen("WARNING: Failed to initialize clock subsystem\n"), NULL);
     }
   }
 
@@ -274,26 +276,26 @@ int halCommonInit(const Hal *hal) {
       if (hal->timer->init() != 0) {
         hal->uart->write(defaultUart,
           (uint8_t*) "WARNING: Failed to initialize timer subsystem\n",
-          strlen("WARNING: Failed to initialize timer subsystem\n"));
+          strlen("WARNING: Failed to initialize timer subsystem\n"), NULL);
         break;
       }
-      
+
       uint32_t online = hal->timer->online[0];
       for (ii = 0; ii < (int32_t) hal->timer->numSupported; ii++) {
         if (online(hal->timer, ii) == false) {
           continue;
         }
-        
+
         if (hal->timer->initDevice(ii) < 0) {
           setOffline(hal->timer, ii);
         }
       }
-      
+
       if (hal->timer->online[0] != online) {
         if (hal->uart != NULL) {
           hal->uart->write(defaultUart,
             (uint8_t*) "WARNING: Did not initialize all timers\n",
-            strlen("WARNING: Did not initialize all timers\n"));
+            strlen("WARNING: Did not initialize all timers\n"), NULL);
         }
       }
     } while (0);

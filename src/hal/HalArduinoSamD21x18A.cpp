@@ -234,33 +234,38 @@ static SavedContext _savedContext;
     = (uint32_t) arduinoSamD21x18ATimerInterruptHandler ## handlerIndex; \
   return
 
-size_t arduinoSamD21x18AProcessStackSize(bool debug) {
+int32_t arduinoSamD21x18AProcessStackSize(bool debug, size_t *returnValue) {
   (void) debug;
-  return PROCESS_STACK_SIZE;
+  *returnValue = PROCESS_STACK_SIZE;
+  return 0;
 }
 
-size_t arduinoSamD21x18AMemoryManagerStackSize(bool debug) {
+int32_t arduinoSamD21x18AMemoryManagerStackSize(bool debug, size_t *returnValue) {
   if (debug == false) {
     // This is the expected case, so list it first.
-    return MEMORY_MANAGER_STACK_SIZE;
+    *returnValue = MEMORY_MANAGER_STACK_SIZE;
   } else {
-    return MEMORY_MANAGER_DEBUG_STACK_SIZE;
+    *returnValue = MEMORY_MANAGER_DEBUG_STACK_SIZE;
   }
+  return 0;
 }
 
-void* arduinoSamD21x18ABottomOfHeap(bool debug) {
+int32_t arduinoSamD21x18ABottomOfHeap(bool debug, void **returnValue) {
   (void) debug;
-  return (void*) (OVERLAY_ADDRESS + OVERLAY_SIZE);
+  *returnValue = (void*) (OVERLAY_ADDRESS + OVERLAY_SIZE);
+  return 0;
 }
 
-uint8_t arduinoSamD21x18ANumExtraSchedulerStacks(bool debug) {
+int32_t arduinoSamD21x18ANumExtraSchedulerStacks(bool debug, uint8_t *returnValue) {
   (void) debug;
-  return 2;
+  *returnValue = 2;
+  return 0;
 }
 
-uint8_t arduinoSamD21x18ANumExtraConsoleStacks(bool debug) {
+int32_t arduinoSamD21x18ANumExtraConsoleStacks(bool debug, uint8_t *returnValue) {
   (void) debug;
-  return 1;
+  *returnValue = 1;
+  return 0;
 }
 
 static HalMemory arduinoSamD21x18AMemoryHal = {
@@ -343,31 +348,37 @@ int32_t arduinoSamD21x18APollUart(int32_t deviceId) {
   return serialData;
 }
 
-ssize_t arduinoSamD21x18AWriteUart(int32_t deviceId,
-  const uint8_t *data, ssize_t length
+int32_t arduinoSamD21x18AWriteUart(int32_t deviceId,
+  const uint8_t *data, ssize_t length, ssize_t *returnValue
 ) {
   ssize_t numBytesWritten = -ERANGE;
-  
+
   switch (deviceId) {
     case UART_USB:
       {
         numBytesWritten = Serial.write(data, length);
         break;
       }
-    
+
     case BOARD_UART:
       {
         numBytesWritten = Serial1.write(data, length);
         break;
       }
   }
-  
-  return numBytesWritten;
+
+  if (returnValue != NULL) {
+    *returnValue = numBytesWritten;
+  }
+  return (numBytesWritten >= 0) ? 0 : (int32_t) numBytesWritten;
 }
 
-bool arduinoSamD21x18AIsUartConsole(int32_t deviceId) {
+int32_t arduinoSamD21x18AIsUartConsole(int32_t deviceId, bool *returnValue) {
   (void) deviceId;
-  return true;
+  if (returnValue != NULL) {
+    *returnValue = true;
+  }
+  return 0;
 }
 
 static HalUart arduinoSamD21x18AUartHal = {
@@ -618,26 +629,49 @@ int32_t arduinoSamD21x18ASetSystemTime(struct timespec *now) {
   return 0;
 }
 
-int64_t arduinoSamD21x18AGetElapsedMicroseconds(int64_t startTime);
+int32_t arduinoSamD21x18AGetElapsedMicroseconds(int64_t startTime,
+  int64_t *returnValue);
 
-int64_t arduinoSamD21x18AGetElapsedMilliseconds(int64_t startTime) {
-  return arduinoSamD21x18AGetElapsedMicroseconds(
-    startTime * ((int64_t) 1000)) / ((int64_t) 1000);
+int32_t arduinoSamD21x18AGetElapsedMilliseconds(int64_t startTime,
+  int64_t *returnValue
+) {
+  int64_t microseconds = 0;
+  int32_t rv = arduinoSamD21x18AGetElapsedMicroseconds(
+    startTime * ((int64_t) 1000), &microseconds);
+  if (returnValue != NULL) {
+    *returnValue = microseconds / ((int64_t) 1000);
+  }
+  return rv;
 }
 
-int64_t arduinoSamD21x18AGetElapsedMicroseconds(int64_t startTime) {
+int32_t arduinoSamD21x18AGetElapsedMicroseconds(int64_t startTime,
+  int64_t *returnValue
+) {
   int64_t now = baseSystemTimeUs + micros();
 
   if (now < startTime) {
-    return -1;
+    if (returnValue != NULL) {
+      *returnValue = -1;
+    }
+    return -EIO;
   }
 
-  return now - startTime;
+  if (returnValue != NULL) {
+    *returnValue = now - startTime;
+  }
+  return 0;
 }
 
-int64_t arduinoSamD21x18AGetElapsedNanoseconds(int64_t startTime) {
-  return arduinoSamD21x18AGetElapsedMicroseconds(
-    startTime / ((int64_t) 1000)) * ((int64_t) 1000);
+int32_t arduinoSamD21x18AGetElapsedNanoseconds(int64_t startTime,
+  int64_t *returnValue
+) {
+  int64_t microseconds = 0;
+  int32_t rv = arduinoSamD21x18AGetElapsedMicroseconds(
+    startTime / ((int64_t) 1000), &microseconds);
+  if (returnValue != NULL) {
+    *returnValue = microseconds * ((int64_t) 1000);
+  }
+  return rv;
 }
 
 static HalClock arduinoSamD21x18AClockHal = {
@@ -842,7 +876,7 @@ int32_t arduinoSamD21x18AConfigOneShotTimer(int32_t deviceId,
   
   hwTimer->callback = callback;
   hwTimer->active = true;
-  
+
   // Disable timer
   hwTimer->tc->COUNT16.CTRLA.reg &= ~TC_CTRLA_ENABLE;
   while (hwTimer->tc->COUNT16.STATUS.bit.SYNCBUSY);
@@ -861,41 +895,58 @@ int32_t arduinoSamD21x18AConfigOneShotTimer(int32_t deviceId,
   // Enable timer
   hwTimer->tc->COUNT16.CTRLA.reg |= TC_CTRLA_ENABLE;
   while (hwTimer->tc->COUNT16.STATUS.bit.SYNCBUSY);
-  hwTimer->startTime = arduinoSamD21x18AGetElapsedNanoseconds(0);
+  arduinoSamD21x18AGetElapsedNanoseconds(0, &hwTimer->startTime);
   hwTimer->deadline = hwTimer->startTime + (microseconds * ((uint64_t) 1000));
   
   return 0;
 }
 
-uint64_t arduinoSamD21x18AConfiguredTimerNanoseconds(int32_t deviceId) {
-  if ((deviceId < 0) || (deviceId >= _numTimers)) {
-    return 0;
+int32_t arduinoSamD21x18AConfiguredTimerNanoseconds(int32_t deviceId,
+  uint64_t *returnValue
+) {
+  if (returnValue != NULL) {
+    *returnValue = 0;
   }
-  
+  if ((deviceId < 0) || (deviceId >= _numTimers)) {
+    return -ERANGE;
+  }
+
   HardwareTimer *hwTimer = &hardwareTimers[deviceId];
   if ((!hwTimer->initialized) || (!hwTimer->active)) {
-    return 0;
+    return -EINVAL;
   }
-  
-  return hwTimer->deadline - hwTimer->startTime;
+
+  if (returnValue != NULL) {
+    *returnValue = hwTimer->deadline - hwTimer->startTime;
+  }
+  return 0;
 }
 
-uint64_t arduinoSamD21x18ARemainingTimerNanoseconds(int32_t deviceId) {
-  if ((deviceId < 0) || (deviceId >= _numTimers)) {
-    return 0;
+int32_t arduinoSamD21x18ARemainingTimerNanoseconds(int32_t deviceId,
+  uint64_t *returnValue
+) {
+  if (returnValue != NULL) {
+    *returnValue = 0;
   }
-  
+  if ((deviceId < 0) || (deviceId >= _numTimers)) {
+    return -ERANGE;
+  }
+
   HardwareTimer *hwTimer = &hardwareTimers[deviceId];
   if ((!hwTimer->initialized) || (!hwTimer->active)) {
-    return 0;
+    return -EINVAL;
   }
-  
-  int64_t now = arduinoSamD21x18AGetElapsedNanoseconds(0);
+
+  int64_t now = 0;
+  arduinoSamD21x18AGetElapsedNanoseconds(0, &now);
   if (now > hwTimer->deadline) {
     return 0;
   }
-  
-  return hwTimer->deadline - now;
+
+  if (returnValue != NULL) {
+    *returnValue = hwTimer->deadline - now;
+  }
+  return 0;
 }
 
 int32_t arduinoSamD21x18ACancelTimer(int32_t deviceId) {
@@ -1106,12 +1157,20 @@ int32_t arduinoSamD21x18AInitBlockDevice(void) {
   return 0;
 }
 
-BlockDevice* arduinoSamD21x18AGetBlockDevice(int32_t deviceId) {
+int32_t arduinoSamD21x18AGetBlockDevice(int32_t deviceId,
+  BlockDevice **returnValue
+) {
   if (!online(HAL->blockDevice, deviceId)) {
-    return NULL;
+    if (returnValue != NULL) {
+      *returnValue = NULL;
+    }
+    return -ENODEV;
   }
 
-  return blockDevices[deviceId];
+  if (returnValue != NULL) {
+    *returnValue = blockDevices[deviceId];
+  }
+  return 0;
 }
 
 int32_t arduinoSamD21x18ARestartBlockDevice(ProcessDescriptor *processDescriptor) {

@@ -45,11 +45,11 @@
 // Must come last
 #include "user/NanoOsStdio.h"
 
-size_t posixProcessStackSize(bool debug);
-size_t posixMemoryManagerStackSize(bool debug);
-void* posixBottomOfHeap(bool debug);
-uint8_t posixNumExtraSchedulerStacks(bool debug);
-uint8_t posixNumExtraConsoleStacks(bool debug);
+int32_t posixProcessStackSize(bool debug, size_t *returnValue);
+int32_t posixMemoryManagerStackSize(bool debug, size_t *returnValue);
+int32_t posixBottomOfHeap(bool debug, void **returnValue);
+int32_t posixNumExtraSchedulerStacks(bool debug, uint8_t *returnValue);
+int32_t posixNumExtraConsoleStacks(bool debug, uint8_t *returnValue);
 static HalMemory posixMemoryHal = {
   .processStackSize = posixProcessStackSize,
   .memoryManagerStackSize = posixMemoryManagerStackSize,
@@ -66,8 +66,9 @@ static uint32_t posixUartsOnline[] = {
 int32_t posixInitUart(void);
 int32_t posixConfigureUart(int32_t port, uint32_t baud);
 int posixPollUart(int32_t port);
-ssize_t posixWriteUart(int32_t port, const uint8_t *data, ssize_t length);
-bool posixIsUartConsole(int32_t port);
+int32_t posixWriteUart(int32_t port, const uint8_t *data, ssize_t length,
+  ssize_t *returnValue);
+int32_t posixIsUartConsole(int32_t port, bool *returnValue);
 
 static HalUart posixUartHal = {
   .numSupported = 2,
@@ -116,9 +117,9 @@ static HalSpi posixSpiHal = {
 
 int32_t posixTimeInit(void);
 int32_t posixSetSystemTime(struct timespec *now);
-int64_t posixGetElapsedMilliseconds(int64_t startTime);
-int64_t posixGetElapsedMicroseconds(int64_t startTime);
-int64_t posixGetElapsedNanoseconds(int64_t startTime);
+int32_t posixGetElapsedMilliseconds(int64_t startTime, int64_t *returnValue);
+int32_t posixGetElapsedMicroseconds(int64_t startTime, int64_t *returnValue);
+int32_t posixGetElapsedNanoseconds(int64_t startTime, int64_t *returnValue);
 static HalClock posixClockHal = {
   .init = posixTimeInit,
   .setSystemTime = posixSetSystemTime,
@@ -139,8 +140,8 @@ int posixInitTimer(void);
 int posixInitTimerDevice(int timer);
 int posixConfigOneShotTimer(int timer,
     uint64_t nanoseconds, void (*callback)(void));
-uint64_t posixConfiguredTimerNanoseconds(int timer);
-uint64_t posixRemainingTimerNanoseconds(int timer);
+int32_t posixConfiguredTimerNanoseconds(int timer, uint64_t *returnValue);
+int32_t posixRemainingTimerNanoseconds(int timer, uint64_t *returnValue);
 int posixCancelTimer(int timer);
 int posixCancelAndGetTimer(int timer,
   uint64_t *configuredNanoseconds, uint64_t *remainingNanoseconds,
@@ -214,12 +215,18 @@ int32_t posixInitBlockDevice(void) {
   return 0;
 }
 
-BlockDevice* posixGetBlockDevice(int32_t deviceId) {
+int32_t posixGetBlockDevice(int32_t deviceId, BlockDevice **returnValue) {
   if (!online(HAL->blockDevice, deviceId)) {
-    return NULL;
+    if (returnValue != NULL) {
+      *returnValue = NULL;
+    }
+    return -ENODEV;
   }
-  
-  return blockDevices[deviceId];
+
+  if (returnValue != NULL) {
+    *returnValue = blockDevices[deviceId];
+  }
+  return 0;
 }
 
 int32_t posixRestartBlockDevice(ProcessDescriptor *processDescriptor) {

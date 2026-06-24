@@ -875,10 +875,10 @@ int readSerialByte(ConsolePort *consolePort) {
         if ((serialData != ASCII_RETURN) && (serialData != ASCII_NEWLINE)) {
           char serialChar = (char) serialData;
           HAL->uart->write((int) consolePort->portId,
-            (uint8_t*) &serialChar, 1);
+            (uint8_t*) &serialChar, 1, NULL);
         } else {
           HAL->uart->write(
-            (int) consolePort->portId, (uint8_t*) "\r\n", 2);
+            (int) consolePort->portId, (uint8_t*) "\r\n", 2, NULL);
         }
       }
       
@@ -902,11 +902,11 @@ int readSerialByte(ConsolePort *consolePort) {
           uint8_t backspace = ASCII_BACKSPACE;
           uint8_t space = ASCII_SPACE;
           HAL->uart->write(
-            (int) consolePort->portId, &backspace, 1);
+            (int) consolePort->portId, &backspace, 1, NULL);
           HAL->uart->write(
-            (int) consolePort->portId, &space, 1);
+            (int) consolePort->portId, &space, 1, NULL);
           HAL->uart->write(
-            (int) consolePort->portId, &backspace, 1);
+            (int) consolePort->portId, &backspace, 1, NULL);
         }
         
         consolePort->consoleBufferIndex--;
@@ -948,6 +948,7 @@ int readSerialByte(ConsolePort *consolePort) {
 int printSerialString(unsigned char uart, const char *string) {
   int returnValue = 0;
   size_t numBytes = 0;
+  ssize_t written = 0;
 
   char *newlineAt = strchr(string, '\n');
   newlineAt = strchr(string, '\n');
@@ -957,10 +958,10 @@ int printSerialString(unsigned char uart, const char *string) {
     numBytes = (size_t) (((uintptr_t) newlineAt) - ((uintptr_t) string));
   }
   while (newlineAt != NULL) {
-    returnValue += (int) HAL->uart->write(
-      (int) uart, (uint8_t*) string, numBytes);
-    returnValue += (int) HAL->uart->write(
-      (int) uart, (uint8_t*) "\r\n", 2);
+    HAL->uart->write((int) uart, (uint8_t*) string, numBytes, &written);
+    returnValue += (int) written;
+    HAL->uart->write((int) uart, (uint8_t*) "\r\n", 2, &written);
+    returnValue += (int) written;
     string = newlineAt + 1;
     newlineAt = strchr(string, '\n');
     if (newlineAt == NULL) {
@@ -969,8 +970,8 @@ int printSerialString(unsigned char uart, const char *string) {
       numBytes = (size_t) (((uintptr_t) newlineAt) - ((uintptr_t) string));
     }
   }
-  returnValue += (int) HAL->uart->write(
-    (int) uart, (uint8_t*) string, numBytes);
+  HAL->uart->write((int) uart, (uint8_t*) string, numBytes, &written);
+  returnValue += (int) written;
 
   return returnValue;
 }
@@ -1014,7 +1015,9 @@ void* runConsole(void *args) {
 
   int port = 0;
   for (int ii = 0; ii < consoleState.numConsolePorts; ii++) {
-    if (HAL->uart->isConsole(ii) == false) {
+    bool isConsolePort = false;
+    HAL->uart->isConsole(ii, &isConsolePort);
+    if (isConsolePort == false) {
       // This is not a console-capable UART.  Skip it.
       continue;
     }
