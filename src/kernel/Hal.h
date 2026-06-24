@@ -585,7 +585,7 @@ typedef struct HalBlockDevice {
   ///   device process to restart.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int (*restart)(ProcessDescriptor *processDescriptor);
+  int32_t (*restart)(ProcessDescriptor *processDescriptor);
 } HalBlockDevice;
 
 typedef struct Hal {
@@ -644,7 +644,7 @@ typedef struct Hal {
   /// @brief Initialize the processes that operate the root storage system.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int (*initRootStorage)(void);
+  int32_t (*initRootStorage)(void);
 } Hal;
 
 extern const Hal *HAL;

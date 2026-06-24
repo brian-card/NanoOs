@@ -618,7 +618,7 @@ BlockDevice* arduinoNanoEveryGetBlockDevice(int32_t deviceId) {
   return blockDevices[deviceId];
 }
 
-int arduinoNanoEveryRestartBlockDevice(ProcessDescriptor *processDescriptor) {
+int32_t arduinoNanoEveryRestartBlockDevice(ProcessDescriptor *processDescriptor) {
   int32_t deviceId = (int32_t) (intptr_t) processDescriptor->restartArgs;
 
   SdCardSpiArgs sdCardSpiArgs = {

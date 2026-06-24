@@ -222,7 +222,7 @@ BlockDevice* posixGetBlockDevice(int32_t deviceId) {
   return blockDevices[deviceId];
 }
 
-int posixRestartBlockDevice(ProcessDescriptor *processDescriptor) {
+int32_t posixRestartBlockDevice(ProcessDescriptor *processDescriptor) {
   int32_t deviceId = (int32_t) (intptr_t) processDescriptor->restartArgs;
 
   if (processCreate(

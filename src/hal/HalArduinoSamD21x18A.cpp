@@ -1114,7 +1114,7 @@ BlockDevice* arduinoSamD21x18AGetBlockDevice(int32_t deviceId) {
   return blockDevices[deviceId];
 }
 
-int arduinoSamD21x18ARestartBlockDevice(ProcessDescriptor *processDescriptor) {
+int32_t arduinoSamD21x18ARestartBlockDevice(ProcessDescriptor *processDescriptor) {
   int32_t deviceId = (int32_t) (intptr_t) processDescriptor->restartArgs;
 
   SdCardSpiArgs sdCardSpiArgs = {

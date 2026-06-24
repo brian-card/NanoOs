@@ -3356,7 +3356,7 @@ static const char *shellArgs[] = {
   NULL,
 };
 
-/// @fn int restartConsole(ProcessDescriptor *processDescriptor)
+/// @fn int32_t restartConsole(ProcessDescriptor *processDescriptor)
 ///
 /// @brief Implementation of restartFunction to re-launch the console process if
 /// it dies.
@@ -3365,7 +3365,7 @@ static const char *shellArgs[] = {
 ///   process's state.
 ///
 /// @return Returns 0 on sucess, -errno onfailure.
-int restartConsole(ProcessDescriptor *processDescriptor) {
+int32_t restartConsole(ProcessDescriptor *processDescriptor) {
   if (processCreate(processDescriptor, runConsole, NULL) != processSuccess) {
     printString("Could not restart console process.\n");
     return -ENOMEM;
@@ -3376,7 +3376,7 @@ int restartConsole(ProcessDescriptor *processDescriptor) {
   return 0;
 }
 
-/// @fn int restartMemoryManager(ProcessDescriptor *processDescriptor)
+/// @fn int32_t restartMemoryManager(ProcessDescriptor *processDescriptor)
 ///
 /// @brief Implementation of restartFunction to re-launch the memory manager
 /// process if it dies.
@@ -3385,7 +3385,7 @@ int restartConsole(ProcessDescriptor *processDescriptor) {
 ///   process's state.
 ///
 /// @return Returns 0 on sucess, -errno onfailure.
-int restartMemoryManager(ProcessDescriptor *processDescriptor) {
+int32_t restartMemoryManager(ProcessDescriptor *processDescriptor) {
   if (processCreate(processDescriptor, runMemoryManager, NULL) != processSuccess) {
     printString("Could not restart memory manager process.\n");
     return -ENOMEM;
@@ -3396,7 +3396,7 @@ int restartMemoryManager(ProcessDescriptor *processDescriptor) {
   return 0;
 }
 
-/// @fn int restartShell(ProcessDescriptor *processDescriptor)
+/// @fn int32_t restartShell(ProcessDescriptor *processDescriptor)
 ///
 /// @brief Implementation of restartFunction to re-launch a shell if one dies or
 /// a process that occupied its slot exits.
@@ -3405,7 +3405,7 @@ int restartMemoryManager(ProcessDescriptor *processDescriptor) {
 ///   process's state.
 ///
 /// @return Returns 0 on sucess, -errno onfailure.
-int restartShell(ProcessDescriptor *processDescriptor) {
+int32_t restartShell(ProcessDescriptor *processDescriptor) {
   printDebugString("In restartShell\n");
   if ((SCHEDULER_STATE->hostname == NULL)
     || (*SCHEDULER_STATE->hostname == '\0')

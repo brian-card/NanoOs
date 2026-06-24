@@ -217,9 +217,9 @@ int processQueueRemove(
 void* dummyProcess(void *args);
 
 // Process restart functions.
-int restartConsole(ProcessDescriptor *processDescriptor);
-int restartMemoryManager(ProcessDescriptor *processDescriptor);
-int restartShell(ProcessDescriptor *processDescriptor);
+int32_t restartConsole(ProcessDescriptor *processDescriptor);
+int32_t restartMemoryManager(ProcessDescriptor *processDescriptor);
+int32_t restartShell(ProcessDescriptor *processDescriptor);
 
 // Thread that will be used to represent the scheduler.
 extern Thread *schedulerThread;

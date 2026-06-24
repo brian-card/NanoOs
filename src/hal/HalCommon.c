@@ -76,12 +76,12 @@ BlockDevice* halCommonInitRootSdSpiStorage(
   return sdDevice;
 }
 
-/// @fn int halCommonInitRootFilesystem(void)
+/// @fn int32_t halCommonInitRootFilesystem(void)
 ///
 /// @brief Common initialization for the root filesystem process.
 ///
 /// @return Returns 0 on success, -errno on failure.
-int halCommonInitRootFilesystem(void) {
+int32_t halCommonInitRootFilesystem(void) {
   if (SCHEDULER_STATE == NULL) {
     return -EBUSY;
   }
@@ -143,7 +143,7 @@ int halCommonInitRootFilesystem(void) {
   return 0;
 }
 
-/// @fn int restartFilesystem(ProcessDescriptor *processDescriptor)
+/// @fn int32_t restartFilesystem(ProcessDescriptor *processDescriptor)
 ///
 /// @brief Restart the filesystem process using the existing root block device.
 ///
@@ -151,7 +151,7 @@ int halCommonInitRootFilesystem(void) {
 ///   filesystem process to restart.
 ///
 /// @return Returns 0 on success, -errno on failure.
-int restartFilesystem(ProcessDescriptor *processDescriptor) {
+int32_t restartFilesystem(ProcessDescriptor *processDescriptor) {
   BlockDevice *rootBlockDevice = HAL->blockDevice->get(0);
   if (rootBlockDevice == NULL) {
     return -ENODEV;
