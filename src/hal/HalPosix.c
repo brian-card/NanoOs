@@ -25,7 +25,7 @@
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 
-/// @file HalPosix.cpp
+/// @file HalPosix.c
 ///
 /// @brief HAL implementation for a Posix simulator.
 
@@ -45,117 +45,71 @@
 // Must come last
 #include "user/NanoOsStdio.h"
 
-int32_t posixProcessStackSize(bool debug, size_t *returnValue);
-int32_t posixMemoryManagerStackSize(bool debug, size_t *returnValue);
-int32_t posixBottomOfHeap(bool debug, void **returnValue);
-int32_t posixNumExtraSchedulerStacks(bool debug, uint8_t *returnValue);
-int32_t posixNumExtraConsoleStacks(bool debug, uint8_t *returnValue);
-static HalMemory posixMemoryHal = {
-  .processStackSize = posixProcessStackSize,
-  .memoryManagerStackSize = posixMemoryManagerStackSize,
-  .bottomOfHeap = posixBottomOfHeap,
-  .numExtraSchedulerStacks = posixNumExtraSchedulerStacks,
-  .numExtraConsoleStacks = posixNumExtraConsoleStacks,
-  .overlayMap = NULL,
-  .overlaySize = 0,
-};
+// ---------------------------------------------------------------------------
+// Forward declarations for all POSIX platform functions (defined in
+// HalPosixImpl.c), now with va_list signatures.
+// ---------------------------------------------------------------------------
+int32_t posixProcessStackSize(va_list args);
+int32_t posixMemoryManagerStackSize(va_list args);
+int32_t posixBottomOfHeap(va_list args);
+int32_t posixNumExtraSchedulerStacks(va_list args);
+int32_t posixNumExtraConsoleStacks(va_list args);
+
+int32_t posixInitUart(va_list args);
+int32_t posixConfigureUart(va_list args);
+int32_t posixPollUart(va_list args);
+int32_t posixWriteUart(va_list args);
+int32_t posixIsUartConsole(va_list args);
+
+int32_t posixInitDio(va_list args);
+int32_t posixConfigureDio(va_list args);
+int32_t posixWriteDio(va_list args);
+
+int32_t posixInitSpi(va_list args);
+int32_t posixConfigureSpiDevice(va_list args);
+int32_t posixStartSpiTransfer(va_list args);
+int32_t posixEndSpiTransfer(va_list args);
+int32_t posixSpiTransfer8(va_list args);
+int32_t posixSpiTransferBytes(va_list args);
+
+int32_t posixTimeInit(va_list args);
+int32_t posixSetSystemTime(va_list args);
+int32_t posixGetElapsedMilliseconds(va_list args);
+int32_t posixGetElapsedMicroseconds(va_list args);
+int32_t posixGetElapsedNanoseconds(va_list args);
+
+int32_t posixEnterPowerMode(va_list args);
+
+int32_t posixInitTimer(va_list args);
+int32_t posixInitTimerDevice(va_list args);
+int32_t posixConfigOneShotTimer(va_list args);
+int32_t posixConfiguredTimerNanoseconds(va_list args);
+int32_t posixRemainingTimerNanoseconds(va_list args);
+int32_t posixCancelTimer(va_list args);
+int32_t posixCancelAndGetTimer(va_list args);
+
+int32_t halPosixImplInit(jmp_buf resetBuffer,
+  NanoOsOverlayMap **overlayMap, size_t *overlaySize);
+
+// ---------------------------------------------------------------------------
+// Per-platform online bitmask arrays — pointers are installed on halCommon*
+// instances at init time.
+// ---------------------------------------------------------------------------
 
 static uint32_t posixUartsOnline[] = {
   0x00000002,
-};
-int32_t posixInitUart(void);
-int32_t posixConfigureUart(int32_t port, uint32_t baud);
-int posixPollUart(int32_t port);
-int32_t posixWriteUart(int32_t port, const uint8_t *data, ssize_t length,
-  ssize_t *returnValue);
-int32_t posixIsUartConsole(int32_t port, bool *returnValue);
-
-static HalUart posixUartHal = {
-  .numSupported = 2,
-  .online = posixUartsOnline,
-  .init = posixInitUart,
-  .configure = posixConfigureUart,
-  .poll = posixPollUart,
-  .write = posixWriteUart,
-  .isConsole = posixIsUartConsole,
 };
 
 static uint32_t posixDiosOnline[] = {
   0x00000000,
 };
-int32_t posixInitDio(void);
-int32_t posixConfigureDio(int32_t deviceId, bool output);
-int32_t posixWriteDio(int32_t deviceId, bool high);
-static HalDio posixDioHal = {
-  .numSupported = 0,
-  .online = posixDiosOnline,
-  .init = posixInitDio,
-  .configure = posixConfigureDio,
-  .write = posixWriteDio,
-};
 
 static uint32_t posixSpisOnline[] = {
   0x00000000,
 };
-int32_t posixInitSpi(void);
-int32_t posixConfigureSpiDevice(int32_t deviceId,
-  uint8_t cs, uint8_t sck, uint8_t copi, uint8_t cipo, uint32_t baud);
-int32_t posixStartSpiTransfer(int32_t deviceId);
-int32_t posixEndSpiTransfer(int32_t deviceId);
-int32_t posixSpiTransfer8(int32_t deviceId, uint8_t data);
-int32_t posixSpiTransferBytes(int32_t deviceId, uint8_t *data, uint32_t length);
-static HalSpi posixSpiHal = {
-  .numSupported = 0,
-  .online = posixSpisOnline,
-  .init = posixInitSpi,
-  .configure = posixConfigureSpiDevice,
-  .startTransfer = posixStartSpiTransfer,
-  .endTransfer = posixEndSpiTransfer,
-  .transfer8 = posixSpiTransfer8,
-  .transferBytes = posixSpiTransferBytes,
-};
-
-int32_t posixTimeInit(void);
-int32_t posixSetSystemTime(struct timespec *now);
-int32_t posixGetElapsedMilliseconds(int64_t startTime, int64_t *returnValue);
-int32_t posixGetElapsedMicroseconds(int64_t startTime, int64_t *returnValue);
-int32_t posixGetElapsedNanoseconds(int64_t startTime, int64_t *returnValue);
-static HalClock posixClockHal = {
-  .init = posixTimeInit,
-  .setSystemTime = posixSetSystemTime,
-  .getElapsedMilliseconds = posixGetElapsedMilliseconds,
-  .getElapsedMicroseconds = posixGetElapsedMicroseconds,
-  .getElapsedNanoseconds = posixGetElapsedNanoseconds,
-};
-
-int posixEnterPowerMode(HalPowerMode powerMode);
-static HalPower posixPowerHal = {
-  .enterMode = posixEnterPowerMode,
-};
 
 static uint32_t posixTimersOnline[] = {
   0x00000003,
-};
-int posixInitTimer(void);
-int posixInitTimerDevice(int timer);
-int posixConfigOneShotTimer(int timer,
-    uint64_t nanoseconds, void (*callback)(void));
-int32_t posixConfiguredTimerNanoseconds(int timer, uint64_t *returnValue);
-int32_t posixRemainingTimerNanoseconds(int timer, uint64_t *returnValue);
-int posixCancelTimer(int timer);
-int posixCancelAndGetTimer(int timer,
-  uint64_t *configuredNanoseconds, uint64_t *remainingNanoseconds,
-  void (**callback)(void));
-static HalTimer posixTimerHal = {
-  .numSupported = 2,
-  .online = posixTimersOnline,
-  .init = posixInitTimer,
-  .initDevice = posixInitTimerDevice,
-  .configOneShot = posixConfigOneShotTimer,
-  .configuredNanoseconds = posixConfiguredTimerNanoseconds,
-  .remainingNanoseconds = posixRemainingTimerNanoseconds,
-  .cancel = posixCancelTimer,
-  .cancelAndGet = posixCancelAndGetTimer,
 };
 
 /// @var _sdCardDevicePath
@@ -184,13 +138,14 @@ static uint32_t posixBlockDevicesOnline[] = {
   0x00000000,
 };
 
-int32_t posixInitBlockDevice(void) {
+int32_t posixInitBlockDevice(va_list args) {
+  (void) args;
   if (SCHEDULER_STATE == NULL) {
     return -EBUSY;
   }
-  
+
   ProcessDescriptor *allProcesses = SCHEDULER_STATE->allProcesses;
-  
+
   // Create the SD card process.
   ProcessDescriptor *processDescriptor
     = &allProcesses[SCHEDULER_STATE->firstUserPid - 1];
@@ -211,11 +166,14 @@ int32_t posixInitBlockDevice(void) {
   SCHEDULER_STATE->firstShellPid = SCHEDULER_STATE->firstUserPid;
   blockDevices[0] = sdDevice;
   setOnline(HAL->blockDevice, 0);
-  
+
   return 0;
 }
 
-int32_t posixGetBlockDevice(int32_t deviceId, BlockDevice **returnValue) {
+int32_t posixGetBlockDevice(va_list args) {
+  int32_t deviceId = va_arg(args, int32_t);
+  BlockDevice **returnValue = va_arg(args, BlockDevice**);
+
   if (!online(HAL->blockDevice, deviceId)) {
     if (returnValue != NULL) {
       *returnValue = NULL;
@@ -229,7 +187,8 @@ int32_t posixGetBlockDevice(int32_t deviceId, BlockDevice **returnValue) {
   return 0;
 }
 
-int32_t posixRestartBlockDevice(ProcessDescriptor *processDescriptor) {
+int32_t posixRestartBlockDevice(va_list args) {
+  ProcessDescriptor *processDescriptor = va_arg(args, ProcessDescriptor*);
   int32_t deviceId = (int32_t) (intptr_t) processDescriptor->restartArgs;
 
   if (processCreate(
@@ -256,41 +215,101 @@ int32_t posixRestartBlockDevice(ProcessDescriptor *processDescriptor) {
   return 0;
 }
 
-static HalBlockDevice posixBlockDeviceHal = {
-  .numSupported = _numBlockDevices,
-  .online = posixBlockDevicesOnline,
-  .init = posixInitBlockDevice,
-  .get = posixGetBlockDevice,
-  .restart = posixRestartBlockDevice,
-};
-
-/// @var posixHal
-///
-/// @brief The implementation of the Hal interface for the Arduino Nano 33 Iot.
-static Hal posixHal = {
-  .memory = &posixMemoryHal,
-  .uart = &posixUartHal,
-  .dio = &posixDioHal,
-  .spi = &posixSpiHal,
-  .clock = &posixClockHal,
-  .power = &posixPowerHal,
-  .timer = &posixTimerHal,
-  .blockDevice = &posixBlockDeviceHal,
-  
-  // Root storage configuration.
-  .initRootStorage = halCommonInitRootFilesystem,
-};
-
-const Hal* halPosixImplInit(jmp_buf resetBuffer, Hal *hal);
-
-const Hal* halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
+int32_t halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
   _sdCardDevicePath = sdCardDevicePath;
-  if (halPosixImplInit(resetBuffer, &posixHal) != 0) {
-    return NULL;
+
+  // Populate the dispatch table for all POSIX subsystems.
+  halFunctions[HAL_MEMORY][HAL_MEMORY_PROCESS_STACK_SIZE]
+    = posixProcessStackSize;
+  halFunctions[HAL_MEMORY][HAL_MEMORY_MEMORY_MANAGER_STACK_SIZE]
+    = posixMemoryManagerStackSize;
+  halFunctions[HAL_MEMORY][HAL_MEMORY_BOTTOM_OF_HEAP]
+    = posixBottomOfHeap;
+  halFunctions[HAL_MEMORY][HAL_MEMORY_NUM_EXTRA_SCHEDULER_STACKS]
+    = posixNumExtraSchedulerStacks;
+  halFunctions[HAL_MEMORY][HAL_MEMORY_NUM_EXTRA_CONSOLE_STACKS]
+    = posixNumExtraConsoleStacks;
+
+  halFunctions[HAL_UART][HAL_UART_INIT]        = posixInitUart;
+  halFunctions[HAL_UART][HAL_UART_CONFIGURE]   = posixConfigureUart;
+  halFunctions[HAL_UART][HAL_UART_POLL]        = posixPollUart;
+  halFunctions[HAL_UART][HAL_UART_WRITE]       = posixWriteUart;
+  halFunctions[HAL_UART][HAL_UART_IS_CONSOLE]  = posixIsUartConsole;
+
+  halFunctions[HAL_DIO][HAL_DIO_INIT]      = posixInitDio;
+  halFunctions[HAL_DIO][HAL_DIO_CONFIGURE] = posixConfigureDio;
+  halFunctions[HAL_DIO][HAL_DIO_WRITE]     = posixWriteDio;
+
+  halFunctions[HAL_SPI][HAL_SPI_INIT]           = posixInitSpi;
+  halFunctions[HAL_SPI][HAL_SPI_CONFIGURE]      = posixConfigureSpiDevice;
+  halFunctions[HAL_SPI][HAL_SPI_START_TRANSFER] = posixStartSpiTransfer;
+  halFunctions[HAL_SPI][HAL_SPI_END_TRANSFER]   = posixEndSpiTransfer;
+  halFunctions[HAL_SPI][HAL_SPI_TRANSFER8]      = posixSpiTransfer8;
+  halFunctions[HAL_SPI][HAL_SPI_TRANSFER_BYTES] = posixSpiTransferBytes;
+
+  halFunctions[HAL_CLOCK][HAL_CLOCK_INIT]
+    = posixTimeInit;
+  halFunctions[HAL_CLOCK][HAL_CLOCK_SET_SYSTEM_TIME]
+    = posixSetSystemTime;
+  halFunctions[HAL_CLOCK][HAL_CLOCK_GET_ELAPSED_MILLISECONDS]
+    = posixGetElapsedMilliseconds;
+  halFunctions[HAL_CLOCK][HAL_CLOCK_GET_ELAPSED_MICROSECONDS]
+    = posixGetElapsedMicroseconds;
+  halFunctions[HAL_CLOCK][HAL_CLOCK_GET_ELAPSED_NANOSECONDS]
+    = posixGetElapsedNanoseconds;
+
+  halFunctions[HAL_POWER][HAL_POWER_ENTER_MODE] = posixEnterPowerMode;
+
+  halFunctions[HAL_TIMER][HAL_TIMER_INIT]
+    = posixInitTimer;
+  halFunctions[HAL_TIMER][HAL_TIMER_INIT_DEVICE]
+    = posixInitTimerDevice;
+  halFunctions[HAL_TIMER][HAL_TIMER_CONFIG_ONE_SHOT]
+    = posixConfigOneShotTimer;
+  halFunctions[HAL_TIMER][HAL_TIMER_CONFIGURED_NANOSECONDS]
+    = posixConfiguredTimerNanoseconds;
+  halFunctions[HAL_TIMER][HAL_TIMER_REMAINING_NANOSECONDS]
+    = posixRemainingTimerNanoseconds;
+  halFunctions[HAL_TIMER][HAL_TIMER_CANCEL]
+    = posixCancelTimer;
+  halFunctions[HAL_TIMER][HAL_TIMER_CANCEL_AND_GET]
+    = posixCancelAndGetTimer;
+
+  halFunctions[HAL_BLOCK_DEVICE][HAL_BLOCK_DEVICE_INIT]
+    = posixInitBlockDevice;
+  halFunctions[HAL_BLOCK_DEVICE][HAL_BLOCK_DEVICE_GET]
+    = posixGetBlockDevice;
+  halFunctions[HAL_BLOCK_DEVICE][HAL_BLOCK_DEVICE_RESTART]
+    = posixRestartBlockDevice;
+
+  // Set per-platform data members on the common subsystem instances.
+  halCommonUart.numSupported = 2;
+  halCommonUart.online       = posixUartsOnline;
+
+  halCommonDio.numSupported = 0;
+  halCommonDio.online       = posixDiosOnline;
+
+  halCommonSpi.numSupported = 0;
+  halCommonSpi.online       = posixSpisOnline;
+
+  halCommonTimer.numSupported = 2;
+  halCommonTimer.online       = posixTimersOnline;
+
+  halCommonBlockDevice.numSupported = _numBlockDevices;
+  halCommonBlockDevice.online       = posixBlockDevicesOnline;
+
+  // Perform POSIX-specific hardware setup and retrieve the overlay mapping.
+  NanoOsOverlayMap *overlayMap = NULL;
+  size_t overlaySize = 0;
+  int32_t result = halPosixImplInit(resetBuffer, &overlayMap, &overlaySize);
+  if (result != 0) {
+    return result;
   }
 
-  return &posixHal;
+  halCommonMemory.overlayMap  = overlayMap;
+  halCommonMemory.overlaySize = overlaySize;
+
+  return halCommonInit();
 }
 
 #endif // __x86_64__
-

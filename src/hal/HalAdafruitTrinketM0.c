@@ -80,7 +80,7 @@ static uint32_t halArduinoSamD21x18AImplDiosOnline[] = {
   0x0000003f
 };
 
-const Hal* halArduinoInit(void) {
+int32_t halArduinoInit(void) {
   HalArduinoSamD21x18AInitArgs args = {
     .numUartsSupported   = NUM_UARTS,
     .uartsOnline         = halArduinoSamD21x18AImplUartsOnline,
@@ -92,13 +92,7 @@ const Hal* halArduinoInit(void) {
     .sdCardPinChipSelect = SD_CARD_PIN_CHIP_SELECT,
   };
 
-  const Hal *hal = halArduinoSamD21x18AInit(&args);
-
-  if (halCommonInit(hal) != 0) {
-    return NULL;
-  }
-
-  return hal;
+  return halArduinoSamD21x18AInit(&args);
 }
 
 #endif // ADAFRUIT_TRINKET_M0

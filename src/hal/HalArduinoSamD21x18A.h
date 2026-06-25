@@ -56,8 +56,8 @@ typedef struct HalArduinoSamD21x18AInitArgs {
   uint8_t   sdCardPinChipSelect;
 } HalArduinoSamD21x18AInitArgs;
 
-const Hal* halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args);
-const Hal* halArduinoInit(void);
+int32_t halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args);
+int32_t halArduinoInit(void);
 
 #ifdef __cplusplus
 } // extern "C"

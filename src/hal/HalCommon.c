@@ -35,6 +35,379 @@
 // Must come last
 #include "../user/NanoOsStdio.h"
 
+/// @var halFunctions
+///
+/// @brief Two-dimensional array of HAL function pointers.  First index is the
+/// HalSubsystem, second index is the function name enum value for that
+/// subsystem.
+HalFunction halFunctions[HAL_NUM_SUBSYSTEMS][HAL_MAX_SUBSYSTEM_FNS]
+  = {{NULL}};
+
+/// @fn int32_t callHal(HalSubsystem subsystem, uint32_t function, ...)
+///
+/// @brief Dispatch a call to the registered platform-specific HAL function.
+///
+/// @param subsystem The HalSubsystem index into halFunctions.
+/// @param function The function-name enum index for the given subsystem.
+/// @param ... Arguments to forward to the platform function via va_list.
+///
+/// @return Returns the value returned by the platform function, or -ENOTSUP if
+/// no function has been registered for the given subsystem/function pair.
+int32_t callHal(HalSubsystem subsystem, uint32_t function, ...) {
+  if ((subsystem >= HAL_NUM_SUBSYSTEMS) || (function >= HAL_MAX_SUBSYSTEM_FNS)
+    || (halFunctions[subsystem][function] == NULL)
+  ) {
+    return -ENOTSUP;
+  }
+  va_list args;
+  va_start(args, function);
+  int32_t returnValue = halFunctions[subsystem][function](args);
+  va_end(args);
+  return returnValue;
+}
+
+// ---------------------------------------------------------------------------
+// Forward declarations for typed wrappers (defined later in this file).
+// ---------------------------------------------------------------------------
+static int32_t halMemoryProcessStackSize(bool debug, size_t *returnValue);
+static int32_t halMemoryMemoryManagerStackSize(bool debug, size_t *returnValue);
+static int32_t halMemoryBottomOfHeap(bool debug, void **returnValue);
+static int32_t halMemoryNumExtraSchedulerStacks(bool debug, uint8_t *returnValue);
+static int32_t halMemoryNumExtraConsoleStacks(bool debug, uint8_t *returnValue);
+
+static int32_t halUartInit(void);
+static int32_t halUartConfigure(int32_t deviceId, uint32_t baud);
+static int32_t halUartPoll(int32_t deviceId);
+static int32_t halUartWrite(int32_t deviceId, const uint8_t *data,
+  ssize_t length, ssize_t *returnValue);
+static int32_t halUartIsConsole(int32_t deviceId, bool *returnValue);
+
+static int32_t halDioInit(void);
+static int32_t halDioConfigure(int32_t deviceId, bool output);
+static int32_t halDioWrite(int32_t deviceId, bool high);
+
+static int32_t halSpiInit(void);
+static int32_t halSpiConfigure(int32_t deviceId,
+  uint8_t cs, uint8_t sck, uint8_t copi, uint8_t cipo, uint32_t baud);
+static int32_t halSpiStartTransfer(int32_t deviceId);
+static int32_t halSpiEndTransfer(int32_t deviceId);
+static int32_t halSpiTransfer8(int32_t deviceId, uint8_t data);
+static int32_t halSpiTransferBytes(int32_t deviceId,
+  uint8_t *data, uint32_t length);
+
+static int32_t halClockInit(void);
+static int32_t halClockSetSystemTime(struct timespec *ts);
+static int32_t halClockGetElapsedMilliseconds(int64_t startTime,
+  int64_t *returnValue);
+static int32_t halClockGetElapsedMicroseconds(int64_t startTime,
+  int64_t *returnValue);
+static int32_t halClockGetElapsedNanoseconds(int64_t startTime,
+  int64_t *returnValue);
+
+static int32_t halPowerEnterMode(HalPowerMode powerMode);
+
+static int32_t halTimerInit(void);
+static int32_t halTimerInitDevice(int32_t deviceId);
+static int32_t halTimerConfigOneShot(int32_t deviceId,
+  uint64_t nanoseconds, void (*callback)(void));
+static int32_t halTimerConfiguredNanoseconds(int32_t deviceId,
+  uint64_t *returnValue);
+static int32_t halTimerRemainingNanoseconds(int32_t deviceId,
+  uint64_t *returnValue);
+static int32_t halTimerCancel(int32_t deviceId);
+static int32_t halTimerCancelAndGet(int32_t deviceId,
+  uint64_t *configuredNanoseconds, uint64_t *remainingNanoseconds,
+  void (**callback)(void));
+
+static int32_t halBlockDeviceInit(void);
+static int32_t halBlockDeviceGet(int32_t deviceId, BlockDevice **returnValue);
+static int32_t halBlockDeviceRestart(ProcessDescriptor *processDescriptor);
+
+// ---------------------------------------------------------------------------
+// Common subsystem instances — function pointers set to typed wrappers above;
+// data members (numSupported, online, overlayMap, etc.) set by platform init.
+// ---------------------------------------------------------------------------
+
+HalMemory halCommonMemory = {
+  .processStackSize        = halMemoryProcessStackSize,
+  .memoryManagerStackSize  = halMemoryMemoryManagerStackSize,
+  .bottomOfHeap            = halMemoryBottomOfHeap,
+  .numExtraSchedulerStacks = halMemoryNumExtraSchedulerStacks,
+  .numExtraConsoleStacks   = halMemoryNumExtraConsoleStacks,
+  .overlayMap              = NULL,
+  .overlaySize             = 0,
+};
+
+HalUart halCommonUart = {
+  .numSupported = 0,
+  .online       = NULL,
+  .init         = halUartInit,
+  .configure    = halUartConfigure,
+  .poll         = halUartPoll,
+  .write        = halUartWrite,
+  .isConsole    = halUartIsConsole,
+};
+
+HalDio halCommonDio = {
+  .numSupported = 0,
+  .online       = NULL,
+  .init         = halDioInit,
+  .configure    = halDioConfigure,
+  .write        = halDioWrite,
+};
+
+HalSpi halCommonSpi = {
+  .numSupported  = 0,
+  .online        = NULL,
+  .init          = halSpiInit,
+  .configure     = halSpiConfigure,
+  .startTransfer = halSpiStartTransfer,
+  .endTransfer   = halSpiEndTransfer,
+  .transfer8     = halSpiTransfer8,
+  .transferBytes = halSpiTransferBytes,
+};
+
+HalClock halCommonClock = {
+  .init                   = halClockInit,
+  .setSystemTime          = halClockSetSystemTime,
+  .getElapsedMilliseconds = halClockGetElapsedMilliseconds,
+  .getElapsedMicroseconds = halClockGetElapsedMicroseconds,
+  .getElapsedNanoseconds  = halClockGetElapsedNanoseconds,
+};
+
+HalPower halCommonPower = {
+  .enterMode = halPowerEnterMode,
+};
+
+HalTimer halCommonTimer = {
+  .numSupported        = 0,
+  .online              = NULL,
+  .init                = halTimerInit,
+  .initDevice          = halTimerInitDevice,
+  .configOneShot       = halTimerConfigOneShot,
+  .configuredNanoseconds = halTimerConfiguredNanoseconds,
+  .remainingNanoseconds  = halTimerRemainingNanoseconds,
+  .cancel              = halTimerCancel,
+  .cancelAndGet        = halTimerCancelAndGet,
+};
+
+HalBlockDevice halCommonBlockDevice = {
+  .numSupported = 0,
+  .online       = NULL,
+  .init         = halBlockDeviceInit,
+  .get          = halBlockDeviceGet,
+  .restart      = halBlockDeviceRestart,
+};
+
+static Hal halCommonHal = {
+  .memory      = &halCommonMemory,
+  .uart        = &halCommonUart,
+  .dio         = &halCommonDio,
+  .spi         = &halCommonSpi,
+  .clock       = &halCommonClock,
+  .power       = &halCommonPower,
+  .timer       = &halCommonTimer,
+  .blockDevice = &halCommonBlockDevice,
+
+  .initRootStorage = halCommonInitRootFilesystem,
+};
+
+/// @var HAL
+///
+/// @brief Global pointer to the active HAL instance.
+const Hal *HAL = &halCommonHal;
+
+// ---------------------------------------------------------------------------
+// Typed wrapper implementations — each calls callHal with the subsystem and
+// function enum values, forwarding all typed parameters as varargs.
+// ---------------------------------------------------------------------------
+
+static int32_t halMemoryProcessStackSize(bool debug, size_t *returnValue) {
+  return callHal(HAL_MEMORY, HAL_MEMORY_PROCESS_STACK_SIZE,
+    debug, returnValue);
+}
+
+static int32_t halMemoryMemoryManagerStackSize(bool debug,
+  size_t *returnValue
+) {
+  return callHal(HAL_MEMORY, HAL_MEMORY_MEMORY_MANAGER_STACK_SIZE,
+    debug, returnValue);
+}
+
+static int32_t halMemoryBottomOfHeap(bool debug, void **returnValue) {
+  return callHal(HAL_MEMORY, HAL_MEMORY_BOTTOM_OF_HEAP, debug, returnValue);
+}
+
+static int32_t halMemoryNumExtraSchedulerStacks(bool debug,
+  uint8_t *returnValue
+) {
+  return callHal(HAL_MEMORY, HAL_MEMORY_NUM_EXTRA_SCHEDULER_STACKS,
+    debug, returnValue);
+}
+
+static int32_t halMemoryNumExtraConsoleStacks(bool debug,
+  uint8_t *returnValue
+) {
+  return callHal(HAL_MEMORY, HAL_MEMORY_NUM_EXTRA_CONSOLE_STACKS,
+    debug, returnValue);
+}
+
+static int32_t halUartInit(void) {
+  return callHal(HAL_UART, HAL_UART_INIT);
+}
+
+static int32_t halUartConfigure(int32_t deviceId, uint32_t baud) {
+  return callHal(HAL_UART, HAL_UART_CONFIGURE, deviceId, baud);
+}
+
+static int32_t halUartPoll(int32_t deviceId) {
+  return callHal(HAL_UART, HAL_UART_POLL, deviceId);
+}
+
+static int32_t halUartWrite(int32_t deviceId, const uint8_t *data,
+  ssize_t length, ssize_t *returnValue
+) {
+  return callHal(HAL_UART, HAL_UART_WRITE, deviceId, data, length,
+    returnValue);
+}
+
+static int32_t halUartIsConsole(int32_t deviceId, bool *returnValue) {
+  return callHal(HAL_UART, HAL_UART_IS_CONSOLE, deviceId, returnValue);
+}
+
+static int32_t halDioInit(void) {
+  return callHal(HAL_DIO, HAL_DIO_INIT);
+}
+
+static int32_t halDioConfigure(int32_t deviceId, bool output) {
+  return callHal(HAL_DIO, HAL_DIO_CONFIGURE, deviceId, output);
+}
+
+static int32_t halDioWrite(int32_t deviceId, bool high) {
+  return callHal(HAL_DIO, HAL_DIO_WRITE, deviceId, high);
+}
+
+static int32_t halSpiInit(void) {
+  return callHal(HAL_SPI, HAL_SPI_INIT);
+}
+
+static int32_t halSpiConfigure(int32_t deviceId,
+  uint8_t cs, uint8_t sck, uint8_t copi, uint8_t cipo, uint32_t baud
+) {
+  return callHal(HAL_SPI, HAL_SPI_CONFIGURE,
+    deviceId, (int) cs, (int) sck, (int) copi, (int) cipo, baud);
+}
+
+static int32_t halSpiStartTransfer(int32_t deviceId) {
+  return callHal(HAL_SPI, HAL_SPI_START_TRANSFER, deviceId);
+}
+
+static int32_t halSpiEndTransfer(int32_t deviceId) {
+  return callHal(HAL_SPI, HAL_SPI_END_TRANSFER, deviceId);
+}
+
+static int32_t halSpiTransfer8(int32_t deviceId, uint8_t data) {
+  return callHal(HAL_SPI, HAL_SPI_TRANSFER8, deviceId, (int) data);
+}
+
+static int32_t halSpiTransferBytes(int32_t deviceId,
+  uint8_t *data, uint32_t length
+) {
+  return callHal(HAL_SPI, HAL_SPI_TRANSFER_BYTES, deviceId, data, length);
+}
+
+static int32_t halClockInit(void) {
+  return callHal(HAL_CLOCK, HAL_CLOCK_INIT);
+}
+
+static int32_t halClockSetSystemTime(struct timespec *ts) {
+  return callHal(HAL_CLOCK, HAL_CLOCK_SET_SYSTEM_TIME, ts);
+}
+
+static int32_t halClockGetElapsedMilliseconds(int64_t startTime,
+  int64_t *returnValue
+) {
+  return callHal(HAL_CLOCK, HAL_CLOCK_GET_ELAPSED_MILLISECONDS,
+    startTime, returnValue);
+}
+
+static int32_t halClockGetElapsedMicroseconds(int64_t startTime,
+  int64_t *returnValue
+) {
+  return callHal(HAL_CLOCK, HAL_CLOCK_GET_ELAPSED_MICROSECONDS,
+    startTime, returnValue);
+}
+
+static int32_t halClockGetElapsedNanoseconds(int64_t startTime,
+  int64_t *returnValue
+) {
+  return callHal(HAL_CLOCK, HAL_CLOCK_GET_ELAPSED_NANOSECONDS,
+    startTime, returnValue);
+}
+
+static int32_t halPowerEnterMode(HalPowerMode powerMode) {
+  return callHal(HAL_POWER, HAL_POWER_ENTER_MODE, (int) powerMode);
+}
+
+static int32_t halTimerInit(void) {
+  return callHal(HAL_TIMER, HAL_TIMER_INIT);
+}
+
+static int32_t halTimerInitDevice(int32_t deviceId) {
+  return callHal(HAL_TIMER, HAL_TIMER_INIT_DEVICE, deviceId);
+}
+
+static int32_t halTimerConfigOneShot(int32_t deviceId,
+  uint64_t nanoseconds, void (*callback)(void)
+) {
+  return callHal(HAL_TIMER, HAL_TIMER_CONFIG_ONE_SHOT,
+    deviceId, nanoseconds, callback);
+}
+
+static int32_t halTimerConfiguredNanoseconds(int32_t deviceId,
+  uint64_t *returnValue
+) {
+  return callHal(HAL_TIMER, HAL_TIMER_CONFIGURED_NANOSECONDS,
+    deviceId, returnValue);
+}
+
+static int32_t halTimerRemainingNanoseconds(int32_t deviceId,
+  uint64_t *returnValue
+) {
+  return callHal(HAL_TIMER, HAL_TIMER_REMAINING_NANOSECONDS,
+    deviceId, returnValue);
+}
+
+static int32_t halTimerCancel(int32_t deviceId) {
+  return callHal(HAL_TIMER, HAL_TIMER_CANCEL, deviceId);
+}
+
+static int32_t halTimerCancelAndGet(int32_t deviceId,
+  uint64_t *configuredNanoseconds, uint64_t *remainingNanoseconds,
+  void (**callback)(void)
+) {
+  return callHal(HAL_TIMER, HAL_TIMER_CANCEL_AND_GET,
+    deviceId, configuredNanoseconds, remainingNanoseconds, callback);
+}
+
+static int32_t halBlockDeviceInit(void) {
+  return callHal(HAL_BLOCK_DEVICE, HAL_BLOCK_DEVICE_INIT);
+}
+
+static int32_t halBlockDeviceGet(int32_t deviceId, BlockDevice **returnValue) {
+  return callHal(HAL_BLOCK_DEVICE, HAL_BLOCK_DEVICE_GET,
+    deviceId, returnValue);
+}
+
+static int32_t halBlockDeviceRestart(ProcessDescriptor *processDescriptor) {
+  return callHal(HAL_BLOCK_DEVICE, HAL_BLOCK_DEVICE_RESTART,
+    processDescriptor);
+}
+
+// ---------------------------------------------------------------------------
+// Common HAL helper implementations.
+// ---------------------------------------------------------------------------
+
 /// @fn BlockDevice* halCommonInitRootSdSpiStorage(
 ///   SdCardSpiArgs *sdCardSpiArgs)
 ///
@@ -44,12 +417,13 @@
 /// @param sdCardSpiArgs A pointer to an SdCardSpiArgs structure that contains
 ///   the values to pass to runSdCardSpi.
 ///
-/// @return Returns 0 on success, -errno on failure.
+/// @return Returns the initialized BlockDevice pointer on success, NULL on
+/// failure.
 BlockDevice* halCommonInitRootSdSpiStorage(
   SdCardSpiArgs *sdCardSpiArgs
 ) {
   ProcessDescriptor *allProcesses = SCHEDULER_STATE->allProcesses;
-  
+
   // Create the SD card process.
   ProcessDescriptor *processDescriptor
     = &allProcesses[SCHEDULER_STATE->firstUserPid - 1];
@@ -72,7 +446,7 @@ BlockDevice* halCommonInitRootSdSpiStorage(
   sdDevice->partitionNumber = 1;
   SCHEDULER_STATE->firstUserPid++;
   SCHEDULER_STATE->firstShellPid = SCHEDULER_STATE->firstUserPid;
-  
+
   return sdDevice;
 }
 
@@ -85,7 +459,7 @@ int32_t halCommonInitRootFilesystem(void) {
   if (SCHEDULER_STATE == NULL) {
     return -EBUSY;
   }
-  
+
   BlockDevice *rootBlockDevice = NULL;
   HAL->blockDevice->get(0, &rootBlockDevice);
 
@@ -102,12 +476,12 @@ int32_t halCommonInitRootFilesystem(void) {
 
     HAL->blockDevice->get(0, &rootBlockDevice);
   }
-  
+
   if (rootBlockDevice == NULL) {
     printString("ERROR! No rootBlockDevice available\n");
     return -ENODEV;
   }
-  
+
   // Allocate the filesystem process.
   SCHEDULER_STATE->rootFsPid = SCHEDULER_STATE->firstUserPid;
   ProcessDescriptor *allProcesses = SCHEDULER_STATE->allProcesses;
@@ -124,10 +498,10 @@ int32_t halCommonInitRootFilesystem(void) {
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
   processDescriptor->restartFunction = restartFilesystem;
   // DO NOT resume the process yet.  Let the scheduler take care of that.
-  
+
   SCHEDULER_STATE->firstUserPid = SCHEDULER_STATE->rootFsPid + 1;
   SCHEDULER_STATE->firstShellPid = SCHEDULER_STATE->firstUserPid;
-  
+
   // The filesystem runs as an overlay, which increases the depth of the call
   // stack.  Double the stack size for it.
   Thread *thread = threadProvision(NULL, dummyProcess, NULL);
@@ -140,7 +514,7 @@ int32_t halCommonInitRootFilesystem(void) {
   ) {
     printString("Could not set filesystem process's stack size.\n");
   }
-  
+
   return 0;
 }
 
@@ -206,101 +580,98 @@ int32_t restartFilesystem(ProcessDescriptor *processDescriptor) {
   return 0;
 }
 
-/// @fn int halCommonInit(const Hal *hal)
+/// @fn int32_t halCommonInit(void)
 ///
 /// @brief Initialization function common to multiple HAL implementations.
-///
-/// @param hal A pointer to an initialized Hal structure.
+/// Uses the global HAL pointer to call subsystem init and configure functions.
 ///
 /// @return Returns 0 on success, -errno on failure.
-int halCommonInit(const Hal *hal) {
-  if (hal == NULL) {
-    // Invalid parameter.
+int32_t halCommonInit(void) {
+  if (HAL == NULL) {
     return -EINVAL;
   }
-  
+
   int32_t ii = 0;
   int32_t defaultUart = -1;
-  
-  if (hal->uart != NULL) {
-    if (hal->uart->init() < 0) {
+
+  if (HAL->uart != NULL) {
+    if (HAL->uart->init() < 0) {
       return -ENOTTY;
     }
-    int32_t numUarts = hal->uart->numSupported;
+    int32_t numUarts = HAL->uart->numSupported;
     if (numUarts <= 0) {
       // Nothing we can do.
       return -ENOTTY;
     }
-    
+
     for (ii = 0; ii < numUarts; ii++) {
-      if (!online(hal->uart, ii)) {
+      if (!online(HAL->uart, ii)) {
         continue;
       }
-      
-      if (hal->uart->configure(ii, 1000000) == 0) {
+
+      if (HAL->uart->configure(ii, 1000000) == 0) {
         if (defaultUart < 0) {
           defaultUart = ii;
         }
       } else {
-        setOffline(hal->uart, ii);
+        setOffline(HAL->uart, ii);
       }
     }
   }
 
-  if (hal->dio != NULL) {
-    if (hal->dio->init() != 0) {
-      hal->uart->write(defaultUart,
+  if (HAL->dio != NULL) {
+    if (HAL->dio->init() != 0) {
+      HAL->uart->write(defaultUart,
         (uint8_t*) "WARNING: Failed to initialize DIO subsystem\n",
         strlen("WARNING: Failed to initialize DIO subsystem\n"), NULL);
     }
   }
 
-  if (hal->spi != NULL) {
-    if (hal->spi->init() != 0) {
-      hal->uart->write(defaultUart,
+  if (HAL->spi != NULL) {
+    if (HAL->spi->init() != 0) {
+      HAL->uart->write(defaultUart,
         (uint8_t*) "WARNING: Failed to initialize SPI subsystem\n",
         strlen("WARNING: Failed to initialize SPI subsystem\n"), NULL);
     }
   }
 
-  if (hal->clock != NULL) {
-    if (hal->clock->init() != 0) {
-      hal->uart->write(defaultUart,
+  if (HAL->clock != NULL) {
+    if (HAL->clock->init() != 0) {
+      HAL->uart->write(defaultUart,
         (uint8_t*) "WARNING: Failed to initialize clock subsystem\n",
         strlen("WARNING: Failed to initialize clock subsystem\n"), NULL);
     }
   }
 
-  if (hal->timer != NULL)  {
+  if (HAL->timer != NULL)  {
     do {
-      if (hal->timer->init() != 0) {
-        hal->uart->write(defaultUart,
+      if (HAL->timer->init() != 0) {
+        HAL->uart->write(defaultUart,
           (uint8_t*) "WARNING: Failed to initialize timer subsystem\n",
           strlen("WARNING: Failed to initialize timer subsystem\n"), NULL);
         break;
       }
 
-      uint32_t online = hal->timer->online[0];
-      for (ii = 0; ii < (int32_t) hal->timer->numSupported; ii++) {
-        if (online(hal->timer, ii) == false) {
+      uint32_t timerOnline = HAL->timer->online[0];
+      for (ii = 0; ii < (int32_t) HAL->timer->numSupported; ii++) {
+        if (online(HAL->timer, ii) == false) {
           continue;
         }
 
-        if (hal->timer->initDevice(ii) < 0) {
-          setOffline(hal->timer, ii);
+        if (HAL->timer->initDevice(ii) < 0) {
+          setOffline(HAL->timer, ii);
         }
       }
 
-      if (hal->timer->online[0] != online) {
-        if (hal->uart != NULL) {
-          hal->uart->write(defaultUart,
+      if (HAL->timer->online[0] != timerOnline) {
+        if (HAL->uart != NULL) {
+          HAL->uart->write(defaultUart,
             (uint8_t*) "WARNING: Did not initialize all timers\n",
             strlen("WARNING: Did not initialize all timers\n"), NULL);
         }
       }
     } while (0);
   }
-  
+
   return 0;
 }
-

@@ -25,7 +25,7 @@
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 
-/// @file HalPosix.cpp
+/// @file HalPosixImpl.c
 ///
 /// @brief HAL implementation for a Posix simulator.
 
@@ -38,6 +38,7 @@
 #include <fcntl.h>
 #include <pthread.h>
 #include <signal.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -99,13 +100,17 @@ int (*realTcgetattr)(int fd, struct termios *termios_p) = NULL;
 int (*realTcsetattr)(int fd, int optional_actions,
   const struct termios *termios_p) = NULL;
 
-int32_t posixProcessStackSize(bool debug, size_t *returnValue) {
+int32_t posixProcessStackSize(va_list args) {
+  bool debug = (bool) va_arg(args, int);
+  size_t *returnValue = va_arg(args, size_t*);
   (void) debug;
   *returnValue = PROCESS_STACK_SIZE * DEBUG_MULTIPLIER;
   return 0;
 }
 
-int32_t posixMemoryManagerStackSize(bool debug, size_t *returnValue) {
+int32_t posixMemoryManagerStackSize(va_list args) {
+  bool debug = (bool) va_arg(args, int);
+  size_t *returnValue = va_arg(args, size_t*);
   if (debug == false) {
     // This is the expected case, so list it first.
     *returnValue = MEMORY_MANAGER_STACK_SIZE * DEBUG_MULTIPLIER;
@@ -120,19 +125,25 @@ int32_t posixMemoryManagerStackSize(bool debug, size_t *returnValue) {
 /// @brief Where the bottom of the heap will be set to be in memory.
 static void *_bottomOfHeap = NULL;
 
-int32_t posixBottomOfHeap(bool debug, void **returnValue) {
+int32_t posixBottomOfHeap(va_list args) {
+  bool debug = (bool) va_arg(args, int);
+  void **returnValue = va_arg(args, void**);
   (void) debug;
   *returnValue = _bottomOfHeap;
   return 0;
 }
 
-int32_t posixNumExtraSchedulerStacks(bool debug, uint8_t *returnValue) {
+int32_t posixNumExtraSchedulerStacks(va_list args) {
+  bool debug = (bool) va_arg(args, int);
+  uint8_t *returnValue = va_arg(args, uint8_t*);
   (void) debug;
   *returnValue = 0;
   return 0;
 }
 
-int32_t posixNumExtraConsoleStacks(bool debug, uint8_t *returnValue) {
+int32_t posixNumExtraConsoleStacks(va_list args) {
+  bool debug = (bool) va_arg(args, int);
+  uint8_t *returnValue = va_arg(args, uint8_t*);
   (void) debug;
   *returnValue = 1;
   return 0;
@@ -152,30 +163,33 @@ static FILE **uarts[] = {
 /// @brief The number of serial ports we support on the Arduino Nano 33 IoT.
 static int _numUarts = sizeof(uarts) / sizeof(uarts[0]);
 
-int32_t posixInitUart(void) {
+int32_t posixInitUart(va_list args) {
+  (void) args;
   return 0;
 }
 
-int32_t posixConfigureUart(int32_t deviceId, uint32_t baud) {
+int32_t posixConfigureUart(va_list args) {
+  int32_t deviceId = va_arg(args, int32_t);
+  uint32_t baud = va_arg(args, uint32_t);
   (void) baud;
-  
+
   if (deviceId > 1) {
     return -ERANGE;
   } else if (deviceId != 1) {
     return -ENOTTY;
   }
-  
+
   // We don't actually need to do anything to stdout or stderr, but we do need
   // to configure stdin to be non-blocking.
   if (fcntl(0, F_SETFL, fcntl(0, F_GETFL) | O_NONBLOCK) != 0) {
     return -errno;
   }
-  
+
   // We manage all the prints to screen ourselves, so disable stdin echoing
   // as well.
   struct termios oldFlags = {0};
   struct termios newFlags = {0};
-  
+
   // Get the current console flags.
   int stdinFileno = fileno(stdin);
   if (realTcgetattr(stdinFileno, &oldFlags) != 0) {
@@ -191,13 +205,14 @@ int32_t posixConfigureUart(int32_t deviceId, uint32_t baud) {
     fprintf(stderr, "Could not set new attributes for console.\n");
     return -errno;
   }
-  
+
   return 0;
 }
 
-int32_t posixPollUart(int32_t deviceId) {
+int32_t posixPollUart(va_list args) {
+  int32_t deviceId = va_arg(args, int32_t);
   int serialData = -1;
-  
+
   // While we'll support two outputs, we will only support one input to keep
   // things simple in the simulator.
   if (deviceId == 1) {
@@ -206,13 +221,16 @@ int32_t posixPollUart(int32_t deviceId) {
       serialData = -1;
     }
   }
-  
+
   return serialData;
 }
 
-int32_t posixWriteUart(int32_t deviceId,
-  const uint8_t *data, ssize_t length, ssize_t *returnValue
-) {
+int32_t posixWriteUart(va_list args) {
+  int32_t deviceId = va_arg(args, int32_t);
+  const uint8_t *data = va_arg(args, const uint8_t*);
+  ssize_t length = va_arg(args, ssize_t);
+  ssize_t *returnValue = va_arg(args, ssize_t*);
+
   ssize_t numBytesWritten = -ERANGE;
 
   if ((deviceId >= 0) && (deviceId < _numUarts) && (length >= 0)) {
@@ -226,116 +244,74 @@ int32_t posixWriteUart(int32_t deviceId,
   return (numBytesWritten >= 0) ? 0 : (int32_t) numBytesWritten;
 }
 
-int32_t posixIsUartConsole(int32_t deviceId, bool *returnValue) {
+int32_t posixIsUartConsole(va_list args) {
+  int32_t deviceId = va_arg(args, int32_t);
+  bool *returnValue = va_arg(args, bool*);
   if (returnValue != NULL) {
     *returnValue = (deviceId == 1);
   }
   return 0;
 }
 
-int posixGetNumDios(void) {
+int32_t posixInitDio(va_list args) {
+  (void) args;
   return -ENOSYS;
 }
 
-int posixInitDio(void) {
+int32_t posixConfigureDio(va_list args) {
+  (void) args;
   return -ENOSYS;
 }
 
-int32_t posixConfigureDio(int32_t deviceId, bool output) {
-  (void) deviceId;
-  (void) output;
-  
+int32_t posixWriteDio(va_list args) {
+  (void) args;
   return -ENOSYS;
 }
 
-int32_t posixWriteDio(int32_t deviceId, bool high) {
-  (void) deviceId;
-  (void) high;
-  
+int32_t posixInitSpi(va_list args) {
+  (void) args;
   return -ENOSYS;
 }
 
-int32_t posixInitSpi(void) {
+int32_t posixConfigureSpiDevice(va_list args) {
+  (void) args;
   return -ENOSYS;
 }
 
-int32_t posixConfigureSpiDevice(int32_t deviceId,
-  uint8_t cs, uint8_t sck, uint8_t copi, uint8_t cipo, uint32_t baud
-) {
-  (void) deviceId;
-  (void) cs;
-  (void) sck;
-  (void) copi;
-  (void) cipo;
-  (void) baud;
-  
+int32_t posixStartSpiTransfer(va_list args) {
+  (void) args;
   return -ENOSYS;
 }
 
-int32_t posixStartSpiTransfer(int32_t deviceId) {
-  (void) deviceId;
-  
+int32_t posixEndSpiTransfer(va_list args) {
+  (void) args;
   return -ENOSYS;
 }
 
-int32_t posixEndSpiTransfer(int32_t deviceId) {
-  (void) deviceId;
-  
+int32_t posixSpiTransfer8(va_list args) {
+  (void) args;
   return -ENOSYS;
 }
 
-int32_t posixSpiTransfer8(int32_t deviceId, uint8_t data) {
-  (void) deviceId;
-  (void) data;
-  
+int32_t posixSpiTransferBytes(va_list args) {
+  (void) args;
   return -ENOSYS;
 }
 
-int32_t posixSpiTransferBytes(int32_t deviceId,
-  uint8_t *data, uint32_t length
-) {
-  (void) deviceId;
-  (void) data;
-  (void) length;
-  
-  return -ENOSYS;
-}
-
-int32_t posixTimeInit(void) {
+int32_t posixTimeInit(va_list args) {
+  (void) args;
   return 0;
 }
 
-int32_t posixSetSystemTime(struct timespec *now) {
-  (void) now;
-  
+int32_t posixSetSystemTime(va_list args) {
+  (void) args;
   return 0;
 }
 
-// posixGetElapsedNanoseconds is used as the base implementation, so declare
-// its prototype here.
-int32_t posixGetElapsedNanoseconds(int64_t startTime, int64_t *returnValue);
-
-int32_t posixGetElapsedMilliseconds(int64_t startTime, int64_t *returnValue) {
-  int64_t nanoseconds = 0;
-  int32_t rv = posixGetElapsedNanoseconds(
-    startTime * ((int64_t) 1000000), &nanoseconds);
-  if (returnValue != NULL) {
-    *returnValue = nanoseconds / ((int64_t) 1000000);
-  }
-  return rv;
-}
-
-int32_t posixGetElapsedMicroseconds(int64_t startTime, int64_t *returnValue) {
-  int64_t nanoseconds = 0;
-  int32_t rv = posixGetElapsedNanoseconds(
-    startTime * ((int64_t) 1000), &nanoseconds);
-  if (returnValue != NULL) {
-    *returnValue = nanoseconds / ((int64_t) 1000);
-  }
-  return rv;
-}
-
-int32_t posixGetElapsedNanoseconds(int64_t startTime, int64_t *returnValue) {
+// posixGetElapsedNanosecondsImpl is used as the base implementation.
+static int32_t posixGetElapsedNanosecondsImpl(int64_t startTime,
+  int64_t *returnValue
+) {
   #include <time.h>
   struct timespec spec;
   clock_gettime(CLOCK_REALTIME, &spec);
@@ -346,6 +322,36 @@ int32_t posixGetElapsedNanoseconds(int64_t startTime, int64_t *returnValue) {
   return 0;
 }
 
+int32_t posixGetElapsedMilliseconds(va_list args) {
+  int64_t startTime = va_arg(args, int64_t);
+  int64_t *returnValue = va_arg(args, int64_t*);
+  int64_t nanoseconds = 0;
+  int32_t rv = posixGetElapsedNanosecondsImpl(
+    startTime * ((int64_t) 1000000), &nanoseconds);
+  if (returnValue != NULL) {
+    *returnValue = nanoseconds / ((int64_t) 1000000);
+  }
+  return rv;
+}
+
+int32_t posixGetElapsedMicroseconds(va_list args) {
+  int64_t startTime = va_arg(args, int64_t);
+  int64_t *returnValue = va_arg(args, int64_t*);
+  int64_t nanoseconds = 0;
+  int32_t rv = posixGetElapsedNanosecondsImpl(
+    startTime * ((int64_t) 1000), &nanoseconds);
+  if (returnValue != NULL) {
+    *returnValue = nanoseconds / ((int64_t) 1000);
+  }
+  return rv;
+}
+
+int32_t posixGetElapsedNanoseconds(va_list args) {
+  int64_t startTime = va_arg(args, int64_t);
+  int64_t *returnValue = va_arg(args, int64_t*);
+  return posixGetElapsedNanosecondsImpl(startTime, returnValue);
+}
+
 /// @var _resetBuffer
 ///
 /// @brief Copy of the jmp_buf that was initialized prior to initializing the
@@ -353,7 +359,8 @@ int32_t posixGetElapsedNanoseconds(int64_t startTime, int64_t *returnValue) {
 /// simulation.
 static jmp_buf _resetBuffer;
 
-int32_t posixEnterPowerMode(HalPowerMode powerMode) {
+int32_t posixEnterPowerMode(va_list args) {
+  HalPowerMode powerMode = (HalPowerMode) va_arg(args, int);
   // You can't completely turn off the hardware we're running on.  We're
   // simulating hardware, so do what the hardware would do, which is the same
   // set of operations for both off and suspend.
@@ -367,13 +374,13 @@ int32_t posixEnterPowerMode(HalPowerMode powerMode) {
     size_t overlayBaseSize
       = ((size_t) (OVERLAY_OFFSET + OVERLAY_SIZE + (pageSize - 1)))
       & ~((size_t) (pageSize - 1));
-    
+
     if (munmap((void*) OVERLAY_BASE_ADDRESS, overlayBaseSize) < 0) {
       fprintf(stderr, "ERROR: munmap returned: %s\n", strerror(errno));
       fprintf(stderr, "Exiting.\n");
       exit(1);
     }
-    
+
     // Reset the block storage device online map so that initialization works
     // properly on reset.
     if (HAL->blockDevice != NULL) {
@@ -381,7 +388,7 @@ int32_t posixEnterPowerMode(HalPowerMode powerMode) {
     }
     longjmp(_resetBuffer, 1);
   }
-  
+
   return 0;
 }
 
@@ -434,10 +441,10 @@ extern SoftwareTimer softwareTimers[];
 /// NULL.
 void* timerThreadFunction(void *arg) {
   intptr_t timer = (intptr_t) arg;
-  
+
   // We want to be able to kill this thread if we need to.
   pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
-  
+
   SoftwareTimer *swTimer = &softwareTimers[timer];
   int64_t delay = swTimer->deadline - swTimer->startTime;
   struct timespec ts = {
@@ -449,7 +456,7 @@ void* timerThreadFunction(void *arg) {
     // Send the specified signal to the main thread.
     pthread_kill(_mainThreadId, swTimer->signal);
   }
-  
+
   return NULL;
 }
 
@@ -463,12 +470,12 @@ void* timerThreadFunction(void *arg) {
 /// callback if one is set.
 void timerSignalHandler(int timer) {
   SoftwareTimer *swTimer = &softwareTimers[timer];
-  
+
   swTimer->active = false;
   swTimer->timerThread = 0;
   swTimer->startTime = 0;
   swTimer->deadline = 0;
-  
+
   // Call callback if set
   if (swTimer->callback) {
     swTimer->callback();
@@ -538,21 +545,23 @@ SoftwareTimer softwareTimers[] = {
 /// call to posixSetNumTimers.
 static int _numTimers = sizeof(softwareTimers) / sizeof(softwareTimers[0]);
 
-int32_t posixInitTimer(void) {
+int32_t posixInitTimer(va_list args) {
+  (void) args;
   return 0;
 }
 
-int32_t posixInitTimerDevice(int32_t deviceId) {
+int32_t posixInitTimerDevice(va_list args) {
+  int32_t deviceId = va_arg(args, int32_t);
   if (deviceId >= _numTimers) {
     return -ERANGE;
   }
-  
+
   SoftwareTimer *swTimer = &softwareTimers[deviceId];
   if (swTimer->initialized) {
     // Nothing to do
     return 0;
   }
-  
+
   struct sigaction sa;
   sa.sa_handler = swTimer->signalHandler;
   sigemptyset(&sa.sa_mask);
@@ -560,38 +569,41 @@ int32_t posixInitTimerDevice(int32_t deviceId) {
   if (sigaction(swTimer->signal, &sa, NULL) < 0) {
     return -errno;
   }
-  
+
   swTimer->initialized = true;
-  
+
   return 0;
 }
 
-int32_t posixConfigOneShotTimer(int32_t deviceId,
-    uint64_t nanoseconds, void (*callback)(void)
-) {
+int32_t posixConfigOneShotTimer(va_list args) {
+  int32_t deviceId = va_arg(args, int32_t);
+  uint64_t nanoseconds = va_arg(args, uint64_t);
+  void (*callback)(void) = va_arg(args, void (*)(void));
+
   if (deviceId >= _numTimers) {
     return -ERANGE;
   }
-  
+
   SoftwareTimer *swTimer = &softwareTimers[deviceId];
   if (!swTimer->initialized) {
     return -EINVAL;
   }
-  
+
   swTimer->callback = callback;
   swTimer->active = true;
-  posixGetElapsedNanoseconds(0, &swTimer->startTime);
+  posixGetElapsedNanosecondsImpl(0, &swTimer->startTime);
   swTimer->deadline = swTimer->startTime + nanoseconds;
   pthread_create(&swTimer->timerThread, NULL,
     timerThreadFunction, (void*) ((intptr_t) deviceId));
   pthread_detach(swTimer->timerThread);
-  
+
   return 0;
 }
 
-int32_t posixConfiguredTimerNanoseconds(int32_t deviceId,
-  uint64_t *returnValue
-) {
+int32_t posixConfiguredTimerNanoseconds(va_list args) {
+  int32_t deviceId = va_arg(args, int32_t);
+  uint64_t *returnValue = va_arg(args, uint64_t*);
+
   if (returnValue != NULL) {
     *returnValue = 0;
   }
@@ -610,9 +622,10 @@ int32_t posixConfiguredTimerNanoseconds(int32_t deviceId,
   return 0;
 }
 
-int32_t posixRemainingTimerNanoseconds(int32_t deviceId,
-  uint64_t *returnValue
-) {
+int32_t posixRemainingTimerNanoseconds(va_list args) {
+  int32_t deviceId = va_arg(args, int32_t);
+  uint64_t *returnValue = va_arg(args, uint64_t*);
+
   if (returnValue != NULL) {
     *returnValue = 0;
   }
@@ -626,7 +639,7 @@ int32_t posixRemainingTimerNanoseconds(int32_t deviceId,
   }
 
   int64_t now = 0;
-  posixGetElapsedNanoseconds(0, &now);
+  posixGetElapsedNanosecondsImpl(0, &now);
   if (now > swTimer->deadline) {
     return 0;
   }
@@ -637,44 +650,48 @@ int32_t posixRemainingTimerNanoseconds(int32_t deviceId,
   return 0;
 }
 
-int32_t posixCancelTimer(int32_t deviceId) {
+int32_t posixCancelTimer(va_list args) {
+  int32_t deviceId = va_arg(args, int32_t);
+
   if (deviceId >= _numTimers) {
     return -ERANGE;
   }
-  
+
   SoftwareTimer *swTimer = &softwareTimers[deviceId];
   if (!swTimer->initialized) {
     return -EINVAL;
   }
-  
+
   bool active = swTimer->active;
   swTimer->active = false;
-  
+
   if (active) {
     pthread_cancel(swTimer->timerThread);
   }
-  
+
   swTimer->timerThread = 0;
   swTimer->startTime = 0;
   swTimer->deadline = 0;
   swTimer->callback = NULL;
-  
+
   return 0;
 }
 
-int32_t posixCancelAndGetTimer(int32_t deviceId,
-  uint64_t *configuredNanoseconds, uint64_t *remainingNanoseconds,
-  void (**callback)(void)
-) {
+int32_t posixCancelAndGetTimer(va_list args) {
   // We need to get `now` as close to the beginning of this function call as
   // possible so that any call to reconfigure the timer later is correct.
   int64_t now = 0;
-  posixGetElapsedNanoseconds(0, &now);
-  
+  posixGetElapsedNanosecondsImpl(0, &now);
+
+  int32_t deviceId = va_arg(args, int32_t);
+  uint64_t *configuredNanoseconds = va_arg(args, uint64_t*);
+  uint64_t *remainingNanoseconds = va_arg(args, uint64_t*);
+  void (**callback)(void) = va_arg(args, void (**)(void));
+
   if ((deviceId < 0) || (deviceId >= _numTimers)) {
     return -ERANGE;
   }
-  
+
   SoftwareTimer *swTimer = &softwareTimers[deviceId];
   if ((!swTimer->initialized) || (!swTimer->active)) {
     // We cannot populate the provided pointers, so we will error here.  This
@@ -682,18 +699,18 @@ int32_t posixCancelAndGetTimer(int32_t deviceId,
     // later.
     return -EINVAL;
   }
-  
+
   // ***DO NOT*** call posixCancelTimer.  It's expected that this
   // function is in the critical path.  Time is of the essence, so inline the
   // logic.
-  
+
   bool active = swTimer->active;
   swTimer->active = false;
-  
+
   if (active) {
     pthread_cancel(swTimer->timerThread);
   }
-  
+
   if (configuredNanoseconds != NULL) {
     if (swTimer->deadline > swTimer->startTime) {
       *configuredNanoseconds = swTimer->deadline - swTimer->startTime;
@@ -701,7 +718,7 @@ int32_t posixCancelAndGetTimer(int32_t deviceId,
       *configuredNanoseconds = 0;
     }
   }
-  
+
   if (remainingNanoseconds != NULL) {
     if (now < swTimer->deadline) {
       *remainingNanoseconds = swTimer->deadline - now;
@@ -709,16 +726,16 @@ int32_t posixCancelAndGetTimer(int32_t deviceId,
       *remainingNanoseconds = 0;
     }
   }
-  
+
   if (callback != NULL) {
     *callback = swTimer->callback;
   }
-  
+
   swTimer->active = false;
   swTimer->startTime = 0;
   swTimer->deadline = 0;
   swTimer->callback = NULL;
-  
+
   return 0;
 }
 
@@ -751,15 +768,15 @@ void returnToTop(jmp_buf returnBuffer, char *topOfStack) {
 void allocateGlobalStack(jmp_buf returnBuffer, char *topOfStack) {
   char stack[16384];
   stack[sizeof(stack) / 2] = '\0';
-  
+
   if (topOfStack == NULL) {
     topOfStack = stack;
   }
-  
+
   if (((uintptr_t) stack) > ((uintptr_t) _bottomOfHeap)) {
     allocateGlobalStack(returnBuffer, topOfStack);
   }
-  
+
   returnToTop(returnBuffer, topOfStack);
 }
 
@@ -777,7 +794,9 @@ void sigintHandler(int signal) {
   }
 }
 
-int halPosixImplInit(jmp_buf resetBuffer, Hal *hal) {
+int32_t halPosixImplInit(jmp_buf resetBuffer,
+  NanoOsOverlayMap **overlayMap, size_t *overlaySize
+) {
   // Set the handler for sigint so that it's passed to the running process in
   // NanoOs instead of the simulator.
   signal(SIGINT, sigintHandler);
@@ -786,10 +805,10 @@ int halPosixImplInit(jmp_buf resetBuffer, Hal *hal) {
   memcpy(_resetBuffer, resetBuffer, sizeof(jmp_buf));
   fprintf(stdout, "resetBuffer copied.\n");
   fflush(stdout);
-  
+
   int topOfStack = 0;
   fprintf(stderr, "Top of stack        = %p\n", (void*) &topOfStack);
-  
+
   // Simulate having a total of 64 KB available for dynamic memory.
   _bottomOfHeap = (void*) (((uintptr_t) &topOfStack)
     - ((uintptr_t) (((96 * 1024) * DEBUG_MULTIPLIER) - 0)));
@@ -799,7 +818,7 @@ int halPosixImplInit(jmp_buf resetBuffer, Hal *hal) {
     allocateGlobalStack(returnBuffer, NULL);
   }
   fprintf(stderr, "Global stack allocated\n");
-  
+
   // The size used in the mmap call has to be large enough to accommodate the
   // size used for the overlay, plus the offset into the overlay.  It also has
   // to be page aligned.  Do the appropriate math to get us what we need
@@ -808,77 +827,30 @@ int halPosixImplInit(jmp_buf resetBuffer, Hal *hal) {
   size_t overlayBaseSize
     = ((size_t) (OVERLAY_OFFSET + OVERLAY_SIZE + (pageSize - 1)))
     & ~((size_t) (pageSize - 1));
-  
-  hal->memory->overlayMap = mmap((void*) OVERLAY_BASE_ADDRESS,
+
+  void *mappedOverlay = mmap((void*) OVERLAY_BASE_ADDRESS,
     overlayBaseSize, PROT_READ | PROT_WRITE | PROT_EXEC,
     MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED,
     -1, 0);
-  if (hal->memory->overlayMap == MAP_FAILED) {
+  if (mappedOverlay == MAP_FAILED) {
     fprintf(stderr, "mmap failed with error: %s\n", strerror(errno));
     return -1;
   }
-  
+
   // The address that the code is built around for both the Cortex-M0 and the
   // simulation code is OVERLAY_OFFSET bytes into the map we just made.
-  hal->memory->overlayMap = (void*) (OVERLAY_BASE_ADDRESS + OVERLAY_OFFSET);
-  hal->memory->overlaySize = OVERLAY_SIZE;
-  
-  fprintf(stderr, "posixHal.overlayMap = %p\n",
-    (void*) hal->memory->overlayMap);
+  *overlayMap = (NanoOsOverlayMap*) (OVERLAY_BASE_ADDRESS + OVERLAY_OFFSET);
+  *overlaySize = OVERLAY_SIZE;
+
+  fprintf(stderr, "posixHal.overlayMap = %p\n", (void*) *overlayMap);
   fprintf(stderr, "\n");
-  
+
   _mainThreadId = pthread_self();
-  
+
   *((void**) &realTcgetattr) = dlsym(RTLD_NEXT, "tcgetattr");
   *((void**) &realTcsetattr) = dlsym(RTLD_NEXT, "tcsetattr");
-  
-  int32_t ii = 0;
-  
-  if (hal->uart != NULL) {
-    if (hal->uart->init() < 0) {
-      return -ENOTTY;
-    }
-    int32_t numUarts = hal->uart->numSupported;
-    if (numUarts <= 0) {
-      // Nothing we can do.
-      return -ENOTTY;
-    }
-    
-    for (ii = 0; ii < numUarts; ii++) {
-      if (online(hal->uart, ii)) {
-        if (hal->uart->configure(ii, 1000000) != 0) {
-          setOffline(hal->uart, ii);
-        }
-      }
-    }
-  }
-
-  if (hal->timer != NULL) {
-    do {
-      if (hal->timer->init() != 0) {
-        fprintf(stderr, "WARNING: Could not initialize timer subsystem");
-        break;
-      }
-      
-      uint32_t online = hal->timer->online[0];
-      for (ii = 0; ii < (int32_t) hal->timer->numSupported; ii++) {
-        fprintf(stdout, "Initializing timer %u\n", ii);
-        if (!online(hal->timer, ii)) {
-          continue;
-        }
-        
-        if (hal->timer->initDevice(ii) < 0) {
-          setOffline(hal->timer, ii);
-        }
-      }
-      if (hal->timer->online[0] != online) {
-        fprintf(stderr, "WARNING: Did not initialize all timers\n");
-      }
-    } while (0);
-  }
 
   return 0;
 }
 
 #endif // __x86_64__
-

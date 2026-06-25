@@ -37,6 +37,7 @@
 #ifndef HAL_COMMON_H
 #define HAL_COMMON_H
 
+#include <stdarg.h>
 #include <string.h>
 
 #include "../kernel/Hal.h"
@@ -61,15 +62,31 @@
 #include "../user/NanoOsErrno.h"
 
 
+/// @typedef HalFunction
+///
+/// @brief Type for all HAL implementation functions in the dispatch table.
+typedef int32_t (*HalFunction)(va_list args);
+
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 
+extern HalFunction halFunctions[HAL_NUM_SUBSYSTEMS][HAL_MAX_SUBSYSTEM_FNS];
+extern HalMemory halCommonMemory;
+extern HalUart halCommonUart;
+extern HalDio halCommonDio;
+extern HalSpi halCommonSpi;
+extern HalClock halCommonClock;
+extern HalPower halCommonPower;
+extern HalTimer halCommonTimer;
+extern HalBlockDevice halCommonBlockDevice;
+
+int32_t callHal(HalSubsystem subsystem, uint32_t function, ...);
 BlockDevice* halCommonInitRootSdSpiStorage(SdCardSpiArgs *sdCardSpiArgs);
 int32_t halCommonInitRootFilesystem(void);
 int32_t restartFilesystem(ProcessDescriptor *processDescriptor);
-int halCommonInit(const Hal *hal);
+int32_t halCommonInit(void);
 
 #ifdef __cplusplus
 } // extern "C"

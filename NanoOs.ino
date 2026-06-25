@@ -35,8 +35,6 @@
 #include "src/user/NanoOsLibC.h"
 #include "src/user/NanoOsStdio.h"
 
-const Hal *HAL = NULL;
-
 KEEP_IN_FLASH
 const char bootMessage[] = "\r\nBooting...\r\n";
 
@@ -44,9 +42,7 @@ const char bootMessage[] = "\r\nBooting...\r\n";
 // is to be used for Arduino-specific setup.  *ANYTHING* that requires use of
 // threads needs to be done in the loop function.
 void setup() {
-  HAL = halArduinoInit();
-
-  if (HAL == NULL) {
+  if (halArduinoInit() != 0) {
     // Nothing we can do.  Halt.
     while(1);
   }

@@ -66,8 +66,6 @@
 //// #define printDebug(format, ...) fprintf(stderr, format, ##__VA_ARGS__)
 #define printDebug(format, ...) {}
 
-const Hal *HAL = NULL;
-
 void usage(const char *argv0) {
   const char *programName = strrchr(argv0, '/');
   if (programName != NULL) {
@@ -89,9 +87,7 @@ int main(int argc, char **argv) {
   jmp_buf resetBuffer;
   setjmp(resetBuffer);
 
-  HAL = halPosixInit(resetBuffer, argv[1]);
-  if (HAL == NULL) {
-    // Error message has already been printed.  Bail.
+  if (halPosixInit(resetBuffer, argv[1]) != 0) {
     return 1;
   }
 

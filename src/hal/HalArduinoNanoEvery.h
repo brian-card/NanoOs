@@ -41,7 +41,7 @@ extern "C"
 {
 #endif
 
-const Hal* halArduinoInit(void);
+int32_t halArduinoInit(void);
 
 #ifdef __cplusplus
 } // extern "C"

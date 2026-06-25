@@ -118,46 +118,58 @@
 #include <avr/sleep.h>
 #include <avr/interrupt.h>
 
-uintptr_t arduinoNanoEveryProcessStackSize(bool debug) {
+int32_t arduinoNanoEveryProcessStackSize(va_list args) {
+  bool debug = (bool) va_arg(args, int);
+  size_t *returnValue = va_arg(args, size_t*);
   (void) debug;
-  return PROCESS_STACK_SIZE;
-}
-
-uintptr_t arduinoNanoEveryMemoryManagerStackSize(bool debug) {
-  if (debug == false) {
-    // This is the expected case, so list it first.
-    return MEMORY_MANAGER_STACK_SIZE;
-  } else {
-    return MEMORY_MANAGER_DEBUG_STACK_SIZE;
+  if (returnValue != NULL) {
+    *returnValue = PROCESS_STACK_SIZE;
   }
+  return 0;
 }
 
-void* arduinoNanoEveryBottomOfHeap(bool debug) {
+int32_t arduinoNanoEveryMemoryManagerStackSize(va_list args) {
+  bool debug = (bool) va_arg(args, int);
+  size_t *returnValue = va_arg(args, size_t*);
+  if (returnValue != NULL) {
+    *returnValue = (debug == false)
+      ? MEMORY_MANAGER_STACK_SIZE
+      : MEMORY_MANAGER_DEBUG_STACK_SIZE;
+  }
+  return 0;
+}
+
+int32_t arduinoNanoEveryBottomOfHeap(va_list args) {
+  bool debug = (bool) va_arg(args, int);
+  void **returnValue = va_arg(args, void**);
   (void) debug;
-  extern int __heap_start;
-  extern char *__brkval;
-  return (__brkval == NULL) ? (char*) &__heap_start : __brkval;
+  if (returnValue != NULL) {
+    extern int __heap_start;
+    extern char *__brkval;
+    *returnValue = (__brkval == NULL) ? (char*) &__heap_start : __brkval;
+  }
+  return 0;
 }
 
-uint8_t arduinoNanoEveryNumExtraSchedulerStacks(bool debug) {
+int32_t arduinoNanoEveryNumExtraSchedulerStacks(va_list args) {
+  bool debug = (bool) va_arg(args, int);
+  uint8_t *returnValue = va_arg(args, uint8_t*);
   (void) debug;
-  return 1;
+  if (returnValue != NULL) {
+    *returnValue = 1;
+  }
+  return 0;
 }
 
-uint8_t arduinoNanoEveryNumExtraConsoleStacks(bool debug) {
+int32_t arduinoNanoEveryNumExtraConsoleStacks(va_list args) {
+  bool debug = (bool) va_arg(args, int);
+  uint8_t *returnValue = va_arg(args, uint8_t*);
   (void) debug;
-  return 1;
+  if (returnValue != NULL) {
+    *returnValue = 1;
+  }
+  return 0;
 }
-
-static HalMemory arduinoNanoEveryMemoryHal = {
-  .processStackSize = arduinoNanoEveryProcessStackSize,
-  .memoryManagerStackSize = arduinoNanoEveryMemoryManagerStackSize,
-  .bottomOfHeap = arduinoNanoEveryBottomOfHeap,
-  .numExtraSchedulerStacks = arduinoNanoEveryNumExtraSchedulerStacks,
-  .numExtraConsoleStacks = arduinoNanoEveryNumExtraConsoleStacks,
-  .overlayMap = NULL,
-  .overlaySize = 0,
-};
 
 /// @var uarts
 ///
@@ -173,48 +185,62 @@ static HardwareSerial *uarts[] = {
 /// @brief The number of serial ports we support on the Arduino Nano Every.
 static const int _numUarts = sizeof(uarts) / sizeof(uarts[0]);
 
-int32_t arduinoNanoEveryInitUart(void) {
+int32_t arduinoNanoEveryInitUart(va_list args) {
+  (void) args;
   return 0;
 }
 
-int32_t arduinoNanoEveryConfigureUart(int32_t deviceId, uint32_t baud) {
+int32_t arduinoNanoEveryConfigureUart(va_list args) {
+  int32_t deviceId = va_arg(args, int32_t);
+  uint32_t baud = va_arg(args, uint32_t);
   int returnValue = -ERANGE;
-  
+
   if ((deviceId >= 0) && (deviceId < _numUarts)) {
     uarts[deviceId]->begin(baud);
-    // wait for serial deviceId to connect.
     while (!(*uarts[deviceId]));
     returnValue = 0;
   }
-  
+
   return returnValue;
 }
 
-int32_t arduinoNanoEveryPollUart(int32_t deviceId) {
+int32_t arduinoNanoEveryPollUart(va_list args) {
+  int32_t deviceId = va_arg(args, int32_t);
   int serialData = -ERANGE;
-  
+
   if ((deviceId >= 0) && (deviceId < _numUarts)) {
     serialData = uarts[deviceId]->read();
   }
-  
+
   return serialData;
 }
 
-ssize_t arduinoNanoEveryWriteUart(int32_t deviceId,
-  const uint8_t *data, ssize_t length
-) {
+int32_t arduinoNanoEveryWriteUart(va_list args) {
+  int32_t deviceId = va_arg(args, int32_t);
+  const uint8_t *data = va_arg(args, const uint8_t*);
+  ssize_t length = va_arg(args, ssize_t);
+  ssize_t *returnValue = va_arg(args, ssize_t*);
+
   ssize_t numBytesWritten = -ERANGE;
-  
+
   if ((deviceId >= 0) && (deviceId < _numUarts) && (length >= 0)) {
     numBytesWritten = uarts[deviceId]->write(data, length);
   }
-  
-  return numBytesWritten;
+
+  if (returnValue != NULL) {
+    *returnValue = numBytesWritten;
+  }
+  return (numBytesWritten >= 0) ? 0 : (int32_t) numBytesWritten;
 }
 
-bool arduinoNanoEveryIsUartConsole(int32_t deviceId) {
+int32_t arduinoNanoEveryIsUartConsole(va_list args) {
+  int32_t deviceId = va_arg(args, int32_t);
+  bool *returnValue = va_arg(args, bool*);
   (void) deviceId;
-  return true;
+  if (returnValue != NULL) {
+    *returnValue = true;
+  }
+  return 0;
 }
 
 /// @var halArduinoNanoEveryUartsOnline
@@ -224,59 +250,46 @@ static uint32_t halArduinoNanoEveryUartsOnline[] = {
   0x00000003,
 };
 
-static HalUart arduinoNanoEveryUartHal = {
-  .numSupported = _numUarts,
-  .online = halArduinoNanoEveryUartsOnline,
-  .init = arduinoNanoEveryInitUart,
-  .configure = arduinoNanoEveryConfigureUart,
-  .poll = arduinoNanoEveryPollUart,
-  .write = arduinoNanoEveryWriteUart,
-  .isConsole = arduinoNanoEveryIsUartConsole,
-};
-
-int32_t arduinoNanoEveryInitDio(void) {
+int32_t arduinoNanoEveryInitDio(va_list args) {
+  (void) args;
   return 0;
-};
-
-int32_t arduinoNanoEveryConfigureDio(int32_t deviceId, bool output) {
-  int32_t returnValue = -ERANGE;
-  
-  if ((deviceId >= DIO_START) && (deviceId < NUM_DIO_PINS)) {
-    uint8_t modes[2] = { INPUT, OUTPUT };
-    pinMode(deviceId, modes[output]);
-    
-    returnValue = 0;
-  }
-  
-  return returnValue;
 }
 
-int32_t arduinoNanoEveryWriteDio(int32_t deviceId, bool high) {
-  int32_t returnValue = -ERANGE;
-  
-  if ((deviceId >= DIO_START) && (deviceId < NUM_DIO_PINS)) {
-    uint8_t levels[2] = { LOW, HIGH };
-    digitalWrite(deviceId, levels[high]);
-    
-    returnValue = 0;
+static int32_t arduinoNanoEveryConfigureDioImpl(int32_t deviceId, bool output) {
+  if ((deviceId < DIO_START) || (deviceId >= NUM_DIO_PINS)) {
+    return -ERANGE;
   }
-  
-  return returnValue;
+  uint8_t modes[2] = { INPUT, OUTPUT };
+  pinMode(deviceId, modes[output]);
+  return 0;
 }
 
-/// @var arduinoNanoEveryImplDiosOnline
+int32_t arduinoNanoEveryConfigureDio(va_list args) {
+  int32_t deviceId = va_arg(args, int32_t);
+  bool output = (bool) va_arg(args, int);
+  return arduinoNanoEveryConfigureDioImpl(deviceId, output);
+}
+
+static int32_t arduinoNanoEveryWriteDioImpl(int32_t deviceId, bool high) {
+  if ((deviceId < DIO_START) || (deviceId >= NUM_DIO_PINS)) {
+    return -ERANGE;
+  }
+  uint8_t levels[2] = { LOW, HIGH };
+  digitalWrite(deviceId, levels[high]);
+  return 0;
+}
+
+int32_t arduinoNanoEveryWriteDio(va_list args) {
+  int32_t deviceId = va_arg(args, int32_t);
+  bool high = (bool) va_arg(args, int);
+  return arduinoNanoEveryWriteDioImpl(deviceId, high);
+}
+
+/// @var halArduinoNanoEveryDiosOnline
 ///
-/// @brief Bitmask array of online UARTs.
+/// @brief Bitmask array of online DIOs.
 static uint32_t halArduinoNanoEveryDiosOnline[] = {
   0x00003fff,
-};
-
-static HalDio arduinoNanoEveryDioHal = {
-  .numSupported = NUM_DIO_PINS,
-  .online = halArduinoNanoEveryDiosOnline,
-  .init = arduinoNanoEveryInitDio,
-  .configure = arduinoNanoEveryConfigureDio,
-  .write = arduinoNanoEveryWriteDio,
 };
 
 /// @var globalSpiConfigured
@@ -294,16 +307,6 @@ static bool globalSpiInUse = false;
 ///
 /// @brief Array of structures that will hold the information about SPI
 /// connections.
-///
-/// @details
-/// On the Arduino Nano Every, 5 DIO pins are reserved:
-/// - UART RX
-/// - UART TX
-/// - SPI SCK
-/// - SPI COPI
-/// - SPI CIPO
-/// So, the maximum number of devcies we can support is the number of DIO pins
-/// minus 5.
 static struct ArduinoNanoEverySpi {
   bool     configured;         // Will default to false
   uint8_t  chipSelect;
@@ -317,24 +320,30 @@ static struct ArduinoNanoEverySpi {
 static const int numArduinoSpis
   = sizeof(arduinoSpiDevices) / sizeof(arduinoSpiDevices[0]);
 
-int32_t arduinoNanoEveryInitSpi(void) {
+static int32_t arduinoNanoEveryInitSpiImpl(void) {
   if (globalSpiConfigured == false) {
-    // Set up SPI at the default speed.
     globalSpiConfigured = true;
     SPI.begin();
   }
-  
   return 0;
 }
 
-int32_t arduinoNanoEveryConfigureSpiDevice(int32_t deviceId,
-  uint8_t cs, uint8_t sck, uint8_t copi, uint8_t cipo, uint32_t baud
-) {
+int32_t arduinoNanoEveryInitSpi(va_list args) {
+  (void) args;
+  return arduinoNanoEveryInitSpiImpl();
+}
+
+int32_t arduinoNanoEveryConfigureSpiDevice(va_list args) {
+  int32_t deviceId = va_arg(args, int32_t);
+  uint8_t cs   = (uint8_t) va_arg(args, int);
+  uint8_t sck  = (uint8_t) va_arg(args, int);
+  uint8_t copi = (uint8_t) va_arg(args, int);
+  uint8_t cipo = (uint8_t) va_arg(args, int);
+  uint32_t baud = va_arg(args, uint32_t);
+
   if ((deviceId < 0) || (deviceId >= numArduinoSpis)) {
-    // Outside the limit of the devices we support.
     return -ENODEV;
   } else if ((cs < DIO_START) || (cs >= NUM_DIO_PINS)) {
-    // No such DIO pin to configure.
     return -ERANGE;
   } else if (
        (cs   == SPI_SCK_DIO)
@@ -348,107 +357,94 @@ int32_t arduinoNanoEveryConfigureSpiDevice(int32_t deviceId,
   } else if (arduinoSpiDevices[deviceId].configured == true) {
     return -EBUSY;
   }
-  
-  if (arduinoNanoEveryInitSpi() != 0) {
+
+  if (arduinoNanoEveryInitSpiImpl() != 0) {
     return -ENODEV;
   }
-  
-  // Configure the chip select DIO for output.
-  arduinoNanoEveryConfigureDio(cs, 1);
-  // Deselect the chip select pin.
-  arduinoNanoEveryWriteDio(cs, 1);
-  
-  // Configure our internal metadata for the device.
+
+  arduinoNanoEveryConfigureDioImpl(cs, 1);
+  arduinoNanoEveryWriteDioImpl(cs, 1);
+
   arduinoSpiDevices[deviceId].chipSelect = cs;
   arduinoSpiDevices[deviceId].baud = baud;
   arduinoSpiDevices[deviceId].configured = true;
-  
+
   return 0;
 }
 
-int32_t arduinoNanoEveryStartSpiTransfer(int32_t deviceId) {
+static int32_t arduinoNanoEveryStartSpiTransferImpl(int32_t deviceId) {
   if ((deviceId < 0) || (deviceId >= numArduinoSpis)
     || (arduinoSpiDevices[deviceId].configured == false)
   ) {
-    // Outside the limit of the devices we support.
     return -ENODEV;
   } else if (globalSpiInUse == true) {
     return -EBUSY;
   }
-  
-  // Mark the interface in use.
+
   globalSpiInUse = true;
-  
-  // Select the chip select pin.
-  arduinoNanoEveryWriteDio(arduinoSpiDevices[deviceId].chipSelect, 0);
-  
-  // Begin the transaction
+  arduinoNanoEveryWriteDioImpl(arduinoSpiDevices[deviceId].chipSelect, 0);
   SPI.beginTransaction(SPISettings(arduinoSpiDevices[deviceId].baud,
     MSBFIRST, SPI_MODE0));
-  
   arduinoSpiDevices[deviceId].transferInProgress = true;
-  
+
   return 0;
 }
 
-int32_t arduinoNanoEveryEndSpiTransfer(int32_t deviceId) {
+int32_t arduinoNanoEveryStartSpiTransfer(va_list args) {
+  int32_t deviceId = va_arg(args, int32_t);
+  return arduinoNanoEveryStartSpiTransferImpl(deviceId);
+}
+
+int32_t arduinoNanoEveryEndSpiTransfer(va_list args) {
+  int32_t deviceId = va_arg(args, int32_t);
+
   if ((deviceId < 0) || (deviceId >= numArduinoSpis)
     || (arduinoSpiDevices[deviceId].configured == false)
   ) {
-    // Outside the limit of the devices we support.
     return -ENODEV;
   }
-  
+
   arduinoSpiDevices[deviceId].transferInProgress = false;
-  
-  // End the transaction.
   SPI.endTransaction();
-  
-  // Deselect the chip select pin.
-  arduinoNanoEveryWriteDio(arduinoSpiDevices[deviceId].chipSelect, 1);
+  arduinoNanoEveryWriteDioImpl(arduinoSpiDevices[deviceId].chipSelect, 1);
   for (int ii = 0; ii < 8; ii++) {
-    SPI.transfer(0xFF); // 8 clock pulses
+    SPI.transfer(0xFF);
   }
-  
-  // Mark the interface not in use.
   globalSpiInUse = false;
-  
+
   return 0;
 }
 
-int32_t arduinoNanoEverySpiTransfer8(int32_t deviceId, uint8_t data) {
+int32_t arduinoNanoEverySpiTransfer8(va_list args) {
+  int32_t deviceId = va_arg(args, int32_t);
+  uint8_t data = (uint8_t) va_arg(args, int);
+
   if ((deviceId < 0) || (deviceId >= numArduinoSpis)
     || (arduinoSpiDevices[deviceId].configured == false)
   ) {
-    // Outside the limit of the devices we support.
     return -ENODEV;
   } else if (!arduinoSpiDevices[deviceId].transferInProgress) {
-    // The only error that arduinoNanoEveryStartSpiTransfer can return is
-    // ENODEV and we've already checked for that, so we don't need to check the
-    // return value here.
-    arduinoNanoEveryStartSpiTransfer(deviceId);
+    arduinoNanoEveryStartSpiTransferImpl(deviceId);
   }
-  
+
   return (int) SPI.transfer(data);
 }
 
-int32_t arduinoNanoEverySpiTransferBytes(int32_t deviceId,
-  uint8_t *data, uint32_t length
-) {
+int32_t arduinoNanoEverySpiTransferBytes(va_list args) {
+  int32_t deviceId = va_arg(args, int32_t);
+  uint8_t *data = va_arg(args, uint8_t*);
+  uint32_t length = va_arg(args, uint32_t);
+
   if ((deviceId < 0) || (deviceId >= numArduinoSpis)
     || (arduinoSpiDevices[deviceId].configured == false)
   ) {
-    // Outside the limit of the devices we support.
     return -ENODEV;
   } else if (!arduinoSpiDevices[deviceId].transferInProgress) {
-    // The only error that arduinoNanoEveryStartSpiTransfer can return is
-    // ENODEV and we've already checked for that, so we don't need to check the
-    // return value here.
-    arduinoNanoEveryStartSpiTransfer(deviceId);
+    arduinoNanoEveryStartSpiTransferImpl(deviceId);
   }
-  
+
   SPI.transfer(data, length);
-  
+
   return 0;
 }
 
@@ -459,113 +455,98 @@ static uint32_t halArduinoNanoEverySpisOnline[] = {
   0x00000003,
 };
 
-static HalSpi arduinoNanoEverySpiHal = {
-  .numSupported = MAX_SPI_DEVICES,
-  .online = halArduinoNanoEverySpisOnline,
-  .init = arduinoNanoEveryInitSpi,
-  .configure = arduinoNanoEveryConfigureSpiDevice,
-  .startTransfer = arduinoNanoEveryStartSpiTransfer,
-  .endTransfer = arduinoNanoEveryEndSpiTransfer,
-  .transfer8 = arduinoNanoEverySpiTransfer8,
-  .transferBytes = arduinoNanoEverySpiTransferBytes,
-};
-
 /// @var baseSystemTimeMs
 ///
 /// @brief The time provided by the user or some other process as a baseline
 /// time for the system.
 static int64_t baseSystemTimeMs = 0;
 
-int32_t arduinoNanoEveryTimeInit(void) {
+int32_t arduinoNanoEveryTimeInit(va_list args) {
+  (void) args;
   return 0;
 }
 
-int32_t arduinoNanoEverySetSystemTime(struct timespec *now) {
+int32_t arduinoNanoEverySetSystemTime(va_list args) {
+  struct timespec *now = va_arg(args, struct timespec*);
   if (now == NULL) {
     return -EINVAL;
   }
-  
+
   baseSystemTimeMs
     = (((int64_t) now->tv_sec) * ((int64_t) 1000))
     + (((int64_t) now->tv_nsec) / ((int64_t) 1000000));
-  
+
   return 0;
 }
 
-int64_t arduinoNanoEveryGetElapsedMilliseconds(int64_t startTime) {
+static int64_t arduinoNanoEveryGetElapsedMillisecondsImpl(int64_t startTime) {
   int64_t now = baseSystemTimeMs + millis();
-
   if (now < startTime) {
     return -1;
   }
-
   return now - startTime;
 }
 
-int64_t arduinoNanoEveryGetElapsedMicroseconds(int64_t startTime) {
-  return arduinoNanoEveryGetElapsedMilliseconds(
+int32_t arduinoNanoEveryGetElapsedMilliseconds(va_list args) {
+  int64_t startTime = va_arg(args, int64_t);
+  int64_t *returnValue = va_arg(args, int64_t*);
+  int64_t result = arduinoNanoEveryGetElapsedMillisecondsImpl(startTime);
+  if (returnValue != NULL) {
+    *returnValue = result;
+  }
+  return (result >= 0) ? 0 : -EIO;
+}
+
+int32_t arduinoNanoEveryGetElapsedMicroseconds(va_list args) {
+  int64_t startTime = va_arg(args, int64_t);
+  int64_t *returnValue = va_arg(args, int64_t*);
+  int64_t result = arduinoNanoEveryGetElapsedMillisecondsImpl(
     startTime / ((int64_t) 1000)) * ((int64_t) 1000);
+  if (returnValue != NULL) {
+    *returnValue = result;
+  }
+  return (result >= 0) ? 0 : -EIO;
 }
 
-int64_t arduinoNanoEveryGetElapsedNanoseconds(int64_t startTime) {
-  return arduinoNanoEveryGetElapsedMilliseconds(
+int32_t arduinoNanoEveryGetElapsedNanoseconds(va_list args) {
+  int64_t startTime = va_arg(args, int64_t);
+  int64_t *returnValue = va_arg(args, int64_t*);
+  int64_t result = arduinoNanoEveryGetElapsedMillisecondsImpl(
     startTime / ((int64_t) 1000000)) * ((int64_t) 1000000);
+  if (returnValue != NULL) {
+    *returnValue = result;
+  }
+  return (result >= 0) ? 0 : -EIO;
 }
 
-static HalClock arduinoNanoEveryClockHal = {
-  .init = arduinoNanoEveryTimeInit,
-  .setSystemTime = arduinoNanoEverySetSystemTime,
-  .getElapsedMilliseconds = arduinoNanoEveryGetElapsedMilliseconds,
-  .getElapsedMicroseconds = arduinoNanoEveryGetElapsedMicroseconds,
-  .getElapsedNanoseconds = arduinoNanoEveryGetElapsedNanoseconds,
-};
+int32_t arduinoNanoEveryEnterPowerMode(va_list args) {
+  HalPowerMode powerMode = (HalPowerMode) va_arg(args, int);
 
-int32_t arduinoNanoEveryEnterPowerMode(HalPowerMode powerMode) {
-  // You can't completely turn off a Nano 33 IoT from software.  The best we
-  // can do is put into a low power state, so do the same set of operations for
-  // both off and suspend.
   if ((powerMode == HAL_POWER_MODE_OFF)
     || (powerMode == HAL_POWER_MODE_SUSPEND)
   ) {
-    // 1. Disable ADC
     ADC0.CTRLA &= ~ADC_ENABLE_bm;
-    
-    // 2. Disable all peripherals via Power Reduction
-    SLPCTRL.CTRLA = SLPCTRL_SMODE_PDOWN_gc;  // Power-down mode
-    
-    // 3. Disable Brown-Out Detection (BOD) during sleep
-    //    This is critical for lowest power!
+    SLPCTRL.CTRLA = SLPCTRL_SMODE_PDOWN_gc;
     _PROTECTED_WRITE(BOD.CTRLA, BOD_SLEEP_DIS_gc);
-    
-    // 4. Disable all unnecessary peripherals
-    USART0.CTRLB = 0;   // Disable USART
+    USART0.CTRLB = 0;
     USART1.CTRLB = 0;
     USART2.CTRLB = 0;
-    TWI0.MCTRLA = 0;    // Disable I2C
-    SPI0.CTRLA = 0;     // Disable SPI
-    
-    // 5. Configure all pins to minimize leakage
-    //    Set unused pins as inputs with pullups disabled
+    TWI0.MCTRLA = 0;
+    SPI0.CTRLA = 0;
     for (uint8_t pin = 0; pin < NUM_TOTAL_PINS; pin++) {
       pinMode(pin, INPUT);
-      digitalWrite(pin, LOW);  // Disable pullup
+      digitalWrite(pin, LOW);
     }
-    
-    // 6. Enter sleep
     set_sleep_mode(SLEEP_MODE_PWR_DOWN);
     sleep_enable();
-    sei();  // Must enable interrupts for wake-up
+    sei();
     sleep_cpu();
   } else if (powerMode == HAL_POWER_MODE_RESET) {
     _PROTECTED_WRITE(RSTCTRL.SWRR, 1);
   }
-  
+
   return 0;
 }
-
-static HalPower arduinoNanoEveryPowerHal = {
-  .enterMode = arduinoNanoEveryEnterPowerMode,
-};
 
 /// @var blockDevices
 ///
@@ -588,17 +569,17 @@ static uint32_t arduinoNanoEveryBlockDevicesOnline[] = {
   0x00000000,
 };
 
-int32_t arduinoNanoEveryInitBlockDevice(void) {
+int32_t arduinoNanoEveryInitBlockDevice(va_list args) {
+  (void) args;
   if (SCHEDULER_STATE == NULL) {
     return -EBUSY;
   }
-  
-  // Create the SD card process.
+
   SdCardSpiArgs sdCardSpiArgs = {
-    .spiCsDio = SD_CARD_PIN_CHIP_SELECT,
+    .spiCsDio   = SD_CARD_PIN_CHIP_SELECT,
     .spiCopiDio = SPI_COPI_DIO,
     .spiCipoDio = SPI_CIPO_DIO,
-    .spiSckDio = SPI_SCK_DIO,
+    .spiSckDio  = SPI_SCK_DIO,
   };
 
   blockDevices[0] = halCommonInitRootSdSpiStorage(&sdCardSpiArgs);
@@ -606,19 +587,29 @@ int32_t arduinoNanoEveryInitBlockDevice(void) {
     return -ENODEV;
   }
   setOnline(HAL->blockDevice, 0);
-  
+
   return 0;
 }
 
-BlockDevice* arduinoNanoEveryGetBlockDevice(int32_t deviceId) {
+int32_t arduinoNanoEveryGetBlockDevice(va_list args) {
+  int32_t deviceId = va_arg(args, int32_t);
+  BlockDevice **returnValue = va_arg(args, BlockDevice**);
+
   if (!online(HAL->blockDevice, deviceId)) {
-    return NULL;
+    if (returnValue != NULL) {
+      *returnValue = NULL;
+    }
+    return -ENODEV;
   }
-  
-  return blockDevices[deviceId];
+
+  if (returnValue != NULL) {
+    *returnValue = blockDevices[deviceId];
+  }
+  return 0;
 }
 
-int32_t arduinoNanoEveryRestartBlockDevice(ProcessDescriptor *processDescriptor) {
+int32_t arduinoNanoEveryRestartBlockDevice(va_list args) {
+  ProcessDescriptor *processDescriptor = va_arg(args, ProcessDescriptor*);
   int32_t deviceId = (int32_t) (intptr_t) processDescriptor->restartArgs;
 
   SdCardSpiArgs sdCardSpiArgs = {
@@ -651,39 +642,73 @@ int32_t arduinoNanoEveryRestartBlockDevice(ProcessDescriptor *processDescriptor)
   return 0;
 }
 
-static HalBlockDevice arduinoNanoEveryBlockDeviceHal = {
-  .numSupported = _numBlockDevices,
-  .online = arduinoNanoEveryBlockDevicesOnline,
-  .init = arduinoNanoEveryInitBlockDevice,
-  .get = arduinoNanoEveryGetBlockDevice,
-  .restart = arduinoNanoEveryRestartBlockDevice,
-};
+int32_t halArduinoInit(void) {
+  halFunctions[HAL_MEMORY][HAL_MEMORY_PROCESS_STACK_SIZE]
+    = arduinoNanoEveryProcessStackSize;
+  halFunctions[HAL_MEMORY][HAL_MEMORY_MEMORY_MANAGER_STACK_SIZE]
+    = arduinoNanoEveryMemoryManagerStackSize;
+  halFunctions[HAL_MEMORY][HAL_MEMORY_BOTTOM_OF_HEAP]
+    = arduinoNanoEveryBottomOfHeap;
+  halFunctions[HAL_MEMORY][HAL_MEMORY_NUM_EXTRA_SCHEDULER_STACKS]
+    = arduinoNanoEveryNumExtraSchedulerStacks;
+  halFunctions[HAL_MEMORY][HAL_MEMORY_NUM_EXTRA_CONSOLE_STACKS]
+    = arduinoNanoEveryNumExtraConsoleStacks;
 
-/// @var arduinoNanoEveryHal
-///
-/// @brief The implementation of the Hal interface for the Arduino Nano Every.
-static Hal arduinoNanoEveryHal = {
-  // Memory definitions.
-  .memory = &arduinoNanoEveryMemoryHal,
-  .uart = &arduinoNanoEveryUartHal,
-  .dio = &arduinoNanoEveryDioHal,
-  .spi = &arduinoNanoEverySpiHal,
-  .clock = &arduinoNanoEveryClockHal,
-  .power = &arduinoNanoEveryPowerHal,
-  .timer = NULL,
-  .blockDevice = &arduinoNanoEveryBlockDeviceHal,
-  
-  // Root storage configuration.
-  .initRootStorage = halCommonInitRootFilesystem,
-};
+  halFunctions[HAL_UART][HAL_UART_INIT]       = arduinoNanoEveryInitUart;
+  halFunctions[HAL_UART][HAL_UART_CONFIGURE]  = arduinoNanoEveryConfigureUart;
+  halFunctions[HAL_UART][HAL_UART_POLL]       = arduinoNanoEveryPollUart;
+  halFunctions[HAL_UART][HAL_UART_WRITE]      = arduinoNanoEveryWriteUart;
+  halFunctions[HAL_UART][HAL_UART_IS_CONSOLE] = arduinoNanoEveryIsUartConsole;
 
-const Hal* halArduinoInit(void) {
-  if (halCommonInit(&arduinoNanoEveryHal) != 0) {
-    return NULL;
-  }
+  halFunctions[HAL_DIO][HAL_DIO_INIT]      = arduinoNanoEveryInitDio;
+  halFunctions[HAL_DIO][HAL_DIO_CONFIGURE] = arduinoNanoEveryConfigureDio;
+  halFunctions[HAL_DIO][HAL_DIO_WRITE]     = arduinoNanoEveryWriteDio;
 
-  return &arduinoNanoEveryHal;
+  halFunctions[HAL_SPI][HAL_SPI_INIT]           = arduinoNanoEveryInitSpi;
+  halFunctions[HAL_SPI][HAL_SPI_CONFIGURE]      = arduinoNanoEveryConfigureSpiDevice;
+  halFunctions[HAL_SPI][HAL_SPI_START_TRANSFER] = arduinoNanoEveryStartSpiTransfer;
+  halFunctions[HAL_SPI][HAL_SPI_END_TRANSFER]   = arduinoNanoEveryEndSpiTransfer;
+  halFunctions[HAL_SPI][HAL_SPI_TRANSFER8]      = arduinoNanoEverySpiTransfer8;
+  halFunctions[HAL_SPI][HAL_SPI_TRANSFER_BYTES] = arduinoNanoEverySpiTransferBytes;
+
+  halFunctions[HAL_CLOCK][HAL_CLOCK_INIT]
+    = arduinoNanoEveryTimeInit;
+  halFunctions[HAL_CLOCK][HAL_CLOCK_SET_SYSTEM_TIME]
+    = arduinoNanoEverySetSystemTime;
+  halFunctions[HAL_CLOCK][HAL_CLOCK_GET_ELAPSED_MILLISECONDS]
+    = arduinoNanoEveryGetElapsedMilliseconds;
+  halFunctions[HAL_CLOCK][HAL_CLOCK_GET_ELAPSED_MICROSECONDS]
+    = arduinoNanoEveryGetElapsedMicroseconds;
+  halFunctions[HAL_CLOCK][HAL_CLOCK_GET_ELAPSED_NANOSECONDS]
+    = arduinoNanoEveryGetElapsedNanoseconds;
+
+  halFunctions[HAL_POWER][HAL_POWER_ENTER_MODE] = arduinoNanoEveryEnterPowerMode;
+
+  // No timer implementation for this platform — leave HAL_TIMER entries NULL.
+
+  halFunctions[HAL_BLOCK_DEVICE][HAL_BLOCK_DEVICE_INIT]
+    = arduinoNanoEveryInitBlockDevice;
+  halFunctions[HAL_BLOCK_DEVICE][HAL_BLOCK_DEVICE_GET]
+    = arduinoNanoEveryGetBlockDevice;
+  halFunctions[HAL_BLOCK_DEVICE][HAL_BLOCK_DEVICE_RESTART]
+    = arduinoNanoEveryRestartBlockDevice;
+
+  halCommonUart.numSupported = _numUarts;
+  halCommonUart.online       = halArduinoNanoEveryUartsOnline;
+
+  halCommonDio.numSupported = NUM_DIO_PINS;
+  halCommonDio.online       = halArduinoNanoEveryDiosOnline;
+
+  halCommonSpi.numSupported = MAX_SPI_DEVICES;
+  halCommonSpi.online       = halArduinoNanoEverySpisOnline;
+
+  halCommonTimer.numSupported = 0;
+  halCommonTimer.online       = NULL;
+
+  halCommonBlockDevice.numSupported = _numBlockDevices;
+  halCommonBlockDevice.online       = arduinoNanoEveryBlockDevicesOnline;
+
+  return halCommonInit();
 }
 
 #endif // ARDUINO_AVR_NANO_EVERY
-

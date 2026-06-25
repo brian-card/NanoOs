@@ -90,6 +90,117 @@ typedef enum HalPowerMode {
   HAL_POWER_MODE_NUM_TYPES,
 } HalPowerMode;
 
+/// @enum HalSubsystem
+///
+/// @brief Identifiers for each subsystem in the HAL.
+typedef enum HalSubsystem {
+  HAL_MEMORY,
+  HAL_UART,
+  HAL_DIO,
+  HAL_SPI,
+  HAL_CLOCK,
+  HAL_POWER,
+  HAL_TIMER,
+  HAL_BLOCK_DEVICE,
+  HAL_NUM_SUBSYSTEMS,
+} HalSubsystem;
+
+/// @enum HalMemoryName
+///
+/// @brief Function indices for the HalMemory subsystem.
+typedef enum HalMemoryName {
+  HAL_MEMORY_PROCESS_STACK_SIZE,
+  HAL_MEMORY_MEMORY_MANAGER_STACK_SIZE,
+  HAL_MEMORY_BOTTOM_OF_HEAP,
+  HAL_MEMORY_NUM_EXTRA_SCHEDULER_STACKS,
+  HAL_MEMORY_NUM_EXTRA_CONSOLE_STACKS,
+  HAL_MEMORY_NUM_FNS,
+} HalMemoryName;
+
+/// @enum HalUartName
+///
+/// @brief Function indices for the HalUart subsystem.
+typedef enum HalUartName {
+  HAL_UART_INIT,
+  HAL_UART_CONFIGURE,
+  HAL_UART_POLL,
+  HAL_UART_WRITE,
+  HAL_UART_IS_CONSOLE,
+  HAL_UART_NUM_FNS,
+} HalUartName;
+
+/// @enum HalDioName
+///
+/// @brief Function indices for the HalDio subsystem.
+typedef enum HalDioName {
+  HAL_DIO_INIT,
+  HAL_DIO_CONFIGURE,
+  HAL_DIO_WRITE,
+  HAL_DIO_NUM_FNS,
+} HalDioName;
+
+/// @enum HalSpiName
+///
+/// @brief Function indices for the HalSpi subsystem.
+typedef enum HalSpiName {
+  HAL_SPI_INIT,
+  HAL_SPI_CONFIGURE,
+  HAL_SPI_START_TRANSFER,
+  HAL_SPI_END_TRANSFER,
+  HAL_SPI_TRANSFER8,
+  HAL_SPI_TRANSFER_BYTES,
+  HAL_SPI_NUM_FNS,
+} HalSpiName;
+
+/// @enum HalClockName
+///
+/// @brief Function indices for the HalClock subsystem.
+typedef enum HalClockName {
+  HAL_CLOCK_INIT,
+  HAL_CLOCK_SET_SYSTEM_TIME,
+  HAL_CLOCK_GET_ELAPSED_MILLISECONDS,
+  HAL_CLOCK_GET_ELAPSED_MICROSECONDS,
+  HAL_CLOCK_GET_ELAPSED_NANOSECONDS,
+  HAL_CLOCK_NUM_FNS,
+} HalClockName;
+
+/// @enum HalPowerName
+///
+/// @brief Function indices for the HalPower subsystem.
+typedef enum HalPowerName {
+  HAL_POWER_ENTER_MODE,
+  HAL_POWER_NUM_FNS,
+} HalPowerName;
+
+/// @enum HalTimerName
+///
+/// @brief Function indices for the HalTimer subsystem.
+typedef enum HalTimerName {
+  HAL_TIMER_INIT,
+  HAL_TIMER_INIT_DEVICE,
+  HAL_TIMER_CONFIG_ONE_SHOT,
+  HAL_TIMER_CONFIGURED_NANOSECONDS,
+  HAL_TIMER_REMAINING_NANOSECONDS,
+  HAL_TIMER_CANCEL,
+  HAL_TIMER_CANCEL_AND_GET,
+  HAL_TIMER_NUM_FNS,
+} HalTimerName;
+
+/// @enum HalBlockDeviceName
+///
+/// @brief Function indices for the HalBlockDevice subsystem.
+typedef enum HalBlockDeviceName {
+  HAL_BLOCK_DEVICE_INIT,
+  HAL_BLOCK_DEVICE_GET,
+  HAL_BLOCK_DEVICE_RESTART,
+  HAL_BLOCK_DEVICE_NUM_FNS,
+} HalBlockDeviceName;
+
+/// @def HAL_MAX_SUBSYSTEM_FNS
+///
+/// @brief Maximum number of functions in any single HAL subsystem.
+#define HAL_MAX_SUBSYSTEM_FNS ((uint32_t) HAL_TIMER_NUM_FNS)
+
 // Standard C types
 typedef intptr_t ssize_t;
 typedef uintptr_t size_t;
