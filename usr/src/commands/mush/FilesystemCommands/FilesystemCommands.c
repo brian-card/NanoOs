@@ -165,8 +165,7 @@ void* runFsCommand(void *args) {
     // we set the return value of posix_spawn to errno so that we can just use
     // whatever the value of errno is here for the return value.  We return a
     // negative errno on failure, so negate whatever errno is.
-    printString(__func__);
-    printString(" failed\n");
+    fprintf(stderr, "%s failed\n", __func__);
     returnValue = (void*) ((intptr_t) -errno);
   }
   

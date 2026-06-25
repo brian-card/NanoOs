@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
   while (fgets(buffer, sizeof(buffer), stdin)) {
     if (strstr(buffer, argv[1])) {
       if (fputs(buffer, stdout) == EOF) {
-        printString("ERROR: Could not fputs buffer\n");
+        fprintf(stderr, "ERROR: Could not fputs buffer\n");
       }
     }
   }
