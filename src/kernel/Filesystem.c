@@ -862,7 +862,8 @@ int getFileBlockMetadataFromFile(FILE *stream, FileBlockMetadata *metadata) {
     processMessage = getAvailableMessage();
   }
   if (processMessage == NULL) {
-    printf("%d: %s: ERROR: Out of process messages\n", getRunningPid(), __func__);
+    fprintf(stderr, "%d: %s: ERROR: Out of process messages\n",
+      getRunningPid(), __func__);
     return -ENOMEM;
   }
 
@@ -872,7 +873,7 @@ int getFileBlockMetadataFromFile(FILE *stream, FileBlockMetadata *metadata) {
   if (sendProcessMessageToPid(SCHEDULER_STATE->rootFsPid, processMessage)
     != processSuccess
   ) {
-    printf("ERROR! Failed to send message to filesystem to get file "
+    fprintf(stderr, "ERROR! Failed to send message to filesystem to get file "
       "block metadata\n");
     processMessageRelease(processMessage);
     return -EIO;
@@ -902,7 +903,7 @@ int getFileBlockMetadataFromPath(const char *path,
 
   FILE *stream = fopen(path, "r");
   if (stream == NULL) {
-    printf("%d: %s: ERROR! Could not open file \"%s\"\n",
+    fprintf(stderr, "%d: %s: ERROR! Could not open file \"%s\"\n",
       getRunningPid(), __func__, path);
     return -EIO;
   }

@@ -267,7 +267,9 @@ int printList_(const char *firstString, ...) {
       }
       returnValue += rv;
     } else {
-      printf("Invalid type %d.  Exiting parsing.\n", (int) (intptr_t) type);
+      printString("Invalid type ");
+      printInt((intptr_t) type);
+      printString(".  Exiting parsing.\n");
       returnValue = -EINVAL;
       break;
     }
@@ -865,7 +867,7 @@ ConsoleBuffer* nanoOsWaitForInput(void) {
   ConsoleBuffer *consoleBuffer = NULL;
   FileDescriptor *inputFd = schedulerGetFileDescriptor(stdin);
   if (inputFd == NULL) {
-    printf("ERROR: Could not get input file descriptor for process %d"
+    fprintf(stderr, "ERROR: Could not get input file descriptor for process %d"
       " and stream %d.\n", getRunningPid(), (int) (intptr_t) stdin);
 
     // We can't proceed, so bail.

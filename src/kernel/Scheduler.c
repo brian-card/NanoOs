@@ -773,16 +773,18 @@ ProcessId schedulerGetNumRunningProcesses(struct timespec *timeout) {
     &schedulerGetNumRunningProcessesArgs,
     sizeof(schedulerGetNumRunningProcessesArgs), true);
   if (processMessage == NULL) {
-    printf("ERROR: Could not communicate with scheduler.\n");
+    fprintf(stderr, "ERROR: Could not communicate with scheduler.\n");
     goto exit;
   }
 
   waitStatus = processMessageWaitForDone(processMessage, timeout);
   if (waitStatus != processSuccess) {
     if (waitStatus == processTimedout) {
-      printf("Command to get the number of running processes timed out.\n");
+      fprintf(stderr,
+        "Command to get the number of running processes timed out.\n");
     } else {
-      printf("Command to get the number of running processes failed.\n");
+      fprintf(stderr,
+        "Command to get the number of running processes failed.\n");
     }
 
     // Without knowing how many processes there are, we can't continue.  Bail.
@@ -791,7 +793,7 @@ ProcessId schedulerGetNumRunningProcesses(struct timespec *timeout) {
 
   numProcessDescriptors = schedulerGetNumRunningProcessesArgs.returnValue;
   if (numProcessDescriptors == 0) {
-    printf("ERROR: Number of running processes returned from the "
+    fprintf(stderr, "ERROR: Number of running processes returned from the "
       "scheduler is 0.\n");
     errno = schedulerGetNumRunningProcessesArgs.errorNumber;
     goto releaseMessage;
@@ -799,7 +801,7 @@ ProcessId schedulerGetNumRunningProcesses(struct timespec *timeout) {
 
 releaseMessage:
   if (processMessageRelease(processMessage) != processSuccess) {
-    printf("ERROR: Could not release message sent to scheduler for "
+    fprintf(stderr, "ERROR: Could not release message sent to scheduler for "
       "getting the number of running processes.\n");
   }
 
@@ -838,7 +840,7 @@ ProcessInfo* schedulerGetProcessInfo(void) {
   ProcessInfo *processInfo = (ProcessInfo*) malloc(sizeof(ProcessInfo)
     + ((numProcessDescriptors - 1) * sizeof(ProcessInfoElement)));
   if (processInfo == NULL) {
-    printf(
+    fprintf(stderr,
       "ERROR: Could not allocate memory for processInfo in getProcessInfo.\n");
     goto exit;
   }
@@ -864,16 +866,17 @@ ProcessInfo* schedulerGetProcessInfo(void) {
     sizeof(schedulerGetProcessInfoArgs), true);
 
   if (processMessage == NULL) {
-    printf("ERROR: Could not send scheduler message to get process info.\n");
+    fprintf(stderr,
+      "ERROR: Could not send scheduler message to get process info.\n");
     goto freeMemory;
   }
 
   waitStatus = processMessageWaitForDone(processMessage, &timeout);
   if (waitStatus != processSuccess) {
     if (waitStatus == processTimedout) {
-      printf("Command to get process information timed out.\n");
+      fprintf(stderr, "Command to get process information timed out.\n");
     } else {
-      printf("Command to get process information failed.\n");
+      fprintf(stderr, "Command to get process information failed.\n");
     }
 
     // Without knowing the data for the processes, we can't display them.  Bail.
@@ -887,7 +890,7 @@ ProcessInfo* schedulerGetProcessInfo(void) {
   }
 
   if (processMessageRelease(processMessage) != processSuccess) {
-    printf("ERROR: Could not release message sent to scheduler for "
+    fprintf(stderr, "ERROR: Could not release message sent to scheduler for "
       "getting the number of running processes.\n");
   }
 
@@ -895,7 +898,7 @@ ProcessInfo* schedulerGetProcessInfo(void) {
 
 releaseMessage:
   if (processMessageRelease(processMessage) != processSuccess) {
-    printf("ERROR: Could not release message sent to scheduler for "
+    fprintf(stderr, "ERROR: Could not release message sent to scheduler for "
       "getting the number of running processes.\n");
   }
 
@@ -925,7 +928,7 @@ int schedulerKillProcess(ProcessId pid) {
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_KILL_PROCESS,
     &schedulerKillProcessArgs, sizeof(schedulerKillProcessArgs), true);
   if (processMessage == NULL) {
-    printf("ERROR: Could not communicate with scheduler.\n");
+    fprintf(stderr, "ERROR: Could not communicate with scheduler.\n");
     return 1;
   }
 
@@ -947,22 +950,23 @@ int schedulerKillProcess(ProcessId pid) {
     if (returnValue == 0) {
       printf("Termination of process %d successful.\n", pid);
     } else {
-      printf("Process termination returned status \"%s\".\n",
+      fprintf(stderr, "Process termination returned status \"%s\".\n",
         strerror(schedulerKillProcessArgs.errorNumber));
       errno = schedulerKillProcessArgs.errorNumber;
     }
   } else {
     returnValue = 1;
     if (waitStatus == processTimedout) {
-      printf("Command to kill PID %d timed out.\n", pid);
+      fprintf(stderr, "Command to kill PID %d timed out.\n", pid);
     } else {
-      printf("Command to kill PID %d returned status %d.\n", pid, waitStatus);
+      fprintf(stderr, "Command to kill PID %d returned status %d.\n",
+        pid, waitStatus);
     }
   }
 
   if (processMessageRelease(processMessage) != processSuccess) {
     returnValue = 1;
-    printf("ERROR: "
+    fprintf(stderr, "ERROR: "
       "Could not release message sent to scheduler for kill command.\n");
   }
 
@@ -993,7 +997,7 @@ int schedulerSendSignal(ProcessId pid, int signal) {
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_SEND_SIGNAL,
     /* data= */ &sendSignalArgs, /* size= */ sizeof(sendSignalArgs), true);
   if (processMessage == NULL) {
-    printf("ERROR: Could not communicate with scheduler.\n");
+    fprintf(stderr, "ERROR: Could not communicate with scheduler.\n");
     errno = EOTHER;
     return returnValue; // -1
   }
@@ -1025,7 +1029,7 @@ int schedulerSetProcessUser(UserId userId) {
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_SET_PROCESS_USER,
     &schedulerSetProcessUserArgs, sizeof(schedulerSetProcessUserArgs), true);
   if (processMessage == NULL) {
-    printf("ERROR: Could not communicate with scheduler.\n");
+    fprintf(stderr, "ERROR: Could not communicate with scheduler.\n");
     return returnValue; // -1
   }
 
@@ -1035,7 +1039,7 @@ int schedulerSetProcessUser(UserId userId) {
 
   if (returnValue != 0) {
     errno = schedulerSetProcessUserArgs.errorNumber;
-    printf("Scheduler returned \"%s\" for setProcessUser.\n",
+    fprintf(stderr, "Scheduler returned \"%s\" for setProcessUser.\n",
       strerror(errno));
   }
 
@@ -1086,7 +1090,7 @@ const char* schedulerGetHostname(void) {
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_GET_HOSTNAME,
     &schedulerGetHostnameArgs, sizeof(schedulerGetHostnameArgs), true);
   if (processMessage == NULL) {
-    printf("ERROR: Could not communicate with scheduler.\n");
+    fprintf(stderr, "ERROR: Could not communicate with scheduler.\n");
     return schedulerGetHostnameArgs.hostname; // NULL
   }
 
@@ -1123,14 +1127,15 @@ int schedulerExecve(const char *pathname,
 
   ExecArgs *execArgs = (ExecArgs*) calloc(1, sizeof(ExecArgs));
   if (execArgs == NULL) {
-    printf("%s:%d: Allocating execArgs failed\n", __func__, __LINE__);
+    fprintf(stderr, "%s:%d: Allocating execArgs failed\n", __func__, __LINE__);
     errno = ENOMEM;
     return -1;
   }
 
   execArgs->pathname = (char*) malloc(strlen(pathname) + 1);
   if (execArgs->pathname == NULL) {
-    printf("%s:%d: Allocating execArgs->pathname failed\n", __func__, __LINE__);
+    fprintf(stderr, "%s:%d: Allocating execArgs->pathname failed\n",
+      __func__, __LINE__);
     errno = ENOMEM;
     goto freeExecArgs;
   }
@@ -1141,7 +1146,8 @@ int schedulerExecve(const char *pathname,
   argvLen++; // Account for the terminating NULL element
   execArgs->argv = (char**) calloc(1, argvLen * sizeof(char*));
   if (execArgs->argv == NULL) {
-    printf("%s:%d: Allocating execArgs->argv failed\n", __func__, __LINE__);
+    fprintf(stderr, "%s:%d: Allocating execArgs->argv failed\n",
+      __func__, __LINE__);
     errno = ENOMEM;
     goto freeExecArgs;
   }
@@ -1154,7 +1160,7 @@ int schedulerExecve(const char *pathname,
     // above, so it's safe to use strlen.
     execArgs->argv[ii] = (char*) malloc(strlen(argv[ii]) + 1);
     if (execArgs->argv[ii] == NULL) {
-      printf("%s:%d: Allocating execArgs->argv[%zu] failed\n",
+      fprintf(stderr, "%s:%d: Allocating execArgs->argv[%zu] failed\n",
         __func__, __LINE__, ii);
       errno = ENOMEM;
       goto freeExecArgs;
@@ -1169,7 +1175,8 @@ int schedulerExecve(const char *pathname,
     envpLen++; // Account for the terminating NULL element
     execArgs->envp = (char**) calloc(1, envpLen * sizeof(char*));
     if (execArgs->envp == NULL) {
-      printf("%s:%d: Allocating execArgs->envp failed\n", __func__, __LINE__);
+      fprintf(stderr, "%s:%d: Allocating execArgs->envp failed\n",
+        __func__, __LINE__);
       errno = ENOMEM;
       goto freeExecArgs;
     }
@@ -1181,7 +1188,7 @@ int schedulerExecve(const char *pathname,
       // above, so it's safe to use strlen.
       execArgs->envp[ii] = (char*) malloc(strlen(envp[ii]) + 1);
       if (execArgs->envp[ii] == NULL) {
-        printf("%s:%d: Allocating execArgs->envp[%zu] failed\n",
+        fprintf(stderr, "%s:%d: Allocating execArgs->envp[%zu] failed\n",
           __func__, __LINE__, ii);
         errno = ENOMEM;
         goto freeExecArgs;
