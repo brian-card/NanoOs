@@ -993,7 +993,7 @@ int schedulerSendSignal(ProcessId pid, int signal) {
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_SEND_SIGNAL,
     /* data= */ &sendSignalArgs, /* size= */ sizeof(sendSignalArgs), true);
   if (processMessage == NULL) {
-    printString("ERROR: Could not communicate with scheduler.\n");
+    printf("ERROR: Could not communicate with scheduler.\n");
     errno = EOTHER;
     return returnValue; // -1
   }
@@ -1025,7 +1025,7 @@ int schedulerSetProcessUser(UserId userId) {
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_SET_PROCESS_USER,
     &schedulerSetProcessUserArgs, sizeof(schedulerSetProcessUserArgs), true);
   if (processMessage == NULL) {
-    printString("ERROR: Could not communicate with scheduler.\n");
+    printf("ERROR: Could not communicate with scheduler.\n");
     return returnValue; // -1
   }
 
@@ -1086,7 +1086,7 @@ const char* schedulerGetHostname(void) {
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_GET_HOSTNAME,
     &schedulerGetHostnameArgs, sizeof(schedulerGetHostnameArgs), true);
   if (processMessage == NULL) {
-    printString("ERROR: Could not communicate with scheduler.\n");
+    printf("ERROR: Could not communicate with scheduler.\n");
     return schedulerGetHostnameArgs.hostname; // NULL
   }
 
@@ -1123,22 +1123,14 @@ int schedulerExecve(const char *pathname,
 
   ExecArgs *execArgs = (ExecArgs*) calloc(1, sizeof(ExecArgs));
   if (execArgs == NULL) {
-    printString(__func__);
-    printString(": ");
-    printInt(__LINE__);
-    printString(": ");
-    printString("Allocating execArgs failed\n");
+    printf("%s:%d: Allocating execArgs failed\n", __func__, __LINE__);
     errno = ENOMEM;
     return -1;
   }
 
   execArgs->pathname = (char*) malloc(strlen(pathname) + 1);
   if (execArgs->pathname == NULL) {
-    printString(__func__);
-    printString(": ");
-    printInt(__LINE__);
-    printString(": ");
-    printString("Allocating execArgs->pathname failed\n");
+    printf("%s:%d: Allocating execArgs->pathname failed\n", __func__, __LINE__);
     errno = ENOMEM;
     goto freeExecArgs;
   }
@@ -1149,11 +1141,7 @@ int schedulerExecve(const char *pathname,
   argvLen++; // Account for the terminating NULL element
   execArgs->argv = (char**) calloc(1, argvLen * sizeof(char*));
   if (execArgs->argv == NULL) {
-    printString(__func__);
-    printString(": ");
-    printInt(__LINE__);
-    printString(": ");
-    printString("Allocating execArgs->argv failed\n");
+    printf("%s:%d: Allocating execArgs->argv failed\n", __func__, __LINE__);
     errno = ENOMEM;
     goto freeExecArgs;
   }
@@ -1166,13 +1154,8 @@ int schedulerExecve(const char *pathname,
     // above, so it's safe to use strlen.
     execArgs->argv[ii] = (char*) malloc(strlen(argv[ii]) + 1);
     if (execArgs->argv[ii] == NULL) {
-      printString(__func__);
-      printString(": ");
-      printInt(__LINE__);
-      printString(": ");
-      printString("Allocating execArgs->argv[");
-      printInt(ii);
-      printString("] failed\n");
+      printf("%s:%d: Allocating execArgs->argv[%zu] failed\n",
+        __func__, __LINE__, ii);
       errno = ENOMEM;
       goto freeExecArgs;
     }
@@ -1186,11 +1169,7 @@ int schedulerExecve(const char *pathname,
     envpLen++; // Account for the terminating NULL element
     execArgs->envp = (char**) calloc(1, envpLen * sizeof(char*));
     if (execArgs->envp == NULL) {
-      printString(__func__);
-      printString(": ");
-      printInt(__LINE__);
-      printString(": ");
-      printString("Allocating execArgs->envp failed\n");
+      printf("%s:%d: Allocating execArgs->envp failed\n", __func__, __LINE__);
       errno = ENOMEM;
       goto freeExecArgs;
     }
@@ -1202,13 +1181,8 @@ int schedulerExecve(const char *pathname,
       // above, so it's safe to use strlen.
       execArgs->envp[ii] = (char*) malloc(strlen(envp[ii]) + 1);
       if (execArgs->envp[ii] == NULL) {
-        printString(__func__);
-        printString(": ");
-        printInt(__LINE__);
-        printString(": ");
-        printString("Allocating execArgs->envp[");
-        printInt(ii);
-        printString("] failed\n");
+        printf("%s:%d: Allocating execArgs->envp[%zu] failed\n",
+          __func__, __LINE__, ii);
         errno = ENOMEM;
         goto freeExecArgs;
       }

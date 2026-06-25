@@ -352,13 +352,13 @@ int nanoOsSethostname(const char *name, size_t len) {
   
   FILE *hostnameFile = fopen("/etc/hostname", "r");
   if (hostnameFile == NULL) {
-    printString("ERROR! fopen of hostname returned NULL!\n");
+    printf("ERROR! fopen of hostname returned NULL!\n");
     return -1;
   }
-  
+
   size_t bytesWritten = fwrite(name, 1, len, hostnameFile);
   if (bytesWritten != len) {
-    printString("ERROR! Could not write hostname file.\n");
+    printf("ERROR! Could not write hostname file.\n");
     fclose(hostnameFile);
     return -1;
   }

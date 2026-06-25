@@ -46,20 +46,15 @@
   do { \
     int64_t _nanoOsDebugTs = 0; \
     HAL->clock->getElapsedMicroseconds(0, &_nanoOsDebugTs); \
-    printString("["); \
-    printInt(_nanoOsDebugTs); \
-    printString(" Process "); \
-    printInt(getRunningPid()); \
-    printString(" "); \
-    printString((strrchr(__FILE__, '/')) \
-      ? (strrchr(__FILE__, '/')  + 1) \
-      : __FILE__); \
-    printString(":"); \
-    printString(__func__); \
-    printString("."); \
-    printInt(__LINE__); \
-    printString("] "); \
-    printString(message); \
+    printf("[%lld Process %d %s:%s.%d] %s", \
+      _nanoOsDebugTs, \
+      getRunningPid(), \
+      (strrchr(__FILE__, '/')) \
+        ? (strrchr(__FILE__, '/') + 1) \
+        : __FILE__, \
+      __func__, \
+      __LINE__, \
+      message); \
   } while (0)
 
 /// @def printDebugStackDepth()
@@ -68,30 +63,30 @@
 #define printDebugStackDepth() \
   do { \
     char temp; \
-    printString("Stack depth: "); \
-    printInt(ABS_DIFF((uintptr_t) &temp, (uintptr_t) getRunningCoroutine())); \
-    printString("\n"); \
+    printf("Stack depth: %llu\n", \
+      (unsigned long long int) ABS_DIFF( \
+        (uintptr_t) &temp, (uintptr_t) getRunningCoroutine())); \
   } while (0)
 
 /// @def printDebugString
 ///
 /// @brief Print a string value when userspace debugging is enabled.
-#define printDebugString(message) printString(message)
+#define printDebugString(message) printf("%s", message)
 
 /// @def printDebugInt
 ///
 /// @brief Print an integer value when userspace debugging is enabled.
-#define printDebugInt(intValue) printInt(intValue)
+#define printDebugInt(intValue) printf("%lld", (long long int) (intValue))
 
 /// @def printDebugDouble
 ///
 /// @brief Print a double value when userspace debugging is enabled.
-#define printDebugDouble(floatingPointValue) printDouble(floatingPointValue)
+#define printDebugDouble(floatingPointValue) printf("%f", (floatingPointValue))
 
 /// @def printDebugHex
 ///
 /// @brief Print a hex value when userspace debugging is enabled.
-#define printDebugHex(hexValue) printHex(hexValue)
+#define printDebugHex(hexValue) printf("%llx", (unsigned long long int) (hexValue))
 
 #else // defined(NANO_OS_USER_DEBUG) || defined(NANO_OS_DEBUG)
 

@@ -1289,8 +1289,7 @@ size_t getFreeMemory(void) {
     &memoryManagerGetFreeMemoryArgs,
     sizeof(memoryManagerGetFreeMemoryArgs), true);
   if (sent == NULL) {
-    printString(__func__);
-    printString(": ERROR: initSendProcessMessageToPid returned NULL\n");
+    printf("%s: ERROR: initSendProcessMessageToPid returned NULL\n", __func__);
     return returnValue; // 0
   }
 
@@ -1357,8 +1356,8 @@ void memoryManagerFree(void *ptr) {
     MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_FREE,
     &memoryManagerFreeArgs, sizeof(memoryManagerFreeArgs), false);
   if (processMessage == NULL) {
-    printString("ERROR: Could not send MEMORY_MANAGER_FREE message to ");
-    printString("memory manager; memory leak\n");
+    printf("ERROR: Could not send MEMORY_MANAGER_FREE message to "
+      "memory manager; memory leak\n");
     return;
   }
 
