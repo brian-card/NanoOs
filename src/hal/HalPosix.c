@@ -215,72 +215,77 @@ int32_t posixRestartBlockDevice(va_list args) {
   return 0;
 }
 
+static HalFunction posixMemoryFunctions[HAL_MEMORY_NUM_FNS] = {
+  [HAL_MEMORY_PROCESS_STACK_SIZE]         = posixProcessStackSize,
+  [HAL_MEMORY_MEMORY_MANAGER_STACK_SIZE]  = posixMemoryManagerStackSize,
+  [HAL_MEMORY_BOTTOM_OF_HEAP]             = posixBottomOfHeap,
+  [HAL_MEMORY_NUM_EXTRA_SCHEDULER_STACKS] = posixNumExtraSchedulerStacks,
+  [HAL_MEMORY_NUM_EXTRA_CONSOLE_STACKS]   = posixNumExtraConsoleStacks,
+};
+
+static HalFunction posixUartFunctions[HAL_UART_NUM_FNS] = {
+  [HAL_UART_INIT]       = posixInitUart,
+  [HAL_UART_CONFIGURE]  = posixConfigureUart,
+  [HAL_UART_POLL]       = posixPollUart,
+  [HAL_UART_WRITE]      = posixWriteUart,
+  [HAL_UART_IS_CONSOLE] = posixIsUartConsole,
+};
+
+static HalFunction posixDioFunctions[HAL_DIO_NUM_FNS] = {
+  [HAL_DIO_INIT]      = posixInitDio,
+  [HAL_DIO_CONFIGURE] = posixConfigureDio,
+  [HAL_DIO_WRITE]     = posixWriteDio,
+};
+
+static HalFunction posixSpiFunctions[HAL_SPI_NUM_FNS] = {
+  [HAL_SPI_INIT]           = posixInitSpi,
+  [HAL_SPI_CONFIGURE]      = posixConfigureSpiDevice,
+  [HAL_SPI_START_TRANSFER] = posixStartSpiTransfer,
+  [HAL_SPI_END_TRANSFER]   = posixEndSpiTransfer,
+  [HAL_SPI_TRANSFER8]      = posixSpiTransfer8,
+  [HAL_SPI_TRANSFER_BYTES] = posixSpiTransferBytes,
+};
+
+static HalFunction posixClockFunctions[HAL_CLOCK_NUM_FNS] = {
+  [HAL_CLOCK_INIT]                    = posixTimeInit,
+  [HAL_CLOCK_SET_SYSTEM_TIME]         = posixSetSystemTime,
+  [HAL_CLOCK_GET_ELAPSED_MILLISECONDS] = posixGetElapsedMilliseconds,
+  [HAL_CLOCK_GET_ELAPSED_MICROSECONDS] = posixGetElapsedMicroseconds,
+  [HAL_CLOCK_GET_ELAPSED_NANOSECONDS]  = posixGetElapsedNanoseconds,
+};
+
+static HalFunction posixPowerFunctions[HAL_POWER_NUM_FNS] = {
+  [HAL_POWER_ENTER_MODE] = posixEnterPowerMode,
+};
+
+static HalFunction posixTimerFunctions[HAL_TIMER_NUM_FNS] = {
+  [HAL_TIMER_INIT]                  = posixInitTimer,
+  [HAL_TIMER_INIT_DEVICE]           = posixInitTimerDevice,
+  [HAL_TIMER_CONFIG_ONE_SHOT]       = posixConfigOneShotTimer,
+  [HAL_TIMER_CONFIGURED_NANOSECONDS] = posixConfiguredTimerNanoseconds,
+  [HAL_TIMER_REMAINING_NANOSECONDS]  = posixRemainingTimerNanoseconds,
+  [HAL_TIMER_CANCEL]                = posixCancelTimer,
+  [HAL_TIMER_CANCEL_AND_GET]        = posixCancelAndGetTimer,
+};
+
+static HalFunction posixBlockDeviceFunctions[HAL_BLOCK_DEVICE_NUM_FNS] = {
+  [HAL_BLOCK_DEVICE_INIT]    = posixInitBlockDevice,
+  [HAL_BLOCK_DEVICE_GET]     = posixGetBlockDevice,
+  [HAL_BLOCK_DEVICE_RESTART] = posixRestartBlockDevice,
+};
+
 int32_t halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
   _sdCardDevicePath = sdCardDevicePath;
 
-  // Populate the dispatch table for all POSIX subsystems.
-  halFunctions[HAL_MEMORY][HAL_MEMORY_PROCESS_STACK_SIZE]
-    = posixProcessStackSize;
-  halFunctions[HAL_MEMORY][HAL_MEMORY_MEMORY_MANAGER_STACK_SIZE]
-    = posixMemoryManagerStackSize;
-  halFunctions[HAL_MEMORY][HAL_MEMORY_BOTTOM_OF_HEAP]
-    = posixBottomOfHeap;
-  halFunctions[HAL_MEMORY][HAL_MEMORY_NUM_EXTRA_SCHEDULER_STACKS]
-    = posixNumExtraSchedulerStacks;
-  halFunctions[HAL_MEMORY][HAL_MEMORY_NUM_EXTRA_CONSOLE_STACKS]
-    = posixNumExtraConsoleStacks;
-
-  halFunctions[HAL_UART][HAL_UART_INIT]        = posixInitUart;
-  halFunctions[HAL_UART][HAL_UART_CONFIGURE]   = posixConfigureUart;
-  halFunctions[HAL_UART][HAL_UART_POLL]        = posixPollUart;
-  halFunctions[HAL_UART][HAL_UART_WRITE]       = posixWriteUart;
-  halFunctions[HAL_UART][HAL_UART_IS_CONSOLE]  = posixIsUartConsole;
-
-  halFunctions[HAL_DIO][HAL_DIO_INIT]      = posixInitDio;
-  halFunctions[HAL_DIO][HAL_DIO_CONFIGURE] = posixConfigureDio;
-  halFunctions[HAL_DIO][HAL_DIO_WRITE]     = posixWriteDio;
-
-  halFunctions[HAL_SPI][HAL_SPI_INIT]           = posixInitSpi;
-  halFunctions[HAL_SPI][HAL_SPI_CONFIGURE]      = posixConfigureSpiDevice;
-  halFunctions[HAL_SPI][HAL_SPI_START_TRANSFER] = posixStartSpiTransfer;
-  halFunctions[HAL_SPI][HAL_SPI_END_TRANSFER]   = posixEndSpiTransfer;
-  halFunctions[HAL_SPI][HAL_SPI_TRANSFER8]      = posixSpiTransfer8;
-  halFunctions[HAL_SPI][HAL_SPI_TRANSFER_BYTES] = posixSpiTransferBytes;
-
-  halFunctions[HAL_CLOCK][HAL_CLOCK_INIT]
-    = posixTimeInit;
-  halFunctions[HAL_CLOCK][HAL_CLOCK_SET_SYSTEM_TIME]
-    = posixSetSystemTime;
-  halFunctions[HAL_CLOCK][HAL_CLOCK_GET_ELAPSED_MILLISECONDS]
-    = posixGetElapsedMilliseconds;
-  halFunctions[HAL_CLOCK][HAL_CLOCK_GET_ELAPSED_MICROSECONDS]
-    = posixGetElapsedMicroseconds;
-  halFunctions[HAL_CLOCK][HAL_CLOCK_GET_ELAPSED_NANOSECONDS]
-    = posixGetElapsedNanoseconds;
-
-  halFunctions[HAL_POWER][HAL_POWER_ENTER_MODE] = posixEnterPowerMode;
-
-  halFunctions[HAL_TIMER][HAL_TIMER_INIT]
-    = posixInitTimer;
-  halFunctions[HAL_TIMER][HAL_TIMER_INIT_DEVICE]
-    = posixInitTimerDevice;
-  halFunctions[HAL_TIMER][HAL_TIMER_CONFIG_ONE_SHOT]
-    = posixConfigOneShotTimer;
-  halFunctions[HAL_TIMER][HAL_TIMER_CONFIGURED_NANOSECONDS]
-    = posixConfiguredTimerNanoseconds;
-  halFunctions[HAL_TIMER][HAL_TIMER_REMAINING_NANOSECONDS]
-    = posixRemainingTimerNanoseconds;
-  halFunctions[HAL_TIMER][HAL_TIMER_CANCEL]
-    = posixCancelTimer;
-  halFunctions[HAL_TIMER][HAL_TIMER_CANCEL_AND_GET]
-    = posixCancelAndGetTimer;
-
-  halFunctions[HAL_BLOCK_DEVICE][HAL_BLOCK_DEVICE_INIT]
-    = posixInitBlockDevice;
-  halFunctions[HAL_BLOCK_DEVICE][HAL_BLOCK_DEVICE_GET]
-    = posixGetBlockDevice;
-  halFunctions[HAL_BLOCK_DEVICE][HAL_BLOCK_DEVICE_RESTART]
-    = posixRestartBlockDevice;
+  // Wire up per-subsystem function arrays.
+  halFunctions[HAL_MEMORY]       = posixMemoryFunctions;
+  halFunctions[HAL_UART]         = posixUartFunctions;
+  halFunctions[HAL_DIO]          = posixDioFunctions;
+  halFunctions[HAL_SPI]          = posixSpiFunctions;
+  halFunctions[HAL_CLOCK]        = posixClockFunctions;
+  halFunctions[HAL_POWER]        = posixPowerFunctions;
+  halFunctions[HAL_TIMER]        = posixTimerFunctions;
+  halFunctions[HAL_BLOCK_DEVICE] = posixBlockDeviceFunctions;
 
   // Set per-platform data members on the common subsystem instances.
   halCommonUart.numSupported = 2;

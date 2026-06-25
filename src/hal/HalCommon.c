@@ -37,11 +37,25 @@
 
 /// @var halFunctions
 ///
-/// @brief Two-dimensional array of HAL function pointers.  First index is the
-/// HalSubsystem, second index is the function name enum value for that
-/// subsystem.
-HalFunction halFunctions[HAL_NUM_SUBSYSTEMS][HAL_MAX_SUBSYSTEM_FNS]
-  = {{NULL}};
+/// @brief Array of pointers to per-subsystem function pointer arrays.  Each
+/// platform init sets halFunctions[subsystem] to point at a static array of
+/// HalFunction entries.  Subsystems not supported by a platform leave their
+/// entry NULL.
+HalFunction *halFunctions[HAL_NUM_SUBSYSTEMS] = {NULL};
+
+/// @var halFunctionCounts
+///
+/// @brief Number of valid function slots in each subsystem's array.
+static const uint32_t halFunctionCounts[HAL_NUM_SUBSYSTEMS] = {
+  [HAL_MEMORY]       = HAL_MEMORY_NUM_FNS,
+  [HAL_UART]         = HAL_UART_NUM_FNS,
+  [HAL_DIO]          = HAL_DIO_NUM_FNS,
+  [HAL_SPI]          = HAL_SPI_NUM_FNS,
+  [HAL_CLOCK]        = HAL_CLOCK_NUM_FNS,
+  [HAL_POWER]        = HAL_POWER_NUM_FNS,
+  [HAL_TIMER]        = HAL_TIMER_NUM_FNS,
+  [HAL_BLOCK_DEVICE] = HAL_BLOCK_DEVICE_NUM_FNS,
+};
 
 /// @fn int32_t callHal(HalSubsystem subsystem, uint32_t function, ...)
 ///
@@ -54,7 +68,9 @@ HalFunction halFunctions[HAL_NUM_SUBSYSTEMS][HAL_MAX_SUBSYSTEM_FNS]
 /// @return Returns the value returned by the platform function, or -ENOTSUP if
 /// no function has been registered for the given subsystem/function pair.
 int32_t callHal(HalSubsystem subsystem, uint32_t function, ...) {
-  if ((subsystem >= HAL_NUM_SUBSYSTEMS) || (function >= HAL_MAX_SUBSYSTEM_FNS)
+  if ((subsystem >= HAL_NUM_SUBSYSTEMS)
+    || (halFunctions[subsystem] == NULL)
+    || (function >= halFunctionCounts[subsystem])
     || (halFunctions[subsystem][function] == NULL)
   ) {
     return -ENOTSUP;

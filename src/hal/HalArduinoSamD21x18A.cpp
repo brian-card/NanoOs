@@ -1214,70 +1214,75 @@ int32_t arduinoSamD21x18ARestartBlockDevice(va_list args) {
   return 0;
 }
 
+static HalFunction arduinoSamD21x18AMemoryFunctions[HAL_MEMORY_NUM_FNS] = {
+  [HAL_MEMORY_PROCESS_STACK_SIZE]         = arduinoSamD21x18AProcessStackSize,
+  [HAL_MEMORY_MEMORY_MANAGER_STACK_SIZE]  = arduinoSamD21x18AMemoryManagerStackSize,
+  [HAL_MEMORY_BOTTOM_OF_HEAP]             = arduinoSamD21x18ABottomOfHeap,
+  [HAL_MEMORY_NUM_EXTRA_SCHEDULER_STACKS] = arduinoSamD21x18ANumExtraSchedulerStacks,
+  [HAL_MEMORY_NUM_EXTRA_CONSOLE_STACKS]   = arduinoSamD21x18ANumExtraConsoleStacks,
+};
+
+static HalFunction arduinoSamD21x18AUartFunctions[HAL_UART_NUM_FNS] = {
+  [HAL_UART_INIT]       = arduinoSamD21x18AInitUart,
+  [HAL_UART_CONFIGURE]  = arduinoSamD21x18AConfigureUart,
+  [HAL_UART_POLL]       = arduinoSamD21x18APollUart,
+  [HAL_UART_WRITE]      = arduinoSamD21x18AWriteUart,
+  [HAL_UART_IS_CONSOLE] = arduinoSamD21x18AIsUartConsole,
+};
+
+static HalFunction arduinoSamD21x18ADioFunctions[HAL_DIO_NUM_FNS] = {
+  [HAL_DIO_INIT]      = arduinoSamD21x18AInitDio,
+  [HAL_DIO_CONFIGURE] = arduinoSamD21x18AConfigureDio,
+  [HAL_DIO_WRITE]     = arduinoSamD21x18AWriteDio,
+};
+
+static HalFunction arduinoSamD21x18ASpiFunctions[HAL_SPI_NUM_FNS] = {
+  [HAL_SPI_INIT]           = arduinoSamD21x18AInitSpi,
+  [HAL_SPI_CONFIGURE]      = arduinoSamD21x18AConfigureSpi,
+  [HAL_SPI_START_TRANSFER] = arduinoSamD21x18AStartSpiTransfer,
+  [HAL_SPI_END_TRANSFER]   = arduinoSamD21x18AEndSpiTransfer,
+  [HAL_SPI_TRANSFER8]      = arduinoSamD21x18ASpiTransfer8,
+  [HAL_SPI_TRANSFER_BYTES] = arduinoSamD21x18ASpiTransferBytes,
+};
+
+static HalFunction arduinoSamD21x18AClockFunctions[HAL_CLOCK_NUM_FNS] = {
+  [HAL_CLOCK_INIT]                     = arduinoSamD21x18ATimeInit,
+  [HAL_CLOCK_SET_SYSTEM_TIME]          = arduinoSamD21x18ASetSystemTime,
+  [HAL_CLOCK_GET_ELAPSED_MILLISECONDS] = arduinoSamD21x18AGetElapsedMilliseconds,
+  [HAL_CLOCK_GET_ELAPSED_MICROSECONDS] = arduinoSamD21x18AGetElapsedMicroseconds,
+  [HAL_CLOCK_GET_ELAPSED_NANOSECONDS]  = arduinoSamD21x18AGetElapsedNanoseconds,
+};
+
+static HalFunction arduinoSamD21x18APowerFunctions[HAL_POWER_NUM_FNS] = {
+  [HAL_POWER_ENTER_MODE] = arduinoSamD21x18AEnterMode,
+};
+
+static HalFunction arduinoSamD21x18ATimerFunctions[HAL_TIMER_NUM_FNS] = {
+  [HAL_TIMER_INIT]                   = arduinoSamD21x18AInitTimer,
+  [HAL_TIMER_INIT_DEVICE]            = arduinoSamD21x18AInitTimerDevice,
+  [HAL_TIMER_CONFIG_ONE_SHOT]        = arduinoSamD21x18AConfigOneShotTimer,
+  [HAL_TIMER_CONFIGURED_NANOSECONDS] = arduinoSamD21x18AConfiguredTimerNanoseconds,
+  [HAL_TIMER_REMAINING_NANOSECONDS]  = arduinoSamD21x18ARemainingTimerNanoseconds,
+  [HAL_TIMER_CANCEL]                 = arduinoSamD21x18ACancelTimer,
+  [HAL_TIMER_CANCEL_AND_GET]         = arduinoSamD21x18ACancelAndGetTimer,
+};
+
+static HalFunction arduinoSamD21x18ABlockDeviceFunctions[HAL_BLOCK_DEVICE_NUM_FNS] = {
+  [HAL_BLOCK_DEVICE_INIT]    = arduinoSamD21x18AInitBlockDevice,
+  [HAL_BLOCK_DEVICE_GET]     = arduinoSamD21x18AGetBlockDevice,
+  [HAL_BLOCK_DEVICE_RESTART] = arduinoSamD21x18ARestartBlockDevice,
+};
+
 int32_t halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
-  // Populate the dispatch table.
-  halFunctions[HAL_MEMORY][HAL_MEMORY_PROCESS_STACK_SIZE]
-    = arduinoSamD21x18AProcessStackSize;
-  halFunctions[HAL_MEMORY][HAL_MEMORY_MEMORY_MANAGER_STACK_SIZE]
-    = arduinoSamD21x18AMemoryManagerStackSize;
-  halFunctions[HAL_MEMORY][HAL_MEMORY_BOTTOM_OF_HEAP]
-    = arduinoSamD21x18ABottomOfHeap;
-  halFunctions[HAL_MEMORY][HAL_MEMORY_NUM_EXTRA_SCHEDULER_STACKS]
-    = arduinoSamD21x18ANumExtraSchedulerStacks;
-  halFunctions[HAL_MEMORY][HAL_MEMORY_NUM_EXTRA_CONSOLE_STACKS]
-    = arduinoSamD21x18ANumExtraConsoleStacks;
-
-  halFunctions[HAL_UART][HAL_UART_INIT]       = arduinoSamD21x18AInitUart;
-  halFunctions[HAL_UART][HAL_UART_CONFIGURE]  = arduinoSamD21x18AConfigureUart;
-  halFunctions[HAL_UART][HAL_UART_POLL]       = arduinoSamD21x18APollUart;
-  halFunctions[HAL_UART][HAL_UART_WRITE]      = arduinoSamD21x18AWriteUart;
-  halFunctions[HAL_UART][HAL_UART_IS_CONSOLE] = arduinoSamD21x18AIsUartConsole;
-
-  halFunctions[HAL_DIO][HAL_DIO_INIT]      = arduinoSamD21x18AInitDio;
-  halFunctions[HAL_DIO][HAL_DIO_CONFIGURE] = arduinoSamD21x18AConfigureDio;
-  halFunctions[HAL_DIO][HAL_DIO_WRITE]     = arduinoSamD21x18AWriteDio;
-
-  halFunctions[HAL_SPI][HAL_SPI_INIT]           = arduinoSamD21x18AInitSpi;
-  halFunctions[HAL_SPI][HAL_SPI_CONFIGURE]      = arduinoSamD21x18AConfigureSpi;
-  halFunctions[HAL_SPI][HAL_SPI_START_TRANSFER] = arduinoSamD21x18AStartSpiTransfer;
-  halFunctions[HAL_SPI][HAL_SPI_END_TRANSFER]   = arduinoSamD21x18AEndSpiTransfer;
-  halFunctions[HAL_SPI][HAL_SPI_TRANSFER8]      = arduinoSamD21x18ASpiTransfer8;
-  halFunctions[HAL_SPI][HAL_SPI_TRANSFER_BYTES] = arduinoSamD21x18ASpiTransferBytes;
-
-  halFunctions[HAL_CLOCK][HAL_CLOCK_INIT]
-    = arduinoSamD21x18ATimeInit;
-  halFunctions[HAL_CLOCK][HAL_CLOCK_SET_SYSTEM_TIME]
-    = arduinoSamD21x18ASetSystemTime;
-  halFunctions[HAL_CLOCK][HAL_CLOCK_GET_ELAPSED_MILLISECONDS]
-    = arduinoSamD21x18AGetElapsedMilliseconds;
-  halFunctions[HAL_CLOCK][HAL_CLOCK_GET_ELAPSED_MICROSECONDS]
-    = arduinoSamD21x18AGetElapsedMicroseconds;
-  halFunctions[HAL_CLOCK][HAL_CLOCK_GET_ELAPSED_NANOSECONDS]
-    = arduinoSamD21x18AGetElapsedNanoseconds;
-
-  halFunctions[HAL_POWER][HAL_POWER_ENTER_MODE] = arduinoSamD21x18AEnterMode;
-
-  halFunctions[HAL_TIMER][HAL_TIMER_INIT]
-    = arduinoSamD21x18AInitTimer;
-  halFunctions[HAL_TIMER][HAL_TIMER_INIT_DEVICE]
-    = arduinoSamD21x18AInitTimerDevice;
-  halFunctions[HAL_TIMER][HAL_TIMER_CONFIG_ONE_SHOT]
-    = arduinoSamD21x18AConfigOneShotTimer;
-  halFunctions[HAL_TIMER][HAL_TIMER_CONFIGURED_NANOSECONDS]
-    = arduinoSamD21x18AConfiguredTimerNanoseconds;
-  halFunctions[HAL_TIMER][HAL_TIMER_REMAINING_NANOSECONDS]
-    = arduinoSamD21x18ARemainingTimerNanoseconds;
-  halFunctions[HAL_TIMER][HAL_TIMER_CANCEL]
-    = arduinoSamD21x18ACancelTimer;
-  halFunctions[HAL_TIMER][HAL_TIMER_CANCEL_AND_GET]
-    = arduinoSamD21x18ACancelAndGetTimer;
-
-  halFunctions[HAL_BLOCK_DEVICE][HAL_BLOCK_DEVICE_INIT]
-    = arduinoSamD21x18AInitBlockDevice;
-  halFunctions[HAL_BLOCK_DEVICE][HAL_BLOCK_DEVICE_GET]
-    = arduinoSamD21x18AGetBlockDevice;
-  halFunctions[HAL_BLOCK_DEVICE][HAL_BLOCK_DEVICE_RESTART]
-    = arduinoSamD21x18ARestartBlockDevice;
+  // Wire up per-subsystem function arrays.
+  halFunctions[HAL_MEMORY]       = arduinoSamD21x18AMemoryFunctions;
+  halFunctions[HAL_UART]         = arduinoSamD21x18AUartFunctions;
+  halFunctions[HAL_DIO]          = arduinoSamD21x18ADioFunctions;
+  halFunctions[HAL_SPI]          = arduinoSamD21x18ASpiFunctions;
+  halFunctions[HAL_CLOCK]        = arduinoSamD21x18AClockFunctions;
+  halFunctions[HAL_POWER]        = arduinoSamD21x18APowerFunctions;
+  halFunctions[HAL_TIMER]        = arduinoSamD21x18ATimerFunctions;
+  halFunctions[HAL_BLOCK_DEVICE] = arduinoSamD21x18ABlockDeviceFunctions;
 
   // Set per-platform data members from the init args.
   _spiCopiDio          = args->spiCopiDio;

@@ -642,56 +642,65 @@ int32_t arduinoNanoEveryRestartBlockDevice(va_list args) {
   return 0;
 }
 
+static HalFunction arduinoNanoEveryMemoryFunctions[HAL_MEMORY_NUM_FNS] = {
+  [HAL_MEMORY_PROCESS_STACK_SIZE]         = arduinoNanoEveryProcessStackSize,
+  [HAL_MEMORY_MEMORY_MANAGER_STACK_SIZE]  = arduinoNanoEveryMemoryManagerStackSize,
+  [HAL_MEMORY_BOTTOM_OF_HEAP]             = arduinoNanoEveryBottomOfHeap,
+  [HAL_MEMORY_NUM_EXTRA_SCHEDULER_STACKS] = arduinoNanoEveryNumExtraSchedulerStacks,
+  [HAL_MEMORY_NUM_EXTRA_CONSOLE_STACKS]   = arduinoNanoEveryNumExtraConsoleStacks,
+};
+
+static HalFunction arduinoNanoEveryUartFunctions[HAL_UART_NUM_FNS] = {
+  [HAL_UART_INIT]       = arduinoNanoEveryInitUart,
+  [HAL_UART_CONFIGURE]  = arduinoNanoEveryConfigureUart,
+  [HAL_UART_POLL]       = arduinoNanoEveryPollUart,
+  [HAL_UART_WRITE]      = arduinoNanoEveryWriteUart,
+  [HAL_UART_IS_CONSOLE] = arduinoNanoEveryIsUartConsole,
+};
+
+static HalFunction arduinoNanoEveryDioFunctions[HAL_DIO_NUM_FNS] = {
+  [HAL_DIO_INIT]      = arduinoNanoEveryInitDio,
+  [HAL_DIO_CONFIGURE] = arduinoNanoEveryConfigureDio,
+  [HAL_DIO_WRITE]     = arduinoNanoEveryWriteDio,
+};
+
+static HalFunction arduinoNanoEverySpiFunctions[HAL_SPI_NUM_FNS] = {
+  [HAL_SPI_INIT]           = arduinoNanoEveryInitSpi,
+  [HAL_SPI_CONFIGURE]      = arduinoNanoEveryConfigureSpiDevice,
+  [HAL_SPI_START_TRANSFER] = arduinoNanoEveryStartSpiTransfer,
+  [HAL_SPI_END_TRANSFER]   = arduinoNanoEveryEndSpiTransfer,
+  [HAL_SPI_TRANSFER8]      = arduinoNanoEverySpiTransfer8,
+  [HAL_SPI_TRANSFER_BYTES] = arduinoNanoEverySpiTransferBytes,
+};
+
+static HalFunction arduinoNanoEveryClockFunctions[HAL_CLOCK_NUM_FNS] = {
+  [HAL_CLOCK_INIT]                     = arduinoNanoEveryTimeInit,
+  [HAL_CLOCK_SET_SYSTEM_TIME]          = arduinoNanoEverySetSystemTime,
+  [HAL_CLOCK_GET_ELAPSED_MILLISECONDS] = arduinoNanoEveryGetElapsedMilliseconds,
+  [HAL_CLOCK_GET_ELAPSED_MICROSECONDS] = arduinoNanoEveryGetElapsedMicroseconds,
+  [HAL_CLOCK_GET_ELAPSED_NANOSECONDS]  = arduinoNanoEveryGetElapsedNanoseconds,
+};
+
+static HalFunction arduinoNanoEveryPowerFunctions[HAL_POWER_NUM_FNS] = {
+  [HAL_POWER_ENTER_MODE] = arduinoNanoEveryEnterPowerMode,
+};
+
+static HalFunction arduinoNanoEveryBlockDeviceFunctions[HAL_BLOCK_DEVICE_NUM_FNS] = {
+  [HAL_BLOCK_DEVICE_INIT]    = arduinoNanoEveryInitBlockDevice,
+  [HAL_BLOCK_DEVICE_GET]     = arduinoNanoEveryGetBlockDevice,
+  [HAL_BLOCK_DEVICE_RESTART] = arduinoNanoEveryRestartBlockDevice,
+};
+
 int32_t halArduinoInit(void) {
-  halFunctions[HAL_MEMORY][HAL_MEMORY_PROCESS_STACK_SIZE]
-    = arduinoNanoEveryProcessStackSize;
-  halFunctions[HAL_MEMORY][HAL_MEMORY_MEMORY_MANAGER_STACK_SIZE]
-    = arduinoNanoEveryMemoryManagerStackSize;
-  halFunctions[HAL_MEMORY][HAL_MEMORY_BOTTOM_OF_HEAP]
-    = arduinoNanoEveryBottomOfHeap;
-  halFunctions[HAL_MEMORY][HAL_MEMORY_NUM_EXTRA_SCHEDULER_STACKS]
-    = arduinoNanoEveryNumExtraSchedulerStacks;
-  halFunctions[HAL_MEMORY][HAL_MEMORY_NUM_EXTRA_CONSOLE_STACKS]
-    = arduinoNanoEveryNumExtraConsoleStacks;
-
-  halFunctions[HAL_UART][HAL_UART_INIT]       = arduinoNanoEveryInitUart;
-  halFunctions[HAL_UART][HAL_UART_CONFIGURE]  = arduinoNanoEveryConfigureUart;
-  halFunctions[HAL_UART][HAL_UART_POLL]       = arduinoNanoEveryPollUart;
-  halFunctions[HAL_UART][HAL_UART_WRITE]      = arduinoNanoEveryWriteUart;
-  halFunctions[HAL_UART][HAL_UART_IS_CONSOLE] = arduinoNanoEveryIsUartConsole;
-
-  halFunctions[HAL_DIO][HAL_DIO_INIT]      = arduinoNanoEveryInitDio;
-  halFunctions[HAL_DIO][HAL_DIO_CONFIGURE] = arduinoNanoEveryConfigureDio;
-  halFunctions[HAL_DIO][HAL_DIO_WRITE]     = arduinoNanoEveryWriteDio;
-
-  halFunctions[HAL_SPI][HAL_SPI_INIT]           = arduinoNanoEveryInitSpi;
-  halFunctions[HAL_SPI][HAL_SPI_CONFIGURE]      = arduinoNanoEveryConfigureSpiDevice;
-  halFunctions[HAL_SPI][HAL_SPI_START_TRANSFER] = arduinoNanoEveryStartSpiTransfer;
-  halFunctions[HAL_SPI][HAL_SPI_END_TRANSFER]   = arduinoNanoEveryEndSpiTransfer;
-  halFunctions[HAL_SPI][HAL_SPI_TRANSFER8]      = arduinoNanoEverySpiTransfer8;
-  halFunctions[HAL_SPI][HAL_SPI_TRANSFER_BYTES] = arduinoNanoEverySpiTransferBytes;
-
-  halFunctions[HAL_CLOCK][HAL_CLOCK_INIT]
-    = arduinoNanoEveryTimeInit;
-  halFunctions[HAL_CLOCK][HAL_CLOCK_SET_SYSTEM_TIME]
-    = arduinoNanoEverySetSystemTime;
-  halFunctions[HAL_CLOCK][HAL_CLOCK_GET_ELAPSED_MILLISECONDS]
-    = arduinoNanoEveryGetElapsedMilliseconds;
-  halFunctions[HAL_CLOCK][HAL_CLOCK_GET_ELAPSED_MICROSECONDS]
-    = arduinoNanoEveryGetElapsedMicroseconds;
-  halFunctions[HAL_CLOCK][HAL_CLOCK_GET_ELAPSED_NANOSECONDS]
-    = arduinoNanoEveryGetElapsedNanoseconds;
-
-  halFunctions[HAL_POWER][HAL_POWER_ENTER_MODE] = arduinoNanoEveryEnterPowerMode;
-
-  // No timer implementation for this platform — leave HAL_TIMER entries NULL.
-
-  halFunctions[HAL_BLOCK_DEVICE][HAL_BLOCK_DEVICE_INIT]
-    = arduinoNanoEveryInitBlockDevice;
-  halFunctions[HAL_BLOCK_DEVICE][HAL_BLOCK_DEVICE_GET]
-    = arduinoNanoEveryGetBlockDevice;
-  halFunctions[HAL_BLOCK_DEVICE][HAL_BLOCK_DEVICE_RESTART]
-    = arduinoNanoEveryRestartBlockDevice;
+  // Wire up per-subsystem function arrays.
+  // HAL_TIMER is not supported on this platform — leave halFunctions[HAL_TIMER] NULL.
+  halFunctions[HAL_MEMORY]       = arduinoNanoEveryMemoryFunctions;
+  halFunctions[HAL_UART]         = arduinoNanoEveryUartFunctions;
+  halFunctions[HAL_DIO]          = arduinoNanoEveryDioFunctions;
+  halFunctions[HAL_SPI]          = arduinoNanoEverySpiFunctions;
+  halFunctions[HAL_CLOCK]        = arduinoNanoEveryClockFunctions;
+  halFunctions[HAL_POWER]        = arduinoNanoEveryPowerFunctions;
+  halFunctions[HAL_BLOCK_DEVICE] = arduinoNanoEveryBlockDeviceFunctions;
 
   halCommonUart.numSupported = _numUarts;
   halCommonUart.online       = halArduinoNanoEveryUartsOnline;

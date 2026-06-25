@@ -196,11 +196,6 @@ typedef enum HalBlockDeviceName {
   HAL_BLOCK_DEVICE_NUM_FNS,
 } HalBlockDeviceName;
 
-/// @def HAL_MAX_SUBSYSTEM_FNS
-///
-/// @brief Maximum number of functions in any single HAL subsystem.
-#define HAL_MAX_SUBSYSTEM_FNS ((uint32_t) HAL_TIMER_NUM_FNS)
-
 // Standard C types
 typedef intptr_t ssize_t;
 typedef uintptr_t size_t;

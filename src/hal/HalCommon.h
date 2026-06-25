@@ -72,7 +72,7 @@ extern "C"
 {
 #endif
 
-extern HalFunction halFunctions[HAL_NUM_SUBSYSTEMS][HAL_MAX_SUBSYSTEM_FNS];
+extern HalFunction *halFunctions[HAL_NUM_SUBSYSTEMS];
 extern HalMemory halCommonMemory;
 extern HalUart halCommonUart;
 extern HalDio halCommonDio;
