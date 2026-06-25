@@ -45,7 +45,8 @@ HalFunction *halFunctions[HAL_NUM_SUBSYSTEMS] = {NULL};
 
 /// @var halFunctionCounts
 ///
-/// @brief Number of valid function slots in each subsystem's array.
+/// @brief Number of valid function slots in each subsystem's array.  This is
+/// used to sanity check the function parameter of the callHal function.
 static const uint32_t halFunctionCounts[HAL_NUM_SUBSYSTEMS] = {
   [HAL_MEMORY]       = HAL_MEMORY_NUM_FNS,
   [HAL_UART]         = HAL_UART_NUM_FNS,
