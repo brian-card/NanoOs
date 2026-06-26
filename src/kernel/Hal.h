@@ -105,44 +105,44 @@ typedef enum HalSubsystem {
   HAL_NUM_SUBSYSTEMS,
 } HalSubsystem;
 
-/// @enum HalMemoryName
+/// @enum HalMemoryFunction
 ///
 /// @brief Function indices for the HalMemory subsystem.
-typedef enum HalMemoryName {
+typedef enum HalMemoryFunction {
   HAL_MEMORY_PROCESS_STACK_SIZE,
   HAL_MEMORY_MEMORY_MANAGER_STACK_SIZE,
   HAL_MEMORY_BOTTOM_OF_HEAP,
   HAL_MEMORY_NUM_EXTRA_SCHEDULER_STACKS,
   HAL_MEMORY_NUM_EXTRA_CONSOLE_STACKS,
   HAL_MEMORY_NUM_FNS,
-} HalMemoryName;
+} HalMemoryFunction;
 
-/// @enum HalUartName
+/// @enum HalUartFunction
 ///
 /// @brief Function indices for the HalUart subsystem.
-typedef enum HalUartName {
+typedef enum HalUartFunction {
   HAL_UART_INIT,
   HAL_UART_CONFIGURE,
   HAL_UART_POLL,
   HAL_UART_WRITE,
   HAL_UART_IS_CONSOLE,
   HAL_UART_NUM_FNS,
-} HalUartName;
+} HalUartFunction;
 
-/// @enum HalDioName
+/// @enum HalDioFunction
 ///
 /// @brief Function indices for the HalDio subsystem.
-typedef enum HalDioName {
+typedef enum HalDioFunction {
   HAL_DIO_INIT,
   HAL_DIO_CONFIGURE,
   HAL_DIO_WRITE,
   HAL_DIO_NUM_FNS,
-} HalDioName;
+} HalDioFunction;
 
-/// @enum HalSpiName
+/// @enum HalSpiFunction
 ///
 /// @brief Function indices for the HalSpi subsystem.
-typedef enum HalSpiName {
+typedef enum HalSpiFunction {
   HAL_SPI_INIT,
   HAL_SPI_CONFIGURE,
   HAL_SPI_START_TRANSFER,
@@ -150,32 +150,32 @@ typedef enum HalSpiName {
   HAL_SPI_TRANSFER8,
   HAL_SPI_TRANSFER_BYTES,
   HAL_SPI_NUM_FNS,
-} HalSpiName;
+} HalSpiFunction;
 
-/// @enum HalClockName
+/// @enum HalClockFunction
 ///
 /// @brief Function indices for the HalClock subsystem.
-typedef enum HalClockName {
+typedef enum HalClockFunction {
   HAL_CLOCK_INIT,
   HAL_CLOCK_SET_SYSTEM_TIME,
   HAL_CLOCK_GET_ELAPSED_MILLISECONDS,
   HAL_CLOCK_GET_ELAPSED_MICROSECONDS,
   HAL_CLOCK_GET_ELAPSED_NANOSECONDS,
   HAL_CLOCK_NUM_FNS,
-} HalClockName;
+} HalClockFunction;
 
-/// @enum HalPowerName
+/// @enum HalPowerFunction
 ///
 /// @brief Function indices for the HalPower subsystem.
-typedef enum HalPowerName {
+typedef enum HalPowerFunction {
   HAL_POWER_ENTER_MODE,
   HAL_POWER_NUM_FNS,
-} HalPowerName;
+} HalPowerFunction;
 
-/// @enum HalTimerName
+/// @enum HalTimerFunction
 ///
 /// @brief Function indices for the HalTimer subsystem.
-typedef enum HalTimerName {
+typedef enum HalTimerFunction {
   HAL_TIMER_INIT,
   HAL_TIMER_INIT_DEVICE,
   HAL_TIMER_CONFIG_ONE_SHOT,
@@ -184,17 +184,17 @@ typedef enum HalTimerName {
   HAL_TIMER_CANCEL,
   HAL_TIMER_CANCEL_AND_GET,
   HAL_TIMER_NUM_FNS,
-} HalTimerName;
+} HalTimerFunction;
 
-/// @enum HalBlockDeviceName
+/// @enum HalBlockDeviceFunction
 ///
 /// @brief Function indices for the HalBlockDevice subsystem.
-typedef enum HalBlockDeviceName {
+typedef enum HalBlockDeviceFunction {
   HAL_BLOCK_DEVICE_INIT,
   HAL_BLOCK_DEVICE_GET,
   HAL_BLOCK_DEVICE_RESTART,
   HAL_BLOCK_DEVICE_NUM_FNS,
-} HalBlockDeviceName;
+} HalBlockDeviceFunction;
 
 // Standard C types
 typedef intptr_t ssize_t;
