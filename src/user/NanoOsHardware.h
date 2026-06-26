@@ -37,6 +37,9 @@
 #ifndef NANO_OS_USER_HARDWARE_H
 #define NANO_OS_USER_HARDWARE_H
 
+#include <stdbool.h>
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -45,13 +48,12 @@ extern "C"
 /// @enum NanoOsShutdownType
 ///
 /// @brief Types of shutdowns that can be invoked from userspace.
-typedef enum NanoOsShutdownType {
-  NANO_OS_SHUTDOWN_OFF,
-  NANO_OS_SHUTDOWN_HYBERNATE,
-  NANO_OS_SHUTDOWN_SUSPEND,
-  NANO_OS_SHUTDOWN_RESET,
-  NANO_OS_SHUTDOWN_NUM_TYPES,
-} NanoOsShutdownType;
+typedef uint8_t NanoOsShutdownType;
+#define NANO_OS_SHUTDOWN_OFF       0
+#define NANO_OS_SHUTDOWN_HYBERNATE 1
+#define NANO_OS_SHUTDOWN_SUSPEND   2
+#define NANO_OS_SHUTDOWN_RESET     3
+#define NANO_OS_SHUTDOWN_NUM_TYPES 4
 
 int nanoOsHardwareShutdown(NanoOsShutdownType shutdownType);
 

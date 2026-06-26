@@ -160,45 +160,14 @@ void* callOverlayFunctionFromFile(const void *od, const void *o,
   // to copy the data would be.  The caller is responsible for allocating data
   // in dynamic memory before the pointer is passed to this function.
   
-  // We want to load the new overlay in place of the one that's currently
-  // there, but we want to give other processes some time to run, too.  Also,
-  // loading the overlay is an operation that shouldn't be interrupted.   The
-  // scheduler will automatically load the correct overlay before a process is
-  // resumed, so just set the information for the process's overlay and then
-  // yield.
-  //
-  // A few things of note:
-  //
-  // 1.  Because the scheduler will automatically load the correct overlay
-  //     before a process is resumed, it's technically permissible to set the
-  //     process's overlay information and then load the overlay, however,
-  //     that's redundant.  It would *NOT* be permissible to load the overlay
-  //     and then set the information as that could create an overlay of mixed
-  //     content if loading the overlay was preempted.
-  //
-  // 2.  Setting the information for the overlay has to be an atomic operation.
-  //     The reason it has to be atomic is because the information is used by
-  //     the scheduler, which is outside the context of this process.  There
-  //     are two (2) pieces of information that have to be set:  The path to the
-  //     overlay directory and the block information of the overlay.  Because
-  //     there are two operations that have to be done here (one of which takes
-  //     multiple instructions), we need to make sure the preemption timer isn't
-  //     running and then set both.  We don't have to re-enable the timer again
-  //     after setting the information because we're going to then immediately
-  //     yield after setting it.  So, we can get away with just calling
-  //     cancel instead of cancelAndGetTimer since there's nothing to
-  //     resume.
-  //
-  // JBC 2025-01-24
-  HAL->timer->cancel(SCHEDULER_STATE->preemptionTimer);
   if (overlayDir != OVERLAY_SAME_NAMESPACE) {
-    runningProcess->overlayNamespace = overlayInfo;
+    overlayDir = overlayInfo;
   }
-  runningProcess->overlay.blockDevice = overlayArray[1].blockDevice;
-  runningProcess->overlay.startBlock  = overlayArray[1].startBlock;
-  runningProcess->overlay.numBlocks   = overlayArray[1].numBlocks;
-  processYield();
-  
+  if (schedulerReplaceOverlay(overlayDir, &overlayArray[1]) != 0) {
+    fprintf(stderr, "ERROR: Could not load file overlay via the scheduler\n");
+    goto freeOverlayInfo;
+  }
+
   // If we made it this far, then our new overlay has been successuflly loaded.
   OverlayFunction overlayFunction = findOverlayFunction(functionCopy);
   if (overlayFunction == NULL) {
@@ -211,15 +180,8 @@ void* callOverlayFunctionFromFile(const void *od, const void *o,
   returnValue = overlayFunction(args);
   
 restorePreviousOverlay:
-  // See note above on use of HAL->timer->cancel.
-  HAL->timer->cancel(SCHEDULER_STATE->preemptionTimer);
-  runningProcess->overlay.blockDevice = overlayArray[0].blockDevice;
-  runningProcess->overlay.startBlock  = overlayArray[0].startBlock;
-  runningProcess->overlay.numBlocks   = overlayArray[0].numBlocks;
-  if (overlayDir != OVERLAY_SAME_NAMESPACE) {
-    runningProcess->overlayNamespace = previousOverlayDir;
-  }
-  processYield();
+  // Don't check the return value here.  No point.
+  schedulerReplaceOverlay(previousOverlayDir, &overlayArray[0]);
   
   // Release all the memory for the copies.
 freeOverlayInfo:
@@ -294,15 +256,11 @@ void* callOverlayFunctionFromBlockDevice(
   }
   strcpy(functionCopy, function);
   
-  // See comment in callOverlayFunctionFromFile about this logic.
-  HAL->timer->cancel(SCHEDULER_STATE->preemptionTimer);
-  if (deviceId != OVERLAY_SAME_NAMESPACE) {
-    runningProcess->overlayNamespace = (void*) deviceId;
+  if (schedulerReplaceOverlay(deviceId, &overlayArray[1]) != 0) {
+    fprintf(stderr, "ERROR: Could not load block overlay via the scheduler\n");
+    goto exit;
   }
-  runningProcess->overlay.blockDevice = overlayArray[1].blockDevice;
-  runningProcess->overlay.startBlock  = overlayArray[1].startBlock;
-  runningProcess->overlay.numBlocks   = overlayArray[1].numBlocks;
-  processYield();
+
   
   // If we made it this far, then our new overlay has been successuflly loaded.
   OverlayFunction overlayFunction = findOverlayFunction(functionCopy);
@@ -316,15 +274,7 @@ void* callOverlayFunctionFromBlockDevice(
   returnValue = overlayFunction(args);
   
 restorePreviousOverlay:
-  // See note above on use of HAL->timer->cancel.
-  HAL->timer->cancel(SCHEDULER_STATE->preemptionTimer);
-  runningProcess->overlay.blockDevice = overlayArray[0].blockDevice;
-  runningProcess->overlay.startBlock  = overlayArray[0].startBlock;
-  runningProcess->overlay.numBlocks   = overlayArray[0].numBlocks;
-  if (deviceId != OVERLAY_SAME_NAMESPACE) {
-    runningProcess->overlayNamespace = previousOverlayDevice;
-  }
-  processYield();
+  schedulerReplaceOverlay(previousOverlayDevice, &overlayArray[0]);
   
   // Release all the memory for the copies.
   free(functionCopy);

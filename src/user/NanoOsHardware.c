@@ -29,54 +29,44 @@
 ///
 /// @brief Hardware abstraction for user processes.
 
-#include "../kernel/Hal.h"
+#include "../kernel/NanoOsTypes.h"
+#include "../kernel/Processes.h"
+#include "../kernel/Scheduler.h"
+#include "NanoOsErrno.h"
 #include "NanoOsHardware.h"
 
 // Must come last
 #include "NanoOsStdio.h"
 
 int nanoOsHardwareShutdown(NanoOsShutdownType shutdownType) {
-  int returnValue = 0;
-  
-  if (HAL->power != NULL) {
-    switch (shutdownType) {
-      case NANO_OS_SHUTDOWN_OFF:
-        {
-          HAL->power->enterMode(HAL_POWER_MODE_OFF);
-        }
-        break;
-      
-      case NANO_OS_SHUTDOWN_HYBERNATE:
-        {
-          // Store RAM on disk and then power off.
-          // TODO: Store RAM on disk.
-          HAL->power->enterMode(HAL_POWER_MODE_OFF);
-        }
-        break;
-      
-      case NANO_OS_SHUTDOWN_SUSPEND:
-        {
-          HAL->power->enterMode(HAL_POWER_MODE_SUSPEND);
-        }
-        break;
-      
-      case NANO_OS_SHUTDOWN_RESET:
-        {
-          HAL->power->enterMode(HAL_POWER_MODE_RESET);
-        }
-        break;
-      
-      default:
-        {
-          fprintf(stderr, "Error: Invalid shutdown type in nanoOsShutdown.\n");
-          returnValue = -1;
-        }
-        break;
-    }
-  } else {
-    fprintf(stderr, "Power HAL not implemented\n");
+  int returnValue = -EOTHER;
+  if (shutdownType >= NANO_OS_SHUTDOWN_NUM_TYPES) {
+    fprintf(stderr, "Invalid shutdown type\n");
+    returnValue = -EINVAL;
+    return returnValue;
   }
-  
+
+  SchedulerShutdownArgs schedulerShutdownArgs = {
+    .shutdownType = shutdownType,
+    .returnValue = 0,
+  };
+  ProcessMessage *processMessage
+    = initSendProcessMessageToPid(
+    SCHEDULER_STATE->schedulerPid,
+    SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_SHUTDOWN,
+    /* data= */ &schedulerShutdownArgs,
+    /* size= */ sizeof(schedulerShutdownArgs),
+    true);
+  if (processMessage == NULL) {
+    fprintf(stderr, "ERROR: Could not communicate with scheduler.\n");
+    return returnValue; // -EOTHER
+  }
+
+  processMessageWaitForDone(processMessage, NULL);
+  processMessageRelease(processMessage);
+
+  returnValue = schedulerShutdownArgs.returnValue;
+
   return returnValue;
 }
 

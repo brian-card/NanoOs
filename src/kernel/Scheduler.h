@@ -66,6 +66,8 @@ typedef struct ProcessInfo ProcessInfo;
 typedef int16_t UserId;
 typedef struct ExecArgs ExecArgs;
 typedef struct SpawnArgs SpawnArgs;
+typedef uint8_t NanoOsShutdownType;
+typedef struct FileBlockMetadata FileBlockMetadata;
 
 /// @struct SchedulerKillProcessArgs
 ///
@@ -172,6 +174,33 @@ typedef struct SchedulerSendSignalArgs {
   int errorNumber;
 } SchedulerSendSignalArgs;
 
+/// @struct SchedulerReplaceOverlayArgs
+///
+/// @brief Arguments and return values for the SCHEDULER_REPLACE_OVERLAY
+/// command.
+///
+/// @param overlayNamespace The namespace (directory or block device ID) that
+///   the overlay is in.
+/// @param overlay A pointer to the FileBlockMetadata to use as the process's
+///   new overlay.
+/// @returnValue The returnValue of the command handler.
+typedef struct SchedulerReplaceOverlayArgs {
+  void *overlayNamespace;
+  FileBlockMetadata *overlay;
+  int returnValue;
+} SchedulerReplaceOverlayArgs;
+
+/// @struct SchedulerShutdownArgs
+///
+/// @brief Arguments and return values for the SCHEDULER_SHUTDOWN command.
+///
+/// @param shutdownType The NanoOsShutdownType to invoke.
+/// @param returnValue The returnValue of the command handler.
+typedef struct SchedulerShutdownArgs {
+  NanoOsShutdownType shutdownType;
+  int returnValue;
+} SchedulerShutdownArgs;
+
 /// @enum SchedulerCommandResponse
 ///
 /// @brief Commands and responses understood by the scheduler inter-process
@@ -186,6 +215,8 @@ typedef enum SchedulerCommandResponse {
   SCHEDULER_EXECVE,
   SCHEDULER_SPAWN,
   SCHEDULER_SEND_SIGNAL,
+  SCHEDULER_REPLACE_OVERLAY,
+  SCHEDULER_SHUTDOWN,
   NUM_SCHEDULER_COMMANDS,
   // Responses:
   SCHEDULER_PROCESS_COMPLETE,
@@ -212,6 +243,8 @@ int processQueuePush(
 ProcessDescriptor* processQueuePop(ProcessQueue *processQueue);
 int processQueueRemove(
   ProcessQueue *processQueue, ProcessDescriptor *processDescriptor);
+int schedulerReplaceOverlay(const void *overlayNamespace,
+  FileBlockMetadata *overlay);
 
 // Coroutine setup functions used in the loader.
 void* dummyProcess(void *args);

@@ -75,6 +75,10 @@ int32_t callHal(HalSubsystem subsystem, uint32_t function, ...) {
     || (halFunctions[subsystem][function] == NULL)
   ) {
     return -ENOTSUP;
+  } else if (getRunningProcess() != NULL) {
+    if (getRunningProcess()->privilegeLevel != PRIVILEGE_LEVEL_KERNEL) {
+      return -EACCES;
+    }
   }
   va_list args;
   va_start(args, function);

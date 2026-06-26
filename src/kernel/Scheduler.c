@@ -1011,6 +1011,51 @@ int schedulerSendSignal(ProcessId pid, int signal) {
   return returnValue;
 }
 
+/// @fn int schedulerReplaceOverlay(const void *overlayNamespace,
+///   FileBlockMetadata *overlay)
+///
+/// @brief Replace the overlay of the running process with a new one.
+///
+/// @param overlayNamespace The namespace (directory or block device ID) that
+///   the overlay is in.
+/// @param overlay A pointer to the FileBlockMetadata to use as the new overlay.
+///
+/// @return Returns 0 on success, -errno on failure.  On success, the new
+/// overlay will be loaded when this function returns.
+int schedulerReplaceOverlay(const void *overlayNamespace,
+  FileBlockMetadata *overlay
+) {
+  int returnValue = -EOTHER;
+  if (overlay == NULL) {
+    returnValue = -EINVAL;
+    return returnValue;
+  }
+
+  SchedulerReplaceOverlayArgs schedulerReplaceOverlayArgs = {
+    .overlayNamespace = (void*) overlayNamespace,
+    .overlay = overlay,
+    .returnValue = 0,
+  };
+  ProcessMessage *processMessage
+    = initSendProcessMessageToPid(
+    SCHEDULER_STATE->schedulerPid,
+    SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_REPLACE_OVERLAY,
+    /* data= */ &schedulerReplaceOverlayArgs,
+    /* size= */ sizeof(schedulerReplaceOverlayArgs),
+    true);
+  if (processMessage == NULL) {
+    fprintf(stderr, "ERROR: Could not communicate with scheduler.\n");
+    return returnValue; // -EOTHER
+  }
+
+  processMessageWaitForDone(processMessage, NULL);
+  processMessageRelease(processMessage);
+
+  returnValue = schedulerReplaceOverlayArgs.returnValue;
+
+  return returnValue;
+}
+
 /// @fn int schedulerSetProcessUser(UserId userId)
 ///
 /// @brief Set the user ID of the current process to the specified user ID.
@@ -2759,6 +2804,121 @@ exit:
   return returnValue;
 }
 
+/// @fn int schedulerReplaceOverlayCommandHandler(
+///   SchedulerState *schedulerState, ProcessMessage *processMessage)
+///
+/// @brief Replace the overlay of a process.
+///
+/// @param schedulerState A pointer to the SchedulerState maintained by the
+///   scheduler process.
+/// @param processMessage A pointer to the ProcessMessage that was received.
+///
+/// @return Returns 0 on success, non-zero error code on failure.
+int schedulerReplaceOverlayCommandHandler(
+  SchedulerState *schedulerState, ProcessMessage *processMessage
+) {
+  (void) schedulerState;
+
+  int returnValue = 0;
+  if (processMessage == NULL) {
+    // This should be impossible, but there's nothing to do.  Print an error
+    // and return good status.
+    printString("ERROR: NULL message provided to ");
+    printString(__func__);
+    printString("\n");
+    return returnValue; // 0
+  }
+
+  ProcessDescriptor *processDescriptor = processMessageFrom(processMessage);
+  SchedulerReplaceOverlayArgs *schedulerReplaceOverlayArgs
+    = (SchedulerReplaceOverlayArgs*) processMessageData(processMessage);
+  FileBlockMetadata *overlay = schedulerReplaceOverlayArgs->overlay;
+  if (overlay == NULL) {
+    // Invalid argument
+    schedulerReplaceOverlayArgs->returnValue = -EINVAL;
+    processMessageSetDone(processMessage);
+    return returnValue; // 0
+  }
+  if (schedulerReplaceOverlayArgs->overlayNamespace != OVERLAY_SAME_NAMESPACE) {
+    processDescriptor->overlayNamespace
+       = schedulerReplaceOverlayArgs->overlayNamespace;
+  }
+  processDescriptor->overlay.blockDevice = overlay->blockDevice;
+  processDescriptor->overlay.startBlock  = overlay->startBlock;
+  processDescriptor->overlay.numBlocks   = overlay->numBlocks;
+
+  schedulerReplaceOverlayArgs->returnValue = returnValue;
+  processMessageSetDone(processMessage);
+  return returnValue;
+}
+
+/// @fn int schedulerShutdownCommandHandler(
+///   SchedulerState *schedulerState, ProcessMessage *processMessage)
+///
+/// @brief Replace the overlay of a process.
+///
+/// @param schedulerState A pointer to the SchedulerState maintained by the
+///   scheduler process.
+/// @param processMessage A pointer to the ProcessMessage that was received.
+///
+/// @return Returns 0 on success, non-zero error code on failure.
+int schedulerShutdownCommandHandler(
+  SchedulerState *schedulerState, ProcessMessage *processMessage
+) {
+  (void) schedulerState;
+
+  int returnValue = 0;
+  if (processMessage == NULL) {
+    // This should be impossible, but there's nothing to do.  Print an error
+    // and return good status.
+    printString("ERROR: NULL message provided to ");
+    printString(__func__);
+    printString("\n");
+    return returnValue; // 0
+  }
+
+  SchedulerShutdownArgs *schedulerShutdownArgs
+    = (SchedulerShutdownArgs*) processMessageData(processMessage);
+  switch (schedulerShutdownArgs->shutdownType) {
+    case NANO_OS_SHUTDOWN_OFF:
+      {
+        returnValue = HAL->power->enterMode(HAL_POWER_MODE_OFF);
+      }
+      break;
+    
+    case NANO_OS_SHUTDOWN_HYBERNATE:
+      {
+        // Store RAM on disk and then power off.
+        // TODO: Store RAM on disk.
+        returnValue = HAL->power->enterMode(HAL_POWER_MODE_OFF);
+      }
+      break;
+    
+    case NANO_OS_SHUTDOWN_SUSPEND:
+      {
+        returnValue = HAL->power->enterMode(HAL_POWER_MODE_SUSPEND);
+      }
+      break;
+    
+    case NANO_OS_SHUTDOWN_RESET:
+      {
+        returnValue = HAL->power->enterMode(HAL_POWER_MODE_RESET);
+      }
+      break;
+    
+    default:
+      {
+        returnValue = -EINVAL;
+      }
+      break;
+  }
+
+  schedulerShutdownArgs->returnValue = returnValue;
+  returnValue = 0;
+  processMessageSetDone(processMessage);
+  return returnValue;
+}
+
 /// @typedef SchedulerCommandHandler
 ///
 /// @brief Signature of command handler for a scheduler command.
@@ -2779,6 +2939,8 @@ const SchedulerCommandHandler schedulerCommandHandlers[] = {
   schedulerExecveCommandHandler,            // SCHEDULER_EXECVE
   schedulerSpawnCommandHandler,             // SCHEDULER_SPAWN
   schedulerSendSignalCommandHandler,        // SCHEDULER_SEND_SIGNAL
+  schedulerReplaceOverlayCommandHandler,    // SCHEDULER_REPLACE_OVERLAY
+  schedulerShutdownCommandHandler,          // SCHEDULER_SHUTDOWN
 };
 
 /// @fn void handleSchedulerMessage(SchedulerState *schedulerState)
