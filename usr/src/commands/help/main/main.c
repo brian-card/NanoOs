@@ -38,6 +38,9 @@ int main(int argc, char **argv) {
   int returnValue = 0;
 
   printf("%s %-2s\n",
+    "cat:                    ",
+    "Write the contents of a file to the current console.");
+  printf("%s %-2s\n",
     "dumpMemoryAllocations:  ",
     "Dump information about all dynamic memory allocations.");
   printf("%s %-2s\n",
