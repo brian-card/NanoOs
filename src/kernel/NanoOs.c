@@ -141,14 +141,7 @@ void* yieldCallback(void *stateData, Thread *thread, void *arg) {
     return arg;
   }
 
-  if (getRunningProcess() != NULL) {
-    PrivilegeLevel privilegeLevel = getRunningProcess()->privilegeLevel;
-    getRunningProcess()->privilegeLevel = PRIVILEGE_LEVEL_KERNEL;
-    // No need to check HAL->timer for NULL.  This function can't be configured
-    // to be called unless it wasn't NULL at boot.
-    HAL->timer->cancel(schedulerState->preemptionTimer);
-    getRunningProcess()->privilegeLevel = privilegeLevel;
-  }
+  HAL->timer->cancel(schedulerState->preemptionTimer);
 
   return arg;
 }
