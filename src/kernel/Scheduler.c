@@ -229,6 +229,18 @@ static const char* const shellNames[NANO_OS_MAX_NUM_SHELLS] = {
   "shell 1",
 };
 
+/// @var standardExecutiveHalCapabilities
+///
+/// @brief Array of HalCapability items that describe what a process can do
+/// with the HAL.
+HalCapability standardExecutiveHalCapabilities[] = {
+  {
+    /* subsystem= */ HAL_UART,
+    /* function= */  HAL_UART_WRITE,
+    /* deviceId= */  0,
+  },
+};
+
 /// @var standardUserHalCapabilities
 ///
 /// @brief Array of HalCapability items that describe what a process can do
@@ -4036,6 +4048,11 @@ __attribute__((noinline)) void startScheduler(
     processDescriptor = &allProcesses[ii - 1];
     if (processDescriptor->privilegeLevel == PRIVILEGE_LEVEL_KERNEL) {
       continue;
+    } else if (processDescriptor->privilegeLevel == PRIVILEGE_LEVEL_EXECUTIVE) {
+      processDescriptor->halCapabilities = standardExecutiveHalCapabilities;
+      processDescriptor->numHalCapabilities
+        = sizeof(standardExecutiveHalCapabilities)
+        / sizeof(standardExecutiveHalCapabilities[0]);
     } else {
       processDescriptor->halCapabilities = standardUserHalCapabilities;
       processDescriptor->numHalCapabilities
