@@ -490,6 +490,14 @@ int getPartitionInfo(FilesystemState *fs) {
     printDebugString("getPartitionInfo: Reading partition sectors\n");
     readBytes(&sectorsValue, &entry[PARTITION_SECTORS_OFFSET]);
     fs->endLba = fs->startLba + sectorsValue - 1;
+
+    printDebugString("Filesystem type 0x");
+    printDebugHex(type);
+    printDebugString(" runs from block ");
+    printDebugInt(fs->startLba);
+    printDebugString(" to block ");
+    printDebugInt(fs->endLba);
+    printDebugString("\n");
     
     printDebugString("getPartitionInfo: Returing good status\n");
     return 0;
