@@ -69,14 +69,18 @@ static const uint32_t halFunctionCounts[HAL_NUM_SUBSYSTEMS] = {
 /// @return Returns the value returned by the platform function, or -ENOTSUP if
 /// no function has been registered for the given subsystem/function pair.
 int32_t callHal(HalSubsystem subsystem, uint32_t function, ...) {
+  ProcessDescriptor *processDescriptor = getRunningProcess();
   if ((subsystem >= HAL_NUM_SUBSYSTEMS)
     || (halFunctions[subsystem] == NULL)
     || (function >= halFunctionCounts[subsystem])
     || (halFunctions[subsystem][function] == NULL)
   ) {
     return -ENOTSUP;
-  } else if (getRunningProcess() != NULL) {
-    if (getRunningProcess()->privilegeLevel != PRIVILEGE_LEVEL_KERNEL) {
+  } else if (processDescriptor != NULL) {
+    if ((processDescriptor->privilegeLevel != PRIVILEGE_LEVEL_KERNEL) 
+      && (findHalCapability(processDescriptor->halCapabilities,
+        processDescriptor->numHalCapabilities, subsystem, function) == NULL)
+    ) {
       return -EACCES;
     }
   }

@@ -88,6 +88,9 @@ extern "C"
 /// console process's stack.
 #define CONSOLE_NUM_BUFFERS 4
 
+// Forward declarations from other headers
+typedef struct HalCapability HalCapability;
+
 // Primitive types
 
 /// @enum PrivilegeLevel
@@ -233,6 +236,11 @@ typedef struct ProcessQueue ProcessQueue;
 ///   for use by a future process.
 /// @param restartArgs A void pointer to any process-specific arguments needed
 ///   by restartFunction.
+/// @param halCapabilities A pointer to a *SORTED* array of HalCapability
+///   objects that describe the operations that the process is permitted to do
+///   with the HAL.  This will be NULL for PRIVILEGE_LEVEL_KERNEL processes.
+/// @param numHalCapabilities The  number of HalCapability objects in the
+///   halCapabilities array.
 typedef struct ProcessDescriptor {
   const char         *name;
   Thread             *mainThread;
@@ -252,6 +260,8 @@ typedef struct ProcessDescriptor {
                       const char *function, void *args);
   int32_t           (*restartFunction)(struct ProcessDescriptor *self);
   void               *restartArgs;
+  HalCapability      *halCapabilities;
+  size_t              numHalCapabilities;
 } ProcessDescriptor;
 
 /// @struct ProcessInfoElement

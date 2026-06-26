@@ -206,6 +206,22 @@ typedef struct NanoOsOverlayMap NanoOsOverlayMap;
 typedef struct ProcessDescriptor ProcessDescriptor;
 typedef struct SchedulerState SchedulerState;
 
+/// @struct HalCapability
+///
+/// @brief Metadata to describe a HAL capability that a process has.
+///
+/// @param subsystem A HalSubsystem that the process is authorized to use.
+/// @param function A function within the specified subsystem that the process
+///   is authorized to use.
+/// @param deviceId The ID of a device that the process is authorized to use the
+///   subsystem function with.
+typedef struct HalCapability {
+  HalSubsystem subsystem;
+  uint8_t function;
+  uint8_t deviceId;
+} HalCapability;
+
+// HAL subsystems
 typedef struct HalMemory {
   /// @fn int32_t processStackSize(bool debug, size_t *returnValue)
   ///
@@ -773,6 +789,13 @@ typedef struct Hal {
 } Hal;
 
 extern const Hal *HAL;
+
+HalCapability* findHalCapability(
+  HalCapability *capabilities, size_t numCapabilities,
+  HalSubsystem subsystem, uint32_t function);
+HalCapability* findHalCapabilityWithDevice(
+  HalCapability *capabilities, size_t numCapabilities,
+  HalSubsystem subsystem, uint32_t function, int32_t deviceId);
 
 #ifdef __cplusplus
 } // extern "C"

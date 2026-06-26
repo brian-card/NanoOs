@@ -56,6 +56,7 @@ OS_OBJECTS := \
     $(OBJ_DIR)/Coroutines.o \
     $(OBJ_DIR)/Fat32Filesystem.o \
     $(OBJ_DIR)/Filesystem.o \
+    $(OBJ_DIR)/Hal.o \
     $(OBJ_DIR)/HalCommon.o \
     $(OBJ_DIR)/HalPosix.o \
     $(OBJ_DIR)/HalPosixImpl.o \

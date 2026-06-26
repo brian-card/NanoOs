@@ -52,6 +52,7 @@ OBJECTS = \
     $(OBJ_DIR)/Coroutines.o \
     $(OBJ_DIR)/Fat32Filesystem.o \
     $(OBJ_DIR)/Filesystem.o \
+    $(OBJ_DIR)/Hal.o \
     $(OBJ_DIR)/Link.o \
     $(OBJ_DIR)/MemoryManager.o \
     $(OBJ_DIR)/Messages.o \

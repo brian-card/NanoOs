@@ -229,6 +229,18 @@ static const char* const shellNames[NANO_OS_MAX_NUM_SHELLS] = {
   "shell 1",
 };
 
+/// @var standardUserHalCapabilities
+///
+/// @brief Array of HalCapability items that describe what a process can do
+/// with the HAL.
+HalCapability standardUserHalCapabilities[] = {
+  {
+    /* subsystem= */ HAL_TIMER,
+    /* function= */  HAL_TIMER_CANCEL,
+    /* deviceId= */  0, // To be filled in by scheduler
+  },
+};
+
 /// @fn void runSchedulerQueues(PrivilegeLevel privilegeLevelBound)
 ///
 /// @brief Make one pass through all the process queues less than the provided
@@ -3822,6 +3834,7 @@ __attribute__((noinline)) void startScheduler(
     for (int32_t ii = 0; ii < ((int32_t) HAL->timer->numSupported); ii++) {
       if (online(HAL->timer, ii)) {
         schedulerState.preemptionTimer = ii;
+        standardUserHalCapabilities[0].deviceId = ii;
         break;
       }
     }
@@ -4017,6 +4030,19 @@ __attribute__((noinline)) void startScheduler(
     }
   }
   printDebugString("Created all processes.\n");
+
+  // Set the capabilities for all of the processes.
+  for (ProcessId ii = 1; ii <= NANO_OS_NUM_PROCESSES; ii++) {
+    processDescriptor = &allProcesses[ii - 1];
+    if (processDescriptor->privilegeLevel == PRIVILEGE_LEVEL_KERNEL) {
+      continue;
+    } else {
+      processDescriptor->halCapabilities = standardUserHalCapabilities;
+      processDescriptor->numHalCapabilities
+        = sizeof(standardUserHalCapabilities)
+        / sizeof(standardUserHalCapabilities[0]);
+    }
+  }
 
   // allProcesses array is ordered console process, memory manager process, then
   // either the first block device or the first user process.  So, we want the
