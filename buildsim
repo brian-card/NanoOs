@@ -1,7 +1,6 @@
 #!/bin/bash
 
 set -e
-set -x
 
 hostname="${1}"
 filesystem="fat32"
@@ -17,7 +16,6 @@ fi
 imageFile="$(mktemp)"
 
 cleanup() {
-	echo "cleanup() called, imageFile=${imageFile}" >&2
 	rm -f "${imageFile}"
 }
 trap cleanup ERR EXIT
@@ -60,7 +58,7 @@ MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s usr/lib ::/usr/lib
 MTOOLS_SKIP_CHECK=1 mmd -i "${fatImage}" ::/etc
 printf '%s' "${hostname}" \
 	| MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" - ::/etc/hostname
-printf '\\s \\\r \\\n \\l\n\n' \
+printf '\\s \\r \\n \\l\n\n' \
 	| MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" - ::/etc/issue
 
 # Write block overlays into the image at their absolute sector positions,
@@ -73,42 +71,4 @@ for blockOverlay in ${blockOverlays}; do
 	dd if="${blockOverlay}" of="${imageFile}" bs=512 seek=${startBlock} conv=notrunc
 done
 
-echo ""
-echo "=== Diagnostics ==="
-
-echo ""
-echo "--- Image file size ---"
-ls -la "${imageFile}"
-
-echo ""
-echo "--- Partition table ---"
-sfdisk -l "${imageFile}"
-
-echo ""
-echo "--- BPB (boot sector of FAT32 partition, first 90 bytes) ---"
-dd if="${imageFile}" bs=1 skip="${partitionOffsetBytes}" count=90 2>/dev/null | xxd
-
-echo ""
-echo "--- mdir of FAT32 partition ---"
-MTOOLS_SKIP_CHECK=1 mdir -i "${fatImage}" -/ :: 2>&1 || true
-
-echo ""
-echo "--- Root cluster (first 256 bytes at reserved+FAT region) ---"
-# BPB offset 0x0E (2 bytes): reserved sectors; 0x24 (4 bytes): sectors per FAT
-# Read these from the boot sector to compute root cluster offset dynamically
-reservedSectors=$(dd if="${imageFile}" bs=1 skip=$(( partitionOffsetBytes + 14 )) \
-	count=2 2>/dev/null | od -An -tu2 | tr -d ' ')
-sectorsPerFat=$(dd if="${imageFile}" bs=1 skip=$(( partitionOffsetBytes + 36 )) \
-	count=4 2>/dev/null | od -An -tu4 | tr -d ' ')
-rootClusterOffset=$(( partitionOffsetBytes \
-	+ (reservedSectors + 2 * sectorsPerFat) * 512 ))
-echo "  Reserved sectors: ${reservedSectors}"
-echo "  Sectors per FAT:  ${sectorsPerFat}"
-echo "  Root cluster byte offset in image: ${rootClusterOffset}"
-dd if="${imageFile}" bs=1 skip="${rootClusterOffset}" count=256 2>/dev/null | xxd
-
-echo "=== End diagnostics ==="
-echo ""
-
-set +x
 sim/bin/nano-os-sim "${imageFile}"
