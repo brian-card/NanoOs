@@ -594,33 +594,3 @@ ProcessMessage* initSendProcessMessageToPid(int pid, int64_t type,
   return processMessage;
 }
 
-/// @fn void* waitForDataMessage(
-///   ProcessMessage *sent, int type, const struct timespec *ts)
-///
-/// @brief Wait for a reply to a previously-sent message and get the data from
-/// it.  The provided message will be released when the reply is received.
-///
-/// @param sent A pointer to a previously-sent ProcessMessage the calling function is
-///   waiting on a reply to.
-/// @param type The type of message expected to be sent as a response.
-/// @param ts A pointer to a struct timespec with the future time at which to
-///   timeout if nothing is received by then.  If this parameter is NULL, an
-///   infinite timeout will be used.
-///
-/// @return Returns a pointer to the data member of the received message on
-/// success, NULL on failure.
-void* waitForDataMessage(ProcessMessage *sent, int type, const struct timespec *ts) {
-  void *returnValue = NULL;
-
-  ProcessMessage *incoming = processMessageWaitForReplyWithType(sent, true, type, ts);
-  if (incoming != NULL)  {
-    returnValue = processMessageData(incoming);
-    if (processMessageRelease(incoming) != processSuccess) {
-      printString("ERROR: "
-        "Could not release incoming message from waitForDataMessage.\n");
-    }
-  }
-
-  return returnValue;
-}
-

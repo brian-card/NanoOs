@@ -314,7 +314,6 @@ int sendProcessMessageToPid(unsigned int pid, ProcessMessage *processMessage);
 ProcessMessage* getAvailableMessage(void);
 ProcessMessage* initSendProcessMessageToPid(int pid, int64_t type,
   void *data, size_t size, bool waiting);
-void* waitForDataMessage(ProcessMessage *sent, int type, const struct timespec *ts);
 ExecArgs* execArgsDestroy(ExecArgs *execArgs);
 SpawnArgs* spawnArgsDestroy(SpawnArgs *spawnArgs);
 
