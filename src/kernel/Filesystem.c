@@ -1,17 +1,18 @@
 ///////////////////////////////////////////////////////////////////////////////
 ///
-/// @file              Filesystem.cpp
+/// @file              Filesystem.c
 ///
 /// @brief             Common filesystem functionality.
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "../user/NanoOsLibC.h"
-#include "../user/NanoOsStdio.h"
 #include "Filesystem.h"
 #include "NanoOs.h"
 #include "Scheduler.h"
 #include "Processes.h"
+
+#include "../user/NanoOsStdio.h"
 
 // Partition table constants
 #define PARTITION_TABLE_OFFSET 0x1BE
@@ -49,9 +50,9 @@ int filesystemOpenFileCommandHandler(
     = (FilesystemFopenArgs*) processMessageData(processMessage);
 
   printDebugString("Opening file \"");
-  printDebugString(pathname);
+  printDebugString(fopenArgs->pathname);
   printDebugString("\" in mode \"");
-  printDebugString(mode);
+  printDebugString(fopenArgs->mode);
   printDebugString("\"\n");
 
   if (filesystemState->driverState != NULL) {
