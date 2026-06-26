@@ -221,14 +221,6 @@ static FileDescriptor standardUserFileDescriptors[
   },
 };
 
-/// @var shellNames
-///
-/// @brief The names of the shells as they will appear in the process table.
-static const char* const shellNames[NANO_OS_MAX_NUM_SHELLS] = {
-  "shell 0",
-  "shell 1",
-};
-
 /// @var standardExecutiveHalCapabilities
 ///
 /// @brief Array of HalCapability items that describe what a process can do
@@ -4121,9 +4113,9 @@ __attribute__((noinline)) void startScheduler(
     if (schedulerSetPortShell(ii, schedulerState.firstShellPid + ii)
       != processSuccess
     ) {
-      printString("WARNING: Could not set shell for ");
-      printString(shellNames[ii]);
-      printString(".\n");
+      printString("WARNING: Could not set port for shell ");
+      printInt(ii);
+      printString("\n");
       printString("         Undefined behavior will result.\n");
     }
   }
