@@ -944,6 +944,18 @@ int32_t arduinoSamD21x18ARemainingTimerNanoseconds(va_list args) {
 }
 
 static int32_t arduinoSamD21x18ACancelTimerImpl(int32_t deviceId) {
+  // Always validate capabilities first.
+  ProcessDescriptor *processDescriptor = getRunningProcess();
+  if (processDescriptor != NULL) {
+    if ((processDescriptor->privilegeLevel != PRIVILEGE_LEVEL_KERNEL)
+      && (findHalCapabilityWithDevice(processDescriptor->halCapabilities,
+        processDescriptor->numHalCapabilities, HAL_TIMER, HAL_TIMER_CANCEL,
+        deviceId) == NULL)
+    ) {
+      return -EACCES;
+    }
+  }
+
   if ((deviceId < 0) || (deviceId >= _numTimers)) {
     return -ERANGE;
   }

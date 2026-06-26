@@ -653,6 +653,18 @@ int32_t posixRemainingTimerNanoseconds(va_list args) {
 int32_t posixCancelTimer(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
 
+  // Always validate capabilities first.
+  ProcessDescriptor *processDescriptor = getRunningProcess();
+  if (processDescriptor != NULL) {
+    if ((processDescriptor->privilegeLevel != PRIVILEGE_LEVEL_KERNEL)
+      && (findHalCapabilityWithDevice(processDescriptor->halCapabilities,
+        processDescriptor->numHalCapabilities, HAL_TIMER, HAL_TIMER_CANCEL,
+        deviceId) == NULL)
+    ) {
+      return -EACCES;
+    }
+  }
+
   if (deviceId >= _numTimers) {
     return -ERANGE;
   }
