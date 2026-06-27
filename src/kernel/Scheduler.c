@@ -384,6 +384,128 @@ IpcCapability baseUserIpcCapabilities[] = {
   },
 };
 
+/// @fn int addProcessIpcCapability(ProcessDescriptor *processDescriptor,
+///   ProcessId destinationPid, uint32_t messageType)
+///
+/// @brief Do an in-order array insertion into a process's ipcCapabilities
+/// array.
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor with the
+///   ipcCapabilities array to update.
+/// @param destinationPid The ProcessId that the IPC message is destined for.
+/// @param messageType The numeric message that is to be sent to the
+///   destination.
+///
+/// @return Returns 0 on success, -errno on failure.
+int addProcessIpcCapability(ProcessDescriptor *processDescriptor,
+  ProcessId destinationPid, uint32_t messageType
+) {
+  IpcCapability *capability = NULL;
+  size_t ii = 0;
+  if (processDescriptor->numIpcCapabilities > 0) {
+    for (ii = 0; ii < processDescriptor->numIpcCapabilities; ii++) {
+      capability = &processDescriptor->ipcCapabilities[ii];
+      if (capability->destinationPid == destinationPid) {
+        break;
+      }
+    }
+  }
+
+  if (capability != NULL) {
+    // Add the message type to the existing capability's messageTypes.
+    capability->messageTypes |= ((uint16_t) 1) << messageType;
+    // We're done.
+    return 0;
+  }
+
+  // If we made it this far then the destination PID doesn't exist in the
+  // process's capabilities yet, so we'll have to extend the array.
+  if (processDescriptor->ipcCapabilitiesDynamic == true) {
+    // Resize the existing array.  This is the expected case.
+    void *check = realloc(processDescriptor->ipcCapabilities,
+      sizeof(IpcCapability) * (processDescriptor->numIpcCapabilities + 1));
+    if (check == NULL) {
+      printString("ERROR: realloc returned NULL when trying to allocate ");
+      printInt(processDescriptor->numIpcCapabilities + 1);
+      printString(" IpcCapability objects\n");
+      return -ENOMEM;
+    }
+    processDescriptor->ipcCapabilities = (IpcCapability*) check;
+  } else {
+    // Array is one of the statically-allocated ones.  We'll have to make a
+    // copy first.
+    void *copy = malloc(
+      sizeof(IpcCapability) * (processDescriptor->numIpcCapabilities + 1));
+    if (copy == NULL) {
+      printString("ERROR: malloc returned NULL when trying to allocate ");
+      printInt(processDescriptor->numIpcCapabilities + 1);
+      printString(" IpcCapability objects\n");
+      return -ENOMEM;
+    }
+    memcpy(copy, processDescriptor->ipcCapabilities,
+      sizeof(IpcCapability) * processDescriptor->numIpcCapabilities);
+    processDescriptor->ipcCapabilities = (IpcCapability*) copy;
+    processDescriptor->ipcCapabilitiesDynamic = true;
+  }
+
+  // Find the place in the array that we need to insert the capability.
+  for (ii = 0; ii < processDescriptor->numIpcCapabilities; ii++) {
+    capability = &processDescriptor->ipcCapabilities[ii];
+    if (capability->destinationPid > destinationPid) {
+      break;
+    }
+  }
+
+  // Move all the capabilities from this point on down by one.
+  for (; ii < processDescriptor->numIpcCapabilities; ii++) {
+    processDescriptor->ipcCapabilities[ii + 1]
+      = processDescriptor->ipcCapabilities[ii];
+  }
+
+  // capability still points to the spot we need to update, so set the members
+  // of that poniter.
+  capability->destinationPid = destinationPid;
+  capability->messageTypes = ((uint16_t) 1) << messageType;
+  processDescriptor->numIpcCapabilities++;
+
+  return 0;
+}
+
+/// @fn int removeProcessIpcCapability(ProcessDescriptor *processDescriptor,
+///   ProcessId destinationPid, uint32_t messageType)
+///
+/// @brief Remove a capability from a process's ipcCapabilities array.
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor with the
+///   ipcCapabilities array to update.
+/// @param destinationPid The ProcessId that the IPC message is destined for.
+/// @param messageType The numeric message that is to be sent to the
+///   destination.
+///
+/// @return Returns 0 on success, -errno on failure.
+int removeProcessIpcCapability(ProcessDescriptor *processDescriptor,
+  ProcessId destinationPid, uint32_t messageType
+) {
+  IpcCapability *capability = NULL;
+  if (processDescriptor->numIpcCapabilities > 0) {
+    for (size_t ii = 0; ii < processDescriptor->numIpcCapabilities; ii++) {
+      capability = &processDescriptor->ipcCapabilities[ii];
+      if (capability->destinationPid == destinationPid) {
+        break;
+      }
+    }
+  }
+
+  if (capability != NULL) {
+    // Exclude the message type from the existing capability's messageTypes.
+    capability->messageTypes &= ~(((uint16_t) 1) << messageType);
+  }
+  // else this destinationPid isn't even in the process's ipcCapabilities array,
+  // so there's nothing to update.
+
+  return 0;
+}
+
 /// @fn void runSchedulerQueues(PrivilegeLevel privilegeLevelBound)
 ///
 /// @brief Make one pass through all the process queues less than the provided
