@@ -166,7 +166,6 @@ void releaseConsole(void);
 int getOwnedConsolePort(void);
 bool getConsoleEcho(void);
 int setConsoleEcho(bool desiredEchoState);
-int getNumConsolePorts(void);
 
 // Exported processes
 void* runConsole(void *args);

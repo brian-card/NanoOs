@@ -1265,29 +1265,3 @@ int setConsoleEcho(bool desiredEchoState) {
   return returnValue;
 }
 
-/// @fn int getNumConsolePorts(void)
-///
-/// @brief Get the number of ports the console is running.
-///
-/// @return Returns the number of ports running on success, -1 on failure.
-int getNumConsolePorts(void) {
-  ConsoleGetNumPortsArgs consoleGetNumPortsArgs = {
-    .numPorts = 0,
-  };
-  ProcessMessage *sent = initSendProcessMessageToPid(
-    SCHEDULER_STATE->consolePid,
-    CONSOLE_COMMAND_SIGNATURE | CONSOLE_GET_NUM_PORTS,
-    /* data= */ &consoleGetNumPortsArgs,
-    /* size= */ sizeof(consoleGetNumPortsArgs),
-    /* waiting= */ true);
-  if (sent == NULL) {
-    return -1;
-  }
-
-  processMessageWaitForDone(sent, NULL);
-  int returnValue = consoleGetNumPortsArgs.numPorts;
-  processMessageRelease(sent);
-
-  return returnValue;
-}
-
