@@ -332,8 +332,6 @@ SpawnArgs* spawnArgsDestroy(SpawnArgs *spawnArgs);
 IpcCapability* findIpcCapability(
   IpcCapability *capabilities, size_t numCapabilities,
   uint8_t destinationPid, uint16_t messageType);
-IpcCapability* findCurrentIpcCapability(
-  uint8_t destinationPid, uint16_t messageType);
 bool currentProcessHasIpcCapability(
   uint8_t destinationPid, uint16_t messageType);
 
