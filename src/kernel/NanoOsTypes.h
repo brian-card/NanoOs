@@ -90,6 +90,7 @@ extern "C"
 
 // Forward declarations from other headers
 typedef struct HalCapability HalCapability;
+typedef struct IpcCapability IpcCapability;
 
 // Primitive types
 
@@ -239,8 +240,15 @@ typedef struct ProcessQueue ProcessQueue;
 /// @param halCapabilities A pointer to a *SORTED* array of HalCapability
 ///   objects that describe the operations that the process is permitted to do
 ///   with the HAL.  This will be NULL for PRIVILEGE_LEVEL_KERNEL processes.
-/// @param numHalCapabilities The  number of HalCapability objects in the
+/// @param numHalCapabilities The number of HalCapability objects in the
 ///   halCapabilities array.
+/// @param ipcCapabilities A pointer to a *SORTED* array of IpcCapability
+///   objects that describe the message that the process is permitted to send to
+///   other processes.  This will be NULL only for the scheduler process.
+/// @param numIpcCapabilities The number of IpcCapability objects in the
+///   ipcCapabilities array.
+/// @param ipcCapabilitiesDynamic Whether or not the ipcCapabilities array is
+///   dynamically allocated.
 typedef struct ProcessDescriptor {
   const char         *name;
   Thread             *mainThread;
@@ -262,6 +270,9 @@ typedef struct ProcessDescriptor {
   void               *restartArgs;
   HalCapability      *halCapabilities;
   size_t              numHalCapabilities;
+  IpcCapability      *ipcCapabilities;
+  size_t              numIpcCapabilities;
+  bool                ipcCapabilitiesDynamic;
 } ProcessDescriptor;
 
 /// @struct ProcessInfoElement
