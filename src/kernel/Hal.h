@@ -797,6 +797,8 @@ bool currentProcessHasHalCapability(
 HalCapability* findHalCapabilityWithDevice(
   HalCapability *capabilities, size_t numCapabilities,
   HalSubsystem subsystem, uint32_t function, int32_t deviceId);
+bool currentProcessHasHalCapabilityWithDevice(
+  HalSubsystem subsystem, uint32_t function, int32_t deviceId);
 
 #ifdef __cplusplus
 } // extern "C"

@@ -136,3 +136,31 @@ HalCapability* findHalCapabilityWithDevice(
   return NULL;
 }
 
+/// @fn bool currentProcessHasHalCapabilityWithDevice(
+///   HalSubsystem subsystem, uint32_t function, int32_t deviceId)
+///
+/// @brief Find an IpcCapability object in the currently-running process's
+/// halCapabilities array given a subsystem and function.
+///
+/// @param subsystem The HalSubsystem to search for.
+/// @param function A Hal*Function enum value within the subsystem to search
+///   for.
+/// @param deviceId The ID of the device within the subsystem function to search
+///   for.
+///
+/// @return Returns true if the capability is found in the current process's
+/// halCapabilities, false if not.
+bool currentProcessHasHalCapabilityWithDevice(
+  HalSubsystem subsystem, uint32_t function, int32_t deviceId
+) {
+  ProcessDescriptor *processDescriptor = getRunningProcess();
+  if (processDescriptor == NULL) {
+    // Unlikely but possible in the very early stages of booting.
+    return false;
+  }
+
+  return (findHalCapabilityWithDevice(
+    processDescriptor->halCapabilities, processDescriptor->numHalCapabilities,
+    subsystem, function, deviceId));
+}
+
