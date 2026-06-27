@@ -59,21 +59,14 @@ HalCapability* findHalCapability(
   // CPU with cache prefetch, it may actually load the entire array into cache.
   // Just do a linear search with an early termination since the array is
   // sorted.
+  uint16_t subsystemFunction = (((uint16_t) subsystem) << 8) | function;
   for (size_t ii = 0; ii < numCapabilities; ii++) {
     HalCapability *capability = &capabilities[ii];
-    if ((capability->subsystem == subsystem)
-      && (capability->function == function)
-    ) {
+    if (capability->subsystemFunction == subsystemFunction) {
       return capability;
-    } else if (capability->subsystem > subsystem) {
+    } else if (capability->subsystemFunction > subsystemFunction) {
       // We've passed the subsystem we're looking for in the array, so it's not
       // there.  Bail.
-      return NULL;
-    } else if ((capability->subsystem == subsystem)
-      && (capability->function > function)
-    ) {
-      // We've passed the function we're looking for in the subsystem, so it's
-      // not there.  Bail.
       return NULL;
     }
   }

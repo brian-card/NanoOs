@@ -227,9 +227,8 @@ static FileDescriptor standardUserFileDescriptors[
 /// with the HAL.
 HalCapability standardExecutiveHalCapabilities[] = {
   {
-    /* subsystem= */ HAL_UART,
-    /* function= */  HAL_UART_WRITE,
-    /* deviceIds= */ 0x01, // Bitmask for device ID 0
+    /* subsystemFunction= */ (((uint16_t) HAL_UART) << 8) | HAL_UART_WRITE,
+    /* deviceIds= */         0x01, // Bitmask for device ID 0
   },
 };
 
@@ -239,9 +238,8 @@ HalCapability standardExecutiveHalCapabilities[] = {
 /// with the HAL.
 HalCapability standardUserHalCapabilities[] = {
   {
-    /* subsystem= */ HAL_TIMER,
-    /* function= */  HAL_TIMER_CANCEL,
-    /* deviceIds= */ 0, // To be filled in by scheduler
+    /* subsystemFunction= */ (((uint16_t) HAL_TIMER) << 8) | HAL_TIMER_CANCEL,
+    /* deviceIds= */         0, // To be filled in by scheduler
   },
 };
 
