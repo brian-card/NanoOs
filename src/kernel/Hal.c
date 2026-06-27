@@ -34,6 +34,7 @@
 
 // NanoOs includes
 #include "Hal.h"
+#include "Processes.h"
 
 /// @fn HalCapability* findHalCapability(
 ///   HalCapability *capabilities, size_t numCapabilities,
@@ -73,6 +74,32 @@ HalCapability* findHalCapability(
 
   // We searched the entire array and found nothing.  Return NULL.
   return NULL;
+}
+
+/// @fn bool currentProcessHasHalCapability(
+///   HalSubsystem subsystem, uint32_t function)
+///
+/// @brief Find an IpcCapability object in the currently-running process's
+/// halCapabilities array given a subsystem and function.
+///
+/// @param subsystem The HalSubsystem to search for.
+/// @param function A Hal*Function enum value within the subsystem to search
+///   for.
+///
+/// @return Returns true if the capability is found in the current process's
+/// halCapabilities, false if not.
+bool currentProcessHasHalCapability(
+  HalSubsystem subsystem, uint32_t function
+) {
+  ProcessDescriptor *processDescriptor = getRunningProcess();
+  if (processDescriptor == NULL) {
+    // Unlikely but possible in the very early stages of booting.
+    return false;
+  }
+
+  return (findHalCapability(
+    processDescriptor->halCapabilities, processDescriptor->numHalCapabilities,
+    subsystem, function));
 }
 
 /// @fn HalCapability* findHalCapabilityWithDevice(

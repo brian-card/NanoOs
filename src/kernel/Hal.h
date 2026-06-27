@@ -792,6 +792,8 @@ extern const Hal *HAL;
 HalCapability* findHalCapability(
   HalCapability *capabilities, size_t numCapabilities,
   HalSubsystem subsystem, uint32_t function);
+bool currentProcessHasHalCapability(
+  HalSubsystem subsystem, uint32_t function);
 HalCapability* findHalCapabilityWithDevice(
   HalCapability *capabilities, size_t numCapabilities,
   HalSubsystem subsystem, uint32_t function, int32_t deviceId);
