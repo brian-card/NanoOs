@@ -399,6 +399,46 @@ void* runBlockOverlay(void *args) {
   return main(blockOverlayArgs.args);
 }
 
+/// @fn IpcCapability* findIpcCapability(
+///   IpcCapability *capabilities, size_t numCapabilities,
+///   uint8_t destinationPid, uint16_t messageType)
+///
+/// @brief Find a IpcCapability object in an array of them given a destination
+/// PID and a message type.
+///
+/// @param capabilities An array of IpcCapability objects.
+/// @param numCapabilities The number of IpcCapability objects in the
+///   capabilities array.
+/// @param destinationPid The process ID that the message is bound for.
+/// @param messageType The numerical message type value that is to be sent.
+///
+/// @return Returns a pointer to the first matching capability on success, NULL
+/// on failure.
+IpcCapability* findIpcCapability(
+  IpcCapability *capabilities, size_t numCapabilities,
+  uint8_t destinationPid, uint16_t messageType
+) {
+  // The array of capabilites is expected to be small.  If we're running on a
+  // CPU with cache prefetch, it may actually load the entire array into cache.
+  // Just do a linear search with an early termination since the array is
+  // sorted.
+  for (size_t ii = 0; ii < numCapabilities; ii++) {
+    IpcCapability *capability = &capabilities[ii];
+    if ((capability->destinationPid == destinationPid)
+      && (capability->messageTypes & (((uint16_t) 1) << messageType))
+    ) {
+      return capability;
+    } else if (capability->destinationPid > destinationPid) {
+      // We've passed the subsystem we're looking for in the array, so it's not
+      // there.  Bail.
+      return NULL;
+    }
+  }
+
+  // We searched the entire array and found nothing.  Return NULL.
+  return NULL;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 ///////// NOTHING BELOW THIS LINE MAY CALL initSendProcessMessageTo*: //////////

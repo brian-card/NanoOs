@@ -329,6 +329,9 @@ ProcessMessage* initSendProcessMessageToPid(int pid, int64_t type,
   void *data, size_t size, bool waiting);
 ExecArgs* execArgsDestroy(ExecArgs *execArgs);
 SpawnArgs* spawnArgsDestroy(SpawnArgs *spawnArgs);
+IpcCapability* findIpcCapability(
+  IpcCapability *capabilities, size_t numCapabilities,
+  uint8_t destinationPid, uint16_t messageType);
 
 #ifdef __cplusplus
 } // extern "C"
