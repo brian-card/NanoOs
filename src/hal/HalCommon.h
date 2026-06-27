@@ -84,7 +84,7 @@ extern HalBlockDevice halCommonBlockDevice;
 
 int32_t callHal(HalSubsystem subsystem, uint32_t function, ...);
 BlockDevice* halCommonInitRootSdSpiStorage(SdCardSpiArgs *sdCardSpiArgs);
-int32_t halCommonInitRootFilesystem(void);
+int32_t halCommonInitRootFilesystem(IpcCapability *filesystemCapabilities);
 int32_t restartFilesystem(ProcessDescriptor *processDescriptor);
 int32_t halCommonInit(void);
 

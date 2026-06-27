@@ -221,22 +221,22 @@ static FileDescriptor standardUserFileDescriptors[
   },
 };
 
-/// @var standardExecutiveHalCapabilities
+/// @var baseExecutiveHalCapabilities
 ///
 /// @brief Array of HalCapability items that describe what a process can do
 /// with the HAL.
-HalCapability standardExecutiveHalCapabilities[] = {
+HalCapability baseExecutiveHalCapabilities[] = {
   {
     /* subsystemFunction= */ (((uint16_t) HAL_UART) << 8) | HAL_UART_WRITE,
     /* deviceIds= */         0x01, // Bitmask for device ID 0
   },
 };
 
-/// @var standardUserHalCapabilities
+/// @var baseUserHalCapabilities
 ///
 /// @brief Array of HalCapability items that describe what a process can do
 /// with the HAL.
-HalCapability standardUserHalCapabilities[] = {
+HalCapability baseUserHalCapabilities[] = {
   {
     /* subsystemFunction= */ (((uint16_t) HAL_TIMER) << 8) | HAL_TIMER_CANCEL,
     /* deviceIds= */         0, // To be filled in by scheduler
@@ -295,11 +295,11 @@ IpcCapability baseFilesystemIpcCapabilities[] = {
   },
 };
 
-/// @var standardSupervisorIpcCapabilities
+/// @var baseSupervisorIpcCapabilities
 ///
 /// @brief Array of IpcCapability items that describe what messages a process
 /// with supervisor privilege can send to other processes.
-IpcCapability standardSupervisorIpcCapabilities[] = {
+IpcCapability baseSupervisorIpcCapabilities[] = {
   {
     /* destinationPid= */ 0, // Scheduler PID to be set by scheduler
     /* messageTypes= */
@@ -349,11 +349,11 @@ IpcCapability standardSupervisorIpcCapabilities[] = {
   },
 };
 
-/// @var standardUserIpcCapabilities
+/// @var baseUserIpcCapabilities
 ///
 /// @brief Array of IpcCapability items that describe what messages a process
 /// with user privilege can send to other processes.
-IpcCapability standardUserIpcCapabilities[] = {
+IpcCapability baseUserIpcCapabilities[] = {
   {
     /* destinationPid= */ 0, // Scheduler PID to be set by scheduler
     /* messageTypes= */
@@ -3979,7 +3979,7 @@ __attribute__((noinline)) void startScheduler(
     for (int32_t ii = 0; ii < ((int32_t) HAL->timer->numSupported); ii++) {
       if (online(HAL->timer, ii)) {
         schedulerState.preemptionTimer = ii;
-        standardUserHalCapabilities[0].deviceIds = 1 << ii;
+        baseUserHalCapabilities[0].deviceIds = 1 << ii;
         break;
       }
     }
@@ -4104,13 +4104,36 @@ __attribute__((noinline)) void startScheduler(
 
   // schedulerState.firstUserPid isn't populated until HAL->initRootStorage
   // completes, so we need to call that as soon as we can.
-  int rv = HAL->initRootStorage();
+  int rv = HAL->initRootStorage(baseFilesystemIpcCapabilities);
   if (rv != 0) {
     printString("ERROR: initRootStorage returned status ");
     printInt(rv);
     printString("\n");
   }
   printDebugString("Initialized root storage\n");
+
+  // Fix the rest of the IPC capabilities now that all the core processes are
+  // started.
+  baseConsoleIpcCapabilities[0].destinationPid
+    = schedulerState.schedulerPid;
+  baseConsoleIpcCapabilities[1].destinationPid
+    = schedulerState.memoryManagerPid;
+  baseMemoryManagerIpcCapabilities[0].destinationPid
+    = schedulerState.consolePid;
+  baseSupervisorIpcCapabilities[0].destinationPid
+    = schedulerState.schedulerPid;
+  baseSupervisorIpcCapabilities[1].destinationPid
+    = schedulerState.consolePid;
+  baseSupervisorIpcCapabilities[2].destinationPid
+    = schedulerState.memoryManagerPid;
+  baseSupervisorIpcCapabilities[3].destinationPid
+    = schedulerState.rootFsPid;
+  baseUserIpcCapabilities[0].destinationPid
+    = schedulerState.schedulerPid;
+  baseUserIpcCapabilities[1].destinationPid
+    = schedulerState.memoryManagerPid;
+  baseUserIpcCapabilities[2].destinationPid
+    = schedulerState.rootFsPid;
 
   // Initialize all the kernel process file descriptors.
   for (ProcessId ii = 1; ii < schedulerState.firstUserPid; ii++) {
@@ -4182,15 +4205,59 @@ __attribute__((noinline)) void startScheduler(
     if (processDescriptor->privilegeLevel == PRIVILEGE_LEVEL_KERNEL) {
       continue;
     } else if (processDescriptor->privilegeLevel == PRIVILEGE_LEVEL_EXECUTIVE) {
-      processDescriptor->halCapabilities = standardExecutiveHalCapabilities;
+      processDescriptor->halCapabilities = baseExecutiveHalCapabilities;
       processDescriptor->numHalCapabilities
-        = sizeof(standardExecutiveHalCapabilities)
-        / sizeof(standardExecutiveHalCapabilities[0]);
+        = sizeof(baseExecutiveHalCapabilities)
+        / sizeof(baseExecutiveHalCapabilities[0]);
     } else {
-      processDescriptor->halCapabilities = standardUserHalCapabilities;
+      processDescriptor->halCapabilities = baseUserHalCapabilities;
       processDescriptor->numHalCapabilities
-        = sizeof(standardUserHalCapabilities)
-        / sizeof(standardUserHalCapabilities[0]);
+        = sizeof(baseUserHalCapabilities)
+        / sizeof(baseUserHalCapabilities[0]);
+    }
+  }
+
+  allProcesses[schedulerState.consolePid - 1].ipcCapabilities
+    = baseConsoleIpcCapabilities;
+  allProcesses[schedulerState.consolePid - 1].numIpcCapabilities
+    = sizeof(baseConsoleIpcCapabilities)
+    / sizeof(baseConsoleIpcCapabilities[0]);
+  allProcesses[schedulerState.consolePid - 1].ipcCapabilitiesDynamic
+    = false;
+  allProcesses[schedulerState.memoryManagerPid - 1].ipcCapabilities
+    = baseMemoryManagerIpcCapabilities;
+  allProcesses[schedulerState.memoryManagerPid - 1].numIpcCapabilities
+    = sizeof(baseMemoryManagerIpcCapabilities)
+    / sizeof(baseMemoryManagerIpcCapabilities[0]);
+  allProcesses[schedulerState.memoryManagerPid - 1].ipcCapabilitiesDynamic
+    = false;
+  allProcesses[schedulerState.rootFsPid - 1].ipcCapabilities
+    = baseFilesystemIpcCapabilities;
+  allProcesses[schedulerState.rootFsPid - 1].numIpcCapabilities
+    = sizeof(baseFilesystemIpcCapabilities)
+    / sizeof(baseFilesystemIpcCapabilities[0]);
+  allProcesses[schedulerState.rootFsPid - 1].ipcCapabilitiesDynamic
+    = false;
+  for (ProcessId ii = schedulerState.firstUserPid;
+    ii <= NANO_OS_NUM_PROCESSES;
+    ii++
+  ) {
+    if (processDescriptor->privilegeLevel == PRIVILEGE_LEVEL_SUPERVISOR) {
+      allProcesses[ii - 1].ipcCapabilities
+        = baseSupervisorIpcCapabilities;
+      allProcesses[ii - 1].numIpcCapabilities
+        = sizeof(baseSupervisorIpcCapabilities)
+        / sizeof(baseSupervisorIpcCapabilities[0]);
+      allProcesses[ii - 1].ipcCapabilitiesDynamic
+        = false;
+    } else if (processDescriptor->privilegeLevel == PRIVILEGE_LEVEL_USER) {
+      allProcesses[ii - 1].ipcCapabilities
+        = baseUserIpcCapabilities;
+      allProcesses[ii - 1].numIpcCapabilities
+        = sizeof(baseUserIpcCapabilities)
+        / sizeof(baseUserIpcCapabilities[0]);
+      allProcesses[ii - 1].ipcCapabilitiesDynamic
+        = false;
     }
   }
 

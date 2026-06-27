@@ -80,6 +80,9 @@ extern "C"
 #define setOffline(hal, deviceId) \
   hal->online[deviceId >> 5] &= ~(((uint32_t) 1) << (deviceId & 31))
   
+// Forward declarations from other headers.
+typedef struct IpcCapability IpcCapability;
+
 /// @enum HalPowerMode
 ///
 /// @brief Power modes that can be entered by the HAL.
@@ -779,12 +782,15 @@ typedef struct Hal {
   
   // Root storage configuration.
   
-  /// @fn int initRootStorage(void)
+  /// @fn int initRootStorage(IpcCapability *filesystemCapabilities)
   ///
   /// @brief Initialize the processes that operate the root storage system.
   ///
+  /// @param filesystemCapabilities A pointer to an array of IpcCapability
+  ///   objects that will be updated by the call.
+  ///
   /// @return Returns 0 on success, -errno on failure.
-  int32_t (*initRootStorage)(void);
+  int32_t (*initRootStorage)(IpcCapability *filesystemCapabilities);
 } Hal;
 
 extern const Hal *HAL;
