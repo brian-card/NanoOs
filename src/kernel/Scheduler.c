@@ -3830,13 +3830,15 @@ void runScheduler(void) {
       }
     }
 
-    // Configure the preemption timer to force the process to yield if it
-    // doesn't voluntarily give up control within a reasonable amount of time.
-    if (SCHEDULER_STATE->preemptionTimer > -1) {
-      // No need to check HAL->timer for NULL since it can't be NULL in this
-      // case.
-      HAL->timer->configOneShot(
-        SCHEDULER_STATE->preemptionTimer, 10000000, forceYield);
+    if (processDescriptor->privilegeLevel > PRIVILEGE_LEVEL_EXECUTIVE) {
+      // Configure the preemption timer to force the process to yield if it
+      // doesn't voluntarily give up control within a reasonable amount of time.
+      if (SCHEDULER_STATE->preemptionTimer > -1) {
+        // No need to check HAL->timer for NULL since it can't be NULL in this
+        // case.
+        HAL->timer->configOneShot(
+          SCHEDULER_STATE->preemptionTimer, 10000000, forceYield);
+      }
     }
   }
   processResume(processDescriptor, NULL);
