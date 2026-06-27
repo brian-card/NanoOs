@@ -305,6 +305,19 @@ extern "C"
 typedef Coroutine Thread;
 typedef CoroutinesConfigOptions ThreadsConfigOptions;
 
+/// @struct IpcCapability
+///
+/// @brief Structure to represent the capabilities a process has for sending to
+/// a destination process.
+///
+/// @param destinationPid The destination process ID.
+/// @param messageTypes Bitmask of the message types that the capability holding
+///   process is allowed to send to the destination process.
+typedef struct IpcCapability {
+  uint8_t  destinationPid;
+  uint16_t messageTypes;
+} IpcCapability;
+
 // Exported functionality
 void* execCommand(void *args);
 void* runBlockOverlay(void *args);
