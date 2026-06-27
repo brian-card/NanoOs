@@ -212,7 +212,7 @@ typedef struct SchedulerState SchedulerState;
 ///
 /// @param subsystemFunction A uint16_t with the HalSubsystem that the process
 ///   is authorized to use as the upper 8 bits and the function within that
-///   subsystem that's authoerized as the lower 8 bits.
+///   subsystem that's authorized as the lower 8 bits.
 /// @param deviceIds Bitmask of the device IDs that the process is authorized to
 ///   use the subsystem function with.
 typedef struct HalCapability {
