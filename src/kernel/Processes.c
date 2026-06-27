@@ -448,8 +448,8 @@ IpcCapability* findIpcCapability(
 /// @param destinationPid The process ID that the message is bound for.
 /// @param messageType The numerical message type value that is to be sent.
 ///
-/// @return Returns a pointer to the first matching capability on success, NULL
-/// on failure.
+/// @return Returns true if the capability is found in the current process's
+/// ipcCapabilities, false if not.
 bool currentProcessHasIpcCapability(
   uint8_t destinationPid, uint16_t messageType
 ) {
