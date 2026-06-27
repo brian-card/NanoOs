@@ -229,7 +229,7 @@ HalCapability standardExecutiveHalCapabilities[] = {
   {
     /* subsystem= */ HAL_UART,
     /* function= */  HAL_UART_WRITE,
-    /* deviceId= */  0,
+    /* deviceIds= */ 0x01, // Bitmask for device ID 0
   },
 };
 
@@ -241,7 +241,7 @@ HalCapability standardUserHalCapabilities[] = {
   {
     /* subsystem= */ HAL_TIMER,
     /* function= */  HAL_TIMER_CANCEL,
-    /* deviceId= */  0, // To be filled in by scheduler
+    /* deviceIds= */ 0, // To be filled in by scheduler
   },
 };
 
@@ -3838,7 +3838,7 @@ __attribute__((noinline)) void startScheduler(
     for (int32_t ii = 0; ii < ((int32_t) HAL->timer->numSupported); ii++) {
       if (online(HAL->timer, ii)) {
         schedulerState.preemptionTimer = ii;
-        standardUserHalCapabilities[0].deviceId = ii;
+        standardUserHalCapabilities[0].deviceIds = 1 << ii;
         break;
       }
     }

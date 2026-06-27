@@ -213,12 +213,12 @@ typedef struct SchedulerState SchedulerState;
 /// @param subsystem A HalSubsystem that the process is authorized to use.
 /// @param function A function within the specified subsystem that the process
 ///   is authorized to use.
-/// @param deviceId The ID of a device that the process is authorized to use the
-///   subsystem function with.
+/// @param deviceIds Bitmask of the device IDs that the process is authorized to
+///   use the subsystem function with.
 typedef struct HalCapability {
   HalSubsystem subsystem;
   uint8_t function;
-  uint8_t deviceId;
+  uint8_t deviceIds;
 } HalCapability;
 
 // HAL subsystems

@@ -104,31 +104,11 @@ HalCapability* findHalCapabilityWithDevice(
   HalCapability *capabilities, size_t numCapabilities,
   HalSubsystem subsystem, uint32_t function, int32_t deviceId
 ) {
-  // See the note in findHalCapability about the choice of linear search.
-  for (size_t ii = 0; ii < numCapabilities; ii++) {
-    HalCapability *capability = &capabilities[ii];
-    if ((capability->subsystem == subsystem)
-      && (capability->function == function)
-      && (capability->deviceId == deviceId)
-    ) {
-      return capability;
-    } else if (capability->subsystem > subsystem) {
-      // We've passed the subsystem we're looking for in the array, so it's not
-      // there.  Bail.
-      return NULL;
-    } else if ((capability->subsystem == subsystem)
-      && (capability->function > function)
-    ) {
-      // We've passed the function we're looking for in the subsystem, so it's
-      // not there.  Bail.
-      return NULL;
-    } else if ((capability->subsystem == subsystem)
-      && (capability->function == function)
-      && (capability->deviceId > deviceId)
-    ) {
-      // We've passed the deviceId we're looking for in the function, so it's
-      // not there.  Bail.
-      return NULL;
+  HalCapability *halCapability = findHalCapability(
+    capabilities, numCapabilities, subsystem, function);
+  if (halCapability != NULL) {
+    if (halCapability->deviceIds & (1 << deviceId)) {
+      return halCapability;
     }
   }
 
