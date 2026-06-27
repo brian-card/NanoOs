@@ -243,6 +243,147 @@ HalCapability standardUserHalCapabilities[] = {
   },
 };
 
+/// @var baseConsoleIpcCapabilities
+///
+/// @brief Array of IpcCapability items that describe what messages the console
+/// process can send to other processes.
+IpcCapability baseConsoleIpcCapabilities[] = {
+  {
+    /* destinationPid= */ 0, // Scheduler PID to be set by scheduler
+    /* messageTypes= */
+        (((uint16_t) 1) << SCHEDULER_SEND_SIGNAL)
+  },
+  {
+    /* destinationPid= */ 0, // Memory manager PID to be set by scheduler
+    /* messageTypes= */
+        (((uint16_t) 1) << MEMORY_MANAGER_REALLOC)
+      | (((uint16_t) 1) << MEMORY_MANAGER_FREE)
+      | (((uint16_t) 1) << MEMORY_MANAGER_GET_FREE_MEMORY)
+      | (((uint16_t) 1) << MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS)
+  },
+  {
+    /* destinationPid= */ 0, // PID to be set by scheduler
+    /* messageTypes= */
+      // The console is only allowed to send one message type to other processes
+      (((uint16_t) 1) << CONSOLE_RETURNING_INPUT)
+  },
+};
+
+/// @var baseMemoryManagerIpcCapabilities
+///
+/// @brief Array of IpcCapability items that describe what messages the memory
+/// manager process can send to other processes.
+IpcCapability baseMemoryManagerIpcCapabilities[] = {
+  {
+    /* destinationPid= */ 0, // Console PID to be set by scheduler
+    /* messageTypes= */
+        (((uint16_t) 1) << CONSOLE_WRITE_VALUE)
+      | (((uint16_t) 1) << CONSOLE_RELEASE_PORT)
+  },
+};
+
+/// @var baseFilesystemIpcCapabilities
+///
+/// @brief Array of IpcCapability items that describe what messages the
+/// filesystem process can send to other processes.
+IpcCapability baseFilesystemIpcCapabilities[] = {
+  {
+    /* destinationPid= */ 0, // SD card PID to be set by scheduler
+    /* messageTypes= */
+        (((uint16_t) 1) << SD_CARD_READ_BLOCKS)
+      | (((uint16_t) 1) << SD_CARD_WRITE_BLOCKS)
+  },
+};
+
+/// @var standardSupervisorIpcCapabilities
+///
+/// @brief Array of IpcCapability items that describe what messages a process
+/// with supervisor privilege can send to other processes.
+IpcCapability standardSupervisorIpcCapabilities[] = {
+  {
+    /* destinationPid= */ 0, // Scheduler PID to be set by scheduler
+    /* messageTypes= */
+        (((uint16_t) 1) << SCHEDULER_KILL_PROCESS)
+      | (((uint16_t) 1) << SCHEDULER_GET_NUM_RUNNING_PROCESSES)
+      | (((uint16_t) 1) << SCHEDULER_GET_PROCESS_INFO)
+      | (((uint16_t) 1) << SCHEDULER_SET_PROCESS_USER)
+      | (((uint16_t) 1) << SCHEDULER_GET_HOSTNAME)
+      | (((uint16_t) 1) << SCHEDULER_EXECVE)
+      | (((uint16_t) 1) << SCHEDULER_SPAWN)
+      | (((uint16_t) 1) << SCHEDULER_SEND_SIGNAL)
+      | (((uint16_t) 1) << SCHEDULER_REPLACE_OVERLAY)
+      | (((uint16_t) 1) << SCHEDULER_SHUTDOWN)
+  },
+  {
+    /* destinationPid= */ 0, // Console PID to be set by scheduler
+    /* messageTypes= */
+        (((uint16_t) 1) << CONSOLE_WRITE_VALUE)
+      | (((uint16_t) 1) << CONSOLE_GET_BUFFER)
+      | (((uint16_t) 1) << CONSOLE_WRITE_BUFFER)
+      | (((uint16_t) 1) << CONSOLE_RELEASE_PORT)
+      | (((uint16_t) 1) << CONSOLE_GET_OWNED_PORT)
+      | (((uint16_t) 1) << CONSOLE_GET_ECHO)
+      | (((uint16_t) 1) << CONSOLE_SET_ECHO)
+      | (((uint16_t) 1) << CONSOLE_WAIT_FOR_INPUT)
+      | (((uint16_t) 1) << CONSOLE_RELEASE_BUFFER)
+  },
+  {
+    /* destinationPid= */ 0, // Memory manager PID to be set by scheduler
+    /* messageTypes= */
+        (((uint16_t) 1) << MEMORY_MANAGER_REALLOC)
+      | (((uint16_t) 1) << MEMORY_MANAGER_FREE)
+      | (((uint16_t) 1) << MEMORY_MANAGER_GET_FREE_MEMORY)
+      | (((uint16_t) 1) << MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS)
+  },
+  {
+    /* destinationPid= */ 0, // Filesystem PID to be set by scheduler
+    /* messageTypes= */
+        (((uint16_t) 1) << FILESYSTEM_OPEN_FILE)
+      | (((uint16_t) 1) << FILESYSTEM_CLOSE_FILE)
+      | (((uint16_t) 1) << FILESYSTEM_READ_FILE)
+      | (((uint16_t) 1) << FILESYSTEM_WRITE_FILE)
+      | (((uint16_t) 1) << FILESYSTEM_REMOVE_FILE)
+      | (((uint16_t) 1) << FILESYSTEM_SEEK_FILE)
+      | (((uint16_t) 1) << FILESYSTEM_DUMP_OPEN_FILES)
+      | (((uint16_t) 1) << FILESYSTEM_GET_FILE_BLOCK_METADATA)
+  },
+};
+
+/// @var standardUserIpcCapabilities
+///
+/// @brief Array of IpcCapability items that describe what messages a process
+/// with user privilege can send to other processes.
+IpcCapability standardUserIpcCapabilities[] = {
+  {
+    /* destinationPid= */ 0, // Scheduler PID to be set by scheduler
+    /* messageTypes= */
+        (((uint16_t) 1) << SCHEDULER_GET_NUM_RUNNING_PROCESSES)
+      | (((uint16_t) 1) << SCHEDULER_GET_PROCESS_INFO)
+      | (((uint16_t) 1) << SCHEDULER_GET_HOSTNAME)
+      | (((uint16_t) 1) << SCHEDULER_REPLACE_OVERLAY)
+  },
+  {
+    /* destinationPid= */ 0, // Memory manager PID to be set by scheduler
+    /* messageTypes= */
+        (((uint16_t) 1) << MEMORY_MANAGER_REALLOC)
+      | (((uint16_t) 1) << MEMORY_MANAGER_FREE)
+      | (((uint16_t) 1) << MEMORY_MANAGER_GET_FREE_MEMORY)
+      | (((uint16_t) 1) << MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS)
+  },
+  {
+    /* destinationPid= */ 0, // Filesystem PID to be set by scheduler
+    /* messageTypes= */
+        (((uint16_t) 1) << FILESYSTEM_OPEN_FILE)
+      | (((uint16_t) 1) << FILESYSTEM_CLOSE_FILE)
+      | (((uint16_t) 1) << FILESYSTEM_READ_FILE)
+      | (((uint16_t) 1) << FILESYSTEM_WRITE_FILE)
+      | (((uint16_t) 1) << FILESYSTEM_REMOVE_FILE)
+      | (((uint16_t) 1) << FILESYSTEM_SEEK_FILE)
+      | (((uint16_t) 1) << FILESYSTEM_DUMP_OPEN_FILES)
+      | (((uint16_t) 1) << FILESYSTEM_GET_FILE_BLOCK_METADATA)
+  },
+};
+
 /// @fn void runSchedulerQueues(PrivilegeLevel privilegeLevelBound)
 ///
 /// @brief Make one pass through all the process queues less than the provided
