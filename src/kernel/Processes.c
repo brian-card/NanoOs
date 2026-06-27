@@ -403,7 +403,7 @@ void* runBlockOverlay(void *args) {
 ///   IpcCapability *capabilities, size_t numCapabilities,
 ///   uint8_t destinationPid, uint16_t messageType)
 ///
-/// @brief Find a IpcCapability object in an array of them given a destination
+/// @brief Find an IpcCapability object in an array of them given a destination
 /// PID and a message type.
 ///
 /// @param capabilities An array of IpcCapability objects.
@@ -437,6 +437,31 @@ IpcCapability* findIpcCapability(
 
   // We searched the entire array and found nothing.  Return NULL.
   return NULL;
+}
+
+/// @fn bool currentProcessHasIpcCapability(
+///   uint8_t destinationPid, uint16_t messageType)
+///
+/// @brief Find an IpcCapability object in the currently-running process's
+/// ipcCapabilities array given a destination PID and a message type.
+///
+/// @param destinationPid The process ID that the message is bound for.
+/// @param messageType The numerical message type value that is to be sent.
+///
+/// @return Returns a pointer to the first matching capability on success, NULL
+/// on failure.
+bool currentProcessHasIpcCapability(
+  uint8_t destinationPid, uint16_t messageType
+) {
+  ProcessDescriptor *processDescriptor = getRunningProcess();
+  if (processDescriptor == NULL) {
+    // Unlikely but possible in the very early stages of booting.
+    return NULL;
+  }
+
+  return (findIpcCapability(
+    processDescriptor->ipcCapabilities, processDescriptor->numIpcCapabilities,
+    destinationPid, messageType));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
