@@ -13,10 +13,13 @@ if [ "${hostname}" = "" ]; then
 	exit 1
 fi
 
+shift
+
 imageFile="$(mktemp)"
 
 cleanup() {
 	rm -f "${imageFile}"
+	stty echo
 }
 trap cleanup ERR EXIT
 
@@ -71,4 +74,4 @@ for blockOverlay in ${blockOverlays}; do
 	dd if="${blockOverlay}" of="${imageFile}" bs=512 seek=${startBlock} conv=notrunc
 done
 
-sim/bin/nano-os-sim "${imageFile}"
+${@} sim/bin/nano-os-sim "${imageFile}"
