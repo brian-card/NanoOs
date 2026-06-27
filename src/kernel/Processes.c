@@ -456,7 +456,7 @@ bool currentProcessHasIpcCapability(
   ProcessDescriptor *processDescriptor = getRunningProcess();
   if (processDescriptor == NULL) {
     // Unlikely but possible in the very early stages of booting.
-    return NULL;
+    return false;
   }
 
   return (findIpcCapability(
