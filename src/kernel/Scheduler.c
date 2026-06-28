@@ -243,10 +243,12 @@ HalCapability baseExecutiveHalCapabilities[] = {
 /// @brief Array of HalCapability items that describe what a process can do
 /// with the HAL.
 HalCapability baseUserHalCapabilities[] = {
+#ifdef NANO_OS_DEBUG
   {
     /* subsystemFunction= */ (((uint16_t) HAL_UART) << 8) | HAL_UART_WRITE,
     /* deviceIds= */         0x01, // Bitmask for device ID 0
   },
+#endif // NANO_OS_DEBUG
   {
     /* subsystemFunction= */ (((uint16_t) HAL_TIMER) << 8) | HAL_TIMER_CANCEL,
     /* deviceIds= */         0, // To be filled in by scheduler
