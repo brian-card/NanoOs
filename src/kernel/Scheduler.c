@@ -112,7 +112,7 @@ static FileDescriptor standardKernelFileDescriptors[
   {
     // stdin
     // Kernel processes do not read from stdin, so clear out both pipes.
-    .owner = 0,
+    .lastOwner = 0,
     .inputChannel = {
       .pid = PROCESS_ID_NOT_SET,
       .messageType = -1,
@@ -128,7 +128,7 @@ static FileDescriptor standardKernelFileDescriptors[
     // stdout
     // Uni-directional FileDescriptor, so clear the input pipe and direct the
     // output pipe to the console.
-    .owner = 0,
+    .lastOwner = 0,
     .inputChannel = {
       .pid = PROCESS_ID_NOT_SET,
       .messageType = -1,
@@ -144,7 +144,7 @@ static FileDescriptor standardKernelFileDescriptors[
     // stderr
     // Uni-directional FileDescriptor, so clear the input pipe and direct the
     // output pipe to the console.
-    .owner = 0,
+    .lastOwner = 0,
     .inputChannel = {
       .pid = PROCESS_ID_NOT_SET,
       .messageType = -1,
@@ -181,7 +181,7 @@ static FileDescriptor standardUserFileDescriptors[
     // stdin
     // Uni-directional FileDescriptor, so clear the output pipe and direct the
     // input pipe to the console.
-    .owner = 0,
+    .lastOwner = 0,
     .inputChannel = {
       .pid = PROCESS_ID_NOT_SET,
       .messageType = -1,
@@ -197,7 +197,7 @@ static FileDescriptor standardUserFileDescriptors[
     // stdout
     // Uni-directional FileDescriptor, so clear the input pipe and direct the
     // output pipe to the console.
-    .owner = 0,
+    .lastOwner = 0,
     .inputChannel = {
       .pid = PROCESS_ID_NOT_SET,
       .messageType = -1,
@@ -213,7 +213,7 @@ static FileDescriptor standardUserFileDescriptors[
     // stderr
     // Uni-directional FileDescriptor, so clear the input pipe and direct the
     // output pipe to the console.
-    .owner = 0,
+    .lastOwner = 0,
     .inputChannel = {
       .pid = PROCESS_ID_NOT_SET,
       .messageType = -1,
@@ -2753,7 +2753,8 @@ int schedulerExecveCommandHandler(
   ) {
     addProcessIpcCapability(processDescriptor,
       processDescriptor->fileDescriptors[
-        STDOUT_FILE_DESCRIPTOR_INDEX]->pipeEnd->owner, CONSOLE_RETURNING_INPUT);
+        STDOUT_FILE_DESCRIPTOR_INDEX]->pipeEnd->lastOwner,
+        CONSOLE_RETURNING_INPUT);
   }
 
   processDescriptor->overlayNamespace = pathname;
@@ -2921,7 +2922,7 @@ int schedulerSpawnCommandHandler(
       &standardUserFileDescriptors[ii],
       sizeof(FileDescriptor)
     );
-    processDescriptor->fileDescriptors[ii]->owner
+    processDescriptor->fileDescriptors[ii]->lastOwner
       = processDescriptor->processId;
   }
 
@@ -2941,7 +2942,7 @@ int schedulerSpawnCommandHandler(
       // at the specified fd index and set it to the one provided.
       schedFree(processDescriptor->fileDescriptors[dup2->fd]);
       processDescriptor->fileDescriptors[dup2->fd] = dup2->dup;
-      dup2->dup->owner = processDescriptor->processId;
+      dup2->dup->lastOwner = processDescriptor->processId;
 
       // The dup2->dup FileDescriptor almost certainly has a non-NULL pipeEnd
       // pointer since we're handling dup2 logic, but guard anyway.
@@ -2951,14 +2952,14 @@ int schedulerSpawnCommandHandler(
           // the pipe to our ID.
           dup2->dup->pipeEnd->outputChannel.pid = processDescriptor->processId;
           addProcessIpcCapability(
-            &allProcesses[dup2->dup->pipeEnd->owner - 1],
+            &allProcesses[dup2->dup->pipeEnd->lastOwner - 1],
             processDescriptor->processId, CONSOLE_RETURNING_INPUT);
         } else if ((dup2->fd == STDOUT_FILENO) || (dup2->fd == STDERR_FILENO)) {
           // We need to set the pid of the inputChannel of the other end of
           // the pipe to our ID.
           dup2->dup->pipeEnd->inputChannel.pid = processDescriptor->processId;
           addProcessIpcCapability(processDescriptor,
-            dup2->dup->pipeEnd->owner, CONSOLE_RETURNING_INPUT);
+            dup2->dup->pipeEnd->lastOwner, CONSOLE_RETURNING_INPUT);
         }
       }
     }
@@ -3799,7 +3800,7 @@ int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
       &standardUserFileDescriptors[ii],
       sizeof(FileDescriptor)
     );
-    processDescriptor->fileDescriptors[ii]->owner
+    processDescriptor->fileDescriptors[ii]->lastOwner
       = processDescriptor->processId;
   }
 

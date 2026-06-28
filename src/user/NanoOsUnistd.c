@@ -282,7 +282,7 @@ int nanoOsPipe(int pipefd[2]) {
     }
     
     // Initialize the file descriptor's channels to point to ourself.
-    processDescriptor->fileDescriptors[ii]->owner = getRunningPid();
+    processDescriptor->fileDescriptors[ii]->lastOwner = getRunningPid();
     processDescriptor->fileDescriptors[ii]->inputChannel.pid
       = PROCESS_ID_NOT_SET;
     processDescriptor->fileDescriptors[ii]->inputChannel.messageType = -1;
