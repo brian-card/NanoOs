@@ -261,12 +261,6 @@ IpcCapability baseConsoleIpcCapabilities[] = {
       | (((uint16_t) 1) << MEMORY_MANAGER_GET_FREE_MEMORY)
       | (((uint16_t) 1) << MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS)
   },
-  {
-    /* destinationPid= */ 0, // PID to be set by scheduler
-    /* messageTypes= */
-      // The console is only allowed to send one message type to other processes
-      (((uint16_t) 1) << CONSOLE_RETURNING_INPUT)
-  },
 };
 
 /// @var baseMemoryManagerIpcCapabilities
@@ -384,6 +378,9 @@ IpcCapability baseUserIpcCapabilities[] = {
   },
 };
 
+void* schedRealloc(void *ptr, size_t size);
+void* schedMalloc(size_t size);
+
 /// @fn int addProcessIpcCapability(ProcessDescriptor *processDescriptor,
 ///   ProcessId destinationPid, uint32_t messageType)
 ///
@@ -422,7 +419,7 @@ int addProcessIpcCapability(ProcessDescriptor *processDescriptor,
   // process's capabilities yet, so we'll have to extend the array.
   if (processDescriptor->ipcCapabilitiesDynamic == true) {
     // Resize the existing array.  This is the expected case.
-    void *check = realloc(processDescriptor->ipcCapabilities,
+    void *check = schedRealloc(processDescriptor->ipcCapabilities,
       sizeof(IpcCapability) * (processDescriptor->numIpcCapabilities + 1));
     if (check == NULL) {
       printString("ERROR: realloc returned NULL when trying to allocate ");
@@ -434,7 +431,7 @@ int addProcessIpcCapability(ProcessDescriptor *processDescriptor,
   } else {
     // Array is one of the statically-allocated ones.  We'll have to make a
     // copy first.
-    void *copy = malloc(
+    void *copy = schedMalloc(
       sizeof(IpcCapability) * (processDescriptor->numIpcCapabilities + 1));
     if (copy == NULL) {
       printString("ERROR: malloc returned NULL when trying to allocate ");
@@ -1602,6 +1599,8 @@ int closeProcessFileDescriptors(ProcessDescriptor *processDescriptor) {
       fileDescriptor->pipeEnd->inputChannel.pid = PROCESS_ID_NOT_SET;
 
       ProcessId waitingOutputPid = fileDescriptor->outputChannel.pid;
+      removeProcessIpcCapability(processDescriptor,
+        waitingOutputPid, CONSOLE_RETURNING_INPUT);
       if (waitingOutputPid != PROCESS_ID_NOT_SET) {
         ProcessDescriptor *waitingProcessDescriptor
           = &SCHEDULER_STATE->allProcesses[waitingOutputPid - 1];
@@ -2860,6 +2859,8 @@ int schedulerSpawnCommandHandler(
           // We need to set the pid of the inputChannel of the other end of
           // the pipe to our ID.
           dup2->dup->pipeEnd->inputChannel.pid = processDescriptor->processId;
+          addProcessIpcCapability(processDescriptor,
+            dup2->dup->pipeEnd->inputChannel.pid, CONSOLE_RETURNING_INPUT);
         }
       }
     }
@@ -4489,6 +4490,12 @@ __attribute__((noinline)) void startScheduler(
   processResume(&allProcesses[schedulerState.memoryManagerPid - 1], NULL);
   runSchedulerQueues(PRIVILEGE_LEVEL_SUPERVISOR);
   printDebugString("Started memory manager and filesystem.\n");
+
+  // Set the capabilities for the shells on the console.
+  for (uint8_t ii = 0; ii < schedulerState.numShells; ii++) {
+    addProcessIpcCapability(&allProcesses[schedulerState.consolePid],
+      schedulerState.firstShellPid + ii, CONSOLE_RETURNING_INPUT);
+  }
 
   // Allocate memory for the hostname.
   schedulerState.hostname = (char*) schedCalloc(1, HOST_NAME_MAX + 1);
