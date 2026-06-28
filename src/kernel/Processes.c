@@ -481,7 +481,8 @@ bool currentProcessHasIpcCapability(
 /// @param processMessage A pointer to the message to send to the destination
 ///   process.
 ///
-/// @return Returns processSuccess on success, processError on failure.
+/// @return Returns processSuccess on success.  On failure, processError is
+/// returned and errno is set.
 int sendProcessMessageToProcess(
   ProcessDescriptor *processDescriptor, ProcessMessage *processMessage
 ) {
@@ -490,12 +491,32 @@ int sendProcessMessageToProcess(
     || (processMessage == NULL)
   ) {
     // Invalid.
+    errno = EINVAL;
     returnValue = processError;
-    return returnValue;
+    goto exit;
+  }
+
+  if (currentProcessHasIpcCapability(processDescriptor->processId,
+    processMessageType(processMessage) & 0xff) == false
+  ) {
+    errno = EPERM;
+    returnValue = processError;
+    printString("ERROR: Could not send message type ");
+    printInt(processMessageType(processMessage) & 0xff);
+    printString(" from process ");
+    printInt(getRunningPid());
+    printString(" to process ");
+    printInt(processDescriptor->processId);
+    printString("\n");
+    goto exit;
   }
 
   returnValue = processMessageQueuePush(processDescriptor, processMessage);
+  if (returnValue != processSuccess) {
+    errno = EAGAIN;
+  }
 
+exit:
   return returnValue;
 }
 
@@ -651,11 +672,6 @@ ProcessMessage* initSendProcessMessageToPid(int pid, int64_t type,
   ProcessDescriptor *process = &SCHEDULER_STATE->allProcesses[pid - 1];
   processMessage
     = initSendProcessMessageToProcess(process, type, data, size, waiting);
-  if (processMessage == NULL) {
-    printString("ERROR: Could not send NanoOs message to process ");
-    printInt(pid);
-    printString("\n");
-  }
   return processMessage;
 }
 

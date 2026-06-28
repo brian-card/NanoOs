@@ -180,6 +180,7 @@ typedef struct IoChannel {
 /// @brief Definition of a file descriptor that a process can use for input
 /// and/or output.
 ///
+/// @param owner The process ID of the owner of the file descriptor.
 /// @param inputChannel An IoChannel object that describes where the file
 ///   descriptor gets its input, if any.
 /// @param outputChannel An IoChannel object that describes where the file
@@ -190,6 +191,7 @@ typedef struct IoChannel {
 /// @param file Pointer to the actual NanoOsFile object if this is a file-backed
 ///   file descriptor.
 typedef struct FileDescriptor {
+  ProcessId              owner;
   IoChannel              inputChannel;
   IoChannel              outputChannel;
   struct FileDescriptor *pipeEnd;

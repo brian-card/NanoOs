@@ -345,9 +345,11 @@ int filesystemGetFileBlockMetadataCommandHandler(
     = (GetFileBlockMetadataArgs*) processMessageData(processMessage);
   args->metadata->blockDevice = filesystemState->blockDevice;
 
-  filesystemState->driverGetFileBlockMetadata(
-    filesystemState->driverState, args->stream->file,
-    &args->metadata->startBlock, &args->metadata->numBlocks);
+  if (filesystemState->driverState != NULL) {
+    filesystemState->driverGetFileBlockMetadata(
+      filesystemState->driverState, args->stream->file,
+      &args->metadata->startBlock, &args->metadata->numBlocks);
+  }
 
   processMessageSetDone(processMessage);
   return 0;
@@ -433,6 +435,13 @@ void* runFilesystem(void *args) {
   processYield();
   printDebugString("runFilesystem: Allocating fs.blockBuffer\n");
   fs.blockBuffer = (uint8_t*) malloc(fs.blockSize);
+  if (fs.blockBuffer == NULL) {
+    fprintf(stderr, "ERROR: Could not allocate fs.blockBuffer\n");
+    fprintf(stderr, "       Halting filesystem process\n");
+    // All the command handlers handle state not being initialized, so just go
+    // into handleFilesystemMessages and block.
+    handleFilesystemMessages(&fs);
+  }
   
   printDebugString("runFilesystem: Getting partition info\n");
   getPartitionInfo(&fs);

@@ -112,6 +112,7 @@ static FileDescriptor standardKernelFileDescriptors[
   {
     // stdin
     // Kernel processes do not read from stdin, so clear out both pipes.
+    .owner = 0,
     .inputChannel = {
       .pid = PROCESS_ID_NOT_SET,
       .messageType = -1,
@@ -127,6 +128,7 @@ static FileDescriptor standardKernelFileDescriptors[
     // stdout
     // Uni-directional FileDescriptor, so clear the input pipe and direct the
     // output pipe to the console.
+    .owner = 0,
     .inputChannel = {
       .pid = PROCESS_ID_NOT_SET,
       .messageType = -1,
@@ -142,6 +144,7 @@ static FileDescriptor standardKernelFileDescriptors[
     // stderr
     // Uni-directional FileDescriptor, so clear the input pipe and direct the
     // output pipe to the console.
+    .owner = 0,
     .inputChannel = {
       .pid = PROCESS_ID_NOT_SET,
       .messageType = -1,
@@ -178,6 +181,7 @@ static FileDescriptor standardUserFileDescriptors[
     // stdin
     // Uni-directional FileDescriptor, so clear the output pipe and direct the
     // input pipe to the console.
+    .owner = 0,
     .inputChannel = {
       .pid = PROCESS_ID_NOT_SET,
       .messageType = -1,
@@ -193,6 +197,7 @@ static FileDescriptor standardUserFileDescriptors[
     // stdout
     // Uni-directional FileDescriptor, so clear the input pipe and direct the
     // output pipe to the console.
+    .owner = 0,
     .inputChannel = {
       .pid = PROCESS_ID_NOT_SET,
       .messageType = -1,
@@ -208,6 +213,7 @@ static FileDescriptor standardUserFileDescriptors[
     // stderr
     // Uni-directional FileDescriptor, so clear the input pipe and direct the
     // output pipe to the console.
+    .owner = 0,
     .inputChannel = {
       .pid = PROCESS_ID_NOT_SET,
       .messageType = -1,
@@ -238,8 +244,30 @@ HalCapability baseExecutiveHalCapabilities[] = {
 /// with the HAL.
 HalCapability baseUserHalCapabilities[] = {
   {
+    /* subsystemFunction= */ (((uint16_t) HAL_UART) << 8) | HAL_UART_WRITE,
+    /* deviceIds= */         0x01, // Bitmask for device ID 0
+  },
+  {
     /* subsystemFunction= */ (((uint16_t) HAL_TIMER) << 8) | HAL_TIMER_CANCEL,
     /* deviceIds= */         0, // To be filled in by scheduler
+  },
+};
+
+/// @var baseSchedulerIpcCapabilities
+///
+/// @brief Array of IpcCapability items that describe what messages the
+/// scheduler process can send to other processes.
+///
+/// @note These capabilites only matter when the scheduler is sending a message
+/// to a process via a path that ultimately funnels through
+/// sendProcessMessageToProcess.  Usually, the scheduler uses its own message
+/// infrastructure that bypasses capability checks.
+IpcCapability baseSchedulerIpcCapabilities[] = {
+  {
+    /* destinationPid= */ 0, // SD card PID to be set by scheduler
+    /* messageTypes= */
+        (((uint16_t) 1) << SD_CARD_READ_BLOCKS)
+      | (((uint16_t) 1) << SD_CARD_WRITE_BLOCKS)
   },
 };
 
@@ -281,6 +309,19 @@ IpcCapability baseMemoryManagerIpcCapabilities[] = {
 /// @brief Array of IpcCapability items that describe what messages the
 /// filesystem process can send to other processes.
 IpcCapability baseFilesystemIpcCapabilities[] = {
+  {
+    /* destinationPid= */ 0, // Console PID to be set by scheduler
+    /* messageTypes= */
+        (((uint16_t) 1) << CONSOLE_GET_BUFFER)
+      | (((uint16_t) 1) << CONSOLE_WRITE_BUFFER)
+      | (((uint16_t) 1) << CONSOLE_RELEASE_BUFFER)
+  },
+  {
+    /* destinationPid= */ 0, // Memory manager PID to be set by scheduler
+    /* messageTypes= */
+        (((uint16_t) 1) << MEMORY_MANAGER_REALLOC)
+      | (((uint16_t) 1) << MEMORY_MANAGER_FREE)
+  },
   {
     /* destinationPid= */ 0, // SD card PID to be set by scheduler
     /* messageTypes= */
@@ -357,6 +398,14 @@ IpcCapability baseUserIpcCapabilities[] = {
       | (((uint16_t) 1) << SCHEDULER_REPLACE_OVERLAY)
   },
   {
+    /* destinationPid= */ 0, // Console PID to be set by scheduler
+    /* messageTypes= */
+        (((uint16_t) 1) << CONSOLE_GET_BUFFER)
+      | (((uint16_t) 1) << CONSOLE_WRITE_BUFFER)
+      | (((uint16_t) 1) << CONSOLE_RELEASE_PORT)
+      | (((uint16_t) 1) << CONSOLE_RELEASE_BUFFER)
+  },
+  {
     /* destinationPid= */ 0, // Memory manager PID to be set by scheduler
     /* messageTypes= */
         (((uint16_t) 1) << MEMORY_MANAGER_REALLOC)
@@ -408,17 +457,33 @@ int addProcessIpcCapability(ProcessDescriptor *processDescriptor,
     }
   }
 
-  if (capability != NULL) {
+  if (ii < processDescriptor->numIpcCapabilities) {
     // Add the message type to the existing capability's messageTypes.
     capability->messageTypes |= ((uint16_t) 1) << messageType;
+    printDebugString(__func__);
+    printDebugString(": ");
+    printDebugInt(__LINE__);
+    printDebugString(": Added capability to send message type ");
+    printDebugInt(messageType);
+    printDebugString(" from process ");
+    printDebugInt(processDescriptor->processId);
+    printDebugString(" to process ");
+    printDebugInt(destinationPid);
+    printDebugString("\n");
     // We're done.
     return 0;
   }
+
+  printDebugString(__func__);
+  printDebugString(": ");
+  printDebugInt(__LINE__);
+  printDebugString(": Extinding ipcCapabilities array\n");
 
   // If we made it this far then the destination PID doesn't exist in the
   // process's capabilities yet, so we'll have to extend the array.
   if (processDescriptor->ipcCapabilitiesDynamic == true) {
     // Resize the existing array.  This is the expected case.
+    printDebugString("Extinding exiting array\n");
     void *check = schedRealloc(processDescriptor->ipcCapabilities,
       sizeof(IpcCapability) * (processDescriptor->numIpcCapabilities + 1));
     if (check == NULL) {
@@ -431,6 +496,7 @@ int addProcessIpcCapability(ProcessDescriptor *processDescriptor,
   } else {
     // Array is one of the statically-allocated ones.  We'll have to make a
     // copy first.
+    printDebugString("Copying to new array\n");
     void *copy = schedMalloc(
       sizeof(IpcCapability) * (processDescriptor->numIpcCapabilities + 1));
     if (copy == NULL) {
@@ -453,6 +519,17 @@ int addProcessIpcCapability(ProcessDescriptor *processDescriptor,
     }
   }
 
+  printDebugString(__func__);
+  printDebugString(": ");
+  printDebugInt(__LINE__);
+  printDebugString(": Adding new capability to send message type ");
+  printDebugInt(messageType);
+  printDebugString(" from process ");
+  printDebugInt(processDescriptor->processId);
+  printDebugString(" to process ");
+  printDebugInt(destinationPid);
+  printDebugString("\n");
+
   // Move all the capabilities from this point on down by one.
   for (; ii < processDescriptor->numIpcCapabilities; ii++) {
     processDescriptor->ipcCapabilities[ii + 1]
@@ -463,6 +540,11 @@ int addProcessIpcCapability(ProcessDescriptor *processDescriptor,
   // of that poniter.
   capability->destinationPid = destinationPid;
   capability->messageTypes = ((uint16_t) 1) << messageType;
+  printDebugString("capability->destinationPid = ");
+  printDebugInt(capability->destinationPid);
+  printDebugString(", capability->messageTypes = 0x");
+  printDebugHex(capability->messageTypes);
+  printDebugString("\n");
   processDescriptor->numIpcCapabilities++;
 
   return 0;
@@ -1599,8 +1681,6 @@ int closeProcessFileDescriptors(ProcessDescriptor *processDescriptor) {
       fileDescriptor->pipeEnd->inputChannel.pid = PROCESS_ID_NOT_SET;
 
       ProcessId waitingOutputPid = fileDescriptor->outputChannel.pid;
-      removeProcessIpcCapability(processDescriptor,
-        waitingOutputPid, CONSOLE_RETURNING_INPUT);
       if (waitingOutputPid != PROCESS_ID_NOT_SET) {
         ProcessDescriptor *waitingProcessDescriptor
           = &SCHEDULER_STATE->allProcesses[waitingOutputPid - 1];
@@ -1643,6 +1723,8 @@ int closeProcessFileDescriptors(ProcessDescriptor *processDescriptor) {
           SCHEDULER_STATE->currentReady = currentReady;
         }
       }
+      removeProcessIpcCapability(processDescriptor,
+        waitingOutputPid, CONSOLE_RETURNING_INPUT);
     }
 
     fileDescriptors[ii]->refCount--;
@@ -2664,6 +2746,14 @@ int schedulerExecveCommandHandler(
     }
   }
 
+  if (processDescriptor->fileDescriptors[STDOUT_FILE_DESCRIPTOR_INDEX]->pipeEnd
+    != NULL
+  ) {
+    addProcessIpcCapability(processDescriptor,
+      processDescriptor->fileDescriptors[
+        STDOUT_FILE_DESCRIPTOR_INDEX]->pipeEnd->owner, CONSOLE_RETURNING_INPUT);
+  }
+
   processDescriptor->overlayNamespace = pathname;
   returnValue = loadProcessDescriptorOverlayMetadata(processDescriptor);
   if (returnValue == -EBUSY) {
@@ -2829,6 +2919,8 @@ int schedulerSpawnCommandHandler(
       &standardUserFileDescriptors[ii],
       sizeof(FileDescriptor)
     );
+    processDescriptor->fileDescriptors[ii]->owner
+      = processDescriptor->processId;
   }
 
   if (spawnArgs->fileActions != NULL) {
@@ -2847,6 +2939,7 @@ int schedulerSpawnCommandHandler(
       // at the specified fd index and set it to the one provided.
       schedFree(processDescriptor->fileDescriptors[dup2->fd]);
       processDescriptor->fileDescriptors[dup2->fd] = dup2->dup;
+      dup2->dup->owner = processDescriptor->processId;
 
       // The dup2->dup FileDescriptor almost certainly has a non-NULL pipeEnd
       // pointer since we're handling dup2 logic, but guard anyway.
@@ -2855,12 +2948,15 @@ int schedulerSpawnCommandHandler(
           // We need to set the pid of the outputChannel of the other end of
           // the pipe to our ID.
           dup2->dup->pipeEnd->outputChannel.pid = processDescriptor->processId;
+          addProcessIpcCapability(
+            &allProcesses[dup2->dup->pipeEnd->owner - 1],
+            processDescriptor->processId, CONSOLE_RETURNING_INPUT);
         } else if ((dup2->fd == STDOUT_FILENO) || (dup2->fd == STDERR_FILENO)) {
           // We need to set the pid of the inputChannel of the other end of
           // the pipe to our ID.
           dup2->dup->pipeEnd->inputChannel.pid = processDescriptor->processId;
           addProcessIpcCapability(processDescriptor,
-            dup2->dup->pipeEnd->inputChannel.pid, CONSOLE_RETURNING_INPUT);
+            dup2->dup->pipeEnd->owner, CONSOLE_RETURNING_INPUT);
         }
       }
     }
@@ -3484,7 +3580,10 @@ int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp) {
     processDescriptor->overlay.blockDevice->blockSize,
     (uint8_t*) overlayMap) != 0
   ) {
-    printString("Could not read overlay\n");
+    printString(__func__);
+    printString(": ");
+    printInt(__LINE__);
+    printString(": Could not read overlay\n");
     return -EIO;
   }
 
@@ -3698,6 +3797,8 @@ int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
       &standardUserFileDescriptors[ii],
       sizeof(FileDescriptor)
     );
+    processDescriptor->fileDescriptors[ii]->owner
+      = processDescriptor->processId;
   }
 
   if (processCreate(processDescriptor, execCommand, execArgs) == processError) {
@@ -3837,6 +3938,10 @@ int32_t restartShell(ProcessDescriptor *processDescriptor) {
     printDebugString("restartShell: scheduler not up.  Returning -EAGAIN\n");
     return -EAGAIN;
   }
+
+  // Set the capabilities for the shell on the console.
+  addProcessIpcCapability(&allProcesses[SCHEDULER_STATE->consolePid - 1],
+    processDescriptor->processId, CONSOLE_RETURNING_INPUT);
 
   if (processDescriptor->userId == NO_USER_ID) {
     if (processDescriptor->envp != NULL) {
@@ -4227,7 +4332,7 @@ __attribute__((noinline)) void startScheduler(
 
   // schedulerState.firstUserPid isn't populated until HAL->initRootStorage
   // completes, so we need to call that as soon as we can.
-  int rv = HAL->initRootStorage(baseFilesystemIpcCapabilities);
+  int rv = HAL->initRootStorage();
   if (rv != 0) {
     printString("ERROR: initRootStorage returned status ");
     printInt(rv);
@@ -4237,12 +4342,21 @@ __attribute__((noinline)) void startScheduler(
 
   // Fix the rest of the IPC capabilities now that all the core processes are
   // started.
+  baseSchedulerIpcCapabilities[0].destinationPid
+    = schedulerState.rootFsPid - 1;
   baseConsoleIpcCapabilities[0].destinationPid
     = schedulerState.schedulerPid;
   baseConsoleIpcCapabilities[1].destinationPid
     = schedulerState.memoryManagerPid;
   baseMemoryManagerIpcCapabilities[0].destinationPid
     = schedulerState.consolePid;
+  baseFilesystemIpcCapabilities[0].destinationPid
+    = schedulerState.consolePid;
+  baseFilesystemIpcCapabilities[1].destinationPid
+    = schedulerState.memoryManagerPid;
+  baseFilesystemIpcCapabilities[2].destinationPid
+    = schedulerState.rootFsPid - 1;
+
   baseSupervisorIpcCapabilities[0].destinationPid
     = schedulerState.schedulerPid;
   baseSupervisorIpcCapabilities[1].destinationPid
@@ -4254,8 +4368,10 @@ __attribute__((noinline)) void startScheduler(
   baseUserIpcCapabilities[0].destinationPid
     = schedulerState.schedulerPid;
   baseUserIpcCapabilities[1].destinationPid
-    = schedulerState.memoryManagerPid;
+    = schedulerState.consolePid;
   baseUserIpcCapabilities[2].destinationPid
+    = schedulerState.memoryManagerPid;
+  baseUserIpcCapabilities[3].destinationPid
     = schedulerState.rootFsPid;
 
   // Initialize all the kernel process file descriptors.
@@ -4340,6 +4456,13 @@ __attribute__((noinline)) void startScheduler(
     }
   }
 
+  allProcesses[schedulerState.schedulerPid - 1].ipcCapabilities
+    = baseSchedulerIpcCapabilities;
+  allProcesses[schedulerState.schedulerPid - 1].numIpcCapabilities
+    = sizeof(baseSchedulerIpcCapabilities)
+    / sizeof(baseSchedulerIpcCapabilities[0]);
+  allProcesses[schedulerState.schedulerPid - 1].ipcCapabilitiesDynamic
+    = false;
   allProcesses[schedulerState.consolePid - 1].ipcCapabilities
     = baseConsoleIpcCapabilities;
   allProcesses[schedulerState.consolePid - 1].numIpcCapabilities
@@ -4365,6 +4488,7 @@ __attribute__((noinline)) void startScheduler(
     ii <= NANO_OS_NUM_PROCESSES;
     ii++
   ) {
+    processDescriptor = &allProcesses[ii - 1];
     if (processDescriptor->privilegeLevel == PRIVILEGE_LEVEL_SUPERVISOR) {
       allProcesses[ii - 1].ipcCapabilities
         = baseSupervisorIpcCapabilities;
@@ -4490,12 +4614,6 @@ __attribute__((noinline)) void startScheduler(
   processResume(&allProcesses[schedulerState.memoryManagerPid - 1], NULL);
   runSchedulerQueues(PRIVILEGE_LEVEL_SUPERVISOR);
   printDebugString("Started memory manager and filesystem.\n");
-
-  // Set the capabilities for the shells on the console.
-  for (uint8_t ii = 0; ii < schedulerState.numShells; ii++) {
-    addProcessIpcCapability(&allProcesses[schedulerState.consolePid],
-      schedulerState.firstShellPid + ii, CONSOLE_RETURNING_INPUT);
-  }
 
   // Allocate memory for the hostname.
   schedulerState.hostname = (char*) schedCalloc(1, HOST_NAME_MAX + 1);

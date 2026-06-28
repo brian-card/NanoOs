@@ -475,16 +475,12 @@ BlockDevice* halCommonInitRootSdSpiStorage(
   return sdDevice;
 }
 
-/// @fn int32_t halCommonInitRootFilesystem(
-///   IpcCapability *filesystemCapabilities)
+/// @fn int32_t halCommonInitRootFilesystem(void)
 ///
 /// @brief Common initialization for the root filesystem process.
 ///
-/// @param filesystemCapabilities A pointer to an array of IpcCapability
-///   objects that will be updated by the call.
-///
 /// @return Returns 0 on success, -errno on failure.
-int32_t halCommonInitRootFilesystem(IpcCapability *filesystemCapabilities) {
+int32_t halCommonInitRootFilesystem() {
   if (SCHEDULER_STATE == NULL) {
     return -EBUSY;
   }
@@ -510,11 +506,6 @@ int32_t halCommonInitRootFilesystem(IpcCapability *filesystemCapabilities) {
     printString("ERROR! No rootBlockDevice available\n");
     return -ENODEV;
   }
-
-  // The block device will be the last process started, so its process ID is at
-  // SCHEDULER_STATE->firstUserPid - 1.  Update filesystemCapabilities
-  // accordingly.
-  filesystemCapabilities[0].destinationPid = SCHEDULER_STATE->firstUserPid - 1;
 
   // Allocate the filesystem process.
   SCHEDULER_STATE->rootFsPid = SCHEDULER_STATE->firstUserPid;
