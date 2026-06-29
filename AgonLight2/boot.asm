@@ -1,66 +1,51 @@
-; boot.asm — minimal eZ80F92 bootloader for NanoOS
-; Assembles with ez80-asm / ZDS II / fasmg with eZ80 support
+; boot.asm — NanoOs startup for Agon Light 2 as a MOS user program.
 ;
-; The eZ80 reset vector is at 0x000000.
-; CPU comes up in Z80 mode (ADL=0), so the first instruction
-; must be a .LIL-suffixed jump to enter ADL mode.
+; MOS loads the binary into external SRAM at 0x040000 and jumps to the
+; first byte.  The CPU is already in ADL (24-bit) mode when we arrive;
+; no mode-switch jump is required.
+;
+; Assembled with ez80-none-elf-clang (LLVM integrated assembler) via
+;   clang --target=ez80-none-elf -x assembler-with-cpp
+;
+; Provides:  _start  — program entry point (named in AgonLight2.ld)
+; Requires:  main    — C  int main(void)  in AgonLight2/main.c
+;            __bss_start, __bss_size — absolute symbols from linker script
 
-    .ASSUME ADL = 0           ; we start in Z80 mode
+    .section .text.boot,"ax"
+    .assume ADL=1
+    .globl  _start
 
-    ORG   0x000000
-
-; === Reset vector ================================================
-reset_vector:
-    JP.LIL  _start            ; 4-byte opcode: sets ADL=1, jumps to _start
-
-    ; ----------------------------------------------------------
-    ; From here on we're in ADL mode (24-bit addresses/SP)
-    ; ----------------------------------------------------------
-    .ASSUME ADL = 1
-
-; === NMI (Non-Maskable Interrupt) vector =========================
-; Hardwired at 0x000066 in eZ80 silicon. Pad to reach it.
-    ORG   0x000066
-
-nmi_handler:
-    RETN                      ; restore IFF1 from IFF2 and return
-
-; === Main startup code ===========================================
 _start:
-    DI                        ; disable maskable interrupts while we set up
-    STMIX                     ; set mixed-mode stack frames (3-byte return addresses)
+    DI                          ; disable maskable interrupts while setting up
 
-    LD    SP, 0x0C0000        ; top of 512KB external SRAM
+    ; Point the stack at the top of external SRAM (4-byte aligned).
+    ; External SRAM: 0x040000–0x0BFFFF (512 KB).
+    LD  SP, 0x0BFFFC
 
-    ; --- Zero BSS ------------------------------------------------
-    ; Requires linker to define __bss_start, __bss_size.
-    ; Skip this block if you're not using .bss yet.
-
-    LD    HL, __bss_start
-    LD    BC, __bss_size
-    LD    A,  0
-    OR    A, C                ; check if BC == 0
-    OR    A, B
-    JR    Z, .bss_done
+    ; Zero BSS.  Skip the loop when __bss_size == 0.
+    LD  HL, __bss_start
+    LD  BC, __bss_size
+    LD  A, B
+    OR  C
+    JR  Z, .bss_done
+    XOR A
 .bss_loop:
-    LD    (HL), 0
-    INC   HL
-    DEC   BC
-    LD    A, B
-    OR    A, C
-    JR    NZ, .bss_loop
+    LD  (HL), A
+    INC HL
+    DEC BC
+    LD  A, B
+    OR  C
+    JR  NZ, .bss_loop
 .bss_done:
 
-    ; --- Call main -----------------------------------------------
-    CALL  _main               ; int main(void)
+    ; Jump into the C entry point.
+    CALL _main
 
-    ; --- Halt if main returns ------------------------------------
+    ; NanoOs never returns from main().  Halt the CPU if it somehow does.
 .hang:
     HALT
-    JR    .hang
+    JR  .hang
 
-
-    ; Externals (provided by linker script)
-    EXTERN __bss_start
-    EXTERN __bss_size
-    EXTERN _main
+    .extern __bss_start
+    .extern __bss_size
+    .extern _main
