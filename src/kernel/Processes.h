@@ -333,9 +333,9 @@ ExecArgs* execArgsDestroy(ExecArgs *execArgs);
 SpawnArgs* spawnArgsDestroy(SpawnArgs *spawnArgs);
 IpcCapability* findIpcCapability(
   IpcCapability *capabilities, size_t numCapabilities,
-  uint8_t destinationPid, uint16_t messageType);
+  uint8_t destinationPid, int64_t signature, uint16_t messageType);
 bool currentProcessHasIpcCapability(
-  uint8_t destinationPid, uint16_t messageType);
+  uint8_t destinationPid, int64_t signature, uint16_t messageType);
 
 #ifdef __cplusplus
 } // extern "C"

@@ -448,7 +448,7 @@ void* schedRealloc(void *ptr, size_t size);
 void* schedMalloc(size_t size);
 
 /// @fn int addProcessIpcCapability(ProcessDescriptor *processDescriptor,
-///   ProcessId destinationPid, uint32_t messageType)
+///   ProcessId destinationPid, int64_t signature, uint32_t messageType)
 ///
 /// @brief Do an in-order array insertion into a process's ipcCapabilities
 /// array.
@@ -461,14 +461,16 @@ void* schedMalloc(size_t size);
 ///
 /// @return Returns 0 on success, -errno on failure.
 int addProcessIpcCapability(ProcessDescriptor *processDescriptor,
-  ProcessId destinationPid, uint32_t messageType
+  ProcessId destinationPid, int64_t signature, uint32_t messageType
 ) {
   IpcCapability *capability = NULL;
   size_t ii = 0;
   if (processDescriptor->numIpcCapabilities > 0) {
     for (ii = 0; ii < processDescriptor->numIpcCapabilities; ii++) {
       capability = &processDescriptor->ipcCapabilities[ii];
-      if (capability->destinationPid == destinationPid) {
+      if ((capability->destinationPid == destinationPid)
+        && (capability->signature == signature)
+      ) {
         break;
       }
     }
@@ -532,6 +534,11 @@ int addProcessIpcCapability(ProcessDescriptor *processDescriptor,
   for (ii = 0; ii < processDescriptor->numIpcCapabilities; ii++) {
     capability = &processDescriptor->ipcCapabilities[ii];
     if (capability->destinationPid > destinationPid) {
+      // This is the expected stop case.
+      break;
+    } else if ((capability->destinationPid == destinationPid)
+      && (capability->signature > signature)
+    ) {
       break;
     }
   }
@@ -556,6 +563,7 @@ int addProcessIpcCapability(ProcessDescriptor *processDescriptor,
   // capability still points to the spot we need to update, so set the members
   // of that poniter.
   capability->destinationPid = destinationPid;
+  capability->signature = signature;
   capability->messageTypes = ((uint16_t) 1) << messageType;
   printDebugString("capability->destinationPid = ");
   printDebugInt(capability->destinationPid);
@@ -568,7 +576,7 @@ int addProcessIpcCapability(ProcessDescriptor *processDescriptor,
 }
 
 /// @fn int removeProcessIpcCapability(ProcessDescriptor *processDescriptor,
-///   ProcessId destinationPid, uint32_t messageType)
+///   ProcessId destinationPid, int64_t signature, uint32_t messageType)
 ///
 /// @brief Remove a capability from a process's ipcCapabilities array.
 ///
@@ -580,13 +588,15 @@ int addProcessIpcCapability(ProcessDescriptor *processDescriptor,
 ///
 /// @return Returns 0 on success, -errno on failure.
 int removeProcessIpcCapability(ProcessDescriptor *processDescriptor,
-  ProcessId destinationPid, uint32_t messageType
+  ProcessId destinationPid, int64_t signature, uint32_t messageType
 ) {
   IpcCapability *capability = NULL;
   if (processDescriptor->numIpcCapabilities > 0) {
     for (size_t ii = 0; ii < processDescriptor->numIpcCapabilities; ii++) {
       capability = &processDescriptor->ipcCapabilities[ii];
-      if (capability->destinationPid == destinationPid) {
+      if ((capability->destinationPid == destinationPid)
+        && (capability->signature == signature)
+      ) {
         break;
       }
     }
@@ -1741,7 +1751,7 @@ int closeProcessFileDescriptors(ProcessDescriptor *processDescriptor) {
         }
       }
       removeProcessIpcCapability(processDescriptor,
-        waitingOutputPid, CONSOLE_RETURNING_INPUT);
+        waitingOutputPid, CONSOLE_COMMAND_SIGNATURE, CONSOLE_RETURNING_INPUT);
     }
 
     fileDescriptors[ii]->refCount--;
@@ -2769,7 +2779,7 @@ int schedulerExecveCommandHandler(
     addProcessIpcCapability(processDescriptor,
       processDescriptor->fileDescriptors[
         STDOUT_FILE_DESCRIPTOR_INDEX]->pipeEnd->lastOwner,
-        CONSOLE_RETURNING_INPUT);
+        CONSOLE_COMMAND_SIGNATURE, CONSOLE_RETURNING_INPUT);
   }
 
   processDescriptor->overlayNamespace = pathname;
@@ -2968,13 +2978,15 @@ int schedulerSpawnCommandHandler(
           dup2->dup->pipeEnd->outputChannel.pid = processDescriptor->processId;
           addProcessIpcCapability(
             &allProcesses[dup2->dup->pipeEnd->lastOwner - 1],
-            processDescriptor->processId, CONSOLE_RETURNING_INPUT);
+            processDescriptor->processId, CONSOLE_COMMAND_SIGNATURE,
+            CONSOLE_RETURNING_INPUT);
         } else if ((dup2->fd == STDOUT_FILENO) || (dup2->fd == STDERR_FILENO)) {
           // We need to set the pid of the inputChannel of the other end of
           // the pipe to our ID.
           dup2->dup->pipeEnd->inputChannel.pid = processDescriptor->processId;
           addProcessIpcCapability(processDescriptor,
-            dup2->dup->pipeEnd->lastOwner, CONSOLE_RETURNING_INPUT);
+            dup2->dup->pipeEnd->lastOwner, CONSOLE_COMMAND_SIGNATURE,
+            CONSOLE_RETURNING_INPUT);
         }
       }
     }
@@ -3959,7 +3971,8 @@ int32_t restartShell(ProcessDescriptor *processDescriptor) {
 
   // Set the capabilities for the shell on the console.
   addProcessIpcCapability(&allProcesses[SCHEDULER_STATE->consolePid - 1],
-    processDescriptor->processId, CONSOLE_RETURNING_INPUT);
+    processDescriptor->processId, CONSOLE_COMMAND_SIGNATURE,
+    CONSOLE_RETURNING_INPUT);
 
   if (processDescriptor->userId == NO_USER_ID) {
     if (processDescriptor->envp != NULL) {

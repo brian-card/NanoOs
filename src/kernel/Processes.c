@@ -401,7 +401,7 @@ void* runBlockOverlay(void *args) {
 
 /// @fn IpcCapability* findIpcCapability(
 ///   IpcCapability *capabilities, size_t numCapabilities,
-///   uint8_t destinationPid, uint16_t messageType)
+///   uint8_t destinationPid, int64_t signature, uint16_t messageType)
 ///
 /// @brief Find an IpcCapability object in an array of them given a destination
 /// PID and a message type.
@@ -410,13 +410,14 @@ void* runBlockOverlay(void *args) {
 /// @param numCapabilities The number of IpcCapability objects in the
 ///   capabilities array.
 /// @param destinationPid The process ID that the message is bound for.
+/// @param signature The signature of the message that is to be sent.
 /// @param messageType The numerical message type value that is to be sent.
 ///
 /// @return Returns a pointer to the first matching capability on success, NULL
 /// on failure.
 IpcCapability* findIpcCapability(
   IpcCapability *capabilities, size_t numCapabilities,
-  uint8_t destinationPid, uint16_t messageType
+  uint8_t destinationPid, int64_t signature, uint16_t messageType
 ) {
   // The array of capabilites is expected to be small.  If we're running on a
   // CPU with cache prefetch, it may actually load the entire array into cache.
@@ -425,6 +426,7 @@ IpcCapability* findIpcCapability(
   for (size_t ii = 0; ii < numCapabilities; ii++) {
     IpcCapability *capability = &capabilities[ii];
     if ((capability->destinationPid == destinationPid)
+      && (capability->signature == signature)
       && (capability->messageTypes & (((uint16_t) 1) << messageType))
     ) {
       return capability;
@@ -440,18 +442,19 @@ IpcCapability* findIpcCapability(
 }
 
 /// @fn bool currentProcessHasIpcCapability(
-///   uint8_t destinationPid, uint16_t messageType)
+///   uint8_t destinationPid, int64_t signature, uint16_t messageType)
 ///
 /// @brief Find an IpcCapability object in the currently-running process's
 /// ipcCapabilities array given a destination PID and a message type.
 ///
 /// @param destinationPid The process ID that the message is bound for.
+/// @param signature The signature of the message that is to be sent.
 /// @param messageType The numerical message type value that is to be sent.
 ///
 /// @return Returns true if the capability is found in the current process's
 /// ipcCapabilities, false if not.
 bool currentProcessHasIpcCapability(
-  uint8_t destinationPid, uint16_t messageType
+  uint8_t destinationPid, int64_t signature, uint16_t messageType
 ) {
   ProcessDescriptor *processDescriptor = getRunningProcess();
   if (processDescriptor == NULL) {
@@ -461,7 +464,7 @@ bool currentProcessHasIpcCapability(
 
   return (findIpcCapability(
     processDescriptor->ipcCapabilities, processDescriptor->numIpcCapabilities,
-    destinationPid, messageType));
+    destinationPid, signature, messageType));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -497,6 +500,7 @@ int sendProcessMessageToProcess(
   }
 
   if (currentProcessHasIpcCapability(processDescriptor->processId,
+    processMessageType(processMessage) & 0xffffffffffffff00,
     processMessageType(processMessage) & 0xff) == false
   ) {
     errno = EPERM;
