@@ -18,6 +18,15 @@
 _start:
     DI                          ; disable maskable interrupts while setting up
 
+    ; Map eZ80F92 on-chip 8 KB SRAM to 0x0C0000.
+    ; RAMADL (0xB5) holds address bits [20:13]; for 0x0C0000 that is 0x60.
+    ; Setting RAMCTL (0xB4) bit 6 (RAMEN) arms the mapping.
+    LD  A, 0x60
+    OUT0 (0xB5), A
+    IN0  A, (0xB4)
+    SET  6, A
+    OUT0 (0xB4), A
+
     ; Point the stack at the top of external SRAM (4-byte aligned).
     ; External SRAM: 0x040000–0x0BFFFF (512 KB).
     LD  SP, 0x0BFFFC
@@ -37,6 +46,9 @@ _start:
     OR  C
     JR  NZ, .bss_loop
 .bss_done:
+
+    ; Re-enable maskable interrupts now that setup is complete.
+    EI
 
     ; Jump into the C entry point.
     CALL _main

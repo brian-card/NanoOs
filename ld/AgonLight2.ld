@@ -5,7 +5,7 @@
  * Memory map (eZ80F92 as used on the Agon Light 2):
  *   Internal Flash : 0x000000–0x01FFFF  128 KB  (MOS + VDP firmware)
  *   External SRAM  : 0x040000–0x0BFFFF  512 KB  (MOS loads user programs here)
- *   Internal SRAM  : 0x0C0000–0x0CFFFF   64 KB
+ *   Internal SRAM  : 0x0C0000–0x0C1FFF    8 KB
  *
  * MOS copies the flat binary from the SD card into external SRAM at 0x040000
  * and jumps to the first byte.  The CPU is already in ADL (24-bit) mode.
