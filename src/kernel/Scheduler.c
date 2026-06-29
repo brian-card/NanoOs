@@ -233,8 +233,8 @@ static FileDescriptor standardUserFileDescriptors[
 /// with the HAL.
 HalCapability baseExecutiveHalCapabilities[] = {
   {
-    /* subsystemFunction= */ (((uint16_t) HAL_UART) << 8) | HAL_UART_WRITE,
-    /* deviceIds= */         0x01, // Bitmask for device ID 0
+    .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_WRITE,
+    .deviceIds =         0x01, // Bitmask for device ID 0
   },
 };
 
@@ -245,13 +245,13 @@ HalCapability baseExecutiveHalCapabilities[] = {
 HalCapability baseUserHalCapabilities[] = {
 #ifdef NANO_OS_DEBUG
   {
-    /* subsystemFunction= */ (((uint16_t) HAL_UART) << 8) | HAL_UART_WRITE,
-    /* deviceIds= */         0x01, // Bitmask for device ID 0
+    .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_WRITE,
+    .deviceIds =         0x01, // Bitmask for device ID 0
   },
 #endif // NANO_OS_DEBUG
   {
-    /* subsystemFunction= */ (((uint16_t) HAL_TIMER) << 8) | HAL_TIMER_CANCEL,
-    /* deviceIds= */         0, // To be filled in by scheduler
+    .subsystemFunction = (((uint16_t) HAL_TIMER) << 8) | HAL_TIMER_CANCEL,
+    .deviceIds =         0, // To be filled in by scheduler
   },
 };
 
@@ -266,9 +266,9 @@ HalCapability baseUserHalCapabilities[] = {
 /// infrastructure that bypasses capability checks.
 IpcCapability baseSchedulerIpcCapabilities[] = {
   {
-    /* destinationPid= */ 0, // SD card PID to be set by scheduler
-    /* messageTypes= */
-        (((uint16_t) 1) << SD_CARD_READ_BLOCKS)
+    .destinationPid = 0, // SD card PID to be set by scheduler
+    .messageTypes
+      = (((uint16_t) 1) << SD_CARD_READ_BLOCKS)
       | (((uint16_t) 1) << SD_CARD_WRITE_BLOCKS)
   },
 };
@@ -279,14 +279,14 @@ IpcCapability baseSchedulerIpcCapabilities[] = {
 /// process can send to other processes.
 IpcCapability baseConsoleIpcCapabilities[] = {
   {
-    /* destinationPid= */ 0, // Scheduler PID to be set by scheduler
-    /* messageTypes= */
-        (((uint16_t) 1) << SCHEDULER_SEND_SIGNAL)
+    .destinationPid = 0, // Scheduler PID to be set by scheduler
+    .messageTypes
+      = (((uint16_t) 1) << SCHEDULER_SEND_SIGNAL)
   },
   {
-    /* destinationPid= */ 0, // Memory manager PID to be set by scheduler
-    /* messageTypes= */
-        (((uint16_t) 1) << MEMORY_MANAGER_REALLOC)
+    .destinationPid = 0, // Memory manager PID to be set by scheduler
+    .messageTypes
+      = (((uint16_t) 1) << MEMORY_MANAGER_REALLOC)
       | (((uint16_t) 1) << MEMORY_MANAGER_FREE)
       | (((uint16_t) 1) << MEMORY_MANAGER_GET_FREE_MEMORY)
       | (((uint16_t) 1) << MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS)
@@ -299,9 +299,9 @@ IpcCapability baseConsoleIpcCapabilities[] = {
 /// manager process can send to other processes.
 IpcCapability baseMemoryManagerIpcCapabilities[] = {
   {
-    /* destinationPid= */ 0, // Console PID to be set by scheduler
-    /* messageTypes= */
-        (((uint16_t) 1) << CONSOLE_WRITE_VALUE)
+    .destinationPid = 0, // Console PID to be set by scheduler
+    .messageTypes
+      = (((uint16_t) 1) << CONSOLE_WRITE_VALUE)
       | (((uint16_t) 1) << CONSOLE_RELEASE_PORT)
   },
 };
@@ -312,22 +312,22 @@ IpcCapability baseMemoryManagerIpcCapabilities[] = {
 /// filesystem process can send to other processes.
 IpcCapability baseFilesystemIpcCapabilities[] = {
   {
-    /* destinationPid= */ 0, // Console PID to be set by scheduler
-    /* messageTypes= */
-        (((uint16_t) 1) << CONSOLE_GET_BUFFER)
+    .destinationPid = 0, // Console PID to be set by scheduler
+    .messageTypes
+      = (((uint16_t) 1) << CONSOLE_GET_BUFFER)
       | (((uint16_t) 1) << CONSOLE_WRITE_BUFFER)
       | (((uint16_t) 1) << CONSOLE_RELEASE_BUFFER)
   },
   {
-    /* destinationPid= */ 0, // Memory manager PID to be set by scheduler
-    /* messageTypes= */
-        (((uint16_t) 1) << MEMORY_MANAGER_REALLOC)
+    .destinationPid = 0, // Memory manager PID to be set by scheduler
+    .messageTypes
+      = (((uint16_t) 1) << MEMORY_MANAGER_REALLOC)
       | (((uint16_t) 1) << MEMORY_MANAGER_FREE)
   },
   {
-    /* destinationPid= */ 0, // SD card PID to be set by scheduler
-    /* messageTypes= */
-        (((uint16_t) 1) << SD_CARD_READ_BLOCKS)
+    .destinationPid = 0, // SD card PID to be set by scheduler
+    .messageTypes
+      = (((uint16_t) 1) << SD_CARD_READ_BLOCKS)
       | (((uint16_t) 1) << SD_CARD_WRITE_BLOCKS)
   },
 };
@@ -338,9 +338,9 @@ IpcCapability baseFilesystemIpcCapabilities[] = {
 /// with supervisor privilege can send to other processes.
 IpcCapability baseSupervisorIpcCapabilities[] = {
   {
-    /* destinationPid= */ 0, // Scheduler PID to be set by scheduler
-    /* messageTypes= */
-        (((uint16_t) 1) << SCHEDULER_KILL_PROCESS)
+    .destinationPid = 0, // Scheduler PID to be set by scheduler
+    .messageTypes
+      = (((uint16_t) 1) << SCHEDULER_KILL_PROCESS)
       | (((uint16_t) 1) << SCHEDULER_GET_NUM_RUNNING_PROCESSES)
       | (((uint16_t) 1) << SCHEDULER_GET_PROCESS_INFO)
       | (((uint16_t) 1) << SCHEDULER_SET_PROCESS_USER)
@@ -352,9 +352,9 @@ IpcCapability baseSupervisorIpcCapabilities[] = {
       | (((uint16_t) 1) << SCHEDULER_SHUTDOWN)
   },
   {
-    /* destinationPid= */ 0, // Console PID to be set by scheduler
-    /* messageTypes= */
-        (((uint16_t) 1) << CONSOLE_WRITE_VALUE)
+    .destinationPid = 0, // Console PID to be set by scheduler
+    .messageTypes
+      = (((uint16_t) 1) << CONSOLE_WRITE_VALUE)
       | (((uint16_t) 1) << CONSOLE_GET_BUFFER)
       | (((uint16_t) 1) << CONSOLE_WRITE_BUFFER)
       | (((uint16_t) 1) << CONSOLE_RELEASE_PORT)
@@ -365,17 +365,17 @@ IpcCapability baseSupervisorIpcCapabilities[] = {
       | (((uint16_t) 1) << CONSOLE_RELEASE_BUFFER)
   },
   {
-    /* destinationPid= */ 0, // Memory manager PID to be set by scheduler
-    /* messageTypes= */
-        (((uint16_t) 1) << MEMORY_MANAGER_REALLOC)
+    .destinationPid = 0, // Memory manager PID to be set by scheduler
+    .messageTypes
+      = (((uint16_t) 1) << MEMORY_MANAGER_REALLOC)
       | (((uint16_t) 1) << MEMORY_MANAGER_FREE)
       | (((uint16_t) 1) << MEMORY_MANAGER_GET_FREE_MEMORY)
       | (((uint16_t) 1) << MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS)
   },
   {
-    /* destinationPid= */ 0, // Filesystem PID to be set by scheduler
-    /* messageTypes= */
-        (((uint16_t) 1) << FILESYSTEM_OPEN_FILE)
+    .destinationPid = 0, // Filesystem PID to be set by scheduler
+    .messageTypes
+      = (((uint16_t) 1) << FILESYSTEM_OPEN_FILE)
       | (((uint16_t) 1) << FILESYSTEM_CLOSE_FILE)
       | (((uint16_t) 1) << FILESYSTEM_READ_FILE)
       | (((uint16_t) 1) << FILESYSTEM_WRITE_FILE)
@@ -392,33 +392,33 @@ IpcCapability baseSupervisorIpcCapabilities[] = {
 /// with user privilege can send to other processes.
 IpcCapability baseUserIpcCapabilities[] = {
   {
-    /* destinationPid= */ 0, // Scheduler PID to be set by scheduler
-    /* messageTypes= */
-        (((uint16_t) 1) << SCHEDULER_GET_NUM_RUNNING_PROCESSES)
+    .destinationPid = 0, // Scheduler PID to be set by scheduler
+    .messageTypes
+      = (((uint16_t) 1) << SCHEDULER_GET_NUM_RUNNING_PROCESSES)
       | (((uint16_t) 1) << SCHEDULER_GET_PROCESS_INFO)
       | (((uint16_t) 1) << SCHEDULER_GET_HOSTNAME)
       | (((uint16_t) 1) << SCHEDULER_REPLACE_OVERLAY)
   },
   {
-    /* destinationPid= */ 0, // Console PID to be set by scheduler
-    /* messageTypes= */
-        (((uint16_t) 1) << CONSOLE_GET_BUFFER)
+    .destinationPid = 0, // Console PID to be set by scheduler
+    .messageTypes
+      = (((uint16_t) 1) << CONSOLE_GET_BUFFER)
       | (((uint16_t) 1) << CONSOLE_WRITE_BUFFER)
       | (((uint16_t) 1) << CONSOLE_RELEASE_PORT)
       | (((uint16_t) 1) << CONSOLE_RELEASE_BUFFER)
   },
   {
-    /* destinationPid= */ 0, // Memory manager PID to be set by scheduler
-    /* messageTypes= */
-        (((uint16_t) 1) << MEMORY_MANAGER_REALLOC)
+    .destinationPid = 0, // Memory manager PID to be set by scheduler
+    .messageTypes
+      = (((uint16_t) 1) << MEMORY_MANAGER_REALLOC)
       | (((uint16_t) 1) << MEMORY_MANAGER_FREE)
       | (((uint16_t) 1) << MEMORY_MANAGER_GET_FREE_MEMORY)
       | (((uint16_t) 1) << MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS)
   },
   {
-    /* destinationPid= */ 0, // Filesystem PID to be set by scheduler
-    /* messageTypes= */
-        (((uint16_t) 1) << FILESYSTEM_OPEN_FILE)
+    .destinationPid = 0, // Filesystem PID to be set by scheduler
+    .messageTypes
+      = (((uint16_t) 1) << FILESYSTEM_OPEN_FILE)
       | (((uint16_t) 1) << FILESYSTEM_CLOSE_FILE)
       | (((uint16_t) 1) << FILESYSTEM_READ_FILE)
       | (((uint16_t) 1) << FILESYSTEM_WRITE_FILE)
@@ -4210,7 +4210,11 @@ __attribute__((noinline)) void startScheduler(
     for (int32_t ii = 0; ii < ((int32_t) HAL->timer->numSupported); ii++) {
       if (online(HAL->timer, ii)) {
         schedulerState.preemptionTimer = ii;
+#ifdef NANO_OS_DEBUG
+        baseUserHalCapabilities[1].deviceIds = 1 << ii;
+#else
         baseUserHalCapabilities[0].deviceIds = 1 << ii;
+#endif // NANO_OS_DEBUG
         break;
       }
     }
