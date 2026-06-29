@@ -65,7 +65,7 @@
 /// @def MEMORY_MANAGER_STACK_SIZE
 ///
 /// @brief The size, in bytes, of the memory manager process's stack.
-#define MEMORY_MANAGER_STACK_SIZE 224
+#define MEMORY_MANAGER_STACK_SIZE 256
 
 /// @def OVERLAY_ADDRESS
 ///
