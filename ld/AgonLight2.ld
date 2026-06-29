@@ -11,12 +11,22 @@
  * and jumps to the first byte.  The CPU is already in ADL (24-bit) mode.
  *
  * NanoOs address-space layout (within the 512 KB external SRAM window):
- *   0x040000  .text / .rodata   — code and read-only data  (grows up)
+ *   0x040000  .text             — code                      (grows up)
  *   .         .data             — initialised data
+ *   .         .rodata           — read-only data / strings  (end of binary — strippable)
  *   .         .bss              — zero-initialised data
  *   0x080000  overlay region    — 64 KB (OVERLAY_SIZE in HalAgonLight2.c)
  *   0x090000  heap              — remainder of SRAM (grows up)
  *   0x0BFFFC  stack             — stack pointer set by boot.asm (grows down)
+ *
+ * .rodata is placed after .data so that objcopy -R .rodata truncates the
+ * binary rather than leaving a same-size zero-filled gap.  The stripped
+ * binary is shorter by exactly SIZEOF(.rodata).
+ *
+ * WARNING: any const object the CPU dereferences at runtime (function
+ * pointer tables, const struct instances, lookup tables) must not land in
+ * .rodata.  Remove its const qualifier (goes to .data) or force it into
+ * .text with __attribute__((section(".text"))).
  *
  * Symbol contracts with boot.asm:
  *   __bss_start  — start of BSS (used in BSS-zero loop)
@@ -35,12 +45,11 @@ MEMORY
 
 SECTIONS
 {
-  /* ---- Code and read-only data ----------------------------------------- */
+  /* ---- Code ---------------------------------------------------------------- */
   .text :
   {
     KEEP(*(.text.boot))       /* boot.asm _start must be the very first bytes */
     *(.text .text.*)
-    *(.rodata .rodata.*)
     . = ALIGN(4);
   } > SRAM
 
@@ -51,6 +60,16 @@ SECTIONS
     *(.data .data.*)
     . = ALIGN(4);
     __data_end__ = .;
+  } > SRAM
+
+  /* ---- Read-only data (strings, const tables) ------------------------------ */
+  /* Placed AFTER .data so that objcopy -R .rodata truncates the binary rather
+   * than leaving a same-size zero-filled gap.  The stripped binary is smaller
+   * by exactly SIZEOF(.rodata) bytes. */
+  .rodata :
+  {
+    *(.rodata .rodata.*)
+    . = ALIGN(4);
   } > SRAM
 
   /* ---- Zero-initialised data -------------------------------------------- */
