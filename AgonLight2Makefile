@@ -13,24 +13,26 @@
 # All NanoOs code runs in ADL (24-bit) mode.
 #
 # Usage:
-#   make -f AgonLight2Makefile           - Build NanoOs.bin
-#   make -f AgonLight2Makefile flash     - Copy NanoOs.bin to the Agon SD card
-#   make -f AgonLight2Makefile size      - Show section sizes and SRAM headroom
-#   make -f AgonLight2Makefile sections  - Dump section headers
-#   make -f AgonLight2Makefile disasm    - Disassemble the ELF
-#   make -f AgonLight2Makefile clean     - Remove build directory
+#   make -f AgonLight2Makefile             - Build full and stripped binaries
+#   make -f AgonLight2Makefile flash       - Copy stripped binary to Agon SD card
+#   make -f AgonLight2Makefile flash-full  - Copy full binary to Agon SD card
+#   make -f AgonLight2Makefile size        - Show section sizes and SRAM headroom
+#   make -f AgonLight2Makefile sections    - Dump section headers
+#   make -f AgonLight2Makefile disasm      - Disassemble the ELF
+#   make -f AgonLight2Makefile clean       - Remove build directory
 #
 # Produces (under build/agon/):
-#   NanoOs.elf   — Full ELF (keep for host-side symbol resolution)
-#   NanoOs.bin   — Flat binary for MOS (copy to /bin or / on the SD card)
-#   NanoOs.map   — Linker map
-#   NanoOs.lst   — Disassembly listing
+#   NanoOs.elf          — Full ELF (keep for host-side symbol resolution)
+#   NanoOs_full.bin     — Flat binary including .rodata (for debugging)
+#   NanoOs_stripped.bin — Flat binary without .rodata (for production)
+#   NanoOs.map          — Linker map
+#   NanoOs.lst          — Disassembly listing
 #
 # Flash via SD card:
 #   Mount the Agon SD card (USB mass storage in MOS command mode), then:
 #     make -f AgonLight2Makefile flash SD_MOUNT=/media/$(USER)/AGON
 #   Or copy manually:
-#     cp build/agon/NanoOs.bin /media/$(USER)/AGON/bin/
+#     cp build/agon/NanoOs_stripped.bin /media/$(USER)/AGON/bin/NanoOs.bin
 # =============================================================================
 
 # ---- AgDev toolchain --------------------------------------------------------
@@ -173,19 +175,21 @@ DEPS := $(ALL_OBJS:.o=.d)
 
 # ---- Output files -----------------------------------------------------------
 
-ELF := $(BUILD_DIR)/NanoOs.elf
-BIN := $(BUILD_DIR)/NanoOs.bin
-LST := $(BUILD_DIR)/NanoOs.lst
+ELF          := $(BUILD_DIR)/NanoOs.elf
+FULL_BIN     := $(BUILD_DIR)/NanoOs_full.bin
+STRIPPED_BIN := $(BUILD_DIR)/NanoOs_stripped.bin
+LST          := $(BUILD_DIR)/NanoOs.lst
 
 # ---- Targets ----------------------------------------------------------------
 
-.PHONY: all flash size sections disasm clean
+.PHONY: all flash flash-full size sections disasm clean
 
-all: $(BIN)
+all: $(FULL_BIN) $(STRIPPED_BIN)
 	@echo ""
 	@echo "  Built for:  Agon Light 2 (eZ80F92, ADL mode, MOS program)"
 	@echo "  Output:     $(BUILD_DIR)/"
-	@echo "  Binary:     $(BIN)"
+	@echo "  Full:       $(FULL_BIN)"
+	@echo "  Stripped:   $(STRIPPED_BIN)"
 	@echo "  Map:        $(BUILD_DIR)/NanoOs.map"
 
 # ---- Link -------------------------------------------------------------------
@@ -194,11 +198,15 @@ $(ELF): $(ALL_OBJS) $(LINKER_SCRIPT)
 	@echo "  LINK    $@"
 	@$(LD) $(LDFLAGS) -o $@ $(ALL_OBJS) $(LDLIBS)
 
-# ---- Flat binary ------------------------------------------------------------
+# ---- Flat binaries ----------------------------------------------------------
 
-$(BIN): $(ELF)
-	@echo "  OBJCOPY $@"
+$(FULL_BIN): $(ELF)
+	@echo "  OBJCOPY $@ (full, with .rodata)"
 	@$(OBJCOPY) -O binary $< $@
+
+$(STRIPPED_BIN): $(ELF)
+	@echo "  OBJCOPY $@ (stripped, no .rodata)"
+	@$(OBJCOPY) -O binary -R .rodata $< $@
 
 # ---- Compile: boot assembly (AgonLight2/boot.asm) ---------------------------
 
@@ -230,10 +238,10 @@ $(BUILD_DIR)/src/%.cpp.o: src/%.cpp
 
 # ---- Flash: copy binary to Agon SD card -------------------------------------
 
-flash: $(BIN)
+flash: $(STRIPPED_BIN)
 	@if [ -d "$(SD_MOUNT)" ]; then \
-		echo "  FLASH   Copying NanoOs.bin to $(SD_MOUNT)/bin/"; \
-		cp $(BIN) $(SD_MOUNT)/bin/NanoOs.bin; \
+		echo "  FLASH   Copying NanoOs_stripped.bin to $(SD_MOUNT)/bin/NanoOs.bin"; \
+		cp $(STRIPPED_BIN) $(SD_MOUNT)/bin/NanoOs.bin; \
 		echo "  SYNC    Flushing writes to SD card"; \
 		sync; \
 		echo "  Done.  Run 'NanoOs' at the MOS prompt to launch."; \
@@ -241,6 +249,20 @@ flash: $(BIN)
 		echo "ERROR: SD card not found at $(SD_MOUNT)"; \
 		echo "Mount the Agon SD card (USB mass storage) and re-run:"; \
 		echo "  make -f AgonLight2Makefile flash SD_MOUNT=/media/$$USER/AGON"; \
+		exit 1; \
+	fi
+
+flash-full: $(FULL_BIN)
+	@if [ -d "$(SD_MOUNT)" ]; then \
+		echo "  FLASH   Copying NanoOs_full.bin to $(SD_MOUNT)/bin/NanoOs.bin"; \
+		cp $(FULL_BIN) $(SD_MOUNT)/bin/NanoOs.bin; \
+		echo "  SYNC    Flushing writes to SD card"; \
+		sync; \
+		echo "  Done.  Run 'NanoOs' at the MOS prompt to launch."; \
+	else \
+		echo "ERROR: SD card not found at $(SD_MOUNT)"; \
+		echo "Mount the Agon SD card (USB mass storage) and re-run:"; \
+		echo "  make -f AgonLight2Makefile flash-full SD_MOUNT=/media/$$USER/AGON"; \
 		exit 1; \
 	fi
 
@@ -252,11 +274,13 @@ size: $(ELF)
 	@$(SIZE) -A $(ELF)
 	@echo ""
 	@echo "=== Binary breakdown ==="
-	@echo -n "  .text  (code + rodata): "; $(SIZE) -A $(ELF) | awk '/^\.text / {print $$2 " bytes"}'
-	@echo -n "  .data  (init values):   "; $(SIZE) -A $(ELF) | awk '/^\.data / {print $$2 " bytes"}'
-	@echo -n "  .bss   (zero-init):     "; $(SIZE) -A $(ELF) | awk '/^\.bss /  {print $$2 " bytes"}'
+	@echo -n "  .text   (code):         "; $(SIZE) -A $(ELF) | awk '/^\.text / {print $$2 " bytes"}'
+	@echo -n "  .rodata (strings/ro):   "; $(SIZE) -A $(ELF) | awk '/^\.rodata / {print $$2 " bytes"}'
+	@echo -n "  .data   (init values):  "; $(SIZE) -A $(ELF) | awk '/^\.data / {print $$2 " bytes"}'
+	@echo -n "  .bss    (zero-init):    "; $(SIZE) -A $(ELF) | awk '/^\.bss /  {print $$2 " bytes"}'
 	@echo ""
-	@echo -n "  Flat binary:            "; stat -c%s $(BIN) 2>/dev/null || echo "(build first)"
+	@echo -n "  Stripped binary size:   "; stat -c%s $(STRIPPED_BIN) 2>/dev/null || echo "(build first)"
+	@echo -n "  Full binary size:       "; stat -c%s $(FULL_BIN) 2>/dev/null || echo "(build first)"
 	@echo ""
 	@echo "=== External SRAM headroom ==="
 	@python3 -c "\
@@ -270,7 +294,7 @@ total  = text + rodata + data + bss; \
 avail  = 512 * 1024; \
 print(f'  Total estimated footprint: {total} bytes ({total/1024:.1f} KB)'); \
 print(f'  External SRAM available:   {avail} bytes (512 KB)'); \
-print(f'  Free:                      {avail - total} bytes ({(avail - total)/1024:.1f} KB)'); \
+print(f'  Headroom:                  {avail - total} bytes ({(avail - total)/1024:.1f} KB)'); \
 " 2>/dev/null || true
 
 sections: $(ELF)
