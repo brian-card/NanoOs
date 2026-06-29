@@ -70,7 +70,7 @@
 /// @def OVERLAY_ADDRESS
 ///
 /// @brief The address of where the overlay will be placed in memory.
-#define OVERLAY_ADDRESS 0x20001800
+#define OVERLAY_ADDRESS 0x20001C00
 
 /// @def OVERLAY_SIZE
 ///
