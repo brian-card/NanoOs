@@ -1,0 +1,287 @@
+# =============================================================================
+# NanoOs Makefile for Agon Light 2 (eZ80F92)
+#
+# Toolchain: AgDev (LLVM/Clang for eZ80, ez80-none-elf triple)
+#   https://github.com/AgDev/llvm-project
+#
+# Memory layout (eZ80F92 on the Agon Light 2):
+#   Internal Flash : 0x000000–0x01FFFF  128 KB  (MOS + VDP firmware)
+#   External SRAM  : 0x040000–0x0BFFFF  512 KB  (user programs load here)
+#   Internal SRAM  : 0x0C0000–0x0CFFFF   64 KB
+#
+# MOS loads NanoOs.bin from the SD card into external SRAM at 0x040000.
+# All NanoOs code runs in ADL (24-bit) mode.
+#
+# Usage:
+#   make -f AgonLight2Makefile           - Build NanoOs.bin
+#   make -f AgonLight2Makefile flash     - Copy NanoOs.bin to the Agon SD card
+#   make -f AgonLight2Makefile size      - Show section sizes and SRAM headroom
+#   make -f AgonLight2Makefile sections  - Dump section headers
+#   make -f AgonLight2Makefile disasm    - Disassemble the ELF
+#   make -f AgonLight2Makefile clean     - Remove build directory
+#
+# Produces (under build/agon/):
+#   NanoOs.elf   — Full ELF (keep for host-side symbol resolution)
+#   NanoOs.bin   — Flat binary for MOS (copy to /bin or / on the SD card)
+#   NanoOs.map   — Linker map
+#   NanoOs.lst   — Disassembly listing
+#
+# Flash via SD card:
+#   Mount the Agon SD card (USB mass storage in MOS command mode), then:
+#     make -f AgonLight2Makefile flash SD_MOUNT=/media/$(USER)/AGON
+#   Or copy manually:
+#     cp build/agon/NanoOs.bin /media/$(USER)/AGON/bin/
+# =============================================================================
+
+# ---- AgDev toolchain --------------------------------------------------------
+
+AGDEV_HOME   := $(HOME)/agondev
+AGDEV_BIN    := $(AGDEV_HOME)/bin
+
+CC      := $(AGDEV_BIN)/ez80-none-elf-clang
+CXX     := $(AGDEV_BIN)/ez80-none-elf-clang
+LD      := $(AGDEV_BIN)/ez80-none-elf-ld
+OBJCOPY := $(AGDEV_BIN)/ez80-none-elf-objcopy
+OBJDUMP := $(AGDEV_BIN)/ez80-none-elf-objdump
+SIZE    := $(AGDEV_BIN)/ez80-none-elf-size
+READELF := $(AGDEV_BIN)/ez80-none-elf-readelf
+AR      := $(AGDEV_BIN)/ez80-none-elf-ar
+
+TARGET_TRIPLE := ez80-none-elf
+
+# ---- Linker script ----------------------------------------------------------
+
+LINKER_DIR    := ld
+LINKER_SCRIPT := $(LINKER_DIR)/AgonLight2.ld
+
+# ---- Build directory --------------------------------------------------------
+
+BUILD_DIR := build/agon
+
+# ---- SD card mount point ----------------------------------------------------
+
+SD_MOUNT ?= /media/$(USER)/AGON
+
+# ---- Architecture flags -----------------------------------------------------
+
+ARCH_FLAGS := --target=$(TARGET_TRIPLE)
+
+# ---- Preprocessor defines ---------------------------------------------------
+
+DEFINES := \
+	-DAGON_LIGHT2 \
+	-DEZ80F92 \
+	-DF_CPU=18432000UL \
+	-DNANOOS_AGON \
+	-DNANOOS_EZ80 \
+	-D__STDC_NO_ATOMICS__=1 \
+
+# ---- Include paths ----------------------------------------------------------
+
+CLANG_RESOURCE_DIR := $(shell $(CC) --print-resource-dir 2>/dev/null)
+
+INCLUDES := \
+	$(if $(CLANG_RESOURCE_DIR),-I$(CLANG_RESOURCE_DIR)/include) \
+	-I$(AGDEV_HOME)/include \
+	-Isrc \
+	-Isrc/include
+
+# ---- Compiler flags ---------------------------------------------------------
+
+COMMON_FLAGS := \
+	$(ARCH_FLAGS) \
+	-Os \
+	-ffunction-sections \
+	-fdata-sections \
+	-fno-jump-tables \
+	-ffreestanding \
+	-fno-builtin \
+	-Wall \
+	-Wextra \
+	-Werror=return-type \
+	-mllvm -z80-gas-style \
+	-mllvm -z80-print-zero-offset \
+	-Wa,-march=ez80+full \
+	$(DEFINES) \
+	$(INCLUDES)
+
+CFLAGS   := $(COMMON_FLAGS) -std=gnu11
+CXXFLAGS := $(COMMON_FLAGS) -std=gnu++17 \
+	-fno-exceptions \
+	-fno-rtti \
+	-fno-threadsafe-statics
+
+# Assembly: -x assembler-with-cpp lets .asm/.S files use the C preprocessor.
+ASFLAGS := \
+	--target=$(TARGET_TRIPLE) \
+	-g \
+	-x assembler-with-cpp \
+	-Wa,-march=ez80+full \
+	$(DEFINES) \
+	$(INCLUDES)
+
+# ---- Linker flags -----------------------------------------------------------
+
+LDFLAGS := \
+	--gc-sections \
+	-T$(LINKER_SCRIPT) \
+	-Map=$(BUILD_DIR)/NanoOs.map \
+	--cref \
+	--unresolved-symbols=report-all
+
+# AgDev runtime library.
+LDLIBS := \
+	--start-group \
+	-L$(AGDEV_HOME)/lib \
+	-lagon \
+	--end-group
+
+# ---- Source file discovery --------------------------------------------------
+#
+# Include all C/C++ files under src/, excluding:
+#   • HalPosix.c / HalPosixImpl.c  — use POSIX system headers, not portable
+#
+# All other platform-specific HAL files (SAMD21, Adafruit, Arduino, Seeed)
+# are guarded by target-specific preprocessor macros and compile to empty
+# translation units on the eZ80 target.
+
+SKETCH_C_SRCS := $(shell find src -name '*.c' \
+  | grep -v 'HalPosix\.c' \
+  | grep -v 'HalPosixImpl\.c' \
+  | sort)
+
+SKETCH_CXX_SRCS := $(shell find src -name '*.cpp' | sort)
+
+# Boot assembly, runtime stubs, and C entry point live under AgonLight2/
+BOOT_ASM_SRCS := AgonLight2/boot.asm AgonLight2/runtime_stubs.asm
+MAIN_C_SRCS   := AgonLight2/main.c
+
+# ---- Object file paths ------------------------------------------------------
+
+SKETCH_C_OBJS   := $(patsubst %,$(BUILD_DIR)/%.o,$(SKETCH_C_SRCS))
+SKETCH_CXX_OBJS := $(patsubst %,$(BUILD_DIR)/%.o,$(SKETCH_CXX_SRCS))
+BOOT_ASM_OBJS   := $(patsubst %,$(BUILD_DIR)/%.o,$(BOOT_ASM_SRCS))
+MAIN_C_OBJS     := $(patsubst %,$(BUILD_DIR)/%.o,$(MAIN_C_SRCS))
+
+ALL_OBJS := \
+	$(BOOT_ASM_OBJS) \
+	$(MAIN_C_OBJS) \
+	$(SKETCH_C_OBJS) \
+	$(SKETCH_CXX_OBJS)
+
+DEPS := $(ALL_OBJS:.o=.d)
+
+# ---- Output files -----------------------------------------------------------
+
+ELF := $(BUILD_DIR)/NanoOs.elf
+BIN := $(BUILD_DIR)/NanoOs.bin
+LST := $(BUILD_DIR)/NanoOs.lst
+
+# ---- Targets ----------------------------------------------------------------
+
+.PHONY: all flash size sections disasm clean
+
+all: $(BIN)
+	@echo ""
+	@echo "  Built for:  Agon Light 2 (eZ80F92, ADL mode, MOS program)"
+	@echo "  Output:     $(BUILD_DIR)/"
+	@echo "  Binary:     $(BIN)"
+	@echo "  Map:        $(BUILD_DIR)/NanoOs.map"
+
+# ---- Link -------------------------------------------------------------------
+
+$(ELF): $(ALL_OBJS) $(LINKER_SCRIPT)
+	@echo "  LINK    $@"
+	@$(LD) $(LDFLAGS) -o $@ $(ALL_OBJS) $(LDLIBS)
+
+# ---- Flat binary ------------------------------------------------------------
+
+$(BIN): $(ELF)
+	@echo "  OBJCOPY $@"
+	@$(OBJCOPY) -O binary $< $@
+
+# ---- Compile: boot assembly (AgonLight2/boot.asm) ---------------------------
+
+$(BUILD_DIR)/AgonLight2/%.asm.o: AgonLight2/%.asm
+	@mkdir -p $(dir $@)
+	@echo "  AS      $<"
+	@$(CC) $(ASFLAGS) -MMD -c $< -o $@
+
+# ---- Compile: AgonLight2 C entry point (AgonLight2/main.c) ------------------
+
+$(BUILD_DIR)/AgonLight2/%.c.o: AgonLight2/%.c
+	@mkdir -p $(dir $@)
+	@echo "  CC      $<"
+	@$(CC) $(CFLAGS) -MMD -c $< -o $@
+
+# ---- Compile: src/ C sources ------------------------------------------------
+
+$(BUILD_DIR)/src/%.c.o: src/%.c
+	@mkdir -p $(dir $@)
+	@echo "  CC      $<"
+	@$(CC) $(CFLAGS) -MMD -c $< -o $@
+
+# ---- Compile: src/ C++ sources ----------------------------------------------
+
+$(BUILD_DIR)/src/%.cpp.o: src/%.cpp
+	@mkdir -p $(dir $@)
+	@echo "  CXX     $<"
+	@$(CXX) $(CXXFLAGS) -MMD -c $< -o $@
+
+# ---- Flash: copy binary to Agon SD card -------------------------------------
+
+flash: $(BIN)
+	@if [ -d "$(SD_MOUNT)" ]; then \
+		echo "  FLASH   Copying NanoOs.bin to $(SD_MOUNT)/bin/"; \
+		cp $(BIN) $(SD_MOUNT)/bin/NanoOs.bin; \
+		echo "  SYNC    Flushing writes to SD card"; \
+		sync; \
+		echo "  Done.  Run 'NanoOs' at the MOS prompt to launch."; \
+	else \
+		echo "ERROR: SD card not found at $(SD_MOUNT)"; \
+		echo "Mount the Agon SD card (USB mass storage) and re-run:"; \
+		echo "  make -f AgonLight2Makefile flash SD_MOUNT=/media/$$USER/AGON"; \
+		exit 1; \
+	fi
+
+# ---- Utility targets --------------------------------------------------------
+
+size: $(ELF)
+	@echo ""
+	@echo "=== Agon Light 2 (eZ80F92): Section sizes ==="
+	@$(SIZE) -A $(ELF)
+	@echo ""
+	@echo "=== Binary breakdown ==="
+	@echo -n "  .text  (code + rodata): "; $(SIZE) -A $(ELF) | awk '/^\.text / {print $$2 " bytes"}'
+	@echo -n "  .data  (init values):   "; $(SIZE) -A $(ELF) | awk '/^\.data / {print $$2 " bytes"}'
+	@echo -n "  .bss   (zero-init):     "; $(SIZE) -A $(ELF) | awk '/^\.bss /  {print $$2 " bytes"}'
+	@echo ""
+	@echo -n "  Flat binary:            "; stat -c%s $(BIN) 2>/dev/null || echo "(build first)"
+	@echo ""
+	@echo "=== External SRAM headroom ==="
+	@python3 -c "\
+import subprocess, re; \
+out = subprocess.check_output(['$(SIZE)', '-A', '$(ELF)']).decode(); \
+text   = sum(int(m) for m in re.findall(r'^\\.text\\s+(\\d+)',   out, re.M)); \
+rodata = sum(int(m) for m in re.findall(r'^\\.rodata\\s+(\\d+)', out, re.M)); \
+data   = sum(int(m) for m in re.findall(r'^\\.data\\s+(\\d+)',   out, re.M)); \
+bss    = sum(int(m) for m in re.findall(r'^\\.bss\\s+(\\d+)',    out, re.M)); \
+total  = text + rodata + data + bss; \
+avail  = 512 * 1024; \
+print(f'  Total estimated footprint: {total} bytes ({total/1024:.1f} KB)'); \
+print(f'  External SRAM available:   {avail} bytes (512 KB)'); \
+print(f'  Free:                      {avail - total} bytes ({(avail - total)/1024:.1f} KB)'); \
+" 2>/dev/null || true
+
+sections: $(ELF)
+	@$(OBJDUMP) -h $(ELF)
+
+disasm: $(ELF)
+	@echo "  DISASM  $(LST)"
+	@$(OBJDUMP) --disassemble --source --demangle $(ELF) > $(LST)
+	@echo "  Written to $(LST)"
+
+clean:
+	rm -rf $(BUILD_DIR)
+
+-include $(DEPS)
