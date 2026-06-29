@@ -267,6 +267,7 @@ HalCapability baseUserHalCapabilities[] = {
 IpcCapability baseSchedulerIpcCapabilities[] = {
   {
     .destinationPid = 0, // SD card PID to be set by scheduler
+    .signature      = SD_CARD_COMMAND_SIGNATURE,
     .messageTypes
       = (((uint16_t) 1) << SD_CARD_READ_BLOCKS)
       | (((uint16_t) 1) << SD_CARD_WRITE_BLOCKS)
@@ -280,11 +281,13 @@ IpcCapability baseSchedulerIpcCapabilities[] = {
 IpcCapability baseConsoleIpcCapabilities[] = {
   {
     .destinationPid = 0, // Scheduler PID to be set by scheduler
+    .signature      = SCHEDULER_COMMAND_SIGNATURE,
     .messageTypes
       = (((uint16_t) 1) << SCHEDULER_SEND_SIGNAL)
   },
   {
     .destinationPid = 0, // Memory manager PID to be set by scheduler
+    .signature      = MEMORY_MANAGER_COMMAND_SIGNATURE,
     .messageTypes
       = (((uint16_t) 1) << MEMORY_MANAGER_REALLOC)
       | (((uint16_t) 1) << MEMORY_MANAGER_FREE)
@@ -300,6 +303,7 @@ IpcCapability baseConsoleIpcCapabilities[] = {
 IpcCapability baseMemoryManagerIpcCapabilities[] = {
   {
     .destinationPid = 0, // Console PID to be set by scheduler
+    .signature      = CONSOLE_COMMAND_SIGNATURE,
     .messageTypes
       = (((uint16_t) 1) << CONSOLE_WRITE_VALUE)
       | (((uint16_t) 1) << CONSOLE_RELEASE_PORT)
@@ -313,6 +317,7 @@ IpcCapability baseMemoryManagerIpcCapabilities[] = {
 IpcCapability baseFilesystemIpcCapabilities[] = {
   {
     .destinationPid = 0, // Console PID to be set by scheduler
+    .signature      = CONSOLE_COMMAND_SIGNATURE,
     .messageTypes
       = (((uint16_t) 1) << CONSOLE_GET_BUFFER)
       | (((uint16_t) 1) << CONSOLE_WRITE_BUFFER)
@@ -320,12 +325,14 @@ IpcCapability baseFilesystemIpcCapabilities[] = {
   },
   {
     .destinationPid = 0, // Memory manager PID to be set by scheduler
+    .signature      = MEMORY_MANAGER_COMMAND_SIGNATURE,
     .messageTypes
       = (((uint16_t) 1) << MEMORY_MANAGER_REALLOC)
       | (((uint16_t) 1) << MEMORY_MANAGER_FREE)
   },
   {
     .destinationPid = 0, // SD card PID to be set by scheduler
+    .signature      = SD_CARD_COMMAND_SIGNATURE,
     .messageTypes
       = (((uint16_t) 1) << SD_CARD_READ_BLOCKS)
       | (((uint16_t) 1) << SD_CARD_WRITE_BLOCKS)
@@ -339,6 +346,7 @@ IpcCapability baseFilesystemIpcCapabilities[] = {
 IpcCapability baseSupervisorIpcCapabilities[] = {
   {
     .destinationPid = 0, // Scheduler PID to be set by scheduler
+    .signature      = SCHEDULER_COMMAND_SIGNATURE,
     .messageTypes
       = (((uint16_t) 1) << SCHEDULER_KILL_PROCESS)
       | (((uint16_t) 1) << SCHEDULER_GET_NUM_RUNNING_PROCESSES)
@@ -353,6 +361,7 @@ IpcCapability baseSupervisorIpcCapabilities[] = {
   },
   {
     .destinationPid = 0, // Console PID to be set by scheduler
+    .signature      = CONSOLE_COMMAND_SIGNATURE,
     .messageTypes
       = (((uint16_t) 1) << CONSOLE_WRITE_VALUE)
       | (((uint16_t) 1) << CONSOLE_GET_BUFFER)
@@ -366,6 +375,7 @@ IpcCapability baseSupervisorIpcCapabilities[] = {
   },
   {
     .destinationPid = 0, // Memory manager PID to be set by scheduler
+    .signature      = MEMORY_MANAGER_COMMAND_SIGNATURE,
     .messageTypes
       = (((uint16_t) 1) << MEMORY_MANAGER_REALLOC)
       | (((uint16_t) 1) << MEMORY_MANAGER_FREE)
@@ -374,6 +384,7 @@ IpcCapability baseSupervisorIpcCapabilities[] = {
   },
   {
     .destinationPid = 0, // Filesystem PID to be set by scheduler
+    .signature      = FILESYSTEM_COMMAND_SIGNATURE,
     .messageTypes
       = (((uint16_t) 1) << FILESYSTEM_OPEN_FILE)
       | (((uint16_t) 1) << FILESYSTEM_CLOSE_FILE)
@@ -393,6 +404,7 @@ IpcCapability baseSupervisorIpcCapabilities[] = {
 IpcCapability baseUserIpcCapabilities[] = {
   {
     .destinationPid = 0, // Scheduler PID to be set by scheduler
+    .signature      = SCHEDULER_COMMAND_SIGNATURE,
     .messageTypes
       = (((uint16_t) 1) << SCHEDULER_GET_NUM_RUNNING_PROCESSES)
       | (((uint16_t) 1) << SCHEDULER_GET_PROCESS_INFO)
@@ -401,6 +413,7 @@ IpcCapability baseUserIpcCapabilities[] = {
   },
   {
     .destinationPid = 0, // Console PID to be set by scheduler
+    .signature      = CONSOLE_COMMAND_SIGNATURE,
     .messageTypes
       = (((uint16_t) 1) << CONSOLE_GET_BUFFER)
       | (((uint16_t) 1) << CONSOLE_WRITE_BUFFER)
@@ -409,6 +422,7 @@ IpcCapability baseUserIpcCapabilities[] = {
   },
   {
     .destinationPid = 0, // Memory manager PID to be set by scheduler
+    .signature      = MEMORY_MANAGER_COMMAND_SIGNATURE,
     .messageTypes
       = (((uint16_t) 1) << MEMORY_MANAGER_REALLOC)
       | (((uint16_t) 1) << MEMORY_MANAGER_FREE)
@@ -417,6 +431,7 @@ IpcCapability baseUserIpcCapabilities[] = {
   },
   {
     .destinationPid = 0, // Filesystem PID to be set by scheduler
+    .signature      = FILESYSTEM_COMMAND_SIGNATURE,
     .messageTypes
       = (((uint16_t) 1) << FILESYSTEM_OPEN_FILE)
       | (((uint16_t) 1) << FILESYSTEM_CLOSE_FILE)

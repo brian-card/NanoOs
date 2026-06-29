@@ -311,10 +311,12 @@ typedef CoroutinesConfigOptions ThreadsConfigOptions;
 /// a destination process.
 ///
 /// @param destinationPid The destination process ID.
+/// @param signature The signature of the messages.
 /// @param messageTypes Bitmask of the message types that the capability holding
 ///   process is allowed to send to the destination process.
 typedef struct IpcCapability {
   uint8_t  destinationPid;
+  int64_t  signature;
   uint16_t messageTypes;
 } IpcCapability;
 
