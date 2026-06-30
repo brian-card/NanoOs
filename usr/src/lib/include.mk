@@ -24,6 +24,12 @@ CFLAGS := -std=gnu17
 ifeq ($(COMPILE),arm-none-eabi-gcc)
     CFLAGS += -mcpu=cortex-m0
 endif
+ifneq ($(findstring ez80,$(COMPILE)),)
+    CFLAGS += --target=ez80-none-elf
+    CFLAGS += -mllvm -z80-gas-style
+    CFLAGS += -mllvm -z80-print-zero-offset
+    CFLAGS += -Wa,-march=ez80+full
+endif
 
 INCLUDES += $(EXTRA_INCLUDES)
 
