@@ -2,21 +2,42 @@
 
 set -e
 
-hostname="${1}"
-targetDevice="${2}"
+platform="${1}"
+hostname="${2}"
+targetDevice="${3}"
 filesystem="fat32"
 blocksPerOverlay=8
 
-if [ "${hostname}" = "" ]; then
-	echo "Usage ${0} <hostname> [target device]" >&2
+if [ "${platform}" = "" ] || [ "${hostname}" = "" ]; then
+	echo "Usage ${0} <ArduinoSamd21|AgonLight2> <hostname> [target device]" >&2
+	exit 1
+fi
+
+if [ "${platform}" = "ArduinoSamd21" ]; then
+	compile="arm-none-eabi-gcc"
+	link="arm-none-eabi-ld"
+	objcopy="arm-none-eabi-objcopy"
+	objdump="arm-none-eabi-objdump"
+	size="arm-none-eabi-size"
+	linkerScript="NanoOsArduinoSamd21.ld"
+elif [ "${platform}" = "AgonLight2" ]; then
+	agonDevBin="${HOME}/agondev/bin"
+	compile="${agonDevBin}/ez80-none-elf-clang"
+	link="${agonDevBin}/ez80-none-elf-ld"
+	objcopy="${agonDevBin}/ez80-none-elf-objcopy"
+	objdump="${agonDevBin}/ez80-none-elf-objdump"
+	size="${agonDevBin}/ez80-none-elf-size"
+	linkerScript="NanoOsAgonLight2.ld"
+else
+	echo "ERROR: Unknown platform '${platform}'.  Must be 'ArduinoSamd21' or 'AgonLight2'." >&2
 	exit 1
 fi
 
 echo "Building applications..."
 make -j $(nproc) -C usr/src clean
-make -j $(nproc) -C usr/src COMPILE=arm-none-eabi-gcc LINK=arm-none-eabi-ld \
-	OBJCOPY=arm-none-eabi-objcopy OBJDUMP=arm-none-eabi-objdump \
-	SIZE=arm-none-eabi-size LINKER_SCRIPT=NanoOs.ld overlays
+make -j $(nproc) -C usr/src COMPILE="${compile}" LINK="${link}" \
+	OBJCOPY="${objcopy}" OBJDUMP="${objdump}" \
+	SIZE="${size}" LINKER_SCRIPT="${linkerScript}" overlays
 
 echo ""
 echo "Build complete."
@@ -36,12 +57,12 @@ if [ "${targetDevice}" != "" ]; then
 	sudo bash -c "printf \"${hostname}\" >\"${mountDir}/etc/hostname\""
 	sudo bash -c "printf '\\s \\\r \\\n \\l\n\n' >\"${mountDir}/etc/issue\""
 	sudo umount "${mountDir}"
-fi
 
-blockOverlays="$(ls usr/lib/{filesystem,${filesystem}}/*)"
-for blockOverlay in ${blockOverlays}; do
-	overlayId="$(basename "${blockOverlay}" .overlay)"
-	startBlock=$(( (overlayId * blocksPerOverlay) + 1 ))
-	sudo dd if="${blockOverlay}" of="${targetDevice}" bs=512 \
-		seek=${startBlock}
-done
+	blockOverlays="$(ls usr/lib/{filesystem,${filesystem}}/*)"
+	for blockOverlay in ${blockOverlays}; do
+		overlayId="$(basename "${blockOverlay}" .overlay)"
+		startBlock=$(( (overlayId * blocksPerOverlay) + 1 ))
+		sudo dd if="${blockOverlay}" of="${targetDevice}" bs=512 \
+			seek=${startBlock}
+	done
+fi
