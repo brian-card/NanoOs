@@ -27,9 +27,9 @@ _start:
     SET  6, A
     OUT0 (0xB4), A
 
-    ; Point the stack at the top of external SRAM (4-byte aligned).
+    ; Point the stack at the top of external SRAM.
     ; External SRAM: 0x040000–0x0BFFFF (512 KB).
-    LD  SP, 0x0BFFFC
+    LD  SP, 0x0C0000
 
     ; Zero BSS.  Skip the loop when __bss_size == 0.
     LD  HL, __bss_start
