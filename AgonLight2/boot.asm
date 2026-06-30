@@ -18,13 +18,13 @@
 _start:
     DI                          ; disable maskable interrupts while setting up
 
-    ; Map eZ80F92 on-chip 8 KB SRAM to 0x0C0000.
-    ; RAMADL (0xB5) holds address bits [20:13]; for 0x0C0000 that is 0x60.
-    ; Setting RAMCTL (0xB4) bit 6 (RAMEN) arms the mapping.
-    LD  A, 0x60
+    ; Map eZ80F92 on-chip 8 KB SRAM to 0xFFE000.
+    ; RAMADL (0xB5) holds address bits [23:16]; for 0xFFE000 that is 0xFF.
+    ; Setting RAMCTL (0xB4) bit 7 (RAMEN) arms the mapping.
+    LD  A, 0xFF
     OUT0 (0xB5), A
     IN0  A, (0xB4)
-    SET  6, A
+    SET  7, A
     OUT0 (0xB4), A
 
     ; Point the stack at the top of external SRAM.
