@@ -20,14 +20,21 @@ if [ "${platform}" = "ArduinoSamd21" ]; then
 	objdump="arm-none-eabi-objdump"
 	size="arm-none-eabi-size"
 	linkerScript="NanoOsArduinoSamd21.ld"
+	extraIncludes=""
 elif [ "${platform}" = "AgonLight2" ]; then
-	agonDevBin="${HOME}/agondev/bin"
+	agonHome="${HOME}/agondev"
+	agonDevBin="${agonHome}/bin"
 	compile="${agonDevBin}/ez80-none-elf-clang"
 	link="${agonDevBin}/ez80-none-elf-ld"
 	objcopy="${agonDevBin}/ez80-none-elf-objcopy"
 	objdump="${agonDevBin}/ez80-none-elf-objdump"
 	size="${agonDevBin}/ez80-none-elf-size"
 	linkerScript="NanoOsAgonLight2.ld"
+	clangResourceDir="$("${compile}" --print-resource-dir 2>/dev/null)"
+	extraIncludes="-I${agonHome}/include"
+	if [ -n "${clangResourceDir}" ]; then
+		extraIncludes="${extraIncludes} -I${clangResourceDir}/include"
+	fi
 else
 	echo "ERROR: Unknown platform '${platform}'.  Must be 'ArduinoSamd21' or 'AgonLight2'." >&2
 	exit 1
@@ -37,7 +44,8 @@ echo "Building applications..."
 make -j $(nproc) -C usr/src clean
 make -j $(nproc) -C usr/src COMPILE="${compile}" LINK="${link}" \
 	OBJCOPY="${objcopy}" OBJDUMP="${objdump}" \
-	SIZE="${size}" LINKER_SCRIPT="${linkerScript}" overlays
+	SIZE="${size}" LINKER_SCRIPT="${linkerScript}" \
+	EXTRA_INCLUDES="${extraIncludes}" overlays
 
 echo ""
 echo "Build complete."

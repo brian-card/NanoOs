@@ -25,6 +25,8 @@ ifeq ($(COMPILE),arm-none-eabi-gcc)
     CFLAGS += -mcpu=cortex-m0
 endif
 
+INCLUDES += $(EXTRA_INCLUDES)
+
 # Linker flags
 ifeq ($(COMPILE),arm-none-eabi-gcc)
     LDFLAGS := -mcpu=cortex-m0
