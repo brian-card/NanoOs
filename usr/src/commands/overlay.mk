@@ -14,8 +14,13 @@ CFLAGS += -fno-jump-tables
 CFLAGS += -fno-stack-protector
 
 # Linker flags
+ifdef USE_LD_DIRECTLY
+LDFLAGS += $(LINKER_SCRIPT) --gc-sections
+LDFLAGS += --build-id=none
+else
 LDFLAGS += $(LINKER_SCRIPT) -Wl,--gc-sections -static -no-pie
 LDFLAGS += -Wl,--build-id=none -nostartfiles
+endif
 
 OBJ_DIR = ../../../../obj
 BIN_DIR = ../../../../bin
@@ -54,7 +59,7 @@ $(BINARY): $(ELF)
 $(ELF): $(OBJECTS)
 	@echo "Linking: $@"
 	$(MKDIR) "$(OBJ_DIR)"
-	$(COMPILE) $(LDFLAGS) $(OBJECTS) $(LINKS) -o $@
+	$(LINKER) $(LDFLAGS) $(OBJECTS) $(LINKS) -o $@
 	$(SIZE) $@
 
 # Compile object files

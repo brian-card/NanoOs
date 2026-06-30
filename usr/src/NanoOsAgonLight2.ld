@@ -45,7 +45,16 @@ MEMORY
 }
 
 /* Entry point - not critical for overlays but good practice */
-ENTRY(_start)
+ENTRY(__start)
+
+/*
+ * Provide a default __start so that overlays without an explicit entry point
+ * (library overlays) don't cause the linker to pull in crt0.o from libagon.a
+ * trying to satisfy ENTRY's symbol search.  Overlays that define _start in C
+ * (which the eZ80 ABI mangles to __start) override this via normal symbol
+ * precedence.
+ */
+PROVIDE(__start = ORIGIN(OVERLAY_RAM));
 
 SECTIONS
 {

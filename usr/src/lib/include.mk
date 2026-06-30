@@ -33,12 +33,20 @@ endif
 
 INCLUDES += $(EXTRA_INCLUDES)
 
+# Linker to use for the link step (compiler driver by default; bare ld for
+# toolchains whose driver does not know how to invoke the target linker).
+LINKER := $(COMPILE)
+ifneq ($(findstring ez80,$(COMPILE)),)
+    LINKER := $(LINK)
+    USE_LD_DIRECTLY := 1
+endif
+
 # Linker flags
 ifeq ($(COMPILE),arm-none-eabi-gcc)
     LDFLAGS := -mcpu=cortex-m0
 endif
 
-LINKS = \
+LINKS = $(EXTRA_LINKS)
 
 WARNINGS = \
     -Wall \
