@@ -43,27 +43,34 @@
 // Memory layout constants
 // ---------------------------------------------------------------------------
 
+/// @def HEAP_START_ADDRESS
+///
+/// @brief Address of the start (bottom) of the heap.  On the AgonLight 2,
+/// external RAM starts at address 0x40000 and since we're currently loading the
+/// NanoOs binary at that address, we need to reserve 128 KB from there.
+#define HEAP_START_ADDRESS 0x60000
+
 /// @def PROCESS_STACK_SIZE
 ///
-/// @brief Default coroutine stack size in bytes.  The Agon has 512 KB of
-/// external SRAM, so a generous 2 KB per process is comfortable.
-#define PROCESS_STACK_SIZE 2048
+/// @brief Default process stack size in bytes.
+#define PROCESS_STACK_SIZE 1024
 
 /// @def MEMORY_MANAGER_STACK_SIZE
 ///
-/// @brief Stack for the memory-manager coroutine.
-#define MEMORY_MANAGER_STACK_SIZE 1024
+/// @brief Stack for the memory-manager process.
+#define MEMORY_MANAGER_STACK_SIZE 512
 
 /// @def OVERLAY_ADDRESS
 ///
-/// @brief Address in external SRAM where overlays are loaded.
-/// Placed at the midpoint of the 512 KB window (0x040000 + 0x040000).
-#define OVERLAY_ADDRESS 0x080000
+/// @brief Address in RAM where overlays are loaded.
+/// Placed at end of the 24-bit address space, which is where the internal RAM
+/// is mapped by the boot initialization code.
+#define OVERLAY_ADDRESS 0xFFE000
 
 /// @def OVERLAY_SIZE
 ///
 /// @brief Bytes reserved for the overlay region.
-#define OVERLAY_SIZE 0x10000  // 64 KB
+#define OVERLAY_SIZE 8192 // 8 KB - the size of the internal RAM area
 
 // ---------------------------------------------------------------------------
 // Memory subsystem stubs
@@ -94,7 +101,7 @@ int32_t agonLight2BottomOfHeap(va_list args) {
   void **returnValue = va_arg(args, void**);
   (void) debug;
   if (returnValue != NULL) {
-    *returnValue = (void*) (uintptr_t) (OVERLAY_ADDRESS + OVERLAY_SIZE);
+    *returnValue = (void*) ((uintptr_t) HEAP_START_ADDRESS);
   }
   return 0;
 }
