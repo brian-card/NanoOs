@@ -80,6 +80,42 @@ typedef struct posix_spawnattr_t posix_spawnattr_t;
 // Forward declarations from other headers.
 struct termios;
 
+typedef struct NanoOsExecutiveApi {
+  // Debug functions:
+  int (*printString)(const char *string);
+  int (*printInt)(long long int integer);
+  int (*printDouble)(double floatingPointValue);
+  int (*printHex)(unsigned long long int integer);
+  
+  // Limited HAL access:
+  HalBlockDevice *blockDevice;
+  
+  // Kernel process functions:
+  Coroutine* (*getRunningCoroutine)(void);
+  void* (*coroutineContext)(Coroutine *coroutine);
+  int (*coroutineSetContext)(Coroutine *coroutine, void *context);
+  uint64_t* (*coroutineStackEnd)(Coroutine *coroutine);
+  int (*coroutineSetStackEnd)(Coroutine *coroutine, uint64_t *stackEnd);
+  bool (*coroutineStackOverflowed)(Coroutine *coroutine);
+  void* (*coroutineYield)(void *arg, CoroutineState state);
+  
+  // Kernel message functions:
+  int (*processMessageInit)(msg_t *msg, msg_safety_t msg_safety,
+    int64_t type, void *data, size_t size, bool waiting);
+  int (*processMessageRelease)(msg_t *msg);
+  int (*processMessageSetDone)(msg_t *msg);
+  int (*processMessageWaitForDone)(msg_t *msg, const struct timespec *ts);
+  void* (*processMessageElement)(msg_t *msg, msg_element_t msg_element);
+  
+  // Kernel message queue functions:
+  msg_t* (*comessageQueuePeek)(void);
+  msg_t* (*comessageQueuePop)(void);
+  msg_t* (*comessageQueuePopType)(int type);
+  msg_t* (*comessageQueueWait)(const struct timespec *ts);
+  msg_t* (*comessageQueueWaitForType)(int64_t type, const struct timespec *ts);
+  int (*comessageQueuePush)(Coroutine *coroutine, msg_t *comessage);
+} NanoOsExecutiveApi;
+
 typedef struct NanoOsApi {
   // Standard streams:
   FILE *stdin;
@@ -216,41 +252,11 @@ typedef struct NanoOsApi {
   // NanoOsHardware.h functions:
   int (*shutdown)(NanoOsShutdownType shutdownType);
   
-  // Debug functions:
-  int (*printString)(const char *string);
-  int (*printInt)(long long int integer);
-  int (*printDouble)(double floatingPointValue);
-  int (*printHex)(unsigned long long int integer);
-  
-  // Limited HAL access:
-  HalBlockDevice *blockDevice;
-  
-  // Kernel process functions:
-  Coroutine* (*getRunningCoroutine)(void);
-  void* (*coroutineContext)(Coroutine *coroutine);
-  int (*coroutineSetContext)(Coroutine *coroutine, void *context);
-  uint64_t* (*coroutineStackEnd)(Coroutine *coroutine);
-  int (*coroutineSetStackEnd)(Coroutine *coroutine, uint64_t *stackEnd);
-  bool (*coroutineStackOverflowed)(Coroutine *coroutine);
-  void* (*coroutineYield)(void *arg, CoroutineState state);
-  
-  // Kernel message functions:
-  int (*processMessageInit)(msg_t *msg, msg_safety_t msg_safety,
-    int64_t type, void *data, size_t size, bool waiting);
-  int (*processMessageRelease)(msg_t *msg);
-  int (*processMessageSetDone)(msg_t *msg);
-  int (*processMessageWaitForDone)(msg_t *msg, const struct timespec *ts);
-  void* (*processMessageElement)(msg_t *msg, msg_element_t msg_element);
-  
-  // Kernel message queue functions:
-  msg_t* (*comessageQueuePeek)(void);
-  msg_t* (*comessageQueuePop)(void);
-  msg_t* (*comessageQueuePopType)(int type);
-  msg_t* (*comessageQueueWait)(const struct timespec *ts);
-  msg_t* (*comessageQueueWaitForType)(int64_t type, const struct timespec *ts);
-  int (*comessageQueuePush)(Coroutine *coroutine, msg_t *comessage);
+  // Additional API for PRIVILEGE_LEVEL_EXECUTIVE processes:
+  NanoOsExecutiveApi *executiveApi;
 } NanoOsApi;
 
+extern NanoOsExecutiveApi nanoOsExecutiveApi;
 extern NanoOsApi nanoOsApi;
 
 #ifdef __cplusplus

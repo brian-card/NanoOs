@@ -111,8 +111,12 @@ typedef CoroutinesConfigOptions ThreadsConfigOptions;
 /// @return Returns a pointer to the ProcessDescriptor for the process currently
 /// executing.
 static inline ProcessDescriptor* getRunningProcess(void) {
-  return (ProcessDescriptor*) overlayMap.header.osApi->coroutineContext(
-    overlayMap.header.osApi->getRunningCoroutine());
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return (ProcessDescriptor*) overlayMap.header.osApi->executiveApi->
+      coroutineContext(
+        overlayMap.header.osApi->executiveApi->getRunningCoroutine());
+  }
+  return NULL;
 }
 
 /// @fn static inline ProcessId getRunningPid(void)
@@ -121,7 +125,10 @@ static inline ProcessDescriptor* getRunningProcess(void) {
 ///
 /// @return Returns the ProcessId of the process currently executing.
 static inline ProcessId getRunningPid(void) {
-  return getRunningProcess()->processId;
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return getRunningProcess()->processId;
+  }
+  return 0;
 }
 
 /// @fn static inline UserId getRunningUid(void)
@@ -130,7 +137,10 @@ static inline ProcessId getRunningPid(void) {
 ///
 /// @return Returns the ID of the user running the process currently executing.
 static inline UserId getRunningUid(void) {
-  return getRunningProcess()->userId;
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return getRunningProcess()->userId;
+  }
+  return (UserId) -1;
 }
 
 /// @fn static inline int threadSetContext(Thread *thread, void *context)
@@ -142,7 +152,11 @@ static inline UserId getRunningUid(void) {
 ///
 /// @return Returns processSuccess on success, error status on failure.
 static inline int threadSetContext(Thread *thread, void *context) {
-  return overlayMap.header.osApi->coroutineSetContext(thread, context);
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return overlayMap.header.osApi->executiveApi->coroutineSetContext(
+      thread, context);
+  }
+  return processError;
 }
 
 /// @fn static inline void* threadContext(Thread *thread)
@@ -154,7 +168,10 @@ static inline int threadSetContext(Thread *thread, void *context) {
 /// @return Returns a pointer to the thread's context on success, NULL on
 /// failure.
 static inline void* threadContext(Thread *thread) {
-  return overlayMap.header.osApi->coroutineContext(thread);
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return overlayMap.header.osApi->executiveApi->coroutineContext(thread);
+  }
+  return NULL;
 }
 
 /// @fn static inline uint64_t* threadStackEnd(Thread *thread)
@@ -166,7 +183,10 @@ static inline void* threadContext(Thread *thread) {
 /// @return Returns a pointer to the uint64_t at the end of the thread's stack
 ///   on success, NULL on failure.
 static inline uint64_t* threadStackEnd(Thread *thread) {
-  return overlayMap.header.osApi->coroutineStackEnd(thread);
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return overlayMap.header.osApi->executiveApi->coroutineStackEnd(thread);
+  }
+  return NULL;
 }
 
 /// @fn static inline int threadSetStackEnd(Thread *thread, uint64_t *stackEnd)
@@ -179,7 +199,11 @@ static inline uint64_t* threadStackEnd(Thread *thread) {
 ///
 /// @return Returns processSuccess on success, process error code on failure.
 static inline int threadSetStackEnd(Thread *thread, uint64_t *stackEnd) {
-  return overlayMap.header.osApi->coroutineSetStackEnd(thread, stackEnd);
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return overlayMap.header.osApi->executiveApi->coroutineSetStackEnd(
+      thread, stackEnd);
+  }
+  return processError;
 }
 
 /// @fn static inline int processResetStack(
@@ -191,10 +215,13 @@ static inline int threadSetStackEnd(Thread *thread, uint64_t *stackEnd) {
 /// @param processDescriptor A pointer to the ProcessDescriptor to reset the
 ///   stack of.
 ///
-/// @return This function always succeeds and always returns processSuccess.
+/// @return Returns processSuccess on success, processError on failure.
 static inline int processResetStack(ProcessDescriptor *processDescriptor) {
-  *threadStackEnd(processDescriptor->mainThread) = THREAD_STACK_END_VALUE;
-  return processSuccess;
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    *threadStackEnd(processDescriptor->mainThread) = THREAD_STACK_END_VALUE;
+    return processSuccess;
+  }
+  return processError;
 }
 
 /// @def processCorrupted(processDescriptor)
@@ -219,8 +246,11 @@ static inline int processResetStack(ProcessDescriptor *processDescriptor) {
 static inline bool processStackOverflowed(
   ProcessDescriptor *processDescriptor
 ) {
-  return overlayMap.header.osApi->coroutineStackOverflowed(
-    processDescriptor->mainThread);
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return overlayMap.header.osApi->executiveApi->coroutineStackOverflowed(
+      processDescriptor->mainThread);
+  }
+  return false;
 }
 
 /// @def processRunning(processDescriptor)
@@ -263,7 +293,11 @@ static inline bool processStackOverflowed(
 ///
 /// @return Returns the value that the scheduler calls processResume with.
 static inline void* processYield(void) {
-  return overlayMap.header.osApi->coroutineYield(NULL, COROUTINE_STATE_BLOCKED);
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return overlayMap.header.osApi->executiveApi->coroutineYield(
+      NULL, COROUTINE_STATE_BLOCKED);
+  }
+  return NULL;
 }
 
 /// @fn static inline void* processYieldValue(void *value)
@@ -275,8 +309,11 @@ static inline void* processYield(void) {
 ///
 /// @return Returns the value that the scheduler calls processResume with.
 static inline void* processYieldValue(void *value) {
-  return overlayMap.header.osApi->coroutineYield(
-    value, COROUTINE_STATE_BLOCKED);
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return overlayMap.header.osApi->executiveApi->coroutineYield(
+      value, COROUTINE_STATE_BLOCKED);
+  }
+  return NULL;
 }
 
 /// @fn static inline int processMessageInit(ProcessMessage *processMessage,
@@ -295,8 +332,11 @@ static inline void* processYieldValue(void *value) {
 static inline int processMessageInit(ProcessMessage *processMessage,
   int64_t type, void *data, size_t size, bool waiting
 ) {
-  return overlayMap.header.osApi->processMessageInit(
-    processMessage, MSG_CORO_SAFE, type, data, size, waiting);
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return overlayMap.header.osApi->executiveApi->processMessageInit(
+      processMessage, MSG_CORO_SAFE, type, data, size, waiting);
+  }
+  return processError;
 }
 
 /// @fn static inline int processMessageSetDone(ProcessMessage *processMessage)
@@ -309,7 +349,11 @@ static inline int processMessageInit(ProcessMessage *processMessage,
 ///
 /// @return Returns processSuccess on success, process error code on failure.
 static inline int processMessageSetDone(ProcessMessage *processMessage) {
-  return overlayMap.header.osApi->processMessageSetDone(processMessage);
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return overlayMap.header.osApi->executiveApi->processMessageSetDone(
+      processMessage);
+  }
+  return processError;
 }
 
 /// @fn static inline int processMessageRelease(ProcessMessage *processMessage)
@@ -320,7 +364,11 @@ static inline int processMessageSetDone(ProcessMessage *processMessage) {
 ///
 /// @return Returns processSuccess on success, process error code on failure.
 static inline int processMessageRelease(ProcessMessage *processMessage) {
-  return overlayMap.header.osApi->processMessageRelease(processMessage);
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return overlayMap.header.osApi->executiveApi->processMessageRelease(
+      processMessage);
+  }
+  return processError;
 }
 
 /// @fn static inline int processMessageWaitForDone(
@@ -336,7 +384,11 @@ static inline int processMessageRelease(ProcessMessage *processMessage) {
 static inline int processMessageWaitForDone(
   ProcessMessage *processMessage, struct timespec *ts
 ) {
-  return overlayMap.header.osApi->processMessageWaitForDone(processMessage, ts);
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return overlayMap.header.osApi->executiveApi->processMessageWaitForDone(
+      processMessage, ts);
+  }
+  return processError;
 }
 
 /// @fn static inline ProcessMessage* processMessageQueueWaitForType(
@@ -354,7 +406,11 @@ static inline int processMessageWaitForDone(
 static inline ProcessMessage* processMessageQueueWaitForType(
   int64_t type, struct timespec *ts
 ) {
-  return overlayMap.header.osApi->comessageQueueWaitForType(type, ts);
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return overlayMap.header.osApi->executiveApi->comessageQueueWaitForType(
+      type, ts);
+  }
+  return NULL;
 }
 
 /// @fn static inline ProcessMessage* processMessageQueueWait(
@@ -369,7 +425,10 @@ static inline ProcessMessage* processMessageQueueWaitForType(
 /// @return Returns a pointer to a popped message of the specified type on
 /// success, NULL on failure.
 static inline ProcessMessage* processMessageQueueWait(struct timespec *ts) {
-  return overlayMap.header.osApi->comessageQueueWait(ts);
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return overlayMap.header.osApi->executiveApi->comessageQueueWait(ts);
+  }
+  return NULL;
 }
 
 /// @fn static inline int processMessageQueuePush(
@@ -385,8 +444,11 @@ static inline ProcessMessage* processMessageQueueWait(struct timespec *ts) {
 static inline int processMessageQueuePush(
   ProcessDescriptor *processDescriptor, ProcessMessage *message
 ) {
-  return overlayMap.header.osApi->comessageQueuePush(
-    processDescriptor->mainThread, message);
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return overlayMap.header.osApi->executiveApi->comessageQueuePush(
+      processDescriptor->mainThread, message);
+  }
+  return processError;
 }
 
 /// @fn static inline ProcessMessage* processMessageQueuePop(void)
@@ -396,7 +458,10 @@ static inline int processMessageQueuePush(
 /// @return Returns a pointer to a popped ProcessMessage on success, NULL on
 /// failure.
 static inline ProcessMessage* processMessageQueuePop(void) {
-  return overlayMap.header.osApi->comessageQueuePop();
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return overlayMap.header.osApi->executiveApi->comessageQueuePop();
+  }
+  return NULL;
 }
 
 /// @typedef ProcessMessageElement
@@ -418,8 +483,11 @@ typedef msg_element_t ProcessMessageElement;
 static inline void* processMessageElement(
   ProcessMessage *processMessage, ProcessMessageElement element
 ) {
-  return overlayMap.header.osApi->processMessageElement(
-    processMessage, element);
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return overlayMap.header.osApi->executiveApi->processMessageElement(
+      processMessage, element);
+  }
+  return NULL;
 }
 
 // Process message accessors
@@ -436,11 +504,13 @@ static inline void* processMessageElement(
 #define processMessageInUse(message) \
   (*((bool*) processMessageElement((message), MSG_ELEMENT_IN_USE)))
 #define processMessageFrom(message) \
-  ((ProcessDescriptor*) overlayMap.header.osApi->coroutineContext((*( \
+  ((ProcessDescriptor*) overlayMap.header.osApi->executiveApi-> \
+    coroutineContext((*( \
     (msg_endpoint_t*) processMessageElement((message), \
     MSG_ELEMENT_FROM))).coro))
 #define processMessageTo(message) \
-  ((ProcessDescriptor*) overlayMap.header.osApi->coroutineContext((*( \
+  ((ProcessDescriptor*) overlayMap.header.osApi->executiveApi-> \
+    coroutineContext((*( \
     (msg_endpoint_t*) processMessageElement((message), \
     MSG_ELEMENT_TO))).coro))
 

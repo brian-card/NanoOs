@@ -40,6 +40,7 @@
 // Headers from kernel space.
 #include "../../src/kernel/Overlay.h"
 #include "../../src/user/NanoOsDebug.h"
+#include "../../src/user/NanoOsErrno.h"
 
 #ifdef NANO_OS_USER_DEBUG
 // All of the printDebug* functions print to serial port 0 immediately.  We
@@ -72,18 +73,31 @@ static inline void* callOverlayFunction(
 
 // Debug functions
 static inline int printString_(const char *string) {
-  return overlayMap.header.osApi->printString(string);
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return overlayMap.header.osApi->executiveApi->printString(string);
+  }
+  return -EPERM;
 }
 #define printString(str) printString_((const char*) (str))
 static inline int printInt_(long long int integer) {
-  return overlayMap.header.osApi->printInt(integer);
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return overlayMap.header.osApi->executiveApi->printInt(integer);
+  }
+  return -EPERM;
 }
 #define printInt(value) printInt_((long long int) (value))
 static inline int printDouble(double floatingPointValue) {
-  return overlayMap.header.osApi->printDouble(floatingPointValue);
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return overlayMap.header.osApi->executiveApi->printDouble(
+      floatingPointValue);
+  }
+  return -EPERM;
 }
 static inline int printHex_(unsigned long long int integer) {
-  return overlayMap.header.osApi->printHex(integer);
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return overlayMap.header.osApi->executiveApi->printHex(integer);
+  }
+  return -EPERM;
 }
 #define printHex(integer) printHex_((unsigned long long int) (integer))
 

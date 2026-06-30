@@ -79,6 +79,41 @@ char** parseArgs(char *command, int *argc);
 #undef strerror
 #undef fileno
 
+NanoOsExecutiveApi nanoOsExecutiveApi = {
+  // Debug functions:
+  .printString = printString_,
+  .printInt = printInt_,
+  .printDouble = printDouble,
+  .printHex = printHex_,
+  
+  // Limited HAL access:
+  .blockDevice = NULL,
+  
+  // Kernel process functions:
+  .getRunningCoroutine = getRunningCoroutine,
+  .coroutineContext = coroutineContext,
+  .coroutineSetContext = coroutineSetContext,
+  .coroutineStackEnd = coroutineStackEnd,
+  .coroutineSetStackEnd = coroutineSetStackEnd,
+  .coroutineStackOverflowed = coroutineStackOverflowed,
+  .coroutineYield = coroutineYield,
+  
+  // Kernel message functions:
+  .processMessageInit = msg_init,
+  .processMessageRelease = msg_release,
+  .processMessageSetDone = msg_set_done,
+  .processMessageWaitForDone = msg_wait_for_done,
+  .processMessageElement = msg_element,
+  
+  // Kernel message queue functions:
+  .comessageQueuePeek = comessageQueuePeek,
+  .comessageQueuePop = comessageQueuePop,
+  .comessageQueuePopType = comessageQueuePopType,
+  .comessageQueueWait = comessageQueueWait,
+  .comessageQueueWaitForType = comessageQueueWaitForType,
+  .comessageQueuePush = comessageQueuePush,
+};
+
 NanoOsApi nanoOsApi = {
   // Standard Unix functionality
   
@@ -196,37 +231,7 @@ NanoOsApi nanoOsApi = {
   // NanoOsHardware.h functions:
   .shutdown = nanoOsHardwareShutdown,
   
-  // Debug functions:
-  .printString = printString_,
-  .printInt = printInt_,
-  .printDouble = printDouble,
-  .printHex = printHex_,
-  
-  // Limited HAL access:
-  .blockDevice = NULL,
-  
-  // Kernel process functions:
-  .getRunningCoroutine = getRunningCoroutine,
-  .coroutineContext = coroutineContext,
-  .coroutineSetContext = coroutineSetContext,
-  .coroutineStackEnd = coroutineStackEnd,
-  .coroutineSetStackEnd = coroutineSetStackEnd,
-  .coroutineStackOverflowed = coroutineStackOverflowed,
-  .coroutineYield = coroutineYield,
-  
-  // Kernel message functions:
-  .processMessageInit = msg_init,
-  .processMessageRelease = msg_release,
-  .processMessageSetDone = msg_set_done,
-  .processMessageWaitForDone = msg_wait_for_done,
-  .processMessageElement = msg_element,
-  
-  // Kernel message queue functions:
-  .comessageQueuePeek = comessageQueuePeek,
-  .comessageQueuePop = comessageQueuePop,
-  .comessageQueuePopType = comessageQueuePopType,
-  .comessageQueueWait = comessageQueueWait,
-  .comessageQueueWaitForType = comessageQueueWaitForType,
-  .comessageQueuePush = comessageQueuePush,
+  // Additional API for PRIVILEGE_LEVEL_EXECUTIVE processes:
+  .executiveApi = NULL,
 };
 

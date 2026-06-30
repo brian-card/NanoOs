@@ -316,6 +316,12 @@ IpcCapability baseMemoryManagerIpcCapabilities[] = {
 /// filesystem process can send to other processes.
 IpcCapability baseFilesystemIpcCapabilities[] = {
   {
+    .destinationPid = 0, // Scheduler PID to be set by scheduler
+    .signature      = SCHEDULER_COMMAND_SIGNATURE,
+    .messageTypes
+      = (((uint16_t) 1) << SCHEDULER_REPLACE_OVERLAY)
+  },
+  {
     .destinationPid = 0, // Console PID to be set by scheduler
     .signature      = CONSOLE_COMMAND_SIGNATURE,
     .messageTypes
@@ -3661,6 +3667,14 @@ int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp) {
   overlayHeader->overlay.startBlock = processDescriptor->overlay.startBlock;
   overlayHeader->overlay.numBlocks = processDescriptor->overlay.numBlocks;
   
+  if (processDescriptor->privilegeLevel != PRIVILEGE_LEVEL_EXECUTIVE) {
+    // This is the expected case, so list it first.
+    nanoOsApi.executiveApi = NULL;
+  } else {
+    // Enable the executive API for the process.
+    nanoOsApi.executiveApi = &nanoOsExecutiveApi;
+  }
+  
   return 0;
 }
 
@@ -4386,10 +4400,12 @@ __attribute__((noinline)) void startScheduler(
   baseMemoryManagerIpcCapabilities[0].destinationPid
     = schedulerState.consolePid;
   baseFilesystemIpcCapabilities[0].destinationPid
-    = schedulerState.consolePid;
+    = schedulerState.schedulerPid;
   baseFilesystemIpcCapabilities[1].destinationPid
-    = schedulerState.memoryManagerPid;
+    = schedulerState.consolePid;
   baseFilesystemIpcCapabilities[2].destinationPid
+    = schedulerState.memoryManagerPid;
+  baseFilesystemIpcCapabilities[3].destinationPid
     = schedulerState.rootFsPid - 1;
 
   baseSupervisorIpcCapabilities[0].destinationPid
