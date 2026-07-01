@@ -74,9 +74,8 @@ DEFINES := \
 	-DAGON_LIGHT2 \
 	-DEZ80F92 \
 	-DF_CPU=18432000UL \
-	-DNANOOS_AGON \
+	-DNANO_OS_AGON_LIGHT_2 \
 	-DNANOOS_EZ80 \
-	-D__STDC_NO_ATOMICS__=1 \
 
 # ---- Include paths ----------------------------------------------------------
 
@@ -86,7 +85,8 @@ INCLUDES := \
 	$(if $(CLANG_RESOURCE_DIR),-I$(CLANG_RESOURCE_DIR)/include) \
 	-I$(AGDEV_HOME)/include \
 	-Isrc \
-	-Isrc/include
+	-Isrc/include \
+	-Isrc/include/ez80-none-elf-clang \
 
 # ---- Compiler flags ---------------------------------------------------------
 

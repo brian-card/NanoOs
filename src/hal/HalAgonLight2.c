@@ -33,7 +33,7 @@
 /// cleanly for a binary-size estimate.  Real implementations are to be filled
 /// in as each subsystem is brought up on the hardware.
 
-#ifdef NANOOS_AGON
+#ifdef NANO_OS_AGON_LIGHT_2
 
 #include "HalAgonLight2.h"
 #include "HalCommon.h"
@@ -440,4 +440,4 @@ int32_t halAgonLight2Init(void) {
   return halCommonInit();
 }
 
-#endif // NANOOS_AGON
+#endif // NANO_OS_AGON_LIGHT_2

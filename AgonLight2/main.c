@@ -32,7 +32,7 @@
 /// boot.asm zeros BSS and calls main().  main() initialises the HAL and
 /// then hands control to the NanoOs scheduler, which never returns.
 
-#ifdef NANOOS_AGON
+#ifdef NANO_OS_AGON_LIGHT_2
 
 #include "hal/HalAgonLight2.h"
 #include "kernel/NanoOs.h"
@@ -45,4 +45,4 @@ int main(void) {
   return 0;
 }
 
-#endif // NANOOS_AGON
+#endif // NANO_OS_AGON_LIGHT_2
