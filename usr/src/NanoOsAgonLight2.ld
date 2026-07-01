@@ -6,7 +6,7 @@
  *  @file              NanoOsAgonLight2.ld
  *
  *  @brief             Linker script for eZ80-compiled NanoOs user-space
- *                     applications organized at base address 0x20001C00.
+ *                     applications organized at base address 0xFFE000.
  *                     For use with ez80-none-elf-clang.
  *
  *  @copyright
@@ -35,13 +35,13 @@
  *
  */
 
-/* Overlay Linker Script for ARM Cortex-M0 */
-/* Overlay loads at RAM address 0x20001C00 */
+/* Overlay Linker Script for Zilog eZ80 */
+/* Overlay loads at RAM address 0xFFE000 */
 
 MEMORY
 {
     /* Overlay RAM region - adjust size as needed */
-    OVERLAY_RAM (rwx) : ORIGIN = 0x20001C00, LENGTH = 4K
+    OVERLAY_RAM (rwx) : ORIGIN = 0xFFE000, LENGTH = 8K
 }
 
 /* Entry point - not critical for overlays but good practice */
@@ -59,7 +59,7 @@ PROVIDE(__start = ORIGIN(OVERLAY_RAM));
 SECTIONS
 {
     /* Overlay header must be first - contains export table info */
-    .overlay_header 0x20001C00 :
+    .overlay_header 0xFFE000 :
     {
         KEEP(*(.overlay_header))
         . = ALIGN(4);
