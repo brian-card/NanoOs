@@ -36,10 +36,31 @@ elif [ "${platform}" = "AgonLight2" ]; then
 	if [ -n "${clangResourceDir}" ]; then
 		extraIncludes="${extraIncludes} -isystem ${clangResourceDir}/include"
 	fi
-	extraLinks="--start-group -L${agonHome}/lib -lagon --end-group"
+	extraIncludes="${extraIncludes} -I$(pwd)/src/include/ez80-none-elf-clang"
+	libcSrc="$(pwd)/src/kernel/libc/ez80-none-elf-clang/stdatomic.c"
+	libcObjDir="$(pwd)/usr/obj/AgonLight2/libc"
+	extraLinks="--start-group -L${agonHome}/lib -lagon ${libcObjDir}/stdatomic.o --end-group"
 else
 	echo "ERROR: Unknown platform '${platform}'.  Must be 'ArduinoSamd21' or 'AgonLight2'." >&2
 	exit 1
+fi
+
+if [ -n "${libcSrc:-}" ]; then
+	echo "Building kernel libc..."
+	mkdir -p "${libcObjDir}"
+	"${compile}" -std=gnu17 --target=ez80-none-elf \
+		-mllvm -z80-gas-style \
+		-mllvm -z80-print-zero-offset \
+		-Wa,-march=ez80+full \
+		-Os -nostdlib -ffreestanding \
+		-fno-pic -fno-pie -static \
+		-ffunction-sections -fdata-sections -fcf-protection=none \
+		-fno-jump-tables \
+		-fno-stack-protector \
+		-DNANO_OS_AGON_LIGHT_2 \
+		-Wall -Wextra -pedantic -Werror \
+		${extraIncludes} -I"$(pwd)/src/kernel" \
+		-c "${libcSrc}" -o "${libcObjDir}/stdatomic.o"
 fi
 
 echo "Building applications..."
