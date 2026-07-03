@@ -39,6 +39,17 @@
 #include "HalCommon.h"
 #include "../user/NanoOsErrno.h"
 
+// Prototypes from files that we can't directly include.
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
+  const char *function, void *args);
+#ifdef __cplusplus
+}
+#endif
+
 // ---------------------------------------------------------------------------
 // Memory layout constants
 // ---------------------------------------------------------------------------
@@ -419,6 +430,11 @@ int32_t halAgonLight2Init(void) {
   halFunctions[HAL_TIMER]        = agonLight2TimerFunctions;
   halFunctions[HAL_BLOCK_DEVICE] = agonLight2BlockDeviceFunctions;
 
+  halCommonPlatform.callFileOverlay = callOverlayFunctionFromFile;
+  halCommonPlatform.execCommand = execOverlayCommand;
+  halCommonPlatform.initRootStorage = halCommonInitRootFilesystem,
+  halCommonPlatform.restartShell = restartOverlayShell;
+
   halCommonMemory.overlayMap  = (NanoOsOverlayMap*) (uintptr_t) OVERLAY_ADDRESS;
   halCommonMemory.overlaySize = OVERLAY_SIZE;
 
@@ -436,6 +452,11 @@ int32_t halAgonLight2Init(void) {
 
   halCommonBlockDevice.numSupported = 0;
   halCommonBlockDevice.online       = agonLight2BlockDevicesOnline;
+
+  int result = nanoOsApiInit();
+  if (result != 0) {
+    return result;
+  }
 
   return halCommonInit();
 }
