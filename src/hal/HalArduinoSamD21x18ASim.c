@@ -33,7 +33,7 @@
 
 #include <string.h>
 
-#include "HalArduinoSamD21x18ASim.h"
+#include "HalPosix.h"
 #include "HalCommon.h"
 #include "SdCardPosix.h"
 #include "user/NanoOsErrno.h"
