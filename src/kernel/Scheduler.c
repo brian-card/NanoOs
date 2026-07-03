@@ -3965,7 +3965,7 @@ int32_t restartMemoryManager(ProcessDescriptor *processDescriptor) {
   return 0;
 }
 
-/// @fn int32_t restartShell(ProcessDescriptor *processDescriptor)
+/// @fn int32_t restartOverlayShell(ProcessDescriptor *processDescriptor)
 ///
 /// @brief Implementation of restartFunction to re-launch a shell if one dies or
 /// a process that occupied its slot exits.
@@ -3974,12 +3974,13 @@ int32_t restartMemoryManager(ProcessDescriptor *processDescriptor) {
 ///   process's state.
 ///
 /// @return Returns 0 on sucess, -errno onfailure.
-int32_t restartShell(ProcessDescriptor *processDescriptor) {
-  printDebugString("In restartShell\n");
+int32_t restartOverlayShell(ProcessDescriptor *processDescriptor) {
+  printDebugString("In restartOverlayShell\n");
   if ((SCHEDULER_STATE->hostname == NULL)
     || (*SCHEDULER_STATE->hostname == '\0')
   ) {
-    printDebugString("restartShell: scheduler not up.  Returning -EAGAIN\n");
+    printDebugString(
+      "restartOverlayShell: scheduler not up.  Returning -EAGAIN\n");
     return -EAGAIN;
   }
 
@@ -3997,32 +3998,33 @@ int32_t restartShell(ProcessDescriptor *processDescriptor) {
       processDescriptor->envp = NULL;
     }
 
-    printDebugString("restartShell: Starting getty\n");
+    printDebugString("restartOverlayShell: Starting getty\n");
     int returnValue = schedulerRunOverlayCommand(processDescriptor,
       "/usr/bin/getty", (char**) gettyArgs, NULL);
     if (returnValue == -EBUSY) {
       printDebugString(
-        "restartShell: Starting getty failed.  Returning -EAGAIN\n");
+        "restartOverlayShell: Starting getty failed.  Returning -EAGAIN\n");
       return -EAGAIN;
     }
     return returnValue;
   }
 
   // User process exited.  Re-launch the shell.
-  printDebugString("restartShell: Restarting shell\n");
+  printDebugString("restartOverlayShell: Restarting shell\n");
   int returnValue = 0;
   char *passwdStringBuffer
     = (char*) schedMalloc(NANO_OS_PASSWD_STRING_BUF_SIZE);
   if (passwdStringBuffer == NULL) {
     printString(
       "ERROR! Could not allocate space for passwdStringBuffer in "
-      "restartShell\n");
+      "restartOverlayShell\n");
     return -ENOMEM;
   }
 
   struct passwd *pwd = (struct passwd*) schedMalloc(sizeof(struct passwd));
   if (pwd == NULL) {
-    printString("ERROR! Could not allocate space for pwd in restartShell\n");
+    printString(
+      "ERROR! Could not allocate space for pwd in restartOverlayShell\n");
     schedFree(passwdStringBuffer);
     return -ENOMEM;
   }
@@ -4481,7 +4483,7 @@ __attribute__((noinline)) void startScheduler(
     processDescriptor->callOverlayFunction = callOverlayFunctionFromFile;
     if ((ii - schedulerState.firstShellPid) < schedulerState.numShells) {
       processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_SUPERVISOR;
-      processDescriptor->restartFunction = restartShell;
+      processDescriptor->restartFunction = restartOverlayShell;
     } else {
       processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_USER;
       processDescriptor->restartFunction = NULL;
