@@ -1,0 +1,324 @@
+# =============================================================================
+# NanoOS Makefile for the Arduino Nano Every (ATmega4809, megaAVR-0 series)
+#
+# Toolchain: avr-gcc (Arduino megaAVR core package, arduino15 install)
+#
+# Usage:
+#   make -f ArduinoNanoEveryMakefile               - Build full and stripped hex
+#   make -f ArduinoNanoEveryMakefile flash         - Build and flash stripped hex
+#   make -f ArduinoNanoEveryMakefile flash-full    - Build and flash full hex
+#   make -f ArduinoNanoEveryMakefile flash PORT=/dev/ttyACM0
+#   make -f ArduinoNanoEveryMakefile size          - Show section sizes
+#   make -f ArduinoNanoEveryMakefile sections      - Dump section headers
+#   make -f ArduinoNanoEveryMakefile clean         - Remove build directory
+#
+# Produces (under build/nano_every/):
+#   NanoOs.elf           - Full ELF (keep for host-side string resolution)
+#   NanoOs_full.hex      - Full Intel HEX (includes .rodata)
+#   NanoOs_stripped.hex  - Stripped Intel HEX (no .rodata, for production)
+#
+# On this target, unlike the toy case, avr-gcc *does* place ordinary const
+# data (string literals, HAL function-pointer tables, etc.) in a genuine,
+# separately-relocated ".rodata" output section (avrxmega3's default
+# linker script maps it into flash at ADDR(.text)+SIZEOF(.text)+0x8000),
+# distinct from ".progmem.gcc*", which stays merged into ".text".  So the
+# SAMD21-style "objcopy -R .rodata" strip works here exactly as it does on
+# the other targets -- and on this board it isn't just an optimization:
+# the full build (~54.9 KB) exceeds the ATmega4809's 48 KB flash, while
+# the stripped build (~49.0 KB) just barely fits.  The stripped hex is
+# what you want to actually flash.
+#
+# Flashing:
+#   The Nano Every has no resident bootloader taking flash space; the
+#   onboard bridge MCU (running "jtag2updi" firmware) reprograms the
+#   ATmega4809 over UPDI each time, going through a USB CDC serial port.
+#   A 1200bps "touch" on that port switches the bridge into UPDI mode,
+#   mirroring what the Arduino IDE/arduino-cli do before invoking avrdude.
+# =============================================================================
+
+# ---- Platform package paths (adjust versions to match your installation) -----
+
+ARDUINO_HOME  := $(HOME)/.arduino15
+TOOLCHAIN_DIR := $(ARDUINO_HOME)/packages/arduino/tools/avr-gcc/7.3.0-atmel3.6.1-arduino5
+AVRDUDE_DIR   := $(ARDUINO_HOME)/packages/arduino/tools/avrdude/6.3.0-arduino17
+
+MEGAAVR_CORE  := $(ARDUINO_HOME)/packages/arduino/hardware/megaavr/1.8.8
+
+CORE_DIR      := $(MEGAAVR_CORE)/cores/arduino
+VARIANT_DIR   := $(MEGAAVR_CORE)/variants/nona4809
+LIB_PLATFORM  := $(MEGAAVR_CORE)
+
+# ---- Build directory ----------------------------------------------------------
+
+BUILD_DIR := build/nano_every
+
+# Built from source
+CORE_A := $(BUILD_DIR)/core/core.a
+
+# ---- Sketch source directory ---------------------------------------------------
+
+SKETCH_DIR := .
+
+# ---- Toolchain ------------------------------------------------------------------
+
+PREFIX  := $(TOOLCHAIN_DIR)/bin/avr-
+CC      := $(PREFIX)gcc
+CXX     := $(PREFIX)g++
+LD      := $(PREFIX)gcc
+OBJCOPY := $(PREFIX)objcopy
+OBJDUMP := $(PREFIX)objdump
+SIZE    := $(PREFIX)size
+READELF := $(PREFIX)readelf
+AR      := $(PREFIX)gcc-ar
+
+AVRDUDE      := $(AVRDUDE_DIR)/bin/avrdude
+AVRDUDE_CONF := $(AVRDUDE_DIR)/etc/avrdude.conf
+
+# ---- Board configuration (Arduino Nano Every / "nona4809") ---------------------
+
+MCU              := atmega4809
+UPLOAD_MAX_SIZE  := 49152
+UPLOAD_MAX_DATA  := 6144
+UPLOAD_PROTOCOL  := jtag2updi
+UPLOAD_SPEED     := 115200
+
+# Fuse values from the Arduino megaAVR core's nona4809 board definition.
+FUSE_OSCCFG  := 0x01
+FUSE_SYSCFG0 := 0xC9
+FUSE_BOOTEND := 0x00
+
+# ---- Flags ------------------------------------------------------------------
+
+ARCH_FLAGS := -mmcu=$(MCU)
+
+# Preprocessor defines
+DEFINES := \
+	-DF_CPU=16000000L \
+	-DARDUINO=10607 \
+	-DARDUINO_ARCH_MEGAAVR \
+	-DARDUINO_AVR_NANO_EVERY \
+	-DMILLIS_USE_TIMERB3 \
+	-DNO_EXTERNAL_I2C_PULLUP
+
+# Include paths
+INCLUDES := \
+	-I$(CORE_DIR) \
+	-I$(CORE_DIR)/api/deprecated \
+	-I$(VARIANT_DIR) \
+	-I$(LIB_PLATFORM)/libraries/SPI/src
+
+# Common compiler flags
+COMMON_FLAGS := \
+	$(ARCH_FLAGS) \
+	-g -Os \
+	-Werror=return-type \
+	-ffunction-sections \
+	-fdata-sections \
+	-MMD \
+	$(DEFINES) \
+	$(INCLUDES)
+
+CFLAGS   := $(COMMON_FLAGS) -std=gnu11
+CXXFLAGS := $(COMMON_FLAGS) -std=gnu++11 -fpermissive -fno-threadsafe-statics -fno-exceptions -fno-rtti
+ASFLAGS  := $(ARCH_FLAGS) -g -x assembler-with-cpp $(DEFINES) $(INCLUDES)
+
+# Linker flags.  Final link is done with avr-gcc (not avr-g++), matching
+# the official megaAVR platform recipe: the Arduino core supplies its own
+# minimal C++ runtime support (global ctors via .init6, new.cpp), so no
+# libstdc++ is needed.
+LDFLAGS := \
+	$(ARCH_FLAGS) \
+	-Os \
+	-Wl,--gc-sections \
+	-Wl,--section-start=.text=0x0 \
+	-Wl,-Map,$(BUILD_DIR)/NanoOs.map \
+	-Wl,--cref \
+	-Wl,--check-sections \
+	-Wl,--unresolved-symbols=report-all \
+	-Wl,--warn-common \
+	-Wl,--warn-section-align
+
+LDLIBS := \
+	-Wl,--start-group \
+	-lm \
+	$(CORE_A) \
+	-Wl,--end-group
+
+# ---- Source file discovery ---------------------------------------------------
+
+INO_SRC         := $(SKETCH_DIR)/NanoOs.ino
+SKETCH_C_SRCS   := $(shell find $(SKETCH_DIR)/src -name '*.c' 2>/dev/null)
+SKETCH_CXX_SRCS := $(shell find $(SKETCH_DIR)/src -name '*.cpp' 2>/dev/null)
+
+# Arduino library sources
+LIB_CXX_SRCS := \
+	$(LIB_PLATFORM)/libraries/SPI/src/SPI.cpp
+
+# Board variant (a plain C file on megaAVR, unlike SAMD21's variant.cpp)
+VARIANT_C_SRC := $(VARIANT_DIR)/variant.c
+
+# Arduino core sources
+CORE_C_SRCS   := $(shell find $(CORE_DIR) -name '*.c' 2>/dev/null)
+CORE_CXX_SRCS := $(shell find $(CORE_DIR) -name '*.cpp' 2>/dev/null)
+CORE_S_SRCS   := $(shell find $(CORE_DIR) -name '*.S' 2>/dev/null)
+
+# ---- Object file paths --------------------------------------------------------
+
+INO_OBJ         := $(BUILD_DIR)/sketch/NanoOs.ino.cpp.o
+SKETCH_C_OBJS   := $(patsubst %,$(BUILD_DIR)/sketch/%.o,$(SKETCH_C_SRCS))
+SKETCH_CXX_OBJS := $(patsubst %,$(BUILD_DIR)/sketch/%.o,$(SKETCH_CXX_SRCS))
+LIB_CXX_OBJS    := $(patsubst $(LIB_PLATFORM)/libraries/%,$(BUILD_DIR)/libraries/%.o,$(LIB_CXX_SRCS))
+VARIANT_OBJ     := $(BUILD_DIR)/core/variant.c.o
+
+CORE_C_OBJS   := $(patsubst $(CORE_DIR)/%,$(BUILD_DIR)/core/%.o,$(CORE_C_SRCS))
+CORE_CXX_OBJS := $(patsubst $(CORE_DIR)/%,$(BUILD_DIR)/core/%.o,$(CORE_CXX_SRCS))
+CORE_S_OBJS   := $(patsubst $(CORE_DIR)/%,$(BUILD_DIR)/core/%.o,$(CORE_S_SRCS))
+CORE_ALL_OBJS := $(CORE_C_OBJS) $(CORE_CXX_OBJS) $(CORE_S_OBJS)
+
+ALL_OBJS := $(INO_OBJ) $(SKETCH_C_OBJS) $(SKETCH_CXX_OBJS) $(LIB_CXX_OBJS) $(VARIANT_OBJ)
+
+DEPS := $(ALL_OBJS:.o=.d) $(CORE_ALL_OBJS:.o=.d)
+
+# ---- Output files ---------------------------------------------------------------
+
+ELF          := $(BUILD_DIR)/NanoOs.elf
+FULL_HEX     := $(BUILD_DIR)/NanoOs_full.hex
+STRIPPED_HEX := $(BUILD_DIR)/NanoOs_stripped.hex
+
+# ---- Serial port (for flashing) ------------------------------------------------
+
+PORT ?= $(firstword $(wildcard /dev/ttyACM* /dev/ttyUSB*))
+
+# ---- Targets ------------------------------------------------------------------
+
+.PHONY: all flash flash-full size sections clean
+
+all: $(FULL_HEX) $(STRIPPED_HEX)
+	@echo ""
+	@echo "  Built for: Arduino Nano Every (ATmega4809)"
+	@echo "  Output:    $(BUILD_DIR)/"
+
+# ---- Link ------------------------------------------------------------------
+
+$(ELF): $(ALL_OBJS) $(CORE_A)
+	@echo "  LINK    $@"
+	@$(LD) $(LDFLAGS) -o $@ $(ALL_OBJS) $(LDLIBS)
+
+# ---- Hex output --------------------------------------------------------------
+
+$(FULL_HEX): $(ELF)
+	@echo "  OBJCOPY $@ (full, with .rodata)"
+	@$(OBJCOPY) -O ihex -R .eeprom $< $@
+
+$(STRIPPED_HEX): $(ELF)
+	@echo "  OBJCOPY $@ (stripped, no .rodata)"
+	@$(OBJCOPY) -O ihex -R .eeprom -R .rodata $< $@
+
+# ---- Compile: sketch ------------------------------------------------------------
+
+# .ino file -> compiled as C++.  The Arduino IDE auto-injects
+# '#include <Arduino.h>' and generates function prototypes before
+# compiling; -include Arduino.h replicates the header injection.
+$(INO_OBJ): $(INO_SRC)
+	@mkdir -p $(dir $@)
+	@echo "  CXX     $<"
+	@$(CXX) $(CXXFLAGS) -x c++ -include Arduino.h -c $< -o $@
+
+$(BUILD_DIR)/sketch/%.c.o: %.c
+	@mkdir -p $(dir $@)
+	@echo "  CC      $<"
+	@$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/sketch/%.cpp.o: %.cpp
+	@mkdir -p $(dir $@)
+	@echo "  CXX     $<"
+	@$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# ---- Compile: Arduino libraries -------------------------------------------------
+
+$(BUILD_DIR)/libraries/%.o: $(LIB_PLATFORM)/libraries/%
+	@mkdir -p $(dir $@)
+	@echo "  CXX     $<"
+	@$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# ---- Compile: board variant ------------------------------------------------------
+
+$(VARIANT_OBJ): $(VARIANT_C_SRC)
+	@mkdir -p $(dir $@)
+	@echo "  CC      $< (variant)"
+	@$(CC) $(CFLAGS) -c $< -o $@
+
+# ---- Compile: Arduino core (archived into core.a) --------------------------------
+
+$(BUILD_DIR)/core/%.c.o: $(CORE_DIR)/%.c
+	@mkdir -p $(dir $@)
+	@echo "  CC      $< (core)"
+	@$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/core/%.cpp.o: $(CORE_DIR)/%.cpp
+	@mkdir -p $(dir $@)
+	@echo "  CXX     $< (core)"
+	@$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/core/%.S.o: $(CORE_DIR)/%.S
+	@mkdir -p $(dir $@)
+	@echo "  AS      $< (core)"
+	@$(CC) $(ASFLAGS) -c $< -o $@
+
+$(CORE_A): $(CORE_ALL_OBJS)
+	@echo "  AR      $@"
+	@rm -f $@
+	@$(AR) rcs $@ $^
+
+# ---- Utility targets ----------------------------------------------------------
+
+flash: $(STRIPPED_HEX)
+	@$(MAKE) -f ArduinoNanoEveryMakefile --no-print-directory _flash HEX=$(STRIPPED_HEX)
+
+flash-full: $(FULL_HEX)
+	@$(MAKE) -f ArduinoNanoEveryMakefile --no-print-directory _flash HEX=$(FULL_HEX)
+
+.PHONY: _flash
+_flash:
+	@if [ -z "$(PORT)" ]; then \
+		echo "ERROR: No serial port found."; \
+		echo "Plug in the Nano Every and re-run with PORT=/dev/ttyACMx"; \
+		exit 1; \
+	fi
+	@echo "  TOUCH   1200bps touch on $(PORT) to enter UPDI programming mode"
+	@python3 -c "import serial, time; s = serial.Serial('$(PORT)', 1200); time.sleep(0.1); s.close()"
+	@sleep 1
+	@echo "  AVRDUDE Flashing $(HEX) via $(UPLOAD_PROTOCOL) on $(PORT)"
+	@$(AVRDUDE) "-C$(AVRDUDE_CONF)" -p$(MCU) -c$(UPLOAD_PROTOCOL) -P$(PORT) -b$(UPLOAD_SPEED) -e -D \
+		"-Uflash:w:$(HEX):i" \
+		"-Ufuse2:w:$(FUSE_OSCCFG):m" \
+		"-Ufuse5:w:$(FUSE_SYSCFG0):m" \
+		"-Ufuse8:w:$(FUSE_BOOTEND):m"
+
+size: $(ELF) $(FULL_HEX) $(STRIPPED_HEX)
+	@echo ""
+	@echo "=== Arduino Nano Every (ATmega4809): Section sizes ==="
+	@$(SIZE) -A $(ELF)
+	@echo ""
+	@echo "=== Flash usage breakdown ==="
+	@echo -n "  .text (code):          "; $(SIZE) -A $(ELF) | awk '/^\.text / {print $$2 " bytes"}'
+	@echo -n "  .rodata (strings/ro):  "; $(SIZE) -A $(ELF) | awk '/^\.rodata / {print $$2 " bytes"}'
+	@echo -n "  .data (init values):   "; $(SIZE) -A $(ELF) | awk '/^\.data / {print $$2 " bytes"}'
+	@echo -n "  .bss (zero-init):      "; $(SIZE) -A $(ELF) | awk '/^\.bss /  {print $$2 " bytes"}'
+	@echo ""
+	@$(SIZE) -A $(ELF) | awk -v limit=$(UPLOAD_MAX_SIZE) ' \
+		/^\.text /   {text=$$2} \
+		/^\.rodata / {rodata=$$2} \
+		END { \
+			printf "  Stripped flash total (.text only):     %d / %d bytes (%d free)\n", text, limit, limit-text; \
+			printf "  Full flash total (.text + .rodata):    %d / %d bytes (%d free)\n", text+rodata, limit, limit-(text+rodata); \
+		}'
+	@echo ""
+
+sections: $(ELF)
+	@$(OBJDUMP) -h $(ELF)
+
+clean:
+	rm -rf $(BUILD_DIR)
+
+-include $(DEPS)
