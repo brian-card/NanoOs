@@ -73,6 +73,7 @@ extern "C"
 #endif
 
 extern HalFunction *halFunctions[HAL_NUM_SUBSYSTEMS];
+extern HalPlatform halCommonPlatform;
 extern HalMemory halCommonMemory;
 extern HalUart halCommonUart;
 extern HalDio halCommonDio;

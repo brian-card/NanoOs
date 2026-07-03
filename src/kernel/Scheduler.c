@@ -2692,7 +2692,7 @@ int schedulerExecveCommandHandler(
   }
 
   execArgs->schedulerState = schedulerState;
-  if (processCreate(processDescriptor, execOverlayCommand, execArgs)
+  if (processCreate(processDescriptor, HAL->platform->execCommand, execArgs)
     == processError
   ) {
     printString(
@@ -3004,7 +3004,7 @@ int schedulerSpawnCommandHandler(
 
   schedFree(spawnArgs); spawnArgs = NULL;
 
-  if (processCreate(processDescriptor, execOverlayCommand, execArgs)
+  if (processCreate(processDescriptor, HAL->platform->execCommand, execArgs)
     == processError
   ) {
     printString(
@@ -3849,7 +3849,7 @@ int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
       = processDescriptor->processId;
   }
 
-  if (processCreate(processDescriptor, execOverlayCommand, execArgs)
+  if (processCreate(processDescriptor, HAL->platform->execCommand, execArgs)
     == processError
   ) {
     printString(
@@ -4389,11 +4389,14 @@ __attribute__((noinline)) void startScheduler(
 
   // schedulerState.firstUserPid isn't populated until HAL->initRootStorage
   // completes, so we need to call that as soon as we can.
-  int rv = HAL->initRootStorage();
-  if (rv != 0) {
-    printString("ERROR: initRootStorage returned status ");
-    printInt(rv);
-    printString("\n");
+  int rv = 0;
+  if (HAL->platform->initRootStorage != NULL) {
+    rv = HAL->platform->initRootStorage();
+    if (rv != 0) {
+      printString("ERROR: initRootStorage returned status ");
+      printInt(rv);
+      printString("\n");
+    }
   }
   printDebugString("Initialized root storage\n");
 
@@ -4489,7 +4492,7 @@ __attribute__((noinline)) void startScheduler(
     processDescriptor->callOverlayFunction = callOverlayFunctionFromFile;
     if ((ii - schedulerState.firstShellPid) < schedulerState.numShells) {
       processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_SUPERVISOR;
-      processDescriptor->restartFunction = restartOverlayShell;
+      processDescriptor->restartFunction = HAL->platform->restartShell;
     } else {
       processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_USER;
       processDescriptor->restartFunction = NULL;

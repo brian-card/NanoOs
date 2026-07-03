@@ -221,6 +221,42 @@ typedef struct HalCapability {
 } HalCapability;
 
 // HAL subsystems
+
+/// @struct HalPlatform
+///
+/// @brief Collection of function pointers that implement platform-specific
+/// versions of common functionality.
+typedef struct HalPlatform {
+  /// @fn void* (*execCommand)(void *args)
+  ///
+  /// @brief Platform-specific function that will be used to exec a command.
+  ///
+  /// @param args A pointer to an ExecArgs structure describing the command to
+  ///   run, cast to a void*.
+  ///
+  /// @return If the comamnd is run, returns the result of the command cast to a
+  /// void*.  If the command is not run, returns -1 cast to a void*.
+  void* (*execCommand)(void *args);
+
+  /// @fn int initRootStorage(void)
+  ///
+  /// @brief Initialize the processes that operate the root storage system.
+  ///
+  /// @return Returns 0 on success, -errno on failure.
+  int32_t (*initRootStorage)(void);
+
+  /// @fn int32_t (*restartShell)(ProcessDescriptor *processDescriptor)
+  ///
+  /// @brief Platform-specific function that will be used to restart the shell
+  /// processes on exit.
+  ///
+  /// @param processDescriptor A pointer to the ProcessDescriptor that manages
+  /// the state of the shell process.
+  ///
+  /// @return Returns 0 on sucess, -errno onfailure.
+  int32_t (*restartShell)(ProcessDescriptor *processDescriptor);
+} HalPlatform;
+
 typedef struct HalMemory {
   /// @fn int32_t processStackSize(bool debug, size_t *returnValue)
   ///
@@ -729,10 +765,16 @@ typedef struct HalBlockDevice {
 } HalBlockDevice;
 
 typedef struct Hal {
+  /// @var platform
+  ///
+  /// @brief Pointer to the HalPlatform managed by the HAL.  This member may
+  /// not be NULL.
+  HalPlatform *platform;
+  
   /// @var memory
   ///
-  /// @brief Pointer to the HalMemory managed by the HAL, or NULL if there isn't
-  /// one.  In the case of this HAL, there should always be one.
+  /// @brief Pointer to the HalMemory managed by the HAL.  This member may not
+  /// be NULL.
   HalMemory *memory;
   
   /// @var uart
@@ -776,15 +818,6 @@ typedef struct Hal {
   /// @brief Pointer to the HalBlockDevice managed by the HAL, or NULL if there
   /// isn't one.
   HalBlockDevice *blockDevice;
-  
-  // Root storage configuration.
-  
-  /// @fn int initRootStorage(void)
-  ///
-  /// @brief Initialize the processes that operate the root storage system.
-  ///
-  /// @return Returns 0 on success, -errno on failure.
-  int32_t (*initRootStorage)(void);
 } Hal;
 
 extern const Hal *HAL;

@@ -288,6 +288,10 @@ int32_t halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
   halFunctions[HAL_BLOCK_DEVICE] = posixBlockDeviceFunctions;
 
   // Set per-platform data members on the common subsystem instances.
+  halCommonPlatform.execCommand = execOverlayCommand;
+  halCommonPlatform.initRootStorage = halCommonInitRootFilesystem,
+  halCommonPlatform.restartShell = restartOverlayShell;
+
   halCommonUart.numSupported = 2;
   halCommonUart.online       = posixUartsOnline;
 

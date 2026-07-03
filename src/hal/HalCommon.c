@@ -153,6 +153,12 @@ static int32_t halBlockDeviceRestart(ProcessDescriptor *processDescriptor);
 // data members (numSupported, online, overlayMap, etc.) set by platform init.
 // ---------------------------------------------------------------------------
 
+HalPlatform halCommonPlatform = {
+  .execCommand     = NULL,
+  .initRootStorage = NULL,
+  .restartShell    = NULL,
+};
+
 HalMemory halCommonMemory = {
   .processStackSize        = halMemoryProcessStackSize,
   .memoryManagerStackSize  = halMemoryMemoryManagerStackSize,
@@ -205,15 +211,15 @@ HalPower halCommonPower = {
 };
 
 HalTimer halCommonTimer = {
-  .numSupported        = 0,
-  .online              = NULL,
-  .init                = halTimerInit,
-  .initDevice          = halTimerInitDevice,
-  .configOneShot       = halTimerConfigOneShot,
+  .numSupported          = 0,
+  .online                = NULL,
+  .init                  = halTimerInit,
+  .initDevice            = halTimerInitDevice,
+  .configOneShot         = halTimerConfigOneShot,
   .configuredNanoseconds = halTimerConfiguredNanoseconds,
   .remainingNanoseconds  = halTimerRemainingNanoseconds,
-  .cancel              = halTimerCancel,
-  .cancelAndGet        = halTimerCancelAndGet,
+  .cancel                = halTimerCancel,
+  .cancelAndGet          = halTimerCancelAndGet,
 };
 
 HalBlockDevice halCommonBlockDevice = {
@@ -225,6 +231,7 @@ HalBlockDevice halCommonBlockDevice = {
 };
 
 static Hal halCommonHal = {
+  .platform    = &halCommonPlatform,
   .memory      = &halCommonMemory,
   .uart        = &halCommonUart,
   .dio         = &halCommonDio,
@@ -233,8 +240,6 @@ static Hal halCommonHal = {
   .power       = &halCommonPower,
   .timer       = &halCommonTimer,
   .blockDevice = &halCommonBlockDevice,
-
-  .initRootStorage = halCommonInitRootFilesystem,
 };
 
 /// @var HAL

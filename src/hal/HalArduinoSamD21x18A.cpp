@@ -1302,6 +1302,10 @@ int32_t halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
   _spiSckDio           = args->spiSckDio;
   _sdCardPinChipSelect = args->sdCardPinChipSelect;
 
+  halCommonPlatform.execCommand = execOverlayCommand;
+  halCommonPlatform.initRootStorage = halCommonInitRootFilesystem,
+  halCommonPlatform.restartShell = restartOverlayShell;
+
   halArduinoSamD21x18AUartsOnline = args->uartsOnline;
   halArduinoSamD21x18ADiosOnline  = args->diosOnline;
 
