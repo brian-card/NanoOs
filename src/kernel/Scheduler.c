@@ -2692,7 +2692,7 @@ int schedulerExecveCommandHandler(
   }
 
   execArgs->schedulerState = schedulerState;
-  if (processCreate(processDescriptor, execCommand, execArgs) == processError) {
+  if (processCreate(processDescriptor, execOverlayCommand, execArgs) == processError) {
     printString(
       "ERROR: Could not configure process handle for new command.\n");
   }
@@ -3002,7 +3002,7 @@ int schedulerSpawnCommandHandler(
 
   schedFree(spawnArgs); spawnArgs = NULL;
 
-  if (processCreate(processDescriptor, execCommand, execArgs) == processError) {
+  if (processCreate(processDescriptor, execOverlayCommand, execArgs) == processError) {
     printString(
       "ERROR: Could not configure process handle for new command.\n");
   }
@@ -3845,7 +3845,7 @@ int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
       = processDescriptor->processId;
   }
 
-  if (processCreate(processDescriptor, execCommand, execArgs) == processError) {
+  if (processCreate(processDescriptor, execOverlayCommand, execArgs) == processError) {
     printString(
       "ERROR: Could not configure process handle for new command\n");
     returnValue = -ENOEXEC;

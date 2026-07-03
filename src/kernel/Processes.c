@@ -238,7 +238,7 @@ char** parseArgs(char *command, int *argc) {
   return argv;
 }
 
-/// @fn void* execCommand(void *args)
+/// @fn void* execOverlayCommand(void *args)
 ///
 /// @brief Wrapper process function that calls a command function.
 ///
@@ -247,13 +247,13 @@ char** parseArgs(char *command, int *argc) {
 ///
 /// @return If the comamnd is run, returns the result of the command cast to a
 /// void*.  If the command is not run, returns -1 cast to a void*.
-void* execCommand(void *args) {
+void* execOverlayCommand(void *args) {
   // The scheduler may be suspended because of launching this process.
   // Immediately call processYield as a best practice to make sure the scheduler
   // goes back to its work.
   ExecArgs *execArgs = (ExecArgs*) args;
   if (execArgs == NULL) {
-    printString("ERROR: No arguments provided to execCommand.\n");
+    printString("ERROR: No arguments provided to execOverlayCommand.\n");
     releaseConsole();
     return (void*) ((intptr_t) -1);
   }

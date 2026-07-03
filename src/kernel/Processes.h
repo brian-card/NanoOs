@@ -321,7 +321,7 @@ typedef struct IpcCapability {
 } IpcCapability;
 
 // Exported functionality
-void* execCommand(void *args);
+void* execOverlayCommand(void *args);
 void* runBlockOverlay(void *args);
 int sendProcessMessageToProcess(
   ProcessDescriptor *processDescriptor, ProcessMessage *processMessage);
