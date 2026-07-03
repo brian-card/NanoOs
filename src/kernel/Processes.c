@@ -240,10 +240,10 @@ char** parseArgs(char *command, int *argc) {
 
 /// @fn void* execOverlayCommand(void *args)
 ///
-/// @brief Wrapper process function that calls a command function.
+/// @brief Wrapper function that calls a command overlay.
 ///
-/// @param args The message received from the console process that describes
-///   the command to run, cast to a void*.
+/// @param args A pointer to an ExecArgs structure describing the command to
+///   run, cast to a void*.
 ///
 /// @return If the comamnd is run, returns the result of the command cast to a
 /// void*.  If the command is not run, returns -1 cast to a void*.
