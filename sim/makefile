@@ -58,8 +58,8 @@ OS_OBJECTS := \
     $(OBJ_DIR)/Filesystem.o \
     $(OBJ_DIR)/Hal.o \
     $(OBJ_DIR)/HalCommon.o \
-    $(OBJ_DIR)/HalPosix.o \
-    $(OBJ_DIR)/HalPosixImpl.o \
+    $(OBJ_DIR)/HalArduinoSamD21x18ASim.o \
+    $(OBJ_DIR)/HalArduinoSamD21x18ASimImpl.o \
     $(OBJ_DIR)/Link.o \
     $(OBJ_DIR)/MemoryManager.o \
     $(OBJ_DIR)/Messages.o \

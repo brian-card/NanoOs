@@ -25,7 +25,7 @@
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 
-/// @file HalPosix.c
+/// @file HalArduinoSamD21x18ASim.c
 ///
 /// @brief HAL implementation for a Posix simulator.
 
@@ -33,7 +33,7 @@
 
 #include <string.h>
 
-#include "HalPosix.h"
+#include "HalArduinoSamD21x18ASim.h"
 #include "HalCommon.h"
 #include "SdCardPosix.h"
 #include "user/NanoOsErrno.h"
@@ -58,7 +58,7 @@ void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
 
 // ---------------------------------------------------------------------------
 // Forward declarations for all POSIX platform functions (defined in
-// HalPosixImpl.c), now with va_list signatures.
+// HalArduinoSamD21x18ASimImpl.c), now with va_list signatures.
 // ---------------------------------------------------------------------------
 int32_t posixProcessStackSize(va_list args);
 int32_t posixMemoryManagerStackSize(va_list args);

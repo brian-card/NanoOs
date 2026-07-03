@@ -25,7 +25,7 @@
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 
-/// @file HalPosixImpl.c
+/// @file HalArduinoSamD21x18ASimImpl.c
 ///
 /// @brief HAL implementation for a Posix simulator.
 

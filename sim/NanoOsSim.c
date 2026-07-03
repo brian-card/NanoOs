@@ -35,7 +35,7 @@
 #include "Scheduler.h"
 
 // Simulator includes
-#include "HalPosix.h"
+#include "HalArduinoSamD21x18ASim.h"
 
 // undef all the things that NanoOs defines
 #undef stdin
