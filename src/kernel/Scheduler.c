@@ -3845,7 +3845,9 @@ int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
       = processDescriptor->processId;
   }
 
-  if (processCreate(processDescriptor, execOverlayCommand, execArgs) == processError) {
+  if (processCreate(processDescriptor, execOverlayCommand, execArgs)
+    == processError
+  ) {
     printString(
       "ERROR: Could not configure process handle for new command\n");
     returnValue = -ENOEXEC;
