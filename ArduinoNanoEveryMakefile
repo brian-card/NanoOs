@@ -14,8 +14,26 @@
 #
 # Produces (under build/nano_every/):
 #   NanoOs.elf           - Full ELF (keep for host-side string resolution)
+#   NanoOs_full.bin      - Full flat binary (includes .rodata; size at a glance)
 #   NanoOs_full.hex      - Full Intel HEX (includes .rodata)
+#   NanoOs_stripped.bin  - Stripped flat binary (no .rodata; size at a glance)
 #   NanoOs_stripped.hex  - Stripped Intel HEX (no .rodata, for production)
+#
+# `ls -l`/`stat` on the .bin files gives an honest byte count of what's
+# actually going into flash.  The .hex files are what actually get flashed
+# (see avrdude below) and always carry the same byte count as their .bin
+# counterpart.
+#
+# NanoOs_stripped.bin needs a little care to build correctly: in flash,
+# .rodata sits *between* .text and .data (avrxmega3's default linker
+# script places .text, then .rodata, then .data's load copy, back to
+# back).  A plain "objcopy -R .rodata -O binary" still spans address 0
+# through .data's load address, so it 0xFF-pads across the resulting gap
+# instead of shrinking -- on this target that would silently make the
+# "stripped" binary the same size as the full one.  To avoid that, the
+# stripped .bin is built by extracting .text and .data individually (each
+# starts at file offset 0 in isolation, so no gap) and concatenating them;
+# it's a size/content artifact only, not a flashable image by address.
 #
 # On this target, unlike the toy case, avr-gcc *does* place ordinary const
 # data (string literals, HAL function-pointer tables, etc.) in a genuine,
@@ -182,7 +200,9 @@ DEPS := $(ALL_OBJS:.o=.d) $(CORE_ALL_OBJS:.o=.d)
 # ---- Output files ---------------------------------------------------------------
 
 ELF          := $(BUILD_DIR)/NanoOs.elf
+FULL_BIN     := $(BUILD_DIR)/NanoOs_full.bin
 FULL_HEX     := $(BUILD_DIR)/NanoOs_full.hex
+STRIPPED_BIN := $(BUILD_DIR)/NanoOs_stripped.bin
 STRIPPED_HEX := $(BUILD_DIR)/NanoOs_stripped.hex
 
 # ---- Serial port (for flashing) ------------------------------------------------
@@ -193,7 +213,7 @@ PORT ?= $(firstword $(wildcard /dev/ttyACM* /dev/ttyUSB*))
 
 .PHONY: all flash flash-full size sections clean
 
-all: $(FULL_HEX) $(STRIPPED_HEX)
+all: $(FULL_BIN) $(FULL_HEX) $(STRIPPED_BIN) $(STRIPPED_HEX)
 	@echo ""
 	@echo "  Built for: Arduino Nano Every (ATmega4809)"
 	@echo "  Output:    $(BUILD_DIR)/"
@@ -204,11 +224,25 @@ $(ELF): $(ALL_OBJS) $(CORE_A)
 	@echo "  LINK    $@"
 	@$(LD) $(LDFLAGS) -o $@ $(ALL_OBJS) $(LDLIBS)
 
-# ---- Hex output --------------------------------------------------------------
+# ---- Binary/hex outputs -------------------------------------------------------
+
+$(FULL_BIN): $(ELF)
+	@echo "  OBJCOPY $@ (full, with .rodata)"
+	@$(OBJCOPY) -O binary -R .eeprom $< $@
 
 $(FULL_HEX): $(ELF)
 	@echo "  OBJCOPY $@ (full, with .rodata)"
 	@$(OBJCOPY) -O ihex -R .eeprom $< $@
+
+# See the header comment: .text and .data are extracted separately and
+# concatenated so the file size doesn't include the 0xFF-padded gap left
+# behind by excluding .rodata.
+$(STRIPPED_BIN): $(ELF)
+	@echo "  OBJCOPY $@ (stripped, no .rodata)"
+	@$(OBJCOPY) -O binary --only-section=.text $< $(BUILD_DIR)/.text_only.bin
+	@$(OBJCOPY) -O binary --only-section=.data $< $(BUILD_DIR)/.data_only.bin
+	@cat $(BUILD_DIR)/.text_only.bin $(BUILD_DIR)/.data_only.bin > $@
+	@rm -f $(BUILD_DIR)/.text_only.bin $(BUILD_DIR)/.data_only.bin
 
 $(STRIPPED_HEX): $(ELF)
 	@echo "  OBJCOPY $@ (stripped, no .rodata)"
@@ -295,7 +329,7 @@ _flash:
 		"-Ufuse5:w:$(FUSE_SYSCFG0):m" \
 		"-Ufuse8:w:$(FUSE_BOOTEND):m"
 
-size: $(ELF) $(FULL_HEX) $(STRIPPED_HEX)
+size: $(ELF) $(FULL_BIN) $(FULL_HEX) $(STRIPPED_BIN) $(STRIPPED_HEX)
 	@echo ""
 	@echo "=== Arduino Nano Every (ATmega4809): Section sizes ==="
 	@$(SIZE) -A $(ELF)
@@ -306,12 +340,16 @@ size: $(ELF) $(FULL_HEX) $(STRIPPED_HEX)
 	@echo -n "  .data (init values):   "; $(SIZE) -A $(ELF) | awk '/^\.data / {print $$2 " bytes"}'
 	@echo -n "  .bss (zero-init):      "; $(SIZE) -A $(ELF) | awk '/^\.bss /  {print $$2 " bytes"}'
 	@echo ""
+	@echo -n "  Stripped binary size:  "; stat -c%s $(STRIPPED_BIN) 2>/dev/null || echo "(build first)"
+	@echo -n "  Full binary size:      "; stat -c%s $(FULL_BIN) 2>/dev/null || echo "(build first)"
+	@echo ""
 	@$(SIZE) -A $(ELF) | awk -v limit=$(UPLOAD_MAX_SIZE) ' \
 		/^\.text /   {text=$$2} \
 		/^\.rodata / {rodata=$$2} \
+		/^\.data /   {data=$$2} \
 		END { \
-			printf "  Stripped flash total (.text only):     %d / %d bytes (%d free)\n", text, limit, limit-text; \
-			printf "  Full flash total (.text + .rodata):    %d / %d bytes (%d free)\n", text+rodata, limit, limit-(text+rodata); \
+			printf "  Stripped flash total (.text + .data init):        %d / %d bytes (%d free)\n", text+data, limit, limit-(text+data); \
+			printf "  Full flash total (.text + .rodata + .data init):  %d / %d bytes (%d free)\n", text+rodata+data, limit, limit-(text+rodata+data); \
 		}'
 	@echo ""
 
