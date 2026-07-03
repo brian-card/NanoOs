@@ -4489,7 +4489,7 @@ __attribute__((noinline)) void startScheduler(
     processDescriptor->processId = ii;
     processDescriptor->userId = NO_USER_ID;
     processDescriptor->name = "dummy";
-    processDescriptor->callOverlayFunction = callOverlayFunctionFromFile;
+    processDescriptor->callOverlayFunction = HAL->platform->callFileOverlay;
     if ((ii - schedulerState.firstShellPid) < schedulerState.numShells) {
       processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_SUPERVISOR;
       processDescriptor->restartFunction = HAL->platform->restartShell;

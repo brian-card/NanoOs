@@ -186,6 +186,7 @@ static int32_t halBlockDeviceRestart(ProcessDescriptor *processDescriptor);
 // ---------------------------------------------------------------------------
 
 HalPlatform halCommonPlatform = {
+  .callFileOverlay = NULL,
   .execCommand     = NULL,
   .initRootStorage = NULL,
   .restartShell    = NULL,

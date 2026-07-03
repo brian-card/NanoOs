@@ -45,6 +45,17 @@
 // Must come last
 #include "user/NanoOsStdio.h"
 
+// Prototypes from files that we can't directly include.
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
+  const char *function, void *args);
+#ifdef __cplusplus
+}
+#endif
+
 // ---------------------------------------------------------------------------
 // Forward declarations for all POSIX platform functions (defined in
 // HalPosixImpl.c), now with va_list signatures.
@@ -288,6 +299,7 @@ int32_t halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
   halFunctions[HAL_BLOCK_DEVICE] = posixBlockDeviceFunctions;
 
   // Set per-platform data members on the common subsystem instances.
+  halCommonPlatform.callFileOverlay = callOverlayFunctionFromFile;
   halCommonPlatform.execCommand = execOverlayCommand;
   halCommonPlatform.initRootStorage = halCommonInitRootFilesystem,
   halCommonPlatform.restartShell = restartOverlayShell;

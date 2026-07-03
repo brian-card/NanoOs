@@ -57,6 +57,17 @@
 #include "../user/NanoOsErrno.h"
 #include "../user/NanoOsStdio.h"
 
+// Prototypes from files that we can't directly include.
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
+  const char *function, void *args);
+#ifdef __cplusplus
+}
+#endif
+
 /// @def PROCESS_STACK_SIZE
 ///
 /// @brief The size, in bytes, of a regular process's stack.
@@ -1302,6 +1313,7 @@ int32_t halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
   _spiSckDio           = args->spiSckDio;
   _sdCardPinChipSelect = args->sdCardPinChipSelect;
 
+  halCommonPlatform.callFileOverlay = callOverlayFunctionFromFile;
   halCommonPlatform.execCommand = execOverlayCommand;
   halCommonPlatform.initRootStorage = halCommonInitRootFilesystem,
   halCommonPlatform.restartShell = restartOverlayShell;
@@ -1349,7 +1361,7 @@ int32_t halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
 
   __enable_irq();  // Ensure global interrupts are enabled
 
-  result = nanoOsApiInit();
+  int result = nanoOsApiInit();
   if (result != 0) {
     return result;
   }
