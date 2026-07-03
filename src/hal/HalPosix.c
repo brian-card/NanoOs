@@ -318,6 +318,11 @@ int32_t halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
   halCommonMemory.overlayMap  = overlayMap;
   halCommonMemory.overlaySize = overlaySize;
 
+  result = nanoOsApiInit();
+  if (result != 0) {
+    return result;
+  }
+
   return halCommonInit();
 }
 

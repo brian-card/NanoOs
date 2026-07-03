@@ -118,102 +118,102 @@ NanoOsApi nanoOsApi = {
   // Standard Unix functionality
   
   // Standard streams:
-  .stdin  = (FILE*) ((intptr_t) 0x1),
-  .stdout = (FILE*) ((intptr_t) 0x2),
-  .stderr = (FILE*) ((intptr_t) 0x3),
+  .stdin  = NULL,
+  .stdout = NULL,
+  .stderr = NULL,
   
   // File operations:
-  .fopen = filesystemFopen,
-  .fclose = filesystemFclose,
-  .remove = filesystemRemove,
-  .fseek = filesystemFSeek,
-  .fileno = nanoOsFileno,
+  .fopen = NULL,
+  .fclose = NULL,
+  .remove = NULL,
+  .fseek = NULL,
+  .fileno = NULL,
   
   // Formatted I/O:
-  .vsscanf = vsscanf,
-  .vfscanf = nanoOsVfscanf,
-  .vfprintf = nanoOsVfprintf,
-  .vsnprintf = vsnprintf,
+  .vsscanf = NULL,
+  .vfscanf = NULL,
+  .vfprintf = NULL,
+  .vsnprintf = NULL,
   
   // Direct I/O:
-  .fread = nanoOsFread,
-  .fwrite = nanoOsFwrite,
+  .fread = NULL,
+  .fwrite = NULL,
   
   // Memory management:
-  .free = memoryManagerFree,
-  .realloc = memoryManagerRealloc,
-  .malloc = memoryManagerMalloc,
-  .calloc = memoryManagerCalloc,
+  .free = NULL,
+  .realloc = NULL,
+  .malloc = NULL,
+  .calloc = NULL,
   
   // Copying functions:
-  .memcpy = memcpy,
-  .memmove = memmove,
-  .strcpy = strcpy,
-  .strncpy = strncpy,
-  .strcat = strcat,
-  .strncat = strncat,
+  .memcpy = NULL,
+  .memmove = NULL,
+  .strcpy = NULL,
+  .strncpy = NULL,
+  .strcat = NULL,
+  .strncat = NULL,
   
   // Search functions:
-  .memcmp = memcmp,
-  .strcmp = strcmp,
-  .strncmp = strncmp,
-  .strstr = strstr,
-  .strchr = strchr,
-  .strrchr = strrchr,
-  .strspn = strspn,
-  .strcspn = strcspn,
+  .memcmp = NULL,
+  .strcmp = NULL,
+  .strncmp = NULL,
+  .strstr = NULL,
+  .strchr = NULL,
+  .strrchr = NULL,
+  .strspn = NULL,
+  .strcspn = NULL,
   
   // Miscellaaneous string functions:
-  .memset = memset,
-  .strerror = nanoOsStrError,
-  .strlen = strlen,
+  .memset = NULL,
+  .strerror = NULL,
+  .strlen = NULL,
   
   // Other stdlib functions:
-  .strtoll = nanoOsStrtoll,
+  .strtoll = NULL,
   
   // unistd functions:
-  .close = nanoOsClose,
-  .dup = nanoOsDup,
-  .dup2 = nanoOsDup2,
-  .gethostname = nanoOsGethostname,
-  .getpid = nanoOsGetpid,
-  .sethostname = nanoOsSethostname,
-  .ttyname_r = nanoOsTtyname_r,
-  .execve = schedulerExecve,
-  .setuid = schedulerSetProcessUser,
-  .pipe = nanoOsPipe,
+  .close = NULL,
+  .dup = NULL,
+  .dup2 = NULL,
+  .gethostname = NULL,
+  .getpid = NULL,
+  .sethostname = NULL,
+  .ttyname_r = NULL,
+  .execve = NULL,
+  .setuid = NULL,
+  .pipe = NULL,
   
   // termios functions:
-  .tcgetattr = nanoOsTcgetattr,
-  .tcsetattr = nanoOsTcsetattr,
+  .tcgetattr = NULL,
+  .tcsetattr = NULL,
   
   // errno functions:
-  .errno_ = errno_,
+  .errno_ = NULL,
   
   // sys/*.h functions:
-  .uname = nanoOsUname,
+  .uname = NULL,
   
   // time.h functions:
-  .time = time,
+  .time = NULL,
   
   // pwd.h functions:
-  .getpwnam_r = nanoOsGetpwnam_r,
-  .getpwuid_r = nanoOsGetpwuid_r,
+  .getpwnam_r = NULL,
+  .getpwuid_r = NULL,
   
   // sched.h functions:
-  .sched_yield = nanoOsSchedYield,
+  .sched_yield = NULL,
   
   // signal.h functions:
-  .kill = nanoOsKill,
+  .kill = NULL,
   
   // spawn.h functions:
-  .posix_spawn_file_actions_init = nanoOsSpawnFileActionsInit,
-  .posix_spawn_file_actions_adddup2 = nanoOsSpawnFileActionsAdddup2,
-  .posix_spawn_file_actions_destroy = nanoOsSpawnFileActionsDestroy,
-  .posix_spawn = nanoOsSpawn,
+  .posix_spawn_file_actions_init = NULL,
+  .posix_spawn_file_actions_adddup2 = NULL,
+  .posix_spawn_file_actions_destroy = NULL,
+  .posix_spawn = NULL,
   
   // fcntl.h functions:
-  .fcntl = nanoOsFcntl,
+  .fcntl = NULL,
   
   // NanoOs-specific functionality
   
@@ -221,15 +221,15 @@ NanoOsApi nanoOsApi = {
   .callOverlayFunction = NULL,
   
   // NanoOsUtils.h functions:
-  .parseArgs = parseArgs,
-  .getFreeMemory = getFreeMemory,
-  .dumpMemoryAllocations = dumpMemoryAllocations,
+  .parseArgs = NULL,
+  .getFreeMemory = NULL,
+  .dumpMemoryAllocations = NULL,
   
   // NanoOsProcesses.h functions:
-  .getProcessInfo = schedulerGetProcessInfo,
+  .getProcessInfo = NULL,
   
   // NanoOsHardware.h functions:
-  .shutdown = nanoOsHardwareShutdown,
+  .shutdown = NULL,
   
   // Additional API for PRIVILEGE_LEVEL_EXECUTIVE processes:
   .executiveApi = NULL,

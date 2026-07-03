@@ -1349,6 +1349,11 @@ int32_t halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
 
   __enable_irq();  // Ensure global interrupts are enabled
 
+  result = nanoOsApiInit();
+  if (result != 0) {
+    return result;
+  }
+
   return halCommonInit();
 }
 
