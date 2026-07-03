@@ -227,6 +227,26 @@ typedef struct HalCapability {
 /// @brief Collection of function pointers that implement platform-specific
 /// versions of common functionality.
 typedef struct HalPlatform {
+  /// @fn void* (*callFileOverlay)(const void *overlayDir, const void *overlay,
+  ///   const char *function, void *args)
+  ///
+  /// @brief Platform-specific function to call an overlay that's part of a
+  /// filesystem.
+  ///
+  /// @param overlayDir The path to the overlay directory on the filesystem.  If
+  ///   this parameter is OVERLAY_SAME_NAMESPACE then the overlay path currently
+  ///   in use will be used.
+  /// @param overlay The name of the overlay minus the ".overlay" file extension
+  ///   that is local to the overlay directory.
+  /// @param function The name of the function exported by the overlay.
+  /// @param args Any arguments to be passed to the function in the overlay,
+  ///   cast to a void*.  This parameter may be NULL.
+  ///
+  /// @return Returns the value returned by the overlay function on success,
+  /// NULL on failure.
+  void* (*callFileOverlay)(const void *overlayDir, const void *overlay,
+    const char *function, void *args);
+
   /// @fn void* (*execCommand)(void *args)
   ///
   /// @brief Platform-specific function that will be used to exec a command.
