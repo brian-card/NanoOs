@@ -59,7 +59,7 @@ void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
 ///
 /// @brief Address of the start of external RAM.  The AgonLight 2 uses the
 /// eZ80F92 CPU, which begins external RAM at address 0x40000.  (0x0 through
-/// 0x20000 are 128 KB of flash.  0x20000 through 0x40000 is missing on the
+/// 0x1ffff are 128 KB of flash.  0x20000 through 0x3ffff is missing on the
 /// eZ80F92.  It's an additional 128 KB of flash on the eZ80F91.)
 #define RAM_START_ADDRESS 0x40000
 
