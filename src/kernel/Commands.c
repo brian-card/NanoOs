@@ -41,6 +41,7 @@
 #include "Scheduler.h"
 #include "../user/NanoOsErrno.h"
 #include "../user/NanoOsHardware.h"
+#include "../user/NanoOsSpawn.h"
 
 // Must come last
 #include "../user/NanoOsStdio.h"
@@ -612,14 +613,30 @@ void* runBuiltinShell(void *args) {
       break;
     }
     
+    char *ampersandAt = strrchr(input, '&');
+    bool launchBackground = false;
+    if ((ampersandAt != NULL) && (ampersandAt[-1] != '&')) {
+      *ampersandAt = '\0';
+      launchBackground = true;
+    }
+    
     char **argv = parseArgs(input, NULL);
     if (argv == NULL) {
       fprintf(stderr, "Failed to parse command line\n");
       continue;
     }
     
-    // Run the command in the foreground.  i.e. Replace this shell.
-    schedulerExecve(argv[0], argv, getRunningProcess()->envp);
+    // Run the built-in command.
+    if (launchBackground == false) {
+      // Run the command in the foreground.  i.e. Replace this shell.  This is
+      // the usual case.
+      schedulerExecve(argv[0], argv, getRunningProcess()->envp);
+    } else { // launchBackground == true
+      // Spawn a new task in the background.
+      pid_t pid;
+      errno = nanoOsSpawn(&pid, argv[0], NULL, NULL, argv,
+        getRunningProcess()->envp);
+    }
   }
 
   return NULL;
