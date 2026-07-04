@@ -55,12 +55,32 @@ void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
 // Memory layout constants
 // ---------------------------------------------------------------------------
 
+/// @def RAM_START_ADDRESS
+///
+/// @brief Address of the start of external RAM.  The AgonLight 2 uses the
+/// eZ80F92 CPU, which begins external RAM at address 0x40000.  (0x0 through
+/// 0x20000 are 128 KB of flash.  0x20000 through 0x40000 is missing on the
+/// eZ80F92.  It's an additional 128 KB of flash on the eZ80F91.)
+#define RAM_START_ADDRESS 0x40000
+
+/// @def NANO_OS_SIZE
+///
+/// @brief The size, in bytes, reserved for the NanoOs binary in memory.  We
+/// will reserve 128 KB for this.
+#define NANO_OS_SIZE (128 * 1024)
+
+/// @def FILESYSTEM_DRIVER_SIZE
+///
+/// @brief The size, in bytes, reserved for the filesystem driver in memory.  We
+/// will reserve 32 KB for this.
+#define FILESYSTEM_DRIVER_SIZE (32 * 1024)
+
 /// @def HEAP_START_ADDRESS
 ///
-/// @brief Address of the start (bottom) of the heap.  On the AgonLight 2,
-/// external RAM starts at address 0x40000 and since we're currently loading the
-/// NanoOs binary at that address, we need to reserve 128 KB from there.
-#define HEAP_START_ADDRESS 0x60000
+/// @brief Address of the start (bottom) of the heap.  This is the first address
+/// after all of the reserved space.
+#define HEAP_START_ADDRESS (RAM_START_ADDRESS + NANO_OS_SIZE \
+  + FILESYSTEM_DRIVER_SIZE)
 
 /// @def PROCESS_STACK_SIZE
 ///
@@ -97,22 +117,22 @@ void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
 /// @var _spiCopiDio
 ///
 /// @brief DIO pin used for SPI COPI.
-static uint8_t _spiCopiDio = DIO_PIN_UNDEFINED;
+static uint8_t _spiCopiDio = 95;
 
 /// @var _spiCipoDio
 ///
 /// @brief DIO pin used for SPI CIPO.
-static uint8_t _spiCipoDio = DIO_PIN_UNDEFINED;
+static uint8_t _spiCipoDio = 94;
 
 /// @var _spiSckDio
 ///
 /// @brief DIO pin used for SPI serial clock.
-static uint8_t _spiSckDio = DIO_PIN_UNDEFINED;
+static uint8_t _spiSckDio = 91;
 
 /// @var _sdCardPinChipSelect
 ///
 /// @brief Pin to use for the MicroSD card reader's SPI chip select line.
-static uint8_t _sdCardPinChipSelect = DIO_PIN_UNDEFINED;
+static uint8_t _sdCardPinChipSelect = 90;
 
 // The fact that we've included Arduino.h in this file means that the memory
 // management functions from its library are available in this file.  That's a
