@@ -45,6 +45,10 @@
 // Must come last
 #include "../user/NanoOsStdio.h"
 
+// Defined in NanoOs.c:
+extern const User users[];
+extern const int NUM_USERS;
+
 // Defined at the bottom of this file:
 extern const CommandEntry commands[];
 extern const int NUM_COMMANDS;
@@ -469,6 +473,93 @@ void* execBuiltinCommand(void *args) {
   // that memory here can result in nasty consequences if we get preempted
   // between freeing the memory and returning from this function.
   return (void*) ((intptr_t) returnValue);
+}
+
+/// @def USERNAME_BUFFER_SIZE
+///
+/// @brief Size to use for the username buffer in the login function.
+#define USERNAME_BUFFER_SIZE 16
+
+/// @def PASSWORD_BUFFER_SIZE
+///
+/// @brief Size to use for the password buffer in the login function.
+#define PASSWORD_BUFFER_SIZE 16
+
+/// @fn void login(void)
+///
+/// @brief Authenticate a user for login.  Sets the owner of the current task
+/// to the ID of the authenticated user before returning.
+///
+/// @param This function returns no value.
+void login(void) {
+  UserId userId = NO_USER_ID;
+
+  char *username = (char*) malloc(USERNAME_BUFFER_SIZE);
+  char *password = (char*) malloc(PASSWORD_BUFFER_SIZE);
+  char *newlineAt = NULL;
+  size_t usernameLength = 0, passwordLength = 0, ii = 0;
+
+  while (userId == NO_USER_ID) {
+    unsigned int checksum = 0;
+
+    fputs("login: ", stdout);
+    fgets(username, USERNAME_BUFFER_SIZE, stdin);
+    setConsoleEcho(false);
+    fputs("Password: ", stdout);
+    fgets(password, PASSWORD_BUFFER_SIZE, stdin);
+    setConsoleEcho(true);
+    fputs("\n\n", stdout);
+
+    newlineAt = strchr(username, '\r');
+    if (newlineAt == NULL) {
+      newlineAt = strchr(username, '\n');
+    }
+    if (newlineAt != NULL) {
+      // Terminate the string at the newline.
+      *newlineAt = '\0';
+    }
+    usernameLength = strlen(username);
+    for (ii = 0; ii < usernameLength; ii++) {
+      checksum += (unsigned int) username[ii];
+    }
+
+    newlineAt = strchr(password, '\r');
+    if (newlineAt == NULL) {
+      newlineAt = strchr(password, '\n');
+    }
+    if (newlineAt != NULL) {
+      // Terminate the string at the newline.
+      *newlineAt = '\0';
+    }
+    passwordLength = strlen(password);
+    for (ii = 0; ii < passwordLength; ii++) {
+      checksum += (unsigned int) password[ii];
+    }
+
+    for (int ii = 0; ii < NUM_USERS; ii++) {
+      if (strcmp(users[ii].username, username) == 0) {
+        if (users[ii].checksum == checksum) {
+          userId = users[ii].userId;
+        }
+        break;
+      }
+    }
+
+    if (userId == NO_USER_ID) {
+      fputs("Login incorrect\n", stderr);
+    }
+  }
+
+  username = stringDestroy(username);
+  password = stringDestroy(password);
+
+  if (schedulerSetProcessUser(userId) != 0) {
+    fputs("WARNING: "
+      "Could not set owner of current task to authenticated user.\n",
+      stderr);
+  }
+
+  return;
 }
 
 /// @fn void* runBuiltinShell(void *args)
