@@ -38,6 +38,7 @@
 #include "HalAgonLight2.h"
 #include "HalCommon.h"
 #include "../user/NanoOsErrno.h"
+#include "../user/NanoOsStdio.h"
 
 // Prototypes from files that we can't directly include.
 #ifdef __cplusplus
@@ -82,6 +83,73 @@ void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
 ///
 /// @brief Bytes reserved for the overlay region.
 #define OVERLAY_SIZE 8192 // 8 KB - the size of the internal RAM area
+
+/// @def DIO_PIN_UNDEFINED
+///
+/// @brief Value to indicate that the value of a specific pin is undefined.
+#define DIO_PIN_UNDEFINED 255
+
+/// @def MAX_SPI_DEVICES
+///
+/// @brief The maximum number of SPI devices the system can support.
+#define MAX_SPI_DEVICES 2
+
+/// @var _spiCopiDio
+///
+/// @brief DIO pin used for SPI COPI.
+static uint8_t _spiCopiDio = DIO_PIN_UNDEFINED;
+
+/// @var _spiCipoDio
+///
+/// @brief DIO pin used for SPI CIPO.
+static uint8_t _spiCipoDio = DIO_PIN_UNDEFINED;
+
+/// @var _spiSckDio
+///
+/// @brief DIO pin used for SPI serial clock.
+static uint8_t _spiSckDio = DIO_PIN_UNDEFINED;
+
+/// @var _sdCardPinChipSelect
+///
+/// @brief Pin to use for the MicroSD card reader's SPI chip select line.
+static uint8_t _sdCardPinChipSelect = DIO_PIN_UNDEFINED;
+
+// The fact that we've included Arduino.h in this file means that the memory
+// management functions from its library are available in this file.  That's a
+// problem.  (a) We can't allow dynamic memory at the HAL level and (b) if we
+// were to allocate memory from Arduino's memory manager, we'd run the risk
+// of corrupting something elsewhere in memory.  Just in case we ever forget
+// this and try to use memory management functions in the future, define them
+// all to MEMORY_ERROR so that the build will fail.
+#undef malloc
+#define malloc  MEMORY_ERROR
+#undef calloc
+#define calloc  MEMORY_ERROR
+#undef realloc
+#define realloc MEMORY_ERROR
+#undef free
+#define free   MEMORY_ERROR
+
+/// @var blockDevices
+///
+/// @brief Array of BlockDevice pointers that are managed by the driver
+/// processes.
+static BlockDevice *blockDevices[] = {
+  NULL,
+};
+
+/// @var _numBlockDevices
+///
+/// @brief Number of BlockDevices that can be managed by the HAL.
+static const uint32_t _numBlockDevices
+  = sizeof(blockDevices) / sizeof(blockDevices[0]);
+
+/// @var halArduinoSamD21x18ABlockDevicesOnline
+///
+/// @brief Bitmask array of online block devices.
+static uint32_t halArduinoSamD21x18ABlockDevicesOnline[] = {
+  0x00000000,
+};
 
 // ---------------------------------------------------------------------------
 // Memory subsystem stubs
@@ -326,21 +394,76 @@ int32_t agonLight2CancelAndGetTimer(va_list args) {
 
 int32_t agonLight2InitBlockDevice(va_list args) {
   (void) args;
-  return -ENODEV;
+  if (SCHEDULER_STATE == NULL) {
+    return -EBUSY;
+  }
+
+  // Create the SD card process.
+  SdCardSpiArgs sdCardSpiArgs = {
+    .spiCsDio   = _sdCardPinChipSelect,
+    .spiCopiDio = _spiCopiDio,
+    .spiCipoDio = _spiCipoDio,
+    .spiSckDio  = _spiSckDio,
+  };
+
+  blockDevices[0] = halCommonInitRootSdSpiStorage(&sdCardSpiArgs);
+  if (blockDevices[0] == NULL) {
+    return -ENODEV;
+  }
+  setOnline(HAL->blockDevice, 0);
+
+  return 0;
 }
 
 int32_t agonLight2GetBlockDevice(va_list args) {
-  (void)              va_arg(args, int32_t);     // deviceId
+  int32_t deviceId = va_arg(args, int32_t);
   BlockDevice **returnValue = va_arg(args, BlockDevice**);
-  if (returnValue != NULL) {
-    *returnValue = NULL;
+
+  if (!online(HAL->blockDevice, deviceId)) {
+    if (returnValue != NULL) {
+      *returnValue = NULL;
+    }
+    return -ENODEV;
   }
-  return -ENODEV;
+
+  if (returnValue != NULL) {
+    *returnValue = blockDevices[deviceId];
+  }
+  return 0;
 }
 
 int32_t agonLight2RestartBlockDevice(va_list args) {
-  (void) va_arg(args, ProcessDescriptor*);
-  return -ENODEV;
+  ProcessDescriptor *processDescriptor = va_arg(args, ProcessDescriptor*);
+  int32_t deviceId = (int32_t) (intptr_t) processDescriptor->restartArgs;
+
+  SdCardSpiArgs sdCardSpiArgs = {
+    .spiCsDio   = _sdCardPinChipSelect,
+    .spiCopiDio = _spiCopiDio,
+    .spiCipoDio = _spiCipoDio,
+    .spiSckDio  = _spiSckDio,
+  };
+
+  if (processCreate(processDescriptor, runSdCardSpi, &sdCardSpiArgs)
+    != processSuccess
+  ) {
+    printString("Could not restart SD card process\n");
+    return -ENOMEM;
+  }
+  threadSetContext(processDescriptor->mainThread, processDescriptor);
+  processDescriptor->name = "SD card";
+  processDescriptor->userId = ROOT_USER_ID;
+
+  BlockDevice *sdDevice
+    = (BlockDevice*) coroutineResume(processDescriptor->mainThread, NULL);
+  if (sdDevice == NULL) {
+    printString("SD card restart returned NULL\n");
+    return -ENODEV;
+  }
+  sdDevice->partitionNumber = 1;
+  blockDevices[deviceId] = sdDevice;
+  setOnline(HAL->blockDevice, deviceId);
+
+  return 0;
 }
 
 // ---------------------------------------------------------------------------
