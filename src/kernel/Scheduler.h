@@ -245,6 +245,7 @@ int processQueueRemove(
   ProcessQueue *processQueue, ProcessDescriptor *processDescriptor);
 int schedulerReplaceOverlay(const void *overlayNamespace,
   FileBlockMetadata *overlay);
+int32_t restartBuiltinShell(ProcessDescriptor *processDescriptor);
 int32_t restartOverlayShell(ProcessDescriptor *processDescriptor);
 
 // Coroutine setup functions used in the loader.

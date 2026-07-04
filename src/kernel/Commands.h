@@ -66,7 +66,7 @@ typedef struct CommandEntry {
 
 // Exported tasks
 void* execBuiltinCommand(void *args);
-int32_t restartBuiltinShell(ProcessDescriptor *processDescriptor);
+void* runBuiltinShell(void *args);
 
 #ifdef __cplusplus
 } // extern "C"

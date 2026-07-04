@@ -53,6 +53,9 @@ extern const int NUM_USERS;
 extern const CommandEntry commands[];
 extern const int NUM_COMMANDS;
 
+// Defined in Processes.c:
+char** parseArgs(char *command, int *argc);
+
 // Commands
 
 /// @fn int psCommandHandler(int argc, char **argv);
@@ -592,69 +595,34 @@ void* runBuiltinShell(void *args) {
     = getUsernameByUserId(getRunningProcess()->userId);
   while (1) {
     printf("%s@%s%s ", processUsername, SCHEDULER_STATE->hostname, prompt);
-    fgets(commandBuffer, sizeof(commandBuffer), stdin);
-    const CommandEntry *commandEntry = getCommandEntryFromInput(commandBuffer);
-    if (commandEntry == NULL) {
-      printf("Unknown command.\n");
+    commandBuffer[0] = '\0';
+    char *input = fgets(commandBuffer, sizeof(commandBuffer), stdin);
+    if (input == NULL) {
+    }
+    size_t inputLength = strlen(input);
+    if ((inputLength > 0) && (input[inputLength - 1] == '\n')) {
+      input[inputLength - 1] = '\0';
+    }
+    
+    input = &input[strspn(input, " \t")];
+    if (*input == '\0') {
+      continue;
+    } else if (strcmp(input, "exit") == 0) {
+      getRunningProcess()->userId = NO_USER_ID;
+      break;
+    }
+    
+    char **argv = parseArgs(input, NULL);
+    if (argv == NULL) {
+      fprintf(stderr, "Failed to parse command line\n");
       continue;
     }
-
-    char *newlineAt = strchr(commandBuffer, '\r');
-    if (newlineAt == NULL) {
-      newlineAt = strchr(commandBuffer, '\n');
-    }
-    if (newlineAt != NULL) {
-      *newlineAt = '\0';
-    }
-
-    size_t bufferLength = strlen(commandBuffer);
-    char *consoleInput = (char*) malloc(bufferLength + 1);
-    strcpy(consoleInput, commandBuffer);
-    if (schedulerRunProcess(commandEntry, consoleInput, consolePort) != 0) {
-      consoleInput = stringDestroy(consoleInput);
-    }
+    
+    // Run the command in the foreground.  i.e. Replace this shell.
+    schedulerExecve(argv[0], argv, getRunningProcess()->envp);
   }
 
   return NULL;
-}
-
-/// @fn int32_t restartBuiltinShell(ProcessDescriptor *processDescriptor)
-///
-/// @brief Implementation of restartFunction to re-launch a built-in shell if
-/// one dies or a process that occupied its slot exits.
-///
-/// @param processDescriptor A pointer to the ProcessDescriptor that manages the
-///   process's state.
-///
-/// @return Returns 0 on sucess, -errno onfailure.
-int32_t restartBuiltinShell(ProcessDescriptor *processDescriptor) {
-  printDebugString("In restartBuiltinShell\n");
-  if ((SCHEDULER_STATE->hostname == NULL)
-    || (*SCHEDULER_STATE->hostname == '\0')
-  ) {
-    printDebugString(
-      "restartBuiltinShell: scheduler not up.  Returning -EAGAIN\n");
-    return -EAGAIN;
-  }
-
-  // Set the capabilities for the shell on the console.
-  addProcessIpcCapability(
-    &SCHEDULER_STATE->allProcesses[SCHEDULER_STATE->consolePid - 1],
-    processDescriptor->processId, CONSOLE_COMMAND_SIGNATURE,
-    CONSOLE_RETURNING_INPUT);
-
-  // User process exited.  Re-launch the shell.
-  printDebugString("restartBuiltinShell: Restarting shell\n");
-  if (processCreate(processDescriptor, runBuiltinShell, NULL)
-    != processSuccess
-  ) {
-    printString("Could not restart memory manager process.\n");
-    return -ENOMEM;
-  }
-  threadSetContext(processDescriptor->mainThread, processDescriptor);
-  processDescriptor->name = "shell";
-
-  return 0;
 }
 
 /// @var commands

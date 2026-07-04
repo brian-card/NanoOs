@@ -31,7 +31,8 @@
 // Unix includes
 #include "sys/types.h"
 
-// Custom includes
+// Kernel space includes
+#include "Commands.h"
 #include "Console.h"
 #include "Hal.h"
 #include "NanoOs.h"
@@ -3970,6 +3971,45 @@ int32_t restartMemoryManager(ProcessDescriptor *processDescriptor) {
   threadSetContext(processDescriptor->mainThread, processDescriptor);
   processDescriptor->name = "memory manager";
   processDescriptor->userId = ROOT_USER_ID;
+  return 0;
+}
+
+/// @fn int32_t restartBuiltinShell(ProcessDescriptor *processDescriptor)
+///
+/// @brief Implementation of restartFunction to re-launch a built-in shell if
+/// one dies or a process that occupied its slot exits.
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor that manages the
+///   process's state.
+///
+/// @return Returns 0 on sucess, -errno onfailure.
+int32_t restartBuiltinShell(ProcessDescriptor *processDescriptor) {
+  printDebugString("In restartBuiltinShell\n");
+  if ((SCHEDULER_STATE->hostname == NULL)
+    || (*SCHEDULER_STATE->hostname == '\0')
+  ) {
+    printDebugString(
+      "restartBuiltinShell: scheduler not up.  Returning -EAGAIN\n");
+    return -EAGAIN;
+  }
+
+  // Set the capabilities for the shell on the console.
+  addProcessIpcCapability(
+    &SCHEDULER_STATE->allProcesses[SCHEDULER_STATE->consolePid - 1],
+    processDescriptor->processId, CONSOLE_COMMAND_SIGNATURE,
+    CONSOLE_RETURNING_INPUT);
+
+  // User process exited.  Re-launch the shell.
+  printDebugString("restartBuiltinShell: Restarting shell\n");
+  if (processCreate(processDescriptor, runBuiltinShell, NULL)
+    != processSuccess
+  ) {
+    printString("Could not restart memory manager process.\n");
+    return -ENOMEM;
+  }
+  threadSetContext(processDescriptor->mainThread, processDescriptor);
+  processDescriptor->name = "shell";
+
   return 0;
 }
 
