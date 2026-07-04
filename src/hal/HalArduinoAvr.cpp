@@ -29,7 +29,7 @@
 ///
 /// @brief HAL implementation for an AVR-based Arduino board.
 
-#if defined(__AVR_ATmega4809__)
+#if defined(__AVR_ATmega4809__) || defined(__AVR_ATmega2560__)
 
 // Base Arduino definitions
 #define FILE  Arduino_FILE
@@ -124,6 +124,20 @@ static uint8_t _spiSckDio = DIO_PIN_UNDEFINED;
 // Sleep configuration
 #include <avr/sleep.h>
 #include <avr/interrupt.h>
+#include <avr/wdt.h>
+
+/// @def HAL_ARDUINO_AVR_NUM_PINS
+///
+/// @brief The total number of pins (digital and analog) on the board.  Used
+/// to iterate over every pin when powering down.  The megaAVR-0 core
+/// provides NUM_TOTAL_PINS; the classic AVR core does not, but its
+/// NUM_DIGITAL_PINS already accounts for the analog pins being addressable
+/// as digital pins.
+#if defined(__AVR_ATmega4809__)
+#define HAL_ARDUINO_AVR_NUM_PINS NUM_TOTAL_PINS
+#elif defined(__AVR_ATmega2560__)
+#define HAL_ARDUINO_AVR_NUM_PINS NUM_DIGITAL_PINS
+#endif
 
 int32_t arduinoAvrProcessStackSize(va_list args) {
   bool debug = (bool) va_arg(args, int);
@@ -185,6 +199,10 @@ int32_t arduinoAvrNumExtraConsoleStacks(va_list args) {
 static HardwareSerial *uarts[] = {
   &Serial,
   &Serial1,
+#if defined(__AVR_ATmega2560__)
+  &Serial2,
+  &Serial3,
+#endif
 };
 
 /// @var _numUarts
@@ -518,6 +536,7 @@ int32_t arduinoAvrEnterPowerMode(va_list args) {
   if ((powerMode == HAL_POWER_MODE_OFF)
     || (powerMode == HAL_POWER_MODE_SUSPEND)
   ) {
+#if defined(__AVR_ATmega4809__)
     ADC0.CTRLA &= ~ADC_ENABLE_bm;
     SLPCTRL.CTRLA = SLPCTRL_SMODE_PDOWN_gc;
     _PROTECTED_WRITE(BOD.CTRLA, BOD_SLEEP_DIS_gc);
@@ -526,7 +545,16 @@ int32_t arduinoAvrEnterPowerMode(va_list args) {
     USART2.CTRLB = 0;
     TWI0.MCTRLA = 0;
     SPI0.CTRLA = 0;
-    for (uint8_t pin = 0; pin < NUM_TOTAL_PINS; pin++) {
+#elif defined(__AVR_ATmega2560__)
+    ADCSRA &= ~_BV(ADEN);
+    UCSR0B = 0;
+    UCSR1B = 0;
+    UCSR2B = 0;
+    UCSR3B = 0;
+    TWCR = 0;
+    SPCR = 0;
+#endif
+    for (uint8_t pin = 0; pin < HAL_ARDUINO_AVR_NUM_PINS; pin++) {
       pinMode(pin, INPUT);
       digitalWrite(pin, LOW);
     }
@@ -535,7 +563,12 @@ int32_t arduinoAvrEnterPowerMode(va_list args) {
     sei();
     sleep_cpu();
   } else if (powerMode == HAL_POWER_MODE_RESET) {
+#if defined(__AVR_ATmega4809__)
     _PROTECTED_WRITE(RSTCTRL.SWRR, 1);
+#elif defined(__AVR_ATmega2560__)
+    wdt_enable(WDTO_15MS);
+    while (1) {}
+#endif
   }
 
   return 0;
@@ -665,4 +698,4 @@ int32_t halArduinoAvrInit(HalArduinoAvrInitArgs *args) {
   return halCommonInit();
 }
 
-#endif // defined(__AVR_ATmega4809__)
+#endif // defined(__AVR_ATmega4809__) || defined(__AVR_ATmega2560__)
