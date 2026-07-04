@@ -61,9 +61,7 @@ int main(int argc, char **argv) {
     printDebugString("inputLength = ");
     printDebugInt(inputLength);
     printDebugString("\n");
-    if ((input != NULL) && (inputLength > 0)
-      && (input[inputLength - 1] == '\n')
-    ) {
+    if ((inputLength > 0) && (input[inputLength - 1] == '\n')) {
       input[inputLength - 1] = '\0';
     }
     printDebugString("input is now \"");
