@@ -1791,6 +1791,9 @@ exit:
 /// @return Returns a pointer to the opened file on success, NULL on failure.
 FILE* schedFopen(const char *pathname, const char *mode) {
   FILE *returnValue = NULL;
+  if (SCHEDULER_STATE->rootFsPid == 0) {
+    return returnValue; // NULL
+  }
 
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
@@ -1835,6 +1838,10 @@ FILE* schedFopen(const char *pathname, const char *mode) {
 /// errno is also set to the appropriate error.
 int schedFclose(FILE *stream) {
   int returnValue = 0;
+  if (SCHEDULER_STATE->rootFsPid == 0) {
+    errno = ENODEV;
+    return EOF;
+  }
 
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
@@ -1882,6 +1889,10 @@ int schedFclose(FILE *stream) {
 /// @return Returns 0 on success, -1 and sets the value of errno on failure.
 int schedRemove(const char *pathname) {
   int returnValue = 0;
+  if (SCHEDULER_STATE->rootFsPid == 0) {
+    errno = ENODEV;
+    return -1;
+  }
 
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
@@ -1933,6 +1944,10 @@ int schedRemove(const char *pathname) {
 ///
 /// @return Returns the number of items successfully read in.
 size_t schedFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
+  if (SCHEDULER_STATE->rootFsPid == 0) {
+    return 0;
+  }
+
   FilesystemIoCommandArgs filesystemIoCommandArgs = {
     .file = stream,
     .buffer = ptr,
@@ -1976,6 +1991,10 @@ size_t schedFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
 ///
 /// @return Returns the number of items successfully written out.
 size_t schedFwrite(void *ptr, size_t size, size_t nmemb, FILE *stream) {
+  if (SCHEDULER_STATE->rootFsPid == 0) {
+    return 0;
+  }
+
   FilesystemIoCommandArgs filesystemIoCommandArgs = {
     .file = stream,
     .buffer = ptr,
@@ -2019,6 +2038,10 @@ size_t schedFwrite(void *ptr, size_t size, size_t nmemb, FILE *stream) {
 /// @return Returns a pointer to the provided buffer on success, NULL on
 /// failure.
 char* schedFgets(char *buffer, int size, FILE *stream) {
+  if (SCHEDULER_STATE->rootFsPid == 0) {
+    return NULL;
+  }
+
   char *returnValue = NULL;
 
   if (_functionInProgress == NULL) {
@@ -2067,6 +2090,11 @@ char* schedFgets(char *buffer, int size, FILE *stream) {
 /// @return Returns 0 on success, EOF on failure.  On failure, the value of
 /// errno is also set to the appropriate error.
 int schedFputs(const char *s, FILE *stream) {
+  if (SCHEDULER_STATE->rootFsPid == 0) {
+    errno = ENODEV;
+    return EOF;
+  }
+
   int returnValue = 0;
 
   if (_functionInProgress == NULL) {
@@ -2117,6 +2145,10 @@ int schedFputs(const char *s, FILE *stream) {
 int schedGetFileBlockMetadataFromFile(
   FILE *stream, FileBlockMetadata *metadata
 ) {
+  if (SCHEDULER_STATE->rootFsPid == 0) {
+    return -ENODEV;
+  }
+
   if ((stream == NULL) || (metadata == NULL)) {
     return -EINVAL;
   }
@@ -3499,6 +3531,10 @@ int schedulerDumpMemoryAllocations(void) {
 ///
 /// @return Returns 0 on success, -1 on failure.
 int schedulerDumpOpenFiles(void) {
+  if (SCHEDULER_STATE->rootFsPid == 0) {
+    return -1;
+  }
+
   FilesystemDumpOpenFilesArgs filesystemDumpOpenFilesArgs = {
     .returnValue = 0,
   };
@@ -4316,6 +4352,7 @@ __attribute__((noinline)) void startScheduler(
   schedulerState.memoryManagerPid = 3;
   schedulerState.firstUserPid = 4;
   schedulerState.firstShellPid = 4;
+  schedulerState.rootFsPid = 0; // Invalid PID
   schedulerState.runSchedulerQueues = runSchedulerQueues;
   SCHEDULER_STATE = &schedulerState;
   printDebugString("Set scheduler state.\n");
@@ -4444,8 +4481,10 @@ __attribute__((noinline)) void startScheduler(
 
   // Fix the rest of the IPC capabilities now that all the core processes are
   // started.
-  baseSchedulerIpcCapabilities[0].destinationPid
-    = schedulerState.rootFsPid - 1;
+  if (schedulerState.rootFsPid > 0) {
+    baseSchedulerIpcCapabilities[0].destinationPid
+      = schedulerState.rootFsPid - 1;
+  }
   baseConsoleIpcCapabilities[0].destinationPid
     = schedulerState.schedulerPid;
   baseConsoleIpcCapabilities[1].destinationPid
@@ -4458,8 +4497,10 @@ __attribute__((noinline)) void startScheduler(
     = schedulerState.consolePid;
   baseFilesystemIpcCapabilities[2].destinationPid
     = schedulerState.memoryManagerPid;
-  baseFilesystemIpcCapabilities[3].destinationPid
-    = schedulerState.rootFsPid - 1;
+  if (schedulerState.rootFsPid > 0) {
+    baseFilesystemIpcCapabilities[3].destinationPid
+      = schedulerState.rootFsPid - 1;
+  }
 
   baseSupervisorIpcCapabilities[0].destinationPid
     = schedulerState.schedulerPid;
@@ -4467,16 +4508,20 @@ __attribute__((noinline)) void startScheduler(
     = schedulerState.consolePid;
   baseSupervisorIpcCapabilities[2].destinationPid
     = schedulerState.memoryManagerPid;
-  baseSupervisorIpcCapabilities[3].destinationPid
-    = schedulerState.rootFsPid;
+  if (schedulerState.rootFsPid > 0) {
+    baseSupervisorIpcCapabilities[3].destinationPid
+      = schedulerState.rootFsPid;
+  }
   baseUserIpcCapabilities[0].destinationPid
     = schedulerState.schedulerPid;
   baseUserIpcCapabilities[1].destinationPid
     = schedulerState.consolePid;
   baseUserIpcCapabilities[2].destinationPid
     = schedulerState.memoryManagerPid;
-  baseUserIpcCapabilities[3].destinationPid
-    = schedulerState.rootFsPid;
+  if (schedulerState.rootFsPid > 0) {
+    baseUserIpcCapabilities[3].destinationPid
+      = schedulerState.rootFsPid;
+  }
 
   // Initialize all the kernel process file descriptors.
   for (ProcessId ii = 1; ii < schedulerState.firstUserPid; ii++) {
@@ -4581,13 +4626,15 @@ __attribute__((noinline)) void startScheduler(
     / sizeof(baseMemoryManagerIpcCapabilities[0]);
   allProcesses[schedulerState.memoryManagerPid - 1].ipcCapabilitiesDynamic
     = false;
-  allProcesses[schedulerState.rootFsPid - 1].ipcCapabilities
-    = baseFilesystemIpcCapabilities;
-  allProcesses[schedulerState.rootFsPid - 1].numIpcCapabilities
-    = sizeof(baseFilesystemIpcCapabilities)
-    / sizeof(baseFilesystemIpcCapabilities[0]);
-  allProcesses[schedulerState.rootFsPid - 1].ipcCapabilitiesDynamic
-    = false;
+  if (schedulerState.rootFsPid > 0) {
+    allProcesses[schedulerState.rootFsPid - 1].ipcCapabilities
+      = baseFilesystemIpcCapabilities;
+    allProcesses[schedulerState.rootFsPid - 1].numIpcCapabilities
+      = sizeof(baseFilesystemIpcCapabilities)
+      / sizeof(baseFilesystemIpcCapabilities[0]);
+    allProcesses[schedulerState.rootFsPid - 1].ipcCapabilitiesDynamic
+      = false;
+  }
   for (ProcessId ii = schedulerState.firstUserPid;
     ii <= NANO_OS_NUM_PROCESSES;
     ii++
