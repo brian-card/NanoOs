@@ -21,13 +21,21 @@
 # On the megaAVR-0 series (avrxmega3), .rodata is a genuine, independently
 # relocated output section -- flash on those chips is memory-mapped so plain
 # "const" data can be read with ordinary loads, and the linker script places
-# it after .text at a distinct address. Classic AVR (avr6, this chip) has no
-# such flash-mapping window: the compiler folds ordinary "const" data
-# straight into .text (readable only via LPM), so there's no ".rodata"
-# section to isolate or strip -- `avr-objdump -h` on this target shows only
-# .text/.data/.bss, no .rodata. The "flash-full" target is kept only so the
-# command surface matches the other per-board makefiles; it builds the same
-# file as "flash".
+# it after .text at a distinct address, never touching RAM. Classic AVR
+# (avr6, this chip) has no such flash-mapping window: its default linker
+# script folds .rodata straight into the .data *output* section, so
+# `avr-objdump -h` on this target shows only .text/.data/.bss, no .rodata --
+# and every plain "const"/string literal without an explicit PROGMEM
+# attribute gets copied into RAM at boot right alongside real initialized
+# globals. (Verified directly: a lone `const char foo[] = "...";` compiled
+# for atmega2560 gets a real .rodata section pre-link, which the linker then
+# merges into .data once linked.) This is why NanoOs's .data on this board
+# is dominated by ASCII string content (usage/error messages, format
+# strings) rather than genuine mutable globals, and why RAM runs out well
+# before flash does -- see the `size` target's breakdown. There's nothing to
+# strip here (no separate .rodata to exclude), so the "flash-full" target is
+# kept only so the command surface matches the other per-board makefiles;
+# it builds the same file as "flash".
 #
 # Flashing:
 #   The Mega 2560 ships with a resident STK500v2-compatible bootloader
@@ -285,11 +293,14 @@ size: $(ELF) $(BIN) $(HEX)
 	@$(SIZE) -A $(ELF)
 	@echo ""
 	@echo "=== Flash usage breakdown ==="
-	@echo "  (classic AVR folds \"const\" data into .text -- there is no"
-	@echo "   separate .rodata section to report, unlike the megaAVR-0 boards)"
-	@echo -n "  .text (code + rodata): "; $(SIZE) -A $(ELF) | awk '/^\.text / {print $$2 " bytes"}'
-	@echo -n "  .data (init values):   "; $(SIZE) -A $(ELF) | awk '/^\.data / {print $$2 " bytes"}'
-	@echo -n "  .bss (zero-init):      "; $(SIZE) -A $(ELF) | awk '/^\.bss /  {print $$2 " bytes"}'
+	@echo "  (classic AVR folds .rodata into .data -- there is no separate"
+	@echo "   .rodata section to report, unlike the megaAVR-0 boards. This"
+	@echo "   also means string literals/const data without PROGMEM are"
+	@echo "   copied into RAM at boot; check .data's contribution to the"
+	@echo "   RAM total below if that total looks high.)"
+	@echo -n "  .text (code):        "; $(SIZE) -A $(ELF) | awk '/^\.text / {print $$2 " bytes"}'
+	@echo -n "  .data (init+consts): "; $(SIZE) -A $(ELF) | awk '/^\.data / {print $$2 " bytes"}'
+	@echo -n "  .bss (zero-init):    "; $(SIZE) -A $(ELF) | awk '/^\.bss /  {print $$2 " bytes"}'
 	@echo ""
 	@echo -n "  Binary size:           "; stat -c%s $(BIN) 2>/dev/null || echo "(build first)"
 	@echo ""
