@@ -48,8 +48,8 @@ SOURCES = \
 
 OBJECTS = \
     $(OBJ_DIR)/HalCommon.o \
-    $(OBJ_DIR)/HalArduinoSamD21x18ASim.o \
-    $(OBJ_DIR)/HalArduinoSamD21x18ASimImpl.o \
+    $(OBJ_DIR)/HalPosix.o \
+    $(OBJ_DIR)/HalPosixImpl.o \
 
 # Default target
 all: $(OBJECTS)
