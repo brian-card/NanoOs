@@ -164,13 +164,6 @@ static BlockDevice *blockDevices[] = {
 static const uint32_t _numBlockDevices
   = sizeof(blockDevices) / sizeof(blockDevices[0]);
 
-/// @var halArduinoSamD21x18ABlockDevicesOnline
-///
-/// @brief Bitmask array of online block devices.
-static uint32_t halArduinoSamD21x18ABlockDevicesOnline[] = {
-  0x00000000,
-};
-
 // ---------------------------------------------------------------------------
 // Memory subsystem stubs
 // ---------------------------------------------------------------------------
@@ -593,7 +586,7 @@ int32_t halAgonLight2Init(void) {
   halCommonTimer.numSupported       = 0;
   halCommonTimer.online             = agonLight2TimersOnline;
 
-  halCommonBlockDevice.numSupported = 0;
+  halCommonBlockDevice.numSupported = _numBlockDevices;
   halCommonBlockDevice.online       = agonLight2BlockDevicesOnline;
 
   int result = nanoOsApiInit();
