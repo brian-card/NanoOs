@@ -53,6 +53,7 @@
 // Deliberately *NOT* including MemoryManager.h here.  The HAL has to be
 // operational prior to the memory manager and really should be completely
 // independent of it.
+#include "../kernel/Commands.h"
 #include "../kernel/NanoOs.h"
 #include "../kernel/Processes.h"
 #include "../kernel/SdCardSpi.h"
@@ -651,6 +652,9 @@ int32_t halArduinoInit(void) {
   halFunctions[HAL_CLOCK]        = arduinoNanoEveryClockFunctions;
   halFunctions[HAL_POWER]        = arduinoNanoEveryPowerFunctions;
   halFunctions[HAL_BLOCK_DEVICE] = arduinoNanoEveryBlockDeviceFunctions;
+
+  halCommonPlatform.execCommand = execBuiltinCommand;
+  halCommonPlatform.restartShell = restartBuiltinShell;
 
   halCommonUart.numSupported = _numUarts;
   halCommonUart.online       = halArduinoNanoEveryUartsOnline;
