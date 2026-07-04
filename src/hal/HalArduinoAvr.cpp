@@ -573,8 +573,9 @@ int32_t arduinoAvrEnterPowerMode(va_list args) {
 /// @var blockDevices
 ///
 /// @brief Array of BlockDevice pointers that are managed by the driver
-/// processes.
-static BlockDevice *blockDevices[] = {
+/// processes.  *DON'T* mark this static.  The individual HAL implementations
+/// reference it.
+BlockDevice *blockDevices[] = {
   NULL,
 };
 
@@ -591,20 +592,18 @@ static uint32_t arduinoAvrBlockDevicesOnline[] = {
   0x00000000,
 };
 
-int32_t arduinoAvrInitBlockDevice(va_list args) {
-  (void) args;
-  return -ENODEV;
+// arduinoAvrInitBlockDevice, arduinoAvrGetBlockDevice, and
+// arduinoAvrRestartBlockDevice are defined in the individual implementations.
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+int32_t arduinoAvrInitBlockDevice(va_list args);
+int32_t arduinoAvrGetBlockDevice(va_list args);
+int32_t arduinoAvrRestartBlockDevice(va_list args);
+#ifdef __cplusplus
 }
-
-int32_t arduinoAvrGetBlockDevice(va_list args) {
-  (void) va_arg(args, int32_t);
-  return -ENODEV;
-}
-
-int32_t arduinoAvrRestartBlockDevice(va_list args) {
-  (void) va_arg(args, ProcessDescriptor*);
-  return -ENODEV;
-}
+#endif
 
 static HalFunction arduinoAvrMemoryFunctions[HAL_MEMORY_NUM_FNS] = {
   [HAL_MEMORY_PROCESS_STACK_SIZE]         = arduinoAvrProcessStackSize,

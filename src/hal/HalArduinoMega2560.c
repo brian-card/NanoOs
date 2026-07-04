@@ -33,6 +33,7 @@
 
 #include "HalArduinoAvr.h"
 #include "HalCommon.h"
+#include "../user/NanoOsStdio.h"
 
 /// @def NUM_UARTS
 ///
@@ -88,6 +89,81 @@ static uint32_t halArduinoAvrImplDiosOnline[] = {
   0xffffffff,
   0x003fffff,
 };
+
+extern BlockDevice *blockDevices[];
+
+int32_t arduinoAvrInitBlockDevice(va_list args) {
+  (void) args;
+  if (SCHEDULER_STATE == NULL) {
+    return -EBUSY;
+  }
+
+  SdCardSpiArgs sdCardSpiArgs = {
+    .spiCsDio   = SD_CARD_PIN_CHIP_SELECT,
+    .spiCopiDio = SPI_COPI_DIO,
+    .spiCipoDio = SPI_CIPO_DIO,
+    .spiSckDio  = SPI_SCK_DIO,
+  };
+
+  blockDevices[0] = halCommonInitRootSdSpiStorage(&sdCardSpiArgs);
+  if (blockDevices[0] == NULL) {
+    return -ENODEV;
+  }
+  setOnline(HAL->blockDevice, 0);
+
+  return 0;
+}
+
+int32_t arduinoAvrGetBlockDevice(va_list args) {
+  int32_t deviceId = va_arg(args, int32_t);
+  BlockDevice **returnValue = va_arg(args, BlockDevice**);
+
+  if (!online(HAL->blockDevice, deviceId)) {
+    if (returnValue != NULL) {
+      *returnValue = NULL;
+    }
+    return -ENODEV;
+  }
+
+  if (returnValue != NULL) {
+    *returnValue = blockDevices[deviceId];
+  }
+  return 0;
+}
+
+int32_t arduinoAvrRestartBlockDevice(va_list args) {
+  ProcessDescriptor *processDescriptor = va_arg(args, ProcessDescriptor*);
+  int32_t deviceId = (int32_t) (intptr_t) processDescriptor->restartArgs;
+
+  SdCardSpiArgs sdCardSpiArgs = {
+    .spiCsDio   = SD_CARD_PIN_CHIP_SELECT,
+    .spiCopiDio = SPI_COPI_DIO,
+    .spiCipoDio = SPI_CIPO_DIO,
+    .spiSckDio  = SPI_SCK_DIO,
+  };
+
+  if (processCreate(processDescriptor, runSdCardSpi, &sdCardSpiArgs)
+    != processSuccess
+  ) {
+    printString("Could not restart SD card process\n");
+    return -ENOMEM;
+  }
+  threadSetContext(processDescriptor->mainThread, processDescriptor);
+  processDescriptor->name = "SD card";
+  processDescriptor->userId = ROOT_USER_ID;
+
+  BlockDevice *sdDevice
+    = (BlockDevice*) coroutineResume(processDescriptor->mainThread, NULL);
+  if (sdDevice == NULL) {
+    printString("SD card restart returned NULL\n");
+    return -ENODEV;
+  }
+  sdDevice->partitionNumber = 1;
+  blockDevices[deviceId] = sdDevice;
+  setOnline(HAL->blockDevice, deviceId);
+
+  return 0;
+}
 
 int32_t halArduinoInit(void) {
   HalArduinoAvrInitArgs args = {
