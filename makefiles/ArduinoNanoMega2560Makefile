@@ -1,0 +1,312 @@
+# =============================================================================
+# NanoOS Makefile for the Arduino Mega 2560 (ATmega2560, classic AVR)
+#
+# Toolchain: avr-gcc (Arduino AVR core package, arduino15 install)
+#
+# Usage:
+#   make -f ArduinoNanoMega2560Makefile               - Build the hex
+#   make -f ArduinoNanoMega2560Makefile flash         - Build and flash
+#   make -f ArduinoNanoMega2560Makefile flash-full    - Same as flash (see below)
+#   make -f ArduinoNanoMega2560Makefile flash PORT=/dev/ttyACM0
+#   make -f ArduinoNanoMega2560Makefile size          - Show section sizes
+#   make -f ArduinoNanoMega2560Makefile sections      - Dump section headers
+#   make -f ArduinoNanoMega2560Makefile clean         - Remove build directory
+#
+# Produces (under build/mega_2560/):
+#   NanoOs.elf  - Full ELF (keep for host-side string resolution)
+#   NanoOs.bin  - Flat binary (.text + .data load image; size at a glance)
+#   NanoOs.hex  - Intel HEX (what actually gets flashed)
+#
+# Unlike the Nano Every build, there is no separate full/stripped pair here.
+# On the megaAVR-0 series (avrxmega3), .rodata is a genuine, independently
+# relocated output section -- flash on those chips is memory-mapped so plain
+# "const" data can be read with ordinary loads, and the linker script places
+# it after .text at a distinct address. Classic AVR (avr6, this chip) has no
+# such flash-mapping window: the compiler folds ordinary "const" data
+# straight into .text (readable only via LPM), so there's no ".rodata"
+# section to isolate or strip -- `avr-objdump -h` on this target shows only
+# .text/.data/.bss, no .rodata. The "flash-full" target is kept only so the
+# command surface matches the other per-board makefiles; it builds the same
+# file as "flash".
+#
+# Flashing:
+#   The Mega 2560 ships with a resident STK500v2-compatible bootloader
+#   ("wiring" protocol in avrdude) in the top 8 KB of flash. Opening the
+#   serial port asserts DTR, which the board's auto-reset circuit uses to
+#   drop into the bootloader -- no 1200bps touch step and no fuse writes are
+#   needed on every upload (unlike the Nano Every's UPDI flow, where a chip
+#   erase wipes the fuses and they must be restored each time). Fuses here
+#   are burned once, when the bootloader itself is written via ISP, which
+#   this makefile does not do.
+# =============================================================================
+
+# ---- Platform package paths (adjust versions to match your installation) -----
+
+ARDUINO_HOME  := $(HOME)/.arduino15
+TOOLCHAIN_DIR := $(ARDUINO_HOME)/packages/arduino/tools/avr-gcc/7.3.0-atmel3.6.1-arduino7
+AVRDUDE_DIR   := $(ARDUINO_HOME)/packages/arduino/tools/avrdude/6.3.0-arduino17
+
+AVR_CORE      := $(ARDUINO_HOME)/packages/arduino/hardware/avr/1.8.8
+
+CORE_DIR      := $(AVR_CORE)/cores/arduino
+VARIANT_DIR   := $(AVR_CORE)/variants/mega
+LIB_PLATFORM  := $(AVR_CORE)
+
+# ---- Build directory ----------------------------------------------------------
+
+BUILD_DIR := build/mega_2560
+
+# Built from source
+CORE_A := $(BUILD_DIR)/core/core.a
+
+# ---- Sketch source directory ---------------------------------------------------
+
+SKETCH_DIR := .
+
+# ---- Toolchain ------------------------------------------------------------------
+
+PREFIX  := $(TOOLCHAIN_DIR)/bin/avr-
+CC      := $(PREFIX)gcc
+CXX     := $(PREFIX)g++
+LD      := $(PREFIX)gcc
+OBJCOPY := $(PREFIX)objcopy
+OBJDUMP := $(PREFIX)objdump
+SIZE    := $(PREFIX)size
+READELF := $(PREFIX)readelf
+AR      := $(PREFIX)gcc-ar
+
+AVRDUDE      := $(AVRDUDE_DIR)/bin/avrdude
+AVRDUDE_CONF := $(AVRDUDE_DIR)/etc/avrdude.conf
+
+# ---- Board configuration (Arduino Mega 2560 / "mega:cpu=atmega2560") ----------
+
+MCU              := atmega2560
+UPLOAD_MAX_SIZE  := 253952
+UPLOAD_MAX_DATA  := 8192
+UPLOAD_PROTOCOL  := wiring
+UPLOAD_SPEED     := 115200
+
+# ---- Flags ------------------------------------------------------------------
+
+ARCH_FLAGS := -mmcu=$(MCU)
+
+# Preprocessor defines
+DEFINES := \
+	-DF_CPU=16000000L \
+	-DARDUINO=10607 \
+	-DARDUINO_ARCH_AVR \
+	-DARDUINO_AVR_MEGA2560
+
+# Include paths
+INCLUDES := \
+	-I$(CORE_DIR) \
+	-I$(VARIANT_DIR) \
+	-I$(LIB_PLATFORM)/libraries/SPI/src
+
+# Common compiler flags
+COMMON_FLAGS := \
+	$(ARCH_FLAGS) \
+	-g -Os \
+	-Werror=return-type \
+	-ffunction-sections \
+	-fdata-sections \
+	-MMD \
+	$(DEFINES) \
+	$(INCLUDES)
+
+CFLAGS   := $(COMMON_FLAGS) -std=gnu11
+CXXFLAGS := $(COMMON_FLAGS) -std=gnu++11 -fpermissive -fno-threadsafe-statics -fno-exceptions -fno-rtti
+ASFLAGS  := $(ARCH_FLAGS) -g -x assembler-with-cpp $(DEFINES) $(INCLUDES)
+
+# Linker flags. Final link is done with avr-gcc (not avr-g++), matching the
+# official AVR platform recipe: the Arduino core supplies its own minimal
+# C++ runtime support, so no libstdc++ is needed. Classic AVR's default
+# linker script already starts .text at address 0 (the app region below the
+# bootloader), so --section-start is redundant here; it's kept explicit for
+# parity with the Nano Every makefile and to document the assumption.
+LDFLAGS := \
+	$(ARCH_FLAGS) \
+	-Os \
+	-Wl,--gc-sections \
+	-Wl,--section-start=.text=0x0 \
+	-Wl,-Map,$(BUILD_DIR)/NanoOs.map \
+	-Wl,--cref \
+	-Wl,--check-sections \
+	-Wl,--unresolved-symbols=report-all \
+	-Wl,--warn-common \
+	-Wl,--warn-section-align
+
+LDLIBS := \
+	-Wl,--start-group \
+	-lm \
+	$(CORE_A) \
+	-Wl,--end-group
+
+# ---- Source file discovery ---------------------------------------------------
+
+INO_SRC         := $(SKETCH_DIR)/NanoOs.ino
+SKETCH_C_SRCS   := $(shell find $(SKETCH_DIR)/src -name '*.c' 2>/dev/null)
+SKETCH_CXX_SRCS := $(shell find $(SKETCH_DIR)/src -name '*.cpp' 2>/dev/null)
+
+# Arduino library sources
+LIB_CXX_SRCS := \
+	$(LIB_PLATFORM)/libraries/SPI/src/SPI.cpp
+
+# Arduino core sources.  Unlike the megaAVR core, the classic AVR core has
+# no per-variant variant.c/variant.cpp: pins_arduino.h is just a header of
+# macros/tables pulled in directly by the core sources below.
+CORE_C_SRCS   := $(shell find $(CORE_DIR) -name '*.c' 2>/dev/null)
+CORE_CXX_SRCS := $(shell find $(CORE_DIR) -name '*.cpp' 2>/dev/null)
+CORE_S_SRCS   := $(shell find $(CORE_DIR) -name '*.S' 2>/dev/null)
+
+# ---- Object file paths --------------------------------------------------------
+
+INO_OBJ         := $(BUILD_DIR)/sketch/NanoOs.ino.cpp.o
+SKETCH_C_OBJS   := $(patsubst %,$(BUILD_DIR)/sketch/%.o,$(SKETCH_C_SRCS))
+SKETCH_CXX_OBJS := $(patsubst %,$(BUILD_DIR)/sketch/%.o,$(SKETCH_CXX_SRCS))
+LIB_CXX_OBJS    := $(patsubst $(LIB_PLATFORM)/libraries/%,$(BUILD_DIR)/libraries/%.o,$(LIB_CXX_SRCS))
+
+CORE_C_OBJS   := $(patsubst $(CORE_DIR)/%,$(BUILD_DIR)/core/%.o,$(CORE_C_SRCS))
+CORE_CXX_OBJS := $(patsubst $(CORE_DIR)/%,$(BUILD_DIR)/core/%.o,$(CORE_CXX_SRCS))
+CORE_S_OBJS   := $(patsubst $(CORE_DIR)/%,$(BUILD_DIR)/core/%.o,$(CORE_S_SRCS))
+CORE_ALL_OBJS := $(CORE_C_OBJS) $(CORE_CXX_OBJS) $(CORE_S_OBJS)
+
+ALL_OBJS := $(INO_OBJ) $(SKETCH_C_OBJS) $(SKETCH_CXX_OBJS) $(LIB_CXX_OBJS)
+
+DEPS := $(ALL_OBJS:.o=.d) $(CORE_ALL_OBJS:.o=.d)
+
+# ---- Output files ---------------------------------------------------------------
+
+ELF := $(BUILD_DIR)/NanoOs.elf
+BIN := $(BUILD_DIR)/NanoOs.bin
+HEX := $(BUILD_DIR)/NanoOs.hex
+
+# ---- Serial port (for flashing) ------------------------------------------------
+
+PORT ?= $(firstword $(wildcard /dev/ttyACM* /dev/ttyUSB*))
+
+# ---- Targets ------------------------------------------------------------------
+
+.PHONY: all flash flash-full size sections clean
+
+all: $(BIN) $(HEX)
+	@echo ""
+	@echo "  Built for: Arduino Mega 2560 (ATmega2560)"
+	@echo "  Output:    $(BUILD_DIR)/"
+
+# ---- Link ------------------------------------------------------------------
+
+$(ELF): $(ALL_OBJS) $(CORE_A)
+	@echo "  LINK    $@"
+	@$(LD) $(LDFLAGS) -o $@ $(ALL_OBJS) $(LDLIBS)
+
+# ---- Binary/hex outputs -------------------------------------------------------
+
+$(BIN): $(ELF)
+	@echo "  OBJCOPY $@"
+	@$(OBJCOPY) -O binary -R .eeprom $< $@
+
+$(HEX): $(ELF)
+	@echo "  OBJCOPY $@"
+	@$(OBJCOPY) -O ihex -R .eeprom $< $@
+
+# ---- Compile: sketch ------------------------------------------------------------
+
+# .ino file -> compiled as C++.  The Arduino IDE auto-injects
+# '#include <Arduino.h>' and generates function prototypes before
+# compiling; -include Arduino.h replicates the header injection.
+$(INO_OBJ): $(INO_SRC)
+	@mkdir -p $(dir $@)
+	@echo "  CXX     $<"
+	@$(CXX) $(CXXFLAGS) -x c++ -include Arduino.h -c $< -o $@
+
+$(BUILD_DIR)/sketch/%.c.o: %.c
+	@mkdir -p $(dir $@)
+	@echo "  CC      $<"
+	@$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/sketch/%.cpp.o: %.cpp
+	@mkdir -p $(dir $@)
+	@echo "  CXX     $<"
+	@$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# ---- Compile: Arduino libraries -------------------------------------------------
+
+$(BUILD_DIR)/libraries/%.o: $(LIB_PLATFORM)/libraries/%
+	@mkdir -p $(dir $@)
+	@echo "  CXX     $<"
+	@$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# ---- Compile: Arduino core (archived into core.a) --------------------------------
+
+$(BUILD_DIR)/core/%.c.o: $(CORE_DIR)/%.c
+	@mkdir -p $(dir $@)
+	@echo "  CC      $< (core)"
+	@$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/core/%.cpp.o: $(CORE_DIR)/%.cpp
+	@mkdir -p $(dir $@)
+	@echo "  CXX     $< (core)"
+	@$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/core/%.S.o: $(CORE_DIR)/%.S
+	@mkdir -p $(dir $@)
+	@echo "  AS      $< (core)"
+	@$(CC) $(ASFLAGS) -c $< -o $@
+
+$(CORE_A): $(CORE_ALL_OBJS)
+	@echo "  AR      $@"
+	@rm -f $@
+	@$(AR) rcs $@ $^
+
+# ---- Utility targets ----------------------------------------------------------
+
+flash: $(HEX)
+	@$(MAKE) -f ArduinoNanoMega2560Makefile --no-print-directory _flash HEX=$(HEX)
+
+# No separate "full" image on this target -- see header comment.
+flash-full: $(HEX)
+	@$(MAKE) -f ArduinoNanoMega2560Makefile --no-print-directory _flash HEX=$(HEX)
+
+.PHONY: _flash
+_flash:
+	@if [ -z "$(PORT)" ]; then \
+		echo "ERROR: No serial port found."; \
+		echo "Plug in the Mega 2560 and re-run with PORT=/dev/ttyACMx"; \
+		exit 1; \
+	fi
+	@echo "  AVRDUDE Flashing $(HEX) via $(UPLOAD_PROTOCOL) on $(PORT)"
+	@$(AVRDUDE) "-C$(AVRDUDE_CONF)" -p$(MCU) -c$(UPLOAD_PROTOCOL) -P$(PORT) -b$(UPLOAD_SPEED) -D \
+		"-Uflash:w:$(HEX):i"
+
+size: $(ELF) $(BIN) $(HEX)
+	@echo ""
+	@echo "=== Arduino Mega 2560 (ATmega2560): Section sizes ==="
+	@$(SIZE) -A $(ELF)
+	@echo ""
+	@echo "=== Flash usage breakdown ==="
+	@echo "  (classic AVR folds \"const\" data into .text -- there is no"
+	@echo "   separate .rodata section to report, unlike the megaAVR-0 boards)"
+	@echo -n "  .text (code + rodata): "; $(SIZE) -A $(ELF) | awk '/^\.text / {print $$2 " bytes"}'
+	@echo -n "  .data (init values):   "; $(SIZE) -A $(ELF) | awk '/^\.data / {print $$2 " bytes"}'
+	@echo -n "  .bss (zero-init):      "; $(SIZE) -A $(ELF) | awk '/^\.bss /  {print $$2 " bytes"}'
+	@echo ""
+	@echo -n "  Binary size:           "; stat -c%s $(BIN) 2>/dev/null || echo "(build first)"
+	@echo ""
+	@$(SIZE) -A $(ELF) | awk -v limit=$(UPLOAD_MAX_SIZE) -v ramlimit=$(UPLOAD_MAX_DATA) ' \
+		/^\.text / {text=$$2} \
+		/^\.data / {data=$$2} \
+		/^\.bss /  {bss=$$2} \
+		END { \
+			printf "  Flash total (.text + .data init):  %d / %d bytes (%d free)\n", text+data, limit, limit-(text+data); \
+			printf "  RAM total (.data + .bss):           %d / %d bytes (%d free)\n", data+bss, ramlimit, ramlimit-(data+bss); \
+		}'
+	@echo ""
+
+sections: $(ELF)
+	@$(OBJDUMP) -h $(ELF)
+
+clean:
+	rm -rf $(BUILD_DIR)
+
+-include $(DEPS)
