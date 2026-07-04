@@ -199,10 +199,6 @@ int32_t arduinoAvrNumExtraConsoleStacks(va_list args) {
 static HardwareSerial *uarts[] = {
   &Serial,
   &Serial1,
-#if defined(__AVR_ATmega2560__)
-  &Serial2,
-  &Serial3,
-#endif
 };
 
 /// @var _numUarts
