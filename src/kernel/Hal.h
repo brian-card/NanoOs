@@ -6,7 +6,7 @@
 /// @file              Hal.h
 ///
 /// @brief             Definitions common to all hardware abstraction layer
-///                    (HAL)implementations.
+///                    (HAL) implementations.
 ///
 /// @copyright
 ///                      Copyright (c) 2026 Brian Card
