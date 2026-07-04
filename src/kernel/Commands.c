@@ -575,6 +575,7 @@ void login(void) {
 ///
 /// @return This function never exits, but would return NULL if it did.
 void* runBuiltinShell(void *args) {
+  (void) args;
   char commandBuffer[CONSOLE_BUFFER_SIZE];
   int consolePort = getOwnedConsolePort();
   while (consolePort < 0) {
