@@ -154,9 +154,9 @@ SKETCH_C_SRCS := $(shell find src -name '*.c' \
 
 SKETCH_CXX_SRCS := $(shell find src -name '*.cpp' | sort)
 
-# Boot assembly, runtime stubs, and C entry point live under AgonLight2/
-BOOT_ASM_SRCS := AgonLight2/boot.asm AgonLight2/runtime_stubs.asm
-MAIN_C_SRCS   := AgonLight2/main.c
+# Boot assembly, runtime stubs, and C entry point live under boot/AgonLight2/
+BOOT_ASM_SRCS := boot/AgonLight2/boot.asm boot/AgonLight2/runtime_stubs.asm
+MAIN_C_SRCS   := boot/AgonLight2/main.c
 
 # ---- Object file paths ------------------------------------------------------
 
@@ -208,16 +208,16 @@ $(STRIPPED_BIN): $(ELF)
 	@echo "  OBJCOPY $@ (stripped, no .rodata)"
 	@$(OBJCOPY) -O binary -R .rodata $< $@
 
-# ---- Compile: boot assembly (AgonLight2/boot.asm) ---------------------------
+# ---- Compile: boot assembly (boot/AgonLight2/boot.asm) ----------------------
 
-$(BUILD_DIR)/AgonLight2/%.asm.o: AgonLight2/%.asm
+$(BUILD_DIR)/boot/AgonLight2/%.asm.o: boot/AgonLight2/%.asm
 	@mkdir -p $(dir $@)
 	@echo "  AS      $<"
 	@$(CC) $(ASFLAGS) -MMD -c $< -o $@
 
-# ---- Compile: AgonLight2 C entry point (AgonLight2/main.c) ------------------
+# ---- Compile: AgonLight2 C entry point (boot/AgonLight2/main.c) -------------
 
-$(BUILD_DIR)/AgonLight2/%.c.o: AgonLight2/%.c
+$(BUILD_DIR)/boot/AgonLight2/%.c.o: boot/AgonLight2/%.c
 	@mkdir -p $(dir $@)
 	@echo "  CC      $<"
 	@$(CC) $(CFLAGS) -MMD -c $< -o $@
