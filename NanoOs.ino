@@ -27,7 +27,7 @@
 
 // Custom includes
 #include "src/hal/HalArduinoSamD21x18A.h"
-#include "src/hal/HalArduinoNanoEvery.h"
+#include "src/hal/HalArduinoAvr.h"
 #include "src/kernel/NanoOs.h"
 #include "src/kernel/Processes.h"
 #include "src/kernel/Scheduler.h"
