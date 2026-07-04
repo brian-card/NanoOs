@@ -3961,7 +3961,9 @@ int32_t restartConsole(ProcessDescriptor *processDescriptor) {
 ///
 /// @return Returns 0 on sucess, -errno onfailure.
 int32_t restartMemoryManager(ProcessDescriptor *processDescriptor) {
-  if (processCreate(processDescriptor, runMemoryManager, NULL) != processSuccess) {
+  if (processCreate(processDescriptor, runMemoryManager, NULL)
+    != processSuccess
+  ) {
     printString("Could not restart memory manager process.\n");
     return -ENOMEM;
   }
