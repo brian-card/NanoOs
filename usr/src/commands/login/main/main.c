@@ -180,8 +180,8 @@ int main(int argc, char **argv) {
   // Environment variable will be strlen("HOME=") plus the above.
   // Need one character for NULL terminator.
   char envHome[LOGIN_NAME_MAX + 11 + 1];
-  strcpy(envHome, "HOME=/home/");
-  strcat(envHome, username);
+  strcpy(envHome, "HOME=");
+  strcat(envHome, pwd->pw_dir);
   
   // The PWD variable will be one less than HOME since it's only 3 characters.
   char envPwd[LOGIN_NAME_MAX + 10 + 1];
