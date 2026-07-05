@@ -185,8 +185,8 @@ int main(int argc, char **argv) {
   
   // The PWD variable will be one less than HOME since it's only 3 characters.
   char envPwd[LOGIN_NAME_MAX + 10 + 1];
-  strcpy(envPwd, "PWD=/home/");
-  strcat(envPwd, username);
+  strcpy(envPwd, "PWD=");
+  strcat(envPwd, pwd->pw_dir);
   
   // The UID variable will be strlen("UID=") = 4 plus one character since we
   // only have single-digit user IDs right now.
