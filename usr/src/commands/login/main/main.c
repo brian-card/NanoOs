@@ -146,7 +146,20 @@ int main(int argc, char **argv) {
     fputs("Login failed!\n", stderr);
     returnValue = 1;
     goto freeNew;
-  } else if (strcmp(userPassword, pwd->pw_passwd) == 0) {
+  }
+  
+  unsigned int checksum = 0;
+  size_t usernameLength = strlen(username);
+  size_t passwordLength = strlen(userPassword);
+  
+  for (size_t ii = 0; ii < usernameLength; ii++) {
+    checksum += (unsigned int) username[ii];
+  }
+  for (size_t ii = 0; ii < passwordLength; ii++) {
+    checksum += (unsigned int) userPassword[ii];
+  }
+  
+  if (((unsigned int) strtol(pwd->pw_passwd, NULL, 10)) == checksum) {
     fputs("Login successful!\n", stderr);
   } else {
     fputs("Login failed!\n", stderr);

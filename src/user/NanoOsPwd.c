@@ -135,17 +135,17 @@ int nanoOsGetpwnam_r(
   int returnValue = 0;
   if (strcmp(name, "root") == 0) {
     returnValue = populatePasswd(pwd, buf, buflen,
-    /* name= */ "root", /* passwd= */ "rootroot", /* uid= */ 0, /* gid= */ 0,
+    /* name= */ "root", /* passwd= */ "1356", /* uid= */ 0, /* gid= */ 0,
     /* gecos= */ "Root User", /* dir= */ "/root",
     /* shell= */ "/usr/bin/mush");
   } else if (strcmp(name, "user1") == 0) {
     returnValue = populatePasswd(pwd, buf, buflen,
-    /* name= */ "user1", /* passwd= */ "user1user1", /* uid= */ 1, /* gid= */ 1,
+    /* name= */ "user1", /* passwd= */ "1488", /* uid= */ 1, /* gid= */ 1,
     /* gecos= */ "User 1", /* dir= */ "/home/user1",
     /* shell= */ "/usr/bin/mush");
   } else if (strcmp(name, "user2") == 0) {
     returnValue = populatePasswd(pwd, buf, buflen,
-    /* name= */ "user2", /* passwd= */ "user2user2", /* uid= */ 2, /* gid= */ 2,
+    /* name= */ "user2", /* passwd= */ "1491", /* uid= */ 2, /* gid= */ 2,
     /* gecos= */ "User 2", /* dir= */ "/home/user2",
     /* shell= */ "/usr/bin/mush");
   } else {
