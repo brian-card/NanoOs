@@ -4035,18 +4035,60 @@ int32_t restartBuiltinShell(ProcessDescriptor *processDescriptor) {
     processDescriptor->processId, CONSOLE_COMMAND_SIGNATURE,
     CONSOLE_RETURNING_INPUT);
 
+  int returnValue = 0;
+  processDescriptor->numFileDescriptors = NUM_STANDARD_FILE_DESCRIPTORS;
+  // Use calloc for processDescriptor->fileDescriptors in case we fail to
+  // allocate one of the FileDescriptor pointers later and have to free the
+  // elements of the array.  It's safe to pass NULL to free().
+  processDescriptor->fileDescriptors = (FileDescriptor**) schedCalloc(1,
+    NUM_STANDARD_FILE_DESCRIPTORS * sizeof(FileDescriptor*));
+  if (processDescriptor->fileDescriptors == NULL) {
+    printString(
+      "ERROR: Could not allocate file descriptor array for new command\n");
+    returnValue = -ENOMEM;
+    goto exit;
+  }
+  for (int ii = 0; ii < processDescriptor->numFileDescriptors; ii++) {
+    processDescriptor->fileDescriptors[ii]
+      = (FileDescriptor*) schedMalloc(sizeof(FileDescriptor));
+    if (processDescriptor->fileDescriptors[ii] == NULL) {
+      printString("ERROR: Could not allocate memory for file descriptor ");
+      printInt(ii);
+      printString(" for new process\n");
+      returnValue = -ENOMEM;
+      goto freeFileDescriptors;
+    }
+    memcpy(
+      processDescriptor->fileDescriptors[ii],
+      &standardUserFileDescriptors[ii],
+      sizeof(FileDescriptor)
+    );
+    processDescriptor->fileDescriptors[ii]->lastOwner
+      = processDescriptor->processId;
+  }
+
   // User process exited.  Re-launch the shell.
   printDebugString("restartBuiltinShell: Restarting shell\n");
   if (processCreate(processDescriptor, runBuiltinShell, NULL)
     != processSuccess
   ) {
     printString("Could not restart memory manager process.\n");
-    return -ENOMEM;
+    returnValue = -ENOMEM;
+    goto freeFileDescriptors;
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
   processDescriptor->name = "shell";
 
-  return 0;
+  return returnValue;
+
+freeFileDescriptors:
+  for (int ii = 0; ii < processDescriptor->numFileDescriptors; ii++) {
+    schedFree(processDescriptor->fileDescriptors[ii]);
+  }
+  schedFree(processDescriptor->fileDescriptors);
+
+exit:
+  return returnValue;
 }
 
 /// @fn int32_t restartOverlayShell(ProcessDescriptor *processDescriptor)
