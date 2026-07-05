@@ -37,6 +37,7 @@
 #include "HalCommon.h"
 #include "SdCardPosix.h"
 #include "user/NanoOsErrno.h"
+#include "kernel/Commands.h"
 #include "kernel/Filesystem.h"
 #include "kernel/NanoOs.h"
 #include "kernel/Scheduler.h"
@@ -303,6 +304,9 @@ int32_t halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
   halCommonPlatform.execCommand = execOverlayCommand;
   halCommonPlatform.initRootStorage = halCommonInitRootFilesystem,
   halCommonPlatform.restartShell = restartOverlayShell;
+
+  //// halCommonPlatform.execCommand = execBuiltinCommand;
+  //// halCommonPlatform.restartShell = restartBuiltinShell;
 
   halCommonUart.numSupported = 2;
   halCommonUart.online       = posixUartsOnline;
