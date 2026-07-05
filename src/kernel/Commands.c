@@ -30,7 +30,15 @@
 /// @brief Built-in commands when not running a shell from the filesystem.
 
 // Standard C includes.
+#define FILE C_FILE
+#define gid_t C_gid_t
+#define uid_t C_uid_t
+#define pid_t C_pid_t
 #include "stdio.h"
+#undef FILE
+#undef gid_t
+#undef uid_t
+#undef pid_t
 #include "string.h"
 
 // NanoOs includes.
