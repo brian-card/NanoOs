@@ -136,7 +136,7 @@ static inline int sprintf(char *str, const char *format, ...) {
   va_list ap;
   va_start(ap, format);
   int returnValue
-    = overlayMap.header.osApi->vsnprintf(str, (size_t) -1, format, ap);
+    = overlayMap.header.osApi->vsnprintf(str, (size_t) 32767, format, ap);
   va_end(ap);
   return returnValue;
 }
