@@ -148,7 +148,7 @@ int main(int argc, char **argv) {
     goto freeNew;
   }
   
-  unsigned int checksum = 0;
+  long int checksum = 0;
   size_t usernameLength = strlen(username);
   size_t passwordLength = strlen(userPassword);
   
@@ -159,7 +159,7 @@ int main(int argc, char **argv) {
     checksum += (unsigned int) userPassword[ii];
   }
   
-  if (((unsigned int) strtol(pwd->pw_passwd, NULL, 10)) == checksum) {
+  if (strtol(pwd->pw_passwd, NULL, 10) == checksum) {
     fputs("Login successful!\n", stderr);
   } else {
     fputs("Login failed!\n", stderr);
