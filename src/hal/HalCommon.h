@@ -78,7 +78,6 @@ BlockDevice* halCommonInitRootSdSpiStorage(SdCardSpiArgs *sdCardSpiArgs);
 int32_t halCommonInitRootFilesystem(void);
 int32_t restartFilesystem(ProcessDescriptor *processDescriptor);
 int32_t halCommonInit(void);
-int32_t nanoOsApiInit(void);
 
 #ifdef __cplusplus
 } // extern "C"

@@ -46,7 +46,11 @@
 // Must come last
 #include "user/NanoOsStdio.h"
 
-// Prototypes from files that we can't directly include.
+// Types and prototypes from files that we can't directly include.
+typedef struct NanoOsApi NanoOsApi;
+extern NanoOsApi nanoOsApi;
+extern NanoOsApi *NANO_OS_API;
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -335,10 +339,7 @@ int32_t halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
   halCommonMemory.overlayMap  = overlayMap;
   halCommonMemory.overlaySize = overlaySize;
 
-  result = nanoOsApiInit();
-  if (result != 0) {
-    return result;
-  }
+  NANO_OS_API = &nanoOsApi;
 
   return halCommonInit();
 }

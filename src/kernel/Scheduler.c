@@ -3709,7 +3709,7 @@ int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp) {
   }
 
   // Set the pieces of the overlay header that the program needs to run.
-  overlayHeader->osApi = &nanoOsApi;
+  overlayHeader->osApi = NANO_OS_API;
   overlayHeader->osApi->callOverlayFunction
     = processDescriptor->callOverlayFunction;
   overlayHeader->env = envp;

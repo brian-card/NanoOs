@@ -40,7 +40,11 @@
 #include "../user/NanoOsErrno.h"
 #include "../user/NanoOsStdio.h"
 
-// Prototypes from files that we can't directly include.
+// Types and prototypes from files that we can't directly include.
+typedef struct NanoOsApi NanoOsApi;
+extern NanoOsApi nanoOsApi;
+extern NanoOsApi *NANO_OS_API;
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -589,10 +593,7 @@ int32_t halAgonLight2Init(void) {
   halCommonBlockDevice.numSupported = _numBlockDevices;
   halCommonBlockDevice.online       = agonLight2BlockDevicesOnline;
 
-  int result = nanoOsApiInit();
-  if (result != 0) {
-    return result;
-  }
+  NANO_OS_API = &nanoOsApi;
 
   return halCommonInit();
 }

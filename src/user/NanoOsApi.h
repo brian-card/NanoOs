@@ -258,6 +258,7 @@ typedef struct NanoOsApi {
 
 extern NanoOsExecutiveApi nanoOsExecutiveApi;
 extern NanoOsApi nanoOsApi;
+extern NanoOsApi *NANO_OS_API;
 
 #ifdef __cplusplus
 }
