@@ -305,8 +305,9 @@ int32_t halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
   halCommonPlatform.initRootStorage = halCommonInitRootFilesystem,
   halCommonPlatform.restartShell = restartOverlayShell;
 
-  //// halCommonPlatform.execCommand = execBuiltinCommand;
-  //// halCommonPlatform.restartShell = restartBuiltinShell;
+  // Uncomment these lines to switch to using the built-in shell:
+  // halCommonPlatform.execCommand = execBuiltinCommand;
+  // halCommonPlatform.restartShell = restartBuiltinShell;
 
   halCommonUart.numSupported = 2;
   halCommonUart.online       = posixUartsOnline;
