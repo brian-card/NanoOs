@@ -176,11 +176,21 @@ int main(int argc, char **argv) {
   strcat(envPwd, username);
   
   // The UID variable will be strlen("UID=") = 4 plus one character since we
-  // only have single-digit user IDs right now
+  // only have single-digit user IDs right now.
   char envUid[4 + 1 + 1];
   strcpy(envUid, "UID=");
   envUid[4] = '0' + pwd->pw_uid;
   envUid[5] = '\0';
+  
+  // strlen("HOSTNAME=") = 9.
+  char envHostname[HOST_NAME_MAX + 9 + 1];
+  strcpy(envHostname, "HOSTNAME=");
+  if (gethostname(&envHostname[9], HOST_NAME_MAX) != 0) {
+    fprintf(stderr, "gethostname failed with status: \"%s\"\n",
+      strerror(errno));
+    strcpy(&envHostname[9], "localhost");
+  }
+  envHostname[HOST_NAME_MAX] = '\0';
   
   // The USER variable will just be LOGIN_NAME_MAX + 5 (strlen("USER=")).
   char envUser[LOGIN_NAME_MAX + 5 + 1];
@@ -189,6 +199,7 @@ int main(int argc, char **argv) {
   
   char *shellEnvp[] = {
     envHome,
+    envHostname,
     envPwd,
     envUid,
     envUser,
