@@ -2212,6 +2212,11 @@ int schedGetFileBlockMetadataFromPath(
 ///
 /// @return Returns 0 on success, -errno on failure.
 int loadProcessDescriptorOverlayMetadata(ProcessDescriptor *processDescriptor) {
+  if (processDescriptor->overlay.blockDevice == NULL) {
+    // Nothing to do
+    return 0;
+  }
+
   char *overlayPath = (char*) schedMalloc(
     strlen((char*) processDescriptor->overlayNamespace) + OVERLAY_EXT_LEN + 6);
   if (overlayPath == NULL) {
