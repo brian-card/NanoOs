@@ -43,8 +43,20 @@ int main(int argc, char **argv) {
   
   intptr_t returnValue = 0;
   FsCommandArgs fsCommandArgs;
+  
+  char prompt = '$';
+  if (strcmp(getenv("UID"), "0") == 0) {
+    prompt = '#';
+  }
+  
+  char *username = getenv("USER");
+  char *hostname = getenv("HOSTNAME");
+  if (hostname == NULL) {
+    hostname = "localhost";
+  }
+  
   do {
-    fputs("$ ", stdout);
+    printf("%s@%s mush%c ", username, hostname, prompt);
     char *input = fgets(buffer, 96, stdin);
     if (input == NULL) {
       // Our stdin file descriptor has been closed.  Bail.
