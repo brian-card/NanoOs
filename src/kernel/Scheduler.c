@@ -2212,7 +2212,7 @@ int schedGetFileBlockMetadataFromPath(
 ///
 /// @return Returns 0 on success, -errno on failure.
 int loadProcessDescriptorOverlayMetadata(ProcessDescriptor *processDescriptor) {
-  if (processDescriptor->overlay.blockDevice == NULL) {
+  if (processDescriptor->overlayNamespace == NULL) {
     // Nothing to do
     return 0;
   }
@@ -2828,7 +2828,9 @@ int schedulerExecveCommandHandler(
         CONSOLE_COMMAND_SIGNATURE, CONSOLE_RETURNING_INPUT);
   }
 
-  processDescriptor->overlayNamespace = pathname;
+  if (HAL->platform->execCommand == execOverlayCommand) {
+    processDescriptor->overlayNamespace = pathname;
+  }
   returnValue = loadProcessDescriptorOverlayMetadata(processDescriptor);
   if (returnValue == -EBUSY) {
     // We're in the middle of a filesystem operation already and can't access
@@ -3116,7 +3118,9 @@ int schedulerSpawnCommandHandler(
     }
   }
 
-  processDescriptor->overlayNamespace = pathname;
+  if (HAL->platform->execCommand == execOverlayCommand) {
+    processDescriptor->overlayNamespace = pathname;
+  }
   returnValue = loadProcessDescriptorOverlayMetadata(processDescriptor);
   if (returnValue == -EBUSY) {
     // We're in the middle of a filesystem operation already and can't access
@@ -3900,7 +3904,9 @@ int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
     goto freeFileDescriptors;
   }
 
-  processDescriptor->overlayNamespace = execArgs->pathname;
+  if (HAL->platform->execCommand == execOverlayCommand) {
+    processDescriptor->overlayNamespace = execArgs->pathname;
+  }
   returnValue = loadProcessDescriptorOverlayMetadata(processDescriptor);
   if (returnValue == -EBUSY) {
     // We're in the middle of a filesystem operation already and can't access
