@@ -89,7 +89,7 @@ if [ "${targetDevice}" != "" ]; then
 	sudo bash -c "printf '\\s \\\r \\\n \\l\n\n' >\"${mountDir}/etc/issue\""
 	sudo umount "${mountDir}"
 
-	blockOverlays="$(ls usr/lib/{filesystem,${filesystem}}/*)"
+	blockOverlays="$(ls usr/filesystem/{common,${filesystem}}/*)"
 	for blockOverlay in ${blockOverlays}; do
 		overlayId="$(basename "${blockOverlay}" .overlay)"
 		startBlock=$(( (overlayId * blocksPerOverlay) + 1 ))
