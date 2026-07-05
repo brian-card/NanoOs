@@ -191,9 +191,7 @@ int main(int argc, char **argv) {
   // The UID variable will be strlen("UID=") = 4 plus one character since we
   // only have single-digit user IDs right now.
   char envUid[4 + 1 + 1];
-  strcpy(envUid, "UID=");
-  envUid[4] = '0' + pwd->pw_uid;
-  envUid[5] = '\0';
+  sprintf(envUid, "UID=%u", pwd->pw_uid);
   
   // strlen("HOSTNAME=") = 9.
   char envHostname[HOST_NAME_MAX + 9 + 1];
