@@ -23,7 +23,7 @@ LDFLAGS += -Wl,--build-id=none -nostartfiles
 endif
 
 OBJ_DIR = ../../../../obj
-BIN_DIR = ../../../../lib
+BIN_DIR = ../../../../filesystem
 
 # Source and target files
 ELF = $(OBJ_DIR)/$(TARGET)/$(OVERLAY)/overlay.elf

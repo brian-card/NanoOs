@@ -1,7 +1,7 @@
 include ../include.mk
 
 OBJ_DIR = ../../../obj
-BIN_DIR = ../../../lib
+BIN_DIR = ../../../filesystem
 
 OVERLAYS := $(shell ls | grep -Ev 'makefile|.*\.mk|include|handlers')
 
