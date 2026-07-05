@@ -165,18 +165,33 @@ int main(int argc, char **argv) {
   };
   // Maximum user home directory is strlen("/home/") + LOGIN_NAME_MAX.
   // Environment variable will be strlen("HOME=") plus the above.
-  char envHome[LOGIN_NAME_MAX + 11];
+  // Need one character for NULL terminator.
+  char envHome[LOGIN_NAME_MAX + 11 + 1];
   strcpy(envHome, "HOME=/home/");
   strcat(envHome, username);
   
   // The PWD variable will be one less than HOME since it's only 3 characters.
-  char envPwd[LOGIN_NAME_MAX + 10];
+  char envPwd[LOGIN_NAME_MAX + 10 + 1];
   strcpy(envPwd, "PWD=/home/");
   strcat(envPwd, username);
+  
+  // The UID variable will be strlen("UID=") = 4 plus one character since we
+  // only have single-digit user IDs right now
+  char envUid[4 + 1 + 1];
+  strcpy(envUid, "UID=");
+  envUid[4] = '0' + pwd->pw_uid;
+  envUid[5] = '\0';
+  
+  // The USER variable will just be LOGIN_NAME_MAX + 5 (strlen("USER=")).
+  char envUser[LOGIN_NAME_MAX + 5 + 1];
+  strcpy(envUser, "USER=");
+  strcat(envUser, username);
   
   char *shellEnvp[] = {
     envHome,
     envPwd,
+    envUid,
+    envUser,
     "PATH=/usr/bin",
     NULL,
   };
