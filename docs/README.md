@@ -70,3 +70,5 @@ This work started out as an experiment to see if I could implement an operating 
 
 [2026-06-20: Overlay Filesystem](2026-06-20_Overlay-Filesystem.md)
 
+[2026-07-05: Scalability](2026-07-05_Scalability.md)
+
