@@ -48,17 +48,20 @@ extern "C"
 /// @brief Descriptor for a single, stringless log entry in memory.
 ///
 /// @param timeStamp 64-bit microseconds since midnight, Jan 1, 1970.
-/// @param fileName The address of the name of the file the log message comes
-///   from.
+/// @param logLevel The log level the message was logged at.
+/// @param fileName The address offset of the name of the file the log message
+///   comes from.
 /// @param lineNumber The line number in the file the log message comes from.
-/// @param formatString The address of the format string for the log message.
-/// @param args Up to three (3) arguments provided for the log message.
+/// @param formatString The address offset of the format string for the log
+///   message.
+/// @param args Up to four (4) 32-bit arguments provided for the log message.
 typedef struct LogEntry {
   int64_t  timeStamp;
-  uint32_t fileName;
-  uint32_t lineNumber;
-  uint32_t formatString;
-  uint32_t args[3];
+  uint16_t logLevel;
+  uint16_t fileName;
+  uint16_t lineNumber;
+  uint16_t formatString;
+  uint32_t args[4];
 } LogEntry;
 
 /// @struct StaticLogs
