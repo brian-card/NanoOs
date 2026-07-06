@@ -36,7 +36,7 @@
 #ifndef OVERLAY_FAT32_H
 #define OVERLAY_FAT32_H
 
-#include "../../filesystem/include/OverlayFilesystem.h"
+#include "../../common/include/OverlayFilesystem.h"
 #include "stdbool.h"
 #include "stddef.h" 
 #include "stdint.h"

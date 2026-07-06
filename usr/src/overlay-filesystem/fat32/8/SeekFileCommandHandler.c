@@ -1,1 +1,1 @@
-../../filesystem/handlers/SeekFileCommandHandler.c
+../../common/handlers/SeekFileCommandHandler.c

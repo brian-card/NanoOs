@@ -5,11 +5,18 @@ set -e
 platform="${1}"
 hostname="${2}"
 targetDevice="${3}"
+blockFilesystem="${4}"
 filesystem="fat32"
 blocksPerOverlay=8
 
-if [ "${platform}" = "" ] || [ "${hostname}" = "" ]; then
-	echo "Usage ${0} <ArduinoSamd21|AgonLight2> <hostname> [target device]" >&2
+if [ "${platform}" = "" ] || [ "${hostname}" = "" ] \
+		|| [ "${targetDevice}" = "" ] || [ "${blockFilesystem}" = "" ]; then
+	echo "Usage: ${0} <ArduinoSamd21|AgonLight2> <hostname> <target device> <blockFilesystem>" >&2
+	exit 1
+fi
+
+if [ ! -f "usr/src/${blockFilesystem}/makefile" ]; then
+	echo "ERROR: No block filesystem found at usr/src/${blockFilesystem}." >&2
 	exit 1
 fi
 
@@ -65,7 +72,12 @@ fi
 
 echo "Building applications..."
 make -j $(nproc) -C usr/src clean
+make -j $(nproc) -C usr/src/${blockFilesystem} clean
 make -j $(nproc) -C usr/src COMPILE="${compile}" LINK="${link}" \
+	OBJCOPY="${objcopy}" OBJDUMP="${objdump}" \
+	SIZE="${size}" LINKER_SCRIPT="${linkerScript}" \
+	EXTRA_INCLUDES="${extraIncludes}" EXTRA_LINKS="${extraLinks}" overlays
+make -j $(nproc) -C usr/src/${blockFilesystem} COMPILE="${compile}" LINK="${link}" \
 	OBJCOPY="${objcopy}" OBJDUMP="${objdump}" \
 	SIZE="${size}" LINKER_SCRIPT="${linkerScript}" \
 	EXTRA_INCLUDES="${extraIncludes}" EXTRA_LINKS="${extraLinks}" overlays
@@ -73,27 +85,25 @@ make -j $(nproc) -C usr/src COMPILE="${compile}" LINK="${link}" \
 echo ""
 echo "Build complete."
 
-if [ "${targetDevice}" != "" ]; then
-	# Make a temporary mountpoint
-	mountDir="$(mktemp -d)"
-	trap "rm -rf \"${mountDir}\"" ERR EXIT
+# Make a temporary mountpoint
+mountDir="$(mktemp -d)"
+trap "rm -rf \"${mountDir}\"" ERR EXIT
 
-	echo '2048,,0c' | sudo sfdisk "${targetDevice}"
-	sudo mkfs.vfat -F 32 "${targetDevice}p1" -n NanoOs
-	sudo mount "${targetDevice}p1" "${mountDir}"
-	sudo mkdir -p "${mountDir}/usr"
-	sudo cp -r usr/bin "${mountDir}/usr"
-	sudo cp -r usr/lib "${mountDir}/usr"
-	sudo mkdir -p "${mountDir}/etc"
-	sudo bash -c "printf \"${hostname}\" >\"${mountDir}/etc/hostname\""
-	sudo bash -c "printf '\\s \\\r \\\n \\l\n\n' >\"${mountDir}/etc/issue\""
-	sudo umount "${mountDir}"
+echo '2048,,0c' | sudo sfdisk "${targetDevice}"
+sudo mkfs.vfat -F 32 "${targetDevice}p1" -n NanoOs
+sudo mount "${targetDevice}p1" "${mountDir}"
+sudo mkdir -p "${mountDir}/usr"
+sudo cp -r usr/bin "${mountDir}/usr"
+sudo cp -r usr/lib "${mountDir}/usr"
+sudo mkdir -p "${mountDir}/etc"
+sudo bash -c "printf \"${hostname}\" >\"${mountDir}/etc/hostname\""
+sudo bash -c "printf '\\s \\\r \\\n \\l\n\n' >\"${mountDir}/etc/issue\""
+sudo umount "${mountDir}"
 
-	blockOverlays="$(ls usr/filesystem/{common,${filesystem}}/*)"
-	for blockOverlay in ${blockOverlays}; do
-		overlayId="$(basename "${blockOverlay}" .overlay)"
-		startBlock=$(( (overlayId * blocksPerOverlay) + 1 ))
-		sudo dd if="${blockOverlay}" of="${targetDevice}" bs=512 \
-			seek=${startBlock}
-	done
-fi
+blockOverlays="$(ls usr/filesystem/{common,${filesystem}}/*)"
+for blockOverlay in ${blockOverlays}; do
+	overlayId="$(basename "${blockOverlay}" .overlay)"
+	startBlock=$(( (overlayId * blocksPerOverlay) + 1 ))
+	sudo dd if="${blockOverlay}" of="${targetDevice}" bs=512 \
+		seek=${startBlock}
+done
