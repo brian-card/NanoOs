@@ -1,1 +1,1 @@
-../../filesystem/handlers/GetFileBlockMetadataCommandHandler.c
+../../common/handlers/GetFileBlockMetadataCommandHandler.c

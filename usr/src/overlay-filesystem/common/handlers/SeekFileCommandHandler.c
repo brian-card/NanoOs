@@ -37,7 +37,7 @@
 // NanoOs includes
 #include "KernelProcesses.h"
 #include "NanoOsUtils.h"
-#include "../../filesystem/include/OverlayFilesystem.h"
+#include "../../common/include/OverlayFilesystem.h"
 
 // Prototypes used by this overlay.
 int driverFseek(

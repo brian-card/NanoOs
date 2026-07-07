@@ -1,1 +1,1 @@
-../../filesystem/handlers/RemoveFileCommandHandler.c
+../../common/handlers/RemoveFileCommandHandler.c
