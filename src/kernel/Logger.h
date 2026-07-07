@@ -52,15 +52,14 @@ extern "C"
 /// @param fileName The address offset of the name of the file the log message
 ///   comes from.
 /// @param lineNumber The line number in the file the log message comes from.
-/// @param formatString The address offset of the format string for the log
-///   message.
+/// @param formatThe address offset of the format string for the log message.
 /// @param args Up to four (4) 32-bit arguments provided for the log message.
 typedef struct LogEntry {
   int64_t  timeStamp;
   uint16_t logLevel;
   int16_t  fileName;
   uint16_t lineNumber;
-  int16_t  formatString;
+  int16_t  format;
   uint32_t args[4];
 } LogEntry;
 
@@ -70,7 +69,7 @@ typedef struct LogEntry {
 /// process was running.
 ///
 /// @param metadata The metadata for the log entries.  The LogEntry member keeps
-///   the metadata aligned to the size of a LogEntry message.  The numMessages
+///   the metadata aligned to the size of a LogEntry message.  The numEntries
 ///   member tracks the number of messages logged statically before the logger
 ///   was running.
 /// @param logEntries Array of LogEntry objects that is numMessages in size.
@@ -79,7 +78,7 @@ typedef struct LogEntry {
 typedef struct StaticLogs {
   union {
     LogEntry logEntry;
-    unsigned int numMessages;
+    unsigned int numEntries;
   } metadata;
   LogEntry logEntries[1];
 } StaticLogs;
@@ -104,6 +103,8 @@ typedef uint16_t LogLevel;
 #ifndef LOG_THRESHOLD
 #define LOG_THRESHOLD LOG_LEVEL_DETAIL
 #endif // LOG_THRESHOLD
+
+#define logNever(format, ...) {}
 
 #if (LOG_THRESHOLD == LOG_LEVEL_FLOOD)
 #define logFlood(format, ...) \
@@ -170,7 +171,7 @@ typedef uint16_t LogLevel;
 
 // Exported functions.
 int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
-   const char *formatString, ...);
+   const char *format, ...);
 
 #ifdef __cplusplus
 } // extern "C"
