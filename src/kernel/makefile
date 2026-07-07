@@ -55,6 +55,7 @@ OBJECTS = \
     $(OBJ_DIR)/Filesystem.o \
     $(OBJ_DIR)/Hal.o \
     $(OBJ_DIR)/Link.o \
+    $(OBJ_DIR)/Logger.o \
     $(OBJ_DIR)/MemoryManager.o \
     $(OBJ_DIR)/Messages.o \
     $(OBJ_DIR)/NanoOs.o \
