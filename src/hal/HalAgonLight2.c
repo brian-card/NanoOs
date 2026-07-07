@@ -73,18 +73,35 @@ void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
 /// will reserve 128 KB for this.
 #define NANO_OS_SIZE (128 * 1024)
 
+/// @def FILESYSTEM_DRIVER_ADDRESS
+///
+/// @brief The address of the start of the area reserved for the filesystem
+/// driver binary.
+#define FILESYSTEM_DRIVER_ADDRESS (RAM_START_ADDRESS + NANO_OS_SIZE)
+
 /// @def FILESYSTEM_DRIVER_SIZE
 ///
 /// @brief The size, in bytes, reserved for the filesystem driver in memory.  We
 /// will reserve 32 KB for this.
 #define FILESYSTEM_DRIVER_SIZE (32 * 1024)
 
+/// @def STATIC_LOGS_ADDRESS
+///
+/// @brief The address of the start of the area reserved for the static log
+/// metadata and entries.
+#define STATIC_LOGS_ADDRESS (FILESYSTEM_DRIVER_ADDRESS + FILESYSTEM_DRIVER_SIZE)
+
+/// @def STATIC_LOGS_SIZE
+///
+/// @brief The size, in bytes, reserved for the static logs in memory.  We will
+/// only reserve 1 KB for this.
+#define STATIC_LOGS_SIZE 1024
+
 /// @def HEAP_START_ADDRESS
 ///
 /// @brief Address of the start (bottom) of the heap.  This is the first address
 /// after all of the reserved space.
-#define HEAP_START_ADDRESS (RAM_START_ADDRESS + NANO_OS_SIZE \
-  + FILESYSTEM_DRIVER_SIZE)
+#define HEAP_START_ADDRESS (STATIC_LOGS_ADDRESS + STATIC_LOGS_SIZE)
 
 /// @def PROCESS_STACK_SIZE
 ///
@@ -575,8 +592,9 @@ int32_t halAgonLight2Init(void) {
   halCommonPlatform.initRootStorage = halCommonInitRootFilesystem,
   halCommonPlatform.restartShell = restartOverlayShell;
 
-  halCommonMemory.overlayMap  = (NanoOsOverlayMap*) (uintptr_t) OVERLAY_ADDRESS;
+  halCommonMemory.overlayMap  = (NanoOsOverlayMap*) OVERLAY_ADDRESS;
   halCommonMemory.overlaySize = OVERLAY_SIZE;
+  halCommonMemory.staticLogs  = (StaticLogs) STATIC_LOGS_ADDRESS;
 
   halCommonUart.numSupported        = 0;
   halCommonUart.online              = agonLight2UartsOnline;

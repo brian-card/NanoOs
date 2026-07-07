@@ -807,7 +807,7 @@ void sigintHandler(int signal) {
 }
 
 int32_t halPosixImplInit(jmp_buf resetBuffer,
-  NanoOsOverlayMap **overlayMap, size_t *overlaySize
+  NanoOsOverlayMap **overlayMap, size_t *overlaySize, StaticLogs **staticLogs
 ) {
   // Set the handler for sigint so that it's passed to the running process in
   // NanoOs instead of the simulator.
@@ -830,6 +830,7 @@ int32_t halPosixImplInit(jmp_buf resetBuffer,
     allocateGlobalStack(returnBuffer, NULL);
   }
   fprintf(stderr, "Global stack allocated\n");
+  *staticLogs = (StaticLogs*) (((char*) _bottomOfHeap) + 16384);
 
   // The size used in the mmap call has to be large enough to accommodate the
   // size used for the overlay, plus the offset into the overlay.  It also has

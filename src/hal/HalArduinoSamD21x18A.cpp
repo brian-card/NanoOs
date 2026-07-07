@@ -92,6 +92,11 @@ void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
 /// @brief The size, in bytes, of the overlay supported by the board.
 #define OVERLAY_SIZE 4096
 
+/// @def STATIC_LOGS_ADDRESS
+///
+/// @brief The address where static logs will begin in memory.
+#define STATIC_LOGS_ADDRESS 0x20004000
+
 /// @def DIO_PIN_UNDEFINED
 ///
 /// @brief Value to indicate that the value of a specific pin is undefined.
@@ -1327,6 +1332,7 @@ int32_t halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
 
   halCommonMemory.overlayMap  = (NanoOsOverlayMap*) OVERLAY_ADDRESS;
   halCommonMemory.overlaySize = OVERLAY_SIZE;
+  halCommonMemory.staticLogs  = (StaticLogs) STATIC_LOGS_ADDRESS;
 
   halCommonUart.numSupported = args->numUartsSupported;
   halCommonUart.online       = args->uartsOnline;

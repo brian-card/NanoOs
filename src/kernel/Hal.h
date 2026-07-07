@@ -205,6 +205,7 @@ struct timespec;
 typedef struct NanoOsOverlayMap NanoOsOverlayMap;
 typedef struct ProcessDescriptor ProcessDescriptor;
 typedef struct SchedulerState SchedulerState;
+typedef struct StaticLogs StaticLogs;
 
 /// @struct HalCapability
 ///
@@ -353,6 +354,13 @@ typedef struct HalMemory {
   /// @brief The number of bytes available for the overlay.  This may be 0 on
   /// systems that don't support overlays.
   size_t overlaySize;
+  
+  // Logging definitions.
+  
+  /// @var staticLogs
+  ///
+  /// @brief Address of the region of memory where static logs are maintained.
+  StaticLogs *staticLogs;
 } HalMemory;
 
 typedef struct HalUart {

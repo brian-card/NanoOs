@@ -105,7 +105,7 @@ int32_t posixCancelTimer(va_list args);
 int32_t posixCancelAndGetTimer(va_list args);
 
 int32_t halPosixImplInit(jmp_buf resetBuffer,
-  NanoOsOverlayMap **overlayMap, size_t *overlaySize);
+  NanoOsOverlayMap **overlayMap, size_t *overlaySize, StaticLogs **staticLogs);
 
 // ---------------------------------------------------------------------------
 // Per-platform online bitmask arrays — pointers are installed on halCommon*
@@ -330,14 +330,17 @@ int32_t halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
 
   // Perform POSIX-specific hardware setup and retrieve the overlay mapping.
   NanoOsOverlayMap *overlayMap = NULL;
+  StaticLogs *staticLogs = NULL;
   size_t overlaySize = 0;
-  int32_t result = halPosixImplInit(resetBuffer, &overlayMap, &overlaySize);
+  int32_t result
+    = halPosixImplInit(resetBuffer, &overlayMap, &overlaySize, &staticLogs);
   if (result != 0) {
     return result;
   }
 
   halCommonMemory.overlayMap  = overlayMap;
   halCommonMemory.overlaySize = overlaySize;
+  halCommonMemory.staticLogs  = staticLogs;
 
   NANO_OS_API = &nanoOsApi;
 
