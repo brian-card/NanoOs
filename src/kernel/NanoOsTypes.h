@@ -342,13 +342,14 @@ typedef struct ProcessQueue {
 /// @param numShells The number of shell processes that the scheduler is
 ///   running.
 /// @param preemptionTimer The index of the timer used for preemptive
-///   multiprocessing.  If this is < 0 then the processes run in cooperative mode.
-/// @param schedulerProcessId The ProcessId of the scheduler.
-/// @param consoleProcessId The ProcessId of the console.
-/// @param memoryManagerProcessId The ProcessId of the memory manager.
-/// @param rootFsProcessId The ProcessId of the root filesystem.
-/// @param firstUserProcessId The ProcessId of the first user process.
-/// @param firstShellProcessId The ProcessId of the first shell process.
+///   multitasking.  If this is < 0 then the processes run in cooperative mode.
+/// @param schedulerPid The ProcessId of the scheduler.
+/// @param consolePid The ProcessId of the console.
+/// @param memoryManagerPid The ProcessId of the memory manager.
+/// @param rootFsPid The ProcessId of the root filesystem, if any.
+/// @param loggerPid The ProcessId of the logger, if any.
+/// @param firstUserPid The ProcessId of the first user process.
+/// @param firstShellPid The ProcessId of the first shell process.
 /// @param runSchedulerQueues Function pointer to the runSchedulerQueues
 ///   function in the Scheduler library.
 typedef struct SchedulerState {
@@ -365,6 +366,7 @@ typedef struct SchedulerState {
   ProcessId           consolePid;
   ProcessId           memoryManagerPid;
   ProcessId           rootFsPid;
+  ProcessId           loggerPid;
   ProcessId           firstUserPid;
   ProcessId           firstShellPid;
   void              (*runSchedulerQueues)(PrivilegeLevel);

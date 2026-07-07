@@ -4406,6 +4406,7 @@ __attribute__((noinline)) void startScheduler(
   schedulerState.firstUserPid = 4;
   schedulerState.firstShellPid = 4;
   schedulerState.rootFsPid = 0; // Invalid PID
+  schedulerState.loggerPid = 0; // Invalid PID
   schedulerState.runSchedulerQueues = runSchedulerQueues;
   SCHEDULER_STATE = &schedulerState;
   printDebugString("Set scheduler state.\n");
