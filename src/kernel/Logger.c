@@ -36,6 +36,8 @@
 // NanoOs includes:
 #include "Hal.h"
 #include "Logger.h"
+#include "Processes.h"
+#include "Scheduler.h"
 
 /// @var _referencePoint
 ///
@@ -87,11 +89,12 @@ int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
   }
   va_end(args);
   
-  
-  memcpy(&HAL->memory->staticLogs->logEntries[
-    HAL->memory->staticLogs->metadata.numEntries],
-    &logEntry, sizeof(LogEntry));
-  HAL->memory->staticLogs->metadata.numEntries++;
+  if ((SCHEDULER_STATE->loggerPid == 0) || (getRunningPid() == 1)) {
+    memcpy(&HAL->memory->staticLogs->logEntries[
+      HAL->memory->staticLogs->metadata.numEntries],
+      &logEntry, sizeof(LogEntry));
+    HAL->memory->staticLogs->metadata.numEntries++;
+  }
   
   return 0;
 }
