@@ -47,7 +47,7 @@ extern "C"
 ///
 /// @brief Descriptor for a single, stringless log entry in memory.
 ///
-/// @param timeStamp 64-bit microseconds since midnight, Jan 1, 1970.
+/// @param timeStamp 64-bit nanoseconds since midnight, Jan 1, 1970.
 /// @param logLevel The log level the message was logged at.
 /// @param fileName The address offset of the name of the file the log message
 ///   comes from.
@@ -58,9 +58,9 @@ extern "C"
 typedef struct LogEntry {
   int64_t  timeStamp;
   uint16_t logLevel;
-  uint16_t fileName;
+  int16_t  fileName;
   uint16_t lineNumber;
-  uint16_t formatString;
+  int16_t  formatString;
   uint32_t args[4];
 } LogEntry;
 
@@ -84,8 +84,93 @@ typedef struct StaticLogs {
   LogEntry logEntries[1];
 } StaticLogs;
 
+/// @enum LogLevel
+///
+/// @brief This defines the possible log levels for log messages.
+typedef uint16_t LogLevel;
+#define LOG_LEVEL_NEVER     0
+#define LOG_LEVEL_FLOOD     1
+#define LOG_LEVEL_TRACE     2
+#define LOG_LEVEL_DEBUG     3
+#define LOG_LEVEL_DETAIL    4
+#define LOG_LEVEL_INFO      5
+#define LOG_LEVEL_WARN      6
+#define LOG_LEVEL_ERROR     7
+#define LOG_LEVEL_CRITICAL  8
+#define LOG_LEVEL_BOX       9
+#define LOG_LEVEL_NONE     10
+#define NUM_LOG_LEVELS     11
+
+#ifndef LOG_THRESHOLD
+#define LOG_THRESHOLD LOG_LEVEL_DETAIL
+#endif // LOG_THRESHOLD
+
+#if (LOG_THRESHOLD == LOG_LEVEL_FLOOD)
+#define logFlood(format, ...) \
+  logMessage(LOG_LEVEL_FLOOD, __FILE__, __LINE__, format, ##__VA_ARGS__)
+#else
+#define logFlood(format, ...) {}
+#endif // (LOG_THRESHOLD == LOG_LEVEL_FLOOD)
+
+#if (LOG_THRESHOLD <= LOG_LEVEL_TRACE)
+#define logTrace(format, ...) \
+  logMessage(LOG_LEVEL_TRACE, __FILE__, __LINE__, format, ##__VA_ARGS__)
+#else
+#define logTrace(format, ...) {}
+#endif // (LOG_THRESHOLD <= LOG_LEVEL_TRACE)
+
+#if (LOG_THRESHOLD <= LOG_LEVEL_DEBUG)
+#define logDebug(format, ...) \
+  logMessage(LOG_LEVEL_DEBUG, __FILE__, __LINE__, format, ##__VA_ARGS__)
+#else
+#define logDebug(format, ...) {}
+#endif // (LOG_THRESHOLD <= LOG_LEVEL_DEBUG)
+
+#if (LOG_THRESHOLD <= LOG_LEVEL_DETAIL)
+#define logDetail(format, ...) \
+  logMessage(LOG_LEVEL_DETAIL, __FILE__, __LINE__, format, ##__VA_ARGS__)
+#else
+#define logDetail(format, ...) {}
+#endif // (LOG_THRESHOLD <= LOG_LEVEL_DETAIL)
+
+#if (LOG_THRESHOLD <= LOG_LEVEL_INFO)
+#define logInfo(format, ...) \
+  logMessage(LOG_LEVEL_INFO, __FILE__, __LINE__, format, ##__VA_ARGS__)
+#else
+#define logInfo(format, ...) {}
+#endif // (LOG_THRESHOLD <= LOG_LEVEL_INFO)
+
+#if (LOG_THRESHOLD <= LOG_LEVEL_WARN)
+#define logWarn(format, ...) \
+  logMessage(LOG_LEVEL_WARN, __FILE__, __LINE__, format, ##__VA_ARGS__)
+#else
+#define logWarn(format, ...) {}
+#endif // (LOG_THRESHOLD <= LOG_LEVEL_WARN)
+
+#if (LOG_THRESHOLD <= LOG_LEVEL_ERROR)
+#define logError(format, ...) \
+  logMessage(LOG_LEVEL_ERROR, __FILE__, __LINE__, format, ##__VA_ARGS__)
+#else
+#define logError(format, ...) {}
+#endif // (LOG_THRESHOLD <= LOG_LEVEL_ERROR)
+
+#if (LOG_THRESHOLD <= LOG_LEVEL_CRITICAL)
+#define logCritical(format, ...) \
+  logMessage(LOG_LEVEL_CRITICAL, __FILE__, __LINE__, format, ##__VA_ARGS__)
+#else
+#define logCritical(format, ...) {}
+#endif // (LOG_THRESHOLD <= LOG_LEVEL_CRITICAL)
+
+#if (LOG_THRESHOLD <= LOG_LEVEL_BOX)
+#define logBox(format, ...) \
+  logMessage(LOG_LEVEL_BOX, __FILE__, __LINE__, format, ##__VA_ARGS__)
+#else
+#define logBox(format, ...) {}
+#endif // (LOG_THRESHOLD <= LOG_LEVEL_BOX)
+
 // Exported functions.
-void* runLogger(void *args);
+int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
+   const char *formatString, ...);
 
 #ifdef __cplusplus
 } // extern "C"
