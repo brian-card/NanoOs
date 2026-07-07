@@ -37,6 +37,7 @@
 
 #include "HalAgonLight2.h"
 #include "HalCommon.h"
+#include "../kernel/Logger.h"
 #include "../user/NanoOsErrno.h"
 #include "../user/NanoOsStdio.h"
 
@@ -594,7 +595,8 @@ int32_t halAgonLight2Init(void) {
 
   halCommonMemory.overlayMap  = (NanoOsOverlayMap*) OVERLAY_ADDRESS;
   halCommonMemory.overlaySize = OVERLAY_SIZE;
-  halCommonMemory.staticLogs  = (StaticLogs) STATIC_LOGS_ADDRESS;
+  halCommonMemory.staticLogs  = (StaticLogs*) STATIC_LOGS_ADDRESS;
+  memset(halCommonMemory.staticLogs, 0, sizeof(*halCommonMemory.staticLogs));
 
   halCommonUart.numSupported        = 0;
   halCommonUart.online              = agonLight2UartsOnline;

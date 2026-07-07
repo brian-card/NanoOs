@@ -50,6 +50,7 @@
 // Deliberately *NOT* including MemoryManager.h here.  The HAL has to be
 // operational prior to the memory manager and really should be completely
 // independent of it.
+#include "../kernel/Logger.h"
 #include "../kernel/NanoOs.h"
 #include "../kernel/Processes.h"
 #include "../kernel/Scheduler.h"
@@ -1332,7 +1333,8 @@ int32_t halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
 
   halCommonMemory.overlayMap  = (NanoOsOverlayMap*) OVERLAY_ADDRESS;
   halCommonMemory.overlaySize = OVERLAY_SIZE;
-  halCommonMemory.staticLogs  = (StaticLogs) STATIC_LOGS_ADDRESS;
+  halCommonMemory.staticLogs  = (StaticLogs*) STATIC_LOGS_ADDRESS;
+  memset(halCommonMemory.staticLogs, 0, sizeof(*halCommonMemory.staticLogs));
 
   halCommonUart.numSupported = args->numUartsSupported;
   halCommonUart.online       = args->uartsOnline;

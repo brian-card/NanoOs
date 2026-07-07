@@ -39,6 +39,7 @@
 #include "user/NanoOsErrno.h"
 #include "kernel/Commands.h"
 #include "kernel/Filesystem.h"
+#include "kernel/Logger.h"
 #include "kernel/NanoOs.h"
 #include "kernel/Scheduler.h"
 #include "kernel/Processes.h"
@@ -341,6 +342,7 @@ int32_t halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
   halCommonMemory.overlayMap  = overlayMap;
   halCommonMemory.overlaySize = overlaySize;
   halCommonMemory.staticLogs  = staticLogs;
+  memset(halCommonMemory.staticLogs, 0, sizeof(*halCommonMemory.staticLogs));
 
   NANO_OS_API = &nanoOsApi;
 
