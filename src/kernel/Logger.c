@@ -31,6 +31,7 @@
 
 // C includes:
 #include "stdarg.h"
+#include "stdio.h"
 #include "string.h"
 
 // NanoOs includes:
@@ -39,11 +40,31 @@
 #include "Processes.h"
 #include "Scheduler.h"
 
+// Must come last
+#include "../user/NanoOsStdio.h"
+
 /// @var _referencePoint
 ///
 /// @brief Variable that will be used to compute the relative offsets of string
 /// parameters that are logged.
 const char *_referencePoint = "4abc4abc4abc4abc4abc4abc4abc4abc";
+
+/// @var _logLevelNames
+///
+/// @brief Names that are to be displayed in place of log level numeric values.
+const char *_logLevelNames[NUM_LOG_LEVELS] = {
+  "NEVER",
+  "FLOOD",
+  "TRACE",
+  "DEBUG",
+  "DETAIL",
+  "INFO",
+  "WARN",
+  "ERROR",
+  "CRITICAL",
+  "BOX",
+  "NONE",
+};
 
 /// @fn int logMessage(LogLevel logLevel, const char *fileName,
 ///   uint16_t lineNumber, const char *format, ...)
@@ -63,6 +84,7 @@ const char *_referencePoint = "4abc4abc4abc4abc4abc4abc4abc4abc";
 int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
    const char *format, ...
 ) {
+  va_list args;
   LogEntry logEntry;
   
   // Don't check the return value of getElapsedNanoseconds here.  A failure
@@ -70,16 +92,42 @@ int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
   // as possible.
   HAL->clock->getElapsedNanoseconds(0, &logEntry.timeStamp);
   
+  if (SCHEDULER_STATE->loggerPid == 0) {
+    if (HAL->memory->staticLogs != NULL) {
+      // Logger isn't up yet but will be.  Write to the staticLogs area.
+      goto writeStaticLog;
+    } else if (HAL->memory->logBufferSize > 0) {
+      // Logger isn't coming up.  Write this entry immediately.
+      goto writeImmediate;
+    }
+  }
+  
+writeImmediate:
+  // Print the header.
+  snprintf(HAL->memory->logBuffer, HAL->memory->logBufferSize,
+    "[%lld %s:%u %s:%u %s] ", (long long int) logEntry.timeStamp,
+    SCHEDULER_STATE->hostname, (unsigned int) getRunningPid(),
+    fileName, lineNumber, _logLevelNames[logLevel]);
+  printString(HAL->memory->logBuffer);
+  
+  // Print the log message.
+  va_start(args, format);
+  vsnprintf(HAL->memory->logBuffer, HAL->memory->logBufferSize,
+    format, args);
+  va_end(args);
+  printString(HAL->memory->logBuffer);
+  
+writeStaticLog:
   // Get the rest of the fixed values.
   logEntry.logLevel = logLevel;
   logEntry.fileName = (int16_t) (((intptr_t) _referencePoint)
     - ((intptr_t) fileName));
   logEntry.lineNumber = lineNumber;
+  logEntry.pid = getRunningPid();
   logEntry.format = (int16_t) (((intptr_t) _referencePoint)
     - ((intptr_t) format));
   
   // Get the va_list values.
-  va_list args;
   va_start(args, format);
   for (int ii = 0;
     ii < (int) ((sizeof(logEntry.args)) / (sizeof(logEntry.args[0])));
@@ -89,12 +137,10 @@ int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
   }
   va_end(args);
   
-  if ((SCHEDULER_STATE->loggerPid == 0) || (getRunningPid() == 1)) {
-    memcpy(&HAL->memory->staticLogs->logEntries[
-      HAL->memory->staticLogs->metadata.numEntries],
-      &logEntry, sizeof(LogEntry));
-    HAL->memory->staticLogs->metadata.numEntries++;
-  }
+  memcpy(&HAL->memory->staticLogs->logEntries[
+    HAL->memory->staticLogs->metadata.numEntries],
+    &logEntry, sizeof(LogEntry));
+  HAL->memory->staticLogs->metadata.numEntries++;
   
   return 0;
 }
