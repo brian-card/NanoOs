@@ -4810,11 +4810,6 @@ __attribute__((noinline)) void startScheduler(
   }
   printDebugString("Populated supervisor/user ready queues.\n");
 
-  if (HAL->memory->overlayMap != NULL) {
-    // Make sure the overlay map is zeroed out for first use.
-    memset(HAL->memory->overlayMap, 0, sizeof(NanoOsOverlayMap));
-  }
-
   // Get the memory manager and filesystem up and running.
   processResume(&allProcesses[schedulerState.memoryManagerPid - 1], NULL);
   runSchedulerQueues(PRIVILEGE_LEVEL_SUPERVISOR);

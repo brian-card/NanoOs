@@ -201,6 +201,8 @@ HalMemory halCommonMemory = {
   .overlayMap              = NULL,
   .overlaySize             = 0,
   .staticLogs              = NULL,
+  .logBuffer               = NULL,
+  .logBufferSize           = 0,
 };
 
 HalUart halCommonUart = {
@@ -658,83 +660,71 @@ int32_t halCommonInit(void) {
   int32_t ii = 0;
   int32_t defaultUart = -1;
 
-  if (HAL->uart != NULL) {
-    if (HAL->uart->init() < 0) {
-      return -ENOTTY;
-    }
-    int32_t numUarts = HAL->uart->numSupported;
-    if (numUarts <= 0) {
-      // Nothing we can do.
-      return -ENOTTY;
+  if (HAL->uart->init() < 0) {
+    return -ENOTTY;
+  }
+  int32_t numUarts = HAL->uart->numSupported;
+  if (numUarts <= 0) {
+    // Nothing we can do.
+    return -ENOTTY;
+  }
+
+  for (ii = 0; ii < numUarts; ii++) {
+    if (!online(HAL->uart, ii)) {
+      continue;
     }
 
-    for (ii = 0; ii < numUarts; ii++) {
-      if (!online(HAL->uart, ii)) {
+    if (HAL->uart->configure(ii, 1000000) == 0) {
+      if (defaultUart < 0) {
+        defaultUart = ii;
+      }
+    } else {
+      setOffline(HAL->uart, ii);
+    }
+  }
+
+  if (HAL->dio->init() != 0) {
+    printString("WARNING: Failed to initialize DIO subsystem\n");
+  }
+
+  if (HAL->spi->init() != 0) {
+    printString("WARNING: Failed to initialize SPI subsystem\n");
+  }
+
+  if (HAL->clock->init() != 0) {
+    printString("WARNING: Failed to initialize clock subsystem\n");
+  }
+
+  do {
+    if (HAL->timer->init() != 0) {
+      printString("WARNING: Failed to initialize timer subsystem\n");
+      break;
+    }
+
+    uint32_t timerOnline = HAL->timer->online[0];
+    for (ii = 0; ii < (int32_t) HAL->timer->numSupported; ii++) {
+      if (online(HAL->timer, ii) == false) {
         continue;
       }
 
-      if (HAL->uart->configure(ii, 1000000) == 0) {
-        if (defaultUart < 0) {
-          defaultUart = ii;
-        }
-      } else {
-        setOffline(HAL->uart, ii);
+      if (HAL->timer->initDevice(ii) < 0) {
+        setOffline(HAL->timer, ii);
       }
     }
-  }
 
-  if (HAL->dio != NULL) {
-    if (HAL->dio->init() != 0) {
-      HAL->uart->write(defaultUart,
-        (uint8_t*) "WARNING: Failed to initialize DIO subsystem\n",
-        strlen("WARNING: Failed to initialize DIO subsystem\n"), NULL);
-    }
-  }
-
-  if (HAL->spi != NULL) {
-    if (HAL->spi->init() != 0) {
-      HAL->uart->write(defaultUart,
-        (uint8_t*) "WARNING: Failed to initialize SPI subsystem\n",
-        strlen("WARNING: Failed to initialize SPI subsystem\n"), NULL);
-    }
-  }
-
-  if (HAL->clock != NULL) {
-    if (HAL->clock->init() != 0) {
-      HAL->uart->write(defaultUart,
-        (uint8_t*) "WARNING: Failed to initialize clock subsystem\n",
-        strlen("WARNING: Failed to initialize clock subsystem\n"), NULL);
-    }
-  }
-
-  if (HAL->timer != NULL)  {
-    do {
-      if (HAL->timer->init() != 0) {
-        HAL->uart->write(defaultUart,
-          (uint8_t*) "WARNING: Failed to initialize timer subsystem\n",
-          strlen("WARNING: Failed to initialize timer subsystem\n"), NULL);
-        break;
+    if (HAL->timer->online[0] != timerOnline) {
+      if (HAL->uart != NULL) {
+        printString("WARNING: Did not initialize all timers\n");
       }
+    }
+  } while (0);
 
-      uint32_t timerOnline = HAL->timer->online[0];
-      for (ii = 0; ii < (int32_t) HAL->timer->numSupported; ii++) {
-        if (online(HAL->timer, ii) == false) {
-          continue;
-        }
+  if ((HAL->memory->overlayMap != NULL) && (HAL->memory->overlaySize > 0)) {
+    memset(HAL->memory->overlayMap, 0, HAL->memory->overlaySize);
+  }
 
-        if (HAL->timer->initDevice(ii) < 0) {
-          setOffline(HAL->timer, ii);
-        }
-      }
-
-      if (HAL->timer->online[0] != timerOnline) {
-        if (HAL->uart != NULL) {
-          HAL->uart->write(defaultUart,
-            (uint8_t*) "WARNING: Did not initialize all timers\n",
-            strlen("WARNING: Did not initialize all timers\n"), NULL);
-        }
-      }
-    } while (0);
+  if ((HAL->memory->logBuffer != NULL) && (HAL->memory->logBufferSize > 0)) {
+    memset(HAL->memory->logBuffer, 0, HAL->memory->logBufferSize);
   }
 
   return 0;

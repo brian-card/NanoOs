@@ -361,6 +361,18 @@ typedef struct HalMemory {
   ///
   /// @brief Address of the region of memory where static logs are maintained.
   StaticLogs *staticLogs;
+  
+  /// @var logBuffer
+  ///
+  /// @brief A buffer that can be used by the logger to print an immediate log
+  /// message.
+  char *logBuffer;
+  
+  /// @var logBufferSize
+  ///
+  /// @brief The number of bytes available for the log buffer.  This may be 0 on
+  /// systems that don't support immediate logs.
+  size_t logBufferSize;
 } HalMemory;
 
 typedef struct HalUart {
