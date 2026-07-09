@@ -102,6 +102,25 @@ int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
     }
   }
   
+  ProcessMessage *processMessage = getAvailableMessage();
+  if (processMessage == NULL) {
+    if (getRunningPid() != SCHEDULER_STATE->schedulerPid) {
+      // This is the expected case.
+      while (processMessage == NULL) {
+        processYield();
+        processMessage = getAvailableMessage();
+      }
+    } else {
+      // We have to do things a little differently since the scheduler can't
+      // yield.
+      while (processMessage == NULL) {
+        SCHEDULER_STATE->runSchedulerQueues(PRIVILEGE_LEVEL_EXECUTIVE);
+        processMessage = getAvailableMessage();
+      }
+    }
+  }
+  (void) processMessage;
+  
 writeImmediate:
   // Print the header.
   snprintf(HAL->memory->logBuffer, HAL->memory->logBufferSize,
