@@ -52,15 +52,17 @@ extern "C"
 /// @param fileName The address offset of the name of the file the log message
 ///   comes from.
 /// @param lineNumber The line number in the file the log message comes from.
+/// @param pid The ProcessId of the process logging the message.
 /// @param formatThe address offset of the format string for the log message.
 /// @param args Up to four (4) 32-bit arguments provided for the log message.
 typedef struct LogEntry {
-  int64_t  timeStamp;
-  uint16_t logLevel;
-  int16_t  fileName;
-  uint16_t lineNumber;
-  int16_t  format;
-  uint32_t args[4];
+  int64_t   timeStamp;
+  uint16_t  logLevel;
+  int16_t   fileName;
+  uint16_t  lineNumber;
+  ProcessId pid;
+  int16_t   format;
+  uint32_t  args[4];
 } LogEntry;
 
 /// @struct StaticLogs
