@@ -39,6 +39,7 @@
 #include "Logger.h"
 #include "Processes.h"
 #include "Scheduler.h"
+#include "../user/NanoOsErrno.h"
 
 // Must come last
 #include "../user/NanoOsStdio.h"
@@ -100,6 +101,9 @@ int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
       // Logger isn't coming up.  Write this entry immediately.
       goto writeImmediate;
     }
+    // else, we're in trouble.  We have no way to log anything.  Just return
+    // -ENOMEM, I guess.
+    return -ENOMEM;
   }
   
   ProcessMessage *processMessage = getAvailableMessage();
