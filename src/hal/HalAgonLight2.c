@@ -578,6 +578,11 @@ static uint32_t agonLight2BlockDevicesOnline[] = { 0x00000000 };
 // Platform init
 // ---------------------------------------------------------------------------
 
+/// @var _logBuffer
+///
+/// @brief Statically allocated buffer for formatting log messages.
+static char _logBuffer[96];
+
 int32_t halAgonLight2Init(void) {
   halFunctions[HAL_MEMORY]       = agonLight2MemoryFunctions;
   halFunctions[HAL_UART]         = agonLight2UartFunctions;
@@ -595,8 +600,18 @@ int32_t halAgonLight2Init(void) {
 
   halCommonMemory.overlayMap  = (NanoOsOverlayMap*) OVERLAY_ADDRESS;
   halCommonMemory.overlaySize = OVERLAY_SIZE;
-  halCommonMemory.staticLogs  = (StaticLogs*) STATIC_LOGS_ADDRESS;
+
+#if LOG_THRESHOLD < LOG_LEVEL_DETAIL
+  halCommonMemory.logBuffer     = _logBuffer;
+  halCommonMemory.logBufferSize = sizeof(_logBuffer);
+  halCommonMemory.staticLogs    = NULL;
+#else // LOG_THRESHOLD >= LOG_LEVEL_DETAIL
+  (void) _logBuffer;
+  halCommonMemory.logBuffer     = NULL;
+  halCommonMemory.logBufferSize = 0;
+  halCommonMemory.staticLogs    = (StaticLogs*) STATIC_LOGS_ADDRESS;
   memset(halCommonMemory.staticLogs, 0, sizeof(*halCommonMemory.staticLogs));
+#endif // LOG_THRESHOLD < LOG_LEVEL_DETAIL
 
   halCommonUart.numSupported        = 0;
   halCommonUart.online              = agonLight2UartsOnline;

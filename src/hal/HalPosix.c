@@ -291,6 +291,11 @@ static HalFunction posixBlockDeviceFunctions[HAL_BLOCK_DEVICE_NUM_FNS] = {
   [HAL_BLOCK_DEVICE_RESTART] = posixRestartBlockDevice,
 };
 
+/// @var _logBuffer
+///
+/// @brief Statically allocated buffer for formatting log messages.
+static char _logBuffer[96];
+
 int32_t halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
   _sdCardDevicePath = sdCardDevicePath;
 
@@ -341,8 +346,18 @@ int32_t halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
 
   halCommonMemory.overlayMap  = overlayMap;
   halCommonMemory.overlaySize = overlaySize;
-  halCommonMemory.staticLogs  = staticLogs;
+
+#if LOG_THRESHOLD < LOG_LEVEL_DETAIL
+  halCommonMemory.logBuffer     = _logBuffer;
+  halCommonMemory.logBufferSize = sizeof(_logBuffer);
+  halCommonMemory.staticLogs    = NULL;
+#else // LOG_THRESHOLD >= LOG_LEVEL_DETAIL
+  (void) _logBuffer;
+  halCommonMemory.logBuffer     = NULL;
+  halCommonMemory.logBufferSize = 0;
+  halCommonMemory.staticLogs    = staticLogs;
   memset(halCommonMemory.staticLogs, 0, sizeof(*halCommonMemory.staticLogs));
+#endif // LOG_THRESHOLD < LOG_LEVEL_DETAIL
 
   NANO_OS_API = &nanoOsApi;
 

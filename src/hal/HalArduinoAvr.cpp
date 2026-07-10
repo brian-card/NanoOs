@@ -654,6 +654,11 @@ static HalFunction arduinoAvrBlockDeviceFunctions[HAL_BLOCK_DEVICE_NUM_FNS] = {
   [HAL_BLOCK_DEVICE_RESTART] = arduinoAvrRestartBlockDevice,
 };
 
+/// @var _logBuffer
+///
+/// @brief Statically allocated buffer for formatting log messages.
+static char _logBuffer[96];
+
 int32_t halArduinoAvrInit(HalArduinoAvrInitArgs *args) {
   // Wire up per-subsystem function arrays.
   // HAL_TIMER is not supported on this platform — leave halFunctions[HAL_TIMER] NULL.
@@ -689,6 +694,10 @@ int32_t halArduinoAvrInit(HalArduinoAvrInitArgs *args) {
 
   halCommonBlockDevice.numSupported = _numBlockDevices;
   halCommonBlockDevice.online       = arduinoAvrBlockDevicesOnline;
+
+  halCommonMemory.logBuffer     = _logBuffer;
+  halCommonMemory.logBufferSize = sizeof(_logBuffer);
+  halCommonMemory.staticLogs    = NULL;
 
   return halCommonInit();
 }

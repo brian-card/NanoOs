@@ -1306,6 +1306,11 @@ static HalFunction arduinoSamD21x18ABlockDeviceFunctions[HAL_BLOCK_DEVICE_NUM_FN
   [HAL_BLOCK_DEVICE_RESTART] = arduinoSamD21x18ARestartBlockDevice,
 };
 
+/// @var _logBuffer
+///
+/// @brief Statically allocated buffer for formatting log messages.
+static char _logBuffer[96];
+
 int32_t halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
   // Wire up per-subsystem function arrays.
   halFunctions[HAL_MEMORY]       = arduinoSamD21x18AMemoryFunctions;
@@ -1333,8 +1338,18 @@ int32_t halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
 
   halCommonMemory.overlayMap  = (NanoOsOverlayMap*) OVERLAY_ADDRESS;
   halCommonMemory.overlaySize = OVERLAY_SIZE;
-  halCommonMemory.staticLogs  = (StaticLogs*) STATIC_LOGS_ADDRESS;
+
+#if LOG_THRESHOLD < LOG_LEVEL_DETAIL
+  halCommonMemory.logBuffer     = _logBuffer;
+  halCommonMemory.logBufferSize = sizeof(_logBuffer);
+  halCommonMemory.staticLogs    = NULL;
+#else // LOG_THRESHOLD >= LOG_LEVEL_DETAIL
+  (void) _logBuffer;
+  halCommonMemory.logBuffer     = NULL;
+  halCommonMemory.logBufferSize = 0;
+  halCommonMemory.staticLogs    = (StaticLogs*) STATIC_LOGS_ADDRESS;
   memset(halCommonMemory.staticLogs, 0, sizeof(*halCommonMemory.staticLogs));
+#endif // LOG_THRESHOLD < LOG_LEVEL_DETAIL
 
   halCommonUart.numSupported = args->numUartsSupported;
   halCommonUart.online       = args->uartsOnline;

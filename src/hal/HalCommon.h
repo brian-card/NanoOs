@@ -45,6 +45,7 @@
 // operational prior to the memory manager and really should be completely
 // independent of it.
 #include "../kernel/Filesystem.h"
+#include "../kernel/Logger.h"
 #include "../kernel/NanoOs.h"
 #include "../kernel/Processes.h"
 #include "../kernel/Scheduler.h"
