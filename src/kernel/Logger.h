@@ -177,6 +177,16 @@ typedef uint16_t LogLevel;
 #define logBox(format, ...) {}
 #endif // (LOG_THRESHOLD <= LOG_LEVEL_BOX)
 
+/// @enum LoggerCommandResponse
+///
+/// @brief Commands and responses understood by the logger inter-process message
+/// handler.
+typedef enum LoggerCommandResponse {
+  // Commands:
+  LOGGER_LOG_MESSAGE,
+  NUM_LOGGER_COMMANDS,
+} LoggerCommand;
+
 // Exported functions.
 int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
    const char *format, ...);
