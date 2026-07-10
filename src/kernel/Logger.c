@@ -118,7 +118,7 @@ int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
       // We have to do things a little differently since the scheduler can't
       // yield.
       while (processMessage == NULL) {
-        SCHEDULER_STATE->runSchedulerQueues(PRIVILEGE_LEVEL_EXECUTIVE);
+        SCHEDULER_STATE->runSchedulerQueues(PRIVILEGE_LEVEL_SUPERVISOR);
         processMessage = getAvailableMessage();
       }
     }
