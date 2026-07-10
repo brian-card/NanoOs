@@ -93,6 +93,25 @@ int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
   // as possible.
   HAL->clock->getElapsedNanoseconds(0, &logEntry.timeStamp);
   
+  // Get the rest of the fixed values.
+  logEntry.logLevel = logLevel;
+  logEntry.fileName = (int16_t) (((intptr_t) _referencePoint)
+    - ((intptr_t) fileName));
+  logEntry.lineNumber = lineNumber;
+  logEntry.pid = getRunningPid();
+  logEntry.format = (int16_t) (((intptr_t) _referencePoint)
+    - ((intptr_t) format));
+  
+  // Get the va_list values.
+  va_start(args, format);
+  for (int ii = 0;
+    ii < (int) ((sizeof(logEntry.args)) / (sizeof(logEntry.args[0])));
+    ii++
+  ) {
+    logEntry.args[ii] = (uint32_t) va_arg(args, int);
+  }
+  va_end(args);
+  
   if (SCHEDULER_STATE->loggerPid == 0) {
     if (HAL->memory->staticLogs != NULL) {
       // Logger isn't up yet but will be.  Write to the staticLogs area.
@@ -131,6 +150,15 @@ int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
     return -EAGAIN;
   }
   
+  if (sendProcessMessageToPid(SCHEDULER_STATE->loggerPid, processMessage)
+    != 0
+  ) {
+    processMessageRelease(processMessage);
+    return -EAGAIN;
+  }
+  
+  processMessageWaitForDone(processMessage, NULL);
+  processMessageRelease(processMessage);
   return 0;
   
 writeImmediate:
@@ -150,28 +178,10 @@ writeImmediate:
   return 0;
   
 writeStaticLog:
-  // Get the rest of the fixed values.
-  logEntry.logLevel = logLevel;
-  logEntry.fileName = (int16_t) (((intptr_t) _referencePoint)
-    - ((intptr_t) fileName));
-  logEntry.lineNumber = lineNumber;
-  logEntry.pid = getRunningPid();
-  logEntry.format = (int16_t) (((intptr_t) _referencePoint)
-    - ((intptr_t) format));
-  
-  // Get the va_list values.
-  va_start(args, format);
-  for (int ii = 0;
-    ii < (int) ((sizeof(logEntry.args)) / (sizeof(logEntry.args[0])));
-    ii++
-  ) {
-    logEntry.args[ii] = (uint32_t) va_arg(args, int);
-  }
-  va_end(args);
-  
+  // Copy the log entry to the static log area.
   memcpy(&HAL->memory->staticLogs->logEntries[
     HAL->memory->staticLogs->metadata.numEntries],
-    &logEntry, sizeof(LogEntry));
+    &logEntry, sizeof(logEntry));
   HAL->memory->staticLogs->metadata.numEntries++;
   
   return 0;
