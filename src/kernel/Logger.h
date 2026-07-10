@@ -43,6 +43,12 @@ extern "C"
 {
 #endif
 
+/// @def LOGGER_COMMAND_SIGNATURE
+///
+/// @brief The 64-bit signature used to validate that a command is a logger
+/// command.  "\0LOGPROC" as a little-endian value.
+#define LOGGER_COMMAND_SIGNATURE ((int64_t) 0x43524F50474F4C00)
+
 /// @struct LogEntry
 ///
 /// @brief Descriptor for a single, stringless log entry in memory.
