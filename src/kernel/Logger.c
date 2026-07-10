@@ -157,7 +157,14 @@ int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
     return -EAGAIN;
   }
   
-  processMessageWaitForDone(processMessage, NULL);
+  if (getRunningPid() != SCHEDULER_STATE->schedulerPid) {
+    // This is the expected case.
+    processMessageWaitForDone(processMessage, NULL);
+  } else {
+    while (processMessageDone(processMessage) == false) {
+      SCHEDULER_STATE->runSchedulerQueues(PRIVILEGE_LEVEL_SUPERVISOR);
+    }
+  }
   processMessageRelease(processMessage);
   return 0;
   
