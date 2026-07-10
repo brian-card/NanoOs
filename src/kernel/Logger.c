@@ -123,7 +123,15 @@ int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
       }
     }
   }
-  (void) processMessage;
+  if (processMessageInit(processMessage,
+    LOGGER_COMMAND_SIGNATURE | LOGGER_LOG_MESSAGE,
+    &logEntry, sizeof(logEntry), true) != processSuccess
+  ) {
+    processMessageRelease(processMessage);
+    return -EAGAIN;
+  }
+  
+  return 0;
   
 writeImmediate:
   // Print the header.
@@ -139,6 +147,7 @@ writeImmediate:
     format, args);
   va_end(args);
   printString(HAL->memory->logBuffer);
+  return 0;
   
 writeStaticLog:
   // Get the rest of the fixed values.
