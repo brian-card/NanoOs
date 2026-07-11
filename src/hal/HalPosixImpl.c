@@ -168,6 +168,26 @@ int32_t posixInitUart(va_list args) {
   return 0;
 }
 
+/// @var _getAttrErrorMessage
+///
+/// @brief Message printed when the current console terminal attributes
+/// can't be retrieved.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _getAttrErrorMessage[] KEEP_IN_FLASH
+  = "Could not get current attributes for console.\n";
+
+/// @var _setAttrErrorMessage
+///
+/// @brief Message printed when the new console terminal attributes can't
+/// be applied.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _setAttrErrorMessage[] KEEP_IN_FLASH
+  = "Could not set new attributes for console.\n";
+
 int32_t posixConfigureUart(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   uint32_t baud = va_arg(args, uint32_t);
@@ -193,7 +213,7 @@ int32_t posixConfigureUart(va_list args) {
   // Get the current console flags.
   int stdinFileno = fileno(stdin);
   if (realTcgetattr(stdinFileno, &oldFlags) != 0) {
-    fprintf(stderr, "Could not get current attributes for console.\n");
+    fprintf(stderr, _getAttrErrorMessage);
     return -errno;
   }
 
@@ -202,7 +222,7 @@ int32_t posixConfigureUart(va_list args) {
   newFlags.c_lflag |= ECHONL;
   newFlags.c_lflag &= ~(ECHO | ICANON);
   if (realTcsetattr(stdinFileno, TCSANOW, &newFlags) != 0) {
-    fprintf(stderr, "Could not set new attributes for console.\n");
+    fprintf(stderr, _setAttrErrorMessage);
     return -errno;
   }
 
@@ -359,6 +379,25 @@ int32_t posixGetElapsedNanoseconds(va_list args) {
 /// simulation.
 static jmp_buf _resetBuffer;
 
+/// @var _munmapErrorFormat
+///
+/// @brief printf-style format string used to report a failed munmap() of
+/// the overlay region during a simulated reset.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _munmapErrorFormat[] KEEP_IN_FLASH
+  = "ERROR: munmap returned: %s\n";
+
+/// @var _exitingMessage
+///
+/// @brief Printed immediately before exiting due to a fatal munmap()
+/// failure during a simulated reset.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _exitingMessage[] KEEP_IN_FLASH = "Exiting.\n";
+
 int32_t posixEnterPowerMode(va_list args) {
   HalPowerMode powerMode = (HalPowerMode) va_arg(args, int);
   // You can't completely turn off the hardware we're running on.  We're
@@ -376,8 +415,8 @@ int32_t posixEnterPowerMode(va_list args) {
       & ~((size_t) (pageSize - 1));
 
     if (munmap((void*) OVERLAY_BASE_ADDRESS, overlayBaseSize) < 0) {
-      fprintf(stderr, "ERROR: munmap returned: %s\n", strerror(errno));
-      fprintf(stderr, "Exiting.\n");
+      fprintf(stderr, _munmapErrorFormat, strerror(errno));
+      fprintf(stderr, _exitingMessage);
       exit(1);
     }
 
@@ -806,6 +845,92 @@ void sigintHandler(int signal) {
   }
 }
 
+/// @var _resetBufferCopiedMessage
+///
+/// @brief Bootstrap trace message.  This function runs before HAL exists
+/// (it computes *staticLogs itself), so it cannot use logError() - this is
+/// intentional, not an oversight.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _resetBufferCopiedMessage[] KEEP_IN_FLASH
+  = "resetBuffer copied.\n";
+
+/// @var _topOfStackFormat
+///
+/// @brief Bootstrap trace format string.  See _resetBufferCopiedMessage
+/// for why this stays a raw fprintf.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _topOfStackFormat[] KEEP_IN_FLASH
+  = "Top of stack        = %p\n";
+
+/// @var _bottomOfStackFormat
+///
+/// @brief Bootstrap trace format string.  See _resetBufferCopiedMessage
+/// for why this stays a raw fprintf.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _bottomOfStackFormat[] KEEP_IN_FLASH
+  = "Bottom of stack     = %p\n";
+
+/// @var _globalStackAllocatedMessage
+///
+/// @brief Bootstrap trace message.  See _resetBufferCopiedMessage for why
+/// this stays a raw fprintf.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _globalStackAllocatedMessage[] KEEP_IN_FLASH
+  = "Global stack allocated\n";
+
+/// @var _mmapErrorFormat
+///
+/// @brief Bootstrap error format string.  See _resetBufferCopiedMessage
+/// for why this stays a raw fprintf.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _mmapErrorFormat[] KEEP_IN_FLASH
+  = "mmap failed with error: %s\n";
+
+/// @var _overlayMapFormat
+///
+/// @brief Bootstrap trace format string.  See _resetBufferCopiedMessage
+/// for why this stays a raw fprintf.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _overlayMapFormat[] KEEP_IN_FLASH
+  = "posixHal.overlayMap = %p\n";
+
+/// @var _newline
+///
+/// @brief A single newline character.  See _resetBufferCopiedMessage for
+/// why this stays a raw fprintf.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _newline[] KEEP_IN_FLASH = "\n";
+
+/// @var _tcgetattrSymbolName
+///
+/// @brief Symbol name looked up via dlsym() to get the real tcgetattr().
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _tcgetattrSymbolName[] KEEP_IN_FLASH = "tcgetattr";
+
+/// @var _tcsetattrSymbolName
+///
+/// @brief Symbol name looked up via dlsym() to get the real tcsetattr().
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _tcsetattrSymbolName[] KEEP_IN_FLASH = "tcsetattr";
+
 int32_t halPosixImplInit(jmp_buf resetBuffer,
   NanoOsOverlayMap **overlayMap, size_t *overlaySize, StaticLogs **staticLogs
 ) {
@@ -815,21 +940,21 @@ int32_t halPosixImplInit(jmp_buf resetBuffer,
 
   // Save our reset context for later.
   memcpy(_resetBuffer, resetBuffer, sizeof(jmp_buf));
-  fprintf(stdout, "resetBuffer copied.\n");
+  fprintf(stdout, _resetBufferCopiedMessage);
   fflush(stdout);
 
   int topOfStack = 0;
-  fprintf(stderr, "Top of stack        = %p\n", (void*) &topOfStack);
+  fprintf(stderr, _topOfStackFormat, (void*) &topOfStack);
 
   // Simulate having a total of 64 KB available for dynamic memory.
   _bottomOfHeap = (void*) (((uintptr_t) &topOfStack)
     - ((uintptr_t) (((96 * 1024) * DEBUG_MULTIPLIER) - 0)));
-  fprintf(stderr, "Bottom of stack     = %p\n", (void*) _bottomOfHeap);
+  fprintf(stderr, _bottomOfStackFormat, (void*) _bottomOfHeap);
   jmp_buf returnBuffer;
   if (setjmp(returnBuffer) == 0) {
     allocateGlobalStack(returnBuffer, NULL);
   }
-  fprintf(stderr, "Global stack allocated\n");
+  fprintf(stderr, _globalStackAllocatedMessage);
   *staticLogs = (StaticLogs*) (((char*) _bottomOfHeap) + 16384);
 
   // The size used in the mmap call has to be large enough to accommodate the
@@ -846,7 +971,7 @@ int32_t halPosixImplInit(jmp_buf resetBuffer,
     MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED,
     -1, 0);
   if (mappedOverlay == MAP_FAILED) {
-    fprintf(stderr, "mmap failed with error: %s\n", strerror(errno));
+    fprintf(stderr, _mmapErrorFormat, strerror(errno));
     return -1;
   }
 
@@ -855,13 +980,13 @@ int32_t halPosixImplInit(jmp_buf resetBuffer,
   *overlayMap = (NanoOsOverlayMap*) (OVERLAY_BASE_ADDRESS + OVERLAY_OFFSET);
   *overlaySize = OVERLAY_SIZE;
 
-  fprintf(stderr, "posixHal.overlayMap = %p\n", (void*) *overlayMap);
-  fprintf(stderr, "\n");
+  fprintf(stderr, _overlayMapFormat, (void*) *overlayMap);
+  fprintf(stderr, _newline);
 
   _mainThreadId = pthread_self();
 
-  *((void**) &realTcgetattr) = dlsym(RTLD_NEXT, "tcgetattr");
-  *((void**) &realTcsetattr) = dlsym(RTLD_NEXT, "tcsetattr");
+  *((void**) &realTcgetattr) = dlsym(RTLD_NEXT, _tcgetattrSymbolName);
+  *((void**) &realTcsetattr) = dlsym(RTLD_NEXT, _tcsetattrSymbolName);
 
   return 0;
 }
