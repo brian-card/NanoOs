@@ -474,6 +474,14 @@ static int32_t halBlockDeviceRestart(ProcessDescriptor *processDescriptor) {
 // Common HAL helper implementations.
 // ---------------------------------------------------------------------------
 
+/// @var _sdCardName
+///
+/// @brief Process name assigned to the SD card process.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _sdCardName[] KEEP_IN_FLASH = "SD card";
+
 /// @fn BlockDevice* halCommonInitRootSdSpiStorage(
 ///   SdCardSpiArgs *sdCardSpiArgs)
 ///
@@ -497,12 +505,12 @@ BlockDevice* halCommonInitRootSdSpiStorage(
     processDescriptor, runSdCardSpi, sdCardSpiArgs)
     != processSuccess
   ) {
-    printString("Could not start SD card process\n");
+    logError("Could not start SD card process\n");
     return NULL;
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
   processDescriptor->processId = SCHEDULER_STATE->firstUserPid;
-  processDescriptor->name = "SD card";
+  processDescriptor->name = _sdCardName;
   processDescriptor->userId = ROOT_USER_ID;
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_KERNEL;
   processDescriptor->restartFunction = HAL->blockDevice->restart;
@@ -515,6 +523,14 @@ BlockDevice* halCommonInitRootSdSpiStorage(
 
   return sdDevice;
 }
+
+/// @var _filesystemName
+///
+/// @brief Process name assigned to the filesystem process.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _filesystemName[] KEEP_IN_FLASH = "filesystem";
 
 /// @fn int32_t halCommonInitRootFilesystem(void)
 ///
@@ -531,12 +547,12 @@ int32_t halCommonInitRootFilesystem() {
 
   if (rootBlockDevice == NULL) {
     if (HAL->blockDevice == NULL) {
-      printString("ERROR! HAL->blockDevice is NULL\n");
+      logError("HAL->blockDevice is NULL\n");
       return -ENODEV;
     }
 
     if (HAL->blockDevice->init() != 0) {
-      printString("ERROR! HAL->blockDevice->init() failed\n");
+      logError("HAL->blockDevice->init() failed\n");
       return -ENODEV;
     }
 
@@ -544,7 +560,7 @@ int32_t halCommonInitRootFilesystem() {
   }
 
   if (rootBlockDevice == NULL) {
-    printString("ERROR! No rootBlockDevice available\n");
+    logError("No rootBlockDevice available\n");
     return -ENODEV;
   }
 
@@ -554,12 +570,12 @@ int32_t halCommonInitRootFilesystem() {
   ProcessDescriptor *processDescriptor
     = &allProcesses[SCHEDULER_STATE->rootFsPid - 1];
   if (processCreate(processDescriptor, dummyProcess, NULL) != processSuccess) {
-    printString("Could not allocate filesystem process\n");
+    logError("Could not allocate filesystem process\n");
     return -ENOMEM;
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
   processDescriptor->processId = SCHEDULER_STATE->rootFsPid;
-  processDescriptor->name = "filesystem";
+  processDescriptor->name = _filesystemName;
   processDescriptor->userId = ROOT_USER_ID;
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
   processDescriptor->restartFunction = restartFilesystem;
@@ -572,13 +588,13 @@ int32_t halCommonInitRootFilesystem() {
   // stack.  Double the stack size for it.
   Thread *thread = threadProvision(NULL, dummyProcess, NULL);
   if (thread == NULL) {
-    printString("Could not increase filesystem process's stack size.\n");
+    logError("Could not increase filesystem process's stack size.\n");
     return -ENOMEM;
   }
   if (threadSetStackEnd(
     processDescriptor->mainThread, threadStackEnd(thread)) != processSuccess
   ) {
-    printString("Could not set filesystem process's stack size.\n");
+    logError("Could not set filesystem process's stack size.\n");
   }
 
   return 0;
@@ -627,12 +643,12 @@ int32_t restartFilesystem(ProcessDescriptor *processDescriptor) {
   if (processCreate(processDescriptor, runFilesystem, &fs)
     != processSuccess
   ) {
-    printString("Could not restart filesystem process.\n");
+    logError("Could not restart filesystem process.\n");
     return -ENOMEM;
   }
 
   threadSetContext(processDescriptor->mainThread, processDescriptor);
-  processDescriptor->name = "filesystem";
+  processDescriptor->name = _filesystemName;
   processDescriptor->userId = ROOT_USER_ID;
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
   processDescriptor->restartFunction = restartFilesystem;
@@ -684,20 +700,20 @@ int32_t halCommonInit(void) {
   }
 
   if (HAL->dio->init() != 0) {
-    printString("WARNING: Failed to initialize DIO subsystem\n");
+    logWarn("Failed to initialize DIO subsystem\n");
   }
 
   if (HAL->spi->init() != 0) {
-    printString("WARNING: Failed to initialize SPI subsystem\n");
+    logWarn("Failed to initialize SPI subsystem\n");
   }
 
   if (HAL->clock->init() != 0) {
-    printString("WARNING: Failed to initialize clock subsystem\n");
+    logWarn("Failed to initialize clock subsystem\n");
   }
 
   do {
     if (HAL->timer->init() != 0) {
-      printString("WARNING: Failed to initialize timer subsystem\n");
+      logWarn("Failed to initialize timer subsystem\n");
       break;
     }
 
@@ -714,7 +730,7 @@ int32_t halCommonInit(void) {
 
     if (HAL->timer->online[0] != timerOnline) {
       if (HAL->uart != NULL) {
-        printString("WARNING: Did not initialize all timers\n");
+        logWarn("Did not initialize all timers\n");
       }
     }
   } while (0);
