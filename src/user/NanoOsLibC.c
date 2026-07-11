@@ -69,7 +69,12 @@ int timespec_get(struct timespec* spec, int base) {
 /// @var errorStrings
 ///
 /// @brief Array of error messages arranged by error code.
-const char *errorStrings[] = {
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.  Entries are copied directly into this
+/// array's own storage rather than being separate string-literal objects
+/// pointed to from it, so tagging the array alone protects every entry.
+const char errorStrings[][33] KEEP_IN_FLASH = {
   "Success",                          // ENOERR
   "Unspecified error",                // EOTHER
   "Device or resource busy",          // EBUSY
@@ -97,10 +102,14 @@ const char *errorStrings[] = {
   "Try again",                        // EAGAIN
 };
 
-/// @var NUM_ERRORS
+/// @def NUM_ERRORS
 ///
-/// @brief Constant value to hold the number of errors defined in errorStrings.
-const int NUM_ERRORS = sizeof(errorStrings) / sizeof(errorStrings[0]);
+/// @brief The number of errors defined in errorStrings.
+///
+/// @note This is a #define rather than a const int so that it doesn't need
+/// its own KEEP_IN_FLASH treatment - it's folded into an immediate value at
+/// each use site instead of occupying storage that could land in .rodata.
+#define NUM_ERRORS ((int) (sizeof(errorStrings) / sizeof(errorStrings[0])))
 
 /// @fn char* nanoOsStrError(int errnum)
 ///
@@ -167,6 +176,15 @@ time_t time(time_t *tloc) {
   return now;
 }
 
+/// @var _whitespace
+///
+/// @brief Set of characters considered whitespace when skipping leading
+/// whitespace in nanoOsStrtoll.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _whitespace[] KEEP_IN_FLASH = " \t\r\n";
+
 /// @fn long long nanoOsStrtoll(const char *nptr, char **endptr, int base)
 ///
 /// @brief NanoOs implementation of the standard C strtoll function.
@@ -197,7 +215,7 @@ long long nanoOsStrtoll(const char *nptr, char **endptr, int base) {
     return returnValue; // 0
   }
   
-  nptr = &nptr[strspn(nptr, " \t\r\n")];
+  nptr = &nptr[strspn(nptr, _whitespace)];
   
   if (*nptr == '-') {
     multiplier = -1;
