@@ -112,7 +112,7 @@ int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
   }
   va_end(args);
   
-  if (SCHEDULER_STATE->loggerPid == 0) {
+  if ((SCHEDULER_STATE == NULL) || (SCHEDULER_STATE->loggerPid == 0)) {
     if (HAL->memory->staticLogs != NULL) {
       // Logger isn't up yet but will be.  Write to the staticLogs area.
       goto writeStaticLog;
@@ -120,9 +120,10 @@ int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
       // Logger isn't coming up.  Write this entry immediately.
       goto writeImmediate;
     }
-    // else, we're in trouble.  We have no way to log anything.  Just return
-    // -ENOMEM, I guess.
-    return -ENOMEM;
+    
+    // If we made it this far then NOTHING is setup yet.  We can't do argument
+    // parsing.  Just write out the provided format string.
+    return HAL->uart->write(0, (uint8_t*) format, strlen(format), NULL);
   }
   
   ProcessMessage *processMessage = getAvailableMessage();
@@ -172,7 +173,10 @@ writeImmediate:
   // Print the header.
   snprintf(HAL->memory->logBuffer, HAL->memory->logBufferSize,
     "[%lld %s:%u %s:%u %s] ", (long long int) logEntry.timeStamp,
-    SCHEDULER_STATE->hostname, (unsigned int) getRunningPid(),
+    ((SCHEDULER_STATE != NULL) && (SCHEDULER_STATE->hostname != NULL))
+      ? SCHEDULER_STATE->hostname
+      : "localhost",
+    (unsigned int) getRunningPid(),
     fileName, lineNumber, _logLevelNames[logLevel]);
   printString(HAL->memory->logBuffer);
   
