@@ -155,6 +155,14 @@ static uint32_t posixBlockDevicesOnline[] = {
   0x00000000,
 };
 
+/// @var _sdCardName
+///
+/// @brief Process name assigned to the SD card process.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _sdCardName[] KEEP_IN_FLASH = "SD card";
+
 int32_t posixInitBlockDevice(va_list args) {
   (void) args;
   if (SCHEDULER_STATE == NULL) {
@@ -170,11 +178,11 @@ int32_t posixInitBlockDevice(va_list args) {
     processDescriptor, runSdCardPosix, (void*) _sdCardDevicePath)
     != processSuccess
   ) {
-    printString("Could not start SD card process.\n");
+    logError("Could not start SD card process.\n");
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
   processDescriptor->processId = SCHEDULER_STATE->firstUserPid;
-  processDescriptor->name = "SD card";
+  processDescriptor->name = _sdCardName;
   processDescriptor->userId = ROOT_USER_ID;
   BlockDevice *sdDevice = (BlockDevice*) coroutineResume(
     allProcesses[SCHEDULER_STATE->firstUserPid - 1].mainThread, NULL);
@@ -212,17 +220,17 @@ int32_t posixRestartBlockDevice(va_list args) {
     processDescriptor, runSdCardPosix, (void*) _sdCardDevicePath)
     != processSuccess
   ) {
-    printString("Could not restart SD card process.\n");
+    logError("Could not restart SD card process.\n");
     return -ENOMEM;
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
-  processDescriptor->name = "SD card";
+  processDescriptor->name = _sdCardName;
   processDescriptor->userId = ROOT_USER_ID;
 
   BlockDevice *sdDevice
     = (BlockDevice*) coroutineResume(processDescriptor->mainThread, NULL);
   if (sdDevice == NULL) {
-    printString("SD card restart returned NULL.\n");
+    logError("SD card restart returned NULL.\n");
     return -ENODEV;
   }
   sdDevice->partitionNumber = 1;
