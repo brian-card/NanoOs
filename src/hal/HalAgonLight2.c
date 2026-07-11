@@ -467,6 +467,14 @@ int32_t agonLight2GetBlockDevice(va_list args) {
   return 0;
 }
 
+/// @var _sdCardName
+///
+/// @brief Process name assigned to the SD card process.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _sdCardName[] KEEP_IN_FLASH = "SD card";
+
 int32_t agonLight2RestartBlockDevice(va_list args) {
   ProcessDescriptor *processDescriptor = va_arg(args, ProcessDescriptor*);
   int32_t deviceId = (int32_t) (intptr_t) processDescriptor->restartArgs;
@@ -481,17 +489,17 @@ int32_t agonLight2RestartBlockDevice(va_list args) {
   if (processCreate(processDescriptor, runSdCardSpi, &sdCardSpiArgs)
     != processSuccess
   ) {
-    printString("Could not restart SD card process\n");
+    logError("Could not restart SD card process\n");
     return -ENOMEM;
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
-  processDescriptor->name = "SD card";
+  processDescriptor->name = _sdCardName;
   processDescriptor->userId = ROOT_USER_ID;
 
   BlockDevice *sdDevice
     = (BlockDevice*) coroutineResume(processDescriptor->mainThread, NULL);
   if (sdDevice == NULL) {
-    printString("SD card restart returned NULL\n");
+    logError("SD card restart returned NULL\n");
     return -ENODEV;
   }
   sdDevice->partitionNumber = 1;
