@@ -106,6 +106,14 @@ SpawnArgs* spawnArgsDestroy(SpawnArgs *spawnArgs) {
   return NULL;
 }
 
+/// @var _whitespace
+///
+/// @brief Set of characters considered whitespace when tokenizing input.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _whitespace[] KEEP_IN_FLASH = " \t\r\n";
+
 /// @fn int getNumTokens(const char *input)
 ///
 /// @brief Get the number of whitespace-delimited tokens in a string.
@@ -121,8 +129,8 @@ int getNumTokens(const char *input) {
 
   while (*input != '\0') {
     numTokens++;
-    input = &input[strcspn(input, " \t\r\n")];
-    input = &input[strspn(input, " \t\r\n")];
+    input = &input[strcspn(input, _whitespace)];
+    input = &input[strspn(input, _whitespace)];
   }
 
   return numTokens;
@@ -211,7 +219,7 @@ char** parseArgs(char *command, int *argc) {
       command++;
       endOfArg = findEndQuote(command, '\'');
     } else {
-      endOfArg = &command[strcspn(command, " \t\r\n")];
+      endOfArg = &command[strcspn(command, _whitespace)];
     }
 
     argv[numArgs] = command;
@@ -228,7 +236,7 @@ char** parseArgs(char *command, int *argc) {
       command += strlen(command);
     }
 
-    command = &command[strspn(command, " \t\r\n")];
+    command = &command[strspn(command, _whitespace)];
   }
   argv[numArgs] = NULL;
 
@@ -351,6 +359,15 @@ void* execOverlayCommand(void *args) {
   return (void*) ((intptr_t) returnValue);
 }
 
+/// @var _mainFunctionName
+///
+/// @brief Name of the exported entry-point function a block overlay must
+/// provide.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _mainFunctionName[] KEEP_IN_FLASH = "main";
+
 /// @fn void* runBlockOverlay(void *args)
 ///
 /// @brief Wrapper process function that calls a command function.
@@ -390,7 +407,7 @@ void* runBlockOverlay(void *args) {
   processYield();
 
   logDebug("Call the block overlay function\n");
-  OverlayFunction main = findOverlayFunction("main");
+  OverlayFunction main = findOverlayFunction(_mainFunctionName);
   if (main == NULL) {
     logError("No main function in block overlay\n");
     return (void*) ((intptr_t) -1);
