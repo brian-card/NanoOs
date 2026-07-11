@@ -4778,9 +4778,19 @@ __attribute__((noinline)) void startScheduler(
   }
 
 #ifdef NANO_OS_DEBUG
+  // KEEP_IN_FLASH is required on these: .rodata is removed from the final
+  // binary on some targets.  Declared here (rather than at file scope) so
+  // they only exist in builds that actually define NANO_OS_DEBUG, avoiding
+  // an unused-variable warning in the normal build.
+  static const char _helloFilename[] KEEP_IN_FLASH = "hello";
+  static const char _writeMode[] KEEP_IN_FLASH = "w";
+  static const char _appendMode[] KEEP_IN_FLASH = "a";
+  static const char _worldContent[] KEEP_IN_FLASH = "world";
+  static const char _worldWorldContent[] KEEP_IN_FLASH = "worldworld";
+
   bool sanityTestFailed = false;
   do {
-    FILE *helloFile = schedFopen("hello", "w");
+    FILE *helloFile = schedFopen(_helloFilename, _writeMode);
     if (helloFile == NULL) {
       logDebug("ERROR: Could not open hello file for writing!\n");
       sanityTestFailed = true;
@@ -4788,7 +4798,7 @@ __attribute__((noinline)) void startScheduler(
     }
     logDebug("helloFile is non-NULL!\n");
 
-    if (schedFputs("world", helloFile) == EOF) {
+    if (schedFputs(_worldContent, helloFile) == EOF) {
       logDebug("ERROR: Could not write to hello file!\n");
       schedFclose(helloFile);
       sanityTestFailed = true;
@@ -4796,10 +4806,10 @@ __attribute__((noinline)) void startScheduler(
     }
     schedFclose(helloFile);
 
-    helloFile = schedFopen("hello", "r");
+    helloFile = schedFopen(_helloFilename, _readMode);
     if (helloFile == NULL) {
       logDebug("ERROR: Could not open hello file for reading after write!\n");
-      schedRemove("hello");
+      schedRemove(_helloFilename);
       sanityTestFailed = true;
       break;
     }
@@ -4811,43 +4821,43 @@ __attribute__((noinline)) void startScheduler(
     ) {
       logDebug("ERROR: Could not read worldString after write!\n");
       schedFclose(helloFile);
-      schedRemove("hello");
+      schedRemove(_helloFilename);
       sanityTestFailed = true;
       break;
     }
     logDebug("Read data from helloFile into worldString\n");
 
-    if (strcmp(worldString, "world") != 0) {
+    if (strcmp(worldString, _worldContent) != 0) {
       logDebug("ERROR: Expected \"world\", read \"%s\"!\n", worldString);
       schedFclose(helloFile);
-      schedRemove("hello");
+      schedRemove(_helloFilename);
       sanityTestFailed = true;
       break;
     }
     logDebug("Successfully read \"world\" from \"hello\"!\n");
     schedFclose(helloFile);
 
-    helloFile = schedFopen("hello", "a");
+    helloFile = schedFopen(_helloFilename, _appendMode);
     if (helloFile == NULL) {
       logDebug("ERROR: Could not open hello file for appending!\n");
-      schedRemove("hello");
+      schedRemove(_helloFilename);
       sanityTestFailed = true;
       break;
     }
 
-    if (schedFputs("world", helloFile) == EOF) {
+    if (schedFputs(_worldContent, helloFile) == EOF) {
       logDebug("ERROR: Could not append to hello file!\n");
       schedFclose(helloFile);
-      schedRemove("hello");
+      schedRemove(_helloFilename);
       sanityTestFailed = true;
       break;
     }
     schedFclose(helloFile);
 
-    helloFile = schedFopen("hello", "r");
+    helloFile = schedFopen(_helloFilename, _readMode);
     if (helloFile == NULL) {
       logDebug("ERROR: Could not open hello file for reading after append!\n");
-      schedRemove("hello");
+      schedRemove(_helloFilename);
       sanityTestFailed = true;
       break;
     }
@@ -4857,12 +4867,12 @@ __attribute__((noinline)) void startScheduler(
     ) {
       logDebug("ERROR: Could not read worldString after append!\n");
       schedFclose(helloFile);
-      schedRemove("hello");
+      schedRemove(_helloFilename);
       sanityTestFailed = true;
       break;
     }
 
-    if (strcmp(worldString, "worldworld") == 0) {
+    if (strcmp(worldString, _worldWorldContent) == 0) {
       logDebug(
         "Successfully read \"worldworld\" from \"hello\"!\n");
     } else {
@@ -4871,7 +4881,7 @@ __attribute__((noinline)) void startScheduler(
     }
 
     schedFclose(helloFile);
-    if (schedRemove("hello") != 0) {
+    if (schedRemove(_helloFilename) != 0) {
       logDebug("ERROR: schedRemove failed to remove the \"hello\" file.\n");
       sanityTestFailed = true;
     }
