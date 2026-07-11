@@ -179,6 +179,7 @@ void localFree(MemoryManagerState *memoryManagerState,
     (unsigned long long int) (uintptr_t) memNode->prev);
 
   size_t bytesFreeBefore = memoryManagerState->bytesFree;
+  (void) bytesFreeBefore; // In case logDebug is compiled out.
   memoryManagerState->bytesFree += memNode->size;
   logDebug("Increasing memoryManagerState->bytesFree from %lld to %lld\n",
     (long long int) bytesFreeBefore,
@@ -575,6 +576,7 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
 
     // Reduce system memory.
     size_t bytesFreeBefore = memoryManagerState->bytesFree;
+    (void) bytesFreeBefore; // In case logDebug is compiled out.
     memoryManagerState->bytesFree -= size + sizeof(MemNode);
     logDebug("Updating memoryManagerState->bytesFree from %lld to %lld\n",
       (long long int) bytesFreeBefore,
