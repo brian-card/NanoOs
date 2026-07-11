@@ -34,6 +34,33 @@
 #include "../kernel/NanoOs.h"
 #include "NanoOsUnistd.h"
 
+/// @var _sysname
+///
+/// @brief The name reported for the sysname field of a struct utsname.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _sysname[] KEEP_IN_FLASH = "NanoOs";
+
+/// @var _nanoOsVersion
+///
+/// @brief Local copy of NANO_OS_VERSION (defined in NanoOs.h) kept in this
+/// translation unit's own storage.  If NANO_OS_VERSION's definition ever
+/// changes, this picks up the change automatically since it's initialized
+/// from the macro rather than duplicating the literal.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _nanoOsVersion[] KEEP_IN_FLASH = NANO_OS_VERSION;
+
+/// @var _machine
+///
+/// @brief The name reported for the machine field of a struct utsname.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _machine[] KEEP_IN_FLASH = "arm";
+
 /// @fn int nanoOsUname(struct utsname *buf)
 ///
 /// @brief Get information about the system.
@@ -47,13 +74,13 @@ int nanoOsUname(struct utsname *buf) {
     errno = EFAULT;
     return -1;
   }
-  
-  strncpy(buf->sysname, "NanoOs", sizeof(buf->sysname));
+
+  strncpy(buf->sysname, _sysname, sizeof(buf->sysname));
   nanoOsGethostname(buf->nodename, sizeof(buf->nodename));
-  strncpy(buf->release, NANO_OS_VERSION, sizeof(buf->release));
+  strncpy(buf->release, _nanoOsVersion, sizeof(buf->release));
   strncpy(buf->version, "", sizeof(buf->version));
-  strncpy(buf->machine, "arm", sizeof(buf->machine));
-  
+  strncpy(buf->machine, _machine, sizeof(buf->machine));
+
   return 0;
 }
 
