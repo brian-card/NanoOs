@@ -29,7 +29,16 @@
 ///
 /// @brief C code for Agon keycodes.
 
-const char *const agonKeycodeStrings[256] = {
+#include "AgonKeycodes.h"
+#include "../../kernel/NanoOs.h"
+
+// KEEP_IN_FLASH is required here: the AgonLight2 linker script places
+// .rodata after .data specifically so that it can be truncated off the
+// final binary with `objcopy -R .rodata` (see ld/AgonLight2.ld).  Since the
+// entries below are copied directly into this array's own storage (rather
+// than being separate string-literal objects pointed to from it), tagging
+// the array alone is sufficient to keep every entry out of .rodata.
+const char agonKeycodeStrings[256][6] KEEP_IN_FLASH = {
   "",                /* KEYCODE_NONE            */
   " ",               /* KEYCODE_SPACE           */
   "0",               /* KEYCODE_0               */

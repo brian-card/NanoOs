@@ -361,7 +361,7 @@
 // ------------------------------------------------------------------
 // Character sequences that correspond to the possible keycodes
 // ------------------------------------------------------------------
-extern const char *const agonKeycodeStrings[256];
+extern const char agonKeycodeStrings[256][6];
 
 
 #endif // AGON_KEYCODES_H
