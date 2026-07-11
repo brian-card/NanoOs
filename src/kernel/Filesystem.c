@@ -8,6 +8,7 @@
 
 #include "../user/NanoOsLibC.h"
 #include "Filesystem.h"
+#include "Logger.h"
 #include "NanoOs.h"
 #include "Scheduler.h"
 #include "Processes.h"
@@ -49,11 +50,8 @@ int filesystemOpenFileCommandHandler(
   FilesystemFopenArgs *fopenArgs
     = (FilesystemFopenArgs*) processMessageData(processMessage);
 
-  printDebugString("Opening file \"");
-  printDebugString(fopenArgs->pathname);
-  printDebugString("\" in mode \"");
-  printDebugString(fopenArgs->mode);
-  printDebugString("\"\n");
+  logDebug("Opening file \"%s\" in mode \"%s\"\n",
+    fopenArgs->pathname, fopenArgs->mode);
 
   if (filesystemState->driverState != NULL) {
     void *fileHandle = filesystemState->driverFopen(
@@ -78,10 +76,10 @@ int filesystemOpenFileCommandHandler(
         filesystemState->driverFclose(filesystemState->driverState, fileHandle);
       }
     } else {
-      printString("ERROR: driverFopen returned NULL\n");
+      logError("driverFopen returned NULL\n");
     }
   } else {
-    printString("ERROR: driverState is not valid!\n");
+    logCritical("driverState is not valid!\n");
   }
 
   fopenArgs->returnValue = nanoOsFile;
@@ -307,18 +305,15 @@ int filesystemDumpOpenFilesCommandHandler(
   FilesystemDumpOpenFilesArgs *filesystemDumpOpenFilesArgs
     = (FilesystemDumpOpenFilesArgs*) processMessageData(processMessage);
 
-  printString("Open files:\n");
+  logInfo("Open files:\n");
   for (NanoOsFile *nanoOsFile = filesystemState->openFiles;
     nanoOsFile != NULL;
     nanoOsFile = nanoOsFile->next
   ) {
-    printString("0x");
-    printHex((uintptr_t) nanoOsFile);
-    printString(": \"");
-    printString(filesystemState->driverGetFilename(nanoOsFile->file));
-    printString("\" owned by ");
-    printInt(nanoOsFile->owner);
-    printString("\n");
+    logInfo("0x%llx: \"%s\" owned by %lld\n",
+      (unsigned long long int) (uintptr_t) nanoOsFile,
+      filesystemState->driverGetFilename(nanoOsFile->file),
+      (long long int) nanoOsFile->owner);
   }
 
   filesystemDumpOpenFilesArgs->returnValue = 0;
@@ -388,31 +383,25 @@ static void handleFilesystemMessages(FilesystemState *filesystemState) {
       if ((processMessageType(msg) & 0xffffffffffffff00)
         != FILESYSTEM_COMMAND_SIGNATURE
       ) {
-        printString("Error: ");
-        printString(__func__);
-        printString(" received unknown signature 0x");
-        printHex(processMessageType(msg) & 0xffffffffffffff00);
-        printString(" from process ");
-        printInt(processPid(processMessageFrom(msg)));
-        printString("\n");
+        logError("Error: %s received unknown signature 0x%llx "
+          "from process %lld\n", __func__,
+          (unsigned long long int) (processMessageType(msg)
+            & 0xffffffffffffff00),
+          (long long int) processPid(processMessageFrom(msg)));
         msg = processMessageQueuePop();
         continue;
       }
 
-      FilesystemCommandResponse type = 
+      FilesystemCommandResponse type =
         (FilesystemCommandResponse) (processMessageType(msg) & 0xff);
       if (type >= NUM_FILESYSTEM_COMMANDS) {
-        printString(__func__);
-        printString(": ERROR! Received unknown filesystem message type ");
-        printInt(type);
-        printString(" from process ");
-        printInt(processPid(processMessageFrom(msg)));
-        printString("\n");
+        logError("%s: ERROR! Received unknown filesystem message type "
+          "%lld from process %lld\n", __func__, (long long int) type,
+          (long long int) processPid(processMessageFrom(msg)));
       }
 
-      printDebugString("Handling filesystem message type ");
-      printDebugInt(type);
-      printDebugString("\n");
+      logDebug("Handling filesystem message type %lld\n",
+        (long long int) type);
       filesystemCommandHandlers[type](filesystemState, msg);
 
       msg = processMessageQueuePop();
@@ -433,21 +422,21 @@ void* runFilesystem(void *args) {
   memcpy(&fs, args, sizeof(fs));
   ((FilesystemState*) args)->driverState = (void*) ((intptr_t) 1);
   processYield();
-  printDebugString("runFilesystem: Allocating fs.blockBuffer\n");
+  logDebug("runFilesystem: Allocating fs.blockBuffer\n");
   fs.blockBuffer = (uint8_t*) malloc(fs.blockSize);
   if (fs.blockBuffer == NULL) {
-    fprintf(stderr, "ERROR: Could not allocate fs.blockBuffer\n");
-    fprintf(stderr, "       Halting filesystem process\n");
+    logError("Could not allocate fs.blockBuffer\n");
+    logError("Halting filesystem process\n");
     // All the command handlers handle state not being initialized, so just go
     // into handleFilesystemMessages and block.
     handleFilesystemMessages(&fs);
   }
-  
-  printDebugString("runFilesystem: Getting partition info\n");
+
+  logDebug("runFilesystem: Getting partition info\n");
   getPartitionInfo(&fs);
-  printDebugString("runFilesystem: Initiallizing driverState\n");
+  logDebug("runFilesystem: Initiallizing driverState\n");
   fs.driverInit(&fs);
-  printDebugString("runFilesystem: Initialization complete\n");
+  logDebug("runFilesystem: Initialization complete\n");
   
   handleFilesystemMessages(&fs);
   return NULL;
@@ -463,18 +452,18 @@ void* runFilesystem(void *args) {
 /// @return Returns 0 on success, negative error code on failure.
 int getPartitionInfo(FilesystemState *fs) {
   if (fs->blockDevice->partitionNumber == 0) {
-    printDebugString("getPartitionInfo: Partition number is 0\n");
+    logDebug("getPartitionInfo: Partition number is 0\n");
     return -1;
   }
 
-  printDebugString("getPartitionInfo: Reading block 0\n");
-  if (fs->blockDevice->readBlocks(fs->blockDevice->context, 0, 1, 
+  logDebug("getPartitionInfo: Reading block 0\n");
+  if (fs->blockDevice->readBlocks(fs->blockDevice->context, 0, 1,
       fs->blockSize, fs->blockBuffer) != 0
   ) {
-    printDebugString("getPartitionInfo: Failed to read block 0\n");
+    logDebug("getPartitionInfo: Failed to read block 0\n");
     return -2;
   }
-  printDebugString("getPartitionInfo: Got block 0\n");
+  logDebug("getPartitionInfo: Got block 0\n");
 
   uint8_t *partitionTable = fs->blockBuffer + PARTITION_TABLE_OFFSET;
   uint8_t *entry
@@ -491,28 +480,24 @@ int getPartitionInfo(FilesystemState *fs) {
     uint32_t lbaValue, sectorsValue;
     
     // Read LBA offset using readBytes for alignment safety
-    printDebugString("getPartitionInfo: Reading LBA offset\n");
+    logDebug("getPartitionInfo: Reading LBA offset\n");
     readBytes(&lbaValue, &entry[PARTITION_LBA_OFFSET]);
     fs->startLba = lbaValue;
-    
-    // Read number of sectors using readBytes for alignment safety  
-    printDebugString("getPartitionInfo: Reading partition sectors\n");
+
+    // Read number of sectors using readBytes for alignment safety
+    logDebug("getPartitionInfo: Reading partition sectors\n");
     readBytes(&sectorsValue, &entry[PARTITION_SECTORS_OFFSET]);
     fs->endLba = fs->startLba + sectorsValue - 1;
 
-    printDebugString("Filesystem type 0x");
-    printDebugHex(type);
-    printDebugString(" runs from block ");
-    printDebugInt(fs->startLba);
-    printDebugString(" to block ");
-    printDebugInt(fs->endLba);
-    printDebugString("\n");
-    
-    printDebugString("getPartitionInfo: Returing good status\n");
+    logDebug("Filesystem type 0x%llx runs from block %lld to block %lld\n",
+      (unsigned long long int) type, (long long int) fs->startLba,
+      (long long int) fs->endLba);
+
+    logDebug("getPartitionInfo: Returing good status\n");
     return 0;
   }
-  
-  printDebugString("getPartitionInfo: Invalid partition type\n");
+
+  logDebug("getPartitionInfo: Invalid partition type\n");
   return -3;
 }
 
@@ -779,16 +764,11 @@ size_t filesystemFRead(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     .length = (uint32_t) (size * nmemb)
   };
 
-  printDebugString(__func__);
-  printDebugString(": Sending message to filesystem process to read ");
-  printDebugInt(nmemb);
-  printDebugString(" elements ");
-  printDebugInt(size);
-  printDebugString(" bytes in size from file 0x");
-  printDebugHex((uintptr_t) stream);
-  printDebugString(" into address 0x");
-  printDebugHex((uintptr_t) ptr);
-  printDebugString("\n");
+  logDebug("%s: Sending message to filesystem process to read %lld "
+    "elements %lld bytes in size from file 0x%llx into address 0x%llx\n",
+    __func__, (long long int) nmemb, (long long int) size,
+    (unsigned long long int) (uintptr_t) stream,
+    (unsigned long long int) (uintptr_t) ptr);
 
   ProcessMessage *processMessage = initSendProcessMessageToPid(
     SCHEDULER_STATE->rootFsPid,
@@ -800,14 +780,11 @@ size_t filesystemFRead(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   returnValue = (filesystemIoCommandArgs.length / size);
   processMessageRelease(processMessage);
 
-  printDebugString(__func__);
-  printDebugString(": Returning ");
-  printDebugInt(returnValue);
-  printDebugString(" from read of file 0x");
-  printDebugHex((uintptr_t) filesystemIoCommandArgs.file);
-  printDebugString(" into address 0x");
-  printDebugHex((uintptr_t) filesystemIoCommandArgs.buffer);
-  printDebugString("\n");
+  logDebug("%s: Returning %lld from read of file 0x%llx "
+    "into address 0x%llx\n",
+    __func__, (long long int) returnValue,
+    (unsigned long long int) (uintptr_t) filesystemIoCommandArgs.file,
+    (unsigned long long int) (uintptr_t) filesystemIoCommandArgs.buffer);
   return returnValue;
 }
 
@@ -880,8 +857,7 @@ int getFileBlockMetadataFromFile(FILE *stream, FileBlockMetadata *metadata) {
     processMessage = getAvailableMessage();
   }
   if (processMessage == NULL) {
-    fprintf(stderr, "%d: %s: ERROR: Out of process messages\n",
-      getRunningPid(), __func__);
+    logError("ERROR: Out of process messages\n");
     return -ENOMEM;
   }
 
@@ -891,7 +867,7 @@ int getFileBlockMetadataFromFile(FILE *stream, FileBlockMetadata *metadata) {
   if (sendProcessMessageToPid(SCHEDULER_STATE->rootFsPid, processMessage)
     != processSuccess
   ) {
-    fprintf(stderr, "ERROR! Failed to send message to filesystem to get file "
+    logError("Failed to send message to filesystem to get file "
       "block metadata\n");
     processMessageRelease(processMessage);
     return -EIO;
@@ -921,8 +897,7 @@ int getFileBlockMetadataFromPath(const char *path,
 
   FILE *stream = fopen(path, "r");
   if (stream == NULL) {
-    fprintf(stderr, "%d: %s: ERROR! Could not open file \"%s\"\n",
-      getRunningPid(), __func__, path);
+    logError("Could not open file \"%s\"\n", path);
     return -EIO;
   }
   int returnValue = getFileBlockMetadataFromFile(stream, metadata);

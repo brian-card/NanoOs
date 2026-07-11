@@ -36,6 +36,7 @@
 #include "NanoOsLibC.h"
 #include "../kernel/Console.h"
 #include "../kernel/Hal.h"
+#include "../kernel/Logger.h"
 #include "../kernel/NanoOs.h"
 #include "../kernel/Processes.h"
 #include "../kernel/Scheduler.h"
@@ -867,7 +868,7 @@ ConsoleBuffer* nanoOsWaitForInput(void) {
   ConsoleBuffer *consoleBuffer = NULL;
   FileDescriptor *inputFd = schedulerGetFileDescriptor(stdin);
   if (inputFd == NULL) {
-    fprintf(stderr, "ERROR: Could not get input file descriptor for process %d"
+    logError("Could not get input file descriptor for process %d"
       " and stream %d.\n", getRunningPid(), (int) (intptr_t) stdin);
 
     // We can't proceed, so bail.

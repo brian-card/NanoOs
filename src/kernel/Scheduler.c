@@ -35,6 +35,7 @@
 #include "Commands.h"
 #include "Console.h"
 #include "Hal.h"
+#include "Logger.h"
 #include "NanoOs.h"
 #include "OverlayFunctions.h"
 #include "Processes.h"
@@ -486,49 +487,41 @@ int addProcessIpcCapability(ProcessDescriptor *processDescriptor,
   if (ii < processDescriptor->numIpcCapabilities) {
     // Add the message type to the existing capability's messageTypes.
     capability->messageTypes |= ((uint16_t) 1) << messageType;
-    printDebugString(__func__);
-    printDebugString(": ");
-    printDebugInt(__LINE__);
-    printDebugString(": Added capability to send message type ");
-    printDebugInt(messageType);
-    printDebugString(" from process ");
-    printDebugInt(processDescriptor->processId);
-    printDebugString(" to process ");
-    printDebugInt(destinationPid);
-    printDebugString("\n");
+    logDebug("Added capability to send message type %lld from process %lld "
+      "to process %lld\n",
+      (long long int) messageType,
+      (long long int) processDescriptor->processId,
+      (long long int) destinationPid);
     // We're done.
     return 0;
   }
 
-  printDebugString(__func__);
-  printDebugString(": ");
-  printDebugInt(__LINE__);
-  printDebugString(": Extinding ipcCapabilities array\n");
+  logDebug("Extinding ipcCapabilities array\n");
 
   // If we made it this far then the destination PID doesn't exist in the
   // process's capabilities yet, so we'll have to extend the array.
   if (processDescriptor->ipcCapabilitiesDynamic == true) {
     // Resize the existing array.  This is the expected case.
-    printDebugString("Extinding exiting array\n");
+    logDebug("Extinding exiting array\n");
     void *check = schedRealloc(processDescriptor->ipcCapabilities,
       sizeof(IpcCapability) * (processDescriptor->numIpcCapabilities + 1));
     if (check == NULL) {
-      printString("ERROR: realloc returned NULL when trying to allocate ");
-      printInt(processDescriptor->numIpcCapabilities + 1);
-      printString(" IpcCapability objects\n");
+      logError("realloc returned NULL when trying to allocate "
+        "%d IpcCapability objects\n",
+        processDescriptor->numIpcCapabilities + 1);
       return -ENOMEM;
     }
     processDescriptor->ipcCapabilities = (IpcCapability*) check;
   } else {
     // Array is one of the statically-allocated ones.  We'll have to make a
     // copy first.
-    printDebugString("Copying to new array\n");
+    logDebug("Copying to new array\n");
     void *copy = schedMalloc(
       sizeof(IpcCapability) * (processDescriptor->numIpcCapabilities + 1));
     if (copy == NULL) {
-      printString("ERROR: malloc returned NULL when trying to allocate ");
-      printInt(processDescriptor->numIpcCapabilities + 1);
-      printString(" IpcCapability objects\n");
+      logError("malloc returned NULL when trying to allocate "
+        "%d IpcCapability objects\n",
+        processDescriptor->numIpcCapabilities + 1);
       return -ENOMEM;
     }
     memcpy(copy, processDescriptor->ipcCapabilities,
@@ -550,16 +543,11 @@ int addProcessIpcCapability(ProcessDescriptor *processDescriptor,
     }
   }
 
-  printDebugString(__func__);
-  printDebugString(": ");
-  printDebugInt(__LINE__);
-  printDebugString(": Adding new capability to send message type ");
-  printDebugInt(messageType);
-  printDebugString(" from process ");
-  printDebugInt(processDescriptor->processId);
-  printDebugString(" to process ");
-  printDebugInt(destinationPid);
-  printDebugString("\n");
+  logDebug("Adding new capability to send message type %lld from process "
+    "%lld to process %lld\n",
+    (long long int) messageType,
+    (long long int) processDescriptor->processId,
+    (long long int) destinationPid);
 
   // Move all the capabilities from this point on down by one.
   for (; ii < processDescriptor->numIpcCapabilities; ii++) {
@@ -572,11 +560,10 @@ int addProcessIpcCapability(ProcessDescriptor *processDescriptor,
   capability->destinationPid = destinationPid;
   capability->signature = signature;
   capability->messageTypes = ((uint16_t) 1) << messageType;
-  printDebugString("capability->destinationPid = ");
-  printDebugInt(capability->destinationPid);
-  printDebugString(", capability->messageTypes = 0x");
-  printDebugHex(capability->messageTypes);
-  printDebugString("\n");
+  logDebug("capability->destinationPid = %lld, capability->messageTypes = "
+    "0x%llx\n",
+    (long long int) capability->destinationPid,
+    (unsigned long long int) capability->messageTypes);
   processDescriptor->numIpcCapabilities++;
 
   return 0;
@@ -661,11 +648,8 @@ int processQueuePush(
   if ((processQueue == NULL)
     || (processQueue->numElements >= SCHEDULER_NUM_PROCESSES)
   ) {
-    printString("ERROR: Could not push process ");
-    printInt(processDescriptor->processId);
-    printString(" onto ");
-    printString(processQueue->name);
-    printString(" queue:\n");
+    logError("Could not push process %d onto %s queue:\n",
+      processDescriptor->processId, processQueue->name);
     return ENOMEM;
   }
 
@@ -787,43 +771,37 @@ int schedulerSendProcessMessageToProcess(
   if ((processDescriptor == NULL)
     || (processDescriptor->mainThread == NULL)
   ) {
-    printString(__func__);
-    printString(": ERROR: Attempt to send processMessage to NULL process.\n");
+    logError("%s: ERROR: Attempt to send processMessage to NULL process.\n",
+      __func__);
     returnValue = processError;
     goto exit;
   } else if (processMessage == NULL) {
-    printString(__func__);
-    printString(": ERROR: Attempt to send NULL processMessage to process ");
-    printInt(processDescriptor->processId);
-    printString(".\n");
+    logError(
+      "%s: ERROR: Attempt to send NULL processMessage to process %lld.\n",
+      __func__, (long long int) processDescriptor->processId);
     returnValue = processError;
     goto exit;
   }
 
   // Sanity checks
   if (processCorrupted(processDescriptor)) {
-    printString(__func__);
-    printString(": ERROR: Process ");
-    printInt(processDescriptor->processId);
-    printString(" is corrupted\n");
+    logError("%s: ERROR: Process %lld is corrupted\n",
+      __func__, (long long int) processDescriptor->processId);
     returnValue = processError;
     goto exit;
   }
   if (processRunning(processDescriptor) == false) {
-    printString(__func__);
-    printString(": ERROR: Process ");
-    printInt(processDescriptor->processId);
-    printString(" is not running\n");
+    logError("%s: ERROR: Process %lld is not running\n",
+      __func__, (long long int) processDescriptor->processId);
     returnValue = processError;
     goto exit;
   }
 
   returnValue = processMessageQueuePush(processDescriptor, processMessage);
   if (returnValue != processSuccess) {
-    printString(__func__);
-    printString(": ERROR: Could not push message onto process ");
-    printInt(processDescriptor->processId);
-    printString("'s message queue\n");
+    logError("%s: ERROR: Could not push message onto process %lld's "
+      "message queue\n",
+      __func__, (long long int) processDescriptor->processId);
     // returnValue is already set.  Don't modify it.
     goto exit;
   }
@@ -854,9 +832,7 @@ int schedulerSendProcessMessageToPid(SchedulerState *schedulerState,
   int returnValue = processError;
   if ((pid <= 0) || (pid > NANO_OS_NUM_PROCESSES)) {
     // Not a valid PID.  Fail.
-    printString("ERROR: ");
-    printInt(pid);
-    printString(" is not a valid PID.\n");
+    logError("%d is not a valid PID.\n", pid);
     return returnValue; // processError
   }
 
@@ -918,9 +894,7 @@ int schedulerInitSendMessageToPid(
   int returnValue = processError;
   if ((pid <= 0) || (pid > NANO_OS_NUM_PROCESSES)) {
     // Not a valid PID.  Fail.
-    printString("ERROR: ");
-    printInt(pid);
-    printString(" is not a valid PID.\n");
+    logError("%d is not a valid PID.\n", pid);
     return returnValue; // processError
   }
 
@@ -1003,9 +977,9 @@ void* schedMalloc(size_t size) {
 /// size on success, NULL on failure.
 void* schedCalloc(size_t nmemb, size_t size) {
   size_t totalSize = nmemb * size;
-  printDebugString("Calling schedulerResumeReallocMessage\n");
+  logDebug("Calling schedulerResumeReallocMessage\n");
   void *returnValue = schedulerResumeReallocMessage(NULL, totalSize);
-  printDebugString("Returned from schedulerResumeReallocMessage\n");
+  logDebug("Returned from schedulerResumeReallocMessage\n");
   
   if (returnValue != NULL) {
     memset(returnValue, 0, totalSize);
@@ -1092,9 +1066,9 @@ int schedulerSetPortShell(uint8_t consolePort, ProcessId shell) {
   int returnValue = processError;
 
   if (shell >= NANO_OS_NUM_PROCESSES) {
-    printString("ERROR: schedulerSetPortShell called with invalid shell PID ");
-    printInt(shell);
-    printString("\n");
+    logError(
+      "schedulerSetPortShell called with invalid shell PID %lld\n",
+      (long long int) shell);
     return returnValue; // processError
   }
 
@@ -1129,7 +1103,7 @@ int schedulerGetNumConsolePorts(void) {
     /* data= */ &consoleGetNumPortsArgs,
     /* size= */ sizeof(consoleGetNumPortsArgs)) != processSuccess
   ) {
-    printString("ERROR: Could not send CONSOLE_GET_NUM_PORTS to console\n");
+    logError("Could not send CONSOLE_GET_NUM_PORTS to console\n");
     return returnValue; // -1
   }
 
@@ -1163,18 +1137,16 @@ ProcessId schedulerGetNumRunningProcesses(struct timespec *timeout) {
     &schedulerGetNumRunningProcessesArgs,
     sizeof(schedulerGetNumRunningProcessesArgs), true);
   if (processMessage == NULL) {
-    fprintf(stderr, "ERROR: Could not communicate with scheduler.\n");
+    logError("Could not communicate with scheduler.\n");
     goto exit;
   }
 
   waitStatus = processMessageWaitForDone(processMessage, timeout);
   if (waitStatus != processSuccess) {
     if (waitStatus == processTimedout) {
-      fprintf(stderr,
-        "Command to get the number of running processes timed out.\n");
+      logError("Command to get the number of running processes timed out.\n");
     } else {
-      fprintf(stderr,
-        "Command to get the number of running processes failed.\n");
+      logError("Command to get the number of running processes failed.\n");
     }
 
     // Without knowing how many processes there are, we can't continue.  Bail.
@@ -1183,15 +1155,14 @@ ProcessId schedulerGetNumRunningProcesses(struct timespec *timeout) {
 
   numProcessDescriptors = schedulerGetNumRunningProcessesArgs.returnValue;
   if (numProcessDescriptors == 0) {
-    fprintf(stderr, "ERROR: Number of running processes returned from the "
-      "scheduler is 0.\n");
+    logError("Number of running processes returned from the scheduler is 0.\n");
     errno = schedulerGetNumRunningProcessesArgs.errorNumber;
     goto releaseMessage;
   }
 
 releaseMessage:
   if (processMessageRelease(processMessage) != processSuccess) {
-    fprintf(stderr, "ERROR: Could not release message sent to scheduler for "
+    logError("Could not release message sent to scheduler for "
       "getting the number of running processes.\n");
   }
 
@@ -1230,8 +1201,7 @@ ProcessInfo* schedulerGetProcessInfo(void) {
   ProcessInfo *processInfo = (ProcessInfo*) malloc(sizeof(ProcessInfo)
     + ((numProcessDescriptors - 1) * sizeof(ProcessInfoElement)));
   if (processInfo == NULL) {
-    fprintf(stderr,
-      "ERROR: Could not allocate memory for processInfo in getProcessInfo.\n");
+    logError("Could not allocate memory for processInfo in getProcessInfo.\n");
     goto exit;
   }
 
@@ -1256,17 +1226,16 @@ ProcessInfo* schedulerGetProcessInfo(void) {
     sizeof(schedulerGetProcessInfoArgs), true);
 
   if (processMessage == NULL) {
-    fprintf(stderr,
-      "ERROR: Could not send scheduler message to get process info.\n");
+    logError("Could not send scheduler message to get process info.\n");
     goto freeMemory;
   }
 
   waitStatus = processMessageWaitForDone(processMessage, &timeout);
   if (waitStatus != processSuccess) {
     if (waitStatus == processTimedout) {
-      fprintf(stderr, "Command to get process information timed out.\n");
+      logError("Command to get process information timed out.\n");
     } else {
-      fprintf(stderr, "Command to get process information failed.\n");
+      logError("Command to get process information failed.\n");
     }
 
     // Without knowing the data for the processes, we can't display them.  Bail.
@@ -1275,12 +1244,12 @@ ProcessInfo* schedulerGetProcessInfo(void) {
 
   if (schedulerGetProcessInfoArgs.returnValue != 0) {
     errno = schedulerGetProcessInfoArgs.errorNumber;
-    fprintf(stderr, "ERROR: Scheduler returned status: %s\n", strerror(errno));
+    logError("Scheduler returned status: %s\n", strerror(errno));
     goto releaseMessage;
   }
 
   if (processMessageRelease(processMessage) != processSuccess) {
-    fprintf(stderr, "ERROR: Could not release message sent to scheduler for "
+    logError("Could not release message sent to scheduler for "
       "getting the number of running processes.\n");
   }
 
@@ -1288,7 +1257,7 @@ ProcessInfo* schedulerGetProcessInfo(void) {
 
 releaseMessage:
   if (processMessageRelease(processMessage) != processSuccess) {
-    fprintf(stderr, "ERROR: Could not release message sent to scheduler for "
+    logError("Could not release message sent to scheduler for "
       "getting the number of running processes.\n");
   }
 
@@ -1318,7 +1287,7 @@ int schedulerKillProcess(ProcessId pid) {
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_KILL_PROCESS,
     &schedulerKillProcessArgs, sizeof(schedulerKillProcessArgs), true);
   if (processMessage == NULL) {
-    fprintf(stderr, "ERROR: Could not communicate with scheduler.\n");
+    logError("Could not communicate with scheduler.\n");
     return 1;
   }
 
@@ -1338,26 +1307,24 @@ int schedulerKillProcess(ProcessId pid) {
   if (waitStatus == processSuccess) {
     returnValue = schedulerKillProcessArgs.returnValue;
     if (returnValue == 0) {
-      printf("Termination of process %d successful.\n", pid);
+      logInfo("Termination of process %d successful.\n", pid);
     } else {
-      fprintf(stderr, "Process termination returned status \"%s\".\n",
+      logError("Process termination returned status \"%s\".\n",
         strerror(schedulerKillProcessArgs.errorNumber));
       errno = schedulerKillProcessArgs.errorNumber;
     }
   } else {
     returnValue = 1;
     if (waitStatus == processTimedout) {
-      fprintf(stderr, "Command to kill PID %d timed out.\n", pid);
+      logError("Command to kill PID %d timed out.\n", pid);
     } else {
-      fprintf(stderr, "Command to kill PID %d returned status %d.\n",
-        pid, waitStatus);
+      logError("Command to kill PID %d returned status %d.\n", pid, waitStatus);
     }
   }
 
   if (processMessageRelease(processMessage) != processSuccess) {
     returnValue = 1;
-    fprintf(stderr, "ERROR: "
-      "Could not release message sent to scheduler for kill command.\n");
+    logError("Could not release message sent to scheduler for kill command.\n");
   }
 
   return returnValue;
@@ -1387,7 +1354,7 @@ int schedulerSendSignal(ProcessId pid, int signal) {
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_SEND_SIGNAL,
     /* data= */ &sendSignalArgs, /* size= */ sizeof(sendSignalArgs), true);
   if (processMessage == NULL) {
-    fprintf(stderr, "ERROR: Could not communicate with scheduler.\n");
+    logError("Could not communicate with scheduler.\n");
     errno = EOTHER;
     return returnValue; // -1
   }
@@ -1434,7 +1401,7 @@ int schedulerReplaceOverlay(const void *overlayNamespace,
     /* size= */ sizeof(schedulerReplaceOverlayArgs),
     true);
   if (processMessage == NULL) {
-    fprintf(stderr, "ERROR: Could not communicate with scheduler.\n");
+    logError("Could not communicate with scheduler.\n");
     return returnValue; // -EOTHER
   }
 
@@ -1464,7 +1431,7 @@ int schedulerSetProcessUser(UserId userId) {
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_SET_PROCESS_USER,
     &schedulerSetProcessUserArgs, sizeof(schedulerSetProcessUserArgs), true);
   if (processMessage == NULL) {
-    fprintf(stderr, "ERROR: Could not communicate with scheduler.\n");
+    logError("Could not communicate with scheduler.\n");
     return returnValue; // -1
   }
 
@@ -1474,7 +1441,7 @@ int schedulerSetProcessUser(UserId userId) {
 
   if (returnValue != 0) {
     errno = schedulerSetProcessUserArgs.errorNumber;
-    fprintf(stderr, "Scheduler returned \"%s\" for setProcessUser.\n",
+    logError("Scheduler returned \"%s\" for setProcessUser.\n",
       strerror(errno));
   }
 
@@ -1500,9 +1467,8 @@ FileDescriptor* schedulerGetFileDescriptor(FILE *stream) {
     returnValue
       = allProcesses[runningProcessIndex].fileDescriptors[fdIndex - 1];
   } else {
-    printString("ERROR: Received request for unknown stream ");
-    printInt((intptr_t) stream);
-    printString(".\n");
+    logError("Received request for unknown stream %d.\n",
+      (int) (intptr_t) stream);
   }
 
   return returnValue;
@@ -1525,7 +1491,7 @@ const char* schedulerGetHostname(void) {
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_GET_HOSTNAME,
     &schedulerGetHostnameArgs, sizeof(schedulerGetHostnameArgs), true);
   if (processMessage == NULL) {
-    fprintf(stderr, "ERROR: Could not communicate with scheduler.\n");
+    logError("Could not communicate with scheduler.\n");
     return schedulerGetHostnameArgs.hostname; // NULL
   }
 
@@ -1562,15 +1528,14 @@ int schedulerExecve(const char *pathname,
 
   ExecArgs *execArgs = (ExecArgs*) calloc(1, sizeof(ExecArgs));
   if (execArgs == NULL) {
-    fprintf(stderr, "%s:%d: Allocating execArgs failed\n", __func__, __LINE__);
+    logError("Allocating execArgs failed\n");
     errno = ENOMEM;
     return -1;
   }
 
   execArgs->pathname = (char*) malloc(strlen(pathname) + 1);
   if (execArgs->pathname == NULL) {
-    fprintf(stderr, "%s:%d: Allocating execArgs->pathname failed\n",
-      __func__, __LINE__);
+    logError("Allocating execArgs->pathname failed\n");
     errno = ENOMEM;
     goto freeExecArgs;
   }
@@ -1581,8 +1546,7 @@ int schedulerExecve(const char *pathname,
   argvLen++; // Account for the terminating NULL element
   execArgs->argv = (char**) calloc(1, argvLen * sizeof(char*));
   if (execArgs->argv == NULL) {
-    fprintf(stderr, "%s:%d: Allocating execArgs->argv failed\n",
-      __func__, __LINE__);
+    logError("Allocating execArgs->argv failed\n");
     errno = ENOMEM;
     goto freeExecArgs;
   }
@@ -1595,8 +1559,7 @@ int schedulerExecve(const char *pathname,
     // above, so it's safe to use strlen.
     execArgs->argv[ii] = (char*) malloc(strlen(argv[ii]) + 1);
     if (execArgs->argv[ii] == NULL) {
-      fprintf(stderr, "%s:%d: Allocating execArgs->argv[%zu] failed\n",
-        __func__, __LINE__, ii);
+      logError("Allocating execArgs->argv[%zu] failed\n", ii);
       errno = ENOMEM;
       goto freeExecArgs;
     }
@@ -1610,8 +1573,7 @@ int schedulerExecve(const char *pathname,
     envpLen++; // Account for the terminating NULL element
     execArgs->envp = (char**) calloc(1, envpLen * sizeof(char*));
     if (execArgs->envp == NULL) {
-      fprintf(stderr, "%s:%d: Allocating execArgs->envp failed\n",
-        __func__, __LINE__);
+      logError("Allocating execArgs->envp failed\n");
       errno = ENOMEM;
       goto freeExecArgs;
     }
@@ -1623,8 +1585,7 @@ int schedulerExecve(const char *pathname,
       // above, so it's safe to use strlen.
       execArgs->envp[ii] = (char*) malloc(strlen(envp[ii]) + 1);
       if (execArgs->envp[ii] == NULL) {
-        fprintf(stderr, "%s:%d: Allocating execArgs->envp[%zu] failed\n",
-          __func__, __LINE__, ii);
+        logError("Allocating execArgs->envp[%zu] failed\n", ii);
         errno = ENOMEM;
         goto freeExecArgs;
       }
@@ -1684,11 +1645,8 @@ int closeProcessFileDescriptors(ProcessDescriptor *processDescriptor) {
   memset(&processMessage, 0, sizeof(processMessage));
 
   if (_functionInProgress != NULL) {
-    printString("ERROR: Cannot execute ");
-    printString(__func__);
-    printString(" because ");
-    printString(_functionInProgress);
-    printString(" is already in progress\n");
+    logError("Cannot execute %s because %s is already in progress\n",
+      __func__, _functionInProgress);
     return -EBUSY;
   }
 
@@ -1803,7 +1761,7 @@ FILE* schedFopen(const char *pathname, const char *mode) {
       .mode = (char*) mode,
       .fd = 0, // We don't care
     };
-    printDebugString("schedFopen: Sending message\n");
+    logDebug("schedFopen: Sending message\n");
     if (schedulerInitSendMessageToPid(SCHEDULER_STATE->rootFsPid,
       FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_OPEN_FILE,
       &fopenArgs, sizeof(fopenArgs)
@@ -1817,11 +1775,8 @@ FILE* schedFopen(const char *pathname, const char *mode) {
 
     _functionInProgress = NULL;
   } else {
-    printString("ERROR: Cannot execute ");
-    printString(__func__);
-    printString(" because ");
-    printString(_functionInProgress);
-    printString(" is already in progress\n");
+    logError("Cannot execute %s because %s is already in progress\n",
+      __func__, _functionInProgress);
     errno = EBUSY;
   }
 
@@ -1867,11 +1822,8 @@ int schedFclose(FILE *stream) {
 
     _functionInProgress = NULL;
   } else {
-    printString("ERROR: Cannot execute ");
-    printString(__func__);
-    printString(" because ");
-    printString(_functionInProgress);
-    printString(" is already in progress\n");
+    logError("Cannot execute %s because %s is already in progress\n",
+      __func__, _functionInProgress);
     errno = EBUSY;
     returnValue = EOF;
   }
@@ -1921,11 +1873,8 @@ int schedRemove(const char *pathname) {
 
     _functionInProgress = NULL;
   } else {
-    printString("ERROR: Cannot execute ");
-    printString(__func__);
-    printString(" because ");
-    printString(_functionInProgress);
-    printString(" is already in progress\n");
+    logError("Cannot execute %s because %s is already in progress\n",
+      __func__, _functionInProgress);
     errno = EBUSY;
     returnValue = -1;
   }
@@ -1968,11 +1917,8 @@ size_t schedFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
 
     _functionInProgress = NULL;
   } else {
-    printString("ERROR: Cannot execute ");
-    printString(__func__);
-    printString(" because ");
-    printString(_functionInProgress);
-    printString(" is already in progress\n");
+    logError("Cannot execute %s because %s is already in progress\n",
+      __func__, _functionInProgress);
     errno = EBUSY;
     return 0;
   }
@@ -2015,11 +1961,8 @@ size_t schedFwrite(void *ptr, size_t size, size_t nmemb, FILE *stream) {
 
     _functionInProgress = NULL;
   } else {
-    printString("ERROR: Cannot execute ");
-    printString(__func__);
-    printString(" because ");
-    printString(_functionInProgress);
-    printString(" is already in progress\n");
+    logError("Cannot execute %s because %s is already in progress\n",
+      __func__, _functionInProgress);
     errno = EBUSY;
     return 0;
   }
@@ -2068,11 +2011,8 @@ char* schedFgets(char *buffer, int size, FILE *stream) {
 
     _functionInProgress = NULL;
   } else {
-    printString("ERROR: Cannot execute ");
-    printString(__func__);
-    printString(" because ");
-    printString(_functionInProgress);
-    printString(" is already in progress\n");
+    logError("Cannot execute %s because %s is already in progress\n",
+      __func__, _functionInProgress);
     errno = EBUSY;
     // returnValue is already NULL.
   }
@@ -2120,11 +2060,8 @@ int schedFputs(const char *s, FILE *stream) {
 
     _functionInProgress = NULL;
   } else {
-    printString("ERROR: Cannot execute ");
-    printString(__func__);
-    printString(" because ");
-    printString(_functionInProgress);
-    printString(" is already in progress\n");
+    logError("Cannot execute %s because %s is already in progress\n",
+      __func__, _functionInProgress);
     errno = EBUSY;
     returnValue = EOF;
   }
@@ -2189,12 +2126,7 @@ int schedGetFileBlockMetadataFromPath(
 
   FILE *stream = schedFopen(path, "r");
   if (stream == NULL) {
-    printInt(getRunningPid());
-    printString(": ");
-    printString(__func__);
-    printString(": ERROR! Could not open file \"");
-    printString(path);
-    printString("\"\n");
+    logError("%s: ERROR! Could not open file \"%s\"\n", __func__, path);
     return -EIO;
   }
   int returnValue = schedGetFileBlockMetadataFromFile(stream, metadata);
@@ -2221,7 +2153,7 @@ int loadProcessDescriptorOverlayMetadata(ProcessDescriptor *processDescriptor) {
     strlen((char*) processDescriptor->overlayNamespace) + OVERLAY_EXT_LEN + 6);
   if (overlayPath == NULL) {
     // Fail.
-    printString("ERROR: malloc failure for overlayPath.\n");
+    logError("malloc failure for overlayPath.\n");
     return -ENOMEM;
   }
   strcpy(overlayPath, (char*) processDescriptor->overlayNamespace);
@@ -2260,9 +2192,7 @@ int schedulerKillProcessCommandHandler(
     = (SchedulerKillProcessArgs*) processMessageData(processMessage);
 
   ProcessId pid = schedulerKillProcessArgs->pid;
-  printString("Killing process ");
-  printInt(pid);
-  printString("\n");
+  logInfo("Killing process %lld\n", (long long int) pid);
   int processIndex = pid - 1;
 
   bool selfKill = false;
@@ -2312,9 +2242,9 @@ int schedulerKillProcessCommandHandler(
           /* data= */ &consoleReleasePidPortArgs,
           /* size= */ sizeof(consoleReleasePidPortArgs)) != processSuccess
         ) {
-          printString(
-            "ERROR: Could not send CONSOLE_RELEASE_PID_PORT message ");
-          printString("to console process\n");
+          logError(
+            "Could not send CONSOLE_RELEASE_PID_PORT message "
+            "to console process\n");
           schedulerKillProcessArgs->returnValue = 1;
           schedulerKillProcessArgs->errorNumber = EBUSY;
         }
@@ -2340,9 +2270,9 @@ int schedulerKillProcessCommandHandler(
           &memoryManagerFreeProcessMemoryArgs,
           sizeof(memoryManagerFreeProcessMemoryArgs)) != processSuccess
         ) {
-          printString(
-            "ERROR: Could not send MEMORY_MANAGER_FREE_PROCESS_MEMORY");
-          printString("message to memory manager process\n");
+          logError(
+            "Could not send MEMORY_MANAGER_FREE_PROCESS_MEMORY"
+            "message to memory manager process\n");
           schedulerKillProcessArgs->returnValue = 1;
           schedulerKillProcessArgs->errorNumber = EBUSY;
         }
@@ -2371,9 +2301,8 @@ int schedulerKillProcessCommandHandler(
         processQueuePush(processDescriptor->readyQueue, processDescriptor);
       } else {
         // Tell the caller that we've failed.
-        printString("Failed to terminate process; marking message 0x");
-        printHex((uintptr_t) processMessage);
-        printString(" done\n");
+        logError("Failed to terminate process; marking message 0x%llx done\n",
+          (unsigned long long int) (uintptr_t) processMessage);
         schedulerKillProcessArgs->returnValue = 1;
         schedulerKillProcessArgs->errorNumber = EOTHER;
 
@@ -2383,7 +2312,7 @@ int schedulerKillProcessCommandHandler(
       }
 
       if (processMessageSetDone(processMessage) != processSuccess) {
-        printString("ERROR: Could not mark message done in "
+        logError("Could not mark message done in "
           "schedulerKillProcessCommandHandler.\n");
       }
     } else {
@@ -2391,7 +2320,7 @@ int schedulerKillProcessCommandHandler(
       schedulerKillProcessArgs->returnValue = 1;
       schedulerKillProcessArgs->errorNumber = EACCES;
       if (processMessageSetDone(processMessage) != processSuccess) {
-        printString("ERROR: Could not mark message done in "
+        logError("Could not mark message done in "
           "schedulerKillProcessCommandHandler.\n");
       }
     }
@@ -2400,8 +2329,8 @@ int schedulerKillProcessCommandHandler(
     schedulerKillProcessArgs->returnValue = 1;
     schedulerKillProcessArgs->errorNumber = EINVAL;
     if (processMessageSetDone(processMessage) != processSuccess) {
-      printString("ERROR: "
-        "Could not mark message done in schedulerKillProcessCommandHandler.\n");
+      logError("Could not mark message done in "
+        "schedulerKillProcessCommandHandler.\n");
     }
   }
 
@@ -2590,7 +2519,7 @@ int schedulerExecveCommandHandler(
     = (SchedulerExecveArgs*) processMessageData(processMessage);
   ExecArgs *execArgs = schedulerExecveArgs->execArgs;
   if (execArgs == NULL) {
-    printString("ERROR! execArgs provided was NULL.\n");
+    logError("execArgs provided was NULL.\n");
     schedulerExecveArgs->errorNumber = EINVAL;
     processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
@@ -2600,7 +2529,7 @@ int schedulerExecveCommandHandler(
   char *pathname = execArgs->pathname;
   if (pathname == NULL) {
     // Invalid
-    printString("ERROR! pathname provided was NULL.\n");
+    logError("pathname provided was NULL.\n");
     schedulerExecveArgs->errorNumber = EINVAL;
     processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
@@ -2608,13 +2537,13 @@ int schedulerExecveCommandHandler(
   char **argv = execArgs->argv;
   if (argv == NULL) {
     // Invalid
-    printString("ERROR! argv provided was NULL.\n");
+    logError("argv provided was NULL.\n");
     schedulerExecveArgs->errorNumber = EINVAL;
     processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
   } else if (argv[0] == NULL) {
     // Invalid
-    printString("ERROR! argv[0] provided was NULL.\n");
+    logError("argv[0] provided was NULL.\n");
     schedulerExecveArgs->errorNumber = EINVAL;
     processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
@@ -2632,64 +2561,46 @@ int schedulerExecveCommandHandler(
   }
 
   if (assignMemory(execArgs, 0) != 0) {
-    printString("WARNING: Could not protect execArgs memory.\n");
-    printString("Undefined behavior.\n");
+    logWarn("Could not protect execArgs memory.\nUndefined behavior.\n");
   }
 
   if (assignMemory(pathname, 0) != 0) {
-    printString("WARNING: Could not protect pathname memory.\n");
-    printString("Undefined behavior.\n");
+    logWarn("Could not protect pathname memory.\nUndefined behavior.\n");
   }
 
   if (assignMemory(argv, 0) != 0) {
-    printString("WARNING: Could not protect argv memory.\n");
-    printString("Undefined behavior.\n");
+    logWarn("Could not protect argv memory.\nUndefined behavior.\n");
   }
   for (int ii = 0; argv[ii] != NULL; ii++) {
     if (assignMemory(argv[ii], 0) != 0) {
-      printString("WARNING: Could not protect argv[");
-      printInt(ii);
-      printString("] memory.\n");
-      printString("Undefined behavior.\n");
+      logWarn("Could not protect argv[%lld] memory.\nUndefined behavior.\n",
+        (long long int) ii);
     }
   }
 
   if (envp != NULL) {
     if (assignMemory(envp, 0) != 0) {
-      printString(__func__);
-      printString(": ");
-      printInt(__LINE__);
-      printString(": ");
-      printString("WARNING: Could not protect envp memory.\n");
-      printString("Undefined behavior.\n");
+      logWarn("Could not protect envp memory.\nUndefined behavior.\n");
     }
     for (int ii = 0; envp[ii] != NULL; ii++) {
       if (assignMemory(envp[ii], 0) != 0) {
-        printString(__func__);
-        printString(": ");
-        printInt(__LINE__);
-        printString(": ");
-        printString("WARNING: Could not protect envp[");
-        printInt(ii);
-        printString("] memory.\n");
-        printString("Undefined behavior.\n");
+        logWarn("Could not protect envp[%lld] memory.\n"
+          "Undefined behavior.\n", (long long int) ii);
       }
     }
   }
 
   if (assignMemory(processDescriptor->fileDescriptors, 0) != 0) {
-    printString("WARNING: Could not protect fileDescriptors memory.\n");
-    printString("Undefined behavior.\n");
+    logWarn("Could not protect fileDescriptors memory.\nUndefined behavior.\n");
   }
   for (int ii = 0; ii < processDescriptor->numFileDescriptors; ii++) {
     if (processDescriptor->fileDescriptors[ii] == NULL) {
       continue;
     }
     if (assignMemory(processDescriptor->fileDescriptors[ii], 0) != 0) {
-      printString("WARNING: Could not protect fileDescriptors[");
-      printInt(ii);
-      printString("] memory.\n");
-      printString("Undefined behavior.\n");
+      logWarn("Could not protect fileDescriptors[%lld] memory.\n"
+        "Undefined behavior.\n",
+        (long long int) ii);
     }
   }
 
@@ -2723,78 +2634,47 @@ int schedulerExecveCommandHandler(
     &memoryManagerFreeProcessMemoryArgs,
     sizeof(memoryManagerFreeProcessMemoryArgs))
   ) {
-    printString("WARNING: Could not release memory for process ");
-    printInt(processDescriptor->processId);
-    printString("\n");
-    printString("Memory leak.\n");
+    logWarn("Could not release memory for process %lld\nMemory leak.\n",
+      (long long int) processDescriptor->processId);
   }
 
   execArgs->schedulerState = schedulerState;
   if (processCreate(processDescriptor, HAL->platform->execCommand, execArgs)
     == processError
   ) {
-    printString(
-      "ERROR: Could not configure process handle for new command.\n");
+    logError("Could not configure process handle for new command.\n");
   }
 
   if (assignMemory(execArgs, processDescriptor->processId) != 0) {
-    printString(__func__);
-    printString(": ");
-    printInt(__LINE__);
-    printString(": ");
-    printString("WARNING: Could not assign execArgs to exec process.\n");
-    printString("Undefined behavior.\n");
+    logWarn("Could not assign execArgs to exec process.\n"
+      "Undefined behavior.\n");
   }
 
   if (assignMemory(pathname, processDescriptor->processId) != 0) {
-    printString(__func__);
-    printString(": ");
-    printInt(__LINE__);
-    printString(": ");
-    printString("WARNING: Could not assign pathname to exec process.\n");
-    printString("Undefined behavior.\n");
+    logWarn("Could not assign pathname to exec process.\n"
+      "Undefined behavior.\n");
   }
 
   if (assignMemory(argv, processDescriptor->processId) != 0) {
-    printString(__func__);
-    printString(": ");
-    printInt(__LINE__);
-    printString(": ");
-    printString("WARNING: Could not assign argv to exec process.\n");
-    printString("Undefined behavior.\n");
+    logWarn("Could not assign argv to exec process.\n"
+      "Undefined behavior.\n");
   }
   for (int ii = 0; argv[ii] != NULL; ii++) {
     if (assignMemory(argv[ii], processDescriptor->processId) != 0) {
-      printString(__func__);
-      printString(": ");
-      printInt(__LINE__);
-      printString(": ");
-      printString("WARNING: Could not assign argv[");
-      printInt(ii);
-      printString("] to exec process.\n");
-      printString("Undefined behavior.\n");
+      logWarn("Could not assign argv[%d] to exec process.\n"
+        "Undefined behavior.\n", ii);
     }
   }
 
   if (envp != NULL) {
     if (assignMemory(envp, processDescriptor->processId) != 0) {
-      printString(__func__);
-      printString(": ");
-      printInt(__LINE__);
-      printString(": ");
-      printString("WARNING: Could not assign envp to exec process.\n");
-      printString("Undefined behavior.\n");
+      logWarn("Could not assign envp to exec process.\n"
+        "Undefined behavior.\n");
     }
     for (int ii = 0; envp[ii] != NULL; ii++) {
       if (assignMemory(envp[ii], processDescriptor->processId) != 0) {
-        printString(__func__);
-        printString(": ");
-        printInt(__LINE__);
-        printString(": ");
-        printString("WARNING: Could not assign envp[");
-        printInt(ii);
-        printString("] to exec process.\n");
-        printString("Undefined behavior.\n");
+        logWarn("Could not assign envp[%d] to exec process.\n"
+          "Undefined behavior.\n", ii);
       }
     }
   }
@@ -2802,8 +2682,8 @@ int schedulerExecveCommandHandler(
   if (assignMemory(processDescriptor->fileDescriptors,
     processDescriptor->processId) != 0
   ) {
-    printString("WARNING: Could not assign fileDescriptors to scheduler.\n");
-    printString("Undefined behavior.\n");
+    logWarn("Could not assign fileDescriptors to scheduler.\n"
+      "Undefined behavior.\n");
   }
   for (int ii = 0; ii < processDescriptor->numFileDescriptors; ii++) {
     if (processDescriptor->fileDescriptors[ii] == NULL) {
@@ -2812,10 +2692,8 @@ int schedulerExecveCommandHandler(
     if (assignMemory(processDescriptor->fileDescriptors[ii],
       processDescriptor->processId) != 0
     ) {
-      printString("WARNING: Could not assign fileDescriptors[");
-      printInt(ii);
-      printString("] to scheduler.\n");
-      printString("Undefined behavior.\n");
+      logWarn("Could not assign fileDescriptors[%d] to scheduler.\n"
+        "Undefined behavior.\n", ii);
     }
   }
 
@@ -2862,7 +2740,7 @@ int schedulerExecveCommandHandler(
       /*commandDescriptor->consolePort*/ 255, processDescriptor->processId)
       != processSuccess
     ) {
-      printString("WARNING: Could not assign console port to process.\n");
+      logWarn("Could not assign console port to process.\n");
     }
   }
 
@@ -2902,7 +2780,7 @@ int schedulerSpawnCommandHandler(
     = (SchedulerSpawnArgs*) processMessageData(processMessage);
   SpawnArgs *spawnArgs = schedulerSpawnArgs->spawnArgs;
   if (spawnArgs == NULL) {
-    printString("ERROR! spawnArgs provided was NULL.\n");
+    logError("spawnArgs provided was NULL.\n");
     schedulerSpawnArgs->errorNumber = EINVAL;
     processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
@@ -2911,7 +2789,7 @@ int schedulerSpawnCommandHandler(
   char *pathname = spawnArgs->path;
   if (pathname == NULL) {
     // Invalid
-    printString("ERROR! pathname provided was NULL.\n");
+    logError("pathname provided was NULL.\n");
     schedulerSpawnArgs->errorNumber = EINVAL;
     processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
@@ -2919,13 +2797,13 @@ int schedulerSpawnCommandHandler(
   char **argv = spawnArgs->argv;
   if (argv == NULL) {
     // Invalid
-    printString("ERROR! argv provided was NULL.\n");
+    logError("argv provided was NULL.\n");
     schedulerSpawnArgs->errorNumber = EINVAL;
     processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
   } else if (argv[0] == NULL) {
     // Invalid
-    printString("ERROR! argv[0] provided was NULL.\n");
+    logError("argv[0] provided was NULL.\n");
     schedulerSpawnArgs->errorNumber = EINVAL;
     processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
@@ -2934,7 +2812,7 @@ int schedulerSpawnCommandHandler(
 
   ProcessDescriptor *processDescriptor = processQueuePop(&schedulerState->free);
   if (processDescriptor == NULL) {
-    printString("Out of process slots to launch process.\n");
+    logError("Out of process slots to launch process.\n");
     schedulerSpawnArgs->errorNumber = EINVAL;
     processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
@@ -2946,7 +2824,7 @@ int schedulerSpawnCommandHandler(
 
   ExecArgs *execArgs = (ExecArgs*) schedMalloc(sizeof(ExecArgs));
   if (execArgs == NULL) {
-    printString("Out of memory for ExecArgs.\n");
+    logError("Out of memory for ExecArgs.\n");
     schedulerSpawnArgs->errorNumber = ENOMEM;
     processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
@@ -2967,8 +2845,7 @@ int schedulerSpawnCommandHandler(
   processDescriptor->fileDescriptors = (FileDescriptor**) schedCalloc(1,
     NUM_STANDARD_FILE_DESCRIPTORS * sizeof(FileDescriptor*));
   if (processDescriptor->fileDescriptors == NULL) {
-    printString(
-      "ERROR: Could not allocate file descriptor array for new command\n");
+    logError("Could not allocate file descriptor array for new command\n");
     schedulerSpawnArgs->errorNumber = ENOMEM;
     schedFree(execArgs);
     processMessageSetDone(processMessage);
@@ -2978,9 +2855,8 @@ int schedulerSpawnCommandHandler(
     processDescriptor->fileDescriptors[ii]
       = (FileDescriptor*) schedMalloc(sizeof(FileDescriptor));
     if (processDescriptor->fileDescriptors[ii] == NULL) {
-      printString("ERROR: Could not allocate memory for file descriptor ");
-      printInt(ii);
-      printString(" for new process\n");
+      logError("Could not allocate memory for file descriptor %d "
+        "for new process\n", ii);
       schedulerSpawnArgs->errorNumber = ENOMEM;
       for (int jj = 0; jj < ii; jj++) {
         schedFree(processDescriptor->fileDescriptors[jj]);
@@ -3047,52 +2923,38 @@ int schedulerSpawnCommandHandler(
   if (processCreate(processDescriptor, HAL->platform->execCommand, execArgs)
     == processError
   ) {
-    printString(
-      "ERROR: Could not configure process handle for new command.\n");
+    logError("Could not configure process handle for new command.\n");
   }
 
   if (assignMemory(execArgs, processDescriptor->processId) != 0) {
-    printString("WARNING: Could not assign execArgs to spawn process.\n");
-    printString("Undefined behavior.\n");
+    logWarn("Could not assign execArgs to spawn process.\n"
+      "Undefined behavior.\n");
   }
 
   if (assignMemory(pathname, processDescriptor->processId) != 0) {
-    printString("WARNING: Could not assign pathname to spawn process.\n");
-    printString("Undefined behavior.\n");
+    logWarn("Could not assign pathname to spawn process.\n"
+      "Undefined behavior.\n");
   }
 
   if (assignMemory(argv, processDescriptor->processId) != 0) {
-    printString("WARNING: Could not assign argv to spawn process.\n");
-    printString("Undefined behavior.\n");
+    logWarn("Could not assign argv to spawn process.\nUndefined behavior.\n");
   }
   for (int ii = 0; argv[ii] != NULL; ii++) {
     if (assignMemory(argv[ii], processDescriptor->processId) != 0) {
-      printString("WARNING: Could not assign argv[");
-      printInt(ii);
-      printString("] to spawn process.\n");
-      printString("Undefined behavior.\n");
+      logWarn("Could not assign argv[%d] to spawn process.\n"
+        "Undefined behavior.\n", ii);
     }
   }
 
   if (envp != NULL) {
     if (assignMemory(envp, processDescriptor->processId) != 0) {
-      printString(__func__);
-      printString(": ");
-      printInt(__LINE__);
-      printString(": ");
-      printString("WARNING: Could not assign envp to spawn process.\n");
-      printString("Undefined behavior.\n");
+      logWarn("Could not assign envp to spawn process.\n"
+        "Undefined behavior.\n");
     }
     for (int ii = 0; envp[ii] != NULL; ii++) {
       if (assignMemory(envp[ii], processDescriptor->processId) != 0) {
-        printString(__func__);
-        printString(": ");
-        printInt(__LINE__);
-        printString(": ");
-        printString("WARNING: Could not assign envp[");
-        printInt(ii);
-        printString("] to spawn process.\n");
-        printString("Undefined behavior.\n");
+        logWarn("Could not assign envp[%d] to spawn process.\n"
+          "Undefined behavior.\n", ii);
       }
     }
   }
@@ -3100,9 +2962,8 @@ int schedulerSpawnCommandHandler(
   if (assignMemory(processDescriptor->fileDescriptors,
     processDescriptor->processId) != 0
   ) {
-    printString(
-      "WARNING: Could not assign fileDescriptors to spawn process.\n");
-    printString("Undefined behavior.\n");
+    logWarn("Could not assign fileDescriptors to spawn process.\n"
+      "Undefined behavior.\n");
   }
   for (int ii = 0; ii < processDescriptor->numFileDescriptors; ii++) {
     if (processDescriptor->fileDescriptors[ii] == NULL) {
@@ -3111,10 +2972,8 @@ int schedulerSpawnCommandHandler(
     if (assignMemory(processDescriptor->fileDescriptors[ii],
       processDescriptor->processId) != 0
     ) {
-      printString("WARNING: Could not assign fileDescriptors[");
-      printInt(ii);
-      printString("] to spawn process.\n");
-      printString("Undefined behavior.\n");
+      logWarn("Could not assign fileDescriptors[%d] to spawn process.\n"
+        "Undefined behavior.\n", ii);
     }
   }
 
@@ -3174,9 +3033,7 @@ int schedulerSendSignalCommandHandler(
   if (processMessage == NULL) {
     // This should be impossible, but there's nothing to do.  Print an error
     // and return good status.
-    printString("ERROR: NULL message provided to ");
-    printString(__func__);
-    printString("\n");
+    logError("NULL message provided to %s\n", __func__);
     return returnValue; // 0
   }
 
@@ -3191,9 +3048,7 @@ int schedulerSendSignalCommandHandler(
   ) {
     sendSignalArgs->returnValue = -1;
     sendSignalArgs->errorNumber = ESRCH;
-    printString("ERROR: Invalid process ID specified in ");
-    printString(__func__);
-    printString("\n");
+    logError("Invalid process ID specified in %s\n", __func__);
     processMessageSetDone(processMessage);
     goto exit; // return 0
   }
@@ -3201,9 +3056,7 @@ int schedulerSendSignalCommandHandler(
   if (sendSignalArgs->signal < 0) {
     sendSignalArgs->returnValue = -1;
     sendSignalArgs->errorNumber = EINVAL;
-    printString("ERROR: Invalid signal specified in ");
-    printString(__func__);
-    printString("\n");
+    logError("Invalid signal specified in %s\n", __func__);
     processMessageSetDone(processMessage);
     goto exit; // return 0
   }
@@ -3279,9 +3132,7 @@ int schedulerReplaceOverlayCommandHandler(
   if (processMessage == NULL) {
     // This should be impossible, but there's nothing to do.  Print an error
     // and return good status.
-    printString("ERROR: NULL message provided to ");
-    printString(__func__);
-    printString("\n");
+    logError("NULL message provided to %s\n", __func__);
     return returnValue; // 0
   }
 
@@ -3327,9 +3178,7 @@ int schedulerShutdownCommandHandler(
   if (processMessage == NULL) {
     // This should be impossible, but there's nothing to do.  Print an error
     // and return good status.
-    printString("ERROR: NULL message provided to ");
-    printString(__func__);
-    printString("\n");
+    logError("NULL message provided to %s\n", __func__);
     return returnValue; // 0
   }
 
@@ -3416,13 +3265,11 @@ void handleSchedulerMessage(SchedulerState *schedulerState) {
     if ((processMessageType(message) & 0xffffffffffffff00)
       != SCHEDULER_COMMAND_SIGNATURE
     ) {
-      printString("ERROR: ");
-      printString(__func__);
-      printString(" received unknown signature 0x");
-      printHex(processMessageType(message) & 0xffffffffffffff00);
-      printString(" from process ");
-      printInt(processPid(processMessageFrom(message)));
-      printString("\n");
+      logError("%s received unknown signature 0x%llx from process %d\n",
+        __func__,
+        (unsigned long long int)
+          (processMessageType(message) & 0xffffffffffffff00),
+        processPid(processMessageFrom(message)));
       // Don't attempt to process this message further and don't put it back on
       // our message queue.  Just return immediately.
       return;
@@ -3432,18 +3279,10 @@ void handleSchedulerMessage(SchedulerState *schedulerState) {
       = (SchedulerCommand) (processMessageType(message) & 0xff);
     if (messageType >= NUM_SCHEDULER_COMMANDS) {
       // Invalid.  Purge the message.
-      printInt(getRunningPid());
-      printString(": ");
-      printString(__func__);
-      printString(": ");
-      printInt(__LINE__);
-      printString(": Received invalid message 0x");
-      printHex((uintptr_t) message);
-      printString(" of type ");
-      printInt(messageType);
-      printString(" from process ");
-      printInt(processPid(processMessageFrom(message)));
-      printString("\n");
+      logError("%s: Received invalid message 0x%llx of type %d "
+        "from process %d\n", __func__,
+        (unsigned long long int) (uintptr_t) message,
+        messageType, processPid(processMessageFrom(message)));
       return;
     }
 
@@ -3454,10 +3293,8 @@ void handleSchedulerMessage(SchedulerState *schedulerState) {
       // back of our own queue again and try again later.
       if (lastReturnValue == 0) {
         // Only print out a message if this is the first time we've failed.
-        printString("Scheduler command handler failed for message ");
-        printInt(messageType);
-        printString("\n");
-        printString("Pushing message back onto our own queue\n");
+        logError("Scheduler command handler failed for message %d\n"
+          "Pushing message back onto our own queue\n", messageType);
       }
       processMessageQueuePush(getRunningProcess(), message);
     }
@@ -3527,8 +3364,8 @@ int schedulerDumpMemoryAllocations(void) {
     MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS,
     NULL, 0) != processSuccess
   ) { 
-    printString("ERROR: Could not send message ");
-    printString("MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS to memory manager\n");
+    logError("Could not send message "
+      "MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS to memory manager\n");
   }
   
   return returnValue;
@@ -3554,10 +3391,8 @@ int schedulerDumpOpenFiles(void) {
     /* data= */ &filesystemDumpOpenFilesArgs,
     /* size= */ sizeof(filesystemDumpOpenFilesArgs)) != processSuccess
   ) { 
-    printString("ERROR: Could not send FILESYSTEM_DUMP_OPEN_FILES message ");
-    printString("to root FS process ID ");
-    printInt(SCHEDULER_STATE->rootFsPid);
-    printString("\n");
+    logError("Could not send FILESYSTEM_DUMP_OPEN_FILES message "
+      "to root FS process ID %d\n", SCHEDULER_STATE->rootFsPid);
   }
   
   return filesystemDumpOpenFilesArgs.returnValue;
@@ -3577,12 +3412,8 @@ int schedulerDumpOpenFiles(void) {
 void removeProcess(
   ProcessDescriptor *processDescriptor, const char *errorMessage
 ) {
-  printString("ERROR: ");
-  printString(errorMessage);
-  printString("\n");
-  printString("       Removing process ");
-  printInt(processDescriptor->processId);
-  printString(" from process queues\n");
+  logError("%s\n       Removing process %d from process queues\n",
+    errorMessage, processDescriptor->processId);
 
   processDescriptor->name = NULL;
   processDescriptor->userId = NO_USER_ID;
@@ -3597,8 +3428,8 @@ void removeProcess(
     /* data= */ &consoleReleasePidPortArgs,
     /* size= */ sizeof(consoleReleasePidPortArgs)) != processSuccess
   ) {
-    printString("ERROR: Could not send CONSOLE_RELEASE_PID_PORT message ");
-    printString("to console process\n");
+    logError("Could not send CONSOLE_RELEASE_PID_PORT message "
+      "to console process\n");
   }
 
   MemoryManagerFreeProcessMemoryArgs memoryManagerFreeProcessMemoryArgs = {
@@ -3611,7 +3442,7 @@ void removeProcess(
     &memoryManagerFreeProcessMemoryArgs,
     sizeof(memoryManagerFreeProcessMemoryArgs)) != processSuccess
   ) {
-    printString("ERROR: Could not free process memory. Memory leak.\n");
+    logError("Could not free process memory. Memory leak.\n");
   }
 
   return;
@@ -3643,7 +3474,7 @@ int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp) {
 
   NanoOsOverlayMap *overlayMap = HAL->memory->overlayMap;
   if ((overlayMap == NULL) || (HAL->memory->overlaySize == 0)) {
-    printString("No overlay memory available for use.\n");
+    logError("No overlay memory available for use.\n");
     return -ENOMEM;
   }
 
@@ -3666,45 +3497,39 @@ int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp) {
     processDescriptor->overlay.blockDevice->blockSize,
     (uint8_t*) overlayMap) != 0
   ) {
-    printString(__func__);
-    printString(": ");
-    printInt(__LINE__);
-    printString(": Could not read overlay\n");
+    logError("%s: Could not read overlay\n", __func__);
     return -EIO;
   }
 
   if (overlayMap->header.magic != NANO_OS_OVERLAY_MAGIC) {
-    printString("Overlay magic was not \"NanoOsOL\".\n");
-    printDebugString("Expected 0x");
-    printDebugHex((uintptr_t) NANO_OS_OVERLAY_MAGIC);
-    printDebugString("\n");
-
-    printDebugString("overlayMap->header.osApi = 0x");
-    printDebugHex((uintptr_t) overlayMap->header.osApi);
-    printDebugString("\noverlayMap->header.env = 0x");
-    printDebugHex((uintptr_t) overlayMap->header.env);
-    printDebugString("\noverlayMap->header.overlay.blockDevice = 0x");
-    printDebugHex((uintptr_t) overlayMap->header.overlay.blockDevice);
-    printDebugString("\noverlayMap->header.overlay.startBlock = ");
-    printDebugInt(overlayMap->header.overlay.startBlock);
-    printDebugString("\noverlayMap->header.overlay.numBlocks = ");
-    printDebugInt(overlayMap->header.overlay.numBlocks);
-    printDebugString("\noverlayMap->header.version = 0x");
-    printDebugHex((uintptr_t) overlayMap->header.version);
-    printDebugString("\noverlayMap->header.magic = 0x");
-    printDebugHex((uintptr_t) overlayMap->header.magic);
-    printDebugString("\noverlayMap->exports = 0x");
-    printDebugHex((uintptr_t) overlayMap->exports);
-    printDebugString("\noverlayMap->numExports = 0x");
-    printDebugHex((uintptr_t) overlayMap->numExports);
-    printDebugString("\n");
+    logError("Overlay magic was not \"NanoOsOL\".\n");
+    logDebug("Expected 0x%llx\n"
+      "overlayMap->header.osApi = 0x%llx\n"
+      "overlayMap->header.env = 0x%llx\n"
+      "overlayMap->header.overlay.blockDevice = 0x%llx\n"
+      "overlayMap->header.overlay.startBlock = %lld\n"
+      "overlayMap->header.overlay.numBlocks = %lld\n"
+      "overlayMap->header.version = 0x%llx\n"
+      "overlayMap->header.magic = 0x%llx\n"
+      "overlayMap->exports = 0x%llx\n"
+      "overlayMap->numExports = 0x%llx\n",
+      (unsigned long long int) NANO_OS_OVERLAY_MAGIC,
+      (unsigned long long int) (uintptr_t) overlayMap->header.osApi,
+      (unsigned long long int) (uintptr_t) overlayMap->header.env,
+      (unsigned long long int) (uintptr_t)
+        overlayMap->header.overlay.blockDevice,
+      (long long int) overlayMap->header.overlay.startBlock,
+      (long long int) overlayMap->header.overlay.numBlocks,
+      (unsigned long long int) (uintptr_t) overlayMap->header.version,
+      (unsigned long long int) (uintptr_t) overlayMap->header.magic,
+      (unsigned long long int) (uintptr_t) overlayMap->exports,
+      (unsigned long long int) (uintptr_t) overlayMap->numExports);
 
     return -ENOEXEC;
   }
   if (overlayMap->header.version != NANO_OS_OVERLAY_VERSION) {
-    printString("Overlay version is 0x");
-    printHex(overlayMap->header.version);
-    printString("\n");
+    logError("Overlay version is 0x%llx\n",
+      (unsigned long long int) overlayMap->header.version);
     return -ENOEXEC;
   }
 
@@ -3797,69 +3622,39 @@ int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
   execArgs->schedulerState = SCHEDULER_STATE;
 
   if (assignMemory(execArgs, processDescriptor->processId) != 0) {
-    printString(__func__);
-    printString(": ");
-    printInt(__LINE__);
-    printString(": ");
-    printString("WARNING: Could not assign execArgs to exec process.\n");
-    printString("Undefined behavior.\n");
+    logWarn("Could not assign execArgs to exec process.\n"
+      "Undefined behavior.\n");
   }
 
   if (assignMemory(execArgs->pathname, processDescriptor->processId) != 0) {
-    printString(__func__);
-    printString(": ");
-    printInt(__LINE__);
-    printString(": ");
-    printString(
-      "WARNING: Could not assign execArgs->pathname to exec process.\n");
-    printString("Undefined behavior.\n");
+    logWarn("Could not assign execArgs->pathname to exec process.\n"
+      "Undefined behavior.\n");
   }
 
   if (execArgs->argv != NULL) {
     if (assignMemory(execArgs->argv, processDescriptor->processId) != 0) {
-      printString(__func__);
-      printString(": ");
-      printInt(__LINE__);
-      printString(": ");
-      printString("WARNING: Could not assign argv to exec process.\n");
-      printString("Undefined behavior.\n");
+      logWarn("Could not assign argv to exec process.\n"
+        "Undefined behavior.\n");
     }
 
     for (int ii = 0; execArgs->argv[ii] != NULL; ii++) {
       if (assignMemory(execArgs->argv[ii], processDescriptor->processId) != 0) {
-        printString(__func__);
-        printString(": ");
-        printInt(__LINE__);
-        printString(": ");
-        printString("WARNING: Could not assign execArgs->argv[");
-        printInt(ii);
-        printString("] to exec process.\n");
-        printString("Undefined behavior.\n");
+        logWarn("Could not assign execArgs->argv[%d] to exec process.\n"
+          "Undefined behavior.\n", ii);
       }
     }
   }
 
   if (execArgs->envp != NULL) {
     if (assignMemory(execArgs->envp, processDescriptor->processId) != 0) {
-      printString(__func__);
-      printString(": ");
-      printInt(__LINE__);
-      printString(": ");
-      printString(
-        "WARNING: Could not assign execArgs->envp to exec process.\n");
-      printString("Undefined behavior.\n");
+      logWarn("Could not assign execArgs->envp to exec process.\n"
+        "Undefined behavior.\n");
     }
 
     for (int ii = 0; execArgs->envp[ii] != NULL; ii++) {
       if (assignMemory(execArgs->envp[ii], processDescriptor->processId) != 0) {
-        printString(__func__);
-        printString(": ");
-        printInt(__LINE__);
-        printString(": ");
-        printString("WARNING: Could not assign execArgs->envp[");
-        printInt(ii);
-        printString("] to exec process\n");
-        printString("Undefined behavior\n");
+        logWarn("Could not assign execArgs->envp[%d] to exec "
+          "process\nUndefined behavior\n", ii);
       }
     }
   }
@@ -3871,8 +3666,7 @@ int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
   processDescriptor->fileDescriptors = (FileDescriptor**) schedCalloc(1,
     NUM_STANDARD_FILE_DESCRIPTORS * sizeof(FileDescriptor*));
   if (processDescriptor->fileDescriptors == NULL) {
-    printString(
-      "ERROR: Could not allocate file descriptor array for new command\n");
+    logError("Could not allocate file descriptor array for new command\n");
     returnValue = -ENOMEM;
     goto freeExecArgs;
   }
@@ -3880,9 +3674,9 @@ int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
     processDescriptor->fileDescriptors[ii]
       = (FileDescriptor*) schedMalloc(sizeof(FileDescriptor));
     if (processDescriptor->fileDescriptors[ii] == NULL) {
-      printString("ERROR: Could not allocate memory for file descriptor ");
-      printInt(ii);
-      printString(" for new process\n");
+      logError("Could not allocate memory for file descriptor %lld "
+        "for new process\n",
+        (long long int) ii);
       returnValue = -ENOMEM;
       goto freeFileDescriptors;
     }
@@ -3898,8 +3692,7 @@ int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
   if (processCreate(processDescriptor, HAL->platform->execCommand, execArgs)
     == processError
   ) {
-    printString(
-      "ERROR: Could not configure process handle for new command\n");
+    logError("Could not configure process handle for new command\n");
     returnValue = -ENOEXEC;
     goto freeFileDescriptors;
   }
@@ -3939,12 +3732,8 @@ freeExecArgs:
   }
 
   if (execArgs->envp != NULL) {
-    printString(__func__);
-    printString(": ");
-    printInt(__LINE__);
-    printString(": Freeing execArgs->envp = 0x");
-    printHex((uintptr_t) processDescriptor->envp);
-    printString("\n");
+    logInfo("%s: Freeing execArgs->envp = 0x%llx\n",
+      __func__, (unsigned long long int) (uintptr_t) processDescriptor->envp);
     for (int ii = 0; execArgs->envp[ii] != NULL; ii++) {
       schedFree(execArgs->envp[ii]);
     }
@@ -3990,7 +3779,7 @@ static const char *shellArgs[] = {
 /// @return Returns 0 on sucess, -errno onfailure.
 int32_t restartConsole(ProcessDescriptor *processDescriptor) {
   if (processCreate(processDescriptor, runConsole, NULL) != processSuccess) {
-    printString("Could not restart console process.\n");
+    logError("Could not restart console process.\n");
     return -ENOMEM;
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
@@ -4012,7 +3801,7 @@ int32_t restartMemoryManager(ProcessDescriptor *processDescriptor) {
   if (processCreate(processDescriptor, runMemoryManager, NULL)
     != processSuccess
   ) {
-    printString("Could not restart memory manager process.\n");
+    logError("Could not restart memory manager process.\n");
     return -ENOMEM;
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
@@ -4031,11 +3820,11 @@ int32_t restartMemoryManager(ProcessDescriptor *processDescriptor) {
 ///
 /// @return Returns 0 on sucess, -errno onfailure.
 int32_t restartBuiltinShell(ProcessDescriptor *processDescriptor) {
-  printDebugString("In restartBuiltinShell\n");
+  logDebug("In restartBuiltinShell\n");
   if ((SCHEDULER_STATE->hostname == NULL)
     || (*SCHEDULER_STATE->hostname == '\0')
   ) {
-    printDebugString(
+    logDebug(
       "restartBuiltinShell: scheduler not up.  Returning -EAGAIN\n");
     return -EAGAIN;
   }
@@ -4054,8 +3843,7 @@ int32_t restartBuiltinShell(ProcessDescriptor *processDescriptor) {
   processDescriptor->fileDescriptors = (FileDescriptor**) schedCalloc(1,
     NUM_STANDARD_FILE_DESCRIPTORS * sizeof(FileDescriptor*));
   if (processDescriptor->fileDescriptors == NULL) {
-    printString(
-      "ERROR: Could not allocate file descriptor array for new command\n");
+    logError("Could not allocate file descriptor array for new command\n");
     returnValue = -ENOMEM;
     goto exit;
   }
@@ -4063,9 +3851,8 @@ int32_t restartBuiltinShell(ProcessDescriptor *processDescriptor) {
     processDescriptor->fileDescriptors[ii]
       = (FileDescriptor*) schedMalloc(sizeof(FileDescriptor));
     if (processDescriptor->fileDescriptors[ii] == NULL) {
-      printString("ERROR: Could not allocate memory for file descriptor ");
-      printInt(ii);
-      printString(" for new process\n");
+      logError("Could not allocate memory for file descriptor %d "
+        "for new process\n", ii);
       returnValue = -ENOMEM;
       goto freeFileDescriptors;
     }
@@ -4079,11 +3866,11 @@ int32_t restartBuiltinShell(ProcessDescriptor *processDescriptor) {
   }
 
   // User process exited.  Re-launch the shell.
-  printDebugString("restartBuiltinShell: Restarting shell\n");
+  logDebug("restartBuiltinShell: Restarting shell\n");
   if (processCreate(processDescriptor, runBuiltinShell, NULL)
     != processSuccess
   ) {
-    printString("Could not restart memory manager process.\n");
+    logError("Could not restart memory manager process.\n");
     returnValue = -ENOMEM;
     goto freeFileDescriptors;
   }
@@ -4112,11 +3899,11 @@ exit:
 ///
 /// @return Returns 0 on sucess, -errno onfailure.
 int32_t restartOverlayShell(ProcessDescriptor *processDescriptor) {
-  printDebugString("In restartOverlayShell\n");
+  logDebug("In restartOverlayShell\n");
   if ((SCHEDULER_STATE->hostname == NULL)
     || (*SCHEDULER_STATE->hostname == '\0')
   ) {
-    printDebugString(
+    logDebug(
       "restartOverlayShell: scheduler not up.  Returning -EAGAIN\n");
     return -EAGAIN;
   }
@@ -4135,11 +3922,11 @@ int32_t restartOverlayShell(ProcessDescriptor *processDescriptor) {
       processDescriptor->envp = NULL;
     }
 
-    printDebugString("restartOverlayShell: Starting getty\n");
+    logDebug("restartOverlayShell: Starting getty\n");
     int returnValue = schedulerRunOverlayCommand(processDescriptor,
       "/usr/bin/getty", (char**) gettyArgs, NULL);
     if (returnValue == -EBUSY) {
-      printDebugString(
+      logDebug(
         "restartOverlayShell: Starting getty failed.  Returning -EAGAIN\n");
       return -EAGAIN;
     }
@@ -4147,21 +3934,19 @@ int32_t restartOverlayShell(ProcessDescriptor *processDescriptor) {
   }
 
   // User process exited.  Re-launch the shell.
-  printDebugString("restartOverlayShell: Restarting shell\n");
+  logDebug("restartOverlayShell: Restarting shell\n");
   int returnValue = 0;
   char *passwdStringBuffer
     = (char*) schedMalloc(NANO_OS_PASSWD_STRING_BUF_SIZE);
   if (passwdStringBuffer == NULL) {
-    printString(
-      "ERROR! Could not allocate space for passwdStringBuffer in "
+    logError("Could not allocate space for passwdStringBuffer in "
       "restartOverlayShell\n");
     return -ENOMEM;
   }
 
   struct passwd *pwd = (struct passwd*) schedMalloc(sizeof(struct passwd));
   if (pwd == NULL) {
-    printString(
-      "ERROR! Could not allocate space for pwd in restartOverlayShell\n");
+    logError("Could not allocate space for pwd in restartOverlayShell\n");
     schedFree(passwdStringBuffer);
     return -ENOMEM;
   }
@@ -4171,9 +3956,8 @@ int32_t restartOverlayShell(ProcessDescriptor *processDescriptor) {
     nanoOsGetpwuid_r(processDescriptor->userId, pwd,
       passwdStringBuffer, NANO_OS_PASSWD_STRING_BUF_SIZE, &result);
     if (result == NULL) {
-      printString("Could not find passwd info for uid ");
-      printInt(processDescriptor->userId);
-      printString("\n");
+      logError("Could not find passwd info for uid %lld\n",
+        (long long int) processDescriptor->userId);
       returnValue = -ENOENT;
       break;
     }
@@ -4208,7 +3992,7 @@ void runScheduler(void) {
   if (processStackOverflowed(
     &allProcesses[SCHEDULER_STATE->schedulerPid - 1])
   ) {
-    printString("Scheduler stack overflow detected");
+    logError("Scheduler stack overflow detected");
     HAL->power->enterMode(HAL_POWER_MODE_OFF);
   }
 
@@ -4216,9 +4000,8 @@ void runScheduler(void) {
     = processQueuePop(SCHEDULER_STATE->currentReady);
   if (processDescriptor == NULL) {
     // Nothing we can do.
-    printString("ERROR: No processes to pop in ");
-    printString(SCHEDULER_STATE->currentReady->name);
-    printString(" process queue\n");
+    logError("No processes to pop in %s process queue\n",
+      SCHEDULER_STATE->currentReady->name);
     goto exit;
   }
 
@@ -4267,28 +4050,15 @@ void runScheduler(void) {
   if (processRunning(processDescriptor) == false) {
     if (processDescriptor->envp != NULL) {
       if (assignMemory(processDescriptor->envp, 0) != 0) {
-        printString(__func__);
-        printString(": ");
-        printInt(__LINE__);
-        printString(": ");
-        printString("WARNING: Could not protect envp memory from process ");
-        printInt(processDescriptor->processId);
-        printString("\n");
-        printString("Undefined behavior\n");
+        logWarn("Could not protect envp memory from process %d\n"
+          "Undefined behavior\n",
+          processDescriptor->processId);
       }
 
       for (int ii = 0; processDescriptor->envp[ii] != NULL; ii++) {
         if (assignMemory(processDescriptor->envp[ii], 0) != 0) {
-          printString(__func__);
-          printString(": ");
-          printInt(__LINE__);
-          printString(": ");
-          printString("WARNING: Could not protect envp[");
-          printInt(ii);
-          printString("] memory from process ");
-          printInt(processDescriptor->processId);
-          printString("\n");
-          printString("Undefined behavior\n");
+          logWarn("Could not protect envp[%d] memory from process %d\n"
+            "Undefined behavior\n", ii, processDescriptor->processId);
         }
       }
     }
@@ -4311,8 +4081,8 @@ void runScheduler(void) {
       &memoryManagerFreeProcessMemoryArgs,
       sizeof(memoryManagerFreeProcessMemoryArgs)) != processSuccess
     ) {
-      printString("ERROR: Could not send MEMORY_MANAGER_FREE_PROCESS_MEMORY ");
-      printString("message to memory manager\n");
+      logError("Could not send MEMORY_MANAGER_FREE_PROCESS_MEMORY "
+        "message to memory manager\n");
     }
 
     // Terminate the process so that any lingering messages in its message queue
@@ -4323,13 +4093,11 @@ void runScheduler(void) {
     memset(&processDescriptor->message, 0, sizeof(ProcessMessage));
 
     if (processDescriptor->restartFunction != NULL) {
-      startDebugMessage("Process ");
-      printDebugInt(processDescriptor->processId);
-      printDebugString(" has exited.  Restarting.\n");
+      logDebug("Process %lld has exited.  Restarting.\n",
+        (long long int) processDescriptor->processId);
       int returnValue = processDescriptor->restartFunction(processDescriptor);
       if (returnValue == -EAGAIN) {
-        startDebugMessage(
-          "processDescriptor->restartFunction returned -EAGAIN\n");
+        logDebug("processDescriptor->restartFunction returned -EAGAIN\n");
         processQueuePush(SCHEDULER_STATE->currentReady, processDescriptor);
         goto exit;
       } else if (returnValue != 0) {
@@ -4372,7 +4140,7 @@ exit:
 __attribute__((noinline)) void startScheduler(
   SchedulerState **threadStatePointer
 ) {
-  printDebugString("Starting scheduler in debug mode...\n");
+  logDebug("Starting scheduler in debug mode...\n");
 
   // Initialize the scheduler's state.
   SchedulerState schedulerState = {0};
@@ -4409,7 +4177,7 @@ __attribute__((noinline)) void startScheduler(
   schedulerState.loggerPid = 0; // Invalid PID
   schedulerState.runSchedulerQueues = runSchedulerQueues;
   SCHEDULER_STATE = &schedulerState;
-  printDebugString("Set scheduler state.\n");
+  logDebug("Set scheduler state.\n");
 
   // Initialize the pointer that was used to configure threads.
   *threadStatePointer = &schedulerState;
@@ -4418,7 +4186,7 @@ __attribute__((noinline)) void startScheduler(
   ProcessMessage messagesStorage[NANO_OS_NUM_MESSAGES] = {0};
   extern ProcessMessage *messages;
   messages = messagesStorage;
-  printDebugString("Allocated messages storage.\n");
+  logDebug("Allocated messages storage.\n");
 
   // Initialize the allProcesses pointer.  The processes are all zeroed because
   // we zeroed the entire schedulerState when we declared it.
@@ -4434,7 +4202,7 @@ __attribute__((noinline)) void startScheduler(
     = PRIVILEGE_LEVEL_KERNEL;
   threadSetContext(allProcesses[schedulerState.schedulerPid - 1].mainThread,
     &allProcesses[schedulerState.schedulerPid - 1]);
-  printDebugString("Configured scheduler process.\n");
+  logDebug("Configured scheduler process.\n");
 
   // Initialize the global file descriptors.
   // Kernel stdin file descriptor doesn't need an update because they don't
@@ -4467,11 +4235,11 @@ __attribute__((noinline)) void startScheduler(
   // console's stack, so we create this process before we create anything else.
   // Leaving it at this point of initialization in case we ever have to come
   // back to that flow again.
-  printDebugString("Creating console process.\n");
+  logDebug("Creating console process.\n");
   ProcessDescriptor *processDescriptor
     = &allProcesses[schedulerState.consolePid - 1];
   if (processCreate(processDescriptor, runConsole, NULL) != processSuccess) {
-    printString("Could not create console process.\n");
+    logError("Could not create console process.\n");
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
   processDescriptor->processId = schedulerState.consolePid;
@@ -4479,7 +4247,7 @@ __attribute__((noinline)) void startScheduler(
   processDescriptor->userId = ROOT_USER_ID;
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_KERNEL;
   processDescriptor->restartFunction = restartConsole;
-  printDebugString("Created console process.\n");
+  logDebug("Created console process.\n");
 
   uint8_t numExtraConsoleStacksVal = 0;
   HAL->memory->numExtraConsoleStacks(
@@ -4487,38 +4255,32 @@ __attribute__((noinline)) void startScheduler(
   for (uint8_t ii = 0; ii < numExtraConsoleStacksVal; ii++) {
     Thread *thread = threadProvision(NULL, dummyProcess, NULL);
     if (thread == NULL) {
-      printString("Could not increase console process's stack size.\n");
+      logError("Could not increase console process's stack size.\n");
       break;
     }
     if (threadSetStackEnd(
       processDescriptor->mainThread, threadStackEnd(thread)) != processSuccess
     ) {
-      printString("Could not set console process's stack size.\n");
+      logError("Could not set console process's stack size.\n");
     }
   }
 
-  printDebugString("\n");
-  printDebugString("sizeof(int) = ");
-  printDebugInt(sizeof(int));
-  printDebugString("\n");
-  printDebugString("sizeof(void*) = ");
-  printDebugInt(sizeof(void*));
-  printDebugString("\n");
-  printDebugString("Main stack size = ");
-  printDebugInt(ABS_DIFF(
-    ((intptr_t) schedulerThread),
-    ((intptr_t) threadStackEnd(schedulerThread))
-  ));
-  printDebugString(" bytes\n");
-  printDebugString("schedulerState size = ");
-  printDebugInt(sizeof(SchedulerState));
-  printDebugString(" bytes\n");
-  printDebugString("messagesStorage size = ");
-  printDebugInt(sizeof(ProcessMessage) * NANO_OS_NUM_MESSAGES);
-  printDebugString(" bytes\n");
-  printDebugString("ConsoleState size = ");
-  printDebugInt(sizeof(ConsoleState));
-  printDebugString(" bytes\n");
+  logDebug("\n"
+    "sizeof(int) = %lld\n"
+    "sizeof(void*) = %lld\n"
+    "Main stack size = %lld bytes\n"
+    "schedulerState size = %lld bytes\n"
+    "messagesStorage size = %lld bytes\n"
+    "ConsoleState size = %lld bytes\n",
+    (long long int) sizeof(int),
+    (long long int) sizeof(void*),
+    (long long int) ABS_DIFF(
+      ((intptr_t) schedulerThread),
+      ((intptr_t) threadStackEnd(schedulerThread))
+    ),
+    (long long int) sizeof(SchedulerState),
+    (long long int) (sizeof(ProcessMessage) * NANO_OS_NUM_MESSAGES),
+    (long long int) sizeof(ConsoleState));
 
   // schedulerState.firstUserPid isn't populated until HAL->initRootStorage
   // completes, so we need to call that as soon as we can.
@@ -4526,12 +4288,10 @@ __attribute__((noinline)) void startScheduler(
   if (HAL->platform->initRootStorage != NULL) {
     rv = HAL->platform->initRootStorage();
     if (rv != 0) {
-      printString("ERROR: initRootStorage returned status ");
-      printInt(rv);
-      printString("\n");
+      logError("initRootStorage returned status %d\n", rv);
     }
   }
-  printDebugString("Initialized root storage\n");
+  logDebug("Initialized root storage\n");
 
   // Fix the rest of the IPC capabilities now that all the core processes are
   // started.
@@ -4583,11 +4343,11 @@ __attribute__((noinline)) void startScheduler(
     allProcesses[ii - 1].fileDescriptors
       = standardKernelFileDescriptorsPointers;
   }
-  printDebugString("Initialized kernel process file descriptors.\n");
+  logDebug("Initialized kernel process file descriptors.\n");
 
   // Start the console by calling processResume.
   processResume(&allProcesses[schedulerState.consolePid - 1], NULL);
-  printDebugString("Started console process.\n");
+  logDebug("Started console process.\n");
   // Put the console process on the ready queue.
   allProcesses[schedulerState.consolePid - 1].readyQueue
     = &schedulerState.ready[PRIVILEGE_LEVEL_KERNEL];
@@ -4598,7 +4358,7 @@ __attribute__((noinline)) void startScheduler(
   if (schedulerState.numShells <= 0) {
     // This should be impossible since the HAL was successfully initialized,
     // but take no chances.
-    printString("ERROR! No console ports running.\nHalting.\n");
+    logError("No console ports running.\nHalting.\n");
     while(1);
   }
   // Irrespective of how many ports the console may be running, we can't run
@@ -4606,9 +4366,7 @@ __attribute__((noinline)) void startScheduler(
   // sensible limit.
   schedulerState.numShells
     = MIN(schedulerState.numShells, NANO_OS_MAX_NUM_SHELLS);
-  printDebugString("Managing ");
-  printDebugInt(schedulerState.numShells);
-  printDebugString(" shells\n");
+  logDebug("Managing %lld shells\n", (long long int) schedulerState.numShells);
 
   // We need to do an initial population of all the processes because we need to
   // get to the end of memory to run the memory manager in whatever is left
@@ -4621,9 +4379,7 @@ __attribute__((noinline)) void startScheduler(
     if (processCreate(processDescriptor,
       dummyProcess, NULL) != processSuccess
     ) {
-      printString("Could not create process ");
-      printInt(ii);
-      printString("\n");
+      logError("Could not create process %lld\n", (long long int) ii);
     }
     threadSetContext(
       processDescriptor->mainThread, processDescriptor);
@@ -4639,7 +4395,7 @@ __attribute__((noinline)) void startScheduler(
       processDescriptor->restartFunction = NULL;
     }
   }
-  printDebugString("Created all processes.\n");
+  logDebug("Created all processes.\n");
 
   // Set the capabilities for all of the processes.
   for (ProcessId ii = 1; ii <= NANO_OS_NUM_PROCESSES; ii++) {
@@ -4718,29 +4474,20 @@ __attribute__((noinline)) void startScheduler(
   // process after the memory manager, which would be the value of
   // schedulerState.memoryManagerPid since Pids are one-based instead of
   // zero-based.
-  printDebugString("Console stack size = ");
-  printDebugInt(ABS_DIFF(
-    ((uintptr_t) allProcesses[schedulerState.memoryManagerPid].mainThread),
-    ((uintptr_t) allProcesses[schedulerState.consolePid - 1].mainThread))
-    - sizeof(Thread)
-  );
-  printDebugString(" bytes\n");
-
-  printDebugString("Thread stack size = ");
-  printDebugInt(ABS_DIFF(
-    ((uintptr_t) allProcesses[schedulerState.firstUserPid - 1].mainThread),
-    ((uintptr_t) allProcesses[schedulerState.firstUserPid].mainThread))
-    - sizeof(Thread)
-  );
-  printDebugString(" bytes\n");
-
-  printDebugString("Thread size = ");
-  printDebugInt(sizeof(Thread));
-  printDebugString("\n");
-
-  printDebugString("standardKernelFileDescriptors size = ");
-  printDebugInt(sizeof(standardKernelFileDescriptors));
-  printDebugString("\n");
+  logDebug("Console stack size = %lld bytes\n"
+    "Thread stack size = %lld bytes\n"
+    "Thread size = %lld\n"
+    "standardKernelFileDescriptors size = %lld\n",
+    (long long int) (ABS_DIFF(
+      ((uintptr_t) allProcesses[schedulerState.memoryManagerPid].mainThread),
+      ((uintptr_t) allProcesses[schedulerState.consolePid - 1].mainThread))
+      - sizeof(Thread)),
+    (long long int) (ABS_DIFF(
+      ((uintptr_t) allProcesses[schedulerState.firstUserPid - 1].mainThread),
+      ((uintptr_t) allProcesses[schedulerState.firstUserPid].mainThread))
+      - sizeof(Thread)),
+    (long long int) sizeof(Thread),
+    (long long int) sizeof(standardKernelFileDescriptors));
 
   // Create the memory manager process.  : THIS MUST BE THE LAST PROCESS
   // CREATED BECAUSE WE WANT TO USE THE ENTIRE REST OF MEMORY FOR IT :
@@ -4748,7 +4495,7 @@ __attribute__((noinline)) void startScheduler(
   if (processCreate(processDescriptor,
     runMemoryManager, NULL) != processSuccess
   ) {
-    printString("Could not create memory manager process.\n");
+    logError("Could not create memory manager process.\n");
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
   processDescriptor->processId = schedulerState.memoryManagerPid;
@@ -4762,28 +4509,25 @@ __attribute__((noinline)) void startScheduler(
     if (schedulerAssignPortToPid(
       ii, schedulerState.memoryManagerPid) != processSuccess
     ) {
-      printString(
-        "WARNING: Could not assign console port to memory manager.\n");
+      logWarn("Could not assign console port to memory manager.\n");
     }
   }
-  printDebugString("Assigned console ports to memory manager.\n");
+  logDebug("Assigned console ports to memory manager.\n");
 
   // Set the shells for the ports.
   for (uint8_t ii = 0; ii < schedulerState.numShells; ii++) {
     if (schedulerSetPortShell(ii, schedulerState.firstShellPid + ii)
       != processSuccess
     ) {
-      printString("WARNING: Could not set port for shell ");
-      printInt(ii);
-      printString("\n");
-      printString("         Undefined behavior will result.\n");
+      logWarn("Could not set port for shell %d\n"
+        "Undefined behavior will result.\n", ii);
     }
   }
-  printDebugString("Set shells for ports.\n");
+  logDebug("Set shells for ports.\n");
 
   // Start the memory manager by calling processResume.
   processResume(&allProcesses[schedulerState.memoryManagerPid - 1], NULL);
-  printDebugString("Started memory manager.\n");
+  logDebug("Started memory manager.\n");
 
   // Mark all the kernel processes as being part of the kernel ready queue.
   // Skip over the scheduler (process 0).
@@ -4796,7 +4540,7 @@ __attribute__((noinline)) void startScheduler(
       = &schedulerState.ready[allProcesses[ii - 1].privilegeLevel];
     processQueuePush(allProcesses[ii - 1].readyQueue, &allProcesses[ii - 1]);
   }
-  printDebugString("Populated kernel/executive ready queues.\n");
+  logDebug("Populated kernel/executive ready queues.\n");
 
   // The scheduler will take care of cleaning up the dummy processes in the
   // ready queue.
@@ -4808,25 +4552,25 @@ __attribute__((noinline)) void startScheduler(
       = &schedulerState.ready[allProcesses[ii - 1].privilegeLevel];
     processQueuePush(allProcesses[ii - 1].readyQueue, &allProcesses[ii - 1]);
   }
-  printDebugString("Populated supervisor/user ready queues.\n");
+  logDebug("Populated supervisor/user ready queues.\n");
 
   // Get the memory manager and filesystem up and running.
   processResume(&allProcesses[schedulerState.memoryManagerPid - 1], NULL);
   runSchedulerQueues(PRIVILEGE_LEVEL_SUPERVISOR);
-  printDebugString("Started memory manager and filesystem.\n");
+  logDebug("Started memory manager and filesystem.\n");
 
   // Allocate memory for the hostname.
   schedulerState.hostname = (char*) schedCalloc(1, HOST_NAME_MAX + 1);
-  printDebugString("Allocated memory for the hostname.\n");
+  logDebug("Allocated memory for the hostname.\n");
   if (schedulerState.hostname != NULL) {
     FILE *hostnameFile = schedFopen("/etc/hostname", "r");
     if (hostnameFile != NULL) {
-      printDebugString("Opened hostname file.\n");
+      logDebug("Opened hostname file.\n");
       if (schedFgets(
         schedulerState.hostname, HOST_NAME_MAX + 1, hostnameFile)
           != schedulerState.hostname
       ) {
-        printString("ERROR! fgets did not read hostname!\n");
+        logError("fgets did not read hostname!\n");
       }
       if (strchr(schedulerState.hostname, '\r')) {
         *strchr(schedulerState.hostname, '\r') = '\0';
@@ -4836,16 +4580,14 @@ __attribute__((noinline)) void startScheduler(
         strcpy(schedulerState.hostname, "localhost");
       }
       schedFclose(hostnameFile);
-      printDebugString("Closed hostname file.\n");
-      printDebugString("hostname = ");
-      printDebugString(schedulerState.hostname);
-      printDebugString("\n");
+      logDebug("Closed hostname file.\nhostname = %s\n",
+        schedulerState.hostname);
     } else {
-      printString("ERROR! schedFopen of hostname returned NULL!\n");
+      logError("schedFopen of hostname returned NULL!\n");
       strcpy(schedulerState.hostname, "localhost");
     }
   } else {
-    printString("ERROR! schedulerState.hostname is NULL!\n");
+    logError("schedulerState.hostname is NULL!\n");
   }
 
 #ifdef NANO_OS_DEBUG
@@ -4853,14 +4595,14 @@ __attribute__((noinline)) void startScheduler(
   do {
     FILE *helloFile = schedFopen("hello", "w");
     if (helloFile == NULL) {
-      printDebugString("ERROR: Could not open hello file for writing!\n");
+      logDebug("ERROR: Could not open hello file for writing!\n");
       sanityTestFailed = true;
       break;
     }
-    printDebugString("helloFile is non-NULL!\n");
+    logDebug("helloFile is non-NULL!\n");
 
     if (schedFputs("world", helloFile) == EOF) {
-      printDebugString("ERROR: Could not write to hello file!\n");
+      logDebug("ERROR: Could not write to hello file!\n");
       schedFclose(helloFile);
       sanityTestFailed = true;
       break;
@@ -4869,48 +4611,45 @@ __attribute__((noinline)) void startScheduler(
 
     helloFile = schedFopen("hello", "r");
     if (helloFile == NULL) {
-      printDebugString(
-        "ERROR: Could not open hello file for reading after write!\n");
+      logDebug("ERROR: Could not open hello file for reading after write!\n");
       schedRemove("hello");
       sanityTestFailed = true;
       break;
     }
-    printDebugString("Opened helloFile for reading\n");
+    logDebug("Opened helloFile for reading\n");
 
     char worldString[11] = {0};
     if (schedFgets(
       worldString, sizeof(worldString), helloFile) != worldString
     ) {
-      printDebugString("ERROR: Could not read worldString after write!\n");
+      logDebug("ERROR: Could not read worldString after write!\n");
       schedFclose(helloFile);
       schedRemove("hello");
       sanityTestFailed = true;
       break;
     }
-    printDebugString("Read data from helloFile into worldString\n");
+    logDebug("Read data from helloFile into worldString\n");
 
     if (strcmp(worldString, "world") != 0) {
-      printDebugString("ERROR: Expected \"world\", read \"");
-      printDebugString(worldString);
-      printDebugString("\"!\n");
+      logDebug("ERROR: Expected \"world\", read \"%s\"!\n", worldString);
       schedFclose(helloFile);
       schedRemove("hello");
       sanityTestFailed = true;
       break;
     }
-    printDebugString("Successfully read \"world\" from \"hello\"!\n");
+    logDebug("Successfully read \"world\" from \"hello\"!\n");
     schedFclose(helloFile);
 
     helloFile = schedFopen("hello", "a");
     if (helloFile == NULL) {
-      printDebugString("ERROR: Could not open hello file for appending!\n");
+      logDebug("ERROR: Could not open hello file for appending!\n");
       schedRemove("hello");
       sanityTestFailed = true;
       break;
     }
 
     if (schedFputs("world", helloFile) == EOF) {
-      printDebugString("ERROR: Could not append to hello file!\n");
+      logDebug("ERROR: Could not append to hello file!\n");
       schedFclose(helloFile);
       schedRemove("hello");
       sanityTestFailed = true;
@@ -4920,8 +4659,7 @@ __attribute__((noinline)) void startScheduler(
 
     helloFile = schedFopen("hello", "r");
     if (helloFile == NULL) {
-      printDebugString(
-        "ERROR: Could not open hello file for reading after append!\n");
+      logDebug("ERROR: Could not open hello file for reading after append!\n");
       schedRemove("hello");
       sanityTestFailed = true;
       break;
@@ -4930,7 +4668,7 @@ __attribute__((noinline)) void startScheduler(
     if (schedFgets(
       worldString, sizeof(worldString), helloFile) != worldString
     ) {
-      printDebugString("ERROR: Could not read worldString after append!\n");
+      logDebug("ERROR: Could not read worldString after append!\n");
       schedFclose(helloFile);
       schedRemove("hello");
       sanityTestFailed = true;
@@ -4938,23 +4676,20 @@ __attribute__((noinline)) void startScheduler(
     }
 
     if (strcmp(worldString, "worldworld") == 0) {
-      printDebugString(
+      logDebug(
         "Successfully read \"worldworld\" from \"hello\"!\n");
     } else {
-      printDebugString("ERROR: Expected \"worldworld\", read \"");
-      printDebugString(worldString);
-      printDebugString("\"!\n");
+      logDebug("ERROR: Expected \"worldworld\", read \"%s\"!\n", worldString);
       sanityTestFailed = true;
     }
 
     schedFclose(helloFile);
     if (schedRemove("hello") != 0) {
-      printDebugString(
-        "ERROR: schedRemove failed to remove the \"hello\" file.\n");
+      logDebug("ERROR: schedRemove failed to remove the \"hello\" file.\n");
       sanityTestFailed = true;
     }
   } while (0);
-  printDebugString("Filesystem sanity test complete\n");
+  logDebug("Filesystem sanity test complete\n");
   while (sanityTestFailed == true);
 #endif // NANO_OS_DEBUG
 

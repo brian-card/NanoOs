@@ -31,6 +31,7 @@
 // Custom includes
 #include "Console.h"
 #include "Hal.h"
+#include "Logger.h"
 #include "NanoOs.h"
 #include "OverlayFunctions.h"
 #include "Processes.h"
@@ -253,7 +254,7 @@ void* execOverlayCommand(void *args) {
   // goes back to its work.
   ExecArgs *execArgs = (ExecArgs*) args;
   if (execArgs == NULL) {
-    printString("ERROR: No arguments provided to execOverlayCommand.\n");
+    logError("No arguments provided to execOverlayCommand.\n");
     releaseConsole();
     return (void*) ((intptr_t) -1);
   }
@@ -264,7 +265,7 @@ void* execOverlayCommand(void *args) {
 
   if ((argv == NULL) || (argv[0] == NULL)) {
     // Fail.
-    printString("ERROR: Invalid argv.\n");
+    logError("Invalid argv.\n");
     releaseConsole();
     return (void*) ((intptr_t) -1);
   }
@@ -275,7 +276,7 @@ void* execOverlayCommand(void *args) {
   ProcessDescriptor *processDescriptor = getRunningProcess();
   if (processDescriptor == NULL) {
     // This should be impossible.
-    printString("ERROR: No running process.\n");
+    logError("No running process.\n");
     releaseConsole();
     return (void*) ((intptr_t) -1);
   }
@@ -296,7 +297,7 @@ void* execOverlayCommand(void *args) {
     processYield();
   }
 
-  printDebugString("Call the process function\n");
+  logDebug("Call the process function\n");
   int returnValue = runOverlayCommand(pathname, argc, argv);
 
   if (processDescriptor->userId != NO_USER_ID) {
@@ -307,16 +308,14 @@ void* execOverlayCommand(void *args) {
     do {
       passwdStringBuffer = (char*) malloc(NANO_OS_PASSWD_STRING_BUF_SIZE);
       if (passwdStringBuffer == NULL) {
-        fprintf(stderr,
-          "ERROR! Could not allocate space for passwdStringBuffer in %s.\n",
+        logError("Could not allocate space for passwdStringBuffer in %s.\n",
           argv[0]);
         break;
       }
       
       pwd = (struct passwd*) malloc(sizeof(struct passwd));
       if (pwd == NULL) {
-        fprintf(stderr,
-          "ERROR! Could not allocate space for pwd in %s.\n", argv[0]);
+        logError("Could not allocate space for pwd in %s.\n", argv[0]);
         break;
       }
       
@@ -324,7 +323,7 @@ void* execOverlayCommand(void *args) {
       nanoOsGetpwuid_r(processDescriptor->userId, pwd,
         passwdStringBuffer, NANO_OS_PASSWD_STRING_BUF_SIZE, &result);
       if (result == NULL) {
-        fprintf(stderr, "Could not find passwd info for uid %d\n",
+        logError("Could not find passwd info for uid %d\n",
           processDescriptor->userId);
         // Assume this is the user's shell exiting.
         // Clear the processes's user ID.
@@ -363,7 +362,7 @@ void* execOverlayCommand(void *args) {
 /// void*.  If the command is not run, returns -1 cast to a void*.
 void* runBlockOverlay(void *args) {
   if (args == NULL) {
-    printString("ERROR: No arguments provided to runBlockOverlay\n");
+    logError("No arguments provided to runBlockOverlay\n");
     return (void*) ((intptr_t) -1);
   }
 
@@ -378,7 +377,7 @@ void* runBlockOverlay(void *args) {
   ProcessDescriptor *processDescriptor = getRunningProcess();
   if (processDescriptor == NULL) {
     // This should be impossible.
-    printString("ERROR: No running process\n");
+    logError("No running process\n");
     return (void*) ((intptr_t) -1);
   }
   // Cancel the preemption timer to make sure the load is atomic.
@@ -390,10 +389,10 @@ void* runBlockOverlay(void *args) {
   // Yield so that the scheduler will load our overlay into memory.
   processYield();
 
-  printDebugString("Call the block overlay function\n");
+  logDebug("Call the block overlay function\n");
   OverlayFunction main = findOverlayFunction("main");
   if (main == NULL) {
-    printString("ERROR: No main function in block overlay\n");
+    logError("No main function in block overlay\n");
     return (void*) ((intptr_t) -1);
   }
   return main(blockOverlayArgs.args);
@@ -505,13 +504,9 @@ int sendProcessMessageToProcess(
   ) {
     errno = EPERM;
     returnValue = processError;
-    printString("ERROR: Could not send message type ");
-    printInt(processMessageType(processMessage) & 0xff);
-    printString(" from process ");
-    printInt(getRunningPid());
-    printString(" to process ");
-    printInt(processDescriptor->processId);
-    printString("\n");
+    logError("Could not send message type %d to process %d\n",
+      (processMessageType(processMessage) & 0xff),
+      processDescriptor->processId);
     goto exit;
   }
 
@@ -537,13 +532,12 @@ exit:
 int sendProcessMessageToPid(unsigned int pid, ProcessMessage *processMessage) {
   if ((pid <= 0) || (pid > NANO_OS_NUM_PROCESSES)) {
     // Not a valid PID.  Fail.
-    printString("ERROR: ");
-    printInt(pid);
-    printString(" is not a valid process ID.\n");
+    logError("%d is not a valid process ID.\n", pid);
     return processError;
   }
 
-  ProcessDescriptor *processDescriptor = &SCHEDULER_STATE->allProcesses[pid - 1];
+  ProcessDescriptor *processDescriptor
+    = &SCHEDULER_STATE->allProcesses[pid - 1];
   return sendProcessMessageToProcess(processDescriptor, processMessage);
 }
 
@@ -599,17 +593,11 @@ ProcessMessage* initSendProcessMessageToProcess(
     return processMessage; // NULL
   } else if (!processRunning(processDescriptor)) {
     // Can't send to a non-running process.
-    printString("ERROR: Could not send message from process ");
-    printInt(processPid(getRunningProcess()));
-    printString("\n");
     if (processDescriptor->mainThread == NULL) {
-      printString("ERROR: thread is NULL\n");
+      logError("Could not send message: thread is NULL\n");
     } else {
-      printString("ERROR: Process ");
-      printInt(processPid(processDescriptor));
-      printString(" is in state ");
-      printInt(processState(processDescriptor));
-      printString("\n");
+      logError("Could not send message: process %d is in state %d\n",
+        processPid(processDescriptor), processState(processDescriptor));
     }
     return processMessage; // NULL
   }
@@ -623,10 +611,7 @@ ProcessMessage* initSendProcessMessageToProcess(
     processMessage = getAvailableMessage();
   }
   if (processMessage == NULL) {
-    printInt(getRunningPid());
-    printString(": ");
-    printString(__func__);
-    printString(": ERROR: Out of process messages\n");
+    logError("Out of process messages\n");
     return processMessage; // NULL
   }
 
@@ -636,7 +621,7 @@ ProcessMessage* initSendProcessMessageToProcess(
     != processSuccess
   ) {
     if (processMessageRelease(processMessage) != processSuccess) {
-      printString("ERROR: "
+      logError(
         "Could not release message from initSendProcessMessageToProcess.\n");
     }
     processMessage = NULL;
@@ -667,9 +652,7 @@ ProcessMessage* initSendProcessMessageToPid(int pid, int64_t type,
   ProcessMessage *processMessage = NULL;
   if ((pid < 0) || (pid > NANO_OS_NUM_PROCESSES)) {
     // Not a valid PID.  Fail.
-    printString("ERROR: ");
-    printInt(pid);
-    printString(" is not a valid PID.\n");
+    logError("%d is not a valid PID.\n", pid);
     return processMessage; // NULL
   }
 

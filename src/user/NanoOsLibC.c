@@ -32,6 +32,7 @@
 
 #include "../kernel/Console.h"
 #include "../kernel/Filesystem.h"
+#include "../kernel/Logger.h"
 #include "../kernel/Hal.h"
 #include "../kernel/NanoOs.h"
 #include "../kernel/OverlayFunctions.h"
@@ -57,7 +58,7 @@ int timespec_get(struct timespec* spec, int base) {
   if (HAL->clock != NULL) {
     HAL->clock->getElapsedNanoseconds(0, &now);
   } else {
-    fprintf(stderr, "timespec_get not implemented\n");
+    logError("timespec_get not implemented\n");
   }
   spec->tv_sec = (time_t) (now / ((int64_t) 1000000000));
   spec->tv_nsec = now % ((int64_t) 1000000000);
@@ -136,7 +137,7 @@ void msleep(int durationMs) {
       HAL->clock->getElapsedMilliseconds(start, &elapsed);
     } while (elapsed < durationMs);
   } else {
-    fprintf(stderr, "msleep not implemented\n");
+    logError("msleep not implemented\n");
   }
 }
 
@@ -156,7 +157,7 @@ time_t time(time_t *tloc) {
     HAL->clock->getElapsedMilliseconds(0, &nowMs);
     now = ((time_t) nowMs) / ((time_t) 1000);
   } else {
-    fprintf(stderr, "time not implemented\n");
+    logError("time not implemented\n");
   }
   
   if (tloc != NULL) {

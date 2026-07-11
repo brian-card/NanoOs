@@ -44,6 +44,7 @@
 // NanoOs includes.
 #include "Commands.h"
 #include "Console.h"
+#include "Logger.h"
 #include "NanoOs.h"
 #include "Processes.h"
 #include "Scheduler.h"
@@ -426,7 +427,7 @@ void* execBuiltinCommand(void *args) {
   // goes back to its work.
   ExecArgs *execArgs = (ExecArgs*) args;
   if (execArgs == NULL) {
-    printString("ERROR: No arguments provided to execOverlayCommand.\n");
+    logError("No arguments provided to execOverlayCommand.\n");
     releaseConsole();
     return (void*) ((intptr_t) -1);
   }
@@ -437,7 +438,7 @@ void* execBuiltinCommand(void *args) {
 
   if ((argv == NULL) || (argv[0] == NULL)) {
     // Fail.
-    printString("ERROR: Invalid argv.\n");
+    logError("Invalid argv.\n");
     releaseConsole();
     return (void*) ((intptr_t) -1);
   }
@@ -448,7 +449,7 @@ void* execBuiltinCommand(void *args) {
   ProcessDescriptor *processDescriptor = getRunningProcess();
   if (processDescriptor == NULL) {
     // This should be impossible.
-    printString("ERROR: No running process.\n");
+    logError("No running process.\n");
     releaseConsole();
     return (void*) ((intptr_t) -1);
   }
@@ -469,7 +470,7 @@ void* execBuiltinCommand(void *args) {
     processYield();
   }
 
-  printDebugString("Call the process function\n");
+  logDebug("Call the process function\n");
   const CommandEntry *commandEntry = getCommandEntryFromInput(pathname);
   if (commandEntry == NULL) {
     fprintf(stderr, "ERROR: CommandEntry Not found for command \"%s\"\n",

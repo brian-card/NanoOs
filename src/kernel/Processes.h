@@ -87,9 +87,11 @@ extern "C"
 
 /// @def getRunningPid
 ///
-/// @brief Get the process ID for the currently-running process.
+/// @brief Get the process ID for the currently-running process.  If
+/// getRunningProcess returns NULL then the scheduler isn't up yet, so by
+/// definition, we're running process 0.
 #define getRunningPid() \
-  (getRunningProcess()->processId)
+  ((getRunningProcess() != NULL) ? getRunningProcess()->processId : 0)
 
 /// @def getRunningUid
 ///

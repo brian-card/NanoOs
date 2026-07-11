@@ -41,6 +41,7 @@
 
 #include "Console.h"
 #include "Hal.h"
+#include "Logger.h"
 #include "NanoOs.h"
 #include "Processes.h"
 #include "Scheduler.h"
@@ -78,11 +79,8 @@ int consolePrintMessage(
   }
 
   if (portFound == false) {
-    printString("WARNING: Request to print message \"");
-    printString(message);
-    printString("\" from non-owning process ");
-    printInt(owner);
-    printString("\n");
+    logWarn("Request to print message \"%s\" from non-owning "
+      "process %lld\n", message, (long long int) owner);
     returnValue = processError;
   }
 
@@ -384,9 +382,8 @@ void consoleSetPortShellCommandHandler(
     processMessageSetDone(inputMessage);
     consoleMessageCleanup(inputMessage);
   } else {
-    printString("ERROR: Request to assign ownership of non-existent port ");
-    printInt(consolePort);
-    printString("\n");
+    logError("Request to assign ownership of non-existent port %d\n",
+      consolePort);
     // *DON'T* call processMessageRelease or processMessageSetDone here.  The
     // lack of the message being done will indicate to the caller that there
     // was a problem servicing the command.
@@ -433,9 +430,8 @@ void consoleAssignPortHelper(
     processMessageSetDone(inputMessage);
     consoleMessageCleanup(inputMessage);
   } else {
-    printString("ERROR: Request to assign ownership of non-existent port ");
-    printInt(consolePort);
-    printString("\n");
+    logError("Request to assign ownership of non-existent port %d\n",
+      consolePort);
     // *DON'T* call processMessageRelease or processMessageSetDone here.  The
     // lack of the message being done will indicate to the caller that there
     // was a problem servicing the command.
@@ -579,9 +575,8 @@ void consoleGetEchoCommandHandler(
   if (portFound == true) {
     processMessageData(returnMessage) = (void*) ((uintptr_t) echoing);
   } else {
-    printString("WARNING: Request to get echo from non-owning process ");
-    printInt(owner);
-    printString("\n");
+    logWarn("Request to get echo from non-owning process %lld\n",
+      (long long int) owner);
   }
 
   processMessageSetDone(inputMessage);
@@ -619,9 +614,8 @@ void consoleSetEchoCommandHandler(
 
   consoleSetEchoArgs->returnValue = 0;
   if (portFound == false) {
-    printString("WARNING: Request to set echo from non-owning process ");
-    printInt(owner);
-    printString("\n");
+    logWarn("Request to set echo from non-owning process %lld\n",
+      (long long int) owner);
     consoleSetEchoArgs->returnValue = -1;
   }
 
@@ -657,9 +651,8 @@ void consoleWaitForInputCommandHandler(
   }
 
   if (portFound == false) {
-    printString("WARNING: Request to wait for input from non-owning process ");
-    printInt(owner);
-    printString("\n");
+    logWarn("Request to wait for input from non-owning process "
+      "%lld\n", (long long int) owner);
   }
 
   processMessageSetDone(inputMessage);
@@ -802,13 +795,10 @@ void handleConsoleMessages(ConsoleState *consoleState) {
     if ((processMessageType(message) & 0xffffffffffffff00)
       != CONSOLE_COMMAND_SIGNATURE
     ) {
-      printString("ERROR: ");
-      printString(__func__);
-      printString(" received unknown signature 0x");
-      printHex(processMessageType(message) & 0xffffffffffffff00);
-      printString(" from process ");
-      printInt(processPid(processMessageFrom(message)));
-      printString("\n");
+      logError("Received unknown signature 0x%llx from process %d\n",
+        (unsigned long long int)
+          (processMessageType(message) & 0xffffffffffffff00),
+        processPid(processMessageFrom(message)));
       // Don't attempt to process this message further.
       message = processMessageQueuePop();
       continue;
@@ -818,14 +808,7 @@ void handleConsoleMessages(ConsoleState *consoleState) {
       = (ConsoleCommand) (processMessageType(message) & 0xff);
     if (messageType >= NUM_CONSOLE_COMMANDS) {
       // Invalid.
-      printInt(getRunningPid());
-      printString(": ");
-      printString(__func__);
-      printString(": ");
-      printInt(__LINE__);
-      printString(": Invalid message type ");
-      printInt(messageType);
-      printString("\n");
+      logError("Invalid message type %d\n", messageType);
 
       message = processMessageQueuePop();
       continue;
@@ -928,9 +911,8 @@ int readSerialByte(ConsolePort *consolePort) {
       // sequences is process specific.
       serialData = ASCII_ESCAPE;
     } else {
-      printDebugString("Received unhandled character ");
-      printDebugInt(serialData);
-      printDebugString("\n");
+      logDebug("Received unhandled character %lld\n",
+        (long long int) serialData);
     }
   }
 
@@ -1054,10 +1036,8 @@ void* runConsole(void *args) {
             CONSOLE_COMMAND_SIGNATURE | CONSOLE_RETURNING_INPUT,
             consolePort->consoleBuffer, sizeof(ConsoleBuffer), false) == NULL
           ) {
-            printString(
-              "ERROR: Could not send CONSOLE_RETURNING_INPUT to process ID ");
-            printInt(consolePort->inputOwner);
-            printString("\n");
+            logError("Could not send CONSOLE_RETURNING_INPUT to "
+              "process ID %d\n", consolePort->inputOwner);
           }
           consolePort->waitingForInput = false;
         } else {
@@ -1079,7 +1059,7 @@ void* runConsole(void *args) {
             /* data= */ &sendSignalArgs, /* size= */ sizeof(sendSignalArgs),
             false);
           if (processMessage == NULL) {
-            printString("ERROR: Could not communicate with scheduler.\n");
+            logError("Could not communicate with scheduler.\n");
           }
           consolePort->consolePrintString(consolePort->portId, "^C\n");
         }
@@ -1108,21 +1088,21 @@ void* runConsole(void *args) {
 /// @return This function is non-blocking, always succeeds, and always returns
 /// 0.
 int printConsoleValue(ConsoleValueType valueType, void *value, size_t length) {
-  printDebugString("Entering printConsoleValue.\n");
+  logDebug("Entering printConsoleValue.\n");
   uintptr_t message = 0;
   length = (length <= sizeof(message)) ? length : sizeof(message);
   memcpy(&message, value, length);
 
-  printDebugString("Sending message to console process.\n");
+  logDebug("Sending message to console process.\n");
   if (initSendProcessMessageToPid(SCHEDULER_STATE->consolePid,
     CONSOLE_COMMAND_SIGNATURE | CONSOLE_WRITE_VALUE,
     (void*) message, (size_t) valueType, false) == NULL
   ) {
-    printString(
-      "ERROR: Could not send CONSOLE_WRITE_VALUE message to console process\n");
+    logError(
+      "Could not send CONSOLE_WRITE_VALUE message to console process\n");
   }
 
-  printDebugString("Leaving printConsoleValue.\n");
+  logDebug("Leaving printConsoleValue.\n");
   return 0;
 }
 
@@ -1182,7 +1162,7 @@ void releaseConsole(void) {
     CONSOLE_COMMAND_SIGNATURE | CONSOLE_RELEASE_PORT,
     /* data= */ 0, /* size= */ 0, false) == NULL
   ) {
-    printString("ERROR: Could not send CONSOLE_RELEASE_PORT message to "
+    logError("Could not send CONSOLE_RELEASE_PORT message to "
       "console process\n");
   }
   processYield();

@@ -44,6 +44,7 @@
 #include "NanoOsLibC.h"
 #include "NanoOsUnistd.h"
 #include "../kernel/Console.h"
+#include "../kernel/Logger.h"
 #include "../kernel/NanoOs.h"
 #include "../kernel/Scheduler.h"
 #include "../kernel/Processes.h"
@@ -353,13 +354,13 @@ int nanoOsSethostname(const char *name, size_t len) {
   
   FILE *hostnameFile = fopen("/etc/hostname", "r");
   if (hostnameFile == NULL) {
-    fprintf(stderr, "ERROR! fopen of hostname returned NULL!\n");
+    logError("fopen of hostname returned NULL!\n");
     return -1;
   }
 
   size_t bytesWritten = fwrite(name, 1, len, hostnameFile);
   if (bytesWritten != len) {
-    fprintf(stderr, "ERROR! Could not write hostname file.\n");
+    logError("Could not write hostname file.\n");
     fclose(hostnameFile);
     return -1;
   }

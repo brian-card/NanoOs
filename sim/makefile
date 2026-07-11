@@ -62,6 +62,7 @@ OS_OBJECTS := \
     $(OBJ_DIR)/HalPosix.o \
     $(OBJ_DIR)/HalPosixImpl.o \
     $(OBJ_DIR)/Link.o \
+    $(OBJ_DIR)/Logger.o \
     $(OBJ_DIR)/MemoryManager.o \
     $(OBJ_DIR)/Messages.o \
     $(OBJ_DIR)/NanoOs.o \

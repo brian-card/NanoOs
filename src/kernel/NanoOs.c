@@ -31,6 +31,7 @@
 // NanoOs includes
 #include "Console.h"
 #include "Hal.h"
+#include "Logger.h"
 #include "NanoOs.h"
 #include "Processes.h"
 #include "Scheduler.h"
@@ -76,7 +77,7 @@ void defaultSignalHandler(int signum) {
       SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_KILL_PROCESS,
       &schedulerKillProcessArgs, sizeof(schedulerKillProcessArgs), false);
     if (processMessage == NULL) {
-      printf("ERROR: Could not communicate with scheduler.\n");
+      logError("Could not communicate with scheduler.\n");
       return;
     }
     processYield();
@@ -267,31 +268,31 @@ void nanoOsStart(void) {
     if (threadSetStackEnd(
       &_mainThread, threadStackEnd(thread)) != processSuccess
     ) {
-      printString("Could not set scheduler process's stack size.\n");
+      logError("Could not set scheduler process's stack size.\n");
     }
   } else {
-    printString("Could not increase scheduler process's stack size.\n");
+    logError("Could not increase scheduler process's stack size.\n");
   }
 
-  printDebugString("Extending scheduler stack.\n");
+  logDebug("Extending scheduler stack.\n");
   uint8_t numExtraSchedulerStacksVal = 0;
   HAL->memory->numExtraSchedulerStacks(
     USE_HAL_MEMORY_DEBUG, &numExtraSchedulerStacksVal);
   for (uint8_t ii = 0; ii < numExtraSchedulerStacksVal; ii++) {
     thread = threadProvision(NULL, dummyProcess, NULL);
     if (thread == NULL) {
-      printString("Could not increase scheduler process's stack size.\n");
+      logError("Could not increase scheduler process's stack size.\n");
       break;
     }
     if (threadSetStackEnd(
       &_mainThread, threadStackEnd(thread)) != processSuccess
     ) {
-      printString("Could not set scheduler process's stack size.\n");
+      logError("Could not set scheduler process's stack size.\n");
     }
   }
 
   // Enter the scheduler.  This never returns.
-  printDebugString("Starting scheduler.\n");
+  logDebug("Starting scheduler.\n");
   startScheduler(&threadStatePointer);
 }
 /// @fn ProcessId getNumPipes(const char *commandLine)

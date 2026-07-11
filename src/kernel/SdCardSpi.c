@@ -36,6 +36,7 @@
 // Custom includes
 #include "SdCardSpi.h"
 #include "Hal.h"
+#include "Logger.h"
 #include "NanoOs.h"
 #include "Processes.h"
 #include "../user/NanoOsLibC.h"
@@ -155,7 +156,7 @@ int sdSpiCardInit(SdCardSpiArgs *sdCardSpiArgs) {
     response = sdSpiSendCommand(SD_CARD_SPI_DEVICE, CMD0, 0);
     if (--timeoutCount == 0) {
       HAL->spi->endTransfer(SD_CARD_SPI_DEVICE);
-      printString("ERROR! CMD0 timed out\n");
+      logError("CMD0 timed out\n");
       return -ETIMEDOUT;
     }
   } while (response != R1_IDLE_STATE);
@@ -190,7 +191,7 @@ int sdSpiCardInit(SdCardSpiArgs *sdCardSpiArgs) {
     
     if (--timeoutCount == 0) {
       HAL->spi->endTransfer(SD_CARD_SPI_DEVICE);
-      printString("ERROR! ACMD41 timed out\n");
+      logError("ACMD41 timed out\n");
       return -ETIMEDOUT;
     }
   } while (response != 0);
@@ -482,10 +483,8 @@ int16_t sdSpiGetBlockSize(int sdCardSpiDevice) {
   uint8_t response = sdSpiSendCommand(sdCardSpiDevice, CMD9, 0);
   if (response != 0x00) {
     HAL->spi->endTransfer(sdCardSpiDevice);
-    printString(__func__);
-    printString(": ERROR! CMD9 returned ");
-    printInt(response);
-    printString("\n");
+    logError("%s: ERROR! CMD9 returned %lld\n", __func__,
+      (long long int) response);
     return -1;
   }
 
@@ -528,10 +527,8 @@ int32_t sdSpiGetBlockCount(int sdCardSpiDevice) {
   uint8_t response = sdSpiSendCommand(sdCardSpiDevice, CMD9, 0);
   if (response != 0x00) {
     HAL->spi->endTransfer(sdCardSpiDevice);
-    printString(__func__);
-    printString(": ERROR! CMD9 returned ");
-    printInt(response);
-    printString("\n");
+    logError("%s: ERROR! CMD9 returned %lld\n", __func__,
+      (long long int) response);
     return -1;
   }
   
@@ -668,13 +665,10 @@ void handleSdCardSpiMessages(SdCardState *sdCardState) {
     if ((processMessageType(processMessage) & 0xffffffffffffff00)
       != SD_CARD_COMMAND_SIGNATURE
     ) {
-      printString("ERROR: ");
-      printString(__func__);
-      printString(" received unknown signature 0x");
-      printHex(processMessageType(processMessage) & 0xffffffffffffff00);
-      printString(" from process ");
-      printInt(processPid(processMessageFrom(processMessage)));
-      printString("\n");
+      logError("Received unknown signature 0x%llx from process %d\n",
+        (unsigned long long int)
+          (processMessageType(processMessage) & 0xffffffffffffff00),
+        processPid(processMessageFrom(processMessage)));
       // Don't attempt to process this message further.
       processMessage = processMessageQueuePop();
       continue;
@@ -683,13 +677,8 @@ void handleSdCardSpiMessages(SdCardState *sdCardState) {
     SdCardCommandResponse messageType
       = (SdCardCommandResponse) (processMessageType(processMessage) & 0xff);
     if (messageType >= NUM_SD_CARD_COMMANDS) {
-      printString(": ");
-      printString(__func__);
-      printString(": ");
-      printInt(__LINE__);
-      printString(": Invalid message type");
-      printInt(messageType);
-      printString("\n");
+      logError("%s: Invalid message type %lld\n", __func__,
+        (long long int) messageType);
 
       processMessage = processMessageQueuePop();
       continue;
@@ -735,23 +724,18 @@ void* runSdCardSpi(void *args) {
       = sdSpiGetBlockSize(SD_CARD_SPI_DEVICE);
     sdCardState.numBlocks = sdSpiGetBlockCount(SD_CARD_SPI_DEVICE);
 #ifdef SD_CARD_DEBUG
-    printString("Card is ");
-    printString((sdCardState.sdCardVersion == 1) ? "SDSC" : "SDHC/SDXC");
-    printString("\n");
-
-    printString("Card block size = ");
-    printInt(blockStorageDevice.blockSize);
-    printString("\n");
-    printLong(sdCardState.numBlocks);
-    printString(" total blocks (");
-    printLongLong(((int64_t) sdCardState.numBlocks)
-      * ((int64_t) sdCardState.blockSize));
-    printString(" total bytes)\n");
+    logDebug("Card is %s\n",
+      (sdCardState.sdCardVersion == 1) ? "SDSC" : "SDHC/SDXC");
+    logDebug("Card block size = %lld\n",
+      (long long int) blockStorageDevice.blockSize);
+    logDebug("%lld total blocks (%lld total bytes)\n",
+      (long long int) sdCardState.numBlocks,
+      ((long long int) sdCardState.numBlocks)
+        * ((long long int) sdCardState.blockSize));
 #endif // SD_CARD_DEBUG
   } else {
-    printString("ERROR! sdSpiCardInit returned status: ");
-    printString(strerror(-sdCardState.sdCardVersion));
-    printString("\n");
+    logError("sdSpiCardInit returned status: %s\n",
+      strerror(-sdCardState.sdCardVersion));
   }
   processYieldValue(&blockStorageDevice);
 

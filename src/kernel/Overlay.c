@@ -29,6 +29,7 @@
 /// @file
 
 #include "Hal.h"
+#include "Logger.h"
 #include "NanoOs.h"
 #include "OverlayFunctions.h"
 #include "../user/NanoOsLibC.h"
@@ -100,7 +101,7 @@ void* callOverlayFunctionFromFile(const void *od, const void *o,
   const char *overlay = (const char*) o;
   void *returnValue = NULL;
   if ((overlay == NULL) || (function == NULL)) {
-    fprintf(stderr, "ERROR: One or more NULL arguments provided to "
+    logError("One or more NULL arguments provided to "
       "callOverlayFunctionFromFile\n");
     goto exit; // return NULL
   }
@@ -164,15 +165,14 @@ void* callOverlayFunctionFromFile(const void *od, const void *o,
     overlayDir = overlayInfo;
   }
   if (schedulerReplaceOverlay(overlayDir, &overlayArray[1]) != 0) {
-    fprintf(stderr, "ERROR: Could not load file overlay via the scheduler\n");
+    logError("Could not load file overlay via the scheduler\n");
     goto freeOverlayInfo;
   }
 
   // If we made it this far, then our new overlay has been successuflly loaded.
   OverlayFunction overlayFunction = findOverlayFunction(functionCopy);
   if (overlayFunction == NULL) {
-    fprintf(stderr, "ERROR: Could not find overlay function \"%s\"\n",
-      functionCopy);
+    logError("Could not find overlay function \"%s\"\n", functionCopy);
     goto restorePreviousOverlay;
   }
   
@@ -215,7 +215,7 @@ void* callOverlayFunctionFromBlockDevice(
 ) {
   void *returnValue = NULL;
   if (function == NULL) {
-    fprintf(stderr, "ERROR: One or more NULL arguments provided to "
+    logError("One or more NULL arguments provided to "
       "callOverlayFunctionFromBlockDevice\n");
     goto exit; // return NULL
   }
@@ -257,7 +257,7 @@ void* callOverlayFunctionFromBlockDevice(
   strcpy(functionCopy, function);
   
   if (schedulerReplaceOverlay(deviceId, &overlayArray[1]) != 0) {
-    fprintf(stderr, "ERROR: Could not load block overlay via the scheduler\n");
+    logError("Could not load block overlay via the scheduler\n");
     goto exit;
   }
 
@@ -265,8 +265,7 @@ void* callOverlayFunctionFromBlockDevice(
   // If we made it this far, then our new overlay has been successuflly loaded.
   OverlayFunction overlayFunction = findOverlayFunction(functionCopy);
   if (overlayFunction == NULL) {
-    fprintf(stderr, "ERROR: Could not find overlay function \"%s\"\n",
-      functionCopy);
+    logError("Could not find overlay function \"%s\"\n", functionCopy);
     goto restorePreviousOverlay;
   }
   
@@ -301,24 +300,21 @@ int runOverlayCommand(const char *commandPath,
 
   OverlayFunction _start = findOverlayFunction("_start");
   if (_start == NULL) {
-    fprintf(stderr,
-      "Could not find exported _start function in \"%s\" overlay.\n",
+    logError("Could not find exported _start function in \"%s\" overlay.\n",
       commandPath);
     return 1;
   }
-  printDebugString("Found _start function\n");
+  logDebug("Found _start function\n");
 
   MainArgs mainArgs = {
     .argc = argc,
     .argv = argv,
   };
-  printDebugString("Calling _start function at address 0x");
-  printDebugHex((uintptr_t) _start);
-  printDebugString("\n");
+  logDebug("Calling _start function at address 0x%llx\n",
+    (unsigned long long int) (uintptr_t) _start);
   int returnValue = (int) ((intptr_t) _start(&mainArgs));
-  printDebugString("Got return value ");
-  printDebugInt(returnValue);
-  printDebugString(" from _start function\n");
+  logDebug("Got return value %lld from _start function\n",
+    (long long int) returnValue);
   if ((returnValue < 0) || (returnValue > 255)) {
     // Invalid return value.
     returnValue = -EOTHER;

@@ -29,6 +29,7 @@
 /// @file
 
 // Custom includes
+#include "Logger.h"
 #include "Scheduler.h"
 #include "SdCard.h"
 #include "NanoOs.h"
@@ -64,8 +65,7 @@ int sdCardGetReadWriteArgs(
   *numSdBlocks = sdCommandArgs->numBlocks
     << sdCardState->bsDevice->blockBitShift;
   if ((*startSdBlock + *numSdBlocks) > sdCardState->numBlocks) {
-    printString(__func__);
-    printString(": ERROR! Invalid R/W range\n");
+    logError("%s: ERROR! Invalid R/W range\n", __func__);
     return EINVAL;
   }
 
@@ -181,10 +181,7 @@ int schedSdReadBlocks(void *context, uint32_t startBlock,
     processMessage = getAvailableMessage();
   }
   if (processMessage == NULL) {
-    printInt(getRunningPid());
-    printString(": ");
-    printString(__func__);
-    printString(": ERROR: Out of process messages\n");
+    logError("%s: ERROR: Out of process messages\n", __func__);
     return -ENOMEM;
   }
 
@@ -241,10 +238,7 @@ int schedSdWriteBlocks(void *context, uint32_t startBlock,
     processMessage = getAvailableMessage();
   }
   if (processMessage == NULL) {
-    printInt(getRunningPid());
-    printString(": ");
-    printString(__func__);
-    printString(": ERROR: Out of process messages\n");
+    logError("%s: ERROR: Out of process messages\n", __func__);
     return -ENOMEM;
   }
 

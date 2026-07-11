@@ -29,6 +29,7 @@
 ///
 /// @brief Hardware abstraction for user processes.
 
+#include "../kernel/Logger.h"
 #include "../kernel/NanoOsTypes.h"
 #include "../kernel/Processes.h"
 #include "../kernel/Scheduler.h"
@@ -41,7 +42,7 @@
 int nanoOsHardwareShutdown(NanoOsShutdownType shutdownType) {
   int returnValue = -EOTHER;
   if (shutdownType >= NANO_OS_SHUTDOWN_NUM_TYPES) {
-    fprintf(stderr, "Invalid shutdown type\n");
+    logError("Invalid shutdown type\n");
     returnValue = -EINVAL;
     return returnValue;
   }
@@ -58,7 +59,7 @@ int nanoOsHardwareShutdown(NanoOsShutdownType shutdownType) {
     /* size= */ sizeof(schedulerShutdownArgs),
     true);
   if (processMessage == NULL) {
-    fprintf(stderr, "ERROR: Could not communicate with scheduler.\n");
+    logError("Could not communicate with scheduler.\n");
     return returnValue; // -EOTHER
   }
 

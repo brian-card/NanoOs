@@ -29,6 +29,7 @@
 /// @file
 
 // NanoOs includes
+#include "Logger.h"
 #include "NanoOsLibC.h"
 #include "Processes.h"
 
@@ -58,44 +59,44 @@ int sdCardWrite(int devFd, const void *buffer, size_t start, size_t len);
 int sdCardPosixReadBlocksCommandHandler(
   SdCardState *sdCardState, ProcessMessage *processMessage
 ) {
-  printDebugString("sdCardPosixReadBlocksCommandHandler: Enter\n");
-  printDebugString("sdCardPosixReadBlocksCommandHandler: Got ProcessMessage\n");
+  logDebug("sdCardPosixReadBlocksCommandHandler: Enter\n");
+  logDebug("sdCardPosixReadBlocksCommandHandler: Got ProcessMessage\n");
   
   int devFd = (int) ((intptr_t) sdCardState->context);
   if (devFd < 0) {
     // Nothing we can do.
-    printDebugString(
+    logDebug(
       "sdCardPosixReadBlocksCommandHandler: Invalid file descriptor\n");
     processMessageData(processMessage) = (void*) ((intptr_t) EIO);
     processMessageSetDone(processMessage);
-    printDebugString("sdCardPosixReadBlocksCommandHandler: Returning early\n");
+    logDebug("sdCardPosixReadBlocksCommandHandler: Returning early\n");
     return 0;
   }
-  printDebugString("sdCardPosixReadBlocksCommandHandler: context is *NOT* NULL\n");
+  logDebug("sdCardPosixReadBlocksCommandHandler: context is *NOT* NULL\n");
   
   SdCommandArgs *sdCommandArgs
     = (SdCommandArgs*) processMessageData(processMessage);
-  printDebugString("sdCardPosixReadBlocksCommandHandler: Got sdCommandArgs\n");
+  logDebug("sdCardPosixReadBlocksCommandHandler: Got sdCommandArgs\n");
   uint32_t startSdBlock = 0, numSdBlocks = 0;
   int returnValue = sdCardGetReadWriteArgs(
     sdCardState, sdCommandArgs, &startSdBlock, &numSdBlocks);
-  printDebugString(
+  logDebug(
     "sdCardPosixReadBlocksCommandHandler: Got read/write parameters\n");
 
   if (returnValue == 0) {
     uint8_t *buffer = sdCommandArgs->buffer;
-    printDebugString("Issuing sdCardRead\n");
+    logDebug("Issuing sdCardRead\n");
     returnValue = sdCardRead(devFd, buffer,
       sdCardState->blockSize * startSdBlock,
       sdCardState->blockSize * numSdBlocks);
   }
 
-  printDebugString("sdCardPosixReadBlocksCommandHandler: Exiting\n");
+  logDebug("sdCardPosixReadBlocksCommandHandler: Exiting\n");
   processMessageData(processMessage) = (void*) ((intptr_t) returnValue);
-  printDebugString("sdCardPosixReadBlocksCommandHandler: Setting message to done\n");
+  logDebug("sdCardPosixReadBlocksCommandHandler: Setting message to done\n");
   processMessageSetDone(processMessage);
 
-  printDebugString("sdCardPosixReadBlocksCommandHandler: Returning\n");
+  logDebug("sdCardPosixReadBlocksCommandHandler: Returning\n");
   return 0;
 }
 
@@ -164,13 +165,10 @@ void handleSdCardPosixMessages(SdCardState *sdCardState) {
     if ((processMessageType(processMessage) & 0xffffffffffffff00)
       != SD_CARD_COMMAND_SIGNATURE
     ) {
-      printString("ERROR: ");
-      printString(__func__);
-      printString(" received unknown signature 0x");
-      printHex(processMessageType(processMessage) & 0xffffffffffffff00);
-      printString(" from process ");
-      printInt(processPid(processMessageFrom(processMessage)));
-      printString("\n");
+      logError("Received unknown signature 0x%llx from process %d\n",
+        (long long unsigned int)
+          (processMessageType(processMessage) & 0xffffffffffffff00),
+        processPid(processMessageFrom(processMessage)));
       // Don't attempt to process this message further.
       processMessage = processMessageQueuePop();
       continue;
@@ -179,10 +177,9 @@ void handleSdCardPosixMessages(SdCardState *sdCardState) {
     SdCardCommandResponse messageType
       = (SdCardCommandResponse) (processMessageType(processMessage) & 0xff);
     if (messageType >= NUM_SD_CARD_COMMANDS) {
-      printDebugString(
-        "handleSdCardPosixMessages: Received invalid messageType ");
-      printDebugInt(messageType);
-      printDebugString("\n");
+      logDebug(
+        "handleSdCardPosixMessages: Received invalid messageType %d\n",
+        messageType);
       processMessage = processMessageQueuePop();
       continue;
     }
@@ -223,9 +220,9 @@ void* runSdCardPosix(void *args) {
 
   processYieldValue(&sdDevice);
   if (((intptr_t) sdCardState.context) < 0) {
-    fprintf(stderr, "ERROR: Failed to open sdCardDevicePath \"%s\"\n",
+    logError("Failed to open sdCardDevicePath \"%s\"\n",
       sdCardDevicePath);
-    fprintf(stderr, "Error returned: %s\n", openError);
+    logError("Error returned: %s\n", openError);
   }
 
   while (1) {
