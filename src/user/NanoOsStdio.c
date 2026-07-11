@@ -76,6 +76,14 @@ int printChar_(char character) {
   return (int) written;
 }
 
+/// @var _crlf
+///
+/// @brief Carriage-return/line-feed pair written in place of a bare newline.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _crlf[] KEEP_IN_FLASH = "\r\n";
+
 /// @fn int printString_(const char *string)
 ///
 /// @brief Wrapper around HAL->uart->write for a C string.
@@ -107,7 +115,7 @@ int printString_(const char *string) {
   int bytesWritten = (int) written;
 
   if (printReturnNewline == true) {
-    rv = HAL->uart->write(0, (uint8_t*) "\r\n", 2, &written);
+    rv = HAL->uart->write(0, (uint8_t*) _crlf, 2, &written);
     if (rv == 0) {
       // The usual case.
       bytesWritten += (int) written;
@@ -177,6 +185,14 @@ int printInt_(long long int integer) {
   return (int) written;
 }
 
+/// @var _doubleFormat
+///
+/// @brief sprintf() format specifier for a double value.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _doubleFormat[] KEEP_IN_FLASH = "%lf";
+
 /// @fn int printDouble(double floatingPointValue)
 ///
 /// @brief C wrapper around HAL->uart->write for a double.
@@ -190,11 +206,19 @@ int printDouble(double floatingPointValue) {
   }
 
   char number[20];
-  sprintf(number, "%lf", floatingPointValue);
+  sprintf(number, _doubleFormat, floatingPointValue);
   ssize_t written = 0;
   HAL->uart->write(0, (uint8_t*) number, strlen(number), &written);
   return (int) written;
 }
+
+/// @var _hexAlphabet
+///
+/// @brief Digits used to render a value in hexadecimal.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _hexAlphabet[] KEEP_IN_FLASH = "0123456789abcdef";
 
 /// @fn int printHex_(unsigned long long int integer)
 ///
@@ -213,7 +237,7 @@ int printHex_(unsigned long long int integer) {
   char *nextChar = &number[18];
 
   if (integer > 0) {
-    const char *alphabet = "0123456789abcdef";
+    const char *alphabet = _hexAlphabet;
     while (integer > 0) {
       *nextChar = alphabet[integer & 0xf];
       nextChar--;
@@ -268,9 +292,7 @@ int printList_(const char *firstString, ...) {
       }
       returnValue += rv;
     } else {
-      printString("Invalid type ");
-      printInt((intptr_t) type);
-      printString(".  Exiting parsing.\n");
+      logError("Invalid type %d.  Exiting parsing.\n", (int) ((intptr_t) type));
       returnValue = -EINVAL;
       break;
     }
@@ -580,6 +602,15 @@ int scanfParseFloat(
   return numParsedValues;
 }
 
+/// @var _whitespace
+///
+/// @brief Set of characters considered whitespace when scanning a string
+/// field with no explicit width.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _whitespace[] KEEP_IN_FLASH = " \t\r\n";
+
 /// @fn int scanfParseString(const char **buffer, size_t numBytes,
 ///   bool addNullByte, void *valuePointer)
 ///
@@ -602,7 +633,7 @@ int scanfParseString(
 
   if (numBytes == 0) {
     // Calculate the number of bytes until the first whitespace character.
-    numBytes = strcspn(*buffer, " \t\r\n");
+    numBytes = strcspn(*buffer, _whitespace);
   }
 
   if ((numBytes == 0) || (**buffer == '\0')) {
@@ -1057,12 +1088,8 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *consoleBuffer) {
   if ((stream == stdout) || (stream == stderr)) {
     FileDescriptor *outputFd = schedulerGetFileDescriptor(stream);
     if (outputFd == NULL) {
-      printString(
-        "ERROR: Could not get output file descriptor for process ");
-      printInt(getRunningPid());
-      printString(" and stream ");
-      printInt((intptr_t) stream);
-      printString("\n");
+      logError("Could not get output file descriptor for process %d"
+        " and stream %d\n", getRunningPid(), (int) (intptr_t) stream);
 
       // Release the buffer to avoid creating a leak.  Fire and forget.
       (void) initSendProcessMessageToPid(
@@ -1088,11 +1115,8 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *consoleBuffer) {
           returnValue = EOF;
         }
       } else {
-        printString("ERROR: Request to write to invalid stream ");
-        printInt((intptr_t) stream);
-        printString(" from process ");
-        printInt(getRunningPid());
-        printString(".\n");
+        logError("Request to write to invalid stream %d from process %d.\n",
+          (int) (intptr_t) stream, getRunningPid());
 
         // Release the buffer to avoid creating a leak.  Fire and forget.
         (void) initSendProcessMessageToPid(
@@ -1103,10 +1127,8 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *consoleBuffer) {
         returnValue = EOF;
       }
     } else {
-      printString(
-        "ERROR: Request to write with no output pipe set from process ");
-      printInt(getRunningPid());
-      printString(".\n");
+      logError("Request to write with no output pipe set from process %d.\n",
+        getRunningPid());
 
       // Release the buffer to avoid creating a leak.  Fire and forget.
       (void) initSendProcessMessageToPid(
