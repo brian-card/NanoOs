@@ -2107,6 +2107,14 @@ int schedGetFileBlockMetadataFromFile(
   return 0;
 }
 
+/// @var _readMode
+///
+/// @brief fopen() mode string used to open a file for reading.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _readMode[] KEEP_IN_FLASH = "r";
+
 /// @fn int schedGetFileBlockMetadataFromPath(const char *path,
 ///   FileBlockMetadata *metadata)
 ///
@@ -2124,7 +2132,7 @@ int schedGetFileBlockMetadataFromPath(
     return -EINVAL;
   }
 
-  FILE *stream = schedFopen(path, "r");
+  FILE *stream = schedFopen(path, _readMode);
   if (stream == NULL) {
     logError("%s: ERROR! Could not open file \"%s\"\n", __func__, path);
     return -EIO;
@@ -2134,6 +2142,26 @@ int schedGetFileBlockMetadataFromPath(
 
   return returnValue;
 }
+
+/// @var _mainOverlayPath
+///
+/// @brief Path suffix used to locate an overlay namespace's main overlay
+/// file.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _mainOverlayPath[] KEEP_IN_FLASH = "/main";
+
+/// @var _overlayExt
+///
+/// @brief Local copy of OVERLAY_EXT (defined in Overlay.h) kept in this
+/// translation unit's own storage.  If OVERLAY_EXT's definition ever
+/// changes, this picks up the change automatically since it's initialized
+/// from the macro rather than duplicating the literal.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _overlayExt[] KEEP_IN_FLASH = OVERLAY_EXT;
 
 /// @fn int loadProcessDescriptorOverlayMetadata(ProcessDescriptor *processDescriptor)
 ///
@@ -2157,8 +2185,8 @@ int loadProcessDescriptorOverlayMetadata(ProcessDescriptor *processDescriptor) {
     return -ENOMEM;
   }
   strcpy(overlayPath, (char*) processDescriptor->overlayNamespace);
-  strcat(overlayPath, "/main");
-  strcat(overlayPath, OVERLAY_EXT);
+  strcat(overlayPath, _mainOverlayPath);
+  strcat(overlayPath, _overlayExt);
 
   int returnValue
     = schedGetFileBlockMetadataFromPath(overlayPath,
@@ -3014,6 +3042,36 @@ int schedulerSpawnCommandHandler(
   return returnValue;
 }
 
+/// @var _overlayLoadFailureReason
+///
+/// @brief Reason string passed to removeProcess() when a process's overlay
+/// fails to load.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _overlayLoadFailureReason[] KEEP_IN_FLASH
+  = "Overlay load failure";
+
+/// @var _processCorruptionReason
+///
+/// @brief Reason string passed to removeProcess() when a process is found
+/// to be corrupted.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _processCorruptionReason[] KEEP_IN_FLASH
+  = "Process corruption detected";
+
+/// @var _processRestartFailedReason
+///
+/// @brief Reason string passed to removeProcess() when a process's
+/// restartFunction fails.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _processRestartFailedReason[] KEEP_IN_FLASH
+  = "Process restart failed";
+
 /// @fn int schedulerSendSignalCommandHandler(
 ///   SchedulerState *schedulerState, ProcessMessage *processMessage)
 ///
@@ -3085,7 +3143,7 @@ int schedulerSendSignalCommandHandler(
         sendSignalArgs->errorNumber = ESRCH; // Closest POSIX-compliant value
         schedulerDumpMemoryAllocations();
         schedulerDumpOpenFiles();
-        removeProcess(processDescriptor, "Overlay load failure");
+        removeProcess(processDescriptor, _overlayLoadFailureReason);
         goto exit; // return 0
       }
     }
@@ -3748,13 +3806,21 @@ exit:
   return returnValue;
 }
 
+/// @var _gettyName
+///
+/// @brief argv[0] used to launch the getty process.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _gettyName[] KEEP_IN_FLASH = "getty";
+
 /// @var gettyArgs
 ///
 /// @brief Command line arguments used to launch the getty process.  These have
 /// to be declared global because they're referenced by the launched process on
 /// its own stack.
 static const char *gettyArgs[] = {
-  "getty",
+  _gettyName,
   NULL,
 };
 
@@ -3767,6 +3833,54 @@ static const char *shellArgs[] = {
   NULL, // argv[0], set by runScheduler
   NULL,
 };
+
+/// @var _consoleName
+///
+/// @brief Process name assigned to the console process.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _consoleName[] KEEP_IN_FLASH = "console";
+
+/// @var _memoryManagerName
+///
+/// @brief Process name assigned to the memory manager process.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _memoryManagerName[] KEEP_IN_FLASH = "memory manager";
+
+/// @var _shellName
+///
+/// @brief Process name assigned to a built-in shell process.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _shellName[] KEEP_IN_FLASH = "shell";
+
+/// @var _gettyPath
+///
+/// @brief Path to the getty overlay command run for a login shell.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _gettyPath[] KEEP_IN_FLASH = "/usr/bin/getty";
+
+/// @var _initName
+///
+/// @brief Process name assigned to the scheduler's own process slot.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _initName[] KEEP_IN_FLASH = "init";
+
+/// @var _dummyName
+///
+/// @brief Process name assigned to an as-yet-unused process slot.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _dummyName[] KEEP_IN_FLASH = "dummy";
 
 /// @fn int32_t restartConsole(ProcessDescriptor *processDescriptor)
 ///
@@ -3783,7 +3897,7 @@ int32_t restartConsole(ProcessDescriptor *processDescriptor) {
     return -ENOMEM;
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
-  processDescriptor->name = "console";
+  processDescriptor->name = _consoleName;
   processDescriptor->userId = ROOT_USER_ID;
   return 0;
 }
@@ -3805,7 +3919,7 @@ int32_t restartMemoryManager(ProcessDescriptor *processDescriptor) {
     return -ENOMEM;
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
-  processDescriptor->name = "memory manager";
+  processDescriptor->name = _memoryManagerName;
   processDescriptor->userId = ROOT_USER_ID;
   return 0;
 }
@@ -3875,7 +3989,7 @@ int32_t restartBuiltinShell(ProcessDescriptor *processDescriptor) {
     goto freeFileDescriptors;
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
-  processDescriptor->name = "shell";
+  processDescriptor->name = _shellName;
 
   return returnValue;
 
@@ -3924,7 +4038,7 @@ int32_t restartOverlayShell(ProcessDescriptor *processDescriptor) {
 
     logDebug("restartOverlayShell: Starting getty\n");
     int returnValue = schedulerRunOverlayCommand(processDescriptor,
-      "/usr/bin/getty", (char**) gettyArgs, NULL);
+      (char*) _gettyPath, (char**) gettyArgs, NULL);
     if (returnValue == -EBUSY) {
       logDebug(
         "restartOverlayShell: Starting getty failed.  Returning -EAGAIN\n");
@@ -4006,7 +4120,7 @@ void runScheduler(void) {
   }
 
   if (processCorrupted(processDescriptor)) {
-    removeProcess(processDescriptor, "Process corruption detected");
+    removeProcess(processDescriptor, _processCorruptionReason);
     goto exit;
   }
 
@@ -4020,7 +4134,7 @@ void runScheduler(void) {
       ) {
         schedulerDumpMemoryAllocations();
         schedulerDumpOpenFiles();
-        removeProcess(processDescriptor, "Overlay load failure");
+        removeProcess(processDescriptor, _overlayLoadFailureReason);
         goto exit;
       }
     }
@@ -4101,7 +4215,7 @@ void runScheduler(void) {
         processQueuePush(SCHEDULER_STATE->currentReady, processDescriptor);
         goto exit;
       } else if (returnValue != 0) {
-        removeProcess(processDescriptor, "Process restart failed");
+        removeProcess(processDescriptor, _processRestartFailedReason);
         goto exit;
       }
     } else {
@@ -4132,6 +4246,79 @@ exit:
   return;
 }
 
+/// @var _kernelReadyName
+///
+/// @brief Name of the kernel-privilege-level ready queue.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _kernelReadyName[] KEEP_IN_FLASH = "kernel ready";
+
+/// @var _executiveReadyName
+///
+/// @brief Name of the executive-privilege-level ready queue.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _executiveReadyName[] KEEP_IN_FLASH = "executive ready";
+
+/// @var _supervisorReadyName
+///
+/// @brief Name of the supervisor-privilege-level ready queue.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _supervisorReadyName[] KEEP_IN_FLASH = "supervisor ready";
+
+/// @var _userReadyName
+///
+/// @brief Name of the user-privilege-level ready queue.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _userReadyName[] KEEP_IN_FLASH = "user ready";
+
+/// @var _waitingName
+///
+/// @brief Name of the queue holding processes blocked waiting indefinitely.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _waitingName[] KEEP_IN_FLASH = "waiting";
+
+/// @var _timedWaitingName
+///
+/// @brief Name of the queue holding processes blocked with a timeout.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _timedWaitingName[] KEEP_IN_FLASH = "timed waiting";
+
+/// @var _freeName
+///
+/// @brief Name of the queue holding free process slots.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _freeName[] KEEP_IN_FLASH = "free";
+
+/// @var _hostnameFilePath
+///
+/// @brief Path to the file on the filesystem that stores the system
+/// hostname.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _hostnameFilePath[] KEEP_IN_FLASH = "/etc/hostname";
+
+/// @var _localhost
+///
+/// @brief Fallback hostname used when no hostname file is available.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _localhost[] KEEP_IN_FLASH = "localhost";
+
 /// @fn void startScheduler(SchedulerState **threadStatePointer)
 ///
 /// @brief Initialize and run the round-robin scheduler.
@@ -4145,13 +4332,13 @@ __attribute__((noinline)) void startScheduler(
   // Initialize the scheduler's state.
   SchedulerState schedulerState = {0};
   schedulerState.hostname = NULL;
-  schedulerState.ready[PRIVILEGE_LEVEL_KERNEL].name = "kernel ready";
-  schedulerState.ready[PRIVILEGE_LEVEL_EXECUTIVE].name = "executive ready";
-  schedulerState.ready[PRIVILEGE_LEVEL_SUPERVISOR].name = "supervisor ready";
-  schedulerState.ready[PRIVILEGE_LEVEL_USER].name = "user ready";
-  schedulerState.waiting.name = "waiting";
-  schedulerState.timedWaiting.name = "timed waiting";
-  schedulerState.free.name = "free";
+  schedulerState.ready[PRIVILEGE_LEVEL_KERNEL].name = _kernelReadyName;
+  schedulerState.ready[PRIVILEGE_LEVEL_EXECUTIVE].name = _executiveReadyName;
+  schedulerState.ready[PRIVILEGE_LEVEL_SUPERVISOR].name = _supervisorReadyName;
+  schedulerState.ready[PRIVILEGE_LEVEL_USER].name = _userReadyName;
+  schedulerState.waiting.name = _waitingName;
+  schedulerState.timedWaiting.name = _timedWaitingName;
+  schedulerState.free.name = _freeName;
   schedulerState.currentReady
     = &schedulerState.ready[PRIVILEGE_LEVEL_KERNEL];
   schedulerState.preemptionTimer = -1;
@@ -4196,7 +4383,7 @@ __attribute__((noinline)) void startScheduler(
   allProcesses[schedulerState.schedulerPid - 1].mainThread = schedulerThread;
   allProcesses[schedulerState.schedulerPid - 1].processId
     = schedulerState.schedulerPid;
-  allProcesses[schedulerState.schedulerPid - 1].name = "init";
+  allProcesses[schedulerState.schedulerPid - 1].name = _initName;
   allProcesses[schedulerState.schedulerPid - 1].userId = ROOT_USER_ID;
   allProcesses[schedulerState.schedulerPid - 1].privilegeLevel
     = PRIVILEGE_LEVEL_KERNEL;
@@ -4243,7 +4430,7 @@ __attribute__((noinline)) void startScheduler(
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
   processDescriptor->processId = schedulerState.consolePid;
-  processDescriptor->name = "console";
+  processDescriptor->name = _consoleName;
   processDescriptor->userId = ROOT_USER_ID;
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_KERNEL;
   processDescriptor->restartFunction = restartConsole;
@@ -4385,7 +4572,7 @@ __attribute__((noinline)) void startScheduler(
       processDescriptor->mainThread, processDescriptor);
     processDescriptor->processId = ii;
     processDescriptor->userId = NO_USER_ID;
-    processDescriptor->name = "dummy";
+    processDescriptor->name = _dummyName;
     processDescriptor->callOverlayFunction = HAL->platform->callFileOverlay;
     if ((ii - schedulerState.firstShellPid) < schedulerState.numShells) {
       processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_SUPERVISOR;
@@ -4499,7 +4686,7 @@ __attribute__((noinline)) void startScheduler(
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
   processDescriptor->processId = schedulerState.memoryManagerPid;
-  processDescriptor->name = "memory manager";
+  processDescriptor->name = _memoryManagerName;
   processDescriptor->userId = ROOT_USER_ID;
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_KERNEL;
   processDescriptor->restartFunction = restartMemoryManager;
@@ -4563,7 +4750,7 @@ __attribute__((noinline)) void startScheduler(
   schedulerState.hostname = (char*) schedCalloc(1, HOST_NAME_MAX + 1);
   logDebug("Allocated memory for the hostname.\n");
   if (schedulerState.hostname != NULL) {
-    FILE *hostnameFile = schedFopen("/etc/hostname", "r");
+    FILE *hostnameFile = schedFopen(_hostnameFilePath, _readMode);
     if (hostnameFile != NULL) {
       logDebug("Opened hostname file.\n");
       if (schedFgets(
@@ -4577,7 +4764,7 @@ __attribute__((noinline)) void startScheduler(
       } else if (strchr(schedulerState.hostname, '\n')) {
         *strchr(schedulerState.hostname, '\n') = '\0';
       } else if (*schedulerState.hostname == '\0') {
-        strcpy(schedulerState.hostname, "localhost");
+        strcpy(schedulerState.hostname, _localhost);
       }
       schedFclose(hostnameFile);
       logDebug("Closed hostname file.\nhostname = %s\n",
