@@ -108,7 +108,6 @@ typedef uint16_t LogLevel;
 #define LOG_LEVEL_NONE     10
 #define NUM_LOG_LEVELS     11
 
-#define LOG_THRESHOLD LOG_LEVEL_DEBUG
 #ifndef LOG_THRESHOLD
 #define LOG_THRESHOLD LOG_LEVEL_DETAIL
 #endif // LOG_THRESHOLD
