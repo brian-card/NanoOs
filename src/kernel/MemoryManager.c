@@ -1117,6 +1117,31 @@ void allocateMemoryManagerStack(MemoryManagerState *memoryManagerState,
 ////   return;
 //// }
 
+/// @var _newline
+///
+/// @brief A single newline character.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _newline[] KEEP_IN_FLASH = "\n";
+
+/// @var _usingPrefix
+///
+/// @brief Prefix printed before the amount of dynamic memory available.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _usingPrefix[] KEEP_IN_FLASH = "Using ";
+
+/// @var _dynamicMemorySuffix
+///
+/// @brief Suffix printed after the amount of dynamic memory available.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _dynamicMemorySuffix[] KEEP_IN_FLASH
+  = " bytes of dynamic memory.\n";
+
 /// @fn void* runMemoryManager(void *args)
 ///
 /// @brief Main process for the memory manager that will configure all the
@@ -1129,8 +1154,8 @@ void allocateMemoryManagerStack(MemoryManagerState *memoryManagerState,
 /// it would return NULL if it returned anything.
 void* runMemoryManager(void *args) {
   (void) args;
-  printConsoleString("\n");
-  
+  printConsoleString(_newline);
+
   MemoryManagerState memoryManagerState;
   jmp_buf returnBuffer;
   if (setjmp(returnBuffer) == 0) {
@@ -1144,9 +1169,9 @@ void* runMemoryManager(void *args) {
   //// printMemoryManagerState(&memoryManagerState);
   logDebug("memoryManagerState.firstFree->size = %lld\n",
     (long long int) memoryManagerState.firstFree->size);
-  printConsoleString("Using ");
+  printConsoleString(_usingPrefix);
   printConsoleULong(memoryManagerState.firstFree->size);
-  printConsoleString(" bytes of dynamic memory.\n");
+  printConsoleString(_dynamicMemorySuffix);
   releaseConsole();
   
   while (1) {
