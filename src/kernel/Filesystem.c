@@ -878,6 +878,14 @@ int getFileBlockMetadataFromFile(FILE *stream, FileBlockMetadata *metadata) {
   return 0;
 }
 
+/// @var _readMode
+///
+/// @brief fopen() mode string used to open a file for reading.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _readMode[] KEEP_IN_FLASH = "r";
+
 /// @fn int getFileBlockMetadataFromPath(const char *path,
 ///   FileBlockMetadata *metadata)
 ///
@@ -895,7 +903,7 @@ int getFileBlockMetadataFromPath(const char *path,
     return -EINVAL;
   }
 
-  FILE *stream = fopen(path, "r");
+  FILE *stream = fopen(path, _readMode);
   if (stream == NULL) {
     logError("Could not open file \"%s\"\n", path);
     return -EIO;
