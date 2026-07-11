@@ -52,9 +52,18 @@
 // We're compiling from within NanoOs.
 #include "Filesystem.h"
 #include "MemoryManager.h"
+#include "NanoOs.h"
 #include "../user/NanoOsLibC.h"
 
 #endif // OS-specific imports
+
+// KEEP_IN_FLASH (defined in NanoOs.h) isn't available when this file is
+// compiled as a standalone host tool.  It's only needed to keep string data
+// out of .rodata on targets where that section is removed from the final
+// binary, which doesn't apply to a host build, so fall back to a no-op.
+#ifndef KEEP_IN_FLASH
+#define KEEP_IN_FLASH
+#endif
 
 // Include our own header.
 #include "Link.h"
@@ -68,11 +77,20 @@ typedef enum LinkValueType {
   NUM_LINK_VALUE_TYPES
 } LinkValueType;
 
+/// @var _linkMagicString
+///
+/// @brief 8-byte magic string at the beginning of a link to designate it as
+/// a NanoOs link.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _linkMagicString[] KEEP_IN_FLASH = "SoftLink";
+
 /// @def LINK_MAGIC
 ///
 /// @brief Magic value at the begining of a link to designate it as a NanoOS
 /// link.
-#define LINK_MAGIC ((uint64_t*) "SoftLink")
+#define LINK_MAGIC ((uint64_t*) _linkMagicString)
 
 /// @brief LINK_MAGIC_SIZE
 ///
@@ -153,6 +171,14 @@ const char* getFilename(const char *path) {
   
   return filename;
 }
+
+/// @var _writeBinaryMode
+///
+/// @brief fopen() mode string used to create a new link file.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _writeBinaryMode[] KEEP_IN_FLASH = "wb";
 
 /// @fn int makeLink(const char *target, const char *linkFile)
 ///
@@ -270,7 +296,7 @@ int makeLink(const char *target, const char *linkFile) {
     &checksum, sizeof(checksum));
   
   // Write entire buffer to file
-  FILE *fp = fopen(outputPath, "wb");
+  FILE *fp = fopen(outputPath, _writeBinaryMode);
   if (!fp) {
     free(buffer);
     free(outputPath);
@@ -287,6 +313,14 @@ int makeLink(const char *target, const char *linkFile) {
   return (written == totalSize) ? 0 : -1;
 }
 
+/// @var _readBinaryMode
+///
+/// @brief fopen() mode string used to open an existing link file.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _readBinaryMode[] KEEP_IN_FLASH = "rb";
+
 /// @fn int getNextTarget(char *nextTarget, const char *linkFile)
 ///
 /// @brief Get the next target from the provided link file.
@@ -301,7 +335,7 @@ int getNextTarget(char *nextTarget, const char *linkFile) {
   }
   
   // Open file and get size
-  FILE *fp = fopen(linkFile, "rb");
+  FILE *fp = fopen(linkFile, _readBinaryMode);
   if (fp == NULL) {
     return -1;
   }
