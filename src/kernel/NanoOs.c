@@ -43,8 +43,8 @@
 #include "../user/NanoOsStdio.h"
 
 // Externs
-extern const User users[];
-extern const int NUM_USERS;
+extern const User users[] KEEP_IN_FLASH;
+extern const int NUM_USERS KEEP_IN_FLASH;
 
 // Thread callbacks.  ***DO NOT** do parameter validation.  These callbacks
 // are set when threadConfig is called.  If these callbacks are called at
@@ -427,6 +427,14 @@ unsigned int raiseUInt(unsigned int x, unsigned int y) {
   return z;
 }
 
+/// @var _unownedUsername
+///
+/// @brief Username reported for a user ID that doesn't match any known user.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _unownedUsername[] KEEP_IN_FLASH = "unowned";
+
 /// @fn const char* getUsernameByUserId(UserId userId)
 ///
 /// @brief Get the username for a user given their numeric user ID.
@@ -435,7 +443,7 @@ unsigned int raiseUInt(unsigned int x, unsigned int y) {
 ///
 /// @return Returns the username of the user on success, NULL on failure.
 const char* getUsernameByUserId(UserId userId) {
-  const char *username = "unowned";
+  const char *username = _unownedUsername;
 
   for (int ii = 0; ii < NUM_USERS; ii++) {
     if (users[ii].userId == userId) {
@@ -468,23 +476,53 @@ UserId getUserIdByUsername(const char *username) {
   return userId;
 }
 
+/// @var _rootUsername
+///
+/// @brief Username of the root user.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _rootUsername[] KEEP_IN_FLASH = "root";
+
+/// @var _user1Username
+///
+/// @brief Username of the first non-root user.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _user1Username[] KEEP_IN_FLASH = "user1";
+
+/// @var _user2Username
+///
+/// @brief Username of the second non-root user.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _user2Username[] KEEP_IN_FLASH = "user2";
+
 /// @var users
 ///
 /// @brief The array of user information to simulate a user database.
-const User users[] = {
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.  This only protects the array of structs
+/// itself (the userId/username pointer/checksum fields); the strings each
+/// username field points to are protected separately above since they're
+/// their own objects.
+const User users[] KEEP_IN_FLASH = {
   {
     .userId   = 0,
-    .username = "root",
+    .username = _rootUsername,
     .checksum = 1356, // rootroot
   },
   {
     .userId   = 1000,
-    .username = "user1",
+    .username = _user1Username,
     .checksum = 1488, // user1user1
   },
   {
     .userId   = 1001,
-    .username = "user2",
+    .username = _user2Username,
     .checksum = 1491, // user2user2
   },
 };
@@ -492,4 +530,8 @@ const User users[] = {
 /// @var NUM_USERS
 ///
 /// @brief The number of users in the users array.
-const int NUM_USERS = sizeof(users) / sizeof(users[0]);
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.  This can't be a #define since it's
+/// extern'd and used from other translation units (e.g. Commands.c).
+const int NUM_USERS KEEP_IN_FLASH = sizeof(users) / sizeof(users[0]);
