@@ -206,6 +206,15 @@ exit:
   return returnValue;
 }
 
+/// @var _localhost
+///
+/// @brief Fallback hostname used when the scheduler hasn't set a real
+/// hostname yet.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _localhost[] KEEP_IN_FLASH = "localhost";
+
 /// @fn int nanoOsGethostname(char *name, size_t len)
 ///
 /// @brief Implementation of the standard Unix nanoOsGethostname system call.
@@ -223,7 +232,7 @@ int nanoOsGethostname(char *name, size_t len) {
   
   const char *hostname = schedulerGetHostname();
   if (hostname == NULL) {
-    hostname = "localhost";
+    hostname = _localhost;
   }
   size_t hostnameLen = strlen(hostname);
   
@@ -333,6 +342,23 @@ exit:
   return returnValue;
 }
 
+/// @var _hostnameFilePath
+///
+/// @brief Path to the file on the filesystem that stores the system
+/// hostname.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _hostnameFilePath[] KEEP_IN_FLASH = "/etc/hostname";
+
+/// @var _readMode
+///
+/// @brief fopen() mode string used to open the hostname file for reading.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _readMode[] KEEP_IN_FLASH = "r";
+
 /// @fn int nanoOsSethostname(const char *name, size_t len)
 ///
 /// @brief Implementation of the standard Unix nanoOsSethostname system call.
@@ -352,7 +378,7 @@ int nanoOsSethostname(const char *name, size_t len) {
     return -1;
   }
   
-  FILE *hostnameFile = fopen("/etc/hostname", "r");
+  FILE *hostnameFile = fopen(_hostnameFilePath, _readMode);
   if (hostnameFile == NULL) {
     logError("fopen of hostname returned NULL!\n");
     return -1;
@@ -368,6 +394,15 @@ int nanoOsSethostname(const char *name, size_t len) {
   fclose(hostnameFile);
   return 0;
 }
+
+/// @var _ttyPathFormat
+///
+/// @brief printf-style format string used to build a /dev/ttyN path from a
+/// console port number.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _ttyPathFormat[] KEEP_IN_FLASH = "/dev/tty%d";
 
 /// @fd int nanoOsTtyname_r(int fd, char *buf, size_t buflen)
 ///
@@ -393,7 +428,7 @@ int nanoOsTtyname_r(int fd, char *buf, size_t buflen) {
     return ENOTTY;
   }
   
-  snprintf(buf, buflen, "/dev/tty%d", consolePort);
+  snprintf(buf, buflen, _ttyPathFormat, consolePort);
   
   return 0;
 }
