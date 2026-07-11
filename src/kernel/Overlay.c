@@ -76,6 +76,26 @@ OverlayFunction findOverlayFunction(const char *overlayFunctionName) {
   return overlayFunction;
 }
 
+/// @var _overlayExt
+///
+/// @brief Local copy of OVERLAY_EXT (defined in Overlay.h) kept in this
+/// translation unit's own storage.  If OVERLAY_EXT's definition ever
+/// changes, this picks up the change automatically since it's initialized
+/// from the macro rather than duplicating the literal.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _overlayExt[] KEEP_IN_FLASH = OVERLAY_EXT;
+
+/// @var _pathSeparator
+///
+/// @brief Path separator used to join an overlay directory with an overlay
+/// name.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _pathSeparator[] KEEP_IN_FLASH = "/";
+
 /// @fn void* callOverlayFunctionFromFile(const void *od, const void *o,
 ///   const char *function, void *args)
 ///
@@ -139,9 +159,9 @@ void* callOverlayFunctionFromFile(const void *od, const void *o,
   
   strcpy(overlayInfo,
     (overlayDir == OVERLAY_SAME_NAMESPACE) ? previousOverlayDir : overlayDir);
-  strcat(overlayInfo, "/");
+  strcat(overlayInfo, _pathSeparator);
   strcat(overlayInfo, overlay);
-  strcat(overlayInfo, OVERLAY_EXT);
+  strcat(overlayInfo, _overlayExt);
   
   // Get the overlay information we need.
   if (getFileBlockMetadataFromPath(overlayInfo, &overlayArray[1]) != 0) {
@@ -281,6 +301,15 @@ exit:
   return returnValue;
 }
 
+/// @var _startFunctionName
+///
+/// @brief Name of the exported entry-point function every command overlay
+/// must provide.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _startFunctionName[] KEEP_IN_FLASH = "_start";
+
 /// @fn int runOverlayCommand(const char *commandPath,
 ///   int argc, char **argv)
 ///
@@ -298,7 +327,7 @@ int runOverlayCommand(const char *commandPath,
   // The overlay is already loaded by the scheduler, so there's no need to load
   // it manually.
 
-  OverlayFunction _start = findOverlayFunction("_start");
+  OverlayFunction _start = findOverlayFunction(_startFunctionName);
   if (_start == NULL) {
     logError("Could not find exported _start function in \"%s\" overlay.\n",
       commandPath);
