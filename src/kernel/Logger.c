@@ -37,6 +37,7 @@
 // NanoOs includes:
 #include "Hal.h"
 #include "Logger.h"
+#include "NanoOs.h"
 #include "Processes.h"
 #include "Scheduler.h"
 #include "../user/NanoOsErrno.h"
@@ -53,7 +54,12 @@ const char *_referencePoint = "4abc4abc4abc4abc4abc4abc4abc4abc";
 /// @var _logLevelNames
 ///
 /// @brief Names that are to be displayed in place of log level numeric values.
-const char *_logLevelNames[NUM_LOG_LEVELS] = {
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.  Entries are copied directly into this
+/// array's own storage rather than being separate string-literal objects
+/// pointed to from it, so tagging the array alone protects every entry.
+const char _logLevelNames[NUM_LOG_LEVELS][9] KEEP_IN_FLASH = {
   "NEVER",
   "FLOOD",
   "TRACE",
@@ -66,6 +72,25 @@ const char *_logLevelNames[NUM_LOG_LEVELS] = {
   "BOX",
   "NONE",
 };
+
+/// @var _logHeaderFormat
+///
+/// @brief printf-style format string used to build the header of a log
+/// message printed immediately (before the logger process is up).
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _logHeaderFormat[] KEEP_IN_FLASH
+  = "[%lld %s:%u %s:%u %s] ";
+
+/// @var _localhost
+///
+/// @brief Fallback hostname used in a log message header when the scheduler
+/// hasn't set a real hostname yet.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _localhost[] KEEP_IN_FLASH = "localhost";
 
 /// @fn int logMessage(LogLevel logLevel, const char *fileName,
 ///   uint16_t lineNumber, const char *format, ...)
@@ -172,10 +197,10 @@ int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
 writeImmediate:
   // Print the header.
   snprintf(HAL->memory->logBuffer, HAL->memory->logBufferSize,
-    "[%lld %s:%u %s:%u %s] ", (long long int) logEntry.timeStamp,
+    _logHeaderFormat, (long long int) logEntry.timeStamp,
     ((SCHEDULER_STATE != NULL) && (SCHEDULER_STATE->hostname != NULL))
       ? SCHEDULER_STATE->hostname
-      : "localhost",
+      : _localhost,
     (unsigned int) getRunningPid(),
     fileName, lineNumber, _logLevelNames[logLevel]);
   printString(HAL->memory->logBuffer);
