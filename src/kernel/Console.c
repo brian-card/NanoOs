@@ -87,6 +87,23 @@ int consolePrintMessage(
   return returnValue;
 }
 
+/// @var _releaseErrorPrefix
+///
+/// @brief Message printed when an input message can't be released.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _releaseErrorPrefix[] KEEP_IN_FLASH
+  = "ERROR: Could not release inputMessage from ";
+
+/// @var _newline
+///
+/// @brief A single newline character.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _newline[] KEEP_IN_FLASH = "\n";
+
 /// @fn void consoleMessageCleanup(ProcessMessage *inputMessage)
 ///
 /// @brief Release an input ProcessMessage if there are no waiters for the message.
@@ -99,9 +116,9 @@ void consoleMessageCleanup(ProcessMessage *inputMessage) {
     if (processMessageRelease(inputMessage) != processSuccess) {
       // printSerialString is defined below.  Provide the prototype.
       int printSerialString(unsigned char uart, const char *string);
-      printSerialString(0, "ERROR: Could not release inputMessage from ");
+      printSerialString(0, _releaseErrorPrefix);
       printSerialString(0, __func__);
-      printSerialString(0, "\n");
+      printSerialString(0, _newline);
     }
   }
 }
@@ -166,6 +183,63 @@ int releaseConsoleBuffer(
   return 0;
 }
 
+/// @var _charFormat
+///
+/// @brief sprintf() format specifier for a char value.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _charFormat[] KEEP_IN_FLASH = "%c";
+
+/// @var _unsignedFormat
+///
+/// @brief sprintf() format specifier for an unsigned char or unsigned int
+/// value.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _unsignedFormat[] KEEP_IN_FLASH = "%u";
+
+/// @var _intFormat
+///
+/// @brief sprintf() format specifier for an int value.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _intFormat[] KEEP_IN_FLASH = "%d";
+
+/// @var _longIntFormat
+///
+/// @brief sprintf() format specifier for a long int value.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _longIntFormat[] KEEP_IN_FLASH = "%ld";
+
+/// @var _longUnsignedFormat
+///
+/// @brief sprintf() format specifier for a long unsigned int value.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _longUnsignedFormat[] KEEP_IN_FLASH = "%lu";
+
+/// @var _floatFormat
+///
+/// @brief sprintf() format specifier for a float value (promoted to double).
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _floatFormat[] KEEP_IN_FLASH = "%f";
+
+/// @var _doubleFormat
+///
+/// @brief sprintf() format specifier for a double value.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _doubleFormat[] KEEP_IN_FLASH = "%lf";
+
 /// @fn void consoleWriteValueCommandHandler(
 ///   ConsoleState *consoleState, ProcessMessage *inputMessage)
 ///
@@ -189,7 +263,7 @@ void consoleWriteValueCommandHandler(
     case CONSOLE_VALUE_CHAR:
       {
         char value = (char) ((uintptr_t) processMessageData(inputMessage));
-        sprintf(staticBuffer, "%c", value);
+        sprintf(staticBuffer, _charFormat, value);
         message = staticBuffer;
       }
       break;
@@ -198,7 +272,7 @@ void consoleWriteValueCommandHandler(
       {
         unsigned char value
           = (unsigned char) ((uintptr_t) processMessageData(inputMessage));
-        sprintf(staticBuffer, "%u", value);
+        sprintf(staticBuffer, _unsignedFormat, value);
         message = staticBuffer;
       }
       break;
@@ -206,7 +280,7 @@ void consoleWriteValueCommandHandler(
     case CONSOLE_VALUE_INT:
       {
         int value = (int) ((uintptr_t) processMessageData(inputMessage));
-        sprintf(staticBuffer, "%d", value);
+        sprintf(staticBuffer, _intFormat, value);
         message = staticBuffer;
       }
       break;
@@ -215,7 +289,7 @@ void consoleWriteValueCommandHandler(
       {
         unsigned int value
           = (unsigned int) ((uintptr_t) processMessageData(inputMessage));
-        sprintf(staticBuffer, "%u", value);
+        sprintf(staticBuffer, _unsignedFormat, value);
         message = staticBuffer;
       }
       break;
@@ -223,7 +297,7 @@ void consoleWriteValueCommandHandler(
     case CONSOLE_VALUE_LONG_INT:
       {
         long int value = (long int) ((uintptr_t) processMessageData(inputMessage));
-        sprintf(staticBuffer, "%ld", value);
+        sprintf(staticBuffer, _longIntFormat, value);
         message = staticBuffer;
       }
       break;
@@ -232,7 +306,7 @@ void consoleWriteValueCommandHandler(
       {
         long unsigned int value
           = (long unsigned int) ((uintptr_t) processMessageData(inputMessage));
-        sprintf(staticBuffer, "%lu", value);
+        sprintf(staticBuffer, _longUnsignedFormat, value);
         message = staticBuffer;
       }
       break;
@@ -240,7 +314,7 @@ void consoleWriteValueCommandHandler(
     case CONSOLE_VALUE_FLOAT:
       {
         float value = (float) ((uintptr_t) processMessageData(inputMessage));
-        sprintf(staticBuffer, "%f", (double) value);
+        sprintf(staticBuffer, _floatFormat, (double) value);
         message = staticBuffer;
       }
       break;
@@ -248,7 +322,7 @@ void consoleWriteValueCommandHandler(
     case CONSOLE_VALUE_DOUBLE:
       {
         double value = (double) ((uintptr_t) processMessageData(inputMessage));
-        sprintf(staticBuffer, "%lf", value);
+        sprintf(staticBuffer, _doubleFormat, value);
         message = staticBuffer;
       }
       break;
@@ -836,6 +910,15 @@ void handleConsoleMessages(ConsoleState *consoleState) {
   return;
 }
 
+/// @var _crlf
+///
+/// @brief Carriage-return/line-feed pair written to a serial port in place
+/// of a bare newline.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _crlf[] KEEP_IN_FLASH = "\r\n";
+
 /// @fn int readSerialByte(ConsolePort *consolePort)
 ///
 /// @brief Do a non-blocking read of a serial port.
@@ -861,7 +944,7 @@ int readSerialByte(ConsolePort *consolePort) {
             (uint8_t*) &serialChar, 1, NULL);
         } else {
           HAL->uart->write(
-            (int) consolePort->portId, (uint8_t*) "\r\n", 2, NULL);
+            (int) consolePort->portId, (uint8_t*) _crlf, 2, NULL);
         }
       }
       
@@ -942,7 +1025,7 @@ int printSerialString(unsigned char uart, const char *string) {
   while (newlineAt != NULL) {
     HAL->uart->write((int) uart, (uint8_t*) string, numBytes, &written);
     returnValue += (int) written;
-    HAL->uart->write((int) uart, (uint8_t*) "\r\n", 2, &written);
+    HAL->uart->write((int) uart, (uint8_t*) _crlf, 2, &written);
     returnValue += (int) written;
     string = newlineAt + 1;
     newlineAt = strchr(string, '\n');
@@ -957,6 +1040,14 @@ int printSerialString(unsigned char uart, const char *string) {
 
   return returnValue;
 }
+
+/// @var _ctrlCEcho
+///
+/// @brief Echoed back to the console when the user presses Ctrl-C.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _ctrlCEcho[] KEEP_IN_FLASH = "^C\n";
 
 /// @fn void* runConsole(void *args)
 ///
@@ -1061,7 +1152,7 @@ void* runConsole(void *args) {
           if (processMessage == NULL) {
             logError("Could not communicate with scheduler.\n");
           }
-          consolePort->consolePrintString(consolePort->portId, "^C\n");
+          consolePort->consolePrintString(consolePort->portId, _ctrlCEcho);
         }
       }
     }
