@@ -37,6 +37,7 @@
 #include "Fat32Filesystem.h"
 #include "Filesystem.h"
 #include "MemoryManager.h"
+#include "NanoOs.h"
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -2411,6 +2412,24 @@ uint8_t fat32DefaultSectorsPerCluster(
 ///         small or the block device reports an unusable sector size, or
 ///         FAT32_ERROR on an I/O failure.
 ///
+/// @var _fat32OemName
+///
+/// @brief 8-byte OEM name written into the BPB oemName field of a newly
+/// formatted FAT32 boot sector.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _fat32OemName[] KEEP_IN_FLASH = "MSDOS5.0";
+
+/// @var _fat32FileSystemType
+///
+/// @brief 8-byte filesystem type string written into the BPB
+/// fileSystemType field of a newly formatted FAT32 boot sector.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _fat32FileSystemType[] KEEP_IN_FLASH = "FAT32   ";
+
 int fat32Format(
     FilesystemState *filesystemState,
     const char      *volumeLabel,
@@ -2532,7 +2551,7 @@ int fat32Format(
   bpb->jumpBoot[1] = 0x58;
   bpb->jumpBoot[2] = 0x90;
 
-  memcpy(bpb->oemName, "MSDOS5.0", 8);
+  memcpy(bpb->oemName, _fat32OemName, 8);
 
   // BPB fields — written via memcpy to avoid unaligned-access faults on
   // strict-alignment targets (ARM Cortex-M0+, eZ80).
@@ -2615,7 +2634,7 @@ int fat32Format(
     }
   }
 
-  memcpy(bpb->fileSystemType, "FAT32   ", 8);
+  memcpy(bpb->fileSystemType, _fat32FileSystemType, 8);
   memset(bpb->bootCode, 0, sizeof(bpb->bootCode));
   {
     uint16_t sig = 0xAA55;
