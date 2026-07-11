@@ -601,17 +601,17 @@ int32_t halAgonLight2Init(void) {
   halCommonMemory.overlayMap  = (NanoOsOverlayMap*) OVERLAY_ADDRESS;
   halCommonMemory.overlaySize = OVERLAY_SIZE;
 
-#if LOG_THRESHOLD < LOG_LEVEL_DETAIL
+//// #if LOG_THRESHOLD < LOG_LEVEL_DETAIL
   halCommonMemory.logBuffer     = _logBuffer;
   halCommonMemory.logBufferSize = sizeof(_logBuffer);
   halCommonMemory.staticLogs    = NULL;
-#else // LOG_THRESHOLD >= LOG_LEVEL_DETAIL
-  (void) _logBuffer;
-  halCommonMemory.logBuffer     = NULL;
-  halCommonMemory.logBufferSize = 0;
-  halCommonMemory.staticLogs    = (StaticLogs*) STATIC_LOGS_ADDRESS;
-  memset(halCommonMemory.staticLogs, 0, sizeof(*halCommonMemory.staticLogs));
-#endif // LOG_THRESHOLD < LOG_LEVEL_DETAIL
+//// #else // LOG_THRESHOLD >= LOG_LEVEL_DETAIL
+////   (void) _logBuffer;
+////   halCommonMemory.logBuffer     = NULL;
+////   halCommonMemory.logBufferSize = 0;
+////   halCommonMemory.staticLogs    = (StaticLogs*) STATIC_LOGS_ADDRESS;
+////   memset(halCommonMemory.staticLogs, 0, sizeof(*halCommonMemory.staticLogs));
+//// #endif // LOG_THRESHOLD < LOG_LEVEL_DETAIL
 
   halCommonUart.numSupported        = 0;
   halCommonUart.online              = agonLight2UartsOnline;
