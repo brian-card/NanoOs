@@ -334,6 +334,18 @@ int32_t halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
   halCommonBlockDevice.numSupported = _numBlockDevices;
   halCommonBlockDevice.online       = posixBlockDevicesOnline;
 
+//// #if LOG_THRESHOLD < LOG_LEVEL_DETAIL
+  halCommonMemory.logBuffer     = _logBuffer;
+  halCommonMemory.logBufferSize = sizeof(_logBuffer);
+  halCommonMemory.staticLogs    = NULL;
+//// #else // LOG_THRESHOLD >= LOG_LEVEL_DETAIL
+////   (void) _logBuffer;
+////   halCommonMemory.logBuffer     = NULL;
+////   halCommonMemory.logBufferSize = 0;
+////   halCommonMemory.staticLogs    = staticLogs;
+////   memset(halCommonMemory.staticLogs, 0, sizeof(*halCommonMemory.staticLogs));
+//// #endif // LOG_THRESHOLD < LOG_LEVEL_DETAIL
+
   // Perform POSIX-specific hardware setup and retrieve the overlay mapping.
   NanoOsOverlayMap *overlayMap = NULL;
   StaticLogs *staticLogs = NULL;
@@ -346,18 +358,6 @@ int32_t halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
 
   halCommonMemory.overlayMap  = overlayMap;
   halCommonMemory.overlaySize = overlaySize;
-
-//// #if LOG_THRESHOLD < LOG_LEVEL_DETAIL
-  halCommonMemory.logBuffer     = _logBuffer;
-  halCommonMemory.logBufferSize = sizeof(_logBuffer);
-  halCommonMemory.staticLogs    = NULL;
-//// #else // LOG_THRESHOLD >= LOG_LEVEL_DETAIL
-////   (void) _logBuffer;
-////   halCommonMemory.logBuffer     = NULL;
-////   halCommonMemory.logBufferSize = 0;
-////   halCommonMemory.staticLogs    = staticLogs;
-////   memset(halCommonMemory.staticLogs, 0, sizeof(*halCommonMemory.staticLogs));
-//// #endif // LOG_THRESHOLD < LOG_LEVEL_DETAIL
 
   NANO_OS_API = &nanoOsApi;
 
