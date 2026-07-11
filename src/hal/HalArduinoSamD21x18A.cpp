@@ -1213,6 +1213,14 @@ int32_t arduinoSamD21x18AGetBlockDevice(va_list args) {
   return 0;
 }
 
+/// @var _sdCardName
+///
+/// @brief Process name assigned to the SD card process.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _sdCardName[] KEEP_IN_FLASH = "SD card";
+
 int32_t arduinoSamD21x18ARestartBlockDevice(va_list args) {
   ProcessDescriptor *processDescriptor = va_arg(args, ProcessDescriptor*);
   int32_t deviceId = (int32_t) (intptr_t) processDescriptor->restartArgs;
@@ -1227,17 +1235,17 @@ int32_t arduinoSamD21x18ARestartBlockDevice(va_list args) {
   if (processCreate(processDescriptor, runSdCardSpi, &sdCardSpiArgs)
     != processSuccess
   ) {
-    printString("Could not restart SD card process\n");
+    logError("Could not restart SD card process\n");
     return -ENOMEM;
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
-  processDescriptor->name = "SD card";
+  processDescriptor->name = _sdCardName;
   processDescriptor->userId = ROOT_USER_ID;
 
   BlockDevice *sdDevice
     = (BlockDevice*) coroutineResume(processDescriptor->mainThread, NULL);
   if (sdDevice == NULL) {
-    printString("SD card restart returned NULL\n");
+    logError("SD card restart returned NULL\n");
     return -ENODEV;
   }
   sdDevice->partitionNumber = 1;
@@ -1311,6 +1319,64 @@ static HalFunction arduinoSamD21x18ABlockDeviceFunctions[HAL_BLOCK_DEVICE_NUM_FN
 /// @brief Statically allocated buffer for formatting log messages.
 static char _logBuffer[96];
 
+/// @var _bssOverflowErrorPrefix
+///
+/// @brief Printed via a raw Serial.print when BSS has grown into the
+/// overlay memory region.  This is a last-resort diagnostic that fires
+/// before HAL/logger infrastructure can be trusted, so it deliberately
+/// bypasses logError() - it must not be converted to a log macro call.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _bssOverflowErrorPrefix[] KEEP_IN_FLASH = "ERROR!!! 0x";
+
+/// @var _greaterThanPrefix
+///
+/// @brief Separator printed between the two addresses in the BSS overflow
+/// diagnostic.  See _bssOverflowErrorPrefix for why this stays a raw print.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _greaterThanPrefix[] KEEP_IN_FLASH = " > 0x";
+
+/// @var _newline
+///
+/// @brief A single newline character.  See _bssOverflowErrorPrefix for why
+/// this stays a raw print.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _newline[] KEEP_IN_FLASH = "\n";
+
+/// @var _stackPositionPrefix
+///
+/// @brief Printed before the current stack pointer in the BSS overflow
+/// diagnostic.  See _bssOverflowErrorPrefix for why this stays a raw print.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _stackPositionPrefix[] KEEP_IN_FLASH = "Stack position = 0x";
+
+/// @var _bannerLine
+///
+/// @brief Border line printed above and below the BSS overflow warning.
+/// See _bssOverflowErrorPrefix for why this stays a raw print.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _bannerLine[] KEEP_IN_FLASH
+  = "*******************************************************\n";
+
+/// @var _corruptionWarning
+///
+/// @brief Warning printed when BSS has grown into the overlay memory
+/// region.  See _bssOverflowErrorPrefix for why this stays a raw print.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _corruptionWarning[] KEEP_IN_FLASH
+  = "* Running user programs will corrupt system memory!!! *\n";
+
 int32_t halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
   // Wire up per-subsystem function arrays.
   halFunctions[HAL_MEMORY]       = arduinoSamD21x18AMemoryFunctions;
@@ -1373,17 +1439,17 @@ int32_t halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
     int stackPosition = 0;
     Serial.begin(1000000);
     while (!Serial);
-    Serial.print("ERROR!!! 0x");
+    Serial.print(_bssOverflowErrorPrefix);
     Serial.print((uintptr_t) &__bss_end__, HEX);
-    Serial.print(" > 0x");
+    Serial.print(_greaterThanPrefix);
     Serial.print((uintptr_t) halCommonMemory.overlayMap, HEX);
-    Serial.print("\n");
-    Serial.print("Stack position = 0x");
+    Serial.print(_newline);
+    Serial.print(_stackPositionPrefix);
     Serial.print((uintptr_t) &stackPosition, HEX);
-    Serial.print("\n");
-    Serial.print("*******************************************************\n");
-    Serial.print("* Running user programs will corrupt system memory!!! *\n");
-    Serial.print("*******************************************************\n");
+    Serial.print(_newline);
+    Serial.print(_bannerLine);
+    Serial.print(_corruptionWarning);
+    Serial.print(_bannerLine);
   }
 
   __enable_irq();  // Ensure global interrupts are enabled
