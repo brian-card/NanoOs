@@ -200,6 +200,7 @@ HalMemory halCommonMemory = {
   .numExtraConsoleStacks   = halMemoryNumExtraConsoleStacks,
   .overlayMap              = NULL,
   .overlaySize             = 0,
+  .stringsPresent          = false,
   .staticLogs              = NULL,
   .logBuffer               = NULL,
   .logBufferSize           = 0,
