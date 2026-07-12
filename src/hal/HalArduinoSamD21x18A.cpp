@@ -1407,11 +1407,14 @@ int32_t halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
 
   halCommonMemory.logBuffer      = _logBuffer;
   halCommonMemory.logBufferSize  = sizeof(_logBuffer);
-//// #if LOG_THRESHOLD < LOG_LEVEL_DETAIL
+#ifdef NANO_OS_STRINGS_STRIPPED
+  halCommonMemory.stringsPresent = false;
+#else
   halCommonMemory.stringsPresent = true;
+#endif // NANO_OS_STRINGS_STRIPPED
+//// #if LOG_THRESHOLD < LOG_LEVEL_DETAIL
   halCommonMemory.staticLogs     = NULL;
 //// #else // LOG_THRESHOLD >= LOG_LEVEL_DETAIL
-////   halCommonMemory.stringsPresent = false;
 ////   halCommonMemory.staticLogs     = (StaticLogs*) STATIC_LOGS_ADDRESS;
 ////   memset(halCommonMemory.staticLogs, 0, sizeof(*halCommonMemory.staticLogs));
 //// #endif // LOG_THRESHOLD < LOG_LEVEL_DETAIL
