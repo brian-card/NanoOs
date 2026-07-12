@@ -148,7 +148,7 @@ int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
     
     // If we made it this far then NOTHING is setup yet.  We can't do argument
     // parsing.  Just write out the provided format string.
-    return HAL->uart->write(0, (uint8_t*) format, strlen(format), NULL);
+    return printString(format);
   }
   
   ProcessMessage *processMessage = getAvailableMessage();
@@ -203,15 +203,18 @@ writeImmediate:
       : _localhost,
     (unsigned int) getRunningPid(),
     fileName, lineNumber, _logLevelNames[logLevel]);
-  printString(HAL->memory->logBuffer);
+  int rv = printString(HAL->memory->logBuffer);
+  if (rv < 0) {
+    return rv;
+  }
   
   // Print the log message.
   va_start(args, format);
   vsnprintf(HAL->memory->logBuffer, HAL->memory->logBufferSize,
     format, args);
   va_end(args);
-  printString(HAL->memory->logBuffer);
-  return 0;
+  rv += printString(HAL->memory->logBuffer);
+  return rv;
   
 writeStaticLog:
   // Copy the log entry to the static log area.
