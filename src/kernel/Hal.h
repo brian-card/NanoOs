@@ -370,13 +370,13 @@ typedef struct HalMemory {
   /// @var logBuffer
   ///
   /// @brief A buffer that can be used by the logger to print an immediate log
-  /// message.
+  /// message.  This member variable may *NOT* be NULL.
   char *logBuffer;
   
   /// @var logBufferSize
   ///
-  /// @brief The number of bytes available for the log buffer.  This may be 0 on
-  /// systems that don't support immediate logs.
+  /// @brief The number of bytes available for the log buffer.  This must be
+  /// greater than zero and be of a reasonable size for generating log messages.
   size_t logBufferSize;
 } HalMemory;
 
