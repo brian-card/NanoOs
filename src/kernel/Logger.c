@@ -111,29 +111,30 @@ int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
    const char *format, ...
 ) {
   va_list args;
-  LogEntry logEntry;
+  LogMessageCommandArgs commandArgs;
   
   // Don't check the return value of getElapsedNanoseconds here.  A failure
   // isn't fatal.  Do this before anything else to get as accurate a timestamp
   // as possible.
-  HAL->clock->getElapsedNanoseconds(0, &logEntry.timeStamp);
+  HAL->clock->getElapsedNanoseconds(0, &commandArgs.logEntry.timeStamp);
   
   // Get the rest of the fixed values.
-  logEntry.logLevel = logLevel;
-  logEntry.fileName = (int16_t) (((intptr_t) _referencePoint)
+  commandArgs.logEntry.logLevel = logLevel;
+  commandArgs.logEntry.fileName = (int16_t) (((intptr_t) _referencePoint)
     - ((intptr_t) fileName));
-  logEntry.lineNumber = lineNumber;
-  logEntry.pid = getRunningPid();
-  logEntry.format = (int16_t) (((intptr_t) _referencePoint)
+  commandArgs.logEntry.lineNumber = lineNumber;
+  commandArgs.logEntry.pid = getRunningPid();
+  commandArgs.logEntry.format = (int16_t) (((intptr_t) _referencePoint)
     - ((intptr_t) format));
   
   // Get the va_list values.
   va_start(args, format);
   for (int ii = 0;
-    ii < (int) ((sizeof(logEntry.args)) / (sizeof(logEntry.args[0])));
+    ii < (int) ((sizeof(commandArgs.logEntry.args))
+      / (sizeof(commandArgs.logEntry.args[0])));
     ii++
   ) {
-    logEntry.args[ii] = (uint32_t) va_arg(args, int);
+    commandArgs.logEntry.args[ii] = (uint32_t) va_arg(args, int);
   }
   va_end(args);
   
@@ -170,7 +171,7 @@ int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
   }
   if (processMessageInit(processMessage,
     LOGGER_COMMAND_SIGNATURE | LOGGER_LOG_MESSAGE,
-    &logEntry, sizeof(logEntry), true) != processSuccess
+    &commandArgs.logEntry, sizeof(commandArgs.logEntry), true) != processSuccess
   ) {
     processMessageRelease(processMessage);
     return -EAGAIN;
@@ -192,12 +193,12 @@ int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
     }
   }
   processMessageRelease(processMessage);
-  return 0;
+  return commandArgs.returnValue;
   
 writeImmediate:
   // Print the header.
   snprintf(HAL->memory->logBuffer, HAL->memory->logBufferSize,
-    _logHeaderFormat, (long long int) logEntry.timeStamp,
+    _logHeaderFormat, (long long int) commandArgs.logEntry.timeStamp,
     ((SCHEDULER_STATE != NULL) && (SCHEDULER_STATE->hostname != NULL))
       ? SCHEDULER_STATE->hostname
       : _localhost,
@@ -220,7 +221,7 @@ writeStaticLog:
   // Copy the log entry to the static log area.
   memcpy(&HAL->memory->staticLogs->logEntries[
     HAL->memory->staticLogs->metadata.numEntries],
-    &logEntry, sizeof(logEntry));
+    &commandArgs.logEntry, sizeof(commandArgs.logEntry));
   HAL->memory->staticLogs->metadata.numEntries++;
   
   return 0;
