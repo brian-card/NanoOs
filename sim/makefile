@@ -50,6 +50,7 @@ COMPONENTS := \
 # Source and target files
 TARGET := nano-os-sim
 BINARY := $(BIN_DIR)/$(TARGET)
+RODATA_BIN := $(BIN_DIR)/$(TARGET)_rodata.bin
 
 OS_OBJECTS := \
     $(OBJ_DIR)/Commands.o \
@@ -91,13 +92,20 @@ SIM_OBJECTS := \
     $(OBJ_DIR)/SdCardPosixImpl.o \
 
 # Default target
-all: $(BINARY)
+all: $(BINARY) $(RODATA_BIN)
 
 # Build simulator binary
 $(BINARY): $(COMPONENTS) $(SIM_OBJECTS)
 	$(MKDIR) "$(BIN_DIR)"
 	$(COMPILE) $(WARNINGS) $(CFLAGS) $(INCLUDES) \
 		$(SIM_OBJECTS) $(OS_OBJECTS) -o $@
+
+# Flat binary containing only the .rodata section, for inspection alongside
+# the final program binary. The POSIX/sim target never strips .rodata from
+# $(BINARY) itself (it's a native ELF, not a flashed image), so this is a
+# separate extract rather than a companion to a stripped build.
+$(RODATA_BIN): $(BINARY)
+	$(OBJCOPY) -O binary -j .rodata $< $@
 
 ../src/%: FORCE
 	$(MAKE) -C $@ COMPILE=$(COMPILE) LINK=$(LINK) \
@@ -123,14 +131,14 @@ symbols: $(BINARY)
 
 # Clean build artifacts
 clean:
-	$(RM) $(SIM_OBJECTS) $(BINARY) $(TARGET).dis
+	$(RM) $(SIM_OBJECTS) $(BINARY) $(RODATA_BIN) $(TARGET).dis
 	for component in $(COMPONENTS); do $(MAKE) -C $${component} clean; done
 
 # Show help
 help:
 	@echo "NanoOS Overlay Build System"
 	@echo "Usage:"
-	@echo "  make          - Build the simulator"
+	@echo "  make          - Build the simulator and its .rodata-only artifact"
 	@echo "  make disasm   - Generate disassembly listing"
 	@echo "  make sections - Show ELF section information"  
 	@echo "  make symbols  - Show symbol table"
