@@ -71,6 +71,17 @@ typedef struct LogEntry {
   uint32_t  args[4];
 } LogEntry;
 
+/// @struct LogMessageCommandArgs
+///
+/// @brief Arguments and return value for the logMessage command handler.
+///
+/// @param logEntry The embedded LogEntry to display.
+/// @param returnValue The integer returnValue from the handler.
+typedef struct LogMessageCommandArgs {
+  LogEntry logEntry;
+  int returnValue;
+} LogMessageCommandArgs;
+
 /// @struct StaticLogs
 ///
 /// @brief Metadata and log entries for messages logged before the logger
