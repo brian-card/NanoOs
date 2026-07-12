@@ -18,6 +18,7 @@
 #   NanoOs_full.hex      - Full Intel HEX (includes .rodata)
 #   NanoOs_stripped.bin  - Stripped flat binary (no .rodata; size at a glance)
 #   NanoOs_stripped.hex  - Stripped Intel HEX (no .rodata, for production)
+#   NanoOs_rodata.bin    - Flat binary containing only .rodata (for inspection)
 #
 # `ls -l`/`stat` on the .bin files gives an honest byte count of what's
 # actually going into flash.  The .hex files are what actually get flashed
@@ -204,6 +205,7 @@ FULL_BIN     := $(BUILD_DIR)/NanoOs_full.bin
 FULL_HEX     := $(BUILD_DIR)/NanoOs_full.hex
 STRIPPED_BIN := $(BUILD_DIR)/NanoOs_stripped.bin
 STRIPPED_HEX := $(BUILD_DIR)/NanoOs_stripped.hex
+RODATA_BIN   := $(BUILD_DIR)/NanoOs_rodata.bin
 
 # ---- Serial port (for flashing) ------------------------------------------------
 
@@ -213,7 +215,7 @@ PORT ?= $(firstword $(wildcard /dev/ttyACM* /dev/ttyUSB*))
 
 .PHONY: all flash flash-full size sections clean
 
-all: $(FULL_BIN) $(FULL_HEX) $(STRIPPED_BIN) $(STRIPPED_HEX)
+all: $(FULL_BIN) $(FULL_HEX) $(STRIPPED_BIN) $(STRIPPED_HEX) $(RODATA_BIN)
 	@echo ""
 	@echo "  Built for: Arduino Nano Every (ATmega4809)"
 	@echo "  Output:    $(BUILD_DIR)/"
@@ -247,6 +249,10 @@ $(STRIPPED_BIN): $(ELF)
 $(STRIPPED_HEX): $(ELF)
 	@echo "  OBJCOPY $@ (stripped, no .rodata)"
 	@$(OBJCOPY) -O ihex -R .eeprom -R .rodata $< $@
+
+$(RODATA_BIN): $(ELF)
+	@echo "  OBJCOPY $@ (.rodata only)"
+	@$(OBJCOPY) -O binary -j .rodata $< $@
 
 # ---- Compile: sketch ------------------------------------------------------------
 
@@ -329,7 +335,7 @@ _flash:
 		"-Ufuse5:w:$(FUSE_SYSCFG0):m" \
 		"-Ufuse8:w:$(FUSE_BOOTEND):m"
 
-size: $(ELF) $(FULL_BIN) $(FULL_HEX) $(STRIPPED_BIN) $(STRIPPED_HEX)
+size: $(ELF) $(FULL_BIN) $(FULL_HEX) $(STRIPPED_BIN) $(STRIPPED_HEX) $(RODATA_BIN)
 	@echo ""
 	@echo "=== Arduino Nano Every (ATmega4809): Section sizes ==="
 	@$(SIZE) -A $(ELF)
@@ -342,6 +348,7 @@ size: $(ELF) $(FULL_BIN) $(FULL_HEX) $(STRIPPED_BIN) $(STRIPPED_HEX)
 	@echo ""
 	@echo -n "  Stripped binary size:  "; stat -c%s $(STRIPPED_BIN) 2>/dev/null || echo "(build first)"
 	@echo -n "  Full binary size:      "; stat -c%s $(FULL_BIN) 2>/dev/null || echo "(build first)"
+	@echo -n "  Rodata binary size:    "; stat -c%s $(RODATA_BIN) 2>/dev/null || echo "(build first)"
 	@echo ""
 	@$(SIZE) -A $(ELF) | awk -v limit=$(UPLOAD_MAX_SIZE) ' \
 		/^\.text /   {text=$$2} \

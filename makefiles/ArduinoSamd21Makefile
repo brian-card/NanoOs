@@ -24,6 +24,7 @@
 #   NanoOs_full.uf2      - UF2 of full binary (for testing data layout)
 #   NanoOs_stripped.bin  - Stripped binary (no .rodata, for production)
 #   NanoOs_stripped.uf2  - UF2 of stripped binary (for production flashing)
+#   NanoOs_rodata.bin    - Flat binary containing only .rodata (for inspection)
 # =============================================================================
 
 # ---- Board selection (override on command line) ------------------------------
@@ -290,12 +291,13 @@ FULL_BIN     := $(BUILD_DIR)/NanoOs_full.bin
 FULL_UF2     := $(BUILD_DIR)/NanoOs_full.uf2
 STRIPPED_BIN := $(BUILD_DIR)/NanoOs_stripped.bin
 STRIPPED_UF2 := $(BUILD_DIR)/NanoOs_stripped.uf2
+RODATA_BIN   := $(BUILD_DIR)/NanoOs_rodata.bin
 
 # ---- Targets -----------------------------------------------------------------
 
 .PHONY: all flash flash-full size sections clean clean-all boards
 
-all: $(FULL_BIN) $(FULL_UF2) $(STRIPPED_BIN) $(STRIPPED_UF2)
+all: $(FULL_BIN) $(FULL_UF2) $(STRIPPED_BIN) $(STRIPPED_UF2) $(RODATA_BIN)
 	@echo ""
 	@echo "  Built for: $(BOARD)"
 	@echo "  Output:    $(BUILD_DIR)/"
@@ -324,6 +326,10 @@ $(FULL_UF2): $(FULL_BIN)
 $(STRIPPED_BIN): $(ELF)
 	@echo "  OBJCOPY $@ (stripped, no .rodata)"
 	@$(OBJCOPY) -O binary -R .rodata $< $@
+
+$(RODATA_BIN): $(ELF)
+	@echo "  OBJCOPY $@ (.rodata only)"
+	@$(OBJCOPY) -O binary -j .rodata $< $@
 
 $(STRIPPED_UF2): $(STRIPPED_BIN)
 	@if [ -z "$(UF2CONV)" ]; then \
@@ -426,6 +432,7 @@ size: $(ELF)
 	@echo ""
 	@echo -n "  Stripped binary size:  "; stat -c%s $(STRIPPED_BIN) 2>/dev/null || echo "(build first)"
 	@echo -n "  Full binary size:      "; stat -c%s $(FULL_BIN) 2>/dev/null || echo "(build first)"
+	@echo -n "  Rodata binary size:    "; stat -c%s $(RODATA_BIN) 2>/dev/null || echo "(build first)"
 	@echo ""
 
 sections: $(ELF)

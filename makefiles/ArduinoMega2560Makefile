@@ -35,7 +35,10 @@
 # before flash does -- see the `size` target's breakdown. There's nothing to
 # strip here (no separate .rodata to exclude), so the "flash-full" target is
 # kept only so the command surface matches the other per-board makefiles;
-# it builds the same file as "flash".
+# it builds the same file as "flash". For the same reason, this makefile has
+# no rodata-only artifact target (unlike the other three per-board
+# makefiles): the final linked ELF has no distinct .rodata output section to
+# extract, so there's nothing a `objcopy -O binary -j .rodata` could pull out.
 #
 # Flashing:
 #   The Mega 2560 ships with a resident STK500v2-compatible bootloader

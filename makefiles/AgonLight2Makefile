@@ -25,6 +25,7 @@
 #   NanoOs.elf          — Full ELF (keep for host-side symbol resolution)
 #   NanoOs_full.bin     — Flat binary including .rodata (for debugging)
 #   NanoOs_stripped.bin — Flat binary without .rodata (for production)
+#   NanoOs_rodata.bin   — Flat binary containing only .rodata (for inspection)
 #   NanoOs.map          — Linker map
 #   NanoOs.lst          — Disassembly listing
 #
@@ -178,18 +179,20 @@ DEPS := $(ALL_OBJS:.o=.d)
 ELF          := $(BUILD_DIR)/NanoOs.elf
 FULL_BIN     := $(BUILD_DIR)/NanoOs_full.bin
 STRIPPED_BIN := $(BUILD_DIR)/NanoOs_stripped.bin
+RODATA_BIN   := $(BUILD_DIR)/NanoOs_rodata.bin
 LST          := $(BUILD_DIR)/NanoOs.lst
 
 # ---- Targets ----------------------------------------------------------------
 
 .PHONY: all flash flash-full size sections disasm clean
 
-all: $(FULL_BIN) $(STRIPPED_BIN)
+all: $(FULL_BIN) $(STRIPPED_BIN) $(RODATA_BIN)
 	@echo ""
 	@echo "  Built for:  Agon Light 2 (eZ80F92, ADL mode, MOS program)"
 	@echo "  Output:     $(BUILD_DIR)/"
 	@echo "  Full:       $(FULL_BIN)"
 	@echo "  Stripped:   $(STRIPPED_BIN)"
+	@echo "  Rodata:     $(RODATA_BIN)"
 	@echo "  Map:        $(BUILD_DIR)/NanoOs.map"
 
 # ---- Link -------------------------------------------------------------------
@@ -207,6 +210,10 @@ $(FULL_BIN): $(ELF)
 $(STRIPPED_BIN): $(ELF)
 	@echo "  OBJCOPY $@ (stripped, no .rodata)"
 	@$(OBJCOPY) -O binary -R .rodata $< $@
+
+$(RODATA_BIN): $(ELF)
+	@echo "  OBJCOPY $@ (.rodata only)"
+	@$(OBJCOPY) -O binary -j .rodata $< $@
 
 # ---- Compile: boot assembly (boot/AgonLight2/boot.asm) ----------------------
 
@@ -281,6 +288,7 @@ size: $(ELF)
 	@echo ""
 	@echo -n "  Stripped binary size:   "; stat -c%s $(STRIPPED_BIN) 2>/dev/null || echo "(build first)"
 	@echo -n "  Full binary size:       "; stat -c%s $(FULL_BIN) 2>/dev/null || echo "(build first)"
+	@echo -n "  Rodata binary size:     "; stat -c%s $(RODATA_BIN) 2>/dev/null || echo "(build first)"
 	@echo ""
 	@echo "=== External SRAM headroom ==="
 	@python3 -c "\
