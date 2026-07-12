@@ -134,7 +134,7 @@ int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
       / (sizeof(commandArgs.logEntry.args[0])));
     ii++
   ) {
-    commandArgs.logEntry.args[ii] = (uint32_t) va_arg(args, int);
+    commandArgs.logEntry.args[ii] = (uint32_t) va_arg(args, intptr_t);
   }
   va_end(args);
   
