@@ -357,6 +357,11 @@ typedef struct HalMemory {
   
   // Logging definitions.
   
+  /// @var stringsPresent
+  ///
+  /// @brief Whether or not regular string data is present in the OS image.
+  bool stringsPresent;
+  
   /// @var staticLogs
   ///
   /// @brief Address of the region of memory where static logs are maintained.

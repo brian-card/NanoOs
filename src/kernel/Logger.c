@@ -142,14 +142,17 @@ int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
     if (HAL->memory->staticLogs != NULL) {
       // Logger isn't up yet but will be.  Write to the staticLogs area.
       goto writeStaticLog;
-    } else if (HAL->memory->logBufferSize > 0) {
-      // Logger isn't coming up.  Write this entry immediately.
+    } else if (HAL->memory->stringsPresent == true) {
+      // Write this entry immediately.
       goto writeImmediate;
     }
     
-    // If we made it this far then NOTHING is setup yet.  We can't do argument
-    // parsing.  Just write out the provided format string.
-    return printString(format);
+    // If we made it this far then we have no ability to log a static log for
+    // the logger process to lookup AND strings are not compiled into the OS
+    // image, so we can't print it as an immediate either.  This is a bug in
+    // the HAL but there's nothing we can do at runtime, so just return to the
+    // caller that this isn't supported.
+    return -ENOTSUP;
   }
   
   ProcessMessage *processMessage = getAvailableMessage();

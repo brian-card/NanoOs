@@ -342,15 +342,14 @@ int32_t halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
   halCommonBlockDevice.numSupported = _numBlockDevices;
   halCommonBlockDevice.online       = posixBlockDevicesOnline;
 
+  halCommonMemory.logBuffer      = _logBuffer;
+  halCommonMemory.logBufferSize  = sizeof(_logBuffer);
 //// #if LOG_THRESHOLD < LOG_LEVEL_DETAIL
-  halCommonMemory.logBuffer     = _logBuffer;
-  halCommonMemory.logBufferSize = sizeof(_logBuffer);
-  halCommonMemory.staticLogs    = NULL;
+  halCommonMemory.stringsPresent = true;
+  halCommonMemory.staticLogs     = NULL;
 //// #else // LOG_THRESHOLD >= LOG_LEVEL_DETAIL
-////   (void) _logBuffer;
-////   halCommonMemory.logBuffer     = NULL;
-////   halCommonMemory.logBufferSize = 0;
-////   halCommonMemory.staticLogs    = staticLogs;
+////   halCommonMemory.stringsPresent = false;
+////   halCommonMemory.staticLogs     = staticLogs;
 ////   memset(halCommonMemory.staticLogs, 0, sizeof(*halCommonMemory.staticLogs));
 //// #endif // LOG_THRESHOLD < LOG_LEVEL_DETAIL
 

@@ -695,9 +695,10 @@ int32_t halArduinoAvrInit(HalArduinoAvrInitArgs *args) {
   halCommonBlockDevice.numSupported = _numBlockDevices;
   halCommonBlockDevice.online       = arduinoAvrBlockDevicesOnline;
 
-  halCommonMemory.logBuffer     = _logBuffer;
-  halCommonMemory.logBufferSize = sizeof(_logBuffer);
-  halCommonMemory.staticLogs    = NULL;
+  halCommonMemory.stringsPresent = true;
+  halCommonMemory.logBuffer      = _logBuffer;
+  halCommonMemory.logBufferSize  = sizeof(_logBuffer);
+  halCommonMemory.staticLogs     = NULL;
 
   return halCommonInit();
 }
