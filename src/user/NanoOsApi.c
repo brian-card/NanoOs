@@ -80,14 +80,14 @@ char** parseArgs(char *command, int *argc);
 #undef fileno
 
 NanoOsExecutiveApi nanoOsExecutiveApi = {
+  // HAL access:
+  .hal = NULL,
+  
   // Debug functions:
   .printString = printString_,
   .printInt = printInt_,
   .printDouble = printDouble,
   .printHex = printHex_,
-  
-  // Limited HAL access:
-  .blockDevice = NULL,
   
   // Kernel process functions:
   .getRunningCoroutine = getRunningCoroutine,

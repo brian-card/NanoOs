@@ -211,8 +211,8 @@ void signalCallback(void *stateData, Cocondition *cocondition) {
 ///
 /// @return This function returns no value and never returns.
 void nanoOsStart(void) {
-  // Set the blockDevice pointer in the userspace API.
-  nanoOsExecutiveApi.blockDevice = HAL->blockDevice;
+  // Set the hal pointer in the executive API.
+  nanoOsExecutiveApi.hal = HAL;
 
   // SchedulerState pointer that we will have to populate in startScheduler.
   SchedulerState *threadStatePointer = NULL;
