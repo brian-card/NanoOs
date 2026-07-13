@@ -53,12 +53,10 @@ bool __atomic_compare_exchange_2(void *ptr, void *expected, uint16_t desired,
   
   uint64_t remainingNanoseconds;
   void (*callback)(void);
-  int cancelStatus = -1;
-  if (HAL->timer != NULL) {
-    cancelStatus = HAL->timer->cancelAndGet(
-      SCHEDULER_STATE->preemptionTimer, NULL, &remainingNanoseconds, &callback);
-  }
-  
+  int cancelStatus = HAL->timer->cancelAndGet(
+    SCHEDULER_STATE->preemptionTimer, NULL, &remainingNanoseconds, &callback);
+
+
   bool success = false;
   if (*((uint16_t*) ptr) == *((uint16_t*) expected)) {
     *((uint16_t*) ptr) = desired;
@@ -81,12 +79,10 @@ void __atomic_store_2(void *ptr, uint16_t val, int memorder) {
   
   uint64_t remainingNanoseconds;
   void (*callback)(void);
-  int cancelStatus = -1;
-  if (HAL->timer != NULL) {
-    cancelStatus = HAL->timer->cancelAndGet(
-      SCHEDULER_STATE->preemptionTimer, NULL, &remainingNanoseconds, &callback);
-  }
-  
+  int cancelStatus = HAL->timer->cancelAndGet(
+    SCHEDULER_STATE->preemptionTimer, NULL, &remainingNanoseconds, &callback);
+
+
   *((uint16_t*) ptr) = val;
   
   if (cancelStatus == 0) {
@@ -101,12 +97,10 @@ uint16_t __atomic_load_2(const void *ptr, int memorder) {
   
   uint64_t remainingNanoseconds;
   void (*callback)(void);
-  int cancelStatus = -1;
-  if (HAL->timer != NULL) {
-    cancelStatus = HAL->timer->cancelAndGet(
-      SCHEDULER_STATE->preemptionTimer, NULL, &remainingNanoseconds, &callback);
-  }
-  
+  int cancelStatus = HAL->timer->cancelAndGet(
+    SCHEDULER_STATE->preemptionTimer, NULL, &remainingNanoseconds, &callback);
+
+
   uint16_t returnValue = *((uint16_t*) ptr);
   
   if (cancelStatus == 0) {

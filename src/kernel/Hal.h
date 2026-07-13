@@ -824,44 +824,44 @@ typedef struct Hal {
   
   /// @var uart
   ///
-  /// @brief Pointer to the HalUart managed by the HAL, or NULL if there
-  /// isn't one.
+  /// @brief Pointer to the HalUart managed by the HAL.  This member may not
+  /// be NULL.
   HalUart *uart;
-  
+
   /// @var dio
   ///
-  /// @brief Pointer to the HalDio managed by the HAL, or NULL if there isn't
-  /// one.
+  /// @brief Pointer to the HalDio managed by the HAL.  This member may not
+  /// be NULL.
   HalDio *dio;
-  
+
   /// @var spi
   ///
-  /// @brief Pointer to the HalSpi managed by the HAL, or NULL if there isn't
-  /// one.
+  /// @brief Pointer to the HalSpi managed by the HAL.  This member may not
+  /// be NULL.
   HalSpi *spi;
-  
+
   /// @var clock
   ///
-  /// @brief Pointer to the HalClock managed by the HAL, or NULL if there isn't
-  /// one.
+  /// @brief Pointer to the HalClock managed by the HAL.  This member may not
+  /// be NULL.
   HalClock *clock;
-  
+
   /// @var power
   ///
-  /// @brief Pointer to the HalPower managed by the HAL, or NULL if there isn't
-  /// one.
+  /// @brief Pointer to the HalPower managed by the HAL.  This member may not
+  /// be NULL.
   HalPower *power;
-  
+
   /// @var timer
   ///
-  /// @brief Pointer to the HalTimer managed by HAL, or NULL if there isn't
-  /// one.
+  /// @brief Pointer to the HalTimer managed by HAL.  This member may not be
+  /// NULL.
   HalTimer *timer;
-  
+
   /// @var blockDevice
   ///
-  /// @brief Pointer to the HalBlockDevice managed by the HAL, or NULL if there
-  /// isn't one.
+  /// @brief Pointer to the HalBlockDevice managed by the HAL.  This member
+  /// may not be NULL.
   HalBlockDevice *blockDevice;
 } Hal;
 

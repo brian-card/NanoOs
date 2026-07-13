@@ -47,12 +47,9 @@ void* atomic_load(const volatile void *object) {
   
   uint64_t remainingNanoseconds;
   void (*callback)(void);
-  int cancelStatus = -1;
-  if (HAL->timer != NULL) {
-    cancelStatus = HAL->timer->cancelAndGet(
-      SCHEDULER_STATE->preemptionTimer, NULL, &remainingNanoseconds, &callback);
-  }
-  
+  int cancelStatus = HAL->timer->cancelAndGet(
+    SCHEDULER_STATE->preemptionTimer, NULL, &remainingNanoseconds, &callback);
+
   void *returnValue = *objectPtr;
   
   if (cancelStatus == 0) {
@@ -69,12 +66,9 @@ void atomic_store(volatile void *object, void *desired) {
   
   uint64_t remainingNanoseconds;
   void (*callback)(void);
-  int cancelStatus = -1;
-  if (HAL->timer != NULL) {
-    cancelStatus = HAL->timer->cancelAndGet(
-      SCHEDULER_STATE->preemptionTimer, NULL, &remainingNanoseconds, &callback);
-  }
-  
+  int cancelStatus = HAL->timer->cancelAndGet(
+    SCHEDULER_STATE->preemptionTimer, NULL, &remainingNanoseconds, &callback);
+
   *objectPtr = desired;
   
   if (cancelStatus == 0) {
@@ -92,12 +86,9 @@ bool atomic_compare_exchange_strong(
   
   uint64_t remainingNanoseconds;
   void (*callback)(void);
-  int cancelStatus = -1;
-  if (HAL->timer != NULL) {
-    cancelStatus = HAL->timer->cancelAndGet(
-      SCHEDULER_STATE->preemptionTimer, NULL, &remainingNanoseconds, &callback);
-  }
-  
+  int cancelStatus = HAL->timer->cancelAndGet(
+    SCHEDULER_STATE->preemptionTimer, NULL, &remainingNanoseconds, &callback);
+
   bool success = false;
   if (*objectPtr == *expectedPtr) {
     *objectPtr = desired;

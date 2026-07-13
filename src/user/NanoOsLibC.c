@@ -55,11 +55,7 @@ int timespec_get(struct timespec* spec, int base) {
   }
   
   int64_t now = 0;
-  if (HAL->clock != NULL) {
-    HAL->clock->getElapsedNanoseconds(0, &now);
-  } else {
-    logError("timespec_get not implemented\n");
-  }
+  HAL->clock->getElapsedNanoseconds(0, &now);
   spec->tv_sec = (time_t) (now / ((int64_t) 1000000000));
   spec->tv_nsec = now % ((int64_t) 1000000000);
 
@@ -138,16 +134,12 @@ char* nanoOsStrError(int errnum) {
 ///
 /// @return This function returns no value.
 void msleep(int durationMs) {
-  if (HAL->clock != NULL) {
-    int64_t start = 0;
-    HAL->clock->getElapsedMilliseconds(0, &start);
-    int64_t elapsed = 0;
-    do {
-      HAL->clock->getElapsedMilliseconds(start, &elapsed);
-    } while (elapsed < durationMs);
-  } else {
-    logError("msleep not implemented\n");
-  }
+  int64_t start = 0;
+  HAL->clock->getElapsedMilliseconds(0, &start);
+  int64_t elapsed = 0;
+  do {
+    HAL->clock->getElapsedMilliseconds(start, &elapsed);
+  } while (elapsed < durationMs);
 }
 
 /// @fn time_t time(time_t *tloc)
@@ -161,14 +153,10 @@ void msleep(int durationMs) {
 /// success, (time_t) -1 on error.  On error, the value of errno is also set.
 time_t time(time_t *tloc) {
   time_t now = 0;
-  if (HAL->clock != NULL) {
-    int64_t nowMs = 0;
-    HAL->clock->getElapsedMilliseconds(0, &nowMs);
-    now = ((time_t) nowMs) / ((time_t) 1000);
-  } else {
-    logError("time not implemented\n");
-  }
-  
+  int64_t nowMs = 0;
+  HAL->clock->getElapsedMilliseconds(0, &nowMs);
+  now = ((time_t) nowMs) / ((time_t) 1000);
+
   if (tloc != NULL) {
     *tloc = now;
   }

@@ -67,10 +67,6 @@ FILE *nanoOsStderr = (FILE*) ((intptr_t) 0x3);
 ///
 /// @return Returns the number of bytes written on success, -errno on failure.
 int printChar_(char character) {
-  if (HAL->uart == NULL) {
-    return -ENODEV;
-  }
-
   ssize_t written = 0;
   HAL->uart->write(0, (uint8_t*) &character, 1, &written);
   return (int) written;
@@ -92,8 +88,6 @@ static const char _crlf[] KEEP_IN_FLASH = "\r\n";
 int printString_(const char *string) {
   if (string == NULL) {
     return -EINVAL;
-  } else if (HAL->uart == NULL) {
-    return -ENODEV;
   }
 
   bool printReturnNewline = false;
@@ -164,10 +158,6 @@ int ullToString(unsigned long long int number, char **nextChar) {
 ///
 /// @return Returns the number of bytes written on success, -errno on failure.
 int printInt_(long long int integer) {
-  if (HAL->uart == NULL) {
-    return -ENODEV;
-  }
-
   char number[20];
   number[19] = '\0';
   char *nextChar = &number[18];
@@ -201,10 +191,6 @@ static const char _doubleFormat[] KEEP_IN_FLASH = "%lf";
 ///
 /// @return Returns the number of bytes written on success, -errno on failure.
 int printDouble(double floatingPointValue) {
-  if (HAL->uart == NULL) {
-    return -ENODEV;
-  }
-
   char number[20];
   sprintf(number, _doubleFormat, floatingPointValue);
   ssize_t written = 0;
@@ -228,10 +214,6 @@ static const char _hexAlphabet[] KEEP_IN_FLASH = "0123456789abcdef";
 ///
 /// @return Returns the number of bytes written on success, -errno on failure.
 int printHex_(unsigned long long int integer) {
-  if (HAL->uart == NULL) {
-    return -ENODEV;
-  }
-
   char number[20];
   number[19] = '\0';
   char *nextChar = &number[18];

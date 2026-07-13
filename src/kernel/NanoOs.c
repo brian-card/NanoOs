@@ -234,7 +234,7 @@ void nanoOsStart(void) {
     .unlockCallback = unlockCallback,
     .signalCallback = signalCallback,
   };
-  if ((HAL->timer != NULL) && (HAL->timer->numSupported > 0)) {
+  if (HAL->timer->numSupported > 0) {
     threadsConfigOptions.yieldCallback = yieldCallback;
   }
   if (threadsConfig(&_mainThread, &threadsConfigOptions) != processSuccess) {

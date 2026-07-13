@@ -547,11 +547,6 @@ int32_t halCommonInitRootFilesystem() {
   HAL->blockDevice->get(0, &rootBlockDevice);
 
   if (rootBlockDevice == NULL) {
-    if (HAL->blockDevice == NULL) {
-      logError("HAL->blockDevice is NULL\n");
-      return -ENODEV;
-    }
-
     if (HAL->blockDevice->init() != 0) {
       logError("HAL->blockDevice->init() failed\n");
       return -ENODEV;
@@ -730,9 +725,7 @@ int32_t halCommonInit(void) {
     }
 
     if (HAL->timer->online[0] != timerOnline) {
-      if (HAL->uart != NULL) {
-        logWarn("Did not initialize all timers\n");
-      }
+      logWarn("Did not initialize all timers\n");
     }
   } while (0);
 

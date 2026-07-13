@@ -1069,9 +1069,7 @@ void* runConsole(void *args) {
   ConsoleState consoleState;
   memset(&consoleState, 0, sizeof(ConsoleState));
 
-  if (HAL->uart != NULL) {
-    consoleState.numConsolePorts = CONSOLE_NUM_PORTS;
-  }
+  consoleState.numConsolePorts = CONSOLE_NUM_PORTS;
 
   // For each console port, use the console buffer at the corresponding index.
   for (uint8_t ii = 0; ii < consoleState.numConsolePorts; ii++) {

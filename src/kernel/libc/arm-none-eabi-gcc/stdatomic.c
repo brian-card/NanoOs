@@ -54,12 +54,10 @@ bool __atomic_compare_exchange_4(void *ptr, void *expected, uint32_t desired,
   
   uint64_t remainingNanoseconds;
   void (*callback)(void);
-  int cancelStatus = -1;
-  if (HAL->timer != NULL) {
-    cancelStatus = HAL->timer->cancelAndGet(
-      SCHEDULER_STATE->preemptionTimer, NULL, &remainingNanoseconds, &callback);
-  }
-  
+  int cancelStatus = HAL->timer->cancelAndGet(
+    SCHEDULER_STATE->preemptionTimer, NULL, &remainingNanoseconds, &callback);
+
+
   bool success = false;
   if (*((uint32_t*) ptr) == *((uint32_t*) expected)) {
     *((uint32_t*) ptr) = desired;
