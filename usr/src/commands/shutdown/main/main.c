@@ -36,9 +36,25 @@
 // NanoOs includes
 #include "NanoOsHardware.h"
 
+void usage(const char *argv0) {
+  const char *programName = strrchr(argv0, '/');
+  if (programName != NULL) {
+    programName++;
+  } else {
+    programName = argv0;
+  }
+
+  fprintf(stderr, "Usage: %s <shutdown type>\n", programName);
+  fprintf(stderr, "\n");
+  fprintf(stderr, "Available shutdown types:\n");
+  fprintf(stderr, "-r --reboot    Reboot the system\n");
+  fprintf(stderr, "-h --halt      Halt and power down the system\n");
+  fprintf(stderr, "\n");
+}
+
 int main(int argc, char **argv) {
   if (argc < 2) {
-    fprintf(stderr, "Error! At least one argument is requried.\n");
+    usage(argv[0]);
     return 1;
   }
 
@@ -55,6 +71,7 @@ int main(int argc, char **argv) {
     nanoOsShutdown(NANO_OS_SHUTDOWN_OFF);
   } else {
     fprintf(stderr, "Error! Unknown shutdown type: \"%s\"\n", shutdownType);
+    usage(argv[0]);
     return 1;
   }
 
