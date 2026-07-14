@@ -318,42 +318,42 @@ int32_t halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
   halFunctions[HAL_BLOCK_DEVICE] = posixBlockDeviceFunctions;
 
   // Set per-platform data members on the common subsystem instances.
-  halCommonPlatform.callFileOverlay = callOverlayFunctionFromFile;
-  halCommonPlatform.execCommand = execOverlayCommand;
-  halCommonPlatform.initRootStorage = halCommonInitRootFilesystem,
-  halCommonPlatform.restartShell = restartOverlayShell;
+  halCommonHal.platform.callFileOverlay = callOverlayFunctionFromFile;
+  halCommonHal.platform.execCommand = execOverlayCommand;
+  halCommonHal.platform.initRootStorage = halCommonInitRootFilesystem,
+  halCommonHal.platform.restartShell = restartOverlayShell;
 
   // Uncomment these lines to switch to using the built-in shell:
-  // halCommonPlatform.execCommand = execBuiltinCommand;
-  // halCommonPlatform.restartShell = restartBuiltinShell;
+  // halCommonHal.platform.execCommand = execBuiltinCommand;
+  // halCommonHal.platform.restartShell = restartBuiltinShell;
 
-  halCommonUart.numSupported = 2;
-  halCommonUart.online       = posixUartsOnline;
+  halCommonHal.uart.numSupported = 2;
+  halCommonHal.uart.online       = posixUartsOnline;
 
-  halCommonDio.numSupported = 0;
-  halCommonDio.online       = posixDiosOnline;
+  halCommonHal.dio.numSupported = 0;
+  halCommonHal.dio.online       = posixDiosOnline;
 
-  halCommonSpi.numSupported = 0;
-  halCommonSpi.online       = posixSpisOnline;
+  halCommonHal.spi.numSupported = 0;
+  halCommonHal.spi.online       = posixSpisOnline;
 
-  halCommonTimer.numSupported = 2;
-  halCommonTimer.online       = posixTimersOnline;
+  halCommonHal.timer.numSupported = 2;
+  halCommonHal.timer.online       = posixTimersOnline;
 
-  halCommonBlockDevice.numSupported = _numBlockDevices;
-  halCommonBlockDevice.online       = posixBlockDevicesOnline;
+  halCommonHal.blockDevice.numSupported = _numBlockDevices;
+  halCommonHal.blockDevice.online       = posixBlockDevicesOnline;
 
-  halCommonMemory.logBuffer      = _logBuffer;
-  halCommonMemory.logBufferSize  = sizeof(_logBuffer);
+  halCommonHal.memory.logBuffer      = _logBuffer;
+  halCommonHal.memory.logBufferSize  = sizeof(_logBuffer);
 #ifdef NANO_OS_STRINGS_STRIPPED
-  halCommonMemory.stringsPresent = false;
+  halCommonHal.memory.stringsPresent = false;
 #else
-  halCommonMemory.stringsPresent = true;
+  halCommonHal.memory.stringsPresent = true;
 #endif // NANO_OS_STRINGS_STRIPPED
 //// #if LOG_THRESHOLD < LOG_LEVEL_DETAIL
-  halCommonMemory.staticLogs     = NULL;
+  halCommonHal.memory.staticLogs     = NULL;
 //// #else // LOG_THRESHOLD >= LOG_LEVEL_DETAIL
-////   halCommonMemory.staticLogs     = staticLogs;
-////   memset(halCommonMemory.staticLogs, 0, sizeof(*halCommonMemory.staticLogs));
+////   halCommonHal.memory.staticLogs     = staticLogs;
+////   memset(HAL->memory.staticLogs, 0, sizeof(*HAL->memory.staticLogs));
 //// #endif // LOG_THRESHOLD < LOG_LEVEL_DETAIL
 
   // Perform POSIX-specific hardware setup and retrieve the overlay mapping.
@@ -366,8 +366,8 @@ int32_t halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
     return result;
   }
 
-  halCommonMemory.overlayMap  = overlayMap;
-  halCommonMemory.overlaySize = overlaySize;
+  halCommonHal.memory.overlayMap  = overlayMap;
+  halCommonHal.memory.overlaySize = overlaySize;
 
   NANO_OS_API = &nanoOsApi;
 

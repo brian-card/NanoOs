@@ -1696,12 +1696,12 @@ int closeProcessFileDescriptors(ProcessDescriptor *processDescriptor) {
           }
           ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
           int64_t startTime = 0;
-          HAL->clock->getElapsedMicroseconds(0, &startTime);
+          HAL->clock.getElapsedMicroseconds(0, &startTime);
           // schedulerKillProcess times out after 100 milliseconds, so
           // timeout after 50 milliseconds.
           int64_t elapsedUs = 0;
           while ((processMessageDone(&processMessage) == false)
-            && (HAL->clock->getElapsedMicroseconds(startTime, &elapsedUs),
+            && (HAL->clock.getElapsedMicroseconds(startTime, &elapsedUs),
               elapsedUs < 50000)
           ) {
             for (int ii = 0; ii < NUM_PRIVILEGE_LEVELS; ii++) {
@@ -2667,7 +2667,7 @@ int schedulerExecveCommandHandler(
   }
 
   execArgs->schedulerState = schedulerState;
-  if (processCreate(processDescriptor, HAL->platform->execCommand, execArgs)
+  if (processCreate(processDescriptor, HAL->platform.execCommand, execArgs)
     == processError
   ) {
     logError("Could not configure process handle for new command.\n");
@@ -2734,7 +2734,7 @@ int schedulerExecveCommandHandler(
         CONSOLE_COMMAND_SIGNATURE, CONSOLE_RETURNING_INPUT);
   }
 
-  if (HAL->platform->execCommand == execOverlayCommand) {
+  if (HAL->platform.execCommand == execOverlayCommand) {
     processDescriptor->overlayNamespace = pathname;
   }
   returnValue = loadProcessDescriptorOverlayMetadata(processDescriptor);
@@ -2948,7 +2948,7 @@ int schedulerSpawnCommandHandler(
 
   schedFree(spawnArgs); spawnArgs = NULL;
 
-  if (processCreate(processDescriptor, HAL->platform->execCommand, execArgs)
+  if (processCreate(processDescriptor, HAL->platform.execCommand, execArgs)
     == processError
   ) {
     logError("Could not configure process handle for new command.\n");
@@ -3005,7 +3005,7 @@ int schedulerSpawnCommandHandler(
     }
   }
 
-  if (HAL->platform->execCommand == execOverlayCommand) {
+  if (HAL->platform.execCommand == execOverlayCommand) {
     processDescriptor->overlayNamespace = pathname;
   }
   returnValue = loadProcessDescriptorOverlayMetadata(processDescriptor);
@@ -3153,7 +3153,7 @@ int schedulerSendSignalCommandHandler(
     if (SCHEDULER_STATE->preemptionTimer > -1) {
       // No need to check HAL->timer for NULL since it can't be NULL in this
       // case.
-      HAL->timer->configOneShot(
+      HAL->timer.configOneShot(
         SCHEDULER_STATE->preemptionTimer, 10000000, forceYield);
     }
   }
@@ -3245,7 +3245,7 @@ int schedulerShutdownCommandHandler(
   switch (schedulerShutdownArgs->shutdownType) {
     case NANO_OS_SHUTDOWN_OFF:
       {
-        returnValue = HAL->power->enterMode(HAL_POWER_MODE_OFF);
+        returnValue = HAL->power.enterMode(HAL_POWER_MODE_OFF);
       }
       break;
     
@@ -3253,19 +3253,19 @@ int schedulerShutdownCommandHandler(
       {
         // Store RAM on disk and then power off.
         // TODO: Store RAM on disk.
-        returnValue = HAL->power->enterMode(HAL_POWER_MODE_OFF);
+        returnValue = HAL->power.enterMode(HAL_POWER_MODE_OFF);
       }
       break;
     
     case NANO_OS_SHUTDOWN_SUSPEND:
       {
-        returnValue = HAL->power->enterMode(HAL_POWER_MODE_SUSPEND);
+        returnValue = HAL->power.enterMode(HAL_POWER_MODE_SUSPEND);
       }
       break;
     
     case NANO_OS_SHUTDOWN_RESET:
       {
-        returnValue = HAL->power->enterMode(HAL_POWER_MODE_RESET);
+        returnValue = HAL->power.enterMode(HAL_POWER_MODE_RESET);
       }
       break;
     
@@ -3530,8 +3530,8 @@ int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp) {
     return 0;
   }
 
-  NanoOsOverlayMap *overlayMap = HAL->memory->overlayMap;
-  if ((overlayMap == NULL) || (HAL->memory->overlaySize == 0)) {
+  NanoOsOverlayMap *overlayMap = HAL->memory.overlayMap;
+  if ((overlayMap == NULL) || (HAL->memory.overlaySize == 0)) {
     logError("No overlay memory available for use.\n");
     return -ENOMEM;
   }
@@ -3747,7 +3747,7 @@ int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
       = processDescriptor->processId;
   }
 
-  if (processCreate(processDescriptor, HAL->platform->execCommand, execArgs)
+  if (processCreate(processDescriptor, HAL->platform.execCommand, execArgs)
     == processError
   ) {
     logError("Could not configure process handle for new command\n");
@@ -3755,7 +3755,7 @@ int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
     goto freeFileDescriptors;
   }
 
-  if (HAL->platform->execCommand == execOverlayCommand) {
+  if (HAL->platform.execCommand == execOverlayCommand) {
     processDescriptor->overlayNamespace = execArgs->pathname;
   }
   returnValue = loadProcessDescriptorOverlayMetadata(processDescriptor);
@@ -4107,7 +4107,7 @@ void runScheduler(void) {
     &allProcesses[SCHEDULER_STATE->schedulerPid - 1])
   ) {
     logError("Scheduler stack overflow detected");
-    HAL->power->enterMode(HAL_POWER_MODE_OFF);
+    HAL->power.enterMode(HAL_POWER_MODE_OFF);
   }
 
   ProcessDescriptor *processDescriptor
@@ -4145,13 +4145,13 @@ void runScheduler(void) {
       if (SCHEDULER_STATE->preemptionTimer > -1) {
         // No need to check HAL->timer for NULL since it can't be NULL in this
         // case.
-        HAL->timer->configOneShot(
+        HAL->timer.configOneShot(
           SCHEDULER_STATE->preemptionTimer, 10000000, forceYield);
       }
     }
   }
   processResume(processDescriptor, NULL);
-  // No need to call HAL->timer->cancel since that's called by
+  // No need to call HAL->timer.cancel since that's called by
   // yieldCallback if we're running preemptive multiprocessing.
 
   if (processStackOverflowed(processDescriptor)) {
@@ -4342,8 +4342,8 @@ __attribute__((noinline)) void startScheduler(
   schedulerState.currentReady
     = &schedulerState.ready[PRIVILEGE_LEVEL_KERNEL];
   schedulerState.preemptionTimer = -1;
-  if (HAL->timer->numSupported > 0) {
-    for (int32_t ii = 0; ii < ((int32_t) HAL->timer->numSupported); ii++) {
+  if (HAL->timer.numSupported > 0) {
+    for (int32_t ii = 0; ii < ((int32_t) HAL->timer.numSupported); ii++) {
       if (online(HAL->timer, ii)) {
         schedulerState.preemptionTimer = ii;
 #ifdef NANO_OS_DEBUG
@@ -4437,7 +4437,7 @@ __attribute__((noinline)) void startScheduler(
   logDebug("Created console process.\n");
 
   uint8_t numExtraConsoleStacksVal = 0;
-  HAL->memory->numExtraConsoleStacks(
+  HAL->memory.numExtraConsoleStacks(
     USE_HAL_MEMORY_DEBUG, &numExtraConsoleStacksVal);
   for (uint8_t ii = 0; ii < numExtraConsoleStacksVal; ii++) {
     Thread *thread = threadProvision(NULL, dummyProcess, NULL);
@@ -4472,8 +4472,8 @@ __attribute__((noinline)) void startScheduler(
   // schedulerState.firstUserPid isn't populated until HAL->initRootStorage
   // completes, so we need to call that as soon as we can.
   int rv = 0;
-  if (HAL->platform->initRootStorage != NULL) {
-    rv = HAL->platform->initRootStorage();
+  if (HAL->platform.initRootStorage != NULL) {
+    rv = HAL->platform.initRootStorage();
     if (rv != 0) {
       logError("initRootStorage returned status %d\n", rv);
     }
@@ -4573,10 +4573,10 @@ __attribute__((noinline)) void startScheduler(
     processDescriptor->processId = ii;
     processDescriptor->userId = NO_USER_ID;
     processDescriptor->name = _dummyName;
-    processDescriptor->callOverlayFunction = HAL->platform->callFileOverlay;
+    processDescriptor->callOverlayFunction = HAL->platform.callFileOverlay;
     if ((ii - schedulerState.firstShellPid) < schedulerState.numShells) {
       processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_SUPERVISOR;
-      processDescriptor->restartFunction = HAL->platform->restartShell;
+      processDescriptor->restartFunction = HAL->platform.restartShell;
     } else {
       processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_USER;
       processDescriptor->restartFunction = NULL;

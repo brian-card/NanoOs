@@ -54,7 +54,7 @@ OverlayFunction findOverlayFunction(const char *overlayFunctionName) {
     return overlayFunction; // NULL
   }
   
-  NanoOsOverlayMap *overlayMap = HAL->memory->overlayMap;
+  NanoOsOverlayMap *overlayMap = HAL->memory.overlayMap;
   for (uint16_t ii = 0, jj = overlayMap->numExports - 1; ii <= jj;) {
     cur = (ii + jj) >> 1;
     comp = strcmp(overlayMap->exports[cur].name, overlayFunctionName);
@@ -255,7 +255,7 @@ void* callOverlayFunctionFromBlockDevice(
   
   overlayArray[1].blockDevice = runningProcess->overlay.blockDevice;
   if (deviceId != OVERLAY_SAME_NAMESPACE) {
-    HAL->blockDevice->get(
+    HAL->blockDevice.get(
       (int) ((intptr_t) deviceId), &overlayArray[1].blockDevice);
     if (overlayArray[1].blockDevice == NULL) {
       // No such block device.

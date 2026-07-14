@@ -55,30 +55,30 @@ extern "C"
 /// @brief Function macro to determine whether or not an individual device
 /// within a HAL subsystem is online.
 ///
-/// @param hal Pointer to a HAL subsystem pointer.
+/// @param hal A HAL subsystem struct (e.g. HAL->uart).
 /// @param deviceId The zero-based index of the device to check.
 #define online(hal, deviceId) ( \
-  ((deviceId >= 0) && (deviceId < ((int32_t) hal->numSupported))) \
-  ? (((((uint32_t) 1) << (deviceId & 31)) & hal->online[deviceId >> 5]) != 0) \
+  ((deviceId >= 0) && (deviceId < ((int32_t) (hal).numSupported))) \
+  ? (((((uint32_t) 1) << (deviceId & 31)) & (hal).online[deviceId >> 5]) != 0) \
   : false)
 
 /// @def setOnline
 ///
 /// @brief Mark a device ID as being online within a HAL subsystem.
 ///
-/// @param hal Pointer to a HAL subsystem pointer.
+/// @param hal A HAL subsystem struct (e.g. HAL->uart).
 /// @param deviceId The zero-based index of the device to mark online.
 #define setOnline(hal, deviceId) \
-  hal->online[deviceId >> 5] |= (((uint32_t) 1) << (deviceId & 31))
+  (hal).online[deviceId >> 5] |= (((uint32_t) 1) << (deviceId & 31))
 
 /// @def setOffline
 ///
 /// @brief Mark a device ID as being offline within a HAL subsystem.
 ///
-/// @param hal Pointer to a HAL subsystem pointer.
+/// @param hal A HAL subsystem struct (e.g. HAL->uart).
 /// @param deviceId The zero-based index of the device to mark offline.
 #define setOffline(hal, deviceId) \
-  hal->online[deviceId >> 5] &= ~(((uint32_t) 1) << (deviceId & 31))
+  (hal).online[deviceId >> 5] &= ~(((uint32_t) 1) << (deviceId & 31))
   
 /// @enum HalPowerMode
 ///
@@ -812,59 +812,57 @@ typedef struct HalBlockDevice {
 typedef struct Hal {
   /// @var platform
   ///
-  /// @brief Pointer to the HalPlatform managed by the HAL.  This member may
-  /// not be NULL.
-  HalPlatform *platform;
-  
+  /// @brief The HalPlatform managed by the HAL.
+  HalPlatform platform;
+
   /// @var memory
   ///
-  /// @brief Pointer to the HalMemory managed by the HAL.  This member may not
-  /// be NULL.
-  HalMemory *memory;
-  
+  /// @brief The HalMemory managed by the HAL.
+  HalMemory memory;
+
   /// @var uart
   ///
-  /// @brief Pointer to the HalUart managed by the HAL.  This member may not
-  /// be NULL.
-  HalUart *uart;
+  /// @brief The HalUart managed by the HAL.
+  HalUart uart;
 
   /// @var dio
   ///
-  /// @brief Pointer to the HalDio managed by the HAL.  This member may not
-  /// be NULL.
-  HalDio *dio;
+  /// @brief The HalDio managed by the HAL.
+  HalDio dio;
 
   /// @var spi
   ///
-  /// @brief Pointer to the HalSpi managed by the HAL.  This member may not
-  /// be NULL.
-  HalSpi *spi;
+  /// @brief The HalSpi managed by the HAL.
+  HalSpi spi;
 
   /// @var clock
   ///
-  /// @brief Pointer to the HalClock managed by the HAL.  This member may not
-  /// be NULL.
-  HalClock *clock;
+  /// @brief The HalClock managed by the HAL.
+  HalClock clock;
 
   /// @var power
   ///
-  /// @brief Pointer to the HalPower managed by the HAL.  This member may not
-  /// be NULL.
-  HalPower *power;
+  /// @brief The HalPower managed by the HAL.
+  HalPower power;
 
   /// @var timer
   ///
-  /// @brief Pointer to the HalTimer managed by HAL.  This member may not be
-  /// NULL.
-  HalTimer *timer;
+  /// @brief The HalTimer managed by the HAL.
+  HalTimer timer;
 
   /// @var blockDevice
   ///
-  /// @brief Pointer to the HalBlockDevice managed by the HAL.  This member
-  /// may not be NULL.
-  HalBlockDevice *blockDevice;
+  /// @brief The HalBlockDevice managed by the HAL.
+  HalBlockDevice blockDevice;
 } Hal;
 
+/// @var HAL
+///
+/// @brief Global, read-only pointer to the single, root HAL instance.  All
+/// general kernel/user code must go through this pointer.  HAL initialization
+/// code that needs to populate the HAL's subsystems must instead write to the
+/// mutable halCommonHal instance declared in HalCommon.h, since HAL itself is
+/// const and cannot be written through.
 extern const Hal *HAL;
 
 HalCapability* findHalCapability(

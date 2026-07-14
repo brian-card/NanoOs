@@ -601,42 +601,42 @@ int32_t halAgonLight2Init(void) {
   halFunctions[HAL_TIMER]        = agonLight2TimerFunctions;
   halFunctions[HAL_BLOCK_DEVICE] = agonLight2BlockDeviceFunctions;
 
-  halCommonPlatform.callFileOverlay = callOverlayFunctionFromFile;
-  halCommonPlatform.execCommand = execOverlayCommand;
-  halCommonPlatform.initRootStorage = halCommonInitRootFilesystem,
-  halCommonPlatform.restartShell = restartOverlayShell;
+  halCommonHal.platform.callFileOverlay = callOverlayFunctionFromFile;
+  halCommonHal.platform.execCommand = execOverlayCommand;
+  halCommonHal.platform.initRootStorage = halCommonInitRootFilesystem,
+  halCommonHal.platform.restartShell = restartOverlayShell;
 
-  halCommonMemory.overlayMap  = (NanoOsOverlayMap*) OVERLAY_ADDRESS;
-  halCommonMemory.overlaySize = OVERLAY_SIZE;
+  halCommonHal.memory.overlayMap  = (NanoOsOverlayMap*) OVERLAY_ADDRESS;
+  halCommonHal.memory.overlaySize = OVERLAY_SIZE;
 
-  halCommonMemory.logBuffer      = _logBuffer;
-  halCommonMemory.logBufferSize  = sizeof(_logBuffer);
+  halCommonHal.memory.logBuffer      = _logBuffer;
+  halCommonHal.memory.logBufferSize  = sizeof(_logBuffer);
 #ifdef NANO_OS_STRINGS_STRIPPED
-  halCommonMemory.stringsPresent = false;
+  halCommonHal.memory.stringsPresent = false;
 #else
-  halCommonMemory.stringsPresent = true;
+  halCommonHal.memory.stringsPresent = true;
 #endif // NANO_OS_STRINGS_STRIPPED
 //// #if LOG_THRESHOLD < LOG_LEVEL_DETAIL
-  halCommonMemory.staticLogs     = NULL;
+  halCommonHal.memory.staticLogs     = NULL;
 //// #else // LOG_THRESHOLD >= LOG_LEVEL_DETAIL
-////   halCommonMemory.staticLogs     = (StaticLogs*) STATIC_LOGS_ADDRESS;
-////   memset(halCommonMemory.staticLogs, 0, sizeof(*halCommonMemory.staticLogs));
+////   halCommonHal.memory.staticLogs     = (StaticLogs*) STATIC_LOGS_ADDRESS;
+////   memset(HAL->memory.staticLogs, 0, sizeof(*HAL->memory.staticLogs));
 //// #endif // LOG_THRESHOLD < LOG_LEVEL_DETAIL
 
-  halCommonUart.numSupported        = 0;
-  halCommonUart.online              = agonLight2UartsOnline;
+  halCommonHal.uart.numSupported        = 0;
+  halCommonHal.uart.online              = agonLight2UartsOnline;
 
-  halCommonDio.numSupported         = 0;
-  halCommonDio.online               = agonLight2DiosOnline;
+  halCommonHal.dio.numSupported         = 0;
+  halCommonHal.dio.online               = agonLight2DiosOnline;
 
-  halCommonSpi.numSupported         = 0;
-  halCommonSpi.online               = agonLight2SpisOnline;
+  halCommonHal.spi.numSupported         = 0;
+  halCommonHal.spi.online               = agonLight2SpisOnline;
 
-  halCommonTimer.numSupported       = 0;
-  halCommonTimer.online             = agonLight2TimersOnline;
+  halCommonHal.timer.numSupported       = 0;
+  halCommonHal.timer.online             = agonLight2TimersOnline;
 
-  halCommonBlockDevice.numSupported = _numBlockDevices;
-  halCommonBlockDevice.online       = agonLight2BlockDevicesOnline;
+  halCommonHal.blockDevice.numSupported = _numBlockDevices;
+  halCommonHal.blockDevice.online       = agonLight2BlockDevicesOnline;
 
   NANO_OS_API = &nanoOsApi;
 

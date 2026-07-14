@@ -765,7 +765,7 @@ static HardwareTimer hardwareTimers[] = {
 
 /// @var _numTimers
 ///
-/// @brief The number of timers returned by HAL->timer->numSupported.
+/// @brief The number of timers returned by HAL->timer.numSupported.
 static const int _numTimers
   = sizeof(hardwareTimers) / sizeof(hardwareTimers[0]);
 
@@ -1394,49 +1394,49 @@ int32_t halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
   _spiSckDio           = args->spiSckDio;
   _sdCardPinChipSelect = args->sdCardPinChipSelect;
 
-  halCommonPlatform.callFileOverlay = callOverlayFunctionFromFile;
-  halCommonPlatform.execCommand = execOverlayCommand;
-  halCommonPlatform.initRootStorage = halCommonInitRootFilesystem,
-  halCommonPlatform.restartShell = restartOverlayShell;
+  halCommonHal.platform.callFileOverlay = callOverlayFunctionFromFile;
+  halCommonHal.platform.execCommand = execOverlayCommand;
+  halCommonHal.platform.initRootStorage = halCommonInitRootFilesystem,
+  halCommonHal.platform.restartShell = restartOverlayShell;
 
   halArduinoSamD21x18AUartsOnline = args->uartsOnline;
   halArduinoSamD21x18ADiosOnline  = args->diosOnline;
 
-  halCommonMemory.overlayMap  = (NanoOsOverlayMap*) OVERLAY_ADDRESS;
-  halCommonMemory.overlaySize = OVERLAY_SIZE;
+  halCommonHal.memory.overlayMap  = (NanoOsOverlayMap*) OVERLAY_ADDRESS;
+  halCommonHal.memory.overlaySize = OVERLAY_SIZE;
 
-  halCommonMemory.logBuffer      = _logBuffer;
-  halCommonMemory.logBufferSize  = sizeof(_logBuffer);
+  halCommonHal.memory.logBuffer      = _logBuffer;
+  halCommonHal.memory.logBufferSize  = sizeof(_logBuffer);
 #ifdef NANO_OS_STRINGS_STRIPPED
-  halCommonMemory.stringsPresent = false;
+  halCommonHal.memory.stringsPresent = false;
 #else
-  halCommonMemory.stringsPresent = true;
+  halCommonHal.memory.stringsPresent = true;
 #endif // NANO_OS_STRINGS_STRIPPED
 //// #if LOG_THRESHOLD < LOG_LEVEL_DETAIL
-  halCommonMemory.staticLogs     = NULL;
+  halCommonHal.memory.staticLogs     = NULL;
 //// #else // LOG_THRESHOLD >= LOG_LEVEL_DETAIL
-////   halCommonMemory.staticLogs     = (StaticLogs*) STATIC_LOGS_ADDRESS;
-////   memset(halCommonMemory.staticLogs, 0, sizeof(*halCommonMemory.staticLogs));
+////   halCommonHal.memory.staticLogs     = (StaticLogs*) STATIC_LOGS_ADDRESS;
+////   memset(HAL->memory.staticLogs, 0, sizeof(*HAL->memory.staticLogs));
 //// #endif // LOG_THRESHOLD < LOG_LEVEL_DETAIL
 
-  halCommonUart.numSupported = args->numUartsSupported;
-  halCommonUart.online       = args->uartsOnline;
+  halCommonHal.uart.numSupported = args->numUartsSupported;
+  halCommonHal.uart.online       = args->uartsOnline;
 
-  halCommonDio.numSupported = args->numDiosSupported;
-  halCommonDio.online       = args->diosOnline;
+  halCommonHal.dio.numSupported = args->numDiosSupported;
+  halCommonHal.dio.online       = args->diosOnline;
 
-  halCommonSpi.numSupported = MAX_SPI_DEVICES;
-  halCommonSpi.online       = halArduinoSamD21x18ASpisOnline;
+  halCommonHal.spi.numSupported = MAX_SPI_DEVICES;
+  halCommonHal.spi.online       = halArduinoSamD21x18ASpisOnline;
 
-  halCommonTimer.numSupported = _numTimers;
-  halCommonTimer.online       = halArduinoSamD21x18ATimersOnline;
+  halCommonHal.timer.numSupported = _numTimers;
+  halCommonHal.timer.online       = halArduinoSamD21x18ATimersOnline;
 
-  halCommonBlockDevice.numSupported = _numBlockDevices;
-  halCommonBlockDevice.online       = halArduinoSamD21x18ABlockDevicesOnline;
+  halCommonHal.blockDevice.numSupported = _numBlockDevices;
+  halCommonHal.blockDevice.online       = halArduinoSamD21x18ABlockDevicesOnline;
 
   extern char __bss_end__;
   if (((uintptr_t) &__bss_end__)
-    > ((uintptr_t) halCommonMemory.overlayMap)
+    > ((uintptr_t) HAL->memory.overlayMap)
   ) {
     int stackPosition = 0;
     Serial.begin(1000000);
@@ -1444,7 +1444,7 @@ int32_t halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
     Serial.print(_bssOverflowErrorPrefix);
     Serial.print((uintptr_t) &__bss_end__, HEX);
     Serial.print(_greaterThanPrefix);
-    Serial.print((uintptr_t) halCommonMemory.overlayMap, HEX);
+    Serial.print((uintptr_t) HAL->memory.overlayMap, HEX);
     Serial.print(_newline);
     Serial.print(_stackPositionPrefix);
     Serial.print((uintptr_t) &stackPosition, HEX);

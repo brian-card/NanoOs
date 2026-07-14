@@ -929,7 +929,7 @@ static const char _crlf[] KEEP_IN_FLASH = "\r\n";
 /// @return Returns the byte read, cast to an int, on success, -1 on failure.
 int readSerialByte(ConsolePort *consolePort) {
   int serialData = -1;
-  serialData = HAL->uart->poll((int) consolePort->portId);
+  serialData = HAL->uart.poll((int) consolePort->portId);
   if (serialData > -1) {
     ConsoleBuffer *consoleBuffer = consolePort->consoleBuffer;
     char *buffer = consoleBuffer->buffer;
@@ -940,10 +940,10 @@ int readSerialByte(ConsolePort *consolePort) {
       if (consolePort->echo == true) {
         if ((serialData != ASCII_RETURN) && (serialData != ASCII_NEWLINE)) {
           char serialChar = (char) serialData;
-          HAL->uart->write((int) consolePort->portId,
+          HAL->uart.write((int) consolePort->portId,
             (uint8_t*) &serialChar, 1, NULL);
         } else {
-          HAL->uart->write(
+          HAL->uart.write(
             (int) consolePort->portId, (uint8_t*) _crlf, 2, NULL);
         }
       }
@@ -951,7 +951,7 @@ int readSerialByte(ConsolePort *consolePort) {
       if (serialData == ASCII_RETURN) {
         serialData = ASCII_NEWLINE;
         // Some terminals send \r\n.  Read one more character just in case.
-        HAL->uart->poll((int) consolePort->portId);
+        HAL->uart.poll((int) consolePort->portId);
       }
       
       if (consolePort->consoleBufferIndex < (CONSOLE_BUFFER_SIZE - 1)) {
@@ -967,11 +967,11 @@ int readSerialByte(ConsolePort *consolePort) {
         if (consolePort->echo == true) {
           uint8_t backspace = ASCII_BACKSPACE;
           uint8_t space = ASCII_SPACE;
-          HAL->uart->write(
+          HAL->uart.write(
             (int) consolePort->portId, &backspace, 1, NULL);
-          HAL->uart->write(
+          HAL->uart.write(
             (int) consolePort->portId, &space, 1, NULL);
-          HAL->uart->write(
+          HAL->uart.write(
             (int) consolePort->portId, &backspace, 1, NULL);
         }
         
@@ -985,7 +985,7 @@ int readSerialByte(ConsolePort *consolePort) {
           buffer[consolePort->consoleBufferIndex] = (char) serialData;
           consolePort->consoleBufferIndex++;
         }
-        serialData = HAL->uart->poll(
+        serialData = HAL->uart.poll(
           (int) consolePort->portId);
       } while (serialData > -1);
       
@@ -1023,9 +1023,9 @@ int printSerialString(unsigned char uart, const char *string) {
     numBytes = (size_t) (((uintptr_t) newlineAt) - ((uintptr_t) string));
   }
   while (newlineAt != NULL) {
-    HAL->uart->write((int) uart, (uint8_t*) string, numBytes, &written);
+    HAL->uart.write((int) uart, (uint8_t*) string, numBytes, &written);
     returnValue += (int) written;
-    HAL->uart->write((int) uart, (uint8_t*) _crlf, 2, &written);
+    HAL->uart.write((int) uart, (uint8_t*) _crlf, 2, &written);
     returnValue += (int) written;
     string = newlineAt + 1;
     newlineAt = strchr(string, '\n');
@@ -1035,7 +1035,7 @@ int printSerialString(unsigned char uart, const char *string) {
       numBytes = (size_t) (((uintptr_t) newlineAt) - ((uintptr_t) string));
     }
   }
-  HAL->uart->write((int) uart, (uint8_t*) string, numBytes, &written);
+  HAL->uart.write((int) uart, (uint8_t*) string, numBytes, &written);
   returnValue += (int) written;
 
   return returnValue;
@@ -1087,7 +1087,7 @@ void* runConsole(void *args) {
   int port = 0;
   for (int ii = 0; ii < consoleState.numConsolePorts; ii++) {
     bool isConsolePort = false;
-    HAL->uart->isConsole(ii, &isConsolePort);
+    HAL->uart.isConsole(ii, &isConsolePort);
     if (isConsolePort == false) {
       // This is not a console-capable UART.  Skip it.
       continue;

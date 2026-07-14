@@ -181,107 +181,91 @@ static int32_t halBlockDeviceGet(int32_t deviceId, BlockDevice **returnValue);
 static int32_t halBlockDeviceRestart(ProcessDescriptor *processDescriptor);
 
 // ---------------------------------------------------------------------------
-// Common subsystem instances — function pointers set to typed wrappers above;
-// data members (numSupported, online, overlayMap, etc.) set by platform init.
+// Common HAL instance — function pointers set to typed wrappers above; data
+// members (numSupported, online, overlayMap, etc.) set by platform init code,
+// which writes to halCommonHal directly since it needs a mutable view.  The
+// read-only HAL pointer below points at this same instance for general use.
 // ---------------------------------------------------------------------------
 
-HalPlatform halCommonPlatform = {
-  .callFileOverlay = NULL,
-  .execCommand     = NULL,
-  .initRootStorage = NULL,
-  .restartShell    = NULL,
-};
-
-HalMemory halCommonMemory = {
-  .processStackSize        = halMemoryProcessStackSize,
-  .memoryManagerStackSize  = halMemoryMemoryManagerStackSize,
-  .bottomOfHeap            = halMemoryBottomOfHeap,
-  .numExtraSchedulerStacks = halMemoryNumExtraSchedulerStacks,
-  .numExtraConsoleStacks   = halMemoryNumExtraConsoleStacks,
-  .overlayMap              = NULL,
-  .overlaySize             = 0,
-  .stringsPresent          = false,
-  .staticLogs              = NULL,
-  .logBuffer               = NULL,
-  .logBufferSize           = 0,
-};
-
-HalUart halCommonUart = {
-  .numSupported = 0,
-  .online       = NULL,
-  .init         = halUartInit,
-  .configure    = halUartConfigure,
-  .poll         = halUartPoll,
-  .write        = halUartWrite,
-  .isConsole    = halUartIsConsole,
-};
-
-HalDio halCommonDio = {
-  .numSupported = 0,
-  .online       = NULL,
-  .init         = halDioInit,
-  .configure    = halDioConfigure,
-  .write        = halDioWrite,
-};
-
-HalSpi halCommonSpi = {
-  .numSupported  = 0,
-  .online        = NULL,
-  .init          = halSpiInit,
-  .configure     = halSpiConfigure,
-  .startTransfer = halSpiStartTransfer,
-  .endTransfer   = halSpiEndTransfer,
-  .transfer8     = halSpiTransfer8,
-  .transferBytes = halSpiTransferBytes,
-};
-
-HalClock halCommonClock = {
-  .init                   = halClockInit,
-  .setSystemTime          = halClockSetSystemTime,
-  .getElapsedMilliseconds = halClockGetElapsedMilliseconds,
-  .getElapsedMicroseconds = halClockGetElapsedMicroseconds,
-  .getElapsedNanoseconds  = halClockGetElapsedNanoseconds,
-};
-
-HalPower halCommonPower = {
-  .enterMode = halPowerEnterMode,
-};
-
-HalTimer halCommonTimer = {
-  .numSupported          = 0,
-  .online                = NULL,
-  .init                  = halTimerInit,
-  .initDevice            = halTimerInitDevice,
-  .configOneShot         = halTimerConfigOneShot,
-  .configuredNanoseconds = halTimerConfiguredNanoseconds,
-  .remainingNanoseconds  = halTimerRemainingNanoseconds,
-  .cancel                = halTimerCancel,
-  .cancelAndGet          = halTimerCancelAndGet,
-};
-
-HalBlockDevice halCommonBlockDevice = {
-  .numSupported = 0,
-  .online       = NULL,
-  .init         = halBlockDeviceInit,
-  .get          = halBlockDeviceGet,
-  .restart      = halBlockDeviceRestart,
-};
-
-static Hal halCommonHal = {
-  .platform    = &halCommonPlatform,
-  .memory      = &halCommonMemory,
-  .uart        = &halCommonUart,
-  .dio         = &halCommonDio,
-  .spi         = &halCommonSpi,
-  .clock       = &halCommonClock,
-  .power       = &halCommonPower,
-  .timer       = &halCommonTimer,
-  .blockDevice = &halCommonBlockDevice,
+Hal halCommonHal = {
+  .platform = {
+    .callFileOverlay = NULL,
+    .execCommand     = NULL,
+    .initRootStorage = NULL,
+    .restartShell    = NULL,
+  },
+  .memory = {
+    .processStackSize        = halMemoryProcessStackSize,
+    .memoryManagerStackSize  = halMemoryMemoryManagerStackSize,
+    .bottomOfHeap            = halMemoryBottomOfHeap,
+    .numExtraSchedulerStacks = halMemoryNumExtraSchedulerStacks,
+    .numExtraConsoleStacks   = halMemoryNumExtraConsoleStacks,
+    .overlayMap              = NULL,
+    .overlaySize             = 0,
+    .stringsPresent          = false,
+    .staticLogs              = NULL,
+    .logBuffer               = NULL,
+    .logBufferSize           = 0,
+  },
+  .uart = {
+    .numSupported = 0,
+    .online       = NULL,
+    .init         = halUartInit,
+    .configure    = halUartConfigure,
+    .poll         = halUartPoll,
+    .write        = halUartWrite,
+    .isConsole    = halUartIsConsole,
+  },
+  .dio = {
+    .numSupported = 0,
+    .online       = NULL,
+    .init         = halDioInit,
+    .configure    = halDioConfigure,
+    .write        = halDioWrite,
+  },
+  .spi = {
+    .numSupported  = 0,
+    .online        = NULL,
+    .init          = halSpiInit,
+    .configure     = halSpiConfigure,
+    .startTransfer = halSpiStartTransfer,
+    .endTransfer   = halSpiEndTransfer,
+    .transfer8     = halSpiTransfer8,
+    .transferBytes = halSpiTransferBytes,
+  },
+  .clock = {
+    .init                   = halClockInit,
+    .setSystemTime          = halClockSetSystemTime,
+    .getElapsedMilliseconds = halClockGetElapsedMilliseconds,
+    .getElapsedMicroseconds = halClockGetElapsedMicroseconds,
+    .getElapsedNanoseconds  = halClockGetElapsedNanoseconds,
+  },
+  .power = {
+    .enterMode = halPowerEnterMode,
+  },
+  .timer = {
+    .numSupported          = 0,
+    .online                = NULL,
+    .init                  = halTimerInit,
+    .initDevice            = halTimerInitDevice,
+    .configOneShot         = halTimerConfigOneShot,
+    .configuredNanoseconds = halTimerConfiguredNanoseconds,
+    .remainingNanoseconds  = halTimerRemainingNanoseconds,
+    .cancel                = halTimerCancel,
+    .cancelAndGet          = halTimerCancelAndGet,
+  },
+  .blockDevice = {
+    .numSupported = 0,
+    .online       = NULL,
+    .init         = halBlockDeviceInit,
+    .get          = halBlockDeviceGet,
+    .restart      = halBlockDeviceRestart,
+  },
 };
 
 /// @var HAL
 ///
-/// @brief Global pointer to the active HAL instance.
+/// @brief Global, read-only pointer to the active, root HAL instance.
 const Hal *HAL = &halCommonHal;
 
 // ---------------------------------------------------------------------------
@@ -514,7 +498,7 @@ BlockDevice* halCommonInitRootSdSpiStorage(
   processDescriptor->name = _sdCardName;
   processDescriptor->userId = ROOT_USER_ID;
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_KERNEL;
-  processDescriptor->restartFunction = HAL->blockDevice->restart;
+  processDescriptor->restartFunction = HAL->blockDevice.restart;
   processDescriptor->restartArgs = (void*)(intptr_t)0;
   BlockDevice *sdDevice = (BlockDevice*) coroutineResume(
     allProcesses[SCHEDULER_STATE->firstUserPid - 1].mainThread, NULL);
@@ -544,15 +528,15 @@ int32_t halCommonInitRootFilesystem() {
   }
 
   BlockDevice *rootBlockDevice = NULL;
-  HAL->blockDevice->get(0, &rootBlockDevice);
+  HAL->blockDevice.get(0, &rootBlockDevice);
 
   if (rootBlockDevice == NULL) {
-    if (HAL->blockDevice->init() != 0) {
-      logError("HAL->blockDevice->init() failed\n");
+    if (HAL->blockDevice.init() != 0) {
+      logError("HAL->blockDevice.init() failed\n");
       return -ENODEV;
     }
 
-    HAL->blockDevice->get(0, &rootBlockDevice);
+    HAL->blockDevice.get(0, &rootBlockDevice);
   }
 
   if (rootBlockDevice == NULL) {
@@ -606,7 +590,7 @@ int32_t halCommonInitRootFilesystem() {
 /// @return Returns 0 on success, -errno on failure.
 int32_t restartFilesystem(ProcessDescriptor *processDescriptor) {
   BlockDevice *rootBlockDevice = NULL;
-  HAL->blockDevice->get(0, &rootBlockDevice);
+  HAL->blockDevice.get(0, &rootBlockDevice);
   if (rootBlockDevice == NULL) {
     return -ENODEV;
   }
@@ -672,10 +656,10 @@ int32_t halCommonInit(void) {
   int32_t ii = 0;
   int32_t defaultUart = -1;
 
-  if (HAL->uart->init() < 0) {
+  if (HAL->uart.init() < 0) {
     return -ENOTTY;
   }
-  int32_t numUarts = HAL->uart->numSupported;
+  int32_t numUarts = HAL->uart.numSupported;
   if (numUarts <= 0) {
     // Nothing we can do.
     return -ENOTTY;
@@ -686,7 +670,7 @@ int32_t halCommonInit(void) {
       continue;
     }
 
-    if (HAL->uart->configure(ii, 1000000) == 0) {
+    if (HAL->uart.configure(ii, 1000000) == 0) {
       if (defaultUart < 0) {
         defaultUart = ii;
       }
@@ -695,46 +679,46 @@ int32_t halCommonInit(void) {
     }
   }
 
-  if (HAL->dio->init() != 0) {
+  if (HAL->dio.init() != 0) {
     logWarn("Failed to initialize DIO subsystem\n");
   }
 
-  if (HAL->spi->init() != 0) {
+  if (HAL->spi.init() != 0) {
     logWarn("Failed to initialize SPI subsystem\n");
   }
 
-  if (HAL->clock->init() != 0) {
+  if (HAL->clock.init() != 0) {
     logWarn("Failed to initialize clock subsystem\n");
   }
 
   do {
-    if (HAL->timer->init() != 0) {
+    if (HAL->timer.init() != 0) {
       logWarn("Failed to initialize timer subsystem\n");
       break;
     }
 
-    uint32_t timerOnline = HAL->timer->online[0];
-    for (ii = 0; ii < (int32_t) HAL->timer->numSupported; ii++) {
+    uint32_t timerOnline = HAL->timer.online[0];
+    for (ii = 0; ii < (int32_t) HAL->timer.numSupported; ii++) {
       if (online(HAL->timer, ii) == false) {
         continue;
       }
 
-      if (HAL->timer->initDevice(ii) < 0) {
+      if (HAL->timer.initDevice(ii) < 0) {
         setOffline(HAL->timer, ii);
       }
     }
 
-    if (HAL->timer->online[0] != timerOnline) {
+    if (HAL->timer.online[0] != timerOnline) {
       logWarn("Did not initialize all timers\n");
     }
   } while (0);
 
-  if ((HAL->memory->overlayMap != NULL) && (HAL->memory->overlaySize > 0)) {
-    memset(HAL->memory->overlayMap, 0, HAL->memory->overlaySize);
+  if ((HAL->memory.overlayMap != NULL) && (HAL->memory.overlaySize > 0)) {
+    memset(HAL->memory.overlayMap, 0, HAL->memory.overlaySize);
   }
 
-  if ((HAL->memory->logBuffer != NULL) && (HAL->memory->logBufferSize > 0)) {
-    memset(HAL->memory->logBuffer, 0, HAL->memory->logBufferSize);
+  if ((HAL->memory.logBuffer != NULL) && (HAL->memory.logBufferSize > 0)) {
+    memset(HAL->memory.logBuffer, 0, HAL->memory.logBufferSize);
   }
 
   return 0;

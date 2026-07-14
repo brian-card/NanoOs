@@ -398,10 +398,10 @@ void* runBlockOverlay(void *args) {
     return (void*) ((intptr_t) -1);
   }
   // Cancel the preemption timer to make sure the load is atomic.
-  HAL->timer->cancel(SCHEDULER_STATE->preemptionTimer);
+  HAL->timer.cancel(SCHEDULER_STATE->preemptionTimer);
   processDescriptor->overlay.blockDevice = blockOverlayArgs.blockDevice;
   processDescriptor->overlay.startBlock = blockOverlayArgs.startBlock;
-  processDescriptor->overlay.numBlocks = HAL->memory->overlaySize
+  processDescriptor->overlay.numBlocks = HAL->memory.overlaySize
     / blockOverlayArgs.blockDevice->blockSize;
   // Yield so that the scheduler will load our overlay into memory.
   processYield();

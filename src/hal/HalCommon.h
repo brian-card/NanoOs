@@ -64,15 +64,14 @@ extern "C"
 #endif
 
 extern HalFunction *halFunctions[HAL_NUM_SUBSYSTEMS];
-extern HalPlatform halCommonPlatform;
-extern HalMemory halCommonMemory;
-extern HalUart halCommonUart;
-extern HalDio halCommonDio;
-extern HalSpi halCommonSpi;
-extern HalClock halCommonClock;
-extern HalPower halCommonPower;
-extern HalTimer halCommonTimer;
-extern HalBlockDevice halCommonBlockDevice;
+
+/// @var halCommonHal
+///
+/// @brief The single, mutable, backing instance of the root HAL.  HAL
+/// initialization code (platform init functions) must write to this instance
+/// directly to populate the HAL's subsystems, since the read-only HAL pointer
+/// exported from Hal.h cannot be written through.
+extern Hal halCommonHal;
 
 int32_t callHal(HalSubsystem subsystem, uint32_t function, ...);
 BlockDevice* halCommonInitRootSdSpiStorage(SdCardSpiArgs *sdCardSpiArgs);

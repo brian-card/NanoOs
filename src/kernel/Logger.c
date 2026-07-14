@@ -116,7 +116,7 @@ int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
   // Don't check the return value of getElapsedNanoseconds here.  A failure
   // isn't fatal.  Do this before anything else to get as accurate a timestamp
   // as possible.
-  HAL->clock->getElapsedNanoseconds(0, &commandArgs.logEntry.timeStamp);
+  HAL->clock.getElapsedNanoseconds(0, &commandArgs.logEntry.timeStamp);
   
   // Get the rest of the fixed values.
   commandArgs.logEntry.logLevel = logLevel;
@@ -139,10 +139,10 @@ int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
   va_end(args);
   
   if ((SCHEDULER_STATE == NULL) || (SCHEDULER_STATE->loggerPid == 0)) {
-    if (HAL->memory->staticLogs != NULL) {
+    if (HAL->memory.staticLogs != NULL) {
       // Logger isn't up yet but will be.  Write to the staticLogs area.
       goto writeStaticLog;
-    } else if (HAL->memory->stringsPresent == true) {
+    } else if (HAL->memory.stringsPresent == true) {
       // Write this entry immediately.
       goto writeImmediate;
     }
@@ -200,7 +200,7 @@ int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
   
 writeImmediate:
   // Print the header.
-  snprintf(HAL->memory->logBuffer, HAL->memory->logBufferSize,
+  snprintf(HAL->memory.logBuffer, HAL->memory.logBufferSize,
     _logHeaderFormat,
     ((long long int) commandArgs.logEntry.timeStamp)
       / ((long long int) 1000000000),
@@ -211,25 +211,25 @@ writeImmediate:
       : _localhost,
     (unsigned int) getRunningPid(),
     fileName, lineNumber, _logLevelNames[logLevel]);
-  int rv = printString(HAL->memory->logBuffer);
+  int rv = printString(HAL->memory.logBuffer);
   if (rv < 0) {
     return rv;
   }
   
   // Print the log message.
   va_start(args, format);
-  vsnprintf(HAL->memory->logBuffer, HAL->memory->logBufferSize,
+  vsnprintf(HAL->memory.logBuffer, HAL->memory.logBufferSize,
     format, args);
   va_end(args);
-  rv += printString(HAL->memory->logBuffer);
+  rv += printString(HAL->memory.logBuffer);
   return rv;
   
 writeStaticLog:
   // Copy the log entry to the static log area.
-  memcpy(&HAL->memory->staticLogs->logEntries[
-    HAL->memory->staticLogs->metadata.numEntries],
+  memcpy(&HAL->memory.staticLogs->logEntries[
+    HAL->memory.staticLogs->metadata.numEntries],
     &commandArgs.logEntry, sizeof(commandArgs.logEntry));
-  HAL->memory->staticLogs->metadata.numEntries++;
+  HAL->memory.staticLogs->metadata.numEntries++;
   
   return 0;
 }
