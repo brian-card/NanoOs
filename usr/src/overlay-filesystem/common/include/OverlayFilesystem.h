@@ -36,6 +36,7 @@
 #ifndef OVERLAY_FILESYSTEM_H
 #define OVERLAY_FILESYSTEM_H
 
+#include "NanoOsExecutive.h"
 #include "../../../../../src/kernel/Filesystem.h"
 
 #ifdef __cplusplus
