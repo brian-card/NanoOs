@@ -384,7 +384,7 @@ const CommandEntry* getCommandEntryFromInput(char *consoleInput) {
         // of commandName needs to be zero.  If it's anything else, we don't
         // have an exact match and we need to continue our search.  Since the
         // order we're comparing is commandName - consoleInput, what we're
-        // asserting is that consoleInput[commandNameLength] is a NULL byte (0).
+        // asserting is that consoleInput[commandNameLength] is a NUL byte (0).
         // However, it isn't really because of the whitespace inherent to
         // commands.  So, we can't do a literal subtration here.  However, since
         // it's assumed to be 0, this is the same as

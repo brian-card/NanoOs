@@ -82,7 +82,7 @@ void* runFsCommand(void *args) {
     // extra characters for the path, plus the slash, commandNameLength bytes
     // for the command name, and one more for the slash for that directory.
     // Then, we need 4 bytes for "main", and OVERLAY_EXT_LEN bytes on top of
-    // that plus the NULL byte // at the end.
+    // that plus the NUL byte at the end.
     commandPath
       = (char*) malloc(pathDirLength + commandNameLength + OVERLAY_EXT_LEN + 7);
     if (commandPath == NULL) {

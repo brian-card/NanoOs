@@ -28,10 +28,6 @@
 /// @file SdCardSpi.c
 ///
 /// @brief SPI implementation of the SD card logic.
-///
-/// @note  We do *NOT* need to check HAL->spi for NULL in this
-/// implementation.  If it was NULL, the SD card device would never have been
-/// started with this implementation.
 
 // Custom includes
 #include "SdCardSpi.h"

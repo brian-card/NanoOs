@@ -141,7 +141,7 @@ void* callOverlayFunctionFromFile(const void *od, const void *o,
   
   // We need to allocate enough space for all of the strings we need.  We need
   // the overlay directory, a slash, the name of the overlay, the overlay
-  // extension, a NULL byte, the function name, and a trailing NULL byte.
+  // extension, a NUL byte, the function name, and a trailing NUL byte.
   char *overlayInfo = (char*) malloc(
     ((overlayDir == OVERLAY_SAME_NAMESPACE)
       ? strlen(previousOverlayDir)

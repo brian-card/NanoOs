@@ -280,7 +280,7 @@ int makeLink(const char *target, const char *linkFile) {
   *((uint16_t*) &buffer[LINK_VERSION1_PATH_TYPE_INDEX])
     = LINK_VALUE_TYPE_PATH;
   
-  // Path length, including terminating NULL byte and checksum.
+  // Path length, including terminating NUL byte and checksum.
   *((uint16_t*) &buffer[LINK_VERSION1_PATH_LENGTH_INDEX])
     = pathLen + LINK_CHECKSUM_SIZE;
 

@@ -207,7 +207,7 @@ char** parseArgs(char *command, int *argc) {
   }
 
   // Next, go through the input and fill in the elements of the argv array with
-  // the addresses first letter of each argument and put a NULL byte at the end
+  // the addresses first letter of each argument and put a NUL byte at the end
   // of each argument.
   int numArgs = 0;
   char *endOfArg = NULL;

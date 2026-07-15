@@ -602,7 +602,7 @@ static const char _whitespace[] KEEP_IN_FLASH = " \t\r\n";
 /// @param buffer A pointer to the character buffer that is in the process of
 ///   being parsed.  This value will be updated on success.
 /// @param numBytes The number of bytes to read from the buffer.
-/// @param addNullByte Whether or not to add a terminating NULL byte to the end
+/// @param addNullByte Whether or not to add a terminating NUL byte to the end
 ///   of the string.
 /// @param valuePointer The pointer to the variable to update.
 ///
