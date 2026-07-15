@@ -3,7 +3,7 @@
 include ../../include.mk
 
 ifneq ($(LINKER_SCRIPT),)
-    override LINKER_SCRIPT := -T ../../../$(LINKER_SCRIPT)
+    override LINKER_SCRIPT := -T ../../../../$(LINKER_SCRIPT)
 endif
 
 # Compiler flags
@@ -22,8 +22,8 @@ LDFLAGS += $(LINKER_SCRIPT) -Wl,--gc-sections -static -no-pie
 LDFLAGS += -Wl,--build-id=none -nostartfiles
 endif
 
-OBJ_DIR = ../../../../obj
-BIN_DIR = ../../../../filesystem
+OBJ_DIR = ../../../../../obj
+BIN_DIR = ../../../../../filesystem
 
 # Source and target files
 ELF = $(OBJ_DIR)/$(TARGET)/$(OVERLAY)/overlay.elf
@@ -41,9 +41,9 @@ OBJECTS := $(subst $(OBJ_DIR)/$(TARGET)/$(OVERLAY)/../../../start.o,\
     $(OBJECTS))
 
 INCLUDES += \
-    -I../../../../../src/kernel \
-    -I../../../../../src/user \
-    -I../../../../include \
+    -I../../../../../../src/kernel \
+    -I../../../../../../src/user \
+    -I../../../../../include \
     -I../include \
 
 # Default target
@@ -65,7 +65,7 @@ $(ELF): $(OBJECTS)
 	$(SIZE) $@
 
 # Compile object files
-$(OBJ_DIR)/start.o: ../../../start.c
+$(OBJ_DIR)/start.o: ../../../../start.c
 	@echo "Compiling: $<"
 	$(MKDIR) "$(OBJ_DIR)"
 	$(COMPILE) $(WARNINGS) $(CFLAGS) $(INCLUDES) -c $< -o $@
@@ -77,7 +77,7 @@ $(OBJ_DIR)/$(TARGET)/$(OVERLAY)/%.o: %.c
 
 OverlayMap.c: $(SOURCES)
 	@echo "Creating OverlayMap.c"
-	../../../util/mkOverlayMap.sh OverlayMap.c $(SOURCES)
+	../../../../util/mkOverlayMap.sh OverlayMap.c $(SOURCES)
 
 # Generate disassembly for debugging
 disasm: $(ELF)

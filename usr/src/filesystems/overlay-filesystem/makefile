@@ -2,8 +2,8 @@ include include.mk
 
 LIBRARIES := $(shell ls | grep -Ev 'makefile|.*\.mk|include')
 
-OBJ_DIR = ../../obj
-BIN_DIR = ../../bin
+OBJ_DIR = ../../../obj
+BIN_DIR = ../../../bin
 
 .PHONY: all clean overlays
 

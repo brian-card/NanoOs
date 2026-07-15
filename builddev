@@ -15,8 +15,8 @@ if [ "${platform}" = "" ] || [ "${hostname}" = "" ] \
 	exit 1
 fi
 
-if [ ! -f "usr/src/${blockFilesystem}/makefile" ]; then
-	echo "ERROR: No block filesystem found at usr/src/${blockFilesystem}." >&2
+if [ ! -f "usr/src/filesystems/${blockFilesystem}/makefile" ]; then
+	echo "ERROR: No block filesystem found at usr/src/filesystems/${blockFilesystem}." >&2
 	exit 1
 fi
 
@@ -72,12 +72,12 @@ fi
 
 echo "Building applications..."
 make -j $(nproc) -C usr/src clean
-make -j $(nproc) -C usr/src/${blockFilesystem} clean
+make -j $(nproc) -C usr/src/filesystems/${blockFilesystem} clean
 make -j $(nproc) -C usr/src COMPILE="${compile}" LINK="${link}" \
 	OBJCOPY="${objcopy}" OBJDUMP="${objdump}" \
 	SIZE="${size}" LINKER_SCRIPT="${linkerScript}" \
 	EXTRA_INCLUDES="${extraIncludes}" EXTRA_LINKS="${extraLinks}" overlays
-make -j $(nproc) -C usr/src/${blockFilesystem} COMPILE="${compile}" LINK="${link}" \
+make -j $(nproc) -C usr/src/filesystems/${blockFilesystem} COMPILE="${compile}" LINK="${link}" \
 	OBJCOPY="${objcopy}" OBJDUMP="${objdump}" \
 	SIZE="${size}" LINKER_SCRIPT="${linkerScript}" \
 	EXTRA_INCLUDES="${extraIncludes}" EXTRA_LINKS="${extraLinks}" overlays

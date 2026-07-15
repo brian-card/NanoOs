@@ -14,8 +14,8 @@ if [ "${hostname}" = "" ] || [ "${blockFilesystem}" = "" ]; then
 	exit 1
 fi
 
-if [ ! -f "usr/src/${blockFilesystem}/makefile" ]; then
-	echo "ERROR: No block filesystem found at usr/src/${blockFilesystem}." >&2
+if [ ! -f "usr/src/filesystems/${blockFilesystem}/makefile" ]; then
+	echo "ERROR: No block filesystem found at usr/src/filesystems/${blockFilesystem}." >&2
 	exit 1
 fi
 
@@ -33,10 +33,10 @@ dd if=/dev/zero of="${imageFile}" bs=1M count=${imageSizeMB} status=progress
 
 echo "Building applications..."
 make -j $(nproc) -C usr/src clean
-make -j $(nproc) -C usr/src/${blockFilesystem} clean
+make -j $(nproc) -C usr/src/filesystems/${blockFilesystem} clean
 make -j $(nproc) -C usr/src COMPILE=gcc LINK=ld OBJCOPY=objcopy \
 	OBJDUMP=objdump SIZE=size LINKER_SCRIPT=NanoOsSim.ld overlays
-make -j $(nproc) -C usr/src/${blockFilesystem} COMPILE=gcc LINK=ld OBJCOPY=objcopy \
+make -j $(nproc) -C usr/src/filesystems/${blockFilesystem} COMPILE=gcc LINK=ld OBJCOPY=objcopy \
 	OBJDUMP=objdump SIZE=size LINKER_SCRIPT=NanoOsSim.ld overlays
 make -j $(nproc) -C sim clean
 make -j $(nproc) -C sim
