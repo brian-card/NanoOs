@@ -133,6 +133,11 @@ extern "C"
 /// @brief Configure the threads library.
 #define threadsConfig(first, options) coroutinesConfig(first, options)
 
+/// @def threadsDeconfig
+///
+/// @brief Deconfigure the threads library.
+#define threadsDeconfig() coroutinesDeconfig()
+
 /// @def threadStackEnd
 ///
 /// @brief Get the address of the end of a thread's stack.
