@@ -87,6 +87,22 @@
 /// hardware.
 #define OVERLAY_SIZE               8192
 
+/// @def CONTIGUOUS_OVERLAY_BASE_ADDRESS
+///
+/// @brief The base address that we will use in our mmap call for the
+/// contiguous filesystem overlay.  Unlike the regular, swappable overlay
+/// region, this mapping stays resident for the life of the process, so it
+/// has to live at a different address than OVERLAY_BASE_ADDRESS.  Matches
+/// the ORIGIN in NanoOsSimContiguous.ld.  The address has to be page
+/// aligned on Linux.
+#define CONTIGUOUS_OVERLAY_BASE_ADDRESS 0x20010000
+
+/// @def CONTIGUOUS_OVERLAY_SIZE
+///
+/// @brief The size of the contiguous filesystem overlay region.  Matches
+/// the LENGTH in NanoOsSimContiguous.ld.
+#define CONTIGUOUS_OVERLAY_SIZE          32768
+
 /// @def ELAST
 ///
 /// @brief The highest errno value defined.  Missing from Linux's implementation
@@ -398,6 +414,13 @@ static const char _munmapErrorFormat[] KEEP_IN_FLASH
 /// final binary on some targets.
 static const char _exitingMessage[] KEEP_IN_FLASH = "Exiting.\n";
 
+/// @var _contiguousOverlayMap
+///
+/// @brief The address the contiguous filesystem overlay is mapped at, for
+/// consumption by whatever loads and dispatches to it.  NULL until
+/// halPosixImplInit has run.
+void *_contiguousOverlayMap = NULL;
+
 int32_t posixEnterPowerMode(va_list args) {
   HalPowerMode powerMode = (HalPowerMode) va_arg(args, int);
   // You can't completely turn off the hardware we're running on.  We're
@@ -419,6 +442,21 @@ int32_t posixEnterPowerMode(va_list args) {
       fprintf(stderr, _exitingMessage);
       exit(1);
     }
+
+    // Unmap the contiguous filesystem overlay so that it can be mapped
+    // again when we reset.
+    size_t contiguousOverlayBaseSize
+      = ((size_t) (CONTIGUOUS_OVERLAY_SIZE + (pageSize - 1)))
+      & ~((size_t) (pageSize - 1));
+
+    if (munmap((void*) CONTIGUOUS_OVERLAY_BASE_ADDRESS,
+      contiguousOverlayBaseSize) < 0
+    ) {
+      fprintf(stderr, _munmapErrorFormat, strerror(errno));
+      fprintf(stderr, _exitingMessage);
+      exit(1);
+    }
+    _contiguousOverlayMap = NULL;
 
     // Reset the block storage device online map so that initialization works
     // properly on reset.
@@ -905,6 +943,16 @@ static const char _mmapErrorFormat[] KEEP_IN_FLASH
 static const char _overlayMapFormat[] KEEP_IN_FLASH
   = "posixHal.overlayMap = %p\n";
 
+/// @var _contiguousOverlayMapFormat
+///
+/// @brief Bootstrap trace format string.  See _resetBufferCopiedMessage
+/// for why this stays a raw fprintf.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _contiguousOverlayMapFormat[] KEEP_IN_FLASH
+  = "posixHal.contiguousOverlayMap = %p\n";
+
 /// @var _newline
 ///
 /// @brief A single newline character.  See _resetBufferCopiedMessage for
@@ -980,6 +1028,23 @@ int32_t halPosixImplInit(jmp_buf resetBuffer,
   *overlaySize = OVERLAY_SIZE;
 
   fprintf(stderr, _overlayMapFormat, (void*) *overlayMap);
+  fprintf(stderr, _newline);
+
+  // Second, separate mapping for the contiguous filesystem overlay.  Unlike
+  // the regular overlay region above, this one stays resident for the life
+  // of the process instead of being swapped in and out per call, so it
+  // can't share the same address.
+  void *mappedContiguousOverlay = mmap((void*) CONTIGUOUS_OVERLAY_BASE_ADDRESS,
+    CONTIGUOUS_OVERLAY_SIZE, PROT_READ | PROT_WRITE | PROT_EXEC,
+    MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED,
+    -1, 0);
+  if (mappedContiguousOverlay == MAP_FAILED) {
+    fprintf(stderr, _mmapErrorFormat, strerror(errno));
+    return -1;
+  }
+  _contiguousOverlayMap = mappedContiguousOverlay;
+
+  fprintf(stderr, _contiguousOverlayMapFormat, _contiguousOverlayMap);
   fprintf(stderr, _newline);
 
   _mainThreadId = pthread_self();
