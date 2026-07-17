@@ -48,8 +48,10 @@
 /// @var _referencePoint
 ///
 /// @brief Variable that will be used to compute the relative offsets of string
-/// parameters that are logged.
-const char *_referencePoint = "4abc4abc4abc4abc4abc4abc4abc4abc";
+/// parameters that are logged.  This is REFERENCE_PATTERN duplicated 8 times.
+const char *_referencePoint
+  = REFERENCE_PATTERN REFERENCE_PATTERN REFERENCE_PATTERN REFERENCE_PATTERN
+    REFERENCE_PATTERN REFERENCE_PATTERN REFERENCE_PATTERN REFERENCE_PATTERN;
 
 /// @var _logLevelNames
 ///
