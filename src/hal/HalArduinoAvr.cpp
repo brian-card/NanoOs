@@ -510,7 +510,11 @@ int32_t arduinoAvrGetElapsedMicroseconds(va_list args) {
   int64_t result = arduinoAvrGetElapsedMillisecondsImpl(
     startTime / ((int64_t) 1000)) * ((int64_t) 1000);
   if (returnValue != NULL) {
-    *returnValue = result;
+    if (result >= 0) {
+      *returnValue = result;
+    } else {
+      *returnValue = -1;
+    }
   }
   return (result >= 0) ? 0 : -EIO;
 }
@@ -521,7 +525,11 @@ int32_t arduinoAvrGetElapsedNanoseconds(va_list args) {
   int64_t result = arduinoAvrGetElapsedMillisecondsImpl(
     startTime / ((int64_t) 1000000)) * ((int64_t) 1000000);
   if (returnValue != NULL) {
-    *returnValue = result;
+    if (result >= 0) {
+      *returnValue = result;
+    } else {
+      *returnValue = -1;
+    }
   }
   return (result >= 0) ? 0 : -EIO;
 }

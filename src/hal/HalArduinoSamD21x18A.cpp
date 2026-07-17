@@ -668,7 +668,11 @@ int32_t arduinoSamD21x18AGetElapsedMilliseconds(va_list args) {
   int32_t rv = arduinoSamD21x18AGetElapsedMicrosecondsImpl(
     startTime * ((int64_t) 1000), &microseconds);
   if (returnValue != NULL) {
-    *returnValue = microseconds / ((int64_t) 1000);
+    if (rv == 0) {
+      *returnValue = microseconds / ((int64_t) 1000);
+    } else {
+      *returnValue = -1;
+    }
   }
   return rv;
 }
@@ -686,7 +690,11 @@ int32_t arduinoSamD21x18AGetElapsedNanoseconds(va_list args) {
   int32_t rv = arduinoSamD21x18AGetElapsedMicrosecondsImpl(
     startTime / ((int64_t) 1000), &microseconds);
   if (returnValue != NULL) {
-    *returnValue = microseconds * ((int64_t) 1000);
+    if (rv == 0) {
+      *returnValue = microseconds * ((int64_t) 1000);
+    } else {
+      *returnValue = -1;
+    }
   }
   return rv;
 }
