@@ -461,6 +461,7 @@ int32_t posixEnterPowerMode(va_list args) {
     // Reset the block storage device online map so that initialization works
     // properly on reset.
     HAL->blockDevice.online[0] = 0;
+    SCHEDULER_STATE = NULL;
     threadsDeconfig();
     longjmp(_resetBuffer, 1);
   }
