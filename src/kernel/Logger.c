@@ -159,9 +159,16 @@ int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
   if (processMessage == NULL) {
     if (getRunningPid() != SCHEDULER_STATE->schedulerPid) {
       // This is the expected case.
-      while (processMessage == NULL) {
+      for (int ii = 0;
+        (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
+        ii++
+      ) {
         processYield();
         processMessage = getAvailableMessage();
+      }
+      if (processMessage == NULL) {
+        // There's something wrong with the system.  Try again later.
+        return -EAGAIN;
       }
     } else {
       // We have to do things a little differently since the scheduler can't
