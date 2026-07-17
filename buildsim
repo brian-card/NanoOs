@@ -31,13 +31,20 @@ trap cleanup ERR EXIT
 
 dd if=/dev/zero of="${imageFile}" bs=1M count=${imageSizeMB} status=progress
 
+if [ "${blockFilesystem}" = "contiguous" ]; then
+	filesystemLinkerScript="NanoOsSimContiguous.ld"
+else
+	filesystemLinkerScript="NanoOsSim.ld"
+fi
+
 echo "Building applications..."
 make -j $(nproc) -C usr/src clean
 make -j $(nproc) -C usr/src/filesystems/${blockFilesystem} clean
 make -j $(nproc) -C usr/src COMPILE=gcc LINK=ld OBJCOPY=objcopy \
 	OBJDUMP=objdump SIZE=size LINKER_SCRIPT=NanoOsSim.ld overlays
 make -j $(nproc) -C usr/src/filesystems/${blockFilesystem} COMPILE=gcc LINK=ld OBJCOPY=objcopy \
-	OBJDUMP=objdump SIZE=size LINKER_SCRIPT=NanoOsSim.ld overlays
+	OBJDUMP=objdump SIZE=size LINKER_SCRIPT=${filesystemLinkerScript} \
+	FILESYSTEM="${filesystem}" overlays
 make -j $(nproc) -C sim clean
 make -j $(nproc) -C sim
 
@@ -76,11 +83,21 @@ printf '\\s \\r \\n \\l\n\n' \
 # Write block overlays into the image at their absolute sector positions,
 # relative to the start of the image. Overlay IDs start at 1 to avoid
 # colliding with the MBR at sector 0.
-blockOverlays="$(ls usr/filesystem/{common,${filesystem}}/*)"
-for blockOverlay in ${blockOverlays}; do
-	overlayId="$(basename "${blockOverlay}" .overlay)"
-	startBlock=$(( (overlayId * blocksPerOverlay) + 1 ))
-	dd if="${blockOverlay}" of="${imageFile}" bs=512 seek=${startBlock} conv=notrunc
-done
+if [ "${blockFilesystem}" = "contiguous" ]; then
+	# The contiguous filesystem is a single overlay occupying the same
+	# starting position slot 0 would under the per-slot scheme; it has no
+	# fixed per-slot block budget, so its build (see makefile) fails
+	# instead if it grows past what fits before the FAT32 partition.
+	dd if="usr/filesystem/contiguous/0.overlay" of="${imageFile}" bs=512 \
+		seek=1 conv=notrunc
+else
+	blockOverlays="$(ls usr/filesystem/${blockFilesystem}/*)"
+	for blockOverlay in ${blockOverlays}; do
+		overlayId="$(basename "${blockOverlay}" .overlay)"
+		startBlock=$(( (overlayId * blocksPerOverlay) + 1 ))
+		dd if="${blockOverlay}" of="${imageFile}" bs=512 seek=${startBlock} \
+			conv=notrunc
+	done
+fi
 
 ${@} sim/bin/nano-os-sim "${imageFile}"

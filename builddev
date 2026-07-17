@@ -52,6 +52,20 @@ else
 	exit 1
 fi
 
+filesystemLinkerScript="${linkerScript}"
+if [ "${blockFilesystem}" = "contiguous" ]; then
+	filesystemLinkerScript="${linkerScript%.ld}Contiguous.ld"
+	if [ ! -f "usr/src/${filesystemLinkerScript}" ]; then
+		echo "ERROR: No contiguous-filesystem linker script found at usr/src/${filesystemLinkerScript}." >&2
+		echo "The per-slot ${linkerScript} OVERLAY_RAM region is sized for a single" >&2
+		echo "small overlay, not the combined contiguous filesystem binary (up to 32KB)." >&2
+		echo "A ${platform}-specific contiguous linker script with a region sized for" >&2
+		echo "that platform's actual available RAM needs to be created before building" >&2
+		echo "the contiguous filesystem for this target." >&2
+		exit 1
+	fi
+fi
+
 if [ -n "${libcSrc:-}" ]; then
 	echo "Building kernel libc..."
 	mkdir -p "${libcObjDir}"
@@ -79,8 +93,9 @@ make -j $(nproc) -C usr/src COMPILE="${compile}" LINK="${link}" \
 	EXTRA_INCLUDES="${extraIncludes}" EXTRA_LINKS="${extraLinks}" overlays
 make -j $(nproc) -C usr/src/filesystems/${blockFilesystem} COMPILE="${compile}" LINK="${link}" \
 	OBJCOPY="${objcopy}" OBJDUMP="${objdump}" \
-	SIZE="${size}" LINKER_SCRIPT="${linkerScript}" \
-	EXTRA_INCLUDES="${extraIncludes}" EXTRA_LINKS="${extraLinks}" overlays
+	SIZE="${size}" LINKER_SCRIPT="${filesystemLinkerScript}" \
+	EXTRA_INCLUDES="${extraIncludes}" EXTRA_LINKS="${extraLinks}" \
+	FILESYSTEM="${filesystem}" overlays
 
 echo ""
 echo "Build complete."
@@ -100,10 +115,19 @@ sudo bash -c "printf \"${hostname}\" >\"${mountDir}/etc/hostname\""
 sudo bash -c "printf '\\s \\\r \\\n \\l\n\n' >\"${mountDir}/etc/issue\""
 sudo umount "${mountDir}"
 
-blockOverlays="$(ls usr/filesystem/{common,${filesystem}}/*)"
-for blockOverlay in ${blockOverlays}; do
-	overlayId="$(basename "${blockOverlay}" .overlay)"
-	startBlock=$(( (overlayId * blocksPerOverlay) + 1 ))
-	sudo dd if="${blockOverlay}" of="${targetDevice}" bs=512 \
-		seek=${startBlock}
-done
+if [ "${blockFilesystem}" = "contiguous" ]; then
+	# The contiguous filesystem is a single overlay occupying the same
+	# starting position slot 0 would under the per-slot scheme; it has no
+	# fixed per-slot block budget, so its build (see makefile) fails
+	# instead if it grows past what fits before the FAT32 partition.
+	sudo dd if="usr/filesystem/contiguous/0.overlay" of="${targetDevice}" \
+		bs=512 seek=1
+else
+	blockOverlays="$(ls usr/filesystem/${blockFilesystem}/*)"
+	for blockOverlay in ${blockOverlays}; do
+		overlayId="$(basename "${blockOverlay}" .overlay)"
+		startBlock=$(( (overlayId * blocksPerOverlay) + 1 ))
+		sudo dd if="${blockOverlay}" of="${targetDevice}" bs=512 \
+			seek=${startBlock}
+	done
+fi

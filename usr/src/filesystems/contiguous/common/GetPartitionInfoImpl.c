@@ -1,0 +1,1 @@
+../../drivers/common/GetPartitionInfoImpl.c
