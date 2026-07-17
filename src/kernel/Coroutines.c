@@ -1763,6 +1763,60 @@ int coroutinesConfig(Coroutine *first, CoroutinesConfigOptions *options) {
   return coroutineSuccess;
 }
 
+/// @fn int coroutinesDeconfig(void)
+///
+/// @brief Deconfigure the global or thread-specific defaults for all coroutines
+/// allocated by the current thread.
+///
+/// @return Returns coroutineSuccess on success, coroutineError on error.
+int coroutinesDeconfig(void) {
+  // Reset the idle and running stacks.
+#ifdef THREAD_SAFE_COROUTINES
+  if (!_coroutineThreadingSupportEnabled) {
+    _globalIdle = NULL;
+    _globalRunning = NULL;
+  } else {
+    call_once(&_threadMetadataSetup, coroutineSetupThreadMetadata);
+    tss_set(_tssIdle, NULL);
+    tss_set(_tssRunning, NULL);
+  }
+#else
+  _globalIdle = NULL;
+  _globalRunning = NULL;
+#endif // THREAD_SAFE_COROUTINES
+
+#ifdef THREAD_SAFE_COROUTINES
+  if (_coroutineThreadingSupportEnabled) {
+    if (!coroutineInitializeThreadMetadata(NULL)) {
+      fprintf(stderr,
+        "Could not initialize thread metadata in coroutinesConfig.\n");
+        return coroutineError;
+    }
+
+    tss_set(_tssStackSize, (void*) ((intptr_t) 0));
+    tss_set(_tssStateData, NULL);
+
+    free(tss_get(_tssCoroutineYieldCallback));
+    tss_set(_tssCoroutineYieldCallback, NULL);
+
+    free(tss_get(_tssComutexUnlockCallback));
+    tss_set(_tssComutexUnlockCallback, NULL);
+
+    free(tss_get(_tssCoconditionSignalCallback));
+    tss_set(_tssCoconditionSignalCallback, NULL);
+  }
+#endif // THREAD_SAFE_COROUTINES
+
+  _globalStackSize = 0;
+  _globalStateData = NULL;
+  _globalCoroutineResumeCallback = NULL;
+  _globalCoroutineYieldCallback = NULL;
+  _globalComutexUnlockCallback = NULL;
+  _globalCoconditionSignalCallback = NULL;
+
+  return coroutineSuccess;
+}
+
 /// @fn int comutexInit(Comutex* mtx, int type)
 ///
 /// @brief Initialize a coroutine mutex.

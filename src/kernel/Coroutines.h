@@ -310,6 +310,7 @@ int64_t coroutineGetNanoseconds(const struct timespec *ts);
 
 // Coroutine function prototypes.  Doxygen inline in source file.
 int coroutinesConfig(Coroutine *first, CoroutinesConfigOptions *options);
+int coroutinesDeconfig(void);
 Coroutine* coroutineInit(Coroutine *userCoroutine,
   CoroutineFunction func, void *arg);
 int coroutineCreate(Coroutine **coroutine, CoroutineFunction func, void *arg);
