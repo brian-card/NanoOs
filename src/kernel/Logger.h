@@ -55,6 +55,14 @@ extern "C"
 /// _referencePoint that string offsets are based off of.
 #define REFERENCE_PATTERN "4abc"
 
+/// @def REFERENCE_POINT_STRING
+///
+/// @brief The full string used to define the _referencePoint string.  This is
+/// REFERENCE_PATTERN duplicated 8 times.
+#define REFERENCE_POINT_STRING \
+  REFERENCE_PATTERN REFERENCE_PATTERN REFERENCE_PATTERN REFERENCE_PATTERN \
+  REFERENCE_PATTERN REFERENCE_PATTERN REFERENCE_PATTERN REFERENCE_PATTERN
+
 /// @struct LogEntry
 ///
 /// @brief Descriptor for a single, stringless log entry in memory.
