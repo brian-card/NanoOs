@@ -49,6 +49,12 @@ extern "C"
 /// command.  "\0LOGPROC" as a little-endian value.
 #define LOGGER_COMMAND_SIGNATURE ((int64_t) 0x43524F50474F4C00)
 
+/// @def REFERENCE_PATTERN
+///
+/// @brief Four-byte pattern that will be duplicated 8 times to form the
+/// _referencePoint that string offsets are based off of.
+#define REFERENCE_PATTERN "4abc"
+
 /// @struct LogEntry
 ///
 /// @brief Descriptor for a single, stringless log entry in memory.
