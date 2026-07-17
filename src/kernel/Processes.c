@@ -568,6 +568,11 @@ ProcessMessage* getAvailableMessage(void) {
   ProcessMessage *availableMessage = NULL;
 
   ProcessDescriptor *processDescriptor = getRunningProcess();
+  if (processDescriptor == NULL) {
+    // The system isn't setup yet.  Bail.
+    return availableMessage; // NULL
+  }
+
   if (processMessageInUse(&processDescriptor->message) == false) {
     availableMessage = &processDescriptor->message;
     processMessageInit(availableMessage, 0, NULL, 0, false);
