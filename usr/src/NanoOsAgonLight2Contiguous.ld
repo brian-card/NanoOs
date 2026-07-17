@@ -1,17 +1,16 @@
 /**
  *
  *  @author            James Card
- *  @date              11.22.2025
+ *  @date              09.01.2025
  *
- *  @file              NanoOsSimContiguous.ld
+ *  @file              NanoOsAgonLight2Contiguous.ld
  *
  *  @brief             Linker script for the contiguous filesystem overlay
- *                     on the host-based simulator.  Loads at a different
- *                     base address than the regular per-slot overlays
- *                     (0x20001800) because, unlike those, it stays
- *                     permanently resident rather than being swapped in and
- *                     out, and so cannot share their memory.
- *                     For use with the host OS's gcc.
+ *                     on the Zilog eZ80.  Loads at a different base address
+ *                     than the regular per-slot overlays (0xFFE000) because,
+ *                     unlike those, it stays permanently resident rather
+ *                     than being swapped in and out, and so cannot share
+ *                     their memory.  For use with ez80-none-elf-clang.
  *
  *  @copyright
  *                    Copyright (c) 2012-2025 James Card
@@ -39,26 +38,35 @@
  *
  */
 
-/* Contiguous filesystem linker script for host-based simulator application */
-/* Loads at RAM address 0x20010000, well clear of the 0x20001800-0x20003800 */
-/* window the regular, swappable overlays occupy. */
+/* Contiguous filesystem linker script for Zilog eZ80 */
+/* Loads at RAM address 0x60000, inside the external SRAM region */
+/* (0x40000-0xC0000) but well clear of the regular overlays' 0xFFE000. */
 
 MEMORY
 {
     /* Overlay RAM region - sized for the 32KB contiguous filesystem cap */
-    OVERLAY_RAM (rwx) : ORIGIN = 0x20010000, LENGTH = 32K
+    OVERLAY_RAM (rwx) : ORIGIN = 0x60000, LENGTH = 32K
 }
 
 /* Entry point - not critical for overlays but good practice */
-ENTRY(_start)
+ENTRY(__start)
+
+/*
+ * Provide a default __start so that overlays without an explicit entry point
+ * (library overlays) don't cause the linker to pull in crt0.o from libagon.a
+ * trying to satisfy ENTRY's symbol search.  Overlays that define _start in C
+ * (which the eZ80 ABI mangles to __start) override this via normal symbol
+ * precedence.
+ */
+PROVIDE(__start = ORIGIN(OVERLAY_RAM));
 
 SECTIONS
 {
     /* Overlay header must be first - contains export table info */
-    .overlay_header 0x20010000 :
+    .overlay_header 0x60000 :
     {
         KEEP(*(.overlay_header))
-        . = ALIGN(8);
+        . = ALIGN(4);
     } > OVERLAY_RAM
 
     /* Code section */
@@ -68,7 +76,7 @@ SECTIONS
         *(.text*)
         *(.rodata)
         *(.rodata*)
-        . = ALIGN(8);
+        . = ALIGN(4);
     } > OVERLAY_RAM
 
     /* Initialized data */
@@ -76,18 +84,18 @@ SECTIONS
     {
         *(.data)
         *(.data*)
-        . = ALIGN(8);
+        . = ALIGN(4);
     } > OVERLAY_RAM
 
     /* Uninitialized data */
     .bss :
     {
-        . = ALIGN(8);
+        . = ALIGN(4);
         __bss_start__ = .;
         *(.bss)
         *(.bss*)
         *(COMMON)
-        . = ALIGN(8);
+        . = ALIGN(4);
         __bss_end__ = .;
     } > OVERLAY_RAM
 
@@ -99,13 +107,6 @@ SECTIONS
     /* Discard sections we don't need */
     /DISCARD/ :
     {
-        *(.note.gnu.build-id)
-        *(.note.GNU-stack)
-        *(.note*)
-        *(.gnu.hash)
-        *(.gnu.version*)
-        *(.eh_frame)
-        *(.eh_frame_hdr)
         *(.ARM.exidx*)
         *(.ARM.extab*)
         *(.comment)
