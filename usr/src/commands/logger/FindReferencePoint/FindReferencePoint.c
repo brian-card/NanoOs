@@ -49,6 +49,7 @@
 void* findReferencePoint(void *args) {
   char *binaryPath = (char*) args;
   void *returnValue = (void*) ((intptr_t) -1); // Bad status until success
+  const char *referencePattern = REFERENCE_PATTERN;
   
   FILE *binaryFile = fopen(binaryPath, "r");
   if (binaryFile == NULL) {
@@ -70,8 +71,28 @@ void* findReferencePoint(void *args) {
   
   bool patternFound = false;
   while (patternFound == false) {
-    //// size_t bytesRead = fread(fileBuffer, 1, fileBufferSize, binaryFile);
-    //// for (size_t ii = 0;
+    size_t bytesRead = fread(fileBuffer, 1, fileBufferSize, binaryFile);
+    for (size_t ii = 0; ii < bytesRead; ii++) {
+      if (fileBuffer[ii] != referencePattern[0]) {
+        continue;
+      }
+      
+      size_t jj = 1;
+      for (; jj < REFERENCE_PATTERN_LENGTH; jj++) {
+        if (fileBuffer[ii + jj] != referencePattern[jj]) {
+          break;
+        }
+      }
+      if (jj != REFERENCE_PATTERN_LENGTH) {
+        continue;
+      }
+      
+      if (strcmp((char*) &fileBuffer[ii], REFERENCE_POINT_STRING) == 0) {
+        // Reference point found!!  We're done!
+        patternFound = true;
+        break;
+      }
+    }
   }
   
 //// freeFileBuffer:
