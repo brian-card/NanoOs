@@ -48,7 +48,7 @@
 /// success, -1 cast to a void* on failure.
 void* findReferencePoint(void *args) {
   char *binaryPath = (char*) args;
-  void *returnValue = (void*) ((intptr_t) -1); // Bad status until success
+  intptr_t returnValue = -1; // Bad status until success
   const char *referencePattern = REFERENCE_PATTERN;
   
   FILE *binaryFile = fopen(binaryPath, "r");
@@ -87,21 +87,57 @@ void* findReferencePoint(void *args) {
         continue;
       }
       
-      if (strcmp((char*) &fileBuffer[ii], REFERENCE_POINT_STRING) == 0) {
-        // Reference point found!!  We're done!
-        patternFound = true;
-        break;
+      for (jj = ii + REFERENCE_PATTERN_LENGTH;
+        jj < bytesRead;
+        jj += REFERENCE_PATTERN_LENGTH
+      ) {
+        size_t kk = 0;
+        for (; kk < REFERENCE_PATTERN_LENGTH; kk++) {
+          if (fileBuffer[jj + kk] != referencePattern[kk]) {
+            break;
+          }
+        }
+        if (kk != REFERENCE_PATTERN_LENGTH) {
+          jj += kk;
+          break;
+        }
       }
+      
+      // The number of bytes we found of the reference point sting is now
+      // (jj - ii).
+      if ((jj - ii) == REFERENCE_POINT_STRING_LENGTH) {
+        returnValue = ftell(binaryFile) - bytesRead + ii;
+        goto freeFileBuffer;
+      }
+      // If we made it this far then, by definition, we read fewer than
+      // REFERENCE_POINT_STRING_LENGTH bytes.  This is OK if we're near the
+      // beginning or end of the buffer.
+      
+      // If we're near the beginning of the buffer, then ii has to be less than
+      // REFERENCE_PATTERN_LENGTH and bytesRead has to be greater than
+      // (REFERENCE_POINT_STRING_LENGTH - REFERENCE_PATTERN_LENGTH).
+      if ((bytesRead
+          > (REFERENCE_POINT_STRING_LENGTH - REFERENCE_PATTERN_LENGTH))
+        && (ii < REFERENCE_PATTERN_LENGTH)
+      ) {
+        returnValue = ftell(binaryFile) - bytesRead
+          - (REFERENCE_PATTERN_LENGTH - ii);
+        goto freeFileBuffer;
+      }
+      
+      // If we're near the end of the buffer then bytesRead has to be
+      // fileBufferSize (can't be a short read) and ii plus
+      // REFERENCE_POINT_STRING_LENGTH has to exceed bytesRead.
     }
   }
   
-//// freeFileBuffer:
+freeFileBuffer:
   free(fileBuffer);
   
 closeBinaryFile:
   fclose(binaryFile);
   
 exit:
-  return returnValue;
+  return (void*) returnValue;
 }
 
