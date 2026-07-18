@@ -55,6 +55,17 @@ extern "C"
 /// _referencePoint that string offsets are based off of.
 #define REFERENCE_PATTERN "4abc"
 
+/// @def REFERENCE_PATTERN_LENGTH
+///
+/// @brief The number of bytes in the REFERENCE_PATTERN string
+#define REFERENCE_PATTERN_LENGTH 4
+
+/// @def NUM_REFERENCE_PATTERNS
+///
+/// @brief The number of instances of REFERENCE_PATTERN that appear in
+/// REFERENCE_POINT_STRING.
+#define NUM_REFERENCE_PATTERNS 8
+
 /// @def REFERENCE_POINT_STRING
 ///
 /// @brief The full string used to define the _referencePoint string.  This is
