@@ -25,11 +25,11 @@
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-/// @file main.c
+/// @file FindReferencePoint.c
 ///
-/// @brief Entrypoint into userspace logger command.
+/// @brief Userspace logger overlay for finding the reference point string
+/// within a binary.
 
-#include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -37,24 +37,50 @@
 #include "UserspaceLogger.h"
 #include "NanoOsExecutive.h"
 
-int main(int argc, char **argv) {
-  if (argc < 2) {
-    fprintf(stderr, "ERROR! No binary path provided to logger.  Halting.\n");
-    while (1) sched_yield();
+/// @fn void* findReferencePoint(void *args)
+///
+/// @brief Find the location of the _referencePoint variable in the kernel's
+/// logger.
+///
+/// @param args The full filesystem path to the binary to search.
+///
+/// @return Returns the offset reference point within the provided binary on
+/// success, -1 cast to a void* on failure.
+void* findReferencePoint(void *args) {
+  char *binaryPath = (char*) args;
+  void *returnValue = (void*) ((intptr_t) -1); // Bad status until success
+  
+  FILE *binaryFile = fopen(binaryPath, "r");
+  if (binaryFile == NULL) {
+    goto exit; // return bad status
   }
   
-  char buffer[96];
-  *buffer = '\0';
-  
-  intptr_t returnValue = (intptr_t) callOverlayFunction(OVERLAY_SAME_NAMESPACE,
-    "FindReferencePoint", "findReferencePoint", argv[1]);
-  if (returnValue == -1) {
-    fprintf(stderr,
-      "ERROR! Could not locate reference point in binary.  Halting logger.\n");
-    while (1) sched_yield();
+  // Allocate a buffer for reading from the file.  Sector size (512 bytes) is
+  // ideal, but there may not be that much RAM available, so scale back if
+  // necessary.
+  size_t fileBufferSize = 512;
+  uint8_t *fileBuffer = NULL;
+  for (; (fileBuffer == NULL) && (fileBufferSize >= 64); fileBufferSize >>= 1) {
+    fileBuffer = (uint8_t*) malloc(fileBufferSize);
+  }
+  if (fileBuffer == NULL) {
+    fprintf(stderr, "ERROR: Could not allocate fileBuffer.  Halting logger.\n");
+    goto closeBinaryFile; // return bad status
   }
   
-  printf("Gracefully exiting %s\n", argv[0]);
-  return 0;
+  bool patternFound = false;
+  while (patternFound == false) {
+    //// size_t bytesRead = fread(fileBuffer, 1, fileBufferSize, binaryFile);
+    //// for (size_t ii = 0;
+  }
+  
+//// freeFileBuffer:
+  free(fileBuffer);
+  
+closeBinaryFile:
+  fclose(binaryFile);
+  
+exit:
+  return returnValue;
 }
 
