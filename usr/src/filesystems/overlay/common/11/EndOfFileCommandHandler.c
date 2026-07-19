@@ -55,11 +55,11 @@ int driverFeof(void *fileHandle);
 void* EndOfFile(void *args) {
   FilesystemState *filesystemState = (FilesystemState*) args;
   ProcessMessage *processMessage = (ProcessMessage*) filesystemState->args;
-  FeofArgs *args = (FeofArgs*) processMessageData(processMessage);
-  args->returnValue = 0;
+  FeofArgs *feofArgs = (FeofArgs*) processMessageData(processMessage);
+  feofArgs->returnValue = 0;
 
   if (filesystemState->driverState != NULL) {
-    args->returnValue = driverFeof(args->stream->file);
+    feofArgs->returnValue = driverFeof(feofArgs->stream->file);
   }
 
   processMessageSetDone(processMessage);
