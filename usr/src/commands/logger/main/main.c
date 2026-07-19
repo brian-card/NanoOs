@@ -35,8 +35,6 @@
 #include <string.h>
 
 #include "ExecutiveProcesses.h"
-#include "NanoOsExecutive.h"
-
 #include "UserspaceLogger.h"
 
 /// @fn int loggerLogMessageCommandHandler(

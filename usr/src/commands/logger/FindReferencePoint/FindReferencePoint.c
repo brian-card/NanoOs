@@ -34,8 +34,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "ExecutiveProcesses.h"
 #include "UserspaceLogger.h"
-#include "NanoOsExecutive.h"
 
 /// @fn void* findReferencePoint(void *args)
 ///

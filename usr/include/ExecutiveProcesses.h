@@ -514,6 +514,36 @@ static inline void* processMessageElement(
     (msg_endpoint_t*) processMessageElement((message), \
     MSG_ELEMENT_TO))).coro))
 
+// Debug functions
+static inline int printString_(const char *string) {
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return overlayMap.header.osApi->executiveApi->printString(string);
+  }
+  return -EPERM;
+}
+#define printString(str) printString_((const char*) (str))
+static inline int printInt_(long long int integer) {
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return overlayMap.header.osApi->executiveApi->printInt(integer);
+  }
+  return -EPERM;
+}
+#define printInt(value) printInt_((long long int) (value))
+static inline int printDouble(double floatingPointValue) {
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return overlayMap.header.osApi->executiveApi->printDouble(
+      floatingPointValue);
+  }
+  return -EPERM;
+}
+static inline int printHex_(unsigned long long int integer) {
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return overlayMap.header.osApi->executiveApi->printHex(integer);
+  }
+  return -EPERM;
+}
+#define printHex(integer) printHex_((unsigned long long int) (integer))
+
 #ifdef __cplusplus
 }
 #endif
