@@ -608,6 +608,7 @@ int32_t restartFilesystem(ProcessDescriptor *processDescriptor) {
   fs.driverFseek = fat32Fseek;
   fs.driverGetFileBlockMetadata = fat32GetFileBlockMetadata;
   fs.driverGetFilename = fat32GetFilename;
+  fs.driverFeof = fat32Feof;
 
   //// BlockOverlayArgs blockOverlayArgs = {
   ////   .blockDevice = rootBlockDevice,

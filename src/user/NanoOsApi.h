@@ -128,6 +128,8 @@ typedef struct NanoOsApi {
   int (*remove)(const char *pathname);
   int (*fseek)(FILE *stream, long offset, int whence);
   int (*fileno)(FILE *stream);
+  int (*feof)(FILE *stream);
+  long (*ftell)(FILE *stream);
   
   // Formatted I/O:
   int (*vsscanf)(const char *buffer, const char *format, va_list args);

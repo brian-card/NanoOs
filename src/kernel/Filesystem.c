@@ -350,6 +350,32 @@ int filesystemGetFileBlockMetadataCommandHandler(
   return 0;
 }
 
+/// @fn int filesystemEndOfFileCommandHandler(
+///   FilesystemState *filesystemState, ProcessMessage *processMessage)
+///
+/// @brief Command handler for the FILESYSTEM_END_OF_FILE command.  Determine
+/// whether or not a provided FILE handle is positioned at its end.
+///
+/// @param filesystemState A pointer to the FilesystemState object maintained
+///   by the filesystem process.
+/// @param processMessage A pointer to the ProcessMessage that was received by
+///   the filesystem process.
+///
+/// @return Returns 0 on success, a standard POSIX error code on failure.
+int filesystemEndOfFileCommandHandler(
+  FilesystemState *filesystemState, ProcessMessage *processMessage
+) {
+  FeofArgs *args = (FeofArgs*) processMessageData(processMessage);
+  args->returnValue = 0;
+
+  if (filesystemState->driverState != NULL) {
+    args->returnValue = filesystemState->driverFeof(args->stream->file);
+  }
+
+  processMessageSetDone(processMessage);
+  return 0;
+}
+
 /// @var filesystemCommandHandlers
 ///
 /// @brief Array of FilesystemCommandHandler function pointers.
@@ -364,6 +390,7 @@ const FilesystemCommandHandler filesystemCommandHandlers[] = {
   filesystemDumpOpenFilesCommandHandler, // FILESYSTEM_DUMP_OPEN_FILES
   // FILESYSTEM_GET_FILE_BLOCK_METADATA:
   filesystemGetFileBlockMetadataCommandHandler,
+  filesystemEndOfFileCommandHandler,     // FILESYSTEM_END_OF_FILE
 };
 
 
@@ -910,6 +937,50 @@ int getFileBlockMetadataFromPath(const char *path,
   }
   int returnValue = getFileBlockMetadataFromFile(stream, metadata);
   fclose(stream); stream = NULL;
+
+  return returnValue;
+}
+
+/// @fn int filesystemEndOfFile(FILE *stream)
+///
+/// @brief Determine whether or not an open FILE is positioned at its end.
+///
+/// @param stream A pointer to a previously-opened FILE.
+///
+/// @return Returns 0 if the provided FILE is not positioned at its end, nonzero
+/// if it is.
+int filesystemEndOfFile(FILE *stream) {
+  FeofArgs feofArgs = {
+    .stream = stream,
+    .returnValue = 0,
+  };
+
+  if (stream != NULL) {
+    ProcessMessage *processMessage = initSendProcessMessageToPid(
+      SCHEDULER_STATE->rootFsPid,
+      FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_END_OF_FILE,
+      &feofArgs, sizeof(feofArgs), true);
+    processMessageWaitForDone(processMessage, NULL);
+    processMessageRelease(processMessage);
+  }
+
+  return feofArgs.returnValue;
+}
+
+/// @fn long filesystemFtell(FILE *stream)
+///
+/// @brief Get the current position within an open FILE stream.
+///
+/// @param stream A pointer to a previously-opened FILE.
+///
+/// @return Returns the current offeset into the provided stream on success,
+/// -1 on failure.
+long filesystemFtell(FILE *stream) {
+  long returnValue = -1;
+
+  if (stream != NULL) {
+    returnValue = (long) stream->currentPosition;
+  }
 
   return returnValue;
 }

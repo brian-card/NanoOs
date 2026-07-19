@@ -76,6 +76,8 @@ char** parseArgs(char *command, int *argc);
 #undef fgets
 #undef fread
 #undef fwrite
+#undef feof
+#undef ftell
 #undef strerror
 #undef fileno
 
@@ -128,6 +130,8 @@ NanoOsApi nanoOsApi = {
   .remove = filesystemRemove,
   .fseek = filesystemFSeek,
   .fileno = nanoOsFileno,
+  .feof = filesystemEndOfFile,
+  .ftell = filesystemFtell,
   
   // Formatted I/O:
   .vsscanf = vsscanf,

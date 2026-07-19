@@ -71,6 +71,12 @@ static inline int fseek(FILE *stream, long offset, int whence) {
 static inline int fileno(FILE *stream) {
   return overlayMap.header.osApi->fileno(stream);
 }
+static inline int feof(FILE *stream) {
+  return overlayMap.header.osApi->feof(stream);
+}
+static inline int ftell(FILE *stream) {
+  return overlayMap.header.osApi->ftell(stream);
+}
 
 // Formatted I/O:
 static inline int vsscanf(const char *str, const char *format, va_list ap) {

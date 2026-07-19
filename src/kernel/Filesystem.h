@@ -71,6 +71,8 @@ extern "C"
 /// @brief State metadata the filesystem process uses to provide access to
 /// files.
 ///
+/// @param args A pointer to one of the command arguments structures, cast to a
+///   void*.
 /// @param driverState A pointer to the internal driver's state.
 /// @param blockDevice A pointer to an allocated and initialized
 ///   BlockDevice to use for reading and writing blocks.
@@ -93,9 +95,10 @@ extern "C"
 ///   block-level metadata of a file.
 /// @param driverGetFilename Pointer to the driver function to get the name of
 ///   a file given its file handle.
-/// @param args A pointer to one of the command arguments structures, cast to a
-///   void*.
+/// @param driverFeof Pointer to the driver function to determine whether or not
+///   a file handle is positioned at its end.
 typedef struct FilesystemState {
+  void               *args;
   void               *driverState;
   BlockDevice        *blockDevice;
   uint8_t            *blockBuffer;
@@ -120,7 +123,7 @@ typedef struct FilesystemState {
   int               (*driverGetFileBlockMetadata)(void *ds, void *fileHandle,
     uint32_t *startBlock, uint32_t *numBlocks);
   const char*       (*driverGetFilename)(void *fileHandle);
-  void               *args;
+  int               (*driverFeof)(void *fileHandle);
 } FilesystemState;
 
 /// @struct FilesystemIoCommandArgs
@@ -183,7 +186,8 @@ typedef struct FilesystemFopenArgs {
 ///
 /// @param stream A pointer to the FILE to close.
 /// @param returnValue The return value of the operation that will be passed
-///   back to the handler.  This value will be set to the process's errno value.
+///   back from the handler.  This value will be set to the process's errno
+///   value.
 typedef struct FilesystemFcloseArgs {
   FILE     *stream;
   int       returnValue;
@@ -195,7 +199,8 @@ typedef struct FilesystemFcloseArgs {
 ///
 /// @param pathname The path to the file to remove.
 /// @param returnValue The return value of the operation that will be passed
-///   back to the handler.  This value will be set to the process's errno value.
+///   back from the handler.  This value will be set to the process's errno
+///   value.
 typedef struct FilesystemRemoveArgs {
   char *pathname;
   int   returnValue;
@@ -206,7 +211,7 @@ typedef struct FilesystemRemoveArgs {
 /// @brief Function parameters and return value for FILESYSTEM_DUMP_OPEN_FILES.
 ///
 /// @param returnValue The return value of the operation that will be passed
-///   back to the handler.
+///   back from the handler.
 typedef struct FilesystemDumpOpenFilesArgs {
   int      returnValue;
 } FilesystemDumpOpenFilesArgs;
@@ -224,6 +229,19 @@ typedef struct GetFileBlockMetadataArgs {
   FileBlockMetadata *metadata;
 } GetFileBlockMetadataArgs;
 
+/// @struct FeofArgs
+///
+/// @brief Function parameters and return value for the FILESYSTEM_END_OF_FILE
+/// command handler.
+///
+/// @param stream A pointer to the FILE the caller wants to interrogate.
+/// @param returnValue The return value of the operation that will be passed
+///   back from the handler.
+typedef struct FeofArgs {
+  FILE *stream;
+  int   returnValue;
+} FeofArgs;
+
 /// @enum FilesystemCommandResponse
 ///
 /// @brief Commands and responses understood by the filesystem inter-process
@@ -238,6 +256,7 @@ typedef enum FilesystemCommandResponse {
   FILESYSTEM_SEEK_FILE,
   FILESYSTEM_DUMP_OPEN_FILES,
   FILESYSTEM_GET_FILE_BLOCK_METADATA,
+  FILESYSTEM_END_OF_FILE,
   NUM_FILESYSTEM_COMMANDS,
   // Responses:
 } FilesystemCommandResponse;
@@ -282,6 +301,18 @@ size_t filesystemFWrite(
 #endif // fwrite
 #define fwrite filesystemFWrite
 
+int filesystemEndOfFile(FILE *stream);
+#ifdef feof
+#undef feof
+#endif // feof
+#define feof filesystemEndOfFile
+
+long filesystemFtell(FILE *stream);
+#ifdef ftell
+#undef ftell
+#endif // ftell
+#define ftell filesystemFtell
+
 /// @def rewind
 ///
 /// @brief Function macro to implement the functionality of the standard C
@@ -290,14 +321,6 @@ size_t filesystemFWrite(
 /// @param stream A pointer to a previously-opened FILE object.
 #define rewind(stream) \
   (void) fseek(stream, 0L, SEEK_SET)
-
-/// @def ftell
-///
-/// @brief Function macro to get the current position of a file stream.
-///
-/// @param stream A pointer to a previously-opened FILE object.
-#define ftell(stream) \
-  (long) stream->currentPosition
 
 int getFileBlockMetadataFromFile(FILE *stream, FileBlockMetadata *metadata);
 int getFileBlockMetadataFromPath(const char *path, FileBlockMetadata *metadata);

@@ -2323,6 +2323,26 @@ const char *fat32GetFilename(void *fileHandle) {
 
 ///////////////////////////////////////////////////////////////////////////////
 ///
+/// @brief Determine if an open file's position is the end of the file.
+///
+/// @param fileHandle A pointer to a Fat32FileHandle cast to a void*
+///
+/// @return Returns zero if the provided handle is not positioned at the end of
+/// the file, non-zero if it is.
+///
+int fat32Feof(void *fileHandle) {
+  Fat32FileHandle *handle = (Fat32FileHandle*) fileHandle;
+  if (handle == NULL) {
+    // Well, it's impossible for a NULL file to be at the end, so return 0, I
+    // guess...
+    return 0;
+  }
+
+  return (handle->currentPosition == handle->fileSize);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+///
 /// @brief Compute the default sectors-per-cluster value for a given partition
 ///        size, following Microsoft's published FAT32 cluster size table.
 ///
