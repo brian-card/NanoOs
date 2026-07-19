@@ -70,7 +70,7 @@ void* findReferencePoint(void *args) {
   }
   
   bool patternFound = false;
-  while (patternFound == false) {
+  while ((patternFound == false) && (!feof(binaryFile))) {
     size_t bytesRead = fread(fileBuffer, 1, fileBufferSize, binaryFile);
     for (size_t ii = 0; ii < bytesRead; ii++) {
       if (fileBuffer[ii] != referencePattern[0]) {
@@ -92,7 +92,10 @@ void* findReferencePoint(void *args) {
         jj += REFERENCE_PATTERN_LENGTH
       ) {
         size_t kk = 0;
-        for (; kk < REFERENCE_PATTERN_LENGTH; kk++) {
+        for (;
+          (kk < REFERENCE_PATTERN_LENGTH) && ((jj + kk) < bytesRead);
+          kk++
+        ) {
           if (fileBuffer[jj + kk] != referencePattern[kk]) {
             break;
           }
@@ -114,20 +117,26 @@ void* findReferencePoint(void *args) {
       // beginning or end of the buffer.
       
       // If we're near the beginning of the buffer, then ii has to be less than
-      // REFERENCE_PATTERN_LENGTH and bytesRead has to be greater than
-      // (REFERENCE_POINT_STRING_LENGTH - REFERENCE_PATTERN_LENGTH).
-      if ((bytesRead
-          > (REFERENCE_POINT_STRING_LENGTH - REFERENCE_PATTERN_LENGTH))
-        && (ii < REFERENCE_PATTERN_LENGTH)
+      // REFERENCE_PATTERN_LENGTH and jj has to be greater than
+      // (REFERENCE_PATTERN_LENGTH * (NUM_REFERENCE_PATTERNS - 1)).
+      if ((ii < REFERENCE_PATTERN_LENGTH)
+        && (jj > (REFERENCE_PATTERN_LENGTH * (NUM_REFERENCE_PATTERNS - 1)))
       ) {
         returnValue = ftell(binaryFile) - bytesRead
           - (REFERENCE_PATTERN_LENGTH - ii);
         goto freeFileBuffer;
       }
       
-      // If we're near the end of the buffer then bytesRead has to be
-      // fileBufferSize (can't be a short read) and ii plus
-      // REFERENCE_POINT_STRING_LENGTH has to exceed bytesRead.
+      // If we're near the end of the buffer then bytesRead has to be equal to
+      // fileBufferSize (can't be a short read) and jj has to equal bytesRead.
+      if ((bytesRead == fileBufferSize) && (jj == bytesRead)) {
+        returnValue = ftell(binaryFile) - bytesRead + ii;
+        goto freeFileBuffer;
+      }
+      
+      // If we made it this far then we've discovered an instance of
+      // REFERENCE_PATTERN in isolation that's not part of our full
+      // REFERENCE_POINT_STRING.  We'll continue the search.
     }
   }
   
