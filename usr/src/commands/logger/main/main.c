@@ -34,27 +34,104 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "UserspaceLogger.h"
+#include "ExecutiveProcesses.h"
 #include "NanoOsExecutive.h"
+
+#include "UserspaceLogger.h"
+
+/// @fn int loggerLogMessageCommandHandler(
+///   LoggerState *loggerState, ProcessMessage *processMessage)
+///
+/// @brief Command handler for the LOGGER_LOG_MESSAGE command.  Format and print
+/// out a message that was logged by another process.
+///
+/// @param loggerState Pointer to the LoggerState managed by this process.
+/// @param processMessage Pointer to the ProcessMessage received by this
+///   process.
+///
+/// @return Returns 0 on success, -errno on failure.
+int loggerLogMessageCommandHandler(
+  LoggerState *loggerState, ProcessMessage *processMessage
+) {
+  (void) loggerState;
+  (void) processMessage;
+  return 0;
+}
+
+/// @typedef LoggerCommandHandler
+///
+/// @brief Signature of command handler for a logger command.
+typedef int (*LoggerCommandHandler)(
+  LoggerState *loggerState, ProcessMessage *incoming);
+
+/// @var loggerCommandHandlers
+///
+/// @brief Array of function pointers for handlers for commands that are
+/// understood by this process.
+const LoggerCommandHandler loggerCommandHandlers[] = {
+  loggerLogMessageCommandHandler,       // LOGGER_LOG_MESSAGE
+};
 
 int main(int argc, char **argv) {
   if (argc < 2) {
-    fprintf(stderr, "ERROR! No binary path provided to logger.  Halting.\n");
+    printString("ERROR! No binary path provided to logger.  Halting.\n");
     while (1) sched_yield();
   }
   
-  char buffer[96];
-  *buffer = '\0';
+  LoggerState loggerState;
+  *loggerState.buffer = '\0';
+  loggerState.binaryFile = fopen(argv[1], "r");
+  if (loggerState.binaryFile == NULL) {
+    printString("logger: Could not open binary file \"");
+    printString(argv[1]);
+    printString("\".  Halting.\n");
+    while (1) sched_yield();
+  }
   
-  intptr_t returnValue = (intptr_t) callOverlayFunction(OVERLAY_SAME_NAMESPACE,
-    "FindReferencePoint", "findReferencePoint", argv[1]);
-  if (returnValue == -1) {
-    fprintf(stderr,
+  loggerState.referenceOffset
+    = (intptr_t) callOverlayFunction(OVERLAY_SAME_NAMESPACE,
+    "FindReferencePoint", "findReferencePoint", loggerState.binaryFile);
+  if (loggerState.referenceOffset == -1) {
+    printString(
       "ERROR! Could not locate reference point in binary.  Halting logger.\n");
+    fclose(loggerState.binaryFile);
     while (1) sched_yield();
   }
   
-  printf("Gracefully exiting %s\n", argv[0]);
+  while (1) {
+    ProcessMessage *processMessage = processMessageQueueWait(NULL);
+    while (processMessage != NULL) {
+      if ((processMessageType(processMessage) & 0xffffffffffffff00)
+        != LOGGER_COMMAND_SIGNATURE
+      ) {
+        printString("logger: Received unknown signature 0x");
+        printHex(processMessageType(processMessage) & 0xffffffffffffff00);
+        printString(" from process ");
+        printInt(processPid(processMessageFrom(processMessage)));
+        printString("\n");
+        // Don't attempt to process this message further.
+        processMessage = processMessageQueuePop();
+        continue;
+      }
+
+      LoggerCommand messageType
+        = (LoggerCommand) (processMessageType(processMessage) & 0xff);
+      if (messageType >= NUM_LOGGER_COMMANDS) {
+        printString("logger: Unrecognized message type ");
+        printInt(messageType);
+        printString("\n");
+
+        processMessage = processMessageQueuePop();
+        continue;
+      }
+      
+      loggerCommandHandlers[messageType](&loggerState, processMessage);
+      
+      processMessage = processMessageQueuePop();
+    }
+  }
+  
+  printString("Gracefully exiting logger\n");
   return 0;
 }
 

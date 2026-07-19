@@ -47,14 +47,9 @@
 /// @return Returns the offset reference point within the provided binary on
 /// success, -1 cast to a void* on failure.
 void* findReferencePoint(void *args) {
-  char *binaryPath = (char*) args;
+  FILE *binaryFile = (FILE*) args;
   intptr_t returnValue = -1; // Bad status until success
   const char *referencePattern = REFERENCE_PATTERN;
-  
-  FILE *binaryFile = fopen(binaryPath, "r");
-  if (binaryFile == NULL) {
-    goto exit; // return bad status
-  }
   
   // Allocate a buffer for reading from the file.  Sector size (512 bytes) is
   // ideal, but there may not be that much RAM available, so scale back if
@@ -66,7 +61,7 @@ void* findReferencePoint(void *args) {
   }
   if (fileBuffer == NULL) {
     fprintf(stderr, "ERROR: Could not allocate fileBuffer.  Halting logger.\n");
-    goto closeBinaryFile; // return bad status
+    goto exit; // return bad status
   }
   
   bool patternFound = false;
@@ -142,9 +137,6 @@ void* findReferencePoint(void *args) {
   
 freeFileBuffer:
   free(fileBuffer);
-  
-closeBinaryFile:
-  fclose(binaryFile);
   
 exit:
   return (void*) returnValue;
