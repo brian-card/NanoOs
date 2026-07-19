@@ -544,6 +544,14 @@ static inline int printHex_(unsigned long long int integer) {
 }
 #define printHex(integer) printHex_((unsigned long long int) (integer))
 
+// HAL functions
+static inline const Hal* getHal(void) {
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return overlayMap.header.osApi->executiveApi->hal;
+  }
+  return NULL;
+}
+
 #ifdef __cplusplus
 }
 #endif
