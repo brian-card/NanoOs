@@ -136,6 +136,38 @@ typedef struct StaticLogs {
   LogEntry logEntries[1];
 } StaticLogs;
 
+/// @struct LoggerState
+///
+/// @brief State object managed by the logger userspace process.
+///
+/// @param buffer Statically-allocatd character array for buffering output.
+/// @param binaryFile A FILE pointer to the file that contains the log messages.
+/// @param referenceOffset The offset within binaryFile that all offsets
+///   provided to the logger reference.  This *MUST* be a register-width, signed
+///   integer value, so use intptr_t for this.
+/// @param formatBuffer A pointer to memory allocated by the OS for use in
+///   constructing the format string used in message printing.
+/// @param formatBufferSize The number of bytes available at the formatBuffer
+///   pointer.
+typedef struct LoggerState {
+  char buffer[96];
+  FILE *binaryFile;
+  intptr_t referenceOffset;
+  char *formatBuffer;
+  size_t formatBufferSize;
+  void *args;
+} LoggerState;
+
+/// @enum LoggerCommandResponse
+///
+/// @brief Commands and responses understood by the logger inter-process message
+/// handler.
+typedef enum LoggerCommandResponse {
+  // Commands:
+  LOGGER_LOG_MESSAGE,
+  NUM_LOGGER_COMMANDS,
+} LoggerCommand;
+
 /// @enum LogLevel
 ///
 /// @brief This defines the possible log levels for log messages.
@@ -221,31 +253,6 @@ typedef uint16_t LogLevel;
 #else
 #define logBox(format, ...) {}
 #endif // (LOG_THRESHOLD <= LOG_LEVEL_BOX)
-
-/// @struct LoggerState
-///
-/// @brief State object managed by the logger userspace process.
-///
-/// @param buffer Statically-allocatd character array for buffering output.
-/// @param binaryFile A FILE pointer to the file that contains the log messages.
-/// @param referenceOffset The offset within binaryFile that all offsets
-///   provided to the logger reference.  This *MUST* be a register-width, signed
-///   integer value, so use intptr_t for this.
-typedef struct LoggerState {
-  char buffer[96];
-  FILE *binaryFile;
-  intptr_t referenceOffset;
-} LoggerState;
-
-/// @enum LoggerCommandResponse
-///
-/// @brief Commands and responses understood by the logger inter-process message
-/// handler.
-typedef enum LoggerCommandResponse {
-  // Commands:
-  LOGGER_LOG_MESSAGE,
-  NUM_LOGGER_COMMANDS,
-} LoggerCommand;
 
 // Exported functions.
 int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
