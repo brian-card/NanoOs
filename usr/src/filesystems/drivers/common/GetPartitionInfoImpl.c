@@ -48,7 +48,7 @@
 #include <string.h>
 
 // NanoOs includes
-#include "KernelProcesses.h"
+#include "ExecutiveProcesses.h"
 #include "NanoOsUtils.h"
 #include "FilesystemUtils.h"
 

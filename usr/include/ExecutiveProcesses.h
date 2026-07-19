@@ -3,9 +3,9 @@
 /// @author            Brian Card
 /// @date              06.07.2026
 ///
-/// @file              KernelProcesses.h
+/// @file              ExecutiveProcesses.h
 ///
-/// @brief             Exposed NanoOs kernel functionality related to kernel
+/// @brief             Exposed NanoOs kernel functionality related to executive
 ///                    processes.
 ///
 /// @copyright
@@ -34,8 +34,8 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef KERNEL_PROCESSES_H
-#define KERNEL_PROCESSES_H
+#ifndef EXECUTIVE_PROCESSES_H
+#define EXECUTIVE_PROCESSES_H
 
 #include "NanoOsUser.h"
 #include "../../src/kernel/Coroutines.h"
@@ -518,5 +518,5 @@ static inline void* processMessageElement(
 }
 #endif
 
-#endif // KERNEL_PROCESSES_H
+#endif // EXECUTIVE_PROCESSES_H
 
