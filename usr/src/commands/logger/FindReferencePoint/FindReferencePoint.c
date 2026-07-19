@@ -42,10 +42,11 @@
 /// @brief Find the location of the _referencePoint variable in the kernel's
 /// logger.
 ///
-/// @param args The full filesystem path to the binary to search.
+/// @param args A pointer to the LoggerState maintained by the process.
 ///
-/// @return Returns the offset reference point within the provided binary on
-/// success, -1 cast to a void* on failure.
+/// @return Sets the value of the referenceOffset member variable of the passed
+/// in state to the offset of the found reference string on success, sets it to
+/// -1 on failure.  Always returns the provided pointer.
 void* findReferencePoint(void *args) {
   LoggerState *loggerState = (LoggerState*) args;
   loggerState->referenceOffset = -1; // Bad status until success
