@@ -66,6 +66,8 @@ const FilesystemCommandHandler filesystemCommandHandlers[] = {
   {DUMP_OPEN_FILES_OVERLAY, "DumpOpenFiles"},
   // FILESYSTEM_GET_FILE_BLOCK_METADATA:
   {GET_FILE_BLOCK_METADATA_OVERLAY, "GetFileBlockMetadata"},
+  // FILESYSTEM_END_OF_FILE:
+  {END_OF_FILE_OVERLAY "EndOfFile"},
 };
 
 void* main(void *args) {
