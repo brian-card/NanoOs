@@ -128,12 +128,12 @@ int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
   
   // Get the rest of the fixed values.
   commandArgs.logEntry.logLevel = logLevel;
-  commandArgs.logEntry.fileName = (int16_t) (((intptr_t) _referencePoint)
-    - ((intptr_t) fileName));
+  commandArgs.logEntry.fileName = (int16_t) (((intptr_t) fileName)
+    - ((intptr_t) _referencePoint));
   commandArgs.logEntry.lineNumber = lineNumber;
   commandArgs.logEntry.pid = getRunningPid();
-  commandArgs.logEntry.format = (int16_t) (((intptr_t) _referencePoint)
-    - ((intptr_t) format));
+  commandArgs.logEntry.format = (int16_t) (((intptr_t) format)
+    - ((intptr_t) _referencePoint));
   
   // Get the va_list values.
   va_start(args, format);
