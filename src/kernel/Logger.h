@@ -43,6 +43,9 @@ extern "C"
 {
 #endif
 
+// Typedefs from other headers that we don't want to include here.
+typedef struct NanoOsFile FILE;
+
 /// @def LOGGER_COMMAND_SIGNATURE
 ///
 /// @brief The 64-bit signature used to validate that a command is a logger
@@ -218,6 +221,21 @@ typedef uint16_t LogLevel;
 #else
 #define logBox(format, ...) {}
 #endif // (LOG_THRESHOLD <= LOG_LEVEL_BOX)
+
+/// @struct LoggerState
+///
+/// @brief State object managed by the logger userspace process.
+///
+/// @param buffer Statically-allocatd character array for buffering output.
+/// @param binaryFile A FILE pointer to the file that contains the log messages.
+/// @param referenceOffset The offset within binaryFile that all offsets
+///   provided to the logger reference.  This *MUST* be a register-width, signed
+///   integer value, so use intptr_t for this.
+typedef struct LoggerState {
+  char buffer[96];
+  FILE *binaryFile;
+  intptr_t referenceOffset;
+} LoggerState;
 
 /// @enum LoggerCommandResponse
 ///
