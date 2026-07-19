@@ -37,6 +37,35 @@
 #include "ExecutiveProcesses.h"
 #include "UserspaceLogger.h"
 
+/// @var _logLevelNames
+///
+/// @brief Names that are to be displayed in place of log level numeric values.
+const char _logLevelNames[NUM_LOG_LEVELS][9] = {
+  "NEVER",
+  "FLOOD",
+  "TRACE",
+  "DEBUG",
+  "DETAIL",
+  "INFO",
+  "WARN",
+  "ERROR",
+  "CRITICAL",
+  "BOX",
+  "NONE",
+};
+
+/// @var _logHeaderFormat
+///
+/// @brief printf-style format string used to build the header of a log
+/// message.
+const char _logHeaderFormat[] = "[%lld.%09lld %s:%u %s:%u %s] ";
+
+/// @def LOG_HEADER_LENGTH
+///
+/// @brief Number of characters in _logHeaderFormat, minus the terminating NUL
+/// byte.
+#define LOG_HEADER_LENGTH 29
+
 /// @fn int loggerLogMessageCommandHandler(
 ///   LoggerState *loggerState, ProcessMessage *processMessage)
 ///
@@ -51,8 +80,26 @@
 int loggerLogMessageCommandHandler(
   LoggerState *loggerState, ProcessMessage *processMessage
 ) {
-  (void) loggerState;
-  (void) processMessage;
+  LogMessageCommandArgs *logMessageArgs
+    = (LogMessageCommandArgs*) processMessageData(processMessage);
+  char *formatBuffer = loggerState->formatBuffer;
+  
+  (void) logMessageArgs;
+  (void) formatBuffer;
+  
+  //// bool useHeader = true;
+  //// if (strlen(logMessageArgs->logEntry.format)
+  ////   < (loggerState.formatBufferSize - LOG_HEADER_LENGTH - 1)
+  //// ) {
+  ////   strcpy(formatBuffer, _logHeaderFormat);
+  ////   strcpy(&formatBuffer[LOG_HEADER_LENGTH], logMessageArgs->logEntry.format);
+  //// } else {
+  ////   strncpy(formatBuffer, logMessageArgs->logEntry.format,
+  ////     loggerState.formatBufferSize - 1);
+  ////   formatBuffer[strlen(logMessageArgs->logEntry.format) - 1] = '\0';
+  ////   useHeader = false;
+  //// }
+  
   return 0;
 }
 
@@ -86,15 +133,22 @@ int main(int argc, char **argv) {
     while (1) sched_yield();
   }
   
-  loggerState.referenceOffset
-    = (intptr_t) callOverlayFunction(OVERLAY_SAME_NAMESPACE,
-    "FindReferencePoint", "findReferencePoint", loggerState.binaryFile);
+  if (callOverlayFunction(OVERLAY_SAME_NAMESPACE,
+    "FindReferencePoint", "findReferencePoint", &loggerState) != &loggerState
+  ) {
+    printString("ERROR! Could not call findReferencePoint.  Halting logger.\n");
+    fclose(loggerState.binaryFile);
+    while (1) sched_yield();
+  }
   if (loggerState.referenceOffset == -1) {
     printString(
       "ERROR! Could not locate reference point in binary.  Halting logger.\n");
     fclose(loggerState.binaryFile);
     while (1) sched_yield();
   }
+  
+  loggerState.formatBuffer = getHal()->memory.logBuffer;
+  loggerState.formatBufferSize = getHal()->memory.logBufferSize;
   
   while (1) {
     ProcessMessage *processMessage = processMessageQueueWait(NULL);

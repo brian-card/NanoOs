@@ -47,8 +47,8 @@
 /// @return Returns the offset reference point within the provided binary on
 /// success, -1 cast to a void* on failure.
 void* findReferencePoint(void *args) {
-  FILE *binaryFile = (FILE*) args;
-  intptr_t returnValue = -1; // Bad status until success
+  LoggerState *loggerState = (LoggerState*) args;
+  loggerState->referenceOffset = -1; // Bad status until success
   const char *referencePattern = REFERENCE_PATTERN;
   
   // Allocate a buffer for reading from the file.  Sector size (512 bytes) is
@@ -65,8 +65,9 @@ void* findReferencePoint(void *args) {
   }
   
   bool patternFound = false;
-  while ((patternFound == false) && (!feof(binaryFile))) {
-    size_t bytesRead = fread(fileBuffer, 1, fileBufferSize, binaryFile);
+  while ((patternFound == false) && (!feof(loggerState->binaryFile))) {
+    size_t bytesRead
+      = fread(fileBuffer, 1, fileBufferSize, loggerState->binaryFile);
     for (size_t ii = 0; ii < bytesRead; ii++) {
       if (fileBuffer[ii] != referencePattern[0]) {
         continue;
@@ -104,7 +105,8 @@ void* findReferencePoint(void *args) {
       // The number of bytes we found of the reference point sting is now
       // (jj - ii).
       if ((jj - ii) == REFERENCE_POINT_STRING_LENGTH) {
-        returnValue = ftell(binaryFile) - bytesRead + ii;
+        loggerState->referenceOffset
+          = ftell(loggerState->binaryFile) - bytesRead + ii;
         goto freeFileBuffer;
       }
       // If we made it this far then, by definition, we read fewer than
@@ -117,7 +119,8 @@ void* findReferencePoint(void *args) {
       if ((ii < REFERENCE_PATTERN_LENGTH)
         && (jj > (REFERENCE_PATTERN_LENGTH * (NUM_REFERENCE_PATTERNS - 1)))
       ) {
-        returnValue = ftell(binaryFile) - bytesRead
+        loggerState->referenceOffset
+          = ftell(loggerState->binaryFile) - bytesRead
           - (REFERENCE_PATTERN_LENGTH - ii);
         goto freeFileBuffer;
       }
@@ -125,7 +128,8 @@ void* findReferencePoint(void *args) {
       // If we're near the end of the buffer then bytesRead has to be equal to
       // fileBufferSize (can't be a short read) and jj has to equal bytesRead.
       if ((bytesRead == fileBufferSize) && (jj == bytesRead)) {
-        returnValue = ftell(binaryFile) - bytesRead + ii;
+        loggerState->referenceOffset
+          = ftell(loggerState->binaryFile) - bytesRead + ii;
         goto freeFileBuffer;
       }
       
@@ -139,6 +143,6 @@ freeFileBuffer:
   free(fileBuffer);
   
 exit:
-  return (void*) returnValue;
+  return loggerState;
 }
 
