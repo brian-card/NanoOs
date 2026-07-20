@@ -149,12 +149,17 @@ typedef struct StaticLogs {
 ///   constructing the format string used in message printing.
 /// @param formatBufferSize The number of bytes available at the formatBuffer
 ///   pointer.
+/// @param hostname The hostname of the system the logger is running on.
+/// @param pid The userspace process ID of the logger process.
+/// @param args Custom arguments that are passed to overlay functions.
 typedef struct LoggerState {
   char buffer[96];
   FILE *binaryFile;
   intptr_t referenceOffset;
   char *formatBuffer;
   size_t formatBufferSize;
+  char hostname[16];
+  int pid;
   void *args;
 } LoggerState;
 
