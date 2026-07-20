@@ -57,6 +57,7 @@ const char *driverGetFilename(void *fileHandle);
 int driverGetFileBlockMetadata(
     void *driverState, void *fileHandle,
     uint32_t *startBlock, uint32_t *numBlocks);
+int driverFeof(void *fileHandle);
 
 /// @fn static void* OpenFile(void *args)
 ///
@@ -294,6 +295,30 @@ static void* GetFileBlockMetadata(void *args) {
   return filesystemState;
 }
 
+/// @fn void* EndOfFile(void *args)
+///
+/// @brief Contiguous implementation of an feof function.
+///
+/// @param args A pointer to a FilesystemState, cast to a void*.  The args
+///   member variable is a pointer to a ProcessMessage.
+///
+/// @return Sets the metadata value of the provided GetFileBlockMetadataArgs to
+//  the value that is to be used by the calling process.  This function always
+/// returns the filesystemState pointer provided as args.
+void* EndOfFile(void *args) {
+  FilesystemState *filesystemState = (FilesystemState*) args;
+  ProcessMessage *processMessage = (ProcessMessage*) filesystemState->args;
+  FeofArgs *feofArgs = (FeofArgs*) processMessageData(processMessage);
+  feofArgs->returnValue = 0;
+
+  if (filesystemState->driverState != NULL) {
+    feofArgs->returnValue = driverFeof(feofArgs->stream->file);
+  }
+
+  processMessageSetDone(processMessage);
+  return filesystemState;
+}
+
 /// @typedef FilesystemCommandHandler
 ///
 /// @brief A command handler function, indexed by FilesystemCommandResponse.
@@ -303,14 +328,15 @@ typedef void* (*FilesystemCommandHandler)(void *args);
 ///
 /// @brief Array of command handlers, indexed by FilesystemCommandResponse.
 static const FilesystemCommandHandler filesystemCommandHandlers[] = {
-  OpenFile,           // FILESYSTEM_OPEN_FILE
-  CloseFile,          // FILESYSTEM_CLOSE_FILE
-  ReadFile,           // FILESYSTEM_READ_FILE
-  WriteFile,          // FILESYSTEM_WRITE_FILE
-  RemoveFile,         // FILESYSTEM_REMOVE_FILE
-  SeekFile,           // FILESYSTEM_SEEK_FILE
-  DumpOpenFiles,      // FILESYSTEM_DUMP_OPEN_FILES
+  OpenFile,             // FILESYSTEM_OPEN_FILE
+  CloseFile,            // FILESYSTEM_CLOSE_FILE
+  ReadFile,             // FILESYSTEM_READ_FILE
+  WriteFile,            // FILESYSTEM_WRITE_FILE
+  RemoveFile,           // FILESYSTEM_REMOVE_FILE
+  SeekFile,             // FILESYSTEM_SEEK_FILE
+  DumpOpenFiles,        // FILESYSTEM_DUMP_OPEN_FILES
   GetFileBlockMetadata, // FILESYSTEM_GET_FILE_BLOCK_METADATA
+  EndOfFile,            // FILESYSTEM_END_OF_FILE
 };
 
 void* main(void *args) {
@@ -371,3 +397,4 @@ void* main(void *args) {
 
   return 0;
 }
+
