@@ -57,20 +57,22 @@ echo "Build complete."
 # pre-allocated space from dd.
 echo "${partitionOffsetMB}MiB,+,c" | sfdisk "${imageFile}"
 
-# Partition offset and size in 512-byte sectors, which mformat needs to
-# correctly populate the BPB (BIOS Parameter Block) in the FAT32 boot sector.
-# The byte offset is computed explicitly (rather than using @@2M) to avoid
-# mtools interpreting 'M' as SI megabytes (1,000,000) instead of binary
-# mebibytes (1,048,576), which would misalign reads/writes vs. sfdisk.
+# Partition offset in bytes, which mtools' "@@offset" syntax needs to
+# address the FAT32 partition directly. The byte offset is computed
+# explicitly (rather than using @@2M) to avoid mtools interpreting 'M' as
+# SI megabytes (1,000,000) instead of binary mebibytes (1,048,576), which
+# would misalign reads/writes vs. sfdisk.
 partitionOffsetBytes=$(( partitionOffsetMB * 1024 * 1024 ))
-partitionOffsetSectors=$(( partitionOffsetBytes / 512 ))
-partitionSectors=$(( imageSizeMB * 1024 * 1024 / 512 - partitionOffsetSectors ))
 
-# Format and populate the FAT32 partition at the 2 MiB offset.
+# Format and populate the FAT32 partition at the 2 MiB offset. Cluster size
+# and total sector count are intentionally left for mformat to auto-detect
+# from the remaining file size at the offset: forcing a cluster size here
+# (e.g. reusing blocksPerOverlay) can produce fewer than the ~65525
+# clusters required for a partition this size to be recognized as genuine
+# FAT32, which strict FAT32 readers such as fab-agon-emulator reject.
 fatImage="${imageFile}@@${partitionOffsetBytes}"
 
-MTOOLS_SKIP_CHECK=1 mformat -i "${fatImage}" -F -c ${blocksPerOverlay} \
-	-T ${partitionSectors} -v NanoOs ::
+MTOOLS_SKIP_CHECK=1 mformat -i "${fatImage}" -F -v NanoOs ::
 MTOOLS_SKIP_CHECK=1 mmd -i "${fatImage}" ::/usr
 MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s usr/bin ::/usr/bin
 MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s usr/lib ::/usr/lib
