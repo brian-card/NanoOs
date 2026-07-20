@@ -46,6 +46,9 @@ extern "C"
 
 // C defines:
 #define EOF (-1)
+#define SEEK_SET 0
+#define SEEK_CUR 1
+#define SEEK_END 2
 
 // Standard streams:
 #define stdin \
