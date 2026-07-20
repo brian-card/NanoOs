@@ -33,6 +33,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "ExecutiveProcesses.h"
 #include "UserspaceLogger.h"
@@ -149,6 +150,8 @@ int main(int argc, char **argv) {
   
   loggerState.formatBuffer = getHal()->memory.logBuffer;
   loggerState.formatBufferSize = getHal()->memory.logBufferSize;
+  gethostname(loggerState.hostname, sizeof(loggerState.hostname));
+  loggerState.pid = getpid();
   
   while (1) {
     ProcessMessage *processMessage = processMessageQueueWait(NULL);
