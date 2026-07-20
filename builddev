@@ -35,6 +35,8 @@ if [ "${platform}" = "ArduinoSamd21" ]; then
 	linkerScript="NanoOsArduinoSamd21.ld"
 	extraIncludes=""
 	extraLinks=""
+	osMakefile="makefiles/ArduinoSamd21Makefile"
+	osBuildDir="build/itsybitsy_m0"
 elif [ "${platform}" = "AgonLight2" ]; then
 	agonHome="${HOME}/agondev"
 	agonDevBin="${agonHome}/bin"
@@ -53,10 +55,15 @@ elif [ "${platform}" = "AgonLight2" ]; then
 	libcSrc="$(pwd)/src/kernel/libc/ez80-none-elf-clang/stdatomic.c"
 	libcObjDir="$(pwd)/usr/obj/AgonLight2/libc"
 	extraLinks="--start-group -L${agonHome}/lib -lagon ${libcObjDir}/stdatomic.o --end-group"
+	osMakefile="makefiles/AgonLight2Makefile"
+	osBuildDir="build/agon"
 else
 	echo "ERROR: Unknown platform '${platform}'.  Must be 'ArduinoSamd21' or 'AgonLight2'." >&2
 	exit 1
 fi
+
+osFullBin="${osBuildDir}/NanoOs_full.bin"
+osRodataBin="${osBuildDir}/NanoOs_rodata.bin"
 
 filesystemLinkerScript="${linkerScript}"
 if [ "${blockFilesystem}" = "contiguous" ]; then
@@ -90,6 +97,10 @@ if [ -n "${libcSrc:-}" ]; then
 		-c "${libcSrc}" -o "${libcObjDir}/stdatomic.o"
 fi
 
+echo "Building OS image..."
+make -j $(nproc) -f "${osMakefile}" clean
+make -j $(nproc) -f "${osMakefile}"
+
 echo "Building applications..."
 make -j $(nproc) -C usr/src clean
 make -j $(nproc) -C usr/src/filesystems/${blockFilesystem} clean
@@ -122,6 +133,9 @@ if [ -b "${targetDevice}" ]; then
 	sudo mkdir -p "${mountDir}/usr"
 	sudo cp -r usr/bin "${mountDir}/usr"
 	sudo cp -r usr/lib "${mountDir}/usr"
+	sudo cp "${osRodataBin}" "${mountDir}/usr/lib"
+	sudo mkdir -p "${mountDir}/bin"
+	sudo cp "${osFullBin}" "${mountDir}/bin"
 	sudo mkdir -p "${mountDir}/etc"
 	sudo bash -c "printf \"${hostname}\" >\"${mountDir}/etc/hostname\""
 	sudo bash -c "printf '\\s \\\r \\\n \\l\n\n' >\"${mountDir}/etc/issue\""
@@ -190,6 +204,10 @@ else
 		|| MTOOLS_SKIP_CHECK=1 mmd -i "${fatImage}" ::/usr
 	MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s usr/bin ::/usr/bin
 	MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s usr/lib ::/usr/lib
+	MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" "${osRodataBin}" ::/usr/lib/
+	MTOOLS_SKIP_CHECK=1 mdir -i "${fatImage}" ::/bin >/dev/null 2>&1 \
+		|| MTOOLS_SKIP_CHECK=1 mmd -i "${fatImage}" ::/bin
+	MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" "${osFullBin}" ::/bin/
 	MTOOLS_SKIP_CHECK=1 mdir -i "${fatImage}" ::/etc >/dev/null 2>&1 \
 		|| MTOOLS_SKIP_CHECK=1 mmd -i "${fatImage}" ::/etc
 	printf '%s' "${hostname}" \
