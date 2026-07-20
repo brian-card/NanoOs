@@ -50,7 +50,10 @@ extern "C"
 {
 #endif
 
-// Standard seek mode definitions
+// Standard seek mode definitions.
+// ***WARNING*** These have to match what is defined in userspace in
+// usr/include/stdio.h.  If you change these for some reason, you MUST also
+// update the definitions there!!!!
 #define SEEK_SET 0
 #define SEEK_CUR 1
 #define SEEK_END 2
