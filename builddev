@@ -12,7 +12,7 @@ blocksPerOverlay=8
 
 if [ "${platform}" = "" ] || [ "${hostname}" = "" ] \
 		|| [ "${targetDevice}" = "" ] || [ "${blockFilesystem}" = "" ]; then
-	echo "Usage: ${0} <ArduinoSamd21|AgonLight2> <hostname> <target device> <blockFilesystem> [rootFilesystemSource]" >&2
+	echo "Usage: ${0} <ArduinoSamd21|AgonLight2> <hostname> <target device or image file> <blockFilesystem> [rootFilesystemSource]" >&2
 	exit 1
 fi
 
@@ -106,39 +106,112 @@ make -j $(nproc) -C usr/src/filesystems/${blockFilesystem} COMPILE="${compile}" 
 echo ""
 echo "Build complete."
 
-# Make a temporary mountpoint
-mountDir="$(mktemp -d)"
-trap "rm -rf \"${mountDir}\"" ERR EXIT
+if [ -b "${targetDevice}" ]; then
+	# Make a temporary mountpoint
+	mountDir="$(mktemp -d)"
+	trap "rm -rf \"${mountDir}\"" ERR EXIT
 
-echo '2048,,0c' | sudo sfdisk "${targetDevice}"
-sudo mkfs.vfat -F 32 "${targetDevice}p1" -n NanoOs
-sudo mount "${targetDevice}p1" "${mountDir}"
+	echo '2048,,0c' | sudo sfdisk "${targetDevice}"
+	sudo mkfs.vfat -F 32 "${targetDevice}p1" -n NanoOs
+	sudo mount "${targetDevice}p1" "${mountDir}"
 
-if [ -n "${rootFilesystemSource}" ]; then
-	sudo cp -r "${rootFilesystemSource}/." "${mountDir}"
-fi
+	if [ -n "${rootFilesystemSource}" ]; then
+		sudo cp -r "${rootFilesystemSource}/." "${mountDir}"
+	fi
 
-sudo mkdir -p "${mountDir}/usr"
-sudo cp -r usr/bin "${mountDir}/usr"
-sudo cp -r usr/lib "${mountDir}/usr"
-sudo mkdir -p "${mountDir}/etc"
-sudo bash -c "printf \"${hostname}\" >\"${mountDir}/etc/hostname\""
-sudo bash -c "printf '\\s \\\r \\\n \\l\n\n' >\"${mountDir}/etc/issue\""
-sudo umount "${mountDir}"
+	sudo mkdir -p "${mountDir}/usr"
+	sudo cp -r usr/bin "${mountDir}/usr"
+	sudo cp -r usr/lib "${mountDir}/usr"
+	sudo mkdir -p "${mountDir}/etc"
+	sudo bash -c "printf \"${hostname}\" >\"${mountDir}/etc/hostname\""
+	sudo bash -c "printf '\\s \\\r \\\n \\l\n\n' >\"${mountDir}/etc/issue\""
+	sudo umount "${mountDir}"
 
-if [ "${blockFilesystem}" = "contiguous" ]; then
-	# The contiguous filesystem is a single overlay occupying the same
-	# starting position slot 0 would under the per-slot scheme; it has no
-	# fixed per-slot block budget, so its build (see makefile) fails
-	# instead if it grows past what fits before the FAT32 partition.
-	sudo dd if="usr/filesystem/contiguous/0.overlay" of="${targetDevice}" \
-		bs=512 seek=1
+	if [ "${blockFilesystem}" = "contiguous" ]; then
+		# The contiguous filesystem is a single overlay occupying the same
+		# starting position slot 0 would under the per-slot scheme; it has no
+		# fixed per-slot block budget, so its build (see makefile) fails
+		# instead if it grows past what fits before the FAT32 partition.
+		sudo dd if="usr/filesystem/contiguous/0.overlay" of="${targetDevice}" \
+			bs=512 seek=1
+	else
+		blockOverlays="$(ls usr/filesystem/${blockFilesystem}/*)"
+		for blockOverlay in ${blockOverlays}; do
+			overlayId="$(basename "${blockOverlay}" .overlay)"
+			startBlock=$(( (overlayId * blocksPerOverlay) + 1 ))
+			sudo dd if="${blockOverlay}" of="${targetDevice}" bs=512 \
+				seek=${startBlock}
+		done
+	fi
 else
-	blockOverlays="$(ls usr/filesystem/${blockFilesystem}/*)"
-	for blockOverlay in ${blockOverlays}; do
-		overlayId="$(basename "${blockOverlay}" .overlay)"
-		startBlock=$(( (overlayId * blocksPerOverlay) + 1 ))
-		sudo dd if="${blockOverlay}" of="${targetDevice}" bs=512 \
-			seek=${startBlock}
-	done
+	# targetDevice is a path to a disk image file rather than a real block
+	# device; build it with the same size and layout as the buildsim script.
+	imageSizeMB=100
+	partitionOffsetMB=2
+	imageBlocksPerOverlay=16
+
+	dd if=/dev/zero of="${targetDevice}" bs=1M count=${imageSizeMB} \
+		status=progress
+
+	# Partition: MBR, FAT32 (partition type 0xc) starting at 2 MiB.
+	# sfdisk is used instead of parted because parted truncates image files
+	# to the minimum size needed for the partition table, discarding the
+	# pre-allocated space from dd.
+	echo "${partitionOffsetMB}MiB,+,c" | sfdisk "${targetDevice}"
+
+	# Partition offset and size in 512-byte sectors, which mformat needs to
+	# correctly populate the BPB (BIOS Parameter Block) in the FAT32 boot
+	# sector. The byte offset is computed explicitly (rather than using
+	# @@2M) to avoid mtools interpreting 'M' as SI megabytes (1,000,000)
+	# instead of binary mebibytes (1,048,576), which would misalign
+	# reads/writes vs. sfdisk.
+	partitionOffsetBytes=$(( partitionOffsetMB * 1024 * 1024 ))
+	partitionOffsetSectors=$(( partitionOffsetBytes / 512 ))
+	partitionSectors=$(( imageSizeMB * 1024 * 1024 / 512 - partitionOffsetSectors ))
+
+	# Format and populate the FAT32 partition at the 2 MiB offset.
+	fatImage="${targetDevice}@@${partitionOffsetBytes}"
+
+	MTOOLS_SKIP_CHECK=1 mformat -i "${fatImage}" -F -c ${imageBlocksPerOverlay} \
+		-T ${partitionSectors} -v NanoOs ::
+
+	if [ -n "${rootFilesystemSource}" ]; then
+		shopt -s dotglob nullglob
+		for rootFilesystemEntry in "${rootFilesystemSource}"/*; do
+			MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s \
+				"${rootFilesystemEntry}" ::
+		done
+		shopt -u dotglob nullglob
+	fi
+
+	MTOOLS_SKIP_CHECK=1 mdir -i "${fatImage}" ::/usr >/dev/null 2>&1 \
+		|| MTOOLS_SKIP_CHECK=1 mmd -i "${fatImage}" ::/usr
+	MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s usr/bin ::/usr/bin
+	MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s usr/lib ::/usr/lib
+	MTOOLS_SKIP_CHECK=1 mdir -i "${fatImage}" ::/etc >/dev/null 2>&1 \
+		|| MTOOLS_SKIP_CHECK=1 mmd -i "${fatImage}" ::/etc
+	printf '%s' "${hostname}" \
+		| MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" - ::/etc/hostname
+	printf '\\s \\r \\n \\l\n\n' \
+		| MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" - ::/etc/issue
+
+	# Write block overlays into the image at their absolute sector positions,
+	# relative to the start of the image. Overlay IDs start at 1 to avoid
+	# colliding with the MBR at sector 0.
+	if [ "${blockFilesystem}" = "contiguous" ]; then
+		# The contiguous filesystem is a single overlay occupying the same
+		# starting position slot 0 would under the per-slot scheme; it has no
+		# fixed per-slot block budget, so its build (see makefile) fails
+		# instead if it grows past what fits before the FAT32 partition.
+		dd if="usr/filesystem/contiguous/0.overlay" of="${targetDevice}" \
+			bs=512 seek=1 conv=notrunc
+	else
+		blockOverlays="$(ls usr/filesystem/${blockFilesystem}/*)"
+		for blockOverlay in ${blockOverlays}; do
+			overlayId="$(basename "${blockOverlay}" .overlay)"
+			startBlock=$(( (overlayId * imageBlocksPerOverlay) + 1 ))
+			dd if="${blockOverlay}" of="${targetDevice}" bs=512 \
+				seek=${startBlock} conv=notrunc
+		done
+	fi
 fi
