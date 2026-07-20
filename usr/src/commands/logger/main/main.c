@@ -83,24 +83,48 @@ int loggerLogMessageCommandHandler(
 ) {
   LogMessageCommandArgs *logMessageArgs
     = (LogMessageCommandArgs*) processMessageData(processMessage);
-  char *formatBuffer = loggerState->formatBuffer;
   
-  (void) logMessageArgs;
-  (void) formatBuffer;
+  loggerState->args = (void*) ((intptr_t) logMessageArgs->logEntry.fileName);
+  if (callOverlayFunction(OVERLAY_SAME_NAMESPACE,
+    "GetString", "getString", &loggerState) != &loggerState
+  ) {
+    printString("logger: ERROR! Could not find file name at offset ");
+    printInt(logMessageArgs->logEntry.fileName);
+    printString("\n");
+    goto printMessage;
+  }
   
-  //// bool useHeader = true;
-  //// if (strlen(logMessageArgs->logEntry.format)
-  ////   < (loggerState.formatBufferSize - LOG_HEADER_LENGTH - 1)
-  //// ) {
-  ////   strcpy(formatBuffer, _logHeaderFormat);
-  ////   strcpy(&formatBuffer[LOG_HEADER_LENGTH], logMessageArgs->logEntry.format);
-  //// } else {
-  ////   strncpy(formatBuffer, logMessageArgs->logEntry.format,
-  ////     loggerState.formatBufferSize - 1);
-  ////   formatBuffer[strlen(logMessageArgs->logEntry.format) - 1] = '\0';
-  ////   useHeader = false;
-  //// }
+  snprintf(loggerState->formatBuffer, loggerState->formatBufferSize,
+    "[%lld.%09lld %s:%u %s:%u %s] ",
+    ((long long int) logMessageArgs->logEntry.timeStamp)
+      / ((long long int) 1000000000),
+    ((long long int) logMessageArgs->logEntry.timeStamp)
+      % ((long long int) 1000000000),
+    loggerState->hostname, logMessageArgs->logEntry.pid,
+    loggerState->buffer, // fileName
+    logMessageArgs->logEntry.lineNumber,
+    _logLevelNames[logMessageArgs->logEntry.logLevel]);
   
+printMessage:
+  loggerState->args = (void*) ((intptr_t) logMessageArgs->logEntry.format);
+  if (callOverlayFunction(OVERLAY_SAME_NAMESPACE,
+    "GetString", "getString", &loggerState) != &loggerState
+  ) {
+    printString("logger: ERROR! Could not find format string at offset ");
+    printInt(logMessageArgs->logEntry.fileName);
+    printString("\n");
+    goto exit;
+  }
+  strncat(loggerState->formatBuffer, loggerState->buffer,
+    loggerState->formatBufferSize - strlen(loggerState->formatBuffer));
+  
+  printf(loggerState->formatBuffer,
+    (intptr_t) logMessageArgs->logEntry.args[0],
+    (intptr_t) logMessageArgs->logEntry.args[1],
+    (intptr_t) logMessageArgs->logEntry.args[2],
+    (intptr_t) logMessageArgs->logEntry.args[3]);
+  
+exit:
   return 0;
 }
 
@@ -150,8 +174,9 @@ int main(int argc, char **argv) {
   
   loggerState.formatBuffer = getHal()->memory.logBuffer;
   loggerState.formatBufferSize = getHal()->memory.logBufferSize;
-  gethostname(loggerState.hostname, sizeof(loggerState.hostname));
-  loggerState.pid = getpid();
+  if (gethostname(loggerState.hostname, sizeof(loggerState.hostname)) != 0) {
+    strcpy(loggerState.hostname, "localhost");
+  }
   
   while (1) {
     ProcessMessage *processMessage = processMessageQueueWait(NULL);
