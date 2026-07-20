@@ -72,6 +72,16 @@ SECTIONS
     /* Code section */
     .text :
     {
+        /*
+         * The only live reference to __start is a function pointer inside
+         * the KEEP'd .overlay_header export table, not a direct call from
+         * any other retained section.  This linker's --gc-sections marking
+         * resolves the ENTRY(__start) root against the PROVIDE default
+         * above instead of start.o's real definition, so without an
+         * explicit KEEP here the actual __start (and everything it calls,
+         * e.g. main) gets swept away, leaving only the export table.
+         */
+        KEEP(*(.text.__start))
         *(.text)
         *(.text*)
         *(.rodata)
