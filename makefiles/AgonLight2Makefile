@@ -14,6 +14,7 @@
 #
 # Usage:
 #   make -f AgonLight2Makefile             - Build full and stripped binaries
+#   make -f AgonLight2Makefile STANDALONE=1 - Build the replace-MOS scaffold
 #   make -f AgonLight2Makefile flash       - Copy stripped binary to Agon SD card
 #   make -f AgonLight2Makefile flash-full  - Copy full binary to Agon SD card
 #   make -f AgonLight2Makefile size        - Show section sizes and SRAM headroom
@@ -21,7 +22,7 @@
 #   make -f AgonLight2Makefile disasm      - Disassemble the ELF
 #   make -f AgonLight2Makefile clean       - Remove build directory
 #
-# Produces (under build/agon/):
+# Produces (under build/agon/, or build/agon-standalone/ with STANDALONE=1):
 #   NanoOs.elf          — Full ELF (keep for host-side symbol resolution)
 #   NanoOs_full.bin     — Flat binary including .rodata (for debugging)
 #   NanoOs_stripped.bin — Flat binary without .rodata (for production)
@@ -52,14 +53,38 @@ AR      := $(AGDEV_BIN)/ez80-none-elf-ar
 
 TARGET_TRIPLE := ez80-none-elf
 
+# ---- Build mode: MOS-loadable (default) or standalone ------------------------
+#
+# STANDALONE=0 (default): NanoOs is a MOS user program, loaded by MOS into
+#   external SRAM at 0x040000. The binary carries the "MOS" header MOS's
+#   loader requires (see boot/AgonLight2/boot.asm).
+#
+# STANDALONE=1: scaffold for NanoOs eventually replacing MOS outright,
+#   starting at 0x000000. No MOS header is emitted (there's no MOS to check
+#   it) and the low eZ80 RST/NMI vector slots are stubbed with safe
+#   placeholders instead of being left as fall-through NOPs. This does NOT
+#   yet solve flash execute-in-place semantics: real standalone bring-up
+#   will still need a .data load-address/copy step at startup, the way the
+#   SAMD21 ports do, before it can run from flash for real.
+
+STANDALONE ?= 0
+
 # ---- Linker script ----------------------------------------------------------
 
-LINKER_DIR    := ld
-LINKER_SCRIPT := $(LINKER_DIR)/AgonLight2.ld
+LINKER_DIR := ld
+ifeq ($(STANDALONE),1)
+  LINKER_SCRIPT := $(LINKER_DIR)/AgonLight2Standalone.ld
+else
+  LINKER_SCRIPT := $(LINKER_DIR)/AgonLight2.ld
+endif
 
 # ---- Build directory --------------------------------------------------------
 
-BUILD_DIR := build/agon
+ifeq ($(STANDALONE),1)
+  BUILD_DIR := build/agon-standalone
+else
+  BUILD_DIR := build/agon
+endif
 
 # ---- SD card mount point ----------------------------------------------------
 
@@ -77,6 +102,7 @@ DEFINES := \
 	-DF_CPU=18432000UL \
 	-DNANO_OS_AGON_LIGHT_2 \
 	-DNANOOS_EZ80 \
+	$(if $(filter 1,$(STANDALONE)),-DNANO_OS_AGON_LIGHT_2_STANDALONE) \
 
 # ---- Include paths ----------------------------------------------------------
 
