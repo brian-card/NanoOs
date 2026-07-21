@@ -325,9 +325,9 @@ rodata = sum(int(m) for m in re.findall(r'^\\.rodata\\s+(\\d+)', out, re.M)); \
 data   = sum(int(m) for m in re.findall(r'^\\.data\\s+(\\d+)',   out, re.M)); \
 bss    = sum(int(m) for m in re.findall(r'^\\.bss\\s+(\\d+)',    out, re.M)); \
 total  = text + rodata + data + bss; \
-avail  = 512 * 1024; \
+avail  = 128 * 1024; \
 print(f'  Total estimated footprint: {total} bytes ({total/1024:.1f} KB)'); \
-print(f'  External SRAM available:   {avail} bytes (512 KB)'); \
+print(f'  External SRAM available:   {avail} bytes (128 KB)'); \
 print(f'  Headroom:                  {avail - total} bytes ({(avail - total)/1024:.1f} KB)'); \
 " 2>/dev/null || true
 
