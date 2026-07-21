@@ -4,6 +4,13 @@
 ; first byte.  The CPU is already in ADL (24-bit) mode when we arrive;
 ; no mode-switch jump is required.
 ;
+; MOS (mos_execMode in mos.c) refuses to run a binary unless it carries a
+; header at offset 0x40 from the load address: the bytes "MOS" at
+; 0x40-0x42 and a mode byte at 0x44 (0 = Z80/16-bit, 1 = ADL/24-bit).
+; Without it, RUN/EXEC report "Invalid executable". _start therefore
+; jumps over a padded gap containing that header before falling into the
+; real startup code.
+;
 ; Assembled with ez80-none-elf-clang (LLVM integrated assembler) via
 ;   clang --target=ez80-none-elf -x assembler-with-cpp
 ;
@@ -16,6 +23,16 @@
     .globl  _start
 
 _start:
+    JP  realStart
+
+    .align 6                    ; pad to offset 0x40 for the MOS header below
+    .byte 'M'
+    .byte 'O'
+    .byte 'S'
+    .byte 0                     ; version (unused by MOS)
+    .byte 1                     ; execution mode: 1 = ADL (24-bit)
+
+realStart:
     DI                          ; disable maskable interrupts while setting up
 
     ; Map eZ80F92 on-chip 8 KB SRAM to 0xFFE000.
