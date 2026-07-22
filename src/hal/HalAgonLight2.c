@@ -603,6 +603,7 @@ int32_t halAgonLight2Init(void) {
 
   halCommonHal.platform.callFileOverlay = callOverlayFunctionFromFile;
   halCommonHal.platform.execCommand = execOverlayCommand;
+  halCommonHal.platform.restartRootFilesystem = restartBuiltinFilesystem;
   halCommonHal.platform.initRootStorage = halCommonInitRootFilesystem,
   halCommonHal.platform.restartShell = restartOverlayShell;
 
