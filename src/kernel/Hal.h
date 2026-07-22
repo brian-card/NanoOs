@@ -365,6 +365,18 @@ typedef struct HalMemory {
   /// systems that don't support overlays.
   size_t overlaySize;
   
+  /// @var contiguousFilesystem
+  ///
+  /// @brief Memory address where a contiguous filesystem binary will be loaded.
+  NanoOsOverlayMap *contiguousFilesystem;
+  
+  /// @var contiguousFilesystemSize
+  ///
+  /// @brief The number of bytes available for the contiguout filesystem binary.
+  /// This may be 0 on systems that don't support an in-RAM contiguous
+  /// filesystem.
+  size_t contiguousFilesystemSize;
+  
   // Logging definitions.
   
   /// @var stringsPresent
