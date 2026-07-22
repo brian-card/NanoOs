@@ -12,7 +12,7 @@ blocksPerOverlay=8
 
 if [ "${platform}" = "" ] || [ "${hostname}" = "" ] \
 		|| [ "${targetDevice}" = "" ] || [ "${blockFilesystem}" = "" ]; then
-	echo "Usage: ${0} <ArduinoSamd21|AgonLight2> <hostname> <target device or image file> <blockFilesystem> [rootFilesystemSource]" >&2
+	echo "Usage: ${0} <AgonLight2|itsybitsy_m0|feather_m0_wifi|trinket_m0|nano_33_iot|xiao_m0> <hostname> <target device or image file> <blockFilesystem> [rootFilesystemSource]" >&2
 	exit 1
 fi
 
@@ -26,7 +26,10 @@ if [ ! -f "usr/src/filesystems/${blockFilesystem}/makefile" ]; then
 	exit 1
 fi
 
-if [ "${platform}" = "ArduinoSamd21" ]; then
+if [ "${platform}" = "itsybitsy_m0" ] || [ "${platform}" = "feather_m0_wifi" ] \
+		|| [ "${platform}" = "trinket_m0" ] \
+		|| [ "${platform}" = "nano_33_iot" ] \
+		|| [ "${platform}" = "xiao_m0" ]; then
 	compile="arm-none-eabi-gcc"
 	link="arm-none-eabi-ld"
 	objcopy="arm-none-eabi-objcopy"
@@ -36,7 +39,8 @@ if [ "${platform}" = "ArduinoSamd21" ]; then
 	extraIncludes=""
 	extraLinks=""
 	osMakefile="makefiles/ArduinoSamd21Makefile"
-	osBuildDir="build/itsybitsy_m0"
+	osBuildDir="build/${platform}"
+	osMakeArgs="BOARD=${platform}"
 elif [ "${platform}" = "AgonLight2" ]; then
 	agonHome="${HOME}/agondev"
 	agonDevBin="${agonHome}/bin"
@@ -57,8 +61,11 @@ elif [ "${platform}" = "AgonLight2" ]; then
 	extraLinks="--start-group -L${agonHome}/lib -lagon ${libcObjDir}/stdatomic.o --end-group"
 	osMakefile="makefiles/AgonLight2Makefile"
 	osBuildDir="build/agon"
+	osMakeArgs=""
 else
-	echo "ERROR: Unknown platform '${platform}'.  Must be 'ArduinoSamd21' or 'AgonLight2'." >&2
+	echo "ERROR: Unknown platform '${platform}'." >&2
+	echo "Must be 'AgonLight2' or one of the ArduinoSamd21Makefile boards:" >&2
+	echo "  itsybitsy_m0, feather_m0_wifi, trinket_m0, nano_33_iot, xiao_m0" >&2
 	exit 1
 fi
 
@@ -98,8 +105,8 @@ if [ -n "${libcSrc:-}" ]; then
 fi
 
 echo "Building OS image..."
-make -j $(nproc) -f "${osMakefile}" clean
-make -j $(nproc) -f "${osMakefile}"
+make -j $(nproc) -f "${osMakefile}" ${osMakeArgs} clean
+make -j $(nproc) -f "${osMakefile}" ${osMakeArgs}
 
 echo "Building applications..."
 make -j $(nproc) -C usr/src clean
