@@ -89,7 +89,7 @@ const char _logLevelNames[NUM_LOG_LEVELS][9] KEEP_IN_FLASH = {
 /// @note KEEP_IN_FLASH is required here because .rodata is removed from the
 /// final binary on some targets.
 static const char _logHeaderFormat[] KEEP_IN_FLASH
-  = "[%lld.%09lld %s:%u %s:%u %s] ";
+  = "[%ld.%09ld %s:%u %s:%u %s] ";
 
 /// @var _localhost
 ///
@@ -125,6 +125,11 @@ int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
   // isn't fatal.  Do this before anything else to get as accurate a timestamp
   // as possible.
   HAL->clock.getElapsedNanoseconds(0, &commandArgs.logEntry.timeStamp);
+  
+  char *slashAt = strrchr(fileName, '/');
+  if (slashAt != NULL) {
+    fileName = slashAt + 1;
+  }
   
   // Get the rest of the fixed values.
   commandArgs.logEntry.logLevel = logLevel;
@@ -217,10 +222,8 @@ writeImmediate:
   // Print the header.
   snprintf(HAL->memory.logBuffer, HAL->memory.logBufferSize,
     _logHeaderFormat,
-    ((long long int) commandArgs.logEntry.timeStamp)
-      / ((long long int) 1000000000),
-    ((long long int) commandArgs.logEntry.timeStamp)
-      % ((long long int) 1000000000),
+    (long int) (commandArgs.logEntry.timeStamp / ((int64_t) 1000000000)),
+    (long int) (commandArgs.logEntry.timeStamp % ((int64_t) 1000000000)),
     ((SCHEDULER_STATE != NULL) && (SCHEDULER_STATE->hostname != NULL))
       ? SCHEDULER_STATE->hostname
       : _localhost,

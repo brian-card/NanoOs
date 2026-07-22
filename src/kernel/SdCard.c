@@ -65,7 +65,7 @@ int sdCardGetReadWriteArgs(
   *numSdBlocks = sdCommandArgs->numBlocks
     << sdCardState->bsDevice->blockBitShift;
   if ((*startSdBlock + *numSdBlocks) > sdCardState->numBlocks) {
-    logError("%s: ERROR! Invalid R/W range\n", __func__);
+    logError("Invalid R/W range\n");
     return EINVAL;
   }
 
@@ -181,7 +181,7 @@ int schedSdReadBlocks(void *context, uint32_t startBlock,
     processMessage = getAvailableMessage();
   }
   if (processMessage == NULL) {
-    logError("%s: ERROR: Out of process messages\n", __func__);
+    logError("Out of process messages\n");
     return -ENOMEM;
   }
 
@@ -238,7 +238,7 @@ int schedSdWriteBlocks(void *context, uint32_t startBlock,
     processMessage = getAvailableMessage();
   }
   if (processMessage == NULL) {
-    logError("%s: ERROR: Out of process messages\n", __func__);
+    logError("Out of process messages\n");
     return -ENOMEM;
   }
 

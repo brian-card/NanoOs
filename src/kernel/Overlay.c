@@ -339,11 +339,11 @@ int runOverlayCommand(const char *commandPath,
     .argc = argc,
     .argv = argv,
   };
-  logDebug("Calling _start function at address 0x%llx\n",
-    (unsigned long long int) (uintptr_t) _start);
+  logDebug("Calling _start function at address 0x%lx\n",
+    (unsigned long int) (uintptr_t) _start);
   int returnValue = (int) ((intptr_t) _start(&mainArgs));
-  logDebug("Got return value %lld from _start function\n",
-    (long long int) returnValue);
+  logDebug("Got return value %ld from _start function\n",
+    (long int) returnValue);
   if ((returnValue < 0) || (returnValue > 255)) {
     // Invalid return value.
     returnValue = -EOTHER;

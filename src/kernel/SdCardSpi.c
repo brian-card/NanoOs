@@ -479,8 +479,7 @@ int16_t sdSpiGetBlockSize(int sdCardSpiDevice) {
   uint8_t response = sdSpiSendCommand(sdCardSpiDevice, CMD9, 0);
   if (response != 0x00) {
     HAL->spi.endTransfer(sdCardSpiDevice);
-    logError("%s: ERROR! CMD9 returned %lld\n", __func__,
-      (long long int) response);
+    logError("CMD9 returned %ld\n", (long int) response);
     return -1;
   }
 
@@ -523,8 +522,7 @@ int32_t sdSpiGetBlockCount(int sdCardSpiDevice) {
   uint8_t response = sdSpiSendCommand(sdCardSpiDevice, CMD9, 0);
   if (response != 0x00) {
     HAL->spi.endTransfer(sdCardSpiDevice);
-    logError("%s: ERROR! CMD9 returned %lld\n", __func__,
-      (long long int) response);
+    logError("CMD9 returned %ld\n", (long int) response);
     return -1;
   }
   
@@ -661,8 +659,8 @@ void handleSdCardSpiMessages(SdCardState *sdCardState) {
     if ((processMessageType(processMessage) & 0xffffffffffffff00)
       != SD_CARD_COMMAND_SIGNATURE
     ) {
-      logError("Received unknown signature 0x%llx from process %d\n",
-        (unsigned long long int)
+      logError("Received unknown signature 0x%lx from process %d\n",
+        (unsigned long int)
           (processMessageType(processMessage) & 0xffffffffffffff00),
         processPid(processMessageFrom(processMessage)));
       // Don't attempt to process this message further.
@@ -673,8 +671,7 @@ void handleSdCardSpiMessages(SdCardState *sdCardState) {
     SdCardCommandResponse messageType
       = (SdCardCommandResponse) (processMessageType(processMessage) & 0xff);
     if (messageType >= NUM_SD_CARD_COMMANDS) {
-      logError("%s: Invalid message type %lld\n", __func__,
-        (long long int) messageType);
+      logError("Invalid message type %ld\n", (long int) messageType);
 
       processMessage = processMessageQueuePop();
       continue;
@@ -722,12 +719,11 @@ void* runSdCardSpi(void *args) {
 #ifdef SD_CARD_DEBUG
     logDebug("Card is %s\n",
       (sdCardState.sdCardVersion == 1) ? "SDSC" : "SDHC/SDXC");
-    logDebug("Card block size = %lld\n",
-      (long long int) blockStorageDevice.blockSize);
-    logDebug("%lld total blocks (%lld total bytes)\n",
-      (long long int) sdCardState.numBlocks,
-      ((long long int) sdCardState.numBlocks)
-        * ((long long int) sdCardState.blockSize));
+    logDebug("Card block size = %ld\n",
+      (long int) blockStorageDevice.blockSize);
+    logDebug("%ld total blocks (%ld total bytes)\n",
+      (long int) sdCardState.numBlocks, ((long int) sdCardState.numBlocks)
+        * ((long int) sdCardState.blockSize));
 #endif // SD_CARD_DEBUG
   } else {
     logError("sdSpiCardInit returned status: %s\n",

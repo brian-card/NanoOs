@@ -91,18 +91,18 @@ void localFree(MemoryManagerState *memoryManagerState,
   logDebug("In localFree\n");
   if (!isDynamicPointer(ptr)) {
     // This is not something we can free.  Ignore it.
-    logDebug("Error: Request to free non-dynamic memory 0x%llx\n",
-      (unsigned long long int) (uintptr_t) ptr);
+    logError("Process %d requesting to free non-dynamic memory 0x%lx\n",
+      callingPid, (unsigned long int) (uintptr_t) ptr);
     return;
   }
 
   MemNode *memNode = memNode(ptr);
 
   // This is memory that was previously allocated from one of our allocators.
-  logDebug("Process %lld freeing %lld bytes at 0x%llx from process %lld\n",
-    (long long int) callingPid, (long long int) memNode->size,
-    (unsigned long long int) (uintptr_t) ptr, (long long int) memNode->owner);
-  logDebug("memNode = 0x%llx\n", (unsigned long long int) (uintptr_t) memNode);
+  logDebug("Process %ld freeing %ld bytes at 0x%lx from process %ld\n",
+    (long int) callingPid, (long int) memNode->size,
+    (unsigned long int) (uintptr_t) ptr, (long int) memNode->owner);
+  logDebug("memNode = 0x%lx\n", (unsigned long int) (uintptr_t) memNode);
 
   MemNode *cur = NULL;
 #ifdef NANO_OS_MEM_DEBUG
@@ -112,7 +112,7 @@ void localFree(MemoryManagerState *memoryManagerState,
     }
   }
   if (cur == NULL) {
-    logDebug("ERROR!!!  memNode is not allocated!!\n");
+    logError("memNode is not allocated!!\n");
     HAL->power.enterMode(HAL_POWER_MODE_OFF);
   }
 #endif // NANO_OS_MEM_DEBUG
@@ -126,9 +126,9 @@ void localFree(MemoryManagerState *memoryManagerState,
       }
     }
     if (cur == NULL) {
-      logDebug("ERROR!!!  memNode->prev is not allocated!!\n");
-      logDebug("memNode->prev = 0x%llx\n",
-        (unsigned long long int) (uintptr_t) memNode->prev);
+      logError("memNode->prev is not allocated!!\n");
+      logError("memNode->prev = 0x%lx\n",
+        (unsigned long int) (uintptr_t) memNode->prev);
       HAL->power.enterMode(HAL_POWER_MODE_OFF);
     }
 #endif // NANO_OS_MEM_DEBUG
@@ -150,48 +150,48 @@ void localFree(MemoryManagerState *memoryManagerState,
 #ifdef NANO_OS_MEM_DEBUG
   if (((uintptr_t) cur) < ((uintptr_t) memNode)) {
     // This should be impossible.
-    logDebug("ERROR!!! cur (0x%llx) < memNode (0x%llx)\n",
-      (unsigned long long int) (uintptr_t) cur,
-      (unsigned long long int) (uintptr_t) memNode);
+    logError("cur (0x%lx) < memNode (0x%lx)\n",
+      (unsigned long int) (uintptr_t) cur,
+      (unsigned long int) (uintptr_t) memNode);
     HAL->power.enterMode(HAL_POWER_MODE_OFF);
   }
 #endif // NANO_OS_MEM_DEBUG
   while (((uintptr_t) cur->prev) > ((uintptr_t) memNode)) {
     cur = cur->prev;
   }
-  logDebug("cur = 0x%llx\n", (unsigned long long int) (uintptr_t) cur);
+  logDebug("cur = 0x%lx\n", (unsigned long int) (uintptr_t) cur);
 
 #ifdef NANO_OS_MEM_DEBUG
   if (((uintptr_t) cur) < ((uintptr_t) memNode)) {
     // This should be impossible.
-    logDebug("ERROR!!! cur (0x%llx) < memNode (0x%llx)\n",
-      (unsigned long long int) (uintptr_t) cur,
-      (unsigned long long int) (uintptr_t) memNode);
+    logError("cur (0x%lx) < memNode (0x%lx)\n",
+      (unsigned long int) (uintptr_t) cur,
+      (unsigned long int) (uintptr_t) memNode);
     HAL->power.enterMode(HAL_POWER_MODE_OFF);
   }
 #endif // NANO_OS_MEM_DEBUG
   memNode->next = cur;
-  logDebug("memNode->next = 0x%llx\n",
-    (unsigned long long int) (uintptr_t) memNode->next);
+  logDebug("memNode->next = 0x%lx\n",
+    (unsigned long int) (uintptr_t) memNode->next);
 
   memNode->prev = cur->prev;
-  logDebug("memNode->prev = 0x%llx\n",
-    (unsigned long long int) (uintptr_t) memNode->prev);
+  logDebug("memNode->prev = 0x%lx\n",
+    (unsigned long int) (uintptr_t) memNode->prev);
 
   size_t bytesFreeBefore = memoryManagerState->bytesFree;
   (void) bytesFreeBefore; // In case logDebug is compiled out.
   memoryManagerState->bytesFree += memNode->size;
-  logDebug("Increasing memoryManagerState->bytesFree from %lld to %lld\n",
-    (long long int) bytesFreeBefore,
-    (long long int) memoryManagerState->bytesFree);
+  logDebug("Increasing memoryManagerState->bytesFree from %ld to %ld\n",
+    (long int) bytesFreeBefore,
+    (long int) memoryManagerState->bytesFree);
 
   MemNode *next
     = (MemNode*) (((uint8_t*) memNode) + memNode->size + sizeof(MemNode));
 
   if (next != cur) {
     logDebug("next != cur\n");
-    logDebug("Setting cur->prev to 0x%llx\n",
-      (unsigned long long int) (uintptr_t) memNode);
+    logDebug("Setting cur->prev to 0x%lx\n",
+      (unsigned long int) (uintptr_t) memNode);
 
     cur->prev = memNode;
   } else {
@@ -205,9 +205,9 @@ void localFree(MemoryManagerState *memoryManagerState,
       && (((uintptr_t) cur->next) < ((uintptr_t) memNode))
     ) {
       // This should be impossible.
-      logDebug("ERROR!!! cur->next (0x%llx) < memNode (0x%llx)\n",
-        (unsigned long long int) (uintptr_t) cur->next,
-        (unsigned long long int) (uintptr_t) memNode);
+      logError("cur->next (0x%lx) < memNode (0x%lx)\n",
+        (unsigned long int) (uintptr_t) cur->next,
+        (unsigned long int) (uintptr_t) memNode);
       HAL->power.enterMode(HAL_POWER_MODE_OFF);
     }
 #endif // NANO_OS_MEM_DEBUG
@@ -222,9 +222,9 @@ void localFree(MemoryManagerState *memoryManagerState,
 
     bytesFreeBefore = memoryManagerState->bytesFree;
     memoryManagerState->bytesFree += sizeof(MemNode);
-    logDebug("Increasing memoryManagerState->bytesFree from %lld to %lld\n",
-      (long long int) bytesFreeBefore,
-      (long long int) memoryManagerState->bytesFree);
+    logDebug("Increasing memoryManagerState->bytesFree from %ld to %ld\n",
+      (long int) bytesFreeBefore,
+      (long int) memoryManagerState->bytesFree);
   }
 
   if (memNode->prev == NULL) {
@@ -237,10 +237,10 @@ void localFree(MemoryManagerState *memoryManagerState,
   logDebug("memNode->prev != NULL\n");
 
   MemNode *prev = memNode->prev;
-  logDebug("prev = 0x%llx\n", (unsigned long long int) (uintptr_t) prev);
+  logDebug("prev = 0x%lx\n", (unsigned long int) (uintptr_t) prev);
 
   next = (MemNode*) (((uint8_t*) prev) + prev->size + sizeof(MemNode));
-  logDebug("next = 0x%llx\n", (unsigned long long int) (uintptr_t) next);
+  logDebug("next = 0x%lx\n", (unsigned long int) (uintptr_t) next);
 
   if (next != memNode) {
     logDebug("next != memNode\n");
@@ -249,9 +249,9 @@ void localFree(MemoryManagerState *memoryManagerState,
 #ifdef NANO_OS_MEM_DEBUG
     if (((uintptr_t) memNode) < ((uintptr_t) prev)) {
       // This should be impossible.
-      logDebug("ERROR!!! memNode (0x%llx) < prev (0x%llx)\n",
-        (unsigned long long int) (uintptr_t) memNode,
-        (unsigned long long int) (uintptr_t) prev);
+      logError("memNode (0x%lx) < prev (0x%lx)\n",
+        (unsigned long int) (uintptr_t) memNode,
+        (unsigned long int) (uintptr_t) prev);
       HAL->power.enterMode(HAL_POWER_MODE_OFF);
     }
 #endif // NANO_OS_MEM_DEBUG
@@ -262,16 +262,16 @@ void localFree(MemoryManagerState *memoryManagerState,
     logDebug("Doing memory compaction\n");
 
     prev->size += memNode->size + sizeof(MemNode);
-    logDebug("prev->size = %lld\n", (long long int) prev->size);
+    logDebug("prev->size = %ld\n", (long int) prev->size);
 
 #ifdef NANO_OS_MEM_DEBUG
     if ((memNode->next != NULL)
       && (((uintptr_t) memNode->next) < ((uintptr_t) prev))
     ) {
       // This should be impossible.
-      logDebug("ERROR!!! memNode->next (0x%llx) < prev (0x%llx)\n",
-        (unsigned long long int) (uintptr_t) memNode->next,
-        (unsigned long long int) (uintptr_t) prev);
+      logError("memNode->next (0x%lx) < prev (0x%lx)\n",
+        (unsigned long int) (uintptr_t) memNode->next,
+        (unsigned long int) (uintptr_t) prev);
       HAL->power.enterMode(HAL_POWER_MODE_OFF);
     }
 #endif // NANO_OS_MEM_DEBUG
@@ -279,8 +279,8 @@ void localFree(MemoryManagerState *memoryManagerState,
     if (prev->next != NULL) {
       prev->next->prev = prev;
     }
-    logDebug("prev->next = 0x%llx\n",
-      (unsigned long long int) (uintptr_t) prev->next);
+    logDebug("prev->next = 0x%lx\n",
+      (unsigned long int) (uintptr_t) prev->next);
 
     if (memoryManagerState->lastFree == memNode) {
       logDebug("Setting memoryManagerState->lastFree to prev\n");
@@ -289,9 +289,9 @@ void localFree(MemoryManagerState *memoryManagerState,
 
     bytesFreeBefore = memoryManagerState->bytesFree;
     memoryManagerState->bytesFree += sizeof(MemNode);
-    logDebug("Increasing memoryManagerState->bytesFree from %lld to %lld\n",
-      (long long int) bytesFreeBefore,
-      (long long int) memoryManagerState->bytesFree);
+    logDebug("Increasing memoryManagerState->bytesFree from %ld to %ld\n",
+      (long int) bytesFreeBefore,
+      (long int) memoryManagerState->bytesFree);
   }
 
   return;
@@ -316,7 +316,7 @@ void localFreeProcessMemory(
   for (MemNode *cur = memoryManagerState->allocated; cur != NULL; ) {
     MemNode *next = cur->next;
     if (cur->owner == pid) {
-      logDebug("Freeing 0x%llx\n", (unsigned long long int) (uintptr_t) &cur[1]);
+      logDebug("Freeing 0x%lx\n", (unsigned long int) (uintptr_t) &cur[1]);
       localFree(memoryManagerState, &cur[1], callingPid);
     }
     cur = next;
@@ -357,9 +357,9 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
   } else if ((size + sizeof(MemNode)) > memoryManagerState->bytesFree) {
     // Sanity test failed.  We're being asked for more memory than is available
     // in the system.  Fail immediately.
-    logDebug("Error: Request to allocate %lld bytes, which is more than "
-      "available memory of %lld bytes\n",
-      (long long int) size, (long long int) memoryManagerState->bytesFree);
+    logError("Request to allocate %ld bytes, which is more than "
+      "available memory of %ld bytes\n",
+      (long int) size, (long int) memoryManagerState->bytesFree);
     return NULL;
   }
   
@@ -392,9 +392,9 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
 #ifdef NANO_OS_MEM_DEBUG
           if (((uintptr_t) next) < ((uintptr_t) next->prev)) {
             // This should be impossible.
-            logDebug("ERROR!!! next (0x%llx) < next->prev (0x%llx)\n",
-              (unsigned long long int) (uintptr_t) next,
-              (unsigned long long int) (uintptr_t) next->prev);
+            logError("next (0x%lx) < next->prev (0x%lx)\n",
+              (unsigned long int) (uintptr_t) next,
+              (unsigned long int) (uintptr_t) next->prev);
             HAL->power.enterMode(HAL_POWER_MODE_OFF);
           }
 #endif // NANO_OS_MEM_DEBUG
@@ -419,29 +419,29 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
   } else if (ptr != NULL) {
     // We're being asked to reallocate a pointer that was *NOT* allocated by
     // this allocator.  This is not valid and we cannot do this.  Fail.
-    logDebug("ERROR: Asked to reallocate a non-dynamic pointer\n");
+    logError("Asked to reallocate a non-dynamic pointer\n");
     return NULL;
   }
 
   // We're allocating new memory.  Search from the beginning.
-  logDebug("Allocating %lld bytes, searching from beginning\n",
-    (long long int) size);
+  logDebug("Allocating %ld bytes, searching from beginning\n",
+    (long int) size);
   MemNode *cur = NULL;
   for (cur = memoryManagerState->firstFree; cur != NULL; cur = cur->next) {
 #ifdef NANO_OS_MEM_DEBUG
     if (((uintptr_t) cur->prev) >= ((uintptr_t) cur)) {
-      logDebug("ERROR!!! cur->prev (0x%llx) >= cur (0x%llx)\n",
-        (unsigned long long int) (uintptr_t) cur->prev,
-        (unsigned long long int) (uintptr_t) cur);
+      logError("cur->prev (0x%lx) >= cur (0x%lx)\n",
+        (unsigned long int) (uintptr_t) cur->prev,
+        (unsigned long int) (uintptr_t) cur);
       HAL->power.enterMode(HAL_POWER_MODE_OFF);
     }
 
     if ((cur->next == NULL) && (cur == memoryManagerState->lastFree)) {
       // Do nothing.  This is just a guard against the next case.
     } else if (((uintptr_t) cur->next) <= ((uintptr_t) cur)) {
-      logDebug("ERROR!!! cur->next (0x%llx) <= cur (0x%llx)\n",
-        (unsigned long long int) (uintptr_t) cur->next,
-        (unsigned long long int) (uintptr_t) cur);
+      logError("cur->next (0x%lx) <= cur (0x%lx)\n",
+        (unsigned long int) (uintptr_t) cur->next,
+        (unsigned long int) (uintptr_t) cur);
       HAL->power.enterMode(HAL_POWER_MODE_OFF);
     }
 #endif // NANO_OS_MEM_DEBUG
@@ -450,9 +450,9 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
       break;
     }
 
-    logDebug("0x%llx only has %lld bytes available, need %lld\n",
-      (unsigned long long int) (uintptr_t) cur,
-      (long long int) cur->size, (long long int) size);
+    logDebug("0x%lx only has %ld bytes available, need %ld\n",
+      (unsigned long int) (uintptr_t) cur,
+      (long int) cur->size, (long int) size);
 #ifdef NANO_OS_MEM_DEBUG
     //// msleep(100);
 #endif // NANO_OS_MEM_DEBUG
@@ -461,13 +461,13 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
 
   if (cur != NULL) {
     // Memory allocation has succeeded.
-    logDebug("Found available memory node 0x%llx\n",
-      (unsigned long long int) (uintptr_t) cur);
-    logDebug("cur->size = %lld\n", (long long int) cur->size);
+    logDebug("Found available memory node 0x%lx\n",
+      (unsigned long int) (uintptr_t) cur);
+    logDebug("cur->size = %ld\n", (long int) cur->size);
 
     returnValue = &cur[1];
-    logDebug("returnValue = 0x%llx\n",
-      (unsigned long long int) (uintptr_t) returnValue);
+    logDebug("returnValue = 0x%lx\n",
+      (unsigned long int) (uintptr_t) returnValue);
 
     charPointer = (char*) returnValue;
     
@@ -488,19 +488,19 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
       logDebug("Not enough space in memoryManagerState->lastFree\n");
       return NULL;
     }
-    logDebug("next = 0x%llx\n", (unsigned long long int) (uintptr_t) next);
+    logDebug("next = 0x%lx\n", (unsigned long int) (uintptr_t) next);
 
     // Update the links on the next pointer.
     next->prev = cur->prev;
-    logDebug("next->prev = 0x%llx\n",
-      (unsigned long long int) (uintptr_t) next->prev);
+    logDebug("next->prev = 0x%lx\n",
+      (unsigned long int) (uintptr_t) next->prev);
     if (next->prev != NULL) {
 #ifdef NANO_OS_MEM_DEBUG
       if (((uintptr_t) next) < ((uintptr_t) next->prev)) {
         // This should be impossible.
-        logDebug("ERROR!!! next (0x%llx) < next->prev (0x%llx)\n",
-          (unsigned long long int) (uintptr_t) next,
-          (unsigned long long int) (uintptr_t) next->prev);
+        logError("next (0x%lx) < next->prev (0x%lx)\n",
+          (unsigned long int) (uintptr_t) next,
+          (unsigned long int) (uintptr_t) next->prev);
         HAL->power.enterMode(HAL_POWER_MODE_OFF);
       }
 #endif // NANO_OS_MEM_DEBUG
@@ -508,24 +508,24 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
     }
 
     if (next != cur->next) {
-      logDebug("next (0x%llx) != cur->next (0x%llx)\n",
-        (unsigned long long int) (uintptr_t) next,
-        (unsigned long long int) (uintptr_t) cur->next);
+      logDebug("next (0x%lx) != cur->next (0x%lx)\n",
+        (unsigned long int) (uintptr_t) next,
+        (unsigned long int) (uintptr_t) cur->next);
       logDebug("Updating metadata for next\n");
 #ifdef NANO_OS_MEM_DEBUG
       if ((cur->next != NULL)
         && (((uintptr_t) cur->next) < ((uintptr_t) next))
       ) {
         // This should be impossible.
-        logDebug("ERROR!!! cur->next (0x%llx) < next (0x%llx)\n",
-          (unsigned long long int) (uintptr_t) cur->next,
-          (unsigned long long int) (uintptr_t) next);
+        logError("cur->next (0x%lx) < next (0x%lx)\n",
+          (unsigned long int) (uintptr_t) cur->next,
+          (unsigned long int) (uintptr_t) next);
         HAL->power.enterMode(HAL_POWER_MODE_OFF);
       }
 #endif // NANO_OS_MEM_DEBUG
       next->next = cur->next;
-      logDebug("next->next = 0x%llx\n",
-        (unsigned long long int) (uintptr_t) next->next);
+      logDebug("next->next = 0x%lx\n",
+        (unsigned long int) (uintptr_t) next->next);
 
       if (next->next != NULL) {
         next->next->prev = next;
@@ -534,7 +534,7 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
       // Reduce the free space by the delta between how much we were requested
       // and how much used to be managed by this node.
       next->size = cur->size - size - sizeof(MemNode);
-      logDebug("next->size = %lld\n", (long long int) next->size);
+      logDebug("next->size = %ld\n", (long int) next->size);
     } else {
       logDebug("next == cur->next\n");
       logDebug("*NOT* updating metadata for next\n");
@@ -544,7 +544,7 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
     }
 
     cur->size = size;
-    logDebug("New cur->size = %lld\n", (long long int) cur->size);
+    logDebug("New cur->size = %ld\n", (long int) cur->size);
 
     // Update the first and last pointers.
     if (cur == memoryManagerState->firstFree) {
@@ -558,8 +558,7 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
 
     // Move cur to the allocated list.
     cur->next = memoryManagerState->allocated;
-    logDebug("cur->next = 0x%llx\n",
-      (unsigned long long int) (uintptr_t) cur->next);
+    logDebug("cur->next = 0x%lx\n", (unsigned long int) (uintptr_t) cur->next);
 
     if (cur->next != NULL) {
       logDebug("Setting cur->next->prev to cur\n");
@@ -578,15 +577,15 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
     size_t bytesFreeBefore = memoryManagerState->bytesFree;
     (void) bytesFreeBefore; // In case logDebug is compiled out.
     memoryManagerState->bytesFree -= size + sizeof(MemNode);
-    logDebug("Updating memoryManagerState->bytesFree from %lld to %lld\n",
-      (long long int) bytesFreeBefore,
-      (long long int) memoryManagerState->bytesFree);
+    logDebug("Updating memoryManagerState->bytesFree from %ld to %ld\n",
+      (long int) bytesFreeBefore,
+      (long int) memoryManagerState->bytesFree);
 
-    logDebug("Allocating %lld bytes at 0x%llx\n",
-      (long long int) cur->size,
-      (unsigned long long int) (uintptr_t) returnValue);
+    logDebug("Allocating %ld bytes at 0x%lx\n",
+      (long int) cur->size,
+      (unsigned long int) (uintptr_t) returnValue);
   } else {
-    logDebug("Error: Could not find memory node with enough space\n");
+    logError("Could not find memory node with enough space\n");
   }
 
   if ((returnValue != NULL) && (ptr != NULL)) {
@@ -657,9 +656,9 @@ int memoryManagerReallocCommandHandler(
       != SCHEDULER_STATE->schedulerPid
     )
   ) {
-    logError("Failed to allocate %lld bytes for process %lld\n",
-      (long long int) reallocMessage->size,
-      (long long int) processPid(processMessageFrom(incoming)));
+    logError("Failed to allocate %ld bytes for process %ld\n",
+      (long int) reallocMessage->size,
+      (long int) processPid(processMessageFrom(incoming)));
     memoryManagerDumpMemoryAllocationsCommandHandler(memoryManagerState, NULL);
     do {
       break;
@@ -842,15 +841,15 @@ int memoryManagerAssignMemoryCommandHandler(
       if (cur != NULL) {
         cur->owner = assignMemoryArgs->pid;
       } else {
-        logError("Attempt to assign unallocated memory 0x%llx\n",
-          (unsigned long long int) (uintptr_t) assignMemoryArgs->ptr);
+        logError("Attempt to assign unallocated memory 0x%lx\n",
+          (unsigned long int) (uintptr_t) assignMemoryArgs->ptr);
         returnValue = -1;
         memoryManagerDumpMemoryAllocationsCommandHandler(
           memoryManagerState, NULL);
       }
     } else {
-      logWarn("Attempt to assign non-dynamic memory 0x%llx\n",
-        (unsigned long long int) (uintptr_t) assignMemoryArgs->ptr);
+      logWarn("Attempt to assign non-dynamic memory 0x%lx\n",
+        (unsigned long int) (uintptr_t) assignMemoryArgs->ptr);
       returnValue = -1;
     }
   } else {
@@ -889,12 +888,12 @@ int memoryManagerDumpMemoryAllocationsCommandHandler(
     cur != NULL;
     cur = cur->next
   ) {
-    logInfo("  0x%llx: %lld bytes owned by %lld\n",
-      (unsigned long long int) (uintptr_t) &cur[1],
-      (long long int) cur->size, (long long int) cur->owner);
+    logInfo("  0x%lx: %ld bytes owned by %ld\n",
+      (unsigned long int) (uintptr_t) &cur[1],
+      (long int) cur->size, (long int) cur->owner);
     if (cur->prev != prev) {
-      logInfo("  - cur->prev = 0x%llx\n",
-        (unsigned long long int) (uintptr_t) &cur->prev[1]);
+      logInfo("  - cur->prev = 0x%lx\n",
+        (unsigned long int) (uintptr_t) &cur->prev[1]);
     }
     prev = cur;
   }
@@ -905,11 +904,11 @@ int memoryManagerDumpMemoryAllocationsCommandHandler(
     cur != NULL;
     cur = cur->next
   ) {
-    logInfo("  0x%llx: %lld bytes available\n",
-      (unsigned long long int) (uintptr_t) &cur[1], (long long int) cur->size);
+    logInfo("  0x%lx: %ld bytes available\n",
+      (unsigned long int) (uintptr_t) &cur[1], (long int) cur->size);
     if (cur->prev != prev) {
-      logInfo("  - cur->prev = 0x%llx\n",
-        (unsigned long long int) (uintptr_t) &cur->prev[1]);
+      logInfo("  - cur->prev = 0x%lx\n",
+        (unsigned long int) (uintptr_t) &cur->prev[1]);
     }
     prev = cur;
   }
@@ -958,8 +957,8 @@ void handleMemoryManagerMessages(MemoryManagerState *memoryManagerState) {
     if ((processMessageType(processMessage) & 0xffffffffffffff00)
       != MEMORY_MANAGER_COMMAND_SIGNATURE
     ) {
-      logError("received unknown signature 0x%llx from process %d\n",
-        (unsigned long long int)
+      logError("received unknown signature 0x%lx from process %d\n",
+        (unsigned long int)
           (processMessageType(processMessage) & 0xffffffffffffff00),
         processPid(processMessageFrom(processMessage)));
       // Don't attempt to process this message further.
@@ -970,8 +969,7 @@ void handleMemoryManagerMessages(MemoryManagerState *memoryManagerState) {
     MemoryManagerCommand messageType
       = (MemoryManagerCommand) (processMessageType(processMessage) & 0xff);
     if (messageType >= NUM_MEMORY_MANAGER_COMMANDS) {
-      logError("%s: Unrecognized message type %lld\n",
-        __func__, (long long int) messageType);
+      logError("Unrecognized message type %ld\n", (long int) messageType);
 
       processMessage = processMessageQueuePop();
       continue;
@@ -1011,8 +1009,7 @@ void initializeGlobals(MemoryManagerState *memoryManagerState,
   if (threadSetStackEnd(getRunningProcess()->mainThread, &stackEnd)
     != processSuccess
   ) {
-    logError("%s: ERROR: Could not set stack end for memory manager\n",
-      __func__);
+    logError("Could not set stack end for memory manager\n");
   }
   
   // The buffer needs to be machine-width aligned, so we need to use a pointer
@@ -1167,8 +1164,8 @@ void* runMemoryManager(void *args) {
   logDebug("Returned from allocateMemoryManagerStack.\n");
 
   //// printMemoryManagerState(&memoryManagerState);
-  logDebug("memoryManagerState.firstFree->size = %lld\n",
-    (long long int) memoryManagerState.firstFree->size);
+  logDebug("memoryManagerState.firstFree->size = %ld\n",
+    (long int) memoryManagerState.firstFree->size);
   printConsoleString(_usingPrefix);
   printConsoleULong(memoryManagerState.firstFree->size);
   printConsoleString(_dynamicMemorySuffix);

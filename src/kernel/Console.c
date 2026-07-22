@@ -80,29 +80,21 @@ int consolePrintMessage(
 
   if (portFound == false) {
     logWarn("Request to print message \"%s\" from non-owning "
-      "process %lld\n", message, (long long int) owner);
+      "process %ld\n", message, (long int) owner);
     returnValue = processError;
   }
 
   return returnValue;
 }
 
-/// @var _releaseErrorPrefix
+/// @var _releaseError
 ///
 /// @brief Message printed when an input message can't be released.
 ///
 /// @note KEEP_IN_FLASH is required here because .rodata is removed from the
 /// final binary on some targets.
-static const char _releaseErrorPrefix[] KEEP_IN_FLASH
-  = "ERROR: Could not release inputMessage from ";
-
-/// @var _newline
-///
-/// @brief A single newline character.
-///
-/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
-/// final binary on some targets.
-static const char _newline[] KEEP_IN_FLASH = "\n";
+static const char _releaseError[] KEEP_IN_FLASH
+  = "ERROR: Could not release inputMessage from consoleMessageCleanup\n";
 
 /// @fn void consoleMessageCleanup(ProcessMessage *inputMessage)
 ///
@@ -116,9 +108,7 @@ void consoleMessageCleanup(ProcessMessage *inputMessage) {
     if (processMessageRelease(inputMessage) != processSuccess) {
       // printSerialString is defined below.  Provide the prototype.
       int printSerialString(unsigned char uart, const char *string);
-      printSerialString(0, _releaseErrorPrefix);
-      printSerialString(0, __func__);
-      printSerialString(0, _newline);
+      printSerialString(0, _releaseError);
     }
   }
 }
@@ -649,8 +639,8 @@ void consoleGetEchoCommandHandler(
   if (portFound == true) {
     processMessageData(returnMessage) = (void*) ((uintptr_t) echoing);
   } else {
-    logWarn("Request to get echo from non-owning process %lld\n",
-      (long long int) owner);
+    logWarn("Request to get echo from non-owning process %ld\n",
+      (long int) owner);
   }
 
   processMessageSetDone(inputMessage);
@@ -688,8 +678,8 @@ void consoleSetEchoCommandHandler(
 
   consoleSetEchoArgs->returnValue = 0;
   if (portFound == false) {
-    logWarn("Request to set echo from non-owning process %lld\n",
-      (long long int) owner);
+    logWarn("Request to set echo from non-owning process %ld\n",
+      (long int) owner);
     consoleSetEchoArgs->returnValue = -1;
   }
 
@@ -726,7 +716,7 @@ void consoleWaitForInputCommandHandler(
 
   if (portFound == false) {
     logWarn("Request to wait for input from non-owning process "
-      "%lld\n", (long long int) owner);
+      "%ld\n", (long int) owner);
   }
 
   processMessageSetDone(inputMessage);
@@ -869,8 +859,8 @@ void handleConsoleMessages(ConsoleState *consoleState) {
     if ((processMessageType(message) & 0xffffffffffffff00)
       != CONSOLE_COMMAND_SIGNATURE
     ) {
-      logError("Received unknown signature 0x%llx from process %d\n",
-        (unsigned long long int)
+      logError("Received unknown signature 0x%lx from process %d\n",
+        (unsigned long int)
           (processMessageType(message) & 0xffffffffffffff00),
         processPid(processMessageFrom(message)));
       // Don't attempt to process this message further.
@@ -994,8 +984,7 @@ int readSerialByte(ConsolePort *consolePort) {
       // sequences is process specific.
       serialData = ASCII_ESCAPE;
     } else {
-      logDebug("Received unhandled character %lld\n",
-        (long long int) serialData);
+      logDebug("Received unhandled character %ld\n", (long int) serialData);
     }
   }
 

@@ -310,10 +310,10 @@ int filesystemDumpOpenFilesCommandHandler(
     nanoOsFile != NULL;
     nanoOsFile = nanoOsFile->next
   ) {
-    logInfo("0x%llx: \"%s\" owned by %lld\n",
-      (unsigned long long int) (uintptr_t) nanoOsFile,
+    logInfo("0x%lx: \"%s\" owned by %ld\n",
+      (unsigned long int) (uintptr_t) nanoOsFile,
       filesystemState->driverGetFilename(nanoOsFile->file),
-      (long long int) nanoOsFile->owner);
+      (long int) nanoOsFile->owner);
   }
 
   filesystemDumpOpenFilesArgs->returnValue = 0;
@@ -410,11 +410,11 @@ static void handleFilesystemMessages(FilesystemState *filesystemState) {
       if ((processMessageType(msg) & 0xffffffffffffff00)
         != FILESYSTEM_COMMAND_SIGNATURE
       ) {
-        logError("Error: %s received unknown signature 0x%llx "
-          "from process %lld\n", __func__,
-          (unsigned long long int) (processMessageType(msg)
+        logError("Received unknown signature 0x%lx "
+          "from process %ld\n",
+          (unsigned long int) (processMessageType(msg)
             & 0xffffffffffffff00),
-          (long long int) processPid(processMessageFrom(msg)));
+          (long int) processPid(processMessageFrom(msg)));
         msg = processMessageQueuePop();
         continue;
       }
@@ -422,13 +422,13 @@ static void handleFilesystemMessages(FilesystemState *filesystemState) {
       FilesystemCommandResponse type =
         (FilesystemCommandResponse) (processMessageType(msg) & 0xff);
       if (type >= NUM_FILESYSTEM_COMMANDS) {
-        logError("%s: ERROR! Received unknown filesystem message type "
-          "%lld from process %lld\n", __func__, (long long int) type,
-          (long long int) processPid(processMessageFrom(msg)));
+        logError("Received unknown filesystem message type "
+          "%ld from process %ld\n", (long int) type,
+          (long int) processPid(processMessageFrom(msg)));
       }
 
-      logDebug("Handling filesystem message type %lld\n",
-        (long long int) type);
+      logDebug("Handling filesystem message type %ld\n",
+        (long int) type);
       filesystemCommandHandlers[type](filesystemState, msg);
 
       msg = processMessageQueuePop();
@@ -516,9 +516,9 @@ int getPartitionInfo(FilesystemState *fs) {
     readBytes(&sectorsValue, &entry[PARTITION_SECTORS_OFFSET]);
     fs->endLba = fs->startLba + sectorsValue - 1;
 
-    logDebug("Filesystem type 0x%llx runs from block %lld to block %lld\n",
-      (unsigned long long int) type, (long long int) fs->startLba,
-      (long long int) fs->endLba);
+    logDebug("Filesystem type 0x%lx runs from block %ld to block %ld\n",
+      (unsigned long int) type, (long int) fs->startLba,
+      (long int) fs->endLba);
 
     logDebug("getPartitionInfo: Returing good status\n");
     return 0;
@@ -791,11 +791,11 @@ size_t filesystemFRead(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     .length = (uint32_t) (size * nmemb)
   };
 
-  logDebug("%s: Sending message to filesystem process to read %lld "
-    "elements %lld bytes in size from file 0x%llx into address 0x%llx\n",
-    __func__, (long long int) nmemb, (long long int) size,
-    (unsigned long long int) (uintptr_t) stream,
-    (unsigned long long int) (uintptr_t) ptr);
+  logDebug("Sending message to filesystem process to read %ld "
+    "elements %ld bytes in size from file 0x%lx into address 0x%lx\n",
+    (long int) nmemb, (long int) size,
+    (unsigned long int) (uintptr_t) stream,
+    (unsigned long int) (uintptr_t) ptr);
 
   ProcessMessage *processMessage = initSendProcessMessageToPid(
     SCHEDULER_STATE->rootFsPid,
@@ -807,11 +807,10 @@ size_t filesystemFRead(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   returnValue = (filesystemIoCommandArgs.length / size);
   processMessageRelease(processMessage);
 
-  logDebug("%s: Returning %lld from read of file 0x%llx "
-    "into address 0x%llx\n",
-    __func__, (long long int) returnValue,
-    (unsigned long long int) (uintptr_t) filesystemIoCommandArgs.file,
-    (unsigned long long int) (uintptr_t) filesystemIoCommandArgs.buffer);
+  logDebug("Returning %ld from read of file 0x%lx into address 0x%lx\n",
+    (long int) returnValue,
+    (unsigned long int) (uintptr_t) filesystemIoCommandArgs.file,
+    (unsigned long int) (uintptr_t) filesystemIoCommandArgs.buffer);
   return returnValue;
 }
 
