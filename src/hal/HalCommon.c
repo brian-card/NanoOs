@@ -522,7 +522,7 @@ static const char _filesystemName[] KEEP_IN_FLASH = "filesystem";
 /// @brief Common initialization for the root filesystem process.
 ///
 /// @return Returns 0 on success, -errno on failure.
-int32_t halCommonInitRootFilesystem() {
+int32_t halCommonInitRootFilesystem(void) {
   if (SCHEDULER_STATE == NULL) {
     return -EBUSY;
   }
@@ -558,7 +558,8 @@ int32_t halCommonInitRootFilesystem() {
   processDescriptor->name = _filesystemName;
   processDescriptor->userId = ROOT_USER_ID;
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
-  processDescriptor->restartFunction = restartFilesystem;
+  processDescriptor->restartFunction
+    = halCommonHal.platform.restartRootFilesystem;
   // DO NOT resume the process yet.  Let the scheduler take care of that.
 
   SCHEDULER_STATE->firstUserPid = SCHEDULER_STATE->rootFsPid + 1;
@@ -580,15 +581,16 @@ int32_t halCommonInitRootFilesystem() {
   return 0;
 }
 
-/// @fn int32_t restartFilesystem(ProcessDescriptor *processDescriptor)
+/// @fn int32_t restartBuiltinFilesystem(ProcessDescriptor *processDescriptor)
 ///
-/// @brief Restart the filesystem process using the existing root block device.
+/// @brief Restart the filesystem process built into the OS image using the
+/// existing root block device.
 ///
 /// @param processDescriptor A pointer to the ProcessDescriptor of the
 ///   filesystem process to restart.
 ///
 /// @return Returns 0 on success, -errno on failure.
-int32_t restartFilesystem(ProcessDescriptor *processDescriptor) {
+int32_t restartBuiltinFilesystem(ProcessDescriptor *processDescriptor) {
   BlockDevice *rootBlockDevice = NULL;
   HAL->blockDevice.get(0, &rootBlockDevice);
   if (rootBlockDevice == NULL) {
@@ -610,17 +612,6 @@ int32_t restartFilesystem(ProcessDescriptor *processDescriptor) {
   fs.driverGetFilename = fat32GetFilename;
   fs.driverFeof = fat32Feof;
 
-  //// BlockOverlayArgs blockOverlayArgs = {
-  ////   .blockDevice = rootBlockDevice,
-  ////   .startBlock = 1,
-  ////   .args = &fs,
-  //// };
-  //// if (processCreate(processDescriptor, runBlockOverlay, &blockOverlayArgs)
-  ////   != processSuccess
-  //// ) {
-  ////   printString("Could not restart filesystem process.\n");
-  ////   return -ENOMEM;
-  //// }
   if (processCreate(processDescriptor, runFilesystem, &fs)
     != processSuccess
   ) {
@@ -632,7 +623,55 @@ int32_t restartFilesystem(ProcessDescriptor *processDescriptor) {
   processDescriptor->name = _filesystemName;
   processDescriptor->userId = ROOT_USER_ID;
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
-  processDescriptor->restartFunction = restartFilesystem;
+  processDescriptor->restartFunction = restartBuiltinFilesystem;
+  processDescriptor->callOverlayFunction = callOverlayFunctionFromBlockDevice;
+  processQueuePush(processDescriptor->readyQueue, processDescriptor);
+  // Let the filesystem process initialize before we return.
+  while (fs.driverState == NULL) {
+    SCHEDULER_STATE->runSchedulerQueues(PRIVILEGE_LEVEL_SUPERVISOR);
+  }
+
+  return 0;
+}
+
+/// @fn int32_t restartOverlayFilesystem(ProcessDescriptor *processDescriptor)
+///
+/// @brief Restart the filesystem process run as a regular overlay using the
+/// existing root block device.
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor of the
+///   filesystem process to restart.
+///
+/// @return Returns 0 on success, -errno on failure.
+int32_t restartOverlayFilesystem(ProcessDescriptor *processDescriptor) {
+  BlockDevice *rootBlockDevice = NULL;
+  HAL->blockDevice.get(0, &rootBlockDevice);
+  if (rootBlockDevice == NULL) {
+    return -ENODEV;
+  }
+
+  FilesystemState fs;
+  memset(&fs, 0, sizeof(fs));
+  fs.blockDevice = rootBlockDevice;
+  fs.blockSize = fs.blockDevice->blockSize;
+
+  BlockOverlayArgs blockOverlayArgs = {
+    .blockDevice = rootBlockDevice,
+    .startBlock = 1,
+    .args = &fs,
+  };
+  if (processCreate(processDescriptor, runBlockOverlay, &blockOverlayArgs)
+    != processSuccess
+  ) {
+    printString("Could not restart filesystem process.\n");
+    return -ENOMEM;
+  }
+
+  threadSetContext(processDescriptor->mainThread, processDescriptor);
+  processDescriptor->name = _filesystemName;
+  processDescriptor->userId = ROOT_USER_ID;
+  processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
+  processDescriptor->restartFunction = restartOverlayFilesystem;
   processDescriptor->callOverlayFunction = callOverlayFunctionFromBlockDevice;
   processQueuePush(processDescriptor->readyQueue, processDescriptor);
   // Let the filesystem process initialize before we return.

@@ -81,7 +81,7 @@ void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
 /// @def MEMORY_MANAGER_STACK_SIZE
 ///
 /// @brief The size, in bytes, of the memory manager process's stack.
-#define MEMORY_MANAGER_STACK_SIZE 256
+#define MEMORY_MANAGER_STACK_SIZE 448
 
 /// @def OVERLAY_ADDRESS
 ///
@@ -1404,6 +1404,7 @@ int32_t halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
 
   halCommonHal.platform.callFileOverlay = callOverlayFunctionFromFile;
   halCommonHal.platform.execCommand = execOverlayCommand;
+  halCommonHal.platform.restartRootFilesystem = restartBuiltinFilesystem;
   halCommonHal.platform.initRootStorage = halCommonInitRootFilesystem,
   halCommonHal.platform.restartShell = restartOverlayShell;
 
