@@ -266,6 +266,16 @@ typedef struct HalPlatform {
   /// @return Returns 0 on success, -errno on failure.
   int32_t (*initRootStorage)(void);
 
+  /// @fn int32_t restartRootFilesystem(ProcessDescriptor *processDescriptor)
+  ///
+  /// @brief Start or restart the root filesystem process.
+  ///
+  /// @param processDescriptor A pointer to the ProcessDescriptor that holds the
+  ///   state for the process.
+  ///
+  /// @return Returns 0 on success, -errno on failure.
+  int32_t (*restartRootFilesystem)(ProcessDescriptor *processDescriptor);
+
   /// @fn int32_t (*restartShell)(ProcessDescriptor *processDescriptor)
   ///
   /// @brief Platform-specific function that will be used to restart the shell
