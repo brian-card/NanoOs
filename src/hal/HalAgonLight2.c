@@ -603,9 +603,13 @@ int32_t halAgonLight2Init(void) {
 
   halCommonHal.platform.callFileOverlay = callOverlayFunctionFromFile;
   halCommonHal.platform.execCommand = execOverlayCommand;
-  halCommonHal.platform.restartRootFilesystem = restartBuiltinFilesystem;
+  halCommonHal.platform.restartRootFilesystem = restartContiguousFilesystem;
   halCommonHal.platform.initRootStorage = halCommonInitRootFilesystem,
   halCommonHal.platform.restartShell = restartOverlayShell;
+
+  halCommonHal.memory.contiguousFilesystem
+    = (NanoOsOverlayMap*) FILESYSTEM_DRIVER_ADDRESS;
+  halCommonHal.memory.contiguousFilesystemSize = FILESYSTEM_DRIVER_SIZE;
 
   halCommonHal.memory.overlayMap  = (NanoOsOverlayMap*) OVERLAY_ADDRESS;
   halCommonHal.memory.overlaySize = OVERLAY_SIZE;
