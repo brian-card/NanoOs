@@ -78,6 +78,7 @@ BlockDevice* halCommonInitRootSdSpiStorage(SdCardSpiArgs *sdCardSpiArgs);
 int32_t halCommonInitRootFilesystem(void);
 int32_t restartBuiltinFilesystem(ProcessDescriptor *processDescriptor);
 int32_t restartOverlayFilesystem(ProcessDescriptor *processDescriptor);
+int32_t restartContiguousFilesystem(ProcessDescriptor *processDescriptor);
 int32_t halCommonInit(void);
 
 #ifdef __cplusplus

@@ -682,6 +682,78 @@ int32_t restartOverlayFilesystem(ProcessDescriptor *processDescriptor) {
   return 0;
 }
 
+/// @fn int32_t restartContiguousFilesystem(
+///   ProcessDescriptor *processDescriptor)
+///
+/// @brief Restart the filesystem process run as a dedicated contiguous overlay
+/// process using the existing root block device.
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor of the
+///   filesystem process to restart.
+///
+/// @return Returns 0 on success, -errno on failure.
+int32_t restartContiguousFilesystem(ProcessDescriptor *processDescriptor) {
+  BlockDevice *rootBlockDevice = NULL;
+  HAL->blockDevice.get(0, &rootBlockDevice);
+  if (rootBlockDevice == NULL) {
+    return -ENODEV;
+  }
+
+  FilesystemState fs;
+  memset(&fs, 0, sizeof(fs));
+  fs.blockDevice = rootBlockDevice;
+  fs.blockSize = fs.blockDevice->blockSize;
+
+  // Read the full binary into contiguous memory.
+  rootBlockDevice->readBlocks(
+    rootBlockDevice->context,
+    /* startBlock= */ 1,
+    /* numBlocks= */ HAL->memory.contiguousFilesystemSize
+      / (size_t) rootBlockDevice->blockSize,
+    rootBlockDevice->blockSize,
+    (uint8_t*) HAL->memory.contiguousFilesystem);
+  OverlayFunction filesystemMain = NULL;
+  uint16_t cur = 0;
+  int comp = 0;
+  NanoOsOverlayMap *overlayMap = HAL->memory.contiguousFilesystem;
+  for (uint16_t ii = 0, jj = overlayMap->numExports - 1; ii <= jj;) {
+    cur = (ii + jj) >> 1;
+    comp = strcmp(overlayMap->exports[cur].name, "main");
+    if (comp == 0) {
+      filesystemMain = overlayMap->exports[cur].fn;
+      break;
+    } else if (comp < 0) { // cur < overlayFunctionName
+      // Move the left bound to one greater than cur.
+      ii = cur + 1;
+    } else if (cur > 0) { // comp > 0, overlayFunctionName < cur
+      // Move the right bound to one less than cur.
+      jj = cur - 1;
+    } else {
+      // We're out of indexes to search.  overlayFunctionName not found.
+      break;
+    }
+  }
+
+  if (processCreate(processDescriptor, filesystemMain, &fs) != processSuccess) {
+    printString("Could not restart filesystem process.\n");
+    return -ENOMEM;
+  }
+
+  threadSetContext(processDescriptor->mainThread, processDescriptor);
+  processDescriptor->name = _filesystemName;
+  processDescriptor->userId = ROOT_USER_ID;
+  processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
+  processDescriptor->restartFunction = restartContiguousFilesystem;
+  processDescriptor->callOverlayFunction = NULL;
+  processQueuePush(processDescriptor->readyQueue, processDescriptor);
+  // Let the filesystem process initialize before we return.
+  while (fs.driverState == NULL) {
+    SCHEDULER_STATE->runSchedulerQueues(PRIVILEGE_LEVEL_SUPERVISOR);
+  }
+
+  return 0;
+}
+
 /// @fn int32_t halCommonInit(void)
 ///
 /// @brief Initialization function common to multiple HAL implementations.
