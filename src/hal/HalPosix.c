@@ -106,7 +106,8 @@ int32_t posixCancelTimer(va_list args);
 int32_t posixCancelAndGetTimer(va_list args);
 
 int32_t halPosixImplInit(jmp_buf resetBuffer,
-  NanoOsOverlayMap **overlayMap, size_t *overlaySize, StaticLogs **staticLogs);
+  NanoOsOverlayMap **overlayMap, size_t *overlaySize, StaticLogs **staticLogs,
+  NanoOsOverlayMap **contiguousFilesystem, size_t *contiguousFilesystemSize);
 
 // ---------------------------------------------------------------------------
 // Per-platform online bitmask arrays — pointers are installed on halCommon*
@@ -350,25 +351,24 @@ int32_t halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
 #else
   halCommonHal.memory.stringsPresent = true;
 #endif // NANO_OS_STRINGS_STRIPPED
-//// #if LOG_THRESHOLD < LOG_LEVEL_DETAIL
-  halCommonHal.memory.staticLogs     = NULL;
-//// #else // LOG_THRESHOLD >= LOG_LEVEL_DETAIL
-////   halCommonHal.memory.staticLogs     = staticLogs;
-////   memset(HAL->memory.staticLogs, 0, sizeof(*HAL->memory.staticLogs));
-//// #endif // LOG_THRESHOLD < LOG_LEVEL_DETAIL
 
   // Perform POSIX-specific hardware setup and retrieve the overlay mapping.
-  NanoOsOverlayMap *overlayMap = NULL;
-  StaticLogs *staticLogs = NULL;
-  size_t overlaySize = 0;
   int32_t result
-    = halPosixImplInit(resetBuffer, &overlayMap, &overlaySize, &staticLogs);
+    = halPosixImplInit(resetBuffer,
+      &halCommonHal.memory.overlayMap,
+      &halCommonHal.memory.overlaySize,
+      &halCommonHal.memory.staticLogs,
+      &halCommonHal.memory.contiguousFilesystem,
+      &halCommonHal.memory.contiguousFilesystemSize);
   if (result != 0) {
+    halCommonHal.memory.overlayMap               = NULL;
+    halCommonHal.memory.overlaySize              = 0;
+    halCommonHal.memory.contiguousFilesystem     = NULL;
+    halCommonHal.memory.contiguousFilesystemSize = 0;
+    halCommonHal.memory.staticLogs               = NULL;
     return result;
   }
-
-  halCommonHal.memory.overlayMap  = overlayMap;
-  halCommonHal.memory.overlaySize = overlaySize;
+  memset(halCommonHal.memory.staticLogs, 0, sizeof(StaticLogs));
 
   NANO_OS_API = &nanoOsApi;
 

@@ -980,7 +980,8 @@ static const char _tcgetattrSymbolName[] KEEP_IN_FLASH = "tcgetattr";
 static const char _tcsetattrSymbolName[] KEEP_IN_FLASH = "tcsetattr";
 
 int32_t halPosixImplInit(jmp_buf resetBuffer,
-  NanoOsOverlayMap **overlayMap, size_t *overlaySize, StaticLogs **staticLogs
+  NanoOsOverlayMap **overlayMap, size_t *overlaySize, StaticLogs **staticLogs,
+  NanoOsOverlayMap **contiguousFilesystem, size_t *contiguousFilesystemSize
 ) {
   // Set the handler for sigint so that it's passed to the running process in
   // NanoOs instead of the simulator.
@@ -1044,6 +1045,8 @@ int32_t halPosixImplInit(jmp_buf resetBuffer,
     return -1;
   }
   _contiguousOverlayMap = mappedContiguousOverlay;
+  *contiguousFilesystem = _contiguousOverlayMap;
+  *contiguousFilesystemSize = CONTIGUOUS_OVERLAY_SIZE;
 
   fprintf(stderr, _contiguousOverlayMapFormat, _contiguousOverlayMap);
   fprintf(stderr, _newline);
