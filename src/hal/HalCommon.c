@@ -696,6 +696,8 @@ int32_t restartContiguousFilesystem(ProcessDescriptor *processDescriptor) {
   BlockDevice *rootBlockDevice = NULL;
   HAL->blockDevice.get(0, &rootBlockDevice);
   if (rootBlockDevice == NULL) {
+    printString("Could not get root block device for filesystem\n");
+    processDescriptor->restartFunction = NULL;
     return -ENODEV;
   }
 
@@ -705,37 +707,30 @@ int32_t restartContiguousFilesystem(ProcessDescriptor *processDescriptor) {
   fs.blockSize = fs.blockDevice->blockSize;
 
   // Read the full binary into contiguous memory.
-  rootBlockDevice->readBlocks(
+  rootBlockDevice->schedReadBlocks(
     rootBlockDevice->context,
     /* startBlock= */ 1,
     /* numBlocks= */ HAL->memory.contiguousFilesystemSize
       / (size_t) rootBlockDevice->blockSize,
     rootBlockDevice->blockSize,
     (uint8_t*) HAL->memory.contiguousFilesystem);
+
   OverlayFunction filesystemMain = NULL;
-  uint16_t cur = 0;
-  int comp = 0;
   NanoOsOverlayMap *overlayMap = HAL->memory.contiguousFilesystem;
-  for (uint16_t ii = 0, jj = overlayMap->numExports - 1; ii <= jj;) {
-    cur = (ii + jj) >> 1;
-    comp = strcmp(overlayMap->exports[cur].name, "main");
-    if (comp == 0) {
-      filesystemMain = overlayMap->exports[cur].fn;
-      break;
-    } else if (comp < 0) { // cur < overlayFunctionName
-      // Move the left bound to one greater than cur.
-      ii = cur + 1;
-    } else if (cur > 0) { // comp > 0, overlayFunctionName < cur
-      // Move the right bound to one less than cur.
-      jj = cur - 1;
-    } else {
-      // We're out of indexes to search.  overlayFunctionName not found.
+  for (uint16_t ii = 0; ii < overlayMap->numExports; ii++) {
+    if (strcmp(overlayMap->exports[ii].name, "main") == 0) {
+      filesystemMain = overlayMap->exports[ii].fn;
       break;
     }
   }
+  if (filesystemMain == NULL) {
+    printString("Could not find main function for filesystem process\n");
+    processDescriptor->restartFunction = NULL;
+    return -ENOTSUP;
+  }
 
   if (processCreate(processDescriptor, filesystemMain, &fs) != processSuccess) {
-    printString("Could not restart filesystem process.\n");
+    printString("Could not restart filesystem process\n");
     return -ENOMEM;
   }
 
@@ -747,6 +742,7 @@ int32_t restartContiguousFilesystem(ProcessDescriptor *processDescriptor) {
   processDescriptor->callOverlayFunction = NULL;
   processQueuePush(processDescriptor->readyQueue, processDescriptor);
   // Let the filesystem process initialize before we return.
+  printString("Bringing up contiguous filesystem\n");
   while (fs.driverState == NULL) {
     SCHEDULER_STATE->runSchedulerQueues(PRIVILEGE_LEVEL_SUPERVISOR);
   }
