@@ -707,16 +707,17 @@ int32_t restartContiguousFilesystem(ProcessDescriptor *processDescriptor) {
   fs.blockSize = fs.blockDevice->blockSize;
 
   // Read the full binary into contiguous memory.
+  NanoOsOverlayMap *overlayMap = HAL->memory.contiguousFilesystem;
   rootBlockDevice->schedReadBlocks(
     rootBlockDevice->context,
     /* startBlock= */ 1,
     /* numBlocks= */ HAL->memory.contiguousFilesystemSize
       / (size_t) rootBlockDevice->blockSize,
     rootBlockDevice->blockSize,
-    (uint8_t*) HAL->memory.contiguousFilesystem);
+    (uint8_t*) overlayMap);
+  overlayMap->header.osApi = NANO_OS_API;
 
   OverlayFunction filesystemMain = NULL;
-  NanoOsOverlayMap *overlayMap = HAL->memory.contiguousFilesystem;
   for (uint16_t ii = 0; ii < overlayMap->numExports; ii++) {
     if (strcmp(overlayMap->exports[ii].name, "main") == 0) {
       filesystemMain = overlayMap->exports[ii].fn;
