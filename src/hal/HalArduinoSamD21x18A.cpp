@@ -1402,46 +1402,46 @@ int32_t halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
   _spiSckDio           = args->spiSckDio;
   _sdCardPinChipSelect = args->sdCardPinChipSelect;
 
-  halCommonHal.platform.callFileOverlay = callOverlayFunctionFromFile;
-  halCommonHal.platform.execCommand = execOverlayCommand;
-  halCommonHal.platform.restartRootFilesystem = restartBuiltinFilesystem;
-  halCommonHal.platform.initRootStorage = halCommonInitRootFilesystem,
-  halCommonHal.platform.restartShell = restartOverlayShell;
+  halImpl.platform.callFileOverlay = callOverlayFunctionFromFile;
+  halImpl.platform.execCommand = execOverlayCommand;
+  halImpl.platform.restartRootFilesystem = restartBuiltinFilesystem;
+  halImpl.platform.initRootStorage = halCommonInitRootFilesystem,
+  halImpl.platform.restartShell = restartOverlayShell;
 
   halArduinoSamD21x18AUartsOnline = args->uartsOnline;
   halArduinoSamD21x18ADiosOnline  = args->diosOnline;
 
-  halCommonHal.memory.overlayMap  = (NanoOsOverlayMap*) OVERLAY_ADDRESS;
-  halCommonHal.memory.overlaySize = OVERLAY_SIZE;
+  halImpl.memory.overlayMap  = (NanoOsOverlayMap*) OVERLAY_ADDRESS;
+  halImpl.memory.overlaySize = OVERLAY_SIZE;
 
-  halCommonHal.memory.logBuffer      = _logBuffer;
-  halCommonHal.memory.logBufferSize  = sizeof(_logBuffer);
+  halImpl.memory.logBuffer      = _logBuffer;
+  halImpl.memory.logBufferSize  = sizeof(_logBuffer);
 #ifdef NANO_OS_STRINGS_STRIPPED
-  halCommonHal.memory.stringsPresent = false;
+  halImpl.memory.stringsPresent = false;
 #else
-  halCommonHal.memory.stringsPresent = true;
+  halImpl.memory.stringsPresent = true;
 #endif // NANO_OS_STRINGS_STRIPPED
 //// #if LOG_THRESHOLD < LOG_LEVEL_DETAIL
-  halCommonHal.memory.staticLogs     = NULL;
+  halImpl.memory.staticLogs     = NULL;
 //// #else // LOG_THRESHOLD >= LOG_LEVEL_DETAIL
-////   halCommonHal.memory.staticLogs     = (StaticLogs*) STATIC_LOGS_ADDRESS;
+////   halImpl.memory.staticLogs     = (StaticLogs*) STATIC_LOGS_ADDRESS;
 ////   memset(HAL->memory.staticLogs, 0, sizeof(*HAL->memory.staticLogs));
 //// #endif // LOG_THRESHOLD < LOG_LEVEL_DETAIL
 
-  halCommonHal.uart.numSupported = args->numUartsSupported;
-  halCommonHal.uart.online       = args->uartsOnline;
+  halImpl.uart.numSupported = args->numUartsSupported;
+  halImpl.uart.online       = args->uartsOnline;
 
-  halCommonHal.dio.numSupported = args->numDiosSupported;
-  halCommonHal.dio.online       = args->diosOnline;
+  halImpl.dio.numSupported = args->numDiosSupported;
+  halImpl.dio.online       = args->diosOnline;
 
-  halCommonHal.spi.numSupported = MAX_SPI_DEVICES;
-  halCommonHal.spi.online       = halArduinoSamD21x18ASpisOnline;
+  halImpl.spi.numSupported = MAX_SPI_DEVICES;
+  halImpl.spi.online       = halArduinoSamD21x18ASpisOnline;
 
-  halCommonHal.timer.numSupported = _numTimers;
-  halCommonHal.timer.online       = halArduinoSamD21x18ATimersOnline;
+  halImpl.timer.numSupported = _numTimers;
+  halImpl.timer.online       = halArduinoSamD21x18ATimersOnline;
 
-  halCommonHal.blockDevice.numSupported = _numBlockDevices;
-  halCommonHal.blockDevice.online       = halArduinoSamD21x18ABlockDevicesOnline;
+  halImpl.blockDevice.numSupported = _numBlockDevices;
+  halImpl.blockDevice.online       = halArduinoSamD21x18ABlockDevicesOnline;
 
   extern char __bss_end__;
   if (((uintptr_t) &__bss_end__)

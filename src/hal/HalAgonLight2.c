@@ -601,47 +601,47 @@ int32_t halAgonLight2Init(void) {
   halFunctions[HAL_TIMER]        = agonLight2TimerFunctions;
   halFunctions[HAL_BLOCK_DEVICE] = agonLight2BlockDeviceFunctions;
 
-  halCommonHal.platform.callFileOverlay = callOverlayFunctionFromFile;
-  halCommonHal.platform.execCommand = execOverlayCommand;
-  halCommonHal.platform.restartRootFilesystem = restartContiguousFilesystem;
-  halCommonHal.platform.initRootStorage = halCommonInitRootFilesystem,
-  halCommonHal.platform.restartShell = restartOverlayShell;
+  halImpl.platform.callFileOverlay = callOverlayFunctionFromFile;
+  halImpl.platform.execCommand = execOverlayCommand;
+  halImpl.platform.restartRootFilesystem = restartContiguousFilesystem;
+  halImpl.platform.initRootStorage = halCommonInitRootFilesystem,
+  halImpl.platform.restartShell = restartOverlayShell;
 
-  halCommonHal.memory.contiguousFilesystem
+  halImpl.memory.contiguousFilesystem
     = (NanoOsOverlayMap*) FILESYSTEM_DRIVER_ADDRESS;
-  halCommonHal.memory.contiguousFilesystemSize = FILESYSTEM_DRIVER_SIZE;
+  halImpl.memory.contiguousFilesystemSize = FILESYSTEM_DRIVER_SIZE;
 
-  halCommonHal.memory.overlayMap  = (NanoOsOverlayMap*) OVERLAY_ADDRESS;
-  halCommonHal.memory.overlaySize = OVERLAY_SIZE;
+  halImpl.memory.overlayMap  = (NanoOsOverlayMap*) OVERLAY_ADDRESS;
+  halImpl.memory.overlaySize = OVERLAY_SIZE;
 
-  halCommonHal.memory.logBuffer      = _logBuffer;
-  halCommonHal.memory.logBufferSize  = sizeof(_logBuffer);
+  halImpl.memory.logBuffer      = _logBuffer;
+  halImpl.memory.logBufferSize  = sizeof(_logBuffer);
 #ifdef NANO_OS_STRINGS_STRIPPED
-  halCommonHal.memory.stringsPresent = false;
+  halImpl.memory.stringsPresent = false;
 #else
-  halCommonHal.memory.stringsPresent = true;
+  halImpl.memory.stringsPresent = true;
 #endif // NANO_OS_STRINGS_STRIPPED
 //// #if LOG_THRESHOLD < LOG_LEVEL_DETAIL
-  halCommonHal.memory.staticLogs     = NULL;
+  halImpl.memory.staticLogs     = NULL;
 //// #else // LOG_THRESHOLD >= LOG_LEVEL_DETAIL
-////   halCommonHal.memory.staticLogs     = (StaticLogs*) STATIC_LOGS_ADDRESS;
+////   halImpl.memory.staticLogs     = (StaticLogs*) STATIC_LOGS_ADDRESS;
 ////   memset(HAL->memory.staticLogs, 0, sizeof(*HAL->memory.staticLogs));
 //// #endif // LOG_THRESHOLD < LOG_LEVEL_DETAIL
 
-  halCommonHal.uart.numSupported        = 0;
-  halCommonHal.uart.online              = agonLight2UartsOnline;
+  halImpl.uart.numSupported        = 0;
+  halImpl.uart.online              = agonLight2UartsOnline;
 
-  halCommonHal.dio.numSupported         = 0;
-  halCommonHal.dio.online               = agonLight2DiosOnline;
+  halImpl.dio.numSupported         = 0;
+  halImpl.dio.online               = agonLight2DiosOnline;
 
-  halCommonHal.spi.numSupported         = 0;
-  halCommonHal.spi.online               = agonLight2SpisOnline;
+  halImpl.spi.numSupported         = 0;
+  halImpl.spi.online               = agonLight2SpisOnline;
 
-  halCommonHal.timer.numSupported       = 0;
-  halCommonHal.timer.online             = agonLight2TimersOnline;
+  halImpl.timer.numSupported       = 0;
+  halImpl.timer.online             = agonLight2TimersOnline;
 
-  halCommonHal.blockDevice.numSupported = _numBlockDevices;
-  halCommonHal.blockDevice.online       = agonLight2BlockDevicesOnline;
+  halImpl.blockDevice.numSupported = _numBlockDevices;
+  halImpl.blockDevice.online       = agonLight2BlockDevicesOnline;
 
   NANO_OS_API = &nanoOsApi;
 

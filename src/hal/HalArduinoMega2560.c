@@ -177,8 +177,8 @@ int32_t halArduinoInit(void) {
     .spiSckDio         = SPI_SCK_DIO,
   };
 
-  halCommonHal.platform.restartRootFilesystem = restartBuiltinFilesystem;
-  halCommonHal.platform.initRootStorage = halCommonInitRootFilesystem;
+  halImpl.platform.restartRootFilesystem = restartBuiltinFilesystem;
+  halImpl.platform.initRootStorage = halCommonInitRootFilesystem;
 
   return halArduinoAvrInit(&args);
 }

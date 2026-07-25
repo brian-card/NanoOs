@@ -678,8 +678,8 @@ int32_t halArduinoAvrInit(HalArduinoAvrInitArgs *args) {
   halFunctions[HAL_POWER]        = arduinoAvrPowerFunctions;
   halFunctions[HAL_BLOCK_DEVICE] = arduinoAvrBlockDeviceFunctions;
 
-  halCommonHal.platform.execCommand = execBuiltinCommand;
-  halCommonHal.platform.restartShell = restartBuiltinShell;
+  halImpl.platform.execCommand = execBuiltinCommand;
+  halImpl.platform.restartShell = restartBuiltinShell;
 
   // Set per-platform data members from the init args.
   _dioStart   = args->dioStart;
@@ -688,25 +688,25 @@ int32_t halArduinoAvrInit(HalArduinoAvrInitArgs *args) {
   _spiCipoDio = args->spiCipoDio;
   _spiSckDio  = args->spiSckDio;
 
-  halCommonHal.uart.numSupported = args->numUartsSupported;
-  halCommonHal.uart.online       = args->uartsOnline;
+  halImpl.uart.numSupported = args->numUartsSupported;
+  halImpl.uart.online       = args->uartsOnline;
 
-  halCommonHal.dio.numSupported = args->numDiosSupported;
-  halCommonHal.dio.online       = args->diosOnline;
+  halImpl.dio.numSupported = args->numDiosSupported;
+  halImpl.dio.online       = args->diosOnline;
 
-  halCommonHal.spi.numSupported = MAX_SPI_DEVICES;
-  halCommonHal.spi.online       = halArduinoAvrSpisOnline;
+  halImpl.spi.numSupported = MAX_SPI_DEVICES;
+  halImpl.spi.online       = halArduinoAvrSpisOnline;
 
-  halCommonHal.timer.numSupported = 0;
-  halCommonHal.timer.online       = NULL;
+  halImpl.timer.numSupported = 0;
+  halImpl.timer.online       = NULL;
 
-  halCommonHal.blockDevice.numSupported = _numBlockDevices;
-  halCommonHal.blockDevice.online       = arduinoAvrBlockDevicesOnline;
+  halImpl.blockDevice.numSupported = _numBlockDevices;
+  halImpl.blockDevice.online       = arduinoAvrBlockDevicesOnline;
 
-  halCommonHal.memory.stringsPresent = true;
-  halCommonHal.memory.logBuffer      = _logBuffer;
-  halCommonHal.memory.logBufferSize  = sizeof(_logBuffer);
-  halCommonHal.memory.staticLogs     = NULL;
+  halImpl.memory.stringsPresent = true;
+  halImpl.memory.logBuffer      = _logBuffer;
+  halImpl.memory.logBufferSize  = sizeof(_logBuffer);
+  halImpl.memory.staticLogs     = NULL;
 
   return halCommonInit();
 }

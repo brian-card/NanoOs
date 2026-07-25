@@ -183,11 +183,11 @@ static int32_t halBlockDeviceRestart(ProcessDescriptor *processDescriptor);
 // ---------------------------------------------------------------------------
 // Common HAL instance — function pointers set to typed wrappers above; data
 // members (numSupported, online, overlayMap, etc.) set by platform init code,
-// which writes to halCommonHal directly since it needs a mutable view.  The
+// which writes to halImpl directly since it needs a mutable view.  The
 // read-only HAL pointer below points at this same instance for general use.
 // ---------------------------------------------------------------------------
 
-Hal halCommonHal = {
+Hal halImpl = {
   .platform = {
     .callFileOverlay = NULL,
     .execCommand     = NULL,
@@ -266,7 +266,7 @@ Hal halCommonHal = {
 /// @var HAL
 ///
 /// @brief Global, read-only pointer to the active, root HAL instance.
-const Hal *HAL = &halCommonHal;
+const Hal *HAL = &halImpl;
 
 // ---------------------------------------------------------------------------
 // Typed wrapper implementations — each calls callHal with the subsystem and
@@ -559,7 +559,7 @@ int32_t halCommonInitRootFilesystem(void) {
   processDescriptor->userId = ROOT_USER_ID;
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
   processDescriptor->restartFunction
-    = halCommonHal.platform.restartRootFilesystem;
+    = halImpl.platform.restartRootFilesystem;
   // DO NOT resume the process yet.  Let the scheduler take care of that.
 
   SCHEDULER_STATE->firstUserPid = SCHEDULER_STATE->rootFsPid + 1;

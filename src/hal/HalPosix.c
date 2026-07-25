@@ -319,56 +319,56 @@ int32_t halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
   halFunctions[HAL_BLOCK_DEVICE] = posixBlockDeviceFunctions;
 
   // Set per-platform data members on the common subsystem instances.
-  halCommonHal.platform.callFileOverlay = callOverlayFunctionFromFile;
-  halCommonHal.platform.execCommand = execOverlayCommand;
-  halCommonHal.platform.restartRootFilesystem = restartBuiltinFilesystem;
-  halCommonHal.platform.initRootStorage = halCommonInitRootFilesystem,
-  halCommonHal.platform.restartShell = restartOverlayShell;
+  halImpl.platform.callFileOverlay = callOverlayFunctionFromFile;
+  halImpl.platform.execCommand = execOverlayCommand;
+  halImpl.platform.restartRootFilesystem = restartBuiltinFilesystem;
+  halImpl.platform.initRootStorage = halCommonInitRootFilesystem,
+  halImpl.platform.restartShell = restartOverlayShell;
 
   // Uncomment these lines to switch to using the built-in shell:
-  // halCommonHal.platform.execCommand = execBuiltinCommand;
-  // halCommonHal.platform.restartShell = restartBuiltinShell;
+  // halImpl.platform.execCommand = execBuiltinCommand;
+  // halImpl.platform.restartShell = restartBuiltinShell;
 
-  halCommonHal.uart.numSupported = 2;
-  halCommonHal.uart.online       = posixUartsOnline;
+  halImpl.uart.numSupported = 2;
+  halImpl.uart.online       = posixUartsOnline;
 
-  halCommonHal.dio.numSupported = 0;
-  halCommonHal.dio.online       = posixDiosOnline;
+  halImpl.dio.numSupported = 0;
+  halImpl.dio.online       = posixDiosOnline;
 
-  halCommonHal.spi.numSupported = 0;
-  halCommonHal.spi.online       = posixSpisOnline;
+  halImpl.spi.numSupported = 0;
+  halImpl.spi.online       = posixSpisOnline;
 
-  halCommonHal.timer.numSupported = 2;
-  halCommonHal.timer.online       = posixTimersOnline;
+  halImpl.timer.numSupported = 2;
+  halImpl.timer.online       = posixTimersOnline;
 
-  halCommonHal.blockDevice.numSupported = _numBlockDevices;
-  halCommonHal.blockDevice.online       = posixBlockDevicesOnline;
+  halImpl.blockDevice.numSupported = _numBlockDevices;
+  halImpl.blockDevice.online       = posixBlockDevicesOnline;
 
-  halCommonHal.memory.logBuffer      = _logBuffer;
-  halCommonHal.memory.logBufferSize  = sizeof(_logBuffer);
+  halImpl.memory.logBuffer      = _logBuffer;
+  halImpl.memory.logBufferSize  = sizeof(_logBuffer);
 #ifdef NANO_OS_STRINGS_STRIPPED
-  halCommonHal.memory.stringsPresent = false;
+  halImpl.memory.stringsPresent = false;
 #else
-  halCommonHal.memory.stringsPresent = true;
+  halImpl.memory.stringsPresent = true;
 #endif // NANO_OS_STRINGS_STRIPPED
 
   // Perform POSIX-specific hardware setup and retrieve the overlay mapping.
   int32_t result
     = halPosixImplInit(resetBuffer,
-      &halCommonHal.memory.overlayMap,
-      &halCommonHal.memory.overlaySize,
-      &halCommonHal.memory.staticLogs,
-      &halCommonHal.memory.contiguousFilesystem,
-      &halCommonHal.memory.contiguousFilesystemSize);
+      &halImpl.memory.overlayMap,
+      &halImpl.memory.overlaySize,
+      &halImpl.memory.staticLogs,
+      &halImpl.memory.contiguousFilesystem,
+      &halImpl.memory.contiguousFilesystemSize);
   if (result != 0) {
-    halCommonHal.memory.overlayMap               = NULL;
-    halCommonHal.memory.overlaySize              = 0;
-    halCommonHal.memory.contiguousFilesystem     = NULL;
-    halCommonHal.memory.contiguousFilesystemSize = 0;
-    halCommonHal.memory.staticLogs               = NULL;
+    halImpl.memory.overlayMap               = NULL;
+    halImpl.memory.overlaySize              = 0;
+    halImpl.memory.contiguousFilesystem     = NULL;
+    halImpl.memory.contiguousFilesystemSize = 0;
+    halImpl.memory.staticLogs               = NULL;
     return result;
   }
-  memset(halCommonHal.memory.staticLogs, 0, sizeof(StaticLogs));
+  memset(halImpl.memory.staticLogs, 0, sizeof(StaticLogs));
 
   NANO_OS_API = &nanoOsApi;
 
