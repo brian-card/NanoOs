@@ -3831,6 +3831,14 @@ exit:
   return returnValue;
 }
 
+/// @var _gettyPath
+///
+/// @brief Path to the getty overlay command run for a login shell.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _gettyPath[] KEEP_IN_FLASH = "/usr/bin/getty";
+
 /// @var _gettyName
 ///
 /// @brief argv[0] used to launch the getty process.
@@ -3839,13 +3847,39 @@ exit:
 /// final binary on some targets.
 static const char _gettyName[] KEEP_IN_FLASH = "getty";
 
-/// @var gettyArgs
+/// @var _gettyArgs
 ///
 /// @brief Command line arguments used to launch the getty process.  These have
 /// to be declared global because they're referenced by the launched process on
 /// its own stack.
-static const char *gettyArgs[] = {
+static const char *_gettyArgs[] = {
   _gettyName,
+  NULL,
+};
+
+/// @var _loggerPath
+///
+/// @brief Path to the logger overlay command on the filesystem.
+static const char _loggerPath[] KEEP_IN_FLASH = "/usr/bin/logger";
+
+/// @var _loggerName
+///
+/// @brief argv[0] used to launch the logger process.
+static const char _loggerName[] KEEP_IN_FLASH = "logger";
+
+/// @var _loggerData
+///
+/// @brief Path to the data file the logger needs to use.  This will be argv[1]
+/// from within the logger process.
+static const char _loggerData[] KEEP_IN_FLASH
+  = "/usr/lib/nano-os-sim_rodata.bin";
+
+/// @var _loggerArgs
+///
+/// @brief Command line arguments used to launch the logger process.
+static const char *_loggerArgs[] = {
+  _loggerName,
+  _loggerData,
   NULL,
 };
 
@@ -3882,14 +3916,6 @@ static const char _memoryManagerName[] KEEP_IN_FLASH = "memory manager";
 /// @note KEEP_IN_FLASH is required here because .rodata is removed from the
 /// final binary on some targets.
 static const char _shellName[] KEEP_IN_FLASH = "shell";
-
-/// @var _gettyPath
-///
-/// @brief Path to the getty overlay command run for a login shell.
-///
-/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
-/// final binary on some targets.
-static const char _gettyPath[] KEEP_IN_FLASH = "/usr/bin/getty";
 
 /// @var _initName
 ///
@@ -4048,8 +4074,7 @@ int32_t restartOverlayShell(ProcessDescriptor *processDescriptor) {
   if ((SCHEDULER_STATE->hostname == NULL)
     || (*SCHEDULER_STATE->hostname == '\0')
   ) {
-    logDebug(
-      "restartOverlayShell: scheduler not up.  Returning -EAGAIN\n");
+    logDebug("Scheduler not up.  Returning -EAGAIN\n");
     return -EAGAIN;
   }
 
@@ -4067,31 +4092,30 @@ int32_t restartOverlayShell(ProcessDescriptor *processDescriptor) {
       processDescriptor->envp = NULL;
     }
 
-    logDebug("restartOverlayShell: Starting getty\n");
+    logDebug("Starting getty\n");
     int returnValue = schedulerRunOverlayCommand(processDescriptor,
-      (char*) _gettyPath, (char**) gettyArgs, NULL);
+      (char*) _gettyPath, (char**) _gettyArgs, NULL);
     if (returnValue == -EBUSY) {
       logDebug(
-        "restartOverlayShell: Starting getty failed.  Returning -EAGAIN\n");
+        "Starting getty failed.  Returning -EAGAIN\n");
       return -EAGAIN;
     }
     return returnValue;
   }
 
   // User process exited.  Re-launch the shell.
-  logDebug("restartOverlayShell: Restarting shell\n");
+  logDebug("Restarting shell\n");
   int returnValue = 0;
   char *passwdStringBuffer
     = (char*) schedMalloc(NANO_OS_PASSWD_STRING_BUF_SIZE);
   if (passwdStringBuffer == NULL) {
-    logError("Could not allocate space for passwdStringBuffer in "
-      "restartOverlayShell\n");
+    logError("Could not allocate space for passwdStringBuffer\n");
     return -ENOMEM;
   }
 
   struct passwd *pwd = (struct passwd*) schedMalloc(sizeof(struct passwd));
   if (pwd == NULL) {
-    logError("Could not allocate space for pwd in restartOverlayShell\n");
+    logError("Could not allocate space for pwd\n");
     schedFree(passwdStringBuffer);
     return -ENOMEM;
   }
@@ -4128,6 +4152,33 @@ int32_t restartOverlayShell(ProcessDescriptor *processDescriptor) {
   return returnValue;
 }
 
+/// @fn int32_t restartLogger(ProcessDescriptor *processDescriptor)
+///
+/// @brief Implementation of restartFunction to re-launch the logger if it dies.
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor that manages the
+///   process's state.
+///
+/// @return Returns 0 on sucess, -errno onfailure.
+int32_t restartLogger(ProcessDescriptor *processDescriptor) {
+  logDebug("In restartLogger\n");
+  if ((SCHEDULER_STATE->hostname == NULL)
+    || (*SCHEDULER_STATE->hostname == '\0')
+  ) {
+    logDebug("Scheduler not up.  Returning -EAGAIN\n");
+    return -EAGAIN;
+  }
+
+  logDebug("Starting logger\n");
+  int returnValue = schedulerRunOverlayCommand(processDescriptor,
+    (char*) _loggerPath, (char**) _loggerArgs, NULL);
+  if (returnValue == -EBUSY) {
+    logDebug("Starting logger failed.  Returning -EAGAIN\n");
+    return -EAGAIN;
+  }
+
+  return 0;
+}
 /// @fn void runScheduler(void)
 ///
 /// @brief Run one (1) iteration of the main scheduler loop.
