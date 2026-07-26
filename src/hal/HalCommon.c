@@ -743,7 +743,6 @@ int32_t restartContiguousFilesystem(ProcessDescriptor *processDescriptor) {
   processDescriptor->callOverlayFunction = NULL;
   processQueuePush(processDescriptor->readyQueue, processDescriptor);
   // Let the filesystem process initialize before we return.
-  printString("Bringing up contiguous filesystem\n");
   while (fs.driverState == NULL) {
     SCHEDULER_STATE->runSchedulerQueues(PRIVILEGE_LEVEL_SUPERVISOR);
   }
