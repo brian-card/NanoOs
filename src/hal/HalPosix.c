@@ -321,7 +321,7 @@ int32_t halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
   // Set per-platform data members on the common subsystem instances.
   halImpl.platform.callFileOverlay = callOverlayFunctionFromFile;
   halImpl.platform.execCommand = execOverlayCommand;
-  halImpl.platform.restartRootFilesystem = restartBuiltinFilesystem;
+  halImpl.platform.restartRootFilesystem = restartContiguousFilesystem;
   halImpl.platform.initRootStorage = halCommonInitRootFilesystem,
   halImpl.platform.restartShell = restartOverlayShell;
 
