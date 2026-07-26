@@ -3548,6 +3548,14 @@ int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp) {
     return 0;
   }
 
+  if (processDescriptor->privilegeLevel != PRIVILEGE_LEVEL_EXECUTIVE) {
+    // This is the expected case, so list it first.
+    nanoOsApi.executiveApi = NULL;
+  } else {
+    // Enable the executive API for the process.
+    nanoOsApi.executiveApi = &nanoOsExecutiveApi;
+  }
+  
   if (processDescriptor->overlay.blockDevice == NULL) {
     // This process has no overlay metadata set yet (e.g. a dummy process slot
     // or a runBlockOverlay process before its first self-configuration yield).
@@ -3624,14 +3632,6 @@ int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp) {
   overlayHeader->overlay.blockDevice = processDescriptor->overlay.blockDevice;
   overlayHeader->overlay.startBlock = processDescriptor->overlay.startBlock;
   overlayHeader->overlay.numBlocks = processDescriptor->overlay.numBlocks;
-  
-  if (processDescriptor->privilegeLevel != PRIVILEGE_LEVEL_EXECUTIVE) {
-    // This is the expected case, so list it first.
-    nanoOsApi.executiveApi = NULL;
-  } else {
-    // Enable the executive API for the process.
-    nanoOsApi.executiveApi = &nanoOsExecutiveApi;
-  }
   
   return 0;
 }
