@@ -51,6 +51,8 @@ make -j $(nproc) -C sim
 echo ""
 echo "Build complete."
 
+osRodataBin="sim/bin/nano-os-sim_rodata.bin"
+
 # Partition: MBR, FAT32 (partition type 0xc) starting at 2 MiB.
 # sfdisk is used instead of parted because parted truncates image files
 # to the minimum size needed for the partition table, discarding the
@@ -76,6 +78,7 @@ MTOOLS_SKIP_CHECK=1 mformat -i "${fatImage}" -F -v NanoOs ::
 MTOOLS_SKIP_CHECK=1 mmd -i "${fatImage}" ::/usr
 MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s usr/bin ::/usr/bin
 MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s usr/lib ::/usr/lib
+MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" "${osRodataBin}" ::/usr/lib/
 MTOOLS_SKIP_CHECK=1 mmd -i "${fatImage}" ::/etc
 printf '%s' "${hostname}" \
 	| MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" - ::/etc/hostname
