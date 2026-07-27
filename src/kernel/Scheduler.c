@@ -4400,33 +4400,38 @@ static const char _hostnameFilePath[] KEEP_IN_FLASH = "/etc/hostname";
 /// final binary on some targets.
 static const char _localhost[] KEEP_IN_FLASH = "localhost";
 
-/// @fn void startScheduler(SchedulerState **threadStatePointer)
+/// @fn int initializeSchedulerState(
+///   SchedulerState *schedulerState, SchedulerState **threadStatePointer)
 ///
-/// @brief Initialize and run the round-robin scheduler.
+/// @brief Initialize the base SchedulerState member variables.
 ///
-/// @return This function returns no value and, in fact, never returns at all.
-__attribute__((noinline)) void startScheduler(
-  SchedulerState **threadStatePointer
+/// @param schedulerState A pointer to the SchedulerState maintained by the
+///   startScheduler function.
+/// @param threadStatePointer The double-pointer to a SchedulerState passed into
+///   the startScheduler function.
+/// @param messagesStorage The pointer to an array of ProcessMessages that will
+///   hold the static pool of messages that can be used by processes.
+///
+/// @return Returns 0 on success, -errno on failure.
+int initializeSchedulerState(
+  SchedulerState *schedulerState, SchedulerState **threadStatePointer,
+  ProcessMessage *messagesStorage
 ) {
-  logDebug("Starting scheduler in debug mode...\n");
-
-  // Initialize the scheduler's state.
-  SchedulerState schedulerState = {0};
-  schedulerState.hostname = NULL;
-  schedulerState.ready[PRIVILEGE_LEVEL_KERNEL].name = _kernelReadyName;
-  schedulerState.ready[PRIVILEGE_LEVEL_EXECUTIVE].name = _executiveReadyName;
-  schedulerState.ready[PRIVILEGE_LEVEL_SUPERVISOR].name = _supervisorReadyName;
-  schedulerState.ready[PRIVILEGE_LEVEL_USER].name = _userReadyName;
-  schedulerState.waiting.name = _waitingName;
-  schedulerState.timedWaiting.name = _timedWaitingName;
-  schedulerState.free.name = _freeName;
-  schedulerState.currentReady
-    = &schedulerState.ready[PRIVILEGE_LEVEL_KERNEL];
-  schedulerState.preemptionTimer = -1;
+  schedulerState->hostname = NULL;
+  schedulerState->ready[PRIVILEGE_LEVEL_KERNEL].name = _kernelReadyName;
+  schedulerState->ready[PRIVILEGE_LEVEL_EXECUTIVE].name = _executiveReadyName;
+  schedulerState->ready[PRIVILEGE_LEVEL_SUPERVISOR].name = _supervisorReadyName;
+  schedulerState->ready[PRIVILEGE_LEVEL_USER].name = _userReadyName;
+  schedulerState->waiting.name = _waitingName;
+  schedulerState->timedWaiting.name = _timedWaitingName;
+  schedulerState->free.name = _freeName;
+  schedulerState->currentReady
+    = &schedulerState->ready[PRIVILEGE_LEVEL_KERNEL];
+  schedulerState->preemptionTimer = -1;
   if (HAL->timer.numSupported > 0) {
     for (int32_t ii = 0; ii < ((int32_t) HAL->timer.numSupported); ii++) {
       if (online(HAL->timer, ii)) {
-        schedulerState.preemptionTimer = ii;
+        schedulerState->preemptionTimer = ii;
 #ifdef NANO_OS_DEBUG
         baseUserHalCapabilities[1].deviceIds = 1 << ii;
 #else
@@ -4436,68 +4441,88 @@ __attribute__((noinline)) void startScheduler(
       }
     }
   }
-  schedulerState.schedulerPid = 1;
-  schedulerState.consolePid = 2;
-  schedulerState.memoryManagerPid = 3;
-  schedulerState.firstUserPid = 4;
-  schedulerState.firstShellPid = 4;
-  schedulerState.rootFsPid = 0; // Invalid PID
-  schedulerState.loggerPid = 0; // Invalid PID
-  schedulerState.runSchedulerQueues = runSchedulerQueues;
-  SCHEDULER_STATE = &schedulerState;
+  schedulerState->schedulerPid = 1;
+  schedulerState->consolePid = 2;
+  schedulerState->memoryManagerPid = 3;
+  schedulerState->firstUserPid = 4;
+  schedulerState->firstShellPid = 4;
+  schedulerState->rootFsPid = 0; // Invalid PID
+  schedulerState->loggerPid = 0; // Invalid PID
+  schedulerState->runSchedulerQueues = runSchedulerQueues;
+  SCHEDULER_STATE = schedulerState;
   logDebug("Set scheduler state.\n");
 
   // Initialize the pointer that was used to configure threads.
-  *threadStatePointer = &schedulerState;
+  *threadStatePointer = schedulerState;
 
   // Initialize the static ProcessMessage storage.
-  ProcessMessage messagesStorage[NANO_OS_NUM_MESSAGES] = {0};
   extern ProcessMessage *messages;
   messages = messagesStorage;
   logDebug("Allocated messages storage.\n");
 
   // Initialize the allProcesses pointer.  The processes are all zeroed because
   // we zeroed the entire schedulerState when we declared it.
-  allProcesses = schedulerState.allProcesses;
+  allProcesses = schedulerState->allProcesses;
 
   // Initialize the scheduler in the array of running commands.
-  allProcesses[schedulerState.schedulerPid - 1].mainThread = schedulerThread;
-  allProcesses[schedulerState.schedulerPid - 1].processId
-    = schedulerState.schedulerPid;
-  allProcesses[schedulerState.schedulerPid - 1].name = _initName;
-  allProcesses[schedulerState.schedulerPid - 1].userId = ROOT_USER_ID;
-  allProcesses[schedulerState.schedulerPid - 1].privilegeLevel
+  allProcesses[schedulerState->schedulerPid - 1].mainThread = schedulerThread;
+  allProcesses[schedulerState->schedulerPid - 1].processId
+    = schedulerState->schedulerPid;
+  allProcesses[schedulerState->schedulerPid - 1].name = _initName;
+  allProcesses[schedulerState->schedulerPid - 1].userId = ROOT_USER_ID;
+  allProcesses[schedulerState->schedulerPid - 1].privilegeLevel
     = PRIVILEGE_LEVEL_KERNEL;
-  threadSetContext(allProcesses[schedulerState.schedulerPid - 1].mainThread,
-    &allProcesses[schedulerState.schedulerPid - 1]);
+  threadSetContext(allProcesses[schedulerState->schedulerPid - 1].mainThread,
+    &allProcesses[schedulerState->schedulerPid - 1]);
   logDebug("Configured scheduler process.\n");
 
   // Initialize the global file descriptors.
   // Kernel stdin file descriptor doesn't need an update because they don't
   // receive stdin.  Direct kernel process stdout and stderr to the console.
   standardKernelFileDescriptors[1].outputChannel.pid
-    = schedulerState.consolePid;
+    = schedulerState->consolePid;
   standardKernelFileDescriptors[1].outputChannel.messageType
     = CONSOLE_COMMAND_SIGNATURE | CONSOLE_WRITE_BUFFER;
   standardKernelFileDescriptors[2].outputChannel.pid
-    = schedulerState.consolePid;
+    = schedulerState->consolePid;
   standardKernelFileDescriptors[2].outputChannel.messageType
     = CONSOLE_COMMAND_SIGNATURE | CONSOLE_WRITE_BUFFER;
 
   // Direct the input pipe of user process stdin to the console.  Direcdt the
   // output pipes of user process stdout and stderr to the console as well.
   standardUserFileDescriptors[0].inputChannel.pid
-    = schedulerState.consolePid;
+    = schedulerState->consolePid;
   standardUserFileDescriptors[0].inputChannel.messageType
     = CONSOLE_COMMAND_SIGNATURE | CONSOLE_WAIT_FOR_INPUT;
   standardUserFileDescriptors[1].outputChannel.pid
-    = schedulerState.consolePid;
+    = schedulerState->consolePid;
   standardUserFileDescriptors[1].outputChannel.messageType
     = CONSOLE_COMMAND_SIGNATURE | CONSOLE_WRITE_BUFFER;
   standardUserFileDescriptors[2].outputChannel.pid
-    = schedulerState.consolePid;
+    = schedulerState->consolePid;
   standardUserFileDescriptors[2].outputChannel.messageType
     = CONSOLE_COMMAND_SIGNATURE | CONSOLE_WRITE_BUFFER;
+
+  return 0;
+}
+
+/// @fn void startScheduler(SchedulerState **threadStatePointer)
+///
+/// @brief Initialize and run the round-robin scheduler.
+///
+/// @param threadStatePointer A double pointer to a SchedulerState that serves
+///   as the state for the thread infrastructure setup outside of this call.
+///
+/// @return This function returns no value and, in fact, never returns at all.
+__attribute__((noinline)) void startScheduler(
+  SchedulerState **threadStatePointer
+) {
+  logDebug("Starting scheduler in debug mode...\n");
+
+  SchedulerState schedulerState = {0};
+  ProcessMessage messagesStorage[NANO_OS_NUM_MESSAGES] = {0};
+  initializeSchedulerState(&schedulerState, threadStatePointer,
+    messagesStorage);
 
   // Create the console process.  We used to have to double the size of the
   // console's stack, so we create this process before we create anything else.
