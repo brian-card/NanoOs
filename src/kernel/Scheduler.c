@@ -4996,15 +4996,17 @@ __attribute__((noinline)) void startScheduler(
   memset(&schedulerState, 0, sizeof(schedulerState));
   ProcessMessage messagesStorage[NANO_OS_NUM_MESSAGES];
   memset(messagesStorage, 0, sizeof(messagesStorage));
+  logDebug("Initializing scheduler state\n");
   initializeSchedulerState(&schedulerState, threadStatePointer,
     messagesStorage);
 
+  logDebug("Initializing processes\n");
   initializeProcesses(&schedulerState);
 
-  // Allocate memory for the hostname.
+  logDebug("Allocating memory for the hostname\n");
   schedulerState.hostname = (char*) schedCalloc(1, HOST_NAME_MAX + 1);
-  logDebug("Allocated memory for the hostname.\n");
   if (schedulerState.hostname != NULL) {
+    logDebug("Allocated memory for the hostname\n");
     FILE *hostnameFile = schedFopen(_hostnameFilePath, _readMode);
     if (hostnameFile != NULL) {
       logDebug("Opened hostname file.\n");
@@ -5028,11 +5030,13 @@ __attribute__((noinline)) void startScheduler(
       logError("schedFopen of hostname returned NULL!\n");
       strcpy(schedulerState.hostname, "localhost");
     }
+    logDebug("Populated hostname\n");
   } else {
     logError("schedulerState.hostname is NULL!\n");
   }
 
   logSchedulerDebugInfo(&schedulerState);
+  logDebug("Logged scheduler debug info\n");
 
   // Run our scheduler.
   while (1) {
