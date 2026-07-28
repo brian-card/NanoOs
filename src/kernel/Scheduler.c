@@ -4808,11 +4808,7 @@ int initializeProcesses(SchedulerState *schedulerState) {
   }
   logDebug("Set shells for ports.\n");
 
-  // Start the memory manager by calling processResume.
-  processResume(&allProcesses[schedulerState->memoryManagerPid - 1], NULL);
-  logDebug("Started memory manager.\n");
-
-  // Get the filesystem up and running.
+  // Get the memory manager and filesystem up and running.
   runSchedulerQueues(PRIVILEGE_LEVEL_SUPERVISOR);
   logDebug("Started memory manager and filesystem.\n");
 
