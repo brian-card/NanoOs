@@ -1683,7 +1683,9 @@ int closeProcessFileDescriptors(ProcessDescriptor *processDescriptor) {
   _functionInProgress = __func__;
 
   FileDescriptor **fileDescriptors = processDescriptor->fileDescriptors;
-  if (fileDescriptors == NULL) {
+  if ((fileDescriptors == NULL)
+    || (fileDescriptors == standardKernelFileDescriptorsPointers)
+  ) {
     // Nothing to do.
     goto exit; // return 0
   }
