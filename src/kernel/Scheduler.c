@@ -4760,6 +4760,9 @@ int initializeProcesses(SchedulerState *schedulerState) {
   processDescriptor->restartFunction = restartMemoryManager;
   logDebug("Created all processes.\n");
 
+  // Now that we have all the processes setup, we can fix the IPC capabilities.
+  fixIpcCapabilities(schedulerState);
+
   // Assign the console ports to the memory manager.  This has to be done before
   // assigning all processes to their ready queues.
   for (uint8_t ii = 0; ii < schedulerState->numShells; ii++) {
@@ -4793,9 +4796,6 @@ int initializeProcesses(SchedulerState *schedulerState) {
     processQueuePush(allProcesses[ii - 1].readyQueue, &allProcesses[ii - 1]);
   }
   logDebug("Populated ready queues.\n");
-
-  // Now that we have all the processes setup, we can fix the IPC capabilities.
-  fixIpcCapabilities(schedulerState);
 
   // Set the shells for the ports.
   for (uint8_t ii = 0; ii < schedulerState->numShells; ii++) {
