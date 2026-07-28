@@ -4506,189 +4506,61 @@ int initializeSchedulerState(
   return 0;
 }
 
-/// @fn void startScheduler(SchedulerState **threadStatePointer)
+/// @fn int fixIpcCapabilities(SchedulerState *schedulerState)
 ///
-/// @brief Initialize and run the round-robin scheduler.
+/// @brief Fix all the PIDs in the built-in IPC capabilities once all the
+/// processes are up.
 ///
-/// @param threadStatePointer A double pointer to a SchedulerState that serves
-///   as the state for the thread infrastructure setup outside of this call.
+/// @param schedulerState A pointer to the SchedulerState maintained by the
+///   startScheduler function.
 ///
-/// @return This function returns no value and, in fact, never returns at all.
-__attribute__((noinline)) void startScheduler(
-  SchedulerState **threadStatePointer
-) {
-  logDebug("Starting scheduler in debug mode...\n");
-
-  SchedulerState schedulerState = {0};
-  ProcessMessage messagesStorage[NANO_OS_NUM_MESSAGES] = {0};
-  initializeSchedulerState(&schedulerState, threadStatePointer,
-    messagesStorage);
-
-  // Create the console process.  We used to have to double the size of the
-  // console's stack, so we create this process before we create anything else.
-  // Leaving it at this point of initialization in case we ever have to come
-  // back to that flow again.
-  logDebug("Creating console process.\n");
-  ProcessDescriptor *processDescriptor
-    = &allProcesses[schedulerState.consolePid - 1];
-  if (processCreate(processDescriptor, runConsole, NULL) != processSuccess) {
-    logError("Could not create console process.\n");
-  }
-  threadSetContext(processDescriptor->mainThread, processDescriptor);
-  processDescriptor->processId = schedulerState.consolePid;
-  processDescriptor->name = _consoleName;
-  processDescriptor->userId = ROOT_USER_ID;
-  processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_KERNEL;
-  processDescriptor->restartFunction = restartConsole;
-  logDebug("Created console process.\n");
-
-  uint8_t numExtraConsoleStacksVal = 0;
-  HAL->memory.numExtraConsoleStacks(
-    USE_HAL_MEMORY_DEBUG, &numExtraConsoleStacksVal);
-  for (uint8_t ii = 0; ii < numExtraConsoleStacksVal; ii++) {
-    Thread *thread = threadProvision(NULL, dummyProcess, NULL);
-    if (thread == NULL) {
-      logError("Could not increase console process's stack size.\n");
-      break;
-    }
-    if (threadSetStackEnd(
-      processDescriptor->mainThread, threadStackEnd(thread)) != processSuccess
-    ) {
-      logError("Could not set console process's stack size.\n");
-    }
-  }
-
-  logDebug("\n");
-  logDebug("sizeof(int) = %ld\n", (long int) sizeof(int));
-  logDebug("sizeof(void*) = %ld\n", (long int) sizeof(void*));
-  logDebug("Main stack size = %ld bytes\n",
-    (long int) ABS_DIFF(
-      ((intptr_t) schedulerThread),
-      ((intptr_t) threadStackEnd(schedulerThread))
-    ));
-  logDebug("schedulerState size = %ld bytes\n",
-    (long int) sizeof(SchedulerState));
-  logDebug("messagesStorage size = %ld bytes\n",
-    (long int) (sizeof(ProcessMessage) * NANO_OS_NUM_MESSAGES));
-  logDebug("ConsoleState size = %ld bytes\n",
-    (long int) sizeof(ConsoleState));
-
-  // schedulerState.firstUserPid isn't populated until HAL->initRootStorage
-  // completes, so we need to call that as soon as we can.
-  int rv = 0;
-  if (HAL->platform.initRootStorage != NULL) {
-    rv = HAL->platform.initRootStorage();
-    if (rv != 0) {
-      logError("initRootStorage returned status %d\n", rv);
-    }
-  }
-  logDebug("Initialized root storage\n");
-
-  // Fix the rest of the IPC capabilities now that all the core processes are
-  // started.
-  if (schedulerState.rootFsPid > 0) {
+/// @return Returns 0 on success, -errno on failure.
+int fixIpcCapabilities(SchedulerState *schedulerState) {
+  // Fix the IPC capabilities now that all the core processes are started.
+  if (schedulerState->rootFsPid > 0) {
     baseSchedulerIpcCapabilities[0].destinationPid
-      = schedulerState.rootFsPid - 1;
+      = schedulerState->rootFsPid - 1;
   }
   baseConsoleIpcCapabilities[0].destinationPid
-    = schedulerState.schedulerPid;
+    = schedulerState->schedulerPid;
   baseConsoleIpcCapabilities[1].destinationPid
-    = schedulerState.memoryManagerPid;
+    = schedulerState->memoryManagerPid;
   baseMemoryManagerIpcCapabilities[0].destinationPid
-    = schedulerState.consolePid;
+    = schedulerState->consolePid;
   baseFilesystemIpcCapabilities[0].destinationPid
-    = schedulerState.schedulerPid;
+    = schedulerState->schedulerPid;
   baseFilesystemIpcCapabilities[1].destinationPid
-    = schedulerState.consolePid;
+    = schedulerState->consolePid;
   baseFilesystemIpcCapabilities[2].destinationPid
-    = schedulerState.memoryManagerPid;
-  if (schedulerState.rootFsPid > 0) {
+    = schedulerState->memoryManagerPid;
+  if (schedulerState->rootFsPid > 0) {
     baseFilesystemIpcCapabilities[3].destinationPid
-      = schedulerState.rootFsPid - 1;
+      = schedulerState->rootFsPid - 1;
   }
 
   baseSupervisorIpcCapabilities[0].destinationPid
-    = schedulerState.schedulerPid;
+    = schedulerState->schedulerPid;
   baseSupervisorIpcCapabilities[1].destinationPid
-    = schedulerState.consolePid;
+    = schedulerState->consolePid;
   baseSupervisorIpcCapabilities[2].destinationPid
-    = schedulerState.memoryManagerPid;
-  if (schedulerState.rootFsPid > 0) {
+    = schedulerState->memoryManagerPid;
+  if (schedulerState->rootFsPid > 0) {
     baseSupervisorIpcCapabilities[3].destinationPid
-      = schedulerState.rootFsPid;
+      = schedulerState->rootFsPid;
   }
   baseUserIpcCapabilities[0].destinationPid
-    = schedulerState.schedulerPid;
+    = schedulerState->schedulerPid;
   baseUserIpcCapabilities[1].destinationPid
-    = schedulerState.consolePid;
+    = schedulerState->consolePid;
   baseUserIpcCapabilities[2].destinationPid
-    = schedulerState.memoryManagerPid;
-  if (schedulerState.rootFsPid > 0) {
+    = schedulerState->memoryManagerPid;
+  if (schedulerState->rootFsPid > 0) {
     baseUserIpcCapabilities[3].destinationPid
-      = schedulerState.rootFsPid;
+      = schedulerState->rootFsPid;
   }
-
-  // Initialize all the kernel process file descriptors.
-  for (ProcessId ii = 1; ii < schedulerState.firstUserPid; ii++) {
-    allProcesses[ii - 1].numFileDescriptors = NUM_STANDARD_FILE_DESCRIPTORS;
-    allProcesses[ii - 1].fileDescriptors
-      = standardKernelFileDescriptorsPointers;
-  }
-  logDebug("Initialized kernel process file descriptors.\n");
-
-  // Start the console by calling processResume.
-  processResume(&allProcesses[schedulerState.consolePid - 1], NULL);
-  logDebug("Started console process.\n");
-  // Put the console process on the ready queue.
-  allProcesses[schedulerState.consolePid - 1].readyQueue
-    = &schedulerState.ready[PRIVILEGE_LEVEL_KERNEL];
-  processQueuePush(allProcesses[schedulerState.consolePid - 1].readyQueue,
-    &allProcesses[schedulerState.consolePid - 1]);
-
-  schedulerState.numShells = schedulerGetNumConsolePorts();
-  if (schedulerState.numShells <= 0) {
-    // This should be impossible since the HAL was successfully initialized,
-    // but take no chances.
-    logError("No console ports running.\nHalting.\n");
-    while(1);
-  }
-  // Irrespective of how many ports the console may be running, we can't run
-  // more shell processes than what we're configured for.  Make sure we set a
-  // sensible limit.
-  schedulerState.numShells
-    = MIN(schedulerState.numShells, NANO_OS_MAX_NUM_SHELLS);
-  logDebug("Managing %ld shells\n", (long int) schedulerState.numShells);
-
-  // We need to do an initial population of all the processes because we need to
-  // get to the end of memory to run the memory manager in whatever is left
-  // over.
-  for (ProcessId ii = schedulerState.firstUserPid;
-    ii <= NANO_OS_NUM_PROCESSES;
-    ii++
-  ) {
-    processDescriptor = &allProcesses[ii - 1];
-    if (processCreate(processDescriptor,
-      dummyProcess, NULL) != processSuccess
-    ) {
-      logError("Could not create process %ld\n", (long int) ii);
-    }
-    threadSetContext(
-      processDescriptor->mainThread, processDescriptor);
-    processDescriptor->processId = ii;
-    processDescriptor->userId = NO_USER_ID;
-    processDescriptor->name = _dummyName;
-    processDescriptor->callOverlayFunction = HAL->platform.callFileOverlay;
-    if ((ii - schedulerState.firstShellPid) < schedulerState.numShells) {
-      processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_SUPERVISOR;
-      processDescriptor->restartFunction = HAL->platform.restartShell;
-    } else {
-      processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_USER;
-      processDescriptor->restartFunction = NULL;
-    }
-  }
-  logDebug("Created all processes.\n");
 
   // Set the capabilities for all of the processes.
+  ProcessDescriptor *processDescriptor = NULL;
   for (ProcessId ii = 1; ii <= NANO_OS_NUM_PROCESSES; ii++) {
     processDescriptor = &allProcesses[ii - 1];
     if (processDescriptor->privilegeLevel == PRIVILEGE_LEVEL_KERNEL) {
@@ -4706,37 +4578,37 @@ __attribute__((noinline)) void startScheduler(
     }
   }
 
-  allProcesses[schedulerState.schedulerPid - 1].ipcCapabilities
+  allProcesses[schedulerState->schedulerPid - 1].ipcCapabilities
     = baseSchedulerIpcCapabilities;
-  allProcesses[schedulerState.schedulerPid - 1].numIpcCapabilities
+  allProcesses[schedulerState->schedulerPid - 1].numIpcCapabilities
     = sizeof(baseSchedulerIpcCapabilities)
     / sizeof(baseSchedulerIpcCapabilities[0]);
-  allProcesses[schedulerState.schedulerPid - 1].ipcCapabilitiesDynamic
+  allProcesses[schedulerState->schedulerPid - 1].ipcCapabilitiesDynamic
     = false;
-  allProcesses[schedulerState.consolePid - 1].ipcCapabilities
+  allProcesses[schedulerState->consolePid - 1].ipcCapabilities
     = baseConsoleIpcCapabilities;
-  allProcesses[schedulerState.consolePid - 1].numIpcCapabilities
+  allProcesses[schedulerState->consolePid - 1].numIpcCapabilities
     = sizeof(baseConsoleIpcCapabilities)
     / sizeof(baseConsoleIpcCapabilities[0]);
-  allProcesses[schedulerState.consolePid - 1].ipcCapabilitiesDynamic
+  allProcesses[schedulerState->consolePid - 1].ipcCapabilitiesDynamic
     = false;
-  allProcesses[schedulerState.memoryManagerPid - 1].ipcCapabilities
+  allProcesses[schedulerState->memoryManagerPid - 1].ipcCapabilities
     = baseMemoryManagerIpcCapabilities;
-  allProcesses[schedulerState.memoryManagerPid - 1].numIpcCapabilities
+  allProcesses[schedulerState->memoryManagerPid - 1].numIpcCapabilities
     = sizeof(baseMemoryManagerIpcCapabilities)
     / sizeof(baseMemoryManagerIpcCapabilities[0]);
-  allProcesses[schedulerState.memoryManagerPid - 1].ipcCapabilitiesDynamic
+  allProcesses[schedulerState->memoryManagerPid - 1].ipcCapabilitiesDynamic
     = false;
-  if (schedulerState.rootFsPid > 0) {
-    allProcesses[schedulerState.rootFsPid - 1].ipcCapabilities
+  if (schedulerState->rootFsPid > 0) {
+    allProcesses[schedulerState->rootFsPid - 1].ipcCapabilities
       = baseFilesystemIpcCapabilities;
-    allProcesses[schedulerState.rootFsPid - 1].numIpcCapabilities
+    allProcesses[schedulerState->rootFsPid - 1].numIpcCapabilities
       = sizeof(baseFilesystemIpcCapabilities)
       / sizeof(baseFilesystemIpcCapabilities[0]);
-    allProcesses[schedulerState.rootFsPid - 1].ipcCapabilitiesDynamic
+    allProcesses[schedulerState->rootFsPid - 1].ipcCapabilitiesDynamic
       = false;
   }
-  for (ProcessId ii = schedulerState.firstUserPid;
+  for (ProcessId ii = schedulerState->firstUserPid;
     ii <= NANO_OS_NUM_PROCESSES;
     ii++
   ) {
@@ -4760,54 +4632,173 @@ __attribute__((noinline)) void startScheduler(
     }
   }
 
-  // allProcesses array is ordered console process, memory manager process, then
-  // either the first block device or the first user process.  So, we want the
-  // process after the memory manager, which would be the value of
-  // schedulerState.memoryManagerPid since Pids are one-based instead of
-  // zero-based.
-  logDebug("Console stack size = %ld bytes\n",
-    (long int) (ABS_DIFF(
-      ((uintptr_t) allProcesses[schedulerState.memoryManagerPid].mainThread),
-      ((uintptr_t) allProcesses[schedulerState.consolePid - 1].mainThread))
-      - sizeof(Thread)));
-  logDebug("Thread stack size = %ld bytes\n",
-    (long int) (ABS_DIFF(
-      ((uintptr_t) allProcesses[schedulerState.firstUserPid - 1].mainThread),
-      ((uintptr_t) allProcesses[schedulerState.firstUserPid].mainThread))
-      - sizeof(Thread)));
-  logDebug("Thread size = %ld\n",
-    (long int) sizeof(Thread));
-  logDebug("standardKernelFileDescriptors size = %ld\n",
-    (long int) sizeof(standardKernelFileDescriptors));
+  return 0;
+}
+
+/// @fn int initializeProcesses(SchedulerState *schedulerState)
+///
+/// @brief Initialize all the processes and their state information.
+///
+/// @param schedulerState A pointer to the SchedulerState maintained by the
+///   startScheduler function.
+///
+/// @return Returns 0 on success, -errno on failure.
+int initializeProcesses(SchedulerState *schedulerState) {
+  // Create the console process.  We used to have to double the size of the
+  // console's stack, so we create this process before we create anything else.
+  // Leaving it at this point of initialization in case we ever have to come
+  // back to that flow again.
+  logDebug("Creating console process.\n");
+  ProcessDescriptor *processDescriptor
+    = &allProcesses[schedulerState->consolePid - 1];
+  if (processCreate(processDescriptor, runConsole, NULL) != processSuccess) {
+    logError("Could not create console process.\n");
+  }
+  threadSetContext(processDescriptor->mainThread, processDescriptor);
+  processDescriptor->processId = schedulerState->consolePid;
+  processDescriptor->name = _consoleName;
+  processDescriptor->userId = ROOT_USER_ID;
+  processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_KERNEL;
+  processDescriptor->restartFunction = restartConsole;
+  logDebug("Created console process.\n");
+
+  uint8_t numExtraConsoleStacksVal = 0;
+  HAL->memory.numExtraConsoleStacks(
+    USE_HAL_MEMORY_DEBUG, &numExtraConsoleStacksVal);
+  for (uint8_t ii = 0; ii < numExtraConsoleStacksVal; ii++) {
+    Thread *thread = threadProvision(NULL, dummyProcess, NULL);
+    if (thread == NULL) {
+      logError("Could not increase console process's stack size.\n");
+      break;
+    }
+    if (threadSetStackEnd(
+      processDescriptor->mainThread, threadStackEnd(thread)) != processSuccess
+    ) {
+      logError("Could not set console process's stack size.\n");
+    }
+  }
+
+  // Start the console by calling processResume.
+  processResume(&allProcesses[schedulerState->consolePid - 1], NULL);
+  logDebug("Started console process.\n");
+  // Put the console process on the ready queue.
+  allProcesses[schedulerState->consolePid - 1].readyQueue
+    = &schedulerState->ready[PRIVILEGE_LEVEL_KERNEL];
+  processQueuePush(allProcesses[schedulerState->consolePid - 1].readyQueue,
+    &allProcesses[schedulerState->consolePid - 1]);
+
+  // schedulerState->firstUserPid isn't populated until HAL->initRootStorage
+  // completes, so we need to call that as soon as we can.
+  int rv = 0;
+  if (HAL->platform.initRootStorage != NULL) {
+    rv = HAL->platform.initRootStorage();
+    if (rv != 0) {
+      logError("initRootStorage returned status %d\n", rv);
+    }
+  }
+  logDebug("Initialized root storage\n");
+
+  // Get the number of shells we'll be managing.  This needs to be done before
+  // assigning processes to their ready queues and before we create the user
+  // processes.
+  schedulerState->numShells = schedulerGetNumConsolePorts();
+  if (schedulerState->numShells <= 0) {
+    // This should be impossible since the HAL was successfully initialized,
+    // but take no chances.
+    logError("No console ports running.\nHalting.\n");
+    while(1);
+  }
+  // Irrespective of how many ports the console may be running, we can't run
+  // more shell processes than what we're configured for.  Make sure we set a
+  // sensible limit.
+  schedulerState->numShells
+    = MIN(schedulerState->numShells, NANO_OS_MAX_NUM_SHELLS);
+  logDebug("Managing %ld shells\n", (long int) schedulerState->numShells);
+
+  // We need to do an initial population of all the processes because we need to
+  // get to the end of memory to run the memory manager in whatever is left
+  // over.
+  for (ProcessId ii = schedulerState->firstUserPid;
+    ii <= NANO_OS_NUM_PROCESSES;
+    ii++
+  ) {
+    processDescriptor = &allProcesses[ii - 1];
+    if (processCreate(processDescriptor,
+      dummyProcess, NULL) != processSuccess
+    ) {
+      logError("Could not create process %ld\n", (long int) ii);
+    }
+    threadSetContext(
+      processDescriptor->mainThread, processDescriptor);
+    processDescriptor->processId = ii;
+    processDescriptor->userId = NO_USER_ID;
+    processDescriptor->name = _dummyName;
+    processDescriptor->callOverlayFunction = HAL->platform.callFileOverlay;
+    if ((ii - schedulerState->firstShellPid) < schedulerState->numShells) {
+      processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_SUPERVISOR;
+      processDescriptor->restartFunction = HAL->platform.restartShell;
+    } else {
+      processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_USER;
+      processDescriptor->restartFunction = NULL;
+    }
+  }
 
   // Create the memory manager process.  : THIS MUST BE THE LAST PROCESS
   // CREATED BECAUSE WE WANT TO USE THE ENTIRE REST OF MEMORY FOR IT :
-  processDescriptor = &allProcesses[schedulerState.memoryManagerPid - 1];
+  processDescriptor = &allProcesses[schedulerState->memoryManagerPid - 1];
   if (processCreate(processDescriptor,
     runMemoryManager, NULL) != processSuccess
   ) {
     logError("Could not create memory manager process.\n");
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
-  processDescriptor->processId = schedulerState.memoryManagerPid;
+  processDescriptor->processId = schedulerState->memoryManagerPid;
   processDescriptor->name = _memoryManagerName;
   processDescriptor->userId = ROOT_USER_ID;
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_KERNEL;
   processDescriptor->restartFunction = restartMemoryManager;
+  logDebug("Created all processes.\n");
 
-  // Assign the console ports to it.
-  for (uint8_t ii = 0; ii < schedulerState.numShells; ii++) {
+  // Assign the console ports to the memory manager.  This has to be done before
+  // assigning all processes to their ready queues.
+  for (uint8_t ii = 0; ii < schedulerState->numShells; ii++) {
     if (schedulerAssignPortToPid(
-      ii, schedulerState.memoryManagerPid) != processSuccess
+      ii, schedulerState->memoryManagerPid) != processSuccess
     ) {
       logWarn("Could not assign console port to memory manager.\n");
     }
   }
   logDebug("Assigned console ports to memory manager.\n");
 
+  // Initialize all the kernel process file descriptors.
+  for (ProcessId ii = 1; ii < schedulerState->firstUserPid; ii++) {
+    allProcesses[ii - 1].numFileDescriptors = NUM_STANDARD_FILE_DESCRIPTORS;
+    allProcesses[ii - 1].fileDescriptors
+      = standardKernelFileDescriptorsPointers;
+  }
+  logDebug("Initialized kernel process file descriptors.\n");
+
+  // Mark all the processes as being part of the their ready queues.  Skip over
+  // the scheduler (since by definition it can't be scheduled) and the console
+  // (since it was added to its queue earlier).  The scheduler will take care of
+  // cleaning up the dummy processes in the ready queues.
+  allProcesses[0].readyQueue = NULL;
+  for (ProcessId ii = allProcesses[2].processId;
+    ii < NANO_OS_NUM_PROCESSES;
+    ii++
+  ) {
+    allProcesses[ii - 1].readyQueue
+      = &schedulerState->ready[allProcesses[ii - 1].privilegeLevel];
+    processQueuePush(allProcesses[ii - 1].readyQueue, &allProcesses[ii - 1]);
+  }
+  logDebug("Populated ready queues.\n");
+
+  // Now that we have all the processes setup, we can fix the IPC capabilities.
+  fixIpcCapabilities(schedulerState);
+
   // Set the shells for the ports.
-  for (uint8_t ii = 0; ii < schedulerState.numShells; ii++) {
-    if (schedulerSetPortShell(ii, schedulerState.firstShellPid + ii)
+  for (uint8_t ii = 0; ii < schedulerState->numShells; ii++) {
+    if (schedulerSetPortShell(ii, schedulerState->firstShellPid + ii)
       != processSuccess
     ) {
       logWarn("Could not set port for shell %d\n"
@@ -4817,69 +4808,64 @@ __attribute__((noinline)) void startScheduler(
   logDebug("Set shells for ports.\n");
 
   // Start the memory manager by calling processResume.
-  processResume(&allProcesses[schedulerState.memoryManagerPid - 1], NULL);
+  processResume(&allProcesses[schedulerState->memoryManagerPid - 1], NULL);
   logDebug("Started memory manager.\n");
 
-  // Mark all the kernel processes as being part of the kernel ready queue.
-  // Skip over the scheduler (process 0).
-  allProcesses[0].readyQueue = NULL;
-  for (ProcessId ii = allProcesses[2].processId;
-    ii < schedulerState.firstUserPid;
-    ii++
-  ) {
-    allProcesses[ii - 1].readyQueue
-      = &schedulerState.ready[allProcesses[ii - 1].privilegeLevel];
-    processQueuePush(allProcesses[ii - 1].readyQueue, &allProcesses[ii - 1]);
-  }
-  logDebug("Populated kernel/executive ready queues.\n");
-
-  // The scheduler will take care of cleaning up the dummy processes in the
-  // ready queue.
-  for (ProcessId ii = schedulerState.firstUserPid;
-    ii <= NANO_OS_NUM_PROCESSES;
-    ii++
-  ) {
-    allProcesses[ii - 1].readyQueue
-      = &schedulerState.ready[allProcesses[ii - 1].privilegeLevel];
-    processQueuePush(allProcesses[ii - 1].readyQueue, &allProcesses[ii - 1]);
-  }
-  logDebug("Populated supervisor/user ready queues.\n");
-
   // Get the memory manager and filesystem up and running.
-  processResume(&allProcesses[schedulerState.memoryManagerPid - 1], NULL);
+  processResume(&allProcesses[schedulerState->memoryManagerPid - 1], NULL);
   runSchedulerQueues(PRIVILEGE_LEVEL_SUPERVISOR);
   logDebug("Started memory manager and filesystem.\n");
 
-  // Allocate memory for the hostname.
-  schedulerState.hostname = (char*) schedCalloc(1, HOST_NAME_MAX + 1);
-  logDebug("Allocated memory for the hostname.\n");
-  if (schedulerState.hostname != NULL) {
-    FILE *hostnameFile = schedFopen(_hostnameFilePath, _readMode);
-    if (hostnameFile != NULL) {
-      logDebug("Opened hostname file.\n");
-      if (schedFgets(
-        schedulerState.hostname, HOST_NAME_MAX + 1, hostnameFile)
-          != schedulerState.hostname
-      ) {
-        logError("fgets did not read hostname!\n");
-      }
-      if (strchr(schedulerState.hostname, '\r')) {
-        *strchr(schedulerState.hostname, '\r') = '\0';
-      } else if (strchr(schedulerState.hostname, '\n')) {
-        *strchr(schedulerState.hostname, '\n') = '\0';
-      } else if (*schedulerState.hostname == '\0') {
-        strcpy(schedulerState.hostname, _localhost);
-      }
-      schedFclose(hostnameFile);
-      logDebug("Closed hostname file.\nhostname = %s\n",
-        schedulerState.hostname);
-    } else {
-      logError("schedFopen of hostname returned NULL!\n");
-      strcpy(schedulerState.hostname, "localhost");
-    }
-  } else {
-    logError("schedulerState.hostname is NULL!\n");
-  }
+  return 0;
+}
+
+/// @fn int logSchedulerDebugInfo(SchedulerState *schedulerState)
+///
+/// @brief Log all the "on-boot" debug information the scheduler emits.
+///
+/// @param schedulerState A pointer to the SchedulerState maintained by the
+///   startScheduler function.
+///
+/// @return Returns 0 on success, -errno on failure.
+int logSchedulerDebugInfo(SchedulerState *schedulerState) {
+  // schedulerState is only used when we're logging debug messages, so mark it
+  // unused so that the compiler doesn't complain.
+  (void) schedulerState;
+
+  logDebug("\n");
+  logDebug("sizeof(int) = %ld\n", (long int) sizeof(int));
+  logDebug("sizeof(void*) = %ld\n", (long int) sizeof(void*));
+  logDebug("Main stack size = %ld bytes\n",
+    (long int) ABS_DIFF(
+      ((intptr_t) schedulerThread),
+      ((intptr_t) threadStackEnd(schedulerThread))
+    ));
+  logDebug("schedulerState size = %ld bytes\n",
+    (long int) sizeof(SchedulerState));
+  logDebug("messagesStorage size = %ld bytes\n",
+    (long int) (sizeof(ProcessMessage) * NANO_OS_NUM_MESSAGES));
+  logDebug("ConsoleState size = %ld bytes\n",
+    (long int) sizeof(ConsoleState));
+
+  // allProcesses array is ordered console process, memory manager process, then
+  // either the first block device or the first user process.  So, we want the
+  // process after the memory manager, which would be the value of
+  // schedulerState->memoryManagerPid since Pids are one-based instead of
+  // zero-based.
+  logDebug("Console stack size = %ld bytes\n",
+    (long int) (ABS_DIFF(
+      ((uintptr_t) allProcesses[schedulerState->memoryManagerPid].mainThread),
+      ((uintptr_t) allProcesses[schedulerState->consolePid - 1].mainThread))
+      - sizeof(Thread)));
+  logDebug("Thread stack size = %ld bytes\n",
+    (long int) (ABS_DIFF(
+      ((uintptr_t) allProcesses[schedulerState->firstUserPid - 1].mainThread),
+      ((uintptr_t) allProcesses[schedulerState->firstUserPid].mainThread))
+      - sizeof(Thread)));
+  logDebug("Thread size = %ld\n",
+    (long int) sizeof(Thread));
+  logDebug("standardKernelFileDescriptors size = %ld\n",
+    (long int) sizeof(standardKernelFileDescriptors));
 
 #ifdef NANO_OS_DEBUG
   // KEEP_IN_FLASH is required on these: .rodata is removed from the final
@@ -4993,6 +4979,64 @@ __attribute__((noinline)) void startScheduler(
   logDebug("Filesystem sanity test complete\n");
   while (sanityTestFailed == true);
 #endif // NANO_OS_DEBUG
+
+  return 0;
+}
+
+/// @fn void startScheduler(SchedulerState **threadStatePointer)
+///
+/// @brief Initialize and run the round-robin scheduler.
+///
+/// @param threadStatePointer A double pointer to a SchedulerState that serves
+///   as the state for the thread infrastructure setup outside of this call.
+///
+/// @return This function returns no value and, in fact, never returns at all.
+__attribute__((noinline)) void startScheduler(
+  SchedulerState **threadStatePointer
+) {
+  logDebug("Starting scheduler in debug mode...\n");
+
+  SchedulerState schedulerState;
+  memset(&schedulerState, 0, sizeof(schedulerState));
+  ProcessMessage messagesStorage[NANO_OS_NUM_MESSAGES];
+  memset(messagesStorage, 0, sizeof(messagesStorage));
+  initializeSchedulerState(&schedulerState, threadStatePointer,
+    messagesStorage);
+
+  initializeProcesses(&schedulerState);
+
+  // Allocate memory for the hostname.
+  schedulerState.hostname = (char*) schedCalloc(1, HOST_NAME_MAX + 1);
+  logDebug("Allocated memory for the hostname.\n");
+  if (schedulerState.hostname != NULL) {
+    FILE *hostnameFile = schedFopen(_hostnameFilePath, _readMode);
+    if (hostnameFile != NULL) {
+      logDebug("Opened hostname file.\n");
+      if (schedFgets(
+        schedulerState.hostname, HOST_NAME_MAX + 1, hostnameFile)
+          != schedulerState.hostname
+      ) {
+        logError("fgets did not read hostname!\n");
+      }
+      if (strchr(schedulerState.hostname, '\r')) {
+        *strchr(schedulerState.hostname, '\r') = '\0';
+      } else if (strchr(schedulerState.hostname, '\n')) {
+        *strchr(schedulerState.hostname, '\n') = '\0';
+      } else if (*schedulerState.hostname == '\0') {
+        strcpy(schedulerState.hostname, _localhost);
+      }
+      schedFclose(hostnameFile);
+      logDebug("Closed hostname file.\nhostname = %s\n",
+        schedulerState.hostname);
+    } else {
+      logError("schedFopen of hostname returned NULL!\n");
+      strcpy(schedulerState.hostname, "localhost");
+    }
+  } else {
+    logError("schedulerState.hostname is NULL!\n");
+  }
+
+  logSchedulerDebugInfo(&schedulerState);
 
   // Run our scheduler.
   while (1) {
