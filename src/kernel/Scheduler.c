@@ -4730,8 +4730,7 @@ int initializeProcesses(SchedulerState *schedulerState) {
     ) {
       logError("Could not create process %ld\n", (long int) ii);
     }
-    threadSetContext(
-      processDescriptor->mainThread, processDescriptor);
+    threadSetContext(processDescriptor->mainThread, processDescriptor);
     processDescriptor->processId = ii;
     processDescriptor->userId = NO_USER_ID;
     processDescriptor->name = _dummyName;
@@ -4787,7 +4786,7 @@ int initializeProcesses(SchedulerState *schedulerState) {
   // (since it was added to its queue earlier).
   allProcesses[0].readyQueue = NULL;
   for (ProcessId ii = allProcesses[2].processId;
-    ii < NANO_OS_NUM_PROCESSES;
+    ii <= NANO_OS_NUM_PROCESSES;
     ii++
   ) {
     allProcesses[ii - 1].readyQueue
