@@ -368,7 +368,9 @@ int32_t halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
     halImpl.memory.staticLogs               = NULL;
     return result;
   }
-  memset(halImpl.memory.staticLogs, 0, sizeof(StaticLogs));
+  if (halImpl.memory.staticLogs != NULL) {
+    memset(halImpl.memory.staticLogs, 0, sizeof(StaticLogs));
+  }
 
   NANO_OS_API = &nanoOsApi;
 
