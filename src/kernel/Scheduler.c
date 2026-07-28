@@ -4718,7 +4718,8 @@ int initializeProcesses(SchedulerState *schedulerState) {
 
   // We need to do an initial population of all the processes because we need to
   // get to the end of memory to run the memory manager in whatever is left
-  // over.
+  // over.  The scheduler will take care of cleaning up the dummy processes
+  // after they exit.
   for (ProcessId ii = schedulerState->firstUserPid;
     ii <= NANO_OS_NUM_PROCESSES;
     ii++
@@ -4763,8 +4764,7 @@ int initializeProcesses(SchedulerState *schedulerState) {
   // Now that we have all the processes setup, we can fix the IPC capabilities.
   fixIpcCapabilities(schedulerState);
 
-  // Assign the console ports to the memory manager.  This has to be done before
-  // assigning all processes to their ready queues.
+  // Assign the console ports to the memory manager.
   for (uint8_t ii = 0; ii < schedulerState->numShells; ii++) {
     if (schedulerAssignPortToPid(
       ii, schedulerState->memoryManagerPid) != processSuccess
@@ -4784,8 +4784,7 @@ int initializeProcesses(SchedulerState *schedulerState) {
 
   // Mark all the processes as being part of the their ready queues.  Skip over
   // the scheduler (since by definition it can't be scheduled) and the console
-  // (since it was added to its queue earlier).  The scheduler will take care of
-  // cleaning up the dummy processes in the ready queues.
+  // (since it was added to its queue earlier).
   allProcesses[0].readyQueue = NULL;
   for (ProcessId ii = allProcesses[2].processId;
     ii < NANO_OS_NUM_PROCESSES;
