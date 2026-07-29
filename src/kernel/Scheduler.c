@@ -4213,6 +4213,10 @@ int32_t restartLogger(ProcessDescriptor *processDescriptor) {
     return -EAGAIN;
   }
 
+  processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
+  processDescriptor->readyQueue
+    = &SCHEDULER_STATE->ready[processDescriptor->privilegeLevel];
+
   return 0;
 }
 /// @fn void runScheduler(void)
@@ -4761,7 +4765,7 @@ int initializeProcesses(SchedulerState *schedulerState) {
   processDescriptor->userId = NO_USER_ID;
   processDescriptor->name = _loggerName;
   processDescriptor->callOverlayFunction = HAL->platform.callFileOverlay;
-  processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
+  processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_SUPERVISOR;
   processDescriptor->restartFunction = restartLogger;
   logDebug("Initialized logger process\n");
 
