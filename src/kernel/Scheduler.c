@@ -4765,6 +4765,10 @@ int initializeProcesses(SchedulerState *schedulerState) {
   processDescriptor->userId = NO_USER_ID;
   processDescriptor->name = _loggerName;
   processDescriptor->callOverlayFunction = HAL->platform.callFileOverlay;
+  // The logger is an executive process, but we're going to start it in
+  // supervisor mode until the system comes up far enough to launch it.
+  // restartLogger will take care of fixing the level once it launches
+  // successfully.
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_SUPERVISOR;
   processDescriptor->restartFunction = restartLogger;
   logDebug("Initialized logger process\n");
