@@ -378,6 +378,39 @@ IpcCapability baseFilesystemIpcCapabilities[] = {
   },
 };
 
+/// @var baseLoggerIpcCapabilities
+///
+/// @brief Array of IpcCapability items that describe what messages the logger
+/// process can send to other processes.
+IpcCapability baseLoggerIpcCapabilities[] = {
+  {
+    .destinationPid = 0, // Scheduler PID to be set by scheduler
+    .signature      = SCHEDULER_COMMAND_SIGNATURE,
+    .messageTypes
+      = (((uint16_t) 1) << SCHEDULER_REPLACE_OVERLAY)
+  },
+  {
+    .destinationPid = 0, // Memory manager PID to be set by scheduler
+    .signature      = MEMORY_MANAGER_COMMAND_SIGNATURE,
+    .messageTypes
+      = (((uint16_t) 1) << MEMORY_MANAGER_REALLOC)
+      | (((uint16_t) 1) << MEMORY_MANAGER_FREE)
+  },
+  {
+    .destinationPid = 0, // Filesystem PID to be set by scheduler
+    .signature      = FILESYSTEM_COMMAND_SIGNATURE,
+    .messageTypes
+      = (((uint16_t) 1) << FILESYSTEM_OPEN_FILE)
+      | (((uint16_t) 1) << FILESYSTEM_CLOSE_FILE)
+      | (((uint16_t) 1) << FILESYSTEM_READ_FILE)
+      | (((uint16_t) 1) << FILESYSTEM_WRITE_FILE)
+      | (((uint16_t) 1) << FILESYSTEM_REMOVE_FILE)
+      | (((uint16_t) 1) << FILESYSTEM_SEEK_FILE)
+      | (((uint16_t) 1) << FILESYSTEM_GET_FILE_BLOCK_METADATA)
+      | (((uint16_t) 1) << FILESYSTEM_END_OF_FILE)
+  },
+};
+
 /// @var baseSupervisorIpcCapabilities
 ///
 /// @brief Array of IpcCapability items that describe what messages a process
@@ -4164,19 +4197,19 @@ int32_t restartOverlayShell(ProcessDescriptor *processDescriptor) {
 ///
 /// @return Returns 0 on sucess, -errno onfailure.
 int32_t restartLogger(ProcessDescriptor *processDescriptor) {
-  logDebug("In restartLogger\n");
+  logDetail("In restartLogger\n");
   if ((SCHEDULER_STATE->hostname == NULL)
     || (*SCHEDULER_STATE->hostname == '\0')
   ) {
-    logDebug("Scheduler not up.  Returning -EAGAIN\n");
+    logDetail("Scheduler not up.  Returning -EAGAIN\n");
     return -EAGAIN;
   }
 
-  logDebug("Starting logger\n");
+  logDetail("Starting logger\n");
   int returnValue = schedulerRunOverlayCommand(processDescriptor,
     (char*) _loggerPath, (char**) _loggerArgs, NULL);
   if (returnValue == -EBUSY) {
-    logDebug("Starting logger failed.  Returning -EAGAIN\n");
+    logDetail("Starting logger failed.  Returning -EAGAIN\n");
     return -EAGAIN;
   }
 
@@ -4509,7 +4542,7 @@ int initializeSchedulerState(
   return 0;
 }
 
-/// @fn int fixIpcCapabilities(SchedulerState *schedulerState)
+/// @fn int setIpcCapabilities(SchedulerState *schedulerState)
 ///
 /// @brief Fix all the PIDs in the built-in IPC capabilities once all the
 /// processes are up.
@@ -4518,7 +4551,7 @@ int initializeSchedulerState(
 ///   startScheduler function.
 ///
 /// @return Returns 0 on success, -errno on failure.
-int fixIpcCapabilities(SchedulerState *schedulerState) {
+int setIpcCapabilities(SchedulerState *schedulerState) {
   // Fix the IPC capabilities now that all the core processes are started.
   if (schedulerState->rootFsPid > 0) {
     baseSchedulerIpcCapabilities[0].destinationPid
@@ -4539,6 +4572,14 @@ int fixIpcCapabilities(SchedulerState *schedulerState) {
   if (schedulerState->rootFsPid > 0) {
     baseFilesystemIpcCapabilities[3].destinationPid
       = schedulerState->rootFsPid - 1;
+  }
+  baseLoggerIpcCapabilities[0].destinationPid
+    = schedulerState->schedulerPid;
+  baseLoggerIpcCapabilities[1].destinationPid
+    = schedulerState->memoryManagerPid;
+  if (schedulerState->rootFsPid > 0) {
+    baseLoggerIpcCapabilities[2].destinationPid
+      = schedulerState->rootFsPid;
   }
 
   baseSupervisorIpcCapabilities[0].destinationPid
@@ -4562,7 +4603,7 @@ int fixIpcCapabilities(SchedulerState *schedulerState) {
       = schedulerState->rootFsPid;
   }
 
-  // Set the capabilities for all of the processes.
+  // Set the HAL capabilities for all of the processes.
   ProcessDescriptor *processDescriptor = NULL;
   for (ProcessId ii = 1; ii <= NANO_OS_NUM_PROCESSES; ii++) {
     processDescriptor = &allProcesses[ii - 1];
@@ -4609,6 +4650,15 @@ int fixIpcCapabilities(SchedulerState *schedulerState) {
       = sizeof(baseFilesystemIpcCapabilities)
       / sizeof(baseFilesystemIpcCapabilities[0]);
     allProcesses[schedulerState->rootFsPid - 1].ipcCapabilitiesDynamic
+      = false;
+  }
+  if (schedulerState->loggerPid > 0) {
+    allProcesses[schedulerState->loggerPid - 1].ipcCapabilities
+      = baseLoggerIpcCapabilities;
+    allProcesses[schedulerState->loggerPid - 1].numIpcCapabilities
+      = sizeof(baseLoggerIpcCapabilities)
+      / sizeof(baseLoggerIpcCapabilities[0]);
+    allProcesses[schedulerState->loggerPid - 1].ipcCapabilitiesDynamic
       = false;
   }
   for (ProcessId ii = schedulerState->firstUserPid;
@@ -4701,6 +4751,23 @@ int initializeProcesses(SchedulerState *schedulerState) {
   }
   logDebug("Initialized root storage\n");
 
+  schedulerState->loggerPid = schedulerState->firstUserPid;
+  processDescriptor = &allProcesses[schedulerState->loggerPid - 1];
+  if (processCreate(processDescriptor, dummyProcess, NULL) != processSuccess) {
+    logError("Could not create logger process\n");
+  }
+  threadSetContext(processDescriptor->mainThread, processDescriptor);
+  processDescriptor->processId = schedulerState->firstUserPid;
+  processDescriptor->userId = NO_USER_ID;
+  processDescriptor->name = _loggerName;
+  processDescriptor->callOverlayFunction = HAL->platform.callFileOverlay;
+  processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
+  processDescriptor->restartFunction = restartLogger;
+  logDebug("Initialized logger process\n");
+
+  schedulerState->firstUserPid++;
+  schedulerState->firstShellPid = schedulerState->firstUserPid;
+
   // Get the number of shells we'll be managing.  This needs to be done before
   // assigning processes to their ready queues and before we create the user
   // processes.
@@ -4763,7 +4830,8 @@ int initializeProcesses(SchedulerState *schedulerState) {
   logDebug("Created all processes.\n");
 
   // Now that we have all the processes setup, we can fix the IPC capabilities.
-  fixIpcCapabilities(schedulerState);
+  setIpcCapabilities(schedulerState);
+  schedulerState->loggerPid = 0;
 
   // Assign the console ports to the memory manager.
   for (uint8_t ii = 0; ii < schedulerState->numShells; ii++) {
