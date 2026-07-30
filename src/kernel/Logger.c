@@ -186,9 +186,16 @@ int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
     } else {
       // We have to do things a little differently since the scheduler can't
       // yield.
-      while (processMessage == NULL) {
+      for (int ii = 0;
+        (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
+        ii++
+      ) {
         SCHEDULER_STATE->runSchedulerQueues(PRIVILEGE_LEVEL_SUPERVISOR);
         processMessage = getAvailableMessage();
+      }
+      if (processMessage == NULL) {
+        // There's something wrong with the system.  Try again later.
+        return -EAGAIN;
       }
     }
   }
