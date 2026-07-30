@@ -211,6 +211,11 @@ int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
     != 0
   ) {
     processMessageRelease(processMessage);
+    if (HAL->memory.stringsPresent == true) {
+      printString("ERROR: Could not send message to logger process\n");
+      // Write this entry immediately.
+      goto writeImmediate;
+    }
     return -EAGAIN;
   }
   
