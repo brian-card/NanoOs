@@ -4201,7 +4201,7 @@ int32_t restartLogger(ProcessDescriptor *processDescriptor) {
   if ((SCHEDULER_STATE->hostname == NULL)
     || (*SCHEDULER_STATE->hostname == '\0')
   ) {
-    logDetail("Scheduler not up.  Returning -EAGAIN\n");
+    logError("Scheduler not up.  Returning -EAGAIN\n");
     return -EAGAIN;
   }
 
@@ -4209,13 +4209,14 @@ int32_t restartLogger(ProcessDescriptor *processDescriptor) {
   int returnValue = schedulerRunOverlayCommand(processDescriptor,
     (char*) _loggerPath, (char**) _loggerArgs, NULL);
   if (returnValue == -EBUSY) {
-    logDetail("Starting logger failed.  Returning -EAGAIN\n");
+    logError("Starting logger failed.  Returning -EAGAIN\n");
     return -EAGAIN;
   }
 
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
   processDescriptor->readyQueue
     = &SCHEDULER_STATE->ready[processDescriptor->privilegeLevel];
+  SCHEDULER_STATE->loggerPid = processDescriptor->processId;
 
   return 0;
 }
