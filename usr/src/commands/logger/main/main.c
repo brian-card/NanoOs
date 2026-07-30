@@ -95,7 +95,7 @@ int loggerLogMessageCommandHandler(
   }
   
   snprintf(loggerState->formatBuffer, loggerState->formatBufferSize,
-    "[%lld.%09lld %s:%u %s:%u %s] ",
+    "logger: [%lld.%09lld %s:%u %s:%u %s] ",
     ((long long int) logMessageArgs->logEntry.timeStamp)
       / ((long long int) 1000000000),
     ((long long int) logMessageArgs->logEntry.timeStamp)
@@ -118,11 +118,13 @@ printMessage:
   strncat(loggerState->formatBuffer, loggerState->buffer,
     loggerState->formatBufferSize - strlen(loggerState->formatBuffer));
   
-  printf(loggerState->formatBuffer,
+  snprintf(loggerState->buffer, sizeof(loggerState->buffer),
+    loggerState->formatBuffer,
     (intptr_t) logMessageArgs->logEntry.args[0],
     (intptr_t) logMessageArgs->logEntry.args[1],
     (intptr_t) logMessageArgs->logEntry.args[2],
     (intptr_t) logMessageArgs->logEntry.args[3]);
+  printString(loggerState->buffer);
   
 exit:
   return 0;
