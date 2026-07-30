@@ -507,7 +507,7 @@ int sendProcessMessageToProcess(
 ) {
   int returnValue = processSuccess;
   if ((processDescriptor == NULL) || (processDescriptor->mainThread == NULL)
-    || (processMessage == NULL)
+    || (processRunning(processDescriptor) == false) || (processMessage == NULL)
   ) {
     // Invalid.
     errno = EINVAL;
