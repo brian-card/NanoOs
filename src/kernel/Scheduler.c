@@ -4216,7 +4216,6 @@ int32_t restartLogger(ProcessDescriptor *processDescriptor) {
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
   processDescriptor->readyQueue
     = &SCHEDULER_STATE->ready[processDescriptor->privilegeLevel];
-  SCHEDULER_STATE->loggerPid = processDescriptor->processId;
 
   return 0;
 }
@@ -4840,7 +4839,6 @@ int initializeProcesses(SchedulerState *schedulerState) {
 
   // Now that we have all the processes setup, we can fix the IPC capabilities.
   setIpcCapabilities(schedulerState);
-  schedulerState->loggerPid = 0;
 
   // Assign the console ports to the memory manager.
   for (uint8_t ii = 0; ii < schedulerState->numShells; ii++) {
