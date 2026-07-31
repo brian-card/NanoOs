@@ -639,7 +639,8 @@ int sdCardSpiWriteBlocksCommandHandler(
 ///
 /// @brief Array of SdCardCommandHandler function pointers to handle commands
 /// received by the runSdCard function.
-SdCardCommandHandler sdCardSpiCommandHandlers[] = {
+KEEP_IN_FLASH
+const SdCardCommandHandler sdCardSpiCommandHandlers[] = {
   sdCardSpiReadBlocksCommandHandler,         // SD_CARD_READ_BLOCKS
   sdCardSpiWriteBlocksCommandHandler,        // SD_CARD_WRITE_BLOCKS
 };

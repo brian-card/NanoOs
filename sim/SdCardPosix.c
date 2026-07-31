@@ -30,6 +30,7 @@
 
 // NanoOs includes
 #include "Logger.h"
+#include "NanoOs.h"
 #include "NanoOsLibC.h"
 #include "Processes.h"
 
@@ -145,7 +146,8 @@ int sdCardPosixWriteBlocksCommandHandler(
 ///
 /// @brief Array of SdCardCommandHandler function pointers to handle commands
 /// received by the runSdCard function.
-SdCardCommandHandler sdCardPosixCommandHandlers[] = {
+KEEP_IN_FLASH
+const SdCardCommandHandler sdCardPosixCommandHandlers[] = {
   sdCardPosixReadBlocksCommandHandler,         // SD_CARD_READ_BLOCKS
   sdCardPosixWriteBlocksCommandHandler,        // SD_CARD_WRITE_BLOCKS
 };
