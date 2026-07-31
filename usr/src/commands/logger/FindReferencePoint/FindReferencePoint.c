@@ -59,6 +59,9 @@ void* findReferencePoint(void *args) {
   uint8_t *fileBuffer = NULL;
   for (; (fileBuffer == NULL) && (fileBufferSize >= 64); fileBufferSize >>= 1) {
     fileBuffer = (uint8_t*) malloc(fileBufferSize);
+    if (fileBuffer != NULL) {
+      break;
+    }
   }
   if (fileBuffer == NULL) {
     printString(__func__);
