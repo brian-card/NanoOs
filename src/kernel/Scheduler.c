@@ -4197,7 +4197,7 @@ int32_t restartOverlayShell(ProcessDescriptor *processDescriptor) {
 ///
 /// @return Returns 0 on sucess, -errno onfailure.
 int32_t restartLogger(ProcessDescriptor *processDescriptor) {
-  logDetail("In restartLogger\n");
+  logDebug("In restartLogger\n");
   if ((SCHEDULER_STATE->hostname == NULL)
     || (*SCHEDULER_STATE->hostname == '\0')
   ) {
@@ -4205,7 +4205,7 @@ int32_t restartLogger(ProcessDescriptor *processDescriptor) {
     return -EAGAIN;
   }
 
-  logDetail("Starting logger\n");
+  logDebug("Starting logger\n");
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
   processDescriptor->halCapabilities = baseExecutiveHalCapabilities;
   processDescriptor->readyQueue
