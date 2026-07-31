@@ -61,7 +61,8 @@ void* findReferencePoint(void *args) {
     fileBuffer = (uint8_t*) malloc(fileBufferSize);
   }
   if (fileBuffer == NULL) {
-    fprintf(stderr, "ERROR: Could not allocate fileBuffer.  Halting logger.\n");
+    printString(__func__);
+    printString(": ERROR: Could not allocate fileBuffer.  Halting logger.\n");
     goto exit; // return bad status
   }
   
