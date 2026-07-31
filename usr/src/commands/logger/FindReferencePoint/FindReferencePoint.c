@@ -62,7 +62,12 @@ void* findReferencePoint(void *args) {
   }
   if (fileBuffer == NULL) {
     printString(__func__);
-    printString(": ERROR: Could not allocate fileBuffer.  Halting logger.\n");
+    printString(": ERROR: Could not allocate fileBuffer; Halting logger\n");
+    goto exit; // return bad status
+  }
+  if (feof(loggerState->binaryFile)) {
+    printString(__func__);
+    printString(": ERROR: binaryFile is at its end at search start\n");
     goto exit; // return bad status
   }
   
