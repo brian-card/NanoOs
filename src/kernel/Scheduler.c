@@ -4206,19 +4206,23 @@ int32_t restartLogger(ProcessDescriptor *processDescriptor) {
   }
 
   logDetail("Starting logger\n");
+  processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
+  processDescriptor->halCapabilities = baseExecutiveHalCapabilities;
+  processDescriptor->readyQueue
+    = &SCHEDULER_STATE->ready[processDescriptor->privilegeLevel];
   int returnValue = schedulerRunOverlayCommand(processDescriptor,
     (char*) _loggerPath, (char**) _loggerArgs, NULL);
   if (returnValue == -EBUSY) {
     logError("Starting logger failed.  Returning -EAGAIN\n");
     return -EAGAIN;
+  } else if (returnValue < 0) {
+    logError("Starting logger returned status: %s\n", strerror(-returnValue));
+    return -EAGAIN;
   }
-
-  processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
-  processDescriptor->readyQueue
-    = &SCHEDULER_STATE->ready[processDescriptor->privilegeLevel];
 
   return 0;
 }
+
 /// @fn void runScheduler(void)
 ///
 /// @brief Run one (1) iteration of the main scheduler loop.
