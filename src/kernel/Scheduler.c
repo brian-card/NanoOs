@@ -305,6 +305,12 @@ IpcCapability baseSchedulerIpcCapabilities[] = {
       = (((uint16_t) 1) << SD_CARD_READ_BLOCKS)
       | (((uint16_t) 1) << SD_CARD_WRITE_BLOCKS)
   },
+  {
+    .destinationPid = 0, // Logger PID to be set by scheduler
+    .signature      = LOGGER_COMMAND_SIGNATURE,
+    .messageTypes
+      = (((uint16_t) 1) << LOGGER_LOG_MESSAGE)
+  },
 };
 
 /// @var baseConsoleIpcCapabilities
@@ -387,7 +393,8 @@ IpcCapability baseLoggerIpcCapabilities[] = {
     .destinationPid = 0, // Scheduler PID to be set by scheduler
     .signature      = SCHEDULER_COMMAND_SIGNATURE,
     .messageTypes
-      = (((uint16_t) 1) << SCHEDULER_REPLACE_OVERLAY)
+      = (((uint16_t) 1) << SCHEDULER_GET_HOSTNAME)
+      | (((uint16_t) 1) << SCHEDULER_REPLACE_OVERLAY)
   },
   {
     .destinationPid = 0, // Memory manager PID to be set by scheduler
@@ -4565,6 +4572,8 @@ int setIpcCapabilities(SchedulerState *schedulerState) {
     baseSchedulerIpcCapabilities[0].destinationPid
       = schedulerState->rootFsPid - 1;
   }
+  baseSchedulerIpcCapabilities[1].destinationPid
+    = schedulerState->loggerPid;
   baseConsoleIpcCapabilities[0].destinationPid
     = schedulerState->schedulerPid;
   baseConsoleIpcCapabilities[1].destinationPid
