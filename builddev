@@ -153,10 +153,10 @@ if [ -b "${targetDevice}" ]; then
 		# starting position slot 0 would under the per-slot scheme; it has no
 		# fixed per-slot block budget, so its build (see makefile) fails
 		# instead if it grows past what fits before the FAT32 partition.
-		sudo dd if="usr/filesystem/contiguous/0.overlay" of="${targetDevice}" \
+		sudo dd if="usr/filesystem/contiguous-filesystem/0.overlay" of="${targetDevice}" \
 			bs=512 seek=1
 	else
-		blockOverlays="$(ls usr/filesystem/${blockFilesystem}/*)"
+		blockOverlays="$(ls usr/filesystem/${blockFilesystem}-filesystem/*)"
 		for blockOverlay in ${blockOverlays}; do
 			overlayId="$(basename "${blockOverlay}" .overlay)"
 			startBlock=$(( (overlayId * blocksPerOverlay) + 1 ))
@@ -230,10 +230,10 @@ else
 		# starting position slot 0 would under the per-slot scheme; it has no
 		# fixed per-slot block budget, so its build (see makefile) fails
 		# instead if it grows past what fits before the FAT32 partition.
-		dd if="usr/filesystem/contiguous/0.overlay" of="${targetDevice}" \
+		dd if="usr/filesystem/contiguous-filesystem/0.overlay" of="${targetDevice}" \
 			bs=512 seek=1 conv=notrunc
 	else
-		blockOverlays="$(ls usr/filesystem/${blockFilesystem}/*)"
+		blockOverlays="$(ls usr/filesystem/${blockFilesystem}-filesystem/*)"
 		for blockOverlay in ${blockOverlays}; do
 			overlayId="$(basename "${blockOverlay}" .overlay)"
 			startBlock=$(( (overlayId * imageBlocksPerOverlay) + 1 ))

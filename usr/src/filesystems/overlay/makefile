@@ -1,7 +1,7 @@
 include include.mk
 
-OBJ_DIR := ../../../obj/overlay
-BIN_DIR := ../../../filesystem/overlay
+OBJ_DIR := ../../../obj/overlay-filesystem
+BIN_DIR := ../../../filesystem/overlay-filesystem
 
 # Every overlay slot is the union of common/<slot> (driver-agnostic wrapper
 # code, always present) and $(FILESYSTEM)/<slot> (the selected driver's

@@ -26,8 +26,8 @@ LDFLAGS += $(LINKER_SCRIPT) -Wl,--gc-sections -static -no-pie
 LDFLAGS += -Wl,--build-id=none -nostartfiles
 endif
 
-OBJ_DIR := ../../../obj/overlay/$(SLOT)
-BIN_DIR := ../../../filesystem/overlay
+OBJ_DIR := ../../../obj/overlay-filesystem/$(SLOT)
+BIN_DIR := ../../../filesystem/overlay-filesystem
 
 COMMON_DIR := common/$(SLOT)
 DRIVER_DIR := $(FILESYSTEM)/$(SLOT)

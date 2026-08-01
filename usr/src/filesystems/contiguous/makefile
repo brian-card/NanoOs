@@ -26,8 +26,8 @@ LDFLAGS += $(LINKER_SCRIPT) -Wl,--gc-sections -static -no-pie
 LDFLAGS += -Wl,--build-id=none -nostartfiles
 endif
 
-OBJ_DIR := ../../../obj/contiguous
-BIN_DIR := ../../../filesystem/contiguous
+OBJ_DIR := ../../../obj/contiguous-filesystem
+BIN_DIR := ../../../filesystem/contiguous-filesystem
 
 VPATH := common:fat32
 
