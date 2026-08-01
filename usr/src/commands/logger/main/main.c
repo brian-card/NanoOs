@@ -95,7 +95,7 @@ int loggerLogMessageCommandHandler(
   }
   
   snprintf(loggerState->formatBuffer, loggerState->formatBufferSize,
-    "logger: [%lld.%09lld %s:%u %s:%u %s] ",
+    "[%lld.%09lld %s:%u %s:%u %s] ",
     ((long long int) logMessageArgs->logEntry.timeStamp)
       / ((long long int) 1000000000),
     ((long long int) logMessageArgs->logEntry.timeStamp)
