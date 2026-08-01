@@ -86,7 +86,7 @@ int loggerLogMessageCommandHandler(
   
   loggerState->args = (void*) ((intptr_t) logMessageArgs->logEntry.fileName);
   if (callOverlayFunction(OVERLAY_SAME_NAMESPACE,
-    "GetString", "getString", &loggerState) != &loggerState
+    "GetString", "getString", loggerState) != loggerState
   ) {
     printString("logger: ERROR! Could not find file name at offset ");
     printInt(logMessageArgs->logEntry.fileName);
@@ -108,7 +108,7 @@ int loggerLogMessageCommandHandler(
 printMessage:
   loggerState->args = (void*) ((intptr_t) logMessageArgs->logEntry.format);
   if (callOverlayFunction(OVERLAY_SAME_NAMESPACE,
-    "GetString", "getString", &loggerState) != &loggerState
+    "GetString", "getString", loggerState) != loggerState
   ) {
     printString("logger: ERROR! Could not find format string at offset ");
     printInt(logMessageArgs->logEntry.fileName);
