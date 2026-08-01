@@ -186,6 +186,12 @@ int main(int argc, char **argv) {
     strcpy(loggerState.hostname, "localhost");
   }
   
+  if (getHal()->memory.staticLogs != NULL) {
+    for (unsigned int ii = 0; ii < getHal()->memory.staticLogs->metadata.numEntries; ii++) {
+      printLogEntry(&loggerState, &getHal()->memory.staticLogs->logEntries[ii]);
+    }
+  }
+  
   while (1) {
     ProcessMessage *processMessage = processMessageQueueWait(NULL);
     while (processMessage != NULL) {
