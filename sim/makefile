@@ -27,7 +27,13 @@ ifeq ($(COMPILE),arm-none-eabi-gcc)
 endif
 
 # Compiler flags
-CFLAGS := $(CPU) -std=gnu17 -g -rdynamic
+#
+# -fno-jump-tables: without it, gcc lowers switch statements with dense case
+# ranges to a jump table in .rodata (see e.g. msg_element in Messages.c).
+# $(STRIPPED_BINARY) below removes .rodata to mirror the AgonLight2/SAMD21
+# shipped-binary build, so a jump table there would crash on first use just
+# like it would on real hardware. Matches makefiles/AgonLight2Makefile.
+CFLAGS := $(CPU) -std=gnu17 -g -rdynamic -fno-jump-tables
 
 LINKS := \
 
