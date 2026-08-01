@@ -522,6 +522,10 @@ static inline int printString_(const char *string) {
   return -EPERM;
 }
 #define printString(str) printString_((const char*) (str))
+static inline int printChar(char c) {
+  char string[2] = {c, '\0'};
+  return printString(string);
+}
 static inline int printInt_(long long int integer) {
   if (overlayMap.header.osApi->executiveApi != NULL) {
     return overlayMap.header.osApi->executiveApi->printInt(integer);
