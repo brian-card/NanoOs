@@ -127,6 +127,7 @@ printMessage:
   printString(loggerState->buffer);
   
 exit:
+  processMessageSetDone(processMessage);
   return 0;
 }
 
