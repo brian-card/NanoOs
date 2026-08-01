@@ -97,7 +97,6 @@ SECTIONS
         *(.ARM.exidx*)
         *(.ARM.extab*)
         *(.comment)
-        *(.debug*)
     }
 }
 

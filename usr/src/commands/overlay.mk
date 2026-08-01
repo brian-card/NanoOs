@@ -7,7 +7,7 @@ ifneq ($(LINKER_SCRIPT),)
 endif
 
 # Compiler flags
-CFLAGS += -Os -nostdlib -ffreestanding
+CFLAGS += -Os -nostdlib -ffreestanding -g
 CFLAGS += -fno-pic -fno-pie -static
 CFLAGS += -ffunction-sections -fdata-sections -fcf-protection=none
 CFLAGS += -fno-jump-tables
