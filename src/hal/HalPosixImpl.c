@@ -1005,7 +1005,6 @@ int32_t halPosixImplInit(jmp_buf resetBuffer,
   }
   fprintf(stderr, _globalStackAllocatedMessage);
   *staticLogs = (StaticLogs*) (((char*) _bottomOfHeap) + 16384);
-  *staticLogs = NULL;
 
   // The size used in the mmap call has to be large enough to accommodate the
   // size used for the overlay, plus the offset into the overlay.  It also has
