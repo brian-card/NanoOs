@@ -1819,6 +1819,32 @@ int32_t fat32Fread(
       break;
     }
 
+    // If we are exactly on a cluster boundary (and not at the very start of
+    // the file) we need to advance to the next cluster in the chain before
+    // reading.  This must happen unconditionally at the top of the loop
+    // (rather than only when more data remains within this call) so that a
+    // read which ends precisely on a cluster boundary still leaves
+    // currentCluster correctly positioned for the *next* call to this
+    // function.  fat32Fwrite mirrors this same pattern.
+    if ((handle->currentPosition != 0)
+        && ((handle->currentPosition % ds->bytesPerCluster) == 0)
+    ) {
+      uint32_t nextCluster;
+      int fatResult =
+        fat32ReadFatEntry(ds, handle->currentCluster, &nextCluster);
+      if (fatResult != FAT32_SUCCESS) {
+        return (totalRead > 0) ? (int32_t) totalRead : FAT32_ERROR;
+      }
+
+      // End-of-chain before the file size is reached — the FAT is
+      // inconsistent, but return what we have rather than corrupting memory.
+      if (nextCluster >= FAT32_CLUSTER_EOC_MIN) {
+        break;
+      }
+
+      handle->currentCluster = nextCluster;
+    }
+
     // Byte offset within the current cluster.
     uint32_t offsetInCluster =
       handle->currentPosition % ds->bytesPerCluster;
@@ -1852,26 +1878,6 @@ int32_t fat32Fread(
 
     totalRead                += toCopy;
     handle->currentPosition  += toCopy;
-
-    // ---- Advance to the next cluster if we have reached the boundary ----
-    if (((handle->currentPosition % ds->bytesPerCluster) == 0)
-        && (totalRead < length)
-    ) {
-      uint32_t nextCluster;
-      int fatResult =
-        fat32ReadFatEntry(ds, handle->currentCluster, &nextCluster);
-      if (fatResult != FAT32_SUCCESS) {
-        return (totalRead > 0) ? (int32_t) totalRead : FAT32_ERROR;
-      }
-
-      // End-of-chain before the file size is reached — the FAT is
-      // inconsistent, but return what we have rather than corrupting memory.
-      if (nextCluster >= FAT32_CLUSTER_EOC_MIN) {
-        break;
-      }
-
-      handle->currentCluster = nextCluster;
-    }
   }
 
   return (int32_t) totalRead;
