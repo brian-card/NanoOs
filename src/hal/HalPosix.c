@@ -303,7 +303,7 @@ static HalFunction posixBlockDeviceFunctions[HAL_BLOCK_DEVICE_NUM_FNS] = {
 /// @var _logBuffer
 ///
 /// @brief Statically allocated buffer for formatting log messages.
-static char _logBuffer[96];
+static char _logBuffer[128];
 
 int32_t halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
   _sdCardDevicePath = sdCardDevicePath;

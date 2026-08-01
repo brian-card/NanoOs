@@ -1325,7 +1325,7 @@ static HalFunction arduinoSamD21x18ABlockDeviceFunctions[HAL_BLOCK_DEVICE_NUM_FN
 /// @var _logBuffer
 ///
 /// @brief Statically allocated buffer for formatting log messages.
-static char _logBuffer[96];
+static char _logBuffer[128];
 
 /// @var _bssOverflowErrorPrefix
 ///

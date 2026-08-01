@@ -589,7 +589,7 @@ static uint32_t agonLight2BlockDevicesOnline[] = { 0x00000000 };
 /// @var _logBuffer
 ///
 /// @brief Statically allocated buffer for formatting log messages.
-static char _logBuffer[96];
+static char _logBuffer[128];
 
 int32_t halAgonLight2Init(void) {
   halFunctions[HAL_MEMORY]       = agonLight2MemoryFunctions;

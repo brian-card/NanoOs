@@ -152,7 +152,7 @@ typedef struct StaticLogs {
 /// @param hostname The hostname of the system the logger is running on.
 /// @param args Custom arguments that are passed to overlay functions.
 typedef struct LoggerState {
-  char buffer[96];
+  char buffer[128];
   FILE *binaryFile;
   intptr_t referenceOffset;
   char *formatBuffer;
