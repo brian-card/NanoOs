@@ -462,13 +462,17 @@ static struct ArduinoSamD21x18ASpi {
   uint32_t baud;
 } arduinoSamD21x18ASpiDevices[MAX_SPI_DEVICES] = {};
 
-/// @var numArduinoSpis
+/// @def numArduinoSpis
 ///
 /// @brief The number of devices we support in the
 /// arduinoSamD21x18ASpiDevices array.
-static const int numArduinoSpis
-  = sizeof(arduinoSamD21x18ASpiDevices)
-  / sizeof(arduinoSamD21x18ASpiDevices[0]);
+///
+/// @note This is a #define rather than a const int so that it doesn't need
+/// its own KEEP_IN_FLASH treatment - it's folded into an immediate value at
+/// each use site instead of occupying storage that could land in .rodata.
+#define numArduinoSpis \
+  ((int) (sizeof(arduinoSamD21x18ASpiDevices) \
+  / sizeof(arduinoSamD21x18ASpiDevices[0])))
 
 static int32_t arduinoSamD21x18AInitSpiImpl(void) {
   if (globalSpiConfigured == false) {
@@ -771,11 +775,15 @@ static HardwareTimer hardwareTimers[] = {
   },
 };
 
-/// @var _numTimers
+/// @def _numTimers
 ///
 /// @brief The number of timers returned by HAL->timer.numSupported.
-static const int _numTimers
-  = sizeof(hardwareTimers) / sizeof(hardwareTimers[0]);
+///
+/// @note This is a #define rather than a const int so that it doesn't need
+/// its own KEEP_IN_FLASH treatment - it's folded into an immediate value at
+/// each use site instead of occupying storage that could land in .rodata.
+#define _numTimers \
+  ((int) (sizeof(hardwareTimers) / sizeof(hardwareTimers[0])))
 
 /// @var halArduinoSamD21x18ATimersOnline
 ///
@@ -1151,11 +1159,16 @@ static BlockDevice *blockDevices[] = {
   NULL,
 };
 
-/// @var _numBlockDevices
+/// @def _numBlockDevices
 ///
 /// @brief Number of BlockDevices that can be managed by the HAL.
-static const uint32_t _numBlockDevices
-  = sizeof(blockDevices) / sizeof(blockDevices[0]);
+///
+/// @note This is a #define rather than a const uint32_t so that it doesn't
+/// need its own KEEP_IN_FLASH treatment - it's folded into an immediate
+/// value at each use site instead of occupying storage that could land in
+/// .rodata.
+#define _numBlockDevices \
+  ((uint32_t) (sizeof(blockDevices) / sizeof(blockDevices[0])))
 
 /// @var halArduinoSamD21x18ABlockDevicesOnline
 ///

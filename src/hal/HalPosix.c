@@ -143,11 +143,16 @@ static BlockDevice *blockDevices[] = {
   NULL,
 };
 
-/// @var _numBlockDevices
+/// @def _numBlockDevices
 ///
 /// @brief Number of BlockDevices that can be managed by the HAL.
-static const uint32_t _numBlockDevices
-  = sizeof(blockDevices) / sizeof(blockDevices[0]);
+///
+/// @note This is a #define rather than a const uint32_t so that it doesn't
+/// need its own KEEP_IN_FLASH treatment - it's folded into an immediate
+/// value at each use site instead of occupying storage that could land in
+/// .rodata.
+#define _numBlockDevices \
+  ((uint32_t) (sizeof(blockDevices) / sizeof(blockDevices[0])))
 
 /// @var posixBlockDevicesOnline
 ///
