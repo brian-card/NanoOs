@@ -116,7 +116,7 @@ printMessage:
     goto exit;
   }
   strncat(loggerState->formatBuffer, loggerState->buffer,
-    loggerState->formatBufferSize - strlen(loggerState->formatBuffer));
+    loggerState->formatBufferSize - strlen(loggerState->formatBuffer) - 1);
   
   snprintf(loggerState->buffer, sizeof(loggerState->buffer),
     loggerState->formatBuffer,
