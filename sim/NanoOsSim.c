@@ -66,6 +66,16 @@
 //// #define printDebug(format, ...) fprintf(stderr, format, ##__VA_ARGS__)
 #define printDebug(format, ...) {}
 
+/// @var _usageFormat
+///
+/// @brief printf-style format string used to report the correct command-line
+/// invocation when the simulator is started without the required argument.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _usageFormat[] KEEP_IN_FLASH
+  = "Usage: %s <block device path>\n";
+
 void usage(const char *argv0) {
   const char *programName = strrchr(argv0, '/');
   if (programName != NULL) {
@@ -74,8 +84,8 @@ void usage(const char *argv0) {
   } else {
     programName = argv0;
   }
-  
-  fprintf(stderr, "Usage: %s <block device path>\n", programName);
+
+  fprintf(stderr, _usageFormat, programName);
 }
 
 int main(int argc, char **argv) {
