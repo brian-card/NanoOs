@@ -120,16 +120,12 @@ int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
 ) {
   va_list args;
   LogMessageCommandArgs commandArgs;
+  char *slashAt = NULL;
   
   // Don't check the return value of getElapsedNanoseconds here.  A failure
   // isn't fatal.  Do this before anything else to get as accurate a timestamp
   // as possible.
   HAL->clock.getElapsedNanoseconds(0, &commandArgs.logEntry.timeStamp);
-  
-  char *slashAt = strrchr(fileName, '/');
-  if (slashAt != NULL) {
-    fileName = slashAt + 1;
-  }
   
   // Get the rest of the fixed values.
   commandArgs.logEntry.logLevel = logLevel;
@@ -231,6 +227,11 @@ int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
   
 writeImmediate:
   // Print the header.
+  slashAt = strrchr(fileName, '/');
+  if (slashAt != NULL) {
+    fileName = slashAt + 1;
+  }
+  
   snprintf(HAL->memory.logBuffer, HAL->memory.logBufferSize,
     _logHeaderFormat,
     (long int) (commandArgs.logEntry.timeStamp / ((int64_t) 1000000000)),

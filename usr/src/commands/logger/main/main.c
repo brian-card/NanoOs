@@ -78,6 +78,12 @@ int printLogEntry(LoggerState *loggerState, LogEntry *logEntry) {
     goto printMessage;
   }
   
+  char *fileName = loggerState->buffer;
+  char *slashAt = strrchr(fileName, '/');
+  if (slashAt != NULL) {
+    fileName = slashAt + 1;
+  }
+  
   snprintf(loggerState->formatBuffer, loggerState->formatBufferSize,
     "[%lld.%09lld %s:%u %s:%u %s] ",
     ((long long int) logEntry->timeStamp)
@@ -85,7 +91,7 @@ int printLogEntry(LoggerState *loggerState, LogEntry *logEntry) {
     ((long long int) logEntry->timeStamp)
       % ((long long int) 1000000000),
     loggerState->hostname, logEntry->pid,
-    loggerState->buffer, // fileName
+    fileName,
     logEntry->lineNumber,
     _logLevelNames[logEntry->logLevel]);
   
@@ -95,7 +101,7 @@ printMessage:
     "GetString", "getString", loggerState) != loggerState
   ) {
     printString("logger: ERROR! Could not find format string at offset ");
-    printInt(logEntry->fileName);
+    printInt(logEntry->format);
     printString("\n");
     goto exit;
   }
