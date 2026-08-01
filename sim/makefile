@@ -51,6 +51,7 @@ COMPONENTS := \
 TARGET := nano-os-sim
 BINARY := $(BIN_DIR)/$(TARGET)
 RODATA_BIN := $(BIN_DIR)/$(TARGET)_rodata.bin
+STRIPPED_BINARY := $(BIN_DIR)/$(TARGET)_stripped
 
 OS_OBJECTS := \
     $(OBJ_DIR)/Commands.o \
@@ -92,7 +93,7 @@ SIM_OBJECTS := \
     $(OBJ_DIR)/SdCardPosixImpl.o \
 
 # Default target
-all: $(BINARY) $(RODATA_BIN)
+all: $(BINARY) $(RODATA_BIN) $(STRIPPED_BINARY)
 
 # Build simulator binary
 $(BINARY): $(COMPONENTS) $(SIM_OBJECTS)
@@ -106,6 +107,13 @@ $(BINARY): $(COMPONENTS) $(SIM_OBJECTS)
 # separate extract rather than a companion to a stripped build.
 $(RODATA_BIN): $(BINARY)
 	$(OBJCOPY) -O binary -j .rodata $< $@
+
+# Copy of $(BINARY) with .rodata removed, mirroring the objcopy -R .rodata
+# step the AgonLight2/SAMD21 builds run on their shipped binaries (see
+# makefiles/AgonLight2Makefile), so the same missing-.rodata code paths can
+# be exercised on the dev machine instead of only on real hardware.
+$(STRIPPED_BINARY): $(BINARY)
+	$(OBJCOPY) -R .rodata $< $@
 
 ../src/%: FORCE
 	$(MAKE) -C $@ COMPILE=$(COMPILE) LINK=$(LINK) \
@@ -131,14 +139,14 @@ symbols: $(BINARY)
 
 # Clean build artifacts
 clean:
-	$(RM) $(SIM_OBJECTS) $(BINARY) $(RODATA_BIN) $(TARGET).dis
+	$(RM) $(SIM_OBJECTS) $(BINARY) $(RODATA_BIN) $(STRIPPED_BINARY) $(TARGET).dis
 	for component in $(COMPONENTS); do $(MAKE) -C $${component} clean; done
 
 # Show help
 help:
 	@echo "NanoOS Overlay Build System"
 	@echo "Usage:"
-	@echo "  make          - Build the simulator and its .rodata-only artifact"
+	@echo "  make          - Build the simulator and its .rodata-only/-stripped artifacts"
 	@echo "  make disasm   - Generate disassembly listing"
 	@echo "  make sections - Show ELF section information"  
 	@echo "  make symbols  - Show symbol table"
