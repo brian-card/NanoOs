@@ -310,7 +310,7 @@ flash-full: $(FULL_BIN)
 
 # ---- Utility targets --------------------------------------------------------
 
-size: $(ELF)
+size: $(ELF) $(STRIPPED_BIN)
 	@echo ""
 	@echo "=== Agon Light 2 (eZ80F92): Section sizes ==="
 	@$(SIZE) -A $(ELF)
@@ -325,16 +325,16 @@ size: $(ELF)
 	@echo -n "  Full binary size:       "; stat -c%s $(FULL_BIN) 2>/dev/null || echo "(build first)"
 	@echo -n "  Rodata binary size:     "; stat -c%s $(RODATA_BIN) 2>/dev/null || echo "(build first)"
 	@echo ""
-	@echo "=== External SRAM headroom ==="
+	@echo "=== External SRAM headroom (stripped binary, as shipped) ==="
 	@python3 -c "\
 import subprocess, re; \
-out = subprocess.check_output(['$(SIZE)', '-A', '$(ELF)']).decode(); \
-text   = sum(int(m) for m in re.findall(r'^\\.text\\s+(\\d+)',   out, re.M)); \
-rodata = sum(int(m) for m in re.findall(r'^\\.rodata\\s+(\\d+)', out, re.M)); \
-data   = sum(int(m) for m in re.findall(r'^\\.data\\s+(\\d+)',   out, re.M)); \
-bss    = sum(int(m) for m in re.findall(r'^\\.bss\\s+(\\d+)',    out, re.M)); \
-total  = text + rodata + data + bss; \
+out    = subprocess.check_output(['$(SIZE)', '-A', '$(ELF)']).decode(); \
+bss    = sum(int(m) for m in re.findall(r'^\\.bss\\s+(\\d+)', out, re.M)); \
+loaded = $$(stat -c%s $(STRIPPED_BIN) 2>/dev/null || echo 0); \
+total  = loaded + bss; \
 avail  = 128 * 1024; \
+print(f'  Stripped binary (loaded image): {loaded} bytes ({loaded/1024:.1f} KB)'); \
+print(f'  .bss (zero-init, added at load): {bss} bytes ({bss/1024:.1f} KB)'); \
 print(f'  Total estimated footprint: {total} bytes ({total/1024:.1f} KB)'); \
 print(f'  External SRAM available:   {avail} bytes (128 KB)'); \
 print(f'  Headroom:                  {avail - total} bytes ({(avail - total)/1024:.1f} KB)'); \
