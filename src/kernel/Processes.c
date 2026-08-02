@@ -489,6 +489,40 @@ bool currentProcessHasIpcCapability(
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
+/// @var _couldNotSendMessageTypePrefix
+///
+/// @brief First segment of the message printed by sendProcessMessageToProcess
+/// when a caller lacks the IPC capability to send a message.
+///
+/// @note This stays a raw printString/printHex/printInt sequence, not
+/// logError: logError itself delivers messages by calling back into this
+/// same send path, so using it here to report a send failure recurses
+/// infinitely instead of reporting the error.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _couldNotSendMessageTypePrefix[] KEEP_IN_FLASH
+  = "Could not send message type ";
+
+/// @var _toProcessInfix
+///
+/// @brief Segment printed between the message type and destination PID by
+/// sendProcessMessageToProcess. See _couldNotSendMessageTypePrefix for why
+/// this stays a raw printString.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _toProcessInfix[] KEEP_IN_FLASH = " to process ";
+
+/// @var _sendMessageErrorNewline
+///
+/// @brief Trailing newline printed by sendProcessMessageToProcess. See
+/// _couldNotSendMessageTypePrefix for why this stays a raw printString.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _sendMessageErrorNewline[] KEEP_IN_FLASH = "\n";
+
 /// @fn int sendProcessMessageToProcess(
 ///   ProcessDescriptor *processDescriptor, ProcessMessage *processMessage)
 ///
@@ -521,9 +555,11 @@ int sendProcessMessageToProcess(
   ) {
     errno = EPERM;
     returnValue = processError;
-    logError("Could not send message type %d to process %d\n",
-      (processMessageType(processMessage) & 0xff),
-      processDescriptor->processId);
+    printString(_couldNotSendMessageTypePrefix);
+    printHex(processMessageType(processMessage) & 0xff);
+    printString(_toProcessInfix);
+    printInt(processDescriptor->processId);
+    printString(_sendMessageErrorNewline);
     goto exit;
   }
 
