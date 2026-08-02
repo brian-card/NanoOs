@@ -4812,7 +4812,7 @@ int initializeProcesses(SchedulerState *schedulerState) {
       schedulerState->loggerPid = schedulerState->firstUserPid;
       threadSetContext(processDescriptor->mainThread, processDescriptor);
       processDescriptor->processId = schedulerState->loggerPid;
-      processDescriptor->userId = NO_USER_ID;
+      processDescriptor->userId = ROOT_USER_ID;
       processDescriptor->name = _loggerName;
       processDescriptor->callOverlayFunction = HAL->platform.callFileOverlay;
       // The logger is an executive process, but we're going to start it in
