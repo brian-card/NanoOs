@@ -56,7 +56,10 @@ COMPONENTS := \
 # Source and target files
 TARGET := nano-os-sim
 BINARY := $(BIN_DIR)/$(TARGET)
-RODATA_BIN := $(BIN_DIR)/$(TARGET)_rodata.bin
+# Named NanoOs_rodata.bin (not $(TARGET)_rodata.bin) so it lands on the
+# filesystem under the same name the logger process expects on every
+# platform (see makefiles/AgonLight2Makefile, ArduinoSamd21Makefile).
+RODATA_BIN := $(BIN_DIR)/NanoOs_rodata.bin
 STRIPPED_BINARY := $(BIN_DIR)/$(TARGET)_stripped
 
 OS_OBJECTS := \

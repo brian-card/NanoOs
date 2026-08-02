@@ -51,7 +51,7 @@ make -j $(nproc) -C sim
 echo ""
 echo "Build complete."
 
-osRodataBin="sim/bin/nano-os-sim_rodata.bin"
+osRodataBin="sim/bin/NanoOs_rodata.bin"
 
 # Partition: MBR, FAT32 (partition type 0xc) starting at 2 MiB.
 # sfdisk is used instead of parted because parted truncates image files

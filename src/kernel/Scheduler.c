@@ -3944,7 +3944,7 @@ static const char _couldNotCreateLoggerProcess[] KEEP_IN_FLASH
 /// @brief Path to the data file the logger needs to use.  This will be argv[1]
 /// from within the logger process.
 static const char _loggerData[] KEEP_IN_FLASH
-  = "/usr/lib/nano-os-sim_rodata.bin";
+  = "/usr/lib/NanoOs_rodata.bin";
 
 /// @var _loggerArgs
 ///
