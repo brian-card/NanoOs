@@ -117,6 +117,16 @@ When the filesystem is run from code on the block storage device, the code begin
 
 It is not advised to run the filesystem as an overlay process.  While no functionality is lost, having the filesystem compete with other processes for overlay memory slows down the overall user experience by about 3X.  This option should only be used when both flash memory and RAM are limited.
 
+## Logger
+
+The makefiles for the NanoOs image always produce three artifacts:
+
+1. The full image
+2. The image with the strings stripped from it
+3. The strings stripped from the image
+
+On systems with limited flash, the image with strings stripped can be loaded and a logger process can be run.  The logger process is a normal process on the filesystem (found at `/usr/bin/logger`) that is run with Executive privileges.  This allows it to directly access the HAL and retrieve messages that are logged by the kernel and other executive processes.  The logger process utilizes the strings artifact (found on the filesystem at `/usr/lib/NanoOs_rodata.bin`) to reconstruct the intended log messages and print them to UART0.
+
 ## Hardware
 
 NanoOs is hardware-agnostic.  Neither the operating system nor the processes have any idea about the hardware they're running on.  All hardware operations are abstracted by the Hardware Abstraction Layer (HAL) API.  In order to support a new architecture, the only thing that's needed is a conformant HAL implementation.
