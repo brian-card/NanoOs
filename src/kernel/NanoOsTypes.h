@@ -57,7 +57,7 @@ extern "C"
 /// of PROCESS_ID_NOT_SET must be changed in Processes.h.  If this value is
 /// increased beyond 255, then the type defined by ProcessId below must also
 /// be extended.
-#define NANO_OS_NUM_PROCESSES 9
+#define NANO_OS_NUM_PROCESSES 10
 
 /// @def SCHEDULER_NUM_PROCESSES
 ///
