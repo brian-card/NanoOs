@@ -145,7 +145,7 @@ int32_t arduinoAvrRestartBlockDevice(va_list args) {
   if (processCreate(processDescriptor, runSdCardSpi, &sdCardSpiArgs)
     != processSuccess
   ) {
-    printString("Could not restart SD card process\n");
+    logError("Could not restart SD card process\n");
     return -ENOMEM;
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
@@ -155,7 +155,7 @@ int32_t arduinoAvrRestartBlockDevice(va_list args) {
   BlockDevice *sdDevice
     = (BlockDevice*) coroutineResume(processDescriptor->mainThread, NULL);
   if (sdDevice == NULL) {
-    printString("SD card restart returned NULL\n");
+    logError("SD card restart returned NULL\n");
     return -ENODEV;
   }
   sdDevice->partitionNumber = 1;
