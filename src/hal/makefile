@@ -37,7 +37,15 @@ LDFLAGS =
 # .rodata to mirror the AgonLight2/SAMD21 shipped-binary build, so a jump
 # table there would crash on first use just like it would on real hardware.
 # Matches makefiles/AgonLight2Makefile.
-CFLAGS = $(CPU) -std=gnu17 -g -fno-jump-tables
+#
+# -DNANO_OS_STRINGS_STRIPPED: only read by HalPosix.c, to set
+# halImpl.memory.stringsPresent = false. sim/makefile's stripped binary
+# mirrors the AgonLight2/SAMD21 shipped-binary build (.rodata removed via
+# objcopy), so the HAL must report that string literals are not safely
+# dereferenceable at runtime, same as those two real targets - even though
+# native POSIX .rodata isn't actually stripped, this keeps the sim
+# exercising the same code paths real hardware does.
+CFLAGS = $(CPU) -std=gnu17 -g -fno-jump-tables -DNANO_OS_STRINGS_STRIPPED
 
 LINKS = \
 
