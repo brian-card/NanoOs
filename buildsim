@@ -105,4 +105,4 @@ else
 	done
 fi
 
-${@} sim/bin/nano-os-sim "${imageFile}"
+${@} sim/bin/nano-os-sim_stripped "${imageFile}"
