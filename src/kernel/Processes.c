@@ -504,6 +504,16 @@ bool currentProcessHasIpcCapability(
 static const char _couldNotSendMessageTypePrefix[] KEEP_IN_FLASH
   = "Could not send message type ";
 
+/// @var _fromProcessInfix
+///
+/// @brief Segment printed between the message type and source PID by
+/// sendProcessMessageToProcess. See _couldNotSendMessageTypePrefix for why
+/// this stays a raw printString.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _fromProcessInfix[] KEEP_IN_FLASH = " from process ";
+
 /// @var _toProcessInfix
 ///
 /// @brief Segment printed between the message type and destination PID by
@@ -557,6 +567,8 @@ int sendProcessMessageToProcess(
     returnValue = processError;
     printString(_couldNotSendMessageTypePrefix);
     printHex(processMessageType(processMessage) & 0xff);
+    printString(_fromProcessInfix);
+    printInt(getRunningPid());
     printString(_toProcessInfix);
     printInt(processDescriptor->processId);
     printString(_sendMessageErrorNewline);
