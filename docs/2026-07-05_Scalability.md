@@ -1,4 +1,4 @@
-# 2026-07-05 - Scalability
+# 5-Jul-2026 - Scalability
 
 I've wound up taking several detours before moving on to stripping strings out of the binary.  It's a good thing I did, too, because I've wound up learning a few things.
 
