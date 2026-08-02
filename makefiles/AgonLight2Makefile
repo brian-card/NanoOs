@@ -96,12 +96,21 @@ ARCH_FLAGS := --target=$(TARGET_TRIPLE)
 
 # ---- Preprocessor defines ---------------------------------------------------
 
+# NANO_OS_STRINGS_STRIPPED: only read by hal/HalAgonLight2.c, to set
+# halImpl.memory.stringsPresent. This build ships as NanoOs_stripped.bin
+# with .rodata removed (see the header comment above), so the HAL must
+# report that string literals are not safely dereferenceable at runtime -
+# NanoOs_full.bin is only a debugging artifact of the same compile, not a
+# real deployment target. Applied build-wide since this makefile compiles
+# everything (kernel/hal/user) through one shared DEFINES list; every other
+# file ignores this macro.
 DEFINES := \
 	-DAGON_LIGHT2 \
 	-DEZ80F92 \
 	-DF_CPU=18432000UL \
 	-DNANO_OS_AGON_LIGHT_2 \
 	-DNANOOS_EZ80 \
+	-DNANO_OS_STRINGS_STRIPPED \
 	$(if $(filter 1,$(STANDALONE)),-DNANO_OS_AGON_LIGHT_2_STANDALONE) \
 
 # ---- Include paths ----------------------------------------------------------

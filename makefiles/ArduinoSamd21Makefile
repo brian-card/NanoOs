@@ -180,6 +180,15 @@ LINKER_SCRIPT := $(LINKER_DIR)/ArduinoSamd21FlashWithBootloader.ld
 ARCH_FLAGS := -mcpu=cortex-m0plus -mthumb
 
 # Preprocessor defines: common + board-specific
+#
+# NANO_OS_STRINGS_STRIPPED: only read by hal/HalArduinoSamD21x18A.cpp, to
+# set halImpl.memory.stringsPresent. This build ships as
+# NanoOs_stripped.bin/.uf2 with .rodata removed (see the header comment
+# above), so the HAL must report that string literals are not safely
+# dereferenceable at runtime - NanoOs_full.bin/.uf2 is only a debugging
+# artifact of the same compile, not a real deployment target. Applied
+# build-wide since this makefile compiles everything (kernel/hal/user)
+# through one shared DEFINES list; every other file ignores this macro.
 DEFINES := \
 	-DF_CPU=48000000L \
 	-DARDUINO=10607 \
@@ -193,6 +202,7 @@ DEFINES := \
 	-DUSB_CONFIG_POWER=100 \
 	-DUSB_MANUFACTURER='"$(BOARD_USB_MFR)"' \
 	-DUSB_PRODUCT='"$(BOARD_USB_PRODUCT)"' \
+	-DNANO_OS_STRINGS_STRIPPED \
 	$(BOARD_DEFINES)
 
 # Include paths
