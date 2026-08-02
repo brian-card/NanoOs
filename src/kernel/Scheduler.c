@@ -3910,6 +3910,17 @@ static const char _loggerPath[] KEEP_IN_FLASH = "/usr/bin/logger";
 /// @brief argv[0] used to launch the logger process.
 static const char _loggerName[] KEEP_IN_FLASH = "logger";
 
+/// @var _couldNotCreateLoggerProcess
+///
+/// @brief Message printed when the logger process itself could not be
+/// created.  Since the logger isn't available yet, this can't be logged via
+/// logError and must be printed directly instead.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _couldNotCreateLoggerProcess[] KEEP_IN_FLASH
+  = "Could not create logger process\n";
+
 /// @var _loggerData
 ///
 /// @brief Path to the data file the logger needs to use.  This will be argv[1]
@@ -4768,26 +4779,31 @@ int initializeProcesses(SchedulerState *schedulerState) {
   }
   logDebug("Initialized root storage\n");
 
-  schedulerState->loggerPid = schedulerState->firstUserPid;
-  processDescriptor = &allProcesses[schedulerState->loggerPid - 1];
-  if (processCreate(processDescriptor, dummyProcess, NULL) != processSuccess) {
-    logError("Could not create logger process\n");
-  }
-  threadSetContext(processDescriptor->mainThread, processDescriptor);
-  processDescriptor->processId = schedulerState->loggerPid;
-  processDescriptor->userId = NO_USER_ID;
-  processDescriptor->name = _loggerName;
-  processDescriptor->callOverlayFunction = HAL->platform.callFileOverlay;
-  // The logger is an executive process, but we're going to start it in
-  // supervisor mode until the system comes up far enough to launch it.
-  // restartLogger will take care of fixing the level once it launches
-  // successfully.
-  processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_SUPERVISOR;
-  processDescriptor->restartFunction = restartLogger;
-  logDebug("Initialized logger process\n");
+  if (HAL->memory.stringsPresent == false) {
+    do {
+      processDescriptor = &allProcesses[schedulerState->firstUserPid - 1];
+      if (processCreate(processDescriptor, dummyProcess, NULL) != processSuccess) {
+        printString(_couldNotCreateLoggerProcess);
+        break;
+      }
+      schedulerState->loggerPid = schedulerState->firstUserPid;
+      threadSetContext(processDescriptor->mainThread, processDescriptor);
+      processDescriptor->processId = schedulerState->loggerPid;
+      processDescriptor->userId = NO_USER_ID;
+      processDescriptor->name = _loggerName;
+      processDescriptor->callOverlayFunction = HAL->platform.callFileOverlay;
+      // The logger is an executive process, but we're going to start it in
+      // supervisor mode until the system comes up far enough to launch it.
+      // restartLogger will take care of fixing the level once it launches
+      // successfully.
+      processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_SUPERVISOR;
+      processDescriptor->restartFunction = restartLogger;
+      logDebug("Initialized logger process\n");
 
-  schedulerState->firstUserPid++;
-  schedulerState->firstShellPid = schedulerState->firstUserPid;
+      schedulerState->firstUserPid++;
+      schedulerState->firstShellPid = schedulerState->firstUserPid;
+    } while(0);
+  }
 
   // Get the number of shells we'll be managing.  This needs to be done before
   // assigning processes to their ready queues and before we create the user
