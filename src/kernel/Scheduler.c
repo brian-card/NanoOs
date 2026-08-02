@@ -4806,6 +4806,17 @@ int initializeProcesses(SchedulerState *schedulerState) {
     = MIN(schedulerState->numShells, NANO_OS_MAX_NUM_SHELLS);
   logDebug("Managing %ld shells\n", (long int) schedulerState->numShells);
 
+  // Set the shells for the ports.
+  for (uint8_t ii = 0; ii < schedulerState->numShells; ii++) {
+    if (schedulerSetPortShell(ii, schedulerState->firstShellPid + ii)
+      != processSuccess
+    ) {
+      logWarn("Could not set port for shell %d\n"
+        "Undefined behavior will result.\n", ii);
+    }
+  }
+  logDebug("Set shells for ports.\n");
+
   // We need to do an initial population of all the processes because we need to
   // get to the end of memory to run the memory manager in whatever is left
   // over.  The scheduler will take care of cleaning up the dummy processes
@@ -4884,17 +4895,6 @@ int initializeProcesses(SchedulerState *schedulerState) {
     processQueuePush(allProcesses[ii - 1].readyQueue, &allProcesses[ii - 1]);
   }
   logDebug("Populated ready queues.\n");
-
-  // Set the shells for the ports.
-  for (uint8_t ii = 0; ii < schedulerState->numShells; ii++) {
-    if (schedulerSetPortShell(ii, schedulerState->firstShellPid + ii)
-      != processSuccess
-    ) {
-      logWarn("Could not set port for shell %d\n"
-        "Undefined behavior will result.\n", ii);
-    }
-  }
-  logDebug("Set shells for ports.\n");
 
   // Get the memory manager and filesystem up and running.
   runSchedulerQueues(PRIVILEGE_LEVEL_SUPERVISOR);
