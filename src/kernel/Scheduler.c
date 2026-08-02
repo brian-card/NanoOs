@@ -4774,7 +4774,7 @@ int initializeProcesses(SchedulerState *schedulerState) {
     logError("Could not create logger process\n");
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
-  processDescriptor->processId = schedulerState->firstUserPid;
+  processDescriptor->processId = schedulerState->loggerPid;
   processDescriptor->userId = NO_USER_ID;
   processDescriptor->name = _loggerName;
   processDescriptor->callOverlayFunction = HAL->platform.callFileOverlay;
