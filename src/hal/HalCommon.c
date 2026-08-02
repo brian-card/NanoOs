@@ -517,6 +517,64 @@ BlockDevice* halCommonInitRootSdSpiStorage(
 /// final binary on some targets.
 static const char _filesystemName[] KEEP_IN_FLASH = "filesystem";
 
+/// @var _mainFunctionName
+///
+/// @brief Name of the exported entry-point function a contiguous filesystem
+/// overlay must provide.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _mainFunctionName[] KEEP_IN_FLASH = "main";
+
+/// @var _restartFilesystemFailedMessage
+///
+/// @brief Message printed when restartBuiltinFilesystem or
+/// restartOverlayFilesystem fails to recreate the filesystem process.
+///
+/// @note This stays a raw printString, not logError: it fires while the
+/// filesystem is being brought up (or has just failed to come up), and
+/// logError's own strings are only reachable once the filesystem is
+/// available. If the filesystem is what's failing, they may never be.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _restartFilesystemFailedMessage[] KEEP_IN_FLASH
+  = "Could not restart filesystem process.\n";
+
+/// @var _noRootBlockDeviceMessage
+///
+/// @brief Message printed when restartContiguousFilesystem can't find a
+/// root block device. See _restartFilesystemFailedMessage for why
+/// this stays a raw printString.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _noRootBlockDeviceMessage[] KEEP_IN_FLASH
+  = "Could not get root block device for filesystem\n";
+
+/// @var _noMainFunctionMessage
+///
+/// @brief Message printed when restartContiguousFilesystem can't find the
+/// overlay's main entry point. See _restartFilesystemFailedMessage
+/// for why this stays a raw printString.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _noMainFunctionMessage[] KEEP_IN_FLASH
+  = "Could not find main function for filesystem process\n";
+
+/// @var _restartContiguousFilesystemFailedMessage
+///
+/// @brief Message printed when restartContiguousFilesystem fails to
+/// recreate the filesystem process. See
+/// _restartFilesystemFailedMessage for why this stays a raw
+/// printString.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _restartContiguousFilesystemFailedMessage[] KEEP_IN_FLASH
+  = "Could not restart filesystem process\n";
+
 /// @fn int32_t halCommonInitRootFilesystem(void)
 ///
 /// @brief Common initialization for the root filesystem process.
@@ -615,7 +673,7 @@ int32_t restartBuiltinFilesystem(ProcessDescriptor *processDescriptor) {
   if (processCreate(processDescriptor, runFilesystem, &fs)
     != processSuccess
   ) {
-    logError("Could not restart filesystem process.\n");
+    printString(_restartFilesystemFailedMessage);
     return -ENOMEM;
   }
 
@@ -663,7 +721,7 @@ int32_t restartOverlayFilesystem(ProcessDescriptor *processDescriptor) {
   if (processCreate(processDescriptor, runBlockOverlay, &blockOverlayArgs)
     != processSuccess
   ) {
-    printString("Could not restart filesystem process.\n");
+    printString(_restartFilesystemFailedMessage);
     return -ENOMEM;
   }
 
@@ -696,7 +754,7 @@ int32_t restartContiguousFilesystem(ProcessDescriptor *processDescriptor) {
   BlockDevice *rootBlockDevice = NULL;
   HAL->blockDevice.get(0, &rootBlockDevice);
   if (rootBlockDevice == NULL) {
-    printString("Could not get root block device for filesystem\n");
+    printString(_noRootBlockDeviceMessage);
     processDescriptor->restartFunction = NULL;
     return -ENODEV;
   }
@@ -719,19 +777,19 @@ int32_t restartContiguousFilesystem(ProcessDescriptor *processDescriptor) {
 
   OverlayFunction filesystemMain = NULL;
   for (uint16_t ii = 0; ii < overlayMap->numExports; ii++) {
-    if (strcmp(overlayMap->exports[ii].name, "main") == 0) {
+    if (strcmp(overlayMap->exports[ii].name, _mainFunctionName) == 0) {
       filesystemMain = overlayMap->exports[ii].fn;
       break;
     }
   }
   if (filesystemMain == NULL) {
-    printString("Could not find main function for filesystem process\n");
+    printString(_noMainFunctionMessage);
     processDescriptor->restartFunction = NULL;
     return -ENOTSUP;
   }
 
   if (processCreate(processDescriptor, filesystemMain, &fs) != processSuccess) {
-    printString("Could not restart filesystem process\n");
+    printString(_restartContiguousFilesystemFailedMessage);
     return -ENOMEM;
   }
 
