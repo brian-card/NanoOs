@@ -180,6 +180,8 @@ int32_t halArduinoInit(void) {
   halImpl.platform.restartRootFilesystem = restartBuiltinFilesystem;
   halImpl.platform.initRootStorage = halCommonInitRootFilesystem;
 
+  halImpl.memory.stringsPresent = true;
+
   return halArduinoAvrInit(&args);
 }
 
