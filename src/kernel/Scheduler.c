@@ -333,6 +333,12 @@ IpcCapability baseConsoleIpcCapabilities[] = {
       | (((uint16_t) 1) << MEMORY_MANAGER_GET_FREE_MEMORY)
       | (((uint16_t) 1) << MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS)
   },
+  {
+    .destinationPid = 0, // Logger PID to be set by scheduler
+    .signature      = LOGGER_COMMAND_SIGNATURE,
+    .messageTypes
+      = (((uint16_t) 1) << LOGGER_LOG_MESSAGE)
+  },
 };
 
 /// @var baseMemoryManagerIpcCapabilities
@@ -346,6 +352,12 @@ IpcCapability baseMemoryManagerIpcCapabilities[] = {
     .messageTypes
       = (((uint16_t) 1) << CONSOLE_WRITE_VALUE)
       | (((uint16_t) 1) << CONSOLE_RELEASE_PORT)
+  },
+  {
+    .destinationPid = 0, // Logger PID to be set by scheduler
+    .signature      = LOGGER_COMMAND_SIGNATURE,
+    .messageTypes
+      = (((uint16_t) 1) << LOGGER_LOG_MESSAGE)
   },
 };
 
@@ -381,6 +393,12 @@ IpcCapability baseFilesystemIpcCapabilities[] = {
     .messageTypes
       = (((uint16_t) 1) << SD_CARD_READ_BLOCKS)
       | (((uint16_t) 1) << SD_CARD_WRITE_BLOCKS)
+  },
+  {
+    .destinationPid = 0, // Logger PID to be set by scheduler
+    .signature      = LOGGER_COMMAND_SIGNATURE,
+    .messageTypes
+      = (((uint16_t) 1) << LOGGER_LOG_MESSAGE)
   },
 };
 
@@ -4585,12 +4603,19 @@ int setIpcCapabilities(SchedulerState *schedulerState) {
   }
   baseSchedulerIpcCapabilities[1].destinationPid
     = schedulerState->loggerPid;
+
   baseConsoleIpcCapabilities[0].destinationPid
     = schedulerState->schedulerPid;
   baseConsoleIpcCapabilities[1].destinationPid
     = schedulerState->memoryManagerPid;
+  baseConsoleIpcCapabilities[2].destinationPid
+    = schedulerState->loggerPid;
+
   baseMemoryManagerIpcCapabilities[0].destinationPid
     = schedulerState->consolePid;
+  baseMemoryManagerIpcCapabilities[1].destinationPid
+    = schedulerState->loggerPid;
+
   baseFilesystemIpcCapabilities[0].destinationPid
     = schedulerState->schedulerPid;
   baseFilesystemIpcCapabilities[1].destinationPid
@@ -4601,14 +4626,15 @@ int setIpcCapabilities(SchedulerState *schedulerState) {
     baseFilesystemIpcCapabilities[3].destinationPid
       = schedulerState->rootFsPid - 1;
   }
+  baseFilesystemIpcCapabilities[4].destinationPid
+    = schedulerState->loggerPid;
+
   baseLoggerIpcCapabilities[0].destinationPid
     = schedulerState->schedulerPid;
   baseLoggerIpcCapabilities[1].destinationPid
     = schedulerState->memoryManagerPid;
-  if (schedulerState->rootFsPid > 0) {
-    baseLoggerIpcCapabilities[2].destinationPid
-      = schedulerState->rootFsPid;
-  }
+  baseLoggerIpcCapabilities[2].destinationPid
+    = schedulerState->rootFsPid;
 
   baseSupervisorIpcCapabilities[0].destinationPid
     = schedulerState->schedulerPid;
@@ -4616,20 +4642,17 @@ int setIpcCapabilities(SchedulerState *schedulerState) {
     = schedulerState->consolePid;
   baseSupervisorIpcCapabilities[2].destinationPid
     = schedulerState->memoryManagerPid;
-  if (schedulerState->rootFsPid > 0) {
-    baseSupervisorIpcCapabilities[3].destinationPid
-      = schedulerState->rootFsPid;
-  }
+  baseSupervisorIpcCapabilities[3].destinationPid
+    = schedulerState->rootFsPid;
+
   baseUserIpcCapabilities[0].destinationPid
     = schedulerState->schedulerPid;
   baseUserIpcCapabilities[1].destinationPid
     = schedulerState->consolePid;
   baseUserIpcCapabilities[2].destinationPid
     = schedulerState->memoryManagerPid;
-  if (schedulerState->rootFsPid > 0) {
-    baseUserIpcCapabilities[3].destinationPid
-      = schedulerState->rootFsPid;
-  }
+  baseUserIpcCapabilities[3].destinationPid
+    = schedulerState->rootFsPid;
 
   // Set the HAL capabilities for all of the processes.
   ProcessDescriptor *processDescriptor = NULL;
