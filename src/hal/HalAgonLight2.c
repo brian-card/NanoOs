@@ -627,6 +627,15 @@ int32_t halAgonLight2Init(void) {
 #else
   halImpl.memory.stringsPresent = true;
 #endif // NANO_OS_STRINGS_STRIPPED
+  /*
+   * TODO:
+   *
+   * Remove this next line once we're running a real image with a full HAL
+   * implementation.  This is only here for HAL development.
+   *
+   * JBC 2026-08-06
+   */
+  halImpl.memory.stringsPresent = true;
 //// #if LOG_THRESHOLD < LOG_LEVEL_DETAIL
   halImpl.memory.staticLogs     = NULL;
 //// #else // LOG_THRESHOLD >= LOG_LEVEL_DETAIL
