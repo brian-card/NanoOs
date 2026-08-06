@@ -190,6 +190,8 @@ SKETCH_C_SRCS := $(shell find src -name '*.c' \
 
 SKETCH_CXX_SRCS := $(shell find src -name '*.cpp' | sort)
 
+SKETCH_ASM_SRCS := $(shell find src -name '*.asm' | sort)
+
 # Boot assembly, runtime stubs, and C entry point live under boot/AgonLight2/
 BOOT_ASM_SRCS := boot/AgonLight2/boot.asm boot/AgonLight2/runtime_stubs.asm
 MAIN_C_SRCS   := boot/AgonLight2/main.c
@@ -198,6 +200,7 @@ MAIN_C_SRCS   := boot/AgonLight2/main.c
 
 SKETCH_C_OBJS   := $(patsubst %,$(BUILD_DIR)/%.o,$(SKETCH_C_SRCS))
 SKETCH_CXX_OBJS := $(patsubst %,$(BUILD_DIR)/%.o,$(SKETCH_CXX_SRCS))
+SKETCH_ASM_OBJS := $(patsubst %,$(BUILD_DIR)/%.o,$(SKETCH_ASM_SRCS))
 BOOT_ASM_OBJS   := $(patsubst %,$(BUILD_DIR)/%.o,$(BOOT_ASM_SRCS))
 MAIN_C_OBJS     := $(patsubst %,$(BUILD_DIR)/%.o,$(MAIN_C_SRCS))
 
@@ -205,7 +208,8 @@ ALL_OBJS := \
 	$(BOOT_ASM_OBJS) \
 	$(MAIN_C_OBJS) \
 	$(SKETCH_C_OBJS) \
-	$(SKETCH_CXX_OBJS)
+	$(SKETCH_CXX_OBJS) \
+	$(SKETCH_ASM_OBJS)
 
 DEPS := $(ALL_OBJS:.o=.d)
 
@@ -277,6 +281,13 @@ $(BUILD_DIR)/src/%.cpp.o: src/%.cpp
 	@mkdir -p $(dir $@)
 	@echo "  CXX     $<"
 	@$(CXX) $(CXXFLAGS) -MMD -c $< -o $@
+
+# ---- Compile: src/ assembly sources ------------------------------------------
+
+$(BUILD_DIR)/src/%.asm.o: src/%.asm
+	@mkdir -p $(dir $@)
+	@echo "  AS      $<"
+	@$(CC) $(ASFLAGS) -MMD -c $< -o $@
 
 # ---- Flash: copy binary to Agon SD card -------------------------------------
 
