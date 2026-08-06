@@ -189,10 +189,11 @@ static int32_t halBlockDeviceRestart(ProcessDescriptor *processDescriptor);
 
 Hal halImpl = {
   .platform = {
-    .callFileOverlay = NULL,
-    .execCommand     = NULL,
-    .initRootStorage = NULL,
-    .restartShell    = NULL,
+    .callFileOverlay       = NULL,
+    .execCommand           = NULL,
+    .initRootStorage       = NULL,
+    .restartRootFilesystem = NULL,
+    .restartShell          = NULL,
   },
   .memory = {
     .processStackSize        = halMemoryProcessStackSize,
