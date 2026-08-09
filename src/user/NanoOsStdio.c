@@ -61,15 +61,14 @@ FILE *nanoOsStderr = (FILE*) ((intptr_t) 0x3);
 
 /// @fn int printChar_(char character)
 ///
-/// @brief Wrapper around HAL->uart.write for a single C character.
+/// @brief Wrapper around printString for a single C character.
 ///
 /// @param character The single char value to print.
 ///
 /// @return Returns the number of bytes written on success, -errno on failure.
 int printChar_(char character) {
-  ssize_t written = 0;
-  HAL->uart.write(0, (uint8_t*) &character, 1, &written);
-  return (int) written;
+  char string[2] = {character, '\0'};
+  return printString(string);
 }
 
 /// @var _crlf
@@ -100,8 +99,25 @@ int printString_(const char *string) {
     stringLength--;
   }
 
+  // Find the first UART that's online and a console.
+  int32_t deviceId = 0;
+  for (; ((uint32_t) deviceId) < HAL->uart.numSupported; deviceId++) {
+    bool uartIsConsole = false;
+    
+    if ((online(HAL->uart, deviceId))
+      && (HAL->uart.isConsole(deviceId, &uartIsConsole) == 0)
+      && (uartIsConsole == true)
+    ) {
+      break;
+    }
+  }
+  if (((uint32_t) deviceId) == HAL->uart.numSupported) {
+    return -ENODEV;
+  }
+
   ssize_t written = 0;
-  int32_t rv = HAL->uart.write(0, (uint8_t*) string, stringLength, &written);
+  int32_t rv = HAL->uart.write(deviceId, (uint8_t*) string, stringLength,
+    &written);
   if (rv < 0) {
     // Bail.
     return rv;
@@ -109,7 +125,7 @@ int printString_(const char *string) {
   int bytesWritten = (int) written;
 
   if (printReturnNewline == true) {
-    rv = HAL->uart.write(0, (uint8_t*) _crlf, 2, &written);
+    rv = HAL->uart.write(deviceId, (uint8_t*) _crlf, 2, &written);
     if (rv == 0) {
       // The usual case.
       bytesWritten += (int) written;
@@ -152,7 +168,7 @@ int ullToString(unsigned long long int number, char **nextChar) {
 
 /// @fn int printInt_(long long int integer)
 ///
-/// @brief C wrapper around HAL->uart.write for an integer.
+/// @brief C wrapper around printString for an integer.
 ///
 /// @param integer The integer value to print.
 ///
@@ -170,9 +186,7 @@ int printInt_(long long int integer) {
     *nextChar = '-';
   }
 
-  ssize_t written = 0;
-  HAL->uart.write(0, (uint8_t*) nextChar, strlen(nextChar), &written);
-  return (int) written;
+  return printString(nextChar);
 }
 
 /// @var _doubleFormat
@@ -185,7 +199,7 @@ static const char _doubleFormat[] KEEP_IN_FLASH = "%lf";
 
 /// @fn int printDouble(double floatingPointValue)
 ///
-/// @brief C wrapper around HAL->uart.write for a double.
+/// @brief C wrapper around printString for a double.
 ///
 /// @param floatingPointValue The double value to print.
 ///
@@ -193,9 +207,7 @@ static const char _doubleFormat[] KEEP_IN_FLASH = "%lf";
 int printDouble(double floatingPointValue) {
   char number[20];
   sprintf(number, _doubleFormat, floatingPointValue);
-  ssize_t written = 0;
-  HAL->uart.write(0, (uint8_t*) number, strlen(number), &written);
-  return (int) written;
+  return printString(number);
 }
 
 /// @var _hexAlphabet
@@ -208,7 +220,7 @@ static const char _hexAlphabet[] KEEP_IN_FLASH = "0123456789abcdef";
 
 /// @fn int printHex_(unsigned long long int integer)
 ///
-/// @brief C wrapper around HAL->uart.write for a hexadecimal integer.
+/// @brief C wrapper around printString for a hexadecimal integer.
 ///
 /// @param integer The integer value to print in hexadecimal format.
 ///
@@ -230,9 +242,7 @@ int printHex_(unsigned long long int integer) {
     *nextChar = '0';
   }
 
-  ssize_t written = 0;
-  HAL->uart.write(0, (uint8_t*) nextChar, strlen(nextChar), &written);
-  return (int) written;
+  return printString(nextChar);
 }
 
 /// @fn int printList_(const char *firstString, ...)
