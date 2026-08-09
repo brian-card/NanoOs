@@ -262,27 +262,21 @@ int32_t agonLight2InitUart(va_list args) {
 
 extern void uart0_init(uint16_t divisor);
 extern void uart1_init(uint16_t divisor);
+void (*uart_init[2])(uint16_t divisor) = {
+  uart0_init,
+  uart1_init,
+};
 
 int32_t agonLight2ConfigureUart(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   uint32_t baud = va_arg(args, uint32_t);
   int returnValue = -ERANGE;
-
-  switch (deviceId) {
-    case 0:
-      {
-        uart0_init(BASE_BAUD / baud);
-        returnValue = 0;
-        break;
-      }
-
-    case 1:
-      {
-        uart1_init(BASE_BAUD / baud);
-        returnValue = 0;
-        break;
-      }
+  if (deviceId >= (sizeof(uart_init) / sizeof(uart_init[0]))) {
+    return returnValue; // -ERANGE
   }
+
+  uart_init[deviceId](BASE_BAUD / baud);
+  returnValue = 0;
 
   return returnValue;
 }
@@ -292,14 +286,31 @@ int32_t agonLight2PollUart(va_list args) {
   return -EAGAIN; // no data available yet
 }
 
+extern void uart0_putc(uint8_t c);
+extern void uart1_putc(uint8_t c);
+void (*uart_putc[2])(uint8_t c) = {
+  uart0_putc,
+  uart1_putc,
+};
+
 int32_t agonLight2WriteUart(va_list args) {
-  (void)          va_arg(args, int32_t);        // deviceId
-  (void)          va_arg(args, const uint8_t*); // data
+  int32_t  deviceId    = va_arg(args, int32_t);
+  const uint8_t *data  = va_arg(args, const uint8_t*);
   ssize_t  length      = va_arg(args, ssize_t);
   ssize_t *returnValue = va_arg(args, ssize_t*);
-  if (returnValue != NULL) {
-    *returnValue = length; // pretend every byte was written
+  if (deviceId >= (sizeof(uart_init) / sizeof(uart_init[0]))) {
+    return -ERANGE;
   }
+  void (*putc)(uint8_t c) = uart_putc[deviceId];
+
+  ssize_t bytesWritten = 0;
+  for (;bytesWritten < length; bytesWritten++) {
+    putc(data[bytesWritten]);
+  }
+  if (returnValue != NULL) {
+    *returnValue = bytesWritten;
+  }
+
   return 0;
 }
 
