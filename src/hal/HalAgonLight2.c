@@ -294,7 +294,6 @@ int32_t agonLight2PollUart(va_list args) {
     return -ERANGE;
   }
 
-
   return (int32_t) uart_getc[deviceId]();
 }
 
@@ -310,6 +309,7 @@ int32_t agonLight2WriteUart(va_list args) {
   const uint8_t *data  = va_arg(args, const uint8_t*);
   ssize_t  length      = va_arg(args, ssize_t);
   ssize_t *returnValue = va_arg(args, ssize_t*);
+
   if (deviceId >= (sizeof(uart_init) / sizeof(uart_init[0]))) {
     return -ERANGE;
   }
@@ -327,11 +327,17 @@ int32_t agonLight2WriteUart(va_list args) {
 }
 
 int32_t agonLight2IsUartConsole(va_list args) {
-  (void) va_arg(args, int32_t); // deviceId
+  int32_t deviceId = va_arg(args, int32_t);
   bool *returnValue = va_arg(args, bool*);
+
   if (returnValue != NULL) {
-    *returnValue = true;
+    if (deviceId == 1) {
+      *returnValue = true;
+    } else {
+      *returnValue = false;
+    }
   }
+
   return 0;
 }
 
@@ -632,7 +638,7 @@ static HalFunction agonLight2BlockDeviceFunctions[HAL_BLOCK_DEVICE_NUM_FNS] = {
 // Online-device bitmask arrays (all offline until hardware is brought up)
 // ---------------------------------------------------------------------------
 
-static uint32_t agonLight2UartsOnline[]        = { 0x00000000 };
+static uint32_t agonLight2UartsOnline[]        = { 0x00000003 };
 static uint32_t agonLight2DiosOnline[]         = { 0x00000000 };
 static uint32_t agonLight2SpisOnline[]         = { 0x00000000 };
 static uint32_t agonLight2TimersOnline[]       = { 0x00000000 };
@@ -694,7 +700,7 @@ int32_t halAgonLight2Init(void) {
 ////   memset(HAL->memory.staticLogs, 0, sizeof(*HAL->memory.staticLogs));
 //// #endif // LOG_THRESHOLD < LOG_LEVEL_DETAIL
 
-  halImpl.uart.numSupported        = 0;
+  halImpl.uart.numSupported        = 2;
   halImpl.uart.online              = agonLight2UartsOnline;
 
   halImpl.dio.numSupported         = 0;
