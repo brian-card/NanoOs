@@ -281,9 +281,21 @@ int32_t agonLight2ConfigureUart(va_list args) {
   return returnValue;
 }
 
+extern int uart0_getc(void);
+extern int uart1_getc(void);
+int (*uart_getc[2])(void) = {
+  uart0_getc,
+  uart1_getc,
+};
+
 int32_t agonLight2PollUart(va_list args) {
-  (void) va_arg(args, int32_t); // deviceId
-  return -EAGAIN; // no data available yet
+  int32_t deviceId = va_arg(args, int32_t);
+  if (deviceId >= (sizeof(uart_init) / sizeof(uart_init[0]))) {
+    return -ERANGE;
+  }
+
+
+  return (int32_t) uart_getc[deviceId]();
 }
 
 extern void uart0_putc(uint8_t c);
