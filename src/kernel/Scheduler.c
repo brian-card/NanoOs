@@ -240,6 +240,10 @@ HalCapability baseExecutiveHalCapabilities[] = {
     .deviceIds =         0x01, // Bitmask for device ID 0
   },
   {
+    .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_IS_CONSOLE,
+    .deviceIds =         0x03, // Bitmask for device IDs 0 and 1
+  },
+  {
     .subsystemFunction = (((uint16_t) HAL_CLOCK) << 8)
       | HAL_CLOCK_GET_ELAPSED_MILLISECONDS,
     .deviceIds =         0x00, // No device for this function
