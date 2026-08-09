@@ -136,6 +136,12 @@ void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
 /// @brief The maximum number of SPI devices the system can support.
 #define MAX_SPI_DEVICES 2
 
+/// @def BASE_BAUD
+///
+/// @brief The baud rate that's used to compute the divisor that actually
+/// initializes a UART periheral.
+#define BASE_BAUD 1152000
+
 /// @var _spiCopiDio
 ///
 /// @brief DIO pin used for SPI COPI.
@@ -254,9 +260,31 @@ int32_t agonLight2InitUart(va_list args) {
   return 0;
 }
 
+extern void uart0_init(uint16_t divisor);
+extern void uart1_init(uint16_t divisor);
+
 int32_t agonLight2ConfigureUart(va_list args) {
-  (void) args;
-  return 0;
+  int32_t deviceId = va_arg(args, int32_t);
+  uint32_t baud = va_arg(args, uint32_t);
+  int returnValue = -ERANGE;
+
+  switch (deviceId) {
+    case 0:
+      {
+        uart0_init(BASE_BAUD / baud);
+        returnValue = 0;
+        break;
+      }
+
+    case 1:
+      {
+        uart1_init(BASE_BAUD / baud);
+        returnValue = 0;
+        break;
+      }
+  }
+
+  return returnValue;
 }
 
 int32_t agonLight2PollUart(va_list args) {
