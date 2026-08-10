@@ -96,9 +96,11 @@ realStart:
     LD  A, B
     OR  C
     JR  Z, .bss_done
-    XOR A
+    LD  E, 0                     ; E holds the zero byte; the loop below must
+                                 ; not touch E, since A gets clobbered by the
+                                 ; BC-zero check on every pass
 .bss_loop:
-    LD  (HL), A
+    LD  (HL), E
     INC HL
     DEC BC
     LD  A, B
