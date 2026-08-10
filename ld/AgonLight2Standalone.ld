@@ -69,7 +69,7 @@ SECTIONS
     *(COMMON)
     . = ALIGN(4);
     __bss_end__ = .;          /* referenced by HalAgonLight2.c */
-    __bss_size  = __bss_end__ - __bss_start;   /* referenced by boot.asm */
+    __bss_size  = ABSOLUTE(__bss_end__ - __bss_start);   /* referenced by boot.asm */
   } > SRAM
 
   /* Placeholder heap boundaries, copied from the MOS-loadable script.
