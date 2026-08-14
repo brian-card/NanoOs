@@ -132,6 +132,7 @@
 #include "stdlib.h"
 
 #include "Coroutines.h"
+#include "CoroutineStdio.h"
 
 // Prototype forward declarations.
 void coroutineAllocateStack(int stackSize);
