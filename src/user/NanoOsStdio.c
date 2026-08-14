@@ -143,14 +143,14 @@ int printString_(const char *string) {
 ///
 /// @details
 /// Some targets have no efficient runtime support for 64-bit division, so
-/// division or module of a full unsigned long long by 10 can compile to an
+/// division or modulo of a full unsigned long long by 10 can compile to an
 /// unrolled sequence.  Since actually printing values that large is rare
 /// (there's no case in the codebase as of 2026-08-14), this path is split into
 /// its own function.  This keeps this code from being part of the final binary
 /// unless it's truly needed.  Codespace is considered a precious resource, so
 /// we really want to conserve all that we can.
 ///
-/// @param number The portion of the value that is >= 2^32.
+/// @param number A value that is >= 2^32.
 /// @param nextChar A double pointer to the next character in the buffer to
 ///   populate.
 ///
