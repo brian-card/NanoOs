@@ -2681,18 +2681,22 @@ int schedulerExecveCommandHandler(
     processDescriptor->envp = NULL;
   }
 
+  logDebug("Assigning execArgs to PID 0\n");
   if (assignMemory(execArgs, 0) != 0) {
     logWarn("Could not protect execArgs memory.\nUndefined behavior.\n");
   }
 
+  logDebug("Assigning pathname to PID 0\n");
   if (assignMemory(pathname, 0) != 0) {
     logWarn("Could not protect pathname memory.\nUndefined behavior.\n");
   }
 
+  logDebug("Assigning argv to PID 0\n");
   if (assignMemory(argv, 0) != 0) {
     logWarn("Could not protect argv memory.\nUndefined behavior.\n");
   }
   for (int ii = 0; argv[ii] != NULL; ii++) {
+    logDebug("Assigning argv[%d] to PID 0\n", ii);
     if (assignMemory(argv[ii], 0) != 0) {
       logWarn("Could not protect argv[lld] memory.\nUndefined behavior.\n",
         (long int) ii);
@@ -2700,10 +2704,12 @@ int schedulerExecveCommandHandler(
   }
 
   if (envp != NULL) {
+    logDebug("Assigning envp to PID 0\n");
     if (assignMemory(envp, 0) != 0) {
       logWarn("Could not protect envp memory.\nUndefined behavior.\n");
     }
     for (int ii = 0; envp[ii] != NULL; ii++) {
+      logDebug("Assigning envp[%d] to PID 0\n", ii);
       if (assignMemory(envp[ii], 0) != 0) {
         logWarn("Could not protect envp[%ld] memory.\n"
           "Undefined behavior.\n", (long int) ii);
@@ -2711,6 +2717,7 @@ int schedulerExecveCommandHandler(
     }
   }
 
+  logDebug("Assigning fileDescriptors to PID 0\n");
   if (assignMemory(processDescriptor->fileDescriptors, 0) != 0) {
     logWarn("Could not protect fileDescriptors memory.\nUndefined behavior.\n");
   }
@@ -2718,6 +2725,7 @@ int schedulerExecveCommandHandler(
     if (processDescriptor->fileDescriptors[ii] == NULL) {
       continue;
     }
+    logDebug("Assigning fileDescriptors[%d] to PID 0\n", ii);
     if (assignMemory(processDescriptor->fileDescriptors[ii], 0) != 0) {
       logWarn("Could not protect fileDescriptors[%ld] memory.\n"
         "Undefined behavior.\n",
@@ -2728,6 +2736,8 @@ int schedulerExecveCommandHandler(
   // The process should be blocked in processMessageQueueWaitForType waiting
   // on a condition with an infinite timeout.  So, it *SHOULD* be on the
   // waiting queue.  Take no chances, though.
+  logDebug("Removing process %d from waiting or ready queues\n",
+    processDescriptor->processId);
   if (processQueueRemove(&schedulerState->waiting, processDescriptor) != 0) {
     if (processQueueRemove(&schedulerState->timedWaiting, processDescriptor)
       != 0
@@ -2740,11 +2750,17 @@ int schedulerExecveCommandHandler(
   // though, and if we're using pipes, something may have already sent us a
   // message that the replacement is expected to process.  So, keep the message
   // queue (set the second argument to true).
+  logDebug("Terminating process %d\n",
+    processDescriptor->processId);
   processTerminate(processDescriptor, true);
+  logDebug("Setting main thread context for process %d\n",
+    processDescriptor->processId);
   threadSetContext(processDescriptor->mainThread, processDescriptor);
 
   // We don't want to wait for the memory manager to release the memory.  Make
   // it do it immediately.
+  logDebug("Freeing process memory for process %d\n",
+    processDescriptor->processId);
   MemoryManagerFreeProcessMemoryArgs memoryManagerFreeProcessMemoryArgs = {
     .pid = processDescriptor->processId,
     .returnValue = 0,
@@ -2760,27 +2776,37 @@ int schedulerExecveCommandHandler(
   }
 
   execArgs->schedulerState = schedulerState;
+  logDebug("Creating new process %d\n",
+    processDescriptor->processId);
   if (processCreate(processDescriptor, HAL->platform.execCommand, execArgs)
     == processError
   ) {
     logError("Could not configure process handle for new command.\n");
   }
 
+  logDebug("Assigning execArgs to process %d\n",
+    processDescriptor->processId);
   if (assignMemory(execArgs, processDescriptor->processId) != 0) {
     logWarn("Could not assign execArgs to exec process.\n"
       "Undefined behavior.\n");
   }
 
+  logDebug("Assigning pathname to process %d\n",
+    processDescriptor->processId);
   if (assignMemory(pathname, processDescriptor->processId) != 0) {
     logWarn("Could not assign pathname to exec process.\n"
       "Undefined behavior.\n");
   }
 
+  logDebug("Assigning argv to process %d\n",
+    processDescriptor->processId);
   if (assignMemory(argv, processDescriptor->processId) != 0) {
     logWarn("Could not assign argv to exec process.\n"
       "Undefined behavior.\n");
   }
   for (int ii = 0; argv[ii] != NULL; ii++) {
+    logDebug("Assigning argv[%d] to process %d\n",
+      ii, processDescriptor->processId);
     if (assignMemory(argv[ii], processDescriptor->processId) != 0) {
       logWarn("Could not assign argv[%d] to exec process.\n"
         "Undefined behavior.\n", ii);
@@ -2788,11 +2814,15 @@ int schedulerExecveCommandHandler(
   }
 
   if (envp != NULL) {
+    logDebug("Assigning envp to process %d\n",
+      processDescriptor->processId);
     if (assignMemory(envp, processDescriptor->processId) != 0) {
       logWarn("Could not assign envp to exec process.\n"
         "Undefined behavior.\n");
     }
     for (int ii = 0; envp[ii] != NULL; ii++) {
+      logDebug("Assigning envp[%d] to process %d\n",
+        ii, processDescriptor->processId);
       if (assignMemory(envp[ii], processDescriptor->processId) != 0) {
         logWarn("Could not assign envp[%d] to exec process.\n"
           "Undefined behavior.\n", ii);
@@ -2800,6 +2830,8 @@ int schedulerExecveCommandHandler(
     }
   }
 
+  logDebug("Assigning fileDescriptors to process %d\n",
+    processDescriptor->processId);
   if (assignMemory(processDescriptor->fileDescriptors,
     processDescriptor->processId) != 0
   ) {
@@ -2810,6 +2842,8 @@ int schedulerExecveCommandHandler(
     if (processDescriptor->fileDescriptors[ii] == NULL) {
       continue;
     }
+    logDebug("Assigning fileDescriptors[%d] to process %d\n",
+      ii, processDescriptor->processId);
     if (assignMemory(processDescriptor->fileDescriptors[ii],
       processDescriptor->processId) != 0
     ) {
@@ -2821,6 +2855,8 @@ int schedulerExecveCommandHandler(
   if (processDescriptor->fileDescriptors[STDOUT_FILE_DESCRIPTOR_INDEX]->pipeEnd
     != NULL
   ) {
+    logDebug("Adding CONSOLE_RETURNING_INPUT capability to process %d\n",
+      processDescriptor->processId);
     addProcessIpcCapability(processDescriptor,
       processDescriptor->fileDescriptors[
         STDOUT_FILE_DESCRIPTOR_INDEX]->pipeEnd->lastOwner,
@@ -2830,7 +2866,11 @@ int schedulerExecveCommandHandler(
   if (HAL->platform.execCommand == execOverlayCommand) {
     processDescriptor->overlayNamespace = pathname;
   }
+  logDebug("Loading overlay metadata for process %d\n",
+    processDescriptor->processId);
   returnValue = loadProcessDescriptorOverlayMetadata(processDescriptor);
+  logDebug("Overlay metadata loaded for process %d\n",
+    processDescriptor->processId);
   if (returnValue == -EBUSY) {
     // We're in the middle of a filesystem operation already and can't access
     // a file right now.  Return error status and try again later.  DO NOT
@@ -2867,13 +2907,18 @@ int schedulerExecveCommandHandler(
 
   // Resume the thread so that it picks up all the pointers it needs before
   // we release the message we were sent.
+  logDebug("Resuming process %d\n",
+    processDescriptor->processId);
   processResume(processDescriptor, NULL);
 
   // Put the process on the ready queue.
+  logDebug("Pushing process %d onto its ready queue\n",
+    processDescriptor->processId);
   processQueuePush(processDescriptor->readyQueue, processDescriptor);
 
   processMessageRelease(processMessage);
 
+  logDebug("Exiting schedulerExecveCommandHandler\n");
   return returnValue;
 }
 
