@@ -37,6 +37,7 @@
 
 #include "HalAgonLight2.h"
 #include "HalCommon.h"
+#include "../kernel/Commands.h"
 #include "../kernel/Logger.h"
 #include "../user/NanoOsErrno.h"
 #include "../user/NanoOsStdio.h"
@@ -663,11 +664,15 @@ int32_t halAgonLight2Init(void) {
   halFunctions[HAL_TIMER]        = agonLight2TimerFunctions;
   halFunctions[HAL_BLOCK_DEVICE] = agonLight2BlockDeviceFunctions;
 
-  halImpl.platform.callFileOverlay = callOverlayFunctionFromFile;
-  halImpl.platform.execCommand = execOverlayCommand;
+  //// halImpl.platform.callFileOverlay = callOverlayFunctionFromFile;
+  //// halImpl.platform.execCommand = execOverlayCommand;
   //// halImpl.platform.restartRootFilesystem = restartContiguousFilesystem;
-  //// halImpl.platform.initRootStorage = halCommonInitRootFilesystem,
+  //// halImpl.platform.initRootStorage = halCommonInitRootFilesystem;
   //// halImpl.platform.restartShell = restartOverlayShell;
+  halImpl.platform.callFileOverlay = NULL;
+  halImpl.platform.execCommand = execBuiltinCommand;
+  halImpl.platform.restartRootFilesystem = NULL;
+  halImpl.platform.initRootStorage = NULL;
   halImpl.platform.restartShell = restartBuiltinShell;
 
   halImpl.memory.contiguousFilesystem
