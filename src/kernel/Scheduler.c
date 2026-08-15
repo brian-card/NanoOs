@@ -237,7 +237,7 @@ static FileDescriptor standardUserFileDescriptors[
 HalCapability baseExecutiveHalCapabilities[] = {
   {
     .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_WRITE,
-    .deviceIds =         0x01, // Bitmask for device ID 0
+    .deviceIds =         0x03, // Bitmask for device IDs 0 and 1
   },
   {
     .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_IS_CONSOLE,
@@ -264,13 +264,29 @@ HalCapability baseExecutiveHalCapabilities[] = {
 ///
 /// @brief Array of HalCapability items that describe what a process can do
 /// with the HAL.
+///
+/// @note If this array is extended, its adjustments during bringup need to be
+/// modified as well!!!!!!!!!!!!!!!!!!!!!!!!
 HalCapability baseUserHalCapabilities[] = {
-#ifdef NANO_OS_DEBUG
+//// #ifdef NANO_OS_DEBUG
+////   {
+////     .subsystemFunction = 0x0000,
+////     .deviceIds =         0x00,
+////   },
+////   {
+////     .subsystemFunction = 0x0000,
+////     .deviceIds =         0x00,
+////   },
+//// #else
   {
     .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_WRITE,
-    .deviceIds =         0x01, // Bitmask for device ID 0
+    .deviceIds =         0x03, // Bitmask for device IDs 0 and 1
   },
-#endif // NANO_OS_DEBUG
+  {
+    .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_IS_CONSOLE,
+    .deviceIds =         0x03, // Bitmask for device IDs 0 and 1
+  },
+//// #endif // NANO_OS_DEBUG
   {
     .subsystemFunction = (((uint16_t) HAL_CLOCK) << 8)
       | HAL_CLOCK_GET_ELAPSED_MILLISECONDS,
@@ -4561,11 +4577,7 @@ int initializeSchedulerState(
     for (int32_t ii = 0; ii < ((int32_t) HAL->timer.numSupported); ii++) {
       if (online(HAL->timer, ii)) {
         schedulerState->preemptionTimer = ii;
-#ifdef NANO_OS_DEBUG
-        baseUserHalCapabilities[1].deviceIds = 1 << ii;
-#else
-        baseUserHalCapabilities[0].deviceIds = 1 << ii;
-#endif // NANO_OS_DEBUG
+        baseUserHalCapabilities[5].deviceIds = 1 << ii;
         break;
       }
     }
