@@ -55,6 +55,17 @@ int nanoOsFprintf(NanoOsFile *stream, const char *format, ...);
 #define stderr nanoOsStderr
 extern NanoOsFile *nanoOsStderr;
 
+// Raw print functions
+int printChar_(char character);
+#define printChar(character) printChar_((char) (character))
+int printString_(const char *string);
+#define printString(str) printString_((const char*) (str))
+int printInt_(long long int integer);
+#define printInt(value) printInt_((long long int) (value))
+int printDouble(double floatingPointValue);
+int printHex_(unsigned long long int integer);
+#define printHex(integer) printHex_((unsigned long long int) (integer))
+
 #ifdef __cplusplus
 }
 #endif
