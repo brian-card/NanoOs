@@ -268,16 +268,16 @@ HalCapability baseExecutiveHalCapabilities[] = {
 /// @note If this array is extended, its adjustments during bringup need to be
 /// modified as well!!!!!!!!!!!!!!!!!!!!!!!!
 HalCapability baseUserHalCapabilities[] = {
-//// #ifdef NANO_OS_DEBUG
-////   {
-////     .subsystemFunction = 0x0000,
-////     .deviceIds =         0x00,
-////   },
-////   {
-////     .subsystemFunction = 0x0000,
-////     .deviceIds =         0x00,
-////   },
-//// #else
+#ifdef NANO_OS_DEBUG
+  {
+    .subsystemFunction = 0x0000,
+    .deviceIds =         0x00,
+  },
+  {
+    .subsystemFunction = 0x0000,
+    .deviceIds =         0x00,
+  },
+#else
   {
     .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_WRITE,
     .deviceIds =         0x03, // Bitmask for device IDs 0 and 1
@@ -286,7 +286,7 @@ HalCapability baseUserHalCapabilities[] = {
     .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_IS_CONSOLE,
     .deviceIds =         0x03, // Bitmask for device IDs 0 and 1
   },
-//// #endif // NANO_OS_DEBUG
+#endif // NANO_OS_DEBUG
   {
     .subsystemFunction = (((uint16_t) HAL_CLOCK) << 8)
       | HAL_CLOCK_GET_ELAPSED_MILLISECONDS,
