@@ -1231,6 +1231,21 @@ void coroutineMain(void *stack) {
     // manually pull the data that was provided from coroutinePass since the
     // constructor will be thinking that it just provided us with the function
     // we should call.
+    //
+    // NOTE:  It should absolutely, 100% *NOT* be required to set the value of
+    // the running pointer here.  It was just captured a few lines ago.  If the
+    // pointer was saved to the stack -OR- if it was saved to a register that
+    // setjmp captured, then it would still be the same value here.  One of
+    // those two things *MUST* be true for a compliant C compiler.  However,
+    // NanoOs runs on embedded targets and I have discovered that some of the
+    // compilers for those targets don't comply with the C standard the way they
+    // should.  I've found instances where the pointer was saved to a register
+    // and that register was not preserved in the jmp_buf captured by setjmp,
+    // which means that it's some unknown garbage value by the time we get to
+    // this section of code.  Because of that, we'll grab the value again here.
+    //
+    // JBC 2026-08-15
+    running = getRunningCoroutine();
     funcData = running->passed;
     func = funcData.func;
   }
