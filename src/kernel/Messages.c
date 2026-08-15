@@ -50,6 +50,22 @@ typedef struct msg_q_t msg_q_t;
 /// @brief Array of msg_sync_t objects that hold the function pointers to use
 /// with the synchronization primitives
 msg_sync_t msg_sync_array[] = {
+  {
+    (int      (*)(void *mtx, int type)) comutexInit,
+    (int      (*)(void *mtx)) comutexLock,
+    (int      (*)(void *mtx)) comutexUnlock,
+    (void     (*)(void *mtx)) comutexDestroy,
+    (int      (*)(void *mtx, const struct timespec *ts))
+      comutexTimedLock,
+    (int      (*)(void *mtx)) comutexTryLock,
+    (int      (*)(void *cond)) coconditionBroadcast,
+    (void     (*)(void *cond)) coconditionDestroy,
+    (int      (*)(void *cond)) coconditionInit,
+    (int      (*)(void *cond)) coconditionSignal,
+    (int      (*)(void *cond, void *mtx, const struct timespec *ts))
+      coconditionTimedWait,
+    (int      (*)(void *cond, void *mtx)) coconditionWait,
+  },
 #ifdef THREAD_SAFE_COROUTINES
   {
     (int      (*)(void *mtx, int type)) mtx_init,
@@ -67,22 +83,6 @@ msg_sync_t msg_sync_array[] = {
     (int      (*)(void *cond, void *mtx)) cnd_wait,
   },
 #endif // THREAD_SAFE_COROUTINES
-  {
-    (int      (*)(void *mtx, int type)) comutexInit,
-    (int      (*)(void *mtx)) comutexLock,
-    (int      (*)(void *mtx)) comutexUnlock,
-    (void     (*)(void *mtx)) comutexDestroy,
-    (int      (*)(void *mtx, const struct timespec *ts))
-      comutexTimedLock,
-    (int      (*)(void *mtx)) comutexTryLock,
-    (int      (*)(void *cond)) coconditionBroadcast,
-    (void     (*)(void *cond)) coconditionDestroy,
-    (int      (*)(void *cond)) coconditionInit,
-    (int      (*)(void *cond)) coconditionSignal,
-    (int      (*)(void *cond, void *mtx, const struct timespec *ts))
-      coconditionTimedWait,
-    (int      (*)(void *cond, void *mtx)) coconditionWait,
-  },
 };
 
 // Message functions
