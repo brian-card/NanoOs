@@ -261,48 +261,52 @@ int32_t agonLight2InitUart(va_list args) {
   return 0;
 }
 
-extern void uart0_init(uint16_t divisor);
-extern void uart1_init(uint16_t divisor);
-void (*uart_init[2])(uint16_t divisor) = {
-  uart0_init,
-  uart1_init,
+extern void agonLight2ConfigureUart0Impl(uint16_t divisor);
+extern void agonLight2ConfigureUart1Impl(uint16_t divisor);
+void (*agonLight2ConfigureUartImpl[2])(uint16_t divisor) = {
+  agonLight2ConfigureUart0Impl,
+  agonLight2ConfigureUart1Impl,
 };
 
 int32_t agonLight2ConfigureUart(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   uint32_t baud = va_arg(args, uint32_t);
   int returnValue = -ERANGE;
-  if (deviceId >= (sizeof(uart_init) / sizeof(uart_init[0]))) {
+  if (deviceId >= (sizeof(agonLight2ConfigureUartImpl)
+    / sizeof(agonLight2ConfigureUartImpl[0]))
+  ) {
     return returnValue; // -ERANGE
   }
 
-  uart_init[deviceId](BASE_BAUD / baud);
+  agonLight2ConfigureUartImpl[deviceId](BASE_BAUD / baud);
   returnValue = 0;
 
   return returnValue;
 }
 
-extern int uart0_getc(void);
-extern int uart1_getc(void);
-int (*uart_getc[2])(void) = {
-  uart0_getc,
-  uart1_getc,
+extern int agonLight2PollUart0Impl(void);
+extern int agonLight2PollUart1Impl(void);
+int (*agonLight2PollUartImpl[2])(void) = {
+  agonLight2PollUart0Impl,
+  agonLight2PollUart1Impl,
 };
 
 int32_t agonLight2PollUart(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
-  if (deviceId >= (sizeof(uart_init) / sizeof(uart_init[0]))) {
+  if (deviceId >= (sizeof(agonLight2ConfigureUartImpl)
+    / sizeof(agonLight2ConfigureUartImpl[0]))
+  ) {
     return -ERANGE;
   }
 
-  return (int32_t) uart_getc[deviceId]();
+  return (int32_t) agonLight2PollUartImpl[deviceId]();
 }
 
-extern void uart0_putc(uint8_t c);
-extern void uart1_putc(uint8_t c);
-void (*uart_putc[2])(uint8_t c) = {
-  uart0_putc,
-  uart1_putc,
+extern void agonLight2WriteUart0Impl(uint8_t c);
+extern void agonLight2WriteUart1Impl(uint8_t c);
+void (*agonLight2WriteUartImpl[2])(uint8_t c) = {
+  agonLight2WriteUart0Impl,
+  agonLight2WriteUart1Impl,
 };
 
 int32_t agonLight2WriteUart(va_list args) {
@@ -311,14 +315,14 @@ int32_t agonLight2WriteUart(va_list args) {
   ssize_t  length      = va_arg(args, ssize_t);
   ssize_t *returnValue = va_arg(args, ssize_t*);
 
-  if (deviceId >= (sizeof(uart_init) / sizeof(uart_init[0]))) {
+  if (deviceId >= (sizeof(agonLight2ConfigureUartImpl)
+    / sizeof(agonLight2ConfigureUartImpl[0]))
+  ) {
     return -ERANGE;
   }
-  void (*putc)(uint8_t c) = uart_putc[deviceId];
-
   ssize_t bytesWritten = 0;
   for (;bytesWritten < length; bytesWritten++) {
-    putc(data[bytesWritten]);
+    agonLight2WriteUartImpl[deviceId](data[bytesWritten]);
   }
   if (returnValue != NULL) {
     *returnValue = bytesWritten;

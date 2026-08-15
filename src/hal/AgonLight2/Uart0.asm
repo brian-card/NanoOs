@@ -1,9 +1,9 @@
 .assume adl=1
     .text
 
-    .global _uart0_init
-    .global _uart0_putc
-    .global _uart0_getc
+    .global _agonLight2ConfigureUart0Impl
+    .global _agonLight2PollUart0Impl
+    .global _agonLight2WriteUart0Impl
 
 ;; ── eZ80F92 Port D GPIO registers ──────────────────
 PD_DR       .equ 0xA2      ; Port D data register
@@ -22,9 +22,9 @@ UART0_LCTL  .equ 0xC3      ; Line control
 UART0_MCTL  .equ 0xC4      ; Modem control
 UART0_LSR   .equ 0xC5      ; Line status
 
-;; ── uart0_init(uint16_t divisor) ────────────────────
+;; ── agonLight2ConfigureUart0Impl(uint16_t divisor) ────────────────────
 ;;    divisor passed at ix+6 (low byte), ix+7 (high byte)
-_uart0_init:
+_agonLight2ConfigureUart0Impl:
     push    ix
     ld      ix, 0
     add     ix, sp
@@ -69,9 +69,25 @@ _uart0_init:
     pop     ix
     ret
 
-;; ── uart0_putc(uint8_t c) ───────────────────────────
+
+;; ── int agonLight2PollUart0Impl(void) ────────────────────────────
+;;    returns received byte in HL, or -1 if no data ready (non-blocking)
+_agonLight2PollUart0Impl:
+    in0     a, (UART0_LSR)
+    and     0x01                ; DR — data ready
+    jr      z, .Lno_char
+
+    in0     a, (UART0_RBR)
+    ld      hl, 0
+    ld      l, a
+    ret
+
+.Lno_char:
+    ld      hl, -1
+    ret
+;; ── agonLight2WriteUart0Impl(uint8_t c) ───────────────────────────
 ;;    c passed at ix+6
-_uart0_putc:
+_agonLight2WriteUart0Impl:
     push    ix
     ld      ix, 0
     add     ix, sp
@@ -85,20 +101,4 @@ _uart0_putc:
     out0    (UART0_THR), a
 
     pop     ix
-    ret
-
-;; ── int uart0_getc(void) ────────────────────────────
-;;    returns received byte in HL, or -1 if no data ready (non-blocking)
-_uart0_getc:
-    in0     a, (UART0_LSR)
-    and     0x01                ; DR — data ready
-    jr      z, .Lno_char
-
-    in0     a, (UART0_RBR)
-    ld      hl, 0
-    ld      l, a
-    ret
-
-.Lno_char:
-    ld      hl, -1
     ret
