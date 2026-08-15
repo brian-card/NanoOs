@@ -295,6 +295,7 @@ void nanoOsStart(void) {
   logDebug("Starting scheduler.\n");
   startScheduler(&threadStatePointer);
 }
+
 /// @fn ProcessId getNumPipes(const char *commandLine)
 ///
 /// @brief Get the number of pipes in a commandLine.
