@@ -1167,7 +1167,7 @@ void* runMemoryManager(void *args) {
   logDebug("memoryManagerState.firstFree->size = %ld\n",
     (long int) memoryManagerState.firstFree->size);
   printConsoleString(_usingPrefix);
-  printConsoleULong(memoryManagerState.firstFree->size);
+  printConsoleUInt(memoryManagerState.firstFree->size);
   printConsoleString(_dynamicMemorySuffix);
   releaseConsole();
   
