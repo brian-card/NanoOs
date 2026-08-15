@@ -681,7 +681,7 @@ const CommandEntry commands[] = {
   {
     .name = "helloworld",
     .func = helloworldCommandHandler,
-    .help = "Run the \"helloworld\" command from the filesystem."
+    .help = "Run the \"helloworld\" command."
   },
   {
     .name = "help",
