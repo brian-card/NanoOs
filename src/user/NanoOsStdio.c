@@ -99,7 +99,7 @@ int printString_(const char *string) {
     stringLength--;
   }
 
-  // Find the first UART that's online and a console.
+  // Find the first UART that's both online and a console.
   int32_t deviceId = 0;
   for (; ((uint32_t) deviceId) < HAL->uart.numSupported; deviceId++) {
     bool uartIsConsole = false;
