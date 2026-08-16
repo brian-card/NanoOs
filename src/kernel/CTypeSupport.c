@@ -296,3 +296,32 @@ bool unsupportedTypeLessOrEqual_(
   return (unsupportedTypeLessThan(a, b) || (unsupportedTypeEqual(a, b)));
 }
 
+/// @fn void unsupportedTypeAdd_(UnsupportedType *a, const UnsupportedType *b)
+///
+/// @brief Add a number to a number (a = a + b).
+///
+/// @param a The value to add to.
+/// @param b The value to add.
+///
+/// @return This function returns no value.
+void unsupportedTypeAdd_(UnsupportedType *a, const UnsupportedType *b) {
+  const UnsupportedType *smaller = (a->numU32s > b->numU32s) ? b : a;
+  
+  uint32_t carry = 0;
+  for (int ii = 0; ii < smaller->numU32s; ii++) {
+    a->u32s[ii] += carry;
+    carry = (a->u32s[ii] & 0x80000000) && (b->u32s[ii] & 0x80000000);
+    a->u32s[ii] += b->u32s[ii];
+  }
+  
+  if ((carry > 0) && (a->numU32s > b->numU32s)) {
+    a->u32s[b->numU32s] += carry;
+    for (int ii = b->numU32s;
+      (ii < a->numU32s - 1) && (a->u32s[ii] == 0);
+      ii++
+    ) {
+      a->u32s[ii + 1] += carry;
+    }
+  }
+}
+
