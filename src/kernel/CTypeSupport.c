@@ -47,18 +47,46 @@ static union {
 /// endian system.
 #define HOST_IS_LITTLE_ENDIAN (_endianDetector.character)
 
-/// @fn void unsupportedTypeInit_(UnsupportedType *value, int numU32s, ...)
+/// @fn void unsupportedTypeInit_(UnsupportedType *value, bool signedType,
+///   int numU32s, ...)
 ///
 /// @brief Initialize all the member variables of an UnsupportedType-compatible
 /// value.
 ///
 /// @param value Pointer to an UnsupportedType-compatible value.
+/// @param signedType Whether or not the type is intended to be treated as
+///   signed.
 /// @param numU32s The number of uint32_t values that will be in the unsupported
 ///   value.
 ///
 /// @return This function returns no value.
-void unsupportedTypeInit_(UnsupportedType *value, int numU32s, ...) {
+void unsupportedTypeInit_(UnsupportedType *value, bool signedType,
+  int numU32s, ...
+) {
   value->numU32s = numU32s;
+  uint32_t msw = 0;
+  
+  va_list args;
+  va_start(args, numU32s);
+  
+  if (HOST_IS_LITTLE_ENDIAN) {
+    // LSB first, so set the values in order and msw comes last.
+    for (int ii = 0; ii < numU32s; ii++) {
+      value->u32s[ii] = va_arg(args, uint32_t);
+    }
+    msw = value->u32s[numU32s - 1];
+  } else {
+    for (int ii = numU32s - 1; ii > 0; ii--) {
+      value->u32s[ii] = va_arg(args, uint32_t);
+    }
+    msw = value->u32s[0];
+  }
+  
+  va_end(args);
+  
+  if ((signedType == true) && (msw & 0x80000000)) {
+    value->negative = true;
+  }
 }
 
 /// @fn void unsupportedTypeShiftLeft_(UnsupportedType *value, int numBits)
@@ -70,7 +98,7 @@ void unsupportedTypeInit_(UnsupportedType *value, int numU32s, ...) {
 ///
 /// @return This function returns no value.
 void unsupportedTypeShiftLeft_(UnsupportedType *value, int numBits) {
-  for (int ii = value->numU32s - 1; ii > 0; ii++) {
+  for (int ii = value->numU32s - 1; ii > 0; ii--) {
     value->u32s[ii] = (value->u32s[ii] << numBits)
       | (value->u32s[ii - 1] >> (32 - numBits));
   }
