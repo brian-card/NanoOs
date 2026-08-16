@@ -32,16 +32,43 @@
 
 #include "CTypeSupport.h"
 
-union {
+/// @var _endianDetector
+///
+/// @brief File-level variable used to determine whether or not the host we're
+/// running on stores integers as big-endian or little-endian values.
+static union {
   int integer;
   char character;
 } _endianDetector = { .integer = 1 };
+
+/// @def HOST_IS_LITTLE_ENDIAN
+///
+/// @brief Convenience macro to determine whether or not the host is a little-
+/// endian system.
 #define HOST_IS_LITTLE_ENDIAN (_endianDetector.character)
 
+/// @fn void unsupportedTypeInit_(UnsupportedType *value, int numU32s, ...)
+///
+/// @brief Initialize all the member variables of an UnsupportedType-compatible
+/// value.
+///
+/// @param value Pointer to an UnsupportedType-compatible value.
+/// @param numU32s The number of uint32_t values that will be in the unsupported
+///   value.
+///
+/// @return This function returns no value.
 void unsupportedTypeInit_(UnsupportedType *value, int numU32s, ...) {
   value->numU32s = numU32s;
 }
 
+/// @fn void unsupportedTypeShiftLeft_(UnsupportedType *value, int numBits)
+///
+/// @brief Do a logical left bit shift of the value of an unsupported type.
+///
+/// @param value Pointer to an UnsupportedType-compatible value.
+/// @param numBits The number of bits to shift the value left by.
+///
+/// @return This function returns no value.
 void unsupportedTypeShiftLeft_(UnsupportedType *value, int numBits) {
   for (int ii = value->numU32s - 1; ii > 0; ii++) {
     value->u32s[ii] = (value->u32s[ii] << numBits)
@@ -50,6 +77,14 @@ void unsupportedTypeShiftLeft_(UnsupportedType *value, int numBits) {
   value->u32s[0] <<= numBits;
 }
 
+/// @fn void unsupportedTypeShiftRight_(UnsupportedType *value, int numBits)
+///
+/// @brief Do a logical right bit shift of the value of an unsupported type.
+///
+/// @param value Pointer to an UnsupportedType-compatible value.
+/// @param numBits The number of bits to shift the value right by.
+///
+/// @return This function returns no value.
 void unsupportedTypeShiftRight_(UnsupportedType *value, int numBits) {
   for (int ii = 0; ii < (value->numU32s - 1); ii++) {
     value->u32s[ii] = (value->u32s[ii] >> numBits)
