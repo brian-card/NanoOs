@@ -1232,17 +1232,15 @@ void coroutineMain(void *stack) {
     // constructor will be thinking that it just provided us with the function
     // we should call.
     //
-    // NOTE:  It should absolutely, 100% *NOT* be required to set the value of
-    // the running pointer here.  It was just captured a few lines ago.  If the
-    // pointer was saved to the stack -OR- if it was saved to a register that
-    // setjmp captured, then it would still be the same value here.  One of
-    // those two things *MUST* be true for a compliant C compiler.  However,
-    // NanoOs runs on embedded targets and I have discovered that some of the
-    // compilers for those targets don't comply with the C standard the way they
-    // should.  I've found instances where the pointer was saved to a register
-    // and that register was not preserved in the jmp_buf captured by setjmp,
-    // which means that it's some unknown garbage value by the time we get to
-    // this section of code.  Because of that, we'll grab the value again here.
+    // NOTE:  Some compilers re-use stack slots for local variables once they
+    // determine that a variable is no longer "live".  The `running` variable
+    // isn't used at all within the while loop and it's clear that that loop
+    // is never intended to exit.  Because of this, `running` may be determined
+    // to not be live and its slot may be reused in the while loop below.  This
+    // would obviously create a serious problem if we enter this branch and do
+    // nothing to make sure that the value of `running` is correct before
+    // accessing its `passed` member variable.  That's why we have to call
+    // `getRunningCoroutine()` again here before using it.
     //
     // JBC 2026-08-15
     running = getRunningCoroutine();
