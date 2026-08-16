@@ -63,29 +63,48 @@ static union {
 void unsupportedTypeInit_(UnsupportedType *value, bool signedType,
   int numU32s, ...
 ) {
+  value->signedType = signedType;
+  value->negative = false;
   value->numU32s = numU32s;
-  uint32_t msw = 0;
   
   va_list args;
   va_start(args, numU32s);
   
   if (HOST_IS_LITTLE_ENDIAN) {
-    // LSB first, so set the values in order and msw comes last.
+    // LSB first, so set the values in order.
     for (int ii = 0; ii < numU32s; ii++) {
       value->u32s[ii] = va_arg(args, uint32_t);
     }
-    msw = value->u32s[numU32s - 1];
   } else {
-    for (int ii = numU32s - 1; ii > 0; ii--) {
+    // MSB first, so set the values in reverse order.
+    for (int ii = numU32s - 1; ii >= 0; ii--) {
       value->u32s[ii] = va_arg(args, uint32_t);
     }
-    msw = value->u32s[0];
   }
   
   va_end(args);
   
-  if ((signedType == true) && (msw & 0x80000000)) {
+  // Lowest-order 32 bits is now at value->u32s[0] and highest-order 32 bits
+  // is at value->u32s[numU32s - 1].  If the value is signed and the most-
+  // significant bit of the most-significant word is set, we need to mark the
+  // value negative and negate the value.
+  if ((signedType == true) && (value->u32s[numU32s - 1] & 0x80000000)) {
     value->negative = true;
+    
+    // The way to negate a twos-compliment value is to flip all the bits and
+    // then add 1.  We have to do this in multiple steps.  Flip all the bits on
+    // all the values first.
+    for (int ii = 0; ii < numU32s; ii++) {
+      value->u32s[ii] = ~value->u32s[ii];
+    }
+    
+    // Add 1 to the low-order 32-bit value.  If the value is 0 afterward then
+    // that means we've carried over into the next value and have to add 1 to
+    // that as well.  Repeat the process as long as the next value is 0.
+    value->u32s[0]++;
+    for (int ii = 0; (ii < (numU32s - 1)) && (value->u32s[ii] == 0); ii++) {
+      value->u32s[ii + 1]++;
+    }
   }
 }
 
@@ -119,9 +138,5 @@ void unsupportedTypeShiftRight_(UnsupportedType *value, int numBits) {
       | (value->u32s[ii + 1] & (((uint32_t) 0xffffffff) >> (32 - numBits)));
   }
   value->u32s[value->numU32s - 1] >>= numBits;
-  if (value->negative == true) {
-    value->u32s[value->numU32s - 1]
-      |= ((uint32_t) 0xffffffff) << (32 - numBits);
-  }
 }
 
