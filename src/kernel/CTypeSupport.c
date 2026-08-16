@@ -58,6 +58,8 @@ static union {
 ///   signed.
 /// @param numU32s The number of uint32_t values that will be in the unsupported
 ///   value.
+/// @param ... A single, unsupported value that is a multiple of 32 bits in
+///   size.  This will be broken up and read in as multiple 32-bit values.
 ///
 /// @return This function returns no value.
 void unsupportedTypeInit(UnsupportedType *value, bool signedType,
