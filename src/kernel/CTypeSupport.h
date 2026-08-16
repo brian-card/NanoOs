@@ -88,6 +88,8 @@ typedef struct U64 {
   uint32_t u32s[2];
 } U64;
 
+void unsupportedTypeInit_(UnsupportedType *value, bool signedType,
+  int numU32s, ...);
 void unsupportedTypeShiftLeft_(UnsupportedType *value, int numBits);
 #define unsupportedTypeShiftLeft(value, numBits) \
   unsupportedTypeShiftLeft_((UnsupportedType*) (value), (numBits))
