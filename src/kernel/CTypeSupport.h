@@ -90,9 +90,9 @@ typedef struct U64 {
 
 void unsupportedTypeInit_(UnsupportedType *value, bool signedType,
   int numU32s, ...);
-#define unsupportedTypeInit(value, signedType, numU32s, initialValue) \
+#define unsupportedTypeInit(value, signedType, initialValue) \
   unsupportedTypeInit_((UnsupportedType*) (value), (signedType), \
-  (numU32s), (initialValue))
+  (sizeof(initialValue) + 3) / 4, (initialValue))
 void unsupportedTypeShiftLeft_(UnsupportedType *value, int numBits);
 #define unsupportedTypeShiftLeft(value, numBits) \
   unsupportedTypeShiftLeft_((UnsupportedType*) (value), (numBits))
@@ -106,6 +106,10 @@ bool unsupportedTypeGreaterThan_(
   const UnsupportedType *a, const UnsupportedType *b);
 #define unsupportedTypeGreaterThan(a, b) \
   unsupportedTypeGreaterThan_((UnsupportedType*) (a), (UnsupportedType*) (b))
+bool unsupportedTypeLessThan_(
+  const UnsupportedType *a, const UnsupportedType *b);
+#define unsupportedTypeLessThan(a, b) \
+  unsupportedTypeLessThan_((UnsupportedType*) (a), (UnsupportedType*) (b))
 
 #ifdef __cplusplus
 } // extern "C"

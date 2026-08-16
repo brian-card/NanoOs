@@ -221,3 +221,46 @@ bool unsupportedTypeGreaterThan_(
   return true;
 }
 
+/// @fn bool unsupportedTypeLessThan_(
+///   const UnsupportedType *a, const UnsupportedType *b)
+///
+/// @brief Determine if one UnsupportedType value is less than another one
+/// (a < b).
+///
+/// @param a The first value to compare.
+/// @param b The second value to compare.
+///
+/// @return Returns true if a is strictly less than b, false if not.
+bool unsupportedTypeLessThan_(
+  const UnsupportedType *a, const UnsupportedType *b
+) {
+  if (a->negative != b->negative) {
+    if (a->negative == false) { // b->negative must be true
+      return false;
+    }
+    // a is negative and b is not
+    return true;
+  }
+  
+  const UnsupportedType *bigger = a;
+  const UnsupportedType *smaller = b;
+  if (a->numU32s != b->numU32s) {
+    bigger = (a->numU32s > b->numU32s) ? a : b;
+    smaller = (a->numU32s > b->numU32s) ? b : a;
+    
+    for (int ii = smaller->numU32s; ii < bigger->numU32s; ii++) {
+      if (bigger->u32s[ii] != 0) {
+        return (bigger == b);
+      }
+    }
+  }
+  
+  for (int ii = 0; ii < smaller->numU32s; ii++) {
+    if (a->u32s[ii] >= b->u32s[ii]) {
+      return false;
+    }
+  }
+  
+  return true;
+}
+
