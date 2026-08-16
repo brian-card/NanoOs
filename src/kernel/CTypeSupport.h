@@ -53,6 +53,8 @@ extern "C"
 /// @brief Generic type to deal with types larger than 32 bits.  All other
 /// support types must be compatible with this one.
 ///
+/// @param signedType Boolean value to indicate whether or not the value is
+///   intended to be treated as a signed type.
 /// @param negative Boolean value to indicate whether or not the encoded value
 ///   is negative.
 /// @param numU32s The number of unsigned, 32-bit values the type holds.
@@ -61,6 +63,7 @@ extern "C"
 ///   compilers won't complain.  Index 0 is the lowest-order 32 bits of the
 ///   value.  Higher indexes represent the higer-order groups of 32 bits.
 typedef struct UnsupportedType {
+  bool signedType;
   bool negative;
   int numU32s;
   uint32_t u32s[1];
@@ -70,6 +73,8 @@ typedef struct UnsupportedType {
 ///
 /// @brief Type to deal with 64-bit values.
 ///
+/// @param signedType Boolean value to indicate whether or not the value is
+///   intended to be treated as a signed type.
 /// @param negative Boolean value to indicate whether or not the encoded value
 ///   is negative.
 /// @param numU32s The number of unsigned, 32-bit values the type holds.  This
@@ -77,6 +82,7 @@ typedef struct UnsupportedType {
 /// @param u32s Two unsigned, 32-bit values that represent the full 64-bit
 ///   value.
 typedef struct U64 {
+  bool signedType;
   bool negative;
   int numU32s;
   uint32_t u32s[2];
