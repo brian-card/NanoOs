@@ -145,7 +145,7 @@ void unsupportedTypeShiftRight_(UnsupportedType *value, int numBits) {
 /// @fn bool unsupportedTypeEqual_(const UnsupportedType *a,
 ///   const UnsupportedType *b)
 ///
-/// @brief Compare two UnsupportedType values for equality.
+/// @brief Compare two UnsupportedType values for equality (a == b).
 ///
 /// @param a The first value to compare.
 /// @param b The second value to compare.
@@ -171,6 +171,49 @@ bool unsupportedTypeEqual_(const UnsupportedType *a, const UnsupportedType *b) {
   
   for (int ii = 0; ii < smaller->numU32s; ii++) {
     if (bigger->u32s[ii] != smaller->u32s[ii]) {
+      return false;
+    }
+  }
+  
+  return true;
+}
+
+/// @fn bool unsupportedTypeGreaterThan_(
+///   const UnsupportedType *a, const UnsupportedType *b)
+///
+/// @brief Determine if one UnsupportedType value is greater than another one
+/// (a > b).
+///
+/// @param a The first value to compare.
+/// @param b The second value to compare.
+///
+/// @return Returns true if a is strictly greater than b, false if not.
+bool unsupportedTypeGreaterThan_(
+  const UnsupportedType *a, const UnsupportedType *b
+) {
+  if (a->negative != b->negative) {
+    if (a->negative == false) { // b->negative must be true
+      return true;
+    }
+    // a is negative and b is not
+    return false;
+  }
+  
+  const UnsupportedType *bigger = a;
+  const UnsupportedType *smaller = b;
+  if (a->numU32s != b->numU32s) {
+    bigger = (a->numU32s > b->numU32s) ? a : b;
+    smaller = (a->numU32s > b->numU32s) ? b : a;
+    
+    for (int ii = smaller->numU32s; ii < bigger->numU32s; ii++) {
+      if (bigger->u32s[ii] != 0) {
+        return (bigger == a);
+      }
+    }
+  }
+  
+  for (int ii = 0; ii < smaller->numU32s; ii++) {
+    if (a->u32s[ii] <= b->u32s[ii]) {
       return false;
     }
   }

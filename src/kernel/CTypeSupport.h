@@ -102,6 +102,10 @@ void unsupportedTypeShiftRight_(UnsupportedType *value, int numBits);
 bool unsupportedTypeEqual_(const UnsupportedType *a, const UnsupportedType *b);
 #define unsupportedTypeEqual(a, b) \
   unsupportedTypeEqual_((UnsupportedType*) (a), (UnsupportedType*) (b))
+bool unsupportedTypeGreaterThan_(
+  const UnsupportedType *a, const UnsupportedType *b);
+#define unsupportedTypeGreaterThan(a, b) \
+  unsupportedTypeGreaterThan_((UnsupportedType*) (a), (UnsupportedType*) (b))
 
 #ifdef __cplusplus
 } // extern "C"
