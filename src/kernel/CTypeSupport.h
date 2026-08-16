@@ -99,6 +99,9 @@ void unsupportedTypeShiftLeft_(UnsupportedType *value, int numBits);
 void unsupportedTypeShiftRight_(UnsupportedType *value, int numBits);
 #define unsupportedTypeShiftRight(value, numBits) \
   unsupportedTypeShiftRight_((UnsupportedType*) (value), (numBits))
+bool unsupportedTypeEqual_(const UnsupportedType *a, const UnsupportedType *b);
+#define unsupportedTypeEqual(a, b) \
+  unsupportedTypeEqual_((UnsupportedType*) (a), (UnsupportedType*) (b))
 
 #ifdef __cplusplus
 } // extern "C"

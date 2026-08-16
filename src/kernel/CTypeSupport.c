@@ -142,3 +142,39 @@ void unsupportedTypeShiftRight_(UnsupportedType *value, int numBits) {
   value->u32s[value->numU32s - 1] >>= numBits;
 }
 
+/// @fn bool unsupportedTypeEqual_(const UnsupportedType *a,
+///   const UnsupportedType *b)
+///
+/// @brief Compare two UnsupportedType values for equality.
+///
+/// @param a The first value to compare.
+/// @param b The second value to compare.
+///
+/// @return Returns true if the two values are equal, false if not.
+bool unsupportedTypeEqual_(const UnsupportedType *a, const UnsupportedType *b) {
+  if (a->negative != b->negative) {
+    return false;
+  }
+  
+  const UnsupportedType *bigger = a;
+  const UnsupportedType *smaller = b;
+  if (a->numU32s != b->numU32s) {
+    bigger = (a->numU32s > b->numU32s) ? a : b;
+    smaller = (a->numU32s > b->numU32s) ? b : a;
+    
+    for (int ii = smaller->numU32s; ii < bigger->numU32s; ii++) {
+      if (bigger->u32s[ii] != 0) {
+        return false;
+      }
+    }
+  }
+  
+  for (int ii = 0; ii < smaller->numU32s; ii++) {
+    if (bigger->u32s[ii] != smaller->u32s[ii]) {
+      return false;
+    }
+  }
+  
+  return true;
+}
+
