@@ -47,7 +47,7 @@ static union {
 /// endian system.
 #define HOST_IS_LITTLE_ENDIAN (_endianDetector.character)
 
-/// @fn void unsupportedTypeInit_(UnsupportedType *value, bool signedType,
+/// @fn void unsupportedTypeInit(UnsupportedType *value, bool signedType,
 ///   int numU32s, ...)
 ///
 /// @brief Initialize all the member variables of an UnsupportedType-compatible
@@ -60,7 +60,7 @@ static union {
 ///   value.
 ///
 /// @return This function returns no value.
-void unsupportedTypeInit_(UnsupportedType *value, bool signedType,
+void unsupportedTypeInit(UnsupportedType *value, bool signedType,
   int numU32s, ...
 ) {
   value->signedType = signedType;
