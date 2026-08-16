@@ -81,12 +81,12 @@ typedef struct U64 {
   uint32_t u32s[2];
 } U64;
 
-void unsupportedShiftLeft_(UnsupportedType *value, int numBits);
-#define unsupportedShiftLeft(value, numBits) \
-  unsupportedShiftLeft_((UnsupportedType*) (value), (numBits))
-void unsupportedShiftRight_(UnsupportedType *value, int numBits);
-#define unsupportedShiftRight(value, numBits) \
-  unsupportedShiftRight_((UnsupportedType*) (value), (numBits))
+void unsupportedTypeShiftLeft_(UnsupportedType *value, int numBits);
+#define unsupportedTypeShiftLeft(value, numBits) \
+  unsupportedTypeShiftLeft_((UnsupportedType*) (value), (numBits))
+void unsupportedTypeShiftRight_(UnsupportedType *value, int numBits);
+#define unsupportedTypeShiftRight(value, numBits) \
+  unsupportedTypeShiftRight_((UnsupportedType*) (value), (numBits))
 
 #ifdef __cplusplus
 } // extern "C"

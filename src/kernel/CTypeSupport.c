@@ -32,7 +32,17 @@
 
 #include "CTypeSupport.h"
 
-void unsupportedShiftLeft_(UnsupportedType *value, int numBits) {
+union {
+  int integer;
+  char character;
+} _endianDetector = { .integer = 1 };
+#define HOST_IS_LITTLE_ENDIAN (_endianDetector.character)
+
+void unsupportedTypeInit_(UnsupportedType *value, int numU32s, ...) {
+  value->numU32s = numU32s;
+}
+
+void unsupportedTypeShiftLeft_(UnsupportedType *value, int numBits) {
   for (int ii = value->numU32s - 1; ii > 0; ii++) {
     value->u32s[ii] = (value->u32s[ii] << numBits)
       | (value->u32s[ii - 1] >> (32 - numBits));
@@ -40,7 +50,7 @@ void unsupportedShiftLeft_(UnsupportedType *value, int numBits) {
   value->u32s[0] <<= numBits;
 }
 
-void unsupportedShiftRight_(UnsupportedType *value, int numBits) {
+void unsupportedTypeShiftRight_(UnsupportedType *value, int numBits) {
   for (int ii = 0; ii < (value->numU32s - 1); ii++) {
     value->u32s[ii] = (value->u32s[ii] >> numBits)
       | (value->u32s[ii + 1] & (((uint32_t) 0xffffffff) >> (32 - numBits)));
