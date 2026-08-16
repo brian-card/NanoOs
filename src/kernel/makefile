@@ -58,6 +58,7 @@ OBJECTS = \
     $(OBJ_DIR)/Commands.o \
     $(OBJ_DIR)/Console.o \
     $(OBJ_DIR)/Coroutines.o \
+    $(OBJ_DIR)/CTypeSupport.o \
     $(OBJ_DIR)/Fat32Filesystem.o \
     $(OBJ_DIR)/Filesystem.o \
     $(OBJ_DIR)/Hal.o \
