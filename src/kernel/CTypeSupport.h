@@ -110,6 +110,10 @@ bool unsupportedTypeLessThan_(
   const UnsupportedType *a, const UnsupportedType *b);
 #define unsupportedTypeLessThan(a, b) \
   unsupportedTypeLessThan_((UnsupportedType*) (a), (UnsupportedType*) (b))
+bool unsupportedTypeGreaterOrEqual_(
+  const UnsupportedType *a, const UnsupportedType *b);
+#define unsupportedTypeGreaterOrEqual(a, b) \
+  unsupportedTypeGreaterOrEqual_((UnsupportedType*) (a), (UnsupportedType*) (b))
 
 #ifdef __cplusplus
 } // extern "C"

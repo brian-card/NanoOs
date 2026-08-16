@@ -264,3 +264,19 @@ bool unsupportedTypeLessThan_(
   return true;
 }
 
+/// @fn bool unsupportedTypeGreaterOrEqual_(
+///   const UnsupportedType *a, const UnsupportedType *b)
+///
+/// @brief Determine if one UnsupportedType value is greater than or equal to
+/// another one (a >= b).
+///
+/// @param a The first value to compare.
+/// @param b The second value to compare.
+///
+/// @return Returns true if a is greater than or equal to b, false if not.
+bool unsupportedTypeGreaterOrEqual_(
+  const UnsupportedType *a, const UnsupportedType *b
+) {
+  return (unsupportedTypeGreaterThan(a, b) || (unsupportedTypeEqual(a, b)));
+}
+
