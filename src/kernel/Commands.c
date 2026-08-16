@@ -593,7 +593,7 @@ void* runBuiltinShell(void *args) {
   }
 
   if (getRunningProcess()->userId == NO_USER_ID) {
-    printf("\nNanoOs " NANO_OS_VERSION " %s console %d\n\n",
+    printf("\nNanoOs " NANO_OS_VERSION " %s tty%d\n\n",
       SCHEDULER_STATE->hostname, consolePort);
     login();
   }
