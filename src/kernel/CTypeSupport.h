@@ -133,6 +133,9 @@ void unsupportedTypeAdd_(UnsupportedType *a, const UnsupportedType *b);
 void unsupportedTypeSubtract_(UnsupportedType *a, const UnsupportedType *b);
 #define unsupportedTypeSubtract(a, b) \
   unsupportedTypeSubtract_((UnsupportedType*) (a), (UnsupportedType*) (b))
+void unsupportedTypeMultiply_(UnsupportedType *a, const UnsupportedType *b);
+#define unsupportedTypeMultiply(a, b) \
+  unsupportedTypeMultiply_((UnsupportedType*) (a), (UnsupportedType*) (b))
 void unsupportedTypeDivide_(
   const UnsupportedType *dividend, const UnsupportedType *divisor,
   UnsupportedType *quotient, UnsupportedType *remainder);
