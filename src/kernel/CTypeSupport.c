@@ -325,3 +325,30 @@ void unsupportedTypeAdd_(UnsupportedType *a, const UnsupportedType *b) {
   }
 }
 
+/// @fn void unsupportedTypeSubtract_(
+///   UnsupportedType *a, const UnsupportedType *b)
+///
+/// @brief Subtract a number from a number (a = a - b).
+///
+/// @param a The value to subtract from.
+/// @param b The value to subtract.
+///
+/// @return This function returns no value.
+void unsupportedTypeSubtract_(UnsupportedType *a, const UnsupportedType *b) {
+  const UnsupportedType *smaller = (a->numU32s > b->numU32s) ? b : a;
+  
+  for (int ii = smaller->numU32s; ii >= 0; ii--) {
+    uint32_t borrow = (a->u32s[ii] < b->u32s[ii]);
+    a->u32s[ii] -= b->u32s[ii];
+    if ((borrow > 0) && (ii < (a->numU32s - 1))) {
+      a->u32s[ii + 1] -= borrow;
+      for (int jj = ii + 1;
+        (jj < (a->numU32s - 1)) && (a->u32s[jj] == 0xffffffff);
+        jj++
+      ) {
+        a->u32s[jj + 1] -= borrow;
+      }
+    }
+  }
+}
+
