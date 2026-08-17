@@ -124,6 +124,15 @@ void unsupportedTypeAdd_(UnsupportedType *a, const UnsupportedType *b);
 void unsupportedTypeSubtract_(UnsupportedType *a, const UnsupportedType *b);
 #define unsupportedTypeSubtract(a, b) \
   unsupportedTypeSubtract_((UnsupportedType*) (a), (UnsupportedType*) (b))
+void unsupportedTypeDivide_(
+  const UnsupportedType *dividend, const UnsupportedType *divisor,
+  UnsupportedType *quotient, UnsupportedType *remainder);
+#define unsupportedTypeDivide(dividend, divisor, quotient, remainder) \
+  unsupportedTypeDivide_( \
+    (UnsupportedType*) dividend, \
+    (UnsupportedType*) divisor, \
+    (UnsupportedType*) quotient, \
+    (UnsupportedType*) remainder)
 
 #ifdef __cplusplus
 } // extern "C"

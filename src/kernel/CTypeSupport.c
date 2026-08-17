@@ -30,6 +30,9 @@
 /// @brief Functionality for C types that don't have native support on some
 /// platforms.
 
+// Standard C includes
+#include "string.h"
+
 #include "CTypeSupport.h"
 
 /// @var _endianDetector
@@ -348,6 +351,43 @@ void unsupportedTypeSubtract_(UnsupportedType *a, const UnsupportedType *b) {
       ) {
         a->u32s[jj + 1] -= borrow;
       }
+    }
+  }
+}
+
+/// @fn void unsupportedTypeDivide_(
+///   const UnsupportedType *dividend, const UnsupportedType *divisor,
+///   UnsupportedType *quotient, UnsupportedType *remainder)
+///
+/// @brief Divide a number by a number and get the quotient and remainder.
+///
+/// @param dividend The number to divide.
+/// @param divisor The number to divide by.
+/// @param quotient A pointer to the UnsupportedType to store the quotient in.
+/// @param remainder A pointer to the UnsupportedType to store the remainder in.
+///
+/// @return This function returns no value.
+void unsupportedTypeDivide_(
+  const UnsupportedType *dividend, const UnsupportedType *divisor,
+  UnsupportedType *quotient, UnsupportedType *remainder
+) {
+  const UnsupportedType *smaller
+    = (dividend->numU32s > divisor->numU32s) ? divisor : dividend;
+  
+  // First, clear out the quotient and remainder.
+  memset(quotient->u32s, 0, quotient->numU32s * sizeof(uint32_t));
+  memset(remainder->u32s, 0, remainder->numU32s * sizeof(uint32_t));
+  
+  // Do the division one bit at a time.
+  for (int ii = ((smaller->numU32s * 32) - 1); ii >= 0; ii--) {
+    unsupportedTypeShiftLeft(remainder, 1);
+    
+    uint32_t bit = (dividend->u32s[ii / 32] >> (ii % 32)) & 1;
+    remainder->u32s[0] |= bit;
+    
+    if (unsupportedTypeGreaterOrEqual(remainder, divisor)) {
+      unsupportedTypeSubtract(remainder, divisor);
+      quotient->u32s[ii / 32] |= (((uint32_t) 1) << (ii % 32));
     }
   }
 }
