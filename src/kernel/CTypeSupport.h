@@ -129,10 +129,10 @@ void unsupportedTypeDivide_(
   UnsupportedType *quotient, UnsupportedType *remainder);
 #define unsupportedTypeDivide(dividend, divisor, quotient, remainder) \
   unsupportedTypeDivide_( \
-    (UnsupportedType*) dividend, \
-    (UnsupportedType*) divisor, \
-    (UnsupportedType*) quotient, \
-    (UnsupportedType*) remainder)
+    (UnsupportedType*) (dividend), \
+    (UnsupportedType*) (divisor), \
+    (UnsupportedType*) (quotient), \
+    (UnsupportedType*) (remainder))
 
 #ifdef __cplusplus
 } // extern "C"
