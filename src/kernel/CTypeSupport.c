@@ -113,6 +113,24 @@ void unsupportedTypeInit_(UnsupportedType *value, bool signedType,
   }
 }
 
+/// @fn void unsupportedTypeCopy_(
+///   UnsupportedType *dest, const UnsupportedType *src)
+///
+/// @brief Copy an already-initialized UnsupportedType value to a new one.
+///
+/// @param dest A pointer to the destination UnsupportedType value.
+/// @param src A pointer to the source UnsupportedType value.
+///
+/// @return This function returns no value.
+void unsupportedTypeCopy_(UnsupportedType *dest, const UnsupportedType *src) {
+  dest->signedType = src->signedType;
+  dest->negative = src->negative;
+  dest->numU32s = src->numU32s;
+  for (int ii = 0; ii < dest->numU32s; ii++) {
+    dest->u32s[ii] = src->u32s[ii];
+  }
+}
+
 /// @fn void unsupportedTypeShiftLeft_(UnsupportedType *value, int numBits)
 ///
 /// @brief Do a logical left bit shift of the value of an unsupported type.
@@ -140,7 +158,8 @@ void unsupportedTypeShiftLeft_(UnsupportedType *value, int numBits) {
 void unsupportedTypeShiftRight_(UnsupportedType *value, int numBits) {
   for (int ii = 0; ii < (value->numU32s - 1); ii++) {
     value->u32s[ii] = (value->u32s[ii] >> numBits)
-      | (value->u32s[ii + 1] & (((uint32_t) 0xffffffff) >> (32 - numBits)));
+      | ((value->u32s[ii + 1] & (((uint32_t) 0xffffffff) >> (32 - numBits)))
+        << (32 - numBits));
   }
   value->u32s[value->numU32s - 1] >>= numBits;
 }
@@ -181,6 +200,42 @@ bool unsupportedTypeEqual_(const UnsupportedType *a, const UnsupportedType *b) {
   return true;
 }
 
+/// @fn bool unsupportedTypeAbsValGreaterThan(
+///   const UnsupportedType *a, const UnsupportedType *b)
+///
+/// @brief Determine if the absolute value of one UnsupportedType value is
+/// greater than the absolute value of another one (|a| > |b|).
+///
+/// @param a The first value to compare.
+/// @param b The second value to compare.
+///
+/// @return Returns true if the absolute value of a is strictly greater than the
+/// absolute value of b, false if not.
+bool unsupportedTypeAbsValGreaterThan(
+  const UnsupportedType *a, const UnsupportedType *b
+) {
+  const UnsupportedType *bigger = a;
+  const UnsupportedType *smaller = b;
+  if (a->numU32s != b->numU32s) {
+    bigger = (a->numU32s > b->numU32s) ? a : b;
+    smaller = (a->numU32s > b->numU32s) ? b : a;
+
+    for (int ii = bigger->numU32s - 1; ii >= smaller->numU32s; ii--) {
+      if (bigger->u32s[ii] != 0) {
+        return bigger == a;
+      }
+    }
+  }
+
+  for (int ii = smaller->numU32s - 1; ii >= 0; ii--) {
+    if (a->u32s[ii] != b->u32s[ii]) {
+      return (a->u32s[ii] > b->u32s[ii]);
+    }
+  }
+
+  return false;
+}
+
 /// @fn bool unsupportedTypeGreaterThan_(
 ///   const UnsupportedType *a, const UnsupportedType *b)
 ///
@@ -195,33 +250,14 @@ bool unsupportedTypeGreaterThan_(
   const UnsupportedType *a, const UnsupportedType *b
 ) {
   if (a->negative != b->negative) {
-    if (a->negative == false) { // b->negative must be true
-      return true;
-    }
-    // a is negative and b is not
-    return false;
+    return (a->negative == false);
   }
-  
-  const UnsupportedType *bigger = a;
-  const UnsupportedType *smaller = b;
-  if (a->numU32s != b->numU32s) {
-    bigger = (a->numU32s > b->numU32s) ? a : b;
-    smaller = (a->numU32s > b->numU32s) ? b : a;
-    
-    for (int ii = smaller->numU32s; ii < bigger->numU32s; ii++) {
-      if (bigger->u32s[ii] != 0) {
-        return (bigger == a);
-      }
-    }
+
+  if (a->negative == true) {
+    return unsupportedTypeAbsValGreaterThan(b, a);
   }
-  
-  for (int ii = 0; ii < smaller->numU32s; ii++) {
-    if (a->u32s[ii] <= b->u32s[ii]) {
-      return false;
-    }
-  }
-  
-  return true;
+
+  return unsupportedTypeAbsValGreaterThan(a, b);
 }
 
 /// @fn bool unsupportedTypeLessThan_(
@@ -238,33 +274,14 @@ bool unsupportedTypeLessThan_(
   const UnsupportedType *a, const UnsupportedType *b
 ) {
   if (a->negative != b->negative) {
-    if (a->negative == false) { // b->negative must be true
-      return false;
-    }
-    // a is negative and b is not
-    return true;
+    return (a->negative == true);
   }
-  
-  const UnsupportedType *bigger = a;
-  const UnsupportedType *smaller = b;
-  if (a->numU32s != b->numU32s) {
-    bigger = (a->numU32s > b->numU32s) ? a : b;
-    smaller = (a->numU32s > b->numU32s) ? b : a;
-    
-    for (int ii = smaller->numU32s; ii < bigger->numU32s; ii++) {
-      if (bigger->u32s[ii] != 0) {
-        return (bigger == b);
-      }
-    }
+
+  if (a->negative == true) {
+    return unsupportedTypeAbsValGreaterThan(a, b);
   }
-  
-  for (int ii = 0; ii < smaller->numU32s; ii++) {
-    if (a->u32s[ii] >= b->u32s[ii]) {
-      return false;
-    }
-  }
-  
-  return true;
+
+  return unsupportedTypeAbsValGreaterThan(b, a);
 }
 
 /// @fn bool unsupportedTypeGreaterOrEqual_(
@@ -280,7 +297,7 @@ bool unsupportedTypeLessThan_(
 bool unsupportedTypeGreaterOrEqual_(
   const UnsupportedType *a, const UnsupportedType *b
 ) {
-  return (unsupportedTypeGreaterThan(a, b) || (unsupportedTypeEqual(a, b)));
+  return (unsupportedTypeGreaterThan(a, b) || unsupportedTypeEqual(a, b));
 }
 
 /// @fn bool unsupportedTypeLessOrEqual_(
@@ -296,7 +313,117 @@ bool unsupportedTypeGreaterOrEqual_(
 bool unsupportedTypeLessOrEqual_(
   const UnsupportedType *a, const UnsupportedType *b
 ) {
-  return (unsupportedTypeLessThan(a, b) || (unsupportedTypeEqual(a, b)));
+  return (unsupportedTypeLessThan(a, b) || unsupportedTypeEqual(a, b));
+}
+
+/// @fn void unsupportedTypeAbsValueAdd(
+///   UnsupportedType *a, const UnsupportedType *b)
+///
+/// @brief Add the absolute value of one value to another (a = |a| + |b|).
+///
+/// @param a The value to add to.
+/// @param b The value with the absolute value to add.
+///
+/// @return This function returns no value.
+void unsupportedTypeAbsValueAdd(UnsupportedType *a, const UnsupportedType *b) {
+  const UnsupportedType *smaller = (a->numU32s > b->numU32s) ? b : a;
+
+  uint32_t carry = 0;
+  for (int ii = 0; ii < smaller->numU32s; ii++) {
+    uint32_t sum = a->u32s[ii] + carry;
+    uint32_t carryNext = (sum < carry);
+    sum += b->u32s[ii];
+    carryNext |= (sum < b->u32s[ii]);
+    a->u32s[ii] = sum;
+    carry = carryNext;
+  }
+
+  if ((carry > 0) && (a->numU32s > b->numU32s)) {
+    a->u32s[b->numU32s] += carry;
+    for (int ii = b->numU32s;
+      (ii < a->numU32s - 1) && (a->u32s[ii] == 0);
+      ii++
+    ) {
+      a->u32s[ii + 1] += carry;
+    }
+  }
+}
+
+/// @fn void unsupportedTypeAbsValueSubtract(
+///   UnsupportedType *a, const UnsupportedType *b)
+///
+/// @brief Subtract the absolute value of one value from another
+/// (a = |a| - |b|).  Assumes |a| >= |b|.  Results are undefined otherwise.
+///
+/// @param a The value to subtract from.
+/// @param b The value with the absolute value to subtract.
+///
+/// @return This function returns no value.
+void unsupportedTypeAbsValueSubtract(
+  UnsupportedType *a, const UnsupportedType *b
+) {
+  uint32_t borrow = 0;
+  for (int ii = 0; ii < a->numU32s; ii++) {
+    uint32_t aWord = a->u32s[ii];
+    uint32_t bWord = 0;
+    if (ii < b->numU32s) {
+      bWord = b->u32s[ii];
+    }
+    uint32_t borrowNext = (aWord < bWord) || ((borrow > 0) && (aWord == bWord));
+    a->u32s[ii] = aWord - bWord - borrow;
+    borrow = borrowNext;
+  }
+}
+
+/// @fn void unsupportedTypeSignedAddSubtract(
+///   UnsupportedType *a, const UnsupportedType *b, bool negateB)
+///
+/// @brief Perform signed addition or subtraction on two UnsupportedType values
+/// (a = a +/- b).  The operation performed will be determined by the signs of
+/// the input values and the value of the negateB flag.
+///
+/// @param a A pointer to the first value that will also hold the final result
+///   of the operation.
+/// @param b A pointer to the second value.
+/// @param negateB Whether or not to invert the value of b->negative in the
+///   logic of the operations.
+///
+/// @return This function returns no value.
+void unsupportedTypeSignedAddSubtract(
+  UnsupportedType *a, const UnsupportedType *b, bool negateB
+) {
+  bool bIsNegative = b->negative;
+  if (negateB == true) {
+    bIsNegative = !bIsNegative;
+  }
+  
+  if (a->negative == bIsNegative) {
+    unsupportedTypeAbsValueAdd(a, b);
+  } else if (unsupportedTypeAbsValGreaterThan(a, b)) {
+    unsupportedTypeAbsValueSubtract(a, b);
+  } else { // Subtract a from b
+    // We need to use the largest UnsupportedType-compatible types for bCopy.
+    LargestUnsupportedType bCopy;
+    unsupportedTypeCopy(&bCopy, b);
+    unsupportedTypeAbsValueSubtract(
+      (UnsupportedType*) &bCopy, (UnsupportedType*) a);
+    if (a->numU32s < b->numU32s) {
+      bCopy.numU32s = a->numU32s;
+    }
+    unsupportedTypeCopy(a, &bCopy);
+    a->negative = bIsNegative;
+  }
+  
+  bool aIsZero = true;
+  for (int ii = 0; ii < a->numU32s; ii++) {
+    if (a->u32s[ii] != 0) {
+      aIsZero = false;
+      break;
+    }
+  }
+  if (aIsZero) {
+    a->negative = false;
+  }
 }
 
 /// @fn void unsupportedTypeAdd_(UnsupportedType *a, const UnsupportedType *b)
@@ -308,24 +435,7 @@ bool unsupportedTypeLessOrEqual_(
 ///
 /// @return This function returns no value.
 void unsupportedTypeAdd_(UnsupportedType *a, const UnsupportedType *b) {
-  const UnsupportedType *smaller = (a->numU32s > b->numU32s) ? b : a;
-  
-  uint32_t carry = 0;
-  for (int ii = 0; ii < smaller->numU32s; ii++) {
-    a->u32s[ii] += carry;
-    carry = (a->u32s[ii] & 0x80000000) && (b->u32s[ii] & 0x80000000);
-    a->u32s[ii] += b->u32s[ii];
-  }
-  
-  if ((carry > 0) && (a->numU32s > b->numU32s)) {
-    a->u32s[b->numU32s] += carry;
-    for (int ii = b->numU32s;
-      (ii < a->numU32s - 1) && (a->u32s[ii] == 0);
-      ii++
-    ) {
-      a->u32s[ii + 1] += carry;
-    }
-  }
+  unsupportedTypeSignedAddSubtract(a, b, false);
 }
 
 /// @fn void unsupportedTypeSubtract_(
@@ -338,21 +448,7 @@ void unsupportedTypeAdd_(UnsupportedType *a, const UnsupportedType *b) {
 ///
 /// @return This function returns no value.
 void unsupportedTypeSubtract_(UnsupportedType *a, const UnsupportedType *b) {
-  const UnsupportedType *smaller = (a->numU32s > b->numU32s) ? b : a;
-  
-  for (int ii = smaller->numU32s; ii >= 0; ii--) {
-    uint32_t borrow = (a->u32s[ii] < b->u32s[ii]);
-    a->u32s[ii] -= b->u32s[ii];
-    if ((borrow > 0) && (ii < (a->numU32s - 1))) {
-      a->u32s[ii + 1] -= borrow;
-      for (int jj = ii + 1;
-        (jj < (a->numU32s - 1)) && (a->u32s[jj] == 0xffffffff);
-        jj++
-      ) {
-        a->u32s[jj + 1] -= borrow;
-      }
-    }
-  }
+  unsupportedTypeSignedAddSubtract(a, b, true);
 }
 
 /// @fn void unsupportedTypeDivide_(

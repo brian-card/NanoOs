@@ -88,11 +88,20 @@ typedef struct U64 {
   uint32_t u32s[2];
 } U64;
 
+/// @typedef LargestUnsupportedType
+///
+/// @brief The largest UnsupportedType-compatible type.  Needs to be kept up-to-
+/// date any time we add a new type.
+typedef U64 LargestUnsupportedType;
+
 void unsupportedTypeInit_(UnsupportedType *value, bool signedType,
   int numU32s, ...);
 #define unsupportedTypeInit(value, signedType, initialValue) \
   unsupportedTypeInit_((UnsupportedType*) (value), (signedType), \
   (sizeof(initialValue) + 3) / 4, (initialValue))
+void unsupportedTypeCopy_(UnsupportedType *dest, const UnsupportedType *src);
+#define unsupportedTypeCopy(dest, src) \
+  unsupportedTypeCopy_((UnsupportedType*) (dest), (UnsupportedType*) (src))
 void unsupportedTypeShiftLeft_(UnsupportedType *value, int numBits);
 #define unsupportedTypeShiftLeft(value, numBits) \
   unsupportedTypeShiftLeft_((UnsupportedType*) (value), (numBits))
