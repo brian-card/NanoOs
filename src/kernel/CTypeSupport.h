@@ -88,6 +88,13 @@ typedef struct U64 {
   uint32_t u32s[2];
 } U64;
 
+/// @def undefinedTypeToInt
+///
+/// @brief Cast an UndefinedType to a standard system integer (int data type).
+///
+/// @param value A pointer to an UnsupportedType-compatible value.
+#define undefinedTypeToInt(value) ((int) (value)->u32s[0])
+
 /// @typedef LargestUnsupportedType
 ///
 /// @brief The largest UnsupportedType-compatible type.  Needs to be kept up-to-
