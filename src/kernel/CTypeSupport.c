@@ -488,7 +488,7 @@ void unsupportedTypeMultiply_(UnsupportedType *a, const UnsupportedType *b) {
 
   int totalBits = b->numU32s * 32;
   for (int ii = 0; ii < totalBits; ii++) {
-    if (b->u32s[ii / 32] >> (ii % 32)) {
+    if ((b->u32s[ii / 32] >> (ii % 32)) & 1) {
       unsupportedTypeAbsValueAdd(
         (UnsupportedType*) a, (UnsupportedType*) &aCopy);
     }
