@@ -75,15 +75,31 @@ void unsupportedTypeInit_(UnsupportedType *value, bool signedType,
   va_list args;
   va_start(args, numU32s);
   
-  if (HOST_IS_LITTLE_ENDIAN) {
-    // LSB first, so set the values in order.
-    for (int ii = 0; ii < numU32s; ii++) {
-      value->u32s[ii] = va_arg(args, uint32_t);
+  if (sizeof(uintptr_t) < 8) {
+    if (HOST_IS_LITTLE_ENDIAN) {
+      // LSB first, so set the values in order.
+      for (int ii = 0; ii < numU32s; ii++) {
+        value->u32s[ii] = va_arg(args, uint32_t);
+      }
+    } else {
+      // MSB first, so set the values in reverse order.
+      for (int ii = numU32s - 1; ii >= 0; ii--) {
+        value->u32s[ii] = va_arg(args, uint32_t);
+      }
     }
   } else {
-    // MSB first, so set the values in reverse order.
-    for (int ii = numU32s - 1; ii >= 0; ii--) {
-      value->u32s[ii] = va_arg(args, uint32_t);
+    if (HOST_IS_LITTLE_ENDIAN) {
+      // LSB first, so set the values in order.
+      for (int ii = 0; ii < numU32s; ii += 2) {
+        uint64_t arg = va_arg(args, uint64_t);
+        memcpy(&value->u32s[ii], &arg, sizeof(arg));
+      }
+    } else {
+      // MSB first, so set the values in reverse order.
+      for (int ii = numU32s - 1; ii >= 0; ii -= 2) {
+        uint64_t arg = va_arg(args, uint64_t);
+        memcpy(&value->u32s[ii], &arg, sizeof(arg));
+      }
     }
   }
   
@@ -449,6 +465,49 @@ void unsupportedTypeAdd_(UnsupportedType *a, const UnsupportedType *b) {
 /// @return This function returns no value.
 void unsupportedTypeSubtract_(UnsupportedType *a, const UnsupportedType *b) {
   unsupportedTypeSignedAddSubtract(a, b, true);
+}
+
+/// @fn void unsupportedTypeMultiply_(
+///   UnsupportedType *a, const UnsupportedType *b)
+///
+/// @brief Multiply two UnsupportedType values (a = a * b).
+///
+/// @param a A pointer to the first value that will also hold the final
+///   result of the operation.
+/// @param b A pointer to the second value.
+///
+/// @return This function returns no value.
+void unsupportedTypeMultiply_(UnsupportedType *a, const UnsupportedType *b) {
+  bool resultIsNegative = (a->negative != b->negative);
+
+  LargestUnsupportedType aCopy;
+  unsupportedTypeCopy(&aCopy, a);
+
+  memset(a->u32s, 0, a->numU32s * sizeof(uint32_t));
+  a->negative = false;
+
+  int totalBits = b->numU32s * 32;
+  for (int ii = 0; ii < totalBits; ii++) {
+    uint32_t bit = (b->u32s[ii / 32] >> (ii % 32)) & 1;
+    if (bit != 0) {
+      unsupportedTypeAbsValueAdd(
+        (UnsupportedType*) a, (UnsupportedType*) &aCopy);
+    }
+    unsupportedTypeShiftLeft((UnsupportedType*) &aCopy, 1);
+  }
+
+  a->negative = resultIsNegative;
+
+  bool aIsZero = true;
+  for (int ii = 0; ii < a->numU32s; ii++) {
+    if (a->u32s[ii] != 0) {
+      aIsZero = false;
+      break;
+    }
+  }
+  if (aIsZero) {
+    a->negative = false;
+  }
 }
 
 /// @fn void unsupportedTypeDivide_(
