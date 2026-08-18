@@ -69,7 +69,7 @@ typedef struct UnsupportedType {
   uint32_t u32s[1];
 } UnsupportedType;
 
-/// @struct U64
+/// @struct I64
 ///
 /// @brief Type to deal with 64-bit values.
 ///
@@ -81,12 +81,12 @@ typedef struct UnsupportedType {
 ///   value will always be 2 in this structure.
 /// @param u32s Two unsigned, 32-bit values that represent the full 64-bit
 ///   value.
-typedef struct U64 {
+typedef struct I64 {
   bool signedType;
   bool negative;
   int numU32s;
   uint32_t u32s[2];
-} U64;
+} I64;
 
 /// @def undefinedTypeToInt
 ///
@@ -99,7 +99,7 @@ typedef struct U64 {
 ///
 /// @brief The largest UnsupportedType-compatible type.  Needs to be kept up-to-
 /// date any time we add a new type.
-typedef U64 LargestUnsupportedType;
+typedef I64 LargestUnsupportedType;
 
 void unsupportedTypeInit_(UnsupportedType *value, bool signedType,
   int numU32s, ...);
