@@ -488,8 +488,7 @@ void unsupportedTypeMultiply_(UnsupportedType *a, const UnsupportedType *b) {
 
   int totalBits = b->numU32s * 32;
   for (int ii = 0; ii < totalBits; ii++) {
-    uint32_t bit = (b->u32s[ii / 32] >> (ii % 32)) & 1;
-    if (bit != 0) {
+    if (b->u32s[ii / 32] >> (ii % 32)) {
       unsupportedTypeAbsValueAdd(
         (UnsupportedType*) a, (UnsupportedType*) &aCopy);
     }
@@ -537,8 +536,7 @@ void unsupportedTypeDivide_(
   for (int ii = ((smaller->numU32s * 32) - 1); ii >= 0; ii--) {
     unsupportedTypeShiftLeft(remainder, 1);
     
-    uint32_t bit = (dividend->u32s[ii / 32] >> (ii % 32)) & 1;
-    remainder->u32s[0] |= bit;
+    remainder->u32s[0] |= (dividend->u32s[ii / 32] >> (ii % 32)) & 1;
     
     if (unsupportedTypeGreaterOrEqual(remainder, divisor)) {
       unsupportedTypeSubtract(remainder, divisor);
