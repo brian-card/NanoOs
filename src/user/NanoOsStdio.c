@@ -159,19 +159,19 @@ int ullToString(unsigned long long int number, char **nextChar) {
   }
 
   I64 value;
-  unsupportedTypeInit(&value, false, (uint64_t) number);
+  integerInit(&value, false, (uint64_t) number);
   I64 zero;
-  unsupportedTypeInit(&zero, false, (uint64_t) 0);
+  integerInit(&zero, false, (uint64_t) 0);
   I64 ten;
-  unsupportedTypeInit(&ten, false, (uint64_t) 10);
+  integerInit(&ten, false, (uint64_t) 10);
   I64 quotient, remainder;
-  unsupportedTypeCopy(&quotient, &zero);
-  unsupportedTypeCopy(&remainder, &zero);
+  integerCopy(&quotient, &zero);
+  integerCopy(&remainder, &zero);
   
-  while (unsupportedTypeGreaterThan(&value, &zero)) {
-    unsupportedTypeDivide(&value, &ten, &quotient, &remainder);
+  while (integerGreaterThan(&value, &zero)) {
+    integerDivide(&value, &ten, &quotient, &remainder);
     
-    **nextChar = '0' + unsupportedTypeToInt(&remainder);
+    **nextChar = '0' + integerToInt(&remainder);
     (*nextChar)--;
     
     value = quotient;

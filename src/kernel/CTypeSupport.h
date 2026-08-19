@@ -48,7 +48,7 @@ extern "C"
 {
 #endif
 
-/// @struct UnsupportedType
+/// @struct Integer
 ///
 /// @brief Generic type to deal with types larger than built-in ints.  All other
 /// support types must be compatible with this one.
@@ -62,12 +62,12 @@ extern "C"
 ///   the represented value.  Declared as an array of one element here so that
 ///    C++ compilers won't complain.  Index 0 is the lowest-order int of the
 ///   value.  Higher indexes represent the higer-order ints.
-typedef struct UnsupportedType {
+typedef struct Integer {
   bool signedType;
   bool negative;
   int numUInts;
   unsigned int uInts[1];
-} UnsupportedType;
+} Integer;
 
 /// @struct I64
 ///
@@ -86,64 +86,81 @@ typedef struct I64 {
   unsigned int uInts[(sizeof(uint64_t) + (sizeof(int) - 1)) / sizeof(int)];
 } I64;
 
-/// @def unsupportedTypeToInt
+/// @struct I32
 ///
-/// @brief Cast an UnsupportedType to a standard system integer (int data type).
+/// @brief Type to deal with 32-bit values.
 ///
-/// @param value A pointer to an UnsupportedType-compatible value.
-#define unsupportedTypeToInt(value) ((int) (value)->uInts[0])
+/// @param signedType Boolean value to indicate whether or not the value is
+///   intended to be treated as a signed type.
+/// @param negative Boolean value to indicate whether or not the encoded value
+///   is negative.
+/// @param numUInts The number of unsigned int values the type holds.
+/// @param uInts Unsigned int values that represent the full 32-bit value.
+typedef struct I32 {
+  bool signedType;
+  bool negative;
+  int numUInts;
+  unsigned int uInts[(sizeof(uint32_t) + (sizeof(int) - 1)) / sizeof(int)];
+} I32;
 
-void unsupportedTypeInit_(UnsupportedType *value, bool signedType,
+/// @def integerToInt
+///
+/// @brief Cast an Integer to a standard system integer (int data type).
+///
+/// @param value A pointer to an Integer-compatible value.
+#define integerToInt(value) ((int) (value)->uInts[0])
+
+void integerInit_(Integer *value, bool signedType,
   int numUInts, ...);
-#define unsupportedTypeInit(value, signedType, initialValue) \
-  unsupportedTypeInit_((UnsupportedType*) (value), (signedType), \
+#define integerInit(value, signedType, initialValue) \
+  integerInit_((Integer*) (value), (signedType), \
   (sizeof(initialValue) + (sizeof(int) - 1)) / sizeof(int), (initialValue))
-void unsupportedTypeCopy_(UnsupportedType *dest, const UnsupportedType *src);
-#define unsupportedTypeCopy(dest, src) \
-  unsupportedTypeCopy_((UnsupportedType*) (dest), (UnsupportedType*) (src))
-void unsupportedTypeShiftLeft_(UnsupportedType *value, int numBits);
-#define unsupportedTypeShiftLeft(value, numBits) \
-  unsupportedTypeShiftLeft_((UnsupportedType*) (value), (numBits))
-void unsupportedTypeShiftRight_(UnsupportedType *value, int numBits);
-#define unsupportedTypeShiftRight(value, numBits) \
-  unsupportedTypeShiftRight_((UnsupportedType*) (value), (numBits))
-bool unsupportedTypeEqual_(const UnsupportedType *a, const UnsupportedType *b);
-#define unsupportedTypeEqual(a, b) \
-  unsupportedTypeEqual_((UnsupportedType*) (a), (UnsupportedType*) (b))
-bool unsupportedTypeGreaterThan_(
-  const UnsupportedType *a, const UnsupportedType *b);
-#define unsupportedTypeGreaterThan(a, b) \
-  unsupportedTypeGreaterThan_((UnsupportedType*) (a), (UnsupportedType*) (b))
-bool unsupportedTypeLessThan_(
-  const UnsupportedType *a, const UnsupportedType *b);
-#define unsupportedTypeLessThan(a, b) \
-  unsupportedTypeLessThan_((UnsupportedType*) (a), (UnsupportedType*) (b))
-bool unsupportedTypeGreaterOrEqual_(
-  const UnsupportedType *a, const UnsupportedType *b);
-#define unsupportedTypeGreaterOrEqual(a, b) \
-  unsupportedTypeGreaterOrEqual_((UnsupportedType*) (a), (UnsupportedType*) (b))
-bool unsupportedTypeLessOrEqual_(
-  const UnsupportedType *a, const UnsupportedType *b);
-#define unsupportedTypeLessOrEqual(a, b) \
-  unsupportedTypeLessOrEqual_((UnsupportedType*) (a), (UnsupportedType*) (b))
-void unsupportedTypeAdd_(UnsupportedType *a, const UnsupportedType *b);
-#define unsupportedTypeAdd(a, b) \
-  unsupportedTypeAdd_((UnsupportedType*) (a), (UnsupportedType*) (b))
-void unsupportedTypeSubtract_(UnsupportedType *a, const UnsupportedType *b);
-#define unsupportedTypeSubtract(a, b) \
-  unsupportedTypeSubtract_((UnsupportedType*) (a), (UnsupportedType*) (b))
-void unsupportedTypeMultiply_(UnsupportedType *a, const UnsupportedType *b);
-#define unsupportedTypeMultiply(a, b) \
-  unsupportedTypeMultiply_((UnsupportedType*) (a), (UnsupportedType*) (b))
-void unsupportedTypeDivide_(
-  const UnsupportedType *dividend, const UnsupportedType *divisor,
-  UnsupportedType *quotient, UnsupportedType *remainder);
-#define unsupportedTypeDivide(dividend, divisor, quotient, remainder) \
-  unsupportedTypeDivide_( \
-    (UnsupportedType*) (dividend), \
-    (UnsupportedType*) (divisor), \
-    (UnsupportedType*) (quotient), \
-    (UnsupportedType*) (remainder))
+void integerCopy_(Integer *dest, const Integer *src);
+#define integerCopy(dest, src) \
+  integerCopy_((Integer*) (dest), (Integer*) (src))
+void integerShiftLeft_(Integer *value, int numBits);
+#define integerShiftLeft(value, numBits) \
+  integerShiftLeft_((Integer*) (value), (numBits))
+void integerShiftRight_(Integer *value, int numBits);
+#define integerShiftRight(value, numBits) \
+  integerShiftRight_((Integer*) (value), (numBits))
+bool integerEqual_(const Integer *a, const Integer *b);
+#define integerEqual(a, b) \
+  integerEqual_((Integer*) (a), (Integer*) (b))
+bool integerGreaterThan_(
+  const Integer *a, const Integer *b);
+#define integerGreaterThan(a, b) \
+  integerGreaterThan_((Integer*) (a), (Integer*) (b))
+bool integerLessThan_(
+  const Integer *a, const Integer *b);
+#define integerLessThan(a, b) \
+  integerLessThan_((Integer*) (a), (Integer*) (b))
+bool integerGreaterOrEqual_(
+  const Integer *a, const Integer *b);
+#define integerGreaterOrEqual(a, b) \
+  integerGreaterOrEqual_((Integer*) (a), (Integer*) (b))
+bool integerLessOrEqual_(
+  const Integer *a, const Integer *b);
+#define integerLessOrEqual(a, b) \
+  integerLessOrEqual_((Integer*) (a), (Integer*) (b))
+void integerAdd_(Integer *a, const Integer *b);
+#define integerAdd(a, b) \
+  integerAdd_((Integer*) (a), (Integer*) (b))
+void integerSubtract_(Integer *a, const Integer *b);
+#define integerSubtract(a, b) \
+  integerSubtract_((Integer*) (a), (Integer*) (b))
+void integerMultiply_(Integer *a, const Integer *b);
+#define integerMultiply(a, b) \
+  integerMultiply_((Integer*) (a), (Integer*) (b))
+void integerDivide_(
+  const Integer *dividend, const Integer *divisor,
+  Integer *quotient, Integer *remainder);
+#define integerDivide(dividend, divisor, quotient, remainder) \
+  integerDivide_( \
+    (Integer*) (dividend), \
+    (Integer*) (divisor), \
+    (Integer*) (quotient), \
+    (Integer*) (remainder))
 
 #ifdef __cplusplus
 } // extern "C"

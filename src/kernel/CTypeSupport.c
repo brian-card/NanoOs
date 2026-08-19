@@ -55,11 +55,11 @@
 /// @brief Integer-width mask of "all ones".
 #define INT_MASK ((unsigned int) -1)
 
-/// @typedef LargestUnsupportedType
+/// @typedef LargestInteger
 ///
-/// @brief The largest UnsupportedType-compatible type.  Needs to be kept up-to-
+/// @brief The largest Integer-compatible type.  Needs to be kept up-to-
 /// date any time we add a new type.
-typedef I64 LargestUnsupportedType;
+typedef I64 LargestInteger;
 
 /// @var _endianDetector
 ///
@@ -76,13 +76,13 @@ static union {
 /// endian system.
 #define HOST_IS_LITTLE_ENDIAN (_endianDetector.character)
 
-/// @fn void unsupportedTypeInit_(UnsupportedType *value, bool signedType,
+/// @fn void integerInit_(Integer *value, bool signedType,
 ///   int numUInts, ...)
 ///
-/// @brief Initialize all the member variables of an UnsupportedType-compatible
+/// @brief Initialize all the member variables of an Integer-compatible
 /// value.
 ///
-/// @param value Pointer to an UnsupportedType-compatible value.
+/// @param value Pointer to an Integer-compatible value.
 /// @param signedType Whether or not the type is intended to be treated as
 ///   signed.
 /// @param numUInts The number of unsigned integers values that will be in the
@@ -91,7 +91,7 @@ static union {
 ///   as multiple unsigned int values.
 ///
 /// @return This function returns no value.
-void unsupportedTypeInit_(UnsupportedType *value, bool signedType,
+void integerInit_(Integer *value, bool signedType,
   int numUInts, ...
 ) {
   value->signedType = signedType;
@@ -155,16 +155,16 @@ void unsupportedTypeInit_(UnsupportedType *value, bool signedType,
   }
 }
 
-/// @fn void unsupportedTypeCopy_(
-///   UnsupportedType *dest, const UnsupportedType *src)
+/// @fn void integerCopy_(
+///   Integer *dest, const Integer *src)
 ///
-/// @brief Copy an already-initialized UnsupportedType value to a new one.
+/// @brief Copy an already-initialized Integer value to a new one.
 ///
-/// @param dest A pointer to the destination UnsupportedType value.
-/// @param src A pointer to the source UnsupportedType value.
+/// @param dest A pointer to the destination Integer value.
+/// @param src A pointer to the source Integer value.
 ///
 /// @return This function returns no value.
-void unsupportedTypeCopy_(UnsupportedType *dest, const UnsupportedType *src) {
+void integerCopy_(Integer *dest, const Integer *src) {
   dest->signedType = src->signedType;
   dest->negative = src->negative;
   dest->numUInts = src->numUInts;
@@ -173,15 +173,15 @@ void unsupportedTypeCopy_(UnsupportedType *dest, const UnsupportedType *src) {
   }
 }
 
-/// @fn void unsupportedTypeShiftLeft_(UnsupportedType *value, int numBits)
+/// @fn void integerShiftLeft_(Integer *value, int numBits)
 ///
 /// @brief Do a logical left bit shift of the value of an unsupported type.
 ///
-/// @param value Pointer to an UnsupportedType-compatible value.
+/// @param value Pointer to an Integer-compatible value.
 /// @param numBits The number of bits to shift the value left by.
 ///
 /// @return This function returns no value.
-void unsupportedTypeShiftLeft_(UnsupportedType *value, int numBits) {
+void integerShiftLeft_(Integer *value, int numBits) {
   for (int ii = value->numUInts - 1; ii > 0; ii--) {
     value->uInts[ii] = (value->uInts[ii] << numBits)
       | (value->uInts[ii - 1] >> (INT_NUM_BITS - numBits));
@@ -189,15 +189,15 @@ void unsupportedTypeShiftLeft_(UnsupportedType *value, int numBits) {
   value->uInts[0] <<= numBits;
 }
 
-/// @fn void unsupportedTypeShiftRight_(UnsupportedType *value, int numBits)
+/// @fn void integerShiftRight_(Integer *value, int numBits)
 ///
 /// @brief Do a logical right bit shift of the value of an unsupported type.
 ///
-/// @param value Pointer to an UnsupportedType-compatible value.
+/// @param value Pointer to an Integer-compatible value.
 /// @param numBits The number of bits to shift the value right by.
 ///
 /// @return This function returns no value.
-void unsupportedTypeShiftRight_(UnsupportedType *value, int numBits) {
+void integerShiftRight_(Integer *value, int numBits) {
   for (int ii = 0; ii < (value->numUInts - 1); ii++) {
     value->uInts[ii] = (value->uInts[ii] >> numBits)
       | ((value->uInts[ii + 1] & (INT_MASK >> (INT_NUM_BITS - numBits)))
@@ -206,22 +206,22 @@ void unsupportedTypeShiftRight_(UnsupportedType *value, int numBits) {
   value->uInts[value->numUInts - 1] >>= numBits;
 }
 
-/// @fn bool unsupportedTypeEqual_(const UnsupportedType *a,
-///   const UnsupportedType *b)
+/// @fn bool integerEqual_(const Integer *a,
+///   const Integer *b)
 ///
-/// @brief Compare two UnsupportedType values for equality (a == b).
+/// @brief Compare two Integer values for equality (a == b).
 ///
 /// @param a The first value to compare.
 /// @param b The second value to compare.
 ///
 /// @return Returns true if the two values are equal, false if not.
-bool unsupportedTypeEqual_(const UnsupportedType *a, const UnsupportedType *b) {
+bool integerEqual_(const Integer *a, const Integer *b) {
   if (a->negative != b->negative) {
     return false;
   }
   
-  const UnsupportedType *bigger = a;
-  const UnsupportedType *smaller = b;
+  const Integer *bigger = a;
+  const Integer *smaller = b;
   if (a->numUInts != b->numUInts) {
     bigger = (a->numUInts > b->numUInts) ? a : b;
     smaller = (a->numUInts > b->numUInts) ? b : a;
@@ -242,10 +242,10 @@ bool unsupportedTypeEqual_(const UnsupportedType *a, const UnsupportedType *b) {
   return true;
 }
 
-/// @fn bool unsupportedTypeAbsValGreaterThan(
-///   const UnsupportedType *a, const UnsupportedType *b)
+/// @fn bool integerAbsValGreaterThan(
+///   const Integer *a, const Integer *b)
 ///
-/// @brief Determine if the absolute value of one UnsupportedType value is
+/// @brief Determine if the absolute value of one Integer value is
 /// greater than the absolute value of another one (|a| > |b|).
 ///
 /// @param a The first value to compare.
@@ -253,11 +253,11 @@ bool unsupportedTypeEqual_(const UnsupportedType *a, const UnsupportedType *b) {
 ///
 /// @return Returns true if the absolute value of a is strictly greater than the
 /// absolute value of b, false if not.
-bool unsupportedTypeAbsValGreaterThan(
-  const UnsupportedType *a, const UnsupportedType *b
+bool integerAbsValGreaterThan(
+  const Integer *a, const Integer *b
 ) {
-  const UnsupportedType *bigger = a;
-  const UnsupportedType *smaller = b;
+  const Integer *bigger = a;
+  const Integer *smaller = b;
   if (a->numUInts != b->numUInts) {
     bigger = (a->numUInts > b->numUInts) ? a : b;
     smaller = (a->numUInts > b->numUInts) ? b : a;
@@ -278,88 +278,88 @@ bool unsupportedTypeAbsValGreaterThan(
   return false;
 }
 
-/// @fn bool unsupportedTypeGreaterThan_(
-///   const UnsupportedType *a, const UnsupportedType *b)
+/// @fn bool integerGreaterThan_(
+///   const Integer *a, const Integer *b)
 ///
-/// @brief Determine if one UnsupportedType value is greater than another one
+/// @brief Determine if one Integer value is greater than another one
 /// (a > b).
 ///
 /// @param a The first value to compare.
 /// @param b The second value to compare.
 ///
 /// @return Returns true if a is strictly greater than b, false if not.
-bool unsupportedTypeGreaterThan_(
-  const UnsupportedType *a, const UnsupportedType *b
+bool integerGreaterThan_(
+  const Integer *a, const Integer *b
 ) {
   if (a->negative != b->negative) {
     return (a->negative == false);
   }
 
   if (a->negative == true) {
-    return unsupportedTypeAbsValGreaterThan(b, a);
+    return integerAbsValGreaterThan(b, a);
   }
 
-  return unsupportedTypeAbsValGreaterThan(a, b);
+  return integerAbsValGreaterThan(a, b);
 }
 
-/// @fn bool unsupportedTypeLessThan_(
-///   const UnsupportedType *a, const UnsupportedType *b)
+/// @fn bool integerLessThan_(
+///   const Integer *a, const Integer *b)
 ///
-/// @brief Determine if one UnsupportedType value is less than another one
+/// @brief Determine if one Integer value is less than another one
 /// (a < b).
 ///
 /// @param a The first value to compare.
 /// @param b The second value to compare.
 ///
 /// @return Returns true if a is strictly less than b, false if not.
-bool unsupportedTypeLessThan_(
-  const UnsupportedType *a, const UnsupportedType *b
+bool integerLessThan_(
+  const Integer *a, const Integer *b
 ) {
   if (a->negative != b->negative) {
     return (a->negative == true);
   }
 
   if (a->negative == true) {
-    return unsupportedTypeAbsValGreaterThan(a, b);
+    return integerAbsValGreaterThan(a, b);
   }
 
-  return unsupportedTypeAbsValGreaterThan(b, a);
+  return integerAbsValGreaterThan(b, a);
 }
 
-/// @fn bool unsupportedTypeGreaterOrEqual_(
-///   const UnsupportedType *a, const UnsupportedType *b)
+/// @fn bool integerGreaterOrEqual_(
+///   const Integer *a, const Integer *b)
 ///
-/// @brief Determine if one UnsupportedType value is greater than or equal to
+/// @brief Determine if one Integer value is greater than or equal to
 /// another one (a >= b).
 ///
 /// @param a The first value to compare.
 /// @param b The second value to compare.
 ///
 /// @return Returns true if a is greater than or equal to b, false if not.
-bool unsupportedTypeGreaterOrEqual_(
-  const UnsupportedType *a, const UnsupportedType *b
+bool integerGreaterOrEqual_(
+  const Integer *a, const Integer *b
 ) {
-  return (unsupportedTypeGreaterThan(a, b) || unsupportedTypeEqual(a, b));
+  return (integerGreaterThan(a, b) || integerEqual(a, b));
 }
 
-/// @fn bool unsupportedTypeLessOrEqual_(
-///   const UnsupportedType *a, const UnsupportedType *b)
+/// @fn bool integerLessOrEqual_(
+///   const Integer *a, const Integer *b)
 ///
-/// @brief Determine if one UnsupportedType value is less than or equal to
+/// @brief Determine if one Integer value is less than or equal to
 /// another one (a <= b).
 ///
 /// @param a The first value to compare.
 /// @param b The second value to compare.
 ///
 /// @return Returns true if a is less than or equal to b, false if not.
-bool unsupportedTypeLessOrEqual_(
-  const UnsupportedType *a, const UnsupportedType *b
+bool integerLessOrEqual_(
+  const Integer *a, const Integer *b
 ) {
-  return (unsupportedTypeLessThan(a, b) || unsupportedTypeEqual(a, b));
+  return (integerLessThan(a, b) || integerEqual(a, b));
 }
 
-/// @fn void unsupportedTypeAbsValueAdd(
-///   UnsupportedType *a, const UnsupportedType *b)
+/// @fn void integerAbsValueAdd(
+///   Integer *a, const Integer *b)
 ///
 /// @brief Add the absolute value of one value to another (a = |a| + |b|).
 ///
@@ -367,8 +367,8 @@ bool unsupportedTypeLessOrEqual_(
 /// @param b The value with the absolute value to add.
 ///
 /// @return This function returns no value.
-void unsupportedTypeAbsValueAdd(UnsupportedType *a, const UnsupportedType *b) {
-  const UnsupportedType *smaller = (a->numUInts > b->numUInts) ? b : a;
+void integerAbsValueAdd(Integer *a, const Integer *b) {
+  const Integer *smaller = (a->numUInts > b->numUInts) ? b : a;
 
   unsigned int carry = 0;
   for (int ii = 0; ii < smaller->numUInts; ii++) {
@@ -391,8 +391,8 @@ void unsupportedTypeAbsValueAdd(UnsupportedType *a, const UnsupportedType *b) {
   }
 }
 
-/// @fn void unsupportedTypeAbsValueSubtract(
-///   UnsupportedType *a, const UnsupportedType *b)
+/// @fn void integerAbsValueSubtract(
+///   Integer *a, const Integer *b)
 ///
 /// @brief Subtract the absolute value of one value from another
 /// (a = |a| - |b|).  Assumes |a| >= |b|.  Results are undefined otherwise.
@@ -401,8 +401,8 @@ void unsupportedTypeAbsValueAdd(UnsupportedType *a, const UnsupportedType *b) {
 /// @param b The value with the absolute value to subtract.
 ///
 /// @return This function returns no value.
-void unsupportedTypeAbsValueSubtract(
-  UnsupportedType *a, const UnsupportedType *b
+void integerAbsValueSubtract(
+  Integer *a, const Integer *b
 ) {
   unsigned int borrow = 0;
   for (int ii = 0; ii < a->numUInts; ii++) {
@@ -417,10 +417,10 @@ void unsupportedTypeAbsValueSubtract(
   }
 }
 
-/// @fn void unsupportedTypeSignedAddSubtract(
-///   UnsupportedType *a, const UnsupportedType *b, bool negateB)
+/// @fn void integerSignedAddSubtract(
+///   Integer *a, const Integer *b, bool negateB)
 ///
-/// @brief Perform signed addition or subtraction on two UnsupportedType values
+/// @brief Perform signed addition or subtraction on two Integer values
 /// (a = a +/- b).  The operation performed will be determined by the signs of
 /// the input values and the value of the negateB flag.
 ///
@@ -431,8 +431,8 @@ void unsupportedTypeAbsValueSubtract(
 ///   logic of the operations.
 ///
 /// @return This function returns no value.
-void unsupportedTypeSignedAddSubtract(
-  UnsupportedType *a, const UnsupportedType *b, bool negateB
+void integerSignedAddSubtract(
+  Integer *a, const Integer *b, bool negateB
 ) {
   bool bIsNegative = b->negative;
   if (negateB == true) {
@@ -440,19 +440,19 @@ void unsupportedTypeSignedAddSubtract(
   }
   
   if (a->negative == bIsNegative) {
-    unsupportedTypeAbsValueAdd(a, b);
-  } else if (unsupportedTypeAbsValGreaterThan(a, b)) {
-    unsupportedTypeAbsValueSubtract(a, b);
+    integerAbsValueAdd(a, b);
+  } else if (integerAbsValGreaterThan(a, b)) {
+    integerAbsValueSubtract(a, b);
   } else { // Subtract a from b
-    // We need to use the largest UnsupportedType-compatible types for bCopy.
-    LargestUnsupportedType bCopy;
-    unsupportedTypeCopy(&bCopy, b);
-    unsupportedTypeAbsValueSubtract(
-      (UnsupportedType*) &bCopy, (UnsupportedType*) a);
+    // We need to use the largest Integer-compatible types for bCopy.
+    LargestInteger bCopy;
+    integerCopy(&bCopy, b);
+    integerAbsValueSubtract(
+      (Integer*) &bCopy, (Integer*) a);
     if (a->numUInts < b->numUInts) {
       bCopy.numUInts = a->numUInts;
     }
-    unsupportedTypeCopy(a, &bCopy);
+    integerCopy(a, &bCopy);
     a->negative = bIsNegative;
   }
   
@@ -468,7 +468,7 @@ void unsupportedTypeSignedAddSubtract(
   }
 }
 
-/// @fn void unsupportedTypeAdd_(UnsupportedType *a, const UnsupportedType *b)
+/// @fn void integerAdd_(Integer *a, const Integer *b)
 ///
 /// @brief Add a number to a number (a = a + b).
 ///
@@ -476,12 +476,12 @@ void unsupportedTypeSignedAddSubtract(
 /// @param b The value to add.
 ///
 /// @return This function returns no value.
-void unsupportedTypeAdd_(UnsupportedType *a, const UnsupportedType *b) {
-  unsupportedTypeSignedAddSubtract(a, b, false);
+void integerAdd_(Integer *a, const Integer *b) {
+  integerSignedAddSubtract(a, b, false);
 }
 
-/// @fn void unsupportedTypeSubtract_(
-///   UnsupportedType *a, const UnsupportedType *b)
+/// @fn void integerSubtract_(
+///   Integer *a, const Integer *b)
 ///
 /// @brief Subtract a number from a number (a = a - b).
 ///
@@ -489,25 +489,25 @@ void unsupportedTypeAdd_(UnsupportedType *a, const UnsupportedType *b) {
 /// @param b The value to subtract.
 ///
 /// @return This function returns no value.
-void unsupportedTypeSubtract_(UnsupportedType *a, const UnsupportedType *b) {
-  unsupportedTypeSignedAddSubtract(a, b, true);
+void integerSubtract_(Integer *a, const Integer *b) {
+  integerSignedAddSubtract(a, b, true);
 }
 
-/// @fn void unsupportedTypeMultiply_(
-///   UnsupportedType *a, const UnsupportedType *b)
+/// @fn void integerMultiply_(
+///   Integer *a, const Integer *b)
 ///
-/// @brief Multiply two UnsupportedType values (a = a * b).
+/// @brief Multiply two Integer values (a = a * b).
 ///
 /// @param a A pointer to the first value that will also hold the final
 ///   result of the operation.
 /// @param b A pointer to the second value.
 ///
 /// @return This function returns no value.
-void unsupportedTypeMultiply_(UnsupportedType *a, const UnsupportedType *b) {
+void integerMultiply_(Integer *a, const Integer *b) {
   bool resultIsNegative = (a->negative != b->negative);
 
-  LargestUnsupportedType aCopy;
-  unsupportedTypeCopy(&aCopy, a);
+  LargestInteger aCopy;
+  integerCopy(&aCopy, a);
 
   memset(a->uInts, 0, a->numUInts * sizeof(unsigned int));
   a->negative = false;
@@ -515,10 +515,10 @@ void unsupportedTypeMultiply_(UnsupportedType *a, const UnsupportedType *b) {
   int totalBits = b->numUInts * INT_NUM_BITS;
   for (int ii = 0; ii < totalBits; ii++) {
     if ((b->uInts[ii / INT_NUM_BITS] >> (ii % INT_NUM_BITS)) & 1) {
-      unsupportedTypeAbsValueAdd(
-        (UnsupportedType*) a, (UnsupportedType*) &aCopy);
+      integerAbsValueAdd(
+        (Integer*) a, (Integer*) &aCopy);
     }
-    unsupportedTypeShiftLeft((UnsupportedType*) &aCopy, 1);
+    integerShiftLeft((Integer*) &aCopy, 1);
   }
 
   a->negative = resultIsNegative;
@@ -535,23 +535,23 @@ void unsupportedTypeMultiply_(UnsupportedType *a, const UnsupportedType *b) {
   }
 }
 
-/// @fn void unsupportedTypeDivide_(
-///   const UnsupportedType *dividend, const UnsupportedType *divisor,
-///   UnsupportedType *quotient, UnsupportedType *remainder)
+/// @fn void integerDivide_(
+///   const Integer *dividend, const Integer *divisor,
+///   Integer *quotient, Integer *remainder)
 ///
 /// @brief Divide a number by a number and get the quotient and remainder.
 ///
 /// @param dividend The number to divide.
 /// @param divisor The number to divide by.
-/// @param quotient A pointer to the UnsupportedType to store the quotient in.
-/// @param remainder A pointer to the UnsupportedType to store the remainder in.
+/// @param quotient A pointer to the Integer to store the quotient in.
+/// @param remainder A pointer to the Integer to store the remainder in.
 ///
 /// @return This function returns no value.
-void unsupportedTypeDivide_(
-  const UnsupportedType *dividend, const UnsupportedType *divisor,
-  UnsupportedType *quotient, UnsupportedType *remainder
+void integerDivide_(
+  const Integer *dividend, const Integer *divisor,
+  Integer *quotient, Integer *remainder
 ) {
-  const UnsupportedType *smaller
+  const Integer *smaller
     = (dividend->numUInts > divisor->numUInts) ? divisor : dividend;
   
   // First, clear out the quotient and remainder.
@@ -560,13 +560,13 @@ void unsupportedTypeDivide_(
   
   // Do the division one bit at a time.
   for (int ii = ((smaller->numUInts * INT_NUM_BITS) - 1); ii >= 0; ii--) {
-    unsupportedTypeShiftLeft(remainder, 1);
+    integerShiftLeft(remainder, 1);
     
     remainder->uInts[0] |= (dividend->uInts[ii / INT_NUM_BITS]
       >> (ii % INT_NUM_BITS)) & 1;
     
-    if (unsupportedTypeGreaterOrEqual(remainder, divisor)) {
-      unsupportedTypeSubtract(remainder, divisor);
+    if (integerGreaterOrEqual(remainder, divisor)) {
+      integerSubtract(remainder, divisor);
       quotient->uInts[ii / INT_NUM_BITS]
         |= (((unsigned int) 1) << (ii % INT_NUM_BITS));
     }
