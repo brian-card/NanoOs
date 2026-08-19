@@ -50,23 +50,23 @@ extern "C"
 
 /// @struct UnsupportedType
 ///
-/// @brief Generic type to deal with types larger than 32 bits.  All other
+/// @brief Generic type to deal with types larger than built-in ints.  All other
 /// support types must be compatible with this one.
 ///
 /// @param signedType Boolean value to indicate whether or not the value is
 ///   intended to be treated as a signed type.
 /// @param negative Boolean value to indicate whether or not the encoded value
 ///   is negative.
-/// @param numU32s The number of unsigned, 32-bit values the type holds.
-/// @param u32s Flexible array of uint32_t values to hold the full value of the
-///   represented value.  Declared as an array of one element here so that C++
-///   compilers won't complain.  Index 0 is the lowest-order 32 bits of the
-///   value.  Higher indexes represent the higer-order groups of 32 bits.
+/// @param numUInts The number of unsigned int values the type holds.
+/// @param uInts Flexible array of unsigned int values to hold the full value of
+///   the represented value.  Declared as an array of one element here so that
+///    C++ compilers won't complain.  Index 0 is the lowest-order int of the
+///   value.  Higher indexes represent the higer-order ints.
 typedef struct UnsupportedType {
   bool signedType;
   bool negative;
-  int numU32s;
-  uint32_t u32s[1];
+  int numUInts;
+  unsigned int uInts[1];
 } UnsupportedType;
 
 /// @struct I64
@@ -77,15 +77,13 @@ typedef struct UnsupportedType {
 ///   intended to be treated as a signed type.
 /// @param negative Boolean value to indicate whether or not the encoded value
 ///   is negative.
-/// @param numU32s The number of unsigned, 32-bit values the type holds.  This
-///   value will always be 2 in this structure.
-/// @param u32s Two unsigned, 32-bit values that represent the full 64-bit
-///   value.
+/// @param numUInts The number of unsigned int values the type holds.
+/// @param uInts Unsigned int values that represent the full 64-bit value.
 typedef struct I64 {
   bool signedType;
   bool negative;
-  int numU32s;
-  uint32_t u32s[2];
+  int numUInts;
+  unsigned int uInts[(sizeof(uint64_t) + (sizeof(int) - 1)) / sizeof(int)];
 } I64;
 
 /// @def unsupportedTypeToInt
@@ -93,19 +91,13 @@ typedef struct I64 {
 /// @brief Cast an UnsupportedType to a standard system integer (int data type).
 ///
 /// @param value A pointer to an UnsupportedType-compatible value.
-#define unsupportedTypeToInt(value) ((int) (value)->u32s[0])
-
-/// @typedef LargestUnsupportedType
-///
-/// @brief The largest UnsupportedType-compatible type.  Needs to be kept up-to-
-/// date any time we add a new type.
-typedef I64 LargestUnsupportedType;
+#define unsupportedTypeToInt(value) ((int) (value)->uInts[0])
 
 void unsupportedTypeInit_(UnsupportedType *value, bool signedType,
-  int numU32s, ...);
+  int numUInts, ...);
 #define unsupportedTypeInit(value, signedType, initialValue) \
   unsupportedTypeInit_((UnsupportedType*) (value), (signedType), \
-  (sizeof(initialValue) + 3) / 4, (initialValue))
+  (sizeof(initialValue) + (sizeof(int) - 1)) / sizeof(int), (initialValue))
 void unsupportedTypeCopy_(UnsupportedType *dest, const UnsupportedType *src);
 #define unsupportedTypeCopy(dest, src) \
   unsupportedTypeCopy_((UnsupportedType*) (dest), (UnsupportedType*) (src))

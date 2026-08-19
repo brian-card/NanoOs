@@ -35,6 +35,32 @@
 
 #include "CTypeSupport.h"
 
+/// @def INT_NUM_BITS
+///
+/// @brief The number of bits in an integer type.
+#define INT_NUM_BITS (sizeof(int) << 3)
+
+/// @def INT_MAX_BIT
+///
+/// @brief The zero-based maximum bit index of an integer type.
+#define INT_MAX_BIT (INT_NUM_BITS - 1)
+
+/// @def INT_HIGH_BIT
+///
+/// @brief Convenience macro for the value of an integer's high-order bit.
+#define INT_HIGH_BIT (((unsigned int) 1) << INT_MAX_BIT)
+
+/// @def INT_MASK
+///
+/// @brief Integer-width mask of "all ones".
+#define INT_MASK ((unsigned int) -1)
+
+/// @typedef LargestUnsupportedType
+///
+/// @brief The largest UnsupportedType-compatible type.  Needs to be kept up-to-
+/// date any time we add a new type.
+typedef I64 LargestUnsupportedType;
+
 /// @var _endianDetector
 ///
 /// @brief File-level variable used to determine whether or not the host we're
@@ -51,7 +77,7 @@ static union {
 #define HOST_IS_LITTLE_ENDIAN (_endianDetector.character)
 
 /// @fn void unsupportedTypeInit_(UnsupportedType *value, bool signedType,
-///   int numU32s, ...)
+///   int numUInts, ...)
 ///
 /// @brief Initialize all the member variables of an UnsupportedType-compatible
 /// value.
@@ -59,72 +85,72 @@ static union {
 /// @param value Pointer to an UnsupportedType-compatible value.
 /// @param signedType Whether or not the type is intended to be treated as
 ///   signed.
-/// @param numU32s The number of uint32_t values that will be in the unsupported
-///   value.
-/// @param ... A single, unsupported value that is a multiple of 32 bits in
-///   size.  This will be broken up and read in as multiple 32-bit values.
+/// @param numUInts The number of unsigned integers values that will be in the
+///   unsupported value.
+/// @param ... A single, unsupported value This will be broken up and read in
+///   as multiple unsigned int values.
 ///
 /// @return This function returns no value.
 void unsupportedTypeInit_(UnsupportedType *value, bool signedType,
-  int numU32s, ...
+  int numUInts, ...
 ) {
   value->signedType = signedType;
   value->negative = false;
-  value->numU32s = numU32s;
+  value->numUInts = numUInts;
   
   va_list args;
-  va_start(args, numU32s);
+  va_start(args, numUInts);
   
   if (sizeof(uintptr_t) < 8) {
     if (HOST_IS_LITTLE_ENDIAN) {
       // LSB first, so set the values in order.
-      for (int ii = 0; ii < numU32s; ii++) {
-        value->u32s[ii] = va_arg(args, uint32_t);
+      for (int ii = 0; ii < numUInts; ii++) {
+        value->uInts[ii] = va_arg(args, unsigned int);
       }
     } else {
       // MSB first, so set the values in reverse order.
-      for (int ii = numU32s - 1; ii >= 0; ii--) {
-        value->u32s[ii] = va_arg(args, uint32_t);
+      for (int ii = numUInts - 1; ii >= 0; ii--) {
+        value->uInts[ii] = va_arg(args, unsigned int);
       }
     }
   } else {
     if (HOST_IS_LITTLE_ENDIAN) {
       // LSB first, so set the values in order.
-      for (int ii = 0; ii < numU32s; ii += 2) {
+      for (int ii = 0; ii < numUInts; ii += 2) {
         uint64_t arg = va_arg(args, uint64_t);
-        memcpy(&value->u32s[ii], &arg, sizeof(arg));
+        memcpy(&value->uInts[ii], &arg, sizeof(arg));
       }
     } else {
       // MSB first, so set the values in reverse order.
-      for (int ii = numU32s - 1; ii >= 0; ii -= 2) {
+      for (int ii = numUInts - 1; ii >= 0; ii -= 2) {
         uint64_t arg = va_arg(args, uint64_t);
-        memcpy(&value->u32s[ii], &arg, sizeof(arg));
+        memcpy(&value->uInts[ii], &arg, sizeof(arg));
       }
     }
   }
   
   va_end(args);
   
-  // Lowest-order 32 bits is now at value->u32s[0] and highest-order 32 bits
-  // is at value->u32s[numU32s - 1].  If the value is signed and the most-
+  // Lowest-order integer is now at value->uInts[0] and highest-order int is
+  // at value->uInts[numUInts - 1].  If the value is signed and the most-
   // significant bit of the most-significant word is set, we need to mark the
   // value negative and negate the value.
-  if ((signedType == true) && (value->u32s[numU32s - 1] & 0x80000000)) {
+  if ((signedType == true) && (value->uInts[numUInts - 1] & INT_HIGH_BIT)) {
     value->negative = true;
     
     // The way to negate a twos-compliment value is to flip all the bits and
     // then add 1.  We have to do this in multiple steps.  Flip all the bits on
     // all the values first.
-    for (int ii = 0; ii < numU32s; ii++) {
-      value->u32s[ii] = ~value->u32s[ii];
+    for (int ii = 0; ii < numUInts; ii++) {
+      value->uInts[ii] = ~value->uInts[ii];
     }
     
-    // Add 1 to the low-order 32-bit value.  If the value is 0 afterward then
+    // Add 1 to the low-order integer value.  If the value is 0 afterward then
     // that means we've carried over into the next value and have to add 1 to
     // that as well.  Repeat the process as long as the next value is 0.
-    value->u32s[0]++;
-    for (int ii = 0; (ii < (numU32s - 1)) && (value->u32s[ii] == 0); ii++) {
-      value->u32s[ii + 1]++;
+    value->uInts[0]++;
+    for (int ii = 0; (ii < (numUInts - 1)) && (value->uInts[ii] == 0); ii++) {
+      value->uInts[ii + 1]++;
     }
   }
 }
@@ -141,9 +167,9 @@ void unsupportedTypeInit_(UnsupportedType *value, bool signedType,
 void unsupportedTypeCopy_(UnsupportedType *dest, const UnsupportedType *src) {
   dest->signedType = src->signedType;
   dest->negative = src->negative;
-  dest->numU32s = src->numU32s;
-  for (int ii = 0; ii < dest->numU32s; ii++) {
-    dest->u32s[ii] = src->u32s[ii];
+  dest->numUInts = src->numUInts;
+  for (int ii = 0; ii < dest->numUInts; ii++) {
+    dest->uInts[ii] = src->uInts[ii];
   }
 }
 
@@ -156,11 +182,11 @@ void unsupportedTypeCopy_(UnsupportedType *dest, const UnsupportedType *src) {
 ///
 /// @return This function returns no value.
 void unsupportedTypeShiftLeft_(UnsupportedType *value, int numBits) {
-  for (int ii = value->numU32s - 1; ii > 0; ii--) {
-    value->u32s[ii] = (value->u32s[ii] << numBits)
-      | (value->u32s[ii - 1] >> (32 - numBits));
+  for (int ii = value->numUInts - 1; ii > 0; ii--) {
+    value->uInts[ii] = (value->uInts[ii] << numBits)
+      | (value->uInts[ii - 1] >> (INT_NUM_BITS - numBits));
   }
-  value->u32s[0] <<= numBits;
+  value->uInts[0] <<= numBits;
 }
 
 /// @fn void unsupportedTypeShiftRight_(UnsupportedType *value, int numBits)
@@ -172,12 +198,12 @@ void unsupportedTypeShiftLeft_(UnsupportedType *value, int numBits) {
 ///
 /// @return This function returns no value.
 void unsupportedTypeShiftRight_(UnsupportedType *value, int numBits) {
-  for (int ii = 0; ii < (value->numU32s - 1); ii++) {
-    value->u32s[ii] = (value->u32s[ii] >> numBits)
-      | ((value->u32s[ii + 1] & (((uint32_t) 0xffffffff) >> (32 - numBits)))
-        << (32 - numBits));
+  for (int ii = 0; ii < (value->numUInts - 1); ii++) {
+    value->uInts[ii] = (value->uInts[ii] >> numBits)
+      | ((value->uInts[ii + 1] & (INT_MASK >> (INT_NUM_BITS - numBits)))
+        << (INT_NUM_BITS - numBits));
   }
-  value->u32s[value->numU32s - 1] >>= numBits;
+  value->uInts[value->numUInts - 1] >>= numBits;
 }
 
 /// @fn bool unsupportedTypeEqual_(const UnsupportedType *a,
@@ -196,19 +222,19 @@ bool unsupportedTypeEqual_(const UnsupportedType *a, const UnsupportedType *b) {
   
   const UnsupportedType *bigger = a;
   const UnsupportedType *smaller = b;
-  if (a->numU32s != b->numU32s) {
-    bigger = (a->numU32s > b->numU32s) ? a : b;
-    smaller = (a->numU32s > b->numU32s) ? b : a;
+  if (a->numUInts != b->numUInts) {
+    bigger = (a->numUInts > b->numUInts) ? a : b;
+    smaller = (a->numUInts > b->numUInts) ? b : a;
     
-    for (int ii = smaller->numU32s; ii < bigger->numU32s; ii++) {
-      if (bigger->u32s[ii] != 0) {
+    for (int ii = smaller->numUInts; ii < bigger->numUInts; ii++) {
+      if (bigger->uInts[ii] != 0) {
         return false;
       }
     }
   }
   
-  for (int ii = 0; ii < smaller->numU32s; ii++) {
-    if (bigger->u32s[ii] != smaller->u32s[ii]) {
+  for (int ii = 0; ii < smaller->numUInts; ii++) {
+    if (bigger->uInts[ii] != smaller->uInts[ii]) {
       return false;
     }
   }
@@ -232,20 +258,20 @@ bool unsupportedTypeAbsValGreaterThan(
 ) {
   const UnsupportedType *bigger = a;
   const UnsupportedType *smaller = b;
-  if (a->numU32s != b->numU32s) {
-    bigger = (a->numU32s > b->numU32s) ? a : b;
-    smaller = (a->numU32s > b->numU32s) ? b : a;
+  if (a->numUInts != b->numUInts) {
+    bigger = (a->numUInts > b->numUInts) ? a : b;
+    smaller = (a->numUInts > b->numUInts) ? b : a;
 
-    for (int ii = bigger->numU32s - 1; ii >= smaller->numU32s; ii--) {
-      if (bigger->u32s[ii] != 0) {
+    for (int ii = bigger->numUInts - 1; ii >= smaller->numUInts; ii--) {
+      if (bigger->uInts[ii] != 0) {
         return bigger == a;
       }
     }
   }
 
-  for (int ii = smaller->numU32s - 1; ii >= 0; ii--) {
-    if (a->u32s[ii] != b->u32s[ii]) {
-      return (a->u32s[ii] > b->u32s[ii]);
+  for (int ii = smaller->numUInts - 1; ii >= 0; ii--) {
+    if (a->uInts[ii] != b->uInts[ii]) {
+      return (a->uInts[ii] > b->uInts[ii]);
     }
   }
 
@@ -342,25 +368,25 @@ bool unsupportedTypeLessOrEqual_(
 ///
 /// @return This function returns no value.
 void unsupportedTypeAbsValueAdd(UnsupportedType *a, const UnsupportedType *b) {
-  const UnsupportedType *smaller = (a->numU32s > b->numU32s) ? b : a;
+  const UnsupportedType *smaller = (a->numUInts > b->numUInts) ? b : a;
 
-  uint32_t carry = 0;
-  for (int ii = 0; ii < smaller->numU32s; ii++) {
-    uint32_t sum = a->u32s[ii] + carry;
-    uint32_t carryNext = (sum < carry);
-    sum += b->u32s[ii];
-    carryNext |= (sum < b->u32s[ii]);
-    a->u32s[ii] = sum;
+  unsigned int carry = 0;
+  for (int ii = 0; ii < smaller->numUInts; ii++) {
+    unsigned int sum = a->uInts[ii] + carry;
+    unsigned int carryNext = (sum < carry);
+    sum += b->uInts[ii];
+    carryNext |= (sum < b->uInts[ii]);
+    a->uInts[ii] = sum;
     carry = carryNext;
   }
 
-  if ((carry > 0) && (a->numU32s > b->numU32s)) {
-    a->u32s[b->numU32s] += carry;
-    for (int ii = b->numU32s;
-      (ii < a->numU32s - 1) && (a->u32s[ii] == 0);
+  if ((carry > 0) && (a->numUInts > b->numUInts)) {
+    a->uInts[b->numUInts] += carry;
+    for (int ii = b->numUInts;
+      (ii < a->numUInts - 1) && (a->uInts[ii] == 0);
       ii++
     ) {
-      a->u32s[ii + 1] += carry;
+      a->uInts[ii + 1] += carry;
     }
   }
 }
@@ -378,15 +404,15 @@ void unsupportedTypeAbsValueAdd(UnsupportedType *a, const UnsupportedType *b) {
 void unsupportedTypeAbsValueSubtract(
   UnsupportedType *a, const UnsupportedType *b
 ) {
-  uint32_t borrow = 0;
-  for (int ii = 0; ii < a->numU32s; ii++) {
-    uint32_t aWord = a->u32s[ii];
-    uint32_t bWord = 0;
-    if (ii < b->numU32s) {
-      bWord = b->u32s[ii];
+  unsigned int borrow = 0;
+  for (int ii = 0; ii < a->numUInts; ii++) {
+    unsigned int aWord = a->uInts[ii];
+    unsigned int bWord = 0;
+    if (ii < b->numUInts) {
+      bWord = b->uInts[ii];
     }
-    uint32_t borrowNext = (aWord < bWord) || ((borrow > 0) && (aWord == bWord));
-    a->u32s[ii] = aWord - bWord - borrow;
+    unsigned int borrowNext = (aWord < bWord) || ((borrow > 0) && (aWord == bWord));
+    a->uInts[ii] = aWord - bWord - borrow;
     borrow = borrowNext;
   }
 }
@@ -423,16 +449,16 @@ void unsupportedTypeSignedAddSubtract(
     unsupportedTypeCopy(&bCopy, b);
     unsupportedTypeAbsValueSubtract(
       (UnsupportedType*) &bCopy, (UnsupportedType*) a);
-    if (a->numU32s < b->numU32s) {
-      bCopy.numU32s = a->numU32s;
+    if (a->numUInts < b->numUInts) {
+      bCopy.numUInts = a->numUInts;
     }
     unsupportedTypeCopy(a, &bCopy);
     a->negative = bIsNegative;
   }
   
   bool aIsZero = true;
-  for (int ii = 0; ii < a->numU32s; ii++) {
-    if (a->u32s[ii] != 0) {
+  for (int ii = 0; ii < a->numUInts; ii++) {
+    if (a->uInts[ii] != 0) {
       aIsZero = false;
       break;
     }
@@ -483,12 +509,12 @@ void unsupportedTypeMultiply_(UnsupportedType *a, const UnsupportedType *b) {
   LargestUnsupportedType aCopy;
   unsupportedTypeCopy(&aCopy, a);
 
-  memset(a->u32s, 0, a->numU32s * sizeof(uint32_t));
+  memset(a->uInts, 0, a->numUInts * sizeof(unsigned int));
   a->negative = false;
 
-  int totalBits = b->numU32s * 32;
+  int totalBits = b->numUInts * INT_NUM_BITS;
   for (int ii = 0; ii < totalBits; ii++) {
-    if ((b->u32s[ii / 32] >> (ii % 32)) & 1) {
+    if ((b->uInts[ii / INT_NUM_BITS] >> (ii % INT_NUM_BITS)) & 1) {
       unsupportedTypeAbsValueAdd(
         (UnsupportedType*) a, (UnsupportedType*) &aCopy);
     }
@@ -498,8 +524,8 @@ void unsupportedTypeMultiply_(UnsupportedType *a, const UnsupportedType *b) {
   a->negative = resultIsNegative;
 
   bool aIsZero = true;
-  for (int ii = 0; ii < a->numU32s; ii++) {
-    if (a->u32s[ii] != 0) {
+  for (int ii = 0; ii < a->numUInts; ii++) {
+    if (a->uInts[ii] != 0) {
       aIsZero = false;
       break;
     }
@@ -526,21 +552,23 @@ void unsupportedTypeDivide_(
   UnsupportedType *quotient, UnsupportedType *remainder
 ) {
   const UnsupportedType *smaller
-    = (dividend->numU32s > divisor->numU32s) ? divisor : dividend;
+    = (dividend->numUInts > divisor->numUInts) ? divisor : dividend;
   
   // First, clear out the quotient and remainder.
-  memset(quotient->u32s, 0, quotient->numU32s * sizeof(uint32_t));
-  memset(remainder->u32s, 0, remainder->numU32s * sizeof(uint32_t));
+  memset(quotient->uInts, 0, quotient->numUInts * sizeof(unsigned int));
+  memset(remainder->uInts, 0, remainder->numUInts * sizeof(unsigned int));
   
   // Do the division one bit at a time.
-  for (int ii = ((smaller->numU32s * 32) - 1); ii >= 0; ii--) {
+  for (int ii = ((smaller->numUInts * INT_NUM_BITS) - 1); ii >= 0; ii--) {
     unsupportedTypeShiftLeft(remainder, 1);
     
-    remainder->u32s[0] |= (dividend->u32s[ii / 32] >> (ii % 32)) & 1;
+    remainder->uInts[0] |= (dividend->uInts[ii / INT_NUM_BITS]
+      >> (ii % INT_NUM_BITS)) & 1;
     
     if (unsupportedTypeGreaterOrEqual(remainder, divisor)) {
       unsupportedTypeSubtract(remainder, divisor);
-      quotient->u32s[ii / 32] |= (((uint32_t) 1) << (ii % 32));
+      quotient->uInts[ii / INT_NUM_BITS]
+        |= (((unsigned int) 1) << (ii % INT_NUM_BITS));
     }
   }
 }
