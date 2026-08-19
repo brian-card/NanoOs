@@ -51,7 +51,8 @@ extern "C"
 /// @struct Integer
 ///
 /// @brief Generic type to deal with types larger than built-in ints.  All other
-/// support types must be compatible with this one.
+/// support types must be compatible with this one.  All types must be based on
+/// a power of two bits.
 ///
 /// @param signedType Boolean value to indicate whether or not the value is
 ///   intended to be treated as a signed type.
