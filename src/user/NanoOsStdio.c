@@ -35,6 +35,7 @@
 
 #include "NanoOsLibC.h"
 #include "../kernel/Console.h"
+#include "../kernel/CTypeSupport.h"
 #include "../kernel/Hal.h"
 #include "../kernel/Logger.h"
 #include "../kernel/NanoOs.h"
@@ -137,41 +138,6 @@ int printString_(const char *string) {
   return bytesWritten;
 }
 
-/// @fn int ullUpperToString(unsigned long long int number, char **nextChar)
-///
-/// @brief Handle the upper 32 bits of a 64-bit value.
-///
-/// @details
-/// Some targets have no efficient runtime support for 64-bit division, so
-/// division or modulo of a full unsigned long long by 10 can compile to an
-/// unrolled sequence.  Since actually printing values that large is rare
-/// (there's no case in the codebase as of 2026-08-14), this path is split into
-/// its own function.  This keeps this code from being part of the final binary
-/// unless it's truly needed.  Codespace is considered a precious resource, so
-/// we really want to conserve all that we can.
-///
-/// @param number A value that is >= 2^32.
-/// @param nextChar A double pointer to the next character in the buffer to
-///   populate.
-///
-/// @return Returns the lower 32 bits.
-///
-/// @note noinline is required here because the compiler folds this back into
-/// ullToString's body by default.  That defeats the whole point of keeping its
-/// code out of the normal path.
-__attribute__((noinline))
-unsigned long int ullUpperToString(
-  unsigned long long int number, char **nextChar
-) {
-  while (number > 0xffffffffULL) {
-    **nextChar = '0' + (number % 10);
-    (*nextChar)--;
-    number /= 10;
-  }
-
-  return (unsigned long int) number;
-}
-
 /// @fn int ullToString(unsigned long long int number, char **nextChar)
 ///
 /// @brief Convert an unsigned long long int to its base 10 string
@@ -192,15 +158,23 @@ int ullToString(unsigned long long int number, char **nextChar) {
     return 0;
   }
 
-  unsigned long int numberLower = (unsigned long int) number;
-  if (number > 0xffffffffULL) {
-    numberLower = ullUpperToString(number, nextChar);
-  }
-
-  while (numberLower > 0) {
-    **nextChar = '0' + (numberLower % 10);
+  I64 value;
+  unsupportedTypeInit(&value, false, (uint64_t) number);
+  I64 zero;
+  unsupportedTypeInit(&zero, false, (uint64_t) 0);
+  I64 ten;
+  unsupportedTypeInit(&ten, false, (uint64_t) 10);
+  I64 quotient, remainder;
+  unsupportedTypeCopy(&quotient, &zero);
+  unsupportedTypeCopy(&remainder, &zero);
+  
+  while (unsupportedTypeGreaterThan(&value, &zero)) {
+    unsupportedTypeDivide(&value, &ten, &quotient, &remainder);
+    
+    **nextChar = '0' + unsupportedTypeToInt(&remainder);
     (*nextChar)--;
-    numberLower /= 10;
+    
+    value = quotient;
   }
 
   return 0;
