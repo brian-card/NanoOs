@@ -50,11 +50,6 @@
 /// @brief Convenience macro for the value of an integer's high-order bit.
 #define INT_HIGH_BIT (((unsigned int) 1) << INT_MAX_BIT)
 
-/// @def INT_MASK
-///
-/// @brief Integer-width mask of "all ones".
-#define INT_MASK ((unsigned int) -1)
-
 /// @typedef LargestInteger
 ///
 /// @brief The largest Integer-compatible type.  Needs to be kept up-to-
