@@ -184,11 +184,27 @@ void integerCopy_(Integer *dest, const Integer *src) {
 ///
 /// @return This function returns no value.
 void integerShiftLeft_(Integer *value, int numBits) {
-  for (int ii = value->numUInts - 1; ii > 0; ii--) {
-    value->uInts[ii] = (value->uInts[ii] << numBits)
-      | (value->uInts[ii - 1] >> (INT_NUM_BITS - numBits));
+  int numBitsPerUint = numBits % INT_NUM_BITS;
+  int uintsPerShift = numBits / INT_NUM_BITS;
+
+  if (numBitsPerUint != 0) {
+    for (int ii = value->numUInts - 1; ii > uintsPerShift; ii--) {
+      value->uInts[ii] = (value->uInts[ii - uintsPerShift] << numBitsPerUint)
+        | (value->uInts[ii - uintsPerShift - 1]
+          >> (INT_NUM_BITS - numBitsPerUint));
+    }
+    if (uintsPerShift < value->numUInts) {
+      value->uInts[uintsPerShift] = value->uInts[0] << numBitsPerUint;
+    }
+  } else if (numBits != 0) {
+    for (int ii = value->numUInts - 1; ii >= uintsPerShift; ii--) {
+      value->uInts[ii] = value->uInts[ii - uintsPerShift];
+    }
   }
-  value->uInts[0] <<= numBits;
+
+  for (int ii = uintsPerShift - 1; ii >= 0; ii--) {
+    value->uInts[ii] = 0;
+  }
 }
 
 /// @fn void integerShiftRight_(Integer *value, int numBits)
