@@ -76,7 +76,7 @@ static union {
 /// endian system.
 #define HOST_IS_LITTLE_ENDIAN (_endianDetector.character)
 
-/// @fn void integerInit_(Integer *value, bool signedType,
+/// @fn void integerInit(Integer *value, bool signedType,
 ///   int numUInts, ...)
 ///
 /// @brief Initialize all the member variables of an Integer-compatible
@@ -91,7 +91,7 @@ static union {
 ///   as multiple unsigned int values.
 ///
 /// @return This function returns no value.
-void integerInit_(Integer *value, bool signedType,
+void integerInit(Integer *value, bool signedType,
   int numUInts, ...
 ) {
   value->signedType = signedType;

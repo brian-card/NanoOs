@@ -70,22 +70,11 @@ typedef struct Integer {
   unsigned int uInts[1];
 } Integer;
 
-/// @struct I64
+/// @def INTS_PER_32_BITS
 ///
-/// @brief Type to deal with 64-bit values.
-///
-/// @param signedType Boolean value to indicate whether or not the value is
-///   intended to be treated as a signed type.
-/// @param negative Boolean value to indicate whether or not the encoded value
-///   is negative.
-/// @param numUInts The number of unsigned int values the type holds.
-/// @param uInts Unsigned int values that represent the full 64-bit value.
-typedef struct I64 {
-  bool signedType;
-  bool negative;
-  int numUInts;
-  unsigned int uInts[(sizeof(uint64_t) + (sizeof(int) - 1)) / sizeof(int)];
-} I64;
+/// @brief The number of standard int type variables required to hold one 32-bit
+/// value on the target host.
+#define INTS_PER_32_BITS ((sizeof(uint32_t) + (sizeof(int) - 1)) / sizeof(int))
 
 /// @struct I32
 ///
@@ -101,8 +90,31 @@ typedef struct I32 {
   bool signedType;
   bool negative;
   int numUInts;
-  unsigned int uInts[(sizeof(uint32_t) + (sizeof(int) - 1)) / sizeof(int)];
+  unsigned int uInts[INTS_PER_32_BITS];
 } I32;
+
+/// @def INTS_PER_64_BITS
+///
+/// @brief The number of standard int type variables required to hold one 64-bit
+/// value on the target host.
+#define INTS_PER_64_BITS ((sizeof(uint64_t) + (sizeof(int) - 1)) / sizeof(int))
+
+/// @struct I64
+///
+/// @brief Type to deal with 64-bit values.
+///
+/// @param signedType Boolean value to indicate whether or not the value is
+///   intended to be treated as a signed type.
+/// @param negative Boolean value to indicate whether or not the encoded value
+///   is negative.
+/// @param numUInts The number of unsigned int values the type holds.
+/// @param uInts Unsigned int values that represent the full 64-bit value.
+typedef struct I64 {
+  bool signedType;
+  bool negative;
+  int numUInts;
+  unsigned int uInts[INTS_PER_64_BITS];
+} I64;
 
 /// @def integerToInt
 ///
@@ -111,11 +123,40 @@ typedef struct I32 {
 /// @param value A pointer to an Integer-compatible value.
 #define integerToInt(value) ((int) (value)->uInts[0])
 
-void integerInit_(Integer *value, bool signedType,
+void integerInit(Integer *value, bool signedType,
   int numUInts, ...);
-#define integerInit(value, signedType, initialValue) \
-  integerInit_((Integer*) (value), (signedType), \
-  (sizeof(initialValue) + (sizeof(int) - 1)) / sizeof(int), (initialValue))
+#define declare32(var) \
+  I32 var; \
+  var.negative = false; \
+  var.numUInts = INTS_PER_32_BITS;
+#define declareI32(var) \
+  declare32(var); \
+  var.signedType = true;
+#define declareU32(var) \
+  declare32(var); \
+  var.signedType = false;
+#define declareInitI32(var, value) \
+  I32 var; \
+  integerInit((Integer*) &var, true, INTS_PER_32_BITS, (int32_t) value);
+#define declareInitU32(var, value) \
+  I32 var; \
+  integerInit((Integer*) &var, false, INTS_PER_32_BITS, (uint32_t) value);
+#define declare64(var) \
+  I64 var; \
+  var.negative = false; \
+  var.numUInts = INTS_PER_64_BITS;
+#define declareI64(var) \
+  declare64(var); \
+  var.signedType = true;
+#define declareU64(var) \
+  declare64(var); \
+  var.signedType = false;
+#define declareInitI64(var, value) \
+  I64 var; \
+  integerInit((Integer*) &var, true, INTS_PER_64_BITS, (int64_t) value);
+#define declareInitU64(var, value) \
+  I64 var; \
+  integerInit((Integer*) &var, false, INTS_PER_64_BITS, (uint64_t) value);
 void integerCopy_(Integer *dest, const Integer *src);
 #define integerCopy(dest, src) \
   integerCopy_((Integer*) (dest), (Integer*) (src))

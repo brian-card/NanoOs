@@ -158,15 +158,11 @@ int ullToString(unsigned long long int number, char **nextChar) {
     return 0;
   }
 
-  I64 value;
-  integerInit(&value, false, (uint64_t) number);
-  I64 zero;
-  integerInit(&zero, false, (uint64_t) 0);
-  I64 ten;
-  integerInit(&ten, false, (uint64_t) 10);
-  I64 quotient, remainder;
-  integerCopy(&quotient, &zero);
-  integerCopy(&remainder, &zero);
+  declareInitU64(value, number);
+  declareInitU64(zero, 0);
+  declareInitU64(ten, 10);
+  declareU64(quotient);
+  declareU64(remainder);
   
   while (integerGreaterThan(&value, &zero)) {
     integerDivide(&value, &ten, &quotient, &remainder);
