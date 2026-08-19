@@ -101,7 +101,7 @@ void integerInit_(Integer *value, bool signedType,
   va_list args;
   va_start(args, numUInts);
   
-  if (sizeof(uintptr_t) < 8) {
+  if (sizeof(intptr_t) == sizeof(int)) {
     if (HOST_IS_LITTLE_ENDIAN) {
       // LSB first, so set the values in order.
       for (int ii = 0; ii < numUInts; ii++) {
@@ -113,18 +113,20 @@ void integerInit_(Integer *value, bool signedType,
         value->uInts[ii] = va_arg(args, unsigned int);
       }
     }
-  } else {
+  } else { // sizeof(intptr_t) > sizeof(int)
+    int increment = (sizeof(intptr_t) + (sizeof(int) - 1)) / sizeof(int);
+    int copySize = (numUInts < increment) ? numUInts << 2 : increment << 2;
     if (HOST_IS_LITTLE_ENDIAN) {
       // LSB first, so set the values in order.
-      for (int ii = 0; ii < numUInts; ii += 2) {
-        uint64_t arg = va_arg(args, uint64_t);
-        memcpy(&value->uInts[ii], &arg, sizeof(arg));
+      for (int ii = 0; ii < numUInts; ii += increment) {
+        uintptr_t arg = va_arg(args, uintptr_t);
+        memcpy(&value->uInts[ii], &arg, copySize);
       }
     } else {
       // MSB first, so set the values in reverse order.
-      for (int ii = numUInts - 1; ii >= 0; ii -= 2) {
-        uint64_t arg = va_arg(args, uint64_t);
-        memcpy(&value->uInts[ii], &arg, sizeof(arg));
+      for (int ii = numUInts - 1; ii >= 0; ii -= increment) {
+        uintptr_t arg = va_arg(args, uintptr_t);
+        memcpy(&value->uInts[ii], &arg, copySize);
       }
     }
   }
