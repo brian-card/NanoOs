@@ -216,12 +216,28 @@ void integerShiftLeft_(Integer *value, int numBits) {
 ///
 /// @return This function returns no value.
 void integerShiftRight_(Integer *value, int numBits) {
-  for (int ii = 0; ii < (value->numUInts - 1); ii++) {
-    value->uInts[ii] = (value->uInts[ii] >> numBits)
-      | ((value->uInts[ii + 1] & (INT_MASK >> (INT_NUM_BITS - numBits)))
-        << (INT_NUM_BITS - numBits));
+  int numBitsPerUint = numBits % INT_NUM_BITS;
+  int uintsPerShift = numBits / INT_NUM_BITS;
+
+  if (numBitsPerUint != 0) {
+    for (int ii = 0; ii < value->numUInts - 1 - uintsPerShift; ii++) {
+      value->uInts[ii] = (value->uInts[ii + uintsPerShift] >> numBitsPerUint)
+        | (value->uInts[ii + uintsPerShift + 1]
+          << (INT_NUM_BITS - numBitsPerUint));
+    }
+    if (uintsPerShift < value->numUInts) {
+      value->uInts[value->numUInts - 1 - uintsPerShift]
+        = value->uInts[value->numUInts - 1] >> numBitsPerUint;
+    }
+  } else if (numBits != 0) {
+    for (int ii = 0; ii < value->numUInts - uintsPerShift; ii++) {
+      value->uInts[ii] = value->uInts[ii + uintsPerShift];
+    }
   }
-  value->uInts[value->numUInts - 1] >>= numBits;
+
+  for (int ii = value->numUInts - uintsPerShift; ii < value->numUInts; ii++) {
+    value->uInts[ii] = 0;
+  }
 }
 
 /// @fn bool integerEqual_(const Integer *a,
