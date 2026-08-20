@@ -35,7 +35,6 @@
 
 #include "NanoOsLibC.h"
 #include "../kernel/Console.h"
-#include "../kernel/CTypeSupport.h"
 #include "../kernel/Hal.h"
 #include "../kernel/Logger.h"
 #include "../kernel/NanoOs.h"
@@ -148,7 +147,7 @@ int printString_(const char *string) {
 ///   populate.
 ///
 /// @return Returns 0 on success, -errno on failure.
-int ullToString(unsigned long long int number, char **nextChar) {
+int ullToString(volatile unsigned long long int number, char **nextChar) {
   if (number == 0) {
     **nextChar = '0';
     // The caller expects nextChar to be positioned one character before the
@@ -158,19 +157,12 @@ int ullToString(unsigned long long int number, char **nextChar) {
     return 0;
   }
 
-  declareInitU64(value, number);
-  declareInitU64(zero, 0);
-  declareInitU64(ten, 10);
-  declareU64(quotient);
-  declareU64(remainder);
-  
-  while (integerGreaterThan(&value, &zero)) {
-    integerDivide(&value, &ten, &quotient, &remainder);
-    
-    **nextChar = '0' + integerToInt(&remainder);
+  volatile unsigned long long int zero = 0;
+  volatile unsigned long long int ten = 10;
+  while (number > zero) {
+    **nextChar = '0' + (number % ten);
     (*nextChar)--;
-    
-    value = quotient;
+    number /= ten;
   }
 
   return 0;
