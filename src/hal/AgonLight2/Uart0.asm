@@ -1,17 +1,51 @@
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; 
+;                        Copyright (c) 2026 Brian Card
+; 
+;  Permission is hereby granted, free of charge, to any person obtaining a
+;  copy of this software and associated documentation files (the "Software"),
+;  to deal in the Software without restriction, including without limitation
+;  the rights to use, copy, modify, merge, publish, distribute, sublicense,
+;  and;or sell copies of the Software, and to permit persons to whom the
+;  Software is furnished to do so, subject to the following conditions:
+; 
+;  The above copyright notice and this permission notice shall be included
+;  in all copies or substantial portions of the Software.
+; 
+;  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+;  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+;  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+;  THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+;  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+;  FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+;  DEALINGS IN THE SOFTWARE.
+; 
+;                                  Brian Card
+;                        https://github.com/brian-card
+; 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;; @file Uart0.asm
+;;;
+;;; @brief eZ80 assembly implementation of functionality for communicating with
+;;; UART0 on the Agon Light 2, which uses the eZ80F92 CPU.
+;;;
+;;; @note This file was generated with assistance from claude.ai.
+
 .assume adl=1
-    .text
+.text
 
-    .global _agonLight2ConfigureUart0Impl
-    .global _agonLight2PollUart0Impl
-    .global _agonLight2WriteUart0Impl
+.global _agonLight2ConfigureUart0Impl
+.global _agonLight2PollUart0Impl
+.global _agonLight2WriteUart0Impl
 
-;; ── eZ80F92 Port D GPIO registers ──────────────────
+;; -- eZ80F92 Port D GPIO registers ------------------
 PD_DR       .equ 0xA2      ; Port D data register
 PD_DDR      .equ 0xA3      ; Port D data direction
 PD_ALT1     .equ 0xA4      ; Port D alternate function 1
 PD_ALT2     .equ 0xA5      ; Port D alternate function 2
 
-;; ── eZ80F92 UART0 registers (base 0xC0) ────────────
+;; -- eZ80F92 UART0 registers (base 0xC0) ------------
 UART0_THR   .equ 0xC0      ; TX holding register
 UART0_RBR   .equ 0xC0      ; RX buffer register
 UART0_BRG_L .equ 0xC0      ; BRG divisor low  (DLAB=1)
@@ -22,7 +56,7 @@ UART0_LCTL  .equ 0xC3      ; Line control
 UART0_MCTL  .equ 0xC4      ; Modem control
 UART0_LSR   .equ 0xC5      ; Line status
 
-;; ── agonLight2ConfigureUart0Impl(uint16_t divisor) ────────────────────
+;; -- void agonLight2ConfigureUart0Impl(uint16_t divisor) ---------------
 ;;    divisor passed at ix+6 (low byte), ix+7 (high byte)
 _agonLight2ConfigureUart0Impl:
     push    ix
@@ -70,7 +104,7 @@ _agonLight2ConfigureUart0Impl:
     ret
 
 
-;; ── int agonLight2PollUart0Impl(void) ────────────────────────────
+;; -- int agonLight2PollUart0Impl(void) ----------------------------
 ;;    returns received byte in HL, or -1 if no data ready (non-blocking)
 _agonLight2PollUart0Impl:
     in0     a, (UART0_LSR)
@@ -85,7 +119,7 @@ _agonLight2PollUart0Impl:
 .Lno_char:
     ld      hl, -1
     ret
-;; ── agonLight2WriteUart0Impl(uint8_t c) ───────────────────────────
+;; -- void agonLight2WriteUart0Impl(uint8_t c) ----------------------
 ;;    c passed at ix+6
 _agonLight2WriteUart0Impl:
     push    ix

@@ -1,17 +1,51 @@
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; 
+;                        Copyright (c) 2026 Brian Card
+; 
+;  Permission is hereby granted, free of charge, to any person obtaining a
+;  copy of this software and associated documentation files (the "Software"),
+;  to deal in the Software without restriction, including without limitation
+;  the rights to use, copy, modify, merge, publish, distribute, sublicense,
+;  and;or sell copies of the Software, and to permit persons to whom the
+;  Software is furnished to do so, subject to the following conditions:
+; 
+;  The above copyright notice and this permission notice shall be included
+;  in all copies or substantial portions of the Software.
+; 
+;  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+;  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+;  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+;  THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+;  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+;  FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+;  DEALINGS IN THE SOFTWARE.
+; 
+;                                  Brian Card
+;                        https://github.com/brian-card
+; 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;; @file Uart1.asm
+;;;
+;;; @brief eZ80 assembly implementation of functionality for communicating with
+;;; UART1 on the Agon Light 2, which uses the eZ80F92 CPU.
+;;;
+;;; @note This file was generated with assistance from claude.ai.
+
 .assume adl=1
-    .text
+.text
 
-    .global _agonLight2ConfigureUart1Impl
-    .global _agonLight2PollUart1Impl
-    .global _agonLight2WriteUart1Impl
+.global _agonLight2ConfigureUart1Impl
+.global _agonLight2PollUart1Impl
+.global _agonLight2WriteUart1Impl
 
-;; ── eZ80F92 Port C GPIO registers ──────────────────
+;; -- eZ80F92 Port C GPIO registers ------------------
 PC_DR       .equ 0x9E      ; Port C data register
 PC_DDR      .equ 0x9F      ; Port C data direction (1=input, 0=output)
 PC_ALT1     .equ 0xA0      ; Port C alternate function 1
 PC_ALT2     .equ 0xA1      ; Port C alternate function 2
 
-;; ── eZ80F92 UART1 registers (base 0xD0) ────────────
+;; -- eZ80F92 UART1 registers (base 0xD0) ------------
 UART1_THR   .equ 0xD0      ; TX holding register
 UART1_RBR   .equ 0xD0      ; RX buffer register
 UART1_BRG_L .equ 0xD0      ; BRG divisor low  (DLAB=1)
@@ -22,7 +56,7 @@ UART1_LCTL  .equ 0xD3      ; Line control
 UART1_MCTL  .equ 0xD4      ; Modem control
 UART1_LSR   .equ 0xD5      ; Line status
 
-;; ── agonLight2ConfigureUart1Impl(uint16_t divisor) ────────────────────
+;; -- void agonLight2ConfigureUart1Impl(uint16_t divisor) ---------------
 ;;    divisor passed at ix+6 (low byte), ix+7 (high byte)
 _agonLight2ConfigureUart1Impl:
     push    ix
@@ -69,7 +103,7 @@ _agonLight2ConfigureUart1Impl:
     pop     ix
     ret
 
-;; ── int agonLight2PollUart1Impl(void) ────────────────────────────
+;; -- int agonLight2PollUart1Impl(void) ----------------------------
 ;;    returns received byte in HL, or -1 if no data ready
 _agonLight2PollUart1Impl:
     in0     a, (UART1_LSR)
@@ -85,7 +119,7 @@ _agonLight2PollUart1Impl:
     ld      hl, -1
     ret
 
-;; ── agonLight2WriteUart1Impl(uint8_t c) ───────────────────────────
+;; -- void agonLight2WriteUart1Impl(uint8_t c) ----------------------
 ;;    c passed at ix+6
 _agonLight2WriteUart1Impl:
     push    ix
