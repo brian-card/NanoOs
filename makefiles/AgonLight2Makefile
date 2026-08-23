@@ -57,7 +57,7 @@ TARGET_TRIPLE := ez80-none-elf
 #
 # STANDALONE=0 (default): NanoOs is a MOS user program, loaded by MOS into
 #   external SRAM at 0x040000. The binary carries the "MOS" header MOS's
-#   loader requires (see boot/AgonLight2/boot.asm).
+#   loader requires (see boot/AgonLight2/Boot.asm).
 #
 # STANDALONE=1: scaffold for NanoOs eventually replacing MOS outright,
 #   starting at 0x000000. No MOS header is emitted (there's no MOS to check
@@ -193,7 +193,7 @@ SKETCH_CXX_SRCS := $(shell find src -name '*.cpp' | sort)
 SKETCH_ASM_SRCS := $(shell find src -name '*.asm' | sort)
 
 # Boot assembly, runtime stubs, and C entry point live under boot/AgonLight2/
-BOOT_ASM_SRCS := boot/AgonLight2/boot.asm boot/AgonLight2/runtime_stubs.asm
+BOOT_ASM_SRCS := boot/AgonLight2/Boot.asm boot/AgonLight2/RuntimeStubs.asm
 MAIN_C_SRCS   := boot/AgonLight2/main.c
 
 # ---- Object file paths ------------------------------------------------------
@@ -254,7 +254,7 @@ $(RODATA_BIN): $(ELF)
 	@echo "  OBJCOPY $@ (.rodata only)"
 	@$(OBJCOPY) -O binary -j .rodata $< $@
 
-# ---- Compile: boot assembly (boot/AgonLight2/boot.asm) ----------------------
+# ---- Compile: boot assembly (boot/AgonLight2/Boot.asm) ----------------------
 
 $(BUILD_DIR)/boot/AgonLight2/%.asm.o: boot/AgonLight2/%.asm
 	@mkdir -p $(dir $@)
