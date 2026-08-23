@@ -57,7 +57,7 @@ UART0_MCTL  .equ 0xC4      ; Modem control
 UART0_LSR   .equ 0xC5      ; Line status
 
 ;; -- void agonLight2ConfigureUart0Impl(uint16_t divisor) ---------------
-;;    divisor passed at ix+6 (low byte), ix+7 (high byte)
+;;    divisor passed at sp+6 (low byte), sp+7 (high byte)
 _agonLight2ConfigureUart0Impl:
     push    ix
     ld      ix, 0
@@ -119,8 +119,9 @@ _agonLight2PollUart0Impl:
 .Lno_char:
     ld      hl, -1
     ret
+
 ;; -- void agonLight2WriteUart0Impl(uint8_t c) ----------------------
-;;    c passed at ix+6
+;;    c passed at sp+6
 _agonLight2WriteUart0Impl:
     push    ix
     ld      ix, 0
