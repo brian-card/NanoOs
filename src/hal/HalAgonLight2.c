@@ -57,6 +57,10 @@ void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
 }
 #endif
 
+// Assembly-level functions.
+extern int agonLight2ReadPort(uint16_t port);
+extern void agonLight2WritePort(uint16_t port, uint8_t c);
+
 // ---------------------------------------------------------------------------
 // Memory layout constants
 // ---------------------------------------------------------------------------
@@ -379,7 +383,7 @@ typedef struct AgonLight2Dio {
 ///
 /// @brief Array of AgonLight2Dio structures that correspond to the DIO pins on
 /// the AgonLight 2.
-AgonLight2Dio agonLight2Dios[] = {
+static AgonLight2Dio agonLight2Dios[] = {
   {
     // Pin 68 - PD0 (TxD0 / IR_TxD)
     .configured = false,
@@ -634,9 +638,60 @@ AgonLight2Dio agonLight2Dios[] = {
   },
 };
 
-int32_t agonLight2InitDio(va_list args)      { (void) args; return 0; }
-int32_t agonLight2ConfigureDio(va_list args) { (void) args; return 0; }
-int32_t agonLight2WriteDio(va_list args)     { (void) args; return 0; }
+/// @def numDios
+///
+/// @brief The number of DIO pins we support in the agonLight2Dios array.
+///
+/// @note This is a #define rather than a const int so that it doesn't need
+/// its own KEEP_IN_FLASH treatment - it's folded into an immediate value at
+/// each use site instead of occupying storage that could land in .rodata.
+#define numDios ((int) (sizeof(agonLight2Dios) / sizeof(agonLight2Dios[0])))
+
+/// @def BASE_DIO_PIN
+///
+/// @brief The first DIO pin represented by index 0 of the agonLight2Dios array.
+#define BASE_DIO_PIN 68
+
+int32_t agonLight2InitDio(va_list args) {
+  // This function is a no-op on this platform.
+  (void) args;
+  return 0;
+}
+
+int32_t agonLight2ConfigureDio(va_list args) {
+  int32_t pinIndex = va_arg(args, int32_t) - BASE_DIO_PIN;
+  bool output = (bool) va_arg(args, int);
+  uint8_t c = 0x00;
+
+  if ((pinIndex < 0) || (pindIndex >= numDios)) {
+    return -ENODEV;
+  }
+
+  c = agonLight2ReadPort(agonLight2Dios[pinIndex].alt1);
+  c &= ~(1 << agonLight2Dios[pinIndex].bit);
+  agonLight2WritePort(agonLight2Dios[pinIndex].alt1, c);
+
+  c = agonLight2ReadPort(agonLight2Dios[pinIndex].alt2);
+  c &= ~(1 << agonLight2Dios[pinIndex].bit);
+  agonLight2WritePort(agonLight2Dios[pinIndex].alt2, c);
+
+  c = agonLight2ReadPort(agonLight2Dios[pinIndex].ddr);
+  if (output == true) {
+    c &= ~(1 << agonLight2Dios[pinIndex].bit);
+  } else {
+    c |= 1 << agonLight2Dios[pinIndex].bit;
+  }
+  agonLight2WritePort(agonLight2Dios[pinIndex].ddr, c);
+
+  agonLight2Dios[pinIndex].configured = true;
+
+  return 0;
+}
+
+int32_t agonLight2WriteDio(va_list args) {
+  (void) args;
+  return 0;
+}
 
 // ---------------------------------------------------------------------------
 // SPI subsystem stubs (no SPI bus on the eZ80 side of the Agon)
@@ -663,8 +718,7 @@ static HalSpiDevice spiDevices[MAX_SPI_DEVICES];
 /// @note This is a #define rather than a const int so that it doesn't need
 /// its own KEEP_IN_FLASH treatment - it's folded into an immediate value at
 /// each use site instead of occupying storage that could land in .rodata.
-#define numSpis \
-  ((int) (sizeof(spiDevices) / sizeof(spiDevices[0])))
+#define numSpis ((int) (sizeof(spiDevices) / sizeof(spiDevices[0])))
 
 int32_t agonLight2InitSpi(va_list args) {
   (void) args;
