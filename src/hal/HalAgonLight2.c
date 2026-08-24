@@ -777,6 +777,8 @@ int32_t agonLight2ConfigureSpi(va_list args) {
   uint16_t divisor = (uint16_t) (SYSTEM_CLOCK_HZ / (baud << 1));
   agonLight2ConfigureSpiImpl(divisor);
 
+  agonLight2ConfigureDioImpl(cs, true); // Configure chip-select for output.
+  agonLight2WriteDioImpl(cs, true); // Drive chip-select high.
   spiDevices[deviceId].chipSelect = cs;
   spiDevices[deviceId].baud = baud;
   spiDevices[deviceId].configured = true;
