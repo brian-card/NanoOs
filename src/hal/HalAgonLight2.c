@@ -374,14 +374,9 @@ static bool globalSpiConfigured = false;
 
 /// @var spiDevices
 ///
-/// @brief Array of structures that will hold the information about SPI
+/// @brief Array of HalSpiDevices that will hold the information about SPI
 /// connections.
-static struct HalSpiDevice {
-  bool     configured;         // Will default to false
-  uint8_t  chipSelect;
-  bool     transferInProgress; // Will default to false
-  uint32_t baud;
-} spiDevices[MAX_SPI_DEVICES];
+static HalSpiDevice spiDevices[MAX_SPI_DEVICES];
 
 /// @def numSpis
 ///
@@ -391,7 +386,7 @@ static struct HalSpiDevice {
 /// its own KEEP_IN_FLASH treatment - it's folded into an immediate value at
 /// each use site instead of occupying storage that could land in .rodata.
 #define numSpis \
-  ((int) (sizeof(spiDevices) \ / sizeof(spiDevices[0])))
+  ((int) (sizeof(spiDevices) / sizeof(spiDevices[0])))
 
 int32_t agonLight2InitSpi(va_list args) {
   (void) args;
