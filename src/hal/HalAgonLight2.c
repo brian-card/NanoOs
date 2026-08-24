@@ -846,7 +846,24 @@ int32_t agonLight2SpiTransfer8(va_list args) {
 }
 
 int32_t agonLight2SpiTransferBytes(va_list args) {
-  (void) args; return -ENOTSUP;
+  int32_t deviceId = va_arg(args, int32_t);
+  uint8_t *data = va_arg(args, uint8_t*);
+  uint32_t length = va_arg(args, uint32_t);
+
+  if ((deviceId < 0) || (deviceId >= numSpis)
+    || (spiDevices[deviceId].configured == false)
+  ) {
+    // Outside the limit of the devices we support.
+    return -ENODEV;
+  } else if (!spiDevices[deviceId].transferInProgress) {
+    agonLight2StartSpiTransferImpl(deviceId);
+  }
+
+  for (uint32_t ii = 0; ii < length; ii++) {
+    data[ii] = (uint8_t) agonLight2SpiTransfer8Impl(data[ii]);
+  }
+
+  return 0;
 }
 
 // ---------------------------------------------------------------------------
