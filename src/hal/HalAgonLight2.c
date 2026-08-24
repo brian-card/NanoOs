@@ -61,6 +61,12 @@ void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
 // Memory layout constants
 // ---------------------------------------------------------------------------
 
+/// @def SYSTEM_CLOCK_HZ
+///
+/// @brief The frequency the system clock runs at on the AgonLight 2.  This is
+/// 18.432 MHz.
+#define SYSTEM_CLOCK_HZ ((uint32_t) 18432000)
+
 /// @def RAM_START_ADDRESS
 ///
 /// @brief Address of the start of external RAM.  The AgonLight 2 uses the
@@ -135,7 +141,7 @@ void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
 /// @def MAX_SPI_DEVICES
 ///
 /// @brief The maximum number of SPI devices the system can support.
-#define MAX_SPI_DEVICES 2
+#define MAX_SPI_DEVICES 1
 
 /// @def BASE_BAUD
 ///
@@ -358,12 +364,90 @@ int32_t agonLight2WriteDio(va_list args)     { (void) args; return 0; }
 // SPI subsystem stubs (no SPI bus on the eZ80 side of the Agon)
 // ---------------------------------------------------------------------------
 
-int32_t agonLight2InitSpi(va_list args)          { (void) args; return -ENOTSUP; }
-int32_t agonLight2ConfigureSpi(va_list args)     { (void) args; return -ENOTSUP; }
-int32_t agonLight2StartSpiTransfer(va_list args) { (void) args; return -ENOTSUP; }
-int32_t agonLight2EndSpiTransfer(va_list args)   { (void) args; return -ENOTSUP; }
-int32_t agonLight2SpiTransfer8(va_list args)     { (void) args; return -ENOTSUP; }
-int32_t agonLight2SpiTransferBytes(va_list args) { (void) args; return -ENOTSUP; }
+// Functions defined in the .asm files.
+extern void agonLight2ConfigureSpiImpl(uint16_t divisor);
+
+/// @var globalSpiConfigured
+///
+/// @brief Whether or not the board's SPI interface has already been configured.
+static bool globalSpiConfigured = false;
+
+/// @var spiDevices
+///
+/// @brief Array of structures that will hold the information about SPI
+/// connections.
+static struct HalSpiDevice {
+  bool     configured;         // Will default to false
+  uint8_t  chipSelect;
+  bool     transferInProgress; // Will default to false
+  uint32_t baud;
+} spiDevices[MAX_SPI_DEVICES];
+
+/// @def numSpis
+///
+/// @brief The number of devices we support in the spiDevices array.
+///
+/// @note This is a #define rather than a const int so that it doesn't need
+/// its own KEEP_IN_FLASH treatment - it's folded into an immediate value at
+/// each use site instead of occupying storage that could land in .rodata.
+#define numSpis \
+  ((int) (sizeof(spiDevices) \ / sizeof(spiDevices[0])))
+
+int32_t agonLight2InitSpi(va_list args) {
+  (void) args;
+
+  memset(&spiDevices, 0, numSpis * sizeof(HalSpiDevice));
+  globalSpiConfigured = true;
+
+  return 0;
+}
+
+int32_t agonLight2ConfigureSpi(va_list args) {
+  int32_t deviceId = va_arg(args, int32_t);
+  uint8_t cs   = (uint8_t) va_arg(args, int);
+  uint8_t sck  = (uint8_t) va_arg(args, int);
+  uint8_t copi = (uint8_t) va_arg(args, int);
+  uint8_t cipo = (uint8_t) va_arg(args, int);
+  uint32_t baud = va_arg(args, uint32_t);
+
+  if (deviceId != 0) {
+    // Outside the limit of the devices we support.
+    return -ENODEV;
+  } else if (
+       (cs   != _sdCardPinChipSelect)
+    || (sck  != _spiSckDio)
+    || (copi != _spiCopiDio)
+    || (cipo != _spiCipoDio)
+  ) {
+    return -EINVAL;
+  }
+
+  uint16_t divisor = (uint16_t) (SYSTEM_CLOCK_HZ / (baud << 1));
+  agonLight2ConfigureSpiImpl(divisor);
+
+  spiDevices[deviceId].chipSelect = cs;
+  spiDevices[deviceId].baud = baud;
+  spiDevices[deviceId].configured = true;
+  // spiDevices[deviceId].transferInProgress is already false from the memset.
+
+  return 0;
+}
+
+int32_t agonLight2StartSpiTransfer(va_list args) {
+  (void) args; return -ENOTSUP;
+}
+
+int32_t agonLight2EndSpiTransfer(va_list args) {
+  (void) args; return -ENOTSUP;
+}
+
+int32_t agonLight2SpiTransfer8(va_list args) {
+  (void) args; return -ENOTSUP;
+}
+
+int32_t agonLight2SpiTransferBytes(va_list args) {
+  (void) args; return -ENOTSUP;
+}
 
 // ---------------------------------------------------------------------------
 // Clock subsystem stubs
