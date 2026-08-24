@@ -107,4 +107,6 @@ _agonLight2SpiTransfer8Impl:
     in0     a, (SPI_RBR)
     ld      hl, 0
     ld      l, a
+
+    pop     ix
     ret
