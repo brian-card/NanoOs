@@ -108,14 +108,14 @@ _agonLight2ConfigureUart1Impl:
 _agonLight2PollUart1Impl:
     in0     a, (UART1_LSR)
     and     0x01                ; DR — data ready
-    jr      z, .Lno_char
+    jr      z, .noChar
 
     in0     a, (UART1_RBR)
     ld      hl, 0
     ld      l, a
     ret
 
-.Lno_char:
+.noChar:
     ld      hl, -1
     ret
 
@@ -126,10 +126,10 @@ _agonLight2WriteUart1Impl:
     ld      ix, 0
     add     ix, sp
 
-.Ltx_wait:
+.txWait:
     in0     a, (UART1_LSR)
     and     0x20                ; THRE — transmit holding register empty
-    jr      z, .Ltx_wait
+    jr      z, .txWait
 
     ld      a, (ix+6)
     out0    (UART1_THR), a
