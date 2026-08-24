@@ -356,6 +356,284 @@ int32_t agonLight2IsUartConsole(va_list args) {
 // DIO subsystem stubs
 // ---------------------------------------------------------------------------
 
+/// @struct AgonLight2Dio
+///
+/// @brief In-memory representation of a single DIO pin on the AgonLight 2.
+///
+/// @param configured Whether or not the pin has been configured by the HAL.
+/// @param bin The bit position of the pin within its control register ports.
+/// @param dr The address of the Data Register port.
+/// @param ddr The address of the Data Direction Register port.
+/// @param alt1 The address of the Alternate Function 1 Register port.
+/// @param alt2 The address of the Alternate Function 2 Register port.
+typedef struct AgonLight2Dio {
+  bool          configured;
+  const uint8_t bit;
+  const uint8_t dr;
+  const uint8_t ddr;
+  const uint8_t alt1;
+  const uint8_t alt2;
+} AgonLight2Dio;
+
+/// @var agonLight2Dios
+///
+/// @brief Array of AgonLight2Dio structures that correspond to the DIO pins on
+/// the AgonLight 2.
+AgonLight2Dio agonLight2Dios[] = {
+  {
+    // Pin 68 - PD0 (TxD0 / IR_TxD)
+    .configured = false,
+    .bit        = 0x00,
+    .dr         = 0xa2,
+    .ddr        = 0xa3,
+    .alt1       = 0xa4,
+    .alt2       = 0xa5,
+  },
+  {
+    // Pin 69 - PD1 (RxD0 / IR_RxD)
+    .configured = false,
+    .bit        = 0x01,
+    .dr         = 0xa2,
+    .ddr        = 0xa3,
+    .alt1       = 0xa4,
+    .alt2       = 0xa5,
+  },
+  {
+    // Pin 70 - PD2 (RTS0)
+    .configured = false,
+    .bit        = 0x02,
+    .dr         = 0xa2,
+    .ddr        = 0xa3,
+    .alt1       = 0xa4,
+    .alt2       = 0xa5,
+  },
+  {
+    // Pin 71 - PD3 (CTS0)
+    .configured = false,
+    .bit        = 0x03,
+    .dr         = 0xa2,
+    .ddr        = 0xa3,
+    .alt1       = 0xa4,
+    .alt2       = 0xa5,
+  },
+  {
+    // Pin 72 - PD4 (DTR0)
+    .configured = false,
+    .bit        = 0x04,
+    .dr         = 0xa2,
+    .ddr        = 0xa3,
+    .alt1       = 0xa4,
+    .alt2       = 0xa5,
+  },
+  {
+    // Pin 73 - PD5 (DSR0)
+    .configured = false,
+    .bit        = 0x05,
+    .dr         = 0xa2,
+    .ddr        = 0xa3,
+    .alt1       = 0xa4,
+    .alt2       = 0xa5,
+  },
+  {
+    // Pin 74 - PD6 (DCD0)
+    .configured = false,
+    .bit        = 0x06,
+    .dr         = 0xa2,
+    .ddr        = 0xa3,
+    .alt1       = 0xa4,
+    .alt2       = 0xa5,
+  },
+  {
+    // Pin 75 - PD7 (RI0)
+    .configured = false,
+    .bit        = 0x07,
+    .dr         = 0xa2,
+    .ddr        = 0xa3,
+    .alt1       = 0xa4,
+    .alt2       = 0xa5,
+  },
+  {
+    // Pin 76 - PC0 (TxD1)
+    .configured = false,
+    .bit        = 0x00,
+    .dr         = 0x9e,
+    .ddr        = 0x9f,
+    .alt1       = 0xa0,
+    .alt2       = 0xa1,
+  },
+  {
+    // Pin 77 - PC1 (RxD1)
+    .configured = false,
+    .bit        = 0x01,
+    .dr         = 0x9e,
+    .ddr        = 0x9f,
+    .alt1       = 0xa0,
+    .alt2       = 0xa1,
+  },
+  {
+    // Pin 78 - PC2 (RTS1)
+    .configured = false,
+    .bit        = 0x02,
+    .dr         = 0x9e,
+    .ddr        = 0x9f,
+    .alt1       = 0xa0,
+    .alt2       = 0xa1,
+  },
+  {
+    // Pin 79 - PC3 (CTS1)
+    .configured = false,
+    .bit        = 0x03,
+    .dr         = 0x9e,
+    .ddr        = 0x9f,
+    .alt1       = 0xa0,
+    .alt2       = 0xa1,
+  },
+  {
+    // Pin 80 - PC4 (DTR1)
+    .configured = false,
+    .bit        = 0x04,
+    .dr         = 0x9e,
+    .ddr        = 0x9f,
+    .alt1       = 0xa0,
+    .alt2       = 0xa1,
+  },
+  {
+    // Pin 81 - PC5 (DSR1)
+    .configured = false,
+    .bit        = 0x05,
+    .dr         = 0x9e,
+    .ddr        = 0x9f,
+    .alt1       = 0xa0,
+    .alt2       = 0xa1,
+  },
+  {
+    // Pin 82 - PC6 (DCD1)
+    .configured = false,
+    .bit        = 0x06,
+    .dr         = 0x9e,
+    .ddr        = 0x9f,
+    .alt1       = 0xa0,
+    .alt2       = 0xa1,
+  },
+  {
+    // Pin 83 - PC7 (RI1)
+    .configured = false,
+    .bit        = 0x07,
+    .dr         = 0x9e,
+    .ddr        = 0x9f,
+    .alt1       = 0xa0,
+    .alt2       = 0xa1,
+  },
+  {
+    // Pin 84 - Not mapped (VSS)
+    .configured = false,
+    .bit        = 0x00,
+    .dr         = 0x00,
+    .ddr        = 0x00,
+    .alt1       = 0x00,
+    .alt2       = 0x00,
+  },
+  {
+    // Pin 85 - Not mapped (XIN)
+    .configured = false,
+    .bit        = 0x00,
+    .dr         = 0x00,
+    .ddr        = 0x00,
+    .alt1       = 0x00,
+    .alt2       = 0x00,
+  },
+  {
+    // Pin 86 - Not mapped (XOUT)
+    .configured = false,
+    .bit        = 0x00,
+    .dr         = 0x00,
+    .ddr        = 0x00,
+    .alt1       = 0x00,
+    .alt2       = 0x00,
+  },
+  {
+    // Pin 87 - Not mapped (VDD)
+    .configured = false,
+    .bit        = 0x00,
+    .dr         = 0x00,
+    .ddr        = 0x00,
+    .alt1       = 0x00,
+    .alt2       = 0x00,
+  },
+  {
+    // Pin 88 - PB0 (T0_IN)
+    .configured = false,
+    .bit        = 0x00,
+    .dr         = 0x9a,
+    .ddr        = 0x9b,
+    .alt1       = 0x9c,
+    .alt2       = 0x9d,
+  },
+  {
+    // Pin 89 - PB1 (T1_IN)
+    .configured = false,
+    .bit        = 0x01,
+    .dr         = 0x9a,
+    .ddr        = 0x9b,
+    .alt1       = 0x9c,
+    .alt2       = 0x9d,
+  },
+  {
+    // Pin 90 - PB2 (SS)
+    .configured = false,
+    .bit        = 0x02,
+    .dr         = 0x9a,
+    .ddr        = 0x9b,
+    .alt1       = 0x9c,
+    .alt2       = 0x9d,
+  },
+  {
+    // Pin 91 - PB3 (SCK)
+    .configured = false,
+    .bit        = 0x03,
+    .dr         = 0x9a,
+    .ddr        = 0x9b,
+    .alt1       = 0x9c,
+    .alt2       = 0x9d,
+  },
+  {
+    // Pin 92 - PB4 (T4_OUT)
+    .configured = false,
+    .bit        = 0x04,
+    .dr         = 0x9a,
+    .ddr        = 0x9b,
+    .alt1       = 0x9c,
+    .alt2       = 0x9d,
+  },
+  {
+    // Pin 93 - PB5 (T5_OUT)
+    .configured = false,
+    .bit        = 0x05,
+    .dr         = 0x9a,
+    .ddr        = 0x9b,
+    .alt1       = 0x9c,
+    .alt2       = 0x9d,
+  },
+  {
+    // Pin 94 - PB6 (MISO)
+    .configured = false,
+    .bit        = 0x06,
+    .dr         = 0x9a,
+    .ddr        = 0x9b,
+    .alt1       = 0x9c,
+    .alt2       = 0x9d,
+  },
+  {
+    // Pin 95 - PB7 (MOSI)
+    .configured = false,
+    .bit        = 0x07,
+    .dr         = 0x9a,
+    .ddr        = 0x9b,
+    .alt1       = 0x9c,
+    .alt2       = 0x9d,
+  },
+};
+
 int32_t agonLight2InitDio(va_list args)      { (void) args; return 0; }
 int32_t agonLight2ConfigureDio(va_list args) { (void) args; return 0; }
 int32_t agonLight2WriteDio(va_list args)     { (void) args; return 0; }
