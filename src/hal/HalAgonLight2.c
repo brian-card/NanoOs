@@ -663,7 +663,7 @@ int32_t agonLight2ConfigureDio(va_list args) {
   bool output = (bool) va_arg(args, int);
   uint8_t c = 0x00;
 
-  if ((pinIndex < 0) || (pindIndex >= numDios)) {
+  if ((pinIndex < 0) || (pinIndex >= numDios)) {
     return -ENODEV;
   }
 
@@ -689,7 +689,22 @@ int32_t agonLight2ConfigureDio(va_list args) {
 }
 
 int32_t agonLight2WriteDio(va_list args) {
-  (void) args;
+  int32_t pinIndex = va_arg(args, int32_t) - BASE_DIO_PIN;
+  bool high = (bool) va_arg(args, int);
+  uint8_t c = 0x00;
+
+  if ((pinIndex < 0) || (pinIndex >= numDios)) {
+    return -ENODEV;
+  }
+
+  c = agonLight2ReadPort(agonLight2Dios[pinIndex].dr);
+  if (high == true) {
+    c |= (1 << agonLight2Dios[pinIndex].bit);
+  } else {
+    c &= ~(1 << agonLight2Dios[pinIndex].bit);
+  }
+  agonLight2WritePort(agonLight2Dios[pinIndex].dr, c);
+
   return 0;
 }
 
