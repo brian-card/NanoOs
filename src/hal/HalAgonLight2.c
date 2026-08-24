@@ -53,13 +53,16 @@ extern "C"
 #endif
 void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
   const char *function, void *args);
-#ifdef __cplusplus
-}
-#endif
 
 // Assembly-level functions.
 extern int agonLight2ReadPort(uint16_t port);
 extern void agonLight2WritePort(uint16_t port, uint8_t c);
+extern void agonLight2ConfigureSpiImpl(uint16_t divisor);
+extern int agonLight2SpiTransfer8Impl(uint8_t c);
+#ifdef __cplusplus
+}
+#endif
+
 
 // ---------------------------------------------------------------------------
 // Memory layout constants
@@ -721,10 +724,6 @@ int32_t agonLight2WriteDio(va_list args) {
 // ---------------------------------------------------------------------------
 // SPI subsystem stubs (no SPI bus on the eZ80 side of the Agon)
 // ---------------------------------------------------------------------------
-
-// Functions defined in the .asm files.
-extern void agonLight2ConfigureSpiImpl(uint16_t divisor);
-extern int agonLight2SpiTransfer8Impl(uint8_t c);
 
 /// @var globalSpiConfigured
 ///
