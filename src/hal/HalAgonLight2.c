@@ -788,8 +788,7 @@ int32_t agonLight2ConfigureSpi(va_list args) {
   return 0;
 }
 
-int32_t agonLight2StartSpiTransfer(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int32_t agonLight2StartSpiTransferImpl(int32_t deviceId) {
   if ((deviceId < 0) || (deviceId >= numSpis)
     || (spiDevices[deviceId].configured == false)
   ) {
@@ -804,6 +803,11 @@ int32_t agonLight2StartSpiTransfer(va_list args) {
   spiDevices[deviceId].transferInProgress = true;
 
   return 0;
+}
+
+int32_t agonLight2StartSpiTransfer(va_list args) {
+  int32_t deviceId = va_arg(args, int32_t);
+  return agonLight2StartSpiTransferImpl(deviceId);
 }
 
 int32_t agonLight2EndSpiTransfer(va_list args) {
@@ -826,7 +830,19 @@ int32_t agonLight2EndSpiTransfer(va_list args) {
 }
 
 int32_t agonLight2SpiTransfer8(va_list args) {
-  (void) args; return -ENOTSUP;
+  int32_t deviceId = va_arg(args, int32_t);
+  uint8_t data = (uint8_t) va_arg(args, int);
+
+  if ((deviceId < 0) || (deviceId >= numSpis)
+    || (spiDevices[deviceId].configured == false)
+  ) {
+    // Outside the limit of the devices we support.
+    return -ENODEV;
+  } else if (!spiDevices[deviceId].transferInProgress) {
+    agonLight2StartSpiTransferImpl(deviceId);
+  }
+
+  return (int32_t) agonLight2SpiTransfer8Impl(data);
 }
 
 int32_t agonLight2SpiTransferBytes(va_list args) {
