@@ -59,14 +59,19 @@ _agonLight2ConfigureSpiImpl:
     ld      ix, 0
     add     ix, sp
 
-    ;; Set PB7, PB6, PB3, and PB2 to mode 7 (alternate function)
+    ;; Set PB7, PB6, and PB3 to mode 7 (alternate function)
     in0     a, (PB_ALT1)
-    or      a, 0xCC
+    or      a, 0xC8
     out0    (PB_ALT1), a
 
     in0     a, (PB_ALT2)
-    or      a, 0xCC
+    or      a, 0xC8
     out0    (PB_ALT2), a
+
+    ;; Set PB2's data direction to output (clear bit 2 in PB_DDR)
+    in0     a, (PB_DDR)
+    and     a, 0xFB
+    out0    (PB_DDR), a
 
     ;; Set the speed of the SPI bus.  The caller is responsible for passing the
     ;; desired divisor into this function, where:
