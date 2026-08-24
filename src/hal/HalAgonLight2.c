@@ -724,6 +724,7 @@ int32_t agonLight2WriteDio(va_list args) {
 
 // Functions defined in the .asm files.
 extern void agonLight2ConfigureSpiImpl(uint16_t divisor);
+extern int agonLight2SpiTransfer8Impl(uint8_t c);
 
 /// @var globalSpiConfigured
 ///
@@ -762,7 +763,7 @@ int32_t agonLight2ConfigureSpi(va_list args) {
   uint8_t cipo = (uint8_t) va_arg(args, int);
   uint32_t baud = va_arg(args, uint32_t);
 
-  if (deviceId != 0) {
+  if ((deviceId < 0) || (deviceId >= numSpis)) {
     // Outside the limit of the devices we support.
     return -ENODEV;
   } else if (
@@ -788,11 +789,40 @@ int32_t agonLight2ConfigureSpi(va_list args) {
 }
 
 int32_t agonLight2StartSpiTransfer(va_list args) {
-  (void) args; return -ENOTSUP;
+  int32_t deviceId = va_arg(args, int32_t);
+  if ((deviceId < 0) || (deviceId >= numSpis)
+    || (spiDevices[deviceId].configured == false)
+  ) {
+    // Outside the limit of the devices we support.
+    return -ENODEV;
+  } else if (spiDevices[deviceId].transferInProgress == true) {
+    return -EBUSY;
+  }
+
+  // Drive chip-select low.
+  agonLight2WriteDioImpl(spiDevices[deviceId].chipSelect, false);
+  spiDevices[deviceId].transferInProgress = true;
+
+  return 0;
 }
 
 int32_t agonLight2EndSpiTransfer(va_list args) {
-  (void) args; return -ENOTSUP;
+  int32_t deviceId = va_arg(args, int32_t);
+  if ((deviceId < 0) || (deviceId >= numSpis)
+    || (spiDevices[deviceId].configured == false)
+  ) {
+    // Outside the limit of the devices we support.
+    return -ENODEV;
+  }
+
+  // Drive chip-select high.
+  agonLight2WriteDioImpl(spiDevices[deviceId].chipSelect, true);
+  for (int ii = 0; ii < 8; ii++) {
+    agonLight2SpiTransfer8Impl(0xFF); // 8 clock pulses
+  }
+  spiDevices[deviceId].transferInProgress = false;
+
+  return 0;
 }
 
 int32_t agonLight2SpiTransfer8(va_list args) {
