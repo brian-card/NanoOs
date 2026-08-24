@@ -516,6 +516,30 @@ typedef struct HalDio {
   int32_t (*write)(int32_t deviceId, bool high);
 } HalDio;
 
+typedef struct HalSpiDevice {
+  /// @var configured
+  ///
+  /// @brief Whether or not the SPI device has been configured yet.
+  bool     configured;
+  
+  /// @var chipSelect
+  ///
+  /// @brief The DIO integer value for the chipSelect line that corresponds
+  /// to the SPI device.
+  uint8_t  chipSelect;
+  
+  /// @var transferInProgress
+  ///
+  /// @brief Whether or not a transfer is currently in progress on the SPI
+  /// device.
+  bool     transferInProgress;
+  
+  /// @var baud
+  ///
+  /// @brief The baud rate of the SPI device.
+  uint32_t baud;
+} HalSpiDevice;
+
 typedef struct HalSpi {
   /// @var numSupported
   ///
