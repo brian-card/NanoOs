@@ -68,11 +68,6 @@ _agonLight2ConfigureSpiImpl:
     or      a, 0xC8
     out0    (PB_ALT2), a
 
-    ;; Set PB2's data direction to output (clear bit 2 in PB_DDR)
-    in0     a, (PB_DDR)
-    and     a, 0xFB
-    out0    (PB_DDR), a
-
     ;; Set the speed of the SPI bus.  The caller is responsible for passing the
     ;; desired divisor into this function, where:
     ;;
