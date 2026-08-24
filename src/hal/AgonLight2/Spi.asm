@@ -54,7 +54,7 @@ SPI_TSR,    .equ 0xBC
 SPI_RBR,    .equ 0xBC
 
 ;; -- void agonLight2ConfigureSpiImpl(uint16_t divisor) ---------------
-;;    divisor passed at sp+6 (low byte), sp+7 (high byte)
+;;    divisor passed at sp+3 (low byte), sp+4 (high byte)
 _agonLight2ConfigureSpiImpl:
     push    ix
     ld      ix, 0
