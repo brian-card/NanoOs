@@ -103,7 +103,6 @@ _agonLight2ConfigureUart0Impl:
     pop     ix
     ret
 
-
 ;; -- int agonLight2PollUart0Impl(void) ----------------------------
 ;;    returns received byte in HL, or -1 if no data ready (non-blocking)
 _agonLight2PollUart0Impl:
