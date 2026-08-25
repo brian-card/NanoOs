@@ -1877,6 +1877,7 @@ FILE* schedFopen(const char *pathname, const char *mode) {
       ) != processSuccess
     ) {
       // Nothing we can do.
+      _functionInProgress = NULL;
       return returnValue; // NULL
     }
 
@@ -1921,6 +1922,7 @@ int schedFclose(FILE *stream) {
     ) {
       // Nothing we can do.
       errno = EOTHER;
+      _functionInProgress = NULL;
       return EOF;
     }
 
@@ -1970,6 +1972,7 @@ int schedRemove(const char *pathname) {
     ) {
       // Nothing we can do.
       errno = EOTHER;
+      _functionInProgress = NULL;
       return -1;
     }
 
@@ -2021,6 +2024,7 @@ size_t schedFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
       ) != processSuccess
     ) {
       // Nothing we can do.
+      _functionInProgress = NULL;
       return 0;
     }
 
@@ -2065,6 +2069,7 @@ size_t schedFwrite(void *ptr, size_t size, size_t nmemb, FILE *stream) {
       ) != processSuccess
     ) {
       // Nothing we can do.
+      _functionInProgress = NULL;
       return 0;
     }
 
@@ -2111,6 +2116,7 @@ char* schedFgets(char *buffer, int size, FILE *stream) {
       ) != processSuccess
     ) {
       // Nothing we can do.
+      _functionInProgress = NULL;
       return NULL;
     }
     if (filesystemIoCommandArgs.length > 0) {
@@ -2161,6 +2167,7 @@ int schedFputs(const char *s, FILE *stream) {
       ) != processSuccess
     ) {
       // Nothing we can do.
+      _functionInProgress = NULL;
       return EOF;
     }
     if (filesystemIoCommandArgs.length == 0) {
