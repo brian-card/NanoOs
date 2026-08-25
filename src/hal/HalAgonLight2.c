@@ -1168,16 +1168,16 @@ int32_t halAgonLight2Init(void) {
   halFunctions[HAL_TIMER]        = agonLight2TimerFunctions;
   halFunctions[HAL_BLOCK_DEVICE] = agonLight2BlockDeviceFunctions;
 
-  //// halImpl.platform.callFileOverlay = callOverlayFunctionFromFile;
-  //// halImpl.platform.execCommand = execOverlayCommand;
-  //// halImpl.platform.restartRootFilesystem = restartContiguousFilesystem;
-  //// halImpl.platform.initRootStorage = halCommonInitRootFilesystem;
-  //// halImpl.platform.restartShell = restartOverlayShell;
-  halImpl.platform.callFileOverlay = NULL;
-  halImpl.platform.execCommand = execBuiltinCommand;
-  halImpl.platform.restartRootFilesystem = NULL;
-  halImpl.platform.initRootStorage = NULL;
-  halImpl.platform.restartShell = restartBuiltinShell;
+  halImpl.platform.callFileOverlay = callOverlayFunctionFromFile;
+  halImpl.platform.execCommand = execOverlayCommand;
+  halImpl.platform.restartRootFilesystem = restartContiguousFilesystem;
+  halImpl.platform.initRootStorage = halCommonInitRootFilesystem;
+  halImpl.platform.restartShell = restartOverlayShell;
+  //// halImpl.platform.callFileOverlay = NULL;
+  //// halImpl.platform.execCommand = execBuiltinCommand;
+  //// halImpl.platform.restartRootFilesystem = NULL;
+  //// halImpl.platform.initRootStorage = NULL;
+  //// halImpl.platform.restartShell = restartBuiltinShell;
 
   halImpl.memory.contiguousFilesystem
     = (NanoOsOverlayMap*) FILESYSTEM_DRIVER_ADDRESS;
