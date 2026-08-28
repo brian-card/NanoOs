@@ -59,14 +59,40 @@ _agonLight2ConfigureSpiImpl:
     ld      ix, 0
     add     ix, sp
 
-    ;; Set PB7, PB6, and PB3 to mode 7 (alternate function)
-    in0     a, (PB_ALT1)
+    ;; Set PB7 (MOSI), PB6 (MISO), and PB3 (CLK) to Alternate Function mode
+    ;; (DDR = 1, ALT1 = 0, ALT2 = 1).  "Alternate Function mode" in this case
+    ;; means "SPI peripheral mode".
+    in0     a, (PB_DDR)
     or      a, 0xC8
+    out0    (PB_DDR), a
+
+    in0     a, (PB_ALT1)
+    and     a, 0x37
     out0    (PB_ALT1), a
 
     in0     a, (PB_ALT2)
     or      a, 0xC8
     out0    (PB_ALT2), a
+
+    ;; PB2 is the SPI peripheral's hardware SS input.  It must be configured
+    ;; as a GPIO output and held permanently high for the on-chip SPI hardware
+    ;; to work properly in master mode.  The SD card's chip-select line is a
+    ;; separate line that's configured directly in the HAL C code.
+    in0     a, (PB_DR)
+    or      a, 0x04
+    out0    (PB_DR), a
+
+    in0     a, (PB_ALT1)
+    and     a, 0xFB
+    out0    (PB_ALT1), a
+
+    in0     a, (PB_ALT2)
+    and     a, 0xFB
+    out0    (PB_ALT2), a
+
+    in0     a, (PB_DDR)
+    and     a, 0xFB
+    out0    (PB_DDR), a
 
     ;; Set the speed of the SPI bus.  The caller is responsible for passing the
     ;; desired divisor into this function, where:
