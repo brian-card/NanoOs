@@ -389,16 +389,29 @@ int sdSpiWriteBlocks(SdCardState *sdCardState,
     address *= sdCardState->blockSize; // Convert to byte address
   }
   
-  // Choose the appropriate write command and data token.
+  // Choose the appropriate write command.
   uint8_t writeCmd = (numBlocks == 1) ? CMD24 : CMD25;
-  // CMD24 uses 0xFE as the start token; CMD25 uses 0xFC.
-  uint8_t startToken = (numBlocks == 1) ? 0xFE : 0xFC;
   
   response = sdSpiSendCommand(SD_CARD_SPI_DEVICE, writeCmd, address);
   if (response != 0x00) {
-    HAL->spi.endTransfer(SD_CARD_SPI_DEVICE);
-    return EIO; // Command failed
+    do {
+      if (writeCmd == CMD25) {
+        // We attempted to start a multi-block write and it failed.  Try
+        // single-block.
+        writeCmd = CMD24;
+        response = sdSpiSendCommand(SD_CARD_SPI_DEVICE, writeCmd, address);
+        if (response == 0x00) {
+          // Single-block works, so we're good.  Don't return early.
+          break;
+        }
+      }
+      HAL->spi.endTransfer(SD_CARD_SPI_DEVICE);
+      return EIO; // Command failed
+    } while (0);
   }
+  
+  // CMD24 uses 0xFE as the start token; CMD25 uses 0xFC.
+  uint8_t startToken = (writeCmd == CMD24) ? 0xFE : 0xFC;
   
   for (uint32_t ii = 0; ii < numBlocks; ii++) {
     // Wait for card to be ready before sending data
@@ -463,6 +476,18 @@ int sdSpiWriteBlocks(SdCardState *sdCardState,
     }
     
     buffer += sdCardState->blockSize;
+    
+    if ((ii < numBlocks - 1) && (writeCmd == CMD24)) {
+      address = startBlock + ii + 1;
+      if (sdCardState->sdCardVersion == 1) {
+        address *= sdCardState->blockSize; // Convert to byte address
+      }
+      response = sdSpiSendCommand(SD_CARD_SPI_DEVICE, writeCmd, address);
+      if (response != 0x00) {
+        HAL->spi.endTransfer(SD_CARD_SPI_DEVICE);
+        return EIO; // Command failed
+      }
+    }
   }
   
   // For multi-block writes, send the Stop Tran token (0xFD) and wait for the
