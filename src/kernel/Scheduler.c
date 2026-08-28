@@ -605,13 +605,13 @@ int addProcessIpcCapability(ProcessDescriptor *processDescriptor,
     return 0;
   }
 
-  logDebug("Extinding ipcCapabilities array\n");
+  logDebug("Extending ipcCapabilities array\n");
 
   // If we made it this far then the destination PID doesn't exist in the
   // process's capabilities yet, so we'll have to extend the array.
   if (processDescriptor->ipcCapabilitiesDynamic == true) {
     // Resize the existing array.  This is the expected case.
-    logDebug("Extinding exiting array\n");
+    logDebug("Extending existing array\n");
     void *check = schedRealloc(processDescriptor->ipcCapabilities,
       sizeof(IpcCapability) * (processDescriptor->numIpcCapabilities + 1));
     if (check == NULL) {
