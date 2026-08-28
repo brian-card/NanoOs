@@ -97,17 +97,13 @@ uint8_t sdSpiSendCommand(int sdCardSpiDevice, uint8_t cmd, uint32_t arg) {
   } else if (cmd == CMD8) {
     crc = 0x87; // Valid CRC for CMD8 (0x1AA)
   }
-  HAL->spi.transfer8(sdCardSpiDevice, crc);
-  
+
   // Wait for response
-  uint8_t response;
-  for (int ii = 0; ii < 10; ii++) {
+  uint8_t response = HAL->spi.transfer8(sdCardSpiDevice, crc);
+  for (int ii = 0; ((response & 0x80) != 0) && (ii < 10); ii++) {
     response = HAL->spi.transfer8(sdCardSpiDevice, 0xFF);
-    if ((response & 0x80) == 0) {
-      break; // Exit if valid response
-    }
   }
-  
+
   return response;
 }
 
