@@ -48,15 +48,25 @@ MEMORY
     OVERLAY_RAM (rwx) : ORIGIN = 0x60000, LENGTH = 32K
 }
 
-/* Entry point - not critical for overlays but good practice */
-ENTRY(__start)
-
 /*
- * Provide a default __start so that overlays without an explicit entry point
- * (library overlays) don't cause the linker to pull in crt0.o from libagon.a
- * trying to satisfy ENTRY's symbol search.  Overlays that define _start in C
- * (which the eZ80 ABI mangles to __start) override this via normal symbol
- * precedence.
+ * No ENTRY(__start) here.  NanoOs never uses the ELF entry point - overlays
+ * are objcopy'd to flat binaries and their real entry point is looked up by
+ * name through the .overlay_header export table at runtime.  ENTRY() was
+ * tried for documentation purposes only, but combined with --gc-sections it
+ * makes this linker resolve __start against the PROVIDE default below
+ * instead of a real definition from start.o, even when one exists and is
+ * correctly kept (see the KEEP(*(.text.__start)) note below) - silently
+ * pointing _start at the overlay's own header instead of its code.
+ * Omitting ENTRY avoids that resolution path entirely.  (This overlay
+ * currently exports "main" directly rather than going through start.c, so
+ * it was never actually hit by the bug - fixed here anyway to remove the
+ * landmine for any future contiguous overlay that does use start.c.)
+ *
+ * PROVIDE still supplies a default __start so that overlays without an
+ * explicit entry point (library overlays, which never reference __start at
+ * all) don't need one.  Overlays that define _start in C (which the eZ80
+ * ABI mangles to __start) get the real definition via normal symbol
+ * precedence, since nothing now forces resolution through ENTRY.
  */
 PROVIDE(__start = ORIGIN(OVERLAY_RAM));
 
@@ -75,11 +85,11 @@ SECTIONS
         /*
          * The only live reference to __start is a function pointer inside
          * the KEEP'd .overlay_header export table, not a direct call from
-         * any other retained section.  This linker's --gc-sections marking
-         * resolves the ENTRY(__start) root against the PROVIDE default
-         * above instead of start.o's real definition, so without an
-         * explicit KEEP here the actual __start (and everything it calls,
-         * e.g. main) gets swept away, leaving only the export table.
+         * any other retained section.  That reference is enough on its own
+         * for --gc-sections to keep __start reachable now that ENTRY() is
+         * gone above (verified against the sibling per-slot overlay script,
+         * NanoOsAgonLight2.ld), so this is just belt-and-suspenders against
+         * a future ENTRY() reintroduction reopening that resolution bug.
          */
         KEEP(*(.text.__start))
         *(.text)
