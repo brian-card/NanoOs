@@ -239,6 +239,15 @@ static void sdSpiSendCmd12Inline(int sdCardSpiDevice) {
   }
 }
 
+/// @var _bulkreadCmd
+///
+/// @brief The command to use when reading more than one block.  Note that
+/// this is "bulk read" as opposed to "multi-block read" because it isn't
+/// necessarily multi-block.  It can be overridden to use CMD17 in
+/// sdSpiReadBlocks if we detect that our underlying hardware doesn't support
+/// CMD18.
+static uint8_t _bulkreadCmd = CMD18;
+
 /// @fn int sdSpiReadBlocks(SdCardState *sdCardState,
 ///   uint32_t startBlock, uint32_t numBlocks, uint8_t *buffer)
 ///
@@ -270,7 +279,7 @@ int sdSpiReadBlocks(SdCardState *sdCardState,
   }
   
   // Choose the appropriate read command.
-  uint8_t readCmd = (numBlocks == 1) ? CMD17 : CMD18;
+  uint8_t readCmd = (numBlocks == 1) ? CMD17 : _bulkreadCmd;
   uint8_t response = sdSpiSendCommand(SD_CARD_SPI_DEVICE, readCmd, address);
   if (response != 0x00) {
     do {
@@ -281,6 +290,9 @@ int sdSpiReadBlocks(SdCardState *sdCardState,
         response = sdSpiSendCommand(SD_CARD_SPI_DEVICE, readCmd, address);
         if (response == 0x00) {
           // Single-block works, so we're good.  Don't return early.
+          // Use CMD17 for the bulk read command so that we don't fall into this
+          // case on every read from now on.
+          _bulkreadCmd = CMD17;
           break;
         }
       }
@@ -349,6 +361,14 @@ int sdSpiReadBlocks(SdCardState *sdCardState,
   return 0;
 }
 
+/// @var _bulkWriteCmd
+///
+/// @brief The command to use when multiple blocks are going to be written.
+/// Note that this is "bulk write" as opposed to "multi-block write" because
+/// it isn't necessarily multi-block.  It can be overridden in sdSpiWriteBlocks
+/// to be CMD24 if we detect that CMD25 isn't supported.
+static uint8_t _bulkWriteCmd = CMD25;
+
 /// @fn int sdSpiWriteBlocks(SdCardState *sdCardState,
 ///   uint32_t startBlock, uint32_t numBlocks, uint8_t *buffer)
 /// 
@@ -390,7 +410,7 @@ int sdSpiWriteBlocks(SdCardState *sdCardState,
   }
   
   // Choose the appropriate write command.
-  uint8_t writeCmd = (numBlocks == 1) ? CMD24 : CMD25;
+  uint8_t writeCmd = (numBlocks == 1) ? CMD24 : _bulkWriteCmd;
   
   response = sdSpiSendCommand(SD_CARD_SPI_DEVICE, writeCmd, address);
   if (response != 0x00) {
@@ -402,6 +422,9 @@ int sdSpiWriteBlocks(SdCardState *sdCardState,
         response = sdSpiSendCommand(SD_CARD_SPI_DEVICE, writeCmd, address);
         if (response == 0x00) {
           // Single-block works, so we're good.  Don't return early.
+          // Set _bulkWriteCmd to use CMD24 so that we don't fall into this case
+          // on every write going forward.
+          _bulkWriteCmd = CMD24;
           break;
         }
       }
