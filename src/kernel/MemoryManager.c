@@ -88,7 +88,7 @@ void localFree(MemoryManagerState *memoryManagerState,
 ) {
   (void) callingPid; // Used for debugging, so make the compiler ignore it.
 
-  logDebug("In localFree\n");
+  logTrace("In localFree\n");
   if (!isDynamicPointer(ptr)) {
     // This is not something we can free.  Ignore it.
     logError("Process %d requesting to free non-dynamic memory 0x%lx\n",
@@ -99,10 +99,10 @@ void localFree(MemoryManagerState *memoryManagerState,
   MemNode *memNode = memNode(ptr);
 
   // This is memory that was previously allocated from one of our allocators.
-  logDebug("Process %ld freeing %ld bytes at 0x%lx from process %ld\n",
+  logTrace("Process %ld freeing %ld bytes at 0x%lx from process %ld\n",
     (long int) callingPid, (long int) memNode->size,
     (unsigned long int) (uintptr_t) ptr, (long int) memNode->owner);
-  logDebug("memNode = 0x%lx\n", (unsigned long int) (uintptr_t) memNode);
+  logTrace("memNode = 0x%lx\n", (unsigned long int) (uintptr_t) memNode);
 
   MemNode *cur = NULL;
 #ifdef NANO_OS_MEM_DEBUG
@@ -132,20 +132,20 @@ void localFree(MemoryManagerState *memoryManagerState,
       HAL->power.enterMode(HAL_POWER_MODE_OFF);
     }
 #endif // NANO_OS_MEM_DEBUG
-    logDebug("Updating memNode->prev->next\n");
+    logTrace("Updating memNode->prev->next\n");
     memNode->prev->next = memNode->next;
   }
   if (memNode->next != NULL) {
-    logDebug("Updating memNode->next->prev\n");
+    logTrace("Updating memNode->next->prev\n");
     memNode->next->prev = memNode->prev;
   }
   if (memoryManagerState->allocated == memNode) {
-    logDebug("Updating memoryManagerState->allocated\n");
+    logTrace("Updating memoryManagerState->allocated\n");
     memoryManagerState->allocated = memNode->next;
   }
 
   // Put the memNode in the right place in the free list.
-  logDebug("Searching free list in reverse order\n");
+  logTrace("Searching free list in reverse order\n");
   cur = memoryManagerState->lastFree;
 #ifdef NANO_OS_MEM_DEBUG
   if (((uintptr_t) cur) < ((uintptr_t) memNode)) {
@@ -159,7 +159,7 @@ void localFree(MemoryManagerState *memoryManagerState,
   while (((uintptr_t) cur->prev) > ((uintptr_t) memNode)) {
     cur = cur->prev;
   }
-  logDebug("cur = 0x%lx\n", (unsigned long int) (uintptr_t) cur);
+  logTrace("cur = 0x%lx\n", (unsigned long int) (uintptr_t) cur);
 
 #ifdef NANO_OS_MEM_DEBUG
   if (((uintptr_t) cur) < ((uintptr_t) memNode)) {
@@ -171,17 +171,17 @@ void localFree(MemoryManagerState *memoryManagerState,
   }
 #endif // NANO_OS_MEM_DEBUG
   memNode->next = cur;
-  logDebug("memNode->next = 0x%lx\n",
+  logTrace("memNode->next = 0x%lx\n",
     (unsigned long int) (uintptr_t) memNode->next);
 
   memNode->prev = cur->prev;
-  logDebug("memNode->prev = 0x%lx\n",
+  logTrace("memNode->prev = 0x%lx\n",
     (unsigned long int) (uintptr_t) memNode->prev);
 
   size_t bytesFreeBefore = memoryManagerState->bytesFree;
-  (void) bytesFreeBefore; // In case logDebug is compiled out.
+  (void) bytesFreeBefore; // In case logTrace is compiled out.
   memoryManagerState->bytesFree += memNode->size;
-  logDebug("Increasing memoryManagerState->bytesFree from %ld to %ld\n",
+  logTrace("Increasing memoryManagerState->bytesFree from %ld to %ld\n",
     (long int) bytesFreeBefore,
     (long int) memoryManagerState->bytesFree);
 
@@ -189,15 +189,15 @@ void localFree(MemoryManagerState *memoryManagerState,
     = (MemNode*) (((uint8_t*) memNode) + memNode->size + sizeof(MemNode));
 
   if (next != cur) {
-    logDebug("next != cur\n");
-    logDebug("Setting cur->prev to 0x%lx\n",
+    logTrace("next != cur\n");
+    logTrace("Setting cur->prev to 0x%lx\n",
       (unsigned long int) (uintptr_t) memNode);
 
     cur->prev = memNode;
   } else {
     // Do memory compaction between memNode and cur.
-    logDebug("next == cur\n");
-    logDebug("Doing memory compaction\n");
+    logTrace("next == cur\n");
+    logTrace("Doing memory compaction\n");
 
     memNode->size += cur->size + sizeof(MemNode);
 #ifdef NANO_OS_MEM_DEBUG
@@ -216,35 +216,35 @@ void localFree(MemoryManagerState *memoryManagerState,
       memNode->next->prev = memNode;
     }
     if (memoryManagerState->lastFree == cur) {
-      logDebug("Setting memoryManagerState->lastFree to memNode\n");
+      logTrace("Setting memoryManagerState->lastFree to memNode\n");
       memoryManagerState->lastFree = memNode;
     }
 
     bytesFreeBefore = memoryManagerState->bytesFree;
     memoryManagerState->bytesFree += sizeof(MemNode);
-    logDebug("Increasing memoryManagerState->bytesFree from %ld to %ld\n",
+    logTrace("Increasing memoryManagerState->bytesFree from %ld to %ld\n",
       (long int) bytesFreeBefore,
       (long int) memoryManagerState->bytesFree);
   }
 
   if (memNode->prev == NULL) {
-    logDebug("memNode->prev == NULL\n");
-    logDebug("Setting memoryManagerState->firstFree to memNode\n");
+    logTrace("memNode->prev == NULL\n");
+    logTrace("Setting memoryManagerState->firstFree to memNode\n");
     memoryManagerState->firstFree = memNode;
     return;
   }
 
-  logDebug("memNode->prev != NULL\n");
+  logTrace("memNode->prev != NULL\n");
 
   MemNode *prev = memNode->prev;
-  logDebug("prev = 0x%lx\n", (unsigned long int) (uintptr_t) prev);
+  logTrace("prev = 0x%lx\n", (unsigned long int) (uintptr_t) prev);
 
   next = (MemNode*) (((uint8_t*) prev) + prev->size + sizeof(MemNode));
-  logDebug("next = 0x%lx\n", (unsigned long int) (uintptr_t) next);
+  logTrace("next = 0x%lx\n", (unsigned long int) (uintptr_t) next);
 
   if (next != memNode) {
-    logDebug("next != memNode\n");
-    logDebug("Setting prev->next to memNode\n");
+    logTrace("next != memNode\n");
+    logTrace("Setting prev->next to memNode\n");
 
 #ifdef NANO_OS_MEM_DEBUG
     if (((uintptr_t) memNode) < ((uintptr_t) prev)) {
@@ -258,11 +258,11 @@ void localFree(MemoryManagerState *memoryManagerState,
     prev->next = memNode;
   } else {
     // Do memory compaction between prev and memNode.
-    logDebug("next == memNode\n");
-    logDebug("Doing memory compaction\n");
+    logTrace("next == memNode\n");
+    logTrace("Doing memory compaction\n");
 
     prev->size += memNode->size + sizeof(MemNode);
-    logDebug("prev->size = %ld\n", (long int) prev->size);
+    logTrace("prev->size = %ld\n", (long int) prev->size);
 
 #ifdef NANO_OS_MEM_DEBUG
     if ((memNode->next != NULL)
@@ -279,17 +279,17 @@ void localFree(MemoryManagerState *memoryManagerState,
     if (prev->next != NULL) {
       prev->next->prev = prev;
     }
-    logDebug("prev->next = 0x%lx\n",
+    logTrace("prev->next = 0x%lx\n",
       (unsigned long int) (uintptr_t) prev->next);
 
     if (memoryManagerState->lastFree == memNode) {
-      logDebug("Setting memoryManagerState->lastFree to prev\n");
+      logTrace("Setting memoryManagerState->lastFree to prev\n");
       memoryManagerState->lastFree = prev;
     }
 
     bytesFreeBefore = memoryManagerState->bytesFree;
     memoryManagerState->bytesFree += sizeof(MemNode);
-    logDebug("Increasing memoryManagerState->bytesFree from %ld to %ld\n",
+    logTrace("Increasing memoryManagerState->bytesFree from %ld to %ld\n",
       (long int) bytesFreeBefore,
       (long int) memoryManagerState->bytesFree);
   }
@@ -316,7 +316,7 @@ void localFreeProcessMemory(
   for (MemNode *cur = memoryManagerState->allocated; cur != NULL; ) {
     MemNode *next = cur->next;
     if (cur->owner == pid) {
-      logDebug("Freeing 0x%lx\n", (unsigned long int) (uintptr_t) &cur[1]);
+      logTrace("Freeing 0x%lx\n", (unsigned long int) (uintptr_t) &cur[1]);
       localFree(memoryManagerState, &cur[1], callingPid);
     }
     cur = next;
@@ -344,7 +344,7 @@ void localFreeProcessMemory(
 void* localRealloc(MemoryManagerState *memoryManagerState,
   void *ptr, size_t size, ProcessId pid
 ) {
-  logDebug("In localRealloc\n");
+  logTrace("In localRealloc\n");
   // We need to fix the size to be aligned with our memory model.
   size += sizeof(size_t) - 1;
   size &= ~(sizeof(size_t) - 1);
@@ -376,14 +376,14 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
       // We're fitting into a block that's larger than or equal to the size
       // being requested.  *DO NOT* update the size in this case.  Just
       // return the current pointer.
-      logDebug("Reallocating less memory than availabe\n");
-      logDebug("Returing ptr\n");
+      logTrace("Reallocating less memory than availabe\n");
+      logTrace("Returing ptr\n");
       return ptr;
     } else if (next == memoryManagerState->lastFree) {
       // We're being asked to extend the last block that was allocated.  Just
       // extend it if we have enough space.
       if ((memNode->size + next->size) >= size) {
-        logDebug("Extending last memory block\n");
+        logTrace("Extending last memory block\n");
         MemNode lastFree = *memoryManagerState->lastFree;
         next = (MemNode*) (charPointer + size);
         next->prev = lastFree.prev;
@@ -424,7 +424,7 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
   }
 
   // We're allocating new memory.  Search from the beginning.
-  logDebug("Allocating %ld bytes, searching from beginning\n",
+  logTrace("Allocating %ld bytes, searching from beginning\n",
     (long int) size);
   MemNode *cur = NULL;
   for (cur = memoryManagerState->firstFree; cur != NULL; cur = cur->next) {
@@ -450,23 +450,23 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
       break;
     }
 
-    logDebug("0x%lx only has %ld bytes available, need %ld\n",
+    logTrace("0x%lx only has %ld bytes available, need %ld\n",
       (unsigned long int) (uintptr_t) cur,
       (long int) cur->size, (long int) size);
 #ifdef NANO_OS_MEM_DEBUG
     //// msleep(100);
 #endif // NANO_OS_MEM_DEBUG
   }
-  logDebug("Memory search complete\n");
+  logTrace("Memory search complete\n");
 
   if (cur != NULL) {
     // Memory allocation has succeeded.
-    logDebug("Found available memory node 0x%lx\n",
+    logTrace("Found available memory node 0x%lx\n",
       (unsigned long int) (uintptr_t) cur);
-    logDebug("cur->size = %ld\n", (long int) cur->size);
+    logTrace("cur->size = %ld\n", (long int) cur->size);
 
     returnValue = &cur[1];
-    logDebug("returnValue = 0x%lx\n",
+    logTrace("returnValue = 0x%lx\n",
       (unsigned long int) (uintptr_t) returnValue);
 
     charPointer = (char*) returnValue;
@@ -485,14 +485,14 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
       // need this algorithm to be as compact as possible and that adds extra
       // codespace.  This should be a pretty rare occurrence, so just disallow
       // it rather than trying to do something fancy.
-      logDebug("Not enough space in memoryManagerState->lastFree\n");
+      logTrace("Not enough space in memoryManagerState->lastFree\n");
       return NULL;
     }
-    logDebug("next = 0x%lx\n", (unsigned long int) (uintptr_t) next);
+    logTrace("next = 0x%lx\n", (unsigned long int) (uintptr_t) next);
 
     // Update the links on the next pointer.
     next->prev = cur->prev;
-    logDebug("next->prev = 0x%lx\n",
+    logTrace("next->prev = 0x%lx\n",
       (unsigned long int) (uintptr_t) next->prev);
     if (next->prev != NULL) {
 #ifdef NANO_OS_MEM_DEBUG
@@ -508,10 +508,10 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
     }
 
     if (next != cur->next) {
-      logDebug("next (0x%lx) != cur->next (0x%lx)\n",
+      logTrace("next (0x%lx) != cur->next (0x%lx)\n",
         (unsigned long int) (uintptr_t) next,
         (unsigned long int) (uintptr_t) cur->next);
-      logDebug("Updating metadata for next\n");
+      logTrace("Updating metadata for next\n");
 #ifdef NANO_OS_MEM_DEBUG
       if ((cur->next != NULL)
         && (((uintptr_t) cur->next) < ((uintptr_t) next))
@@ -524,7 +524,7 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
       }
 #endif // NANO_OS_MEM_DEBUG
       next->next = cur->next;
-      logDebug("next->next = 0x%lx\n",
+      logTrace("next->next = 0x%lx\n",
         (unsigned long int) (uintptr_t) next->next);
 
       if (next->next != NULL) {
@@ -534,40 +534,40 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
       // Reduce the free space by the delta between how much we were requested
       // and how much used to be managed by this node.
       next->size = cur->size - size - sizeof(MemNode);
-      logDebug("next->size = %ld\n", (long int) next->size);
+      logTrace("next->size = %ld\n", (long int) next->size);
     } else {
-      logDebug("next == cur->next\n");
-      logDebug("*NOT* updating metadata for next\n");
+      logTrace("next == cur->next\n");
+      logTrace("*NOT* updating metadata for next\n");
       // Reduce bytesFree by the delta.
       memoryManagerState->bytesFree += sizeof(MemNode);
       memoryManagerState->bytesFree -= (cur->size - size);
     }
 
     cur->size = size;
-    logDebug("New cur->size = %ld\n", (long int) cur->size);
+    logTrace("New cur->size = %ld\n", (long int) cur->size);
 
     // Update the first and last pointers.
     if (cur == memoryManagerState->firstFree) {
-      logDebug("Updating memoryManagerState->firstFree to next\n");
+      logTrace("Updating memoryManagerState->firstFree to next\n");
       memoryManagerState->firstFree = next;
     }
     if (cur == memoryManagerState->lastFree) {
-      logDebug("Updating memoryManagerState->lastFree to next\n");
+      logTrace("Updating memoryManagerState->lastFree to next\n");
       memoryManagerState->lastFree = next;
     }
 
     // Move cur to the allocated list.
     cur->next = memoryManagerState->allocated;
-    logDebug("cur->next = 0x%lx\n", (unsigned long int) (uintptr_t) cur->next);
+    logTrace("cur->next = 0x%lx\n", (unsigned long int) (uintptr_t) cur->next);
 
     if (cur->next != NULL) {
-      logDebug("Setting cur->next->prev to cur\n");
+      logTrace("Setting cur->next->prev to cur\n");
       cur->next->prev = cur;
     }
 
     cur->prev = NULL;
 
-    logDebug("Updating memoryManagerState->allocated to cur\n");
+    logTrace("Updating memoryManagerState->allocated to cur\n");
     memoryManagerState->allocated = cur;
 
     // Set the owner for the memory.
@@ -575,13 +575,13 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
 
     // Reduce system memory.
     size_t bytesFreeBefore = memoryManagerState->bytesFree;
-    (void) bytesFreeBefore; // In case logDebug is compiled out.
+    (void) bytesFreeBefore; // In case logTrace is compiled out.
     memoryManagerState->bytesFree -= size + sizeof(MemNode);
-    logDebug("Updating memoryManagerState->bytesFree from %ld to %ld\n",
+    logTrace("Updating memoryManagerState->bytesFree from %ld to %ld\n",
       (long int) bytesFreeBefore,
       (long int) memoryManagerState->bytesFree);
 
-    logDebug("Allocating %ld bytes at 0x%lx\n",
+    logTrace("Allocating %ld bytes at 0x%lx\n",
       (long int) cur->size,
       (unsigned long int) (uintptr_t) returnValue);
   } else {
@@ -593,7 +593,7 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
     // address of returnValue is not the same as the address of ptr.  Copy
     // the data from the old memory to the new memory and free the old
     // memory.
-    logDebug("Copying old memory to new memory\n");
+    logTrace("Copying old memory to new memory\n");
     memcpy(returnValue, ptr, sizeOfMemory(ptr));
     localFree(memoryManagerState, ptr, pid);
   }
