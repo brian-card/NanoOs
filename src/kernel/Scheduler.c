@@ -5070,8 +5070,13 @@ int logSchedulerDebugInfo(SchedulerState *schedulerState) {
   static const char _worldWorldContent[] KEEP_IN_FLASH = "worldworld";
 
   bool sanityTestFailed = false;
+  int64_t sanityStepStart = 0;
+  int64_t sanityStepElapsed = 0;
   do {
+    HAL->clock.getElapsedMilliseconds(0, &sanityStepStart);
     FILE *helloFile = schedFopen(_helloFilename, _writeMode);
+    HAL->clock.getElapsedMilliseconds(sanityStepStart, &sanityStepElapsed);
+    logDebug("fopen(w) took %ld ms\n", (long int) sanityStepElapsed);
     if (helloFile == NULL) {
       logDebug("ERROR: Could not open hello file for writing!\n");
       sanityTestFailed = true;
@@ -5079,15 +5084,27 @@ int logSchedulerDebugInfo(SchedulerState *schedulerState) {
     }
     logDebug("helloFile is non-NULL!\n");
 
-    if (schedFputs(_worldContent, helloFile) == EOF) {
+    HAL->clock.getElapsedMilliseconds(0, &sanityStepStart);
+    int fputsStatus = schedFputs(_worldContent, helloFile);
+    HAL->clock.getElapsedMilliseconds(sanityStepStart, &sanityStepElapsed);
+    logDebug("fputs took %ld ms\n", (long int) sanityStepElapsed);
+    if (fputsStatus == EOF) {
       logDebug("ERROR: Could not write to hello file!\n");
       schedFclose(helloFile);
       sanityTestFailed = true;
       break;
     }
-    schedFclose(helloFile);
 
+    HAL->clock.getElapsedMilliseconds(0, &sanityStepStart);
+    schedFclose(helloFile);
+    HAL->clock.getElapsedMilliseconds(sanityStepStart, &sanityStepElapsed);
+    logDebug("fclose (after write) took %ld ms\n",
+      (long int) sanityStepElapsed);
+
+    HAL->clock.getElapsedMilliseconds(0, &sanityStepStart);
     helloFile = schedFopen(_helloFilename, _readMode);
+    HAL->clock.getElapsedMilliseconds(sanityStepStart, &sanityStepElapsed);
+    logDebug("fopen(r) took %ld ms\n", (long int) sanityStepElapsed);
     if (helloFile == NULL) {
       logDebug("ERROR: Could not open hello file for reading after write!\n");
       schedRemove(_helloFilename);
@@ -5097,9 +5114,12 @@ int logSchedulerDebugInfo(SchedulerState *schedulerState) {
     logDebug("Opened helloFile for reading\n");
 
     char worldString[11] = {0};
-    if (schedFgets(
-      worldString, sizeof(worldString), helloFile) != worldString
-    ) {
+    HAL->clock.getElapsedMilliseconds(0, &sanityStepStart);
+    char *fgetsStatus = schedFgets(
+      worldString, sizeof(worldString), helloFile);
+    HAL->clock.getElapsedMilliseconds(sanityStepStart, &sanityStepElapsed);
+    logDebug("fgets took %ld ms\n", (long int) sanityStepElapsed);
+    if (fgetsStatus != worldString) {
       logDebug("ERROR: Could not read worldString after write!\n");
       schedFclose(helloFile);
       schedRemove(_helloFilename);
