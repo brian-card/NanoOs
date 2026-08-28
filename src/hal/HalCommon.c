@@ -576,6 +576,17 @@ static const char _noMainFunctionMessage[] KEEP_IN_FLASH
 static const char _restartContiguousFilesystemFailedMessage[] KEEP_IN_FLASH
   = "Could not restart filesystem process\n";
 
+/// @var _contiguousFilesystemReadFailedMessage
+///
+/// @brief Message printed when restartContiguousFilesystem can't read the
+/// contiguous filesystem binary from the block device. See
+/// _restartFilesystemFailedMessage for why this stays a raw printString.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _contiguousFilesystemReadFailedMessage[] KEEP_IN_FLASH
+  = "Could not read filesystem binary from block device\n";
+
 /// @fn int32_t halCommonInitRootFilesystem(void)
 ///
 /// @brief Common initialization for the root filesystem process.
@@ -767,13 +778,18 @@ int32_t restartContiguousFilesystem(ProcessDescriptor *processDescriptor) {
 
   // Read the full binary into contiguous memory.
   NanoOsOverlayMap *overlayMap = HAL->memory.contiguousFilesystem;
-  rootBlockDevice->schedReadBlocks(
+  if (rootBlockDevice->schedReadBlocks(
     rootBlockDevice->context,
     /* startBlock= */ 1,
     /* numBlocks= */ HAL->memory.contiguousFilesystemSize
       / (size_t) rootBlockDevice->blockSize,
     rootBlockDevice->blockSize,
-    (uint8_t*) overlayMap);
+    (uint8_t*) overlayMap) != 0
+  ) {
+    printString(_contiguousFilesystemReadFailedMessage);
+    processDescriptor->restartFunction = NULL;
+    return -EIO;
+  }
   overlayMap->header.osApi = NANO_OS_API;
 
   OverlayFunction filesystemMain = NULL;
