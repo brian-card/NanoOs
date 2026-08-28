@@ -476,7 +476,8 @@ int16_t sdSpiGetBlockSize(int sdCardSpiDevice) {
   if (response != 0x00) {
     HAL->spi.endTransfer(sdCardSpiDevice);
     logError("CMD9 returned %ld\n", (long int) response);
-    return -1;
+    logError("Assuming 512 bytes per block\n");
+    return 512;
   }
 
   for(int i = 0; i < 100; i++) {
@@ -519,7 +520,8 @@ int32_t sdSpiGetBlockCount(int sdCardSpiDevice) {
   if (response != 0x00) {
     HAL->spi.endTransfer(sdCardSpiDevice);
     logError("CMD9 returned %ld\n", (long int) response);
-    return -1;
+    logError("Assuming %ld blocks\n", ((long int) 1024) * ((long int) 1024));
+    return ((long int) 1024) * ((long int) 1024);
   }
   
   // Wait for data token
