@@ -273,8 +273,20 @@ int sdSpiReadBlocks(SdCardState *sdCardState,
   uint8_t readCmd = (numBlocks == 1) ? CMD17 : CMD18;
   uint8_t response = sdSpiSendCommand(SD_CARD_SPI_DEVICE, readCmd, address);
   if (response != 0x00) {
-    HAL->spi.endTransfer(SD_CARD_SPI_DEVICE);
-    return EIO; // Command failed
+    do {
+      if (readCmd == CMD18) {
+        // We attempted to start a multi-block read and it failed.  Try
+        // single-block.
+        readCmd = CMD17;
+        response = sdSpiSendCommand(SD_CARD_SPI_DEVICE, readCmd, address);
+        if (response == 0x00) {
+          // Single-block works, so we're good.  Don't return early.
+          break;
+        }
+      }
+      HAL->spi.endTransfer(SD_CARD_SPI_DEVICE);
+      return EIO; // Command failed
+    } while (0);
   }
   
   for (uint32_t ii = 0; ii < numBlocks; ii++) {
@@ -314,6 +326,18 @@ int sdSpiReadBlocks(SdCardState *sdCardState,
     HAL->spi.transfer8(SD_CARD_SPI_DEVICE, 0xFF);
     
     buffer += sdCardState->blockSize;
+    
+    if ((ii < numBlocks - 1) && (readCmd == CMD17)) {
+      address = startBlock + ii + 1;
+      if (sdCardState->sdCardVersion == 1) {
+        address *= sdCardState->blockSize; // Convert to byte address
+      }
+      response = sdSpiSendCommand(SD_CARD_SPI_DEVICE, readCmd, address);
+      if (response != 0x00) {
+        HAL->spi.endTransfer(SD_CARD_SPI_DEVICE);
+        return EIO; // Command failed
+      }
+    }
   }
   
   // For multi-block reads, send CMD12 (STOP_TRANSMISSION) to end the stream.
