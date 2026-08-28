@@ -444,12 +444,25 @@ int sdSpiWriteBlocks(SdCardState *sdCardState,
       return EIO; // Bad response
     }
     
-    // Send dummy CRC
-    HAL->spi.transfer8(SD_CARD_SPI_DEVICE, 0xFF);
-    HAL->spi.transfer8(SD_CARD_SPI_DEVICE, 0xFF);
+    // We need the response token which, per spec, could actually come in on
+    // the last byte transferred for the block.  Grab that as the first
+    // candidate.
+    response = buffer[sdCardState->blockSize - 1];
     
-    // Get data response
-    response = HAL->spi.transfer8(SD_CARD_SPI_DEVICE, 0xFF);
+    // Always transfer at least two bytes for the CRC after the block.  The
+    // response token could actually be one of them since we're not using CRC
+    // in this implementation.  If the response token isn't one of them, poll
+    // for up to 10 more cycles after that.
+    for (int jj = 0;
+      (jj < 2) || (((response & 0x1F) != 0x05) && (jj < 12));
+      jj++
+    ) {
+      if ((response & 0x1F) == 0x05) {
+        HAL->spi.transfer8(SD_CARD_SPI_DEVICE, 0xFF);
+      } else {
+        response = HAL->spi.transfer8(SD_CARD_SPI_DEVICE, 0xFF);
+      }
+    }
     if ((response & 0x1F) != 0x05) {
       if (writeCmd == CMD25) {
         HAL->spi.transfer8(SD_CARD_SPI_DEVICE, 0xFD);
