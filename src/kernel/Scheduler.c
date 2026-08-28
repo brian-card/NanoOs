@@ -5219,8 +5219,8 @@ __attribute__((noinline)) void startScheduler(
         strcpy(schedulerState.hostname, _localhost);
       }
       schedFclose(hostnameFile);
-      logDebug("Closed hostname file.\nhostname = %s\n",
-        schedulerState.hostname);
+      logDebug("Closed hostname file.\n");
+      logDebug("hostname = %s\n", schedulerState.hostname);
     } else {
       logError("schedFopen of hostname returned NULL!\n");
       strcpy(schedulerState.hostname, "localhost");
