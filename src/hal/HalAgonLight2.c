@@ -174,7 +174,7 @@ static uint8_t _spiSckDio = 91;
 /// @var _sdCardPinChipSelect
 ///
 /// @brief Pin to use for the MicroSD card reader's SPI chip select line.
-static uint8_t _sdCardPinChipSelect = 90;
+static uint8_t _sdCardPinChipSelect = 92;
 
 // The fact that we've included Arduino.h in this file means that the memory
 // management functions from its library are available in this file.  That's a
