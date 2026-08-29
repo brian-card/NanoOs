@@ -140,8 +140,11 @@ realStart:
     JR  NZ, .bss_loop
 .bss_done:
 
-    ; Re-enable maskable interrupts now that setup is complete.
-    EI
+    ; Interrupts are left DISABLED here.  NanoOs installs its own mode 2
+    ; interrupt vector table (src/hal/AgonLight2/Interrupts.asm) during HAL
+    ; bring-up and re-enables interrupts itself once the table and the
+    ; per-peripheral handlers are in place.  Enabling them here would run on
+    ; whatever vector table MOS left behind.
 
     ; Jump into the C entry point.
     CALL _main
