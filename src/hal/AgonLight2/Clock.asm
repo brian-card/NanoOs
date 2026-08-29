@@ -33,32 +33,31 @@
 ;;; @note This file was generated with assistance from claude.ai.
 
 .assume adl=1
-.text
 
+;;; @var __nanosecondCount
+;;;
+;;; @brief 64-bit, little-endian count of the number of nanoseconds since boot.
+;;; Incremented by 62500 (62.5 microseconds) every time _clockTimerIsr fires.
+;;;
+;;; Lives in .bss (zeroed by Boot.asm's BSS-clear loop), not .text - .text is
+;;; ROM in a future standalone/flash build and this counter is written at
+;;; runtime.
+.bss
+__nanosecondCount:     .space 8        ; nanoseconds since boot, 64-bit LE
+
+.text
 .global _initClockTimer
 .global _clockTimerIsr
 .global _readClock
 
 ;; -- eZ80F92 Timer0 registers
 ;; On the eZ80F92 the counter and the reload value share an address: a read
-;; returns the live counter, a write sets the reload register.
+;; returns the live counter, a write sets the reload register.  We're not
+;; ever reading the counter value in this code, so no aliases are provided for
+;; that.
 TMR0_CTL    .equ 0x080     ; R/W  control register
-TMR0_DR_L   .equ 0x081     ; R    counter value  - low byte
-TMR0_DR_H   .equ 0x082     ; R    counter value  - high byte
-TMR0_RR_L   .equ 0x081     ; W    reload value   - low byte  (aliases TMR0_DR_L)
-TMR0_RR_H   .equ 0x082     ; W    reload value   - high byte (aliases TMR0_DR_H)
-
-;;; @var __nanosecondCount
-;;;
-;;; @brief 64-bit, little-endian count of the number of nanoseconds since boot.
-;;; Incremented by 62500 (62.5 microseconds) every time Timer0Isr fires.
-;;;
-;;; Lives in .bss (zeroed by Boot.asm's BSS-clear loop), not .text — .text is
-;;; ROM in a future standalone/flash build and this counter is written at
-;;; runtime.
-.bss
-__nanosecondCount:     .space 8        ; nanoseconds since boot, 64-bit LE
-.text
+TMR0_RR_L   .equ 0x081     ; W    reload value   - low byte
+TMR0_RR_H   .equ 0x082     ; W    reload value   - high byte
 
 ;;; @fn void initClockTimer(void)
 ;;;
@@ -66,12 +65,12 @@ __nanosecondCount:     .space 8        ; nanoseconds since boot, 64-bit LE
 ;;;
 ;;; @return This function returns no value.
 _initClockTimer:
-    xor     a
+    ld      a, 0x00         ; Clear timer 0's configuration while we're working
     out0    (TMR0_CTL), a
 
     ld      a, 0x48         ; reload low byte  = 0x48  (72 decimal)
     out0    (TMR0_RR_L), a
-    ld      A, 0x00         ; reload high byte = 0x00
+    ld      a, 0x00         ; reload high byte = 0x00
     out0    (TMR0_RR_H), a
 
     ld      a, 0x57         ; IRQ_EN=1, PRT_MODE=1 (continuous)
@@ -90,6 +89,9 @@ _initClockTimer:
 _clockTimerIsr:
     push    af
     push    hl
+    push    bc              ; the wide adds below use bc (an ISR must save it)
+    ld      bc, 0           ; zero addend for the carry-propagation adds below
+
     in0     a, (TMR0_CTL)   ; read of TMR0_CTL clears the PRT_IRQ flag (bit 7)
 
     ; --- add 62500 (0xf424) to the low 16 bits ---
@@ -103,38 +105,20 @@ _clockTimerIsr:
     ld      (hl), a
     jr      nc, tickDone    ; no carry out — common case, done
 
-    ; --- propagate carry through remaining 6 bytes ---
-    inc     hl
-    ld      a, (hl)
-    inc     a
-    ld      (hl), a
-    jr      nz, tickDone
-    inc     hl
-    ld      a, (hl)
-    inc     a
-    ld      (hl), a
-    jr      nz, tickDone
-    inc     hl
-    ld      a, (hl)
-    inc     a
-    ld      (hl), a
-    jr      nz, tickDone
-    inc     hl
-    ld      a, (hl)
-    inc     a
-    ld      (hl), a
-    jr      nz, tickDone
-    inc     hl
-    ld      a, (hl)
-    inc     a
-    ld      (hl), a
-    jr      nz, tickDone
-    inc     hl
-    ld      a, (hl)
-    inc     a
-    ld      (hl), a
+    ; --- propagate the carry through the upper 6 bytes ---
+    ; ADL mode makes hl and bc 24-bit, so bytes 2..4 and 5..7 each ripple in a
+    ; single "adc hl, bc" (bc is 0, so only the incoming carry is added).  ld
+    ; does not touch the carry flag, so it survives between the two chunks.
+    ld      hl, (__nanosecondCount + 2)
+    adc     hl, bc
+    ld      (__nanosecondCount + 2), hl
+    jr      nc, tickDone
+    ld      hl, (__nanosecondCount + 5)
+    adc     hl, bc
+    ld      (__nanosecondCount + 5), hl
 
 tickDone:
+    pop     bc
     pop     hl
     pop     af
     ei                      ; re-enable interrupts on the instruction after this
