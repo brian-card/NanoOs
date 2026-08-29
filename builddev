@@ -7,18 +7,35 @@ hostname="${2}"
 targetDevice="${3}"
 blockFilesystem="${4}"
 rootFilesystemSource="${5}"
+mosImagePath="${6}"
 filesystem="fat32"
 blocksPerOverlay=8
 
 if [ "${platform}" = "" ] || [ "${hostname}" = "" ] \
 		|| [ "${targetDevice}" = "" ] || [ "${blockFilesystem}" = "" ]; then
-	echo "Usage: ${0} <AgonLight2|itsybitsy_m0|feather_m0_wifi|trinket_m0|nano_33_iot|xiao_m0> <hostname> <target device or image file> <blockFilesystem> [rootFilesystemSource]" >&2
+	echo "Usage: ${0} <AgonLight2|itsybitsy_m0|feather_m0_wifi|trinket_m0|nano_33_iot|xiao_m0> <hostname> <target device or image file> <blockFilesystem> [rootFilesystemSource] [mosImagePath]" >&2
+	echo "" >&2
+	echo "  mosImagePath  AgonLight2 only. Path to an existing MOS image file" >&2
+	echo "                (e.g. the emulator's MOS.bin). When given, the built" >&2
+	echo "                NanoOs firmware image is copied over it, keeping its" >&2
+	echo "                file name - that is the only name the Agon tools load." >&2
 	exit 1
 fi
 
 if [ -n "${rootFilesystemSource}" ] && [ ! -d "${rootFilesystemSource}" ]; then
 	echo "ERROR: No root filesystem source directory found at ${rootFilesystemSource}." >&2
 	exit 1
+fi
+
+if [ -n "${mosImagePath}" ]; then
+	if [ "${platform}" != "AgonLight2" ]; then
+		echo "ERROR: mosImagePath is only valid for the AgonLight2 platform." >&2
+		exit 1
+	fi
+	if [ ! -d "$(dirname "${mosImagePath}")" ]; then
+		echo "ERROR: Directory for mosImagePath does not exist: $(dirname "${mosImagePath}")." >&2
+		exit 1
+	fi
 fi
 
 if [ ! -f "usr/src/filesystems/${blockFilesystem}/makefile" ]; then
@@ -123,6 +140,11 @@ make -j $(nproc) -C usr/src/filesystems/${blockFilesystem} COMPILE="${compile}" 
 
 echo ""
 echo "Build complete."
+
+if [ -n "${mosImagePath}" ]; then
+	echo "Copying NanoOs firmware image to ${mosImagePath}"
+	cp "${osFullBin}" "${mosImagePath}"
+fi
 
 if [ -b "${targetDevice}" ]; then
 	# Make a temporary mountpoint

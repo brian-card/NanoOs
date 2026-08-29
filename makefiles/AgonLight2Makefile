@@ -4,37 +4,31 @@
 # Toolchain: AgDev (LLVM/Clang for eZ80, ez80-none-elf triple)
 #   https://github.com/AgDev/llvm-project
 #
-# Memory layout (eZ80F92 on the Agon Light 2):
-#   Internal Flash : 0x000000–0x01FFFF  128 KB  (MOS + VDP firmware)
-#   External SRAM  : 0x040000–0x0BFFFF  512 KB  (user programs load here)
-#   Internal SRAM  : 0x0C0000–0x0CFFFF   64 KB
+# NanoOs is the primary firmware on this target: it boots from the eZ80 reset
+# vector at 0x000000 and replaces MOS entirely.  It is not a MOS user program.
+# The Agon tools (hardware flasher, fab-agon-emulator) only know how to load a
+# MOS image, so the build product is deployed by overwriting an existing
+# MOS.bin with it, keeping that file's name (see the `flash` target and the
+# builddev script's optional MOS-image path argument).
 #
-# MOS loads NanoOs.bin from the SD card into external SRAM at 0x040000.
 # All NanoOs code runs in ADL (24-bit) mode.
 #
 # Usage:
-#   make -f AgonLight2Makefile             - Build full and stripped binaries
-#   make -f AgonLight2Makefile STANDALONE=1 - Build the replace-MOS scaffold
-#   make -f AgonLight2Makefile flash       - Copy stripped binary to Agon SD card
-#   make -f AgonLight2Makefile flash-full  - Copy full binary to Agon SD card
-#   make -f AgonLight2Makefile size        - Show section sizes and SRAM headroom
-#   make -f AgonLight2Makefile sections    - Dump section headers
-#   make -f AgonLight2Makefile disasm      - Disassemble the ELF
-#   make -f AgonLight2Makefile clean       - Remove build directory
+#   make -f AgonLight2Makefile           - Build the binaries and ELF
+#   make -f AgonLight2Makefile flash MOS_BIN=/path/to/MOS.bin
+#                                       - Overwrite MOS.bin with NanoOs_full.bin
+#   make -f AgonLight2Makefile size      - Show section sizes and headroom
+#   make -f AgonLight2Makefile sections  - Dump section headers
+#   make -f AgonLight2Makefile disasm    - Disassemble the ELF
+#   make -f AgonLight2Makefile clean     - Remove build directory
 #
-# Produces (under build/agon/, or build/agon-standalone/ with STANDALONE=1):
+# Produces (under build/agon/):
 #   NanoOs.elf          — Full ELF (keep for host-side symbol resolution)
-#   NanoOs_full.bin     — Flat binary including .rodata (for debugging)
-#   NanoOs_stripped.bin — Flat binary without .rodata (for production)
+#   NanoOs_full.bin     — Flat firmware image including .rodata
+#   NanoOs_stripped.bin — Flat binary without .rodata
 #   NanoOs_rodata.bin   — Flat binary containing only .rodata (for inspection)
 #   NanoOs.map          — Linker map
 #   NanoOs.lst          — Disassembly listing
-#
-# Flash via SD card:
-#   Mount the Agon SD card (USB mass storage in MOS command mode), then:
-#     make -f AgonLight2Makefile flash SD_MOUNT=/media/$(USER)/AGON
-#   Or copy manually:
-#     cp build/agon/NanoOs_stripped.bin /media/$(USER)/AGON/bin/NanoOs.bin
 # =============================================================================
 
 # ---- AgDev toolchain --------------------------------------------------------
@@ -53,42 +47,21 @@ AR      := $(AGDEV_BIN)/ez80-none-elf-ar
 
 TARGET_TRIPLE := ez80-none-elf
 
-# ---- Build mode: MOS-loadable (default) or standalone ------------------------
+# ---- Linker script --------------------------------------------------------
+
+LINKER_SCRIPT := ld/AgonLight2.ld
+
+# ---- Build directory ------------------------------------------------------
+
+BUILD_DIR := build/agon
+
+# ---- Deploy target --------------------------------------------------------
 #
-# STANDALONE=0 (default): NanoOs is a MOS user program, loaded by MOS into
-#   external SRAM at 0x040000. The binary carries the "MOS" header MOS's
-#   loader requires (see boot/AgonLight2/Boot.asm).
-#
-# STANDALONE=1: scaffold for NanoOs eventually replacing MOS outright,
-#   starting at 0x000000. No MOS header is emitted (there's no MOS to check
-#   it) and the low eZ80 RST/NMI vector slots are stubbed with safe
-#   placeholders instead of being left as fall-through NOPs. This does NOT
-#   yet solve flash execute-in-place semantics: real standalone bring-up
-#   will still need a .data load-address/copy step at startup, the way the
-#   SAMD21 ports do, before it can run from flash for real.
+# Path to an existing MOS image file to overwrite with the built firmware.
+# Required by the `flash` target; the file name is preserved because that is
+# the only thing the Agon tools load.
 
-STANDALONE ?= 0
-
-# ---- Linker script ----------------------------------------------------------
-
-LINKER_DIR := ld
-ifeq ($(STANDALONE),1)
-  LINKER_SCRIPT := $(LINKER_DIR)/AgonLight2Standalone.ld
-else
-  LINKER_SCRIPT := $(LINKER_DIR)/AgonLight2.ld
-endif
-
-# ---- Build directory --------------------------------------------------------
-
-ifeq ($(STANDALONE),1)
-  BUILD_DIR := build/agon-standalone
-else
-  BUILD_DIR := build/agon
-endif
-
-# ---- SD card mount point ----------------------------------------------------
-
-SD_MOUNT ?= /media/$(USER)/AGON
+MOS_BIN ?=
 
 # ---- Architecture flags -----------------------------------------------------
 
@@ -111,7 +84,6 @@ DEFINES := \
 	-DNANO_OS_AGON_LIGHT_2 \
 	-DNANOOS_EZ80 \
 	-DNANO_OS_STRINGS_STRIPPED \
-	$(if $(filter 1,$(STANDALONE)),-DNANO_OS_AGON_LIGHT_2_STANDALONE) \
 
 # ---- Include paths ----------------------------------------------------------
 
@@ -223,11 +195,11 @@ LST          := $(BUILD_DIR)/NanoOs.lst
 
 # ---- Targets ----------------------------------------------------------------
 
-.PHONY: all flash flash-full size sections disasm clean
+.PHONY: all flash size sections disasm clean
 
 all: $(FULL_BIN) $(STRIPPED_BIN) $(RODATA_BIN)
 	@echo ""
-	@echo "  Built for:  Agon Light 2 (eZ80F92, ADL mode, MOS program)"
+	@echo "  Built for:  Agon Light 2 (eZ80F92, ADL mode, primary firmware)"
 	@echo "  Output:     $(BUILD_DIR)/"
 	@echo "  Full:       $(FULL_BIN)"
 	@echo "  Stripped:   $(STRIPPED_BIN)"
@@ -289,35 +261,24 @@ $(BUILD_DIR)/src/%.asm.o: src/%.asm
 	@echo "  AS      $<"
 	@$(CC) $(ASFLAGS) -MMD -c $< -o $@
 
-# ---- Flash: copy binary to Agon SD card -------------------------------------
+# ---- Flash: overwrite a MOS image with the built firmware ------------------
+#
+# The Agon tools load a MOS image by a fixed file name, so deployment is a
+# copy over that file, leaving its name unchanged.  Pass its path in MOS_BIN.
 
-flash: $(STRIPPED_BIN)
-	@if [ -d "$(SD_MOUNT)" ]; then \
-		echo "  FLASH   Copying NanoOs_stripped.bin to $(SD_MOUNT)/bin/NanoOs.bin"; \
-		cp $(STRIPPED_BIN) $(SD_MOUNT)/bin/NanoOs.bin; \
-		echo "  SYNC    Flushing writes to SD card"; \
-		sync; \
-		echo "  Done.  Run 'NanoOs' at the MOS prompt to launch."; \
-	else \
-		echo "ERROR: SD card not found at $(SD_MOUNT)"; \
-		echo "Mount the Agon SD card (USB mass storage) and re-run:"; \
-		echo "  make -f AgonLight2Makefile flash SD_MOUNT=/media/$$USER/AGON"; \
+flash: $(FULL_BIN)
+	@if [ -z "$(MOS_BIN)" ]; then \
+		echo "ERROR: set MOS_BIN to the MOS image file to overwrite:"; \
+		echo "  make -f AgonLight2Makefile flash MOS_BIN=/path/to/MOS.bin"; \
 		exit 1; \
 	fi
-
-flash-full: $(FULL_BIN)
-	@if [ -d "$(SD_MOUNT)" ]; then \
-		echo "  FLASH   Copying NanoOs_full.bin to $(SD_MOUNT)/bin/NanoOs.bin"; \
-		cp $(FULL_BIN) $(SD_MOUNT)/bin/NanoOs.bin; \
-		echo "  SYNC    Flushing writes to SD card"; \
-		sync; \
-		echo "  Done.  Run 'NanoOs' at the MOS prompt to launch."; \
-	else \
-		echo "ERROR: SD card not found at $(SD_MOUNT)"; \
-		echo "Mount the Agon SD card (USB mass storage) and re-run:"; \
-		echo "  make -f AgonLight2Makefile flash-full SD_MOUNT=/media/$$USER/AGON"; \
+	@if [ ! -d "$(dir $(MOS_BIN))" ]; then \
+		echo "ERROR: directory for MOS_BIN does not exist: $(dir $(MOS_BIN))"; \
 		exit 1; \
 	fi
+	@echo "  FLASH   Copying $(FULL_BIN) -> $(MOS_BIN)"
+	@cp $(FULL_BIN) $(MOS_BIN)
+	@echo "  Done."
 
 # ---- Utility targets --------------------------------------------------------
 

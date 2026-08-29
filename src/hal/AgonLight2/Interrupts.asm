@@ -44,14 +44,12 @@
 ;;;   - 128 entries => a full 256-byte page.
 ;;;
 ;;; On the Agon Light 2 the first 64 KB is on-chip flash (external RAM starts
-;;; at 0x040000), so a NanoOs-owned vector table can only be installed in the
-;;; standalone / flash build, where NanoOs's own image occupies low flash and
-;;; the linker script places .ivt and .text.ivt below 0x010000.  The whole
-;;; file is therefore compiled only when NANO_OS_AGON_LIGHT_2_STANDALONE is
-;;; defined; in the MOS-hosted build it is an empty translation unit.
+;;; at 0x040000), so this only works because NanoOs is the primary firmware:
+;;; its own image occupies low flash and ld/AgonLight2.ld places .ivt and
+;;; .text.ivt below 0x010000.
 ;;;
 ;;; The table lives in its own initialised section (.ivt), kept in the image by
-;;; KEEP(*(.ivt)) in ld/AgonLight2Standalone.ld.  It ends up in flash, so it is
+;;; KEEP(*(.ivt)) in ld/AgonLight2.ld.  It ends up in flash, so it is
 ;;; read-only at run time - a vector is bound only by editing its .short line
 ;;; here at build time, not by any runtime call.  Every slot starts out
 ;;; pointing at _defaultIsr; as each driver is written, replace the .short on
@@ -63,8 +61,6 @@
 ;;; swap the pointer - the table entry itself stays put.
 ;;;
 ;;; @note This file was generated with assistance from claude.ai.
-
-#ifdef NANO_OS_AGON_LIGHT_2_STANDALONE
 
 .assume adl=1
 
@@ -87,7 +83,7 @@ IVECT_PB1       .equ 0x32       ; VDP VBLANK line on the Agon
 
 ;;; ------------------------------------------------------------------------
 ;;; The hardware vector table: 128 slots of 2 bytes each = one 256-byte page.
-;;; Placed below 0x010000 and 256-aligned by ld/AgonLight2Standalone.ld.
+;;; Placed below 0x010000 and 256-aligned by ld/AgonLight2.ld.
 ;;; ------------------------------------------------------------------------
 .section .ivt,"aw",@progbits
 .align 8                        ; 2^8 = 256-byte boundary
@@ -190,5 +186,3 @@ _defaultIsr:
     di
     halt
     jr      _defaultIsr
-
-#endif  /* NANO_OS_AGON_LIGHT_2_STANDALONE */
