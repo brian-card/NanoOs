@@ -40,9 +40,27 @@ SECTIONS
   .text :
   {
     KEEP(*(.text.boot))       /* boot.asm _start must be the very first bytes */
+
+    /* eZ80F92 mode 2 interrupt vector table and the code it points at.
+     * The CPU forms the vector address as { I[7:0], IVECT[7:0] } and jumps to
+     * { 00h, entry }, so both the 256-byte table and every handler it names
+     * must sit on a 256-byte boundary within the first 64 KB.  Kept here,
+     * right after the boot code, so they land low.  See
+     * src/hal/AgonLight2/Interrupts.asm.  (This scaffold keeps .ivt in the
+     * flat image; a real flash build will need it copied to / fixed up in
+     * low RAM.) */
+    . = ALIGN(0x100);
+    __ivt_start = .;
+    KEEP(*(.ivt))
+    KEEP(*(.text.ivt))
+    __ivt_end = .;
+
     *(.text .text.*)
     . = ALIGN(4);
   } > SRAM
+
+  ASSERT(__ivt_end <= 0x10000,
+    "Interrupt vector table + .text.ivt overflow the first 64 KB")
 
   /* ---- Initialised data ------------------------------------------------- */
   .data :
