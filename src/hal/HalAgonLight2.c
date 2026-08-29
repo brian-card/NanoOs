@@ -1158,6 +1158,8 @@ static uint32_t agonLight2BlockDevicesOnline[] = { 0x00000000 };
 /// @brief Statically allocated buffer for formatting log messages.
 static char _logBuffer[128];
 
+extern void enableInterrupts(void);
+
 int32_t halAgonLight2Init(void) {
   halFunctions[HAL_MEMORY]       = agonLight2MemoryFunctions;
   halFunctions[HAL_UART]         = agonLight2UartFunctions;
@@ -1225,6 +1227,7 @@ int32_t halAgonLight2Init(void) {
   halImpl.blockDevice.online       = agonLight2BlockDevicesOnline;
 
   NANO_OS_API = &nanoOsApi;
+  enableInterrupts();
 
   return halCommonInit();
 }
