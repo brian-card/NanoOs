@@ -89,9 +89,6 @@ _initClockTimer:
 _clockTimerIsr:
     push    af
     push    hl
-    push    bc              ; the wide adds below use bc (an ISR must save it)
-    ld      bc, 0           ; zero addend for the carry-propagation adds below
-
     in0     a, (TMR0_CTL)   ; read of TMR0_CTL clears the PRT_IRQ flag (bit 7)
 
     ; --- add 62500 (0xf424) to the low 16 bits ---
@@ -105,20 +102,42 @@ _clockTimerIsr:
     ld      (hl), a
     jr      nc, tickDone    ; no carry out — common case, done
 
-    ; --- propagate the carry through the upper 6 bytes ---
-    ; ADL mode makes hl and bc 24-bit, so bytes 2..4 and 5..7 each ripple in a
-    ; single "adc hl, bc" (bc is 0, so only the incoming carry is added).  ld
-    ; does not touch the carry flag, so it survives between the two chunks.
-    ld      hl, (__nanosecondCount + 2)
-    adc     hl, bc
-    ld      (__nanosecondCount + 2), hl
-    jr      nc, tickDone
-    ld      hl, (__nanosecondCount + 5)
-    adc     hl, bc
-    ld      (__nanosecondCount + 5), hl
+    ; --- propagate the carry through the remaining 6 bytes, one at a time ---
+    ; Each byte is only touched when a carry actually reaches it, so the common
+    ; case (carry stops in byte 2) costs a single inc + compare.  A wide 24-bit
+    ; add would be shorter to write but slower here: it would touch three bytes
+    ; and pay a fixed bc save/restore on every tick.
+    inc     hl
+    ld      a, (hl)
+    inc     a
+    ld      (hl), a
+    jr      nz, tickDone
+    inc     hl
+    ld      a, (hl)
+    inc     a
+    ld      (hl), a
+    jr      nz, tickDone
+    inc     hl
+    ld      a, (hl)
+    inc     a
+    ld      (hl), a
+    jr      nz, tickDone
+    inc     hl
+    ld      a, (hl)
+    inc     a
+    ld      (hl), a
+    jr      nz, tickDone
+    inc     hl
+    ld      a, (hl)
+    inc     a
+    ld      (hl), a
+    jr      nz, tickDone
+    inc     hl
+    ld      a, (hl)
+    inc     a
+    ld      (hl), a
 
 tickDone:
-    pop     bc
     pop     hl
     pop     af
     ei                      ; re-enable interrupts on the instruction after this
