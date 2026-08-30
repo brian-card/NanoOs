@@ -222,15 +222,30 @@ realStart:
 
 ;;; @fn void agonLight2SystemReset(void)
 ;;;
-;;; @brief Restart NanoOs by re-entering the reset path.  The eZ80F92 has no
-;;; software reset line that fab-agon-emulator models (its watchdog is not
-;;; emulated), so this jumps back into realStart, which re-runs the CS0 / flash
-;;; / RAM bring-up, the .data copy, the .bss clear, and main() - a full restart
-;;; from the HAL up.  DI first so a pending PRT interrupt cannot land in the
-;;; half-reset machine.  Does not return.
+;;; @brief Restart the machine.  On real hardware this arms the watchdog for a
+;;; genuine full-chip reset; on fab-agon-emulator (no WDT model) it falls
+;;; through to a warm restart via realStart.  DI first so a pending PRT
+;;; interrupt cannot land in the half-reset machine.  Does not return.
 .globl _agonLight2SystemReset
 _agonLight2SystemReset:
     DI
+
+    ; Light the watchdog fuse for a real full-chip RESET.  eZ80F92 Product
+    ; Specification Table 27 - WDT_CTL (I/O 0x93) = 1000_0011b:
+    ;   bit  7    WDT_EN      = 1   enable (cannot be cleared except by a RESET)
+    ;   bit  6    NMI_OUT     = 0   time-out asserts RESET, not NMI
+    ;   bits 4:3  WDT_CLK     = 00  system-clock source
+    ;   bits 1:0  WDT_PERIOD  = 11  2^18 cycles, the shortest (~14 ms @ 18.432 MHz)
+    ; We then never write the A5h/5Ah kick to WDT_RR, so it times out and resets
+    ; the whole chip (afterwards WDT_CTL reads 20h: WDT_EN clear, RST_FLAG set).
+    LD   A, 0x83
+    OUT0 (0x93), A             ; WDT_CTL
+
+    ; fab-agon-emulator does not model the WDT, so the OUT0 above is inert there
+    ; and we fall straight through to a warm restart: realStart redoes the CS0 /
+    ; flash / RAM bring-up, the .data copy, the .bss clear, and main().  On real
+    ; silicon the watchdog RESET arrives ~14 ms later, mid-restart, and
+    ; supersedes it with a true cold boot.
     JP.LIL  realStart
 
 ;;; @fn void agonLight2Halt(void)
