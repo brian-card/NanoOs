@@ -970,10 +970,11 @@ int32_t agonLight2EnterMode(va_list args) {
   HalPowerMode powerMode = (HalPowerMode) va_arg(args, int);
 
   if (powerMode == HAL_POWER_MODE_RESET) {
-    // No software reset line the emulator models (its watchdog is not
-    // emulated), so "reset" re-enters the boot vector: Boot.asm's realStart
-    // re-runs the CS0 / flash / RAM bring-up, the .data copy, the .bss clear,
-    // and main() - a full restart of NanoOs from the HAL up.  Does not return.
+    // agonLight2SystemReset (Boot.asm) arms the eZ80F92 watchdog for a real
+    // full-chip reset on hardware, then falls through to re-entering the boot
+    // vector - realStart re-runs the CS0 / flash / RAM bring-up, the .data
+    // copy, the .bss clear, and main().  On the emulator (no WDT model) the
+    // fall-through is all that happens.  Does not return.
     agonLight2SystemReset();
   }
 
