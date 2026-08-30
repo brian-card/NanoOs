@@ -241,11 +241,26 @@ _agonLight2SystemReset:
     LD   A, 0x83
     OUT0 (0x93), A             ; WDT_CTL
 
-    ; fab-agon-emulator does not model the WDT, so the OUT0 above is inert there
-    ; and we fall straight through to a warm restart: realStart redoes the CS0 /
-    ; flash / RAM bring-up, the .data copy, the .bss clear, and main().  On real
-    ; silicon the watchdog RESET arrives ~14 ms later, mid-restart, and
-    ; supersedes it with a true cold boot.
+    ; Spin long enough that the watchdog RESET fires before we reach realStart.
+    ; The shortest WDT period is 2^18 system-clock cycles (~14 ms @ 18.432 MHz);
+    ; this loop is comfortably longer (~30-90 ms, depending on exact eZ80 cycle
+    ; timing) so on real silicon the RESET always wins and realStart is never
+    ; entered.  Interrupts are off (DI above) and this routine never returns, so
+    ; there is nothing to preserve.
+    LD   B, 4
+.resetWaitOuter:
+    LD   HL, 0xFFFF
+.resetWaitInner:
+    DEC  HL
+    LD   A, H
+    OR   L
+    JR   NZ, .resetWaitInner
+    DJNZ .resetWaitOuter
+
+    ; fab-agon-emulator does not model the WDT, so the OUT0 above is inert and
+    ; the spin just elapses; fall through to a warm restart: realStart redoes
+    ; the CS0 / flash / RAM bring-up, the .data copy, the .bss clear, and
+    ; main().
     JP.LIL  realStart
 
 ;;; @fn void agonLight2Halt(void)
