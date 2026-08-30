@@ -93,23 +93,32 @@ unhandledVector:
     JR  unhandledVector
 
 realStart:
-    ; --- map the external SRAM -------------------------------------------------
+    ; --- external memory bus bring-up ------------------------------------------
     ; The eZ80F92 only routes bus cycles to the external SRAM when the target
-    ; page (address bits 23:16) falls between the Chip Select 0 lower- and
-    ; upper-bound registers.  Out of RESET CS0 does not cover the Agon's
-    ; 0x040000-0x0BFFFF SRAM window, so until this runs every access there -
-    ; the stack included - is dropped on write and reads back garbage.  As a
-    ; MOS application NanoOs never had to do this because MOS had already
-    ; programmed CS0; as the primary firmware it must.  This has to come before
-    ; the first stack use (the CALL below) and before the .data/.bss/canary
-    ; writes.
+    ; page (address bits 23:16) lies within the Chip Select 0 bound registers,
+    ; and only with the timing described by CS0's bus-mode / control registers.
+    ; Out of RESET, CS0 does not cover the Agon's 0x040000-0x0BFFFF SRAM window
+    ; at all, so until this runs every access there - the stack included - is
+    ; dropped on write and reads back garbage.  As a MOS application NanoOs
+    ; inherited this setup; as the primary firmware it must do it itself, before
+    ; the first stack use (the CALL into _main) and before the .data / .bss /
+    ; canary writes below.
     ;
-    ; CS0_CTL (0xAA) bus-mode / wait-state configuration for real hardware is
-    ; still TODO - the emulator only consults the bound registers.
-    LD  A, 0x04                 ; CS0_LBR: SRAM starts at page 0x04 (0x040000)
+    ; The values are the ones Agon MOS programs on real Agon Light 2 hardware
+    ; (agon-mos eZ80F92_AGON_Flash.ztgt): CS0 spans pages 0x04..0x0B; BMC 0x01
+    ; selects eZ80 bus mode on a non-multiplexed bus; CTL 0x08 enables the
+    ; region with zero wait states.  Write order follows MOS - bounds, bus
+    ; mode, then control last, so the region goes live only once fully
+    ; described.  The emulator honours only the bound registers and quietly
+    ; ignores BMC / CTL.
+    LD  A, 0x04                 ; CS0_LBR - lower bound page (0x040000)
     OUT0 (0xA8), A
-    LD  A, 0x0B                 ; CS0_UBR: SRAM ends in page 0x0B (0x0BFFFF)
+    LD  A, 0x0B                 ; CS0_UBR - upper bound page (0x0BFFFF)
     OUT0 (0xA9), A
+    LD  A, 0x01                 ; CS0_BMC (I/O 0xF0) - eZ80 mode, separate A/D bus
+    OUT0 (0xF0), A
+    LD  A, 0x08                 ; CS0_CTL (I/O 0xAA) - enable CS0, 0 wait states
+    OUT0 (0xAA), A
 
     ; --- external-RAM integrity canary -------------------------------------
     ; Stamp the known pattern 0x4ABC4ABC4ABC4ABC at __data_bss_limit (0x049000,
