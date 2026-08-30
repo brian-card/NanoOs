@@ -896,16 +896,10 @@ int32_t agonLight2SpiTransferBytes(va_list args) {
 // Clock subsystem stubs
 // ---------------------------------------------------------------------------
 
-/// @var _baseSystemTimeUs
+/// @var _baseSystemTimeNs
 ///
-/// @brief Epoch offset set via setSystemTime(), in microseconds.
-static int64_t _baseSystemTimeUs = 0;
-
-/// @var _uptimeUs
-///
-/// @brief Monotonic uptime counter in microseconds.
-/// Incremented by real timer interrupt code once timers are implemented.
-static int64_t _uptimeUs = 0;
+/// @brief Epoch offset set via setSystemTime(), in nanoseconds.
+static int64_t _baseSystemTimeNs = 0;
 
 // Assembly function prototypes.
 extern void initClockTimer(void);
@@ -922,9 +916,9 @@ int32_t agonLight2SetSystemTime(va_list args) {
   if (ts == NULL) {
     return -EINVAL;
   }
-  _baseSystemTimeUs
-    = (((int64_t) ts->tv_sec)  * ((int64_t) 1000000))
-    + (((int64_t) ts->tv_nsec) / ((int64_t) 1000));
+  _baseSystemTimeNs
+    = (((int64_t) ts->tv_sec) * ((int64_t) 1000000000))
+    + ((int64_t) ts->tv_nsec);
   return 0;
 }
 
@@ -933,7 +927,7 @@ int32_t agonLight2GetElapsedMilliseconds(va_list args) {
   int64_t *returnValue = va_arg(args, int64_t*);
   int64_t  nowMs = 0;
   readClock(&nowMs);
-  nowMs += _baseSystemTimeUs * ((int64_t) 1000);
+  nowMs += _baseSystemTimeNs;
   nowMs /= (int64_t) 1000000;
   if (returnValue != NULL) {
     *returnValue = nowMs - startTime;
@@ -946,7 +940,7 @@ int32_t agonLight2GetElapsedMicroseconds(va_list args) {
   int64_t *returnValue = va_arg(args, int64_t*);
   int64_t  nowUs = 0;
   readClock(&nowUs);
-  nowUs += _baseSystemTimeUs * ((int64_t) 1000);
+  nowUs += _baseSystemTimeNs;
   nowUs /= (int64_t) 1000;
   if (returnValue != NULL) {
     *returnValue = nowUs - startTime;
@@ -959,7 +953,7 @@ int32_t agonLight2GetElapsedNanoseconds(va_list args) {
   int64_t *returnValue = va_arg(args, int64_t*);
   int64_t  nowNs = 0;
   readClock(&nowNs);
-  nowNs += _baseSystemTimeUs * ((int64_t) 1000);
+  nowNs += _baseSystemTimeNs;
   if (returnValue != NULL) {
     *returnValue = nowNs - startTime;
   }
