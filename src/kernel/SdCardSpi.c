@@ -205,33 +205,44 @@ int sdSpiCardInit(SdCardSpiArgs *sdCardSpiArgs, SdCardState *sdCardState) {
     }
   } while (response != 0);
 
-  // Card is out of the idle state.  Drain the trailing busy bytes from ACMD41.
+  // Start from the card-version heuristic (v1 -> byte addressed, v2 -> block
+  // addressed).  CMD58 below only *refines* this, and only when the OCR it
+  // hands back is unambiguously valid - a flaky READ_OCR must never be able to
+  // flip a working card into the wrong addressing mode.
+  blockAddressed = isSDv2;
+
+  // Drain the trailing busy bytes from ACMD41 and, keeping CS asserted the same
+  // way CMD0 flows into CMD8, send CMD58 (READ_OCR).  The dummy-clock loop here
+  // also primes the bus for the command, exactly as the CMD0 / CMD8 / ACMD41
+  // paths above do - without it the command byte races the CS falling edge and
+  // the response can come back misaligned.
   for (int ii = 0; ii < 8; ii++) {
     HAL->spi.transfer8(SD_CARD_SPI_DEVICE, 0xFF);
   }
-  HAL->spi.endTransfer(SD_CARD_SPI_DEVICE);
-
-  // CMD58 (READ_OCR): the CCS bit (OCR bit 30) tells a block-addressed
-  // high-capacity card from a byte-addressed standard-capacity one.  This
-  // cannot be inferred from CMD8 - a v2 card can still be standard capacity.
   response = sdSpiSendCommand(SD_CARD_SPI_DEVICE, CMD58, 0);
   if (response == 0x00) {
     uint8_t ocr[4];
     for (int ii = 0; ii < 4; ii++) {
       ocr[ii] = HAL->spi.transfer8(SD_CARD_SPI_DEVICE, 0xFF);
     }
-    blockAddressed = ((ocr[0] & 0x40) != 0); // CCS
+    // Only trust the CCS bit (OCR bit 30) when bit 31 (power-up complete) is
+    // set - i.e. this really is an OCR and not an idle or half-shifted bus.
+    if ((ocr[0] & 0x80) != 0) {
+      blockAddressed = ((ocr[0] & 0x40) != 0); // CCS
+    }
   } else {
-    // CMD58 not supported / failed: fall back to the version heuristic.
-    logError("CMD58 (READ_OCR) returned %ld; assuming %s addressing\n",
+    logError("CMD58 (READ_OCR) returned %ld; keeping %s addressing\n",
       (long int) response, isSDv2 ? "block" : "byte");
-    blockAddressed = isSDv2;
   }
   HAL->spi.endTransfer(SD_CARD_SPI_DEVICE);
 
-  // CMD16 (SET_BLOCKLEN = 512): only meaningful for byte-addressed cards.
-  // Block-addressed cards are fixed at 512 bytes and may reject it.
+  // CMD16 (SET_BLOCKLEN = 512): only meaningful for byte-addressed cards -
+  // block-addressed cards are fixed at 512 bytes and may reject it.  Primed
+  // with dummy clocks like every other command here.
   if (blockAddressed == false) {
+    for (int ii = 0; ii < 8; ii++) {
+      HAL->spi.transfer8(SD_CARD_SPI_DEVICE, 0xFF);
+    }
     response = sdSpiSendCommand(SD_CARD_SPI_DEVICE, CMD16, 512);
     HAL->spi.endTransfer(SD_CARD_SPI_DEVICE);
     if (response != 0x00) {
