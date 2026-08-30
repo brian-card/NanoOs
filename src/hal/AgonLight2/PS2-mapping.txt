@@ -1,0 +1,2 @@
+Agon Light 2 pin 9 = ESP32 GPIO 26 = white/brown PS/2 line
+Agon Light 2 pin 8 = ESP32 GPIO 27 = orange PS/2 line
