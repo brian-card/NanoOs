@@ -577,6 +577,33 @@ static HalSpiDevice spiDevices[MAX_SPI_DEVICES];
 /// each use site instead of occupying storage that could land in .rodata.
 #define numSpis ((int) (sizeof(spiDevices) / sizeof(spiDevices[0])))
 
+/// @def SPI_POWER_UP_CLOCK_BYTES
+///
+/// @brief Number of 0xFF bytes clocked out with every chip select deasserted
+/// right after a device is configured.  The SD physical spec requires at least
+/// 74 clock cycles (>= 10 bytes) with CS and DI high before the first command;
+/// harmless for any other SPI peripheral.
+#define SPI_POWER_UP_CLOCK_BYTES 10
+
+/// @fn uint16_t agonLight2SpiDivisor(uint32_t baud)
+///
+/// @brief eZ80F92 SPI baud-rate divisor for a requested bit clock:
+/// divisor = system clock / (2 * baud), clamped to the hardware minimum of 2
+/// (BRG values 0 and 1 are not valid) and the 16-bit register maximum.  A
+/// requested baud at or above SYSTEM_CLOCK_HZ / 4 therefore saturates at the
+/// fastest the bus can run (~4.6 MHz).
+static uint16_t agonLight2SpiDivisor(uint32_t baud) {
+  uint32_t divisor = (baud != 0)
+    ? (SYSTEM_CLOCK_HZ / (baud << 1))
+    : 0xFFFF;
+  if (divisor < 2) {
+    divisor = 2;
+  } else if (divisor > 0xFFFF) {
+    divisor = 0xFFFF;
+  }
+  return (uint16_t) divisor;
+}
+
 int32_t agonLight2InitSpi(va_list args) {
   (void) args;
 
@@ -629,15 +656,45 @@ int32_t agonLight2ConfigureSpi(va_list args) {
     }
   }
 
-  uint16_t divisor = (uint16_t) (SYSTEM_CLOCK_HZ / (baud << 1));
-  agonLight2ConfigureSpiImpl(divisor);
+  agonLight2ConfigureSpiImpl(agonLight2SpiDivisor(baud));
 
   agonLight2ConfigureDioImpl(cs, true); // Configure chip-select for output.
   agonLight2WriteDioImpl(cs, true); // Drive chip-select high (deselected).
+
+  // SD physical-spec power-up sequence: >= 74 clock cycles with this device's
+  // chip select (and DI) held high, before it is ever selected for a command.
+  for (int ii = 0; ii < SPI_POWER_UP_CLOCK_BYTES; ii++) {
+    agonLight2SpiTransfer8Impl(0xFF);
+  }
+
   spiDevices[deviceId].chipSelect = cs;
   spiDevices[deviceId].baud = baud;
   spiDevices[deviceId].configured = true;
   // spiDevices[deviceId].transferInProgress is already false from the memset.
+
+  return 0;
+}
+
+int32_t agonLight2SetSpiSpeed(va_list args) {
+  int32_t  deviceId = va_arg(args, int32_t);
+  uint32_t baud     = va_arg(args, uint32_t);
+
+  if ((deviceId < 0) || (deviceId >= numSpis)
+    || (spiDevices[deviceId].configured == false)
+  ) {
+    return -ENODEV;
+  }
+  if (baud == 0) {
+    return -EINVAL;
+  }
+
+  spiDevices[deviceId].baud = baud;
+
+  // If this device currently holds the bus, retune the BRG now; otherwise
+  // agonLight2StartSpiTransferImpl re-applies it on the next transfer.
+  if (spiDevices[deviceId].transferInProgress == true) {
+    agonLight2ConfigureSpiImpl(agonLight2SpiDivisor(baud));
+  }
 
   return 0;
 }
@@ -658,10 +715,9 @@ int32_t agonLight2StartSpiTransferImpl(int32_t deviceId) {
   globalSpiInUse = true;
 
   // Re-apply this device's clock divider - devices on the shared bus may run at
-  // different speeds, so whichever configure() ran last does not get to win.
-  uint16_t divisor
-    = (uint16_t) (SYSTEM_CLOCK_HZ / (spiDevices[deviceId].baud << 1));
-  agonLight2ConfigureSpiImpl(divisor);
+  // different speeds, so whichever configure() / setSpeed() ran last does not
+  // get to win.
+  agonLight2ConfigureSpiImpl(agonLight2SpiDivisor(spiDevices[deviceId].baud));
 
   // Drive chip-select low.
   agonLight2WriteDioImpl(spiDevices[deviceId].chipSelect, false);
@@ -1262,6 +1318,7 @@ static HalFunction agonLight2DioFunctions[HAL_DIO_NUM_FNS] = {
 static HalFunction agonLight2SpiFunctions[HAL_SPI_NUM_FNS] = {
   [HAL_SPI_INIT]           = agonLight2InitSpi,
   [HAL_SPI_CONFIGURE]      = agonLight2ConfigureSpi,
+  [HAL_SPI_SET_SPEED]      = agonLight2SetSpiSpeed,
   [HAL_SPI_START_TRANSFER] = agonLight2StartSpiTransfer,
   [HAL_SPI_END_TRANSFER]   = agonLight2EndSpiTransfer,
   [HAL_SPI_TRANSFER8]      = agonLight2SpiTransfer8,
@@ -1301,7 +1358,20 @@ static HalFunction agonLight2BlockDeviceFunctions[HAL_BLOCK_DEVICE_NUM_FNS] = {
 // ---------------------------------------------------------------------------
 
 static uint32_t agonLight2UartsOnline[]        = { 0x00000003 };
-static uint32_t agonLight2DiosOnline[]         = { 0x00000000 };
+
+/// @var agonLight2DiosOnline
+///
+/// @brief Online-DIO bitmask, indexed by the packed DIO id ((port << 4) | bit),
+/// so it spans ids 0xB0..0xD7 and needs seven 32-bit words.  Only the pins the
+/// HAL will actually accept as SPI chip selects are advertised: PB4 (the
+/// on-board microSD CS) plus the free header GPIOs PC2..PC7 and PD4..PD7.  The
+/// authoritative validity check for any DIO id is agonGpioDecode(), not this
+/// mask.
+static uint32_t agonLight2DiosOnline[] = {
+  0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+  0x00100000, // word 5 (ids 0xA0..0xBF): bit 20 -> PB4 (0xB4)
+  0x00F000FC, // word 6 (ids 0xC0..0xDF): PC2..PC7 (0xC2..0xC7), PD4..PD7 (0xD4..0xD7)
+};
 static uint32_t agonLight2SpisOnline[]         = { 0x0000000F }; // 4 SPI devices
 static uint32_t agonLight2TimersOnline[]       = { 0x0000001F }; // PRT1..PRT5
 static uint32_t agonLight2BlockDevicesOnline[] = { 0x00000000 };
@@ -1382,7 +1452,9 @@ int32_t halAgonLight2Init(void) {
   halImpl.uart.numSupported        = 2;
   halImpl.uart.online              = agonLight2UartsOnline;
 
-  halImpl.dio.numSupported         = 0;
+  // DIO ids are the packed value (port_nibble << 4) | bit, spanning 0xB0..0xD7,
+  // so the online() bound is the largest valid id + 1 rather than a pin count.
+  halImpl.dio.numSupported         = 0xD8;
   halImpl.dio.online               = agonLight2DiosOnline;
 
   halImpl.spi.numSupported         = MAX_SPI_DEVICES;

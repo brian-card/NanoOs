@@ -149,6 +149,7 @@ typedef enum HalSpiFunction {
   HAL_SPI_END_TRANSFER,
   HAL_SPI_TRANSFER8,
   HAL_SPI_TRANSFER_BYTES,
+  HAL_SPI_SET_SPEED,
   HAL_SPI_NUM_FNS,
 } HalSpiFunction;
 
@@ -576,7 +577,24 @@ typedef struct HalSpi {
   /// @return Returns 0 on success, -errno on failure.
   int32_t (*configure)(int32_t deviceId,
     uint8_t cs, uint8_t sck, uint8_t copi, uint8_t cipo, uint32_t baud);
-  
+
+  /// @fn int32_t setSpeed(int32_t deviceId, uint32_t baud)
+  ///
+  /// @brief Change the clock rate of an already-configured SPI device.
+  ///
+  /// @details Intended for peripherals such as SD cards that must be identified
+  /// at a low rate (<= 400 kHz per the SD physical spec) and then switched to
+  /// full speed once they are in the ready state.  The new rate takes effect no
+  /// later than the next startTransfer.  A HAL whose bus rate cannot be changed
+  /// (or is fixed by the underlying library) may return 0 without doing
+  /// anything; a HAL with no SPI at all returns -ENOSYS.
+  ///
+  /// @param deviceId The zero-based index of the SPI device to retune.
+  /// @param baud The new bit-clock rate the device should run at.
+  ///
+  /// @return Returns 0 on success, -errno on failure.
+  int32_t (*setSpeed)(int32_t deviceId, uint32_t baud);
+
   /// @fn int startTransfer(int deviceId)
   ///
   /// @brief Begin a transfer with a SPI device.

@@ -146,6 +146,7 @@ static int32_t halDioWrite(int32_t deviceId, bool high);
 static int32_t halSpiInit(void);
 static int32_t halSpiConfigure(int32_t deviceId,
   uint8_t cs, uint8_t sck, uint8_t copi, uint8_t cipo, uint32_t baud);
+static int32_t halSpiSetSpeed(int32_t deviceId, uint32_t baud);
 static int32_t halSpiStartTransfer(int32_t deviceId);
 static int32_t halSpiEndTransfer(int32_t deviceId);
 static int32_t halSpiTransfer8(int32_t deviceId, uint8_t data);
@@ -229,6 +230,7 @@ Hal halImpl = {
     .online        = NULL,
     .init          = halSpiInit,
     .configure     = halSpiConfigure,
+    .setSpeed      = halSpiSetSpeed,
     .startTransfer = halSpiStartTransfer,
     .endTransfer   = halSpiEndTransfer,
     .transfer8     = halSpiTransfer8,
@@ -348,6 +350,10 @@ static int32_t halSpiConfigure(int32_t deviceId,
 ) {
   return callHal(HAL_SPI, HAL_SPI_CONFIGURE,
     deviceId, (int) cs, (int) sck, (int) copi, (int) cipo, baud);
+}
+
+static int32_t halSpiSetSpeed(int32_t deviceId, uint32_t baud) {
+  return callHal(HAL_SPI, HAL_SPI_SET_SPEED, deviceId, baud);
 }
 
 static int32_t halSpiStartTransfer(int32_t deviceId) {

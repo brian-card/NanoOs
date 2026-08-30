@@ -84,6 +84,7 @@ int32_t posixWriteDio(va_list args);
 
 int32_t posixInitSpi(va_list args);
 int32_t posixConfigureSpiDevice(va_list args);
+int32_t posixSetSpiSpeed(va_list args);
 int32_t posixStartSpiTransfer(va_list args);
 int32_t posixEndSpiTransfer(va_list args);
 int32_t posixSpiTransfer8(va_list args);
@@ -271,6 +272,7 @@ static HalFunction posixDioFunctions[HAL_DIO_NUM_FNS] = {
 static HalFunction posixSpiFunctions[HAL_SPI_NUM_FNS] = {
   [HAL_SPI_INIT]           = posixInitSpi,
   [HAL_SPI_CONFIGURE]      = posixConfigureSpiDevice,
+  [HAL_SPI_SET_SPEED]      = posixSetSpiSpeed,
   [HAL_SPI_START_TRANSFER] = posixStartSpiTransfer,
   [HAL_SPI_END_TRANSFER]   = posixEndSpiTransfer,
   [HAL_SPI_TRANSFER8]      = posixSpiTransfer8,

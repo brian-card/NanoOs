@@ -474,6 +474,14 @@ static struct ArduinoSamD21x18ASpi {
   ((int) (sizeof(arduinoSamD21x18ASpiDevices) \
   / sizeof(arduinoSamD21x18ASpiDevices[0])))
 
+/// @def SPI_POWER_UP_CLOCK_BYTES
+///
+/// @brief 0xFF bytes clocked out with chip select deasserted right after a
+/// device is configured.  The SD physical spec wants >= 74 clock cycles (>= 10
+/// bytes) with CS and DI high before the first command; harmless for anything
+/// else on the bus.
+#define SPI_POWER_UP_CLOCK_BYTES 10
+
 static int32_t arduinoSamD21x18AInitSpiImpl(void) {
   if (globalSpiConfigured == false) {
     // Set up SPI at the default speed.
@@ -521,11 +529,39 @@ int32_t arduinoSamD21x18AConfigureSpi(va_list args) {
   // Deselect the chip select pin.
   arduinoSamD21x18AWriteDioImpl(cs, 1);
 
+  // SD physical-spec power-up: >= 74 clock cycles (>= 10 bytes) with CS and DI
+  // held high before the device is ever selected for a command.  Harmless for
+  // any other SPI peripheral.
+  SPI.beginTransaction(SPISettings(baud, MSBFIRST, SPI_MODE0));
+  for (uint8_t ii = 0; ii < SPI_POWER_UP_CLOCK_BYTES; ii++) {
+    SPI.transfer(0xFF);
+  }
+  SPI.endTransaction();
+
   // Configure our internal metadata for the device.
   arduinoSamD21x18ASpiDevices[deviceId].chipSelect = cs;
   arduinoSamD21x18ASpiDevices[deviceId].baud = baud;
   arduinoSamD21x18ASpiDevices[deviceId].configured = true;
 
+  return 0;
+}
+
+int32_t arduinoSamD21x18ASetSpiSpeed(va_list args) {
+  int32_t  deviceId = va_arg(args, int32_t);
+  uint32_t baud     = va_arg(args, uint32_t);
+
+  if ((deviceId < 0) || (deviceId >= numArduinoSpis)
+    || (arduinoSamD21x18ASpiDevices[deviceId].configured == false)
+  ) {
+    return -ENODEV;
+  }
+  if (baud == 0) {
+    return -EINVAL;
+  }
+
+  // Picked up by the SPISettings passed to the next SPI.beginTransaction() in
+  // arduinoSamD21x18AStartSpiTransferImpl().
+  arduinoSamD21x18ASpiDevices[deviceId].baud = baud;
   return 0;
 }
 
@@ -1301,6 +1337,7 @@ static HalFunction arduinoSamD21x18ADioFunctions[HAL_DIO_NUM_FNS] = {
 static HalFunction arduinoSamD21x18ASpiFunctions[HAL_SPI_NUM_FNS] = {
   [HAL_SPI_INIT]           = arduinoSamD21x18AInitSpi,
   [HAL_SPI_CONFIGURE]      = arduinoSamD21x18AConfigureSpi,
+  [HAL_SPI_SET_SPEED]      = arduinoSamD21x18ASetSpiSpeed,
   [HAL_SPI_START_TRANSFER] = arduinoSamD21x18AStartSpiTransfer,
   [HAL_SPI_END_TRANSFER]   = arduinoSamD21x18AEndSpiTransfer,
   [HAL_SPI_TRANSFER8]      = arduinoSamD21x18ASpiTransfer8,

@@ -314,6 +314,11 @@ int32_t posixConfigureSpiDevice(va_list args) {
   return -ENOSYS;
 }
 
+int32_t posixSetSpiSpeed(va_list args) {
+  (void) args;
+  return -ENOSYS;
+}
+
 int32_t posixStartSpiTransfer(va_list args) {
   (void) args;
   return -ENOSYS;

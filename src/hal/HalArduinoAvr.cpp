@@ -327,6 +327,14 @@ static struct ArduinoAvrSpi {
 static const int numArduinoSpis
   = sizeof(arduinoAvrSpiDevices) / sizeof(arduinoAvrSpiDevices[0]);
 
+/// @def SPI_POWER_UP_CLOCK_BYTES
+///
+/// @brief 0xFF bytes clocked out with chip select deasserted right after a
+/// device is configured.  The SD physical spec wants >= 74 clock cycles (>= 10
+/// bytes) with CS and DI high before the first command; harmless for anything
+/// else on the bus.
+#define SPI_POWER_UP_CLOCK_BYTES 10
+
 static int32_t arduinoAvrInitSpiImpl(void) {
   if (globalSpiConfigured == false) {
     globalSpiConfigured = true;
@@ -372,10 +380,37 @@ int32_t arduinoAvrConfigureSpiDevice(va_list args) {
   arduinoAvrConfigureDioImpl(cs, 1);
   arduinoAvrWriteDioImpl(cs, 1);
 
+  // SD physical-spec power-up: >= 74 clocks with CS (and DI) high before the
+  // device is ever selected.
+  SPI.beginTransaction(SPISettings(baud, MSBFIRST, SPI_MODE0));
+  for (uint8_t ii = 0; ii < SPI_POWER_UP_CLOCK_BYTES; ii++) {
+    SPI.transfer(0xFF);
+  }
+  SPI.endTransaction();
+
   arduinoAvrSpiDevices[deviceId].chipSelect = cs;
   arduinoAvrSpiDevices[deviceId].baud = baud;
   arduinoAvrSpiDevices[deviceId].configured = true;
 
+  return 0;
+}
+
+int32_t arduinoAvrSetSpiSpeed(va_list args) {
+  int32_t  deviceId = va_arg(args, int32_t);
+  uint32_t baud     = va_arg(args, uint32_t);
+
+  if ((deviceId < 0) || (deviceId >= numArduinoSpis)
+    || (arduinoAvrSpiDevices[deviceId].configured == false)
+  ) {
+    return -ENODEV;
+  }
+  if (baud == 0) {
+    return -EINVAL;
+  }
+
+  // Picked up by the SPISettings passed to the next SPI.beginTransaction() in
+  // arduinoAvrStartSpiTransferImpl().
+  arduinoAvrSpiDevices[deviceId].baud = baud;
   return 0;
 }
 
@@ -638,6 +673,7 @@ static HalFunction arduinoAvrDioFunctions[HAL_DIO_NUM_FNS] = {
 static HalFunction arduinoAvrSpiFunctions[HAL_SPI_NUM_FNS] = {
   [HAL_SPI_INIT]           = arduinoAvrInitSpi,
   [HAL_SPI_CONFIGURE]      = arduinoAvrConfigureSpiDevice,
+  [HAL_SPI_SET_SPEED]      = arduinoAvrSetSpiSpeed,
   [HAL_SPI_START_TRANSFER] = arduinoAvrStartSpiTransfer,
   [HAL_SPI_END_TRANSFER]   = arduinoAvrEndSpiTransfer,
   [HAL_SPI_TRANSFER8]      = arduinoAvrSpiTransfer8,
