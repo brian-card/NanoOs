@@ -1227,9 +1227,11 @@ int32_t halAgonLight2Init(void) {
   halImpl.blockDevice.online       = agonLight2BlockDevicesOnline;
 
   NANO_OS_API = &nanoOsApi;
-  enableInterrupts();
 
-  return halCommonInit();
+  int returnValue = halCommonInit();
+
+  enableInterrupts();
+  return returnValue;
 }
 
 #endif // NANO_OS_AGON_LIGHT_2
