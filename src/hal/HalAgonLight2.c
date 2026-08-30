@@ -176,8 +176,11 @@ extern void agonLight2Halt(void);          // boot/AgonLight2/Boot.asm; no retur
 
 /// @def MAX_SPI_DEVICES
 ///
-/// @brief The maximum number of SPI devices the system can support.
-#define MAX_SPI_DEVICES 1
+/// @brief The maximum number of SPI devices the system can support.  All share
+/// the one eZ80F92 hardware-SPI bus (PB3/PB6/PB7), each with its own chip
+/// select: device 0 is the on-board microSD (CS = PB4), and up to three more
+/// hang off the same bus with a CS on a free header GPIO (PC2-PC7 / PD4-PD7).
+#define MAX_SPI_DEVICES 4
 
 /// @def BASE_BAUD
 ///
@@ -204,6 +207,20 @@ static uint8_t _spiSckDio = 91;
 ///
 /// @brief Pin to use for the MicroSD card reader's SPI chip select line.
 static uint8_t _sdCardPinChipSelect = 92;
+
+/// @def SPI_CS_PD_LOW / SPI_CS_PD_HIGH
+///
+/// @brief Inclusive DIO range for Port D pins PD4..PD7 - free header GPIOs the
+/// SPI bus is broken out alongside, usable as extra device chip selects.
+#define SPI_CS_PD_LOW  72
+#define SPI_CS_PD_HIGH 75
+
+/// @def SPI_CS_PC_LOW / SPI_CS_PC_HIGH
+///
+/// @brief Inclusive DIO range for Port C pins PC2..PC7 - likewise free header
+/// GPIOs (PC0/PC1 are UART1) usable as extra device chip selects.
+#define SPI_CS_PC_LOW  78
+#define SPI_CS_PC_HIGH 83
 
 // The fact that we've included Arduino.h in this file means that the memory
 // management functions from its library are available in this file.  That's a
@@ -759,6 +776,12 @@ int32_t agonLight2WriteDio(va_list args) {
 /// @brief Whether or not the board's SPI interface has already been configured.
 static bool globalSpiConfigured = false;
 
+/// @var globalSpiInUse
+///
+/// @brief Set while any device holds a transfer.  The bus is shared, so a
+/// second device cannot be selected until the first ends its transfer.
+static bool globalSpiInUse = false;
+
 /// @var spiDevices
 ///
 /// @brief Array of HalSpiDevices that will hold the information about SPI
@@ -779,6 +802,7 @@ int32_t agonLight2InitSpi(va_list args) {
 
   memset(&spiDevices, 0, numSpis * sizeof(HalSpiDevice));
   globalSpiConfigured = true;
+  globalSpiInUse = false;
 
   return 0;
 }
@@ -794,20 +818,42 @@ int32_t agonLight2ConfigureSpi(va_list args) {
   if ((deviceId < 0) || (deviceId >= numSpis)) {
     // Outside the limit of the devices we support.
     return -ENODEV;
-  } else if (
-       (cs   != _sdCardPinChipSelect)
-    || (sck  != _spiSckDio)
+  }
+
+  // The bus signals are fixed to the eZ80F92 hardware-SPI pins and every device
+  // shares them.  The chip select must be either PB4 (the on-board microSD,
+  // device 0) or one of the free header GPIOs the SPI bus is broken out
+  // alongside: PD4..PD7 or PC2..PC7.  Nothing else is accepted.
+  bool csValid = (cs == _sdCardPinChipSelect)
+    || ((cs >= SPI_CS_PD_LOW) && (cs <= SPI_CS_PD_HIGH))
+    || ((cs >= SPI_CS_PC_LOW) && (cs <= SPI_CS_PC_HIGH));
+  if ((sck  != _spiSckDio)
     || (copi != _spiCopiDio)
     || (cipo != _spiCipoDio)
+    || (csValid == false)
   ) {
     return -EINVAL;
+  }
+
+  if (spiDevices[deviceId].configured == true) {
+    // Already set up; the caller must not reconfigure a slot in place.
+    return -EBUSY;
+  }
+
+  // A chip-select line can only belong to one device.
+  for (int ii = 0; ii < numSpis; ii++) {
+    if ((spiDevices[ii].configured == true)
+      && (spiDevices[ii].chipSelect == cs)
+    ) {
+      return -EBUSY;
+    }
   }
 
   uint16_t divisor = (uint16_t) (SYSTEM_CLOCK_HZ / (baud << 1));
   agonLight2ConfigureSpiImpl(divisor);
 
   agonLight2ConfigureDioImpl(cs, true); // Configure chip-select for output.
-  agonLight2WriteDioImpl(cs, true); // Drive chip-select high.
+  agonLight2WriteDioImpl(cs, true); // Drive chip-select high (deselected).
   spiDevices[deviceId].chipSelect = cs;
   spiDevices[deviceId].baud = baud;
   spiDevices[deviceId].configured = true;
@@ -822,9 +868,20 @@ int32_t agonLight2StartSpiTransferImpl(int32_t deviceId) {
   ) {
     // Outside the limit of the devices we support.
     return -ENODEV;
-  } else if (spiDevices[deviceId].transferInProgress == true) {
+  } else if ((spiDevices[deviceId].transferInProgress == true)
+    || (globalSpiInUse == true)
+  ) {
+    // This device, or another one on the shared bus, already holds a transfer.
     return -EBUSY;
   }
+
+  globalSpiInUse = true;
+
+  // Re-apply this device's clock divider - devices on the shared bus may run at
+  // different speeds, so whichever configure() ran last does not get to win.
+  uint16_t divisor
+    = (uint16_t) (SYSTEM_CLOCK_HZ / (spiDevices[deviceId].baud << 1));
+  agonLight2ConfigureSpiImpl(divisor);
 
   // Drive chip-select low.
   agonLight2WriteDioImpl(spiDevices[deviceId].chipSelect, false);
@@ -853,6 +910,7 @@ int32_t agonLight2EndSpiTransfer(va_list args) {
     agonLight2SpiTransfer8Impl(0xFF); // 8 clock pulses
   }
   spiDevices[deviceId].transferInProgress = false;
+  globalSpiInUse = false; // release the shared bus
 
   return 0;
 }
@@ -1464,7 +1522,7 @@ static HalFunction agonLight2BlockDeviceFunctions[HAL_BLOCK_DEVICE_NUM_FNS] = {
 
 static uint32_t agonLight2UartsOnline[]        = { 0x00000003 };
 static uint32_t agonLight2DiosOnline[]         = { 0x00000000 };
-static uint32_t agonLight2SpisOnline[]         = { 0x00000000 };
+static uint32_t agonLight2SpisOnline[]         = { 0x0000000F }; // 4 SPI devices
 static uint32_t agonLight2TimersOnline[]       = { 0x0000001F }; // PRT1..PRT5
 static uint32_t agonLight2BlockDevicesOnline[] = { 0x00000000 };
 
@@ -1547,7 +1605,7 @@ int32_t halAgonLight2Init(void) {
   halImpl.dio.numSupported         = 0;
   halImpl.dio.online               = agonLight2DiosOnline;
 
-  halImpl.spi.numSupported         = 0;
+  halImpl.spi.numSupported         = MAX_SPI_DEVICES;
   halImpl.spi.online               = agonLight2SpisOnline;
 
   halImpl.timer.numSupported       = 5; // eZ80F92 PRT1..PRT5 (PRT0 is the clock)
