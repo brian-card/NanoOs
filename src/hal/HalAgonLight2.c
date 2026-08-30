@@ -174,6 +174,44 @@ extern void agonLight2Halt(void);          // boot/AgonLight2/Boot.asm; no retur
 /// @brief Value to indicate that the value of a specific pin is undefined.
 #define DIO_PIN_UNDEFINED 255
 
+// -------------------------------------------------------------------------
+// DIO pin numbering
+// -------------------------------------------------------------------------
+//
+// A DIO number packs the eZ80F92 GPIO port and bit into one hex byte:
+//   (port_nibble << 4) | bit    port_nibble = 0xB..0xD, bit = 0..7
+// so 0xC2 *is* "Port C, bit 2" - the same as "GPIO_PC2" in the Agon Light 2
+// documentation, the Olimex schematic net names, and the eZ80F92 datasheet.
+// (Port A exists on the eZ80F92 package but is not bonded out on the Agon.)
+
+#define PB0 0xB0
+#define PB1 0xB1
+#define PB2 0xB2
+#define PB3 0xB3
+#define PB4 0xB4
+#define PB5 0xB5
+#define PB6 0xB6
+#define PB7 0xB7
+
+#define PC0 0xC0
+#define PC1 0xC1
+#define PC2 0xC2
+#define PC3 0xC3
+#define PC4 0xC4
+#define PC5 0xC5
+#define PC6 0xC6
+#define PC7 0xC7
+
+#define PD0 0xD0
+#define PD1 0xD1
+#define PD2 0xD2
+#define PD3 0xD3
+#define PD4 0xD4
+#define PD5 0xD5
+#define PD6 0xD6
+#define PD7 0xD7
+
+
 /// @def MAX_SPI_DEVICES
 ///
 /// @brief The maximum number of SPI devices the system can support.  All share
@@ -190,37 +228,23 @@ extern void agonLight2Halt(void);          // boot/AgonLight2/Boot.asm; no retur
 
 /// @var _spiCopiDio
 ///
-/// @brief DIO pin used for SPI COPI.
-static uint8_t _spiCopiDio = 95;
+/// @brief DIO pin used for SPI COPI (eZ80F92 hardware SPI MOSI).
+static uint8_t _spiCopiDio = PB7;
 
 /// @var _spiCipoDio
 ///
-/// @brief DIO pin used for SPI CIPO.
-static uint8_t _spiCipoDio = 94;
+/// @brief DIO pin used for SPI CIPO (eZ80F92 hardware SPI MISO).
+static uint8_t _spiCipoDio = PB6;
 
 /// @var _spiSckDio
 ///
-/// @brief DIO pin used for SPI serial clock.
-static uint8_t _spiSckDio = 91;
+/// @brief DIO pin used for the SPI serial clock (eZ80F92 hardware SPI SCK).
+static uint8_t _spiSckDio = PB3;
 
 /// @var _sdCardPinChipSelect
 ///
-/// @brief Pin to use for the MicroSD card reader's SPI chip select line.
-static uint8_t _sdCardPinChipSelect = 92;
-
-/// @def SPI_CS_PD_LOW / SPI_CS_PD_HIGH
-///
-/// @brief Inclusive DIO range for Port D pins PD4..PD7 - free header GPIOs the
-/// SPI bus is broken out alongside, usable as extra device chip selects.
-#define SPI_CS_PD_LOW  72
-#define SPI_CS_PD_HIGH 75
-
-/// @def SPI_CS_PC_LOW / SPI_CS_PC_HIGH
-///
-/// @brief Inclusive DIO range for Port C pins PC2..PC7 - likewise free header
-/// GPIOs (PC0/PC1 are UART1) usable as extra device chip selects.
-#define SPI_CS_PC_LOW  78
-#define SPI_CS_PC_HIGH 83
+/// @brief Chip-select for the on-board microSD card reader.  Device 0's CS.
+static uint8_t _sdCardPinChipSelect = PB4;
 
 // The fact that we've included Arduino.h in this file means that the memory
 // management functions from its library are available in this file.  That's a
@@ -409,297 +433,53 @@ int32_t agonLight2IsUartConsole(va_list args) {
 // DIO subsystem stubs
 // ---------------------------------------------------------------------------
 
-/// @struct AgonLight2Dio
+/// @struct AgonLight2GpioPort
 ///
-/// @brief In-memory representation of a single DIO pin on the AgonLight 2.
+/// @brief The four eZ80F92 I/O-register addresses for one GPIO port.
 ///
-/// @param configured Whether or not the pin has been configured by the HAL.
-/// @param bin The bit position of the pin within its control register ports.
-/// @param dr The address of the Data Register port.
-/// @param ddr The address of the Data Direction Register port.
-/// @param alt1 The address of the Alternate Function 1 Register port.
-/// @param alt2 The address of the Alternate Function 2 Register port.
-typedef struct AgonLight2Dio {
-  bool          configured;
-  const uint8_t bit;
-  const uint8_t dr;
-  const uint8_t ddr;
-  const uint8_t alt1;
-  const uint8_t alt2;
-} AgonLight2Dio;
+/// @param dr   Data Register.
+/// @param ddr  Data Direction Register (1 = input, 0 = output).
+/// @param alt1 Alternate Function 1 Register.
+/// @param alt2 Alternate Function 2 Register.
+typedef struct AgonLight2GpioPort {
+  uint8_t dr;
+  uint8_t ddr;
+  uint8_t alt1;
+  uint8_t alt2;
+} AgonLight2GpioPort;
 
-/// @var agonLight2Dios
+/// @var _agonGpioPorts
 ///
-/// @brief Array of AgonLight2Dio structures that correspond to the DIO pins on
-/// the AgonLight 2.
-static AgonLight2Dio agonLight2Dios[] = {
-  {
-    // Pin 68 - PD0 (TxD0 / IR_TxD)
-    .configured = false,
-    .bit        = 0x00,
-    .dr         = 0xa2,
-    .ddr        = 0xa3,
-    .alt1       = 0xa4,
-    .alt2       = 0xa5,
-  },
-  {
-    // Pin 69 - PD1 (RxD0 / IR_RxD)
-    .configured = false,
-    .bit        = 0x01,
-    .dr         = 0xa2,
-    .ddr        = 0xa3,
-    .alt1       = 0xa4,
-    .alt2       = 0xa5,
-  },
-  {
-    // Pin 70 - PD2 (RTS0)
-    .configured = false,
-    .bit        = 0x02,
-    .dr         = 0xa2,
-    .ddr        = 0xa3,
-    .alt1       = 0xa4,
-    .alt2       = 0xa5,
-  },
-  {
-    // Pin 71 - PD3 (CTS0)
-    .configured = false,
-    .bit        = 0x03,
-    .dr         = 0xa2,
-    .ddr        = 0xa3,
-    .alt1       = 0xa4,
-    .alt2       = 0xa5,
-  },
-  {
-    // Pin 72 - PD4 (DTR0)
-    .configured = false,
-    .bit        = 0x04,
-    .dr         = 0xa2,
-    .ddr        = 0xa3,
-    .alt1       = 0xa4,
-    .alt2       = 0xa5,
-  },
-  {
-    // Pin 73 - PD5 (DSR0)
-    .configured = false,
-    .bit        = 0x05,
-    .dr         = 0xa2,
-    .ddr        = 0xa3,
-    .alt1       = 0xa4,
-    .alt2       = 0xa5,
-  },
-  {
-    // Pin 74 - PD6 (DCD0)
-    .configured = false,
-    .bit        = 0x06,
-    .dr         = 0xa2,
-    .ddr        = 0xa3,
-    .alt1       = 0xa4,
-    .alt2       = 0xa5,
-  },
-  {
-    // Pin 75 - PD7 (RI0)
-    .configured = false,
-    .bit        = 0x07,
-    .dr         = 0xa2,
-    .ddr        = 0xa3,
-    .alt1       = 0xa4,
-    .alt2       = 0xa5,
-  },
-  {
-    // Pin 76 - PC0 (TxD1)
-    .configured = false,
-    .bit        = 0x00,
-    .dr         = 0x9e,
-    .ddr        = 0x9f,
-    .alt1       = 0xa0,
-    .alt2       = 0xa1,
-  },
-  {
-    // Pin 77 - PC1 (RxD1)
-    .configured = false,
-    .bit        = 0x01,
-    .dr         = 0x9e,
-    .ddr        = 0x9f,
-    .alt1       = 0xa0,
-    .alt2       = 0xa1,
-  },
-  {
-    // Pin 78 - PC2 (RTS1)
-    .configured = false,
-    .bit        = 0x02,
-    .dr         = 0x9e,
-    .ddr        = 0x9f,
-    .alt1       = 0xa0,
-    .alt2       = 0xa1,
-  },
-  {
-    // Pin 79 - PC3 (CTS1)
-    .configured = false,
-    .bit        = 0x03,
-    .dr         = 0x9e,
-    .ddr        = 0x9f,
-    .alt1       = 0xa0,
-    .alt2       = 0xa1,
-  },
-  {
-    // Pin 80 - PC4 (DTR1)
-    .configured = false,
-    .bit        = 0x04,
-    .dr         = 0x9e,
-    .ddr        = 0x9f,
-    .alt1       = 0xa0,
-    .alt2       = 0xa1,
-  },
-  {
-    // Pin 81 - PC5 (DSR1)
-    .configured = false,
-    .bit        = 0x05,
-    .dr         = 0x9e,
-    .ddr        = 0x9f,
-    .alt1       = 0xa0,
-    .alt2       = 0xa1,
-  },
-  {
-    // Pin 82 - PC6 (DCD1)
-    .configured = false,
-    .bit        = 0x06,
-    .dr         = 0x9e,
-    .ddr        = 0x9f,
-    .alt1       = 0xa0,
-    .alt2       = 0xa1,
-  },
-  {
-    // Pin 83 - PC7 (RI1)
-    .configured = false,
-    .bit        = 0x07,
-    .dr         = 0x9e,
-    .ddr        = 0x9f,
-    .alt1       = 0xa0,
-    .alt2       = 0xa1,
-  },
-  {
-    // Pin 84 - Not mapped (VSS)
-    .configured = false,
-    .bit        = 0x00,
-    .dr         = 0x00,
-    .ddr        = 0x00,
-    .alt1       = 0x00,
-    .alt2       = 0x00,
-  },
-  {
-    // Pin 85 - Not mapped (XIN)
-    .configured = false,
-    .bit        = 0x00,
-    .dr         = 0x00,
-    .ddr        = 0x00,
-    .alt1       = 0x00,
-    .alt2       = 0x00,
-  },
-  {
-    // Pin 86 - Not mapped (XOUT)
-    .configured = false,
-    .bit        = 0x00,
-    .dr         = 0x00,
-    .ddr        = 0x00,
-    .alt1       = 0x00,
-    .alt2       = 0x00,
-  },
-  {
-    // Pin 87 - Not mapped (VDD)
-    .configured = false,
-    .bit        = 0x00,
-    .dr         = 0x00,
-    .ddr        = 0x00,
-    .alt1       = 0x00,
-    .alt2       = 0x00,
-  },
-  {
-    // Pin 88 - PB0 (T0_IN)
-    .configured = false,
-    .bit        = 0x00,
-    .dr         = 0x9a,
-    .ddr        = 0x9b,
-    .alt1       = 0x9c,
-    .alt2       = 0x9d,
-  },
-  {
-    // Pin 89 - PB1 (T1_IN)
-    .configured = false,
-    .bit        = 0x01,
-    .dr         = 0x9a,
-    .ddr        = 0x9b,
-    .alt1       = 0x9c,
-    .alt2       = 0x9d,
-  },
-  {
-    // Pin 90 - PB2 (SS)
-    .configured = false,
-    .bit        = 0x02,
-    .dr         = 0x9a,
-    .ddr        = 0x9b,
-    .alt1       = 0x9c,
-    .alt2       = 0x9d,
-  },
-  {
-    // Pin 91 - PB3 (SCK)
-    .configured = false,
-    .bit        = 0x03,
-    .dr         = 0x9a,
-    .ddr        = 0x9b,
-    .alt1       = 0x9c,
-    .alt2       = 0x9d,
-  },
-  {
-    // Pin 92 - PB4 (T4_OUT)
-    .configured = false,
-    .bit        = 0x04,
-    .dr         = 0x9a,
-    .ddr        = 0x9b,
-    .alt1       = 0x9c,
-    .alt2       = 0x9d,
-  },
-  {
-    // Pin 93 - PB5 (T5_OUT)
-    .configured = false,
-    .bit        = 0x05,
-    .dr         = 0x9a,
-    .ddr        = 0x9b,
-    .alt1       = 0x9c,
-    .alt2       = 0x9d,
-  },
-  {
-    // Pin 94 - PB6 (MISO)
-    .configured = false,
-    .bit        = 0x06,
-    .dr         = 0x9a,
-    .ddr        = 0x9b,
-    .alt1       = 0x9c,
-    .alt2       = 0x9d,
-  },
-  {
-    // Pin 95 - PB7 (MOSI)
-    .configured = false,
-    .bit        = 0x07,
-    .dr         = 0x9a,
-    .ddr        = 0x9b,
-    .alt1       = 0x9c,
-    .alt2       = 0x9d,
-  },
+/// @brief Register sets for Ports B, C and D, indexed by (port nibble - 0xB).
+///
+/// @note KEEP_IN_FLASH so it survives .rodata stripping on the shipped image.
+static const AgonLight2GpioPort _agonGpioPorts[3] KEEP_IN_FLASH = {
+  { 0x9A, 0x9B, 0x9C, 0x9D }, // Port B: DR, DDR, ALT1, ALT2
+  { 0x9E, 0x9F, 0xA0, 0xA1 }, // Port C
+  { 0xA2, 0xA3, 0xA4, 0xA5 }, // Port D
 };
 
-/// @def numDios
+/// @fn const AgonLight2GpioPort* agonGpioDecode(int32_t dio, uint8_t *bit)
 ///
-/// @brief The number of DIO pins we support in the agonLight2Dios array.
+/// @brief Split a DIO number (0xB0..0xD7) into its port register set and bit.
 ///
-/// @note This is a #define rather than a const int so that it doesn't need
-/// its own KEEP_IN_FLASH treatment - it's folded into an immediate value at
-/// each use site instead of occupying storage that could land in .rodata.
-#define numDios ((int) (sizeof(agonLight2Dios) / sizeof(agonLight2Dios[0])))
+/// @param dio The DIO number.
+/// @param bit If non-NULL, receives the 0..7 bit number on success.
+///
+/// @return The port's register set, or NULL if dio is not a valid Agon
+/// Port B/C/D pin.
+static const AgonLight2GpioPort* agonGpioDecode(int32_t dio, uint8_t *bit) {
+  uint8_t port = (uint8_t) (((uint32_t) dio >> 4) & 0x0F);
+  uint8_t b    = (uint8_t) (((uint32_t) dio) & 0x0F);
 
-/// @def BASE_DIO_PIN
-///
-/// @brief The first DIO pin represented by index 0 of the agonLight2Dios array.
-#define BASE_DIO_PIN 68
+  if ((port < 0x0B) || (port > 0x0D) || (b > 7)) {
+    return NULL;
+  }
+  if (bit != NULL) {
+    *bit = b;
+  }
+  return &_agonGpioPorts[port - 0x0B];
+}
 
 int32_t agonLight2InitDio(va_list args) {
   // This function is a no-op on this platform.
@@ -708,30 +488,29 @@ int32_t agonLight2InitDio(va_list args) {
 }
 
 int32_t agonLight2ConfigureDioImpl(int32_t dio, bool output) {
-  int32_t pinIndex = dio - BASE_DIO_PIN;
+  uint8_t bit;
+  const AgonLight2GpioPort *port = agonGpioDecode(dio, &bit);
   uint8_t c = 0x00;
 
-  if ((pinIndex < 0) || (pinIndex >= numDios)) {
+  if (port == NULL) {
     return -ENODEV;
   }
 
-  c = agonLight2ReadPort(agonLight2Dios[pinIndex].alt1);
-  c &= ~(1 << agonLight2Dios[pinIndex].bit);
-  agonLight2WritePort(agonLight2Dios[pinIndex].alt1, c);
+  c = (uint8_t) agonLight2ReadPort(port->alt1);
+  c &= (uint8_t) ~(1 << bit);            // plain GPIO: clear ALT1
+  agonLight2WritePort(port->alt1, c);
 
-  c = agonLight2ReadPort(agonLight2Dios[pinIndex].alt2);
-  c &= ~(1 << agonLight2Dios[pinIndex].bit);
-  agonLight2WritePort(agonLight2Dios[pinIndex].alt2, c);
+  c = (uint8_t) agonLight2ReadPort(port->alt2);
+  c &= (uint8_t) ~(1 << bit);            // plain GPIO: clear ALT2
+  agonLight2WritePort(port->alt2, c);
 
-  c = agonLight2ReadPort(agonLight2Dios[pinIndex].ddr);
+  c = (uint8_t) agonLight2ReadPort(port->ddr);
   if (output == true) {
-    c &= ~(1 << agonLight2Dios[pinIndex].bit);
+    c &= (uint8_t) ~(1 << bit);          // eZ80F92 DDR: 0 = output
   } else {
-    c |= 1 << agonLight2Dios[pinIndex].bit;
+    c |= (uint8_t) (1 << bit);           //              1 = input
   }
-  agonLight2WritePort(agonLight2Dios[pinIndex].ddr, c);
-
-  agonLight2Dios[pinIndex].configured = true;
+  agonLight2WritePort(port->ddr, c);
 
   return 0;
 }
@@ -743,20 +522,21 @@ int32_t agonLight2ConfigureDio(va_list args) {
 }
 
 int32_t agonLight2WriteDioImpl(int32_t dio, bool high) {
-  int32_t pinIndex = dio - BASE_DIO_PIN;
+  uint8_t bit;
+  const AgonLight2GpioPort *port = agonGpioDecode(dio, &bit);
   uint8_t c = 0x00;
 
-  if ((pinIndex < 0) || (pinIndex >= numDios)) {
+  if (port == NULL) {
     return -ENODEV;
   }
 
-  c = agonLight2ReadPort(agonLight2Dios[pinIndex].dr);
+  c = (uint8_t) agonLight2ReadPort(port->dr);
   if (high == true) {
-    c |= (1 << agonLight2Dios[pinIndex].bit);
+    c |= (uint8_t) (1 << bit);
   } else {
-    c &= ~(1 << agonLight2Dios[pinIndex].bit);
+    c &= (uint8_t) ~(1 << bit);
   }
-  agonLight2WritePort(agonLight2Dios[pinIndex].dr, c);
+  agonLight2WritePort(port->dr, c);
 
   return 0;
 }
@@ -825,8 +605,8 @@ int32_t agonLight2ConfigureSpi(va_list args) {
   // device 0) or one of the free header GPIOs the SPI bus is broken out
   // alongside: PD4..PD7 or PC2..PC7.  Nothing else is accepted.
   bool csValid = (cs == _sdCardPinChipSelect)
-    || ((cs >= SPI_CS_PD_LOW) && (cs <= SPI_CS_PD_HIGH))
-    || ((cs >= SPI_CS_PC_LOW) && (cs <= SPI_CS_PC_HIGH));
+    || ((cs >= PD4) && (cs <= PD7))
+    || ((cs >= PC2) && (cs <= PC7));
   if ((sck  != _spiSckDio)
     || (copi != _spiCopiDio)
     || (cipo != _spiCipoDio)
