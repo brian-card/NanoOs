@@ -212,6 +212,39 @@ realStart:
     HALT
     JR  .hang
 
+;;; ------------------------------------------------------------------------
+;;; System-control entry points for the power HAL (src/hal/HalAgonLight2.c).
+;;; Regular .text so they do not compete for the sub-0x100 space the reset /
+;;; RST stubs and the IVT need.
+;;; ------------------------------------------------------------------------
+.section .text,"ax"
+.assume ADL=1
+
+;;; @fn void agonLight2SystemReset(void)
+;;;
+;;; @brief Restart NanoOs by re-entering the reset path.  The eZ80F92 has no
+;;; software reset line that fab-agon-emulator models (its watchdog is not
+;;; emulated), so this jumps back into realStart, which re-runs the CS0 / flash
+;;; / RAM bring-up, the .data copy, the .bss clear, and main() - a full restart
+;;; from the HAL up.  DI first so a pending PRT interrupt cannot land in the
+;;; half-reset machine.  Does not return.
+.globl _agonLight2SystemReset
+_agonLight2SystemReset:
+    DI
+    JP.LIL  realStart
+
+;;; @fn void agonLight2Halt(void)
+;;;
+;;; @brief Stop the CPU for good.  The Agon Light 2 has no software power
+;;; control (power is a physical switch), so OFF / SUSPEND - and the kernel's
+;;; panic path - come down to this.  Does not return.
+.globl _agonLight2Halt
+_agonLight2Halt:
+    DI
+.agonLight2HaltLoop:
+    HALT
+    JR  .agonLight2HaltLoop
+
     .extern __bss_start
     .extern __bss_size
     .extern __data_start__
