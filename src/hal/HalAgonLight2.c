@@ -985,15 +985,16 @@ int32_t agonLight2EnterMode(va_list args) {
 // rationale and its HalArduinoSamD21x18A.cpp analogue.
 //
 // The interrupt path (trampoline -> handler -> callback) is wired, and
-// configOneShot / cancel program the PRTs directly.  Still stubbed: initDevice,
-// the configured/remaining queries, cancelAndGet, and timer.numSupported /
-// online - so the kernel does not use these yet.
+// initDevice / configOneShot / cancel / the configured & remaining queries are
+// implemented against the PRT registers.  Still stubbed: cancelAndGet and
+// timer.numSupported / online - so the kernel does not drive these yet.
 
 /// @struct AgonLight2Timer
 ///
 /// @brief Per-device bookkeeping for one PRT-backed HAL timer.  Mirrors the
 /// non-SAMD-specific fields of HardwareTimer in HalArduinoSamD21x18A.cpp.
 typedef struct AgonLight2Timer {
+  bool    initialized;       ///< initDevice() has run for this timer
   void  (*callback)(void);   ///< fired once, when the timer expires
   bool    active;            ///< armed and counting
   int64_t startTimeNs;       ///< readClock() ns when configOneShot armed it
@@ -1032,13 +1033,43 @@ void agonLight2TimerInterruptHandler4(void);
 void agonLight2TimerInterruptHandler5(void);
 
 int32_t agonLight2InitTimer(va_list args) {
+  // Nothing subsystem-wide to do: each eZ80F92 PRT (TMR0..TMR5) is fully
+  // independent and clocked straight from the system clock - there is no
+  // shared enable, clock gate, or reset the way the SAMD21's GCLK needs.  All
+  // per-device work lives in agonLight2InitTimerDevice.
   (void) args;
   return 0;
 }
 
 int32_t agonLight2InitTimerDevice(va_list args) {
-  (void) args;
-  return -EINVAL; // no timer devices configured yet
+  int32_t deviceId = va_arg(args, int32_t);
+
+  if ((deviceId < 0) || (deviceId >= _numPrtTimers)) {
+    return -ERANGE;
+  }
+
+  AgonLight2Timer *timer = &_prtTimers[deviceId];
+  if (timer->initialized) {
+    return 0;   // idempotent, like arduinoSamD21x18AInitTimerDevice
+  }
+
+  // Bring the PRT to a known, stopped state.  Writing TMRn_CTL = 0 drops EN and
+  // IRQ_EN; the follow-up read clears any latched PRT_IRQ.  There is no reset
+  // or mode-select step beyond this on the eZ80F92 - one-shot mode, the clock
+  // divider, and the enable are all set by configOneShot's CTL write.  (The
+  // PRTn vector slot is bound to prtNTramp at build time in Interrupts.asm, and
+  // interrupts come online once, in enableInterrupts().)
+  uint8_t ctlPort = _prtCtlPort[deviceId];
+  agonLight2WritePort(ctlPort, 0x00);
+  (void) agonLight2ReadPort(ctlPort);
+
+  timer->callback    = NULL;
+  timer->active      = false;
+  timer->startTimeNs = 0;
+  timer->deadlineNs  = 0;
+  timer->initialized = true;
+
+  return 0;
 }
 
 int32_t agonLight2ConfigOneShotTimer(va_list args) {
@@ -1048,6 +1079,9 @@ int32_t agonLight2ConfigOneShotTimer(va_list args) {
 
   if ((deviceId < 0) || (deviceId >= _numPrtTimers)) {
     return -ERANGE;
+  }
+  if (_prtTimers[deviceId].initialized == false) {
+    return -EINVAL;
   }
 
   // Pick the smallest clock divider (4, 16, 64, 256) whose 16-bit reload
@@ -1095,21 +1129,53 @@ int32_t agonLight2ConfigOneShotTimer(va_list args) {
 }
 
 int32_t agonLight2ConfiguredTimerNanoseconds(va_list args) {
-  (void)          va_arg(args, int32_t);  // deviceId
+  int32_t   deviceId    = va_arg(args, int32_t);
   uint64_t *returnValue = va_arg(args, uint64_t*);
+
   if (returnValue != NULL) {
     *returnValue = 0;
   }
-  return -EINVAL;
+  if ((deviceId < 0) || (deviceId >= _numPrtTimers)) {
+    return -ERANGE;
+  }
+
+  AgonLight2Timer *timer = &_prtTimers[deviceId];
+  if ((timer->initialized == false) || (timer->active == false)) {
+    return -EINVAL;
+  }
+
+  // The delay configOneShot was asked for, recovered from the recorded window.
+  if (returnValue != NULL) {
+    *returnValue = (uint64_t) (timer->deadlineNs - timer->startTimeNs);
+  }
+  return 0;
 }
 
 int32_t agonLight2RemainingTimerNanoseconds(va_list args) {
-  (void)          va_arg(args, int32_t);  // deviceId
+  int32_t   deviceId    = va_arg(args, int32_t);
   uint64_t *returnValue = va_arg(args, uint64_t*);
+
   if (returnValue != NULL) {
     *returnValue = 0;
   }
-  return -EINVAL;
+  if ((deviceId < 0) || (deviceId >= _numPrtTimers)) {
+    return -ERANGE;
+  }
+
+  AgonLight2Timer *timer = &_prtTimers[deviceId];
+  if ((timer->initialized == false) || (timer->active == false)) {
+    return -EINVAL;
+  }
+
+  // Wall-clock estimate against the recorded deadline, as
+  // arduinoSamD21x18ARemainingTimerNanoseconds does - no need to latch and
+  // scale the live PRT counter.  Resolution is the system clock tick.
+  int64_t nowNs = 0;
+  readClock(&nowNs);
+  if ((returnValue != NULL) && (nowNs < timer->deadlineNs)) {
+    *returnValue = (uint64_t) (timer->deadlineNs - nowNs);
+  }
+  return 0;
 }
 
 int32_t agonLight2CancelTimer(va_list args) {
