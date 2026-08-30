@@ -96,11 +96,11 @@ __nanoOsIvt:
     .short _defaultIsr   ; 0x06
     .short _defaultIsr   ; 0x08
     .short clockTimerIsr ; 0x0A  PRT0 / Timer0
-    .short _defaultIsr   ; 0x0C  PRT1
-    .short _defaultIsr   ; 0x0E  PRT2
-    .short _defaultIsr   ; 0x10  PRT3
-    .short _defaultIsr   ; 0x12  PRT4
-    .short _defaultIsr   ; 0x14  PRT5
+    .short _defaultIsr   ; 0x0C  PRT1   <- prt1Tramp once the C dispatcher exists
+    .short _defaultIsr   ; 0x0E  PRT2   <- prt2Tramp        "
+    .short _defaultIsr   ; 0x10  PRT3   <- prt3Tramp        "
+    .short _defaultIsr   ; 0x12  PRT4   <- prt4Tramp        "
+    .short _defaultIsr   ; 0x14  PRT5   <- prt5Tramp        "
     .short _defaultIsr   ; 0x16
     .short _defaultIsr   ; 0x18  UART0
     .short _defaultIsr   ; 0x1A  UART1
@@ -186,3 +186,121 @@ _defaultIsr:
     di
     halt
     jr      _defaultIsr
+
+;;; ========================================================================
+;;; PRT1..PRT5 one-shot timer trampolines (FIRST-PASS DRAFT - not yet wired)
+;;; ========================================================================
+;;;
+;;; These are the eZ80 analogue of TC3_Handler / TC4_Handler +
+;;; arduinoSamD21x18ATimerInterruptHandler{0,1} in
+;;; src/hal/HalArduinoSamD21x18A.cpp.  Two things force a trampoline here:
+;;;
+;;;   1. Reach.  An IM2 vector slot is 2 bytes and the CPU jumps to
+;;;      { 00h, entry }, so the target must live below 0x010000.  The real
+;;;      timer handlers are C, linked into the main .text well above 64 KB;
+;;;      this stub sits in .text.ivt (kept low by ld/AgonLight2.ld) and is
+;;;      what the slot actually points at.
+;;;
+;;;   2. Context.  The HAL timer callback for these devices is the scheduler's
+;;;      preemption callback (forceYield -> processYieldTo), which performs a
+;;;      coroutine context switch and does NOT return to the interrupted point
+;;;      until that process is next scheduled.  It has to run with interrupts
+;;;      ENABLED, or PRT0 (the millisecond clock) and every other timer stall
+;;;      for the whole duration of the preemption.  On the SAMD21 that means
+;;;      returning from the Cortex-M0 exception first (RETURN_TO_HANDLER) and
+;;;      running the handler in thread mode.  The eZ80 has no handler mode - an
+;;;      IM2 interrupt only clears IEF1 and pushes a 3-byte return PC - so the
+;;;      trampoline just clears the timer's IRQ, does `ei`, and calls the
+;;;      handler.  If the callback switches away, this trampoline's frame
+;;;      (~28 bytes: the register saves + the interrupt-pushed PC) simply
+;;;      freezes on the preempted process's stack; when the coroutine
+;;;      machinery later restores that process's SP/PC, execution returns from
+;;;      the `call` below, the frame unwinds, and `reti` pops the pushed PC to
+;;;      resume exactly where the timer fired.  No _savedContext-style global
+;;;      is needed: every trampoline invocation is self-contained on the stack,
+;;;      so nesting / re-entrancy is naturally safe.
+;;;
+;;; TODO before wiring the .short slots to prtNTramp:
+;;;   - Add agonLight2TimerInterruptHandler1..5() to HalAgonLight2.c, each a
+;;;     thin wrapper around a shared agonLight2TimerInterruptHandler(deviceId)
+;;;     that clears the hardwareTimers[deviceId] bookkeeping (active/deadline)
+;;;     and invokes its callback - mirror arduinoSamD21x18ATimerInterruptHandler.
+;;;   - Add a hardwareTimers[]-equivalent plus PRT-backed initDevice /
+;;;     configOneShot / cancel / cancelAndGet (PRT_MODE=0 single-pass, so the
+;;;     PRT auto-disables after one shot; the `in0` below still has to clear
+;;;     the pending PRT_IRQ so `ei` does not immediately re-enter).
+;;;   - Then change the five ".short _defaultIsr ; 0x0C..0x14" lines above to
+;;;     ".short prtNTramp".
+;;;
+;;; Tradeoff to revisit: `ei` before the call keeps this frame parked on the
+;;; interrupted process's 1 KB stack across the entire preemption.  Bounded by
+;;; the number of processes; acceptable for a first pass.
+
+;;; Weak placeholders so this file links before HalAgonLight2.c provides the
+;;; real handlers.  Any strong C definition of agonLight2TimerInterruptHandlerN
+;;; overrides its stub.  They are dead until a .short slot above is repointed;
+;;; delete this block once the C side lands.
+.section .text,"ax",@progbits
+.weak _agonLight2TimerInterruptHandler1
+.weak _agonLight2TimerInterruptHandler2
+.weak _agonLight2TimerInterruptHandler3
+.weak _agonLight2TimerInterruptHandler4
+.weak _agonLight2TimerInterruptHandler5
+_agonLight2TimerInterruptHandler1:
+_agonLight2TimerInterruptHandler2:
+_agonLight2TimerInterruptHandler3:
+_agonLight2TimerInterruptHandler4:
+_agonLight2TimerInterruptHandler5:
+    ret
+
+.section .text.ivt,"ax",@progbits
+.global prt1Tramp
+.global prt2Tramp
+.global prt3Tramp
+.global prt4Tramp
+.global prt5Tramp
+
+;;; eZ80F92 PRT control-register I/O addresses.  A read of TMRn_CTL clears that
+;;; timer's PRT_IRQ (bit 7).  TMRn_CTL = 0x80 + 3*n.
+TMR1_CTL    .equ 0x083
+TMR2_CTL    .equ 0x086
+TMR3_CTL    .equ 0x089
+TMR4_CTL    .equ 0x08C
+TMR5_CTL    .equ 0x08F
+
+;;; PRT_TRAMPOLINE name, ctlPort, handler
+;;;   name    - the label the IVT slot points at
+;;;   ctlPort - that timer's TMRn_CTL, read to clear the pending PRT_IRQ
+;;;   handler - the C entry point (deviceId is baked into the entry point, as
+;;;             in the SAMD21 ...Handler0 / ...Handler1 split, so nothing has to
+;;;             be marshalled across the eZ80 C ABI here)
+.macro PRT_TRAMPOLINE name, ctlPort, handler
+\name:
+    push    af
+    push    bc
+    push    de
+    push    hl
+    push    ix                 ; over-saved for the first pass; IX/IY are
+    push    iy                 ; probably callee-saved by the C ABI + preserved
+                               ; across processYieldTo, so these two may go
+    in0     a, (\ctlPort)      ; read TMRn_CTL -> clears this timer's PRT_IRQ
+    ei                         ; handler (and its context switch) runs with
+                               ; interrupts live - see the note above
+    call    \handler
+    di                         ; atomic teardown
+    pop     iy
+    pop     ix
+    pop     hl
+    pop     de
+    pop     bc
+    pop     af
+    ei                         ; effective after the reti below
+    reti                       ; plain RETI (ED 4D): MADL=0 / pure ADL, so the
+                               ; interrupt pushed only a 3-byte PC
+.endm
+
+    PRT_TRAMPOLINE prt1Tramp, TMR1_CTL, _agonLight2TimerInterruptHandler1
+    PRT_TRAMPOLINE prt2Tramp, TMR2_CTL, _agonLight2TimerInterruptHandler2
+    PRT_TRAMPOLINE prt3Tramp, TMR3_CTL, _agonLight2TimerInterruptHandler3
+    PRT_TRAMPOLINE prt4Tramp, TMR4_CTL, _agonLight2TimerInterruptHandler4
+    PRT_TRAMPOLINE prt5Tramp, TMR5_CTL, _agonLight2TimerInterruptHandler5
