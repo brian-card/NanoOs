@@ -984,9 +984,10 @@ int32_t agonLight2EnterMode(va_list args) {
 // agonLight2TimerInterruptHandlerN() below.  See Interrupts.asm for the full
 // rationale and its HalArduinoSamD21x18A.cpp analogue.
 //
-// The interrupt path (trampoline -> handler -> callback) is wired.  Arming the
-// PRTs - initDevice / configOneShot / cancel / cancelAndGet, plus
-// numSupported / online - is still stubbed below, so nothing fires these yet.
+// The interrupt path (trampoline -> handler -> callback) is wired, and
+// configOneShot / cancel program the PRTs directly.  Still stubbed: initDevice,
+// the configured/remaining queries, cancelAndGet, and timer.numSupported /
+// online - so the kernel does not use these yet.
 
 /// @struct AgonLight2Timer
 ///
@@ -1010,6 +1011,18 @@ static AgonLight2Timer _prtTimers[5];
 /// not need KEEP_IN_FLASH - it folds to an immediate at each use site.
 #define _numPrtTimers ((int32_t) (sizeof(_prtTimers) / sizeof(_prtTimers[0])))
 
+/// @var _prtCtlPort
+///
+/// @brief TMRn_CTL I/O address for HAL timer device 0..4 (eZ80F92 PRT1..PRT5).
+/// Each timer's reload registers follow it contiguously: TMRn_RR_L = port + 1,
+/// TMRn_RR_H = port + 2.  Written a byte at a time through agonLight2WritePort,
+/// the same table-of-ports pattern agonLight2ConfigureDioImpl uses.
+///
+/// @note KEEP_IN_FLASH so it survives .rodata stripping on the shipped image.
+static const uint8_t _prtCtlPort[5] KEEP_IN_FLASH = {
+  0x83, 0x86, 0x89, 0x8C, 0x8F,
+};
+
 // Called from the PRT trampolines in src/hal/AgonLight2/Interrupts.asm.
 void agonLight2TimerInterruptHandler(int32_t deviceId);
 void agonLight2TimerInterruptHandler1(void);
@@ -1029,8 +1042,56 @@ int32_t agonLight2InitTimerDevice(va_list args) {
 }
 
 int32_t agonLight2ConfigOneShotTimer(va_list args) {
-  (void) args;
-  return -EINVAL;
+  int32_t   deviceId    = va_arg(args, int32_t);
+  uint64_t  nanoseconds = va_arg(args, uint64_t);
+  void    (*callback)(void) = va_arg(args, void (*)(void));
+
+  if ((deviceId < 0) || (deviceId >= _numPrtTimers)) {
+    return -ERANGE;
+  }
+
+  // Pick the smallest clock divider (4, 16, 64, 256) whose 16-bit reload
+  // covers the requested delay.  reload = ns * SYSTEM_CLOCK_HZ / (clkDiv * 1e9)
+  // - the same prescaler search arduinoSamD21x18AConfigOneShotTimer does.
+  uint32_t clkDivSel = 0;
+  uint64_t reload    = 0;
+  for (clkDivSel = 0; clkDivSel < 4; clkDivSel++) {
+    uint64_t clkDiv = ((uint64_t) 4) << (2 * clkDivSel);   // 4, 16, 64, 256
+    reload = (nanoseconds * (uint64_t) SYSTEM_CLOCK_HZ)
+      / (clkDiv * ((uint64_t) 1000000000));
+    if (reload <= 0xFFFF) {
+      break;
+    }
+  }
+  if (clkDivSel >= 4) {
+    // Longer than the PRT can express (~910 ms at /256); clamp to its maximum.
+    clkDivSel = 3;
+    reload    = 0xFFFF;
+  }
+  if (reload == 0) {
+    reload = 1;   // never arm with a zero reload
+  }
+
+  // TMRn_CTL to arm: EN | RST_EN | IRQ_EN, single-pass (PRT_MODE = 0), with the
+  // chosen divider in bits [3:2].  This is _initClockTimer's 0x57 without the
+  // continuous-mode bit.
+  uint8_t ctl     = (uint8_t) (0x43u | (clkDivSel << 2));
+  uint8_t ctlPort = _prtCtlPort[deviceId];
+
+  agonLight2WritePort(ctlPort, 0x00);                            // stop
+  agonLight2WritePort(ctlPort + 1, (uint8_t) (reload & 0xFF));   // TMRn_RR_L
+  agonLight2WritePort(ctlPort + 2, (uint8_t) (reload >> 8));     // TMRn_RR_H
+  agonLight2WritePort(ctlPort, ctl);                             // arm
+
+  int64_t nowNs = 0;
+  readClock(&nowNs);
+
+  _prtTimers[deviceId].callback    = callback;
+  _prtTimers[deviceId].active      = true;
+  _prtTimers[deviceId].startTimeNs = nowNs;
+  _prtTimers[deviceId].deadlineNs  = nowNs + (int64_t) nanoseconds;
+
+  return 0;
 }
 
 int32_t agonLight2ConfiguredTimerNanoseconds(va_list args) {
@@ -1052,7 +1113,21 @@ int32_t agonLight2RemainingTimerNanoseconds(va_list args) {
 }
 
 int32_t agonLight2CancelTimer(va_list args) {
-  (void) args;
+  int32_t deviceId = va_arg(args, int32_t);
+
+  if ((deviceId < 0) || (deviceId >= _numPrtTimers)) {
+    return -ERANGE;
+  }
+
+  // Clearing TMRn_CTL drops EN and IRQ_EN, so the PRT stops and cannot raise
+  // its interrupt.
+  agonLight2WritePort(_prtCtlPort[deviceId], 0x00);
+
+  _prtTimers[deviceId].callback    = NULL;
+  _prtTimers[deviceId].active      = false;
+  _prtTimers[deviceId].startTimeNs = 0;
+  _prtTimers[deviceId].deadlineNs  = 0;
+
   return 0;
 }
 
