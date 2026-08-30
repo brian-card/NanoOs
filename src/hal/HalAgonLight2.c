@@ -975,8 +975,8 @@ int32_t agonLight2EnterMode(va_list args) {
 // Timer subsystem
 // ---------------------------------------------------------------------------
 //
-// HAL timer devices 0..4 map to eZ80F92 PRT1..PRT5 (PRT0 is the system
-// millisecond clock - see Clock.asm).  The IM2 vector for each PRT is a 2-byte
+// HAL timer devices 0..4 map to eZ80F92 PRT1..PRT5 (PRT0 is the nanosecond
+// system clock - see Clock.asm).  The IM2 vector for each PRT is a 2-byte
 // slot that can only reach the first 64 KB, and the callback these devices
 // carry is the scheduler's preemption callback, which context-switches.  So
 // each vector runs through a trampoline in src/hal/AgonLight2/Interrupts.asm

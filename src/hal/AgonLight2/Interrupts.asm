@@ -205,8 +205,8 @@ _defaultIsr:
 ;;;      preemption callback (forceYield -> processYieldTo), which performs a
 ;;;      coroutine context switch and does NOT return to the interrupted point
 ;;;      until that process is next scheduled.  It has to run with interrupts
-;;;      ENABLED, or PRT0 (the millisecond clock) and every other timer stall
-;;;      for the whole duration of the preemption.  On the SAMD21 that means
+;;;      ENABLED, or PRT0 (the nanosecond system clock) and every other timer
+;;;      stall for the whole duration of the preemption.  On the SAMD21 that means
 ;;;      returning from the Cortex-M0 exception first (RETURN_TO_HANDLER) and
 ;;;      running the handler in thread mode.  The eZ80 has no handler mode - an
 ;;;      IM2 interrupt only clears IEF1 and pushes a 3-byte return PC - so the
