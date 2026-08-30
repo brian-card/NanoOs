@@ -36,6 +36,7 @@
 .text
 
 .global _agonLight2ConfigureSpiImpl
+.global _agonLight2SetSpiBrgImpl
 .global _agonLight2SpiTransfer8Impl
 
 ;; -- eZ80F92 Port B GPIO registers ------------------
@@ -106,6 +107,28 @@ _agonLight2ConfigureSpiImpl:
     ;; Set SPIEN | MASTEREN, CPOL=0 CPHA=0
     ld      a, 0x30
     out0    (SPI_CTL), a
+
+    pop     ix
+    ret
+
+;; -- void agonLight2SetSpiBrgImpl(uint16_t divisor) ---------------
+;;    divisor passed at sp+3 (low byte), sp+4 (high byte).
+;;
+;;    Reprograms ONLY the SPI baud-rate generator.  The pin mux and SPI_CTL
+;;    (mode / CPOL / CPHA / enable) set up by _agonLight2ConfigureSpiImpl are
+;;    left untouched - re-muxing PB3/PB6/PB7 or rewriting SPI_CTL on an idle
+;;    bus glitches the clock line, which corrupts the first byte of the next
+;;    transfer.  Devices sharing the bus at different speeds call this on every
+;;    transfer start; the full configure runs once at device-configure time.
+_agonLight2SetSpiBrgImpl:
+    push    ix
+    ld      ix, 0
+    add     ix, sp
+
+    ld      a, (ix+6)
+    out0    (SPI_BRG_L), a
+    ld      a, (ix+7)
+    out0    (SPI_BRG_H), a
 
     pop     ix
     ret
