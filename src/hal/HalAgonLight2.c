@@ -907,8 +907,13 @@ static int64_t _baseSystemTimeUs = 0;
 /// Incremented by real timer interrupt code once timers are implemented.
 static int64_t _uptimeUs = 0;
 
+// Assembly function prototypes.
+extern void initClockTimer(void);
+extern void readClock(int64_t *returnValue);
+
 int32_t agonLight2InitClock(va_list args) {
   (void) args;
+  initClockTimer();
   return 0;
 }
 
@@ -926,7 +931,10 @@ int32_t agonLight2SetSystemTime(va_list args) {
 int32_t agonLight2GetElapsedMilliseconds(va_list args) {
   int64_t  startTime   = va_arg(args, int64_t);
   int64_t *returnValue = va_arg(args, int64_t*);
-  int64_t  nowMs = (_baseSystemTimeUs + _uptimeUs) / (int64_t) 1000;
+  int64_t  nowMs = 0;
+  readClock(&nowMs);
+  nowMs += _baseSystemTimeUs * ((int64_t) 1000);
+  nowMs /= (int64_t) 1000000;
   if (returnValue != NULL) {
     *returnValue = nowMs - startTime;
   }
@@ -936,7 +944,10 @@ int32_t agonLight2GetElapsedMilliseconds(va_list args) {
 int32_t agonLight2GetElapsedMicroseconds(va_list args) {
   int64_t  startTime   = va_arg(args, int64_t);
   int64_t *returnValue = va_arg(args, int64_t*);
-  int64_t  nowUs = _baseSystemTimeUs + _uptimeUs;
+  int64_t  nowUs = 0;
+  readClock(&nowUs);
+  nowUs += _baseSystemTimeUs * ((int64_t) 1000);
+  nowUs /= (int64_t) 1000;
   if (returnValue != NULL) {
     *returnValue = nowUs - startTime;
   }
@@ -946,7 +957,9 @@ int32_t agonLight2GetElapsedMicroseconds(va_list args) {
 int32_t agonLight2GetElapsedNanoseconds(va_list args) {
   int64_t  startTime   = va_arg(args, int64_t);
   int64_t *returnValue = va_arg(args, int64_t*);
-  int64_t  nowNs = (_baseSystemTimeUs + _uptimeUs) * (int64_t) 1000;
+  int64_t  nowNs = 0;
+  readClock(&nowNs);
+  nowNs += _baseSystemTimeUs * ((int64_t) 1000);
   if (returnValue != NULL) {
     *returnValue = nowNs - startTime;
   }
