@@ -42,6 +42,7 @@ LD      := $(AGDEV_BIN)/ez80-none-elf-ld
 OBJCOPY := $(AGDEV_BIN)/ez80-none-elf-objcopy
 OBJDUMP := $(AGDEV_BIN)/ez80-none-elf-objdump
 SIZE    := $(AGDEV_BIN)/ez80-none-elf-size
+NM      := $(AGDEV_BIN)/ez80-none-elf-nm
 READELF := $(AGDEV_BIN)/ez80-none-elf-readelf
 AR      := $(AGDEV_BIN)/ez80-none-elf-ar
 
@@ -282,35 +283,54 @@ flash: $(FULL_BIN)
 
 # ---- Utility targets --------------------------------------------------------
 
-size: $(ELF) $(STRIPPED_BIN)
+# Reports the two budgets that matter for this target's split memory model:
+#   - the flash image (.text + .data load image + .rodata) against the 128 KB
+#     on-chip flash, for both the shipped (strings-stripped) and full binaries;
+#   - .bss + .data against their fixed 4 KB external-RAM reservation, past which
+#     the boot integrity canary at 0x049000 gets overwritten.
+# Everything is derived from linker symbols (see ld/AgonLight2.ld); only the
+# physical flash / SRAM capacities are constants here.
+size: $(ELF) $(FULL_BIN) $(STRIPPED_BIN) $(RODATA_BIN)
 	@echo ""
-	@echo "=== Agon Light 2 (eZ80F92): Section sizes ==="
+	@echo "=== Agon Light 2 (eZ80F92): section sizes ==="
 	@$(SIZE) -A $(ELF)
 	@echo ""
-	@echo "=== Binary breakdown ==="
-	@echo -n "  .text   (code):         "; $(SIZE) -A $(ELF) | awk '/^\.text / {print $$2 " bytes"}'
-	@echo -n "  .rodata (strings/ro):   "; $(SIZE) -A $(ELF) | awk '/^\.rodata / {print $$2 " bytes"}'
-	@echo -n "  .data   (init values):  "; $(SIZE) -A $(ELF) | awk '/^\.data / {print $$2 " bytes"}'
-	@echo -n "  .bss    (zero-init):    "; $(SIZE) -A $(ELF) | awk '/^\.bss /  {print $$2 " bytes"}'
+	@echo "  Full binary file:     $$(stat -c%s $(FULL_BIN)) B"
+	@echo "  Stripped binary file: $$(stat -c%s $(STRIPPED_BIN)) B  (shipped image, no .rodata)"
+	@echo "  Rodata binary file:   $$(stat -c%s $(RODATA_BIN)) B"
 	@echo ""
-	@echo -n "  Stripped binary size:   "; stat -c%s $(STRIPPED_BIN) 2>/dev/null || echo "(build first)"
-	@echo -n "  Full binary size:       "; stat -c%s $(FULL_BIN) 2>/dev/null || echo "(build first)"
-	@echo -n "  Rodata binary size:     "; stat -c%s $(RODATA_BIN) 2>/dev/null || echo "(build first)"
-	@echo ""
-	@echo "=== External SRAM headroom (stripped binary, as shipped) ==="
-	@python3 -c "\
-import subprocess, re; \
-out    = subprocess.check_output(['$(SIZE)', '-A', '$(ELF)']).decode(); \
-bss    = sum(int(m) for m in re.findall(r'^\\.bss\\s+(\\d+)', out, re.M)); \
-loaded = $$(stat -c%s $(STRIPPED_BIN) 2>/dev/null || echo 0); \
-total  = loaded + bss; \
-avail  = 128 * 1024; \
-print(f'  Stripped binary (loaded image): {loaded} bytes ({loaded/1024:.1f} KB)'); \
-print(f'  .bss (zero-init, added at load): {bss} bytes ({bss/1024:.1f} KB)'); \
-print(f'  Total estimated footprint: {total} bytes ({total/1024:.1f} KB)'); \
-print(f'  External SRAM available:   {avail} bytes (128 KB)'); \
-print(f'  Headroom:                  {avail - total} bytes ({(avail - total)/1024:.1f} KB)'); \
-" 2>/dev/null || true
+	@$(NM) $(ELF) | awk ' \
+	  { v = strtonum("0x" $$1); n = $$3 } \
+	  n == "__etext"          { etext = v } \
+	  n == "__flash_end"      { flash_end = v } \
+	  n == "__bss_start"      { bss_start = v } \
+	  n == "__bss_size"       { bss_size = v } \
+	  n == "__data_size"      { data_size = v } \
+	  n == "__data_bss_limit" { limit = v } \
+	  END { \
+	    flash_cap = 128 * 1024; \
+	    sram_org  = strtonum("0x40000"); \
+	    fs_win    = bss_start - sram_org; \
+	    reserve   = limit - bss_start; \
+	    used      = bss_size + data_size; \
+	    ship_img  = etext + data_size; \
+	    full_img  = flash_end; \
+	    printf "=== Flash: 128 KB on-chip, 0x000000-0x01FFFF (executed / read in place) ===\n"; \
+	    printf "  .text .............. %6d B  (ends 0x%06X)\n", etext, etext; \
+	    printf "  .data load image ... %6d B\n", data_size; \
+	    printf "  .rodata ............ %6d B  (in the full image; stripped from the shipped one)\n", full_img - ship_img; \
+	    printf "  shipped image ...... %6d B  %5.1f%% of flash, %6d B free\n", ship_img, 100.0 * ship_img / flash_cap, flash_cap - ship_img; \
+	    printf "  full image ......... %6d B  %5.1f%% of flash, %6d B free\n", full_img, 100.0 * full_img / flash_cap, flash_cap - full_img; \
+	    printf "\n"; \
+	    printf "=== External SRAM: 512 KB, 0x040000-0x0BFFFF ===\n"; \
+	    printf "  0x%06X  filesystem window .. %6d B\n", sram_org, fs_win; \
+	    printf "  0x%06X  .bss + .data ....... %6d B used / %d B reserved  (%d B free)\n", bss_start, used, reserve, reserve - used; \
+	    printf "              .bss ......... %6d B\n", bss_size; \
+	    printf "              .data ........ %6d B\n", data_size; \
+	    printf "  0x%06X  boot canary, then the heap -> grows toward the stack at 0x0C0000\n", limit; \
+	    if (used > reserve) \
+	      printf "  *** .bss + .data OVER reservation by %d B: boot canary at 0x%06X is clobbered ***\n", used - reserve, limit; \
+	  }'
 
 sections: $(ELF)
 	@$(OBJDUMP) -h $(ELF)
