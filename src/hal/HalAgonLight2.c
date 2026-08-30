@@ -58,6 +58,7 @@ void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
 extern int agonLight2ReadPort(uint16_t port);
 extern void agonLight2WritePort(uint16_t port, uint8_t c);
 extern void agonLight2ConfigureSpiImpl(uint16_t divisor);
+extern void agonLight2SetSpiBrgImpl(uint16_t divisor);
 extern int agonLight2SpiTransfer8Impl(uint8_t c);
 extern void agonLight2SystemReset(void);   // boot/AgonLight2/Boot.asm; no return
 extern void agonLight2Halt(void);          // boot/AgonLight2/Boot.asm; no return
@@ -691,9 +692,11 @@ int32_t agonLight2SetSpiSpeed(va_list args) {
   spiDevices[deviceId].baud = baud;
 
   // If this device currently holds the bus, retune the BRG now; otherwise
-  // agonLight2StartSpiTransferImpl re-applies it on the next transfer.
+  // agonLight2StartSpiTransferImpl re-applies it on the next transfer.  Only
+  // the baud-rate generator is touched - the pin mux and SPI_CTL are already
+  // live and rewriting them mid-session glitches the clock line.
   if (spiDevices[deviceId].transferInProgress == true) {
-    agonLight2ConfigureSpiImpl(agonLight2SpiDivisor(baud));
+    agonLight2SetSpiBrgImpl(agonLight2SpiDivisor(baud));
   }
 
   return 0;
@@ -716,8 +719,11 @@ int32_t agonLight2StartSpiTransferImpl(int32_t deviceId) {
 
   // Re-apply this device's clock divider - devices on the shared bus may run at
   // different speeds, so whichever configure() / setSpeed() ran last does not
-  // get to win.
-  agonLight2ConfigureSpiImpl(agonLight2SpiDivisor(spiDevices[deviceId].baud));
+  // get to win.  This is a BRG-only reload: the one-time agonLight2ConfigureSpi
+  // has already muxed the pins and programmed SPI_CTL, and re-running the full
+  // configure here (pin re-mux + SPI_CTL rewrite) on the idle bus glitched the
+  // clock and corrupted the first byte of the transfer.
+  agonLight2SetSpiBrgImpl(agonLight2SpiDivisor(spiDevices[deviceId].baud));
 
   // Drive chip-select low.
   agonLight2WriteDioImpl(spiDevices[deviceId].chipSelect, false);
