@@ -68,6 +68,19 @@
 /// @brief The SPI device ID to use in SPI calls in the HAL.
 #define SD_CARD_SPI_DEVICE 0
 
+/// @def SD_SPI_INIT_BAUD
+///
+/// @brief Bus clock for the card-identification phase.  The SD physical spec
+/// requires CMD0 through ACMD41 to run at 100-400 kHz; the HAL clamps this to
+/// whatever its hardware can produce at or below the request.
+#define SD_SPI_INIT_BAUD 400000
+
+/// @def SD_SPI_FAST_BAUD
+///
+/// @brief Bus clock requested for the data phase, once the card is in the ready
+/// state.  Each HAL clamps this to what its SPI peripheral can actually do.
+#define SD_SPI_FAST_BAUD 8000000
+
 /// @fn uint8_t sdSpiSendCommand(int sdCardSpiDevice, uint8_t cmd, uint32_t arg)
 ///
 /// @brief Send a command and its argument to the SD card over the SPI
@@ -107,38 +120,42 @@ uint8_t sdSpiSendCommand(int sdCardSpiDevice, uint8_t cmd, uint32_t arg) {
   return response;
 }
 
-/// @fn int sdSpiCardInit(SdCardSpiArgs *sdCardSpiArgs)
+/// @fn int sdSpiCardInit(SdCardSpiArgs *sdCardSpiArgs, SdCardState *sdCardState)
 ///
 /// @brief Initialize the SD card for communication with the OS.
 ///
+/// @details The card-identification handshake (CMD0 / CMD8 / ACMD41 / CMD58)
+/// runs at SD_SPI_INIT_BAUD; the bus is switched to SD_SPI_FAST_BAUD only once
+/// the card reports it is out of the idle state.  The >= 74-clock power-up
+/// sequence with the chip select deasserted is emitted by HAL->spi.configure().
+///
 /// @param sdCardSpiArgs A pointer to an SdCardSpiArgs structure that contains
 ///   the information needed to initialize the card.
+/// @param sdCardState If non-NULL, sdCardState->blockAddressed is set from the
+///   CMD58 OCR CCS bit.
 ///
 /// @return Returns the version of the connected card on success (1 or 2),
-/// 0 on error.
-int sdSpiCardInit(SdCardSpiArgs *sdCardSpiArgs) {
+/// 0 on error, or a negative errno.
+int sdSpiCardInit(SdCardSpiArgs *sdCardSpiArgs, SdCardState *sdCardState) {
   uint8_t response;
   uint16_t timeoutCount;
   bool isSDv2 = false;
-  
-  // Set up SPI at the default speed
+  bool blockAddressed = false;
+
+  // Bring the device up at the identification-phase clock rate.  configure()
+  // also drives the chip select high and emits the SD power-up clock sequence.
   int32_t initStatus = HAL->spi.configure(SD_CARD_SPI_DEVICE,
     sdCardSpiArgs->spiCsDio,
     sdCardSpiArgs->spiSckDio,
     sdCardSpiArgs->spiCopiDio,
     sdCardSpiArgs->spiCipoDio,
-    8000000
+    SD_SPI_INIT_BAUD
   );
   if (initStatus != 0) {
     // Just pass the error upward.
     return initStatus;
   }
-  
-  // Extended power up sequence - Send more clock cycles
-  for (int ii = 0; ii < 128; ii++) {
-    HAL->spi.transfer8(SD_CARD_SPI_DEVICE, 0xFF);
-  }
-  
+
   // Send CMD0 to enter SPI mode
   timeoutCount = 200;  // Extended timeout
   do {
@@ -187,13 +204,48 @@ int sdSpiCardInit(SdCardSpiArgs *sdCardSpiArgs) {
       return -ETIMEDOUT;
     }
   } while (response != 0);
-  
-  // If we get here, card is initialized
+
+  // Card is out of the idle state.  Drain the trailing busy bytes from ACMD41.
   for (int ii = 0; ii < 8; ii++) {
     HAL->spi.transfer8(SD_CARD_SPI_DEVICE, 0xFF);
   }
-  
   HAL->spi.endTransfer(SD_CARD_SPI_DEVICE);
+
+  // CMD58 (READ_OCR): the CCS bit (OCR bit 30) tells a block-addressed
+  // high-capacity card from a byte-addressed standard-capacity one.  This
+  // cannot be inferred from CMD8 - a v2 card can still be standard capacity.
+  response = sdSpiSendCommand(SD_CARD_SPI_DEVICE, CMD58, 0);
+  if (response == 0x00) {
+    uint8_t ocr[4];
+    for (int ii = 0; ii < 4; ii++) {
+      ocr[ii] = HAL->spi.transfer8(SD_CARD_SPI_DEVICE, 0xFF);
+    }
+    blockAddressed = ((ocr[0] & 0x40) != 0); // CCS
+  } else {
+    // CMD58 not supported / failed: fall back to the version heuristic.
+    logError("CMD58 (READ_OCR) returned %ld; assuming %s addressing\n",
+      (long int) response, isSDv2 ? "block" : "byte");
+    blockAddressed = isSDv2;
+  }
+  HAL->spi.endTransfer(SD_CARD_SPI_DEVICE);
+
+  // CMD16 (SET_BLOCKLEN = 512): only meaningful for byte-addressed cards.
+  // Block-addressed cards are fixed at 512 bytes and may reject it.
+  if (blockAddressed == false) {
+    response = sdSpiSendCommand(SD_CARD_SPI_DEVICE, CMD16, 512);
+    HAL->spi.endTransfer(SD_CARD_SPI_DEVICE);
+    if (response != 0x00) {
+      // Not fatal: most byte-addressed cards already default to 512.
+      logError("CMD16 (SET_BLOCKLEN) returned %ld\n", (long int) response);
+    }
+  }
+
+  // Handshake complete - the card can now be clocked at full speed.
+  HAL->spi.setSpeed(SD_CARD_SPI_DEVICE, SD_SPI_FAST_BAUD);
+
+  if (sdCardState != NULL) {
+    sdCardState->blockAddressed = blockAddressed;
+  }
   return isSDv2 ? 2 : 1;
 }
 
@@ -274,7 +326,7 @@ int sdSpiReadBlocks(SdCardState *sdCardState,
   }
   
   uint32_t address = startBlock;
-  if (sdCardState->sdCardVersion == 1) {
+  if (sdCardState->blockAddressed == false) {
     address *= sdCardState->blockSize; // Convert to byte address
   }
   
@@ -341,7 +393,7 @@ int sdSpiReadBlocks(SdCardState *sdCardState,
     
     if ((ii < numBlocks - 1) && (readCmd == CMD17)) {
       address = startBlock + ii + 1;
-      if (sdCardState->sdCardVersion == 1) {
+      if (sdCardState->blockAddressed == false) {
         address *= sdCardState->blockSize; // Convert to byte address
       }
       response = sdSpiSendCommand(SD_CARD_SPI_DEVICE, readCmd, address);
@@ -405,7 +457,7 @@ int sdSpiWriteBlocks(SdCardState *sdCardState,
   }
   
   uint32_t address = startBlock;
-  if (sdCardState->sdCardVersion == 1) {
+  if (sdCardState->blockAddressed == false) {
     address *= sdCardState->blockSize; // Convert to byte address
   }
   
@@ -515,7 +567,7 @@ int sdSpiWriteBlocks(SdCardState *sdCardState,
     
     if ((ii < numBlocks - 1) && (writeCmd == CMD24)) {
       address = startBlock + ii + 1;
-      if (sdCardState->sdCardVersion == 1) {
+      if (sdCardState->blockAddressed == false) {
         address *= sdCardState->blockSize; // Convert to byte address
       }
       response = sdSpiSendCommand(SD_CARD_SPI_DEVICE, writeCmd, address);
@@ -795,14 +847,15 @@ void* runSdCardSpi(void *args) {
   };
   sdCardState.bsDevice = &blockStorageDevice;
 
-  sdCardState.sdCardVersion = sdSpiCardInit(sdCardSpiArgs);
+  sdCardState.sdCardVersion = sdSpiCardInit(sdCardSpiArgs, &sdCardState);
   if (sdCardState.sdCardVersion > 0) {
     sdCardState.blockSize = blockStorageDevice.blockSize
       = sdSpiGetBlockSize(SD_CARD_SPI_DEVICE);
     sdCardState.numBlocks = sdSpiGetBlockCount(SD_CARD_SPI_DEVICE);
 #ifdef SD_CARD_DEBUG
     logDebug("Card is %s\n",
-      (sdCardState.sdCardVersion == 1) ? "SDSC" : "SDHC/SDXC");
+      sdCardState.blockAddressed ? "SDHC/SDXC (block addressed)"
+                                 : "SDSC (byte addressed)");
     logDebug("Card block size = %ld\n",
       (long int) blockStorageDevice.blockSize);
     logDebug("%ld total blocks (%ld total bytes)\n",

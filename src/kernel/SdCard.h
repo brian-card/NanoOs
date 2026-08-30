@@ -36,6 +36,7 @@
 #ifndef SD_CARD_H
 #define SD_CARD_H
 
+#include "stdbool.h"
 #include "stdint.h"
 
 #ifdef __cplusplus
@@ -60,6 +61,10 @@ typedef struct BlockDevice BlockDevice;
 ///   to the host.
 /// @param numBlocks The total number of blocks available on the SD card.
 /// @param sdCardVersion The version of the card (1 or 2).
+/// @param blockAddressed true if the card takes block (LBA) addresses -
+///   high-capacity SDHC/SDXC; false if it takes byte addresses - standard-
+///   capacity SDSC.  Determined from the CMD58 OCR CCS bit, not from the
+///   version, since a v2 card can still be standard capacity.
 /// @param bsDevice A pointer to the BlockDevice that abstracts this
 ///   card.
 typedef struct SdCardState {
@@ -67,6 +72,7 @@ typedef struct SdCardState {
   uint16_t blockSize;
   uint32_t numBlocks;
   int sdCardVersion;
+  bool blockAddressed;
   BlockDevice *bsDevice;
 } SdCardState;
 
