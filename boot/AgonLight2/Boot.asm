@@ -93,13 +93,30 @@ unhandledVector:
     JR  unhandledVector
 
 realStart:
+    ; --- map the external SRAM -------------------------------------------------
+    ; The eZ80F92 only routes bus cycles to the external SRAM when the target
+    ; page (address bits 23:16) falls between the Chip Select 0 lower- and
+    ; upper-bound registers.  Out of RESET CS0 does not cover the Agon's
+    ; 0x040000-0x0BFFFF SRAM window, so until this runs every access there -
+    ; the stack included - is dropped on write and reads back garbage.  As a
+    ; MOS application NanoOs never had to do this because MOS had already
+    ; programmed CS0; as the primary firmware it must.  This has to come before
+    ; the first stack use (the CALL below) and before the .data/.bss/canary
+    ; writes.
+    ;
+    ; CS0_CTL (0xAA) bus-mode / wait-state configuration for real hardware is
+    ; still TODO - the emulator only consults the bound registers.
+    LD  A, 0x04                 ; CS0_LBR: SRAM starts at page 0x04 (0x040000)
+    OUT0 (0xA8), A
+    LD  A, 0x0B                 ; CS0_UBR: SRAM ends in page 0x0B (0x0BFFFF)
+    OUT0 (0xA9), A
+
     ; --- external-RAM integrity canary -------------------------------------
     ; Stamp the known pattern 0x4ABC4ABC4ABC4ABC at __data_bss_limit (0x049000,
     ; the 36 KB mark of external SRAM — the byte just past the 4 KB .bss/.data
-    ; reservation) as the very first thing we do, before .data is copied or
-    ; .bss is cleared.  External SRAM needs no controller setup, so this is
-    ; safe this early.  halAgonLight2Init() re-reads these 8 bytes as its final
-    ; step; a mismatch means .bss/.data overflowed and corrupted memory.
+    ; reservation) before .data is copied or .bss is cleared.
+    ; halAgonLight2Init() re-reads these 8 bytes as its final step; a mismatch
+    ; means .bss/.data overflowed and corrupted memory.
     LD  HL, __data_bss_limit
     LD  B, 4
 .canary_loop:
