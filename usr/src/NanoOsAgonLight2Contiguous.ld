@@ -39,13 +39,16 @@
  */
 
 /* Contiguous filesystem linker script for Zilog eZ80 */
-/* Loads at RAM address 0x60000, inside the external SRAM region */
-/* (0x40000-0xC0000) but well clear of the regular overlays' 0xFFE000. */
+/* Loads at RAM address 0x40000 - this MUST equal FILESYSTEM_DRIVER_ADDRESS in */
+/* src/hal/HalAgonLight2.c, since the overlay is position-dependent (its       */
+/* export table holds absolute pointers).  0x40000 is the base of external     */
+/* SRAM; the 32K window ends at DATA_BSS_REGION_ADDRESS (0x48000), just below   */
+/* NanoOs's own .bss/.data.  Clear of the regular per-slot overlays at 0xFFE000.*/
 
 MEMORY
 {
     /* Overlay RAM region - sized for the 32KB contiguous filesystem cap */
-    OVERLAY_RAM (rwx) : ORIGIN = 0x60000, LENGTH = 32K
+    OVERLAY_RAM (rwx) : ORIGIN = 0x40000, LENGTH = 32K
 }
 
 /*
@@ -73,7 +76,7 @@ PROVIDE(__start = ORIGIN(OVERLAY_RAM));
 SECTIONS
 {
     /* Overlay header must be first - contains export table info */
-    .overlay_header 0x60000 :
+    .overlay_header 0x40000 :
     {
         KEEP(*(.overlay_header))
         . = ALIGN(4);
