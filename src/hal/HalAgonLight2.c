@@ -984,10 +984,11 @@ int32_t agonLight2EnterMode(va_list args) {
 // agonLight2TimerInterruptHandlerN() below.  See Interrupts.asm for the full
 // rationale and its HalArduinoSamD21x18A.cpp analogue.
 //
-// The interrupt path (trampoline -> handler -> callback) is wired, and
-// initDevice / configOneShot / cancel / the configured & remaining queries are
-// implemented against the PRT registers.  Still stubbed: cancelAndGet and
-// timer.numSupported / online - so the kernel does not drive these yet.
+// Fully wired: the interrupt path (trampoline -> handler -> callback) plus
+// initDevice / configOneShot / cancel / cancelAndGet / the configured &
+// remaining queries against the PRT registers.  timer.numSupported = 5 and all
+// five are online, so the scheduler arms PRT1 as its preemption timer and user
+// tasks run preemptively.
 
 /// @struct AgonLight2Timer
 ///
@@ -1198,14 +1199,54 @@ int32_t agonLight2CancelTimer(va_list args) {
 }
 
 int32_t agonLight2CancelAndGetTimer(va_list args) {
-  (void)              va_arg(args, int32_t);          // deviceId
-  uint64_t           *cn = va_arg(args, uint64_t*);   // configuredNanoseconds
-  uint64_t           *rn = va_arg(args, uint64_t*);   // remainingNanoseconds
-  void             (**cb)(void) = va_arg(args, void (**)(void)); // callback
-  if (cn != NULL) { *cn = 0; }
-  if (rn != NULL) { *rn = 0; }
-  if (cb != NULL) { *cb = NULL; }
-  return -EINVAL;
+  // Snapshot 'now' first: this is critical-path (stdatomic.c wraps every atomic
+  // op in cancelAndGet + re-arm) and the remaining-time figure feeds straight
+  // back into configOneShot.
+  int64_t nowNs = 0;
+  readClock(&nowNs);
+
+  int32_t   deviceId              = va_arg(args, int32_t);
+  uint64_t *configuredNanoseconds = va_arg(args, uint64_t*);
+  uint64_t *remainingNanoseconds  = va_arg(args, uint64_t*);
+  void   (**callback)(void)       = va_arg(args, void (**)(void));
+
+  if ((deviceId < 0) || (deviceId >= _numPrtTimers)) {
+    return -ERANGE;
+  }
+
+  AgonLight2Timer *timer = &_prtTimers[deviceId];
+  if ((timer->initialized == false) || (timer->active == false)) {
+    // Nothing to capture; the -EINVAL also tells the caller not to re-arm.
+    return -EINVAL;
+  }
+
+  // Inline the stop - do NOT call agonLight2CancelTimer; this is the critical
+  // path.  TMRn_CTL = 0 drops EN / IRQ_EN, and the follow-up read clears a
+  // latched PRT_IRQ so a pending preemption cannot fire the instant we return.
+  uint8_t ctlPort = _prtCtlPort[deviceId];
+  agonLight2WritePort(ctlPort, 0x00);
+  (void) agonLight2ReadPort(ctlPort);
+
+  if (configuredNanoseconds != NULL) {
+    *configuredNanoseconds = (timer->deadlineNs > timer->startTimeNs)
+      ? (uint64_t) (timer->deadlineNs - timer->startTimeNs)
+      : 0;
+  }
+  if (remainingNanoseconds != NULL) {
+    *remainingNanoseconds = (nowNs < timer->deadlineNs)
+      ? (uint64_t) (timer->deadlineNs - nowNs)
+      : 0;
+  }
+  if (callback != NULL) {
+    *callback = timer->callback;
+  }
+
+  timer->active      = false;
+  timer->startTimeNs = 0;
+  timer->deadlineNs  = 0;
+  timer->callback    = NULL;
+
+  return 0;
 }
 
 /// @fn void agonLight2TimerInterruptHandler(int32_t deviceId)
@@ -1403,7 +1444,7 @@ static HalFunction agonLight2BlockDeviceFunctions[HAL_BLOCK_DEVICE_NUM_FNS] = {
 static uint32_t agonLight2UartsOnline[]        = { 0x00000003 };
 static uint32_t agonLight2DiosOnline[]         = { 0x00000000 };
 static uint32_t agonLight2SpisOnline[]         = { 0x00000000 };
-static uint32_t agonLight2TimersOnline[]       = { 0x00000000 };
+static uint32_t agonLight2TimersOnline[]       = { 0x0000001F }; // PRT1..PRT5
 static uint32_t agonLight2BlockDevicesOnline[] = { 0x00000000 };
 
 // ---------------------------------------------------------------------------
@@ -1488,7 +1529,7 @@ int32_t halAgonLight2Init(void) {
   halImpl.spi.numSupported         = 0;
   halImpl.spi.online               = agonLight2SpisOnline;
 
-  halImpl.timer.numSupported       = 0;
+  halImpl.timer.numSupported       = 5; // eZ80F92 PRT1..PRT5 (PRT0 is the clock)
   halImpl.timer.online             = agonLight2TimersOnline;
 
   halImpl.blockDevice.numSupported = _numBlockDevices;
