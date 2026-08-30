@@ -82,17 +82,13 @@ extern int agonLight2SpiTransfer8Impl(uint8_t c);
 /// eZ80F92.  It's an additional 128 KB of flash on the eZ80F91.)
 #define RAM_START_ADDRESS 0x40000
 
-/// @def NANO_OS_SIZE
-///
-/// @brief The size, in bytes, reserved for the NanoOs binary in memory.  We
-/// will reserve 128 KB for this.
-#define NANO_OS_SIZE (128 * 1024)
-
 /// @def FILESYSTEM_DRIVER_ADDRESS
 ///
-/// @brief The address of the start of the area reserved for the filesystem
-/// driver binary.
-#define FILESYSTEM_DRIVER_ADDRESS (RAM_START_ADDRESS + NANO_OS_SIZE)
+/// @brief Start of the contiguous filesystem image window.  NanoOs is primary
+/// firmware executing in place from flash, so no external-RAM range is reserved
+/// for the OS binary any more; the filesystem image sits at the very base of
+/// external RAM.
+#define FILESYSTEM_DRIVER_ADDRESS RAM_START_ADDRESS
 
 /// @def FILESYSTEM_DRIVER_SIZE
 ///
@@ -100,23 +96,54 @@ extern int agonLight2SpiTransfer8Impl(uint8_t c);
 /// will reserve 32 KB for this.
 #define FILESYSTEM_DRIVER_SIZE (32 * 1024)
 
+/// @def DATA_BSS_REGION_ADDRESS
+///
+/// @brief Base of the external-RAM region holding NanoOs's own .bss and .data
+/// (linked in that order), immediately above the filesystem window.
+/// ld/AgonLight2.ld places both sections here; boot/AgonLight2/Boot.asm copies
+/// .data in from its flash load image at startup and then zeroes .bss.
+#define DATA_BSS_REGION_ADDRESS \
+  (FILESYSTEM_DRIVER_ADDRESS + FILESYSTEM_DRIVER_SIZE)
+
+/// @def DATA_BSS_REGION_SIZE
+///
+/// @brief Bytes reserved for .bss + .data + padding.  The current build uses
+/// well under 2 KB; 4 KB leaves head-room as the HAL and kernel fill in.
+#define DATA_BSS_REGION_SIZE (4 * 1024)
+
+/// @def DATA_BSS_CANARY_ADDRESS
+///
+/// @brief The 36 KB mark of external RAM: the byte just past the .bss/.data
+/// reservation.  Boot.asm stamps DATA_BSS_CANARY_VALUE here before it copies
+/// .data; halAgonLight2Init() re-reads it as its last step.  A mismatch means
+/// .bss or .data outgrew DATA_BSS_REGION_SIZE and corrupted memory past the
+/// reservation.  Kept in sync with __data_bss_limit in ld/AgonLight2.ld.
+#define DATA_BSS_CANARY_ADDRESS \
+  (DATA_BSS_REGION_ADDRESS + DATA_BSS_REGION_SIZE)
+
+/// @def DATA_BSS_CANARY_VALUE
+///
+/// @brief 64-bit known pattern written at DATA_BSS_CANARY_ADDRESS.
+#define DATA_BSS_CANARY_VALUE ((uint64_t) 0x4abc4abc4abc4abcULL)
+
+/// @def HEAP_START_ADDRESS
+///
+/// @brief Address of the start (bottom) of the heap.  The 8-byte integrity
+/// canary occupies the first bytes here and is consumed once the heap is first
+/// used, which happens after the boot-time integrity check has run.
+#define HEAP_START_ADDRESS DATA_BSS_CANARY_ADDRESS
+
 /// @def STATIC_LOGS_ADDRESS
 ///
-/// @brief The address of the start of the area reserved for the static log
-/// metadata and entries.
-#define STATIC_LOGS_ADDRESS (FILESYSTEM_DRIVER_ADDRESS + FILESYSTEM_DRIVER_SIZE)
+/// @brief Static-log metadata/entry area: 1 KB, one kilobyte above the bottom
+/// of the heap.  Not enabled yet -- halImpl.memory.staticLogs stays NULL.
+#define STATIC_LOGS_ADDRESS (HEAP_START_ADDRESS + 1024)
 
 /// @def STATIC_LOGS_SIZE
 ///
 /// @brief The size, in bytes, reserved for the static logs in memory.  We will
 /// only reserve 1 KB for this.
 #define STATIC_LOGS_SIZE 1024
-
-/// @def HEAP_START_ADDRESS
-///
-/// @brief Address of the start (bottom) of the heap.  This is the first address
-/// after all of the reserved space.
-#define HEAP_START_ADDRESS (STATIC_LOGS_ADDRESS + STATIC_LOGS_SIZE)
 
 /// @def PROCESS_STACK_SIZE
 ///
@@ -1158,6 +1185,17 @@ static uint32_t agonLight2BlockDevicesOnline[] = { 0x00000000 };
 /// @brief Statically allocated buffer for formatting log messages.
 static char _logBuffer[128];
 
+/// @var _dataBssCanaryError
+///
+/// @brief Message printed when the external-RAM integrity canary that Boot.asm
+/// stamps at DATA_BSS_CANARY_ADDRESS no longer reads back at the end of HAL
+/// init -- meaning .bss/.data overran their reservation and trashed memory.
+///
+/// @note KEEP_IN_FLASH so it survives .rodata stripping in the shipped image.
+static const char _dataBssCanaryError[] KEEP_IN_FLASH =
+  "FATAL: NanoOs .bss/.data overran their reservation; "
+  "external RAM past the canary is corrupted.\n";
+
 extern void enableInterrupts(void);
 
 int32_t halAgonLight2Init(void) {
@@ -1231,6 +1269,16 @@ int32_t halAgonLight2Init(void) {
   int returnValue = halCommonInit();
 
   enableInterrupts();
+
+  // Final step: verify the external-RAM integrity canary that Boot.asm stamped
+  // at DATA_BSS_CANARY_ADDRESS before it copied .data.  halCommonInit() has
+  // brought up the console UART by now, so printString() reaches the user.
+  if (*(volatile uint64_t *) (uintptr_t) DATA_BSS_CANARY_ADDRESS
+    != DATA_BSS_CANARY_VALUE
+  ) {
+    printString(_dataBssCanaryError);
+  }
+
   return returnValue;
 }
 

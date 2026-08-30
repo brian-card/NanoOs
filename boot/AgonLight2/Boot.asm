@@ -42,9 +42,10 @@
 ;;; otherwise be reachable (and misinterpreted as an instruction stream) by a
 ;;; stray RST or NMI.
 ;;;
-;;; This does NOT yet handle flash execute-in-place semantics (.data still
-;;; needs a load-address/copy step at startup, the way the SAMD21 ports do) —
-;;; that is follow-up work for real hardware bring-up.
+;;; Flash execute-in-place: .text and .rodata run / are read straight from
+;;; on-chip flash.  .data has its load image in flash (right after .text) and
+;;; its run location in external SRAM; realStart copies it there and then zeroes
+;;; .bss, both in external SRAM (see ld/AgonLight2.ld for the memory model).
 ;;;
 ;;; Assembled with ez80-none-elf-clang (LLVM integrated assembler) via
 ;;;   clang --target=ez80-none-elf -x assembler-with-cpp
@@ -92,6 +93,23 @@ unhandledVector:
     JR  unhandledVector
 
 realStart:
+    ; --- external-RAM integrity canary -------------------------------------
+    ; Stamp the known pattern 0x4ABC4ABC4ABC4ABC at __data_bss_limit (0x049000,
+    ; the 36 KB mark of external SRAM — the byte just past the 4 KB .bss/.data
+    ; reservation) as the very first thing we do, before .data is copied or
+    ; .bss is cleared.  External SRAM needs no controller setup, so this is
+    ; safe this early.  halAgonLight2Init() re-reads these 8 bytes as its final
+    ; step; a mismatch means .bss/.data overflowed and corrupted memory.
+    LD  HL, __data_bss_limit
+    LD  B, 4
+.canary_loop:
+    LD  (HL), 0xBC
+    INC HL
+    LD  (HL), 0x4A
+    INC HL
+    DEC B
+    JR  NZ, .canary_loop
+
     DI                          ; disable maskable interrupts while setting up
 
     ; Map eZ80F92 on-chip 8 KB SRAM to 0xFFE000.
@@ -106,6 +124,26 @@ realStart:
     ; Point the stack at the top of external SRAM.
     ; External SRAM: 0x040000–0x0BFFFF (512 KB).
     LD  SP, 0x0C0000
+
+    ; Copy initialised data from its load image in flash (__data_load__, laid
+    ; down by the linker right after .text) to its run location in external
+    ; SRAM (__data_start__).  Skip the loop when __data_size == 0.
+    LD  HL, __data_load__
+    LD  DE, __data_start__
+    LD  BC, __data_size
+    LD  A, B
+    OR  C
+    JR  Z, .data_done
+.data_loop:
+    LD  A, (HL)
+    LD  (DE), A
+    INC HL
+    INC DE
+    DEC BC
+    LD  A, B
+    OR  C
+    JR  NZ, .data_loop
+.data_done:
 
     ; Zero BSS.  Skip the loop when __bss_size == 0.
     LD  HL, __bss_start
@@ -141,4 +179,8 @@ realStart:
 
     .extern __bss_start
     .extern __bss_size
+    .extern __data_start__
+    .extern __data_load__
+    .extern __data_size
+    .extern __data_bss_limit
     .extern _main
