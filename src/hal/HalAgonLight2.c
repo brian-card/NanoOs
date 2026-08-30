@@ -972,8 +972,51 @@ int32_t agonLight2EnterMode(va_list args) {
 }
 
 // ---------------------------------------------------------------------------
-// Timer subsystem stubs (no hardware timer driver yet)
+// Timer subsystem
 // ---------------------------------------------------------------------------
+//
+// HAL timer devices 0..4 map to eZ80F92 PRT1..PRT5 (PRT0 is the system
+// millisecond clock - see Clock.asm).  The IM2 vector for each PRT is a 2-byte
+// slot that can only reach the first 64 KB, and the callback these devices
+// carry is the scheduler's preemption callback, which context-switches.  So
+// each vector runs through a trampoline in src/hal/AgonLight2/Interrupts.asm
+// (prtNTramp): it clears that timer's PRT_IRQ, re-enables interrupts, and calls
+// agonLight2TimerInterruptHandlerN() below.  See Interrupts.asm for the full
+// rationale and its HalArduinoSamD21x18A.cpp analogue.
+//
+// The interrupt path (trampoline -> handler -> callback) is wired.  Arming the
+// PRTs - initDevice / configOneShot / cancel / cancelAndGet, plus
+// numSupported / online - is still stubbed below, so nothing fires these yet.
+
+/// @struct AgonLight2Timer
+///
+/// @brief Per-device bookkeeping for one PRT-backed HAL timer.  Mirrors the
+/// non-SAMD-specific fields of HardwareTimer in HalArduinoSamD21x18A.cpp.
+typedef struct AgonLight2Timer {
+  void  (*callback)(void);   ///< fired once, when the timer expires
+  bool    active;            ///< armed and counting
+  int64_t startTimeNs;       ///< readClock() ns when configOneShot armed it
+  int64_t deadlineNs;        ///< startTimeNs + the configured delay
+} AgonLight2Timer;
+
+/// @var _prtTimers
+///
+/// @brief State for HAL timer devices 0..4 (eZ80F92 PRT1..PRT5).
+static AgonLight2Timer _prtTimers[5];
+
+/// @def _numPrtTimers
+///
+/// @brief Number of PRT-backed HAL timers.  A #define, not a const, so it does
+/// not need KEEP_IN_FLASH - it folds to an immediate at each use site.
+#define _numPrtTimers ((int32_t) (sizeof(_prtTimers) / sizeof(_prtTimers[0])))
+
+// Called from the PRT trampolines in src/hal/AgonLight2/Interrupts.asm.
+void agonLight2TimerInterruptHandler(int32_t deviceId);
+void agonLight2TimerInterruptHandler1(void);
+void agonLight2TimerInterruptHandler2(void);
+void agonLight2TimerInterruptHandler3(void);
+void agonLight2TimerInterruptHandler4(void);
+void agonLight2TimerInterruptHandler5(void);
 
 int32_t agonLight2InitTimer(va_list args) {
   (void) args;
@@ -1023,6 +1066,45 @@ int32_t agonLight2CancelAndGetTimer(va_list args) {
   if (cb != NULL) { *cb = NULL; }
   return -EINVAL;
 }
+
+/// @fn void agonLight2TimerInterruptHandler(int32_t deviceId)
+///
+/// @brief Shared body for the PRT1..PRT5 one-shot timer interrupts.  Reached
+/// via agonLight2TimerInterruptHandlerN() and the prtNTramp trampoline, so on
+/// entry interrupts are already re-enabled and the timer's PRT_IRQ is already
+/// cleared.  The PRT runs in single-pass mode and has disarmed itself in
+/// hardware; this just clears the software bookkeeping and runs the callback.
+/// Mirrors arduinoSamD21x18ATimerInterruptHandler().
+///
+/// @param deviceId 0..4, pre-selected by the calling wrapper (never out of
+///   range).
+///
+/// @return This function returns no value.
+void agonLight2TimerInterruptHandler(int32_t deviceId) {
+  AgonLight2Timer *timer = &_prtTimers[deviceId];
+
+  timer->active      = false;
+  timer->startTimeNs = 0;
+  timer->deadlineNs  = 0;
+
+  if (timer->callback != NULL) {
+    timer->callback();
+  }
+}
+
+/// @fn void agonLight2TimerInterruptHandlerN(void)
+///
+/// @brief PRT<N> vector entry points.  Split per device, as
+/// HalArduinoSamD21x18A.cpp splits ...Handler0 / ...Handler1, so the deviceId
+/// is a compile-time constant and nothing has to be marshalled across the
+/// eZ80 C ABI from the trampoline.
+///
+/// @return These functions return no value.
+void agonLight2TimerInterruptHandler1(void) { agonLight2TimerInterruptHandler(0); }
+void agonLight2TimerInterruptHandler2(void) { agonLight2TimerInterruptHandler(1); }
+void agonLight2TimerInterruptHandler3(void) { agonLight2TimerInterruptHandler(2); }
+void agonLight2TimerInterruptHandler4(void) { agonLight2TimerInterruptHandler(3); }
+void agonLight2TimerInterruptHandler5(void) { agonLight2TimerInterruptHandler(4); }
 
 // ---------------------------------------------------------------------------
 // Block device subsystem stubs (no SD card driver for eZ80 side yet)

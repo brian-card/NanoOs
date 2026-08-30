@@ -96,11 +96,11 @@ __nanoOsIvt:
     .short _defaultIsr   ; 0x06
     .short _defaultIsr   ; 0x08
     .short clockTimerIsr ; 0x0A  PRT0 / Timer0
-    .short _defaultIsr   ; 0x0C  PRT1   <- prt1Tramp once the C dispatcher exists
-    .short _defaultIsr   ; 0x0E  PRT2   <- prt2Tramp        "
-    .short _defaultIsr   ; 0x10  PRT3   <- prt3Tramp        "
-    .short _defaultIsr   ; 0x12  PRT4   <- prt4Tramp        "
-    .short _defaultIsr   ; 0x14  PRT5   <- prt5Tramp        "
+    .short prt1Tramp     ; 0x0C  PRT1
+    .short prt2Tramp     ; 0x0E  PRT2
+    .short prt3Tramp     ; 0x10  PRT3
+    .short prt4Tramp     ; 0x12  PRT4
+    .short prt5Tramp     ; 0x14  PRT5
     .short _defaultIsr   ; 0x16
     .short _defaultIsr   ; 0x18  UART0
     .short _defaultIsr   ; 0x1A  UART1
@@ -188,7 +188,7 @@ _defaultIsr:
     jr      _defaultIsr
 
 ;;; ========================================================================
-;;; PRT1..PRT5 one-shot timer trampolines (FIRST-PASS DRAFT - not yet wired)
+;;; PRT1..PRT5 one-shot timer trampolines
 ;;; ========================================================================
 ;;;
 ;;; These are the eZ80 analogue of TC3_Handler / TC4_Handler +
@@ -220,40 +220,28 @@ _defaultIsr:
 ;;;      is needed: every trampoline invocation is self-contained on the stack,
 ;;;      so nesting / re-entrancy is naturally safe.
 ;;;
-;;; TODO before wiring the .short slots to prtNTramp:
-;;;   - Add agonLight2TimerInterruptHandler1..5() to HalAgonLight2.c, each a
-;;;     thin wrapper around a shared agonLight2TimerInterruptHandler(deviceId)
-;;;     that clears the hardwareTimers[deviceId] bookkeeping (active/deadline)
-;;;     and invokes its callback - mirror arduinoSamD21x18ATimerInterruptHandler.
-;;;   - Add a hardwareTimers[]-equivalent plus PRT-backed initDevice /
-;;;     configOneShot / cancel / cancelAndGet (PRT_MODE=0 single-pass, so the
-;;;     PRT auto-disables after one shot; the `in0` below still has to clear
-;;;     the pending PRT_IRQ so `ei` does not immediately re-enter).
-;;;   - Then change the five ".short _defaultIsr ; 0x0C..0x14" lines above to
-;;;     ".short prtNTramp".
+;;; Wired: the PRT1..PRT5 slots point here, and each trampoline calls its C
+;;; handler agonLight2TimerInterruptHandlerN() in src/hal/HalAgonLight2.c.
+;;; Still to come there: PRT-backed initDevice / configOneShot / cancel /
+;;; cancelAndGet plus timer.numSupported / online, so that something actually
+;;; arms a PRT - until then these trampolines never run (no PRT1..5 EN bit is
+;;; ever set).  The PRTs are used PRT_MODE=0 single-pass, so a fired timer
+;;; auto-disables in hardware; the `in0` below still has to clear the pending
+;;; PRT_IRQ so `ei` does not immediately re-enter.
 ;;;
 ;;; Tradeoff to revisit: `ei` before the call keeps this frame parked on the
 ;;; interrupted process's 1 KB stack across the entire preemption.  Bounded by
 ;;; the number of processes; acceptable for a first pass.
 
-;;; Weak placeholders so this file links before HalAgonLight2.c provides the
-;;; real handlers.  Any strong C definition of agonLight2TimerInterruptHandlerN
-;;; overrides its stub.  They are dead until a .short slot above is repointed;
-;;; delete this block once the C side lands.
-.section .text,"ax",@progbits
-.weak _agonLight2TimerInterruptHandler1
-.weak _agonLight2TimerInterruptHandler2
-.weak _agonLight2TimerInterruptHandler3
-.weak _agonLight2TimerInterruptHandler4
-.weak _agonLight2TimerInterruptHandler5
-_agonLight2TimerInterruptHandler1:
-_agonLight2TimerInterruptHandler2:
-_agonLight2TimerInterruptHandler3:
-_agonLight2TimerInterruptHandler4:
-_agonLight2TimerInterruptHandler5:
-    ret
+;;; The five agonLight2TimerInterruptHandlerN() targets are C functions in
+;;; src/hal/HalAgonLight2.c (linked into the main .text, which a `call` from
+;;; ADL mode can reach without range limits).
+.extern _agonLight2TimerInterruptHandler1
+.extern _agonLight2TimerInterruptHandler2
+.extern _agonLight2TimerInterruptHandler3
+.extern _agonLight2TimerInterruptHandler4
+.extern _agonLight2TimerInterruptHandler5
 
-.section .text.ivt,"ax",@progbits
 .global prt1Tramp
 .global prt2Tramp
 .global prt3Tramp
