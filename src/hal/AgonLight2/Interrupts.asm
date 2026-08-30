@@ -95,7 +95,7 @@ __nanoOsIvt:
     .short _defaultIsr   ; 0x04
     .short _defaultIsr   ; 0x06
     .short _defaultIsr   ; 0x08
-    .short _defaultIsr   ; 0x0A  PRT0 / Timer0  <- _clockTimerIsr goes here
+    .short clockTimerIsr ; 0x0A  PRT0 / Timer0
     .short _defaultIsr   ; 0x0C  PRT1
     .short _defaultIsr   ; 0x0E  PRT2
     .short _defaultIsr   ; 0x10  PRT3
