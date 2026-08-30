@@ -59,6 +59,8 @@ extern int agonLight2ReadPort(uint16_t port);
 extern void agonLight2WritePort(uint16_t port, uint8_t c);
 extern void agonLight2ConfigureSpiImpl(uint16_t divisor);
 extern int agonLight2SpiTransfer8Impl(uint8_t c);
+extern void agonLight2SystemReset(void);   // boot/AgonLight2/Boot.asm; no return
+extern void agonLight2Halt(void);          // boot/AgonLight2/Boot.asm; no return
 #ifdef __cplusplus
 }
 #endif
@@ -965,10 +967,28 @@ int32_t agonLight2GetElapsedNanoseconds(va_list args) {
 // ---------------------------------------------------------------------------
 
 int32_t agonLight2EnterMode(va_list args) {
-  (void) va_arg(args, int); // HalPowerMode
-  // Halt the CPU in all cases until real power management is implemented.
-  for (;;) {}
-  return 0;
+  HalPowerMode powerMode = (HalPowerMode) va_arg(args, int);
+
+  if (powerMode == HAL_POWER_MODE_RESET) {
+    // No software reset line the emulator models (its watchdog is not
+    // emulated), so "reset" re-enters the boot vector: Boot.asm's realStart
+    // re-runs the CS0 / flash / RAM bring-up, the .data copy, the .bss clear,
+    // and main() - a full restart of NanoOs from the HAL up.  Does not return.
+    agonLight2SystemReset();
+  }
+
+  // HAL_POWER_MODE_OFF / HAL_POWER_MODE_SUSPEND, and the kernel's panic path
+  // (MemoryManager.c calls enterMode(OFF) on unrecoverable errors): the Agon
+  // Light 2 has no software power control - power is a physical switch - so the
+  // best we can do is stop the CPU.  On fab-agon-emulator, writing I/O port
+  // 0x00 ends the emulator with the low byte as its exit status (mirrors the
+  // POSIX HAL's exit(0) for OFF); 0x00 is an unused I/O address on real
+  // eZ80F92 silicon, so that write is a harmless no-op there and
+  // agonLight2Halt (di; halt loop) is the actual behaviour.
+  agonLight2WritePort(0x0000, 0x00);
+  agonLight2Halt();
+
+  return 0;   // not reached
 }
 
 // ---------------------------------------------------------------------------
