@@ -37,7 +37,7 @@
 ;;; @var __nanosecondCount
 ;;;
 ;;; @brief 64-bit, little-endian count of the number of nanoseconds since boot.
-;;; Incremented by 62500 (62.5 microseconds) every time _clockTimerIsr fires.
+;;; Incremented by 62500 (62.5 microseconds) every time clockTimerIsr fires.
 ;;;
 ;;; Lives in .bss (zeroed by Boot.asm's BSS-clear loop), not .text - .text is
 ;;; ROM in a future standalone/flash build and this counter is written at
@@ -47,7 +47,6 @@ __nanosecondCount:     .space 8        ; nanoseconds since boot, 64-bit LE
 
 .text
 .global _initClockTimer
-.global _clockTimerIsr
 .global _readClock
 
 ;; -- eZ80F92 Timer0 registers
@@ -79,6 +78,47 @@ _initClockTimer:
 
     ret
 
+;;; @fn void readClock(int64_t *returnValue)
+;;;
+;;; @brief Atomically read the number of nanoseconds since boot.
+;;;
+;;; @details Interrupts are disabled only for the 8-byte copy, so the timer ISR
+;;; cannot update __nanosecondCount mid-read and hand back a torn value that
+;;; straddles a carry.  The caller's interrupt-enable state is preserved: if
+;;; interrupts were already disabled on entry they are left disabled on exit.
+;;; This makes the routine safe to call from an ISR or a critical section as
+;;; well as from ordinary thread context.
+;;;
+;;; @param returnValue The address of the 64-bit memory location to store the
+;;;   clock value in.  Located at sp+3.
+;;;
+;;; @return This function returns no value.  Overwrites the AF, BC, DE, and HL
+;;; registers.
+_readClock:
+    push    ix
+    ld      ix, 0
+    add     ix, sp
+
+    ld      de, (ix+6)      ; Get the address of the return value
+    ld      hl, __nanosecondCount
+    ld      bc, 8           ; Copy 8 bytes (64 bits)
+
+    ld      a, i            ; side effect: P/V := IEF2 (1 = interrupts were on)
+                            ; A takes the I register (IVT base) and is discarded
+    push    af              ; preserve P/V — LDIR forces it to 0 when BC hits 0
+    di                      ; block the timer ISR so the 8-byte read can't tear
+    ldir
+    pop     af              ; recover the saved P/V
+    jp      po, tickRead    ; P/V = 0: caller had interrupts off, leave them off
+    ei
+
+tickRead:
+    pop     ix
+    ret
+
+.section .ivt,"aw",@progbits
+.global clockTimerIsr
+
 ;;; @fn void clockTimerIsr(void)
 ;;;
 ;;; @brief Interrupt service routine (ISR) that runs every time timer 0 fires.
@@ -86,7 +126,7 @@ _initClockTimer:
 ;;; microseconds.
 ;;;
 ;;; @return This function returns no value.
-_clockTimerIsr:
+clockTimerIsr:
     push    af
     push    hl
     in0     a, (TMR0_CTL)   ; read of TMR0_CTL clears the PRT_IRQ flag (bit 7)
@@ -141,43 +181,8 @@ tickDone:
     pop     hl
     pop     af
     ei                      ; re-enable interrupts on the instruction after this
-    reti.l
-
-;;; @fn void readClock(int64_t *returnValue)
-;;;
-;;; @brief Atomically read the number of nanoseconds since boot.
-;;;
-;;; @details Interrupts are disabled only for the 8-byte copy, so the timer ISR
-;;; cannot update __nanosecondCount mid-read and hand back a torn value that
-;;; straddles a carry.  The caller's interrupt-enable state is preserved: if
-;;; interrupts were already disabled on entry they are left disabled on exit.
-;;; This makes the routine safe to call from an ISR or a critical section as
-;;; well as from ordinary thread context.
-;;;
-;;; @param returnValue The address of the 64-bit memory location to store the
-;;;   clock value in.  Located at sp+3.
-;;;
-;;; @return This function returns no value.  Overwrites the AF, BC, DE, and HL
-;;; registers.
-_readClock:
-    push    ix
-    ld      ix, 0
-    add     ix, sp
-
-    ld      de, (ix+6)      ; Get the address of the return value
-    ld      hl, __nanosecondCount
-    ld      bc, 8           ; Copy 8 bytes (64 bits)
-
-    ld      a, i            ; side effect: P/V := IEF2 (1 = interrupts were on)
-                            ; A takes the I register (IVT base) and is discarded
-    push    af              ; preserve P/V — LDIR forces it to 0 when BC hits 0
-    di                      ; block the timer ISR so the 8-byte read can't tear
-    ldir
-    pop     af              ; recover the saved P/V
-    jp      po, tickRead    ; P/V = 0: caller had interrupts off, leave them off
-    ei
-
-tickRead:
-    pop     ix
-    ret
+    reti                    ; plain RETI (ED 4D): NanoOs runs MADL=0 / pure ADL,
+                            ; so interrupt entry pushed only a 3-byte PC.  reti.l
+                            ; (5B ED 4D) would pop a mode-restore byte that was
+                            ; never pushed and return to a garbage address.
 
