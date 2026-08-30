@@ -55,6 +55,7 @@ UART0_FCTL  .equ 0xC2      ; FIFO control (write)
 UART0_LCTL  .equ 0xC3      ; Line control
 UART0_MCTL  .equ 0xC4      ; Modem control
 UART0_LSR   .equ 0xC5      ; Line status
+UART0_MSR   .equ 0xC6      ; Modem status (bit 4 = CTS)
 
 ;; -- void agonLight2ConfigureUart0Impl(uint16_t divisor) ---------------
 ;;    divisor passed at sp+3 (low byte), sp+4 (high byte)
@@ -63,19 +64,23 @@ _agonLight2ConfigureUart0Impl:
     ld      ix, 0
     add     ix, sp
 
-    ;; Configure PD0 (TxD0) and PD1 (RxD0) for UART alternate function
+    ;; Configure PD0 (TxD0), PD1 (RxD0), PD2 (RTS0) and PD3 (CTS0) for UART
+    ;; alternate function.  RTS0/CTS0 are wired to the peer (the VDP co-
+    ;; processor) for flow control; MOS mux es these alongside TxD/RxD.  The
+    ;; eZ80F92 UART has no automatic flow control, so RTS is driven from MCTL
+    ;; and CTS is polled from MSR (see the write path below).
     ;; UART mode = ALT1:0, ALT2:1
     in0     a, (PD_ALT1)
-    and     0xFC                ; clear bits 0,1
+    and     0xF0                ; clear bits 0..3
     out0    (PD_ALT1), a
 
     in0     a, (PD_ALT2)
-    or      0x03                ; set bits 0,1
+    or      0x0F                ; set bits 0..3
     out0    (PD_ALT2), a
 
-    ;; Set DDR bits 0,1 to input — peripheral overrides direction
+    ;; Set DDR bits 0..3 to input — peripheral overrides direction
     in0     a, (PD_DDR)
-    or      0x03
+    or      0x0F
     out0    (PD_DDR), a
 
     ;; Disable UART0 interrupts
@@ -99,6 +104,10 @@ _agonLight2ConfigureUart0Impl:
     ;; Enable and reset both FIFOs
     ld      a, 0x07
     out0    (UART0_FCTL), a
+
+    ;; Assert RTS0 (MCTL bit 1) so the peer is permitted to transmit to us.
+    ld      a, 0x02
+    out0    (UART0_MCTL), a
 
     pop     ix
     ret
@@ -125,6 +134,22 @@ _agonLight2WriteUart0Impl:
     push    ix
     ld      ix, 0
     add     ix, sp
+
+    ;; Bounded wait for CTS0 (MSR bit 4 set = peer is clear to send).  The
+    ;; eZ80F92 UART does not gate TX on CTS itself, so honour it here.  Give up
+    ;; after ~8192 polls (~17 ms worst case) and send anyway, so an absent or
+    ;; silent peer can slow TX but never wedge it.  BC is caller-saved under the
+    ;; eZ80 C ABI.
+    ld      bc, 0x2000
+.ctsWait:
+    in0     a, (UART0_MSR)
+    bit     4, a
+    jr      nz, .ctsReady
+    dec     bc
+    ld      a, b
+    or      c
+    jr      nz, .ctsWait
+.ctsReady:
 
 .txWait:
     in0     a, (UART0_LSR)
