@@ -120,6 +120,15 @@ realStart:
     LD  A, 0x08                 ; CS0_CTL (I/O 0xAA) - enable CS0, 0 wait states
     OUT0 (0xAA), A
 
+    ; Drop on-chip flash to zero wait states, as Agon MOS does
+    ; (init_params_f92.asm); the eZ80F92 reset default inserts several, which
+    ; just slows every instruction fetch since NanoOs executes .text in place
+    ; from flash.  0x08 keeps the flash controller enabled with FLASH_WAIT = 0.
+    ; FLASH_ADDR_U (I/O 0xF7) is left at its reset default of 0 - flash already
+    ; maps at page 0 (0x000000), which is where NanoOs is linked.
+    LD  A, 0x08                 ; FLASH_CTRL (I/O 0xF8)
+    OUT0 (0xF8), A
+
     ; --- external-RAM integrity canary -------------------------------------
     ; Stamp the known pattern 0x4ABC4ABC4ABC4ABC at __data_bss_limit (0x049000,
     ; the 36 KB mark of external SRAM — the byte just past the 4 KB .bss/.data
