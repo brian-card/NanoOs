@@ -864,12 +864,12 @@ void* runSdCardSpi(void *args) {
       = sdSpiGetBlockSize(SD_CARD_SPI_DEVICE);
     sdCardState.numBlocks = sdSpiGetBlockCount(SD_CARD_SPI_DEVICE);
 #ifdef SD_CARD_DEBUG
-    logDebug("Card is %s\n",
+    logDetail("Card is %s\n",
       sdCardState.blockAddressed ? "SDHC/SDXC (block addressed)"
                                  : "SDSC (byte addressed)");
-    logDebug("Card block size = %ld\n",
+    logDetail("Card block size = %ld\n",
       (long int) blockStorageDevice.blockSize);
-    logDebug("%ld total blocks (%ld total bytes)\n",
+    logDetail("%ld total blocks (%ld total bytes)\n",
       (long int) sdCardState.numBlocks, ((long int) sdCardState.numBlocks)
         * ((long int) sdCardState.blockSize));
 #endif // SD_CARD_DEBUG
