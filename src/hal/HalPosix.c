@@ -272,11 +272,11 @@ static HalFunction posixDioFunctions[HAL_DIO_NUM_FNS] = {
 static HalFunction posixSpiFunctions[HAL_SPI_NUM_FNS] = {
   [HAL_SPI_INIT]           = posixInitSpi,
   [HAL_SPI_CONFIGURE]      = posixConfigureSpiDevice,
-  [HAL_SPI_SET_SPEED]      = posixSetSpiSpeed,
   [HAL_SPI_START_TRANSFER] = posixStartSpiTransfer,
   [HAL_SPI_END_TRANSFER]   = posixEndSpiTransfer,
   [HAL_SPI_TRANSFER8]      = posixSpiTransfer8,
   [HAL_SPI_TRANSFER_BYTES] = posixSpiTransferBytes,
+  [HAL_SPI_SET_SPEED]      = posixSetSpiSpeed,
 };
 
 static HalFunction posixClockFunctions[HAL_CLOCK_NUM_FNS] = {

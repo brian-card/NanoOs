@@ -1337,11 +1337,11 @@ static HalFunction arduinoSamD21x18ADioFunctions[HAL_DIO_NUM_FNS] = {
 static HalFunction arduinoSamD21x18ASpiFunctions[HAL_SPI_NUM_FNS] = {
   [HAL_SPI_INIT]           = arduinoSamD21x18AInitSpi,
   [HAL_SPI_CONFIGURE]      = arduinoSamD21x18AConfigureSpi,
-  [HAL_SPI_SET_SPEED]      = arduinoSamD21x18ASetSpiSpeed,
   [HAL_SPI_START_TRANSFER] = arduinoSamD21x18AStartSpiTransfer,
   [HAL_SPI_END_TRANSFER]   = arduinoSamD21x18AEndSpiTransfer,
   [HAL_SPI_TRANSFER8]      = arduinoSamD21x18ASpiTransfer8,
   [HAL_SPI_TRANSFER_BYTES] = arduinoSamD21x18ASpiTransferBytes,
+  [HAL_SPI_SET_SPEED]      = arduinoSamD21x18ASetSpiSpeed,
 };
 
 static HalFunction arduinoSamD21x18AClockFunctions[HAL_CLOCK_NUM_FNS] = {

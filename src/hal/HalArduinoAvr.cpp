@@ -673,11 +673,11 @@ static HalFunction arduinoAvrDioFunctions[HAL_DIO_NUM_FNS] = {
 static HalFunction arduinoAvrSpiFunctions[HAL_SPI_NUM_FNS] = {
   [HAL_SPI_INIT]           = arduinoAvrInitSpi,
   [HAL_SPI_CONFIGURE]      = arduinoAvrConfigureSpiDevice,
-  [HAL_SPI_SET_SPEED]      = arduinoAvrSetSpiSpeed,
   [HAL_SPI_START_TRANSFER] = arduinoAvrStartSpiTransfer,
   [HAL_SPI_END_TRANSFER]   = arduinoAvrEndSpiTransfer,
   [HAL_SPI_TRANSFER8]      = arduinoAvrSpiTransfer8,
   [HAL_SPI_TRANSFER_BYTES] = arduinoAvrSpiTransferBytes,
+  [HAL_SPI_SET_SPEED]      = arduinoAvrSetSpiSpeed,
 };
 
 static HalFunction arduinoAvrClockFunctions[HAL_CLOCK_NUM_FNS] = {

@@ -1318,11 +1318,11 @@ static HalFunction agonLight2DioFunctions[HAL_DIO_NUM_FNS] = {
 static HalFunction agonLight2SpiFunctions[HAL_SPI_NUM_FNS] = {
   [HAL_SPI_INIT]           = agonLight2InitSpi,
   [HAL_SPI_CONFIGURE]      = agonLight2ConfigureSpi,
-  [HAL_SPI_SET_SPEED]      = agonLight2SetSpiSpeed,
   [HAL_SPI_START_TRANSFER] = agonLight2StartSpiTransfer,
   [HAL_SPI_END_TRANSFER]   = agonLight2EndSpiTransfer,
   [HAL_SPI_TRANSFER8]      = agonLight2SpiTransfer8,
   [HAL_SPI_TRANSFER_BYTES] = agonLight2SpiTransferBytes,
+  [HAL_SPI_SET_SPEED]      = agonLight2SetSpiSpeed,
 };
 
 static HalFunction agonLight2ClockFunctions[HAL_CLOCK_NUM_FNS] = {
