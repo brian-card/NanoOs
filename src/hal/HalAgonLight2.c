@@ -138,9 +138,8 @@ extern void agonLight2Halt(void);          // boot/AgonLight2/Boot.asm; no retur
 
 /// @def STATIC_LOGS_ADDRESS
 ///
-/// @brief Static-log metadata/entry area: 1 KB, one kilobyte above the bottom
-/// of the heap.  Not enabled yet -- halImpl.memory.staticLogs stays NULL.
-#define STATIC_LOGS_ADDRESS (HEAP_START_ADDRESS + 1024)
+/// @brief Static-log metadata/entry area: 4 KB above the bottom of the heap.
+#define STATIC_LOGS_ADDRESS (HEAP_START_ADDRESS + (4 * 1024))
 
 /// @def STATIC_LOGS_SIZE
 ///
@@ -589,16 +588,19 @@ static HalSpiDevice spiDevices[MAX_SPI_DEVICES];
 /// @fn uint16_t agonLight2SpiDivisor(uint32_t baud)
 ///
 /// @brief eZ80F92 SPI baud-rate divisor for a requested bit clock:
-/// divisor = system clock / (2 * baud), clamped to the hardware minimum of 2
-/// (BRG values 0 and 1 are not valid) and the 16-bit register maximum.  A
-/// requested baud at or above SYSTEM_CLOCK_HZ / 4 therefore saturates at the
-/// fastest the bus can run (~4.6 MHz).
+/// divisor = system clock / (2 * baud), clamped to the 16-bit register maximum
+/// and to the master-mode minimum of 3.  Per the eZ80F92 Product Specification
+/// (PS015317), "When the SPI is operating as a Master, the BRG divisor value
+/// must be set to a value of 0003h or greater" - values 1 and 2 are only legal
+/// for the RESET default / slave mode and produce an unreliable master clock.
+/// A request at or above SYSTEM_CLOCK_HZ / 6 therefore saturates at the fastest
+/// the master bus can run, ~3.07 MHz.
 static uint16_t agonLight2SpiDivisor(uint32_t baud) {
   uint32_t divisor = (baud != 0)
     ? (SYSTEM_CLOCK_HZ / (baud << 1))
     : 0xFFFF;
-  if (divisor < 2) {
-    divisor = 2;
+  if (divisor < 3) {
+    divisor = 3;
   } else if (divisor > 0xFFFF) {
     divisor = 0xFFFF;
   }
@@ -1419,11 +1421,6 @@ int32_t halAgonLight2Init(void) {
   halImpl.platform.restartRootFilesystem = restartContiguousFilesystem;
   halImpl.platform.initRootStorage = halCommonInitRootFilesystem;
   halImpl.platform.restartShell = restartOverlayShell;
-  //// halImpl.platform.callFileOverlay = NULL;
-  //// halImpl.platform.execCommand = execBuiltinCommand;
-  //// halImpl.platform.restartRootFilesystem = NULL;
-  //// halImpl.platform.initRootStorage = NULL;
-  //// halImpl.platform.restartShell = restartBuiltinShell;
 
   halImpl.memory.contiguousFilesystem
     = (NanoOsOverlayMap*) FILESYSTEM_DRIVER_ADDRESS;
@@ -1439,21 +1436,8 @@ int32_t halAgonLight2Init(void) {
 #else
   halImpl.memory.stringsPresent = true;
 #endif // NANO_OS_STRINGS_STRIPPED
-  /*
-   * TODO:
-   *
-   * Remove this next line once we're running a real image with a full HAL
-   * implementation.  This is only here for HAL development.
-   *
-   * JBC 2026-08-06
-   */
-  halImpl.memory.stringsPresent = true;
-//// #if LOG_THRESHOLD < LOG_LEVEL_DETAIL
-  halImpl.memory.staticLogs     = NULL;
-//// #else // LOG_THRESHOLD >= LOG_LEVEL_DETAIL
-////   halImpl.memory.staticLogs     = (StaticLogs*) STATIC_LOGS_ADDRESS;
-////   memset(HAL->memory.staticLogs, 0, sizeof(*HAL->memory.staticLogs));
-//// #endif // LOG_THRESHOLD < LOG_LEVEL_DETAIL
+  halImpl.memory.staticLogs     = (StaticLogs*) STATIC_LOGS_ADDRESS;
+  memset(halImpl.memory.staticLogs, 0, sizeof(StaticLogs));
 
   halImpl.uart.numSupported        = 2;
   halImpl.uart.online              = agonLight2UartsOnline;
