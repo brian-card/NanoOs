@@ -40,7 +40,7 @@
 
 // Types and prototypes we need here because we can't include things directly.
 typedef uintptr_t size_t;
-int vsnprintf(char *str, size_t size, const char *format, va_list ap);
+int nanoOsVsnprintf(char *buffer, size_t size, const char *format, va_list args);
 char** parseArgs(char *command, int *argc);
 
 // Must come first
@@ -72,6 +72,7 @@ char** parseArgs(char *command, int *argc);
 #undef fseek
 #undef vfscanf
 #undef vfprintf
+#undef vsnprintf
 #undef fputs
 #undef fgets
 #undef fread
@@ -137,7 +138,7 @@ NanoOsApi nanoOsApi = {
   .vsscanf = vsscanf,
   .vfscanf = nanoOsVfscanf,
   .vfprintf = nanoOsVfprintf,
-  .vsnprintf = vsnprintf,
+  .vsnprintf = nanoOsVsnprintf,
   
   // Direct I/O:
   .fread = nanoOsFread,
