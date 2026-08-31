@@ -87,6 +87,7 @@ else
 fi
 
 osFullBin="${osBuildDir}/NanoOs_full.bin"
+osStrippedBin="${osBuildDir}/NanoOs_stripped.bin"
 osRodataBin="${osBuildDir}/NanoOs_rodata.bin"
 
 filesystemLinkerScript="${linkerScript}"
@@ -143,7 +144,7 @@ echo "Build complete."
 
 if [ -n "${mosImagePath}" ]; then
 	echo "Copying NanoOs firmware image to ${mosImagePath}"
-	cp "${osFullBin}" "${mosImagePath}"
+	cp "${osStrippedBin}" "${mosImagePath}"
 fi
 
 if [ -b "${targetDevice}" ]; then
