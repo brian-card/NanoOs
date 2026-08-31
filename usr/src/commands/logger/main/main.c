@@ -59,7 +59,7 @@ const char _logLevelNames[NUM_LOG_LEVELS][9] = {
 ///
 /// @brief printf-style format string used to build the header of a log
 /// message.
-const char _logHeaderFormat[] = "[%lld.%09lld %s:%u %s:%u %s] ";
+const char _logHeaderFormat[] = "[%ld.%09ld %s:%u %s:%u %s] ";
 
 /// @def LOG_HEADER_LENGTH
 ///
@@ -85,11 +85,9 @@ int printLogEntry(LoggerState *loggerState, LogEntry *logEntry) {
   }
   
   snprintf(loggerState->formatBuffer, loggerState->formatBufferSize,
-    "[%lld.%09lld %s:%u %s:%u %s] ",
-    ((long long int) logEntry->timeStamp)
-      / ((long long int) 1000000000),
-    ((long long int) logEntry->timeStamp)
-      % ((long long int) 1000000000),
+    _logHeaderFormat,
+    (long int) (logEntry->timeStamp / ((int64_t) 1000000000)),
+    (long int) (logEntry->timeStamp % ((int64_t) 1000000000)),
     loggerState->hostname, logEntry->pid,
     fileName,
     logEntry->lineNumber,
