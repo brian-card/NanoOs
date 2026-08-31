@@ -75,11 +75,24 @@
 /// whatever its hardware can produce at or below the request.
 #define SD_SPI_INIT_BAUD 400000
 
-/// @def SD_SPI_FAST_BAUD
+/// @def SD_SPI_FAST_BAUD_MAX
 ///
-/// @brief Bus clock requested for the data phase, once the card is in the ready
-/// state.  Each HAL clamps this to what its SPI peripheral can actually do.
-#define SD_SPI_FAST_BAUD 8000000
+/// @brief Ceiling for the data-phase bus clock.  sdSpiNegotiateFastBaud()
+/// starts here and halves the request until a CMD9 (SEND_CSD) block read comes
+/// back with a valid CRC-16, or the next halving would drop below
+/// SD_SPI_INIT_BAUD - a rate the identification phase already proved works.
+/// Each HAL still clamps the request to what its SPI peripheral can produce.
+#define SD_SPI_FAST_BAUD_MAX 8000000
+
+/// @var _sdSpiFastBaud
+///
+/// @brief The data-phase bus clock actually in use.  Seeded from
+/// SD_SPI_FAST_BAUD_MAX and lowered by sdSpiNegotiateFastBaud() to the fastest
+/// rate this board / card / wiring combination reads without corruption.  This
+/// is deliberately a runtime variable rather than a constant: the safe ceiling
+/// is a property of the hardware, discovered by probing, and a card-process
+/// restart re-discovers it.
+static uint32_t _sdSpiFastBaud = SD_SPI_FAST_BAUD_MAX;
 
 /// @fn uint8_t sdSpiSendCommand(int sdCardSpiDevice, uint8_t cmd, uint32_t arg)
 ///
@@ -93,7 +106,12 @@
 /// @return Returns the 8-bit command response from the SD card.
 uint8_t sdSpiSendCommand(int sdCardSpiDevice, uint8_t cmd, uint32_t arg) {
   HAL->spi.startTransfer(sdCardSpiDevice);
-  
+
+  // At least 8 clocks (Ncs) with the chip select asserted before the command
+  // byte, per the SD physical spec.  For a mid-stream call - CS already low, a
+  // transfer already active - this is just a harmless inter-command gap byte.
+  HAL->spi.transfer8(sdCardSpiDevice, 0xFF);
+
   // Command byte
   HAL->spi.transfer8(sdCardSpiDevice, cmd | 0x40);
   
@@ -120,14 +138,93 @@ uint8_t sdSpiSendCommand(int sdCardSpiDevice, uint8_t cmd, uint32_t arg) {
   return response;
 }
 
+/// @fn uint16_t sdSpiCrc16Ccitt(const uint8_t *data, uint16_t length)
+///
+/// @brief CRC-16-CCITT (polynomial 0x1021, seed 0x0000) over a buffer - the
+/// check word that every SD data block carries at its tail in SPI mode,
+/// transmitted regardless of the CMD59 CRC_ON_OFF setting.
+///
+/// @param data The buffer to checksum.
+/// @param length The number of bytes in the buffer.
+///
+/// @return The 16-bit CRC.
+static uint16_t sdSpiCrc16Ccitt(const uint8_t *data, uint16_t length) {
+  uint16_t crc = 0;
+  for (uint16_t ii = 0; ii < length; ii++) {
+    crc ^= (uint16_t) ((uint16_t) data[ii] << 8);
+    for (uint8_t bit = 0; bit < 8; bit++) {
+      if ((crc & 0x8000) != 0) {
+        crc = (uint16_t) ((crc << 1) ^ 0x1021);
+      } else {
+        crc = (uint16_t) (crc << 1);
+      }
+    }
+  }
+  return crc;
+}
+
+/// @fn int sdSpiReadCsd(int sdCardSpiDevice, uint8_t csd[16], bool requireCrc)
+///
+/// @brief Issue CMD9 (SEND_CSD) and read the 16-byte CSD register, optionally
+/// verifying the trailing CRC-16.
+///
+/// @details The SPI transfer is ended before this function returns in every
+/// case - success or failure.
+///
+/// @param sdCardSpiDevice The zero-based SPI device ID.
+/// @param csd A 16-byte buffer that receives the CSD.  Left untouched on an
+///   R1 or data-token failure; populated (but suspect) on a CRC mismatch.
+/// @param requireCrc When true, a CRC-16 mismatch fails the read; when false
+///   the bytes are returned as-is and only the transport is checked.
+///
+/// @return 0 on success, negative errno on failure.
+static int sdSpiReadCsd(int sdCardSpiDevice, uint8_t csd[16], bool requireCrc) {
+  uint8_t response = sdSpiSendCommand(sdCardSpiDevice, CMD9, 0);
+  if (response != 0x00) {
+    HAL->spi.endTransfer(sdCardSpiDevice);
+    return -EIO;
+  }
+
+  // Wait for the data token (0xFE).
+  uint16_t timeoutCount = 10000;
+  do {
+    response = HAL->spi.transfer8(sdCardSpiDevice, 0xFF);
+    if (response == 0xFE) {
+      break;
+    }
+  } while (--timeoutCount != 0);
+  if (timeoutCount == 0) {
+    HAL->spi.endTransfer(sdCardSpiDevice);
+    return -ETIMEDOUT;
+  }
+
+  for (int ii = 0; ii < 16; ii++) {
+    csd[ii] = HAL->spi.transfer8(sdCardSpiDevice, 0xFF);
+  }
+
+  uint8_t crcHigh = HAL->spi.transfer8(sdCardSpiDevice, 0xFF);
+  uint8_t crcLow  = HAL->spi.transfer8(sdCardSpiDevice, 0xFF);
+  HAL->spi.endTransfer(sdCardSpiDevice);
+
+  if (requireCrc == true) {
+    uint16_t received = (uint16_t) (((uint16_t) crcHigh << 8) | crcLow);
+    if (sdSpiCrc16Ccitt(csd, 16) != received) {
+      return -EIO;
+    }
+  }
+
+  return 0;
+}
+
 /// @fn int sdSpiCardInit(SdCardSpiArgs *sdCardSpiArgs, SdCardState *sdCardState)
 ///
 /// @brief Initialize the SD card for communication with the OS.
 ///
-/// @details The card-identification handshake (CMD0 / CMD8 / ACMD41 / CMD58)
-/// runs at SD_SPI_INIT_BAUD; the bus is switched to SD_SPI_FAST_BAUD only once
-/// the card reports it is out of the idle state.  The >= 74-clock power-up
-/// sequence with the chip select deasserted is emitted by HAL->spi.configure().
+/// @details The whole card-identification handshake (CMD0 / CMD8 / ACMD41 /
+/// CMD58 / CMD16) runs at SD_SPI_INIT_BAUD and the bus is left there on
+/// return; picking the data-phase clock is sdSpiNegotiateFastBaud()'s job.
+/// The >= 74-clock power-up sequence with the chip select deasserted is
+/// emitted by HAL->spi.configure().
 ///
 /// @param sdCardSpiArgs A pointer to an SdCardSpiArgs structure that contains
 ///   the information needed to initialize the card.
@@ -251,13 +348,58 @@ int sdSpiCardInit(SdCardSpiArgs *sdCardSpiArgs, SdCardState *sdCardState) {
     }
   }
 
-  // Handshake complete - the card can now be clocked at full speed.
-  HAL->spi.setSpeed(SD_CARD_SPI_DEVICE, SD_SPI_FAST_BAUD);
-
+  // Handshake complete.  The bus stays at SD_SPI_INIT_BAUD; sdSpiNegotiateFastBaud()
+  // ramps it up from here.
   if (sdCardState != NULL) {
     sdCardState->blockAddressed = blockAddressed;
   }
   return isSDv2 ? 2 : 1;
+}
+
+/// @fn uint32_t sdSpiNegotiateFastBaud(int sdCardSpiDevice)
+///
+/// @brief Find the fastest data-phase bus clock this hardware reads cleanly.
+///
+/// @details The identification phase has already completed at SD_SPI_INIT_BAUD,
+/// so that rate is known good.  Starting from the current _sdSpiFastBaud (seeded
+/// at SD_SPI_FAST_BAUD_MAX, so the first call after a cold boot begins at the
+/// ceiling) this halves the requested clock and re-reads the CSD (CMD9) with a
+/// CRC-16 check on each step.  The first rate whose CSD read passes wins.  If
+/// nothing down to (but not below) SD_SPI_INIT_BAUD passes, the bus is left at
+/// SD_SPI_INIT_BAUD.  A card-process restart keeps the last negotiated ceiling
+/// rather than re-testing rates already known to fail on this board.
+///
+/// Note that each HAL clamps the request to its peripheral's real range, so on
+/// some targets consecutive halvings map to the same actual clock; that just
+/// costs one extra probe and is otherwise harmless.
+///
+/// @param sdCardSpiDevice The zero-based SPI device ID.
+///
+/// @return The negotiated baud.  Also stored in _sdSpiFastBaud and left applied
+/// to the bus via HAL->spi.setSpeed().
+static uint32_t sdSpiNegotiateFastBaud(int sdCardSpiDevice) {
+  uint8_t csd[16];
+
+  for (uint32_t baud = _sdSpiFastBaud;
+    baud >= SD_SPI_INIT_BAUD;
+    baud >>= 1
+  ) {
+    HAL->spi.setSpeed(sdCardSpiDevice, baud);
+    int status = sdSpiReadCsd(sdCardSpiDevice, csd, true);
+    if (status == 0) {
+      _sdSpiFastBaud = baud;
+      logDetail("SD: data phase negotiated to %ld baud\n", (long int) baud);
+      return baud;
+    }
+    logDetail("SD: CMD9 probe failed at %ld baud (%s)\n",
+      (long int) baud, strerror(-status));
+  }
+
+  _sdSpiFastBaud = SD_SPI_INIT_BAUD;
+  HAL->spi.setSpeed(sdCardSpiDevice, SD_SPI_INIT_BAUD);
+  logError("SD: no data-phase rate passed CRC; holding bus at %ld baud\n",
+    (long int) SD_SPI_INIT_BAUD);
+  return SD_SPI_INIT_BAUD;
 }
 
 /// @fn void sdSpiSendCmd12Inline(int sdCardSpiDevice)
@@ -620,33 +762,13 @@ int sdSpiWriteBlocks(SdCardState *sdCardState,
 /// @return Returns the number of bytes per block on success, negative error
 /// code on failure.
 int16_t sdSpiGetBlockSize(int sdCardSpiDevice) {
-  uint8_t response = sdSpiSendCommand(sdCardSpiDevice, CMD9, 0);
-  if (response != 0x00) {
-    HAL->spi.endTransfer(sdCardSpiDevice);
-    logError("CMD9 returned %ld\n", (long int) response);
-    logError("Assuming 512 bytes per block\n");
+  uint8_t csd[16];
+  if (sdSpiReadCsd(sdCardSpiDevice, csd, false) != 0) {
+    logError("CMD9 (SEND_CSD) failed; assuming 512 bytes per block\n");
     return 512;
   }
 
-  for(int i = 0; i < 100; i++) {
-    response = HAL->spi.transfer8(sdCardSpiDevice, 0xFF);
-    if (response == 0xFE) {
-      break;  // Data token
-    }
-  }
-  
-  // Read 16-byte CSD register
-  uint8_t csd[16];
-  for(int i = 0; i < 16; i++) {
-    csd[i] = HAL->spi.transfer8(sdCardSpiDevice, 0xFF);
-  }
-  
-  // Read 2 CRC bytes
-  HAL->spi.transfer8(sdCardSpiDevice, 0xFF);
-  HAL->spi.transfer8(sdCardSpiDevice, 0xFF);
-  HAL->spi.endTransfer(sdCardSpiDevice);
-
-  // For CSD Version 1.0 and 2.0, READ_BL_LEN is at the same location
+  // For CSD Version 1.0 and 2.0, READ_BL_LEN is at the same location.
   uint8_t readBlockLength = (csd[5] & 0x0F);
   return (int16_t) (((uint16_t) 1) << readBlockLength);
 }
@@ -662,36 +784,13 @@ int16_t sdSpiGetBlockSize(int sdCardSpiDevice) {
 int32_t sdSpiGetBlockCount(int sdCardSpiDevice) {
   uint8_t cardSpecificData[16];
   uint32_t blockCount = 0;
-  
-  // Send SEND_CSD command
-  uint8_t response = sdSpiSendCommand(sdCardSpiDevice, CMD9, 0);
-  if (response != 0x00) {
-    HAL->spi.endTransfer(sdCardSpiDevice);
-    logError("CMD9 returned %ld\n", (long int) response);
-    logError("Assuming %ld blocks\n", ((long int) 1024) * ((long int) 1024));
+
+  if (sdSpiReadCsd(sdCardSpiDevice, cardSpecificData, false) != 0) {
+    logError("CMD9 (SEND_CSD) failed; assuming %ld blocks\n",
+      ((long int) 1024) * ((long int) 1024));
     return ((long int) 1024) * ((long int) 1024);
   }
-  
-  // Wait for data token
-  uint16_t timeoutCount = 10000;
-  while (timeoutCount--) {
-    response = HAL->spi.transfer8(sdCardSpiDevice, 0xFF);
-    if (response == 0xFE) {
-      break;
-    }
-    if (timeoutCount == 0) {
-      HAL->spi.endTransfer(sdCardSpiDevice);
-      return -2;
-    }
-  }
-  
-  // Read CSD register
-  for (int ii = 0; ii < 16; ii++) {
-    cardSpecificData[ii] = HAL->spi.transfer8(sdCardSpiDevice, 0xFF);
-  }
-  
-  HAL->spi.endTransfer(sdCardSpiDevice);
-  
+
   // Calculate capacity based on CSD version
   if ((cardSpecificData[0] >> 6) == 0x01) {  // CSD version 2.0
     // C_SIZE is bits [69:48] in CSD
@@ -860,6 +959,9 @@ void* runSdCardSpi(void *args) {
 
   sdCardState.sdCardVersion = sdSpiCardInit(sdCardSpiArgs, &sdCardState);
   if (sdCardState.sdCardVersion > 0) {
+    // Ramp the bus from the (known-good) identification clock up to the fastest
+    // rate this board / card / wiring reads without corrupting data.
+    sdSpiNegotiateFastBaud(SD_CARD_SPI_DEVICE);
     sdCardState.blockSize = blockStorageDevice.blockSize
       = sdSpiGetBlockSize(SD_CARD_SPI_DEVICE);
     sdCardState.numBlocks = sdSpiGetBlockCount(SD_CARD_SPI_DEVICE);
@@ -867,6 +969,7 @@ void* runSdCardSpi(void *args) {
     logDetail("Card is %s\n",
       sdCardState.blockAddressed ? "SDHC/SDXC (block addressed)"
                                  : "SDSC (byte addressed)");
+    logDetail("Data-phase bus clock = %ld baud\n", (long int) _sdSpiFastBaud);
     logDetail("Card block size = %ld\n",
       (long int) blockStorageDevice.blockSize);
     logDetail("%ld total blocks (%ld total bytes)\n",
