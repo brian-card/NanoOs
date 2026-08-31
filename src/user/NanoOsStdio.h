@@ -96,6 +96,34 @@ int printList_(const char *firstString, ...);
 int vsscanf(const char *buffer, const char *format, va_list args);
 int sscanf(const char *buffer, const char *format, ...);
 
+// Output formatting (printf family).  NanoOs supplies its own implementation so
+// that libagon's nanoprintf - whose conversion dispatch lives in .rodata, which
+// is stripped from the shipped firmware image on some targets - is never
+// linked.  nanoOsVsnprintf is the core; the rest delegate to it.
+int nanoOsVsnprintf(char *buffer, size_t size, const char *format, va_list args);
+#ifdef vsnprintf
+#undef vsnprintf
+#endif
+#define vsnprintf nanoOsVsnprintf
+
+int nanoOsSnprintf(char *buffer, size_t size, const char *format, ...);
+#ifdef snprintf
+#undef snprintf
+#endif
+#define snprintf nanoOsSnprintf
+
+int nanoOsVsprintf(char *buffer, const char *format, va_list args);
+#ifdef vsprintf
+#undef vsprintf
+#endif
+#define vsprintf nanoOsVsprintf
+
+int nanoOsSprintf(char *buffer, const char *format, ...);
+#ifdef sprintf
+#undef sprintf
+#endif
+#define sprintf nanoOsSprintf
+
 // Exported IO functions
 int nanoOsFputs(const char *s, FILE *stream);
 #ifdef fputs

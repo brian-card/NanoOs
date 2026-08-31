@@ -881,6 +881,802 @@ int sscanf(const char *buffer, const char *format, ...) {
   return returnValue;
 }
 
+// Output formatting support functions (printf family).
+
+/// @def SPRINTF_DIGITS_BUFFER_SIZE
+///
+/// @brief Scratch size for the digit run of the widest value rendered: a 64-bit
+/// value in base 8 is 22 digits, so 24 leaves a small margin.
+#define SPRINTF_DIGITS_BUFFER_SIZE 24
+
+/// @def SPRINTF_FLOAT_MAX_PRECISION
+///
+/// @brief Upper bound on the number of fractional digits emitted for a floating
+/// point conversion.  Keeps the 10^precision scaling factor inside a 32-bit
+/// unsigned long (the eZ80 soft-float library provides unsigned-long<->double
+/// conversions but not unsigned-long-long<->double).
+#define SPRINTF_FLOAT_MAX_PRECISION 9
+
+/// @def SPRINTF_UNBOUNDED
+///
+/// @brief Value passed as the size argument to nanoOsVsnprintf by the
+/// unbounded wrappers (nanoOsVsprintf / nanoOsSprintf).
+#define SPRINTF_UNBOUNDED ((size_t) -1)
+
+/// @var _hexAlphabetUppercase
+///
+/// @brief Digits used to render a value in uppercase hexadecimal (%X / %p uses
+/// the lowercase table above).
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _hexAlphabetUppercase[] KEEP_IN_FLASH = "0123456789ABCDEF";
+
+/// @var _radixPrefixHexLower
+///
+/// @brief Alternate-form ("#") / pointer prefix for lowercase hexadecimal.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _radixPrefixHexLower[] KEEP_IN_FLASH = "0x";
+
+/// @var _radixPrefixHexUpper
+///
+/// @brief Alternate-form ("#") prefix for uppercase hexadecimal.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _radixPrefixHexUpper[] KEEP_IN_FLASH = "0X";
+
+/// @var _radixPrefixOctal
+///
+/// @brief Alternate-form ("#") prefix for octal.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _radixPrefixOctal[] KEEP_IN_FLASH = "0";
+
+/// @var _sprintfNullString
+///
+/// @brief Rendered in place of a NULL argument to a "%s" conversion.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _sprintfNullString[] KEEP_IN_FLASH = "(null)";
+
+/// @var _sprintfNilString
+///
+/// @brief Rendered in place of a NULL argument to a "%p" conversion.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _sprintfNilString[] KEEP_IN_FLASH = "(nil)";
+
+/// @struct SprintfState
+///
+/// @brief Bounded output cursor threaded through the formatting helpers.
+///
+/// @param cursor The next position to write to.
+/// @param limit One past the last writable position; the byte at limit is
+///   reserved for the terminating NUL.  Data is written only while
+///   cursor < limit, but length keeps counting so the return value follows
+///   C99 vsnprintf semantics.
+/// @param length The number of characters the complete result would contain.
+typedef struct SprintfState {
+  char *cursor;
+  char *limit;
+  size_t length;
+} SprintfState;
+
+/// @struct SprintfConversion
+///
+/// @brief The flags, field width, precision and length modifier parsed from a
+/// single "%" conversion in the format string.
+typedef struct SprintfConversion {
+  bool leftJustify;    ///< "-" flag.
+  bool forceSign;      ///< "+" flag.
+  bool spaceSign;      ///< " " flag.
+  bool alternateForm;  ///< "#" flag.
+  bool zeroPad;        ///< "0" flag.
+  int fieldWidth;      ///< Minimum field width, 0 if unspecified.
+  int precision;       ///< Precision, -1 if unspecified.
+  TypeModifier typeModifier;
+} SprintfConversion;
+
+/// @fn void sprintfPutChar(SprintfState *state, char character)
+///
+/// @brief Append a single character to the output, respecting the buffer limit
+/// but always advancing the logical length.
+///
+/// @param state A pointer to the SprintfState for the call in progress.
+/// @param character The character to append.
+///
+/// @return This function returns no value.
+void sprintfPutChar(SprintfState *state, char character) {
+  if (state->cursor < state->limit) {
+    *(state->cursor++) = character;
+  }
+  state->length++;
+}
+
+/// @fn void sprintfPutFill(SprintfState *state, char character, int count)
+///
+/// @brief Append the same character count times.  A count <= 0 is a no-op.
+///
+/// @param state A pointer to the SprintfState for the call in progress.
+/// @param character The character to append.
+/// @param count The number of copies to append.
+///
+/// @return This function returns no value.
+void sprintfPutFill(SprintfState *state, char character, int count) {
+  for (int ii = 0; ii < count; ii++) {
+    sprintfPutChar(state, character);
+  }
+}
+
+/// @fn void sprintfPutRun(SprintfState *state, const char *bytes, int length)
+///
+/// @brief Append length bytes from a buffer.
+///
+/// @param state A pointer to the SprintfState for the call in progress.
+/// @param bytes A pointer to the bytes to append.
+/// @param length The number of bytes to append.
+///
+/// @return This function returns no value.
+void sprintfPutRun(SprintfState *state, const char *bytes, int length) {
+  for (int ii = 0; ii < length; ii++) {
+    sprintfPutChar(state, bytes[ii]);
+  }
+}
+
+/// @fn void sprintfRenderInteger(SprintfState *state,
+///   const SprintfConversion *conversion, unsigned long long int magnitude,
+///   unsigned int base, bool uppercase, char signChar, const char *radixPrefix)
+///
+/// @brief Render an integer magnitude with sign, optional radix prefix,
+/// precision (minimum digit count) and field width.
+///
+/// @param state A pointer to the SprintfState for the call in progress.
+/// @param conversion A pointer to the parsed SprintfConversion.
+/// @param magnitude The absolute value to render.
+/// @param base The numeric base (8, 10 or 16).
+/// @param uppercase Whether hexadecimal digits should be uppercase.
+/// @param signChar The sign character to emit ('-', '+', ' ') or '\0' for none.
+/// @param radixPrefix A prefix such as "0x" to emit after the sign, or NULL.
+///
+/// @return This function returns no value.
+void sprintfRenderInteger(
+  SprintfState *state, const SprintfConversion *conversion,
+  unsigned long long int magnitude, unsigned int base, bool uppercase,
+  char signChar, const char *radixPrefix
+) {
+  char digits[SPRINTF_DIGITS_BUFFER_SIZE];
+  int numDigits = 0;
+  const char *alphabet = (uppercase == true) ? _hexAlphabetUppercase : _hexAlphabet;
+
+  if (magnitude == 0) {
+    digits[numDigits++] = '0';
+  } else {
+    while (magnitude > 0) {
+      digits[numDigits++] = alphabet[(unsigned int) (magnitude % base)];
+      magnitude /= base;
+    }
+  }
+
+  // A precision of 0 with a value of 0 renders no digits at all.
+  if ((conversion->precision == 0) && (numDigits == 1) && (digits[0] == '0')) {
+    numDigits = 0;
+  }
+
+  int precisionZeros = 0;
+  if (conversion->precision > numDigits) {
+    precisionZeros = conversion->precision - numDigits;
+  }
+
+  int prefixLength = 0;
+  if (signChar != '\0') {
+    prefixLength++;
+  }
+  if (radixPrefix != NULL) {
+    prefixLength += (int) strlen(radixPrefix);
+  }
+
+  int contentLength = prefixLength + precisionZeros + numDigits;
+  int fieldPad = 0;
+  if (conversion->fieldWidth > contentLength) {
+    fieldPad = conversion->fieldWidth - contentLength;
+  }
+
+  // The "0" flag is ignored when left-justifying or when an explicit precision
+  // was given.
+  bool zeroPad = (conversion->zeroPad == true)
+    && (conversion->leftJustify == false)
+    && (conversion->precision < 0);
+
+  if ((conversion->leftJustify == false) && (zeroPad == false)) {
+    sprintfPutFill(state, ' ', fieldPad);
+  }
+  if (signChar != '\0') {
+    sprintfPutChar(state, signChar);
+  }
+  if (radixPrefix != NULL) {
+    sprintfPutRun(state, radixPrefix, (int) strlen(radixPrefix));
+  }
+  if (zeroPad == true) {
+    sprintfPutFill(state, '0', fieldPad);
+  }
+  sprintfPutFill(state, '0', precisionZeros);
+  while (numDigits > 0) {
+    sprintfPutChar(state, digits[--numDigits]);
+  }
+  if (conversion->leftJustify == true) {
+    sprintfPutFill(state, ' ', fieldPad);
+  }
+}
+
+/// @fn void sprintfRenderString(SprintfState *state,
+///   const SprintfConversion *conversion, const char *value)
+///
+/// @brief Render a string with optional precision (maximum length) and field
+/// width.
+///
+/// @param state A pointer to the SprintfState for the call in progress.
+/// @param conversion A pointer to the parsed SprintfConversion.
+/// @param value The string to render.  NULL renders "(null)".
+///
+/// @return This function returns no value.
+void sprintfRenderString(
+  SprintfState *state, const SprintfConversion *conversion, const char *value
+) {
+  if (value == NULL) {
+    value = _sprintfNullString;
+  }
+
+  int length = 0;
+  if (conversion->precision >= 0) {
+    while ((length < conversion->precision) && (value[length] != '\0')) {
+      length++;
+    }
+  } else {
+    length = (int) strlen(value);
+  }
+
+  int fieldPad = 0;
+  if (conversion->fieldWidth > length) {
+    fieldPad = conversion->fieldWidth - length;
+  }
+
+  if (conversion->leftJustify == false) {
+    sprintfPutFill(state, ' ', fieldPad);
+  }
+  sprintfPutRun(state, value, length);
+  if (conversion->leftJustify == true) {
+    sprintfPutFill(state, ' ', fieldPad);
+  }
+}
+
+/// @fn void sprintfRenderChar(SprintfState *state,
+///   const SprintfConversion *conversion, char value)
+///
+/// @brief Render a single character with field width.
+///
+/// @param state A pointer to the SprintfState for the call in progress.
+/// @param conversion A pointer to the parsed SprintfConversion.
+/// @param value The character to render.
+///
+/// @return This function returns no value.
+void sprintfRenderChar(
+  SprintfState *state, const SprintfConversion *conversion, char value
+) {
+  int fieldPad = (conversion->fieldWidth > 1) ? (conversion->fieldWidth - 1) : 0;
+
+  if (conversion->leftJustify == false) {
+    sprintfPutFill(state, ' ', fieldPad);
+  }
+  sprintfPutChar(state, value);
+  if (conversion->leftJustify == true) {
+    sprintfPutFill(state, ' ', fieldPad);
+  }
+}
+
+/// @fn void sprintfRenderFloat(SprintfState *state,
+///   const SprintfConversion *conversion, double value)
+///
+/// @brief Render a non-negative-or-signed floating point value in fixed
+/// notation ("%f").  Precision defaults to 6 and is clamped to
+/// SPRINTF_FLOAT_MAX_PRECISION.  Exponential ("%e") and shortest ("%g") forms
+/// are rendered the same as "%f" - NanoOs only ever asks for "%f" / "%lf".
+///
+/// The integer part is taken through a 32-bit unsigned long, so magnitudes at
+/// or above 2^32 are not rendered accurately.  Every NanoOs caller formats
+/// small values, so this keeps the code off the missing 64-bit soft-float
+/// conversion helpers.
+///
+/// @param state A pointer to the SprintfState for the call in progress.
+/// @param conversion A pointer to the parsed SprintfConversion.
+/// @param value The value to render.
+///
+/// @return This function returns no value.
+void sprintfRenderFloat(
+  SprintfState *state, const SprintfConversion *conversion, double value
+) {
+  int precision = (conversion->precision < 0) ? 6 : conversion->precision;
+  if (precision > SPRINTF_FLOAT_MAX_PRECISION) {
+    precision = SPRINTF_FLOAT_MAX_PRECISION;
+  }
+
+  char signChar = '\0';
+  if (value < 0.0) {
+    signChar = '-';
+    value = -value;
+  } else if (conversion->forceSign == true) {
+    signChar = '+';
+  } else if (conversion->spaceSign == true) {
+    signChar = ' ';
+  }
+
+  // Split into integer and fractional parts, scaling the fraction to the
+  // requested number of digits and rounding half up.
+  unsigned long int integerPart = (unsigned long int) value;
+  double fraction = value - (double) integerPart;
+
+  unsigned long int scale = 1;
+  double scaleDouble = 1.0;
+  for (int ii = 0; ii < precision; ii++) {
+    scale *= 10;
+    scaleDouble *= 10.0;
+  }
+  unsigned long int scaledFraction
+    = (unsigned long int) ((fraction * scaleDouble) + 0.5);
+  if (scaledFraction >= scale) {
+    // Rounding carried into the integer part.
+    scaledFraction -= scale;
+    integerPart++;
+  }
+
+  // Render the integer part digits (reversed) into a scratch buffer.
+  char integerDigits[SPRINTF_DIGITS_BUFFER_SIZE];
+  int numIntegerDigits = 0;
+  if (integerPart == 0) {
+    integerDigits[numIntegerDigits++] = '0';
+  } else {
+    while (integerPart > 0) {
+      integerDigits[numIntegerDigits++] = (char) ('0' + (int) (integerPart % 10));
+      integerPart /= 10;
+    }
+  }
+
+  int contentLength = numIntegerDigits;
+  if (signChar != '\0') {
+    contentLength++;
+  }
+  if (precision > 0) {
+    contentLength += 1 + precision;
+  }
+
+  int fieldPad = 0;
+  if (conversion->fieldWidth > contentLength) {
+    fieldPad = conversion->fieldWidth - contentLength;
+  }
+
+  bool zeroPad = (conversion->zeroPad == true)
+    && (conversion->leftJustify == false);
+
+  if ((conversion->leftJustify == false) && (zeroPad == false)) {
+    sprintfPutFill(state, ' ', fieldPad);
+  }
+  if (signChar != '\0') {
+    sprintfPutChar(state, signChar);
+  }
+  if (zeroPad == true) {
+    sprintfPutFill(state, '0', fieldPad);
+  }
+  while (numIntegerDigits > 0) {
+    sprintfPutChar(state, integerDigits[--numIntegerDigits]);
+  }
+  if (precision > 0) {
+    sprintfPutChar(state, '.');
+    // Emit exactly "precision" fractional digits, most significant first.
+    for (int ii = precision - 1; ii >= 0; ii--) {
+      unsigned long int placeValue = 1;
+      for (int jj = 0; jj < ii; jj++) {
+        placeValue *= 10;
+      }
+      sprintfPutChar(state,
+        (char) ('0' + (int) ((scaledFraction / placeValue) % 10)));
+    }
+  }
+  if (conversion->leftJustify == true) {
+    sprintfPutFill(state, ' ', fieldPad);
+  }
+}
+
+/// @fn int nanoOsVsnprintf(char *buffer, size_t size, const char *format,
+///   va_list args)
+///
+/// @brief Bounded, self-contained printf-family formatter.  This is the core
+/// that nanoOsVsprintf / nanoOsSnprintf / nanoOsSprintf all delegate to, and it
+/// is the reason NanoOs does not link libagon's nanoprintf (whose .rodata jump
+/// tables are unsafe on the string-stripped firmware image).
+///
+/// Supported: flags "-+ #0", a decimal or "*" field width, a "." precision
+/// (decimal or "*"), the length modifiers h hh l ll j z t L q, and the
+/// conversions d i u o x X p c s f F e E g G and %%.
+///
+/// @param buffer The destination buffer.  May be NULL only when size is 0.
+/// @param size The size of buffer in bytes, including the NUL.  Pass
+///   SPRINTF_UNBOUNDED for the unbounded wrappers.
+/// @param format The printf-style format string.
+/// @param args The arguments to format.
+///
+/// @return Returns the number of characters that a sufficiently large buffer
+/// would have received, not counting the NUL (C99 semantics), or -1 if format
+/// is NULL.
+int nanoOsVsnprintf(
+  char *buffer, size_t size, const char *format, va_list args
+) {
+  if (format == NULL) {
+    return -1;
+  }
+
+  SprintfState state;
+  state.cursor = buffer;
+  state.length = 0;
+  if (size == 0) {
+    state.limit = buffer;
+  } else if (size == SPRINTF_UNBOUNDED) {
+    state.limit = (char*) ((uintptr_t) -1);
+  } else {
+    state.limit = buffer + (size - 1);
+  }
+
+  for (const char *fmt = format; *fmt != '\0'; fmt++) {
+    if (*fmt != '%') {
+      sprintfPutChar(&state, *fmt);
+      continue;
+    }
+
+    fmt++; // Consume the '%'.
+    if (*fmt == '%') {
+      sprintfPutChar(&state, '%');
+      continue;
+    }
+
+    // Set each field explicitly rather than with an aggregate initializer: the
+    // compiler would lower the initializer to a .rodata template and memcpy it
+    // in, and .rodata is stripped from the shipped image.
+    SprintfConversion conversion;
+    conversion.leftJustify = false;
+    conversion.forceSign = false;
+    conversion.spaceSign = false;
+    conversion.alternateForm = false;
+    conversion.zeroPad = false;
+    conversion.fieldWidth = 0;
+    conversion.precision = -1;
+    conversion.typeModifier = TYPE_MODIFIER_NONE;
+
+    // Flags.
+    bool parsingFlags = true;
+    while (parsingFlags == true) {
+      switch (*fmt) {
+        case '-': conversion.leftJustify = true;   fmt++; break;
+        case '+': conversion.forceSign = true;     fmt++; break;
+        case ' ': conversion.spaceSign = true;     fmt++; break;
+        case '#': conversion.alternateForm = true; fmt++; break;
+        case '0': conversion.zeroPad = true;       fmt++; break;
+        default:  parsingFlags = false;                   break;
+      }
+    }
+
+    // Field width.
+    if (*fmt == '*') {
+      int width = va_arg(args, int);
+      if (width < 0) {
+        conversion.leftJustify = true;
+        width = -width;
+      }
+      conversion.fieldWidth = width;
+      fmt++;
+    } else {
+      while ((*fmt >= '0') && (*fmt <= '9')) {
+        conversion.fieldWidth = (conversion.fieldWidth * 10) + (*fmt - '0');
+        fmt++;
+      }
+    }
+
+    // Precision.
+    if (*fmt == '.') {
+      fmt++;
+      conversion.precision = 0;
+      if (*fmt == '*') {
+        int precision = va_arg(args, int);
+        conversion.precision = (precision < 0) ? -1 : precision;
+        fmt++;
+      } else {
+        while ((*fmt >= '0') && (*fmt <= '9')) {
+          conversion.precision = (conversion.precision * 10) + (*fmt - '0');
+          fmt++;
+        }
+      }
+    }
+
+    // Length modifier (same vocabulary as vsscanf above).
+    switch (*fmt) {
+      case 'h':
+        conversion.typeModifier = TYPE_MODIFIER_HALF;
+        fmt++;
+        if (*fmt == 'h') {
+          conversion.typeModifier = TYPE_MODIFIER_HALF_HALF;
+          fmt++;
+        }
+        break;
+      case 'l':
+        conversion.typeModifier = TYPE_MODIFIER_LONG;
+        fmt++;
+        if (*fmt == 'l') {
+          conversion.typeModifier = TYPE_MODIFIER_LONG_LONG;
+          fmt++;
+        }
+        break;
+      case 'j':
+        conversion.typeModifier = TYPE_MODIFIER_INTMAX_T;
+        fmt++;
+        break;
+      case 'z':
+        conversion.typeModifier = TYPE_MODIFIER_SIZE_T;
+        fmt++;
+        break;
+      case 't':
+        conversion.typeModifier = TYPE_MODIFIER_PTRDIFF_T;
+        fmt++;
+        break;
+      case 'L':
+        conversion.typeModifier = TYPE_MODIFIER_LONG_DOUBLE;
+        fmt++;
+        break;
+      case 'q':
+        conversion.typeModifier = TYPE_MODIFIER_LONG_LONG;
+        fmt++;
+        break;
+      default:
+        break;
+    }
+
+    // Conversion specifier.
+    char specifier = *fmt;
+
+    // Pull the integer argument (if this is an integer conversion) here, in the
+    // function that owns the va_list.  The width to read depends on the length
+    // modifier; everything is widened to (unsigned) long long int for a single
+    // rendering path.  This is done inline rather than in a helper so the
+    // va_list is never passed by address (not portable - va_list is an array
+    // type on some ABIs).
+    long long int signedValue = 0;
+    unsigned long long int unsignedValue = 0;
+    bool isSignedConversion = ((specifier == 'd') || (specifier == 'i'));
+    bool isUnsignedConversion = ((specifier == 'u') || (specifier == 'o')
+      || (specifier == 'x') || (specifier == 'X'));
+
+    if (isSignedConversion == true) {
+      switch (conversion.typeModifier) {
+        case TYPE_MODIFIER_HALF:
+          signedValue = (long long int) ((short int) va_arg(args, int));
+          break;
+        case TYPE_MODIFIER_HALF_HALF:
+          signedValue = (long long int) ((signed char) va_arg(args, int));
+          break;
+        case TYPE_MODIFIER_LONG:
+          signedValue = (long long int) va_arg(args, long int);
+          break;
+        case TYPE_MODIFIER_LONG_LONG:
+          signedValue = va_arg(args, long long int);
+          break;
+        case TYPE_MODIFIER_INTMAX_T:
+          signedValue = (long long int) va_arg(args, intmax_t);
+          break;
+        case TYPE_MODIFIER_PTRDIFF_T:
+          signedValue = (long long int) va_arg(args, ptrdiff_t);
+          break;
+        case TYPE_MODIFIER_SIZE_T:
+          signedValue = (long long int) va_arg(args, size_t);
+          break;
+        default:
+          signedValue = (long long int) va_arg(args, int);
+          break;
+      }
+    } else if (isUnsignedConversion == true) {
+      switch (conversion.typeModifier) {
+        case TYPE_MODIFIER_HALF:
+          unsignedValue = (unsigned long long int)
+            ((unsigned short int) va_arg(args, unsigned int));
+          break;
+        case TYPE_MODIFIER_HALF_HALF:
+          unsignedValue = (unsigned long long int)
+            ((unsigned char) va_arg(args, unsigned int));
+          break;
+        case TYPE_MODIFIER_LONG:
+          unsignedValue = (unsigned long long int) va_arg(args, unsigned long int);
+          break;
+        case TYPE_MODIFIER_LONG_LONG:
+          unsignedValue = va_arg(args, unsigned long long int);
+          break;
+        case TYPE_MODIFIER_INTMAX_T:
+          unsignedValue = (unsigned long long int) va_arg(args, uintmax_t);
+          break;
+        case TYPE_MODIFIER_PTRDIFF_T:
+          unsignedValue = (unsigned long long int) va_arg(args, ptrdiff_t);
+          break;
+        case TYPE_MODIFIER_SIZE_T:
+          unsignedValue = (unsigned long long int) va_arg(args, size_t);
+          break;
+        default:
+          unsignedValue = (unsigned long long int) va_arg(args, unsigned int);
+          break;
+      }
+    }
+
+    switch (specifier) {
+      case 'd':
+      case 'i':
+        {
+          bool isNegative = (signedValue < 0);
+          unsigned long long int magnitude = (isNegative == true)
+            ? (0ULL - (unsigned long long int) signedValue)
+            : (unsigned long long int) signedValue;
+          char signChar = '\0';
+          if (isNegative == true) {
+            signChar = '-';
+          } else if (conversion.forceSign == true) {
+            signChar = '+';
+          } else if (conversion.spaceSign == true) {
+            signChar = ' ';
+          }
+          sprintfRenderInteger(&state, &conversion, magnitude, 10, false,
+            signChar, NULL);
+        }
+        break;
+
+      case 'u':
+        sprintfRenderInteger(&state, &conversion, unsignedValue, 10, false,
+          '\0', NULL);
+        break;
+
+      case 'o':
+        {
+          const char *radixPrefix
+            = ((conversion.alternateForm == true) && (unsignedValue != 0))
+              ? _radixPrefixOctal : NULL;
+          sprintfRenderInteger(&state, &conversion, unsignedValue, 8, false,
+            '\0', radixPrefix);
+        }
+        break;
+
+      case 'x':
+      case 'X':
+        {
+          bool uppercase = (specifier == 'X');
+          const char *radixPrefix = NULL;
+          if ((conversion.alternateForm == true) && (unsignedValue != 0)) {
+            radixPrefix = (uppercase == true)
+              ? _radixPrefixHexUpper : _radixPrefixHexLower;
+          }
+          sprintfRenderInteger(&state, &conversion, unsignedValue, 16, uppercase,
+            '\0', radixPrefix);
+        }
+        break;
+
+      case 'p':
+        {
+          uintptr_t value = (uintptr_t) va_arg(args, void*);
+          if (value == 0) {
+            sprintfRenderString(&state, &conversion, _sprintfNilString);
+          } else {
+            sprintfRenderInteger(&state, &conversion,
+              (unsigned long long int) value, 16, false, '\0',
+              _radixPrefixHexLower);
+          }
+        }
+        break;
+
+      case 'c':
+        {
+          char value = (char) va_arg(args, int);
+          sprintfRenderChar(&state, &conversion, value);
+        }
+        break;
+
+      case 's':
+        {
+          const char *value = va_arg(args, const char*);
+          sprintfRenderString(&state, &conversion, value);
+        }
+        break;
+
+      case 'f':
+      case 'F':
+      case 'e':
+      case 'E':
+      case 'g':
+      case 'G':
+        {
+          double value = va_arg(args, double);
+          sprintfRenderFloat(&state, &conversion, value);
+        }
+        break;
+
+      case '\0':
+        // Truncated format string.  Step back so the for-loop's ++ lands on the
+        // NUL and the loop exits.
+        fmt--;
+        break;
+
+      default:
+        // Unknown conversion.  Emit it verbatim so the output stays debuggable.
+        sprintfPutChar(&state, '%');
+        sprintfPutChar(&state, specifier);
+        break;
+    }
+  }
+
+  if (size != 0) {
+    *(state.cursor) = '\0';
+  }
+
+  return (int) state.length;
+}
+
+/// @fn int nanoOsVsprintf(char *buffer, const char *format, va_list args)
+///
+/// @brief Unbounded va_list printf into a caller-supplied buffer.  Redefined
+/// over vsprintf by NanoOsStdio.h.
+///
+/// @param buffer The destination buffer.
+/// @param format The printf-style format string.
+/// @param args The arguments to format.
+///
+/// @return Returns the number of characters written, not counting the NUL.
+int nanoOsVsprintf(char *buffer, const char *format, va_list args) {
+  return nanoOsVsnprintf(buffer, SPRINTF_UNBOUNDED, format, args);
+}
+
+/// @fn int nanoOsSnprintf(char *buffer, size_t size, const char *format, ...)
+///
+/// @brief Bounded printf into a caller-supplied buffer.  Redefined over
+/// snprintf by NanoOsStdio.h.
+///
+/// @param buffer The destination buffer.
+/// @param size The size of buffer in bytes, including the NUL.
+/// @param format The printf-style format string.
+/// @param ... The arguments to format.
+///
+/// @return Returns the number of characters that would have been written, not
+/// counting the NUL (C99 semantics).
+int nanoOsSnprintf(char *buffer, size_t size, const char *format, ...) {
+  va_list args;
+  va_start(args, format);
+  int returnValue = nanoOsVsnprintf(buffer, size, format, args);
+  va_end(args);
+  return returnValue;
+}
+
+/// @fn int nanoOsSprintf(char *buffer, const char *format, ...)
+///
+/// @brief Unbounded printf into a caller-supplied buffer.  Redefined over
+/// sprintf by NanoOsStdio.h.
+///
+/// @param buffer The destination buffer.
+/// @param format The printf-style format string.
+/// @param ... The arguments to format.
+///
+/// @return Returns the number of characters written, not counting the NUL.
+int nanoOsSprintf(char *buffer, const char *format, ...) {
+  va_list args;
+  va_start(args, format);
+  int returnValue = nanoOsVsnprintf(buffer, SPRINTF_UNBOUNDED, format, args);
+  va_end(args);
+  return returnValue;
+}
+
 // Input support functions.
 
 /// @fn ConsoleBuffer* nanoOsWaitForInput(void)
