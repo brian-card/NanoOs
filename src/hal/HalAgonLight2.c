@@ -833,6 +833,13 @@ int32_t agonLight2GetElapsedMilliseconds(va_list args) {
   readClock(&nowMs);
   nowMs += _baseSystemTimeNs;
   nowMs /= (int64_t) 1000000;
+  if (nowMs < startTime) {
+    // Clock skew or a bogus start time: never report a negative interval.
+    if (returnValue != NULL) {
+      *returnValue = -1;
+    }
+    return -EIO;
+  }
   if (returnValue != NULL) {
     *returnValue = nowMs - startTime;
   }
@@ -846,6 +853,13 @@ int32_t agonLight2GetElapsedMicroseconds(va_list args) {
   readClock(&nowUs);
   nowUs += _baseSystemTimeNs;
   nowUs /= (int64_t) 1000;
+  if (nowUs < startTime) {
+    // Clock skew or a bogus start time: never report a negative interval.
+    if (returnValue != NULL) {
+      *returnValue = -1;
+    }
+    return -EIO;
+  }
   if (returnValue != NULL) {
     *returnValue = nowUs - startTime;
   }
@@ -858,6 +872,13 @@ int32_t agonLight2GetElapsedNanoseconds(va_list args) {
   int64_t  nowNs = 0;
   readClock(&nowNs);
   nowNs += _baseSystemTimeNs;
+  if (nowNs < startTime) {
+    // Clock skew or a bogus start time: never report a negative interval.
+    if (returnValue != NULL) {
+      *returnValue = -1;
+    }
+    return -EIO;
+  }
   if (returnValue != NULL) {
     *returnValue = nowNs - startTime;
   }
@@ -956,6 +977,36 @@ void agonLight2TimerInterruptHandler3(void);
 void agonLight2TimerInterruptHandler4(void);
 void agonLight2TimerInterruptHandler5(void);
 
+/// @fn int32_t agonLight2CheckTimerCancelCapability(int32_t deviceId)
+///
+/// @brief Enforce the per-device HAL capability for tearing down a timer.
+///
+/// @details callHal() has already checked that the running process may invoke
+/// this subsystem/function pair at all; this adds the device-bitmask
+/// granularity that the POSIX and SAMD21 HALs apply on their cancel paths.  A
+/// re-arm through configOneShot implicitly cancels whatever reload was already
+/// loaded, so it is gated the same way.  Kernel-privileged callers - the
+/// scheduler arming its own preemption timer, most notably - are always
+/// allowed, as is any call made before the scheduler is up
+/// (getRunningProcess() == NULL).
+///
+/// @param deviceId The zero-based ID of the timer being cancelled or re-armed.
+///   Must already have been range-checked by the caller.
+///
+/// @return Returns 0 if the operation is permitted, -EACCES if not.
+static int32_t agonLight2CheckTimerCancelCapability(int32_t deviceId) {
+  ProcessDescriptor *processDescriptor = getRunningProcess();
+  if ((processDescriptor != NULL)
+    && (processDescriptor->privilegeLevel != PRIVILEGE_LEVEL_KERNEL)
+    && (findHalCapabilityWithDevice(processDescriptor->halCapabilities,
+      processDescriptor->numHalCapabilities, HAL_TIMER, HAL_TIMER_CANCEL,
+      deviceId) == NULL)
+  ) {
+    return -EACCES;
+  }
+  return 0;
+}
+
 int32_t agonLight2InitTimer(va_list args) {
   // Nothing subsystem-wide to do: each eZ80F92 PRT (TMR0..TMR5) is fully
   // independent and clocked straight from the system clock - there is no
@@ -1006,6 +1057,15 @@ int32_t agonLight2ConfigOneShotTimer(va_list args) {
   }
   if (_prtTimers[deviceId].initialized == false) {
     return -EINVAL;
+  }
+
+  // Arming a timer overwrites whatever reload was already loaded, i.e. it
+  // implicitly cancels any pending fire.  Require the same per-device cancel
+  // capability an explicit cancel would need, matching the SAMD21 HAL (which
+  // runs its cancel path from configOneShot for exactly this reason).
+  int32_t capabilityStatus = agonLight2CheckTimerCancelCapability(deviceId);
+  if (capabilityStatus != 0) {
+    return capabilityStatus;
   }
 
   // Pick the smallest clock divider (4, 16, 64, 256) whose 16-bit reload
@@ -1107,6 +1167,11 @@ int32_t agonLight2CancelTimer(va_list args) {
 
   if ((deviceId < 0) || (deviceId >= _numPrtTimers)) {
     return -ERANGE;
+  }
+
+  int32_t capabilityStatus = agonLight2CheckTimerCancelCapability(deviceId);
+  if (capabilityStatus != 0) {
+    return capabilityStatus;
   }
 
   // Clearing TMRn_CTL drops EN and IRQ_EN, so the PRT stops and cannot raise
