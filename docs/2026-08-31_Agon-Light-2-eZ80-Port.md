@@ -1,4 +1,4 @@
-# xx-Xxx-2026 - Agon Light 2 eZ80 Port
+# 31-Aug-2026 - Agon Light 2 eZ80 Port
 
 OK, I had originally intended to do a deep dive into what this effort took, but that's ridiculous.  This has taken nearly a month and there's simply no way to capture all the details of this effort in any readable document.  So, let me just do the **Reader's Digest** version.
 
