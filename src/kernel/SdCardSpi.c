@@ -388,7 +388,7 @@ static uint32_t sdSpiNegotiateFastBaud(int sdCardSpiDevice) {
     int status = sdSpiReadCsd(sdCardSpiDevice, csd, true);
     if (status == 0) {
       _sdSpiFastBaud = baud;
-      logDetail("SD: data phase negotiated to %ld baud\n", (long int) baud);
+      logDebug("SD: data phase negotiated to %ld baud\n", (long int) baud);
       return baud;
     }
     logDetail("SD: CMD9 probe failed at %ld baud (%s)\n",
