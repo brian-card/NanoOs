@@ -1375,6 +1375,67 @@ exit:
   return processInfo;
 }
 
+/// @var _killCouldNotCommunicate
+///
+/// @brief Message printed by schedulerKillProcess() when it can't get a
+/// message to the scheduler.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _killCouldNotCommunicate[] KEEP_IN_FLASH
+  = "Could not communicate with scheduler.\n";
+
+/// @var _killSuccessFormat
+///
+/// @brief printf-style format printed by schedulerKillProcess() on a
+/// successful termination.  Takes the killed PID.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _killSuccessFormat[] KEEP_IN_FLASH
+  = "Termination of process %d successful.\n";
+
+/// @var _killStatusFormat
+///
+/// @brief printf-style format printed by schedulerKillProcess() when the
+/// scheduler reports a non-zero termination status.  Takes a strerror() string.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _killStatusFormat[] KEEP_IN_FLASH
+  = "Process termination returned status \"%s\".\n";
+
+/// @var _killTimedOutFormat
+///
+/// @brief printf-style format printed by schedulerKillProcess() when the kill
+/// command times out.  Takes the target PID.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _killTimedOutFormat[] KEEP_IN_FLASH
+  = "Command to kill PID %d timed out.\n";
+
+/// @var _killBadStatusFormat
+///
+/// @brief printf-style format printed by schedulerKillProcess() when the kill
+/// command returns an unexpected wait status.  Takes the target PID and the
+/// wait status.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _killBadStatusFormat[] KEEP_IN_FLASH
+  = "Command to kill PID %d returned status %d.\n";
+
+/// @var _killCouldNotRelease
+///
+/// @brief Message printed by schedulerKillProcess() when it can't release the
+/// message it sent to the scheduler.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _killCouldNotRelease[] KEEP_IN_FLASH
+  = "Could not release message sent to scheduler for kill command.\n";
+
 /// @fn int schedulerKillProcess(ProcessId pid)
 ///
 /// @brief Do all the inter-process communication with the scheduler required
@@ -1394,7 +1455,7 @@ int schedulerKillProcess(ProcessId pid) {
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_KILL_PROCESS,
     &schedulerKillProcessArgs, sizeof(schedulerKillProcessArgs), true);
   if (processMessage == NULL) {
-    logError("Could not communicate with scheduler.\n");
+    fprintf(stderr, _killCouldNotCommunicate);
     return 1;
   }
 
@@ -1414,24 +1475,24 @@ int schedulerKillProcess(ProcessId pid) {
   if (waitStatus == processSuccess) {
     returnValue = schedulerKillProcessArgs.returnValue;
     if (returnValue == 0) {
-      logInfo("Termination of process %d successful.\n", pid);
+      printf(_killSuccessFormat, pid);
     } else {
-      logError("Process termination returned status \"%s\".\n",
+      fprintf(stderr, _killStatusFormat,
         strerror(schedulerKillProcessArgs.errorNumber));
       errno = schedulerKillProcessArgs.errorNumber;
     }
   } else {
     returnValue = 1;
     if (waitStatus == processTimedout) {
-      logError("Command to kill PID %d timed out.\n", pid);
+      fprintf(stderr, _killTimedOutFormat, pid);
     } else {
-      logError("Command to kill PID %d returned status %d.\n", pid, waitStatus);
+      fprintf(stderr, _killBadStatusFormat, pid, waitStatus);
     }
   }
 
   if (processMessageRelease(processMessage) != processSuccess) {
     returnValue = 1;
-    logError("Could not release message sent to scheduler for kill command.\n");
+    fprintf(stderr, _killCouldNotRelease);
   }
 
   return returnValue;
