@@ -2715,6 +2715,9 @@ int schedulerExecveCommandHandler(
     // This should be impossible, but there's nothing to do.  Return good
     // status.
     return returnValue; // 0
+  } else if (_functionInProgress != NULL) {
+    // We can't run while this is true.
+    return -EBUSY;
   }
 
   ProcessDescriptor *processDescriptor = processMessageFrom(processMessage);
@@ -3569,8 +3572,9 @@ void handleSchedulerMessage(SchedulerState *schedulerState) {
       // back of our own queue again and try again later.
       if (lastReturnValue == 0) {
         // Only print out a message if this is the first time we've failed.
-        logError("Scheduler command handler failed for message %d\n"
-          "Pushing message back onto our own queue\n", messageType);
+        logError("Scheduler command handler failed for message %d\n",
+          messageType);
+        logError("Pushing message back onto our own queue\n");
       }
       processMessageQueuePush(getRunningProcess(), message);
     }
@@ -5324,4 +5328,3 @@ __attribute__((noinline)) void startScheduler(
     }
   }
 }
-
