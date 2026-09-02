@@ -137,13 +137,15 @@ int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
     - ((intptr_t) _referencePoint));
   
   // Get the va_list values.
+  int increment = sizeof(intptr_t) / sizeof(uint32_t);
   va_start(args, format);
   for (int ii = 0;
     ii < (int) ((sizeof(commandArgs.logEntry.args))
       / (sizeof(commandArgs.logEntry.args[0])));
-    ii++
+    ii += increment
   ) {
-    commandArgs.logEntry.args[ii] = (uint32_t) va_arg(args, intptr_t);
+    intptr_t arg = va_arg(args, intptr_t);
+    memcpy(&commandArgs.logEntry.args[ii], &arg, sizeof(arg));
   }
   va_end(args);
   

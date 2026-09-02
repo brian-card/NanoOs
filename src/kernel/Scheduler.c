@@ -2310,7 +2310,7 @@ int schedGetFileBlockMetadataFromPath(
 
   FILE *stream = schedFopen(path, _readMode);
   if (stream == NULL) {
-    logError("Could not open file \"%s\"\n", path);
+    logError("Could not open file\n");
     return -EIO;
   }
   int returnValue = schedGetFileBlockMetadataFromFile(stream, metadata);

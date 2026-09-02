@@ -106,12 +106,13 @@ printMessage:
   strncat(loggerState->formatBuffer, loggerState->buffer,
     loggerState->formatBufferSize - strlen(loggerState->formatBuffer) - 1);
   
+  intptr_t args[4];
+  int increment = sizeof(intptr_t) / sizeof(uint32_t);
+  for (int ii = 0, jj = 0; ii < 4; ii += increment, jj++) {
+    memcpy(&args[jj], &logEntry->args[ii], sizeof(intptr_t));
+  }
   snprintf(loggerState->buffer, sizeof(loggerState->buffer),
-    loggerState->formatBuffer,
-    (intptr_t) logEntry->args[0],
-    (intptr_t) logEntry->args[1],
-    (intptr_t) logEntry->args[2],
-    (intptr_t) logEntry->args[3]);
+    loggerState->formatBuffer, args[0], args[1], args[2], args[3]);
   printString(loggerState->buffer);
   
 exit:
