@@ -107,6 +107,7 @@ printMessage:
     loggerState->formatBufferSize - strlen(loggerState->formatBuffer) - 1);
   
   intptr_t args[4];
+  memset(args, 0, sizeof(args));
   int increment = sizeof(intptr_t) / sizeof(uint32_t);
   for (int ii = 0, jj = 0; ii < 4; ii += increment, jj++) {
     memcpy(&args[jj], &logEntry->args[ii], sizeof(intptr_t));
