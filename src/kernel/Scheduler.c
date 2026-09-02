@@ -3576,7 +3576,12 @@ void handleSchedulerMessage(SchedulerState *schedulerState) {
           messageType);
         logError("Pushing message back onto our own queue\n");
       }
-      processMessageQueuePush(getRunningProcess(), message);
+      if (processMessageQueuePush(getRunningProcess(), message)
+        != processSuccess
+      ) {
+        logError("Could not push failed message back onto scheduler queue\n");
+        logError("Undefined behavior will result\n");
+      }
     }
     lastReturnValue = returnValue;
   }
