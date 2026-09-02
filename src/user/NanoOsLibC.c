@@ -240,9 +240,9 @@ long long nanoOsStrtoll(const char *nptr, char **endptr, int base) {
     if ((c >= '0') && (c <= '9')) {
       digit = c - '0';
     } else if ((c >= 'a') && (c <= 'z')) {
-      digit = c - 'a';
+      digit = 10 + c - 'a';
     } else if ((c >= 'A') && (c <= 'Z')) {
-      digit = c - 'A';
+      digit = 10 + c - 'A';
     } else {
       // Not an alpha-numeric character
       break;
