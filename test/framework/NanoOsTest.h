@@ -66,6 +66,8 @@ typedef struct NanoOsTestCase {
   const char           *name;
   NanoOsTestFn           fn;
   bool                   isKernelTest;
+  const char            *todoReason; ///< non-NULL => TAP "# TODO": a known
+                                     ///< failure that must not fail the run.
   struct NanoOsTestCase *next;
 } NanoOsTestCase;
 
@@ -131,10 +133,10 @@ void nanoOsTestParentEnd(int fd);
 
 #define NANO_OS_TEST_ABORT() longjmp(*nanoOsTestAbortBuffer(), 1)
 
-#define NANO_OS_TEST_REGISTER_(suiteId, nameId, kernelFlag)                  \
+#define NANO_OS_TEST_REGISTER_(suiteId, nameId, kernelFlag, todo)            \
   static void suiteId##_##nameId##_body(void);                               \
   static NanoOsTestCase suiteId##_##nameId##_case = {                        \
-    #suiteId, #nameId, suiteId##_##nameId##_body, kernelFlag, NULL           \
+    #suiteId, #nameId, suiteId##_##nameId##_body, kernelFlag, todo, NULL     \
   };                                                                         \
   __attribute__((constructor))                                               \
   static void suiteId##_##nameId##_register(void) {                          \
@@ -142,8 +144,16 @@ void nanoOsTestParentEnd(int fd);
   }                                                                          \
   static void suiteId##_##nameId##_body(void)
 
-#define NANO_OS_TEST(suite, name)        NANO_OS_TEST_REGISTER_(suite, name, false)
-#define NANO_OS_KERNEL_TEST(suite, name) NANO_OS_TEST_REGISTER_(suite, name, true)
+#define NANO_OS_TEST(suite, name)        NANO_OS_TEST_REGISTER_(suite, name, false, NULL)
+#define NANO_OS_KERNEL_TEST(suite, name) NANO_OS_TEST_REGISTER_(suite, name, true, NULL)
+
+/// A test that currently fails because of a known, tracked bug.  It still
+/// runs, but a failure is reported as TAP "# TODO <reason>" and does NOT fail
+/// the suite; if it starts passing the runner says so (fix landed -> promote).
+#define NANO_OS_TEST_TODO(suite, name, reason) \
+  NANO_OS_TEST_REGISTER_(suite, name, false, reason)
+#define NANO_OS_KERNEL_TEST_TODO(suite, name, reason) \
+  NANO_OS_TEST_REGISTER_(suite, name, true, reason)
 
 // --- assertions --------------------------------------------------------
 

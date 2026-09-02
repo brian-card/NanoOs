@@ -85,7 +85,9 @@ SIM_SRCS := SdCardPosix SdCardPosixImpl
 FRAMEWORK_SRCS := NanoOsTest TestMain
 HARNESS_SRCS   := KernelTestHarness
 MOCK_SRCS      := HalMock MockClock MockTimer MockUart MockBlockDevice
-SUITE_SRCS     := test_smoke
+SUITE_SRCS     := test_smoke test_unit_misc test_unit_strtoll \
+                  test_kernel_memory test_kernel_hal test_kernel_ipc \
+                  test_kernel_scheduler
 
 KERNEL_OBJS := $(addprefix $(OBJ_DIR)/kernel_,$(addsuffix .o,$(KERNEL_SRCS)))
 USER_OBJS   := $(addprefix $(OBJ_DIR)/user_,$(addsuffix .o,$(USER_SRCS)))

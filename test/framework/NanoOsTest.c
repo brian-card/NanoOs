@@ -206,7 +206,17 @@ int nanoOsTestRunAll(const char *filter) {
       runOneBody(tc->fn);
     }
 
-    if (_currentFailed) {
+    if (tc->todoReason != NULL) {
+      // Known failure: never counts against the run.  Report honestly, and
+      // shout if it has started passing (bug fixed -> drop the TODO).
+      if (_currentFailed) {
+        printf("not ok %d - %s # TODO %s\n", index, label, tc->todoReason);
+        printf("#   %s\n", _currentDiag[0] ? _currentDiag : "(no diagnostic)");
+      } else {
+        printf("ok %d - %s # TODO %s -- PASSES NOW, promote it\n",
+          index, label, tc->todoReason);
+      }
+    } else if (_currentFailed) {
       failures++;
       printf("not ok %d - %s\n", index, label);
       printf("# %s\n", _currentDiag[0] ? _currentDiag : "(no diagnostic)");
