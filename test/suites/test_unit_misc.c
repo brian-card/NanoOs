@@ -51,10 +51,9 @@ NANO_OS_TEST(unit_users, unknown_user_is_reported_consistently) {
 // timespecFromDelay - build a struct timespec from a millisecond delay.
 // -------------------------------------------------------------------------
 
-// Documents BUG-1 (test/BUGS.txt): timespecFromDelay double-counts whole
-// seconds and never normalises tv_nsec back below 1e9.
-NANO_OS_TEST_TODO(unit_time, timespecFromDelay_splits_ms_into_s_and_ns,
-  "BUG-1: timespecFromDelay double-counts seconds, tv_nsec not normalised") {
+// Regression test for BUG-1 (test/BUGS.txt), fixed 2026-09-01: timespecFromDelay
+// used to double-count whole seconds and never renormalise tv_nsec below 1e9.
+NANO_OS_TEST(unit_time, timespecFromDelay_splits_ms_into_s_and_ns) {
   struct timespec ts;
 
   memset(&ts, 0, sizeof(ts));

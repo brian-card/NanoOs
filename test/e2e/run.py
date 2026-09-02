@@ -133,6 +133,50 @@ def test_pipe_between_commands(s):
     assert "one-two-three" not in neg, neg
 
 
+def test_pipe_two_stage_is_the_working_max(s):
+    # A single pipe (2 commands) is the deepest pipeline NanoOs currently
+    # handles.  Confirm it works and the shell stays alive afterwards.
+    s.login()
+    assert "keep" in s.sh("echo keep-this-line | grep keep")
+    assert "still-here" in s.sh("echo still-here")
+
+
+def test_pipe_three_stage_does_not_crash_the_os(s):
+    # Boundary: one command past the working max.  Expected behaviour is a
+    # graceful error and a live shell (compare the background-job path,
+    # which reports "Out of process slots" cleanly).  See BUGS.txt BUG-4:
+    # the SIGSEGV is fixed, but this still hangs the shell (the -EBUSY spawn
+    # is re-queued forever at Scheduler.c:3565).
+    s.login()
+    s.child.sendline("echo a | grep a | grep a")
+    idx = s.child.expect([PROMPT, pexpect.EOF, pexpect.TIMEOUT], timeout=12)
+    if idx == 1:
+        sig = s.child.signalstatus
+        raise AssertionError(
+            f"simulator died on a 3-command pipeline "
+            f"(signal {sig}{' = SIGSEGV' if sig == 11 else ''})")
+    if idx == 2:
+        raise AssertionError("3-command pipeline hung the shell")
+    # Reached a prompt: make sure the shell is actually still usable.
+    assert "alive" in s.sh("echo alive"), "shell unresponsive after the pipeline"
+
+
+def test_background_jobs_fail_gracefully_past_the_slot_limit(s):
+    # Contrast with the pipe path: launching more background jobs than there
+    # are free process slots must report an error and leave the shell alive.
+    s.login()
+    saw_error = False
+    for _ in range(6):
+        s.child.sendline("looseLoop &")
+        idx = s.child.expect([PROMPT, pexpect.EOF, pexpect.TIMEOUT], timeout=8)
+        assert idx == 0, f"background spawn killed/hung the shell (expect idx {idx})"
+        if "out of process slots" in s.child.before.lower():
+            saw_error = True
+    assert saw_error, "never hit the process-slot limit"
+    # Shell still works, and ps still works.
+    assert "looseLoop" in s.sh("ps")
+
+
 def test_unknown_command_errors(s):
     s.login()
     out = s.sh("no_such_command_here").lower()
@@ -147,6 +191,15 @@ def test_shutdown_halts(s):
 
 
 TESTS = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
+
+# Tests known to fail because of an open bug (see test/BUGS.txt).  A failure
+# is reported as TAP "# TODO <reason>" and does not fail the run; if one
+# starts passing the runner says so.
+XFAIL = {
+    "test_pipe_three_stage_does_not_crash_the_os":
+        "BUG-4: 3+ command pipelines hang the shell (SIGSEGV fixed; the "
+        "-EBUSY spawn is re-queued forever)",
+}
 
 
 def main(argv):
@@ -175,15 +228,22 @@ def main(argv):
         if not os.path.exists(sim_bin):
             print(f"ok {i} - {label} # SKIP {os.path.basename(sim_bin)} not built")
             continue
+        xfail = XFAIL.get(t.__name__)
         s = None
         try:
             s = Session(sim_bin, image)
             t(s)
-            print(f"ok {i} - {label}")
+            if xfail:
+                print(f"ok {i} - {label} # TODO {xfail} -- PASSES NOW, promote it")
+            else:
+                print(f"ok {i} - {label}")
         except Exception as e:  # noqa: BLE001
-            failures += 1
-            print(f"not ok {i} - {label}")
             msg = str(e).splitlines()[0] if str(e) else type(e).__name__
+            if xfail:
+                print(f"not ok {i} - {label} # TODO {xfail}")
+            else:
+                failures += 1
+                print(f"not ok {i} - {label}")
             print(f"#   {type(e).__name__}: {msg}")
             if s is not None and s.child.before:
                 tail = s.child.before.replace("\r", "")[-300:]

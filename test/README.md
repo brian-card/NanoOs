@@ -98,19 +98,36 @@ real POSIX implementation from `HalPosixImpl.c`:
 Defaults give a fully deterministic kernel: no wall clock, no preemption
 unless a test calls `mockTimerFire()`, console I/O driven byte by byte.
 
-## Known-failing tests (open bugs)
+## Bugs found (see `test/BUGS.txt`)
 
-`make -C test run` currently reports **6 failures across 2 real bugs** in
-NanoOs; the assertions are left red on purpose. See `test/BUGS.txt`.
+- **BUG-1** — `timespecFromDelay` double-counted seconds, never normalised
+  `tv_nsec`, 32-bit multiply overflow. **Fixed**; regression test
+  `unit_time/timespecFromDelay_splits_ms_into_s_and_ns`.
+- **BUG-2** — `nanoOsStrtoll` valued letter digits 10 too low (every base >
+  10 wrong, trailing letters eaten in base 10). **Fixed**; regression
+  tests `strtoll/*`.
+- **BUG-3** — `schedulerGetProcessInfo` built an invalid `timespec` ~10% of
+  the time (same class as BUG-1, inlined at `Scheduler.c:1296`). **Fixed**
+  by routing through `timespecFromDelay(&timeout, 100)`. Masked by the
+  virtual clock, so no unit test — covered indirectly by the e2e `ps`
+  tests.
+- **BUG-4** — a pipeline of **3+ commands** (`echo a | grep a | grep a`)
+  takes down the OS. **Partially fixed.** The original **SIGSEGV** was
+  `logMessage` truncating every log vararg to 32 bits (`Logger.c:146`,
+  `LogEntry.args` is `uint32_t[4]`) — lossless on the 32-bit MCUs, but on
+  the 64-bit sim a `logError("...%s", heapPtr)` truncated the pointer and
+  the logger process `strlen`'d a wild address. Fixed 2026-09-01 (both
+  sides `memcpy` `sizeof(intptr_t)` with a matching stride; unused slots
+  `memset` to 0). The 3-command pipe now **hangs** instead: the `schedF*`
+  reentrancy guard is held during pipe-stage teardown, `SPAWN` returns
+  `-EBUSY`, and `Scheduler.c:3565` re-queues it forever. 2-command pipes
+  are fine; the `cmd &` path fails cleanly on slot exhaustion. **Open** —
+  full analysis in `BUGS.txt`; xfail e2e test
+  `test_pipe_three_stage_does_not_crash_the_os`.
 
-| test | bug |
-|------|-----|
-| `unit_time/timespecFromDelay_splits_ms_into_s_and_ns` | BUG-1: `timespecFromDelay` double-counts seconds, never normalises `tv_nsec`, 32-bit overflow |
-| `strtoll/*` (5) | BUG-2: `nanoOsStrtoll` values letter digits 10 too low — every base > 10 wrong, trailing letters eaten in base 10 |
-
-BUG-3 (`schedulerGetProcessInfo` builds an invalid `timespec` ~10% of the
-time) is masked by the virtual clock and has no failing test; it is
-documented in `BUGS.txt`.
+`make -C test run` is currently all-green. Known regressions, if any are
+added later, use `NANO_OS_TEST_TODO` / `NANO_OS_KERNEL_TEST_TODO` so they
+report red without failing the run.
 
 ## Limitations / next increments
 

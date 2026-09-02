@@ -21,7 +21,16 @@
 # sources resolve their "kernel/..." / "user/..." includes without putting
 # src/kernel on the header search path - that would shadow <sys/types.h>).
 
-OBJ_DIR := obj
+# ASan and non-ASan objects are not link-compatible, so they get separate
+# trees - switching `make -C test` <-> `make -C test ASAN=1` never needs a
+# manual clean.
+ifdef ASAN
+  VARIANT := -asan
+else
+  VARIANT :=
+endif
+
+OBJ_DIR := obj$(VARIANT)
 BIN_DIR := bin
 
 MKDIR := mkdir -p
@@ -29,7 +38,7 @@ RM    := rm -rf
 
 COMPILE ?= gcc
 
-TARGET := $(BIN_DIR)/nano-os-test
+TARGET := $(BIN_DIR)/nano-os-test$(VARIANT)
 
 # --- flags -------------------------------------------------------------
 
@@ -148,4 +157,4 @@ $(OBJ_DIR)/suite_%.o: suites/%.c
 	$(COMPILE) $(TEST_CFLAGS) $(TEST_INC) -c $< -o $@
 
 clean:
-	$(RM) $(OBJ_DIR) $(BIN_DIR)
+	$(RM) obj obj-asan $(BIN_DIR)
