@@ -1291,9 +1291,8 @@ ProcessInfo* schedulerGetProcessInfo(void) {
   // We don't know where our messages to the scheduler will be in its queue, so
   // we can't assume they will be processed immediately, but we can't wait
   // forever either.  Set a 100 ms timeout.
-  struct timespec timeout = {0};
-  timespec_get(&timeout, TIME_UTC);
-  timeout.tv_nsec += 100000000;
+  struct timespec timeout;
+  timespecFromDelay(&timeout, 100);
 
   // Because the scheduler runs on the main thread, it doesn't have the
   // ability to yield.  That means it can't do anything that requires a
