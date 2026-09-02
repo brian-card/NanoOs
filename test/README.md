@@ -122,8 +122,12 @@ documented in `BUGS.txt`.
   through a pipe, not `printf`. Wiring FDs needs
   `standardUserFileDescriptors` exported from `Scheduler.c` (a deliberate
   one-line change, deferred until a suite needs it).
-- **`ASAN=1` skips kernel tests** — `halPosixImplInit`'s heap-sizing
-  recursion overflows the stack under ASan. Plain suites still get ASan.
+- **`ASAN=1` can't run kernel tests** — `halPosixImplInit`'s heap-sizing
+  stack recursion overflows under ASan, so `kernelTestRun()` returns SKIP
+  for `NANO_OS_KERNEL_TEST`s. `run-all.sh` sets `NANO_OS_TEST_SKIP_KERNEL=1`
+  for its ASan pass so they're omitted entirely instead of printed as
+  skips; the plain (Layer-1) suites still get full ASan/UBSan coverage
+  there, and the kernel tests ran for real in the non-ASan pass just above.
 - **Layer 3 is wired for the `contiguous` block filesystem** (what the
   POSIX sim's `restartContiguousFilesystem` expects); building the image
   with `overlay` makes the sim fail to bring up its filesystem.

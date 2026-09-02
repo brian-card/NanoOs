@@ -10,6 +10,7 @@
 
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -157,18 +158,32 @@ static void runKernelBodyTrampoline(void) {
 }
 
 int nanoOsTestRunAll(const char *filter) {
+  // When NANO_OS_TEST_SKIP_KERNEL is set, kernel tests are omitted entirely
+  // (not planned, not printed) rather than listed as SKIP.  run-all.sh sets
+  // this for the ASan pass, where kernel tests cannot run anyway.
+  bool skipKernel = (getenv("NANO_OS_TEST_SKIP_KERNEL") != NULL);
+
   int total = 0;
   for (NanoOsTestCase *tc = _head; tc != NULL; tc = tc->next) {
+    if (skipKernel && tc->isKernelTest) {
+      continue;
+    }
     total++;
   }
   printf("TAP version 13\n");
   printf("1..%d\n", total);
+  if (skipKernel) {
+    printf("# kernel tests omitted (NANO_OS_TEST_SKIP_KERNEL set)\n");
+  }
 
   int index = 0;
   int failures = 0;
   char label[256];
 
   for (NanoOsTestCase *tc = _head; tc != NULL; tc = tc->next) {
+    if (skipKernel && tc->isKernelTest) {
+      continue;
+    }
     index++;
     snprintf(label, sizeof(label), "%s/%s", tc->suite, tc->name);
 
@@ -193,7 +208,9 @@ int nanoOsTestRunAll(const char *filter) {
       int harnessStatus = _kernelRunner(runKernelBodyTrampoline);
       _pendingBody = NULL;
       if (harnessStatus < 0) {
-        printf("ok %d - %s # SKIP kernel harness unavailable\n", index, label);
+        printf("ok %d - %s # SKIP needs a non-ASan build "
+          "(halPosixImplInit's heap-sizing stack recursion overflows under "
+          "AddressSanitizer)\n", index, label);
         continue;
       }
       if ((harnessStatus != 0) && (!_currentFailed)) {

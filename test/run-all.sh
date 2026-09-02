@@ -41,9 +41,12 @@ else
 fi
 
 if [ "${RUN_ASAN}" = "1" ]; then
-	section "Layer 1: unit tests under ASan/UBSan (kernel tests skip)"
+	section "Layer 1: unit tests under ASan/UBSan"
+	echo "(kernel tests are omitted here: halPosixImplInit's heap-sizing"
+	echo " stack recursion overflows under AddressSanitizer - they ran"
+	echo " for real in the section above)"
 	make -C test clean >/dev/null
-	if make -C test run ASAN=1; then
+	if NANO_OS_TEST_SKIP_KERNEL=1 make -C test run ASAN=1; then
 		echo "[asan] PASS"
 	else
 		echo "[asan] FAIL"
