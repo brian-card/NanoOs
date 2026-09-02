@@ -285,6 +285,13 @@ extern "C"
 #define processMessageQueuePop() \
   comessageQueuePop()
 
+/// @def processMessageQueuePeek
+///
+/// @brief Function macro to peek at the head of the the running process's
+/// message queue.
+#define processMessageQueuePeek() \
+  comessageQueuePop()
+
 /// @def processResume
 ///
 /// @brief Resume a process and update the currentProcess state correctly.
