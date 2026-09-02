@@ -398,8 +398,11 @@ void timespecFromDelay(struct timespec *ts, long int delayMs) {
   }
 
   timespec_get(ts, TIME_UTC);
-  ts->tv_sec += (delayMs / 1000);
-  ts->tv_nsec += (delayMs * 1000000);
+  int64_t time = (ts->tv_sec * ((int64_t) 1000000000))
+    + ((int64_t) ts->tv_nsec);
+  time += ((int64_t) delayMs) * ((int64_t) 1000000);
+  ts->tv_sec = time / ((int64_t) 1000000000);
+  ts->tv_nsec = time % ((int64_t) 1000000000);
 
   return;
 }
