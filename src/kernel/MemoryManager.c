@@ -883,6 +883,7 @@ int memoryManagerDumpMemoryAllocationsCommandHandler(
   int returnValue = 0;
 
   logInfo("Outstanding allocations:\n");
+  processYield();
   MemNode *prev = NULL;
   for (MemNode *cur = memoryManagerState->allocated;
     cur != NULL;
@@ -891,14 +892,17 @@ int memoryManagerDumpMemoryAllocationsCommandHandler(
     logInfo("  0x%lx: %ld bytes owned by %ld\n",
       (unsigned long int) (uintptr_t) &cur[1],
       (long int) cur->size, (long int) cur->owner);
+    processYield();
     if (cur->prev != prev) {
       logInfo("  - cur->prev = 0x%lx\n",
         (unsigned long int) (uintptr_t) &cur->prev[1]);
+      processYield();
     }
     prev = cur;
   }
 
   logInfo("Available memory blocks:\n");
+  processYield();
   prev = NULL;
   for (MemNode *cur = memoryManagerState->firstFree;
     cur != NULL;
@@ -906,9 +910,11 @@ int memoryManagerDumpMemoryAllocationsCommandHandler(
   ) {
     logInfo("  0x%lx: %ld bytes available\n",
       (unsigned long int) (uintptr_t) &cur[1], (long int) cur->size);
+    processYield();
     if (cur->prev != prev) {
       logInfo("  - cur->prev = 0x%lx\n",
         (unsigned long int) (uintptr_t) &cur->prev[1]);
+      processYield();
     }
     prev = cur;
   }

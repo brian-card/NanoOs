@@ -306,6 +306,7 @@ int filesystemDumpOpenFilesCommandHandler(
     = (FilesystemDumpOpenFilesArgs*) processMessageData(processMessage);
 
   logInfo("Open files:\n");
+  processYield();
   for (NanoOsFile *nanoOsFile = filesystemState->openFiles;
     nanoOsFile != NULL;
     nanoOsFile = nanoOsFile->next
@@ -314,6 +315,7 @@ int filesystemDumpOpenFilesCommandHandler(
       (unsigned long int) (uintptr_t) nanoOsFile,
       filesystemState->driverGetFilename(nanoOsFile->file),
       (long int) nanoOsFile->owner);
+    processYield();
   }
 
   filesystemDumpOpenFilesArgs->returnValue = 0;
