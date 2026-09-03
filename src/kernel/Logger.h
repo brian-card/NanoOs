@@ -91,49 +91,39 @@ typedef struct NanoOsFile FILE;
 /// @param logLevel The log level the message was logged at.
 /// @param fileName The address offset of the name of the file the log message
 ///   comes from.
+/// @param functionName The address offset of the name of the function the log
+///   message comes from.
 /// @param lineNumber The line number in the file the log message comes from.
-/// @param pid The ProcessId of the process logging the message.
-/// @param formatThe address offset of the format string for the log message.
-/// @param args Up to four (4) 32-bit arguments provided for the log message.
+/// @param processId The ProcessId of the process logging the message.
+/// @param threadId The ThreadId of the thread logging the message.
+/// @param format The address offset of the format string for the log message.
+/// @param args Up to four (4) uintptr_t arguments provided for the log message.
+/// @param inUse Whether or not this entry is currently being used.
 typedef struct LogEntry {
   int64_t   timeStamp;
-  uint16_t  logLevel;
-  int16_t   fileName;
-  uint16_t  lineNumber;
-  ProcessId pid;
-  int16_t   format;
-  uint32_t  args[4];
+  int       logLevel;
+  int       fileName;
+  int       functionName;
+  int       lineNumber;
+  ProcessId processId;
+  ThreadId  threadId;
+  int       format;
+  uintptr_t args[4];
+  bool      inUse;
 } LogEntry;
-
-/// @struct LogMessageCommandArgs
-///
-/// @brief Arguments and return value for the logMessage command handler.
-///
-/// @param logEntry The embedded LogEntry to display.
-/// @param returnValue The integer returnValue from the handler.
-typedef struct LogMessageCommandArgs {
-  LogEntry logEntry;
-  int returnValue;
-} LogMessageCommandArgs;
 
 /// @struct StaticLogs
 ///
 /// @brief Metadata and log entries for messages logged before the logger
 /// process was running.
 ///
-/// @param metadata The metadata for the log entries.  The LogEntry member keeps
-///   the metadata aligned to the size of a LogEntry message.  The numEntries
-///   member tracks the number of messages logged statically before the logger
-///   was running.
-/// @param logEntries Array of LogEntry objects that is numMessages in size.
+/// @param numEntries The number of entries that the logEntries array holds.
+/// @param logEntries Array of LogEntry pointers that is numMessages in size.
 ///   This is a variable-length array.  The size of one element is just to keep
 ///   some compilers from complaining.
 typedef struct StaticLogs {
-  union {
-    LogEntry logEntry;
-    unsigned int numEntries;
-  } metadata;
-  LogEntry logEntries[1];
+  uintptr_t numEntries;
+  LogEntry *logEntries[1];
 } StaticLogs;
 
 /// @struct LoggerState
@@ -174,7 +164,7 @@ typedef enum LoggerCommandResponse {
 /// @enum LogLevel
 ///
 /// @brief This defines the possible log levels for log messages.
-typedef uint16_t LogLevel;
+typedef int LogLevel;
 #define LOG_LEVEL_NEVER     0
 #define LOG_LEVEL_FLOOD     1
 #define LOG_LEVEL_TRACE     2
@@ -196,70 +186,79 @@ typedef uint16_t LogLevel;
 
 #if (LOG_THRESHOLD == LOG_LEVEL_FLOOD)
 #define logFlood(format, ...) \
-  logMessage(LOG_LEVEL_FLOOD, __FILE__, __LINE__, format, ##__VA_ARGS__)
+  logMessage(LOG_LEVEL_FLOOD, __FILE__, __func__, __LINE__, format, ##__VA_ARGS__)
 #else
 #define logFlood(format, ...) {}
 #endif // (LOG_THRESHOLD == LOG_LEVEL_FLOOD)
 
 #if (LOG_THRESHOLD <= LOG_LEVEL_TRACE)
 #define logTrace(format, ...) \
-  logMessage(LOG_LEVEL_TRACE, __FILE__, __LINE__, format, ##__VA_ARGS__)
+  logMessage(LOG_LEVEL_TRACE, __FILE__, __func__, __LINE__, format, \
+    ##__VA_ARGS__)
 #else
 #define logTrace(format, ...) {}
 #endif // (LOG_THRESHOLD <= LOG_LEVEL_TRACE)
 
 #if (LOG_THRESHOLD <= LOG_LEVEL_DEBUG)
 #define logDebug(format, ...) \
-  logMessage(LOG_LEVEL_DEBUG, __FILE__, __LINE__, format, ##__VA_ARGS__)
+  logMessage(LOG_LEVEL_DEBUG, __FILE__, __func__, __LINE__, format, \
+    ##__VA_ARGS__)
 #else
 #define logDebug(format, ...) {}
 #endif // (LOG_THRESHOLD <= LOG_LEVEL_DEBUG)
 
 #if (LOG_THRESHOLD <= LOG_LEVEL_DETAIL)
 #define logDetail(format, ...) \
-  logMessage(LOG_LEVEL_DETAIL, __FILE__, __LINE__, format, ##__VA_ARGS__)
+  logMessage(LOG_LEVEL_DETAIL, __FILE__, __func__, __LINE__, format, \
+    ##__VA_ARGS__)
 #else
 #define logDetail(format, ...) {}
 #endif // (LOG_THRESHOLD <= LOG_LEVEL_DETAIL)
 
 #if (LOG_THRESHOLD <= LOG_LEVEL_INFO)
 #define logInfo(format, ...) \
-  logMessage(LOG_LEVEL_INFO, __FILE__, __LINE__, format, ##__VA_ARGS__)
+  logMessage(LOG_LEVEL_INFO, __FILE__, __func__, __LINE__, format, \
+    ##__VA_ARGS__)
 #else
 #define logInfo(format, ...) {}
 #endif // (LOG_THRESHOLD <= LOG_LEVEL_INFO)
 
 #if (LOG_THRESHOLD <= LOG_LEVEL_WARN)
 #define logWarn(format, ...) \
-  logMessage(LOG_LEVEL_WARN, __FILE__, __LINE__, format, ##__VA_ARGS__)
+  logMessage(LOG_LEVEL_WARN, __FILE__, __func__, __LINE__, format, \
+    ##__VA_ARGS__)
 #else
 #define logWarn(format, ...) {}
 #endif // (LOG_THRESHOLD <= LOG_LEVEL_WARN)
 
 #if (LOG_THRESHOLD <= LOG_LEVEL_ERROR)
 #define logError(format, ...) \
-  logMessage(LOG_LEVEL_ERROR, __FILE__, __LINE__, format, ##__VA_ARGS__)
+  logMessage(LOG_LEVEL_ERROR, __FILE__, __func__, __LINE__, format, \
+    ##__VA_ARGS__)
 #else
 #define logError(format, ...) {}
 #endif // (LOG_THRESHOLD <= LOG_LEVEL_ERROR)
 
 #if (LOG_THRESHOLD <= LOG_LEVEL_CRITICAL)
 #define logCritical(format, ...) \
-  logMessage(LOG_LEVEL_CRITICAL, __FILE__, __LINE__, format, ##__VA_ARGS__)
+  logMessage(LOG_LEVEL_CRITICAL, __FILE__, __func__, __LINE__, format, \
+    ##__VA_ARGS__)
 #else
 #define logCritical(format, ...) {}
 #endif // (LOG_THRESHOLD <= LOG_LEVEL_CRITICAL)
 
 #if (LOG_THRESHOLD <= LOG_LEVEL_BOX)
 #define logBox(format, ...) \
-  logMessage(LOG_LEVEL_BOX, __FILE__, __LINE__, format, ##__VA_ARGS__)
+  logMessage(LOG_LEVEL_BOX, __FILE__, __func__, __LINE__, format, \
+    ##__VA_ARGS__)
 #else
 #define logBox(format, ...) {}
 #endif // (LOG_THRESHOLD <= LOG_LEVEL_BOX)
 
 // Exported functions.
-int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
-   const char *format, ...);
+int logMessage(LogLevel logLevel,
+  const char *fileName, const char *functionName, int lineNumber,
+  const char *format, ...);
 
 #ifdef __cplusplus
 } // extern "C"

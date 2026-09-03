@@ -59,7 +59,7 @@ const char _logLevelNames[NUM_LOG_LEVELS][9] = {
 ///
 /// @brief printf-style format string used to build the header of a log
 /// message.
-const char _logHeaderFormat[] = "[%lld.%09lld %s:%u %s:%u %s] ";
+const char _logHeaderFormat[] = "[%lld.%09lld %s:%u:%u %s:%s:%d %s] ";
 
 /// @def LOG_HEADER_LENGTH
 ///
@@ -68,6 +68,17 @@ const char _logHeaderFormat[] = "[%lld.%09lld %s:%u %s:%u %s] ";
 #define LOG_HEADER_LENGTH 29
 
 int printLogEntry(LoggerState *loggerState, LogEntry *logEntry) {
+  loggerState->args = (void*) ((intptr_t) logEntry->functionName);
+  if (callOverlayFunction(OVERLAY_SAME_NAMESPACE,
+    "GetString", "getString", loggerState) != loggerState
+  ) {
+    printString("logger: ERROR! Could not find function name at offset ");
+    printInt(logEntry->functionName);
+    printString("\n");
+    goto printMessage;
+  }
+  strcpy(loggerState->formatBuffer, loggerState->buffer);
+  
   loggerState->args = (void*) ((intptr_t) logEntry->fileName);
   if (callOverlayFunction(OVERLAY_SAME_NAMESPACE,
     "GetString", "getString", loggerState) != loggerState
@@ -83,14 +94,16 @@ int printLogEntry(LoggerState *loggerState, LogEntry *logEntry) {
   if (slashAt != NULL) {
     fileName = slashAt + 1;
   }
+  char *functionName = fileName + strlen(fileName) + 1;
+  strncpy(functionName, loggerState->formatBuffer,
+    sizeof(loggerState->buffer) - (functionName - loggerState->buffer));
   
   snprintf(loggerState->formatBuffer, loggerState->formatBufferSize,
     _logHeaderFormat,
     (long long int) (logEntry->timeStamp / ((int64_t) 1000000000)),
     (long long int) (logEntry->timeStamp % ((int64_t) 1000000000)),
-    loggerState->hostname, logEntry->pid,
-    fileName,
-    logEntry->lineNumber,
+    loggerState->hostname, logEntry->processId, logEntry->threadId,
+    fileName, functionName, logEntry->lineNumber,
     _logLevelNames[logEntry->logLevel]);
   
 printMessage:
@@ -117,6 +130,7 @@ printMessage:
   printString(loggerState->buffer);
   
 exit:
+  logEntry->inUse = false;
   return 0;
 }
 
@@ -134,11 +148,10 @@ exit:
 int loggerLogMessageCommandHandler(
   LoggerState *loggerState, ProcessMessage *processMessage
 ) {
-  LogMessageCommandArgs *logMessageArgs
-    = (LogMessageCommandArgs*) processMessageData(processMessage);
-  logMessageArgs->returnValue = printLogEntry(loggerState, &logMessageArgs->logEntry);
+  LogEntry *logEntry = (LogEntry*) processMessageData(processMessage);
+  printLogEntry(loggerState, logEntry);
   
-  processMessageSetDone(processMessage);
+  processMessageRelease(processMessage);
   return 0;
 }
 
@@ -193,8 +206,8 @@ int main(int argc, char **argv) {
   }
   
   if (getHal()->memory.staticLogs != NULL) {
-    for (unsigned int ii = 0; ii < getHal()->memory.staticLogs->metadata.numEntries; ii++) {
-      printLogEntry(&loggerState, &getHal()->memory.staticLogs->logEntries[ii]);
+    for (uintptr_t ii = 0; ii < getHal()->memory.staticLogs->numEntries; ii++) {
+      printLogEntry(&loggerState, getHal()->memory.staticLogs->logEntries[ii]);
     }
   }
   

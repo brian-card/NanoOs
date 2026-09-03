@@ -115,6 +115,11 @@ typedef Coroutine Thread;
 /// @brief Definition of the type to use for a process ID.
 typedef uint8_t ProcessId;
 
+/// @typedef ThreadId
+///
+/// @brief Definition of the type to use for a thread ID.
+typedef uint8_t ThreadId;
+
 /// @typedef ProcessMessage
 ///
 /// @brief Definition of the ProcessMessage object that processes will use for

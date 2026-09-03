@@ -67,7 +67,7 @@ const char *_referencePoint = REFERENCE_POINT_STRING;
 /// final binary on some targets.  Entries are copied directly into this
 /// array's own storage rather than being separate string-literal objects
 /// pointed to from it, so tagging the array alone protects every entry.
-const char _logLevelNames[NUM_LOG_LEVELS][9] KEEP_IN_FLASH = {
+static const char _logLevelNames[NUM_LOG_LEVELS][9] KEEP_IN_FLASH = {
   "NEVER",
   "FLOOD",
   "TRACE",
@@ -89,7 +89,7 @@ const char _logLevelNames[NUM_LOG_LEVELS][9] KEEP_IN_FLASH = {
 /// @note KEEP_IN_FLASH is required here because .rodata is removed from the
 /// final binary on some targets.
 static const char _logHeaderFormat[] KEEP_IN_FLASH
-  = "[%lld.%09lld %s:%u %s:%u %s] ";
+  = "[%lld.%09lld %s:%u:%u %s:%s:%d %s] ";
 
 /// @var _localhost
 ///
@@ -100,8 +100,20 @@ static const char _logHeaderFormat[] KEEP_IN_FLASH
 /// final binary on some targets.
 static const char _localhost[] KEEP_IN_FLASH = "localhost";
 
-/// @fn int logMessage(LogLevel logLevel, const char *fileName,
-///   uint16_t lineNumber, const char *format, ...)
+/// @def NUM_LOG_ENTRIES
+///
+/// @brief The number of LogEntry objects held in our local array.
+#define NUM_LOG_ENTRIES 10
+
+/// @var _logEntries
+///
+/// @brief Local array of LogEntry objects to use in communication with the
+/// logger process.
+static LogEntry _logEntries[NUM_LOG_ENTRIES] = {0};
+
+/// @fn int logMessage(LogLevel logLevel,
+///   const char *fileName, const char *functionName, int lineNumber,
+///   const char *format, ...)
 ///
 /// @brief Log a message to be displayed.
 ///
@@ -115,37 +127,54 @@ static const char _localhost[] KEEP_IN_FLASH = "localhost";
 /// @return If logging to the logger process, returns 0 on success.  If logging
 /// to the console, returns the number of bytes successfully written on success.
 /// Returns -errno on failure.
-int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
+int logMessage(LogLevel logLevel,
+  const char *fileName, const char *functionName, int lineNumber,
    const char *format, ...
 ) {
   va_list args;
-  LogMessageCommandArgs commandArgs;
   char *slashAt = NULL;
+  union {
+    int64_t i64Value;
+    int     intValue;
+  } temp;
   
   // Don't check the return value of getElapsedNanoseconds here.  A failure
   // isn't fatal.  Do this before anything else to get as accurate a timestamp
   // as possible.
-  HAL->clock.getElapsedNanoseconds(0, &commandArgs.logEntry.timeStamp);
+  HAL->clock.getElapsedNanoseconds(0, &temp.i64Value);
+  
+  LogEntry *logEntry = NULL;
+  for (int ii = 0; ii < NUM_LOG_ENTRIES; ii++) {
+    if (_logEntries[ii].inUse == false) {
+      logEntry = &_logEntries[ii];
+      break;
+    }
+  }
+  if (logEntry == NULL) {
+    // Nothing we can do.  The log message is just silently dropped.
+    return -ENOMEM;
+  }
+  logEntry->inUse = true;
   
   // Get the rest of the fixed values.
-  commandArgs.logEntry.logLevel = logLevel;
-  commandArgs.logEntry.fileName = (int16_t) (((intptr_t) fileName)
+  logEntry->timeStamp = temp.i64Value;
+  logEntry->logLevel = logLevel;
+  logEntry->fileName = (int) (((intptr_t) fileName)
     - ((intptr_t) _referencePoint));
-  commandArgs.logEntry.lineNumber = lineNumber;
-  commandArgs.logEntry.pid = getRunningPid();
-  commandArgs.logEntry.format = (int16_t) (((intptr_t) format)
+  logEntry->functionName = (int) (((intptr_t) functionName)
+    - ((intptr_t) _referencePoint));
+  logEntry->lineNumber = lineNumber;
+  logEntry->processId = getRunningPid();
+  logEntry->threadId = 1;
+  logEntry->format = (int) (((intptr_t) format)
     - ((intptr_t) _referencePoint));
   
   // Get the va_list values.
-  int increment = sizeof(intptr_t) / sizeof(uint32_t);
+  temp.intValue = (int) ((sizeof(logEntry->args))
+    / (sizeof(logEntry->args[0])));
   va_start(args, format);
-  for (int ii = 0;
-    ii < (int) ((sizeof(commandArgs.logEntry.args))
-      / (sizeof(commandArgs.logEntry.args[0])));
-    ii += increment
-  ) {
-    intptr_t arg = va_arg(args, intptr_t);
-    memcpy(&commandArgs.logEntry.args[ii], &arg, sizeof(arg));
+  for (int ii = 0; ii < temp.intValue; ii++) {
+    logEntry->args[ii] = va_arg(args, uintptr_t);
   }
   va_end(args);
   
@@ -163,6 +192,7 @@ int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
     // image, so we can't print it as an immediate either.  This is a bug in
     // the HAL but there's nothing we can do at runtime, so just return to the
     // caller that this isn't supported.
+    logEntry->inUse = false;
     return -ENOTSUP;
   }
   
@@ -179,6 +209,7 @@ int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
       }
       if (processMessage == NULL) {
         // There's something wrong with the system.  Try again later.
+        logEntry->inUse = false;
         return -EAGAIN;
       }
     } else {
@@ -193,15 +224,17 @@ int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
       }
       if (processMessage == NULL) {
         // There's something wrong with the system.  Try again later.
+        logEntry->inUse = false;
         return -EAGAIN;
       }
     }
   }
   if (processMessageInit(processMessage,
     LOGGER_COMMAND_SIGNATURE | LOGGER_LOG_MESSAGE,
-    &commandArgs.logEntry, sizeof(commandArgs.logEntry), true) != processSuccess
+    logEntry, sizeof(*logEntry), false) != processSuccess
   ) {
     processMessageRelease(processMessage);
+    logEntry->inUse = false;
     return -EAGAIN;
   }
   
@@ -213,19 +246,11 @@ int logMessage(LogLevel logLevel, const char *fileName, uint16_t lineNumber,
       // Write this entry immediately.
       goto writeImmediate;
     }
+    logEntry->inUse = false;
     return -EAGAIN;
   }
   
-  if (getRunningPid() != SCHEDULER_STATE->schedulerPid) {
-    // This is the expected case.
-    processMessageWaitForDone(processMessage, NULL);
-  } else {
-    while (processMessageDone(processMessage) == false) {
-      SCHEDULER_STATE->runSchedulerQueues(PRIVILEGE_LEVEL_SUPERVISOR);
-    }
-  }
-  processMessageRelease(processMessage);
-  return commandArgs.returnValue;
+  return 0;
   
 writeImmediate:
   // Print the header.
@@ -236,15 +261,16 @@ writeImmediate:
   
   snprintf(HAL->memory.logBuffer, HAL->memory.logBufferSize,
     _logHeaderFormat,
-    (long long int) (commandArgs.logEntry.timeStamp / ((int64_t) 1000000000)),
-    (long long int) (commandArgs.logEntry.timeStamp % ((int64_t) 1000000000)),
+    (long long int) (logEntry->timeStamp / ((int64_t) 1000000000)),
+    (long long int) (logEntry->timeStamp % ((int64_t) 1000000000)),
     ((SCHEDULER_STATE != NULL) && (SCHEDULER_STATE->hostname != NULL))
       ? SCHEDULER_STATE->hostname
       : _localhost,
-    (unsigned int) getRunningPid(),
-    fileName, lineNumber, _logLevelNames[logLevel]);
+    logEntry->processId, logEntry->threadId,
+    fileName, functionName, lineNumber, _logLevelNames[logLevel]);
   int rv = printString(HAL->memory.logBuffer);
   if (rv < 0) {
+    logEntry->inUse = false;
     return rv;
   }
   
@@ -254,14 +280,14 @@ writeImmediate:
     format, args);
   va_end(args);
   rv += printString(HAL->memory.logBuffer);
+  logEntry->inUse = false;
   return rv;
   
 writeStaticLog:
   // Copy the log entry to the static log area.
-  memcpy(&HAL->memory.staticLogs->logEntries[
-    HAL->memory.staticLogs->metadata.numEntries],
-    &commandArgs.logEntry, sizeof(commandArgs.logEntry));
-  HAL->memory.staticLogs->metadata.numEntries++;
+  HAL->memory.staticLogs->logEntries[
+    HAL->memory.staticLogs->numEntries] = logEntry;
+  HAL->memory.staticLogs->numEntries++;
   
   return 0;
 }
