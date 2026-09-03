@@ -97,7 +97,7 @@ int printLogEntry(LoggerState *loggerState, LogEntry *logEntry) {
   char *functionName = fileName + strlen(fileName) + 1;
   strncpy(functionName, loggerState->formatBuffer,
     sizeof(loggerState->buffer) - (functionName - loggerState->buffer));
-  functionName[16] = '\0';
+  functionName[12] = '\0';
   
   snprintf(loggerState->formatBuffer, loggerState->formatBufferSize,
     _logHeaderFormat,
