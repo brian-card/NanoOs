@@ -111,6 +111,15 @@ static const char _localhost[] KEEP_IN_FLASH = "localhost";
 /// logger process.
 static LogEntry _logEntries[NUM_LOG_ENTRIES] = {0};
 
+/// @var _logMessages
+///
+/// @brief Private pool of ProcessMessage objects used to deliver log entries to
+/// the logger process.  One per _logEntries slot.  Logging is asynchronous.
+/// The message stays in use until the logger process drains its queue, so it
+/// MUST NOT come from the shared getAvailableMessage() pool.  Doing so would
+/// let a backed up logger starve the whole system of messages.
+static ProcessMessage _logMessages[NUM_LOG_ENTRIES] = {0};
+
 /// @fn int logMessage(LogLevel logLevel,
 ///   const char *fileName, const char *functionName, int lineNumber,
 ///   const char *format, ...)
@@ -144,9 +153,13 @@ int logMessage(LogLevel logLevel,
   HAL->clock.getElapsedNanoseconds(0, &temp.i64Value);
   
   LogEntry *logEntry = NULL;
+  ProcessMessage *processMessage = NULL;
   for (int ii = 0; ii < NUM_LOG_ENTRIES; ii++) {
-    if (_logEntries[ii].inUse == false) {
+    if ((_logEntries[ii].inUse == false)
+      && (processMessageInUse(&_logMessages[ii]) == false)
+    ) {
       logEntry = &_logEntries[ii];
+      processMessage = &_logMessages[ii];
       break;
     }
   }
@@ -196,39 +209,6 @@ int logMessage(LogLevel logLevel,
     return -ENOTSUP;
   }
   
-  ProcessMessage *processMessage = getAvailableMessage();
-  if (processMessage == NULL) {
-    if (getRunningPid() != SCHEDULER_STATE->schedulerPid) {
-      // This is the expected case.
-      for (int ii = 0;
-        (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
-        ii++
-      ) {
-        processYield();
-        processMessage = getAvailableMessage();
-      }
-      if (processMessage == NULL) {
-        // There's something wrong with the system.  Try again later.
-        logEntry->inUse = false;
-        return -EAGAIN;
-      }
-    } else {
-      // We have to do things a little differently since the scheduler can't
-      // yield.
-      for (int ii = 0;
-        (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
-        ii++
-      ) {
-        SCHEDULER_STATE->runSchedulerQueues(PRIVILEGE_LEVEL_SUPERVISOR);
-        processMessage = getAvailableMessage();
-      }
-      if (processMessage == NULL) {
-        // There's something wrong with the system.  Try again later.
-        logEntry->inUse = false;
-        return -EAGAIN;
-      }
-    }
-  }
   if (processMessageInit(processMessage,
     LOGGER_COMMAND_SIGNATURE | LOGGER_LOG_MESSAGE,
     logEntry, sizeof(*logEntry), false) != processSuccess
