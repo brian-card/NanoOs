@@ -208,7 +208,7 @@ int main(int argc, char **argv) {
   
   if (getHal()->memory.staticLogs != NULL) {
     for (uintptr_t ii = 0; ii < getHal()->memory.staticLogs->numEntries; ii++) {
-      printLogEntry(&loggerState, getHal()->memory.staticLogs->logEntries[ii]);
+      printLogEntry(&loggerState, &getHal()->memory.staticLogs->logEntries[ii]);
     }
   }
   

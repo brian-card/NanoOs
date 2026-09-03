@@ -109,7 +109,7 @@ static const char _localhost[] KEEP_IN_FLASH = "localhost";
 ///
 /// @brief Local array of LogEntry objects to use in communication with the
 /// logger process.
-static LogEntry _logEntries[NUM_LOG_ENTRIES] = {0};
+static LogEntry *_logEntries = NULL;
 
 /// @var _logMessages
 ///
@@ -118,7 +118,10 @@ static LogEntry _logEntries[NUM_LOG_ENTRIES] = {0};
 /// The message stays in use until the logger process drains its queue, so it
 /// MUST NOT come from the shared getAvailableMessage() pool.  Doing so would
 /// let a backed up logger starve the whole system of messages.
-static ProcessMessage _logMessages[NUM_LOG_ENTRIES] = {0};
+static ProcessMessage *_logMessages = NULL;
+
+// Prototype needed from Scheduler.c.
+void* schedCalloc(size_t nmemb, size_t size);
 
 /// @fn int logMessage(LogLevel logLevel,
 ///   const char *fileName, const char *functionName, int lineNumber,
@@ -154,14 +157,43 @@ int logMessage(LogLevel logLevel,
   
   LogEntry *logEntry = NULL;
   ProcessMessage *processMessage = NULL;
-  for (int ii = 0; ii < NUM_LOG_ENTRIES; ii++) {
-    if ((_logEntries[ii].inUse == false)
-      && (processMessageInUse(&_logMessages[ii]) == false)
-    ) {
-      logEntry = &_logEntries[ii];
-      processMessage = &_logMessages[ii];
-      break;
+  if ((SCHEDULER_STATE != NULL) && (SCHEDULER_STATE->loggerPid != 0)) {
+    if (_logEntries == NULL) {
+      // Dynamically allocate our arrays first.
+      if (getRunningPid() == SCHEDULER_STATE->schedulerPid) {
+        _logEntries = (LogEntry*) schedCalloc(1,
+          sizeof(LogEntry) * NUM_LOG_ENTRIES);
+        _logMessages = (ProcessMessage*) schedCalloc(1,
+          sizeof(ProcessMessage) * NUM_LOG_ENTRIES);
+      } else {
+        _logEntries = (LogEntry*) calloc(1,
+          sizeof(LogEntry) * NUM_LOG_ENTRIES);
+        _logMessages = (ProcessMessage*) calloc(1,
+          sizeof(ProcessMessage) * NUM_LOG_ENTRIES);
+      }
+      
+      if (_logMessages == NULL) {
+        // Nothing we can do.
+        free(_logEntries);
+        return -ENOMEM;
+      }
     }
+    
+    // Select pointers from our dynamically-allocated arrays.
+    for (int ii = 0; ii < NUM_LOG_ENTRIES; ii++) {
+      if ((_logEntries[ii].inUse == false)
+        && (processMessageInUse(&_logMessages[ii]) == false)
+      ) {
+        logEntry = &_logEntries[ii];
+        processMessage = &_logMessages[ii];
+        break;
+      }
+    }
+  } else {
+    // Select a LogEntry pointer from HAL->memory.staticLogs.  No ProcessMessage
+    // pointer is necessary.
+    logEntry = &HAL->memory.staticLogs->logEntries[
+      HAL->memory.staticLogs->numEntries];
   }
   if (logEntry == NULL) {
     // Nothing we can do.  The log message is just silently dropped.
@@ -264,9 +296,7 @@ writeImmediate:
   return rv;
   
 writeStaticLog:
-  // Copy the log entry to the static log area.
-  HAL->memory.staticLogs->logEntries[
-    HAL->memory.staticLogs->numEntries] = logEntry;
+  // Increment numEntries in the static log area.
   HAL->memory.staticLogs->numEntries++;
   
   return 0;
