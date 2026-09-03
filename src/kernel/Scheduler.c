@@ -3528,6 +3528,13 @@ const SchedulerCommandHandler schedulerCommandHandlers[] = {
   schedulerShutdownCommandHandler,          // SCHEDULER_SHUTDOWN
 };
 
+/// @var _handleSchedulerMessageInProgress
+///
+/// @brief State variable to keep track of whether or not we're already in the
+/// middle of handling a message.  handleSchedulerMessage is non-reentrant, so
+/// we have to make sure we handle recursive calls correctly.
+bool _handleSchedulerMessageInProgress = false;
+
 /// @fn void handleSchedulerMessage(SchedulerState *schedulerState)
 ///
 /// @brief Handle one (and only one) message from our message queue.  If
@@ -3539,6 +3546,13 @@ const SchedulerCommandHandler schedulerCommandHandlers[] = {
 ///
 /// @return This function returns no value.
 void handleSchedulerMessage(SchedulerState *schedulerState) {
+  if (_handleSchedulerMessageInProgress == true) {
+    // Don't attempt to handle a message while we're in the middle of handling
+    // one.
+    return;
+  }
+  _handleSchedulerMessageInProgress = true;
+
   static int lastReturnValue = 0;
   ProcessMessage *message = processMessageQueuePop();
   if (message != NULL) {
@@ -3551,6 +3565,7 @@ void handleSchedulerMessage(SchedulerState *schedulerState) {
         processPid(processMessageFrom(message)));
       // Don't attempt to process this message further and don't put it back on
       // our message queue.  Just return immediately.
+      _handleSchedulerMessageInProgress = false;
       return;
     }
 
@@ -3562,6 +3577,7 @@ void handleSchedulerMessage(SchedulerState *schedulerState) {
         "from process %d\n",
         (unsigned long int) (uintptr_t) message,
         messageType, processPid(processMessageFrom(message)));
+      _handleSchedulerMessageInProgress = false;
       return;
     }
 
@@ -3581,11 +3597,13 @@ void handleSchedulerMessage(SchedulerState *schedulerState) {
       ) {
         logError("Could not push failed message back onto scheduler queue\n");
         logError("Undefined behavior will result\n");
+        processMessageRelease(message); // Don't leak messages
       }
     }
     lastReturnValue = returnValue;
   }
 
+  _handleSchedulerMessageInProgress = false;
   return;
 }
 
@@ -4431,10 +4449,15 @@ void runScheduler(void) {
     if (processRunning(processDescriptor) == true) {
       // This is a non-kernel process running from an overlay.  Make sure it's
       // loaded.
-      if (schedulerLoadOverlay(
+      int rv = schedulerLoadOverlay(
         processDescriptor,
-        processDescriptor->envp) != 0
-      ) {
+        processDescriptor->envp);
+      if ((rv == -EIO) || (rv == -ENOMEM)) {
+        // Transient errors.  Re-queue and try again later.
+        processQueuePush(SCHEDULER_STATE->currentReady, processDescriptor);
+        goto exit;
+      } else if (rv != 0) {
+        // Permanent failure.  Remove the process.
         schedulerDumpMemoryAllocations();
         schedulerDumpOpenFiles();
         removeProcess(processDescriptor, _overlayLoadFailureReason);
