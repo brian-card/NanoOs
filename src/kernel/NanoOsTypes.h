@@ -357,6 +357,9 @@ typedef struct ProcessQueue {
 /// @param firstShellPid The ProcessId of the first shell process.
 /// @param runSchedulerQueues Function pointer to the runSchedulerQueues
 ///   function in the Scheduler library.
+/// @param runSchedulerDepth Recursion counter of how many levels of the
+///   runScheduler function are in progress.  Needed to avoid non-reentrant
+///   functions that are run by it.
 typedef struct SchedulerState {
   ProcessDescriptor   allProcesses[NANO_OS_NUM_PROCESSES];
   ProcessQueue        ready[SCHEDULER_NUM_READY_QUEUES];
@@ -375,6 +378,7 @@ typedef struct SchedulerState {
   ProcessId           firstUserPid;
   ProcessId           firstShellPid;
   void              (*runSchedulerQueues)(PrivilegeLevel);
+  int                 runSchedulerDepth;
 } SchedulerState;
 
 /// @struct CommandDescriptor
