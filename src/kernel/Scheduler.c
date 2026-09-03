@@ -3528,13 +3528,6 @@ const SchedulerCommandHandler schedulerCommandHandlers[] = {
   schedulerShutdownCommandHandler,          // SCHEDULER_SHUTDOWN
 };
 
-/// @var _handleSchedulerMessageInProgress
-///
-/// @brief State variable to keep track of whether or not we're already in the
-/// middle of handling a message.  handleSchedulerMessage is non-reentrant, so
-/// we have to make sure we handle recursive calls correctly.
-static bool _handleSchedulerMessageInProgress = false;
-
 /// @fn void handleSchedulerMessage(SchedulerState *schedulerState)
 ///
 /// @brief Handle one (and only one) message from our message queue.  If
@@ -3546,13 +3539,6 @@ static bool _handleSchedulerMessageInProgress = false;
 ///
 /// @return This function returns no value.
 void handleSchedulerMessage(SchedulerState *schedulerState) {
-  if (_handleSchedulerMessageInProgress == true) {
-    // Don't attempt to handle a message while we're in the middle of handling
-    // one.
-    return;
-  }
-  _handleSchedulerMessageInProgress = true;
-
   static int lastReturnValue = 0;
   ProcessMessage *message = processMessageQueuePop();
   if (message != NULL) {
@@ -3565,7 +3551,6 @@ void handleSchedulerMessage(SchedulerState *schedulerState) {
         processPid(processMessageFrom(message)));
       // Don't attempt to process this message further and don't put it back on
       // our message queue.  Just return immediately.
-      _handleSchedulerMessageInProgress = false;
       return;
     }
 
@@ -3577,7 +3562,6 @@ void handleSchedulerMessage(SchedulerState *schedulerState) {
         "from process %d\n",
         (unsigned long int) (uintptr_t) message,
         messageType, processPid(processMessageFrom(message)));
-      _handleSchedulerMessageInProgress = false;
       return;
     }
 
@@ -3603,7 +3587,6 @@ void handleSchedulerMessage(SchedulerState *schedulerState) {
     lastReturnValue = returnValue;
   }
 
-  _handleSchedulerMessageInProgress = false;
   return;
 }
 
@@ -4424,6 +4407,7 @@ int32_t restartLogger(ProcessDescriptor *processDescriptor) {
 ///
 /// @return This function returns no value.
 void runScheduler(void) {
+  SCHEDULER_STATE->runSchedulerDepth++;
   if (processStackOverflowed(
     &allProcesses[SCHEDULER_STATE->schedulerPid - 1])
   ) {
@@ -4505,9 +4489,7 @@ void runScheduler(void) {
     int returnValue = closeProcessFileDescriptors(processDescriptor);
     if (returnValue == -EBUSY) {
       processQueuePush(SCHEDULER_STATE->currentReady, processDescriptor);
-      // DON'T goto exit.  We're in the middle of a loop inside
-      // closeProcessFileDescriptors, so just return immediately.
-      return;
+      goto exit;
     }
 
     MemoryManagerFreeProcessMemoryArgs memoryManagerFreeProcessMemoryArgs = {
@@ -4566,8 +4548,11 @@ void runScheduler(void) {
 
 exit:
   checkForTimeouts(SCHEDULER_STATE);
-  handleSchedulerMessage(SCHEDULER_STATE);
+  if (SCHEDULER_STATE->runSchedulerDepth == 1) {
+    handleSchedulerMessage(SCHEDULER_STATE);
+  }
 
+  SCHEDULER_STATE->runSchedulerDepth--;
   return;
 }
 
