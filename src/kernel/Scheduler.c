@@ -3533,7 +3533,7 @@ const SchedulerCommandHandler schedulerCommandHandlers[] = {
 /// @brief State variable to keep track of whether or not we're already in the
 /// middle of handling a message.  handleSchedulerMessage is non-reentrant, so
 /// we have to make sure we handle recursive calls correctly.
-bool _handleSchedulerMessageInProgress = false;
+static bool _handleSchedulerMessageInProgress = false;
 
 /// @fn void handleSchedulerMessage(SchedulerState *schedulerState)
 ///
