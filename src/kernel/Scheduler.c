@@ -3028,6 +3028,10 @@ int schedulerSpawnCommandHandler(
     // This should be impossible, but there's nothing to do.  Return good
     // status.
     return returnValue; // 0
+  } else if (_functionInProgress != NULL) {
+    // A filesystem operation is in progress.  We can't spawn like this.  Bail
+    // out now before corrupting the state of anything.
+    return -EBUSY;
   }
 
   SchedulerSpawnArgs *schedulerSpawnArgs
