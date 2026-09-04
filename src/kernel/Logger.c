@@ -120,9 +120,6 @@ static LogEntry _logEntries[NUM_LOG_ENTRIES] = {0};
 /// let a backed up logger starve the whole system of messages.
 static ProcessMessage _logMessages[NUM_LOG_ENTRIES] = {0};
 
-// Prototype needed from Scheduler.c.
-void* schedCalloc(size_t nmemb, size_t size);
-
 /// @fn int logMessage(LogLevel logLevel,
 ///   const char *fileName, const char *functionName, int lineNumber,
 ///   const char *format, ...)
