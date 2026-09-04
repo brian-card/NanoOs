@@ -2308,11 +2308,13 @@ int schedGetFileBlockMetadataFromPath(
     return -EINVAL;
   }
 
+  errno = 0;
   FILE *stream = schedFopen(path, _readMode);
   if (stream == NULL) {
     logError("Could not open file\n");
     return -EIO;
   }
+  errno = 0;
   int returnValue = schedGetFileBlockMetadataFromFile(stream, metadata);
   schedFclose(stream); stream = NULL;
 
