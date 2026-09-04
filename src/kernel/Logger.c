@@ -103,13 +103,13 @@ static const char _localhost[] KEEP_IN_FLASH = "localhost";
 /// @def NUM_LOG_ENTRIES
 ///
 /// @brief The number of LogEntry objects held in our local array.
-#define NUM_LOG_ENTRIES 10
+#define NUM_LOG_ENTRIES 3
 
 /// @var _logEntries
 ///
 /// @brief Local array of LogEntry objects to use in communication with the
 /// logger process.
-static LogEntry *_logEntries = NULL;
+static LogEntry _logEntries[NUM_LOG_ENTRIES] = {0};
 
 /// @var _logMessages
 ///
@@ -118,7 +118,7 @@ static LogEntry *_logEntries = NULL;
 /// The message stays in use until the logger process drains its queue, so it
 /// MUST NOT come from the shared getAvailableMessage() pool.  Doing so would
 /// let a backed up logger starve the whole system of messages.
-static ProcessMessage *_logMessages = NULL;
+static ProcessMessage _logMessages[NUM_LOG_ENTRIES] = {0};
 
 // Prototype needed from Scheduler.c.
 void* schedCalloc(size_t nmemb, size_t size);
@@ -158,27 +158,6 @@ int logMessage(LogLevel logLevel,
   LogEntry *logEntry = NULL;
   ProcessMessage *processMessage = NULL;
   if ((SCHEDULER_STATE != NULL) && (SCHEDULER_STATE->loggerPid != 0)) {
-    if (_logEntries == NULL) {
-      // Dynamically allocate our arrays first.
-      if (getRunningPid() == SCHEDULER_STATE->schedulerPid) {
-        _logEntries = (LogEntry*) schedCalloc(1,
-          sizeof(LogEntry) * NUM_LOG_ENTRIES);
-        _logMessages = (ProcessMessage*) schedCalloc(1,
-          sizeof(ProcessMessage) * NUM_LOG_ENTRIES);
-      } else {
-        _logEntries = (LogEntry*) calloc(1,
-          sizeof(LogEntry) * NUM_LOG_ENTRIES);
-        _logMessages = (ProcessMessage*) calloc(1,
-          sizeof(ProcessMessage) * NUM_LOG_ENTRIES);
-      }
-      
-      if (_logMessages == NULL) {
-        // Nothing we can do.
-        free(_logEntries);
-        return -ENOMEM;
-      }
-    }
-    
     // Select pointers from our dynamically-allocated arrays.
     for (int ii = 0; ii < NUM_LOG_ENTRIES; ii++) {
       if ((_logEntries[ii].inUse == false)
@@ -189,7 +168,7 @@ int logMessage(LogLevel logLevel,
         break;
       }
     }
-  } else {
+  } else if (HAL->memory.staticLogs != NULL) {
     // Select a LogEntry pointer from HAL->memory.staticLogs.  No ProcessMessage
     // pointer is necessary.
     logEntry = &HAL->memory.staticLogs->logEntries[
