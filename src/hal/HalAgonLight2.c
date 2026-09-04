@@ -141,12 +141,6 @@ extern void agonLight2Halt(void);          // boot/AgonLight2/Boot.asm; no retur
 /// @brief Static-log metadata/entry area: 4 KB above the bottom of the heap.
 #define STATIC_LOGS_ADDRESS (HEAP_START_ADDRESS + (4 * 1024))
 
-/// @def STATIC_LOGS_SIZE
-///
-/// @brief The size, in bytes, reserved for the static logs in memory.  We will
-/// only reserve 1 KB for this.
-#define STATIC_LOGS_SIZE 1024
-
 /// @def PROCESS_STACK_SIZE
 ///
 /// @brief Default process stack size in bytes.
