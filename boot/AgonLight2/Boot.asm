@@ -272,13 +272,7 @@ _agonLight2SystemReset:
 _agonLight2Off:
     DI
 .agonLight2OffLoop:
-    ; SLEEP is a new mode in the eZ80, not part of the original Z80.  It's
-    ; lower power than HALT mode and stops the CPU clock entirely.  Resuming
-    ; out of SLEEP mode starts the CPU back at the reset vector, it does NOT
-    ; resume from where it left off the way that HALT does.  So, somewhat
-    ; confusingly, we will use SLEEP as what NanoOs understands as its "OFF"
-    ; state and HALT as what NanoOs understands as its "SUSPEND" state.
-    SLP
+    HALT
     JR  .agonLight2OffLoop
 
     .extern __bss_start
