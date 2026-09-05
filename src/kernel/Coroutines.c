@@ -2758,3 +2758,24 @@ int comessageQueuePush(Coroutine *coroutine, msg_t *msg) {
   return msg_q_push(&coroutine->messageQueue, replyTo, msg);
 }
 
+/// @fn int comessageQueueRemove(Coroutine *coroutine, msg_t *msg)
+///
+/// @brief Remove a specific message from a coroutine's message queue,
+/// without releasing it, if it's present in the coroutine's message queue.
+///
+/// @param coroutine A pointer to the Coroutine whose message queue should be
+///   searched and removed from.
+/// @param msg A pointer to the msg_t to remove.
+///
+/// @return Returns msg_success if the message was found and removed or if it
+/// wasn't present to start with, coroutineError on failure.
+int comessageQueueRemove(Coroutine *coroutine, msg_t *msg) {
+  int returnValue = coroutineError;
+
+  if (coroutine == NULL) {
+    return returnValue; // coroutineError
+  }
+
+  return msg_q_remove(&coroutine->messageQueue, msg);
+}
+

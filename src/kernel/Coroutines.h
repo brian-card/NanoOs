@@ -340,6 +340,7 @@ msg_t* comessageQueuePopType(int type);
 msg_t* comessageQueueWait(const struct timespec *ts);
 msg_t* comessageQueueWaitForType(int64_t type, const struct timespec *ts);
 int comessageQueuePush(Coroutine *coroutine, msg_t *comessage);
+int comessageQueueRemove(Coroutine *coroutine, msg_t *comessage);
 
 
 #ifdef __cplusplus
