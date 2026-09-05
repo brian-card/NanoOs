@@ -273,6 +273,7 @@ msg_t* msg_q_wait(msg_q_t *queue, const struct timespec *ts);
 msg_t* msg_q_wait_for_type(msg_q_t *queue, int64_t type,
   const struct timespec *ts);
 int msg_q_push(msg_q_t *queue, msg_q_t *reply_to, msg_t *msg);
+int msg_q_remove(msg_q_t *queue, msg_t *msg);
 
 #ifdef __cplusplus
 }
