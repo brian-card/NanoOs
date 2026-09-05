@@ -863,6 +863,84 @@ int memoryManagerAssignMemoryCommandHandler(
   return returnValue;
 }
 
+/// @var _outstandingAllocationsHeader
+///
+/// @brief Header line printed before the list of outstanding allocations by
+/// memoryManagerDumpMemoryAllocationsCommandHandler.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _outstandingAllocationsHeader[] KEEP_IN_FLASH
+  = "Outstanding allocations:\n";
+
+/// @var _availableBlocksHeader
+///
+/// @brief Header line printed before the list of available memory blocks by
+/// memoryManagerDumpMemoryAllocationsCommandHandler.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _availableBlocksHeader[] KEEP_IN_FLASH
+  = "Available memory blocks:\n";
+
+/// @var _memoryDumpNodePrefix
+///
+/// @brief Prefix printed before a node's address by
+/// memoryManagerDumpMemoryAllocationsCommandHandler.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _memoryDumpNodePrefix[] KEEP_IN_FLASH = "  0x";
+
+/// @var _memoryDumpSizeInfix
+///
+/// @brief Segment printed between a node's address and its size by
+/// memoryManagerDumpMemoryAllocationsCommandHandler.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _memoryDumpSizeInfix[] KEEP_IN_FLASH = ": ";
+
+/// @var _memoryDumpOwnedBySuffix
+///
+/// @brief Suffix printed after an allocated node's size, before its owning
+/// process ID, by memoryManagerDumpMemoryAllocationsCommandHandler.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _memoryDumpOwnedBySuffix[] KEEP_IN_FLASH
+  = " bytes owned by ";
+
+/// @var _memoryDumpAvailableSuffix
+///
+/// @brief Suffix printed after a free node's size by
+/// memoryManagerDumpMemoryAllocationsCommandHandler.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _memoryDumpAvailableSuffix[] KEEP_IN_FLASH
+  = " bytes available\n";
+
+/// @var _memoryDumpPrevMismatchPrefix
+///
+/// @brief Prefix printed before a node's cur->prev address when it doesn't
+/// match the previously-visited node, by
+/// memoryManagerDumpMemoryAllocationsCommandHandler.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _memoryDumpPrevMismatchPrefix[] KEEP_IN_FLASH
+  = "  - cur->prev = 0x";
+
+/// @var _memoryDumpNewline
+///
+/// @brief Trailing newline printed after a memory dump line by
+/// memoryManagerDumpMemoryAllocationsCommandHandler.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _memoryDumpNewline[] KEEP_IN_FLASH = "\n";
+
 /// @fn int memoryManagerDumpMemoryAllocationsCommandHandler(
 ///   MemoryManagerState *memoryManagerState, ProcessMessage *incoming)
 ///
@@ -882,45 +960,54 @@ int memoryManagerDumpMemoryAllocationsCommandHandler(
 ) {
   int returnValue = 0;
 
-  logInfo("Outstanding allocations:\n");
+  printString(_outstandingAllocationsHeader);
   processYield();
   MemNode *prev = NULL;
   for (MemNode *cur = memoryManagerState->allocated;
     cur != NULL;
     cur = cur->next
   ) {
-    logInfo("  0x%lx: %ld bytes owned by %ld\n",
-      (unsigned long int) (uintptr_t) &cur[1],
-      (long int) cur->size, (long int) cur->owner);
+    printString(_memoryDumpNodePrefix);
+    printHex((uintptr_t) &cur[1]);
+    printString(_memoryDumpSizeInfix);
+    printInt(cur->size);
+    printString(_memoryDumpOwnedBySuffix);
+    printInt(cur->owner);
+    printString(_memoryDumpNewline);
     processYield();
     if (cur->prev != prev) {
-      logInfo("  - cur->prev = 0x%lx\n",
-        (unsigned long int) (uintptr_t) &cur->prev[1]);
+      printString(_memoryDumpPrevMismatchPrefix);
+      printHex((uintptr_t) &cur->prev[1]);
+      printString(_memoryDumpNewline);
       processYield();
     }
     prev = cur;
   }
 
-  logInfo("Available memory blocks:\n");
+  printString(_availableBlocksHeader);
   processYield();
   prev = NULL;
   for (MemNode *cur = memoryManagerState->firstFree;
     cur != NULL;
     cur = cur->next
   ) {
-    logInfo("  0x%lx: %ld bytes available\n",
-      (unsigned long int) (uintptr_t) &cur[1], (long int) cur->size);
+    printString(_memoryDumpNodePrefix);
+    printHex((uintptr_t) &cur[1]);
+    printString(_memoryDumpSizeInfix);
+    printInt(cur->size);
+    printString(_memoryDumpAvailableSuffix);
     processYield();
     if (cur->prev != prev) {
-      logInfo("  - cur->prev = 0x%lx\n",
-        (unsigned long int) (uintptr_t) &cur->prev[1]);
+      printString(_memoryDumpPrevMismatchPrefix);
+      printHex((uintptr_t) &cur->prev[1]);
+      printString(_memoryDumpNewline);
       processYield();
     }
     prev = cur;
   }
-  
+
   processMessageSetDone(incoming);
-  
+
   return returnValue;
 }
 
