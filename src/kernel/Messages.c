@@ -866,7 +866,7 @@ msg_t* msg_q_pop_type(msg_q_t *queue, int64_t type) {
   }
   
   queue->msg_sync->mtx_unlock(&queue->lock);
-  
+
   return return_value;
 }
 
@@ -902,10 +902,6 @@ msg_t* msg_q_wait_for_type_(msg_q_t *queue, int64_t *type,
   int lock_status = msg_success;
   int wait_status = msg_success;
   int64_t search_type = 0;
-
-  if (queue == NULL) {
-    return return_value; // NULL
-  }
 
   if (type != NULL) {
     // This saves us from having to dereference the pointer on each iteration
@@ -1056,6 +1052,61 @@ int msg_q_push(msg_q_t *queue, msg_q_t *reply_to, msg_t *msg) {
   
   queue->msg_sync->mtx_unlock(&queue->lock);
   
+  return return_value;
+}
+
+/// @fn int msg_q_remove(msg_q_t *queue, msg_t *msg)
+///
+/// @brief Remove a specific message from a message queue, without releasing
+/// it, if it's present in the queue.
+///
+/// @param queue The queue to search and remove from.
+/// @param msg A pointer to the msg_t to remove.
+///
+/// @return Returns msg_success if the message was found and removed or if it
+/// wasn't present to start with, msg_error on failure.
+int msg_q_remove(msg_q_t *queue, msg_t *msg) {
+  int return_value = msg_error;
+  if ((queue == NULL) || (msg == NULL)) {
+    // Invalid.
+    return return_value; // msg_error
+  }
+
+  msg_t *prev = NULL;
+  msg_t *cur = queue->head;
+  msg_t **prev_next = &queue->head;
+
+  if (queue->msg_sync->mtx_lock(&queue->lock) != msg_success) {
+    // Error case.
+    return return_value; // msg_error
+  }
+
+  while ((cur != NULL) && (cur != msg)) {
+    prev = cur;
+    prev_next = &cur->next;
+    cur = cur->next;
+  }
+
+  if (cur != NULL) {
+    // Message was found.  Remove it from the queue.
+    *prev_next = cur->next;
+
+    if (queue->head == NULL) {
+      // Empty queue.  Set queue->tail to NULL too.
+      queue->tail = NULL;
+    }
+    if (queue->tail == cur) {
+      queue->tail = prev;
+    }
+    cur->next = NULL;
+  }
+
+  // Either the message was never in the queue to start with or we just removed
+  // it.  Either way, it's now gone, so return success.
+  return_value = msg_success;
+
+  queue->msg_sync->mtx_unlock(&queue->lock);
+
   return return_value;
 }
 
