@@ -1882,6 +1882,15 @@ int closeProcessFileDescriptors(ProcessDescriptor *processDescriptor) {
             }
           }
           SCHEDULER_STATE->currentReady = currentReady;
+
+          if (processMessageDone(&processMessage) == false) {
+            // The waiting process timed out without marking the message done.
+            // Since the message is about to go out of scope, remove it from the
+            // process's message queue so that we don't segfault when we
+            // terminate the process and it cleans up its message queue below.
+            processMessageQueueRemove(waitingProcessDescriptor,
+              &processMessage);
+          }
         }
       }
       removeProcessIpcCapability(processDescriptor,
