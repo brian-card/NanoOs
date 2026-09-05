@@ -142,11 +142,23 @@ def test_pipe_two_stage_is_the_working_max(s):
 
 
 def test_pipe_three_stage_does_not_crash_the_os(s):
-    # Boundary: one command past the working max.  Expected behaviour is a
-    # graceful error and a live shell (compare the background-job path,
-    # which reports "Out of process slots" cleanly).  See BUGS.txt BUG-4:
-    # the SIGSEGV is fixed, but this still hangs the shell (the -EBUSY spawn
-    # is re-queued forever at Scheduler.c:3565).
+    # Regression test for a SIGSEGV/reboot on 3+-stage pipelines: the
+    # process that is simultaneously a pipe reader (of an already-exited
+    # upstream writer) and a pipe writer (to a still-live downstream
+    # reader) could exit with a stale message still linked into its own
+    # coroutine message queue.  closeProcessFileDescriptors() pushes a
+    # stack-local ProcessMessage as a best-effort "you're unblocked" ping
+    # to a waiting process and gives up after a bounded timeout; if the
+    # receiver never drained it in time, the queue was left holding a
+    # dangling pointer into the now-returned stack frame, and crashed
+    # whatever later walked that queue - including the queue's own
+    # destruction when the receiving process itself exited.  Fixed by
+    # unlinking the message (msg_q_remove()/comessageQueueRemove()) before
+    # giving up on it.  Confirmed via gdb backtraces on
+    # sim/bin/nano-os-sim core dumps and printString-level tracing in the
+    # real AgonLight2 emulator before the fix (msg_destroy() crashed on a
+    # dangling msg->msg_sync while the AgonLight2 target instead
+    # free-ran off the deep end into an eventual watchdog-style reboot).
     s.login()
     s.child.sendline("echo a | grep a | grep a")
     idx = s.child.expect([PROMPT, pexpect.EOF, pexpect.TIMEOUT], timeout=12)
@@ -157,7 +169,26 @@ def test_pipe_three_stage_does_not_crash_the_os(s):
             f"(signal {sig}{' = SIGSEGV' if sig == 11 else ''})")
     if idx == 2:
         raise AssertionError("3-command pipeline hung the shell")
-    # Reached a prompt: make sure the shell is actually still usable.
+    # Reached a prompt: the pipeline should have actually matched and
+    # printed its output, and the shell must still be usable afterwards.
+    assert "a" in s.child.before, s.child.before
+    assert "alive" in s.sh("echo alive"), "shell unresponsive after the pipeline"
+
+
+def test_pipe_four_stage_does_not_crash_the_os(s):
+    # One stage deeper than the bug above ever needed to reproduce -
+    # confirms the fix isn't specific to exactly 3 stages.
+    s.login()
+    s.child.sendline("echo a | grep a | grep a | grep a")
+    idx = s.child.expect([PROMPT, pexpect.EOF, pexpect.TIMEOUT], timeout=12)
+    if idx == 1:
+        sig = s.child.signalstatus
+        raise AssertionError(
+            f"simulator died on a 4-command pipeline "
+            f"(signal {sig}{' = SIGSEGV' if sig == 11 else ''})")
+    if idx == 2:
+        raise AssertionError("4-command pipeline hung the shell")
+    assert "a" in s.child.before, s.child.before
     assert "alive" in s.sh("echo alive"), "shell unresponsive after the pipeline"
 
 
@@ -195,11 +226,7 @@ TESTS = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
 # Tests known to fail because of an open bug (see test/BUGS.txt).  A failure
 # is reported as TAP "# TODO <reason>" and does not fail the run; if one
 # starts passing the runner says so.
-XFAIL = {
-    "test_pipe_three_stage_does_not_crash_the_os":
-        "BUG-4: 3+ command pipelines hang the shell (SIGSEGV fixed; the "
-        "-EBUSY spawn is re-queued forever)",
-}
+XFAIL = {}
 
 
 def main(argv):
