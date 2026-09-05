@@ -263,17 +263,23 @@ _agonLight2SystemReset:
     ; main().
     JP.LIL  realStart
 
-;;; @fn void agonLight2Halt(void)
+;;; @fn void agonLight2Off(void)
 ;;;
 ;;; @brief Stop the CPU for good.  The Agon Light 2 has no software power
 ;;; control (power is a physical switch), so OFF / SUSPEND - and the kernel's
 ;;; panic path - come down to this.  Does not return.
-.globl _agonLight2Halt
-_agonLight2Halt:
+.globl _agonLight2Off
+_agonLight2Off:
     DI
-.agonLight2HaltLoop:
-    HALT
-    JR  .agonLight2HaltLoop
+.agonLight2OffLoop:
+    ; SLEEP is a new mode in the eZ80, not part of the original Z80.  It's
+    ; lower power than HALT mode and stops the CPU clock entirely.  Resuming
+    ; out of SLEEP mode starts the CPU back at the reset vector, it does NOT
+    ; resume from where it left off the way that HALT does.  So, somewhat
+    ; confusingly, we will use SLEEP as what NanoOs understands as its "OFF"
+    ; state and HALT as what NanoOs understands as its "SUSPEND" state.
+    SLP
+    JR  .agonLight2OffLoop
 
     .extern __bss_start
     .extern __bss_size

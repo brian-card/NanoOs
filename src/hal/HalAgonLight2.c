@@ -61,7 +61,7 @@ extern void agonLight2ConfigureSpiImpl(uint16_t divisor);
 extern void agonLight2SetSpiBrgImpl(uint16_t divisor);
 extern int agonLight2SpiTransfer8Impl(uint8_t c);
 extern void agonLight2SystemReset(void);   // boot/AgonLight2/Boot.asm; no return
-extern void agonLight2Halt(void);          // boot/AgonLight2/Boot.asm; no return
+extern void agonLight2Off(void);           // boot/AgonLight2/Boot.asm; no return
 #ifdef __cplusplus
 }
 #endif
@@ -902,9 +902,9 @@ int32_t agonLight2EnterMode(va_list args) {
   // 0x00 ends the emulator with the low byte as its exit status (mirrors the
   // POSIX HAL's exit(0) for OFF); 0x00 is an unused I/O address on real
   // eZ80F92 silicon, so that write is a harmless no-op there and
-  // agonLight2Halt (di; halt loop) is the actual behaviour.
+  // agonLight2Off (di; sleep loop) is the actual behaviour.
   agonLight2WritePort(0x0000, 0x00);
-  agonLight2Halt();
+  agonLight2Off();
 
   return 0;   // not reached
 }
