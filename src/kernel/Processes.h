@@ -290,7 +290,14 @@ extern "C"
 /// @brief Function macro to peek at the head of the the running process's
 /// message queue.
 #define processMessageQueuePeek() \
-  comessageQueuePop()
+  comessageQueuePeek()
+
+/// @def processMessageQueueRemove
+///
+/// @brief Function macro to remove a specific message from a process's message
+/// queue without releasing it.
+#define processMessageQueueRemove(processDescriptor, message) \
+  comessageQueueRemove((processDescriptor)->mainThread, message)
 
 /// @def processResume
 ///
