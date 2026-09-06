@@ -5125,6 +5125,8 @@ int logSchedulerDebugInfo(SchedulerState *schedulerState) {
     ));
   logDebug("schedulerState size = %ld bytes\n",
     (long int) sizeof(SchedulerState));
+  logDebug("allProcesses size = %ld bytes\n",
+    (long int) sizeof(schedulerState->allProcesses));
   logDebug("messagesStorage size = %ld bytes\n",
     (long int) (sizeof(ProcessMessage) * NANO_OS_NUM_MESSAGES));
   logDebug("ConsoleState size = %ld bytes\n",
