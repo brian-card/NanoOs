@@ -154,8 +154,10 @@ int logMessage(LogLevel logLevel,
   
   LogEntry *logEntry = NULL;
   ProcessMessage *processMessage = NULL;
-  if ((SCHEDULER_STATE != NULL) && (SCHEDULER_STATE->loggerPid != 0)) {
-    // Select pointers from our dynamically-allocated arrays.
+  if (((SCHEDULER_STATE != NULL) && (SCHEDULER_STATE->loggerPid != 0))
+    || (HAL->memory.staticLogs == NULL)
+  ) {
+    // Select pointers from our statically-allocated arrays.
     for (int ii = 0; ii < NUM_LOG_ENTRIES; ii++) {
       if ((_logEntries[ii].inUse == false)
         && (processMessageInUse(&_logMessages[ii]) == false)
