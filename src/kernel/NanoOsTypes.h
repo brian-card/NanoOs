@@ -47,25 +47,6 @@ extern "C"
 
 // Constants
 
-/// @def NANO_OS_NUM_PROCESSES
-///
-/// @brief The total number of concurrent processes that can be run by the OS,
-/// including the scheduler.
-///
-/// @note If this value is increased beyond 15, the number of bits used to store
-/// the owner in a MemNode in MemoryManager.cpp must be extended and the value
-/// of PROCESS_ID_NOT_SET must be changed in Processes.h.  If this value is
-/// increased beyond 255, then the type defined by ProcessId below must also
-/// be extended.
-#define NANO_OS_NUM_PROCESSES 10
-
-/// @def SCHEDULER_NUM_PROCESSES
-///
-/// @brief The number of processes managed by the scheduler.  This is one fewer
-/// than the total number of processes managed by NanoOs since the scheduler is
-/// a process.
-#define SCHEDULER_NUM_PROCESSES (NANO_OS_NUM_PROCESSES - 1)
-
 /// @def SCHEDULER_NUM_READY_QUEUES
 ///
 /// @brief This is the total number of ready queues managed by the scheduler
@@ -313,25 +294,26 @@ typedef struct ProcessInfo {
 /// @brief Structure to manage an individual process queue
 ///
 /// @param name The string name of the queue for use in error messages.
-/// @param processes The array of pointers to ProcessDescriptors from the
-///   allProcesses array.
 /// @param head The index of the head of the queue.
 /// @param tail The index of the tail of the queue.
 /// @param numElements The number of elements currently in the queue.
+/// @param processes The array of pointers to ProcessDescriptors from the
+///   allProcesses array.  This is a variable-length array.  It's declared with
+///   a size of 1 here to keep C++ compilers from complaining.
 typedef struct ProcessQueue {
   const char        *name;
-  ProcessDescriptor *processes[SCHEDULER_NUM_PROCESSES];
-  uint8_t            head:4;
-  uint8_t            tail:4;
-  uint8_t            numElements:4;
+  uint8_t            head;
+  uint8_t            tail;
+  uint8_t            numElements;
+  ProcessDescriptor *processes[1];
 } ProcessQueue;
 
 /// @struct SchedulerState
 ///
 /// @brief State data used by the scheduler.
 ///
-/// @param allProcesses Array that will hold the metadata for every process,
-///   including the scheduler.
+/// @param numManagedProcesses The number of processes managed by the scheduler.
+///   This will be one less than the global numProcesses variable.
 /// @param ready Queue of processes that are allocated and not waiting on
 ///   anything but not currently running.  This queue never includes the
 ///   scheduler process.
@@ -361,12 +343,12 @@ typedef struct ProcessQueue {
 ///   runScheduler function are in progress.  Needed to avoid non-reentrant
 ///   functions that are run by it.
 typedef struct SchedulerState {
-  ProcessDescriptor   allProcesses[NANO_OS_NUM_PROCESSES];
-  ProcessQueue        ready[SCHEDULER_NUM_READY_QUEUES];
+  size_t              numManagedProcesses;
+  ProcessQueue      **readyQueues;
   ProcessQueue       *currentReady;
-  ProcessQueue        waiting;
-  ProcessQueue        timedWaiting;
-  ProcessQueue        free;
+  ProcessQueue       *waitingQueue;
+  ProcessQueue       *timedWaitingQueue;
+  ProcessQueue       *freeQueue;
   char               *hostname;
   uint8_t             numShells;
   int                 preemptionTimer;

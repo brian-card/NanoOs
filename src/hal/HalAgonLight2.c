@@ -168,6 +168,12 @@ extern void agonLight2Off(void);           // boot/AgonLight2/Boot.asm; no retur
 /// @brief Value to indicate that the value of a specific pin is undefined.
 #define DIO_PIN_UNDEFINED 255
 
+/// @def NUM_PROCESSES
+///
+/// @brief Value to indicate the maximum number of processes that can be run
+/// concurrently.
+#define NUM_PROCESSES 10
+
 // -------------------------------------------------------------------------
 // DIO pin numbering
 // -------------------------------------------------------------------------
@@ -263,6 +269,90 @@ static uint8_t _sdCardPinChipSelect = PB4;
 static BlockDevice *blockDevices[] = {
   NULL,
 };
+
+/// @struct HalProcessQueue
+///
+/// @brief Structure to manage an individual process queue.  This is the
+/// implementation that backs the ProcessQueue structure in the kernel.
+///
+/// @param name The string name of the queue for use in error messages.
+/// @param head The index of the head of the queue.
+/// @param tail The index of the tail of the queue.
+/// @param numElements The number of elements currently in the queue.
+/// @param processes The array of pointers to ProcessDescriptors from the
+///   allProcesses array.  This is a variable-length array in the kernel.  It's
+///   declared with definitive size here since this is the actual
+///   implementationn backing.
+typedef struct HalProcessQueue {
+  const char        *name;
+  uint8_t            head;
+  uint8_t            tail;
+  uint8_t            numElements;
+  ProcessDescriptor *processes[NUM_PROCESSES];
+} HalProcessQueue;
+
+/// @var _kernelReadyQueue
+///
+/// @brief HAL implementation backing for the PRIVILEGE_LEVEL_KERNEL ready
+/// queue.
+static HalProcessQueue _kernelReadyQueue;
+
+/// @var _executiveReadyQueue
+///
+/// @brief HAL implementation backing for the PRIVILEGE_LEVEL_EXECUTIVE ready
+/// queue.
+static HalProcessQueue _executiveReadyQueue;
+
+/// @var _supervisorReadyQueue
+///
+/// @brief HAL implementation backing for the PRIVILEGE_LEVEL_SUPERVISOR ready
+/// queue.
+static HalProcessQueue _supervisorReadyQueue;
+
+/// @var _userReadyQueue
+///
+/// @brief HAL implementation backing for the PRIVILEGE_LEVEL_USER ready queue.
+static HalProcessQueue _userReadyQueue;
+
+/// @var _readyQueues
+///
+/// @brief HAL implementation backing for the ready queues.
+static ProcessQueue *_readyQueues[NUM_READY_QUEUES] = {
+  (ProcessQueue*) &_kernelReadyQueue,
+  (ProcessQueue*) &_executiveReadyQueue,
+  (ProcessQueue*) &_supervisorReadyQueue,
+  (ProcessQueue*) &_userReadyQueue,
+};
+
+/// @var _waitingQueue
+///
+/// @brief HAL implementation backing for the waiting queue.
+static HalProcessQueue _waitingQueue;
+
+/// @var _timedWaitingQueue
+///
+/// @brief HAL implementation backing for the timed waiting queue.
+static HalProcessQueue _timedWaitingQueue;
+
+/// @var _freeQueue
+///
+/// @brief HAL implementation backing for the free queue.
+static HalProcessQueue _freeQueue;
+
+/// @var _processErrorNumbers
+///
+/// @brief Process-specific storage for each process's errno value.
+static int _processErrorNumbers[NUM_PROCESSES + 1];
+
+/// @var _processStorageBase
+///
+/// @brief File-local, first-level variable to hold the per-process storage.
+static void *_processStorageBase[NUM_PROCESSES][NUM_PROCESS_STORAGE_KEYS];
+
+/// @var _processStorage
+///
+/// @brief File-local, second-level variable to hold the per-process storage.
+static void **_processStorage[NUM_PROCESSES];
 
 /// @def _numBlockDevices
 ///
@@ -1452,6 +1542,12 @@ static uint32_t agonLight2BlockDevicesOnline[] = { 0x00000000 };
 /// @brief Statically allocated buffer for formatting log messages.
 static char _logBuffer[128];
 
+/// @var _allProcesses
+///
+/// @brief Statically allocated buffer of ProcessDescriptors to hold the
+/// metadata for all processes on the system, including the scheduler.
+static ProcessDescriptor _allProcesses[NUM_PROCESSES];
+
 /// @var _dataBssCanaryError
 ///
 /// @brief Message printed when the external-RAM integrity canary that Boot.asm
@@ -1497,6 +1593,27 @@ int halAgonLight2Init(void) {
 #endif // NANO_OS_STRINGS_STRIPPED
   halImpl.memory.staticLogs     = (StaticLogs*) STATIC_LOGS_ADDRESS;
   memset(halImpl.memory.staticLogs, 0, sizeof(StaticLogs));
+
+  memset(_allProcesses, 0, sizeof(_allProcesses));
+  halImpl.memory.numProcesses        = NUM_PROCESSES;
+  halImpl.memory.allProcesses        = _allProcesses;
+  for (int ii = 0; ii < NUM_READY_QUEUES; ii++) {
+    memset(_readyQueues[ii], 0, sizeof(HalProcessQueue));
+  }
+  halImpl.memory.readyQueues         = _readyQueues;
+  memset(&_waitingQueue, 0, sizeof(HalProcessQueue));
+  halImpl.memory.waitingQueue        = (ProcessQueue*) &_waitingQueue;
+  memset(&_timedWaitingQueue, 0, sizeof(HalProcessQueue));
+  halImpl.memory.timedWaitingQueue   = (ProcessQueue*) &_timedWaitingQueue;
+  memset(&_freeQueue, 0, sizeof(HalProcessQueue));
+  halImpl.memory.freeQueue           = (ProcessQueue*) &_freeQueue;
+  halImpl.memory.processErrorNumbers = _processErrorNumbers;
+  memset(_processStorageBase, 0,
+    NUM_PROCESSES * NUM_PROCESS_STORAGE_KEYS * sizeof(void*));
+  for (int ii = 0; ii < NUM_PROCESSES; ii++) {
+    _processStorage[ii] = _processStorageBase[ii];
+  }
+  halImpl.memory.processStorage = _processStorage;
 
   halImpl.uart.numSupported        = 2;
   halImpl.uart.online              = agonLight2UartsOnline;

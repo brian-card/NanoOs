@@ -25,6 +25,27 @@ ENTRY(Reset_Handler)
 
 SECTIONS
 {
+	/*
+	 * Top of the RAM that .data + .bss may occupy.
+	 *
+	 * NanoOs reserves everything from this address upward for the overlay
+	 * window (OVERLAY_ADDRESS / OVERLAY_SIZE in
+	 * src/hal/HalArduinoSamD21x18A.cpp), immediately followed by the
+	 * MemoryManager heap (arduinoSamD21x18ABottomOfHeap() returns
+	 * OVERLAY_ADDRESS + OVERLAY_SIZE).  The C runtime and the linker know
+	 * nothing about that reservation - .data + .bss simply grow up from
+	 * ORIGIN(RAM) - so .bss spilling past here is otherwise only caught at
+	 * run time, by the raw-Serial guard in halArduinoSamD21x18AInit(), which
+	 * merely prints a warning and then boots into the corruption (the first
+	 * overlay load memcpy()s over the tail of .bss).  The ASSERT after .bss
+	 * turns that into a hard link error instead.
+	 *
+	 * MUST be kept in sync with:
+	 *   - OVERLAY_ADDRESS      in src/hal/HalArduinoSamD21x18A.cpp
+	 *   - OVERLAY_RAM ORIGIN   in usr/src/NanoOsArduinoSamd21.ld
+	 */
+	__nanoos_overlay_window = 0x20002200;
+
 	.text :
 	{
 		__text_start__ = .;
@@ -171,6 +192,19 @@ SECTIONS
 		. = ALIGN(4);
 		__bss_end__ = .;
 	} > RAM
+
+	/*
+	 * .data + .bss must end below the NanoOs overlay window.  If this fires,
+	 * static RAM use (Arduino core + NanoOs HAL, notably HAL->memory's
+	 * _allProcesses[] and the ProcessQueue backings) has grown past the
+	 * reservation.  Fix by trimming static RAM, or by raising
+	 * __nanoos_overlay_window here together with OVERLAY_ADDRESS in
+	 * src/hal/HalArduinoSamD21x18A.cpp and OVERLAY_RAM ORIGIN in
+	 * usr/src/NanoOsArduinoSamd21.ld (and shrinking OVERLAY_SIZE or the heap
+	 * to pay for it).
+	 */
+	ASSERT(__bss_end__ <= __nanoos_overlay_window,
+		".data + .bss overran the NanoOs overlay window (OVERLAY_ADDRESS) - see ld/ArduinoSamd21FlashWithBootloader.ld")
 
 	.heap (COPY):
 	{

@@ -321,7 +321,7 @@ ProcessId getNumPipes(const char *commandLine) {
 /// @var processStorage
 ///
 /// @brief File-local variable to hold the per-process storage.
-static void *processStorage[NANO_OS_NUM_PROCESSES][NUM_PROCESS_STORAGE_KEYS] = {0};
+void ***processStorage = NULL;
 
 /// @fn void *getProcessStorage(uint8_t key)
 ///
@@ -335,10 +335,17 @@ void *getProcessStorage(uint8_t key) {
   if (key >= NUM_PROCESS_STORAGE_KEYS) {
     // Key is out of range.
     return returnValue; // NULL
+  } else if (processStorage == NULL) {
+    // Nothing we can do at this point.  Fail.
+    return returnValue; // NULL
   }
 
-  int processIndex = ((int) getRunningPid()) - 1;
-  if ((processIndex >= 0) && (processIndex < NANO_OS_NUM_PROCESSES)) {
+  size_t processIndex = (size_t) getRunningPid();
+  if (processIndex == 0) {
+    // Processes not setup yet.  Fail.
+    return returnValue; // NULL
+  }
+  if (processIndex < numProcesses) {
     // Calling process is not supported and does not have storage.
     returnValue = processStorage[processIndex][key];
   }
@@ -361,6 +368,9 @@ int setProcessStorage_(uint8_t key, void *val, int pid, ...) {
   if (key >= NUM_PROCESS_STORAGE_KEYS) {
     // Key is out of range.
     return returnValue; // processError
+  } else if (processStorage == NULL) {
+    // Nothing we can do at this point.  Fail.
+    return returnValue; // processError
   }
 
   if (pid < 0) {
@@ -370,8 +380,12 @@ int setProcessStorage_(uint8_t key, void *val, int pid, ...) {
       return returnValue; // processError
     }
   }
-  int processIndex = pid - 1;
-  if ((processIndex >= 0) && (processIndex < NANO_OS_NUM_PROCESSES)) {
+  if (pid == 0) {
+    // Invalid destination PID.
+    return returnValue; // processError
+  }
+  size_t processIndex = (size_t) (pid - 1);
+  if (processIndex < numProcesses) {
     // Calling process is not supported and does not have storage.
     processStorage[processIndex][key] = val;
     returnValue = processSuccess;

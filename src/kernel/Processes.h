@@ -341,6 +341,9 @@ typedef struct IpcCapability {
   uint16_t messageTypes;
 } IpcCapability;
 
+extern ProcessDescriptor *allProcesses;
+extern size_t numProcesses;
+
 // Exported functionality
 void* execOverlayCommand(void *args);
 void* runBlockOverlay(void *args);

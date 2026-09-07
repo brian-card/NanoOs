@@ -94,16 +94,10 @@ const char *_functionInProgress = NULL;
 /// scheduler is started.
 Thread *schedulerThread = NULL;
 
-/// @var allProcesses
-///
-/// @brief Pointer to the allProcesses array that is part of the
-/// SchedulerState object maintained by the scheduler process.  This is needed
-/// in order to do lookups from process IDs to process object pointers.
-static ProcessDescriptor *allProcesses = NULL;
-
 /// @var SCHEDULER_STATE
 ///
-/// @brief Global pointer to the SchedulerState managed by the scheduler process.
+/// @brief Global pointer to the SchedulerState managed by the scheduler
+/// process.
 SchedulerState *SCHEDULER_STATE = NULL;
 
 /// @var standardKernelFileDescriptors
@@ -731,7 +725,7 @@ void runSchedulerQueues(PrivilegeLevel privilegeLevelBound) {
     ii < privilegeLevelBound;
     ii++
   ) {
-    SCHEDULER_STATE->currentReady = &SCHEDULER_STATE->ready[ii];
+    SCHEDULER_STATE->currentReady = SCHEDULER_STATE->readyQueues[ii];
     uint8_t queueSize = SCHEDULER_STATE->currentReady->numElements;
     for (uint8_t jj = 0; jj < queueSize; jj++) {
       runScheduler();
@@ -754,9 +748,7 @@ void runSchedulerQueues(PrivilegeLevel privilegeLevelBound) {
 int processQueuePush(
   ProcessQueue *processQueue, ProcessDescriptor *processDescriptor
 ) {
-  if ((processQueue == NULL)
-    || (processQueue->numElements >= SCHEDULER_NUM_PROCESSES)
-  ) {
+  if ((processQueue == NULL) || (processQueue->numElements >= numProcesses)) {
     logError("Could not push process %d onto %s queue:\n",
       processDescriptor->processId, processQueue->name);
     return ENOMEM;
@@ -764,7 +756,7 @@ int processQueuePush(
 
   processQueue->processes[processQueue->tail] = processDescriptor;
   processQueue->tail++;
-  processQueue->tail %= SCHEDULER_NUM_PROCESSES;
+  processQueue->tail %= numProcesses;
   processQueue->numElements++;
   processDescriptor->processQueue = processQueue;
 
@@ -787,7 +779,7 @@ ProcessDescriptor* processQueuePop(ProcessQueue *processQueue) {
 
   processDescriptor = processQueue->processes[processQueue->head];
   processQueue->head++;
-  processQueue->head %= SCHEDULER_NUM_PROCESSES;
+  processQueue->head %= numProcesses;
   processQueue->numElements--;
   processDescriptor->processQueue = NULL;
 
@@ -841,7 +833,7 @@ int processQueueRemove(
 /// @return Returns the found process descriptor on success, NULL on failure.
 ProcessDescriptor* schedulerGetProcessById(unsigned int pid) {
   ProcessDescriptor *processDescriptor = NULL;
-  if ((pid > 0) && (pid <= NANO_OS_NUM_PROCESSES)) {
+  if ((pid > 0) && (pid <= numProcesses)) {
     processDescriptor = &allProcesses[pid - 1];
   }
 
@@ -921,29 +913,27 @@ exit:
   return returnValue;
 }
 
-/// @fn int schedulerSendProcessMessageToPid(SchedulerState *schedulerState,
+/// @fn int schedulerSendProcessMessageToPid(
 ///   unsigned int pid, ProcessMessage *processMessage)
 ///
 /// @brief Look up a process by its PID and send a message to it.
 ///
-/// @param schedulerState A pointer to the SchedulerState maintained by the
-///   scheduler process.
 /// @param pid The ID of the process to send the message to.
 /// @param processMessage A pointer to the message to send to the destination
 ///   process.
 ///
 /// @return Returns processSuccess on success, processError on failure.
-int schedulerSendProcessMessageToPid(SchedulerState *schedulerState,
+int schedulerSendProcessMessageToPid(
   unsigned int pid, ProcessMessage *processMessage
 ) {
   int returnValue = processError;
-  if ((pid <= 0) || (pid > NANO_OS_NUM_PROCESSES)) {
+  if ((pid <= 0) || (pid > numProcesses)) {
     // Not a valid PID.  Fail.
     logError("%d is not a valid PID.\n", pid);
     return returnValue; // processError
   }
 
-  ProcessDescriptor *processDescriptor = &schedulerState->allProcesses[pid - 1];
+  ProcessDescriptor *processDescriptor = &allProcesses[pid - 1];
   // If processDescriptor is NULL, it will be detected as not running by
   // schedulerSendProcessMessageToProcess, so there's no real point in
   //  checking for NULL here.
@@ -999,14 +989,13 @@ int schedulerInitSendMessageToPid(
   int pid, int64_t type, void *data, size_t size
 ) {
   int returnValue = processError;
-  if ((pid <= 0) || (pid > NANO_OS_NUM_PROCESSES)) {
+  if ((pid <= 0) || (pid > ((int) numProcesses))) {
     // Not a valid PID.  Fail.
     logError("%d is not a valid PID.\n", pid);
     return returnValue; // processError
   }
 
-  ProcessDescriptor *processDescriptor
-    = &SCHEDULER_STATE->allProcesses[pid - 1];
+  ProcessDescriptor *processDescriptor = &allProcesses[pid - 1];
   returnValue = schedulerInitSendMessageToProcess(
     processDescriptor, type, data, size);
   return returnValue;
@@ -1172,7 +1161,7 @@ int schedulerAssignPortToPid(uint8_t consolePort, ProcessId owner) {
 int schedulerSetPortShell(uint8_t consolePort, ProcessId shell) {
   int returnValue = processError;
 
-  if (shell >= NANO_OS_NUM_PROCESSES) {
+  if (shell >= numProcesses) {
     logError(
       "schedulerSetPortShell called with invalid shell PID %ld\n",
       (long int) shell);
@@ -1844,7 +1833,7 @@ int closeProcessFileDescriptors(ProcessDescriptor *processDescriptor) {
       ProcessId waitingOutputPid = fileDescriptor->outputChannel.pid;
       if (waitingOutputPid != PROCESS_ID_NOT_SET) {
         ProcessDescriptor *waitingProcessDescriptor
-          = &SCHEDULER_STATE->allProcesses[waitingOutputPid - 1];
+          = &allProcesses[waitingOutputPid - 1];
         if (processState(waitingProcessDescriptor) == PROCESS_STATE_WAIT) {
           // Send an empty message to the waiting process so that it will
           // become unblocked.
@@ -1874,7 +1863,7 @@ int closeProcessFileDescriptors(ProcessDescriptor *processDescriptor) {
               elapsedUs < 50000)
           ) {
             for (int ii = 0; ii < NUM_PRIVILEGE_LEVELS; ii++) {
-              SCHEDULER_STATE->currentReady = &SCHEDULER_STATE->ready[ii];
+              SCHEDULER_STATE->currentReady = SCHEDULER_STATE->readyQueues[ii];
               uint8_t queueSize = SCHEDULER_STATE->currentReady->numElements;
               for (uint8_t jj = 0; jj < queueSize; jj++) {
                 runScheduler();
@@ -2416,7 +2405,7 @@ int schedulerKillProcessCommandHandler(
   }
 
   if ((pid >= schedulerState->firstUserPid)
-    && (pid <= NANO_OS_NUM_PROCESSES)
+    && (pid <= numProcesses)
     && (processRunning(&allProcesses[processIndex]))
   ) {
     if ((allProcesses[processIndex].userId == callingUserId)
@@ -2432,12 +2421,14 @@ int schedulerKillProcessCommandHandler(
       // ready queue is the second-most-likely place it could be.  The least-
       // likely place for it to be would be the timed waiting queue with a very
       // long timeout.  So, attempt to remove from the queues in that order.
-      if (processQueueRemove(&schedulerState->waiting, processDescriptor) != 0
+      if (processQueueRemove(schedulerState->waitingQueue,
+        processDescriptor) != 0
       ) {
         if (processQueueRemove(processDescriptor->readyQueue,
           processDescriptor) != 0
         ) {
-          processQueueRemove(&schedulerState->timedWaiting, processDescriptor);
+          processQueueRemove(schedulerState->timedWaitingQueue,
+            processDescriptor);
         }
       }
 
@@ -2571,13 +2562,14 @@ int schedulerKillProcessCommandHandler(
 int schedulerGetNumProcessDescriptorsCommandHandler(
   SchedulerState *schedulerState, ProcessMessage *processMessage
 ) {
+  (void) schedulerState;
   int returnValue = 0;
   SchedulerGetNumRunningProcessesArgs *schedulerGetNumRunningProcessesArgs
     = (SchedulerGetNumRunningProcessesArgs*) processMessageData(processMessage);
 
   uint8_t numProcessDescriptors = 0;
-  for (int ii = 1; ii <= NANO_OS_NUM_PROCESSES; ii++) {
-    if (processRunning(&schedulerState->allProcesses[ii - 1])) {
+  for (size_t ii = 1; ii <= numProcesses; ii++) {
+    if (processRunning(&allProcesses[ii - 1])) {
       numProcessDescriptors++;
     }
   }
@@ -2606,6 +2598,7 @@ int schedulerGetNumProcessDescriptorsCommandHandler(
 int schedulerGetProcessInfoCommandHandler(
   SchedulerState *schedulerState, ProcessMessage *processMessage
 ) {
+  (void) schedulerState;
   int returnValue = 0;
 
   SchedulerGetProcessInfoArgs *schedulerGetProcessInfoArgs =
@@ -2615,17 +2608,14 @@ int schedulerGetProcessInfoCommandHandler(
     = schedulerGetProcessInfoArgs->processInfo->processes;
 
   int idx = 0;
-  for (int ii = 1;
-    (ii <= NANO_OS_NUM_PROCESSES) && (idx < maxProcesses);
-    ii++
-  ) {
-    if (processRunning(&schedulerState->allProcesses[ii - 1]) == false) {
+  for (size_t ii = 1; (ii <= numProcesses) && (idx < maxProcesses); ii++) {
+    if (processRunning(&allProcesses[ii - 1]) == false) {
       continue;
     }
 
-    processes[idx].pid = (int) schedulerState->allProcesses[ii - 1].processId;
-    processes[idx].name = schedulerState->allProcesses[ii - 1].name;
-    processes[idx].userId = schedulerState->allProcesses[ii - 1].userId;
+    processes[idx].pid = (int) allProcesses[ii - 1].processId;
+    processes[idx].name = allProcesses[ii - 1].name;
+    processes[idx].userId = allProcesses[ii - 1].userId;
     idx++;
   }
 
@@ -2657,17 +2647,17 @@ int schedulerGetProcessInfoCommandHandler(
 int schedulerSetProcessUserCommandHandler(
   SchedulerState *schedulerState, ProcessMessage *processMessage
 ) {
+  (void) schedulerState;
   int returnValue = 0;
   SchedulerSetProcessUserArgs *schedulerSetProcessUserArgs
     = (SchedulerSetProcessUserArgs*) processMessageData(processMessage);
   ProcessId callingPid = processPid(processMessageFrom(processMessage));
 
-  if ((callingPid > 0) && (callingPid <= NANO_OS_NUM_PROCESSES)) {
-    if ((schedulerState->allProcesses[callingPid - 1].userId == -1)
+  if ((callingPid > 0) && (callingPid <= numProcesses)) {
+    if ((allProcesses[callingPid - 1].userId == -1)
       || (schedulerSetProcessUserArgs->userId == -1)
     ) {
-      schedulerState->allProcesses[callingPid - 1].userId
-        = schedulerSetProcessUserArgs->userId;
+      allProcesses[callingPid - 1].userId = schedulerSetProcessUserArgs->userId;
       schedulerSetProcessUserArgs->returnValue = 0;
       schedulerSetProcessUserArgs->errorNumber = 0;
     } else {
@@ -2835,9 +2825,11 @@ int schedulerExecveCommandHandler(
   // waiting queue.  Take no chances, though.
   logDebug("Removing process %d from waiting or ready queues\n",
     processDescriptor->processId);
-  if (processQueueRemove(&schedulerState->waiting, processDescriptor) != 0) {
-    if (processQueueRemove(&schedulerState->timedWaiting, processDescriptor)
-      != 0
+  if (processQueueRemove(schedulerState->waitingQueue,
+    processDescriptor) != 0
+  ) {
+    if (processQueueRemove(schedulerState->timedWaitingQueue,
+      processDescriptor) != 0
     ) {
       processQueueRemove(processDescriptor->readyQueue, processDescriptor);
     }
@@ -3077,7 +3069,8 @@ int schedulerSpawnCommandHandler(
   }
   char **envp = spawnArgs->envp;
 
-  ProcessDescriptor *processDescriptor = processQueuePop(&schedulerState->free);
+  ProcessDescriptor *processDescriptor
+    = processQueuePop(schedulerState->freeQueue);
   if (processDescriptor == NULL) {
     logError("Out of process slots to launch process.\n");
     schedulerSpawnArgs->errorNumber = EINVAL;
@@ -3340,7 +3333,7 @@ int schedulerSendSignalCommandHandler(
   ProcessId pid = sendSignalArgs->pid;
   ProcessDescriptor *processDescriptor = &allProcesses[pid - 1];
   if ((pid < 2)
-    || (pid > NANO_OS_NUM_PROCESSES)
+    || (pid > numProcesses)
     || (processRunning(processDescriptor) == false)
   ) {
     sendSignalArgs->returnValue = -1;
@@ -3614,7 +3607,7 @@ void handleSchedulerMessage(SchedulerState *schedulerState) {
 ///
 /// @return This function returns no value.
 void checkForTimeouts(SchedulerState *schedulerState) {
-  ProcessQueue *timedWaiting = &schedulerState->timedWaiting;
+  ProcessQueue *timedWaiting = schedulerState->timedWaitingQueue;
   uint8_t numElements = timedWaiting->numElements;
   int64_t now = processGetNanoseconds(NULL);
 
@@ -4231,7 +4224,7 @@ int restartBuiltinShell(ProcessDescriptor *processDescriptor) {
 
   // Set the capabilities for the shell on the console.
   addProcessIpcCapability(
-    &SCHEDULER_STATE->allProcesses[SCHEDULER_STATE->consolePid - 1],
+    &allProcesses[SCHEDULER_STATE->consolePid - 1],
     processDescriptor->processId, CONSOLE_COMMAND_SIGNATURE,
     CONSOLE_RETURNING_INPUT);
 
@@ -4402,7 +4395,7 @@ int restartLogger(ProcessDescriptor *processDescriptor) {
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
   processDescriptor->halCapabilities = baseExecutiveHalCapabilities;
   processDescriptor->readyQueue
-    = &SCHEDULER_STATE->ready[processDescriptor->privilegeLevel];
+    = SCHEDULER_STATE->readyQueues[processDescriptor->privilegeLevel];
   int returnValue = schedulerRunOverlayCommand(processDescriptor,
     (char*) _loggerPath, (char**) _loggerArgs, NULL);
   if (returnValue == -EBUSY) {
@@ -4552,11 +4545,11 @@ void runScheduler(void) {
   }
 
   if (processState(processDescriptor) == PROCESS_STATE_WAIT) {
-    processQueuePush(&SCHEDULER_STATE->waiting, processDescriptor);
+    processQueuePush(SCHEDULER_STATE->waitingQueue, processDescriptor);
   } else if (processState(processDescriptor) == PROCESS_STATE_TIMEDWAIT) {
-    processQueuePush(&SCHEDULER_STATE->timedWaiting, processDescriptor);
+    processQueuePush(SCHEDULER_STATE->timedWaitingQueue, processDescriptor);
   } else if (processFinished(processDescriptor)) {
-    processQueuePush(&SCHEDULER_STATE->free, processDescriptor);
+    processQueuePush(SCHEDULER_STATE->freeQueue, processDescriptor);
   } else { // Process is still running.
     processQueuePush(SCHEDULER_STATE->currentReady, processDescriptor);
   }
@@ -4661,16 +4654,33 @@ int initializeSchedulerState(
   SchedulerState *schedulerState, SchedulerState **threadStatePointer,
   ProcessMessage *messagesStorage
 ) {
+  // Initialize the allProcesses pointer and numProcesses. 
+  numProcesses = HAL->memory.numProcesses;
+  allProcesses = HAL->memory.allProcesses;
+  schedulerState->numManagedProcesses = numProcesses - 1;
+  schedulerState->readyQueues = HAL->memory.readyQueues;
+  schedulerState->waitingQueue = HAL->memory.waitingQueue;
+  schedulerState->timedWaitingQueue = HAL->memory.timedWaitingQueue;
+  schedulerState->freeQueue = HAL->memory.freeQueue;
+  extern int *processErrorNumbers;
+  processErrorNumbers = HAL->memory.processErrorNumbers;
+  extern void ***processStorage;
+  processStorage = HAL->memory.processStorage;
+
   schedulerState->hostname = NULL;
-  schedulerState->ready[PRIVILEGE_LEVEL_KERNEL].name = _kernelReadyName;
-  schedulerState->ready[PRIVILEGE_LEVEL_EXECUTIVE].name = _executiveReadyName;
-  schedulerState->ready[PRIVILEGE_LEVEL_SUPERVISOR].name = _supervisorReadyName;
-  schedulerState->ready[PRIVILEGE_LEVEL_USER].name = _userReadyName;
-  schedulerState->waiting.name = _waitingName;
-  schedulerState->timedWaiting.name = _timedWaitingName;
-  schedulerState->free.name = _freeName;
+  schedulerState->readyQueues[PRIVILEGE_LEVEL_KERNEL]->name
+    = _kernelReadyName;
+  schedulerState->readyQueues[PRIVILEGE_LEVEL_EXECUTIVE]->name
+    = _executiveReadyName;
+  schedulerState->readyQueues[PRIVILEGE_LEVEL_SUPERVISOR]->name
+    = _supervisorReadyName;
+  schedulerState->readyQueues[PRIVILEGE_LEVEL_USER]->name
+    = _userReadyName;
+  schedulerState->waitingQueue->name = _waitingName;
+  schedulerState->timedWaitingQueue->name = _timedWaitingName;
+  schedulerState->freeQueue->name = _freeName;
   schedulerState->currentReady
-    = &schedulerState->ready[PRIVILEGE_LEVEL_KERNEL];
+    = schedulerState->readyQueues[PRIVILEGE_LEVEL_KERNEL];
   schedulerState->preemptionTimer = -1;
   if (HAL->timer.numSupported > 0) {
     for (int32_t ii = 0; ii < ((int32_t) HAL->timer.numSupported); ii++) {
@@ -4699,10 +4709,6 @@ int initializeSchedulerState(
   extern ProcessMessage *messages;
   messages = messagesStorage;
   logDebug("Allocated messages storage.\n");
-
-  // Initialize the allProcesses pointer.  The processes are all zeroed because
-  // we zeroed the entire schedulerState when we declared it.
-  allProcesses = schedulerState->allProcesses;
 
   // Initialize the scheduler in the array of running commands.
   allProcesses[schedulerState->schedulerPid - 1].mainThread = schedulerThread;
@@ -4816,7 +4822,7 @@ int setIpcCapabilities(SchedulerState *schedulerState) {
 
   // Set the HAL capabilities for all of the processes.
   ProcessDescriptor *processDescriptor = NULL;
-  for (ProcessId ii = 1; ii <= NANO_OS_NUM_PROCESSES; ii++) {
+  for (ProcessId ii = 1; ii <= numProcesses; ii++) {
     processDescriptor = &allProcesses[ii - 1];
     if (processDescriptor->privilegeLevel == PRIVILEGE_LEVEL_KERNEL) {
       continue;
@@ -4872,10 +4878,7 @@ int setIpcCapabilities(SchedulerState *schedulerState) {
     allProcesses[schedulerState->loggerPid - 1].ipcCapabilitiesDynamic
       = false;
   }
-  for (ProcessId ii = schedulerState->firstUserPid;
-    ii <= NANO_OS_NUM_PROCESSES;
-    ii++
-  ) {
+  for (ProcessId ii = schedulerState->firstUserPid; ii <= numProcesses; ii++) {
     processDescriptor = &allProcesses[ii - 1];
     if (processDescriptor->privilegeLevel == PRIVILEGE_LEVEL_SUPERVISOR) {
       allProcesses[ii - 1].ipcCapabilities
@@ -4947,7 +4950,7 @@ int initializeProcesses(SchedulerState *schedulerState) {
   logDebug("Started console process.\n");
   // Put the console process on the ready queue.
   allProcesses[schedulerState->consolePid - 1].readyQueue
-    = &schedulerState->ready[PRIVILEGE_LEVEL_KERNEL];
+    = schedulerState->readyQueues[PRIVILEGE_LEVEL_KERNEL];
   processQueuePush(allProcesses[schedulerState->consolePid - 1].readyQueue,
     &allProcesses[schedulerState->consolePid - 1]);
 
@@ -5020,10 +5023,7 @@ int initializeProcesses(SchedulerState *schedulerState) {
   // get to the end of memory to run the memory manager in whatever is left
   // over.  The scheduler will take care of cleaning up the dummy processes
   // after they exit.
-  for (ProcessId ii = schedulerState->firstUserPid;
-    ii <= NANO_OS_NUM_PROCESSES;
-    ii++
-  ) {
+  for (ProcessId ii = schedulerState->firstUserPid; ii <= numProcesses; ii++) {
     processDescriptor = &allProcesses[ii - 1];
     if (processCreate(processDescriptor,
       dummyProcess, NULL) != processSuccess
@@ -5085,12 +5085,9 @@ int initializeProcesses(SchedulerState *schedulerState) {
   // the scheduler (since by definition it can't be scheduled) and the console
   // (since it was added to its queue earlier).
   allProcesses[0].readyQueue = NULL;
-  for (ProcessId ii = allProcesses[2].processId;
-    ii <= NANO_OS_NUM_PROCESSES;
-    ii++
-  ) {
+  for (ProcessId ii = allProcesses[2].processId; ii <= numProcesses; ii++) {
     allProcesses[ii - 1].readyQueue
-      = &schedulerState->ready[allProcesses[ii - 1].privilegeLevel];
+      = schedulerState->readyQueues[allProcesses[ii - 1].privilegeLevel];
     processQueuePush(allProcesses[ii - 1].readyQueue, &allProcesses[ii - 1]);
   }
   logDebug("Populated ready queues.\n");
@@ -5126,7 +5123,7 @@ int logSchedulerDebugInfo(SchedulerState *schedulerState) {
   logDebug("schedulerState size = %ld bytes\n",
     (long int) sizeof(SchedulerState));
   logDebug("allProcesses size = %ld bytes\n",
-    (long int) sizeof(schedulerState->allProcesses));
+    (long int) (sizeof(ProcessDescriptor) * numProcesses));
   logDebug("messagesStorage size = %ld bytes\n",
     (long int) (sizeof(ProcessMessage) * NANO_OS_NUM_MESSAGES));
   logDebug("ConsoleState size = %ld bytes\n",
@@ -5350,7 +5347,7 @@ __attribute__((noinline)) void startScheduler(
   // Run our scheduler.
   while (1) {
     for (int ii = 0; ii < SCHEDULER_NUM_READY_QUEUES; ii++) {
-      schedulerState.currentReady = &schedulerState.ready[ii];
+      schedulerState.currentReady = schedulerState.readyQueues[ii];
       uint8_t queueSize = schedulerState.currentReady->numElements;
       for (uint8_t jj = 0; jj < queueSize; jj++) {
         runScheduler();

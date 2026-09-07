@@ -70,5 +70,5 @@ NANO_OS_KERNEL_TEST(sched, num_running_processes_is_sane) {
 
   // scheduler + console + memory manager + this driver, at minimum.
   NANO_OS_ASSERT_TRUE(args.returnValue >= 4);
-  NANO_OS_ASSERT_TRUE(args.returnValue <= NANO_OS_NUM_PROCESSES);
+  NANO_OS_ASSERT_TRUE(args.returnValue <= (int) numProcesses);
 }

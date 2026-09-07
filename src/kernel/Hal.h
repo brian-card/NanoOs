@@ -79,6 +79,11 @@ extern "C"
 /// @param deviceId The zero-based index of the device to mark offline.
 #define setOffline(hal, deviceId) \
   (hal).online[deviceId >> 5] &= ~(((uint32_t) 1) << (deviceId & 31))
+
+/// @def NUM_READY_QUEUES
+///
+/// @brief The number of ready queues that will be exposed by the HAL.
+#define NUM_READY_QUEUES 4
   
 /// @enum HalPowerMode
 ///
@@ -205,6 +210,7 @@ struct timespec;
 // NanoOs types
 typedef struct NanoOsOverlayMap NanoOsOverlayMap;
 typedef struct ProcessDescriptor ProcessDescriptor;
+typedef struct ProcessQueue ProcessQueue;
 typedef struct SchedulerState SchedulerState;
 typedef struct StaticLogs StaticLogs;
 
@@ -401,6 +407,54 @@ typedef struct HalMemory {
   /// @brief The number of bytes available for the log buffer.  This must be
   /// greater than zero and be of a reasonable size for generating log messages.
   size_t logBufferSize;
+  
+  // Scheduler definitions.
+  
+  /// @var numProcesses
+  ///
+  /// @brief The number of ProcessDescriptors in the allProcesses array.
+  size_t numProcesses;
+  
+  /// @var allProcesses
+  ///
+  /// @brief Array of ProcessDescriptors available on the system.  This array
+  /// will be numProcesses in size.
+  ProcessDescriptor *allProcesses;
+  
+  /// @var readyQueues
+  ///
+  /// @brief Array of ready ProcessQueue pointers.  One queue per privilege
+  /// level. Each queue will hold numProcesses - 1 processes;
+  ProcessQueue **readyQueues;
+  
+  /// @var waitingQueue
+  ///
+  /// @brief Pointer to ProcessQueue for processes in the WAITING state.  The
+  /// queue will hold numProcesses - 1 processes.
+  ProcessQueue *waitingQueue;
+  
+  /// @var timedWaitingQueue
+  ///
+  /// @brief Pointer to ProcessQueue for processes in the TIMED_WAITING state.
+  ///  The queue will hold numProcesses - 1 processes.
+  ProcessQueue *timedWaitingQueue;
+  
+  /// @var freeQueue
+  ///
+  /// @brief Pointer to ProcessQueue for processes that are not running and
+  /// available for provisioning.  The queue will hold numProcesses - 1
+  /// processes.
+  ProcessQueue *freeQueue;
+  
+  /// @var processErrorNumbers
+  ///
+  /// @brief Array of integers for storage of errno values per process.
+  int *processErrorNumbers;
+  
+  /// @var processStorage
+  ///
+  /// @brief Two-dimensional array of void pointers to process-local storage.
+  void ***processStorage;
 } HalMemory;
 
 typedef struct HalUart {

@@ -669,8 +669,8 @@ int memoryManagerReallocCommandHandler(
       }
       processMessageInit(filesystemCommand,
         FILESYSTEM_DUMP_OPEN_FILES, NULL, 0, true);
-      if (sendProcessMessageToProcess(
-        &SCHEDULER_STATE->allProcesses[SCHEDULER_STATE->rootFsPid - 1],
+      if (sendProcessMessageToPid(
+        SCHEDULER_STATE->rootFsPid,
         filesystemCommand) != processSuccess
       ) {
         logError("Could not send FILESYSTEM_DUMP_OPEN_FILES "

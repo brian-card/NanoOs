@@ -488,8 +488,6 @@ static const char _sdCardName[] KEEP_IN_FLASH = "SD card";
 BlockDevice* halCommonInitRootSdSpiStorage(
   SdCardSpiArgs *sdCardSpiArgs
 ) {
-  ProcessDescriptor *allProcesses = SCHEDULER_STATE->allProcesses;
-
   // Create the SD card process.
   ProcessDescriptor *processDescriptor
     = &allProcesses[SCHEDULER_STATE->firstUserPid - 1];
@@ -622,7 +620,6 @@ int halCommonInitRootFilesystem(void) {
 
   // Allocate the filesystem process.
   SCHEDULER_STATE->rootFsPid = SCHEDULER_STATE->firstUserPid;
-  ProcessDescriptor *allProcesses = SCHEDULER_STATE->allProcesses;
   ProcessDescriptor *processDescriptor
     = &allProcesses[SCHEDULER_STATE->rootFsPid - 1];
   if (processCreate(processDescriptor, dummyProcess, NULL) != processSuccess) {

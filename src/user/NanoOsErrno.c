@@ -34,8 +34,8 @@
 
 /// @var processErrorNumbers
 ///
-/// @brief Process-specific storage for each process's errno value.
-static int processErrorNumbers[NANO_OS_NUM_PROCESSES + 1];
+/// @brief Array of process-specific storage for each process's errno value.
+int *processErrorNumbers;
 
 /// @fn in* errno_(void)
 ///
@@ -48,11 +48,11 @@ static int processErrorNumbers[NANO_OS_NUM_PROCESSES + 1];
 /// be returned instead of the pointer to the current process's storage.
 int* errno_(void) {
   ProcessId currentPid = getRunningPid();
-  if (currentPid > NANO_OS_NUM_PROCESSES) {
+  if (currentPid > numProcesses) {
     // This isn't valid.  This shouldn't happen but that doesn't mean it won't.
-    // Use the last index of the array as scratch storage.  This will prevent
+    // Use the first index of the array as scratch storage.  This will prevent
     // a segfault as would happen if we returned NULL.
-    currentPid = NANO_OS_NUM_PROCESSES;
+    currentPid = 0;
   }
   
   return &processErrorNumbers[currentPid];

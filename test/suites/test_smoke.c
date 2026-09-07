@@ -50,7 +50,7 @@ NANO_OS_KERNEL_TEST(boot, body_runs_as_a_real_process) {
   ProcessDescriptor *self = getRunningProcess();
   NANO_OS_ASSERT_NOT_NULL(self);
   NANO_OS_ASSERT_TRUE(getRunningPid() >= SCHEDULER_STATE->firstShellPid);
-  NANO_OS_ASSERT_TRUE(getRunningPid() <= NANO_OS_NUM_PROCESSES);
+  NANO_OS_ASSERT_TRUE(getRunningPid() <= numProcesses);
 }
 
 NANO_OS_KERNEL_TEST(boot, hal_clock_is_the_virtual_mock) {

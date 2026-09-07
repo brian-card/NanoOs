@@ -102,6 +102,51 @@ static uint32_t _blockDevicesOnline[] = { 0x00000000 };
 
 static char _logBuffer[128];
 
+// --- process-model backing published to the kernel via HAL->memory --------
+//
+// The refactor that turned SchedulerState's queues into pointers moved this
+// storage behind the HAL; every back-end now owns it.  The mock mirrors
+// HalPosix.c: a ProcessDescriptor table, one ready queue per privilege level
+// plus the waiting / timed-waiting / free queues, and the per-process errno
+// slots.  initializeSchedulerState() dereferences all of these on boot, so a
+// missing field is an immediate NULL deref.
+
+/// @def NUM_PROCESSES
+///
+/// @brief Maximum number of concurrent processes the mock kernel supports.
+#define NUM_PROCESSES 10
+
+/// @struct HalMockProcessQueue
+///
+/// @brief Concrete backing for the kernel's variable-length ProcessQueue.
+/// Layout must match struct ProcessQueue in NanoOsTypes.h, with the trailing
+/// flexible array given a real size.
+typedef struct HalMockProcessQueue {
+  const char        *name;
+  uint8_t            head;
+  uint8_t            tail;
+  uint8_t            numElements;
+  ProcessDescriptor *processes[NUM_PROCESSES];
+} HalMockProcessQueue;
+
+static ProcessDescriptor  _allProcesses[NUM_PROCESSES];
+static HalMockProcessQueue _readyQueueStorage[NUM_READY_QUEUES];
+static ProcessQueue       *_readyQueues[NUM_READY_QUEUES] = {
+  (ProcessQueue*) &_readyQueueStorage[0],
+  (ProcessQueue*) &_readyQueueStorage[1],
+  (ProcessQueue*) &_readyQueueStorage[2],
+  (ProcessQueue*) &_readyQueueStorage[3],
+};
+static HalMockProcessQueue _waitingQueue;
+static HalMockProcessQueue _timedWaitingQueue;
+static HalMockProcessQueue _freeQueue;
+static int                 _processErrorNumbers[NUM_PROCESSES + 1];
+
+// Per-process local storage.  getProcessStorage() / setProcessStorage_()
+// index HAL->memory.processStorage[pid][key]; a NULL here makes both a no-op.
+static void  *_processStorageBase[NUM_PROCESSES][NUM_PROCESS_STORAGE_KEYS];
+static void **_processStorage[NUM_PROCESSES];
+
 // --- dispatch tables -------------------------------------------------
 
 static HalFunction _memoryFunctions[HAL_MEMORY_NUM_FNS];
@@ -279,6 +324,25 @@ int halMockInit(const HalMockConfig *config, jmp_buf *powerReturn) {
   halImpl.memory.logBuffer      = _logBuffer;
   halImpl.memory.logBufferSize  = sizeof(_logBuffer);
   halImpl.memory.stringsPresent = true;
+
+  memset(_allProcesses, 0, sizeof(_allProcesses));
+  halImpl.memory.numProcesses        = NUM_PROCESSES;
+  halImpl.memory.allProcesses        = _allProcesses;
+  memset(_readyQueueStorage, 0, sizeof(_readyQueueStorage));
+  halImpl.memory.readyQueues         = _readyQueues;
+  memset(&_waitingQueue, 0, sizeof(_waitingQueue));
+  halImpl.memory.waitingQueue        = (ProcessQueue*) &_waitingQueue;
+  memset(&_timedWaitingQueue, 0, sizeof(_timedWaitingQueue));
+  halImpl.memory.timedWaitingQueue   = (ProcessQueue*) &_timedWaitingQueue;
+  memset(&_freeQueue, 0, sizeof(_freeQueue));
+  halImpl.memory.freeQueue           = (ProcessQueue*) &_freeQueue;
+  memset(_processErrorNumbers, 0, sizeof(_processErrorNumbers));
+  halImpl.memory.processErrorNumbers = _processErrorNumbers;
+  memset(_processStorageBase, 0, sizeof(_processStorageBase));
+  for (int ii = 0; ii < NUM_PROCESSES; ii++) {
+    _processStorage[ii] = _processStorageBase[ii];
+  }
+  halImpl.memory.processStorage      = _processStorage;
 
   jmp_buf implResetBuffer;
   memset(implResetBuffer, 0, sizeof(implResetBuffer));

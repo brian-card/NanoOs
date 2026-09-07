@@ -48,6 +48,17 @@
 /// scheduler function's stack.
 ProcessMessage *messages = NULL;
 
+/// @var allProcesses
+///
+/// @brief Array of ProcessDescriptors to hold the metadata for all processes
+/// on the system, including the scheduler.
+ProcessDescriptor *allProcesses = NULL;
+
+/// @var numProcesses
+///
+/// @brief Number of ProcessDescriptors held by the allProcesses array.
+size_t numProcesses = 0;
+
 /// @fn char** stringArrayDestroy(char **stringArray)
 ///
 /// @brief Destroy a NULL-terminated array of C strings.
@@ -595,14 +606,13 @@ exit:
 ///
 /// @return Returns processSuccess on success, processError on failure.
 int sendProcessMessageToPid(unsigned int pid, ProcessMessage *processMessage) {
-  if ((pid <= 0) || (pid > NANO_OS_NUM_PROCESSES)) {
+  if ((pid <= 0) || (pid > numProcesses)) {
     // Not a valid PID.  Fail.
     logError("%d is not a valid process ID.\n", pid);
     return processError;
   }
 
-  ProcessDescriptor *processDescriptor
-    = &SCHEDULER_STATE->allProcesses[pid - 1];
+  ProcessDescriptor *processDescriptor = &allProcesses[pid - 1];
   return sendProcessMessageToProcess(processDescriptor, processMessage);
 }
 
@@ -703,8 +713,8 @@ ProcessMessage* initSendProcessMessageToProcess(
 /// @fn ProcessMessage* initSendProcessMessageToPid(int pid, int64_t type,
 ///   void *data, size_t size, bool waiting)
 ///
-/// @brief Send a ProcessMessage to another process identified by its process ID. Looks
-/// up the process's Coroutine by its PID and then calls
+/// @brief Send a ProcessMessage to another process identified by its process
+/// ID. Looks up the process's Coroutine by its PID and then calls
 /// initSendProcessMessageToProcess.
 ///
 /// @param pid The process ID of the destination process.
@@ -720,13 +730,13 @@ ProcessMessage* initSendProcessMessageToPid(int pid, int64_t type,
   void *data, size_t size, bool waiting
 ) {
   ProcessMessage *processMessage = NULL;
-  if ((pid < 0) || (pid > NANO_OS_NUM_PROCESSES)) {
+  if ((pid < 0) || (pid > ((int) numProcesses))) {
     // Not a valid PID.  Fail.
     logError("%d is not a valid PID.\n", pid);
     return processMessage; // NULL
   }
 
-  ProcessDescriptor *process = &SCHEDULER_STATE->allProcesses[pid - 1];
+  ProcessDescriptor *process = &allProcesses[pid - 1];
   processMessage
     = initSendProcessMessageToProcess(process, type, data, size, waiting);
   return processMessage;

@@ -86,7 +86,7 @@ void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
 /// @def OVERLAY_ADDRESS
 ///
 /// @brief The address of where the overlay will be placed in memory.
-#define OVERLAY_ADDRESS 0x20001C00
+#define OVERLAY_ADDRESS 0x20002400
 
 /// @def OVERLAY_SIZE
 ///
@@ -96,7 +96,7 @@ void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
 /// @def STATIC_LOGS_ADDRESS
 ///
 /// @brief The address where static logs will begin in memory.
-#define STATIC_LOGS_ADDRESS 0x20004000
+#define STATIC_LOGS_ADDRESS 0x20004800
 
 /// @def DIO_PIN_UNDEFINED
 ///
@@ -107,6 +107,12 @@ void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
 ///
 /// @brief The maximum number of SPI devices the system can support.
 #define MAX_SPI_DEVICES 2
+
+/// @def NUM_PROCESSES
+///
+/// @brief Value to indicate the maximum number of processes that can be run
+/// concurrently.
+#define NUM_PROCESSES 9
 
 /// @var _spiCopiDio
 ///
@@ -143,6 +149,90 @@ static uint8_t _sdCardPinChipSelect = DIO_PIN_UNDEFINED;
 #define realloc MEMORY_ERROR
 #undef free
 #define free   MEMORY_ERROR
+
+/// @struct HalProcessQueue
+///
+/// @brief Structure to manage an individual process queue.  This is the
+/// implementation that backs the ProcessQueue structure in the kernel.
+///
+/// @param name The string name of the queue for use in error messages.
+/// @param head The index of the head of the queue.
+/// @param tail The index of the tail of the queue.
+/// @param numElements The number of elements currently in the queue.
+/// @param processes The array of pointers to ProcessDescriptors from the
+///   allProcesses array.  This is a variable-length array in the kernel.  It's
+///   declared with definitive size here since this is the actual
+///   implementationn backing.
+typedef struct HalProcessQueue {
+  const char        *name;
+  uint8_t            head;
+  uint8_t            tail;
+  uint8_t            numElements;
+  ProcessDescriptor *processes[NUM_PROCESSES];
+} HalProcessQueue;
+
+/// @var _kernelReadyQueue
+///
+/// @brief HAL implementation backing for the PRIVILEGE_LEVEL_KERNEL ready
+/// queue.
+HalProcessQueue _kernelReadyQueue;
+
+/// @var _executiveReadyQueue
+///
+/// @brief HAL implementation backing for the PRIVILEGE_LEVEL_EXECUTIVE ready
+/// queue.
+HalProcessQueue _executiveReadyQueue;
+
+/// @var _supervisorReadyQueue
+///
+/// @brief HAL implementation backing for the PRIVILEGE_LEVEL_SUPERVISOR ready
+/// queue.
+HalProcessQueue _supervisorReadyQueue;
+
+/// @var _userReadyQueue
+///
+/// @brief HAL implementation backing for the PRIVILEGE_LEVEL_USER ready queue.
+HalProcessQueue _userReadyQueue;
+
+/// @var _readyQueues
+///
+/// @brief HAL implementation backing for the ready queues.
+ProcessQueue *_readyQueues[SCHEDULER_NUM_READY_QUEUES] = {
+  (ProcessQueue*) &_kernelReadyQueue,
+  (ProcessQueue*) &_executiveReadyQueue,
+  (ProcessQueue*) &_supervisorReadyQueue,
+  (ProcessQueue*) &_userReadyQueue,
+};
+
+/// @var _waitingQueue
+///
+/// @brief HAL implementation backing for the waiting queue.
+static HalProcessQueue _waitingQueue;
+
+/// @var _timedWaitingQueue
+///
+/// @brief HAL implementation backing for the timed waiting queue.
+static HalProcessQueue _timedWaitingQueue;
+
+/// @var _freeQueue
+///
+/// @brief HAL implementation backing for the free queue.
+static HalProcessQueue _freeQueue;
+
+/// @var _processErrorNumbers
+///
+/// @brief Process-specific storage for each process's errno value.
+static int _processErrorNumbers[NUM_PROCESSES + 1];
+
+/// @var _processStorageBase
+///
+/// @brief File-local, first-level variable to hold the per-process storage.
+static void *_processStorageBase[NUM_PROCESSES][NUM_PROCESS_STORAGE_KEYS];
+
+/// @var _processStorage
+///
+/// @brief File-local, second-level variable to hold the per-process storage.
+static void **_processStorage[NUM_PROCESSES];
 
 /// @struct SavedContext
 ///
@@ -287,7 +377,7 @@ int arduinoSamD21x18ANumExtraSchedulerStacks(va_list args) {
   bool debug = (bool) va_arg(args, int);
   uint8_t *returnValue = va_arg(args, uint8_t*);
   (void) debug;
-  *returnValue = 2;
+  *returnValue = 0;
   return 0;
 }
 
@@ -1377,6 +1467,12 @@ static HalFunction arduinoSamD21x18ABlockDeviceFunctions[HAL_BLOCK_DEVICE_NUM_FN
 /// @brief Statically allocated buffer for formatting log messages.
 static char _logBuffer[128];
 
+/// @var _allProcesses
+///
+/// @brief Statically allocated buffer of ProcessDescriptors to hold the
+/// metadata for all processes on the system, including the scheduler.
+static ProcessDescriptor _allProcesses[NUM_PROCESSES];
+
 /// @var _bssOverflowErrorPrefix
 ///
 /// @brief Printed via a raw Serial.print when BSS has grown into the
@@ -1477,6 +1573,27 @@ int halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
 ////   halImpl.memory.staticLogs     = (StaticLogs*) STATIC_LOGS_ADDRESS;
 ////   memset(HAL->memory.staticLogs, 0, sizeof(*HAL->memory.staticLogs));
 //// #endif // LOG_THRESHOLD < LOG_LEVEL_DETAIL
+
+  memset(_allProcesses, 0, sizeof(_allProcesses));
+  halImpl.memory.numProcesses   = NUM_PROCESSES;
+  halImpl.memory.allProcesses   = _allProcesses;
+  for (int ii = 0; ii < NUM_READY_QUEUES; ii++) {
+    memset(_readyQueues[ii], 0, sizeof(HalProcessQueue));
+  }
+  halImpl.memory.readyQueues         = _readyQueues;
+  memset(&_waitingQueue, 0, sizeof(HalProcessQueue));
+  halImpl.memory.waitingQueue        = (ProcessQueue*) &_waitingQueue;
+  memset(&_timedWaitingQueue, 0, sizeof(HalProcessQueue));
+  halImpl.memory.timedWaitingQueue   = (ProcessQueue*) &_timedWaitingQueue;
+  memset(&_freeQueue, 0, sizeof(HalProcessQueue));
+  halImpl.memory.freeQueue           = (ProcessQueue*) &_freeQueue;
+  halImpl.memory.processErrorNumbers = _processErrorNumbers;
+  memset(&_processStorageBase, 0,
+    NUM_PROCESSES * NUM_PROCESS_STORAGE_KEYS * sizeof(void*));
+  for (int ii = 0; ii < NUM_PROCESSES; ii++) {
+    _processStorage[ii] = _processStorageBase[ii];
+  }
+  halImpl.memory.processStorage = _processStorage;
 
   halImpl.uart.numSupported = args->numUartsSupported;
   halImpl.uart.online       = args->uartsOnline;
