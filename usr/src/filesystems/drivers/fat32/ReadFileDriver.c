@@ -60,7 +60,7 @@
 /// @return The number of bytes actually read (>= 0), or a negative FAT32
 ///         error code on failure.
 ///
-int32_t driverFread(
+int driverFread(
     void *driverState,
     void *ptr,
     uint32_t length,
@@ -120,7 +120,7 @@ int32_t driverFread(
       int fatResult =
         fat32ReadFatEntry(ds, handle->currentCluster, &nextCluster);
       if (fatResult != FAT32_SUCCESS) {
-        return (totalRead > 0) ? (int32_t) totalRead : FAT32_ERROR;
+        return (totalRead > 0) ? (int) totalRead : FAT32_ERROR;
       }
 
       // End-of-chain before the file size is reached — the FAT is
@@ -148,7 +148,7 @@ int32_t driverFread(
     int ioResult = bd->readBlocks(
       bd->context, lba, 1, bd->blockSize, fs->blockBuffer);
     if (ioResult != 0) {
-      return (totalRead > 0) ? (int32_t) totalRead : FAT32_ERROR;
+      return (totalRead > 0) ? (int) totalRead : FAT32_ERROR;
     }
 
     // How many usable bytes remain in this sector?
@@ -167,6 +167,6 @@ int32_t driverFread(
     handle->currentPosition  += toCopy;
   }
 
-  return (int32_t) totalRead;
+  return (int) totalRead;
 }
 

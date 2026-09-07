@@ -47,9 +47,9 @@ FilesystemState* filesystemInitDriver(FilesystemState *filesystemState);
 FilesystemState* getPartitionInfoImpl(FilesystemState *filesystemState);
 void* driverFopen(void *driverState, const char *filePath, const char *mode);
 int driverFclose(void *driverState, void *fileHandle);
-int32_t driverFread(
+int driverFread(
     void *driverState, void *ptr, uint32_t length, void *fileHandle);
-int32_t driverFwrite(
+int driverFwrite(
     void *driverState, void *ptr, uint32_t length, void *fileHandle);
 int driverRemove(void *driverState, const char *pathname);
 int driverFseek(void *driverState, void *fileHandle, long offset, int whence);
@@ -141,12 +141,12 @@ static void* ReadFile(void *args) {
   ProcessMessage *processMessage = (ProcessMessage*) filesystemState->args;
   FilesystemIoCommandArgs *filesystemIoCommandArgs
     = (FilesystemIoCommandArgs*) processMessageData(processMessage);
-  int32_t returnValue = 0;
+  int returnValue = 0;
   if (filesystemState->driverState != NULL) {
     uint32_t length = filesystemIoCommandArgs->length;
-    if (length > 0x7fffffff) {
-      // Make sure we don't overflow the maximum value of a signed 32-bit int.
-      length = 0x7fffffff;
+    if (length > (uint32_t) (~0u >> 1)) {
+      // Clamp to the platform INT_MAX: driverFread/driverFwrite return an int.
+      length = (uint32_t) (~0u >> 1);
     }
     NanoOsFile *nanoOsFile = filesystemIoCommandArgs->file;
     returnValue = driverFread(filesystemState->driverState,
@@ -175,12 +175,12 @@ static void* WriteFile(void *args) {
   ProcessMessage *processMessage = (ProcessMessage*) filesystemState->args;
   FilesystemIoCommandArgs *filesystemIoCommandArgs
     = (FilesystemIoCommandArgs*) processMessageData(processMessage);
-  int32_t returnValue = 0;
+  int returnValue = 0;
   if (filesystemState->driverState != NULL) {
     uint32_t length = filesystemIoCommandArgs->length;
-    if (length > 0x7fffffff) {
-      // Make sure we don't overflow the maximum value of a signed 32-bit int.
-      length = 0x7fffffff;
+    if (length > (uint32_t) (~0u >> 1)) {
+      // Clamp to the platform INT_MAX: driverFread/driverFwrite return an int.
+      length = (uint32_t) (~0u >> 1);
     }
     NanoOsFile *nanoOsFile = filesystemIoCommandArgs->file;
     returnValue = driverFwrite(filesystemState->driverState,

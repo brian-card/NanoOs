@@ -39,7 +39,7 @@
 #include "OverlayFilesystem.h"
 
 // Prototypes used by this overlay.
-int32_t driverFread(
+int driverFread(
     void *driverState,
     void *ptr,
     uint32_t length,
@@ -60,12 +60,12 @@ void* ReadFile(void *args) {
   ProcessMessage *processMessage = (ProcessMessage*) filesystemState->args;
   FilesystemIoCommandArgs *filesystemIoCommandArgs
     = (FilesystemIoCommandArgs*) processMessageData(processMessage);
-  int32_t returnValue = 0;
+  int returnValue = 0;
   if (filesystemState->driverState != NULL) {
     uint32_t length = filesystemIoCommandArgs->length;
-    if (length > 0x7fffffff) {
-      // Make sure we don't overflow the maximum value of a signed 32-bit int.
-      length = 0x7fffffff;
+    if (length > (uint32_t) (~0u >> 1)) {
+      // Clamp to the platform INT_MAX: driverFread/driverFwrite return an int.
+      length = (uint32_t) (~0u >> 1);
     }
     NanoOsFile *nanoOsFile = filesystemIoCommandArgs->file;
     returnValue = driverFread(filesystemState->driverState,

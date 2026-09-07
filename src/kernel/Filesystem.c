@@ -151,12 +151,14 @@ int filesystemReadFileCommandHandler(
 ) {
   FilesystemIoCommandArgs *filesystemIoCommandArgs
     = (FilesystemIoCommandArgs*) processMessageData(processMessage);
-  int32_t returnValue = 0;
+  int returnValue = 0;
   if (filesystemState->driverState != NULL) {
     uint32_t length = filesystemIoCommandArgs->length;
-    if (length > 0x7fffffff) {
-      // Make sure we don't overflow the maximum value of a signed 32-bit int.
-      length = 0x7fffffff;
+    // driverFread/driverFwrite report the byte count in an int, so never ask
+    // for more than an int can represent on this platform.  (~0u >> 1) is the
+    // platform's INT_MAX without pulling in <limits.h>.
+    if (length > (uint32_t) (~0u >> 1)) {
+      length = (uint32_t) (~0u >> 1);
     }
     NanoOsFile *nanoOsFile = filesystemIoCommandArgs->file;
     returnValue = filesystemState->driverFread(filesystemState->driverState,
@@ -195,12 +197,14 @@ int filesystemWriteFileCommandHandler(
 ) {
   FilesystemIoCommandArgs *filesystemIoCommandArgs
     = (FilesystemIoCommandArgs*) processMessageData(processMessage);
-  int32_t returnValue = 0;
+  int returnValue = 0;
   if (filesystemState->driverState != NULL) {
     uint32_t length = filesystemIoCommandArgs->length;
-    if (length > 0x7fffffff) {
-      // Make sure we don't overflow the maximum value of a signed 32-bit int.
-      length = 0x7fffffff;
+    // driverFread/driverFwrite report the byte count in an int, so never ask
+    // for more than an int can represent on this platform.  (~0u >> 1) is the
+    // platform's INT_MAX without pulling in <limits.h>.
+    if (length > (uint32_t) (~0u >> 1)) {
+      length = (uint32_t) (~0u >> 1);
     }
     NanoOsFile *nanoOsFile = filesystemIoCommandArgs->file;
     returnValue = filesystemState->driverFwrite(filesystemState->driverState,

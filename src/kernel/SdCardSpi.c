@@ -752,7 +752,7 @@ int sdSpiWriteBlocks(SdCardState *sdCardState,
   return 0;
 }
 
-/// @fn int16_t sdSpiGetBlockSize(int sdCardSpiDevice)
+/// @fn int sdSpiGetBlockSize(int sdCardSpiDevice)
 ///
 /// @brief Get the size, in bytes, of blocks on the SD card as presented to the
 /// host.
@@ -761,7 +761,7 @@ int sdSpiWriteBlocks(SdCardState *sdCardState,
 ///
 /// @return Returns the number of bytes per block on success, negative error
 /// code on failure.
-int16_t sdSpiGetBlockSize(int sdCardSpiDevice) {
+int sdSpiGetBlockSize(int sdCardSpiDevice) {
   uint8_t csd[16];
   if (sdSpiReadCsd(sdCardSpiDevice, csd, false) != 0) {
     logError("CMD9 (SEND_CSD) failed; assuming 512 bytes per block\n");
@@ -770,7 +770,7 @@ int16_t sdSpiGetBlockSize(int sdCardSpiDevice) {
 
   // For CSD Version 1.0 and 2.0, READ_BL_LEN is at the same location.
   uint8_t readBlockLength = (csd[5] & 0x0F);
-  return (int16_t) (((uint16_t) 1) << readBlockLength);
+  return (int) (((uint32_t) 1) << readBlockLength);
 }
 
 /// @fn int sdSpiGetBlockCount(sdCardSpiDevice)
@@ -781,7 +781,7 @@ int16_t sdSpiGetBlockSize(int sdCardSpiDevice) {
 ///
 /// @return Returns the number of blocks available on success, negative error
 /// code on failure.
-int32_t sdSpiGetBlockCount(int sdCardSpiDevice) {
+int sdSpiGetBlockCount(int sdCardSpiDevice) {
   uint8_t cardSpecificData[16];
   uint32_t blockCount = 0;
 
@@ -813,7 +813,7 @@ int32_t sdSpiGetBlockCount(int sdCardSpiDevice) {
     blockCount <<= (readBlockLength - 9);  // Adjust for 512-byte blocks
   }
   
-  return (int32_t) blockCount;
+  return (int) blockCount;
 }
 
 /// @fn int sdCardSpiReadBlocksCommandHandler(

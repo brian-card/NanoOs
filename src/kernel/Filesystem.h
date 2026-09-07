@@ -113,10 +113,10 @@ typedef struct FilesystemState {
   int               (*driverInit)(struct FilesystemState* filesystemState);
   void*             (*driverFopen)(
     void *driverState, const char *filePath, const char *mode);
-  int32_t           (*driverFread)(
+  int               (*driverFread)(
     void *driverState, void *ptr, uint32_t length,
     void *fileHandle);
-  int32_t           (*driverFwrite)(
+  int               (*driverFwrite)(
     void *driverState, void *ptr, uint32_t length,
     void *fileHandle);
   int               (*driverFclose)(void *driverState, void *fileHandle);

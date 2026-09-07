@@ -1773,7 +1773,7 @@ int fat32Fclose(void *driverState, void *fileHandle) {
 /// @return The number of bytes actually read (>= 0), or a negative FAT32
 ///         error code on failure.
 ///
-int32_t fat32Fread(
+int fat32Fread(
     void *driverState,
     void *ptr,
     uint32_t length,
@@ -1833,7 +1833,7 @@ int32_t fat32Fread(
       int fatResult =
         fat32ReadFatEntry(ds, handle->currentCluster, &nextCluster);
       if (fatResult != FAT32_SUCCESS) {
-        return (totalRead > 0) ? (int32_t) totalRead : FAT32_ERROR;
+        return (totalRead > 0) ? (int) totalRead : FAT32_ERROR;
       }
 
       // End-of-chain before the file size is reached — the FAT is
@@ -1861,7 +1861,7 @@ int32_t fat32Fread(
     int ioResult = bd->readBlocks(
       bd->context, lba, 1, bd->blockSize, fs->blockBuffer);
     if (ioResult != 0) {
-      return (totalRead > 0) ? (int32_t) totalRead : FAT32_ERROR;
+      return (totalRead > 0) ? (int) totalRead : FAT32_ERROR;
     }
 
     // How many usable bytes remain in this sector?
@@ -1880,7 +1880,7 @@ int32_t fat32Fread(
     handle->currentPosition  += toCopy;
   }
 
-  return (int32_t) totalRead;
+  return (int) totalRead;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1909,7 +1909,7 @@ int32_t fat32Fread(
 /// @return The number of bytes actually written (>= 0), or a negative FAT32
 ///         error code on failure.
 ///
-int32_t fat32Fwrite(
+int fat32Fwrite(
     void *driverState,
     void *ptr,
     uint32_t length,
@@ -1970,7 +1970,7 @@ int32_t fat32Fwrite(
       uint32_t newCluster;
       int allocResult = fat32AllocateCluster(ds, 0, &newCluster);
       if (allocResult != FAT32_SUCCESS) {
-        return (totalWritten > 0) ? (int32_t) totalWritten : allocResult;
+        return (totalWritten > 0) ? (int) totalWritten : allocResult;
       }
       handle->firstCluster   = newCluster;
       handle->currentCluster = newCluster;
@@ -1985,7 +1985,7 @@ int32_t fat32Fwrite(
       int fatResult =
         fat32ReadFatEntry(ds, handle->currentCluster, &nextCluster);
       if (fatResult != FAT32_SUCCESS) {
-        return (totalWritten > 0) ? (int32_t) totalWritten : FAT32_ERROR;
+        return (totalWritten > 0) ? (int) totalWritten : FAT32_ERROR;
       }
 
       if (nextCluster >= FAT32_CLUSTER_EOC_MIN
@@ -1994,7 +1994,7 @@ int32_t fat32Fwrite(
         fatResult = fat32AllocateCluster(
           ds, handle->currentCluster, &nextCluster);
         if (fatResult != FAT32_SUCCESS) {
-          return (totalWritten > 0) ? (int32_t) totalWritten : fatResult;
+          return (totalWritten > 0) ? (int) totalWritten : fatResult;
         }
       }
 
@@ -2023,7 +2023,7 @@ int32_t fat32Fwrite(
       int ioResult = bd->readBlocks(
         bd->context, lba, 1, bd->blockSize, fs->blockBuffer);
       if (ioResult != 0) {
-        return (totalWritten > 0) ? (int32_t) totalWritten : FAT32_ERROR;
+        return (totalWritten > 0) ? (int) totalWritten : FAT32_ERROR;
       }
     }
 
@@ -2033,7 +2033,7 @@ int32_t fat32Fwrite(
     int ioResult = bd->writeBlocks(
       bd->context, lba, 1, bd->blockSize, fs->blockBuffer);
     if (ioResult != 0) {
-      return (totalWritten > 0) ? (int32_t) totalWritten : FAT32_ERROR;
+      return (totalWritten > 0) ? (int) totalWritten : FAT32_ERROR;
     }
 
     totalWritten             += toCopy;
@@ -2045,7 +2045,7 @@ int32_t fat32Fwrite(
     }
   }
 
-  return (int32_t) totalWritten;
+  return (int) totalWritten;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

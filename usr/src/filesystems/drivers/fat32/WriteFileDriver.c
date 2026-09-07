@@ -64,7 +64,7 @@
 /// @return The number of bytes actually written (>= 0), or a negative FAT32
 ///         error code on failure.
 ///
-int32_t driverFwrite(
+int driverFwrite(
     void *driverState,
     void *ptr,
     uint32_t length,
@@ -125,7 +125,7 @@ int32_t driverFwrite(
       uint32_t newCluster;
       int allocResult = fat32AllocateCluster(ds, 0, &newCluster);
       if (allocResult != FAT32_SUCCESS) {
-        return (totalWritten > 0) ? (int32_t) totalWritten : allocResult;
+        return (totalWritten > 0) ? (int) totalWritten : allocResult;
       }
       handle->firstCluster   = newCluster;
       handle->currentCluster = newCluster;
@@ -140,7 +140,7 @@ int32_t driverFwrite(
       int fatResult =
         fat32ReadFatEntry(ds, handle->currentCluster, &nextCluster);
       if (fatResult != FAT32_SUCCESS) {
-        return (totalWritten > 0) ? (int32_t) totalWritten : FAT32_ERROR;
+        return (totalWritten > 0) ? (int) totalWritten : FAT32_ERROR;
       }
 
       if (nextCluster >= FAT32_CLUSTER_EOC_MIN
@@ -149,7 +149,7 @@ int32_t driverFwrite(
         fatResult = fat32AllocateCluster(
           ds, handle->currentCluster, &nextCluster);
         if (fatResult != FAT32_SUCCESS) {
-          return (totalWritten > 0) ? (int32_t) totalWritten : fatResult;
+          return (totalWritten > 0) ? (int) totalWritten : fatResult;
         }
       }
 
@@ -178,7 +178,7 @@ int32_t driverFwrite(
       int ioResult = bd->readBlocks(
         bd->context, lba, 1, bd->blockSize, fs->blockBuffer);
       if (ioResult != 0) {
-        return (totalWritten > 0) ? (int32_t) totalWritten : FAT32_ERROR;
+        return (totalWritten > 0) ? (int) totalWritten : FAT32_ERROR;
       }
     }
 
@@ -188,7 +188,7 @@ int32_t driverFwrite(
     int ioResult = bd->writeBlocks(
       bd->context, lba, 1, bd->blockSize, fs->blockBuffer);
     if (ioResult != 0) {
-      return (totalWritten > 0) ? (int32_t) totalWritten : FAT32_ERROR;
+      return (totalWritten > 0) ? (int) totalWritten : FAT32_ERROR;
     }
 
     totalWritten             += toCopy;
@@ -200,6 +200,6 @@ int32_t driverFwrite(
     }
   }
 
-  return (int32_t) totalWritten;
+  return (int) totalWritten;
 }
 
