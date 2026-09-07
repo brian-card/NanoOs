@@ -286,8 +286,8 @@ flash: $(FULL_BIN)
 # Reports the two budgets that matter for this target's split memory model:
 #   - the flash image (.text + .data load image + .rodata) against the 128 KB
 #     on-chip flash, for both the shipped (strings-stripped) and full binaries;
-#   - .bss + .data against their fixed 4 KB external-RAM reservation, past which
-#     the boot integrity canary at 0x049000 gets overwritten.
+#   - .bss + .data against their fixed 5 KB external-RAM reservation, past which
+#     the boot integrity canary at 0x049400 gets overwritten.
 # Everything is derived from linker symbols (see ld/AgonLight2.ld); only the
 # physical flash / SRAM capacities are constants here.
 size: $(ELF) $(FULL_BIN) $(STRIPPED_BIN) $(RODATA_BIN)

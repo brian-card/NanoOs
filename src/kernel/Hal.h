@@ -208,8 +208,10 @@ typedef uintptr_t size_t;
 struct timespec;
 
 // NanoOs types
+typedef struct LogEntry LogEntry;
 typedef struct NanoOsOverlayMap NanoOsOverlayMap;
 typedef struct ProcessDescriptor ProcessDescriptor;
+typedef struct msg_t ProcessMessage;
 typedef struct ProcessQueue ProcessQueue;
 typedef struct SchedulerState SchedulerState;
 typedef struct StaticLogs StaticLogs;
@@ -408,6 +410,24 @@ typedef struct HalMemory {
   /// greater than zero and be of a reasonable size for generating log messages.
   size_t logBufferSize;
   
+  /// @var numLogEntries
+  ///
+  /// @brief The number of LogEntry objects held in the logEntries array and
+  /// number of ProcessMessage objects hel in the logMessages array.
+  size_t numLogEntries;
+  
+  /// @var logEntries
+  ///
+  /// @brief Array of LogEntry objects to use in communication with the logger
+  /// process.
+  LogEntry *logEntries;
+  
+  /// @var logMessages
+  ///
+  /// @brief Pool of ProcessMessage objects used to deliver log entries to
+  /// the logger process.  One per logEntries slot.
+  ProcessMessage *logMessages;
+
   // Scheduler definitions.
   
   /// @var numProcesses

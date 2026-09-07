@@ -793,6 +793,23 @@ static HalFunction arduinoAvrBlockDeviceFunctions[HAL_BLOCK_DEVICE_NUM_FNS] = {
 /// @brief Statically allocated buffer for formatting log messages.
 static char _logBuffer[96];
 
+/// @def NUM_LOG_ENTRIES
+///
+/// @brief The number of LogEntry objects held in our local array.
+#define NUM_LOG_ENTRIES 3
+
+/// @var _logEntries
+///
+/// @brief Local array of LogEntry objects to use in communication with the
+/// logger process.
+static LogEntry _logEntries[NUM_LOG_ENTRIES];
+
+/// @var _logMessages
+///
+/// @brief Private pool of ProcessMessage objects used to deliver log entries to
+/// the logger process.  One per _logEntries slot.
+static ProcessMessage _logMessages[NUM_LOG_ENTRIES];
+
 /// @var _allProcesses
 ///
 /// @brief Statically allocated buffer of ProcessDescriptors to hold the
@@ -838,6 +855,11 @@ int halArduinoAvrInit(HalArduinoAvrInitArgs *args) {
   halImpl.memory.stringsPresent = true;
   halImpl.memory.logBuffer      = _logBuffer;
   halImpl.memory.logBufferSize  = sizeof(_logBuffer);
+  halImpl.memory.numLogEntries  = NUM_LOG_ENTRIES;
+  memset(&_logEntries, 0, sizeof(_logEntries));
+  halImpl.memory.logEntries     = _logEntries;
+  memset(&_logMessages, 0, sizeof(_logMessages));
+  halImpl.memory.logMessages    = _logMessages;
   halImpl.memory.staticLogs     = NULL;
   memset(_allProcesses, 0, sizeof(_allProcesses));
   halImpl.memory.numProcesses   = NUM_PROCESSES;

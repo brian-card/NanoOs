@@ -13,9 +13,9 @@
  *                                Executed / read in place; read-only at runtime.
  *   ext RAM 0x040000..0x0BFFFF   512 KB external SRAM:
  *            0x040000..0x047FFF  32 KB  contiguous filesystem image window
- *            0x048000..0x048FFF  4 KB   .bss then .data  (see HalAgonLight2.c
+ *            0x048000..0x0493FF  5 KB   .bss then .data  (see HalAgonLight2.c
  *                                       DATA_BSS_REGION_ADDRESS / _SIZE)
- *            0x049000            8-byte data/bss integrity canary, then the heap
+ *            0x049400            8-byte data/bss integrity canary, then the heap
  *            ..0x0BFFFF          heap (grows up) toward the stack at 0x0C0000
  *   int RAM 0xFFE000..0xFFFFFF   8 KB on-chip SRAM, mapped by Boot.asm; the
  *                                overlay window (OVERLAY_ADDRESS).
@@ -48,9 +48,9 @@ MEMORY
 
 SECTIONS
 {
-  /* 36 KB into external SRAM: one byte past the .bss/.data reservation.
+  /* 37 KB into external SRAM: one byte past the .bss/.data reservation.
    * Keep in sync with DATA_BSS_CANARY_ADDRESS in src/hal/HalAgonLight2.c. */
-  __data_bss_limit = 0x049000;
+  __data_bss_limit = 0x049400;
 
   /* ---- Code + read-only data: in flash, executed / read in place --------- */
   .text :
@@ -110,7 +110,7 @@ SECTIONS
   } > FLASH
 
   ASSERT(__data_end__ <= __data_bss_limit,
-    ".bss + .data exceed their 4 KB external-RAM reservation (canary at 0x049000)")
+    ".bss + .data exceed their 5 KB external-RAM reservation (canary at 0x049400)")
   ASSERT(__flash_end <= 0x020000,
     "flash image (.text + .data load image + .rodata) overflows the 128 KB on-chip flash")
 

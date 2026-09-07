@@ -100,25 +100,23 @@ static const char _logHeaderFormat[] KEEP_IN_FLASH
 /// final binary on some targets.
 static const char _localhost[] KEEP_IN_FLASH = "localhost";
 
-/// @def NUM_LOG_ENTRIES
+/// @var numLogEntries
 ///
-/// @brief The number of LogEntry objects held in our local array.
-#define NUM_LOG_ENTRIES 3
+/// @brief The number of LogEntry objects held in the logEntries array and
+/// number of ProcessMessage objects hel in the logMessages array.
+size_t numLogEntries = 0;
 
-/// @var _logEntries
+/// @var logEntries
 ///
-/// @brief Local array of LogEntry objects to use in communication with the
-/// logger process.
-static LogEntry _logEntries[NUM_LOG_ENTRIES] = {0};
+/// @brief Array of LogEntry objects to use in communication with the logger
+/// process.
+LogEntry *logEntries = NULL;
 
-/// @var _logMessages
+/// @var logMessages
 ///
-/// @brief Private pool of ProcessMessage objects used to deliver log entries to
-/// the logger process.  One per _logEntries slot.  Logging is asynchronous.
-/// The message stays in use until the logger process drains its queue, so it
-/// MUST NOT come from the shared getAvailableMessage() pool.  Doing so would
-/// let a backed up logger starve the whole system of messages.
-static ProcessMessage _logMessages[NUM_LOG_ENTRIES] = {0};
+/// @brief Pool of ProcessMessage objects used to deliver log entries to
+/// the logger process.  One per logEntries slot.
+ProcessMessage *logMessages = NULL;
 
 /// @fn int logMessage(LogLevel logLevel,
 ///   const char *fileName, const char *functionName, int lineNumber,
@@ -158,12 +156,12 @@ int logMessage(LogLevel logLevel,
     || (HAL->memory.staticLogs == NULL)
   ) {
     // Select pointers from our statically-allocated arrays.
-    for (int ii = 0; ii < NUM_LOG_ENTRIES; ii++) {
-      if ((_logEntries[ii].inUse == false)
-        && (processMessageInUse(&_logMessages[ii]) == false)
+    for (size_t ii = 0; ii < numLogEntries; ii++) {
+      if ((logEntries[ii].inUse == false)
+        && (processMessageInUse(&logMessages[ii]) == false)
       ) {
-        logEntry = &_logEntries[ii];
-        processMessage = &_logMessages[ii];
+        logEntry = &logEntries[ii];
+        processMessage = &logMessages[ii];
         break;
       }
     }

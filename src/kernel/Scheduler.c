@@ -4666,6 +4666,12 @@ int initializeSchedulerState(
   processErrorNumbers = HAL->memory.processErrorNumbers;
   extern void ***processStorage;
   processStorage = HAL->memory.processStorage;
+  extern size_t numLogEntries;
+  numLogEntries = HAL->memory.numLogEntries;
+  extern LogEntry *logEntries;
+  logEntries = HAL->memory.logEntries;
+  extern ProcessMessage *logMessages;
+  logMessages = HAL->memory.logMessages;
 
   schedulerState->hostname = NULL;
   schedulerState->readyQueues[PRIVILEGE_LEVEL_KERNEL]->name
