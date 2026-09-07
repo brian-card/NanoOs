@@ -56,7 +56,7 @@
 /// @typedef HalFunction
 ///
 /// @brief Type for all HAL implementation functions in the dispatch table.
-typedef int32_t (*HalFunction)(va_list args);
+typedef int (*HalFunction)(va_list args);
 
 #ifdef __cplusplus
 extern "C"
@@ -73,13 +73,13 @@ extern HalFunction *halFunctions[HAL_NUM_SUBSYSTEMS];
 /// exported from Hal.h cannot be written through.
 extern Hal halImpl;
 
-int32_t callHal(HalSubsystem subsystem, uint32_t function, ...);
+int callHal(HalSubsystem subsystem, uint32_t function, ...);
 BlockDevice* halCommonInitRootSdSpiStorage(SdCardSpiArgs *sdCardSpiArgs);
 int halCommonInitRootFilesystem(void);
 int restartBuiltinFilesystem(ProcessDescriptor *processDescriptor);
 int restartOverlayFilesystem(ProcessDescriptor *processDescriptor);
 int restartContiguousFilesystem(ProcessDescriptor *processDescriptor);
-int32_t halCommonInit(void);
+int halCommonInit(void);
 
 #ifdef __cplusplus
 } // extern "C"

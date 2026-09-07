@@ -83,18 +83,18 @@ size_t mockUartDrain(char *out, size_t max) {
   return copied;
 }
 
-int32_t mockUartInitFn(va_list args) {
+int mockUartInitFn(va_list args) {
   (void) args;
   mockUartReset();
   return 0;
 }
 
-int32_t mockUartConfigureFn(va_list args) {
+int mockUartConfigureFn(va_list args) {
   (void) args; // deviceId, baud - accepted and ignored
   return 0;
 }
 
-int32_t mockUartPollFn(va_list args) {
+int mockUartPollFn(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   if (deviceId != MOCK_CONSOLE_UART) {
     return -1;
@@ -102,7 +102,7 @@ int32_t mockUartPollFn(va_list args) {
   return ringPop(&_rx);
 }
 
-int32_t mockUartWriteFn(va_list args) {
+int mockUartWriteFn(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   const uint8_t *data = va_arg(args, const uint8_t*);
   intptr_t length = va_arg(args, intptr_t);
@@ -123,7 +123,7 @@ int32_t mockUartWriteFn(va_list args) {
   return (written >= 0) ? 0 : -1;
 }
 
-int32_t mockUartIsConsoleFn(va_list args) {
+int mockUartIsConsoleFn(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   bool *returnValue = va_arg(args, bool*);
   if (returnValue != NULL) {

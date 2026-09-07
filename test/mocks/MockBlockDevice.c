@@ -27,12 +27,12 @@
 void mockBlockDeviceReset(void) {
 }
 
-int32_t mockBlockDeviceInitFn(va_list args) {
+int mockBlockDeviceInitFn(va_list args) {
   (void) args;
   return -ENODEV;
 }
 
-int32_t mockBlockDeviceGetFn(va_list args) {
+int mockBlockDeviceGetFn(va_list args) {
   (void) va_arg(args, int32_t); // deviceId
   void **returnValue = va_arg(args, void**);
   if (returnValue != NULL) {
@@ -41,7 +41,7 @@ int32_t mockBlockDeviceGetFn(va_list args) {
   return -ENODEV;
 }
 
-int32_t mockBlockDeviceRestartFn(va_list args) {
+int mockBlockDeviceRestartFn(va_list args) {
   (void) args;
   return -ENOSYS;
 }

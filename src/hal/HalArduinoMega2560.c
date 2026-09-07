@@ -92,7 +92,7 @@ static uint32_t halArduinoAvrImplDiosOnline[] = {
 
 extern BlockDevice *blockDevices[];
 
-int32_t arduinoAvrInitBlockDevice(va_list args) {
+int arduinoAvrInitBlockDevice(va_list args) {
   (void) args;
   if (SCHEDULER_STATE == NULL) {
     return -EBUSY;
@@ -114,7 +114,7 @@ int32_t arduinoAvrInitBlockDevice(va_list args) {
   return 0;
 }
 
-int32_t arduinoAvrGetBlockDevice(va_list args) {
+int arduinoAvrGetBlockDevice(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   BlockDevice **returnValue = va_arg(args, BlockDevice**);
 
@@ -131,7 +131,7 @@ int32_t arduinoAvrGetBlockDevice(va_list args) {
   return 0;
 }
 
-int32_t arduinoAvrRestartBlockDevice(va_list args) {
+int arduinoAvrRestartBlockDevice(va_list args) {
   ProcessDescriptor *processDescriptor = va_arg(args, ProcessDescriptor*);
   int32_t deviceId = (int32_t) (intptr_t) processDescriptor->restartArgs;
 
@@ -165,7 +165,7 @@ int32_t arduinoAvrRestartBlockDevice(va_list args) {
   return 0;
 }
 
-int32_t halArduinoInit(void) {
+int halArduinoInit(void) {
   HalArduinoAvrInitArgs args = {
     .numUartsSupported = NUM_UARTS,
     .uartsOnline       = halArduinoAvrImplUartsOnline,

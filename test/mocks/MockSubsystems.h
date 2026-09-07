@@ -21,39 +21,39 @@ extern "C"
 {
 #endif
 
-// Each of these matches the HalFunction signature: int32_t fn(va_list).
+// Each of these matches the HalFunction signature: int fn(va_list).
 
 // --- clock (MockClock.c) -----------------------------------------------
 void    mockClockReset(void);
-int32_t mockClockInitFn(va_list args);
-int32_t mockClockSetSystemTimeFn(va_list args);
-int32_t mockClockGetElapsedMillisecondsFn(va_list args);
-int32_t mockClockGetElapsedMicrosecondsFn(va_list args);
-int32_t mockClockGetElapsedNanosecondsFn(va_list args);
+int mockClockInitFn(va_list args);
+int mockClockSetSystemTimeFn(va_list args);
+int mockClockGetElapsedMillisecondsFn(va_list args);
+int mockClockGetElapsedMicrosecondsFn(va_list args);
+int mockClockGetElapsedNanosecondsFn(va_list args);
 
 // --- timer (MockTimer.c) ---------------------------------------------
 void    mockTimerReset(void);
-int32_t mockTimerInitFn(va_list args);
-int32_t mockTimerInitDeviceFn(va_list args);
-int32_t mockTimerConfigOneShotFn(va_list args);
-int32_t mockTimerConfiguredNanosecondsFn(va_list args);
-int32_t mockTimerRemainingNanosecondsFn(va_list args);
-int32_t mockTimerCancelFn(va_list args);
-int32_t mockTimerCancelAndGetFn(va_list args);
+int mockTimerInitFn(va_list args);
+int mockTimerInitDeviceFn(va_list args);
+int mockTimerConfigOneShotFn(va_list args);
+int mockTimerConfiguredNanosecondsFn(va_list args);
+int mockTimerRemainingNanosecondsFn(va_list args);
+int mockTimerCancelFn(va_list args);
+int mockTimerCancelAndGetFn(va_list args);
 
 // --- uart (MockUart.c) ---------------------------------------------
 void    mockUartReset(void);
-int32_t mockUartInitFn(va_list args);
-int32_t mockUartConfigureFn(va_list args);
-int32_t mockUartPollFn(va_list args);
-int32_t mockUartWriteFn(va_list args);
-int32_t mockUartIsConsoleFn(va_list args);
+int mockUartInitFn(va_list args);
+int mockUartConfigureFn(va_list args);
+int mockUartPollFn(va_list args);
+int mockUartWriteFn(va_list args);
+int mockUartIsConsoleFn(va_list args);
 
 // --- block device (MockBlockDevice.c) -------------------------------
 void    mockBlockDeviceReset(void);
-int32_t mockBlockDeviceInitFn(va_list args);
-int32_t mockBlockDeviceGetFn(va_list args);
-int32_t mockBlockDeviceRestartFn(va_list args);
+int mockBlockDeviceInitFn(va_list args);
+int mockBlockDeviceGetFn(va_list args);
+int mockBlockDeviceRestartFn(va_list args);
 
 #ifdef __cplusplus
 } // extern "C"

@@ -66,47 +66,47 @@ void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
 // Forward declarations for all POSIX platform functions (defined in
 // HalArduinoSamD21x18ASimImpl.c), now with va_list signatures.
 // ---------------------------------------------------------------------------
-int32_t posixProcessStackSize(va_list args);
-int32_t posixMemoryManagerStackSize(va_list args);
-int32_t posixBottomOfHeap(va_list args);
-int32_t posixNumExtraSchedulerStacks(va_list args);
-int32_t posixNumExtraConsoleStacks(va_list args);
+int posixProcessStackSize(va_list args);
+int posixMemoryManagerStackSize(va_list args);
+int posixBottomOfHeap(va_list args);
+int posixNumExtraSchedulerStacks(va_list args);
+int posixNumExtraConsoleStacks(va_list args);
 
-int32_t posixInitUart(va_list args);
-int32_t posixConfigureUart(va_list args);
-int32_t posixPollUart(va_list args);
-int32_t posixWriteUart(va_list args);
-int32_t posixIsUartConsole(va_list args);
+int posixInitUart(va_list args);
+int posixConfigureUart(va_list args);
+int posixPollUart(va_list args);
+int posixWriteUart(va_list args);
+int posixIsUartConsole(va_list args);
 
-int32_t posixInitDio(va_list args);
-int32_t posixConfigureDio(va_list args);
-int32_t posixWriteDio(va_list args);
+int posixInitDio(va_list args);
+int posixConfigureDio(va_list args);
+int posixWriteDio(va_list args);
 
-int32_t posixInitSpi(va_list args);
-int32_t posixConfigureSpiDevice(va_list args);
-int32_t posixSetSpiSpeed(va_list args);
-int32_t posixStartSpiTransfer(va_list args);
-int32_t posixEndSpiTransfer(va_list args);
-int32_t posixSpiTransfer8(va_list args);
-int32_t posixSpiTransferBytes(va_list args);
+int posixInitSpi(va_list args);
+int posixConfigureSpiDevice(va_list args);
+int posixSetSpiSpeed(va_list args);
+int posixStartSpiTransfer(va_list args);
+int posixEndSpiTransfer(va_list args);
+int posixSpiTransfer8(va_list args);
+int posixSpiTransferBytes(va_list args);
 
-int32_t posixTimeInit(va_list args);
-int32_t posixSetSystemTime(va_list args);
-int32_t posixGetElapsedMilliseconds(va_list args);
-int32_t posixGetElapsedMicroseconds(va_list args);
-int32_t posixGetElapsedNanoseconds(va_list args);
+int posixTimeInit(va_list args);
+int posixSetSystemTime(va_list args);
+int posixGetElapsedMilliseconds(va_list args);
+int posixGetElapsedMicroseconds(va_list args);
+int posixGetElapsedNanoseconds(va_list args);
 
-int32_t posixEnterPowerMode(va_list args);
+int posixEnterPowerMode(va_list args);
 
-int32_t posixInitTimer(va_list args);
-int32_t posixInitTimerDevice(va_list args);
-int32_t posixConfigOneShotTimer(va_list args);
-int32_t posixConfiguredTimerNanoseconds(va_list args);
-int32_t posixRemainingTimerNanoseconds(va_list args);
-int32_t posixCancelTimer(va_list args);
-int32_t posixCancelAndGetTimer(va_list args);
+int posixInitTimer(va_list args);
+int posixInitTimerDevice(va_list args);
+int posixConfigOneShotTimer(va_list args);
+int posixConfiguredTimerNanoseconds(va_list args);
+int posixRemainingTimerNanoseconds(va_list args);
+int posixCancelTimer(va_list args);
+int posixCancelAndGetTimer(va_list args);
 
-int32_t halPosixImplInit(jmp_buf resetBuffer,
+int halPosixImplInit(jmp_buf resetBuffer,
   NanoOsOverlayMap **overlayMap, size_t *overlaySize, StaticLogs **staticLogs,
   NanoOsOverlayMap **contiguousFilesystem, size_t *contiguousFilesystemSize);
 
@@ -170,7 +170,7 @@ static uint32_t posixBlockDevicesOnline[] = {
 /// final binary on some targets.
 static const char _sdCardName[] KEEP_IN_FLASH = "SD card";
 
-int32_t posixInitBlockDevice(va_list args) {
+int posixInitBlockDevice(va_list args) {
   (void) args;
   if (SCHEDULER_STATE == NULL) {
     return -EBUSY;
@@ -202,7 +202,7 @@ int32_t posixInitBlockDevice(va_list args) {
   return 0;
 }
 
-int32_t posixGetBlockDevice(va_list args) {
+int posixGetBlockDevice(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   BlockDevice **returnValue = va_arg(args, BlockDevice**);
 
@@ -219,7 +219,7 @@ int32_t posixGetBlockDevice(va_list args) {
   return 0;
 }
 
-int32_t posixRestartBlockDevice(va_list args) {
+int posixRestartBlockDevice(va_list args) {
   ProcessDescriptor *processDescriptor = va_arg(args, ProcessDescriptor*);
   int32_t deviceId = (int32_t) (intptr_t) processDescriptor->restartArgs;
 
@@ -312,7 +312,7 @@ static HalFunction posixBlockDeviceFunctions[HAL_BLOCK_DEVICE_NUM_FNS] = {
 /// @brief Statically allocated buffer for formatting log messages.
 static char _logBuffer[128];
 
-int32_t halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
+int halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
   _sdCardDevicePath = sdCardDevicePath;
 
   // Wire up per-subsystem function arrays.

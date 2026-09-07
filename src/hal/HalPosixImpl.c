@@ -116,7 +116,7 @@ int (*realTcgetattr)(int fd, struct termios *termios_p) = NULL;
 int (*realTcsetattr)(int fd, int optional_actions,
   const struct termios *termios_p) = NULL;
 
-int32_t posixProcessStackSize(va_list args) {
+int posixProcessStackSize(va_list args) {
   bool debug = (bool) va_arg(args, int);
   size_t *returnValue = va_arg(args, size_t*);
   (void) debug;
@@ -124,7 +124,7 @@ int32_t posixProcessStackSize(va_list args) {
   return 0;
 }
 
-int32_t posixMemoryManagerStackSize(va_list args) {
+int posixMemoryManagerStackSize(va_list args) {
   bool debug = (bool) va_arg(args, int);
   size_t *returnValue = va_arg(args, size_t*);
   if (debug == false) {
@@ -141,7 +141,7 @@ int32_t posixMemoryManagerStackSize(va_list args) {
 /// @brief Where the bottom of the heap will be set to be in memory.
 static void *_bottomOfHeap = NULL;
 
-int32_t posixBottomOfHeap(va_list args) {
+int posixBottomOfHeap(va_list args) {
   bool debug = (bool) va_arg(args, int);
   void **returnValue = va_arg(args, void**);
   (void) debug;
@@ -149,7 +149,7 @@ int32_t posixBottomOfHeap(va_list args) {
   return 0;
 }
 
-int32_t posixNumExtraSchedulerStacks(va_list args) {
+int posixNumExtraSchedulerStacks(va_list args) {
   bool debug = (bool) va_arg(args, int);
   uint8_t *returnValue = va_arg(args, uint8_t*);
   (void) debug;
@@ -157,7 +157,7 @@ int32_t posixNumExtraSchedulerStacks(va_list args) {
   return 0;
 }
 
-int32_t posixNumExtraConsoleStacks(va_list args) {
+int posixNumExtraConsoleStacks(va_list args) {
   bool debug = (bool) va_arg(args, int);
   uint8_t *returnValue = va_arg(args, uint8_t*);
   (void) debug;
@@ -179,7 +179,7 @@ static FILE **uarts[] = {
 /// @brief The number of serial ports we support on the Arduino Nano 33 IoT.
 static int _numUarts = sizeof(uarts) / sizeof(uarts[0]);
 
-int32_t posixInitUart(va_list args) {
+int posixInitUart(va_list args) {
   (void) args;
   return 0;
 }
@@ -204,7 +204,7 @@ static const char _getAttrErrorMessage[] KEEP_IN_FLASH
 static const char _setAttrErrorMessage[] KEEP_IN_FLASH
   = "Could not set new attributes for console.\n";
 
-int32_t posixConfigureUart(va_list args) {
+int posixConfigureUart(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   uint32_t baud = va_arg(args, uint32_t);
   (void) baud;
@@ -245,7 +245,7 @@ int32_t posixConfigureUart(va_list args) {
   return 0;
 }
 
-int32_t posixPollUart(va_list args) {
+int posixPollUart(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   int serialData = -1;
 
@@ -261,7 +261,7 @@ int32_t posixPollUart(va_list args) {
   return serialData;
 }
 
-int32_t posixWriteUart(va_list args) {
+int posixWriteUart(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   const uint8_t *data = va_arg(args, const uint8_t*);
   ssize_t length = va_arg(args, ssize_t);
@@ -277,10 +277,10 @@ int32_t posixWriteUart(va_list args) {
   if (returnValue != NULL) {
     *returnValue = numBytesWritten;
   }
-  return (numBytesWritten >= 0) ? 0 : (int32_t) numBytesWritten;
+  return (numBytesWritten >= 0) ? 0 : (int) numBytesWritten;
 }
 
-int32_t posixIsUartConsole(va_list args) {
+int posixIsUartConsole(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   bool *returnValue = va_arg(args, bool*);
   if (returnValue != NULL) {
@@ -289,68 +289,68 @@ int32_t posixIsUartConsole(va_list args) {
   return 0;
 }
 
-int32_t posixInitDio(va_list args) {
+int posixInitDio(va_list args) {
   (void) args;
   return -ENOSYS;
 }
 
-int32_t posixConfigureDio(va_list args) {
+int posixConfigureDio(va_list args) {
   (void) args;
   return -ENOSYS;
 }
 
-int32_t posixWriteDio(va_list args) {
+int posixWriteDio(va_list args) {
   (void) args;
   return -ENOSYS;
 }
 
-int32_t posixInitSpi(va_list args) {
+int posixInitSpi(va_list args) {
   (void) args;
   return -ENOSYS;
 }
 
-int32_t posixConfigureSpiDevice(va_list args) {
+int posixConfigureSpiDevice(va_list args) {
   (void) args;
   return -ENOSYS;
 }
 
-int32_t posixSetSpiSpeed(va_list args) {
+int posixSetSpiSpeed(va_list args) {
   (void) args;
   return -ENOSYS;
 }
 
-int32_t posixStartSpiTransfer(va_list args) {
+int posixStartSpiTransfer(va_list args) {
   (void) args;
   return -ENOSYS;
 }
 
-int32_t posixEndSpiTransfer(va_list args) {
+int posixEndSpiTransfer(va_list args) {
   (void) args;
   return -ENOSYS;
 }
 
-int32_t posixSpiTransfer8(va_list args) {
+int posixSpiTransfer8(va_list args) {
   (void) args;
   return -ENOSYS;
 }
 
-int32_t posixSpiTransferBytes(va_list args) {
+int posixSpiTransferBytes(va_list args) {
   (void) args;
   return -ENOSYS;
 }
 
-int32_t posixTimeInit(va_list args) {
+int posixTimeInit(va_list args) {
   (void) args;
   return 0;
 }
 
-int32_t posixSetSystemTime(va_list args) {
+int posixSetSystemTime(va_list args) {
   (void) args;
   return 0;
 }
 
 // posixGetElapsedNanosecondsImpl is used as the base implementation.
-static int32_t posixGetElapsedNanosecondsImpl(int64_t startTime,
+static int posixGetElapsedNanosecondsImpl(int64_t startTime,
   int64_t *returnValue
 ) {
   #include <time.h>
@@ -363,7 +363,7 @@ static int32_t posixGetElapsedNanosecondsImpl(int64_t startTime,
   return 0;
 }
 
-int32_t posixGetElapsedMilliseconds(va_list args) {
+int posixGetElapsedMilliseconds(va_list args) {
   int64_t startTime = va_arg(args, int64_t);
   int64_t *returnValue = va_arg(args, int64_t*);
   int64_t nanoseconds = 0;
@@ -375,7 +375,7 @@ int32_t posixGetElapsedMilliseconds(va_list args) {
   return rv;
 }
 
-int32_t posixGetElapsedMicroseconds(va_list args) {
+int posixGetElapsedMicroseconds(va_list args) {
   int64_t startTime = va_arg(args, int64_t);
   int64_t *returnValue = va_arg(args, int64_t*);
   int64_t nanoseconds = 0;
@@ -387,7 +387,7 @@ int32_t posixGetElapsedMicroseconds(va_list args) {
   return rv;
 }
 
-int32_t posixGetElapsedNanoseconds(va_list args) {
+int posixGetElapsedNanoseconds(va_list args) {
   int64_t startTime = va_arg(args, int64_t);
   int64_t *returnValue = va_arg(args, int64_t*);
   return posixGetElapsedNanosecondsImpl(startTime, returnValue);
@@ -426,7 +426,7 @@ static const char _exitingMessage[] KEEP_IN_FLASH = "Exiting.\n";
 /// halPosixImplInit has run.
 void *_contiguousOverlayMap = NULL;
 
-int32_t posixEnterPowerMode(va_list args) {
+int posixEnterPowerMode(va_list args) {
   HalPowerMode powerMode = (HalPowerMode) va_arg(args, int);
   // You can't completely turn off the hardware we're running on.  We're
   // simulating hardware, so do what the hardware would do, which is the same
@@ -627,12 +627,12 @@ SoftwareTimer softwareTimers[] = {
 /// call to posixSetNumTimers.
 static int _numTimers = sizeof(softwareTimers) / sizeof(softwareTimers[0]);
 
-int32_t posixInitTimer(va_list args) {
+int posixInitTimer(va_list args) {
   (void) args;
   return 0;
 }
 
-int32_t posixInitTimerDevice(va_list args) {
+int posixInitTimerDevice(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   if (deviceId >= _numTimers) {
     return -ERANGE;
@@ -657,7 +657,7 @@ int32_t posixInitTimerDevice(va_list args) {
   return 0;
 }
 
-int32_t posixConfigOneShotTimer(va_list args) {
+int posixConfigOneShotTimer(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   uint64_t nanoseconds = va_arg(args, uint64_t);
   void (*callback)(void) = va_arg(args, void (*)(void));
@@ -682,7 +682,7 @@ int32_t posixConfigOneShotTimer(va_list args) {
   return 0;
 }
 
-int32_t posixConfiguredTimerNanoseconds(va_list args) {
+int posixConfiguredTimerNanoseconds(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   uint64_t *returnValue = va_arg(args, uint64_t*);
 
@@ -704,7 +704,7 @@ int32_t posixConfiguredTimerNanoseconds(va_list args) {
   return 0;
 }
 
-int32_t posixRemainingTimerNanoseconds(va_list args) {
+int posixRemainingTimerNanoseconds(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   uint64_t *returnValue = va_arg(args, uint64_t*);
 
@@ -732,7 +732,7 @@ int32_t posixRemainingTimerNanoseconds(va_list args) {
   return 0;
 }
 
-int32_t posixCancelTimer(va_list args) {
+int posixCancelTimer(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
 
   // Always validate capabilities first.
@@ -771,7 +771,7 @@ int32_t posixCancelTimer(va_list args) {
   return 0;
 }
 
-int32_t posixCancelAndGetTimer(va_list args) {
+int posixCancelAndGetTimer(va_list args) {
   // We need to get `now` as close to the beginning of this function call as
   // possible so that any call to reconfigure the timer later is correct.
   int64_t now = 0;
@@ -984,7 +984,7 @@ static const char _tcgetattrSymbolName[] KEEP_IN_FLASH = "tcgetattr";
 /// final binary on some targets.
 static const char _tcsetattrSymbolName[] KEEP_IN_FLASH = "tcsetattr";
 
-int32_t halPosixImplInit(jmp_buf resetBuffer,
+int halPosixImplInit(jmp_buf resetBuffer,
   NanoOsOverlayMap **overlayMap, size_t *overlaySize, StaticLogs **staticLogs,
   NanoOsOverlayMap **contiguousFilesystem, size_t *contiguousFilesystemSize
 ) {

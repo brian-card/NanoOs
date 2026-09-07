@@ -90,7 +90,7 @@ static const uint32_t halFunctionCounts[HAL_NUM_SUBSYSTEMS] KEEP_IN_FLASH = {
   [HAL_BLOCK_DEVICE] = HAL_BLOCK_DEVICE_NUM_FNS,
 };
 
-/// @fn int32_t callHal(HalSubsystem subsystem, uint32_t function, ...)
+/// @fn int callHal(HalSubsystem subsystem, uint32_t function, ...)
 ///
 /// @brief Dispatch a call to the registered platform-specific HAL function.
 ///
@@ -100,7 +100,7 @@ static const uint32_t halFunctionCounts[HAL_NUM_SUBSYSTEMS] KEEP_IN_FLASH = {
 ///
 /// @return Returns the value returned by the platform function, or -ENOTSUP if
 /// no function has been registered for the given subsystem/function pair.
-int32_t callHal(HalSubsystem subsystem, uint32_t function, ...) {
+int callHal(HalSubsystem subsystem, uint32_t function, ...) {
   ProcessDescriptor *processDescriptor = getRunningProcess();
   if ((subsystem >= HAL_NUM_SUBSYSTEMS)
     || (halFunctions[subsystem] == NULL)
@@ -118,7 +118,7 @@ int32_t callHal(HalSubsystem subsystem, uint32_t function, ...) {
   }
   va_list args;
   va_start(args, function);
-  int32_t returnValue = halFunctions[subsystem][function](args);
+  int returnValue = halFunctions[subsystem][function](args);
   va_end(args);
   return returnValue;
 }
@@ -831,13 +831,13 @@ int restartContiguousFilesystem(ProcessDescriptor *processDescriptor) {
   return 0;
 }
 
-/// @fn int32_t halCommonInit(void)
+/// @fn int halCommonInit(void)
 ///
 /// @brief Initialization function common to multiple HAL implementations.
 /// Uses the global HAL pointer to call subsystem init and configure functions.
 ///
 /// @return Returns 0 on success, -errno on failure.
-int32_t halCommonInit(void) {
+int halCommonInit(void) {
   if (HAL == NULL) {
     return -EINVAL;
   }

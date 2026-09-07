@@ -42,7 +42,7 @@
 extern "C" {
 #endif
 
-/// @fn int32_t halAgonLight2Init(void)
+/// @fn int halAgonLight2Init(void)
 ///
 /// @brief Initialise the HAL for the Agon Light 2.
 ///
@@ -50,7 +50,7 @@ extern "C" {
 /// then calls halCommonInit() to finish the common HAL setup.
 ///
 /// @return Returns 0 on success, -errno on failure.
-int32_t halAgonLight2Init(void);
+int halAgonLight2Init(void);
 
 #ifdef __cplusplus
 } // extern "C"

@@ -58,18 +58,18 @@ int mockTimerFire(int32_t deviceId) {
   return 0;
 }
 
-int32_t mockTimerInitFn(va_list args) {
+int mockTimerInitFn(va_list args) {
   (void) args;
   mockTimerReset();
   return 0;
 }
 
-int32_t mockTimerInitDeviceFn(va_list args) {
+int mockTimerInitDeviceFn(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   return validDevice(deviceId) ? 0 : -1;
 }
 
-int32_t mockTimerConfigOneShotFn(va_list args) {
+int mockTimerConfigOneShotFn(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   uint64_t nanoseconds = va_arg(args, uint64_t);
   void (*callback)(void) = va_arg(args, void (*)(void));
@@ -83,7 +83,7 @@ int32_t mockTimerConfigOneShotFn(va_list args) {
   return 0;
 }
 
-int32_t mockTimerConfiguredNanosecondsFn(va_list args) {
+int mockTimerConfiguredNanosecondsFn(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   uint64_t *returnValue = va_arg(args, uint64_t*);
   if (!validDevice(deviceId) || (returnValue == NULL)) {
@@ -93,7 +93,7 @@ int32_t mockTimerConfiguredNanosecondsFn(va_list args) {
   return 0;
 }
 
-int32_t mockTimerRemainingNanosecondsFn(va_list args) {
+int mockTimerRemainingNanosecondsFn(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   uint64_t *returnValue = va_arg(args, uint64_t*);
   if (!validDevice(deviceId) || (returnValue == NULL)) {
@@ -109,7 +109,7 @@ int32_t mockTimerRemainingNanosecondsFn(va_list args) {
   return 0;
 }
 
-int32_t mockTimerCancelFn(va_list args) {
+int mockTimerCancelFn(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   if (!validDevice(deviceId)) {
     return -1;
@@ -119,7 +119,7 @@ int32_t mockTimerCancelFn(va_list args) {
   return 0;
 }
 
-int32_t mockTimerCancelAndGetFn(va_list args) {
+int mockTimerCancelAndGetFn(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   uint64_t *configuredNanoseconds = va_arg(args, uint64_t*);
   uint64_t *remainingNanoseconds = va_arg(args, uint64_t*);

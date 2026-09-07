@@ -255,7 +255,7 @@ static SavedContext _savedContext;
     = (uint32_t) arduinoSamD21x18ATimerInterruptHandler ## handlerIndex; \
   return
 
-int32_t arduinoSamD21x18AProcessStackSize(va_list args) {
+int arduinoSamD21x18AProcessStackSize(va_list args) {
   bool debug = (bool) va_arg(args, int);
   size_t *returnValue = va_arg(args, size_t*);
   (void) debug;
@@ -263,7 +263,7 @@ int32_t arduinoSamD21x18AProcessStackSize(va_list args) {
   return 0;
 }
 
-int32_t arduinoSamD21x18AMemoryManagerStackSize(va_list args) {
+int arduinoSamD21x18AMemoryManagerStackSize(va_list args) {
   bool debug = (bool) va_arg(args, int);
   size_t *returnValue = va_arg(args, size_t*);
   if (debug == false) {
@@ -275,7 +275,7 @@ int32_t arduinoSamD21x18AMemoryManagerStackSize(va_list args) {
   return 0;
 }
 
-int32_t arduinoSamD21x18ABottomOfHeap(va_list args) {
+int arduinoSamD21x18ABottomOfHeap(va_list args) {
   bool debug = (bool) va_arg(args, int);
   void **returnValue = va_arg(args, void**);
   (void) debug;
@@ -283,7 +283,7 @@ int32_t arduinoSamD21x18ABottomOfHeap(va_list args) {
   return 0;
 }
 
-int32_t arduinoSamD21x18ANumExtraSchedulerStacks(va_list args) {
+int arduinoSamD21x18ANumExtraSchedulerStacks(va_list args) {
   bool debug = (bool) va_arg(args, int);
   uint8_t *returnValue = va_arg(args, uint8_t*);
   (void) debug;
@@ -291,7 +291,7 @@ int32_t arduinoSamD21x18ANumExtraSchedulerStacks(va_list args) {
   return 0;
 }
 
-int32_t arduinoSamD21x18ANumExtraConsoleStacks(va_list args) {
+int arduinoSamD21x18ANumExtraConsoleStacks(va_list args) {
   bool debug = (bool) va_arg(args, int);
   uint8_t *returnValue = va_arg(args, uint8_t*);
   (void) debug;
@@ -320,13 +320,13 @@ int32_t arduinoSamD21x18ANumExtraConsoleStacks(va_list args) {
 /// this HAL.
 #define BOARD_UART 1
 
-int32_t arduinoSamD21x18AInitUart(va_list args) {
+int arduinoSamD21x18AInitUart(va_list args) {
   (void) args;
   // Nothing really to do on this platform.  Just return.
   return 0;
 }
 
-int32_t arduinoSamD21x18AConfigureUart(va_list args) {
+int arduinoSamD21x18AConfigureUart(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   uint32_t baud = va_arg(args, uint32_t);
   int returnValue = -ERANGE;
@@ -352,7 +352,7 @@ int32_t arduinoSamD21x18AConfigureUart(va_list args) {
   return returnValue;
 }
 
-int32_t arduinoSamD21x18APollUart(va_list args) {
+int arduinoSamD21x18APollUart(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   int serialData = -ERANGE;
 
@@ -373,7 +373,7 @@ int32_t arduinoSamD21x18APollUart(va_list args) {
   return serialData;
 }
 
-int32_t arduinoSamD21x18AWriteUart(va_list args) {
+int arduinoSamD21x18AWriteUart(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   const uint8_t *data = va_arg(args, const uint8_t*);
   ssize_t length = va_arg(args, ssize_t);
@@ -401,7 +401,7 @@ int32_t arduinoSamD21x18AWriteUart(va_list args) {
   return (numBytesWritten >= 0) ? 0 : (int32_t) numBytesWritten;
 }
 
-int32_t arduinoSamD21x18AIsUartConsole(va_list args) {
+int arduinoSamD21x18AIsUartConsole(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   bool *returnValue = va_arg(args, bool*);
   (void) deviceId;
@@ -411,30 +411,30 @@ int32_t arduinoSamD21x18AIsUartConsole(va_list args) {
   return 0;
 }
 
-int32_t arduinoSamD21x18AInitDio(va_list args) {
+int arduinoSamD21x18AInitDio(va_list args) {
   (void) args;
   return 0;
 }
 
-static int32_t arduinoSamD21x18AConfigureDioImpl(int32_t dio, bool output) {
+static int arduinoSamD21x18AConfigureDioImpl(int32_t dio, bool output) {
   uint8_t modes[2] = { INPUT, OUTPUT };
   pinMode(dio, modes[output]);
   return 0;
 }
 
-int32_t arduinoSamD21x18AConfigureDio(va_list args) {
+int arduinoSamD21x18AConfigureDio(va_list args) {
   int32_t dio = va_arg(args, int32_t);
   bool output = (bool) va_arg(args, int);
   return arduinoSamD21x18AConfigureDioImpl(dio, output);
 }
 
-static int32_t arduinoSamD21x18AWriteDioImpl(int32_t dio, bool high) {
+static int arduinoSamD21x18AWriteDioImpl(int32_t dio, bool high) {
   uint8_t levels[2] = { LOW, HIGH };
   digitalWrite(dio, levels[high]);
   return 0;
 }
 
-int32_t arduinoSamD21x18AWriteDio(va_list args) {
+int arduinoSamD21x18AWriteDio(va_list args) {
   int32_t dio = va_arg(args, int32_t);
   bool high = (bool) va_arg(args, int);
   return arduinoSamD21x18AWriteDioImpl(dio, high);
@@ -482,7 +482,7 @@ static struct ArduinoSamD21x18ASpi {
 /// else on the bus.
 #define SPI_POWER_UP_CLOCK_BYTES 10
 
-static int32_t arduinoSamD21x18AInitSpiImpl(void) {
+static int arduinoSamD21x18AInitSpiImpl(void) {
   if (globalSpiConfigured == false) {
     // Set up SPI at the default speed.
     globalSpiConfigured = true;
@@ -491,12 +491,12 @@ static int32_t arduinoSamD21x18AInitSpiImpl(void) {
   return 0;
 }
 
-int32_t arduinoSamD21x18AInitSpi(va_list args) {
+int arduinoSamD21x18AInitSpi(va_list args) {
   (void) args;
   return arduinoSamD21x18AInitSpiImpl();
 }
 
-int32_t arduinoSamD21x18AConfigureSpi(va_list args) {
+int arduinoSamD21x18AConfigureSpi(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   uint8_t cs   = (uint8_t) va_arg(args, int);
   uint8_t sck  = (uint8_t) va_arg(args, int);
@@ -546,7 +546,7 @@ int32_t arduinoSamD21x18AConfigureSpi(va_list args) {
   return 0;
 }
 
-int32_t arduinoSamD21x18ASetSpiSpeed(va_list args) {
+int arduinoSamD21x18ASetSpiSpeed(va_list args) {
   int32_t  deviceId = va_arg(args, int32_t);
   uint32_t baud     = va_arg(args, uint32_t);
 
@@ -565,7 +565,7 @@ int32_t arduinoSamD21x18ASetSpiSpeed(va_list args) {
   return 0;
 }
 
-static int32_t arduinoSamD21x18AStartSpiTransferImpl(int32_t deviceId) {
+static int arduinoSamD21x18AStartSpiTransferImpl(int32_t deviceId) {
   if ((deviceId < 0) || (deviceId >= numArduinoSpis)
     || (arduinoSamD21x18ASpiDevices[deviceId].configured == false)
   ) {
@@ -591,12 +591,12 @@ static int32_t arduinoSamD21x18AStartSpiTransferImpl(int32_t deviceId) {
   return 0;
 }
 
-int32_t arduinoSamD21x18AStartSpiTransfer(va_list args) {
+int arduinoSamD21x18AStartSpiTransfer(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   return arduinoSamD21x18AStartSpiTransferImpl(deviceId);
 }
 
-int32_t arduinoSamD21x18AEndSpiTransfer(va_list args) {
+int arduinoSamD21x18AEndSpiTransfer(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
 
   if ((deviceId < 0) || (deviceId >= numArduinoSpis)
@@ -624,7 +624,7 @@ int32_t arduinoSamD21x18AEndSpiTransfer(va_list args) {
   return 0;
 }
 
-int32_t arduinoSamD21x18ASpiTransfer8(va_list args) {
+int arduinoSamD21x18ASpiTransfer8(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   uint8_t data = (uint8_t) va_arg(args, int);
 
@@ -640,7 +640,7 @@ int32_t arduinoSamD21x18ASpiTransfer8(va_list args) {
   return (int32_t) SPI.transfer(data);
 }
 
-int32_t arduinoSamD21x18ASpiTransferBytes(va_list args) {
+int arduinoSamD21x18ASpiTransferBytes(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   uint8_t *data = va_arg(args, uint8_t*);
   uint32_t length = va_arg(args, uint32_t);
@@ -665,12 +665,12 @@ int32_t arduinoSamD21x18ASpiTransferBytes(va_list args) {
 /// time for the system.
 static int64_t baseSystemTimeUs = 0;
 
-int32_t arduinoSamD21x18ATimeInit(va_list args) {
+int arduinoSamD21x18ATimeInit(va_list args) {
   (void) args;
   return 0;
 }
 
-int32_t arduinoSamD21x18ASetSystemTime(va_list args) {
+int arduinoSamD21x18ASetSystemTime(va_list args) {
   struct timespec *now = va_arg(args, struct timespec*);
   if (now == NULL) {
     return -EINVAL;
@@ -683,7 +683,7 @@ int32_t arduinoSamD21x18ASetSystemTime(va_list args) {
   return 0;
 }
 
-static int32_t arduinoSamD21x18AGetElapsedMicrosecondsImpl(int64_t startTime,
+static int arduinoSamD21x18AGetElapsedMicrosecondsImpl(int64_t startTime,
   int64_t *returnValue
 ) {
   int64_t now = baseSystemTimeUs + micros();
@@ -701,7 +701,7 @@ static int32_t arduinoSamD21x18AGetElapsedMicrosecondsImpl(int64_t startTime,
   return 0;
 }
 
-int32_t arduinoSamD21x18AGetElapsedMilliseconds(va_list args) {
+int arduinoSamD21x18AGetElapsedMilliseconds(va_list args) {
   int64_t startTime = va_arg(args, int64_t);
   int64_t *returnValue = va_arg(args, int64_t*);
   int64_t microseconds = 0;
@@ -717,13 +717,13 @@ int32_t arduinoSamD21x18AGetElapsedMilliseconds(va_list args) {
   return rv;
 }
 
-int32_t arduinoSamD21x18AGetElapsedMicroseconds(va_list args) {
+int arduinoSamD21x18AGetElapsedMicroseconds(va_list args) {
   int64_t startTime = va_arg(args, int64_t);
   int64_t *returnValue = va_arg(args, int64_t*);
   return arduinoSamD21x18AGetElapsedMicrosecondsImpl(startTime, returnValue);
 }
 
-int32_t arduinoSamD21x18AGetElapsedNanoseconds(va_list args) {
+int arduinoSamD21x18AGetElapsedNanoseconds(va_list args) {
   int64_t startTime = va_arg(args, int64_t);
   int64_t *returnValue = va_arg(args, int64_t*);
   int64_t microseconds = 0;
@@ -739,7 +739,7 @@ int32_t arduinoSamD21x18AGetElapsedNanoseconds(va_list args) {
   return rv;
 }
 
-int32_t arduinoSamD21x18AEnterMode(va_list args) {
+int arduinoSamD21x18AEnterMode(va_list args) {
   HalPowerMode powerMode = (HalPowerMode) va_arg(args, int);
   // You can't completely turn off the board from software.  The best we can
   // do is put into a low power state, so do the same set of operations for
@@ -828,12 +828,12 @@ static uint32_t halArduinoSamD21x18ATimersOnline[] = {
   0x00000003,
 };
 
-int32_t arduinoSamD21x18AInitTimer(va_list args) {
+int arduinoSamD21x18AInitTimer(va_list args) {
   (void) args;
   return 0;
 }
 
-int32_t arduinoSamD21x18AInitTimerDevice(va_list args) {
+int arduinoSamD21x18AInitTimerDevice(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
 
   if ((deviceId < 0) || (deviceId >= _numTimers)) {
@@ -880,9 +880,9 @@ int32_t arduinoSamD21x18AInitTimerDevice(va_list args) {
   return 0;
 }
 
-static int32_t arduinoSamD21x18ACancelTimerImpl(int32_t deviceId);
+static int arduinoSamD21x18ACancelTimerImpl(int32_t deviceId);
 
-int32_t arduinoSamD21x18AConfigOneShotTimer(va_list args) {
+int arduinoSamD21x18AConfigOneShotTimer(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   uint64_t nanoseconds = va_arg(args, uint64_t);
   void (*callback)(void) = va_arg(args, void (*)(void));
@@ -965,7 +965,7 @@ int32_t arduinoSamD21x18AConfigOneShotTimer(va_list args) {
   return 0;
 }
 
-int32_t arduinoSamD21x18AConfiguredTimerNanoseconds(va_list args) {
+int arduinoSamD21x18AConfiguredTimerNanoseconds(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   uint64_t *returnValue = va_arg(args, uint64_t*);
 
@@ -987,7 +987,7 @@ int32_t arduinoSamD21x18AConfiguredTimerNanoseconds(va_list args) {
   return 0;
 }
 
-int32_t arduinoSamD21x18ARemainingTimerNanoseconds(va_list args) {
+int arduinoSamD21x18ARemainingTimerNanoseconds(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   uint64_t *returnValue = va_arg(args, uint64_t*);
 
@@ -1016,7 +1016,7 @@ int32_t arduinoSamD21x18ARemainingTimerNanoseconds(va_list args) {
   return 0;
 }
 
-static int32_t arduinoSamD21x18ACancelTimerImpl(int32_t deviceId) {
+static int arduinoSamD21x18ACancelTimerImpl(int32_t deviceId) {
   // Always validate capabilities first.
   ProcessDescriptor *processDescriptor = getRunningProcess();
   if (processDescriptor != NULL) {
@@ -1056,12 +1056,12 @@ static int32_t arduinoSamD21x18ACancelTimerImpl(int32_t deviceId) {
   return 0;
 }
 
-int32_t arduinoSamD21x18ACancelTimer(va_list args) {
+int arduinoSamD21x18ACancelTimer(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   return arduinoSamD21x18ACancelTimerImpl(deviceId);
 }
 
-int32_t arduinoSamD21x18ACancelAndGetTimer(va_list args) {
+int arduinoSamD21x18ACancelAndGetTimer(va_list args) {
   // We need to get `now` as close to the beginning of this function call as
   // possible so that any call to reconfigure the timer later is correct.
   int64_t nowUs = micros();
@@ -1230,7 +1230,7 @@ static uint32_t halArduinoSamD21x18ASpisOnline[] = {
   0x00000003,
 };
 
-int32_t arduinoSamD21x18AInitBlockDevice(va_list args) {
+int arduinoSamD21x18AInitBlockDevice(va_list args) {
   (void) args;
   if (SCHEDULER_STATE == NULL) {
     return -EBUSY;
@@ -1253,7 +1253,7 @@ int32_t arduinoSamD21x18AInitBlockDevice(va_list args) {
   return 0;
 }
 
-int32_t arduinoSamD21x18AGetBlockDevice(va_list args) {
+int arduinoSamD21x18AGetBlockDevice(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   BlockDevice **returnValue = va_arg(args, BlockDevice**);
 
@@ -1278,7 +1278,7 @@ int32_t arduinoSamD21x18AGetBlockDevice(va_list args) {
 /// final binary on some targets.
 static const char _sdCardName[] KEEP_IN_FLASH = "SD card";
 
-int32_t arduinoSamD21x18ARestartBlockDevice(va_list args) {
+int arduinoSamD21x18ARestartBlockDevice(va_list args) {
   ProcessDescriptor *processDescriptor = va_arg(args, ProcessDescriptor*);
   int32_t deviceId = (int32_t) (intptr_t) processDescriptor->restartArgs;
 
@@ -1435,7 +1435,7 @@ static const char _bannerLine[] KEEP_IN_FLASH
 static const char _corruptionWarning[] KEEP_IN_FLASH
   = "* Running user programs will corrupt system memory!!! *\n";
 
-int32_t halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
+int halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
   // Wire up per-subsystem function arrays.
   halFunctions[HAL_MEMORY]       = arduinoSamD21x18AMemoryFunctions;
   halFunctions[HAL_UART]         = arduinoSamD21x18AUartFunctions;

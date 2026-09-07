@@ -139,7 +139,7 @@ static uint8_t _spiSckDio = DIO_PIN_UNDEFINED;
 #define HAL_ARDUINO_AVR_NUM_PINS NUM_DIGITAL_PINS
 #endif
 
-int32_t arduinoAvrProcessStackSize(va_list args) {
+int arduinoAvrProcessStackSize(va_list args) {
   bool debug = (bool) va_arg(args, int);
   size_t *returnValue = va_arg(args, size_t*);
   (void) debug;
@@ -149,7 +149,7 @@ int32_t arduinoAvrProcessStackSize(va_list args) {
   return 0;
 }
 
-int32_t arduinoAvrMemoryManagerStackSize(va_list args) {
+int arduinoAvrMemoryManagerStackSize(va_list args) {
   bool debug = (bool) va_arg(args, int);
   size_t *returnValue = va_arg(args, size_t*);
   if (returnValue != NULL) {
@@ -160,7 +160,7 @@ int32_t arduinoAvrMemoryManagerStackSize(va_list args) {
   return 0;
 }
 
-int32_t arduinoAvrBottomOfHeap(va_list args) {
+int arduinoAvrBottomOfHeap(va_list args) {
   bool debug = (bool) va_arg(args, int);
   void **returnValue = va_arg(args, void**);
   (void) debug;
@@ -172,7 +172,7 @@ int32_t arduinoAvrBottomOfHeap(va_list args) {
   return 0;
 }
 
-int32_t arduinoAvrNumExtraSchedulerStacks(va_list args) {
+int arduinoAvrNumExtraSchedulerStacks(va_list args) {
   bool debug = (bool) va_arg(args, int);
   uint8_t *returnValue = va_arg(args, uint8_t*);
   (void) debug;
@@ -182,7 +182,7 @@ int32_t arduinoAvrNumExtraSchedulerStacks(va_list args) {
   return 0;
 }
 
-int32_t arduinoAvrNumExtraConsoleStacks(va_list args) {
+int arduinoAvrNumExtraConsoleStacks(va_list args) {
   bool debug = (bool) va_arg(args, int);
   uint8_t *returnValue = va_arg(args, uint8_t*);
   (void) debug;
@@ -206,12 +206,12 @@ static HardwareSerial *uarts[] = {
 /// @brief The number of serial ports we support on this AVR board.
 static const int _numUarts = sizeof(uarts) / sizeof(uarts[0]);
 
-int32_t arduinoAvrInitUart(va_list args) {
+int arduinoAvrInitUart(va_list args) {
   (void) args;
   return 0;
 }
 
-int32_t arduinoAvrConfigureUart(va_list args) {
+int arduinoAvrConfigureUart(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   uint32_t baud = va_arg(args, uint32_t);
   int returnValue = -ERANGE;
@@ -225,7 +225,7 @@ int32_t arduinoAvrConfigureUart(va_list args) {
   return returnValue;
 }
 
-int32_t arduinoAvrPollUart(va_list args) {
+int arduinoAvrPollUart(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   int serialData = -ERANGE;
 
@@ -236,7 +236,7 @@ int32_t arduinoAvrPollUart(va_list args) {
   return serialData;
 }
 
-int32_t arduinoAvrWriteUart(va_list args) {
+int arduinoAvrWriteUart(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   const uint8_t *data = va_arg(args, const uint8_t*);
   ssize_t length = va_arg(args, ssize_t);
@@ -254,7 +254,7 @@ int32_t arduinoAvrWriteUart(va_list args) {
   return (numBytesWritten >= 0) ? 0 : (int32_t) numBytesWritten;
 }
 
-int32_t arduinoAvrIsUartConsole(va_list args) {
+int arduinoAvrIsUartConsole(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   bool *returnValue = va_arg(args, bool*);
   (void) deviceId;
@@ -264,12 +264,12 @@ int32_t arduinoAvrIsUartConsole(va_list args) {
   return 0;
 }
 
-int32_t arduinoAvrInitDio(va_list args) {
+int arduinoAvrInitDio(va_list args) {
   (void) args;
   return 0;
 }
 
-static int32_t arduinoAvrConfigureDioImpl(int32_t deviceId, bool output) {
+static int arduinoAvrConfigureDioImpl(int32_t deviceId, bool output) {
   if ((deviceId < _dioStart) || (deviceId >= (int32_t) _numDioPins)) {
     return -ERANGE;
   }
@@ -278,13 +278,13 @@ static int32_t arduinoAvrConfigureDioImpl(int32_t deviceId, bool output) {
   return 0;
 }
 
-int32_t arduinoAvrConfigureDio(va_list args) {
+int arduinoAvrConfigureDio(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   bool output = (bool) va_arg(args, int);
   return arduinoAvrConfigureDioImpl(deviceId, output);
 }
 
-static int32_t arduinoAvrWriteDioImpl(int32_t deviceId, bool high) {
+static int arduinoAvrWriteDioImpl(int32_t deviceId, bool high) {
   if ((deviceId < _dioStart) || (deviceId >= (int32_t) _numDioPins)) {
     return -ERANGE;
   }
@@ -293,7 +293,7 @@ static int32_t arduinoAvrWriteDioImpl(int32_t deviceId, bool high) {
   return 0;
 }
 
-int32_t arduinoAvrWriteDio(va_list args) {
+int arduinoAvrWriteDio(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   bool high = (bool) va_arg(args, int);
   return arduinoAvrWriteDioImpl(deviceId, high);
@@ -335,7 +335,7 @@ static const int numArduinoSpis
 /// else on the bus.
 #define SPI_POWER_UP_CLOCK_BYTES 10
 
-static int32_t arduinoAvrInitSpiImpl(void) {
+static int arduinoAvrInitSpiImpl(void) {
   if (globalSpiConfigured == false) {
     globalSpiConfigured = true;
     SPI.begin();
@@ -343,12 +343,12 @@ static int32_t arduinoAvrInitSpiImpl(void) {
   return 0;
 }
 
-int32_t arduinoAvrInitSpi(va_list args) {
+int arduinoAvrInitSpi(va_list args) {
   (void) args;
   return arduinoAvrInitSpiImpl();
 }
 
-int32_t arduinoAvrConfigureSpiDevice(va_list args) {
+int arduinoAvrConfigureSpiDevice(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   uint8_t cs   = (uint8_t) va_arg(args, int);
   uint8_t sck  = (uint8_t) va_arg(args, int);
@@ -395,7 +395,7 @@ int32_t arduinoAvrConfigureSpiDevice(va_list args) {
   return 0;
 }
 
-int32_t arduinoAvrSetSpiSpeed(va_list args) {
+int arduinoAvrSetSpiSpeed(va_list args) {
   int32_t  deviceId = va_arg(args, int32_t);
   uint32_t baud     = va_arg(args, uint32_t);
 
@@ -414,7 +414,7 @@ int32_t arduinoAvrSetSpiSpeed(va_list args) {
   return 0;
 }
 
-static int32_t arduinoAvrStartSpiTransferImpl(int32_t deviceId) {
+static int arduinoAvrStartSpiTransferImpl(int32_t deviceId) {
   if ((deviceId < 0) || (deviceId >= numArduinoSpis)
     || (arduinoAvrSpiDevices[deviceId].configured == false)
   ) {
@@ -432,12 +432,12 @@ static int32_t arduinoAvrStartSpiTransferImpl(int32_t deviceId) {
   return 0;
 }
 
-int32_t arduinoAvrStartSpiTransfer(va_list args) {
+int arduinoAvrStartSpiTransfer(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   return arduinoAvrStartSpiTransferImpl(deviceId);
 }
 
-int32_t arduinoAvrEndSpiTransfer(va_list args) {
+int arduinoAvrEndSpiTransfer(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
 
   if ((deviceId < 0) || (deviceId >= numArduinoSpis)
@@ -457,7 +457,7 @@ int32_t arduinoAvrEndSpiTransfer(va_list args) {
   return 0;
 }
 
-int32_t arduinoAvrSpiTransfer8(va_list args) {
+int arduinoAvrSpiTransfer8(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   uint8_t data = (uint8_t) va_arg(args, int);
 
@@ -472,7 +472,7 @@ int32_t arduinoAvrSpiTransfer8(va_list args) {
   return (int) SPI.transfer(data);
 }
 
-int32_t arduinoAvrSpiTransferBytes(va_list args) {
+int arduinoAvrSpiTransferBytes(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   uint8_t *data = va_arg(args, uint8_t*);
   uint32_t length = va_arg(args, uint32_t);
@@ -503,12 +503,12 @@ static uint32_t halArduinoAvrSpisOnline[] = {
 /// time for the system.
 static int64_t baseSystemTimeMs = 0;
 
-int32_t arduinoAvrTimeInit(va_list args) {
+int arduinoAvrTimeInit(va_list args) {
   (void) args;
   return 0;
 }
 
-int32_t arduinoAvrSetSystemTime(va_list args) {
+int arduinoAvrSetSystemTime(va_list args) {
   struct timespec *now = va_arg(args, struct timespec*);
   if (now == NULL) {
     return -EINVAL;
@@ -529,7 +529,7 @@ static int64_t arduinoAvrGetElapsedMillisecondsImpl(int64_t startTime) {
   return now - startTime;
 }
 
-int32_t arduinoAvrGetElapsedMilliseconds(va_list args) {
+int arduinoAvrGetElapsedMilliseconds(va_list args) {
   int64_t startTime = va_arg(args, int64_t);
   int64_t *returnValue = va_arg(args, int64_t*);
   int64_t result = arduinoAvrGetElapsedMillisecondsImpl(startTime);
@@ -539,7 +539,7 @@ int32_t arduinoAvrGetElapsedMilliseconds(va_list args) {
   return (result >= 0) ? 0 : -EIO;
 }
 
-int32_t arduinoAvrGetElapsedMicroseconds(va_list args) {
+int arduinoAvrGetElapsedMicroseconds(va_list args) {
   int64_t startTime = va_arg(args, int64_t);
   int64_t *returnValue = va_arg(args, int64_t*);
   int64_t result = arduinoAvrGetElapsedMillisecondsImpl(
@@ -554,7 +554,7 @@ int32_t arduinoAvrGetElapsedMicroseconds(va_list args) {
   return (result >= 0) ? 0 : -EIO;
 }
 
-int32_t arduinoAvrGetElapsedNanoseconds(va_list args) {
+int arduinoAvrGetElapsedNanoseconds(va_list args) {
   int64_t startTime = va_arg(args, int64_t);
   int64_t *returnValue = va_arg(args, int64_t*);
   int64_t result = arduinoAvrGetElapsedMillisecondsImpl(
@@ -569,7 +569,7 @@ int32_t arduinoAvrGetElapsedNanoseconds(va_list args) {
   return (result >= 0) ? 0 : -EIO;
 }
 
-int32_t arduinoAvrEnterPowerMode(va_list args) {
+int arduinoAvrEnterPowerMode(va_list args) {
   HalPowerMode powerMode = (HalPowerMode) va_arg(args, int);
 
   if ((powerMode == HAL_POWER_MODE_OFF)
@@ -641,9 +641,9 @@ static uint32_t arduinoAvrBlockDevicesOnline[] = {
 extern "C"
 {
 #endif
-int32_t arduinoAvrInitBlockDevice(va_list args);
-int32_t arduinoAvrGetBlockDevice(va_list args);
-int32_t arduinoAvrRestartBlockDevice(va_list args);
+int arduinoAvrInitBlockDevice(va_list args);
+int arduinoAvrGetBlockDevice(va_list args);
+int arduinoAvrRestartBlockDevice(va_list args);
 #ifdef __cplusplus
 }
 #endif
@@ -703,7 +703,7 @@ static HalFunction arduinoAvrBlockDeviceFunctions[HAL_BLOCK_DEVICE_NUM_FNS] = {
 /// @brief Statically allocated buffer for formatting log messages.
 static char _logBuffer[96];
 
-int32_t halArduinoAvrInit(HalArduinoAvrInitArgs *args) {
+int halArduinoAvrInit(HalArduinoAvrInitArgs *args) {
   // Wire up per-subsystem function arrays.
   // HAL_TIMER is not supported on this platform — leave halFunctions[HAL_TIMER] NULL.
   halFunctions[HAL_MEMORY]       = arduinoAvrMemoryFunctions;

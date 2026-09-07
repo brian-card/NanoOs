@@ -52,8 +52,8 @@ typedef struct HalArduinoAvrInitArgs {
   uint8_t   spiSckDio;
 } HalArduinoAvrInitArgs;
 
-int32_t halArduinoAvrInit(HalArduinoAvrInitArgs *args);
-int32_t halArduinoInit(void);
+int halArduinoAvrInit(HalArduinoAvrInitArgs *args);
+int halArduinoInit(void);
 
 #ifdef __cplusplus
 } // extern "C"
