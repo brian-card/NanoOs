@@ -78,7 +78,7 @@ int nanoOsUname(struct utsname *buf) {
   strncpy(buf->sysname, _sysname, sizeof(buf->sysname));
   nanoOsGethostname(buf->nodename, sizeof(buf->nodename));
   strncpy(buf->release, _nanoOsVersion, sizeof(buf->release));
-  strncpy(buf->version, "", sizeof(buf->version));
+  memset(buf->version, 0, sizeof(buf->version));
   strncpy(buf->machine, _machine, sizeof(buf->machine));
 
   return 0;
