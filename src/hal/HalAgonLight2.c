@@ -404,7 +404,7 @@ int agonLight2NumExtraSchedulerStacks(va_list args) {
   uint8_t *returnValue = va_arg(args, uint8_t*);
   (void) debug;
   if (returnValue != NULL) {
-    *returnValue = 2;
+    *returnValue = 0;
   }
   return 0;
 }
