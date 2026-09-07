@@ -129,11 +129,11 @@ static int32_t mockEnterPowerModeFn(va_list args) {
 
 // --- root storage --------------------------------------------------
 
-/// @fn static int32_t mockInitRootStorageNone(void)
+/// @fn static int mockInitRootStorageNone(void)
 ///
 /// @brief MOCK_STORAGE_NONE: leave rootFsPid == 0.  schedFopen and friends
 /// already treat that as "no filesystem" and return NULL/ENOENT.
-static int32_t mockInitRootStorageNone(void) {
+static int mockInitRootStorageNone(void) {
   return 0;
 }
 
@@ -256,7 +256,7 @@ int halMockInit(const HalMockConfig *config, jmp_buf *powerReturn) {
   halImpl.platform.callFileOverlay       = callOverlayFunctionFromFile;
   halImpl.platform.execCommand           = NULL;
   halImpl.platform.restartRootFilesystem = NULL;
-  halImpl.platform.restartShell          = (int32_t (*)(ProcessDescriptor*)) _restartShell;
+  halImpl.platform.restartShell          = (int (*)(ProcessDescriptor*)) _restartShell;
   if (cfg.storage == MOCK_STORAGE_FILE) {
     // TODO: POSIX SD-card process over cfg.imagePath.
     halImpl.platform.initRootStorage = halCommonInitRootFilesystem;

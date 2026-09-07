@@ -273,7 +273,7 @@ typedef struct ProcessDescriptor {
   void*             (*callOverlayFunction)(
                       const void *overlayNamespace, const void *overlay,
                       const char *function, void *args);
-  int32_t           (*restartFunction)(struct ProcessDescriptor *self);
+  int               (*restartFunction)(struct ProcessDescriptor *self);
   void               *restartArgs;
   HalCapability      *halCapabilities;
   size_t              numHalCapabilities;

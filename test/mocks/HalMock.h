@@ -72,7 +72,7 @@ HalMockConfig halMockConfigDefault(void);
 /// @brief Signature of the harness callback that fills the shell process slot.
 /// The argument is really a ProcessDescriptor*; kept as void* here so HalMock.h
 /// does not have to pull in the kernel types.
-typedef int32_t (*HalMockRestartShellFn)(void *processDescriptor);
+typedef int (*HalMockRestartShellFn)(void *processDescriptor);
 
 /// @fn void halMockSetRestartShell(HalMockRestartShellFn fn)
 ///

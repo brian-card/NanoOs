@@ -77,11 +77,11 @@ static void* driverProcessMain(void *args) {
   return NULL; // not reached
 }
 
-/// @fn static int32_t kernelTestRestartShell(void *processDescriptorRaw)
+/// @fn static int kernelTestRestartShell(void *processDescriptorRaw)
 ///
 /// @brief Installed as HAL->platform.restartShell.  Populates the shell slot
 /// with the driver process instead of a login shell.
-static int32_t kernelTestRestartShell(void *processDescriptorRaw) {
+static int kernelTestRestartShell(void *processDescriptorRaw) {
   ProcessDescriptor *processDescriptor
     = (ProcessDescriptor*) processDescriptorRaw;
 

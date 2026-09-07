@@ -4162,7 +4162,7 @@ static const char _initName[] KEEP_IN_FLASH = "init";
 /// final binary on some targets.
 static const char _dummyName[] KEEP_IN_FLASH = "dummy";
 
-/// @fn int32_t restartConsole(ProcessDescriptor *processDescriptor)
+/// @fn int restartConsole(ProcessDescriptor *processDescriptor)
 ///
 /// @brief Implementation of restartFunction to re-launch the console process if
 /// it dies.
@@ -4171,7 +4171,7 @@ static const char _dummyName[] KEEP_IN_FLASH = "dummy";
 ///   process's state.
 ///
 /// @return Returns 0 on sucess, -errno onfailure.
-int32_t restartConsole(ProcessDescriptor *processDescriptor) {
+int restartConsole(ProcessDescriptor *processDescriptor) {
   logError("Console process not running; Restarting \n");
   uint64_t *consoleStackEnd = threadStackEnd(processDescriptor->mainThread);
   *consoleStackEnd = THREAD_STACK_END_VALUE;
@@ -4186,7 +4186,7 @@ int32_t restartConsole(ProcessDescriptor *processDescriptor) {
   return 0;
 }
 
-/// @fn int32_t restartMemoryManager(ProcessDescriptor *processDescriptor)
+/// @fn int restartMemoryManager(ProcessDescriptor *processDescriptor)
 ///
 /// @brief Implementation of restartFunction to re-launch the memory manager
 /// process if it dies.
@@ -4195,7 +4195,7 @@ int32_t restartConsole(ProcessDescriptor *processDescriptor) {
 ///   process's state.
 ///
 /// @return Returns 0 on sucess, -errno onfailure.
-int32_t restartMemoryManager(ProcessDescriptor *processDescriptor) {
+int restartMemoryManager(ProcessDescriptor *processDescriptor) {
   logError("Memory manager process not running; Halting\n");
   while (1);
   if (processCreate(processDescriptor, runMemoryManager, NULL)
@@ -4210,7 +4210,7 @@ int32_t restartMemoryManager(ProcessDescriptor *processDescriptor) {
   return 0;
 }
 
-/// @fn int32_t restartBuiltinShell(ProcessDescriptor *processDescriptor)
+/// @fn int restartBuiltinShell(ProcessDescriptor *processDescriptor)
 ///
 /// @brief Implementation of restartFunction to re-launch a built-in shell if
 /// one dies or a process that occupied its slot exits.
@@ -4219,7 +4219,7 @@ int32_t restartMemoryManager(ProcessDescriptor *processDescriptor) {
 ///   process's state.
 ///
 /// @return Returns 0 on sucess, -errno onfailure.
-int32_t restartBuiltinShell(ProcessDescriptor *processDescriptor) {
+int restartBuiltinShell(ProcessDescriptor *processDescriptor) {
   logDebug("In restartBuiltinShell\n");
   if ((SCHEDULER_STATE->hostname == NULL)
     || (*SCHEDULER_STATE->hostname == '\0')
@@ -4289,7 +4289,7 @@ exit:
   return returnValue;
 }
 
-/// @fn int32_t restartOverlayShell(ProcessDescriptor *processDescriptor)
+/// @fn int restartOverlayShell(ProcessDescriptor *processDescriptor)
 ///
 /// @brief Implementation of restartFunction to re-launch a shell if one dies or
 /// a process that occupied its slot exits.
@@ -4298,7 +4298,7 @@ exit:
 ///   process's state.
 ///
 /// @return Returns 0 on sucess, -errno onfailure.
-int32_t restartOverlayShell(ProcessDescriptor *processDescriptor) {
+int restartOverlayShell(ProcessDescriptor *processDescriptor) {
   logDebug("In restartOverlayShell\n");
   if ((SCHEDULER_STATE->hostname == NULL)
     || (*SCHEDULER_STATE->hostname == '\0')
@@ -4381,7 +4381,7 @@ int32_t restartOverlayShell(ProcessDescriptor *processDescriptor) {
   return returnValue;
 }
 
-/// @fn int32_t restartLogger(ProcessDescriptor *processDescriptor)
+/// @fn int restartLogger(ProcessDescriptor *processDescriptor)
 ///
 /// @brief Implementation of restartFunction to re-launch the logger if it dies.
 ///
@@ -4389,7 +4389,7 @@ int32_t restartOverlayShell(ProcessDescriptor *processDescriptor) {
 ///   process's state.
 ///
 /// @return Returns 0 on sucess, -errno onfailure.
-int32_t restartLogger(ProcessDescriptor *processDescriptor) {
+int restartLogger(ProcessDescriptor *processDescriptor) {
   logDebug("In restartLogger\n");
   if ((SCHEDULER_STATE->hostname == NULL)
     || (*SCHEDULER_STATE->hostname == '\0')

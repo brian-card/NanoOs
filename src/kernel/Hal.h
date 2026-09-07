@@ -265,9 +265,9 @@ typedef struct HalPlatform {
   /// @brief Initialize the processes that operate the root storage system.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int32_t (*initRootStorage)(void);
+  int (*initRootStorage)(void);
 
-  /// @fn int32_t restartRootFilesystem(ProcessDescriptor *processDescriptor)
+  /// @fn int restartRootFilesystem(ProcessDescriptor *processDescriptor)
   ///
   /// @brief Start or restart the root filesystem process.
   ///
@@ -275,9 +275,9 @@ typedef struct HalPlatform {
   ///   state for the process.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int32_t (*restartRootFilesystem)(ProcessDescriptor *processDescriptor);
+  int (*restartRootFilesystem)(ProcessDescriptor *processDescriptor);
 
-  /// @fn int32_t (*restartShell)(ProcessDescriptor *processDescriptor)
+  /// @fn int (*restartShell)(ProcessDescriptor *processDescriptor)
   ///
   /// @brief Platform-specific function that will be used to restart the shell
   /// processes on exit.
@@ -286,11 +286,11 @@ typedef struct HalPlatform {
   /// the state of the shell process.
   ///
   /// @return Returns 0 on sucess, -errno onfailure.
-  int32_t (*restartShell)(ProcessDescriptor *processDescriptor);
+  int (*restartShell)(ProcessDescriptor *processDescriptor);
 } HalPlatform;
 
 typedef struct HalMemory {
-  /// @fn int32_t processStackSize(bool debug, size_t *returnValue)
+  /// @fn int processStackSize(bool debug, size_t *returnValue)
   ///
   /// @brief The size of a regular process's stack.
   ///
@@ -300,9 +300,9 @@ typedef struct HalMemory {
   ///   on success.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int32_t (*processStackSize)(bool debug, size_t *returnValue);
+  int (*processStackSize)(bool debug, size_t *returnValue);
 
-  /// @fn int32_t memoryManagerStackSize(bool debug, size_t *returnValue)
+  /// @fn int memoryManagerStackSize(bool debug, size_t *returnValue)
   ///
   /// @brief The size of the memory manager process's stack.
   ///
@@ -313,9 +313,9 @@ typedef struct HalMemory {
   ///   on success.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int32_t (*memoryManagerStackSize)(bool debug, size_t *returnValue);
+  int (*memoryManagerStackSize)(bool debug, size_t *returnValue);
 
-  /// @fn int32_t bottomOfHeap(bool debug, void **returnValue)
+  /// @fn int bottomOfHeap(bool debug, void **returnValue)
   ///
   /// @brief The memmory manager needs to know where the bottom of the heap is
   /// so that it knows where to start allocating memory.
@@ -325,9 +325,9 @@ typedef struct HalMemory {
   ///   address on success.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int32_t (*bottomOfHeap)(bool debug, void **returnValue);
+  int (*bottomOfHeap)(bool debug, void **returnValue);
 
-  /// @fn int32_t numExtraSchedulerStacks(bool debug, uint8_t *returnValue)
+  /// @fn int numExtraSchedulerStacks(bool debug, uint8_t *returnValue)
   ///
   /// @brief Get the number of extra scheduler stacks that need to be
   /// provisioned during startup.
@@ -338,9 +338,9 @@ typedef struct HalMemory {
   ///   success.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int32_t (*numExtraSchedulerStacks)(bool debug, uint8_t *returnValue);
+  int (*numExtraSchedulerStacks)(bool debug, uint8_t *returnValue);
 
-  /// @fn int32_t numExtraConsoleStacks(bool debug, uint8_t *returnValue)
+  /// @fn int numExtraConsoleStacks(bool debug, uint8_t *returnValue)
   ///
   /// @brief Get the number of extra console stacks that need to be provisioned
   /// during startup.
@@ -351,7 +351,7 @@ typedef struct HalMemory {
   ///   success.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int32_t (*numExtraConsoleStacks)(bool debug, uint8_t *returnValue);
+  int (*numExtraConsoleStacks)(bool debug, uint8_t *returnValue);
   
   // Overlay definitions.
   
@@ -417,12 +417,12 @@ typedef struct HalUart {
   /// online(HAL->uart, deviceId)
   uint32_t *online;
   
-  /// @fn int32_t init(void)
+  /// @fn int init(void)
   ///
   /// @brief Initialize the UART subsystem.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int32_t (*init)(void);
+  int (*init)(void);
   
   /// @fn configure(int32_t deviceId, uint32_t baud)
   ///
@@ -432,7 +432,7 @@ typedef struct HalUart {
   /// @param baud The desired baud rate of the UART.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int32_t (*configure)(int32_t deviceId, uint32_t baud);
+  int (*configure)(int32_t deviceId, uint32_t baud);
   
   /// @fn int poll(int32_t deviceId)
   ///
@@ -440,11 +440,11 @@ typedef struct HalUart {
   ///
   /// @param deviceId The zero-based ID of the UART to read from.
   ///
-  /// @return Returns the byte read, cast to an int32_t, on success, -errno on
+  /// @return Returns the byte read, cast to an int, on success, -errno on
   /// failure.
-  int32_t (*poll)(int32_t deviceId);
+  int (*poll)(int32_t deviceId);
   
-  /// @fn int32_t write(int32_t deviceId, const uint8_t *data, ssize_t length,
+  /// @fn int write(int32_t deviceId, const uint8_t *data, ssize_t length,
   ///   ssize_t *returnValue)
   ///
   /// @brief Write data to a UART.
@@ -457,10 +457,10 @@ typedef struct HalUart {
   ///   bytes written on success.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int32_t (*write)(int32_t deviceId, const uint8_t *data, ssize_t length,
+  int (*write)(int32_t deviceId, const uint8_t *data, ssize_t length,
     ssize_t *returnValue);
 
-  /// @fn int32_t isConsole(int32_t deviceId, bool *returnValue)
+  /// @fn int isConsole(int32_t deviceId, bool *returnValue)
   ///
   /// @brief Determine whether or not a given UART functions as a console.
   ///
@@ -469,7 +469,7 @@ typedef struct HalUart {
   ///   UART is a console, false if not.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int32_t (*isConsole)(int32_t deviceId, bool *returnValue);
+  int (*isConsole)(int32_t deviceId, bool *returnValue);
 } HalUart;
 
 typedef struct HalDio {
@@ -486,14 +486,14 @@ typedef struct HalDio {
   /// online(HAL->dio, deviceId)
   uint32_t *online;
   
-  /// @fn int32_t init(void)
+  /// @fn int init(void)
   ///
   /// @brief Initialize the DIO subsystem.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int32_t (*init)(void);
+  int (*init)(void);
   
-  /// @fn int32_t configure(int32_t deviceId, bool output)
+  /// @fn int configure(int32_t deviceId, bool output)
   ///
   /// @brief Configure a DIO for either input or output.
   ///
@@ -502,9 +502,9 @@ typedef struct HalDio {
   ///   input (false).
   ///
   /// @return Returns 0 on success, -errno onfailure.
-  int32_t (*configure)(int32_t deviceId, bool output);
+  int (*configure)(int32_t deviceId, bool output);
   
-  /// @fn int32_t write(int32_t deviceId, bool high)
+  /// @fn int write(int32_t deviceId, bool high)
   ///
   /// @brief Write either a high or low value to a DIO.  The DIO must be
   /// configured for output.
@@ -514,7 +514,7 @@ typedef struct HalDio {
   ///   (true) or low (false).
   ///
   /// @return Returns 0 on success, -errno onfailure.
-  int32_t (*write)(int32_t deviceId, bool high);
+  int (*write)(int32_t deviceId, bool high);
 } HalDio;
 
 typedef struct HalSpiDevice {
@@ -555,14 +555,14 @@ typedef struct HalSpi {
   /// online(HAL->spi, deviceId)
   uint32_t *online;
   
-  /// @fn int32_t init(void)
+  /// @fn int init(void)
   ///
   /// @brief Initialize the SPI subsystem.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int32_t (*init)(void);
+  int (*init)(void);
   
-  /// @fn int32_t configure(int32_t deviceId,
+  /// @fn int configure(int32_t deviceId,
   ///   uint8_t cs, uint8_t sck, uint8_t copi, uint8_t cipo);
   ///
   /// @brief Initialize a SPI device on the system.
@@ -575,10 +575,10 @@ typedef struct HalSpi {
   /// @param baud The baud rate the SPI is to run at.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int32_t (*configure)(int32_t deviceId,
+  int (*configure)(int32_t deviceId,
     uint8_t cs, uint8_t sck, uint8_t copi, uint8_t cipo, uint32_t baud);
 
-  /// @fn int32_t setSpeed(int32_t deviceId, uint32_t baud)
+  /// @fn int setSpeed(int32_t deviceId, uint32_t baud)
   ///
   /// @brief Change the clock rate of an already-configured SPI device.
   ///
@@ -593,7 +593,7 @@ typedef struct HalSpi {
   /// @param baud The new bit-clock rate the device should run at.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int32_t (*setSpeed)(int32_t deviceId, uint32_t baud);
+  int (*setSpeed)(int32_t deviceId, uint32_t baud);
 
   /// @fn int startTransfer(int deviceId)
   ///
@@ -603,9 +603,9 @@ typedef struct HalSpi {
   ///   transferring data with.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int32_t (*startTransfer)(int32_t deviceId);
+  int (*startTransfer)(int32_t deviceId);
   
-  /// @fn int32_t endTransfer(int32_t deviceId)
+  /// @fn int endTransfer(int32_t deviceId)
   ///
   /// @brief End a transfer with a SPI device.
   ///
@@ -613,9 +613,9 @@ typedef struct HalSpi {
   ///   transferring data with.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int32_t (*endTransfer)(int32_t deviceId);
+  int (*endTransfer)(int32_t deviceId);
   
-  /// @fn int32_t transfer8(int32_t deviceId, uint8_t data)
+  /// @fn int transfer8(int32_t deviceId, uint8_t data)
   ///
   /// @brief Tranfer 8 bits (1 byte) between the SPI controller and a
   /// peripheral.
@@ -627,9 +627,9 @@ typedef struct HalSpi {
   /// @return Returns a value in the range 0x00000000 to 0x000000ff
   /// corresponding to the 8 bits transferred from the device on success,
   /// -errno on failure.
-  int32_t (*transfer8)(int32_t deviceId, uint8_t data);
+  int (*transfer8)(int32_t deviceId, uint8_t data);
   
-  /// @fn int32_t transferBytes(int32_t deviceId,
+  /// @fn int transferBytes(int32_t deviceId,
   ///   uint8_t *data, uint32_t length)
   ///
   /// @brief Tranfer a buffer of 8-bit bytes between the SPI controller and a
@@ -644,18 +644,18 @@ typedef struct HalSpi {
   /// replaced with the bytes that were transferred from the SPI peripheral.
   /// -errno is returned and the contents of the data buffer are undefined on
   /// failure.
-  int32_t (*transferBytes)(int32_t deviceId, uint8_t *data, uint32_t length);
+  int (*transferBytes)(int32_t deviceId, uint8_t *data, uint32_t length);
 } HalSpi;
 
 typedef struct HalClock {
-  /// @fn int32_t init(void)
+  /// @fn int init(void)
   ///
   /// @brief Initialize the time subsystem.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int32_t (*init)(void);
+  int (*init)(void);
   
-  /// @fn int32_t setSystemTime(struct timespec *ts)
+  /// @fn int setSystemTime(struct timespec *ts)
   ///
   /// @brief Set the current time on the system.
   ///
@@ -663,9 +663,10 @@ typedef struct HalClock {
   ///   nanoseconds since the epoch.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int32_t (*setSystemTime)(struct timespec *ts);
+  int (*setSystemTime)(struct timespec *ts);
   
-  /// @fn int32_t getElapsedMilliseconds(int64_t startTime, int64_t *returnValue)
+  /// @fn int getElapsedMilliseconds(
+  ///   int64_t startTime, int64_t *returnValue)
   ///
   /// @brief Get the number of milliseconds that have elapsed since the
   /// provided start time.
@@ -680,9 +681,10 @@ typedef struct HalClock {
   ///   milliseconds on success.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int32_t (*getElapsedMilliseconds)(int64_t startTime, int64_t *returnValue);
+  int (*getElapsedMilliseconds)(int64_t startTime, int64_t *returnValue);
 
-  /// @fn int32_t getElapsedMicroseconds(int64_t startTime, int64_t *returnValue)
+  /// @fn int getElapsedMicroseconds(
+  ///   int64_t startTime, int64_t *returnValue)
   ///
   /// @brief Get the number of microseconds that have elapsed since the
   /// provided start time.
@@ -697,9 +699,9 @@ typedef struct HalClock {
   ///   microseconds on success.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int32_t (*getElapsedMicroseconds)(int64_t startTime, int64_t *returnValue);
+  int (*getElapsedMicroseconds)(int64_t startTime, int64_t *returnValue);
 
-  /// @fn int32_t getElapsedNanoseconds(int64_t startTime, int64_t *returnValue)
+  /// @fn int getElapsedNanoseconds(int64_t startTime, int64_t *returnValue)
   ///
   /// @brief Get the number of nanoseconds that have elapsed since the
   /// provided start time.
@@ -714,11 +716,11 @@ typedef struct HalClock {
   ///   nanoseconds on success.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int32_t (*getElapsedNanoseconds)(int64_t startTime, int64_t *returnValue);
+  int (*getElapsedNanoseconds)(int64_t startTime, int64_t *returnValue);
 } HalClock;
 
 typedef struct HalPower {
-  /// @fn int32_t enterMode(HalPowerMode powerMode)
+  /// @fn int enterMode(HalPowerMode powerMode)
   ///
   /// @brief Enter a given power mode for the system.
   ///
@@ -726,7 +728,7 @@ typedef struct HalPower {
   ///
   /// @return On success, either does not return or blocks until the mode is
   /// exited.  On error, -errno will be returned.
-  int32_t (*enterMode)(HalPowerMode powerMode);
+  int (*enterMode)(HalPowerMode powerMode);
 } HalPower;
 
 typedef struct HalTimer {
@@ -743,23 +745,23 @@ typedef struct HalTimer {
   /// online(HAL->timer, deviceId)
   uint32_t *online;
   
-  /// @fn int32_t init(void)
+  /// @fn int init(void)
   ///
   /// @brief Initialize the timer subsystem.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int32_t (*init)(void);
+  int (*init)(void);
   
-  /// @fn int32_t initDevice(int32_t deviceId)
+  /// @fn int initDevice(int32_t deviceId)
   ///
   /// @brief Initialize one of the system timers.
   ///
   /// @param deviceId The zero-based ID of the timer to initialize.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int32_t (*initDevice)(int32_t deviceId);
+  int (*initDevice)(int32_t deviceId);
   
-  /// @fn int32_t configOneShot(int32_t deviceId,
+  /// @fn int configOneShot(int32_t deviceId,
   ///   uint64_t nanoseconds, void (*callback)(void))
   ///
   /// @brief Configure a hardware timer to fire at some point in the future and
@@ -771,10 +773,10 @@ typedef struct HalTimer {
   /// @param callback The function to call when the timer fires.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int32_t (*configOneShot)(int32_t deviceId,
+  int (*configOneShot)(int32_t deviceId,
     uint64_t nanoseconds, void (*callback)(void));
   
-  /// @fn int32_t configuredNanoseconds(int32_t deviceId, uint64_t *returnValue)
+  /// @fn int configuredNanoseconds(int32_t deviceId, uint64_t *returnValue)
   ///
   /// @brief Get the number of nanoseconds a timer is configured to wait.
   ///
@@ -783,9 +785,9 @@ typedef struct HalTimer {
   ///   nanoseconds on success.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int32_t (*configuredNanoseconds)(int32_t deviceId, uint64_t *returnValue);
+  int (*configuredNanoseconds)(int32_t deviceId, uint64_t *returnValue);
 
-  /// @fn int32_t remainingNanoseconds(int32_t deviceId, uint64_t *returnValue)
+  /// @fn int remainingNanoseconds(int32_t deviceId, uint64_t *returnValue)
   ///
   /// @brief Get the remaining number of nanoseconds before a timer fires.
   ///
@@ -794,18 +796,18 @@ typedef struct HalTimer {
   ///   nanoseconds on success.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int32_t (*remainingNanoseconds)(int32_t deviceId, uint64_t *returnValue);
+  int (*remainingNanoseconds)(int32_t deviceId, uint64_t *returnValue);
   
-  /// @fn int32_t cancel(int32_t deviceId)
+  /// @fn int cancel(int32_t deviceId)
   ///
   /// @brief Cancel a timer that's currently configured.
   ///
   /// @param deviceId The zero-based ID of the timer to cancel.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int32_t (*cancel)(int32_t deviceId);
+  int (*cancel)(int32_t deviceId);
   
-  /// @fn int32_t cancelAndGet(int32_t deviceId,
+  /// @fn int cancelAndGet(int32_t deviceId,
   ///   uint64_t *configuredNanoseconds, uint64_t *remainingNanoseconds,
   ///   void (**callback)(void))
   ///
@@ -822,7 +824,7 @@ typedef struct HalTimer {
   ///   populated with the callback that the timer was going to call, if any.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int32_t (*cancelAndGet)(int32_t deviceId,
+  int (*cancelAndGet)(int32_t deviceId,
     uint64_t *configuredNanoseconds, uint64_t *remainingNanoseconds,
     void (**callback)(void));
 } HalTimer;
@@ -842,14 +844,14 @@ typedef struct HalBlockDevice {
   /// online(HAL->blockDevice, deviceId)
   uint32_t *online;
   
-  /// @fn int32_t init(void)
+  /// @fn int init(void)
   ///
   /// @brief Initialize the block device subsystem.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int32_t (*init)(void);
+  int (*init)(void);
   
-  /// @fn int32_t get(int32_t deviceId, BlockDevice **returnValue)
+  /// @fn int get(int32_t deviceId, BlockDevice **returnValue)
   ///
   /// @brief Get one of the block devices managed by the HAL.
   ///
@@ -858,7 +860,7 @@ typedef struct HalBlockDevice {
   ///   pointer on success.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int32_t (*get)(int32_t deviceId, BlockDevice **returnValue);
+  int (*get)(int32_t deviceId, BlockDevice **returnValue);
 
   /// @fn int restart(ProcessDescriptor *processDescriptor)
   ///
@@ -870,7 +872,7 @@ typedef struct HalBlockDevice {
   ///   device process to restart.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int32_t (*restart)(ProcessDescriptor *processDescriptor);
+  int (*restart)(ProcessDescriptor *processDescriptor);
 } HalBlockDevice;
 
 typedef struct Hal {
