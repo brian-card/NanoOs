@@ -636,7 +636,8 @@ exit:
 ///
 /// @param stream A pointer to a previously-opened FILE object.
 ///
-/// @return This function always succeeds and always returns 0.
+/// @return Returns 0 on success, sets errno to the appropriate value and
+/// returns EOF on failure.
 int filesystemFclose(FILE *stream) {
   int returnValue = 0;
 
