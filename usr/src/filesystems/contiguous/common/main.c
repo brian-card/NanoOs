@@ -59,11 +59,20 @@ int driverGetFileBlockMetadata(
     uint32_t *startBlock, uint32_t *numBlocks);
 int driverFeof(void *fileHandle);
 
-/// @fn static void* OpenFile(void *args)
+/// @fn void* filesystemOpenFileCommandHandler(FilesystemState *filesystemState)
 ///
-/// @brief Contiguous implementation of an fopen function.
-static void* OpenFile(void *args) {
-  FilesystemState *filesystemState = (FilesystemState*) args;
+/// @brief Command handler for an fopen call.
+///
+/// @param filesystemState A pointer to the FilesystemState managed by the
+///   process.  The args member variable will contain the processMessage that
+///   was received from the client-side fopen call.  The data payload of the
+///   message will contain the actual arguments for the call.
+///
+/// @return Sets the returnValue member of the provided FilesystemFopenArgs to
+/// the value that is to be used by the calling process, i.e. the open file on
+/// success and NULL on failure. This function always returns the
+/// filesystemState pointer argument provided.
+void* filesystemOpenFileCommandHandler(FilesystemState *filesystemState) {
   NanoOsFile *nanoOsFile = NULL;
   ProcessMessage *processMessage = (ProcessMessage*) filesystemState->args;
   FilesystemFopenArgs *fopenArgs
@@ -103,11 +112,21 @@ static void* OpenFile(void *args) {
   return filesystemState;
 }
 
-/// @fn static void* CloseFile(void *args)
+/// @fn void* filesystemCloseFileCommandHandler(
+///   FilesystemState *filesystemState)
 ///
-/// @brief Contiguous implementation of an fclose function.
-static void* CloseFile(void *args) {
-  FilesystemState *filesystemState = (FilesystemState*) args;
+/// @brief Command handler for an fclose call.
+///
+/// @param filesystemState A pointer to the FilesystemState managed by the
+///   process.  The args member variable will contain the processMessage that
+///   was received from the client-side fclose call.  The data payload of the
+///   message will contain the actual arguments for the call.
+///
+/// @return Sets the returnValue member of the provided FilesystemFcloseArgs to
+/// the value that is to be used by the calling process, i.e. 0 on success and
+/// -errno on failure. This function always returns the filesystemState pointer
+/// argument provided.
+void* filesystemCloseFileCommandHandler(FilesystemState *filesystemState) {
   ProcessMessage *processMessage = (ProcessMessage*) filesystemState->args;
   FilesystemFcloseArgs *fcloseArgs
     = (FilesystemFcloseArgs*) processMessageData(processMessage);
@@ -133,11 +152,19 @@ static void* CloseFile(void *args) {
   return filesystemState;
 }
 
-/// @fn static void* ReadFile(void *args)
+/// @fn void* filesystemReadFileCommandHandler(FilesystemState *filesystemState)
 ///
-/// @brief Contiguous implementation of an fread function.
-static void* ReadFile(void *args) {
-  FilesystemState *filesystemState = (FilesystemState*) args;
+/// @brief Command handler for an fread call.
+///
+/// @param filesystemState A pointer to the FilesystemState managed by the
+///   process.  The args member variable will contain the processMessage that
+///   was received from the client-side fread call.  The data payload of the
+///   message will contain the actual arguments for the call.
+///
+/// @return Sets the length member of the provided FilesystemIoCommandArgs to
+/// the value that is to be used by the calling process. This function always
+/// returns the filesystemState pointer argument provided.
+void* filesystemReadFileCommandHandler(FilesystemState *filesystemState) {
   ProcessMessage *processMessage = (ProcessMessage*) filesystemState->args;
   FilesystemIoCommandArgs *filesystemIoCommandArgs
     = (FilesystemIoCommandArgs*) processMessageData(processMessage);
@@ -167,11 +194,20 @@ static void* ReadFile(void *args) {
   return filesystemState;
 }
 
-/// @fn static void* WriteFile(void *args)
+/// @fn void* filesystemWriteFileCommandHandler(
+///   FilesystemState *filesystemState)
 ///
-/// @brief Contiguous implementation of an fwrite function.
-static void* WriteFile(void *args) {
-  FilesystemState *filesystemState = (FilesystemState*) args;
+/// @brief Command handler for an fwrite call.
+///
+/// @param filesystemState A pointer to the FilesystemState managed by the
+///   process.  The args member variable will contain the processMessage that
+///   was received from the client-side fwrite call.  The data payload of the
+///   message will contain the actual arguments for the call.
+///
+/// @return Sets the length member of the provided FilesystemIoCommandArgs to
+/// the value that is to be used by the calling process. This function always
+/// returns the filesystemState pointer argument provided.
+void* filesystemWriteFileCommandHandler(FilesystemState *filesystemState) {
   ProcessMessage *processMessage = (ProcessMessage*) filesystemState->args;
   FilesystemIoCommandArgs *filesystemIoCommandArgs
     = (FilesystemIoCommandArgs*) processMessageData(processMessage);
@@ -203,11 +239,21 @@ static void* WriteFile(void *args) {
   return filesystemState;
 }
 
-/// @fn static void* RemoveFile(void *args)
+/// @fn void* filesystemRemoveFileCommandHandler(
+///   FilesystemState *filesystemState)
 ///
-/// @brief Contiguous implementation of a remove function.
-static void* RemoveFile(void *args) {
-  FilesystemState *filesystemState = (FilesystemState*) args;
+/// @brief Command handler for a remove call.
+///
+/// @param filesystemState A pointer to the FilesystemState managed by the
+///   process.  The args member variable will contain the processMessage that
+///   was received from the client-side remove call.  The data payload of the
+///   message will contain the actual arguments for the call.
+///
+/// @return Sets the returnValue member of the provided FilesystemRemoveArgs to
+/// the value that is to be used by the calling process, i.e. 0 on success and
+/// -errno on failure. This function always returns the filesystemState pointer
+/// argument provided.
+void* filesystemRemoveFileCommandHandler(FilesystemState *filesystemState) {
   ProcessMessage *processMessage = (ProcessMessage*) filesystemState->args;
   FilesystemRemoveArgs *filesystemRemoveArgs
     = (FilesystemRemoveArgs*) processMessageData(processMessage);
@@ -222,11 +268,19 @@ static void* RemoveFile(void *args) {
   return filesystemState;
 }
 
-/// @fn static void* SeekFile(void *args)
+/// @fn void* filesystemSeekFileCommandHandler(FilesystemState *filesystemState)
 ///
-/// @brief Contiguous implementation of an fseek function.
-static void* SeekFile(void *args) {
-  FilesystemState *filesystemState = (FilesystemState*) args;
+/// @brief Command handler for an fseek call.
+///
+/// @param filesystemState A pointer to the FilesystemState managed by the
+///   process.  The args member variable will contain the processMessage that
+///   was received from the client-side fseek call.  The data payload of the
+///   message will contain the actual arguments for the call.
+///
+/// @return Sets the returnValue and errorNumber members of the provided
+/// FilesystemSeekArgs to the value that is to be used by the calling process.
+/// This function always returns the filesystemState pointer argument provided.
+void* filesystemSeekFileCommandHandler(FilesystemState *filesystemState) {
   ProcessMessage *processMessage = (ProcessMessage*) filesystemState->args;
   FilesystemSeekArgs *filesystemSeekArgs
     = (FilesystemSeekArgs*) processMessageData(processMessage);
@@ -249,11 +303,21 @@ static void* SeekFile(void *args) {
   return filesystemState;
 }
 
-/// @fn static void* DumpOpenFiles(void *args)
+/// @fn void* filesystemDumpOpenFilesCommandHandler(
+///   FilesystemState *filesystemState)
 ///
-/// @brief Contiguous implementation of a dumpOpenFiles function.
-static void* DumpOpenFiles(void *args) {
-  FilesystemState *filesystemState = (FilesystemState*) args;
+/// @brief Command handler for a dumpOpenFiles call.
+///
+/// @param filesystemState A pointer to the FilesystemState managed by the
+///   process.  The args member variable will contain the processMessage that
+///   was received from the client-side dumpOpenFiles call.  The data payload of
+///   the message will contain the actual arguments for the call.
+///
+/// @return Sets the returnValue member of the provided
+/// FilesystemDumpOpenFilesArgs to the value that is to be used by the calling
+/// process.  This function always returns the filesystemState pointer argument
+/// provided.
+void* filesystemDumpOpenFilesCommandHandler(FilesystemState *filesystemState) {
   ProcessMessage *processMessage = (ProcessMessage*) filesystemState->args;
   FilesystemDumpOpenFilesArgs *filesystemDumpOpenFilesArgs
     = (FilesystemDumpOpenFilesArgs*) processMessageData(processMessage);
@@ -277,11 +341,22 @@ static void* DumpOpenFiles(void *args) {
   return filesystemState;
 }
 
-/// @fn static void* GetFileBlockMetadata(void *args)
+/// @fn void* filesystemGetFileBlockMetadataCommandHandler(
+///   FilesystemState *filesystemState)
 ///
-/// @brief Contiguous implementation of a getFileBlockMetadata function.
-static void* GetFileBlockMetadata(void *args) {
-  FilesystemState *filesystemState = (FilesystemState*) args;
+/// @brief Command handler for a getFileBlockMetadata call.
+///
+/// @param filesystemState A pointer to the FilesystemState managed by the
+///   process.  The args member variable will contain the processMessage that
+///   was received from the client-side getFileBlockMetadata call.  The data
+///   payload of the message will contain the actual arguments for the call.
+///
+/// @return Sets the metadata member of the provided GetFileBlockMetadataArgs to
+//  the value that is to be used by the calling process.  This function always
+/// returns the filesystemState pointer argument provided.
+void* filesystemGetFileBlockMetadataCommandHandler(
+  FilesystemState *filesystemState
+) {
   ProcessMessage *processMessage = (ProcessMessage*) filesystemState->args;
   GetFileBlockMetadataArgs *metadataArgs
     = (GetFileBlockMetadataArgs*) processMessageData(processMessage);
@@ -295,18 +370,20 @@ static void* GetFileBlockMetadata(void *args) {
   return filesystemState;
 }
 
-/// @fn void* EndOfFile(void *args)
+/// @fn void* filesystemEndOfFileCommandHandler(void *args)
 ///
-/// @brief Contiguous implementation of an feof function.
+/// @brief Command handler for an feof call.
 ///
-/// @param args A pointer to a FilesystemState, cast to a void*.  The args
-///   member variable is a pointer to a ProcessMessage.
+/// @param filesystemState A pointer to the FilesystemState managed by the
+///   process.  The args member variable will contain the processMessage that
+///   was received from the client-side feof call.  The data payload of the
+///   message will contain the actual arguments for the call.
 ///
-/// @return Sets the metadata value of the provided GetFileBlockMetadataArgs to
-//  the value that is to be used by the calling process.  This function always
-/// returns the filesystemState pointer provided as args.
-void* EndOfFile(void *args) {
-  FilesystemState *filesystemState = (FilesystemState*) args;
+/// @return Sets the returnValue member of the provided FeofArgs to the value
+/// that is to be used by the calling process, i.e. 0 if the end of the file has
+/// not been reached and non-zero otherwise.  This function always returns the
+/// filesystemState pointer argument provided.
+void* filesystemEndOfFileCommandHandler(FilesystemState *filesystemState) {
   ProcessMessage *processMessage = (ProcessMessage*) filesystemState->args;
   FeofArgs *feofArgs = (FeofArgs*) processMessageData(processMessage);
   feofArgs->returnValue = 0;
@@ -322,21 +399,22 @@ void* EndOfFile(void *args) {
 /// @typedef FilesystemCommandHandler
 ///
 /// @brief A command handler function, indexed by FilesystemCommandResponse.
-typedef void* (*FilesystemCommandHandler)(void *args);
+typedef void* (*FilesystemCommandHandler)(FilesystemState *filesystemState);
 
 /// @var filesystemCommandHandlers
 ///
 /// @brief Array of command handlers, indexed by FilesystemCommandResponse.
 static const FilesystemCommandHandler filesystemCommandHandlers[] = {
-  OpenFile,             // FILESYSTEM_OPEN_FILE
-  CloseFile,            // FILESYSTEM_CLOSE_FILE
-  ReadFile,             // FILESYSTEM_READ_FILE
-  WriteFile,            // FILESYSTEM_WRITE_FILE
-  RemoveFile,           // FILESYSTEM_REMOVE_FILE
-  SeekFile,             // FILESYSTEM_SEEK_FILE
-  DumpOpenFiles,        // FILESYSTEM_DUMP_OPEN_FILES
-  GetFileBlockMetadata, // FILESYSTEM_GET_FILE_BLOCK_METADATA
-  EndOfFile,            // FILESYSTEM_END_OF_FILE
+  filesystemOpenFileCommandHandler,             // FILESYSTEM_OPEN_FILE
+  filesystemCloseFileCommandHandler,            // FILESYSTEM_CLOSE_FILE
+  filesystemReadFileCommandHandler,             // FILESYSTEM_READ_FILE
+  filesystemWriteFileCommandHandler,            // FILESYSTEM_WRITE_FILE
+  filesystemRemoveFileCommandHandler,           // FILESYSTEM_REMOVE_FILE
+  filesystemSeekFileCommandHandler,             // FILESYSTEM_SEEK_FILE
+  filesystemDumpOpenFilesCommandHandler,        // FILESYSTEM_DUMP_OPEN_FILES
+  // FILESYSTEM_GET_FILE_BLOCK_METADATA:
+  filesystemGetFileBlockMetadataCommandHandler,
+  filesystemEndOfFileCommandHandler,            // FILESYSTEM_END_OF_FILE
 };
 
 void* main(void *args) {
