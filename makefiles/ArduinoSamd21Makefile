@@ -45,60 +45,99 @@ SEEED_SAMD       := $(ARDUINO_HOME)/packages/Seeeduino/hardware/samd/1.8.6
 # ---- Per-board configuration -------------------------------------------------
 #
 # Each board defines:
-#   BOARD_PLATFORM    - Path to the board's platform package
-#   BOARD_VARIANT     - Variant subdirectory name
-#   BOARD_DEFINES     - Board-specific preprocessor defines
-#   BOARD_USB_VID     - USB Vendor ID
-#   BOARD_USB_PID     - USB Product ID
-#   BOARD_USB_MFR     - USB manufacturer string
-#   BOARD_USB_PRODUCT - USB product string
-#   BOARD_UF2_VOLUME  - Name of the UF2 bootloader mass-storage volume
-#   BOARD_EXTRA_LIBS  - Any extra Arduino library source files needed
+#   BOARD_PLATFORM       - Path to the board's platform package (variant/pins)
+#   BOARD_CORE_PLATFORM  - Path to the platform package to build the Arduino
+#                          core from.  Adafruit's core is a superset of
+#                          upstream and is the default for boards that are
+#                          actually Adafruit's own, but a board on a
+#                          different vendor's platform (e.g. nano_33_iot)
+#                          should use that vendor's own core instead --
+#                          mixing a variant with a core it wasn't designed
+#                          against can fail to compile (see nano_33_iot's
+#                          history: Adafruit's samd21_host.c assumes a pin
+#                          only Adafruit's own variants define).
+#   BOARD_LIB_PLATFORM   - Path to the platform package to build Arduino
+#                          library sources (SPI, etc.) from.
+#   BOARD_VARIANT        - Variant subdirectory name
+#   BOARD_DEFINES        - Board-specific preprocessor defines
+#   BOARD_USB_VID        - USB Vendor ID
+#   BOARD_USB_PID        - USB Product ID
+#   BOARD_USB_MFR        - USB manufacturer string
+#   BOARD_USB_PRODUCT    - USB product string
+#   BOARD_UF2_VOLUME     - Name of the UF2 bootloader mass-storage volume
+#   BOARD_EXTRA_LIBS     - Any extra Arduino library source files needed
+#                          (e.g. Adafruit_ZeroDMA, for boards that build
+#                          their core from Adafruit's platform); empty for
+#                          boards that don't need it
+#   BOARD_EXTRA_INCLUDES - Any extra include paths those extra libraries need
+#                          (e.g. Adafruit_TinyUSB_Arduino's headers)
 #
 # All boards share the same SAMD21 memory layout (256KB flash, 8KB bootloader,
 # 32KB RAM) and use the same linker script.
 #
-# The Adafruit toolchain and CMSIS headers are used for all boards.  The
-# variant (pin map) comes from each board's own platform package.  Core
-# sources default to the Adafruit platform; change CORE_PLATFORM below if
-# you prefer each board's native core.
+# The Adafruit toolchain and CMSIS headers are used for all boards, since
+# that's simply where this makefile downloads the (vendor-neutral) ARM
+# toolchain and CMSIS headers from.  The variant (pin map), core, and
+# libraries each come from whichever platform package BOARD_PLATFORM /
+# BOARD_CORE_PLATFORM / BOARD_LIB_PLATFORM name above.
 # ------------------------------------------------------------------------------
 
 ifeq ($(BOARD),itsybitsy_m0)
   BOARD_PLATFORM    := $(ADAFRUIT_SAMD)
+  BOARD_CORE_PLATFORM := $(ADAFRUIT_SAMD)
+  BOARD_LIB_PLATFORM  := $(ADAFRUIT_SAMD)
   BOARD_VARIANT     := itsybitsy_m0
-  BOARD_DEFINES     := -D__SAMD21G18A__ -DARDUINO_ITSYBITSY_M0 -DADAFRUIT_ITSYBITSY_M0
+  BOARD_DEFINES     := -D__SAMD21G18A__ -DARDUINO_ITSYBITSY_M0 -DADAFRUIT_ITSYBITSY_M0 \
+                        -DARDUINO_SAMD_ADAFRUIT
   BOARD_USB_VID     := 0x239A
   BOARD_USB_PID     := 0x800F
   BOARD_USB_MFR     := Adafruit
   BOARD_USB_PRODUCT := ItsyBitsy M0 Express
   BOARD_UF2_VOLUME  := ITSYBOOT
-  BOARD_EXTRA_LIBS  :=
+  BOARD_EXTRA_LIBS  := $(BOARD_LIB_PLATFORM)/libraries/Adafruit_ZeroDMA/Adafruit_ZeroDMA.cpp
+  BOARD_EXTRA_INCLUDES := -I$(BOARD_LIB_PLATFORM)/libraries/Adafruit_TinyUSB_Arduino/src/arduino \
+                          -I$(BOARD_LIB_PLATFORM)/libraries/Adafruit_ZeroDMA
 
 else ifeq ($(BOARD),feather_m0_wifi)
   BOARD_PLATFORM    := $(ADAFRUIT_SAMD)
+  BOARD_CORE_PLATFORM := $(ADAFRUIT_SAMD)
+  BOARD_LIB_PLATFORM  := $(ADAFRUIT_SAMD)
   BOARD_VARIANT     := feather_m0
-  BOARD_DEFINES     := -D__SAMD21G18A__ -DARDUINO_SAMD_FEATHER_M0 -DADAFRUIT_FEATHER_M0
+  BOARD_DEFINES     := -D__SAMD21G18A__ -DARDUINO_SAMD_FEATHER_M0 -DADAFRUIT_FEATHER_M0 \
+                        -DARDUINO_SAMD_ADAFRUIT
   BOARD_USB_VID     := 0x239A
   BOARD_USB_PID     := 0x800B
   BOARD_USB_MFR     := Adafruit
   BOARD_USB_PRODUCT := Feather M0
   BOARD_UF2_VOLUME  := FEATHERBOOT
-  BOARD_EXTRA_LIBS  :=
+  BOARD_EXTRA_LIBS  := $(BOARD_LIB_PLATFORM)/libraries/Adafruit_ZeroDMA/Adafruit_ZeroDMA.cpp
+  BOARD_EXTRA_INCLUDES := -I$(BOARD_LIB_PLATFORM)/libraries/Adafruit_TinyUSB_Arduino/src/arduino \
+                          -I$(BOARD_LIB_PLATFORM)/libraries/Adafruit_ZeroDMA
 
 else ifeq ($(BOARD),trinket_m0)
   BOARD_PLATFORM    := $(ADAFRUIT_SAMD)
+  BOARD_CORE_PLATFORM := $(ADAFRUIT_SAMD)
+  BOARD_LIB_PLATFORM  := $(ADAFRUIT_SAMD)
   BOARD_VARIANT     := trinket_m0
-  BOARD_DEFINES     := -D__SAMD21E18A__ -DARDUINO_TRINKET_M0 -DADAFRUIT_TRINKET_M0
+  BOARD_DEFINES     := -D__SAMD21E18A__ -DARDUINO_TRINKET_M0 -DADAFRUIT_TRINKET_M0 \
+                        -DARDUINO_SAMD_ADAFRUIT
   BOARD_USB_VID     := 0x239A
   BOARD_USB_PID     := 0x801E
   BOARD_USB_MFR     := Adafruit
   BOARD_USB_PRODUCT := Trinket M0
   BOARD_UF2_VOLUME  := TRINKETBOOT
-  BOARD_EXTRA_LIBS  :=
+  BOARD_EXTRA_LIBS  := $(BOARD_LIB_PLATFORM)/libraries/Adafruit_ZeroDMA/Adafruit_ZeroDMA.cpp
+  BOARD_EXTRA_INCLUDES := -I$(BOARD_LIB_PLATFORM)/libraries/Adafruit_TinyUSB_Arduino/src/arduino \
+                          -I$(BOARD_LIB_PLATFORM)/libraries/Adafruit_ZeroDMA
 
 else ifeq ($(BOARD),nano_33_iot)
+  # Not an Adafruit board: use Arduino's own SAMD core, libraries, and
+  # variant, all from the same package -- unlike the Adafruit-family boards
+  # above, this pairing was never designed to mix with Adafruit's fork of
+  # the core (see the samd21_host.c USB-host mismatch this used to hit).
   BOARD_PLATFORM    := $(ARDUINO_SAMD)
+  BOARD_CORE_PLATFORM := $(ARDUINO_SAMD)
+  BOARD_LIB_PLATFORM  := $(ARDUINO_SAMD)
   BOARD_VARIANT     := nano_33_iot
   BOARD_DEFINES     := -D__SAMD21G18A__ -DARDUINO_SAMD_NANO_33_IOT
   BOARD_USB_VID     := 0x2341
@@ -107,17 +146,23 @@ else ifeq ($(BOARD),nano_33_iot)
   BOARD_USB_PRODUCT := Arduino NANO 33 IoT
   BOARD_UF2_VOLUME  := NANO33BOOT
   BOARD_EXTRA_LIBS  :=
+  BOARD_EXTRA_INCLUDES :=
 
 else ifeq ($(BOARD),xiao_m0)
   BOARD_PLATFORM    := $(SEEED_SAMD)
+  BOARD_CORE_PLATFORM := $(ADAFRUIT_SAMD)
+  BOARD_LIB_PLATFORM  := $(ADAFRUIT_SAMD)
   BOARD_VARIANT     := XIAO_m0
-  BOARD_DEFINES     := -D__SAMD21G18A__ -DARDUINO_SEEED_XIAO_M0 -DSEEED_XIAO_M0
+  BOARD_DEFINES     := -D__SAMD21G18A__ -DARDUINO_SEEED_XIAO_M0 -DSEEED_XIAO_M0 \
+                        -DARDUINO_SAMD_ADAFRUIT
   BOARD_USB_VID     := 0x2886
   BOARD_USB_PID     := 0x802F
   BOARD_USB_MFR     := Seeed
   BOARD_USB_PRODUCT := Seeed XIAO M0
   BOARD_UF2_VOLUME  := Arduino
-  BOARD_EXTRA_LIBS  :=
+  BOARD_EXTRA_LIBS  := $(BOARD_LIB_PLATFORM)/libraries/Adafruit_ZeroDMA/Adafruit_ZeroDMA.cpp
+  BOARD_EXTRA_INCLUDES := -I$(BOARD_LIB_PLATFORM)/libraries/Adafruit_TinyUSB_Arduino/src/arduino \
+                          -I$(BOARD_LIB_PLATFORM)/libraries/Adafruit_ZeroDMA
 
 else
   $(error Unknown BOARD '$(BOARD)'. Run 'make boards' for the list.)
@@ -128,13 +173,14 @@ endif
 # Variant directory comes from the board's own platform (pin maps etc.)
 VARIANT_DIR := $(BOARD_PLATFORM)/variants/$(BOARD_VARIANT)
 
-# Core sources always come from the Adafruit platform (superset of upstream).
-# Change this to $(BOARD_PLATFORM) if you prefer each board's native core.
-CORE_PLATFORM := $(ADAFRUIT_SAMD)
+# Core and library sources: Adafruit's core is a superset of upstream and is
+# the default for boards that are actually Adafruit's own, but a board on a
+# different vendor's platform (nano_33_iot) uses that vendor's core instead
+# -- see BOARD_CORE_PLATFORM / BOARD_LIB_PLATFORM above.
+CORE_PLATFORM := $(BOARD_CORE_PLATFORM)
 CORE_DIR      := $(CORE_PLATFORM)/cores/arduino
 
-# Libraries come from the Adafruit platform
-LIB_PLATFORM := $(ADAFRUIT_SAMD)
+LIB_PLATFORM := $(BOARD_LIB_PLATFORM)
 
 # ---- Build directory (per-board) ---------------------------------------------
 
@@ -193,7 +239,6 @@ DEFINES := \
 	-DF_CPU=48000000L \
 	-DARDUINO=10607 \
 	-DARDUINO_ARCH_SAMD \
-	-DARDUINO_SAMD_ADAFRUIT \
 	-DCRYSTALLESS \
 	-DARM_MATH_CM0PLUS \
 	-DUSB_VID=$(BOARD_USB_VID) \
@@ -207,14 +252,13 @@ DEFINES := \
 
 # Include paths
 INCLUDES := \
-	-I$(LIB_PLATFORM)/libraries/Adafruit_TinyUSB_Arduino/src/arduino \
+	$(BOARD_EXTRA_INCLUDES) \
 	-I$(CMSIS)/CMSIS/Core/Include \
 	-I$(CMSIS)/CMSIS/DSP/Include \
 	-I$(CMSIS_ATMEL)/CMSIS/Device/ATMEL \
 	-I$(CORE_DIR) \
 	-I$(VARIANT_DIR) \
 	-I$(LIB_PLATFORM)/libraries/SPI \
-	-I$(LIB_PLATFORM)/libraries/Adafruit_ZeroDMA \
 	-Iusr/src/filesystems/drivers/fat32
 
 # Common compiler flags
@@ -264,10 +308,12 @@ INO_SRC         := $(SKETCH_DIR)/NanoOs.ino
 SKETCH_C_SRCS   := $(shell find $(SKETCH_DIR)/src -name '*.c' 2>/dev/null)
 SKETCH_CXX_SRCS := $(shell find $(SKETCH_DIR)/src -name '*.cpp' 2>/dev/null)
 
-# Arduino library sources
+# Arduino library sources.  Adafruit_ZeroDMA is Adafruit-specific (not part
+# of Arduino's or Seeed's own SAMD packages), so it comes in through
+# BOARD_EXTRA_LIBS for the boards that actually need it, rather than being
+# hardcoded here for every board.
 LIB_CXX_SRCS := \
 	$(LIB_PLATFORM)/libraries/SPI/SPI.cpp \
-	$(LIB_PLATFORM)/libraries/Adafruit_ZeroDMA/Adafruit_ZeroDMA.cpp \
 	$(BOARD_EXTRA_LIBS)
 
 # Board variant
