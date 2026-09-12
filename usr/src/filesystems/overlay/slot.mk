@@ -51,7 +51,7 @@ INCLUDES += \
     -I../../../include \
     -I../include \
     -Icommon/include \
-    -I../drivers/$(FILESYSTEM)/include \
+    -I../drivers/$(FILESYSTEM) \
 
 .PHONY: all clean
 

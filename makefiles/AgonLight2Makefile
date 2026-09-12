@@ -85,6 +85,7 @@ DEFINES := \
 	-DNANO_OS_AGON_LIGHT_2 \
 	-DNANOOS_EZ80 \
 	-DNANO_OS_STRINGS_STRIPPED \
+	-DNANO_OS_NO_BUILTIN_FILESYSTEM \
 
 # ---- Include paths ----------------------------------------------------------
 
@@ -96,6 +97,7 @@ INCLUDES := \
 	-Isrc \
 	-Isrc/include \
 	-Isrc/include/ez80-none-elf-clang \
+	-Iusr/src/filesystems/drivers/fat32 \
 
 # ---- Compiler flags ---------------------------------------------------------
 

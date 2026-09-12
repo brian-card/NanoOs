@@ -38,18 +38,25 @@
 #include "NanoOsUtils.h"
 #include "OverlayFilesystem.h"
 
-/// @typedef FilesystemCommandHandler
+/// @typedef OverlayFilesystemCommandEntry
 ///
 /// @brief Definition of the metadata required to handle a filesystem command.
-typedef struct FilesystemCommandHandler {
+///
+/// @note Named to avoid colliding with FilesystemCommandHandler (Filesystem.h):
+/// that's a function pointer type, used by the kernel-linked and contiguous
+/// builds, which can call a command handler directly since their own binary
+/// only ever holds one; this overlay build instead reaches its handlers
+/// through callOverlayFunction, so what it needs per command is which
+/// overlay to load and which exported name to call within it.
+typedef struct OverlayFilesystemCommandEntry {
   void *overlay;
   const char *function;
-} FilesystemCommandHandler;
+} OverlayFilesystemCommandEntry;
 
 /// @var filesystemCommandHandlers
 ///
-/// @brief Array of FilesystemCommandHandler metadata.
-const FilesystemCommandHandler filesystemCommandHandlers[] = {
+/// @brief Array of OverlayFilesystemCommandEntry metadata.
+const OverlayFilesystemCommandEntry filesystemCommandHandlers[] = {
   // FILESYSTEM_OPEN_FILE:
   {OPEN_FILE_OVERLAY, "OpenFile"},
   // FILESYSTEM_CLOSE_FILE:
@@ -68,6 +75,8 @@ const FilesystemCommandHandler filesystemCommandHandlers[] = {
   {GET_FILE_BLOCK_METADATA_OVERLAY, "GetFileBlockMetadata"},
   // FILESYSTEM_END_OF_FILE:
   {END_OF_FILE_OVERLAY, "EndOfFile"},
+  // FILESYSTEM_FORMAT:
+  {FORMAT_OVERLAY, "Format"},
 };
 
 void* main(void *args) {

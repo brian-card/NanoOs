@@ -816,6 +816,25 @@ static ProcessMessage _logMessages[NUM_LOG_ENTRIES];
 /// metadata for all processes on the system, including the scheduler.
 static ProcessDescriptor _allProcesses[NUM_PROCESSES];
 
+// We want to link in the built-in filesystem and FAT32 implementation, so
+// provide those declarations here.  Only the Mega 2560 (via
+// HalArduinoMega2560.c) actually wires restartRootFilesystem to
+// restartBuiltinFilesystem; the Nano Every never does, so these are simply
+// unused there -- harmless, since NANO_OS_NO_BUILTIN_FILESYSTEM isn't
+// defined for either AVR target (see NanoOsBuiltinFilesystem.h), so both
+// still link the driver in.
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+extern FilesystemState* filesystemInitDriver(FilesystemState
+ *filesystemState);
+extern const FilesystemCommandHandler
+  fat32CommandHandlers[NUM_FILESYSTEM_COMMANDS];
+#ifdef __cplusplus
+}
+#endif
+
 int halArduinoAvrInit(HalArduinoAvrInitArgs *args) {
   // Wire up per-subsystem function arrays.
   // HAL_TIMER is not supported on this platform — leave halFunctions[HAL_TIMER] NULL.
@@ -882,7 +901,10 @@ int halArduinoAvrInit(HalArduinoAvrInitArgs *args) {
   }
   halImpl.memory.processStorage = _processStorage;
 
-  return halCommonInit();
+  return halCommonInit(
+    /* builtinFilesystemInitDriver= */ filesystemInitDriver,
+    /* builtinFilesystemCommandHandlers= */ fat32CommandHandlers
+  );
 }
 
 #endif // defined(__AVR_ATmega4809__) || defined(__AVR_ATmega2560__)

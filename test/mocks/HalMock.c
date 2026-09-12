@@ -361,7 +361,12 @@ int halMockInit(const HalMockConfig *config, jmp_buf *powerReturn) {
 
   NANO_OS_API = &nanoOsApi;
 
-  return halCommonInit();
+  // The mock HAL doesn't exercise the builtin filesystem path (its
+  // restartRootFilesystem stays NULL), so there's no driver to hand
+  // halCommonInit here.
+  return halCommonInit(
+    /* builtinFilesystemInitDriver= */ NULL,
+    /* builtinFilesystemCommandHandlers= */ NULL);
 }
 
 #endif // __x86_64__

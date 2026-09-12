@@ -53,7 +53,8 @@ endif
 
 # Mirrors of the per-directory makefiles (paths rebased to test/ as cwd).
 KERNEL_CFLAGS := $(BASE_CFLAGS) -rdynamic
-KERNEL_INC    := -I../src/user -I../src/include
+KERNEL_INC    := -I../src/user -I../src/include \
+    -I../usr/src/filesystems/drivers/fat32
 
 USER_CFLAGS   := $(BASE_CFLAGS) -rdynamic
 USER_INC      := -I../src/kernel -I../src/include
@@ -74,6 +75,7 @@ TEST_INC      := -I../sim -Iframework -Iharness -Imocks
 
 KERNEL_SRCS := \
     Commands Console Coroutines CTypeSupport Fat32Filesystem Filesystem \
+    FilesystemCommandHandlers \
     Hal Link Logger MemoryManager Messages NanoOs Overlay Processes \
     Scheduler SdCard SdCardSpi
 

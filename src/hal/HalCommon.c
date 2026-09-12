@@ -49,7 +49,6 @@
 
 // NanoOs includes
 #include "../kernel/Coroutines.h"
-#include "../kernel/Fat32Filesystem.h"
 #include "../kernel/MemoryManager.h"
 #include "../kernel/NanoOs.h"
 #include "../kernel/Overlay.h"
@@ -654,6 +653,18 @@ int halCommonInitRootFilesystem(void) {
   return 0;
 }
 
+/// @var _builtinFilesystemInitDriver
+///
+/// @brief File-local variable to hold the value to set fs.driverInit to in
+/// restartBuiltinFilesystem.
+static FilesystemDriverInit _builtinFilesystemInitDriver;
+
+/// @var _builtinFilesystemCommandHandlers
+///
+/// @brief File-local variable to hold the value to set fs.commandHandlers to
+/// in restartBuiltinFilesystem.
+static const FilesystemCommandHandler *_builtinFilesystemCommandHandlers;
+
 /// @fn int restartBuiltinFilesystem(ProcessDescriptor *processDescriptor)
 ///
 /// @brief Restart the filesystem process built into the OS image using the
@@ -674,16 +685,9 @@ int restartBuiltinFilesystem(ProcessDescriptor *processDescriptor) {
   memset(&fs, 0, sizeof(fs));
   fs.blockDevice = rootBlockDevice;
   fs.blockSize = fs.blockDevice->blockSize;
-  fs.driverInit = fat32Initialize;
-  fs.driverFopen = fat32Fopen;
-  fs.driverFread = fat32Fread;
-  fs.driverFwrite = fat32Fwrite;
-  fs.driverFclose = fat32Fclose;
-  fs.driverRemove = fat32Remove;
-  fs.driverFseek = fat32Fseek;
-  fs.driverGetFileBlockMetadata = fat32GetFileBlockMetadata;
-  fs.driverGetFilename = fat32GetFilename;
-  fs.driverFeof = fat32Feof;
+
+  fs.driverInit = _builtinFilesystemInitDriver;
+  fs.commandHandlers = _builtinFilesystemCommandHandlers;
 
   if (processCreate(processDescriptor, runFilesystem, &fs)
     != processSuccess
@@ -828,13 +832,18 @@ int restartContiguousFilesystem(ProcessDescriptor *processDescriptor) {
   return 0;
 }
 
-/// @fn int halCommonInit(void)
+/// @fn int halCommonInit(
+///   FilesystemDriverInit builtinFilesystemInitDriver,
+///   const FilesystemCommandHandler *builtinFilesystemCommandHandlers)
 ///
 /// @brief Initialization function common to multiple HAL implementations.
 /// Uses the global HAL pointer to call subsystem init and configure functions.
 ///
 /// @return Returns 0 on success, -errno on failure.
-int halCommonInit(void) {
+int halCommonInit(
+  FilesystemDriverInit builtinFilesystemInitDriver,
+  const FilesystemCommandHandler *builtinFilesystemCommandHandlers
+) {
   if (HAL == NULL) {
     return -EINVAL;
   }
@@ -906,6 +915,9 @@ int halCommonInit(void) {
   if ((HAL->memory.logBuffer != NULL) && (HAL->memory.logBufferSize > 0)) {
     memset(HAL->memory.logBuffer, 0, HAL->memory.logBufferSize);
   }
+
+  _builtinFilesystemInitDriver = builtinFilesystemInitDriver;
+  _builtinFilesystemCommandHandlers = builtinFilesystemCommandHandlers;
 
   return 0;
 }

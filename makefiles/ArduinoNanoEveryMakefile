@@ -124,7 +124,8 @@ INCLUDES := \
 	-I$(CORE_DIR) \
 	-I$(CORE_DIR)/api/deprecated \
 	-I$(VARIANT_DIR) \
-	-I$(LIB_PLATFORM)/libraries/SPI/src
+	-I$(LIB_PLATFORM)/libraries/SPI/src \
+	-Iusr/src/filesystems/drivers/fat32
 
 # Common compiler flags
 #

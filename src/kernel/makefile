@@ -45,6 +45,7 @@ LINKS = \
 INCLUDES = \
     -I../user \
     -I../include \
+    -I../../usr/src/filesystems/drivers/fat32 \
 
 WARNINGS = \
     -Wall \
@@ -61,6 +62,7 @@ OBJECTS = \
     $(OBJ_DIR)/CTypeSupport.o \
     $(OBJ_DIR)/Fat32Filesystem.o \
     $(OBJ_DIR)/Filesystem.o \
+    $(OBJ_DIR)/FilesystemCommandHandlers.o \
     $(OBJ_DIR)/Hal.o \
     $(OBJ_DIR)/Link.o \
     $(OBJ_DIR)/Logger.o \

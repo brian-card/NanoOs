@@ -1656,7 +1656,12 @@ int halAgonLight2Init(void) {
 
   NANO_OS_API = &nanoOsApi;
 
-  int returnValue = halCommonInit();
+  // AgonLight2 always runs its filesystem as a contiguous overlay process
+  // (see restartContiguousFilesystem, selected below), never the builtin
+  // path, so there's no driver to hand halCommonInit here.
+  int returnValue = halCommonInit(
+    /* builtinFilesystemInitDriver= */ NULL,
+    /* builtinFilesystemCommandHandlers= */ NULL);
 
   enableInterrupts();
 

@@ -112,7 +112,8 @@ DEFINES := \
 INCLUDES := \
 	-I$(CORE_DIR) \
 	-I$(VARIANT_DIR) \
-	-I$(LIB_PLATFORM)/libraries/SPI/src
+	-I$(LIB_PLATFORM)/libraries/SPI/src \
+	-Iusr/src/filesystems/drivers/fat32
 
 # Common compiler flags
 COMMON_FLAGS := \

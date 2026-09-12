@@ -1548,6 +1548,22 @@ static const char _bannerLine[] KEEP_IN_FLASH
 static const char _corruptionWarning[] KEEP_IN_FLASH
   = "* Running user programs will corrupt system memory!!! *\n";
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
+// We want to link in the built-in filesystem and FAT32 implementation, so
+// provide those declarations here.
+extern FilesystemState* filesystemInitDriver(FilesystemState
+ *filesystemState);
+extern const FilesystemCommandHandler
+  fat32CommandHandlers[NUM_FILESYSTEM_COMMANDS];
+
+#ifdef __cplusplus
+} // extern "C"
+#endif
+
 int halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
   // Wire up per-subsystem function arrays.
   halFunctions[HAL_MEMORY]       = arduinoSamD21x18AMemoryFunctions;
@@ -1656,7 +1672,10 @@ int halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
 
   NANO_OS_API = &nanoOsApi;
 
-  return halCommonInit();
+  return halCommonInit(
+    /* builtinFilesystemInitDriver= */ filesystemInitDriver,
+    /* builtinFilesystemCommandHandlers= */ fat32CommandHandlers
+  );
 }
 
 #endif // defined(__SAMD21G18A__) || defined(__SAMD21E18A__)

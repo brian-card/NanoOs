@@ -79,7 +79,9 @@ int halCommonInitRootFilesystem(void);
 int restartBuiltinFilesystem(ProcessDescriptor *processDescriptor);
 int restartOverlayFilesystem(ProcessDescriptor *processDescriptor);
 int restartContiguousFilesystem(ProcessDescriptor *processDescriptor);
-int halCommonInit(void);
+int halCommonInit(
+  FilesystemDriverInit builtinFilesystemInitDriver,
+  const FilesystemCommandHandler *builtinFilesystemCommandHandlers);
 
 #ifdef __cplusplus
 } // extern "C"

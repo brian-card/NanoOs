@@ -41,6 +41,7 @@ INCLUDES := \
     -Ihal \
     -Ikernel \
     -Iuser \
+    -I../usr/src/filesystems/drivers/fat32 \
 
 WARNINGS := \
     -Wall \
@@ -69,6 +70,7 @@ OS_OBJECTS := \
     $(OBJ_DIR)/CTypeSupport.o \
     $(OBJ_DIR)/Fat32Filesystem.o \
     $(OBJ_DIR)/Filesystem.o \
+    $(OBJ_DIR)/FilesystemCommandHandlers.o \
     $(OBJ_DIR)/Hal.o \
     $(OBJ_DIR)/HalCommon.o \
     $(OBJ_DIR)/HalPosix.o \

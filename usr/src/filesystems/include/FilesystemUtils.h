@@ -38,7 +38,14 @@
 #ifndef FILESYSTEMS_FILESYSTEM_UTILS_H
 #define FILESYSTEMS_FILESYSTEM_UTILS_H
 
+// ExecutiveProcesses.h routes through the overlay API table (overlayMap),
+// which only exists in the freestanding contiguous/overlay filesystem
+// builds.  The kernel-linked build already has real, direct declarations of
+// everything it provides (see Fat32Filesystem.c/FilesystemCommandHandlers.c),
+// so skip it there.
+#ifndef NANO_OS_KERNEL_BUILD
 #include "ExecutiveProcesses.h"
+#endif // NANO_OS_KERNEL_BUILD
 #include "../../../../src/kernel/Filesystem.h"
 
 #ifdef __cplusplus

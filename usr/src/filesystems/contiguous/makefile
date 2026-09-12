@@ -48,7 +48,7 @@ INCLUDES += \
     -I../../../../src/user \
     -I../../../include \
     -I../include \
-    -I../drivers/$(FILESYSTEM)/include \
+    -I../drivers/$(FILESYSTEM) \
 
 # Maximum size, in bytes, of the contiguous overlay binary.  It is placed at
 # a fixed block offset (see buildsim/builddev) with no per-slot budget to

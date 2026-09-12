@@ -69,6 +69,30 @@ extern "C"
 /// "\0FILESYS" as a 64-bit, little-endian value.
 #define FILESYSTEM_COMMAND_SIGNATURE ((int64_t) 0x535953454C494600)
 
+/// @typedef FilesystemCommandHandler
+///
+/// @brief A command handler function, indexed by FilesystemCommandResponse.
+///
+/// @param args A pointer to the FilesystemState the handler should operate
+///   on, cast to a void*.  The state's own args member holds the
+///   ProcessMessage being answered.
+///
+/// @return The same pointer passed in, cast back from void*.  (This lets a
+/// caller confirm the handler ran to completion rather than, say, jumping
+/// through an uninitialized function pointer and returning garbage; see the
+/// overlay-callable convention this signature is shared with.)
+typedef void* (*FilesystemCommandHandler)(void *args);
+
+/// @typedef FilesystemDriverInit
+///
+/// @brief A function that initializes a filesystem.
+///
+/// @param fs A pointer to the FilesystemState the function should initialize.
+///
+/// @return Returns the FilesystemState pointer passed in.
+typedef struct FilesystemState* (*FilesystemDriverInit)(
+  struct FilesystemState *fs);
+
 /// @struct FilesystemState
 ///
 /// @brief State metadata the filesystem process uses to provide access to
@@ -87,46 +111,31 @@ extern "C"
 /// @param openFiles A pointer to the first FILE that's open.
 /// @param startLba The address of the first block of the filesystem.
 /// @param endLba The address of the last block of the filesystem.
-/// @param driverInit Pointer to the driver initialization function.
-/// @param driverFopen Pointer to the driver function to open a file.
-/// @param driverFread Pointer to the driver function to read a file.
-/// @param driverFwrite Pointer to the driver function to write a file.
-/// @param driverFclose Pointer to the driver function to close a file.
-/// @param driverRemove Pointer to the driver function to remove a file.
-/// @param driverFseek Pointer to the driver function to seek within a file.
-/// @param driverGetFileBlockMetadata Pointer to the driver function to get the
-///   block-level metadata of a file.
-/// @param driverGetFilename Pointer to the driver function to get the name of
-///   a file given its file handle.
-/// @param driverFeof Pointer to the driver function to determine whether or not
-///   a file handle is positioned at its end.
+/// @param driverInit Pointer to the driver's initialization function, or
+///   NULL if no driver is linked directly into this build.  Populated by
+///   whichever platform-specific HAL code creates the filesystem process (see
+///   restartBuiltinFilesystem in HalCommon.c); Filesystem.c itself never names
+///   a specific driver, so it stays buildable on every target regardless of
+///   which -- if any -- is linked in.
+/// @param commandHandlers Pointer to a NUM_FILESYSTEM_COMMANDS-length array
+///   of command handler functions, indexed by FilesystemCommandResponse, or
+///   NULL under the same condition as driverInit.  Which concrete
+///   filesystem backs these -- FAT32 today, potentially something else in
+///   the future -- is a build-time choice (which driver source is linked
+///   in), not a runtime one; this is what lets that choice live in the HAL
+///   layer instead of here.
 typedef struct FilesystemState {
-  void               *args;
-  void               *driverState;
-  BlockDevice        *blockDevice;
-  uint8_t            *blockBuffer;
-  uint16_t            blockSize;
-  uint8_t             numOpenFiles;
-  FILE               *openFiles;
-  uint32_t            startLba;
-  uint32_t            endLba;
-  int               (*driverInit)(struct FilesystemState* filesystemState);
-  void*             (*driverFopen)(
-    void *driverState, const char *filePath, const char *mode);
-  int               (*driverFread)(
-    void *driverState, void *ptr, uint32_t length,
-    void *fileHandle);
-  int               (*driverFwrite)(
-    void *driverState, void *ptr, uint32_t length,
-    void *fileHandle);
-  int               (*driverFclose)(void *driverState, void *fileHandle);
-  int               (*driverRemove)(void *driverState, const char *pathname);
-  int               (*driverFseek)(void *driverState,
-    void *fileHandle, long offset, int whence);
-  int               (*driverGetFileBlockMetadata)(void *ds, void *fileHandle,
-    uint32_t *startBlock, uint32_t *numBlocks);
-  const char*       (*driverGetFilename)(void *fileHandle);
-  int               (*driverFeof)(void *fileHandle);
+  void                           *args;
+  void                           *driverState;
+  BlockDevice                    *blockDevice;
+  uint8_t                        *blockBuffer;
+  uint16_t                        blockSize;
+  uint8_t                         numOpenFiles;
+  FILE                           *openFiles;
+  uint32_t                        startLba;
+  uint32_t                        endLba;
+  FilesystemDriverInit            driverInit;
+  const FilesystemCommandHandler *commandHandlers;
 } FilesystemState;
 
 /// @struct FilesystemIoCommandArgs
@@ -245,6 +254,51 @@ typedef struct FeofArgs {
   int   returnValue;
 } FeofArgs;
 
+/// @def FAT32_FORMAT_SIGNATURE
+///
+/// @brief Signature identifying a Fat32FormatArgs structure.  "FAT32FMT" as
+/// a 64-bit, little-endian value.
+///
+/// @details FILESYSTEM_FORMAT is a single, filesystem-agnostic command slot
+/// (see FilesystemCommandResponse) that could in principle be answered by
+/// any driver's format handler, but Fat32FormatArgs's shape -- and any other
+/// driver's own equivalent -- is specific to what that filesystem type
+/// needs. This build only ever links one driver in, so nothing today would
+/// send a mismatched payload, but the FAT32 format handler checks this
+/// field first regardless: it's the only thing standing between a future
+/// build that links a different driver and that driver misreading someone
+/// else's format arguments as its own.
+#define FAT32_FORMAT_SIGNATURE ((int64_t) 0x544D463233544146)
+
+/// @struct Fat32FormatArgs
+///
+/// @brief Function parameters and return value for the FILESYSTEM_FORMAT
+/// command handler.
+///
+/// @note Named for FAT32, not the filesystem-agnostic "Filesystem*Args"
+/// convention the other structs here follow: unlike open/read/write/seek,
+/// which have universal semantics regardless of what's on disk, a format
+/// operation's parameters are inherently specific to the filesystem type
+/// being written.  A future second filesystem driver would define its own
+/// args struct (and its own client-facing format function) shaped for
+/// whatever parameters that filesystem type actually needs.
+///
+/// @param signature Must be FAT32_FORMAT_SIGNATURE.  Lets the FAT32 format
+///   handler recognize and refuse a payload built for some other driver's
+///   format command before touching any of the fields below.
+/// @param volumeLabel A string containing the volume label to write, up to 11
+///   characters.  May be NULL or empty for no label.
+/// @param clusterSize The desired cluster size in bytes, or 0 to use a default
+///   derived from the size of the partition.
+/// @param returnValue The return value of the operation that will be passed
+///   back from the handler.
+typedef struct Fat32FormatArgs {
+  int64_t  signature;
+  char    *volumeLabel;
+  uint32_t clusterSize;
+  int      returnValue;
+} Fat32FormatArgs;
+
 /// @enum FilesystemCommandResponse
 ///
 /// @brief Commands and responses understood by the filesystem inter-process
@@ -260,13 +314,12 @@ typedef enum FilesystemCommandResponse {
   FILESYSTEM_DUMP_OPEN_FILES,
   FILESYSTEM_GET_FILE_BLOCK_METADATA,
   FILESYSTEM_END_OF_FILE,
+  FILESYSTEM_FORMAT,
   NUM_FILESYSTEM_COMMANDS,
   // Responses:
 } FilesystemCommandResponse;
 
 // Exported functionality
-int getPartitionInfo(FilesystemState *fs);
-
 FILE* filesystemFopen(const char *pathname, const char *mode);
 #ifdef fopen
 #undef fopen
@@ -328,6 +381,22 @@ long filesystemFtell(FILE *stream);
 int getFileBlockMetadataFromFile(FILE *stream, FileBlockMetadata *metadata);
 int getFileBlockMetadataFromPath(const char *path, FileBlockMetadata *metadata);
 void* runFilesystem(void *args);
+
+/// @fn int fat32Format(const char *volumeLabel, uint32_t clusterSize)
+///
+/// @brief Format the root filesystem's partition as FAT32.
+///
+/// @note Named for FAT32, not "filesystemFormat": unlike fopen/fread/fwrite,
+/// a format call's parameters are inherently specific to the filesystem type
+/// being written, so there is no filesystem-agnostic name for it to share.
+///
+/// @param volumeLabel A string containing the volume label to write, up to 11
+///   characters.  May be NULL or empty for no label.
+/// @param clusterSize The desired cluster size in bytes, or 0 to use a
+///   default derived from the size of the partition.
+///
+/// @return Returns 0 on success, -1 and sets the value of errno on failure.
+int fat32Format(const char *volumeLabel, uint32_t clusterSize);
 
 #ifdef __cplusplus
 } // extern "C"

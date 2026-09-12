@@ -517,7 +517,12 @@ int halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
 
   NANO_OS_API = &nanoOsApi;
 
-  return halCommonInit();
+  // POSIX/sim always runs its filesystem as a contiguous overlay process
+  // (see restartContiguousFilesystem, selected below), never the builtin
+  // path, so there's no driver to hand halCommonInit here.
+  return halCommonInit(
+    /* builtinFilesystemInitDriver= */ NULL,
+    /* builtinFilesystemCommandHandlers= */ NULL);
 }
 
 #endif // __x86_64__

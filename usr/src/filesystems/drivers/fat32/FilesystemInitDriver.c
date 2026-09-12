@@ -34,8 +34,10 @@
 #include <string.h>
 
 // NanoOs includes
+#ifndef NANO_OS_KERNEL_BUILD
 #include "ExecutiveProcesses.h"
 #include "NanoOsUtils.h"
+#endif // NANO_OS_KERNEL_BUILD
 #include "Fat32.h"
 
 /// @fn FilesystemState* filesystemInitDriver(FilesystemState *filesystemState)

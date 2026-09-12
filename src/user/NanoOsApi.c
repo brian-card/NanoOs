@@ -133,6 +133,7 @@ NanoOsApi nanoOsApi = {
   .fileno = nanoOsFileno,
   .feof = filesystemEndOfFile,
   .ftell = filesystemFtell,
+  .fat32Format = fat32Format,
   
   // Formatted I/O:
   .vsscanf = vsscanf,

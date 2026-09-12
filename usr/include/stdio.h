@@ -77,6 +77,16 @@ static inline int fileno(FILE *stream) {
 static inline int feof(FILE *stream) {
   return overlayMap.header.osApi->feof(stream);
 }
+// NanoOs extension: not part of the standard C library.  Formats the root
+// filesystem's partition as FAT32.  Named for FAT32 rather than a generic
+// "format", since -- unlike fopen/fread/fwrite -- its parameters (a volume
+// label, a cluster size) are inherent to the filesystem type being written,
+// not universal across whatever this build happens to link in.  volumeLabel
+// may be NULL/empty for no label; clusterSize may be 0 to use a default
+// derived from the partition's size.
+static inline int fat32Format(const char *volumeLabel, uint32_t clusterSize) {
+  return overlayMap.header.osApi->fat32Format(volumeLabel, clusterSize);
+}
 static inline int ftell(FILE *stream) {
   return overlayMap.header.osApi->ftell(stream);
 }

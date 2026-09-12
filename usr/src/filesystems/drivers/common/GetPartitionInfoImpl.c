@@ -48,9 +48,11 @@
 #include <string.h>
 
 // NanoOs includes
+#ifndef NANO_OS_KERNEL_BUILD
 #include "ExecutiveProcesses.h"
 #include "NanoOsUtils.h"
 #include "FilesystemUtils.h"
+#endif // NANO_OS_KERNEL_BUILD
 
 /// @fn FilesystemState* getPartitionInfoImpl(FilesystemState *filesystemState)
 ///

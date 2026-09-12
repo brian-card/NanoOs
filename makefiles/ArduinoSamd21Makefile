@@ -39,8 +39,8 @@ CMSIS            := $(ARDUINO_HOME)/packages/adafruit/tools/CMSIS/5.4.0
 CMSIS_ATMEL      := $(ARDUINO_HOME)/packages/adafruit/tools/CMSIS-Atmel/1.2.2
 
 ADAFRUIT_SAMD    := $(ARDUINO_HOME)/packages/adafruit/hardware/samd/1.7.17
-ARDUINO_SAMD     := $(ARDUINO_HOME)/packages/arduino/hardware/samd/1.8.13
-SEEED_SAMD       := $(ARDUINO_HOME)/packages/Seeeduino/hardware/samd/1.8.5
+ARDUINO_SAMD     := $(ARDUINO_HOME)/packages/arduino/hardware/samd/1.8.14
+SEEED_SAMD       := $(ARDUINO_HOME)/packages/Seeeduino/hardware/samd/1.8.6
 
 # ---- Per-board configuration -------------------------------------------------
 #
@@ -214,7 +214,8 @@ INCLUDES := \
 	-I$(CORE_DIR) \
 	-I$(VARIANT_DIR) \
 	-I$(LIB_PLATFORM)/libraries/SPI \
-	-I$(LIB_PLATFORM)/libraries/Adafruit_ZeroDMA
+	-I$(LIB_PLATFORM)/libraries/Adafruit_ZeroDMA \
+	-Iusr/src/filesystems/drivers/fat32
 
 # Common compiler flags
 COMMON_FLAGS := \

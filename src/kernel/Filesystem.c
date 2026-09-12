@@ -15,390 +15,15 @@
 
 #include "../user/NanoOsStdio.h"
 
-// Partition table constants
-#define PARTITION_TABLE_OFFSET 0x1BE
-#define PARTITION_ENTRY_SIZE 16
-
-#define PARTITION_TYPE_FAT16_LBA 0x0E
-#define PARTITION_TYPE_FAT16_LBA_EXTENDED 0x1E
-#define PARTITION_TYPE_FAT32_LBA 0x0C
-#define PARTITION_TYPE_LINUX 0x83
-
-#define PARTITION_LBA_OFFSET 8
-#define PARTITION_SECTORS_OFFSET 12
-
-/// @typedef FilesystemCommandHandler
-///
-/// @brief Definition of a filesystem command handler function.
-typedef int (*FilesystemCommandHandler)(FilesystemState*, ProcessMessage*);
-
-/// @fn int filesystemOpenFileCommandHandler(
-///   FilesystemState *filesystemState, ProcessMessage *processMessage)
-///
-/// @brief Command handler for FILESYSTEM_OPEN_FILE command.
-///
-/// @param filesystemState A pointer to the FilesystemState object maintained
-///   by the filesystem process.
-/// @param processMessage A pointer to the ProcessMessage that was received by
-///   the filesystem process.
-///
-/// @return Returns 0 on success, a standard POSIX error code on failure.
-int filesystemOpenFileCommandHandler(
-  FilesystemState *filesystemState, ProcessMessage *processMessage
-) {
-  NanoOsFile *nanoOsFile = NULL;
-  FilesystemFopenArgs *fopenArgs
-    = (FilesystemFopenArgs*) processMessageData(processMessage);
-
-  logDebug("Opening file \"%s\" in mode \"%s\"\n",
-    fopenArgs->pathname, fopenArgs->mode);
-
-  if (filesystemState->driverState != NULL) {
-    void *fileHandle = filesystemState->driverFopen(
-      filesystemState->driverState,
-      fopenArgs->pathname, fopenArgs->mode);
-    if (fileHandle != NULL) {
-      nanoOsFile = (NanoOsFile*) malloc(sizeof(NanoOsFile));
-      if (nanoOsFile != NULL) {
-        nanoOsFile->file = fileHandle;
-        nanoOsFile->currentPosition = 0;
-        nanoOsFile->fd = fopenArgs->fd;
-        nanoOsFile->owner = processPid(processMessageFrom(processMessage));
-        filesystemState->numOpenFiles++;
-
-        nanoOsFile->next = filesystemState->openFiles;
-        nanoOsFile->prev = NULL;
-        if (filesystemState->openFiles != NULL) {
-          filesystemState->openFiles->prev = nanoOsFile;
-        }
-        filesystemState->openFiles = nanoOsFile;
-      } else {
-        filesystemState->driverFclose(filesystemState->driverState, fileHandle);
-      }
-    } else {
-      logError("driverFopen returned NULL\n");
-    }
-  } else {
-    logCritical("driverState is not valid!\n");
-  }
-
-  fopenArgs->returnValue = nanoOsFile;
-  processMessageSetDone(processMessage);
-  return 0;
-}
-
-/// @fn int filesystemCloseFileCommandHandler(
-///   FilesystemState *filesystemState, ProcessMessage *processMessage)
-///
-/// @brief Command handler for FILESYSTEM_CLOSE_FILE command.
-///
-/// @param filesystemState A pointer to the FilesystemState object maintained
-///   by the filesystem process.
-/// @param processMessage A pointer to the ProcessMessage that was received by
-///   the filesystem process.
-///
-/// @return Returns 0 on success, a standard POSIX error code on failure.
-int filesystemCloseFileCommandHandler(
-  FilesystemState *filesystemState, ProcessMessage *processMessage
-) {
-  // A note about the way this function is written:
-  //
-  // I used to have sensible variables in this function.  That worked fine most
-  // of the time.  However, I was getting stack corruptions when debug messages
-  // were enabled.  So, I had to reduce the number of variables declared here.
-  // I know it's tempting, but *DO NOT* declare more variables in this function.
-  // Yes, it would definitely be more clear if there were proper variables
-  // declared and used in this function, but functionality comes first.
-  //
-  // JBC 2026-02-17
-  FilesystemFcloseArgs *fcloseArgs
-    = (FilesystemFcloseArgs*) processMessageData(processMessage);
-  if (filesystemState->driverState != NULL) {
-    fcloseArgs->returnValue = filesystemState->driverFclose(
-      filesystemState->driverState, fcloseArgs->stream->file);
-    if (filesystemState->numOpenFiles > 0) {
-      filesystemState->numOpenFiles--;
-    }
-    if (fcloseArgs->stream->next != NULL) {
-      fcloseArgs->stream->next->prev = fcloseArgs->stream->prev;
-    }
-    if (fcloseArgs->stream->prev != NULL) {
-      fcloseArgs->stream->prev->next = fcloseArgs->stream->next;
-    }
-    if (fcloseArgs->stream == filesystemState->openFiles) {
-      filesystemState->openFiles = fcloseArgs->stream->next;
-    }
-  }
-  free(fcloseArgs->stream);
-
-  processMessageSetDone(processMessage);
-  return 0;
-}
-
-/// @fn int filesystemReadFileCommandHandler(
-///   FilesystemState *filesystemState, ProcessMessage *processMessage)
-///
-/// @brief Command handler for FILESYSTEM_READ_FILE command.
-///
-/// @param filesystemState A pointer to the FilesystemState object maintained
-///   by the filesystem process.
-/// @param processMessage A pointer to the ProcessMessage that was received by
-///   the filesystem process.
-///
-/// @return Returns 0 on success, a standard POSIX error code on failure.
-int filesystemReadFileCommandHandler(
-  FilesystemState *filesystemState, ProcessMessage *processMessage
-) {
-  FilesystemIoCommandArgs *filesystemIoCommandArgs
-    = (FilesystemIoCommandArgs*) processMessageData(processMessage);
-  int returnValue = 0;
-  if (filesystemState->driverState != NULL) {
-    uint32_t length = filesystemIoCommandArgs->length;
-    // driverFread/driverFwrite report the byte count in an int, so never ask
-    // for more than an int can represent on this platform.  (~0u >> 1) is the
-    // platform's INT_MAX without pulling in <limits.h>.
-    if (length > (uint32_t) (~0u >> 1)) {
-      length = (uint32_t) (~0u >> 1);
-    }
-    NanoOsFile *nanoOsFile = filesystemIoCommandArgs->file;
-    returnValue = filesystemState->driverFread(filesystemState->driverState,
-      filesystemIoCommandArgs->buffer, length, nanoOsFile->file);
-    if (returnValue >= 0) {
-      // Return value is the number of bytes read.  Set the length variable to
-      // it and set it to 0 to indicate good status.
-      nanoOsFile->currentPosition += returnValue;
-      filesystemIoCommandArgs->length = returnValue;
-      returnValue = 0;
-    } else {
-      // Return value is a negative error code.  Negate it.
-      returnValue = -returnValue;
-      // Tell the caller that we read nothing.
-      filesystemIoCommandArgs->length = 0;
-    }
-  }
-
-  processMessageSetDone(processMessage);
-  return returnValue;
-}
-
-/// @fn int filesystemWriteFileCommandHandler(
-///   FilesystemState *filesystemState, ProcessMessage *processMessage)
-///
-/// @brief Command handler for FILESYSTEM_WRITE_FILE command.
-///
-/// @param filesystemState A pointer to the FilesystemState object maintained
-///   by the filesystem process.
-/// @param processMessage A pointer to the ProcessMessage that was received by
-///   the filesystem process.
-///
-/// @return Returns 0 on success, a standard POSIX error code on failure.
-int filesystemWriteFileCommandHandler(
-  FilesystemState *filesystemState, ProcessMessage *processMessage
-) {
-  FilesystemIoCommandArgs *filesystemIoCommandArgs
-    = (FilesystemIoCommandArgs*) processMessageData(processMessage);
-  int returnValue = 0;
-  if (filesystemState->driverState != NULL) {
-    uint32_t length = filesystemIoCommandArgs->length;
-    // driverFread/driverFwrite report the byte count in an int, so never ask
-    // for more than an int can represent on this platform.  (~0u >> 1) is the
-    // platform's INT_MAX without pulling in <limits.h>.
-    if (length > (uint32_t) (~0u >> 1)) {
-      length = (uint32_t) (~0u >> 1);
-    }
-    NanoOsFile *nanoOsFile = filesystemIoCommandArgs->file;
-    returnValue = filesystemState->driverFwrite(filesystemState->driverState,
-      filesystemIoCommandArgs->buffer,
-      length, nanoOsFile->file);
-    if (returnValue >= 0) {
-      // Return value is the number of bytes written.  Set the length variable
-      // to it and set it to 0 to indicate good status.
-      nanoOsFile->currentPosition += returnValue;
-      filesystemIoCommandArgs->length = returnValue;
-      returnValue = 0;
-    } else {
-      // Return value is a negative error code.  Negate it.
-      returnValue = -returnValue;
-      // Tell the caller that we wrote nothing.
-      filesystemIoCommandArgs->length = 0;
-    }
-  }
-
-  processMessageSetDone(processMessage);
-  return returnValue;
-}
-
-/// @fn int filesystemRemoveFileCommandHandler(
-///   FilesystemState *filesystemState, ProcessMessage *processMessage)
-///
-/// @brief Command handler for FILESYSTEM_REMOVE_FILE command.
-///
-/// @param filesystemState A pointer to the FilesystemState object maintained
-///   by the filesystem process.
-/// @param processMessage A pointer to the ProcessMessage that was received by
-///   the filesystem process.
-///
-/// @return Returns 0 on success, a standard POSIX error code on failure.
-int filesystemRemoveFileCommandHandler(
-  FilesystemState *filesystemState, ProcessMessage *processMessage
-) {
-  FilesystemRemoveArgs *filesystemRemoveArgs
-    = (FilesystemRemoveArgs*) processMessageData(processMessage);
-  int returnValue = 0;
-  if (filesystemState->driverState != NULL) {
-    returnValue = filesystemState->driverRemove(
-      filesystemState->driverState, filesystemRemoveArgs->pathname);
-  }
-
-  filesystemRemoveArgs->returnValue = returnValue;
-  processMessageSetDone(processMessage);
-  return 0;
-}
-
-/// @fn int filesystemSeekFileCommandHandler(
-///   FilesystemState *filesystemState, ProcessMessage *processMessage)
-///
-/// @brief Command handler for FILESYSTEM_SEEK_FILE command.
-///
-/// @param filesystemState A pointer to the FilesystemState object maintained
-///   by the filesystem process.
-/// @param processMessage A pointer to the ProcessMessage that was received by
-///   the filesystem process.
-///
-/// @return Returns 0 on success, a standard POSIX error code on failure.
-int filesystemSeekFileCommandHandler(
-  FilesystemState *filesystemState, ProcessMessage *processMessage
-) {
-  FilesystemSeekArgs *filesystemSeekArgs
-    = (FilesystemSeekArgs*) processMessageData(processMessage);
-  int returnValue = 0;
-  if (filesystemState->driverState != NULL) {
-    NanoOsFile *nanoOsFile = filesystemSeekArgs->stream;
-    errno = 0;
-    returnValue = filesystemState->driverFseek(
-      filesystemState->driverState, nanoOsFile->file,
-      filesystemSeekArgs->offset,
-      filesystemSeekArgs->whence);
-    if (returnValue >= 0) {
-      nanoOsFile->currentPosition = returnValue;
-    }
-  }
-
-  filesystemSeekArgs->returnValue = returnValue;
-  filesystemSeekArgs->errorNumber = errno;
-  processMessageSetDone(processMessage);
-  return 0;
-}
-
-/// @fn int filesystemDumpOpenFilesCommandHandler(
-///   FilesystemState *filesystemState, ProcessMessage *processMessage)
-///
-/// @brief Command handler for the FILESYSTEM_DUMP_OPEN_FILES command.  Walk
-/// the open files list and display information about all of the files and
-/// their owning processes.
-///
-/// @param filesystemState A pointer to the FilesystemState object maintained
-///   by the filesystem process.
-/// @param processMessage A pointer to the ProcessMessage that was received by
-///   the filesystem process.
-///
-/// @return Returns 0 on success, a standard POSIX error code on failure.
-int filesystemDumpOpenFilesCommandHandler(
-  FilesystemState *filesystemState, ProcessMessage *processMessage
-) {
-  FilesystemDumpOpenFilesArgs *filesystemDumpOpenFilesArgs
-    = (FilesystemDumpOpenFilesArgs*) processMessageData(processMessage);
-
-  logInfo("Open files:\n");
-  processYield();
-  for (NanoOsFile *nanoOsFile = filesystemState->openFiles;
-    nanoOsFile != NULL;
-    nanoOsFile = nanoOsFile->next
-  ) {
-    logInfo("0x%lx: \"%s\" owned by %ld\n",
-      (unsigned long int) (uintptr_t) nanoOsFile,
-      filesystemState->driverGetFilename(nanoOsFile->file),
-      (long int) nanoOsFile->owner);
-    processYield();
-  }
-
-  filesystemDumpOpenFilesArgs->returnValue = 0;
-  processMessageSetDone(processMessage);
-  return 0;
-}
-
-/// @fn int filesystemGetFileBlockMetadataCommandHandler(
-///   FilesystemState *filesystemState, ProcessMessage *processMessage)
-///
-/// @brief Command handler for the FILESYSTEM_GET_FILE_BLOCK_METADATA command.
-/// Populate a caller-supplied FileBlockMetadata structure for a given file.
-///
-/// @param filesystemState A pointer to the FilesystemState object maintained
-///   by the filesystem process.
-/// @param processMessage A pointer to the ProcessMessage that was received by
-///   the filesystem process.
-///
-/// @return Returns 0 on success, a standard POSIX error code on failure.
-int filesystemGetFileBlockMetadataCommandHandler(
-  FilesystemState *filesystemState, ProcessMessage *processMessage
-) {
-  GetFileBlockMetadataArgs *args
-    = (GetFileBlockMetadataArgs*) processMessageData(processMessage);
-  args->metadata->blockDevice = filesystemState->blockDevice;
-
-  if (filesystemState->driverState != NULL) {
-    filesystemState->driverGetFileBlockMetadata(
-      filesystemState->driverState, args->stream->file,
-      &args->metadata->startBlock, &args->metadata->numBlocks);
-  }
-
-  processMessageSetDone(processMessage);
-  return 0;
-}
-
-/// @fn int filesystemEndOfFileCommandHandler(
-///   FilesystemState *filesystemState, ProcessMessage *processMessage)
-///
-/// @brief Command handler for the FILESYSTEM_END_OF_FILE command.  Determine
-/// whether or not a provided FILE handle is positioned at its end.
-///
-/// @param filesystemState A pointer to the FilesystemState object maintained
-///   by the filesystem process.
-/// @param processMessage A pointer to the ProcessMessage that was received by
-///   the filesystem process.
-///
-/// @return Returns 0 on success, a standard POSIX error code on failure.
-int filesystemEndOfFileCommandHandler(
-  FilesystemState *filesystemState, ProcessMessage *processMessage
-) {
-  FeofArgs *args = (FeofArgs*) processMessageData(processMessage);
-  args->returnValue = 0;
-
-  if (filesystemState->driverState != NULL) {
-    args->returnValue = filesystemState->driverFeof(args->stream->file);
-  }
-
-  processMessageSetDone(processMessage);
-  return 0;
-}
-
-/// @var filesystemCommandHandlers
-///
-/// @brief Array of FilesystemCommandHandler function pointers.
-KEEP_IN_FLASH
-const FilesystemCommandHandler filesystemCommandHandlers[] = {
-  filesystemOpenFileCommandHandler,      // FILESYSTEM_OPEN_FILE
-  filesystemCloseFileCommandHandler,     // FILESYSTEM_CLOSE_FILE
-  filesystemReadFileCommandHandler,      // FILESYSTEM_READ_FILE
-  filesystemWriteFileCommandHandler,     // FILESYSTEM_WRITE_FILE
-  filesystemRemoveFileCommandHandler,    // FILESYSTEM_REMOVE_FILE
-  filesystemSeekFileCommandHandler,      // FILESYSTEM_SEEK_FILE
-  filesystemDumpOpenFilesCommandHandler, // FILESYSTEM_DUMP_OPEN_FILES
-  // FILESYSTEM_GET_FILE_BLOCK_METADATA:
-  filesystemGetFileBlockMetadataCommandHandler,
-  filesystemEndOfFileCommandHandler,     // FILESYSTEM_END_OF_FILE
-};
-
+// getPartitionInfoImpl is filesystem-agnostic (it only parses the MBR
+// partition table), so it's compiled in unconditionally and shared by every
+// filesystem build -- contiguous and overlay reach it by symlinking
+// usr/src/filesystems/drivers/common/GetPartitionInfoImpl.c into their own
+// source trees; the kernel-linked build here pulls it in with #include
+// instead, since Arduino IDE only discovers source files physically under
+// src/kernel.
+#define NANO_OS_KERNEL_BUILD
+#include "../../usr/src/filesystems/drivers/common/GetPartitionInfoImpl.c"
 
 /// @fn static void handleFilesystemMessages(FilesystemState *fs)
 ///
@@ -431,11 +56,23 @@ static void handleFilesystemMessages(FilesystemState *filesystemState) {
         logError("Received unknown filesystem message type "
           "%ld from process %ld\n", (long int) type,
           (long int) processPid(processMessageFrom(msg)));
+      } else if (filesystemState->commandHandlers == NULL) {
+        // No driver is linked directly into this build; this process only
+        // exists because restartBuiltinFilesystem is always compiled
+        // (HalCommon.c is shared), even on targets that never call it.
+        logError("No filesystem driver linked in to handle command type "
+          "%ld from process %ld\n", (long int) type,
+          (long int) processPid(processMessageFrom(msg)));
+      } else {
+        logDebug("Handling filesystem message type %ld\n",
+          (long int) type);
+        filesystemState->args = msg;
+        if (filesystemState->commandHandlers[type](filesystemState)
+          != filesystemState
+        ) {
+          logError("Calling the filesystem command handler failed\n");
+        }
       }
-
-      logDebug("Handling filesystem message type %ld\n",
-        (long int) type);
-      filesystemCommandHandlers[type](filesystemState, msg);
 
       msg = processMessageQueuePop();
     }
@@ -444,10 +81,14 @@ static void handleFilesystemMessages(FilesystemState *filesystemState) {
 
 /// @fn void* runFilesystem(void *args)
 ///
-/// @brief Main process entry point for the FAT16 filesystem process.
+/// @brief Main process entry point for the filesystem process.
 ///
-/// @param args A pointer to an initialized BlockDevice structure cast
-///   to a void*.
+/// @param args A pointer to an initialized FilesystemState, cast to a
+///   void*.  Its driverInit and commandHandlers members, if any driver is
+///   linked directly into this build, are expected to already be populated
+///   (see restartBuiltinFilesystem in HalCommon.c); Filesystem.c itself
+///   never names a specific driver, so this function works whether or not
+///   one is linked in.
 ///
 /// @return This function never returns, but would return NULL if it did.
 void* runFilesystem(void *args) {
@@ -466,72 +107,20 @@ void* runFilesystem(void *args) {
   }
 
   logDebug("runFilesystem: Getting partition info\n");
-  getPartitionInfo(&fs);
-  logDebug("runFilesystem: Initiallizing driverState\n");
-  fs.driverInit(&fs);
+  getPartitionInfoImpl(&fs);
+  if (fs.driverInit != NULL) {
+    logDebug("runFilesystem: Initiallizing driverState\n");
+    fs.driverInit(&fs);
+  }
+  // getPartitionInfoImpl and driverInit both stash their result in fs.args
+  // (see their own documentation); neither result is checked here, matching
+  // this function's prior behavior.  Clear it before fs.args takes on its
+  // other meaning: a pointer to the ProcessMessage being handled.
+  fs.args = NULL;
   logDebug("runFilesystem: Initialization complete\n");
-  
+
   handleFilesystemMessages(&fs);
   return NULL;
-}
-
-/// @fn int getPartitionInfo(FilesystemState *fs)
-///
-/// @brief Get information about the partition for the provided filesystem.
-///
-/// @param fs Pointer to the filesystem state structure maintained by the
-///   filesystem process.
-///
-/// @return Returns 0 on success, negative error code on failure.
-int getPartitionInfo(FilesystemState *fs) {
-  if (fs->blockDevice->partitionNumber == 0) {
-    logDebug("getPartitionInfo: Partition number is 0\n");
-    return -1;
-  }
-
-  logDebug("getPartitionInfo: Reading block 0\n");
-  if (fs->blockDevice->readBlocks(fs->blockDevice->context, 0, 1,
-      fs->blockSize, fs->blockBuffer) != 0
-  ) {
-    logDebug("getPartitionInfo: Failed to read block 0\n");
-    return -2;
-  }
-  logDebug("getPartitionInfo: Got block 0\n");
-
-  uint8_t *partitionTable = fs->blockBuffer + PARTITION_TABLE_OFFSET;
-  uint8_t *entry
-    = partitionTable
-    + ((fs->blockDevice->partitionNumber - 1)
-    * PARTITION_ENTRY_SIZE);
-  uint8_t type = entry[4];
-  
-  if ((type == PARTITION_TYPE_FAT16_LBA)
-    || (type == PARTITION_TYPE_FAT16_LBA_EXTENDED)
-    || (type == PARTITION_TYPE_FAT32_LBA)
-    || (type == PARTITION_TYPE_LINUX)
-  ) {
-    uint32_t lbaValue, sectorsValue;
-    
-    // Read LBA offset using readBytes for alignment safety
-    logDebug("getPartitionInfo: Reading LBA offset\n");
-    readBytes(&lbaValue, &entry[PARTITION_LBA_OFFSET]);
-    fs->startLba = lbaValue;
-
-    // Read number of sectors using readBytes for alignment safety
-    logDebug("getPartitionInfo: Reading partition sectors\n");
-    readBytes(&sectorsValue, &entry[PARTITION_SECTORS_OFFSET]);
-    fs->endLba = fs->startLba + sectorsValue - 1;
-
-    logDebug("Filesystem type 0x%lx runs from block %ld to block %ld\n",
-      (unsigned long int) type, (long int) fs->startLba,
-      (long int) fs->endLba);
-
-    logDebug("getPartitionInfo: Returing good status\n");
-    return 0;
-  }
-
-  logDebug("getPartitionInfo: Invalid partition type\n");
-  return -3;
 }
 
 /// @fn FILE* filesystemFopen(const char *pathname, const char *mode)
@@ -734,6 +323,51 @@ int filesystemRemove(const char *pathname) {
     }
     processMessageRelease(msg);
   }
+  return returnValue;
+}
+
+/// @fn int fat32Format(const char *volumeLabel, uint32_t clusterSize)
+///
+/// @brief Format the root filesystem's partition as FAT32.
+///
+/// @note Named for FAT32, not "filesystemFormat": unlike fopen/fread/fwrite,
+/// a format call's parameters are inherently specific to the filesystem type
+/// being written, so there is no filesystem-agnostic name for it to share.
+///
+/// @param volumeLabel A string containing the volume label to write, up to 11
+///   characters.  May be NULL or empty for no label.
+/// @param clusterSize The desired cluster size in bytes, or 0 to use a
+///   default derived from the size of the partition.
+///
+/// @return Returns 0 on success, -1 and sets the value of errno on failure.
+int fat32Format(const char *volumeLabel, uint32_t clusterSize) {
+  int returnValue = 0;
+  Fat32FormatArgs fat32FormatArgs;
+  memset(&fat32FormatArgs, 0, sizeof(fat32FormatArgs));
+  fat32FormatArgs.signature = FAT32_FORMAT_SIGNATURE;
+  fat32FormatArgs.clusterSize = clusterSize;
+  if ((volumeLabel != NULL) && (*volumeLabel != '\0')) {
+    fat32FormatArgs.volumeLabel = (char*) malloc(strlen(volumeLabel) + 1);
+    if (fat32FormatArgs.volumeLabel == NULL) {
+      errno = ENOMEM;
+      return -1;
+    }
+    strcpy(fat32FormatArgs.volumeLabel, volumeLabel);
+  }
+
+  ProcessMessage *msg = initSendProcessMessageToPid(
+    SCHEDULER_STATE->rootFsPid,
+    FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_FORMAT,
+    &fat32FormatArgs, sizeof(fat32FormatArgs), true);
+  processMessageWaitForDone(msg, NULL);
+  free(fat32FormatArgs.volumeLabel); fat32FormatArgs.volumeLabel = NULL;
+  if (fat32FormatArgs.returnValue != 0) {
+    // returnValue holds a FAT32 driver error code, not an errno value; there
+    // is no clean mapping between the two, so report a generic I/O error.
+    errno = EIO;
+    returnValue = -1;
+  }
+  processMessageRelease(msg);
   return returnValue;
 }
 
