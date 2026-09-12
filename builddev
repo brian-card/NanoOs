@@ -80,7 +80,7 @@ elif [ "${platform}" = "AgonLight2" ]; then
 	osMakefile="makefiles/AgonLight2Makefile"
 	osBuildDir="build/agon"
 	osMakeArgs=""
-	contiguousMaxSize=49152
+	contiguousMaxSize=36864
 else
 	echo "ERROR: Unknown platform '${platform}'." >&2
 	echo "Must be 'AgonLight2' or one of the ArduinoSamd21Makefile boards:" >&2

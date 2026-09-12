@@ -12,10 +12,10 @@
  *                                included), the .data load image, and .rodata.
  *                                Executed / read in place; read-only at runtime.
  *   ext RAM 0x040000..0x0BFFFF   512 KB external SRAM:
- *            0x040000..0x04BFFF  48 KB  contiguous filesystem image window
- *            0x04C000..0x04D3FF  5 KB   .bss then .data  (see HalAgonLight2.c
+ *            0x040000..0x048FFF  36 KB  contiguous filesystem image window
+ *            0x049000..0x04A3FF  5 KB   .bss then .data  (see HalAgonLight2.c
  *                                       DATA_BSS_REGION_ADDRESS / _SIZE)
- *            0x04D400            8-byte data/bss integrity canary, then the heap
+ *            0x04A400            8-byte data/bss integrity canary, then the heap
  *            ..0x0BFFFF          heap (grows up) toward the stack at 0x0C0000
  *   int RAM 0xFFE000..0xFFFFFF   8 KB on-chip SRAM, mapped by Boot.asm; the
  *                                overlay window (OVERLAY_ADDRESS).
@@ -43,14 +43,14 @@ ENTRY(_start)
 MEMORY
 {
   FLASH (rx)  : ORIGIN = 0x000000, LENGTH = 0x020000   /* 128 KB on-chip flash   */
-  RAM   (rwx) : ORIGIN = 0x04C000, LENGTH = 0x074000   /* ext SRAM above the FS window, up to 0x0C0000 */
+  RAM   (rwx) : ORIGIN = 0x049000, LENGTH = 0x077000   /* ext SRAM above the FS window, up to 0x0C0000 */
 }
 
 SECTIONS
 {
-  /* 53 KB into external SRAM: one byte past the .bss/.data reservation.
+  /* 41 KB into external SRAM: one byte past the .bss/.data reservation.
    * Keep in sync with DATA_BSS_CANARY_ADDRESS in src/hal/HalAgonLight2.c. */
-  __data_bss_limit = 0x04D400;
+  __data_bss_limit = 0x04A400;
 
   /* ---- Code + read-only data: in flash, executed / read in place --------- */
   .text :
@@ -110,7 +110,7 @@ SECTIONS
   } > FLASH
 
   ASSERT(__data_end__ <= __data_bss_limit,
-    ".bss + .data exceed their 5 KB external-RAM reservation (canary at 0x04D400)")
+    ".bss + .data exceed their 5 KB external-RAM reservation (canary at 0x04A400)")
   ASSERT(__flash_end <= 0x020000,
     "flash image (.text + .data load image + .rodata) overflows the 128 KB on-chip flash")
 

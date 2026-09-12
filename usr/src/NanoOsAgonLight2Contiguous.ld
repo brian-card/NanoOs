@@ -42,13 +42,13 @@
 /* Loads at RAM address 0x40000 - this MUST equal FILESYSTEM_DRIVER_ADDRESS in */
 /* src/hal/HalAgonLight2.c, since the overlay is position-dependent (its       */
 /* export table holds absolute pointers).  0x40000 is the base of external     */
-/* SRAM; the 48K window ends at DATA_BSS_REGION_ADDRESS (0x4C000), just below   */
+/* SRAM; the 36K window ends at DATA_BSS_REGION_ADDRESS (0x49000), just below   */
 /* NanoOs's own .bss/.data.  Clear of the regular per-slot overlays at 0xFFE000.*/
 
 MEMORY
 {
-    /* Overlay RAM region - sized for the 48KB contiguous filesystem cap */
-    OVERLAY_RAM (rwx) : ORIGIN = 0x40000, LENGTH = 48K
+    /* Overlay RAM region - sized for the 36KB contiguous filesystem cap */
+    OVERLAY_RAM (rwx) : ORIGIN = 0x40000, LENGTH = 36K
 }
 
 /*
