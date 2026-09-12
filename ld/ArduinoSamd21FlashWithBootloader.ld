@@ -40,6 +40,12 @@ SECTIONS
 	 * overlay load memcpy()s over the tail of .bss).  The ASSERT after .bss
 	 * turns that into a hard link error instead.
 	 *
+	 * Set 0x200 (512 bytes) below OVERLAY_ADDRESS itself, so this assert
+	 * fires before .bss growth eats into the margin OVERLAY_ADDRESS
+	 * reserves for the Arduino core/libraries' own boot-time dynamic
+	 * allocations (see OVERLAY_ADDRESS's own doc comment for how that
+	 * margin was derived).
+	 *
 	 * MUST be kept in sync with:
 	 *   - OVERLAY_ADDRESS      in src/hal/HalArduinoSamD21x18A.cpp
 	 *   - OVERLAY_RAM ORIGIN   in usr/src/NanoOsArduinoSamd21.ld

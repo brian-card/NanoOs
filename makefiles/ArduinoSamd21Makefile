@@ -3,15 +3,20 @@
 #
 # Supported boards (pass BOARD= on the command line):
 #   itsybitsy_m0    - Adafruit ItsyBitsy M0 Express (default)
-#   feather_m0_wifi - Adafruit Feather M0 WiFi
 #   trinket_m0      - Adafruit Trinket M0
-#   nano_33_iot     - Arduino Nano 33 IoT
 #   xiao_m0         - Seeed XIAO M0 (Seeeduino)
+#
+# NOT supported: feather_m0_wifi (Adafruit Feather M0 WiFi) and nano_33_iot
+# (Arduino Nano 33 IoT). Both need more static RAM (.data + .bss) than fits
+# below OVERLAY_ADDRESS (src/hal/HalArduinoSamD21x18A.cpp); moving that
+# boundary up to fit them costs the same amount of heap on every other
+# board, which was judged not worth it. See OVERLAY_ADDRESS's own doc
+# comment for the numbers.
 #
 # Usage:
 #   make                          - Build default board (itsybitsy_m0)
-#   make BOARD=feather_m0_wifi    - Build for Feather M0 WiFi
-#   make BOARD=nano_33_iot flash  - Build and flash stripped binary
+#   make BOARD=trinket_m0         - Build for Trinket M0
+#   make BOARD=xiao_m0 flash      - Build and flash stripped binary
 #   make flash-full               - Build and flash full binary (with .rodata)
 #   make boards                   - List supported boards
 #   make size                     - Show section sizes
@@ -39,7 +44,6 @@ CMSIS            := $(ARDUINO_HOME)/packages/adafruit/tools/CMSIS/5.4.0
 CMSIS_ATMEL      := $(ARDUINO_HOME)/packages/adafruit/tools/CMSIS-Atmel/1.2.2
 
 ADAFRUIT_SAMD    := $(ARDUINO_HOME)/packages/adafruit/hardware/samd/1.7.17
-ARDUINO_SAMD     := $(ARDUINO_HOME)/packages/arduino/hardware/samd/1.8.14
 SEEED_SAMD       := $(ARDUINO_HOME)/packages/Seeeduino/hardware/samd/1.8.6
 
 # ---- Per-board configuration -------------------------------------------------
@@ -48,14 +52,16 @@ SEEED_SAMD       := $(ARDUINO_HOME)/packages/Seeeduino/hardware/samd/1.8.6
 #   BOARD_PLATFORM       - Path to the board's platform package (variant/pins)
 #   BOARD_CORE_PLATFORM  - Path to the platform package to build the Arduino
 #                          core from.  Adafruit's core is a superset of
-#                          upstream and is the default for boards that are
-#                          actually Adafruit's own, but a board on a
-#                          different vendor's platform (e.g. nano_33_iot)
-#                          should use that vendor's own core instead --
-#                          mixing a variant with a core it wasn't designed
-#                          against can fail to compile (see nano_33_iot's
-#                          history: Adafruit's samd21_host.c assumes a pin
-#                          only Adafruit's own variants define).
+#                          upstream and is the default for every board
+#                          currently supported here, all of which are on
+#                          Adafruit's own platform or (xiao_m0) build
+#                          against it anyway.  A board on a different
+#                          vendor's platform should use that vendor's own
+#                          core instead: mixing a variant with a core it
+#                          wasn't designed against can fail to compile (this
+#                          is why nano_33_iot isn't supported -- Adafruit's
+#                          samd21_host.c assumes a pin only Adafruit's own
+#                          variants define).
 #   BOARD_LIB_PLATFORM   - Path to the platform package to build Arduino
 #                          library sources (SPI, etc.) from.
 #   BOARD_VARIANT        - Variant subdirectory name
@@ -98,22 +104,6 @@ ifeq ($(BOARD),itsybitsy_m0)
   BOARD_EXTRA_INCLUDES := -I$(BOARD_LIB_PLATFORM)/libraries/Adafruit_TinyUSB_Arduino/src/arduino \
                           -I$(BOARD_LIB_PLATFORM)/libraries/Adafruit_ZeroDMA
 
-else ifeq ($(BOARD),feather_m0_wifi)
-  BOARD_PLATFORM    := $(ADAFRUIT_SAMD)
-  BOARD_CORE_PLATFORM := $(ADAFRUIT_SAMD)
-  BOARD_LIB_PLATFORM  := $(ADAFRUIT_SAMD)
-  BOARD_VARIANT     := feather_m0
-  BOARD_DEFINES     := -D__SAMD21G18A__ -DARDUINO_SAMD_FEATHER_M0 -DADAFRUIT_FEATHER_M0 \
-                        -DARDUINO_SAMD_ADAFRUIT
-  BOARD_USB_VID     := 0x239A
-  BOARD_USB_PID     := 0x800B
-  BOARD_USB_MFR     := Adafruit
-  BOARD_USB_PRODUCT := Feather M0
-  BOARD_UF2_VOLUME  := FEATHERBOOT
-  BOARD_EXTRA_LIBS  := $(BOARD_LIB_PLATFORM)/libraries/Adafruit_ZeroDMA/Adafruit_ZeroDMA.cpp
-  BOARD_EXTRA_INCLUDES := -I$(BOARD_LIB_PLATFORM)/libraries/Adafruit_TinyUSB_Arduino/src/arduino \
-                          -I$(BOARD_LIB_PLATFORM)/libraries/Adafruit_ZeroDMA
-
 else ifeq ($(BOARD),trinket_m0)
   BOARD_PLATFORM    := $(ADAFRUIT_SAMD)
   BOARD_CORE_PLATFORM := $(ADAFRUIT_SAMD)
@@ -129,24 +119,6 @@ else ifeq ($(BOARD),trinket_m0)
   BOARD_EXTRA_LIBS  := $(BOARD_LIB_PLATFORM)/libraries/Adafruit_ZeroDMA/Adafruit_ZeroDMA.cpp
   BOARD_EXTRA_INCLUDES := -I$(BOARD_LIB_PLATFORM)/libraries/Adafruit_TinyUSB_Arduino/src/arduino \
                           -I$(BOARD_LIB_PLATFORM)/libraries/Adafruit_ZeroDMA
-
-else ifeq ($(BOARD),nano_33_iot)
-  # Not an Adafruit board: use Arduino's own SAMD core, libraries, and
-  # variant, all from the same package -- unlike the Adafruit-family boards
-  # above, this pairing was never designed to mix with Adafruit's fork of
-  # the core (see the samd21_host.c USB-host mismatch this used to hit).
-  BOARD_PLATFORM    := $(ARDUINO_SAMD)
-  BOARD_CORE_PLATFORM := $(ARDUINO_SAMD)
-  BOARD_LIB_PLATFORM  := $(ARDUINO_SAMD)
-  BOARD_VARIANT     := nano_33_iot
-  BOARD_DEFINES     := -D__SAMD21G18A__ -DARDUINO_SAMD_NANO_33_IOT
-  BOARD_USB_VID     := 0x2341
-  BOARD_USB_PID     := 0x8057
-  BOARD_USB_MFR     := Arduino
-  BOARD_USB_PRODUCT := Arduino NANO 33 IoT
-  BOARD_UF2_VOLUME  := NANO33BOOT
-  BOARD_EXTRA_LIBS  :=
-  BOARD_EXTRA_INCLUDES :=
 
 else ifeq ($(BOARD),xiao_m0)
   BOARD_PLATFORM    := $(SEEED_SAMD)
@@ -173,10 +145,9 @@ endif
 # Variant directory comes from the board's own platform (pin maps etc.)
 VARIANT_DIR := $(BOARD_PLATFORM)/variants/$(BOARD_VARIANT)
 
-# Core and library sources: Adafruit's core is a superset of upstream and is
-# the default for boards that are actually Adafruit's own, but a board on a
-# different vendor's platform (nano_33_iot) uses that vendor's core instead
-# -- see BOARD_CORE_PLATFORM / BOARD_LIB_PLATFORM above.
+# Core and library sources come from whichever platform package each board
+# sets BOARD_CORE_PLATFORM / BOARD_LIB_PLATFORM to above (Adafruit's, for
+# every board currently supported here).
 CORE_PLATFORM := $(BOARD_CORE_PLATFORM)
 CORE_DIR      := $(CORE_PLATFORM)/cores/arduino
 
@@ -498,10 +469,12 @@ sections: $(ELF)
 boards:
 	@echo "Supported boards (pass BOARD= on the command line):"
 	@echo "  itsybitsy_m0     Adafruit ItsyBitsy M0 Express  (default)"
-	@echo "  feather_m0_wifi  Adafruit Feather M0 WiFi"
 	@echo "  trinket_m0       Adafruit Trinket M0"
-	@echo "  nano_33_iot      Arduino Nano 33 IoT"
 	@echo "  xiao_m0          Seeed XIAO M0"
+	@echo ""
+	@echo "NOT supported: feather_m0_wifi, nano_33_iot (need more static RAM"
+	@echo "than fits below OVERLAY_ADDRESS; see the comment at the top of"
+	@echo "this makefile)."
 
 clean:
 	rm -rf $(BUILD_DIR)

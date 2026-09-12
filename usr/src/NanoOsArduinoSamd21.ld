@@ -39,11 +39,13 @@
 /* Overlay loads at RAM address 0x20002400 */
 
 /*
- * OVERLAY_RAM ORIGIN below MUST match:
- *   - OVERLAY_ADDRESS         in src/hal/HalArduinoSamD21x18A.cpp
- *   - __nanoos_overlay_window in ld/ArduinoSamd21FlashWithBootloader.ld
- * The kernel link asserts .data + .bss end at or below that address; this is
- * where the scheduler memcpy()s each overlay, so a mismatch corrupts .bss.
+ * OVERLAY_RAM ORIGIN below MUST match OVERLAY_ADDRESS in
+ * src/hal/HalArduinoSamD21x18A.cpp (see that macro's own doc comment for how
+ * its value is derived) -- this is where the scheduler memcpy()s each
+ * overlay, so a mismatch corrupts .bss.  __nanoos_overlay_window in
+ * ld/ArduinoSamd21FlashWithBootloader.ld is a related but distinct value:
+ * the kernel link asserts .data + .bss end at or below that address, which
+ * is deliberately 512 bytes below this one.
  */
 
 MEMORY

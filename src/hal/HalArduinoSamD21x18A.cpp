@@ -86,6 +86,22 @@ void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
 /// @def OVERLAY_ADDRESS
 ///
 /// @brief The address of where the overlay will be placed in memory.
+///
+/// @note This must clear .bss end on every SAMD21 board this makefile
+/// supports, with enough headroom left over for whatever dynamic (heap)
+/// allocations the Arduino core/libraries make during their own boot
+/// sequence, before NanoOs takes over -- that memory starts allocating
+/// right after .bss too, so a boundary set exactly at .bss end would
+/// collide with it. This value is the one the ItsyBitsy M0 has always
+/// shipped and worked on (.bss end 0x200021c4, 0x23c/572 bytes below
+/// this address). Raising it to fit a board with more static RAM use
+/// costs the same amount of heap everywhere else, which isn't worth it:
+/// see "Supported boards" at the top of makefiles/ArduinoSamd21Makefile
+/// for the boards this constant excludes and why.
+///
+/// MUST be kept in sync with:
+///   - __nanoos_overlay_window in ld/ArduinoSamd21FlashWithBootloader.ld
+///   - OVERLAY_RAM ORIGIN      in usr/src/NanoOsArduinoSamd21.ld
 #define OVERLAY_ADDRESS 0x20002400
 
 /// @def OVERLAY_SIZE
