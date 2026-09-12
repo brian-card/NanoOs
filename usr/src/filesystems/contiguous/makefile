@@ -53,8 +53,12 @@ INCLUDES += \
 # Maximum size, in bytes, of the contiguous overlay binary.  It is placed at
 # a fixed block offset (see buildsim/builddev) with no per-slot budget to
 # grow into, so a build that produces a binary larger than this must fail
-# rather than silently corrupt whatever follows it on disk.
-MAX_CONTIGUOUS_SIZE := 32768
+# rather than silently corrupt whatever follows it on disk.  Platform-specific:
+# must match the target's actual contiguous-filesystem RAM window (e.g.
+# FILESYSTEM_DRIVER_SIZE in src/hal/HalAgonLight2.c for AgonLight2), so
+# buildsim/builddev pass it in per platform; this default covers callers that
+# don't.
+MAX_CONTIGUOUS_SIZE ?= 32768
 
 .PHONY: all overlays clean
 

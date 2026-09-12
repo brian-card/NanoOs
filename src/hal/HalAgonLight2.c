@@ -96,8 +96,8 @@ extern void agonLight2Off(void);           // boot/AgonLight2/Boot.asm; no retur
 /// @def FILESYSTEM_DRIVER_SIZE
 ///
 /// @brief The size, in bytes, reserved for the filesystem driver in memory.  We
-/// will reserve 32 KB for this.
-#define FILESYSTEM_DRIVER_SIZE (32 * 1024)
+/// will reserve 48 KB for this.
+#define FILESYSTEM_DRIVER_SIZE (48 * 1024)
 
 /// @def DATA_BSS_REGION_ADDRESS
 ///
@@ -116,7 +116,7 @@ extern void agonLight2Off(void);           // boot/AgonLight2/Boot.asm; no retur
 
 /// @def DATA_BSS_CANARY_ADDRESS
 ///
-/// @brief The 36 KB mark of external RAM: the byte just past the .bss/.data
+/// @brief The 53 KB mark of external RAM: the byte just past the .bss/.data
 /// reservation.  Boot.asm stamps DATA_BSS_CANARY_VALUE here before it copies
 /// .data; halAgonLight2Init() re-reads it as its last step.  A mismatch means
 /// .bss or .data outgrew DATA_BSS_REGION_SIZE and corrupted memory past the

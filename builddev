@@ -58,6 +58,7 @@ if [ "${platform}" = "itsybitsy_m0" ] || [ "${platform}" = "feather_m0_wifi" ] \
 	osMakefile="makefiles/ArduinoSamd21Makefile"
 	osBuildDir="build/${platform}"
 	osMakeArgs="BOARD=${platform}"
+	contiguousMaxSize=32768
 elif [ "${platform}" = "AgonLight2" ]; then
 	agonHome="${HOME}/agondev"
 	agonDevBin="${agonHome}/bin"
@@ -79,6 +80,7 @@ elif [ "${platform}" = "AgonLight2" ]; then
 	osMakefile="makefiles/AgonLight2Makefile"
 	osBuildDir="build/agon"
 	osMakeArgs=""
+	contiguousMaxSize=49152
 else
 	echo "ERROR: Unknown platform '${platform}'." >&2
 	echo "Must be 'AgonLight2' or one of the ArduinoSamd21Makefile boards:" >&2
@@ -96,7 +98,8 @@ if [ "${blockFilesystem}" = "contiguous" ]; then
 	if [ ! -f "usr/src/${filesystemLinkerScript}" ]; then
 		echo "ERROR: No contiguous-filesystem linker script found at usr/src/${filesystemLinkerScript}." >&2
 		echo "The per-slot ${linkerScript} OVERLAY_RAM region is sized for a single" >&2
-		echo "small overlay, not the combined contiguous filesystem binary (up to 32KB)." >&2
+		echo "small overlay, not the combined contiguous filesystem binary (up to" >&2
+		echo "${contiguousMaxSize} bytes)." >&2
 		echo "A ${platform}-specific contiguous linker script with a region sized for" >&2
 		echo "that platform's actual available RAM needs to be created before building" >&2
 		echo "the contiguous filesystem for this target." >&2
@@ -137,7 +140,7 @@ make -j $(nproc) -C usr/src/filesystems/${blockFilesystem} COMPILE="${compile}" 
 	OBJCOPY="${objcopy}" OBJDUMP="${objdump}" \
 	SIZE="${size}" LINKER_SCRIPT="${filesystemLinkerScript}" \
 	EXTRA_INCLUDES="${extraIncludes}" EXTRA_LINKS="${extraLinks}" \
-	FILESYSTEM="${filesystem}" overlays
+	FILESYSTEM="${filesystem}" MAX_CONTIGUOUS_SIZE="${contiguousMaxSize}" overlays
 
 echo ""
 echo "Build complete."
