@@ -79,6 +79,7 @@ HalFunction *halFunctions[HAL_NUM_SUBSYSTEMS] = {NULL};
 /// @brief Number of valid function slots in each subsystem's array.  This is
 /// used to sanity check the function parameter of the callHal function.
 static const uint32_t halFunctionCounts[HAL_NUM_SUBSYSTEMS] KEEP_IN_FLASH = {
+  [HAL_PLATFORM]     = HAL_PLATFORM_NUM_FNS,
   [HAL_MEMORY]       = HAL_MEMORY_NUM_FNS,
   [HAL_UART]         = HAL_UART_NUM_FNS,
   [HAL_DIO]          = HAL_DIO_NUM_FNS,
@@ -125,11 +126,31 @@ int callHal(HalSubsystem subsystem, uint32_t function, ...) {
 // ---------------------------------------------------------------------------
 // Forward declarations for typed wrappers (defined later in this file).
 // ---------------------------------------------------------------------------
+static int halPlatformCallFileOverlay(HalCallFileOverlayFn *returnValue);
+static int halPlatformExecCommand(HalExecCommandFn *returnValue);
+static int halPlatformInitRootStorage(HalInitRootStorageFn *returnValue);
+static int halPlatformRestartRootFilesystem(
+  HalRestartRootFilesystemFn *returnValue);
+static int halPlatformRestartShell(HalRestartShellFn *returnValue);
+
 static int halMemoryProcessStackSize(bool debug, size_t *returnValue);
 static int halMemoryMemoryManagerStackSize(bool debug, size_t *returnValue);
 static int halMemoryBottomOfHeap(bool debug, void **returnValue);
 static int halMemoryNumExtraSchedulerStacks(bool debug, uint8_t *returnValue);
 static int halMemoryNumExtraConsoleStacks(bool debug, uint8_t *returnValue);
+static int halMemoryOverlayMap(NanoOsOverlayMap **returnValue);
+static int halMemoryContiguousFilesystem(NanoOsOverlayMap **returnValue);
+static int halMemoryStaticLogs(StaticLogs **returnValue);
+static int halMemoryLogBuffer(char **returnValue);
+static int halMemoryLogEntries(LogEntry **returnValue);
+static int halMemoryLogMessages(ProcessMessage **returnValue);
+static int halMemoryAllProcesses(ProcessDescriptor **returnValue);
+static int halMemoryReadyQueues(ProcessQueue ***returnValue);
+static int halMemoryWaitingQueue(ProcessQueue **returnValue);
+static int halMemoryTimedWaitingQueue(ProcessQueue **returnValue);
+static int halMemoryFreeQueue(ProcessQueue **returnValue);
+static int halMemoryProcessErrorNumbers(int **returnValue);
+static int halMemoryProcessStorage(void ****returnValue);
 
 static int halUartInit(void);
 static int halUartConfigure(int32_t deviceId, uint32_t baud);
@@ -189,11 +210,11 @@ static int halBlockDeviceRestart(ProcessDescriptor *processDescriptor);
 
 Hal halImpl = {
   .platform = {
-    .callFileOverlay       = NULL,
-    .execCommand           = NULL,
-    .initRootStorage       = NULL,
-    .restartRootFilesystem = NULL,
-    .restartShell          = NULL,
+    .callFileOverlay       = halPlatformCallFileOverlay,
+    .execCommand           = halPlatformExecCommand,
+    .initRootStorage       = halPlatformInitRootStorage,
+    .restartRootFilesystem = halPlatformRestartRootFilesystem,
+    .restartShell          = halPlatformRestartShell,
   },
   .memory = {
     .processStackSize        = halMemoryProcessStackSize,
@@ -201,12 +222,22 @@ Hal halImpl = {
     .bottomOfHeap            = halMemoryBottomOfHeap,
     .numExtraSchedulerStacks = halMemoryNumExtraSchedulerStacks,
     .numExtraConsoleStacks   = halMemoryNumExtraConsoleStacks,
-    .overlayMap              = NULL,
+    .overlayMap              = halMemoryOverlayMap,
     .overlaySize             = 0,
+    .contiguousFilesystem    = halMemoryContiguousFilesystem,
     .stringsPresent          = false,
-    .staticLogs              = NULL,
-    .logBuffer               = NULL,
+    .staticLogs              = halMemoryStaticLogs,
+    .logBuffer               = halMemoryLogBuffer,
     .logBufferSize           = 0,
+    .logEntries              = halMemoryLogEntries,
+    .logMessages             = halMemoryLogMessages,
+    .allProcesses            = halMemoryAllProcesses,
+    .readyQueues             = halMemoryReadyQueues,
+    .waitingQueue            = halMemoryWaitingQueue,
+    .timedWaitingQueue       = halMemoryTimedWaitingQueue,
+    .freeQueue               = halMemoryFreeQueue,
+    .processErrorNumbers     = halMemoryProcessErrorNumbers,
+    .processStorage          = halMemoryProcessStorage,
   },
   .uart = {
     .numSupported = 0,
@@ -303,6 +334,81 @@ static int halMemoryNumExtraConsoleStacks(bool debug,
 ) {
   return callHal(HAL_MEMORY, HAL_MEMORY_NUM_EXTRA_CONSOLE_STACKS,
     debug, returnValue);
+}
+
+static int halMemoryOverlayMap(NanoOsOverlayMap **returnValue) {
+  return callHal(HAL_MEMORY, HAL_MEMORY_OVERLAY_MAP, returnValue);
+}
+
+static int halMemoryContiguousFilesystem(NanoOsOverlayMap **returnValue) {
+  return callHal(HAL_MEMORY, HAL_MEMORY_CONTIGUOUS_FILESYSTEM, returnValue);
+}
+
+static int halMemoryStaticLogs(StaticLogs **returnValue) {
+  return callHal(HAL_MEMORY, HAL_MEMORY_STATIC_LOGS, returnValue);
+}
+
+static int halMemoryLogBuffer(char **returnValue) {
+  return callHal(HAL_MEMORY, HAL_MEMORY_LOG_BUFFER, returnValue);
+}
+
+static int halMemoryLogEntries(LogEntry **returnValue) {
+  return callHal(HAL_MEMORY, HAL_MEMORY_LOG_ENTRIES, returnValue);
+}
+
+static int halMemoryLogMessages(ProcessMessage **returnValue) {
+  return callHal(HAL_MEMORY, HAL_MEMORY_LOG_MESSAGES, returnValue);
+}
+
+static int halMemoryAllProcesses(ProcessDescriptor **returnValue) {
+  return callHal(HAL_MEMORY, HAL_MEMORY_ALL_PROCESSES, returnValue);
+}
+
+static int halMemoryReadyQueues(ProcessQueue ***returnValue) {
+  return callHal(HAL_MEMORY, HAL_MEMORY_READY_QUEUES, returnValue);
+}
+
+static int halMemoryWaitingQueue(ProcessQueue **returnValue) {
+  return callHal(HAL_MEMORY, HAL_MEMORY_WAITING_QUEUE, returnValue);
+}
+
+static int halMemoryTimedWaitingQueue(ProcessQueue **returnValue) {
+  return callHal(HAL_MEMORY, HAL_MEMORY_TIMED_WAITING_QUEUE, returnValue);
+}
+
+static int halMemoryFreeQueue(ProcessQueue **returnValue) {
+  return callHal(HAL_MEMORY, HAL_MEMORY_FREE_QUEUE, returnValue);
+}
+
+static int halMemoryProcessErrorNumbers(int **returnValue) {
+  return callHal(HAL_MEMORY, HAL_MEMORY_PROCESS_ERROR_NUMBERS, returnValue);
+}
+
+static int halMemoryProcessStorage(void ****returnValue) {
+  return callHal(HAL_MEMORY, HAL_MEMORY_PROCESS_STORAGE, returnValue);
+}
+
+static int halPlatformCallFileOverlay(HalCallFileOverlayFn *returnValue) {
+  return callHal(HAL_PLATFORM, HAL_PLATFORM_CALL_FILE_OVERLAY, returnValue);
+}
+
+static int halPlatformExecCommand(HalExecCommandFn *returnValue) {
+  return callHal(HAL_PLATFORM, HAL_PLATFORM_EXEC_COMMAND, returnValue);
+}
+
+static int halPlatformInitRootStorage(HalInitRootStorageFn *returnValue) {
+  return callHal(HAL_PLATFORM, HAL_PLATFORM_INIT_ROOT_STORAGE, returnValue);
+}
+
+static int halPlatformRestartRootFilesystem(
+  HalRestartRootFilesystemFn *returnValue
+) {
+  return callHal(HAL_PLATFORM, HAL_PLATFORM_RESTART_ROOT_FILESYSTEM,
+    returnValue);
+}
+
+static int halPlatformRestartShell(HalRestartShellFn *returnValue) {
+  return callHal(HAL_PLATFORM, HAL_PLATFORM_RESTART_SHELL, returnValue);
 }
 
 static int halUartInit(void) {
@@ -630,8 +736,9 @@ int halCommonInitRootFilesystem(void) {
   processDescriptor->name = _filesystemName;
   processDescriptor->userId = ROOT_USER_ID;
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
-  processDescriptor->restartFunction
-    = halImpl.platform.restartRootFilesystem;
+  HalRestartRootFilesystemFn restartRootFilesystem = NULL;
+  halImpl.platform.restartRootFilesystem(&restartRootFilesystem);
+  processDescriptor->restartFunction = restartRootFilesystem;
   // DO NOT resume the process yet.  Let the scheduler take care of that.
 
   SCHEDULER_STATE->firstUserPid = SCHEDULER_STATE->rootFsPid + 1;
@@ -784,7 +891,8 @@ int restartContiguousFilesystem(ProcessDescriptor *processDescriptor) {
   fs.blockSize = fs.blockDevice->blockSize;
 
   // Read the full binary into contiguous memory.
-  NanoOsOverlayMap *overlayMap = HAL->memory.contiguousFilesystem;
+  NanoOsOverlayMap *overlayMap = NULL;
+  HAL->memory.contiguousFilesystem(&overlayMap);
   if (rootBlockDevice->schedReadBlocks(
     rootBlockDevice->context,
     /* startBlock= */ 1,
@@ -908,12 +1016,16 @@ int halCommonInit(
     }
   } while (0);
 
-  if ((HAL->memory.overlayMap != NULL) && (HAL->memory.overlaySize > 0)) {
-    memset(HAL->memory.overlayMap, 0, HAL->memory.overlaySize);
+  NanoOsOverlayMap *overlayMap = NULL;
+  HAL->memory.overlayMap(&overlayMap);
+  if ((overlayMap != NULL) && (HAL->memory.overlaySize > 0)) {
+    memset(overlayMap, 0, HAL->memory.overlaySize);
   }
 
-  if ((HAL->memory.logBuffer != NULL) && (HAL->memory.logBufferSize > 0)) {
-    memset(HAL->memory.logBuffer, 0, HAL->memory.logBufferSize);
+  char *logBuffer = NULL;
+  HAL->memory.logBuffer(&logBuffer);
+  if ((logBuffer != NULL) && (HAL->memory.logBufferSize > 0)) {
+    memset(logBuffer, 0, HAL->memory.logBufferSize);
   }
 
   _builtinFilesystemInitDriver = builtinFilesystemInitDriver;

@@ -211,6 +211,34 @@ static void *_processStorageBase[NUM_PROCESSES][NUM_PROCESS_STORAGE_KEYS];
 /// @brief File-local, second-level variable to hold the per-process storage.
 static void **_processStorage[NUM_PROCESSES];
 
+/// @var _logBuffer
+///
+/// @brief Statically allocated buffer for formatting log messages.
+static char _logBuffer[96];
+
+/// @def NUM_LOG_ENTRIES
+///
+/// @brief The number of LogEntry objects held in our local array.
+#define NUM_LOG_ENTRIES 3
+
+/// @var _logEntries
+///
+/// @brief Local array of LogEntry objects to use in communication with the
+/// logger process.
+static LogEntry _logEntries[NUM_LOG_ENTRIES];
+
+/// @var _logMessages
+///
+/// @brief Private pool of ProcessMessage objects used to deliver log entries to
+/// the logger process.  One per _logEntries slot.
+static ProcessMessage _logMessages[NUM_LOG_ENTRIES];
+
+/// @var _allProcesses
+///
+/// @brief Statically allocated buffer of ProcessDescriptors to hold the
+/// metadata for all processes on the system, including the scheduler.
+static ProcessDescriptor _allProcesses[NUM_PROCESSES];
+
 // Sleep configuration
 #include <avr/sleep.h>
 #include <avr/interrupt.h>
@@ -738,12 +766,171 @@ int arduinoAvrRestartBlockDevice(va_list args);
 }
 #endif
 
+/// @var _initRootStorage
+///
+/// @brief Board-specific initRootStorage implementation, set via
+/// arduinoAvrSetRootStorageFunctions.  NULL on boards with no root storage.
+static HalInitRootStorageFn _initRootStorage = NULL;
+
+/// @var _restartRootFilesystem
+///
+/// @brief Board-specific restartRootFilesystem implementation, set via
+/// arduinoAvrSetRootStorageFunctions.  NULL on boards with no root
+/// filesystem.
+static HalRestartRootFilesystemFn _restartRootFilesystem = NULL;
+
+void arduinoAvrSetRootStorageFunctions(
+  HalInitRootStorageFn initRootStorage,
+  HalRestartRootFilesystemFn restartRootFilesystem
+) {
+  _initRootStorage = initRootStorage;
+  _restartRootFilesystem = restartRootFilesystem;
+}
+
+int arduinoAvrExecCommand(va_list args) {
+  HalExecCommandFn *returnValue = va_arg(args, HalExecCommandFn*);
+  if (returnValue != NULL) {
+    *returnValue = execBuiltinCommand;
+  }
+  return 0;
+}
+
+int arduinoAvrInitRootStorage(va_list args) {
+  HalInitRootStorageFn *returnValue = va_arg(args, HalInitRootStorageFn*);
+  if (returnValue != NULL) {
+    *returnValue = _initRootStorage;
+  }
+  return 0;
+}
+
+int arduinoAvrRestartRootFilesystem(va_list args) {
+  HalRestartRootFilesystemFn *returnValue
+    = va_arg(args, HalRestartRootFilesystemFn*);
+  if (returnValue != NULL) {
+    *returnValue = _restartRootFilesystem;
+  }
+  return 0;
+}
+
+int arduinoAvrRestartShell(va_list args) {
+  HalRestartShellFn *returnValue = va_arg(args, HalRestartShellFn*);
+  if (returnValue != NULL) {
+    *returnValue = restartBuiltinShell;
+  }
+  return 0;
+}
+
+int arduinoAvrLogBuffer(va_list args) {
+  char **returnValue = va_arg(args, char**);
+  if (returnValue != NULL) {
+    *returnValue = _logBuffer;
+  }
+  return 0;
+}
+
+int arduinoAvrLogEntries(va_list args) {
+  LogEntry **returnValue = va_arg(args, LogEntry**);
+  if (returnValue != NULL) {
+    *returnValue = _logEntries;
+  }
+  return 0;
+}
+
+int arduinoAvrLogMessages(va_list args) {
+  ProcessMessage **returnValue = va_arg(args, ProcessMessage**);
+  if (returnValue != NULL) {
+    *returnValue = _logMessages;
+  }
+  return 0;
+}
+
+int arduinoAvrAllProcesses(va_list args) {
+  ProcessDescriptor **returnValue = va_arg(args, ProcessDescriptor**);
+  if (returnValue != NULL) {
+    *returnValue = _allProcesses;
+  }
+  return 0;
+}
+
+int arduinoAvrReadyQueues(va_list args) {
+  ProcessQueue ***returnValue = va_arg(args, ProcessQueue***);
+  if (returnValue != NULL) {
+    *returnValue = _readyQueues;
+  }
+  return 0;
+}
+
+int arduinoAvrWaitingQueue(va_list args) {
+  ProcessQueue **returnValue = va_arg(args, ProcessQueue**);
+  if (returnValue != NULL) {
+    *returnValue = (ProcessQueue*) &_waitingQueue;
+  }
+  return 0;
+}
+
+int arduinoAvrTimedWaitingQueue(va_list args) {
+  ProcessQueue **returnValue = va_arg(args, ProcessQueue**);
+  if (returnValue != NULL) {
+    *returnValue = (ProcessQueue*) &_timedWaitingQueue;
+  }
+  return 0;
+}
+
+int arduinoAvrFreeQueue(va_list args) {
+  ProcessQueue **returnValue = va_arg(args, ProcessQueue**);
+  if (returnValue != NULL) {
+    *returnValue = (ProcessQueue*) &_freeQueue;
+  }
+  return 0;
+}
+
+int arduinoAvrProcessErrorNumbers(va_list args) {
+  int **returnValue = va_arg(args, int**);
+  if (returnValue != NULL) {
+    *returnValue = _processErrorNumbers;
+  }
+  return 0;
+}
+
+int arduinoAvrProcessStorage(va_list args) {
+  void ****returnValue = va_arg(args, void****);
+  if (returnValue != NULL) {
+    *returnValue = _processStorage;
+  }
+  return 0;
+}
+
+// NOTE: avr-g++ (unlike gcc) cannot compile a designated-initializer array
+// with gaps ("sorry, unimplemented: non-trivial designated initializers not
+// supported"), so every enum index must be listed in order, even the ones
+// this platform leaves NULL.
+static HalFunction arduinoAvrPlatformFunctions[HAL_PLATFORM_NUM_FNS] = {
+  [HAL_PLATFORM_CALL_FILE_OVERLAY]       = NULL,
+  [HAL_PLATFORM_EXEC_COMMAND]            = arduinoAvrExecCommand,
+  [HAL_PLATFORM_INIT_ROOT_STORAGE]       = arduinoAvrInitRootStorage,
+  [HAL_PLATFORM_RESTART_ROOT_FILESYSTEM] = arduinoAvrRestartRootFilesystem,
+  [HAL_PLATFORM_RESTART_SHELL]           = arduinoAvrRestartShell,
+};
+
 static HalFunction arduinoAvrMemoryFunctions[HAL_MEMORY_NUM_FNS] = {
   [HAL_MEMORY_PROCESS_STACK_SIZE]         = arduinoAvrProcessStackSize,
   [HAL_MEMORY_MEMORY_MANAGER_STACK_SIZE]  = arduinoAvrMemoryManagerStackSize,
   [HAL_MEMORY_BOTTOM_OF_HEAP]             = arduinoAvrBottomOfHeap,
   [HAL_MEMORY_NUM_EXTRA_SCHEDULER_STACKS] = arduinoAvrNumExtraSchedulerStacks,
   [HAL_MEMORY_NUM_EXTRA_CONSOLE_STACKS]   = arduinoAvrNumExtraConsoleStacks,
+  [HAL_MEMORY_OVERLAY_MAP]                = NULL,
+  [HAL_MEMORY_CONTIGUOUS_FILESYSTEM]      = NULL,
+  [HAL_MEMORY_STATIC_LOGS]                = NULL,
+  [HAL_MEMORY_LOG_BUFFER]                 = arduinoAvrLogBuffer,
+  [HAL_MEMORY_LOG_ENTRIES]                = arduinoAvrLogEntries,
+  [HAL_MEMORY_LOG_MESSAGES]               = arduinoAvrLogMessages,
+  [HAL_MEMORY_ALL_PROCESSES]              = arduinoAvrAllProcesses,
+  [HAL_MEMORY_READY_QUEUES]               = arduinoAvrReadyQueues,
+  [HAL_MEMORY_WAITING_QUEUE]              = arduinoAvrWaitingQueue,
+  [HAL_MEMORY_TIMED_WAITING_QUEUE]        = arduinoAvrTimedWaitingQueue,
+  [HAL_MEMORY_FREE_QUEUE]                 = arduinoAvrFreeQueue,
+  [HAL_MEMORY_PROCESS_ERROR_NUMBERS]      = arduinoAvrProcessErrorNumbers,
+  [HAL_MEMORY_PROCESS_STORAGE]            = arduinoAvrProcessStorage,
 };
 
 static HalFunction arduinoAvrUartFunctions[HAL_UART_NUM_FNS] = {
@@ -788,34 +975,6 @@ static HalFunction arduinoAvrBlockDeviceFunctions[HAL_BLOCK_DEVICE_NUM_FNS] = {
   [HAL_BLOCK_DEVICE_RESTART] = arduinoAvrRestartBlockDevice,
 };
 
-/// @var _logBuffer
-///
-/// @brief Statically allocated buffer for formatting log messages.
-static char _logBuffer[96];
-
-/// @def NUM_LOG_ENTRIES
-///
-/// @brief The number of LogEntry objects held in our local array.
-#define NUM_LOG_ENTRIES 3
-
-/// @var _logEntries
-///
-/// @brief Local array of LogEntry objects to use in communication with the
-/// logger process.
-static LogEntry _logEntries[NUM_LOG_ENTRIES];
-
-/// @var _logMessages
-///
-/// @brief Private pool of ProcessMessage objects used to deliver log entries to
-/// the logger process.  One per _logEntries slot.
-static ProcessMessage _logMessages[NUM_LOG_ENTRIES];
-
-/// @var _allProcesses
-///
-/// @brief Statically allocated buffer of ProcessDescriptors to hold the
-/// metadata for all processes on the system, including the scheduler.
-static ProcessDescriptor _allProcesses[NUM_PROCESSES];
-
 // We want to link in the built-in filesystem and FAT32 implementation, so
 // provide those declarations here.  Only the Mega 2560 (via
 // HalArduinoMega2560.c) actually wires restartRootFilesystem to
@@ -838,6 +997,7 @@ extern const FilesystemCommandHandler
 int halArduinoAvrInit(HalArduinoAvrInitArgs *args) {
   // Wire up per-subsystem function arrays.
   // HAL_TIMER is not supported on this platform — leave halFunctions[HAL_TIMER] NULL.
+  halFunctions[HAL_PLATFORM]     = arduinoAvrPlatformFunctions;
   halFunctions[HAL_MEMORY]       = arduinoAvrMemoryFunctions;
   halFunctions[HAL_UART]         = arduinoAvrUartFunctions;
   halFunctions[HAL_DIO]          = arduinoAvrDioFunctions;
@@ -845,9 +1005,6 @@ int halArduinoAvrInit(HalArduinoAvrInitArgs *args) {
   halFunctions[HAL_CLOCK]        = arduinoAvrClockFunctions;
   halFunctions[HAL_POWER]        = arduinoAvrPowerFunctions;
   halFunctions[HAL_BLOCK_DEVICE] = arduinoAvrBlockDeviceFunctions;
-
-  halImpl.platform.execCommand = execBuiltinCommand;
-  halImpl.platform.restartShell = restartBuiltinShell;
 
   // Set per-platform data members from the init args.
   _dioStart   = args->dioStart;
@@ -872,34 +1029,23 @@ int halArduinoAvrInit(HalArduinoAvrInitArgs *args) {
   halImpl.blockDevice.online       = arduinoAvrBlockDevicesOnline;
 
   halImpl.memory.stringsPresent = true;
-  halImpl.memory.logBuffer      = _logBuffer;
   halImpl.memory.logBufferSize  = sizeof(_logBuffer);
   halImpl.memory.numLogEntries  = NUM_LOG_ENTRIES;
   memset(&_logEntries, 0, sizeof(_logEntries));
-  halImpl.memory.logEntries     = _logEntries;
   memset(&_logMessages, 0, sizeof(_logMessages));
-  halImpl.memory.logMessages    = _logMessages;
-  halImpl.memory.staticLogs     = NULL;
   memset(_allProcesses, 0, sizeof(_allProcesses));
   halImpl.memory.numProcesses   = NUM_PROCESSES;
-  halImpl.memory.allProcesses   = _allProcesses;
   for (int ii = 0; ii < NUM_READY_QUEUES; ii++) {
     memset(_readyQueues[ii], 0, sizeof(HalProcessQueue));
   }
-  halImpl.memory.readyQueues         = _readyQueues;
   memset(&_waitingQueue, 0, sizeof(HalProcessQueue));
-  halImpl.memory.waitingQueue        = (ProcessQueue*) &_waitingQueue;
   memset(&_timedWaitingQueue, 0, sizeof(HalProcessQueue));
-  halImpl.memory.timedWaitingQueue   = (ProcessQueue*) &_timedWaitingQueue;
   memset(&_freeQueue, 0, sizeof(HalProcessQueue));
-  halImpl.memory.freeQueue           = (ProcessQueue*) &_freeQueue;
-  halImpl.memory.processErrorNumbers = _processErrorNumbers;
   memset(_processStorageBase, 0,
     NUM_PROCESSES * NUM_PROCESS_STORAGE_KEYS * sizeof(void*));
   for (int ii = 0; ii < NUM_PROCESSES; ii++) {
     _processStorage[ii] = _processStorageBase[ii];
   }
-  halImpl.memory.processStorage = _processStorage;
 
   return halCommonInit(
     /* builtinFilesystemInitDriver= */ filesystemInitDriver,

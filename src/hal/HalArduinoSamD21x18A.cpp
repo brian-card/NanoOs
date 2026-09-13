@@ -92,17 +92,21 @@ void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
 /// allocations the Arduino core/libraries make during their own boot
 /// sequence, before NanoOs takes over -- that memory starts allocating
 /// right after .bss too, so a boundary set exactly at .bss end would
-/// collide with it. This value is the one the ItsyBitsy M0 has always
-/// shipped and worked on (.bss end 0x200021c4, 0x23c/572 bytes below
-/// this address). Raising it to fit a board with more static RAM use
+/// collide with it. Raising it to fit a board with more static RAM use
 /// costs the same amount of heap everywhere else, which isn't worth it:
 /// see "Supported boards" at the top of makefiles/ArduinoSamd21Makefile
 /// for the boards this constant excludes and why.
 ///
+/// Raised by 0x100 (256 bytes) from the ItsyBitsy M0's original
+/// 0x20002400 to make room for the HAL_PLATFORM/HAL_MEMORY callHal
+/// dispatch tables and capability entries added when HalPlatform's
+/// function pointers and HalMemory's overlay/log/scheduler pointers
+/// were converted to callHal-routed getters.
+///
 /// MUST be kept in sync with:
 ///   - __nanoos_overlay_window in ld/ArduinoSamd21FlashWithBootloader.ld
 ///   - OVERLAY_RAM ORIGIN      in usr/src/NanoOsArduinoSamd21.ld
-#define OVERLAY_ADDRESS 0x20002400
+#define OVERLAY_ADDRESS 0x20002500
 
 /// @def OVERLAY_SIZE
 ///
@@ -1418,12 +1422,211 @@ int arduinoSamD21x18ARestartBlockDevice(va_list args) {
   return 0;
 }
 
+/// @var _logBuffer
+///
+/// @brief Statically allocated buffer for formatting log messages.
+static char _logBuffer[128];
+
+/// @def NUM_LOG_ENTRIES
+///
+/// @brief The number of LogEntry objects held in our local array.
+#define NUM_LOG_ENTRIES 3
+
+/// @var _logEntries
+///
+/// @brief Local array of LogEntry objects to use in communication with the
+/// logger process.
+static LogEntry _logEntries[NUM_LOG_ENTRIES];
+
+/// @var _logMessages
+///
+/// @brief Private pool of ProcessMessage objects used to deliver log entries to
+/// the logger process.  One per _logEntries slot.
+static ProcessMessage _logMessages[NUM_LOG_ENTRIES];
+
+/// @var _allProcesses
+///
+/// @brief Statically allocated buffer of ProcessDescriptors to hold the
+/// metadata for all processes on the system, including the scheduler.
+static ProcessDescriptor _allProcesses[NUM_PROCESSES];
+
+int arduinoSamD21x18ACallFileOverlay(va_list args) {
+  HalCallFileOverlayFn *returnValue = va_arg(args, HalCallFileOverlayFn*);
+  if (returnValue != NULL) {
+    *returnValue = callOverlayFunctionFromFile;
+  }
+  return 0;
+}
+
+int arduinoSamD21x18AExecCommand(va_list args) {
+  HalExecCommandFn *returnValue = va_arg(args, HalExecCommandFn*);
+  if (returnValue != NULL) {
+    *returnValue = execOverlayCommand;
+  }
+  return 0;
+}
+
+int arduinoSamD21x18AInitRootStorage(va_list args) {
+  HalInitRootStorageFn *returnValue = va_arg(args, HalInitRootStorageFn*);
+  if (returnValue != NULL) {
+    *returnValue = halCommonInitRootFilesystem;
+  }
+  return 0;
+}
+
+int arduinoSamD21x18ARestartRootFilesystem(va_list args) {
+  HalRestartRootFilesystemFn *returnValue
+    = va_arg(args, HalRestartRootFilesystemFn*);
+  if (returnValue != NULL) {
+    *returnValue = restartBuiltinFilesystem;
+  }
+  return 0;
+}
+
+int arduinoSamD21x18ARestartShell(va_list args) {
+  HalRestartShellFn *returnValue = va_arg(args, HalRestartShellFn*);
+  if (returnValue != NULL) {
+    *returnValue = restartOverlayShell;
+  }
+  return 0;
+}
+
+int arduinoSamD21x18AOverlayMap(va_list args) {
+  NanoOsOverlayMap **returnValue = va_arg(args, NanoOsOverlayMap**);
+  if (returnValue != NULL) {
+    *returnValue = (NanoOsOverlayMap*) OVERLAY_ADDRESS;
+  }
+  return 0;
+}
+
+int arduinoSamD21x18AStaticLogs(va_list args) {
+  StaticLogs **returnValue = va_arg(args, StaticLogs**);
+  if (returnValue != NULL) {
+//// #if LOG_THRESHOLD < LOG_LEVEL_DETAIL
+    *returnValue = NULL;
+//// #else // LOG_THRESHOLD >= LOG_LEVEL_DETAIL
+////     *returnValue = (StaticLogs*) STATIC_LOGS_ADDRESS;
+//// #endif // LOG_THRESHOLD < LOG_LEVEL_DETAIL
+  }
+  return 0;
+}
+
+int arduinoSamD21x18ALogBuffer(va_list args) {
+  char **returnValue = va_arg(args, char**);
+  if (returnValue != NULL) {
+    *returnValue = _logBuffer;
+  }
+  return 0;
+}
+
+int arduinoSamD21x18ALogEntries(va_list args) {
+  LogEntry **returnValue = va_arg(args, LogEntry**);
+  if (returnValue != NULL) {
+    *returnValue = _logEntries;
+  }
+  return 0;
+}
+
+int arduinoSamD21x18ALogMessages(va_list args) {
+  ProcessMessage **returnValue = va_arg(args, ProcessMessage**);
+  if (returnValue != NULL) {
+    *returnValue = _logMessages;
+  }
+  return 0;
+}
+
+int arduinoSamD21x18AAllProcesses(va_list args) {
+  ProcessDescriptor **returnValue = va_arg(args, ProcessDescriptor**);
+  if (returnValue != NULL) {
+    *returnValue = _allProcesses;
+  }
+  return 0;
+}
+
+int arduinoSamD21x18AReadyQueues(va_list args) {
+  ProcessQueue ***returnValue = va_arg(args, ProcessQueue***);
+  if (returnValue != NULL) {
+    *returnValue = _readyQueues;
+  }
+  return 0;
+}
+
+int arduinoSamD21x18AWaitingQueue(va_list args) {
+  ProcessQueue **returnValue = va_arg(args, ProcessQueue**);
+  if (returnValue != NULL) {
+    *returnValue = (ProcessQueue*) &_waitingQueue;
+  }
+  return 0;
+}
+
+int arduinoSamD21x18ATimedWaitingQueue(va_list args) {
+  ProcessQueue **returnValue = va_arg(args, ProcessQueue**);
+  if (returnValue != NULL) {
+    *returnValue = (ProcessQueue*) &_timedWaitingQueue;
+  }
+  return 0;
+}
+
+int arduinoSamD21x18AFreeQueue(va_list args) {
+  ProcessQueue **returnValue = va_arg(args, ProcessQueue**);
+  if (returnValue != NULL) {
+    *returnValue = (ProcessQueue*) &_freeQueue;
+  }
+  return 0;
+}
+
+int arduinoSamD21x18AProcessErrorNumbers(va_list args) {
+  int **returnValue = va_arg(args, int**);
+  if (returnValue != NULL) {
+    *returnValue = _processErrorNumbers;
+  }
+  return 0;
+}
+
+int arduinoSamD21x18AProcessStorage(va_list args) {
+  void ****returnValue = va_arg(args, void****);
+  if (returnValue != NULL) {
+    *returnValue = _processStorage;
+  }
+  return 0;
+}
+
+static HalFunction arduinoSamD21x18APlatformFunctions[HAL_PLATFORM_NUM_FNS] = {
+  [HAL_PLATFORM_CALL_FILE_OVERLAY]
+    = arduinoSamD21x18ACallFileOverlay,
+  [HAL_PLATFORM_EXEC_COMMAND]
+    = arduinoSamD21x18AExecCommand,
+  [HAL_PLATFORM_INIT_ROOT_STORAGE]
+    = arduinoSamD21x18AInitRootStorage,
+  [HAL_PLATFORM_RESTART_ROOT_FILESYSTEM]
+    = arduinoSamD21x18ARestartRootFilesystem,
+  [HAL_PLATFORM_RESTART_SHELL]
+    = arduinoSamD21x18ARestartShell,
+};
+
+// NOTE: avr-g++/arm-none-eabi-g++ cannot compile a designated-initializer
+// array with gaps ("sorry, unimplemented: non-trivial designated
+// initializers not supported"), so every enum index must be listed in
+// order, even the ones this platform leaves NULL.
 static HalFunction arduinoSamD21x18AMemoryFunctions[HAL_MEMORY_NUM_FNS] = {
   [HAL_MEMORY_PROCESS_STACK_SIZE]         = arduinoSamD21x18AProcessStackSize,
   [HAL_MEMORY_MEMORY_MANAGER_STACK_SIZE]  = arduinoSamD21x18AMemoryManagerStackSize,
   [HAL_MEMORY_BOTTOM_OF_HEAP]             = arduinoSamD21x18ABottomOfHeap,
   [HAL_MEMORY_NUM_EXTRA_SCHEDULER_STACKS] = arduinoSamD21x18ANumExtraSchedulerStacks,
   [HAL_MEMORY_NUM_EXTRA_CONSOLE_STACKS]   = arduinoSamD21x18ANumExtraConsoleStacks,
+  [HAL_MEMORY_OVERLAY_MAP]                = arduinoSamD21x18AOverlayMap,
+  [HAL_MEMORY_CONTIGUOUS_FILESYSTEM]      = NULL,
+  [HAL_MEMORY_STATIC_LOGS]                = arduinoSamD21x18AStaticLogs,
+  [HAL_MEMORY_LOG_BUFFER]                 = arduinoSamD21x18ALogBuffer,
+  [HAL_MEMORY_LOG_ENTRIES]                = arduinoSamD21x18ALogEntries,
+  [HAL_MEMORY_LOG_MESSAGES]               = arduinoSamD21x18ALogMessages,
+  [HAL_MEMORY_ALL_PROCESSES]              = arduinoSamD21x18AAllProcesses,
+  [HAL_MEMORY_READY_QUEUES]               = arduinoSamD21x18AReadyQueues,
+  [HAL_MEMORY_WAITING_QUEUE]              = arduinoSamD21x18AWaitingQueue,
+  [HAL_MEMORY_TIMED_WAITING_QUEUE]        = arduinoSamD21x18ATimedWaitingQueue,
+  [HAL_MEMORY_FREE_QUEUE]                 = arduinoSamD21x18AFreeQueue,
+  [HAL_MEMORY_PROCESS_ERROR_NUMBERS]      = arduinoSamD21x18AProcessErrorNumbers,
+  [HAL_MEMORY_PROCESS_STORAGE]            = arduinoSamD21x18AProcessStorage,
 };
 
 static HalFunction arduinoSamD21x18AUartFunctions[HAL_UART_NUM_FNS] = {
@@ -1477,34 +1680,6 @@ static HalFunction arduinoSamD21x18ABlockDeviceFunctions[HAL_BLOCK_DEVICE_NUM_FN
   [HAL_BLOCK_DEVICE_GET]     = arduinoSamD21x18AGetBlockDevice,
   [HAL_BLOCK_DEVICE_RESTART] = arduinoSamD21x18ARestartBlockDevice,
 };
-
-/// @var _logBuffer
-///
-/// @brief Statically allocated buffer for formatting log messages.
-static char _logBuffer[128];
-
-/// @def NUM_LOG_ENTRIES
-///
-/// @brief The number of LogEntry objects held in our local array.
-#define NUM_LOG_ENTRIES 3
-
-/// @var _logEntries
-///
-/// @brief Local array of LogEntry objects to use in communication with the
-/// logger process.
-static LogEntry _logEntries[NUM_LOG_ENTRIES];
-
-/// @var _logMessages
-///
-/// @brief Private pool of ProcessMessage objects used to deliver log entries to
-/// the logger process.  One per _logEntries slot.
-static ProcessMessage _logMessages[NUM_LOG_ENTRIES];
-
-/// @var _allProcesses
-///
-/// @brief Statically allocated buffer of ProcessDescriptors to hold the
-/// metadata for all processes on the system, including the scheduler.
-static ProcessDescriptor _allProcesses[NUM_PROCESSES];
 
 /// @var _bssOverflowErrorPrefix
 ///
@@ -1582,6 +1757,7 @@ extern const FilesystemCommandHandler
 
 int halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
   // Wire up per-subsystem function arrays.
+  halFunctions[HAL_PLATFORM]     = arduinoSamD21x18APlatformFunctions;
   halFunctions[HAL_MEMORY]       = arduinoSamD21x18AMemoryFunctions;
   halFunctions[HAL_UART]         = arduinoSamD21x18AUartFunctions;
   halFunctions[HAL_DIO]          = arduinoSamD21x18ADioFunctions;
@@ -1597,57 +1773,34 @@ int halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
   _spiSckDio           = args->spiSckDio;
   _sdCardPinChipSelect = args->sdCardPinChipSelect;
 
-  halImpl.platform.callFileOverlay = callOverlayFunctionFromFile;
-  halImpl.platform.execCommand = execOverlayCommand;
-  halImpl.platform.restartRootFilesystem = restartBuiltinFilesystem;
-  halImpl.platform.initRootStorage = halCommonInitRootFilesystem,
-  halImpl.platform.restartShell = restartOverlayShell;
-
   halArduinoSamD21x18AUartsOnline = args->uartsOnline;
   halArduinoSamD21x18ADiosOnline  = args->diosOnline;
 
-  halImpl.memory.overlayMap  = (NanoOsOverlayMap*) OVERLAY_ADDRESS;
   halImpl.memory.overlaySize = OVERLAY_SIZE;
 
-  halImpl.memory.logBuffer      = _logBuffer;
   halImpl.memory.logBufferSize  = sizeof(_logBuffer);
   halImpl.memory.numLogEntries  = NUM_LOG_ENTRIES;
   memset(&_logEntries, 0, sizeof(_logEntries));
-  halImpl.memory.logEntries     = _logEntries;
   memset(&_logMessages, 0, sizeof(_logMessages));
-  halImpl.memory.logMessages    = _logMessages;
 #ifdef NANO_OS_STRINGS_STRIPPED
   halImpl.memory.stringsPresent = false;
 #else
   halImpl.memory.stringsPresent = true;
 #endif // NANO_OS_STRINGS_STRIPPED
-//// #if LOG_THRESHOLD < LOG_LEVEL_DETAIL
-  halImpl.memory.staticLogs     = NULL;
-//// #else // LOG_THRESHOLD >= LOG_LEVEL_DETAIL
-////   halImpl.memory.staticLogs     = (StaticLogs*) STATIC_LOGS_ADDRESS;
-////   memset(HAL->memory.staticLogs, 0, sizeof(*HAL->memory.staticLogs));
-//// #endif // LOG_THRESHOLD < LOG_LEVEL_DETAIL
 
   memset(_allProcesses, 0, sizeof(_allProcesses));
   halImpl.memory.numProcesses   = NUM_PROCESSES;
-  halImpl.memory.allProcesses   = _allProcesses;
   for (int ii = 0; ii < NUM_READY_QUEUES; ii++) {
     memset(_readyQueues[ii], 0, sizeof(HalProcessQueue));
   }
-  halImpl.memory.readyQueues         = _readyQueues;
   memset(&_waitingQueue, 0, sizeof(HalProcessQueue));
-  halImpl.memory.waitingQueue        = (ProcessQueue*) &_waitingQueue;
   memset(&_timedWaitingQueue, 0, sizeof(HalProcessQueue));
-  halImpl.memory.timedWaitingQueue   = (ProcessQueue*) &_timedWaitingQueue;
   memset(&_freeQueue, 0, sizeof(HalProcessQueue));
-  halImpl.memory.freeQueue           = (ProcessQueue*) &_freeQueue;
-  halImpl.memory.processErrorNumbers = _processErrorNumbers;
   memset(&_processStorageBase, 0,
     NUM_PROCESSES * NUM_PROCESS_STORAGE_KEYS * sizeof(void*));
   for (int ii = 0; ii < NUM_PROCESSES; ii++) {
     _processStorage[ii] = _processStorageBase[ii];
   }
-  halImpl.memory.processStorage = _processStorage;
 
   halImpl.uart.numSupported = args->numUartsSupported;
   halImpl.uart.online       = args->uartsOnline;
@@ -1666,7 +1819,7 @@ int halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
 
   extern char __bss_end__;
   if (((uintptr_t) &__bss_end__)
-    > ((uintptr_t) HAL->memory.overlayMap)
+    > ((uintptr_t) OVERLAY_ADDRESS)
   ) {
     int stackPosition = 0;
     Serial.begin(1000000);
@@ -1674,7 +1827,7 @@ int halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
     Serial.print(_bssOverflowErrorPrefix);
     Serial.print((uintptr_t) &__bss_end__, HEX);
     Serial.print(_greaterThanPrefix);
-    Serial.print((uintptr_t) HAL->memory.overlayMap, HEX);
+    Serial.print((uintptr_t) OVERLAY_ADDRESS, HEX);
     Serial.print(_newline);
     Serial.print(_stackPositionPrefix);
     Serial.print((uintptr_t) &stackPosition, HEX);

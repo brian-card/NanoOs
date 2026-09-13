@@ -110,6 +110,26 @@ int halPosixImplInit(jmp_buf resetBuffer,
   NanoOsOverlayMap **overlayMap, size_t *overlaySize, StaticLogs **staticLogs,
   NanoOsOverlayMap **contiguousFilesystem, size_t *contiguousFilesystemSize);
 
+static int posixCallFileOverlay(va_list args);
+static int posixExecCommand(va_list args);
+static int posixInitRootStorage(va_list args);
+static int posixRestartRootFilesystem(va_list args);
+static int posixRestartShell(va_list args);
+
+static int posixOverlayMap(va_list args);
+static int posixContiguousFilesystem(va_list args);
+static int posixStaticLogs(va_list args);
+static int posixLogBuffer(va_list args);
+static int posixLogEntries(va_list args);
+static int posixLogMessages(va_list args);
+static int posixAllProcesses(va_list args);
+static int posixReadyQueues(va_list args);
+static int posixWaitingQueue(va_list args);
+static int posixTimedWaitingQueue(va_list args);
+static int posixFreeQueue(va_list args);
+static int posixProcessErrorNumbers(va_list args);
+static int posixProcessStorage(va_list args);
+
 // ---------------------------------------------------------------------------
 // Per-platform online bitmask arrays — pointers are installed on halCommon*
 // instances at init time.
@@ -252,6 +272,34 @@ static void *_processStorageBase[NUM_PROCESSES][NUM_PROCESS_STORAGE_KEYS];
 /// @brief File-local, second-level variable to hold the per-process storage.
 static void **_processStorage[NUM_PROCESSES];
 
+/// @var _logBuffer
+///
+/// @brief Statically allocated buffer for formatting log messages.
+static char _logBuffer[128];
+
+/// @def NUM_LOG_ENTRIES
+///
+/// @brief The number of LogEntry objects held in our local array.
+#define NUM_LOG_ENTRIES 10
+
+/// @var _logEntries
+///
+/// @brief Local array of LogEntry objects to use in communication with the
+/// logger process.
+static LogEntry _logEntries[NUM_LOG_ENTRIES];
+
+/// @var _logMessages
+///
+/// @brief Private pool of ProcessMessage objects used to deliver log entries to
+/// the logger process.  One per _logEntries slot.
+static ProcessMessage _logMessages[NUM_LOG_ENTRIES];
+
+/// @var _allProcesses
+///
+/// @brief Statically allocated buffer of ProcessDescriptors to hold the
+/// metadata for all processes on the system, including the scheduler.
+static ProcessDescriptor _allProcesses[NUM_PROCESSES];
+
 /// @var _sdCardName
 ///
 /// @brief Process name assigned to the SD card process.
@@ -334,12 +382,199 @@ int posixRestartBlockDevice(va_list args) {
   return 0;
 }
 
+/// @var _overlayMap
+///
+/// @brief Runtime-determined overlay memory address, set by halPosixImplInit.
+static NanoOsOverlayMap *_overlayMap = NULL;
+
+/// @var _contiguousFilesystem
+///
+/// @brief Runtime-determined contiguous filesystem memory address, set by
+/// halPosixImplInit.
+static NanoOsOverlayMap *_contiguousFilesystem = NULL;
+
+/// @var _staticLogs
+///
+/// @brief Runtime-determined static logs memory address, set by
+/// halPosixImplInit.
+static StaticLogs *_staticLogs = NULL;
+
+static int posixCallFileOverlay(va_list args) {
+  HalCallFileOverlayFn *returnValue = va_arg(args, HalCallFileOverlayFn*);
+  if (returnValue != NULL) {
+    *returnValue = callOverlayFunctionFromFile;
+  }
+  return 0;
+}
+
+static int posixExecCommand(va_list args) {
+  HalExecCommandFn *returnValue = va_arg(args, HalExecCommandFn*);
+  if (returnValue != NULL) {
+    // Uncomment to switch to using the built-in shell:
+    // *returnValue = execBuiltinCommand;
+    *returnValue = execOverlayCommand;
+  }
+  return 0;
+}
+
+static int posixInitRootStorage(va_list args) {
+  HalInitRootStorageFn *returnValue = va_arg(args, HalInitRootStorageFn*);
+  if (returnValue != NULL) {
+    *returnValue = halCommonInitRootFilesystem;
+  }
+  return 0;
+}
+
+static int posixRestartRootFilesystem(va_list args) {
+  HalRestartRootFilesystemFn *returnValue
+    = va_arg(args, HalRestartRootFilesystemFn*);
+  if (returnValue != NULL) {
+    *returnValue = restartContiguousFilesystem;
+  }
+  return 0;
+}
+
+static int posixRestartShell(va_list args) {
+  HalRestartShellFn *returnValue = va_arg(args, HalRestartShellFn*);
+  if (returnValue != NULL) {
+    // Uncomment to switch to using the built-in shell:
+    // *returnValue = restartBuiltinShell;
+    *returnValue = restartOverlayShell;
+  }
+  return 0;
+}
+
+static int posixOverlayMap(va_list args) {
+  NanoOsOverlayMap **returnValue = va_arg(args, NanoOsOverlayMap**);
+  if (returnValue != NULL) {
+    *returnValue = _overlayMap;
+  }
+  return 0;
+}
+
+static int posixContiguousFilesystem(va_list args) {
+  NanoOsOverlayMap **returnValue = va_arg(args, NanoOsOverlayMap**);
+  if (returnValue != NULL) {
+    *returnValue = _contiguousFilesystem;
+  }
+  return 0;
+}
+
+static int posixStaticLogs(va_list args) {
+  StaticLogs **returnValue = va_arg(args, StaticLogs**);
+  if (returnValue != NULL) {
+    *returnValue = _staticLogs;
+  }
+  return 0;
+}
+
+static int posixLogBuffer(va_list args) {
+  char **returnValue = va_arg(args, char**);
+  if (returnValue != NULL) {
+    *returnValue = _logBuffer;
+  }
+  return 0;
+}
+
+static int posixLogEntries(va_list args) {
+  LogEntry **returnValue = va_arg(args, LogEntry**);
+  if (returnValue != NULL) {
+    *returnValue = _logEntries;
+  }
+  return 0;
+}
+
+static int posixLogMessages(va_list args) {
+  ProcessMessage **returnValue = va_arg(args, ProcessMessage**);
+  if (returnValue != NULL) {
+    *returnValue = _logMessages;
+  }
+  return 0;
+}
+
+static int posixAllProcesses(va_list args) {
+  ProcessDescriptor **returnValue = va_arg(args, ProcessDescriptor**);
+  if (returnValue != NULL) {
+    *returnValue = _allProcesses;
+  }
+  return 0;
+}
+
+static int posixReadyQueues(va_list args) {
+  ProcessQueue ***returnValue = va_arg(args, ProcessQueue***);
+  if (returnValue != NULL) {
+    *returnValue = _readyQueues;
+  }
+  return 0;
+}
+
+static int posixWaitingQueue(va_list args) {
+  ProcessQueue **returnValue = va_arg(args, ProcessQueue**);
+  if (returnValue != NULL) {
+    *returnValue = (ProcessQueue*) &_waitingQueue;
+  }
+  return 0;
+}
+
+static int posixTimedWaitingQueue(va_list args) {
+  ProcessQueue **returnValue = va_arg(args, ProcessQueue**);
+  if (returnValue != NULL) {
+    *returnValue = (ProcessQueue*) &_timedWaitingQueue;
+  }
+  return 0;
+}
+
+static int posixFreeQueue(va_list args) {
+  ProcessQueue **returnValue = va_arg(args, ProcessQueue**);
+  if (returnValue != NULL) {
+    *returnValue = (ProcessQueue*) &_freeQueue;
+  }
+  return 0;
+}
+
+static int posixProcessErrorNumbers(va_list args) {
+  int **returnValue = va_arg(args, int**);
+  if (returnValue != NULL) {
+    *returnValue = _processErrorNumbers;
+  }
+  return 0;
+}
+
+static int posixProcessStorage(va_list args) {
+  void ****returnValue = va_arg(args, void****);
+  if (returnValue != NULL) {
+    *returnValue = _processStorage;
+  }
+  return 0;
+}
+
+static HalFunction posixPlatformFunctions[HAL_PLATFORM_NUM_FNS] = {
+  [HAL_PLATFORM_CALL_FILE_OVERLAY]       = posixCallFileOverlay,
+  [HAL_PLATFORM_EXEC_COMMAND]            = posixExecCommand,
+  [HAL_PLATFORM_INIT_ROOT_STORAGE]       = posixInitRootStorage,
+  [HAL_PLATFORM_RESTART_ROOT_FILESYSTEM] = posixRestartRootFilesystem,
+  [HAL_PLATFORM_RESTART_SHELL]           = posixRestartShell,
+};
+
 static HalFunction posixMemoryFunctions[HAL_MEMORY_NUM_FNS] = {
   [HAL_MEMORY_PROCESS_STACK_SIZE]         = posixProcessStackSize,
   [HAL_MEMORY_MEMORY_MANAGER_STACK_SIZE]  = posixMemoryManagerStackSize,
   [HAL_MEMORY_BOTTOM_OF_HEAP]             = posixBottomOfHeap,
   [HAL_MEMORY_NUM_EXTRA_SCHEDULER_STACKS] = posixNumExtraSchedulerStacks,
   [HAL_MEMORY_NUM_EXTRA_CONSOLE_STACKS]   = posixNumExtraConsoleStacks,
+  [HAL_MEMORY_OVERLAY_MAP]                = posixOverlayMap,
+  [HAL_MEMORY_CONTIGUOUS_FILESYSTEM]      = posixContiguousFilesystem,
+  [HAL_MEMORY_STATIC_LOGS]                = posixStaticLogs,
+  [HAL_MEMORY_LOG_BUFFER]                 = posixLogBuffer,
+  [HAL_MEMORY_LOG_ENTRIES]                = posixLogEntries,
+  [HAL_MEMORY_LOG_MESSAGES]               = posixLogMessages,
+  [HAL_MEMORY_ALL_PROCESSES]              = posixAllProcesses,
+  [HAL_MEMORY_READY_QUEUES]               = posixReadyQueues,
+  [HAL_MEMORY_WAITING_QUEUE]              = posixWaitingQueue,
+  [HAL_MEMORY_TIMED_WAITING_QUEUE]        = posixTimedWaitingQueue,
+  [HAL_MEMORY_FREE_QUEUE]                 = posixFreeQueue,
+  [HAL_MEMORY_PROCESS_ERROR_NUMBERS]      = posixProcessErrorNumbers,
+  [HAL_MEMORY_PROCESS_STORAGE]            = posixProcessStorage,
 };
 
 static HalFunction posixUartFunctions[HAL_UART_NUM_FNS] = {
@@ -394,38 +629,11 @@ static HalFunction posixBlockDeviceFunctions[HAL_BLOCK_DEVICE_NUM_FNS] = {
   [HAL_BLOCK_DEVICE_RESTART] = posixRestartBlockDevice,
 };
 
-/// @var _logBuffer
-///
-/// @brief Statically allocated buffer for formatting log messages.
-static char _logBuffer[128];
-
-/// @def NUM_LOG_ENTRIES
-///
-/// @brief The number of LogEntry objects held in our local array.
-#define NUM_LOG_ENTRIES 10
-
-/// @var _logEntries
-///
-/// @brief Local array of LogEntry objects to use in communication with the
-/// logger process.
-static LogEntry _logEntries[NUM_LOG_ENTRIES];
-
-/// @var _logMessages
-///
-/// @brief Private pool of ProcessMessage objects used to deliver log entries to
-/// the logger process.  One per _logEntries slot.
-static ProcessMessage _logMessages[NUM_LOG_ENTRIES];
-
-/// @var _allProcesses
-///
-/// @brief Statically allocated buffer of ProcessDescriptors to hold the
-/// metadata for all processes on the system, including the scheduler.
-static ProcessDescriptor _allProcesses[NUM_PROCESSES];
-
 int halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
   _sdCardDevicePath = sdCardDevicePath;
 
   // Wire up per-subsystem function arrays.
+  halFunctions[HAL_PLATFORM]     = posixPlatformFunctions;
   halFunctions[HAL_MEMORY]       = posixMemoryFunctions;
   halFunctions[HAL_UART]         = posixUartFunctions;
   halFunctions[HAL_DIO]          = posixDioFunctions;
@@ -434,17 +642,6 @@ int halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
   halFunctions[HAL_POWER]        = posixPowerFunctions;
   halFunctions[HAL_TIMER]        = posixTimerFunctions;
   halFunctions[HAL_BLOCK_DEVICE] = posixBlockDeviceFunctions;
-
-  // Set per-platform data members on the common subsystem instances.
-  halImpl.platform.callFileOverlay = callOverlayFunctionFromFile;
-  halImpl.platform.execCommand = execOverlayCommand;
-  halImpl.platform.restartRootFilesystem = restartContiguousFilesystem;
-  halImpl.platform.initRootStorage = halCommonInitRootFilesystem,
-  halImpl.platform.restartShell = restartOverlayShell;
-
-  // Uncomment these lines to switch to using the built-in shell:
-  // halImpl.platform.execCommand = execBuiltinCommand;
-  // halImpl.platform.restartShell = restartBuiltinShell;
 
   halImpl.uart.numSupported = 2;
   halImpl.uart.online       = posixUartsOnline;
@@ -461,13 +658,10 @@ int halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
   halImpl.blockDevice.numSupported = _numBlockDevices;
   halImpl.blockDevice.online       = posixBlockDevicesOnline;
 
-  halImpl.memory.logBuffer      = _logBuffer;
   halImpl.memory.logBufferSize  = sizeof(_logBuffer);
   halImpl.memory.numLogEntries  = NUM_LOG_ENTRIES;
   memset(&_logEntries, 0, sizeof(_logEntries));
-  halImpl.memory.logEntries     = _logEntries;
   memset(&_logMessages, 0, sizeof(_logMessages));
-  halImpl.memory.logMessages    = _logMessages;
 #ifdef NANO_OS_STRINGS_STRIPPED
   halImpl.memory.stringsPresent = false;
 #else
@@ -476,43 +670,36 @@ int halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
 
   memset(_allProcesses, 0, sizeof(_allProcesses));
   halImpl.memory.numProcesses        = NUM_PROCESSES;
-  halImpl.memory.allProcesses        = _allProcesses;
   for (int ii = 0; ii < NUM_READY_QUEUES; ii++) {
     memset(_readyQueues[ii], 0, sizeof(HalProcessQueue));
   }
-  halImpl.memory.readyQueues         = _readyQueues;
   memset(&_waitingQueue, 0, sizeof(HalProcessQueue));
-  halImpl.memory.waitingQueue        = (ProcessQueue*) &_waitingQueue;
   memset(&_timedWaitingQueue, 0, sizeof(HalProcessQueue));
-  halImpl.memory.timedWaitingQueue   = (ProcessQueue*) &_timedWaitingQueue;
   memset(&_freeQueue, 0, sizeof(HalProcessQueue));
-  halImpl.memory.freeQueue           = (ProcessQueue*) &_freeQueue;
-  halImpl.memory.processErrorNumbers = _processErrorNumbers;
   memset(_processStorageBase, 0,
     NUM_PROCESSES * NUM_PROCESS_STORAGE_KEYS * sizeof(void*));
   for (int ii = 0; ii < NUM_PROCESSES; ii++) {
     _processStorage[ii] = _processStorageBase[ii];
   }
-  halImpl.memory.processStorage = _processStorage;
 
   // Perform POSIX-specific hardware setup and retrieve the overlay mapping.
   int32_t result
     = halPosixImplInit(resetBuffer,
-      &halImpl.memory.overlayMap,
+      &_overlayMap,
       &halImpl.memory.overlaySize,
-      &halImpl.memory.staticLogs,
-      &halImpl.memory.contiguousFilesystem,
+      &_staticLogs,
+      &_contiguousFilesystem,
       &halImpl.memory.contiguousFilesystemSize);
   if (result != 0) {
-    halImpl.memory.overlayMap               = NULL;
+    _overlayMap                             = NULL;
     halImpl.memory.overlaySize              = 0;
-    halImpl.memory.contiguousFilesystem     = NULL;
+    _contiguousFilesystem                   = NULL;
     halImpl.memory.contiguousFilesystemSize = 0;
-    halImpl.memory.staticLogs               = NULL;
+    _staticLogs                             = NULL;
     return result;
   }
-  if (halImpl.memory.staticLogs != NULL) {
-    memset(halImpl.memory.staticLogs, 0, sizeof(StaticLogs));
+  if (_staticLogs != NULL) {
+    memset(_staticLogs, 0, sizeof(StaticLogs));
   }
 
   NANO_OS_API = &nanoOsApi;

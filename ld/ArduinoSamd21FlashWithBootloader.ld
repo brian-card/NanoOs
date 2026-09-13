@@ -50,7 +50,7 @@ SECTIONS
 	 *   - OVERLAY_ADDRESS      in src/hal/HalArduinoSamD21x18A.cpp
 	 *   - OVERLAY_RAM ORIGIN   in usr/src/NanoOsArduinoSamd21.ld
 	 */
-	__nanoos_overlay_window = 0x20002200;
+	__nanoos_overlay_window = 0x20002300;
 
 	.text :
 	{

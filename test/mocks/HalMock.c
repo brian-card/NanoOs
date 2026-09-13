@@ -147,8 +147,20 @@ static int                 _processErrorNumbers[NUM_PROCESSES + 1];
 static void  *_processStorageBase[NUM_PROCESSES][NUM_PROCESS_STORAGE_KEYS];
 static void **_processStorage[NUM_PROCESSES];
 
+// --- platform hooks, published through getters (see below) ---------------
+
+static HalCallFileOverlayFn _callFileOverlay = NULL;
+static HalExecCommandFn _execCommand = NULL;
+static HalInitRootStorageFn _initRootStorage = NULL;
+static HalRestartRootFilesystemFn _restartRootFilesystemImpl = NULL;
+
+static NanoOsOverlayMap *_overlayMap = NULL;
+static NanoOsOverlayMap *_contiguousFilesystem = NULL;
+static StaticLogs *_staticLogsPtr = NULL;
+
 // --- dispatch tables -------------------------------------------------
 
+static HalFunction _platformFunctions[HAL_PLATFORM_NUM_FNS];
 static HalFunction _memoryFunctions[HAL_MEMORY_NUM_FNS];
 static HalFunction _uartFunctions[HAL_UART_NUM_FNS];
 static HalFunction _dioFunctions[HAL_DIO_NUM_FNS];
@@ -179,6 +191,137 @@ static int mockEnterPowerModeFn(va_list args) {
 /// @brief MOCK_STORAGE_NONE: leave rootFsPid == 0.  schedFopen and friends
 /// already treat that as "no filesystem" and return NULL/ENOENT.
 static int mockInitRootStorageNone(void) {
+  return 0;
+}
+
+// --- platform / memory pointer getters --------------------------------
+
+static int mockCallFileOverlayFn(va_list args) {
+  HalCallFileOverlayFn *returnValue = va_arg(args, HalCallFileOverlayFn*);
+  if (returnValue != NULL) {
+    *returnValue = _callFileOverlay;
+  }
+  return 0;
+}
+
+static int mockExecCommandFn(va_list args) {
+  HalExecCommandFn *returnValue = va_arg(args, HalExecCommandFn*);
+  if (returnValue != NULL) {
+    *returnValue = _execCommand;
+  }
+  return 0;
+}
+
+static int mockInitRootStorageFn(va_list args) {
+  HalInitRootStorageFn *returnValue = va_arg(args, HalInitRootStorageFn*);
+  if (returnValue != NULL) {
+    *returnValue = _initRootStorage;
+  }
+  return 0;
+}
+
+static int mockRestartRootFilesystemFn(va_list args) {
+  HalRestartRootFilesystemFn *returnValue
+    = va_arg(args, HalRestartRootFilesystemFn*);
+  if (returnValue != NULL) {
+    *returnValue = _restartRootFilesystemImpl;
+  }
+  return 0;
+}
+
+static int mockRestartShellFn(va_list args) {
+  HalRestartShellFn *returnValue = va_arg(args, HalRestartShellFn*);
+  if (returnValue != NULL) {
+    *returnValue = (HalRestartShellFn) _restartShell;
+  }
+  return 0;
+}
+
+static int mockOverlayMapFn(va_list args) {
+  NanoOsOverlayMap **returnValue = va_arg(args, NanoOsOverlayMap**);
+  if (returnValue != NULL) {
+    *returnValue = _overlayMap;
+  }
+  return 0;
+}
+
+static int mockContiguousFilesystemFn(va_list args) {
+  NanoOsOverlayMap **returnValue = va_arg(args, NanoOsOverlayMap**);
+  if (returnValue != NULL) {
+    *returnValue = _contiguousFilesystem;
+  }
+  return 0;
+}
+
+static int mockStaticLogsFn(va_list args) {
+  StaticLogs **returnValue = va_arg(args, StaticLogs**);
+  if (returnValue != NULL) {
+    *returnValue = _staticLogsPtr;
+  }
+  return 0;
+}
+
+static int mockLogBufferFn(va_list args) {
+  char **returnValue = va_arg(args, char**);
+  if (returnValue != NULL) {
+    *returnValue = _logBuffer;
+  }
+  return 0;
+}
+
+static int mockAllProcessesFn(va_list args) {
+  ProcessDescriptor **returnValue = va_arg(args, ProcessDescriptor**);
+  if (returnValue != NULL) {
+    *returnValue = _allProcesses;
+  }
+  return 0;
+}
+
+static int mockReadyQueuesFn(va_list args) {
+  ProcessQueue ***returnValue = va_arg(args, ProcessQueue***);
+  if (returnValue != NULL) {
+    *returnValue = _readyQueues;
+  }
+  return 0;
+}
+
+static int mockWaitingQueueFn(va_list args) {
+  ProcessQueue **returnValue = va_arg(args, ProcessQueue**);
+  if (returnValue != NULL) {
+    *returnValue = (ProcessQueue*) &_waitingQueue;
+  }
+  return 0;
+}
+
+static int mockTimedWaitingQueueFn(va_list args) {
+  ProcessQueue **returnValue = va_arg(args, ProcessQueue**);
+  if (returnValue != NULL) {
+    *returnValue = (ProcessQueue*) &_timedWaitingQueue;
+  }
+  return 0;
+}
+
+static int mockFreeQueueFn(va_list args) {
+  ProcessQueue **returnValue = va_arg(args, ProcessQueue**);
+  if (returnValue != NULL) {
+    *returnValue = (ProcessQueue*) &_freeQueue;
+  }
+  return 0;
+}
+
+static int mockProcessErrorNumbersFn(va_list args) {
+  int **returnValue = va_arg(args, int**);
+  if (returnValue != NULL) {
+    *returnValue = _processErrorNumbers;
+  }
+  return 0;
+}
+
+static int mockProcessStorageFn(va_list args) {
+  void ****returnValue = va_arg(args, void****);
+  if (returnValue != NULL) {
+    *returnValue = _processStorage;
+  }
   return 0;
 }
 
@@ -288,6 +431,25 @@ int halMockInit(const HalMockConfig *config, jmp_buf *powerReturn) {
   _blockDeviceFunctions[HAL_BLOCK_DEVICE_GET]     = mockBlockDeviceGetFn;
   _blockDeviceFunctions[HAL_BLOCK_DEVICE_RESTART] = mockBlockDeviceRestartFn;
 
+  _platformFunctions[HAL_PLATFORM_CALL_FILE_OVERLAY]       = mockCallFileOverlayFn;
+  _platformFunctions[HAL_PLATFORM_EXEC_COMMAND]            = mockExecCommandFn;
+  _platformFunctions[HAL_PLATFORM_INIT_ROOT_STORAGE]       = mockInitRootStorageFn;
+  _platformFunctions[HAL_PLATFORM_RESTART_ROOT_FILESYSTEM] = mockRestartRootFilesystemFn;
+  _platformFunctions[HAL_PLATFORM_RESTART_SHELL]           = mockRestartShellFn;
+
+  _memoryFunctions[HAL_MEMORY_OVERLAY_MAP]           = mockOverlayMapFn;
+  _memoryFunctions[HAL_MEMORY_CONTIGUOUS_FILESYSTEM] = mockContiguousFilesystemFn;
+  _memoryFunctions[HAL_MEMORY_STATIC_LOGS]           = mockStaticLogsFn;
+  _memoryFunctions[HAL_MEMORY_LOG_BUFFER]            = mockLogBufferFn;
+  _memoryFunctions[HAL_MEMORY_ALL_PROCESSES]         = mockAllProcessesFn;
+  _memoryFunctions[HAL_MEMORY_READY_QUEUES]          = mockReadyQueuesFn;
+  _memoryFunctions[HAL_MEMORY_WAITING_QUEUE]         = mockWaitingQueueFn;
+  _memoryFunctions[HAL_MEMORY_TIMED_WAITING_QUEUE]   = mockTimedWaitingQueueFn;
+  _memoryFunctions[HAL_MEMORY_FREE_QUEUE]            = mockFreeQueueFn;
+  _memoryFunctions[HAL_MEMORY_PROCESS_ERROR_NUMBERS] = mockProcessErrorNumbersFn;
+  _memoryFunctions[HAL_MEMORY_PROCESS_STORAGE]       = mockProcessStorageFn;
+
+  halFunctions[HAL_PLATFORM]     = _platformFunctions;
   halFunctions[HAL_MEMORY]       = _memoryFunctions;
   halFunctions[HAL_UART]         = _uartFunctions;
   halFunctions[HAL_DIO]          = _dioFunctions;
@@ -298,15 +460,14 @@ int halMockInit(const HalMockConfig *config, jmp_buf *powerReturn) {
   halFunctions[HAL_BLOCK_DEVICE] = _blockDeviceFunctions;
 
   // Platform hooks.
-  halImpl.platform.callFileOverlay       = callOverlayFunctionFromFile;
-  halImpl.platform.execCommand           = NULL;
-  halImpl.platform.restartRootFilesystem = NULL;
-  halImpl.platform.restartShell          = (int (*)(ProcessDescriptor*)) _restartShell;
+  _callFileOverlay       = callOverlayFunctionFromFile;
+  _execCommand           = NULL;
+  _restartRootFilesystemImpl = NULL;
   if (cfg.storage == MOCK_STORAGE_FILE) {
     // TODO: POSIX SD-card process over cfg.imagePath.
-    halImpl.platform.initRootStorage = halCommonInitRootFilesystem;
+    _initRootStorage = halCommonInitRootFilesystem;
   } else {
-    halImpl.platform.initRootStorage = mockInitRootStorageNone;
+    _initRootStorage = mockInitRootStorageNone;
   }
 
   // Subsystem counts / online bitmasks.
@@ -321,42 +482,34 @@ int halMockInit(const HalMockConfig *config, jmp_buf *powerReturn) {
   halImpl.blockDevice.numSupported = 1;
   halImpl.blockDevice.online      = _blockDevicesOnline;
 
-  halImpl.memory.logBuffer      = _logBuffer;
   halImpl.memory.logBufferSize  = sizeof(_logBuffer);
   halImpl.memory.stringsPresent = true;
 
   memset(_allProcesses, 0, sizeof(_allProcesses));
   halImpl.memory.numProcesses        = NUM_PROCESSES;
-  halImpl.memory.allProcesses        = _allProcesses;
   memset(_readyQueueStorage, 0, sizeof(_readyQueueStorage));
-  halImpl.memory.readyQueues         = _readyQueues;
   memset(&_waitingQueue, 0, sizeof(_waitingQueue));
-  halImpl.memory.waitingQueue        = (ProcessQueue*) &_waitingQueue;
   memset(&_timedWaitingQueue, 0, sizeof(_timedWaitingQueue));
-  halImpl.memory.timedWaitingQueue   = (ProcessQueue*) &_timedWaitingQueue;
   memset(&_freeQueue, 0, sizeof(_freeQueue));
-  halImpl.memory.freeQueue           = (ProcessQueue*) &_freeQueue;
   memset(_processErrorNumbers, 0, sizeof(_processErrorNumbers));
-  halImpl.memory.processErrorNumbers = _processErrorNumbers;
   memset(_processStorageBase, 0, sizeof(_processStorageBase));
   for (int ii = 0; ii < NUM_PROCESSES; ii++) {
     _processStorage[ii] = _processStorageBase[ii];
   }
-  halImpl.memory.processStorage      = _processStorage;
 
   jmp_buf implResetBuffer;
   memset(implResetBuffer, 0, sizeof(implResetBuffer));
   int32_t result = halPosixImplInit(implResetBuffer,
-    &halImpl.memory.overlayMap,
+    &_overlayMap,
     &halImpl.memory.overlaySize,
-    &halImpl.memory.staticLogs,
-    &halImpl.memory.contiguousFilesystem,
+    &_staticLogsPtr,
+    &_contiguousFilesystem,
     &halImpl.memory.contiguousFilesystemSize);
   if (result != 0) {
     return result;
   }
-  if (halImpl.memory.staticLogs != NULL) {
-    memset(halImpl.memory.staticLogs, 0, sizeof(StaticLogs));
+  if (_staticLogsPtr != NULL) {
+    memset(_staticLogsPtr, 0, sizeof(StaticLogs));
   }
 
   NANO_OS_API = &nanoOsApi;

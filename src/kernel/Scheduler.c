@@ -228,7 +228,62 @@ static FileDescriptor standardUserFileDescriptors[
 ///
 /// @brief Array of HalCapability items that describe what a process can do
 /// with the HAL.
+///
+/// @note findHalCapability() does an early-terminating linear search that
+/// assumes this array is sorted in ascending order of subsystemFunction (i.e.
+/// by (subsystem << 8) | function). Keep new entries in the correct sorted
+/// position, not just appended at the end.
 HalCapability baseExecutiveHalCapabilities[] = {
+  {
+    .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_WRITE,
+    .deviceIds =         0x03, // Bitmask for device IDs 0 and 1
+  },
+  {
+    .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_IS_CONSOLE,
+    .deviceIds =         0x03, // Bitmask for device IDs 0 and 1
+  },
+  {
+    .subsystemFunction = (((uint16_t) HAL_CLOCK) << 8)
+      | HAL_CLOCK_GET_ELAPSED_MILLISECONDS,
+    .deviceIds =         0x00, // No device for this function
+  },
+  {
+    .subsystemFunction = (((uint16_t) HAL_CLOCK) << 8)
+      | HAL_CLOCK_GET_ELAPSED_MICROSECONDS,
+    .deviceIds =         0x00, // No device for this function
+  },
+  {
+    .subsystemFunction = (((uint16_t) HAL_CLOCK) << 8)
+      | HAL_CLOCK_GET_ELAPSED_NANOSECONDS,
+    .deviceIds =         0x00, // No device for this function
+  },
+};
+
+/// @var loggerHalCapabilities
+///
+/// @brief Array of HalCapability items granted specifically to the logger
+/// process.  It's the only process that needs direct access to
+/// HAL_MEMORY_STATIC_LOGS/HAL_MEMORY_LOG_BUFFER: it reads staticLogs at
+/// startup to flush messages logged before it existed (see
+/// usr/src/commands/logger/main/main.c), and uses logBuffer to format them.
+/// No other executive or user process talks to the logger this way -- they
+/// just send it IPC messages -- so this is kept separate from
+/// baseExecutiveHalCapabilities rather than extending that (and
+/// baseUserHalCapabilities) for every process.
+///
+/// @note findHalCapability() does an early-terminating linear search that
+/// assumes this array is sorted in ascending order of subsystemFunction (i.e.
+/// by (subsystem << 8) | function). Keep new entries in the correct sorted
+/// position, not just appended at the end.
+HalCapability loggerHalCapabilities[] = {
+  {
+    .subsystemFunction = (((uint16_t) HAL_MEMORY) << 8) | HAL_MEMORY_STATIC_LOGS,
+    .deviceIds =         0x00, // No device for this function
+  },
+  {
+    .subsystemFunction = (((uint16_t) HAL_MEMORY) << 8) | HAL_MEMORY_LOG_BUFFER,
+    .deviceIds =         0x00, // No device for this function
+  },
   {
     .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_WRITE,
     .deviceIds =         0x03, // Bitmask for device IDs 0 and 1
@@ -261,6 +316,13 @@ HalCapability baseExecutiveHalCapabilities[] = {
 ///
 /// @note If this array is extended, its adjustments during bringup need to be
 /// modified as well!!!!!!!!!!!!!!!!!!!!!!!!
+///
+/// @note findHalCapability() does an early-terminating linear search that
+/// assumes this array is sorted in ascending order of subsystemFunction (i.e.
+/// by (subsystem << 8) | function). Keep new entries in the correct sorted
+/// position. HAL_TIMER_CANCEL must stay the LAST entry: initializeSchedulerState()
+/// indexes this array by literal position (baseUserHalCapabilities[5]) to
+/// patch in the preemption timer's device ID.
 HalCapability baseUserHalCapabilities[] = {
 #ifdef NANO_OS_DEBUG
   {
@@ -2867,7 +2929,9 @@ int schedulerExecveCommandHandler(
   execArgs->schedulerState = schedulerState;
   logDebug("Creating new process %d\n",
     processDescriptor->processId);
-  if (processCreate(processDescriptor, HAL->platform.execCommand, execArgs)
+  HalExecCommandFn execCommand = NULL;
+  HAL->platform.execCommand(&execCommand);
+  if (processCreate(processDescriptor, execCommand, execArgs)
     == processError
   ) {
     logError("Could not configure process handle for new command.\n");
@@ -2952,7 +3016,7 @@ int schedulerExecveCommandHandler(
         CONSOLE_COMMAND_SIGNATURE, CONSOLE_RETURNING_INPUT);
   }
 
-  if (HAL->platform.execCommand == execOverlayCommand) {
+  if (execCommand == execOverlayCommand) {
     processDescriptor->overlayNamespace = pathname;
   }
   logDebug("Loading overlay metadata for process %d\n",
@@ -3180,7 +3244,9 @@ int schedulerSpawnCommandHandler(
 
   schedFree(spawnArgs); spawnArgs = NULL;
 
-  if (processCreate(processDescriptor, HAL->platform.execCommand, execArgs)
+  HalExecCommandFn execCommand = NULL;
+  HAL->platform.execCommand(&execCommand);
+  if (processCreate(processDescriptor, execCommand, execArgs)
     == processError
   ) {
     logError("Could not configure process handle for new command.\n");
@@ -3237,7 +3303,7 @@ int schedulerSpawnCommandHandler(
     }
   }
 
-  if (HAL->platform.execCommand == execOverlayCommand) {
+  if (execCommand == execOverlayCommand) {
     processDescriptor->overlayNamespace = pathname;
   }
   returnValue = loadProcessDescriptorOverlayMetadata(processDescriptor);
@@ -3774,7 +3840,7 @@ int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp) {
     return 0;
   }
 
-  NanoOsOverlayMap *overlayMap = HAL->memory.overlayMap;
+  extern NanoOsOverlayMap *overlayMap;
   if ((overlayMap == NULL) || (HAL->memory.overlaySize == 0)) {
     logError("No overlay memory available for use.\n");
     return -ENOMEM;
@@ -3983,7 +4049,9 @@ int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
       = processDescriptor->processId;
   }
 
-  if (processCreate(processDescriptor, HAL->platform.execCommand, execArgs)
+  HalExecCommandFn execCommand = NULL;
+  HAL->platform.execCommand(&execCommand);
+  if (processCreate(processDescriptor, execCommand, execArgs)
     == processError
   ) {
     logError("Could not configure process handle for new command\n");
@@ -3991,7 +4059,7 @@ int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
     goto freeFileDescriptors;
   }
 
-  if (HAL->platform.execCommand == execOverlayCommand) {
+  if (execCommand == execOverlayCommand) {
     processDescriptor->overlayNamespace = execArgs->pathname;
   }
   returnValue = loadProcessDescriptorOverlayMetadata(processDescriptor);
@@ -4393,7 +4461,9 @@ int restartLogger(ProcessDescriptor *processDescriptor) {
 
   logDebug("Starting logger\n");
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
-  processDescriptor->halCapabilities = baseExecutiveHalCapabilities;
+  processDescriptor->halCapabilities = loggerHalCapabilities;
+  processDescriptor->numHalCapabilities
+    = sizeof(loggerHalCapabilities) / sizeof(loggerHalCapabilities[0]);
   processDescriptor->readyQueue
     = SCHEDULER_STATE->readyQueues[processDescriptor->privilegeLevel];
   int returnValue = schedulerRunOverlayCommand(processDescriptor,
@@ -4654,24 +4724,26 @@ int initializeSchedulerState(
   SchedulerState *schedulerState, SchedulerState **threadStatePointer,
   ProcessMessage *messagesStorage
 ) {
-  // Initialize the allProcesses pointer and numProcesses. 
+  // Initialize the allProcesses pointer and numProcesses.
   numProcesses = HAL->memory.numProcesses;
-  allProcesses = HAL->memory.allProcesses;
+  HAL->memory.allProcesses(&allProcesses);
   schedulerState->numManagedProcesses = numProcesses - 1;
-  schedulerState->readyQueues = HAL->memory.readyQueues;
-  schedulerState->waitingQueue = HAL->memory.waitingQueue;
-  schedulerState->timedWaitingQueue = HAL->memory.timedWaitingQueue;
-  schedulerState->freeQueue = HAL->memory.freeQueue;
+  HAL->memory.readyQueues(&schedulerState->readyQueues);
+  HAL->memory.waitingQueue(&schedulerState->waitingQueue);
+  HAL->memory.timedWaitingQueue(&schedulerState->timedWaitingQueue);
+  HAL->memory.freeQueue(&schedulerState->freeQueue);
   extern int *processErrorNumbers;
-  processErrorNumbers = HAL->memory.processErrorNumbers;
+  HAL->memory.processErrorNumbers(&processErrorNumbers);
   extern void ***processStorage;
-  processStorage = HAL->memory.processStorage;
+  HAL->memory.processStorage(&processStorage);
   extern size_t numLogEntries;
   numLogEntries = HAL->memory.numLogEntries;
   extern LogEntry *logEntries;
-  logEntries = HAL->memory.logEntries;
+  HAL->memory.logEntries(&logEntries);
   extern ProcessMessage *logMessages;
-  logMessages = HAL->memory.logMessages;
+  HAL->memory.logMessages(&logMessages);
+  extern NanoOsOverlayMap *overlayMap;
+  HAL->memory.overlayMap(&overlayMap);
 
   schedulerState->hostname = NULL;
   schedulerState->readyQueues[PRIVILEGE_LEVEL_KERNEL]->name
@@ -4963,8 +5035,10 @@ int initializeProcesses(SchedulerState *schedulerState) {
   // schedulerState->firstUserPid isn't populated until HAL->initRootStorage
   // completes, so we need to call that as soon as we can.
   int rv = 0;
-  if (HAL->platform.initRootStorage != NULL) {
-    rv = HAL->platform.initRootStorage();
+  HalInitRootStorageFn initRootStorage = NULL;
+  HAL->platform.initRootStorage(&initRootStorage);
+  if (initRootStorage != NULL) {
+    rv = initRootStorage();
     if (rv != 0) {
       logError("initRootStorage returned status %d\n", rv);
     }
@@ -4983,7 +5057,7 @@ int initializeProcesses(SchedulerState *schedulerState) {
       processDescriptor->processId = schedulerState->loggerPid;
       processDescriptor->userId = ROOT_USER_ID;
       processDescriptor->name = _loggerName;
-      processDescriptor->callOverlayFunction = HAL->platform.callFileOverlay;
+      HAL->platform.callFileOverlay(&processDescriptor->callOverlayFunction);
       // The logger is an executive process, but we're going to start it in
       // supervisor mode until the system comes up far enough to launch it.
       // restartLogger will take care of fixing the level once it launches
@@ -5040,10 +5114,10 @@ int initializeProcesses(SchedulerState *schedulerState) {
     processDescriptor->processId = ii;
     processDescriptor->userId = NO_USER_ID;
     processDescriptor->name = _dummyName;
-    processDescriptor->callOverlayFunction = HAL->platform.callFileOverlay;
+    HAL->platform.callFileOverlay(&processDescriptor->callOverlayFunction);
     if ((ii - schedulerState->firstShellPid) < schedulerState->numShells) {
       processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_SUPERVISOR;
-      processDescriptor->restartFunction = HAL->platform.restartShell;
+      HAL->platform.restartShell(&processDescriptor->restartFunction);
     } else {
       processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_USER;
       processDescriptor->restartFunction = NULL;

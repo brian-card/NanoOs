@@ -198,15 +198,17 @@ int main(int argc, char **argv) {
     while (1) sched_yield();
   }
   
-  loggerState.formatBuffer = getHal()->memory.logBuffer;
+  getHal()->memory.logBuffer(&loggerState.formatBuffer);
   loggerState.formatBufferSize = getHal()->memory.logBufferSize;
   if (gethostname(loggerState.hostname, sizeof(loggerState.hostname)) != 0) {
     strcpy(loggerState.hostname, "localhost");
   }
-  
-  if (getHal()->memory.staticLogs != NULL) {
-    for (uintptr_t ii = 0; ii < getHal()->memory.staticLogs->numEntries; ii++) {
-      printLogEntry(&loggerState, &getHal()->memory.staticLogs->logEntries[ii]);
+
+  StaticLogs *staticLogs = NULL;
+  getHal()->memory.staticLogs(&staticLogs);
+  if (staticLogs != NULL) {
+    for (uintptr_t ii = 0; ii < staticLogs->numEntries; ii++) {
+      printLogEntry(&loggerState, &staticLogs->logEntries[ii]);
     }
   }
   

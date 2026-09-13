@@ -354,6 +354,34 @@ static void *_processStorageBase[NUM_PROCESSES][NUM_PROCESS_STORAGE_KEYS];
 /// @brief File-local, second-level variable to hold the per-process storage.
 static void **_processStorage[NUM_PROCESSES];
 
+/// @var _logBuffer
+///
+/// @brief Statically allocated buffer for formatting log messages.
+static char _logBuffer[128];
+
+/// @def NUM_LOG_ENTRIES
+///
+/// @brief The number of LogEntry objects held in our local array.
+#define NUM_LOG_ENTRIES 10
+
+/// @var _logEntries
+///
+/// @brief Local array of LogEntry objects to use in communication with the
+/// logger process.
+static LogEntry _logEntries[NUM_LOG_ENTRIES];
+
+/// @var _logMessages
+///
+/// @brief Private pool of ProcessMessage objects used to deliver log entries to
+/// the logger process.  One per _logEntries slot.
+static ProcessMessage _logMessages[NUM_LOG_ENTRIES];
+
+/// @var _allProcesses
+///
+/// @brief Statically allocated buffer of ProcessDescriptors to hold the
+/// metadata for all processes on the system, including the scheduler.
+static ProcessDescriptor _allProcesses[NUM_PROCESSES];
+
 /// @def _numBlockDevices
 ///
 /// @brief Number of BlockDevices that can be managed by the HAL.
@@ -1450,12 +1478,178 @@ int agonLight2RestartBlockDevice(va_list args) {
 // Per-subsystem function tables
 // ---------------------------------------------------------------------------
 
+int agonLight2CallFileOverlay(va_list args) {
+  HalCallFileOverlayFn *returnValue = va_arg(args, HalCallFileOverlayFn*);
+  if (returnValue != NULL) {
+    *returnValue = callOverlayFunctionFromFile;
+  }
+  return 0;
+}
+
+int agonLight2ExecCommand(va_list args) {
+  HalExecCommandFn *returnValue = va_arg(args, HalExecCommandFn*);
+  if (returnValue != NULL) {
+    *returnValue = execOverlayCommand;
+  }
+  return 0;
+}
+
+int agonLight2InitRootStorage(va_list args) {
+  HalInitRootStorageFn *returnValue = va_arg(args, HalInitRootStorageFn*);
+  if (returnValue != NULL) {
+    *returnValue = halCommonInitRootFilesystem;
+  }
+  return 0;
+}
+
+int agonLight2RestartRootFilesystem(va_list args) {
+  HalRestartRootFilesystemFn *returnValue
+    = va_arg(args, HalRestartRootFilesystemFn*);
+  if (returnValue != NULL) {
+    *returnValue = restartContiguousFilesystem;
+  }
+  return 0;
+}
+
+int agonLight2RestartShell(va_list args) {
+  HalRestartShellFn *returnValue = va_arg(args, HalRestartShellFn*);
+  if (returnValue != NULL) {
+    *returnValue = restartOverlayShell;
+  }
+  return 0;
+}
+
+int agonLight2OverlayMap(va_list args) {
+  NanoOsOverlayMap **returnValue = va_arg(args, NanoOsOverlayMap**);
+  if (returnValue != NULL) {
+    *returnValue = (NanoOsOverlayMap*) OVERLAY_ADDRESS;
+  }
+  return 0;
+}
+
+int agonLight2ContiguousFilesystem(va_list args) {
+  NanoOsOverlayMap **returnValue = va_arg(args, NanoOsOverlayMap**);
+  if (returnValue != NULL) {
+    *returnValue = (NanoOsOverlayMap*) FILESYSTEM_DRIVER_ADDRESS;
+  }
+  return 0;
+}
+
+int agonLight2StaticLogs(va_list args) {
+  StaticLogs **returnValue = va_arg(args, StaticLogs**);
+  if (returnValue != NULL) {
+    *returnValue = (StaticLogs*) STATIC_LOGS_ADDRESS;
+  }
+  return 0;
+}
+
+int agonLight2LogBuffer(va_list args) {
+  char **returnValue = va_arg(args, char**);
+  if (returnValue != NULL) {
+    *returnValue = _logBuffer;
+  }
+  return 0;
+}
+
+int agonLight2LogEntries(va_list args) {
+  LogEntry **returnValue = va_arg(args, LogEntry**);
+  if (returnValue != NULL) {
+    *returnValue = _logEntries;
+  }
+  return 0;
+}
+
+int agonLight2LogMessages(va_list args) {
+  ProcessMessage **returnValue = va_arg(args, ProcessMessage**);
+  if (returnValue != NULL) {
+    *returnValue = _logMessages;
+  }
+  return 0;
+}
+
+int agonLight2AllProcesses(va_list args) {
+  ProcessDescriptor **returnValue = va_arg(args, ProcessDescriptor**);
+  if (returnValue != NULL) {
+    *returnValue = _allProcesses;
+  }
+  return 0;
+}
+
+int agonLight2ReadyQueues(va_list args) {
+  ProcessQueue ***returnValue = va_arg(args, ProcessQueue***);
+  if (returnValue != NULL) {
+    *returnValue = _readyQueues;
+  }
+  return 0;
+}
+
+int agonLight2WaitingQueue(va_list args) {
+  ProcessQueue **returnValue = va_arg(args, ProcessQueue**);
+  if (returnValue != NULL) {
+    *returnValue = (ProcessQueue*) &_waitingQueue;
+  }
+  return 0;
+}
+
+int agonLight2TimedWaitingQueue(va_list args) {
+  ProcessQueue **returnValue = va_arg(args, ProcessQueue**);
+  if (returnValue != NULL) {
+    *returnValue = (ProcessQueue*) &_timedWaitingQueue;
+  }
+  return 0;
+}
+
+int agonLight2FreeQueue(va_list args) {
+  ProcessQueue **returnValue = va_arg(args, ProcessQueue**);
+  if (returnValue != NULL) {
+    *returnValue = (ProcessQueue*) &_freeQueue;
+  }
+  return 0;
+}
+
+int agonLight2ProcessErrorNumbers(va_list args) {
+  int **returnValue = va_arg(args, int**);
+  if (returnValue != NULL) {
+    *returnValue = _processErrorNumbers;
+  }
+  return 0;
+}
+
+int agonLight2ProcessStorage(va_list args) {
+  void ****returnValue = va_arg(args, void****);
+  if (returnValue != NULL) {
+    *returnValue = _processStorage;
+  }
+  return 0;
+}
+
+static HalFunction agonLight2PlatformFunctions[HAL_PLATFORM_NUM_FNS] = {
+  [HAL_PLATFORM_CALL_FILE_OVERLAY]       = agonLight2CallFileOverlay,
+  [HAL_PLATFORM_EXEC_COMMAND]            = agonLight2ExecCommand,
+  [HAL_PLATFORM_INIT_ROOT_STORAGE]       = agonLight2InitRootStorage,
+  [HAL_PLATFORM_RESTART_ROOT_FILESYSTEM] = agonLight2RestartRootFilesystem,
+  [HAL_PLATFORM_RESTART_SHELL]           = agonLight2RestartShell,
+};
+
 static HalFunction agonLight2MemoryFunctions[HAL_MEMORY_NUM_FNS] = {
   [HAL_MEMORY_PROCESS_STACK_SIZE]         = agonLight2ProcessStackSize,
   [HAL_MEMORY_MEMORY_MANAGER_STACK_SIZE]  = agonLight2MemoryManagerStackSize,
   [HAL_MEMORY_BOTTOM_OF_HEAP]             = agonLight2BottomOfHeap,
   [HAL_MEMORY_NUM_EXTRA_SCHEDULER_STACKS] = agonLight2NumExtraSchedulerStacks,
   [HAL_MEMORY_NUM_EXTRA_CONSOLE_STACKS]   = agonLight2NumExtraConsoleStacks,
+  [HAL_MEMORY_OVERLAY_MAP]                = agonLight2OverlayMap,
+  [HAL_MEMORY_CONTIGUOUS_FILESYSTEM]      = agonLight2ContiguousFilesystem,
+  [HAL_MEMORY_STATIC_LOGS]                = agonLight2StaticLogs,
+  [HAL_MEMORY_LOG_BUFFER]                 = agonLight2LogBuffer,
+  [HAL_MEMORY_LOG_ENTRIES]                = agonLight2LogEntries,
+  [HAL_MEMORY_LOG_MESSAGES]               = agonLight2LogMessages,
+  [HAL_MEMORY_ALL_PROCESSES]              = agonLight2AllProcesses,
+  [HAL_MEMORY_READY_QUEUES]               = agonLight2ReadyQueues,
+  [HAL_MEMORY_WAITING_QUEUE]              = agonLight2WaitingQueue,
+  [HAL_MEMORY_TIMED_WAITING_QUEUE]        = agonLight2TimedWaitingQueue,
+  [HAL_MEMORY_FREE_QUEUE]                 = agonLight2FreeQueue,
+  [HAL_MEMORY_PROCESS_ERROR_NUMBERS]      = agonLight2ProcessErrorNumbers,
+  [HAL_MEMORY_PROCESS_STORAGE]            = agonLight2ProcessStorage,
 };
 
 static HalFunction agonLight2UartFunctions[HAL_UART_NUM_FNS] = {
@@ -1537,34 +1731,6 @@ static uint32_t agonLight2BlockDevicesOnline[] = { 0x00000000 };
 // Platform init
 // ---------------------------------------------------------------------------
 
-/// @var _logBuffer
-///
-/// @brief Statically allocated buffer for formatting log messages.
-static char _logBuffer[128];
-
-/// @def NUM_LOG_ENTRIES
-///
-/// @brief The number of LogEntry objects held in our local array.
-#define NUM_LOG_ENTRIES 10
-
-/// @var _logEntries
-///
-/// @brief Local array of LogEntry objects to use in communication with the
-/// logger process.
-static LogEntry _logEntries[NUM_LOG_ENTRIES];
-
-/// @var _logMessages
-///
-/// @brief Private pool of ProcessMessage objects used to deliver log entries to
-/// the logger process.  One per _logEntries slot.
-static ProcessMessage _logMessages[NUM_LOG_ENTRIES];
-
-/// @var _allProcesses
-///
-/// @brief Statically allocated buffer of ProcessDescriptors to hold the
-/// metadata for all processes on the system, including the scheduler.
-static ProcessDescriptor _allProcesses[NUM_PROCESSES];
-
 /// @var _dataBssCanaryError
 ///
 /// @brief Message printed when the external-RAM integrity canary that Boot.asm
@@ -1579,6 +1745,7 @@ static const char _dataBssCanaryError[] KEEP_IN_FLASH =
 extern void enableInterrupts(void);
 
 int halAgonLight2Init(void) {
+  halFunctions[HAL_PLATFORM]     = agonLight2PlatformFunctions;
   halFunctions[HAL_MEMORY]       = agonLight2MemoryFunctions;
   halFunctions[HAL_UART]         = agonLight2UartFunctions;
   halFunctions[HAL_DIO]          = agonLight2DioFunctions;
@@ -1588,54 +1755,33 @@ int halAgonLight2Init(void) {
   halFunctions[HAL_TIMER]        = agonLight2TimerFunctions;
   halFunctions[HAL_BLOCK_DEVICE] = agonLight2BlockDeviceFunctions;
 
-  halImpl.platform.callFileOverlay = callOverlayFunctionFromFile;
-  halImpl.platform.execCommand = execOverlayCommand;
-  halImpl.platform.restartRootFilesystem = restartContiguousFilesystem;
-  halImpl.platform.initRootStorage = halCommonInitRootFilesystem;
-  halImpl.platform.restartShell = restartOverlayShell;
-
-  halImpl.memory.contiguousFilesystem
-    = (NanoOsOverlayMap*) FILESYSTEM_DRIVER_ADDRESS;
   halImpl.memory.contiguousFilesystemSize = FILESYSTEM_DRIVER_SIZE;
-
-  halImpl.memory.overlayMap  = (NanoOsOverlayMap*) OVERLAY_ADDRESS;
   halImpl.memory.overlaySize = OVERLAY_SIZE;
 
-  halImpl.memory.logBuffer      = _logBuffer;
   halImpl.memory.logBufferSize  = sizeof(_logBuffer);
   halImpl.memory.numLogEntries  = NUM_LOG_ENTRIES;
   memset(&_logEntries, 0, sizeof(_logEntries));
-  halImpl.memory.logEntries     = _logEntries;
   memset(&_logMessages, 0, sizeof(_logMessages));
-  halImpl.memory.logMessages    = _logMessages;
 #ifdef NANO_OS_STRINGS_STRIPPED
   halImpl.memory.stringsPresent = false;
 #else
   halImpl.memory.stringsPresent = true;
 #endif // NANO_OS_STRINGS_STRIPPED
-  halImpl.memory.staticLogs     = (StaticLogs*) STATIC_LOGS_ADDRESS;
-  memset(halImpl.memory.staticLogs, 0, sizeof(StaticLogs));
+  memset((StaticLogs*) STATIC_LOGS_ADDRESS, 0, sizeof(StaticLogs));
 
   memset(_allProcesses, 0, sizeof(_allProcesses));
   halImpl.memory.numProcesses        = NUM_PROCESSES;
-  halImpl.memory.allProcesses        = _allProcesses;
   for (int ii = 0; ii < NUM_READY_QUEUES; ii++) {
     memset(_readyQueues[ii], 0, sizeof(HalProcessQueue));
   }
-  halImpl.memory.readyQueues         = _readyQueues;
   memset(&_waitingQueue, 0, sizeof(HalProcessQueue));
-  halImpl.memory.waitingQueue        = (ProcessQueue*) &_waitingQueue;
   memset(&_timedWaitingQueue, 0, sizeof(HalProcessQueue));
-  halImpl.memory.timedWaitingQueue   = (ProcessQueue*) &_timedWaitingQueue;
   memset(&_freeQueue, 0, sizeof(HalProcessQueue));
-  halImpl.memory.freeQueue           = (ProcessQueue*) &_freeQueue;
-  halImpl.memory.processErrorNumbers = _processErrorNumbers;
   memset(_processStorageBase, 0,
     NUM_PROCESSES * NUM_PROCESS_STORAGE_KEYS * sizeof(void*));
   for (int ii = 0; ii < NUM_PROCESSES; ii++) {
     _processStorage[ii] = _processStorageBase[ii];
   }
-  halImpl.memory.processStorage = _processStorage;
 
   halImpl.uart.numSupported        = 2;
   halImpl.uart.online              = agonLight2UartsOnline;

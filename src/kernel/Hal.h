@@ -99,6 +99,7 @@ typedef enum HalPowerMode {
 ///
 /// @brief Identifiers for each subsystem in the HAL.
 typedef enum HalSubsystem {
+  HAL_PLATFORM,
   HAL_MEMORY,
   HAL_UART,
   HAL_DIO,
@@ -110,6 +111,18 @@ typedef enum HalSubsystem {
   HAL_NUM_SUBSYSTEMS,
 } HalSubsystem;
 
+/// @enum HalPlatformFunction
+///
+/// @brief Function indices for the HalPlatform subsystem.
+typedef enum HalPlatformFunction {
+  HAL_PLATFORM_CALL_FILE_OVERLAY,
+  HAL_PLATFORM_EXEC_COMMAND,
+  HAL_PLATFORM_INIT_ROOT_STORAGE,
+  HAL_PLATFORM_RESTART_ROOT_FILESYSTEM,
+  HAL_PLATFORM_RESTART_SHELL,
+  HAL_PLATFORM_NUM_FNS,
+} HalPlatformFunction;
+
 /// @enum HalMemoryFunction
 ///
 /// @brief Function indices for the HalMemory subsystem.
@@ -119,6 +132,19 @@ typedef enum HalMemoryFunction {
   HAL_MEMORY_BOTTOM_OF_HEAP,
   HAL_MEMORY_NUM_EXTRA_SCHEDULER_STACKS,
   HAL_MEMORY_NUM_EXTRA_CONSOLE_STACKS,
+  HAL_MEMORY_OVERLAY_MAP,
+  HAL_MEMORY_CONTIGUOUS_FILESYSTEM,
+  HAL_MEMORY_STATIC_LOGS,
+  HAL_MEMORY_LOG_BUFFER,
+  HAL_MEMORY_LOG_ENTRIES,
+  HAL_MEMORY_LOG_MESSAGES,
+  HAL_MEMORY_ALL_PROCESSES,
+  HAL_MEMORY_READY_QUEUES,
+  HAL_MEMORY_WAITING_QUEUE,
+  HAL_MEMORY_TIMED_WAITING_QUEUE,
+  HAL_MEMORY_FREE_QUEUE,
+  HAL_MEMORY_PROCESS_ERROR_NUMBERS,
+  HAL_MEMORY_PROCESS_STORAGE,
   HAL_MEMORY_NUM_FNS,
 } HalMemoryFunction;
 
@@ -216,6 +242,34 @@ typedef struct ProcessQueue ProcessQueue;
 typedef struct SchedulerState SchedulerState;
 typedef struct StaticLogs StaticLogs;
 
+/// @typedef HalCallFileOverlayFn
+///
+/// @brief Signature of a platform's concrete callFileOverlay implementation.
+typedef void* (*HalCallFileOverlayFn)(const void *overlayDir,
+  const void *overlay, const char *function, void *args);
+
+/// @typedef HalExecCommandFn
+///
+/// @brief Signature of a platform's concrete execCommand implementation.
+typedef void* (*HalExecCommandFn)(void *args);
+
+/// @typedef HalInitRootStorageFn
+///
+/// @brief Signature of a platform's concrete initRootStorage implementation.
+typedef int (*HalInitRootStorageFn)(void);
+
+/// @typedef HalRestartRootFilesystemFn
+///
+/// @brief Signature of a platform's concrete restartRootFilesystem
+/// implementation.
+typedef int (*HalRestartRootFilesystemFn)(
+  ProcessDescriptor *processDescriptor);
+
+/// @typedef HalRestartShellFn
+///
+/// @brief Signature of a platform's concrete restartShell implementation.
+typedef int (*HalRestartShellFn)(ProcessDescriptor *processDescriptor);
+
 /// @struct HalCapability
 ///
 /// @brief Metadata to describe a HAL capability that a process has.
@@ -237,64 +291,65 @@ typedef struct HalCapability {
 /// @brief Collection of function pointers that implement platform-specific
 /// versions of common functionality.
 typedef struct HalPlatform {
-  /// @fn void* (*callFileOverlay)(const void *overlayDir, const void *overlay,
-  ///   const char *function, void *args)
+  /// @fn int callFileOverlay(HalCallFileOverlayFn *returnValue)
   ///
-  /// @brief Platform-specific function to call an overlay that's part of a
-  /// filesystem.
+  /// @brief Get the platform-specific function to call an overlay that's part
+  /// of a filesystem.
   ///
-  /// @param overlayDir The path to the overlay directory on the filesystem.  If
-  ///   this parameter is OVERLAY_SAME_NAMESPACE then the overlay path currently
-  ///   in use will be used.
-  /// @param overlay The name of the overlay minus the ".overlay" file extension
-  ///   that is local to the overlay directory.
-  /// @param function The name of the function exported by the overlay.
-  /// @param args Any arguments to be passed to the function in the overlay,
-  ///   cast to a void*.  This parameter may be NULL.
-  ///
-  /// @return Returns the value returned by the overlay function on success,
-  /// NULL on failure.
-  void* (*callFileOverlay)(const void *overlayDir, const void *overlay,
-    const char *function, void *args);
-
-  /// @fn void* (*execCommand)(void *args)
-  ///
-  /// @brief Platform-specific function that will be used to exec a command.
-  ///
-  /// @param args A pointer to an ExecArgs structure describing the command to
-  ///   run, cast to a void*.
-  ///
-  /// @return If the comamnd is run, returns the result of the command cast to a
-  /// void*.  If the command is not run, returns -1 cast to a void*.
-  void* (*execCommand)(void *args);
-
-  /// @fn int initRootStorage(void)
-  ///
-  /// @brief Initialize the processes that operate the root storage system.
+  /// @param returnValue A pointer to a HalCallFileOverlayFn that will hold the
+  ///   platform's implementation on success, NULL if the platform doesn't
+  ///   support calling file overlays.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int (*initRootStorage)(void);
+  int (*callFileOverlay)(HalCallFileOverlayFn *returnValue);
 
-  /// @fn int restartRootFilesystem(ProcessDescriptor *processDescriptor)
+  /// @fn int execCommand(HalExecCommandFn *returnValue)
   ///
-  /// @brief Start or restart the root filesystem process.
+  /// @brief Get the platform-specific function that will be used to exec a
+  /// command.
   ///
-  /// @param processDescriptor A pointer to the ProcessDescriptor that holds the
-  ///   state for the process.
+  /// @param returnValue A pointer to a HalExecCommandFn that will hold the
+  ///   platform's implementation on success, NULL if the platform doesn't
+  ///   support execing commands.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int (*restartRootFilesystem)(ProcessDescriptor *processDescriptor);
+  int (*execCommand)(HalExecCommandFn *returnValue);
 
-  /// @fn int (*restartShell)(ProcessDescriptor *processDescriptor)
+  /// @fn int initRootStorage(HalInitRootStorageFn *returnValue)
   ///
-  /// @brief Platform-specific function that will be used to restart the shell
-  /// processes on exit.
+  /// @brief Get the platform-specific function that initializes the processes
+  /// that operate the root storage system.
   ///
-  /// @param processDescriptor A pointer to the ProcessDescriptor that manages
-  /// the state of the shell process.
+  /// @param returnValue A pointer to a HalInitRootStorageFn that will hold the
+  ///   platform's implementation on success, NULL if the platform has no root
+  ///   storage to initialize.
   ///
-  /// @return Returns 0 on sucess, -errno onfailure.
-  int (*restartShell)(ProcessDescriptor *processDescriptor);
+  /// @return Returns 0 on success, -errno on failure.
+  int (*initRootStorage)(HalInitRootStorageFn *returnValue);
+
+  /// @fn int restartRootFilesystem(HalRestartRootFilesystemFn *returnValue)
+  ///
+  /// @brief Get the platform-specific function that starts or restarts the
+  /// root filesystem process.
+  ///
+  /// @param returnValue A pointer to a HalRestartRootFilesystemFn that will
+  ///   hold the platform's implementation on success, NULL if the platform has
+  ///   no root filesystem to restart.
+  ///
+  /// @return Returns 0 on success, -errno on failure.
+  int (*restartRootFilesystem)(HalRestartRootFilesystemFn *returnValue);
+
+  /// @fn int restartShell(HalRestartShellFn *returnValue)
+  ///
+  /// @brief Get the platform-specific function that will be used to restart
+  /// the shell processes on exit.
+  ///
+  /// @param returnValue A pointer to a HalRestartShellFn that will hold the
+  ///   platform's implementation on success, NULL if the platform doesn't
+  ///   support restarting the shell.
+  ///
+  /// @return Returns 0 on success, -errno on failure.
+  int (*restartShell)(HalRestartShellFn *returnValue);
 } HalPlatform;
 
 typedef struct HalMemory {
@@ -362,119 +417,189 @@ typedef struct HalMemory {
   int (*numExtraConsoleStacks)(bool debug, uint8_t *returnValue);
   
   // Overlay definitions.
-  
-  /// @var overlayMap
+
+  /// @fn int overlayMap(NanoOsOverlayMap **returnValue)
   ///
-  /// @brief Memory address where overlays will be loaded.
-  NanoOsOverlayMap *overlayMap;
-  
+  /// @brief Get the memory address where overlays will be loaded.
+  ///
+  /// @param returnValue A pointer to a NanoOsOverlayMap* that will hold the
+  ///   address on success, NULL on systems that don't support overlays.
+  ///
+  /// @return Returns 0 on success, -errno on failure.
+  int (*overlayMap)(NanoOsOverlayMap **returnValue);
+
   /// @var overlaySize
   ///
   /// @brief The number of bytes available for the overlay.  This may be 0 on
   /// systems that don't support overlays.
   size_t overlaySize;
-  
-  /// @var contiguousFilesystem
+
+  /// @fn int contiguousFilesystem(NanoOsOverlayMap **returnValue)
   ///
-  /// @brief Memory address where a contiguous filesystem binary will be loaded.
-  NanoOsOverlayMap *contiguousFilesystem;
-  
+  /// @brief Get the memory address where a contiguous filesystem binary will
+  /// be loaded.
+  ///
+  /// @param returnValue A pointer to a NanoOsOverlayMap* that will hold the
+  ///   address on success, NULL on systems that don't support an in-RAM
+  ///   contiguous filesystem.
+  ///
+  /// @return Returns 0 on success, -errno on failure.
+  int (*contiguousFilesystem)(NanoOsOverlayMap **returnValue);
+
   /// @var contiguousFilesystemSize
   ///
   /// @brief The number of bytes available for the contiguout filesystem binary.
   /// This may be 0 on systems that don't support an in-RAM contiguous
   /// filesystem.
   size_t contiguousFilesystemSize;
-  
+
   // Logging definitions.
-  
+
   /// @var stringsPresent
   ///
   /// @brief Whether or not regular string data is present in the OS image.
   bool stringsPresent;
-  
-  /// @var staticLogs
+
+  /// @fn int staticLogs(StaticLogs **returnValue)
   ///
-  /// @brief Address of the region of memory where static logs are maintained.
-  StaticLogs *staticLogs;
-  
-  /// @var logBuffer
+  /// @brief Get the address of the region of memory where static logs are
+  /// maintained.
   ///
-  /// @brief A buffer that can be used by the logger to print an immediate log
-  /// message.  This member variable may *NOT* be NULL.
-  char *logBuffer;
-  
+  /// @param returnValue A pointer to a StaticLogs* that will hold the address
+  ///   on success, NULL on systems that don't maintain static logs.
+  ///
+  /// @return Returns 0 on success, -errno on failure.
+  int (*staticLogs)(StaticLogs **returnValue);
+
+  /// @fn int logBuffer(char **returnValue)
+  ///
+  /// @brief Get the buffer that can be used by the logger to print an
+  /// immediate log message.  This may *NOT* be NULL on any system.
+  ///
+  /// @param returnValue A pointer to a char* that will hold the buffer address
+  ///   on success.
+  ///
+  /// @return Returns 0 on success, -errno on failure.
+  int (*logBuffer)(char **returnValue);
+
   /// @var logBufferSize
   ///
   /// @brief The number of bytes available for the log buffer.  This must be
   /// greater than zero and be of a reasonable size for generating log messages.
   size_t logBufferSize;
-  
+
   /// @var numLogEntries
   ///
   /// @brief The number of LogEntry objects held in the logEntries array and
   /// number of ProcessMessage objects hel in the logMessages array.
   size_t numLogEntries;
-  
-  /// @var logEntries
+
+  /// @fn int logEntries(LogEntry **returnValue)
   ///
-  /// @brief Array of LogEntry objects to use in communication with the logger
-  /// process.
-  LogEntry *logEntries;
-  
-  /// @var logMessages
+  /// @brief Get the array of LogEntry objects to use in communication with the
+  /// logger process.
   ///
-  /// @brief Pool of ProcessMessage objects used to deliver log entries to
-  /// the logger process.  One per logEntries slot.
-  ProcessMessage *logMessages;
+  /// @param returnValue A pointer to a LogEntry* that will hold the array
+  ///   address on success.
+  ///
+  /// @return Returns 0 on success, -errno on failure.
+  int (*logEntries)(LogEntry **returnValue);
+
+  /// @fn int logMessages(ProcessMessage **returnValue)
+  ///
+  /// @brief Get the pool of ProcessMessage objects used to deliver log entries
+  /// to the logger process.  One per logEntries slot.
+  ///
+  /// @param returnValue A pointer to a ProcessMessage* that will hold the pool
+  ///   address on success.
+  ///
+  /// @return Returns 0 on success, -errno on failure.
+  int (*logMessages)(ProcessMessage **returnValue);
 
   // Scheduler definitions.
-  
+
   /// @var numProcesses
   ///
   /// @brief The number of ProcessDescriptors in the allProcesses array.
   size_t numProcesses;
-  
-  /// @var allProcesses
+
+  /// @fn int allProcesses(ProcessDescriptor **returnValue)
   ///
-  /// @brief Array of ProcessDescriptors available on the system.  This array
-  /// will be numProcesses in size.
-  ProcessDescriptor *allProcesses;
-  
-  /// @var readyQueues
+  /// @brief Get the array of ProcessDescriptors available on the system.
+  /// This array will be numProcesses in size.
   ///
-  /// @brief Array of ready ProcessQueue pointers.  One queue per privilege
-  /// level. Each queue will hold numProcesses - 1 processes;
-  ProcessQueue **readyQueues;
-  
-  /// @var waitingQueue
+  /// @param returnValue A pointer to a ProcessDescriptor* that will hold the
+  ///   array address on success.
   ///
-  /// @brief Pointer to ProcessQueue for processes in the WAITING state.  The
+  /// @return Returns 0 on success, -errno on failure.
+  int (*allProcesses)(ProcessDescriptor **returnValue);
+
+  /// @fn int readyQueues(ProcessQueue ***returnValue)
+  ///
+  /// @brief Get the array of ready ProcessQueue pointers.  One queue per
+  /// privilege level.  Each queue will hold numProcesses - 1 processes.
+  ///
+  /// @param returnValue A pointer to a ProcessQueue** that will hold the array
+  ///   address on success.
+  ///
+  /// @return Returns 0 on success, -errno on failure.
+  int (*readyQueues)(ProcessQueue ***returnValue);
+
+  /// @fn int waitingQueue(ProcessQueue **returnValue)
+  ///
+  /// @brief Get the ProcessQueue for processes in the WAITING state.  The
   /// queue will hold numProcesses - 1 processes.
-  ProcessQueue *waitingQueue;
-  
-  /// @var timedWaitingQueue
   ///
-  /// @brief Pointer to ProcessQueue for processes in the TIMED_WAITING state.
-  ///  The queue will hold numProcesses - 1 processes.
-  ProcessQueue *timedWaitingQueue;
-  
-  /// @var freeQueue
+  /// @param returnValue A pointer to a ProcessQueue* that will hold the queue
+  ///   address on success.
   ///
-  /// @brief Pointer to ProcessQueue for processes that are not running and
+  /// @return Returns 0 on success, -errno on failure.
+  int (*waitingQueue)(ProcessQueue **returnValue);
+
+  /// @fn int timedWaitingQueue(ProcessQueue **returnValue)
+  ///
+  /// @brief Get the ProcessQueue for processes in the TIMED_WAITING state.
+  /// The queue will hold numProcesses - 1 processes.
+  ///
+  /// @param returnValue A pointer to a ProcessQueue* that will hold the queue
+  ///   address on success.
+  ///
+  /// @return Returns 0 on success, -errno on failure.
+  int (*timedWaitingQueue)(ProcessQueue **returnValue);
+
+  /// @fn int freeQueue(ProcessQueue **returnValue)
+  ///
+  /// @brief Get the ProcessQueue for processes that are not running and
   /// available for provisioning.  The queue will hold numProcesses - 1
   /// processes.
-  ProcessQueue *freeQueue;
-  
-  /// @var processErrorNumbers
   ///
-  /// @brief Array of integers for storage of errno values per process.
-  int *processErrorNumbers;
-  
-  /// @var processStorage
+  /// @param returnValue A pointer to a ProcessQueue* that will hold the queue
+  ///   address on success.
   ///
-  /// @brief Two-dimensional array of void pointers to process-local storage.
-  void ***processStorage;
+  /// @return Returns 0 on success, -errno on failure.
+  int (*freeQueue)(ProcessQueue **returnValue);
+
+  /// @fn int processErrorNumbers(int **returnValue)
+  ///
+  /// @brief Get the array of integers for storage of errno values per
+  /// process.
+  ///
+  /// @param returnValue A pointer to an int* that will hold the array address
+  ///   on success.
+  ///
+  /// @return Returns 0 on success, -errno on failure.
+  int (*processErrorNumbers)(int **returnValue);
+
+  /// @fn int processStorage(void ****returnValue)
+  ///
+  /// @brief Get the two-dimensional array of void pointers to process-local
+  /// storage.
+  ///
+  /// @param returnValue A pointer to a void*** that will hold the array
+  ///   address on success.
+  ///
+  /// @return Returns 0 on success, -errno on failure.
+  int (*processStorage)(void ****returnValue);
 } HalMemory;
 
 typedef struct HalUart {

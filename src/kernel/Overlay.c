@@ -39,6 +39,13 @@
 // Must come last
 #include "../user/NanoOsStdio.h"
 
+/// @var overlayMap
+///
+/// @brief Memory address where overlays are loaded.  Populated once from
+/// HAL->memory.overlayMap() by initializeSchedulerState(); everything else
+/// reads this directly instead of going through the HAL on every call.
+NanoOsOverlayMap *overlayMap = NULL;
+
 /// @fn OverlayFunction findOverlayFunction(const char *overlayFunctionName)
 ///
 /// @brief Find a function in an overlay that's been previously loaded into RAM.
@@ -53,8 +60,7 @@ OverlayFunction findOverlayFunction(const char *overlayFunctionName) {
   if (overlayFunctionName == NULL) {
     return overlayFunction; // NULL
   }
-  
-  NanoOsOverlayMap *overlayMap = HAL->memory.overlayMap;
+
   for (uint16_t ii = 0, jj = overlayMap->numExports - 1; ii <= jj;) {
     cur = (ii + jj) >> 1;
     comp = strcmp(overlayMap->exports[cur].name, overlayFunctionName);

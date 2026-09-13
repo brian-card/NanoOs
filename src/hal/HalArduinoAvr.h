@@ -55,6 +55,16 @@ typedef struct HalArduinoAvrInitArgs {
 int halArduinoAvrInit(HalArduinoAvrInitArgs *args);
 int halArduinoInit(void);
 
+/// @fn void arduinoAvrSetRootStorageFunctions(
+///   HalInitRootStorageFn initRootStorage,
+///   HalRestartRootFilesystemFn restartRootFilesystem)
+///
+/// @brief Set the board-specific root storage functions.  Boards with no root
+/// storage (e.g. the Nano Every) simply never call this, leaving both NULL.
+void arduinoAvrSetRootStorageFunctions(
+  HalInitRootStorageFn initRootStorage,
+  HalRestartRootFilesystemFn restartRootFilesystem);
+
 #ifdef __cplusplus
 } // extern "C"
 #endif

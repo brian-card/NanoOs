@@ -149,11 +149,16 @@ int logMessage(LogLevel logLevel,
   // isn't fatal.  Do this before anything else to get as accurate a timestamp
   // as possible.
   HAL->clock.getElapsedNanoseconds(0, &temp.i64Value);
-  
+
+  StaticLogs *staticLogs = NULL;
+  HAL->memory.staticLogs(&staticLogs);
+  char *logBuffer = NULL;
+  HAL->memory.logBuffer(&logBuffer);
+
   LogEntry *logEntry = NULL;
   ProcessMessage *processMessage = NULL;
   if (((SCHEDULER_STATE != NULL) && (SCHEDULER_STATE->loggerPid != 0))
-    || (HAL->memory.staticLogs == NULL)
+    || (staticLogs == NULL)
   ) {
     // Select pointers from our statically-allocated arrays.
     for (size_t ii = 0; ii < numLogEntries; ii++) {
@@ -165,11 +170,10 @@ int logMessage(LogLevel logLevel,
         break;
       }
     }
-  } else if (HAL->memory.staticLogs != NULL) {
-    // Select a LogEntry pointer from HAL->memory.staticLogs.  No ProcessMessage
-    // pointer is necessary.
-    logEntry = &HAL->memory.staticLogs->logEntries[
-      HAL->memory.staticLogs->numEntries];
+  } else if (staticLogs != NULL) {
+    // Select a LogEntry pointer from staticLogs.  No ProcessMessage pointer is
+    // necessary.
+    logEntry = &staticLogs->logEntries[staticLogs->numEntries];
   }
   if (logEntry == NULL) {
     // Nothing we can do.  The log message is just silently dropped.
@@ -200,7 +204,7 @@ int logMessage(LogLevel logLevel,
   va_end(args);
   
   if ((SCHEDULER_STATE == NULL) || (SCHEDULER_STATE->loggerPid == 0)) {
-    if (HAL->memory.staticLogs != NULL) {
+    if (staticLogs != NULL) {
       // Logger isn't up yet but will be.  Write to the staticLogs area.
       goto writeStaticLog;
     } else if (HAL->memory.stringsPresent == true) {
@@ -247,7 +251,7 @@ writeImmediate:
     fileName = slashAt + 1;
   }
   
-  snprintf(HAL->memory.logBuffer, HAL->memory.logBufferSize,
+  snprintf(logBuffer, HAL->memory.logBufferSize,
     _logHeaderFormat,
     (long long int) (logEntry->timeStamp / ((int64_t) 1000000000)),
     (long long int) (logEntry->timeStamp % ((int64_t) 1000000000)),
@@ -256,24 +260,24 @@ writeImmediate:
       : _localhost,
     logEntry->processId, logEntry->threadId,
     fileName, functionName, lineNumber, _logLevelNames[logLevel]);
-  int rv = printString(HAL->memory.logBuffer);
+  int rv = printString(logBuffer);
   if (rv < 0) {
     logEntry->inUse = false;
     return rv;
   }
-  
+
   // Print the log message.
   va_start(args, format);
-  vsnprintf(HAL->memory.logBuffer, HAL->memory.logBufferSize,
+  vsnprintf(logBuffer, HAL->memory.logBufferSize,
     format, args);
   va_end(args);
-  rv += printString(HAL->memory.logBuffer);
+  rv += printString(logBuffer);
   logEntry->inUse = false;
   return rv;
-  
+
 writeStaticLog:
   // Increment numEntries in the static log area.
-  HAL->memory.staticLogs->numEntries++;
+  staticLogs->numEntries++;
   
   return 0;
 }
