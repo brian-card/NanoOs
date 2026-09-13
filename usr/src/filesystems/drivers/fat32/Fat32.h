@@ -86,6 +86,15 @@ typedef struct FilesystemState FilesystemState;
 #define FAT32_LFN_LAST_ENTRY_MASK    0x40  // OR'd with ordinal for last LFN entry
 #define FAT32_LFN_ORDINAL_MASK       0x3F  // Mask to extract ordinal number
 
+// NT reserved byte (Fat32DirectoryEntry.ntReserved) case bits.  Windows
+// NT+, Linux, and mtools all set these on a short entry that has no
+// accompanying LFN entry but whose original name was lowercase, rather than
+// spending an LFN entry just to preserve case for a name that otherwise fits
+// 8.3.  A legacy (DOS-era) writer leaves this byte 0, so the short name is
+// rendered all-uppercase, as it's stored on disk.
+#define FAT32_NT_RESERVED_LOWER_BASE 0x08  // Base name is lowercase
+#define FAT32_NT_RESERVED_LOWER_EXT  0x10  // Extension is lowercase
+
 // File attributes
 #define FAT32_ATTR_READ_ONLY         0x01
 #define FAT32_ATTR_HIDDEN            0x02
@@ -372,19 +381,35 @@ static inline void fat32AssembleLfnEntry(
 /// @brief Convert a raw 11-byte 8.3 directory name into a human-readable
 ///        null-terminated string (e.g. "README  TXT" -> "README.TXT").
 ///
+/// @details Honors the ntReserved lowercase-display bits (see
+///          FAT32_NT_RESERVED_LOWER_BASE / FAT32_NT_RESERVED_LOWER_EXT):
+///          when set, the corresponding half of the name is rendered
+///          lowercase instead of the raw (uppercase, DOS-style) on-disk
+///          bytes.  This only ever applies to a short entry that has no
+///          accompanying LFN entry -- a name with a real LFN is resolved
+///          from that instead, and case-preserved as written.
+///
 /// @param raw        Pointer to the 11-byte short name in the directory entry.
+/// @param ntReserved The directory entry's ntReserved byte.
 /// @param formatted  [out] Caller-supplied buffer of at least 13 bytes.
 ///
 static inline void fat32FormatShortName(
     const uint8_t *raw,
+    uint8_t ntReserved,
     char *formatted
 ) {
-  int pos = 0;
+  int  pos = 0;
+  bool lowerBase = (ntReserved & FAT32_NT_RESERVED_LOWER_BASE) != 0;
+  bool lowerExt  = (ntReserved & FAT32_NT_RESERVED_LOWER_EXT)  != 0;
 
   // Copy the base name (first 8 bytes), trimming trailing spaces.
   for (int i = 0; i < 8; i++) {
     if (raw[i] != ' ') {
-      formatted[pos++] = (char) raw[i];
+      char c = (char) raw[i];
+      if (lowerBase && (c >= 'A') && (c <= 'Z')) {
+        c = (char) (c + ('a' - 'A'));
+      }
+      formatted[pos++] = c;
     }
   }
 
@@ -401,7 +426,11 @@ static inline void fat32FormatShortName(
     formatted[pos++] = '.';
     for (int i = 8; i < 11; i++) {
       if (raw[i] != ' ') {
-        formatted[pos++] = (char) raw[i];
+        char c = (char) raw[i];
+        if (lowerExt && (c >= 'A') && (c <= 'Z')) {
+          c = (char) (c + ('a' - 'A'));
+        }
+        formatted[pos++] = c;
       }
     }
   }
@@ -562,7 +591,7 @@ static inline int fat32SearchDirectory(
         // Fall back to the short name.
         if (!match) {
           char shortName[13];
-          fat32FormatShortName(entry->name, shortName);
+          fat32FormatShortName(entry->name, entry->ntReserved, shortName);
           match = (fat32StrcaseCmp(shortName, name) == 0);
         }
 
@@ -582,7 +611,8 @@ static inline int fat32SearchDirectory(
               done = true;
               break;
             }
-            fat32FormatShortName(entry->name, result->longName);
+            fat32FormatShortName(entry->name, entry->ntReserved,
+              result->longName);
           }
 
           result->dirCluster = currentCluster;
@@ -935,7 +965,7 @@ static inline int fat32ReadDirectoryEntry(
         if ((lfnBuffer != NULL) && (lfnBuffer[0] != '\0')) {
           resolvedName = lfnBuffer;
         } else {
-          fat32FormatShortName(entry->name, shortName);
+          fat32FormatShortName(entry->name, entry->ntReserved, shortName);
           resolvedName = shortName;
         }
 
