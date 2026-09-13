@@ -130,8 +130,8 @@ realStart:
     OUT0 (0xF8), A
 
     ; --- external-RAM integrity canary -------------------------------------
-    ; Stamp the known pattern 0x4ABC4ABC4ABC4ABC at __data_bss_limit (0x049000,
-    ; the 36 KB mark of external SRAM — the byte just past the 4 KB .bss/.data
+    ; Stamp the known pattern 0x4ABC4ABC4ABC4ABC at __data_bss_limit (0x04C000,
+    ; the 48 KB mark of external SRAM — the byte just past the 5 KB .bss/.data
     ; reservation) before .data is copied or .bss is cleared.
     ; halAgonLight2Init() re-reads these 8 bytes as its final step; a mismatch
     ; means .bss/.data overflowed and corrupted memory.
