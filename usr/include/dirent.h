@@ -1,12 +1,12 @@
 ///////////////////////////////////////////////////////////////////////////////
 ///
 /// @author            Brian Card
-/// @date              03.09.2026
+/// @date              09.13.2026
 ///
-/// @file              NanoOsSysTypes.h
+/// @file              dirent.h
 ///
-/// @brief             Kernel-side header for sys/types.h defines exposed to
-///                    userspace processes.
+/// @brief             Definitions used for accessing functionality in the C
+///                    dirent library.
 ///
 /// @copyright
 ///                      Copyright (c) 2026 Brian Card
@@ -34,11 +34,29 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef NANO_OS_USER_SYS_TYPES_H
-#define NANO_OS_USER_SYS_TYPES_H
+#ifndef DIRENT_H
+#define DIRENT_H
 
-#include "../include/sys/types.h"
-#include "../include/NanoOsDirentTypes.h"
+#include "NanoOsUser.h"
 
-#endif // NANO_OS_USER_SYS_TYPES_H
+#ifdef __cplusplus
+extern "C"
+{
+#endif
 
+// Directory operations:
+static inline DIR* opendir(const char *pathname) {
+  return overlayMap.header.osApi->opendir(pathname);
+}
+static inline struct dirent* readdir(DIR *dirp) {
+  return overlayMap.header.osApi->readdir(dirp);
+}
+static inline int closedir(DIR *dirp) {
+  return overlayMap.header.osApi->closedir(dirp);
+}
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // DIRENT_H

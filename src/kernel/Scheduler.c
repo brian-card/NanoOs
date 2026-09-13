@@ -571,6 +571,9 @@ IpcCapability baseSupervisorIpcCapabilities[] = {
       | (((uint16_t) 1) << FILESYSTEM_SEEK_FILE)
       | (((uint16_t) 1) << FILESYSTEM_DUMP_OPEN_FILES)
       | (((uint16_t) 1) << FILESYSTEM_GET_FILE_BLOCK_METADATA)
+      | (((uint16_t) 1) << FILESYSTEM_OPEN_DIR)
+      | (((uint16_t) 1) << FILESYSTEM_READ_DIR)
+      | (((uint16_t) 1) << FILESYSTEM_CLOSE_DIR)
   },
 };
 
@@ -618,6 +621,9 @@ IpcCapability baseUserIpcCapabilities[] = {
       | (((uint16_t) 1) << FILESYSTEM_SEEK_FILE)
       | (((uint16_t) 1) << FILESYSTEM_DUMP_OPEN_FILES)
       | (((uint16_t) 1) << FILESYSTEM_GET_FILE_BLOCK_METADATA)
+      | (((uint16_t) 1) << FILESYSTEM_OPEN_DIR)
+      | (((uint16_t) 1) << FILESYSTEM_READ_DIR)
+      | (((uint16_t) 1) << FILESYSTEM_CLOSE_DIR)
   },
 };
 

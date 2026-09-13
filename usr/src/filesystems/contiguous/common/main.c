@@ -59,6 +59,9 @@ void* DumpOpenFiles(void *args);
 void* GetFileBlockMetadata(void *args);
 void* EndOfFile(void *args);
 void* Format(void *args);
+void* Opendir(void *args);
+void* Readdir(void *args);
+void* Closedir(void *args);
 
 /// @typedef FilesystemCommandHandler
 ///
@@ -79,6 +82,9 @@ static const FilesystemCommandHandler filesystemCommandHandlers[] = {
   GetFileBlockMetadata, // FILESYSTEM_GET_FILE_BLOCK_METADATA
   EndOfFile,            // FILESYSTEM_END_OF_FILE
   Format,               // FILESYSTEM_FORMAT
+  Opendir,              // FILESYSTEM_OPEN_DIR
+  Readdir,              // FILESYSTEM_READ_DIR
+  Closedir,             // FILESYSTEM_CLOSE_DIR
 };
 
 void* main(void *args) {

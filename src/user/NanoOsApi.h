@@ -71,6 +71,18 @@ typedef uint8_t msg_element_t;
 typedef struct NanoOsFile NanoOsFile;
 #define FILE NanoOsFile
 
+// Opaque handle to an open directory stream.  Never dereferenced from
+// userspace -- the concrete storage belongs entirely to whichever
+// filesystem driver is linked in (see Fat32DirHandle).
+typedef struct NanoOsDirStream NanoOsDir;
+#define DIR NanoOsDir
+
+// struct dirent and its DT_* constants are defined in NanoOsSysTypes.h
+// (included above, which pulls in src/include/sys/types.h): that header is
+// the one both kernel and user code already reach -- and reach
+// simultaneously in the freestanding filesystem driver builds -- so it has
+// to be the single place that struct is defined.
+
 typedef struct ProcessInfo ProcessInfo;
 
 // POSIX-mandated objects require for posix_spawn
@@ -130,6 +142,11 @@ typedef struct NanoOsApi {
   int (*fileno)(FILE *stream);
   int (*feof)(FILE *stream);
   long (*ftell)(FILE *stream);
+
+  // Directory operations:
+  DIR* (*opendir)(const char *pathname);
+  struct dirent* (*readdir)(DIR *dirp);
+  int (*closedir)(DIR *dirp);
 
   // NanoOs extensions with no filesystem-agnostic name (see fat32Format's
   // own doc comment for why): unlike the operations above, these depend on

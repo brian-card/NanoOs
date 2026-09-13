@@ -77,6 +77,12 @@ const OverlayFilesystemCommandEntry filesystemCommandHandlers[] = {
   {END_OF_FILE_OVERLAY, "EndOfFile"},
   // FILESYSTEM_FORMAT:
   {FORMAT_OVERLAY, "Format"},
+  // FILESYSTEM_OPEN_DIR:
+  {OPEN_DIR_OVERLAY, "Opendir"},
+  // FILESYSTEM_READ_DIR:
+  {READ_DIR_OVERLAY, "Readdir"},
+  // FILESYSTEM_CLOSE_DIR:
+  {CLOSE_DIR_OVERLAY, "Closedir"},
 };
 
 void* main(void *args) {

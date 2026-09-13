@@ -211,6 +211,21 @@ typedef struct Fat32FileHandle {
   bool      appendMode;            // Whether file is in append mode
 } Fat32FileHandle;
 
+/// @struct Fat32DirHandle
+///
+/// @brief Handle for an open FAT32 directory stream (the concrete storage
+/// behind an opaque DIR pointer).
+typedef struct Fat32DirHandle {
+  uint32_t       currentCluster;    // Cluster to resume scanning from
+  uint32_t       offsetInCluster;   // Byte offset within currentCluster to
+                                     // resume scanning from
+  uint32_t       nextSequence;      // Next value to hand out as d_off
+  struct dirent *entry;             // Storage for the most recently returned
+                                     // entry (see driverReaddir).  Owned by
+                                     // this handle: freed and reallocated on
+                                     // every call, freed for good on close.
+} Fat32DirHandle;
+
 /// @struct Fat32DriverState
 ///
 /// @brief Driver state for FAT32 filesystem
@@ -712,6 +727,271 @@ static inline int fat32ResolveParentDirectory(
 
   *parentCluster = currentCluster;
   return result;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+///
+/// @brief Resolve a path to the cluster of the directory it names.
+///
+/// @details Builds on fat32ResolveParentDirectory, which already walks every
+///          intermediate path component: this just resolves the final
+///          component too (special-casing an empty final component -- the
+///          path named the root directory itself -- exactly like
+///          fat32ResolveParentDirectory already does for "/") and rejects the
+///          result if it isn't a directory.
+///
+/// @param ds           Pointer to an initialized Fat32DriverState.
+/// @param path         The absolute or relative path to resolve.
+/// @param dirClusterOut [out] The first cluster of the named directory.
+///
+/// @return FAT32_SUCCESS if the path names a directory, FAT32_FILE_NOT_FOUND
+///         if any component doesn't exist or the path names a regular file,
+///         or a FAT32 error code on I/O failure.
+///
+static inline int fat32ResolveDirectory(
+    Fat32DriverState *ds,
+    const char *path,
+    uint32_t *dirClusterOut
+) {
+  uint32_t    parentCluster;
+  const char *nameComponent = NULL;
+
+  int result = fat32ResolveParentDirectory(
+    ds, path, &parentCluster, &nameComponent);
+  if (result != FAT32_SUCCESS) {
+    return result;
+  }
+
+  if ((nameComponent == NULL) || (nameComponent[0] == '\0')) {
+    // The path named the root directory itself.
+    *dirClusterOut = parentCluster;
+    return FAT32_SUCCESS;
+  }
+
+  Fat32DirSearchResult searchResult;
+  searchResult.longName = NULL;
+  result = fat32SearchDirectory(
+    ds, parentCluster, nameComponent, &searchResult);
+  if (result != FAT32_SUCCESS) {
+    free(searchResult.longName);
+    return result;
+  }
+
+  if (!(searchResult.entry.attributes & FAT32_ATTR_DIRECTORY)) {
+    free(searchResult.longName);
+    return FAT32_FILE_NOT_FOUND;
+  }
+
+  uint16_t clusterHigh;
+  uint16_t clusterLow;
+  memcpy(&clusterHigh, &searchResult.entry.firstClusterHigh,
+    sizeof(uint16_t));
+  memcpy(&clusterLow, &searchResult.entry.firstClusterLow,
+    sizeof(uint16_t));
+  *dirClusterOut =
+    ((uint32_t) clusterHigh << 16) | (uint32_t) clusterLow;
+
+  free(searchResult.longName);
+  return FAT32_SUCCESS;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+///
+/// @brief Read the next entry from an open directory stream, advancing its
+///        cursor past it.
+///
+/// @details This is fat32SearchDirectory's cluster/sector/entry walk, adapted
+///          to resume from a saved (currentCluster, offsetInCluster) cursor
+///          instead of starting at the beginning of the directory, and to
+///          stop at the first valid entry instead of searching for a name
+///          match.  Deleted entries (0xE5), LFN fragments (accumulated via
+///          the same fat32AssembleLfnEntry used by fat32SearchDirectory), and
+///          volume-label entries (FAT32_ATTR_VOLUME_ID) are skipped, not
+///          returned.
+///
+/// @param ds      Pointer to an initialized Fat32DriverState.
+/// @param handle  Pointer to the Fat32DirHandle to read from and advance.
+///
+/// @return FAT32_SUCCESS with handle->entry populated with a freshly
+///         allocated struct dirent, FAT32_FILE_NOT_FOUND with handle->entry
+///         set to NULL if the directory is exhausted, or FAT32_ERROR /
+///         FAT32_NO_MEMORY on failure.
+///
+/// @note Uses the shared blockBuffer for sector I/O.  The buffer contents are
+///       undefined on return.
+///
+static inline int fat32ReadDirectoryEntry(
+    Fat32DriverState *ds,
+    Fat32DirHandle *handle
+) {
+  FilesystemState    *fs = ds->filesystemState;
+  BlockDevice *bd = fs->blockDevice;
+
+  free(handle->entry);
+  handle->entry = NULL;
+
+  char *lfnBuffer = NULL;
+
+  uint32_t currentCluster = handle->currentCluster;
+  uint32_t resumeOffset = handle->offsetInCluster;
+  int      status = FAT32_FILE_NOT_FOUND;
+  bool     done = false;
+
+  while (!done
+      && (currentCluster >= FAT32_CLUSTER_FIRST_VALID)
+      && (currentCluster < FAT32_CLUSTER_EOC_MIN)
+  ) {
+
+    uint32_t clusterLba = fat32ClusterToLba(ds, currentCluster);
+    uint8_t  startSector = (uint8_t) (resumeOffset / ds->bytesPerSector);
+    uint32_t startByteInSector = resumeOffset % ds->bytesPerSector;
+
+    for (uint8_t sector = startSector;
+        (sector < ds->sectorsPerCluster) && !done;
+        sector++) {
+
+      int readResult = bd->readBlocks(
+        bd->context, clusterLba + sector, 1,
+        bd->blockSize, fs->blockBuffer);
+      if (readResult != 0) {
+        status = FAT32_ERROR;
+        done = true;
+        break;
+      }
+
+      uint32_t entriesPerSector =
+        ds->bytesPerSector / FAT32_DIRECTORY_ENTRY_SIZE;
+      uint32_t startEntry = (sector == startSector)
+        ? (startByteInSector / FAT32_DIRECTORY_ENTRY_SIZE)
+        : 0;
+
+      for (uint32_t i = startEntry; (i < entriesPerSector) && !done; i++) {
+        uint32_t entryByteOffset = i * FAT32_DIRECTORY_ENTRY_SIZE;
+        Fat32DirectoryEntry *entry =
+          (Fat32DirectoryEntry *) (fs->blockBuffer + entryByteOffset);
+
+        // Where the next entry starts, regardless of what this one turns out
+        // to be -- the cursor always advances past whatever is consumed.
+        uint32_t nextOffsetInCluster =
+          (uint32_t) sector * ds->bytesPerSector + entryByteOffset
+          + FAT32_DIRECTORY_ENTRY_SIZE;
+
+        // End-of-directory sentinel.  Leave the cursor where it is (at the
+        // sentinel) so a stale or repeated call keeps reporting the same
+        // result instead of reading past it.
+        if (entry->name[0] == FAT32_ENTRY_END_OF_DIR) {
+          done = true;
+          break;
+        }
+
+        // Deleted entry -- discard any in-progress LFN assembly and move on.
+        if (entry->name[0] == FAT32_ENTRY_FREE) {
+          free(lfnBuffer);
+          lfnBuffer = NULL;
+          handle->currentCluster = currentCluster;
+          handle->offsetInCluster = nextOffsetInCluster;
+          continue;
+        }
+
+        // LFN fragment -- accumulate it and move on.
+        if ((entry->attributes & FAT32_ATTR_LONG_NAME)
+            == FAT32_ATTR_LONG_NAME) {
+          Fat32LfnEntry *lfn = (Fat32LfnEntry *) entry;
+          if (lfn->ordinal & FAT32_LFN_LAST_ENTRY_MASK) {
+            free(lfnBuffer);
+            uint8_t ordinal =
+              lfn->ordinal & FAT32_LFN_ORDINAL_MASK;
+            uint32_t bufSize =
+              (uint32_t) ordinal * FAT32_LFN_CHARS_PER_ENTRY + 1;
+            lfnBuffer = (char *) malloc(bufSize);
+            if (lfnBuffer == NULL) {
+              status = FAT32_NO_MEMORY;
+              done = true;
+              break;
+            }
+            memset(lfnBuffer, 0, bufSize);
+          }
+          if (lfnBuffer != NULL) {
+            fat32AssembleLfnEntry(lfn, lfnBuffer);
+          }
+          handle->currentCluster = currentCluster;
+          handle->offsetInCluster = nextOffsetInCluster;
+          continue;
+        }
+
+        // Volume-label entry -- not a real file or directory.
+        if (entry->attributes & FAT32_ATTR_VOLUME_ID) {
+          free(lfnBuffer);
+          lfnBuffer = NULL;
+          handle->currentCluster = currentCluster;
+          handle->offsetInCluster = nextOffsetInCluster;
+          continue;
+        }
+
+        // ---- Valid short entry: produce a dirent for it ----
+
+        const char *resolvedName;
+        char shortName[13];
+        if ((lfnBuffer != NULL) && (lfnBuffer[0] != '\0')) {
+          resolvedName = lfnBuffer;
+        } else {
+          fat32FormatShortName(entry->name, shortName);
+          resolvedName = shortName;
+        }
+
+        size_t nameLen = strlen(resolvedName);
+        struct dirent *newEntry = (struct dirent *) malloc(
+          offsetof(struct dirent, d_name) + nameLen + 1);
+        if (newEntry == NULL) {
+          status = FAT32_NO_MEMORY;
+          done = true;
+          break;
+        }
+
+        uint16_t entryClusterHigh;
+        uint16_t entryClusterLow;
+        memcpy(&entryClusterHigh, &entry->firstClusterHigh,
+          sizeof(uint16_t));
+        memcpy(&entryClusterLow, &entry->firstClusterLow,
+          sizeof(uint16_t));
+        newEntry->d_ino =
+          ((uint32_t) entryClusterHigh << 16) | (uint32_t) entryClusterLow;
+        newEntry->d_off = (off_t) handle->nextSequence++;
+        newEntry->d_reclen =
+          (unsigned short) (offsetof(struct dirent, d_name) + nameLen + 1);
+        newEntry->d_type =
+          (entry->attributes & FAT32_ATTR_DIRECTORY) ? DT_DIR : DT_REG;
+        memcpy(newEntry->d_name, resolvedName, nameLen + 1);
+
+        handle->entry = newEntry;
+        handle->currentCluster = currentCluster;
+        handle->offsetInCluster = nextOffsetInCluster;
+
+        status = FAT32_SUCCESS;
+        done = true;
+      }
+    }
+
+    // Follow the cluster chain if this cluster was exhausted without
+    // producing a result (the directory sector data in blockBuffer is no
+    // longer needed at this point, so the FAT read may safely reuse it).
+    if (!done) {
+      uint32_t nextCluster;
+      if (fat32ReadFatEntry(ds, currentCluster, &nextCluster)
+          != FAT32_SUCCESS) {
+        status = FAT32_ERROR;
+        done = true;
+      } else {
+        currentCluster = nextCluster;
+        resumeOffset = 0;
+        handle->currentCluster = currentCluster;
+        handle->offsetInCluster = 0;
+      }
+    }
+  }
+
+  free(lfnBuffer);
+  return status;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

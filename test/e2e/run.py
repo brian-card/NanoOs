@@ -208,6 +208,40 @@ def test_background_jobs_fail_gracefully_past_the_slot_limit(s):
     assert "looseLoop" in s.sh("ps")
 
 
+def test_dirent_lists_directories_with_correct_type(s):
+    # test/e2e/mkimage.sh always builds a root directory containing exactly
+    # /etc and /usr (via mmd), both real subdirectories.
+    s.login()
+    out = s.sh("dirtest")
+    for name in ("USR", "ETC"):
+        assert f'd_name="{name}" d_type=4' in out, out
+
+
+def test_dirent_lists_files_with_correct_type(s):
+    # /etc always contains exactly hostname and issue, both regular files
+    # (via mcopy).
+    s.login()
+    out = s.sh("dirtest")
+    for name in ("HOSTNAME", "ISSUE"):
+        assert f'd_name="{name}" d_type=8' in out, out
+
+
+def test_dirent_includes_dot_and_dotdot_in_subdirectories(s):
+    s.login()
+    out = s.sh("dirtest")
+    assert 'd_name="."' in out, out
+    assert 'd_name=".."' in out, out
+
+
+def test_dirent_opendir_rejects_missing_path_and_regular_file(s):
+    # opendir must fail both for a path that doesn't exist and for a path
+    # that names a regular file rather than a directory.
+    s.login()
+    out = s.sh("dirtest")
+    assert "opendir(/nonexistent) -> NULL" in out, out
+    assert "opendir(/etc/hostname) -> NULL" in out, out
+
+
 def test_unknown_command_errors(s):
     s.login()
     out = s.sh("no_such_command_here").lower()

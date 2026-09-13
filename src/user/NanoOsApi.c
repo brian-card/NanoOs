@@ -81,6 +81,9 @@ char** parseArgs(char *command, int *argc);
 #undef ftell
 #undef strerror
 #undef fileno
+#undef opendir
+#undef readdir
+#undef closedir
 
 NanoOsExecutiveApi nanoOsExecutiveApi = {
   // HAL access:
@@ -134,6 +137,11 @@ NanoOsApi nanoOsApi = {
   .feof = filesystemEndOfFile,
   .ftell = filesystemFtell,
   .fat32Format = fat32Format,
+
+  // Directory operations:
+  .opendir = filesystemOpendir,
+  .readdir = filesystemReaddir,
+  .closedir = filesystemClosedir,
   
   // Formatted I/O:
   .vsscanf = vsscanf,

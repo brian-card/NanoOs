@@ -64,4 +64,7 @@
 #include "../../usr/src/filesystems/drivers/fat32/GetFilenameDriver.c"
 #include "../../usr/src/filesystems/drivers/fat32/EndOfFileDriver.c"
 #include "../../usr/src/filesystems/drivers/fat32/FormatDriver.c"
+#include "../../usr/src/filesystems/drivers/fat32/OpendirDriver.c"
+#include "../../usr/src/filesystems/drivers/fat32/ReaddirDriver.c"
+#include "../../usr/src/filesystems/drivers/fat32/ClosedirDriver.c"
 

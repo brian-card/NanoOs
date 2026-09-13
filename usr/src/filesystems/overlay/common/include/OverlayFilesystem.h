@@ -56,7 +56,10 @@ extern "C"
 #define GET_FILE_BLOCK_METADATA_OVERLAY blockOverlayId(10)
 #define END_OF_FILE_OVERLAY             blockOverlayId(11)
 #define FORMAT_OVERLAY                  blockOverlayId(12)
-#define FIRST_FS_OVERLAY_ID             13
+#define OPEN_DIR_OVERLAY                blockOverlayId(13)
+#define READ_DIR_OVERLAY                blockOverlayId(14)
+#define CLOSE_DIR_OVERLAY               blockOverlayId(15)
+#define FIRST_FS_OVERLAY_ID             16
 
 #ifdef __cplusplus
 }

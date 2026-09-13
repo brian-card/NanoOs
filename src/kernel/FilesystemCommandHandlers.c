@@ -60,6 +60,9 @@
 #include "../../usr/src/filesystems/common/GetFileBlockMetadataCommandHandler.c"
 #include "../../usr/src/filesystems/common/EndOfFileCommandHandler.c"
 #include "../../usr/src/filesystems/common/FormatCommandHandler.c"
+#include "../../usr/src/filesystems/common/OpendirCommandHandler.c"
+#include "../../usr/src/filesystems/common/ReaddirCommandHandler.c"
+#include "../../usr/src/filesystems/common/ClosedirCommandHandler.c"
 
 /// @var fat32CommandHandlers
 ///
@@ -82,5 +85,8 @@ const FilesystemCommandHandler fat32CommandHandlers[NUM_FILESYSTEM_COMMANDS] = {
   GetFileBlockMetadata, // FILESYSTEM_GET_FILE_BLOCK_METADATA
   EndOfFile,            // FILESYSTEM_END_OF_FILE
   Format,               // FILESYSTEM_FORMAT
+  Opendir,              // FILESYSTEM_OPEN_DIR
+  Readdir,              // FILESYSTEM_READ_DIR
+  Closedir,             // FILESYSTEM_CLOSE_DIR
 };
 

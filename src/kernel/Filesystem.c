@@ -326,6 +326,92 @@ int filesystemRemove(const char *pathname) {
   return returnValue;
 }
 
+/// @fn DIR* filesystemOpendir(const char *pathname)
+///
+/// @brief Implementation of the standard C opendir call.
+///
+/// @param pathname The full pathname to the directory.
+///
+/// @return Returns a pointer to an opened DIR object on success, NULL on
+/// failure.
+DIR* filesystemOpendir(const char *pathname) {
+  DIR *returnValue = NULL;
+  if ((pathname != NULL) && (*pathname != '\0')) {
+    FilesystemOpendirArgs filesystemOpendirArgs;
+    memset(&filesystemOpendirArgs, 0, sizeof(filesystemOpendirArgs));
+    filesystemOpendirArgs.pathname = (char*) malloc(strlen(pathname) + 1);
+    if (filesystemOpendirArgs.pathname == NULL) {
+      errno = ENOMEM;
+      return NULL;
+    }
+    strcpy(filesystemOpendirArgs.pathname, pathname);
+
+    ProcessMessage *msg = initSendProcessMessageToPid(
+      SCHEDULER_STATE->rootFsPid,
+      FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_OPEN_DIR,
+      &filesystemOpendirArgs, sizeof(filesystemOpendirArgs), true);
+    processMessageWaitForDone(msg, NULL);
+    free(filesystemOpendirArgs.pathname); filesystemOpendirArgs.pathname = NULL;
+    returnValue = filesystemOpendirArgs.returnValue;
+    processMessageRelease(msg);
+  }
+  return returnValue;
+}
+
+/// @fn struct dirent* filesystemReaddir(DIR *dirp)
+///
+/// @brief Implementation of the standard C readdir call.
+///
+/// @param dirp A pointer to a previously-opened DIR object.
+///
+/// @return Returns a pointer to the next directory entry in dirp, or NULL at
+/// the end of the directory or on failure.  The returned pointer is valid
+/// until the next call to filesystemReaddir or filesystemClosedir on the same
+/// dirp.
+struct dirent* filesystemReaddir(DIR *dirp) {
+  FilesystemReaddirArgs filesystemReaddirArgs = {
+    .dirp = dirp,
+    .returnValue = NULL,
+  };
+
+  if (dirp != NULL) {
+    ProcessMessage *msg = initSendProcessMessageToPid(
+      SCHEDULER_STATE->rootFsPid,
+      FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_READ_DIR,
+      &filesystemReaddirArgs, sizeof(filesystemReaddirArgs), true);
+    processMessageWaitForDone(msg, NULL);
+    processMessageRelease(msg);
+  }
+
+  return filesystemReaddirArgs.returnValue;
+}
+
+/// @fn int filesystemClosedir(DIR *dirp)
+///
+/// @brief Implementation of the standard C closedir call.
+///
+/// @param dirp A pointer to a previously-opened DIR object.
+///
+/// @return Returns 0 on success, -1 on failure.
+int filesystemClosedir(DIR *dirp) {
+  if (dirp == NULL) {
+    return -1;
+  }
+
+  FilesystemClosedirArgs filesystemClosedirArgs = {
+    .dirp = dirp,
+    .returnValue = 0,
+  };
+  ProcessMessage *msg = initSendProcessMessageToPid(
+    SCHEDULER_STATE->rootFsPid,
+    FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_CLOSE_DIR,
+    &filesystemClosedirArgs, sizeof(filesystemClosedirArgs), true);
+  processMessageWaitForDone(msg, NULL);
+  int returnValue = filesystemClosedirArgs.returnValue;
+  processMessageRelease(msg);
+  return returnValue;
+}
+
 /// @fn int fat32Format(const char *volumeLabel, uint32_t clusterSize)
 ///
 /// @brief Format the root filesystem's partition as FAT32.

@@ -38,12 +38,27 @@
 
 // Custom includes
 #include "BlockDevice.h"
+#include "../include/NanoOsDirentTypes.h"
 
 #include "stddef.h"
 #include "stdint.h"
 
 typedef struct NanoOsFile FILE;
 typedef struct msg_t ProcessMessage;
+
+/// @typedef DIR
+///
+/// @brief Opaque handle to an open directory stream.  The concrete storage is
+/// owned entirely by whichever filesystem driver is linked in (see
+/// Fat32DirHandle) and is never examined here; nothing outside the driver
+/// dereferences a DIR.
+typedef struct NanoOsDirStream DIR;
+
+// struct dirent and its DT_* constants are defined in
+// ../include/NanoOsDirentTypes.h (included above): that header -- not this
+// one -- is the one both kernel and user code already reach, and reach
+// simultaneously in the freestanding filesystem driver builds, so it has to
+// be the single place that struct is defined.
 
 #ifdef __cplusplus
 extern "C"
@@ -218,6 +233,42 @@ typedef struct FilesystemRemoveArgs {
   int   returnValue;
 } FilesystemRemoveArgs;
 
+/// @struct FilesystemOpendirArgs
+///
+/// @brief Function parameters and return value for an opendir call.
+///
+/// @param pathname A string containing the full path to the directory.
+/// @param returnValue A pointer to the DIR that's opened on success, NULL on
+///   failure.
+typedef struct FilesystemOpendirArgs {
+  char *pathname;
+  DIR  *returnValue;
+} FilesystemOpendirArgs;
+
+/// @struct FilesystemReaddirArgs
+///
+/// @brief Function parameters and return value for a readdir call.
+///
+/// @param dirp A pointer to a previously-opened DIR object.
+/// @param returnValue A pointer to the next directory entry, or NULL at the
+///   end of the directory or on failure.
+typedef struct FilesystemReaddirArgs {
+  DIR           *dirp;
+  struct dirent *returnValue;
+} FilesystemReaddirArgs;
+
+/// @struct FilesystemClosedirArgs
+///
+/// @brief Function parameters and return value for a closedir call.
+///
+/// @param dirp A pointer to the DIR to close.
+/// @param returnValue The return value of the operation that will be passed
+///   back from the handler.
+typedef struct FilesystemClosedirArgs {
+  DIR *dirp;
+  int  returnValue;
+} FilesystemClosedirArgs;
+
 /// @struct FilesystemDumpOpenFilesArgs
 ///
 /// @brief Function parameters and return value for FILESYSTEM_DUMP_OPEN_FILES.
@@ -315,6 +366,9 @@ typedef enum FilesystemCommandResponse {
   FILESYSTEM_GET_FILE_BLOCK_METADATA,
   FILESYSTEM_END_OF_FILE,
   FILESYSTEM_FORMAT,
+  FILESYSTEM_OPEN_DIR,
+  FILESYSTEM_READ_DIR,
+  FILESYSTEM_CLOSE_DIR,
   NUM_FILESYSTEM_COMMANDS,
   // Responses:
 } FilesystemCommandResponse;
@@ -368,6 +422,24 @@ long filesystemFtell(FILE *stream);
 #undef ftell
 #endif // ftell
 #define ftell filesystemFtell
+
+DIR* filesystemOpendir(const char *pathname);
+#ifdef opendir
+#undef opendir
+#endif // opendir
+#define opendir filesystemOpendir
+
+struct dirent* filesystemReaddir(DIR *dirp);
+#ifdef readdir
+#undef readdir
+#endif // readdir
+#define readdir filesystemReaddir
+
+int filesystemClosedir(DIR *dirp);
+#ifdef closedir
+#undef closedir
+#endif // closedir
+#define closedir filesystemClosedir
 
 /// @def rewind
 ///
