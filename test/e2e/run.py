@@ -210,19 +210,22 @@ def test_background_jobs_fail_gracefully_past_the_slot_limit(s):
 
 def test_dirent_lists_directories_with_correct_type(s):
     # test/e2e/mkimage.sh always builds a root directory containing exactly
-    # /etc and /usr (via mmd), both real subdirectories.
+    # /etc and /usr (via mmd), both real subdirectories.  mtools writes
+    # lowercase 8.3 names using the ntReserved case bits rather than an LFN,
+    # so the case-preserving name comes back lowercase, not the legacy
+    # all-uppercase short-name rendering.
     s.login()
     out = s.sh("dirtest")
-    for name in ("USR", "ETC"):
+    for name in ("usr", "etc"):
         assert f'd_name="{name}" d_type=4' in out, out
 
 
 def test_dirent_lists_files_with_correct_type(s):
     # /etc always contains exactly hostname and issue, both regular files
-    # (via mcopy).
+    # (via mcopy), written lowercase (see above).
     s.login()
     out = s.sh("dirtest")
-    for name in ("HOSTNAME", "ISSUE"):
+    for name in ("hostname", "issue"):
         assert f'd_name="{name}" d_type=8' in out, out
 
 
