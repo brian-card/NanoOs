@@ -54,17 +54,25 @@ extern "C"
 // translation unit would shadow them with these narrower, NanoOs-specific
 // ones. ino_t/off_t have no such real counterpart in use anywhere in this
 // codebase (nothing here makes a real syscall using either name), so it's
-// safe to let ours win over a system libc's own -- guarded with the same
-// macro names glibc itself uses, so whichever definition is processed first
-// in a given translation unit wins and the second is skipped rather than
-// conflicting.
-#ifndef __ino_t_defined
+// safe to let ours win over a system libc's own -- guarded with whichever
+// macro name that libc itself uses to guard its own typedef, so whichever
+// definition is processed first in a given translation unit wins and the
+// second is skipped rather than conflicting.  Two different guard
+// conventions are checked because this header is compiled against two
+// different real libcs depending on target: glibc (__ino_t_defined /
+// __off_t_defined, used by the POSIX simulator build) and newlib
+// (_INO_T_DECLARED / _OFF_T_DECLARED, used by the arm-none-eabi-gcc/
+// avr-gcc/ez80 cross toolchains) -- e.g. Arduino.h on SAMD21 targets pulls
+// in newlib's <sys/types.h> before this header is ever reached.
+#if !defined(__ino_t_defined) && !defined(_INO_T_DECLARED)
 typedef uint32_t ino_t;
 #define __ino_t_defined
+#define _INO_T_DECLARED
 #endif
-#ifndef __off_t_defined
+#if !defined(__off_t_defined) && !defined(_OFF_T_DECLARED)
 typedef int32_t off_t;
 #define __off_t_defined
+#define _OFF_T_DECLARED
 #endif
 
 // d_type values for struct dirent below.
