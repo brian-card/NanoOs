@@ -277,19 +277,23 @@ HalCapability baseExecutiveHalCapabilities[] = {
 /// position, not just appended at the end.
 HalCapability loggerHalCapabilities[] = {
   {
-    .subsystemFunction = (((uint16_t) HAL_MEMORY) << 8) | HAL_MEMORY_STATIC_LOGS,
+    .subsystemFunction = (((uint16_t) HAL_MEMORY) << 8)
+      | HAL_MEMORY_STATIC_LOGS,
     .deviceIds =         0x00, // No device for this function
   },
   {
-    .subsystemFunction = (((uint16_t) HAL_MEMORY) << 8) | HAL_MEMORY_LOG_BUFFER,
+    .subsystemFunction = (((uint16_t) HAL_MEMORY) << 8)
+      | HAL_MEMORY_LOG_BUFFER,
     .deviceIds =         0x00, // No device for this function
   },
   {
-    .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_WRITE,
+    .subsystemFunction = (((uint16_t) HAL_UART) << 8)
+      | HAL_UART_WRITE,
     .deviceIds =         0x03, // Bitmask for device IDs 0 and 1
   },
   {
-    .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_IS_CONSOLE,
+    .subsystemFunction = (((uint16_t) HAL_UART) << 8)
+      | HAL_UART_IS_CONSOLE,
     .deviceIds =         0x03, // Bitmask for device IDs 0 and 1
   },
   {
