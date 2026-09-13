@@ -240,9 +240,14 @@ typedef struct FilesystemRemoveArgs {
 /// @param pathname A string containing the full path to the directory.
 /// @param returnValue A pointer to the DIR that's opened on success, NULL on
 ///   failure.
+/// @param errorNumber The errno value that should be used for the calling
+///   process when returnValue is NULL.  Populated by the driver (which
+///   knows what its own failure actually means); this struct and the
+///   command handler that fills it in never interpret it themselves.
 typedef struct FilesystemOpendirArgs {
   char *pathname;
   DIR  *returnValue;
+  int   errorNumber;
 } FilesystemOpendirArgs;
 
 /// @struct FilesystemReaddirArgs
@@ -252,9 +257,14 @@ typedef struct FilesystemOpendirArgs {
 /// @param dirp A pointer to a previously-opened DIR object.
 /// @param returnValue A pointer to the next directory entry, or NULL at the
 ///   end of the directory or on failure.
+/// @param errorNumber The errno value that should be used for the calling
+///   process when returnValue is NULL, or 0 if returnValue is NULL only
+///   because the directory was exhausted (not an error -- the calling
+///   process's errno must be left unchanged in that case).
 typedef struct FilesystemReaddirArgs {
   DIR           *dirp;
   struct dirent *returnValue;
+  int            errorNumber;
 } FilesystemReaddirArgs;
 
 /// @struct FilesystemClosedirArgs

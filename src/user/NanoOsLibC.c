@@ -96,6 +96,7 @@ const char errorStrings[][33] KEEP_IN_FLASH = {
   "Operation not permitted",          // EPERM
   "No such process",                  // ESRCH
   "Try again",                        // EAGAIN
+  "Not a directory",                  // ENOTDIR
 };
 
 /// @def NUM_ERRORS

@@ -46,26 +46,33 @@
 ///
 /// @param driverState  Pointer to a Fat32DriverState (passed as void*).
 /// @param path         The null-terminated path of the directory to open.
+/// @param errorNumber  [out] Set to the errno value the caller should see
+///                     on failure (0 on success).  Must not be NULL.
 ///
 /// @return A pointer to a heap-allocated Fat32DirHandle on success, or NULL
-///         if either argument is NULL, the path does not exist, or the path
-///         names a regular file rather than a directory.
+///         if either argument is NULL, the path does not exist, the path
+///         names a regular file rather than a directory, or allocation
+///         fails.
 ///
-void* driverOpendir(void *driverState, const char *path) {
+void* driverOpendir(void *driverState, const char *path, int *errorNumber) {
   Fat32DriverState *ds = (Fat32DriverState *) driverState;
 
   if ((ds == NULL) || (path == NULL)) {
+    *errorNumber = fat32ErrorToErrno(FAT32_INVALID_PARAMETER);
     return NULL;
   }
 
   uint32_t dirCluster;
-  if (fat32ResolveDirectory(ds, path, &dirCluster) != FAT32_SUCCESS) {
+  int result = fat32ResolveDirectory(ds, path, &dirCluster);
+  if (result != FAT32_SUCCESS) {
+    *errorNumber = fat32ErrorToErrno(result);
     return NULL;
   }
 
   Fat32DirHandle *handle
     = (Fat32DirHandle *) malloc(sizeof(Fat32DirHandle));
   if (handle == NULL) {
+    *errorNumber = fat32ErrorToErrno(FAT32_NO_MEMORY);
     return NULL;
   }
 
@@ -74,5 +81,6 @@ void* driverOpendir(void *driverState, const char *path) {
   handle->nextSequence = 0;
   handle->entry = NULL;
 
+  *errorNumber = 0;
   return (void *) handle;
 }

@@ -38,7 +38,9 @@
 
 #include <stdio.h>
 #include <dirent.h>
+#include <errno.h>
 #include <stdint.h>
+#include <string.h>
 
 static void listDir(const char *path) {
   printf("opendir(%s):\n", path);
@@ -68,10 +70,33 @@ int main(int argc, char **argv) {
   listDir("/");
   listDir("/etc");
   listDir("/usr");
-  printf("opendir(/nonexistent) -> %s\n",
-    (opendir("/nonexistent") == NULL) ? "NULL" : "non-NULL");
-  printf("opendir(/etc/hostname) -> %s\n",
-    (opendir("/etc/hostname") == NULL) ? "NULL" : "non-NULL");
+
+  errno = 0;
+  DIR *missing = opendir("/nonexistent");
+  printf("opendir(/nonexistent) -> %s, errno=%d\n",
+    (missing == NULL) ? "NULL" : "non-NULL", errno);
+
+  errno = 0;
+  DIR *notADir = opendir("/etc/hostname");
+  printf("opendir(/etc/hostname) -> %s, errno=%d, strerror=\"%s\"\n",
+    (notADir == NULL) ? "NULL" : "non-NULL", errno, strerror(errno));
+
+  // readdir must not disturb errno when it returns NULL because the
+  // directory was simply exhausted (not a real error).
+  DIR *etc = opendir("/etc");
+  while (readdir(etc) != NULL) {
+    // Drain the directory.
+  }
+  errno = 0;
+  struct dirent *pastEnd = readdir(etc);
+  printf("readdir past end of /etc -> %s, errno=%d\n",
+    (pastEnd == NULL) ? "NULL" : "non-NULL", errno);
+  closedir(etc);
+
+  // closedir on a NULL DIR must fail and set errno.
+  errno = 0;
+  int closeResult = closedir(NULL);
+  printf("closedir(NULL) -> %d, errno=%d\n", closeResult, errno);
 
   return 0;
 }

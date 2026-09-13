@@ -47,23 +47,38 @@
 /// @param driverState  Pointer to a Fat32DriverState (passed as void*).
 /// @param dirHandle    Pointer to the Fat32DirHandle to read from (passed as
 ///                     void*).
+/// @param errorNumber  [out] Set to 0 when the directory was simply
+///                     exhausted (not an error -- the caller must not
+///                     change its own errno in that case) or on success,
+///                     or to the errno value the caller should see on a
+///                     real I/O/allocation/argument error.  Must not be
+///                     NULL.
 ///
 /// @return A pointer to a struct dirent describing the next entry, valid
 ///         until the next call to driverReaddir or driverClosedir on the
 ///         same handle; or NULL if either argument is NULL, the directory is
 ///         exhausted, or an I/O or allocation error occurred.
 ///
-struct dirent* driverReaddir(void *driverState, void *dirHandle) {
+struct dirent* driverReaddir(
+    void *driverState, void *dirHandle, int *errorNumber
+) {
   Fat32DriverState *ds     = (Fat32DriverState *) driverState;
   Fat32DirHandle   *handle = (Fat32DirHandle *)   dirHandle;
 
   if ((ds == NULL) || (handle == NULL)) {
+    *errorNumber = fat32ErrorToErrno(FAT32_INVALID_PARAMETER);
     return NULL;
   }
 
-  if (fat32ReadDirectoryEntry(ds, handle) != FAT32_SUCCESS) {
+  int result = fat32ReadDirectoryEntry(ds, handle);
+  if (result != FAT32_SUCCESS) {
+    // FAT32_FILE_NOT_FOUND here just means the directory is exhausted --
+    // a normal, non-error condition the caller's errno must not change for.
+    *errorNumber =
+      (result == FAT32_FILE_NOT_FOUND) ? 0 : fat32ErrorToErrno(result);
     return NULL;
   }
 
+  *errorNumber = 0;
   return handle->entry;
 }

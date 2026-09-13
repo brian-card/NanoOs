@@ -70,7 +70,8 @@ extern "C"
 #define EPERM           22      /* Operation not permitted */
 #define ESRCH           23      /* No such process */
 #define EAGAIN          24      /* Try again */
-#define ELAST           24      /* End of error codes */
+#define ENOTDIR         25      /* Not a directory */
+#define ELAST           25      /* End of error codes */
 
 int* errno_(void);
 #define errno (*errno_())

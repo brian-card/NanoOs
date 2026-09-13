@@ -245,6 +245,21 @@ def test_dirent_opendir_rejects_missing_path_and_regular_file(s):
     assert "opendir(/etc/hostname) -> NULL" in out, out
 
 
+def test_dirent_sets_errno_correctly(s):
+    # ENOENT (8) for a path that doesn't exist, ENOTDIR (25) for a path that
+    # names a regular file rather than a directory (see src/user/NanoOsErrno.h
+    # for the numbering) -- distinct values, not the same generic failure.
+    s.login()
+    out = s.sh("dirtest")
+    assert "opendir(/nonexistent) -> NULL, errno=8" in out, out
+    assert 'opendir(/etc/hostname) -> NULL, errno=25, strerror="Not a directory"' in out, out
+    # readdir must leave errno untouched when it returns NULL only because
+    # the directory was exhausted -- that's not an error.
+    assert "readdir past end of /etc -> NULL, errno=0" in out, out
+    # closedir on a NULL DIR must fail (-1) and set errno (EBADF = 13).
+    assert "closedir(NULL) -> -1, errno=13" in out, out
+
+
 def test_unknown_command_errors(s):
     s.login()
     out = s.sh("no_such_command_here").lower()

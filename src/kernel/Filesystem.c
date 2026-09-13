@@ -332,29 +332,34 @@ int filesystemRemove(const char *pathname) {
 ///
 /// @param pathname The full pathname to the directory.
 ///
-/// @return Returns a pointer to an opened DIR object on success, NULL on
-/// failure.
+/// @return Returns a pointer to an opened DIR object on success, NULL and
+/// sets the value of errno on failure.
 DIR* filesystemOpendir(const char *pathname) {
-  DIR *returnValue = NULL;
-  if ((pathname != NULL) && (*pathname != '\0')) {
-    FilesystemOpendirArgs filesystemOpendirArgs;
-    memset(&filesystemOpendirArgs, 0, sizeof(filesystemOpendirArgs));
-    filesystemOpendirArgs.pathname = (char*) malloc(strlen(pathname) + 1);
-    if (filesystemOpendirArgs.pathname == NULL) {
-      errno = ENOMEM;
-      return NULL;
-    }
-    strcpy(filesystemOpendirArgs.pathname, pathname);
-
-    ProcessMessage *msg = initSendProcessMessageToPid(
-      SCHEDULER_STATE->rootFsPid,
-      FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_OPEN_DIR,
-      &filesystemOpendirArgs, sizeof(filesystemOpendirArgs), true);
-    processMessageWaitForDone(msg, NULL);
-    free(filesystemOpendirArgs.pathname); filesystemOpendirArgs.pathname = NULL;
-    returnValue = filesystemOpendirArgs.returnValue;
-    processMessageRelease(msg);
+  if ((pathname == NULL) || (*pathname == '\0')) {
+    errno = EINVAL;
+    return NULL;
   }
+
+  FilesystemOpendirArgs filesystemOpendirArgs;
+  memset(&filesystemOpendirArgs, 0, sizeof(filesystemOpendirArgs));
+  filesystemOpendirArgs.pathname = (char*) malloc(strlen(pathname) + 1);
+  if (filesystemOpendirArgs.pathname == NULL) {
+    errno = ENOMEM;
+    return NULL;
+  }
+  strcpy(filesystemOpendirArgs.pathname, pathname);
+
+  ProcessMessage *msg = initSendProcessMessageToPid(
+    SCHEDULER_STATE->rootFsPid,
+    FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_OPEN_DIR,
+    &filesystemOpendirArgs, sizeof(filesystemOpendirArgs), true);
+  processMessageWaitForDone(msg, NULL);
+  free(filesystemOpendirArgs.pathname); filesystemOpendirArgs.pathname = NULL;
+  DIR *returnValue = filesystemOpendirArgs.returnValue;
+  if (returnValue == NULL) {
+    errno = filesystemOpendirArgs.errorNumber;
+  }
+  processMessageRelease(msg);
   return returnValue;
 }
 
@@ -367,20 +372,32 @@ DIR* filesystemOpendir(const char *pathname) {
 /// @return Returns a pointer to the next directory entry in dirp, or NULL at
 /// the end of the directory or on failure.  The returned pointer is valid
 /// until the next call to filesystemReaddir or filesystemClosedir on the same
-/// dirp.
+/// dirp.  errno is left unchanged when NULL is returned because the
+/// directory was simply exhausted; it is set to the appropriate value when
+/// NULL is returned because of a real error.
 struct dirent* filesystemReaddir(DIR *dirp) {
+  if (dirp == NULL) {
+    errno = EBADF;
+    return NULL;
+  }
+
   FilesystemReaddirArgs filesystemReaddirArgs = {
     .dirp = dirp,
     .returnValue = NULL,
+    .errorNumber = 0,
   };
 
-  if (dirp != NULL) {
-    ProcessMessage *msg = initSendProcessMessageToPid(
-      SCHEDULER_STATE->rootFsPid,
-      FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_READ_DIR,
-      &filesystemReaddirArgs, sizeof(filesystemReaddirArgs), true);
-    processMessageWaitForDone(msg, NULL);
-    processMessageRelease(msg);
+  ProcessMessage *msg = initSendProcessMessageToPid(
+    SCHEDULER_STATE->rootFsPid,
+    FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_READ_DIR,
+    &filesystemReaddirArgs, sizeof(filesystemReaddirArgs), true);
+  processMessageWaitForDone(msg, NULL);
+  processMessageRelease(msg);
+
+  if ((filesystemReaddirArgs.returnValue == NULL)
+    && (filesystemReaddirArgs.errorNumber != 0)
+  ) {
+    errno = filesystemReaddirArgs.errorNumber;
   }
 
   return filesystemReaddirArgs.returnValue;
@@ -392,9 +409,10 @@ struct dirent* filesystemReaddir(DIR *dirp) {
 ///
 /// @param dirp A pointer to a previously-opened DIR object.
 ///
-/// @return Returns 0 on success, -1 on failure.
+/// @return Returns 0 on success, -1 and sets the value of errno on failure.
 int filesystemClosedir(DIR *dirp) {
   if (dirp == NULL) {
+    errno = EBADF;
     return -1;
   }
 
@@ -407,7 +425,12 @@ int filesystemClosedir(DIR *dirp) {
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_CLOSE_DIR,
     &filesystemClosedirArgs, sizeof(filesystemClosedirArgs), true);
   processMessageWaitForDone(msg, NULL);
-  int returnValue = filesystemClosedirArgs.returnValue;
+  int returnValue = 0;
+  if (filesystemClosedirArgs.returnValue != 0) {
+    // The only way the driver can fail a closedir is a bad handle.
+    errno = EBADF;
+    returnValue = -1;
+  }
   processMessageRelease(msg);
   return returnValue;
 }

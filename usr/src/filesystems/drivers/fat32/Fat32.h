@@ -38,10 +38,11 @@
 
 #include "../../include/FilesystemUtils.h"
 #include "stdbool.h"
-#include "stddef.h" 
+#include "stddef.h"
 #include "stdint.h"
 #include "stdlib.h"
 #include "string.h"
+
 
 #ifdef __cplusplus
 extern "C"
@@ -115,6 +116,48 @@ typedef struct FilesystemState FilesystemState;
 #define FAT32_DISK_FULL              -5
 #define FAT32_TOO_MANY_OPEN_FILES    -6
 #define FAT32_INVALID_FILESYSTEM     -7
+#define FAT32_NOT_A_DIRECTORY        -8
+
+///////////////////////////////////////////////////////////////////////////////
+///
+/// @brief Translate a FAT32_* driver status code into the errno value the
+///        calling process should see.
+///
+/// @details This lives here, not in the filesystem-agnostic client/handler
+///          layers (Filesystem.c, usr/src/filesystems/common/*), because
+///          only the driver knows what its own status codes mean.  The
+///          driver-agnostic layers only ever see the resulting plain errno
+///          value (see e.g. FilesystemOpendirArgs.errorNumber), never a
+///          FAT32_* code.
+///
+/// @note The values returned are deliberately plain integer literals, not
+/// the symbolic EINVAL/ENOENT/etc. names: this file is compiled together
+/// (via direct #include, in all three filesystem build shapes) with code
+/// that already includes the toolchain's own <errno.h> for unrelated
+/// reasons, and that collides with src/user/NanoOsErrno.h's own,
+/// differently-numbered versions of those same names.  ***WARNING*** These
+/// values have to match src/user/NanoOsErrno.h.  If you change the numbering
+/// there, you MUST update the values here too!
+///
+/// @param fat32Status One of the FAT32_* status codes defined above.
+///
+/// @return The corresponding errno value (using NanoOs's own numbering, from
+/// NanoOsErrno.h), or 0 for FAT32_SUCCESS.
+///
+static inline int fat32ErrorToErrno(int fat32Status) {
+  switch (fat32Status) {
+    case FAT32_SUCCESS:             return 0;  // ENOERR
+    case FAT32_FILE_NOT_FOUND:      return 8;  // ENOENT
+    case FAT32_NOT_A_DIRECTORY:     return 25; // ENOTDIR
+    case FAT32_INVALID_PARAMETER:   return 5;  // EINVAL
+    case FAT32_NO_MEMORY:           return 3;  // ENOMEM
+    case FAT32_DISK_FULL:           return 7;  // ENOSPC
+    case FAT32_TOO_MANY_OPEN_FILES: return 2;  // EBUSY
+    case FAT32_INVALID_FILESYSTEM:  return 6;  // EIO
+    case FAT32_ERROR:               return 6;  // EIO
+    default:                        return 6;  // EIO
+  }
+}
 
 /// @struct Fat32BiosParameterBlock
 ///
@@ -775,8 +818,8 @@ static inline int fat32ResolveParentDirectory(
 /// @param dirClusterOut [out] The first cluster of the named directory.
 ///
 /// @return FAT32_SUCCESS if the path names a directory, FAT32_FILE_NOT_FOUND
-///         if any component doesn't exist or the path names a regular file,
-///         or a FAT32 error code on I/O failure.
+///         if any component doesn't exist, FAT32_NOT_A_DIRECTORY if the path
+///         resolves to a regular file, or a FAT32 error code on I/O failure.
 ///
 static inline int fat32ResolveDirectory(
     Fat32DriverState *ds,
@@ -809,7 +852,7 @@ static inline int fat32ResolveDirectory(
 
   if (!(searchResult.entry.attributes & FAT32_ATTR_DIRECTORY)) {
     free(searchResult.longName);
-    return FAT32_FILE_NOT_FOUND;
+    return FAT32_NOT_A_DIRECTORY;
   }
 
   uint16_t clusterHigh;
