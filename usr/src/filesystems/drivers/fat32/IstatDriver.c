@@ -83,7 +83,10 @@ int driverIstat(
     // The root-directory sentinel (see driverLstat): root has no directory
     // entry of its own to read back.
     statbuf->st_ino = 0;
-    statbuf->st_mode = S_IFDIR;
+    // No FAT32_ATTR_READ_ONLY to check here either -- the root directory is
+    // never read-only, so this is the same permission bits fat32PopulateStat
+    // would compute for any other read-write directory.
+    statbuf->st_mode = S_IFDIR | S_IRWXU | S_IRWXG | S_IRWXO;
     *errorNumber = 0;
     return 0;
   }

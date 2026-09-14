@@ -1461,13 +1461,20 @@ static inline time_t fat32DateTimeToUnixTime(uint16_t fatDate, uint16_t fatTime)
 ///          is the entirety of what either driver does once it has the
 ///          entry in hand.
 ///
-///          Leaves st_uid/st_gid at the FILESYSTEM_*_UNKNOWN sentinels
-///          (see NanoOsStatTypes.h) and the permission bits of st_mode
-///          clear: FAT32 has no concept of either, and it's the
-///          driver-agnostic FILESYSTEM_LSTAT/FILESYSTEM_ISTAT command
+///          Leaves st_uid/st_gid at the FILESYSTEM_*_UNKNOWN sentinels (see
+///          NanoOsStatTypes.h): FAT32 has no concept of ownership, and it's
+///          the driver-agnostic FILESYSTEM_LSTAT/FILESYSTEM_ISTAT command
 ///          handlers' job, not this driver's, to decide what to report in
-///          their place (see filesystemFixupUnknownOwnership in
-///          Filesystem.h).
+///          its place (see filesystemFixupUnknownOwnership in
+///          NanoOsStatTypes.h). Permission bits are a different matter:
+///          FAT32 *does* track something permission-shaped (the read-only
+///          attribute), so this driver sets real, final permission bits
+///          itself -- read/execute for everyone, plus write unless
+///          FAT32_ATTR_READ_ONLY is set -- rather than leaving them for the
+///          command handler to guess at. The command handler never touches
+///          st_mode at all, for exactly this reason: it has no way to know
+///          whether a given driver tracks permissions, so it must never
+///          override whatever one that does already decided.
 ///
 /// @param ds       Pointer to an initialized Fat32DriverState.
 /// @param entry    The resolved short directory entry to populate from.
@@ -1489,7 +1496,10 @@ static inline void fat32PopulateStat(
   statbuf->st_blksize = (blksize_t) ds->bytesPerCluster;
 
   bool isDirectory = (entry->attributes & FAT32_ATTR_DIRECTORY) != 0;
-  statbuf->st_mode = isDirectory ? S_IFDIR : S_IFREG;
+  mode_t permissionBits = (entry->attributes & FAT32_ATTR_READ_ONLY)
+    ? (S_IRUSR | S_IXUSR | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
+    : (S_IRWXU | S_IRWXG | S_IRWXO);
+  statbuf->st_mode = (isDirectory ? S_IFDIR : S_IFREG) | permissionBits;
 
   if (!isDirectory) {
     uint32_t fileSize;

@@ -44,14 +44,17 @@
 ///
 /// @brief Populate a struct stat for a path on a FAT32 filesystem.
 ///
-/// @details FAT32 has no concept of file ownership or Unix-style permission
-///          bits, so st_uid and st_gid are always set to the
-///          FILESYSTEM_UID_UNKNOWN/FILESYSTEM_GID_UNKNOWN sentinels (and the
-///          permission bits of st_mode are left clear) rather than guessed
-///          at here: it's the driver-agnostic FILESYSTEM_LSTAT command
-///          handler's job, not this driver's, to decide what a filesystem
-///          that doesn't track ownership should report -- see
-///          usr/src/filesystems/common/LstatCommandHandler.c.
+/// @details FAT32 has no concept of file ownership, so st_uid and st_gid
+///          are always set to the FILESYSTEM_UID_UNKNOWN/
+///          FILESYSTEM_GID_UNKNOWN sentinels rather than guessed at here:
+///          it's the driver-agnostic FILESYSTEM_LSTAT command handler's
+///          job, not this driver's, to decide what a filesystem that
+///          doesn't track ownership should report -- see
+///          usr/src/filesystems/common/LstatCommandHandler.c.  Permission
+///          bits are different: FAT32 does track something permission-
+///          shaped (the read-only attribute), so this driver computes real,
+///          final permission bits itself (see fat32PopulateStat) rather
+///          than leaving them for that handler to guess at.
 ///
 /// @param driverState  Pointer to a Fat32DriverState (passed as void*).
 /// @param path         The null-terminated path to stat.
@@ -100,7 +103,10 @@ int driverLstat(
     // matching the convention real inode-based filesystems already use 0
     // for (e.g. ext2 never issues inode 0 to a real file).
     statbuf->st_ino = (ino_t) 0;
-    statbuf->st_mode = S_IFDIR;
+    // No FAT32_ATTR_READ_ONLY to check here either -- the root directory is
+    // never read-only, so this is the same permission bits fat32PopulateStat
+    // would compute for any other read-write directory.
+    statbuf->st_mode = S_IFDIR | S_IRWXU | S_IRWXG | S_IRWXO;
     *errorNumber = 0;
     return 0;
   }

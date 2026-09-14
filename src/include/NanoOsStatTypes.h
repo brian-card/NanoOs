@@ -170,6 +170,16 @@ struct stat {
 /// it never learns which filesystem produced the sentinel, only that it
 /// did.
 ///
+/// @note Deliberately touches st_uid/st_gid only, never st_mode's
+/// permission bits: those are the driver's call, not this layer's.  A
+/// filesystem that can't track ownership may still track something
+/// permission-shaped (e.g. FAT32's read-only attribute), and this code has
+/// no way to know whether it does; overwriting the driver's own bits here
+/// would silently discard whatever it *did* know. The driver already
+/// leaves st_uid/st_gid at these sentinels specifically to signal "I don't
+/// track this" -- it sets st_mode's permission bits to whatever is actually
+/// correct on its own, unconditionally, before this ever runs.
+///
 /// @note Deliberately defined here rather than in Filesystem.h, right next
 /// to the two sentinels it compares against: those expand to "((uid_t) -1)"
 /// and "((gid_t) -1)", and uid_t/gid_t are renamed to different, undefined
@@ -186,7 +196,6 @@ static inline void filesystemFixupUnknownOwnership(struct stat *statbuf) {
   ) {
     statbuf->st_uid = 0;
     statbuf->st_gid = 0;
-    statbuf->st_mode |= (S_IRWXU | S_IRWXG | S_IRWXO);
   }
 }
 

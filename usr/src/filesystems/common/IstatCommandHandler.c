@@ -88,7 +88,7 @@ void* Istat(void *args) {
 
   if (returnValue == 0) {
     // Identical fixup to FILESYSTEM_LSTAT's, and for the same reason -- see
-    // filesystemFixupUnknownOwnership's doc comment (Filesystem.h).
+    // filesystemFixupUnknownOwnership's doc comment (NanoOsStatTypes.h).
     filesystemFixupUnknownOwnership(istatArgs->statbuf);
   }
 

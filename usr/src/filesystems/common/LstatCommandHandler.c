@@ -87,14 +87,16 @@ void* Lstat(void *args) {
   }
 
   if (returnValue == 0) {
-    // The driver has no notion of ownership or permissions for a filesystem
-    // type that doesn't track them, and signals that by leaving st_uid and
-    // st_gid set to the FILESYSTEM_*_UNKNOWN sentinels.  Fixing those up is
-    // the only thing this handler (and FILESYSTEM_ISTAT's, identically) ever
-    // does to the driver's struct stat: everything else about it -- and
-    // which filesystem driver produced it in the first place -- is passed
-    // through without this code knowing or caring.  See
-    // filesystemFixupUnknownOwnership's own doc comment (Filesystem.h).
+    // The driver has no notion of ownership for a filesystem type that
+    // doesn't track it, and signals that by leaving st_uid and st_gid set
+    // to the FILESYSTEM_*_UNKNOWN sentinels.  Fixing those up is the only
+    // thing this handler (and FILESYSTEM_ISTAT's, identically) ever does to
+    // the driver's struct stat: st_mode's permission bits -- and everything
+    // else about it, including which filesystem driver produced it in the
+    // first place -- are passed through untouched, since a driver that
+    // can't track ownership may still track something permission-shaped
+    // (e.g. FAT32's read-only attribute) that only it knows about.  See
+    // filesystemFixupUnknownOwnership's own doc comment (NanoOsStatTypes.h).
     filesystemFixupUnknownOwnership(lstatArgs->statbuf);
   }
 
