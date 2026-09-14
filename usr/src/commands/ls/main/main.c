@@ -35,6 +35,7 @@
 #include <stdlib.h>
 #include <dirent.h>
 #include <stdint.h>
+#include <sys/stat.h>
 
 void listDir(const char *path) {
   DIR *dirp = opendir(path);
@@ -44,8 +45,36 @@ void listDir(const char *path) {
   }
 
   struct dirent *entry;
+  char buffer[96];
+  struct stat st;
   while ((entry = readdir(dirp)) != NULL) {
-    printf("%s%s\n", entry->d_name, (entry->d_type == DT_DIR) ? "/" : "");
+    if (istat(entry->d_ino, &st) < 0) {
+      printf("%s%s\n", entry->d_name, (entry->d_type == DT_DIR) ? "/" : "");
+      continue;
+    }
+
+    // Print the full thing
+    mode_t mode = st.st_mode;
+    snprintf(buffer, sizeof(buffer),
+      "%c%c%c%c%c%c%c%c%c%c %d %d %lld %lld %s%s\n",
+      S_ISDIR(mode)    ? 'd' : '-',
+      (mode & S_IRUSR) ? 'r' : '-',
+      (mode & S_IWUSR) ? 'w' : '-',
+      (mode & S_IXUSR) ? 'x' : '-',
+      (mode & S_IRGRP) ? 'r' : '-',
+      (mode & S_IWGRP) ? 'w' : '-',
+      (mode & S_IXGRP) ? 'x' : '-',
+      (mode & S_IROTH) ? 'r' : '-',
+      (mode & S_IWOTH) ? 'w' : '-',
+      (mode & S_IXOTH) ? 'x' : '-',
+      st.st_uid,
+      st.st_gid,
+      (long long int) st.st_size,
+      (long long int) st.st_mtime,
+      entry->d_name,
+      (entry->d_type == DT_DIR) ? "/" : ""
+    );
+    fputs(buffer, stdout);
   }
 
   closedir(dirp);
