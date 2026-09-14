@@ -158,6 +158,38 @@ struct stat {
   time_t    st_ctime;
 };
 
+/// @fn void filesystemFixupUnknownOwnership(struct stat *statbuf)
+///
+/// @brief Replace a driver's FILESYSTEM_UID_UNKNOWN/FILESYSTEM_GID_UNKNOWN
+/// sentinels with real defaults.
+///
+/// @details Shared by the FILESYSTEM_LSTAT and FILESYSTEM_ISTAT command
+/// handlers (see usr/src/filesystems/common/) so the two apply an
+/// identical, driver-agnostic policy: this is the entire extent of what
+/// either handler knows about *why* a driver couldn't populate ownership --
+/// it never learns which filesystem produced the sentinel, only that it
+/// did.
+///
+/// @note Deliberately defined here rather than in Filesystem.h, right next
+/// to the two sentinels it compares against: those expand to "((uid_t) -1)"
+/// and "((gid_t) -1)", and uid_t/gid_t are renamed to different, undefined
+/// names around certain includes in some translation units this header
+/// reaches (see e.g. HalCommon.c). This header is already reliably reached
+/// -- for struct stat itself -- before any of those renames take effect;
+/// Filesystem.h is not guaranteed to be.
+///
+/// @param statbuf A pointer to a struct stat a driver has already
+///   populated, to fix up in place.
+static inline void filesystemFixupUnknownOwnership(struct stat *statbuf) {
+  if ((statbuf->st_uid == FILESYSTEM_UID_UNKNOWN)
+    && (statbuf->st_gid == FILESYSTEM_GID_UNKNOWN)
+  ) {
+    statbuf->st_uid = 0;
+    statbuf->st_gid = 0;
+    statbuf->st_mode |= (S_IRWXU | S_IRWXG | S_IRWXO);
+  }
+}
+
 #ifdef __cplusplus
 }
 #endif

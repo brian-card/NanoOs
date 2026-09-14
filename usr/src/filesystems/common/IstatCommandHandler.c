@@ -25,11 +25,11 @@
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-/// @file LstatCommandHandler.c
+/// @file IstatCommandHandler.c
 ///
-/// @brief Filesystem-driver-agnostic implementation of a FILESYSTEM_LSTAT
+/// @brief Filesystem-driver-agnostic implementation of a FILESYSTEM_ISTAT
 /// command handler.  Shared verbatim by the kernel-linked, contiguous, and
-/// overlay filesystem builds; calls the selected driver's driverLstat
+/// overlay filesystem builds; calls the selected driver's driverIstat
 /// directly, since which driver is linked in is a build-time choice, not a
 /// runtime one.
 
@@ -45,7 +45,7 @@
 #endif // NANO_OS_KERNEL_BUILD
 
 // Prototype used by this handler.
-int driverLstat(void *driverState, const char *path, struct stat *statbuf,
+int driverIstat(void *driverState, ino_t ino, struct stat *statbuf,
   int *errorNumber);
 
 /// @def NO_DRIVER_ERRNO
@@ -62,44 +62,38 @@ int driverLstat(void *driverState, const char *path, struct stat *statbuf,
 /// If you change the numbering there, you MUST update this value too!
 #define NO_DRIVER_ERRNO 14 // ENODEV
 
-/// @fn void* Lstat(void *args)
+/// @fn void* Istat(void *args)
 ///
-/// @brief Command handler for an lstat call.
+/// @brief Command handler for an istat call.
 ///
 /// @param args A pointer to a FilesystemState, cast to a void*.  The args
 ///   member variable is a pointer to a ProcessMessage.
 ///
-/// @return Sets the returnValue member of the provided FilesystemLstatArgs
+/// @return Sets the returnValue member of the provided FilesystemIstatArgs
 /// to 0 on success (with errorNumber set to 0), or to -1 with errorNumber
 /// set to the errno value the caller should see on failure.  This function
 /// always returns the filesystemState pointer provided as args.
-void* Lstat(void *args) {
+void* Istat(void *args) {
   FilesystemState *filesystemState = (FilesystemState*) args;
   ProcessMessage *processMessage = (ProcessMessage*) filesystemState->args;
-  FilesystemLstatArgs *lstatArgs
-    = (FilesystemLstatArgs*) processMessageData(processMessage);
+  FilesystemIstatArgs *istatArgs
+    = (FilesystemIstatArgs*) processMessageData(processMessage);
 
   int returnValue = -1;
   int errorNumber = NO_DRIVER_ERRNO;
   if (filesystemState->driverState != NULL) {
-    returnValue = driverLstat(filesystemState->driverState,
-      lstatArgs->pathname, lstatArgs->statbuf, &errorNumber);
+    returnValue = driverIstat(filesystemState->driverState,
+      istatArgs->ino, istatArgs->statbuf, &errorNumber);
   }
 
   if (returnValue == 0) {
-    // The driver has no notion of ownership or permissions for a filesystem
-    // type that doesn't track them, and signals that by leaving st_uid and
-    // st_gid set to the FILESYSTEM_*_UNKNOWN sentinels.  Fixing those up is
-    // the only thing this handler (and FILESYSTEM_ISTAT's, identically) ever
-    // does to the driver's struct stat: everything else about it -- and
-    // which filesystem driver produced it in the first place -- is passed
-    // through without this code knowing or caring.  See
-    // filesystemFixupUnknownOwnership's own doc comment (Filesystem.h).
-    filesystemFixupUnknownOwnership(lstatArgs->statbuf);
+    // Identical fixup to FILESYSTEM_LSTAT's, and for the same reason -- see
+    // filesystemFixupUnknownOwnership's doc comment (Filesystem.h).
+    filesystemFixupUnknownOwnership(istatArgs->statbuf);
   }
 
-  lstatArgs->returnValue = returnValue;
-  lstatArgs->errorNumber = errorNumber;
+  istatArgs->returnValue = returnValue;
+  istatArgs->errorNumber = errorNumber;
   processMessageSetDone(processMessage);
   return filesystemState;
 }

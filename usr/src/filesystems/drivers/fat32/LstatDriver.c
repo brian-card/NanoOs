@@ -115,41 +115,9 @@ int driverLstat(
   }
   free(searchResult.longName);
 
-  statbuf->st_ino = fat32EntryLocationToIno(
+  ino_t ino = fat32EntryLocationToIno(
     ds, searchResult.dirCluster, searchResult.offsetInCluster);
-
-  bool isDirectory =
-    (searchResult.entry.attributes & FAT32_ATTR_DIRECTORY) != 0;
-  statbuf->st_mode = isDirectory ? S_IFDIR : S_IFREG;
-
-  if (!isDirectory) {
-    uint32_t fileSize;
-    memcpy(&fileSize, &searchResult.entry.fileSize, sizeof(uint32_t));
-    statbuf->st_size = (off_t) fileSize;
-    statbuf->st_blocks = (blkcnt_t) ((fileSize + 511) / 512);
-  }
-  // FAT32 stores (and this driver reports) a directory's own size and block
-  // count as 0, just like the on-disk entry: it never tracks the sum of its
-  // contents as a "file size" the way a regular file's entry does.
-
-  uint16_t writeDate;
-  uint16_t writeTime;
-  uint16_t createDate;
-  uint16_t createTime;
-  uint16_t lastAccessDate;
-  memcpy(&writeDate, &searchResult.entry.writeDate, sizeof(uint16_t));
-  memcpy(&writeTime, &searchResult.entry.writeTime, sizeof(uint16_t));
-  memcpy(&createDate, &searchResult.entry.createDate, sizeof(uint16_t));
-  memcpy(&createTime, &searchResult.entry.createTime, sizeof(uint16_t));
-  memcpy(&lastAccessDate, &searchResult.entry.lastAccessDate,
-    sizeof(uint16_t));
-
-  statbuf->st_mtime = fat32DateTimeToUnixTime(writeDate, writeTime);
-  // FAT32 has no distinct metadata-change timestamp; creation time is the
-  // closest available analog for st_ctime.
-  statbuf->st_ctime = fat32DateTimeToUnixTime(createDate, createTime);
-  // lastAccessDate has no time-of-day component on disk.
-  statbuf->st_atime = fat32DateTimeToUnixTime(lastAccessDate, 0);
+  fat32PopulateStat(ds, &searchResult.entry, ino, statbuf);
 
   *errorNumber = 0;
   return 0;

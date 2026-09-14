@@ -48,6 +48,10 @@ static inline int lstat(const char *pathname, struct stat *statbuf) {
   return overlayMap.header.osApi->lstat(pathname, statbuf);
 }
 
+static inline int istat(ino_t ino, struct stat *statbuf) {
+  return overlayMap.header.osApi->istat(ino, statbuf);
+}
+
 #ifdef __cplusplus
 }
 #endif

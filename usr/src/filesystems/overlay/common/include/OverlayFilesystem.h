@@ -60,7 +60,8 @@ extern "C"
 #define READ_DIR_OVERLAY                blockOverlayId(14)
 #define CLOSE_DIR_OVERLAY               blockOverlayId(15)
 #define LSTAT_OVERLAY                   blockOverlayId(16)
-#define FIRST_FS_OVERLAY_ID             17
+#define ISTAT_OVERLAY                   blockOverlayId(17)
+#define FIRST_FS_OVERLAY_ID             18
 
 #ifdef __cplusplus
 }

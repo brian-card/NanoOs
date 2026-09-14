@@ -287,6 +287,26 @@ typedef struct FilesystemLstatArgs {
   int          errorNumber;
 } FilesystemLstatArgs;
 
+/// @struct FilesystemIstatArgs
+///
+/// @brief Function parameters and return value for an istat call.
+///
+/// @param ino The inode number of the file to stat, as previously returned
+///   in st_ino/d_ino by lstat/readdir on the same file.
+/// @param statbuf A pointer to a caller-supplied struct stat to be populated.
+/// @param returnValue The return value of the operation that will be passed
+///   back from the handler: 0 on success, -1 on failure.
+/// @param errorNumber The errno value that should be used for the calling
+///   process when returnValue is -1.  Populated by the driver (which knows
+///   what its own failure actually means); this struct and the command
+///   handler that fills it in never interpret it themselves.
+typedef struct FilesystemIstatArgs {
+  ino_t        ino;
+  struct stat *statbuf;
+  int          returnValue;
+  int          errorNumber;
+} FilesystemIstatArgs;
+
 /// @struct FilesystemClosedirArgs
 ///
 /// @brief Function parameters and return value for a closedir call.
@@ -400,6 +420,7 @@ typedef enum FilesystemCommandResponse {
   FILESYSTEM_READ_DIR,
   FILESYSTEM_CLOSE_DIR,
   FILESYSTEM_LSTAT,
+  FILESYSTEM_ISTAT,
   NUM_FILESYSTEM_COMMANDS,
   // Responses:
 } FilesystemCommandResponse;
@@ -477,6 +498,44 @@ int filesystemLstat(const char *pathname, struct stat *statbuf);
 #undef lstat
 #endif // lstat
 #define lstat filesystemLstat
+
+/// @fn int filesystemIstat(ino_t ino, struct stat *statbuf)
+///
+/// @brief Populate a struct stat directly from an inode number, bypassing
+/// the path-resolution and directory-search work lstat has to do.
+///
+/// @details Not a POSIX function: it exists because, unlike a filesystem
+/// with real inodes, a filesystem-agnostic caller has no other way to ask
+/// for "the file lstat/readdir already told me has inode N" without walking
+/// a path back down to it.  Behaves exactly like filesystemLstat otherwise,
+/// including the same driver-agnostic ownership/permission fixup (see
+/// filesystemFixupUnknownOwnership) -- the only difference is how the
+/// driver locates the entry.
+///
+/// @param ino A value previously returned in st_ino/d_ino by lstat/readdir
+///   on the same filesystem.
+/// @param statbuf A pointer to a caller-supplied struct stat to populate.
+///
+/// @return Returns 0 on success, -1 and sets the value of errno on failure
+/// (including when ino no longer refers to a real file, e.g. it was
+/// deleted after the caller obtained it).
+int filesystemIstat(ino_t ino, struct stat *statbuf);
+#ifdef istat
+#undef istat
+#endif // istat
+#define istat filesystemIstat
+
+// filesystemFixupUnknownOwnership (used by both the FILESYSTEM_LSTAT and
+// FILESYSTEM_ISTAT command handlers) is defined in NanoOsStatTypes.h, not
+// here, alongside the FILESYSTEM_UID_UNKNOWN/FILESYSTEM_GID_UNKNOWN
+// sentinels it checks: that macro expands to "((uid_t) -1)", and uid_t is
+// renamed to a different, undefined name (see e.g. HalCommon.c) around
+// certain includes in some translation units this header reaches. Defining
+// the function here would place its *first* textual expansion of that
+// macro wherever this header first happens to be processed in such a
+// TU -- which is not guaranteed to be outside one of those rename
+// brackets -- whereas NanoOsStatTypes.h is already reliably reached (for
+// struct stat itself) before any of them.
 
 /// @def rewind
 ///

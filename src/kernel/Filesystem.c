@@ -474,6 +474,42 @@ int filesystemLstat(const char *pathname, struct stat *statbuf) {
   return returnValue;
 }
 
+/// @fn int filesystemIstat(ino_t ino, struct stat *statbuf)
+///
+/// @brief Implementation of filesystemIstat: like filesystemLstat, but
+/// looks the file up by inode number instead of by path.
+///
+/// @param ino A value previously returned in st_ino/d_ino by lstat/readdir.
+/// @param statbuf A pointer to a caller-supplied struct stat to populate.
+///
+/// @return Returns 0 on success, -1 and sets the value of errno on failure.
+int filesystemIstat(ino_t ino, struct stat *statbuf) {
+  if (statbuf == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  FilesystemIstatArgs filesystemIstatArgs = {
+    .ino = ino,
+    .statbuf = statbuf,
+    .returnValue = 0,
+    .errorNumber = 0,
+  };
+
+  ProcessMessage *msg = initSendProcessMessageToPid(
+    SCHEDULER_STATE->rootFsPid,
+    FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_ISTAT,
+    &filesystemIstatArgs, sizeof(filesystemIstatArgs), true);
+  processMessageWaitForDone(msg, NULL);
+  int returnValue = filesystemIstatArgs.returnValue;
+  if (returnValue != 0) {
+    errno = filesystemIstatArgs.errorNumber;
+    returnValue = -1;
+  }
+  processMessageRelease(msg);
+  return returnValue;
+}
+
 /// @fn int fat32Format(const char *volumeLabel, uint32_t clusterSize)
 ///
 /// @brief Format the root filesystem's partition as FAT32.

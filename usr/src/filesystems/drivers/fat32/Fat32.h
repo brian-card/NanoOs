@@ -1452,6 +1452,76 @@ static inline time_t fat32DateTimeToUnixTime(uint16_t fatDate, uint16_t fatTime)
 
 ///////////////////////////////////////////////////////////////////////////////
 ///
+/// @brief Populate a struct stat from an already-resolved FAT32 short
+///        directory entry.
+///
+/// @details Shared by driverLstat (which finds the entry by walking a path)
+///          and driverIstat (which finds it directly from an inode number),
+///          so the two report identical results for the same file -- this
+///          is the entirety of what either driver does once it has the
+///          entry in hand.
+///
+///          Leaves st_uid/st_gid at the FILESYSTEM_*_UNKNOWN sentinels
+///          (see NanoOsStatTypes.h) and the permission bits of st_mode
+///          clear: FAT32 has no concept of either, and it's the
+///          driver-agnostic FILESYSTEM_LSTAT/FILESYSTEM_ISTAT command
+///          handlers' job, not this driver's, to decide what to report in
+///          their place (see filesystemFixupUnknownOwnership in
+///          Filesystem.h).
+///
+/// @param ds       Pointer to an initialized Fat32DriverState.
+/// @param entry    The resolved short directory entry to populate from.
+/// @param ino      The entry's own inode number (see
+///                 fat32EntryLocationToIno), to store in st_ino.
+/// @param statbuf  [out] The struct stat to populate.  Assumed to already
+///                 be zeroed.
+///
+static inline void fat32PopulateStat(
+    const Fat32DriverState *ds,
+    const Fat32DirectoryEntry *entry,
+    ino_t ino,
+    struct stat *statbuf
+) {
+  statbuf->st_ino = ino;
+  statbuf->st_uid = FILESYSTEM_UID_UNKNOWN;
+  statbuf->st_gid = FILESYSTEM_GID_UNKNOWN;
+  statbuf->st_nlink = 1;
+  statbuf->st_blksize = (blksize_t) ds->bytesPerCluster;
+
+  bool isDirectory = (entry->attributes & FAT32_ATTR_DIRECTORY) != 0;
+  statbuf->st_mode = isDirectory ? S_IFDIR : S_IFREG;
+
+  if (!isDirectory) {
+    uint32_t fileSize;
+    memcpy(&fileSize, &entry->fileSize, sizeof(uint32_t));
+    statbuf->st_size = (off_t) fileSize;
+    statbuf->st_blocks = (blkcnt_t) ((fileSize + 511) / 512);
+  }
+  // FAT32 stores (and this driver reports) a directory's own size and block
+  // count as 0, just like the on-disk entry: it never tracks the sum of its
+  // contents as a "file size" the way a regular file's entry does.
+
+  uint16_t writeDate;
+  uint16_t writeTime;
+  uint16_t createDate;
+  uint16_t createTime;
+  uint16_t lastAccessDate;
+  memcpy(&writeDate, &entry->writeDate, sizeof(uint16_t));
+  memcpy(&writeTime, &entry->writeTime, sizeof(uint16_t));
+  memcpy(&createDate, &entry->createDate, sizeof(uint16_t));
+  memcpy(&createTime, &entry->createTime, sizeof(uint16_t));
+  memcpy(&lastAccessDate, &entry->lastAccessDate, sizeof(uint16_t));
+
+  statbuf->st_mtime = fat32DateTimeToUnixTime(writeDate, writeTime);
+  // FAT32 has no distinct metadata-change timestamp; creation time is the
+  // closest available analog for st_ctime.
+  statbuf->st_ctime = fat32DateTimeToUnixTime(createDate, createTime);
+  // lastAccessDate has no time-of-day component on disk.
+  statbuf->st_atime = fat32DateTimeToUnixTime(lastAccessDate, 0);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+///
 /// @brief Locate a run of contiguous free directory-entry slots in a
 ///        directory's cluster chain.
 ///

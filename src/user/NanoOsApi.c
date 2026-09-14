@@ -85,6 +85,7 @@ char** parseArgs(char *command, int *argc);
 #undef readdir
 #undef closedir
 #undef lstat
+#undef istat
 
 NanoOsExecutiveApi nanoOsExecutiveApi = {
   // HAL access:
@@ -146,6 +147,7 @@ NanoOsApi nanoOsApi = {
 
   // File status:
   .lstat = filesystemLstat,
+  .istat = filesystemIstat,
 
   // Formatted I/O:
   .vsscanf = vsscanf,

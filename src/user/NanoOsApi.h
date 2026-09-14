@@ -151,6 +151,7 @@ typedef struct NanoOsApi {
 
   // File status:
   int (*lstat)(const char *pathname, struct stat *statbuf);
+  int (*istat)(ino_t ino, struct stat *statbuf);
 
   // NanoOs extensions with no filesystem-agnostic name (see fat32Format's
   // own doc comment for why): unlike the operations above, these depend on
