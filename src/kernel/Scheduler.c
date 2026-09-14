@@ -574,6 +574,7 @@ IpcCapability baseSupervisorIpcCapabilities[] = {
       | (((uint16_t) 1) << FILESYSTEM_OPEN_DIR)
       | (((uint16_t) 1) << FILESYSTEM_READ_DIR)
       | (((uint16_t) 1) << FILESYSTEM_CLOSE_DIR)
+      | (((uint16_t) 1) << FILESYSTEM_LSTAT)
   },
 };
 
@@ -624,6 +625,7 @@ IpcCapability baseUserIpcCapabilities[] = {
       | (((uint16_t) 1) << FILESYSTEM_OPEN_DIR)
       | (((uint16_t) 1) << FILESYSTEM_READ_DIR)
       | (((uint16_t) 1) << FILESYSTEM_CLOSE_DIR)
+      | (((uint16_t) 1) << FILESYSTEM_LSTAT)
   },
 };
 

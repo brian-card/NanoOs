@@ -45,9 +45,46 @@ extern "C"
 {
 #endif
 
+// Dual-guarded the same way ino_t/off_t are in NanoOsDirentTypes.h: struct
+// stat (see NanoOsStatTypes.h, reached from src/kernel/Filesystem.h) needs
+// gid_t/uid_t, and Filesystem.h ends up compiled into translation units
+// that also reach a real libc's own, differently-shaped gid_t/uid_t/pid_t --
+// the POSIX simulator build (src/hal/HalPosix.c, via kernel/Logger.h's
+// stdlib.h chain) and the Arduino builds' own sketch file (NanoOs.ino is
+// compiled with -include Arduino.h forced ahead of its own text, which this
+// codebase has no chance to wrap the way every other file here that
+// touches these names does -- see the next paragraph).
+//
+// Everywhere else in this codebase that risks the same collision
+// (Commands.c, Console.c, Logger.c, NanoOsUnistd.c, HalCommon.c) already
+// brackets its own #include of whatever pulls in the real names
+// (typically "stdio.h") with "#define gid_t C_gid_t" / "#define uid_t
+// C_uid_t" / "#define pid_t C_pid_t" ... "#undef", renaming the real
+// library's typedefs out of the way so this header's own definitions
+// (below) are the ones that end up bound to the real names. Those files
+// also clear the guard macros below (immediately after their own #undef
+// gid_t/uid_t/pid_t) so that dance doesn't leave a false "already
+// declared" flag behind for this header to wrongly defer to.
+//
+// Guarding lets whichever definition is processed first in a given
+// translation unit win, checking the same two conventions those libcs use
+// to guard their own typedefs: glibc (__foo_t_defined) and newlib
+// (_FOO_T_DECLARED).
+#if !defined(__gid_t_defined) && !defined(_GID_T_DECLARED)
 typedef unsigned int gid_t;
+#define __gid_t_defined
+#define _GID_T_DECLARED
+#endif
+#if !defined(__pid_t_defined) && !defined(_PID_T_DECLARED)
 typedef uint8_t pid_t;
+#define __pid_t_defined
+#define _PID_T_DECLARED
+#endif
+#if !defined(__uid_t_defined) && !defined(_UID_T_DECLARED)
 typedef int16_t uid_t;
+#define __uid_t_defined
+#define _UID_T_DECLARED
+#endif
 
 #ifdef __cplusplus
 }

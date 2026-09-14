@@ -33,8 +33,34 @@
 
 #include <string.h>
 
+// Must come before HalCommon.h: struct stat and struct dirent (from
+// kernel/Filesystem.h) declare fields of type uid_t/gid_t, so those typedefs
+// need to be established under their real names here, first and unwrapped.
+// Otherwise, reached fresh for the first time down HalCommon.h's own include
+// chain below, they would fall inside the uid_t/gid_t/pid_t rename bracket
+// immediately below and end up referring to types (C_uid_t/C_gid_t) that
+// the rename never actually defines.
+#include "kernel/Filesystem.h"
+
 #include "HalPosix.h"
+
+// HalCommon.h transitively includes, via kernel/Logger.h's own chain, the
+// real <stdlib.h>/<sys/types.h>, which would otherwise typedef
+// uid_t/gid_t/pid_t in this same translation unit with types conflicting
+// with the ones kernel/Filesystem.h (included above) already established.
+// Renaming them here for the real header's own definitions -- reached only
+// inside this one #include -- mirrors the identical hazard every file that
+// includes "stdio.h" already guards against (see e.g. Console.c, Logger.c,
+// Commands.c) and the one HalCommon.c itself already guards against around
+// its own #include "HalCommon.h".
+#define gid_t C_gid_t
+#define uid_t C_uid_t
+#define pid_t C_pid_t
 #include "HalCommon.h"
+#undef gid_t
+#undef uid_t
+#undef pid_t
+
 #include "SdCardPosix.h"
 #include "user/NanoOsErrno.h"
 #include "kernel/Commands.h"

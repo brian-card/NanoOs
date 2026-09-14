@@ -62,6 +62,7 @@ void* Format(void *args);
 void* Opendir(void *args);
 void* Readdir(void *args);
 void* Closedir(void *args);
+void* Lstat(void *args);
 
 /// @typedef FilesystemCommandHandler
 ///
@@ -85,6 +86,7 @@ static const FilesystemCommandHandler filesystemCommandHandlers[] = {
   Opendir,              // FILESYSTEM_OPEN_DIR
   Readdir,              // FILESYSTEM_READ_DIR
   Closedir,             // FILESYSTEM_CLOSE_DIR
+  Lstat,                // FILESYSTEM_LSTAT
 };
 
 void* main(void *args) {

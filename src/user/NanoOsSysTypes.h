@@ -39,6 +39,7 @@
 
 #include "../include/sys/types.h"
 #include "../include/NanoOsDirentTypes.h"
+#include "../include/NanoOsStatTypes.h"
 
 #endif // NANO_OS_USER_SYS_TYPES_H
 

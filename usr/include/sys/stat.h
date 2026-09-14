@@ -1,12 +1,12 @@
 ///////////////////////////////////////////////////////////////////////////////
 ///
 /// @author            Brian Card
-/// @date              06.11.2026
+/// @date              09.13.2026
 ///
-/// @file              OverlayFilesystem.h
+/// @file              stat.h
 ///
-/// @brief             Overlay-slot definitions for the filesystem overlay
-///                    packaging shape.
+/// @brief             Definitions used for accessing functionality in the C
+///                    sys/stat library.
 ///
 /// @copyright
 ///                      Copyright (c) 2026 Brian Card
@@ -34,37 +34,22 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef OVERLAY_FILESYSTEM_H
-#define OVERLAY_FILESYSTEM_H
+#ifndef SYS_STAT_H
+#define SYS_STAT_H
 
-#include "../../../include/FilesystemUtils.h"
+#include "NanoOsUser.h"
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 
-#define GET_PARTITION_INFO_OVERLAY      blockOverlayId(1)
-#define DRIVER_INIT_OVERLAY             blockOverlayId(2)
-#define OPEN_FILE_OVERLAY               blockOverlayId(3)
-#define CLOSE_FILE_OVERLAY              blockOverlayId(4)
-#define READ_FILE_OVERLAY               blockOverlayId(5)
-#define WRITE_FILE_OVERLAY              blockOverlayId(6)
-#define REMOVE_FILE_OVERLAY             blockOverlayId(7)
-#define SEEK_FILE_OVERLAY               blockOverlayId(8)
-#define DUMP_OPEN_FILES_OVERLAY         blockOverlayId(9)
-#define GET_FILE_BLOCK_METADATA_OVERLAY blockOverlayId(10)
-#define END_OF_FILE_OVERLAY             blockOverlayId(11)
-#define FORMAT_OVERLAY                  blockOverlayId(12)
-#define OPEN_DIR_OVERLAY                blockOverlayId(13)
-#define READ_DIR_OVERLAY                blockOverlayId(14)
-#define CLOSE_DIR_OVERLAY               blockOverlayId(15)
-#define LSTAT_OVERLAY                   blockOverlayId(16)
-#define FIRST_FS_OVERLAY_ID             17
+static inline int lstat(const char *pathname, struct stat *statbuf) {
+  return overlayMap.header.osApi->lstat(pathname, statbuf);
+}
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // OVERLAY_FILESYSTEM_H
-
+#endif // SYS_STAT_H

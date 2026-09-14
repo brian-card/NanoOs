@@ -77,11 +77,12 @@ typedef struct NanoOsFile NanoOsFile;
 typedef struct NanoOsDirStream NanoOsDir;
 #define DIR NanoOsDir
 
-// struct dirent and its DT_* constants are defined in NanoOsSysTypes.h
-// (included above, which pulls in src/include/sys/types.h): that header is
-// the one both kernel and user code already reach -- and reach
+// struct dirent and its DT_* constants, and struct stat and its mode_t/S_*
+// constants, are defined in NanoOsSysTypes.h (included above, which pulls in
+// src/include/NanoOsDirentTypes.h and src/include/NanoOsStatTypes.h): that
+// header is the one both kernel and user code already reach -- and reach
 // simultaneously in the freestanding filesystem driver builds -- so it has
-// to be the single place that struct is defined.
+// to be the single place those structs are defined.
 
 typedef struct ProcessInfo ProcessInfo;
 
@@ -147,6 +148,9 @@ typedef struct NanoOsApi {
   DIR* (*opendir)(const char *pathname);
   struct dirent* (*readdir)(DIR *dirp);
   int (*closedir)(DIR *dirp);
+
+  // File status:
+  int (*lstat)(const char *pathname, struct stat *statbuf);
 
   // NanoOs extensions with no filesystem-agnostic name (see fat32Format's
   // own doc comment for why): unlike the operations above, these depend on

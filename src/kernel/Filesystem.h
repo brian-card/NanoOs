@@ -39,6 +39,7 @@
 // Custom includes
 #include "BlockDevice.h"
 #include "../include/NanoOsDirentTypes.h"
+#include "../include/NanoOsStatTypes.h"
 
 #include "stddef.h"
 #include "stdint.h"
@@ -267,6 +268,25 @@ typedef struct FilesystemReaddirArgs {
   int            errorNumber;
 } FilesystemReaddirArgs;
 
+/// @struct FilesystemLstatArgs
+///
+/// @brief Function parameters and return value for an lstat call.
+///
+/// @param pathname A string containing the full path to the file.
+/// @param statbuf A pointer to a caller-supplied struct stat to be populated.
+/// @param returnValue The return value of the operation that will be passed
+///   back from the handler: 0 on success, -1 on failure.
+/// @param errorNumber The errno value that should be used for the calling
+///   process when returnValue is -1.  Populated by the driver (which knows
+///   what its own failure actually means); this struct and the command
+///   handler that fills it in never interpret it themselves.
+typedef struct FilesystemLstatArgs {
+  char        *pathname;
+  struct stat *statbuf;
+  int          returnValue;
+  int          errorNumber;
+} FilesystemLstatArgs;
+
 /// @struct FilesystemClosedirArgs
 ///
 /// @brief Function parameters and return value for a closedir call.
@@ -379,6 +399,7 @@ typedef enum FilesystemCommandResponse {
   FILESYSTEM_OPEN_DIR,
   FILESYSTEM_READ_DIR,
   FILESYSTEM_CLOSE_DIR,
+  FILESYSTEM_LSTAT,
   NUM_FILESYSTEM_COMMANDS,
   // Responses:
 } FilesystemCommandResponse;
@@ -450,6 +471,12 @@ int filesystemClosedir(DIR *dirp);
 #undef closedir
 #endif // closedir
 #define closedir filesystemClosedir
+
+int filesystemLstat(const char *pathname, struct stat *statbuf);
+#ifdef lstat
+#undef lstat
+#endif // lstat
+#define lstat filesystemLstat
 
 /// @def rewind
 ///

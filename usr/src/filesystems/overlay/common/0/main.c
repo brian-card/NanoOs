@@ -83,6 +83,8 @@ const OverlayFilesystemCommandEntry filesystemCommandHandlers[] = {
   {READ_DIR_OVERLAY, "Readdir"},
   // FILESYSTEM_CLOSE_DIR:
   {CLOSE_DIR_OVERLAY, "Closedir"},
+  // FILESYSTEM_LSTAT:
+  {LSTAT_OVERLAY, "Lstat"},
 };
 
 void* main(void *args) {

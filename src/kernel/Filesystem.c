@@ -435,6 +435,45 @@ int filesystemClosedir(DIR *dirp) {
   return returnValue;
 }
 
+/// @fn int filesystemLstat(const char *pathname, struct stat *statbuf)
+///
+/// @brief Implementation of the standard C lstat call.
+///
+/// @param pathname The full pathname to the file.
+/// @param statbuf A pointer to a caller-supplied struct stat to populate.
+///
+/// @return Returns 0 on success, -1 and sets the value of errno on failure.
+int filesystemLstat(const char *pathname, struct stat *statbuf) {
+  if ((pathname == NULL) || (*pathname == '\0') || (statbuf == NULL)) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  FilesystemLstatArgs filesystemLstatArgs;
+  memset(&filesystemLstatArgs, 0, sizeof(filesystemLstatArgs));
+  filesystemLstatArgs.pathname = (char*) malloc(strlen(pathname) + 1);
+  if (filesystemLstatArgs.pathname == NULL) {
+    errno = ENOMEM;
+    return -1;
+  }
+  strcpy(filesystemLstatArgs.pathname, pathname);
+  filesystemLstatArgs.statbuf = statbuf;
+
+  ProcessMessage *msg = initSendProcessMessageToPid(
+    SCHEDULER_STATE->rootFsPid,
+    FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_LSTAT,
+    &filesystemLstatArgs, sizeof(filesystemLstatArgs), true);
+  processMessageWaitForDone(msg, NULL);
+  free(filesystemLstatArgs.pathname); filesystemLstatArgs.pathname = NULL;
+  int returnValue = filesystemLstatArgs.returnValue;
+  if (returnValue != 0) {
+    errno = filesystemLstatArgs.errorNumber;
+    returnValue = -1;
+  }
+  processMessageRelease(msg);
+  return returnValue;
+}
+
 /// @fn int fat32Format(const char *volumeLabel, uint32_t clusterSize)
 ///
 /// @brief Format the root filesystem's partition as FAT32.

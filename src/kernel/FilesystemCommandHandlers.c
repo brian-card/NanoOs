@@ -63,6 +63,7 @@
 #include "../../usr/src/filesystems/common/OpendirCommandHandler.c"
 #include "../../usr/src/filesystems/common/ReaddirCommandHandler.c"
 #include "../../usr/src/filesystems/common/ClosedirCommandHandler.c"
+#include "../../usr/src/filesystems/common/LstatCommandHandler.c"
 
 /// @var fat32CommandHandlers
 ///
@@ -88,5 +89,6 @@ const FilesystemCommandHandler fat32CommandHandlers[NUM_FILESYSTEM_COMMANDS] = {
   Opendir,              // FILESYSTEM_OPEN_DIR
   Readdir,              // FILESYSTEM_READ_DIR
   Closedir,             // FILESYSTEM_CLOSE_DIR
+  Lstat,                // FILESYSTEM_LSTAT
 };
 

@@ -1368,6 +1368,50 @@ static inline uint8_t fat32ShortNameChecksum(const uint8_t *shortName) {
 
 ///////////////////////////////////////////////////////////////////////////////
 ///
+/// @brief Convert a FAT32 on-disk date/time pair into a Unix time_t.
+///
+/// @details FAT32 stores no time zone, so the result is treated as UTC,
+///          matching common practice for minimal FAT32 implementations.  A
+///          date of 0 (never set -- lastAccessDate in particular is commonly
+///          left at 0 by other writers) yields the Unix epoch rather than a
+///          nonsensical date.
+///
+/// @param fatDate  A FAT32 packed date (bits 15-9 year-1980, 8-5 month,
+///                 4-0 day).
+/// @param fatTime  A FAT32 packed time (bits 15-11 hours, 10-5 minutes,
+///                 4-0 seconds/2).
+///
+/// @return The corresponding Unix time_t, or 0 if fatDate is 0.
+///
+static inline time_t fat32DateTimeToUnixTime(uint16_t fatDate, uint16_t fatTime) {
+  if (fatDate == 0) {
+    return (time_t) 0;
+  }
+
+  int year  = ((fatDate >> 9) & 0x7F) + 1980;
+  int month = (fatDate >> 5) & 0x0F;
+  int day   = fatDate & 0x1F;
+
+  int hour   = (fatTime >> 11) & 0x1F;
+  int minute = (fatTime >> 5) & 0x3F;
+  int second = (fatTime & 0x1F) * 2;
+
+  // Days since the Unix epoch, via Howard Hinnant's days_from_civil
+  // algorithm: exact over the proleptic Gregorian calendar with no library
+  // calls (mktime is unavailable in this freestanding environment).
+  int y = year - (month <= 2);
+  int era = (y >= 0 ? y : y - 399) / 400;
+  uint32_t yoe = (uint32_t) (y - era * 400);
+  uint32_t doy = (uint32_t) ((153 * (month + (month > 2 ? -3 : 9)) + 2) / 5
+    + day - 1);
+  uint32_t doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+  int64_t days = (int64_t) era * 146097 + (int64_t) doe - 719468;
+
+  return (time_t) (days * 86400 + hour * 3600 + minute * 60 + second);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+///
 /// @brief Locate a run of contiguous free directory-entry slots in a
 ///        directory's cluster chain.
 ///

@@ -39,6 +39,15 @@
 #undef gid_t
 #undef uid_t
 #undef pid_t
+// See src/include/sys/types.h: clear the guard flags the real library's
+// (renamed) typedefs above set, so that header's own gid_t/uid_t/pid_t,
+// reached later in this file, don't wrongly defer to them.
+#undef __gid_t_defined
+#undef _GID_T_DECLARED
+#undef __uid_t_defined
+#undef _UID_T_DECLARED
+#undef __pid_t_defined
+#undef _PID_T_DECLARED
 #include "string.h"
 
 #include "NanoOsLibC.h"
