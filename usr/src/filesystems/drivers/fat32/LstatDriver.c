@@ -92,8 +92,14 @@ int driverLstat(
   if ((nameComponent == NULL) || (nameComponent[0] == '\0')) {
     // The path names the root directory itself, which -- unlike every other
     // directory on a FAT32 volume -- has no directory entry of its own to
-    // read attributes, a size, or timestamps from.
-    statbuf->st_ino = (ino_t) ds->rootDirectoryCluster;
+    // read attributes, a size, or timestamps from, and so no on-disk
+    // location for fat32EntryLocationToIno to derive an inode number from.
+    // 0 is never a real fat32EntryLocationToIno result (the lowest possible
+    // LBA it can ever compute from is the start of the data region, well
+    // past 0), so it's a safe, unambiguous sentinel for "the root" here --
+    // matching the convention real inode-based filesystems already use 0
+    // for (e.g. ext2 never issues inode 0 to a real file).
+    statbuf->st_ino = (ino_t) 0;
     statbuf->st_mode = S_IFDIR;
     *errorNumber = 0;
     return 0;
@@ -109,14 +115,8 @@ int driverLstat(
   }
   free(searchResult.longName);
 
-  uint16_t clusterHigh;
-  uint16_t clusterLow;
-  memcpy(&clusterHigh, &searchResult.entry.firstClusterHigh,
-    sizeof(uint16_t));
-  memcpy(&clusterLow, &searchResult.entry.firstClusterLow,
-    sizeof(uint16_t));
-  statbuf->st_ino =
-    (ino_t) (((uint32_t) clusterHigh << 16) | (uint32_t) clusterLow);
+  statbuf->st_ino = fat32EntryLocationToIno(
+    ds, searchResult.dirCluster, searchResult.offsetInCluster);
 
   bool isDirectory =
     (searchResult.entry.attributes & FAT32_ATTR_DIRECTORY) != 0;

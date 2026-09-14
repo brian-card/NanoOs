@@ -65,7 +65,7 @@ extern "C"
 // avr-gcc/ez80 cross toolchains) -- e.g. Arduino.h on SAMD21 targets pulls
 // in newlib's <sys/types.h> before this header is ever reached.
 #if !defined(__ino_t_defined) && !defined(_INO_T_DECLARED)
-typedef uint32_t ino_t;
+typedef uint64_t ino_t;
 #define __ino_t_defined
 #define _INO_T_DECLARED
 #endif
@@ -95,8 +95,15 @@ typedef int32_t off_t;
 /// to store, so that a future, more Unix-like filesystem can populate it
 /// correctly too.
 ///
-/// @param d_ino A filesystem-specific identifier for this entry.  For FAT32,
-///   this is the entry's own first cluster number.
+/// @param d_ino A filesystem-specific identifier for this entry, matching
+///   st_ino for the same entry (see NanoOsStatTypes.h).  For FAT32, this is
+///   derived from the on-disk location (LBA and byte offset) of the entry's
+///   own directory entry, not from the cluster its data starts at: FAT32 has
+///   no real inode table, so the entry's location -- where its metadata
+///   actually lives -- is what stands in for one. 64 bits wide so that
+///   derivation has room to encode both the LBA and a slot within it (see
+///   fat32EntryLocationToIno) without practical risk of two entries
+///   colliding.
 /// @param d_off An opaque, monotonically increasing per-DIR sequence number.
 ///   Not currently usable with seekdir/telldir (neither is implemented);
 ///   present for structural completeness.

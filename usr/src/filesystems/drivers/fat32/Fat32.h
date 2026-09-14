@@ -338,6 +338,52 @@ static inline uint32_t fat32ClusterToLba(
 
 ///////////////////////////////////////////////////////////////////////////////
 ///
+/// @brief Compute the inode number of a directory entry from its on-disk
+///        location.
+///
+/// @details FAT32 has no inode table: a file's metadata (size, attributes,
+///          timestamps) lives entirely in its directory entry, not at the
+///          cluster that entry's data starts at. So, unlike a filesystem
+///          with real inodes -- where the inode number is already the
+///          address of the metadata -- the closest FAT32 equivalent is the
+///          location of the directory entry itself: st_ino/d_ino computed
+///          this way lets a future fstat()-style lookup go directly to the
+///          entry with a single block read, no directory search required.
+///
+///          A sector's worth of LBA alone isn't unique: at 32 bytes per
+///          entry, a single 512-byte sector holds 16 of them (128 for the
+///          largest legal 4096-byte FAT32 sector), so the low 8 bits of the
+///          result encode which slot within the sector this entry occupies.
+///          8 bits comfortably covers every legal sector size with room to
+///          spare, and the LBA -- shifted up by those same 8 bits -- still
+///          fits easily within the 64 bits of ino_t.
+///
+///          Always compute this from the entry's own (dirCluster,
+///          offsetInCluster) -- e.g. Fat32DirSearchResult's or
+///          Fat32DirHandle's -- never from an LFN fragment that precedes it;
+///          those aren't the entry that actually holds the metadata.
+///
+/// @param ds               Pointer to an initialized Fat32DriverState.
+/// @param dirCluster       The cluster containing the entry.
+/// @param offsetInCluster  Byte offset of the entry within that cluster.
+///
+/// @return The computed inode number.
+///
+static inline ino_t fat32EntryLocationToIno(
+    const Fat32DriverState *ds,
+    uint32_t dirCluster,
+    uint32_t offsetInCluster
+) {
+  uint32_t lba = fat32ClusterToLba(ds, dirCluster)
+    + (offsetInCluster / ds->bytesPerSector);
+  uint32_t slot = (offsetInCluster % ds->bytesPerSector)
+    / FAT32_DIRECTORY_ENTRY_SIZE;
+
+  return (((ino_t) lba) << 8) | ((ino_t) slot & 0xFF);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+///
 /// @brief Case-insensitive comparison of two null-terminated strings using
 ///        ASCII rules.
 ///
@@ -1021,14 +1067,8 @@ static inline int fat32ReadDirectoryEntry(
           break;
         }
 
-        uint16_t entryClusterHigh;
-        uint16_t entryClusterLow;
-        memcpy(&entryClusterHigh, &entry->firstClusterHigh,
-          sizeof(uint16_t));
-        memcpy(&entryClusterLow, &entry->firstClusterLow,
-          sizeof(uint16_t));
-        newEntry->d_ino =
-          ((uint32_t) entryClusterHigh << 16) | (uint32_t) entryClusterLow;
+        newEntry->d_ino = fat32EntryLocationToIno(
+          ds, currentCluster, nextOffsetInCluster - FAT32_DIRECTORY_ENTRY_SIZE);
         newEntry->d_off = (off_t) handle->nextSequence++;
         newEntry->d_reclen =
           (unsigned short) (offsetof(struct dirent, d_name) + nameLen + 1);

@@ -52,9 +52,9 @@ static void listDir(const char *path) {
 
   struct dirent *entry;
   while ((entry = readdir(dirp)) != NULL) {
-    printf("  d_name=\"%s\" d_type=%d d_ino=%lu d_reclen=%u\n",
+    printf("  d_name=\"%s\" d_type=%d d_ino=%llu d_reclen=%u\n",
       entry->d_name, (int) entry->d_type,
-      (unsigned long) entry->d_ino, (unsigned int) entry->d_reclen);
+      (unsigned long long) entry->d_ino, (unsigned int) entry->d_reclen);
   }
 
   closedir(dirp);
