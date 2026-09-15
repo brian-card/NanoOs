@@ -133,21 +133,13 @@ static const char _rootGecos[] KEEP_IN_FLASH = "Root User";
 /// final binary on some targets.
 static const char _rootHome[] KEEP_IN_FLASH = "/root";
 
-/// @var _rootPasswdShort
+/// @var _rootPasswd
 ///
 /// @brief Password checksum for the root user as looked up by username.
 ///
 /// @note KEEP_IN_FLASH is required here because .rodata is removed from the
 /// final binary on some targets.
-static const char _rootPasswdShort[] KEEP_IN_FLASH = "1356";
-
-/// @var _rootPasswdLong
-///
-/// @brief Password checksum for the root user as looked up by user ID.
-///
-/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
-/// final binary on some targets.
-static const char _rootPasswdLong[] KEEP_IN_FLASH = "rootroot";
+static const char _rootPasswd[] KEEP_IN_FLASH = "1356";
 
 /// @var _user1Username
 ///
@@ -173,23 +165,14 @@ static const char _user1Gecos[] KEEP_IN_FLASH = "User 1";
 /// final binary on some targets.
 static const char _user1Home[] KEEP_IN_FLASH = "/home/user1";
 
-/// @var _user1PasswdShort
+/// @var _user1Passwd
 ///
 /// @brief Password checksum for the first non-root user as looked up by
 /// username.
 ///
 /// @note KEEP_IN_FLASH is required here because .rodata is removed from the
 /// final binary on some targets.
-static const char _user1PasswdShort[] KEEP_IN_FLASH = "1488";
-
-/// @var _user1PasswdLong
-///
-/// @brief Password checksum for the first non-root user as looked up by
-/// user ID.
-///
-/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
-/// final binary on some targets.
-static const char _user1PasswdLong[] KEEP_IN_FLASH = "user1user1";
+static const char _user1Passwd[] KEEP_IN_FLASH = "1488";
 
 /// @var _user2Username
 ///
@@ -215,23 +198,14 @@ static const char _user2Gecos[] KEEP_IN_FLASH = "User 2";
 /// final binary on some targets.
 static const char _user2Home[] KEEP_IN_FLASH = "/home/user2";
 
-/// @var _user2PasswdShort
+/// @var _user2Passwd
 ///
 /// @brief Password checksum for the second non-root user as looked up by
 /// username.
 ///
 /// @note KEEP_IN_FLASH is required here because .rodata is removed from the
 /// final binary on some targets.
-static const char _user2PasswdShort[] KEEP_IN_FLASH = "1491";
-
-/// @var _user2PasswdLong
-///
-/// @brief Password checksum for the second non-root user as looked up by
-/// user ID.
-///
-/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
-/// final binary on some targets.
-static const char _user2PasswdLong[] KEEP_IN_FLASH = "user2user2";
+static const char _user2Passwd[] KEEP_IN_FLASH = "1491";
 
 /// @fn int nanoOsGetpwnam_r(const char *name, struct passwd *pwd,
 ///   char *buf, size_t buflen, struct passwd **result)
@@ -258,7 +232,9 @@ int nanoOsGetpwnam_r(
   size_t buflen,
   struct passwd **result
 ) {
-  if ((name == NULL) || (pwd == NULL) || (buf == NULL) || (buflen == 0)) {
+  if ((name == NULL) || (pwd == NULL) || (buf == NULL) || (buflen == 0)
+    || (result == NULL)
+  ) {
     if (result != NULL) {
       *result = NULL;
     }
@@ -268,36 +244,52 @@ int nanoOsGetpwnam_r(
   int returnValue = 0;
   if (strcmp(name, _rootUsername) == 0) {
     returnValue = populatePasswd(pwd, buf, buflen,
-    /* name= */ _rootUsername, /* passwd= */ _rootPasswdShort,
+    /* name= */ _rootUsername, /* passwd= */ _rootPasswd,
     /* uid= */ 0, /* gid= */ 0,
     /* gecos= */ _rootGecos, /* dir= */ _rootHome,
     /* shell= */ _defaultShell);
   } else if (strcmp(name, _user1Username) == 0) {
     returnValue = populatePasswd(pwd, buf, buflen,
-    /* name= */ _user1Username, /* passwd= */ _user1PasswdShort,
+    /* name= */ _user1Username, /* passwd= */ _user1Passwd,
     /* uid= */ 1, /* gid= */ 1,
     /* gecos= */ _user1Gecos, /* dir= */ _user1Home,
     /* shell= */ _defaultShell);
   } else if (strcmp(name, _user2Username) == 0) {
     returnValue = populatePasswd(pwd, buf, buflen,
-    /* name= */ _user2Username, /* passwd= */ _user2PasswdShort,
+    /* name= */ _user2Username, /* passwd= */ _user2Passwd,
     /* uid= */ 2, /* gid= */ 2,
     /* gecos= */ _user2Gecos, /* dir= */ _user2Home,
     /* shell= */ _defaultShell);
   } else {
     // User not found.  Set result to NULL and return 0 as per spec.
-    if (result != NULL) {
-      *result = NULL;
-    }
+    *result = NULL;
     return 0;
   }
   
-  if ((returnValue == 0) && (result != NULL)) {
+  if (returnValue == 0) {
     *result = pwd;
   }
   return -returnValue;
 }
 
+/// @fn int nanoOsGetpwuid_r(uid_t uid, struct passwd *pwd, char *buf,
+///   size_t buflen, struct passwd **result)
+///
+/// @brief NanoOs implementation of the standard POSIX getpwuid_r function to
+/// get user information from the passwd database given a user ID.
+///
+/// @param uid The user ID to look up in the passwd database.
+/// @param pwd A pointer to a struct passwd to populate.
+/// @param buf A pointer to a character buffer that will hold all of the
+///   strings in the populated passwd structure.
+/// @param buflen The number of bytes available in the buf pointer.
+/// @param result Double pointer to a struct passwd to populate on successful
+///   lookup.
+///
+/// @return If the user is found, the result pointer is set to the provided pwd
+/// pointer and 0 is returned.  If no error occurs but the user is not found,
+/// the result pointer is set to NULL and 0 is returned.  The result pointer is
+/// set to NULL and an errno value is returned on error.
 int nanoOsGetpwuid_r(
   uid_t uid,
   struct passwd *pwd,
@@ -305,7 +297,7 @@ int nanoOsGetpwuid_r(
   size_t buflen,
   struct passwd **result
 ) {
-  if ((pwd == NULL) || (buf == NULL) || (buflen == 0)) {
+  if ((pwd == NULL) || (buf == NULL) || (buflen == 0) || (result ==  NULL)) {
     if (result != NULL) {
       *result = NULL;
     }
@@ -315,31 +307,29 @@ int nanoOsGetpwuid_r(
   int returnValue = 0;
   if (uid == 0) {
     returnValue = populatePasswd(pwd, buf, buflen,
-    /* name= */ _rootUsername, /* passwd= */ _rootPasswdLong,
+    /* name= */ _rootUsername, /* passwd= */ _rootPasswd,
     /* uid= */ 0, /* gid= */ 0,
     /* gecos= */ _rootGecos, /* dir= */ _rootHome,
     /* shell= */ _defaultShell);
   } else if (uid == 1) {
     returnValue = populatePasswd(pwd, buf, buflen,
-    /* name= */ _user1Username, /* passwd= */ _user1PasswdLong,
+    /* name= */ _user1Username, /* passwd= */ _user1Passwd,
     /* uid= */ 1, /* gid= */ 1,
     /* gecos= */ _user1Gecos, /* dir= */ _user1Home,
     /* shell= */ _defaultShell);
   } else if (uid == 2) {
     returnValue = populatePasswd(pwd, buf, buflen,
-    /* name= */ _user2Username, /* passwd= */ _user2PasswdLong,
+    /* name= */ _user2Username, /* passwd= */ _user2Passwd,
     /* uid= */ 2, /* gid= */ 2,
     /* gecos= */ _user2Gecos, /* dir= */ _user2Home,
     /* shell= */ _defaultShell);
   } else {
     // User not found.  Set result to NULL and return 0 as per spec.
-    if (result != NULL) {
-      *result = NULL;
-    }
+    *result = NULL;
     return 0;
   }
   
-  if ((returnValue == 0) && (result != NULL)) {
+  if (returnValue == 0) {
     *result = pwd;
   }
   return -returnValue;

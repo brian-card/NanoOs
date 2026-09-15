@@ -43,6 +43,11 @@ extern "C"
 {
 #endif
 
+/// @def NANO_OS_MAX_USERNAME_LENGTH
+///
+/// @brief The maximum number of characters that a user name can be.
+#define NANO_OS_MAX_USERNAME_LENGTH 16
+
 /// @def NANO_OS_MAX_PASSWORD_LENGTH
 ///
 /// @brief The maximum number of characters that a user password can be.
