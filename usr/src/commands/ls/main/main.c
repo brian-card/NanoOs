@@ -36,8 +36,32 @@
 #include <dirent.h>
 #include <stdint.h>
 #include <sys/stat.h>
+#include <pwd.h>
+#include <grp.h>
 
+/// @def INVALID_UID
+///
+/// @brief Sentinal value to represent an invalid user ID.
+#define INVALID_UID ((uid_t) -1)
+
+/// @def INVALID_GID
+///
+/// @brief Sentinal value to represent an invalid group ID.
+#define INVALID_GID ((gid_t) -1)
+
+/// @fn void listDir(const char *path)
+///
+/// @brief List the contents of a directory.
+///
+/// @param path The full path to the directory.
+///
+/// @return This function returns no value.
 void listDir(const char *path) {
+  uid_t lastUid = INVALID_UID;
+  char lastUsername[NANO_OS_MAX_USERNAME_LENGTH];
+  gid_t lastGid = INVALID_GID;
+  char lastGroupname[NANO_OS_MAX_GROUPNAME_LENGTH];
+
   DIR *dirp = opendir(path);
   if (dirp == NULL) {
     puts(strerror(errno));
@@ -53,10 +77,34 @@ void listDir(const char *path) {
       continue;
     }
 
+    // st is valid.  Make sure our username and groupname are filled in.
+    if (st.st_uid != lastUid) {
+      struct passwd pwd;
+      struct passwd *result = NULL;
+      getpwuid_r(st.st_uid, &pwd, buffer, sizeof(buffer), &result);
+      if (result != NULL) {
+        strncpy(lastUsername, pwd.pw_name, NANO_OS_MAX_USERNAME_LENGTH);
+      } else {
+        strncpy(lastUsername, "UNKNOWN", NANO_OS_MAX_USERNAME_LENGTH);
+      }
+      lastUid = st.st_uid;
+    }
+    if (st.st_gid != lastGid) {
+      struct group grp;
+      struct group *result = NULL;
+      getgrgid_r(st.st_gid, &grp, buffer, sizeof(buffer), &result);
+      if (result != NULL) {
+        strncpy(lastGroupname, grp.gr_name, NANO_OS_MAX_GROUPNAME_LENGTH);
+      } else {
+        strncpy(lastGroupname, "UNKNOWN", NANO_OS_MAX_GROUPNAME_LENGTH);
+      }
+      lastGid = st.st_gid;
+    }
+
     // Print the full thing
     mode_t mode = st.st_mode;
     snprintf(buffer, sizeof(buffer),
-      "%c%c%c%c%c%c%c%c%c%c %d %d %lld %lld %s%s\n",
+      "%c%c%c%c%c%c%c%c%c%c %s %s %lld %lld %s%s\n",
       S_ISDIR(mode)    ? 'd' : '-',
       (mode & S_IRUSR) ? 'r' : '-',
       (mode & S_IWUSR) ? 'w' : '-',
@@ -67,8 +115,8 @@ void listDir(const char *path) {
       (mode & S_IROTH) ? 'r' : '-',
       (mode & S_IWOTH) ? 'w' : '-',
       (mode & S_IXOTH) ? 'x' : '-',
-      st.st_uid,
-      st.st_gid,
+      lastUsername,
+      lastGroupname,
       (long long int) st.st_size,
       (long long int) st.st_mtime,
       entry->d_name,
