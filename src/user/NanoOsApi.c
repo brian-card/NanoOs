@@ -220,6 +220,10 @@ NanoOsApi nanoOsApi = {
   .getpwnam_r = nanoOsGetpwnam_r,
   .getpwuid_r = nanoOsGetpwuid_r,
   
+  // grp.h functions:
+  .getgrnam_r = nanoOsGetgrnam_r,
+  .getgrgid_r = nanoOsGetgrgid_r,
+  
   // sched.h functions:
   .sched_yield = nanoOsSchedYield,
   

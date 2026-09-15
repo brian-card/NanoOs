@@ -50,6 +50,7 @@
 #undef stdout
 #undef stderr
 
+#include "NanoOsGrp.h"
 #include "NanoOsHardware.h"
 #include "NanoOsPwd.h"
 #include "NanoOsSpawn.h"
@@ -239,6 +240,20 @@ typedef struct NanoOsApi {
     char *buf,
     size_t buflen,
     struct passwd **result);
+  
+  // grp.h functions:
+  int (*getgrnam_r)(
+    const char *name,
+    struct group *grp,
+    char *buf,
+    size_t buflen,
+    struct group **result);
+  int (*getgrgid_r)(
+    gid_t gid,
+    struct group *grp,
+    char *buf,
+    size_t buflen,
+    struct group **result);
   
   // sched.h functions:
   int (*sched_yield)(void);
