@@ -147,6 +147,7 @@ struct tm* gmtime_r(const time_t *timep, struct tm *result) {
   result->tm_min = (int) (timev / SECONDS_PER_MINUTE);
   result->tm_sec = (int) (timev % SECONDS_PER_MINUTE);
 
+  result->tm_wday = -1;
   result->tm_isdst = dstInEffect;
 
   return result;
