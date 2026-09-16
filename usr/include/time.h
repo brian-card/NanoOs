@@ -68,8 +68,20 @@ struct timespec {
   long   tv_nsec;
 };
 
+static inline long nanoOsTimezone(void) {
+  return overlayMap.header.osApi->nanoOsTimezone();
+}
 static inline time_t time(time_t *tloc) {
   return overlayMap.header.osApi->time(tloc);
+}
+static inline struct tm* gmtime_r(const time_t *timep, struct tm *result) {
+  return overlayMap.header.osApi->gmtime_r(timep, result);
+}
+static inline struct tm* localtime_r(const time_t *timep, struct tm *result) {
+  return overlayMap.header.osApi->localtime_r(timep, result);
+}
+static inline int timespec_get(struct timespec* spec, int base) {
+  return overlayMap.header.osApi->timespec_get(spec, base);
 }
 
 #ifdef __cplusplus
