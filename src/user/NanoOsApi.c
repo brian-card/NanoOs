@@ -58,6 +58,7 @@ char** parseArgs(char *command, int *argc);
 #include "NanoOsSched.h"
 #include "NanoOsSignal.h"
 #include "NanoOsTermios.h"
+#include "NanoOsTime.h"
 #include "NanoOsUnistd.h"
 
 // Must come last
@@ -214,7 +215,11 @@ NanoOsApi nanoOsApi = {
   .uname = nanoOsUname,
   
   // time.h functions:
+  .nanoOsTimezone = nanoOsTimezone,
   .time = time,
+  .gmtime_r = gmtime_r,
+  .localtime_r = localtime_r,
+  .timespec_get = timespec_get,
   
   // pwd.h functions:
   .getpwnam_r = nanoOsGetpwnam_r,

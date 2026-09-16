@@ -353,7 +353,6 @@ int posixSetSystemTime(va_list args) {
 static int posixGetElapsedNanosecondsImpl(int64_t startTime,
   int64_t *returnValue
 ) {
-  #include <time.h>
   struct timespec spec;
   clock_gettime(CLOCK_REALTIME, &spec);
   if (returnValue != NULL) {

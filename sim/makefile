@@ -89,6 +89,7 @@ OS_OBJECTS := \
     $(OBJ_DIR)/NanoOsApi.o \
     $(OBJ_DIR)/NanoOsErrno.o \
     $(OBJ_DIR)/NanoOsFcntl.o \
+    $(OBJ_DIR)/NanoOsGrp.o \
     $(OBJ_DIR)/NanoOsLibC.o \
     $(OBJ_DIR)/NanoOsPwd.o \
     $(OBJ_DIR)/NanoOsSched.o \
@@ -97,6 +98,7 @@ OS_OBJECTS := \
     $(OBJ_DIR)/NanoOsStdio.o \
     $(OBJ_DIR)/NanoOsSysUtsname.o \
     $(OBJ_DIR)/NanoOsTermios.o \
+    $(OBJ_DIR)/NanoOsTime.o \
     $(OBJ_DIR)/NanoOsUnistd.o \
 
 SIM_OBJECTS := \

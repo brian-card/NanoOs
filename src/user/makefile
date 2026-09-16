@@ -68,6 +68,7 @@ OBJECTS = \
     $(OBJ_DIR)/NanoOsStdio.o \
     $(OBJ_DIR)/NanoOsSysUtsname.o \
     $(OBJ_DIR)/NanoOsTermios.o \
+    $(OBJ_DIR)/NanoOsTime.o \
     $(OBJ_DIR)/NanoOsUnistd.o \
 
 # Default target

@@ -41,27 +41,6 @@
 // Must come last
 #include "NanoOsStdio.h"
 
-/// @fn int timespec_get(struct timespec* spec, int base)
-///
-/// @brief Get the current time in the form of a struct timespec.
-///
-/// @param spec A pointer to the sturct timespec to populate.
-/// @param base The base for the time (TIME_UTC).
-///
-/// @return Returns teh value of base on success, 0 on failure.
-int timespec_get(struct timespec* spec, int base) {
-  if (spec == NULL) {
-    return 0;
-  }
-  
-  int64_t now = 0;
-  HAL->clock.getElapsedNanoseconds(0, &now);
-  spec->tv_sec = (time_t) (now / ((int64_t) 1000000000));
-  spec->tv_nsec = now % ((int64_t) 1000000000);
-
-  return base;
-}
-
 /// @var errorStrings
 ///
 /// @brief Array of error messages arranged by error code.
@@ -141,28 +120,6 @@ void msleep(int durationMs) {
   do {
     HAL->clock.getElapsedMilliseconds(start, &elapsed);
   } while (elapsed < durationMs);
-}
-
-/// @fn time_t time(time_t *tloc)
-///
-/// @brief Implementation of standard C time function.
-///
-/// @param tloc Pointer to a time_t to store the current time in.  This
-///   parameter may be NULL.
-///
-/// @return Returns the number of seconds since midnight, Jan 1, 1970 on
-/// success, (time_t) -1 on error.  On error, the value of errno is also set.
-time_t time(time_t *tloc) {
-  time_t now = 0;
-  int64_t nowMs = 0;
-  HAL->clock.getElapsedMilliseconds(0, &nowMs);
-  now = ((time_t) nowMs) / ((time_t) 1000);
-
-  if (tloc != NULL) {
-    *tloc = now;
-  }
-  
-  return now;
 }
 
 /// @var _whitespace

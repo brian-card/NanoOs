@@ -43,6 +43,31 @@ extern "C"
 {
 #endif
 
+/// @def TIME_UTC
+///
+/// @brief Value to be passed to the "base" parameter of the timespec_get
+/// function.
+#define TIME_UTC 1
+
+typedef int64_t time_t;
+
+struct tm {
+  int tm_sec;   // 0 to 60
+  int tm_min;   // 0 to 59
+  int tm_hour;  // 0 to 23
+  int tm_mday;  // 1 to 31
+  int tm_mon;   // 0 to 11
+  int tm_year;  // since 1900
+  int tm_wday;  // 0 to 6
+  int tm_yday;  // 0 to 365
+  int tm_isdst; // 1=yes, 0=no, -1=unknown
+};
+
+struct timespec {
+  time_t tv_sec;
+  long   tv_nsec;
+};
+
 static inline time_t time(time_t *tloc) {
   return overlayMap.header.osApi->time(tloc);
 }

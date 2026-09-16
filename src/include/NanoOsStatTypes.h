@@ -56,7 +56,7 @@
 // idempotency -- avoids that hazard entirely.
 #include "sys/types.h"
 #include "NanoOsDirentTypes.h"
-#include "time.h"
+#include "../user/NanoOsTime.h"
 
 #ifdef __cplusplus
 extern "C"

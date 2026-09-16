@@ -37,7 +37,7 @@
 #define NANO_OS_H
 
 // Standard C includes
-#include "time.h"
+#include "../user/NanoOsTime.h"
 
 // Local headers
 #include "MemoryManager.h"
