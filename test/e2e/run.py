@@ -208,6 +208,32 @@ def test_background_jobs_fail_gracefully_past_the_slot_limit(s):
     assert "looseLoop" in s.sh("ps")
 
 
+def test_tightloop_is_killed_by_ctrl_c(s):
+    # tightLoop is a pure `while (1);` -- it never yields cooperatively and
+    # never calls back into the scheduler on its own.  It exists specifically
+    # so e2e tests can confirm Ctrl-C still kills a foreground process in
+    # that case: the console process detects ^C on the input stream and
+    # sends SIGINT directly to the foreground process, and the scheduler's
+    # preemptive multitasking (not the process yielding) is what lets that
+    # signal actually be delivered and acted on.  See
+    # docs/2026-06-06_Signals-Signatures-and-Stack-Overflows.md.
+    s.login()
+    s.child.sendline("tightLoop")
+    # Give it a moment to actually become the foreground process before
+    # interrupting it, so Ctrl-C exercises the kill path rather than racing
+    # the shell's own dispatch of the command.
+    time.sleep(0.5)
+    s.child.sendcontrol("c")
+    idx = s.child.expect([PROMPT, pexpect.EOF, pexpect.TIMEOUT], timeout=10)
+    assert idx == 0, \
+        "Ctrl-C did not return the shell to a prompt (tightLoop still " \
+        "running or the shell died)"
+    # The shell must be usable afterwards, and tightLoop must really be
+    # gone -- not merely backgrounded.
+    assert "alive" in s.sh("echo alive"), "shell unresponsive after killing tightLoop"
+    assert "tightLoop" not in s.sh("ps"), "tightLoop still listed in ps after Ctrl-C"
+
+
 def test_dirent_lists_directories_with_correct_type(s):
     # test/e2e/mkimage.sh always builds a root directory containing exactly
     # /etc and /usr (via mmd), both real subdirectories.  mtools writes
