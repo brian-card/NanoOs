@@ -129,6 +129,10 @@ struct tm* gmtime_r(const time_t *timep, struct tm *result) {
       yearHour -= HOURS_PER_NORMAL_YEAR;
     }
   }
+  if (lastLeapYear == result->tm_year) {
+    // This year is a leap year, so set the number of days in February to be 29.
+    daysPerMonth[1] = 29;
+  }
 
   int yearDay = yearHour / 24;
   result->tm_yday = yearDay;
