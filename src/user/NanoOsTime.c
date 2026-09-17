@@ -165,7 +165,7 @@ struct tm* nanoOsGmtime_r(const time_t *timep, struct tm *result) {
   result->tm_wday %= 7;
 
   unsigned int month;
-  for (month = 0; (month < 11) && (yearDay > daysPerMonth[month]); month++) {
+  for (month = 0; (month < 11) && (yearDay >= daysPerMonth[month]); month++) {
     yearDay -= daysPerMonth[month];
   }
 
