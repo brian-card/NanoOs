@@ -38,6 +38,7 @@
 #include <sys/stat.h>
 #include <pwd.h>
 #include <grp.h>
+#include <time.h>
 
 /// @def INVALID_UID
 ///
@@ -71,6 +72,7 @@ void listDir(const char *path) {
   struct dirent *entry;
   char buffer[96];
   struct stat st;
+  struct tm tm;
   while ((entry = readdir(dirp)) != NULL) {
     if (istat(entry->d_ino, &st) < 0) {
       printf("%s%s\n", entry->d_name, (entry->d_type == DT_DIR) ? "/" : "");
@@ -101,10 +103,13 @@ void listDir(const char *path) {
       lastGid = st.st_gid;
     }
 
+    // Parse the last-modified time
+    localtime_r(&st.st_mtime, &tm);
+
     // Print the full thing
     mode_t mode = st.st_mode;
     snprintf(buffer, sizeof(buffer),
-      "%c%c%c%c%c%c%c%c%c%c %s %s %lld %lld %s%s\n",
+      "%c%c%c%c%c%c%c%c%c%c %s %s %lld %d-%02d-%02d %02d:%02d:%02d %s%s\n",
       S_ISDIR(mode)    ? 'd' : '-',
       (mode & S_IRUSR) ? 'r' : '-',
       (mode & S_IWUSR) ? 'w' : '-',
@@ -118,7 +123,8 @@ void listDir(const char *path) {
       lastUsername,
       lastGroupname,
       (long long int) st.st_size,
-      (long long int) st.st_mtime,
+      tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+      tm.tm_hour, tm.tm_min, tm.tm_sec,
       entry->d_name,
       (entry->d_type == DT_DIR) ? "/" : ""
     );
