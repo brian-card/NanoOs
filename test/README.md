@@ -124,6 +124,20 @@ unless a test calls `mockTimerFire()`, console I/O driven byte by byte.
   are fine; the `cmd &` path fails cleanly on slot exhaustion. **Open** —
   full analysis in `BUGS.txt`; xfail e2e test
   `test_pipe_three_stage_does_not_crash_the_os`.
+- **BUG-5** — `ls`'s day-of-week column (`weekdays[tm.tm_wday]`) could read
+  out of bounds and crash/hang. Root cause: `NanoOsTime.c`'s
+  `_yearStartDay` lookup table (used by `nanoOsGmtime_r` to compute
+  `tm_wday`) lacked `KEEP_IN_FLASH`, so on the **stripped** binary
+  (`.rodata` removed — what actually ships to AgonLight2/ItsyBitsy)
+  it held garbage instead of `{4,5,6,1,2,3,4,...}`, producing a wildly
+  out-of-range `tm_wday` (e.g. `-4`) for perfectly ordinary dates. Latent
+  since `nanoOsGmtime_r` was written — nothing read `tm_wday` until `ls`
+  started printing a weekday column. **Fixed** 2026-09-17 (added
+  `KEEP_IN_FLASH`); regression tests
+  `test_ls_does_not_crash_on_populated_directory` (crash/hang) and
+  `test_ls_shows_correct_weekday_for_mtime` (every printed weekday
+  actually matches its printed date, not just "looks like a real
+  abbreviation").
 
 `make -C test run` is currently all-green. Known regressions, if any are
 added later, use `NANO_OS_TEST_TODO` / `NANO_OS_KERNEL_TEST_TODO` so they
