@@ -140,11 +140,11 @@ struct tm* nanoOsGmtime_r(const time_t *timep, struct tm *result) {
 
   time_t epochHours = timev / SECONDS_PER_HOUR;
   time_t epochYears = timev / AVERAGE_SECONDS_PER_YEAR;
-  result->tm_year = ((int) epochYears);
+  result->tm_year = ((int) epochYears) + 70;
   int lastLeapYear = result->tm_year & ~((int) 3);
   int yearsSinceLeapYear = result->tm_year & ((int) 3);
   unsigned int yearHour = (unsigned int) (epochHours
-    - (((time_t) lastLeapYear) * AVERAGE_HOURS_PER_YEAR));
+    - (((time_t) (lastLeapYear - 70)) * AVERAGE_HOURS_PER_YEAR));
   if (yearsSinceLeapYear > 0) {
     yearHour -= HOURS_PER_LEAP_YEAR;
     yearsSinceLeapYear--;
@@ -160,7 +160,8 @@ struct tm* nanoOsGmtime_r(const time_t *timep, struct tm *result) {
   unsigned int yearDay = yearHour / 24;
   result->tm_yday = yearDay;
 
-  result->tm_wday = _yearStartDay[result->tm_year % YEARS_IN_WEEKDAY_CYCLE];
+  result->tm_wday = _yearStartDay[
+    (result->tm_year - 70) % YEARS_IN_WEEKDAY_CYCLE];
   result->tm_wday += (int) yearDay;
   result->tm_wday %= 7;
 
@@ -169,7 +170,6 @@ struct tm* nanoOsGmtime_r(const time_t *timep, struct tm *result) {
     yearDay -= daysPerMonth[month];
   }
 
-  result->tm_year += 70;
   result->tm_mon = month;
   result->tm_mday = yearDay + 1;
 
