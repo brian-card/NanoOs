@@ -221,6 +221,7 @@ NanoOsApi nanoOsApi = {
   
   // time.h functions:
   .nanoOsTimezone = nanoOsTimezone,
+  .nanoOsDstInEffect = nanoOsDstInEffect,
   .nanoOsTime = nanoOsTime,
   .nanoOsGmtime_r = nanoOsGmtime_r,
   .nanoOsLocaltime_r = nanoOsLocaltime_r,

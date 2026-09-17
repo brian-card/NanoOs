@@ -53,15 +53,38 @@ static long _timezone = (8 * SECONDS_PER_HOUR);
 ///
 /// @brief 1 if Daylight Savings Time (DST) is in effect, 0 if it's not, -1 if
 /// we don't know.  Initialize to -1 until proven otherwise.
-int dstInEffect = -1;
+static int _dstInEffect = -1;
+
+/// @def YEARS_IN_WEEKDAY_CYCLE
+///
+/// @brief The number of years in the full cycle of weekday calendars.
+#define YEARS_IN_WEEKDAY_CYCLE 28
+
+/// @var _yearStartDay
+///
+/// @brief Day of the week that a year starts on.  Index 0 of the array is 1970.
+/// Day 0 is Sunday.
+static const int _yearStartDay[YEARS_IN_WEEKDAY_CYCLE] = {
+  4, 5, 6, 1, 2, 3, 4, 6, 0, 1, 2, 4, 5, 6,
+  0, 2, 3, 4, 5, 0, 1, 2, 3, 5, 6, 0, 1, 3,
+};
 
 /// @fn long* nanoOsTimezone(void)
 ///
-/// @brief Get the value of the global timezone variable.
+/// @brief Get the address of the global _timezone variable.
 ///
-/// @return Returns the value of the global timezone variable.
+/// @return Returns the address of the global _timezone variable.
 long* nanoOsTimezone(void) {
   return &_timezone;
+}
+
+/// @fn int* nanoOsDstInEffect(void)
+///
+/// @brief Get the address of the global _dstInEffect variable.
+///
+/// @return Returns the address of the global _dstInEffect variable.
+int* nanoOsDstInEffect(void) {
+  return &_dstInEffect;
 }
 
 /// @fn time_t nanoOsTime(time_t *tloc)
@@ -100,7 +123,7 @@ struct tm* nanoOsGmtime_r(const time_t *timep, struct tm *result) {
   }
 
   time_t timev = *timep;
-  unsigned int daysPerMonth[12] = {
+  unsigned int daysPerMonth[11] = {
     31, // January
     28, // February
     31, // March
@@ -112,7 +135,7 @@ struct tm* nanoOsGmtime_r(const time_t *timep, struct tm *result) {
     30, // September
     31, // October
     30, // November
-    31, // December
+    // December is unnecessary
   };
 
   time_t epochHours = timev / SECONDS_PER_HOUR;
@@ -136,8 +159,13 @@ struct tm* nanoOsGmtime_r(const time_t *timep, struct tm *result) {
 
   unsigned int yearDay = yearHour / 24;
   result->tm_yday = yearDay;
+
+  result->tm_wday = _yearStartDay[result->tm_year % YEARS_IN_WEEKDAY_CYCLE];
+  result->tm_wday += (int) yearDay;
+  result->tm_wday %= 7;
+
   unsigned int month;
-  for (month = 0; (month < 12) && (yearDay > daysPerMonth[month]); month++) {
+  for (month = 0; (month < 11) && (yearDay > daysPerMonth[month]); month++) {
     yearDay -= daysPerMonth[month];
   }
 
@@ -150,7 +178,6 @@ struct tm* nanoOsGmtime_r(const time_t *timep, struct tm *result) {
   result->tm_min = (int) (timev / SECONDS_PER_MINUTE);
   result->tm_sec = (int) (timev % SECONDS_PER_MINUTE);
 
-  result->tm_wday = -1;
   result->tm_isdst = dstInEffect;
 
   return result;

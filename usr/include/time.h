@@ -39,6 +39,7 @@
 #include "NanoOsUser.h"
 
 #undef timezone
+#undef dstInEffect
 #undef time
 #undef gmtime_r
 #undef localtime_r
@@ -82,6 +83,10 @@ static inline long* timezone_(void) {
   return overlayMap.header.osApi->nanoOsTimezone();
 }
 #define timezone (*timezone_())
+int* dstInEffect_(void) {
+  return overlayMap.header.osApi->nanoOsDstInEffect();
+  }
+#define dstInEffect (*dstInEffect_())
 static inline time_t time(time_t *tloc) {
   return overlayMap.header.osApi->nanoOsTime(tloc);
 }

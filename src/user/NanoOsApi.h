@@ -225,6 +225,7 @@ typedef struct NanoOsApi {
   
   // time.h functions:
   long* (*nanoOsTimezone)(void);
+  int* (*nanoOsDstInEffect)(void);
   time_t (*nanoOsTime)(time_t *tloc);
   struct tm* (*nanoOsGmtime_r)(const time_t *timep, struct tm *result);
   struct tm* (*nanoOsLocaltime_r)(const time_t *timep, struct tm *result);

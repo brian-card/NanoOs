@@ -99,6 +99,8 @@ struct timespec {
 
 long* nanoOsTimezone(void);
 #define timezone (*nanoOsTimezone())
+int* nanoOsDstInEffect(void);
+#define dstInEffect (*nanoOsDstInEffect())
 time_t nanoOsTime(time_t *tloc);
 #define time(tloc) nanoOsTime(tloc)
 struct tm* nanoOsGmtime_r(const time_t *timep, struct tm *result);
