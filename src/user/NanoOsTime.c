@@ -143,8 +143,13 @@ struct tm* nanoOsGmtime_r(const time_t *timep, struct tm *result) {
   result->tm_year = ((int) epochYears) + 70;
   int lastLeapYear = result->tm_year & ~((int) 3);
   int yearsSinceLeapYear = result->tm_year & ((int) 3);
+  // 1970 was not a leap year, but 1972 was.  So, we need to subtract the
+  // average hours per year since 1972, minus the number of hours in a leap year
+  // (1972) minus the number of hours in a normal year (1971) to get the number
+  // of hours into the current year we are.
   unsigned int yearHour = (unsigned int) (epochHours
-    - (((time_t) (lastLeapYear - 70)) * AVERAGE_HOURS_PER_YEAR));
+    - (((time_t) (lastLeapYear - 68)) * AVERAGE_HOURS_PER_YEAR)
+    + HOURS_PER_LEAP_YEAR + HOURS_PER_NORMAL_YEAR);
   if (yearsSinceLeapYear > 0) {
     yearHour -= HOURS_PER_LEAP_YEAR;
     yearsSinceLeapYear--;
