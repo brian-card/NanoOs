@@ -54,7 +54,6 @@
 #include "NanoOsPwd.h"
 #include "NanoOsSpawn.h"
 #include "NanoOsSysUtsname.h"
-#include "NanoOsTime.h"
 #include "NanoOsSysTypes.h"
 #include "../kernel/Hal.h"
 
@@ -225,11 +224,11 @@ typedef struct NanoOsApi {
   int (*uname)(struct utsname *buf);
   
   // time.h functions:
-  long (*nanoOsTimezone)(void);
-  time_t (*time)(time_t *tloc);
-  struct tm* (*gmtime_r)(const time_t *timep, struct tm *result);
-  struct tm* (*localtime_r)(const time_t *timep, struct tm *result);
-  int (*timespec_get)(struct timespec* spec, int base);
+  long* (*nanoOsTimezone)(void);
+  time_t (*nanoOsTime)(time_t *tloc);
+  struct tm* (*nanoOsGmtime_r)(const time_t *timep, struct tm *result);
+  struct tm* (*nanoOsLocaltime_r)(const time_t *timep, struct tm *result);
+  int (*nanoOsTimespec_get)(struct timespec* spec, int base);
   
   // pwd.h functions:
   int (*getpwnam_r)(

@@ -44,10 +44,10 @@
 #define AVERAGE_SECONDS_PER_YEAR \
   (((time_t) AVERAGE_HOURS_PER_YEAR) * SECONDS_PER_HOUR)
 
-/// @var timezone
+/// @var _timezone
 ///
 /// @brief Implementation of the standard C timezone global variable.
-long timezone = 0;
+static long _timezone = (8 * SECONDS_PER_HOUR);
 
 /// @var dstInEffect
 ///
@@ -60,11 +60,11 @@ int dstInEffect = -1;
 /// @brief Get the value of the global timezone variable.
 ///
 /// @return Returns the value of the global timezone variable.
-long nanoOsTimezone(void) {
-  return timezone;
+long* nanoOsTimezone(void) {
+  return &_timezone;
 }
 
-/// @fn time_t time(time_t *tloc)
+/// @fn time_t nanoOsTime(time_t *tloc)
 ///
 /// @brief NanoOs implementation of the standard time function.
 ///
@@ -73,7 +73,7 @@ long nanoOsTimezone(void) {
 ///
 /// @return Returns the number of seconds that have elapsed since midnight,
 /// January 1st, 1970.
-time_t time(time_t *tloc) {
+time_t nanoOsTime(time_t *tloc) {
   int64_t elapsedTime = 0;
   HAL->clock.getElapsedNanoseconds(0, &elapsedTime);
   if (tloc != NULL) {
@@ -84,7 +84,7 @@ time_t time(time_t *tloc) {
   return (time_t) (elapsedTime / 1000000000LL);
 }
 
-/// @fn struct tm* gmtime_r(const time_t *timep, struct tm *result)
+/// @fn struct tm* nanoOsGmtime_r(const time_t *timep, struct tm *result)
 ///
 /// @brief NanoOs implementation of the gmtime_r function.
 ///
@@ -93,14 +93,14 @@ time_t time(time_t *tloc) {
 ///
 /// @return This function always succeeds and always returns the value of the
 /// result pointer provided.
-struct tm* gmtime_r(const time_t *timep, struct tm *result) {
+struct tm* nanoOsGmtime_r(const time_t *timep, struct tm *result) {
   if ((timep == NULL) || (result == NULL)) {
     // Don't bother trying to parse anything.
     return NULL;
   }
 
   time_t timev = *timep;
-  int daysPerMonth[12] = {
+  unsigned int daysPerMonth[12] = {
     31, // January
     28, // February
     31, // March
@@ -117,10 +117,10 @@ struct tm* gmtime_r(const time_t *timep, struct tm *result) {
 
   time_t epochHours = timev / SECONDS_PER_HOUR;
   time_t epochYears = timev / AVERAGE_SECONDS_PER_YEAR;
-  result->tm_year = ((int) epochYears) + 70;
-  int lastLeapYear = result->tm_year & ~3;
-  int yearsSinceLeapYear = result->tm_year & 3;
-  int yearHour = (int) (epochHours
+  result->tm_year = ((int) epochYears);
+  int lastLeapYear = result->tm_year & ~((int) 3);
+  int yearsSinceLeapYear = result->tm_year & ((int) 3);
+  unsigned int yearHour = (unsigned int) (epochHours
     - (((time_t) lastLeapYear) * AVERAGE_HOURS_PER_YEAR));
   if (yearsSinceLeapYear > 0) {
     yearHour -= HOURS_PER_LEAP_YEAR;
@@ -134,19 +134,18 @@ struct tm* gmtime_r(const time_t *timep, struct tm *result) {
     daysPerMonth[1] = 29;
   }
 
-  int yearDay = yearHour / 24;
+  unsigned int yearDay = yearHour / 24;
   result->tm_yday = yearDay;
-  int month;
-  for (month = 0; (month < 12) && (yearDay > 0); month++) {
+  unsigned int month;
+  for (month = 0; (month < 12) && (yearDay > daysPerMonth[month]); month++) {
     yearDay -= daysPerMonth[month];
   }
-  month--;
-  yearDay += daysPerMonth[month];
+
+  result->tm_year += 70;
   result->tm_mon = month;
   result->tm_mday = yearDay + 1;
 
   result->tm_hour = yearHour - (result->tm_yday * 24);
-
   timev -= epochHours * SECONDS_PER_HOUR;
   result->tm_min = (int) (timev / SECONDS_PER_MINUTE);
   result->tm_sec = (int) (timev % SECONDS_PER_MINUTE);
@@ -157,7 +156,7 @@ struct tm* gmtime_r(const time_t *timep, struct tm *result) {
   return result;
 }
 
-/// @fn struct tm* localtime_r(const time_t *timep, struct tm *result)
+/// @fn struct tm* nanoOsLocaltime_r(const time_t *timep, struct tm *result)
 ///
 /// @brief NanoOs implementation of the localtime_r function.
 ///
@@ -166,11 +165,11 @@ struct tm* gmtime_r(const time_t *timep, struct tm *result) {
 ///
 /// @return This function always succeeds and always returns the value of the
 /// result pointer provided.
-struct tm* localtime_r(const time_t *timep, struct tm *result) {
+struct tm* nanoOsLocaltime_r(const time_t *timep, struct tm *result) {
   return gmtime_r(timep, result);
 }
 
-/// @fn int timespec_get(struct timespec* spec, int base)
+/// @fn int nanoOsTimespec_get(struct timespec* spec, int base)
 ///
 /// @brief Get the current time in the form of a struct timespec.
 ///
@@ -178,7 +177,7 @@ struct tm* localtime_r(const time_t *timep, struct tm *result) {
 /// @param base The base for the time (TIME_UTC).
 ///
 /// @return Returns the value of base on success, 0 on failure.
-int timespec_get(struct timespec* spec, int base) {
+int nanoOsTimespec_get(struct timespec* spec, int base) {
   if (spec == NULL) {
     return 0;
   }

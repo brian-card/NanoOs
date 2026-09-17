@@ -38,10 +38,18 @@
 
 #include "NanoOsUser.h"
 
+#undef timezone
+#undef time
+#undef gmtime_r
+#undef localtime_r
+#undef timespec_get
+
 #ifdef __cplusplus
 extern "C"
 {
 #endif
+
+#ifndef NANO_OS_USER_TIME_H
 
 /// @def TIME_UTC
 ///
@@ -68,20 +76,23 @@ struct timespec {
   long   tv_nsec;
 };
 
-static inline long nanoOsTimezone(void) {
+#endif // NANO_OS_USER_TIME_H
+
+static inline long* timezone_(void) {
   return overlayMap.header.osApi->nanoOsTimezone();
 }
+#define timezone (*timezone_())
 static inline time_t time(time_t *tloc) {
-  return overlayMap.header.osApi->time(tloc);
+  return overlayMap.header.osApi->nanoOsTime(tloc);
 }
 static inline struct tm* gmtime_r(const time_t *timep, struct tm *result) {
-  return overlayMap.header.osApi->gmtime_r(timep, result);
+  return overlayMap.header.osApi->nanoOsGmtime_r(timep, result);
 }
 static inline struct tm* localtime_r(const time_t *timep, struct tm *result) {
-  return overlayMap.header.osApi->localtime_r(timep, result);
+  return overlayMap.header.osApi->nanoOsLocaltime_r(timep, result);
 }
 static inline int timespec_get(struct timespec* spec, int base) {
-  return overlayMap.header.osApi->timespec_get(spec, base);
+  return overlayMap.header.osApi->nanoOsTimespec_get(spec, base);
 }
 
 #ifdef __cplusplus

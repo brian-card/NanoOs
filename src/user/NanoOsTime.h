@@ -97,11 +97,16 @@ struct timespec {
 #define _SYS__TIMESPEC_H_
 #endif
 
-long nanoOsTimezone(void);
-time_t time(time_t *tloc);
-struct tm* gmtime_r(const time_t *timep, struct tm *result);
-struct tm* localtime_r(const time_t *timep, struct tm *result);
-int timespec_get(struct timespec* spec, int base);
+long* nanoOsTimezone(void);
+#define timezone (*nanoOsTimezone())
+time_t nanoOsTime(time_t *tloc);
+#define time(tloc) nanoOsTime(tloc)
+struct tm* nanoOsGmtime_r(const time_t *timep, struct tm *result);
+#define gmtime_r(timep, result) nanoOsGmtime_r(timep, result)
+struct tm* nanoOsLocaltime_r(const time_t *timep, struct tm *result);
+#define localtime_r(timep, result) nanoOsLocaltime_r(timep, result)
+int nanoOsTimespec_get(struct timespec* spec, int base);
+#define timespec_get(spec, base) nanoOsTimespec_get(spec, base)
 
 #ifdef __cplusplus
 }
