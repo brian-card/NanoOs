@@ -50,6 +50,19 @@
 /// @brief Sentinal value to represent an invalid group ID.
 #define INVALID_GID ((gid_t) -1)
 
+/// @var weekdays
+///
+/// @brief Three-letter abbreviations for the days of the week.
+static const char *weekdays[7] = {
+  "Sun",
+  "Mon",
+  "Tue",
+  "Wed",
+  "Thu",
+  "Fri",
+  "Sat",
+};
+
 /// @fn void listDir(const char *path)
 ///
 /// @brief List the contents of a directory.
@@ -109,7 +122,7 @@ void listDir(const char *path) {
     // Print the full thing
     mode_t mode = st.st_mode;
     snprintf(buffer, sizeof(buffer),
-      "%c%c%c%c%c%c%c%c%c%c %s %s %lld %d-%02d-%02d %02d:%02d:%02d %s%s\n",
+      "%c%c%c%c%c%c%c%c%c%c %s %s %lld %s %d-%02d-%02d %02d:%02d:%02d %s%s\n",
       S_ISDIR(mode)    ? 'd' : '-',
       (mode & S_IRUSR) ? 'r' : '-',
       (mode & S_IWUSR) ? 'w' : '-',
@@ -123,6 +136,7 @@ void listDir(const char *path) {
       lastUsername,
       lastGroupname,
       (long long int) st.st_size,
+      weekdays[tm.tm_wday],
       tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
       tm.tm_hour, tm.tm_min, tm.tm_sec,
       entry->d_name,
