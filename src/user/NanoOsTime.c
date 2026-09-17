@@ -31,6 +31,7 @@
 
 #include "NanoOsTime.h"
 #include "../kernel/Hal.h"
+#include "../kernel/NanoOs.h"
 
 // Standard C includes
 #include <stddef.h> // For NULL
@@ -64,7 +65,10 @@ static int _dstInEffect = -1;
 ///
 /// @brief Day of the week that a year starts on.  Index 0 of the array is 1970.
 /// Day 0 is Sunday.
-static const int _yearStartDay[YEARS_IN_WEEKDAY_CYCLE] = {
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const int _yearStartDay[YEARS_IN_WEEKDAY_CYCLE] KEEP_IN_FLASH = {
   4, 5, 6, 1, 2, 3, 4, 6, 0, 1, 2, 4, 5, 6,
   0, 2, 3, 4, 5, 0, 1, 2, 3, 5, 6, 0, 1, 3,
 };
