@@ -120,7 +120,7 @@ void listDir(const char *path) {
     localtime_r(&st.st_mtime, &tm);
 
     // Print the full thing.  Format:
-    // drwxrwxrwx <user> <group> <size> Day YYYY-MM-DD hh:mm:ss <entry name>[trailing /]
+    // drwxrwxrwx <user> <group> <size> Day YYYY-MM-DD hh:mm:ss <entry name>[/]
     mode_t mode = st.st_mode;
     snprintf(buffer, sizeof(buffer),
       "%c%c%c%c%c%c%c%c%c%c ",
