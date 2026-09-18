@@ -127,20 +127,19 @@ struct tm* nanoOsGmtime_r(const time_t *timep, struct tm *result) {
   }
 
   time_t timev = *timep;
-  unsigned int daysPerMonth[11] = {
-    31, // January
-    28, // February
-    31, // March
-    30, // April
-    31, // May
-    30, // June
-    31, // July
-    31, // August
-    30, // September
-    31, // October
-    30, // November
-    // December is unnecessary
-  };
+  unsigned int daysPerMonth[11];
+  daysPerMonth[0]  = 31; // January
+  daysPerMonth[1]  = 28; // February
+  daysPerMonth[2]  = 31; // March
+  daysPerMonth[3]  = 30; // April
+  daysPerMonth[4]  = 31; // May
+  daysPerMonth[5]  = 30; // June
+  daysPerMonth[6]  = 31; // July
+  daysPerMonth[7]  = 31; // August
+  daysPerMonth[8]  = 30; // September
+  daysPerMonth[9]  = 31; // October
+  daysPerMonth[10] = 30; // November
+  // December is unnecessary
 
   time_t epochHours = timev / SECONDS_PER_HOUR;
   time_t epochYears = timev / AVERAGE_SECONDS_PER_YEAR;
