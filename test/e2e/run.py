@@ -9,7 +9,9 @@ Builds (once) a FAT32 disk image via mkimage.sh, then for each simulator
 binary spawns it on a fresh image copy and drives the console.
 """
 
+import datetime
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -284,6 +286,66 @@ def test_dirent_sets_errno_correctly(s):
     assert "readdir past end of /etc -> NULL, errno=0" in out, out
     # closedir on a NULL DIR must fail (-1) and set errno (EBADF = 13).
     assert "closedir(NULL) -> -1, errno=13" in out, out
+
+
+_LS_LINE_RE = re.compile(
+    r'^[dl-][rwx-]{9}\s+\S+\s+\S+\s+\d+\s+(?P<wday>\w{3})\s+'
+    r'(?P<year>\d+)-(?P<month>\d+)-(?P<day>\d+)\s+\d+:\d+:\d+\s+\S+$')
+
+
+def test_ls_does_not_crash_on_populated_directory(s):
+    # Regression test: ls's day-of-week column (weekdays[tm.tm_wday]) could
+    # read an out-of-bounds index and dereference garbage as a string
+    # pointer -- see test_ls_shows_correct_weekday_for_mtime for the root
+    # cause. On the sim that's a SIGSEGV; on real hardware with no MMU it's
+    # a hang instead. Checked separately from output correctness so a crash
+    # here is reported distinctly from a wrong-but-harmless value.
+    s.login()
+    s.child.sendline("ls /usr/bin")
+    idx = s.child.expect([PROMPT, pexpect.EOF, pexpect.TIMEOUT], timeout=12)
+    if idx == 1:
+        sig = s.child.signalstatus
+        raise AssertionError(
+            f"simulator died running ls on a populated directory "
+            f"(signal {sig}{' = SIGSEGV' if sig == 11 else ''})")
+    if idx == 2:
+        raise AssertionError("ls hung listing a populated directory")
+    assert "alive" in s.sh("echo alive"), "shell unresponsive after ls"
+
+
+def test_ls_shows_correct_weekday_for_mtime(s):
+    # Regression test for a bug where NanoOsTime.c's _yearStartDay lookup
+    # table (used by nanoOsGmtime_r to compute tm_wday) lacked
+    # KEEP_IN_FLASH. On the stripped binary (.rodata removed -- what
+    # actually ships to AgonLight2/ItsyBitsy), the table held garbage
+    # instead of {4,5,6,1,2,3,4,...}, so tm_wday came out wildly
+    # out-of-range (e.g. -4 instead of 4) for perfectly ordinary dates.
+    # Nothing had ever read tm_wday before ls started printing a weekday
+    # column, so the bug was latent until then. Confirms every listed
+    # file's printed weekday actually matches its printed date, rather
+    # than just being one of the seven valid-looking abbreviations.
+    s.login()
+    out = s.sh("ls /etc")
+    # Session.sh()'s PROMPT pattern doesn't include the "root" username
+    # prefix, so .before always has a trailing "root" line bled in from the
+    # start of the *next* prompt -- harmless for the substring checks every
+    # other test does, but not a real ls line, so filter to lines that
+    # actually look like one rather than asserting every line matches.
+    lines = [line for line in out.splitlines() if _LS_LINE_RE.match(line)]
+    assert lines, out
+    checked = 0
+    for line in lines:
+        m = _LS_LINE_RE.match(line)
+        expected = datetime.date(
+            int(m["year"]), int(m["month"]), int(m["day"])).strftime("%a")
+        assert m["wday"] == expected, (
+            f"ls printed weekday {m['wday']!r} for "
+            f"{m['year']}-{m['month']}-{m['day']}, expected {expected!r}: "
+            f"{line!r}")
+        checked += 1
+    # /etc always contains exactly hostname and issue (see mkimage.sh) plus
+    # . and .. -- four real entries, not zero.
+    assert checked >= 4, f"expected at least 4 entries, got:\n{out}"
 
 
 def test_unknown_command_errors(s):
