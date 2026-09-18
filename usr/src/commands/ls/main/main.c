@@ -117,12 +117,13 @@ void listDir(const char *path) {
     }
 
     // Parse the last-modified time
-    localtime_r(&st.st_mtime, &tm);
+    gmtime_r(&st.st_mtime, &tm);
 
-    // Print the full thing
+    // Print the full thing.  Format:
+    // drwxrwxrwx <user> <group> <size> Day YYYY-MM-DD hh:mm:ss <entry name>[trailing /]
     mode_t mode = st.st_mode;
     snprintf(buffer, sizeof(buffer),
-      "%c%c%c%c%c%c%c%c%c%c %s %s %lld %s %d-%02d-%02d %02d:%02d:%02d %s%s\n",
+      "%c%c%c%c%c%c%c%c%c%c ",
       S_ISDIR(mode)    ? 'd' : '-',
       (mode & S_IRUSR) ? 'r' : '-',
       (mode & S_IWUSR) ? 'w' : '-',
@@ -132,17 +133,24 @@ void listDir(const char *path) {
       (mode & S_IXGRP) ? 'x' : '-',
       (mode & S_IROTH) ? 'r' : '-',
       (mode & S_IWOTH) ? 'w' : '-',
-      (mode & S_IXOTH) ? 'x' : '-',
+      (mode & S_IXOTH) ? 'x' : '-'
+    );
+    strcat(buffer, "%s %s %lld ");
+    snprintf(&buffer[22], sizeof(buffer) - 22, "%s %d-%02d-%02d ",
+      weekdays[tm.tm_wday],
+      tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday
+    );
+    snprintf(&buffer[37], sizeof(buffer) - 37, "%02d:%02d:%02d ",
+      tm.tm_hour, tm.tm_min, tm.tm_sec
+    );
+    strcat(buffer, "%s%s\n");
+    printf(/* format= */ buffer,
       lastUsername,
       lastGroupname,
       (long long int) st.st_size,
-      weekdays[tm.tm_wday],
-      tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
-      tm.tm_hour, tm.tm_min, tm.tm_sec,
       entry->d_name,
       (entry->d_type == DT_DIR) ? "/" : ""
     );
-    fputs(buffer, stdout);
   }
 
   closedir(dirp);
