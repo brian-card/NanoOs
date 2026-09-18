@@ -117,7 +117,7 @@ void listDir(const char *path) {
     }
 
     // Parse the last-modified time
-    gmtime_r(&st.st_mtime, &tm);
+    localtime_r(&st.st_mtime, &tm);
 
     // Print the full thing.  Format:
     // drwxrwxrwx <user> <group> <size> Day YYYY-MM-DD hh:mm:ss <entry name>[trailing /]
