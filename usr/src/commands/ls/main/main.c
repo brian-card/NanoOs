@@ -135,12 +135,12 @@ void listDir(const char *path) {
       (mode & S_IWOTH) ? 'w' : '-',
       (mode & S_IXOTH) ? 'x' : '-'
     );
-    strcat(buffer, "%s %s %lld ");
-    snprintf(&buffer[22], sizeof(buffer) - 22, "%s %d-%02d-%02d ",
+    strcat(buffer, "%s %s %7lld ");
+    snprintf(&buffer[23], sizeof(buffer) - 23, "%s %d-%02d-%02d ",
       weekdays[tm.tm_wday],
       tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday
     );
-    snprintf(&buffer[37], sizeof(buffer) - 37, "%02d:%02d:%02d ",
+    snprintf(&buffer[38], sizeof(buffer) - 38, "%02d:%02d:%02d ",
       tm.tm_hour, tm.tm_min, tm.tm_sec
     );
     strcat(buffer, "%s%s\n");
