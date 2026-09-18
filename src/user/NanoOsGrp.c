@@ -75,7 +75,15 @@ int populateGroup(struct group *grp, char *buf, size_t buflen,
   if (buflen > 0) {
     int numMembers = 0;
     for (; members[numMembers] != NULL; numMembers++);
-    
+
+    // Make sure that buf remains aligned to the system's natural integer width.
+    char *alignedBuf = buf + sizeof(uintptr_t) - 1;
+    alignedBuf = (char*) (
+      ((intptr_t) alignedBuf) & ~((intptr_t) sizeof(uintptr_t) - 1)
+    );
+    buflen -= (alignedBuf - buf);
+    buf = alignedBuf;
+
     if (buflen >= ((numMembers + 1) * sizeof(char*))) {
       memset(buf, 0, ((numMembers + 1) * sizeof(char*)));
       grp->gr_mem = (char**) buf;
