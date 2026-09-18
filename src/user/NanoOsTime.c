@@ -54,7 +54,7 @@ static long _timezone = (8 * SECONDS_PER_HOUR);
 ///
 /// @brief 1 if Daylight Savings Time (DST) is in effect, 0 if it's not, -1 if
 /// we don't know.  Initialize to -1 until proven otherwise.
-static int _dstInEffect = -1;
+static int _dstInEffect = 1;
 
 /// @def YEARS_IN_WEEKDAY_CYCLE
 ///
@@ -201,7 +201,10 @@ struct tm* nanoOsGmtime_r(const time_t *timep, struct tm *result) {
 /// @return This function always succeeds and always returns the value of the
 /// result pointer provided.
 struct tm* nanoOsLocaltime_r(const time_t *timep, struct tm *result) {
-  return gmtime_r(timep, result);
+  time_t timev = *timep;
+  timev -= (time_t) _timezone;
+  timev += (time_t) ((_dstInEffect > 0) * 3600);
+  return gmtime_r(&timev, result);
 }
 
 /// @fn int nanoOsTimespec_get(struct timespec* spec, int base)
