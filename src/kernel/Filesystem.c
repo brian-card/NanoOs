@@ -25,6 +25,13 @@
 #define NANO_OS_KERNEL_BUILD
 #include "../../usr/src/filesystems/drivers/common/GetPartitionInfoImpl.c"
 
+/// @var rootFilesystemPid
+///
+/// @brief The well-known ProcessId of the root filesystem, or 0 if none is
+/// running.  Set once, directly, when the filesystem process is created in
+/// HalCommon.c's halCommonInitRootFilesystem.
+ProcessId rootFilesystemPid = 0;
+
 /// @fn static void handleFilesystemMessages(FilesystemState *fs)
 ///
 /// @brief Pop and handle all messages in the filesystem process's message
@@ -183,7 +190,7 @@ FILE* filesystemFopen(const char *pathname, const char *mode) {
   fopenArgs.fd = numFileDescriptors;
 
   ProcessMessage *msg = initSendProcessMessageToPid(
-    SCHEDULER_STATE->rootFsPid,
+    rootFilesystemPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_OPEN_FILE,
     &fopenArgs, sizeof(fopenArgs), true);
   processMessageWaitForDone(msg, NULL);
@@ -267,7 +274,7 @@ int filesystemFclose(FILE *stream) {
     fcloseArgs.returnValue = 0;
 
     ProcessMessage *msg = initSendProcessMessageToPid(
-      SCHEDULER_STATE->rootFsPid,
+      rootFilesystemPid,
       FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_CLOSE_FILE,
       &fcloseArgs, sizeof(fcloseArgs), true);
     processMessageWaitForDone(msg, NULL);
@@ -309,7 +316,7 @@ int filesystemRemove(const char *pathname) {
     strcpy(filesystemRemoveArgs.pathname, pathname);
 
     ProcessMessage *msg = initSendProcessMessageToPid(
-      SCHEDULER_STATE->rootFsPid,
+      rootFilesystemPid,
       FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_REMOVE_FILE,
       &filesystemRemoveArgs, sizeof(filesystemRemoveArgs), true);
     processMessageWaitForDone(msg, NULL);
@@ -350,7 +357,7 @@ DIR* filesystemOpendir(const char *pathname) {
   strcpy(filesystemOpendirArgs.pathname, pathname);
 
   ProcessMessage *msg = initSendProcessMessageToPid(
-    SCHEDULER_STATE->rootFsPid,
+    rootFilesystemPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_OPEN_DIR,
     &filesystemOpendirArgs, sizeof(filesystemOpendirArgs), true);
   processMessageWaitForDone(msg, NULL);
@@ -388,7 +395,7 @@ struct dirent* filesystemReaddir(DIR *dirp) {
   };
 
   ProcessMessage *msg = initSendProcessMessageToPid(
-    SCHEDULER_STATE->rootFsPid,
+    rootFilesystemPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_READ_DIR,
     &filesystemReaddirArgs, sizeof(filesystemReaddirArgs), true);
   processMessageWaitForDone(msg, NULL);
@@ -421,7 +428,7 @@ int filesystemClosedir(DIR *dirp) {
     .returnValue = 0,
   };
   ProcessMessage *msg = initSendProcessMessageToPid(
-    SCHEDULER_STATE->rootFsPid,
+    rootFilesystemPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_CLOSE_DIR,
     &filesystemClosedirArgs, sizeof(filesystemClosedirArgs), true);
   processMessageWaitForDone(msg, NULL);
@@ -460,7 +467,7 @@ int filesystemLstat(const char *pathname, struct stat *statbuf) {
   filesystemLstatArgs.statbuf = statbuf;
 
   ProcessMessage *msg = initSendProcessMessageToPid(
-    SCHEDULER_STATE->rootFsPid,
+    rootFilesystemPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_LSTAT,
     &filesystemLstatArgs, sizeof(filesystemLstatArgs), true);
   processMessageWaitForDone(msg, NULL);
@@ -497,7 +504,7 @@ int filesystemIstat(ino_t ino, struct stat *statbuf) {
   };
 
   ProcessMessage *msg = initSendProcessMessageToPid(
-    SCHEDULER_STATE->rootFsPid,
+    rootFilesystemPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_ISTAT,
     &filesystemIstatArgs, sizeof(filesystemIstatArgs), true);
   processMessageWaitForDone(msg, NULL);
@@ -540,7 +547,7 @@ int fat32Format(const char *volumeLabel, uint32_t clusterSize) {
   }
 
   ProcessMessage *msg = initSendProcessMessageToPid(
-    SCHEDULER_STATE->rootFsPid,
+    rootFilesystemPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_FORMAT,
     &fat32FormatArgs, sizeof(fat32FormatArgs), true);
   processMessageWaitForDone(msg, NULL);
@@ -580,7 +587,7 @@ int filesystemFSeek(FILE *stream, long offset, int whence) {
     .errorNumber = 0,
   };
   ProcessMessage *msg = initSendProcessMessageToPid(
-    SCHEDULER_STATE->rootFsPid,
+    rootFilesystemPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_SEEK_FILE,
     &filesystemSeekArgs, sizeof(filesystemSeekArgs), true);
   processMessageWaitForDone(msg, NULL);
@@ -623,7 +630,7 @@ size_t filesystemFRead(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     (unsigned long int) (uintptr_t) ptr);
 
   ProcessMessage *processMessage = initSendProcessMessageToPid(
-    SCHEDULER_STATE->rootFsPid,
+    rootFilesystemPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_READ_FILE,
     /* data= */ &filesystemIoCommandArgs,
     /* size= */ sizeof(filesystemIoCommandArgs),
@@ -667,7 +674,7 @@ size_t filesystemFWrite(
     .length = (uint32_t) (size * nmemb)
   };
   ProcessMessage *processMessage = initSendProcessMessageToPid(
-    SCHEDULER_STATE->rootFsPid,
+    rootFilesystemPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_WRITE_FILE,
     /* data= */ &filesystemIoCommandArgs,
     /* size= */ sizeof(filesystemIoCommandArgs),
@@ -715,7 +722,7 @@ int getFileBlockMetadataFromFile(FILE *stream, FileBlockMetadata *metadata) {
   processMessageInit(processMessage,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_GET_FILE_BLOCK_METADATA,
     &args, sizeof(args), true);
-  if (sendProcessMessageToPid(SCHEDULER_STATE->rootFsPid, processMessage)
+  if (sendProcessMessageToPid(rootFilesystemPid, processMessage)
     != processSuccess
   ) {
     logError("Failed to send message to filesystem to get file "
@@ -781,7 +788,7 @@ int filesystemEndOfFile(FILE *stream) {
 
   if (stream != NULL) {
     ProcessMessage *processMessage = initSendProcessMessageToPid(
-      SCHEDULER_STATE->rootFsPid,
+      rootFilesystemPid,
       FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_END_OF_FILE,
       &feofArgs, sizeof(feofArgs), true);
     processMessageWaitForDone(processMessage, NULL);

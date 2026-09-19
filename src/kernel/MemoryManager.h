@@ -169,6 +169,10 @@ void* memoryManagerCalloc(size_t nmemb, size_t size);
 size_t getFreeMemory(void);
 int dumpMemoryAllocations(void);
 
+// The well-known ProcessId of the memory manager.  Set once, directly, when
+// the memory manager process is created; see MemoryManager.c for details.
+extern ProcessId memoryManagerPid;
+
 
 #ifdef __cplusplus
 } // extern "C"

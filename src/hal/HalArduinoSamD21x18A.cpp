@@ -1459,6 +1459,13 @@ static ProcessMessage _logMessages[NUM_LOG_ENTRIES];
 /// metadata for all processes on the system, including the scheduler.
 static ProcessDescriptor _allProcesses[NUM_PROCESSES];
 
+/// @var _namedProcesses
+///
+/// @brief This platform's storage for HalCommon.c's named-process lookup
+/// table.  Sized for the processes arduinoSamD21x18ADoStartProcesses can
+/// register (filesystem, logger).
+static NamedProcessEntry _namedProcesses[2];
+
 int arduinoSamD21x18ACallFileOverlay(va_list args) {
   HalCallFileOverlayFn *returnValue = va_arg(args, HalCallFileOverlayFn*);
   if (returnValue != NULL) {
@@ -1475,10 +1482,28 @@ int arduinoSamD21x18AExecCommand(va_list args) {
   return 0;
 }
 
-int arduinoSamD21x18AInitRootStorage(va_list args) {
-  HalInitRootStorageFn *returnValue = va_arg(args, HalInitRootStorageFn*);
+/// @fn static int arduinoSamD21x18ADoStartProcesses(void)
+///
+/// @brief Start every process specific to the SAMD21 platform: the root
+/// filesystem (and, transitively, the SD card process), plus the logger if
+/// this build's .rodata was stripped.
+///
+/// @return Returns 0 on success, -errno on failure.
+static int arduinoSamD21x18ADoStartProcesses(void) {
+  int returnValue = halCommonInitRootFilesystem();
+  if (HAL->memory.stringsPresent == false) {
+    int loggerStatus = halCommonInitLogger();
+    if ((returnValue == 0) && (loggerStatus != 0)) {
+      returnValue = loggerStatus;
+    }
+  }
+  return returnValue;
+}
+
+int arduinoSamD21x18AStartProcesses(va_list args) {
+  HalStartProcessesFn *returnValue = va_arg(args, HalStartProcessesFn*);
   if (returnValue != NULL) {
-    *returnValue = halCommonInitRootFilesystem;
+    *returnValue = arduinoSamD21x18ADoStartProcesses;
   }
   return 0;
 }
@@ -1605,12 +1630,12 @@ static HalFunction arduinoSamD21x18APlatformFunctions[HAL_PLATFORM_NUM_FNS] = {
     = arduinoSamD21x18ACallFileOverlay,
   [HAL_PLATFORM_EXEC_COMMAND]
     = arduinoSamD21x18AExecCommand,
-  [HAL_PLATFORM_INIT_ROOT_STORAGE]
-    = arduinoSamD21x18AInitRootStorage,
   [HAL_PLATFORM_RESTART_ROOT_FILESYSTEM]
     = arduinoSamD21x18ARestartRootFilesystem,
   [HAL_PLATFORM_RESTART_SHELL]
     = arduinoSamD21x18ARestartShell,
+  [HAL_PLATFORM_START_PROCESSES]
+    = arduinoSamD21x18AStartProcesses,
 };
 
 // NOTE: avr-g++/arm-none-eabi-g++ cannot compile a designated-initializer
@@ -1796,6 +1821,11 @@ int halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
 #else
   halImpl.memory.stringsPresent = true;
 #endif // NANO_OS_STRINGS_STRIPPED
+
+  memset(_namedProcesses, 0, sizeof(_namedProcesses));
+  namedProcessTable = _namedProcesses;
+  namedProcessTableCapacity
+    = sizeof(_namedProcesses) / sizeof(_namedProcesses[0]);
 
   memset(_allProcesses, 0, sizeof(_allProcesses));
   halImpl.memory.numProcesses   = NUM_PROCESSES;

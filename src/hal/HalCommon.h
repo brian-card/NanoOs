@@ -58,6 +58,18 @@
 /// @brief Type for all HAL implementation functions in the dispatch table.
 typedef int (*HalFunction)(va_list args);
 
+/// @struct NamedProcessEntry
+///
+/// @brief One entry in a platform's table of named processes.
+///
+/// @param name The process's registered name, or NULL if this slot is
+///   unused.
+/// @param pid The ProcessId registered under name.
+typedef struct NamedProcessEntry {
+  const char *name;
+  ProcessId   pid;
+} NamedProcessEntry;
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -73,9 +85,30 @@ extern HalFunction *halFunctions[HAL_NUM_SUBSYSTEMS];
 /// exported from Hal.h cannot be written through.
 extern Hal halImpl;
 
+/// @var namedProcessTable
+///
+/// @brief Pointer to the platform-owned array of NamedProcessEntry slots.
+/// HalCommon.c owns the lookup/registration logic but not the storage: each
+/// platform declares its own array, sized to what it actually needs, and
+/// points this at it during its own init (mirrors the HalUart.online /
+/// HalDio.online pattern of a common field pointing at platform-owned
+/// storage). NULL (the default) means the platform has no named-process
+/// table at all, which findProcessByName/registerProcessName handle safely.
+extern NamedProcessEntry *namedProcessTable;
+
+/// @var namedProcessTableCapacity
+///
+/// @brief The number of slots in namedProcessTable, set by the platform
+/// alongside namedProcessTable itself.
+extern uint8_t namedProcessTableCapacity;
+
 int callHal(HalSubsystem subsystem, uint32_t function, ...);
+ProcessId reserveProcessSlot(void);
+int findProcessByName(const char *name, ProcessId *returnValue);
+int registerProcessName(const char *name, ProcessId pid);
 BlockDevice* halCommonInitRootSdSpiStorage(SdCardSpiArgs *sdCardSpiArgs);
 int halCommonInitRootFilesystem(void);
+int halCommonInitLogger(void);
 int restartBuiltinFilesystem(ProcessDescriptor *processDescriptor);
 int restartOverlayFilesystem(ProcessDescriptor *processDescriptor);
 int restartContiguousFilesystem(ProcessDescriptor *processDescriptor);

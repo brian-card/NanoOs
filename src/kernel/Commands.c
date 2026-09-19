@@ -325,7 +325,7 @@ int shutdownCommandHandler(int argc, char **argv) {
   };
   ProcessMessage *processMessage
     = initSendProcessMessageToPid(
-    SCHEDULER_STATE->schedulerPid,
+    schedulerPid,
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_SHUTDOWN,
     /* data= */ &schedulerShutdownArgs,
     /* size= */ sizeof(schedulerShutdownArgs),

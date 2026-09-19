@@ -71,7 +71,7 @@ NANO_OS_KERNEL_TEST(ipc_roundtrip, blocking_call_to_memory_manager) {
   args.returnValue = (size_t) -1;
 
   ProcessMessage *msg = initSendProcessMessageToPid(
-    SCHEDULER_STATE->memoryManagerPid,
+    memoryManagerPid,
     MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_GET_FREE_MEMORY,
     &args, sizeof(args), /* waiting = */ true);
   NANO_OS_ASSERT_NOT_NULL(msg);

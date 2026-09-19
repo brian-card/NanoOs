@@ -11,6 +11,7 @@
 
 #include <string.h>
 
+#include "kernel/Console.h"
 #include "kernel/NanoOs.h"
 #include "kernel/Processes.h"
 #include "kernel/Scheduler.h"
@@ -40,9 +41,9 @@ NANO_OS_KERNEL_TEST(sched, process_info_lists_the_core_processes) {
 
   for (uint8_t ii = 0; ii < info->numProcesses; ii++) {
     ProcessInfoElement *e = &info->processes[ii];
-    if (e->pid == SCHEDULER_STATE->schedulerPid)     schedulerName = e->name;
-    if (e->pid == SCHEDULER_STATE->consolePid)       consoleName   = e->name;
-    if (e->pid == SCHEDULER_STATE->memoryManagerPid) memmgrName     = e->name;
+    if (e->pid == schedulerPid)     schedulerName = e->name;
+    if (e->pid == consolePid)       consoleName   = e->name;
+    if (e->pid == memoryManagerPid) memmgrName     = e->name;
     if ((unsigned int) e->pid == selfPid)                            sawSelf       = true;
   }
 
@@ -61,7 +62,7 @@ NANO_OS_KERNEL_TEST(sched, num_running_processes_is_sane) {
   memset(&args, 0, sizeof(args));
 
   ProcessMessage *msg = initSendProcessMessageToPid(
-    SCHEDULER_STATE->schedulerPid,
+    schedulerPid,
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_GET_NUM_RUNNING_PROCESSES,
     &args, sizeof(args), true);
   NANO_OS_ASSERT_NOT_NULL(msg);

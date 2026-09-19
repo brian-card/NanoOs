@@ -1697,7 +1697,7 @@ ConsoleBuffer* nanoOsWaitForInput(void) {
   }
   IoChannel *inputChannel = &inputFd->inputChannel;
 
-  if (inputChannel->pid == SCHEDULER_STATE->consolePid) {
+  if (inputChannel->pid == consolePid) {
     // Tell the console that we're waiting for input.  Fire and forget.
     (void) initSendProcessMessageToPid(
       inputChannel->pid, inputChannel->messageType,
@@ -1770,7 +1770,7 @@ int nanoOsVfscanf(FILE *stream, const char *format, va_list args) {
     returnValue = vsscanf(consoleBuffer->buffer, format, args);
     // Release the buffer.  Fire and forget.
     (void) initSendProcessMessageToPid(
-      SCHEDULER_STATE->consolePid,
+      consolePid,
       CONSOLE_COMMAND_SIGNATURE | CONSOLE_RELEASE_BUFFER,
       /* data= */ consoleBuffer, /* size= */ sizeof(*consoleBuffer), false);
   }
@@ -1837,7 +1837,7 @@ ConsoleBuffer* nanoOsGetBuffer(void) {
   // get a buffer back or until an error occurs.
   while (consoleGetBufferArgs.consoleBuffer == NULL) {
     ProcessMessage *processMessage = initSendProcessMessageToPid(
-      SCHEDULER_STATE->consolePid,
+      consolePid,
       CONSOLE_COMMAND_SIGNATURE | CONSOLE_GET_BUFFER,
       &consoleGetBufferArgs, sizeof(consoleGetBufferArgs), true);
     if (processMessage == NULL) {
@@ -1883,7 +1883,7 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *consoleBuffer) {
 
       // Release the buffer to avoid creating a leak.  Fire and forget.
       (void) initSendProcessMessageToPid(
-        SCHEDULER_STATE->consolePid,
+        consolePid,
         CONSOLE_COMMAND_SIGNATURE | CONSOLE_RELEASE_BUFFER,
         /* data= */ consoleBuffer, /* size= */ sizeof(*consoleBuffer), false);
 
@@ -1910,7 +1910,7 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *consoleBuffer) {
 
         // Release the buffer to avoid creating a leak.  Fire and forget.
         (void) initSendProcessMessageToPid(
-          SCHEDULER_STATE->consolePid,
+          consolePid,
           CONSOLE_COMMAND_SIGNATURE | CONSOLE_RELEASE_BUFFER,
           /* data= */ consoleBuffer, /* size= */ sizeof(*consoleBuffer), false);
 
@@ -1922,7 +1922,7 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *consoleBuffer) {
 
       // Release the buffer to avoid creating a leak.  Fire and forget.
       (void) initSendProcessMessageToPid(
-        SCHEDULER_STATE->consolePid,
+        consolePid,
         CONSOLE_COMMAND_SIGNATURE | CONSOLE_RELEASE_BUFFER,
         /* data= */ consoleBuffer, /* size= */ sizeof(*consoleBuffer), false);
 
@@ -1936,7 +1936,7 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *consoleBuffer) {
       .length = (uint32_t) strlen(consoleBuffer->buffer)
     };
     ProcessMessage *processMessage = initSendProcessMessageToPid(
-      SCHEDULER_STATE->rootFsPid,
+      rootFilesystemPid,
       FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_WRITE_FILE,
       /* data= */ &filesystemIoCommandArgs,
       /* size= */ sizeof(filesystemIoCommandArgs),
@@ -1949,7 +1949,7 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *consoleBuffer) {
 
     // Release the buffer to avoid creating a leak.  Fire and forget.
     (void) initSendProcessMessageToPid(
-      SCHEDULER_STATE->consolePid,
+      consolePid,
       CONSOLE_COMMAND_SIGNATURE | CONSOLE_RELEASE_BUFFER,
       /* data= */ consoleBuffer, /* size= */ sizeof(*consoleBuffer), false);
   }
@@ -2155,7 +2155,7 @@ size_t nanoOsFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
       charBuffer[numBytesReceived] = '\0';
       // Release the buffer.  Fire and forget.
       (void) initSendProcessMessageToPid(
-        SCHEDULER_STATE->consolePid,
+        consolePid,
         CONSOLE_COMMAND_SIGNATURE | CONSOLE_RELEASE_BUFFER,
         /* data= */ consoleBuffer, /* size= */ sizeof(*consoleBuffer), false);
 

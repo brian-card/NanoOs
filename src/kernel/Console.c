@@ -60,6 +60,12 @@
 // Must come last
 #include "../user/NanoOsStdio.h"
 
+/// @var consolePid
+///
+/// @brief The well-known ProcessId of the console.  Set once, directly,
+/// when the console process is created in initializeProcesses.
+ProcessId consolePid = 0;
+
 /// @fn int consolePrintMessage(ConsoleState *consoleState,
 ///   ProcessMessage *inputMessage, const char *message)
 ///
@@ -749,7 +755,7 @@ void consoleReleasePidPortCommandHandler(
   ConsoleState *consoleState, ProcessMessage *inputMessage
 ) {
   ProcessId sender = processPid(processMessageFrom(inputMessage));
-  if (sender != SCHEDULER_STATE->schedulerPid) {
+  if (sender != schedulerPid) {
     // Sender is not the scheduler.  We will ignore this.
     processMessageSetDone(inputMessage);
     consoleMessageCleanup(inputMessage);
@@ -1141,7 +1147,7 @@ void* runConsole(void *args) {
           sendSignalArgs.errorNumber = 0;
           ProcessMessage *processMessage
             = initSendProcessMessageToPid(
-            SCHEDULER_STATE->schedulerPid,
+            schedulerPid,
             SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_SEND_SIGNAL,
             /* data= */ &sendSignalArgs, /* size= */ sizeof(sendSignalArgs),
             false);
@@ -1181,7 +1187,7 @@ int printConsoleValue(ConsoleValueType valueType, void *value, size_t length) {
   memcpy(&message, value, length);
 
   logDebug("Sending message to console process.\n");
-  if (initSendProcessMessageToPid(SCHEDULER_STATE->consolePid,
+  if (initSendProcessMessageToPid(consolePid,
     CONSOLE_COMMAND_SIGNATURE | CONSOLE_WRITE_VALUE,
     (void*) message, (size_t) valueType, false) == NULL
   ) {
@@ -1245,7 +1251,7 @@ void releaseConsole(void) {
   // from within the console process.  That means we can't do blocking prints
   // from this function.  i.e. We can't use printf here.  Use printConsole
   // instead.
-  if (initSendProcessMessageToPid(SCHEDULER_STATE->consolePid,
+  if (initSendProcessMessageToPid(consolePid,
     CONSOLE_COMMAND_SIGNATURE | CONSOLE_RELEASE_PORT,
     /* data= */ 0, /* size= */ 0, false) == NULL
   ) {
@@ -1266,7 +1272,7 @@ int getOwnedConsolePort(void) {
     .ownedPort = -1,
   };
   ProcessMessage *sent = initSendProcessMessageToPid(
-    SCHEDULER_STATE->consolePid,
+    consolePid,
     CONSOLE_COMMAND_SIGNATURE | CONSOLE_GET_OWNED_PORT,
     /* data= */ &consoleGetOwnedPortArgs,
     /* size= */ sizeof(consoleGetOwnedPortArgs),
@@ -1291,7 +1297,7 @@ bool getConsoleEcho(void) {
     .echoing = false,
   };
   ProcessMessage *sent = initSendProcessMessageToPid(
-    SCHEDULER_STATE->consolePid,
+    consolePid,
     CONSOLE_COMMAND_SIGNATURE | CONSOLE_GET_ECHO,
     /* data= */ &consoleGetEchoArgs,
     /* size= */ sizeof(consoleGetEchoArgs),
@@ -1318,7 +1324,7 @@ int setConsoleEcho(bool desiredEchoState) {
     .returnValue = 0,
   };
   ProcessMessage *sent = initSendProcessMessageToPid(
-    SCHEDULER_STATE->consolePid,
+    consolePid,
     CONSOLE_COMMAND_SIGNATURE | CONSOLE_SET_ECHO,
     /* data= */ &consoleSetEchoArgs,
     /* size= */ sizeof(consoleSetEchoArgs),

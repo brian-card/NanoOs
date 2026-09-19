@@ -68,6 +68,13 @@
 /// parameters that are logged.
 const char *_referencePoint = REFERENCE_POINT_STRING;
 
+/// @var loggerPid
+///
+/// @brief The well-known ProcessId of the logger, or 0 if none is running.
+/// Set once, directly, when the logger process is created in HalCommon.c's
+/// halCommonInitLogger.
+ProcessId loggerPid = 0;
+
 /// @var _logLevelNames
 ///
 /// @brief Names that are to be displayed in place of log level numeric values.
@@ -166,7 +173,7 @@ int logMessage(LogLevel logLevel,
 
   LogEntry *logEntry = NULL;
   ProcessMessage *processMessage = NULL;
-  if (((SCHEDULER_STATE != NULL) && (SCHEDULER_STATE->loggerPid != 0))
+  if (((SCHEDULER_STATE != NULL) && (loggerPid != 0))
     || (staticLogs == NULL)
   ) {
     // Select pointers from our statically-allocated arrays.
@@ -212,7 +219,7 @@ int logMessage(LogLevel logLevel,
   }
   va_end(args);
   
-  if ((SCHEDULER_STATE == NULL) || (SCHEDULER_STATE->loggerPid == 0)) {
+  if ((SCHEDULER_STATE == NULL) || (loggerPid == 0)) {
     if (staticLogs != NULL) {
       // Logger isn't up yet but will be.  Write to the staticLogs area.
       goto writeStaticLog;
@@ -239,7 +246,7 @@ int logMessage(LogLevel logLevel,
     return -EAGAIN;
   }
   
-  if (sendProcessMessageToPid(SCHEDULER_STATE->loggerPid, processMessage)
+  if (sendProcessMessageToPid(loggerPid, processMessage)
     != 0
   ) {
     processMessageRelease(processMessage);

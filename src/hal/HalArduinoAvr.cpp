@@ -248,6 +248,14 @@ static ProcessMessage _logMessages[NUM_LOG_ENTRIES];
 /// metadata for all processes on the system, including the scheduler.
 static ProcessDescriptor _allProcesses[NUM_PROCESSES];
 
+/// @var _namedProcesses
+///
+/// @brief This platform's storage for HalCommon.c's named-process lookup
+/// table.  Sized for just the filesystem: AVR boards always leave
+/// stringsPresent true, so arduinoAvrDoStartProcesses never starts a
+/// logger, and data-segment space here is scarce.
+static NamedProcessEntry _namedProcesses[1];
+
 // Sleep configuration
 #include <avr/sleep.h>
 #include <avr/interrupt.h>
@@ -804,10 +812,31 @@ int arduinoAvrExecCommand(va_list args) {
   return 0;
 }
 
-int arduinoAvrInitRootStorage(va_list args) {
-  HalInitRootStorageFn *returnValue = va_arg(args, HalInitRootStorageFn*);
+/// @fn static int arduinoAvrDoStartProcesses(void)
+///
+/// @brief Start every process specific to this AVR board: its root storage,
+/// if the board set one via arduinoAvrSetRootStorageFunctions, plus the
+/// logger if this build's .rodata was stripped.
+///
+/// @return Returns 0 on success, -errno on failure.
+static int arduinoAvrDoStartProcesses(void) {
+  int returnValue = 0;
+  if (_initRootStorage != NULL) {
+    returnValue = _initRootStorage();
+  }
+  if (HAL->memory.stringsPresent == false) {
+    int loggerStatus = halCommonInitLogger();
+    if ((returnValue == 0) && (loggerStatus != 0)) {
+      returnValue = loggerStatus;
+    }
+  }
+  return returnValue;
+}
+
+int arduinoAvrStartProcesses(va_list args) {
+  HalStartProcessesFn *returnValue = va_arg(args, HalStartProcessesFn*);
   if (returnValue != NULL) {
-    *returnValue = _initRootStorage;
+    *returnValue = arduinoAvrDoStartProcesses;
   }
   return 0;
 }
@@ -916,9 +945,9 @@ int arduinoAvrProcessStorage(va_list args) {
 static HalFunction arduinoAvrPlatformFunctions[HAL_PLATFORM_NUM_FNS] = {
   [HAL_PLATFORM_CALL_FILE_OVERLAY]       = NULL,
   [HAL_PLATFORM_EXEC_COMMAND]            = arduinoAvrExecCommand,
-  [HAL_PLATFORM_INIT_ROOT_STORAGE]       = arduinoAvrInitRootStorage,
   [HAL_PLATFORM_RESTART_ROOT_FILESYSTEM] = arduinoAvrRestartRootFilesystem,
   [HAL_PLATFORM_RESTART_SHELL]           = arduinoAvrRestartShell,
+  [HAL_PLATFORM_START_PROCESSES]         = arduinoAvrStartProcesses,
 };
 
 static HalFunction arduinoAvrMemoryFunctions[HAL_MEMORY_NUM_FNS] = {
@@ -1042,6 +1071,12 @@ int halArduinoAvrInit(HalArduinoAvrInitArgs *args) {
   halImpl.memory.numLogEntries  = NUM_LOG_ENTRIES;
   memset(&_logEntries, 0, sizeof(_logEntries));
   memset(&_logMessages, 0, sizeof(_logMessages));
+
+  memset(_namedProcesses, 0, sizeof(_namedProcesses));
+  namedProcessTable = _namedProcesses;
+  namedProcessTableCapacity
+    = sizeof(_namedProcesses) / sizeof(_namedProcesses[0]);
+
   memset(_allProcesses, 0, sizeof(_allProcesses));
   halImpl.memory.numProcesses   = NUM_PROCESSES;
   for (int ii = 0; ii < NUM_READY_QUEUES; ii++) {

@@ -73,7 +73,7 @@ void defaultSignalHandler(int signum) {
       .errorNumber = 0,
     };
     ProcessMessage *processMessage = initSendProcessMessageToPid(
-      SCHEDULER_STATE->schedulerPid,
+      schedulerPid,
       SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_KILL_PROCESS,
       &schedulerKillProcessArgs, sizeof(schedulerKillProcessArgs), false);
     if (processMessage == NULL) {
@@ -374,7 +374,7 @@ int setProcessStorage_(uint8_t key, void *val, int pid, ...) {
   }
 
   if (pid < 0) {
-    if (getRunningPid() == SCHEDULER_STATE->schedulerPid) {
+    if (getRunningPid() == schedulerPid) {
       pid = (int) getRunningPid();
     } else {
       return returnValue; // processError

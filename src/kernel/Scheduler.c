@@ -100,6 +100,15 @@ Thread *schedulerThread = NULL;
 /// process.
 SchedulerState *SCHEDULER_STATE = NULL;
 
+/// @var schedulerPid
+///
+/// @brief The well-known ProcessId of the scheduler.  Set once, directly,
+/// when the scheduler's own process slot is configured.  Declared here
+/// rather than as a SchedulerState member so that it's usable by any file
+/// that includes Scheduler.h without going through the scheduler-private
+/// SCHEDULER_STATE pointer.
+ProcessId schedulerPid = 0;
+
 /// @var standardKernelFileDescriptors
 ///
 /// @brief The array of file descriptors that all kernel processes use.
@@ -1093,7 +1102,7 @@ void* schedulerResumeReallocMessage(void *ptr, size_t size) {
   reallocMessage.ptr = ptr;
   reallocMessage.size = size;
   
-  if (schedulerInitSendMessageToPid(SCHEDULER_STATE->memoryManagerPid,
+  if (schedulerInitSendMessageToPid(memoryManagerPid,
     MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_REALLOC,
     &reallocMessage, sizeof(reallocMessage)
     ) != processSuccess
@@ -1172,7 +1181,7 @@ void schedFree(void *ptr) {
   MemoryManagerFreeArgs memoryManagerFreeArgs = {
     .ptr = ptr,
   };
-  schedulerInitSendMessageToPid(SCHEDULER_STATE->memoryManagerPid,
+  schedulerInitSendMessageToPid(memoryManagerPid,
     MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_FREE,
     &memoryManagerFreeArgs, sizeof(memoryManagerFreeArgs));
   return;
@@ -1193,7 +1202,7 @@ int assignMemory(void *ptr, ProcessId pid) {
   };
 
   int returnValue = 0;
-  if (schedulerInitSendMessageToPid(SCHEDULER_STATE->memoryManagerPid,
+  if (schedulerInitSendMessageToPid(memoryManagerPid,
     MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_ASSIGN_MEMORY,
     &assignMemoryArgs, sizeof(assignMemoryArgs)) != processSuccess
   ) {
@@ -1219,7 +1228,7 @@ int schedulerAssignPortToPid(uint8_t consolePort, ProcessId owner) {
   consolePortPidUnion.consolePortPidAssociation.pid = owner;
 
   int returnValue = schedulerInitSendMessageToPid(
-    SCHEDULER_STATE->consolePid,
+    consolePid,
     CONSOLE_COMMAND_SIGNATURE | CONSOLE_ASSIGN_PORT,
     (void*) ((uintptr_t) consolePortPidUnion.nanoOsMessageData), /* size= */ 0);
 
@@ -1250,7 +1259,7 @@ int schedulerSetPortShell(uint8_t consolePort, ProcessId shell) {
   consolePortPidUnion.consolePortPidAssociation.pid = shell;
 
   returnValue = schedulerInitSendMessageToPid(
-    SCHEDULER_STATE->consolePid,
+    consolePid,
     CONSOLE_COMMAND_SIGNATURE | CONSOLE_SET_PORT_SHELL,
     (void*) ((uintptr_t) consolePortPidUnion.nanoOsMessageData), /* size= */ 0);
 
@@ -1270,7 +1279,7 @@ int schedulerGetNumConsolePorts(void) {
     .numPorts = 0,
   };
   if (schedulerInitSendMessageToPid(
-    SCHEDULER_STATE->consolePid,
+    consolePid,
     CONSOLE_COMMAND_SIGNATURE | CONSOLE_GET_NUM_PORTS,
     /* data= */ &consoleGetNumPortsArgs,
     /* size= */ sizeof(consoleGetNumPortsArgs)) != processSuccess
@@ -1304,7 +1313,7 @@ ProcessId schedulerGetNumRunningProcesses(struct timespec *timeout) {
     .errorNumber = 0,
   };
   processMessage = initSendProcessMessageToPid(
-    SCHEDULER_STATE->schedulerPid,
+    schedulerPid,
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_GET_NUM_RUNNING_PROCESSES,
     &schedulerGetNumRunningProcessesArgs,
     sizeof(schedulerGetNumRunningProcessesArgs), true);
@@ -1391,7 +1400,7 @@ ProcessInfo* schedulerGetProcessInfo(void) {
     .errorNumber = 0,
   };
   processMessage
-    = initSendProcessMessageToPid(SCHEDULER_STATE->schedulerPid,
+    = initSendProcessMessageToPid(schedulerPid,
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_GET_PROCESS_INFO,
     &schedulerGetProcessInfoArgs,
     sizeof(schedulerGetProcessInfoArgs), true);
@@ -1515,7 +1524,7 @@ int schedulerKillProcess(ProcessId pid) {
     .errorNumber = 0,
   };
   ProcessMessage *processMessage = initSendProcessMessageToPid(
-    SCHEDULER_STATE->schedulerPid,
+    schedulerPid,
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_KILL_PROCESS,
     &schedulerKillProcessArgs, sizeof(schedulerKillProcessArgs), true);
   if (processMessage == NULL) {
@@ -1582,7 +1591,7 @@ int schedulerSendSignal(ProcessId pid, int signal) {
   };
   ProcessMessage *processMessage
     = initSendProcessMessageToPid(
-    SCHEDULER_STATE->schedulerPid,
+    schedulerPid,
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_SEND_SIGNAL,
     /* data= */ &sendSignalArgs, /* size= */ sizeof(sendSignalArgs), true);
   if (processMessage == NULL) {
@@ -1627,7 +1636,7 @@ int schedulerReplaceOverlay(const void *overlayNamespace,
   };
   ProcessMessage *processMessage
     = initSendProcessMessageToPid(
-    SCHEDULER_STATE->schedulerPid,
+    schedulerPid,
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_REPLACE_OVERLAY,
     /* data= */ &schedulerReplaceOverlayArgs,
     /* size= */ sizeof(schedulerReplaceOverlayArgs),
@@ -1659,7 +1668,7 @@ int schedulerSetProcessUser(UserId userId) {
   };
   ProcessMessage *processMessage
     = initSendProcessMessageToPid(
-    SCHEDULER_STATE->schedulerPid,
+    schedulerPid,
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_SET_PROCESS_USER,
     &schedulerSetProcessUserArgs, sizeof(schedulerSetProcessUserArgs), true);
   if (processMessage == NULL) {
@@ -1719,7 +1728,7 @@ const char* schedulerGetHostname(void) {
   };
   ProcessMessage *processMessage
     = initSendProcessMessageToPid(
-    SCHEDULER_STATE->schedulerPid,
+    schedulerPid,
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_GET_HOSTNAME,
     &schedulerGetHostnameArgs, sizeof(schedulerGetHostnameArgs), true);
   if (processMessage == NULL) {
@@ -1836,7 +1845,7 @@ int schedulerExecve(const char *pathname,
   };
   ProcessMessage *processMessage
     = initSendProcessMessageToPid(
-    SCHEDULER_STATE->schedulerPid,
+    schedulerPid,
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_EXECVE,
     &schedulerExecveArgs, sizeof(schedulerExecveArgs), true);
   if (processMessage == NULL) {
@@ -1992,7 +2001,7 @@ exit:
 /// @return Returns a pointer to the opened file on success, NULL on failure.
 FILE* schedFopen(const char *pathname, const char *mode) {
   FILE *returnValue = NULL;
-  if (SCHEDULER_STATE->rootFsPid == 0) {
+  if (rootFilesystemPid == 0) {
     return returnValue; // NULL
   }
 
@@ -2005,7 +2014,7 @@ FILE* schedFopen(const char *pathname, const char *mode) {
       .fd = 0, // We don't care
     };
     logDebug("schedFopen: Sending message\n");
-    if (schedulerInitSendMessageToPid(SCHEDULER_STATE->rootFsPid,
+    if (schedulerInitSendMessageToPid(rootFilesystemPid,
       FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_OPEN_FILE,
       &fopenArgs, sizeof(fopenArgs)
       ) != processSuccess
@@ -2037,7 +2046,7 @@ FILE* schedFopen(const char *pathname, const char *mode) {
 /// errno is also set to the appropriate error.
 int schedFclose(FILE *stream) {
   int returnValue = 0;
-  if (SCHEDULER_STATE->rootFsPid == 0) {
+  if (rootFilesystemPid == 0) {
     errno = ENODEV;
     return EOF;
   }
@@ -2049,7 +2058,7 @@ int schedFclose(FILE *stream) {
     fcloseArgs.stream = stream;
     fcloseArgs.returnValue = 0;
 
-    if (schedulerInitSendMessageToPid(SCHEDULER_STATE->rootFsPid,
+    if (schedulerInitSendMessageToPid(rootFilesystemPid,
       FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_CLOSE_FILE,
       &fcloseArgs, sizeof(fcloseArgs)
       ) != processSuccess
@@ -2086,7 +2095,7 @@ int schedFclose(FILE *stream) {
 /// @return Returns 0 on success, -1 and sets the value of errno on failure.
 int schedRemove(const char *pathname) {
   int returnValue = 0;
-  if (SCHEDULER_STATE->rootFsPid == 0) {
+  if (rootFilesystemPid == 0) {
     errno = ENODEV;
     return -1;
   }
@@ -2099,7 +2108,7 @@ int schedRemove(const char *pathname) {
       .returnValue = 0,
     };
 
-    if (schedulerInitSendMessageToPid(SCHEDULER_STATE->rootFsPid,
+    if (schedulerInitSendMessageToPid(rootFilesystemPid,
       FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_REMOVE_FILE,
       &filesystemRemoveArgs, sizeof(filesystemRemoveArgs)
       ) != processSuccess
@@ -2139,7 +2148,7 @@ int schedRemove(const char *pathname) {
 ///
 /// @return Returns the number of items successfully read in.
 size_t schedFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
-  if (SCHEDULER_STATE->rootFsPid == 0) {
+  if (rootFilesystemPid == 0) {
     return 0;
   }
 
@@ -2152,7 +2161,7 @@ size_t schedFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    if (schedulerInitSendMessageToPid(SCHEDULER_STATE->rootFsPid,
+    if (schedulerInitSendMessageToPid(rootFilesystemPid,
       FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_READ_FILE,
       &filesystemIoCommandArgs, sizeof(filesystemIoCommandArgs)
       ) != processSuccess
@@ -2184,7 +2193,7 @@ size_t schedFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
 ///
 /// @return Returns the number of items successfully written out.
 size_t schedFwrite(void *ptr, size_t size, size_t nmemb, FILE *stream) {
-  if (SCHEDULER_STATE->rootFsPid == 0) {
+  if (rootFilesystemPid == 0) {
     return 0;
   }
 
@@ -2197,7 +2206,7 @@ size_t schedFwrite(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    if (schedulerInitSendMessageToPid(SCHEDULER_STATE->rootFsPid,
+    if (schedulerInitSendMessageToPid(rootFilesystemPid,
       FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_WRITE_FILE,
       &filesystemIoCommandArgs, sizeof(filesystemIoCommandArgs)
       ) != processSuccess
@@ -2229,7 +2238,7 @@ size_t schedFwrite(void *ptr, size_t size, size_t nmemb, FILE *stream) {
 /// @return Returns a pointer to the provided buffer on success, NULL on
 /// failure.
 char* schedFgets(char *buffer, int size, FILE *stream) {
-  if (SCHEDULER_STATE->rootFsPid == 0) {
+  if (rootFilesystemPid == 0) {
     return NULL;
   }
 
@@ -2244,7 +2253,7 @@ char* schedFgets(char *buffer, int size, FILE *stream) {
       .length = (uint32_t) size - 1
     };
 
-    if (schedulerInitSendMessageToPid(SCHEDULER_STATE->rootFsPid,
+    if (schedulerInitSendMessageToPid(rootFilesystemPid,
       FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_READ_FILE,
       &filesystemIoCommandArgs, sizeof(filesystemIoCommandArgs)
       ) != processSuccess
@@ -2279,7 +2288,7 @@ char* schedFgets(char *buffer, int size, FILE *stream) {
 /// @return Returns 0 on success, EOF on failure.  On failure, the value of
 /// errno is also set to the appropriate error.
 int schedFputs(const char *s, FILE *stream) {
-  if (SCHEDULER_STATE->rootFsPid == 0) {
+  if (rootFilesystemPid == 0) {
     errno = ENODEV;
     return EOF;
   }
@@ -2295,7 +2304,7 @@ int schedFputs(const char *s, FILE *stream) {
       .length = (uint32_t) strlen(s)
     };
 
-    if (schedulerInitSendMessageToPid(SCHEDULER_STATE->rootFsPid,
+    if (schedulerInitSendMessageToPid(rootFilesystemPid,
       FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_WRITE_FILE,
       &filesystemIoCommandArgs, sizeof(filesystemIoCommandArgs)
       ) != processSuccess
@@ -2332,7 +2341,7 @@ int schedFputs(const char *s, FILE *stream) {
 int schedGetFileBlockMetadataFromFile(
   FILE *stream, FileBlockMetadata *metadata
 ) {
-  if (SCHEDULER_STATE->rootFsPid == 0) {
+  if (rootFilesystemPid == 0) {
     return -ENODEV;
   }
 
@@ -2345,7 +2354,7 @@ int schedGetFileBlockMetadataFromFile(
     .metadata = metadata,
   };
 
-  if (schedulerInitSendMessageToPid(SCHEDULER_STATE->rootFsPid,
+  if (schedulerInitSendMessageToPid(rootFilesystemPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_GET_FILE_BLOCK_METADATA,
     &args, sizeof(args)
     ) != processSuccess
@@ -2519,7 +2528,7 @@ int schedulerKillProcessCommandHandler(
           .processId = pid,
         };
         if (schedulerInitSendMessageToPid(
-          SCHEDULER_STATE->consolePid,
+          consolePid,
           CONSOLE_COMMAND_SIGNATURE | CONSOLE_RELEASE_PID_PORT,
           /* data= */ &consoleReleasePidPortArgs,
           /* size= */ sizeof(consoleReleasePidPortArgs)) != processSuccess
@@ -2547,7 +2556,7 @@ int schedulerKillProcessCommandHandler(
           .returnValue = 0,
         };
         if (schedulerInitSendMessageToPid(
-          SCHEDULER_STATE->memoryManagerPid,
+          memoryManagerPid,
           MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_FREE_PROCESS_MEMORY,
           &memoryManagerFreeProcessMemoryArgs,
           sizeof(memoryManagerFreeProcessMemoryArgs)) != processSuccess
@@ -2931,7 +2940,7 @@ int schedulerExecveCommandHandler(
     .returnValue = 0,
   };
   if (schedulerInitSendMessageToPid(
-    SCHEDULER_STATE->memoryManagerPid,
+    memoryManagerPid,
     MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_FREE_PROCESS_MEMORY,
     &memoryManagerFreeProcessMemoryArgs,
     sizeof(memoryManagerFreeProcessMemoryArgs))
@@ -3721,7 +3730,7 @@ void checkForTimeouts(SchedulerState *schedulerState) {
 ///
 /// @return This function returns no value.
 void forceYield(void) {
-  processYieldTo(&allProcesses[SCHEDULER_STATE->schedulerPid - 1]);
+  processYieldTo(&allProcesses[schedulerPid - 1]);
 }
 
 /// @fn int schedulerDumpMemoryAllocations(void)
@@ -3734,7 +3743,7 @@ int schedulerDumpMemoryAllocations(void) {
   int returnValue = 0;
   
   if (schedulerInitSendMessageToPid(
-    SCHEDULER_STATE->memoryManagerPid,
+    memoryManagerPid,
     MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS,
     NULL, 0) != processSuccess
   ) { 
@@ -3751,7 +3760,7 @@ int schedulerDumpMemoryAllocations(void) {
 ///
 /// @return Returns 0 on success, -1 on failure.
 int schedulerDumpOpenFiles(void) {
-  if (SCHEDULER_STATE->rootFsPid == 0) {
+  if (rootFilesystemPid == 0) {
     return -1;
   }
 
@@ -3760,13 +3769,13 @@ int schedulerDumpOpenFiles(void) {
   };
   
   if (schedulerInitSendMessageToPid(
-    SCHEDULER_STATE->rootFsPid,
+    rootFilesystemPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_DUMP_OPEN_FILES,
     /* data= */ &filesystemDumpOpenFilesArgs,
     /* size= */ sizeof(filesystemDumpOpenFilesArgs)) != processSuccess
   ) { 
     logError("Could not send FILESYSTEM_DUMP_OPEN_FILES message "
-      "to root FS process ID %d\n", SCHEDULER_STATE->rootFsPid);
+      "to root FS process ID %d\n", rootFilesystemPid);
   }
   
   return filesystemDumpOpenFilesArgs.returnValue;
@@ -3797,7 +3806,7 @@ void removeProcess(
     .processId = processDescriptor->processId,
   };
   if (schedulerInitSendMessageToPid(
-    SCHEDULER_STATE->consolePid,
+    consolePid,
     CONSOLE_COMMAND_SIGNATURE | CONSOLE_RELEASE_PID_PORT,
     /* data= */ &consoleReleasePidPortArgs,
     /* size= */ sizeof(consoleReleasePidPortArgs)) != processSuccess
@@ -3811,7 +3820,7 @@ void removeProcess(
     .returnValue = 0,
   };
   if (schedulerInitSendMessageToPid(
-    SCHEDULER_STATE->memoryManagerPid,
+    memoryManagerPid,
     MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_FREE_PROCESS_MEMORY,
     &memoryManagerFreeProcessMemoryArgs,
     sizeof(memoryManagerFreeProcessMemoryArgs)) != processSuccess
@@ -4160,17 +4169,6 @@ static const char _loggerPath[] KEEP_IN_FLASH = "/usr/bin/logger";
 /// @brief argv[0] used to launch the logger process.
 static const char _loggerName[] KEEP_IN_FLASH = "logger";
 
-/// @var _couldNotCreateLoggerProcess
-///
-/// @brief Message printed when the logger process itself could not be
-/// created.  Since the logger isn't available yet, this can't be logged via
-/// logError and must be printed directly instead.
-///
-/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
-/// final binary on some targets.
-static const char _couldNotCreateLoggerProcess[] KEEP_IN_FLASH
-  = "Could not create logger process\n";
-
 /// @var _loggerData
 ///
 /// @brief Path to the data file the logger needs to use.  This will be argv[1]
@@ -4306,7 +4304,7 @@ int restartBuiltinShell(ProcessDescriptor *processDescriptor) {
 
   // Set the capabilities for the shell on the console.
   addProcessIpcCapability(
-    &allProcesses[SCHEDULER_STATE->consolePid - 1],
+    &allProcesses[consolePid - 1],
     processDescriptor->processId, CONSOLE_COMMAND_SIGNATURE,
     CONSOLE_RETURNING_INPUT);
 
@@ -4383,7 +4381,7 @@ int restartOverlayShell(ProcessDescriptor *processDescriptor) {
   }
 
   // Set the capabilities for the shell on the console.
-  addProcessIpcCapability(&allProcesses[SCHEDULER_STATE->consolePid - 1],
+  addProcessIpcCapability(&allProcesses[consolePid - 1],
     processDescriptor->processId, CONSOLE_COMMAND_SIGNATURE,
     CONSOLE_RETURNING_INPUT);
 
@@ -4501,7 +4499,7 @@ int restartLogger(ProcessDescriptor *processDescriptor) {
 void runScheduler(void) {
   SCHEDULER_STATE->runSchedulerDepth++;
   if (processStackOverflowed(
-    &allProcesses[SCHEDULER_STATE->schedulerPid - 1])
+    &allProcesses[schedulerPid - 1])
   ) {
     logError("Scheduler stack overflow detected");
     HAL->power.enterMode(HAL_POWER_MODE_OFF);
@@ -4589,7 +4587,7 @@ void runScheduler(void) {
       .returnValue = 0,
     };
     if (schedulerInitSendMessageToPid(
-      SCHEDULER_STATE->memoryManagerPid,
+      memoryManagerPid,
       MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_FREE_PROCESS_MEMORY,
       &memoryManagerFreeProcessMemoryArgs,
       sizeof(memoryManagerFreeProcessMemoryArgs)) != processSuccess
@@ -4783,13 +4781,13 @@ int initializeSchedulerState(
       }
     }
   }
-  schedulerState->schedulerPid = 1;
-  schedulerState->consolePid = 2;
-  schedulerState->memoryManagerPid = 3;
+  schedulerPid = 1;
+  consolePid = 2;
+  memoryManagerPid = 3;
   schedulerState->firstUserPid = 4;
   schedulerState->firstShellPid = 4;
-  schedulerState->rootFsPid = 0; // Invalid PID
-  schedulerState->loggerPid = 0; // Invalid PID
+  rootFilesystemPid = 0; // Invalid PID
+  loggerPid = 0; // Invalid PID
   schedulerState->runSchedulerQueues = runSchedulerQueues;
   SCHEDULER_STATE = schedulerState;
   logDebug("Set scheduler state.\n");
@@ -4803,41 +4801,41 @@ int initializeSchedulerState(
   logDebug("Allocated messages storage.\n");
 
   // Initialize the scheduler in the array of running commands.
-  allProcesses[schedulerState->schedulerPid - 1].mainThread = schedulerThread;
-  allProcesses[schedulerState->schedulerPid - 1].processId
-    = schedulerState->schedulerPid;
-  allProcesses[schedulerState->schedulerPid - 1].name = _initName;
-  allProcesses[schedulerState->schedulerPid - 1].userId = ROOT_USER_ID;
-  allProcesses[schedulerState->schedulerPid - 1].privilegeLevel
+  allProcesses[schedulerPid - 1].mainThread = schedulerThread;
+  allProcesses[schedulerPid - 1].processId
+    = schedulerPid;
+  allProcesses[schedulerPid - 1].name = _initName;
+  allProcesses[schedulerPid - 1].userId = ROOT_USER_ID;
+  allProcesses[schedulerPid - 1].privilegeLevel
     = PRIVILEGE_LEVEL_KERNEL;
-  threadSetContext(allProcesses[schedulerState->schedulerPid - 1].mainThread,
-    &allProcesses[schedulerState->schedulerPid - 1]);
+  threadSetContext(allProcesses[schedulerPid - 1].mainThread,
+    &allProcesses[schedulerPid - 1]);
   logDebug("Configured scheduler process.\n");
 
   // Initialize the global file descriptors.
   // Kernel stdin file descriptor doesn't need an update because they don't
   // receive stdin.  Direct kernel process stdout and stderr to the console.
   standardKernelFileDescriptors[1].outputChannel.pid
-    = schedulerState->consolePid;
+    = consolePid;
   standardKernelFileDescriptors[1].outputChannel.messageType
     = CONSOLE_COMMAND_SIGNATURE | CONSOLE_WRITE_BUFFER;
   standardKernelFileDescriptors[2].outputChannel.pid
-    = schedulerState->consolePid;
+    = consolePid;
   standardKernelFileDescriptors[2].outputChannel.messageType
     = CONSOLE_COMMAND_SIGNATURE | CONSOLE_WRITE_BUFFER;
 
   // Direct the input pipe of user process stdin to the console.  Direcdt the
   // output pipes of user process stdout and stderr to the console as well.
   standardUserFileDescriptors[0].inputChannel.pid
-    = schedulerState->consolePid;
+    = consolePid;
   standardUserFileDescriptors[0].inputChannel.messageType
     = CONSOLE_COMMAND_SIGNATURE | CONSOLE_WAIT_FOR_INPUT;
   standardUserFileDescriptors[1].outputChannel.pid
-    = schedulerState->consolePid;
+    = consolePid;
   standardUserFileDescriptors[1].outputChannel.messageType
     = CONSOLE_COMMAND_SIGNATURE | CONSOLE_WRITE_BUFFER;
   standardUserFileDescriptors[2].outputChannel.pid
-    = schedulerState->consolePid;
+    = consolePid;
   standardUserFileDescriptors[2].outputChannel.messageType
     = CONSOLE_COMMAND_SIGNATURE | CONSOLE_WRITE_BUFFER;
 
@@ -4855,62 +4853,62 @@ int initializeSchedulerState(
 /// @return Returns 0 on success, -errno on failure.
 int setIpcCapabilities(SchedulerState *schedulerState) {
   // Fix the IPC capabilities now that all the core processes are started.
-  if (schedulerState->rootFsPid > 0) {
+  if (rootFilesystemPid > 0) {
     baseSchedulerIpcCapabilities[0].destinationPid
-      = schedulerState->rootFsPid - 1;
+      = rootFilesystemPid - 1;
   }
   baseSchedulerIpcCapabilities[1].destinationPid
-    = schedulerState->loggerPid;
+    = loggerPid;
 
   baseConsoleIpcCapabilities[0].destinationPid
-    = schedulerState->schedulerPid;
+    = schedulerPid;
   baseConsoleIpcCapabilities[1].destinationPid
-    = schedulerState->memoryManagerPid;
+    = memoryManagerPid;
   baseConsoleIpcCapabilities[2].destinationPid
-    = schedulerState->loggerPid;
+    = loggerPid;
 
   baseMemoryManagerIpcCapabilities[0].destinationPid
-    = schedulerState->consolePid;
+    = consolePid;
   baseMemoryManagerIpcCapabilities[1].destinationPid
-    = schedulerState->loggerPid;
+    = loggerPid;
 
   baseFilesystemIpcCapabilities[0].destinationPid
-    = schedulerState->schedulerPid;
+    = schedulerPid;
   baseFilesystemIpcCapabilities[1].destinationPid
-    = schedulerState->consolePid;
+    = consolePid;
   baseFilesystemIpcCapabilities[2].destinationPid
-    = schedulerState->memoryManagerPid;
-  if (schedulerState->rootFsPid > 0) {
+    = memoryManagerPid;
+  if (rootFilesystemPid > 0) {
     baseFilesystemIpcCapabilities[3].destinationPid
-      = schedulerState->rootFsPid - 1;
+      = rootFilesystemPid - 1;
   }
   baseFilesystemIpcCapabilities[4].destinationPid
-    = schedulerState->loggerPid;
+    = loggerPid;
 
   baseLoggerIpcCapabilities[0].destinationPid
-    = schedulerState->schedulerPid;
+    = schedulerPid;
   baseLoggerIpcCapabilities[1].destinationPid
-    = schedulerState->memoryManagerPid;
+    = memoryManagerPid;
   baseLoggerIpcCapabilities[2].destinationPid
-    = schedulerState->rootFsPid;
+    = rootFilesystemPid;
 
   baseSupervisorIpcCapabilities[0].destinationPid
-    = schedulerState->schedulerPid;
+    = schedulerPid;
   baseSupervisorIpcCapabilities[1].destinationPid
-    = schedulerState->consolePid;
+    = consolePid;
   baseSupervisorIpcCapabilities[2].destinationPid
-    = schedulerState->memoryManagerPid;
+    = memoryManagerPid;
   baseSupervisorIpcCapabilities[3].destinationPid
-    = schedulerState->rootFsPid;
+    = rootFilesystemPid;
 
   baseUserIpcCapabilities[0].destinationPid
-    = schedulerState->schedulerPid;
+    = schedulerPid;
   baseUserIpcCapabilities[1].destinationPid
-    = schedulerState->consolePid;
+    = consolePid;
   baseUserIpcCapabilities[2].destinationPid
-    = schedulerState->memoryManagerPid;
+    = memoryManagerPid;
   baseUserIpcCapabilities[3].destinationPid
-    = schedulerState->rootFsPid;
+    = rootFilesystemPid;
 
   // Set the HAL capabilities for all of the processes.
   ProcessDescriptor *processDescriptor = NULL;
@@ -4931,43 +4929,43 @@ int setIpcCapabilities(SchedulerState *schedulerState) {
     }
   }
 
-  allProcesses[schedulerState->schedulerPid - 1].ipcCapabilities
+  allProcesses[schedulerPid - 1].ipcCapabilities
     = baseSchedulerIpcCapabilities;
-  allProcesses[schedulerState->schedulerPid - 1].numIpcCapabilities
+  allProcesses[schedulerPid - 1].numIpcCapabilities
     = sizeof(baseSchedulerIpcCapabilities)
     / sizeof(baseSchedulerIpcCapabilities[0]);
-  allProcesses[schedulerState->schedulerPid - 1].ipcCapabilitiesDynamic
+  allProcesses[schedulerPid - 1].ipcCapabilitiesDynamic
     = false;
-  allProcesses[schedulerState->consolePid - 1].ipcCapabilities
+  allProcesses[consolePid - 1].ipcCapabilities
     = baseConsoleIpcCapabilities;
-  allProcesses[schedulerState->consolePid - 1].numIpcCapabilities
+  allProcesses[consolePid - 1].numIpcCapabilities
     = sizeof(baseConsoleIpcCapabilities)
     / sizeof(baseConsoleIpcCapabilities[0]);
-  allProcesses[schedulerState->consolePid - 1].ipcCapabilitiesDynamic
+  allProcesses[consolePid - 1].ipcCapabilitiesDynamic
     = false;
-  allProcesses[schedulerState->memoryManagerPid - 1].ipcCapabilities
+  allProcesses[memoryManagerPid - 1].ipcCapabilities
     = baseMemoryManagerIpcCapabilities;
-  allProcesses[schedulerState->memoryManagerPid - 1].numIpcCapabilities
+  allProcesses[memoryManagerPid - 1].numIpcCapabilities
     = sizeof(baseMemoryManagerIpcCapabilities)
     / sizeof(baseMemoryManagerIpcCapabilities[0]);
-  allProcesses[schedulerState->memoryManagerPid - 1].ipcCapabilitiesDynamic
+  allProcesses[memoryManagerPid - 1].ipcCapabilitiesDynamic
     = false;
-  if (schedulerState->rootFsPid > 0) {
-    allProcesses[schedulerState->rootFsPid - 1].ipcCapabilities
+  if (rootFilesystemPid > 0) {
+    allProcesses[rootFilesystemPid - 1].ipcCapabilities
       = baseFilesystemIpcCapabilities;
-    allProcesses[schedulerState->rootFsPid - 1].numIpcCapabilities
+    allProcesses[rootFilesystemPid - 1].numIpcCapabilities
       = sizeof(baseFilesystemIpcCapabilities)
       / sizeof(baseFilesystemIpcCapabilities[0]);
-    allProcesses[schedulerState->rootFsPid - 1].ipcCapabilitiesDynamic
+    allProcesses[rootFilesystemPid - 1].ipcCapabilitiesDynamic
       = false;
   }
-  if (schedulerState->loggerPid > 0) {
-    allProcesses[schedulerState->loggerPid - 1].ipcCapabilities
+  if (loggerPid > 0) {
+    allProcesses[loggerPid - 1].ipcCapabilities
       = baseLoggerIpcCapabilities;
-    allProcesses[schedulerState->loggerPid - 1].numIpcCapabilities
+    allProcesses[loggerPid - 1].numIpcCapabilities
       = sizeof(baseLoggerIpcCapabilities)
       / sizeof(baseLoggerIpcCapabilities[0]);
-    allProcesses[schedulerState->loggerPid - 1].ipcCapabilitiesDynamic
+    allProcesses[loggerPid - 1].ipcCapabilitiesDynamic
       = false;
   }
   for (ProcessId ii = schedulerState->firstUserPid; ii <= numProcesses; ii++) {
@@ -5009,12 +5007,12 @@ int initializeProcesses(SchedulerState *schedulerState) {
   // back to that flow again.
   logDebug("Creating console process.\n");
   ProcessDescriptor *processDescriptor
-    = &allProcesses[schedulerState->consolePid - 1];
+    = &allProcesses[consolePid - 1];
   if (processCreate(processDescriptor, runConsole, NULL) != processSuccess) {
     logError("Could not create console process.\n");
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
-  processDescriptor->processId = schedulerState->consolePid;
+  processDescriptor->processId = consolePid;
   processDescriptor->name = _consoleName;
   processDescriptor->userId = ROOT_USER_ID;
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_KERNEL;
@@ -5038,52 +5036,28 @@ int initializeProcesses(SchedulerState *schedulerState) {
   }
 
   // Start the console by calling processResume.
-  processResume(&allProcesses[schedulerState->consolePid - 1], NULL);
+  processResume(&allProcesses[consolePid - 1], NULL);
   logDebug("Started console process.\n");
   // Put the console process on the ready queue.
-  allProcesses[schedulerState->consolePid - 1].readyQueue
+  allProcesses[consolePid - 1].readyQueue
     = schedulerState->readyQueues[PRIVILEGE_LEVEL_KERNEL];
-  processQueuePush(allProcesses[schedulerState->consolePid - 1].readyQueue,
-    &allProcesses[schedulerState->consolePid - 1]);
+  processQueuePush(allProcesses[consolePid - 1].readyQueue,
+    &allProcesses[consolePid - 1]);
 
-  // schedulerState->firstUserPid isn't populated until HAL->initRootStorage
-  // completes, so we need to call that as soon as we can.
-  int rv = 0;
-  HalInitRootStorageFn initRootStorage = NULL;
-  HAL->platform.initRootStorage(&initRootStorage);
-  if (initRootStorage != NULL) {
-    rv = initRootStorage();
+  // Start every process specific to this platform (root storage, logger,
+  // and anything else this platform needs) now that the console is up.
+  // firstUserPid isn't final until this returns, and the shell/dummy-process
+  // setup below depends on it being final, so nothing above this point may
+  // be reordered relative to it.
+  HalStartProcessesFn startProcesses = NULL;
+  HAL->platform.startProcesses(&startProcesses);
+  if (startProcesses != NULL) {
+    int rv = startProcesses();
     if (rv != 0) {
-      logError("initRootStorage returned status %d\n", rv);
+      logError("startProcesses returned status %d\n", rv);
     }
   }
-  logDebug("Initialized root storage\n");
-
-  if (HAL->memory.stringsPresent == false) {
-    do {
-      processDescriptor = &allProcesses[schedulerState->firstUserPid - 1];
-      if (processCreate(processDescriptor, dummyProcess, NULL) != processSuccess) {
-        printString(_couldNotCreateLoggerProcess);
-        break;
-      }
-      schedulerState->loggerPid = schedulerState->firstUserPid;
-      threadSetContext(processDescriptor->mainThread, processDescriptor);
-      processDescriptor->processId = schedulerState->loggerPid;
-      processDescriptor->userId = ROOT_USER_ID;
-      processDescriptor->name = _loggerName;
-      HAL->platform.callFileOverlay(&processDescriptor->callOverlayFunction);
-      // The logger is an executive process, but we're going to start it in
-      // supervisor mode until the system comes up far enough to launch it.
-      // restartLogger will take care of fixing the level once it launches
-      // successfully.
-      processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_SUPERVISOR;
-      processDescriptor->restartFunction = restartLogger;
-      logDebug("Initialized logger process\n");
-
-      schedulerState->firstUserPid++;
-      schedulerState->firstShellPid = schedulerState->firstUserPid;
-    } while(0);
-  }
+  logDebug("Started platform-specific processes\n");
 
   // Get the number of shells we'll be managing.  This needs to be done before
   // assigning processes to their ready queues and before we create the user
@@ -5140,14 +5114,14 @@ int initializeProcesses(SchedulerState *schedulerState) {
 
   // Create the memory manager process.  : THIS MUST BE THE LAST PROCESS
   // CREATED BECAUSE WE WANT TO USE THE ENTIRE REST OF MEMORY FOR IT :
-  processDescriptor = &allProcesses[schedulerState->memoryManagerPid - 1];
+  processDescriptor = &allProcesses[memoryManagerPid - 1];
   if (processCreate(processDescriptor,
     runMemoryManager, NULL) != processSuccess
   ) {
     logError("Could not create memory manager process.\n");
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
-  processDescriptor->processId = schedulerState->memoryManagerPid;
+  processDescriptor->processId = memoryManagerPid;
   processDescriptor->name = _memoryManagerName;
   processDescriptor->userId = ROOT_USER_ID;
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_KERNEL;
@@ -5160,7 +5134,7 @@ int initializeProcesses(SchedulerState *schedulerState) {
   // Assign the console ports to the memory manager.
   for (uint8_t ii = 0; ii < schedulerState->numShells; ii++) {
     if (schedulerAssignPortToPid(
-      ii, schedulerState->memoryManagerPid) != processSuccess
+      ii, memoryManagerPid) != processSuccess
     ) {
       logWarn("Could not assign console port to memory manager.\n");
     }
@@ -5226,12 +5200,12 @@ int logSchedulerDebugInfo(SchedulerState *schedulerState) {
   // allProcesses array is ordered console process, memory manager process, then
   // either the first block device or the first user process.  So, we want the
   // process after the memory manager, which would be the value of
-  // schedulerState->memoryManagerPid since Pids are one-based instead of
+  // memoryManagerPid since Pids are one-based instead of
   // zero-based.
   logDebug("Console stack size = %ld bytes\n",
     (long int) (ABS_DIFF(
-      ((uintptr_t) allProcesses[schedulerState->memoryManagerPid].mainThread),
-      ((uintptr_t) allProcesses[schedulerState->consolePid - 1].mainThread))
+      ((uintptr_t) allProcesses[memoryManagerPid].mainThread),
+      ((uintptr_t) allProcesses[consolePid - 1].mainThread))
       - sizeof(Thread)));
   logDebug("Thread stack size = %ld bytes\n",
     (long int) (ABS_DIFF(

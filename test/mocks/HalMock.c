@@ -212,10 +212,24 @@ static int mockExecCommandFn(va_list args) {
   return 0;
 }
 
-static int mockInitRootStorageFn(va_list args) {
-  HalInitRootStorageFn *returnValue = va_arg(args, HalInitRootStorageFn*);
+/// @fn static int mockDoStartProcesses(void)
+///
+/// @brief Mirrors a real platform's startProcesses: calls whatever
+/// root-storage initializer the test configured (see MockConfig.storage).
+/// stringsPresent is always true for this mock, so a logger is never
+/// started here.
+static int mockDoStartProcesses(void) {
+  int returnValue = 0;
+  if (_initRootStorage != NULL) {
+    returnValue = _initRootStorage();
+  }
+  return returnValue;
+}
+
+static int mockStartProcessesFn(va_list args) {
+  HalStartProcessesFn *returnValue = va_arg(args, HalStartProcessesFn*);
   if (returnValue != NULL) {
-    *returnValue = _initRootStorage;
+    *returnValue = mockDoStartProcesses;
   }
   return 0;
 }
@@ -433,9 +447,9 @@ int halMockInit(const HalMockConfig *config, jmp_buf *powerReturn) {
 
   _platformFunctions[HAL_PLATFORM_CALL_FILE_OVERLAY]       = mockCallFileOverlayFn;
   _platformFunctions[HAL_PLATFORM_EXEC_COMMAND]            = mockExecCommandFn;
-  _platformFunctions[HAL_PLATFORM_INIT_ROOT_STORAGE]       = mockInitRootStorageFn;
   _platformFunctions[HAL_PLATFORM_RESTART_ROOT_FILESYSTEM] = mockRestartRootFilesystemFn;
   _platformFunctions[HAL_PLATFORM_RESTART_SHELL]           = mockRestartShellFn;
+  _platformFunctions[HAL_PLATFORM_START_PROCESSES]         = mockStartProcessesFn;
 
   _memoryFunctions[HAL_MEMORY_OVERLAY_MAP]           = mockOverlayMapFn;
   _memoryFunctions[HAL_MEMORY_CONTIGUOUS_FILESYSTEM] = mockContiguousFilesystemFn;

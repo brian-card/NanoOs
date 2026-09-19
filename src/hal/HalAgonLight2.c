@@ -382,6 +382,13 @@ static ProcessMessage _logMessages[NUM_LOG_ENTRIES];
 /// metadata for all processes on the system, including the scheduler.
 static ProcessDescriptor _allProcesses[NUM_PROCESSES];
 
+/// @var _namedProcesses
+///
+/// @brief This platform's storage for HalCommon.c's named-process lookup
+/// table.  Sized for the processes agonLight2DoStartProcesses can register
+/// (filesystem, logger).
+static NamedProcessEntry _namedProcesses[2];
+
 /// @def _numBlockDevices
 ///
 /// @brief Number of BlockDevices that can be managed by the HAL.
@@ -1494,10 +1501,28 @@ int agonLight2ExecCommand(va_list args) {
   return 0;
 }
 
-int agonLight2InitRootStorage(va_list args) {
-  HalInitRootStorageFn *returnValue = va_arg(args, HalInitRootStorageFn*);
+/// @fn static int agonLight2DoStartProcesses(void)
+///
+/// @brief Start every process specific to the AgonLight2 platform: the
+/// contiguous root filesystem, plus the logger if this build's .rodata was
+/// stripped.
+///
+/// @return Returns 0 on success, -errno on failure.
+static int agonLight2DoStartProcesses(void) {
+  int returnValue = halCommonInitRootFilesystem();
+  if (HAL->memory.stringsPresent == false) {
+    int loggerStatus = halCommonInitLogger();
+    if ((returnValue == 0) && (loggerStatus != 0)) {
+      returnValue = loggerStatus;
+    }
+  }
+  return returnValue;
+}
+
+int agonLight2StartProcesses(va_list args) {
+  HalStartProcessesFn *returnValue = va_arg(args, HalStartProcessesFn*);
   if (returnValue != NULL) {
-    *returnValue = halCommonInitRootFilesystem;
+    *returnValue = agonLight2DoStartProcesses;
   }
   return 0;
 }
@@ -1626,9 +1651,9 @@ int agonLight2ProcessStorage(va_list args) {
 static HalFunction agonLight2PlatformFunctions[HAL_PLATFORM_NUM_FNS] = {
   [HAL_PLATFORM_CALL_FILE_OVERLAY]       = agonLight2CallFileOverlay,
   [HAL_PLATFORM_EXEC_COMMAND]            = agonLight2ExecCommand,
-  [HAL_PLATFORM_INIT_ROOT_STORAGE]       = agonLight2InitRootStorage,
   [HAL_PLATFORM_RESTART_ROOT_FILESYSTEM] = agonLight2RestartRootFilesystem,
   [HAL_PLATFORM_RESTART_SHELL]           = agonLight2RestartShell,
+  [HAL_PLATFORM_START_PROCESSES]         = agonLight2StartProcesses,
 };
 
 static HalFunction agonLight2MemoryFunctions[HAL_MEMORY_NUM_FNS] = {
@@ -1768,6 +1793,11 @@ int halAgonLight2Init(void) {
   halImpl.memory.stringsPresent = true;
 #endif // NANO_OS_STRINGS_STRIPPED
   memset((StaticLogs*) STATIC_LOGS_ADDRESS, 0, sizeof(StaticLogs));
+
+  memset(_namedProcesses, 0, sizeof(_namedProcesses));
+  namedProcessTable = _namedProcesses;
+  namedProcessTableCapacity
+    = sizeof(_namedProcesses) / sizeof(_namedProcesses[0]);
 
   memset(_allProcesses, 0, sizeof(_allProcesses));
   halImpl.memory.numProcesses        = NUM_PROCESSES;

@@ -170,6 +170,10 @@ int setConsoleEcho(bool desiredEchoState);
 // Exported processes
 void* runConsole(void *args);
 
+// The well-known ProcessId of the console.  Set once, directly, when the
+// console process is created; see Console.c for details.
+extern ProcessId consolePid;
+
 int printConsoleChar(char message);
 int printConsoleUChar(unsigned char message);
 int printConsoleInt(int message);

@@ -247,6 +247,7 @@ int schedulerReplaceOverlay(const void *overlayNamespace,
   FileBlockMetadata *overlay);
 int restartBuiltinShell(ProcessDescriptor *processDescriptor);
 int restartOverlayShell(ProcessDescriptor *processDescriptor);
+int restartLogger(ProcessDescriptor *processDescriptor);
 
 // Coroutine setup functions used in the loader.
 void* dummyProcess(void *args);
@@ -258,6 +259,9 @@ int restartShell(ProcessDescriptor *processDescriptor);
 
 // Thread that will be used to represent the scheduler.
 extern Thread *schedulerThread;
+
+// The well-known ProcessId of the scheduler.  See Scheduler.c for details.
+extern ProcessId schedulerPid;
 
 #ifdef __cplusplus
 } // extern "C"

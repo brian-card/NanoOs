@@ -80,9 +80,9 @@ KERNEL_SRCS := \
     Scheduler SdCard SdCardSpi
 
 USER_SRCS := \
-    NanoOsApi NanoOsErrno NanoOsFcntl NanoOsHardware NanoOsLibC NanoOsPwd \
-    NanoOsSched NanoOsSignal NanoOsSpawn NanoOsStdio NanoOsSysUtsname \
-    NanoOsTermios NanoOsUnistd
+    NanoOsApi NanoOsErrno NanoOsFcntl NanoOsGrp NanoOsHardware NanoOsLibC \
+    NanoOsPwd NanoOsSched NanoOsSignal NanoOsSpawn NanoOsStdio \
+    NanoOsSysUtsname NanoOsTermios NanoOsTime NanoOsUnistd
 
 # HAL: common wiring + the POSIX low-level implementation.  HalMock reuses
 # halPosixImplInit() (overlay-RAM mapping, heap sizing) and the posix

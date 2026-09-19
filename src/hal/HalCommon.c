@@ -137,10 +137,10 @@ int callHal(HalSubsystem subsystem, uint32_t function, ...) {
 // ---------------------------------------------------------------------------
 static int halPlatformCallFileOverlay(HalCallFileOverlayFn *returnValue);
 static int halPlatformExecCommand(HalExecCommandFn *returnValue);
-static int halPlatformInitRootStorage(HalInitRootStorageFn *returnValue);
 static int halPlatformRestartRootFilesystem(
   HalRestartRootFilesystemFn *returnValue);
 static int halPlatformRestartShell(HalRestartShellFn *returnValue);
+static int halPlatformStartProcesses(HalStartProcessesFn *returnValue);
 
 static int halMemoryProcessStackSize(bool debug, size_t *returnValue);
 static int halMemoryMemoryManagerStackSize(bool debug, size_t *returnValue);
@@ -221,9 +221,9 @@ Hal halImpl = {
   .platform = {
     .callFileOverlay       = halPlatformCallFileOverlay,
     .execCommand           = halPlatformExecCommand,
-    .initRootStorage       = halPlatformInitRootStorage,
     .restartRootFilesystem = halPlatformRestartRootFilesystem,
     .restartShell          = halPlatformRestartShell,
+    .startProcesses        = halPlatformStartProcesses,
   },
   .memory = {
     .processStackSize        = halMemoryProcessStackSize,
@@ -309,6 +309,71 @@ Hal halImpl = {
 ///
 /// @brief Global, read-only pointer to the active, root HAL instance.
 const Hal *HAL = &halImpl;
+
+/// @var namedProcessTable
+///
+/// @brief See the declaration in HalCommon.h.  Defaults to NULL; a platform
+/// that wants named-process lookup points this at its own storage.
+NamedProcessEntry *namedProcessTable = NULL;
+
+/// @var namedProcessTableCapacity
+///
+/// @brief See the declaration in HalCommon.h.
+uint8_t namedProcessTableCapacity = 0;
+
+/// @fn int findProcessByName(const char *name, ProcessId *returnValue)
+///
+/// @brief Look up a process's PID by the name it was registered under.
+///
+/// @param name The name to search for.
+/// @param returnValue A pointer to a ProcessId that will hold the result on
+///   success.
+///
+/// @return Returns 0 on success, -errno on failure.
+int findProcessByName(const char *name, ProcessId *returnValue) {
+  if ((name == NULL) || (returnValue == NULL)) {
+    return -EINVAL;
+  }
+
+  for (uint8_t ii = 0; ii < namedProcessTableCapacity; ii++) {
+    if (namedProcessTable[ii].name == NULL) {
+      break;
+    }
+    if (strcmp(namedProcessTable[ii].name, name) == 0) {
+      *returnValue = namedProcessTable[ii].pid;
+      return 0;
+    }
+  }
+
+  return -ENOENT;
+}
+
+/// @fn int registerProcessName(const char *name, ProcessId pid)
+///
+/// @brief Register a process's PID under a name, so it can later be found
+/// with findProcessByName.
+///
+/// @param name The name to register.  Only its pointer is stored, so it
+///   must remain valid for the life of the system (a KEEP_IN_FLASH string
+///   literal, as used elsewhere in the HAL, satisfies this).
+/// @param pid The ProcessId to associate with name.
+///
+/// @return Returns 0 on success, -errno on failure.
+int registerProcessName(const char *name, ProcessId pid) {
+  if (name == NULL) {
+    return -EINVAL;
+  }
+
+  for (uint8_t ii = 0; ii < namedProcessTableCapacity; ii++) {
+    if (namedProcessTable[ii].name == NULL) {
+      namedProcessTable[ii].name = name;
+      namedProcessTable[ii].pid = pid;
+      return 0;
+    }
+  }
+
+  return -ENOSPC;
+}
 
 // ---------------------------------------------------------------------------
 // Typed wrapper implementations — each calls callHal with the subsystem and
@@ -405,10 +470,6 @@ static int halPlatformExecCommand(HalExecCommandFn *returnValue) {
   return callHal(HAL_PLATFORM, HAL_PLATFORM_EXEC_COMMAND, returnValue);
 }
 
-static int halPlatformInitRootStorage(HalInitRootStorageFn *returnValue) {
-  return callHal(HAL_PLATFORM, HAL_PLATFORM_INIT_ROOT_STORAGE, returnValue);
-}
-
 static int halPlatformRestartRootFilesystem(
   HalRestartRootFilesystemFn *returnValue
 ) {
@@ -418,6 +479,10 @@ static int halPlatformRestartRootFilesystem(
 
 static int halPlatformRestartShell(HalRestartShellFn *returnValue) {
   return callHal(HAL_PLATFORM, HAL_PLATFORM_RESTART_SHELL, returnValue);
+}
+
+static int halPlatformStartProcesses(HalStartProcessesFn *returnValue) {
+  return callHal(HAL_PLATFORM, HAL_PLATFORM_START_PROCESSES, returnValue);
 }
 
 static int halUartInit(void) {
@@ -580,6 +645,22 @@ static int halBlockDeviceRestart(ProcessDescriptor *processDescriptor) {
 // Common HAL helper implementations.
 // ---------------------------------------------------------------------------
 
+/// @fn ProcessId reserveProcessSlot(void)
+///
+/// @brief Reserve the next available process slot, advancing the
+/// scheduler's firstUserPid/firstShellPid bookkeeping accordingly.  Shared
+/// by every platform-specific process the HAL starts during scheduler
+/// bring-up (SD card, root filesystem, logger, and future ones) so that
+/// slot allocation isn't duplicated ad hoc at each call site.
+///
+/// @return Returns the ProcessId of the reserved slot.
+ProcessId reserveProcessSlot(void) {
+  ProcessId pid = SCHEDULER_STATE->firstUserPid;
+  SCHEDULER_STATE->firstUserPid = pid + 1;
+  SCHEDULER_STATE->firstShellPid = SCHEDULER_STATE->firstUserPid;
+  return pid;
+}
+
 /// @var _sdCardName
 ///
 /// @brief Process name assigned to the SD card process.
@@ -602,9 +683,11 @@ static const char _sdCardName[] KEEP_IN_FLASH = "SD card";
 BlockDevice* halCommonInitRootSdSpiStorage(
   SdCardSpiArgs *sdCardSpiArgs
 ) {
-  // Create the SD card process.
-  ProcessDescriptor *processDescriptor
-    = &allProcesses[SCHEDULER_STATE->firstUserPid - 1];
+  // Create the SD card process.  Its PID is intentionally not exposed as a
+  // well-known global: nothing outside this function and the BlockDevice it
+  // returns needs to address it directly.
+  ProcessId sdCardPid = reserveProcessSlot();
+  ProcessDescriptor *processDescriptor = &allProcesses[sdCardPid - 1];
   if (processCreate(
     processDescriptor, runSdCardSpi, sdCardSpiArgs)
     != processSuccess
@@ -613,17 +696,15 @@ BlockDevice* halCommonInitRootSdSpiStorage(
     return NULL;
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
-  processDescriptor->processId = SCHEDULER_STATE->firstUserPid;
+  processDescriptor->processId = sdCardPid;
   processDescriptor->name = _sdCardName;
   processDescriptor->userId = ROOT_USER_ID;
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_KERNEL;
   processDescriptor->restartFunction = HAL->blockDevice.restart;
   processDescriptor->restartArgs = (void*)(intptr_t)0;
   BlockDevice *sdDevice = (BlockDevice*) coroutineResume(
-    allProcesses[SCHEDULER_STATE->firstUserPid - 1].mainThread, NULL);
+    processDescriptor->mainThread, NULL);
   sdDevice->partitionNumber = 1;
-  SCHEDULER_STATE->firstUserPid++;
-  SCHEDULER_STATE->firstShellPid = SCHEDULER_STATE->firstUserPid;
 
   return sdDevice;
 }
@@ -733,15 +814,15 @@ int halCommonInitRootFilesystem(void) {
   }
 
   // Allocate the filesystem process.
-  SCHEDULER_STATE->rootFsPid = SCHEDULER_STATE->firstUserPid;
+  rootFilesystemPid = reserveProcessSlot();
   ProcessDescriptor *processDescriptor
-    = &allProcesses[SCHEDULER_STATE->rootFsPid - 1];
+    = &allProcesses[rootFilesystemPid - 1];
   if (processCreate(processDescriptor, dummyProcess, NULL) != processSuccess) {
     logError("Could not allocate filesystem process\n");
     return -ENOMEM;
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
-  processDescriptor->processId = SCHEDULER_STATE->rootFsPid;
+  processDescriptor->processId = rootFilesystemPid;
   processDescriptor->name = _filesystemName;
   processDescriptor->userId = ROOT_USER_ID;
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
@@ -749,9 +830,6 @@ int halCommonInitRootFilesystem(void) {
   halImpl.platform.restartRootFilesystem(&restartRootFilesystem);
   processDescriptor->restartFunction = restartRootFilesystem;
   // DO NOT resume the process yet.  Let the scheduler take care of that.
-
-  SCHEDULER_STATE->firstUserPid = SCHEDULER_STATE->rootFsPid + 1;
-  SCHEDULER_STATE->firstShellPid = SCHEDULER_STATE->firstUserPid;
 
   // The filesystem runs as an overlay, which increases the depth of the call
   // stack.  Double the stack size for it.
@@ -765,6 +843,65 @@ int halCommonInitRootFilesystem(void) {
   ) {
     logError("Could not set filesystem process's stack size.\n");
   }
+
+  registerProcessName(_filesystemName, rootFilesystemPid);
+
+  return 0;
+}
+
+/// @var _loggerName
+///
+/// @brief Process name assigned to the logger process.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _loggerName[] KEEP_IN_FLASH = "logger";
+
+/// @var _couldNotCreateLoggerProcess
+///
+/// @brief Message printed when the logger process itself could not be
+/// created.  Since the logger isn't available yet, this can't be logged via
+/// logError and must be printed directly instead.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _couldNotCreateLoggerProcess[] KEEP_IN_FLASH
+  = "Could not create logger process\n";
+
+/// @fn int halCommonInitLogger(void)
+///
+/// @brief Common initialization for the logger process.  Only meant to be
+/// called by a platform's startProcesses implementation, and only when
+/// HAL->memory.stringsPresent is false: platforms whose OS image keeps its
+/// .rodata can format log messages immediately and have no need for a
+/// separate logger process.
+///
+/// @return Returns 0 on success, -errno on failure.
+int halCommonInitLogger(void) {
+  if (SCHEDULER_STATE == NULL) {
+    return -EBUSY;
+  }
+
+  loggerPid = reserveProcessSlot();
+  ProcessDescriptor *processDescriptor = &allProcesses[loggerPid - 1];
+  if (processCreate(processDescriptor, dummyProcess, NULL) != processSuccess) {
+    printString(_couldNotCreateLoggerProcess);
+    loggerPid = 0; // Invalid PID
+    return -ENOMEM;
+  }
+  threadSetContext(processDescriptor->mainThread, processDescriptor);
+  processDescriptor->processId = loggerPid;
+  processDescriptor->userId = ROOT_USER_ID;
+  processDescriptor->name = _loggerName;
+  HAL->platform.callFileOverlay(&processDescriptor->callOverlayFunction);
+  // The logger is an executive process, but we're going to start it in
+  // supervisor mode until the system comes up far enough to launch it.
+  // restartLogger will take care of fixing the level once it launches
+  // successfully.
+  processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_SUPERVISOR;
+  processDescriptor->restartFunction = restartLogger;
+  registerProcessName(_loggerName, loggerPid);
+  logDebug("Initialized logger process\n");
 
   return 0;
 }

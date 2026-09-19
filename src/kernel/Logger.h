@@ -260,6 +260,11 @@ int logMessage(LogLevel logLevel,
   const char *fileName, const char *functionName, int lineNumber,
   const char *format, ...);
 
+// The well-known ProcessId of the logger, or 0 if none is running.  Set
+// once, directly, when the logger process is created; see HalCommon.c's
+// halCommonInitLogger for details.
+extern ProcessId loggerPid;
+
 #ifdef __cplusplus
 } // extern "C"
 #endif

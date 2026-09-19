@@ -138,9 +138,9 @@ int halPosixImplInit(jmp_buf resetBuffer,
 
 static int posixCallFileOverlay(va_list args);
 static int posixExecCommand(va_list args);
-static int posixInitRootStorage(va_list args);
 static int posixRestartRootFilesystem(va_list args);
 static int posixRestartShell(va_list args);
+static int posixStartProcesses(va_list args);
 
 static int posixOverlayMap(va_list args);
 static int posixContiguousFilesystem(va_list args);
@@ -326,6 +326,13 @@ static ProcessMessage _logMessages[NUM_LOG_ENTRIES];
 /// metadata for all processes on the system, including the scheduler.
 static ProcessDescriptor _allProcesses[NUM_PROCESSES];
 
+/// @var _namedProcesses
+///
+/// @brief This platform's storage for HalCommon.c's named-process lookup
+/// table.  Sized for the processes posixDoStartProcesses can register
+/// (filesystem, logger).
+static NamedProcessEntry _namedProcesses[2];
+
 /// @var _sdCardName
 ///
 /// @brief Process name assigned to the SD card process.
@@ -443,10 +450,28 @@ static int posixExecCommand(va_list args) {
   return 0;
 }
 
-static int posixInitRootStorage(va_list args) {
-  HalInitRootStorageFn *returnValue = va_arg(args, HalInitRootStorageFn*);
+/// @fn static int posixDoStartProcesses(void)
+///
+/// @brief Start every process specific to the POSIX platform: the root
+/// filesystem (and, transitively, the SD card process), plus the logger if
+/// this build's .rodata was stripped.
+///
+/// @return Returns 0 on success, -errno on failure.
+static int posixDoStartProcesses(void) {
+  int returnValue = halCommonInitRootFilesystem();
+  if (HAL->memory.stringsPresent == false) {
+    int loggerStatus = halCommonInitLogger();
+    if ((returnValue == 0) && (loggerStatus != 0)) {
+      returnValue = loggerStatus;
+    }
+  }
+  return returnValue;
+}
+
+static int posixStartProcesses(va_list args) {
+  HalStartProcessesFn *returnValue = va_arg(args, HalStartProcessesFn*);
   if (returnValue != NULL) {
-    *returnValue = halCommonInitRootFilesystem;
+    *returnValue = posixDoStartProcesses;
   }
   return 0;
 }
@@ -577,9 +602,9 @@ static int posixProcessStorage(va_list args) {
 static HalFunction posixPlatformFunctions[HAL_PLATFORM_NUM_FNS] = {
   [HAL_PLATFORM_CALL_FILE_OVERLAY]       = posixCallFileOverlay,
   [HAL_PLATFORM_EXEC_COMMAND]            = posixExecCommand,
-  [HAL_PLATFORM_INIT_ROOT_STORAGE]       = posixInitRootStorage,
   [HAL_PLATFORM_RESTART_ROOT_FILESYSTEM] = posixRestartRootFilesystem,
   [HAL_PLATFORM_RESTART_SHELL]           = posixRestartShell,
+  [HAL_PLATFORM_START_PROCESSES]         = posixStartProcesses,
 };
 
 static HalFunction posixMemoryFunctions[HAL_MEMORY_NUM_FNS] = {
@@ -683,6 +708,11 @@ int halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
 
   halImpl.blockDevice.numSupported = _numBlockDevices;
   halImpl.blockDevice.online       = posixBlockDevicesOnline;
+
+  memset(_namedProcesses, 0, sizeof(_namedProcesses));
+  namedProcessTable = _namedProcesses;
+  namedProcessTableCapacity
+    = sizeof(_namedProcesses) / sizeof(_namedProcesses[0]);
 
   halImpl.memory.logBufferSize  = sizeof(_logBuffer);
   halImpl.memory.numLogEntries  = NUM_LOG_ENTRIES;

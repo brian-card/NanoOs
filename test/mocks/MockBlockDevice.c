@@ -5,7 +5,7 @@
 /// @brief             Block-device layer for the mock HAL.
 ///
 /// Currently only MOCK_STORAGE_NONE is implemented: the kernel boots with no
-/// root filesystem (SCHEDULER_STATE->rootFsPid == 0, which schedFopen and
+/// root filesystem (rootFilesystemPid == 0, which schedFopen and
 /// friends already handle by returning NULL/ENOENT).  MOCK_STORAGE_FILE - a
 /// POSIX SD-card process backed by a real FAT32 image, reusing the same
 /// runSdCardPosix process buildsim uses - is stubbed and will be filled in

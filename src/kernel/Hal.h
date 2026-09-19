@@ -117,9 +117,9 @@ typedef enum HalSubsystem {
 typedef enum HalPlatformFunction {
   HAL_PLATFORM_CALL_FILE_OVERLAY,
   HAL_PLATFORM_EXEC_COMMAND,
-  HAL_PLATFORM_INIT_ROOT_STORAGE,
   HAL_PLATFORM_RESTART_ROOT_FILESYSTEM,
   HAL_PLATFORM_RESTART_SHELL,
+  HAL_PLATFORM_START_PROCESSES,
   HAL_PLATFORM_NUM_FNS,
 } HalPlatformFunction;
 
@@ -255,7 +255,11 @@ typedef void* (*HalExecCommandFn)(void *args);
 
 /// @typedef HalInitRootStorageFn
 ///
-/// @brief Signature of a platform's concrete initRootStorage implementation.
+/// @brief Signature of a function that initializes the processes that
+/// operate a board's root storage system.  Not part of the HalPlatform
+/// dispatch table itself (see HalStartProcessesFn/startProcesses below);
+/// used by boards, such as the AVR ones, that plug their own root-storage
+/// initializer into a shared platform implementation at board-init time.
 typedef int (*HalInitRootStorageFn)(void);
 
 /// @typedef HalRestartRootFilesystemFn
@@ -269,6 +273,11 @@ typedef int (*HalRestartRootFilesystemFn)(
 ///
 /// @brief Signature of a platform's concrete restartShell implementation.
 typedef int (*HalRestartShellFn)(ProcessDescriptor *processDescriptor);
+
+/// @typedef HalStartProcessesFn
+///
+/// @brief Signature of a platform's concrete startProcesses implementation.
+typedef int (*HalStartProcessesFn)(void);
 
 /// @struct HalCapability
 ///
@@ -315,18 +324,6 @@ typedef struct HalPlatform {
   /// @return Returns 0 on success, -errno on failure.
   int (*execCommand)(HalExecCommandFn *returnValue);
 
-  /// @fn int initRootStorage(HalInitRootStorageFn *returnValue)
-  ///
-  /// @brief Get the platform-specific function that initializes the processes
-  /// that operate the root storage system.
-  ///
-  /// @param returnValue A pointer to a HalInitRootStorageFn that will hold the
-  ///   platform's implementation on success, NULL if the platform has no root
-  ///   storage to initialize.
-  ///
-  /// @return Returns 0 on success, -errno on failure.
-  int (*initRootStorage)(HalInitRootStorageFn *returnValue);
-
   /// @fn int restartRootFilesystem(HalRestartRootFilesystemFn *returnValue)
   ///
   /// @brief Get the platform-specific function that starts or restarts the
@@ -350,6 +347,19 @@ typedef struct HalPlatform {
   ///
   /// @return Returns 0 on success, -errno on failure.
   int (*restartShell)(HalRestartShellFn *returnValue);
+
+  /// @fn int startProcesses(HalStartProcessesFn *returnValue)
+  ///
+  /// @brief Get the platform-specific function that starts all of the
+  /// platform's own processes (root storage, logger, and anything else
+  /// specific to this platform) during scheduler startup.
+  ///
+  /// @param returnValue A pointer to a HalStartProcessesFn that will hold
+  ///   the platform's implementation on success, NULL if the platform has
+  ///   no platform-specific processes to start.
+  ///
+  /// @return Returns 0 on success, -errno on failure.
+  int (*startProcesses)(HalStartProcessesFn *returnValue);
 } HalPlatform;
 
 typedef struct HalMemory {

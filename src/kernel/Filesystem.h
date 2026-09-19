@@ -46,6 +46,7 @@
 
 typedef struct NanoOsFile FILE;
 typedef struct msg_t ProcessMessage;
+typedef uint8_t ProcessId;
 
 /// @typedef DIR
 ///
@@ -565,6 +566,11 @@ void* runFilesystem(void *args);
 ///
 /// @return Returns 0 on success, -1 and sets the value of errno on failure.
 int fat32Format(const char *volumeLabel, uint32_t clusterSize);
+
+// The well-known ProcessId of the root filesystem, or 0 if none is running.
+// Set once, directly, when the filesystem process is created; see
+// HalCommon.c's halCommonInitRootFilesystem for details.
+extern ProcessId rootFilesystemPid;
 
 #ifdef __cplusplus
 } // extern "C"

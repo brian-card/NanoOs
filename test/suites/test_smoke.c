@@ -12,6 +12,7 @@
 
 // NanoOs kernel headers - safe to include in a suite TU (the simulator does
 // the same in NanoOsSim.c).
+#include "kernel/Console.h"
 #include "kernel/Hal.h"
 #include "kernel/NanoOs.h"
 #include "kernel/Processes.h"
@@ -39,9 +40,9 @@ NANO_OS_TEST(framework, assertions_pass_on_truth) {
 
 NANO_OS_KERNEL_TEST(boot, scheduler_state_is_live) {
   NANO_OS_ASSERT_NOT_NULL(SCHEDULER_STATE);
-  NANO_OS_ASSERT_EQ_INT(1, SCHEDULER_STATE->schedulerPid);
-  NANO_OS_ASSERT_EQ_INT(2, SCHEDULER_STATE->consolePid);
-  NANO_OS_ASSERT_EQ_INT(3, SCHEDULER_STATE->memoryManagerPid);
+  NANO_OS_ASSERT_EQ_INT(1, schedulerPid);
+  NANO_OS_ASSERT_EQ_INT(2, consolePid);
+  NANO_OS_ASSERT_EQ_INT(3, memoryManagerPid);
 }
 
 NANO_OS_KERNEL_TEST(boot, body_runs_as_a_real_process) {

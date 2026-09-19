@@ -43,6 +43,13 @@
 #include "../user/NanoOsErrno.h"
 #include "../user/NanoOsStdio.h"
 
+/// @var memoryManagerPid
+///
+/// @brief The well-known ProcessId of the memory manager.  Set once,
+/// directly, when the memory manager process is created in
+/// initializeProcesses.
+ProcessId memoryManagerPid = 0;
+
 /****************** Begin Custom Memory Management Functions ******************/
 
 /// @def isDynamicPointer
@@ -653,7 +660,7 @@ int memoryManagerReallocCommandHandler(
     reallocMessage->size = sizeOfMemory(clientReturnValue);
   } else if ((reallocMessage->size > 0)
     && (processPid(processMessageFrom(incoming))
-      != SCHEDULER_STATE->schedulerPid
+      != schedulerPid
     )
   ) {
     logError("Failed to allocate %ld bytes for process %ld\n",
@@ -670,11 +677,11 @@ int memoryManagerReallocCommandHandler(
       processMessageInit(filesystemCommand,
         FILESYSTEM_DUMP_OPEN_FILES, NULL, 0, true);
       if (sendProcessMessageToPid(
-        SCHEDULER_STATE->rootFsPid,
+        rootFilesystemPid,
         filesystemCommand) != processSuccess
       ) {
         logError("Could not send FILESYSTEM_DUMP_OPEN_FILES "
-          "message to root FS process %d\n", SCHEDULER_STATE->rootFsPid);
+          "message to root FS process %d\n", rootFilesystemPid);
       }
       processMessageRelease(filesystemCommand);
     } while (0);
@@ -776,7 +783,7 @@ int memoryManagerFreeProcessMemoryCommandHandler(
   MemoryManagerFreeProcessMemoryArgs *memoryManagerFreeProcessMemoryArgs
     = (MemoryManagerFreeProcessMemoryArgs*) processMessageData(incoming);
   if (processPid(processMessageFrom(incoming))
-    == SCHEDULER_STATE->schedulerPid
+    == schedulerPid
   ) {
     localFreeProcessMemory(memoryManagerState,
       memoryManagerFreeProcessMemoryArgs->pid,
@@ -826,7 +833,7 @@ int memoryManagerAssignMemoryCommandHandler(
   int returnValue = 0;
   
   if (processPid(processMessageFrom(incoming))
-    == SCHEDULER_STATE->schedulerPid
+    == schedulerPid
   ) {
     AssignMemoryArgs *assignMemoryArgs
       = (AssignMemoryArgs*) processMessageData(incoming);
@@ -1287,7 +1294,7 @@ size_t getFreeMemory(void) {
   };
 
   ProcessMessage *sent
-    = initSendProcessMessageToPid(SCHEDULER_STATE->memoryManagerPid,
+    = initSendProcessMessageToPid(memoryManagerPid,
     MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_GET_FREE_MEMORY,
     &memoryManagerGetFreeMemoryArgs,
     sizeof(memoryManagerGetFreeMemoryArgs), true);
@@ -1318,7 +1325,7 @@ void* memoryManagerSendReallocMessage(void *ptr, size_t size) {
   reallocMessage.size = size;
   
   ProcessMessage *sent
-    = initSendProcessMessageToPid(SCHEDULER_STATE->memoryManagerPid,
+    = initSendProcessMessageToPid(memoryManagerPid,
     MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_REALLOC,
     &reallocMessage, sizeof(reallocMessage), true);
   
@@ -1355,7 +1362,7 @@ void memoryManagerFree(void *ptr) {
     .ptr = ptr,
   };
   ProcessMessage *processMessage = initSendProcessMessageToPid(
-    SCHEDULER_STATE->memoryManagerPid,
+    memoryManagerPid,
     MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_FREE,
     &memoryManagerFreeArgs, sizeof(memoryManagerFreeArgs), false);
   if (processMessage == NULL) {
@@ -1424,7 +1431,7 @@ void* memoryManagerCalloc(size_t nmemb, size_t size) {
 /// @return Returns 0 on success, -errno on failure.
 int dumpMemoryAllocations(void) {
   ProcessMessage *processMessage = initSendProcessMessageToPid(
-    SCHEDULER_STATE->memoryManagerPid,
+    memoryManagerPid,
     MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS,
     NULL, 0, /* waiting= */ true);
   if (processMessage == NULL) { 

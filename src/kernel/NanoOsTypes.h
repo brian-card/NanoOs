@@ -330,11 +330,6 @@ typedef struct ProcessQueue {
 ///   running.
 /// @param preemptionTimer The index of the timer used for preemptive
 ///   multitasking.  If this is < 0 then the processes run in cooperative mode.
-/// @param schedulerPid The ProcessId of the scheduler.
-/// @param consolePid The ProcessId of the console.
-/// @param memoryManagerPid The ProcessId of the memory manager.
-/// @param rootFsPid The ProcessId of the root filesystem, if any.
-/// @param loggerPid The ProcessId of the logger, if any.
 /// @param firstUserPid The ProcessId of the first user process.
 /// @param firstShellPid The ProcessId of the first shell process.
 /// @param runSchedulerQueues Function pointer to the runSchedulerQueues
@@ -352,11 +347,6 @@ typedef struct SchedulerState {
   char               *hostname;
   uint8_t             numShells;
   int                 preemptionTimer;
-  ProcessId           schedulerPid;
-  ProcessId           consolePid;
-  ProcessId           memoryManagerPid;
-  ProcessId           rootFsPid;
-  ProcessId           loggerPid;
   ProcessId           firstUserPid;
   ProcessId           firstShellPid;
   void              (*runSchedulerQueues)(PrivilegeLevel);
