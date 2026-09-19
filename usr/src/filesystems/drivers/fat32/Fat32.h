@@ -37,22 +37,6 @@
 #define FAT32_H
 
 #include "../../include/FilesystemUtils.h"
-#ifdef NANO_OS_KERNEL_BUILD
-// The kernel-linked build shares one binary with NanoOsTime.c, so it can
-// call straight into the nanoOs* functions behind timezone/dstInEffect
-// (see src/kernel/time.h, which is nothing more than a symlink to
-// src/user/NanoOsTime.h).
-#include "../../../../../src/kernel/time.h"
-#else
-// The freestanding filesystem-overlay build (see
-// usr/src/filesystems/overlay/slot.mk) is never linked against
-// NanoOsTime.c, so calling those functions directly here would leave
-// nanoOsTimezone/nanoOsDstInEffect as unresolved symbols. Route through
-// usr/include/time.h instead, which reaches the same state via the osApi
-// jump table the overlay loader populates, exactly like every other
-// overlay does.
-#include "../../../../include/time.h"
-#endif // NANO_OS_KERNEL_BUILD
 #include "stdbool.h"
 #include "stddef.h"
 #include "stdint.h"
@@ -1428,16 +1412,9 @@ static inline uint8_t fat32ShortNameChecksum(const uint8_t *shortName) {
 ///
 /// @details FAT32 stores no time zone of its own; every writer (Windows,
 ///          Linux, etc.) stamps entries with its own local wall-clock time.
-///          So the raw fields decode to local time, not UTC, and have to be
-///          shifted by the current timezone/dstInEffect globals (see
-///          usr/include/time.h and src/kernel/time.h) to become a real Unix
-///          time_t: UTC = local + timezone - (dstInEffect ? 3600 : 0),
-///          matching the sign convention of the standard C timezone
-///          variable (seconds *west* of UTC).  A date of 0 (never set --
-///          lastAccessDate in particular is commonly left at 0 by other
-///          writers) yields the Unix epoch rather than a nonsensical date,
-///          and is left unshifted since it was never a real timestamp to
-///          begin with.
+///          A date of 0 (never set -- lastAccessDate in particular is commonly
+///          left at 0 by other writers) yields the Unix epoch rather than a
+///          nonsensical date.
 ///
 /// @param fatDate  A FAT32 packed date (bits 15-9 year-1980, 8-5 month,
 ///                 4-0 day).
@@ -1473,7 +1450,7 @@ static inline time_t fat32DateTimeToUnixTime(uint16_t fatDate, uint16_t fatTime)
   time_t localTime = (time_t)
     (days * 86400 + hour * 3600 + minute * 60 + second);
 
-  return localTime + timezone - ((dstInEffect > 0) ? 3600 : 0);
+  return localTime;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
