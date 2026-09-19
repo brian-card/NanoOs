@@ -256,6 +256,15 @@ static ProcessDescriptor _allProcesses[NUM_PROCESSES];
 /// logger, and data-segment space here is scarce.
 static NamedProcessEntry _namedProcesses[1];
 
+/// @var _filesystemIpcCapabilities
+///
+/// @brief This platform's storage for the filesystem process's IPC
+/// capabilities.  See FILESYSTEM_IPC_CAPABILITIES_INITIALIZER.  No
+/// _loggerIpcCapabilities here: AVR boards always leave stringsPresent
+/// true, so arduinoAvrDoStartProcesses never starts a logger.
+static IpcCapability _filesystemIpcCapabilities[]
+  = FILESYSTEM_IPC_CAPABILITIES_INITIALIZER;
+
 // Sleep configuration
 #include <avr/sleep.h>
 #include <avr/interrupt.h>
@@ -1076,6 +1085,10 @@ int halArduinoAvrInit(HalArduinoAvrInitArgs *args) {
   namedProcessTable = _namedProcesses;
   namedProcessTableCapacity
     = sizeof(_namedProcesses) / sizeof(_namedProcesses[0]);
+
+  filesystemIpcCapabilities = _filesystemIpcCapabilities;
+  numFilesystemIpcCapabilities
+    = sizeof(_filesystemIpcCapabilities) / sizeof(_filesystemIpcCapabilities[0]);
 
   memset(_allProcesses, 0, sizeof(_allProcesses));
   halImpl.memory.numProcesses   = NUM_PROCESSES;

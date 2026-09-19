@@ -1466,6 +1466,20 @@ static ProcessDescriptor _allProcesses[NUM_PROCESSES];
 /// register (filesystem, logger).
 static NamedProcessEntry _namedProcesses[2];
 
+/// @var _filesystemIpcCapabilities
+///
+/// @brief This platform's storage for the filesystem process's IPC
+/// capabilities.  See FILESYSTEM_IPC_CAPABILITIES_INITIALIZER.
+static IpcCapability _filesystemIpcCapabilities[]
+  = FILESYSTEM_IPC_CAPABILITIES_INITIALIZER;
+
+/// @var _loggerIpcCapabilities
+///
+/// @brief This platform's storage for the logger process's IPC
+/// capabilities.  See LOGGER_IPC_CAPABILITIES_INITIALIZER.
+static IpcCapability _loggerIpcCapabilities[]
+  = LOGGER_IPC_CAPABILITIES_INITIALIZER;
+
 int arduinoSamD21x18ACallFileOverlay(va_list args) {
   HalCallFileOverlayFn *returnValue = va_arg(args, HalCallFileOverlayFn*);
   if (returnValue != NULL) {
@@ -1826,6 +1840,13 @@ int halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
   namedProcessTable = _namedProcesses;
   namedProcessTableCapacity
     = sizeof(_namedProcesses) / sizeof(_namedProcesses[0]);
+
+  filesystemIpcCapabilities = _filesystemIpcCapabilities;
+  numFilesystemIpcCapabilities
+    = sizeof(_filesystemIpcCapabilities) / sizeof(_filesystemIpcCapabilities[0]);
+  loggerIpcCapabilities = _loggerIpcCapabilities;
+  numLoggerIpcCapabilities
+    = sizeof(_loggerIpcCapabilities) / sizeof(_loggerIpcCapabilities[0]);
 
   memset(_allProcesses, 0, sizeof(_allProcesses));
   halImpl.memory.numProcesses   = NUM_PROCESSES;

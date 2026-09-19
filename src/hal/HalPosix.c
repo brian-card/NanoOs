@@ -333,6 +333,20 @@ static ProcessDescriptor _allProcesses[NUM_PROCESSES];
 /// (filesystem, logger).
 static NamedProcessEntry _namedProcesses[2];
 
+/// @var _filesystemIpcCapabilities
+///
+/// @brief This platform's storage for the filesystem process's IPC
+/// capabilities.  See FILESYSTEM_IPC_CAPABILITIES_INITIALIZER.
+static IpcCapability _filesystemIpcCapabilities[]
+  = FILESYSTEM_IPC_CAPABILITIES_INITIALIZER;
+
+/// @var _loggerIpcCapabilities
+///
+/// @brief This platform's storage for the logger process's IPC
+/// capabilities.  See LOGGER_IPC_CAPABILITIES_INITIALIZER.
+static IpcCapability _loggerIpcCapabilities[]
+  = LOGGER_IPC_CAPABILITIES_INITIALIZER;
+
 /// @var _sdCardName
 ///
 /// @brief Process name assigned to the SD card process.
@@ -713,6 +727,13 @@ int halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
   namedProcessTable = _namedProcesses;
   namedProcessTableCapacity
     = sizeof(_namedProcesses) / sizeof(_namedProcesses[0]);
+
+  filesystemIpcCapabilities = _filesystemIpcCapabilities;
+  numFilesystemIpcCapabilities
+    = sizeof(_filesystemIpcCapabilities) / sizeof(_filesystemIpcCapabilities[0]);
+  loggerIpcCapabilities = _loggerIpcCapabilities;
+  numLoggerIpcCapabilities
+    = sizeof(_loggerIpcCapabilities) / sizeof(_loggerIpcCapabilities[0]);
 
   halImpl.memory.logBufferSize  = sizeof(_logBuffer);
   halImpl.memory.numLogEntries  = NUM_LOG_ENTRIES;

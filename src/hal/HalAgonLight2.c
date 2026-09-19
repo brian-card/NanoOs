@@ -389,6 +389,20 @@ static ProcessDescriptor _allProcesses[NUM_PROCESSES];
 /// (filesystem, logger).
 static NamedProcessEntry _namedProcesses[2];
 
+/// @var _filesystemIpcCapabilities
+///
+/// @brief This platform's storage for the filesystem process's IPC
+/// capabilities.  See FILESYSTEM_IPC_CAPABILITIES_INITIALIZER.
+static IpcCapability _filesystemIpcCapabilities[]
+  = FILESYSTEM_IPC_CAPABILITIES_INITIALIZER;
+
+/// @var _loggerIpcCapabilities
+///
+/// @brief This platform's storage for the logger process's IPC
+/// capabilities.  See LOGGER_IPC_CAPABILITIES_INITIALIZER.
+static IpcCapability _loggerIpcCapabilities[]
+  = LOGGER_IPC_CAPABILITIES_INITIALIZER;
+
 /// @def _numBlockDevices
 ///
 /// @brief Number of BlockDevices that can be managed by the HAL.
@@ -1798,6 +1812,13 @@ int halAgonLight2Init(void) {
   namedProcessTable = _namedProcesses;
   namedProcessTableCapacity
     = sizeof(_namedProcesses) / sizeof(_namedProcesses[0]);
+
+  filesystemIpcCapabilities = _filesystemIpcCapabilities;
+  numFilesystemIpcCapabilities
+    = sizeof(_filesystemIpcCapabilities) / sizeof(_filesystemIpcCapabilities[0]);
+  loggerIpcCapabilities = _loggerIpcCapabilities;
+  numLoggerIpcCapabilities
+    = sizeof(_loggerIpcCapabilities) / sizeof(_loggerIpcCapabilities[0]);
 
   memset(_allProcesses, 0, sizeof(_allProcesses));
   halImpl.memory.numProcesses        = NUM_PROCESSES;

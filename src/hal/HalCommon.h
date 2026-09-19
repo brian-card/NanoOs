@@ -44,6 +44,7 @@
 // Deliberately *NOT* including MemoryManager.h here.  The HAL has to be
 // operational prior to the memory manager and really should be completely
 // independent of it.
+#include "../kernel/Console.h"
 #include "../kernel/Filesystem.h"
 #include "../kernel/Logger.h"
 #include "../kernel/NanoOs.h"
@@ -69,6 +70,86 @@ typedef struct NamedProcessEntry {
   const char *name;
   ProcessId   pid;
 } NamedProcessEntry;
+
+/// @def FILESYSTEM_IPC_CAPABILITIES_INITIALIZER
+///
+/// @brief Initializer for a platform's own array of IpcCapability entries
+/// granted to the root filesystem process.  destinationPid fields start at
+/// 0 and are patched in by halCommonInitRootFilesystem/halCommonInitLogger
+/// once the processes they refer to exist.  Kept as a macro (rather than a
+/// single shared array) so each platform that starts a filesystem process
+/// gets its own storage -- see filesystemIpcCapabilities below -- while
+/// still having exactly one place that defines what the capabilities are.
+#define FILESYSTEM_IPC_CAPABILITIES_INITIALIZER { \
+  { \
+    .destinationPid = 0, /* Scheduler PID */ \
+    .signature      = SCHEDULER_COMMAND_SIGNATURE, \
+    .messageTypes   = (((uint16_t) 1) << SCHEDULER_REPLACE_OVERLAY) \
+  }, \
+  { \
+    .destinationPid = 0, /* Console PID */ \
+    .signature      = CONSOLE_COMMAND_SIGNATURE, \
+    .messageTypes \
+      = (((uint16_t) 1) << CONSOLE_GET_BUFFER) \
+      | (((uint16_t) 1) << CONSOLE_WRITE_BUFFER) \
+      | (((uint16_t) 1) << CONSOLE_RELEASE_BUFFER) \
+  }, \
+  { \
+    .destinationPid = 0, /* Memory manager PID */ \
+    .signature      = MEMORY_MANAGER_COMMAND_SIGNATURE, \
+    .messageTypes \
+      = (((uint16_t) 1) << MEMORY_MANAGER_REALLOC) \
+      | (((uint16_t) 1) << MEMORY_MANAGER_FREE) \
+  }, \
+  { \
+    .destinationPid = 0, /* SD card PID (== rootFilesystemPid - 1) */ \
+    .signature      = SD_CARD_COMMAND_SIGNATURE, \
+    .messageTypes \
+      = (((uint16_t) 1) << SD_CARD_READ_BLOCKS) \
+      | (((uint16_t) 1) << SD_CARD_WRITE_BLOCKS) \
+  }, \
+  { \
+    .destinationPid = 0, /* Logger PID, patched by halCommonInitLogger */ \
+    .signature      = LOGGER_COMMAND_SIGNATURE, \
+    .messageTypes   = (((uint16_t) 1) << LOGGER_LOG_MESSAGE) \
+  }, \
+}
+
+/// @def LOGGER_IPC_CAPABILITIES_INITIALIZER
+///
+/// @brief Initializer for a platform's own array of IpcCapability entries
+/// granted to the logger process.  See
+/// FILESYSTEM_IPC_CAPABILITIES_INITIALIZER for why this is a macro rather
+/// than a single shared array.
+#define LOGGER_IPC_CAPABILITIES_INITIALIZER { \
+  { \
+    .destinationPid = 0, /* Scheduler PID */ \
+    .signature      = SCHEDULER_COMMAND_SIGNATURE, \
+    .messageTypes \
+      = (((uint16_t) 1) << SCHEDULER_GET_HOSTNAME) \
+      | (((uint16_t) 1) << SCHEDULER_REPLACE_OVERLAY) \
+  }, \
+  { \
+    .destinationPid = 0, /* Memory manager PID */ \
+    .signature      = MEMORY_MANAGER_COMMAND_SIGNATURE, \
+    .messageTypes \
+      = (((uint16_t) 1) << MEMORY_MANAGER_REALLOC) \
+      | (((uint16_t) 1) << MEMORY_MANAGER_FREE) \
+  }, \
+  { \
+    .destinationPid = 0, /* Filesystem PID */ \
+    .signature      = FILESYSTEM_COMMAND_SIGNATURE, \
+    .messageTypes \
+      = (((uint16_t) 1) << FILESYSTEM_OPEN_FILE) \
+      | (((uint16_t) 1) << FILESYSTEM_CLOSE_FILE) \
+      | (((uint16_t) 1) << FILESYSTEM_READ_FILE) \
+      | (((uint16_t) 1) << FILESYSTEM_WRITE_FILE) \
+      | (((uint16_t) 1) << FILESYSTEM_REMOVE_FILE) \
+      | (((uint16_t) 1) << FILESYSTEM_SEEK_FILE) \
+      | (((uint16_t) 1) << FILESYSTEM_GET_FILE_BLOCK_METADATA) \
+      | (((uint16_t) 1) << FILESYSTEM_END_OF_FILE) \
+  }, \
+}
 
 #ifdef __cplusplus
 extern "C"
@@ -101,6 +182,32 @@ extern NamedProcessEntry *namedProcessTable;
 /// @brief The number of slots in namedProcessTable, set by the platform
 /// alongside namedProcessTable itself.
 extern uint8_t namedProcessTableCapacity;
+
+/// @var filesystemIpcCapabilities
+///
+/// @brief Pointer to the platform-owned array of IpcCapability entries for
+/// the root filesystem process, built from
+/// FILESYSTEM_IPC_CAPABILITIES_INITIALIZER.  NULL (the default) means this
+/// platform never starts a filesystem process at all.  Same
+/// platform-owned-storage pattern as namedProcessTable.
+extern IpcCapability *filesystemIpcCapabilities;
+
+/// @var numFilesystemIpcCapabilities
+///
+/// @brief The number of entries in filesystemIpcCapabilities.
+extern size_t numFilesystemIpcCapabilities;
+
+/// @var loggerIpcCapabilities
+///
+/// @brief Pointer to the platform-owned array of IpcCapability entries for
+/// the logger process, built from LOGGER_IPC_CAPABILITIES_INITIALIZER.
+/// NULL (the default) means this platform never starts a logger.
+extern IpcCapability *loggerIpcCapabilities;
+
+/// @var numLoggerIpcCapabilities
+///
+/// @brief The number of entries in loggerIpcCapabilities.
+extern size_t numLoggerIpcCapabilities;
 
 int callHal(HalSubsystem subsystem, uint32_t function, ...);
 ProcessId reserveProcessSlot(void);

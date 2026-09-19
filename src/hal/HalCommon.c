@@ -321,6 +321,28 @@ NamedProcessEntry *namedProcessTable = NULL;
 /// @brief See the declaration in HalCommon.h.
 uint8_t namedProcessTableCapacity = 0;
 
+/// @var filesystemIpcCapabilities
+///
+/// @brief See the declaration in HalCommon.h.  Defaults to NULL; a platform
+/// that starts a filesystem process points this at its own storage.
+IpcCapability *filesystemIpcCapabilities = NULL;
+
+/// @var numFilesystemIpcCapabilities
+///
+/// @brief See the declaration in HalCommon.h.
+size_t numFilesystemIpcCapabilities = 0;
+
+/// @var loggerIpcCapabilities
+///
+/// @brief See the declaration in HalCommon.h.  Defaults to NULL; a platform
+/// that starts a logger points this at its own storage.
+IpcCapability *loggerIpcCapabilities = NULL;
+
+/// @var numLoggerIpcCapabilities
+///
+/// @brief See the declaration in HalCommon.h.
+size_t numLoggerIpcCapabilities = 0;
+
 /// @fn int findProcessByName(const char *name, ProcessId *returnValue)
 ///
 /// @brief Look up a process's PID by the name it was registered under.
@@ -846,6 +868,24 @@ int halCommonInitRootFilesystem(void) {
 
   registerProcessName(_filesystemName, rootFilesystemPid);
 
+  // Grant the filesystem process its IPC capabilities, if this platform has
+  // any to grant (see FILESYSTEM_IPC_CAPABILITIES_INITIALIZER).  The logger
+  // entry ([4]) is intentionally left at its default 0 here: the logger
+  // doesn't exist yet at this point in bring-up.  halCommonInitLogger
+  // patches it in once/if the logger actually starts.
+  if (filesystemIpcCapabilities != NULL) {
+    filesystemIpcCapabilities[0].destinationPid = schedulerPid;
+    filesystemIpcCapabilities[1].destinationPid = consolePid;
+    filesystemIpcCapabilities[2].destinationPid = memoryManagerPid;
+    // The SD card process's PID is never made well-known (see
+    // halCommonInitRootSdSpiStorage): it's always the slot immediately
+    // before the filesystem's own, by construction of reserveProcessSlot.
+    filesystemIpcCapabilities[3].destinationPid = rootFilesystemPid - 1;
+    processDescriptor->ipcCapabilities = filesystemIpcCapabilities;
+    processDescriptor->numIpcCapabilities = numFilesystemIpcCapabilities;
+    processDescriptor->ipcCapabilitiesDynamic = false;
+  }
+
   return 0;
 }
 
@@ -902,6 +942,24 @@ int halCommonInitLogger(void) {
   processDescriptor->restartFunction = restartLogger;
   registerProcessName(_loggerName, loggerPid);
   logDebug("Initialized logger process\n");
+
+  // Grant the logger process its IPC capabilities, if this platform has any
+  // to grant (see LOGGER_IPC_CAPABILITIES_INITIALIZER).
+  if (loggerIpcCapabilities != NULL) {
+    loggerIpcCapabilities[0].destinationPid = schedulerPid;
+    loggerIpcCapabilities[1].destinationPid = memoryManagerPid;
+    loggerIpcCapabilities[2].destinationPid = rootFilesystemPid;
+    processDescriptor->ipcCapabilities = loggerIpcCapabilities;
+    processDescriptor->numIpcCapabilities = numLoggerIpcCapabilities;
+    processDescriptor->ipcCapabilitiesDynamic = false;
+  }
+
+  // The logger didn't exist yet when the filesystem's own IPC capabilities
+  // were set up (see halCommonInitRootFilesystem).  Now that it does, patch
+  // the filesystem's logger entry ([4]) in too.
+  if ((filesystemIpcCapabilities != NULL) && (rootFilesystemPid > 0)) {
+    filesystemIpcCapabilities[4].destinationPid = loggerPid;
+  }
 
   return 0;
 }

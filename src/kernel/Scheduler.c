@@ -450,81 +450,6 @@ IpcCapability baseMemoryManagerIpcCapabilities[] = {
   },
 };
 
-/// @var baseFilesystemIpcCapabilities
-///
-/// @brief Array of IpcCapability items that describe what messages the
-/// filesystem process can send to other processes.
-IpcCapability baseFilesystemIpcCapabilities[] = {
-  {
-    .destinationPid = 0, // Scheduler PID to be set by scheduler
-    .signature      = SCHEDULER_COMMAND_SIGNATURE,
-    .messageTypes
-      = (((uint16_t) 1) << SCHEDULER_REPLACE_OVERLAY)
-  },
-  {
-    .destinationPid = 0, // Console PID to be set by scheduler
-    .signature      = CONSOLE_COMMAND_SIGNATURE,
-    .messageTypes
-      = (((uint16_t) 1) << CONSOLE_GET_BUFFER)
-      | (((uint16_t) 1) << CONSOLE_WRITE_BUFFER)
-      | (((uint16_t) 1) << CONSOLE_RELEASE_BUFFER)
-  },
-  {
-    .destinationPid = 0, // Memory manager PID to be set by scheduler
-    .signature      = MEMORY_MANAGER_COMMAND_SIGNATURE,
-    .messageTypes
-      = (((uint16_t) 1) << MEMORY_MANAGER_REALLOC)
-      | (((uint16_t) 1) << MEMORY_MANAGER_FREE)
-  },
-  {
-    .destinationPid = 0, // SD card PID to be set by scheduler
-    .signature      = SD_CARD_COMMAND_SIGNATURE,
-    .messageTypes
-      = (((uint16_t) 1) << SD_CARD_READ_BLOCKS)
-      | (((uint16_t) 1) << SD_CARD_WRITE_BLOCKS)
-  },
-  {
-    .destinationPid = 0, // Logger PID to be set by scheduler
-    .signature      = LOGGER_COMMAND_SIGNATURE,
-    .messageTypes
-      = (((uint16_t) 1) << LOGGER_LOG_MESSAGE)
-  },
-};
-
-/// @var baseLoggerIpcCapabilities
-///
-/// @brief Array of IpcCapability items that describe what messages the logger
-/// process can send to other processes.
-IpcCapability baseLoggerIpcCapabilities[] = {
-  {
-    .destinationPid = 0, // Scheduler PID to be set by scheduler
-    .signature      = SCHEDULER_COMMAND_SIGNATURE,
-    .messageTypes
-      = (((uint16_t) 1) << SCHEDULER_GET_HOSTNAME)
-      | (((uint16_t) 1) << SCHEDULER_REPLACE_OVERLAY)
-  },
-  {
-    .destinationPid = 0, // Memory manager PID to be set by scheduler
-    .signature      = MEMORY_MANAGER_COMMAND_SIGNATURE,
-    .messageTypes
-      = (((uint16_t) 1) << MEMORY_MANAGER_REALLOC)
-      | (((uint16_t) 1) << MEMORY_MANAGER_FREE)
-  },
-  {
-    .destinationPid = 0, // Filesystem PID to be set by scheduler
-    .signature      = FILESYSTEM_COMMAND_SIGNATURE,
-    .messageTypes
-      = (((uint16_t) 1) << FILESYSTEM_OPEN_FILE)
-      | (((uint16_t) 1) << FILESYSTEM_CLOSE_FILE)
-      | (((uint16_t) 1) << FILESYSTEM_READ_FILE)
-      | (((uint16_t) 1) << FILESYSTEM_WRITE_FILE)
-      | (((uint16_t) 1) << FILESYSTEM_REMOVE_FILE)
-      | (((uint16_t) 1) << FILESYSTEM_SEEK_FILE)
-      | (((uint16_t) 1) << FILESYSTEM_GET_FILE_BLOCK_METADATA)
-      | (((uint16_t) 1) << FILESYSTEM_END_OF_FILE)
-  },
-};
-
 /// @var baseSupervisorIpcCapabilities
 ///
 /// @brief Array of IpcCapability items that describe what messages a process
@@ -4872,25 +4797,10 @@ int setIpcCapabilities(SchedulerState *schedulerState) {
   baseMemoryManagerIpcCapabilities[1].destinationPid
     = loggerPid;
 
-  baseFilesystemIpcCapabilities[0].destinationPid
-    = schedulerPid;
-  baseFilesystemIpcCapabilities[1].destinationPid
-    = consolePid;
-  baseFilesystemIpcCapabilities[2].destinationPid
-    = memoryManagerPid;
-  if (rootFilesystemPid > 0) {
-    baseFilesystemIpcCapabilities[3].destinationPid
-      = rootFilesystemPid - 1;
-  }
-  baseFilesystemIpcCapabilities[4].destinationPid
-    = loggerPid;
-
-  baseLoggerIpcCapabilities[0].destinationPid
-    = schedulerPid;
-  baseLoggerIpcCapabilities[1].destinationPid
-    = memoryManagerPid;
-  baseLoggerIpcCapabilities[2].destinationPid
-    = rootFilesystemPid;
+  // Filesystem and logger are platform-optional processes; their own IPC
+  // capabilities (if this platform starts them at all) are configured by
+  // halCommonInitRootFilesystem/halCommonInitLogger at creation time, not
+  // here -- see HalCommon.c.
 
   baseSupervisorIpcCapabilities[0].destinationPid
     = schedulerPid;
@@ -4950,24 +4860,9 @@ int setIpcCapabilities(SchedulerState *schedulerState) {
     / sizeof(baseMemoryManagerIpcCapabilities[0]);
   allProcesses[memoryManagerPid - 1].ipcCapabilitiesDynamic
     = false;
-  if (rootFilesystemPid > 0) {
-    allProcesses[rootFilesystemPid - 1].ipcCapabilities
-      = baseFilesystemIpcCapabilities;
-    allProcesses[rootFilesystemPid - 1].numIpcCapabilities
-      = sizeof(baseFilesystemIpcCapabilities)
-      / sizeof(baseFilesystemIpcCapabilities[0]);
-    allProcesses[rootFilesystemPid - 1].ipcCapabilitiesDynamic
-      = false;
-  }
-  if (loggerPid > 0) {
-    allProcesses[loggerPid - 1].ipcCapabilities
-      = baseLoggerIpcCapabilities;
-    allProcesses[loggerPid - 1].numIpcCapabilities
-      = sizeof(baseLoggerIpcCapabilities)
-      / sizeof(baseLoggerIpcCapabilities[0]);
-    allProcesses[loggerPid - 1].ipcCapabilitiesDynamic
-      = false;
-  }
+  // Filesystem and logger's ipcCapabilities/numIpcCapabilities/
+  // ipcCapabilitiesDynamic are set by halCommonInitRootFilesystem/
+  // halCommonInitLogger at creation time -- see HalCommon.c.
   for (ProcessId ii = schedulerState->firstUserPid; ii <= numProcesses; ii++) {
     processDescriptor = &allProcesses[ii - 1];
     if (processDescriptor->privilegeLevel == PRIVILEGE_LEVEL_SUPERVISOR) {
