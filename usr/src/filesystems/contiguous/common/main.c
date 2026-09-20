@@ -104,6 +104,17 @@ void* main(void *args) {
   printDebugString("runFilesystem: Initiallizing driverState\n");
   filesystemInitDriver(&fs);
   fs.args = NULL;
+  // args still points at the caller's (restartContiguousFilesystem's) stack
+  // copy of this struct, which only ever saw the (void*) 1 placeholder
+  // written above before the first processYield.  The caller is spinning
+  // in a wait loop on that copy's driverState field, so it needs the real
+  // outcome written back through the original pointer -- otherwise it
+  // thinks we're done as soon as we started, before the driver (or lack
+  // thereof, on failure) is known.  (void*) 2 stands in for "finished, but
+  // driverInit failed" so the caller can tell that apart from "hasn't run
+  // yet" (NULL) -- it must never collide with a real driverState pointer.
+  ((FilesystemState*) args)->driverState =
+    (fs.driverState != NULL) ? fs.driverState : (void*) ((intptr_t) 2);
   printDebugString("runFilesystem: Initialization complete\n");
 
   while (1) {

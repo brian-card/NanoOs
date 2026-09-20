@@ -108,6 +108,10 @@ void* runFilesystem(void *args) {
   if (fs.blockBuffer == NULL) {
     logError("Could not allocate fs.blockBuffer\n");
     logError("Halting filesystem process\n");
+    // Unblock the caller's wait loop before going into handleFilesystemMessages
+    // below (see the matching driverState write-back further down for why
+    // this is (void*) 2, not fs.driverState itself, when it's NULL here).
+    ((FilesystemState*) args)->driverState = (void*) ((intptr_t) 2);
     // All the command handlers handle state not being initialized, so just go
     // into handleFilesystemMessages and block.
     handleFilesystemMessages(&fs);
@@ -124,6 +128,17 @@ void* runFilesystem(void *args) {
   // this function's prior behavior.  Clear it before fs.args takes on its
   // other meaning: a pointer to the ProcessMessage being handled.
   fs.args = NULL;
+  // args still points at the caller's (restartBuiltinFilesystem's) stack
+  // copy of this struct, which only ever saw the (void*) 1 placeholder
+  // written above before the first processYield.  The caller is spinning
+  // in a wait loop on that copy's driverState field, so it needs the real
+  // outcome written back through the original pointer -- otherwise it
+  // thinks we're done as soon as we started, before the driver (or lack
+  // thereof, on failure) is known.  (void*) 2 stands in for "finished, but
+  // driverInit failed" so the caller can tell that apart from "hasn't run
+  // yet" (NULL) -- it must never collide with a real driverState pointer.
+  ((FilesystemState*) args)->driverState =
+    (fs.driverState != NULL) ? fs.driverState : (void*) ((intptr_t) 2);
   logDebug("runFilesystem: Initialization complete\n");
 
   handleFilesystemMessages(&fs);
