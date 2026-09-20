@@ -90,6 +90,13 @@ static uint32_t halArduinoAvrImplDiosOnline[] = {
   0x003fffff,
 };
 
+/// @var _sdCardHalCapabilities
+///
+/// @brief This board's storage for the SD-over-SPI card process's HAL
+/// capabilities.  See SD_CARD_HAL_CAPABILITIES_INITIALIZER.
+static HalCapability _sdCardHalCapabilities[]
+  = SD_CARD_HAL_CAPABILITIES_INITIALIZER;
+
 extern BlockDevice *blockDevices[];
 
 int arduinoAvrInitBlockDevice(va_list args) {
@@ -151,6 +158,10 @@ int arduinoAvrRestartBlockDevice(va_list args) {
   threadSetContext(processDescriptor->mainThread, processDescriptor);
   processDescriptor->name = "SD card";
   processDescriptor->userId = ROOT_USER_ID;
+  if (sdCardHalCapabilities != NULL) {
+    processDescriptor->halCapabilities = sdCardHalCapabilities;
+    processDescriptor->numHalCapabilities = numSdCardHalCapabilities;
+  }
 
   BlockDevice *sdDevice
     = (BlockDevice*) coroutineResume(processDescriptor->mainThread, NULL);
@@ -179,6 +190,10 @@ int halArduinoInit(void) {
 
   arduinoAvrSetRootStorageFunctions(
     halCommonInitRootFilesystem, restartBuiltinFilesystem);
+
+  sdCardHalCapabilities = _sdCardHalCapabilities;
+  numSdCardHalCapabilities
+    = sizeof(_sdCardHalCapabilities) / sizeof(_sdCardHalCapabilities[0]);
 
   halImpl.memory.stringsPresent = true;
 

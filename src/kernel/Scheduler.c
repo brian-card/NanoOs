@@ -233,6 +233,78 @@ static FileDescriptor standardUserFileDescriptors[
   },
 };
 
+/// @var consoleHalCapabilities
+///
+/// @brief Array of HalCapability items granted specifically to the console
+/// process, which is the only process that talks to UART hardware directly.
+///
+/// @note Not const: HalCapability arrays that get patched at runtime
+/// (elsewhere in this file) can't be const, and declaring this one const
+/// anyway -- since nothing happens to patch it -- would put it in .rodata,
+/// which is stripped on some targets.  Keep it a plain array, matching
+/// every other HalCapability/IpcCapability array in this file, so it lands
+/// in .data instead.
+///
+/// @note findHalCapability() does an early-terminating linear search that
+/// assumes this array is sorted in ascending order of subsystemFunction (i.e.
+/// by (subsystem << 8) | function). Keep new entries in the correct sorted
+/// position, not just appended at the end.
+HalCapability consoleHalCapabilities[] = {
+  {
+    .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_POLL,
+    .deviceIds =         0x03, // Bitmask for device IDs 0 and 1
+  },
+  {
+    .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_WRITE,
+    .deviceIds =         0x03, // Bitmask for device IDs 0 and 1
+  },
+  {
+    .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_IS_CONSOLE,
+    .deviceIds =         0x03, // Bitmask for device IDs 0 and 1
+  },
+};
+
+/// @var memoryManagerHalCapabilities
+///
+/// @brief Array of HalCapability items granted specifically to the memory
+/// manager process.  Includes HAL_UART_WRITE/HAL_UART_IS_CONSOLE even
+/// though MemoryManager.c never calls HAL->uart directly: logError/logDebug
+/// and printString() (used directly by the allocation-dump handler) fall
+/// back to writing straight to the UART -- via printString_() -- whenever
+/// the logger process isn't up yet or stringsPresent is true, and that
+/// fallback runs in the calling process's own context.
+///
+/// @note Not const -- see the note on consoleHalCapabilities above.
+///
+/// @note findHalCapability() does an early-terminating linear search that
+/// assumes this array is sorted in ascending order of subsystemFunction (i.e.
+/// by (subsystem << 8) | function). Keep new entries in the correct sorted
+/// position, not just appended at the end.
+HalCapability memoryManagerHalCapabilities[] = {
+  {
+    .subsystemFunction = (((uint16_t) HAL_MEMORY) << 8)
+      | HAL_MEMORY_MEMORY_MANAGER_STACK_SIZE,
+    .deviceIds =         0x00, // No device for this function
+  },
+  {
+    .subsystemFunction = (((uint16_t) HAL_MEMORY) << 8)
+      | HAL_MEMORY_BOTTOM_OF_HEAP,
+    .deviceIds =         0x00, // No device for this function
+  },
+  {
+    .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_WRITE,
+    .deviceIds =         0x03, // Bitmask for device IDs 0 and 1
+  },
+  {
+    .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_IS_CONSOLE,
+    .deviceIds =         0x03, // Bitmask for device IDs 0 and 1
+  },
+  {
+    .subsystemFunction = (((uint16_t) HAL_POWER) << 8) | HAL_POWER_ENTER_MODE,
+    .deviceIds =         0x00, // No device for this function
+  },
+};
+
 /// @var baseExecutiveHalCapabilities
 ///
 /// @brief Array of HalCapability items that describe what a process can do
@@ -3999,14 +4071,15 @@ int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
 
   HalExecCommandFn execCommand = NULL;
   HAL->platform.execCommand(&execCommand);
-  if (processCreate(processDescriptor, execCommand, execArgs)
-    == processError
-  ) {
-    logError("Could not configure process handle for new command\n");
-    returnValue = -ENOEXEC;
-    goto freeFileDescriptors;
-  }
 
+  // Resolve the overlay's block metadata *before* creating the process.
+  // processCreate() below hands the new coroutine to the scheduler as
+  // runnable; once that's happened, we can no longer bail out and free
+  // execArgs/fileDescriptors on a later failure here, because the
+  // scheduler may already be holding the coroutine ready to resume it
+  // with those freed pointers still in hand (a use-after-free once it
+  // actually runs). Doing this lookup first means a failure here still
+  // has nothing else to unwind.
   if (execCommand == execOverlayCommand) {
     processDescriptor->overlayNamespace = execArgs->pathname;
   }
@@ -4018,6 +4091,15 @@ int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
   } else if (returnValue != 0) {
     goto freeFileDescriptors;
   }
+
+  if (processCreate(processDescriptor, execCommand, execArgs)
+    == processError
+  ) {
+    logError("Could not configure process handle for new command\n");
+    returnValue = -ENOEXEC;
+    goto freeFileDescriptors;
+  }
+
   processDescriptor->envp = execArgs->envp;
   processDescriptor->name = execArgs->argv[0];
 
@@ -4181,6 +4263,9 @@ int restartConsole(ProcessDescriptor *processDescriptor) {
   threadSetStackEnd(processDescriptor->mainThread, consoleStackEnd);
   processDescriptor->name = _consoleName;
   processDescriptor->userId = ROOT_USER_ID;
+  processDescriptor->halCapabilities = consoleHalCapabilities;
+  processDescriptor->numHalCapabilities
+    = sizeof(consoleHalCapabilities) / sizeof(consoleHalCapabilities[0]);
   return 0;
 }
 
@@ -4912,6 +4997,9 @@ int initializeProcesses(SchedulerState *schedulerState) {
   processDescriptor->userId = ROOT_USER_ID;
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_KERNEL;
   processDescriptor->restartFunction = restartConsole;
+  processDescriptor->halCapabilities = consoleHalCapabilities;
+  processDescriptor->numHalCapabilities
+    = sizeof(consoleHalCapabilities) / sizeof(consoleHalCapabilities[0]);
   logDebug("Created console process.\n");
 
   uint8_t numExtraConsoleStacksVal = 0;
@@ -5021,6 +5109,10 @@ int initializeProcesses(SchedulerState *schedulerState) {
   processDescriptor->userId = ROOT_USER_ID;
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_KERNEL;
   processDescriptor->restartFunction = restartMemoryManager;
+  processDescriptor->halCapabilities = memoryManagerHalCapabilities;
+  processDescriptor->numHalCapabilities
+    = sizeof(memoryManagerHalCapabilities)
+    / sizeof(memoryManagerHalCapabilities[0]);
   logDebug("Created all processes.\n");
 
   // Now that we have all the processes setup, we can fix the IPC capabilities.

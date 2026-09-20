@@ -52,6 +52,12 @@
 #include "kernel/NanoOs.h"
 #include "kernel/Processes.h"
 
+// Scheduler.h is deliberately *NOT* included here: it #define's FILE to
+// NanoOsFile, which would break this file's legitimate use of the real
+// system FILE (see posixConfigOneShotTimer et al. below). schedulerPid is
+// just a plain ProcessId global; forward-declare it instead.
+extern ProcessId schedulerPid;
+
 /// @def DEBUG_MULTIPLIER
 ///
 /// @brief Multiplier to use for stack/heap size during debugging.  When not
@@ -734,10 +740,11 @@ int posixRemainingTimerNanoseconds(va_list args) {
 int posixCancelTimer(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
 
-  // Always validate capabilities first.
+  // Always validate capabilities first.  Only the scheduler (arming its own
+  // preemption timer) gets an unconditional pass here.
   ProcessDescriptor *processDescriptor = getRunningProcess();
   if (processDescriptor != NULL) {
-    if ((processDescriptor->privilegeLevel != PRIVILEGE_LEVEL_KERNEL)
+    if ((processDescriptor->processId != schedulerPid)
       && (findHalCapabilityWithDevice(processDescriptor->halCapabilities,
         processDescriptor->numHalCapabilities, HAL_TIMER, HAL_TIMER_CANCEL,
         deviceId) == NULL)

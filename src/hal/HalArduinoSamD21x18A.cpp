@@ -1136,10 +1136,11 @@ int arduinoSamD21x18ARemainingTimerNanoseconds(va_list args) {
 }
 
 static int arduinoSamD21x18ACancelTimerImpl(int32_t deviceId) {
-  // Always validate capabilities first.
+  // Always validate capabilities first.  Only the scheduler (arming its own
+  // preemption timer) gets an unconditional pass here.
   ProcessDescriptor *processDescriptor = getRunningProcess();
   if (processDescriptor != NULL) {
-    if ((processDescriptor->privilegeLevel != PRIVILEGE_LEVEL_KERNEL)
+    if ((processDescriptor->processId != schedulerPid)
       && (findHalCapabilityWithDevice(processDescriptor->halCapabilities,
         processDescriptor->numHalCapabilities, HAL_TIMER, HAL_TIMER_CANCEL,
         deviceId) == NULL)
@@ -1417,6 +1418,10 @@ int arduinoSamD21x18ARestartBlockDevice(va_list args) {
   threadSetContext(processDescriptor->mainThread, processDescriptor);
   processDescriptor->name = _sdCardName;
   processDescriptor->userId = ROOT_USER_ID;
+  if (sdCardHalCapabilities != NULL) {
+    processDescriptor->halCapabilities = sdCardHalCapabilities;
+    processDescriptor->numHalCapabilities = numSdCardHalCapabilities;
+  }
 
   BlockDevice *sdDevice
     = (BlockDevice*) coroutineResume(processDescriptor->mainThread, NULL);
@@ -1479,6 +1484,13 @@ static IpcCapability _filesystemIpcCapabilities[]
 /// capabilities.  See LOGGER_IPC_CAPABILITIES_INITIALIZER.
 static IpcCapability _loggerIpcCapabilities[]
   = LOGGER_IPC_CAPABILITIES_INITIALIZER;
+
+/// @var _sdCardHalCapabilities
+///
+/// @brief This platform's storage for the SD-over-SPI card process's HAL
+/// capabilities.  See SD_CARD_HAL_CAPABILITIES_INITIALIZER.
+static HalCapability _sdCardHalCapabilities[]
+  = SD_CARD_HAL_CAPABILITIES_INITIALIZER;
 
 int arduinoSamD21x18ACallFileOverlay(va_list args) {
   HalCallFileOverlayFn *returnValue = va_arg(args, HalCallFileOverlayFn*);
@@ -1847,6 +1859,10 @@ int halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
   loggerIpcCapabilities = _loggerIpcCapabilities;
   numLoggerIpcCapabilities
     = sizeof(_loggerIpcCapabilities) / sizeof(_loggerIpcCapabilities[0]);
+
+  sdCardHalCapabilities = _sdCardHalCapabilities;
+  numSdCardHalCapabilities
+    = sizeof(_sdCardHalCapabilities) / sizeof(_sdCardHalCapabilities[0]);
 
   memset(_allProcesses, 0, sizeof(_allProcesses));
   halImpl.memory.numProcesses   = NUM_PROCESSES;

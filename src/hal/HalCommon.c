@@ -118,7 +118,11 @@ int callHal(HalSubsystem subsystem, uint32_t function, ...) {
   ) {
     return -ENOTSUP;
   } else if (processDescriptor != NULL) {
-    if ((processDescriptor->privilegeLevel != PRIVILEGE_LEVEL_KERNEL) 
+    // Only the scheduler gets an unconditional pass here.  Every other
+    // process -- including the other PRIVILEGE_LEVEL_KERNEL ones (console,
+    // memory manager, the SD-over-SPI card process) -- needs a real,
+    // explicit grant in its own halCapabilities array.
+    if ((processDescriptor->processId != schedulerPid)
       && (findHalCapability(processDescriptor->halCapabilities,
         processDescriptor->numHalCapabilities, subsystem, function) == NULL)
     ) {
@@ -342,6 +346,17 @@ IpcCapability *loggerIpcCapabilities = NULL;
 ///
 /// @brief See the declaration in HalCommon.h.
 size_t numLoggerIpcCapabilities = 0;
+
+/// @var sdCardHalCapabilities
+///
+/// @brief See the declaration in HalCommon.h.  Defaults to NULL; a platform
+/// that starts an SD-over-SPI card process points this at its own storage.
+HalCapability *sdCardHalCapabilities = NULL;
+
+/// @var numSdCardHalCapabilities
+///
+/// @brief See the declaration in HalCommon.h.
+size_t numSdCardHalCapabilities = 0;
 
 /// @fn int findProcessByName(const char *name, ProcessId *returnValue)
 ///
@@ -724,6 +739,10 @@ BlockDevice* halCommonInitRootSdSpiStorage(
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_KERNEL;
   processDescriptor->restartFunction = HAL->blockDevice.restart;
   processDescriptor->restartArgs = (void*)(intptr_t)0;
+  if (sdCardHalCapabilities != NULL) {
+    processDescriptor->halCapabilities = sdCardHalCapabilities;
+    processDescriptor->numHalCapabilities = numSdCardHalCapabilities;
+  }
   BlockDevice *sdDevice = (BlockDevice*) coroutineResume(
     processDescriptor->mainThread, NULL);
   sdDevice->partitionNumber = 1;
@@ -1014,8 +1033,19 @@ int restartBuiltinFilesystem(ProcessDescriptor *processDescriptor) {
   processDescriptor->restartFunction = restartBuiltinFilesystem;
   processDescriptor->callOverlayFunction = callOverlayFunctionFromBlockDevice;
   processQueuePush(processDescriptor->readyQueue, processDescriptor);
-  // Let the filesystem process initialize before we return.
-  while (fs.driverState == NULL) {
+  // Let the filesystem process initialize before we return.  fs.driverState
+  // starts at NULL (memset above) meaning "hasn't run yet"; runFilesystem
+  // writes the (void*) 1 placeholder into it the moment it starts (before
+  // it's actually parsed a partition or initialized a driver), then
+  // overwrites it with the real outcome once initialization genuinely
+  // finishes -- a real driverState pointer on success, or (void*) 2 on
+  // failure.  Waiting on driverState != NULL would return here far too
+  // early (right after the placeholder is written), so we wait through
+  // both the "hasn't run yet" and "started but not finished" states
+  // instead.
+  while ((fs.driverState == NULL)
+    || (fs.driverState == (void*) ((intptr_t) 1))
+  ) {
     SCHEDULER_STATE->runSchedulerQueues(PRIVILEGE_LEVEL_SUPERVISOR);
   }
 
@@ -1062,8 +1092,12 @@ int restartOverlayFilesystem(ProcessDescriptor *processDescriptor) {
   processDescriptor->restartFunction = restartOverlayFilesystem;
   processDescriptor->callOverlayFunction = callOverlayFunctionFromBlockDevice;
   processQueuePush(processDescriptor->readyQueue, processDescriptor);
-  // Let the filesystem process initialize before we return.
-  while (fs.driverState == NULL) {
+  // Let the filesystem process initialize before we return.  See the
+  // comment in restartBuiltinFilesystem above for why this waits through
+  // both NULL and the placeholder value.
+  while ((fs.driverState == NULL)
+    || (fs.driverState == (void*) ((intptr_t) 1))
+  ) {
     SCHEDULER_STATE->runSchedulerQueues(PRIVILEGE_LEVEL_SUPERVISOR);
   }
 
@@ -1136,8 +1170,12 @@ int restartContiguousFilesystem(ProcessDescriptor *processDescriptor) {
   processDescriptor->restartFunction = restartContiguousFilesystem;
   processDescriptor->callOverlayFunction = NULL;
   processQueuePush(processDescriptor->readyQueue, processDescriptor);
-  // Let the filesystem process initialize before we return.
-  while (fs.driverState == NULL) {
+  // Let the filesystem process initialize before we return.  See the
+  // comment in restartBuiltinFilesystem above for why this waits through
+  // both NULL and the placeholder value.
+  while ((fs.driverState == NULL)
+    || (fs.driverState == (void*) ((intptr_t) 1))
+  ) {
     SCHEDULER_STATE->runSchedulerQueues(PRIVILEGE_LEVEL_SUPERVISOR);
   }
 

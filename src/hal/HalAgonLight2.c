@@ -403,6 +403,13 @@ static IpcCapability _filesystemIpcCapabilities[]
 static IpcCapability _loggerIpcCapabilities[]
   = LOGGER_IPC_CAPABILITIES_INITIALIZER;
 
+/// @var _sdCardHalCapabilities
+///
+/// @brief This platform's storage for the SD-over-SPI card process's HAL
+/// capabilities.  See SD_CARD_HAL_CAPABILITIES_INITIALIZER.
+static HalCapability _sdCardHalCapabilities[]
+  = SD_CARD_HAL_CAPABILITIES_INITIALIZER;
+
 /// @def _numBlockDevices
 ///
 /// @brief Number of BlockDevices that can be managed by the HAL.
@@ -1118,8 +1125,8 @@ void agonLight2TimerInterruptHandler5(void);
 /// this subsystem/function pair at all; this adds the device-bitmask
 /// granularity that the POSIX and SAMD21 HALs apply on their cancel paths.  A
 /// re-arm through configOneShot implicitly cancels whatever reload was already
-/// loaded, so it is gated the same way.  Kernel-privileged callers - the
-/// scheduler arming its own preemption timer, most notably - are always
+/// loaded, so it is gated the same way.  Only the scheduler - arming its own
+/// preemption timer, the sole legitimate caller of this bypass - is always
 /// allowed, as is any call made before the scheduler is up
 /// (getRunningProcess() == NULL).
 ///
@@ -1130,7 +1137,7 @@ void agonLight2TimerInterruptHandler5(void);
 static int agonLight2CheckTimerCancelCapability(int32_t deviceId) {
   ProcessDescriptor *processDescriptor = getRunningProcess();
   if ((processDescriptor != NULL)
-    && (processDescriptor->privilegeLevel != PRIVILEGE_LEVEL_KERNEL)
+    && (processDescriptor->processId != schedulerPid)
     && (findHalCapabilityWithDevice(processDescriptor->halCapabilities,
       processDescriptor->numHalCapabilities, HAL_TIMER, HAL_TIMER_CANCEL,
       deviceId) == NULL)
@@ -1481,6 +1488,10 @@ int agonLight2RestartBlockDevice(va_list args) {
   threadSetContext(processDescriptor->mainThread, processDescriptor);
   processDescriptor->name = _sdCardName;
   processDescriptor->userId = ROOT_USER_ID;
+  if (sdCardHalCapabilities != NULL) {
+    processDescriptor->halCapabilities = sdCardHalCapabilities;
+    processDescriptor->numHalCapabilities = numSdCardHalCapabilities;
+  }
 
   BlockDevice *sdDevice
     = (BlockDevice*) coroutineResume(processDescriptor->mainThread, NULL);
@@ -1819,6 +1830,10 @@ int halAgonLight2Init(void) {
   loggerIpcCapabilities = _loggerIpcCapabilities;
   numLoggerIpcCapabilities
     = sizeof(_loggerIpcCapabilities) / sizeof(_loggerIpcCapabilities[0]);
+
+  sdCardHalCapabilities = _sdCardHalCapabilities;
+  numSdCardHalCapabilities
+    = sizeof(_sdCardHalCapabilities) / sizeof(_sdCardHalCapabilities[0]);
 
   memset(_allProcesses, 0, sizeof(_allProcesses));
   halImpl.memory.numProcesses        = NUM_PROCESSES;

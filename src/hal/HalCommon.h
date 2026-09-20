@@ -151,6 +151,53 @@ typedef struct NamedProcessEntry {
   }, \
 }
 
+/// @def SD_CARD_HAL_CAPABILITIES_INITIALIZER
+///
+/// @brief Initializer for a platform's own array of HalCapability entries
+/// granted to the SD-over-SPI card process (see
+/// halCommonInitRootSdSpiStorage).  Kept as a macro, same as the
+/// IpcCapability initializers above, so each platform that actually starts
+/// this process gets its own storage -- see sdCardHalCapabilities below --
+/// rather than every platform carrying it whether or not it's used.
+///
+/// Includes HAL_UART_WRITE/HAL_UART_IS_CONSOLE even though runSdCardSpi
+/// never calls HAL->uart directly: logError/logWarn (used throughout
+/// SdCardSpi.c) fall back to writing straight to the UART -- via
+/// printString_() -- whenever the logger process isn't up yet or
+/// stringsPresent is true, and that fallback runs in the calling process's
+/// own context.  See the identical note on memoryManagerHalCapabilities in
+/// Scheduler.c.
+#define SD_CARD_HAL_CAPABILITIES_INITIALIZER { \
+  { \
+    .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_WRITE, \
+    .deviceIds =         0x03, /* Bitmask for device IDs 0 and 1 */ \
+  }, \
+  { \
+    .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_IS_CONSOLE, \
+    .deviceIds =         0x03, /* Bitmask for device IDs 0 and 1 */ \
+  }, \
+  { \
+    .subsystemFunction = (((uint16_t) HAL_SPI) << 8) | HAL_SPI_CONFIGURE, \
+    .deviceIds =         0x01, /* Bitmask for device ID 0 */ \
+  }, \
+  { \
+    .subsystemFunction = (((uint16_t) HAL_SPI) << 8) | HAL_SPI_START_TRANSFER, \
+    .deviceIds =         0x01, /* Bitmask for device ID 0 */ \
+  }, \
+  { \
+    .subsystemFunction = (((uint16_t) HAL_SPI) << 8) | HAL_SPI_END_TRANSFER, \
+    .deviceIds =         0x01, /* Bitmask for device ID 0 */ \
+  }, \
+  { \
+    .subsystemFunction = (((uint16_t) HAL_SPI) << 8) | HAL_SPI_TRANSFER_BYTES, \
+    .deviceIds =         0x01, /* Bitmask for device ID 0 */ \
+  }, \
+  { \
+    .subsystemFunction = (((uint16_t) HAL_SPI) << 8) | HAL_SPI_SET_SPEED, \
+    .deviceIds =         0x01, /* Bitmask for device ID 0 */ \
+  }, \
+}
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -208,6 +255,20 @@ extern IpcCapability *loggerIpcCapabilities;
 ///
 /// @brief The number of entries in loggerIpcCapabilities.
 extern size_t numLoggerIpcCapabilities;
+
+/// @var sdCardHalCapabilities
+///
+/// @brief Pointer to the platform-owned array of HalCapability entries for
+/// the SD-over-SPI card process, built from
+/// SD_CARD_HAL_CAPABILITIES_INITIALIZER.  NULL (the default) means this
+/// platform never starts an SD-over-SPI card process at all -- most don't;
+/// only the specific boards that call halCommonInitRootSdSpiStorage do.
+extern HalCapability *sdCardHalCapabilities;
+
+/// @var numSdCardHalCapabilities
+///
+/// @brief The number of entries in sdCardHalCapabilities.
+extern size_t numSdCardHalCapabilities;
 
 int callHal(HalSubsystem subsystem, uint32_t function, ...);
 ProcessId reserveProcessSlot(void);
