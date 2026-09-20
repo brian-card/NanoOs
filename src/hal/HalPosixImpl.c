@@ -990,6 +990,39 @@ static const char _tcgetattrSymbolName[] KEEP_IN_FLASH = "tcgetattr";
 /// final binary on some targets.
 static const char _tcsetattrSymbolName[] KEEP_IN_FLASH = "tcsetattr";
 
+/// @fn void* posixCancelTimerWarmupThreadFunc(void *arg)
+///
+/// @brief No-op thread function used only to give
+/// posixCancelTimerWarmupPthreadCancel something real to cancel.
+static void* posixCancelTimerWarmupThreadFunc(void *arg) {
+  (void) arg;
+  return NULL;
+}
+
+/// @fn void posixCancelTimerWarmupPthreadCancel(void)
+///
+/// @brief Force glibc's one-time, lazy dlopen() of libgcc_s.so.1 (needed
+/// internally by pthread_cancel() for stack-unwinding support) to happen
+/// here, on the native thread's own large stack, instead of happening the
+/// first time some coroutine calls HAL->timer.cancel() -> posixCancelTimer()
+/// -> pthread_cancel() from deep inside its own tiny, recursively-carved
+/// stack slice.  That dlopen recurses far enough into glibc's dynamic
+/// loader to overflow a coroutine's slice; it's a one-time, process-wide
+/// cost (cached by glibc after the first call), so paying it here, before
+/// any coroutine stack exists, means no coroutine ever pays it.
+///
+/// @return This function returns no value.
+static void posixCancelTimerWarmupPthreadCancel(void) {
+  pthread_t warmupThread;
+  if (pthread_create(
+    &warmupThread, NULL, posixCancelTimerWarmupThreadFunc, NULL) != 0
+  ) {
+    return;
+  }
+  pthread_cancel(warmupThread);
+  pthread_join(warmupThread, NULL);
+}
+
 int halPosixImplInit(jmp_buf resetBuffer,
   NanoOsOverlayMap **overlayMap, size_t *overlaySize, StaticLogs **staticLogs,
   NanoOsOverlayMap **contiguousFilesystem, size_t *contiguousFilesystemSize
@@ -997,6 +1030,11 @@ int halPosixImplInit(jmp_buf resetBuffer,
   // Set the handler for sigint so that it's passed to the running process in
   // NanoOs instead of the simulator.
   signal(SIGINT, sigintHandler);
+
+  // See posixCancelTimerWarmupPthreadCancel's own comment for why this has
+  // to happen here, before any coroutine's stack is carved out of the
+  // global stack allocated below.
+  posixCancelTimerWarmupPthreadCancel();
 
   // Save our reset context for later.
   memcpy(_resetBuffer, resetBuffer, sizeof(jmp_buf));
