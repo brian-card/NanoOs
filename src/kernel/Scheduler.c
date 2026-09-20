@@ -4566,6 +4566,8 @@ void runScheduler(void) {
     logError("Process %d's stack overflowed\n", processDescriptor->processId);
     processTerminate(processDescriptor, false);
     threadSetContext(processDescriptor->mainThread, processDescriptor);
+    comessageQueueRemove(msg_to(&processDescriptor->message).coro,
+      &processDescriptor->message);
     memset(&processDescriptor->message, 0, sizeof(ProcessMessage));
     processResetStack(processDescriptor);
   }
@@ -4611,6 +4613,8 @@ void runScheduler(void) {
     // happens.
     processTerminate(processDescriptor, false);
     threadSetContext(processDescriptor->mainThread, processDescriptor);
+    comessageQueueRemove(msg_to(&processDescriptor->message).coro,
+      &processDescriptor->message);
     memset(&processDescriptor->message, 0, sizeof(ProcessMessage));
 
     if (processDescriptor->restartFunction != NULL) {
