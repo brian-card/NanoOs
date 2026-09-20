@@ -189,6 +189,10 @@ typedef struct NamedProcessEntry {
     .deviceIds =         0x01, /* Bitmask for device ID 0 */ \
   }, \
   { \
+    .subsystemFunction = (((uint16_t) HAL_SPI) << 8) | HAL_SPI_TRANSFER8, \
+    .deviceIds =         0x01, /* Bitmask for device ID 0 */ \
+  }, \
+  { \
     .subsystemFunction = (((uint16_t) HAL_SPI) << 8) | HAL_SPI_TRANSFER_BYTES, \
     .deviceIds =         0x01, /* Bitmask for device ID 0 */ \
   }, \
