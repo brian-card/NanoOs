@@ -50,6 +50,69 @@ int kernelTestRun(NanoOsTestFn body) {
 /// does not have to include the enum's header.
 #define DRIVER_PRIVILEGE_LEVEL 0 /* PRIVILEGE_LEVEL_KERNEL */
 
+/// @var driverHalCapabilities
+///
+/// @brief HAL capabilities granted to the driver process.  Only the
+/// scheduler gets an unconditional pass through callHal() now (see
+/// HalCommon.c), so the driver -- which is not the scheduler -- needs an
+/// explicit grant for every HAL function any test body calls directly.
+/// This is a test-only concession to keep "kernel tests can call HAL
+/// functions directly" true without production code needing a bypass for
+/// it; add an entry here (in sorted subsystemFunction order) whenever a
+/// new test calls a HAL function the driver doesn't have yet.
+///
+/// @note findHalCapability() does an early-terminating linear search that
+/// assumes this array is sorted in ascending order of subsystemFunction
+/// (i.e. by (subsystem << 8) | function).
+static HalCapability driverHalCapabilities[] = {
+  {
+    .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_POLL,
+    .deviceIds =         0x03,
+  },
+  {
+    .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_WRITE,
+    .deviceIds =         0x03,
+  },
+  {
+    .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_IS_CONSOLE,
+    .deviceIds =         0x03,
+  },
+  {
+    .subsystemFunction = (((uint16_t) HAL_CLOCK) << 8)
+      | HAL_CLOCK_GET_ELAPSED_MILLISECONDS,
+    .deviceIds =         0x00,
+  },
+  {
+    .subsystemFunction = (((uint16_t) HAL_CLOCK) << 8)
+      | HAL_CLOCK_GET_ELAPSED_MICROSECONDS,
+    .deviceIds =         0x00,
+  },
+  {
+    .subsystemFunction = (((uint16_t) HAL_CLOCK) << 8)
+      | HAL_CLOCK_GET_ELAPSED_NANOSECONDS,
+    .deviceIds =         0x00,
+  },
+  {
+    .subsystemFunction = (((uint16_t) HAL_TIMER) << 8)
+      | HAL_TIMER_CONFIG_ONE_SHOT,
+    .deviceIds =         0x03,
+  },
+  {
+    .subsystemFunction = (((uint16_t) HAL_TIMER) << 8)
+      | HAL_TIMER_CONFIGURED_NANOSECONDS,
+    .deviceIds =         0x03,
+  },
+  {
+    .subsystemFunction = (((uint16_t) HAL_TIMER) << 8) | HAL_TIMER_CANCEL,
+    .deviceIds =         0x03,
+  },
+  {
+    .subsystemFunction = (((uint16_t) HAL_TIMER) << 8)
+      | HAL_TIMER_CANCEL_AND_GET,
+    .deviceIds =         0x03,
+  },
+};
+
 // --- child-side state (only meaningful in the forked child) -------------
 
 static int         _reportFd   = -1;
@@ -100,6 +163,9 @@ static int kernelTestRestartShell(void *processDescriptorRaw) {
   threadSetContext(processDescriptor->mainThread, processDescriptor);
   processDescriptor->userId         = ROOT_USER_ID;
   processDescriptor->privilegeLevel = DRIVER_PRIVILEGE_LEVEL;
+  processDescriptor->halCapabilities = driverHalCapabilities;
+  processDescriptor->numHalCapabilities
+    = sizeof(driverHalCapabilities) / sizeof(driverHalCapabilities[0]);
 
   return 0;
 }
