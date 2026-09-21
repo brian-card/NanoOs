@@ -297,6 +297,75 @@ typedef struct SavedContext {
 /// @brief Temporary storage for storing the context during a timer interrupt.
 static SavedContext _savedContext;
 
+/// @var _savedContextState
+///
+/// @brief TEMPORARY DIAGNOSTIC: tracks whether _savedContext has been
+/// written by a timer's frame handler but not yet consumed by the matching
+/// SAVE_CONTEXT() in the resume handler.
+///
+/// @details _savedContext is a single global shared by both timer handlers,
+/// and the resume handler that consumes it runs in Thread mode with
+/// interrupts enabled.  Any second timer interrupt arriving in that window
+/// overwrites it, and the first context is lost -- which would leave a
+/// restored PC/LR pointing into the timer handling code itself.  This flag
+/// detects exactly that overlap.  Remove once the ItsyBitsy M0 boot hang is
+/// root-caused.
+static volatile uint8_t _savedContextState = 0;
+
+/// @def SAVED_CONTEXT_IN_USE
+///
+/// @brief Bit in _savedContextState meaning _savedContext has been written
+/// but not yet consumed.
+#define SAVED_CONTEXT_IN_USE 0x01
+
+/// @def SAVED_CONTEXT_REENTRY_REPORTED
+///
+/// @brief Bit in _savedContextState meaning the overlap has already been
+/// reported once, so it is not repeated.
+#define SAVED_CONTEXT_REENTRY_REPORTED 0x02
+
+/// @var _diagTimerReentry
+///
+/// @brief TEMPORARY DIAGNOSTIC string reported when the overlap above is
+/// detected.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _diagBadRestore[] KEEP_IN_FLASH
+  = "DIAG bad saved context: pc=";
+static const char _diagBadRestoreSp[] KEEP_IN_FLASH = " sp=";
+static const char _diagBadRestoreNewline[] KEEP_IN_FLASH = "\n";
+
+/// @def VALIDATE_SAVED_CONTEXT
+///
+/// @brief Sanity-check a context captured by SAVE_CONTEXT() before
+/// RESTORE_CONTEXT() branches through it.
+///
+/// @details RESTORE_CONTEXT ends in "bx r5" with r5 = savedContext.pc.  A
+/// zeroed or stale context therefore branches to 0 with the Thumb bit clear,
+/// which on this core is an INVSTATE HardFault reporting pc=0 and xpsr=0 --
+/// exactly the fault observed.  The frame handler always sets pc with "| 1",
+/// so a valid pc is odd and in flash; a valid sp is inside RAM.  Report and
+/// skip the restore rather than branching through a bad one.
+#define VALIDATE_SAVED_CONTEXT() \
+  do { \
+    if (((savedContext.pc & 1) == 0) \
+      || (savedContext.pc < 0x2000) \
+      || (savedContext.sp < 0x20000000) \
+      || (savedContext.sp > 0x20008000) \
+    ) { \
+      printString(_diagBadRestore); \
+      printHex(savedContext.pc); \
+      printString(_diagBadRestoreSp); \
+      printHex(savedContext.sp); \
+      printString(_diagBadRestoreNewline); \
+      while (1) { } \
+    } \
+  } while (0)
+
+static const char _diagTimerReentry[] KEEP_IN_FLASH
+  = "DIAG timer reentry: _savedContext clobbered before use\n";
+
 /// @def THUMB_BIT
 ///
 /// @brief A value that corresponds to the thumb bit in xPSR (bit 24).
@@ -311,7 +380,8 @@ static SavedContext _savedContext;
 ///
 /// @brief Save the context of the stack frame we're using before proceeding.
 #define SAVE_CONTEXT() \
-  SavedContext savedContext = _savedContext
+  SavedContext savedContext = _savedContext; \
+  _savedContextState &= (uint8_t) ~SAVED_CONTEXT_IN_USE
 
 /// @def RESTORE_CONTEXT
 ///
@@ -359,10 +429,11 @@ static SavedContext _savedContext;
     "1:                    \n" \
     "mrs  r0, msp          \n" \
     "2:                    \n" \
-    "push {lr}             \n" /* Preserve EXC_RETURN across the call */ \
+    "push {r4, lr}         \n" /* EXC_RETURN preserved; pair keeps SP */ \
+                               /* 8-byte aligned per AAPCS. */ \
     "ldr  r1, =" #frameHandler " \n" \
     "blx  r1               \n" \
-    "pop  {pc}             \n" /* Loading EXC_RETURN into PC returns */ \
+    "pop  {r4, pc}         \n" /* Loading EXC_RETURN into PC returns */ \
     : \
     : \
     : "r0", "r1", "memory" \
@@ -1268,6 +1339,7 @@ void arduinoSamD21x18ATimerInterruptHandler(int32_t deviceId) {
 void arduinoSamD21x18ATimerInterruptHandler0() {
   SAVE_CONTEXT();
   arduinoSamD21x18ATimerInterruptHandler(0);
+  VALIDATE_SAVED_CONTEXT();
   RESTORE_CONTEXT();
 }
 
@@ -1280,6 +1352,7 @@ void arduinoSamD21x18ATimerInterruptHandler0() {
 void arduinoSamD21x18ATimerInterruptHandler1() {
   SAVE_CONTEXT();
   arduinoSamD21x18ATimerInterruptHandler(1);
+  VALIDATE_SAVED_CONTEXT();
   RESTORE_CONTEXT();
 }
 
@@ -1328,6 +1401,17 @@ static void arduinoSamD21x18ATimerFrameHandler(
     // Clear interrupt flag
     hwTimer->tc->COUNT16.INTFLAG.reg = TC_INTFLAG_OVF;
   }
+
+  if ((_savedContextState & SAVED_CONTEXT_IN_USE) != 0) {
+    // A previous timer's context has not been consumed yet; writing over it
+    // now loses it.  See _savedContextState's own comment above.  Reported
+    // once only, to avoid flooding.
+    if ((_savedContextState & SAVED_CONTEXT_REENTRY_REPORTED) == 0) {
+      _savedContextState |= SAVED_CONTEXT_REENTRY_REPORTED;
+      printString(_diagTimerReentry);
+    }
+  }
+  _savedContextState |= SAVED_CONTEXT_IN_USE;
 
   _savedContext.r0  = exceptionFrame[0];
   _savedContext.r1  = exceptionFrame[1];
@@ -2022,7 +2106,28 @@ static const char _diagHardFaultR0[] KEEP_IN_FLASH = " r0=";
 static const char _diagHardFaultR1[] KEEP_IN_FLASH = " r1=";
 static const char _diagHardFaultR2[] KEEP_IN_FLASH = " r2=";
 static const char _diagHardFaultR3[] KEEP_IN_FLASH = " r3=";
+static const char _diagHardFaultR4[] KEEP_IN_FLASH = " r4=";
+static const char _diagHardFaultStackDump[] KEEP_IN_FLASH = "DIAG stack:";
+static const char _diagHardFaultRunning[] KEEP_IN_FLASH
+  = "DIAG runningPid=";
+static const char _diagHardFaultRunCoro[] KEEP_IN_FLASH = " runningCoroutine=";
+static const char _diagHardFaultThread[] KEEP_IN_FLASH = ":t";
+static const char _diagHardFaultHalImpl[] KEEP_IN_FLASH = "DIAG halImpl@";
+static const char _diagHardFaultHalFns[] KEEP_IN_FLASH = "DIAG halFunctions:";
+static const char _diagHardFaultUartFns[] KEEP_IN_FLASH = "DIAG uartFns:";
+static const char _diagHardFaultColon[] KEEP_IN_FLASH = ":";
+static const char _diagHardFaultSpace[] KEEP_IN_FLASH = " ";
+static const char _diagHardFaultFrame[] KEEP_IN_FLASH = " frame=";
+static const char _diagHardFaultXpsr[] KEEP_IN_FLASH = " xpsr=";
+static const char _diagHardFaultMsp[] KEEP_IN_FLASH = " msp=";
+static const char _diagHardFaultPsp[] KEEP_IN_FLASH = " psp=";
 static const char _diagHardFaultNewline[] KEEP_IN_FLASH = "\n";
+static const char _diagHardFaultStacks[] KEEP_IN_FLASH
+  = "DIAG stacks (pid:stackEnd:canary)";
+static const char _diagHardFaultStackPid[] KEEP_IN_FLASH = " p";
+static const char _diagHardFaultStackEnd[] KEEP_IN_FLASH = ":";
+static const char _diagHardFaultCanaryOk[] KEEP_IN_FLASH = ":ok";
+static const char _diagHardFaultCanaryBad[] KEEP_IN_FLASH = ":SMASHED";
 
 extern "C" {
 
@@ -2047,7 +2152,7 @@ extern "C" {
 /// @return This function never returns.
 ///
 /// @note Remove once the ItsyBitsy M0 boot hang is root-caused.
-void hardFaultReport(uint32_t *exceptionFrame) {
+void hardFaultReport(uint32_t *exceptionFrame, uint32_t r4Value) {
   printString(_diagHardFaultPrefix);
   printHex(exceptionFrame[6]); // Stacked PC: the faulting instruction.
   printString(_diagHardFaultLr);
@@ -2060,6 +2165,126 @@ void hardFaultReport(uint32_t *exceptionFrame) {
   printHex(exceptionFrame[2]);
   printString(_diagHardFaultR3);
   printHex(exceptionFrame[3]);
+
+  // The frame address IS the stack pointer at the moment of the fault.  If
+  // it lands at or near a coroutine's stack-end canary
+  // (COROUTINE_STACK_END_VALUE, "STACKEND"), that is a stack overflow: the
+  // hardware's automatic stacking ran off the end of the active stack, so
+  // the register values above are whatever happened to already be in that
+  // memory rather than a faithful snapshot.
+  printString(_diagHardFaultFrame);
+  printHex((uintptr_t) exceptionFrame);
+  printString(_diagHardFaultXpsr);
+  printHex(exceptionFrame[7]);
+
+  uint32_t mspValue = 0;
+  uint32_t pspValue = 0;
+  __asm volatile ("mrs %0, msp" : "=r" (mspValue));
+  __asm volatile ("mrs %0, psp" : "=r" (pspValue));
+  printString(_diagHardFaultMsp);
+  printHex(mspValue);
+  printString(_diagHardFaultPsp);
+  printHex(pspValue);
+  // r4 is callee-saved so the hardware does not stack it, but it is still
+  // live at fault time -- and it is the register holding the called
+  // function pointer in the coroutine callback dispatch path.
+  printString(_diagHardFaultR4);
+  printHex(r4Value);
+  printString(_diagHardFaultNewline);
+
+  // Every coroutine stack is carved out of this one main stack by
+  // coroutineAllocateStack, so the slabs are adjacent and separated only by
+  // each coroutine's stack-end canary.  A process that overruns its budget
+  // writes straight into its neighbour's stack, smashing saved return
+  // addresses -- which is why faults land in function epilogues with an LR
+  // that makes no sense for the call site.  Report each stack's boundary and
+  // whether its canary survived, which names the process that overran.
+  // Dump the words at and above the exception frame.  A single reported PC
+  // has proven unreliable here -- an imprecise abort reports some later,
+  // innocent instruction -- so dump raw stack words instead: the ones that
+  // look like code addresses are the real return chain.  Bounded at
+  // __StackTop so this cannot read off the end of RAM.
+  extern uint32_t __StackTop;
+  printString(_diagHardFaultStackDump);
+  for (int ii = 0; ii < 32; ii++) {
+    uint32_t *wordAddress = &exceptionFrame[ii];
+    if (wordAddress >= &__StackTop) {
+      break;
+    }
+    printString(_diagHardFaultSpace);
+    printHex(*wordAddress);
+  }
+  printString(_diagHardFaultNewline);
+
+  // Ownership of a stack address cannot be inferred from the gaps between
+  // stackEnd values: the memory manager relocates its own stackEnd into its
+  // init frame, and threadProvision carves slabs for dummy coroutines that
+  // never appear in allProcesses[].  So ask the scheduler directly who is
+  // running, and print each process's mainThread pointer to match against
+  // the running coroutine.
+  // r2 pointed into halImpl on the INVSTATE fault, and the fault itself was
+  // a branch through a function pointer whose Thumb bit was clear.  Dump the
+  // HAL dispatch struct's words so we can see directly whether its function
+  // pointers have been corrupted -- a valid one is an odd flash address.
+  {
+    uint32_t *halWords = (uint32_t*) &halImpl;
+    printString(_diagHardFaultHalImpl);
+    printHex((uintptr_t) halWords);
+    printString(_diagHardFaultColon);
+    for (int ii = 0; ii < 24; ii++) {
+      printString(_diagHardFaultSpace);
+      printHex(halWords[ii]);
+    }
+    printString(_diagHardFaultNewline);
+  }
+
+  // callHal dispatches through halFunctions[subsystem][function], and only
+  // rejects that entry if it is NULL -- a corrupted non-NULL value passes
+  // the check and gets branched to, which is exactly an INVSTATE fault at a
+  // non-Thumb address.  halImpl above is a different table; dump this one
+  // too.  Every valid entry is an odd flash address.
+  printString(_diagHardFaultHalFns);
+  for (int ii = 0; ii < HAL_NUM_SUBSYSTEMS; ii++) {
+    printString(_diagHardFaultSpace);
+    printHex((uintptr_t) halFunctions[ii]);
+  }
+  printString(_diagHardFaultNewline);
+
+  printString(_diagHardFaultUartFns);
+  if (halFunctions[HAL_UART] != NULL) {
+    for (int ii = 0; ii < 12; ii++) {
+      printString(_diagHardFaultSpace);
+      printHex((uintptr_t) halFunctions[HAL_UART][ii]);
+    }
+  }
+  printString(_diagHardFaultNewline);
+
+  printString(_diagHardFaultRunning);
+  printInt(getRunningPid());
+  printString(_diagHardFaultRunCoro);
+  printHex((uintptr_t) getRunningCoroutine());
+  printString(_diagHardFaultNewline);
+
+  printString(_diagHardFaultStacks);
+  for (int ii = 0; ii < NUM_PROCESSES; ii++) {
+    Coroutine *processThread = _allProcesses[ii].mainThread;
+    if (processThread == NULL) {
+      continue;
+    }
+    printString(_diagHardFaultStackPid);
+    printInt(ii + 1);
+    printString(_diagHardFaultThread);
+    printHex((uintptr_t) processThread);
+    printString(_diagHardFaultStackEnd);
+    printHex((uintptr_t) processThread->stackEnd);
+    if ((processThread->stackEnd != NULL)
+      && (*(processThread->stackEnd) == COROUTINE_STACK_END_VALUE)
+    ) {
+      printString(_diagHardFaultCanaryOk);
+    } else {
+      printString(_diagHardFaultCanaryBad);
+    }
+  }
   printString(_diagHardFaultNewline);
 
   while (1) {
@@ -2089,8 +2314,9 @@ __attribute__((naked)) void HardFault_Handler(void) {
     "1:                           \n"
     "mrs  r0, msp                 \n"
     "2:                           \n"
-    "ldr  r1, =hardFaultReport    \n"
-    "bx   r1                      \n"
+    "mov  r1, r4                  \n" /* r4 is not hardware-stacked */
+    "ldr  r2, =hardFaultReport    \n"
+    "bx   r2                      \n"
   );
 }
 
