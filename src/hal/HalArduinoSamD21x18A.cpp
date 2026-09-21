@@ -128,7 +128,7 @@ void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
 /// MUST be kept in sync with:
 ///   - __nanoos_overlay_window in ld/ArduinoSamd21FlashWithBootloader.ld
 ///   - OVERLAY_RAM ORIGIN      in usr/src/NanoOsArduinoSamd21.ld
-#define OVERLAY_ADDRESS 0x20002520
+#define OVERLAY_ADDRESS 0x200025A0
 
 /// @def OVERLAY_SIZE
 ///
@@ -289,13 +289,42 @@ static void **_processStorage[NUM_PROCESSES];
 /// @param pc The value to load into the ARM pc register.
 /// @param sp The value to load into the ARM sp register.
 typedef struct SavedContext {
+  /// @param r4..r11 The callee-saved registers of the interrupted context.
+  /// The hardware does not stack these, so they are captured by the naked
+  /// exception stub before any C code runs.  Without them, interrupted code
+  /// resumed with r4-r11 holding whatever the timer path left behind --
+  /// observed as callHal computing halFunctionCounts[subsystem] from a
+  /// clobbered r5 and taking an unaligned load fault.
+  ///
+  /// Kept first in the struct so TIMER_EXCEPTION_ENTRY can store straight to
+  /// offset 0; the static_asserts below pin every offset the assembly uses.
+  uint32_t r4, r5, r6, r7;
+  uint32_t r8, r9, r10, r11;
   uint32_t r0, r1, r2, r3, r12, lr, pc, sp;
+  /// @param owner TEMPORARY DIAGNOSTIC: the coroutine this context was
+  /// captured from, so SAVE_CONTEXT() can verify it is being consumed by the
+  /// same coroutine that produced it.
+  void *owner;
 } SavedContext;
 
 /// @var _savedContext
 ///
 /// @brief Temporary storage for storing the context during a timer interrupt.
-static SavedContext _savedContext;
+extern "C" {
+/// @note Deliberately not static: TIMER_EXCEPTION_ENTRY is a naked function
+/// and must reference this by its unmangled assembler name.
+SavedContext _savedContext;
+}
+
+static_assert(offsetof(SavedContext, r4)  ==  0, "asm offset");
+static_assert(offsetof(SavedContext, r8)  == 16, "asm offset");
+static_assert(offsetof(SavedContext, r0)  == 32, "asm offset");
+static_assert(offsetof(SavedContext, r12) == 48, "asm offset");
+static_assert(offsetof(SavedContext, lr)  == 52, "asm offset");
+static_assert(offsetof(SavedContext, pc)  == 56, "asm offset");
+static_assert(offsetof(SavedContext, sp)  == 60, "asm offset");
+
+static volatile uint8_t _savedContextState = 0;
 
 /// @var _savedContextState
 ///
@@ -310,7 +339,7 @@ static SavedContext _savedContext;
 /// restored PC/LR pointing into the timer handling code itself.  This flag
 /// detects exactly that overlap.  Remove once the ItsyBitsy M0 boot hang is
 /// root-caused.
-static volatile uint8_t _savedContextState = 0;
+
 
 /// @def SAVED_CONTEXT_IN_USE
 ///
@@ -331,6 +360,11 @@ static volatile uint8_t _savedContextState = 0;
 ///
 /// @note KEEP_IN_FLASH is required here because .rodata is removed from the
 /// final binary on some targets.
+static const char _diagContextOwnerMismatch[] KEEP_IN_FLASH
+  = "DIAG context owner mismatch: producedBy=";
+static const char _diagContextOwnerNow[] KEEP_IN_FLASH = " consumedBy=";
+static const char _diagContextOwnerNewline[] KEEP_IN_FLASH = "\n";
+
 static const char _diagBadRestore[] KEEP_IN_FLASH
   = "DIAG bad saved context: pc=";
 static const char _diagBadRestoreSp[] KEEP_IN_FLASH = " sp=";
@@ -381,7 +415,14 @@ static const char _diagTimerReentry[] KEEP_IN_FLASH
 /// @brief Save the context of the stack frame we're using before proceeding.
 #define SAVE_CONTEXT() \
   SavedContext savedContext = _savedContext; \
-  _savedContextState &= (uint8_t) ~SAVED_CONTEXT_IN_USE
+  _savedContextState &= (uint8_t) ~SAVED_CONTEXT_IN_USE; \
+  if (savedContext.owner != (void*) getRunningCoroutine()) { \
+    printString(_diagContextOwnerMismatch); \
+    printHex((uintptr_t) savedContext.owner); \
+    printString(_diagContextOwnerNow); \
+    printHex((uintptr_t) getRunningCoroutine()); \
+    printString(_diagContextOwnerNewline); \
+  }
 
 /// @def RESTORE_CONTEXT
 ///
@@ -390,19 +431,35 @@ static const char _diagTimerReentry[] KEEP_IN_FLASH
 #define RESTORE_CONTEXT() \
   /* Jump back to where we were interrupted */ \
   asm volatile( \
-    "mov r4, %[ctx]\n\t"         /* Get address of context */ \
-    "ldmia r4!, {r0-r3}\n\t"     /* Load r0-r3 */ \
-    "ldr r5, [r4, #0]\n\t"       /* Load r12 */ \
-    "mov r12, r5\n\t" \
-    "ldr r5, [r4, #4]\n\t"       /* Load lr */ \
-    "mov lr, r5\n\t" \
-    "ldr r5, [r4, #8]\n\t"       /* Load pc */ \
-    "ldr r4, [r4, #12]\n\t"      /* Load sp */ \
-    "mov sp, r4\n\t"             /* Restore SP */ \
-    "bx r5\n\t"                  /* Branch to PC */ \
+    "mov  r7, %[ctx]     \n\t" /* r7 = &savedContext, base throughout */ \
+    "ldr  r0, [r7, #60]  \n\t" /* sp first: needed for the push below */ \
+    "mov  sp, r0         \n\t" \
+    "ldr  r0, [r7, #16]  \n\t" /* r8 */ \
+    "ldr  r1, [r7, #20]  \n\t" /* r9 */ \
+    "ldr  r2, [r7, #24]  \n\t" /* r10 */ \
+    "ldr  r3, [r7, #28]  \n\t" /* r11 */ \
+    "mov  r8, r0         \n\t" \
+    "mov  r9, r1         \n\t" \
+    "mov  r10, r2        \n\t" \
+    "mov  r11, r3        \n\t" \
+    "ldr  r0, [r7, #48]  \n\t" /* r12 */ \
+    "mov  r12, r0        \n\t" \
+    "ldr  r0, [r7, #52]  \n\t" /* lr */ \
+    "mov  lr, r0         \n\t" \
+    "ldr  r0, [r7, #56]  \n\t" /* target pc */ \
+    "push {r0}           \n\t" /* stage it so r0 can be restored below */ \
+    "ldr  r0, [r7, #32]  \n\t" /* r0-r3 */ \
+    "ldr  r1, [r7, #36]  \n\t" \
+    "ldr  r2, [r7, #40]  \n\t" \
+    "ldr  r3, [r7, #44]  \n\t" \
+    "ldr  r4, [r7, #0]   \n\t" /* r4-r6 */ \
+    "ldr  r5, [r7, #4]   \n\t" \
+    "ldr  r6, [r7, #8]   \n\t" \
+    "ldr  r7, [r7, #12]  \n\t" /* r7 last; base is dead after this */ \
+    "pop  {pc}           \n\t" /* branch, leaving every register correct */ \
     : \
     : [ctx] "l" (&savedContext) \
-    : "r4", "r5", "memory" \
+    : "memory" \
   ); \
   __builtin_unreachable()
 
@@ -420,6 +477,16 @@ static const char _diagTimerReentry[] KEEP_IN_FLASH
 /// prologue runs before the stack pointer is read.
 #define TIMER_EXCEPTION_ENTRY(frameHandler) \
   __asm volatile ( \
+    /* Capture the interrupted context's callee-saved registers first: the */ \
+    /* hardware does not stack r4-r11, and any C code called below would */ \
+    /* save and restore only its own copies. */ \
+    "ldr  r2, =_savedContext \n" /* r2 = &_savedContext.r4 (offset 0) */ \
+    "stmia r2!, {r4-r7}    \n" /* r4-r7; r2 advances to &r8 */ \
+    "mov  r4, r8           \n" \
+    "mov  r5, r9           \n" \
+    "mov  r6, r10          \n" \
+    "mov  r7, r11          \n" \
+    "stmia r2!, {r4-r7}    \n" /* r8-r11 */ \
     "movs r0, #4           \n" /* EXC_RETURN bit 2: 0 = MSP, 1 = PSP */ \
     "mov  r1, lr           \n" \
     "tst  r0, r1           \n" \
@@ -436,7 +503,7 @@ static const char _diagTimerReentry[] KEEP_IN_FLASH
     "pop  {r4, pc}         \n" /* Loading EXC_RETURN into PC returns */ \
     : \
     : \
-    : "r0", "r1", "memory" \
+    : "r0", "r1", "r2", "memory" \
   )
 
 int arduinoSamD21x18AProcessStackSize(va_list args) {
@@ -1402,10 +1469,10 @@ static void arduinoSamD21x18ATimerFrameHandler(
     hwTimer->tc->COUNT16.INTFLAG.reg = TC_INTFLAG_OVF;
   }
 
+
   if ((_savedContextState & SAVED_CONTEXT_IN_USE) != 0) {
     // A previous timer's context has not been consumed yet; writing over it
-    // now loses it.  See _savedContextState's own comment above.  Reported
-    // once only, to avoid flooding.
+    // now loses it.  Reported once only, to avoid flooding.
     if ((_savedContextState & SAVED_CONTEXT_REENTRY_REPORTED) == 0) {
       _savedContextState |= SAVED_CONTEXT_REENTRY_REPORTED;
       printString(_diagTimerReentry);
@@ -1413,6 +1480,7 @@ static void arduinoSamD21x18ATimerFrameHandler(
   }
   _savedContextState |= SAVED_CONTEXT_IN_USE;
 
+  _savedContext.owner = (void*) getRunningCoroutine();
   _savedContext.r0  = exceptionFrame[0];
   _savedContext.r1  = exceptionFrame[1];
   _savedContext.r2  = exceptionFrame[2];
