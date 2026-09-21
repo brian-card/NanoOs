@@ -293,6 +293,40 @@ typedef struct HalCapability {
   uint8_t deviceIds;
 } HalCapability;
 
+/// @def LOG_FALLBACK_HAL_CAPABILITIES
+///
+/// @brief The HalCapability entries that logMessage() (Logger.c) needs in
+/// order to run its immediate-write fallback in the calling process's own
+/// context, which is what happens whenever the logger process isn't up (or
+/// isn't run at all on a given build).
+///
+/// Every process that can call logError()/logDebug()/etc. needs these, not
+/// just the logger process itself.  Without HAL_MEMORY_LOG_BUFFER in
+/// particular, HAL->memory.logBuffer() is denied, logMessage()'s local
+/// logBuffer stays NULL, and the fallback formats through a NULL pointer --
+/// on the SAMD21 that's a store into flash, i.e. an immediate HardFault
+/// raised from inside the error reporting path.  logMessage() now guards
+/// against that, but a process missing these capabilities still silently
+/// loses all of its log output, so grant them alongside
+/// HAL_UART_WRITE/HAL_UART_IS_CONSOLE wherever those are granted for the
+/// same fallback.
+///
+/// @note Expands to entries sorted by (subsystem << 8) | function, as
+/// findHalCapability()'s early-terminating linear search requires.  Place the
+/// macro between a HAL_MEMORY_BOTTOM_OF_HEAP entry (or any earlier
+/// HalMemoryFunction) and the array's first non-HAL_MEMORY entry.
+#define LOG_FALLBACK_HAL_CAPABILITIES \
+  { \
+    .subsystemFunction = (((uint16_t) HAL_MEMORY) << 8) \
+      | HAL_MEMORY_STATIC_LOGS, \
+    .deviceIds =         0x00, /* No device for this function */ \
+  }, \
+  { \
+    .subsystemFunction = (((uint16_t) HAL_MEMORY) << 8) \
+      | HAL_MEMORY_LOG_BUFFER, \
+    .deviceIds =         0x00, /* No device for this function */ \
+  }
+
 // HAL subsystems
 
 /// @struct HalPlatform
