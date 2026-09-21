@@ -43,6 +43,13 @@
 #include "Scheduler.h"
 #include "SdCard.h"
 
+// HAL space includes.  Needed for sdCardHalCapabilities/
+// numSdCardHalCapabilities: the preemption timer's device ID isn't known
+// until initializeSchedulerState() runs, so that's the only place its
+// HAL_TIMER_CANCEL capability entry can be patched -- see the patch right
+// next to baseUserHalCapabilities's below.
+#include "../hal/HalCommon.h"
+
 // User space includes
 #include "../user/NanoOsLibC.h"
 #include "../user/NanoOsUnistd.h"
@@ -250,6 +257,7 @@ static FileDescriptor standardUserFileDescriptors[
 /// by (subsystem << 8) | function). Keep new entries in the correct sorted
 /// position, not just appended at the end.
 HalCapability consoleHalCapabilities[] = {
+  LOG_FALLBACK_HAL_CAPABILITIES,
   {
     .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_POLL,
     .deviceIds =         0x03, // Bitmask for device IDs 0 and 1
@@ -261,6 +269,11 @@ HalCapability consoleHalCapabilities[] = {
   {
     .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_IS_CONSOLE,
     .deviceIds =         0x03, // Bitmask for device IDs 0 and 1
+  },
+  {
+    .subsystemFunction = (((uint16_t) HAL_CLOCK) << 8)
+      | HAL_CLOCK_GET_ELAPSED_NANOSECONDS,
+    .deviceIds =         0x00, // No device for this function
   },
 };
 
@@ -291,6 +304,7 @@ HalCapability memoryManagerHalCapabilities[] = {
       | HAL_MEMORY_BOTTOM_OF_HEAP,
     .deviceIds =         0x00, // No device for this function
   },
+  LOG_FALLBACK_HAL_CAPABILITIES,
   {
     .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_WRITE,
     .deviceIds =         0x03, // Bitmask for device IDs 0 and 1
@@ -298,6 +312,11 @@ HalCapability memoryManagerHalCapabilities[] = {
   {
     .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_IS_CONSOLE,
     .deviceIds =         0x03, // Bitmask for device IDs 0 and 1
+  },
+  {
+    .subsystemFunction = (((uint16_t) HAL_CLOCK) << 8)
+      | HAL_CLOCK_GET_ELAPSED_NANOSECONDS,
+    .deviceIds =         0x00, // No device for this function
   },
   {
     .subsystemFunction = (((uint16_t) HAL_POWER) << 8) | HAL_POWER_ENTER_MODE,
@@ -315,6 +334,7 @@ HalCapability memoryManagerHalCapabilities[] = {
 /// by (subsystem << 8) | function). Keep new entries in the correct sorted
 /// position, not just appended at the end.
 HalCapability baseExecutiveHalCapabilities[] = {
+  LOG_FALLBACK_HAL_CAPABILITIES,
   {
     .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_WRITE,
     .deviceIds =         0x03, // Bitmask for device IDs 0 and 1
@@ -399,16 +419,18 @@ HalCapability loggerHalCapabilities[] = {
 /// @brief Array of HalCapability items that describe what a process can do
 /// with the HAL.
 ///
-/// @note If this array is extended, its adjustments during bringup need to be
-/// modified as well!!!!!!!!!!!!!!!!!!!!!!!!
-///
 /// @note findHalCapability() does an early-terminating linear search that
 /// assumes this array is sorted in ascending order of subsystemFunction (i.e.
 /// by (subsystem << 8) | function). Keep new entries in the correct sorted
-/// position. HAL_TIMER_CANCEL must stay the LAST entry: initializeSchedulerState()
-/// indexes this array by literal position (baseUserHalCapabilities[5]) to
-/// patch in the preemption timer's device ID.
+/// position. HAL_TIMER_CANCEL must stay the LAST entry:
+/// initializeSchedulerState() patches the preemption timer's device ID into
+/// the last entry, the same way it does for sdCardHalCapabilities.  It used to
+/// index this array by the literal position 5 instead, which silently aimed at
+/// the wrong entry the first time the array grew; it now derives the index
+/// from sizeof, so extending the array here needs no matching edit there as
+/// long as HAL_TIMER_CANCEL stays last.
 HalCapability baseUserHalCapabilities[] = {
+  LOG_FALLBACK_HAL_CAPABILITIES,
 #ifdef NANO_OS_DEBUG
   {
     .subsystemFunction = 0x0000,
@@ -935,6 +957,19 @@ void* dummyProcess(void *args) {
   return NULL;
 }
 
+/// @var _diagSendWaitStuck
+///
+/// @brief TEMPORARY DIAGNOSTIC strings for the spin-detector in
+/// schedulerSendProcessMessageToProcess's wait loop.  Remove along with the
+/// rest of these once the ItsyBitsy M0 boot hang is root-caused.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _diagSendWaitStuck[] KEEP_IN_FLASH
+  = "DIAG send-and-wait STUCK waiting on process pid=";
+static const char _diagSendWaitNewline[] KEEP_IN_FLASH = "\n";
+static int _diagSendWaitPrintsRemaining = 10;
+
 /// @fn int schedulerSendProcessMessageToProcess(
 ///   ProcessDescriptor *processDescriptor, ProcessMessage *processMessage)
 ///
@@ -987,8 +1022,33 @@ int schedulerSendProcessMessageToProcess(
     goto exit;
   }
 
-  while (processMessageDone(processMessage) == false) {
-    runSchedulerQueues(PRIVILEGE_LEVEL_SUPERVISOR);
+  {
+    // TEMPORARY DIAGNOSTIC: bounded spin counter.  Fires exactly once, only
+    // if this wait loop genuinely never sees processMessageDone() become
+    // true within 5000 iterations -- confirms a real stall here
+    // specifically (as opposed to schedFopen's own _functionInProgress
+    // guard, or something earlier) without printing anything at all for a
+    // normal, fast wait.  (Originally 2000000; lowered because each
+    // iteration does real scheduling work -- popping and resuming other
+    // processes -- not a trivial check, so on real hardware 2000000
+    // iterations could take far longer than anyone would wait around for,
+    // even for a genuine infinite spin.)  Remove once the ItsyBitsy M0
+    // boot hang is root-caused.
+    uint32_t diagSpinCount = 0;
+    bool diagSpinReported = false;
+    while (processMessageDone(processMessage) == false) {
+      runSchedulerQueues(PRIVILEGE_LEVEL_SUPERVISOR);
+      diagSpinCount++;
+      if ((diagSpinCount == 5000) && (diagSpinReported == false)
+        && (_diagSendWaitPrintsRemaining > 0)
+      ) {
+        diagSpinReported = true;
+        _diagSendWaitPrintsRemaining--;
+        printString(_diagSendWaitStuck);
+        printInt(processDescriptor->processId);
+        printString(_diagSendWaitNewline);
+      }
+    }
   }
 
 exit:
@@ -1184,6 +1244,19 @@ void schedFree(void *ptr) {
   return;
 }
 
+/// @note KEEP_IN_FLASH is required on the string literals below because
+/// .rodata is removed from the final binary on some targets.
+static const char _diagAssignMemoryFailed[] KEEP_IN_FLASH
+  = "DIAG assignMemory FAILED memoryManagerPid=";
+static const char _diagAssignMemoryPtr[] KEEP_IN_FLASH = " ptr=";
+static const char _diagAssignMemoryPid[] KEEP_IN_FLASH = " pid=";
+static const char _diagAssignMemoryNewline[] KEEP_IN_FLASH = "\n";
+static const char _diagAssignMemoryMainThread[] KEEP_IN_FLASH
+  = "DIAG assignMemory memoryManager mainThread=";
+static const char _diagAssignMemoryGuard1[] KEEP_IN_FLASH = " guard1=";
+static const char _diagAssignMemoryGuard2[] KEEP_IN_FLASH = " guard2=";
+static int _diagAssignMemoryPrintsRemaining = 20;
+
 /// @fn int assignMemory(void *ptr, ProcessId pid) {
 ///
 /// @brief Assign a piece of memory to a specific process.
@@ -1205,6 +1278,43 @@ int assignMemory(void *ptr, ProcessId pid) {
   ) {
     // Nothing we can do.
     returnValue = -ENOMEM;
+
+    // TEMPORARY DIAGNOSTIC: capture the actual current value of the
+    // memoryManagerPid global at the moment schedulerInitSendMessageToPid
+    // failed, to distinguish "the global itself got clobbered" (would print
+    // something other than 3 here) from "allProcesses[memoryManagerPid-1]'s
+    // own struct content is corrupted" (this would still print 3, since the
+    // global itself is fine -- only the array slot's content is wrong).
+    // Remove once the ItsyBitsy M0 boot hang is root-caused.
+    if (_diagAssignMemoryPrintsRemaining > 0) {
+      _diagAssignMemoryPrintsRemaining--;
+      printString(_diagAssignMemoryFailed);
+      printInt(memoryManagerPid);
+      printString(_diagAssignMemoryPtr);
+      printHex((uintptr_t) ptr);
+      printString(_diagAssignMemoryPid);
+      printInt(pid);
+      printString(_diagAssignMemoryNewline);
+
+      // Bracket the memory manager's own Coroutine struct with its address
+      // and both guard canary values, to see which end (guard1, the first
+      // field -- something wrote forward into this struct from below it in
+      // memory -- vs guard2, the last field -- this coroutine's own data,
+      // e.g. its stack, overflowed within/past itself) got clobbered, and
+      // whether the garbage value itself is recognizable (e.g. a pointer
+      // into some other known structure).
+      Coroutine *memoryManagerThread
+        = allProcesses[memoryManagerPid - 1].mainThread;
+      printString(_diagAssignMemoryMainThread);
+      printHex((uintptr_t) memoryManagerThread);
+      if (memoryManagerThread != NULL) {
+        printString(_diagAssignMemoryGuard1);
+        printHex(memoryManagerThread->guard1);
+        printString(_diagAssignMemoryGuard2);
+        printHex(memoryManagerThread->guard2);
+      }
+      printString(_diagAssignMemoryNewline);
+    }
   }
 
   return returnValue;
@@ -1987,6 +2097,25 @@ exit:
   return returnValue;
 }
 
+/// @var _diagSchedFopenPrefix
+///
+/// @brief TEMPORARY DIAGNOSTIC strings for tracing schedFopen calls
+/// specifically (the filesystem lookup a shell's overlay metadata load
+/// goes through).  Remove along with the rest of these once the
+/// ItsyBitsy M0 boot hang is root-caused.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _diagSchedFopenPrefix[] KEEP_IN_FLASH
+  = "DIAG schedFopen path=";
+static const char _diagSchedFopenInProgress[] KEEP_IN_FLASH
+  = " functionInProgress=";
+static const char _diagSchedFopenNull[] KEEP_IN_FLASH = "NULL";
+static const char _diagSchedFopenReturned[] KEEP_IN_FLASH
+  = "DIAG schedFopen send/wait RETURNED for path=";
+static const char _diagSchedFopenNewline[] KEEP_IN_FLASH = "\n";
+static int _diagSchedFopenPrintsRemaining = 20;
+
 /// @fn FILE* schedFopen(const char *pathname, const char *mode)
 ///
 /// @brief Version of fopen for the scheduler.
@@ -2000,6 +2129,24 @@ FILE* schedFopen(const char *pathname, const char *mode) {
   FILE *returnValue = NULL;
   if (rootFilesystemPid == 0) {
     return returnValue; // NULL
+  }
+
+  if (_diagSchedFopenPrintsRemaining > 0) {
+    // TEMPORARY DIAGNOSTIC: shows every schedFopen call's path and whether
+    // _functionInProgress was already set (a stuck reentrancy guard would
+    // make every subsequent call fail fast with -EBUSY rather than hang,
+    // but this rules that in or out directly).  Remove once the ItsyBitsy
+    // M0 boot hang is root-caused.
+    _diagSchedFopenPrintsRemaining--;
+    printString(_diagSchedFopenPrefix);
+    printString(pathname);
+    printString(_diagSchedFopenInProgress);
+    if (_functionInProgress != NULL) {
+      printInt((intptr_t) _functionInProgress);
+    } else {
+      printString(_diagSchedFopenNull);
+    }
+    printString(_diagSchedFopenNewline);
   }
 
   if (_functionInProgress == NULL) {
@@ -2022,6 +2169,17 @@ FILE* schedFopen(const char *pathname, const char *mode) {
     }
 
     returnValue = fopenArgs.returnValue;
+
+    if (_diagSchedFopenPrintsRemaining > 0) {
+      // TEMPORARY DIAGNOSTIC: confirms schedulerInitSendMessageToPid's
+      // internal wait actually returned (as opposed to schedFopen itself
+      // being the thing stuck).  Remove once the ItsyBitsy M0 boot hang is
+      // root-caused.
+      _diagSchedFopenPrintsRemaining--;
+      printString(_diagSchedFopenReturned);
+      printString(pathname);
+      printString(_diagSchedFopenNewline);
+    }
 
     _functionInProgress = NULL;
   } else {
@@ -3838,6 +3996,21 @@ void removeProcess(
 /// @param envp The array of environment variables in "name=value" form.
 ///
 /// @return Returns 0 on success, negative error code on failure.
+///
+/// @note KEEP_IN_FLASH is required on the string literals below because
+/// .rodata is removed from the final binary on some targets.
+static const char _diagOverlayReloadPid[] KEEP_IN_FLASH
+  = "DIAG overlay RELOAD pid=";
+static const char _diagOverlayReloadStartBlock[] KEEP_IN_FLASH
+  = " startBlock=";
+static const char _diagOverlayReloadNumBlocks[] KEEP_IN_FLASH
+  = " numBlocks=";
+static const char _diagOverlayReloadNewline[] KEEP_IN_FLASH = "\n";
+static int _diagOverlayReloadPrintsRemaining = 60;
+static const char _diagOverlayReloadDescriptorAddr[] KEEP_IN_FLASH
+  = "DIAG overlay RELOAD processDescriptor=";
+static const char _diagOverlayReloadStartBlockAddr[] KEEP_IN_FLASH
+  = " &overlay.startBlock=";
 int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp) {
   if (processDescriptor == NULL) {
     // There's no overlay to load.  This isn't really an error, but there's
@@ -3876,6 +4049,37 @@ int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp) {
   ) {
     // Overlay is already loaded.  Do nothing.
     return 0;
+  }
+
+  if (_diagOverlayReloadPrintsRemaining > 0) {
+    // TEMPORARY DIAGNOSTIC: fires every time an overlay actually has to be
+    // (re)loaded (i.e. something else's overlay is currently resident in
+    // the shared overlay window) -- to check whether two or more
+    // supervisor-level processes (e.g. two shells on two console ports)
+    // are repeatedly evicting each other's overlay before either one ever
+    // gets to run its own code, a livelock that real, slow SPI transfer
+    // time could turn into an effectively permanent hang even though the
+    // same thing resolves quickly on the simulator.  Remove once the
+    // ItsyBitsy M0 boot hang is root-caused.
+    _diagOverlayReloadPrintsRemaining--;
+    printString(_diagOverlayReloadPid);
+    printInt(processDescriptor->processId);
+    printString(_diagOverlayReloadStartBlock);
+    printInt(processDescriptor->overlay.startBlock);
+    printString(_diagOverlayReloadNumBlocks);
+    printInt(processDescriptor->overlay.numBlocks);
+    printString(_diagOverlayReloadNewline);
+    // TEMPORARY DIAGNOSTIC: pin down whether processDescriptor itself is a
+    // valid pointer into the real allProcesses[] array (real corruption of
+    // this process's own descriptor content) or a bad/aliased pointer
+    // (meaning we're reading unrelated memory as if it were a
+    // ProcessDescriptor).  Remove once the ItsyBitsy M0 boot hang is
+    // root-caused.
+    printString(_diagOverlayReloadDescriptorAddr);
+    printHex((uintptr_t) processDescriptor);
+    printString(_diagOverlayReloadStartBlockAddr);
+    printHex((uintptr_t) &processDescriptor->overlay.startBlock);
+    printString(_diagOverlayReloadNewline);
   }
 
   if (processDescriptor->overlay.blockDevice->schedReadBlocks(
@@ -4372,6 +4576,23 @@ exit:
   return returnValue;
 }
 
+/// @note KEEP_IN_FLASH is required on the string literals below because
+/// .rodata is removed from the final binary on some targets.
+static const char _diagRestartShellEntered[] KEEP_IN_FLASH
+  = "DIAG restartOverlayShell relaunch-shell branch entered\n";
+static const char _diagRestartShellMalloc1Done[] KEEP_IN_FLASH
+  = "DIAG restartOverlayShell passwdStringBuffer malloc done\n";
+static const char _diagRestartShellMalloc2Done[] KEEP_IN_FLASH
+  = "DIAG restartOverlayShell pwd malloc done\n";
+static const char _diagRestartShellGetpwuidDone[] KEEP_IN_FLASH
+  = "DIAG restartOverlayShell getpwuid_r done\n";
+static const char _diagRestartShellBeforeRunOverlay[] KEEP_IN_FLASH
+  = "DIAG restartOverlayShell calling schedulerRunOverlayCommand\n";
+static const char _diagRestartShellAfterRunOverlay[] KEEP_IN_FLASH
+  = "DIAG restartOverlayShell schedulerRunOverlayCommand returned rv=";
+static const char _diagRestartShellNewline[] KEEP_IN_FLASH = "\n";
+static int _diagRestartShellPrintsRemaining = 20;
+
 /// @fn int restartOverlayShell(ProcessDescriptor *processDescriptor)
 ///
 /// @brief Implementation of restartFunction to re-launch a shell if one dies or
@@ -4417,6 +4638,16 @@ int restartOverlayShell(ProcessDescriptor *processDescriptor) {
 
   // User process exited.  Re-launch the shell.
   logDebug("Restarting shell\n");
+  // TEMPORARY DIAGNOSTIC: this branch (relaunching a shell for an already
+  // logged-in user, as opposed to the NO_USER_ID/getty branch above) has
+  // never been reached before in this investigation -- every prior
+  // successful overlay reload went through either that branch or login's
+  // own exec chain.  Bracket it to see exactly how far we get.  Remove
+  // once the ItsyBitsy M0 boot hang is root-caused.
+  if (_diagRestartShellPrintsRemaining > 0) {
+    _diagRestartShellPrintsRemaining--;
+    printString(_diagRestartShellEntered);
+  }
   int returnValue = 0;
   char *passwdStringBuffer
     = (char*) schedMalloc(NANO_OS_PASSWD_STRING_BUF_SIZE);
@@ -4424,12 +4655,18 @@ int restartOverlayShell(ProcessDescriptor *processDescriptor) {
     logError("Could not allocate space for passwdStringBuffer\n");
     return -ENOMEM;
   }
+  if (_diagRestartShellPrintsRemaining > 0) {
+    printString(_diagRestartShellMalloc1Done);
+  }
 
   struct passwd *pwd = (struct passwd*) schedMalloc(sizeof(struct passwd));
   if (pwd == NULL) {
     logError("Could not allocate space for pwd\n");
     schedFree(passwdStringBuffer);
     return -ENOMEM;
+  }
+  if (_diagRestartShellPrintsRemaining > 0) {
+    printString(_diagRestartShellMalloc2Done);
   }
 
   do {
@@ -4442,10 +4679,21 @@ int restartOverlayShell(ProcessDescriptor *processDescriptor) {
       returnValue = -ENOENT;
       break;
     }
+    if (_diagRestartShellPrintsRemaining > 0) {
+      printString(_diagRestartShellGetpwuidDone);
+    }
 
     shellArgs[0] = strrchr(pwd->pw_shell, '/') + 1;
+    if (_diagRestartShellPrintsRemaining > 0) {
+      printString(_diagRestartShellBeforeRunOverlay);
+    }
     returnValue = schedulerRunOverlayCommand(processDescriptor,
       pwd->pw_shell, (char**) shellArgs, processDescriptor->envp);
+    if (_diagRestartShellPrintsRemaining > 0) {
+      printString(_diagRestartShellAfterRunOverlay);
+      printInt(returnValue);
+      printString(_diagRestartShellNewline);
+    }
     if (returnValue == -EBUSY) {
       returnValue = -EAGAIN;
     } else if (returnValue != 0) {
@@ -4501,6 +4749,92 @@ int restartLogger(ProcessDescriptor *processDescriptor) {
   return 0;
 }
 
+/// @var _diagOverlayLoadFailedPid
+///
+/// @brief TEMPORARY DIAGNOSTIC string.  See the comment at its use in
+/// runScheduler for why this exists; remove along with that once the
+/// ItsyBitsy M0 boot hang is root-caused.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets (including the POSIX sim's "_stripped"
+/// variant that buildsim runs) -- a plain string literal passed directly to
+/// printString is not guaranteed to survive that.
+static const char _diagOverlayLoadFailedPid[] KEEP_IN_FLASH
+  = "DIAG overlay load FAILED pid=";
+static const char _diagOverlayLoadFailedName[] KEEP_IN_FLASH = " name=";
+static const char _diagOverlayLoadFailedRv[] KEEP_IN_FLASH = " rv=";
+static const char _diagNewline[] KEEP_IN_FLASH = "\n";
+static const char _diagSupervisorProcFinished[] KEEP_IN_FLASH
+  = "DIAG SUPERVISOR proc FINISHED (exit/restart path) pid=";
+/// @var _diagSupervisorFinishedPrintsRemaining
+///
+/// @brief TEMPORARY DIAGNOSTIC budget: how many times a SUPERVISOR-level
+/// process (a shell/getty) is seen finishing/restarting is capped so this
+/// can't flood output if it ever happens far more than the expected
+/// once-per-shell-at-boot.  Remove along with the rest of these once the
+/// ItsyBitsy M0 boot hang is root-caused.
+static int _diagSupervisorFinishedPrintsRemaining = 30;
+
+/// @var _diagExecutiveProcPopped
+///
+/// @brief TEMPORARY DIAGNOSTIC string for tracing whether the filesystem
+/// process (the only PRIVILEGE_LEVEL_EXECUTIVE process on this platform)
+/// ever actually gets a scheduler turn.  Remove along with the rest of
+/// these once the ItsyBitsy M0 boot hang is root-caused.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _diagExecutiveProcPopped[] KEEP_IN_FLASH
+  = "DIAG EXECUTIVE proc popped pid=";
+static int _diagExecutiveProcPrintsRemaining = 30;
+
+/// @var _diagSdCardProcPopped
+///
+/// @brief TEMPORARY DIAGNOSTIC string for tracing whether the SD card
+/// process (KERNEL-level, never gets its own preemption timer armed by this
+/// function) ever actually gets a scheduler turn during a hang.  Existing
+/// diagnostics only cover the EXECUTIVE-level filesystem process; this fills
+/// the gap of having zero visibility into the KERNEL-level process the
+/// preemption-timer-cancel fix actually lives in.  Remove along with the
+/// rest of these once the ItsyBitsy M0 boot hang is root-caused.
+static const char _diagSdCardProcPopped[] KEEP_IN_FLASH
+  = "DIAG SD CARD proc popped pid=";
+static int _diagSdCardProcPrintsRemaining = 60;
+
+/// @var _diagBadPopPrefix
+///
+/// @brief TEMPORARY DIAGNOSTIC strings for reporting a ready queue handing
+/// back a ProcessDescriptor pointer that isn't actually in allProcesses[].
+/// See their use in runScheduler; remove along with the rest of these once
+/// the ItsyBitsy M0 boot hang is root-caused.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _diagBadPopPrefix[] KEEP_IN_FLASH
+  = "DIAG BAD POP descriptor=";
+static const char _diagBadPopQueue[] KEEP_IN_FLASH = " queue=";
+static const char _diagBadPopHead[] KEEP_IN_FLASH = " head=";
+static const char _diagBadPopTail[] KEEP_IN_FLASH = " tail=";
+static const char _diagBadPopNumElements[] KEEP_IN_FLASH = " numElements=";
+static const char _diagBadPopBase[] KEEP_IN_FLASH = " allProcesses=";
+
+/// @var _schedulerStackOverflowMessage
+///
+/// @brief Message logged when the scheduler's own stack overflows.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets: without it, this literal (previously
+/// passed directly to logError) risks being stripped away, so if the
+/// scheduler's stack genuinely does overflow, the code below could crash
+/// trying to read this string instead of reporting the overflow -- turning
+/// a detectable, logged condition into a silent hang indistinguishable
+/// from one.  Pulled out as its own KEEP_IN_FLASH constant while
+/// investigating the ItsyBitsy M0 boot hang, but this is a real,
+/// independent fix worth keeping regardless of that investigation's
+/// outcome.
+static const char _schedulerStackOverflowMessage[] KEEP_IN_FLASH
+  = "Scheduler stack overflow detected";
+
 /// @fn void runScheduler(void)
 ///
 /// @brief Run one (1) iteration of the main scheduler loop.
@@ -4511,7 +4845,7 @@ void runScheduler(void) {
   if (processStackOverflowed(
     &allProcesses[schedulerPid - 1])
   ) {
-    logError("Scheduler stack overflow detected");
+    logError(_schedulerStackOverflowMessage);
     HAL->power.enterMode(HAL_POWER_MODE_OFF);
   }
 
@@ -4524,9 +4858,71 @@ void runScheduler(void) {
     goto exit;
   }
 
+  // TEMPORARY DIAGNOSTIC: validate that what we just popped is actually a
+  // pointer into allProcesses[], on a struct boundary.  A ready queue has
+  // been observed handing back a pointer into stack memory (0x20007950,
+  // nowhere near allProcesses[]), which then read as processId=248 and
+  // bogus overlay metadata.  This check must run BEFORE processCorrupted()
+  // below, since that dereferences ->mainThread and would fault outright on
+  // a bad pointer.  Prints the offending queue's own head/tail/numElements
+  // so we can tell "someone pushed a bad pointer" from "the indices are
+  // corrupt and the pop read past processes[]".  Remove once the ItsyBitsy
+  // M0 boot hang is root-caused.
+  {
+    uintptr_t descriptorAddress = (uintptr_t) processDescriptor;
+    uintptr_t processesBase = (uintptr_t) allProcesses;
+    uintptr_t processesEnd
+      = processesBase + (((uintptr_t) numProcesses) * sizeof(ProcessDescriptor));
+    if ((descriptorAddress < processesBase)
+      || (descriptorAddress >= processesEnd)
+      || (((descriptorAddress - processesBase) % sizeof(ProcessDescriptor))
+        != 0)
+    ) {
+      ProcessQueue *poppedFrom = SCHEDULER_STATE->currentReady;
+      printString(_diagBadPopPrefix);
+      printHex(descriptorAddress);
+      printString(_diagBadPopQueue);
+      printString(poppedFrom->name);
+      printString(_diagBadPopHead);
+      printInt(poppedFrom->head);
+      printString(_diagBadPopTail);
+      printInt(poppedFrom->tail);
+      printString(_diagBadPopNumElements);
+      printInt(poppedFrom->numElements);
+      printString(_diagBadPopBase);
+      printHex(processesBase);
+      printString(_diagNewline);
+      goto exit;
+    }
+  }
+
   if (processCorrupted(processDescriptor)) {
     removeProcess(processDescriptor, _processCorruptionReason);
     goto exit;
+  }
+
+  if ((processDescriptor->privilegeLevel == PRIVILEGE_LEVEL_EXECUTIVE)
+    && (_diagExecutiveProcPrintsRemaining > 0)
+  ) {
+    // TEMPORARY DIAGNOSTIC: the filesystem process is the only EXECUTIVE-
+    // level process on this platform.  If it's never popped here while
+    // schedFopen's wait loop is stuck, it's not getting a ready-queue turn
+    // at all -- the wait can never resolve regardless of how long anyone
+    // waits.  Remove once the ItsyBitsy M0 boot hang is root-caused.
+    _diagExecutiveProcPrintsRemaining--;
+    printString(_diagExecutiveProcPopped);
+    printInt(processDescriptor->processId);
+    printString(_diagSendWaitNewline);
+  }
+
+  if ((rootFilesystemPid != 0)
+    && (processDescriptor->processId == (rootFilesystemPid - 1))
+    && (_diagSdCardProcPrintsRemaining > 0)
+  ) {
+    _diagSdCardProcPrintsRemaining--;
+    printString(_diagSdCardProcPopped);
+    printInt(processDescriptor->processId);
+    printString(_diagSendWaitNewline);
   }
 
   if (processDescriptor->privilegeLevel != PRIVILEGE_LEVEL_KERNEL) {
@@ -4536,6 +4932,20 @@ void runScheduler(void) {
       int rv = schedulerLoadOverlay(
         processDescriptor,
         processDescriptor->envp);
+      if (rv != 0) {
+        // TEMPORARY DIAGNOSTIC: only fires on an actual overlay-load
+        // failure (unconditional, not gated by NANO_OS_DEBUG, so it shows
+        // up in a normal build), to confirm/deny a silent retry loop here
+        // without flooding normal boot output.  Remove once the ItsyBitsy
+        // M0 boot hang is root-caused.
+        printString(_diagOverlayLoadFailedPid);
+        printInt(processDescriptor->processId);
+        printString(_diagOverlayLoadFailedName);
+        printString(processDescriptor->name);
+        printString(_diagOverlayLoadFailedRv);
+        printInt(rv);
+        printString(_diagNewline);
+      }
       if ((rv == -EIO) || (rv == -ENOMEM)) {
         // Transient errors.  Re-queue and try again later.
         processQueuePush(SCHEDULER_STATE->currentReady, processDescriptor);
@@ -4573,6 +4983,20 @@ void runScheduler(void) {
   }
 
   if (processRunning(processDescriptor) == false) {
+    if ((processDescriptor->privilegeLevel == PRIVILEGE_LEVEL_SUPERVISOR)
+      && (_diagSupervisorFinishedPrintsRemaining > 0)
+    ) {
+      // TEMPORARY DIAGNOSTIC: a SUPERVISOR-level process (a shell/getty)
+      // finishing here means it's about to go through the full exit +
+      // restart cycle -- if this fires repeatedly for the same PID, it's
+      // being restarted from scratch over and over rather than actually
+      // making progress through its own code between overlay loads.
+      // Remove once the ItsyBitsy M0 boot hang is root-caused.
+      _diagSupervisorFinishedPrintsRemaining--;
+      printString(_diagSupervisorProcFinished);
+      printInt(processDescriptor->processId);
+      printString(_diagNewline);
+    }
     if (processDescriptor->envp != NULL) {
       if (assignMemory(processDescriptor->envp, 0) != 0) {
         logWarn("Could not protect envp memory from process %d\n"
@@ -4790,7 +5214,21 @@ int initializeSchedulerState(
     for (int32_t ii = 0; ii < ((int32_t) HAL->timer.numSupported); ii++) {
       if (online(HAL->timer, ii)) {
         schedulerState->preemptionTimer = ii;
-        baseUserHalCapabilities[5].deviceIds = 1 << ii;
+        // HAL_TIMER_CANCEL is kept as the last entry of
+        // baseUserHalCapabilities specifically so it can be patched here
+        // without hard-coding an index that goes stale whenever the array
+        // grows -- see that array's doc comment.
+        baseUserHalCapabilities[
+          (sizeof(baseUserHalCapabilities)
+            / sizeof(baseUserHalCapabilities[0])) - 1].deviceIds = 1 << ii;
+        if (sdCardHalCapabilities != NULL) {
+          // See SD_CARD_HAL_CAPABILITIES_INITIALIZER's doc comment in
+          // HalCommon.h: HAL_TIMER_CANCEL is kept as its last entry
+          // specifically so it can be patched here the same way as
+          // baseUserHalCapabilities's own HAL_TIMER_CANCEL entry above.
+          sdCardHalCapabilities[numSdCardHalCapabilities - 1].deviceIds
+            = 1 << ii;
+        }
         break;
       }
     }
@@ -5344,6 +5782,20 @@ int logSchedulerDebugInfo(SchedulerState *schedulerState) {
   return 0;
 }
 
+/// @var _diagEnteringMainLoop
+///
+/// @brief TEMPORARY DIAGNOSTIC strings.  See the comments at their use in
+/// startScheduler for why they exist; remove along with that once the
+/// ItsyBitsy M0 boot hang is root-caused.
+///
+/// @note KEEP_IN_FLASH is required here for the same reason as
+/// _diagOverlayLoadFailedPid above.
+static const char _diagEnteringMainLoop[] KEEP_IN_FLASH
+  = "DIAG entering main scheduler loop\n";
+static const char _diagReadyQueuePrefix[] KEEP_IN_FLASH = "DIAG ready queue ";
+static const char _diagReadyQueueNameOpen[] KEEP_IN_FLASH = " (";
+static const char _diagReadyQueueSize[] KEEP_IN_FLASH = ") size=";
+
 /// @fn void startScheduler(SchedulerState **threadStatePointer)
 ///
 /// @brief Initialize and run the round-robin scheduler.
@@ -5403,14 +5855,45 @@ __attribute__((noinline)) void startScheduler(
   logSchedulerDebugInfo(&schedulerState);
   logDebug("Logged scheduler debug info\n");
 
+  // TEMPORARY DIAGNOSTIC: unconditional (not gated by NANO_OS_DEBUG), fires
+  // exactly once, right before the main scheduler loop is entered for the
+  // first time.  Remove once the ItsyBitsy M0 boot hang is root-caused.
+  printString(_diagEnteringMainLoop);
+
   // Run our scheduler.
+  bool diagPrintedQueueSizes = false;
   while (1) {
     for (int ii = 0; ii < SCHEDULER_NUM_READY_QUEUES; ii++) {
       schedulerState.currentReady = schedulerState.readyQueues[ii];
       uint8_t queueSize = schedulerState.currentReady->numElements;
+      if (diagPrintedQueueSizes == false) {
+        // TEMPORARY DIAGNOSTIC: fires once per queue, only on the very
+        // first pass through the outer while(1), to show the starting
+        // size of every ready queue (kernel/executive/supervisor/user)
+        // without flooding output on every subsequent pass.  Remove once
+        // the ItsyBitsy M0 boot hang is root-caused.
+        printString(_diagReadyQueuePrefix);
+        printInt(ii);
+        printString(_diagReadyQueueNameOpen);
+        printString(schedulerState.currentReady->name);
+        printString(_diagReadyQueueSize);
+        printInt(queueSize);
+        printString(_diagNewline);
+      }
       for (uint8_t jj = 0; jj < queueSize; jj++) {
         runScheduler();
       }
     }
+    if (diagPrintedQueueSizes == false) {
+      // TEMPORARY DIAGNOSTIC: reset the overlay-reload print budget right
+      // as the first full pass through all four ready queues finishes, so
+      // there's guaranteed visibility into whatever happens next --
+      // regardless of how much of the budget a long busy-wait earlier in
+      // this same pass (e.g. schedSdReadBlocks's wait loop while loading
+      // getty's overlay) already spent.  Remove once the ItsyBitsy M0 boot
+      // hang is root-caused.
+      _diagOverlayReloadPrintsRemaining = 60;
+    }
+    diagPrintedQueueSizes = true;
   }
 }

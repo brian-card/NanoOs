@@ -166,8 +166,20 @@ typedef struct NamedProcessEntry {
 /// printString_() -- whenever the logger process isn't up yet or
 /// stringsPresent is true, and that fallback runs in the calling process's
 /// own context.  See the identical note on memoryManagerHalCapabilities in
-/// Scheduler.c.
+/// Scheduler.c.  LOG_FALLBACK_HAL_CAPABILITIES (Hal.h) and
+/// HAL_CLOCK_GET_ELAPSED_NANOSECONDS are included for that same fallback:
+/// writing to the UART is only the last step of it, and without the rest
+/// logMessage() can't get the buffer it formats into.
+///
+/// HAL_TIMER_CANCEL must stay the LAST entry: initializeSchedulerState() in
+/// Scheduler.c indexes this array by its last position
+/// (sdCardHalCapabilities[numSdCardHalCapabilities - 1]) to patch in the
+/// preemption timer's device ID once it's known, the same way it does for
+/// baseUserHalCapabilities.  The SD card process needs this so its own
+/// command handlers can cancel a stale preemption timer left armed from
+/// whoever ran before them, right before touching real SPI hardware.
 #define SD_CARD_HAL_CAPABILITIES_INITIALIZER { \
+  LOG_FALLBACK_HAL_CAPABILITIES, \
   { \
     .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_WRITE, \
     .deviceIds =         0x03, /* Bitmask for device IDs 0 and 1 */ \
@@ -199,6 +211,15 @@ typedef struct NamedProcessEntry {
   { \
     .subsystemFunction = (((uint16_t) HAL_SPI) << 8) | HAL_SPI_SET_SPEED, \
     .deviceIds =         0x01, /* Bitmask for device ID 0 */ \
+  }, \
+  { \
+    .subsystemFunction = (((uint16_t) HAL_CLOCK) << 8) \
+      | HAL_CLOCK_GET_ELAPSED_NANOSECONDS, \
+    .deviceIds =         0x00, /* No device for this function */ \
+  }, \
+  { \
+    .subsystemFunction = (((uint16_t) HAL_TIMER) << 8) | HAL_TIMER_CANCEL, \
+    .deviceIds =         0, /* To be filled in by initializeSchedulerState() */ \
   }, \
 }
 
