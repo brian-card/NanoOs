@@ -4866,7 +4866,6 @@ int initializeSchedulerState(
   schedulerState->firstShellPid = 4;
   rootFilesystemPid = 0; // Invalid PID
   loggerPid = 0; // Invalid PID
-  schedulerState->runSchedulerQueues = runSchedulerQueues;
   SCHEDULER_STATE = schedulerState;
   logDebug("Set scheduler state.\n");
 

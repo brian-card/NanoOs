@@ -245,9 +245,6 @@ int processQueueRemove(
   ProcessQueue *processQueue, ProcessDescriptor *processDescriptor);
 int schedulerReplaceOverlay(const void *overlayNamespace,
   FileBlockMetadata *overlay);
-int restartBuiltinShell(ProcessDescriptor *processDescriptor);
-int restartOverlayShell(ProcessDescriptor *processDescriptor);
-int restartLogger(ProcessDescriptor *processDescriptor);
 
 // Coroutine setup functions used in the loader.
 void* dummyProcess(void *args);
@@ -256,6 +253,9 @@ void* dummyProcess(void *args);
 int restartConsole(ProcessDescriptor *processDescriptor);
 int restartMemoryManager(ProcessDescriptor *processDescriptor);
 int restartShell(ProcessDescriptor *processDescriptor);
+int restartBuiltinShell(ProcessDescriptor *processDescriptor);
+int restartOverlayShell(ProcessDescriptor *processDescriptor);
+int restartLogger(ProcessDescriptor *processDescriptor);
 
 // Thread that will be used to represent the scheduler.
 extern Thread *schedulerThread;

@@ -39,6 +39,9 @@
 // Must come last
 #include "../user/NanoOsStdio.h"
 
+// Functionality needed from Scheduler.c
+void runSchedulerQueues(PrivilegeLevel privilegeLevelBound);
+
 /// @fn int sdCardGetReadWriteArgs(
 ///   SdCardState *sdCardState, SdCommandArgs *sdCommandArgs,
 ///   uint32_t *startSdBlock, uint32_t *numSdBlocks)
@@ -177,7 +180,7 @@ int schedSdReadBlocks(void *context, uint32_t startBlock,
     (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
     ii++
   ) {
-    SCHEDULER_STATE->runSchedulerQueues(PRIVILEGE_LEVEL_EXECUTIVE);
+    runSchedulerQueues(PRIVILEGE_LEVEL_EXECUTIVE);
     processMessage = getAvailableMessage();
   }
   if (processMessage == NULL) {
@@ -195,7 +198,7 @@ int schedSdReadBlocks(void *context, uint32_t startBlock,
   }
 
   while (processMessageDone(processMessage) == false) {
-    SCHEDULER_STATE->runSchedulerQueues(PRIVILEGE_LEVEL_EXECUTIVE);
+    runSchedulerQueues(PRIVILEGE_LEVEL_EXECUTIVE);
   }
   int returnValue = (int) ((intptr_t) processMessageData(processMessage));
   processMessageRelease(processMessage);
@@ -234,7 +237,7 @@ int schedSdWriteBlocks(void *context, uint32_t startBlock,
     (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
     ii++
   ) {
-    SCHEDULER_STATE->runSchedulerQueues(PRIVILEGE_LEVEL_EXECUTIVE);
+    runSchedulerQueues(PRIVILEGE_LEVEL_EXECUTIVE);
     processMessage = getAvailableMessage();
   }
   if (processMessage == NULL) {
@@ -252,7 +255,7 @@ int schedSdWriteBlocks(void *context, uint32_t startBlock,
   }
 
   while (processMessageDone(processMessage) == false) {
-    SCHEDULER_STATE->runSchedulerQueues(PRIVILEGE_LEVEL_EXECUTIVE);
+    runSchedulerQueues(PRIVILEGE_LEVEL_EXECUTIVE);
   }
   int returnValue = (int) ((intptr_t) processMessageData(processMessage));
   processMessageRelease(processMessage);

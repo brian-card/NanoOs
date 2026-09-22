@@ -75,6 +75,9 @@
 // Must come last
 #include "../user/NanoOsStdio.h"
 
+// Functionality needed from Scheduler.c
+void runSchedulerQueues(PrivilegeLevel privilegeLevelBound);
+
 /// @var halFunctions
 ///
 /// @brief Array of pointers to per-subsystem function pointer arrays.  Each
@@ -1046,7 +1049,7 @@ int restartBuiltinFilesystem(ProcessDescriptor *processDescriptor) {
   while ((fs.driverState == NULL)
     || (fs.driverState == (void*) ((intptr_t) 1))
   ) {
-    SCHEDULER_STATE->runSchedulerQueues(PRIVILEGE_LEVEL_SUPERVISOR);
+    runSchedulerQueues(PRIVILEGE_LEVEL_SUPERVISOR);
   }
 
   return 0;
@@ -1098,7 +1101,7 @@ int restartOverlayFilesystem(ProcessDescriptor *processDescriptor) {
   while ((fs.driverState == NULL)
     || (fs.driverState == (void*) ((intptr_t) 1))
   ) {
-    SCHEDULER_STATE->runSchedulerQueues(PRIVILEGE_LEVEL_SUPERVISOR);
+    runSchedulerQueues(PRIVILEGE_LEVEL_SUPERVISOR);
   }
 
   return 0;
@@ -1181,7 +1184,7 @@ int restartContiguousFilesystem(ProcessDescriptor *processDescriptor) {
   while ((fs.driverState == NULL)
     || (fs.driverState == (void*) ((intptr_t) 1))
   ) {
-    SCHEDULER_STATE->runSchedulerQueues(PRIVILEGE_LEVEL_SUPERVISOR);
+    runSchedulerQueues(PRIVILEGE_LEVEL_SUPERVISOR);
   }
 
   return 0;
