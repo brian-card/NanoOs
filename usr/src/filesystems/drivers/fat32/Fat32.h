@@ -601,10 +601,25 @@ static inline int fat32SearchDirectory(
   int      status = FAT32_FILE_NOT_FOUND;
   bool     done = false;
 
+  // Bound the cluster chain walk.  Terminating only on an end-of-chain
+  // marker or a match trusts the on-disk FAT: if the chain has been
+  // corrupted into a cycle, currentCluster keeps landing inside the valid
+  // range forever and this loop -- which does a real SD block read every
+  // iteration -- hangs the OS permanently while still showing SD activity.
+  // Failing the lookup instead keeps a corrupt filesystem from taking the
+  // system down with it.
+  uint32_t clusterChainLength = 0;
+
   while (!done
       && (currentCluster >= FAT32_CLUSTER_FIRST_VALID)
       && (currentCluster < FAT32_CLUSTER_EOC_MIN)
   ) {
+
+    clusterChainLength++;
+    if (clusterChainLength > 10000) {
+      status = FAT32_ERROR;
+      break;
+    }
 
     uint32_t clusterLba = fat32ClusterToLba(ds, currentCluster);
 
@@ -761,11 +776,19 @@ static inline int fat32ResolveParentDirectory(
     uint32_t *parentCluster,
     const char **fileNameOut
 ) {
-  // Locate the last path separator.
+  // Locate the last path separator.  The scan is bounded rather than
+  // trusting filePath to be NUL-terminated: if whatever built it left it
+  // unterminated, an unbounded scan runs off the end of the buffer with no
+  // SD activity at all, which hangs the OS with nothing to show for it.
   const char *lastSlash = NULL;
+  uint32_t pathScanLength = 0;
   for (const char *p = filePath; *p != '\0'; p++) {
     if (*p == '/') {
       lastSlash = p;
+    }
+    pathScanLength++;
+    if (pathScanLength > 1024) {
+      return FAT32_ERROR;
     }
   }
 
