@@ -301,10 +301,6 @@ typedef struct SavedContext {
   uint32_t r4, r5, r6, r7;
   uint32_t r8, r9, r10, r11;
   uint32_t r0, r1, r2, r3, r12, lr, pc, sp;
-  /// @param owner TEMPORARY DIAGNOSTIC: the coroutine this context was
-  /// captured from, so SAVE_CONTEXT() can verify it is being consumed by the
-  /// same coroutine that produced it.
-  void *owner;
 } SavedContext;
 
 /// @var _savedContext
@@ -324,81 +320,50 @@ static_assert(offsetof(SavedContext, lr)  == 52, "asm offset");
 static_assert(offsetof(SavedContext, pc)  == 56, "asm offset");
 static_assert(offsetof(SavedContext, sp)  == 60, "asm offset");
 
-static volatile uint8_t _savedContextState = 0;
-
-/// @var _savedContextState
+/// @var _diagStaleTimer
 ///
-/// @brief TEMPORARY DIAGNOSTIC: tracks whether _savedContext has been
-/// written by a timer's frame handler but not yet consumed by the matching
-/// SAVE_CONTEXT() in the resume handler.
+/// @brief String reporting a preemption timer that fired while a process
+/// that is never supposed to be preempted was running.
 ///
-/// @details _savedContext is a single global shared by both timer handlers,
-/// and the resume handler that consumes it runs in Thread mode with
-/// interrupts enabled.  Any second timer interrupt arriving in that window
-/// overwrites it, and the first context is lost -- which would leave a
-/// restored PC/LR pointing into the timer handling code itself.  This flag
-/// detects exactly that overlap.  Remove once the ItsyBitsy M0 boot hang is
-/// root-caused.
-
-
-/// @def SAVED_CONTEXT_IN_USE
-///
-/// @brief Bit in _savedContextState meaning _savedContext has been written
-/// but not yet consumed.
-#define SAVED_CONTEXT_IN_USE 0x01
-
-/// @def SAVED_CONTEXT_REENTRY_REPORTED
-///
-/// @brief Bit in _savedContextState meaning the overlap has already been
-/// reported once, so it is not repeated.
-#define SAVED_CONTEXT_REENTRY_REPORTED 0x02
-
-/// @var _diagTimerReentry
-///
-/// @brief TEMPORARY DIAGNOSTIC string reported when the overlap above is
-/// detected.
+/// The scheduler arms the preemption timer as a one-shot, for 10ms, only for
+/// processes with privilegeLevel > PRIVILEGE_LEVEL_EXECUTIVE, immediately
+/// before resuming one (Scheduler.c, both the runScheduler path and
+/// schedulerSendSignalCommandHandler's user-process path).  If that process
+/// yields voluntarily before the 10ms is up and the timer is not cancelled,
+/// the timer is still armed while the scheduler -- or any other
+/// KERNEL/EXECUTIVE process -- runs.  When it then fires, this handler
+/// hijacks whatever was executing at that instant and hands it to
+/// RESTORE_CONTEXT, which is not valid for a context that was never set up
+/// to be preempted.
 ///
 /// @note KEEP_IN_FLASH is required here because .rodata is removed from the
 /// final binary on some targets.
-static const char _diagContextOwnerMismatch[] KEEP_IN_FLASH
-  = "DIAG context owner mismatch: producedBy=";
-static const char _diagContextOwnerNow[] KEEP_IN_FLASH = " consumedBy=";
-static const char _diagContextOwnerNewline[] KEEP_IN_FLASH = "\n";
+static const char _diagStaleTimer[] KEEP_IN_FLASH
+  = "DIAG STALE TIMER fired, not preemptible: pid=";
 
-static const char _diagBadRestore[] KEEP_IN_FLASH
-  = "DIAG bad saved context: pc=";
-static const char _diagBadRestoreSp[] KEEP_IN_FLASH = " sp=";
-static const char _diagBadRestoreNewline[] KEEP_IN_FLASH = "\n";
-
-/// @def VALIDATE_SAVED_CONTEXT
+/// @var _diagStaleTimerPrivilege
 ///
-/// @brief Sanity-check a context captured by SAVE_CONTEXT() before
-/// RESTORE_CONTEXT() branches through it.
-///
-/// @details RESTORE_CONTEXT ends in "bx r5" with r5 = savedContext.pc.  A
-/// zeroed or stale context therefore branches to 0 with the Thumb bit clear,
-/// which on this core is an INVSTATE HardFault reporting pc=0 and xpsr=0 --
-/// exactly the fault observed.  The frame handler always sets pc with "| 1",
-/// so a valid pc is odd and in flash; a valid sp is inside RAM.  Report and
-/// skip the restore rather than branching through a bad one.
-#define VALIDATE_SAVED_CONTEXT() \
-  do { \
-    if (((savedContext.pc & 1) == 0) \
-      || (savedContext.pc < 0x2000) \
-      || (savedContext.sp < 0x20000000) \
-      || (savedContext.sp > 0x20008000) \
-    ) { \
-      printString(_diagBadRestore); \
-      printHex(savedContext.pc); \
-      printString(_diagBadRestoreSp); \
-      printHex(savedContext.sp); \
-      printString(_diagBadRestoreNewline); \
-      while (1) { } \
-    } \
-  } while (0)
+/// @brief Separator printed between the pid and the privilege level in a
+/// stale preemption timer report.
+static const char _diagStaleTimerPrivilege[] KEEP_IN_FLASH = " privilege=";
 
-static const char _diagTimerReentry[] KEEP_IN_FLASH
-  = "DIAG timer reentry: _savedContext clobbered before use\n";
+/// @var _diagStaleTimerPc
+///
+/// @brief Separator printed before the interrupted PC in
+/// a stale preemption timer report.  This is the address the timer would have
+/// hijacked, so it names the code that would have been corrupted.
+static const char _diagStaleTimerPc[] KEEP_IN_FLASH = " interruptedPc=";
+
+/// @var _diagStaleTimerNewline
+///
+/// @brief Line terminator for a stale timer report.
+static const char _diagStaleTimerNewline[] KEEP_IN_FLASH = "\n";
+
+/// @var _diagStaleTimerPrintsRemaining
+///
+/// @brief Budget capping how many stale preemption timer reports are
+/// printed, so a repeating stale timer can't flood the console.
+static int _diagStaleTimerPrintsRemaining = 20;
 
 /// @def THUMB_BIT
 ///
@@ -414,15 +379,7 @@ static const char _diagTimerReentry[] KEEP_IN_FLASH
 ///
 /// @brief Save the context of the stack frame we're using before proceeding.
 #define SAVE_CONTEXT() \
-  SavedContext savedContext = _savedContext; \
-  _savedContextState &= (uint8_t) ~SAVED_CONTEXT_IN_USE; \
-  if (savedContext.owner != (void*) getRunningCoroutine()) { \
-    printString(_diagContextOwnerMismatch); \
-    printHex((uintptr_t) savedContext.owner); \
-    printString(_diagContextOwnerNow); \
-    printHex((uintptr_t) getRunningCoroutine()); \
-    printString(_diagContextOwnerNewline); \
-  }
+  SavedContext savedContext = _savedContext
 
 /// @def RESTORE_CONTEXT
 ///
@@ -487,6 +444,19 @@ static const char _diagTimerReentry[] KEEP_IN_FLASH
     "mov  r6, r10          \n" \
     "mov  r7, r11          \n" \
     "stmia r2!, {r4-r7}    \n" /* r8-r11 */ \
+    /* Put r4-r7 back.  Saving r8-r11 above had to stage them through r4-r7 */ \
+    /* (Thumb-1 stmia cannot encode high registers), which destroyed the */ \
+    /* interrupted context's own r4-r7.  That used to be survivable only */ \
+    /* because every path out of here ended in RESTORE_CONTEXT, which */ \
+    /* rewrites all 16 registers.  frameHandler may now decline to retarget */ \
+    /* the exception (a stale preemption timer), in which case the exception */ \
+    /* returns straight to the interrupted code and these registers are */ \
+    /* whatever we leave them.  r2 has advanced 32 bytes across the two */ \
+    /* stmia's, so reload the base address rather than backing it up -- the */ \
+    /* r4 field is at offset 0, so it needs no displacement.  r8-r11 were */ \
+    /* only read, never written, so they need no restore. */ \
+    "ldr  r2, =_savedContext \n" \
+    "ldmia r2!, {r4-r7}    \n" \
     "movs r0, #4           \n" /* EXC_RETURN bit 2: 0 = MSP, 1 = PSP */ \
     "mov  r1, lr           \n" \
     "tst  r0, r1           \n" \
@@ -1300,6 +1270,16 @@ static int arduinoSamD21x18ACancelTimerImpl(int32_t deviceId) {
   // Clear interrupt flag
   hwTimer->tc->COUNT16.INTFLAG.reg = TC_INTFLAG_OVF;
 
+  // Also drop any interrupt the NVIC has already latched for this timer.
+  // The peripheral INTFLAG above and the NVIC's pending bit are separate:
+  // if the timer overflowed before we got here, the NVIC has already latched
+  // a pending interrupt, and clearing INTFLAG does not retract it.  Without
+  // this, a cancelled timer still delivers one more interrupt -- with
+  // INTFLAG now reading clear, so the handler cannot even tell it is
+  // spurious -- and that interrupt lands on whatever is running next, which
+  // is exactly the stale-timer preemption this cancel is meant to prevent.
+  NVIC_ClearPendingIRQ(hwTimer->irqType);
+
   hwTimer->active = false;
   hwTimer->startTime = 0;
   hwTimer->deadline = 0;
@@ -1406,7 +1386,6 @@ void arduinoSamD21x18ATimerInterruptHandler(int32_t deviceId) {
 void arduinoSamD21x18ATimerInterruptHandler0() {
   SAVE_CONTEXT();
   arduinoSamD21x18ATimerInterruptHandler(0);
-  VALIDATE_SAVED_CONTEXT();
   RESTORE_CONTEXT();
 }
 
@@ -1419,7 +1398,6 @@ void arduinoSamD21x18ATimerInterruptHandler0() {
 void arduinoSamD21x18ATimerInterruptHandler1() {
   SAVE_CONTEXT();
   arduinoSamD21x18ATimerInterruptHandler(1);
-  VALIDATE_SAVED_CONTEXT();
   RESTORE_CONTEXT();
 }
 
@@ -1467,20 +1445,54 @@ static void arduinoSamD21x18ATimerFrameHandler(
   if (hwTimer->tc->COUNT16.INTFLAG.bit.OVF) {
     // Clear interrupt flag
     hwTimer->tc->COUNT16.INTFLAG.reg = TC_INTFLAG_OVF;
+  } else {
+    // The peripheral is not signalling an overflow, so this interrupt was
+    // latched in the NVIC before something cleared INTFLAG underneath it --
+    // a timer that was cancelled after it had already expired.  There is no
+    // preemption being requested here, so returning without retargeting
+    // exceptionFrame[6] resumes the interrupted code untouched.  (Cancel now
+    // calls NVIC_ClearPendingIRQ, so this should no longer be reachable; it
+    // stays because honouring a spurious interrupt means corrupting whatever
+    // was running, which is too expensive a failure to leave to inference.)
+    return;
   }
 
-
-  if ((_savedContextState & SAVED_CONTEXT_IN_USE) != 0) {
-    // A previous timer's context has not been consumed yet; writing over it
-    // now loses it.  Reported once only, to avoid flooding.
-    if ((_savedContextState & SAVED_CONTEXT_REENTRY_REPORTED) == 0) {
-      _savedContextState |= SAVED_CONTEXT_REENTRY_REPORTED;
-      printString(_diagTimerReentry);
+  // Refuse to hijack a context that was never eligible for preemption.  The
+  // scheduler only ever arms this timer for a process with privilegeLevel >
+  // PRIVILEGE_LEVEL_EXECUTIVE, so seeing it fire while anything at or below
+  // EXECUTIVE is running means the one-shot outlived the process it was
+  // armed for.  Hijacking here would hand an arbitrary instruction boundary
+  // in the scheduler (or the filesystem, or the memory manager) to
+  // RESTORE_CONTEXT, which is only valid for a context the scheduler is
+  // prepared to resume.
+  //
+  // Returning without retargeting exceptionFrame[6] lets the exception
+  // return normally to exactly where it interrupted, leaving the running
+  // process untouched.  That is safe to do unconditionally because the timer
+  // is a one-shot (arduinoSamD21x18AConfigOneShotTimer), so declining it does
+  // not leave it re-firing.
+  //
+  // This should no longer fire: the scheduler now cancels the timer after
+  // every processResume(), which closed the exit-without-yield path that
+  // produced these.  It stays as an invariant check, because honouring such
+  // an interrupt silently corrupts whichever kernel process was running.
+  ProcessDescriptor *runningProcess = getRunningProcess();
+  if ((runningProcess != NULL)
+    && (runningProcess->privilegeLevel <= PRIVILEGE_LEVEL_EXECUTIVE)
+  ) {
+    if (_diagStaleTimerPrintsRemaining > 0) {
+      _diagStaleTimerPrintsRemaining--;
+      printString(_diagStaleTimer);
+      printInt(runningProcess->processId);
+      printString(_diagStaleTimerPrivilege);
+      printInt((int) runningProcess->privilegeLevel);
+      printString(_diagStaleTimerPc);
+      printHex(exceptionFrame[6]);
+      printString(_diagStaleTimerNewline);
     }
+    return;
   }
-  _savedContextState |= SAVED_CONTEXT_IN_USE;
 
-  _savedContext.owner = (void*) getRunningCoroutine();
   _savedContext.r0  = exceptionFrame[0];
   _savedContext.r1  = exceptionFrame[1];
   _savedContext.r2  = exceptionFrame[2];
@@ -2161,7 +2173,7 @@ int halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
 
 /// @var _diagHardFaultPrefix
 ///
-/// @brief TEMPORARY DIAGNOSTIC strings for the HardFault handler below.
+/// @brief Strings for the HardFault handler below.
 ///
 /// @note KEEP_IN_FLASH is required here because .rodata is removed from the
 /// final binary on some targets -- and doubly so here, since this is the one
@@ -2201,7 +2213,7 @@ extern "C" {
 
 /// @fn void hardFaultReport(uint32_t *exceptionFrame)
 ///
-/// @brief TEMPORARY DIAGNOSTIC: report the stacked exception frame from a
+/// @brief Report the stacked exception frame from a
 /// HardFault.
 ///
 /// @details The Arduino SAMD core's default HardFault_Handler is a weak
@@ -2218,8 +2230,6 @@ extern "C" {
 ///   from whichever stack pointer was active (see HardFault_Handler).
 ///
 /// @return This function never returns.
-///
-/// @note Remove once the ItsyBitsy M0 boot hang is root-caused.
 void hardFaultReport(uint32_t *exceptionFrame, uint32_t r4Value) {
   printString(_diagHardFaultPrefix);
   printHex(exceptionFrame[6]); // Stacked PC: the faulting instruction.
@@ -2362,7 +2372,7 @@ void hardFaultReport(uint32_t *exceptionFrame, uint32_t r4Value) {
 
 /// @fn void HardFault_Handler(void)
 ///
-/// @brief TEMPORARY DIAGNOSTIC: strong override of the Arduino SAMD core's
+/// @brief Strong override of the Arduino SAMD core's
 /// weak HardFault_Handler.  Recovers the stacked exception frame from
 /// whichever stack was in use (bit 2 of EXC_RETURN selects MSP vs PSP) and
 /// hands it to hardFaultReport above.  Declared naked so the compiler can't
@@ -2370,7 +2380,9 @@ void hardFaultReport(uint32_t *exceptionFrame, uint32_t r4Value) {
 ///
 /// @return This function never returns.
 ///
-/// @note Remove once the ItsyBitsy M0 boot hang is root-caused.
+/// @note Without this override the core's weak HardFault_Handler aliases
+/// Dummy_Handler, which is a bare "for (;;) { }" -- a silent lockup that is
+/// indistinguishable from a software hang.
 __attribute__((naked)) void HardFault_Handler(void) {
   __asm volatile (
     "movs r0, #4                  \n"
