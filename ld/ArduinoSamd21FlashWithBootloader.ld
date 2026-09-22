@@ -49,8 +49,13 @@ SECTIONS
 	 * MUST be kept in sync with:
 	 *   - OVERLAY_ADDRESS      in src/hal/HalArduinoSamD21x18A.cpp
 	 *   - OVERLAY_RAM ORIGIN   in usr/src/NanoOsArduinoSamd21.ld
+	 *
+	 * Raised from 0x20002300 to 0x20002320 (32 bytes) alongside
+	 * OVERLAY_ADDRESS moving from 0x20002500 to 0x20002520, to make room for
+	 * the SD card process's new HAL_TIMER_CANCEL capability entry -- see
+	 * OVERLAY_ADDRESS's own doc comment in HalArduinoSamD21x18A.cpp.
 	 */
-	__nanoos_overlay_window = 0x20002300;
+	__nanoos_overlay_window = 0x200023A0;
 
 	.text :
 	{
