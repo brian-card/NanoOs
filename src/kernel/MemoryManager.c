@@ -656,6 +656,7 @@ int memoryManagerReallocCommandHandler(
     = localRealloc(memoryManagerState,
       reallocMessage->ptr, reallocMessage->size,
       processPid(processMessageFrom(incoming)));
+
   if (clientReturnValue != NULL) {
     reallocMessage->size = sizeOfMemory(clientReturnValue);
   } else if ((reallocMessage->size > 0)
@@ -831,17 +832,25 @@ int memoryManagerAssignMemoryCommandHandler(
   MemoryManagerState *memoryManagerState, ProcessMessage *incoming
 ) {
   int returnValue = 0;
-  
+
   if (processPid(processMessageFrom(incoming))
     == schedulerPid
   ) {
     AssignMemoryArgs *assignMemoryArgs
       = (AssignMemoryArgs*) processMessageData(incoming);
     if (isDynamicPointer(assignMemoryArgs->ptr)) {
-      // Make sure the pointer being assigned is allocated.
+      // Make sure the pointer being assigned is allocated.  Limit the traversal
+      // count to make sure we don't wind up in an infinite loop here if the
+      // allocated list is corrupted.
       MemNode *cur = memoryManagerState->allocated;
+      uint32_t traversalCount = 0;
       for (; cur != NULL; cur = cur->next) {
         if (&cur[1] == assignMemoryArgs->ptr) {
+          break;
+        }
+        traversalCount++;
+        if (traversalCount > 10000) {
+          cur = NULL;
           break;
         }
       }
