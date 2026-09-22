@@ -116,6 +116,12 @@ static const char _logHeaderFormat[] KEEP_IN_FLASH
 /// final binary on some targets.
 static const char _localhost[] KEEP_IN_FLASH = "localhost";
 
+/// @var _noLogBufferMessage
+///
+/// @brief Message written to the console if we cant get logBuffer from the HAL.
+static const char _noLogBufferMessage[] KEEP_IN_FLASH
+  = "logMessage: Cannot get logBuffer from HAL.  Discarding message.\n";
+
 /// @var numLogEntries
 ///
 /// @brief The number of LogEntry objects held in the logEntries array and
@@ -154,12 +160,14 @@ int logMessage(LogLevel logLevel,
   const char *fileName, const char *functionName, int lineNumber,
    const char *format, ...
 ) {
+  // Declare our variables upfront since we use gotos.
   va_list args;
   char *slashAt = NULL;
   union {
     int64_t i64Value;
     int     intValue;
   } temp;
+  temp.i64Value = 0; // In case we fail to get a timestamp from the HAL.
   
   // Don't check the return value of getElapsedNanoseconds here.  A failure
   // isn't fatal.  Do this before anything else to get as accurate a timestamp
@@ -167,12 +175,11 @@ int logMessage(LogLevel logLevel,
   HAL->clock.getElapsedNanoseconds(0, &temp.i64Value);
 
   StaticLogs *staticLogs = NULL;
-  HAL->memory.staticLogs(&staticLogs);
   char *logBuffer = NULL;
-  HAL->memory.logBuffer(&logBuffer);
 
   LogEntry *logEntry = NULL;
   ProcessMessage *processMessage = NULL;
+  HAL->memory.staticLogs(&staticLogs);
   if (((SCHEDULER_STATE != NULL) && (loggerPid != 0))
     || (staticLogs == NULL)
   ) {
@@ -261,6 +268,16 @@ int logMessage(LogLevel logLevel,
   return 0;
   
 writeImmediate:
+  HAL->memory.logBuffer(&logBuffer);
+  if (logBuffer == NULL) {
+    // Either we lack the necessary HAL capability to get the logBuffer, or the
+    // HAL on this system doesn't provide one.  Either way, we can't print the
+    // user's message.  Use printString to alert of the problem and bail.
+    printString(_noLogBufferMessage);
+    logEntry->inUse = false;
+    return -ENOMEM;
+  }
+
   // Print the header.
   slashAt = strrchr(fileName, '/');
   if (slashAt != NULL) {
