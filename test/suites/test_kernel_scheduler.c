@@ -25,7 +25,7 @@ unsigned char nanoOsGetpid(void);
 NANO_OS_KERNEL_TEST(sched, getpid_matches_running_pid) {
   unsigned int pid = nanoOsGetpid();
   NANO_OS_ASSERT_EQ_INT((long long) getRunningPid(), (long long) pid);
-  NANO_OS_ASSERT_TRUE(pid >= SCHEDULER_STATE->firstShellPid);
+  NANO_OS_ASSERT_TRUE(pid >= schedulerGetFirstShellPid());
 }
 
 NANO_OS_KERNEL_TEST(sched, process_info_lists_the_core_processes) {

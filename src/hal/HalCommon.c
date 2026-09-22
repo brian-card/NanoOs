@@ -685,22 +685,6 @@ static int halBlockDeviceRestart(ProcessDescriptor *processDescriptor) {
 // Common HAL helper implementations.
 // ---------------------------------------------------------------------------
 
-/// @fn ProcessId reserveProcessSlot(void)
-///
-/// @brief Reserve the next available process slot, advancing the
-/// scheduler's firstUserPid/firstShellPid bookkeeping accordingly.  Shared
-/// by every platform-specific process the HAL starts during scheduler
-/// bring-up (SD card, root filesystem, logger, and future ones) so that
-/// slot allocation isn't duplicated ad hoc at each call site.
-///
-/// @return Returns the ProcessId of the reserved slot.
-ProcessId reserveProcessSlot(void) {
-  ProcessId pid = SCHEDULER_STATE->firstUserPid;
-  SCHEDULER_STATE->firstUserPid = pid + 1;
-  SCHEDULER_STATE->firstShellPid = SCHEDULER_STATE->firstUserPid;
-  return pid;
-}
-
 /// @var _sdCardName
 ///
 /// @brief Process name assigned to the SD card process.
@@ -836,7 +820,7 @@ static const char _contiguousFilesystemReadFailedMessage[] KEEP_IN_FLASH
 ///
 /// @return Returns 0 on success, -errno on failure.
 int halCommonInitRootFilesystem(void) {
-  if (SCHEDULER_STATE == NULL) {
+  if (schedulerIsInitialized() == false) {
     return -EBUSY;
   }
 
@@ -940,7 +924,7 @@ static const char _couldNotCreateLoggerProcess[] KEEP_IN_FLASH
 ///
 /// @return Returns 0 on success, -errno on failure.
 int halCommonInitLogger(void) {
-  if (SCHEDULER_STATE == NULL) {
+  if (schedulerIsInitialized() == false) {
     return -EBUSY;
   }
 

@@ -148,10 +148,7 @@ static int kernelTestRestartShell(void *processDescriptorRaw) {
   ProcessDescriptor *processDescriptor
     = (ProcessDescriptor*) processDescriptorRaw;
 
-  if ((SCHEDULER_STATE == NULL)
-    || (SCHEDULER_STATE->hostname == NULL)
-    || (*SCHEDULER_STATE->hostname == '\0')
-  ) {
+  if (*schedulerPeekHostname() == '\0') {
     return -11; // -EAGAIN: scheduler not up yet; retried next sweep.
   }
 

@@ -68,7 +68,7 @@ NANO_OS_TEST(mysuite, plain_thing) {          // layer 1: runs in the runner
 
 #include "kernel/Scheduler.h"
 NANO_OS_KERNEL_TEST(mysuite, in_a_kernel) {   // layer 2: fresh kernel, per test
-  NANO_OS_ASSERT_NOT_NULL(SCHEDULER_STATE);   // IPC / malloc / HAL all live
+  NANO_OS_ASSERT_TRUE(schedulerIsInitialized()); // IPC / malloc / HAL all live
 }
 ```
 

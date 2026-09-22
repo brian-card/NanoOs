@@ -379,6 +379,20 @@ void* execOverlayCommand(void *args) {
 /// final binary on some targets.
 static const char _mainFunctionName[] KEEP_IN_FLASH = "main";
 
+/// @var _preemptionTimerCached
+///
+/// @brief Whether _cachedPreemptionTimer has been fetched from the
+/// scheduler yet.  The timer's device ID is fixed once the scheduler
+/// initializes (never reassigned after that), so it only needs to be
+/// fetched once per process image.
+static bool _preemptionTimerCached = false;
+
+/// @var _cachedPreemptionTimer
+///
+/// @brief Cached copy of the preemption timer's device ID, avoiding a
+/// schedulerGetPreemptionTimer() call on this hot path once cached.
+static int _cachedPreemptionTimer = -1;
+
 /// @fn void* runBlockOverlay(void *args)
 ///
 /// @brief Wrapper process function that calls a command function.
@@ -409,7 +423,11 @@ void* runBlockOverlay(void *args) {
     return (void*) ((intptr_t) -1);
   }
   // Cancel the preemption timer to make sure the load is atomic.
-  HAL->timer.cancel(SCHEDULER_STATE->preemptionTimer);
+  if (_preemptionTimerCached == false) {
+    _cachedPreemptionTimer = schedulerGetPreemptionTimer();
+    _preemptionTimerCached = true;
+  }
+  HAL->timer.cancel(_cachedPreemptionTimer);
   processDescriptor->overlay.blockDevice = blockOverlayArgs.blockDevice;
   processDescriptor->overlay.startBlock = blockOverlayArgs.startBlock;
   processDescriptor->overlay.numBlocks = HAL->memory.overlaySize

@@ -75,6 +75,16 @@ const char *_referencePoint = REFERENCE_POINT_STRING;
 /// halCommonInitLogger.
 ProcessId loggerPid = 0;
 
+/// @var _cachedHostname
+///
+/// @brief Cached hostname, fetched via schedulerPeekHostname() the first
+/// time it's needed and reused after that.  NULL means "not fetched yet".
+/// A non-NULL, non-empty value doubles as this file's "is the scheduler
+/// initialized" signal, so logMessage doesn't need a separate readiness
+/// check once this is set: schedulerPeekHostname() only ever returns a
+/// real (non-empty) hostname once the scheduler is initialized.
+static const char *_cachedHostname = NULL;
+
 /// @var _logLevelNames
 ///
 /// @brief Names that are to be displayed in place of log level numeric values.
@@ -180,7 +190,20 @@ int logMessage(LogLevel logLevel,
   LogEntry *logEntry = NULL;
   ProcessMessage *processMessage = NULL;
   HAL->memory.staticLogs(&staticLogs);
-  if (((SCHEDULER_STATE != NULL) && (loggerPid != 0))
+
+  // Once cached, a non-empty hostname proves the scheduler was initialized
+  // at some point, which is all we need this check for.  Only pay for the
+  // schedulerPeekHostname() call while that hasn't happened yet.
+  if ((_cachedHostname == NULL) || (*_cachedHostname == '\0')) {
+    const char *hostname = schedulerPeekHostname();
+    if (*hostname != '\0') {
+      _cachedHostname = hostname;
+    }
+  }
+  bool schedulerReady
+    = ((_cachedHostname != NULL) && (*_cachedHostname != '\0'));
+
+  if ((schedulerReady && (loggerPid != 0))
     || (staticLogs == NULL)
   ) {
     // Select pointers from our statically-allocated arrays.
@@ -226,7 +249,7 @@ int logMessage(LogLevel logLevel,
   }
   va_end(args);
   
-  if ((SCHEDULER_STATE == NULL) || (loggerPid == 0)) {
+  if ((schedulerReady == false) || (loggerPid == 0)) {
     if (staticLogs != NULL) {
       // Logger isn't up yet but will be.  Write to the staticLogs area.
       goto writeStaticLog;
@@ -288,9 +311,7 @@ writeImmediate:
     _logHeaderFormat,
     (long long int) (logEntry->timeStamp / ((int64_t) 1000000000)),
     (long long int) (logEntry->timeStamp % ((int64_t) 1000000000)),
-    ((SCHEDULER_STATE != NULL) && (SCHEDULER_STATE->hostname != NULL))
-      ? SCHEDULER_STATE->hostname
-      : _localhost,
+    schedulerReady ? _cachedHostname : _localhost,
     logEntry->processId, logEntry->threadId,
     fileName, functionName, lineNumber, _logLevelNames[logLevel]);
   int rv = printString(logBuffer);

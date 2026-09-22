@@ -89,6 +89,51 @@ void forceYield(void);
 /// FileDescriptor object that maps to the process's stderr FILE stream.
 #define STDERR_FILE_DESCRIPTOR_INDEX 2
 
+/// @struct SchedulerState
+///
+/// @brief State data used by the scheduler.  Definition is private to this
+/// file -- NanoOsTypes.h only forward-declares the type name.  Everything
+/// outside this file goes through the accessor functions declared in
+/// Scheduler.h instead of dereferencing a field directly.
+///
+/// @param numManagedProcesses The number of processes managed by the scheduler.
+///   This will be one less than the global numProcesses variable.
+/// @param ready Queue of processes that are allocated and not waiting on
+///   anything but not currently running.  This queue never includes the
+///   scheduler process.
+/// @param waiting Queue of processes that are waiting on a mutex or condition
+///   with an infinite timeout.  This queue never includes the scheduler
+///   process.
+/// @param timedWaiting Queue of processes that are waiting on a mutex or
+///   condition with a defined timeout.  This queue never includes the scheduler
+///   process.
+/// @param free Queue of processes that are free within the allProcesses
+///   array.
+/// @param hostname The contents of the /etc/hostname file read at startup.
+/// @param numShells The number of shell processes that the scheduler is
+///   running.
+/// @param preemptionTimer The index of the timer used for preemptive
+///   multitasking.  If this is < 0 then the processes run in cooperative mode.
+/// @param firstUserPid The ProcessId of the first user process.
+/// @param firstShellPid The ProcessId of the first shell process.
+/// @param runSchedulerDepth Recursion counter of how many levels of the
+///   runScheduler function are in progress.  Needed to avoid non-reentrant
+///   functions that are run by it.
+struct SchedulerState {
+  size_t              numManagedProcesses;
+  ProcessQueue      **readyQueues;
+  ProcessQueue       *currentReady;
+  ProcessQueue       *waitingQueue;
+  ProcessQueue       *timedWaitingQueue;
+  ProcessQueue       *freeQueue;
+  char               *hostname;
+  uint8_t             numShells;
+  int                 preemptionTimer;
+  ProcessId           firstUserPid;
+  ProcessId           firstShellPid;
+  int                 runSchedulerDepth;
+};
+
 /// @var _functionInProgress
 ///
 /// @brief Function that's already in progress that keeps another function from
@@ -101,11 +146,16 @@ const char *_functionInProgress = NULL;
 /// scheduler is started.
 Thread *schedulerThread = NULL;
 
-/// @var SCHEDULER_STATE
+/// @var _schedulerState
 ///
-/// @brief Global pointer to the SchedulerState managed by the scheduler
-/// process.
-SchedulerState *SCHEDULER_STATE = NULL;
+/// @brief File-private pointer to the SchedulerState managed by the
+/// scheduler process.  Not exposed outside this file -- everything else
+/// goes through the accessor functions below (schedulerIsInitialized,
+/// schedulerPeekHostname, schedulerGetPreemptionTimer,
+/// schedulerDeinitialize, schedulerGetFirstShellPid, reserveProcessSlot)
+/// or the schedulerState parameter threaded through the scheduler's own
+/// command handlers.
+static SchedulerState *_schedulerState = NULL;
 
 /// @var schedulerPid
 ///
@@ -113,7 +163,7 @@ SchedulerState *SCHEDULER_STATE = NULL;
 /// when the scheduler's own process slot is configured.  Declared here
 /// rather than as a SchedulerState member so that it's usable by any file
 /// that includes Scheduler.h without going through the scheduler-private
-/// SCHEDULER_STATE pointer.
+/// _schedulerState pointer.
 ProcessId schedulerPid = 0;
 
 /// @var standardKernelFileDescriptors
@@ -823,20 +873,20 @@ int removeProcessIpcCapability(ProcessDescriptor *processDescriptor,
 ///
 /// @return This function returns no value.
 void runSchedulerQueues(PrivilegeLevel privilegeLevelBound) {
-  ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
+  ProcessQueue *currentReady = _schedulerState->currentReady;
 
   for (PrivilegeLevel ii = PRIVILEGE_LEVEL_KERNEL;
     ii < privilegeLevelBound;
     ii++
   ) {
-    SCHEDULER_STATE->currentReady = SCHEDULER_STATE->readyQueues[ii];
-    uint8_t queueSize = SCHEDULER_STATE->currentReady->numElements;
+    _schedulerState->currentReady = _schedulerState->readyQueues[ii];
+    uint8_t queueSize = _schedulerState->currentReady->numElements;
     for (uint8_t jj = 0; jj < queueSize; jj++) {
       runScheduler();
     }
   }
 
-  SCHEDULER_STATE->currentReady = currentReady;
+  _schedulerState->currentReady = currentReady;
 }
 
 /// @fn int processQueuePush(
@@ -1765,6 +1815,112 @@ const char* schedulerGetHostname(void) {
   return schedulerGetHostnameArgs.hostname;
 }
 
+/// @var _emptyHostname
+///
+/// @brief Empty string returned by schedulerPeekHostname when the caller
+/// isn't authorized to see the real hostname or the scheduler isn't
+/// initialized yet.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _emptyHostname[] KEEP_IN_FLASH = "";
+
+/// @fn bool schedulerIsInitialized(void)
+///
+/// @brief Determine whether the scheduler's internal state has been set up
+/// yet.  Callers outside Scheduler.c use this instead of comparing a
+/// SchedulerState pointer to NULL directly.
+///
+/// @return Returns true if the scheduler is initialized, false otherwise.
+bool schedulerIsInitialized(void) {
+  return (_schedulerState != NULL);
+}
+
+/// @fn const char* schedulerPeekHostname(void)
+///
+/// @brief Direct, non-blocking accessor for the hostname, for use by code
+/// that can't go through the schedulerGetHostname() IPC round trip (e.g.
+/// because the message-passing subsystem isn't up yet or isn't safe to use
+/// on the calling code's hot path).  Restricted to PRIVILEGE_LEVEL_KERNEL
+/// callers since it bypasses the normal IPC capability checks entirely.
+///
+/// @return Returns the real hostname if the calling process is
+/// PRIVILEGE_LEVEL_KERNEL and the scheduler is initialized with a hostname
+/// set.  Returns an empty string in every other case (not authorized, not
+/// initialized yet, or no hostname set yet).  Never returns NULL.
+const char* schedulerPeekHostname(void) {
+  ProcessDescriptor *runningProcess = getRunningProcess();
+  if ((runningProcess == NULL)
+    || (runningProcess->privilegeLevel != PRIVILEGE_LEVEL_KERNEL)
+    || (_schedulerState == NULL)
+    || (_schedulerState->hostname == NULL)
+    || (*_schedulerState->hostname == '\0')
+  ) {
+    return _emptyHostname;
+  }
+
+  return _schedulerState->hostname;
+}
+
+/// @fn int schedulerGetPreemptionTimer(void)
+///
+/// @brief Direct, non-blocking accessor for the preemption timer's device
+/// ID.  Used by code that cancels/restores the preemption timer around a
+/// critical section and can't afford an IPC round trip to get it.  No
+/// privilege restriction: unlike the hostname, this is read from code that
+/// may run at any privilege level (overlay loads, atomic operations).
+///
+/// @return Returns the preemption timer's device ID, or a negative value
+/// if the system is running in cooperative (non-preemptive) mode, or if
+/// the scheduler isn't initialized yet.  Callers that need to distinguish
+/// "not initialized" from "legitimately cooperative" should check
+/// schedulerIsInitialized() themselves before caching this value -- see
+/// NanoOs.c's yieldCallback, which is invoked before the scheduler exists.
+int schedulerGetPreemptionTimer(void) {
+  if (_schedulerState == NULL) {
+    return -1;
+  }
+
+  return _schedulerState->preemptionTimer;
+}
+
+/// @fn void schedulerDeinitialize(void)
+///
+/// @brief Reset the scheduler's state pointer back to NULL.  Used by a
+/// platform's power-mode handling when it needs to unwind back to a fresh
+/// boot (e.g. the POSIX simulator's HAL_POWER_MODE_RESET).
+///
+/// @return This function returns no value.
+void schedulerDeinitialize(void) {
+  _schedulerState = NULL;
+}
+
+/// @fn ProcessId schedulerGetFirstShellPid(void)
+///
+/// @brief Direct accessor for the ProcessId of the first shell process.
+/// Used by tests that need to assert a given pid is a shell/user pid.
+///
+/// @return Returns the ProcessId of the first shell process.
+ProcessId schedulerGetFirstShellPid(void) {
+  return _schedulerState->firstShellPid;
+}
+
+/// @fn ProcessId reserveProcessSlot(void)
+///
+/// @brief Reserve the next available process slot, advancing the
+/// scheduler's firstUserPid/firstShellPid bookkeeping accordingly.  Shared
+/// by every platform-specific process the HAL starts during scheduler
+/// bring-up (SD card, root filesystem, logger, and future ones) so that
+/// slot allocation isn't duplicated ad hoc at each call site.
+///
+/// @return Returns the ProcessId of the reserved slot.
+ProcessId reserveProcessSlot(void) {
+  ProcessId pid = _schedulerState->firstUserPid;
+  _schedulerState->firstUserPid = pid + 1;
+  _schedulerState->firstShellPid = _schedulerState->firstUserPid;
+  return pid;
+}
+
 /// @fn int schedulerExecve(const char *pathname,
 ///   char *const argv[], char *const envp[])
 ///
@@ -1957,7 +2113,7 @@ int closeProcessFileDescriptors(ProcessDescriptor *processDescriptor) {
             returnValue = -EOTHER;
             goto exit;
           }
-          ProcessQueue *currentReady = SCHEDULER_STATE->currentReady;
+          ProcessQueue *currentReady = _schedulerState->currentReady;
           int64_t startTime = 0;
           HAL->clock.getElapsedMicroseconds(0, &startTime);
           // schedulerKillProcess times out after 100 milliseconds, so
@@ -1968,14 +2124,14 @@ int closeProcessFileDescriptors(ProcessDescriptor *processDescriptor) {
               elapsedUs < 50000)
           ) {
             for (int ii = 0; ii < NUM_PRIVILEGE_LEVELS; ii++) {
-              SCHEDULER_STATE->currentReady = SCHEDULER_STATE->readyQueues[ii];
-              uint8_t queueSize = SCHEDULER_STATE->currentReady->numElements;
+              _schedulerState->currentReady = _schedulerState->readyQueues[ii];
+              uint8_t queueSize = _schedulerState->currentReady->numElements;
               for (uint8_t jj = 0; jj < queueSize; jj++) {
                 runScheduler();
               }
             }
           }
-          SCHEDULER_STATE->currentReady = currentReady;
+          _schedulerState->currentReady = currentReady;
 
           if (processMessageDone(&processMessage) == false) {
             // The waiting process timed out without marking the message done.
@@ -3472,7 +3628,7 @@ int schedulerSendSignalCommandHandler(
     .signature = SIGNAL_SIGNATURE,
     .signum = sendSignalArgs->signal,
   };
-  if (pid >= SCHEDULER_STATE->firstUserPid) {
+  if (pid >= _schedulerState->firstUserPid) {
     if (processRunning(processDescriptor) == true) {
       // This is a user process, which is in an overlay.  Make sure it's loaded.
       if (schedulerLoadOverlay(
@@ -3491,9 +3647,9 @@ int schedulerSendSignalCommandHandler(
     
     // Configure the preemption timer to force the process to yield if it
     // doesn't voluntarily give up control within a reasonable amount of time.
-    if (SCHEDULER_STATE->preemptionTimer > -1) {
+    if (_schedulerState->preemptionTimer > -1) {
       HAL->timer.configOneShot(
-        SCHEDULER_STATE->preemptionTimer, 10000000, forceYield);
+        _schedulerState->preemptionTimer, 10000000, forceYield);
     }
   }
   processResume(processDescriptor, &signalCallback);
@@ -3503,8 +3659,8 @@ int schedulerSendSignalCommandHandler(
   // yieldCallback, so the one-shot would otherwise stay armed and fire
   // under the scheduler.  Signal delivery can absolutely end with the
   // target exiting, so this path needs it too.
-  if (SCHEDULER_STATE->preemptionTimer > -1) {
-    HAL->timer.cancel(SCHEDULER_STATE->preemptionTimer);
+  if (_schedulerState->preemptionTimer > -1) {
+    HAL->timer.cancel(_schedulerState->preemptionTimer);
   }
 
   sendSignalArgs->returnValue = 0;
@@ -4032,7 +4188,7 @@ int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
   // direclty here.  The logic below will take care of memory ownership.
   execArgs->envp = envp;
 
-  execArgs->schedulerState = SCHEDULER_STATE;
+  execArgs->schedulerState = _schedulerState;
 
   if (assignMemory(execArgs, processDescriptor->processId) != 0) {
     logWarn("Could not assign execArgs to exec process.\n"
@@ -4337,8 +4493,8 @@ int restartMemoryManager(ProcessDescriptor *processDescriptor) {
 /// @return Returns 0 on sucess, -errno onfailure.
 int restartBuiltinShell(ProcessDescriptor *processDescriptor) {
   logDebug("In restartBuiltinShell\n");
-  if ((SCHEDULER_STATE->hostname == NULL)
-    || (*SCHEDULER_STATE->hostname == '\0')
+  if ((_schedulerState->hostname == NULL)
+    || (*_schedulerState->hostname == '\0')
   ) {
     logDebug(
       "restartBuiltinShell: scheduler not up.  Returning -EAGAIN\n");
@@ -4416,8 +4572,8 @@ exit:
 /// @return Returns 0 on sucess, -errno onfailure.
 int restartOverlayShell(ProcessDescriptor *processDescriptor) {
   logDebug("In restartOverlayShell\n");
-  if ((SCHEDULER_STATE->hostname == NULL)
-    || (*SCHEDULER_STATE->hostname == '\0')
+  if ((_schedulerState->hostname == NULL)
+    || (*_schedulerState->hostname == '\0')
   ) {
     logDebug("Scheduler not up.  Returning -EAGAIN\n");
     return -EAGAIN;
@@ -4504,8 +4660,8 @@ int restartOverlayShell(ProcessDescriptor *processDescriptor) {
 /// @return Returns 0 on sucess, -errno onfailure.
 int restartLogger(ProcessDescriptor *processDescriptor) {
   logDebug("In restartLogger\n");
-  if ((SCHEDULER_STATE->hostname == NULL)
-    || (*SCHEDULER_STATE->hostname == '\0')
+  if ((_schedulerState->hostname == NULL)
+    || (*_schedulerState->hostname == '\0')
   ) {
     logError("Scheduler not up.  Returning -EAGAIN\n");
     return -EAGAIN;
@@ -4517,7 +4673,7 @@ int restartLogger(ProcessDescriptor *processDescriptor) {
   processDescriptor->numHalCapabilities
     = sizeof(loggerHalCapabilities) / sizeof(loggerHalCapabilities[0]);
   processDescriptor->readyQueue
-    = SCHEDULER_STATE->readyQueues[processDescriptor->privilegeLevel];
+    = _schedulerState->readyQueues[processDescriptor->privilegeLevel];
   int returnValue = schedulerRunOverlayCommand(processDescriptor,
     (char*) _loggerPath, (char**) _loggerArgs, NULL);
   if (returnValue == -EBUSY) {
@@ -4554,7 +4710,7 @@ static const char _schedulerStackOverflowMessage[] KEEP_IN_FLASH
 ///
 /// @return This function returns no value.
 void runScheduler(void) {
-  SCHEDULER_STATE->runSchedulerDepth++;
+  _schedulerState->runSchedulerDepth++;
   if (processStackOverflowed(
     &allProcesses[schedulerPid - 1])
   ) {
@@ -4563,11 +4719,11 @@ void runScheduler(void) {
   }
 
   ProcessDescriptor *processDescriptor
-    = processQueuePop(SCHEDULER_STATE->currentReady);
+    = processQueuePop(_schedulerState->currentReady);
   if (processDescriptor == NULL) {
     // Nothing we can do.
     logError("No processes to pop in %s process queue\n",
-      SCHEDULER_STATE->currentReady->name);
+      _schedulerState->currentReady->name);
     goto exit;
   }
 
@@ -4585,7 +4741,7 @@ void runScheduler(void) {
         processDescriptor->envp);
       if ((rv == -EIO) || (rv == -ENOMEM)) {
         // Transient errors.  Re-queue and try again later.
-        processQueuePush(SCHEDULER_STATE->currentReady, processDescriptor);
+        processQueuePush(_schedulerState->currentReady, processDescriptor);
         goto exit;
       } else if (rv != 0) {
         // Permanent failure.  Remove the process.
@@ -4599,17 +4755,17 @@ void runScheduler(void) {
     if (processDescriptor->privilegeLevel > PRIVILEGE_LEVEL_EXECUTIVE) {
       // Configure the preemption timer to force the process to yield if it
       // doesn't voluntarily give up control within a reasonable amount of time.
-      if (SCHEDULER_STATE->preemptionTimer > -1) {
+      if (_schedulerState->preemptionTimer > -1) {
         HAL->timer.configOneShot(
-          SCHEDULER_STATE->preemptionTimer, 10000000, forceYield);
+          _schedulerState->preemptionTimer, 10000000, forceYield);
       }
     }
   }
   processResume(processDescriptor, NULL);
   // Explicitly cancel the preemption timer.  Don't rely on yeildCallback to
   // have run because the process may have exited rather than yielded.
-  if (SCHEDULER_STATE->preemptionTimer > -1) {
-    HAL->timer.cancel(SCHEDULER_STATE->preemptionTimer);
+  if (_schedulerState->preemptionTimer > -1) {
+    HAL->timer.cancel(_schedulerState->preemptionTimer);
   }
 
   if (processStackOverflowed(processDescriptor)) {
@@ -4640,7 +4796,7 @@ void runScheduler(void) {
 
     int returnValue = closeProcessFileDescriptors(processDescriptor);
     if (returnValue == -EBUSY) {
-      processQueuePush(SCHEDULER_STATE->currentReady, processDescriptor);
+      processQueuePush(_schedulerState->currentReady, processDescriptor);
       goto exit;
     }
 
@@ -4673,7 +4829,7 @@ void runScheduler(void) {
       int returnValue = processDescriptor->restartFunction(processDescriptor);
       if (returnValue == -EAGAIN) {
         logDebug("processDescriptor->restartFunction returned -EAGAIN\n");
-        processQueuePush(SCHEDULER_STATE->currentReady, processDescriptor);
+        processQueuePush(_schedulerState->currentReady, processDescriptor);
         goto exit;
       } else if (returnValue != 0) {
         removeProcess(processDescriptor, _processRestartFailedReason);
@@ -4691,22 +4847,22 @@ void runScheduler(void) {
   }
 
   if (processState(processDescriptor) == PROCESS_STATE_WAIT) {
-    processQueuePush(SCHEDULER_STATE->waitingQueue, processDescriptor);
+    processQueuePush(_schedulerState->waitingQueue, processDescriptor);
   } else if (processState(processDescriptor) == PROCESS_STATE_TIMEDWAIT) {
-    processQueuePush(SCHEDULER_STATE->timedWaitingQueue, processDescriptor);
+    processQueuePush(_schedulerState->timedWaitingQueue, processDescriptor);
   } else if (processFinished(processDescriptor)) {
-    processQueuePush(SCHEDULER_STATE->freeQueue, processDescriptor);
+    processQueuePush(_schedulerState->freeQueue, processDescriptor);
   } else { // Process is still running.
-    processQueuePush(SCHEDULER_STATE->currentReady, processDescriptor);
+    processQueuePush(_schedulerState->currentReady, processDescriptor);
   }
 
 exit:
-  checkForTimeouts(SCHEDULER_STATE);
-  if (SCHEDULER_STATE->runSchedulerDepth == 1) {
-    handleSchedulerMessage(SCHEDULER_STATE);
+  checkForTimeouts(_schedulerState);
+  if (_schedulerState->runSchedulerDepth == 1) {
+    handleSchedulerMessage(_schedulerState);
   }
 
-  SCHEDULER_STATE->runSchedulerDepth--;
+  _schedulerState->runSchedulerDepth--;
   return;
 }
 
@@ -4866,7 +5022,7 @@ int initializeSchedulerState(
   schedulerState->firstShellPid = 4;
   rootFilesystemPid = 0; // Invalid PID
   loggerPid = 0; // Invalid PID
-  SCHEDULER_STATE = schedulerState;
+  _schedulerState = schedulerState;
   logDebug("Set scheduler state.\n");
 
   // Initialize the pointer that was used to configure threads.

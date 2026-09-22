@@ -133,16 +133,27 @@ void* resumeCallback(void *stateData, Thread *thread, void *arg) {
 ///
 /// @Return This function returns no value.
 void* yieldCallback(void *stateData, Thread *thread, void *arg) {
+  (void) stateData;
   (void) thread;
-  SchedulerState *schedulerState = *((SchedulerState**) stateData);
-  if (schedulerState == NULL) {
-    // We're being called before the scheduler has been started.  This is
-    // sometimes done to fix the stack size of the scheduler itself before
-    // starting it.  Just return.
-    return arg;
+
+  // Cache the preemption timer's device ID once the scheduler is actually
+  // initialized -- this runs on every yield, so it's worth avoiding the
+  // schedulerGetPreemptionTimer() call once we have a real value.  Can't
+  // cache on the first call unconditionally: this callback is also invoked
+  // before the scheduler has been started (e.g. to fix the stack size of
+  // the scheduler itself before starting it), when there's no real value
+  // to cache yet.
+  static bool preemptionTimerCached = false;
+  static int cachedPreemptionTimer = -1;
+  if (preemptionTimerCached == false) {
+    if (schedulerIsInitialized() == false) {
+      return arg;
+    }
+    cachedPreemptionTimer = schedulerGetPreemptionTimer();
+    preemptionTimerCached = true;
   }
 
-  HAL->timer.cancel(schedulerState->preemptionTimer);
+  HAL->timer.cancel(cachedPreemptionTimer);
 
   return arg;
 }

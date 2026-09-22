@@ -357,12 +357,12 @@ static const char _sdCardName[] KEEP_IN_FLASH = "SD card";
 
 int posixInitBlockDevice(va_list args) {
   (void) args;
-  if (SCHEDULER_STATE == NULL) {
+  if (schedulerIsInitialized() == false) {
     return -EBUSY;
   }
 
-  ProcessDescriptor *processDescriptor
-    = &allProcesses[SCHEDULER_STATE->firstUserPid - 1];
+  ProcessId sdCardPid = reserveProcessSlot();
+  ProcessDescriptor *processDescriptor = &allProcesses[sdCardPid - 1];
   if (processCreate(
     processDescriptor, runSdCardPosix, (void*) _sdCardDevicePath)
     != processSuccess
@@ -370,14 +370,12 @@ int posixInitBlockDevice(va_list args) {
     logError("Could not start SD card process.\n");
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
-  processDescriptor->processId = SCHEDULER_STATE->firstUserPid;
+  processDescriptor->processId = sdCardPid;
   processDescriptor->name = _sdCardName;
   processDescriptor->userId = ROOT_USER_ID;
   BlockDevice *sdDevice = (BlockDevice*) coroutineResume(
-    allProcesses[SCHEDULER_STATE->firstUserPid - 1].mainThread, NULL);
+    allProcesses[sdCardPid - 1].mainThread, NULL);
   sdDevice->partitionNumber = 1;
-  SCHEDULER_STATE->firstUserPid++;
-  SCHEDULER_STATE->firstShellPid = SCHEDULER_STATE->firstUserPid;
   blockDevices[0] = sdDevice;
   setOnline(HAL->blockDevice, 0);
 

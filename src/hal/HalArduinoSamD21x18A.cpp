@@ -1600,7 +1600,7 @@ static uint32_t halArduinoSamD21x18ASpisOnline[] = {
 
 int arduinoSamD21x18AInitBlockDevice(va_list args) {
   (void) args;
-  if (SCHEDULER_STATE == NULL) {
+  if (schedulerIsInitialized() == false) {
     return -EBUSY;
   }
 

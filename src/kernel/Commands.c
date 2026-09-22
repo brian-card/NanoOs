@@ -603,7 +603,7 @@ void* runBuiltinShell(void *args) {
 
   if (getRunningProcess()->userId == NO_USER_ID) {
     printf("\nNanoOs " NANO_OS_VERSION " %s tty%d\n\n",
-      SCHEDULER_STATE->hostname, consolePort);
+      schedulerGetHostname(), consolePort);
     login();
   }
 
@@ -615,7 +615,7 @@ void* runBuiltinShell(void *args) {
     = getUsernameByUserId(getRunningProcess()->userId);
   while (1) {
     printf("%s@%s built-in%s ",
-      processUsername, SCHEDULER_STATE->hostname, prompt);
+      processUsername, schedulerGetHostname(), prompt);
     commandBuffer[0] = '\0';
     char *input = fgets(commandBuffer, sizeof(commandBuffer), stdin);
     if (input == NULL) {

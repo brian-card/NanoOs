@@ -101,7 +101,7 @@ extern BlockDevice *blockDevices[];
 
 int arduinoAvrInitBlockDevice(va_list args) {
   (void) args;
-  if (SCHEDULER_STATE == NULL) {
+  if (schedulerIsInitialized() == false) {
     return -EBUSY;
   }
 

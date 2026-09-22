@@ -37,6 +37,7 @@
 #define SCHEDULER_H
 
 #include <stdint.h>
+#include "stdbool.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -222,8 +223,6 @@ typedef enum SchedulerCommandResponse {
   SCHEDULER_PROCESS_COMPLETE,
 } SchedulerCommand;
 
-extern SchedulerState *SCHEDULER_STATE;
-
 // Exported functionality
 void startScheduler(SchedulerState **coroutineStatePointer);
 ProcessDescriptor* schedulerGetProcessById(unsigned int pid);
@@ -238,6 +237,12 @@ const char* schedulerGetHostname(void);
 int schedulerExecve(const char *pathname,
   char *const argv[], char *const envp[]);
 int schedulerAssignMemory(void *ptr);
+bool schedulerIsInitialized(void);
+const char* schedulerPeekHostname(void);
+int schedulerGetPreemptionTimer(void);
+void schedulerDeinitialize(void);
+ProcessId schedulerGetFirstShellPid(void);
+ProcessId reserveProcessSlot(void);
 int processQueuePush(
   ProcessQueue *processQueue, ProcessDescriptor *processDescriptor);
 ProcessDescriptor* processQueuePop(ProcessQueue *processQueue);

@@ -1422,7 +1422,7 @@ void agonLight2TimerInterruptHandler5(void) { agonLight2TimerInterruptHandler(4)
 
 int agonLight2InitBlockDevice(va_list args) {
   (void) args;
-  if (SCHEDULER_STATE == NULL) {
+  if (schedulerIsInitialized() == false) {
     return -EBUSY;
   }
 

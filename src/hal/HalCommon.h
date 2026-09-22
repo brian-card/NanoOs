@@ -296,7 +296,6 @@ extern HalCapability *sdCardHalCapabilities;
 extern size_t numSdCardHalCapabilities;
 
 int callHal(HalSubsystem subsystem, uint32_t function, ...);
-ProcessId reserveProcessSlot(void);
 int findProcessByName(const char *name, ProcessId *returnValue);
 int registerProcessName(const char *name, ProcessId pid);
 BlockDevice* halCommonInitRootSdSpiStorage(SdCardSpiArgs *sdCardSpiArgs);

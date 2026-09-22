@@ -310,45 +310,15 @@ typedef struct ProcessQueue {
 
 /// @struct SchedulerState
 ///
-/// @brief State data used by the scheduler.
-///
-/// @param numManagedProcesses The number of processes managed by the scheduler.
-///   This will be one less than the global numProcesses variable.
-/// @param ready Queue of processes that are allocated and not waiting on
-///   anything but not currently running.  This queue never includes the
-///   scheduler process.
-/// @param waiting Queue of processes that are waiting on a mutex or condition
-///   with an infinite timeout.  This queue never includes the scheduler
-///   process.
-/// @param timedWaiting Queue of processes that are waiting on a mutex or
-///   condition with a defined timeout.  This queue never includes the scheduler
-///   process.
-/// @param free Queue of processes that are free within the allProcesses
-///   array.
-/// @param hostname The contents of the /etc/hostname file read at startup.
-/// @param numShells The number of shell processes that the scheduler is
-///   running.
-/// @param preemptionTimer The index of the timer used for preemptive
-///   multitasking.  If this is < 0 then the processes run in cooperative mode.
-/// @param firstUserPid The ProcessId of the first user process.
-/// @param firstShellPid The ProcessId of the first shell process.
-/// @param runSchedulerDepth Recursion counter of how many levels of the
-///   runScheduler function are in progress.  Needed to avoid non-reentrant
-///   functions that are run by it.
-typedef struct SchedulerState {
-  size_t              numManagedProcesses;
-  ProcessQueue      **readyQueues;
-  ProcessQueue       *currentReady;
-  ProcessQueue       *waitingQueue;
-  ProcessQueue       *timedWaitingQueue;
-  ProcessQueue       *freeQueue;
-  char               *hostname;
-  uint8_t             numShells;
-  int                 preemptionTimer;
-  ProcessId           firstUserPid;
-  ProcessId           firstShellPid;
-  int                 runSchedulerDepth;
-} SchedulerState;
+/// @brief Opaque forward declaration only.  The full definition is private
+/// to Scheduler.c -- nothing outside it should dereference a
+/// SchedulerState field directly.  Other structs (ExecArgs, SpawnArgs) hold
+/// a SchedulerState* for the scheduler's own internal use, never touching
+/// its fields themselves, so only a pointer-compatible forward declaration
+/// is needed here.  Code that needs scheduler state reaches it through
+/// Scheduler.h's accessor functions (schedulerIsInitialized,
+/// schedulerGetHostname, etc.) instead.
+typedef struct SchedulerState SchedulerState;
 
 /// @struct CommandDescriptor
 ///

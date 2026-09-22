@@ -55,8 +55,11 @@
 // Scheduler.h is deliberately *NOT* included here: it #define's FILE to
 // NanoOsFile, which would break this file's legitimate use of the real
 // system FILE (see posixConfigOneShotTimer et al. below). schedulerPid is
-// just a plain ProcessId global; forward-declare it instead.
+// just a plain ProcessId global; forward-declare it instead.  Same reason
+// schedulerDeinitialize is forward-declared rather than pulled in via the
+// header.
 extern ProcessId schedulerPid;
+void schedulerDeinitialize(void);
 
 /// @def DEBUG_MULTIPLIER
 ///
@@ -114,9 +117,6 @@ extern ProcessId schedulerPid;
 /// @brief The highest errno value defined.  Missing from Linux's implementation
 /// of errno.h.  (It's a BSD thing...)
 #define ELAST                  EHWPOISON
-
-// Defined in Scheduler.c
-extern SchedulerState *SCHEDULER_STATE;
 
 int (*realTcgetattr)(int fd, struct termios *termios_p) = NULL;
 int (*realTcsetattr)(int fd, int optional_actions,
@@ -471,7 +471,7 @@ int posixEnterPowerMode(va_list args) {
     // Reset the block storage device online map so that initialization works
     // properly on reset.
     HAL->blockDevice.online[0] = 0;
-    SCHEDULER_STATE = NULL;
+    schedulerDeinitialize();
     threadsDeconfig();
     longjmp(_resetBuffer, 1);
   }

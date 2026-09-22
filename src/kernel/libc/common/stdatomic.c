@@ -42,38 +42,64 @@
 #include "../../NanoOsTypes.h"
 #include "../../Scheduler.h"
 
+/// @var _preemptionTimerCached
+///
+/// @brief Whether _cachedPreemptionTimer has been fetched from the
+/// scheduler yet.  The timer's device ID is fixed once the scheduler
+/// initializes (never reassigned after that), so it only needs to be
+/// fetched once per process image.  Separate from every other file's own
+/// copy of this cache -- different translation unit, same pattern.
+static bool _preemptionTimerCached = false;
+
+/// @var _cachedPreemptionTimer
+///
+/// @brief Cached copy of the preemption timer's device ID, avoiding a
+/// schedulerGetPreemptionTimer() call on this hot path once cached.
+static int _cachedPreemptionTimer = -1;
+
+/// @fn int getPreemptionTimer(void)
+///
+/// @brief Fetch and cache the preemption timer's device ID on first use.
+static inline int getPreemptionTimer(void) {
+  if (_preemptionTimerCached == false) {
+    _cachedPreemptionTimer = schedulerGetPreemptionTimer();
+    _preemptionTimerCached = true;
+  }
+  return _cachedPreemptionTimer;
+}
+
 void* atomic_load(const volatile void *object) {
   void **objectPtr = (void**) object;
-  
+
   uint64_t remainingNanoseconds;
   void (*callback)(void);
   int cancelStatus = HAL->timer.cancelAndGet(
-    SCHEDULER_STATE->preemptionTimer, NULL, &remainingNanoseconds, &callback);
+    getPreemptionTimer(), NULL, &remainingNanoseconds, &callback);
 
   void *returnValue = *objectPtr;
-  
+
   if (cancelStatus == 0) {
     // A timer was active when we were called.  Restore it.
-    HAL->timer.configOneShot(SCHEDULER_STATE->preemptionTimer,
+    HAL->timer.configOneShot(getPreemptionTimer(),
       remainingNanoseconds, callback);
   }
-  
+
   return returnValue;
 }
 
 void atomic_store(volatile void *object, void *desired) {
   void **objectPtr = (void**) object;
-  
+
   uint64_t remainingNanoseconds;
   void (*callback)(void);
   int cancelStatus = HAL->timer.cancelAndGet(
-    SCHEDULER_STATE->preemptionTimer, NULL, &remainingNanoseconds, &callback);
+    getPreemptionTimer(), NULL, &remainingNanoseconds, &callback);
 
   *objectPtr = desired;
-  
+
   if (cancelStatus == 0) {
     // A timer was active when we were called.  Restore it.
-    HAL->timer.configOneShot(SCHEDULER_STATE->preemptionTimer,
+    HAL->timer.configOneShot(getPreemptionTimer(),
       remainingNanoseconds, callback);
   }
 }
@@ -83,11 +109,11 @@ bool atomic_compare_exchange_strong(
 ) {
   void **objectPtr = (void**) object;
   void **expectedPtr = (void**) expected;
-  
+
   uint64_t remainingNanoseconds;
   void (*callback)(void);
   int cancelStatus = HAL->timer.cancelAndGet(
-    SCHEDULER_STATE->preemptionTimer, NULL, &remainingNanoseconds, &callback);
+    getPreemptionTimer(), NULL, &remainingNanoseconds, &callback);
 
   bool success = false;
   if (*objectPtr == *expectedPtr) {
@@ -96,13 +122,13 @@ bool atomic_compare_exchange_strong(
   } else {
     *expectedPtr = *objectPtr;
   }
-  
+
   if (cancelStatus == 0) {
     // A timer was active when we were called.  Restore it.
-    HAL->timer.configOneShot(SCHEDULER_STATE->preemptionTimer,
+    HAL->timer.configOneShot(getPreemptionTimer(),
       remainingNanoseconds, callback);
   }
-  
+
   return success;
 }
 
