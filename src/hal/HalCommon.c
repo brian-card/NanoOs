@@ -1128,10 +1128,15 @@ int restartContiguousFilesystem(ProcessDescriptor *processDescriptor) {
   fs.blockDevice = rootBlockDevice;
   fs.blockSize = fs.blockDevice->blockSize;
 
-  // Read the full binary into contiguous memory.
   NanoOsOverlayMap *overlayMap = NULL;
   HAL->memory.contiguousFilesystem(&overlayMap);
-  if (rootBlockDevice->schedReadBlocks(
+  // HAL->memory.contiguousFilesystem can fail if the calling process doesn't
+  // have the HAL capabilities to run it, which would leave overlayMap NULL.  It
+  // *SHOULD'T* fail because only the scheduler should be running this function
+  // and the scheduler is the one privileged process, but don't take any chances
+  // here.  Read the binary into memory as long as overlayMap isn't NULL.
+  if ((overlayMap == NULL)
+    || rootBlockDevice->schedReadBlocks(
     rootBlockDevice->context,
     /* startBlock= */ 1,
     /* numBlocks= */ HAL->memory.contiguousFilesystemSize
