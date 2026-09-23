@@ -110,9 +110,13 @@ extern void agonLight2Off(void);           // boot/AgonLight2/Boot.asm; no retur
 
 /// @def DATA_BSS_REGION_SIZE
 ///
-/// @brief Bytes reserved for .bss + .data + padding.  5 KB leaves head-room as
-/// the HAL and kernel fill in.
-#define DATA_BSS_REGION_SIZE (5 * 1024)
+/// @brief Bytes reserved for .bss + .data + padding.  6 KB leaves head-room as
+/// the HAL and kernel fill in.  Bumped from 5 KB to make room for the UART
+/// interrupt ring buffers (src/hal/AgonLight2/Uart0.asm, Uart1.asm); as of this
+/// change .bss + .data used ~4.7 KB of the prior 5 KB reservation, so the ring
+/// buffers would not have fit.  Kept in sync with __data_bss_limit in
+/// ld/AgonLight2.ld.
+#define DATA_BSS_REGION_SIZE (6 * 1024)
 
 /// @def DATA_BSS_CANARY_ADDRESS
 ///

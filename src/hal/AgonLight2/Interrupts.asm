@@ -103,7 +103,7 @@ __nanoOsIvt:
     .short prt5Tramp     ; 0x14  PRT5
     .short _defaultIsr   ; 0x16
     .short _defaultIsr   ; 0x18  UART0
-    .short _defaultIsr   ; 0x1A  UART1
+    .short uart1Tramp    ; 0x1A  UART1
     .short _defaultIsr   ; 0x1C  I2C
     .short _defaultIsr   ; 0x1E  SPI
     .short _defaultIsr   ; 0x20
@@ -292,3 +292,50 @@ TMR5_CTL    .equ 0x08F
     PRT_TRAMPOLINE prt3Tramp, TMR3_CTL, _agonLight2TimerInterruptHandler3
     PRT_TRAMPOLINE prt4Tramp, TMR4_CTL, _agonLight2TimerInterruptHandler4
     PRT_TRAMPOLINE prt5Tramp, TMR5_CTL, _agonLight2TimerInterruptHandler5
+
+;;; ========================================================================
+;;; UART trampolines
+;;; ========================================================================
+;;;
+;;; Unlike the PRT trampolines above, these do NOT `ei` before calling the
+;;; handler.  The PRT case needs interrupts live during the call because its
+;;; handler (the scheduler's preemption callback) performs a coroutine context
+;;; switch that may not return for a while - leaving interrupts off for that
+;;; whole span would stall every other timer and peripheral.  A UART handler
+;;; does no such thing: it only drains/refills a hardware FIFO into a small
+;;; ring buffer in src/hal/AgonLight2/Uart1.asm (soon Uart0.asm too) and
+;;; returns in a few dozen cycles.  Keeping interrupts off for that entire
+;;; span is both cheap and important: it is what makes it safe for the
+;;; handler to acknowledge its interrupt source (by reading RBR / writing THR)
+;;; AFTER the vector fires rather than before - an early `ei`, as in the PRT
+;;; case, would let the still-pending condition re-vector into this same ISR
+;;; before it had a chance to clear it, recursing without bound.
+;;;
+;;; The handler itself (uart1Isr, etc.) lives in ordinary .text in its
+;;; driver's .asm file, not in .text.ivt - only the trampoline (the literal
+;;; hardware jump target) has to live below 64 KB.  A `call` from ADL mode is
+;;; a plain 3-byte-address call and can reach anywhere, same as the PRT
+;;; trampolines' `call` into C functions linked well above 64 KB.
+.extern uart1Isr
+
+.macro UART_TRAMPOLINE name, handler
+\name:
+    push    af
+    push    bc
+    push    de
+    push    hl
+    push    ix
+    push    iy
+    call    \handler            ; runs with interrupts OFF for its duration
+    pop     iy
+    pop     ix
+    pop     hl
+    pop     de
+    pop     bc
+    pop     af
+    ei                          ; effective after the reti below
+    reti                        ; plain RETI: MADL=0 / pure ADL, 3-byte pushed PC
+.endm
+
+    .global uart1Tramp
+    UART_TRAMPOLINE uart1Tramp, uart1Isr
