@@ -42,7 +42,7 @@
 /// @var overlayMap
 ///
 /// @brief Memory address where overlays are loaded.  Populated once from
-/// HAL->memory.overlayMap() by initializeSchedulerState(); everything else
+/// HAL->memory->overlayMap() by initializeSchedulerState(); everything else
 /// reads this directly instead of going through the HAL on every call.
 NanoOsOverlayMap *overlayMap = NULL;
 
@@ -261,8 +261,12 @@ void* callOverlayFunctionFromBlockDevice(
   
   overlayArray[1].blockDevice = runningProcess->overlay.blockDevice;
   if (deviceId != OVERLAY_SAME_NAMESPACE) {
-    HAL->blockDevice.get(
-      (int) ((intptr_t) deviceId), &overlayArray[1].blockDevice);
+    if (HAL->blockDevice != NULL) {
+      HAL->blockDevice->get(
+        (int) ((intptr_t) deviceId), &overlayArray[1].blockDevice);
+    } else {
+      overlayArray[1].blockDevice = NULL;
+    }
     if (overlayArray[1].blockDevice == NULL) {
       // No such block device.
       goto exit; // return NULL

@@ -51,26 +51,11 @@
 /// @brief The number of digital IO pins on the board.  14 on an Arduino Nano.
 #define NUM_DIO_PINS 14
 
-/// @def SPI_COPI_DIO
-///
-/// @brief DIO pin used for SPI COPI on the Arduino Nano Every.
-#define SPI_COPI_DIO 11
-
-/// @def SPI_CIPO_DIO
-///
-/// @brief DIO pin used for SPI CIPO on the Arduino Nano Every.
-#define SPI_CIPO_DIO 12
-
-/// @def SPI_SCK_DIO
-///
-/// @brief DIO pin used for SPI serial clock on the Arduino Nano Every.
-#define SPI_SCK_DIO 13
-
-/// @def SD_CARD_PIN_CHIP_SELECT
-///
-/// @brief Pin to use for the MicroSD card reader's SPI chip select line.
-#define SD_CARD_PIN_CHIP_SELECT 4
-
+// This board has no SPI bus wired to anything and no block device of any
+// kind: arduinoAvrInitBlockDevice/etc below always return -ENODEV, and
+// halArduinoInit() leaves HAL->spi and HAL->blockDevice NULL.  So, unlike
+// HalArduinoMega2560.cpp, there are no SPI pin or SD-card chip-select
+// defines here -- there's nothing for them to configure.
 
 /// @var halArduinoAvrImplUartsOnline
 ///
@@ -108,12 +93,24 @@ int halArduinoInit(void) {
     .dioStart          = DIO_START,
     .numDiosSupported  = NUM_DIO_PINS,
     .diosOnline        = halArduinoAvrImplDiosOnline,
-    .spiCopiDio        = SPI_COPI_DIO,
-    .spiCipoDio        = SPI_CIPO_DIO,
-    .spiSckDio         = SPI_SCK_DIO,
   };
 
-  return halArduinoAvrInit(&args);
+  // This board has no SPI bus wired to anything.  Null the pointer out
+  // before halArduinoAvrInit()/halCommonInit() run, so the generic SPI init
+  // step in halCommonInit() (which checks HAL->spi for NULL) skips over it
+  // instead of logging a spurious "failed to initialize" warning.
+  halImpl.spi = NULL;
+
+  int returnValue = halArduinoAvrInit(&args);
+
+  // halArduinoAvrInit() unconditionally wires up the generic block-device
+  // dispatch table (arduinoAvrInitBlockDevice/etc above, which always
+  // return -ENODEV on this board) and its numSupported/online fields; null
+  // the outer pointer afterward since this board has no real block device
+  // to expose.
+  halImpl.blockDevice = NULL;
+
+  return returnValue;
 }
 
 #endif // ARDUINO_AVR_NANO_EVERY

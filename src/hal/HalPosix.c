@@ -471,7 +471,7 @@ static int posixExecCommand(va_list args) {
 /// @return Returns 0 on success, -errno on failure.
 static int posixDoStartProcesses(void) {
   int returnValue = halCommonInitRootFilesystem();
-  if (HAL->memory.stringsPresent == false) {
+  if (HAL->memory->stringsPresent == false) {
     int loggerStatus = halCommonInitLogger();
     if ((returnValue == 0) && (loggerStatus != 0)) {
       returnValue = loggerStatus;
@@ -706,20 +706,20 @@ int halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
   halFunctions[HAL_TIMER]        = posixTimerFunctions;
   halFunctions[HAL_BLOCK_DEVICE] = posixBlockDeviceFunctions;
 
-  halImpl.uart.numSupported = 2;
-  halImpl.uart.online       = posixUartsOnline;
+  halImpl.uart->numSupported = 2;
+  halImpl.uart->online       = posixUartsOnline;
 
-  halImpl.dio.numSupported = 0;
-  halImpl.dio.online       = posixDiosOnline;
+  halImpl.dio->numSupported = 0;
+  halImpl.dio->online       = posixDiosOnline;
 
-  halImpl.spi.numSupported = 0;
-  halImpl.spi.online       = posixSpisOnline;
+  halImpl.spi->numSupported = 0;
+  halImpl.spi->online       = posixSpisOnline;
 
-  halImpl.timer.numSupported = 2;
-  halImpl.timer.online       = posixTimersOnline;
+  halImpl.timer->numSupported = 2;
+  halImpl.timer->online       = posixTimersOnline;
 
-  halImpl.blockDevice.numSupported = _numBlockDevices;
-  halImpl.blockDevice.online       = posixBlockDevicesOnline;
+  halImpl.blockDevice->numSupported = _numBlockDevices;
+  halImpl.blockDevice->online       = posixBlockDevicesOnline;
 
   memset(_namedProcesses, 0, sizeof(_namedProcesses));
   namedProcessTable = _namedProcesses;
@@ -733,18 +733,18 @@ int halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
   numLoggerIpcCapabilities
     = sizeof(_loggerIpcCapabilities) / sizeof(_loggerIpcCapabilities[0]);
 
-  halImpl.memory.logBufferSize  = sizeof(_logBuffer);
-  halImpl.memory.numLogEntries  = NUM_LOG_ENTRIES;
+  halImpl.memory->logBufferSize  = sizeof(_logBuffer);
+  halImpl.memory->numLogEntries  = NUM_LOG_ENTRIES;
   memset(&_logEntries, 0, sizeof(_logEntries));
   memset(&_logMessages, 0, sizeof(_logMessages));
 #ifdef NANO_OS_STRINGS_STRIPPED
-  halImpl.memory.stringsPresent = false;
+  halImpl.memory->stringsPresent = false;
 #else
-  halImpl.memory.stringsPresent = true;
+  halImpl.memory->stringsPresent = true;
 #endif // NANO_OS_STRINGS_STRIPPED
 
   memset(_allProcesses, 0, sizeof(_allProcesses));
-  halImpl.memory.numProcesses        = NUM_PROCESSES;
+  halImpl.memory->numProcesses        = NUM_PROCESSES;
   for (int ii = 0; ii < NUM_READY_QUEUES; ii++) {
     memset(_readyQueues[ii], 0, sizeof(HalProcessQueue));
   }
@@ -761,15 +761,15 @@ int halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
   int32_t result
     = halPosixImplInit(resetBuffer,
       &_overlayMap,
-      &halImpl.memory.overlaySize,
+      &halImpl.memory->overlaySize,
       &_staticLogs,
       &_contiguousFilesystem,
-      &halImpl.memory.contiguousFilesystemSize);
+      &halImpl.memory->contiguousFilesystemSize);
   if (result != 0) {
     _overlayMap                             = NULL;
-    halImpl.memory.overlaySize              = 0;
+    halImpl.memory->overlaySize              = 0;
     _contiguousFilesystem                   = NULL;
-    halImpl.memory.contiguousFilesystemSize = 0;
+    halImpl.memory->contiguousFilesystemSize = 0;
     _staticLogs                             = NULL;
     return result;
   }

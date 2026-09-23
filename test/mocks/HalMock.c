@@ -143,7 +143,7 @@ static HalMockProcessQueue _freeQueue;
 static int                 _processErrorNumbers[NUM_PROCESSES + 1];
 
 // Per-process local storage.  getProcessStorage() / setProcessStorage_()
-// index HAL->memory.processStorage[pid][key]; a NULL here makes both a no-op.
+// index HAL->memory->processStorage[pid][key]; a NULL here makes both a no-op.
 static void  *_processStorageBase[NUM_PROCESSES][NUM_PROCESS_STORAGE_KEYS];
 static void **_processStorage[NUM_PROCESSES];
 
@@ -485,22 +485,22 @@ int halMockInit(const HalMockConfig *config, jmp_buf *powerReturn) {
   }
 
   // Subsystem counts / online bitmasks.
-  halImpl.uart.numSupported        = 2;
-  halImpl.uart.online              = _uartsOnline;
-  halImpl.dio.numSupported         = 0;
-  halImpl.dio.online              = _diosOnline;
-  halImpl.spi.numSupported         = 0;
-  halImpl.spi.online              = _spisOnline;
-  halImpl.timer.numSupported       = 2;
-  halImpl.timer.online            = _timersOnline;
-  halImpl.blockDevice.numSupported = 1;
-  halImpl.blockDevice.online      = _blockDevicesOnline;
+  halImpl.uart->numSupported        = 2;
+  halImpl.uart->online              = _uartsOnline;
+  halImpl.dio->numSupported         = 0;
+  halImpl.dio->online              = _diosOnline;
+  halImpl.spi->numSupported         = 0;
+  halImpl.spi->online              = _spisOnline;
+  halImpl.timer->numSupported       = 2;
+  halImpl.timer->online            = _timersOnline;
+  halImpl.blockDevice->numSupported = 1;
+  halImpl.blockDevice->online      = _blockDevicesOnline;
 
-  halImpl.memory.logBufferSize  = sizeof(_logBuffer);
-  halImpl.memory.stringsPresent = true;
+  halImpl.memory->logBufferSize  = sizeof(_logBuffer);
+  halImpl.memory->stringsPresent = true;
 
   memset(_allProcesses, 0, sizeof(_allProcesses));
-  halImpl.memory.numProcesses        = NUM_PROCESSES;
+  halImpl.memory->numProcesses        = NUM_PROCESSES;
   memset(_readyQueueStorage, 0, sizeof(_readyQueueStorage));
   memset(&_waitingQueue, 0, sizeof(_waitingQueue));
   memset(&_timedWaitingQueue, 0, sizeof(_timedWaitingQueue));
@@ -515,10 +515,10 @@ int halMockInit(const HalMockConfig *config, jmp_buf *powerReturn) {
   memset(implResetBuffer, 0, sizeof(implResetBuffer));
   int32_t result = halPosixImplInit(implResetBuffer,
     &_overlayMap,
-    &halImpl.memory.overlaySize,
+    &halImpl.memory->overlaySize,
     &_staticLogsPtr,
     &_contiguousFilesystem,
-    &halImpl.memory.contiguousFilesystemSize);
+    &halImpl.memory->contiguousFilesystemSize);
   if (result != 0) {
     return result;
   }

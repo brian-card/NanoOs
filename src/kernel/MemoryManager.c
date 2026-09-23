@@ -120,7 +120,7 @@ void localFree(volatile MemoryManagerState *memoryManagerState,
   }
   if (cur == NULL) {
     logError("memNode is not allocated!!\n");
-    HAL->power.enterMode(HAL_POWER_MODE_OFF);
+    HAL->power->enterMode(HAL_POWER_MODE_OFF);
   }
 #endif // NANO_OS_MEM_DEBUG
 
@@ -136,7 +136,7 @@ void localFree(volatile MemoryManagerState *memoryManagerState,
       logError("memNode->prev is not allocated!!\n");
       logError("memNode->prev = 0x%lx\n",
         (unsigned long int) (uintptr_t) memNode->prev);
-      HAL->power.enterMode(HAL_POWER_MODE_OFF);
+      HAL->power->enterMode(HAL_POWER_MODE_OFF);
     }
 #endif // NANO_OS_MEM_DEBUG
     logTrace("Updating memNode->prev->next\n");
@@ -160,7 +160,7 @@ void localFree(volatile MemoryManagerState *memoryManagerState,
     logError("cur (0x%lx) < memNode (0x%lx)\n",
       (unsigned long int) (uintptr_t) cur,
       (unsigned long int) (uintptr_t) memNode);
-    HAL->power.enterMode(HAL_POWER_MODE_OFF);
+    HAL->power->enterMode(HAL_POWER_MODE_OFF);
   }
 #endif // NANO_OS_MEM_DEBUG
   while (((uintptr_t) cur->prev) > ((uintptr_t) memNode)) {
@@ -174,7 +174,7 @@ void localFree(volatile MemoryManagerState *memoryManagerState,
     logError("cur (0x%lx) < memNode (0x%lx)\n",
       (unsigned long int) (uintptr_t) cur,
       (unsigned long int) (uintptr_t) memNode);
-    HAL->power.enterMode(HAL_POWER_MODE_OFF);
+    HAL->power->enterMode(HAL_POWER_MODE_OFF);
   }
 #endif // NANO_OS_MEM_DEBUG
   memNode->next = cur;
@@ -215,7 +215,7 @@ void localFree(volatile MemoryManagerState *memoryManagerState,
       logError("cur->next (0x%lx) < memNode (0x%lx)\n",
         (unsigned long int) (uintptr_t) cur->next,
         (unsigned long int) (uintptr_t) memNode);
-      HAL->power.enterMode(HAL_POWER_MODE_OFF);
+      HAL->power->enterMode(HAL_POWER_MODE_OFF);
     }
 #endif // NANO_OS_MEM_DEBUG
     memNode->next = cur->next;
@@ -259,7 +259,7 @@ void localFree(volatile MemoryManagerState *memoryManagerState,
       logError("memNode (0x%lx) < prev (0x%lx)\n",
         (unsigned long int) (uintptr_t) memNode,
         (unsigned long int) (uintptr_t) prev);
-      HAL->power.enterMode(HAL_POWER_MODE_OFF);
+      HAL->power->enterMode(HAL_POWER_MODE_OFF);
     }
 #endif // NANO_OS_MEM_DEBUG
     prev->next = memNode;
@@ -279,7 +279,7 @@ void localFree(volatile MemoryManagerState *memoryManagerState,
       logError("memNode->next (0x%lx) < prev (0x%lx)\n",
         (unsigned long int) (uintptr_t) memNode->next,
         (unsigned long int) (uintptr_t) prev);
-      HAL->power.enterMode(HAL_POWER_MODE_OFF);
+      HAL->power->enterMode(HAL_POWER_MODE_OFF);
     }
 #endif // NANO_OS_MEM_DEBUG
     prev->next = memNode->next;
@@ -403,7 +403,7 @@ void* localRealloc(volatile MemoryManagerState *memoryManagerState,
             logError("next (0x%lx) < next->prev (0x%lx)\n",
               (unsigned long int) (uintptr_t) next,
               (unsigned long int) (uintptr_t) next->prev);
-            HAL->power.enterMode(HAL_POWER_MODE_OFF);
+            HAL->power->enterMode(HAL_POWER_MODE_OFF);
           }
 #endif // NANO_OS_MEM_DEBUG
           next->prev->next = next;
@@ -441,7 +441,7 @@ void* localRealloc(volatile MemoryManagerState *memoryManagerState,
       logError("cur->prev (0x%lx) >= cur (0x%lx)\n",
         (unsigned long int) (uintptr_t) cur->prev,
         (unsigned long int) (uintptr_t) cur);
-      HAL->power.enterMode(HAL_POWER_MODE_OFF);
+      HAL->power->enterMode(HAL_POWER_MODE_OFF);
     }
 
     if ((cur->next == NULL) && (cur == memoryManagerState->lastFree)) {
@@ -450,7 +450,7 @@ void* localRealloc(volatile MemoryManagerState *memoryManagerState,
       logError("cur->next (0x%lx) <= cur (0x%lx)\n",
         (unsigned long int) (uintptr_t) cur->next,
         (unsigned long int) (uintptr_t) cur);
-      HAL->power.enterMode(HAL_POWER_MODE_OFF);
+      HAL->power->enterMode(HAL_POWER_MODE_OFF);
     }
 #endif // NANO_OS_MEM_DEBUG
 
@@ -509,7 +509,7 @@ void* localRealloc(volatile MemoryManagerState *memoryManagerState,
         logError("next (0x%lx) < next->prev (0x%lx)\n",
           (unsigned long int) (uintptr_t) next,
           (unsigned long int) (uintptr_t) next->prev);
-        HAL->power.enterMode(HAL_POWER_MODE_OFF);
+        HAL->power->enterMode(HAL_POWER_MODE_OFF);
       }
 #endif // NANO_OS_MEM_DEBUG
       next->prev->next = next;
@@ -528,7 +528,7 @@ void* localRealloc(volatile MemoryManagerState *memoryManagerState,
         logError("cur->next (0x%lx) < next (0x%lx)\n",
           (unsigned long int) (uintptr_t) cur->next,
           (unsigned long int) (uintptr_t) next);
-        HAL->power.enterMode(HAL_POWER_MODE_OFF);
+        HAL->power->enterMode(HAL_POWER_MODE_OFF);
       }
 #endif // NANO_OS_MEM_DEBUG
       next->next = cur->next;
@@ -1131,7 +1131,7 @@ void initializeGlobals(MemoryManagerState *memoryManagerState,
   
   // Set up the memory manager's state.
   void *bottomOfHeapVal = NULL;
-  HAL->memory.bottomOfHeap(MEMORY_MANAGER_DEBUG, &bottomOfHeapVal);
+  HAL->memory->bottomOfHeap(MEMORY_MANAGER_DEBUG, &bottomOfHeapVal);
   memoryManagerState->start = (uintptr_t) bottomOfHeapVal;
   memoryManagerState->end = (uintptr_t) &mallocBufferEnd;
   memoryManagerState->bytesFree
@@ -1277,7 +1277,7 @@ void* runMemoryManager(void *args) {
   jmp_buf returnBuffer;
   if (setjmp(returnBuffer) == 0) {
     size_t mmStackSize = 0;
-    HAL->memory.memoryManagerStackSize(MEMORY_MANAGER_DEBUG, &mmStackSize);
+    HAL->memory->memoryManagerStackSize(MEMORY_MANAGER_DEBUG, &mmStackSize);
     allocateMemoryManagerStack((MemoryManagerState*) &memoryManagerState,
       returnBuffer, mmStackSize, NULL);
   }

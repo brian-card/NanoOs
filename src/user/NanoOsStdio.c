@@ -81,7 +81,7 @@ static const char _crlf[] KEEP_IN_FLASH = "\r\n";
 
 /// @fn int printString_(const char *string)
 ///
-/// @brief Wrapper around HAL->uart.write for a C string.
+/// @brief Wrapper around HAL->uart->write for a C string.
 ///
 /// @return Returns the number of bytes written on success, -errno on failure.
 int printString_(const char *string) {
@@ -101,22 +101,22 @@ int printString_(const char *string) {
 
   // Find the first UART that's both online and a console.
   int32_t deviceId = 0;
-  for (; ((uint32_t) deviceId) < HAL->uart.numSupported; deviceId++) {
+  for (; ((uint32_t) deviceId) < HAL->uart->numSupported; deviceId++) {
     bool uartIsConsole = false;
     
     if ((online(HAL->uart, deviceId))
-      && (HAL->uart.isConsole(deviceId, &uartIsConsole) == 0)
+      && (HAL->uart->isConsole(deviceId, &uartIsConsole) == 0)
       && (uartIsConsole == true)
     ) {
       break;
     }
   }
-  if (((uint32_t) deviceId) == HAL->uart.numSupported) {
+  if (((uint32_t) deviceId) == HAL->uart->numSupported) {
     return -ENODEV;
   }
 
   ssize_t written = 0;
-  int32_t rv = HAL->uart.write(deviceId, (uint8_t*) string, stringLength,
+  int32_t rv = HAL->uart->write(deviceId, (uint8_t*) string, stringLength,
     &written);
   if (rv < 0) {
     // Bail.
@@ -125,7 +125,7 @@ int printString_(const char *string) {
   int bytesWritten = (int) written;
 
   if (printReturnNewline == true) {
-    rv = HAL->uart.write(deviceId, (uint8_t*) _crlf, 2, &written);
+    rv = HAL->uart->write(deviceId, (uint8_t*) _crlf, 2, &written);
     if (rv == 0) {
       // The usual case.
       bytesWritten += (int) written;

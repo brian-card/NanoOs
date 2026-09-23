@@ -470,7 +470,7 @@ int posixEnterPowerMode(va_list args) {
 
     // Reset the block storage device online map so that initialization works
     // properly on reset.
-    HAL->blockDevice.online[0] = 0;
+    HAL->blockDevice->online[0] = 0;
     schedulerDeinitialize();
     threadsDeconfig();
     longjmp(_resetBuffer, 1);
@@ -1004,7 +1004,7 @@ static void* posixCancelTimerWarmupThreadFunc(void *arg) {
 /// @brief Force glibc's one-time, lazy dlopen() of libgcc_s.so.1 (needed
 /// internally by pthread_cancel() for stack-unwinding support) to happen
 /// here, on the native thread's own large stack, instead of happening the
-/// first time some coroutine calls HAL->timer.cancel() -> posixCancelTimer()
+/// first time some coroutine calls HAL->timer->cancel() -> posixCancelTimer()
 /// -> pthread_cancel() from deep inside its own tiny, recursively-carved
 /// stack slice.  That dlopen recurses far enough into glibc's dynamic
 /// loader to overflow a coroutine's slice; it's a one-time, process-wide

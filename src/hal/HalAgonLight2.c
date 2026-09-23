@@ -1539,7 +1539,7 @@ int agonLight2ExecCommand(va_list args) {
 /// @return Returns 0 on success, -errno on failure.
 static int agonLight2DoStartProcesses(void) {
   int returnValue = halCommonInitRootFilesystem();
-  if (HAL->memory.stringsPresent == false) {
+  if (HAL->memory->stringsPresent == false) {
     int loggerStatus = halCommonInitLogger();
     if ((returnValue == 0) && (loggerStatus != 0)) {
       returnValue = loggerStatus;
@@ -1809,17 +1809,17 @@ int halAgonLight2Init(void) {
   halFunctions[HAL_TIMER]        = agonLight2TimerFunctions;
   halFunctions[HAL_BLOCK_DEVICE] = agonLight2BlockDeviceFunctions;
 
-  halImpl.memory.contiguousFilesystemSize = FILESYSTEM_DRIVER_SIZE;
-  halImpl.memory.overlaySize = OVERLAY_SIZE;
+  halImpl.memory->contiguousFilesystemSize = FILESYSTEM_DRIVER_SIZE;
+  halImpl.memory->overlaySize = OVERLAY_SIZE;
 
-  halImpl.memory.logBufferSize  = sizeof(_logBuffer);
-  halImpl.memory.numLogEntries  = NUM_LOG_ENTRIES;
+  halImpl.memory->logBufferSize  = sizeof(_logBuffer);
+  halImpl.memory->numLogEntries  = NUM_LOG_ENTRIES;
   memset(&_logEntries, 0, sizeof(_logEntries));
   memset(&_logMessages, 0, sizeof(_logMessages));
 #ifdef NANO_OS_STRINGS_STRIPPED
-  halImpl.memory.stringsPresent = false;
+  halImpl.memory->stringsPresent = false;
 #else
-  halImpl.memory.stringsPresent = true;
+  halImpl.memory->stringsPresent = true;
 #endif // NANO_OS_STRINGS_STRIPPED
   memset((StaticLogs*) STATIC_LOGS_ADDRESS, 0, sizeof(StaticLogs));
 
@@ -1840,7 +1840,7 @@ int halAgonLight2Init(void) {
     = sizeof(_sdCardHalCapabilities) / sizeof(_sdCardHalCapabilities[0]);
 
   memset(_allProcesses, 0, sizeof(_allProcesses));
-  halImpl.memory.numProcesses        = NUM_PROCESSES;
+  halImpl.memory->numProcesses        = NUM_PROCESSES;
   for (int ii = 0; ii < NUM_READY_QUEUES; ii++) {
     memset(_readyQueues[ii], 0, sizeof(HalProcessQueue));
   }
@@ -1853,22 +1853,22 @@ int halAgonLight2Init(void) {
     _processStorage[ii] = _processStorageBase[ii];
   }
 
-  halImpl.uart.numSupported        = 2;
-  halImpl.uart.online              = agonLight2UartsOnline;
+  halImpl.uart->numSupported        = 2;
+  halImpl.uart->online              = agonLight2UartsOnline;
 
   // DIO ids are the packed value (port_nibble << 4) | bit, spanning 0xB0..0xD7,
   // so the online() bound is the largest valid id + 1 rather than a pin count.
-  halImpl.dio.numSupported         = 0xD8;
-  halImpl.dio.online               = agonLight2DiosOnline;
+  halImpl.dio->numSupported         = 0xD8;
+  halImpl.dio->online               = agonLight2DiosOnline;
 
-  halImpl.spi.numSupported         = MAX_SPI_DEVICES;
-  halImpl.spi.online               = agonLight2SpisOnline;
+  halImpl.spi->numSupported         = MAX_SPI_DEVICES;
+  halImpl.spi->online               = agonLight2SpisOnline;
 
-  halImpl.timer.numSupported       = 5; // eZ80F92 PRT1..PRT5 (PRT0 is the clock)
-  halImpl.timer.online             = agonLight2TimersOnline;
+  halImpl.timer->numSupported       = 5; // eZ80F92 PRT1..PRT5 (PRT0 is the clock)
+  halImpl.timer->online             = agonLight2TimersOnline;
 
-  halImpl.blockDevice.numSupported = _numBlockDevices;
-  halImpl.blockDevice.online       = agonLight2BlockDevicesOnline;
+  halImpl.blockDevice->numSupported = _numBlockDevices;
+  halImpl.blockDevice->online       = agonLight2BlockDevicesOnline;
 
   NANO_OS_API = &nanoOsApi;
 

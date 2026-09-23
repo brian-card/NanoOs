@@ -1034,7 +1034,7 @@ static HardwareTimer hardwareTimers[] = {
 
 /// @def _numTimers
 ///
-/// @brief The number of timers returned by HAL->timer.numSupported.
+/// @brief The number of timers returned by HAL->timer->numSupported.
 ///
 /// @note This is a #define rather than a const int so that it doesn't need
 /// its own KEEP_IN_FLASH treatment - it's folded into an immediate value at
@@ -1765,7 +1765,7 @@ int arduinoSamD21x18AExecCommand(va_list args) {
 /// @return Returns 0 on success, -errno on failure.
 static int arduinoSamD21x18ADoStartProcesses(void) {
   int returnValue = halCommonInitRootFilesystem();
-  if (HAL->memory.stringsPresent == false) {
+  if (HAL->memory->stringsPresent == false) {
     int loggerStatus = halCommonInitLogger();
     if ((returnValue == 0) && (loggerStatus != 0)) {
       returnValue = loggerStatus;
@@ -2084,16 +2084,16 @@ int halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
   halArduinoSamD21x18AUartsOnline = args->uartsOnline;
   halArduinoSamD21x18ADiosOnline  = args->diosOnline;
 
-  halImpl.memory.overlaySize = OVERLAY_SIZE;
+  halImpl.memory->overlaySize = OVERLAY_SIZE;
 
-  halImpl.memory.logBufferSize  = sizeof(_logBuffer);
-  halImpl.memory.numLogEntries  = NUM_LOG_ENTRIES;
+  halImpl.memory->logBufferSize  = sizeof(_logBuffer);
+  halImpl.memory->numLogEntries  = NUM_LOG_ENTRIES;
   memset(&_logEntries, 0, sizeof(_logEntries));
   memset(&_logMessages, 0, sizeof(_logMessages));
 #ifdef NANO_OS_STRINGS_STRIPPED
-  halImpl.memory.stringsPresent = false;
+  halImpl.memory->stringsPresent = false;
 #else
-  halImpl.memory.stringsPresent = true;
+  halImpl.memory->stringsPresent = true;
 #endif // NANO_OS_STRINGS_STRIPPED
 
   memset(_namedProcesses, 0, sizeof(_namedProcesses));
@@ -2113,7 +2113,7 @@ int halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
     = sizeof(_sdCardHalCapabilities) / sizeof(_sdCardHalCapabilities[0]);
 
   memset(_allProcesses, 0, sizeof(_allProcesses));
-  halImpl.memory.numProcesses   = NUM_PROCESSES;
+  halImpl.memory->numProcesses   = NUM_PROCESSES;
   for (int ii = 0; ii < NUM_READY_QUEUES; ii++) {
     memset(_readyQueues[ii], 0, sizeof(HalProcessQueue));
   }
@@ -2126,20 +2126,20 @@ int halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
     _processStorage[ii] = _processStorageBase[ii];
   }
 
-  halImpl.uart.numSupported = args->numUartsSupported;
-  halImpl.uart.online       = args->uartsOnline;
+  halImpl.uart->numSupported = args->numUartsSupported;
+  halImpl.uart->online       = args->uartsOnline;
 
-  halImpl.dio.numSupported = args->numDiosSupported;
-  halImpl.dio.online       = args->diosOnline;
+  halImpl.dio->numSupported = args->numDiosSupported;
+  halImpl.dio->online       = args->diosOnline;
 
-  halImpl.spi.numSupported = MAX_SPI_DEVICES;
-  halImpl.spi.online       = halArduinoSamD21x18ASpisOnline;
+  halImpl.spi->numSupported = MAX_SPI_DEVICES;
+  halImpl.spi->online       = halArduinoSamD21x18ASpisOnline;
 
-  halImpl.timer.numSupported = _numTimers;
-  halImpl.timer.online       = halArduinoSamD21x18ATimersOnline;
+  halImpl.timer->numSupported = _numTimers;
+  halImpl.timer->online       = halArduinoSamD21x18ATimersOnline;
 
-  halImpl.blockDevice.numSupported = _numBlockDevices;
-  halImpl.blockDevice.online       = halArduinoSamD21x18ABlockDevicesOnline;
+  halImpl.blockDevice->numSupported = _numBlockDevices;
+  halImpl.blockDevice->online       = halArduinoSamD21x18ABlockDevicesOnline;
 
   extern char __bss_end__;
   if (((uintptr_t) &__bss_end__)

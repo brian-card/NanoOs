@@ -58,7 +58,7 @@ NANO_OS_KERNEL_TEST(boot, hal_clock_is_the_virtual_mock) {
   // The deterministic clock starts at zero and only moves when asked.
   int64_t elapsedA = 0;
   int64_t elapsedB = 0;
-  HAL->clock.getElapsedMilliseconds(0, &elapsedA);
-  HAL->clock.getElapsedMilliseconds(0, &elapsedB);
+  HAL->clock->getElapsedMilliseconds(0, &elapsedA);
+  HAL->clock->getElapsedMilliseconds(0, &elapsedB);
   NANO_OS_ASSERT_EQ_INT(elapsedA, elapsedB);
 }

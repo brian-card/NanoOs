@@ -79,7 +79,7 @@ bool __atomic_compare_exchange_2(void *ptr, void *expected, uint16_t desired,
 
   uint64_t remainingNanoseconds;
   void (*callback)(void);
-  int cancelStatus = HAL->timer.cancelAndGet(
+  int cancelStatus = HAL->timer->cancelAndGet(
     getPreemptionTimer(), NULL, &remainingNanoseconds, &callback);
 
 
@@ -93,7 +93,7 @@ bool __atomic_compare_exchange_2(void *ptr, void *expected, uint16_t desired,
 
   if (cancelStatus == 0) {
     // A timer was active when we were called.  Restore it.
-    HAL->timer.configOneShot(getPreemptionTimer(),
+    HAL->timer->configOneShot(getPreemptionTimer(),
       remainingNanoseconds, callback);
   }
 
@@ -105,7 +105,7 @@ void __atomic_store_2(void *ptr, uint16_t val, int memorder) {
 
   uint64_t remainingNanoseconds;
   void (*callback)(void);
-  int cancelStatus = HAL->timer.cancelAndGet(
+  int cancelStatus = HAL->timer->cancelAndGet(
     getPreemptionTimer(), NULL, &remainingNanoseconds, &callback);
 
 
@@ -113,7 +113,7 @@ void __atomic_store_2(void *ptr, uint16_t val, int memorder) {
 
   if (cancelStatus == 0) {
     // A timer was active when we were called.  Restore it.
-    HAL->timer.configOneShot(getPreemptionTimer(),
+    HAL->timer->configOneShot(getPreemptionTimer(),
       remainingNanoseconds, callback);
   }
 }
@@ -123,7 +123,7 @@ uint16_t __atomic_load_2(const void *ptr, int memorder) {
 
   uint64_t remainingNanoseconds;
   void (*callback)(void);
-  int cancelStatus = HAL->timer.cancelAndGet(
+  int cancelStatus = HAL->timer->cancelAndGet(
     getPreemptionTimer(), NULL, &remainingNanoseconds, &callback);
 
 
@@ -131,7 +131,7 @@ uint16_t __atomic_load_2(const void *ptr, int memorder) {
 
   if (cancelStatus == 0) {
     // A timer was active when we were called.  Restore it.
-    HAL->timer.configOneShot(getPreemptionTimer(),
+    HAL->timer->configOneShot(getPreemptionTimer(),
       remainingNanoseconds, callback);
   }
 

@@ -2115,12 +2115,12 @@ int closeProcessFileDescriptors(ProcessDescriptor *processDescriptor) {
           }
           ProcessQueue *currentReady = _schedulerState->currentReady;
           int64_t startTime = 0;
-          HAL->clock.getElapsedMicroseconds(0, &startTime);
+          HAL->clock->getElapsedMicroseconds(0, &startTime);
           // schedulerKillProcess times out after 100 milliseconds, so
           // timeout after 50 milliseconds.
           int64_t elapsedUs = 0;
           while ((processMessageDone(&processMessage) == false)
-            && (HAL->clock.getElapsedMicroseconds(startTime, &elapsedUs),
+            && (HAL->clock->getElapsedMicroseconds(startTime, &elapsedUs),
               elapsedUs < 50000)
           ) {
             for (int ii = 0; ii < NUM_PRIVILEGE_LEVELS; ii++) {
@@ -3129,7 +3129,7 @@ int schedulerExecveCommandHandler(
   logDebug("Creating new process %d\n",
     processDescriptor->processId);
   HalExecCommandFn execCommand = NULL;
-  HAL->platform.execCommand(&execCommand);
+  HAL->platform->execCommand(&execCommand);
   if (processCreate(processDescriptor, execCommand, execArgs)
     == processError
   ) {
@@ -3444,7 +3444,7 @@ int schedulerSpawnCommandHandler(
   schedFree(spawnArgs); spawnArgs = NULL;
 
   HalExecCommandFn execCommand = NULL;
-  HAL->platform.execCommand(&execCommand);
+  HAL->platform->execCommand(&execCommand);
   if (processCreate(processDescriptor, execCommand, execArgs)
     == processError
   ) {
@@ -3648,7 +3648,7 @@ int schedulerSendSignalCommandHandler(
     // Configure the preemption timer to force the process to yield if it
     // doesn't voluntarily give up control within a reasonable amount of time.
     if (_schedulerState->preemptionTimer > -1) {
-      HAL->timer.configOneShot(
+      HAL->timer->configOneShot(
         _schedulerState->preemptionTimer, 10000000, forceYield);
     }
   }
@@ -3660,7 +3660,7 @@ int schedulerSendSignalCommandHandler(
   // under the scheduler.  Signal delivery can absolutely end with the
   // target exiting, so this path needs it too.
   if (_schedulerState->preemptionTimer > -1) {
-    HAL->timer.cancel(_schedulerState->preemptionTimer);
+    HAL->timer->cancel(_schedulerState->preemptionTimer);
   }
 
   sendSignalArgs->returnValue = 0;
@@ -3749,7 +3749,7 @@ int schedulerShutdownCommandHandler(
   switch (schedulerShutdownArgs->shutdownType) {
     case NANO_OS_SHUTDOWN_OFF:
       {
-        returnValue = HAL->power.enterMode(HAL_POWER_MODE_OFF);
+        returnValue = HAL->power->enterMode(HAL_POWER_MODE_OFF);
       }
       break;
     
@@ -3757,19 +3757,19 @@ int schedulerShutdownCommandHandler(
       {
         // Store RAM on disk and then power off.
         // TODO: Store RAM on disk.
-        returnValue = HAL->power.enterMode(HAL_POWER_MODE_OFF);
+        returnValue = HAL->power->enterMode(HAL_POWER_MODE_OFF);
       }
       break;
     
     case NANO_OS_SHUTDOWN_SUSPEND:
       {
-        returnValue = HAL->power.enterMode(HAL_POWER_MODE_SUSPEND);
+        returnValue = HAL->power->enterMode(HAL_POWER_MODE_SUSPEND);
       }
       break;
     
     case NANO_OS_SHUTDOWN_RESET:
       {
-        returnValue = HAL->power.enterMode(HAL_POWER_MODE_RESET);
+        returnValue = HAL->power->enterMode(HAL_POWER_MODE_RESET);
       }
       break;
     
@@ -4050,7 +4050,7 @@ int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp) {
   }
 
   extern NanoOsOverlayMap *overlayMap;
-  if ((overlayMap == NULL) || (HAL->memory.overlaySize == 0)) {
+  if ((overlayMap == NULL) || (HAL->memory->overlaySize == 0)) {
     logError("No overlay memory available for use.\n");
     return -ENOMEM;
   }
@@ -4259,7 +4259,7 @@ int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
   }
 
   HalExecCommandFn execCommand = NULL;
-  HAL->platform.execCommand(&execCommand);
+  HAL->platform->execCommand(&execCommand);
 
   // Resolve the overlay's block metadata *before* creating the process.
   // processCreate() below hands the new coroutine to the scheduler as
@@ -4715,7 +4715,7 @@ void runScheduler(void) {
     &allProcesses[schedulerPid - 1])
   ) {
     logError(_schedulerStackOverflowMessage);
-    HAL->power.enterMode(HAL_POWER_MODE_OFF);
+    HAL->power->enterMode(HAL_POWER_MODE_OFF);
   }
 
   ProcessDescriptor *processDescriptor
@@ -4756,7 +4756,7 @@ void runScheduler(void) {
       // Configure the preemption timer to force the process to yield if it
       // doesn't voluntarily give up control within a reasonable amount of time.
       if (_schedulerState->preemptionTimer > -1) {
-        HAL->timer.configOneShot(
+        HAL->timer->configOneShot(
           _schedulerState->preemptionTimer, 10000000, forceYield);
       }
     }
@@ -4765,7 +4765,7 @@ void runScheduler(void) {
   // Explicitly cancel the preemption timer.  Don't rely on yeildCallback to
   // have run because the process may have exited rather than yielded.
   if (_schedulerState->preemptionTimer > -1) {
-    HAL->timer.cancel(_schedulerState->preemptionTimer);
+    HAL->timer->cancel(_schedulerState->preemptionTimer);
   }
 
   if (processStackOverflowed(processDescriptor)) {
@@ -4957,25 +4957,25 @@ int initializeSchedulerState(
   ProcessMessage *messagesStorage
 ) {
   // Initialize the allProcesses pointer and numProcesses.
-  numProcesses = HAL->memory.numProcesses;
-  HAL->memory.allProcesses(&allProcesses);
+  numProcesses = HAL->memory->numProcesses;
+  HAL->memory->allProcesses(&allProcesses);
   schedulerState->numManagedProcesses = numProcesses - 1;
-  HAL->memory.readyQueues(&schedulerState->readyQueues);
-  HAL->memory.waitingQueue(&schedulerState->waitingQueue);
-  HAL->memory.timedWaitingQueue(&schedulerState->timedWaitingQueue);
-  HAL->memory.freeQueue(&schedulerState->freeQueue);
+  HAL->memory->readyQueues(&schedulerState->readyQueues);
+  HAL->memory->waitingQueue(&schedulerState->waitingQueue);
+  HAL->memory->timedWaitingQueue(&schedulerState->timedWaitingQueue);
+  HAL->memory->freeQueue(&schedulerState->freeQueue);
   extern int *processErrorNumbers;
-  HAL->memory.processErrorNumbers(&processErrorNumbers);
+  HAL->memory->processErrorNumbers(&processErrorNumbers);
   extern void ***processStorage;
-  HAL->memory.processStorage(&processStorage);
+  HAL->memory->processStorage(&processStorage);
   extern size_t numLogEntries;
-  numLogEntries = HAL->memory.numLogEntries;
+  numLogEntries = HAL->memory->numLogEntries;
   extern LogEntry *logEntries;
-  HAL->memory.logEntries(&logEntries);
+  HAL->memory->logEntries(&logEntries);
   extern ProcessMessage *logMessages;
-  HAL->memory.logMessages(&logMessages);
+  HAL->memory->logMessages(&logMessages);
   extern NanoOsOverlayMap *overlayMap;
-  HAL->memory.overlayMap(&overlayMap);
+  HAL->memory->overlayMap(&overlayMap);
 
   schedulerState->hostname = NULL;
   schedulerState->readyQueues[PRIVILEGE_LEVEL_KERNEL]->name
@@ -4992,8 +4992,8 @@ int initializeSchedulerState(
   schedulerState->currentReady
     = schedulerState->readyQueues[PRIVILEGE_LEVEL_KERNEL];
   schedulerState->preemptionTimer = -1;
-  if (HAL->timer.numSupported > 0) {
-    for (int32_t ii = 0; ii < ((int32_t) HAL->timer.numSupported); ii++) {
+  if (HAL->timer->numSupported > 0) {
+    for (int32_t ii = 0; ii < ((int32_t) HAL->timer->numSupported); ii++) {
       if (online(HAL->timer, ii)) {
         schedulerState->preemptionTimer = ii;
         // HAL_TIMER_CANCEL is kept as the last entry of
@@ -5226,7 +5226,7 @@ int initializeProcesses(SchedulerState *schedulerState) {
   logDebug("Created console process.\n");
 
   uint8_t numExtraConsoleStacksVal = 0;
-  HAL->memory.numExtraConsoleStacks(
+  HAL->memory->numExtraConsoleStacks(
     USE_HAL_MEMORY_DEBUG, &numExtraConsoleStacksVal);
   for (uint8_t ii = 0; ii < numExtraConsoleStacksVal; ii++) {
     Thread *thread = threadProvision(NULL, dummyProcess, NULL);
@@ -5256,7 +5256,7 @@ int initializeProcesses(SchedulerState *schedulerState) {
   // setup below depends on it being final, so nothing above this point may
   // be reordered relative to it.
   HalStartProcessesFn startProcesses = NULL;
-  HAL->platform.startProcesses(&startProcesses);
+  HAL->platform->startProcesses(&startProcesses);
   if (startProcesses != NULL) {
     int rv = startProcesses();
     if (rv != 0) {
@@ -5308,10 +5308,10 @@ int initializeProcesses(SchedulerState *schedulerState) {
     processDescriptor->processId = ii;
     processDescriptor->userId = NO_USER_ID;
     processDescriptor->name = _dummyName;
-    HAL->platform.callFileOverlay(&processDescriptor->callOverlayFunction);
+    HAL->platform->callFileOverlay(&processDescriptor->callOverlayFunction);
     if ((ii - schedulerState->firstShellPid) < schedulerState->numShells) {
       processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_SUPERVISOR;
-      HAL->platform.restartShell(&processDescriptor->restartFunction);
+      HAL->platform->restartShell(&processDescriptor->restartFunction);
     } else {
       processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_USER;
       processDescriptor->restartFunction = NULL;
@@ -5442,9 +5442,9 @@ int logSchedulerDebugInfo(SchedulerState *schedulerState) {
   int64_t sanityStepStart = 0;
   int64_t sanityStepElapsed = 0;
   do {
-    HAL->clock.getElapsedMilliseconds(0, &sanityStepStart);
+    HAL->clock->getElapsedMilliseconds(0, &sanityStepStart);
     FILE *helloFile = schedFopen(_helloFilename, _writeMode);
-    HAL->clock.getElapsedMilliseconds(sanityStepStart, &sanityStepElapsed);
+    HAL->clock->getElapsedMilliseconds(sanityStepStart, &sanityStepElapsed);
     logDebug("fopen(w) took %ld ms\n", (long int) sanityStepElapsed);
     if (helloFile == NULL) {
       logDebug("ERROR: Could not open hello file for writing!\n");
@@ -5453,9 +5453,9 @@ int logSchedulerDebugInfo(SchedulerState *schedulerState) {
     }
     logDebug("helloFile is non-NULL!\n");
 
-    HAL->clock.getElapsedMilliseconds(0, &sanityStepStart);
+    HAL->clock->getElapsedMilliseconds(0, &sanityStepStart);
     int fputsStatus = schedFputs(_worldContent, helloFile);
-    HAL->clock.getElapsedMilliseconds(sanityStepStart, &sanityStepElapsed);
+    HAL->clock->getElapsedMilliseconds(sanityStepStart, &sanityStepElapsed);
     logDebug("fputs took %ld ms\n", (long int) sanityStepElapsed);
     if (fputsStatus == EOF) {
       logDebug("ERROR: Could not write to hello file!\n");
@@ -5464,15 +5464,15 @@ int logSchedulerDebugInfo(SchedulerState *schedulerState) {
       break;
     }
 
-    HAL->clock.getElapsedMilliseconds(0, &sanityStepStart);
+    HAL->clock->getElapsedMilliseconds(0, &sanityStepStart);
     schedFclose(helloFile);
-    HAL->clock.getElapsedMilliseconds(sanityStepStart, &sanityStepElapsed);
+    HAL->clock->getElapsedMilliseconds(sanityStepStart, &sanityStepElapsed);
     logDebug("fclose (after write) took %ld ms\n",
       (long int) sanityStepElapsed);
 
-    HAL->clock.getElapsedMilliseconds(0, &sanityStepStart);
+    HAL->clock->getElapsedMilliseconds(0, &sanityStepStart);
     helloFile = schedFopen(_helloFilename, _readMode);
-    HAL->clock.getElapsedMilliseconds(sanityStepStart, &sanityStepElapsed);
+    HAL->clock->getElapsedMilliseconds(sanityStepStart, &sanityStepElapsed);
     logDebug("fopen(r) took %ld ms\n", (long int) sanityStepElapsed);
     if (helloFile == NULL) {
       logDebug("ERROR: Could not open hello file for reading after write!\n");
@@ -5483,10 +5483,10 @@ int logSchedulerDebugInfo(SchedulerState *schedulerState) {
     logDebug("Opened helloFile for reading\n");
 
     char worldString[11] = {0};
-    HAL->clock.getElapsedMilliseconds(0, &sanityStepStart);
+    HAL->clock->getElapsedMilliseconds(0, &sanityStepStart);
     char *fgetsStatus = schedFgets(
       worldString, sizeof(worldString), helloFile);
-    HAL->clock.getElapsedMilliseconds(sanityStepStart, &sanityStepElapsed);
+    HAL->clock->getElapsedMilliseconds(sanityStepStart, &sanityStepElapsed);
     logDebug("fgets took %ld ms\n", (long int) sanityStepElapsed);
     if (fgetsStatus != worldString) {
       logDebug("ERROR: Could not read worldString after write!\n");

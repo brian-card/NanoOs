@@ -142,7 +142,7 @@ static void* driverProcessMain(void *args) {
 
 /// @fn static int kernelTestRestartShell(void *processDescriptorRaw)
 ///
-/// @brief Installed as HAL->platform.restartShell.  Populates the shell slot
+/// @brief Installed as HAL->platform->restartShell.  Populates the shell slot
 /// with the driver process instead of a login shell.
 static int kernelTestRestartShell(void *processDescriptorRaw) {
   ProcessDescriptor *processDescriptor
@@ -171,7 +171,7 @@ static int kernelTestRestartShell(void *processDescriptorRaw) {
 
 /// @fn static void kernelTestOnPowerMode(void)
 ///
-/// @brief Invoked by the mock HAL when a test drives HAL->power.enterMode().
+/// @brief Invoked by the mock HAL when a test drives HAL->power->enterMode().
 /// The child dies; its result (whatever the body asserted before calling
 /// shutdown) has already been captured or will be reported here.
 static void kernelTestOnPowerMode(void) {

@@ -74,7 +74,7 @@ bool __atomic_compare_exchange_4(void *ptr, void *expected, uint32_t desired,
 
   uint64_t remainingNanoseconds;
   void (*callback)(void);
-  int cancelStatus = HAL->timer.cancelAndGet(
+  int cancelStatus = HAL->timer->cancelAndGet(
     _cachedPreemptionTimer, NULL, &remainingNanoseconds, &callback);
 
 
@@ -88,7 +88,7 @@ bool __atomic_compare_exchange_4(void *ptr, void *expected, uint32_t desired,
 
   if (cancelStatus == 0) {
     // A timer was active when we were called.  Restore it.
-    HAL->timer.configOneShot(_cachedPreemptionTimer,
+    HAL->timer->configOneShot(_cachedPreemptionTimer,
       remainingNanoseconds, callback);
   }
 

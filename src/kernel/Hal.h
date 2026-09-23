@@ -55,30 +55,30 @@ extern "C"
 /// @brief Function macro to determine whether or not an individual device
 /// within a HAL subsystem is online.
 ///
-/// @param hal A HAL subsystem struct (e.g. HAL->uart).
+/// @param hal Pointer to a HAL subsystem struct (e.g. HAL->uart).
 /// @param deviceId The zero-based index of the device to check.
 #define online(hal, deviceId) ( \
-  ((deviceId >= 0) && (deviceId < ((int32_t) (hal).numSupported))) \
-  ? (((((uint32_t) 1) << (deviceId & 31)) & (hal).online[deviceId >> 5]) != 0) \
+  ((deviceId >= 0) && (deviceId < ((int32_t) (hal)->numSupported))) \
+  ? (((((uint32_t) 1) << (deviceId & 31)) & (hal)->online[deviceId >> 5]) != 0) \
   : false)
 
 /// @def setOnline
 ///
 /// @brief Mark a device ID as being online within a HAL subsystem.
 ///
-/// @param hal A HAL subsystem struct (e.g. HAL->uart).
+/// @param hal Pointer to a HAL subsystem struct (e.g. HAL->uart).
 /// @param deviceId The zero-based index of the device to mark online.
 #define setOnline(hal, deviceId) \
-  (hal).online[deviceId >> 5] |= (((uint32_t) 1) << (deviceId & 31))
+  (hal)->online[deviceId >> 5] |= (((uint32_t) 1) << (deviceId & 31))
 
 /// @def setOffline
 ///
 /// @brief Mark a device ID as being offline within a HAL subsystem.
 ///
-/// @param hal A HAL subsystem struct (e.g. HAL->uart).
+/// @param hal Pointer to a HAL subsystem struct (e.g. HAL->uart).
 /// @param deviceId The zero-based index of the device to mark offline.
 #define setOffline(hal, deviceId) \
-  (hal).online[deviceId >> 5] &= ~(((uint32_t) 1) << (deviceId & 31))
+  (hal)->online[deviceId >> 5] &= ~(((uint32_t) 1) << (deviceId & 31))
 
 /// @def NUM_READY_QUEUES
 ///
@@ -302,7 +302,7 @@ typedef struct HalCapability {
 ///
 /// Every process that can call logError()/logDebug()/etc. needs these, not
 /// just the logger process itself.  Without HAL_MEMORY_LOG_BUFFER in
-/// particular, HAL->memory.logBuffer() is denied, logMessage()'s local
+/// particular, HAL->memory->logBuffer() is denied, logMessage()'s local
 /// logBuffer stays NULL, and the fallback formats through a NULL pointer --
 /// on the SAMD21 that's a store into flash, i.e. an immediate HardFault
 /// raised from inside the error reporting path.  logMessage() now guards
@@ -1121,48 +1121,59 @@ typedef struct HalBlockDevice {
 typedef struct Hal {
   /// @var platform
   ///
-  /// @brief The HalPlatform managed by the HAL.
-  HalPlatform platform;
+  /// @brief Pointer to the HalPlatform managed by the HAL.  This member may
+  /// not be NULL.
+  HalPlatform *platform;
 
   /// @var memory
   ///
-  /// @brief The HalMemory managed by the HAL.
-  HalMemory memory;
+  /// @brief Pointer to the HalMemory managed by the HAL.  This member may
+  /// not be NULL.
+  HalMemory *memory;
 
   /// @var uart
   ///
-  /// @brief The HalUart managed by the HAL.
-  HalUart uart;
+  /// @brief Pointer to the HalUart managed by the HAL.  This member may not
+  /// be NULL.
+  HalUart *uart;
 
   /// @var dio
   ///
-  /// @brief The HalDio managed by the HAL.
-  HalDio dio;
+  /// @brief Pointer to the HalDio managed by the HAL.  This member may not
+  /// be NULL.
+  HalDio *dio;
 
   /// @var spi
   ///
-  /// @brief The HalSpi managed by the HAL.
-  HalSpi spi;
+  /// @brief Pointer to the HalSpi managed by the HAL.  NULL on platforms
+  /// that don't have a SPI bus wired to anything (e.g. the Arduino Nano
+  /// Every), in which case no code may dereference this pointer.
+  HalSpi *spi;
 
   /// @var clock
   ///
-  /// @brief The HalClock managed by the HAL.
-  HalClock clock;
+  /// @brief Pointer to the HalClock managed by the HAL.  This member may
+  /// not be NULL.
+  HalClock *clock;
 
   /// @var power
   ///
-  /// @brief The HalPower managed by the HAL.
-  HalPower power;
+  /// @brief Pointer to the HalPower managed by the HAL.  This member may
+  /// not be NULL.
+  HalPower *power;
 
   /// @var timer
   ///
-  /// @brief The HalTimer managed by the HAL.
-  HalTimer timer;
+  /// @brief Pointer to the HalTimer managed by the HAL.  This member may
+  /// not be NULL.
+  HalTimer *timer;
 
   /// @var blockDevice
   ///
-  /// @brief The HalBlockDevice managed by the HAL.
-  HalBlockDevice blockDevice;
+  /// @brief Pointer to the HalBlockDevice managed by the HAL.  NULL on
+  /// platforms with no block device of any kind (e.g. the Arduino Nano
+  /// Every), in which case no code may dereference this pointer.
+  HalBlockDevice *blockDevice;
 } Hal;
 
 /// @var HAL
@@ -1170,7 +1181,7 @@ typedef struct Hal {
 /// @brief Global, read-only pointer to the single, root HAL instance.  All
 /// general kernel/user code must go through this pointer.  HAL initialization
 /// code that needs to populate the HAL's subsystems must instead write to the
-/// mutable halCommonHal instance declared in HalCommon.h, since HAL itself is
+/// mutable halImpl instance declared in HalCommon.h, since HAL itself is
 /// const and cannot be written through.
 extern const Hal *HAL;
 

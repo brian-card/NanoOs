@@ -427,10 +427,10 @@ void* runBlockOverlay(void *args) {
     _cachedPreemptionTimer = schedulerGetPreemptionTimer();
     _preemptionTimerCached = true;
   }
-  HAL->timer.cancel(_cachedPreemptionTimer);
+  HAL->timer->cancel(_cachedPreemptionTimer);
   processDescriptor->overlay.blockDevice = blockOverlayArgs.blockDevice;
   processDescriptor->overlay.startBlock = blockOverlayArgs.startBlock;
-  processDescriptor->overlay.numBlocks = HAL->memory.overlaySize
+  processDescriptor->overlay.numBlocks = HAL->memory->overlaySize
     / blockOverlayArgs.blockDevice->blockSize;
   // Yield so that the scheduler will load our overlay into memory.
   processYield();

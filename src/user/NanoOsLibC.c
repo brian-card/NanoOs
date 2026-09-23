@@ -115,10 +115,10 @@ char* nanoOsStrError(int errnum) {
 /// @return This function returns no value.
 void msleep(int durationMs) {
   int64_t start = 0;
-  HAL->clock.getElapsedMilliseconds(0, &start);
+  HAL->clock->getElapsedMilliseconds(0, &start);
   int64_t elapsed = 0;
   do {
-    HAL->clock.getElapsedMilliseconds(start, &elapsed);
+    HAL->clock->getElapsedMilliseconds(start, &elapsed);
   } while (elapsed < durationMs);
 }
 

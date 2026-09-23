@@ -76,16 +76,16 @@ typedef int (*HalMockRestartShellFn)(void *processDescriptor);
 
 /// @fn void halMockSetRestartShell(HalMockRestartShellFn fn)
 ///
-/// @brief Register the function installed as HAL->platform.restartShell.  Must
+/// @brief Register the function installed as HAL->platform->restartShell.  Must
 /// be called before halMockInit().
 void halMockSetRestartShell(HalMockRestartShellFn fn);
 
 /// @fn void halMockSetPowerHook(void (*hook)(void))
 ///
 /// @brief Register a callback invoked whenever a test drives
-/// HAL->power.enterMode() (any mode).  The harness uses this to end the child
+/// HAL->power->enterMode() (any mode).  The harness uses this to end the child
 /// process instead of exit()ing the whole run.  If no hook is set,
-/// HAL->power.enterMode() is a no-op that returns 0.
+/// HAL->power->enterMode() is a no-op that returns 0.
 void halMockSetPowerHook(void (*hook)(void));
 
 /// @fn int halMockInit(const HalMockConfig *config, jmp_buf *powerReturn)
@@ -94,7 +94,7 @@ void halMockSetPowerHook(void (*hook)(void));
 /// HAL bring-up.  Equivalent to halPosixInit() for the sim.
 ///
 /// @param config Configuration, or NULL for halMockConfigDefault().
-/// @param powerReturn Where HAL->power.enterMode() longjmps to.  The harness
+/// @param powerReturn Where HAL->power->enterMode() longjmps to.  The harness
 ///   points this at a buffer it setjmp'd before calling halMockInit; any
 ///   power mode (OFF / SUSPEND / RESET) unwinds there instead of exit()ing.
 ///

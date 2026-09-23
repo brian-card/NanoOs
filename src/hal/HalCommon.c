@@ -218,98 +218,122 @@ static int halBlockDeviceGet(int32_t deviceId, BlockDevice **returnValue);
 static int halBlockDeviceRestart(ProcessDescriptor *processDescriptor);
 
 // ---------------------------------------------------------------------------
-// Common HAL instance — function pointers set to typed wrappers above; data
-// members (numSupported, online, overlayMap, etc.) set by platform init code,
-// which writes to halImpl directly since it needs a mutable view.  The
-// read-only HAL pointer below points at this same instance for general use.
+// Common subsystem instances — function pointers set to typed wrappers
+// above; data members (numSupported, online, overlayMap, etc.) set by
+// platform init code, which writes to halImpl's pointers directly since it
+// needs a mutable view.  The read-only HAL pointer below points at the same
+// halImpl instance for general use.
+//
+// Every board links this one file, so these instances always exist; a
+// board with no use for a given subsystem (e.g. the Arduino Nano Every has
+// no SPI bus or block device) simply points halImpl's corresponding member
+// at NULL instead of at the instance below -- see halImpl's initializer.
 // ---------------------------------------------------------------------------
 
+static HalPlatform halImplPlatform = {
+  .callFileOverlay       = halPlatformCallFileOverlay,
+  .execCommand           = halPlatformExecCommand,
+  .restartRootFilesystem = halPlatformRestartRootFilesystem,
+  .restartShell          = halPlatformRestartShell,
+  .startProcesses        = halPlatformStartProcesses,
+};
+
+static HalMemory halImplMemory = {
+  .processStackSize        = halMemoryProcessStackSize,
+  .memoryManagerStackSize  = halMemoryMemoryManagerStackSize,
+  .bottomOfHeap            = halMemoryBottomOfHeap,
+  .numExtraSchedulerStacks = halMemoryNumExtraSchedulerStacks,
+  .numExtraConsoleStacks   = halMemoryNumExtraConsoleStacks,
+  .overlayMap              = halMemoryOverlayMap,
+  .overlaySize             = 0,
+  .contiguousFilesystem    = halMemoryContiguousFilesystem,
+  .stringsPresent          = false,
+  .staticLogs              = halMemoryStaticLogs,
+  .logBuffer               = halMemoryLogBuffer,
+  .logBufferSize           = 0,
+  .logEntries              = halMemoryLogEntries,
+  .logMessages             = halMemoryLogMessages,
+  .allProcesses            = halMemoryAllProcesses,
+  .readyQueues             = halMemoryReadyQueues,
+  .waitingQueue            = halMemoryWaitingQueue,
+  .timedWaitingQueue       = halMemoryTimedWaitingQueue,
+  .freeQueue               = halMemoryFreeQueue,
+  .processErrorNumbers     = halMemoryProcessErrorNumbers,
+  .processStorage          = halMemoryProcessStorage,
+};
+
+static HalUart halImplUart = {
+  .numSupported = 0,
+  .online       = NULL,
+  .init         = halUartInit,
+  .configure    = halUartConfigure,
+  .poll         = halUartPoll,
+  .write        = halUartWrite,
+  .isConsole    = halUartIsConsole,
+};
+
+static HalDio halImplDio = {
+  .numSupported = 0,
+  .online       = NULL,
+  .init         = halDioInit,
+  .configure    = halDioConfigure,
+  .write        = halDioWrite,
+};
+
+static HalSpi halImplSpi = {
+  .numSupported  = 0,
+  .online        = NULL,
+  .init          = halSpiInit,
+  .configure     = halSpiConfigure,
+  .setSpeed      = halSpiSetSpeed,
+  .startTransfer = halSpiStartTransfer,
+  .endTransfer   = halSpiEndTransfer,
+  .transfer8     = halSpiTransfer8,
+  .transferBytes = halSpiTransferBytes,
+};
+
+static HalClock halImplClock = {
+  .init                   = halClockInit,
+  .setSystemTime          = halClockSetSystemTime,
+  .getElapsedMilliseconds = halClockGetElapsedMilliseconds,
+  .getElapsedMicroseconds = halClockGetElapsedMicroseconds,
+  .getElapsedNanoseconds  = halClockGetElapsedNanoseconds,
+};
+
+static HalPower halImplPower = {
+  .enterMode = halPowerEnterMode,
+};
+
+static HalTimer halImplTimer = {
+  .numSupported          = 0,
+  .online                = NULL,
+  .init                  = halTimerInit,
+  .initDevice            = halTimerInitDevice,
+  .configOneShot         = halTimerConfigOneShot,
+  .configuredNanoseconds = halTimerConfiguredNanoseconds,
+  .remainingNanoseconds  = halTimerRemainingNanoseconds,
+  .cancel                = halTimerCancel,
+  .cancelAndGet          = halTimerCancelAndGet,
+};
+
+static HalBlockDevice halImplBlockDevice = {
+  .numSupported = 0,
+  .online       = NULL,
+  .init         = halBlockDeviceInit,
+  .get          = halBlockDeviceGet,
+  .restart      = halBlockDeviceRestart,
+};
+
 Hal halImpl = {
-  .platform = {
-    .callFileOverlay       = halPlatformCallFileOverlay,
-    .execCommand           = halPlatformExecCommand,
-    .restartRootFilesystem = halPlatformRestartRootFilesystem,
-    .restartShell          = halPlatformRestartShell,
-    .startProcesses        = halPlatformStartProcesses,
-  },
-  .memory = {
-    .processStackSize        = halMemoryProcessStackSize,
-    .memoryManagerStackSize  = halMemoryMemoryManagerStackSize,
-    .bottomOfHeap            = halMemoryBottomOfHeap,
-    .numExtraSchedulerStacks = halMemoryNumExtraSchedulerStacks,
-    .numExtraConsoleStacks   = halMemoryNumExtraConsoleStacks,
-    .overlayMap              = halMemoryOverlayMap,
-    .overlaySize             = 0,
-    .contiguousFilesystem    = halMemoryContiguousFilesystem,
-    .stringsPresent          = false,
-    .staticLogs              = halMemoryStaticLogs,
-    .logBuffer               = halMemoryLogBuffer,
-    .logBufferSize           = 0,
-    .logEntries              = halMemoryLogEntries,
-    .logMessages             = halMemoryLogMessages,
-    .allProcesses            = halMemoryAllProcesses,
-    .readyQueues             = halMemoryReadyQueues,
-    .waitingQueue            = halMemoryWaitingQueue,
-    .timedWaitingQueue       = halMemoryTimedWaitingQueue,
-    .freeQueue               = halMemoryFreeQueue,
-    .processErrorNumbers     = halMemoryProcessErrorNumbers,
-    .processStorage          = halMemoryProcessStorage,
-  },
-  .uart = {
-    .numSupported = 0,
-    .online       = NULL,
-    .init         = halUartInit,
-    .configure    = halUartConfigure,
-    .poll         = halUartPoll,
-    .write        = halUartWrite,
-    .isConsole    = halUartIsConsole,
-  },
-  .dio = {
-    .numSupported = 0,
-    .online       = NULL,
-    .init         = halDioInit,
-    .configure    = halDioConfigure,
-    .write        = halDioWrite,
-  },
-  .spi = {
-    .numSupported  = 0,
-    .online        = NULL,
-    .init          = halSpiInit,
-    .configure     = halSpiConfigure,
-    .setSpeed      = halSpiSetSpeed,
-    .startTransfer = halSpiStartTransfer,
-    .endTransfer   = halSpiEndTransfer,
-    .transfer8     = halSpiTransfer8,
-    .transferBytes = halSpiTransferBytes,
-  },
-  .clock = {
-    .init                   = halClockInit,
-    .setSystemTime          = halClockSetSystemTime,
-    .getElapsedMilliseconds = halClockGetElapsedMilliseconds,
-    .getElapsedMicroseconds = halClockGetElapsedMicroseconds,
-    .getElapsedNanoseconds  = halClockGetElapsedNanoseconds,
-  },
-  .power = {
-    .enterMode = halPowerEnterMode,
-  },
-  .timer = {
-    .numSupported          = 0,
-    .online                = NULL,
-    .init                  = halTimerInit,
-    .initDevice            = halTimerInitDevice,
-    .configOneShot         = halTimerConfigOneShot,
-    .configuredNanoseconds = halTimerConfiguredNanoseconds,
-    .remainingNanoseconds  = halTimerRemainingNanoseconds,
-    .cancel                = halTimerCancel,
-    .cancelAndGet          = halTimerCancelAndGet,
-  },
-  .blockDevice = {
-    .numSupported = 0,
-    .online       = NULL,
-    .init         = halBlockDeviceInit,
-    .get          = halBlockDeviceGet,
-    .restart      = halBlockDeviceRestart,
-  },
+  .platform    = &halImplPlatform,
+  .memory      = &halImplMemory,
+  .uart        = &halImplUart,
+  .dio         = &halImplDio,
+  .spi         = &halImplSpi,
+  .clock       = &halImplClock,
+  .power       = &halImplPower,
+  .timer       = &halImplTimer,
+  .blockDevice = &halImplBlockDevice,
 };
 
 /// @var HAL
@@ -724,7 +748,7 @@ BlockDevice* halCommonInitRootSdSpiStorage(
   processDescriptor->name = _sdCardName;
   processDescriptor->userId = ROOT_USER_ID;
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_KERNEL;
-  processDescriptor->restartFunction = HAL->blockDevice.restart;
+  processDescriptor->restartFunction = HAL->blockDevice->restart;
   processDescriptor->restartArgs = (void*)(intptr_t)0;
   if (sdCardHalCapabilities != NULL) {
     processDescriptor->halCapabilities = sdCardHalCapabilities;
@@ -825,15 +849,15 @@ int halCommonInitRootFilesystem(void) {
   }
 
   BlockDevice *rootBlockDevice = NULL;
-  HAL->blockDevice.get(0, &rootBlockDevice);
+  HAL->blockDevice->get(0, &rootBlockDevice);
 
   if (rootBlockDevice == NULL) {
-    if (HAL->blockDevice.init() != 0) {
-      logError("HAL->blockDevice.init() failed\n");
+    if (HAL->blockDevice->init() != 0) {
+      logError("HAL->blockDevice->init() failed\n");
       return -ENODEV;
     }
 
-    HAL->blockDevice.get(0, &rootBlockDevice);
+    HAL->blockDevice->get(0, &rootBlockDevice);
   }
 
   if (rootBlockDevice == NULL) {
@@ -855,7 +879,7 @@ int halCommonInitRootFilesystem(void) {
   processDescriptor->userId = ROOT_USER_ID;
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
   HalRestartRootFilesystemFn restartRootFilesystem = NULL;
-  halImpl.platform.restartRootFilesystem(&restartRootFilesystem);
+  halImpl.platform->restartRootFilesystem(&restartRootFilesystem);
   processDescriptor->restartFunction = restartRootFilesystem;
   // DO NOT resume the process yet.  Let the scheduler take care of that.
 
@@ -918,7 +942,7 @@ static const char _couldNotCreateLoggerProcess[] KEEP_IN_FLASH
 ///
 /// @brief Common initialization for the logger process.  Only meant to be
 /// called by a platform's startProcesses implementation, and only when
-/// HAL->memory.stringsPresent is false: platforms whose OS image keeps its
+/// HAL->memory->stringsPresent is false: platforms whose OS image keeps its
 /// .rodata can format log messages immediately and have no need for a
 /// separate logger process.
 ///
@@ -939,7 +963,7 @@ int halCommonInitLogger(void) {
   processDescriptor->processId = loggerPid;
   processDescriptor->userId = ROOT_USER_ID;
   processDescriptor->name = _loggerName;
-  HAL->platform.callFileOverlay(&processDescriptor->callOverlayFunction);
+  HAL->platform->callFileOverlay(&processDescriptor->callOverlayFunction);
   // The logger is an executive process, but we're going to start it in
   // supervisor mode until the system comes up far enough to launch it.
   // restartLogger will take care of fixing the level once it launches
@@ -993,7 +1017,7 @@ static const FilesystemCommandHandler *_builtinFilesystemCommandHandlers;
 /// @return Returns 0 on success, -errno on failure.
 int restartBuiltinFilesystem(ProcessDescriptor *processDescriptor) {
   BlockDevice *rootBlockDevice = NULL;
-  HAL->blockDevice.get(0, &rootBlockDevice);
+  HAL->blockDevice->get(0, &rootBlockDevice);
   if (rootBlockDevice == NULL) {
     return -ENODEV;
   }
@@ -1050,7 +1074,7 @@ int restartBuiltinFilesystem(ProcessDescriptor *processDescriptor) {
 /// @return Returns 0 on success, -errno on failure.
 int restartOverlayFilesystem(ProcessDescriptor *processDescriptor) {
   BlockDevice *rootBlockDevice = NULL;
-  HAL->blockDevice.get(0, &rootBlockDevice);
+  HAL->blockDevice->get(0, &rootBlockDevice);
   if (rootBlockDevice == NULL) {
     return -ENODEV;
   }
@@ -1103,7 +1127,7 @@ int restartOverlayFilesystem(ProcessDescriptor *processDescriptor) {
 /// @return Returns 0 on success, -errno on failure.
 int restartContiguousFilesystem(ProcessDescriptor *processDescriptor) {
   BlockDevice *rootBlockDevice = NULL;
-  HAL->blockDevice.get(0, &rootBlockDevice);
+  HAL->blockDevice->get(0, &rootBlockDevice);
   if (rootBlockDevice == NULL) {
     printString(_noRootBlockDeviceMessage);
     processDescriptor->restartFunction = NULL;
@@ -1116,8 +1140,8 @@ int restartContiguousFilesystem(ProcessDescriptor *processDescriptor) {
   fs.blockSize = fs.blockDevice->blockSize;
 
   NanoOsOverlayMap *overlayMap = NULL;
-  HAL->memory.contiguousFilesystem(&overlayMap);
-  // HAL->memory.contiguousFilesystem can fail if the calling process doesn't
+  HAL->memory->contiguousFilesystem(&overlayMap);
+  // HAL->memory->contiguousFilesystem can fail if the calling process doesn't
   // have the HAL capabilities to run it, which would leave overlayMap NULL.  It
   // *SHOULD'T* fail because only the scheduler should be running this function
   // and the scheduler is the one privileged process, but don't take any chances
@@ -1126,7 +1150,7 @@ int restartContiguousFilesystem(ProcessDescriptor *processDescriptor) {
     || rootBlockDevice->schedReadBlocks(
     rootBlockDevice->context,
     /* startBlock= */ 1,
-    /* numBlocks= */ HAL->memory.contiguousFilesystemSize
+    /* numBlocks= */ HAL->memory->contiguousFilesystemSize
       / (size_t) rootBlockDevice->blockSize,
     rootBlockDevice->blockSize,
     (uint8_t*) overlayMap) != 0
@@ -1193,10 +1217,10 @@ int halCommonInit(
   int32_t ii = 0;
   int32_t defaultUart = -1;
 
-  if (HAL->uart.init() < 0) {
+  if (HAL->uart->init() < 0) {
     return -ENOTTY;
   }
-  int32_t numUarts = HAL->uart.numSupported;
+  int32_t numUarts = HAL->uart->numSupported;
   if (numUarts <= 0) {
     // Nothing we can do.
     return -ENOTTY;
@@ -1207,7 +1231,7 @@ int halCommonInit(
       continue;
     }
 
-    if (HAL->uart.configure(ii, 1000000) == 0) {
+    if (HAL->uart->configure(ii, 1000000) == 0) {
       if (defaultUart < 0) {
         defaultUart = ii;
       }
@@ -1216,50 +1240,53 @@ int halCommonInit(
     }
   }
 
-  if (HAL->dio.init() != 0) {
+  if (HAL->dio->init() != 0) {
     logWarn("Failed to initialize DIO subsystem\n");
   }
 
-  if (HAL->spi.init() != 0) {
+  // HAL->spi is NULL on platforms with no SPI bus wired to anything (e.g.
+  // the Arduino Nano Every) -- nothing to initialize, so skip silently
+  // rather than logging a spurious failure.
+  if ((HAL->spi != NULL) && (HAL->spi->init() != 0)) {
     logWarn("Failed to initialize SPI subsystem\n");
   }
 
-  if (HAL->clock.init() != 0) {
+  if (HAL->clock->init() != 0) {
     logWarn("Failed to initialize clock subsystem\n");
   }
 
   do {
-    if (HAL->timer.init() != 0) {
+    if (HAL->timer->init() != 0) {
       logWarn("Failed to initialize timer subsystem\n");
       break;
     }
 
-    uint32_t timerOnline = HAL->timer.online[0];
-    for (ii = 0; ii < (int32_t) HAL->timer.numSupported; ii++) {
+    uint32_t timerOnline = HAL->timer->online[0];
+    for (ii = 0; ii < (int32_t) HAL->timer->numSupported; ii++) {
       if (online(HAL->timer, ii) == false) {
         continue;
       }
 
-      if (HAL->timer.initDevice(ii) < 0) {
+      if (HAL->timer->initDevice(ii) < 0) {
         setOffline(HAL->timer, ii);
       }
     }
 
-    if (HAL->timer.online[0] != timerOnline) {
+    if (HAL->timer->online[0] != timerOnline) {
       logWarn("Did not initialize all timers\n");
     }
   } while (0);
 
   NanoOsOverlayMap *overlayMap = NULL;
-  HAL->memory.overlayMap(&overlayMap);
-  if ((overlayMap != NULL) && (HAL->memory.overlaySize > 0)) {
-    memset(overlayMap, 0, HAL->memory.overlaySize);
+  HAL->memory->overlayMap(&overlayMap);
+  if ((overlayMap != NULL) && (HAL->memory->overlaySize > 0)) {
+    memset(overlayMap, 0, HAL->memory->overlaySize);
   }
 
   char *logBuffer = NULL;
-  HAL->memory.logBuffer(&logBuffer);
-  if ((logBuffer != NULL) && (HAL->memory.logBufferSize > 0)) {
-    memset(logBuffer, 0, HAL->memory.logBufferSize);
+  HAL->memory->logBuffer(&logBuffer);
+  if ((logBuffer != NULL) && (HAL->memory->logBufferSize > 0)) {
+    memset(logBuffer, 0, HAL->memory->logBufferSize);
   }
 
   _builtinFilesystemInitDriver = builtinFilesystemInitDriver;

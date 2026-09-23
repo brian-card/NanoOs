@@ -51,9 +51,6 @@
 #undef __pid_t_defined
 #undef _PID_T_DECLARED
 
-// Basic SPI communication
-#include <SPI.h>
-
 // Standard C includes from the compiler
 #include <limits.h>
 
@@ -69,11 +66,6 @@
 #include "../user/NanoOsErrno.h"
 #include "../user/NanoOsStdio.h"
 
-/// @def MAX_SPI_DEVICES
-///
-/// @brief The maximum number of SPI devices the system can support.
-#define MAX_SPI_DEVICES 2
-
 /// @def PROCESS_STACK_SIZE
 ///
 /// @brief The size, in bytes, of a regular process's stack.
@@ -83,11 +75,6 @@
 ///
 /// @brief The size, in bytes, of the memory manager process's stack.
 #define MEMORY_MANAGER_STACK_SIZE 128
-
-/// @def DIO_PIN_UNDEFINED
-///
-/// @brief Value to indicate that the value of a specific pin is undefined.
-#define DIO_PIN_UNDEFINED 255
 
 /// @def NUM_PROCESSES
 ///
@@ -104,21 +91,6 @@ static uint8_t _dioStart = 0;
 ///
 /// @brief The number of digital IO pins on the board.
 static uint32_t _numDioPins = 0;
-
-/// @var _spiCopiDio
-///
-/// @brief DIO pin used for SPI COPI.
-static uint8_t _spiCopiDio = DIO_PIN_UNDEFINED;
-
-/// @var _spiCipoDio
-///
-/// @brief DIO pin used for SPI CIPO.
-static uint8_t _spiCipoDio = DIO_PIN_UNDEFINED;
-
-/// @var _spiSckDio
-///
-/// @brief DIO pin used for SPI serial clock.
-static uint8_t _spiSckDio = DIO_PIN_UNDEFINED;
 
 // The fact that we've included Arduino.h in this file means that the memory
 // management functions from its library are available in this file.  That's a
@@ -413,7 +385,14 @@ int arduinoAvrInitDio(va_list args) {
   return 0;
 }
 
-static int arduinoAvrConfigureDioImpl(int32_t deviceId, bool output) {
+// @fn int arduinoAvrConfigureDioImpl(int32_t deviceId, bool output)
+//
+// Not static: the Mega 2560's SPI implementation (HalArduinoMega2560.cpp)
+// needs to drive its own chip-select line directly, bypassing the
+// capability-gated HAL_DIO dispatch (SPI chip-select is treated as part of
+// what "SPI" means at the hardware level, not a generic DIO operation a
+// process needs its own HAL_DIO grant for).  Declared in HalArduinoAvr.h.
+int arduinoAvrConfigureDioImpl(int32_t deviceId, bool output) {
   if ((deviceId < _dioStart) || (deviceId >= (int32_t) _numDioPins)) {
     return -ERANGE;
   }
@@ -428,7 +407,8 @@ int arduinoAvrConfigureDio(va_list args) {
   return arduinoAvrConfigureDioImpl(deviceId, output);
 }
 
-static int arduinoAvrWriteDioImpl(int32_t deviceId, bool high) {
+// See arduinoAvrConfigureDioImpl above for why this isn't static.
+int arduinoAvrWriteDioImpl(int32_t deviceId, bool high) {
   if ((deviceId < _dioStart) || (deviceId >= (int32_t) _numDioPins)) {
     return -ERANGE;
   }
@@ -442,204 +422,6 @@ int arduinoAvrWriteDio(va_list args) {
   bool high = (bool) va_arg(args, int);
   return arduinoAvrWriteDioImpl(deviceId, high);
 }
-
-/// @var globalSpiConfigured
-///
-/// @brief Whether or not the Arduino's SPI interface has already been
-/// configured.
-static bool globalSpiConfigured = false;
-
-/// @var globalSpiInUse
-///
-/// @brief Whether or not the Arduino's SPI interface is currently in use.
-static bool globalSpiInUse = false;
-
-/// @var arduinoAvrSpiDevices
-///
-/// @brief Array of structures that will hold the information about SPI
-/// connections.
-static struct ArduinoAvrSpi {
-  bool     configured;         // Will default to false
-  uint8_t  chipSelect;
-  bool     transferInProgress; // Will default to false
-  uint32_t baud;
-} arduinoAvrSpiDevices[MAX_SPI_DEVICES] = {};
-
-/// @var numArduinoSpis
-///
-/// @brief The number of devices we support in the arduinoAvrSpiDevices array.
-static const int numArduinoSpis
-  = sizeof(arduinoAvrSpiDevices) / sizeof(arduinoAvrSpiDevices[0]);
-
-/// @def SPI_POWER_UP_CLOCK_BYTES
-///
-/// @brief 0xFF bytes clocked out with chip select deasserted right after a
-/// device is configured.  The SD physical spec wants >= 74 clock cycles (>= 10
-/// bytes) with CS and DI high before the first command; harmless for anything
-/// else on the bus.
-#define SPI_POWER_UP_CLOCK_BYTES 10
-
-static int arduinoAvrInitSpiImpl(void) {
-  if (globalSpiConfigured == false) {
-    globalSpiConfigured = true;
-    SPI.begin();
-  }
-  return 0;
-}
-
-int arduinoAvrInitSpi(va_list args) {
-  (void) args;
-  return arduinoAvrInitSpiImpl();
-}
-
-int arduinoAvrConfigureSpiDevice(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
-  uint8_t cs   = (uint8_t) va_arg(args, int);
-  uint8_t sck  = (uint8_t) va_arg(args, int);
-  uint8_t copi = (uint8_t) va_arg(args, int);
-  uint8_t cipo = (uint8_t) va_arg(args, int);
-  uint32_t baud = va_arg(args, uint32_t);
-
-  if ((deviceId < 0) || (deviceId >= numArduinoSpis)) {
-    return -ENODEV;
-  } else if ((cs < _dioStart) || (cs >= _numDioPins)) {
-    return -ERANGE;
-  } else if (
-       (cs   == _spiSckDio)
-    || (cs   == _spiCopiDio)
-    || (cs   == _spiCipoDio)
-    || (sck  != _spiSckDio)
-    || (copi != _spiCopiDio)
-    || (cipo != _spiCipoDio)
-  ) {
-    return -EINVAL;
-  } else if (arduinoAvrSpiDevices[deviceId].configured == true) {
-    return -EBUSY;
-  }
-
-  if (arduinoAvrInitSpiImpl() != 0) {
-    return -ENODEV;
-  }
-
-  arduinoAvrConfigureDioImpl(cs, 1);
-  arduinoAvrWriteDioImpl(cs, 1);
-
-  // SD physical-spec power-up: >= 74 clocks with CS (and DI) high before the
-  // device is ever selected.
-  SPI.beginTransaction(SPISettings(baud, MSBFIRST, SPI_MODE0));
-  for (uint8_t ii = 0; ii < SPI_POWER_UP_CLOCK_BYTES; ii++) {
-    SPI.transfer(0xFF);
-  }
-  SPI.endTransaction();
-
-  arduinoAvrSpiDevices[deviceId].chipSelect = cs;
-  arduinoAvrSpiDevices[deviceId].baud = baud;
-  arduinoAvrSpiDevices[deviceId].configured = true;
-
-  return 0;
-}
-
-int arduinoAvrSetSpiSpeed(va_list args) {
-  int32_t  deviceId = va_arg(args, int32_t);
-  uint32_t baud     = va_arg(args, uint32_t);
-
-  if ((deviceId < 0) || (deviceId >= numArduinoSpis)
-    || (arduinoAvrSpiDevices[deviceId].configured == false)
-  ) {
-    return -ENODEV;
-  }
-  if (baud == 0) {
-    return -EINVAL;
-  }
-
-  // Picked up by the SPISettings passed to the next SPI.beginTransaction() in
-  // arduinoAvrStartSpiTransferImpl().
-  arduinoAvrSpiDevices[deviceId].baud = baud;
-  return 0;
-}
-
-static int arduinoAvrStartSpiTransferImpl(int32_t deviceId) {
-  if ((deviceId < 0) || (deviceId >= numArduinoSpis)
-    || (arduinoAvrSpiDevices[deviceId].configured == false)
-  ) {
-    return -ENODEV;
-  } else if (globalSpiInUse == true) {
-    return -EBUSY;
-  }
-
-  globalSpiInUse = true;
-  arduinoAvrWriteDioImpl(arduinoAvrSpiDevices[deviceId].chipSelect, 0);
-  SPI.beginTransaction(SPISettings(arduinoAvrSpiDevices[deviceId].baud,
-    MSBFIRST, SPI_MODE0));
-  arduinoAvrSpiDevices[deviceId].transferInProgress = true;
-
-  return 0;
-}
-
-int arduinoAvrStartSpiTransfer(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
-  return arduinoAvrStartSpiTransferImpl(deviceId);
-}
-
-int arduinoAvrEndSpiTransfer(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
-
-  if ((deviceId < 0) || (deviceId >= numArduinoSpis)
-    || (arduinoAvrSpiDevices[deviceId].configured == false)
-  ) {
-    return -ENODEV;
-  }
-
-  arduinoAvrSpiDevices[deviceId].transferInProgress = false;
-  SPI.endTransaction();
-  arduinoAvrWriteDioImpl(arduinoAvrSpiDevices[deviceId].chipSelect, 1);
-  for (int ii = 0; ii < 8; ii++) {
-    SPI.transfer(0xFF);
-  }
-  globalSpiInUse = false;
-
-  return 0;
-}
-
-int arduinoAvrSpiTransfer8(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
-  uint8_t data = (uint8_t) va_arg(args, int);
-
-  if ((deviceId < 0) || (deviceId >= numArduinoSpis)
-    || (arduinoAvrSpiDevices[deviceId].configured == false)
-  ) {
-    return -ENODEV;
-  } else if (!arduinoAvrSpiDevices[deviceId].transferInProgress) {
-    arduinoAvrStartSpiTransferImpl(deviceId);
-  }
-
-  return (int) SPI.transfer(data);
-}
-
-int arduinoAvrSpiTransferBytes(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
-  uint8_t *data = va_arg(args, uint8_t*);
-  uint32_t length = va_arg(args, uint32_t);
-
-  if ((deviceId < 0) || (deviceId >= numArduinoSpis)
-    || (arduinoAvrSpiDevices[deviceId].configured == false)
-  ) {
-    return -ENODEV;
-  } else if (!arduinoAvrSpiDevices[deviceId].transferInProgress) {
-    arduinoAvrStartSpiTransferImpl(deviceId);
-  }
-
-  SPI.transfer(data, length);
-
-  return 0;
-}
-
-/// @var halArduinoAvrSpisOnline
-///
-/// @brief Bitmask array of online SPIs.
-static uint32_t halArduinoAvrSpisOnline[] = {
-  0x00000003,
-};
 
 /// @var baseSystemTimeMs
 ///
@@ -780,17 +562,9 @@ static uint32_t arduinoAvrBlockDevicesOnline[] = {
 };
 
 // arduinoAvrInitBlockDevice, arduinoAvrGetBlockDevice, and
-// arduinoAvrRestartBlockDevice are defined in the individual implementations.
-#ifdef __cplusplus
-extern "C"
-{
-#endif
-int arduinoAvrInitBlockDevice(va_list args);
-int arduinoAvrGetBlockDevice(va_list args);
-int arduinoAvrRestartBlockDevice(va_list args);
-#ifdef __cplusplus
-}
-#endif
+// arduinoAvrRestartBlockDevice are defined in the individual implementations
+// (HalArduinoMega2560.cpp / HalArduinoNanoEvery.c); declared with C linkage
+// in HalArduinoAvr.h.
 
 /// @var _initRootStorage
 ///
@@ -833,7 +607,7 @@ static int arduinoAvrDoStartProcesses(void) {
   if (_initRootStorage != NULL) {
     returnValue = _initRootStorage();
   }
-  if (HAL->memory.stringsPresent == false) {
+  if (HAL->memory->stringsPresent == false) {
     int loggerStatus = halCommonInitLogger();
     if ((returnValue == 0) && (loggerStatus != 0)) {
       returnValue = loggerStatus;
@@ -994,15 +768,10 @@ static HalFunction arduinoAvrDioFunctions[HAL_DIO_NUM_FNS] = {
   [HAL_DIO_WRITE]     = arduinoAvrWriteDio,
 };
 
-static HalFunction arduinoAvrSpiFunctions[HAL_SPI_NUM_FNS] = {
-  [HAL_SPI_INIT]           = arduinoAvrInitSpi,
-  [HAL_SPI_CONFIGURE]      = arduinoAvrConfigureSpiDevice,
-  [HAL_SPI_START_TRANSFER] = arduinoAvrStartSpiTransfer,
-  [HAL_SPI_END_TRANSFER]   = arduinoAvrEndSpiTransfer,
-  [HAL_SPI_TRANSFER8]      = arduinoAvrSpiTransfer8,
-  [HAL_SPI_TRANSFER_BYTES] = arduinoAvrSpiTransferBytes,
-  [HAL_SPI_SET_SPEED]      = arduinoAvrSetSpiSpeed,
-};
+// No arduinoAvrSpiFunctions table here: the SPI implementation (and its
+// HAL_SPI dispatch table) lives entirely in HalArduinoMega2560.cpp now,
+// since the Nano Every has no SPI bus wired to anything -- see
+// HalArduinoNanoEvery.c's halArduinoInit(), which leaves halImpl.spi NULL.
 
 static HalFunction arduinoAvrClockFunctions[HAL_CLOCK_NUM_FNS] = {
   [HAL_CLOCK_INIT]                     = arduinoAvrTimeInit,
@@ -1024,7 +793,7 @@ static HalFunction arduinoAvrBlockDeviceFunctions[HAL_BLOCK_DEVICE_NUM_FNS] = {
 
 // We want to link in the built-in filesystem and FAT32 implementation, so
 // provide those declarations here.  Only the Mega 2560 (via
-// HalArduinoMega2560.c) actually wires restartRootFilesystem to
+// HalArduinoMega2560.cpp) actually wires restartRootFilesystem to
 // restartBuiltinFilesystem; the Nano Every never does, so these are simply
 // unused there -- harmless, since NANO_OS_NO_BUILTIN_FILESYSTEM isn't
 // defined for either AVR target (see NanoOsBuiltinFilesystem.h), so both
@@ -1044,11 +813,14 @@ extern const FilesystemCommandHandler
 int halArduinoAvrInit(HalArduinoAvrInitArgs *args) {
   // Wire up per-subsystem function arrays.
   // HAL_TIMER is not supported on this platform — leave halFunctions[HAL_TIMER] NULL.
+  // HAL_SPI is not wired here at all: only the Mega 2560 has an SPI bus
+  // wired to anything, and it wires its own HAL_SPI table (and
+  // halImpl.spi's data members) itself, in HalArduinoMega2560.cpp, before
+  // calling this function.  The Nano Every leaves halImpl.spi NULL.
   halFunctions[HAL_PLATFORM]     = arduinoAvrPlatformFunctions;
   halFunctions[HAL_MEMORY]       = arduinoAvrMemoryFunctions;
   halFunctions[HAL_UART]         = arduinoAvrUartFunctions;
   halFunctions[HAL_DIO]          = arduinoAvrDioFunctions;
-  halFunctions[HAL_SPI]          = arduinoAvrSpiFunctions;
   halFunctions[HAL_CLOCK]        = arduinoAvrClockFunctions;
   halFunctions[HAL_POWER]        = arduinoAvrPowerFunctions;
   halFunctions[HAL_BLOCK_DEVICE] = arduinoAvrBlockDeviceFunctions;
@@ -1056,28 +828,22 @@ int halArduinoAvrInit(HalArduinoAvrInitArgs *args) {
   // Set per-platform data members from the init args.
   _dioStart   = args->dioStart;
   _numDioPins = args->numDiosSupported;
-  _spiCopiDio = args->spiCopiDio;
-  _spiCipoDio = args->spiCipoDio;
-  _spiSckDio  = args->spiSckDio;
 
-  halImpl.uart.numSupported = args->numUartsSupported;
-  halImpl.uart.online       = args->uartsOnline;
+  halImpl.uart->numSupported = args->numUartsSupported;
+  halImpl.uart->online       = args->uartsOnline;
 
-  halImpl.dio.numSupported = args->numDiosSupported;
-  halImpl.dio.online       = args->diosOnline;
+  halImpl.dio->numSupported = args->numDiosSupported;
+  halImpl.dio->online       = args->diosOnline;
 
-  halImpl.spi.numSupported = MAX_SPI_DEVICES;
-  halImpl.spi.online       = halArduinoAvrSpisOnline;
+  halImpl.timer->numSupported = 0;
+  halImpl.timer->online       = NULL;
 
-  halImpl.timer.numSupported = 0;
-  halImpl.timer.online       = NULL;
+  halImpl.blockDevice->numSupported = _numBlockDevices;
+  halImpl.blockDevice->online       = arduinoAvrBlockDevicesOnline;
 
-  halImpl.blockDevice.numSupported = _numBlockDevices;
-  halImpl.blockDevice.online       = arduinoAvrBlockDevicesOnline;
-
-  halImpl.memory.stringsPresent = true;
-  halImpl.memory.logBufferSize  = sizeof(_logBuffer);
-  halImpl.memory.numLogEntries  = NUM_LOG_ENTRIES;
+  halImpl.memory->stringsPresent = true;
+  halImpl.memory->logBufferSize  = sizeof(_logBuffer);
+  halImpl.memory->numLogEntries  = NUM_LOG_ENTRIES;
   memset(&_logEntries, 0, sizeof(_logEntries));
   memset(&_logMessages, 0, sizeof(_logMessages));
 
@@ -1091,7 +857,7 @@ int halArduinoAvrInit(HalArduinoAvrInitArgs *args) {
     = sizeof(_filesystemIpcCapabilities) / sizeof(_filesystemIpcCapabilities[0]);
 
   memset(_allProcesses, 0, sizeof(_allProcesses));
-  halImpl.memory.numProcesses   = NUM_PROCESSES;
+  halImpl.memory->numProcesses   = NUM_PROCESSES;
   for (int ii = 0; ii < NUM_READY_QUEUES; ii++) {
     memset(_readyQueues[ii], 0, sizeof(HalProcessQueue));
   }

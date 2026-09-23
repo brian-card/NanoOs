@@ -182,14 +182,14 @@ int logMessage(LogLevel logLevel,
   // Don't check the return value of getElapsedNanoseconds here.  A failure
   // isn't fatal.  Do this before anything else to get as accurate a timestamp
   // as possible.
-  HAL->clock.getElapsedNanoseconds(0, &temp.i64Value);
+  HAL->clock->getElapsedNanoseconds(0, &temp.i64Value);
 
   StaticLogs *staticLogs = NULL;
   char *logBuffer = NULL;
 
   LogEntry *logEntry = NULL;
   ProcessMessage *processMessage = NULL;
-  HAL->memory.staticLogs(&staticLogs);
+  HAL->memory->staticLogs(&staticLogs);
 
   // Once cached, a non-empty hostname proves the scheduler was initialized
   // at some point, which is all we need this check for.  Only pay for the
@@ -253,7 +253,7 @@ int logMessage(LogLevel logLevel,
     if (staticLogs != NULL) {
       // Logger isn't up yet but will be.  Write to the staticLogs area.
       goto writeStaticLog;
-    } else if (HAL->memory.stringsPresent == true) {
+    } else if (HAL->memory->stringsPresent == true) {
       // Write this entry immediately.
       goto writeImmediate;
     }
@@ -280,7 +280,7 @@ int logMessage(LogLevel logLevel,
     != 0
   ) {
     processMessageRelease(processMessage);
-    if (HAL->memory.stringsPresent == true) {
+    if (HAL->memory->stringsPresent == true) {
       // Write this entry immediately.
       goto writeImmediate;
     }
@@ -291,7 +291,7 @@ int logMessage(LogLevel logLevel,
   return 0;
   
 writeImmediate:
-  HAL->memory.logBuffer(&logBuffer);
+  HAL->memory->logBuffer(&logBuffer);
   if (logBuffer == NULL) {
     // Either we lack the necessary HAL capability to get the logBuffer, or the
     // HAL on this system doesn't provide one.  Either way, we can't print the
@@ -307,7 +307,7 @@ writeImmediate:
     fileName = slashAt + 1;
   }
   
-  snprintf(logBuffer, HAL->memory.logBufferSize,
+  snprintf(logBuffer, HAL->memory->logBufferSize,
     _logHeaderFormat,
     (long long int) (logEntry->timeStamp / ((int64_t) 1000000000)),
     (long long int) (logEntry->timeStamp % ((int64_t) 1000000000)),
@@ -322,7 +322,7 @@ writeImmediate:
 
   // Print the log message.
   va_start(args, format);
-  vsnprintf(logBuffer, HAL->memory.logBufferSize,
+  vsnprintf(logBuffer, HAL->memory->logBufferSize,
     format, args);
   va_end(args);
   rv += printString(logBuffer);

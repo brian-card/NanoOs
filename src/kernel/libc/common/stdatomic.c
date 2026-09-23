@@ -73,14 +73,14 @@ void* atomic_load(const volatile void *object) {
 
   uint64_t remainingNanoseconds;
   void (*callback)(void);
-  int cancelStatus = HAL->timer.cancelAndGet(
+  int cancelStatus = HAL->timer->cancelAndGet(
     getPreemptionTimer(), NULL, &remainingNanoseconds, &callback);
 
   void *returnValue = *objectPtr;
 
   if (cancelStatus == 0) {
     // A timer was active when we were called.  Restore it.
-    HAL->timer.configOneShot(getPreemptionTimer(),
+    HAL->timer->configOneShot(getPreemptionTimer(),
       remainingNanoseconds, callback);
   }
 
@@ -92,14 +92,14 @@ void atomic_store(volatile void *object, void *desired) {
 
   uint64_t remainingNanoseconds;
   void (*callback)(void);
-  int cancelStatus = HAL->timer.cancelAndGet(
+  int cancelStatus = HAL->timer->cancelAndGet(
     getPreemptionTimer(), NULL, &remainingNanoseconds, &callback);
 
   *objectPtr = desired;
 
   if (cancelStatus == 0) {
     // A timer was active when we were called.  Restore it.
-    HAL->timer.configOneShot(getPreemptionTimer(),
+    HAL->timer->configOneShot(getPreemptionTimer(),
       remainingNanoseconds, callback);
   }
 }
@@ -112,7 +112,7 @@ bool atomic_compare_exchange_strong(
 
   uint64_t remainingNanoseconds;
   void (*callback)(void);
-  int cancelStatus = HAL->timer.cancelAndGet(
+  int cancelStatus = HAL->timer->cancelAndGet(
     getPreemptionTimer(), NULL, &remainingNanoseconds, &callback);
 
   bool success = false;
@@ -125,7 +125,7 @@ bool atomic_compare_exchange_strong(
 
   if (cancelStatus == 0) {
     // A timer was active when we were called.  Restore it.
-    HAL->timer.configOneShot(getPreemptionTimer(),
+    HAL->timer->configOneShot(getPreemptionTimer(),
       remainingNanoseconds, callback);
   }
 

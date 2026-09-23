@@ -33,6 +33,8 @@
 #ifndef HAL_ARDUINO_AVR_H
 #define HAL_ARDUINO_AVR_H
 
+#include <stdarg.h>
+
 #include "../kernel/Hal.h"
 
 
@@ -47,13 +49,23 @@ typedef struct HalArduinoAvrInitArgs {
   uint8_t   dioStart;
   uint32_t  numDiosSupported;
   uint32_t *diosOnline;
-  uint8_t   spiCopiDio;
-  uint8_t   spiCipoDio;
-  uint8_t   spiSckDio;
 } HalArduinoAvrInitArgs;
 
 int halArduinoAvrInit(HalArduinoAvrInitArgs *args);
 int halArduinoInit(void);
+
+/// @fn int arduinoAvrConfigureDioImpl(int32_t deviceId, bool output)
+///
+/// @brief Fast-path DIO configure, shared with board-specific code that
+/// needs to drive a DIO directly (e.g. an SPI chip-select line) without
+/// going through the capability-gated HAL_DIO dispatch.  Defined in
+/// HalArduinoAvr.cpp.
+int arduinoAvrConfigureDioImpl(int32_t deviceId, bool output);
+
+/// @fn int arduinoAvrWriteDioImpl(int32_t deviceId, bool high)
+///
+/// @brief Fast-path DIO write.  See arduinoAvrConfigureDioImpl above.
+int arduinoAvrWriteDioImpl(int32_t deviceId, bool high);
 
 /// @fn void arduinoAvrSetRootStorageFunctions(
 ///   HalInitRootStorageFn initRootStorage,
@@ -64,6 +76,18 @@ int halArduinoInit(void);
 void arduinoAvrSetRootStorageFunctions(
   HalInitRootStorageFn initRootStorage,
   HalRestartRootFilesystemFn restartRootFilesystem);
+
+// arduinoAvrInitBlockDevice, arduinoAvrGetBlockDevice, and
+// arduinoAvrRestartBlockDevice are defined per-board (HalArduinoMega2560.cpp
+// / HalArduinoNanoEvery.c), not in the shared HalArduinoAvr.cpp, but
+// HalArduinoAvr.cpp's arduinoAvrBlockDeviceFunctions dispatch table
+// references them.  Declaring them here, rather than privately in
+// HalArduinoAvr.cpp, ensures a board file that's compiled as C++ (currently
+// only HalArduinoMega2560.cpp) defines them with the C linkage that
+// dispatch table (and HalArduinoNanoEvery.c's plain-C definitions) expect.
+int arduinoAvrInitBlockDevice(va_list args);
+int arduinoAvrGetBlockDevice(va_list args);
+int arduinoAvrRestartBlockDevice(va_list args);
 
 #ifdef __cplusplus
 } // extern "C"
