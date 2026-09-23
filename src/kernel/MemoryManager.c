@@ -78,7 +78,7 @@ extern "C"
 {
 #endif
 
-/// @fn void localFree(MemoryManagerState *memoryManagerState,
+/// @fn void localFree(volatile MemoryManagerState *memoryManagerState,
 ///   void *ptr, ProcessId callingPid)
 ///
 /// @brief Free a previously-allocated block of memory.
@@ -90,7 +90,7 @@ extern "C"
 /// @param callingPid The PID of the process freeing the memory.
 ///
 /// @return This function always succeeds and returns no value.
-void localFree(MemoryManagerState *memoryManagerState,
+void localFree(volatile MemoryManagerState *memoryManagerState,
   void *ptr, ProcessId callingPid
 ) {
   (void) callingPid; // Used for debugging, so make the compiler ignore it.
@@ -305,7 +305,7 @@ void localFree(MemoryManagerState *memoryManagerState,
 }
 
 /// @fn void localFreeProcessMemory(
-///   MemoryManagerState *memoryManagerState, ProcessId pid,
+///   volatile MemoryManagerState *memoryManagerState, ProcessId pid,
 ///   ProcessId callingPid)
 ///
 /// @brief Free *ALL* the memory owned by a process given its process ID.
@@ -318,7 +318,8 @@ void localFree(MemoryManagerState *memoryManagerState,
 ///
 /// @return This function always succeeds and returns no value.
 void localFreeProcessMemory(
-  MemoryManagerState *memoryManagerState, ProcessId pid, ProcessId callingPid
+  volatile MemoryManagerState *memoryManagerState,
+  ProcessId pid, ProcessId callingPid
 ) {
   for (MemNode *cur = memoryManagerState->allocated; cur != NULL; ) {
     MemNode *next = cur->next;
@@ -332,7 +333,7 @@ void localFreeProcessMemory(
   return;
 }
 
-/// @fn void* localRealloc(MemoryManagerState *memoryManagerState,
+/// @fn void* localRealloc(volatile MemoryManagerState *memoryManagerState,
 ///   void *ptr, size_t size, Processid pid)
 ///
 /// @brief Reallocate a provided pointer to a new size.
@@ -348,7 +349,7 @@ void localFreeProcessMemory(
 ///
 /// @return Returns a pointer to size-adjusted memory on success, NULL on
 /// failure or on free.
-void* localRealloc(MemoryManagerState *memoryManagerState,
+void* localRealloc(volatile MemoryManagerState *memoryManagerState,
   void *ptr, size_t size, ProcessId pid
 ) {
   logTrace("In localRealloc\n");
@@ -615,10 +616,10 @@ void* localRealloc(MemoryManagerState *memoryManagerState,
 /******************* End Custom Memory Management Functions *******************/
 
 int memoryManagerDumpMemoryAllocationsCommandHandler(
-  MemoryManagerState *memoryManagerState, ProcessMessage *incoming
+  volatile MemoryManagerState *memoryManagerState, ProcessMessage *incoming
 );
 /// @fn int memoryManagerReallocCommandHandler(
-///   MemoryManagerState *memoryManagerState, ProcessMessage *incoming)
+///   volatile MemoryManagerState *memoryManagerState, ProcessMessage *incoming)
 ///
 /// @brief Command handler for a MEMORY_MANAGER_REALLOC command.  Extracts the
 /// ReallocMessage from the message and passes the parameters to localRealloc.
@@ -631,7 +632,7 @@ int memoryManagerDumpMemoryAllocationsCommandHandler(
 ///
 /// @return Returns 0 on success, error code on failure.
 int memoryManagerReallocCommandHandler(
-  MemoryManagerState *memoryManagerState, ProcessMessage *incoming
+  volatile MemoryManagerState *memoryManagerState, ProcessMessage *incoming
 ) {
   int returnValue = 0;
   
@@ -703,7 +704,7 @@ exit:
 }
 
 /// @fn int memoryManagerFreeCommandHandler(
-///   MemoryManagerState *memoryManagerState, ProcessMessage *incoming)
+///   volatile MemoryManagerState *memoryManagerState, ProcessMessage *incoming)
 ///
 /// @brief Command handler for a MEMORY_MANAGER_FREE command.  Extracts the
 /// pointer to free from the message and then calls localFree.
@@ -716,7 +717,7 @@ exit:
 ///
 /// @return Returns 0 on success, error code on failure.
 int memoryManagerFreeCommandHandler(
-  MemoryManagerState *memoryManagerState, ProcessMessage *incoming
+  volatile MemoryManagerState *memoryManagerState, ProcessMessage *incoming
 ) {
   int returnValue = 0;
 
@@ -734,7 +735,7 @@ int memoryManagerFreeCommandHandler(
 }
 
 /// @fn int memoryManagerGetFreeMemoryCommandHandler(
-///   MemoryManagerState *memoryManagerState, ProcessMessage *incoming)
+///   volatile MemoryManagerState *memoryManagerState, ProcessMessage *incoming)
 ///
 /// @brief Command handler for MEMORY_MANAGER_GET_FREE_MEMORY.  Gets the amount
 /// of free dynamic memory left in the system.
@@ -747,7 +748,7 @@ int memoryManagerFreeCommandHandler(
 ///
 /// @return Returns 0 on success, error code on failure.
 int memoryManagerGetFreeMemoryCommandHandler(
-  MemoryManagerState *memoryManagerState, ProcessMessage *incoming
+  volatile MemoryManagerState *memoryManagerState, ProcessMessage *incoming
 ) {
   int returnValue = 0;
   MemoryManagerGetFreeMemoryArgs *memoryManagerGetFreeMemoryArgs
@@ -764,7 +765,7 @@ int memoryManagerGetFreeMemoryCommandHandler(
 }
 
 /// @fn int memoryManagerFreeProcessMemoryCommandHandler(
-///   MemoryManagerState *memoryManagerState, ProcessMessage *incoming)
+///   volatile MemoryManagerState *memoryManagerState, ProcessMessage *incoming)
 ///
 /// @brief Command handler for a MEMORY_MANAGER_FREE_PROCESS_MEMORY command.
 /// Extracts the process ID from the message and then calls
@@ -778,7 +779,7 @@ int memoryManagerGetFreeMemoryCommandHandler(
 ///
 /// @return Returns 0 on success, error code on failure.
 int memoryManagerFreeProcessMemoryCommandHandler(
-  MemoryManagerState *memoryManagerState, ProcessMessage *incoming
+  volatile MemoryManagerState *memoryManagerState, ProcessMessage *incoming
 ) {
   int returnValue = 0;
   MemoryManagerFreeProcessMemoryArgs *memoryManagerFreeProcessMemoryArgs
@@ -812,7 +813,7 @@ int memoryManagerFreeProcessMemoryCommandHandler(
 }
 
 /// @fn int memoryManagerAssignMemoryCommandHandler(
-///   MemoryManagerState *memoryManagerState, ProcessMessage *incoming)
+///   volatile MemoryManagerState *memoryManagerState, ProcessMessage *incoming)
 ///
 /// @brief Command handler for the MEMORY_MANAGER_ASSIGN_MEMORY command. Makes
 /// sure that the memory falls in the range of dynamic memory and, if so,
@@ -829,7 +830,7 @@ int memoryManagerFreeProcessMemoryCommandHandler(
 ///
 /// @return Returns 0 on success, error code on failure.
 int memoryManagerAssignMemoryCommandHandler(
-  MemoryManagerState *memoryManagerState, ProcessMessage *incoming
+  volatile MemoryManagerState *memoryManagerState, ProcessMessage *incoming
 ) {
   int returnValue = 0;
 
@@ -958,7 +959,7 @@ static const char _memoryDumpPrevMismatchPrefix[] KEEP_IN_FLASH
 static const char _memoryDumpNewline[] KEEP_IN_FLASH = "\n";
 
 /// @fn int memoryManagerDumpMemoryAllocationsCommandHandler(
-///   MemoryManagerState *memoryManagerState, ProcessMessage *incoming)
+///   volatile MemoryManagerState *memoryManagerState, ProcessMessage *incoming)
 ///
 /// @brief Command handler for MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS.  Walk
 /// the memory allocation list and display information about all of the
@@ -972,7 +973,7 @@ static const char _memoryDumpNewline[] KEEP_IN_FLASH = "\n";
 ///
 /// @return Returns 0 on success, error code on failure.
 int memoryManagerDumpMemoryAllocationsCommandHandler(
-  MemoryManagerState *memoryManagerState, ProcessMessage *incoming
+  volatile MemoryManagerState *memoryManagerState, ProcessMessage *incoming
 ) {
   int returnValue = 0;
 
@@ -1031,7 +1032,7 @@ int memoryManagerDumpMemoryAllocationsCommandHandler(
 ///
 /// @brief Signature of command handler for a memory manager command.
 typedef int (*MemoryManagerCommandHandler)(
-  MemoryManagerState *memoryManagerState, ProcessMessage *incoming);
+  volatile MemoryManagerState *memoryManagerState, ProcessMessage *incoming);
 
 /// @var memoryManagerCommandHandlers
 ///
