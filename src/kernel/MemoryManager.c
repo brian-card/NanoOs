@@ -1050,7 +1050,7 @@ const MemoryManagerCommandHandler memoryManagerCommandHandlers[] = {
 };
 
 /// @fn void handleMemoryManagerMessages(
-///   MemoryManagerState *memoryManagerState)
+///   volatile MemoryManagerState *memoryManagerState)
 ///
 /// @brief Handle memory manager messages from the process's queue until there
 /// are no more waiting.
@@ -1060,7 +1060,9 @@ const MemoryManagerCommandHandler memoryManagerCommandHandlers[] = {
 ///   deallocation.
 ///
 /// @return This function returns no value.
-void handleMemoryManagerMessages(MemoryManagerState *memoryManagerState) {
+void handleMemoryManagerMessages(
+  volatile MemoryManagerState *memoryManagerState
+) {
   ProcessMessage *processMessage = processMessageQueueWait(NULL);
   while (processMessage != NULL) {
     if ((processMessageType(processMessage) & 0xffffffffffffff00)
@@ -1262,13 +1264,21 @@ void* runMemoryManager(void *args) {
   (void) args;
   printConsoleString(_newline);
 
-  MemoryManagerState memoryManagerState;
+  // *sigh*  SOME compilers (not mentioning any names because that would be rude
+  // but I sure do want to) apparently can't keep track of the fact that they
+  // still need to maintain stack area for variables after a setjmp call.  That
+  // is a blatant violation of the C spec but we have to work around it.  I'm
+  // not a compiler writer, so I can't really complain too much.  To that end,
+  // we're declaring memoryManagerState volatile here even though that really
+  // makes no sense.  This keeps the compiler from reusing stack space that it
+  // shouldn't and corrupting values later on.
+  volatile MemoryManagerState memoryManagerState;
   jmp_buf returnBuffer;
   if (setjmp(returnBuffer) == 0) {
     size_t mmStackSize = 0;
     HAL->memory.memoryManagerStackSize(MEMORY_MANAGER_DEBUG, &mmStackSize);
-    allocateMemoryManagerStack(&memoryManagerState, returnBuffer,
-      mmStackSize, NULL);
+    allocateMemoryManagerStack((MemoryManagerState*) &memoryManagerState,
+      returnBuffer, mmStackSize, NULL);
   }
   logDebug("Returned from allocateMemoryManagerStack.\n");
 
@@ -1279,7 +1289,7 @@ void* runMemoryManager(void *args) {
   printConsoleUInt(memoryManagerState.firstFree->size);
   printConsoleString(_dynamicMemorySuffix);
   releaseConsole();
-  
+
   while (1) {
     processYield();
     handleMemoryManagerMessages(&memoryManagerState);
