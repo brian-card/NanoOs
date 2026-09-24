@@ -61,6 +61,7 @@
 // independent of it.
 #include "../kernel/Logger.h"
 #include "../kernel/NanoOs.h"
+#include "../kernel/Overlay.h"
 #include "../kernel/Processes.h"
 #include "../kernel/Scheduler.h"
 #include "../kernel/SdCardSpi.h"
@@ -125,10 +126,29 @@ void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
 /// already down to 12 bytes with nothing to do with the ruled-out theory
 /// above.  32 bytes covers that need with 16 bytes of real slack left over.
 ///
+/// Raised from 0x200025A0 to 0x20002800 after a HardFault at login was traced
+/// to the Arduino core's newlib heap growing into this window.  That heap
+/// starts at .bss end and grows up; USBCore/SPI/operator new had taken it to
+/// a break of 0x2000269c, which is 252 bytes *inside* the old window.  The
+/// USB CDC receive buffer ended exactly at the old base, so typing a password
+/// wrote across the boundary and overwrote the overlay header's osApi (the
+/// window's first word).  The overlay then called through osApi + 0xDC and
+/// faulted.  The old reservation between __nanoos_overlay_window and this
+/// address was 512 bytes; the core was measured needing 792.
+///
+/// Every byte given to the newlib heap below is a byte taken from the NanoOs
+/// heap above (bottomOfHeap is OVERLAY_ADDRESS + OVERLAY_SIZE), so this is
+/// not free headroom to pad.  Moving the window from 0x200025A0 to 0x20002800
+/// cost the NanoOs heap 608 bytes and made `ps | grep p | grep t` run out of
+/// memory.  0x20002700 leaves the newlib heap 892 bytes -- 100 over its
+/// measured need -- and gives 256 of those bytes back.  The margin can be
+/// this tight because _sbrk now enforces the boundary instead of trusting it:
+/// overrunning fails the allocation rather than corrupting the window.
+///
 /// MUST be kept in sync with:
 ///   - __nanoos_overlay_window in ld/ArduinoSamd21FlashWithBootloader.ld
 ///   - OVERLAY_RAM ORIGIN      in usr/src/NanoOsArduinoSamd21.ld
-#define OVERLAY_ADDRESS 0x200025A0
+#define OVERLAY_ADDRESS 0x20002700
 
 /// @def OVERLAY_SIZE
 ///
@@ -2204,6 +2224,74 @@ static const char _diagHardFaultPsp[] KEEP_IN_FLASH = " psp=";
 static const char _diagHardFaultNewline[] KEEP_IN_FLASH = "\n";
 static const char _diagHardFaultStacks[] KEEP_IN_FLASH
   = "DIAG stacks (pid:stackEnd:canary)";
+
+/// @var _diagOverlayLoaded
+///
+/// @brief Strings describing the state of the overlay window at fault time.
+/// The faulting PC lands inside that window, so what is loaded there -- and
+/// whether it matches what the running process expects -- is the question.
+static const char _diagOverlayLoaded[] KEEP_IN_FLASH
+  = "DIAG overlay loaded magic=";
+static const char _diagOverlayColon[] KEEP_IN_FLASH = ":";
+static const char _diagOverlayDev[] KEEP_IN_FLASH = " dev=";
+static const char _diagOverlayStart[] KEEP_IN_FLASH = " start=";
+static const char _diagOverlayNum[] KEEP_IN_FLASH = " num=";
+static const char _diagOverlayOsApi[] KEEP_IN_FLASH = " osApi=";
+static const char _diagOverlayWanted[] KEEP_IN_FLASH
+  = "DIAG overlay wanted dev=";
+static const char _diagOverlayCode[] KEEP_IN_FLASH = "DIAG overlay code@";
+static const char _diagOverlayBreak[] KEEP_IN_FLASH = "DIAG heap break=";
+static const char _diagOverlayWindowBase[] KEEP_IN_FLASH = " windowBase=";
+static const char _diagOverlayExpectApi[] KEEP_IN_FLASH = " expectedOsApi=";
+static const char _diagOverlayBoundary[] KEEP_IN_FLASH
+  = "DIAG boundary[base-16..base+16):";
+
+/// @fn char* _sbrk(int increment)
+///
+/// @brief Override of newlib's heap break function, which otherwise comes
+/// from libnosys.a(sbrk.o) and grows the break with no upper bound.
+///
+/// @details The newlib heap starts at .bss end and grows up toward the
+/// overlay window.  Nothing used to stop it: USBCore/SPI/operator new took
+/// the break past OVERLAY_ADDRESS, and since schedulerLoadOverlay memcpy()s
+/// overlay images into that window and the overlay executes out of it, the
+/// two corrupted each other silently -- a USB receive buffer straddling the
+/// boundary overwrote the overlay header's osApi and the overlay then
+/// branched through the garbage.  That took a long time to find precisely
+/// because nothing failed at the point of the mistake.
+///
+/// Refusing to hand out memory at or past OVERLAY_ADDRESS turns that into an
+/// ordinary allocation failure at the moment it happens.  Callers get NULL
+/// from malloc instead of memory that another subsystem also believes it
+/// owns.  Bounding against OVERLAY_ADDRESS directly (rather than a separate
+/// constant) means there is no second value to keep in sync.
+///
+/// @param increment The number of bytes to move the break by.  May be zero
+///   (to read the current break) or negative (to give memory back).
+///
+/// @return Returns the previous break on success, (char*) -1 on failure.
+extern "C" char* _sbrk(int increment) {
+  // Supplied by the linker: the first address past .bss, where the heap
+  // begins.
+  extern char end;
+
+  // Zero-initialized at load, so this is safe no matter how early malloc is
+  // first called.
+  static char *heapEnd = NULL;
+  if (heapEnd == NULL) {
+    heapEnd = &end;
+  }
+
+  char *newHeapEnd = heapEnd + increment;
+  if (newHeapEnd > ((char*) OVERLAY_ADDRESS)) {
+    // Growing here would put heap blocks inside the overlay window.
+    return (char*) -1;
+  }
+
+  char *previousHeapEnd = heapEnd;
+  heapEnd = newHeapEnd;
+  return previousHeapEnd;
+}
 static const char _diagHardFaultStackPid[] KEEP_IN_FLASH = " p";
 static const char _diagHardFaultStackEnd[] KEEP_IN_FLASH = ":";
 static const char _diagHardFaultCanaryOk[] KEEP_IN_FLASH = ":ok";
@@ -2342,6 +2430,88 @@ void hardFaultReport(uint32_t *exceptionFrame, uint32_t r4Value) {
   printString(_diagHardFaultRunCoro);
   printHex((uintptr_t) getRunningCoroutine());
   printString(_diagHardFaultNewline);
+
+  // The faulting PC has been identical across builds whose code moved, and it
+  // lands inside the overlay window, so the question is whether the window
+  // holds the overlay the running process expects.  Print what is loaded
+  // (read out of the window itself, which is what schedulerLoadOverlay's
+  // "already loaded" fast path trusts) next to what the running process's
+  // descriptor asks for.  A mismatch means the process was resumed on top of
+  // somebody else's overlay; a garbage magic means the window was overwritten.
+  {
+    NanoOsOverlayMap *faultOverlayMap = (NanoOsOverlayMap*) OVERLAY_ADDRESS;
+    printString(_diagOverlayLoaded);
+    printHex((uint32_t) (faultOverlayMap->header.magic >> 32));
+    printString(_diagOverlayColon);
+    printHex((uint32_t) faultOverlayMap->header.magic);
+    printString(_diagOverlayDev);
+    printHex((uintptr_t) faultOverlayMap->header.overlay.blockDevice);
+    printString(_diagOverlayStart);
+    printInt((int) faultOverlayMap->header.overlay.startBlock);
+    printString(_diagOverlayNum);
+    printInt((int) faultOverlayMap->header.overlay.numBlocks);
+    printString(_diagOverlayOsApi);
+    printHex((uintptr_t) faultOverlayMap->header.osApi);
+    printString(_diagHardFaultNewline);
+
+    // osApi is the first word of the window, so it is the first casualty if
+    // anything growing up from .bss end runs into it.  NanoOs's own heap
+    // starts above the window, but the Arduino core's malloc heap starts at
+    // .bss end and grows toward it.  Print the current break next to the
+    // window base: a break at or past the base proves that collision.  Also
+    // print what osApi is supposed to be, and the words spanning the
+    // boundary, so a near-miss is as visible as a hit.
+    printString(_diagOverlayBreak);
+    printHex((uintptr_t) _sbrk(0));
+    printString(_diagOverlayWindowBase);
+    printHex((uintptr_t) OVERLAY_ADDRESS);
+    printString(_diagOverlayExpectApi);
+    printHex((uintptr_t) NANO_OS_API);
+    printString(_diagHardFaultNewline);
+
+    printString(_diagOverlayBoundary);
+    for (uint32_t address = ((uint32_t) OVERLAY_ADDRESS) - 16;
+      address < ((uint32_t) OVERLAY_ADDRESS) + 16;
+      address += 4
+    ) {
+      printString(_diagHardFaultSpace);
+      printHex(*((uint32_t*) address));
+    }
+    printString(_diagHardFaultNewline);
+
+    ProcessId faultPid = getRunningPid();
+    if ((faultPid > 0) && (faultPid <= NUM_PROCESSES)) {
+      ProcessDescriptor *faultProcess = &_allProcesses[faultPid - 1];
+      printString(_diagOverlayWanted);
+      printHex((uintptr_t) faultProcess->overlay.blockDevice);
+      printString(_diagOverlayStart);
+      printInt((int) faultProcess->overlay.startBlock);
+      printString(_diagOverlayNum);
+      printInt((int) faultProcess->overlay.numBlocks);
+      printString(_diagHardFaultNewline);
+    }
+
+    // Dump the words around the faulting PC.  If the window really does hold
+    // this process's code, these read as plausible Thumb; if the overlay was
+    // swapped or clobbered, they will not.  Bounded to the window so this
+    // cannot fault a second time.
+    uint32_t faultPc = exceptionFrame[6] & ~((uint32_t) 3);
+    uint32_t windowStart = (uint32_t) OVERLAY_ADDRESS;
+    uint32_t windowEnd = windowStart + OVERLAY_SIZE;
+    if ((faultPc >= windowStart + 16) && (faultPc < windowEnd)) {
+      printString(_diagOverlayCode);
+      printHex(faultPc - 16);
+      printString(_diagOverlayColon);
+      for (uint32_t address = faultPc - 16;
+        (address < faultPc + 16) && (address < windowEnd);
+        address += 4
+      ) {
+        printString(_diagHardFaultSpace);
+        printHex(*((uint32_t*) address));
+      }
+      printString(_diagHardFaultNewline);
+    }
+  }
 
   printString(_diagHardFaultStacks);
   for (int ii = 0; ii < NUM_PROCESSES; ii++) {

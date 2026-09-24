@@ -54,8 +54,23 @@ SECTIONS
 	 * OVERLAY_ADDRESS moving from 0x20002500 to 0x20002520, to make room for
 	 * the SD card process's new HAL_TIMER_CANCEL capability entry -- see
 	 * OVERLAY_ADDRESS's own doc comment in HalArduinoSamD21x18A.cpp.
+	 *
+	 * The gap between this symbol and OVERLAY_ADDRESS is the reservation for
+	 * the Arduino core's newlib heap, which starts at __bss_end__ and grows
+	 * up toward the window.  That reservation used to be 512 bytes, but the
+	 * core (USBCore, SPI, operator new) was measured taking the break to
+	 * 0x2000269c -- 792 bytes -- which put it inside the window and corrupted
+	 * the overlay header.
+	 *
+	 * This now sits at OVERLAY_ADDRESS (0x20002700) minus an 832-byte
+	 * reservation, which leaves .bss about 60 bytes of room to grow before
+	 * this assert fires.  _sbrk in HalArduinoSamD21x18A.cpp enforces the
+	 * other end at runtime, so a heap that outgrows the reservation fails its
+	 * allocation rather than running into the window.  If this fires, trim
+	 * static RAM or move the window -- and if you move it, re-measure the
+	 * core's break rather than assuming 792 still holds.
 	 */
-	__nanoos_overlay_window = 0x200023A0;
+	__nanoos_overlay_window = 0x200023C0;
 
 	.text :
 	{
