@@ -85,13 +85,15 @@ extern "C"
 #define getRunningProcess() \
   ((ProcessDescriptor*) getRunningCoroutineContext())
 
-/// @def getRunningPid
+/// @fn ProcessId getRunningPid(void)
 ///
 /// @brief Get the process ID for the currently-running process.  If
 /// getRunningProcess returns NULL then the scheduler isn't up yet, so by
 /// definition, we're running process 0.
-#define getRunningPid() \
-  ((getRunningProcess() != NULL) ? getRunningProcess()->processId : 0)
+static inline ProcessId getRunningPid(void) {
+  ProcessDescriptor *runningProcess = getRunningProcess();
+  return (runningProcess != NULL) ? runningProcess->processId : 0;
+}
 
 /// @def getRunningUid
 ///
