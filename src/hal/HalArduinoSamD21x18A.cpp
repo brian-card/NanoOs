@@ -536,7 +536,7 @@ int arduinoSamD21x18ANumExtraConsoleStacks(va_list args) {
   bool debug = (bool) va_arg(args, int);
   uint8_t *returnValue = va_arg(args, uint8_t*);
   (void) debug;
-  *returnValue = 0;
+  *returnValue = 1;
   return 0;
 }
 
