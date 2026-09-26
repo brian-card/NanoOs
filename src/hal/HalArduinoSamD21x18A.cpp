@@ -2532,6 +2532,7 @@ void hardFaultReport(uint32_t *exceptionFrame, uint32_t r4Value) {
     } else {
       printString(_diagHardFaultCanaryBad);
     }
+    printString(_diagHardFaultNewline);
   }
   printString(_diagHardFaultNewline);
 
