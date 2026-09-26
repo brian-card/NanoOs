@@ -140,16 +140,14 @@ void* callOverlayFunctionFromFile(const void *od, const void *o,
   
   // Keep track of the overlay that's currently running and the one we need.
   char *previousOverlayDir = (char*) runningProcess->overlayNamespace;
-  FileBlockMetadata overlayArray[2];
-  overlayArray[0].blockDevice = runningProcess->overlay.blockDevice;
-  overlayArray[0].startBlock  = runningProcess->overlay.startBlock;
-  overlayArray[0].numBlocks   = runningProcess->overlay.numBlocks;
-  
-  // We need to allocate enough space for all of the strings we need.  We need
-  // the overlay directory, a slash, the name of the overlay, the overlay
-  // extension, a NUL byte, the function name, and a trailing NUL byte.
-  char *overlayInfo = (char*) malloc(
-    ((overlayDir == OVERLAY_SAME_NAMESPACE)
+
+  // We need to allocate enough space for the two FileBlockMetadata objects and
+  // all of the strings we need.  For the strings, we need the overlay
+  // directory, a slash, the name of the overlay, the overlay extension, a NUL
+  // byte, the function name, and a trailing NUL byte.
+  char *allocation = (char*) malloc(
+    (2 * sizeof(FileBlockMetadata))
+    + ((overlayDir == OVERLAY_SAME_NAMESPACE)
       ? strlen(previousOverlayDir)
       : strlen(overlayDir)
     )
@@ -159,10 +157,16 @@ void* callOverlayFunctionFromFile(const void *od, const void *o,
     + 1
     + strlen(function)
     + 1);
-  if (overlayInfo == NULL) {
+  if (allocation == NULL) {
     goto exit;
   }
-  
+  FileBlockMetadata *overlayArray = (FileBlockMetadata*) allocation;
+  char *overlayInfo = allocation + (2 * sizeof(FileBlockMetadata));
+
+  overlayArray[0].blockDevice = runningProcess->overlay.blockDevice;
+  overlayArray[0].startBlock  = runningProcess->overlay.startBlock;
+  overlayArray[0].numBlocks   = runningProcess->overlay.numBlocks;
+
   strcpy(overlayInfo,
     (overlayDir == OVERLAY_SAME_NAMESPACE) ? previousOverlayDir : overlayDir);
   strcat(overlayInfo, _pathSeparator);
@@ -208,10 +212,10 @@ void* callOverlayFunctionFromFile(const void *od, const void *o,
 restorePreviousOverlay:
   // Don't check the return value here.  No point.
   schedulerReplaceOverlay(previousOverlayDir, &overlayArray[0]);
-  
+
   // Release all the memory for the copies.
 freeOverlayInfo:
-  free(overlayInfo);
+  free(allocation);
 exit:
   return returnValue;
 }
