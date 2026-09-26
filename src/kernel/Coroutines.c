@@ -1177,19 +1177,31 @@ int coroutineCreate(Coroutine **coroutine, CoroutineFunction func, void *arg) {
 ///
 /// @return This function returns no value and, in fact, never returns.
 void coroutineMain(void *stack) {
-  uint64_t stackEnd = COROUTINE_STACK_END_VALUE;
+  // We need to set the marker for the end of the stack of the previous
+  // coroutine, which is the one that's running at the time this block of code
+  // executes.  We need to be *GUARANTEED* that that marker is at a physically
+  // greater address than the address of the Coroutine that's declared in this
+  // function.  The only way to do that is to put both the Coroutine and the
+  // marker in a structure that forces the marker to be at a greater address
+  // than the declared Coroutine.  So, do that here.
+  struct CoroutineMainFrame {
+    Coroutine me;
+    uint64_t stackEnd;
+  };
+  ZEROINIT(struct CoroutineMainFrame frame);
+  frame.stackEnd = COROUTINE_STACK_END_VALUE;
+
   Coroutine *running = getRunningCoroutine();
   if (running->stackEnd == NULL) {
-    running->stackEnd = &stackEnd;
+    running->stackEnd = &frame.stackEnd;
   }
 
-  ZEROINIT(Coroutine me);
-  me.guard1 = COROUTINE_GUARD_VALUE;
-  me.guard2 = COROUTINE_GUARD_VALUE;
-  coroutinePushIdle(&me);
+  frame.me.guard1 = COROUTINE_GUARD_VALUE;
+  frame.me.guard2 = COROUTINE_GUARD_VALUE;
+  coroutinePushIdle(&frame.me);
 
   // Initialize the message queue.
-  comessageQueueCreate(&me);
+  comessageQueueCreate(&frame.me);
 
   // The target of coroutinePass() (the caller) is at the head of the running
   // list.  The return point for that Coroutine was either set in the setjmp
@@ -1203,7 +1215,7 @@ void coroutineMain(void *stack) {
   // take in a new function pointer when we're resumed.
   CoroutineFuncData funcData;
   funcData.data = stack;
-  funcData = coroutinePass(&me, funcData);
+  funcData = coroutinePass(&frame.me, funcData);
   void *(*func)(void *arg);
   func = funcData.func;
 
@@ -1258,7 +1270,7 @@ void coroutineMain(void *stack) {
     // Return our Coroutine and get the function argument from the constructor.
     // coroutineYield will set our state to BLOCKED on call and RUNNING on
     // return.
-    void* callingArgument = coroutineYield(&me, COROUTINE_STATE_BLOCKED);
+    void* callingArgument = coroutineYield(&frame.me, COROUTINE_STATE_BLOCKED);
 
     // Yield again and wait to be resumed by the caller of coroutineInit.
     coroutineYield(NULL, COROUTINE_STATE_BLOCKED);
@@ -1273,13 +1285,13 @@ void coroutineMain(void *stack) {
     coroutinePushIdle(currentCoroutine);
 
     // Destroy any messages that were sent.
-    comessageQueueDestroy(&me);
+    comessageQueueDestroy(&frame.me);
 
     // Block until we're called from the constructor again.
     funcData.data = ret;
-    funcData = coroutinePass(&me, funcData);
+    funcData = coroutinePass(&frame.me, funcData);
     // Re-initialize the queue.
-    comessageQueueCreate(&me);
+    comessageQueueCreate(&frame.me);
     func = funcData.func;
   }
 }
