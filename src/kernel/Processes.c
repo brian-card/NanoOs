@@ -444,12 +444,12 @@ void* runBlockOverlay(void *args) {
   return main(blockOverlayArgs.args);
 }
 
-/// @fn IpcCapability* findIpcCapability(
+/// @fn IpcCapability* ipcCapabilitySearch(
 ///   IpcCapability *capabilities, size_t numCapabilities,
 ///   uint8_t destinationPid, int64_t signature, uint16_t messageType)
 ///
-/// @brief Find an IpcCapability object in an array of them given a destination
-/// PID and a message type.
+/// @brief Search an array of IpcCapability objects for a match.  Inlined in
+/// functions that use this directly to avoid stack cost.
 ///
 /// @param capabilities An array of IpcCapability objects.
 /// @param numCapabilities The number of IpcCapability objects in the
@@ -460,7 +460,8 @@ void* runBlockOverlay(void *args) {
 ///
 /// @return Returns a pointer to the first matching capability on success, NULL
 /// on failure.
-IpcCapability* findIpcCapability(
+static inline __attribute__((always_inline)) IpcCapability*
+ipcCapabilitySearch(
   IpcCapability *capabilities, size_t numCapabilities,
   uint8_t destinationPid, int64_t signature, uint16_t messageType
 ) {
@@ -486,6 +487,30 @@ IpcCapability* findIpcCapability(
   return NULL;
 }
 
+/// @fn IpcCapability* findIpcCapability(
+///   IpcCapability *capabilities, size_t numCapabilities,
+///   uint8_t destinationPid, int64_t signature, uint16_t messageType)
+///
+/// @brief Find an IpcCapability object in an array of them given a destination
+/// PID and a message type.
+///
+/// @param capabilities An array of IpcCapability objects.
+/// @param numCapabilities The number of IpcCapability objects in the
+///   capabilities array.
+/// @param destinationPid The process ID that the message is bound for.
+/// @param signature The signature of the message that is to be sent.
+/// @param messageType The numerical message type value that is to be sent.
+///
+/// @return Returns a pointer to the first matching capability on success, NULL
+/// on failure.
+IpcCapability* findIpcCapability(
+  IpcCapability *capabilities, size_t numCapabilities,
+  uint8_t destinationPid, int64_t signature, uint16_t messageType
+) {
+  return ipcCapabilitySearch(capabilities, numCapabilities, destinationPid,
+    signature, messageType);
+}
+
 /// @fn bool currentProcessHasIpcCapability(
 ///   uint8_t destinationPid, int64_t signature, uint16_t messageType)
 ///
@@ -507,9 +532,9 @@ bool currentProcessHasIpcCapability(
     return false;
   }
 
-  return (findIpcCapability(
+  return (ipcCapabilitySearch(
     processDescriptor->ipcCapabilities, processDescriptor->numIpcCapabilities,
-    destinationPid, signature, messageType));
+    destinationPid, signature, messageType) != NULL);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -562,6 +587,62 @@ static const char _toProcessInfix[] KEEP_IN_FLASH = " to process ";
 /// final binary on some targets.
 static const char _sendMessageErrorNewline[] KEEP_IN_FLASH = "\n";
 
+/// @var _invalidPidPrefix
+///
+/// @brief Printed by initSendProcessMessageToPid for an out-of-range PID.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _invalidPidPrefix[] KEEP_IN_FLASH = "Not a valid PID: ";
+
+/// @var _nullThreadMessage
+///
+/// @brief Printed by initSendProcessMessageToProcess when the destination
+/// process has no thread.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _nullThreadMessage[] KEEP_IN_FLASH
+  = "Could not send message: thread is NULL\n";
+
+/// @var _notRunningPrefix
+///
+/// @brief Printed by initSendProcessMessageToProcess when the destination
+/// process is not running.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _notRunningPrefix[] KEEP_IN_FLASH
+  = "Could not send message: process ";
+
+/// @var _notRunningInfix
+///
+/// @brief Printed between the PID and the state in a not-running report.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _notRunningInfix[] KEEP_IN_FLASH = " is in state ";
+
+/// @var _outOfMessagesMessage
+///
+/// @brief Printed by initSendProcessMessageToProcess when the message pool is
+/// exhausted.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _outOfMessagesMessage[] KEEP_IN_FLASH
+  = "Out of process messages\n";
+
+/// @var _releaseFailedMessage
+///
+/// @brief Printed by initSendProcessMessageToProcess when releasing a message
+/// it could not send also fails.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _releaseFailedMessage[] KEEP_IN_FLASH
+  = "Could not release message from initSendProcessMessageToProcess\n";
+
 /// @fn int sendProcessMessageToProcess(
 ///   ProcessDescriptor *processDescriptor, ProcessMessage *processMessage)
 ///
@@ -588,9 +669,13 @@ int sendProcessMessageToProcess(
     goto exit;
   }
 
-  if (currentProcessHasIpcCapability(processDescriptor->processId,
-    processMessageType(processMessage) & 0xffffffffffffff00,
-    processMessageType(processMessage) & 0xff) == false
+  ProcessDescriptor *runningProcess = getRunningProcess();
+  if ((runningProcess == NULL)
+    || (ipcCapabilitySearch(
+      runningProcess->ipcCapabilities, runningProcess->numIpcCapabilities,
+      processDescriptor->processId,
+      processMessageType(processMessage) & 0xffffffffffffff00,
+      processMessageType(processMessage) & 0xff) == NULL)
   ) {
     errno = EPERM;
     returnValue = processError;
@@ -692,10 +777,13 @@ ProcessMessage* initSendProcessMessageToProcess(
   } else if (!processRunning(processDescriptor)) {
     // Can't send to a non-running process.
     if (processDescriptor->mainThread == NULL) {
-      logError("Could not send message: thread is NULL\n");
+      printString(_nullThreadMessage);
     } else {
-      logError("Could not send message: process %d is in state %d\n",
-        processPid(processDescriptor), processState(processDescriptor));
+      printString(_notRunningPrefix);
+      printInt(processPid(processDescriptor));
+      printString(_notRunningInfix);
+      printInt(processState(processDescriptor));
+      printString(_sendMessageErrorNewline);
     }
     return processMessage; // NULL
   }
@@ -709,7 +797,7 @@ ProcessMessage* initSendProcessMessageToProcess(
     processMessage = getAvailableMessage();
   }
   if (processMessage == NULL) {
-    logError("Out of process messages\n");
+    printString(_outOfMessagesMessage);
     return processMessage; // NULL
   }
 
@@ -719,8 +807,7 @@ ProcessMessage* initSendProcessMessageToProcess(
     != processSuccess
   ) {
     if (processMessageRelease(processMessage) != processSuccess) {
-      logError(
-        "Could not release message from initSendProcessMessageToProcess.\n");
+      printString(_releaseFailedMessage);
     }
     processMessage = NULL;
   }
@@ -748,13 +835,15 @@ ProcessMessage* initSendProcessMessageToPid(int pid, int64_t type,
   void *data, size_t size, bool waiting
 ) {
   ProcessMessage *processMessage = NULL;
-  if ((pid < 0) || (pid > ((int) numProcesses))) {
+  ProcessDescriptor *process = processIdToDescriptor(pid);
+  if (process == NULL) {
     // Not a valid PID.  Fail.
-    logError("%d is not a valid PID.\n", pid);
+    printString(_invalidPidPrefix);
+    printInt(pid);
+    printString(_sendMessageErrorNewline);
     return processMessage; // NULL
   }
 
-  ProcessDescriptor *process = &allProcesses[pid - 1];
   processMessage
     = initSendProcessMessageToProcess(process, type, data, size, waiting);
   return processMessage;

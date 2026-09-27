@@ -346,6 +346,22 @@ typedef struct IpcCapability {
 extern ProcessDescriptor *allProcesses;
 extern size_t numProcesses;
 
+/// @fn ProcessDescriptor* processIdToDescriptor(int pid)
+///
+/// @brief Get the ProcessDescriptor for a process ID.
+///
+/// @param pid The process ID to look up.
+///
+/// @return Returns a pointer to the process's ProcessDescriptor on success,
+/// NULL on failure.
+static inline ProcessDescriptor* processIdToDescriptor(int pid) {
+  if ((pid <= 0) || (pid > ((int) numProcesses))) {
+    return NULL;
+  }
+
+  return &allProcesses[pid - 1];
+}
+
 // Exported functionality
 void* execOverlayCommand(void *args);
 void* runBlockOverlay(void *args);
@@ -354,6 +370,9 @@ int sendProcessMessageToProcess(
 int sendProcessMessageToPid(unsigned int pid, ProcessMessage *processMessage);
 ProcessMessage* getAvailableMessage(void);
 ProcessMessage* initSendProcessMessageToPid(int pid, int64_t type,
+  void *data, size_t size, bool waiting);
+ProcessMessage* initSendProcessMessageToProcess(
+  ProcessDescriptor *processDescriptor, int64_t type,
   void *data, size_t size, bool waiting);
 ExecArgs* execArgsDestroy(ExecArgs *execArgs);
 SpawnArgs* spawnArgsDestroy(SpawnArgs *spawnArgs);
