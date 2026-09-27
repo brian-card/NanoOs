@@ -1884,8 +1884,8 @@ ConsoleBuffer* nanoOsGetBuffer(void) {
   // is made, so we may have to try multiple times.  Do a while loop until we
   // get a buffer back or until an error occurs.
   while (consoleGetBufferArgs.consoleBuffer == NULL) {
-    ProcessMessage *processMessage = initSendProcessMessageToPid(
-      consolePid,
+    ProcessMessage *processMessage = initSendProcessMessageToProcess(
+      processIdToDescriptor(consolePid),
       CONSOLE_COMMAND_SIGNATURE | CONSOLE_GET_BUFFER,
       &consoleGetBufferArgs, sizeof(consoleGetBufferArgs), true);
     if (processMessage == NULL) {
@@ -1943,8 +1943,8 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *consoleBuffer) {
 
     if ((outputChannel != NULL) && (outputChannel->pid != PROCESS_ID_NOT_SET)) {
       if ((stream == stdout) || (stream == stderr)) {
-        ProcessMessage *processMessage = initSendProcessMessageToPid(
-          outputChannel->pid, outputChannel->messageType,
+        ProcessMessage *processMessage = initSendProcessMessageToProcess(
+          processIdToDescriptor(outputChannel->pid), outputChannel->messageType,
           /* data= */ consoleBuffer, /* size= */ sizeof(*consoleBuffer), true);
         if (processMessage != NULL) {
           processMessageWaitForDone(processMessage, NULL);
