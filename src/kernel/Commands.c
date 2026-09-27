@@ -614,7 +614,7 @@ void* runBuiltinShell(void *args) {
   const char *processUsername
     = getUsernameByUserId(getRunningProcess()->userId);
   while (1) {
-    printf("%s@%s built-in%s ",
+    printf("built-in %s@%s %s ",
       processUsername, schedulerGetHostname(), prompt);
     commandBuffer[0] = '\0';
     char *input = fgets(commandBuffer, sizeof(commandBuffer), stdin);
