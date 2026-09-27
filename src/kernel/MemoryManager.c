@@ -1345,7 +1345,7 @@ void* memoryManagerSendReallocMessage(void *ptr, size_t size) {
   reallocMessage.size = size;
   
   ProcessMessage *sent
-    = initSendProcessMessageToPid(memoryManagerPid,
+    = initSendProcessMessageToProcess(processIdToDescriptor(memoryManagerPid),
     MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_REALLOC,
     &reallocMessage, sizeof(reallocMessage), true);
   
@@ -1381,8 +1381,8 @@ void memoryManagerFree(void *ptr) {
   MemoryManagerFreeArgs memoryManagerFreeArgs = {
     .ptr = ptr,
   };
-  ProcessMessage *processMessage = initSendProcessMessageToPid(
-    memoryManagerPid,
+  ProcessMessage *processMessage = initSendProcessMessageToProcess(
+    processIdToDescriptor(memoryManagerPid),
     MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_FREE,
     &memoryManagerFreeArgs, sizeof(memoryManagerFreeArgs), false);
   if (processMessage == NULL) {
