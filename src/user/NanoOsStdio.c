@@ -137,6 +137,30 @@ int printString_(const char *string) {
   return bytesWritten;
 }
 
+/// @fn void ullToString64(volatile unsigned long long int number,
+///   char **nextChar)
+///
+/// @brief Convert a value greater than 32 bits to its base 10 representation.
+/// Split out both to save compute time and to save stack space.
+///
+/// @param number The non-negative number to convert.  Volatile to keep some
+///   compilers from inlining the division.
+/// @param nextChar A double pointer to the next character in the buffer to
+///   populate.
+///
+/// @return This function returns no value.
+static __attribute__((noinline)) void ullToString64(
+  volatile unsigned long long int number, char **nextChar
+) {
+  volatile unsigned long long int zero = 0;
+  volatile unsigned long long int ten = 10;
+  while (number > zero) {
+    **nextChar = '0' + (number % ten);
+    (*nextChar)--;
+    number /= ten;
+  }
+}
+
 /// @fn int ullToString(unsigned long long int number, char **nextChar)
 ///
 /// @brief Convert an unsigned long long int to its base 10 string
@@ -147,7 +171,7 @@ int printString_(const char *string) {
 ///   populate.
 ///
 /// @return Returns 0 on success, -errno on failure.
-int ullToString(volatile unsigned long long int number, char **nextChar) {
+int ullToString(unsigned long long int number, char **nextChar) {
   if (number == 0) {
     **nextChar = '0';
     // The caller expects nextChar to be positioned one character before the
@@ -157,12 +181,21 @@ int ullToString(volatile unsigned long long int number, char **nextChar) {
     return 0;
   }
 
-  volatile unsigned long long int zero = 0;
-  volatile unsigned long long int ten = 10;
-  while (number > zero) {
-    **nextChar = '0' + (number % ten);
+  if (number > 0xffffffffULL) {
+    ullToString64(number, nextChar);
+    return 0;
+  }
+
+  // Process the 32-bit portion of an unsigned long long int.  *DO NOT* rely on
+  // an integer being a 32-bit value.  There are multiple architectures we run
+  // on where that's not true.
+  uint32_t value = (uint32_t) number;
+  uint32_t zero = 0;
+  uint32_t ten = 10;
+  while (value > zero) {
+    **nextChar = '0' + ((char) (value % ten));
     (*nextChar)--;
-    number /= ten;
+    value /= ten;
   }
 
   return 0;
@@ -1052,13 +1085,28 @@ void sprintfRenderInteger(
 ) {
   char digits[SPRINTF_DIGITS_BUFFER_SIZE];
   int numDigits = 0;
-  const char *alphabet = (uppercase == true) ? _hexAlphabetUppercase : _hexAlphabet;
+  const char *alphabet = (uppercase == true)
+    ? _hexAlphabetUppercase
+    : _hexAlphabet;
 
   if (magnitude == 0) {
     digits[numDigits++] = '0';
+  } else if (magnitude <= 0xffffffffULL) {
+    // Render values that fit in 32 bits with 32-bit division.  This is a stack
+    // optimization.
+    //
+    // This needs to explicitly be a uint32_t, not an unsigned int.  Integers
+    // are not guaranteed to be 32-bit values on all platforms we support.
+    uint32_t value = (uint32_t) magnitude;
+    uint32_t zero = 0;
+    while (value > zero) {
+      digits[numDigits++] = alphabet[value % ((uint32_t) base)];
+      value /= base;
+    }
   } else {
     while (magnitude > 0) {
-      digits[numDigits++] = alphabet[(unsigned int) (magnitude % base)];
+      digits[numDigits++] = alphabet[(unsigned int) (magnitude %
+        ((unsigned long long int) base))];
       magnitude /= base;
     }
   }
