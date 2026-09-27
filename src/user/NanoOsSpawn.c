@@ -144,7 +144,7 @@ int nanoOsSpawn(
   char *const argv[], char *const envp[]
 ) {
   int returnValue = 0;
-  if ((path == NULL) || (argv == NULL) || (argv[0] == NULL)) {
+  if ((pid == NULL) || (path == NULL) || (argv == NULL) || (argv[0] == NULL)) {
     return EFAULT;
   }
 
@@ -153,6 +153,7 @@ int nanoOsSpawn(
     return ENOMEM;
   }
 
+  *pid = -1; // Default error value.
   spawnArgs->newPid = pid;
 
   spawnArgs->path = (char*) malloc(strlen(path) + 1);
