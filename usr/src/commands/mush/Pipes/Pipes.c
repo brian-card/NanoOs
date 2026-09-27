@@ -59,125 +59,97 @@ void* processPipes(void *args) {
   // Used in the error case at the bottom.
   int tmpErrno = 0;
   
-  char *input = (char*) args;
+  FsCommandArgs *fsCommandArgs = (FsCommandArgs*) args;
   
   printDebugString("Evaluating command line ");
-  printDebugString(input);
+  printDebugString(fsCommandArgs->commandLine);
   printDebugString("\n");
   
-  uint8_t numPipes = 0;
-  char *pipeAt = strchr(input, '|');
-  while (pipeAt != NULL) {
-    numPipes++;
-    pipeAt = pipeAt + 1;
-    pipeAt = strchr(pipeAt, '|');
+  char *pipeAt = NULL;
+  if (fsCommandArgs->numProcessesLaunched == 0) {
+    pipeAt = strchr(fsCommandArgs->commandLine, '|');
+    fsCommandArgs->numPipes = 0;
+    while (pipeAt != NULL) {
+      fsCommandArgs->numPipes++;
+      pipeAt = pipeAt + 1;
+      pipeAt = strchr(pipeAt, '|');
+    }
+    
+    // We need to allocate memory for everything in one block.  If this fails,
+    // everything else fails.  Allocating a single block means that everything
+    // is represented by a single MemNode in dynamic memory, which (a) keeps us
+    // from punching a bunch of holes in dynamic memory and (b) reduces the
+    // metadata consumption, thereby making more overall RAM available in the
+    // system.
+    fsCommandArgs->fileActions = (posix_spawn_file_actions_t*)
+      calloc(1,
+          sizeof(posix_spawn_file_actions_t)
+        + sizeof(int) * fsCommandArgs->numPipes // fsCommandArgs->pids
+        + sizeof(int) * 4                       // fsCommandArgs->pipes
+      );
+    if (fsCommandArgs->fileActions == NULL) {
+      errno = ENOMEM;
+      goto exit;
+    }
+    fsCommandArgs->pids = (int*) &fsCommandArgs->fileActions[1];
+    fsCommandArgs->pipes[0] = &fsCommandArgs->pids[fsCommandArgs->numPipes];
+    fsCommandArgs->pipes[1] = &fsCommandArgs->pipes[0][2];
+    fsCommandArgs->pipeIndex = 0;
+  } else if ((fsCommandArgs->pids[fsCommandArgs->numProcessesLaunched] < 0)
+    || (errno != 0)
+  ) {
+    goto freeFileActions;
   }
   
-  // We need to keep track of the processes we launch in case something in the
-  // chain fails.  The number of commands we'll launch in the background is the
-  // number of pipes in the command.
-  int *pids = (int*) calloc(1, sizeof(int) * numPipes);
-  if (pids == NULL) {
-    errno = ENOMEM;
-    goto exit;
-  }
-  // Reset numPipes to use as an index into the pids array below.
-  numPipes = 0;
-  
-  bool firstCommand = true;
-  FsCommandArgs *fsCommandArgs = (FsCommandArgs*) malloc(sizeof(FsCommandArgs));
-  if (fsCommandArgs == NULL) {
-    errno = ENOMEM;
-    goto freePids;
-  }
-  
-  // Pipe
-  int pipes[2][2];
-  int pipeIndex = 0;
-  
-  // File actions
-  posix_spawn_file_actions_t *fileActions
-    = (posix_spawn_file_actions_t*) malloc(sizeof(posix_spawn_file_actions_t));
-  if (fileActions == NULL) {
-    errno = ENOMEM;
-    goto freeFsCommandArgs;
-  }
-  
-  pipeAt = strchr(input, '|');
-  while (pipeAt != NULL) {
+  pipeAt = strchr(fsCommandArgs->commandLine, '|');
+  if (pipeAt != NULL) {
     *pipeAt = '\0';
     
     // Create the pipes
-    if (pipe(pipes[pipeIndex]) != 0) {
+    if (pipe(fsCommandArgs->pipes[fsCommandArgs->pipeIndex]) != 0) {
       // errno is already set
       goto freeFileActions;
     }
-    if (fcntl(pipes[pipeIndex][0], F_SETFD, FD_CLOEXEC) != 0) {
+    if (fcntl(fsCommandArgs->pipes[fsCommandArgs->pipeIndex][0],
+      F_SETFD, FD_CLOEXEC) != 0
+    ) {
       // errno is already set
       goto freeFileActions;
     }
-    if (fcntl(pipes[pipeIndex][1], F_SETFD, FD_CLOEXEC) != 0) {
+    if (fcntl(fsCommandArgs->pipes[fsCommandArgs->pipeIndex][1],
+      F_SETFD, FD_CLOEXEC) != 0
+    ) {
       // errno is already set
       goto freeFileActions;
     }
     
     // Initialize the fileActions
-    errno = posix_spawn_file_actions_init(fileActions);
+    errno = posix_spawn_file_actions_init(fsCommandArgs->fileActions);
     if (errno != 0) {
       // errno is already set
       goto freeFileActions;
     }
-    if (firstCommand == false) {
-      errno = posix_spawn_file_actions_adddup2(fileActions,
-        pipes[pipeIndex ^ 1][0], STDIN_FILENO);
+    if (fsCommandArgs->numProcessesLaunched > 0) {
+      errno = posix_spawn_file_actions_adddup2(fsCommandArgs->fileActions,
+        fsCommandArgs->pipes[fsCommandArgs->pipeIndex ^ 1][0], STDIN_FILENO);
       if (errno != 0) {
         // errno is already set
-        posix_spawn_file_actions_destroy(fileActions);
+        posix_spawn_file_actions_destroy(fsCommandArgs->fileActions);
         goto freeFileActions;
       }
     }
-    errno = posix_spawn_file_actions_adddup2(fileActions,
-      pipes[pipeIndex][1], STDOUT_FILENO);
+    errno = posix_spawn_file_actions_adddup2(fsCommandArgs->fileActions,
+      fsCommandArgs->pipes[fsCommandArgs->pipeIndex][1], STDOUT_FILENO);
     if (errno != 0) {
       // errno is already set
-      posix_spawn_file_actions_destroy(fileActions);
+      posix_spawn_file_actions_destroy(fsCommandArgs->fileActions);
       goto freeFileActions;
     }
     
-    // Launch the command in the background
-    fsCommandArgs->commandLine = input;
+    // Launch the command in the background by having the caller run the
+    // runFsCommand overlay function.
     fsCommandArgs->launchBackground = true;
-    fsCommandArgs->fileActions = fileActions;
-    pids[numPipes] = (int) ((intptr_t) callOverlayFunction(
-      OVERLAY_SAME_NAMESPACE, "FilesystemCommands", "runFsCommand",
-      fsCommandArgs));
-    if (pids[numPipes] <= 0) {
-      // errno is already set
-      fprintf(stderr, "Launching \"%s\" failed\n", fsCommandArgs->commandLine);
-      close(pipes[pipeIndex ^ 1][1]);
-      posix_spawn_file_actions_destroy(fileActions);
-      goto freeFileActions;
-    }
-    numPipes++;
-    
-    // Destroy the fileActions
-    errno = posix_spawn_file_actions_destroy(fileActions);
-    if (errno != 0) {
-      // errno is already set
-      goto freeFileActions;
-    }
-    
-    if (firstCommand == false) {
-      // Close the last command's pipe
-      close(pipes[pipeIndex ^ 1][0]);
-      close(pipes[pipeIndex ^ 1][1]);
-    }
-    
-    firstCommand = false;
-    pipeIndex ^= 1;
-    
-    input = pipeAt + 1;
-    pipeAt = strchr(input, '|');
+    return fsCommandArgs;
   }
   
   // Make a backup copy of our stdin in case something goes wrong.
@@ -187,50 +159,53 @@ void* processPipes(void *args) {
   }
   
   // dup the last command's pipe onto our stdin instead of using file actions
-  if (dup2(pipes[pipeIndex ^ 1][0], STDIN_FILENO) != 0) {
+  if (dup2(fsCommandArgs->pipes[fsCommandArgs->pipeIndex ^ 1][0],
+    STDIN_FILENO) != 0
+  ) {
     // errno is already set
     goto freeFileActions;
   }
-  close(pipes[pipeIndex ^ 1][0]);
-  close(pipes[pipeIndex ^ 1][1]);
+  close(fsCommandArgs->pipes[fsCommandArgs->pipeIndex ^ 1][0]);
+  close(fsCommandArgs->pipes[fsCommandArgs->pipeIndex ^ 1][1]);
   
-  // Launch the last command in the foreground
-  fsCommandArgs->commandLine = input;
+  // Launch the last command in the foreground by having the caller run the
+  // runFsCommand overlay function.
   fsCommandArgs->launchBackground = false;
-  fsCommandArgs->fileActions = NULL;
-  callOverlayFunction(
-    OVERLAY_SAME_NAMESPACE, "FilesystemCommands", "runFsCommand",
-    fsCommandArgs);
-  fprintf(stderr, "Launching \"%s\" failed\n", fsCommandArgs->commandLine);
+  free(fsCommandArgs->fileActions); fsCommandArgs->fileActions = NULL;
+  fsCommandArgs->numPipes = 0;
+  fsCommandArgs->pids = NULL;
+  fsCommandArgs->pipes[0] = NULL;
+  fsCommandArgs->pipes[1] = NULL;
+  fsCommandArgs->numProcessesLaunched = 0;
+  fsCommandArgs->pipeIndex = 0;
+  return fsCommandArgs;
   
-  // If we made it this far then errno is already set.
-  // Copy our backup stdin back to STDIN_FILENO and close the dup.
-  if (dup2(stdinDup, STDIN_FILENO) != STDIN_FILENO) {
-    fprintf(stderr, "ERROR: dup2 of stdinDup onto STDIN_FILENO failed\n");
-  }
-  tmpErrno = errno;
-  close(stdinDup);
-  errno = tmpErrno;
+  // No error is possible here, so we're done and we don't need to do any
+  // cleanup.
   
 freeFileActions:
-  tmpErrno = errno;
-  posix_spawn_file_actions_destroy(fileActions);
-  errno = tmpErrno;
-  free(fileActions); fileActions = NULL;
-  
-freeFsCommandArgs:
-  free(fsCommandArgs); fsCommandArgs = NULL;
-  
-freePids:
   // kill potentially changes the value of errno.  We want to use the value
   // that was set from above.
   tmpErrno = errno;
-  for (int ii = 0; ii < numPipes; ii++) {
-    kill(pids[ii], SIGKILL);
+  for (int ii = 0; ii < fsCommandArgs->numProcessesLaunched; ii++) {
+    kill(fsCommandArgs->pids[ii], SIGKILL);
   }
   errno = tmpErrno;
-  free(pids); pids = NULL;
 
+  // All memory is allocated under fileActions, so that's the only pointer we
+  // need to free.
+  tmpErrno = errno;
+  posix_spawn_file_actions_destroy(fsCommandArgs->fileActions);
+  errno = tmpErrno;
+  free(fsCommandArgs->fileActions); fsCommandArgs->fileActions = NULL;
+  fsCommandArgs->launchBackground = false;
+  fsCommandArgs->numPipes = 0;
+  fsCommandArgs->pids = NULL;
+  fsCommandArgs->pipes[0] = NULL;
+  fsCommandArgs->pipes[1] = NULL;
+  fsCommandArgs->numProcessesLaunched = 0;
+  fsCommandArgs->pipeIndex = 0;
+  
 exit:
   // The fact that we failed likely means that there wasn't enough contiguous
   // memory in the system to start a process.  Even if that's not true (because,

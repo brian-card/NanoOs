@@ -47,27 +47,31 @@
 /// @param args A pointer to an FsCommandArgs structure containing the arguments
 ///   for this function.
 ///
-/// @return If this function execs the command line provided, it does not
-/// return.  If it spawns a new process, the PID of the spawned process is
-/// returned, cast to a void*.  On failure, -errno is returned, cast to a void*.
+/// @return On success, the value of the provided FsCommandArgs pointer is
+/// returned.  On failure the value of errno is set and NULL is returned.
 void* runFsCommand(void *args) {
   FsCommandArgs *fsCommandArgs = (FsCommandArgs*) args;
-  char *commandLine = fsCommandArgs->commandLine;
-  bool launchBackground = fsCommandArgs->launchBackground;
-  posix_spawn_file_actions_t *fileActions = fsCommandArgs->fileActions;
-
+  if (fsCommandArgs == NULL) {
+    fprintf(stderr, "ERROR:  NULL fsCommandArgs provided to runFsCommand\n");
+    return NULL;
+  }
+  
   printDebugString("Evaluating command line ");
-  printDebugString(commandLine);
+  printDebugString(fsCommandArgs->commandLine);
   printDebugString("\n");
   
-  void *returnValue = (void*) ((intptr_t) 0); // Default to good status.
-  
-  commandLine = &commandLine[strspn(commandLine, " \t")];
-  const char *charAt = strchr(commandLine, ' ');
+  fsCommandArgs->commandLine
+    = &fsCommandArgs->commandLine[strspn(fsCommandArgs->commandLine, " \t")];
+  const char *charAt = strchr(fsCommandArgs->commandLine, ' ');
   if (charAt == NULL) {
-    charAt = commandLine + strlen(commandLine);
+    charAt = fsCommandArgs->commandLine + strlen(fsCommandArgs->commandLine);
   }
-  size_t commandNameLength = ((uintptr_t) charAt) - ((uintptr_t) commandLine);
+  size_t commandNameLength
+    = ((uintptr_t) charAt)
+    - ((uintptr_t) fsCommandArgs->commandLine);
+  size_t commandLineLength = strlen(fsCommandArgs->commandLine);
+  
+  void *returnValue = fsCommandArgs;
   
   char *commandPath = NULL;
   const char *path = getenv("PATH");
@@ -86,7 +90,8 @@ void* runFsCommand(void *args) {
     commandPath
       = (char*) malloc(pathDirLength + commandNameLength + OVERLAY_EXT_LEN + 7);
     if (commandPath == NULL) {
-      returnValue = (void*) ((intptr_t) -ENOMEM);
+      errno = ENOMEM;
+      returnValue = NULL;
       goto exit;
     }
     
@@ -98,7 +103,7 @@ void* runFsCommand(void *args) {
       pathDirLength++;
     }
     commandPath[pathDirLength] = '\0';
-    strncat(commandPath, commandLine, commandNameLength);
+    strncat(commandPath, fsCommandArgs->commandLine, commandNameLength);
     commandPath[pathDirLength + commandNameLength] = '\0';
     strcat(commandPath, "/main");
     strcat(commandPath, OVERLAY_EXT);
@@ -118,9 +123,10 @@ void* runFsCommand(void *args) {
   
   if (commandPath == NULL) {
     // No such command on the filesystem.
-    fputs(commandLine, stdout);
+    fputs(fsCommandArgs->commandLine, stdout);
     fputs(": command not found\n", stdout);
-    returnValue = (void*) ((intptr_t) -ENOENT);
+    errno = ENOENT;
+    returnValue = NULL;
     goto exit;
   }
   
@@ -134,24 +140,50 @@ void* runFsCommand(void *args) {
   // above, so we can blindly dereference the value returned by strrchr here.
   *strrchr(commandPath, '/') = '\0';
   
-  char **argv = parseArgs(commandLine, NULL);
+  char **argv = parseArgs(fsCommandArgs->commandLine, NULL);
   if (argv == NULL) {
     fprintf(stderr, "Failed to parse command line\n");
     free(commandPath); commandPath = NULL;
-    returnValue = (void*) ((intptr_t) -EINVAL);
+    errno = EINVAL;
+    returnValue = NULL;
     goto exit;
   }
   
   // Run the command from the filesystem.
-  if (launchBackground == false) {
+  if (fsCommandArgs->launchBackground == false) {
     // Run the command in the foreground.  i.e. Replace this shell.  This is
     // the usual case.
     execve(commandPath, argv, environ);
-  } else { // launchBackground == true
+  } else { // fsCommandArgs->launchBackground == true
     // Spawn a new task in the background.
     pid_t pid; // We'll return this if posix_spawn is successful.
-    errno = posix_spawn(&pid, commandPath, fileActions, NULL, argv, environ);
-    returnValue = (void*) ((intptr_t) pid);
+    errno = 0;
+    errno = posix_spawn(&pid, commandPath, fsCommandArgs->fileActions,
+      NULL, argv, environ);
+    if (fsCommandArgs->numPipes > 0) {
+      // We're in the middle of processing a command line with pipes, so we
+      // need to behave differently.
+      fsCommandArgs->pids[fsCommandArgs->numProcessesLaunched] = pid;
+      if ((pid <= 0) || (errno != 0)) {
+        fprintf(stderr, "Launching \"%s\" failed\n",
+          fsCommandArgs->commandLine);
+        if (errno == 0) {
+          // This should be impossible since we set errno to the return value
+          // of posix_spawn, but don't chance it.
+          errno = EAGAIN; // Generic "try again later" error.
+        }
+        close(fsCommandArgs->pipes[fsCommandArgs->pipeIndex ^ 1][1]);
+        return fsCommandArgs;
+      }
+      if (fsCommandArgs->numProcessesLaunched > 0) {
+        close(fsCommandArgs->pipes[fsCommandArgs->pipeIndex ^ 1][0]);
+        close(fsCommandArgs->pipes[fsCommandArgs->pipeIndex ^ 1][1]);
+      }
+      fsCommandArgs->numProcessesLaunched++;
+      errno = posix_spawn_file_actions_destroy(fsCommandArgs->fileActions);
+      fsCommandArgs->pipeIndex ^= 1;
+      fsCommandArgs->commandLine += commandLineLength + 1;
+    }
   }
   
   // If we made it this far then we either called posix_spawn or execve failed.
@@ -160,13 +192,9 @@ void* runFsCommand(void *args) {
   free(argv); argv = NULL;
   
   if (errno != 0) {
-    // We need to return a negative errno from this function.  execve sets the
-    // value of errno on failure, so we don't have to do anything there.  Above,
-    // we set the return value of posix_spawn to errno so that we can just use
-    // whatever the value of errno is here for the return value.  We return a
-    // negative errno on failure, so negate whatever errno is.
+    // We need to return a NULL from this function.
     fprintf(stderr, "%s failed\n", __func__);
-    returnValue = (void*) ((intptr_t) -errno);
+    returnValue = NULL;
   }
   
 exit:

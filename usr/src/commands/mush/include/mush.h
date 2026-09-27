@@ -54,10 +54,25 @@ extern "C"
 ///   background.
 /// @param fileActions A pointer to the posix_spawn_file_actions_t to use with
 ///   the call to posix_spawn if launching the command in the background.
+/// @param numPipes The number of '|' characters in the commandLine.  This is
+///   also the number of process IDs in the pids array.
+/// @param pids Array of process IDs that are launched during pipe parsing.
+/// @param pipes Array of int arrays.  Each array an element points to is two
+///   ints in size.
+/// @param numProcessesLaunched The number of processes successfully launched
+///   so far.  i.e. The number of elements in the pids array that hold valid
+///   processIds.
+/// @param pipeIndex The index into the pipes array that is to be used for the
+///   next process launched.
 typedef struct FsCommandArgs {
   char *commandLine;
   bool launchBackground;
   posix_spawn_file_actions_t *fileActions;
+  uint8_t numPipes;
+  int *pids;
+  int *pipes[2];
+  int numProcessesLaunched;
+  int pipeIndex;
 } FsCommandArgs;
 
 #ifdef __cplusplus

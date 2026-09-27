@@ -26,7 +26,7 @@ CACHE_DIR = os.path.join(E2E_DIR, ".cache")
 HOSTNAME = "nanoe2e"
 BLOCK_FS = "contiguous"
 SIM_BINARIES = ["nano-os-sim_stripped", "nano-os-sim"]
-PROMPT = r"@%s mush[#$] " % HOSTNAME
+PROMPT = r"mush [^\r\n]*@%s:[^\r\n]*[#$] " % HOSTNAME
 
 VERBOSE = False
 
@@ -62,7 +62,12 @@ class Session:
         self.tmp = tempfile.mkdtemp(prefix="nanoe2e-")
         img_copy = os.path.join(self.tmp, "disk.img")
         shutil.copyfile(image, img_copy)
-        self.child = pexpect.spawn(sim_bin, [img_copy], encoding="utf-8", timeout=15)
+        # codec_errors="replace": a misbehaving simulator can emit bytes that
+        # aren't valid UTF-8, and a UnicodeDecodeError out of expect() aborts
+        # the test with a decoding traceback instead of reporting what the
+        # simulator actually did.
+        self.child = pexpect.spawn(sim_bin, [img_copy], encoding="utf-8",
+                                   codec_errors="replace", timeout=15)
         if VERBOSE:
             self.child.logfile_read = sys.stdout
 

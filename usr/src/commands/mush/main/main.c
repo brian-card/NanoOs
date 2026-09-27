@@ -28,6 +28,7 @@
 // Doxygen marker
 /// @file
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -35,10 +36,20 @@
 #include "mush.h"
 #include "NanoOsUtils.h"
 
+/// @def MUSH_COMMAND_LINE_LENGTH
+///
+/// @brief The maximum number of bytes that the CLI can accept in MUSH.
+#define MUSH_COMMAND_LINE_LENGTH 96
+
 int main(int argc, char **argv) {
   (void) argc;
   
-  char buffer[96];
+  char *buffer = (char*) malloc(MUSH_COMMAND_LINE_LENGTH);
+  if (buffer == NULL) {
+    fprintf(stderr,
+      "ERROR: Could not allocate space for mush command line buffer\n");
+    return 1;
+  }
   *buffer = '\0';
   
   intptr_t returnValue = 0;
@@ -56,8 +67,12 @@ int main(int argc, char **argv) {
   }
   
   do {
-    printf("%s@%s mush%c ", username, hostname, prompt);
-    char *input = fgets(buffer, 96, stdin);
+    char *pwd = getenv("PWD");
+    if (pwd == NULL) {
+      pwd = "<unknown directory>";
+    }
+    printf("mush %s@%s:%s%c ", username, hostname, pwd, prompt);
+    char *input = fgets(buffer, MUSH_COMMAND_LINE_LENGTH, stdin);
     if (input == NULL) {
       // Our stdin file descriptor has been closed.  Bail.
       break;
@@ -106,8 +121,24 @@ int main(int argc, char **argv) {
       printDebugString("Command is *NOT* a builtin\n");
       if (strchr(input, '|')) {
         // Command line contains pipes.  Process it that way.
-        returnValue = (intptr_t) callOverlayFunction(
-          OVERLAY_SAME_NAMESPACE, "Pipes", "processPipes", input);
+        fsCommandArgs.commandLine = input;
+        fsCommandArgs.launchBackground = false;
+        fsCommandArgs.fileActions = NULL;
+        fsCommandArgs.numPipes = 0;
+        fsCommandArgs.pids = NULL;
+        fsCommandArgs.pipes[0] = NULL;
+        fsCommandArgs.pipes[1] = NULL;
+        fsCommandArgs.numProcessesLaunched = 0;
+        fsCommandArgs.pipeIndex = 0;
+        errno = 0;
+        FsCommandArgs *nextCommand = &fsCommandArgs;
+        while (nextCommand == &fsCommandArgs) {
+          nextCommand = (FsCommandArgs*) callOverlayFunction(
+            OVERLAY_SAME_NAMESPACE, "Pipes", "processPipes", &fsCommandArgs);
+          nextCommand = callOverlayFunction(
+            OVERLAY_SAME_NAMESPACE, "FilesystemCommands", "runFsCommand",
+            nextCommand);
+        }
       } else {
         fsCommandArgs.commandLine = input;
         fsCommandArgs.launchBackground = false;
@@ -117,12 +148,21 @@ int main(int argc, char **argv) {
           fsCommandArgs.launchBackground = true;
         }
         fsCommandArgs.fileActions = NULL;
+        fsCommandArgs.numPipes = 0;
+        fsCommandArgs.pids = NULL;
+        fsCommandArgs.pipes[0] = NULL;
+        fsCommandArgs.pipes[1] = NULL;
+        fsCommandArgs.numProcessesLaunched = 0;
+        fsCommandArgs.pipeIndex = 0;
+        errno = 0;
         returnValue = (intptr_t) callOverlayFunction(
           OVERLAY_SAME_NAMESPACE, "FilesystemCommands", "runFsCommand",
           &fsCommandArgs);
       }
     }
   } while (returnValue != -1);
+  
+  free(buffer);
   
   printf("Gracefully exiting %s\n", argv[0]);
   return 0;
