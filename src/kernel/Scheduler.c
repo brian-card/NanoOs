@@ -3908,6 +3908,11 @@ void checkForTimeouts(SchedulerState *schedulerState) {
   return;
 }
 
+/// @var schedulerPreemptionInhibited
+///
+/// @brief Set by code that needs to guard a critical section.
+volatile bool schedulerPreemptionInhibited = false;
+
 /// @fn void forceYield(void)
 ///
 /// @brief Callback that's invoked when the preemption timer fires.  Wrapper
@@ -3915,6 +3920,11 @@ void checkForTimeouts(SchedulerState *schedulerState) {
 ///
 /// @return This function returns no value.
 void forceYield(void) {
+  if (schedulerPreemptionInhibited == true) {
+    // The running process is within a critical section.  Don't preempt it.
+    return;
+  }
+
   processYieldTo(&allProcesses[schedulerPid - 1]);
 }
 

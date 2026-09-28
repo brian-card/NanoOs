@@ -241,6 +241,7 @@ bool schedulerIsInitialized(void);
 const char* schedulerPeekHostname(void);
 int schedulerGetPreemptionTimer(void);
 void schedulerDeinitialize(void);
+
 ProcessId schedulerGetFirstShellPid(void);
 ProcessId reserveProcessSlot(void);
 int processQueuePush(
@@ -267,6 +268,9 @@ extern Thread *schedulerThread;
 
 // The well-known ProcessId of the scheduler.  See Scheduler.c for details.
 extern ProcessId schedulerPid;
+
+// Set to inhibit a forced preemption during a critical section.
+extern volatile bool schedulerPreemptionInhibited;
 
 #ifdef __cplusplus
 } // extern "C"

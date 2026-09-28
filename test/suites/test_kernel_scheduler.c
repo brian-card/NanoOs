@@ -73,3 +73,44 @@ NANO_OS_KERNEL_TEST(sched, num_running_processes_is_sane) {
   NANO_OS_ASSERT_TRUE(args.returnValue >= 4);
   NANO_OS_ASSERT_TRUE(args.returnValue <= (int) numProcesses);
 }
+
+// forceYield() is the scheduler's preemption callback.  It has no declaration
+// in Scheduler.h, so declare it the same way nanoOsGetpid is declared above.
+void forceYield(void);
+
+NANO_OS_KERNEL_TEST(sched, preemption_inhibit_blocks_force_yield) {
+  NANO_OS_ASSERT_TRUE(schedulerPreemptionInhibited == false);
+
+  // An inhibited forceYield must decline the switch, return to its caller,
+  // and leave the flag set for the critical section that owns it.
+  unsigned int pidBefore = nanoOsGetpid();
+  schedulerPreemptionInhibited = true;
+  forceYield();
+  NANO_OS_ASSERT_TRUE(schedulerPreemptionInhibited == true);
+  NANO_OS_ASSERT_EQ_INT((long long) pidBefore, (long long) nanoOsGetpid());
+
+  // Uninhibited, the same call is a normal yield that must round-trip back to
+  // this process with the flag still clear.
+  schedulerPreemptionInhibited = false;
+  forceYield();
+  NANO_OS_ASSERT_TRUE(schedulerPreemptionInhibited == false);
+  NANO_OS_ASSERT_EQ_INT((long long) pidBefore, (long long) nanoOsGetpid());
+}
+
+NANO_OS_KERNEL_TEST(sched, preemption_inhibit_ipc_still_works) {
+  // A message send takes the destination queue's mutex, which is where the
+  // atomics that use the inhibit flag actually run.  Confirm a full send,
+  // wait and release round-trip still completes with the flag left clear.
+  SchedulerGetNumRunningProcessesArgs args;
+  memset(&args, 0, sizeof(args));
+
+  ProcessMessage *msg = initSendProcessMessageToPid(
+    schedulerPid,
+    SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_GET_NUM_RUNNING_PROCESSES,
+    &args, sizeof(args), true);
+  NANO_OS_ASSERT_NOT_NULL(msg);
+  NANO_OS_ASSERT_EQ_INT(0, processMessageWaitForDone(msg, NULL));
+  processMessageRelease(msg);
+  NANO_OS_ASSERT_TRUE(schedulerPreemptionInhibited == false);
+  NANO_OS_ASSERT_TRUE(args.returnValue >= 4);
+}
