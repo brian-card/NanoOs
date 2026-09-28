@@ -45,9 +45,9 @@
 void* atomic_load(const volatile void *object) {
   void **objectPtr = (void**) object;
 
-  schedulerPreemptionInhibited = true;
+  schedulerInhibitPreemption();
   void *returnValue = *objectPtr;
-  schedulerPreemptionInhibited = false;
+  schedulerAllowPreemption();
 
   return returnValue;
 }
@@ -55,9 +55,9 @@ void* atomic_load(const volatile void *object) {
 void atomic_store(volatile void *object, void *desired) {
   void **objectPtr = (void**) object;
 
-  schedulerPreemptionInhibited = true;
+  schedulerInhibitPreemption();
   *objectPtr = desired;
-  schedulerPreemptionInhibited = false;
+  schedulerAllowPreemption();
 }
 
 bool atomic_compare_exchange_strong(
@@ -66,7 +66,7 @@ bool atomic_compare_exchange_strong(
   void **objectPtr = (void**) object;
   void **expectedPtr = (void**) expected;
 
-  schedulerPreemptionInhibited = true;
+  schedulerInhibitPreemption();
 
   bool success = false;
   if (*objectPtr == *expectedPtr) {
@@ -76,7 +76,7 @@ bool atomic_compare_exchange_strong(
     *expectedPtr = *objectPtr;
   }
 
-  schedulerPreemptionInhibited = false;
+  schedulerAllowPreemption();
 
   return success;
 }

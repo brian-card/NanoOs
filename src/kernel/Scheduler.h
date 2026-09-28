@@ -272,6 +272,33 @@ extern ProcessId schedulerPid;
 // Set to inhibit a forced preemption during a critical section.
 extern volatile bool schedulerPreemptionInhibited;
 
+// Set by forceYield when it declines a preemption because of the above.
+extern volatile bool schedulerPreemptionPending;
+
+void forceYield(void);
+
+/// @fn void schedulerInhibitPreemption(void)
+///
+/// @brief Begin a critical section.
+///
+/// @return This function returns no value.
+static inline void schedulerInhibitPreemption(void) {
+  schedulerPreemptionInhibited = true;
+}
+
+/// @fn void schedulerAllowPreemption(void)
+///
+/// @brief End a critical section and take any preemption that was deferred.
+///
+/// @return This function returns no value.
+static inline void schedulerAllowPreemption(void) {
+  schedulerPreemptionInhibited = false;
+  if (schedulerPreemptionPending == true) {
+    schedulerPreemptionPending = false;
+    forceYield();
+  }
+}
+
 #ifdef __cplusplus
 } // extern "C"
 #endif

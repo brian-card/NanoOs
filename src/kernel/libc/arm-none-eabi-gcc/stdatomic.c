@@ -52,7 +52,7 @@ bool __atomic_compare_exchange_4(void *ptr, void *expected, uint32_t desired,
   (void) success_memorder;
   (void) failure_memorder;
 
-  schedulerPreemptionInhibited = true;
+  schedulerInhibitPreemption();
 
   bool success = false;
   if (*((uint32_t*) ptr) == *((uint32_t*) expected)) {
@@ -62,7 +62,7 @@ bool __atomic_compare_exchange_4(void *ptr, void *expected, uint32_t desired,
     *((uint32_t*) expected) = *((uint32_t*) ptr);
   }
 
-  schedulerPreemptionInhibited = false;
+  schedulerAllowPreemption();
 
   return success;
 }

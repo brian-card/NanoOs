@@ -3913,6 +3913,12 @@ void checkForTimeouts(SchedulerState *schedulerState) {
 /// @brief Set by code that needs to guard a critical section.
 volatile bool schedulerPreemptionInhibited = false;
 
+/// @var schedulerPreemptionPending
+///
+/// @brief Set when a preemption is deferred so that it can be taken as soon as
+/// the critical section ends.
+volatile bool schedulerPreemptionPending = false;
+
 /// @fn void forceYield(void)
 ///
 /// @brief Callback that's invoked when the preemption timer fires.  Wrapper
@@ -3922,6 +3928,10 @@ volatile bool schedulerPreemptionInhibited = false;
 void forceYield(void) {
   if (schedulerPreemptionInhibited == true) {
     // The running process is within a critical section.  Don't preempt it.
+    // Note that a preemption is pending so that schedulerAllowPreemption will
+    // invoke us again with schedulerPreemptionInhibited set to false when the
+    // critical section ends.
+    schedulerPreemptionPending = true;
     return;
   }
 
