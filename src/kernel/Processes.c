@@ -680,7 +680,7 @@ int sendProcessMessageToProcess(
     errno = EPERM;
     returnValue = processError;
     printString(_couldNotSendMessageTypePrefix);
-    printHex(processMessageType(processMessage) & 0xff);
+    printInt(processMessageType(processMessage) & 0xff);
     printString(_fromProcessInfix);
     printInt(getRunningPid());
     printString(_toProcessInfix);
