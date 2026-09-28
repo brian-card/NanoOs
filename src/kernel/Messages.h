@@ -151,8 +151,8 @@ typedef union msg_endpoint_t {
 ///   waiting on a response message from the recipient of the message.
 /// @param done A Boolean flag to indicate whether or not the receiving entity
 ///   has handled the message yet.
-/// @param in_use A Boolean flag to indicate whether or not this msg_t is in
-///   use.
+/// @param in_use NULL when the msg_t is free, the address of the msg_t itself
+///   when in use.
 /// @param from A msg_endpoint_t union that represents the sending entity.
 /// @param to A msg_endpoint_t union that represents the receiveing entity.
 /// @param condition A msg_cnd_t union that will allow for signalling between
@@ -172,13 +172,13 @@ typedef struct msg_t {
   void *data;
   size_t size;
   struct msg_t *next;
-  bool waiting;
-  bool done;
-  bool in_use;
+  void *in_use;
   msg_endpoint_t from;
   msg_endpoint_t to;
   msg_cnd_t condition;
   msg_mtx_t lock;
+  bool waiting;
+  bool done;
   bool configured;
   bool dynamically_allocated;
   msg_sync_t *msg_sync;
@@ -257,7 +257,7 @@ void* msg_element(msg_t *msg, msg_element_t msg_element);
 #define msg_done(msg_ptr) \
   (*((bool*) msg_element((msg_ptr), MSG_ELEMENT_DONE)))
 #define msg_in_use(msg_ptr) \
-  (*((bool*) msg_element((msg_ptr), MSG_ELEMENT_IN_USE)))
+  (*((void**) msg_element((msg_ptr), MSG_ELEMENT_IN_USE)))
 #define msg_from(msg_ptr) \
   (*((msg_endpoint_t*) msg_element((msg_ptr), MSG_ELEMENT_FROM)))
 #define msg_to(msg_ptr) \

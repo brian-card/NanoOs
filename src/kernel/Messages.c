@@ -101,14 +101,14 @@ static inline int msg_start_use(msg_t *msg, msg_safety_t msg_safety) {
   int return_value = msg_success;
   
   if (msg != NULL) {
-    if (msg->in_use == false) {
+    void *expected = NULL;
+    if (atomic_compare_exchange_strong(&msg->in_use, &expected, msg) == true) {
       msg->type = 0;
       msg->data = NULL;
       msg->size = 0;
       msg->next = NULL;
       msg->waiting = false;
       msg->done = true;
-      msg->in_use = true;
       memset(&msg->from, 0, sizeof(msg->from));
       memset(&msg->to, 0, sizeof(msg->to));
       if (msg->configured == false) {
@@ -182,7 +182,7 @@ msg_t* msg_destroy(msg_t *msg) {
   // Don't touch msg->size.
   // Don't touch msg->next.
   // Don't touch msg->waiting.
-  msg->in_use = false;
+  msg->in_use = NULL;
   // Don't touch from.
   if (msg->configured == true) {
     if (msg->msg_sync->mtx_trylock(&msg->lock) == msg_success) {
@@ -284,7 +284,7 @@ int msg_release(msg_t *msg) {
   // Don't touch msg->size.
   // Don't touch msg->next.
   // Don't touch msg->waiting.
-  msg->in_use = false;
+  msg->in_use = NULL;
   // Don't touch msg->from.
   if (msg->configured == true) {
     if (msg->msg_sync->mtx_trylock(&msg->lock) == msg_success) {
