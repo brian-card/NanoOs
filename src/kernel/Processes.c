@@ -734,10 +734,6 @@ ProcessMessage* getAvailableMessage(void) {
     return availableMessage; // NULL
   }
 
-  // Claiming a message is a test of in_use followed by setting it.  Without
-  // this, a message could be claimed by two different processes.
-  schedulerPreemptionInhibited = true;
-
   if (processMessageInUse(&processDescriptor->message) == false) {
     availableMessage = &processDescriptor->message;
     processMessageInit(availableMessage, 0, NULL, 0, false);
@@ -752,8 +748,6 @@ ProcessMessage* getAvailableMessage(void) {
       }
     }
   }
-
-  schedulerPreemptionInhibited = false;
 
   return availableMessage;
 }
