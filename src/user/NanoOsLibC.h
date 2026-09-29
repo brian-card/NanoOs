@@ -103,6 +103,8 @@ char* nanoOsStrError(int errnum);
 
 long long nanoOsStrtoll(const char *nptr, char **endptr, int base);
 
+int nanoOsSetenv(const char *name, const char *value, int overwrite);
+
 #ifdef __cplusplus
 } // extern "C"
 #endif

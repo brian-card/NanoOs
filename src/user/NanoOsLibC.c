@@ -36,6 +36,7 @@
 #include "../kernel/Hal.h"
 #include "../kernel/NanoOs.h"
 #include "../kernel/OverlayFunctions.h"
+#include "../kernel/Processes.h"
 #include "../kernel/Scheduler.h"
 
 // Must come last
@@ -236,5 +237,122 @@ long long nanoOsStrtoll(const char *nptr, char **endptr, int base) {
   }
   
   return returnValue;
+}
+
+/// @fn int nanoOsSetenv(const char *name, const char *value, int overwrite)
+///
+/// @brief Add an environment variable to the running process's context or
+/// change the value of one that already exists.
+///
+/// @param name The name of the environment variable to change or add.
+/// @param value The value to set for the environment variable.
+/// @param overwrite Whether to overwrite an existing environment variable
+////  (true/non-zero) or leave it unchanged (false/zero).
+///
+/// @return Returns 0 on success, sets the value of errno and returns -1 on
+/// failure.
+int nanoOsSetenv(const char *name, const char *value, int overwrite) {
+  if ((name == NULL) || (*name == '\0') || (strchr(name, '=') != NULL)) {
+    errno = EINVAL;
+    return -1;
+  }
+  if (value == NULL) {
+    value = "";
+  }
+
+  ProcessDescriptor *processDescriptor = getRunningProcess();
+  if (processDescriptor == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  size_t nameLen = strlen(name);
+  size_t valueLen = strlen(value);
+  size_t newEntryLen = nameLen + valueLen + 2;
+
+  char **envp = processDescriptor->envp;
+  size_t numVariables = 0;
+  size_t stringsBytes = 0;
+  size_t entryOffset = 0;
+  size_t oldEntryLen = 0;
+  bool found = false;
+  while ((envp != NULL) && (envp[numVariables] != NULL)) {
+    size_t entryLen = strlen(envp[numVariables]) + 1;
+    if ((found == false)
+      && (strncmp(envp[numVariables], name, nameLen) == 0)
+      && (envp[numVariables][nameLen] == '=')
+    ) {
+      if ((overwrite == 0)
+        || (value == &envp[numVariables][nameLen + 1])
+      ) {
+        // Either we've been instructed to not overwrite the environment
+        // variable we've found or someone has passed in `getenv(name)` as the
+        // value, which would overlap and potentially cause problems with our
+        // logic below.  Either way, this is a no-op.  Just return good status.
+        return 0;
+      }
+      found = true;
+      entryOffset = stringsBytes;
+      oldEntryLen = entryLen;
+    }
+    stringsBytes += entryLen;
+    numVariables++;
+  }
+
+  if (found == false) {
+    entryOffset = stringsBytes;
+  }
+  size_t newNumVariables = numVariables + ((found == true) ? 0 : 1);
+  size_t newStringsBytes = stringsBytes - oldEntryLen + newEntryLen;
+  size_t paddedBytes
+    = (newStringsBytes + sizeof(uintptr_t) - 1) & ~(sizeof(uintptr_t) - 1);
+  size_t newBytes = paddedBytes + ((newNumVariables + 1) * sizeof(char*));
+  size_t tailBytes = stringsBytes - entryOffset - oldEntryLen;
+
+  char *block = (envp != NULL) ? envp[0] : NULL;
+  if (newEntryLen > oldEntryLen) {
+    // Extend the allocated memory block and move all entries past the found
+    // entry down in memory.
+    void *check = realloc(block, newBytes);
+    if (check == NULL) {
+      errno = ENOMEM;
+      return -1;
+    }
+    block = (char*) check;
+    memmove(&block[entryOffset + newEntryLen],
+      &block[entryOffset + oldEntryLen], tailBytes);
+  } else {
+    // Compact all the values past the found entry up in memory and then realloc
+    // the memory block down in size.
+    memmove(&block[entryOffset + newEntryLen],
+      &block[entryOffset + oldEntryLen], tailBytes);
+    void *check = realloc(block, newBytes);
+    if (check == NULL) {
+      errno = ENOMEM;
+      return -1;
+    }
+    block = (char*) check;
+  }
+
+  memcpy(&block[entryOffset], name, nameLen);
+  block[entryOffset + nameLen] = '=';
+  memcpy(&block[entryOffset + nameLen + 1], value, valueLen + 1);
+
+  char **newEnvp = (char**) &block[paddedBytes];
+  char *nextString = block;
+  for (size_t ii = 0; ii < newNumVariables; ii++) {
+    newEnvp[ii] = nextString;
+    nextString += strlen(nextString) + 1;
+  }
+  newEnvp[newNumVariables] = NULL;
+
+  processDescriptor->envp = newEnvp;
+
+  extern NanoOsOverlayMap *overlayMap;
+  if (overlayMap != NULL) {
+    overlayMap->header.env = newEnvp;
+  }
+
+  return 0;
 }
 

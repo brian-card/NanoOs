@@ -75,6 +75,9 @@ static inline char *getenv(const char *name) {
 
   return value;
 }
+static inline int setenv(const char *name, const char *value, int overwrite) {
+  return overlayMap.header.osApi->userApi->setenv(name, value, overwrite);
+}
 
 static inline long strtol(const char *nptr, char **endptr, int base) {
   long long returnValue = (unsigned long long)
