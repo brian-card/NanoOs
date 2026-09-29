@@ -44,7 +44,7 @@ extern "C"
 #endif
 
 static inline int uname(struct utsname *buf) {
-  return overlayMap.header.osApi->uname(buf);
+  return overlayMap.header.osApi->userApi->uname(buf);
 }
 
 #ifdef __cplusplus

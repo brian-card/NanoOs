@@ -44,13 +44,13 @@ extern "C"
 #endif
 
 static inline char** parseArgs(char *command, int *argc) {
-  return overlayMap.header.osApi->parseArgs(command, argc);
+  return overlayMap.header.osApi->userApi->parseArgs(command, argc);
 }
 static inline size_t getFreeMemory(void) {
-  return overlayMap.header.osApi->getFreeMemory();
+  return overlayMap.header.osApi->userApi->getFreeMemory();
 }
 static inline int dumpMemoryAllocations(void) {
-  return overlayMap.header.osApi->dumpMemoryAllocations();
+  return overlayMap.header.osApi->userApi->dumpMemoryAllocations();
 }
 
 #ifdef __cplusplus

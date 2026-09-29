@@ -80,24 +80,24 @@ struct timespec {
 #endif // NANO_OS_USER_TIME_H
 
 static inline long* timezone_(void) {
-  return overlayMap.header.osApi->nanoOsTimezone();
+  return overlayMap.header.osApi->userApi->nanoOsTimezone();
 }
 #define timezone (*timezone_())
 static inline int* dstInEffect_(void) {
-  return overlayMap.header.osApi->nanoOsDstInEffect();
+  return overlayMap.header.osApi->userApi->nanoOsDstInEffect();
 }
 #define dstInEffect (*dstInEffect_())
 static inline time_t time(time_t *tloc) {
-  return overlayMap.header.osApi->nanoOsTime(tloc);
+  return overlayMap.header.osApi->userApi->nanoOsTime(tloc);
 }
 static inline struct tm* gmtime_r(const time_t *timep, struct tm *result) {
-  return overlayMap.header.osApi->nanoOsGmtime_r(timep, result);
+  return overlayMap.header.osApi->userApi->nanoOsGmtime_r(timep, result);
 }
 static inline struct tm* localtime_r(const time_t *timep, struct tm *result) {
-  return overlayMap.header.osApi->nanoOsLocaltime_r(timep, result);
+  return overlayMap.header.osApi->userApi->nanoOsLocaltime_r(timep, result);
 }
 static inline int timespec_get(struct timespec* spec, int base) {
-  return overlayMap.header.osApi->nanoOsTimespec_get(spec, base);
+  return overlayMap.header.osApi->userApi->nanoOsTimespec_get(spec, base);
 }
 
 #ifdef __cplusplus

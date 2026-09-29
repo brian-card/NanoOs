@@ -46,12 +46,13 @@ extern "C"
 #endif
 
 static inline int tcgetattr(int fd, struct termios *termios_p) {
-  return overlayMap.header.osApi->tcgetattr(fd, termios_p);
+  return overlayMap.header.osApi->userApi->tcgetattr(fd, termios_p);
 }
 static inline int tcsetattr(int fd, int optional_actions,
   const struct termios *termios_p
 ) {
-  return overlayMap.header.osApi->tcsetattr(fd, optional_actions, termios_p);
+  return overlayMap.header.osApi->userApi->tcsetattr(
+    fd, optional_actions, termios_p);
 }
 
 #ifdef __cplusplus

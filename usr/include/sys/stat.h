@@ -45,11 +45,11 @@ extern "C"
 #endif
 
 static inline int lstat(const char *pathname, struct stat *statbuf) {
-  return overlayMap.header.osApi->lstat(pathname, statbuf);
+  return overlayMap.header.osApi->userApi->lstat(pathname, statbuf);
 }
 
 static inline int istat(ino_t ino, struct stat *statbuf) {
-  return overlayMap.header.osApi->istat(ino, statbuf);
+  return overlayMap.header.osApi->userApi->istat(ino, statbuf);
 }
 
 #ifdef __cplusplus

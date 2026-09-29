@@ -45,7 +45,7 @@ extern "C"
 #endif
 
 static inline int kill(pid_t pid, int sig) {
-  return overlayMap.header.osApi->kill(pid, sig);
+  return overlayMap.header.osApi->userApi->kill(pid, sig);
 }
 
 #ifdef __cplusplus

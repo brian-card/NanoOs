@@ -44,7 +44,7 @@ extern "C"
 #endif
 
 static inline int sched_yield(void) {
-  return overlayMap.header.osApi->sched_yield();
+  return overlayMap.header.osApi->userApi->sched_yield();
 }
 
 #ifdef __cplusplus

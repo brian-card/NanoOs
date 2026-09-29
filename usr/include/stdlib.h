@@ -46,16 +46,16 @@ extern "C"
 #endif
 
 static inline void free(void *ptr) {
-  overlayMap.header.osApi->free(ptr);
+  overlayMap.header.osApi->userApi->free(ptr);
 }
 static inline void* realloc(void *ptr, size_t size) {
-  return overlayMap.header.osApi->realloc(ptr, size);
+  return overlayMap.header.osApi->userApi->realloc(ptr, size);
 }
 static inline void* malloc(size_t size) {
-  return overlayMap.header.osApi->malloc(size);
+  return overlayMap.header.osApi->userApi->malloc(size);
 }
 static inline void* calloc(size_t nmemb, size_t size) {
-  return overlayMap.header.osApi->calloc(nmemb, size);
+  return overlayMap.header.osApi->userApi->calloc(nmemb, size);
 }
 
 static inline char *getenv(const char *name) {
@@ -78,7 +78,7 @@ static inline char *getenv(const char *name) {
 
 static inline long strtol(const char *nptr, char **endptr, int base) {
   long long returnValue = (unsigned long long)
-    overlayMap.header.osApi->strtoll(nptr, endptr, base);
+    overlayMap.header.osApi->userApi->strtoll(nptr, endptr, base);
 
   if (sizeof(long long) > sizeof(long)) {
     long min = 1L << ((sizeof(long) << 3) - 1);
@@ -96,7 +96,7 @@ static inline long strtol(const char *nptr, char **endptr, int base) {
   return (long) returnValue;
 }
 static inline long long strtoll(const char *nptr, char **endptr, int base) {
-  return overlayMap.header.osApi->strtoll(nptr, endptr, base);
+  return overlayMap.header.osApi->userApi->strtoll(nptr, endptr, base);
 }
 
 #ifdef __cplusplus

@@ -93,10 +93,8 @@ char** parseArgs(char *command, int *argc);
 #undef lstat
 #undef istat
 
-NanoOsExecutiveApi nanoOsExecutiveApi = {
-  // HAL access:
-  .hal = NULL,
-  
+KEEP_IN_FLASH
+const NanoOsExecutiveApi nanoOsExecutiveApi = {
   // Debug functions:
   .printString = printString_,
   .printInt = printInt_,
@@ -128,7 +126,8 @@ NanoOsExecutiveApi nanoOsExecutiveApi = {
   .comessageQueuePush = comessageQueuePush,
 };
 
-NanoOsApi nanoOsApi = {
+KEEP_IN_FLASH
+static const NanoOsUserApi _nanoOsUserApi = {
   // Standard Unix functionality
   
   // Standard streams:
@@ -252,9 +251,6 @@ NanoOsApi nanoOsApi = {
   
   // NanoOs-specific functionality
   
-  // NanoOsUser.h functions:
-  .callOverlayFunction = NULL,
-  
   // NanoOsUtils.h functions:
   .parseArgs = parseArgs,
   .getFreeMemory = getFreeMemory,
@@ -265,9 +261,20 @@ NanoOsApi nanoOsApi = {
   
   // NanoOsHardware.h functions:
   .shutdown = nanoOsHardwareShutdown,
+};
+
+NanoOsApi nanoOsApi = {
+  // Base API for user space processes:
+  .userApi = &_nanoOsUserApi,
   
-  // Additional API for PRIVILEGE_LEVEL_EXECUTIVE processes:
+  // NanoOsUser.h functions:
+  .callOverlayFunction = NULL,
+  
+  // Additional API for PRIVILEGE_LEVEL_EXECUTIVE processes only:
   .executiveApi = NULL,
+  
+  // HAL access for PRIVILEGE_LEVEL_EXECUTIVE processes only:
+  .hal = NULL,
 };
 
 NanoOsApi *NANO_OS_API = NULL;

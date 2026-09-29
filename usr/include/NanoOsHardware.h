@@ -45,7 +45,7 @@ extern "C"
 #endif
 
 static inline int nanoOsShutdown(NanoOsShutdownType shutdownType) {
-  return overlayMap.header.osApi->shutdown(shutdownType);
+  return overlayMap.header.osApi->userApi->shutdown(shutdownType);
 }
 
 #ifdef __cplusplus

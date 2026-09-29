@@ -3973,9 +3973,11 @@ int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp) {
 
   if (processDescriptor->privilegeLevel != PRIVILEGE_LEVEL_EXECUTIVE) {
     // This is the expected case, so list it first.
+    nanoOsApi.executiveApi = NULL;
     nanoOsApi.hal = NULL;
   } else {
     // Enable the executive API for the process.
+    nanoOsApi.executiveApi = &nanoOsExecutiveApi;
     nanoOsApi.hal = HAL;
   }
   

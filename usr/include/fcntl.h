@@ -47,7 +47,7 @@ extern "C"
 static inline int fcntl(int fd, int op, ... /* arg */ ) {
   va_list arg;
   va_start(arg, op);
-  int returnValue = overlayMap.header.osApi->fcntl(fd, op, arg);
+  int returnValue = overlayMap.header.osApi->userApi->fcntl(fd, op, arg);
   va_end(arg);
   return returnValue;
 }

@@ -48,12 +48,14 @@ extern "C"
 static inline int getgrnam_r(const char *name, struct group *grp,
   char *buf, size_t buflen, struct group **result
 ) {
-  return overlayMap.header.osApi->getgrnam_r(name, grp, buf, buflen, result);
+  return overlayMap.header.osApi->userApi->getgrnam_r(
+    name, grp, buf, buflen, result);
 }
 static inline int getgrgid_r(gid_t gid, struct group *grp,
   char *buf, size_t buflen, struct group **result
 ) {
-  return overlayMap.header.osApi->getgrgid_r(gid, grp, buf, buflen, result);
+  return overlayMap.header.osApi->userApi->getgrgid_r(
+    gid, grp, buf, buflen, result);
 }
 
 

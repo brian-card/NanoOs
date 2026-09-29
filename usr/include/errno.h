@@ -41,7 +41,7 @@
 
 #undef errno
 #define errno \
-  (*overlayMap.header.osApi->errno_())
+  (*overlayMap.header.osApi->userApi->errno_())
 
 #endif // ERRNO_H
 

@@ -46,7 +46,7 @@ extern "C"
 #endif
 
 static inline ProcessInfo* getProcessInfo(void) {
-  return overlayMap.header.osApi->getProcessInfo();
+  return overlayMap.header.osApi->userApi->getProcessInfo();
 }
 
 #ifdef __cplusplus

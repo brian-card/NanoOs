@@ -46,13 +46,13 @@ extern "C"
 
 // Directory operations:
 static inline DIR* opendir(const char *pathname) {
-  return overlayMap.header.osApi->opendir(pathname);
+  return overlayMap.header.osApi->userApi->opendir(pathname);
 }
 static inline struct dirent* readdir(DIR *dirp) {
-  return overlayMap.header.osApi->readdir(dirp);
+  return overlayMap.header.osApi->userApi->readdir(dirp);
 }
 static inline int closedir(DIR *dirp) {
-  return overlayMap.header.osApi->closedir(dirp);
+  return overlayMap.header.osApi->userApi->closedir(dirp);
 }
 
 #ifdef __cplusplus

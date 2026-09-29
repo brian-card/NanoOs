@@ -94,9 +94,6 @@ typedef struct posix_spawnattr_t posix_spawnattr_t;
 struct termios;
 
 typedef struct NanoOsExecutiveApi {
-  // HAL access:
-  const Hal *hal;
-  
   // Debug functions:
   int (*printString)(const char *string);
   int (*printInt)(long long int integer);
@@ -129,7 +126,7 @@ typedef struct NanoOsExecutiveApi {
   int (*comessageQueuePush)(Coroutine *coroutine, msg_t *comessage);
 } NanoOsExecutiveApi;
 
-typedef struct NanoOsApi {
+typedef struct NanoOsUserApi {
   // Standard streams:
   FILE *stdin;
   FILE *stdout;
@@ -284,11 +281,6 @@ typedef struct NanoOsApi {
   
   // NanoOs-specific functionality
   
-  // NanoOsUser.h functions:
-  void* (*callOverlayFunction)(
-    const void *overlayNamespace, const void *overlay,
-    const char *function, void *args);
-  
   // NanoOsUtils.h functions:
   char** (*parseArgs)(char *command, int *argc);
   size_t (*getFreeMemory)(void);
@@ -299,12 +291,25 @@ typedef struct NanoOsApi {
   
   // NanoOsHardware.h functions:
   int (*shutdown)(NanoOsShutdownType shutdownType);
+} NanoOsUserApi;
+
+typedef struct NanoOsApi {
+  // Base API for user space processes:
+  const NanoOsUserApi * const userApi;
   
-  // Additional API for PRIVILEGE_LEVEL_EXECUTIVE processes:
-  NanoOsExecutiveApi *executiveApi;
+  // NanoOsUser.h functions:
+  void* (*callOverlayFunction)(
+    const void *overlayNamespace, const void *overlay,
+    const char *function, void *args);
+  
+  // Additional API for PRIVILEGE_LEVEL_EXECUTIVE processes only:
+  const NanoOsExecutiveApi *executiveApi;
+  
+  // HAL access for PRIVILEGE_LEVEL_EXECUTIVE processes only:
+  const Hal *hal;
 } NanoOsApi;
 
-extern NanoOsExecutiveApi nanoOsExecutiveApi;
+extern const NanoOsExecutiveApi nanoOsExecutiveApi;
 extern NanoOsApi nanoOsApi;
 extern NanoOsApi *NANO_OS_API;
 

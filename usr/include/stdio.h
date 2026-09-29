@@ -52,30 +52,30 @@ extern "C"
 
 // Standard streams:
 #define stdin \
-  overlayMap.header.osApi->stdin
+  overlayMap.header.osApi->userApi->stdin
 #define stdout \
-  overlayMap.header.osApi->stdout
+  overlayMap.header.osApi->userApi->stdout
 #define stderr \
-  overlayMap.header.osApi->stderr
+  overlayMap.header.osApi->userApi->stderr
 
 // File operations:
 static inline FILE* fopen(const char *pathname, const char *mode) {
-  return overlayMap.header.osApi->fopen(pathname, mode);
+  return overlayMap.header.osApi->userApi->fopen(pathname, mode);
 }
 static inline int fclose(FILE *stream) {
-  return overlayMap.header.osApi->fclose(stream);
+  return overlayMap.header.osApi->userApi->fclose(stream);
 }
 static inline int remove(const char *pathname) {
-  return overlayMap.header.osApi->remove(pathname);
+  return overlayMap.header.osApi->userApi->remove(pathname);
 }
 static inline int fseek(FILE *stream, long offset, int whence) {
-  return overlayMap.header.osApi->fseek(stream, offset, whence);
+  return overlayMap.header.osApi->userApi->fseek(stream, offset, whence);
 }
 static inline int fileno(FILE *stream) {
-  return overlayMap.header.osApi->fileno(stream);
+  return overlayMap.header.osApi->userApi->fileno(stream);
 }
 static inline int feof(FILE *stream) {
-  return overlayMap.header.osApi->feof(stream);
+  return overlayMap.header.osApi->userApi->feof(stream);
 }
 // NanoOs extension: not part of the standard C library.  Formats the root
 // filesystem's partition as FAT32.  Named for FAT32 rather than a generic
@@ -85,69 +85,76 @@ static inline int feof(FILE *stream) {
 // may be NULL/empty for no label; clusterSize may be 0 to use a default
 // derived from the partition's size.
 static inline int fat32Format(const char *volumeLabel, uint32_t clusterSize) {
-  return overlayMap.header.osApi->fat32Format(volumeLabel, clusterSize);
+  return overlayMap.header.osApi->userApi->fat32Format(
+    volumeLabel, clusterSize);
 }
 static inline int ftell(FILE *stream) {
-  return overlayMap.header.osApi->ftell(stream);
+  return overlayMap.header.osApi->userApi->ftell(stream);
 }
 
 // Formatted I/O:
 static inline int vsscanf(const char *str, const char *format, va_list ap) {
-  return overlayMap.header.osApi->vsscanf(str, format, ap);
+  return overlayMap.header.osApi->userApi->vsscanf(str, format, ap);
 }
 static inline int sscanf(const char *str, const char *format, ...) {
   va_list ap;
   va_start(ap, format);
-  int returnValue = overlayMap.header.osApi->vsscanf(str, format, ap);
+  int returnValue = overlayMap.header.osApi->userApi->vsscanf(str, format, ap);
   va_end(ap);
   return returnValue;
 }
 static inline int vfscanf(FILE *stream, const char *format, va_list ap) {
-  return overlayMap.header.osApi->vfscanf(stream, format, ap);
+  return overlayMap.header.osApi->userApi->vfscanf(stream, format, ap);
 }
 static inline int fscanf(FILE *stream, const char *format, ...) {
   va_list ap;
   va_start(ap, format);
-  int returnValue = overlayMap.header.osApi->vfscanf(stream, format, ap);
+  int returnValue = overlayMap.header.osApi->userApi->vfscanf(
+    stream, format, ap);
   va_end(ap);
   return returnValue;
 }
 static inline int scanf(const char *format, ...) {
   va_list ap;
   va_start(ap, format);
-  int returnValue = overlayMap.header.osApi->vfscanf(stdin, format, ap);
+  int returnValue = overlayMap.header.osApi->userApi->vfscanf(
+    stdin, format, ap);
   va_end(ap);
   return returnValue;
 }
 static inline int vfprintf(FILE *stream, const char *format, va_list ap) {
-  return overlayMap.header.osApi->vfprintf(stream, format, ap);
+  return overlayMap.header.osApi->userApi->vfprintf(stream, format, ap);
 }
 static inline int fprintf(FILE *stream, const char *format, ...) {
   va_list ap;
   va_start(ap, format);
-  int returnValue = overlayMap.header.osApi->vfprintf(stream, format, ap);
+  int returnValue = overlayMap.header.osApi->userApi->vfprintf(
+    stream, format, ap);
   va_end(ap);
   return returnValue;
 }
 static inline int printf(const char *format, ...) {
   va_list ap;
   va_start(ap, format);
-  int returnValue = overlayMap.header.osApi->vfprintf(stdout, format, ap);
+  int returnValue = overlayMap.header.osApi->userApi->vfprintf(
+    stdout, format, ap);
   va_end(ap);
   return returnValue;
 }
 static inline int vsnprintf(char *str, size_t size,
   const char *format, va_list ap
 ) {
-  return overlayMap.header.osApi->vsnprintf(str, size, format, ap);
+  return overlayMap.header.osApi->userApi->vsnprintf(str, size, format, ap);
 }
 static inline int vsprintf(char *str, const char *format, va_list ap) {
-  return overlayMap.header.osApi->vsnprintf(str, (size_t) -1, format, ap);
+  return overlayMap.header.osApi->userApi->vsnprintf(
+    str, (size_t) -1, format, ap);
 }
 static inline int snprintf(char *str, size_t size, const char *format, ...) {
   va_list ap;
   va_start(ap, format);
-  int returnValue = overlayMap.header.osApi->vsnprintf(str, size, format, ap);
+  int returnValue = overlayMap.header.osApi->userApi->vsnprintf(
+    str, size, format, ap);
   va_end(ap);
   return returnValue;
 }
@@ -155,7 +162,8 @@ static inline int sprintf(char *str, const char *format, ...) {
   va_list ap;
   va_start(ap, format);
   int returnValue
-    = overlayMap.header.osApi->vsnprintf(str, (size_t) 32767, format, ap);
+    = overlayMap.header.osApi->userApi->vsnprintf(
+      str, (size_t) 32767, format, ap);
   va_end(ap);
   return returnValue;
 }
@@ -163,8 +171,8 @@ static inline int sprintf(char *str, const char *format, ...) {
 // Character I/O:
 static inline int fputs(const char *s, FILE *stream) {
   int returnValue = 0;
-  size_t len = overlayMap.header.osApi->strlen(s);
-  if (overlayMap.header.osApi->fwrite(s, 1, len, stream) != len) {
+  size_t len = overlayMap.header.osApi->userApi->strlen(s);
+  if (overlayMap.header.osApi->userApi->fwrite(s, 1, len, stream) != len) {
     returnValue = EOF;
   }
   return returnValue;
@@ -178,7 +186,8 @@ static inline int puts(const char *s) {
 static inline char *fgets(char *s, int size, FILE *stream) {
   char *returnValue = NULL;
   if (size > 0) {
-    size_t bytesRead = overlayMap.header.osApi->fread(s, 1, size - 1, stream);
+    size_t bytesRead = overlayMap.header.osApi->userApi->fread(
+      s, 1, size - 1, stream);
     if (bytesRead > 0) {
       s[bytesRead] = '\0';
       returnValue = s;
@@ -189,12 +198,12 @@ static inline char *fgets(char *s, int size, FILE *stream) {
 
 // Direct I/O:
 static inline size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
-  return overlayMap.header.osApi->fread(ptr, size, nmemb, stream);
+  return overlayMap.header.osApi->userApi->fread(ptr, size, nmemb, stream);
 }
 static inline size_t fwrite(
   void *ptr, size_t size, size_t nmemb, FILE *stream
 ) {
-  return overlayMap.header.osApi->fwrite(ptr, size, nmemb, stream);
+  return overlayMap.header.osApi->userApi->fwrite(ptr, size, nmemb, stream);
 }
 
 #ifdef __cplusplus

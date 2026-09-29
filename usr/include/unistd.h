@@ -46,36 +46,36 @@ extern "C"
 #endif
 
 static inline int close(int fd) {
-  return overlayMap.header.osApi->close(fd);
+  return overlayMap.header.osApi->userApi->close(fd);
 }
 static inline int dup(int oldfd) {
-  return overlayMap.header.osApi->dup(oldfd);
+  return overlayMap.header.osApi->userApi->dup(oldfd);
 }
 static inline int dup2(int oldfd, int newfd) {
-  return overlayMap.header.osApi->dup2(oldfd, newfd);
+  return overlayMap.header.osApi->userApi->dup2(oldfd, newfd);
 }
 static inline int gethostname(char *name, size_t len) {
-  return overlayMap.header.osApi->gethostname(name, len);
+  return overlayMap.header.osApi->userApi->gethostname(name, len);
 }
 static inline int getpid(void) {
-  return overlayMap.header.osApi->getpid();
+  return overlayMap.header.osApi->userApi->getpid();
 }
 static inline int sethostname(const char *name, size_t len) {
-  return overlayMap.header.osApi->sethostname(name, len);
+  return overlayMap.header.osApi->userApi->sethostname(name, len);
 }
 static inline int ttyname_r(int fd, char buf[], size_t buflen) {
-  return overlayMap.header.osApi->ttyname_r(fd, buf, buflen);
+  return overlayMap.header.osApi->userApi->ttyname_r(fd, buf, buflen);
 }
 static inline int execve(const char *pathname,
   char *const argv[], char *const envp[]
 ) {
-  return overlayMap.header.osApi->execve(pathname, argv, envp);
+  return overlayMap.header.osApi->userApi->execve(pathname, argv, envp);
 }
 static inline int setuid(uid_t uid) {
-  return overlayMap.header.osApi->setuid(uid);
+  return overlayMap.header.osApi->userApi->setuid(uid);
 }
 static inline int pipe(int pipefd[2]) {
-  return overlayMap.header.osApi->pipe(pipefd);
+  return overlayMap.header.osApi->userApi->pipe(pipefd);
 }
 
 #ifdef __cplusplus
