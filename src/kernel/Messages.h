@@ -172,7 +172,7 @@ typedef struct msg_t {
   void *data;
   size_t size;
   struct msg_t *next;
-  void *in_use;
+  _Atomic(void*) in_use;
   msg_endpoint_t from;
   msg_endpoint_t to;
   msg_cnd_t condition;
