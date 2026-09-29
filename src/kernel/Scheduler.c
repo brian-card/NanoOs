@@ -178,11 +178,11 @@ static FileDescriptor standardKernelFileDescriptors[
     .lastOwner = 0,
     .inputChannel = {
       .pid = PROCESS_ID_NOT_SET,
-      .messageType = -1,
+      .messageType = 0xff,
     },
     .outputChannel = {
       .pid = PROCESS_ID_NOT_SET,
-      .messageType = -1,
+      .messageType = 0xff,
     },
     .pipeEnd = NULL,
     .refCount = 1,
@@ -194,11 +194,11 @@ static FileDescriptor standardKernelFileDescriptors[
     .lastOwner = 0,
     .inputChannel = {
       .pid = PROCESS_ID_NOT_SET,
-      .messageType = -1,
+      .messageType = 0xff,
     },
     .outputChannel = {
       .pid = PROCESS_ID_NOT_SET,
-      .messageType = -1,
+      .messageType = 0xff,
     },
     .pipeEnd = NULL,
     .refCount = 1,
@@ -210,11 +210,11 @@ static FileDescriptor standardKernelFileDescriptors[
     .lastOwner = 0,
     .inputChannel = {
       .pid = PROCESS_ID_NOT_SET,
-      .messageType = -1,
+      .messageType = 0xff,
     },
     .outputChannel = {
       .pid = PROCESS_ID_NOT_SET,
-      .messageType = -1,
+      .messageType = 0xff,
     },
     .pipeEnd = NULL,
     .refCount = 1,
@@ -247,11 +247,11 @@ static FileDescriptor standardUserFileDescriptors[
     .lastOwner = 0,
     .inputChannel = {
       .pid = PROCESS_ID_NOT_SET,
-      .messageType = -1,
+      .messageType = 0xff,
     },
     .outputChannel = {
       .pid = PROCESS_ID_NOT_SET,
-      .messageType = -1,
+      .messageType = 0xff,
     },
     .pipeEnd = NULL,
     .refCount = 1,
@@ -263,11 +263,11 @@ static FileDescriptor standardUserFileDescriptors[
     .lastOwner = 0,
     .inputChannel = {
       .pid = PROCESS_ID_NOT_SET,
-      .messageType = -1,
+      .messageType = 0xff,
     },
     .outputChannel = {
       .pid = PROCESS_ID_NOT_SET,
-      .messageType = -1,
+      .messageType = 0xff,
     },
     .pipeEnd = NULL,
     .refCount = 1,
@@ -279,11 +279,11 @@ static FileDescriptor standardUserFileDescriptors[
     .lastOwner = 0,
     .inputChannel = {
       .pid = PROCESS_ID_NOT_SET,
-      .messageType = -1,
+      .messageType = 0xff,
     },
     .outputChannel = {
       .pid = PROCESS_ID_NOT_SET,
-      .messageType = -1,
+      .messageType = 0xff,
     },
     .pipeEnd = NULL,
     .refCount = 1,
@@ -1943,72 +1943,58 @@ int schedulerExecve(const char *pathname,
     return -1;
   }
 
-  ExecArgs *execArgs = (ExecArgs*) calloc(1, sizeof(ExecArgs));
+  size_t argvLen = 0;
+  size_t argvBytes = 0;
+  for (; argv[argvLen] != NULL; argvLen++) {
+    argvBytes += strlen(argv[argvLen]) + 1;
+  }
+  argvLen++;
+
+  size_t pathnameBytes = strlen(pathname) + 1;
+  ExecArgs *execArgs = (ExecArgs*) calloc(1,
+    sizeof(ExecArgs) + (argvLen * sizeof(char*)) + argvBytes + pathnameBytes);
   if (execArgs == NULL) {
     logError("Allocating execArgs failed\n");
     errno = ENOMEM;
     return -1;
   }
 
-  execArgs->pathname = (char*) malloc(strlen(pathname) + 1);
-  if (execArgs->pathname == NULL) {
-    logError("Allocating execArgs->pathname failed\n");
-    errno = ENOMEM;
-    goto freeExecArgs;
-  }
-  strcpy(execArgs->pathname, pathname);
-
-  size_t argvLen = 0;
-  for (; argv[argvLen] != NULL; argvLen++);
-  argvLen++; // Account for the terminating NULL element
-  execArgs->argv = (char**) calloc(1, argvLen * sizeof(char*));
-  if (execArgs->argv == NULL) {
-    logError("Allocating execArgs->argv failed\n");
-    errno = ENOMEM;
-    goto freeExecArgs;
-  }
-
-  // argvLen is guaranteed to always be at least 1, so it's safe to run to
-  // (argvLen - 1) here.
+  execArgs->argv = (char**) &((char*) execArgs)[sizeof(ExecArgs)];
+  char *nextString = (char*) &execArgs->argv[argvLen];
   size_t ii = 0;
   for (; ii < (argvLen - 1); ii++) {
-    // We know that argv[ii] isn't NULL because of the calculation for argvLen
-    // above, so it's safe to use strlen.
-    execArgs->argv[ii] = (char*) malloc(strlen(argv[ii]) + 1);
-    if (execArgs->argv[ii] == NULL) {
-      logError("Allocating execArgs->argv[%zu] failed\n", ii);
-      errno = ENOMEM;
-      goto freeExecArgs;
-    }
-    strcpy(execArgs->argv[ii], argv[ii]);
+    execArgs->argv[ii] = nextString;
+    strcpy(nextString, argv[ii]);
+    nextString += strlen(argv[ii]) + 1;
   }
-  execArgs->argv[ii] = NULL; // NULL-terminate the array
+  execArgs->argv[ii] = NULL;
+
+  execArgs->pathname = nextString;
+  strcpy(execArgs->pathname, pathname);
 
   if (envp != NULL) {
     size_t envpLen = 0;
-    for (; envp[envpLen] != NULL; envpLen++);
-    envpLen++; // Account for the terminating NULL element
-    execArgs->envp = (char**) calloc(1, envpLen * sizeof(char*));
+    size_t envpBytes = 0;
+    for (; envp[envpLen] != NULL; envpLen++) {
+      envpBytes += strlen(envp[envpLen]) + 1;
+    }
+    envpLen++;
+
+    execArgs->envp = (char**) calloc(1,
+      (envpLen * sizeof(char*)) + envpBytes);
     if (execArgs->envp == NULL) {
       logError("Allocating execArgs->envp failed\n");
       errno = ENOMEM;
       goto freeExecArgs;
     }
 
-    // envpLen is guaranteed to always be at least 1, so it's safe to run to
-    // (envpLen - 1) here.
+    nextString = (char*) &execArgs->envp[envpLen];
     for (ii = 0; ii < (envpLen - 1); ii++) {
-      // We know that envp[ii] isn't NULL because of the calculation for envpLen
-      // above, so it's safe to use strlen.
-      execArgs->envp[ii] = (char*) malloc(strlen(envp[ii]) + 1);
-      if (execArgs->envp[ii] == NULL) {
-        logError("Allocating execArgs->envp[%zu] failed\n", ii);
-        errno = ENOMEM;
-        goto freeExecArgs;
-      }
-      strcpy(execArgs->envp[ii], envp[ii]);
+      execArgs->envp[ii] = nextString;
+      strcpy(nextString, envp[ii]);
+      nextString += strlen(envp[ii]) + 1;
     }
-    execArgs->envp[ii] = NULL; // NULL-terminate the array
+    execArgs->envp[ii] = NULL;
   } else {
     execArgs->envp = NULL;
   }
@@ -2099,7 +2085,9 @@ int closeProcessFileDescriptors(ProcessDescriptor *processDescriptor) {
           // Send an empty message to the waiting process so that it will
           // become unblocked.
           if (processMessageInit(&processMessage,
-            fileDescriptor->outputChannel.messageType, NULL, 0, true
+            CONSOLE_COMMAND_SIGNATURE
+              | fileDescriptor->outputChannel.messageType,
+            NULL, 0, true
             ) != processSuccess
           ) {
             // Nothing we can do.
@@ -3022,9 +3010,6 @@ int schedulerExecveCommandHandler(
   // The arguments provided to this command are going to replace the ones that
   // spawned the original.  We need to free the original envp if there was one.
   if (processDescriptor->envp != NULL) {
-    for (int ii = 0; processDescriptor->envp[ii] != NULL; ii++)  {
-      schedFree(processDescriptor->envp[ii]);
-    }
     schedFree(processDescriptor->envp);
     processDescriptor->envp = NULL;
   }
@@ -3034,34 +3019,12 @@ int schedulerExecveCommandHandler(
     logWarn("Could not protect execArgs memory.\nUndefined behavior.\n");
   }
 
-  logDebug("Assigning pathname to PID 0\n");
-  if (assignMemory(pathname, 0) != 0) {
-    logWarn("Could not protect pathname memory.\nUndefined behavior.\n");
-  }
 
-  logDebug("Assigning argv to PID 0\n");
-  if (assignMemory(argv, 0) != 0) {
-    logWarn("Could not protect argv memory.\nUndefined behavior.\n");
-  }
-  for (int ii = 0; argv[ii] != NULL; ii++) {
-    logDebug("Assigning argv[%d] to PID 0\n", ii);
-    if (assignMemory(argv[ii], 0) != 0) {
-      logWarn("Could not protect argv[lld] memory.\nUndefined behavior.\n",
-        (long int) ii);
-    }
-  }
 
   if (envp != NULL) {
     logDebug("Assigning envp to PID 0\n");
     if (assignMemory(envp, 0) != 0) {
       logWarn("Could not protect envp memory.\nUndefined behavior.\n");
-    }
-    for (int ii = 0; envp[ii] != NULL; ii++) {
-      logDebug("Assigning envp[%d] to PID 0\n", ii);
-      if (assignMemory(envp[ii], 0) != 0) {
-        logWarn("Could not protect envp[%ld] memory.\n"
-          "Undefined behavior.\n", (long int) ii);
-      }
     }
   }
 
@@ -3143,27 +3106,7 @@ int schedulerExecveCommandHandler(
       "Undefined behavior.\n");
   }
 
-  logDebug("Assigning pathname to process %d\n",
-    processDescriptor->processId);
-  if (assignMemory(pathname, processDescriptor->processId) != 0) {
-    logWarn("Could not assign pathname to exec process.\n"
-      "Undefined behavior.\n");
-  }
 
-  logDebug("Assigning argv to process %d\n",
-    processDescriptor->processId);
-  if (assignMemory(argv, processDescriptor->processId) != 0) {
-    logWarn("Could not assign argv to exec process.\n"
-      "Undefined behavior.\n");
-  }
-  for (int ii = 0; argv[ii] != NULL; ii++) {
-    logDebug("Assigning argv[%d] to process %d\n",
-      ii, processDescriptor->processId);
-    if (assignMemory(argv[ii], processDescriptor->processId) != 0) {
-      logWarn("Could not assign argv[%d] to exec process.\n"
-        "Undefined behavior.\n", ii);
-    }
-  }
 
   if (envp != NULL) {
     logDebug("Assigning envp to process %d\n",
@@ -3171,14 +3114,6 @@ int schedulerExecveCommandHandler(
     if (assignMemory(envp, processDescriptor->processId) != 0) {
       logWarn("Could not assign envp to exec process.\n"
         "Undefined behavior.\n");
-    }
-    for (int ii = 0; envp[ii] != NULL; ii++) {
-      logDebug("Assigning envp[%d] to process %d\n",
-        ii, processDescriptor->processId);
-      if (assignMemory(envp[ii], processDescriptor->processId) != 0) {
-        logWarn("Could not assign envp[%d] to exec process.\n"
-          "Undefined behavior.\n", ii);
-      }
     }
   }
 
@@ -3438,10 +3373,8 @@ int schedulerSpawnCommandHandler(
       }
     }
 
-    schedFree(spawnArgs->fileActions); spawnArgs->fileActions = NULL;
+    spawnArgs->fileActions = NULL;
   }
-
-  schedFree(spawnArgs); spawnArgs = NULL;
 
   HalExecCommandFn execCommand = NULL;
   HAL->platform->execCommand(&execCommand);
@@ -3456,31 +3389,15 @@ int schedulerSpawnCommandHandler(
       "Undefined behavior.\n");
   }
 
-  if (assignMemory(pathname, processDescriptor->processId) != 0) {
-    logWarn("Could not assign pathname to spawn process.\n"
+  if (assignMemory(spawnArgs, processDescriptor->processId) != 0) {
+    logWarn("Could not assign spawnArgs to spawn process.\n"
       "Undefined behavior.\n");
-  }
-
-  if (assignMemory(argv, processDescriptor->processId) != 0) {
-    logWarn("Could not assign argv to spawn process.\nUndefined behavior.\n");
-  }
-  for (int ii = 0; argv[ii] != NULL; ii++) {
-    if (assignMemory(argv[ii], processDescriptor->processId) != 0) {
-      logWarn("Could not assign argv[%d] to spawn process.\n"
-        "Undefined behavior.\n", ii);
-    }
   }
 
   if (envp != NULL) {
     if (assignMemory(envp, processDescriptor->processId) != 0) {
       logWarn("Could not assign envp to spawn process.\n"
         "Undefined behavior.\n");
-    }
-    for (int ii = 0; envp[ii] != NULL; ii++) {
-      if (assignMemory(envp[ii], processDescriptor->processId) != 0) {
-        logWarn("Could not assign envp[%d] to spawn process.\n"
-          "Undefined behavior.\n", ii);
-      }
     }
   }
 
@@ -4056,10 +3973,10 @@ int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp) {
 
   if (processDescriptor->privilegeLevel != PRIVILEGE_LEVEL_EXECUTIVE) {
     // This is the expected case, so list it first.
-    nanoOsApi.executiveApi = NULL;
+    nanoOsApi.hal = NULL;
   } else {
     // Enable the executive API for the process.
-    nanoOsApi.executiveApi = &nanoOsExecutiveApi;
+    nanoOsApi.hal = HAL;
   }
   
   if (processDescriptor->overlay.blockDevice == NULL) {
@@ -4162,44 +4079,34 @@ int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
 ) {
   int returnValue = 0;
 
-  // Copy over the exec args.
-  ExecArgs *execArgs = schedMalloc(sizeof(ExecArgs));
+  size_t argvLen = 0;
+  size_t argvBytes = 0;
+  for (; argv[argvLen] != NULL; argvLen++) {
+    argvBytes += strlen(argv[argvLen]) + 1;
+  }
+  argvLen++;
+
+  size_t pathnameBytes = strlen(commandPath) + 1;
+  ExecArgs *execArgs = (ExecArgs*) schedCalloc(1,
+    sizeof(ExecArgs) + (argvLen * sizeof(char*)) + argvBytes + pathnameBytes);
   if (execArgs == NULL) {
     returnValue = -ENOMEM;
     goto exit;
   }
   execArgs->callingPid = processDescriptor->processId;
 
-  execArgs->pathname = (char*) schedMalloc(strlen(commandPath) + 1);
-  if (execArgs->pathname == NULL) {
-    returnValue = -ENOMEM;
-    goto freeExecArgs;
-  }
-  strcpy(execArgs->pathname, commandPath);
-
-  size_t argvLen = 0;
-  for (; argv[argvLen] != NULL; argvLen++);
-  argvLen++; // Account for the terminating NULL element
-  execArgs->argv = (char**) schedCalloc(1, argvLen * sizeof(char*));
-  if (execArgs->argv == NULL) {
-    returnValue = -ENOMEM;
-    goto freeExecArgs;
-  }
-
-  // argvLen is guaranteed to always be at least 1, so it's safe to run to
-  // (argvLen - 1) here.
+  execArgs->argv = (char**) &((char*) execArgs)[sizeof(ExecArgs)];
+  char *nextString = (char*) &execArgs->argv[argvLen];
   size_t ii = 0;
   for (; ii < (argvLen - 1); ii++) {
-    // We know that argv[ii] isn't NULL because of the calculation for argvLen
-    // above, so it's safe to use strlen.
-    execArgs->argv[ii] = (char*) schedMalloc(strlen(argv[ii]) + 1);
-    if (execArgs->argv[ii] == NULL) {
-      returnValue = -ENOMEM;
-      goto freeExecArgs;
-    }
-    strcpy(execArgs->argv[ii], argv[ii]);
+    execArgs->argv[ii] = nextString;
+    strcpy(nextString, argv[ii]);
+    nextString += strlen(argv[ii]) + 1;
   }
-  execArgs->argv[ii] = NULL; // NULL-terminate the array
+  execArgs->argv[ii] = NULL;
+
+  execArgs->pathname = nextString;
+  strcpy(execArgs->pathname, commandPath);
 
   // There are two possibilities for how this function is called:  Either envp
   // is NULL or it's the envp that already existed for the processDescriptor.
@@ -4215,24 +4122,7 @@ int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
       "Undefined behavior.\n");
   }
 
-  if (assignMemory(execArgs->pathname, processDescriptor->processId) != 0) {
-    logWarn("Could not assign execArgs->pathname to exec process.\n"
-      "Undefined behavior.\n");
-  }
 
-  if (execArgs->argv != NULL) {
-    if (assignMemory(execArgs->argv, processDescriptor->processId) != 0) {
-      logWarn("Could not assign argv to exec process.\n"
-        "Undefined behavior.\n");
-    }
-
-    for (int ii = 0; execArgs->argv[ii] != NULL; ii++) {
-      if (assignMemory(execArgs->argv[ii], processDescriptor->processId) != 0) {
-        logWarn("Could not assign execArgs->argv[%d] to exec process.\n"
-          "Undefined behavior.\n", ii);
-      }
-    }
-  }
 
   if (execArgs->envp != NULL) {
     if (assignMemory(execArgs->envp, processDescriptor->processId) != 0) {
@@ -4240,12 +4130,6 @@ int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
         "Undefined behavior.\n");
     }
 
-    for (int ii = 0; execArgs->envp[ii] != NULL; ii++) {
-      if (assignMemory(execArgs->envp[ii], processDescriptor->processId) != 0) {
-        logWarn("Could not assign execArgs->envp[%d] to exec "
-          "process\nUndefined behavior\n", ii);
-      }
-    }
   }
 
   processDescriptor->numFileDescriptors = NUM_STANDARD_FILE_DESCRIPTORS;
@@ -4323,25 +4207,9 @@ freeFileDescriptors:
   schedFree(processDescriptor->fileDescriptors);
 
 freeExecArgs:
-  schedFree(execArgs->pathname);
-
-  if (execArgs->argv != NULL) {
-    for (int ii = 0; execArgs->argv[ii] != NULL; ii++) {
-      schedFree(execArgs->argv[ii]);
-    }
-    schedFree(execArgs->argv);
-  }
-
   if (execArgs->envp != NULL) {
-    logInfo("Freeing execArgs->envp = 0x%lx\n",
-      (unsigned long int) (uintptr_t) processDescriptor->envp);
-    for (int ii = 0; execArgs->envp[ii] != NULL; ii++) {
-      schedFree(execArgs->envp[ii]);
-    }
     schedFree(execArgs->envp);
   }
-
-  // We don't need to and SHOULD NOT touch execArgs->schedulerState.
 
   schedFree(execArgs);
 
@@ -4606,9 +4474,6 @@ int restartOverlayShell(ProcessDescriptor *processDescriptor) {
 
   if (processDescriptor->userId == NO_USER_ID) {
     if (processDescriptor->envp != NULL) {
-      for (int ii = 0; processDescriptor->envp[ii] != NULL; ii++) {
-        schedFree(processDescriptor->envp[ii]);
-      }
       schedFree(processDescriptor->envp);
       processDescriptor->envp = NULL;
     }
@@ -4656,9 +4521,6 @@ int restartOverlayShell(ProcessDescriptor *processDescriptor) {
       returnValue = -EAGAIN;
     } else if (returnValue != 0) {
       if (processDescriptor->envp != NULL) {
-        for (int ii = 0; processDescriptor->envp[ii] != NULL; ii++) {
-          schedFree(processDescriptor->envp[ii]);
-        }
         schedFree(processDescriptor->envp);
         processDescriptor->envp = NULL;
       }
@@ -4806,12 +4668,6 @@ void runScheduler(void) {
           processDescriptor->processId);
       }
 
-      for (int ii = 0; processDescriptor->envp[ii] != NULL; ii++) {
-        if (assignMemory(processDescriptor->envp[ii], 0) != 0) {
-          logWarn("Could not protect envp[%d] memory from process %d\n"
-            "Undefined behavior\n", ii, processDescriptor->processId);
-        }
-      }
     }
 
     int returnValue = closeProcessFileDescriptors(processDescriptor);
@@ -4857,9 +4713,6 @@ void runScheduler(void) {
       }
     } else {
       if (processDescriptor->envp != NULL) {
-        for (int ii = 0; processDescriptor->envp[ii] != NULL; ii++) {
-          schedFree(processDescriptor->envp[ii]);
-        }
         schedFree(processDescriptor->envp);
         processDescriptor->envp = NULL;
       }
@@ -5071,26 +4924,26 @@ int initializeSchedulerState(
   standardKernelFileDescriptors[1].outputChannel.pid
     = consolePid;
   standardKernelFileDescriptors[1].outputChannel.messageType
-    = CONSOLE_COMMAND_SIGNATURE | CONSOLE_WRITE_BUFFER;
+    = CONSOLE_WRITE_BUFFER;
   standardKernelFileDescriptors[2].outputChannel.pid
     = consolePid;
   standardKernelFileDescriptors[2].outputChannel.messageType
-    = CONSOLE_COMMAND_SIGNATURE | CONSOLE_WRITE_BUFFER;
+    = CONSOLE_WRITE_BUFFER;
 
   // Direct the input pipe of user process stdin to the console.  Direcdt the
   // output pipes of user process stdout and stderr to the console as well.
   standardUserFileDescriptors[0].inputChannel.pid
     = consolePid;
   standardUserFileDescriptors[0].inputChannel.messageType
-    = CONSOLE_COMMAND_SIGNATURE | CONSOLE_WAIT_FOR_INPUT;
+    = CONSOLE_WAIT_FOR_INPUT;
   standardUserFileDescriptors[1].outputChannel.pid
     = consolePid;
   standardUserFileDescriptors[1].outputChannel.messageType
-    = CONSOLE_COMMAND_SIGNATURE | CONSOLE_WRITE_BUFFER;
+    = CONSOLE_WRITE_BUFFER;
   standardUserFileDescriptors[2].outputChannel.pid
     = consolePid;
   standardUserFileDescriptors[2].outputChannel.messageType
-    = CONSOLE_COMMAND_SIGNATURE | CONSOLE_WRITE_BUFFER;
+    = CONSOLE_WRITE_BUFFER;
 
   return 0;
 }

@@ -158,7 +158,7 @@ typedef struct NanoOsFile {
 /// @param messageType The type of message to send to the process.
 typedef struct IoChannel {
   ProcessId pid;
-  int64_t   messageType;
+  uint8_t   messageType;
 } IoChannel;
 
 /// @struct FileDescriptor

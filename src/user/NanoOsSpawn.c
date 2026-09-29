@@ -148,85 +148,76 @@ int nanoOsSpawn(
     return EFAULT;
   }
 
-  SpawnArgs *spawnArgs = (SpawnArgs*) calloc(1, sizeof(SpawnArgs));
+  size_t argvLen = 0;
+  size_t argvBytes = 0;
+  for (; argv[argvLen] != NULL; argvLen++) {
+    argvBytes += strlen(argv[argvLen]) + 1;
+  }
+  argvLen++;
+
+  size_t fileActionsBytes = 0;
+  if (file_actions != NULL) {
+    fileActionsBytes = sizeof(posix_spawn_file_actions_t);
+  }
+  size_t pathBytes = strlen(path) + 1;
+
+  SpawnArgs *spawnArgs = (SpawnArgs*) calloc(1,
+    sizeof(SpawnArgs) + fileActionsBytes + (argvLen * sizeof(char*))
+    + argvBytes + pathBytes);
   if (spawnArgs == NULL) {
     return ENOMEM;
   }
 
-  *pid = -1; // Default error value.
   spawnArgs->newPid = pid;
 
-  spawnArgs->path = (char*) malloc(strlen(path) + 1);
-  if (spawnArgs->path == NULL) {
-    returnValue = ENOMEM;
-    goto freeSpawnArgs;
-  }
-  strcpy(spawnArgs->path, path);
-
+  char *nextField = &((char*) spawnArgs)[sizeof(SpawnArgs)];
   if (file_actions != NULL) {
-    spawnArgs->fileActions = (posix_spawn_file_actions_t*) malloc(
-      sizeof(posix_spawn_file_actions_t));
-    if (spawnArgs->fileActions == NULL) {
-      returnValue = ENOMEM;
-      goto freeSpawnArgs;
-    }
+    spawnArgs->fileActions = (posix_spawn_file_actions_t*) nextField;
     memcpy(spawnArgs->fileActions, file_actions, sizeof(*file_actions));
+    nextField += fileActionsBytes;
   } else {
     spawnArgs->fileActions = NULL;
   }
 
+  spawnArgs->argv = (char**) nextField;
+  char *nextString = (char*) &spawnArgs->argv[argvLen];
+  size_t ii = 0;
+  for (; ii < (argvLen - 1); ii++) {
+    spawnArgs->argv[ii] = nextString;
+    strcpy(nextString, argv[ii]);
+    nextString += strlen(argv[ii]) + 1;
+  }
+  spawnArgs->argv[ii] = NULL;
+
+  spawnArgs->path = nextString;
+  strcpy(spawnArgs->path, path);
 
   // Not doing anything intelligent with this arg yet.  We need to make a copy
   // rather than casting away the `const` qualifier here if we ever do use it.
   spawnArgs->attrp = (posix_spawnattr_t*) attrp;
 
-  size_t argvLen = 0;
-  for (; argv[argvLen] != NULL; argvLen++);
-  argvLen++; // Account for the terminating NULL element
-  spawnArgs->argv = (char**) calloc(1, argvLen * sizeof(char*));
-  if (spawnArgs->argv == NULL) {
-    returnValue = ENOMEM;
-    goto freeSpawnArgs;
-  }
-
-  // argvLen is guaranteed to always be at least 1, so it's safe to run to
-  // (argvLen - 1) here.
-  size_t ii = 0;
-  for (; ii < (argvLen - 1); ii++) {
-    // We know that argv[ii] isn't NULL because of the calculation for argvLen
-    // above, so it's safe to use strlen.
-    spawnArgs->argv[ii] = (char*) malloc(strlen(argv[ii]) + 1);
-    if (spawnArgs->argv[ii] == NULL) {
-      returnValue = ENOMEM;
-      goto freeSpawnArgs;
-    }
-    strcpy(spawnArgs->argv[ii], argv[ii]);
-  }
-  spawnArgs->argv[ii] = NULL; // NULL-terminate the array
-
   if (envp != NULL) {
     size_t envpLen = 0;
-    for (; envp[envpLen] != NULL; envpLen++);
-    envpLen++; // Account for the terminating NULL element
-    spawnArgs->envp = (char**) calloc(1, envpLen * sizeof(char*));
+    size_t envpBytes = 0;
+    for (; envp[envpLen] != NULL; envpLen++) {
+      envpBytes += strlen(envp[envpLen]) + 1;
+    }
+    envpLen++;
+
+    spawnArgs->envp = (char**) calloc(1,
+      (envpLen * sizeof(char*)) + envpBytes);
     if (spawnArgs->envp == NULL) {
       returnValue = ENOMEM;
       goto freeSpawnArgs;
     }
 
-    // envpLen is guaranteed to always be at least 1, so it's safe to run to
-    // (envpLen - 1) here.
+    nextString = (char*) &spawnArgs->envp[envpLen];
     for (ii = 0; ii < (envpLen - 1); ii++) {
-      // We know that envp[ii] isn't NULL because of the calculation for envpLen
-      // above, so it's safe to use strlen.
-      spawnArgs->envp[ii] = (char*) malloc(strlen(envp[ii]) + 1);
-      if (spawnArgs->envp[ii] == NULL) {
-        returnValue = ENOMEM;
-        goto freeSpawnArgs;
-      }
-      strcpy(spawnArgs->envp[ii], envp[ii]);
+      spawnArgs->envp[ii] = nextString;
+      strcpy(nextString, envp[ii]);
+      nextString += strlen(envp[ii]) + 1;
     }
-    spawnArgs->envp[ii] = NULL; // NULL-terminate the array
+    spawnArgs->envp[ii] = NULL;
   } else {
     spawnArgs->envp = NULL;
   }

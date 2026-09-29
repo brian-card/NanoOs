@@ -304,10 +304,10 @@ int nanoOsPipe(int pipefd[2]) {
     processDescriptor->fileDescriptors[ii]->lastOwner = getRunningPid();
     processDescriptor->fileDescriptors[ii]->inputChannel.pid
       = PROCESS_ID_NOT_SET;
-    processDescriptor->fileDescriptors[ii]->inputChannel.messageType = -1;
+    processDescriptor->fileDescriptors[ii]->inputChannel.messageType = 0xff;
     processDescriptor->fileDescriptors[ii]->outputChannel.pid
       = PROCESS_ID_NOT_SET;
-    processDescriptor->fileDescriptors[ii]->outputChannel.messageType = -1;
+    processDescriptor->fileDescriptors[ii]->outputChannel.messageType = 0xff;
     processDescriptor->fileDescriptors[ii]->pipeEnd = NULL;
     processDescriptor->fileDescriptors[ii]->refCount = 1;
   }
@@ -315,10 +315,10 @@ int nanoOsPipe(int pipefd[2]) {
   // Fix the messages for the relevant channels in the file descriptors.
   processDescriptor->fileDescriptors[numFileDescriptors
     ]->inputChannel.messageType
-      = CONSOLE_COMMAND_SIGNATURE | CONSOLE_RETURNING_INPUT;
+      = CONSOLE_RETURNING_INPUT;
   processDescriptor->fileDescriptors[numFileDescriptors + 1
     ]->outputChannel.messageType
-      = CONSOLE_COMMAND_SIGNATURE | CONSOLE_RETURNING_INPUT;
+      = CONSOLE_RETURNING_INPUT;
   
   // Now point the pipe ends toward each other.
   processDescriptor->fileDescriptors[numFileDescriptors]->pipeEnd

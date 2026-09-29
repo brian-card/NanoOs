@@ -86,10 +86,7 @@ char** stringArrayDestroy(char **stringArray) {
 ///
 /// @return This function always succeeds and always returns NULL.
 ExecArgs* execArgsDestroy(ExecArgs *execArgs) {
-  free(execArgs->pathname);
-
-  execArgs->argv = stringArrayDestroy(execArgs->argv);
-  execArgs->envp = stringArrayDestroy(execArgs->envp);
+  free(execArgs->envp);
 
   // We don't need to and SHOULD NOT touch execArgs->schedulerState.
 
@@ -105,11 +102,7 @@ ExecArgs* execArgsDestroy(ExecArgs *execArgs) {
 ///
 /// @return This function always succeeds and always returns NULL.
 SpawnArgs* spawnArgsDestroy(SpawnArgs *spawnArgs) {
-  free(spawnArgs->path);
-  free(spawnArgs->fileActions);
-
-  spawnArgs->argv = stringArrayDestroy(spawnArgs->argv);
-  spawnArgs->envp = stringArrayDestroy(spawnArgs->envp);
+  free(spawnArgs->envp);
 
   // We don't need to and SHOULD NOT touch spawnArgs->schedulerState.
 
