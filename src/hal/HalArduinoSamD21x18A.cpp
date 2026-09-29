@@ -113,7 +113,7 @@ void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
 /// function pointers and HalMemory's overlay/log/scheduler pointers
 /// were converted to callHal-routed getters.
 ///
-/// Tested raising this in small steps (0x20002600, 0x20002700, 0x20002900)
+/// Tested raising this in small steps (0x20002600, 0x20002580, 0x20002900)
 /// while root-causing a real-hardware boot hang, on the theory that Arduino
 /// core/library boot-time dynamic (heap) allocations -- which start right
 /// after .bss too -- were growing past the original ~524-byte margin here
@@ -140,7 +140,7 @@ void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
 /// heap above (bottomOfHeap is OVERLAY_ADDRESS + OVERLAY_SIZE), so this is
 /// not free headroom to pad.  Moving the window from 0x200025A0 to 0x20002800
 /// cost the NanoOs heap 608 bytes and made `ps | grep p | grep t` run out of
-/// memory.  0x20002700 leaves the newlib heap 892 bytes -- 100 over its
+/// memory.  0x20002580 leaves the newlib heap 892 bytes -- 100 over its
 /// measured need -- and gives 256 of those bytes back.  The margin can be
 /// this tight because _sbrk now enforces the boundary instead of trusting it:
 /// overrunning fails the allocation rather than corrupting the window.
@@ -148,7 +148,7 @@ void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
 /// MUST be kept in sync with:
 ///   - __nanoos_overlay_window in ld/ArduinoSamd21FlashWithBootloader.ld
 ///   - OVERLAY_RAM ORIGIN      in usr/src/NanoOsArduinoSamd21.ld
-#define OVERLAY_ADDRESS 0x20002700
+#define OVERLAY_ADDRESS 0x20002580
 
 /// @def OVERLAY_SIZE
 ///

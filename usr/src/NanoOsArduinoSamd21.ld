@@ -6,7 +6,7 @@
  *  @file              NanoOsArduinoSamd21.ld
  *
  *  @brief             Linker script for ARM-compiled NanoOs user-space
- *                     applications organized at base address 0x20002700.
+ *                     applications organized at base address 0x20002580.
  *                     For use with arm-none-eabi-gcc.
  *
  *  @copyright
@@ -36,7 +36,7 @@
  */
 
 /* Overlay Linker Script for ARM Cortex-M0 */
-/* Overlay loads at RAM address 0x20002700 */
+/* Overlay loads at RAM address 0x20002580 */
 
 /*
  * OVERLAY_RAM ORIGIN below MUST match OVERLAY_ADDRESS in
@@ -53,7 +53,7 @@
 MEMORY
 {
     /* Overlay RAM region - adjust size as needed */
-    OVERLAY_RAM (rwx) : ORIGIN = 0x20002700, LENGTH = 4K
+    OVERLAY_RAM (rwx) : ORIGIN = 0x20002580, LENGTH = 4K
 }
 
 /* Entry point - not critical for overlays but good practice */
@@ -62,7 +62,7 @@ ENTRY(_start)
 SECTIONS
 {
     /* Overlay header must be first - contains export table info */
-    .overlay_header 0x20002700 :
+    .overlay_header 0x20002580 :
     {
         KEEP(*(.overlay_header))
         . = ALIGN(4);
