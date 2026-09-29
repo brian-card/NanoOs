@@ -123,15 +123,15 @@ int main(int argc, char **argv) {
   fputs("password: ", stdout);
   
   // Disable echo
-  overlayMap.header.osApi->userApi->tcgetattr(STDIN_FILENO, old);
+  tcgetattr(STDIN_FILENO, old);
   *new = *old;
   new->c_lflag &= ~ECHO;
-  overlayMap.header.osApi->userApi->tcsetattr(STDIN_FILENO, TCSANOW, new);
+  tcsetattr(STDIN_FILENO, TCSANOW, new);
   
   char *input = fgets(userPassword, NANO_OS_MAX_PASSWORD_LENGTH + 1, stdin);
   
   // Restore echo
-  overlayMap.header.osApi->userApi->tcsetattr(STDIN_FILENO, TCSANOW, old);
+  tcsetattr(STDIN_FILENO, TCSANOW, old);
   
   // Print a newline since one didn't get echoed when the user hit <ENTER>.
   fputs("\n", stdout);
