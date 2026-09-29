@@ -1962,6 +1962,8 @@ int schedulerExecve(const char *pathname,
   execArgs->argv = (char**) &((char*) execArgs)[sizeof(ExecArgs)];
   char *nextString = (char*) &execArgs->argv[argvLen];
   size_t ii = 0;
+  // argvLen is guaranteed to always be at least 1, so it's safe to run to
+  // (argvLen - 1) here.
   for (; ii < (argvLen - 1); ii++) {
     execArgs->argv[ii] = nextString;
     strcpy(nextString, argv[ii]);
@@ -1993,6 +1995,8 @@ int schedulerExecve(const char *pathname,
 
       execArgs->envp = (char**) &envpBlock[paddedBytes];
       nextString = envpBlock;
+      // envpLen is guaranteed to always be at least 1, so it's safe to run to
+      // (envpLen - 1) here.
       for (ii = 0; ii < (envpLen - 1); ii++) {
         execArgs->envp[ii] = nextString;
         strcpy(nextString, envp[ii]);
@@ -3017,6 +3021,7 @@ int schedulerExecveCommandHandler(
   // The arguments provided to this command are going to replace the ones that
   // spawned the original.  We need to free the original envp if there was one.
   if (processDescriptor->envp != NULL) {
+    // The pointer for the envp block is stored at envp[0], so free that.
     schedFree(processDescriptor->envp[0]);
     processDescriptor->envp = NULL;
   }
@@ -4107,6 +4112,8 @@ int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
   execArgs->argv = (char**) &((char*) execArgs)[sizeof(ExecArgs)];
   char *nextString = (char*) &execArgs->argv[argvLen];
   size_t ii = 0;
+  // argvLen is guaranteed to always be at least 1, so it's safe to run to
+  // (argvLen - 1) here.
   for (; ii < (argvLen - 1); ii++) {
     execArgs->argv[ii] = nextString;
     strcpy(nextString, argv[ii]);
@@ -4130,8 +4137,6 @@ int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
     logWarn("Could not assign execArgs to exec process.\n"
       "Undefined behavior.\n");
   }
-
-
 
   if (execArgs->envp != NULL) {
     if (assignMemory(execArgs->envp[0], processDescriptor->processId) != 0) {
@@ -4217,6 +4222,7 @@ freeFileDescriptors:
 
 freeExecArgs:
   if (execArgs->envp != NULL) {
+    // The pointer for the envp block is stored at envp[0], so free that.
     schedFree(execArgs->envp[0]);
   }
 
@@ -4483,6 +4489,7 @@ int restartOverlayShell(ProcessDescriptor *processDescriptor) {
 
   if (processDescriptor->userId == NO_USER_ID) {
     if (processDescriptor->envp != NULL) {
+      // The pointer for the envp block is stored at envp[0], so free that.
       schedFree(processDescriptor->envp[0]);
       processDescriptor->envp = NULL;
     }
@@ -4530,6 +4537,7 @@ int restartOverlayShell(ProcessDescriptor *processDescriptor) {
       returnValue = -EAGAIN;
     } else if (returnValue != 0) {
       if (processDescriptor->envp != NULL) {
+        // The pointer for the envp block is stored at envp[0], so free that.
         schedFree(processDescriptor->envp[0]);
         processDescriptor->envp = NULL;
       }
@@ -4722,6 +4730,7 @@ void runScheduler(void) {
       }
     } else {
       if (processDescriptor->envp != NULL) {
+        // The pointer for the envp block is stored at envp[0], so free that.
         schedFree(processDescriptor->envp[0]);
         processDescriptor->envp = NULL;
       }
