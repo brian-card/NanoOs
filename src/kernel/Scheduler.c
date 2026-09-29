@@ -1980,21 +1980,28 @@ int schedulerExecve(const char *pathname,
     }
     envpLen++;
 
-    execArgs->envp = (char**) calloc(1,
-      (envpLen * sizeof(char*)) + envpBytes);
-    if (execArgs->envp == NULL) {
-      logError("Allocating execArgs->envp failed\n");
-      errno = ENOMEM;
-      goto freeExecArgs;
-    }
+    if (envpBytes > 0) {
+      size_t paddedBytes
+        = (envpBytes + sizeof(uintptr_t) - 1) & ~(sizeof(uintptr_t) - 1);
+      char *envpBlock = (char*) calloc(1,
+        paddedBytes + (envpLen * sizeof(char*)));
+      if (envpBlock == NULL) {
+        logError("Allocating execArgs->envp failed\n");
+        errno = ENOMEM;
+        goto freeExecArgs;
+      }
 
-    nextString = (char*) &execArgs->envp[envpLen];
-    for (ii = 0; ii < (envpLen - 1); ii++) {
-      execArgs->envp[ii] = nextString;
-      strcpy(nextString, envp[ii]);
-      nextString += strlen(envp[ii]) + 1;
+      execArgs->envp = (char**) &envpBlock[paddedBytes];
+      nextString = envpBlock;
+      for (ii = 0; ii < (envpLen - 1); ii++) {
+        execArgs->envp[ii] = nextString;
+        strcpy(nextString, envp[ii]);
+        nextString += strlen(envp[ii]) + 1;
+      }
+      execArgs->envp[ii] = NULL;
+    } else {
+      execArgs->envp = NULL;
     }
-    execArgs->envp[ii] = NULL;
   } else {
     execArgs->envp = NULL;
   }
@@ -3010,7 +3017,7 @@ int schedulerExecveCommandHandler(
   // The arguments provided to this command are going to replace the ones that
   // spawned the original.  We need to free the original envp if there was one.
   if (processDescriptor->envp != NULL) {
-    schedFree(processDescriptor->envp);
+    schedFree(processDescriptor->envp[0]);
     processDescriptor->envp = NULL;
   }
 
@@ -3023,7 +3030,7 @@ int schedulerExecveCommandHandler(
 
   if (envp != NULL) {
     logDebug("Assigning envp to PID 0\n");
-    if (assignMemory(envp, 0) != 0) {
+    if (assignMemory(envp[0], 0) != 0) {
       logWarn("Could not protect envp memory.\nUndefined behavior.\n");
     }
   }
@@ -3111,7 +3118,7 @@ int schedulerExecveCommandHandler(
   if (envp != NULL) {
     logDebug("Assigning envp to process %d\n",
       processDescriptor->processId);
-    if (assignMemory(envp, processDescriptor->processId) != 0) {
+    if (assignMemory(envp[0], processDescriptor->processId) != 0) {
       logWarn("Could not assign envp to exec process.\n"
         "Undefined behavior.\n");
     }
@@ -3395,7 +3402,7 @@ int schedulerSpawnCommandHandler(
   }
 
   if (envp != NULL) {
-    if (assignMemory(envp, processDescriptor->processId) != 0) {
+    if (assignMemory(envp[0], processDescriptor->processId) != 0) {
       logWarn("Could not assign envp to spawn process.\n"
         "Undefined behavior.\n");
     }
@@ -4127,7 +4134,7 @@ int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
 
 
   if (execArgs->envp != NULL) {
-    if (assignMemory(execArgs->envp, processDescriptor->processId) != 0) {
+    if (assignMemory(execArgs->envp[0], processDescriptor->processId) != 0) {
       logWarn("Could not assign execArgs->envp to exec process.\n"
         "Undefined behavior.\n");
     }
@@ -4210,7 +4217,7 @@ freeFileDescriptors:
 
 freeExecArgs:
   if (execArgs->envp != NULL) {
-    schedFree(execArgs->envp);
+    schedFree(execArgs->envp[0]);
   }
 
   schedFree(execArgs);
@@ -4476,7 +4483,7 @@ int restartOverlayShell(ProcessDescriptor *processDescriptor) {
 
   if (processDescriptor->userId == NO_USER_ID) {
     if (processDescriptor->envp != NULL) {
-      schedFree(processDescriptor->envp);
+      schedFree(processDescriptor->envp[0]);
       processDescriptor->envp = NULL;
     }
 
@@ -4523,7 +4530,7 @@ int restartOverlayShell(ProcessDescriptor *processDescriptor) {
       returnValue = -EAGAIN;
     } else if (returnValue != 0) {
       if (processDescriptor->envp != NULL) {
-        schedFree(processDescriptor->envp);
+        schedFree(processDescriptor->envp[0]);
         processDescriptor->envp = NULL;
       }
     }
@@ -4664,7 +4671,7 @@ void runScheduler(void) {
 
   if (processRunning(processDescriptor) == false) {
     if (processDescriptor->envp != NULL) {
-      if (assignMemory(processDescriptor->envp, 0) != 0) {
+      if (assignMemory(processDescriptor->envp[0], 0) != 0) {
         logWarn("Could not protect envp memory from process %d\n"
           "Undefined behavior\n",
           processDescriptor->processId);
@@ -4715,7 +4722,7 @@ void runScheduler(void) {
       }
     } else {
       if (processDescriptor->envp != NULL) {
-        schedFree(processDescriptor->envp);
+        schedFree(processDescriptor->envp[0]);
         processDescriptor->envp = NULL;
       }
     }

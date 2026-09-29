@@ -86,7 +86,9 @@ char** stringArrayDestroy(char **stringArray) {
 ///
 /// @return This function always succeeds and always returns NULL.
 ExecArgs* execArgsDestroy(ExecArgs *execArgs) {
-  free(execArgs->envp);
+  if (execArgs->envp != NULL) {
+    free(execArgs->envp[0]);
+  }
 
   // We don't need to and SHOULD NOT touch execArgs->schedulerState.
 
@@ -102,7 +104,9 @@ ExecArgs* execArgsDestroy(ExecArgs *execArgs) {
 ///
 /// @return This function always succeeds and always returns NULL.
 SpawnArgs* spawnArgsDestroy(SpawnArgs *spawnArgs) {
-  free(spawnArgs->envp);
+  if (spawnArgs->envp != NULL) {
+    free(spawnArgs->envp[0]);
+  }
 
   // We don't need to and SHOULD NOT touch spawnArgs->schedulerState.
 

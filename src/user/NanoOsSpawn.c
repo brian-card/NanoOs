@@ -204,20 +204,27 @@ int nanoOsSpawn(
     }
     envpLen++;
 
-    spawnArgs->envp = (char**) calloc(1,
-      (envpLen * sizeof(char*)) + envpBytes);
-    if (spawnArgs->envp == NULL) {
-      returnValue = ENOMEM;
-      goto freeSpawnArgs;
-    }
+    if (envpBytes > 0) {
+      size_t paddedBytes
+        = (envpBytes + sizeof(uintptr_t) - 1) & ~(sizeof(uintptr_t) - 1);
+      char *envpBlock = (char*) calloc(1,
+        paddedBytes + (envpLen * sizeof(char*)));
+      if (envpBlock == NULL) {
+        returnValue = ENOMEM;
+        goto freeSpawnArgs;
+      }
 
-    nextString = (char*) &spawnArgs->envp[envpLen];
-    for (ii = 0; ii < (envpLen - 1); ii++) {
-      spawnArgs->envp[ii] = nextString;
-      strcpy(nextString, envp[ii]);
-      nextString += strlen(envp[ii]) + 1;
+      spawnArgs->envp = (char**) &envpBlock[paddedBytes];
+      nextString = envpBlock;
+      for (ii = 0; ii < (envpLen - 1); ii++) {
+        spawnArgs->envp[ii] = nextString;
+        strcpy(nextString, envp[ii]);
+        nextString += strlen(envp[ii]) + 1;
+      }
+      spawnArgs->envp[ii] = NULL;
+    } else {
+      spawnArgs->envp = NULL;
     }
-    spawnArgs->envp[ii] = NULL;
   } else {
     spawnArgs->envp = NULL;
   }
