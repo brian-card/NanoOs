@@ -172,6 +172,9 @@ if [ -b "${targetDevice}" ]; then
 	sudo mkdir -p "${mountDir}/etc"
 	sudo bash -c "printf \"${hostname}\" >\"${mountDir}/etc/hostname\""
 	sudo bash -c "printf '\\s \\\r \\\n \\l\n\n' >\"${mountDir}/etc/issue\""
+	sudo mkdir -p "${mountDir}/root"
+	sudo mkdir -p "${mountDir}/home/user1"
+	sudo mkdir -p "${mountDir}/home/user2"
 	sudo umount "${mountDir}"
 
 	if [ "${blockFilesystem}" = "contiguous" ]; then
@@ -247,6 +250,14 @@ else
 		| MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" - ::/etc/hostname
 	printf '\\s \\r \\n \\l\n\n' \
 		| MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" - ::/etc/issue
+	MTOOLS_SKIP_CHECK=1 mdir -i "${fatImage}" ::/root >/dev/null 2>&1 \
+		|| MTOOLS_SKIP_CHECK=1 mmd -i "${fatImage}" ::/root
+	MTOOLS_SKIP_CHECK=1 mdir -i "${fatImage}" ::/home >/dev/null 2>&1 \
+		|| MTOOLS_SKIP_CHECK=1 mmd -i "${fatImage}" ::/home
+	MTOOLS_SKIP_CHECK=1 mdir -i "${fatImage}" ::/home/user1 >/dev/null 2>&1 \
+		|| MTOOLS_SKIP_CHECK=1 mmd -i "${fatImage}" ::/home/user1
+	MTOOLS_SKIP_CHECK=1 mdir -i "${fatImage}" ::/home/user2 >/dev/null 2>&1 \
+		|| MTOOLS_SKIP_CHECK=1 mmd -i "${fatImage}" ::/home/user2
 
 	# Write block overlays into the image at their absolute sector positions,
 	# relative to the start of the image. Overlay IDs start at 1 to avoid
