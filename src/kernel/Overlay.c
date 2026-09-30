@@ -315,14 +315,14 @@ exit:
   return returnValue;
 }
 
-/// @var _startFunctionName
+/// @var startFunctionName
 ///
 /// @brief Name of the exported entry-point function every command overlay
 /// must provide.
 ///
 /// @note KEEP_IN_FLASH is required here because .rodata is removed from the
 /// final binary on some targets.
-static const char _startFunctionName[] KEEP_IN_FLASH = "_start";
+const char startFunctionName[] KEEP_IN_FLASH = "_start";
 
 /// @fn int runOverlayCommand(const char *commandPath,
 ///   int argc, char **argv)
@@ -341,7 +341,7 @@ int runOverlayCommand(const char *commandPath,
   // The overlay is already loaded by the scheduler, so there's no need to load
   // it manually.
 
-  OverlayFunction _start = findOverlayFunction(_startFunctionName);
+  OverlayFunction _start = findOverlayFunction(startFunctionName);
   if (_start == NULL) {
     logError("Could not find exported _start function in \"%s\" overlay.\n",
       commandPath);
