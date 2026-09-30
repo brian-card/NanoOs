@@ -332,7 +332,7 @@ void* execOverlayCommand(void *args) {
     };
     logDebug("Calling _start function at address 0x%lx\n",
       (unsigned long int) (uintptr_t) _start);
-    int returnValue = (int) ((intptr_t) _start(&mainArgs));
+    returnValue = (int) ((intptr_t) _start(&mainArgs));
     logDebug("Got return value %ld from _start function\n",
       (long int) returnValue);
     if ((returnValue < 0) || (returnValue > 255)) {
