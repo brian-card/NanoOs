@@ -1878,7 +1878,7 @@ int halAgonLight2Init(void) {
   int returnValue = halCommonInit(
     /* builtinFilesystemInitDriver= */ NULL,
     /* builtinFilesystemCommandHandlers= */ NULL,
-    /* numExtraFilesystemStacks= */ 1
+    /* numExtraFilesystemStacks= */ 0
   );
 
   enableInterrupts();
