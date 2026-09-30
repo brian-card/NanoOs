@@ -188,6 +188,11 @@ int main(int argc, char **argv) {
   strcpy(envPwd, "PWD=");
   strcat(envPwd, pwd->pw_dir);
   
+  // The OLDPWD variable will be three more than PWD.
+  char envOldpwd[LOGIN_NAME_MAX + 13 + 1];
+  strcpy(envOldpwd, "OLDPWD=");
+  strcat(envOldpwd, pwd->pw_dir);
+  
   // The UID variable will be strlen("UID=") = 4 plus one character since we
   // only have single-digit user IDs right now.
   char envUid[4 + 1 + 1];
@@ -211,6 +216,7 @@ int main(int argc, char **argv) {
   char *shellEnvp[] = {
     envHome,
     envHostname,
+    envOldpwd,
     envPwd,
     envUid,
     envUser,
