@@ -196,6 +196,7 @@ static const NanoOsUserApi _nanoOsUserApi = {
   // Other stdlib functions:
   .strtoll = nanoOsStrtoll,
   .setenv = nanoOsSetenv,
+  .unsetenv = nanoOsUnsetenv,
   
   // unistd functions:
   .close = nanoOsClose,

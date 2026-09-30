@@ -197,6 +197,7 @@ typedef struct NanoOsUserApi {
   // Other stdlib functions:
   long long (*strtoll)(const char *nptr, char **endptr, int base);
   int (*setenv)(const char *name, const char *value, int overwrite);
+  int (*unsetenv)(const char *name);
   
   // unistd functions:
   int (*close)(int fd);
