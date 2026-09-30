@@ -55,13 +55,15 @@ int main(int argc, char **argv) {
     prompt = '#';
   }
   
-  char *username = getenv("USER");
-  char *hostname = getenv("HOSTNAME");
-  if (hostname == NULL) {
-    hostname = "localhost";
-  }
-  
   do {
+    char *username = getenv("USER");
+    if (username == NULL) {
+      username = "<unknown user>";
+    }
+    char *hostname = getenv("HOSTNAME");
+    if (hostname == NULL) {
+      hostname = "localhost";
+    }
     char *pwd = getenv("PWD");
     if (pwd == NULL) {
       pwd = "<unknown directory>";
