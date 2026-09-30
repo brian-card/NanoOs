@@ -171,3 +171,97 @@ NANO_OS_KERNEL_TEST(env, setenv_preserves_the_inherited_environment) {
   NANO_OS_ASSERT_STR_EQ(firstEntry, getRunningProcess()->envp[0]);
   NANO_OS_ASSERT_TRUE(envLayoutIsValid());
 }
+
+NANO_OS_KERNEL_TEST(env, unsetenv_rejects_invalid_names) {
+  NANO_OS_ASSERT_EQ_INT(-1, nanoOsUnsetenv(NULL));
+  NANO_OS_ASSERT_EQ_INT(EINVAL, errno);
+  NANO_OS_ASSERT_EQ_INT(-1, nanoOsUnsetenv(""));
+  NANO_OS_ASSERT_EQ_INT(EINVAL, errno);
+  NANO_OS_ASSERT_EQ_INT(-1, nanoOsUnsetenv("HAS=EQUALS"));
+  NANO_OS_ASSERT_EQ_INT(EINVAL, errno);
+}
+
+NANO_OS_KERNEL_TEST(env, unsetenv_ignores_a_missing_variable) {
+  int count = envCount();
+  NANO_OS_ASSERT_EQ_INT(0, nanoOsUnsetenv("NANOOS_TEST_NOT_THERE"));
+  NANO_OS_ASSERT_EQ_INT(count, envCount());
+  NANO_OS_ASSERT_TRUE(envLayoutIsValid());
+}
+
+NANO_OS_KERNEL_TEST(env, unsetenv_removes_a_variable) {
+  NANO_OS_ASSERT_EQ_INT(0, nanoOsSetenv("NANOOS_TEST_FIRST", "one", 1));
+  NANO_OS_ASSERT_EQ_INT(0, nanoOsSetenv("NANOOS_TEST_MIDDLE", "a value", 1));
+  NANO_OS_ASSERT_EQ_INT(0, nanoOsSetenv("NANOOS_TEST_LAST", "three", 1));
+  int count = envCount();
+
+  NANO_OS_ASSERT_EQ_INT(0, nanoOsUnsetenv("NANOOS_TEST_MIDDLE"));
+  NANO_OS_ASSERT_NULL(envLookup("NANOOS_TEST_MIDDLE"));
+  NANO_OS_ASSERT_STR_EQ("one", envLookup("NANOOS_TEST_FIRST"));
+  NANO_OS_ASSERT_STR_EQ("three", envLookup("NANOOS_TEST_LAST"));
+  NANO_OS_ASSERT_EQ_INT(count - 1, envCount());
+  NANO_OS_ASSERT_TRUE(envLayoutIsValid());
+
+  NANO_OS_ASSERT_EQ_INT(0, nanoOsUnsetenv("NANOOS_TEST_LAST"));
+  NANO_OS_ASSERT_NULL(envLookup("NANOOS_TEST_LAST"));
+  NANO_OS_ASSERT_STR_EQ("one", envLookup("NANOOS_TEST_FIRST"));
+  NANO_OS_ASSERT_EQ_INT(count - 2, envCount());
+  NANO_OS_ASSERT_TRUE(envLayoutIsValid());
+}
+
+NANO_OS_KERNEL_TEST(env, unsetenv_can_be_set_again_afterward) {
+  NANO_OS_ASSERT_EQ_INT(0, nanoOsSetenv("NANOOS_TEST_CYCLE", "before", 1));
+  NANO_OS_ASSERT_EQ_INT(0, nanoOsUnsetenv("NANOOS_TEST_CYCLE"));
+  NANO_OS_ASSERT_NULL(envLookup("NANOOS_TEST_CYCLE"));
+  NANO_OS_ASSERT_EQ_INT(0, nanoOsSetenv("NANOOS_TEST_CYCLE", "after", 1));
+  NANO_OS_ASSERT_STR_EQ("after", envLookup("NANOOS_TEST_CYCLE"));
+  NANO_OS_ASSERT_TRUE(envLayoutIsValid());
+}
+
+NANO_OS_KERNEL_TEST(env, unsetenv_draining_the_environment_yields_null) {
+  while (envCount() > 0) {
+    char name[64];
+    char *entry = getRunningProcess()->envp[0];
+    char *equalsAt = strchr(entry, '=');
+    NANO_OS_ASSERT_NOT_NULL(equalsAt);
+    size_t nameLen = (size_t) (equalsAt - entry);
+    NANO_OS_ASSERT_TRUE(nameLen < sizeof(name));
+    memcpy(name, entry, nameLen);
+    name[nameLen] = '\0';
+
+    NANO_OS_ASSERT_EQ_INT(0, nanoOsUnsetenv(name));
+    NANO_OS_ASSERT_TRUE(envLayoutIsValid());
+  }
+
+  NANO_OS_ASSERT_NULL(getRunningProcess()->envp);
+  NANO_OS_ASSERT_EQ_INT(0, nanoOsUnsetenv("NANOOS_TEST_ANYTHING"));
+
+  NANO_OS_ASSERT_EQ_INT(0, nanoOsSetenv("NANOOS_TEST_REBUILT", "value", 1));
+  NANO_OS_ASSERT_STR_EQ("value", envLookup("NANOOS_TEST_REBUILT"));
+  NANO_OS_ASSERT_EQ_INT(1, envCount());
+  NANO_OS_ASSERT_TRUE(envLayoutIsValid());
+}
+
+NANO_OS_KERNEL_TEST(env, setenv_accepts_a_value_from_another_variable) {
+  NANO_OS_ASSERT_EQ_INT(0, nanoOsSetenv("NANOOS_TEST_SRC", "/a/source/path", 1));
+  NANO_OS_ASSERT_EQ_INT(0, nanoOsSetenv("NANOOS_TEST_DST", "x", 1));
+  NANO_OS_ASSERT_EQ_INT(0, nanoOsSetenv("NANOOS_TEST_END", "tail", 1));
+  int count = envCount();
+
+  // The value aliases the block that setenv is about to grow and memmove.
+  NANO_OS_ASSERT_EQ_INT(0,
+    nanoOsSetenv("NANOOS_TEST_DST", envLookup("NANOOS_TEST_SRC"), 1));
+  NANO_OS_ASSERT_STR_EQ("/a/source/path", envLookup("NANOOS_TEST_DST"));
+  NANO_OS_ASSERT_STR_EQ("/a/source/path", envLookup("NANOOS_TEST_SRC"));
+  NANO_OS_ASSERT_STR_EQ("tail", envLookup("NANOOS_TEST_END"));
+  NANO_OS_ASSERT_EQ_INT(count, envCount());
+  NANO_OS_ASSERT_TRUE(envLayoutIsValid());
+
+  // Same thing in the other direction, where the source sits after the target.
+  NANO_OS_ASSERT_EQ_INT(0, nanoOsSetenv("NANOOS_TEST_SRC", "short", 1));
+  NANO_OS_ASSERT_EQ_INT(0,
+    nanoOsSetenv("NANOOS_TEST_SRC", envLookup("NANOOS_TEST_END"), 1));
+  NANO_OS_ASSERT_STR_EQ("tail", envLookup("NANOOS_TEST_SRC"));
+  NANO_OS_ASSERT_STR_EQ("tail", envLookup("NANOOS_TEST_END"));
+  NANO_OS_ASSERT_EQ_INT(count, envCount());
+  NANO_OS_ASSERT_TRUE(envLayoutIsValid());
+}

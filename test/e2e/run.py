@@ -26,7 +26,9 @@ CACHE_DIR = os.path.join(E2E_DIR, ".cache")
 HOSTNAME = "nanoe2e"
 BLOCK_FS = "contiguous"
 SIM_BINARIES = ["nano-os-sim_stripped", "nano-os-sim"]
-PROMPT = r"mush [^\r\n]*@%s:[^\r\n]*[#$] " % HOSTNAME
+PROMPT = r"mush [^\r\n]*@%s:[^\r\n]+[#$] " % HOSTNAME
+# Same prompt, capturing the user and the working directory it reports.
+PROMPT_PARTS = r"mush ([^\r\n@]+)@%s:([^\r\n]+)[#$] " % HOSTNAME
 
 VERBOSE = False
 
@@ -113,6 +115,47 @@ def test_login_rejects_bad_password(s):
     s.child.sendline("wrongpassword")
     idx = s.child.expect([PROMPT, "login: ", pexpect.TIMEOUT], timeout=10)
     assert idx != 0, "bad password produced a shell prompt"
+
+
+def promptParts(s):
+    """Return (user, directory) from the next prompt the shell emits."""
+    s.child.sendline("")
+    s.child.expect(PROMPT_PARTS, timeout=10)
+    return s.child.match.group(1), s.child.match.group(2)
+
+
+def test_prompt_reports_the_user_and_working_directory(s):
+    # A missing or empty PWD in the shell's environment has to fail here rather
+    # than being absorbed by the prompt pattern.
+    s.login()
+    user, pwd = promptParts(s)
+    assert user == "root", f"prompt user is {user!r}"
+    assert pwd.startswith("/"), f"prompt directory is not absolute: {pwd!r}"
+    assert "unknown" not in pwd, f"shell could not read PWD: {pwd!r}"
+    assert pwd == s.sh("pwd").splitlines()[-1].strip(), \
+        f"prompt directory {pwd!r} disagrees with pwd builtin"
+
+
+def test_cd_changes_the_working_directory(s):
+    # Each step checks the user as well as the directory: setenv reallocates the
+    # environment block, so anything the shell cached a getenv pointer to shows
+    # up here as a mangled prompt.
+    s.login()
+    home = promptParts(s)[1]
+
+    for command, expected in (("cd /usr/bin", "/usr/bin"),
+                              ("cd ..", "/usr"),
+                              ("cd -", "/usr/bin"),
+                              ("cd", home)):
+        s.child.sendline(command)
+        s.child.expect(PROMPT_PARTS, timeout=10)
+        user, pwd = s.child.match.group(1), s.child.match.group(2)
+        assert pwd == expected, f"{command!r} left the prompt at {pwd!r}"
+        assert user == "root", f"{command!r} mangled the prompt user to {user!r}"
+
+    assert "/usr/bin" not in s.sh("pwd"), \
+        "bare cd did not return to the home directory"
+    assert "alive" in s.sh("echo alive")
 
 
 def test_ps_lists_kernel_processes(s):

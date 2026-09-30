@@ -44,6 +44,7 @@ fi
 echo "mkimage: building applications + simulator..."
 make -j "$(nproc)" -C usr/src clean
 make -j "$(nproc)" -C "usr/src/filesystems/${blockFilesystem}" clean
+make -j "$(nproc)" -C sim clean
 make -j "$(nproc)" -C usr/src COMPILE=gcc LINK=ld OBJCOPY=objcopy \
 	OBJDUMP=objdump SIZE=size LINKER_SCRIPT=NanoOsSim.ld overlays
 make -j "$(nproc)" -C "usr/src/filesystems/${blockFilesystem}" COMPILE=gcc \
