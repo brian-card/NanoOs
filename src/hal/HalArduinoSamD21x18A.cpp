@@ -2187,7 +2187,8 @@ int halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
 
   return halCommonInit(
     /* builtinFilesystemInitDriver= */ filesystemInitDriver,
-    /* builtinFilesystemCommandHandlers= */ fat32CommandHandlers
+    /* builtinFilesystemCommandHandlers= */ fat32CommandHandlers,
+    /* numExtraFilesystemStacks= */ 1
   );
 }
 

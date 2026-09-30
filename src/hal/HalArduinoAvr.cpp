@@ -872,7 +872,8 @@ int halArduinoAvrInit(HalArduinoAvrInitArgs *args) {
 
   return halCommonInit(
     /* builtinFilesystemInitDriver= */ filesystemInitDriver,
-    /* builtinFilesystemCommandHandlers= */ fat32CommandHandlers
+    /* builtinFilesystemCommandHandlers= */ fat32CommandHandlers,
+    /* numExtraFilesystemStacks= */ 1
   );
 }
 

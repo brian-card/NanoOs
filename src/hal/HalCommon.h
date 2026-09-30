@@ -306,7 +306,8 @@ int restartOverlayFilesystem(ProcessDescriptor *processDescriptor);
 int restartContiguousFilesystem(ProcessDescriptor *processDescriptor);
 int halCommonInit(
   FilesystemDriverInit builtinFilesystemInitDriver,
-  const FilesystemCommandHandler *builtinFilesystemCommandHandlers);
+  const FilesystemCommandHandler *builtinFilesystemCommandHandlers,
+  int numExtraFilesystemStacks);
 
 #ifdef __cplusplus
 } // extern "C"

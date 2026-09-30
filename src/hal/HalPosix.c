@@ -784,7 +784,9 @@ int halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
   // path, so there's no driver to hand halCommonInit here.
   return halCommonInit(
     /* builtinFilesystemInitDriver= */ NULL,
-    /* builtinFilesystemCommandHandlers= */ NULL);
+    /* builtinFilesystemCommandHandlers= */ NULL,
+    /* numExtraFilesystemStacks= */ 1
+  );
 }
 
 #endif // __x86_64__

@@ -838,6 +838,11 @@ static const char _restartContiguousFilesystemFailedMessage[] KEEP_IN_FLASH
 static const char _contiguousFilesystemReadFailedMessage[] KEEP_IN_FLASH
   = "Could not read filesystem binary from block device\n";
 
+/// @var _numExtraFilesystemStacks
+///
+/// @brief The number of extra stacks to add for the filesystem.
+static int _numExtraFilesystemStacks = 0;
+
 /// @fn int halCommonInitRootFilesystem(void)
 ///
 /// @brief Common initialization for the root filesystem process.
@@ -884,16 +889,19 @@ int halCommonInitRootFilesystem(void) {
   // DO NOT resume the process yet.  Let the scheduler take care of that.
 
   // The filesystem runs as an overlay, which increases the depth of the call
-  // stack.  Double the stack size for it.
-  Thread *thread = threadProvision(NULL, dummyProcess, NULL);
-  if (thread == NULL) {
-    logError("Could not increase filesystem process's stack size.\n");
-    return -ENOMEM;
-  }
-  if (threadSetStackEnd(
-    processDescriptor->mainThread, threadStackEnd(thread)) != processSuccess
-  ) {
-    logError("Could not set filesystem process's stack size.\n");
+  // stack relative to a kernel process.  Increase the stack space for the
+  // process as required for the platform.
+  for (int ii = 0; ii < _numExtraFilesystemStacks; ii++) {
+    Thread *thread = threadProvision(NULL, dummyProcess, NULL);
+    if (thread == NULL) {
+      logError("Could not increase filesystem process's stack size.\n");
+      return -ENOMEM;
+    }
+    if (threadSetStackEnd(
+      processDescriptor->mainThread, threadStackEnd(thread)) != processSuccess
+    ) {
+      logError("Could not set filesystem process's stack size.\n");
+    }
   }
 
   registerProcessName(_filesystemName, rootFilesystemPid);
@@ -1200,15 +1208,24 @@ int restartContiguousFilesystem(ProcessDescriptor *processDescriptor) {
 
 /// @fn int halCommonInit(
 ///   FilesystemDriverInit builtinFilesystemInitDriver,
-///   const FilesystemCommandHandler *builtinFilesystemCommandHandlers)
+///   const FilesystemCommandHandler *builtinFilesystemCommandHandlers,
+///   int numExtraFilesystemStacks)
 ///
 /// @brief Initialization function common to multiple HAL implementations.
 /// Uses the global HAL pointer to call subsystem init and configure functions.
 ///
+/// @param builtinFilesystemInitDriver The function to use to initialize the
+///   built-in filesystem.
+/// @param builtinFilesystemCommandHandlers The command handlers to use for the
+///   built-in filesystem.
+/// @param numExtraFilesystemStacks The number of extra stacks to allocate for
+///   the filesystem.
+///
 /// @return Returns 0 on success, -errno on failure.
 int halCommonInit(
   FilesystemDriverInit builtinFilesystemInitDriver,
-  const FilesystemCommandHandler *builtinFilesystemCommandHandlers
+  const FilesystemCommandHandler *builtinFilesystemCommandHandlers,
+  int numExtraFilesystemStacks
 ) {
   if (HAL == NULL) {
     return -EINVAL;
@@ -1291,6 +1308,7 @@ int halCommonInit(
 
   _builtinFilesystemInitDriver = builtinFilesystemInitDriver;
   _builtinFilesystemCommandHandlers = builtinFilesystemCommandHandlers;
+  _numExtraFilesystemStacks = numExtraFilesystemStacks;
 
   return 0;
 }
