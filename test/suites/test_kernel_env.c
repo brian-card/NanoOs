@@ -16,6 +16,7 @@
 #include "kernel/Scheduler.h"
 #include "user/NanoOsLibC.h"
 #include "user/NanoOsErrno.h"
+#include "user/NanoOsStdio.h"
 
 static char* envLookup(const char *name) {
   char **envp = getRunningProcess()->envp;
@@ -264,4 +265,25 @@ NANO_OS_KERNEL_TEST(env, setenv_accepts_a_value_from_another_variable) {
   NANO_OS_ASSERT_STR_EQ("tail", envLookup("NANOOS_TEST_END"));
   NANO_OS_ASSERT_EQ_INT(count, envCount());
   NANO_OS_ASSERT_TRUE(envLayoutIsValid());
+}
+
+NANO_OS_KERNEL_TEST(env, repeated_setenv_preserves_every_earlier_variable) {
+  // Each setenv grows the envp block with the scheduler's own realloc, so this
+  // covers the schedRealloc path rather than the user-space one.
+  char name[16];
+  char value[16];
+  for (int ii = 0; ii < 12; ii++) {
+    sprintf(name, "NANOOS_GROW_%d", ii);
+    sprintf(value, "value_%d", ii);
+    NANO_OS_ASSERT_EQ_INT(0, nanoOsSetenv(name, value, 1));
+    NANO_OS_ASSERT_TRUE(envLayoutIsValid());
+
+    for (int jj = 0; jj <= ii; jj++) {
+      sprintf(name, "NANOOS_GROW_%d", jj);
+      sprintf(value, "value_%d", jj);
+      const char *found = envLookup(name);
+      NANO_OS_ASSERT_NOT_NULL(found);
+      NANO_OS_ASSERT_STR_EQ(value, found);
+    }
+  }
 }
