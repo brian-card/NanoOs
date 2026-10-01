@@ -340,7 +340,7 @@ typedef CoroutinesConfigOptions ThreadsConfigOptions;
 typedef struct IpcCapability {
   uint8_t  destinationPid;
   int64_t  signature;
-  uint16_t messageTypes;
+  uint32_t messageTypes;
 } IpcCapability;
 
 extern ProcessDescriptor *allProcesses;

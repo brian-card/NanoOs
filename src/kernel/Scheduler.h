@@ -69,6 +69,7 @@ typedef struct ExecArgs ExecArgs;
 typedef struct SpawnArgs SpawnArgs;
 typedef uint8_t NanoOsShutdownType;
 typedef struct FileBlockMetadata FileBlockMetadata;
+typedef struct IpcCapability IpcCapability;
 
 /// @struct SchedulerKillProcessArgs
 ///
@@ -244,6 +245,8 @@ void schedulerDeinitialize(void);
 
 ProcessId schedulerGetFirstShellPid(void);
 ProcessId reserveProcessSlot(void);
+void ipcCapabilityInsert(IpcCapability *capabilities, size_t numCapabilities,
+  ProcessId destinationPid, int64_t signature, uint32_t messageType);
 int processQueuePush(
   ProcessQueue *processQueue, ProcessDescriptor *processDescriptor);
 ProcessDescriptor* processQueuePop(ProcessQueue *processQueue);

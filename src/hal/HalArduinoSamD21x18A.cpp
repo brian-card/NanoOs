@@ -2123,7 +2123,8 @@ int halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
 
   filesystemIpcCapabilities = _filesystemIpcCapabilities;
   numFilesystemIpcCapabilities
-    = sizeof(_filesystemIpcCapabilities) / sizeof(_filesystemIpcCapabilities[0]);
+    = sizeof(_filesystemIpcCapabilities)
+    / sizeof(_filesystemIpcCapabilities[0]);
   loggerIpcCapabilities = _loggerIpcCapabilities;
   numLoggerIpcCapabilities
     = sizeof(_loggerIpcCapabilities) / sizeof(_loggerIpcCapabilities[0]);

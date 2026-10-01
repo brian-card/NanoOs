@@ -495,7 +495,7 @@ ipcCapabilitySearch(
     IpcCapability *capability = &capabilities[ii];
     if ((capability->destinationPid == destinationPid)
       && (capability->signature == signature)
-      && (capability->messageTypes & (((uint16_t) 1) << messageType))
+      && (capability->messageTypes & (((uint32_t) 1) << messageType))
     ) {
       return capability;
     } else if (capability->destinationPid > destinationPid) {
@@ -578,7 +578,7 @@ bool currentProcessHasIpcCapability(
 /// @note KEEP_IN_FLASH is required here because .rodata is removed from the
 /// final binary on some targets.
 static const char _couldNotSendMessageTypePrefix[] KEEP_IN_FLASH
-  = "Could not send message type ";
+  = "Could not send message type 0x";
 
 /// @var _fromProcessInfix
 ///
@@ -702,7 +702,7 @@ int sendProcessMessageToProcess(
     errno = EPERM;
     returnValue = processError;
     printString(_couldNotSendMessageTypePrefix);
-    printInt(processMessageType(processMessage) & 0xff);
+    printHex(processMessageType(processMessage));
     printString(_fromProcessInfix);
     printInt(getRunningPid());
     printString(_toProcessInfix);

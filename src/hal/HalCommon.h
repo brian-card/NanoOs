@@ -84,34 +84,34 @@ typedef struct NamedProcessEntry {
   { \
     .destinationPid = 0, /* Scheduler PID */ \
     .signature      = SCHEDULER_COMMAND_SIGNATURE, \
-    .messageTypes   = (((uint16_t) 1) << SCHEDULER_REPLACE_OVERLAY) \
+    .messageTypes   = (((uint32_t) 1) << SCHEDULER_REPLACE_OVERLAY) \
   }, \
   { \
     .destinationPid = 0, /* Console PID */ \
     .signature      = CONSOLE_COMMAND_SIGNATURE, \
     .messageTypes \
-      = (((uint16_t) 1) << CONSOLE_GET_BUFFER) \
-      | (((uint16_t) 1) << CONSOLE_WRITE_BUFFER) \
-      | (((uint16_t) 1) << CONSOLE_RELEASE_BUFFER) \
+      = (((uint32_t) 1) << CONSOLE_GET_BUFFER) \
+      | (((uint32_t) 1) << CONSOLE_WRITE_BUFFER) \
+      | (((uint32_t) 1) << CONSOLE_RELEASE_BUFFER) \
   }, \
   { \
     .destinationPid = 0, /* Memory manager PID */ \
     .signature      = MEMORY_MANAGER_COMMAND_SIGNATURE, \
     .messageTypes \
-      = (((uint16_t) 1) << MEMORY_MANAGER_REALLOC) \
-      | (((uint16_t) 1) << MEMORY_MANAGER_FREE) \
+      = (((uint32_t) 1) << MEMORY_MANAGER_REALLOC) \
+      | (((uint32_t) 1) << MEMORY_MANAGER_FREE) \
   }, \
   { \
     .destinationPid = 0, /* SD card PID (== rootFilesystemPid - 1) */ \
     .signature      = SD_CARD_COMMAND_SIGNATURE, \
     .messageTypes \
-      = (((uint16_t) 1) << SD_CARD_READ_BLOCKS) \
-      | (((uint16_t) 1) << SD_CARD_WRITE_BLOCKS) \
+      = (((uint32_t) 1) << SD_CARD_READ_BLOCKS) \
+      | (((uint32_t) 1) << SD_CARD_WRITE_BLOCKS) \
   }, \
   { \
     .destinationPid = 0, /* Logger PID, patched by halCommonInitLogger */ \
     .signature      = LOGGER_COMMAND_SIGNATURE, \
-    .messageTypes   = (((uint16_t) 1) << LOGGER_LOG_MESSAGE) \
+    .messageTypes   = (((uint32_t) 1) << LOGGER_LOG_MESSAGE) \
   }, \
 }
 
@@ -126,28 +126,28 @@ typedef struct NamedProcessEntry {
     .destinationPid = 0, /* Scheduler PID */ \
     .signature      = SCHEDULER_COMMAND_SIGNATURE, \
     .messageTypes \
-      = (((uint16_t) 1) << SCHEDULER_GET_HOSTNAME) \
-      | (((uint16_t) 1) << SCHEDULER_REPLACE_OVERLAY) \
+      = (((uint32_t) 1) << SCHEDULER_GET_HOSTNAME) \
+      | (((uint32_t) 1) << SCHEDULER_REPLACE_OVERLAY) \
   }, \
   { \
     .destinationPid = 0, /* Memory manager PID */ \
     .signature      = MEMORY_MANAGER_COMMAND_SIGNATURE, \
     .messageTypes \
-      = (((uint16_t) 1) << MEMORY_MANAGER_REALLOC) \
-      | (((uint16_t) 1) << MEMORY_MANAGER_FREE) \
+      = (((uint32_t) 1) << MEMORY_MANAGER_REALLOC) \
+      | (((uint32_t) 1) << MEMORY_MANAGER_FREE) \
   }, \
   { \
     .destinationPid = 0, /* Filesystem PID */ \
     .signature      = FILESYSTEM_COMMAND_SIGNATURE, \
     .messageTypes \
-      = (((uint16_t) 1) << FILESYSTEM_OPEN_FILE) \
-      | (((uint16_t) 1) << FILESYSTEM_CLOSE_FILE) \
-      | (((uint16_t) 1) << FILESYSTEM_READ_FILE) \
-      | (((uint16_t) 1) << FILESYSTEM_WRITE_FILE) \
-      | (((uint16_t) 1) << FILESYSTEM_REMOVE_FILE) \
-      | (((uint16_t) 1) << FILESYSTEM_SEEK_FILE) \
-      | (((uint16_t) 1) << FILESYSTEM_GET_FILE_BLOCK_METADATA) \
-      | (((uint16_t) 1) << FILESYSTEM_END_OF_FILE) \
+      = (((uint32_t) 1) << FILESYSTEM_OPEN_FILE) \
+      | (((uint32_t) 1) << FILESYSTEM_CLOSE_FILE) \
+      | (((uint32_t) 1) << FILESYSTEM_READ_FILE) \
+      | (((uint32_t) 1) << FILESYSTEM_WRITE_FILE) \
+      | (((uint32_t) 1) << FILESYSTEM_REMOVE_FILE) \
+      | (((uint32_t) 1) << FILESYSTEM_SEEK_FILE) \
+      | (((uint32_t) 1) << FILESYSTEM_GET_FILE_BLOCK_METADATA) \
+      | (((uint32_t) 1) << FILESYSTEM_END_OF_FILE) \
   }, \
 }
 

@@ -535,14 +535,14 @@ IpcCapability baseSchedulerIpcCapabilities[] = {
     .destinationPid = 0, // SD card PID to be set by scheduler
     .signature      = SD_CARD_COMMAND_SIGNATURE,
     .messageTypes
-      = (((uint16_t) 1) << SD_CARD_READ_BLOCKS)
-      | (((uint16_t) 1) << SD_CARD_WRITE_BLOCKS)
+      = (((uint32_t) 1) << SD_CARD_READ_BLOCKS)
+      | (((uint32_t) 1) << SD_CARD_WRITE_BLOCKS)
   },
   {
     .destinationPid = 0, // Logger PID to be set by scheduler
     .signature      = LOGGER_COMMAND_SIGNATURE,
     .messageTypes
-      = (((uint16_t) 1) << LOGGER_LOG_MESSAGE)
+      = (((uint32_t) 1) << LOGGER_LOG_MESSAGE)
   },
 };
 
@@ -555,22 +555,22 @@ IpcCapability baseConsoleIpcCapabilities[] = {
     .destinationPid = 0, // Scheduler PID to be set by scheduler
     .signature      = SCHEDULER_COMMAND_SIGNATURE,
     .messageTypes
-      = (((uint16_t) 1) << SCHEDULER_SEND_SIGNAL)
+      = (((uint32_t) 1) << SCHEDULER_SEND_SIGNAL)
   },
   {
     .destinationPid = 0, // Memory manager PID to be set by scheduler
     .signature      = MEMORY_MANAGER_COMMAND_SIGNATURE,
     .messageTypes
-      = (((uint16_t) 1) << MEMORY_MANAGER_REALLOC)
-      | (((uint16_t) 1) << MEMORY_MANAGER_FREE)
-      | (((uint16_t) 1) << MEMORY_MANAGER_GET_FREE_MEMORY)
-      | (((uint16_t) 1) << MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS)
+      = (((uint32_t) 1) << MEMORY_MANAGER_REALLOC)
+      | (((uint32_t) 1) << MEMORY_MANAGER_FREE)
+      | (((uint32_t) 1) << MEMORY_MANAGER_GET_FREE_MEMORY)
+      | (((uint32_t) 1) << MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS)
   },
   {
     .destinationPid = 0, // Logger PID to be set by scheduler
     .signature      = LOGGER_COMMAND_SIGNATURE,
     .messageTypes
-      = (((uint16_t) 1) << LOGGER_LOG_MESSAGE)
+      = (((uint32_t) 1) << LOGGER_LOG_MESSAGE)
   },
 };
 
@@ -583,14 +583,14 @@ IpcCapability baseMemoryManagerIpcCapabilities[] = {
     .destinationPid = 0, // Console PID to be set by scheduler
     .signature      = CONSOLE_COMMAND_SIGNATURE,
     .messageTypes
-      = (((uint16_t) 1) << CONSOLE_WRITE_VALUE)
-      | (((uint16_t) 1) << CONSOLE_RELEASE_PORT)
+      = (((uint32_t) 1) << CONSOLE_WRITE_VALUE)
+      | (((uint32_t) 1) << CONSOLE_RELEASE_PORT)
   },
   {
     .destinationPid = 0, // Logger PID to be set by scheduler
     .signature      = LOGGER_COMMAND_SIGNATURE,
     .messageTypes
-      = (((uint16_t) 1) << LOGGER_LOG_MESSAGE)
+      = (((uint32_t) 1) << LOGGER_LOG_MESSAGE)
   },
 };
 
@@ -603,57 +603,57 @@ IpcCapability baseSupervisorIpcCapabilities[] = {
     .destinationPid = 0, // Scheduler PID to be set by scheduler
     .signature      = SCHEDULER_COMMAND_SIGNATURE,
     .messageTypes
-      = (((uint16_t) 1) << SCHEDULER_KILL_PROCESS)
-      | (((uint16_t) 1) << SCHEDULER_GET_NUM_RUNNING_PROCESSES)
-      | (((uint16_t) 1) << SCHEDULER_GET_PROCESS_INFO)
-      | (((uint16_t) 1) << SCHEDULER_SET_PROCESS_USER)
-      | (((uint16_t) 1) << SCHEDULER_GET_HOSTNAME)
-      | (((uint16_t) 1) << SCHEDULER_EXECVE)
-      | (((uint16_t) 1) << SCHEDULER_SPAWN)
-      | (((uint16_t) 1) << SCHEDULER_SEND_SIGNAL)
-      | (((uint16_t) 1) << SCHEDULER_REPLACE_OVERLAY)
-      | (((uint16_t) 1) << SCHEDULER_SHUTDOWN)
+      = (((uint32_t) 1) << SCHEDULER_KILL_PROCESS)
+      | (((uint32_t) 1) << SCHEDULER_GET_NUM_RUNNING_PROCESSES)
+      | (((uint32_t) 1) << SCHEDULER_GET_PROCESS_INFO)
+      | (((uint32_t) 1) << SCHEDULER_SET_PROCESS_USER)
+      | (((uint32_t) 1) << SCHEDULER_GET_HOSTNAME)
+      | (((uint32_t) 1) << SCHEDULER_EXECVE)
+      | (((uint32_t) 1) << SCHEDULER_SPAWN)
+      | (((uint32_t) 1) << SCHEDULER_SEND_SIGNAL)
+      | (((uint32_t) 1) << SCHEDULER_REPLACE_OVERLAY)
+      | (((uint32_t) 1) << SCHEDULER_SHUTDOWN)
   },
   {
     .destinationPid = 0, // Console PID to be set by scheduler
     .signature      = CONSOLE_COMMAND_SIGNATURE,
     .messageTypes
-      = (((uint16_t) 1) << CONSOLE_WRITE_VALUE)
-      | (((uint16_t) 1) << CONSOLE_GET_BUFFER)
-      | (((uint16_t) 1) << CONSOLE_WRITE_BUFFER)
-      | (((uint16_t) 1) << CONSOLE_RELEASE_PORT)
-      | (((uint16_t) 1) << CONSOLE_GET_OWNED_PORT)
-      | (((uint16_t) 1) << CONSOLE_GET_ECHO)
-      | (((uint16_t) 1) << CONSOLE_SET_ECHO)
-      | (((uint16_t) 1) << CONSOLE_WAIT_FOR_INPUT)
-      | (((uint16_t) 1) << CONSOLE_RELEASE_BUFFER)
+      = (((uint32_t) 1) << CONSOLE_WRITE_VALUE)
+      | (((uint32_t) 1) << CONSOLE_GET_BUFFER)
+      | (((uint32_t) 1) << CONSOLE_WRITE_BUFFER)
+      | (((uint32_t) 1) << CONSOLE_RELEASE_PORT)
+      | (((uint32_t) 1) << CONSOLE_GET_OWNED_PORT)
+      | (((uint32_t) 1) << CONSOLE_GET_ECHO)
+      | (((uint32_t) 1) << CONSOLE_SET_ECHO)
+      | (((uint32_t) 1) << CONSOLE_WAIT_FOR_INPUT)
+      | (((uint32_t) 1) << CONSOLE_RELEASE_BUFFER)
   },
   {
     .destinationPid = 0, // Memory manager PID to be set by scheduler
     .signature      = MEMORY_MANAGER_COMMAND_SIGNATURE,
     .messageTypes
-      = (((uint16_t) 1) << MEMORY_MANAGER_REALLOC)
-      | (((uint16_t) 1) << MEMORY_MANAGER_FREE)
-      | (((uint16_t) 1) << MEMORY_MANAGER_GET_FREE_MEMORY)
-      | (((uint16_t) 1) << MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS)
+      = (((uint32_t) 1) << MEMORY_MANAGER_REALLOC)
+      | (((uint32_t) 1) << MEMORY_MANAGER_FREE)
+      | (((uint32_t) 1) << MEMORY_MANAGER_GET_FREE_MEMORY)
+      | (((uint32_t) 1) << MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS)
   },
   {
     .destinationPid = 0, // Filesystem PID to be set by scheduler
     .signature      = FILESYSTEM_COMMAND_SIGNATURE,
     .messageTypes
-      = (((uint16_t) 1) << FILESYSTEM_OPEN_FILE)
-      | (((uint16_t) 1) << FILESYSTEM_CLOSE_FILE)
-      | (((uint16_t) 1) << FILESYSTEM_READ_FILE)
-      | (((uint16_t) 1) << FILESYSTEM_WRITE_FILE)
-      | (((uint16_t) 1) << FILESYSTEM_REMOVE_FILE)
-      | (((uint16_t) 1) << FILESYSTEM_SEEK_FILE)
-      | (((uint16_t) 1) << FILESYSTEM_DUMP_OPEN_FILES)
-      | (((uint16_t) 1) << FILESYSTEM_GET_FILE_BLOCK_METADATA)
-      | (((uint16_t) 1) << FILESYSTEM_OPEN_DIR)
-      | (((uint16_t) 1) << FILESYSTEM_READ_DIR)
-      | (((uint16_t) 1) << FILESYSTEM_CLOSE_DIR)
-      | (((uint16_t) 1) << FILESYSTEM_LSTAT)
-      | (((uint16_t) 1) << FILESYSTEM_ISTAT)
+      = (((uint32_t) 1) << FILESYSTEM_OPEN_FILE)
+      | (((uint32_t) 1) << FILESYSTEM_CLOSE_FILE)
+      | (((uint32_t) 1) << FILESYSTEM_READ_FILE)
+      | (((uint32_t) 1) << FILESYSTEM_WRITE_FILE)
+      | (((uint32_t) 1) << FILESYSTEM_REMOVE_FILE)
+      | (((uint32_t) 1) << FILESYSTEM_SEEK_FILE)
+      | (((uint32_t) 1) << FILESYSTEM_DUMP_OPEN_FILES)
+      | (((uint32_t) 1) << FILESYSTEM_GET_FILE_BLOCK_METADATA)
+      | (((uint32_t) 1) << FILESYSTEM_OPEN_DIR)
+      | (((uint32_t) 1) << FILESYSTEM_READ_DIR)
+      | (((uint32_t) 1) << FILESYSTEM_CLOSE_DIR)
+      | (((uint32_t) 1) << FILESYSTEM_LSTAT)
+      | (((uint32_t) 1) << FILESYSTEM_ISTAT)
   },
 };
 
@@ -666,51 +666,93 @@ IpcCapability baseUserIpcCapabilities[] = {
     .destinationPid = 0, // Scheduler PID to be set by scheduler
     .signature      = SCHEDULER_COMMAND_SIGNATURE,
     .messageTypes
-      = (((uint16_t) 1) << SCHEDULER_GET_NUM_RUNNING_PROCESSES)
-      | (((uint16_t) 1) << SCHEDULER_GET_PROCESS_INFO)
-      | (((uint16_t) 1) << SCHEDULER_GET_HOSTNAME)
-      | (((uint16_t) 1) << SCHEDULER_REPLACE_OVERLAY)
+      = (((uint32_t) 1) << SCHEDULER_GET_NUM_RUNNING_PROCESSES)
+      | (((uint32_t) 1) << SCHEDULER_GET_PROCESS_INFO)
+      | (((uint32_t) 1) << SCHEDULER_GET_HOSTNAME)
+      | (((uint32_t) 1) << SCHEDULER_REPLACE_OVERLAY)
   },
   {
     .destinationPid = 0, // Console PID to be set by scheduler
     .signature      = CONSOLE_COMMAND_SIGNATURE,
     .messageTypes
-      = (((uint16_t) 1) << CONSOLE_GET_BUFFER)
-      | (((uint16_t) 1) << CONSOLE_WRITE_BUFFER)
-      | (((uint16_t) 1) << CONSOLE_RELEASE_PORT)
-      | (((uint16_t) 1) << CONSOLE_RELEASE_BUFFER)
+      = (((uint32_t) 1) << CONSOLE_GET_BUFFER)
+      | (((uint32_t) 1) << CONSOLE_WRITE_BUFFER)
+      | (((uint32_t) 1) << CONSOLE_RELEASE_PORT)
+      | (((uint32_t) 1) << CONSOLE_RELEASE_BUFFER)
   },
   {
     .destinationPid = 0, // Memory manager PID to be set by scheduler
     .signature      = MEMORY_MANAGER_COMMAND_SIGNATURE,
     .messageTypes
-      = (((uint16_t) 1) << MEMORY_MANAGER_REALLOC)
-      | (((uint16_t) 1) << MEMORY_MANAGER_FREE)
-      | (((uint16_t) 1) << MEMORY_MANAGER_GET_FREE_MEMORY)
-      | (((uint16_t) 1) << MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS)
+      = (((uint32_t) 1) << MEMORY_MANAGER_REALLOC)
+      | (((uint32_t) 1) << MEMORY_MANAGER_FREE)
+      | (((uint32_t) 1) << MEMORY_MANAGER_GET_FREE_MEMORY)
+      | (((uint32_t) 1) << MEMORY_MANAGER_DUMP_MEMORY_ALLOCATIONS)
   },
   {
     .destinationPid = 0, // Filesystem PID to be set by scheduler
     .signature      = FILESYSTEM_COMMAND_SIGNATURE,
     .messageTypes
-      = (((uint16_t) 1) << FILESYSTEM_OPEN_FILE)
-      | (((uint16_t) 1) << FILESYSTEM_CLOSE_FILE)
-      | (((uint16_t) 1) << FILESYSTEM_READ_FILE)
-      | (((uint16_t) 1) << FILESYSTEM_WRITE_FILE)
-      | (((uint16_t) 1) << FILESYSTEM_REMOVE_FILE)
-      | (((uint16_t) 1) << FILESYSTEM_SEEK_FILE)
-      | (((uint16_t) 1) << FILESYSTEM_DUMP_OPEN_FILES)
-      | (((uint16_t) 1) << FILESYSTEM_GET_FILE_BLOCK_METADATA)
-      | (((uint16_t) 1) << FILESYSTEM_OPEN_DIR)
-      | (((uint16_t) 1) << FILESYSTEM_READ_DIR)
-      | (((uint16_t) 1) << FILESYSTEM_CLOSE_DIR)
-      | (((uint16_t) 1) << FILESYSTEM_LSTAT)
-      | (((uint16_t) 1) << FILESYSTEM_ISTAT)
+      = (((uint32_t) 1) << FILESYSTEM_OPEN_FILE)
+      | (((uint32_t) 1) << FILESYSTEM_CLOSE_FILE)
+      | (((uint32_t) 1) << FILESYSTEM_READ_FILE)
+      | (((uint32_t) 1) << FILESYSTEM_WRITE_FILE)
+      | (((uint32_t) 1) << FILESYSTEM_REMOVE_FILE)
+      | (((uint32_t) 1) << FILESYSTEM_SEEK_FILE)
+      | (((uint32_t) 1) << FILESYSTEM_DUMP_OPEN_FILES)
+      | (((uint32_t) 1) << FILESYSTEM_GET_FILE_BLOCK_METADATA)
+      | (((uint32_t) 1) << FILESYSTEM_OPEN_DIR)
+      | (((uint32_t) 1) << FILESYSTEM_READ_DIR)
+      | (((uint32_t) 1) << FILESYSTEM_CLOSE_DIR)
+      | (((uint32_t) 1) << FILESYSTEM_LSTAT)
+      | (((uint32_t) 1) << FILESYSTEM_ISTAT)
   },
 };
 
 void* schedRealloc(void *ptr, size_t size);
 void* schedMalloc(size_t size);
+
+/// @fn void ipcCapabilityInsert(IpcCapability *capabilities,
+///   size_t numCapabilities, ProcessId destinationPid, int64_t signature,
+///   uint32_t messageType)
+///
+/// @brief Insert a new capability into an existing, pre-sized array of them.
+///
+/// @param capabilities A sorted array of IpcCapability objects sized to allow
+///   adding a new one.
+/// @param numCapabilities The number of IpcCapability objects currently in the
+///   array.  The array size is actually numCapabilities + 1.
+/// @param destinationPid The process ID that the capability is destined for.
+/// @param signature The signature of the messages to be sent to the
+///   destination.
+/// @param messageType The numeric message that is to be sent to the
+///   destination.
+///
+/// @return This function returns no value.
+void ipcCapabilityInsert(IpcCapability *capabilities, size_t numCapabilities,
+  ProcessId destinationPid, int64_t signature, uint32_t messageType
+) {
+  size_t insertIndex = numCapabilities;
+  for (size_t ii = 0; ii < numCapabilities; ii++) {
+    if ((capabilities[ii].destinationPid > destinationPid)
+      || ((capabilities[ii].destinationPid == destinationPid)
+        && (capabilities[ii].signature > signature))
+    ) {
+      insertIndex = ii;
+      break;
+    }
+  }
+
+  // Move all the capabilities beyond the located insertIndex down by one so
+  // that we can insert the new one there.
+  for (size_t ii = numCapabilities; ii > insertIndex; ii--) {
+    capabilities[ii] = capabilities[ii - 1];
+  }
+
+  capabilities[insertIndex].destinationPid = destinationPid;
+  capabilities[insertIndex].signature = signature;
+  capabilities[insertIndex].messageTypes = ((uint32_t) 1) << messageType;
+}
 
 /// @fn int addProcessIpcCapability(ProcessDescriptor *processDescriptor,
 ///   ProcessId destinationPid, int64_t signature, uint32_t messageType)
@@ -721,6 +763,8 @@ void* schedMalloc(size_t size);
 /// @param processDescriptor A pointer to the ProcessDescriptor with the
 ///   ipcCapabilities array to update.
 /// @param destinationPid The ProcessId that the IPC message is destined for.
+/// @param signature The signature of the messages to be sent to the
+///   destination.
 /// @param messageType The numeric message that is to be sent to the
 ///   destination.
 ///
@@ -743,7 +787,7 @@ int addProcessIpcCapability(ProcessDescriptor *processDescriptor,
 
   if (ii < processDescriptor->numIpcCapabilities) {
     // Add the message type to the existing capability's messageTypes.
-    capability->messageTypes |= ((uint16_t) 1) << messageType;
+    capability->messageTypes |= ((uint32_t) 1) << messageType;
     logDebug("Added capability to send message type %ld from process %ld "
       "to process %ld\n",
       (long int) messageType,
@@ -787,41 +831,17 @@ int addProcessIpcCapability(ProcessDescriptor *processDescriptor,
     processDescriptor->ipcCapabilitiesDynamic = true;
   }
 
-  // Find the place in the array that we need to insert the capability.
-  for (ii = 0; ii < processDescriptor->numIpcCapabilities; ii++) {
-    capability = &processDescriptor->ipcCapabilities[ii];
-    if (capability->destinationPid > destinationPid) {
-      // This is the expected stop case.
-      break;
-    } else if ((capability->destinationPid == destinationPid)
-      && (capability->signature > signature)
-    ) {
-      break;
-    }
-  }
-
   logDebug("Adding new capability to send message type %ld from process "
     "%ld to process %ld\n",
     (long int) messageType,
     (long int) processDescriptor->processId,
     (long int) destinationPid);
 
-  // Move all the capabilities from this point on down by one.
-  for (; ii < processDescriptor->numIpcCapabilities; ii++) {
-    processDescriptor->ipcCapabilities[ii + 1]
-      = processDescriptor->ipcCapabilities[ii];
-  }
-
-  // capability still points to the spot we need to update, so set the members
-  // of that poniter.
-  capability->destinationPid = destinationPid;
-  capability->signature = signature;
-  capability->messageTypes = ((uint16_t) 1) << messageType;
-  logDebug("capability->destinationPid = %ld, capability->messageTypes = "
-    "0x%lx\n",
-    (long int) capability->destinationPid,
-    (unsigned long int) capability->messageTypes);
+  ipcCapabilityInsert(processDescriptor->ipcCapabilities,
+    processDescriptor->numIpcCapabilities, destinationPid, signature,
+    messageType);
   processDescriptor->numIpcCapabilities++;
+
 
   return 0;
 }
@@ -842,20 +862,19 @@ int removeProcessIpcCapability(ProcessDescriptor *processDescriptor,
   ProcessId destinationPid, int64_t signature, uint32_t messageType
 ) {
   IpcCapability *capability = NULL;
-  if (processDescriptor->numIpcCapabilities > 0) {
-    for (size_t ii = 0; ii < processDescriptor->numIpcCapabilities; ii++) {
+  for (size_t ii = 0; ii < processDescriptor->numIpcCapabilities; ii++) {
+    if ((processDescriptor->ipcCapabilities[ii].destinationPid
+        == destinationPid)
+      && (processDescriptor->ipcCapabilities[ii].signature == signature)
+    ) {
       capability = &processDescriptor->ipcCapabilities[ii];
-      if ((capability->destinationPid == destinationPid)
-        && (capability->signature == signature)
-      ) {
-        break;
-      }
+      break;
     }
   }
 
   if (capability != NULL) {
     // Exclude the message type from the existing capability's messageTypes.
-    capability->messageTypes &= ~(((uint16_t) 1) << messageType);
+    capability->messageTypes &= ~(((uint32_t) 1) << messageType);
   }
   // else this destinationPid isn't even in the process's ipcCapabilities array,
   // so there's nothing to update.
@@ -1170,6 +1189,7 @@ void* schedulerResumeReallocMessage(void *ptr, size_t size) {
   ReallocMessage reallocMessage;
   reallocMessage.ptr = ptr;
   reallocMessage.size = size;
+  reallocMessage.zero = false;
   
   if (schedulerInitSendMessageToPid(memoryManagerPid,
     MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_REALLOC,
@@ -1921,6 +1941,115 @@ ProcessId reserveProcessSlot(void) {
   return pid;
 }
 
+/// @fn size_t execArgsSize(const char *pathname, char *const argv[])
+///
+/// @brief Compute the size of the single block that holds an ExecArgs structure
+///   and everything in it.
+///
+/// @param pathname The full path to exec.
+/// @param argv The array of arguments to copy into the block.
+///
+/// @return Returns the total size of the memory block in bytes.
+static __attribute__((noinline)) size_t execArgsSize(const char *pathname,
+  char *const argv[]
+) {
+  size_t numArgs = 0;
+  size_t stringBytes = 0;
+  for (; argv[numArgs] != NULL; numArgs++) {
+    stringBytes += strlen(argv[numArgs]) + 1;
+  }
+  numArgs++;
+
+  return sizeof(ExecArgs) + (numArgs * sizeof(char*)) + stringBytes
+    + strlen(pathname) + 1;
+}
+
+/// @fn void execArgsFill(ExecArgs *execArgs, const char *pathname,
+///   char *const argv[])
+///
+/// @brief Copy an ExecArgs structure and everything in it into a zeroed block
+/// of contiguous memory.
+///
+/// @param execArgs A pointer to the block of memory to populate.
+/// @param pathname The path to exec.
+/// @param argv The array of arguments to copy into the block.
+///
+/// @return This function returns no value.
+static __attribute__((noinline)) void execArgsFill(ExecArgs *execArgs,
+  const char *pathname, char *const argv[]
+) {
+  size_t numArgs = 0;
+  for (; argv[numArgs] != NULL; numArgs++);
+  numArgs++;
+
+  execArgs->argv = (char**) &((char*) execArgs)[sizeof(ExecArgs)];
+  char *nextString = (char*) &execArgs->argv[numArgs];
+  for (size_t index = 0; index < (numArgs - 1); index++) {
+    execArgs->argv[index] = nextString;
+    strcpy(nextString, argv[index]);
+    nextString += strlen(argv[index]) + 1;
+  }
+
+  execArgs->pathname = nextString;
+  strcpy(execArgs->pathname, pathname);
+}
+
+/// @fn size_t envpBlockSize(char *const envp[])
+///
+/// @brief Compute the size of the single block that holds an environment's
+/// strings and the array of pointers to them.
+///
+/// @param envp A process's envp array of environment strings to measure.
+///
+/// @return Returns the total size of the block in bytes, or 0 if the
+/// environment is empty.
+static __attribute__((noinline)) size_t envpBlockSize(char *const envp[]) {
+  size_t numVariables = 0;
+  size_t stringBytes = 0;
+  for (; envp[numVariables] != NULL; numVariables++) {
+    stringBytes += strlen(envp[numVariables]) + 1;
+  }
+  if (stringBytes == 0) {
+    return 0;
+  }
+  numVariables++;
+
+  return ((stringBytes + sizeof(uintptr_t) - 1) & ~(sizeof(uintptr_t) - 1))
+    + (numVariables * sizeof(char*));
+}
+
+/// @fn char** envpBlockFill(char *block, char *const envp[])
+///
+/// @brief Copy an environment's strings and its array of pointers into a zeroed
+/// block of contiguous memory.
+///
+/// @param block A pointer to the block of memory to populate.
+/// @param envp The array of environment variables to copy into the block.
+///
+/// @return Returns the address of the array within the block.  Note:  The
+/// address returned is *NOT* the beginning of the block.  That address is held
+/// at returnAddress[0].
+static __attribute__((noinline)) char** envpBlockFill(char *block,
+  char *const envp[]
+) {
+  size_t numVariables = 0;
+  size_t stringBytes = 0;
+  for (; envp[numVariables] != NULL; numVariables++) {
+    stringBytes += strlen(envp[numVariables]) + 1;
+  }
+
+  char **envpArray = (char**) &block[
+    (stringBytes + sizeof(uintptr_t) - 1) & ~(sizeof(uintptr_t) - 1)];
+  char *nextString = block;
+  for (size_t index = 0; index < numVariables; index++) {
+    envpArray[index] = nextString;
+    strcpy(nextString, envp[index]);
+    nextString += strlen(envp[index]) + 1;
+  }
+
+  return envpArray;
+}
+
 /// @fn int schedulerExecve(const char *pathname,
 ///   char *const argv[], char *const envp[])
 ///
@@ -1943,71 +2072,25 @@ int schedulerExecve(const char *pathname,
     return -1;
   }
 
-  size_t argvLen = 0;
-  size_t argvBytes = 0;
-  for (; argv[argvLen] != NULL; argvLen++) {
-    argvBytes += strlen(argv[argvLen]) + 1;
-  }
-  argvLen++;
-
-  size_t pathnameBytes = strlen(pathname) + 1;
-  ExecArgs *execArgs = (ExecArgs*) calloc(1,
-    sizeof(ExecArgs) + (argvLen * sizeof(char*)) + argvBytes + pathnameBytes);
+  ExecArgs *execArgs = (ExecArgs*) calloc(1, execArgsSize(pathname, argv));
   if (execArgs == NULL) {
     logError("Allocating execArgs failed\n");
     errno = ENOMEM;
     return -1;
   }
-
-  execArgs->argv = (char**) &((char*) execArgs)[sizeof(ExecArgs)];
-  char *nextString = (char*) &execArgs->argv[argvLen];
-  size_t ii = 0;
-  // argvLen is guaranteed to always be at least 1, so it's safe to run to
-  // (argvLen - 1) here.
-  for (; ii < (argvLen - 1); ii++) {
-    execArgs->argv[ii] = nextString;
-    strcpy(nextString, argv[ii]);
-    nextString += strlen(argv[ii]) + 1;
-  }
-  execArgs->argv[ii] = NULL;
-
-  execArgs->pathname = nextString;
-  strcpy(execArgs->pathname, pathname);
+  execArgsFill(execArgs, pathname, argv);
 
   if (envp != NULL) {
-    size_t envpLen = 0;
-    size_t envpBytes = 0;
-    for (; envp[envpLen] != NULL; envpLen++) {
-      envpBytes += strlen(envp[envpLen]) + 1;
-    }
-    envpLen++;
-
+    size_t envpBytes = envpBlockSize(envp);
     if (envpBytes > 0) {
-      size_t paddedBytes
-        = (envpBytes + sizeof(uintptr_t) - 1) & ~(sizeof(uintptr_t) - 1);
-      char *envpBlock = (char*) calloc(1,
-        paddedBytes + (envpLen * sizeof(char*)));
+      char *envpBlock = (char*) calloc(1, envpBytes);
       if (envpBlock == NULL) {
         logError("Allocating execArgs->envp failed\n");
         errno = ENOMEM;
         goto freeExecArgs;
       }
-
-      execArgs->envp = (char**) &envpBlock[paddedBytes];
-      nextString = envpBlock;
-      // envpLen is guaranteed to always be at least 1, so it's safe to run to
-      // (envpLen - 1) here.
-      for (ii = 0; ii < (envpLen - 1); ii++) {
-        execArgs->envp[ii] = nextString;
-        strcpy(nextString, envp[ii]);
-        nextString += strlen(envp[ii]) + 1;
-      }
-      execArgs->envp[ii] = NULL;
-    } else {
-      execArgs->envp = NULL;
+      execArgs->envp = envpBlockFill(envpBlock, envp);
     }
-  } else {
-    execArgs->envp = NULL;
   }
 
   execArgs->schedulerState = NULL; // Set by the scheduler
@@ -4026,6 +4109,7 @@ int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp) {
     (uint8_t*) overlayMap) != 0
   ) {
     logError("Could not read overlay\n");
+    HAL->power->enterMode(HAL_POWER_MODE_RESET);
     return -EIO;
   }
 
