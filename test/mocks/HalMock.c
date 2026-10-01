@@ -533,7 +533,8 @@ int halMockInit(const HalMockConfig *config, jmp_buf *powerReturn) {
   // halCommonInit here.
   return halCommonInit(
     /* builtinFilesystemInitDriver= */ NULL,
-    /* builtinFilesystemCommandHandlers= */ NULL);
+    /* builtinFilesystemCommandHandlers= */ NULL,
+    /* numExtraFilesystemStacks= */ 0);
 }
 
 #endif // __x86_64__
