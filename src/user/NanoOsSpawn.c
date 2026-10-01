@@ -120,6 +120,143 @@ int nanoOsSpawnFileActionsDestroy(posix_spawn_file_actions_t *fileActions) {
   return 0;
 }
 
+/// @fn size_t spawnArgsSize(const char *path,
+///   const posix_spawn_file_actions_t *fileActions, char *const argv[])
+///
+/// @brief Calculate the size of the single block that holds a SpawnArgs
+///   structure and all its contents.
+///
+/// @param path The path to the executable the spawned process will run.
+/// @param fileActions The file actions to use for the posix_spawn operation.
+///   This parameter may be NULL.
+/// @param argv The argument array to use for the posix_spawn call.
+///
+/// @return Returns the total size of the contiguous block in bytes.
+static __attribute__((noinline)) size_t spawnArgsSize(const char *path,
+  const posix_spawn_file_actions_t *fileActions, char *const argv[]
+) {
+  size_t numArgs = 0;
+  size_t stringBytes = 0;
+  for (; argv[numArgs] != NULL; numArgs++) {
+    stringBytes += strlen(argv[numArgs]) + 1;
+  }
+  numArgs++;
+
+  size_t fileActionBytes = 0;
+  if (fileActions != NULL) {
+    fileActionBytes = sizeof(posix_spawn_file_actions_t);
+  }
+
+  return sizeof(SpawnArgs) + fileActionBytes + (numArgs * sizeof(char*))
+    + stringBytes + strlen(path) + 1;
+}
+
+/// @fn void spawnArgsFill(SpawnArgs *spawnArgs, pid_t *pid, const char *path,
+///   const posix_spawn_file_actions_t *fileActions,
+///   const posix_spawnattr_t *attrp, char *const argv[])
+///
+/// @brief Copy a SpawnArgs structure and everything it to at into a zeroed
+/// block of contiguous memory.
+///
+/// @param spawnArgs A pointer to SpawnArgs structure to populate.
+/// @param pid The address the spawned process's PID is to be written to.
+/// @param path The path to the executable the spawned process will run.
+/// @param fileActions The file actions to copy into the block.  This parameter
+///   may be NULL
+/// @param attrp The spawn attributes.  This parameter is currently only set
+///   by pointer.  Its contents, if any, are not copied into the block.
+/// @param argv The argument array the spawned process will use.
+///
+/// @return This function returns no value.
+static __attribute__((noinline)) void spawnArgsFill(SpawnArgs *spawnArgs,
+  pid_t *pid, const char *path,
+  const posix_spawn_file_actions_t *fileActions,
+  const posix_spawnattr_t *attrp, char *const argv[]
+) {
+  spawnArgs->newPid = pid;
+  spawnArgs->attrp = (posix_spawnattr_t*) attrp;
+
+  char *nextField = &((char*) spawnArgs)[sizeof(SpawnArgs)];
+  if (fileActions != NULL) {
+    spawnArgs->fileActions = (posix_spawn_file_actions_t*) nextField;
+    memcpy(spawnArgs->fileActions, fileActions, sizeof(*fileActions));
+    nextField += sizeof(posix_spawn_file_actions_t);
+  }
+
+  size_t numArgs = 0;
+  for (; argv[numArgs] != NULL; numArgs++);
+  numArgs++;
+
+  spawnArgs->argv = (char**) nextField;
+  char *nextString = (char*) &spawnArgs->argv[numArgs];
+  size_t index = 0;
+  for (; index < (numArgs - 1); index++) {
+    spawnArgs->argv[index] = nextString;
+    strcpy(nextString, argv[index]);
+    nextString += strlen(argv[index]) + 1;
+  }
+
+  spawnArgs->path = nextString;
+  strcpy(spawnArgs->path, path);
+}
+
+/// @fn size_t envpBlockSize(char *const envp[])
+///
+/// @brief Calculate the size of the the contiguous block that holds an
+/// environment's strings and the array that points to them.
+///
+/// @param envp The environment array of environment variables to calcualte the
+///   size of.
+///
+/// @return Returns the size of the contiguous block in bytes or 0 if the
+/// environment is empty.
+static __attribute__((noinline)) size_t envpBlockSize(char *const envp[]) {
+  size_t numVariables = 0;
+  size_t stringBytes = 0;
+  for (; envp[numVariables] != NULL; numVariables++) {
+    stringBytes += strlen(envp[numVariables]) + 1;
+  }
+  if (stringBytes == 0) {
+    return 0;
+  }
+  numVariables++;
+
+  return ((stringBytes + sizeof(uintptr_t) - 1) & ~(sizeof(uintptr_t) - 1))
+    + (numVariables * sizeof(char*));
+}
+
+/// @fn char** envpBlockFill(char *block, char *const envp[])
+///
+/// @brief Copy an environment's strings and its array into a zeroed block
+/// of contiguous memory.
+///
+/// @param block A pointer to the contiguous block of memory to populate.
+/// @param envp The process's environment array to copy into the block.
+///
+/// @return Returns the address of the array within the block.  Note:  This is
+/// *NOT* the address of the start of the block.  That address may be found at
+/// returnValue[0].
+static __attribute__((noinline)) char** envpBlockFill(char *block,
+  char *const envp[]
+) {
+  size_t numVariables = 0;
+  size_t stringBytes = 0;
+  for (; envp[numVariables] != NULL; numVariables++) {
+    stringBytes += strlen(envp[numVariables]) + 1;
+  }
+
+  char **envpArray = (char**) &block[
+    (stringBytes + sizeof(uintptr_t) - 1) & ~(sizeof(uintptr_t) - 1)];
+  char *nextString = block;
+  for (size_t index = 0; index < numVariables; index++) {
+    envpArray[index] = nextString;
+    strcpy(nextString, envp[index]);
+    nextString += strlen(envp[index]) + 1;
+  }
+
+  return envpArray;
+}
+
 /// @fn int nanoOsSpawn(
 ///   pid_t *pid, const char *path,
 ///   const posix_spawn_file_actions_t *file_actions,
@@ -148,85 +285,23 @@ int nanoOsSpawn(
     return EFAULT;
   }
 
-  size_t argvLen = 0;
-  size_t argvBytes = 0;
-  for (; argv[argvLen] != NULL; argvLen++) {
-    argvBytes += strlen(argv[argvLen]) + 1;
-  }
-  argvLen++;
-
-  size_t fileActionsBytes = 0;
-  if (file_actions != NULL) {
-    fileActionsBytes = sizeof(posix_spawn_file_actions_t);
-  }
-  size_t pathBytes = strlen(path) + 1;
-
-  SpawnArgs *spawnArgs = (SpawnArgs*) calloc(1,
-    sizeof(SpawnArgs) + fileActionsBytes + (argvLen * sizeof(char*))
-    + argvBytes + pathBytes);
+  SpawnArgs *spawnArgs
+    = (SpawnArgs*) calloc(1, spawnArgsSize(path, file_actions, argv));
   if (spawnArgs == NULL) {
     return ENOMEM;
   }
-
-  spawnArgs->newPid = pid;
-
-  char *nextField = &((char*) spawnArgs)[sizeof(SpawnArgs)];
-  if (file_actions != NULL) {
-    spawnArgs->fileActions = (posix_spawn_file_actions_t*) nextField;
-    memcpy(spawnArgs->fileActions, file_actions, sizeof(*file_actions));
-    nextField += fileActionsBytes;
-  } else {
-    spawnArgs->fileActions = NULL;
-  }
-
-  spawnArgs->argv = (char**) nextField;
-  char *nextString = (char*) &spawnArgs->argv[argvLen];
-  size_t ii = 0;
-  for (; ii < (argvLen - 1); ii++) {
-    spawnArgs->argv[ii] = nextString;
-    strcpy(nextString, argv[ii]);
-    nextString += strlen(argv[ii]) + 1;
-  }
-  spawnArgs->argv[ii] = NULL;
-
-  spawnArgs->path = nextString;
-  strcpy(spawnArgs->path, path);
-
-  // Not doing anything intelligent with this arg yet.  We need to make a copy
-  // rather than casting away the `const` qualifier here if we ever do use it.
-  spawnArgs->attrp = (posix_spawnattr_t*) attrp;
+  spawnArgsFill(spawnArgs, pid, path, file_actions, attrp, argv);
 
   if (envp != NULL) {
-    size_t envpLen = 0;
-    size_t envpBytes = 0;
-    for (; envp[envpLen] != NULL; envpLen++) {
-      envpBytes += strlen(envp[envpLen]) + 1;
-    }
-    envpLen++;
-
+    size_t envpBytes = envpBlockSize(envp);
     if (envpBytes > 0) {
-      size_t paddedBytes
-        = (envpBytes + sizeof(uintptr_t) - 1) & ~(sizeof(uintptr_t) - 1);
-      char *envpBlock = (char*) calloc(1,
-        paddedBytes + (envpLen * sizeof(char*)));
+      char *envpBlock = (char*) calloc(1, envpBytes);
       if (envpBlock == NULL) {
         returnValue = ENOMEM;
         goto freeSpawnArgs;
       }
-
-      spawnArgs->envp = (char**) &envpBlock[paddedBytes];
-      nextString = envpBlock;
-      for (ii = 0; ii < (envpLen - 1); ii++) {
-        spawnArgs->envp[ii] = nextString;
-        strcpy(nextString, envp[ii]);
-        nextString += strlen(envp[ii]) + 1;
-      }
-      spawnArgs->envp[ii] = NULL;
-    } else {
-      spawnArgs->envp = NULL;
+      spawnArgs->envp = envpBlockFill(envpBlock, envp);
     }
-  } else {
-    spawnArgs->envp = NULL;
   }
 
   SchedulerSpawnArgs schedulerSpawnArgs = {
