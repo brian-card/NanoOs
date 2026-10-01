@@ -281,7 +281,7 @@ int sdSpiCardInit(SdCardSpiArgs *sdCardSpiArgs, SdCardState *sdCardState) {
   HAL->spi->endTransfer(SD_CARD_SPI_DEVICE);
   
   // Initialize card with ACMD41
-  timeoutCount = 20000;  // Much longer timeout
+  timeoutCount = 2000;  // Much longer timeout
   do {
     response = sdSpiSendCommand(SD_CARD_SPI_DEVICE, CMD55, 0);
     HAL->spi->endTransfer(SD_CARD_SPI_DEVICE);
