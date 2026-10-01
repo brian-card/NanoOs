@@ -659,6 +659,9 @@ int memoryManagerReallocCommandHandler(
       processPid(processMessageFrom(incoming)));
 
   if (clientReturnValue != NULL) {
+    if (reallocMessage->zero == true) {
+      memset(clientReturnValue, 0, reallocMessage->size);
+    }
     reallocMessage->size = sizeOfMemory(clientReturnValue);
   } else if ((reallocMessage->size > 0)
     && (processPid(processMessageFrom(incoming))
@@ -1328,21 +1331,26 @@ size_t getFreeMemory(void) {
   return memoryManagerGetFreeMemoryArgs.bytesFree;
 }
 
-/// @fn void* memoryManagerSendReallocMessage(void *ptr, size_t size)
+/// @fn void* memoryManagerSendReallocMessage(void *ptr, size_t size,
+///   bool zero)
 ///
 /// @brief Send a MEMORY_MANAGER_REALLOC command to the memory manager process
 /// and wait for a reply.
 ///
 /// @param ptr The pointer to send to the process.
 /// @param size The size to send to the process.
+/// @param zero Whether or not the memory manager needs to zero the memory it
+///   returns before returning it.
 ///
 /// @return Returns the data pointer returned in the reply.
-void* memoryManagerSendReallocMessage(void *ptr, size_t size) {
+static inline __attribute__((always_inline)) void*
+memoryManagerSendReallocMessage(void *ptr, size_t size, bool zero) {
   void *returnValue = NULL;
   
   ReallocMessage reallocMessage;
   reallocMessage.ptr = ptr;
   reallocMessage.size = size;
+  reallocMessage.zero = zero;
   
   ProcessMessage *sent
     = initSendProcessMessageToProcess(processIdToDescriptor(memoryManagerPid),
@@ -1409,7 +1417,7 @@ void memoryManagerFree(void *ptr) {
 /// @return Returns a pointer to size-adjusted memory on success, NULL on
 /// failure or free.
 void* memoryManagerRealloc(void *ptr, size_t size) {
-  return memoryManagerSendReallocMessage(ptr, size);
+  return memoryManagerSendReallocMessage(ptr, size, false);
 }
 
 /// @fn void* memoryManagerMalloc(size_t size)
@@ -1421,7 +1429,7 @@ void* memoryManagerRealloc(void *ptr, size_t size) {
 /// @return Returns a pointer to newly-allocated memory of the specified size
 /// on success, NULL on failure.
 void* memoryManagerMalloc(size_t size) {
-  return memoryManagerSendReallocMessage(NULL, size);
+  return memoryManagerSendReallocMessage(NULL, size, false);
 }
 
 /// @fn void* memoryManagerCalloc(size_t nmemb, size_t size)
@@ -1434,13 +1442,7 @@ void* memoryManagerMalloc(size_t size) {
 /// @return Returns a pointer to zeroed newly-allocated memory of the specified
 /// size on success, NULL on failure.
 void* memoryManagerCalloc(size_t nmemb, size_t size) {
-  size_t totalSize = nmemb * size;
-  void *returnValue = memoryManagerSendReallocMessage(NULL, totalSize);
-  
-  if (returnValue != NULL) {
-    memset(returnValue, 0, totalSize);
-  }
-  return returnValue;
+  return memoryManagerSendReallocMessage(NULL, nmemb * size, true);
 }
 
 /// @fn int dumpMemoryAllocations(void)

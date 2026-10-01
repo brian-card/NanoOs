@@ -80,6 +80,7 @@ extern "C"
 typedef struct ReallocMessage {
   void     *ptr;
   size_t    size;
+  bool      zero;
 } ReallocMessage;
 
 /// @struct MemoryManagerFreeArgs
