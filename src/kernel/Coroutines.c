@@ -383,6 +383,12 @@ ZEROINIT(static tss_t _tssComutexUnlockCallback);
 /// @brief Thread-specific callback to call when a cocondition is signalled.
 ZEROINIT(static tss_t _tssCoconditionSignalCallback);
 
+/// @var static tss_t _tssPreemptionCallback
+///
+/// @brief Thread-specific callback to call when a coroutine leaves its
+/// outermost critical section with a preemption that was deferred.
+ZEROINIT(static tss_t _tssPreemptionCallback);
+
 /// @var static once_flag _threadMetadataSetup
 ///
 /// @brief once_flag to make sure we only initialize the thread-specific storage
@@ -426,6 +432,14 @@ void coroutineSetupThreadMetadata(void) {
   status = tss_create(&_tssCoconditionSignalCallback, free);
   if (status != thrd_success) {
     fprintf(stderr, "Could not initialize _tssCoconditionSignalCallback.\n");
+  }
+  status = tss_create(&_tssCoroutineResumeCallback, free);
+  if (status != thrd_success) {
+    fprintf(stderr, "Could not initialize _tssCoroutineResumeCallback.\n");
+  }
+  status = tss_create(&_tssPreemptionCallback, free);
+  if (status != thrd_success) {
+    fprintf(stderr, "Could not initialize _tssPreemptionCallback.\n");
   }
 }
 
@@ -512,6 +526,16 @@ bool coroutineInitializeThreadMetadata(Coroutine *first) {
   if (status != thrd_success) {
     fprintf(stderr,
       "Could not set _tssCoconditionSignalCallback to NULL in "
+      "coroutineInitializeThreadMetadata.\n");
+    return false;
+  }
+  status = tss_set(
+    _tssPreemptionCallback,
+    NULL
+  );
+  if (status != thrd_success) {
+    fprintf(stderr,
+      "Could not set _tssPreemptionCallback to NULL in "
       "coroutineInitializeThreadMetadata.\n");
     return false;
   }
@@ -1744,6 +1768,17 @@ int coroutinesConfig(Coroutine *first, CoroutinesConfigOptions *options) {
       } else {
         tss_set(_tssCoconditionSignalCallback, NULL);
       }
+
+      if (options->preemptionCallback != NULL) {
+        free(tss_get(_tssPreemptionCallback));
+        CoroutinePreemptionCallback *preemptionCallbackPointer
+          = (CoroutinePreemptionCallback*)
+            malloc(sizeof(CoroutinePreemptionCallback));
+        *preemptionCallbackPointer = options->preemptionCallback;
+        tss_set(_tssPreemptionCallback, preemptionCallbackPointer);
+      } else {
+        tss_set(_tssPreemptionCallback, NULL);
+      }
     } else {
       tss_set(_tssStateData, NULL);
 
@@ -1755,6 +1790,9 @@ int coroutinesConfig(Coroutine *first, CoroutinesConfigOptions *options) {
 
       free(tss_get(_tssCoconditionSignalCallback));
       tss_set(_tssCoconditionSignalCallback, NULL);
+
+      free(tss_get(_tssPreemptionCallback));
+      tss_set(_tssPreemptionCallback, NULL);
     }
   }
 #endif // THREAD_SAFE_COROUTINES
@@ -1840,6 +1878,9 @@ int coroutinesDeconfig(void) {
 
     free(tss_get(_tssCoconditionSignalCallback));
     tss_set(_tssCoconditionSignalCallback, NULL);
+
+    free(tss_get(_tssPreemptionCallback));
+    tss_set(_tssPreemptionCallback, NULL);
   }
 #endif // THREAD_SAFE_COROUTINES
 
@@ -1849,6 +1890,7 @@ int coroutinesDeconfig(void) {
   _globalCoroutineYieldCallback = NULL;
   _globalComutexUnlockCallback = NULL;
   _globalCoconditionSignalCallback = NULL;
+  _globalPreemptionCallback = NULL;
 
   return coroutineSuccess;
 }
@@ -1869,6 +1911,11 @@ void coroutineTakeDeferredPreemption(void) {
     call_once(&_threadMetadataSetup, coroutineSetupThreadMetadata);
     if (coroutineInitializeThreadMetadata(NULL)) {
       stateData = tss_get(_tssStateData);
+      CoroutinePreemptionCallback *possibleCallback
+        = (CoroutinePreemptionCallback*) tss_get(_tssPreemptionCallback);
+      if (possibleCallback != NULL) {
+        preemptionCallback = *possibleCallback;
+      }
     }
   }
 #endif
