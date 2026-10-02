@@ -211,6 +211,12 @@ static ComutexUnlockCallback _globalComutexUnlockCallback = NULL;
 /// @brief Global callback to call when a cocondition is signalled.
 static CoconditionSignalCallback _globalCoconditionSignalCallback = NULL;
 
+/// @var _globalPreemptionCallback
+///
+/// @brief Callback invoked when a coroutine leaves its outermost critical
+/// section with a preemption that was deferred while it was inside.
+static CoroutinePreemptionCallback _globalPreemptionCallback = NULL;
+
 /// @fn int64_t coroutineGetNanoseconds(const struct timespec *ts)
 ///
 /// @brief Convert the time in a timespec to a raw number of nanoseconds.
@@ -1104,6 +1110,8 @@ Coroutine* coroutineInit(Coroutine *userCoroutine,
   configuredCoroutine->nextToLock = NULL;
   configuredCoroutine->prevToLock = NULL;
   configuredCoroutine->blockingComutex = NULL;
+  configuredCoroutine->criticalSectionDepth = 0;
+  configuredCoroutine->preemptionPending = false;
 
   coroutineResume(configuredCoroutine, arg);
 
@@ -1518,18 +1526,16 @@ int coroutineTerminate(Coroutine *targetCoroutine, Comutex **mutexes,
 
   Comutex *mtx = targetCoroutine->blockingComutex;
   if (mtx != NULL) {
-    Coroutine **cur = &mtx->head;
-    while ((*cur != NULL) && (*cur != targetCoroutine)) {
-      cur = &((*cur)->nextToLock);
+    if (targetCoroutine->prevToLock != NULL) {
+      targetCoroutine->prevToLock->nextToLock = targetCoroutine->nextToLock;
+    } else if (mtx->head == targetCoroutine) {
+      mtx->head = targetCoroutine->nextToLock;
     }
-    *cur = targetCoroutine->prevToLock;
-  }
-  // targetCoroutine->prevToLock->nextToLock is taken care of above.
-  if (targetCoroutine->nextToLock != NULL) {
-    targetCoroutine->nextToLock->prevToLock = targetCoroutine->prevToLock;
-  }
-  if (targetCoroutine->prevToLock != NULL) {
-    targetCoroutine->prevToLock->nextToLock = targetCoroutine->nextToLock;
+    if (targetCoroutine->nextToLock != NULL) {
+      targetCoroutine->nextToLock->prevToLock = targetCoroutine->prevToLock;
+    } else if (mtx->tail == targetCoroutine) {
+      mtx->tail = targetCoroutine->prevToLock;
+    }
   }
   targetCoroutine->nextToLock = NULL;
   targetCoroutine->prevToLock = NULL;
@@ -1765,6 +1771,8 @@ int coroutinesConfig(Coroutine *first, CoroutinesConfigOptions *options) {
   // to by the first pointer), so by definition, it's running.  Mark it as
   // such.
   first->state = COROUTINE_STATE_RUNNING;
+  first->criticalSectionDepth = 0;
+  first->preemptionPending = false;
   first->guard1 = COROUTINE_GUARD_VALUE;
   first->guard2 = COROUTINE_GUARD_VALUE;
 
@@ -1778,12 +1786,14 @@ int coroutinesConfig(Coroutine *first, CoroutinesConfigOptions *options) {
     _globalCoroutineYieldCallback = options->yieldCallback;
     _globalComutexUnlockCallback = options->unlockCallback;
     _globalCoconditionSignalCallback = options->signalCallback;
+    _globalPreemptionCallback = options->preemptionCallback;
   } else {
     _globalStateData = NULL;
     _globalCoroutineResumeCallback = NULL;
     _globalCoroutineYieldCallback = NULL;
     _globalComutexUnlockCallback = NULL;
     _globalCoconditionSignalCallback = NULL;
+    _globalPreemptionCallback = NULL;
   }
 
   return coroutineSuccess;
@@ -1843,6 +1853,30 @@ int coroutinesDeconfig(void) {
   return coroutineSuccess;
 }
 
+/// @fn void coroutineTakeDeferredPreemption(void)
+///
+/// @brief Hand control to the host's preemption callback on behalf of a
+/// coroutine that has just left its outermost critical section.  This is out
+/// of line so that coroutineExitCriticalSection stays small enough to inline
+/// at every one of its call sites.
+///
+/// @return This function returns no value.
+void coroutineTakeDeferredPreemption(void) {
+  void *stateData = _globalStateData;
+  CoroutinePreemptionCallback preemptionCallback = _globalPreemptionCallback;
+#ifdef THREAD_SAFE_COROUTINES
+  if (_coroutineThreadingSupportEnabled) {
+    call_once(&_threadMetadataSetup, coroutineSetupThreadMetadata);
+    if (coroutineInitializeThreadMetadata(NULL)) {
+      stateData = tss_get(_tssStateData);
+    }
+  }
+#endif
+  if (preemptionCallback != NULL) {
+    preemptionCallback(stateData);
+  }
+}
+
 /// @fn int comutexInit(Comutex* mtx, int type)
 ///
 /// @brief Initialize a coroutine mutex.
@@ -1861,6 +1895,7 @@ int comutexInit(Comutex *mtx, int type) {
     atomic_store(&mtx->coroutine, (Coroutine*) NULL);
     mtx->recursionLevel = 0;
     mtx->head = NULL;
+    mtx->tail = NULL;
     mtx->timeoutTime = 0;
   } else {
     returnValue = coroutineError;
@@ -1905,16 +1940,17 @@ int comutexLock(Comutex *mtx) {
     return coroutineError;
   }
 
-  // Push ourselves onto the queue.
+  // Push ourselves onto the tail of the queue.
+  coroutineEnterCriticalSection();
   running->nextToLock = NULL;
-  Coroutine *prev = NULL;
-  Coroutine **cur = &mtx->head;
-  while (*cur != NULL) {
-    prev = *cur;
-    cur = &((*cur)->nextToLock);
+  running->prevToLock = mtx->tail;
+  if (mtx->tail != NULL) {
+    mtx->tail->nextToLock = running;
+  } else {
+    mtx->head = running;
   }
-  *cur = running;
-  running->prevToLock = prev;
+  mtx->tail = running;
+  coroutineExitCriticalSection();
 
   running->blockingComutex = mtx;
   while (comutexTryLock(mtx) != coroutineSuccess) {
@@ -1923,16 +1959,20 @@ int comutexLock(Comutex *mtx) {
   running->blockingComutex = NULL;
 
   // Remove ourselves from the queue.
-  prev = NULL;
-  cur = &mtx->head;
-  while (*cur != running) {
-    prev = *cur;
-    cur = &((*cur)->nextToLock);
+  coroutineEnterCriticalSection();
+  if (running->prevToLock != NULL) {
+    running->prevToLock->nextToLock = running->nextToLock;
+  } else {
+    mtx->head = running->nextToLock;
   }
-  *cur = running->nextToLock;
   if (running->nextToLock != NULL) {
-    running->nextToLock->prevToLock = prev;
+    running->nextToLock->prevToLock = running->prevToLock;
+  } else {
+    mtx->tail = running->prevToLock;
   }
+  running->nextToLock = NULL;
+  running->prevToLock = NULL;
+  coroutineExitCriticalSection();
 
   return coroutineSuccess;
 }
@@ -1967,6 +2007,7 @@ int comutexUnlock(Comutex *mtx) {
   }
 
   if ((mtx != NULL) && (atomic_load(&mtx->coroutine) == running)) {
+    coroutineEnterCriticalSection();
     mtx->recursionLevel--;
     if (mtx->recursionLevel == 0) {
       void *stateData = _globalStateData;
@@ -1990,6 +2031,7 @@ int comutexUnlock(Comutex *mtx) {
 
       atomic_store(&mtx->coroutine, (Coroutine*) NULL);
     }
+    coroutineExitCriticalSection();
   } else {
     returnValue = coroutineError;
   }
@@ -2011,6 +2053,7 @@ void comutexDestroy(Comutex *mtx) {
     atomic_store(&mtx->coroutine, (Coroutine*) NULL);
     mtx->recursionLevel = 0;
     mtx->head = NULL;
+    mtx->tail = NULL;
     mtx->timeoutTime = 0;
   }
 }
@@ -2062,16 +2105,17 @@ int comutexTimedLock(Comutex *mtx, const struct timespec *ts) {
     return coroutineError;
   }
 
-  // Push ourselves onto the queue.
+  // Push ourselves onto the tail of the queue.
+  coroutineEnterCriticalSection();
   running->nextToLock = NULL;
-  Coroutine *prev = NULL;
-  Coroutine **cur = &mtx->head;
-  while (*cur != NULL) {
-    prev = *cur;
-    cur = &((*cur)->nextToLock);
+  running->prevToLock = mtx->tail;
+  if (mtx->tail != NULL) {
+    mtx->tail->nextToLock = running;
+  } else {
+    mtx->head = running;
   }
-  *cur = running;
-  running->prevToLock = prev;
+  mtx->tail = running;
+  coroutineExitCriticalSection();
 
   int returnValue = comutexTryLock(mtx);
   running->blockingComutex = mtx;
@@ -2087,16 +2131,20 @@ int comutexTimedLock(Comutex *mtx, const struct timespec *ts) {
   running->blockingComutex = NULL;
 
   // Remove ourselves from the queue.
-  prev = NULL;
-  cur = &mtx->head;
-  while (*cur != running) {
-    prev = *cur;
-    cur = &((*cur)->nextToLock);
+  coroutineEnterCriticalSection();
+  if (running->prevToLock != NULL) {
+    running->prevToLock->nextToLock = running->nextToLock;
+  } else {
+    mtx->head = running->nextToLock;
   }
-  *cur = running->nextToLock;
   if (running->nextToLock != NULL) {
-    running->nextToLock->prevToLock = prev;
+    running->nextToLock->prevToLock = running->prevToLock;
+  } else {
+    mtx->tail = running->prevToLock;
   }
+  running->nextToLock = NULL;
+  running->prevToLock = NULL;
+  coroutineExitCriticalSection();
 
   return returnValue;
 }
@@ -2183,6 +2231,7 @@ int coconditionBroadcast(Cocondition *cond) {
   int returnValue = coroutineSuccess;
 
   if (cond != NULL) {
+    coroutineEnterCriticalSection();
     cond->numSignals = cond->numWaiters;
 
     void *stateData = _globalStateData;
@@ -2204,6 +2253,7 @@ int coconditionBroadcast(Cocondition *cond) {
     if (coconditionSignalCallback != NULL) {
       coconditionSignalCallback(stateData, cond);
     }
+    coroutineExitCriticalSection();
   } else {
     returnValue = coroutineError;
   }
@@ -2267,6 +2317,7 @@ int coconditionSignal(Cocondition *cond) {
 
   if (cond != NULL) {
     if (cond->numWaiters > 0) {
+      coroutineEnterCriticalSection();
       cond->numSignals++;
 
       void *stateData = _globalStateData;
@@ -2288,6 +2339,7 @@ int coconditionSignal(Cocondition *cond) {
       if (coconditionSignalCallback != NULL) {
         coconditionSignalCallback(stateData, cond);
       }
+      coroutineExitCriticalSection();
     }
   } else {
     returnValue = coroutineError;
@@ -2323,7 +2375,6 @@ int coconditionTimedWait(Cocondition *cond, Comutex *mtx,
   // Clear the lastYieldValue before we do anything else.
   cond->lastYieldValue = NULL;
 
-  comutexUnlock(mtx);
 
 #ifdef THREAD_SAFE_COROUTINES
   if (_coroutineThreadingSupportEnabled) {
@@ -2341,7 +2392,10 @@ int coconditionTimedWait(Cocondition *cond, Comutex *mtx,
     return coroutineError;
   }
 
-  // Add ourselves to the queue.
+  // Add ourselves to the queue before releasing the mutex.  A signaller holds
+  // the mutex, so registering first is what keeps it from counting waiters
+  // without us and losing our wakeup.
+  coroutineEnterCriticalSection();
   cond->numWaiters++;
   if (cond->tail != NULL) {
     cond->tail->nextToSignal = running;
@@ -2351,6 +2405,9 @@ int coconditionTimedWait(Cocondition *cond, Comutex *mtx,
   if (cond->head == NULL) {
     cond->head = running;
   }
+  coroutineExitCriticalSection();
+
+  comutexUnlock(mtx);
 
   int returnValue = coroutineSuccess;
   running->blockingCocondition = cond;
@@ -2366,6 +2423,9 @@ int coconditionTimedWait(Cocondition *cond, Comutex *mtx,
   }
   cond->timeoutTime = 0;
   running->blockingCocondition = NULL;
+  comutexLock(mtx);
+
+  coroutineEnterCriticalSection();
   if ((returnValue == coroutineSuccess) && (cond->numSignals > 0)) {
     // We are at the head of the queue.
     cond->numSignals--;
@@ -2405,8 +2465,8 @@ int coconditionTimedWait(Cocondition *cond, Comutex *mtx,
   }
   running->nextToSignal = NULL;
   running->prevToSignal = NULL;
+  coroutineExitCriticalSection();
 
-  comutexLock(mtx);
   return returnValue;
 }
 
@@ -2430,8 +2490,6 @@ int coconditionWait(Cocondition *cond, Comutex *mtx) {
   // Clear the lastYieldValue before we do anything else.
   cond->lastYieldValue = NULL;
 
-  comutexUnlock(mtx);
-
 #ifdef THREAD_SAFE_COROUTINES
   if (_coroutineThreadingSupportEnabled) {
     call_once(&_threadMetadataSetup, coroutineSetupThreadMetadata);
@@ -2447,7 +2505,10 @@ int coconditionWait(Cocondition *cond, Comutex *mtx) {
     return coroutineError;
   }
 
-  // Add ourselves to the queue.
+  // Add ourselves to the queue before releasing the mutex.  A signaller holds
+  // the mutex, so registering first is what keeps it from counting waiters
+  // without us and losing our wakeup.
+  coroutineEnterCriticalSection();
   cond->numWaiters++;
   if (cond->tail != NULL) {
     cond->tail->nextToSignal = running;
@@ -2457,6 +2518,9 @@ int coconditionWait(Cocondition *cond, Comutex *mtx) {
   if (cond->head == NULL) {
     cond->head = running;
   }
+  coroutineExitCriticalSection();
+
+  comutexUnlock(mtx);
 
   int returnValue = coroutineSuccess;
   running->blockingCocondition = cond;
@@ -2464,6 +2528,10 @@ int coconditionWait(Cocondition *cond, Comutex *mtx) {
     cond->lastYieldValue = coroutineYield(NULL, COROUTINE_STATE_WAIT);
   }
   running->blockingCocondition = NULL;
+
+  comutexLock(mtx);
+
+  coroutineEnterCriticalSection();
   if (cond->numSignals > 0) {
     cond->numSignals--;
     cond->numWaiters--;
@@ -2484,8 +2552,8 @@ int coconditionWait(Cocondition *cond, Comutex *mtx) {
   }
   running->nextToSignal = NULL;
   running->prevToSignal = NULL;
+  coroutineExitCriticalSection();
 
-  comutexLock(mtx);
   return returnValue;
 }
 

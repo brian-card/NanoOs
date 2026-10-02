@@ -145,6 +145,13 @@ typedef void* (*CoroutineYieldCallback)(
 /// unlocked.
 typedef void (*ComutexUnlockCallback)(void *stateData, Comutex *comutex);
 
+/// @typedef CoroutinePreemptionCallback
+///
+/// @brief Function to call when a coroutine leaves its outermost critical
+/// section with a preemption that was deferred while it was inside.  A host
+/// that doesn't preempt coroutines leaves this NULL.
+typedef void (*CoroutinePreemptionCallback)(void *stateData);
+
 /// @typedef CoconditionSignalCallback
 ///
 /// @brief Function signature that can be used as a callback when a cocondition
@@ -197,6 +204,11 @@ typedef union CoroutineFuncData {
 ///   coroutine is currently waiting on to be signalled.
 /// @param stackEnd A pointer to a uint64_t that marks the end of the stack
 ///   for this coroutine.
+/// @param criticalSectionDepth The number of times times the coroutine has
+///   entered a critical section.
+/// @param preemptionPending Whether or not a preemption has happened while the
+///   coroutine was in a critical section and needs to be taken once it leaves
+///   it.
 /// @param guard2 A well-known value to check for state corruption (stack
 ///   overflow).
 typedef struct Coroutine {
@@ -215,6 +227,8 @@ typedef struct Coroutine {
   Comutex *blockingComutex;
   Cocondition *blockingCocondition;
   uint64_t *stackEnd;
+  uint8_t criticalSectionDepth;
+  bool preemptionPending;
   uint32_t guard2;
 } Coroutine, coro_s, *coro_t;
 
@@ -242,6 +256,7 @@ typedef struct CoroutinesConfigOptions {
   CoroutineYieldCallback yieldCallback;
   ComutexUnlockCallback unlockCallback;
   CoconditionSignalCallback signalCallback;
+  CoroutinePreemptionCallback preemptionCallback;
 } CoroutinesConfigOptions;
 
 // Support functions
@@ -327,6 +342,44 @@ bool coroutineThreadingSupportEnabled();
 int coroutineTerminate(Coroutine *targetCoroutine, Comutex **mutexes,
   bool keepMessageQueue);
 Coroutine* getRunningCoroutine(void);
+void coroutineTakeDeferredPreemption(void);
+
+/// @fn void coroutineEnterCriticalSection(void)
+///
+/// @brief Mark the running coroutine as being inside a critical section so
+/// that a host that preempts coroutines defers the preemption until the
+/// section ends.  Sections nest.
+///
+/// @return This function returns no value.
+static inline __attribute__((always_inline))
+void coroutineEnterCriticalSection(void) {
+  Coroutine *running = getRunningCoroutine();
+  if (running != NULL) {
+    running->criticalSectionDepth++;
+  }
+}
+
+/// @fn void coroutineExitCriticalSection(void)
+///
+/// @brief Leave a critical section entered by coroutineEnterCriticalSection
+/// and take any preemption that was deferred while inside the outermost one.
+///
+/// @return This function returns no value.
+static inline __attribute__((always_inline))
+void coroutineExitCriticalSection(void) {
+  Coroutine *running = getRunningCoroutine();
+  if ((running == NULL) || (running->criticalSectionDepth == 0)) {
+    return;
+  }
+
+  running->criticalSectionDepth--;
+  if ((running->criticalSectionDepth == 0)
+    && (running->preemptionPending == true)
+  ) {
+    running->preemptionPending = false;
+    coroutineTakeDeferredPreemption();
+  }
+}
 bool coroutineDeadlocked(Coroutine *coroutine);
 bool coroutineStackOverflowed(Coroutine *coroutine);
 uint64_t* coroutineStackEnd(Coroutine *coroutine);
