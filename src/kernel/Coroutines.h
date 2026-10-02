@@ -339,6 +339,40 @@ msg_t* comessageQueuePop(void);
 msg_t* comessageQueuePopType(int type);
 msg_t* comessageQueueWait(const struct timespec *ts);
 msg_t* comessageQueueWaitForType(int64_t type, const struct timespec *ts);
+/// @fn int comessageQueuePushInline(Coroutine *coroutine, msg_t *msg)
+///
+/// @brief Push a message onto a coroutine's message queue without the overhead
+/// of a function call.  Callers on a constrained stack use this directly
+/// instead of comessageQueuePush.
+///
+/// @param coroutine A pointer to the Coroutine with the message queue to add
+///   to.
+/// @param msg A pointer to the msg_t to push onto the queue.
+///
+/// @return Returns coroutineSuccess on success, coroutineError on failure.
+static inline __attribute__((always_inline)) int comessageQueuePushInline(
+  Coroutine *coroutine, msg_t *msg
+) {
+  int returnValue = coroutineError;
+
+  if ((coroutine == NULL) || (coroutine->state == COROUTINE_STATE_NOT_RUNNING)
+    || (msg == NULL)
+  ) {
+    // This is invalid.
+    return returnValue; // coroutineError
+  }
+
+  msg->from.coro = getRunningCoroutine();
+  msg->to.coro = coroutine;
+  Coroutine *replyToCoroutine = getRunningCoroutine();
+  msg_q_t *replyTo = NULL;
+  if (replyToCoroutine != NULL) {
+    replyTo = &replyToCoroutine->messageQueue;
+  }
+
+  return msg_q_push_inline(&coroutine->messageQueue, replyTo, msg);
+}
+
 int comessageQueuePush(Coroutine *coroutine, msg_t *comessage);
 int comessageQueueRemove(Coroutine *coroutine, msg_t *comessage);
 

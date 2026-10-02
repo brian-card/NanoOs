@@ -2748,26 +2748,9 @@ msg_t* comessageQueueWaitForType(int64_t type, const struct timespec *ts) {
 /// @param coroutine A pointer to the Coroutine with the message queue to add
 ///   to.
 ///
-/// @return Returns coroutineSuccess, coroutineError on failure.
+/// @return Returns coroutineSuccess on success, coroutineError on failure.
 int comessageQueuePush(Coroutine *coroutine, msg_t *msg) {
-  int returnValue = coroutineError;
-
-  if ((coroutine == NULL) || (coroutine->state == COROUTINE_STATE_NOT_RUNNING)
-    || (msg == NULL)
-  ) {
-    // This is invalid.
-    return returnValue; // coroutineError
-  }
-
-  msg->from.coro = getRunningCoroutine();
-  msg->to.coro = coroutine;
-  Coroutine *replyToCoroutine = getRunningCoroutine();
-  msg_q_t *replyTo = NULL;
-  if (replyToCoroutine != NULL) {
-    replyTo = &replyToCoroutine->messageQueue;
-  }
-
-  return msg_q_push(&coroutine->messageQueue, replyTo, msg);
+  return comessageQueuePushInline(coroutine, msg);
 }
 
 /// @fn int comessageQueueRemove(Coroutine *coroutine, msg_t *msg)
