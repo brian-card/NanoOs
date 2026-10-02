@@ -100,7 +100,8 @@ SUITE_SRCS     := test_smoke test_unit_misc test_unit_strtoll \
                   test_kernel_memory test_kernel_hal test_kernel_ipc \
                   test_kernel_scheduler test_kernel_env \
                   test_kernel_ipccap \
-                  test_kernel_logger
+                  test_kernel_logger \
+                  test_kernel_preempt
 
 KERNEL_OBJS := $(addprefix $(OBJ_DIR)/kernel_,$(addsuffix .o,$(KERNEL_SRCS)))
 USER_OBJS   := $(addprefix $(OBJ_DIR)/user_,$(addsuffix .o,$(USER_SRCS)))

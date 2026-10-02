@@ -75,30 +75,30 @@ NANO_OS_KERNEL_TEST(sched, num_running_processes_is_sane) {
 }
 
 NANO_OS_KERNEL_TEST(sched, preemption_inhibit_blocks_force_yield) {
-  NANO_OS_ASSERT_TRUE(schedulerPreemptionInhibited == false);
-  NANO_OS_ASSERT_TRUE(schedulerPreemptionPending == false);
+  NANO_OS_ASSERT_FALSE(schedulerPreemptionInhibited());
+  NANO_OS_ASSERT_FALSE(schedulerPreemptionPending());
 
   // An inhibited forceYield must decline the switch, return to its caller,
   // and leave the flag set for the critical section that owns it.
   unsigned int pidBefore = nanoOsGetpid();
   schedulerInhibitPreemption();
   forceYield();
-  NANO_OS_ASSERT_TRUE(schedulerPreemptionInhibited == true);
+  NANO_OS_ASSERT_TRUE(schedulerPreemptionInhibited());
   NANO_OS_ASSERT_EQ_INT((long long) pidBefore, (long long) nanoOsGetpid());
 
   // The declined preemption must be recorded, then taken and cleared when the
   // critical section ends, rather than dropped.
-  NANO_OS_ASSERT_TRUE(schedulerPreemptionPending == true);
+  NANO_OS_ASSERT_TRUE(schedulerPreemptionPending());
   schedulerAllowPreemption();
-  NANO_OS_ASSERT_TRUE(schedulerPreemptionInhibited == false);
-  NANO_OS_ASSERT_TRUE(schedulerPreemptionPending == false);
+  NANO_OS_ASSERT_FALSE(schedulerPreemptionInhibited());
+  NANO_OS_ASSERT_FALSE(schedulerPreemptionPending());
   NANO_OS_ASSERT_EQ_INT((long long) pidBefore, (long long) nanoOsGetpid());
 
   // Uninhibited, the same call is a normal yield that must round-trip back to
   // this process with both flags still clear.
   forceYield();
-  NANO_OS_ASSERT_TRUE(schedulerPreemptionInhibited == false);
-  NANO_OS_ASSERT_TRUE(schedulerPreemptionPending == false);
+  NANO_OS_ASSERT_FALSE(schedulerPreemptionInhibited());
+  NANO_OS_ASSERT_FALSE(schedulerPreemptionPending());
   NANO_OS_ASSERT_EQ_INT((long long) pidBefore, (long long) nanoOsGetpid());
 }
 
@@ -116,7 +116,7 @@ NANO_OS_KERNEL_TEST(sched, preemption_inhibit_ipc_still_works) {
   NANO_OS_ASSERT_NOT_NULL(msg);
   NANO_OS_ASSERT_EQ_INT(0, processMessageWaitForDone(msg, NULL));
   processMessageRelease(msg);
-  NANO_OS_ASSERT_TRUE(schedulerPreemptionInhibited == false);
-  NANO_OS_ASSERT_TRUE(schedulerPreemptionPending == false);
+  NANO_OS_ASSERT_FALSE(schedulerPreemptionInhibited());
+  NANO_OS_ASSERT_FALSE(schedulerPreemptionPending());
   NANO_OS_ASSERT_TRUE(args.returnValue >= 4);
 }
