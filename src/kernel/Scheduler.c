@@ -3911,30 +3911,20 @@ void checkForTimeouts(SchedulerState *schedulerState) {
   return;
 }
 
-/// @var schedulerPreemptionInhibited
-///
-/// @brief Set by code that needs to guard a critical section.
-volatile bool schedulerPreemptionInhibited = false;
-
-/// @var schedulerPreemptionPending
-///
-/// @brief Set when a preemption is deferred so that it can be taken as soon as
-/// the critical section ends.
-volatile bool schedulerPreemptionPending = false;
-
 /// @fn void forceYield(void)
 ///
 /// @brief Callback that's invoked when the preemption timer fires.  Wrapper
-///   for processYield.  Does nothing else.
+///   for processYieldTo if the coroutine isn't in its critical section.  Marks
+///   the coroutine's preemptionPending flag true if it is.
 ///
 /// @return This function returns no value.
 void forceYield(void) {
-  if (schedulerPreemptionInhibited == true) {
+  Coroutine *running = getRunningCoroutine();
+  if ((running != NULL) && (running->criticalSectionDepth > 0)) {
     // The running process is within a critical section.  Don't preempt it.
-    // Note that a preemption is pending so that schedulerAllowPreemption will
-    // invoke us again with schedulerPreemptionInhibited set to false when the
-    // critical section ends.
-    schedulerPreemptionPending = true;
+    // Note that a preemption is pending so that the end of the section invokes
+    // us again by way of coroutineTakeDeferredPreemption.
+    running->preemptionPending = true;
     return;
   }
 
