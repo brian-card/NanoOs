@@ -1981,6 +1981,13 @@ int comutexLock(Comutex *mtx) {
   }
 #endif
 
+  // comutexTryLock refuses the lock while anyone is queued ahead of us, so
+  // succeeding here means the queue was empty and joining it would have been
+  // an insertion and a removal for nothing.
+  if (comutexTryLock(mtx) == coroutineSuccess) {
+    return coroutineSuccess;
+  }
+
   Coroutine* running = getRunningCoroutine();
   if (running == NULL) {
     // running stack not setup yet.  Bail.
@@ -2144,6 +2151,14 @@ int comutexTimedLock(Comutex *mtx, const struct timespec *ts) {
     }
   }
 #endif
+
+  // comutexTryLock refuses the lock while anyone is queued ahead of us, so
+  // succeeding here means the queue was empty and joining it would have been
+  // an insertion and a removal for nothing.
+  if (comutexTryLock(mtx) == coroutineSuccess) {
+    mtx->timeoutTime = 0;
+    return coroutineSuccess;
+  }
 
   Coroutine* running = getRunningCoroutine();
   if (running == NULL) {
