@@ -132,6 +132,41 @@ static const char _localhost[] KEEP_IN_FLASH = "localhost";
 static const char _noLogBufferMessage[] KEEP_IN_FLASH
   = "logMessage: Cannot get logBuffer from HAL.  Discarding message.\n";
 
+/// @var _droppedReentrantLogMessage
+///
+/// @brief Message written to the console when a log raised from inside the
+/// send to the logger process can't be written immediately either.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _droppedReentrantLogMessage[] KEEP_IN_FLASH
+  = "logMessage: Discarding log raised while logging from line ";
+
+/// @var _droppedReentrantLogInfix
+///
+/// @brief Infix component of message started by _droppedReentrantLogMessage.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _droppedReentrantLogInfix[] KEEP_IN_FLASH
+  = " of the file at 0x";
+
+/// @var _droppedReentrantLogSuffix
+///
+/// @brief Terminator for _droppedReentrantLogMessage.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _droppedReentrantLogSuffix[] KEEP_IN_FLASH = ".\n";
+
+/// @var _sendingToLogger
+///
+/// @brief Whether or not a logMessage call is currently sending a message to
+/// the logger process.  Sending re-enters the IPC path, which logs its own
+/// failures, so this is what keeps such a log from recursing back through the
+/// send and consuming the stack a second time.
+static bool _sendingToLogger = false;
+
 /// @var numLogEntries
 ///
 /// @brief The number of LogEntry objects held in the logEntries array and
@@ -149,6 +184,28 @@ LogEntry *logEntries = NULL;
 /// @brief Pool of ProcessMessage objects used to deliver log entries to
 /// the logger process.  One per logEntries slot.
 ProcessMessage *logMessages = NULL;
+
+/// @fn void logDroppedReentrantLog(int lineNumber, const char *fileName)
+///
+/// @brief Report a log message that was raised from inside the send to the
+/// logger process and could not be written immediately either.  Keeping this
+/// out of logMessage keeps its strings and its stack usage off that function's
+/// hot path.
+///
+/// @param lineNumber The line number the discarded message was raised from.
+/// @param fileName The name of the file the discarded message was raised from.
+///   Only its address is printed:  this path only runs when the strings have
+///   been removed from the binary, so the characters it points at aren't there
+///   to print.
+///
+/// @return This function returns no value.
+void logDroppedReentrantLog(int lineNumber, const char *fileName) {
+  printString(_droppedReentrantLogMessage);
+  printInt(lineNumber);
+  printString(_droppedReentrantLogInfix);
+  printHex((uintptr_t) fileName);
+  printString(_droppedReentrantLogSuffix);
+}
 
 /// @fn int logMessage(LogLevel logLevel,
 ///   const char *fileName, const char *functionName, int lineNumber,
@@ -267,6 +324,18 @@ int logMessage(LogLevel logLevel,
     return -ENOTSUP;
   }
   
+  if (_sendingToLogger == true) {
+    // This log was raised from inside the send below.  Going through the
+    // logger again would recurse through the whole IPC path, so write it
+    // immediately instead.
+    if (HAL->memory->stringsPresent == true) {
+      goto writeImmediate;
+    }
+    logDroppedReentrantLog(lineNumber, fileName);
+    logEntry->inUse = false;
+    return -EAGAIN;
+  }
+  
   if (processMessageInit(processMessage,
     LOGGER_COMMAND_SIGNATURE | LOGGER_LOG_MESSAGE,
     logEntry, sizeof(*logEntry), false) != processSuccess
@@ -276,9 +345,10 @@ int logMessage(LogLevel logLevel,
     return -EAGAIN;
   }
   
-  if (sendProcessMessageToPid(loggerPid, processMessage)
-    != 0
-  ) {
+  _sendingToLogger = true;
+  int sendStatus = sendProcessMessageToPid(loggerPid, processMessage);
+  _sendingToLogger = false;
+  if (sendStatus != 0) {
     processMessageRelease(processMessage);
     if (HAL->memory->stringsPresent == true) {
       // Write this entry immediately.

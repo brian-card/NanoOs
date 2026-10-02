@@ -256,6 +256,8 @@ typedef int LogLevel;
 #endif // (LOG_THRESHOLD <= LOG_LEVEL_BOX)
 
 // Exported functions.
+void logDroppedReentrantLog(int lineNumber, const char *fileName);
+
 int logMessage(LogLevel logLevel,
   const char *fileName, const char *functionName, int lineNumber,
   const char *format, ...);
