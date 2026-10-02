@@ -178,8 +178,26 @@ void unlockCallback(void *stateData, Comutex *comutex) {
     // Nothing is waiting on this mutex.  Just return.
     return;
   }
+  schedulerInhibitPreemption();
   processQueueRemove(processDescriptor->processQueue, processDescriptor);
   processQueuePush(processDescriptor->readyQueue, processDescriptor);
+  schedulerAllowPreemption();
+
+  return;
+}
+
+/// @fn void preemptionCallback(void *stateData)
+///
+/// @brief Take a preemption that was deferred while the running process was
+/// inside a critical section.
+///
+/// @param stateData The thread state pointer provided when threadConfig was
+///   called.
+///
+/// @return This function returns no value.
+void preemptionCallback(void *stateData) {
+  (void) stateData;
+  forceYield();
 
   return;
 }
@@ -202,6 +220,7 @@ void signalCallback(void *stateData, Cocondition *cocondition) {
   (void) stateData;
   Thread *cur = cocondition->head;
 
+  schedulerInhibitPreemption();
   for (int ii = 0; (ii < cocondition->numSignals) && (cur != NULL); ii++) {
     ProcessDescriptor *processDescriptor = threadContext(cur);
     // It's not possible for processDescriptor to be NULL.  We only enter this
@@ -212,6 +231,7 @@ void signalCallback(void *stateData, Cocondition *cocondition) {
     processQueuePushInline(processDescriptor->readyQueue, processDescriptor);
     cur = cur->nextToSignal;
   }
+  schedulerAllowPreemption();
 
   return;
 }
@@ -242,6 +262,7 @@ void nanoOsStart(void) {
     .yieldCallback = NULL,
     .unlockCallback = unlockCallback,
     .signalCallback = signalCallback,
+    .preemptionCallback = preemptionCallback,
   };
   if (HAL->timer->numSupported > 0) {
     threadsConfigOptions.yieldCallback = yieldCallback;
