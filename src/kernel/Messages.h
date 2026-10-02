@@ -263,6 +263,58 @@ void* msg_element(msg_t *msg, msg_element_t msg_element);
 #define msg_to(msg_ptr) \
   (*((msg_endpoint_t*) msg_element((msg_ptr), MSG_ELEMENT_TO)))
 
+/// @fn int msg_q_push_inline(
+///   msg_q_t *queue, msg_q_t *reply_to, msg_t *msg)
+///
+/// @brief Push a message onto a message queue without the overhead of a
+/// function call.  Callers on a constrained stack use this directly instead of
+/// msg_q_push.
+///
+/// @param queue A pointer to the msg_q_t to push the message onto.
+/// @param reply_to A pointer to the msg_q_t that replies to the message are to
+///   be pushed onto.
+/// @param msg A pointer to the msg_t to push onto the queue.
+///
+/// @return Returns msg_success on success, msg_error on failure.
+static inline __attribute__((always_inline)) int msg_q_push_inline(
+  msg_q_t *queue, msg_q_t *reply_to, msg_t *msg
+) {
+  int return_value = msg_error;
+  
+  if (msg == NULL) {
+    // Invalid.
+    return return_value; // msg_error
+  }
+  
+  if (queue == NULL) {
+    // Destination thread has exited.  Fail.
+    return return_value; // msg_error
+  }
+  
+  if (queue->msg_sync->mtx_lock(&queue->lock) != msg_success) {
+    // Error case.
+    return return_value; // msg_error
+  }
+  
+  msg->next = NULL;
+  if (queue->tail != NULL) {
+    queue->tail->next = msg;
+    queue->tail = msg;
+  } else {
+    // Empty queue.  Populate both queue->head and queue->tail.
+    queue->head = msg;
+    queue->tail = msg;
+  }
+  msg->reply_to = reply_to;
+  
+  // Let all the waiters know that there's something new in the queue now.
+  return_value = queue->msg_sync->cnd_broadcast(&queue->condition);
+  
+  queue->msg_sync->mtx_unlock(&queue->lock);
+  
+  return return_value;
+}
+
 // Message queue functions
 msg_q_t* msg_q_create(msg_q_t *q, msg_safety_t msg_safety);
 int msg_q_destroy(msg_q_t *queue);
