@@ -90,14 +90,14 @@ msg_sync_t msg_sync_array[] = {
 /// @fn int msg_start_use(msg_t *msg, msg_safety_t msg_safety)
 ///
 /// @brief Set all the member elements of a msg_t to their default values so
-/// that we can begin using it.
+/// that we can begin using it, without the overhead of a function call.
 ///
 /// @param msg A pointer to the msg_t to configure and begin using.
 /// @param msg_safety The level of safety to use for the message (process,
 ///   thread, or coroutine).
 ///
 /// @return Returns msg_success on success, msg_error on error.
-static inline int msg_start_use(msg_t *msg, msg_safety_t msg_safety) {
+int msg_start_use(msg_t *msg, msg_safety_t msg_safety) {
   int return_value = msg_success;
   
   if (msg != NULL) {
@@ -112,17 +112,7 @@ static inline int msg_start_use(msg_t *msg, msg_safety_t msg_safety) {
       memset(&msg->from, 0, sizeof(msg->from));
       memset(&msg->to, 0, sizeof(msg->to));
       if (msg->configured == false) {
-        msg->msg_sync = &msg_sync_array[msg_safety];
-        if (msg->msg_sync->cnd_init(&msg->condition) == msg_success) {
-          if (msg->msg_sync->mtx_init(&msg->lock, msg_mtx_plain | msg_mtx_timed)
-            == msg_success
-          ) {
-            msg->configured = true;
-          } else {
-            msg->msg_sync->cnd_destroy(&msg->condition);
-            return_value = msg_error;
-          }
-        }
+        return_value = msg_configure(msg, msg_safety);
       }
       // Don't touch msg->dynamically_allocated;
     } // Else this message is already setup
@@ -130,6 +120,35 @@ static inline int msg_start_use(msg_t *msg, msg_safety_t msg_safety) {
     return_value = msg_error;
   }
   
+  return return_value;
+}
+
+/// @fn int msg_configure(msg_t *msg, msg_safety_t msg_safety)
+///
+/// @brief Set up a message's synchronization primitives the first time it is
+/// used.  Keeping this out of msg_start_use_inline keeps the one-time setup out
+/// of every one of that function's inlined copies.
+///
+/// @param msg A pointer to the msg_t to configure.
+/// @param msg_safety The level of safety to use for the message (process,
+///   thread, or coroutine).
+///
+/// @return Returns msg_success on success, msg_error on failure.
+int msg_configure(msg_t *msg, msg_safety_t msg_safety) {
+  int return_value = msg_success;
+
+  msg->msg_sync = &msg_sync_array[msg_safety];
+  if (msg->msg_sync->cnd_init(&msg->condition) == msg_success) {
+    if (msg->msg_sync->mtx_init(&msg->lock, msg_mtx_plain | msg_mtx_timed)
+      == msg_success
+    ) {
+      msg->configured = true;
+    } else {
+      msg->msg_sync->cnd_destroy(&msg->condition);
+      return_value = msg_error;
+    }
+  }
+
   return return_value;
 }
 
@@ -241,27 +260,7 @@ msg_t* msg_destroy(msg_t *msg) {
 int msg_init(msg_t *msg, msg_safety_t msg_safety,
   int64_t type, void *data, size_t size, bool waiting
 ) {
-  int return_value = msg_error;
-  
-  if (msg == NULL) {
-    // Nothing we can do.  Fail.
-    return return_value; // msg_error
-  } else if (msg_start_use(msg, msg_safety) != msg_success) {
-    // Couldn't configure this message for use for some reason.  Fail.
-    return return_value; // msg_error
-  }
-  
-  msg->type = type;
-  msg->data = data;
-  msg->size = size;
-  msg->next = NULL;
-  msg->waiting = waiting;
-  msg->done = false;
-  // No need to set msg->in_use since we called msg_start_use above.
-  // Don't touch msg->from in case this message is being reused.
-  return_value = msg_success;
-  
-  return return_value;
+  return msg_init_inline(msg, msg_safety, type, data, size, waiting);
 }
 
 /// @fn int msg_release(msg_t *msg)

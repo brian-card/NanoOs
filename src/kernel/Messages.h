@@ -263,6 +263,54 @@ void* msg_element(msg_t *msg, msg_element_t msg_element);
 #define msg_to(msg_ptr) \
   (*((msg_endpoint_t*) msg_element((msg_ptr), MSG_ELEMENT_TO)))
 
+int msg_configure(msg_t *msg, msg_safety_t msg_safety);
+int msg_start_use(msg_t *msg, msg_safety_t msg_safety);
+
+/// @fn int msg_init_inline(msg_t *msg, msg_safety_t msg_safety,
+///   int64_t type, void *data, size_t size, bool waiting)
+///
+/// @brief Initialize a message for use without the overhead of a function
+/// call.  Callers on a constrained stack use this directly instead of
+/// msg_init.
+///
+/// @param msg A pointer to an allocated msg_t.  Will be properly configured if
+///   not already so.
+/// @param msg_safety The level of safety to use for the message (process,
+///   thread, or coroutine).
+/// @param type The message type to use for the message.
+/// @param data A pointer to the data for the message (if any).
+/// @param size The number of bytes pointed to by the data pointer.
+/// @param waiting Whether or not the caller of this function will be waiting on
+///   a response to this message from the destination thread.
+///
+/// @return Returns msg_success on success, msg_error on failure.
+static inline __attribute__((always_inline)) int msg_init_inline(
+  msg_t *msg, msg_safety_t msg_safety,
+  int64_t type, void *data, size_t size, bool waiting
+) {
+  int return_value = msg_error;
+  
+  if (msg == NULL) {
+    // Nothing we can do.  Fail.
+    return return_value; // msg_error
+  } else if (msg_start_use(msg, msg_safety) != msg_success) {
+    // Couldn't configure this message for use for some reason.  Fail.
+    return return_value; // msg_error
+  }
+  
+  msg->type = type;
+  msg->data = data;
+  msg->size = size;
+  msg->next = NULL;
+  msg->waiting = waiting;
+  msg->done = false;
+  // No need to set msg->in_use since we called msg_start_use above.
+  // Don't touch msg->from in case this message is being reused.
+  return_value = msg_success;
+  
+  return return_value;
+}
+
 /// @fn int msg_q_push_inline(
 ///   msg_q_t *queue, msg_q_t *reply_to, msg_t *msg)
 ///
