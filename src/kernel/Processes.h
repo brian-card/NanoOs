@@ -280,6 +280,13 @@ static inline ProcessId getRunningPid(void) {
 #define processMessageQueuePush(processDescriptor, message) \
   comessageQueuePush((processDescriptor)->mainThread, message)
 
+/// @def processMessageQueuePushInline
+///
+/// @brief Function macro to push a process message on to a process's message
+/// queue without the overhead of a function call.
+#define processMessageQueuePushInline(processDescriptor, message) \
+  comessageQueuePushInline((processDescriptor)->mainThread, message)
+
 /// @def processMessageQueuePop
 ///
 /// @brief Function macro to pop a process message from the running process's
