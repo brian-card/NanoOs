@@ -165,6 +165,13 @@ static const char _droppedReentrantLogSuffix[] KEEP_IN_FLASH = ".\n";
 /// the logger process.  Sending re-enters the IPC path, which logs its own
 /// failures, so this is what keeps such a log from recursing back through the
 /// send and consuming the stack a second time.
+///
+/// @note Strictly speaking, this should be process-specific storage because
+/// this is a condition that can affect each process's stack.  However, the only
+/// processes that call logMessage are kernel processes and kernel processes
+/// are cooperative, not preemptive.  So, there's no reason today (Oct 1, 2026)
+/// to make this process-specific.  We may need to revisit this again in the
+/// future if we decide to make kernel processes preemptive.
 static bool _sendingToLogger = false;
 
 /// @var numLogEntries
