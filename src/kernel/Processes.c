@@ -742,13 +742,16 @@ int sendProcessMessageToPid(unsigned int pid, ProcessMessage *processMessage) {
   return sendProcessMessageToProcess(processDescriptor, processMessage);
 }
 
-/// ProcessMessage* getAvailableMessage(void)
+/// ProcessMessage* getAvailableMessageInline(void)
 ///
-/// @brief Get a message from the messages array that is not in use.
+/// @brief Get a message from the messages array that is not in use without the
+/// overhead of a function call.  This is file-local because the messages array
+/// it searches is file-local.
 ///
 /// @return Returns a pointer to the available message on success, NULL if there
 /// was no available message in the array.
-ProcessMessage* getAvailableMessage(void) {
+static inline __attribute__((always_inline))
+ProcessMessage* getAvailableMessageInline(void) {
   ProcessMessage *availableMessage = NULL;
 
   ProcessDescriptor *processDescriptor = getRunningProcess();
@@ -759,20 +762,30 @@ ProcessMessage* getAvailableMessage(void) {
 
   if (processMessageInUse(&processDescriptor->message) == false) {
     availableMessage = &processDescriptor->message;
-    processMessageInit(availableMessage, 0, NULL, 0, false);
+    processMessageInitInline(availableMessage, 0, NULL, 0, false);
   }
 
   if (availableMessage == NULL) {
     for (int ii = 0; ii < NANO_OS_NUM_MESSAGES; ii++) {
       if (processMessageInUse(&messages[ii]) == false) {
         availableMessage = &messages[ii];
-        processMessageInit(availableMessage, 0, NULL, 0, false);
+        processMessageInitInline(availableMessage, 0, NULL, 0, false);
         break;
       }
     }
   }
 
   return availableMessage;
+}
+
+/// ProcessMessage* getAvailableMessage(void)
+///
+/// @brief Get a message from the messages array that is not in use.
+///
+/// @return Returns a pointer to the available message on success, NULL if there
+/// was no available message in the array.
+ProcessMessage* getAvailableMessage(void) {
+  return getAvailableMessageInline();
 }
 
 /// @fn ProcessMessage* initSendProcessMessageToProcess(
@@ -811,20 +824,20 @@ ProcessMessage* initSendProcessMessageToProcess(
     return processMessage; // NULL
   }
 
-  processMessage = getAvailableMessage();
+  processMessage = getAvailableMessageInline();
   for (int ii = 0;
     (ii < MAX_GET_MESSAGE_RETRIES) && (processMessage == NULL);
     ii++
   ) {
     processYield();
-    processMessage = getAvailableMessage();
+    processMessage = getAvailableMessageInline();
   }
   if (processMessage == NULL) {
     printString(_outOfMessagesMessage);
     return processMessage; // NULL
   }
 
-  processMessageInit(processMessage, type, data, size, waiting);
+  processMessageInitInline(processMessage, type, data, size, waiting);
 
   if (sendProcessMessageToProcess(processDescriptor, processMessage)
     != processSuccess
