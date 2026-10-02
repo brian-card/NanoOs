@@ -71,6 +71,8 @@ typedef struct Coroutine Coroutine, coro_s, *coro_t;
 /// @param recursionLevel The number of times this mutex has been successfully
 ///   locked in this coroutine.
 /// @param head The next coroutine in the queue to lock this mutex.
+/// @param tail The last coroutine in the lock queue, after which the next
+///   coroutine will be added on a lock.
 /// @param timeoutTime The time at which a call to comutexTimedLock will
 ///   timeout.
 typedef struct Comutex {
@@ -79,6 +81,7 @@ typedef struct Comutex {
   _Atomic(Coroutine*) coroutine;
   int recursionLevel;
   Coroutine *head;
+  Coroutine *tail;
   int64_t timeoutTime;
 } Comutex, coro_mtx_t;
 
