@@ -207,7 +207,8 @@ void signalCallback(void *stateData, Cocondition *cocondition) {
     // It's not possible for processDescriptor to be NULL.  We only enter this
     // loop if cocondition->numSignals > 0, so there MUST be something waiting
     // on this condition.
-    processQueueRemoveInline(processDescriptor->processQueue, processDescriptor);
+    processQueueRemoveInline(
+      processDescriptor->processQueue, processDescriptor);
     processQueuePushInline(processDescriptor->readyQueue, processDescriptor);
     cur = cur->nextToSignal;
   }
