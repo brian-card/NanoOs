@@ -38,6 +38,7 @@
 
 #include <stdint.h>
 #include "stdbool.h"
+#include "Coroutines.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -54,7 +55,6 @@ extern "C"
 struct timespec;
 typedef struct Cocondition Cocondition;
 typedef struct Comutex Comutex;
-typedef struct Coroutine Coroutine;
 typedef struct FileDescriptor FileDescriptor;
 typedef struct NanoOsFile NanoOsFile;
 #define FILE NanoOsFile
@@ -272,21 +272,17 @@ extern Thread *schedulerThread;
 // The well-known ProcessId of the scheduler.  See Scheduler.c for details.
 extern ProcessId schedulerPid;
 
-// Set to inhibit a forced preemption during a critical section.
-extern volatile bool schedulerPreemptionInhibited;
-
-// Set by forceYield when it declines a preemption because of the above.
-extern volatile bool schedulerPreemptionPending;
-
 void forceYield(void);
 
 /// @fn void schedulerInhibitPreemption(void)
 ///
-/// @brief Begin a critical section.
+/// @brief Begin a critical section.  The state lives on the running Coroutine
+/// rather than in a global so that a preemption landing in the middle of
+/// raising it can't be attributed to, or lost by, another process.
 ///
 /// @return This function returns no value.
 static inline void schedulerInhibitPreemption(void) {
-  schedulerPreemptionInhibited = true;
+  coroutineEnterCriticalSection();
 }
 
 /// @fn void schedulerAllowPreemption(void)
@@ -295,11 +291,28 @@ static inline void schedulerInhibitPreemption(void) {
 ///
 /// @return This function returns no value.
 static inline void schedulerAllowPreemption(void) {
-  schedulerPreemptionInhibited = false;
-  if (schedulerPreemptionPending == true) {
-    schedulerPreemptionPending = false;
-    forceYield();
-  }
+  coroutineExitCriticalSection();
+}
+
+/// @fn bool schedulerPreemptionInhibited(void)
+///
+/// @brief Determine whether the running process is inside a critical section.
+///
+/// @return Returns true if a preemption would be deferred, false otherwise.
+static inline bool schedulerPreemptionInhibited(void) {
+  Coroutine *running = getRunningCoroutine();
+  return ((running != NULL) && (running->criticalSectionDepth > 0));
+}
+
+/// @fn bool schedulerPreemptionPending(void)
+///
+/// @brief Determine whether a preemption of the running process was deferred
+/// and is waiting for its critical section to end.
+///
+/// @return Returns true if a preemption is deferred, false otherwise.
+static inline bool schedulerPreemptionPending(void) {
+  Coroutine *running = getRunningCoroutine();
+  return ((running != NULL) && (running->preemptionPending == true));
 }
 
 #ifdef __cplusplus
