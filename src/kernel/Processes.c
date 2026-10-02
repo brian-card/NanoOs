@@ -711,7 +711,8 @@ int sendProcessMessageToProcess(
     goto exit;
   }
 
-  returnValue = processMessageQueuePush(processDescriptor, processMessage);
+  returnValue
+    = processMessageQueuePushInline(processDescriptor, processMessage);
   if (returnValue != processSuccess) {
     errno = EAGAIN;
   }
