@@ -362,6 +362,103 @@ static inline ProcessDescriptor* processIdToDescriptor(int pid) {
   return &allProcesses[pid - 1];
 }
 
+int processQueuePushFailure(
+  ProcessQueue *processQueue, ProcessDescriptor *processDescriptor);
+int processQueueRemoveFailure(void);
+
+/// @fn int processQueuePushInline(
+///   ProcessQueue *processQueue, ProcessDescriptor *processDescriptor)
+///
+/// @brief Push a pointer to a ProcessDescriptor onto a ProcessQueue without
+/// the overhead of a function call.
+///
+/// @param processQueue A pointer to a ProcessQueue to push the pointer to.
+/// @param processDescriptor A pointer to a ProcessDescriptor to push onto the
+///   queue.
+///
+/// @return Returns 0 on success, ENOMEM on failure.
+static inline __attribute__((always_inline)) int processQueuePushInline(
+  ProcessQueue *processQueue, ProcessDescriptor *processDescriptor
+) {
+  if ((processQueue == NULL) || (processQueue->numElements >= numProcesses)) {
+    return processQueuePushFailure(processQueue, processDescriptor);
+  }
+
+  processQueue->processes[processQueue->tail] = processDescriptor;
+  processQueue->tail++;
+  if (processQueue->tail == numProcesses) {
+    // Doing this saves stack space and time relative to
+    // processQueue->head %= numProcesses
+    processQueue->tail = 0;
+  }
+  processQueue->numElements++;
+  processDescriptor->processQueue = processQueue;
+
+  return 0;
+}
+
+/// @fn ProcessDescriptor* processQueuePopInline(ProcessQueue *processQueue)
+///
+/// @brief Pop a pointer to a ProcessDescriptor from a ProcessQueue without the
+/// overhead of a function call.
+///
+/// @param processQueue A pointer to a ProcessQueue to pop the pointer from.
+///
+/// @return Returns a pointer to a ProcessDescriptor on success, NULL on
+/// failure.
+static inline __attribute__((always_inline)) ProcessDescriptor*
+processQueuePopInline(ProcessQueue *processQueue) {
+  ProcessDescriptor *processDescriptor = NULL;
+  if ((processQueue == NULL) || (processQueue->numElements == 0)) {
+    return processDescriptor; // NULL
+  }
+
+  processDescriptor = processQueue->processes[processQueue->head];
+  processQueue->head++;
+  if (processQueue->head == numProcesses) {
+    // Doing this saves stack space and time relative to
+    // processQueue->head %= numProcesses
+    processQueue->head = 0;
+  }
+  processQueue->numElements--;
+  processDescriptor->processQueue = NULL;
+
+  return processDescriptor;
+}
+
+/// @fn int processQueueRemoveInline(
+///   ProcessQueue *processQueue, ProcessDescriptor *processDescriptor)
+///
+/// @brief Remove a pointer to a ProcessDescriptor from a ProcessQueue without
+/// the overhead of a function call.
+///
+/// @param processQueue A pointer to a ProcessQueue to remove the pointer from.
+/// @param processDescriptor A pointer to a ProcessDescriptor to remove from the
+///   queue.
+///
+/// @return Returns 0 on success, EINVAL on failure.
+static inline __attribute__((always_inline)) int processQueueRemoveInline(
+  ProcessQueue *processQueue, ProcessDescriptor *processDescriptor
+) {
+  if ((processQueue == NULL) || (processQueue->numElements == 0)) {
+    // Nothing to do.
+    return processQueueRemoveFailure();
+  }
+
+  ProcessDescriptor *poppedDescriptor = NULL;
+  for (uint8_t ii = 0; ii < processQueue->numElements; ii++) {
+    poppedDescriptor = processQueuePopInline(processQueue);
+    if (poppedDescriptor == processDescriptor) {
+      processDescriptor->processQueue = NULL;
+      return 0;
+    }
+    // This is not what we're looking for.  Put it back.
+    processQueuePushInline(processQueue, poppedDescriptor);
+  }
+
+  return processQueueRemoveFailure();
+}
+
 // Exported functionality
 void* execOverlayCommand(void *args);
 void* runBlockOverlay(void *args);

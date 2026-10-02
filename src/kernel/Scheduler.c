@@ -908,6 +908,38 @@ void runSchedulerQueues(PrivilegeLevel privilegeLevelBound) {
   _schedulerState->currentReady = currentReady;
 }
 
+/// @fn int processQueuePushFailure(
+///   ProcessQueue *processQueue, ProcessDescriptor *processDescriptor)
+///
+/// @brief Report a failed push onto a ProcessQueue.  Having this here keeps
+/// the stack from growing unnecessarily in all bug error conditions.
+///
+/// @param processQueue A pointer to the ProcessQueue that could not be pushed
+///   onto.
+/// @param processDescriptor A pointer to the ProcessDescriptor that could not
+///   be pushed.
+///
+/// @return Returns ENOMEM.
+int processQueuePushFailure(
+  ProcessQueue *processQueue, ProcessDescriptor *processDescriptor
+) {
+  logError("Could not push process %d onto %s queue:\n",
+    processDescriptor->processId, processQueue->name);
+  return ENOMEM;
+}
+
+/// @fn int processQueueRemoveFailure(void)
+///
+/// @brief Report that a ProcessDescriptor could not be removed from a
+/// ProcessQueue.  This is here because we can't include NanoOsErrno.h from a
+/// header, so this is effectively a relay for the value of EINVAL from that
+/// header.
+///
+/// @return Returns EINVAL.
+int processQueueRemoveFailure(void) {
+  return EINVAL;
+}
+
 /// @fn int processQueuePush(
 ///   ProcessQueue *processQueue, ProcessDescriptor *processDescriptor)
 ///
@@ -921,19 +953,7 @@ void runSchedulerQueues(PrivilegeLevel privilegeLevelBound) {
 int processQueuePush(
   ProcessQueue *processQueue, ProcessDescriptor *processDescriptor
 ) {
-  if ((processQueue == NULL) || (processQueue->numElements >= numProcesses)) {
-    logError("Could not push process %d onto %s queue:\n",
-      processDescriptor->processId, processQueue->name);
-    return ENOMEM;
-  }
-
-  processQueue->processes[processQueue->tail] = processDescriptor;
-  processQueue->tail++;
-  processQueue->tail %= numProcesses;
-  processQueue->numElements++;
-  processDescriptor->processQueue = processQueue;
-
-  return 0;
+  return processQueuePushInline(processQueue, processDescriptor);
 }
 
 /// @fn ProcessDescriptor* processQueuePop(ProcessQueue *processQueue)
@@ -945,18 +965,7 @@ int processQueuePush(
 /// @return Returns a pointer to a ProcessDescriptor on success, NULL on
 /// failure.
 ProcessDescriptor* processQueuePop(ProcessQueue *processQueue) {
-  ProcessDescriptor *processDescriptor = NULL;
-  if ((processQueue == NULL) || (processQueue->numElements == 0)) {
-    return processDescriptor; // NULL
-  }
-
-  processDescriptor = processQueue->processes[processQueue->head];
-  processQueue->head++;
-  processQueue->head %= numProcesses;
-  processQueue->numElements--;
-  processDescriptor->processQueue = NULL;
-
-  return processDescriptor;
+  return processQueuePopInline(processQueue);
 }
 
 /// @fn int processQueueRemove(
@@ -972,25 +981,7 @@ ProcessDescriptor* processQueuePop(ProcessQueue *processQueue) {
 int processQueueRemove(
   ProcessQueue *processQueue, ProcessDescriptor *processDescriptor
 ) {
-  int returnValue = EINVAL;
-  if ((processQueue == NULL) || (processQueue->numElements == 0)) {
-    // Nothing to do.
-    return returnValue; // EINVAL
-  }
-
-  ProcessDescriptor *poppedDescriptor = NULL;
-  for (uint8_t ii = 0; ii < processQueue->numElements; ii++) {
-    poppedDescriptor = processQueuePop(processQueue);
-    if (poppedDescriptor == processDescriptor) {
-      returnValue = ENOERR;
-      processDescriptor->processQueue = NULL;
-      break;
-    }
-    // This is not what we're looking for.  Put it back.
-    processQueuePush(processQueue, poppedDescriptor);
-  }
-
-  return returnValue;
+  return processQueueRemoveInline(processQueue, processDescriptor);
 }
 
 /// @fn ProcessDescriptor* schedulerGetProcessById(unsigned int pid)
