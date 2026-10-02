@@ -398,6 +398,7 @@ static inline __attribute__((always_inline)) int processQueuePushInline(
     return processQueuePushFailure(processQueue, processDescriptor);
   }
 
+  coroutineEnterCriticalSection();
   processQueue->processes[processQueue->tail] = processDescriptor;
   processQueue->tail++;
   if (processQueue->tail == numProcesses) {
@@ -407,6 +408,7 @@ static inline __attribute__((always_inline)) int processQueuePushInline(
   }
   processQueue->numElements++;
   processDescriptor->processQueue = processQueue;
+  coroutineExitCriticalSection();
 
   return 0;
 }
@@ -427,6 +429,7 @@ processQueuePopInline(ProcessQueue *processQueue) {
     return processDescriptor; // NULL
   }
 
+  coroutineEnterCriticalSection();
   processDescriptor = processQueue->processes[processQueue->head];
   processQueue->head++;
   if (processQueue->head == numProcesses) {
@@ -436,6 +439,7 @@ processQueuePopInline(ProcessQueue *processQueue) {
   }
   processQueue->numElements--;
   processDescriptor->processQueue = NULL;
+  coroutineExitCriticalSection();
 
   return processDescriptor;
 }
