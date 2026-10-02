@@ -234,6 +234,13 @@ static inline ProcessId getRunningPid(void) {
 #define processMessageInit(processMessage, type, data, size, waiting) \
   msg_init(processMessage, MSG_CORO_SAFE, type, data, size, waiting)
 
+/// @def processMessageInitInline
+///
+/// @brief Function macro to initialize a process message without the overhead
+/// of a function call.
+#define processMessageInitInline(processMessage, type, data, size, waiting) \
+  msg_init_inline(processMessage, MSG_CORO_SAFE, type, data, size, waiting)
+
 /// @def processMessageSetDone
 ///
 /// @brief Function macro to set a process message to the 'done' state.
