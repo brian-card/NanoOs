@@ -3789,6 +3789,116 @@ int schedulerShutdownCommandHandler(
   return returnValue;
 }
 
+/// @fn int schedulerCleanupProcessCommandHandler(
+///   SchedulerState *schedulerState, ProcessMessage *processMessage)
+///
+/// @brief Cleanup after a process exits.
+///
+/// @param schedulerState A pointer to the SchedulerState maintained by the
+///   scheduler process.
+/// @param processMessage A pointer to the ProcessMessage that was received.
+///
+/// @return Returns 0 on success, non-zero error code on failure.
+int schedulerCleanupProcessCommandHandler(
+  SchedulerState *schedulerState, ProcessMessage *processMessage
+) {
+  (void) schedulerState;
+
+  int returnValue = 0;
+  if (processMessage == NULL) {
+    // This should be impossible, but there's nothing to do.  Print an error
+    // and return good status.
+    logError("NULL message provided\n");
+    return returnValue; // 0
+  }
+  ProcessDescriptor *processDescriptor
+    = (ProcessDescriptor*) processMessageData(processMessage);
+
+  if (processDescriptor->processId == memoryManagerPid) {
+    // We have to bypass all the memory manager stuff and just restart.
+    goto terminateAndRestart;
+  }
+
+  if (processState(&allProcesses[memoryManagerPid - 1]) != PROCESS_STATE_WAIT) {
+    // Memory manager isn't able to receive commands right now.  Try
+    // again later.
+    returnValue = -EBUSY;
+    return returnValue;
+  }
+
+  if (processDescriptor->envp != NULL) {
+    if (assignMemory(processDescriptor->envp[0], 0) != 0) {
+      logWarn("Could not protect envp memory from process %d\n"
+        "Undefined behavior\n",
+        processDescriptor->processId);
+    }
+  }
+
+  returnValue = closeProcessFileDescriptors(processDescriptor);
+  if (returnValue == -EBUSY) {
+    processQueuePush(_schedulerState->currentReady, processDescriptor);
+    return returnValue;
+  }
+
+  MemoryManagerFreeProcessMemoryArgs memoryManagerFreeProcessMemoryArgs = {
+    .pid = processDescriptor->processId,
+    .returnValue = 0,
+  };
+  if (schedulerInitSendMessageToPid(
+    memoryManagerPid,
+    MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_FREE_PROCESS_MEMORY,
+    &memoryManagerFreeProcessMemoryArgs,
+    sizeof(memoryManagerFreeProcessMemoryArgs)) != processSuccess
+  ) {
+    logError("Could not send MEMORY_MANAGER_FREE_PROCESS_MEMORY "
+      "message to memory manager\n");
+  }
+
+terminateAndRestart:
+  // Terminate the process so that any lingering messages in its message queue
+  // get released.  Set the second parameter to false to make sure that
+  // happens.
+  processTerminate(processDescriptor, false);
+  threadSetContext(processDescriptor->mainThread, processDescriptor);
+  comessageQueueRemove(msg_to(&processDescriptor->message).coro,
+    &processDescriptor->message);
+  memset(&processDescriptor->message, 0, sizeof(ProcessMessage));
+
+  if (processDescriptor->restartFunction != NULL) {
+    logDebug("Process %ld has exited.  Restarting.\n",
+      (long int) processDescriptor->processId);
+    returnValue = processDescriptor->restartFunction(processDescriptor);
+    if (returnValue == -EAGAIN) {
+      logDebug("processDescriptor->restartFunction returned -EAGAIN\n");
+      processQueuePush(_schedulerState->currentReady, processDescriptor);
+      return returnValue;
+    } else if (returnValue != 0) {
+      removeProcess(processDescriptor, _processRestartFailedReason);
+      goto exit;
+    }
+  } else if (processDescriptor->envp != NULL) {
+    // The pointer for the envp block is stored at envp[0], so free that.
+    schedFree(processDescriptor->envp[0]);
+    processDescriptor->envp = NULL;
+  }
+
+  if (processState(processDescriptor) == PROCESS_STATE_WAIT) {
+    processQueuePush(_schedulerState->waitingQueue, processDescriptor);
+  } else if (processState(processDescriptor) == PROCESS_STATE_TIMEDWAIT) {
+    processQueuePush(_schedulerState->timedWaitingQueue, processDescriptor);
+  } else if (processFinished(processDescriptor)) {
+    processQueuePush(_schedulerState->freeQueue, processDescriptor);
+  } else { // Process is still running.
+    processQueuePush(_schedulerState->currentReady, processDescriptor);
+  }
+
+  returnValue = 0;
+
+exit:
+  processMessageRelease(processMessage);
+  return returnValue;
+}
+
 /// @typedef SchedulerCommandHandler
 ///
 /// @brief Signature of command handler for a scheduler command.
@@ -3811,6 +3921,7 @@ const SchedulerCommandHandler schedulerCommandHandlers[] = {
   schedulerSendSignalCommandHandler,        // SCHEDULER_SEND_SIGNAL
   schedulerReplaceOverlayCommandHandler,    // SCHEDULER_REPLACE_OVERLAY
   schedulerShutdownCommandHandler,          // SCHEDULER_SHUTDOWN
+  schedulerCleanupProcessCommandHandler,    // SCHEDULER_CLEANUP_PROCESS,
 };
 
 /// @fn void handleSchedulerMessage(SchedulerState *schedulerState)
@@ -4743,63 +4854,19 @@ void runScheduler(void) {
   }
 
   if (processRunning(processDescriptor) == false) {
-    if (processDescriptor->envp != NULL) {
-      if (assignMemory(processDescriptor->envp[0], 0) != 0) {
-        logWarn("Could not protect envp memory from process %d\n"
-          "Undefined behavior\n",
-          processDescriptor->processId);
+    do {
+      ProcessMessage *processMessage = getAvailableMessage();
+      if (processMessage == NULL) {
+        break;
       }
 
-    }
+      processMessageInit(processMessage,
+        SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_CLEANUP_PROCESS,
+        processDescriptor, sizeof(*processDescriptor), false);
 
-    int returnValue = closeProcessFileDescriptors(processDescriptor);
-    if (returnValue == -EBUSY) {
-      processQueuePush(_schedulerState->currentReady, processDescriptor);
+      processMessageQueuePush(&allProcesses[schedulerPid - 1], processMessage);
       goto exit;
-    }
-
-    MemoryManagerFreeProcessMemoryArgs memoryManagerFreeProcessMemoryArgs = {
-      .pid = processDescriptor->processId,
-      .returnValue = 0,
-    };
-    if (schedulerInitSendMessageToPid(
-      memoryManagerPid,
-      MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_FREE_PROCESS_MEMORY,
-      &memoryManagerFreeProcessMemoryArgs,
-      sizeof(memoryManagerFreeProcessMemoryArgs)) != processSuccess
-    ) {
-      logError("Could not send MEMORY_MANAGER_FREE_PROCESS_MEMORY "
-        "message to memory manager\n");
-    }
-
-    // Terminate the process so that any lingering messages in its message queue
-    // get released.  Set the second parameter to false to make sure that
-    // happens.
-    processTerminate(processDescriptor, false);
-    threadSetContext(processDescriptor->mainThread, processDescriptor);
-    comessageQueueRemove(msg_to(&processDescriptor->message).coro,
-      &processDescriptor->message);
-    memset(&processDescriptor->message, 0, sizeof(ProcessMessage));
-
-    if (processDescriptor->restartFunction != NULL) {
-      logDebug("Process %ld has exited.  Restarting.\n",
-        (long int) processDescriptor->processId);
-      int returnValue = processDescriptor->restartFunction(processDescriptor);
-      if (returnValue == -EAGAIN) {
-        logDebug("processDescriptor->restartFunction returned -EAGAIN\n");
-        processQueuePush(_schedulerState->currentReady, processDescriptor);
-        goto exit;
-      } else if (returnValue != 0) {
-        removeProcess(processDescriptor, _processRestartFailedReason);
-        goto exit;
-      }
-    } else {
-      if (processDescriptor->envp != NULL) {
-        // The pointer for the envp block is stored at envp[0], so free that.
-        schedFree(processDescriptor->envp[0]);
-        processDescriptor->envp = NULL;
-      }
-    }
+    } while (0);
   }
 
   if (processState(processDescriptor) == PROCESS_STATE_WAIT) {
