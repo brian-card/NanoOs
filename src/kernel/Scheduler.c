@@ -3921,7 +3921,7 @@ const SchedulerCommandHandler schedulerCommandHandlers[] = {
   schedulerSendSignalCommandHandler,        // SCHEDULER_SEND_SIGNAL
   schedulerReplaceOverlayCommandHandler,    // SCHEDULER_REPLACE_OVERLAY
   schedulerShutdownCommandHandler,          // SCHEDULER_SHUTDOWN
-  schedulerCleanupProcessCommandHandler,    // SCHEDULER_CLEANUP_PROCESS,
+  schedulerCleanupProcessCommandHandler,    // SCHEDULER_CLEANUP_PROCESS
 };
 
 /// @fn void handleSchedulerMessage(SchedulerState *schedulerState)
@@ -3966,12 +3966,22 @@ void handleSchedulerMessage(SchedulerState *schedulerState) {
     if (returnValue != 0) {
       // Processing the message failed.  We can't release it.  Put it on the
       // back of our own queue again and try again later.
-      if (lastReturnValue == 0) {
-        // Only print out a message if this is the first time we've failed.
-        logError("Scheduler command handler failed for message %d\n",
-          messageType);
-        logError("Pushing message back onto our own queue\n");
-      }
+      do {
+        if ((returnValue == -EBUSY)
+          && (messageType == SCHEDULER_CLEANUP_PROCESS)
+        ) {
+          returnValue = 0;
+          break;
+        }
+
+        if (lastReturnValue == 0) {
+          // Only print out a message if this is the first time we've failed.
+          logError("Scheduler command handler failed for message %d\n",
+            messageType);
+          logError("Pushing message back onto our own queue\n");
+        }
+      } while (0);
+
       if (processMessageQueuePush(getRunningProcess(), message)
         != processSuccess
       ) {
