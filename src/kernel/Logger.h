@@ -123,7 +123,7 @@ typedef struct LogEntry {
 ///   some compilers from complaining.
 typedef struct StaticLogs {
   uintptr_t numEntries;
-  LogEntry logEntries[1];
+  LogEntry logEntries[16];
 } StaticLogs;
 
 /// @struct LoggerState
