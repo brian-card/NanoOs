@@ -50,6 +50,13 @@ int kernelTestRun(NanoOsTestFn body) {
 /// does not have to include the enum's header.
 #define DRIVER_PRIVILEGE_LEVEL 0 /* PRIVILEGE_LEVEL_KERNEL */
 
+/// @def DRIVER_NUM_EXTRA_STACKS
+///
+/// @brief Number of extra PROCESS_STACK_SIZE slices chained onto the driver
+/// process's stack, since a test body's local buffers can exceed the single
+/// slice a normal process gets.
+#define DRIVER_NUM_EXTRA_STACKS 4
+
 /// @var driverHalCapabilities
 ///
 /// @brief HAL capabilities granted to the driver process.  Only the
@@ -65,6 +72,8 @@ int kernelTestRun(NanoOsTestFn body) {
 /// assumes this array is sorted in ascending order of subsystemFunction
 /// (i.e. by (subsystem << 8) | function).
 static HalCapability driverHalCapabilities[] = {
+  // Must stay ahead of the HAL_UART entries: HAL_MEMORY sorts lower.
+  LOG_FALLBACK_HAL_CAPABILITIES,
   {
     .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_POLL,
     .deviceIds =         0x03,
@@ -158,6 +167,18 @@ static int kernelTestRestartShell(void *processDescriptorRaw) {
     return -12; // -ENOMEM
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
+
+  // Widen the driver's stack the way nanoOsStart widens the console's via
+  // numExtraConsoleStacks; a test body's locals can overrun one slice.
+  for (int ii = 0; ii < DRIVER_NUM_EXTRA_STACKS; ii++) {
+    Thread *extraStack = threadProvision(NULL, dummyProcess, NULL);
+    if (extraStack == NULL) {
+      break;
+    }
+    threadSetStackEnd(processDescriptor->mainThread,
+      threadStackEnd(extraStack));
+  }
+
   processDescriptor->userId         = ROOT_USER_ID;
   processDescriptor->privilegeLevel = DRIVER_PRIVILEGE_LEVEL;
   processDescriptor->halCapabilities = driverHalCapabilities;

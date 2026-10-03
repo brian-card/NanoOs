@@ -23,6 +23,7 @@
 #define HAL_MOCK_H
 
 #include <setjmp.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -54,6 +55,9 @@ typedef enum MockStorageMode {
 /// @struct HalMockConfig
 ///
 /// @brief Per-boot configuration for the mock HAL.
+// Declared in kernel/Logger.h; only ever handled by pointer here.
+typedef struct StaticLogs StaticLogs;
+
 typedef struct HalMockConfig {
   MockClockMode   clock;
   MockTimerMode   timer;
@@ -87,6 +91,26 @@ void halMockSetRestartShell(HalMockRestartShellFn fn);
 /// process instead of exit()ing the whole run.  If no hook is set,
 /// HAL->power->enterMode() is a no-op that returns 0.
 void halMockSetPowerHook(void (*hook)(void));
+
+/// @fn void halMockSetStringsPresent(bool stringsPresent)
+///
+/// @brief Override HAL->memory->stringsPresent after boot so a test can drive
+/// logMessage's static-log path, which a strings-present platform never takes.
+///
+/// @param stringsPresent The value to publish.
+///
+/// @return This function returns no value.
+void halMockSetStringsPresent(bool stringsPresent);
+
+/// @fn void halMockSetStaticLogs(StaticLogs *staticLogs)
+///
+/// @brief Publish a static log area.  The mock starts no logger process, so it
+/// publishes none by default and a test that needs one supplies its own.
+///
+/// @param staticLogs The area to publish, or NULL for none.
+///
+/// @return This function returns no value.
+void halMockSetStaticLogs(StaticLogs *staticLogs);
 
 /// @fn int halMockInit(const HalMockConfig *config, jmp_buf *powerReturn)
 ///
