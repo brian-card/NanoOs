@@ -1295,7 +1295,6 @@ void* runMemoryManager(void *args) {
   releaseConsole();
 
   while (1) {
-    processYield();
     handleMemoryManagerMessages(&memoryManagerState);
   }
   
