@@ -338,27 +338,37 @@ def test_dirent_sets_errno_correctly(s):
 
 _LS_LINE_RE = re.compile(
     r'^[dl-][rwx-]{9}\s+\S+\s+\S+\s+\d+\s+(?P<wday>\w{3})\s+'
-    r'(?P<year>\d+)-(?P<month>\d+)-(?P<day>\d+)\s+\d+:\d+:\d+\s+\S+$')
+    r'(?P<year>\d+)-(?P<month>\d+)-(?P<day>\d+)\s+\d+:\d+:\d+\s+(?P<name>\S+)$')
 
 
 def test_ls_does_not_crash_on_populated_directory(s):
-    # Regression test: ls's day-of-week column (weekdays[tm.tm_wday]) could
+    # Regression test: ll's day-of-week column (weekdays[tm.tm_wday]) could
     # read an out-of-bounds index and dereference garbage as a string
     # pointer -- see test_ls_shows_correct_weekday_for_mtime for the root
     # cause. On the sim that's a SIGSEGV; on real hardware with no MMU it's
-    # a hang instead. Checked separately from output correctness so a crash
+    # a hang instead. Checked separately from weekday correctness so a crash
     # here is reported distinctly from a wrong-but-harmless value.
     s.login()
-    s.child.sendline("ls /usr/bin")
+    s.child.sendline("ll /usr/bin")
     idx = s.child.expect([PROMPT, pexpect.EOF, pexpect.TIMEOUT], timeout=12)
     if idx == 1:
         sig = s.child.signalstatus
         raise AssertionError(
-            f"simulator died running ls on a populated directory "
+            f"simulator died running ll on a populated directory "
             f"(signal {sig}{' = SIGSEGV' if sig == 11 else ''})")
     if idx == 2:
-        raise AssertionError("ls hung listing a populated directory")
-    assert "alive" in s.sh("echo alive"), "shell unresponsive after ls"
+        raise AssertionError("ll hung listing a populated directory")
+    out = s.child.before.replace("\r", "")
+    matches = [m for m in (_LS_LINE_RE.match(line)
+                           for line in out.splitlines()) if m is not None]
+    assert matches, f"ll printed no listing lines for /usr/bin:\n{out}"
+    # Every command lives in /usr/bin/<name>/main.overlay, so ll's own
+    # directory has to appear -- a renamed or missing command shows up here
+    # as a shell "not found" rather than as a silent pass.
+    names = {m["name"].rstrip("/") for m in matches}
+    assert "ll" in names, \
+        f"ll did not list its own /usr/bin entry, got {sorted(names)}:\n{out}"
+    assert "alive" in s.sh("echo alive"), "shell unresponsive after ll"
 
 
 def test_ls_shows_correct_weekday_for_mtime(s):
@@ -368,16 +378,16 @@ def test_ls_shows_correct_weekday_for_mtime(s):
     # actually ships to AgonLight2/ItsyBitsy), the table held garbage
     # instead of {4,5,6,1,2,3,4,...}, so tm_wday came out wildly
     # out-of-range (e.g. -4 instead of 4) for perfectly ordinary dates.
-    # Nothing had ever read tm_wday before ls started printing a weekday
+    # Nothing had ever read tm_wday before ll started printing a weekday
     # column, so the bug was latent until then. Confirms every listed
     # file's printed weekday actually matches its printed date, rather
     # than just being one of the seven valid-looking abbreviations.
     s.login()
-    out = s.sh("ls /etc")
+    out = s.sh("ll /etc")
     # Session.sh()'s PROMPT pattern doesn't include the "root" username
     # prefix, so .before always has a trailing "root" line bled in from the
     # start of the *next* prompt -- harmless for the substring checks every
-    # other test does, but not a real ls line, so filter to lines that
+    # other test does, but not a real ll line, so filter to lines that
     # actually look like one rather than asserting every line matches.
     lines = [line for line in out.splitlines() if _LS_LINE_RE.match(line)]
     assert lines, out
@@ -387,7 +397,7 @@ def test_ls_shows_correct_weekday_for_mtime(s):
         expected = datetime.date(
             int(m["year"]), int(m["month"]), int(m["day"])).strftime("%a")
         assert m["wday"] == expected, (
-            f"ls printed weekday {m['wday']!r} for "
+            f"ll printed weekday {m['wday']!r} for "
             f"{m['year']}-{m['month']}-{m['day']}, expected {expected!r}: "
             f"{line!r}")
         checked += 1
