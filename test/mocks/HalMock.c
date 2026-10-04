@@ -73,6 +73,7 @@ int posixCancelAndGetTimer(va_list args);
 int posixInitUart(va_list args);
 int posixConfigureUart(va_list args);
 int posixPollUart(va_list args);
+int posixReadUart(va_list args);
 int posixWriteUart(va_list args);
 int posixIsUartConsole(va_list args);
 
@@ -464,6 +465,7 @@ int halMockInit(const HalMockConfig *config, jmp_buf *powerReturn) {
     _uartFunctions[HAL_UART_INIT]       = posixInitUart;
     _uartFunctions[HAL_UART_CONFIGURE]  = posixConfigureUart;
     _uartFunctions[HAL_UART_POLL]       = posixPollUart;
+    _uartFunctions[HAL_UART_READ]       = posixReadUart;
     _uartFunctions[HAL_UART_WRITE]      = posixWriteUart;
     _uartFunctions[HAL_UART_IS_CONSOLE] = posixIsUartConsole;
   } else {

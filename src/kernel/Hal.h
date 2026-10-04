@@ -177,6 +177,7 @@ typedef enum HalUartFunction {
   HAL_UART_INIT,
   HAL_UART_CONFIGURE,
   HAL_UART_POLL,
+  HAL_UART_READ,
   HAL_UART_WRITE,
   HAL_UART_IS_CONSOLE,
   HAL_UART_NUM_FNS,
@@ -718,12 +719,30 @@ typedef struct HalUart {
   /// failure.
   int (*poll)(int32_t deviceId);
   
+  /// @fn int read(int32_t deviceId, uint8_t *data, ssize_t length,
+  ///   ssize_t *returnValue)
+  ///
+  /// @brief Read data from a UART.  Returns immediately with *returnValue set
+  /// to 0 if no bytes are ready for the UART or if the device is a poll-only
+  /// device.
+  ///
+  /// @param deviceId The zero-based ID of the UART to read from.
+  /// @param data A pointer to the buffer to fill with data read from the UART.
+  /// @param length The size of the buffer provided.  This is the maximum number
+  ///   of bytes that will be read in a single call.
+  /// @param returnValue A pointer to a ssize_t that will hold the number of
+  ///   bytes read on success.
+  ///
+  /// @return Returns 0 on success, -errno on failure.
+  int (*read)(int32_t deviceId, uint8_t *data, ssize_t length,
+    ssize_t *returnValue);
+
   /// @fn int write(int32_t deviceId, const uint8_t *data, ssize_t length,
   ///   ssize_t *returnValue)
   ///
   /// @brief Write data to a UART.
   ///
-  /// @param deviceId The zero-based ID of the UART to read from.
+  /// @param deviceId The zero-based ID of the UART to write to.
   /// @param data A pointer to arbitrary bytes of data to write to the UART.
   /// @param length The number of bytes to write to the UART from the data
   ///   pointer.

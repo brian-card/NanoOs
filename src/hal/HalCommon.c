@@ -171,6 +171,8 @@ static int halMemoryProcessStorage(void ****returnValue);
 static int halUartInit(void);
 static int halUartConfigure(int32_t deviceId, uint32_t baud);
 static int halUartPoll(int32_t deviceId);
+static int halUartRead(int32_t deviceId, uint8_t *data,
+  ssize_t length, ssize_t *returnValue);
 static int halUartWrite(int32_t deviceId, const uint8_t *data,
   ssize_t length, ssize_t *returnValue);
 static int halUartIsConsole(int32_t deviceId, bool *returnValue);
@@ -269,6 +271,7 @@ static HalUart halImplUart = {
   .init         = halUartInit,
   .configure    = halUartConfigure,
   .poll         = halUartPoll,
+  .read         = halUartRead,
   .write        = halUartWrite,
   .isConsole    = halUartIsConsole,
 };
@@ -560,6 +563,13 @@ static int halUartConfigure(int32_t deviceId, uint32_t baud) {
 
 static int halUartPoll(int32_t deviceId) {
   return callHal(HAL_UART, HAL_UART_POLL, deviceId);
+}
+
+static int halUartRead(int32_t deviceId, uint8_t *data,
+  ssize_t length, ssize_t *returnValue
+) {
+  return callHal(HAL_UART, HAL_UART_READ, deviceId, data, length,
+    returnValue);
 }
 
 static int halUartWrite(int32_t deviceId, const uint8_t *data,

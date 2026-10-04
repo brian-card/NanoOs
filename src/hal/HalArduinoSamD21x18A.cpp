@@ -614,6 +614,30 @@ int arduinoSamD21x18APollUart(va_list args) {
   return serialData;
 }
 
+/// @fn int arduinoSamD21x18AReadUart(va_list args)
+///
+/// @brief Read data from a UART.  UARTs on this platform are poll-only, so this
+/// always reports 0 bytes read.
+///
+/// @param args A va_list holding the int32_t deviceId, uint8_t *data,
+///   ssize_t length, and ssize_t *returnValue arguments of HalUart.read.
+///
+/// @return Returns 0 on success, -errno on failure.
+int arduinoSamD21x18AReadUart(va_list args) {
+  int32_t deviceId = va_arg(args, int32_t);
+  uint8_t *data = va_arg(args, uint8_t*);
+  ssize_t length = va_arg(args, ssize_t);
+  ssize_t *returnValue = va_arg(args, ssize_t*);
+  (void) deviceId;
+  (void) data;
+  (void) length;
+
+  if (returnValue != NULL) {
+    *returnValue = 0;
+  }
+  return 0;
+}
+
 int arduinoSamD21x18AWriteUart(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   const uint8_t *data = va_arg(args, const uint8_t*);
@@ -1966,6 +1990,7 @@ static HalFunction arduinoSamD21x18AUartFunctions[HAL_UART_NUM_FNS] = {
   [HAL_UART_INIT]       = arduinoSamD21x18AInitUart,
   [HAL_UART_CONFIGURE]  = arduinoSamD21x18AConfigureUart,
   [HAL_UART_POLL]       = arduinoSamD21x18APollUart,
+  [HAL_UART_READ]       = arduinoSamD21x18AReadUart,
   [HAL_UART_WRITE]      = arduinoSamD21x18AWriteUart,
   [HAL_UART_IS_CONSOLE] = arduinoSamD21x18AIsUartConsole,
 };

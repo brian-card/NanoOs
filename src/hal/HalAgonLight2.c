@@ -529,6 +529,43 @@ int agonLight2PollUart(va_list args) {
   return (int32_t) agonLight2PollUartImpl[deviceId]();
 }
 
+extern size_t agonLight2ReadUart1Impl(uint8_t *data, size_t length);
+size_t (*agonLight2ReadUartImpl[2])(uint8_t *data, size_t length) = {
+  NULL, // UART0 is poll-only.
+  agonLight2ReadUart1Impl,
+};
+
+/// @fn int agonLight2ReadUart(va_list args)
+///
+/// @brief Read whatever bytes a UART's interrupt handler has buffered, up to
+/// the provided length, without blocking.  Poll-only UARTs report 0 bytes.
+///
+/// @param args A va_list holding the int32_t deviceId, uint8_t *data,
+///   ssize_t length, and ssize_t *returnValue arguments of HalUart.read.
+///
+/// @return Returns 0 on success, -errno on failure.
+int agonLight2ReadUart(va_list args) {
+  int32_t  deviceId    = va_arg(args, int32_t);
+  uint8_t *data        = va_arg(args, uint8_t*);
+  ssize_t  length      = va_arg(args, ssize_t);
+  ssize_t *returnValue = va_arg(args, ssize_t*);
+
+  if (deviceId >= (sizeof(agonLight2ReadUartImpl)
+    / sizeof(agonLight2ReadUartImpl[0]))
+  ) {
+    return -ERANGE;
+  }
+  ssize_t bytesRead = 0;
+  if ((agonLight2ReadUartImpl[deviceId] != NULL) && (length > 0)) {
+    bytesRead = (ssize_t) agonLight2ReadUartImpl[deviceId](data, length);
+  }
+  if (returnValue != NULL) {
+    *returnValue = bytesRead;
+  }
+
+  return 0;
+}
+
 extern void agonLight2WriteUart0Impl(uint8_t c);
 extern void agonLight2WriteUart1Impl(uint8_t c);
 void (*agonLight2WriteUartImpl[2])(uint8_t c) = {
@@ -1710,6 +1747,7 @@ static HalFunction agonLight2UartFunctions[HAL_UART_NUM_FNS] = {
   [HAL_UART_INIT]       = agonLight2InitUart,
   [HAL_UART_CONFIGURE]  = agonLight2ConfigureUart,
   [HAL_UART_POLL]       = agonLight2PollUart,
+  [HAL_UART_READ]       = agonLight2ReadUart,
   [HAL_UART_WRITE]      = agonLight2WriteUart,
   [HAL_UART_IS_CONSOLE] = agonLight2IsUartConsole,
 };
@@ -1763,7 +1801,7 @@ static HalFunction agonLight2BlockDeviceFunctions[HAL_BLOCK_DEVICE_NUM_FNS] = {
 // ---------------------------------------------------------------------------
 
 static uint32_t agonLight2UartsOnline[]        = { 0x00000003 };
-static uint32_t agonLight2UartsPollOnly[]      = { 0x00000000 };
+static uint32_t agonLight2UartsPollOnly[]      = { 0x00000001 };
 
 /// @var agonLight2DiosOnline
 ///

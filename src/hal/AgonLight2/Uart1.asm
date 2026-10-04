@@ -53,6 +53,7 @@
 
 .global _agonLight2ConfigureUart1Impl
 .global _agonLight2PollUart1Impl
+.global _agonLight2ReadUart1Impl
 .global _agonLight2WriteUart1Impl
 .global uart1Isr
 
@@ -82,7 +83,7 @@ UART1_RING_MASK .equ (UART1_RING_SIZE - 1)
 
 .bss
 uart1RxHead: .space 1              ; written only by uart1Isr
-uart1RxTail: .space 1              ; written only by _agonLight2PollUart1Impl
+uart1RxTail: .space 1              ; written only by the Poll/Read impls
 uart1RxBuf:  .space UART1_RING_SIZE
 
 uart1TxHead: .space 1              ; written only by _agonLight2WriteUart1Impl
@@ -193,6 +194,68 @@ _agonLight2PollUart1Impl:
 .rxEmpty:
     ei
     ld      hl, -1
+    ret
+
+;; -- size_t agonLight2ReadUart1Impl(uint8_t *data, size_t length) ---------
+;;    data at sp+3, length at sp+6.  Copies up to length bytes from the RX
+;;    ring into data, advances uart1RxTail past them, and returns the number
+;;    copied in HL.  di/ei for the same reason as agonLight2PollUart1Impl.
+_agonLight2ReadUart1Impl:
+    push    ix
+    ld      ix, 0
+    add     ix, sp
+
+    di
+    ld      a, (uart1RxTail)
+    ld      c, a                ; c = tail
+    ld      a, (uart1RxHead)
+    sub     c
+    and     UART1_RING_MASK     ; a = bytes available
+    ld      de, 0               ; clears DEU too - see agonLight2PollUart1Impl
+    ld      e, a
+    ld      hl, (ix+9)          ; hl = length
+    or      a
+    sbc     hl, de
+    jr      nc, .readCountReady ; length >= available -> take all of it
+    ld      a, (ix+9)           ; length < available, so it fits in a byte
+.readCountReady:
+    or      a
+    jr      z, .readEmpty
+
+    ld      b, a                ; b = bytes to copy
+    ld      hl, uart1RxBuf
+    ld      e, c                ; DEU/D still clear from above
+    add     hl, de              ; hl = &uart1RxBuf[tail]
+    ld      de, (ix+6)          ; de = data
+.readLoop:
+    ld      a, (hl)
+    ld      (de), a
+    inc     de
+    inc     hl
+    ld      a, c
+    inc     a
+    and     UART1_RING_MASK
+    ld      c, a
+    jr      nz, .readNoWrap
+    ld      hl, uart1RxBuf
+.readNoWrap:
+    djnz    .readLoop
+
+    ld      a, c
+    ld      (uart1RxTail), a
+    ei
+
+    ex      de, hl              ; hl = one past the last byte written
+    ld      de, (ix+6)
+    or      a
+    sbc     hl, de              ; hl = bytes copied
+    pop     ix
+    ret
+
+.readEmpty:
+    ei
+    ld      hl, 0
+    pop     ix
     ret
 
 ;; -- void agonLight2WriteUart1Impl(uint8_t c) ------------------------------

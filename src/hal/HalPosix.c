@@ -101,6 +101,7 @@ int posixNumExtraConsoleStacks(va_list args);
 int posixInitUart(va_list args);
 int posixConfigureUart(va_list args);
 int posixPollUart(va_list args);
+int posixReadUart(va_list args);
 int posixWriteUart(va_list args);
 int posixIsUartConsole(va_list args);
 
@@ -648,6 +649,7 @@ static HalFunction posixUartFunctions[HAL_UART_NUM_FNS] = {
   [HAL_UART_INIT]       = posixInitUart,
   [HAL_UART_CONFIGURE]  = posixConfigureUart,
   [HAL_UART_POLL]       = posixPollUart,
+  [HAL_UART_READ]       = posixReadUart,
   [HAL_UART_WRITE]      = posixWriteUart,
   [HAL_UART_IS_CONSOLE] = posixIsUartConsole,
 };
