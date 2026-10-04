@@ -127,6 +127,13 @@ static uint32_t halArduinoAvrImplUartsOnline[] = {
   0x0000000f,
 };
 
+/// @var halArduinoAvrImplUartsPollOnly
+///
+/// @brief Bitmask array of online UARTs.
+static uint32_t halArduinoAvrImplUartsPollOnly[] = {
+  0x0000000f,
+};
+
 /// @var halArduinoAvrImplDiosOnline
 ///
 /// @brief Bitmask array of online DIOs.
@@ -440,6 +447,7 @@ int halArduinoInit(void) {
   HalArduinoAvrInitArgs args = {
     .numUartsSupported = NUM_UARTS,
     .uartsOnline       = halArduinoAvrImplUartsOnline,
+    .uartsPollOnly     = halArduinoAvrImplUartsPollOnly,
     .dioStart          = DIO_START,
     .numDiosSupported  = NUM_DIO_PINS,
     .diosOnline        = halArduinoAvrImplDiosOnline,

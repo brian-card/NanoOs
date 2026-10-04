@@ -143,3 +143,26 @@ NANO_OS_KERNEL_TEST(hal_uart, device_1_is_the_console) {
   HAL->uart->isConsole(0, &isConsole);
   NANO_OS_ASSERT_FALSE(isConsole);
 }
+
+// -------------------------------------------------------------------------
+// UART bitmask arrays: the mock HAL has to install backing storage for both
+// the online and poll-only masks, or the accessor macros index through NULL.
+// -------------------------------------------------------------------------
+
+NANO_OS_KERNEL_TEST(hal_uart, poll_only_mask_is_backed_and_per_device) {
+  NANO_OS_ASSERT_TRUE(HAL->uart->pollOnly != NULL);
+
+  NANO_OS_ASSERT_TRUE(pollOnly(HAL->uart, 1));
+  NANO_OS_ASSERT_FALSE(pollOnly(HAL->uart, 0));
+
+  // Out-of-range ids report false rather than reading past the mask.
+  NANO_OS_ASSERT_FALSE(pollOnly(HAL->uart, (int32_t) HAL->uart->numSupported));
+  NANO_OS_ASSERT_FALSE(pollOnly(HAL->uart, -1));
+}
+
+NANO_OS_KERNEL_TEST(hal_uart, online_mask_is_backed_and_per_device) {
+  NANO_OS_ASSERT_TRUE(HAL->uart->online != NULL);
+
+  NANO_OS_ASSERT_TRUE(online(HAL->uart, 1));
+  NANO_OS_ASSERT_FALSE(online(HAL->uart, 0));
+}

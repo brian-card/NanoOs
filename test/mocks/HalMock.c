@@ -95,6 +95,7 @@ static HalMockRestartShellFn _restartShell = NULL;
 
 // online bitmasks (pointed at from halImpl at init time)
 static uint32_t _uartsOnline[]        = { 0x00000002 };
+static uint32_t _uartsPollOnly[]      = { 0x00000002 };
 static uint32_t _diosOnline[]         = { 0x00000000 };
 static uint32_t _spisOnline[]         = { 0x00000000 };
 static uint32_t _timersOnline[]       = { 0x00000003 };
@@ -523,6 +524,7 @@ int halMockInit(const HalMockConfig *config, jmp_buf *powerReturn) {
   // Subsystem counts / online bitmasks.
   halImpl.uart->numSupported        = 2;
   halImpl.uart->online              = _uartsOnline;
+  halImpl.uart->pollOnly            = _uartsPollOnly;
   halImpl.dio->numSupported         = 0;
   halImpl.dio->online              = _diosOnline;
   halImpl.spi->numSupported         = 0;

@@ -72,6 +72,13 @@ static uint32_t halArduinoSamD21x18AImplUartsOnline[] = {
   0x00000003,
 };
 
+/// @var halArduinoSamD21x18AImplUartsPollOnly
+///
+/// @brief Bitmask array of online UARTs.
+static uint32_t halArduinoSamD21x18AImplUartsPollOnly[] = {
+  0x00000003,
+};
+
 /// @var halArduinoSamD21x18AImplDiosOnline
 ///
 /// @brief Bitmask array of online DIOs.
@@ -83,6 +90,7 @@ int halArduinoInit(void) {
   HalArduinoSamD21x18AInitArgs args = {
     .numUartsSupported   = NUM_UARTS,
     .uartsOnline         = halArduinoSamD21x18AImplUartsOnline,
+    .uartsPollOnly       = halArduinoSamD21x18AImplUartsPollOnly,
     .numDiosSupported    = NUM_DIO_PINS,
     .diosOnline          = halArduinoSamD21x18AImplDiosOnline,
     .spiCopiDio          = SPI_COPI_DIO,

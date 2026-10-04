@@ -1759,10 +1759,11 @@ static HalFunction agonLight2BlockDeviceFunctions[HAL_BLOCK_DEVICE_NUM_FNS] = {
 };
 
 // ---------------------------------------------------------------------------
-// Online-device bitmask arrays (all offline until hardware is brought up)
+// Device bitmask arrays
 // ---------------------------------------------------------------------------
 
 static uint32_t agonLight2UartsOnline[]        = { 0x00000003 };
+static uint32_t agonLight2UartsPollOnly[]      = { 0x00000000 };
 
 /// @var agonLight2DiosOnline
 ///
@@ -1855,6 +1856,7 @@ int halAgonLight2Init(void) {
 
   halImpl.uart->numSupported        = 2;
   halImpl.uart->online              = agonLight2UartsOnline;
+  halImpl.uart->pollOnly            = agonLight2UartsPollOnly;
 
   // DIO ids are the packed value (port_nibble << 4) | bit, spanning 0xB0..0xD7,
   // so the online() bound is the largest valid id + 1 rather than a pin count.

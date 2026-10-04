@@ -80,6 +80,28 @@ extern "C"
 #define setOffline(hal, deviceId) \
   (hal)->online[deviceId >> 5] &= ~(((uint32_t) 1) << (deviceId & 31))
 
+/// @def pollOnly
+///
+/// @brief Function macro to determine whether or not an individual device
+/// within a HAL subsystem is a "poll-only" device (i.e. cannot use interrupts).
+///
+/// @param hal Pointer to a HAL subsystem struct (e.g. HAL->uart).
+/// @param deviceId The zero-based index of the device to check.
+#define pollOnly(hal, deviceId) ( \
+  ((deviceId >= 0) && (deviceId < ((int32_t) (hal)->numSupported))) \
+  ? (((((uint32_t) 1) << (deviceId & 31)) \
+    & (hal)->pollOnly[deviceId >> 5]) != 0) \
+  : false)
+
+/// @def setPollOnly
+///
+/// @brief Mark a device ID as being "poll-only" within a HAL subsystem.
+///
+/// @param hal Pointer to a HAL subsystem struct (e.g. HAL->uart).
+/// @param deviceId The zero-based index of the device to mark "poll-only".
+#define setPollOnly(hal, deviceId) \
+  (hal)->pollOnly[deviceId >> 5] |= (((uint32_t) 1) << (deviceId & 31))
+
 /// @def NUM_READY_QUEUES
 ///
 /// @brief The number of ready queues that will be exposed by the HAL.
@@ -659,6 +681,15 @@ typedef struct HalUart {
   ///
   /// online(HAL->uart, deviceId)
   uint32_t *online;
+  
+  /// @var pollOnly
+  ///
+  /// @brief Bitmask array indicating with of the online UARTs are "poll-only",
+  /// i.e. cannot be used with interrupts.  Whether or not an individual UART is
+  /// "poll-only" can be found by:
+  ///
+  /// pollOnly(HAL->uart, deviceId)
+  uint32_t *pollOnly;
   
   /// @fn int init(void)
   ///

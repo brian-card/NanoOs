@@ -831,6 +831,7 @@ int halArduinoAvrInit(HalArduinoAvrInitArgs *args) {
 
   halImpl.uart->numSupported = args->numUartsSupported;
   halImpl.uart->online       = args->uartsOnline;
+  halImpl.uart->pollOnly     = args->uartsPollOnly;
 
   halImpl.dio->numSupported = args->numDiosSupported;
   halImpl.dio->online       = args->diosOnline;
