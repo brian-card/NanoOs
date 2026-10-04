@@ -313,6 +313,10 @@ HalCapability consoleHalCapabilities[] = {
     .deviceIds =         0x03, // Bitmask for device IDs 0 and 1
   },
   {
+    .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_READ,
+    .deviceIds =         0x03, // Bitmask for device IDs 0 and 1
+  },
+  {
     .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_WRITE,
     .deviceIds =         0x03, // Bitmask for device IDs 0 and 1
   },
