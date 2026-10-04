@@ -114,6 +114,45 @@ NANO_OS_KERNEL_TEST(hal_uart, fed_bytes_poll_back_in_order) {
   NANO_OS_ASSERT_EQ_INT(-1,  HAL->uart->poll(1)); // empty -> non-blocking -1
 }
 
+NANO_OS_KERNEL_TEST(hal_uart, read_on_poll_only_device_returns_nothing) {
+  mockUartFeed("abc", 3);
+
+  uint8_t buffer[8];
+  memset(buffer, 0, sizeof(buffer));
+  ssize_t bytesRead = -1;
+  NANO_OS_ASSERT_EQ_INT(0, HAL->uart->read(1, buffer, sizeof(buffer),
+    &bytesRead));
+  NANO_OS_ASSERT_EQ_INT(0, bytesRead);
+  NANO_OS_ASSERT_EQ_INT(0, buffer[0]);
+
+  // The fed bytes are still there for poll.
+  NANO_OS_ASSERT_EQ_INT('a', HAL->uart->poll(1));
+}
+
+NANO_OS_KERNEL_TEST(hal_uart, read_returns_buffered_bytes_up_to_length) {
+  halMockSetUartPollOnly(1, false);
+  mockUartFeed("Hello, world", 12);
+
+  char buffer[16];
+  memset(buffer, 0, sizeof(buffer));
+  ssize_t bytesRead = -1;
+  NANO_OS_ASSERT_EQ_INT(0, HAL->uart->read(1, (uint8_t*) buffer, 5,
+    &bytesRead));
+  NANO_OS_ASSERT_EQ_INT(5, bytesRead);
+  NANO_OS_ASSERT_STR_EQ("Hello", buffer);
+
+  memset(buffer, 0, sizeof(buffer));
+  NANO_OS_ASSERT_EQ_INT(0, HAL->uart->read(1, (uint8_t*) buffer,
+    sizeof(buffer) - 1, &bytesRead));
+  NANO_OS_ASSERT_EQ_INT(7, bytesRead);
+  NANO_OS_ASSERT_STR_EQ(", world", buffer);
+
+  NANO_OS_ASSERT_EQ_INT(0, HAL->uart->read(1, (uint8_t*) buffer,
+    sizeof(buffer) - 1, &bytesRead));
+  NANO_OS_ASSERT_EQ_INT(0, bytesRead);
+  NANO_OS_ASSERT_EQ_INT(-1, HAL->uart->poll(1));
+}
+
 NANO_OS_KERNEL_TEST(hal_uart, kernel_writes_reach_the_drain_buffer) {
   // Discard any console bring-up chatter already sitting in the tx buffer.
   char scratch[512];

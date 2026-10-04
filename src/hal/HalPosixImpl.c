@@ -35,7 +35,6 @@
 #undef errno
 #include <dlfcn.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdarg.h>
@@ -210,6 +209,123 @@ static const char _getAttrErrorMessage[] KEEP_IN_FLASH
 static const char _setAttrErrorMessage[] KEEP_IN_FLASH
   = "Could not set new attributes for console.\n";
 
+/// @var _mainThreadId
+///
+/// @brief The ID of the main thread that calls halPosixInit.
+static pthread_t _mainThreadId = 0;
+
+/// @def POSIX_UART_RX_BUFFER_SIZE
+///
+/// @brief Size of the console receive ring.  One slot stays empty to tell a
+/// full ring from an empty one, so it holds one less than this.
+#define POSIX_UART_RX_BUFFER_SIZE 64
+
+/// @def POSIX_UART_RX_SIGNAL
+///
+/// @brief Signal the receive thread raises on the main thread for each byte it
+/// buffers, standing in for a UART receive interrupt.
+#define POSIX_UART_RX_SIGNAL SIGIO
+
+/// @var _uartRxBuffer
+///
+/// @brief Ring of bytes read from stdin by the receive thread.
+static uint8_t _uartRxBuffer[POSIX_UART_RX_BUFFER_SIZE];
+
+/// @var _uartRxHead
+///
+/// @brief Index of the next slot the receive thread writes.
+static int _uartRxHead = 0;
+
+/// @var _uartRxTail
+///
+/// @brief Index of the next slot posixPollUart reads.
+static int _uartRxTail = 0;
+
+/// @var _uartRxMutex
+///
+/// @brief Guards _uartRxBuffer, _uartRxHead, and _uartRxTail.
+static pthread_mutex_t _uartRxMutex = PTHREAD_MUTEX_INITIALIZER;
+
+/// @var _uartRxNotFull
+///
+/// @brief Signaled by posixPollUart when it frees a slot in a full ring.
+static pthread_cond_t _uartRxNotFull = PTHREAD_COND_INITIALIZER;
+
+/// @var _uartRxThreadStarted
+///
+/// @brief Whether posixConfigureUart has already started the receive thread.
+static bool _uartRxThreadStarted = false;
+
+/// @fn bool posixUartRxPushLocked(uint8_t byte)
+///
+/// @brief Append a byte to the receive ring.  The caller must hold
+/// _uartRxMutex.
+///
+/// @param byte The byte to append.
+///
+/// @return Returns true if the byte was stored, false if the ring was full.
+static bool posixUartRxPushLocked(uint8_t byte) {
+  int nextHead = _uartRxHead + 1;
+  if (nextHead == POSIX_UART_RX_BUFFER_SIZE) {
+    nextHead = 0;
+  }
+  if (nextHead == _uartRxTail) {
+    return false;
+  }
+  _uartRxBuffer[_uartRxHead] = byte;
+  _uartRxHead = nextHead;
+  return true;
+}
+
+/// @fn void posixUartRxSignalHandler(int signal)
+///
+/// @brief Handle POSIX_UART_RX_SIGNAL on the main thread.  It does nothing
+/// yet; installing it keeps the signal's default action from terminating the
+/// simulator.
+///
+/// @param signal The numeric value of the signal.  Ignored.
+///
+/// @return This function returns no value.
+static void posixUartRxSignalHandler(int signal) {
+  (void) signal;
+}
+
+/// @fn void* posixUartRxThreadFunction(void *arg)
+///
+/// @brief Block reading stdin, move each byte into the receive ring, and signal the
+/// main thread.  Waits for room rather than dropping bytes when the ring is
+/// full, and exits at end of file.
+///
+/// @param arg Unused.
+///
+/// @return This function always returns NULL.
+static void* posixUartRxThreadFunction(void *arg) {
+  (void) arg;
+
+  // read() rather than getc(): getc() holds stdin's stdio lock while it
+  // blocks, and exit() waits on that lock to flush streams.
+  uint8_t byte = 0;
+  while (read(STDIN_FILENO, &byte, 1) == 1) {
+    pthread_mutex_lock(&_uartRxMutex);
+    while (!posixUartRxPushLocked(byte)) {
+      pthread_cond_wait(&_uartRxNotFull, &_uartRxMutex);
+    }
+    pthread_mutex_unlock(&_uartRxMutex);
+    pthread_kill(_mainThreadId, POSIX_UART_RX_SIGNAL);
+  }
+
+  return NULL;
+}
+
+/// @fn int posixConfigureUart(va_list args)
+///
+/// @brief Configure stdin to not echo and launch posixUartRxThreadFunction as
+/// a background thread.
+///
+/// @param args A va_list of the arguments that were passed to the call.  See
+///   HalUart.configure for a description of the arguments.
+///
+/// @return Returns 0 on success, -errno on failure.
 int posixConfigureUart(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   uint32_t baud = va_arg(args, uint32_t);
@@ -219,12 +335,6 @@ int posixConfigureUart(va_list args) {
     return -ERANGE;
   } else if (deviceId != 1) {
     return -ENOTTY;
-  }
-
-  // We don't actually need to do anything to stdout or stderr, but we do need
-  // to configure stdin to be non-blocking.
-  if (fcntl(0, F_SETFL, fcntl(0, F_GETFL) | O_NONBLOCK) != 0) {
-    return -errno;
   }
 
   // We manage all the prints to screen ourselves, so disable stdin echoing
@@ -248,6 +358,34 @@ int posixConfigureUart(va_list args) {
     return -errno;
   }
 
+  if (_uartRxThreadStarted) {
+    return 0;
+  }
+
+  struct sigaction sa;
+  sa.sa_handler = posixUartRxSignalHandler;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = SA_RESTART;
+  if (sigaction(POSIX_UART_RX_SIGNAL, &sa, NULL) < 0) {
+    return -errno;
+  }
+
+  // The thread inherits this mask, which keeps process-directed signals like
+  // SIGINT on the main thread.
+  sigset_t allSignals;
+  sigset_t previousSignals;
+  sigfillset(&allSignals);
+  pthread_sigmask(SIG_SETMASK, &allSignals, &previousSignals);
+  pthread_t rxThread;
+  int status = pthread_create(&rxThread, NULL,
+    posixUartRxThreadFunction, NULL);
+  pthread_sigmask(SIG_SETMASK, &previousSignals, NULL);
+  if (status != 0) {
+    return -status;
+  }
+  pthread_detach(rxThread);
+  _uartRxThreadStarted = true;
+
   return 0;
 }
 
@@ -258,10 +396,22 @@ int posixPollUart(va_list args) {
   // While we'll support two outputs, we will only support one input to keep
   // things simple in the simulator.
   if (deviceId == 1) {
-    serialData = getchar();
-    if (serialData == EOF) {
-      serialData = -1;
+    // A timer signal here could switch coroutines while the mutex is held.
+    sigset_t allSignals;
+    sigset_t previousSignals;
+    sigfillset(&allSignals);
+    pthread_sigmask(SIG_SETMASK, &allSignals, &previousSignals);
+    pthread_mutex_lock(&_uartRxMutex);
+    if (_uartRxTail != _uartRxHead) {
+      serialData = _uartRxBuffer[_uartRxTail];
+      _uartRxTail++;
+      if (_uartRxTail == POSIX_UART_RX_BUFFER_SIZE) {
+        _uartRxTail = 0;
+      }
+      pthread_cond_signal(&_uartRxNotFull);
     }
+    pthread_mutex_unlock(&_uartRxMutex);
+    pthread_sigmask(SIG_SETMASK, &previousSignals, NULL);
   }
 
   return serialData;
@@ -269,8 +419,9 @@ int posixPollUart(va_list args) {
 
 /// @fn int posixReadUart(va_list args)
 ///
-/// @brief Read data from a UART.  Not yet supported in the simulator, so this
-/// always reports 0 bytes read.
+/// @brief Copy up to length bytes from the console receive ring without
+/// blocking.  Poll-only devices and devices other than the console report 0
+/// bytes read.
 ///
 /// @param args A va_list holding the int32_t deviceId, uint8_t *data,
 ///   ssize_t length, and ssize_t *returnValue arguments of HalUart.read.
@@ -281,12 +432,31 @@ int posixReadUart(va_list args) {
   uint8_t *data = va_arg(args, uint8_t*);
   ssize_t length = va_arg(args, ssize_t);
   ssize_t *returnValue = va_arg(args, ssize_t*);
-  (void) deviceId;
-  (void) data;
-  (void) length;
+
+  ssize_t bytesRead = 0;
+  if ((deviceId == 1) && !pollOnly(HAL->uart, deviceId)) {
+    // A timer signal here could switch coroutines while the mutex is held.
+    sigset_t allSignals;
+    sigset_t previousSignals;
+    sigfillset(&allSignals);
+    pthread_sigmask(SIG_SETMASK, &allSignals, &previousSignals);
+    pthread_mutex_lock(&_uartRxMutex);
+    while ((bytesRead < length) && (_uartRxTail != _uartRxHead)) {
+      data[bytesRead++] = _uartRxBuffer[_uartRxTail];
+      _uartRxTail++;
+      if (_uartRxTail == POSIX_UART_RX_BUFFER_SIZE) {
+        _uartRxTail = 0;
+      }
+    }
+    if (bytesRead > 0) {
+      pthread_cond_signal(&_uartRxNotFull);
+    }
+    pthread_mutex_unlock(&_uartRxMutex);
+    pthread_sigmask(SIG_SETMASK, &previousSignals, NULL);
+  }
 
   if (returnValue != NULL) {
-    *returnValue = 0;
+    *returnValue = bytesRead;
   }
   return 0;
 }
@@ -504,11 +674,6 @@ int posixEnterPowerMode(va_list args) {
 }
 
 // Timer support
-
-/// @var _mainThreadId
-///
-/// @brief The ID of the main thread that calls halPosixInit.
-static pthread_t _mainThreadId = 0;
 
 /// @struct SoftwareTimer
 ///
@@ -914,7 +1079,9 @@ void allocateGlobalStack(jmp_buf returnBuffer, char *topOfStack) {
 /// @return This function returns no value.
 void sigintHandler(int signal) {
   if (signal == SIGINT) {
-    ungetc(0x03, stdin);
+    pthread_mutex_lock(&_uartRxMutex);
+    posixUartRxPushLocked(0x03);
+    pthread_mutex_unlock(&_uartRxMutex);
   }
 }
 

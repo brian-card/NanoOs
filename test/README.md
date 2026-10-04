@@ -90,7 +90,7 @@ real POSIX implementation from `HalPosixImpl.c`:
 | overlay RAM window, heap sizing | POSIX (`halPosixImplInit`) | — |
 | clock | virtual, `mockClockAdvanceNs()` | `MOCK_CLOCK_POSIX` |
 | timer | synchronous, `mockTimerFire()` | `MOCK_TIMER_POSIX` |
-| uart | RAM buffers, `mockUartFeed/Drain()` | `MOCK_UART_POSIX` |
+| uart | RAM buffers, `mockUartFeed/Drain()`, `halMockSetUartPollOnly()` | `MOCK_UART_POSIX` |
 | storage | none (`rootFsPid == 0`) | `MOCK_STORAGE_FILE` *(stub)* |
 | memory, dio, spi | POSIX | — |
 | power | ends the child cleanly | — |

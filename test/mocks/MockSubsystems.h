@@ -46,6 +46,7 @@ void    mockUartReset(void);
 int mockUartInitFn(va_list args);
 int mockUartConfigureFn(va_list args);
 int mockUartPollFn(va_list args);
+int mockUartReadFn(va_list args);
 int mockUartWriteFn(va_list args);
 int mockUartIsConsoleFn(va_list args);
 

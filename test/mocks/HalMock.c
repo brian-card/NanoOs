@@ -299,6 +299,15 @@ void halMockSetStringsPresent(bool stringsPresent) {
   halImpl.memory->stringsPresent = stringsPresent;
 }
 
+void halMockSetUartPollOnly(int32_t deviceId, bool isPollOnly) {
+  uint32_t bit = ((uint32_t) 1) << (deviceId & 31);
+  if (isPollOnly) {
+    _uartsPollOnly[deviceId >> 5] |= bit;
+  } else {
+    _uartsPollOnly[deviceId >> 5] &= ~bit;
+  }
+}
+
 void halMockSetStaticLogs(StaticLogs *staticLogs) {
   _staticLogsPtr = staticLogs;
 }
@@ -472,6 +481,7 @@ int halMockInit(const HalMockConfig *config, jmp_buf *powerReturn) {
     _uartFunctions[HAL_UART_INIT]       = mockUartInitFn;
     _uartFunctions[HAL_UART_CONFIGURE]  = mockUartConfigureFn;
     _uartFunctions[HAL_UART_POLL]       = mockUartPollFn;
+    _uartFunctions[HAL_UART_READ]       = mockUartReadFn;
     _uartFunctions[HAL_UART_WRITE]      = mockUartWriteFn;
     _uartFunctions[HAL_UART_IS_CONSOLE] = mockUartIsConsoleFn;
   }

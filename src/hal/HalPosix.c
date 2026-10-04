@@ -167,7 +167,7 @@ static uint32_t posixUartsOnline[] = {
 };
 
 static uint32_t posixUartsPollOnly[] = {
-  0x00000002,
+  0x00000000,
 };
 
 static uint32_t posixDiosOnline[] = {

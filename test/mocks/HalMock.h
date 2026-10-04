@@ -102,6 +102,17 @@ void halMockSetPowerHook(void (*hook)(void));
 /// @return This function returns no value.
 void halMockSetStringsPresent(bool stringsPresent);
 
+/// @fn void halMockSetUartPollOnly(int32_t deviceId, bool isPollOnly)
+///
+/// @brief Mark a mock UART as poll-only or interrupt-driven after boot so a
+/// test can drive HalUart.read, which returns nothing for a poll-only device.
+///
+/// @param deviceId The zero-based ID of the UART, 0 or 1.
+/// @param isPollOnly Whether the device is poll-only.
+///
+/// @return This function returns no value.
+void halMockSetUartPollOnly(int32_t deviceId, bool isPollOnly);
+
 /// @fn void halMockSetStaticLogs(StaticLogs *staticLogs)
 ///
 /// @brief Publish a static log area.  The mock starts no logger process, so it
