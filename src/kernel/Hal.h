@@ -176,6 +176,7 @@ typedef enum HalMemoryFunction {
 typedef enum HalUartFunction {
   HAL_UART_INIT,
   HAL_UART_CONFIGURE,
+  HAL_UART_REGISTER_CALLBACK,
   HAL_UART_POLL,
   HAL_UART_READ,
   HAL_UART_WRITE,
@@ -703,11 +704,29 @@ typedef struct HalUart {
   ///
   /// @brief Configure a UART device.
   ///
-  /// @param device ID The zero-based ID of the UART to configure.
+  /// @param deviceId The zero-based ID of the UART to configure.
   /// @param baud The desired baud rate of the UART.
   ///
   /// @return Returns 0 on success, -errno on failure.
   int (*configure)(int32_t deviceId, uint32_t baud);
+  
+  /// @fn int registerCallback(int32_t deviceId,
+  ///   ProcessDescriptor *processDescriptor, int64_t messageType, void *priv)
+  ///
+  /// @brief Register a callback to be called when the interrupt for a UART
+  /// fires.
+  ///
+  /// @param deviceId The zero-based ID of the UART to register a callback for.
+  /// @param processDescriptor A pointer to the ProcessDescriptor for the
+  ///   process to call.
+  /// @param messageType The type of the message to send to the process for the
+  ///   callback.
+  /// @param priv A pointer to private data the process wants to be provided
+  ///   when the callback triggers.
+  ///
+  /// @return Returns 0 on success, -errno on failure.
+  int (*registerCallback)(int32_t deviceId,
+    ProcessDescriptor *processDescriptor, int64_t messageType, void *priv);
   
   /// @fn int poll(int32_t deviceId)
   ///
@@ -764,6 +783,25 @@ typedef struct HalUart {
   /// @return Returns 0 on success, -errno on failure.
   int (*isConsole)(int32_t deviceId, bool *returnValue);
 } HalUart;
+
+typedef struct HalUartCallback {
+  /// @var processDescriptor
+  ///
+  /// @brief A pointer to the ProcessDescriptor to push a message onto for the
+  /// callback.
+  ProcessDescriptor *processDescriptor;
+  
+  /// @var messageType
+  ///
+  /// @brief The type of the message to send to the process for the callback.
+  int64_t messageType;
+  
+  /// @var priv
+  ///
+  /// @brief A pointer to private data the process wants to be provided when
+  /// the callback is triggered.
+  void *priv;
+} HalUartCallback;
 
 typedef struct HalDio {
   /// @var numSupported

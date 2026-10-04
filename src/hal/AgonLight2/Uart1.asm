@@ -52,6 +52,7 @@
 .assume adl=1
 
 .global _agonLight2ConfigureUart1Impl
+.extern _halCommonUartCallCallback
 .global _agonLight2PollUart1Impl
 .global _agonLight2ReadUart1Impl
 .global _agonLight2WriteUart1Impl
@@ -317,19 +318,32 @@ _agonLight2WriteUart1Impl:
 
 ;; -- uart1Isr --------------------------------------------------------------
 ;;    Called (interrupts off) from uart1Tramp in Interrupts.asm.  Drains the
-;;    RX FIFO into uart1RxBuf, then - if the transmit holding register is
+;;    RX FIFO into uart1RxBuf and, if it received anything, calls the device's
+;;    registered callback.  Then - if the transmit holding register is
 ;;    empty and uart1TxBuf has data - writes one byte to THR.  One byte per
 ;;    interrupt on the TX side is deliberate simplicity for a first pass, not
 ;;    a FIFO-depth burst; see the file header.
 uart1Isr:
-.uart1IsrRxLoop:
     in0     a, (UART1_LSR)
     and     0x01                ; DR - receiver data ready
-    jr      z, .uart1IsrTx
+    jr      z, .uart1IsrTx      ; nothing received - no callback
 
+.uart1IsrRxLoop:
     in0     a, (UART1_RBR)      ; also clears DR for this byte
     call    uart1RxPushByte
-    jr      .uart1IsrRxLoop
+    in0     a, (UART1_LSR)
+    and     0x01
+    jr      nz, .uart1IsrRxLoop
+
+    ;; halCommonUartCallCallback(1): an int32_t takes two 3-byte stack slots,
+    ;; high byte pushed first (de), low 24 bits pushed last (hl).
+    ld      de, 0
+    ld      hl, 1
+    push    de
+    push    hl
+    call    _halCommonUartCallCallback
+    pop     hl
+    pop     de
 
 .uart1IsrTx:
     in0     a, (UART1_LSR)

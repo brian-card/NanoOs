@@ -170,6 +170,8 @@ static int halMemoryProcessStorage(void ****returnValue);
 
 static int halUartInit(void);
 static int halUartConfigure(int32_t deviceId, uint32_t baud);
+static int halUartRegisterCallback(int32_t deviceId,
+  ProcessDescriptor *processDescriptor, int64_t messageType, void *priv);
 static int halUartPoll(int32_t deviceId);
 static int halUartRead(int32_t deviceId, uint8_t *data,
   ssize_t length, ssize_t *returnValue);
@@ -265,15 +267,16 @@ static HalMemory halImplMemory = {
 };
 
 static HalUart halImplUart = {
-  .numSupported = 0,
-  .online       = NULL,
-  .pollOnly     = NULL,
-  .init         = halUartInit,
-  .configure    = halUartConfigure,
-  .poll         = halUartPoll,
-  .read         = halUartRead,
-  .write        = halUartWrite,
-  .isConsole    = halUartIsConsole,
+  .numSupported     = 0,
+  .online           = NULL,
+  .pollOnly         = NULL,
+  .init             = halUartInit,
+  .configure        = halUartConfigure,
+  .registerCallback = halUartRegisterCallback,
+  .poll             = halUartPoll,
+  .read             = halUartRead,
+  .write            = halUartWrite,
+  .isConsole        = halUartIsConsole,
 };
 
 static HalDio halImplDio = {
@@ -559,6 +562,13 @@ static int halUartInit(void) {
 
 static int halUartConfigure(int32_t deviceId, uint32_t baud) {
   return callHal(HAL_UART, HAL_UART_CONFIGURE, deviceId, baud);
+}
+
+static int halUartRegisterCallback(int32_t deviceId,
+  ProcessDescriptor *processDescriptor, int64_t messageType, void *priv
+) {
+  return callHal(HAL_UART, HAL_UART_REGISTER_CALLBACK, deviceId,
+    processDescriptor, messageType, priv);
 }
 
 static int halUartPoll(int32_t deviceId) {
@@ -1213,6 +1223,80 @@ int restartContiguousFilesystem(ProcessDescriptor *processDescriptor) {
   ) {
     runSchedulerQueues(PRIVILEGE_LEVEL_SUPERVISOR);
   }
+
+  return 0;
+}
+
+// We want to utilize the HAL UART callback storage that is provided by the HAL
+// implementation, so provide those declarations here.
+extern HalUartCallback halUartCallbacks[];
+extern ProcessMessage halUartCallbackMessages[];
+
+/// @fn int halCommonUartRegisterCallback(va_list args)
+///
+/// @brief Common helper function to register a callback to be called when a
+/// UART interrupt fires.
+///
+/// @param args A va_list that captures the parameters that were passed to
+///   HAL->uart->registerCallback.
+///
+/// @return Returns 0 on success, -errno on failure.
+int halCommonUartRegisterCallback(va_list args) {
+  int32_t deviceId = va_arg(args, int32_t);
+  ProcessDescriptor *processDescriptor = va_arg(args, ProcessDescriptor*);
+  int64_t messageType = va_arg(args, int64_t);
+  void *priv = va_arg(args, void*);
+
+  ProcessDescriptor *runningProcess = getRunningProcess();
+  if (runningProcess != NULL) {
+    if ((runningProcess->processId != schedulerPid)
+      && (findHalCapabilityWithDevice(runningProcess->halCapabilities,
+        runningProcess->numHalCapabilities,
+        HAL_UART, HAL_UART_REGISTER_CALLBACK, deviceId) == NULL)
+    ) {
+      return -EACCES;
+    }
+  }
+
+  HalUartCallback *halUartCallback = &halUartCallbacks[deviceId];
+  halUartCallback->processDescriptor = processDescriptor;
+  halUartCallback->messageType = messageType;
+  halUartCallback->priv = priv;
+
+  return 0;
+}
+
+/// @fn int halCommonUartCallCallback(int32_t deviceId)
+///
+/// @brief Call the callback associated with a particular UART deviceId.
+///
+/// @param deviceId The device ID of the UART to call the callback for.  The
+///   callback must have been previously registered with
+///   halCommonUartRegisterCallback.
+///
+/// @return Returns 0 on success, -errno on failure.
+int halCommonUartCallCallback(int32_t deviceId) {
+  // *DO NOT* check HAL permissions on the device ID this time.  This function
+  // is called from an interrupt and can happen within the context of *ANY*
+  // process.
+
+  HalUartCallback *halUartCallback = &halUartCallbacks[deviceId];
+  if (halUartCallback->processDescriptor == NULL) {
+    // Not an error, but there's no callback configured.  Bail.
+    return 0;
+  }
+
+  ProcessMessage *processMessage =  &halUartCallbackMessages[deviceId];
+  if (processMessageInUse(processMessage)) {
+    // The recipient hasn't processed the last interrupt.  That's OK.  When
+    // they do a read, they'll get everything in the buffer.  Just return.
+    return 0;
+  }
+
+  processMessageInit(processMessage,
+    halUartCallback->messageType, halUartCallback->priv,
+    sizeof(void*), false);
+  processMessageQueuePush(halUartCallback->processDescriptor, processMessage);
 
   return 0;
 }

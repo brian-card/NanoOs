@@ -1987,12 +1987,13 @@ static HalFunction arduinoSamD21x18AMemoryFunctions[HAL_MEMORY_NUM_FNS] = {
 };
 
 static HalFunction arduinoSamD21x18AUartFunctions[HAL_UART_NUM_FNS] = {
-  [HAL_UART_INIT]       = arduinoSamD21x18AInitUart,
-  [HAL_UART_CONFIGURE]  = arduinoSamD21x18AConfigureUart,
-  [HAL_UART_POLL]       = arduinoSamD21x18APollUart,
-  [HAL_UART_READ]       = arduinoSamD21x18AReadUart,
-  [HAL_UART_WRITE]      = arduinoSamD21x18AWriteUart,
-  [HAL_UART_IS_CONSOLE] = arduinoSamD21x18AIsUartConsole,
+  [HAL_UART_INIT]              = arduinoSamD21x18AInitUart,
+  [HAL_UART_CONFIGURE]         = arduinoSamD21x18AConfigureUart,
+  [HAL_UART_REGISTER_CALLBACK] = halCommonUartRegisterCallback,
+  [HAL_UART_POLL]              = arduinoSamD21x18APollUart,
+  [HAL_UART_READ]              = arduinoSamD21x18AReadUart,
+  [HAL_UART_WRITE]             = arduinoSamD21x18AWriteUart,
+  [HAL_UART_IS_CONSOLE]        = arduinoSamD21x18AIsUartConsole,
 };
 
 static HalFunction arduinoSamD21x18ADioFunctions[HAL_DIO_NUM_FNS] = {

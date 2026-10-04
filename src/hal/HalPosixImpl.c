@@ -170,22 +170,39 @@ int posixNumExtraConsoleStacks(va_list args) {
   return 0;
 }
 
+/// @var NUM_UARTS
+///
+/// @brief The number of serial ports we support on the Arduinos.  Using that
+/// as a simulation baseline.
+#define NUM_UARTS 2
+
 /// @var uarts
 ///
 /// @brief Array of serial ports on the system.  Index 0 is the main port,
-/// which is the USB serial port.
-static FILE **uarts[] = {
+/// which is the USB serial port on the Arduinos.  We won't use that here in
+/// the sim because we want to test being able to use a non-default port from
+/// the Console process.
+static FILE **uarts[NUM_UARTS] = {
   &stderr,
   &stderr,
 };
 
-/// @var _numUarts
+/// @var halUartCallbacks
 ///
-/// @brief The number of serial ports we support on the Arduino Nano 33 IoT.
-static int _numUarts = sizeof(uarts) / sizeof(uarts[0]);
+/// @brief This is the backing storage for the callback information to be used
+/// when an interrupt for one of the UARTs fires.
+HalUartCallback halUartCallbacks[NUM_UARTS];
+
+/// @var halUartCallbackMessages
+///
+/// @brief Callback-specific message storage to be used when a UART interrupt
+/// is triggered.
+ProcessMessage halUartCallbackMessages[NUM_UARTS];
 
 int posixInitUart(va_list args) {
   (void) args;
+  memset(halUartCallbacks, 0, sizeof(halUartCallbacks));
+  memset(halUartCallbackMessages, 0, sizeof(halUartCallbackMessages));
   return 0;
 }
 
@@ -256,6 +273,17 @@ static pthread_cond_t _uartRxNotFull = PTHREAD_COND_INITIALIZER;
 /// @brief Whether posixConfigureUart has already started the receive thread.
 static bool _uartRxThreadStarted = false;
 
+/// @def POSIX_UART_RX_SIGNAL_STACK_SIZE
+///
+/// @brief Size of the stack posixUartRxSignalHandler runs on.
+#define POSIX_UART_RX_SIGNAL_STACK_SIZE (32 * 1024)
+
+/// @var _uartRxSignalStack
+///
+/// @brief Alternate stack for POSIX_UART_RX_SIGNAL.  Delivering a signal costs
+/// over 3 KB of stack on x86-64, which a 4 KB coroutine stack can't absorb.
+static uint8_t _uartRxSignalStack[POSIX_UART_RX_SIGNAL_STACK_SIZE];
+
 /// @fn bool posixUartRxPushLocked(uint8_t byte)
 ///
 /// @brief Append a byte to the receive ring.  The caller must hold
@@ -288,6 +316,8 @@ static bool posixUartRxPushLocked(uint8_t byte) {
 /// @return This function returns no value.
 static void posixUartRxSignalHandler(int signal) {
   (void) signal;
+  int halCommonUartCallCallback(int32_t deviceId);
+  halCommonUartCallCallback(1);
 }
 
 /// @fn void* posixUartRxThreadFunction(void *arg)
@@ -362,10 +392,20 @@ int posixConfigureUart(va_list args) {
     return 0;
   }
 
+  stack_t signalStack;
+  signalStack.ss_sp = _uartRxSignalStack;
+  signalStack.ss_size = sizeof(_uartRxSignalStack);
+  signalStack.ss_flags = 0;
+  if (sigaltstack(&signalStack, NULL) < 0) {
+    return -errno;
+  }
+
+  // Blocking every signal keeps a preemption from switching coroutines while
+  // a frame is live on the alternate stack.
   struct sigaction sa;
   sa.sa_handler = posixUartRxSignalHandler;
-  sigemptyset(&sa.sa_mask);
-  sa.sa_flags = SA_RESTART;
+  sigfillset(&sa.sa_mask);
+  sa.sa_flags = SA_RESTART | SA_ONSTACK;
   if (sigaction(POSIX_UART_RX_SIGNAL, &sa, NULL) < 0) {
     return -errno;
   }
@@ -469,7 +509,7 @@ int posixWriteUart(va_list args) {
 
   ssize_t numBytesWritten = -ERANGE;
 
-  if ((deviceId >= 0) && (deviceId < _numUarts) && (length >= 0)) {
+  if ((deviceId >= 0) && (deviceId < NUM_UARTS) && (length >= 0)) {
     numBytesWritten = fwrite(data, 1, length, *uarts[deviceId]);
     fflush(*uarts[deviceId]);
   }

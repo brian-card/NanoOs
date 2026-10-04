@@ -483,8 +483,22 @@ int agonLight2NumExtraConsoleStacks(va_list args) {
 // UART subsystem stubs
 // ---------------------------------------------------------------------------
 
+/// @var halUartCallbacks
+///
+/// @brief This is the backing storage for the callback information to be used
+/// when an interrupt for one of the UARTs fires.
+HalUartCallback halUartCallbacks[2];
+
+/// @var halUartCallbackMessages
+///
+/// @brief Callback-specific message storage to be used when a UART interrupt
+/// is triggered.
+ProcessMessage halUartCallbackMessages[2];
+
 int agonLight2InitUart(va_list args) {
   (void) args;
+  memset(halUartCallbacks, 0, sizeof(halUartCallbacks));
+  memset(halUartCallbackMessages, 0, sizeof(halUartCallbackMessages));
   return 0;
 }
 
@@ -1744,12 +1758,13 @@ static HalFunction agonLight2MemoryFunctions[HAL_MEMORY_NUM_FNS] = {
 };
 
 static HalFunction agonLight2UartFunctions[HAL_UART_NUM_FNS] = {
-  [HAL_UART_INIT]       = agonLight2InitUart,
-  [HAL_UART_CONFIGURE]  = agonLight2ConfigureUart,
-  [HAL_UART_POLL]       = agonLight2PollUart,
-  [HAL_UART_READ]       = agonLight2ReadUart,
-  [HAL_UART_WRITE]      = agonLight2WriteUart,
-  [HAL_UART_IS_CONSOLE] = agonLight2IsUartConsole,
+  [HAL_UART_INIT]              = agonLight2InitUart,
+  [HAL_UART_CONFIGURE]         = agonLight2ConfigureUart,
+  [HAL_UART_REGISTER_CALLBACK] = halCommonUartRegisterCallback,
+  [HAL_UART_POLL]              = agonLight2PollUart,
+  [HAL_UART_READ]              = agonLight2ReadUart,
+  [HAL_UART_WRITE]             = agonLight2WriteUart,
+  [HAL_UART_IS_CONSOLE]        = agonLight2IsUartConsole,
 };
 
 static HalFunction agonLight2DioFunctions[HAL_DIO_NUM_FNS] = {

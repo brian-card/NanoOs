@@ -304,6 +304,8 @@ int halCommonInitLogger(void);
 int restartBuiltinFilesystem(ProcessDescriptor *processDescriptor);
 int restartOverlayFilesystem(ProcessDescriptor *processDescriptor);
 int restartContiguousFilesystem(ProcessDescriptor *processDescriptor);
+int halCommonUartRegisterCallback(va_list args);
+int halCommonUartCallCallback(int32_t deviceId);
 int halCommonInit(
   FilesystemDriverInit builtinFilesystemInitDriver,
   const FilesystemCommandHandler *builtinFilesystemCommandHandlers,

@@ -322,6 +322,20 @@ static HardwareSerial *uarts[] = {
 /// @brief The number of serial ports we support on this AVR board.
 static const int _numUarts = sizeof(uarts) / sizeof(uarts[0]);
 
+/// @var halUartCallbacks
+///
+/// @brief This is the backing storage for the callback information to be used
+/// when an interrupt for one of the UARTs fires.  On Arduino platforms, we have
+/// to poll the UARTs, so there's no backing storage.
+HalUartCallback *halUartCallbacks = NULL;
+
+/// @var halUartCallbackMessages
+///
+/// @brief Callback-specific message storage to be used when a UART interrupt
+/// is triggered.  On Arduino platforms, we have to poll the UARTs, so there's
+/// no backing storage.
+ProcessMessage *halUartCallbackMessages = NULL;
+
 int arduinoAvrInitUart(va_list args) {
   (void) args;
   return 0;
@@ -779,12 +793,13 @@ static HalFunction arduinoAvrMemoryFunctions[HAL_MEMORY_NUM_FNS] = {
 };
 
 static HalFunction arduinoAvrUartFunctions[HAL_UART_NUM_FNS] = {
-  [HAL_UART_INIT]       = arduinoAvrInitUart,
-  [HAL_UART_CONFIGURE]  = arduinoAvrConfigureUart,
-  [HAL_UART_POLL]       = arduinoAvrPollUart,
-  [HAL_UART_READ]       = arduinoAvrReadUart,
-  [HAL_UART_WRITE]      = arduinoAvrWriteUart,
-  [HAL_UART_IS_CONSOLE] = arduinoAvrIsUartConsole,
+  [HAL_UART_INIT]              = arduinoAvrInitUart,
+  [HAL_UART_CONFIGURE]         = arduinoAvrConfigureUart,
+  [HAL_UART_REGISTER_CALLBACK] = halCommonUartRegisterCallback,
+  [HAL_UART_POLL]              = arduinoAvrPollUart,
+  [HAL_UART_READ]              = arduinoAvrReadUart,
+  [HAL_UART_WRITE]             = arduinoAvrWriteUart,
+  [HAL_UART_IS_CONSOLE]        = arduinoAvrIsUartConsole,
 };
 
 static HalFunction arduinoAvrDioFunctions[HAL_DIO_NUM_FNS] = {
