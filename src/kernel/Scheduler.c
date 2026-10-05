@@ -4899,6 +4899,8 @@ exit:
     handleSchedulerMessage(_schedulerState);
   }
 
+  HAL->uart->invokePendingCallbacks();
+
   _schedulerState->runSchedulerDepth--;
   return;
 }
