@@ -316,8 +316,8 @@ static bool posixUartRxPushLocked(uint8_t byte) {
 /// @return This function returns no value.
 static void posixUartRxSignalHandler(int signal) {
   (void) signal;
-  int halCommonUartCallCallback(int32_t deviceId);
-  halCommonUartCallCallback(1);
+  int halCommonUartMarkReady(int32_t deviceId);
+  halCommonUartMarkReady(1);
 }
 
 /// @fn void* posixUartRxThreadFunction(void *arg)

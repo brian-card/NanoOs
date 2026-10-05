@@ -52,7 +52,7 @@
 .assume adl=1
 
 .global _agonLight2ConfigureUart1Impl
-.extern _halCommonUartCallCallback
+.extern _halCommonUartMarkReady
 .global _agonLight2PollUart1Impl
 .global _agonLight2ReadUart1Impl
 .global _agonLight2WriteUart1Impl
@@ -335,13 +335,13 @@ uart1Isr:
     and     0x01
     jr      nz, .uart1IsrRxLoop
 
-    ;; halCommonUartCallCallback(1): an int32_t takes two 3-byte stack slots,
+    ;; halCommonUartMarkReady(1): an int32_t takes two 3-byte stack slots,
     ;; high byte pushed first (de), low 24 bits pushed last (hl).
     ld      de, 0
     ld      hl, 1
     push    de
     push    hl
-    call    _halCommonUartCallCallback
+    call    _halCommonUartMarkReady
     pop     hl
     pop     de
 

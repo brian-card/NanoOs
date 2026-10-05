@@ -1266,7 +1266,7 @@ int halCommonUartRegisterCallback(va_list args) {
   return 0;
 }
 
-/// @fn int halCommonUartCallCallback(int32_t deviceId)
+/// @fn int halCommonUartMarkReady(int32_t deviceId)
 ///
 /// @brief Call the callback associated with a particular UART deviceId.
 ///
@@ -1275,7 +1275,7 @@ int halCommonUartRegisterCallback(va_list args) {
 ///   halCommonUartRegisterCallback.
 ///
 /// @return Returns 0 on success, -errno on failure.
-int halCommonUartCallCallback(int32_t deviceId) {
+int halCommonUartMarkReady(int32_t deviceId) {
   // *DO NOT* check HAL permissions on the device ID this time.  This function
   // is called from an interrupt and can happen within the context of *ANY*
   // process.
