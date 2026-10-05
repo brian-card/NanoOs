@@ -1237,8 +1237,8 @@ int restartContiguousFilesystem(ProcessDescriptor *processDescriptor) {
 // implementation, so provide those declarations here.
 extern HalUartCallback halUartCallbacks[];
 extern ProcessMessage halUartCallbackMessages[];
-extern bool halUartCallbacksPending[];
-extern bool halUartCallbacksAnyPending;
+extern volatile bool halUartCallbacksPending[];
+extern volatile bool halUartCallbacksAnyPending;
 
 /// @fn int halCommonUartRegisterCallback(va_list args)
 ///
@@ -1255,6 +1255,15 @@ int halCommonUartRegisterCallback(va_list args) {
   int64_t messageType = va_arg(args, int64_t);
   void *priv = va_arg(args, void*);
 
+  if ((deviceId < 0) || (((uint32_t) deviceId) >= HAL->uart->numSupported)) {
+    return -ENODEV;
+  }
+
+  if (pollOnly(HAL->uart, deviceId)) {
+    // We can't configure this device with a callback.  It's poll-only.
+    return -ENOTSUP;
+  }
+
   ProcessDescriptor *runningProcess = getRunningProcess();
   if (runningProcess != NULL) {
     if ((runningProcess->processId != schedulerPid)
@@ -1264,10 +1273,6 @@ int halCommonUartRegisterCallback(va_list args) {
     ) {
       return -EACCES;
     }
-  } else if ((deviceId < 0)
-    || (((uint32_t) deviceId) >= HAL->uart->numSupported)
-  ) {
-    return -ENODEV;
   }
 
   HalUartCallback *halUartCallback = &halUartCallbacks[deviceId];
@@ -1280,10 +1285,10 @@ int halCommonUartRegisterCallback(va_list args) {
 
 /// @fn void halCommonUartMarkReady(int32_t deviceId)
 ///
-/// @brief Call the callback associated with a particular UART deviceId.
+/// @brief Mark a callback as being ready.
 ///
-/// @param deviceId The device ID of the UART to call the callback for.  The
-///   callback must have been previously registered with
+/// @param deviceId The device ID of the UART to mark the callback ready for.
+///   The callback must have been previously registered with
 ///   halCommonUartRegisterCallback.
 ///
 /// @return This function returns no value.
@@ -1297,11 +1302,17 @@ void halCommonUartMarkReady(int32_t deviceId) {
   // deviceId hardcoded.  We don't want to waste time validating the same
   // parameter every single time.  If the caller doesn't write their vector with
   // the correct deviceId, that's on them.
+  HalUartCallback *halUartCallback = &halUartCallbacks[deviceId];
+  if (halUartCallback->processDescriptor == NULL) {
+    // Nothing registered.  Nothing to mark.
+    return;
+  }
+
   halUartCallbacksPending[deviceId] = true;
   halUartCallbacksAnyPending = true;
 }
 
-/// @fn int halCommonUartInvokePendingCallbacks(void)
+/// @fn int halCommonUartInvokePendingCallbacks(va_list args)
 ///
 /// @brief Invoke any pending UART callbacks.
 ///
@@ -1344,16 +1355,35 @@ int halCommonUartInvokePendingCallbacks(va_list args) {
     ProcessMessage *processMessage =  &halUartCallbackMessages[ii];
     if (processMessageInUse(processMessage)) {
       // The recipient hasn't processed the last interrupt.  That's OK.  When
-      // they do a read, they'll get everything in the buffer.  Just return.
+      // they do a read, they'll get everything in the buffer.  We need to mark
+      // halUartCallbacksAnyPending true again so that we don't take the early
+      // exit the next time this function is called.
+      halUartCallbacksAnyPending = true;
       continue;
     }
+
+    halUartCallbacksPending[ii] = false;
 
     processMessageInit(processMessage,
       halUartCallback->messageType, halUartCallback->priv,
       sizeof(void*), false);
-    processMessageQueuePush(halUartCallback->processDescriptor, processMessage);
+    if (processMessageQueuePush(
+      halUartCallback->processDescriptor, processMessage) != processSuccess
+    ) {
+      processMessageRelease(processMessage);
 
-    halUartCallbacksPending[ii] = false;
+      // processMessageQueuePush will fail if the process is no longer running.
+      // Clean up the callback if so.
+      if (processRunning(halUartCallback->processDescriptor) == false) {
+        memset(halUartCallback, 0, sizeof(*halUartCallback));
+        // Don't mark the callback pending again.
+        continue;
+      }
+
+      // Mark the callback pending again since we weren't able to process it.
+      halUartCallbacksPending[ii] = true;
+      halUartCallbacksAnyPending = true;
+    }
   }
 
   return 0;

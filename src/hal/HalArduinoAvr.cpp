@@ -341,13 +341,13 @@ ProcessMessage *halUartCallbackMessages = NULL;
 /// @brief Callback-specific callback-pending storage to be used when a UART
 /// interrupt is triggered.  On Arduino platforms, we have to poll the UARTs,
 /// so there's no backing storage.
-ProcessMessage *halUartCallbacksPending = NULL;
+volatile bool *halUartCallbacksPending = NULL;
 
 /// @var halUartCallbacksAnyPending
 ///
 /// @brief Whether or not there are currently ANY pending UART callbacks.
 /// Unused in this implementation.  Provided here for linkage only.
-bool halUartCallbacksAnyPending = false;
+volatile bool halUartCallbacksAnyPending = false;
 
 int arduinoAvrInitUart(va_list args) {
   (void) args;
