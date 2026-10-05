@@ -561,6 +561,33 @@ int arduinoSamD21x18ANumExtraConsoleStacks(va_list args) {
 /// this HAL.
 #define BOARD_UART 1
 
+/// @var halUartCallbacks
+///
+/// @brief This is the backing storage for the callback information to be used
+/// when an interrupt for one of the UARTs fires.  On Arduino platforms, we have
+/// to poll the UARTs, so there's no backing storage.
+HalUartCallback *halUartCallbacks = NULL;
+
+/// @var halUartCallbackMessages
+///
+/// @brief Callback-specific message storage to be used when a UART interrupt
+/// is triggered.  On Arduino platforms, we have to poll the UARTs, so there's
+/// no backing storage.
+ProcessMessage *halUartCallbackMessages = NULL;
+
+/// @var halUartCallbacksPending
+///
+/// @brief Callback-specific callback-pending storage to be used when a UART
+/// interrupt is triggered.  On Arduino platforms, we have to poll the UARTs,
+/// so there's no backing storage.
+ProcessMessage *halUartCallbacksPending = NULL;
+
+/// @var halUartCallbacksAnyPending
+///
+/// @brief Whether or not there are currently ANY pending UART callbacks.
+/// Unused in this implementation.  Provided here for linkage only.
+bool halUartCallbacksAnyPending = false;
+
 int arduinoSamD21x18AInitUart(va_list args) {
   (void) args;
   // Nothing really to do on this platform.  Just return.
@@ -1987,13 +2014,14 @@ static HalFunction arduinoSamD21x18AMemoryFunctions[HAL_MEMORY_NUM_FNS] = {
 };
 
 static HalFunction arduinoSamD21x18AUartFunctions[HAL_UART_NUM_FNS] = {
-  [HAL_UART_INIT]              = arduinoSamD21x18AInitUart,
-  [HAL_UART_CONFIGURE]         = arduinoSamD21x18AConfigureUart,
-  [HAL_UART_REGISTER_CALLBACK] = halCommonUartRegisterCallback,
-  [HAL_UART_POLL]              = arduinoSamD21x18APollUart,
-  [HAL_UART_READ]              = arduinoSamD21x18AReadUart,
-  [HAL_UART_WRITE]             = arduinoSamD21x18AWriteUart,
-  [HAL_UART_IS_CONSOLE]        = arduinoSamD21x18AIsUartConsole,
+  [HAL_UART_INIT]                     = arduinoSamD21x18AInitUart,
+  [HAL_UART_CONFIGURE]                = arduinoSamD21x18AConfigureUart,
+  [HAL_UART_REGISTER_CALLBACK]        = halCommonUartRegisterCallback,
+  [HAL_UART_INVOKE_PENDING_CALLBACKS] = halCommonUartInvokePendingCallbacks,
+  [HAL_UART_POLL]                     = arduinoSamD21x18APollUart,
+  [HAL_UART_READ]                     = arduinoSamD21x18AReadUart,
+  [HAL_UART_WRITE]                    = arduinoSamD21x18AWriteUart,
+  [HAL_UART_IS_CONSOLE]               = arduinoSamD21x18AIsUartConsole,
 };
 
 static HalFunction arduinoSamD21x18ADioFunctions[HAL_DIO_NUM_FNS] = {

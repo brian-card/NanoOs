@@ -199,10 +199,22 @@ HalUartCallback halUartCallbacks[NUM_UARTS];
 /// is triggered.
 ProcessMessage halUartCallbackMessages[NUM_UARTS];
 
+/// @var halUartCallbacksPending
+///
+/// @brief Callback-specific callback-pending storage to be used when a UART
+/// interrupt is triggered.
+bool halUartCallbacksPending[NUM_UARTS];
+
+/// @var halUartCallbacksAnyPending
+///
+/// @brief Whether or not there are currently ANY pending UART callbacks.
+bool halUartCallbacksAnyPending = false;
+
 int posixInitUart(va_list args) {
   (void) args;
   memset(halUartCallbacks, 0, sizeof(halUartCallbacks));
   memset(halUartCallbackMessages, 0, sizeof(halUartCallbackMessages));
+  memset(halUartCallbacksPending, 0, sizeof(halUartCallbacksPending));
   return 0;
 }
 

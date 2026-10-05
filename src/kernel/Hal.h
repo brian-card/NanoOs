@@ -177,6 +177,7 @@ typedef enum HalUartFunction {
   HAL_UART_INIT,
   HAL_UART_CONFIGURE,
   HAL_UART_REGISTER_CALLBACK,
+  HAL_UART_INVOKE_PENDING_CALLBACKS,
   HAL_UART_POLL,
   HAL_UART_READ,
   HAL_UART_WRITE,
@@ -727,6 +728,13 @@ typedef struct HalUart {
   /// @return Returns 0 on success, -errno on failure.
   int (*registerCallback)(int32_t deviceId,
     ProcessDescriptor *processDescriptor, int64_t messageType, void *priv);
+  
+  /// @fn int invokePendingCallbacks(void)
+  ///
+  /// @brief Invoke any callbacks that are pending.
+  ///
+  /// @return Returns 0 on success, -errno on failure.
+  int (*invokePendingCallbacks)(void);
   
   /// @fn int poll(int32_t deviceId)
   ///

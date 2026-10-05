@@ -336,6 +336,19 @@ HalUartCallback *halUartCallbacks = NULL;
 /// no backing storage.
 ProcessMessage *halUartCallbackMessages = NULL;
 
+/// @var halUartCallbacksPending
+///
+/// @brief Callback-specific callback-pending storage to be used when a UART
+/// interrupt is triggered.  On Arduino platforms, we have to poll the UARTs,
+/// so there's no backing storage.
+ProcessMessage *halUartCallbacksPending = NULL;
+
+/// @var halUartCallbacksAnyPending
+///
+/// @brief Whether or not there are currently ANY pending UART callbacks.
+/// Unused in this implementation.  Provided here for linkage only.
+bool halUartCallbacksAnyPending = false;
+
 int arduinoAvrInitUart(va_list args) {
   (void) args;
   return 0;
@@ -793,13 +806,14 @@ static HalFunction arduinoAvrMemoryFunctions[HAL_MEMORY_NUM_FNS] = {
 };
 
 static HalFunction arduinoAvrUartFunctions[HAL_UART_NUM_FNS] = {
-  [HAL_UART_INIT]              = arduinoAvrInitUart,
-  [HAL_UART_CONFIGURE]         = arduinoAvrConfigureUart,
-  [HAL_UART_REGISTER_CALLBACK] = halCommonUartRegisterCallback,
-  [HAL_UART_POLL]              = arduinoAvrPollUart,
-  [HAL_UART_READ]              = arduinoAvrReadUart,
-  [HAL_UART_WRITE]             = arduinoAvrWriteUart,
-  [HAL_UART_IS_CONSOLE]        = arduinoAvrIsUartConsole,
+  [HAL_UART_INIT]                     = arduinoAvrInitUart,
+  [HAL_UART_CONFIGURE]                = arduinoAvrConfigureUart,
+  [HAL_UART_REGISTER_CALLBACK]        = halCommonUartRegisterCallback,
+  [HAL_UART_INVOKE_PENDING_CALLBACKS] = halCommonUartInvokePendingCallbacks,
+  [HAL_UART_POLL]                     = arduinoAvrPollUart,
+  [HAL_UART_READ]                     = arduinoAvrReadUart,
+  [HAL_UART_WRITE]                    = arduinoAvrWriteUart,
+  [HAL_UART_IS_CONSOLE]               = arduinoAvrIsUartConsole,
 };
 
 static HalFunction arduinoAvrDioFunctions[HAL_DIO_NUM_FNS] = {

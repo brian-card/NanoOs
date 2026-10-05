@@ -646,13 +646,14 @@ static HalFunction posixMemoryFunctions[HAL_MEMORY_NUM_FNS] = {
 };
 
 static HalFunction posixUartFunctions[HAL_UART_NUM_FNS] = {
-  [HAL_UART_INIT]              = posixInitUart,
-  [HAL_UART_CONFIGURE]         = posixConfigureUart,
-  [HAL_UART_REGISTER_CALLBACK] = halCommonUartRegisterCallback,
-  [HAL_UART_POLL]              = posixPollUart,
-  [HAL_UART_READ]              = posixReadUart,
-  [HAL_UART_WRITE]             = posixWriteUart,
-  [HAL_UART_IS_CONSOLE]        = posixIsUartConsole,
+  [HAL_UART_INIT]                     = posixInitUart,
+  [HAL_UART_CONFIGURE]                = posixConfigureUart,
+  [HAL_UART_REGISTER_CALLBACK]        = halCommonUartRegisterCallback,
+  [HAL_UART_INVOKE_PENDING_CALLBACKS] = halCommonUartInvokePendingCallbacks,
+  [HAL_UART_POLL]                     = posixPollUart,
+  [HAL_UART_READ]                     = posixReadUart,
+  [HAL_UART_WRITE]                    = posixWriteUart,
+  [HAL_UART_IS_CONSOLE]               = posixIsUartConsole,
 };
 
 static HalFunction posixDioFunctions[HAL_DIO_NUM_FNS] = {
