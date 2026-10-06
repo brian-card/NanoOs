@@ -140,10 +140,45 @@ typedef enum ConsoleCommandResponse {
   CONSOLE_RELEASE_PID_PORT,
   CONSOLE_RELEASE_BUFFER,
   CONSOLE_GET_NUM_PORTS,
+  CONSOLE_INPUT_READY,
   NUM_CONSOLE_COMMANDS,
   // Responses:
   CONSOLE_RETURNING_INPUT,
 } ConsoleCommand;
+
+/// @enum ConsoleInputEvent
+///
+/// @brief What event a byte of input completed, according to
+/// consoleProcessByte.
+typedef enum ConsoleInputEvent {
+  CONSOLE_INPUT_NONE,
+  CONSOLE_INPUT_LINE,
+  CONSOLE_INPUT_ESCAPE,
+  CONSOLE_INPUT_INTERRUPT,
+  CONSOLE_INPUT_UNHANDLED,
+} ConsoleInputEvent;
+
+/// @enum ConsoleEcho
+///
+/// @brief What, if anything, a byte of input should echo back to its port.
+typedef enum ConsoleEcho {
+  CONSOLE_ECHO_NONE,
+  CONSOLE_ECHO_CHAR,
+  CONSOLE_ECHO_NEWLINE,
+  CONSOLE_ECHO_ERASE,
+} ConsoleEcho;
+
+/// @enum ConsoleInputState
+///
+/// @brief Per-port line-editing state, kept in ConsolePort.inputState so that
+/// a multi-byte sequence can arrive split across reads.
+typedef enum ConsoleInputState {
+  CONSOLE_INPUT_STATE_NORMAL,
+  CONSOLE_INPUT_STATE_AFTER_RETURN,
+  CONSOLE_INPUT_STATE_ESCAPE,
+  CONSOLE_INPUT_STATE_ESCAPE_CTRL_SEQ,
+  CONSOLE_INPUT_STATE_ESCAPE_SINGLE_SHIFT,
+} ConsoleInputState;
 
 /// @enum ConsoleValueType
 ///
@@ -166,6 +201,10 @@ void releaseConsole(void);
 int getOwnedConsolePort(void);
 bool getConsoleEcho(void);
 int setConsoleEcho(bool desiredEchoState);
+
+// Exported for unit tests to use
+ConsoleInputEvent consoleProcessByte(
+  ConsolePort *consolePort, uint8_t byte, ConsoleEcho *echo);
 
 // Exported processes
 void* runConsole(void *args);
