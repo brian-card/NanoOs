@@ -28,16 +28,20 @@
 ;;; @file Uart0.asm
 ;;;
 ;;; @brief eZ80 assembly implementation of functionality for communicating with
-;;; UART0 on the Agon Light 2, which uses the eZ80F92 CPU.
+;;; UART0 on the Agon Light 2, which uses the eZ80F92 CPU.  RX is interrupt-
+;;; driven into a ring buffer, as on UART1.  TX stays polled because it has to
+;;; wait on CTS from the VDP, which an interrupt handler can't do.
 ;;;
 ;;; @note This file was generated with assistance from claude.ai.
 
 .assume adl=1
-.text
 
 .global _agonLight2ConfigureUart0Impl
+.extern _halCommonUartMarkReady
 .global _agonLight2PollUart0Impl
+.global _agonLight2ReadUart0Impl
 .global _agonLight2WriteUart0Impl
+.global uart0Isr
 
 ;; -- eZ80F92 Port D GPIO registers ------------------
 PD_DR       .equ 0xA2      ; Port D data register
@@ -56,6 +60,20 @@ UART0_LCTL  .equ 0xC3      ; Line control
 UART0_MCTL  .equ 0xC4      ; Modem control
 UART0_LSR   .equ 0xC5      ; Line status
 UART0_MSR   .equ 0xC6      ; Modem status (bit 4 = CTS)
+
+UART0_IER_RX_BIT .equ 0x01 ; ERBI - enable "receive data available" interrupt
+
+;; -- RX ring buffer: uart0Isr is the only producer, the Poll/Read impls the
+;; only consumers.
+UART0_RING_SIZE .equ 64            ; must be a power of two
+UART0_RING_MASK .equ (UART0_RING_SIZE - 1)
+
+.bss
+uart0RxHead: .space 1              ; written only by uart0Isr
+uart0RxTail: .space 1              ; written only by the Poll/Read impls
+uart0RxBuf:  .space UART0_RING_SIZE
+
+.text
 
 ;; -- void agonLight2ConfigureUart0Impl(uint16_t divisor) ---------------
 ;;    divisor passed at sp+3 (low byte), sp+4 (high byte)
@@ -87,6 +105,10 @@ _agonLight2ConfigureUart0Impl:
     xor     a
     out0    (UART0_IER), a
 
+    ;; Interrupts for this UART are off, so the ring can be reset safely.
+    ld      (uart0RxHead), a
+    ld      (uart0RxTail), a
+
     ;; Set DLAB to access baud rate divisor registers
     ld      a, 0x80
     out0    (UART0_LCTL), a
@@ -109,23 +131,102 @@ _agonLight2ConfigureUart0Impl:
     ld      a, 0x02
     out0    (UART0_MCTL), a
 
+    ld      a, UART0_IER_RX_BIT
+    out0    (UART0_IER), a
+
     pop     ix
     ret
 
 ;; -- int agonLight2PollUart0Impl(void) ----------------------------
-;;    returns received byte in HL, or -1 if no data ready (non-blocking)
+;;    Pops one byte from the RX ring.  Returns it in HL, or -1 if the ring is
+;;    empty.  di/ei for the same reason as agonLight2PollUart1Impl.
 _agonLight2PollUart0Impl:
-    in0     a, (UART0_LSR)
-    and     0x01                ; DR — data ready
-    jr      z, .noChar
+    di
+    ld      a, (uart0RxTail)
+    ld      hl, uart0RxHead
+    cp      (hl)
+    jr      z, .noChar          ; tail == head -> ring empty
 
-    in0     a, (UART0_RBR)
+    ld      bc, 0               ; clears BCU too - see agonLight2PollUart1Impl
+    ld      c, a
+    ld      hl, uart0RxBuf
+    add     hl, bc
+    ld      b, (hl)             ; b = the byte
+
+    inc     a
+    and     UART0_RING_MASK
+    ld      (uart0RxTail), a
+    ei
+
     ld      hl, 0
-    ld      l, a
+    ld      l, b
     ret
 
 .noChar:
+    ei
     ld      hl, -1
+    ret
+
+;; -- size_t agonLight2ReadUart0Impl(uint8_t *data, size_t length) ---------
+;;    data at sp+3, length at sp+6.  Copies up to length bytes from the RX
+;;    ring into data, advances uart0RxTail past them, and returns the number
+;;    copied in HL.  Same structure as agonLight2ReadUart1Impl.
+_agonLight2ReadUart0Impl:
+    push    ix
+    ld      ix, 0
+    add     ix, sp
+
+    di
+    ld      a, (uart0RxTail)
+    ld      c, a                ; c = tail
+    ld      a, (uart0RxHead)
+    sub     c
+    and     UART0_RING_MASK     ; a = bytes available
+    ld      de, 0               ; clears DEU too - see agonLight2PollUart1Impl
+    ld      e, a
+    ld      hl, (ix+9)          ; hl = length
+    or      a
+    sbc     hl, de
+    jr      nc, .readCountReady ; length >= available -> take all of it
+    ld      a, (ix+9)           ; length < available, so it fits in a byte
+.readCountReady:
+    or      a
+    jr      z, .readEmpty
+
+    ld      b, a                ; b = bytes to copy
+    ld      hl, uart0RxBuf
+    ld      e, c                ; DEU/D still clear from above
+    add     hl, de              ; hl = &uart0RxBuf[tail]
+    ld      de, (ix+6)          ; de = data
+.readLoop:
+    ld      a, (hl)
+    ld      (de), a
+    inc     de
+    inc     hl
+    ld      a, c
+    inc     a
+    and     UART0_RING_MASK
+    ld      c, a
+    jr      nz, .readNoWrap
+    ld      hl, uart0RxBuf
+.readNoWrap:
+    djnz    .readLoop
+
+    ld      a, c
+    ld      (uart0RxTail), a
+    ei
+
+    ex      de, hl              ; hl = one past the last byte written
+    ld      de, (ix+6)
+    or      a
+    sbc     hl, de              ; hl = bytes copied
+    pop     ix
+    ret
+
+.readEmpty:
+    ei
+    ld      hl, 0
+    pop     ix
     ret
 
 ;; -- void agonLight2WriteUart0Impl(uint8_t c) ----------------------
@@ -160,4 +261,56 @@ _agonLight2WriteUart0Impl:
     out0    (UART0_THR), a
 
     pop     ix
+    ret
+
+;; -- uart0Isr --------------------------------------------------------------
+;;    Called (interrupts off) from uart0Tramp in Interrupts.asm.  Drains the
+;;    RX FIFO into uart0RxBuf and, if it received anything, calls the device's
+;;    registered callback.
+uart0Isr:
+    in0     a, (UART0_LSR)
+    and     0x01                ; DR - receiver data ready
+    ret     z
+
+.uart0IsrRxLoop:
+    in0     a, (UART0_RBR)      ; also clears DR for this byte
+    call    uart0RxPushByte
+    in0     a, (UART0_LSR)
+    and     0x01
+    jr      nz, .uart0IsrRxLoop
+
+    ;; halCommonUartMarkReady(0): an int32_t takes two 3-byte stack slots,
+    ;; high byte pushed first (de), low 24 bits pushed last (hl).
+    ld      de, 0
+    ld      hl, 0
+    push    de
+    push    hl
+    call    _halCommonUartMarkReady
+    pop     hl
+    pop     de
+    ret
+
+;; -- uart0RxPushByte ---------------------------------------------------
+;;    a = received byte on entry.  Pushes onto uart0RxBuf, dropping the byte
+;;    if the ring is full (never overwrites unread data).  Clobbers af/bc/de/hl.
+uart0RxPushByte:
+    ld      b, a                ; b = byte to store
+    ld      a, (uart0RxHead)
+    inc     a
+    and     UART0_RING_MASK
+    ld      hl, uart0RxTail
+    cp      (hl)
+    ret     z                   ; would collide with tail -> full, drop byte
+
+    ld      a, (uart0RxHead)    ; a = slot to write (the OLD head)
+    ld      de, 0               ; clears DEU too - see agonLight2PollUart1Impl
+    ld      e, a
+    ld      hl, uart0RxBuf
+    add     hl, de
+    ld      (hl), b             ; store the byte
+
+    ld      a, (uart0RxHead)
+    inc     a
+    and     UART0_RING_MASK
+    ld      (uart0RxHead), a
     ret
