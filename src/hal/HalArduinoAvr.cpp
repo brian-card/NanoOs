@@ -343,12 +343,6 @@ ProcessMessage *halUartCallbackMessages = NULL;
 /// so there's no backing storage.
 volatile bool *halUartCallbacksPending = NULL;
 
-/// @var halUartCallbacksAnyPending
-///
-/// @brief Whether or not there are currently ANY pending UART callbacks.
-/// Unused in this implementation.  Provided here for linkage only.
-volatile bool halUartCallbacksAnyPending = false;
-
 int arduinoAvrInitUart(va_list args) {
   (void) args;
   return 0;
@@ -782,6 +776,8 @@ static HalFunction arduinoAvrPlatformFunctions[HAL_PLATFORM_NUM_FNS] = {
   [HAL_PLATFORM_RESTART_ROOT_FILESYSTEM] = arduinoAvrRestartRootFilesystem,
   [HAL_PLATFORM_RESTART_SHELL]           = arduinoAvrRestartShell,
   [HAL_PLATFORM_START_PROCESSES]         = arduinoAvrStartProcesses,
+  [HAL_PLATFORM_INVOKE_PENDING_CALLBACKS] =
+    halCommonPlatformInvokePendingCallbacks,
 };
 
 static HalFunction arduinoAvrMemoryFunctions[HAL_MEMORY_NUM_FNS] = {
@@ -806,14 +802,13 @@ static HalFunction arduinoAvrMemoryFunctions[HAL_MEMORY_NUM_FNS] = {
 };
 
 static HalFunction arduinoAvrUartFunctions[HAL_UART_NUM_FNS] = {
-  [HAL_UART_INIT]                     = arduinoAvrInitUart,
-  [HAL_UART_CONFIGURE]                = arduinoAvrConfigureUart,
-  [HAL_UART_REGISTER_CALLBACK]        = halCommonUartRegisterCallback,
-  [HAL_UART_INVOKE_PENDING_CALLBACKS] = halCommonUartInvokePendingCallbacks,
-  [HAL_UART_POLL]                     = arduinoAvrPollUart,
-  [HAL_UART_READ]                     = arduinoAvrReadUart,
-  [HAL_UART_WRITE]                    = arduinoAvrWriteUart,
-  [HAL_UART_IS_CONSOLE]               = arduinoAvrIsUartConsole,
+  [HAL_UART_INIT]              = arduinoAvrInitUart,
+  [HAL_UART_CONFIGURE]         = arduinoAvrConfigureUart,
+  [HAL_UART_REGISTER_CALLBACK] = halCommonUartRegisterCallback,
+  [HAL_UART_POLL]              = arduinoAvrPollUart,
+  [HAL_UART_READ]              = arduinoAvrReadUart,
+  [HAL_UART_WRITE]             = arduinoAvrWriteUart,
+  [HAL_UART_IS_CONSOLE]        = arduinoAvrIsUartConsole,
 };
 
 static HalFunction arduinoAvrDioFunctions[HAL_DIO_NUM_FNS] = {

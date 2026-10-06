@@ -506,11 +506,6 @@ ProcessMessage halUartCallbackMessages[NUM_UARTS];
 /// interrupt is triggered.
 volatile bool halUartCallbacksPending[NUM_UARTS];
 
-/// @var halUartCallbacksAnyPending
-///
-/// @brief Whether or not there are currently ANY pending UART callbacks.
-volatile bool halUartCallbacksAnyPending = false;
-
 int agonLight2InitUart(va_list args) {
   (void) args;
   memset((void*) halUartCallbacks, 0, sizeof(halUartCallbacks));
@@ -1751,6 +1746,8 @@ static HalFunction agonLight2PlatformFunctions[HAL_PLATFORM_NUM_FNS] = {
   [HAL_PLATFORM_RESTART_ROOT_FILESYSTEM] = agonLight2RestartRootFilesystem,
   [HAL_PLATFORM_RESTART_SHELL]           = agonLight2RestartShell,
   [HAL_PLATFORM_START_PROCESSES]         = agonLight2StartProcesses,
+  [HAL_PLATFORM_INVOKE_PENDING_CALLBACKS] =
+    halCommonPlatformInvokePendingCallbacks,
 };
 
 static HalFunction agonLight2MemoryFunctions[HAL_MEMORY_NUM_FNS] = {
@@ -1775,14 +1772,13 @@ static HalFunction agonLight2MemoryFunctions[HAL_MEMORY_NUM_FNS] = {
 };
 
 static HalFunction agonLight2UartFunctions[HAL_UART_NUM_FNS] = {
-  [HAL_UART_INIT]                     = agonLight2InitUart,
-  [HAL_UART_CONFIGURE]                = agonLight2ConfigureUart,
-  [HAL_UART_REGISTER_CALLBACK]        = halCommonUartRegisterCallback,
-  [HAL_UART_INVOKE_PENDING_CALLBACKS] = halCommonUartInvokePendingCallbacks,
-  [HAL_UART_POLL]                     = agonLight2PollUart,
-  [HAL_UART_READ]                     = agonLight2ReadUart,
-  [HAL_UART_WRITE]                    = agonLight2WriteUart,
-  [HAL_UART_IS_CONSOLE]               = agonLight2IsUartConsole,
+  [HAL_UART_INIT]              = agonLight2InitUart,
+  [HAL_UART_CONFIGURE]         = agonLight2ConfigureUart,
+  [HAL_UART_REGISTER_CALLBACK] = halCommonUartRegisterCallback,
+  [HAL_UART_POLL]              = agonLight2PollUart,
+  [HAL_UART_READ]              = agonLight2ReadUart,
+  [HAL_UART_WRITE]             = agonLight2WriteUart,
+  [HAL_UART_IS_CONSOLE]        = agonLight2IsUartConsole,
 };
 
 static HalFunction agonLight2DioFunctions[HAL_DIO_NUM_FNS] = {

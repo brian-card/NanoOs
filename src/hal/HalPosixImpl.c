@@ -205,11 +205,6 @@ ProcessMessage halUartCallbackMessages[NUM_UARTS];
 /// interrupt is triggered.
 volatile bool halUartCallbacksPending[NUM_UARTS];
 
-/// @var halUartCallbacksAnyPending
-///
-/// @brief Whether or not there are currently ANY pending UART callbacks.
-volatile bool halUartCallbacksAnyPending = false;
-
 int posixInitUart(va_list args) {
   (void) args;
   memset((void*) halUartCallbacks, 0, sizeof(halUartCallbacks));
