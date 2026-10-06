@@ -369,10 +369,18 @@ typedef struct ConsoleBuffer {
 /// @param shell The ID of the process that serves as the console port's shell.
 /// @param waitingForInput Whether or not the owning process is currently
 ///   waiting for input from the user.
+/// @param bufferAwaitingRelease Whether consoleBuffer holds input that has
+///   been sent to inputOwner and not yet released.  No input is read while
+///  this is set.
+/// @param pollOnly Whether or not the port has to be polled for input rather
+///   than being serviced by a CONSOLE_INPUT_READY message.
+/// @param holdsCompletedLine Whether consoleBuffer holds a completed line that
+///   is waiting for inputOwner to ask for input.
 /// @param readByte A pointer to the non-blocking function that will attempt to
 ///   read a byte of input from the user.
 /// @param echo Whether or not the data read from the port should be echoed back
 ///   to the port.
+/// @param inputState The ConsoleInputState of the port's line editing.
 /// @param printString A pointer to the function that will print a string of
 ///   output to the console port.
 typedef struct ConsolePort {
@@ -383,8 +391,12 @@ typedef struct ConsolePort {
   ProcessId           inputOwner;
   ProcessId           shell;
   bool                waitingForInput;
+  bool                bufferAwaitingRelease;
+  bool                pollOnly;
+  bool                holdsCompletedLine;
   int               (*readByte)(struct ConsolePort *consolePort);
   bool                echo;
+  uint8_t             inputState;
   int               (*consolePrintString)(unsigned char port,
                       const char *string);
 } ConsolePort;
@@ -399,10 +411,16 @@ typedef struct ConsolePort {
 /// @param consoleBuffers The array of ConsoleBuffers that can be used by
 ///   the console ports for input and by processes for output.
 /// @param numConsolePorts The number of active console ports.
+/// @param sendSignalArgs A pointer to the SchedulerSendSignalArgs that Ctrl-C
+///   sends to the scheduler.  It lives in runConsole's frame because the send
+///   doesn't wait for the scheduler to read it.  Declared as a void* poineter
+///   here so that we dont' have to include the definition of
+///   SchedulerSendSignalArgs (which is a scheduler structure) in this file.
 typedef struct ConsoleState {
   ConsolePort   consolePorts[CONSOLE_NUM_PORTS];
   ConsoleBuffer consoleBuffers[CONSOLE_NUM_BUFFERS];
   int           numConsolePorts;
+  void         *sendSignalArgs;
 } ConsoleState;
 
 /// @struct ConsolePortPidAssociation
