@@ -128,6 +128,32 @@ void consoleMessageCleanup(ProcessMessage *inputMessage) {
   }
 }
 
+/// @fn static bool consoleBufferHasInput(
+///   ConsoleState *consoleState, ConsoleBuffer *consoleBuffer)
+///
+/// @brief Report whether a buffer is a port's input buffer with input in it
+/// that a process formatting output into it would destroy.
+///
+/// @param consoleState A pointer to the ConsoleState structure held by the
+///   runConsole process.
+/// @param consoleBuffer A pointer to the ConsoleBuffer to check.
+///
+/// @return Returns true if the buffer holds input, false otherwise.
+static bool consoleBufferHasInput(
+  ConsoleState *consoleState, ConsoleBuffer *consoleBuffer
+) {
+  ConsolePort *consolePorts = consoleState->consolePorts;
+  for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
+    if (consolePorts[ii].consoleBuffer == consoleBuffer) {
+      return (consolePorts[ii].consoleBufferIndex > 0)
+        || (consolePorts[ii].holdsCompletedLine == true)
+        || (consolePorts[ii].bufferAwaitingRelease == true);
+    }
+  }
+
+  return false;
+}
+
 /// @fn ConsoleBuffer* getAvailableConsoleBuffer(
 ///   ConsoleState *consoleState, ProcessId pid)
 ///
@@ -147,6 +173,9 @@ ConsoleBuffer* getAvailableConsoleBuffer(
   ConsoleBuffer *returnValue = NULL;
 
   for (int ii = 0; ii < CONSOLE_NUM_BUFFERS; ii++) {
+    if (consoleBufferHasInput(consoleState, &consoleBuffers[ii])) {
+      continue;
+    }
     if ((consoleBuffers[ii].owner == PROCESS_ID_NOT_SET)
       || (consoleBuffers[ii].owner == pid)
     ) {
@@ -179,6 +208,7 @@ int releaseConsoleBuffer(
     if (consolePorts[ii].consoleBuffer == consoleBuffer) {
       // Buffer belongs to a port.  Restore its owner back to the port's shell.
       consoleBuffer->owner = consolePorts[ii].shell;
+      consolePorts[ii].bufferAwaitingRelease = false;
       return 0;
     }
   }
@@ -506,6 +536,7 @@ void consoleAssignPortHelper(
     }
     consoleState->consolePorts[consolePort].inputOwner = pid;
     consoleState->consolePorts[consolePort].consoleBuffer->owner = pid;
+    consoleState->consolePorts[consolePort].bufferAwaitingRelease = false;
     processMessageSetDone(inputMessage);
     consoleMessageCleanup(inputMessage);
   } else {
@@ -566,6 +597,7 @@ void consoleReleasePortCommandHandler(
     if (consolePorts[ii].inputOwner == owner) {
       consolePorts[ii].inputOwner = consolePorts[ii].shell;
       consolePorts[ii].consoleBuffer->owner = consolePorts[ii].shell;
+      consolePorts[ii].bufferAwaitingRelease = false;
     }
   }
 
@@ -725,6 +757,7 @@ void consoleWaitForInputCommandHandler(
   for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
     if (consolePorts[ii].inputOwner == owner) {
       consolePorts[ii].waitingForInput = true;
+      consolePorts[ii].bufferAwaitingRelease = false;
       portFound = true;
     }
   }
@@ -769,6 +802,7 @@ void consoleReleasePidPortCommandHandler(
   for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
     if (consolePorts[ii].inputOwner == consoleReleasePidPortArgs->processId) {
       consolePorts[ii].inputOwner = consolePorts[ii].shell;
+      consolePorts[ii].bufferAwaitingRelease = false;
     }
     if (consolePorts[ii].outputOwner == consoleReleasePidPortArgs->processId) {
       consolePorts[ii].outputOwner = consolePorts[ii].shell;
@@ -834,6 +868,32 @@ void consoleGetNumPortsCommandHandler(
   return;
 }
 
+/// @fn void consoleInputReadyCommandHandler(
+///   ConsoleState *consoleState, ProcessMessage *inputMessage)
+///
+/// @brief Process input being ready from a console interrupt.
+///
+/// @param consoleState A pointer to the ConsoleState being maintained by the
+///   runConsole function that's running.
+/// @param inputMessage A pointer to the ProcessMessage with the received
+///   command.
+///
+/// @return This function returns no value.
+void consoleInputReadyCommandHandler(
+  ConsoleState *consoleState, ProcessMessage *inputMessage
+) {
+  (void) consoleState;
+  ConsolePort *consolePort = (ConsolePort*) processMessageData(inputMessage);
+  processMessageRelease(inputMessage);
+
+  if (consolePort == NULL) {
+    logError("consolePort is NULL\n");
+    return;
+  }
+
+  return;
+}
+
 /// @typedef ConsoleCommandHandler
 ///
 /// @brief Signature of command handler for a console command.
@@ -857,18 +917,21 @@ const ConsoleCommandHandler consoleCommandHandlers[] = {
   consoleReleasePidPortCommandHandler,  // CONSOLE_RELEASE_PID_PORT
   consoleReleaseBufferCommandHandler,   // CONSOLE_RELEASE_BUFFER
   consoleGetNumPortsCommandHandler,     // CONSOLE_GET_NUM_PORTS
+  consoleInputReadyCommandHandler,      // CONSOLE_INPUT_READY
 };
 
-/// @fn void handleConsoleMessages(ConsoleState *consoleState)
+/// @fn void handleConsoleMessages(ConsoleState *consoleState, bool block)
 ///
 /// @brief Handle all messages currently in the console process's message queue.
 ///
 /// @param consoleState A pointer to the ConsoleState structure maintained by
 ///   the runConsole process.
+/// @param block Whether to wait for a message if none is queued.
 ///
 /// @return This function returns no value.
-void handleConsoleMessages(ConsoleState *consoleState) {
-  ProcessMessage *message = processMessageQueuePop();
+void handleConsoleMessages(ConsoleState *consoleState, bool block) {
+  ProcessMessage *message = (block == true)
+    ? processMessageQueueWait(NULL) : processMessageQueuePop();
   ProcessMessage *firstMessage = message;
   while (message != NULL) {
     if ((processMessageType(message) & 0xffffffffffffff00)
@@ -924,86 +987,310 @@ void handleConsoleMessages(ConsoleState *consoleState) {
 /// final binary on some targets.
 static const char _crlf[] KEEP_IN_FLASH = "\r\n";
 
+/// @var _erase
+///
+/// @brief Backspace/space/backspace sequence written to a serial port to erase
+/// the last character echoed.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _erase[] KEEP_IN_FLASH = "\b \b";
+
 /// @fn int readSerialByte(ConsolePort *consolePort)
 ///
-/// @brief Do a non-blocking read of a serial port.
+/// @brief Do a non-blocking read of one byte from a port that has to be
+/// polled.
 ///
-/// @param ConsolePort A pointer to the ConsolePort data structure that contains
-///   the buffer information to use.
+/// @param consolePort A pointer to the ConsolePort to read from.
 ///
-/// @return Returns the byte read, cast to an int, on success, -1 on failure.
+/// @return Returns the byte read, cast to an int, on success, -1 if there was
+/// nothing to read.
 int readSerialByte(ConsolePort *consolePort) {
-  int serialData = -1;
-  serialData = HAL->uart->poll((int) consolePort->portId);
-  if (serialData > -1) {
-    ConsoleBuffer *consoleBuffer = consolePort->consoleBuffer;
-    char *buffer = consoleBuffer->buffer;
-    if (((serialData >= ASCII_SPACE) && (serialData < ASCII_DELETE))
-      || (serialData == ASCII_RETURN) || (serialData == ASCII_NEWLINE)
-    ) {
-      // Data is a printable ASCII character.
-      if (consolePort->echo == true) {
-        if ((serialData != ASCII_RETURN) && (serialData != ASCII_NEWLINE)) {
-          char serialChar = (char) serialData;
-          HAL->uart->write((int) consolePort->portId,
-            (uint8_t*) &serialChar, 1, NULL);
-        } else {
-          HAL->uart->write(
-            (int) consolePort->portId, (uint8_t*) _crlf, 2, NULL);
-        }
-      }
-      
-      if (serialData == ASCII_RETURN) {
-        serialData = ASCII_NEWLINE;
-        // Some terminals send \r\n.  Read one more character just in case.
-        HAL->uart->poll((int) consolePort->portId);
-      }
-      
-      if (consolePort->consoleBufferIndex < (CONSOLE_BUFFER_SIZE - 1)) {
-        buffer[consolePort->consoleBufferIndex] = (char) serialData;
-        consolePort->consoleBufferIndex++;
-      }
-    } else if ((serialData == ASCII_BACKSPACE)
-      || (serialData == ASCII_DELETE)
-    ) {
-      // Data is a backspace or delete ASCII control character.  Treat them
-      // both like a backspace.
-      if (consolePort->consoleBufferIndex > 0) {
-        if (consolePort->echo == true) {
-          uint8_t backspace = ASCII_BACKSPACE;
-          uint8_t space = ASCII_SPACE;
-          HAL->uart->write(
-            (int) consolePort->portId, &backspace, 1, NULL);
-          HAL->uart->write(
-            (int) consolePort->portId, &space, 1, NULL);
-          HAL->uart->write(
-            (int) consolePort->portId, &backspace, 1, NULL);
-        }
-        
-        consolePort->consoleBufferIndex--;
-      }
-    } else if (serialData == ASCII_ESCAPE) {
-      // Data is the beginning of an escape sequence.  We need to fill the
-      // buffer with the full sequence.
-      do {
-        if (consolePort->consoleBufferIndex < (CONSOLE_BUFFER_SIZE - 1)) {
-          buffer[consolePort->consoleBufferIndex] = (char) serialData;
-          consolePort->consoleBufferIndex++;
-        }
-        serialData = HAL->uart->poll(
-          (int) consolePort->portId);
-      } while (serialData > -1);
-      
-      // In this case, we need to return ASCII_ESCAPE so that the main loop
-      // knows to forward this to the waiting process.  Handling escape
-      // sequences is process specific.
-      serialData = ASCII_ESCAPE;
-    } else {
-      logDebug("Received unhandled character %ld\n", (long int) serialData);
-    }
+  return HAL->uart->poll((int) consolePort->portId);
+}
+
+/// @fn int readSerialByteAsync(ConsolePort *consolePort)
+///
+/// @brief Do a non-blocking read of one byte that a port's interrupt handler
+/// has already buffered.
+///
+/// @param consolePort A pointer to the ConsolePort to read from.
+///
+/// @return Returns the byte read, cast to an int, on success, -1 if there was
+/// nothing to read.
+int readSerialByteAsync(ConsolePort *consolePort) {
+  uint8_t byte = 0;
+  ssize_t bytesRead = 0;
+  if ((HAL->uart->read((int32_t) consolePort->portId, &byte, 1, &bytesRead)
+      != 0)
+    || (bytesRead != 1)
+  ) {
+    return -1;
   }
 
-  return serialData;
+  return byte;
+}
+
+/// @fn static bool consoleStoreByte(ConsolePort *consolePort, uint8_t byte)
+///
+/// @brief Append a byte to a port's line buffer if there's room for it and the
+/// terminating NUL.
+///
+/// @param consolePort A pointer to the ConsolePort whose buffer to append to.
+/// @param byte The byte to append.
+///
+/// @return Returns true if the byte was stored, false if the buffer was full.
+static bool consoleStoreByte(ConsolePort *consolePort, uint8_t byte) {
+  if (consolePort->consoleBufferIndex >= (CONSOLE_BUFFER_SIZE - 1)) {
+    return false;
+  }
+
+  consolePort->consoleBuffer->buffer[consolePort->consoleBufferIndex]
+    = (char) byte;
+  consolePort->consoleBufferIndex++;
+  return true;
+}
+
+/// @fn ConsoleInputEvent consoleProcessByte(
+///   ConsolePort *consolePort, uint8_t byte, ConsoleEcho *echo)
+///
+/// @brief Apply one byte of input to a port's line buffer and editing state.
+/// Does no I/O, so what to echo is returned through echo rather than written.
+///
+/// @param consolePort A pointer to the ConsolePort the byte was read from.
+/// @param byte The byte read.
+/// @param echo A pointer to the ConsoleEcho that receives what the byte should
+///   echo back to the port.
+///
+/// @return Returns the ConsoleInputEvent the byte completed, if any.
+ConsoleInputEvent consoleProcessByte(
+  ConsolePort *consolePort, uint8_t byte, ConsoleEcho *echo
+) {
+  *echo = CONSOLE_ECHO_NONE;
+
+  if (consolePort->inputState == CONSOLE_INPUT_STATE_AFTER_RETURN) {
+    consolePort->inputState = CONSOLE_INPUT_STATE_NORMAL;
+    if (byte == ASCII_NEWLINE) {
+      // Second half of a carriage return/line feed pair.
+      return CONSOLE_INPUT_NONE;
+    }
+  } else if (consolePort->inputState == CONSOLE_INPUT_STATE_ESCAPE) {
+    consoleStoreByte(consolePort, byte);
+    if (byte == '[') {
+      consolePort->inputState = CONSOLE_INPUT_STATE_ESCAPE_CTRL_SEQ;
+      return CONSOLE_INPUT_NONE;
+    } else if (byte == 'O') {
+      consolePort->inputState = CONSOLE_INPUT_STATE_ESCAPE_SINGLE_SHIFT;
+      return CONSOLE_INPUT_NONE;
+    }
+    consolePort->inputState = CONSOLE_INPUT_STATE_NORMAL;
+    return CONSOLE_INPUT_ESCAPE;
+  } else if (consolePort->inputState == CONSOLE_INPUT_STATE_ESCAPE_CTRL_SEQ) {
+    consoleStoreByte(consolePort, byte);
+    if ((byte >= 0x40) && (byte <= 0x7e)) {
+      consolePort->inputState = CONSOLE_INPUT_STATE_NORMAL;
+      return CONSOLE_INPUT_ESCAPE;
+    }
+    return CONSOLE_INPUT_NONE;
+  } else if (
+    consolePort->inputState == CONSOLE_INPUT_STATE_ESCAPE_SINGLE_SHIFT
+  ) {
+    consoleStoreByte(consolePort, byte);
+    consolePort->inputState = CONSOLE_INPUT_STATE_NORMAL;
+    return CONSOLE_INPUT_ESCAPE;
+  }
+
+  if ((byte >= ASCII_SPACE) && (byte < ASCII_DELETE)) {
+    if (consoleStoreByte(consolePort, byte)) {
+      *echo = CONSOLE_ECHO_CHAR;
+    }
+    return CONSOLE_INPUT_NONE;
+  } else if ((byte == ASCII_RETURN) || (byte == ASCII_NEWLINE)) {
+    if (byte == ASCII_RETURN) {
+      consolePort->inputState = CONSOLE_INPUT_STATE_AFTER_RETURN;
+    }
+    consoleStoreByte(consolePort, ASCII_NEWLINE);
+    *echo = CONSOLE_ECHO_NEWLINE;
+    return CONSOLE_INPUT_LINE;
+  } else if ((byte == ASCII_BACKSPACE) || (byte == ASCII_DELETE)) {
+    if (consolePort->consoleBufferIndex > 0) {
+      consolePort->consoleBufferIndex--;
+      *echo = CONSOLE_ECHO_ERASE;
+    }
+    return CONSOLE_INPUT_NONE;
+  } else if (byte == ASCII_ESCAPE) {
+    consoleStoreByte(consolePort, byte);
+    consolePort->inputState = CONSOLE_INPUT_STATE_ESCAPE;
+    return CONSOLE_INPUT_NONE;
+  } else if (byte == 0x03) {
+    return CONSOLE_INPUT_INTERRUPT;
+  }
+
+  return CONSOLE_INPUT_UNHANDLED;
+}
+
+/// @fn static void consoleEchoInput(
+///   ConsolePort *consolePort, ConsoleEcho echo, uint8_t byte)
+///
+/// @brief Write what consoleProcessByte decided a byte should echo, if the
+/// port is echoing.
+///
+/// @param consolePort A pointer to the ConsolePort to echo to.
+/// @param echo The ConsoleEcho returned by consoleProcessByte.
+/// @param byte The byte that was processed.
+///
+/// @return This function returns no value.
+static void consoleEchoInput(
+  ConsolePort *consolePort, ConsoleEcho echo, uint8_t byte
+) {
+  if (consolePort->echo == false) {
+    return;
+  }
+
+  int portId = (int) consolePort->portId;
+  if (echo == CONSOLE_ECHO_CHAR) {
+    HAL->uart->write(portId, &byte, 1, NULL);
+  } else if (echo == CONSOLE_ECHO_NEWLINE) {
+    HAL->uart->write(portId, (const uint8_t*) _crlf, 2, NULL);
+  } else if (echo == CONSOLE_ECHO_ERASE) {
+    HAL->uart->write(portId, (const uint8_t*) _erase, 3, NULL);
+  }
+}
+
+/// @var _ctrlCEcho
+///
+/// @brief Echoed back to the console when the user presses Ctrl-C.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _ctrlCEcho[] KEEP_IN_FLASH = "^C\n";
+
+/// @fn static void consoleDeliverLine(ConsolePort *consolePort)
+///
+/// @brief Send a port's held line to its input owner if the owner is waiting
+/// for input.
+///
+/// @param consolePort A pointer to the ConsolePort holding the line.
+///
+/// @return This function returns no value.
+static void consoleDeliverLine(ConsolePort *consolePort) {
+  if ((consolePort->holdsCompletedLine == false)
+    || (consolePort->waitingForInput == false)
+  ) {
+    return;
+  }
+
+  consolePort->consoleBuffer->buffer[consolePort->consoleBufferIndex] = '\0';
+  consolePort->consoleBufferIndex = 0;
+  consolePort->holdsCompletedLine = false;
+  if (initSendProcessMessageToPid(
+    consolePort->inputOwner,
+    CONSOLE_COMMAND_SIGNATURE | CONSOLE_RETURNING_INPUT,
+    consolePort->consoleBuffer, sizeof(ConsoleBuffer), false) == NULL
+  ) {
+    logError("Could not send CONSOLE_RETURNING_INPUT to "
+      "process ID %d\n", consolePort->inputOwner);
+  } else {
+    consolePort->bufferAwaitingRelease = true;
+  }
+  consolePort->waitingForInput = false;
+}
+
+/// @fn static void consoleHandleInputEvent(ConsoleState *consoleState,
+///   ConsolePort *consolePort, ConsoleInputEvent event)
+///
+/// @brief Act on a completed line, escape sequence, or Ctrl-C from a port.
+///
+/// @param consoleState A pointer to the ConsoleState being maintained by the
+///   runConsole function that's running.
+/// @param consolePort A pointer to the ConsolePort the input came from.
+/// @param event The ConsoleInputEvent returned by consoleProcessByte.
+///
+/// @return This function returns no value.
+static void consoleHandleInputEvent(
+  ConsoleState *consoleState, ConsolePort *consolePort,
+  ConsoleInputEvent event
+) {
+  if ((event == CONSOLE_INPUT_LINE) || (event == CONSOLE_INPUT_ESCAPE)) {
+    if (consolePort->inputOwner != PROCESS_ID_NOT_SET) {
+      consolePort->holdsCompletedLine = true;
+      consoleDeliverLine(consolePort);
+    } else {
+      // Console port is not owned.  Reset our buffer and do nothing.
+      consolePort->consoleBufferIndex = 0;
+    }
+  } else if (event == CONSOLE_INPUT_INTERRUPT) {
+    // Like a terminal, an interrupt discards input that hasn't been read.
+    consolePort->holdsCompletedLine = false;
+    consolePort->consoleBufferIndex = 0;
+    consolePort->inputState = CONSOLE_INPUT_STATE_NORMAL;
+
+    // The user hit Ctrl-C on the keyboard.  Send SIGINT to the input owner.
+    if (consolePort->inputOwner != PROCESS_ID_NOT_SET) {
+      SchedulerSendSignalArgs *sendSignalArgs
+        = (SchedulerSendSignalArgs*) consoleState->sendSignalArgs;
+      sendSignalArgs->pid = consolePort->inputOwner;
+      sendSignalArgs->signal = SIGINT;
+      sendSignalArgs->returnValue = 0;
+      sendSignalArgs->errorNumber = 0;
+      ProcessMessage *processMessage
+        = initSendProcessMessageToPid(
+        schedulerPid,
+        SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_SEND_SIGNAL,
+        /* data= */ sendSignalArgs, /* size= */ sizeof(*sendSignalArgs),
+        false);
+      if (processMessage == NULL) {
+        logError("Could not communicate with scheduler.\n");
+      }
+      consolePort->consolePrintString(consolePort->portId, _ctrlCEcho);
+    }
+  }
+}
+
+/// @fn static void consoleServicePort(
+///   ConsoleState *consoleState, ConsolePort *consolePort)
+///
+/// @brief Read and process a port's input until it has nothing more to give or
+/// a completed line has been sent to the port's input owner.  While a line is
+/// held for an owner that isn't waiting, only Ctrl-C is acted on.
+///
+/// @param consoleState A pointer to the ConsoleState being maintained by the
+///   runConsole function that's running.
+/// @param consolePort A pointer to the ConsolePort to service.
+///
+/// @return This function returns no value.
+static void consoleServicePort(
+  ConsoleState *consoleState, ConsolePort *consolePort
+) {
+  consoleDeliverLine(consolePort);
+  while (consolePort->bufferAwaitingRelease == false) {
+    int byteRead = consolePort->readByte(consolePort);
+    if ((consolePort->holdsCompletedLine == true) && (byteRead != 0x03)) {
+      if (byteRead < 0) {
+        break;
+      }
+      continue;
+    }
+    if (byteRead < 0) {
+      if (consolePort->inputState == CONSOLE_INPUT_STATE_ESCAPE) {
+        // Nothing followed the escape, so it was the escape key by itself.
+        consolePort->inputState = CONSOLE_INPUT_STATE_NORMAL;
+        consoleHandleInputEvent(
+          consoleState, consolePort, CONSOLE_INPUT_ESCAPE);
+      }
+      break;
+    }
+
+    ConsoleEcho echo = CONSOLE_ECHO_NONE;
+    ConsoleInputEvent event
+      = consoleProcessByte(consolePort, (uint8_t) byteRead, &echo);
+    consoleEchoInput(consolePort, echo, (uint8_t) byteRead);
+    if (event == CONSOLE_INPUT_UNHANDLED) {
+      logDebug("Received unhandled character %ld\n", (long int) byteRead);
+    } else if (event != CONSOLE_INPUT_NONE) {
+      consoleHandleInputEvent(consoleState, consolePort, event);
+    }
+  }
 }
 
 /// @fn int printSerialString(unsigned char uart, const char *string)
@@ -1045,21 +1332,13 @@ int printSerialString(unsigned char uart, const char *string) {
   return returnValue;
 }
 
-/// @var _ctrlCEcho
-///
-/// @brief Echoed back to the console when the user presses Ctrl-C.
-///
-/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
-/// final binary on some targets.
-static const char _ctrlCEcho[] KEEP_IN_FLASH = "^C\n";
-
 /// @fn void* runConsole(void *args)
 ///
 /// @brief Main process for managing console input and output.  Runs in an
-/// infinite loop and never exits.  Every iteration, it checks the serial
-/// connection for a byte and adds it to the buffer if there is anything,
-/// handles the user command if the incoming byte is a newline, and handles any
-/// messages that were sent to this process.
+/// infinite loop and never exits.  Every iteration, it services each console
+/// port's input and handles any messages that were sent to this process.  If
+/// any port has to be polled, it yields between iterations; otherwise it
+/// blocks until a message arrives.
 ///
 /// @param args Any arguments provided by the scheduler.  Ignored by this
 ///   process.
@@ -1069,11 +1348,11 @@ void* runConsole(void *args) {
   (void) args;
 
   SchedulerSendSignalArgs sendSignalArgs; // For sending Ctrl-C to processes
-  int byteRead = -1;
   ConsoleState consoleState;
   memset(&consoleState, 0, sizeof(ConsoleState));
 
   consoleState.numConsolePorts = CONSOLE_NUM_PORTS;
+  consoleState.sendSignalArgs = &sendSignalArgs;
 
   // For each console port, use the console buffer at the corresponding index.
   for (uint8_t ii = 0; ii < consoleState.numConsolePorts; ii++) {
@@ -1089,6 +1368,7 @@ void* runConsole(void *args) {
   }
 
   int port = 0;
+  int pollNeeded = false;
   for (int ii = 0; ii < consoleState.numConsolePorts; ii++) {
     bool isConsolePort = false;
     HAL->uart->isConsole(ii, &isConsolePort);
@@ -1098,69 +1378,49 @@ void* runConsole(void *args) {
     }
 
     // Set the port-specific data.
-    consoleState.consolePorts[port].portId = ii;
-    consoleState.consolePorts[port].consoleBufferIndex = 0;
-    consoleState.consolePorts[port].inputOwner = PROCESS_ID_NOT_SET;
-    consoleState.consolePorts[port].outputOwner = PROCESS_ID_NOT_SET;
-    consoleState.consolePorts[port].shell = PROCESS_ID_NOT_SET;
-    consoleState.consolePorts[port].waitingForInput = false;
-    consoleState.consolePorts[port].readByte = readSerialByte;
-    consoleState.consolePorts[port].echo = true;
-    consoleState.consolePorts[port].consolePrintString = printSerialString;
+    ConsolePort *consolePort = &consoleState.consolePorts[port];
+    consolePort->portId = ii;
+    consolePort->consoleBufferIndex = 0;
+    consolePort->inputOwner = PROCESS_ID_NOT_SET;
+    consolePort->outputOwner = PROCESS_ID_NOT_SET;
+    consolePort->shell = PROCESS_ID_NOT_SET;
+    consolePort->waitingForInput = false;
+    consolePort->bufferAwaitingRelease = false;
+    consolePort->holdsCompletedLine = false;
+    consolePort->inputState = CONSOLE_INPUT_STATE_NORMAL;
+    consolePort->echo = true;
+    consolePort->consolePrintString = printSerialString;
+
+    consolePort->pollOnly = pollOnly(HAL->uart, ii);
+    if ((consolePort->pollOnly == false)
+      && (HAL->uart->registerCallback(ii, getRunningProcess(),
+        CONSOLE_COMMAND_SIGNATURE | CONSOLE_INPUT_READY, consolePort) != 0)
+    ) {
+      logError("Could not register for input from port %d.  Polling it.\n",
+        ii);
+      consolePort->pollOnly = true;
+    }
+    if (consolePort->pollOnly == true) {
+      consolePort->readByte = readSerialByte;
+      pollNeeded = true;
+    } else {
+      consolePort->readByte = readSerialByteAsync;
+    }
     port++;
   }
   consoleState.numConsolePorts = port;
 
+  // Input that arrived before the callbacks were registered never notified
+  // anyone, so the first pass has to service every port.
   while (1) {
     for (uint8_t ii = 0; ii < consoleState.numConsolePorts; ii++) {
-      ConsolePort *consolePort = &consoleState.consolePorts[ii];
-      byteRead = consolePort->readByte(consolePort);
-      if ((byteRead == ASCII_NEWLINE) || (byteRead == ASCII_RETURN)
-        || (byteRead == ASCII_ESCAPE)
-      ) {
-        if ((consolePort->inputOwner != PROCESS_ID_NOT_SET)
-          && (consolePort->waitingForInput == true)
-        ) {
-          consolePort->consoleBuffer->buffer[consolePort->consoleBufferIndex]
-            = '\0';
-          consolePort->consoleBufferIndex = 0;
-          if (initSendProcessMessageToPid(
-            consolePort->inputOwner,
-            CONSOLE_COMMAND_SIGNATURE | CONSOLE_RETURNING_INPUT,
-            consolePort->consoleBuffer, sizeof(ConsoleBuffer), false) == NULL
-          ) {
-            logError("Could not send CONSOLE_RETURNING_INPUT to "
-              "process ID %d\n", consolePort->inputOwner);
-          }
-          consolePort->waitingForInput = false;
-        } else {
-          // Console port is either not owned or owning process is not waiting
-          // for input.  Reset our buffer and do nothing.
-          consolePort->consoleBufferIndex = 0;
-        }
-      } else if (byteRead == 0x03) {
-        // The user hit Ctrl-C on the keyboard.  Send SIGINT to the input owner.
-        if (consolePort->inputOwner != PROCESS_ID_NOT_SET) {
-          sendSignalArgs.pid = consolePort->inputOwner;
-          sendSignalArgs.signal = SIGINT;
-          sendSignalArgs.returnValue = 0;
-          sendSignalArgs.errorNumber = 0;
-          ProcessMessage *processMessage
-            = initSendProcessMessageToPid(
-            schedulerPid,
-            SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_SEND_SIGNAL,
-            /* data= */ &sendSignalArgs, /* size= */ sizeof(sendSignalArgs),
-            false);
-          if (processMessage == NULL) {
-            logError("Could not communicate with scheduler.\n");
-          }
-          consolePort->consolePrintString(consolePort->portId, _ctrlCEcho);
-        }
-      }
+      consoleServicePort(&consoleState, &consoleState.consolePorts[ii]);
     }
 
-    processYield();
-    handleConsoleMessages(&consoleState);
+    if (pollNeeded > 0) {
+      processYield();
+    }
+    handleConsoleMessages(&consoleState, !pollNeeded);
   }
 
   return NULL;
