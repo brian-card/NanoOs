@@ -96,7 +96,7 @@ SIM_SRCS := SdCardPosix SdCardPosixImpl
 FRAMEWORK_SRCS := NanoOsTest TestMain
 HARNESS_SRCS   := KernelTestHarness
 MOCK_SRCS      := HalMock MockClock MockTimer MockUart MockBlockDevice
-SUITE_SRCS     := test_smoke test_unit_misc test_unit_strtoll \
+SUITE_SRCS     := test_smoke test_unit_misc test_unit_strtoll test_unit_console \
                   test_kernel_memory test_kernel_hal test_kernel_ipc \
                   test_kernel_scheduler test_kernel_env \
                   test_kernel_ipccap \
