@@ -309,6 +309,11 @@ static FileDescriptor standardUserFileDescriptors[
 HalCapability consoleHalCapabilities[] = {
   LOG_FALLBACK_HAL_CAPABILITIES,
   {
+    .subsystemFunction = (((uint16_t) HAL_UART) << 8)
+      | HAL_UART_REGISTER_CALLBACK,
+    .deviceIds =         0x03, // Bitmask for device IDs 0 and 1
+  },
+  {
     .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_POLL,
     .deviceIds =         0x03, // Bitmask for device IDs 0 and 1
   },
@@ -5663,12 +5668,27 @@ __attribute__((noinline)) void startScheduler(
 
   // Run our scheduler.
   while (1) {
+    bool ranProcess = false;
     for (int ii = 0; ii < SCHEDULER_NUM_READY_QUEUES; ii++) {
       schedulerState.currentReady = schedulerState.readyQueues[ii];
       uint8_t queueSize = schedulerState.currentReady->numElements;
       for (uint8_t jj = 0; jj < queueSize; jj++) {
         runScheduler();
+        ranProcess = true;
       }
+    }
+
+    if (ranProcess == false) {
+      // Every process is waiting.  We need to run the things that runScheduler
+      // would normally run at the end of each cycle to check for timeouts and
+      // callbacks.  Set the value of schedulerState.runSchedulerDepth to what
+      // it would be if runScheduler were running so that handleSchedulerMessage
+      // processes things correctly rather than exiting early.
+      schedulerState.runSchedulerDepth++;
+      checkForTimeouts(&schedulerState);
+      handleSchedulerMessage(&schedulerState);
+      HAL->platform->invokePendingCallbacks();
+      schedulerState.runSchedulerDepth--;
     }
   }
 }
