@@ -238,6 +238,29 @@ static const char _setAttrErrorMessage[] KEEP_IN_FLASH
 /// @brief The ID of the main thread that calls halPosixInit.
 static pthread_t _mainThreadId = 0;
 
+// HalCommon.h can't be included here; see the note on Scheduler.h above.
+void halCommonUartMarkReady(int32_t deviceId);
+
+/// @var _pollOnlyEnvironmentVariable
+///
+/// @brief Environment variable that makes the simulator report its console
+/// UART as poll-only.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _pollOnlyEnvironmentVariable[] KEEP_IN_FLASH
+  = "NANO_OS_SIM_POLL_ONLY";
+
+/// @fn bool posixConsolePollOnlyRequested(void)
+///
+/// @brief Report whether the simulator was asked to treat its console UART as
+/// poll-only.
+///
+/// @return Returns true if NANO_OS_SIM_POLL_ONLY is set, false otherwise.
+bool posixConsolePollOnlyRequested(void) {
+  return getenv(_pollOnlyEnvironmentVariable) != NULL;
+}
+
 /// @def POSIX_UART_RX_BUFFER_SIZE
 ///
 /// @brief Size of the console receive ring.  One slot stays empty to tell a
@@ -323,7 +346,6 @@ static bool posixUartRxPushLocked(uint8_t byte) {
 /// @return This function returns no value.
 static void posixUartRxSignalHandler(int signal) {
   (void) signal;
-  int halCommonUartMarkReady(int32_t deviceId);
   halCommonUartMarkReady(1);
 }
 
@@ -1129,6 +1151,7 @@ void sigintHandler(int signal) {
     pthread_mutex_lock(&_uartRxMutex);
     posixUartRxPushLocked(0x03);
     pthread_mutex_unlock(&_uartRxMutex);
+    halCommonUartMarkReady(1);
   }
 }
 
