@@ -104,6 +104,7 @@ int posixPollUart(va_list args);
 int posixReadUart(va_list args);
 int posixWriteUart(va_list args);
 int posixIsUartConsole(va_list args);
+bool posixConsolePollOnlyRequested(void);
 
 int posixInitDio(va_list args);
 int posixConfigureDio(va_list args);
@@ -715,6 +716,9 @@ int halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
   halFunctions[HAL_TIMER]        = posixTimerFunctions;
   halFunctions[HAL_BLOCK_DEVICE] = posixBlockDeviceFunctions;
 
+  if (posixConsolePollOnlyRequested()) {
+    posixUartsPollOnly[0] |= 0x00000002;
+  }
   halImpl.uart->numSupported = 2;
   halImpl.uart->online       = posixUartsOnline;
   halImpl.uart->pollOnly     = posixUartsPollOnly;
