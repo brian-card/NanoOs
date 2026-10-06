@@ -46,6 +46,7 @@ mocks/      HalMock.{h,c}       layered mock HAL + control surface
 suites/     test_smoke.c            framework + kernel bring-up
             test_unit_misc.c       raiseUInt, user table, timespecFromDelay
             test_unit_strtoll.c    nanoOsStrtoll
+            test_unit_console.c    consoleProcessByte (the console's line editor)
             test_kernel_memory.c   malloc/free/calloc/realloc via the mm process
             test_kernel_ipc.c      message pool + blocking request/response
             test_kernel_hal.c      clock / timer / uart HAL calls
@@ -90,7 +91,7 @@ real POSIX implementation from `HalPosixImpl.c`:
 | overlay RAM window, heap sizing | POSIX (`halPosixImplInit`) | — |
 | clock | virtual, `mockClockAdvanceNs()` | `MOCK_CLOCK_POSIX` |
 | timer | synchronous, `mockTimerFire()` | `MOCK_TIMER_POSIX` |
-| uart | RAM buffers, `mockUartFeed/Drain()` | `MOCK_UART_POSIX` |
+| uart | RAM buffers, `mockUartFeed/Drain()`, `halMockSetUartPollOnly()` | `MOCK_UART_POSIX` |
 | storage | none (`rootFsPid == 0`) | `MOCK_STORAGE_FILE` *(stub)* |
 | memory, dio, spi | POSIX | — |
 | power | ends the child cleanly | — |

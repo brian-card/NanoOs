@@ -52,7 +52,9 @@
 .assume adl=1
 
 .global _agonLight2ConfigureUart1Impl
+.extern _halCommonUartMarkReady
 .global _agonLight2PollUart1Impl
+.global _agonLight2ReadUart1Impl
 .global _agonLight2WriteUart1Impl
 .global uart1Isr
 
@@ -82,7 +84,7 @@ UART1_RING_MASK .equ (UART1_RING_SIZE - 1)
 
 .bss
 uart1RxHead: .space 1              ; written only by uart1Isr
-uart1RxTail: .space 1              ; written only by _agonLight2PollUart1Impl
+uart1RxTail: .space 1              ; written only by the Poll/Read impls
 uart1RxBuf:  .space UART1_RING_SIZE
 
 uart1TxHead: .space 1              ; written only by _agonLight2WriteUart1Impl
@@ -195,6 +197,68 @@ _agonLight2PollUart1Impl:
     ld      hl, -1
     ret
 
+;; -- size_t agonLight2ReadUart1Impl(uint8_t *data, size_t length) ---------
+;;    data at sp+3, length at sp+6.  Copies up to length bytes from the RX
+;;    ring into data, advances uart1RxTail past them, and returns the number
+;;    copied in HL.  di/ei for the same reason as agonLight2PollUart1Impl.
+_agonLight2ReadUart1Impl:
+    push    ix
+    ld      ix, 0
+    add     ix, sp
+
+    di
+    ld      a, (uart1RxTail)
+    ld      c, a                ; c = tail
+    ld      a, (uart1RxHead)
+    sub     c
+    and     UART1_RING_MASK     ; a = bytes available
+    ld      de, 0               ; clears DEU too - see agonLight2PollUart1Impl
+    ld      e, a
+    ld      hl, (ix+9)          ; hl = length
+    or      a
+    sbc     hl, de
+    jr      nc, .readCountReady ; length >= available -> take all of it
+    ld      a, (ix+9)           ; length < available, so it fits in a byte
+.readCountReady:
+    or      a
+    jr      z, .readEmpty
+
+    ld      b, a                ; b = bytes to copy
+    ld      hl, uart1RxBuf
+    ld      e, c                ; DEU/D still clear from above
+    add     hl, de              ; hl = &uart1RxBuf[tail]
+    ld      de, (ix+6)          ; de = data
+.readLoop:
+    ld      a, (hl)
+    ld      (de), a
+    inc     de
+    inc     hl
+    ld      a, c
+    inc     a
+    and     UART1_RING_MASK
+    ld      c, a
+    jr      nz, .readNoWrap
+    ld      hl, uart1RxBuf
+.readNoWrap:
+    djnz    .readLoop
+
+    ld      a, c
+    ld      (uart1RxTail), a
+    ei
+
+    ex      de, hl              ; hl = one past the last byte written
+    ld      de, (ix+6)
+    or      a
+    sbc     hl, de              ; hl = bytes copied
+    pop     ix
+    ret
+
+.readEmpty:
+    ei
+    ld      hl, 0
+    pop     ix
+    ret
+
 ;; -- void agonLight2WriteUart1Impl(uint8_t c) ------------------------------
 ;;    c passed at sp+3.  Pushes the byte onto the TX ring (drained by
 ;;    uart1Isr) and arms the transmit-empty interrupt.  Spins (cooperative
@@ -254,19 +318,32 @@ _agonLight2WriteUart1Impl:
 
 ;; -- uart1Isr --------------------------------------------------------------
 ;;    Called (interrupts off) from uart1Tramp in Interrupts.asm.  Drains the
-;;    RX FIFO into uart1RxBuf, then - if the transmit holding register is
+;;    RX FIFO into uart1RxBuf and, if it received anything, calls the device's
+;;    registered callback.  Then - if the transmit holding register is
 ;;    empty and uart1TxBuf has data - writes one byte to THR.  One byte per
 ;;    interrupt on the TX side is deliberate simplicity for a first pass, not
 ;;    a FIFO-depth burst; see the file header.
 uart1Isr:
-.uart1IsrRxLoop:
     in0     a, (UART1_LSR)
     and     0x01                ; DR - receiver data ready
-    jr      z, .uart1IsrTx
+    jr      z, .uart1IsrTx      ; nothing received - no callback
 
+.uart1IsrRxLoop:
     in0     a, (UART1_RBR)      ; also clears DR for this byte
     call    uart1RxPushByte
-    jr      .uart1IsrRxLoop
+    in0     a, (UART1_LSR)
+    and     0x01
+    jr      nz, .uart1IsrRxLoop
+
+    ;; halCommonUartMarkReady(1): an int32_t takes two 3-byte stack slots,
+    ;; high byte pushed first (de), low 24 bits pushed last (hl).
+    ld      de, 0
+    ld      hl, 1
+    push    de
+    push    hl
+    call    _halCommonUartMarkReady
+    pop     hl
+    pop     de
 
 .uart1IsrTx:
     in0     a, (UART1_LSR)

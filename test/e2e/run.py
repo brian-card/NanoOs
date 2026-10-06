@@ -25,7 +25,13 @@ REPO_ROOT = os.path.dirname(os.path.dirname(E2E_DIR))
 CACHE_DIR = os.path.join(E2E_DIR, ".cache")
 HOSTNAME = "nanoe2e"
 BLOCK_FS = "contiguous"
-SIM_BINARIES = ["nano-os-sim_stripped", "nano-os-sim"]
+# (label, binary, extra environment).  The poll-only pass makes the console
+# UART report poll-only so the console's polling path stays covered.
+SIM_CONFIGS = [
+    ("nano-os-sim_stripped", "nano-os-sim_stripped", {}),
+    ("nano-os-sim", "nano-os-sim", {}),
+    ("nano-os-sim-poll", "nano-os-sim", {"NANO_OS_SIM_POLL_ONLY": "1"}),
+]
 PROMPT = r"mush [^\r\n]*@%s:[^\r\n]+[#$] " % HOSTNAME
 # Same prompt, capturing the user and the working directory it reports.
 PROMPT_PARTS = r"mush ([^\r\n@]+)@%s:([^\r\n]+)[#$] " % HOSTNAME
@@ -60,7 +66,7 @@ def build_image():
 
 
 class Session:
-    def __init__(self, sim_bin, image):
+    def __init__(self, sim_bin, image, env=None):
         self.tmp = tempfile.mkdtemp(prefix="nanoe2e-")
         img_copy = os.path.join(self.tmp, "disk.img")
         shutil.copyfile(image, img_copy)
@@ -69,7 +75,8 @@ class Session:
         # the test with a decoding traceback instead of reporting what the
         # simulator actually did.
         self.child = pexpect.spawn(sim_bin, [img_copy], encoding="utf-8",
-                                   codec_errors="replace", timeout=15)
+                                   codec_errors="replace", timeout=15,
+                                   env=dict(os.environ, **(env or {})))
         if VERBOSE:
             self.child.logfile_read = sys.stdout
 
@@ -406,6 +413,22 @@ def test_ls_shows_correct_weekday_for_mtime(s):
     assert checked >= 4, f"expected at least 4 entries, got:\n{out}"
 
 
+def test_typed_ahead_lines_both_run_in_order(s):
+    # Both lines arrive in one read.  The second must neither be edited into
+    # the console buffer while the shell is still reading the first out of it
+    # nor be dropped because the shell wasn't waiting for it yet.  Whether both
+    # lines land in one read depends on timing, so try a few.
+    s.login()
+    for first, second in (("abc", "def"), ("ghi", "jkl"), ("mno", "pqr")):
+        s.child.send(f"echo {first}\recho {second}\r")
+        s.child.expect(r"\n%s\r*\n" % first, timeout=10)
+        # The typed-ahead line was echoed before the first one ran, so its
+        # output follows the shell's next prompt on the same line.
+        s.child.expect(r"%s\r*\n" % second, timeout=10)
+        s.child.expect(PROMPT, timeout=10)
+    assert s.sh("echo ok") == "ok"
+
+
 def test_unknown_command_errors(s):
     s.login()
     out = s.sh("no_such_command_here").lower()
@@ -438,25 +461,25 @@ def main(argv):
     image = build_image()
 
     cases = []
-    for sim_name in SIM_BINARIES:
+    for config_name, sim_name, env in SIM_CONFIGS:
         sim_bin = os.path.join(REPO_ROOT, "sim", "bin", sim_name)
         for t in TESTS:
-            label = f"{sim_name}/{t.__name__}"
+            label = f"{config_name}/{t.__name__}"
             if flt and flt not in label:
                 continue
-            cases.append((label, sim_bin, t))
+            cases.append((label, sim_bin, env, t))
 
     print("TAP version 13")
     print(f"1..{len(cases)}")
     failures = 0
-    for i, (label, sim_bin, t) in enumerate(cases, 1):
+    for i, (label, sim_bin, env, t) in enumerate(cases, 1):
         if not os.path.exists(sim_bin):
             print(f"ok {i} - {label} # SKIP {os.path.basename(sim_bin)} not built")
             continue
         xfail = XFAIL.get(t.__name__)
         s = None
         try:
-            s = Session(sim_bin, image)
+            s = Session(sim_bin, image, env)
             t(s)
             if xfail:
                 print(f"ok {i} - {label} # TODO {xfail} -- PASSES NOW, promote it")

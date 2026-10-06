@@ -561,6 +561,27 @@ int arduinoSamD21x18ANumExtraConsoleStacks(va_list args) {
 /// this HAL.
 #define BOARD_UART 1
 
+/// @var halUartCallbacks
+///
+/// @brief This is the backing storage for the callback information to be used
+/// when an interrupt for one of the UARTs fires.  On Arduino platforms, we have
+/// to poll the UARTs, so there's no backing storage.
+HalUartCallback *halUartCallbacks = NULL;
+
+/// @var halUartCallbackMessages
+///
+/// @brief Callback-specific message storage to be used when a UART interrupt
+/// is triggered.  On Arduino platforms, we have to poll the UARTs, so there's
+/// no backing storage.
+ProcessMessage *halUartCallbackMessages = NULL;
+
+/// @var halUartCallbacksPending
+///
+/// @brief Callback-specific callback-pending storage to be used when a UART
+/// interrupt is triggered.  On Arduino platforms, we have to poll the UARTs,
+/// so there's no backing storage.
+volatile bool *halUartCallbacksPending = NULL;
+
 int arduinoSamD21x18AInitUart(va_list args) {
   (void) args;
   // Nothing really to do on this platform.  Just return.
@@ -612,6 +633,30 @@ int arduinoSamD21x18APollUart(va_list args) {
   }
 
   return serialData;
+}
+
+/// @fn int arduinoSamD21x18AReadUart(va_list args)
+///
+/// @brief Read data from a UART.  UARTs on this platform are poll-only, so this
+/// always reports 0 bytes read.
+///
+/// @param args A va_list holding the int32_t deviceId, uint8_t *data,
+///   ssize_t length, and ssize_t *returnValue arguments of HalUart.read.
+///
+/// @return Returns 0 on success, -errno on failure.
+int arduinoSamD21x18AReadUart(va_list args) {
+  int32_t deviceId = va_arg(args, int32_t);
+  uint8_t *data = va_arg(args, uint8_t*);
+  ssize_t length = va_arg(args, ssize_t);
+  ssize_t *returnValue = va_arg(args, ssize_t*);
+  (void) deviceId;
+  (void) data;
+  (void) length;
+
+  if (returnValue != NULL) {
+    *returnValue = 0;
+  }
+  return 0;
 }
 
 int arduinoSamD21x18AWriteUart(va_list args) {
@@ -1935,6 +1980,8 @@ static HalFunction arduinoSamD21x18APlatformFunctions[HAL_PLATFORM_NUM_FNS] = {
     = arduinoSamD21x18ARestartShell,
   [HAL_PLATFORM_START_PROCESSES]
     = arduinoSamD21x18AStartProcesses,
+  [HAL_PLATFORM_INVOKE_PENDING_CALLBACKS]
+    = halCommonPlatformInvokePendingCallbacks,
 };
 
 // NOTE: avr-g++/arm-none-eabi-g++ cannot compile a designated-initializer
@@ -1963,11 +2010,13 @@ static HalFunction arduinoSamD21x18AMemoryFunctions[HAL_MEMORY_NUM_FNS] = {
 };
 
 static HalFunction arduinoSamD21x18AUartFunctions[HAL_UART_NUM_FNS] = {
-  [HAL_UART_INIT]       = arduinoSamD21x18AInitUart,
-  [HAL_UART_CONFIGURE]  = arduinoSamD21x18AConfigureUart,
-  [HAL_UART_POLL]       = arduinoSamD21x18APollUart,
-  [HAL_UART_WRITE]      = arduinoSamD21x18AWriteUart,
-  [HAL_UART_IS_CONSOLE] = arduinoSamD21x18AIsUartConsole,
+  [HAL_UART_INIT]              = arduinoSamD21x18AInitUart,
+  [HAL_UART_CONFIGURE]         = arduinoSamD21x18AConfigureUart,
+  [HAL_UART_REGISTER_CALLBACK] = halCommonUartRegisterCallback,
+  [HAL_UART_POLL]              = arduinoSamD21x18APollUart,
+  [HAL_UART_READ]              = arduinoSamD21x18AReadUart,
+  [HAL_UART_WRITE]             = arduinoSamD21x18AWriteUart,
+  [HAL_UART_IS_CONSOLE]        = arduinoSamD21x18AIsUartConsole,
 };
 
 static HalFunction arduinoSamD21x18ADioFunctions[HAL_DIO_NUM_FNS] = {

@@ -79,6 +79,10 @@ static HalCapability driverHalCapabilities[] = {
     .deviceIds =         0x03,
   },
   {
+    .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_READ,
+    .deviceIds =         0x03,
+  },
+  {
     .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_WRITE,
     .deviceIds =         0x03,
   },

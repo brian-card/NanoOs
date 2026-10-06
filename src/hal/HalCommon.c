@@ -148,6 +148,7 @@ static int halPlatformRestartRootFilesystem(
   HalRestartRootFilesystemFn *returnValue);
 static int halPlatformRestartShell(HalRestartShellFn *returnValue);
 static int halPlatformStartProcesses(HalStartProcessesFn *returnValue);
+static int halPlatformInvokePendingCallbacks(void);
 
 static int halMemoryProcessStackSize(bool debug, size_t *returnValue);
 static int halMemoryMemoryManagerStackSize(bool debug, size_t *returnValue);
@@ -170,7 +171,11 @@ static int halMemoryProcessStorage(void ****returnValue);
 
 static int halUartInit(void);
 static int halUartConfigure(int32_t deviceId, uint32_t baud);
+static int halUartRegisterCallback(int32_t deviceId,
+  ProcessDescriptor *processDescriptor, int64_t messageType, void *priv);
 static int halUartPoll(int32_t deviceId);
+static int halUartRead(int32_t deviceId, uint8_t *data,
+  ssize_t length, ssize_t *returnValue);
 static int halUartWrite(int32_t deviceId, const uint8_t *data,
   ssize_t length, ssize_t *returnValue);
 static int halUartIsConsole(int32_t deviceId, bool *returnValue);
@@ -231,11 +236,12 @@ static int halBlockDeviceRestart(ProcessDescriptor *processDescriptor);
 // ---------------------------------------------------------------------------
 
 static HalPlatform halImplPlatform = {
-  .callFileOverlay       = halPlatformCallFileOverlay,
-  .execCommand           = halPlatformExecCommand,
-  .restartRootFilesystem = halPlatformRestartRootFilesystem,
-  .restartShell          = halPlatformRestartShell,
-  .startProcesses        = halPlatformStartProcesses,
+  .callFileOverlay        = halPlatformCallFileOverlay,
+  .execCommand            = halPlatformExecCommand,
+  .restartRootFilesystem  = halPlatformRestartRootFilesystem,
+  .restartShell           = halPlatformRestartShell,
+  .startProcesses         = halPlatformStartProcesses,
+  .invokePendingCallbacks = halPlatformInvokePendingCallbacks,
 };
 
 static HalMemory halImplMemory = {
@@ -263,14 +269,16 @@ static HalMemory halImplMemory = {
 };
 
 static HalUart halImplUart = {
-  .numSupported = 0,
-  .online       = NULL,
-  .pollOnly     = NULL,
-  .init         = halUartInit,
-  .configure    = halUartConfigure,
-  .poll         = halUartPoll,
-  .write        = halUartWrite,
-  .isConsole    = halUartIsConsole,
+  .numSupported           = 0,
+  .online                 = NULL,
+  .pollOnly               = NULL,
+  .init                   = halUartInit,
+  .configure              = halUartConfigure,
+  .registerCallback       = halUartRegisterCallback,
+  .poll                   = halUartPoll,
+  .read                   = halUartRead,
+  .write                  = halUartWrite,
+  .isConsole              = halUartIsConsole,
 };
 
 static HalDio halImplDio = {
@@ -550,6 +558,10 @@ static int halPlatformStartProcesses(HalStartProcessesFn *returnValue) {
   return callHal(HAL_PLATFORM, HAL_PLATFORM_START_PROCESSES, returnValue);
 }
 
+static int halPlatformInvokePendingCallbacks(void) {
+  return callHal(HAL_PLATFORM, HAL_PLATFORM_INVOKE_PENDING_CALLBACKS);
+}
+
 static int halUartInit(void) {
   return callHal(HAL_UART, HAL_UART_INIT);
 }
@@ -558,8 +570,22 @@ static int halUartConfigure(int32_t deviceId, uint32_t baud) {
   return callHal(HAL_UART, HAL_UART_CONFIGURE, deviceId, baud);
 }
 
+static int halUartRegisterCallback(int32_t deviceId,
+  ProcessDescriptor *processDescriptor, int64_t messageType, void *priv
+) {
+  return callHal(HAL_UART, HAL_UART_REGISTER_CALLBACK, deviceId,
+    processDescriptor, messageType, priv);
+}
+
 static int halUartPoll(int32_t deviceId) {
   return callHal(HAL_UART, HAL_UART_POLL, deviceId);
+}
+
+static int halUartRead(int32_t deviceId, uint8_t *data,
+  ssize_t length, ssize_t *returnValue
+) {
+  return callHal(HAL_UART, HAL_UART_READ, deviceId, data, length,
+    returnValue);
 }
 
 static int halUartWrite(int32_t deviceId, const uint8_t *data,
@@ -1202,6 +1228,166 @@ int restartContiguousFilesystem(ProcessDescriptor *processDescriptor) {
     || (fs.driverState == (void*) ((intptr_t) 1))
   ) {
     runSchedulerQueues(PRIVILEGE_LEVEL_SUPERVISOR);
+  }
+
+  return 0;
+}
+
+// We want to utilize the HAL UART callback storage that is provided by the HAL
+// implementation, so provide those declarations here.
+extern HalUartCallback halUartCallbacks[];
+extern ProcessMessage halUartCallbackMessages[];
+extern volatile bool halUartCallbacksPending[];
+
+/// @var halPlatformCallbacksAnyPending
+///
+/// @brief Whether or not there are currently ANY pending callbacks.
+static volatile bool halPlatformCallbacksAnyPending = false;
+
+/// @fn int halCommonUartRegisterCallback(va_list args)
+///
+/// @brief Common helper function to register a callback to be called when a
+/// UART interrupt fires.
+///
+/// @param args A va_list that captures the parameters that were passed to
+///   HAL->uart->registerCallback.
+///
+/// @return Returns 0 on success, -errno on failure.
+int halCommonUartRegisterCallback(va_list args) {
+  int32_t deviceId = va_arg(args, int32_t);
+  ProcessDescriptor *processDescriptor = va_arg(args, ProcessDescriptor*);
+  int64_t messageType = va_arg(args, int64_t);
+  void *priv = va_arg(args, void*);
+
+  if ((deviceId < 0) || (((uint32_t) deviceId) >= HAL->uart->numSupported)) {
+    return -ENODEV;
+  }
+
+  if (pollOnly(HAL->uart, deviceId)) {
+    // We can't configure this device with a callback.  It's poll-only.
+    return -ENOTSUP;
+  }
+
+  ProcessDescriptor *runningProcess = getRunningProcess();
+  if (runningProcess != NULL) {
+    if ((runningProcess->processId != schedulerPid)
+      && (findHalCapabilityWithDevice(runningProcess->halCapabilities,
+        runningProcess->numHalCapabilities,
+        HAL_UART, HAL_UART_REGISTER_CALLBACK, deviceId) == NULL)
+    ) {
+      return -EACCES;
+    }
+  }
+
+  HalUartCallback *halUartCallback = &halUartCallbacks[deviceId];
+  halUartCallback->processDescriptor = processDescriptor;
+  halUartCallback->messageType = messageType;
+  halUartCallback->priv = priv;
+
+  return 0;
+}
+
+/// @fn void halCommonUartMarkReady(int32_t deviceId)
+///
+/// @brief Mark a callback as being ready.
+///
+/// @param deviceId The device ID of the UART to mark the callback ready for.
+///   The callback must have been previously registered with
+///   halCommonUartRegisterCallback.
+///
+/// @return This function returns no value.
+void halCommonUartMarkReady(int32_t deviceId) {
+  // *DO NOT* check HAL permissions on the device ID this time.  This function
+  // is called from an interrupt and can happen within the context of *ANY*
+  // process.
+  //
+  // Also, *DO NOT* do parameter validation in this function.  This function is
+  // intended to be called from within a dedicated interrupt vector that has the
+  // deviceId hardcoded.  We don't want to waste time validating the same
+  // parameter every single time.  If the caller doesn't write their vector with
+  // the correct deviceId, that's on them.
+  HalUartCallback *halUartCallback = &halUartCallbacks[deviceId];
+  if (halUartCallback->processDescriptor == NULL) {
+    // Nothing registered.  Nothing to mark.
+    return;
+  }
+
+  halUartCallbacksPending[deviceId] = true;
+  halPlatformCallbacksAnyPending = true;
+}
+
+/// @fn int halCommonPlatformInvokePendingCallbacks(va_list args)
+///
+/// @brief Invoke any pending UART callbacks.
+///
+/// @note This function is intended to be called on every iteration of the
+/// scheduler loop, so it's optimized to be as fast as possible.
+///
+/// @return Returns 0 on success, -errno on failure.
+int halCommonPlatformInvokePendingCallbacks(va_list args) {
+  (void) args;
+
+  if (halPlatformCallbacksAnyPending == false) {
+    return 0;
+  }
+  halPlatformCallbacksAnyPending = false;
+
+  // BUG:  Look, I know this is cheating.  HAL->uart->numSupported is a uint32_t
+  // and the smallest platform we run on has 16-bit integers, so this is data
+  // loss.  We can't affort to run the for loop with non-register-width
+  // integers, though.  This function is intended to be run every scheduler loop
+  // and on systems without native 32-bit integer support, it's just too slow
+  // to do 32-bit math.  For now, I'm going to assume that we'll never run on
+  // a system with more that 65,535 UARTs.  *IF WE EVER DO* in some sort of
+  // weird, alternate universe, the fix for this would be to break numSupported
+  // into a high 16-bits and a low 16-bits and run a double for loop.  At the
+  // moment, the cost of doing that is considered unacceptable, so we'll just
+  // accept the data loss and (infinitesimally) small risk.
+  unsigned int numDevices = (unsigned int) HAL->uart->numSupported;
+  for (unsigned int ii = 0; ii < numDevices; ii++) {
+    if (halUartCallbacksPending[ii] == false) {
+      // Nothing to notify
+      continue;
+    }
+
+    HalUartCallback *halUartCallback = &halUartCallbacks[ii];
+    if (halUartCallback->processDescriptor == NULL) {
+      // Not an error, but there's no callback configured.  Bail.
+      continue;
+    }
+
+    ProcessMessage *processMessage =  &halUartCallbackMessages[ii];
+    if (processMessageInUse(processMessage)) {
+      // The recipient hasn't processed the last interrupt.  That's OK.  When
+      // they do a read, they'll get everything in the buffer.  We need to mark
+      // halPlatformCallbacksAnyPending true again so that we don't take the
+      // early exit the next time this function is called.
+      halPlatformCallbacksAnyPending = true;
+      continue;
+    }
+
+    halUartCallbacksPending[ii] = false;
+
+    processMessageInit(processMessage,
+      halUartCallback->messageType, halUartCallback->priv,
+      sizeof(void*), false);
+    if (processMessageQueuePush(
+      halUartCallback->processDescriptor, processMessage) != processSuccess
+    ) {
+      processMessageRelease(processMessage);
+
+      // processMessageQueuePush will fail if the process is no longer running.
+      // Clean up the callback if so.
+      if (processRunning(halUartCallback->processDescriptor) == false) {
+        memset(halUartCallback, 0, sizeof(*halUartCallback));
+        // Don't mark the callback pending again.
+        continue;
+      }
+
+      // Mark the callback pending again since we weren't able to process it.
+      halUartCallbacksPending[ii] = true;
+      halPlatformCallbacksAnyPending = true;
+    }
   }
 
   return 0;

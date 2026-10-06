@@ -142,6 +142,7 @@ typedef enum HalPlatformFunction {
   HAL_PLATFORM_RESTART_ROOT_FILESYSTEM,
   HAL_PLATFORM_RESTART_SHELL,
   HAL_PLATFORM_START_PROCESSES,
+  HAL_PLATFORM_INVOKE_PENDING_CALLBACKS,
   HAL_PLATFORM_NUM_FNS,
 } HalPlatformFunction;
 
@@ -176,7 +177,9 @@ typedef enum HalMemoryFunction {
 typedef enum HalUartFunction {
   HAL_UART_INIT,
   HAL_UART_CONFIGURE,
+  HAL_UART_REGISTER_CALLBACK,
   HAL_UART_POLL,
+  HAL_UART_READ,
   HAL_UART_WRITE,
   HAL_UART_IS_CONSOLE,
   HAL_UART_NUM_FNS,
@@ -416,6 +419,13 @@ typedef struct HalPlatform {
   ///
   /// @return Returns 0 on success, -errno on failure.
   int (*startProcesses)(HalStartProcessesFn *returnValue);
+
+  /// @fn int invokePendingCallbacks(void)
+  ///
+  /// @brief Invoke any callbacks that are pending.
+  ///
+  /// @return Returns 0 on success, -errno on failure.
+  int (*invokePendingCallbacks)(void);
 } HalPlatform;
 
 typedef struct HalMemory {
@@ -702,11 +712,29 @@ typedef struct HalUart {
   ///
   /// @brief Configure a UART device.
   ///
-  /// @param device ID The zero-based ID of the UART to configure.
+  /// @param deviceId The zero-based ID of the UART to configure.
   /// @param baud The desired baud rate of the UART.
   ///
   /// @return Returns 0 on success, -errno on failure.
   int (*configure)(int32_t deviceId, uint32_t baud);
+  
+  /// @fn int registerCallback(int32_t deviceId,
+  ///   ProcessDescriptor *processDescriptor, int64_t messageType, void *priv)
+  ///
+  /// @brief Register a callback to be called when the interrupt for a UART
+  /// fires.
+  ///
+  /// @param deviceId The zero-based ID of the UART to register a callback for.
+  /// @param processDescriptor A pointer to the ProcessDescriptor for the
+  ///   process to call.
+  /// @param messageType The type of the message to send to the process for the
+  ///   callback.
+  /// @param priv A pointer to private data the process wants to be provided
+  ///   when the callback triggers.
+  ///
+  /// @return Returns 0 on success, -errno on failure.
+  int (*registerCallback)(int32_t deviceId,
+    ProcessDescriptor *processDescriptor, int64_t messageType, void *priv);
   
   /// @fn int poll(int32_t deviceId)
   ///
@@ -718,12 +746,30 @@ typedef struct HalUart {
   /// failure.
   int (*poll)(int32_t deviceId);
   
+  /// @fn int read(int32_t deviceId, uint8_t *data, ssize_t length,
+  ///   ssize_t *returnValue)
+  ///
+  /// @brief Read data from a UART.  Returns immediately with *returnValue set
+  /// to 0 if no bytes are ready for the UART or if the device is a poll-only
+  /// device.
+  ///
+  /// @param deviceId The zero-based ID of the UART to read from.
+  /// @param data A pointer to the buffer to fill with data read from the UART.
+  /// @param length The size of the buffer provided.  This is the maximum number
+  ///   of bytes that will be read in a single call.
+  /// @param returnValue A pointer to a ssize_t that will hold the number of
+  ///   bytes read on success.
+  ///
+  /// @return Returns 0 on success, -errno on failure.
+  int (*read)(int32_t deviceId, uint8_t *data, ssize_t length,
+    ssize_t *returnValue);
+
   /// @fn int write(int32_t deviceId, const uint8_t *data, ssize_t length,
   ///   ssize_t *returnValue)
   ///
   /// @brief Write data to a UART.
   ///
-  /// @param deviceId The zero-based ID of the UART to read from.
+  /// @param deviceId The zero-based ID of the UART to write to.
   /// @param data A pointer to arbitrary bytes of data to write to the UART.
   /// @param length The number of bytes to write to the UART from the data
   ///   pointer.
@@ -745,6 +791,25 @@ typedef struct HalUart {
   /// @return Returns 0 on success, -errno on failure.
   int (*isConsole)(int32_t deviceId, bool *returnValue);
 } HalUart;
+
+typedef struct HalUartCallback {
+  /// @var processDescriptor
+  ///
+  /// @brief A pointer to the ProcessDescriptor to push a message onto for the
+  /// callback.
+  ProcessDescriptor *processDescriptor;
+  
+  /// @var messageType
+  ///
+  /// @brief The type of the message to send to the process for the callback.
+  int64_t messageType;
+  
+  /// @var priv
+  ///
+  /// @brief A pointer to private data the process wants to be provided when
+  /// the callback is triggered.
+  void *priv;
+} HalUartCallback;
 
 typedef struct HalDio {
   /// @var numSupported

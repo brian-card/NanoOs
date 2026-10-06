@@ -6,6 +6,8 @@
 ///                    console: its receive buffer is fed by mockUartFeed()
 ///                    (as if a user typed) and its transmit buffer is read by
 ///                    mockUartDrain().  Device 0 exists but sinks its output.
+///                    HalUart.read serves the same receive buffer, but only
+///                    once a test marks device 1 as not poll-only.
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -13,6 +15,7 @@
 
 #include <stdbool.h>
 
+#include "kernel/Hal.h"
 #include "HalMock.h"
 
 #include "MockSubsystems.h"
@@ -100,6 +103,34 @@ int mockUartPollFn(va_list args) {
     return -1;
   }
   return ringPop(&_rx);
+}
+
+/// @fn int mockUartReadFn(va_list args)
+///
+/// @brief Copy up to length bytes from the console's receive buffer.  Like the
+/// real HALs, a poll-only device reports 0 bytes read.
+///
+/// @param args A va_list holding the int32_t deviceId, uint8_t *data,
+///   ssize_t length, and ssize_t *returnValue arguments of HalUart.read.
+///
+/// @return Returns 0.
+int mockUartReadFn(va_list args) {
+  int32_t deviceId = va_arg(args, int32_t);
+  uint8_t *data = va_arg(args, uint8_t*);
+  ssize_t length = va_arg(args, ssize_t);
+  ssize_t *returnValue = va_arg(args, ssize_t*);
+
+  ssize_t bytesRead = 0;
+  if ((deviceId == MOCK_CONSOLE_UART) && !pollOnly(HAL->uart, deviceId)) {
+    while ((bytesRead < length) && (ringCount(&_rx) > 0)) {
+      data[bytesRead++] = (uint8_t) ringPop(&_rx);
+    }
+  }
+
+  if (returnValue != NULL) {
+    *returnValue = bytesRead;
+  }
+  return 0;
 }
 
 int mockUartWriteFn(va_list args) {

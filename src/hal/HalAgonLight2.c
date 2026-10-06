@@ -483,14 +483,40 @@ int agonLight2NumExtraConsoleStacks(va_list args) {
 // UART subsystem stubs
 // ---------------------------------------------------------------------------
 
+/// @var NUM_UARTS
+///
+/// @brief The number of UARTs that exist on the Agon Light 2.
+#define NUM_UARTS 2
+
+/// @var halUartCallbacks
+///
+/// @brief This is the backing storage for the callback information to be used
+/// when an interrupt for one of the UARTs fires.
+HalUartCallback halUartCallbacks[NUM_UARTS];
+
+/// @var halUartCallbackMessages
+///
+/// @brief Callback-specific message storage to be used when a UART interrupt
+/// is triggered.
+ProcessMessage halUartCallbackMessages[NUM_UARTS];
+
+/// @var halUartCallbacksPending
+///
+/// @brief Callback-specific callback-pending storage to be used when a UART
+/// interrupt is triggered.
+volatile bool halUartCallbacksPending[NUM_UARTS];
+
 int agonLight2InitUart(va_list args) {
   (void) args;
+  memset((void*) halUartCallbacks, 0, sizeof(halUartCallbacks));
+  memset((void*) halUartCallbackMessages, 0, sizeof(halUartCallbackMessages));
+  memset((void*) halUartCallbacksPending, 0, sizeof(halUartCallbacksPending));
   return 0;
 }
 
 extern void agonLight2ConfigureUart0Impl(uint16_t divisor);
 extern void agonLight2ConfigureUart1Impl(uint16_t divisor);
-void (*agonLight2ConfigureUartImpl[2])(uint16_t divisor) = {
+void (*agonLight2ConfigureUartImpl[NUM_UARTS])(uint16_t divisor) = {
   agonLight2ConfigureUart0Impl,
   agonLight2ConfigureUart1Impl,
 };
@@ -513,7 +539,7 @@ int agonLight2ConfigureUart(va_list args) {
 
 extern int agonLight2PollUart0Impl(void);
 extern int agonLight2PollUart1Impl(void);
-int (*agonLight2PollUartImpl[2])(void) = {
+int (*agonLight2PollUartImpl[NUM_UARTS])(void) = {
   agonLight2PollUart0Impl,
   agonLight2PollUart1Impl,
 };
@@ -529,9 +555,46 @@ int agonLight2PollUart(va_list args) {
   return (int32_t) agonLight2PollUartImpl[deviceId]();
 }
 
+extern size_t agonLight2ReadUart1Impl(uint8_t *data, size_t length);
+size_t (*agonLight2ReadUartImpl[NUM_UARTS])(uint8_t *data, size_t length) = {
+  NULL, // UART0 is poll-only.
+  agonLight2ReadUart1Impl,
+};
+
+/// @fn int agonLight2ReadUart(va_list args)
+///
+/// @brief Read whatever bytes a UART's interrupt handler has buffered, up to
+/// the provided length, without blocking.  Poll-only UARTs report 0 bytes.
+///
+/// @param args A va_list holding the int32_t deviceId, uint8_t *data,
+///   ssize_t length, and ssize_t *returnValue arguments of HalUart.read.
+///
+/// @return Returns 0 on success, -errno on failure.
+int agonLight2ReadUart(va_list args) {
+  int32_t  deviceId    = va_arg(args, int32_t);
+  uint8_t *data        = va_arg(args, uint8_t*);
+  ssize_t  length      = va_arg(args, ssize_t);
+  ssize_t *returnValue = va_arg(args, ssize_t*);
+
+  if (deviceId >= (sizeof(agonLight2ReadUartImpl)
+    / sizeof(agonLight2ReadUartImpl[0]))
+  ) {
+    return -ERANGE;
+  }
+  ssize_t bytesRead = 0;
+  if ((agonLight2ReadUartImpl[deviceId] != NULL) && (length > 0)) {
+    bytesRead = (ssize_t) agonLight2ReadUartImpl[deviceId](data, length);
+  }
+  if (returnValue != NULL) {
+    *returnValue = bytesRead;
+  }
+
+  return 0;
+}
+
 extern void agonLight2WriteUart0Impl(uint8_t c);
 extern void agonLight2WriteUart1Impl(uint8_t c);
-void (*agonLight2WriteUartImpl[2])(uint8_t c) = {
+void (*agonLight2WriteUartImpl[NUM_UARTS])(uint8_t c) = {
   agonLight2WriteUart0Impl,
   agonLight2WriteUart1Impl,
 };
@@ -1683,6 +1746,8 @@ static HalFunction agonLight2PlatformFunctions[HAL_PLATFORM_NUM_FNS] = {
   [HAL_PLATFORM_RESTART_ROOT_FILESYSTEM] = agonLight2RestartRootFilesystem,
   [HAL_PLATFORM_RESTART_SHELL]           = agonLight2RestartShell,
   [HAL_PLATFORM_START_PROCESSES]         = agonLight2StartProcesses,
+  [HAL_PLATFORM_INVOKE_PENDING_CALLBACKS] =
+    halCommonPlatformInvokePendingCallbacks,
 };
 
 static HalFunction agonLight2MemoryFunctions[HAL_MEMORY_NUM_FNS] = {
@@ -1707,11 +1772,13 @@ static HalFunction agonLight2MemoryFunctions[HAL_MEMORY_NUM_FNS] = {
 };
 
 static HalFunction agonLight2UartFunctions[HAL_UART_NUM_FNS] = {
-  [HAL_UART_INIT]       = agonLight2InitUart,
-  [HAL_UART_CONFIGURE]  = agonLight2ConfigureUart,
-  [HAL_UART_POLL]       = agonLight2PollUart,
-  [HAL_UART_WRITE]      = agonLight2WriteUart,
-  [HAL_UART_IS_CONSOLE] = agonLight2IsUartConsole,
+  [HAL_UART_INIT]              = agonLight2InitUart,
+  [HAL_UART_CONFIGURE]         = agonLight2ConfigureUart,
+  [HAL_UART_REGISTER_CALLBACK] = halCommonUartRegisterCallback,
+  [HAL_UART_POLL]              = agonLight2PollUart,
+  [HAL_UART_READ]              = agonLight2ReadUart,
+  [HAL_UART_WRITE]             = agonLight2WriteUart,
+  [HAL_UART_IS_CONSOLE]        = agonLight2IsUartConsole,
 };
 
 static HalFunction agonLight2DioFunctions[HAL_DIO_NUM_FNS] = {
@@ -1763,7 +1830,7 @@ static HalFunction agonLight2BlockDeviceFunctions[HAL_BLOCK_DEVICE_NUM_FNS] = {
 // ---------------------------------------------------------------------------
 
 static uint32_t agonLight2UartsOnline[]        = { 0x00000003 };
-static uint32_t agonLight2UartsPollOnly[]      = { 0x00000000 };
+static uint32_t agonLight2UartsPollOnly[]      = { 0x00000001 };
 
 /// @var agonLight2DiosOnline
 ///
@@ -1854,7 +1921,7 @@ int halAgonLight2Init(void) {
     _processStorage[ii] = _processStorageBase[ii];
   }
 
-  halImpl.uart->numSupported        = 2;
+  halImpl.uart->numSupported        = NUM_UARTS;
   halImpl.uart->online              = agonLight2UartsOnline;
   halImpl.uart->pollOnly            = agonLight2UartsPollOnly;
 

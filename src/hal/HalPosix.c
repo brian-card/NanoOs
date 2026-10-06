@@ -101,8 +101,10 @@ int posixNumExtraConsoleStacks(va_list args);
 int posixInitUart(va_list args);
 int posixConfigureUart(va_list args);
 int posixPollUart(va_list args);
+int posixReadUart(va_list args);
 int posixWriteUart(va_list args);
 int posixIsUartConsole(va_list args);
+bool posixConsolePollOnlyRequested(void);
 
 int posixInitDio(va_list args);
 int posixConfigureDio(va_list args);
@@ -166,7 +168,7 @@ static uint32_t posixUartsOnline[] = {
 };
 
 static uint32_t posixUartsPollOnly[] = {
-  0x00000002,
+  0x00000000,
 };
 
 static uint32_t posixDiosOnline[] = {
@@ -621,6 +623,8 @@ static HalFunction posixPlatformFunctions[HAL_PLATFORM_NUM_FNS] = {
   [HAL_PLATFORM_RESTART_ROOT_FILESYSTEM] = posixRestartRootFilesystem,
   [HAL_PLATFORM_RESTART_SHELL]           = posixRestartShell,
   [HAL_PLATFORM_START_PROCESSES]         = posixStartProcesses,
+  [HAL_PLATFORM_INVOKE_PENDING_CALLBACKS] =
+    halCommonPlatformInvokePendingCallbacks,
 };
 
 static HalFunction posixMemoryFunctions[HAL_MEMORY_NUM_FNS] = {
@@ -645,11 +649,13 @@ static HalFunction posixMemoryFunctions[HAL_MEMORY_NUM_FNS] = {
 };
 
 static HalFunction posixUartFunctions[HAL_UART_NUM_FNS] = {
-  [HAL_UART_INIT]       = posixInitUart,
-  [HAL_UART_CONFIGURE]  = posixConfigureUart,
-  [HAL_UART_POLL]       = posixPollUart,
-  [HAL_UART_WRITE]      = posixWriteUart,
-  [HAL_UART_IS_CONSOLE] = posixIsUartConsole,
+  [HAL_UART_INIT]              = posixInitUart,
+  [HAL_UART_CONFIGURE]         = posixConfigureUart,
+  [HAL_UART_REGISTER_CALLBACK] = halCommonUartRegisterCallback,
+  [HAL_UART_POLL]              = posixPollUart,
+  [HAL_UART_READ]              = posixReadUart,
+  [HAL_UART_WRITE]             = posixWriteUart,
+  [HAL_UART_IS_CONSOLE]        = posixIsUartConsole,
 };
 
 static HalFunction posixDioFunctions[HAL_DIO_NUM_FNS] = {
@@ -710,6 +716,9 @@ int halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
   halFunctions[HAL_TIMER]        = posixTimerFunctions;
   halFunctions[HAL_BLOCK_DEVICE] = posixBlockDeviceFunctions;
 
+  if (posixConsolePollOnlyRequested()) {
+    posixUartsPollOnly[0] |= 0x00000002;
+  }
   halImpl.uart->numSupported = 2;
   halImpl.uart->online       = posixUartsOnline;
   halImpl.uart->pollOnly     = posixUartsPollOnly;
