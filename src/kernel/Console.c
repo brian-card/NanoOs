@@ -1396,8 +1396,7 @@ void* runConsole(void *args) {
       && (HAL->uart->registerCallback(ii, getRunningProcess(),
         CONSOLE_COMMAND_SIGNATURE | CONSOLE_INPUT_READY, consolePort) != 0)
     ) {
-      logError("Could not register for input from port %d.  Polling it.\n",
-        ii);
+      logError("Could not register for input from port %d.  Polling it.\n", ii);
       consolePort->pollOnly = true;
     }
     if (consolePort->pollOnly == true) {
