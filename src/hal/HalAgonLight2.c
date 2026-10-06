@@ -555,9 +555,10 @@ int agonLight2PollUart(va_list args) {
   return (int32_t) agonLight2PollUartImpl[deviceId]();
 }
 
+extern size_t agonLight2ReadUart0Impl(uint8_t *data, size_t length);
 extern size_t agonLight2ReadUart1Impl(uint8_t *data, size_t length);
 size_t (*agonLight2ReadUartImpl[NUM_UARTS])(uint8_t *data, size_t length) = {
-  NULL, // UART0 is poll-only.
+  agonLight2ReadUart0Impl,
   agonLight2ReadUart1Impl,
 };
 
@@ -1830,7 +1831,7 @@ static HalFunction agonLight2BlockDeviceFunctions[HAL_BLOCK_DEVICE_NUM_FNS] = {
 // ---------------------------------------------------------------------------
 
 static uint32_t agonLight2UartsOnline[]        = { 0x00000003 };
-static uint32_t agonLight2UartsPollOnly[]      = { 0x00000001 };
+static uint32_t agonLight2UartsPollOnly[]      = { 0x00000000 };
 
 /// @var agonLight2DiosOnline
 ///

@@ -102,7 +102,7 @@ __nanoOsIvt:
     .short prt4Tramp     ; 0x12  PRT4
     .short prt5Tramp     ; 0x14  PRT5
     .short _defaultIsr   ; 0x16
-    .short _defaultIsr   ; 0x18  UART0
+    .short uart0Tramp    ; 0x18  UART0
     .short uart1Tramp    ; 0x1A  UART1
     .short _defaultIsr   ; 0x1C  I2C
     .short _defaultIsr   ; 0x1E  SPI
@@ -303,7 +303,7 @@ TMR5_CTL    .equ 0x08F
 ;;; switch that may not return for a while - leaving interrupts off for that
 ;;; whole span would stall every other timer and peripheral.  A UART handler
 ;;; does no such thing: it only drains/refills a hardware FIFO into a small
-;;; ring buffer in src/hal/AgonLight2/Uart1.asm (soon Uart0.asm too) and
+;;; ring buffer in src/hal/AgonLight2/Uart0.asm or Uart1.asm and
 ;;; returns in a few dozen cycles.  Keeping interrupts off for that entire
 ;;; span is both cheap and important: it is what makes it safe for the
 ;;; handler to acknowledge its interrupt source (by reading RBR / writing THR)
@@ -311,11 +311,12 @@ TMR5_CTL    .equ 0x08F
 ;;; case, would let the still-pending condition re-vector into this same ISR
 ;;; before it had a chance to clear it, recursing without bound.
 ;;;
-;;; The handler itself (uart1Isr, etc.) lives in ordinary .text in its
+;;; The handler itself (uart0Isr, uart1Isr) lives in ordinary .text in its
 ;;; driver's .asm file, not in .text.ivt - only the trampoline (the literal
 ;;; hardware jump target) has to live below 64 KB.  A `call` from ADL mode is
 ;;; a plain 3-byte-address call and can reach anywhere, same as the PRT
 ;;; trampolines' `call` into C functions linked well above 64 KB.
+.extern uart0Isr
 .extern uart1Isr
 
 .macro UART_TRAMPOLINE name, handler
@@ -337,5 +338,7 @@ TMR5_CTL    .equ 0x08F
     reti                        ; plain RETI: MADL=0 / pure ADL, 3-byte pushed PC
 .endm
 
+    .global uart0Tramp
+    UART_TRAMPOLINE uart0Tramp, uart0Isr
     .global uart1Tramp
     UART_TRAMPOLINE uart1Tramp, uart1Isr
