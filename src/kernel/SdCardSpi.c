@@ -983,7 +983,6 @@ void* runSdCardSpi(void *args) {
   processYieldValue(&blockStorageDevice);
 
   while (1) {
-    processYield();
     handleSdCardSpiMessages(&sdCardState);
   }
 

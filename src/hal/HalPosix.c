@@ -157,11 +157,15 @@ static int posixProcessErrorNumbers(va_list args);
 static int posixProcessStorage(va_list args);
 
 // ---------------------------------------------------------------------------
-// Per-platform online bitmask arrays — pointers are installed on halCommon*
+// Per-platform bitmask arrays — pointers are installed on halCommon*
 // instances at init time.
 // ---------------------------------------------------------------------------
 
 static uint32_t posixUartsOnline[] = {
+  0x00000002,
+};
+
+static uint32_t posixUartsPollOnly[] = {
   0x00000002,
 };
 
@@ -708,6 +712,7 @@ int halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
 
   halImpl.uart->numSupported = 2;
   halImpl.uart->online       = posixUartsOnline;
+  halImpl.uart->pollOnly     = posixUartsPollOnly;
 
   halImpl.dio->numSupported = 0;
   halImpl.dio->online       = posixDiosOnline;

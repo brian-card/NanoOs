@@ -119,8 +119,6 @@ typedef struct LogEntry {
 ///
 /// @param numEntries The number of entries that the logEntries array holds.
 /// @param logEntries Array of LogEntry objects that is numMessages in size.
-///   This is a variable-length array.  The size of one element is just to keep
-///   some compilers from complaining.
 typedef struct StaticLogs {
   uintptr_t numEntries;
   LogEntry logEntries[16];

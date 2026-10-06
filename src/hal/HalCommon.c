@@ -265,6 +265,7 @@ static HalMemory halImplMemory = {
 static HalUart halImplUart = {
   .numSupported = 0,
   .online       = NULL,
+  .pollOnly     = NULL,
   .init         = halUartInit,
   .configure    = halUartConfigure,
   .poll         = halUartPoll,

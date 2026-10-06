@@ -46,6 +46,7 @@ extern "C"
 typedef struct HalArduinoAvrInitArgs {
   uint32_t  numUartsSupported;
   uint32_t *uartsOnline;
+  uint32_t *uartsPollOnly;
   uint8_t   dioStart;
   uint32_t  numDiosSupported;
   uint32_t *diosOnline;

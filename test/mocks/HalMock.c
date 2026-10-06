@@ -95,6 +95,7 @@ static HalMockRestartShellFn _restartShell = NULL;
 
 // online bitmasks (pointed at from halImpl at init time)
 static uint32_t _uartsOnline[]        = { 0x00000002 };
+static uint32_t _uartsPollOnly[]      = { 0x00000002 };
 static uint32_t _diosOnline[]         = { 0x00000000 };
 static uint32_t _spisOnline[]         = { 0x00000000 };
 static uint32_t _timersOnline[]       = { 0x00000003 };
@@ -157,6 +158,16 @@ static HalRestartRootFilesystemFn _restartRootFilesystemImpl = NULL;
 static NanoOsOverlayMap *_overlayMap = NULL;
 static NanoOsOverlayMap *_contiguousFilesystem = NULL;
 static StaticLogs *_staticLogsPtr = NULL;
+
+/// @def NUM_LOG_ENTRIES
+///
+/// @brief Number of LogEntry/ProcessMessage pairs the mock publishes for
+/// logMessage to format and deliver from, mirroring HalPosix.c.  Without
+/// these the harness has no entry to format into and drops every log.
+#define NUM_LOG_ENTRIES 10
+
+static LogEntry _logEntries[NUM_LOG_ENTRIES];
+static ProcessMessage _logMessages[NUM_LOG_ENTRIES];
 
 // --- dispatch tables -------------------------------------------------
 
@@ -279,6 +290,30 @@ static int mockLogBufferFn(va_list args) {
   char **returnValue = va_arg(args, char**);
   if (returnValue != NULL) {
     *returnValue = _logBuffer;
+  }
+  return 0;
+}
+
+void halMockSetStringsPresent(bool stringsPresent) {
+  halImpl.memory->stringsPresent = stringsPresent;
+}
+
+void halMockSetStaticLogs(StaticLogs *staticLogs) {
+  _staticLogsPtr = staticLogs;
+}
+
+static int mockLogEntriesFn(va_list args) {
+  LogEntry **returnValue = va_arg(args, LogEntry**);
+  if (returnValue != NULL) {
+    *returnValue = _logEntries;
+  }
+  return 0;
+}
+
+static int mockLogMessagesFn(va_list args) {
+  ProcessMessage **returnValue = va_arg(args, ProcessMessage**);
+  if (returnValue != NULL) {
+    *returnValue = _logMessages;
   }
   return 0;
 }
@@ -455,6 +490,8 @@ int halMockInit(const HalMockConfig *config, jmp_buf *powerReturn) {
   _memoryFunctions[HAL_MEMORY_CONTIGUOUS_FILESYSTEM] = mockContiguousFilesystemFn;
   _memoryFunctions[HAL_MEMORY_STATIC_LOGS]           = mockStaticLogsFn;
   _memoryFunctions[HAL_MEMORY_LOG_BUFFER]            = mockLogBufferFn;
+  _memoryFunctions[HAL_MEMORY_LOG_ENTRIES]           = mockLogEntriesFn;
+  _memoryFunctions[HAL_MEMORY_LOG_MESSAGES]          = mockLogMessagesFn;
   _memoryFunctions[HAL_MEMORY_ALL_PROCESSES]         = mockAllProcessesFn;
   _memoryFunctions[HAL_MEMORY_READY_QUEUES]          = mockReadyQueuesFn;
   _memoryFunctions[HAL_MEMORY_WAITING_QUEUE]         = mockWaitingQueueFn;
@@ -487,6 +524,7 @@ int halMockInit(const HalMockConfig *config, jmp_buf *powerReturn) {
   // Subsystem counts / online bitmasks.
   halImpl.uart->numSupported        = 2;
   halImpl.uart->online              = _uartsOnline;
+  halImpl.uart->pollOnly            = _uartsPollOnly;
   halImpl.dio->numSupported         = 0;
   halImpl.dio->online              = _diosOnline;
   halImpl.spi->numSupported         = 0;
@@ -497,6 +535,9 @@ int halMockInit(const HalMockConfig *config, jmp_buf *powerReturn) {
   halImpl.blockDevice->online      = _blockDevicesOnline;
 
   halImpl.memory->logBufferSize  = sizeof(_logBuffer);
+  halImpl.memory->numLogEntries  = NUM_LOG_ENTRIES;
+  memset(_logEntries, 0, sizeof(_logEntries));
+  memset(_logMessages, 0, sizeof(_logMessages));
   halImpl.memory->stringsPresent = true;
 
   memset(_allProcesses, 0, sizeof(_allProcesses));
@@ -522,9 +563,10 @@ int halMockInit(const HalMockConfig *config, jmp_buf *powerReturn) {
   if (result != 0) {
     return result;
   }
-  if (_staticLogsPtr != NULL) {
-    memset(_staticLogsPtr, 0, sizeof(StaticLogs));
-  }
+  // halPosixImplImit hands back an area inside the heap for a logger process
+  // to drain.  This mock starts no logger (stringsPresent is true), so
+  // publishing it would park entries in memory the allocator hands out.
+  _staticLogsPtr = NULL;
 
   NANO_OS_API = &nanoOsApi;
 

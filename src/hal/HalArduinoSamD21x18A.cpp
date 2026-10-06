@@ -1606,6 +1606,11 @@ static uint32_t halArduinoSamD21x18ABlockDevicesOnline[] = {
 /// @brief Placeholder; actual online arrays come from the per-board init args.
 static uint32_t *halArduinoSamD21x18AUartsOnline = NULL;
 
+/// @var halArduinoSamD21x18AUartsPollOnly
+///
+/// @brief Placeholder; actual online arrays come from the per-board init args.
+static uint32_t *halArduinoSamD21x18AUartsPollOnly = NULL;
+
 /// @var halArduinoSamD21x18ADiosOnline
 ///
 /// @brief Placeholder; actual online arrays come from the per-board init args.
@@ -2101,8 +2106,9 @@ int halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
   _spiSckDio           = args->spiSckDio;
   _sdCardPinChipSelect = args->sdCardPinChipSelect;
 
-  halArduinoSamD21x18AUartsOnline = args->uartsOnline;
-  halArduinoSamD21x18ADiosOnline  = args->diosOnline;
+  halArduinoSamD21x18AUartsOnline   = args->uartsOnline;
+  halArduinoSamD21x18AUartsPollOnly = args->uartsPollOnly;
+  halArduinoSamD21x18ADiosOnline    = args->diosOnline;
 
   halImpl.memory->overlaySize = OVERLAY_SIZE;
 
@@ -2149,6 +2155,7 @@ int halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
 
   halImpl.uart->numSupported = args->numUartsSupported;
   halImpl.uart->online       = args->uartsOnline;
+  halImpl.uart->pollOnly     = args->uartsPollOnly;
 
   halImpl.dio->numSupported = args->numDiosSupported;
   halImpl.dio->online       = args->diosOnline;

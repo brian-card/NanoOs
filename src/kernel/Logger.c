@@ -280,9 +280,12 @@ int logMessage(LogLevel logLevel,
         break;
       }
     }
-  } else if (staticLogs != NULL) {
+  } else if (staticLogs->numEntries
+    < (sizeof(staticLogs->logEntries) / sizeof(staticLogs->logEntries[0]))
+  ) {
     // Select a LogEntry pointer from staticLogs.  No ProcessMessage pointer is
-    // necessary.
+    // necessary.  The bound stops an overrun from running past the entries the
+    // platform reserved, into heap the logger hasn't released yet.
     logEntry = &staticLogs->logEntries[staticLogs->numEntries];
   }
   if (logEntry == NULL) {
