@@ -31,17 +31,25 @@ BIN_DIR := ../../../filesystem/contiguous-filesystem
 
 VPATH := common:fat32
 
-# Full paths (needed by mkOverlayMap.sh) and their basenames (needed to
-# compute object file paths via VPATH).
-SOURCE_PATHS := $(wildcard common/*.c) $(wildcard fat32/*.c)
-SOURCES := $(notdir $(SOURCE_PATHS))
+# Full paths (needed by mkOverlayMap.sh) and the command handlers' basenames
+# (needed to compute object file paths via VPATH).
+DRIVER_PATHS := $(wildcard fat32/*.c)
+SOURCE_PATHS := $(wildcard common/*.c) $(DRIVER_PATHS)
+COMMON_SOURCES := $(notdir $(wildcard common/*.c))
+
+# The driver sources are compiled as a single translation unit, as the
+# kernel-linked build does in src/kernel/Fat32Filesystem.c, so that each of the
+# driver header's static inline helpers is emitted once instead of once per
+# driver file.
+DRIVER_UNIT := $(OBJ_DIR)/Driver.c
 
 ELF := $(OBJ_DIR)/overlay.elf
 BINARY := $(BIN_DIR)/0.overlay
 
 OBJECTS := \
     $(OBJ_DIR)/OverlayMap.o \
-    $(addprefix $(OBJ_DIR)/,$(SOURCES:.c=.o)) \
+    $(addprefix $(OBJ_DIR)/,$(COMMON_SOURCES:.c=.o)) \
+    $(OBJ_DIR)/Driver.o \
 
 INCLUDES += \
     -I../../../../src/kernel \
@@ -95,6 +103,15 @@ $(OBJ_DIR)/%.o: %.c
 $(OBJ_DIR)/OverlayMap.o: $(OBJ_DIR)/OverlayMap.c
 	@echo "Compiling: $<"
 	$(COMPILE) $(WARNINGS) $(CFLAGS) $(INCLUDES) -c $< -o $@
+
+$(OBJ_DIR)/Driver.o: $(DRIVER_UNIT)
+	@echo "Compiling: $<"
+	$(COMPILE) $(WARNINGS) $(CFLAGS) $(INCLUDES) -c $< -o $@
+
+$(DRIVER_UNIT): $(DRIVER_PATHS)
+	@echo "Creating $@"
+	$(MKDIR) "$(OBJ_DIR)"
+	printf '#include "%s"\n' $(abspath $(DRIVER_PATHS)) > $@
 
 $(OBJ_DIR)/OverlayMap.c: $(SOURCE_PATHS)
 	@echo "Creating OverlayMap.c"
