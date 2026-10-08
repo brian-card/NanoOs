@@ -44,8 +44,8 @@ int main(int argc, char **argv) {
     while (bytesRead > 0) {
       fwrite(buffer, 1, bytesRead, stdout);
       bytesRead = fread(buffer, 1, sizeof(buffer), inputFile);
-      bytesRead = 0;
     }
+    fclose(inputFile);
   } else {
     // Read from stdin and echo the input back to the user until "EOF\n" is
     // received.
