@@ -65,6 +65,7 @@
 #include "../../usr/src/filesystems/common/ClosedirCommandHandler.c"
 #include "../../usr/src/filesystems/common/LstatCommandHandler.c"
 #include "../../usr/src/filesystems/common/IstatCommandHandler.c"
+#include "../../usr/src/filesystems/common/RenameFileCommandHandler.c"
 
 /// @var fat32CommandHandlers
 ///
@@ -92,5 +93,6 @@ const FilesystemCommandHandler fat32CommandHandlers[NUM_FILESYSTEM_COMMANDS] = {
   Closedir,             // FILESYSTEM_CLOSE_DIR
   Lstat,                // FILESYSTEM_LSTAT
   Istat,                // FILESYSTEM_ISTAT
+  RenameFile,           // FILESYSTEM_RENAME_FILE
 };
 

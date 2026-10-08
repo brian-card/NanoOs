@@ -61,7 +61,8 @@ extern "C"
 #define CLOSE_DIR_OVERLAY               blockOverlayId(15)
 #define LSTAT_OVERLAY                   blockOverlayId(16)
 #define ISTAT_OVERLAY                   blockOverlayId(17)
-#define FIRST_FS_OVERLAY_ID             18
+#define RENAME_FILE_OVERLAY             blockOverlayId(18)
+#define FIRST_FS_OVERLAY_ID             19
 
 #ifdef __cplusplus
 }

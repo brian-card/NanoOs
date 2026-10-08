@@ -87,6 +87,8 @@ const OverlayFilesystemCommandEntry filesystemCommandHandlers[] = {
   {LSTAT_OVERLAY, "Lstat"},
   // FILESYSTEM_ISTAT:
   {ISTAT_OVERLAY, "Istat"},
+  // FILESYSTEM_RENAME_FILE:
+  {RENAME_FILE_OVERLAY, "RenameFile"},
 };
 
 void* main(void *args) {

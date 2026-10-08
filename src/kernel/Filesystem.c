@@ -348,6 +348,53 @@ int filesystemRemove(const char *pathname) {
   return returnValue;
 }
 
+/// @fn int filesystemRename(const char *oldpath, const char *newpath)
+///
+/// @brief Implementation of the standard C rename call.
+///
+/// @param oldpath The full pathname to the file to rename.
+/// @param newpath The full pathname the file is to have.
+///
+/// @return Returns 0 on success, -1 and sets the value of errno on failure.
+int filesystemRename(const char *oldpath, const char *newpath) {
+  if ((oldpath == NULL) || (*oldpath == '\0')
+    || (newpath == NULL) || (*newpath == '\0')
+  ) {
+    errno = ENOENT;
+    return -1;
+  }
+
+  FilesystemRenameArgs filesystemRenameArgs;
+  memset(&filesystemRenameArgs, 0, sizeof(filesystemRenameArgs));
+  size_t oldpathSize = strlen(oldpath) + 1;
+  filesystemRenameArgs.oldpath
+    = (char*) malloc(oldpathSize + strlen(newpath) + 1);
+  if (filesystemRenameArgs.oldpath == NULL) {
+    errno = ENOMEM;
+    return -1;
+  }
+  strcpy(filesystemRenameArgs.oldpath, oldpath);
+  filesystemRenameArgs.newpath = filesystemRenameArgs.oldpath + oldpathSize;
+  strcpy(filesystemRenameArgs.newpath, newpath);
+
+  ProcessMessage *msg = initSendProcessMessageToPid(
+    rootFilesystemPid,
+    FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_RENAME_FILE,
+    &filesystemRenameArgs, sizeof(filesystemRenameArgs), true);
+  processMessageWaitForDone(msg, NULL);
+  free(filesystemRenameArgs.oldpath); filesystemRenameArgs.oldpath = NULL;
+  int returnValue = filesystemRenameArgs.returnValue;
+  if (returnValue != 0) {
+    // returnValue holds a negative errno.  Set errno for the current process
+    // and return -1 like we're supposed to.
+    errno = -returnValue;
+    returnValue = -1;
+  }
+  processMessageRelease(msg);
+
+  return returnValue;
+}
+
 /// @fn DIR* filesystemOpendir(const char *pathname)
 ///
 /// @brief Implementation of the standard C opendir call.

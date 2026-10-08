@@ -235,6 +235,21 @@ typedef struct FilesystemRemoveArgs {
   int   returnValue;
 } FilesystemRemoveArgs;
 
+/// @struct FilesystemRenameArgs
+///
+/// @brief Function parameters and return value for a rename call.
+///
+/// @param oldpath The current path to the file.
+/// @param newpath The path the file is to have after the call.
+/// @param returnValue The return value of the operation that will be passed
+///   back from the handler.  This value will be set to the process's errno
+///   value.
+typedef struct FilesystemRenameArgs {
+  char *oldpath;
+  char *newpath;
+  int   returnValue;
+} FilesystemRenameArgs;
+
 /// @struct FilesystemOpendirArgs
 ///
 /// @brief Function parameters and return value for an opendir call.
@@ -422,6 +437,7 @@ typedef enum FilesystemCommandResponse {
   FILESYSTEM_CLOSE_DIR,
   FILESYSTEM_LSTAT,
   FILESYSTEM_ISTAT,
+  FILESYSTEM_RENAME_FILE,
   NUM_FILESYSTEM_COMMANDS,
   // Responses:
 } FilesystemCommandResponse;
@@ -444,6 +460,12 @@ int filesystemRemove(const char *pathname);
 #undef remove
 #endif // remove
 #define remove filesystemRemove
+
+int filesystemRename(const char *oldpath, const char *newpath);
+#ifdef rename
+#undef rename
+#endif // rename
+#define rename filesystemRename
 
 int filesystemFSeek(FILE *stream, long offset, int whence);
 #ifdef fseek

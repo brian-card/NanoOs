@@ -68,6 +68,9 @@ static inline int fclose(FILE *stream) {
 static inline int remove(const char *pathname) {
   return overlayMap.header.osApi->userApi->remove(pathname);
 }
+static inline int rename(const char *oldpath, const char *newpath) {
+  return overlayMap.header.osApi->userApi->rename(oldpath, newpath);
+}
 static inline int fseek(FILE *stream, long offset, int whence) {
   return overlayMap.header.osApi->userApi->fseek(stream, offset, whence);
 }

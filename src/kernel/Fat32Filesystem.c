@@ -69,4 +69,5 @@
 #include "../../usr/src/filesystems/drivers/fat32/ClosedirDriver.c"
 #include "../../usr/src/filesystems/drivers/fat32/LstatDriver.c"
 #include "../../usr/src/filesystems/drivers/fat32/IstatDriver.c"
+#include "../../usr/src/filesystems/drivers/fat32/RenameFileDriver.c"
 

@@ -75,6 +75,7 @@ char** parseArgs(char *command, int *argc);
 #undef fopen
 #undef fclose
 #undef remove
+#undef rename
 #undef fseek
 #undef vfscanf
 #undef vfprintf
@@ -139,6 +140,7 @@ static const NanoOsUserApi _nanoOsUserApi = {
   .fopen = filesystemFopen,
   .fclose = filesystemFclose,
   .remove = filesystemRemove,
+  .rename = filesystemRename,
   .fseek = filesystemFSeek,
   .fileno = nanoOsFileno,
   .feof = filesystemEndOfFile,

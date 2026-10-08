@@ -663,6 +663,7 @@ IpcCapability baseSupervisorIpcCapabilities[] = {
       | (((uint32_t) 1) << FILESYSTEM_CLOSE_DIR)
       | (((uint32_t) 1) << FILESYSTEM_LSTAT)
       | (((uint32_t) 1) << FILESYSTEM_ISTAT)
+      | (((uint32_t) 1) << FILESYSTEM_RENAME_FILE)
   },
 };
 
@@ -715,6 +716,7 @@ IpcCapability baseUserIpcCapabilities[] = {
       | (((uint32_t) 1) << FILESYSTEM_CLOSE_DIR)
       | (((uint32_t) 1) << FILESYSTEM_LSTAT)
       | (((uint32_t) 1) << FILESYSTEM_ISTAT)
+      | (((uint32_t) 1) << FILESYSTEM_RENAME_FILE)
   },
 };
 
