@@ -72,6 +72,9 @@ printf '%s' "${hostname}" \
 	| MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" - ::/etc/hostname
 printf '\\s \\r \\n \\l\n\n' \
 	| MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" - ::/etc/issue
+for lineNumber in $(seq -w 1 40); do
+	printf 'line-%s\n' "${lineNumber}"
+done | MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" - ::/etc/catfile
 
 if [ "${blockFilesystem}" = "contiguous" ]; then
 	dd if="usr/filesystem/contiguous-filesystem/0.overlay" of="${outImage}" \

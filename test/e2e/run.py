@@ -183,6 +183,71 @@ def test_hostname_file(s):
     assert "nanoe2e" in s.sh("cat /etc/hostname")
 
 
+CATFILE_CONTENTS = "\n".join("line-%02d" % n for n in range(1, 41))
+
+
+def test_cat_prints_a_file_longer_than_its_buffer(s):
+    s.login()
+    assert s.sh("cat /etc/catfile") == CATFILE_CONTENTS
+
+
+def ll_names(s, path):
+    out = s.sh("ll " + path)
+    names = [m.group("name") for m in (_LS_LINE_RE.match(line)
+             for line in out.splitlines()) if m is not None]
+    return sorted(n for n in names if n not in ("./", "../"))
+
+
+def test_mv_renames_a_file_to_a_long_name(s):
+    s.login()
+    assert s.sh("mv /etc/catfile /etc/renamed-catfile.txt") == ""
+    assert s.sh("cat /etc/renamed-catfile.txt") == CATFILE_CONTENTS
+    assert ll_names(s, "/etc") == \
+        ["hostname", "issue", "renamed-catfile.txt"]
+
+
+def test_mv_moves_a_file_to_another_directory(s):
+    s.login()
+    assert s.sh("mv /etc/catfile /usr/catfile") == ""
+    assert s.sh("cat /usr/catfile") == CATFILE_CONTENTS
+    assert ll_names(s, "/etc") == ["hostname", "issue"]
+    assert "catfile" in ll_names(s, "/usr")
+
+
+def test_mv_replaces_an_existing_file(s):
+    s.login()
+    assert s.sh("mv /etc/catfile /etc/issue") == ""
+    assert s.sh("cat /etc/issue") == CATFILE_CONTENTS
+    assert ll_names(s, "/etc") == ["hostname", "issue"]
+
+
+def test_mv_changes_only_the_case_of_a_name(s):
+    s.login()
+    assert s.sh("mv /etc/catfile /etc/CatFile") == ""
+    assert s.sh("cat /etc/CatFile") == CATFILE_CONTENTS
+    assert ll_names(s, "/etc") == ["CatFile", "hostname", "issue"]
+
+
+def test_mv_reports_a_missing_source(s):
+    s.login()
+    assert s.sh("mv /etc/missing /etc/other") == \
+        'ERROR: Could not rename "/etc/missing" to "/etc/other": ' \
+        'No such entry found'
+    assert ll_names(s, "/etc") == ["catfile", "hostname", "issue"]
+
+
+def test_rm_removes_a_file(s):
+    s.login()
+    assert s.sh("rm /etc/catfile") == ""
+    assert ll_names(s, "/etc") == ["hostname", "issue"]
+
+
+def test_rm_reports_a_missing_file(s):
+    s.login()
+    assert s.sh("rm /etc/missing") == \
+        'ERROR: Could not remove "/etc/missing": No such entry found'
+
+
 def test_pipe_between_commands(s):
     s.login()
     assert "needle-in-haystack" in s.sh("echo needle-in-haystack | grep needle")
@@ -304,8 +369,8 @@ def test_dirent_lists_directories_with_correct_type(s):
 
 
 def test_dirent_lists_files_with_correct_type(s):
-    # /etc always contains exactly hostname and issue, both regular files
-    # (via mcopy), written lowercase (see above).
+    # /etc always contains hostname and issue, both regular files (via
+    # mcopy), written lowercase (see above).
     s.login()
     out = s.sh("dirtest")
     for name in ("hostname", "issue"):
