@@ -94,8 +94,6 @@ void* OpenFile(void *args) {
       } else {
         driverFclose(filesystemState->driverState, fileHandle);
       }
-    } else {
-      printString("ERROR: driverFopen returned NULL\n");
     }
   } else {
     printString("ERROR: driverState is not valid!\n");
