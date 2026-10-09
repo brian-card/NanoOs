@@ -153,11 +153,6 @@ void* driverFopen(
   int resolveResult = fat32ResolveParentDirectory(
     ds, filePath, &parentCluster, &fileName);
   if (resolveResult != FAT32_SUCCESS) {
-    printString("driverFopen: resolveParent failed for \"");
-    printString(filePath);
-    printString("\" result=");
-    printInt(resolveResult);
-    printString("\n");
     return NULL;
   }
 
