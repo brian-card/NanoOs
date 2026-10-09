@@ -664,6 +664,8 @@ IpcCapability baseSupervisorIpcCapabilities[] = {
       | (((uint32_t) 1) << FILESYSTEM_LSTAT)
       | (((uint32_t) 1) << FILESYSTEM_ISTAT)
       | (((uint32_t) 1) << FILESYSTEM_RENAME_FILE)
+      | (((uint32_t) 1) << FILESYSTEM_MKDIR)
+      | (((uint32_t) 1) << FILESYSTEM_RMDIR)
   },
 };
 
@@ -717,6 +719,8 @@ IpcCapability baseUserIpcCapabilities[] = {
       | (((uint32_t) 1) << FILESYSTEM_LSTAT)
       | (((uint32_t) 1) << FILESYSTEM_ISTAT)
       | (((uint32_t) 1) << FILESYSTEM_RENAME_FILE)
+      | (((uint32_t) 1) << FILESYSTEM_MKDIR)
+      | (((uint32_t) 1) << FILESYSTEM_RMDIR)
   },
 };
 
@@ -2272,6 +2276,7 @@ FILE* schedFopen(const char *pathname, const char *mode) {
       .pathname = (char*) pathname,
       .mode = (char*) mode,
       .fd = 0, // We don't care
+      .now = time(NULL),
     };
     logDebug("schedFopen: Sending message\n");
     if (schedulerInitSendMessageToPid(rootFilesystemPid,
