@@ -145,6 +145,31 @@ FilesystemState* filesystemInitDriver(FilesystemState *filesystemState) {
   driverState->totalDataClusters =
     dataSectors / bpb->sectorsPerCluster;
 
+  // Start cluster searches at the FSInfo sector's next-free hint when it is
+  // present and in range.  The hint is advisory, so any value is safe.
+  driverState->nextFreeCluster = FAT32_CLUSTER_FIRST_VALID;
+  if (blockDevice->readBlocks(blockDevice->context,
+    filesystemState->startLba + bpbFsInfoSector, 1,
+    blockDevice->blockSize, filesystemState->blockBuffer) == 0
+  ) {
+    Fat32FsInfoSector *fsInfo
+      = (Fat32FsInfoSector*) filesystemState->blockBuffer;
+    uint32_t leadSignature;
+    uint32_t structSignature;
+    uint32_t nextFree;
+    memcpy(&leadSignature, &fsInfo->leadSignature, sizeof(uint32_t));
+    memcpy(&structSignature, &fsInfo->structSignature, sizeof(uint32_t));
+    memcpy(&nextFree, &fsInfo->nextFree, sizeof(uint32_t));
+    if ((leadSignature == FAT32_FSINFO_LEAD_SIG)
+      && (structSignature == FAT32_FSINFO_STRUCT_SIG)
+      && (nextFree >= FAT32_CLUSTER_FIRST_VALID)
+      && (nextFree
+        < FAT32_CLUSTER_FIRST_VALID + driverState->totalDataClusters)
+    ) {
+      driverState->nextFreeCluster = nextFree;
+    }
+  }
+
   filesystemState->driverState = driverState;
 
   filesystemState->args = ((void*) FAT32_SUCCESS);
