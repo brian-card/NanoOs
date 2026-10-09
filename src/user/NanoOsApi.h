@@ -137,6 +137,8 @@ typedef struct NanoOsUserApi {
   int (*fclose)(FILE *stream);
   int (*remove)(const char *pathname);
   int (*rename)(const char *oldpath, const char *newpath);
+  int (*mkdir)(const char *pathname, mode_t mode);
+  int (*rmdir)(const char *pathname);
   int (*fseek)(FILE *stream, long offset, int whence);
   int (*fileno)(FILE *stream);
   int (*feof)(FILE *stream);
