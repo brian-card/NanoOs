@@ -46,7 +46,7 @@
 
 // Prototypes used by this handler.
 void* driverFopen(
-    void *driverState, const char *filePath, const char *mode);
+    void *driverState, const char *filePath, const char *mode, time_t now);
 int driverFclose(void *driverState, void *fileHandle);
 
 /// @fn void* OpenFile(void *args)
@@ -75,7 +75,7 @@ void* OpenFile(void *args) {
   if (filesystemState->driverState != NULL) {
     void *fileHandle = driverFopen(
       filesystemState->driverState,
-      fopenArgs->pathname, fopenArgs->mode);
+      fopenArgs->pathname, fopenArgs->mode, fopenArgs->now);
     if (fileHandle != NULL) {
       nanoOsFile = (NanoOsFile*) malloc(sizeof(NanoOsFile));
       if (nanoOsFile != NULL) {
