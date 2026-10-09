@@ -164,6 +164,7 @@ typedef struct NanoOsUserApi {
   
   // Direct I/O:
   size_t (*fread)(void *ptr, size_t size, size_t nmemb, FILE *stream);
+  char* (*fgets)(char *s, int size, FILE *stream);
   size_t (*fwrite)(const void *ptr, size_t size, size_t nmemb, FILE *stream);
   
   // Memory management:

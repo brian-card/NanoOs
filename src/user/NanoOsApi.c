@@ -164,6 +164,7 @@ static const NanoOsUserApi _nanoOsUserApi = {
   
   // Direct I/O:
   .fread = nanoOsFread,
+  .fgets = nanoOsFgets,
   .fwrite = nanoOsFwrite,
   
   // Memory management:
