@@ -187,16 +187,7 @@ static inline int puts(const char *s) {
   return fputs("\n", stdout);
 }
 static inline char *fgets(char *s, int size, FILE *stream) {
-  char *returnValue = NULL;
-  if (size > 0) {
-    size_t bytesRead = overlayMap.header.osApi->userApi->fread(
-      s, 1, size - 1, stream);
-    if (bytesRead > 0) {
-      s[bytesRead] = '\0';
-      returnValue = s;
-    }
-  }
-  return returnValue;
+  return overlayMap.header.osApi->userApi->fgets(s, size, stream);
 }
 
 // Direct I/O:
