@@ -147,58 +147,55 @@ int printEscape(char escapeChar, struct utsname *utsname) {
 /// @fn int showIssue(void)
 ///
 /// @brief Display the contents of /etc/issue, replacing any escapes with the
-/// appropriate information.
+/// appropriate information.  A missing /etc/issue displays nothing.
 ///
 /// @return Returns 0 on success, -1 on failure.
 int showIssue(void) {
-  char *buffer = (char*) malloc(96);
-  if (buffer == NULL) {
-    fputs("ERROR! Could not allocate space for buffer in showIssue.\n", stderr);
-    return -1;
-  }
-  
   FILE *issueFile = fopen("/etc/issue", "r");
   if (issueFile == NULL) {
-    fputs("ERROR! Could not open \"/etc/issue\" in showIssue.\n", stderr);
-    return -1;
+    return 0;
   }
-  
-  if (fgets(buffer, 96, issueFile) != buffer) {
-    fputs("ERROR! fgets did not read \"/etc/issue\"\n", stderr);
-  }
-  fclose(issueFile);
-  
+
+  int returnValue = 0;
+  char *buffer = (char*) malloc(96);
   struct utsname *utsname = (struct utsname*) malloc(sizeof(struct utsname));
-  uname(utsname);
-  
-  char *nextPart = buffer;
-  char *backslashAt = strchr(nextPart, '\\');
-  while (backslashAt != NULL) {
-    *backslashAt = '\0';
-    fputs(nextPart, stdout);
-    
-    // Get to the escape character after the backslash.
-    nextPart = backslashAt + 1;
-    printEscape(*nextPart, utsname);
-    
-    // Skip over whatever the escape sequence was.
-    nextPart = &nextPart[strcspn(nextPart, " \t\n")];
-    backslashAt = strchr(nextPart, '\\');
+  if ((buffer == NULL) || (utsname == NULL) || (uname(utsname) != 0)) {
+    fputs("ERROR! Could not prepare to show \"/etc/issue\".\n", stderr);
+    returnValue = -1;
+    goto exit;
   }
-  fputs(nextPart, stdout);
-  
+
+  while (fgets(buffer, 96, issueFile) == buffer) {
+    char *nextPart = buffer;
+    char *backslashAt = strchr(nextPart, '\\');
+    while (backslashAt != NULL) {
+      *backslashAt = '\0';
+      fputs(nextPart, stdout);
+
+      // Get to the escape character after the backslash.
+      nextPart = backslashAt + 1;
+      printEscape(*nextPart, utsname);
+
+      // Skip over whatever the escape sequence was.
+      nextPart = &nextPart[strcspn(nextPart, " \t\n")];
+      backslashAt = strchr(nextPart, '\\');
+    }
+    fputs(nextPart, stdout);
+  }
+
+exit:
+  fclose(issueFile);
   free(utsname);
   free(buffer);
-  return 0;
+  return returnValue;
 }
 
 int main(int argc, char **argv) {
   (void) argc;
   
-  if (showIssue() != 0) {
-    // Error message, if any, was already displayed.
-    return 1;
-  }
+  // The banner is informational, so a failure to show it doesn't prevent a
+  // login.  showIssue displays its own error message.
+  showIssue();
   
   char *buffer = (char*) malloc(LOGIN_NAME_MAX);
   if (buffer == NULL) {
