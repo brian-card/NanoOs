@@ -65,20 +65,38 @@ def build_image():
     return img
 
 
+# Simulated memory size, in bytes, that leaves a heap of under 3 KB, as on the
+# SAMD21 boards.
+SMALL_MEMORY_SIZE = 71500
+
+
 class Session:
     def __init__(self, sim_bin, image, env=None):
+        self.sim_bin = sim_bin
+        self.env = env
         self.tmp = tempfile.mkdtemp(prefix="nanoe2e-")
         img_copy = os.path.join(self.tmp, "disk.img")
         shutil.copyfile(image, img_copy)
+        self.img_copy = img_copy
+        self.spawn([img_copy])
+
+    def spawn(self, args):
         # codec_errors="replace": a misbehaving simulator can emit bytes that
         # aren't valid UTF-8, and a UnicodeDecodeError out of expect() aborts
         # the test with a decoding traceback instead of reporting what the
         # simulator actually did.
-        self.child = pexpect.spawn(sim_bin, [img_copy], encoding="utf-8",
+        self.child = pexpect.spawn(self.sim_bin, args, encoding="utf-8",
                                    codec_errors="replace", timeout=15,
-                                   env=dict(os.environ, **(env or {})))
+                                   env=dict(os.environ, **(self.env or {})))
         if VERBOSE:
             self.child.logfile_read = sys.stdout
+
+    def restart_with_memory(self, memory_size):
+        if self.child.isalive():
+            self.child.terminate(force=True)
+        self.spawn([self.img_copy, str(memory_size)])
+        self.child.expect(r"Using (\d+) bytes of dynamic memory", timeout=15)
+        return int(self.child.match.group(1))
 
     def wait_login_prompt(self):
         self.child.expect("login: ", timeout=15)
@@ -254,6 +272,104 @@ def test_grep_reads_a_file_line_by_line(s):
     assert s.sh("grep line-12 /etc/catfile") == "line-12"
     assert s.sh("grep 4 /etc/catfile") == \
         "line-04\nline-14\nline-24\nline-34\nline-40"
+
+
+def test_small_memory_boots_to_a_working_shell(s):
+    heap = s.restart_with_memory(SMALL_MEMORY_SIZE)
+    assert heap < 3 * 1024, heap
+    s.login()
+    assert s.sh("echo small-memory") == "small-memory"
+    assert s.sh("cat /etc/hostname") == "nanoe2e"
+
+
+# fsck.vfat output that is expected on every image:  mformat's label mismatch,
+# and the FSInfo free count, which the driver never updates.
+_FSCK_KNOWN = re.compile(
+    r"^(fsck\.fat \d|Volume label .* different\.|"
+    r"\s+Auto-copying volume label|Free cluster summary wrong|"
+    r"\s+Auto-correcting\.|Leaving filesystem unchanged\.|"
+    r"\S+: \d+ files, \d+/\d+ clusters|$)")
+
+
+def fsck_problems(s):
+    s.child.sendline("shutdown -h")
+    s.child.expect(pexpect.EOF, timeout=10)
+    partition = os.path.join(s.tmp, "partition.img")
+    subprocess.run(["dd", "if=" + s.img_copy, "of=" + partition, "bs=1M",
+                    "skip=2", "status=none"], check=True)
+    out = subprocess.run(["/sbin/fsck.vfat", "-n", partition],
+                         capture_output=True, text=True)
+    return [line for line in (out.stdout + out.stderr).splitlines()
+            if not _FSCK_KNOWN.match(line)]
+
+
+def test_mkdir_and_rmdir_manage_an_empty_directory(s):
+    s.login()
+    assert s.sh("mkdir /etc/newdir") == ""
+    assert ll_names(s, "/etc") == ["catfile", "hostname", "issue", "newdir/"]
+    assert ll_names(s, "/etc/newdir") == []
+    assert ll_names(s, "/etc/newdir/..") == \
+        ["catfile", "hostname", "issue", "newdir/"]
+    assert s.sh("rmdir /etc/newdir") == ""
+    assert ll_names(s, "/etc") == ["catfile", "hostname", "issue"]
+    assert fsck_problems(s) == []
+
+
+def test_mkdir_nests_directories_and_holds_files(s):
+    s.login()
+    assert s.sh("mkdir /top") == ""
+    assert s.sh("mkdir /top/inner") == ""
+    assert ll_names(s, "/top/inner/..") == ["inner/"]
+    assert s.sh("mv /etc/catfile /top/inner/catfile") == ""
+    assert s.sh("cat /top/inner/catfile") == CATFILE_CONTENTS
+    assert s.sh("rmdir /top/inner") == \
+        'ERROR: Could not remove directory "/top/inner": Directory not empty'
+    assert s.sh("rm /top/inner/catfile") == ""
+    assert s.sh("rmdir /top/inner") == ""
+    assert s.sh("rmdir /top") == ""
+    assert "top/" not in ll_names(s, "/")
+    assert fsck_problems(s) == []
+
+
+def assert_created_now(s, command, listed_name):
+    # The sim's clock is the host's, and its local time is UTC-8 with DST on.
+    before = datetime.datetime.utcnow() - datetime.timedelta(hours=7)
+    assert s.sh(command) == ""
+    after = datetime.datetime.utcnow() - datetime.timedelta(hours=7)
+    out = s.sh("ll /etc")
+    m = re.search(r"(\w{3}) (\d+)-(\d+)-(\d+)\s+(\d+):(\d+):(\d+) "
+                  + re.escape(listed_name) + "$", out, re.M)
+    assert m, out
+    shown = datetime.datetime(*(int(g) for g in m.groups()[1:]))
+    assert before - datetime.timedelta(seconds=2) <= shown <= after, \
+        (before, shown, after)
+    assert m.group(1) == shown.strftime("%a"), out
+
+
+def test_mkdir_stamps_the_directory_with_the_current_time(s):
+    s.login()
+    assert_created_now(s, "mkdir /etc/stamped", "stamped/")
+
+
+def test_touch_creates_a_file_stamped_with_the_current_time(s):
+    s.login()
+    assert_created_now(s, "touch /etc/touched", "touched")
+    assert s.sh("cat /etc/touched") == ""
+    assert ll_names(s, "/etc") == ["catfile", "hostname", "issue", "touched"]
+    assert fsck_problems(s) == []
+
+
+def test_mkdir_and_rmdir_report_errors(s):
+    s.login()
+    assert s.sh("mkdir /etc/issue") == \
+        'ERROR: Could not create directory "/etc/issue": File exists'
+    assert s.sh("mkdir /missing/dir") == \
+        'ERROR: Could not create directory "/missing/dir": No such entry found'
+    assert s.sh("rmdir /etc/issue") == \
+        'ERROR: Could not remove directory "/etc/issue": Not a directory'
+    assert s.sh("rmdir /etc/missing") == \
+        'ERROR: Could not remove directory "/etc/missing": No such entry found'
+    assert ll_names(s, "/etc") == ["catfile", "hostname", "issue"]
 
 
 def test_pipe_between_commands(s):

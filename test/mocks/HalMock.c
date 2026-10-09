@@ -21,6 +21,7 @@
 // Everything is addressed through the sim/ symlink dir so src/kernel never
 // lands on the include path.
 #include "hal/HalCommon.h"
+#include "hal/HalPosix.h"
 #include "kernel/NanoOs.h"
 #include "kernel/Processes.h"
 #include "kernel/Scheduler.h"
@@ -77,9 +78,6 @@ int posixReadUart(va_list args);
 int posixWriteUart(va_list args);
 int posixIsUartConsole(va_list args);
 
-int halPosixImplInit(jmp_buf resetBuffer,
-  NanoOsOverlayMap **overlayMap, size_t *overlaySize, StaticLogs **staticLogs,
-  NanoOsOverlayMap **contiguousFilesystem, size_t *contiguousFilesystemSize);
 
 // --- state -----------------------------------------------------------
 
@@ -567,17 +565,16 @@ int halMockInit(const HalMockConfig *config, jmp_buf *powerReturn) {
   jmp_buf implResetBuffer;
   memset(implResetBuffer, 0, sizeof(implResetBuffer));
   int32_t result = halPosixImplInit(implResetBuffer,
+    /* memorySize= */ 0,
     &_overlayMap,
     &halImpl.memory->overlaySize,
-    &_staticLogsPtr,
     &_contiguousFilesystem,
     &halImpl.memory->contiguousFilesystemSize);
   if (result != 0) {
     return result;
   }
-  // halPosixImplImit hands back an area inside the heap for a logger process
-  // to drain.  This mock starts no logger (stringsPresent is true), so
-  // publishing it would park entries in memory the allocator hands out.
+  // This mock starts no logger (stringsPresent is true), so it publishes no
+  // static logs area for one to drain.
   _staticLogsPtr = NULL;
 
   NANO_OS_API = &nanoOsApi;
