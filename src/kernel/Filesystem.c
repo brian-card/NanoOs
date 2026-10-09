@@ -190,6 +190,7 @@ FILE* filesystemFopen(const char *pathname, const char *mode) {
 
   FilesystemFopenArgs fopenArgs;
   memset(&fopenArgs, 0, sizeof(fopenArgs));
+  fopenArgs.now = time(NULL);
   fopenArgs.pathname = (char*) malloc(strlen(pathname) + 1);
   if (fopenArgs.pathname == NULL) {
     goto freeFileDescriptor;
@@ -393,6 +394,74 @@ int filesystemRename(const char *oldpath, const char *newpath) {
   processMessageRelease(msg);
 
   return returnValue;
+}
+
+/// @fn static int filesystemSendPathCommand(
+///   FilesystemCommandResponse command, const char *pathname)
+///
+/// @brief Send a filesystem command whose only argument is a path and wait
+/// for its result.
+///
+/// @param command The FILESYSTEM_* command to send.
+/// @param pathname The full pathname to operate on.
+///
+/// @return Returns 0 on success, -1 and sets the value of errno on failure.
+static int filesystemSendPathCommand(
+  FilesystemCommandResponse command, const char *pathname
+) {
+  if ((pathname == NULL) || (*pathname == '\0')) {
+    errno = ENOENT;
+    return -1;
+  }
+
+  FilesystemPathArgs filesystemPathArgs;
+  memset(&filesystemPathArgs, 0, sizeof(filesystemPathArgs));
+  filesystemPathArgs.pathname = (char*) malloc(strlen(pathname) + 1);
+  if (filesystemPathArgs.pathname == NULL) {
+    errno = ENOMEM;
+    return -1;
+  }
+  strcpy(filesystemPathArgs.pathname, pathname);
+  filesystemPathArgs.now = time(NULL);
+
+  ProcessMessage *msg = initSendProcessMessageToPid(
+    rootFilesystemPid, FILESYSTEM_COMMAND_SIGNATURE | command,
+    &filesystemPathArgs, sizeof(filesystemPathArgs), true);
+  processMessageWaitForDone(msg, NULL);
+  free(filesystemPathArgs.pathname); filesystemPathArgs.pathname = NULL;
+  int returnValue = filesystemPathArgs.returnValue;
+  if (returnValue != 0) {
+    errno = -returnValue;
+    returnValue = -1;
+  }
+  processMessageRelease(msg);
+
+  return returnValue;
+}
+
+/// @fn int filesystemMkdir(const char *pathname, mode_t mode)
+///
+/// @brief Implementation of the standard POSIX mkdir call.
+///
+/// @param pathname The full pathname of the directory to create.
+/// @param mode The permissions for the new directory.  Ignored, since the
+///   filesystem does not store permissions.
+///
+/// @return Returns 0 on success, -1 and sets the value of errno on failure.
+int filesystemMkdir(const char *pathname, mode_t mode) {
+  (void) mode;
+  return filesystemSendPathCommand(FILESYSTEM_MKDIR, pathname);
+}
+
+/// @fn int filesystemRmdir(const char *pathname)
+///
+/// @brief Implementation of the standard POSIX rmdir call.
+///
+/// @param pathname The full pathname of the empty directory to remove.
+///
+/// @return Returns 0 on success, -1 and sets the value of errno on failure.
+int filesystemRmdir(const char *pathname) {
+  return filesystemSendPathCommand(FILESYSTEM_RMDIR, pathname);
 }
 
 /// @fn DIR* filesystemOpendir(const char *pathname)

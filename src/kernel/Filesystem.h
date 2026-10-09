@@ -200,13 +200,16 @@ typedef struct FilesystemSeekArgs {
 /// @param pathname A string containing the full path to the file.
 /// @param mode A string containing the mode to open the file with.
 /// @param fd The numeric file descriptor to use for the file.
+/// @param now The time to record if the file is created, in seconds since the
+///   Unix epoch.
 /// @param returnValue A pointer to the FILE that's opened on success, NULL
 ///   on failure.
 typedef struct FilesystemFopenArgs {
-  char *pathname;
-  char *mode;
-  int   fd;
-  FILE *returnValue;
+  char   *pathname;
+  char   *mode;
+  int     fd;
+  time_t  now;
+  FILE   *returnValue;
 } FilesystemFopenArgs;
 
 /// @struct FilesystemFcloseArgs
@@ -249,6 +252,23 @@ typedef struct FilesystemRenameArgs {
   char *newpath;
   int   returnValue;
 } FilesystemRenameArgs;
+
+/// @struct FilesystemPathArgs
+///
+/// @brief Function parameters and return value for a call whose only argument
+/// is a path:  mkdir and rmdir.
+///
+/// @param pathname The path to operate on.
+/// @param now The time to record if the call creates an entry, in seconds
+///   since the Unix epoch.
+/// @param returnValue The return value of the operation that will be passed
+///   back from the handler:  0 on success or the negated errno value on
+///   failure.
+typedef struct FilesystemPathArgs {
+  char   *pathname;
+  time_t  now;
+  int     returnValue;
+} FilesystemPathArgs;
 
 /// @struct FilesystemOpendirArgs
 ///
@@ -438,6 +458,8 @@ typedef enum FilesystemCommandResponse {
   FILESYSTEM_LSTAT,
   FILESYSTEM_ISTAT,
   FILESYSTEM_RENAME_FILE,
+  FILESYSTEM_MKDIR,
+  FILESYSTEM_RMDIR,
   NUM_FILESYSTEM_COMMANDS,
   // Responses:
 } FilesystemCommandResponse;
@@ -466,6 +488,18 @@ int filesystemRename(const char *oldpath, const char *newpath);
 #undef rename
 #endif // rename
 #define rename filesystemRename
+
+int filesystemMkdir(const char *pathname, mode_t mode);
+#ifdef mkdir
+#undef mkdir
+#endif // mkdir
+#define mkdir filesystemMkdir
+
+int filesystemRmdir(const char *pathname);
+#ifdef rmdir
+#undef rmdir
+#endif // rmdir
+#define rmdir filesystemRmdir
 
 int filesystemFSeek(FILE *stream, long offset, int whence);
 #ifdef fseek
