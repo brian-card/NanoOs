@@ -1777,22 +1777,36 @@ ConsoleBuffer* nanoOsWaitForInput(void) {
 ///
 /// @param buffer The character buffer to write the captured input into.
 /// @param size The maximum number of bytes to write into the buffer.
-/// @param stream A pointer to the FILE stream to read from.  Currently, only
-///   stdin is supported.
+/// @param stream A pointer to the FILE stream to read from.
 ///
 /// @return Returns the buffer pointer provided on success, NULL on failure.
 char *nanoOsFgets(char *buffer, int size, FILE *stream) {
-  char *returnValue = NULL;
+  if ((buffer == NULL) || (size <= 0)) {
+    return NULL;
+  }
 
-  if (size > 0) {
-    size_t bytesRead = nanoOsFread(buffer, 1, size - 1, stream);
-    if (bytesRead > 0) {
-      buffer[bytesRead] = '\0';
-      returnValue = buffer;
+  size_t bytesRead = nanoOsFread(buffer, 1, size - 1, stream);
+  if (bytesRead == 0) {
+    return NULL;
+  }
+
+  // A read from stdin already stops at a newline; a read from a file doesn't.
+  if (stream != stdin) {
+    char *newlineAt = (char*) memchr(buffer, '\n', bytesRead);
+    if (newlineAt != NULL) {
+      size_t lineLength = ((size_t) (newlineAt - buffer)) + 1;
+      if ((lineLength < bytesRead)
+        && (filesystemFSeek(stream, -((long) (bytesRead - lineLength)),
+          SEEK_CUR) != 0)
+      ) {
+        return NULL;
+      }
+      bytesRead = lineLength;
     }
   }
 
-  return returnValue;
+  buffer[bytesRead] = '\0';
+  return buffer;
 }
 
 /// @fn int nanoOsVfscanf(FILE *stream, const char *format, va_list args)
