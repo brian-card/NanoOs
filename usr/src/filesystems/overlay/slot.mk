@@ -16,6 +16,7 @@ CFLAGS += -fno-pic -fno-pie -static
 CFLAGS += -ffunction-sections -fdata-sections -fcf-protection=none
 CFLAGS += -fno-jump-tables
 CFLAGS += -fno-stack-protector
+CFLAGS += -DNANO_OS_OVERLAY_FILESYSTEM
 
 # Linker flags
 ifdef USE_LD_DIRECTLY
