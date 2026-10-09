@@ -133,6 +133,25 @@ def test_login_root(s):
     s.login("root", "rootroot")
 
 
+def test_getty_shows_every_line_of_the_issue_file(s):
+    s.wait_login_prompt()
+    banner = s.child.before.replace("\r", "")
+    assert re.search(r"\nNanoOs \S+ nanoe2e tty\d+\n\n$", banner), \
+        repr(banner[-120:])
+
+
+def test_getty_prompts_for_login_without_an_issue_file(s):
+    s.login()
+    assert s.sh("rm /etc/issue") == ""
+    s.child.sendline("exit")
+    s.child.expect("login: ", timeout=15)
+    assert "ERROR" not in s.child.before, repr(s.child.before[-300:])
+    s.child.sendline("root")
+    s.child.expect("password: ", timeout=10)
+    s.child.sendline("rootroot")
+    s.child.expect(PROMPT, timeout=10)
+
+
 def test_login_rejects_bad_password(s):
     s.wait_login_prompt()
     s.child.sendline("root")
@@ -370,6 +389,160 @@ def test_mkdir_and_rmdir_report_errors(s):
     assert s.sh("rmdir /etc/missing") == \
         'ERROR: Could not remove directory "/etc/missing": No such entry found'
     assert ll_names(s, "/etc") == ["catfile", "hostname", "issue"]
+
+
+def ed_session(s, command, script):
+    # The console echoes a line only when ed reads it, so a typed-ahead script
+    # still comes back with each command followed by its own output.
+    s.child.sendline(command)
+    for line in script:
+        s.child.sendline(line)
+    s.child.expect(PROMPT, timeout=30)
+    return s.child.before.replace("\r", "")
+
+
+CATFILE_LINES = ["line-%02d" % n for n in range(1, 41)]
+
+
+def test_ed_appends_and_writes_a_new_file(s):
+    s.login()
+    out = ed_session(s, "ed", ["a", "one", "two", "three", ".", ",p",
+                               "w /etc/new.txt", "q"])
+    assert out.endswith("ed\na\none\ntwo\nthree\n.\n,p\none\ntwo\nthree\n"
+                        "w /etc/new.txt\n14\nq\n"), repr(out)
+    assert s.sh("cat /etc/new.txt") == "one\ntwo\nthree"
+    assert ll_names(s, "/etc") == \
+        ["catfile", "hostname", "issue", "new.txt"]
+    assert ll_names(s, "/tmp") == []
+
+
+def test_ed_edits_an_existing_file(s):
+    s.login()
+    out = ed_session(s, "ed /etc/catfile", [
+        "2,4p", "3d", ".=", "1i", "header", ".", "$a", "footer", ".",
+        "2c", "changed", ".", "w", "q"])
+    lines = CATFILE_LINES[:2] + CATFILE_LINES[3:]
+    lines = ["header", "changed"] + lines[1:] + ["footer"]
+    content = "\n".join(lines) + "\n"
+    assert out.endswith(
+        "ed /etc/catfile\n320\n2,4p\nline-02\nline-03\nline-04\n3d\n.=\n3\n"
+        "1i\nheader\n.\n$a\nfooter\n.\n2c\nchanged\n.\nw\n%d\nq\n"
+        % len(content)), repr(out)
+    assert s.sh("cat /etc/catfile") == content.rstrip("\n")
+    assert ll_names(s, "/etc") == ["catfile", "hostname", "issue"]
+
+
+def test_ed_resolves_addresses_and_marks(s):
+    s.login()
+    out = ed_session(s, "ed /etc/catfile", [
+        "$=", "5ka", "'a,'a+2n", "-1p", "+2", "", ";+1p", ",=", "Q"])
+    assert out.endswith(
+        "ed /etc/catfile\n320\n$=\n40\n5ka\n'a,'a+2n\n5\tline-05\n"
+        "6\tline-06\n7\tline-07\n-1p\nline-06\n+2\nline-08\n\nline-09\n"
+        ";+1p\nline-09\nline-10\n,=\n40\nQ\n"), repr(out)
+
+
+def ed_model_move(lines, a1, a2, dest):
+    block = lines[a1 - 1:a2]
+    rest = lines[:a1 - 1] + lines[a2:]
+    at = dest if dest < a1 else dest - len(block)
+    return rest[:at] + block + rest[at:]
+
+
+def ed_model_copy(lines, a1, a2, dest):
+    return lines[:dest] + lines[a1 - 1:a2] + lines[dest:]
+
+
+def test_ed_moves_copies_and_joins_lines(s):
+    s.login()
+    lines = list(CATFILE_LINES)
+    lines = ["".join(lines[0:3])] + lines[3:]
+    lines = ed_model_move(lines, 2, 3, len(lines))
+    lines = ed_model_move(lines, 10, 12, 4)
+    lines = ed_model_copy(lines, 1, 1, 0)
+    lines = ed_model_copy(lines, 2, 3, 5)
+    lines = ed_model_copy(lines, 2, 3, 2)
+    out = ed_session(s, "ed /etc/catfile", [
+        "1,3j", "2,3m$", "10,12m4", "1t0", "2,3t5", "2,3t2", "1,3m2",
+        ",p", "Q"])
+    assert out.endswith(
+        "1,3j\n2,3m$\n10,12m4\n1t0\n2,3t5\n2,3t2\n1,3m2\n?\n,p\n"
+        + "\n".join(lines) + "\nQ\n"), repr(out)
+
+
+def test_ed_reports_errors_and_guards_unsaved_changes(s):
+    s.login()
+    out = ed_session(s, "ed", [
+        "x", "h", "H", "9p", "a", "text", ".", "q", "e /etc/hostname",
+        "e /etc/hostname", ",p", "q"])
+    assert out.endswith(
+        "ed\nx\n?\nh\nunknown command\nH\nunknown command\n9p\n?\n"
+        "invalid address\na\ntext\n.\nq\n?\nwarning: buffer modified\n"
+        "e /etc/hostname\n?\nwarning: buffer modified\ne /etc/hostname\n7\n"
+        ",p\nnanoe2e\nq\n"), repr(out)
+    assert ll_names(s, "/tmp") == []
+
+
+def test_ed_reads_and_appends_files(s):
+    s.login()
+    out = ed_session(s, "ed /etc/hostname", [
+        "f", "$r /etc/issue", "w /etc/out.txt", "W /etc/out.txt", "q"])
+    assert out.endswith(
+        "ed /etc/hostname\n7\nf\n/etc/hostname\n$r /etc/issue\n13\n"
+        "w /etc/out.txt\n21\nW /etc/out.txt\n21\nq\n"), repr(out)
+    once = "nanoe2e\n\\s \\r \\n \\l\n\n"
+    assert s.sh("cat /etc/out.txt") == (once + once).rstrip("\n")
+    assert s.sh("cat /etc/hostname") == "nanoe2e"
+
+
+def test_ed_reports_files_it_cannot_open(s):
+    s.login()
+    out = ed_session(s, "ed /etc/missing", [
+        "h", "f", "a", "x", ".", "w /missing/out.txt", "h", "Q"])
+    assert out.endswith(
+        "ed /etc/missing\n?\nh\ncannot open input file\nf\n/etc/missing\n"
+        "a\nx\n.\nw /missing/out.txt\n?\nh\ncannot open output file\nQ\n"), \
+        repr(out)
+    assert ll_names(s, "/tmp") == []
+    assert ll_names(s, "/etc") == ["catfile", "hostname", "issue"]
+
+
+# Simulated memory size, in bytes, that leaves a command about 1 KB of heap,
+# the budget for a command on the SAMD21 boards.
+COMMAND_BUDGET_MEMORY_SIZE = 72500
+
+
+def test_ed_loads_nothing_from_a_file_that_does_not_fit(s):
+    s.restart_with_memory(COMMAND_BUDGET_MEMORY_SIZE)
+    s.login()
+    out = ed_session(s, "ed /etc/catfile", ["h", "$=", "f", "w", "Q"])
+    assert out.endswith(
+        "ed /etc/catfile\n?\nh\nout of memory\n$=\n0\nf\n?\nw\n?\nQ\n"), \
+        repr(out)
+    assert s.sh("cat /etc/catfile") == "\n".join(CATFILE_LINES)
+    assert ll_names(s, "/tmp") == []
+
+
+def test_ed_discards_typed_text_that_does_not_fit(s):
+    # Each typed line is "d", which would delete a line if it were run as a
+    # command after the buffer filled up.
+    s.restart_with_memory(COMMAND_BUDGET_MEMORY_SIZE)
+    s.login()
+    out = ed_session(s, "ed", ["a"] + ["d"] * 200 + [".", "h", "$=", "Q"])
+    m = re.search(r"\n\.\n\?\nh\nout of memory\n\$=\n(\d+)\nQ\n$", out)
+    assert m, repr(out[-300:])
+    assert 0 < int(m.group(1)) < 200, m.group(1)
+    assert out.count("?") == 1, repr(out)
+    assert s.sh("echo still-alive") == "still-alive"
+    assert ll_names(s, "/tmp") == []
+
+
+def test_ed_quits_when_too_little_memory_is_left_to_edit(s):
+    s.restart_with_memory(SMALL_MEMORY_SIZE)
+    s.login()
+    ed_session(s, "ed /etc/catfile", ["Q"])
+    assert s.sh("echo still-alive") == "still-alive"
+    assert ll_names(s, "/tmp") == []
 
 
 def test_pipe_between_commands(s):
