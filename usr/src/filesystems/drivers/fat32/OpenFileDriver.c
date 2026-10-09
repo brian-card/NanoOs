@@ -39,6 +39,9 @@
 #include "NanoOsUtils.h"
 #endif // NANO_OS_KERNEL_BUILD
 #include "Fat32.h"
+#ifdef NANO_OS_OVERLAY_FILESYSTEM
+#include "OverlayFilesystem.h"
+#endif // NANO_OS_OVERLAY_FILESYSTEM
 
 ///////////////////////////////////////////////////////////////////////////////
 ///
@@ -108,6 +111,8 @@ int fat32ParseMode(const char *mode, Fat32OpenMode *flags) {
 /// @param driverState  Pointer to a Fat32DriverState (passed as void*).
 /// @param filePath     The null-terminated path to the file.
 /// @param mode         The null-terminated C fopen mode string.
+/// @param now          The time to record if the file is created, in seconds
+///                     since the Unix epoch.
 ///
 /// @return A pointer to a heap-allocated Fat32FileHandle on success, or NULL
 ///         on failure.
@@ -115,7 +120,8 @@ int fat32ParseMode(const char *mode, Fat32OpenMode *flags) {
 void* driverFopen(
     void *driverState,
     const char *filePath,
-    const char *mode
+    const char *mode,
+    time_t now
 ) {
   Fat32DriverState *ds = (Fat32DriverState *) driverState;
   if (ds == NULL) {
@@ -192,8 +198,21 @@ void* driverFopen(
     }
 
     // "w", "w+", "a", "a+" — create a new, empty file.
-    if (fat32CreateFileEntry(ds, parentCluster, fileName, &searchResult)
-        != FAT32_SUCCESS) {
+    Fat32CreateFileArgs createArgs = {
+      .ds = ds,
+      .parentCluster = parentCluster,
+      .fileName = fileName,
+      .now = now,
+      .result = &searchResult,
+      .returnValue = FAT32_ERROR,
+    };
+#ifdef NANO_OS_OVERLAY_FILESYSTEM
+    callOverlayFunction(OVERLAY_SAME_NAMESPACE,
+      blockOverlayId(FIRST_FS_OVERLAY_ID), "Fat32CreateFile", &createArgs);
+#else
+    Fat32CreateFile(&createArgs);
+#endif // NANO_OS_OVERLAY_FILESYSTEM
+    if (createArgs.returnValue != FAT32_SUCCESS) {
       free(searchResult.longName);
       return NULL;
     }

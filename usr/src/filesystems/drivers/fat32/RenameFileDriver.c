@@ -71,36 +71,6 @@ static bool fat32EntryIsOpen(
 
 ///////////////////////////////////////////////////////////////////////////////
 ///
-/// @brief Resolve a path to its parent directory and final component,
-///        rejecting an empty final component and the "." and ".." entries.
-///
-/// @param ds             Pointer to an initialized Fat32DriverState.
-/// @param path           The null-terminated path to resolve.
-/// @param parentCluster  [out] First cluster of the parent directory.
-/// @param name           [out] Pointer to the final component within path.
-///
-/// @return FAT32_SUCCESS on success, or a FAT32 error code on failure.
-///
-static int fat32ResolveRenamePath(
-    Fat32DriverState *ds,
-    const char *path,
-    uint32_t *parentCluster,
-    const char **name
-) {
-  *name = NULL;
-  int result = fat32ResolveParentDirectory(ds, path, parentCluster, name);
-  if ((result == FAT32_SUCCESS)
-    && ((*name == NULL) || (**name == '\0')
-      || (strcmp(*name, ".") == 0) || (strcmp(*name, "..") == 0))
-  ) {
-    result = FAT32_INVALID_PARAMETER;
-  }
-
-  return result;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-///
 /// @brief Rename a file or directory on a FAT32 filesystem, replacing an
 ///        existing regular file at the new path.
 ///
@@ -130,13 +100,13 @@ int driverRename(void *driverState, const char *oldpath, const char *newpath) {
   const char *newName = NULL;
   bool        targetExists = false;
 
-  int result = fat32ResolveRenamePath(
+  int result = fat32ResolveEntryPath(
     ds, oldpath, &oldParentCluster, &oldName);
   if (result == FAT32_SUCCESS) {
     result = fat32SearchDirectory(ds, oldParentCluster, oldName, &oldEntry);
   }
   if (result == FAT32_SUCCESS) {
-    result = fat32ResolveRenamePath(
+    result = fat32ResolveEntryPath(
       ds, newpath, &newParentCluster, &newName);
   }
   if (result == FAT32_SUCCESS) {
@@ -197,16 +167,8 @@ int driverRename(void *driverState, const char *oldpath, const char *newpath) {
   // The new entry is written before the old one is invalidated so that an
   // interruption leaves the file reachable.
   if (result == FAT32_SUCCESS) {
-    result = fat32CreateFileEntry(
-      ds, newParentCluster, newName, &createdEntry);
-  }
-  if (result == FAT32_SUCCESS) {
-    Fat32DirectoryEntry renamedEntry = oldEntry.entry;
-    memcpy(renamedEntry.name, createdEntry.entry.name,
-      FAT32_SHORT_NAME_LENGTH);
-    renamedEntry.ntReserved = createdEntry.entry.ntReserved;
-    result = fat32WriteDirectoryEntry(ds, createdEntry.dirCluster,
-      createdEntry.offsetInCluster, &renamedEntry);
+    result = fat32CreateFileEntry(ds, newParentCluster, newName,
+      &oldEntry.entry, &createdEntry);
   }
   if (result == FAT32_SUCCESS) {
     result = fat32InvalidateDirectoryEntries(
