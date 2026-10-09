@@ -77,6 +77,7 @@ const char errorStrings[][33] KEEP_IN_FLASH = {
   "No such process",                  // ESRCH
   "Try again",                        // EAGAIN
   "Not a directory",                  // ENOTDIR
+  "File exists",                      // EEXIST
 };
 
 /// @def NUM_ERRORS
