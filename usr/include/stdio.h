@@ -195,7 +195,7 @@ static inline size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   return overlayMap.header.osApi->userApi->fread(ptr, size, nmemb, stream);
 }
 static inline size_t fwrite(
-  void *ptr, size_t size, size_t nmemb, FILE *stream
+  const void *ptr, size_t size, size_t nmemb, FILE *stream
 ) {
   return overlayMap.header.osApi->userApi->fwrite(ptr, size, nmemb, stream);
 }
