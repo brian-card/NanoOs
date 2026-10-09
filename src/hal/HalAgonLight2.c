@@ -997,8 +997,10 @@ int agonLight2SpiTransferBytes(va_list args) {
     agonLight2StartSpiTransferImpl(deviceId);
   }
 
-  for (uint32_t ii = 0; ii < length; ii++) {
-    data[ii] = (uint8_t) agonLight2SpiTransfer8Impl(data[ii]);
+  // A 32-bit counter here would need a library call per byte for the compare
+  // and the increment on the eZ80's 24-bit registers.
+  for (uint8_t *end = data + length; data < end; data++) {
+    *data = (uint8_t) agonLight2SpiTransfer8Impl(*data);
   }
 
   return 0;
