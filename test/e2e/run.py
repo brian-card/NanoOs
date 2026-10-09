@@ -248,6 +248,14 @@ def test_rm_reports_a_missing_file(s):
         'ERROR: Could not remove "/etc/missing": No such entry found'
 
 
+def test_grep_reads_a_file_line_by_line(s):
+    s.login()
+    assert s.sh("grep line-05 /etc/catfile") == "line-05"
+    assert s.sh("grep line-12 /etc/catfile") == "line-12"
+    assert s.sh("grep 4 /etc/catfile") == \
+        "line-04\nline-14\nline-24\nline-34\nline-40"
+
+
 def test_pipe_between_commands(s):
     s.login()
     assert "needle-in-haystack" in s.sh("echo needle-in-haystack | grep needle")
