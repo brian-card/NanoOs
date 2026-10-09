@@ -52,6 +52,10 @@ static inline int istat(ino_t ino, struct stat *statbuf) {
   return overlayMap.header.osApi->userApi->istat(ino, statbuf);
 }
 
+static inline int mkdir(const char *pathname, mode_t mode) {
+  return overlayMap.header.osApi->userApi->mkdir(pathname, mode);
+}
+
 #ifdef __cplusplus
 }
 #endif
