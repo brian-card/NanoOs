@@ -303,6 +303,7 @@ typedef struct Fat32DriverState {
   uint32_t          rootDirectoryCluster;   // Root directory cluster
   uint32_t          totalDataClusters;      // Total data clusters
   uint16_t          fsInfoSector;           // FSInfo sector number
+  uint32_t          nextFreeCluster;        // Where cluster searches start
 } Fat32DriverState;
 
 // Mode-string parsing flags used by fat32Fopen.
@@ -2008,28 +2009,47 @@ static inline int fat32AllocateCluster(
 ) {
   FilesystemState *fs = ds->filesystemState;
   BlockDevice     *bd = fs->blockDevice;
-  uint32_t entriesPerSector = ds->bytesPerSector / sizeof(uint32_t);
+  uint16_t entriesPerSector = ds->bytesPerSector / sizeof(uint32_t);
   uint32_t endCluster = FAT32_CLUSTER_FIRST_VALID + ds->totalDataClusters;
+  uint32_t numSectors = (endCluster + entriesPerSector - 1) / entriesPerSector;
 
-  // Each FAT sector is read once and all of its entries examined, rather
-  // than reading the sector again for every candidate cluster.
-  for (uint32_t candidate = FAT32_CLUSTER_FIRST_VALID;
-    candidate < endCluster; candidate++
+  // Each FAT sector is read once and all of its entries examined, starting
+  // with the sector that holds the next-free hint and wrapping around.
+  uint32_t sectorIndex = ds->nextFreeCluster / entriesPerSector;
+  for (uint32_t sectorsScanned = 0; sectorsScanned < numSectors;
+    sectorsScanned++, sectorIndex++
   ) {
-    uint32_t indexInSector = candidate % entriesPerSector;
-    if ((indexInSector == 0) || (candidate == FAT32_CLUSTER_FIRST_VALID)) {
-      if (bd->readBlocks(bd->context,
-        ds->fatStartSector + (candidate / entriesPerSector), 1,
-        bd->blockSize, fs->blockBuffer) != 0
-      ) {
-        return FAT32_ERROR;
-      }
+    if (sectorIndex >= numSectors) {
+      sectorIndex = 0;
+    }
+    uint32_t sectorFirst = sectorIndex * entriesPerSector;
+    if (bd->readBlocks(bd->context, ds->fatStartSector + sectorIndex, 1,
+      bd->blockSize, fs->blockBuffer) != 0
+    ) {
+      return FAT32_ERROR;
     }
 
-    uint32_t entry;
-    memcpy(&entry, fs->blockBuffer + (indexInSector * sizeof(uint32_t)),
-      sizeof(uint32_t));
-    if ((entry & FAT32_FAT_ENTRY_MASK) == FAT32_CLUSTER_FREE) {
+    // The bounds are computed once per sector so that the per-entry work
+    // needs no 32-bit arithmetic, which the eZ80 does in library calls.
+    uint16_t firstIndex
+      = (sectorFirst == 0) ? FAT32_CLUSTER_FIRST_VALID : 0;
+    uint16_t endIndex = entriesPerSector;
+    if (endCluster - sectorFirst < entriesPerSector) {
+      endIndex = (uint16_t) (endCluster - sectorFirst);
+    }
+
+    const uint8_t *fatEntry
+      = fs->blockBuffer + (firstIndex * sizeof(uint32_t));
+    for (uint16_t index = firstIndex; index < endIndex;
+      index++, fatEntry += sizeof(uint32_t)
+    ) {
+      if ((fatEntry[0] | fatEntry[1] | fatEntry[2] | (fatEntry[3] & 0x0F))
+        != 0
+      ) {
+        continue;
+      }
+
+      uint32_t candidate = sectorFirst + index;
       int result;
       // Mark the new cluster as end-of-chain.
       result = fat32WriteFatEntry(ds, candidate, FAT32_CLUSTER_EOC);
@@ -2047,6 +2067,10 @@ static inline int fat32AllocateCluster(
         }
       }
 
+      ds->nextFreeCluster = candidate + 1;
+      if (ds->nextFreeCluster >= endCluster) {
+        ds->nextFreeCluster = FAT32_CLUSTER_FIRST_VALID;
+      }
       *newCluster = candidate;
       return FAT32_SUCCESS;
     }
