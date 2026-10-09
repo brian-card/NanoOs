@@ -47,6 +47,7 @@
 #include <unistd.h>
 
 #include "kernel/Hal.h"
+#include "HalPosix.h"
 #include "kernel/MemoryManager.h"
 #include "kernel/NanoOs.h"
 #include "kernel/Processes.h"
@@ -65,6 +66,12 @@ void schedulerDeinitialize(void);
 /// @brief Multiplier to use for stack/heap size during debugging.  When not
 /// debugging, this value should be 1.
 #define DEBUG_MULTIPLIER 1
+
+/// @def DEFAULT_MEMORY_SIZE
+///
+/// @brief The size, in bytes, of the simulated memory shared by the process
+/// stacks and the heap when halPosixImplInit is given no size.
+#define DEFAULT_MEMORY_SIZE (96 * 1024)
 
 /// @def PROCESS_STACK_SIZE
 ///
@@ -1284,8 +1291,8 @@ static void posixCancelTimerWarmupPthreadCancel(void) {
   pthread_join(warmupThread, NULL);
 }
 
-int halPosixImplInit(jmp_buf resetBuffer,
-  NanoOsOverlayMap **overlayMap, size_t *overlaySize, StaticLogs **staticLogs,
+int halPosixImplInit(jmp_buf resetBuffer, size_t memorySize,
+  NanoOsOverlayMap **overlayMap, size_t *overlaySize,
   NanoOsOverlayMap **contiguousFilesystem, size_t *contiguousFilesystemSize
 ) {
   // Set the handler for sigint so that it's passed to the running process in
@@ -1305,16 +1312,17 @@ int halPosixImplInit(jmp_buf resetBuffer,
   int topOfStack = 0;
   fprintf(stderr, _topOfStackFormat, (void*) &topOfStack);
 
-  // Simulate having a total of 64 KB available for dynamic memory.
+  if (memorySize == 0) {
+    memorySize = DEFAULT_MEMORY_SIZE;
+  }
   _bottomOfHeap = (void*) (((uintptr_t) &topOfStack)
-    - ((uintptr_t) (((96 * 1024) * DEBUG_MULTIPLIER) - 0)));
+    - ((uintptr_t) (memorySize * DEBUG_MULTIPLIER)));
   fprintf(stderr, _bottomOfStackFormat, (void*) _bottomOfHeap);
   jmp_buf returnBuffer;
   if (setjmp(returnBuffer) == 0) {
     allocateGlobalStack(returnBuffer, NULL);
   }
   fprintf(stderr, _globalStackAllocatedMessage);
-  *staticLogs = (StaticLogs*) (((char*) _bottomOfHeap) + 16384);
 
   // The size used in the mmap call has to be large enough to accommodate the
   // size used for the overlay, plus the offset into the overlay.  It also has

@@ -62,6 +62,7 @@
 
 // Standard C includes
 #include <stdio.h>
+#include <stdlib.h>
 
 //// #define printDebug(format, ...) fprintf(stderr, format, ##__VA_ARGS__)
 #define printDebug(format, ...) {}
@@ -74,7 +75,7 @@
 /// @note KEEP_IN_FLASH is required here because .rodata is removed from the
 /// final binary on some targets.
 static const char _usageFormat[] KEEP_IN_FLASH
-  = "Usage: %s <block device path>\n";
+  = "Usage: %s <block device path> [memory size in bytes]\n";
 
 void usage(const char *argv0) {
   const char *programName = strrchr(argv0, '/');
@@ -89,15 +90,25 @@ void usage(const char *argv0) {
 }
 
 int main(int argc, char **argv) {
-  if (argc != 2) {
+  if ((argc != 2) && (argc != 3)) {
     usage(argv[0]);
     return 1;
+  }
+
+  size_t memorySize = 0;
+  if (argc == 3) {
+    char *end = NULL;
+    memorySize = (size_t) strtoul(argv[2], &end, 0);
+    if ((end == argv[2]) || (*end != '\0') || (memorySize == 0)) {
+      usage(argv[0]);
+      return 1;
+    }
   }
 
   jmp_buf resetBuffer;
   setjmp(resetBuffer);
 
-  if (halPosixInit(resetBuffer, argv[1]) != 0) {
+  if (halPosixInit(resetBuffer, argv[1], memorySize) != 0) {
     return 1;
   }
 

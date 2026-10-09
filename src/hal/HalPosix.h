@@ -45,7 +45,11 @@ extern "C"
 {
 #endif
 
-int halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath);
+int halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath,
+  size_t memorySize);
+int halPosixImplInit(jmp_buf resetBuffer, size_t memorySize,
+  NanoOsOverlayMap **overlayMap, size_t *overlaySize,
+  NanoOsOverlayMap **contiguousFilesystem, size_t *contiguousFilesystemSize);
 
 #ifdef __cplusplus
 } // extern "C"

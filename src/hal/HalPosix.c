@@ -134,9 +134,6 @@ int posixRemainingTimerNanoseconds(va_list args);
 int posixCancelTimer(va_list args);
 int posixCancelAndGetTimer(va_list args);
 
-int halPosixImplInit(jmp_buf resetBuffer,
-  NanoOsOverlayMap **overlayMap, size_t *overlaySize, StaticLogs **staticLogs,
-  NanoOsOverlayMap **contiguousFilesystem, size_t *contiguousFilesystemSize);
 
 static int posixCallFileOverlay(va_list args);
 static int posixExecCommand(va_list args);
@@ -450,6 +447,12 @@ static NanoOsOverlayMap *_contiguousFilesystem = NULL;
 /// halPosixImplInit.
 static StaticLogs *_staticLogs = NULL;
 
+/// @var _staticLogsStorage
+///
+/// @brief Storage for the logs written before the logger is running.  Kept
+/// out of the simulated heap so that the heap's size can be configured.
+static StaticLogs _staticLogsStorage;
+
 static int posixCallFileOverlay(va_list args) {
   HalCallFileOverlayFn *returnValue = va_arg(args, HalCallFileOverlayFn*);
   if (returnValue != NULL) {
@@ -702,7 +705,9 @@ static HalFunction posixBlockDeviceFunctions[HAL_BLOCK_DEVICE_NUM_FNS] = {
   [HAL_BLOCK_DEVICE_RESTART] = posixRestartBlockDevice,
 };
 
-int halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
+int halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath,
+  size_t memorySize
+) {
   _sdCardDevicePath = sdCardDevicePath;
 
   // Wire up per-subsystem function arrays.
@@ -773,10 +778,9 @@ int halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
 
   // Perform POSIX-specific hardware setup and retrieve the overlay mapping.
   int32_t result
-    = halPosixImplInit(resetBuffer,
+    = halPosixImplInit(resetBuffer, memorySize,
       &_overlayMap,
       &halImpl.memory->overlaySize,
-      &_staticLogs,
       &_contiguousFilesystem,
       &halImpl.memory->contiguousFilesystemSize);
   if (result != 0) {
@@ -787,9 +791,8 @@ int halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath) {
     _staticLogs                             = NULL;
     return result;
   }
-  if (_staticLogs != NULL) {
-    memset(_staticLogs, 0, sizeof(StaticLogs));
-  }
+  _staticLogs = &_staticLogsStorage;
+  memset(_staticLogs, 0, sizeof(StaticLogs));
 
   NANO_OS_API = &nanoOsApi;
 
