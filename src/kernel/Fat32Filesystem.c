@@ -55,6 +55,7 @@
 
 #include "../../usr/src/filesystems/drivers/fat32/FilesystemInitDriver.c"
 #include "../../usr/src/filesystems/drivers/fat32/OpenFileDriver.c"
+#include "../../usr/src/filesystems/drivers/fat32/CreateFileDriver.c"
 #include "../../usr/src/filesystems/drivers/fat32/CloseFileDriver.c"
 #include "../../usr/src/filesystems/drivers/fat32/ReadFileDriver.c"
 #include "../../usr/src/filesystems/drivers/fat32/WriteFileDriver.c"
@@ -70,4 +71,6 @@
 #include "../../usr/src/filesystems/drivers/fat32/LstatDriver.c"
 #include "../../usr/src/filesystems/drivers/fat32/IstatDriver.c"
 #include "../../usr/src/filesystems/drivers/fat32/RenameFileDriver.c"
+#include "../../usr/src/filesystems/drivers/fat32/MkdirDriver.c"
+#include "../../usr/src/filesystems/drivers/fat32/RmdirDriver.c"
 
