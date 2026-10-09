@@ -36,14 +36,9 @@
 // Standard C includes
 #include <stddef.h> // For NULL
 
-#define AVERAGE_HOURS_PER_YEAR   ((time_t) ((365 * 24) + 6))
-#define HOURS_PER_NORMAL_YEAR    (365 * 24)
-#define HOURS_PER_LEAP_YEAR      (366 * 24)
 #define SECONDS_PER_MINUTE       ((time_t) 60)
 #define SECONDS_PER_HOUR         ((time_t) (SECONDS_PER_MINUTE * ((time_t) 60)))
 #define SECONDS_PER_DAY          ((time_t) (SECONDS_PER_HOUR   * ((time_t) 24)))
-#define AVERAGE_SECONDS_PER_YEAR \
-  (((time_t) AVERAGE_HOURS_PER_YEAR) * SECONDS_PER_HOUR)
 
 /// @var _timezone
 ///
@@ -55,23 +50,6 @@ static long _timezone = (8 * SECONDS_PER_HOUR);
 /// @brief 1 if Daylight Savings Time (DST) is in effect, 0 if it's not, -1 if
 /// we don't know.  Initialize to -1 until proven otherwise.
 static int _dstInEffect = 1;
-
-/// @def YEARS_IN_WEEKDAY_CYCLE
-///
-/// @brief The number of years in the full cycle of weekday calendars.
-#define YEARS_IN_WEEKDAY_CYCLE 28
-
-/// @var _yearStartDay
-///
-/// @brief Day of the week that a year starts on.  Index 0 of the array is 1970.
-/// Day 0 is Sunday.
-///
-/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
-/// final binary on some targets.
-static const int _yearStartDay[YEARS_IN_WEEKDAY_CYCLE] KEEP_IN_FLASH = {
-  4, 5, 6, 1, 2, 3, 4, 6, 0, 1, 2, 4, 5, 6,
-  0, 2, 3, 4, 5, 0, 1, 2, 3, 5, 6, 0, 1, 3,
-};
 
 /// @fn long* nanoOsTimezone(void)
 ///
@@ -126,66 +104,42 @@ struct tm* nanoOsGmtime_r(const time_t *timep, struct tm *result) {
     return NULL;
   }
 
-  time_t timev = *timep;
-  unsigned int daysPerMonth[11];
-  daysPerMonth[0]  = 31; // January
-  daysPerMonth[1]  = 28; // February
-  daysPerMonth[2]  = 31; // March
-  daysPerMonth[3]  = 30; // April
-  daysPerMonth[4]  = 31; // May
-  daysPerMonth[5]  = 30; // June
-  daysPerMonth[6]  = 31; // July
-  daysPerMonth[7]  = 31; // August
-  daysPerMonth[8]  = 30; // September
-  daysPerMonth[9]  = 31; // October
-  daysPerMonth[10] = 30; // November
-  // December is unnecessary
-
-  time_t epochHours = timev / SECONDS_PER_HOUR;
-  time_t epochYears = timev / AVERAGE_SECONDS_PER_YEAR;
-  result->tm_year = ((int) epochYears) + 70;
-  int lastLeapYear = result->tm_year & ~((int) 3);
-  int yearsSinceLeapYear = result->tm_year & ((int) 3);
-  // 1970 was not a leap year, but 1972 was.  So, we need to subtract the
-  // average hours per year since 1972, minus the number of hours in a leap year
-  // (1972) minus the number of hours in a normal year (1971) to get the number
-  // of hours into the current year we are.
-  unsigned int yearHour = (unsigned int) (epochHours
-    - (((time_t) (lastLeapYear - 68)) * AVERAGE_HOURS_PER_YEAR)
-    + HOURS_PER_LEAP_YEAR + HOURS_PER_NORMAL_YEAR);
-  if (yearsSinceLeapYear > 0) {
-    yearHour -= HOURS_PER_LEAP_YEAR;
-    yearsSinceLeapYear--;
-    for (; yearsSinceLeapYear > 0; yearsSinceLeapYear--) {
-      yearHour -= HOURS_PER_NORMAL_YEAR;
-    }
-  }
-  if (lastLeapYear == result->tm_year) {
-    // This year is a leap year, so set the number of days in February to be 29.
-    daysPerMonth[1] = 29;
+  // Floor division, so that times before the epoch land on the previous day.
+  time_t days = *timep / SECONDS_PER_DAY;
+  time_t secondOfDay = *timep % SECONDS_PER_DAY;
+  if (secondOfDay < 0) {
+    secondOfDay += SECONDS_PER_DAY;
+    days--;
   }
 
-  unsigned int yearDay = yearHour / 24;
-  result->tm_yday = yearDay;
+  result->tm_hour = (int) (secondOfDay / SECONDS_PER_HOUR);
+  result->tm_min = (int) ((secondOfDay % SECONDS_PER_HOUR)
+    / SECONDS_PER_MINUTE);
+  result->tm_sec = (int) (secondOfDay % SECONDS_PER_MINUTE);
 
-  result->tm_wday = _yearStartDay[
-    (result->tm_year - 70) % YEARS_IN_WEEKDAY_CYCLE];
-  result->tm_wday += (int) yearDay;
-  result->tm_wday %= 7;
+  // January 1, 1970 was a Thursday.
+  result->tm_wday = (int) (((days % 7) + 11) % 7);
 
-  unsigned int month;
-  for (month = 0; (month < 11) && (yearDay >= daysPerMonth[month]); month++) {
-    yearDay -= daysPerMonth[month];
-  }
+  // Howard Hinnant's civil_from_days algorithm, on a calendar whose years
+  // start on March 1 so that a leap day is the last day of its year.
+  long marchDays = (long) days + 719468L;
+  long era = ((marchDays >= 0) ? marchDays : (marchDays - 146096L)) / 146097L;
+  long dayOfEra = marchDays - (era * 146097L);
+  long yearOfEra = (dayOfEra - (dayOfEra / 1460L) + (dayOfEra / 36524L)
+    - (dayOfEra / 146096L)) / 365L;
+  long dayOfYear = dayOfEra
+    - ((365L * yearOfEra) + (yearOfEra / 4L) - (yearOfEra / 100L));
+  long monthIndex = ((5L * dayOfYear) + 2L) / 153L;
+  long month = (monthIndex < 10L) ? (monthIndex + 3L) : (monthIndex - 9L);
+  long year = yearOfEra + (era * 400L) + (month <= 2L);
+  bool leapYear = ((year % 4L) == 0L)
+    && (((year % 100L) != 0L) || ((year % 400L) == 0L));
 
-  result->tm_mon = month;
-  result->tm_mday = yearDay + 1;
-
-  result->tm_hour = yearHour - (result->tm_yday * 24);
-  timev -= epochHours * SECONDS_PER_HOUR;
-  result->tm_min = (int) (timev / SECONDS_PER_MINUTE);
-  result->tm_sec = (int) (timev % SECONDS_PER_MINUTE);
-
+  result->tm_year = (int) (year - 1900L);
+  result->tm_mon = (int) (month - 1L);
+  result->tm_mday = (int) (dayOfYear - (((153L * monthIndex) + 2L) / 5L) + 1L);
+  result->tm_yday = (int) ((month <= 2L)
+    ? (dayOfYear - 306L) : (dayOfYear + 59L + leapYear));
   result->tm_isdst = dstInEffect;
 
   return result;
