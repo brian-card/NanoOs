@@ -36,12 +36,22 @@
 int main(int argc, char **argv) {
   char buffer[96];
 
-  if (argc < 2) {
-    printf("Usage:  %s <string to find>\n", argv[0]);
+  if ((argc < 2) || (argc > 3)) {
+    printf("Usage:  %s <string to find> [file]\n", argv[0]);
     return 1;
   }
 
-  while (fgets(buffer, sizeof(buffer), stdin)) {
+  FILE *inputFile = stdin;
+  if (argc == 3) {
+    inputFile = fopen(argv[2], "r");
+    if (inputFile == NULL) {
+      fprintf(stderr, "ERROR: Could not open file \"%s\"\n", argv[2]);
+      return 1;
+    }
+  }
+
+  buffer[0] = '\0';
+  while (fgets(buffer, sizeof(buffer), inputFile)) {
     if (strstr(buffer, argv[1])) {
       if (fputs(buffer, stdout) == EOF) {
         fprintf(stderr, "ERROR: Could not fputs buffer\n");
@@ -51,6 +61,10 @@ int main(int argc, char **argv) {
 
   if ((strlen(buffer) > 0) && (buffer[strlen(buffer) - 1] != '\n')) {
     fputs("\n", stdout);
+  }
+
+  if (inputFile != stdin) {
+    fclose(inputFile);
   }
 
   return 0;
