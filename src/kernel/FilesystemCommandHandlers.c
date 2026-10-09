@@ -66,6 +66,8 @@
 #include "../../usr/src/filesystems/common/LstatCommandHandler.c"
 #include "../../usr/src/filesystems/common/IstatCommandHandler.c"
 #include "../../usr/src/filesystems/common/RenameFileCommandHandler.c"
+#include "../../usr/src/filesystems/common/MkdirCommandHandler.c"
+#include "../../usr/src/filesystems/common/RmdirCommandHandler.c"
 
 /// @var fat32CommandHandlers
 ///
@@ -94,5 +96,7 @@ const FilesystemCommandHandler fat32CommandHandlers[NUM_FILESYSTEM_COMMANDS] = {
   Lstat,                // FILESYSTEM_LSTAT
   Istat,                // FILESYSTEM_ISTAT
   RenameFile,           // FILESYSTEM_RENAME_FILE
+  Mkdir,                // FILESYSTEM_MKDIR
+  Rmdir,                // FILESYSTEM_RMDIR
 };
 
