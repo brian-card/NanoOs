@@ -42,6 +42,11 @@
 #include "stdint.h"
 #include "stdlib.h"
 #include "string.h"
+#ifndef NANO_OS_KERNEL_BUILD
+// By path, because src/kernel/time.h is ahead of usr/include on the include
+// path in the filesystem builds.
+#include "../../../../include/time.h"
+#endif // NANO_OS_KERNEL_BUILD
 
 
 #ifdef __cplusplus
@@ -117,6 +122,8 @@ typedef struct FilesystemState FilesystemState;
 #define FAT32_TOO_MANY_OPEN_FILES    -6
 #define FAT32_INVALID_FILESYSTEM     -7
 #define FAT32_NOT_A_DIRECTORY        -8
+#define FAT32_FILE_EXISTS            -9
+#define FAT32_DIRECTORY_NOT_EMPTY    -10
 
 ///////////////////////////////////////////////////////////////////////////////
 ///
@@ -149,6 +156,8 @@ static inline int fat32ErrorToErrno(int fat32Status) {
     case FAT32_SUCCESS:             return 0;  // ENOERR
     case FAT32_FILE_NOT_FOUND:      return 8;  // ENOENT
     case FAT32_NOT_A_DIRECTORY:     return 25; // ENOTDIR
+    case FAT32_FILE_EXISTS:         return 26; // EEXIST
+    case FAT32_DIRECTORY_NOT_EMPTY: return 9;  // ENOTEMPTY
     case FAT32_INVALID_PARAMETER:   return 5;  // EINVAL
     case FAT32_NO_MEMORY:           return 3;  // ENOMEM
     case FAT32_DISK_FULL:           return 7;  // ENOSPC
@@ -868,6 +877,36 @@ static inline int fat32ResolveParentDirectory(
   }
 
   *parentCluster = currentCluster;
+  return result;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+///
+/// @brief Resolve a path to its parent directory and final component,
+///        rejecting an empty final component and the "." and ".." entries.
+///
+/// @param ds             Pointer to an initialized Fat32DriverState.
+/// @param path           The null-terminated path to resolve.
+/// @param parentCluster  [out] First cluster of the parent directory.
+/// @param name           [out] Pointer to the final component within path.
+///
+/// @return FAT32_SUCCESS on success, or a FAT32 error code on failure.
+///
+static inline int fat32ResolveEntryPath(
+    Fat32DriverState *ds,
+    const char *path,
+    uint32_t *parentCluster,
+    const char **name
+) {
+  *name = NULL;
+  int result = fat32ResolveParentDirectory(ds, path, parentCluster, name);
+  if ((result == FAT32_SUCCESS)
+    && ((*name == NULL) || (**name == '\0')
+      || (strcmp(*name, ".") == 0) || (strcmp(*name, "..") == 0))
+  ) {
+    result = FAT32_INVALID_PARAMETER;
+  }
+
   return result;
 }
 
@@ -1645,12 +1684,50 @@ static inline int fat32FindFreeDirectorySlots(
 
 ///////////////////////////////////////////////////////////////////////////////
 ///
+/// @brief Initialize a directory entry for a new file or directory, with its
+///        creation, modification, and access timestamps set to a given time.
+///
+/// @param entry       The directory entry to initialize.
+/// @param attributes  The FAT32_ATTR_* attributes for the entry.
+/// @param now         The time to record, in seconds since the Unix epoch.
+///
+/// @return This function returns no value.
+///
+static inline void fat32InitNewEntry(
+    Fat32DirectoryEntry *entry,
+    uint8_t attributes,
+    time_t now
+) {
+  struct tm tm;
+  uint16_t fatDate = 0;
+  uint16_t fatTime = 0;
+  memset(entry, 0, sizeof(*entry));
+  entry->attributes = attributes;
+  if ((gmtime_r(&now, &tm) != NULL) && (tm.tm_year >= 80)) {
+    fatDate = (uint16_t) (((tm.tm_year - 80) << 9)
+      | ((tm.tm_mon + 1) << 5) | tm.tm_mday);
+    fatTime = (uint16_t) ((tm.tm_hour << 11) | (tm.tm_min << 5)
+      | (tm.tm_sec / 2));
+    entry->createTimeTenths = (uint8_t) ((tm.tm_sec % 2) * 100);
+  }
+
+  memcpy(&entry->createTime, &fatTime, sizeof(uint16_t));
+  memcpy(&entry->createDate, &fatDate, sizeof(uint16_t));
+  memcpy(&entry->lastAccessDate, &fatDate, sizeof(uint16_t));
+  memcpy(&entry->writeTime, &fatTime, sizeof(uint16_t));
+  memcpy(&entry->writeDate, &fatDate, sizeof(uint16_t));
+}
+
+///////////////////////////////////////////////////////////////////////////////
+///
 /// @brief Create a new file (or empty entry) in a directory, writing both
 ///        LFN entries and the short directory entry to disk.
 ///
 /// @param ds             Pointer to an initialized Fat32DriverState.
 /// @param parentCluster  First cluster of the parent directory.
 /// @param fileName       The desired long file name.
+/// @param entryTemplate  The short directory entry to write.  Its name is
+///                       replaced with one generated from fileName.
 /// @param result         [out] Populated with the newly-written directory
 ///                       entry and its location.
 ///
@@ -1660,6 +1737,7 @@ static inline int fat32CreateFileEntry(
     Fat32DriverState *ds,
     uint32_t parentCluster,
     const char *fileName,
+    const Fat32DirectoryEntry *entryTemplate,
     Fat32DirSearchResult *result
 ) {
   // Generate the 8.3 short name and compute the LFN checksum.
@@ -1756,16 +1834,9 @@ static inline int fat32CreateFileEntry(
       memcpy(fs->blockBuffer + offsetInSector, &lfn, sizeof(Fat32LfnEntry));
     } else {
       // Short directory entry.
-      memset(&shortEntry, 0, sizeof(Fat32DirectoryEntry));
+      memcpy(&shortEntry, entryTemplate, sizeof(Fat32DirectoryEntry));
       memcpy(shortEntry.name, shortName, FAT32_SHORT_NAME_LENGTH);
-      shortEntry.attributes      = FAT32_ATTR_ARCHIVE;
-      {
-        uint16_t zero16 = 0;
-        uint32_t zero32 = 0;
-        memcpy(&shortEntry.firstClusterHigh, &zero16, sizeof(uint16_t));
-        memcpy(&shortEntry.firstClusterLow, &zero16, sizeof(uint16_t));
-        memcpy(&shortEntry.fileSize, &zero32, sizeof(uint32_t));
-      }
+      shortEntry.ntReserved = 0;
 
       memcpy(fs->blockBuffer + offsetInSector,
         &shortEntry, sizeof(Fat32DirectoryEntry));
@@ -1809,6 +1880,28 @@ static inline int fat32CreateFileEntry(
 
   return returnValue;
 }
+
+/// @struct Fat32CreateFileArgs
+///
+/// @brief Arguments and result for Fat32CreateFile.
+///
+/// @param ds             Pointer to an initialized Fat32DriverState.
+/// @param parentCluster  First cluster of the parent directory.
+/// @param fileName       The name of the file to create.
+/// @param now            The creation time, in seconds since the Unix epoch.
+/// @param result         [out] Populated with the new directory entry and its
+///                       location.
+/// @param returnValue    [out] FAT32_SUCCESS or a FAT32 error code.
+typedef struct Fat32CreateFileArgs {
+  Fat32DriverState     *ds;
+  uint32_t              parentCluster;
+  const char           *fileName;
+  time_t                now;
+  Fat32DirSearchResult *result;
+  int                   returnValue;
+} Fat32CreateFileArgs;
+
+void* Fat32CreateFile(void *args);
 
 ///////////////////////////////////////////////////////////////////////////////
 ///
