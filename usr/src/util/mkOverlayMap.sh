@@ -7,12 +7,12 @@ echo '#include "NanoOsUser.h"' > "${outputFile}"
 echo '' >> "${outputFile}"
 
 # Grab all the function prototypes.
-grep "^void\* [_a-zA-Z]*(void \*args) {" ${@} | sed -e 's/.*:\(.*\) *{$/\1;/' >> "${outputFile}"
+grep "^void\* [_a-zA-Z][_a-zA-Z0-9]*(void \*args) {" ${@} | sed -e 's/.*:\(.*\) *{$/\1;/' >> "${outputFile}"
 echo '' >> "${outputFile}"
 
 # Build the exports.
 echo 'NanoOsOverlayExport exports[] = {' >> "${outputFile}"
-functionNames="$(grep "^void\* [_a-zA-Z]*(void \*args) {" ${@} | sed -e 's/.*:void\* \([_a-zA-Z]*\)(void \*args) {/\1/' | sort)"
+functionNames="$(grep "^void\* [_a-zA-Z][_a-zA-Z0-9]*(void \*args) {" ${@} | sed -e 's/.*:void\* \([_a-zA-Z][_a-zA-Z0-9]*\)(void \*args) {/\1/' | sort)"
 for functionName in ${functionNames}; do
 	echo "  {\"${functionName}\", ${functionName}}," >> "${outputFile}"
 done
