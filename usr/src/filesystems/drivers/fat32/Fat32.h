@@ -2006,18 +2006,31 @@ static inline int fat32AllocateCluster(
     uint32_t previousCluster,
     uint32_t *newCluster
 ) {
-  // Linear scan — simple and correct.  The FSInfo hint could speed this up,
-  // but the added complexity is not warranted for NanoOs at this stage.
+  FilesystemState *fs = ds->filesystemState;
+  BlockDevice     *bd = fs->blockDevice;
+  uint32_t entriesPerSector = ds->bytesPerSector / sizeof(uint32_t);
+  uint32_t endCluster = FAT32_CLUSTER_FIRST_VALID + ds->totalDataClusters;
+
+  // Each FAT sector is read once and all of its entries examined, rather
+  // than reading the sector again for every candidate cluster.
   for (uint32_t candidate = FAT32_CLUSTER_FIRST_VALID;
-      candidate < FAT32_CLUSTER_FIRST_VALID + ds->totalDataClusters;
-      candidate++) {
-    uint32_t entry;
-    int result = fat32ReadFatEntry(ds, candidate, &entry);
-    if (result != FAT32_SUCCESS) {
-      return FAT32_ERROR;
+    candidate < endCluster; candidate++
+  ) {
+    uint32_t indexInSector = candidate % entriesPerSector;
+    if ((indexInSector == 0) || (candidate == FAT32_CLUSTER_FIRST_VALID)) {
+      if (bd->readBlocks(bd->context,
+        ds->fatStartSector + (candidate / entriesPerSector), 1,
+        bd->blockSize, fs->blockBuffer) != 0
+      ) {
+        return FAT32_ERROR;
+      }
     }
 
-    if (entry == FAT32_CLUSTER_FREE) {
+    uint32_t entry;
+    memcpy(&entry, fs->blockBuffer + (indexInSector * sizeof(uint32_t)),
+      sizeof(uint32_t));
+    if ((entry & FAT32_FAT_ENTRY_MASK) == FAT32_CLUSTER_FREE) {
+      int result;
       // Mark the new cluster as end-of-chain.
       result = fat32WriteFatEntry(ds, candidate, FAT32_CLUSTER_EOC);
       if (result != FAT32_SUCCESS) {
