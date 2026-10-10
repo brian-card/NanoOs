@@ -615,6 +615,11 @@ int posixSpiTransferBytes(va_list args) {
   return -ENOSYS;
 }
 
+int posixSpiTransferUntil(va_list args) {
+  (void) args;
+  return -ENOSYS;
+}
+
 int posixTimeInit(va_list args) {
   (void) args;
   return 0;

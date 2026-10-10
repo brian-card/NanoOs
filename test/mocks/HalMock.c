@@ -56,6 +56,7 @@ int posixStartSpiTransfer(va_list args);
 int posixEndSpiTransfer(va_list args);
 int posixSpiTransfer8(va_list args);
 int posixSpiTransferBytes(va_list args);
+int posixSpiTransferUntil(va_list args);
 
 int posixTimeInit(va_list args);
 int posixSetSystemTime(va_list args);
@@ -432,6 +433,7 @@ int halMockInit(const HalMockConfig *config, jmp_buf *powerReturn) {
   _spiFunctions[HAL_SPI_TRANSFER8]      = posixSpiTransfer8;
   _spiFunctions[HAL_SPI_TRANSFER_BYTES] = posixSpiTransferBytes;
   _spiFunctions[HAL_SPI_SET_SPEED]      = posixSetSpiSpeed;
+  _spiFunctions[HAL_SPI_TRANSFER_UNTIL] = posixSpiTransferUntil;
 
   // Clock.
   if (cfg.clock == MOCK_CLOCK_POSIX) {

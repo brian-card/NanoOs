@@ -945,6 +945,33 @@ int arduinoSamD21x18ASpiTransferBytes(va_list args) {
   return 0;
 }
 
+int arduinoSamD21x18ASpiTransferUntil(va_list args) {
+  int32_t deviceId = va_arg(args, int32_t);
+  uint8_t data = (uint8_t) va_arg(args, int);
+  uint8_t mask = (uint8_t) va_arg(args, int);
+  uint8_t value = (uint8_t) va_arg(args, int);
+  bool equal = (bool) va_arg(args, int);
+  uint16_t maxTransfers = (uint16_t) va_arg(args, int);
+
+  if ((deviceId < 0) || (deviceId >= numArduinoSpis)
+    || (arduinoSamD21x18ASpiDevices[deviceId].configured == false)
+  ) {
+    // Outside the limit of the devices we support.
+    return -ENODEV;
+  } else if (maxTransfers == 0) {
+    return -EINVAL;
+  } else if (!arduinoSamD21x18ASpiDevices[deviceId].transferInProgress) {
+    arduinoSamD21x18AStartSpiTransferImpl(deviceId);
+  }
+
+  uint8_t received;
+  do {
+    received = SPI.transfer(data);
+  } while ((((received & mask) == value) != equal) && (--maxTransfers > 0));
+
+  return (int) received;
+}
+
 /// @var baseSystemTimeUs
 ///
 /// @brief The time provided by the user or some other process as a baseline
@@ -2033,6 +2060,7 @@ static HalFunction arduinoSamD21x18ASpiFunctions[HAL_SPI_NUM_FNS] = {
   [HAL_SPI_TRANSFER8]      = arduinoSamD21x18ASpiTransfer8,
   [HAL_SPI_TRANSFER_BYTES] = arduinoSamD21x18ASpiTransferBytes,
   [HAL_SPI_SET_SPEED]      = arduinoSamD21x18ASetSpiSpeed,
+  [HAL_SPI_TRANSFER_UNTIL] = arduinoSamD21x18ASpiTransferUntil,
 };
 
 static HalFunction arduinoSamD21x18AClockFunctions[HAL_CLOCK_NUM_FNS] = {

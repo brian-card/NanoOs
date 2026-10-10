@@ -117,6 +117,7 @@ int posixStartSpiTransfer(va_list args);
 int posixEndSpiTransfer(va_list args);
 int posixSpiTransfer8(va_list args);
 int posixSpiTransferBytes(va_list args);
+int posixSpiTransferUntil(va_list args);
 
 int posixTimeInit(va_list args);
 int posixSetSystemTime(va_list args);
@@ -675,6 +676,7 @@ static HalFunction posixSpiFunctions[HAL_SPI_NUM_FNS] = {
   [HAL_SPI_TRANSFER8]      = posixSpiTransfer8,
   [HAL_SPI_TRANSFER_BYTES] = posixSpiTransferBytes,
   [HAL_SPI_SET_SPEED]      = posixSetSpiSpeed,
+  [HAL_SPI_TRANSFER_UNTIL] = posixSpiTransferUntil,
 };
 
 static HalFunction posixClockFunctions[HAL_CLOCK_NUM_FNS] = {

@@ -333,6 +333,32 @@ int arduinoAvrSpiTransferBytes(va_list args) {
   return 0;
 }
 
+int arduinoAvrSpiTransferUntil(va_list args) {
+  int32_t deviceId = va_arg(args, int32_t);
+  uint8_t data = (uint8_t) va_arg(args, int);
+  uint8_t mask = (uint8_t) va_arg(args, int);
+  uint8_t value = (uint8_t) va_arg(args, int);
+  bool equal = (bool) va_arg(args, int);
+  uint16_t maxTransfers = (uint16_t) va_arg(args, int);
+
+  if ((deviceId < 0) || (deviceId >= numArduinoSpis)
+    || (arduinoAvrSpiDevices[deviceId].configured == false)
+  ) {
+    return -ENODEV;
+  } else if (maxTransfers == 0) {
+    return -EINVAL;
+  } else if (!arduinoAvrSpiDevices[deviceId].transferInProgress) {
+    arduinoAvrStartSpiTransferImpl(deviceId);
+  }
+
+  uint8_t received;
+  do {
+    received = SPI.transfer(data);
+  } while ((((received & mask) == value) != equal) && (--maxTransfers > 0));
+
+  return (int) received;
+}
+
 /// @var halArduinoAvrSpisOnline
 ///
 /// @brief Bitmask array of online SPIs.
@@ -355,6 +381,7 @@ static HalFunction arduinoAvrSpiFunctions[HAL_SPI_NUM_FNS] = {
   [HAL_SPI_TRANSFER8]      = arduinoAvrSpiTransfer8,
   [HAL_SPI_TRANSFER_BYTES] = arduinoAvrSpiTransferBytes,
   [HAL_SPI_SET_SPEED]      = arduinoAvrSetSpiSpeed,
+  [HAL_SPI_TRANSFER_UNTIL] = arduinoAvrSpiTransferUntil,
 };
 
 /// @var _sdCardHalCapabilities

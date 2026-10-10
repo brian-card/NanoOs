@@ -1006,6 +1006,33 @@ int agonLight2SpiTransferBytes(va_list args) {
   return 0;
 }
 
+int agonLight2SpiTransferUntil(va_list args) {
+  int32_t deviceId = va_arg(args, int32_t);
+  uint8_t data = (uint8_t) va_arg(args, int);
+  uint8_t mask = (uint8_t) va_arg(args, int);
+  uint8_t value = (uint8_t) va_arg(args, int);
+  bool equal = (bool) va_arg(args, int);
+  unsigned int maxTransfers = (uint16_t) va_arg(args, int);
+
+  if ((deviceId < 0) || (deviceId >= numSpis)
+    || (spiDevices[deviceId].configured == false)
+  ) {
+    // Outside the limit of the devices we support.
+    return -ENODEV;
+  } else if (maxTransfers == 0) {
+    return -EINVAL;
+  } else if (!spiDevices[deviceId].transferInProgress) {
+    agonLight2StartSpiTransferImpl(deviceId);
+  }
+
+  uint8_t received;
+  do {
+    received = (uint8_t) agonLight2SpiTransfer8Impl(data);
+  } while ((((received & mask) == value) != equal) && (--maxTransfers > 0));
+
+  return (int) received;
+}
+
 // ---------------------------------------------------------------------------
 // Clock subsystem stubs
 // ---------------------------------------------------------------------------
@@ -1798,6 +1825,7 @@ static HalFunction agonLight2SpiFunctions[HAL_SPI_NUM_FNS] = {
   [HAL_SPI_TRANSFER8]      = agonLight2SpiTransfer8,
   [HAL_SPI_TRANSFER_BYTES] = agonLight2SpiTransferBytes,
   [HAL_SPI_SET_SPEED]      = agonLight2SetSpiSpeed,
+  [HAL_SPI_TRANSFER_UNTIL] = agonLight2SpiTransferUntil,
 };
 
 static HalFunction agonLight2ClockFunctions[HAL_CLOCK_NUM_FNS] = {
