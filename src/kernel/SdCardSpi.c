@@ -456,6 +456,17 @@ static uint32_t sdSpiNegotiateFastBaud(int sdCardSpiDevice) {
   return SD_SPI_INIT_BAUD;
 }
 
+/// @var _sdSpiCmd12
+///
+/// @brief The bytes of a CMD12 (STOP_TRANSMISSION): the command byte, a zero
+/// argument, a don't-care CRC, and the stuff byte that follows the command.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const uint8_t _sdSpiCmd12[7] KEEP_IN_FLASH = {
+  CMD12 | 0x40, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF
+};
+
 /// @fn void sdSpiSendCmd12Inline(int sdCardSpiDevice)
 ///
 /// @brief Send CMD12 (STOP_TRANSMISSION) on an already-active SPI transfer.
@@ -467,9 +478,8 @@ static uint32_t sdSpiNegotiateFastBaud(int sdCardSpiDevice) {
 ///
 /// @param sdCardSpiDevice The zero-based SPI device ID to use.
 static void sdSpiSendCmd12Inline(int sdCardSpiDevice) {
-  // Command byte, a zero argument, a don't-care CRC, and the stuff byte that
-  // follows a CMD12 response.
-  uint8_t command[7] = { CMD12 | 0x40, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF };
+  uint8_t command[sizeof(_sdSpiCmd12)];
+  memcpy(command, _sdSpiCmd12, sizeof(command));
   HAL->spi->transferBytes(sdCardSpiDevice, command, sizeof(command));
   
   // Wait for the R1 response.
