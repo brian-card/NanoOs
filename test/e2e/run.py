@@ -352,14 +352,15 @@ def test_mkdir_nests_directories_and_holds_files(s):
 
 def assert_created_now(s, command, listed_name):
     # The sim's clock is the host's, and its local time is UTC-8 with DST on.
-    before = datetime.datetime.utcnow() - datetime.timedelta(hours=7)
+    before = datetime.datetime.now(datetime.UTC) - datetime.timedelta(hours=7)
     assert s.sh(command) == ""
-    after = datetime.datetime.utcnow() - datetime.timedelta(hours=7)
+    after = datetime.datetime.now(datetime.UTC) - datetime.timedelta(hours=7)
     out = s.sh("ll /etc")
     m = re.search(r"(\w{3}) (\d+)-(\d+)-(\d+)\s+(\d+):(\d+):(\d+) "
                   + re.escape(listed_name) + "$", out, re.M)
     assert m, out
-    shown = datetime.datetime(*(int(g) for g in m.groups()[1:]))
+    shown = datetime.datetime(*(int(g) for g in m.groups()[1:]),
+                               tzinfo=datetime.UTC)
     assert before - datetime.timedelta(seconds=2) <= shown <= after, \
         (before, shown, after)
     assert m.group(1) == shown.strftime("%a"), out
