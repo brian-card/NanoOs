@@ -107,20 +107,6 @@ static uint32_t _sdSpiFastBaud = SD_SPI_FAST_BAUD_MAX;
 uint8_t sdSpiSendCommand(int sdCardSpiDevice, uint8_t cmd, uint32_t arg) {
   HAL->spi->startTransfer(sdCardSpiDevice);
 
-  // At least 8 clocks (Ncs) with the chip select asserted before the command
-  // byte, per the SD physical spec.  For a mid-stream call - CS already low, a
-  // transfer already active - this is just a harmless inter-command gap byte.
-  HAL->spi->transfer8(sdCardSpiDevice, 0xFF);
-
-  // Command byte
-  HAL->spi->transfer8(sdCardSpiDevice, cmd | 0x40);
-  
-  // Argument
-  HAL->spi->transfer8(sdCardSpiDevice, (arg >> 24) & 0xff);
-  HAL->spi->transfer8(sdCardSpiDevice, (arg >> 16) & 0xff);
-  HAL->spi->transfer8(sdCardSpiDevice, (arg >>  8) & 0xff);
-  HAL->spi->transfer8(sdCardSpiDevice, (arg >>  0) & 0xff);
-  
   // CRC - only needed for CMD0 and CMD8
   uint8_t crc = 0xFF;
   if (cmd == CMD0) {
@@ -129,10 +115,26 @@ uint8_t sdSpiSendCommand(int sdCardSpiDevice, uint8_t cmd, uint32_t arg) {
     crc = 0x87; // Valid CRC for CMD8 (0x1AA)
   }
 
+  // The leading 0xFF provides at least 8 clocks (Ncs) with the chip select
+  // asserted before the command byte, per the SD physical spec.  For a
+  // mid-stream call - CS already low, a transfer already active - this is just
+  // a harmless inter-command gap byte.
+  uint8_t command[7] = {
+    0xFF,
+    cmd | 0x40,
+    (arg >> 24) & 0xff,
+    (arg >> 16) & 0xff,
+    (arg >>  8) & 0xff,
+    (arg >>  0) & 0xff,
+    crc,
+  };
+  HAL->spi->transferBytes(sdCardSpiDevice, command, sizeof(command));
+
   // Wait for response
-  uint8_t response = HAL->spi->transfer8(sdCardSpiDevice, crc);
-  for (int ii = 0; ((response & 0x80) != 0) && (ii < 10); ii++) {
-    response = HAL->spi->transfer8(sdCardSpiDevice, 0xFF);
+  uint8_t response = command[sizeof(command) - 1];
+  if ((response & 0x80) != 0) {
+    response = (uint8_t) HAL->spi->transferUntil(
+      sdCardSpiDevice, 0xFF, 0x80, 0x00, true, 10);
   }
 
   return response;
@@ -413,35 +415,16 @@ static uint32_t sdSpiNegotiateFastBaud(int sdCardSpiDevice) {
 ///
 /// @param sdCardSpiDevice The zero-based SPI device ID to use.
 static void sdSpiSendCmd12Inline(int sdCardSpiDevice) {
-  // Command byte
-  HAL->spi->transfer8(sdCardSpiDevice, CMD12 | 0x40);
-  
-  // Argument (0x00000000)
-  HAL->spi->transfer8(sdCardSpiDevice, 0x00);
-  HAL->spi->transfer8(sdCardSpiDevice, 0x00);
-  HAL->spi->transfer8(sdCardSpiDevice, 0x00);
-  HAL->spi->transfer8(sdCardSpiDevice, 0x00);
-  
-  // CRC (don't care)
-  HAL->spi->transfer8(sdCardSpiDevice, 0xFF);
-  
-  // Discard the stuff byte that follows a CMD12 response.
-  HAL->spi->transfer8(sdCardSpiDevice, 0xFF);
+  // Command byte, a zero argument, a don't-care CRC, and the stuff byte that
+  // follows a CMD12 response.
+  uint8_t command[7] = { CMD12 | 0x40, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF };
+  HAL->spi->transferBytes(sdCardSpiDevice, command, sizeof(command));
   
   // Wait for the R1 response.
-  for (int ii = 0; ii < 10; ii++) {
-    uint8_t response = HAL->spi->transfer8(sdCardSpiDevice, 0xFF);
-    if ((response & 0x80) == 0) {
-      break;
-    }
-  }
+  HAL->spi->transferUntil(sdCardSpiDevice, 0xFF, 0x80, 0x00, true, 10);
   
   // Consume any remaining busy bytes (card holds MISO low).
-  for (int ii = 0; ii < 10000; ii++) {
-    if (HAL->spi->transfer8(sdCardSpiDevice, 0xFF) == 0xFF) {
-      break;
-    }
-  }
+  HAL->spi->transferUntil(sdCardSpiDevice, 0xFF, 0xFF, 0xFF, true, 10000);
 }
 
 /// @var _bulkreadCmd
@@ -508,22 +491,17 @@ int sdSpiReadBlocks(SdCardState *sdCardState,
   
   for (uint32_t ii = 0; ii < numBlocks; ii++) {
     // Wait for data token (0xFE)
-    uint16_t timeout = 10000;
-    while (timeout--) {
-      response = HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFF);
-      if (response == 0xFE) {
-        break;
+    if (HAL->spi->transferUntil(
+      SD_CARD_SPI_DEVICE, 0xFF, 0xFF, 0xFE, true, 10000) != 0xFE
+    ) {
+      // On a multi-block read we must still stop transmission.  Send CMD12
+      // inline — we cannot use sdSpiSendCommand here because it would call
+      // startTransfer again on an already-active SPI transfer.
+      if (readCmd == CMD18) {
+        sdSpiSendCmd12Inline(SD_CARD_SPI_DEVICE);
       }
-      if (timeout == 0) {
-        // On a multi-block read we must still stop transmission.  Send CMD12
-        // inline — we cannot use sdSpiSendCommand here because it would call
-        // startTransfer again on an already-active SPI transfer.
-        if (readCmd == CMD18) {
-          sdSpiSendCmd12Inline(SD_CARD_SPI_DEVICE);
-        }
-        HAL->spi->endTransfer(SD_CARD_SPI_DEVICE);
-        return EIO;  // Timeout waiting for data
-      }
+      HAL->spi->endTransfer(SD_CARD_SPI_DEVICE);
+      return EIO;  // Timeout waiting for data
     }
     
     // Read the block
@@ -539,8 +517,8 @@ int sdSpiReadBlocks(SdCardState *sdCardState,
     }
     
     // Read CRC (2 bytes, ignored)
-    HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFF);
-    HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFF);
+    uint8_t crc[2] = { 0xFF, 0xFF };
+    HAL->spi->transferBytes(SD_CARD_SPI_DEVICE, crc, sizeof(crc));
     
     buffer += sdCardState->blockSize;
     
@@ -643,19 +621,17 @@ int sdSpiWriteBlocks(SdCardState *sdCardState,
   
   for (uint32_t ii = 0; ii < numBlocks; ii++) {
     // Wait for card to be ready before sending data
-    uint16_t timeout = 10000;
-    do {
-      response = HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFF);
-      if (--timeout == 0) {
-        if (writeCmd == CMD25) {
-          // Send Stop Tran token to abort the multi-block write.
-          HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFD);
-          HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFF);
-        }
-        HAL->spi->endTransfer(SD_CARD_SPI_DEVICE);
-        return EIO;
+    if (HAL->spi->transferUntil(
+      SD_CARD_SPI_DEVICE, 0xFF, 0xFF, 0xFF, true, 10000) != 0xFF
+    ) {
+      if (writeCmd == CMD25) {
+        // Send Stop Tran token to abort the multi-block write.
+        HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFD);
+        HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFF);
       }
-    } while (response != 0xFF);
+      HAL->spi->endTransfer(SD_CARD_SPI_DEVICE);
+      return EIO;
+    }
     
     // Send start token
     HAL->spi->transfer8(SD_CARD_SPI_DEVICE, startToken);
@@ -701,19 +677,15 @@ int sdSpiWriteBlocks(SdCardState *sdCardState,
     }
     
     // Wait for write to complete (card holds MISO low while busy)
-    timeout = 10000;
-    while (timeout--) {
-      if (HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFF) != 0x00) {
-        break;
+    if (HAL->spi->transferUntil(
+      SD_CARD_SPI_DEVICE, 0xFF, 0xFF, 0x00, false, 10000) <= 0
+    ) {
+      if (writeCmd == CMD25) {
+        HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFD);
+        HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFF);
       }
-      if (timeout == 0) {
-        if (writeCmd == CMD25) {
-          HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFD);
-          HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFF);
-        }
-        HAL->spi->endTransfer(SD_CARD_SPI_DEVICE);
-        return EIO; // Write timeout
-      }
+      HAL->spi->endTransfer(SD_CARD_SPI_DEVICE);
+      return EIO; // Write timeout
     }
     
     buffer += sdCardState->blockSize;
@@ -736,15 +708,11 @@ int sdSpiWriteBlocks(SdCardState *sdCardState,
   if (writeCmd == CMD25) {
     HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFD);
     // Wait for card to leave busy state.
-    uint16_t timeout = 10000;
-    while (timeout--) {
-      if (HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFF) != 0x00) {
-        break;
-      }
-      if (timeout == 0) {
-        HAL->spi->endTransfer(SD_CARD_SPI_DEVICE);
-        return EIO;
-      }
+    if (HAL->spi->transferUntil(
+      SD_CARD_SPI_DEVICE, 0xFF, 0xFF, 0x00, false, 10000) <= 0
+    ) {
+      HAL->spi->endTransfer(SD_CARD_SPI_DEVICE);
+      return EIO;
     }
   }
   
