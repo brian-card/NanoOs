@@ -94,6 +94,58 @@
 /// restart re-discovers it.
 static uint32_t _sdSpiFastBaud = SD_SPI_FAST_BAUD_MAX;
 
+/// @def SD_SPI_WAIT_TIMEOUT_NS
+///
+/// @brief The longest the card may hold off a data token or stay busy, in
+/// nanoseconds.  The SD physical spec allows up to 100 ms for a read and
+/// 500 ms for a write.
+#define SD_SPI_WAIT_TIMEOUT_NS 500000000LL
+
+/// @def SD_SPI_POLLS_PER_CLOCK_CHECK
+///
+/// @brief The number of bytes sdSpiWaitFor polls between checks of the clock.
+#define SD_SPI_POLLS_PER_CLOCK_CHECK 256
+
+/// @fn int sdSpiWaitFor(uint8_t mask, uint8_t value, bool equal)
+///
+/// @brief Clock 0xFF bytes to the card until the masked byte received matches
+/// value (or, if equal is false, stops matching it), giving up after
+/// SD_SPI_WAIT_TIMEOUT_NS.  The limit is in time rather than in bytes because
+/// how long one poll takes depends on the HAL and the bus speed.
+///
+/// @param mask The mask to apply to each received byte before comparing it.
+/// @param value The value to compare each masked received byte against.
+/// @param equal true to stop when the masked byte equals value, false to stop
+///   when it differs from value.
+///
+/// @return Returns the last byte received (0x00 to 0xff), whether or not it
+/// met the condition, on success, -errno on failure.
+static int sdSpiWaitFor(uint8_t mask, uint8_t value, bool equal) {
+  int64_t start = -1;
+  int64_t elapsed = 0;
+  int response;
+
+  do {
+    response = HAL->spi->transferUntil(SD_CARD_SPI_DEVICE,
+      0xFF, mask, value, equal, SD_SPI_POLLS_PER_CLOCK_CHECK);
+    if ((response < 0)
+      || (((((uint8_t) response) & mask) == value) == equal)
+    ) {
+      return response;
+    }
+    // The clock is only read once the card has kept us waiting, which keeps
+    // it off the path of a card that answers right away.
+    int status = (start < 0)
+      ? HAL->clock->getElapsedNanoseconds(0, &start)
+      : HAL->clock->getElapsedNanoseconds(start, &elapsed);
+    if (status != 0) {
+      return response;
+    }
+  } while (elapsed < SD_SPI_WAIT_TIMEOUT_NS);
+
+  return response;
+}
+
 /// @fn uint8_t sdSpiSendCommand(int sdCardSpiDevice, uint8_t cmd, uint32_t arg)
 ///
 /// @brief Send a command and its argument to the SD card over the SPI
@@ -424,7 +476,7 @@ static void sdSpiSendCmd12Inline(int sdCardSpiDevice) {
   HAL->spi->transferUntil(sdCardSpiDevice, 0xFF, 0x80, 0x00, true, 10);
   
   // Consume any remaining busy bytes (card holds MISO low).
-  HAL->spi->transferUntil(sdCardSpiDevice, 0xFF, 0xFF, 0xFF, true, 10000);
+  sdSpiWaitFor(0xFF, 0xFF, true);
 }
 
 /// @var _bulkreadCmd
@@ -491,9 +543,7 @@ int sdSpiReadBlocks(SdCardState *sdCardState,
   
   for (uint32_t ii = 0; ii < numBlocks; ii++) {
     // Wait for data token (0xFE)
-    if (HAL->spi->transferUntil(
-      SD_CARD_SPI_DEVICE, 0xFF, 0xFF, 0xFE, true, 10000) != 0xFE
-    ) {
+    if (sdSpiWaitFor(0xFF, 0xFE, true) != 0xFE) {
       // On a multi-block read we must still stop transmission.  Send CMD12
       // inline — we cannot use sdSpiSendCommand here because it would call
       // startTransfer again on an already-active SPI transfer.
@@ -621,9 +671,7 @@ int sdSpiWriteBlocks(SdCardState *sdCardState,
   
   for (uint32_t ii = 0; ii < numBlocks; ii++) {
     // Wait for card to be ready before sending data
-    if (HAL->spi->transferUntil(
-      SD_CARD_SPI_DEVICE, 0xFF, 0xFF, 0xFF, true, 10000) != 0xFF
-    ) {
+    if (sdSpiWaitFor(0xFF, 0xFF, true) != 0xFF) {
       if (writeCmd == CMD25) {
         // Send Stop Tran token to abort the multi-block write.
         HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFD);
@@ -677,9 +725,7 @@ int sdSpiWriteBlocks(SdCardState *sdCardState,
     }
     
     // Wait for write to complete (card holds MISO low while busy)
-    if (HAL->spi->transferUntil(
-      SD_CARD_SPI_DEVICE, 0xFF, 0xFF, 0x00, false, 10000) <= 0
-    ) {
+    if (sdSpiWaitFor(0xFF, 0x00, false) <= 0) {
       if (writeCmd == CMD25) {
         HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFD);
         HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFF);
@@ -708,9 +754,7 @@ int sdSpiWriteBlocks(SdCardState *sdCardState,
   if (writeCmd == CMD25) {
     HAL->spi->transfer8(SD_CARD_SPI_DEVICE, 0xFD);
     // Wait for card to leave busy state.
-    if (HAL->spi->transferUntil(
-      SD_CARD_SPI_DEVICE, 0xFF, 0xFF, 0x00, false, 10000) <= 0
-    ) {
+    if (sdSpiWaitFor(0xFF, 0x00, false) <= 0) {
       HAL->spi->endTransfer(SD_CARD_SPI_DEVICE);
       return EIO;
     }
