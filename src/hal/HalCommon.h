@@ -213,6 +213,10 @@ typedef struct NamedProcessEntry {
     .deviceIds =         0x01, /* Bitmask for device ID 0 */ \
   }, \
   { \
+    .subsystemFunction = (((uint16_t) HAL_SPI) << 8) | HAL_SPI_TRANSFER_UNTIL, \
+    .deviceIds =         0x01, /* Bitmask for device ID 0 */ \
+  }, \
+  { \
     .subsystemFunction = (((uint16_t) HAL_CLOCK) << 8) \
       | HAL_CLOCK_GET_ELAPSED_NANOSECONDS, \
     .deviceIds =         0x00, /* No device for this function */ \

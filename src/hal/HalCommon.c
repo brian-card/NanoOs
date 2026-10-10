@@ -193,6 +193,8 @@ static int halSpiEndTransfer(int32_t deviceId);
 static int halSpiTransfer8(int32_t deviceId, uint8_t data);
 static int halSpiTransferBytes(int32_t deviceId,
   uint8_t *data, uint32_t length);
+static int halSpiTransferUntil(int32_t deviceId, uint8_t data,
+  uint8_t mask, uint8_t value, bool equal, uint16_t maxTransfers);
 
 static int halClockInit(void);
 static int halClockSetSystemTime(struct timespec *ts);
@@ -299,6 +301,7 @@ static HalSpi halImplSpi = {
   .endTransfer   = halSpiEndTransfer,
   .transfer8     = halSpiTransfer8,
   .transferBytes = halSpiTransferBytes,
+  .transferUntil = halSpiTransferUntil,
 };
 
 static HalClock halImplClock = {
@@ -642,6 +645,13 @@ static int halSpiTransferBytes(int32_t deviceId,
   uint8_t *data, uint32_t length
 ) {
   return callHal(HAL_SPI, HAL_SPI_TRANSFER_BYTES, deviceId, data, length);
+}
+
+static int halSpiTransferUntil(int32_t deviceId, uint8_t data,
+  uint8_t mask, uint8_t value, bool equal, uint16_t maxTransfers
+) {
+  return callHal(HAL_SPI, HAL_SPI_TRANSFER_UNTIL, deviceId, (int) data,
+    (int) mask, (int) value, (int) equal, (int) maxTransfers);
 }
 
 static int halClockInit(void) {
