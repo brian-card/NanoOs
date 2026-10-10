@@ -35,7 +35,7 @@
 #include "../kernel/NanoOs.h"
 
 /// @fn int populateGroup(struct group *grp, char *buf, size_t buflen,
-///   const char *name, const char *passwd, gid_t gid, const char **members)
+///   const char *name, const char *passwd, gid_t gid, const char *const *members)
 ///
 /// @brief Populate a struct group with the provided parameters.
 ///
@@ -49,7 +49,7 @@
 ///
 /// @return Returns 0 on success, -errno on failure.
 int populateGroup(struct group *grp, char *buf, size_t buflen,
-  const char *name, const char *passwd, gid_t gid, const char **members
+  const char *name, const char *passwd, gid_t gid, const char *const *members
 ) {
   // This function is only called internally, so don't check for bad parameters.
   
@@ -153,6 +153,30 @@ static const char _user2Groupname[] KEEP_IN_FLASH = "user2";
 /// final binary on some targets.
 static const char _user2Passwd[] KEEP_IN_FLASH = "!";
 
+/// @var _rootMembers
+///
+/// @brief NULL-terminated list of the members of the root group.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char *const _rootMembers[] KEEP_IN_FLASH = {_rootGroupname, NULL};
+
+/// @var _user1Members
+///
+/// @brief NULL-terminated list of the members of the first non-root user's group.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char *const _user1Members[] KEEP_IN_FLASH = {_user1Groupname, NULL};
+
+/// @var _user2Members
+///
+/// @brief NULL-terminated list of the members of the second non-root user's group.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char *const _user2Members[] KEEP_IN_FLASH = {_user2Groupname, NULL};
+
 /// @fn int nanoOsGetgrnam_r(const char *name, struct group *grp, char *buf,
 ///   size_t buflen, struct group **result)
 ///
@@ -189,20 +213,17 @@ int nanoOsGetgrnam_r(
   
   int returnValue = 0;
   if (strcmp(name, _rootGroupname) == 0) {
-    const char *members[] = {_rootGroupname, NULL};
     returnValue = populateGroup(grp, buf, buflen,
       /* name= */ _rootGroupname, /* passwd= */ _rootPasswd,
-      /* gid= */ 0, /* members= */ members);
+      /* gid= */ 0, /* members= */ _rootMembers);
   } else if (strcmp(name, _user1Groupname) == 0) {
-    const char *members[] = {_user1Groupname, NULL};
     returnValue = populateGroup(grp, buf, buflen,
       /* name= */ _user1Groupname, /* passwd= */ _user1Passwd,
-      /* gid= */ 1, /* members= */ members);
+      /* gid= */ 1, /* members= */ _user1Members);
   } else if (strcmp(name, _user2Groupname) == 0) {
-    const char *members[] = {_user2Groupname, NULL};
     returnValue = populateGroup(grp, buf, buflen,
       /* name= */ _user2Groupname, /* passwd= */ _user2Passwd,
-      /* gid= */ 2, /* members= */ members);
+      /* gid= */ 2, /* members= */ _user2Members);
   } else {
     // Group not found.  Set result to NULL and return 0 as per spec.
     *result = NULL;
@@ -249,20 +270,17 @@ int nanoOsGetgrgid_r(
   
   int returnValue = 0;
   if (gid == 0) {
-    const char *members[] = {_rootGroupname, NULL};
     returnValue = populateGroup(grp, buf, buflen,
       /* name= */ _rootGroupname, /* passwd= */ _rootPasswd,
-      /* gid= */ 0, /* members= */ members);
+      /* gid= */ 0, /* members= */ _rootMembers);
   } else if (gid == 1) {
-    const char *members[] = {_user1Groupname, NULL};
     returnValue = populateGroup(grp, buf, buflen,
       /* name= */ _user1Groupname, /* passwd= */ _user1Passwd,
-      /* gid= */ 1, /* members= */ members);
+      /* gid= */ 1, /* members= */ _user1Members);
   } else if (gid == 2) {
-    const char *members[] = {_user2Groupname, NULL};
     returnValue = populateGroup(grp, buf, buflen,
       /* name= */ _user2Groupname, /* passwd= */ _user2Passwd,
-      /* gid= */ 2, /* members= */ members);
+      /* gid= */ 2, /* members= */ _user2Members);
   } else {
     // Group not found.  Set result to NULL and return 0 as per spec.
     *result = NULL;
