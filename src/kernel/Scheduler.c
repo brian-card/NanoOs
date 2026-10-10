@@ -4023,8 +4023,13 @@ void handleSchedulerMessage(SchedulerState *schedulerState) {
 void checkForTimeouts(SchedulerState *schedulerState) {
   ProcessQueue *timedWaiting = schedulerState->timedWaitingQueue;
   uint8_t numElements = timedWaiting->numElements;
-  int64_t now = processGetNanoseconds(NULL);
+  if (numElements == 0) {
+    // Nothing to do.
+    return;
+  }
 
+  int64_t now = 0;
+  HAL->clock->getElapsedNanoseconds(0, &now);
   for (uint8_t ii = 0; ii < numElements; ii++) {
     ProcessDescriptor *poppedDescriptor = processQueuePop(timedWaiting);
     Comutex *blockingComutex
