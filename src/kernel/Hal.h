@@ -206,6 +206,7 @@ typedef enum HalSpiFunction {
   HAL_SPI_TRANSFER8,
   HAL_SPI_TRANSFER_BYTES,
   HAL_SPI_SET_SPEED,
+  HAL_SPI_TRANSFER_UNTIL,
   HAL_SPI_NUM_FNS,
 } HalSpiFunction;
 
@@ -984,6 +985,28 @@ typedef struct HalSpi {
   /// -errno is returned and the contents of the data buffer are undefined on
   /// failure.
   int (*transferBytes)(int32_t deviceId, uint8_t *data, uint32_t length);
+
+  /// @fn int transferUntil(int32_t deviceId, uint8_t data,
+  ///   uint8_t mask, uint8_t value, bool equal, uint16_t maxTransfers)
+  ///
+  /// @brief Repeatedly transfer the same byte until the masked byte received
+  /// matches (or, if equal is false, stops matching) a value.  This exists so
+  /// that polling a peripheral costs one HAL call instead of one per byte.
+  ///
+  /// @param deviceId The zero-based index of the SPI device to transfer data
+  ///   with.
+  /// @param data The 8-bit value to transfer to the peripheral on every cycle.
+  /// @param mask The mask to apply to each received byte before comparing it.
+  /// @param value The value to compare each masked received byte against.
+  /// @param equal true to stop when the masked byte equals value, false to
+  ///   stop when it differs from value.
+  /// @param maxTransfers The maximum number of bytes to transfer.  Must be
+  ///   greater than zero.
+  ///
+  /// @return Returns the last byte received (0x00 to 0xff), whether or not it
+  /// met the condition, on success, -errno on failure.
+  int (*transferUntil)(int32_t deviceId, uint8_t data,
+    uint8_t mask, uint8_t value, bool equal, uint16_t maxTransfers);
 } HalSpi;
 
 typedef struct HalClock {
