@@ -222,6 +222,13 @@ $(FULL_BIN): $(ELF)
 	@$(OBJCOPY) -O binary $< $@
 
 $(STRIPPED_BIN): $(ELF)
+	@consts="$$($(NM) $< | awk '$$2 ~ /^[rR]$$/ && $$3 ~ /__const\./ { print $$3 }')"; \
+	if [ -n "$$consts" ]; then \
+	  echo "ERROR: these local initializers are copied from .rodata, which $@ omits:" >&2; \
+	  echo "$$consts" | sed 's/^/  /' >&2; \
+	  echo "Make each one a static const KEEP_IN_FLASH table." >&2; \
+	  exit 1; \
+	fi
 	@echo "  OBJCOPY $@ (stripped, no .rodata)"
 	@$(OBJCOPY) -O binary -R .rodata $< $@
 
