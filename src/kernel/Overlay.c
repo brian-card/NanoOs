@@ -366,3 +366,9 @@ int runOverlayCommand(const char *commandPath,
   return returnValue;
 }
 
+/// @var overlayFifo
+///
+/// @brief Storage for an OverlayFifo to be used by
+/// callOverlayFunctionFromCache.
+OverlayFifo *overlayFifo = NULL;
+
