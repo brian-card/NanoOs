@@ -2716,7 +2716,7 @@ int loadProcessDescriptorOverlayMetadata(ProcessDescriptor *processDescriptor) {
 
   int returnValue
     = schedGetFileBlockMetadataFromPath(overlayPath,
-      &processDescriptor->overlay);
+      &processDescriptor->overlay.fileBlockMetadata);
   if ((returnValue == -EIO) && (errno == EBUSY)) {
     returnValue = -EBUSY;
   }
@@ -3731,9 +3731,12 @@ int schedulerReplaceOverlayCommandHandler(
     processDescriptor->overlayNamespace
        = schedulerReplaceOverlayArgs->overlayNamespace;
   }
-  processDescriptor->overlay.blockDevice = overlay->blockDevice;
-  processDescriptor->overlay.startBlock  = overlay->startBlock;
-  processDescriptor->overlay.numBlocks   = overlay->numBlocks;
+  processDescriptor->overlay.fileBlockMetadata.blockDevice
+    = overlay->blockDevice;
+  processDescriptor->overlay.fileBlockMetadata.startBlock
+    = overlay->startBlock;
+  processDescriptor->overlay.fileBlockMetadata.numBlocks
+    = overlay->numBlocks;
 
   schedulerReplaceOverlayArgs->returnValue = returnValue;
   processMessageSetDone(processMessage);
@@ -4199,7 +4202,7 @@ int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp) {
     nanoOsApi.hal = HAL;
   }
   
-  if (processDescriptor->overlay.blockDevice == NULL) {
+  if (processDescriptor->overlay.fileBlockMetadata.blockDevice == NULL) {
     // This process has no overlay metadata set yet (e.g. a dummy process slot
     // or a runBlockOverlay process before its first self-configuration yield).
     // Nothing to load.
@@ -4213,22 +4216,22 @@ int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp) {
   }
 
   NanoOsOverlayHeader *overlayHeader = &overlayMap->header;
-  if ((overlayHeader->overlay.blockDevice
-      == processDescriptor->overlay.blockDevice)
-    && (overlayHeader->overlay.startBlock
-      == processDescriptor->overlay.startBlock)
-    && (overlayHeader->overlay.numBlocks
-      == processDescriptor->overlay.numBlocks)
+  if ((overlayHeader->overlay.fileBlockMetadata.blockDevice
+      == processDescriptor->overlay.fileBlockMetadata.blockDevice)
+    && (overlayHeader->overlay.fileBlockMetadata.startBlock
+      == processDescriptor->overlay.fileBlockMetadata.startBlock)
+    && (overlayHeader->overlay.fileBlockMetadata.numBlocks
+      == processDescriptor->overlay.fileBlockMetadata.numBlocks)
   ) {
     // Overlay is already loaded.  Do nothing.
     return 0;
   }
 
-  if (processDescriptor->overlay.blockDevice->schedReadBlocks(
-    processDescriptor->overlay.blockDevice->context,
-    processDescriptor->overlay.startBlock,
-    processDescriptor->overlay.numBlocks,
-    processDescriptor->overlay.blockDevice->blockSize,
+  if (processDescriptor->overlay.fileBlockMetadata.blockDevice->schedReadBlocks(
+    processDescriptor->overlay.fileBlockMetadata.blockDevice->context,
+    processDescriptor->overlay.fileBlockMetadata.startBlock,
+    processDescriptor->overlay.fileBlockMetadata.numBlocks,
+    processDescriptor->overlay.fileBlockMetadata.blockDevice->blockSize,
     (uint8_t*) overlayMap) != 0
   ) {
     logError("Could not read overlay\n");
@@ -4273,9 +4276,12 @@ int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp) {
   overlayHeader->osApi->callOverlayFunction
     = processDescriptor->callOverlayFunction;
   overlayHeader->env = envp;
-  overlayHeader->overlay.blockDevice = processDescriptor->overlay.blockDevice;
-  overlayHeader->overlay.startBlock = processDescriptor->overlay.startBlock;
-  overlayHeader->overlay.numBlocks = processDescriptor->overlay.numBlocks;
+  overlayHeader->overlay.fileBlockMetadata.blockDevice
+    = processDescriptor->overlay.fileBlockMetadata.blockDevice;
+  overlayHeader->overlay.fileBlockMetadata.startBlock
+    = processDescriptor->overlay.fileBlockMetadata.startBlock;
+  overlayHeader->overlay.fileBlockMetadata.numBlocks
+    = processDescriptor->overlay.fileBlockMetadata.numBlocks;
   
   return 0;
 }

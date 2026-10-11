@@ -207,8 +207,8 @@ typedef struct ProcessQueue ProcessQueue;
 ///   user process.  This is the path to the overlay's directory for a file-
 ///   based overlay or the zero-based index of the block device for a block-
 ///   based overaly.
-/// @param overlay The FileBlockMetadata of how to access the overlay from its
-///   block device.
+/// @param overlay The OverlayDescriptor that describes how to access the
+///   overlay.
 /// @param envp A pointer to the array of NULL-terminated environment variable
 ///   strings.
 /// @param processQueue The process queue that the descriptor is currently in.
@@ -246,7 +246,7 @@ typedef struct ProcessDescriptor {
   PrivilegeLevel      privilegeLevel;
   FileDescriptor    **fileDescriptors;
   void               *overlayNamespace;
-  FileBlockMetadata   overlay;
+  OverlayDescriptor   overlay;
   char              **envp;
   ProcessQueue       *processQueue;
   ProcessQueue       *readyQueue;

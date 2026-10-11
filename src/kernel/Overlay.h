@@ -107,8 +107,8 @@ typedef struct NanoOsOverlayExport {
 ///   manages all the standard C API interfaces.
 /// @param env The array of NULL-terminated environment variables for the
 ///   running program.
-/// @param overlay The FileBlockMetadata that points to the location of the
-///   overlay on disk.
+/// @param overlay The OverlayDescriptor that points to the location of the
+///   overlay on disk or in memory.
 /// @param version The version of the overlay header.  Format will be:
 ///   (major << 24) | (minor << 16) | (revision << 8) | (build << 0).
 /// @param magic The value of NANO_OS_OVERLAY_MAGIC to identify that this is a
@@ -116,7 +116,7 @@ typedef struct NanoOsOverlayExport {
 typedef struct NanoOsOverlayHeader {
   NanoOsApi *osApi;
   char **env;
-  FileBlockMetadata overlay;
+  OverlayDescriptor overlay;
   uint32_t version;
   uint64_t magic;
 } NanoOsOverlayHeader;
@@ -166,11 +166,11 @@ typedef struct BlockOverlayArgs {
 ///
 /// @brief Individual node for an OverlayFifo.
 ///
+/// @param overaly Pointer to the block of memory that holds the contents of a
+///   cached overlay.
 /// @param overlayId The ID of the overlay.  This is the full path to the
 ///   overlay if it's a file-based overlay, or the index of the overlay cast to
 ///   a void* if it's block based.
-/// @param overaly Pointer to the block of memory that holds the contents of a
-///   cached overlay.
 /// @param overlayIdLength The number of bytes occupied by the overlayId.  If
 ///   this value is 0, the overlayId will be compared to the target directly
 ///   using ==.  If it's greater than 0, overlayId is a string and the full
@@ -180,8 +180,8 @@ typedef struct BlockOverlayArgs {
 ///   node before it's ejected.  Reset to 3 on insertion or cache hit.
 ///   Decremented each time a node is popped from a full FIFO.
 typedef struct OverlayFifoNode {
-  void    *overlayId;
   uint8_t *overlay;
+  void    *overlayId;
   uint8_t  overlayIdLength;
   uint8_t  missesRemaining;
 } OverlayFifoNode;

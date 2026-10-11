@@ -102,7 +102,7 @@ static const char _overlayExt[] KEEP_IN_FLASH = OVERLAY_EXT;
 /// final binary on some targets.
 static const char _pathSeparator[] KEEP_IN_FLASH = "/";
 
-/// @fn void* callOverlayFunctionFromFile(const void *od, const void *o,
+/// @fn void* callOverlayFunctionFromFile(const void *od, const void *oo,
 ///   const char *function, void *args)
 ///
 /// @brief Kernel function to load an overlay from a file into memory, find a
@@ -112,7 +112,7 @@ static const char _pathSeparator[] KEEP_IN_FLASH = "/";
 /// @param od The path to the overlay directory on the filesystem.  If this
 ///   parameter is OVERLAY_SAME_NAMESPACE then the overlay path currently in
 ///   use will be used.
-/// @param o The name of the overlay minus the ".overlay" file extension
+/// @param oo The name of the overlay minus the ".overlay" file extension
 ///   that is local to the overlay directory.
 /// @param function The name of the function exported by the overlay.
 /// @param args Any arguments to be passed to the function in the overlay, cast
@@ -120,11 +120,11 @@ static const char _pathSeparator[] KEEP_IN_FLASH = "/";
 ///
 /// @return Returns the value returned by the overlay function on success, NULL
 /// on failure.
-void* callOverlayFunctionFromFile(const void *od, const void *o,
+void* callOverlayFunctionFromFile(const void *od, const void *oo,
   const char *function, void *args
 ) {
   const char *overlayDir = (const char*) od;
-  const char *overlay = (const char*) o;
+  const char *overlay = (const char*) oo;
   void *returnValue = NULL;
   if ((overlay == NULL) || (function == NULL)) {
     logError("One or more NULL arguments provided to "
@@ -163,9 +163,12 @@ void* callOverlayFunctionFromFile(const void *od, const void *o,
   FileBlockMetadata *overlayArray = (FileBlockMetadata*) allocation;
   char *overlayInfo = allocation + (2 * sizeof(FileBlockMetadata));
 
-  overlayArray[0].blockDevice = runningProcess->overlay.blockDevice;
-  overlayArray[0].startBlock  = runningProcess->overlay.startBlock;
-  overlayArray[0].numBlocks   = runningProcess->overlay.numBlocks;
+  overlayArray[0].blockDevice
+    = runningProcess->overlay.fileBlockMetadata.blockDevice;
+  overlayArray[0].startBlock
+    = runningProcess->overlay.fileBlockMetadata.startBlock;
+  overlayArray[0].numBlocks
+    = runningProcess->overlay.fileBlockMetadata.numBlocks;
 
   strcpy(overlayInfo,
     (overlayDir == OVERLAY_SAME_NAMESPACE) ? previousOverlayDir : overlayDir);
@@ -259,11 +262,15 @@ void* callOverlayFunctionFromBlockDevice(
   // Keep track of the overlay that's currently running and the one we need.
   void *previousOverlayDevice = runningProcess->overlayNamespace;
   FileBlockMetadata overlayArray[2];
-  overlayArray[0].blockDevice = runningProcess->overlay.blockDevice;
-  overlayArray[0].startBlock  = runningProcess->overlay.startBlock;
-  overlayArray[0].numBlocks   = runningProcess->overlay.numBlocks;
+  overlayArray[0].blockDevice
+    = runningProcess->overlay.fileBlockMetadata.blockDevice;
+  overlayArray[0].startBlock
+    = runningProcess->overlay.fileBlockMetadata.startBlock;
+  overlayArray[0].numBlocks
+    = runningProcess->overlay.fileBlockMetadata.numBlocks;
   
-  overlayArray[1].blockDevice = runningProcess->overlay.blockDevice;
+  overlayArray[1].blockDevice
+    = runningProcess->overlay.fileBlockMetadata.blockDevice;
   if (deviceId != OVERLAY_SAME_NAMESPACE) {
     if (HAL->blockDevice != NULL) {
       HAL->blockDevice->get(
@@ -279,7 +286,8 @@ void* callOverlayFunctionFromBlockDevice(
   
   // The number of blocks in block-based overlays always have to be the same.
   // So, just copy what we're already using.
-  overlayArray[1].numBlocks = runningProcess->overlay.numBlocks;
+  overlayArray[1].numBlocks
+    = runningProcess->overlay.fileBlockMetadata.numBlocks;
   overlayArray[1].startBlock
     = (((uintptr_t) overlay) * overlayArray[1].numBlocks) + 1;
   
@@ -365,12 +373,6 @@ int runOverlayCommand(const char *commandPath,
 
   return returnValue;
 }
-
-/// @var overlayFifo
-///
-/// @brief Storage for an OverlayFifo to be used by
-/// callOverlayFunctionFromCache.
-OverlayFifo *overlayFifo = NULL;
 
 /// @fn OverlayFifoNode* overlayFifoPop(OverlayFifo *overlayFifo)
 ///
@@ -531,10 +533,137 @@ setOverlayFifoNode:
   // function is called, so just copy it from there.
   ProcessDescriptor *processDescriptor = getRunningProcess();
   memcpy(overlayFifoNode->overlay, overlayMap,
-    processDescriptor->overlay.numBlocks
-    * processDescriptor->overlay.blockDevice->blockSize);
+    processDescriptor->overlay.fileBlockMetadata.numBlocks
+    * processDescriptor->overlay.fileBlockMetadata.blockDevice->blockSize);
 
   coroutineExitCriticalSection();
   return 0;
+}
+
+/// @var fileCache
+///
+/// @brief Storage for an OverlayFifo to be used by
+/// callOverlayFunctionFromFileCache.
+OverlayFifo *fileCache = NULL;
+
+/// @fn void* callOverlayFunctionFromFileCache(const void *od, const void *oo,
+///   const char *function, void *args)
+///
+/// @brief Kernel function to load an overlay from a file into memory, find a
+/// designated function, call it with the provided arguments, and return the
+/// return value.
+///
+/// @param od The path to the overlay directory on the filesystem.  If this
+///   parameter is OVERLAY_SAME_NAMESPACE then the overlay path currently in
+///   use will be used.
+/// @param oo The name of the overlay minus the ".overlay" file extension
+///   that is local to the overlay directory.
+/// @param function The name of the function exported by the overlay.
+/// @param args Any arguments to be passed to the function in the overlay, cast
+///   to a void*.  This parameter may be NULL.
+///
+/// @return Returns the value returned by the overlay function on success, NULL
+/// on failure.
+void* callOverlayFunctionFromFileCache(const void *od, const void *oo,
+  const char *function, void *args
+) {
+  const char *overlayDir = (const char*) od;
+  const char *overlay = (const char*) oo;
+  void *returnValue = NULL;
+  if ((overlay == NULL) || (function == NULL)) {
+    logError("One or more NULL arguments provided to "
+      "callOverlayFunctionFromFile\n");
+    goto exit; // return NULL
+  }
+  
+  ProcessDescriptor *runningProcess = getRunningProcess();
+  if (runningProcess == NULL) {
+    // This should be impossible.
+    goto exit; // return NULL
+  }
+  
+  // Keep track of the overlay that's currently running and the one we need.
+  char *previousOverlayDir = (char*) runningProcess->overlayNamespace;
+
+  // We need to allocate enough space for the two FileBlockMetadata objects and
+  // all of the strings we need.  For the strings, we need the overlay
+  // directory, a slash, the name of the overlay, the overlay extension, a NUL
+  // byte, the function name, and a trailing NUL byte.
+  char *allocation = (char*) malloc(
+    (2 * sizeof(FileBlockMetadata))
+    + ((overlayDir == OVERLAY_SAME_NAMESPACE)
+      ? strlen(previousOverlayDir)
+      : strlen(overlayDir)
+    )
+    + 1
+    + strlen(overlay)
+    + OVERLAY_EXT_LEN
+    + 1
+    + strlen(function)
+    + 1);
+  if (allocation == NULL) {
+    goto exit;
+  }
+  FileBlockMetadata *overlayArray = (FileBlockMetadata*) allocation;
+  char *overlayInfo = allocation + (2 * sizeof(FileBlockMetadata));
+
+  overlayArray[0].blockDevice
+    = runningProcess->overlay.fileBlockMetadata.blockDevice;
+  overlayArray[0].startBlock
+    = runningProcess->overlay.fileBlockMetadata.startBlock;
+  overlayArray[0].numBlocks
+    = runningProcess->overlay.fileBlockMetadata.numBlocks;
+
+  strcpy(overlayInfo,
+    (overlayDir == OVERLAY_SAME_NAMESPACE) ? previousOverlayDir : overlayDir);
+  strcat(overlayInfo, _pathSeparator);
+  strcat(overlayInfo, overlay);
+  strcat(overlayInfo, _overlayExt);
+  
+  // Get the overlay information we need.
+  if (getFileBlockMetadataFromPath(overlayInfo, &overlayArray[1]) != 0) {
+    // We can't proceed
+    goto freeOverlayInfo;
+  }
+  
+  char *functionCopy = overlayInfo + strlen(overlayInfo) + 1;
+  strcpy(functionCopy, function);
+  
+  // Terminate the overlayInfo string at the end of the directory path.
+  overlayInfo[strlen(
+    (overlayDir == OVERLAY_SAME_NAMESPACE) ? previousOverlayDir : overlayDir)]
+    = '\0';
+  
+  // args does not get copied.  We have no way of knowing what the proper way
+  // to copy the data would be.  The caller is responsible for allocating data
+  // in dynamic memory before the pointer is passed to this function.
+  
+  if (overlayDir != OVERLAY_SAME_NAMESPACE) {
+    overlayDir = overlayInfo;
+  }
+  if (schedulerReplaceOverlay(overlayDir, &overlayArray[1]) != 0) {
+    logError("Could not load file overlay via the scheduler\n");
+    goto freeOverlayInfo;
+  }
+
+  // If we made it this far, then our new overlay has been successuflly loaded.
+  OverlayFunction overlayFunction = findOverlayFunction(functionCopy);
+  if (overlayFunction == NULL) {
+    logError("Could not find overlay function \"%s\"\n", functionCopy);
+    goto restorePreviousOverlay;
+  }
+  
+  // The overlay function was found.  Get our return value.
+  returnValue = overlayFunction(args);
+  
+restorePreviousOverlay:
+  // Don't check the return value here.  No point.
+  schedulerReplaceOverlay(previousOverlayDir, &overlayArray[0]);
+
+  // Release all the memory for the copies.
+freeOverlayInfo:
+  free(allocation);
+exit:
+  return returnValue;
 }
 
