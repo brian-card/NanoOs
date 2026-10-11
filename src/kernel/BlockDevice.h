@@ -89,6 +89,18 @@ typedef struct FileBlockMetadata {
   uint32_t     numBlocks;
 } FileBlockMetadata;
 
+/// @union OverlayDescriptor
+///
+/// @brief Descriptor for an overlay of a process.
+///
+/// @param fileBlockMetadata The FileBlockMetadata for a disk-based overlay.
+/// @param memory A pointer to the block of memory where a memory-based overlay
+///   lives.
+typedef union OverlayDescriptor {
+  FileBlockMetadata  fileBlockMetadata;
+  uint8_t           *memory;
+} OverlayDescriptor;
+
 #ifdef __cplusplus
 }
 #endif
