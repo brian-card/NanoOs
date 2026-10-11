@@ -162,6 +162,53 @@ typedef struct BlockOverlayArgs {
   void *args;
 } BlockOverlayArgs;
 
+/// @struct OverlayFifoNode
+///
+/// @brief Individual node for an OverlayFifo.
+///
+/// @param overlayId The ID of the overlay.  This is the full path to the
+///   overlay if it's a file-based overlay, or the index of the overlay cast to
+///   a void* if it's block based.
+/// @param overaly Pointer to the block of memory that holds the contents of a
+///   cached overlay.
+/// @param overlayIdLength The number of bytes occupied by the overlayId.  If
+///   this value is 0, the overlayId will be compared to the target directly
+///   using ==.  If it's greater than 0, overlayId is a string and the full
+///   number of bytes specified by this value will be compared at the memory
+///   address pointed to by overlayId.
+/// @param missesRemaining This is the number of cache misses remaining for the
+///   node before it's ejected.  Reset to 3 on insertion or cache hit.
+///   Decremented each time a node is popped from a full FIFO.
+typedef struct OverlayFifoNode {
+  void    *overlayId;
+  uint8_t *overlay;
+  uint8_t  overlayIdLength;
+  uint8_t  missesRemaining;
+} OverlayFifoNode;
+
+/// @struct OverlayFifo
+///
+/// @brief FIFO to implement an LRU cache for overlays.
+///
+/// @param head The index of the head of the FIFO.
+/// @param tail The index of the tail of the FIFO.
+/// @param size The size of the FIFO.
+/// @param numElements The number of elements currently in the FIFO.
+/// @param nodes The array of OverlayFifoNodes that hold cached overlay
+///   contents.  This is a flexible array member that is actually `size`
+///   elements long, but is declared as an array of size 1 to make C++ compilers
+///   happy.
+typedef struct OverlayFifo {
+  uint8_t         head;
+  uint8_t         tail;
+  uint8_t         size;
+  uint8_t         numElements;
+  OverlayFifoNode nodes[1];
+} OverlayFifo;
+
+// Declared in Overlay.c.
+extern OverlayFifo *overlayFifo;
+
 #ifdef __cplusplus
 }
 #endif
