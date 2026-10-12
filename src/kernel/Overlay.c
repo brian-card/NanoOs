@@ -467,7 +467,8 @@ OverlayFifoNode* overlayFifoGet(
 }
 
 /// @fn OverlayFifoNode* overlayFifoPush(
-///   OverlayFifo *overlayFifo, void *overlayId, uint8_t overlayIdLength)
+///   OverlayFifo *overlayFifo, void *overlayId, uint8_t overlayIdLength,
+///   void* (*fifoMalloc)(size_t)
 ///
 /// @brief Push an overlay into an overlay FIFO.
 ///
@@ -487,7 +488,8 @@ OverlayFifoNode* overlayFifoGet(
 /// @return Returns a pointer to the OverlayFifoNode used on success, NULL on
 /// failure.
 OverlayFifoNode* overlayFifoPush(
-  OverlayFifo *overlayFifo, void *overlayId, uint8_t overlayIdLength
+  OverlayFifo *overlayFifo, void *overlayId, uint8_t overlayIdLength,
+  void* (*fifoMalloc)(size_t)
 ) {
   if (overlayFifo == NULL) {
     errno = EINVAL;
@@ -561,7 +563,7 @@ setOverlayFifoNode:
   } else {
     // Allocate and copy memory.  missesRemaining should protect us while we're
     // not inside a critical section.
-    overlayFifoNode->overlayId = malloc(overlayIdLength);
+    overlayFifoNode->overlayId = fifoMalloc(overlayIdLength);
     if (overlayFifoNode->overlayId == NULL) {
       errno = ENOMEM;
       return NULL;
@@ -696,7 +698,7 @@ loadAndCallFunction:
   }
   if (overlayArray[1].memory == NULL) {
     overlayFifoNode = overlayFifoPush(
-      fileCache, overlayInfo, strlen(overlayInfo) + 1);
+      fileCache, overlayInfo, strlen(overlayInfo) + 1, memoryManagerMalloc);
   }
 
   // If we made it this far, then our new overlay has been successuflly loaded.
