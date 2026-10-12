@@ -52,6 +52,14 @@ void* callOverlayFunctionFromBlockDevice(
   const void *deviceId, const void *overlay,
   const char *function, void *args);
 int runOverlayCommand(const char *commandPath, int argc, char **argv);
+OverlayFifoNode* overlayFifoPop(OverlayFifo *overlayFifo);
+OverlayFifoNode* overlayFifoGet(
+  OverlayFifo *overlayFifo, void *overlayId, uint8_t overlayIdLength);
+OverlayFifoNode* overlayFifoPush(
+  OverlayFifo *overlayFifo, void *overlayId, uint8_t overlayIdLength,
+  void* (*fifoMalloc)(size_t));
+void* callOverlayFunctionFromFileCache(const void *od, const void *oo,
+  const char *function, void *args);
 
 #ifdef __cplusplus
 }
