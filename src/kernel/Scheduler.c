@@ -4228,6 +4228,7 @@ int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp) {
   }
 
   if (processDescriptor->overlay.memory == NULL) {
+    // Load the overlay from the filesystem.
     if (processDescriptor->overlay.fileBlockMetadata.blockDevice->
       schedReadBlocks(
         processDescriptor->overlay.fileBlockMetadata.blockDevice->context,
@@ -4240,6 +4241,11 @@ int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp) {
       HAL->power->enterMode(HAL_POWER_MODE_RESET);
       return -EIO;
     }
+  } else {
+    // Copy the overlay from its cache in RAM.
+    memcpy(overlayMap, processDescriptor->overlay.memory,
+      processDescriptor->overlay.fileBlockMetadata.numBlocks
+      * processDescriptor->overlay.fileBlockMetadata.blockDevice->blockSize);
   }
 
   if (overlayMap->header.magic != NANO_OS_OVERLAY_MAGIC) {
