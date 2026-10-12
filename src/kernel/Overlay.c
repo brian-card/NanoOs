@@ -459,7 +459,7 @@ OverlayFifoNode* overlayFifoGet(
   return overlayFifoNode;
 }
 
-/// @fn int overlayFifoPush(
+/// @fn OverlayFifoNode* overlayFifoPush(
 ///   OverlayFifo *overlayFifo, void *overlayId, uint8_t overlayIdLength)
 ///
 /// @brief Push an overlay into an overlay FIFO.
@@ -477,12 +477,14 @@ OverlayFifoNode* overlayFifoGet(
 /// room for the entry being pushed.  The intent is that this function should
 /// always succeed.
 ///
-/// @return Returns 0 on success, -errno on failure.
-int overlayFifoPush(
+/// @return Returns a pointer to the OverlayFifoNode used on success, NULL on
+/// failure.
+OverlayFifoNode* overlayFifoPush(
   OverlayFifo *overlayFifo, void *overlayId, uint8_t overlayIdLength
 ) {
   if (overlayFifo == NULL) {
-    return -EINVAL;
+    errno = EINVAL;
+    return NULL;
   }
 
   coroutineEnterCriticalSection();
@@ -503,41 +505,65 @@ int overlayFifoPush(
   // If we got this far then the FIFO is currently full.  We need to make room.
   // Run through the FIFO, decrementing the missesRemaining until we find one
   // that's 0 and use that.
+  //
+  // Note:  What we're doing here is essentially repeatedly popping from and
+  // pushing to the queue with the coroutine's critical section locked.  Because
+  // of that, we need to update the head and tail indexes as we do this walk.
+  //
+  // Note:  Because the queue is full, head == tail at the start of this loop.
+  // We will still update them as if we didn't know that.
   overlayFifoNode = &overlayFifo->nodes[overlayFifo->head];
-  for (unsigned int ii = 0; overlayFifoNode->missesRemaining != 0; ii++) {
+  overlayFifo->head++;
+  if (overlayFifo->head == overlayFifo->size) {
+    overlayFifo->head = 0;
+  }
+  while (overlayFifoNode->missesRemaining != 0) {
     overlayFifoNode->missesRemaining--;
-    if (ii == overlayFifo->size) {
-      ii = 0;
+
+    // "Push" to the tail of the FIFO.  We're leaving the data in place, so
+    // there's no actual data to update apart from the tail index.
+    overlayFifo->tail++;
+    if (overlayFifo->tail == overlayFifo->size) {
+      overlayFifo->tail = 0;
     }
-    overlayFifoNode = &overlayFifo->nodes[ii];
+
+    // "Pop" the head of the FIFO.
+    overlayFifoNode = &overlayFifo->nodes[overlayFifo->head];
+    overlayFifo->head++;
+    if (overlayFifo->head == overlayFifo->size) {
+      overlayFifo->head = 0;
+    }
   }
 
 setOverlayFifoNode:
   overlayFifoNode->missesRemaining = 3;
   overlayFifoNode->overlayIdLength = overlayIdLength;
-  if (overlayIdLength == 0) {
-    overlayFifoNode->overlayId = overlayId;
-  } else {
-    // Allocate and copy memory.  missesRemaining should protect us while we're
-    // not inside a critical section.
-    coroutineExitCriticalSection();
-    overlayFifoNode->overlayId = malloc(overlayIdLength);
-    coroutineEnterCriticalSection();
-    if (overlayFifoNode->overlayId == NULL) {
-      return -ENOMEM;
-    }
-    memcpy(overlayFifoNode->overlayId, overlayId, overlayIdLength);
-  }
 
   // The overlay is already loaded into the overlayMap pointer at the time this
-  // function is called, so just copy it from there.
+  // function is called, so just copy it from there.  We *MUST* do this *FIRST*
+  // before we do a malloc.  malloc transfers control to the memory manager.
+  // That context switch means that other processes can potentially overwrite
+  // the overlayMap area during that time.
   ProcessDescriptor *processDescriptor = getRunningProcess();
   memcpy(overlayFifoNode->overlay, overlayMap,
     processDescriptor->overlay.fileBlockMetadata.numBlocks
     * processDescriptor->overlay.fileBlockMetadata.blockDevice->blockSize);
 
+  if (overlayIdLength == 0) {
+    overlayFifoNode->overlayId = overlayId;
+  } else {
+    // Allocate and copy memory.  missesRemaining should protect us while we're
+    // not inside a critical section.
+    overlayFifoNode->overlayId = malloc(overlayIdLength);
+    if (overlayFifoNode->overlayId == NULL) {
+      errno = ENOMEM;
+      return NULL;
+    }
+    memcpy(overlayFifoNode->overlayId, overlayId, overlayIdLength);
+  }
+
   coroutineExitCriticalSection();
-  return 0;
+  return overlayFifoNode;
 }
 
 /// @var fileCache
@@ -662,6 +688,10 @@ loadAndCallFunction:
   ) {
     logError("Could not load file overlay via the scheduler\n");
     goto freeOverlayInfo;
+  }
+  if (overlayArray[1].memory == NULL) {
+    overlayFifoNode = overlayFifoPush(
+      fileCache, overlayInfo, strlen(overlayInfo) + 1);
   }
 
   // If we made it this far, then our new overlay has been successuflly loaded.
