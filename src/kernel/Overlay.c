@@ -618,7 +618,7 @@ void* callOverlayFunctionFromFileCache(const void *od, const void *oo,
   // directory, a slash, the name of the overlay, the overlay extension, a NUL
   // byte, the function name, and a trailing NUL byte.
   char *allocation = (char*) malloc(
-    (2 * sizeof(FileBlockMetadata))
+    (2 * sizeof(OverlayDescriptor))
     + ((overlayDir == OVERLAY_SAME_NAMESPACE)
       ? strlen(previousOverlayDir)
       : strlen(overlayDir)
