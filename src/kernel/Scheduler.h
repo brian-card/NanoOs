@@ -70,6 +70,7 @@ typedef struct SpawnArgs SpawnArgs;
 typedef uint8_t NanoOsShutdownType;
 typedef struct FileBlockMetadata FileBlockMetadata;
 typedef struct IpcCapability IpcCapability;
+typedef struct OverlayDescriptor OverlayDescriptor;
 
 /// @struct SchedulerKillProcessArgs
 ///
@@ -183,12 +184,12 @@ typedef struct SchedulerSendSignalArgs {
 ///
 /// @param overlayNamespace The namespace (directory or block device ID) that
 ///   the overlay is in.
-/// @param overlay A pointer to the FileBlockMetadata to use as the process's
+/// @param overlay A pointer to the OverlayDescriptor to use as the process's
 ///   new overlay.
 /// @returnValue The returnValue of the command handler.
 typedef struct SchedulerReplaceOverlayArgs {
   void *overlayNamespace;
-  FileBlockMetadata *overlay;
+  OverlayDescriptor *overlay;
   int returnValue;
 } SchedulerReplaceOverlayArgs;
 
@@ -254,7 +255,7 @@ ProcessDescriptor* processQueuePop(ProcessQueue *processQueue);
 int processQueueRemove(
   ProcessQueue *processQueue, ProcessDescriptor *processDescriptor);
 int schedulerReplaceOverlay(const void *overlayNamespace,
-  FileBlockMetadata *overlay);
+  OverlayDescriptor *overlay);
 
 // Coroutine setup functions used in the loader.
 void* dummyProcess(void *args);

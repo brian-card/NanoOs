@@ -1706,7 +1706,7 @@ int schedulerSendSignal(ProcessId pid, int signal) {
 }
 
 /// @fn int schedulerReplaceOverlay(const void *overlayNamespace,
-///   FileBlockMetadata *overlay)
+///   OverlayDescriptor *overlay)
 ///
 /// @brief Replace the overlay of the running process with a new one.
 ///
@@ -1717,7 +1717,7 @@ int schedulerSendSignal(ProcessId pid, int signal) {
 /// @return Returns 0 on success, -errno on failure.  On success, the new
 /// overlay will be loaded when this function returns.
 int schedulerReplaceOverlay(const void *overlayNamespace,
-  FileBlockMetadata *overlay
+  OverlayDescriptor *overlay
 ) {
   int returnValue = -EOTHER;
   if (overlay == NULL) {
@@ -3720,7 +3720,7 @@ int schedulerReplaceOverlayCommandHandler(
   ProcessDescriptor *processDescriptor = processMessageFrom(processMessage);
   SchedulerReplaceOverlayArgs *schedulerReplaceOverlayArgs
     = (SchedulerReplaceOverlayArgs*) processMessageData(processMessage);
-  FileBlockMetadata *overlay = schedulerReplaceOverlayArgs->overlay;
+  OverlayDescriptor *overlay = schedulerReplaceOverlayArgs->overlay;
   if (overlay == NULL) {
     // Invalid argument
     schedulerReplaceOverlayArgs->returnValue = -EINVAL;
@@ -3732,11 +3732,13 @@ int schedulerReplaceOverlayCommandHandler(
        = schedulerReplaceOverlayArgs->overlayNamespace;
   }
   processDescriptor->overlay.fileBlockMetadata.blockDevice
-    = overlay->blockDevice;
+    = overlay->fileBlockMetadata.blockDevice;
   processDescriptor->overlay.fileBlockMetadata.startBlock
-    = overlay->startBlock;
+    = overlay->fileBlockMetadata.startBlock;
   processDescriptor->overlay.fileBlockMetadata.numBlocks
-    = overlay->numBlocks;
+    = overlay->fileBlockMetadata.numBlocks;
+  processDescriptor->overlay.memory
+    = overlay->memory;
 
   schedulerReplaceOverlayArgs->returnValue = returnValue;
   processMessageSetDone(processMessage);

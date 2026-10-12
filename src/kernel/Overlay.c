@@ -201,9 +201,7 @@ void* callOverlayFunctionFromFile(const void *od, const void *oo,
   if (overlayDir != OVERLAY_SAME_NAMESPACE) {
     overlayDir = overlayInfo;
   }
-  if (schedulerReplaceOverlay(overlayDir,
-    &overlayArray[1].fileBlockMetadata) != 0
-  ) {
+  if (schedulerReplaceOverlay(overlayDir, &overlayArray[1]) != 0) {
     logError("Could not load file overlay via the scheduler\n");
     goto freeOverlayInfo;
   }
@@ -220,8 +218,7 @@ void* callOverlayFunctionFromFile(const void *od, const void *oo,
   
 restorePreviousOverlay:
   // Don't check the return value here.  No point.
-  schedulerReplaceOverlay(previousOverlayDir,
-    &overlayArray[0].fileBlockMetadata);
+  schedulerReplaceOverlay(previousOverlayDir, &overlayArray[0]);
 
   // Release all the memory for the copies.
 freeOverlayInfo:
@@ -268,24 +265,27 @@ void* callOverlayFunctionFromBlockDevice(
   
   // Keep track of the overlay that's currently running and the one we need.
   void *previousOverlayDevice = runningProcess->overlayNamespace;
-  FileBlockMetadata overlayArray[2];
-  overlayArray[0].blockDevice
+  OverlayDescriptor overlayArray[2];
+  overlayArray[0].fileBlockMetadata.blockDevice
     = runningProcess->overlay.fileBlockMetadata.blockDevice;
-  overlayArray[0].startBlock
+  overlayArray[0].fileBlockMetadata.startBlock
     = runningProcess->overlay.fileBlockMetadata.startBlock;
-  overlayArray[0].numBlocks
+  overlayArray[0].fileBlockMetadata.numBlocks
     = runningProcess->overlay.fileBlockMetadata.numBlocks;
+  overlayArray[0].memory = NULL;
   
-  overlayArray[1].blockDevice
+  overlayArray[1].fileBlockMetadata.blockDevice
     = runningProcess->overlay.fileBlockMetadata.blockDevice;
+  overlayArray[1].memory = NULL;
   if (deviceId != OVERLAY_SAME_NAMESPACE) {
     if (HAL->blockDevice != NULL) {
       HAL->blockDevice->get(
-        (int) ((intptr_t) deviceId), &overlayArray[1].blockDevice);
+        (int) ((intptr_t) deviceId),
+        &overlayArray[1].fileBlockMetadata.blockDevice);
     } else {
-      overlayArray[1].blockDevice = NULL;
+      overlayArray[1].fileBlockMetadata.blockDevice = NULL;
     }
-    if (overlayArray[1].blockDevice == NULL) {
+    if (overlayArray[1].fileBlockMetadata.blockDevice == NULL) {
       // No such block device.
       goto exit; // return NULL
     }
@@ -293,10 +293,10 @@ void* callOverlayFunctionFromBlockDevice(
   
   // The number of blocks in block-based overlays always have to be the same.
   // So, just copy what we're already using.
-  overlayArray[1].numBlocks
+  overlayArray[1].fileBlockMetadata.numBlocks
     = runningProcess->overlay.fileBlockMetadata.numBlocks;
-  overlayArray[1].startBlock
-    = (((uintptr_t) overlay) * overlayArray[1].numBlocks) + 1;
+  overlayArray[1].fileBlockMetadata.startBlock
+    = (((uintptr_t) overlay) * overlayArray[1].fileBlockMetadata.numBlocks) + 1;
   
   char *functionCopy = (char*) malloc(strlen(function) + 1);
   if (functionCopy == NULL) {
@@ -690,9 +690,7 @@ loadAndCallFunction:
   if (overlayDir != OVERLAY_SAME_NAMESPACE) {
     overlayDir = overlayInfo;
   }
-  if (schedulerReplaceOverlay(overlayDir,
-    &overlayArray[1].fileBlockMetadata) != 0
-  ) {
+  if (schedulerReplaceOverlay(overlayDir, &overlayArray[1]) != 0) {
     logError("Could not load file overlay via the scheduler\n");
     goto freeOverlayInfo;
   }
@@ -713,8 +711,7 @@ loadAndCallFunction:
   
 restorePreviousOverlay:
   // Don't check the return value here.  No point.
-  schedulerReplaceOverlay(previousOverlayDir,
-    &overlayArray[0].fileBlockMetadata);
+  schedulerReplaceOverlay(previousOverlayDir, &overlayArray[0]);
 
   // Release all the memory for the copies.
 freeOverlayInfo:
