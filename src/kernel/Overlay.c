@@ -146,7 +146,7 @@ void* callOverlayFunctionFromFile(const void *od, const void *oo,
   // directory, a slash, the name of the overlay, the overlay extension, a NUL
   // byte, the function name, and a trailing NUL byte.
   char *allocation = (char*) malloc(
-    (2 * sizeof(FileBlockMetadata))
+    (2 * sizeof(OverlayDescriptor))
     + ((overlayDir == OVERLAY_SAME_NAMESPACE)
       ? strlen(previousOverlayDir)
       : strlen(overlayDir)
@@ -160,15 +160,16 @@ void* callOverlayFunctionFromFile(const void *od, const void *oo,
   if (allocation == NULL) {
     goto exit;
   }
-  FileBlockMetadata *overlayArray = (FileBlockMetadata*) allocation;
-  char *overlayInfo = allocation + (2 * sizeof(FileBlockMetadata));
+  OverlayDescriptor *overlayArray = (OverlayDescriptor*) allocation;
+  char *overlayInfo = allocation + (2 * sizeof(OverlayDescriptor));
 
-  overlayArray[0].blockDevice
+  overlayArray[0].fileBlockMetadata.blockDevice
     = runningProcess->overlay.fileBlockMetadata.blockDevice;
-  overlayArray[0].startBlock
+  overlayArray[0].fileBlockMetadata.startBlock
     = runningProcess->overlay.fileBlockMetadata.startBlock;
-  overlayArray[0].numBlocks
+  overlayArray[0].fileBlockMetadata.numBlocks
     = runningProcess->overlay.fileBlockMetadata.numBlocks;
+  overlayArray[0].memory = NULL;
 
   strcpy(overlayInfo,
     (overlayDir == OVERLAY_SAME_NAMESPACE) ? previousOverlayDir : overlayDir);
@@ -177,7 +178,10 @@ void* callOverlayFunctionFromFile(const void *od, const void *oo,
   strcat(overlayInfo, _overlayExt);
   
   // Get the overlay information we need.
-  if (getFileBlockMetadataFromPath(overlayInfo, &overlayArray[1]) != 0) {
+  overlayArray[1].memory = NULL;
+  if (getFileBlockMetadataFromPath(overlayInfo,
+    &overlayArray[1].fileBlockMetadata) != 0
+  ) {
     // We can't proceed
     goto freeOverlayInfo;
   }
@@ -197,7 +201,9 @@ void* callOverlayFunctionFromFile(const void *od, const void *oo,
   if (overlayDir != OVERLAY_SAME_NAMESPACE) {
     overlayDir = overlayInfo;
   }
-  if (schedulerReplaceOverlay(overlayDir, &overlayArray[1]) != 0) {
+  if (schedulerReplaceOverlay(overlayDir,
+    &overlayArray[1].fileBlockMetadata) != 0
+  ) {
     logError("Could not load file overlay via the scheduler\n");
     goto freeOverlayInfo;
   }
@@ -214,7 +220,8 @@ void* callOverlayFunctionFromFile(const void *od, const void *oo,
   
 restorePreviousOverlay:
   // Don't check the return value here.  No point.
-  schedulerReplaceOverlay(previousOverlayDir, &overlayArray[0]);
+  schedulerReplaceOverlay(previousOverlayDir,
+    &overlayArray[0].fileBlockMetadata);
 
   // Release all the memory for the copies.
 freeOverlayInfo:
