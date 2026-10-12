@@ -570,6 +570,8 @@ void* callOverlayFunctionFromFileCache(const void *od, const void *oo,
   const char *overlayDir = (const char*) od;
   const char *overlay = (const char*) oo;
   void *returnValue = NULL;
+  char *functionCopy = NULL;
+
   if ((overlay == NULL) || (function == NULL)) {
     logError("One or more NULL arguments provided to "
       "callOverlayFunctionFromFile\n");
@@ -604,15 +606,17 @@ void* callOverlayFunctionFromFileCache(const void *od, const void *oo,
   if (allocation == NULL) {
     goto exit;
   }
-  FileBlockMetadata *overlayArray = (FileBlockMetadata*) allocation;
-  char *overlayInfo = allocation + (2 * sizeof(FileBlockMetadata));
+  OverlayDescriptor *overlayArray = (OverlayDescriptor*) allocation;
+  char *overlayInfo = allocation + (2 * sizeof(OverlayDescriptor));
 
-  overlayArray[0].blockDevice
+  overlayArray[0].fileBlockMetadata.blockDevice
     = runningProcess->overlay.fileBlockMetadata.blockDevice;
-  overlayArray[0].startBlock
+  overlayArray[0].fileBlockMetadata.startBlock
     = runningProcess->overlay.fileBlockMetadata.startBlock;
-  overlayArray[0].numBlocks
+  overlayArray[0].fileBlockMetadata.numBlocks
     = runningProcess->overlay.fileBlockMetadata.numBlocks;
+  overlayArray[0].memory
+    = runningProcess->overlay.memory;
 
   strcpy(overlayInfo,
     (overlayDir == OVERLAY_SAME_NAMESPACE) ? previousOverlayDir : overlayDir);
@@ -620,13 +624,25 @@ void* callOverlayFunctionFromFileCache(const void *od, const void *oo,
   strcat(overlayInfo, overlay);
   strcat(overlayInfo, _overlayExt);
   
+  memcpy(&overlayArray[1], &overlayArray[0], sizeof(OverlayDescriptor));
+  overlayArray[1].memory = NULL;
+  OverlayFifoNode *overlayFifoNode = overlayFifoGet(
+    fileCache, overlayInfo, strlen(overlayInfo) + 1);
+  if (overlayFifoNode != NULL) {
+    overlayArray[1].memory = overlayFifoNode->overlay;
+    goto loadAndCallFunction;
+  }
+  
   // Get the overlay information we need.
-  if (getFileBlockMetadataFromPath(overlayInfo, &overlayArray[1]) != 0) {
+  if (getFileBlockMetadataFromPath(overlayInfo,
+    &overlayArray[1].fileBlockMetadata) != 0
+  ) {
     // We can't proceed
     goto freeOverlayInfo;
   }
   
-  char *functionCopy = overlayInfo + strlen(overlayInfo) + 1;
+loadAndCallFunction:
+  functionCopy = overlayInfo + strlen(overlayInfo) + 1;
   strcpy(functionCopy, function);
   
   // Terminate the overlayInfo string at the end of the directory path.
@@ -641,7 +657,9 @@ void* callOverlayFunctionFromFileCache(const void *od, const void *oo,
   if (overlayDir != OVERLAY_SAME_NAMESPACE) {
     overlayDir = overlayInfo;
   }
-  if (schedulerReplaceOverlay(overlayDir, &overlayArray[1]) != 0) {
+  if (schedulerReplaceOverlay(overlayDir,
+    &overlayArray[1].fileBlockMetadata) != 0
+  ) {
     logError("Could not load file overlay via the scheduler\n");
     goto freeOverlayInfo;
   }
@@ -658,7 +676,8 @@ void* callOverlayFunctionFromFileCache(const void *od, const void *oo,
   
 restorePreviousOverlay:
   // Don't check the return value here.  No point.
-  schedulerReplaceOverlay(previousOverlayDir, &overlayArray[0]);
+  schedulerReplaceOverlay(previousOverlayDir,
+    &overlayArray[0].fileBlockMetadata);
 
   // Release all the memory for the copies.
 freeOverlayInfo:
