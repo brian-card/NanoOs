@@ -4227,16 +4227,19 @@ int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp) {
     return 0;
   }
 
-  if (processDescriptor->overlay.fileBlockMetadata.blockDevice->schedReadBlocks(
-    processDescriptor->overlay.fileBlockMetadata.blockDevice->context,
-    processDescriptor->overlay.fileBlockMetadata.startBlock,
-    processDescriptor->overlay.fileBlockMetadata.numBlocks,
-    processDescriptor->overlay.fileBlockMetadata.blockDevice->blockSize,
-    (uint8_t*) overlayMap) != 0
-  ) {
-    logError("Could not read overlay\n");
-    HAL->power->enterMode(HAL_POWER_MODE_RESET);
-    return -EIO;
+  if (processDescriptor->overlay.memory == NULL) {
+    if (processDescriptor->overlay.fileBlockMetadata.blockDevice->
+      schedReadBlocks(
+        processDescriptor->overlay.fileBlockMetadata.blockDevice->context,
+        processDescriptor->overlay.fileBlockMetadata.startBlock,
+        processDescriptor->overlay.fileBlockMetadata.numBlocks,
+        processDescriptor->overlay.fileBlockMetadata.blockDevice->blockSize,
+        (uint8_t*) overlayMap) != 0
+    ) {
+      logError("Could not read overlay\n");
+      HAL->power->enterMode(HAL_POWER_MODE_RESET);
+      return -EIO;
+    }
   }
 
   if (overlayMap->header.magic != NANO_OS_OVERLAY_MAGIC) {
