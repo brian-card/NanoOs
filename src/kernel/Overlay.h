@@ -206,6 +206,9 @@ typedef struct OverlayFifo {
   OverlayFifoNode nodes[1];
 } OverlayFifo;
 
+// Defined in Overlay.c
+extern OverlayFifo *fileCache;
+
 #ifdef __cplusplus
 }
 #endif
