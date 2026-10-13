@@ -654,8 +654,20 @@ void* callOverlayFunctionFromFileCache(const void *od, const void *oo,
     = runningProcess->overlay.fileBlockMetadata.startBlock;
   overlayArray[0].fileBlockMetadata.numBlocks
     = runningProcess->overlay.fileBlockMetadata.numBlocks;
-  overlayArray[0].overlayFifoNode
-    = runningProcess->overlay.overlayFifoNode;
+  // We *could* do a direct comparison of the elements ourselves rather than
+  // calling overlayFifoGet, but we shouldn't for two reasons:
+  //
+  // 1. We need to do the comparisons with the critical section in effect and we
+  //    already get that by calling overlayFifoGet.
+  // 2. We want to *automically* set overlayFifoNode->missesRemaining = 3, which
+  //    we also get by calling overlayFifoGet on success.
+  overlayArray[0].overlayFifoNode = overlayFifoGet(fileCache,
+    runningProcess->overlay.overlayId, runningProcess->overlay.overlayIdLength);
+  if (overlayArray[0].overlayFifoNode == NULL) {
+    // Put ourselves back into the cache.
+    overlayArray[0].overlayFifoNode = overlayFifoPush(
+      fileCache, overlayInfo, strlen(overlayInfo) + 1, memoryManagerMalloc);
+  }
 
   strcpy(overlayInfo,
     (overlayDir == OVERLAY_SAME_NAMESPACE) ? previousOverlayDir : overlayDir);
