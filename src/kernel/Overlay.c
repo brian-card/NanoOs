@@ -169,7 +169,7 @@ void* callOverlayFunctionFromFile(const void *od, const void *oo,
     = runningProcess->overlay.fileBlockMetadata.startBlock;
   overlayArray[0].fileBlockMetadata.numBlocks
     = runningProcess->overlay.fileBlockMetadata.numBlocks;
-  overlayArray[0].memory = NULL;
+  overlayArray[0].overlayFifoNode = NULL;
 
   strcpy(overlayInfo,
     (overlayDir == OVERLAY_SAME_NAMESPACE) ? previousOverlayDir : overlayDir);
@@ -178,7 +178,7 @@ void* callOverlayFunctionFromFile(const void *od, const void *oo,
   strcat(overlayInfo, _overlayExt);
   
   // Get the overlay information we need.
-  overlayArray[1].memory = NULL;
+  overlayArray[1].overlayFifoNode = NULL;
   if (getFileBlockMetadataFromPath(overlayInfo,
     &overlayArray[1].fileBlockMetadata) != 0
   ) {
@@ -272,11 +272,11 @@ void* callOverlayFunctionFromBlockDevice(
     = runningProcess->overlay.fileBlockMetadata.startBlock;
   overlayArray[0].fileBlockMetadata.numBlocks
     = runningProcess->overlay.fileBlockMetadata.numBlocks;
-  overlayArray[0].memory = NULL;
+  overlayArray[0].overlayFifoNode = NULL;
   
   overlayArray[1].fileBlockMetadata.blockDevice
     = runningProcess->overlay.fileBlockMetadata.blockDevice;
-  overlayArray[1].memory = NULL;
+  overlayArray[1].overlayFifoNode = NULL;
   if (deviceId != OVERLAY_SAME_NAMESPACE) {
     if (HAL->blockDevice != NULL) {
       HAL->blockDevice->get(
@@ -554,7 +554,7 @@ setOverlayFifoNode:
   // That context switch means that other processes can potentially overwrite
   // the overlayMap area during that time.
   ProcessDescriptor *processDescriptor = getRunningProcess();
-  memcpy(overlayFifoNode->overlay, overlayMap,
+  memcpy(overlayFifoNode->memory, overlayMap,
     processDescriptor->overlay.fileBlockMetadata.numBlocks
     * processDescriptor->overlay.fileBlockMetadata.blockDevice->blockSize);
 
@@ -654,8 +654,8 @@ void* callOverlayFunctionFromFileCache(const void *od, const void *oo,
     = runningProcess->overlay.fileBlockMetadata.startBlock;
   overlayArray[0].fileBlockMetadata.numBlocks
     = runningProcess->overlay.fileBlockMetadata.numBlocks;
-  overlayArray[0].memory
-    = runningProcess->overlay.memory;
+  overlayArray[0].overlayFifoNode
+    = runningProcess->overlay.overlayFifoNode;
 
   strcpy(overlayInfo,
     (overlayDir == OVERLAY_SAME_NAMESPACE) ? previousOverlayDir : overlayDir);
@@ -669,7 +669,7 @@ void* callOverlayFunctionFromFileCache(const void *od, const void *oo,
   OverlayFifoNode *overlayFifoNode = overlayFifoGet(
     fileCache, overlayArray[0].overlayId, overlayArray[0].overlayIdLength);
   if (overlayFifoNode != NULL) {
-    overlayArray[1].memory = overlayFifoNode->overlay;
+    overlayArray[1].overlayFifoNode = overlayFifoNode;
     goto loadAndCallFunction;
   }
   
@@ -701,7 +701,7 @@ loadAndCallFunction:
     logError("Could not load file overlay via the scheduler\n");
     goto freeOverlayInfo;
   }
-  if (overlayArray[1].memory == NULL) {
+  if (overlayArray[1].overlayFifoNode == NULL) {
     overlayFifoNode = overlayFifoPush(
       fileCache, overlayInfo, strlen(overlayInfo) + 1, memoryManagerMalloc);
   }

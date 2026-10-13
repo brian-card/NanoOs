@@ -3753,8 +3753,8 @@ int schedulerReplaceOverlayCommandHandler(
     = overlay->fileBlockMetadata.startBlock;
   processDescriptor->overlay.fileBlockMetadata.numBlocks
     = overlay->fileBlockMetadata.numBlocks;
-  processDescriptor->overlay.memory
-    = overlay->memory;
+  processDescriptor->overlay.overlayFifoNode
+    = overlay->overlayFifoNode;
 
   schedulerReplaceOverlayArgs->returnValue = returnValue;
   processMessageSetDone(processMessage);
@@ -4245,7 +4245,7 @@ int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp) {
     return 0;
   }
 
-  if (processDescriptor->overlay.memory == NULL) {
+  if (processDescriptor->overlay.overlayFifoNode == NULL) {
     // Load the overlay from the filesystem.
     if (processDescriptor->overlay.fileBlockMetadata.blockDevice->
       schedReadBlocks(
@@ -4261,7 +4261,7 @@ int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp) {
     }
   } else {
     // Copy the overlay from its cache in RAM.
-    memcpy(overlayMap, processDescriptor->overlay.memory,
+    memcpy(overlayMap, processDescriptor->overlay.overlayFifoNode->memory,
       processDescriptor->overlay.fileBlockMetadata.numBlocks
       * processDescriptor->overlay.fileBlockMetadata.blockDevice->blockSize);
   }

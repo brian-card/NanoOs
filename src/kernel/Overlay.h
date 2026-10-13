@@ -166,7 +166,7 @@ typedef struct BlockOverlayArgs {
 ///
 /// @brief Individual node for an OverlayFifo.
 ///
-/// @param overaly Pointer to the block of memory that holds the contents of a
+/// @param memory Pointer to the block of memory that holds the contents of a
 ///   cached overlay.
 /// @param overlayId The ID of the overlay.  This is the full path to the
 ///   overlay if it's a file-based overlay, or the index of the overlay cast to
@@ -180,7 +180,7 @@ typedef struct BlockOverlayArgs {
 ///   node before it's ejected.  Reset to 3 on insertion or cache hit.
 ///   Decremented each time a node is popped from a full FIFO.
 typedef struct OverlayFifoNode {
-  uint8_t *overlay;
+  uint8_t *memory;
   void    *overlayId;
   uint8_t  overlayIdLength;
   uint8_t  missesRemaining;

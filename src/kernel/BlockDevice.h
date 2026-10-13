@@ -100,13 +100,13 @@ typedef struct FileBlockMetadata {
 /// @param overlayIdLength The number of bytes at the overlayId pointer.  If
 ///   this value is 0, pointer values will be literally compared with `==`.
 /// @param fileBlockMetadata The FileBlockMetadata for a disk-based overlay.
-/// @param memory A pointer to the block of memory where a memory-based overlay
-///   lives.
+/// @param overlayFifoNode A pointer to the OverlayFifoNode where the cache for
+///   the overaly lives (or used to live).
 typedef struct OverlayDescriptor {
-  void              *overlayId;
-  size_t             overlayIdLength;
-  FileBlockMetadata  fileBlockMetadata;
-  uint8_t           *memory;
+  void                     *overlayId;
+  size_t                    overlayIdLength;
+  FileBlockMetadata         fileBlockMetadata;
+  struct OverlayFifoNode   *overlayFifoNode;
 } OverlayDescriptor;
 
 #ifdef __cplusplus
