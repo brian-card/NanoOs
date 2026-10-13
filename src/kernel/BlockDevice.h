@@ -37,6 +37,7 @@
 #ifndef BLOCK_DEVICE_H
 #define BLOCK_DEVICE_H
 
+#include "stddef.h"
 #include "stdint.h"
 
 #ifdef __cplusplus
@@ -94,10 +95,16 @@ typedef struct FileBlockMetadata {
 /// @brief Descriptor for where to find the data of an overlay on disk or in
 ///   memory.
 ///
+/// @param overlayId The ID of the overlay from its overlay system (file or
+///   block).
+/// @param overlayIdLength The number of bytes at the overlayId pointer.  If
+///   this value is 0, pointer values will be literally compared with `==`.
 /// @param fileBlockMetadata The FileBlockMetadata for a disk-based overlay.
 /// @param memory A pointer to the block of memory where a memory-based overlay
 ///   lives.
 typedef struct OverlayDescriptor {
+  void              *overlayId;
+  size_t             overlayIdLength;
   FileBlockMetadata  fileBlockMetadata;
   uint8_t           *memory;
 } OverlayDescriptor;
