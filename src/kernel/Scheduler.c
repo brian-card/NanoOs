@@ -2703,6 +2703,7 @@ int loadProcessDescriptorOverlayMetadata(ProcessDescriptor *processDescriptor) {
     return 0;
   }
 
+  // The magical `+ 6` here is for `strlen("/main")` plus a NUL character.
   char *overlayPath = (char*) schedMalloc(
     strlen((char*) processDescriptor->overlayNamespace) + OVERLAY_EXT_LEN + 6);
   if (overlayPath == NULL) {
