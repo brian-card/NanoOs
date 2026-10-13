@@ -644,6 +644,10 @@ void* callOverlayFunctionFromFileCache(const void *od, const void *oo,
   OverlayDescriptor *overlayArray = (OverlayDescriptor*) allocation;
   char *overlayInfo = allocation + (2 * sizeof(OverlayDescriptor));
 
+  overlayArray[0].overlayId
+    = runningProcess->overlay.overlayId;
+  overlayArray[0].overlayIdLength
+    = runningProcess->overlay.overlayIdLength;
   overlayArray[0].fileBlockMetadata.blockDevice
     = runningProcess->overlay.fileBlockMetadata.blockDevice;
   overlayArray[0].fileBlockMetadata.startBlock
@@ -659,10 +663,11 @@ void* callOverlayFunctionFromFileCache(const void *od, const void *oo,
   strcat(overlayInfo, overlay);
   strcat(overlayInfo, _overlayExt);
   
-  memcpy(&overlayArray[1], &overlayArray[0], sizeof(OverlayDescriptor));
-  overlayArray[1].memory = NULL;
+  memset(&overlayArray[1], 0, sizeof(OverlayDescriptor));
+  overlayArray[0].overlayId = overlayInfo;
+  overlayArray[0].overlayIdLength = strlen(overlayInfo) + 1;
   OverlayFifoNode *overlayFifoNode = overlayFifoGet(
-    fileCache, overlayInfo, strlen(overlayInfo) + 1);
+    fileCache, overlayArray[0].overlayId, overlayArray[0].overlayIdLength);
   if (overlayFifoNode != NULL) {
     overlayArray[1].memory = overlayFifoNode->overlay;
     goto loadAndCallFunction;
