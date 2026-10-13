@@ -1271,6 +1271,11 @@ void* schedCalloc(size_t nmemb, size_t size) {
 ///
 /// @return This function returns no value.
 void schedFree(void *ptr) {
+  if (ptr == NULL) {
+    // No-op.
+    return;
+  }
+
   // No need to check the return value here.  There's nothing we can do if we
   // fail to send the message for some reason.
   MemoryManagerFreeArgs memoryManagerFreeArgs = {
@@ -2721,7 +2726,17 @@ int loadProcessDescriptorOverlayMetadata(ProcessDescriptor *processDescriptor) {
   if ((returnValue == -EIO) && (errno == EBUSY)) {
     returnValue = -EBUSY;
   }
-  schedFree(overlayPath);
+
+  if ((returnValue == 0)
+    && (processDescriptor->callOverlayFunction
+      == callOverlayFunctionFromFileCache)
+  ){
+    schedFree(processDescriptor->overlay.overlayId);
+    processDescriptor->overlay.overlayId = overlayPath;
+    processDescriptor->overlay.overlayIdLength = strlen(overlayPath) + 1;
+  } else {
+    schedFree(overlayPath);
+  }
 
   return returnValue;
 }
