@@ -4245,7 +4245,13 @@ int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp) {
     return 0;
   }
 
-  if (processDescriptor->overlay.overlayFifoNode == NULL) {
+  if ((processDescriptor->overlay.overlayFifoNode == NULL)
+    || (processDescriptor->overlay.overlayIdLength
+      != processDescriptor->overlay.overlayFifoNode->overlayIdLength)
+    || (memcmp(processDescriptor->overlay.overlayId,
+      processDescriptor->overlay.overlayFifoNode->overlayId,
+      processDescriptor->overlay.overlayIdLength) != 0)
+  ) {
     // Load the overlay from the filesystem.
     if (processDescriptor->overlay.fileBlockMetadata.blockDevice->
       schedReadBlocks(
