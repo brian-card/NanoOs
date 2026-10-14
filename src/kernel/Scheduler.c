@@ -3747,6 +3747,10 @@ int schedulerReplaceOverlayCommandHandler(
     processDescriptor->overlayNamespace
        = schedulerReplaceOverlayArgs->overlayNamespace;
   }
+  processDescriptor->overlay.overlayId
+    = overlay->overlayId;
+  processDescriptor->overlay.overlayIdLength
+    = overlay->overlayIdLength;
   processDescriptor->overlay.fileBlockMetadata.blockDevice
     = overlay->fileBlockMetadata.blockDevice;
   processDescriptor->overlay.fileBlockMetadata.startBlock
