@@ -26,11 +26,15 @@ CACHE_DIR = os.path.join(E2E_DIR, ".cache")
 HOSTNAME = "nanoe2e"
 BLOCK_FS = "contiguous"
 # (label, binary, extra environment).  The poll-only pass makes the console
-# UART report poll-only so the console's polling path stays covered.
+# UART report poll-only so the console's polling path stays covered.  The
+# cache passes call file overlays through the overlay file cache.
 SIM_CONFIGS = [
     ("nano-os-sim_stripped", "nano-os-sim_stripped", {}),
     ("nano-os-sim", "nano-os-sim", {}),
     ("nano-os-sim-poll", "nano-os-sim", {"NANO_OS_SIM_POLL_ONLY": "1"}),
+    ("nano-os-sim_stripped-cache", "nano-os-sim_stripped",
+     {"NANO_OS_SIM_FILE_CACHE": "1"}),
+    ("nano-os-sim-cache", "nano-os-sim", {"NANO_OS_SIM_FILE_CACHE": "1"}),
 ]
 PROMPT = r"mush [^\r\n]*@%s:[^\r\n]+[#$] " % HOSTNAME
 # Same prompt, capturing the user and the working directory it reports.

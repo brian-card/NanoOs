@@ -214,6 +214,9 @@ static int runChild(NanoOsTestFn body, int reportFd) {
 
   halMockSetRestartShell(kernelTestRestartShell);
   halMockSetPowerHook(kernelTestOnPowerMode);
+  if (nanoOsTestPreBoot() != NULL) {
+    nanoOsTestPreBoot()();
+  }
 
   HalMockConfig config = halMockConfigDefault();
   if (halMockInit(&config, NULL) != 0) {

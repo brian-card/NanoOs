@@ -149,6 +149,15 @@ static void runOneBody(NanoOsTestFn body) {
 /// @brief Body handed to the kernel runner via runKernelBodyTrampoline.
 static NanoOsTestFn _pendingBody = NULL;
 
+/// @var _pendingPreBoot
+///
+/// @brief The pre-boot hook of the kernel test being run, if any.
+static NanoOsTestFn _pendingPreBoot = NULL;
+
+NanoOsTestFn nanoOsTestPreBoot(void) {
+  return _pendingPreBoot;
+}
+
 /// @fn static void runKernelBodyTrampoline(void)
 ///
 /// @brief Adapter passed to the kernel runner: runs _pendingBody under the
@@ -201,12 +210,14 @@ int nanoOsTestRunAll(const char *filter) {
         continue;
       }
       _pendingBody = tc->fn;
+      _pendingPreBoot = tc->preBoot;
       // The runner forks; runKernelBodyTrampoline executes in the child and
       // the runner folds the child's result back into _currentFailed /
       // _currentDiag before returning here.  A negative status means the
       // runner declined to run (e.g. incompatible build) - report SKIP.
       int harnessStatus = _kernelRunner(runKernelBodyTrampoline);
       _pendingBody = NULL;
+      _pendingPreBoot = NULL;
       if (harnessStatus < 0) {
         printf("ok %d - %s # SKIP needs a non-ASan build "
           "(halPosixImplInit's heap-sizing stack recursion overflows under "

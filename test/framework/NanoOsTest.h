@@ -68,6 +68,8 @@ typedef struct NanoOsTestCase {
   bool                   isKernelTest;
   const char            *todoReason; ///< non-NULL => TAP "# TODO": a known
                                      ///< failure that must not fail the run.
+  NanoOsTestFn           preBoot;    ///< kernel tests only: run in the child
+                                     ///< before the HAL comes up, or NULL.
   struct NanoOsTestCase *next;
 } NanoOsTestCase;
 
@@ -82,6 +84,11 @@ void nanoOsTestRegister(NanoOsTestCase *testCase);
 /// @brief Install the runner used to execute NANO_OS_KERNEL_TEST bodies.  If
 /// no runner is installed, kernel tests are reported as skipped.
 void nanoOsTestSetKernelRunner(NanoOsTestKernelRunner runner);
+
+/// @fn NanoOsTestFn nanoOsTestPreBoot(void)
+///
+/// @brief Get the pre-boot hook of the kernel test being run, or NULL.
+NanoOsTestFn nanoOsTestPreBoot(void);
 
 /// @fn int nanoOsTestRunAll(const char *filter)
 ///
@@ -134,9 +141,13 @@ void nanoOsTestParentEnd(int fd);
 #define NANO_OS_TEST_ABORT() longjmp(*nanoOsTestAbortBuffer(), 1)
 
 #define NANO_OS_TEST_REGISTER_(suiteId, nameId, kernelFlag, todo)            \
+  NANO_OS_TEST_REGISTER_WITH_(suiteId, nameId, kernelFlag, todo, NULL)
+
+#define NANO_OS_TEST_REGISTER_WITH_(suiteId, nameId, kernelFlag, todo, pre)  \
   static void suiteId##_##nameId##_body(void);                               \
   static NanoOsTestCase suiteId##_##nameId##_case = {                        \
-    #suiteId, #nameId, suiteId##_##nameId##_body, kernelFlag, todo, NULL     \
+    #suiteId, #nameId, suiteId##_##nameId##_body, kernelFlag, todo, pre,     \
+    NULL                                                                     \
   };                                                                         \
   __attribute__((constructor))                                               \
   static void suiteId##_##nameId##_register(void) {                          \
@@ -146,6 +157,11 @@ void nanoOsTestParentEnd(int fd);
 
 #define NANO_OS_TEST(suite, name)        NANO_OS_TEST_REGISTER_(suite, name, false, NULL)
 #define NANO_OS_KERNEL_TEST(suite, name) NANO_OS_TEST_REGISTER_(suite, name, true, NULL)
+
+/// A kernel test whose preBoot function runs in the child before the HAL is
+/// initialized, to configure the mock HAL for that one boot.
+#define NANO_OS_KERNEL_TEST_WITH(suite, name, preBoot) \
+  NANO_OS_TEST_REGISTER_WITH_(suite, name, true, NULL, preBoot)
 
 /// A test that currently fails because of a known, tracked bug.  It still
 /// runs, but a failure is reported as TAP "# TODO <reason>" and does NOT fail
