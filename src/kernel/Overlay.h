@@ -179,11 +179,13 @@ typedef struct BlockOverlayArgs {
 /// @param missesRemaining This is the number of cache misses remaining for the
 ///   node before it's ejected.  Reset to 3 on insertion or cache hit.
 ///   Decremented each time a node is popped from a full FIFO.
+/// @param fileBlockMetadata The location on disk of the cached overlay.
 typedef struct OverlayFifoNode {
-  uint8_t *memory;
-  void    *overlayId;
-  uint8_t  overlayIdLength;
-  uint8_t  missesRemaining;
+  uint8_t           *memory;
+  void              *overlayId;
+  uint8_t            overlayIdLength;
+  uint8_t            missesRemaining;
+  FileBlockMetadata  fileBlockMetadata;
 } OverlayFifoNode;
 
 /// @struct OverlayFifo
