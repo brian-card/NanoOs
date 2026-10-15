@@ -69,9 +69,9 @@ def build_image():
     return img
 
 
-# Simulated memory size, in bytes, that leaves a heap of under 3 KB, as on the
-# SAMD21 boards.
-SMALL_MEMORY_SIZE = 71500
+# Simulated memory size, in bytes, that leaves a little over 2.5 KB of heap at
+# the shell prompt, as on the SAMD21 boards.
+SMALL_MEMORY_SIZE = 75000
 
 
 class Session:
@@ -298,9 +298,10 @@ def test_grep_reads_a_file_line_by_line(s):
 
 
 def test_small_memory_boots_to_a_working_shell(s):
-    heap = s.restart_with_memory(SMALL_MEMORY_SIZE)
-    assert heap < 3 * 1024, heap
+    s.restart_with_memory(SMALL_MEMORY_SIZE)
     s.login()
+    m = re.match(r"- Dynamic memory left: (\d+)$", s.sh("ps").splitlines()[0])
+    assert m and 2560 <= int(m.group(1)) < 2816, m and m.group(1)
     assert s.sh("echo small-memory") == "small-memory"
     assert s.sh("cat /etc/hostname") == "nanoe2e"
 
@@ -409,6 +410,16 @@ def ed_session(s, command, script):
 CATFILE_LINES = ["line-%02d" % n for n in range(1, 41)]
 
 
+def test_ed_writes_a_line_that_starts_on_a_cluster_boundary(s):
+    # Line 129 starts at offset 1024 in ed's scratch file, the first byte of
+    # its second cluster.
+    lines = ["cl-%04d" % n for n in range(1, 130)]
+    s.login()
+    out = ed_session(s, "ed", ["a"] + lines + [".", "w /etc/clusters", "q"])
+    assert out.endswith(".\nw /etc/clusters\n1032\nq\n"), repr(out[-200:])
+    assert s.sh("cat /etc/clusters") == "\n".join(lines)
+
+
 def test_ed_appends_and_writes_a_new_file(s):
     s.login()
     out = ed_session(s, "ed", ["a", "one", "two", "three", ".", ",p",
@@ -512,31 +523,34 @@ def test_ed_reports_files_it_cannot_open(s):
     assert ll_names(s, "/etc") == ["catfile", "hostname", "issue"]
 
 
-# Simulated memory size, in bytes, that leaves a command about 1 KB of heap,
-# the budget for a command on the SAMD21 boards.
-COMMAND_BUDGET_MEMORY_SIZE = 72500
+# More lines than ed's line table can hold at SMALL_MEMORY_SIZE.
+OVERSIZED_LINE_COUNT = 300
 
 
 def test_ed_loads_nothing_from_a_file_that_does_not_fit(s):
-    s.restart_with_memory(COMMAND_BUDGET_MEMORY_SIZE)
+    big_lines = ["big-%03d" % n for n in range(1, OVERSIZED_LINE_COUNT + 1)]
     s.login()
-    out = ed_session(s, "ed /etc/catfile", ["h", "$=", "f", "w", "Q"])
+    ed_session(s, "ed", ["a"] + big_lines + [".", "w /etc/bigfile", "q"])
+    s.restart_with_memory(SMALL_MEMORY_SIZE)
+    s.login()
+    out = ed_session(s, "ed /etc/bigfile", ["h", "$=", "f", "w", "Q"])
     assert out.endswith(
-        "ed /etc/catfile\n?\nh\nout of memory\n$=\n0\nf\n?\nw\n?\nQ\n"), \
+        "ed /etc/bigfile\n?\nh\nout of memory\n$=\n0\nf\n?\nw\n?\nQ\n"), \
         repr(out)
-    assert s.sh("cat /etc/catfile") == "\n".join(CATFILE_LINES)
+    assert s.sh("cat /etc/bigfile", timeout=30) == "\n".join(big_lines)
     assert ll_names(s, "/tmp") == []
 
 
 def test_ed_discards_typed_text_that_does_not_fit(s):
     # Each typed line is "d", which would delete a line if it were run as a
     # command after the buffer filled up.
-    s.restart_with_memory(COMMAND_BUDGET_MEMORY_SIZE)
+    s.restart_with_memory(SMALL_MEMORY_SIZE)
     s.login()
-    out = ed_session(s, "ed", ["a"] + ["d"] * 200 + [".", "h", "$=", "Q"])
+    out = ed_session(s, "ed",
+                     ["a"] + ["d"] * OVERSIZED_LINE_COUNT + [".", "h", "$=", "Q"])
     m = re.search(r"\n\.\n\?\nh\nout of memory\n\$=\n(\d+)\nQ\n$", out)
     assert m, repr(out[-300:])
-    assert 0 < int(m.group(1)) < 200, m.group(1)
+    assert 0 < int(m.group(1)) < OVERSIZED_LINE_COUNT, m.group(1)
     assert out.count("?") == 1, repr(out)
     assert s.sh("echo still-alive") == "still-alive"
     assert ll_names(s, "/tmp") == []
