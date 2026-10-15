@@ -143,6 +143,7 @@ typedef enum HalPlatformFunction {
   HAL_PLATFORM_RESTART_SHELL,
   HAL_PLATFORM_START_PROCESSES,
   HAL_PLATFORM_INVOKE_PENDING_CALLBACKS,
+  HAL_PLATFORM_LAUNCH_PROCESSES,
   HAL_PLATFORM_NUM_FNS,
 } HalPlatformFunction;
 
@@ -305,6 +306,11 @@ typedef int (*HalRestartShellFn)(ProcessDescriptor *processDescriptor);
 /// @brief Signature of a platform's concrete startProcesses implementation.
 typedef int (*HalStartProcessesFn)(void);
 
+/// @typedef HalLaunchProcessesFn
+///
+/// @brief Signature of a platform's concrete launchProcesses implementation.
+typedef int (*HalLaunchProcessesFn)(void);
+
 /// @struct HalCapability
 ///
 /// @brief Metadata to describe a HAL capability that a process has.
@@ -427,6 +433,20 @@ typedef struct HalPlatform {
   ///
   /// @return Returns 0 on success, -errno on failure.
   int (*invokePendingCallbacks)(void);
+
+  /// @fn int launchProcesses(HalLaunchProcessesFn *returnValue)
+  ///
+  /// @brief Get the platform-specific function that arms the processes that
+  /// were created but not queued during scheduler startup and puts them on
+  /// their ready queues.  Called as the last step before the scheduler's
+  /// main loop.
+  ///
+  /// @param returnValue A pointer to a HalLaunchProcessesFn that will hold
+  ///   the platform's implementation on success, NULL if the platform has
+  ///   nothing to launch.
+  ///
+  /// @return Returns 0 on success, -errno on failure.
+  int (*launchProcesses)(HalLaunchProcessesFn *returnValue);
 } HalPlatform;
 
 typedef struct HalMemory {
