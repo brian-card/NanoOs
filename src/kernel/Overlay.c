@@ -169,6 +169,8 @@ void* callOverlayFunctionFromFile(const void *od, const void *oo,
     = runningProcess->overlay.fileBlockMetadata.startBlock;
   overlayArray[0].fileBlockMetadata.numBlocks
     = runningProcess->overlay.fileBlockMetadata.numBlocks;
+  overlayArray[0].overlayId = NULL;
+  overlayArray[0].overlayIdLength = 0;
   overlayArray[0].overlayFifoNode = NULL;
 
   strcpy(overlayInfo,
@@ -178,6 +180,8 @@ void* callOverlayFunctionFromFile(const void *od, const void *oo,
   strcat(overlayInfo, _overlayExt);
   
   // Get the overlay information we need.
+  overlayArray[1].overlayId = NULL;
+  overlayArray[1].overlayIdLength = 0;
   overlayArray[1].overlayFifoNode = NULL;
   if (getFileBlockMetadataFromPath(overlayInfo,
     &overlayArray[1].fileBlockMetadata) != 0
@@ -272,10 +276,14 @@ void* callOverlayFunctionFromBlockDevice(
     = runningProcess->overlay.fileBlockMetadata.startBlock;
   overlayArray[0].fileBlockMetadata.numBlocks
     = runningProcess->overlay.fileBlockMetadata.numBlocks;
+  overlayArray[0].overlayId = NULL;
+  overlayArray[0].overlayIdLength = 0;
   overlayArray[0].overlayFifoNode = NULL;
   
   overlayArray[1].fileBlockMetadata.blockDevice
     = runningProcess->overlay.fileBlockMetadata.blockDevice;
+  overlayArray[1].overlayId = NULL;
+  overlayArray[1].overlayIdLength = 0;
   overlayArray[1].overlayFifoNode = NULL;
   if (deviceId != OVERLAY_SAME_NAMESPACE) {
     if (HAL->blockDevice != NULL) {
@@ -557,6 +565,8 @@ setOverlayFifoNode:
   memcpy(overlayFifoNode->memory, overlayMap,
     processDescriptor->overlay.fileBlockMetadata.numBlocks
     * processDescriptor->overlay.fileBlockMetadata.blockDevice->blockSize);
+  overlayFifoNode->fileBlockMetadata
+    = processDescriptor->overlay.fileBlockMetadata;
 
   if (overlayIdLength == 0) {
     overlayFifoNode->overlayId = overlayId;
@@ -565,6 +575,8 @@ setOverlayFifoNode:
     // not inside a critical section.
     overlayFifoNode->overlayId = fifoMalloc(overlayIdLength);
     if (overlayFifoNode->overlayId == NULL) {
+      overlayFifoNode->overlayIdLength = 0;
+      coroutineExitCriticalSection();
       errno = ENOMEM;
       return NULL;
     }
@@ -626,26 +638,37 @@ void* callOverlayFunctionFromFileCache(const void *od, const void *oo,
   // all of the strings we need.  For the strings, we need the overlay
   // directory, a slash, the name of the overlay, the overlay extension, a NUL
   // byte, the function name, and a trailing NUL byte.
+  const char *newOverlayDir
+    = (overlayDir == OVERLAY_SAME_NAMESPACE) ? previousOverlayDir : overlayDir;
+  size_t newOverlayDirLength = strlen(newOverlayDir);
   char *allocation = (char*) malloc(
     (2 * sizeof(OverlayDescriptor))
-    + ((overlayDir == OVERLAY_SAME_NAMESPACE)
-      ? strlen(previousOverlayDir)
-      : strlen(overlayDir)
-    )
+    + newOverlayDirLength
     + 1
     + strlen(overlay)
     + OVERLAY_EXT_LEN
     + 1
     + strlen(function)
-    + 1);
+    + 1
+    + newOverlayDirLength
+    + 1
+    + runningProcess->overlay.overlayIdLength);
   if (allocation == NULL) {
     goto exit;
   }
   OverlayDescriptor *overlayArray = (OverlayDescriptor*) allocation;
-  char *overlayInfo = allocation + (2 * sizeof(OverlayDescriptor));
+  char *previousOverlayId = allocation + (2 * sizeof(OverlayDescriptor));
+  char *overlayInfo
+    = previousOverlayId + runningProcess->overlay.overlayIdLength;
 
-  overlayArray[0].overlayId
-    = runningProcess->overlay.overlayId;
+  // The scheduler may reallocate the process's own copy of its overlayId when
+  // the new overlay replaces it, so restore from a copy of our own.
+  overlayArray[0].overlayId = NULL;
+  if (runningProcess->overlay.overlayIdLength > 0) {
+    memcpy(previousOverlayId, runningProcess->overlay.overlayId,
+      runningProcess->overlay.overlayIdLength);
+    overlayArray[0].overlayId = previousOverlayId;
+  }
   overlayArray[0].overlayIdLength
     = runningProcess->overlay.overlayIdLength;
   overlayArray[0].fileBlockMetadata.blockDevice
@@ -663,25 +686,28 @@ void* callOverlayFunctionFromFileCache(const void *od, const void *oo,
   //    we also get by calling overlayFifoGet on success.
   overlayArray[0].overlayFifoNode = overlayFifoGet(fileCache,
     runningProcess->overlay.overlayId, runningProcess->overlay.overlayIdLength);
-  if (overlayArray[0].overlayFifoNode == NULL) {
+  if ((overlayArray[0].overlayFifoNode == NULL)
+    && (overlayArray[0].overlayId != NULL)
+  ) {
     // Put ourselves back into the cache.
     overlayArray[0].overlayFifoNode = overlayFifoPush(
-      fileCache, overlayInfo, strlen(overlayInfo) + 1, memoryManagerMalloc);
+      fileCache, overlayArray[0].overlayId, overlayArray[0].overlayIdLength,
+      memoryManagerMalloc);
   }
 
-  strcpy(overlayInfo,
-    (overlayDir == OVERLAY_SAME_NAMESPACE) ? previousOverlayDir : overlayDir);
+  strcpy(overlayInfo, newOverlayDir);
   strcat(overlayInfo, _pathSeparator);
   strcat(overlayInfo, overlay);
   strcat(overlayInfo, _overlayExt);
   
   memset(&overlayArray[1], 0, sizeof(OverlayDescriptor));
-  overlayArray[0].overlayId = overlayInfo;
-  overlayArray[0].overlayIdLength = strlen(overlayInfo) + 1;
+  overlayArray[1].overlayId = overlayInfo;
+  overlayArray[1].overlayIdLength = strlen(overlayInfo) + 1;
   OverlayFifoNode *overlayFifoNode = overlayFifoGet(
-    fileCache, overlayArray[0].overlayId, overlayArray[0].overlayIdLength);
+    fileCache, overlayArray[1].overlayId, overlayArray[1].overlayIdLength);
   if (overlayFifoNode != NULL) {
     overlayArray[1].overlayFifoNode = overlayFifoNode;
+    overlayArray[1].fileBlockMetadata = overlayFifoNode->fileBlockMetadata;
     goto loadAndCallFunction;
   }
   
@@ -697,25 +723,26 @@ loadAndCallFunction:
   functionCopy = overlayInfo + strlen(overlayInfo) + 1;
   strcpy(functionCopy, function);
   
-  // Terminate the overlayInfo string at the end of the directory path.
-  overlayInfo[strlen(
-    (overlayDir == OVERLAY_SAME_NAMESPACE) ? previousOverlayDir : overlayDir)]
-    = '\0';
+  // The new namespace needs its own copy of the directory because overlayInfo
+  // has to stay the full path that identifies the overlay in the cache.
+  char *newOverlayDirCopy = functionCopy + strlen(functionCopy) + 1;
+  strcpy(newOverlayDirCopy, newOverlayDir);
   
   // args does not get copied.  We have no way of knowing what the proper way
   // to copy the data would be.  The caller is responsible for allocating data
   // in dynamic memory before the pointer is passed to this function.
   
   if (overlayDir != OVERLAY_SAME_NAMESPACE) {
-    overlayDir = overlayInfo;
+    overlayDir = newOverlayDirCopy;
   }
   if (schedulerReplaceOverlay(overlayDir, &overlayArray[1]) != 0) {
     logError("Could not load file overlay via the scheduler\n");
     goto freeOverlayInfo;
   }
   if (overlayArray[1].overlayFifoNode == NULL) {
-    overlayFifoNode = overlayFifoPush(
-      fileCache, overlayInfo, strlen(overlayInfo) + 1, memoryManagerMalloc);
+    runningProcess->overlay.overlayFifoNode = overlayFifoPush(
+      fileCache, overlayArray[1].overlayId, overlayArray[1].overlayIdLength,
+      memoryManagerMalloc);
   }
 
   // If we made it this far, then our new overlay has been successuflly loaded.
