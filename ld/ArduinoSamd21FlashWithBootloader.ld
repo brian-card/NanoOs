@@ -62,7 +62,7 @@ SECTIONS
 	 * 0x2000269c -- 832 bytes -- which put it inside the window and corrupted
 	 * the overlay header.
 	 *
-	 * This now sits at OVERLAY_ADDRESS (0x20002580) minus an 832-byte
+	 * This now sits at OVERLAY_ADDRESS (0x200025C0) minus an 896-byte
 	 * reservation, which leaves .bss about 60 bytes of room to grow before
 	 * this assert fires.  _sbrk in HalArduinoSamD21x18A.cpp enforces the
 	 * other end at runtime, so a heap that outgrows the reservation fails its
