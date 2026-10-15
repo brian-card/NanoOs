@@ -246,6 +246,8 @@ int schedulerGetPreemptionTimer(void);
 void schedulerDeinitialize(void);
 
 ProcessId schedulerGetFirstShellPid(void);
+uint8_t schedulerGetNumShells(void);
+void* schedMalloc(size_t size);
 ProcessId reserveProcessSlot(void);
 void ipcCapabilityInsert(IpcCapability *capabilities, size_t numCapabilities,
   ProcessId destinationPid, int64_t signature, uint32_t messageType);

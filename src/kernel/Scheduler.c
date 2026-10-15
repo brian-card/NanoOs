@@ -1936,6 +1936,16 @@ ProcessId schedulerGetFirstShellPid(void) {
   return _schedulerState->firstShellPid;
 }
 
+/// @fn uint8_t schedulerGetNumShells(void)
+///
+/// @brief Direct accessor for the number of shell processes the scheduler is
+/// managing.
+///
+/// @return Returns the number of shell processes.
+uint8_t schedulerGetNumShells(void) {
+  return _schedulerState->numShells;
+}
+
 /// @fn ProcessId reserveProcessSlot(void)
 ///
 /// @brief Reserve the next available process slot, advancing the
@@ -3747,8 +3757,25 @@ int schedulerReplaceOverlayCommandHandler(
     processDescriptor->overlayNamespace
        = schedulerReplaceOverlayArgs->overlayNamespace;
   }
-  processDescriptor->overlay.overlayId
-    = overlay->overlayId;
+  if (overlay->overlayIdLength == 0) {
+    if (processDescriptor->overlay.overlayIdLength > 0) {
+      schedFree(processDescriptor->overlay.overlayId);
+    }
+    processDescriptor->overlay.overlayIdLength = 0;
+    processDescriptor->overlay.overlayId = overlay->overlayId;
+  } else {
+    // The descriptor owns its overlayId: the caller's copy can be freed before
+    // the overlay is replaced again, e.g. by an exec from a nested call.
+    void *overlayId = schedRealloc(
+      processDescriptor->overlay.overlayId, overlay->overlayIdLength);
+    if (overlayId == NULL) {
+      schedulerReplaceOverlayArgs->returnValue = -ENOMEM;
+      processMessageSetDone(processMessage);
+      return returnValue; // 0
+    }
+    memcpy(overlayId, overlay->overlayId, overlay->overlayIdLength);
+    processDescriptor->overlay.overlayId = overlayId;
+  }
   processDescriptor->overlay.overlayIdLength
     = overlay->overlayIdLength;
   processDescriptor->overlay.fileBlockMetadata.blockDevice
@@ -4809,13 +4836,6 @@ int restartOverlayShell(ProcessDescriptor *processDescriptor) {
 /// @return Returns 0 on sucess, -errno onfailure.
 int restartLogger(ProcessDescriptor *processDescriptor) {
   logDebug("In restartLogger\n");
-  if ((_schedulerState->hostname == NULL)
-    || (*_schedulerState->hostname == '\0')
-  ) {
-    logError("Scheduler not up.  Returning -EAGAIN\n");
-    return -EAGAIN;
-  }
-
   logDebug("Starting logger\n");
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
   processDescriptor->halCapabilities = loggerHalCapabilities;
@@ -5407,13 +5427,11 @@ int initializeProcesses(SchedulerState *schedulerState) {
     processDescriptor->processId = ii;
     processDescriptor->userId = NO_USER_ID;
     processDescriptor->name = _dummyName;
-    HAL->platform->callFileOverlay(&processDescriptor->callOverlayFunction);
+    processDescriptor->restartFunction = NULL;
     if ((ii - schedulerState->firstShellPid) < schedulerState->numShells) {
       processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_SUPERVISOR;
-      HAL->platform->restartShell(&processDescriptor->restartFunction);
     } else {
       processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_USER;
-      processDescriptor->restartFunction = NULL;
     }
   }
 
@@ -5460,9 +5478,13 @@ int initializeProcesses(SchedulerState *schedulerState) {
 
   // Mark all the processes as being part of the their ready queues.  Skip over
   // the scheduler (since by definition it can't be scheduled) and the console
-  // (since it was added to its queue earlier).
+  // (since it was added to its queue earlier).  Supervisor and user processes
+  // are queued by the platform's launchProcesses at the end of startScheduler.
   allProcesses[0].readyQueue = NULL;
   for (ProcessId ii = allProcesses[2].processId; ii <= numProcesses; ii++) {
+    if (allProcesses[ii - 1].privilegeLevel >= PRIVILEGE_LEVEL_SUPERVISOR) {
+      continue;
+    }
     allProcesses[ii - 1].readyQueue
       = schedulerState->readyQueues[allProcesses[ii - 1].privilegeLevel];
     processQueuePush(allProcesses[ii - 1].readyQueue, &allProcesses[ii - 1]);
@@ -5720,6 +5742,15 @@ __attribute__((noinline)) void startScheduler(
 
   logSchedulerDebugInfo(&schedulerState);
   logDebug("Logged scheduler debug info\n");
+
+  HalLaunchProcessesFn launchProcesses = NULL;
+  HAL->platform->launchProcesses(&launchProcesses);
+  if (launchProcesses != NULL) {
+    int rv = launchProcesses();
+    if (rv != 0) {
+      logError("launchProcesses returned status %d\n", rv);
+    }
+  }
 
   // Run our scheduler.
   while (1) {
