@@ -38,6 +38,8 @@ extern NanoOsApi *NANO_OS_API;
 
 void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
   const char *function, void *args);
+void* callOverlayFunctionFromFileCache(const void *overlayDir,
+  const void *overlay, const char *function, void *args);
 
 int posixProcessStackSize(va_list args);
 int posixMemoryManagerStackSize(va_list args);
@@ -92,6 +94,12 @@ static void (*_powerHook)(void) = NULL;
 ///
 /// @brief Harness-provided function used to populate the shell process slot.
 static HalMockRestartShellFn _restartShell = NULL;
+
+/// @var _fileCacheDepth
+///
+/// @brief Depth of the overlay file cache the mock platform launches with, or
+/// 0 for no cache.
+static uint8_t _fileCacheDepth = 0;
 
 // online bitmasks (pointed at from halImpl at init time)
 static uint32_t _uartsOnline[]        = { 0x00000002 };
@@ -241,6 +249,31 @@ static int mockStartProcessesFn(va_list args) {
   HalStartProcessesFn *returnValue = va_arg(args, HalStartProcessesFn*);
   if (returnValue != NULL) {
     *returnValue = mockDoStartProcesses;
+  }
+  return 0;
+}
+
+/// @fn static int mockDoLaunchProcesses(void)
+///
+/// @brief Mirrors a real platform's launchProcesses: allocates the overlay
+/// file cache if one was configured, then arms and queues the supervisor and
+/// user processes.
+static int mockDoLaunchProcesses(void) {
+  int returnValue = 0;
+  if (_fileCacheDepth > 0) {
+    returnValue = halCommonInitFileCache(_fileCacheDepth);
+  }
+  int launchStatus = halCommonLaunchProcesses();
+  if (launchStatus != 0) {
+    returnValue = launchStatus;
+  }
+  return returnValue;
+}
+
+static int mockLaunchProcessesFn(va_list args) {
+  HalLaunchProcessesFn *returnValue = va_arg(args, HalLaunchProcessesFn*);
+  if (returnValue != NULL) {
+    *returnValue = mockDoLaunchProcesses;
   }
   return 0;
 }
@@ -400,6 +433,10 @@ void halMockSetRestartShell(HalMockRestartShellFn fn) {
   _restartShell = fn;
 }
 
+void halMockSetFileCacheDepth(uint8_t depth) {
+  _fileCacheDepth = depth;
+}
+
 void halMockSetPowerHook(void (*hook)(void)) {
   _powerHook = hook;
 }
@@ -497,6 +534,7 @@ int halMockInit(const HalMockConfig *config, jmp_buf *powerReturn) {
   _platformFunctions[HAL_PLATFORM_RESTART_ROOT_FILESYSTEM] = mockRestartRootFilesystemFn;
   _platformFunctions[HAL_PLATFORM_RESTART_SHELL]           = mockRestartShellFn;
   _platformFunctions[HAL_PLATFORM_START_PROCESSES]         = mockStartProcessesFn;
+  _platformFunctions[HAL_PLATFORM_LAUNCH_PROCESSES]        = mockLaunchProcessesFn;
 
   _memoryFunctions[HAL_MEMORY_OVERLAY_MAP]           = mockOverlayMapFn;
   _memoryFunctions[HAL_MEMORY_CONTIGUOUS_FILESYSTEM] = mockContiguousFilesystemFn;
@@ -523,7 +561,9 @@ int halMockInit(const HalMockConfig *config, jmp_buf *powerReturn) {
   halFunctions[HAL_BLOCK_DEVICE] = _blockDeviceFunctions;
 
   // Platform hooks.
-  _callFileOverlay       = callOverlayFunctionFromFile;
+  _callFileOverlay       = (_fileCacheDepth > 0)
+    ? callOverlayFunctionFromFileCache
+    : callOverlayFunctionFromFile;
   _execCommand           = NULL;
   _restartRootFilesystemImpl = NULL;
   if (cfg.storage == MOCK_STORAGE_FILE) {
@@ -567,7 +607,7 @@ int halMockInit(const HalMockConfig *config, jmp_buf *powerReturn) {
   jmp_buf implResetBuffer;
   memset(implResetBuffer, 0, sizeof(implResetBuffer));
   int32_t result = halPosixImplInit(implResetBuffer,
-    /* memorySize= */ 0,
+    (_fileCacheDepth > 0) ? posixDefaultMemorySize(_fileCacheDepth) : 0,
     &_overlayMap,
     &halImpl.memory->overlaySize,
     &_contiguousFilesystem,

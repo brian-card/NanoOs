@@ -84,6 +84,8 @@ extern "C"
 #endif
 void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
   const char *function, void *args);
+void* callOverlayFunctionFromFileCache(const void *overlayDir,
+  const void *overlay, const char *function, void *args);
 #ifdef __cplusplus
 }
 #endif
@@ -105,6 +107,7 @@ int posixReadUart(va_list args);
 int posixWriteUart(va_list args);
 int posixIsUartConsole(va_list args);
 bool posixConsolePollOnlyRequested(void);
+bool posixFileCacheRequested(void);
 
 int posixInitDio(va_list args);
 int posixConfigureDio(va_list args);
@@ -457,7 +460,9 @@ static StaticLogs _staticLogsStorage;
 static int posixCallFileOverlay(va_list args) {
   HalCallFileOverlayFn *returnValue = va_arg(args, HalCallFileOverlayFn*);
   if (returnValue != NULL) {
-    *returnValue = callOverlayFunctionFromFile;
+    *returnValue = posixFileCacheRequested()
+      ? callOverlayFunctionFromFileCache
+      : callOverlayFunctionFromFile;
   }
   return 0;
 }
@@ -597,6 +602,32 @@ static int posixTimedWaitingQueue(va_list args) {
   return 0;
 }
 
+/// @fn static int posixDoLaunchProcesses(void)
+///
+/// @brief Allocate the overlay file cache if the simulator was asked to use
+/// one, then arm and queue the supervisor and user processes.
+///
+/// @return Returns 0 on success, -errno on failure.
+static int posixDoLaunchProcesses(void) {
+  int returnValue = 0;
+  if (posixFileCacheRequested()) {
+    returnValue = halCommonInitFileCache(POSIX_FILE_CACHE_DEPTH);
+  }
+  int launchStatus = halCommonLaunchProcesses();
+  if (launchStatus != 0) {
+    returnValue = launchStatus;
+  }
+  return returnValue;
+}
+
+static int posixLaunchProcesses(va_list args) {
+  HalLaunchProcessesFn *returnValue = va_arg(args, HalLaunchProcessesFn*);
+  if (returnValue != NULL) {
+    *returnValue = posixDoLaunchProcesses;
+  }
+  return 0;
+}
+
 static int posixFreeQueue(va_list args) {
   ProcessQueue **returnValue = va_arg(args, ProcessQueue**);
   if (returnValue != NULL) {
@@ -629,6 +660,7 @@ static HalFunction posixPlatformFunctions[HAL_PLATFORM_NUM_FNS] = {
   [HAL_PLATFORM_START_PROCESSES]         = posixStartProcesses,
   [HAL_PLATFORM_INVOKE_PENDING_CALLBACKS] =
     halCommonPlatformInvokePendingCallbacks,
+  [HAL_PLATFORM_LAUNCH_PROCESSES]        = posixLaunchProcesses,
 };
 
 static HalFunction posixMemoryFunctions[HAL_MEMORY_NUM_FNS] = {

@@ -73,6 +73,12 @@ void schedulerDeinitialize(void);
 /// stacks and the heap when halPosixImplInit is given no size.
 #define DEFAULT_MEMORY_SIZE (96 * 1024)
 
+/// @def POSIX_FILE_CACHE_NODE_OVERHEAD
+///
+/// @brief Heap bytes allowed per overlay file cache node beyond the overlay
+/// itself, for its node and its copied overlay ID.
+#define POSIX_FILE_CACHE_NODE_OVERHEAD 128
+
 /// @def PROCESS_STACK_SIZE
 ///
 /// @brief The size, in bytes, of a regular process's stack.
@@ -266,6 +272,26 @@ static const char _pollOnlyEnvironmentVariable[] KEEP_IN_FLASH
 /// @return Returns true if NANO_OS_SIM_POLL_ONLY is set, false otherwise.
 bool posixConsolePollOnlyRequested(void) {
   return getenv(_pollOnlyEnvironmentVariable) != NULL;
+}
+
+/// @var _fileCacheEnvironmentVariable
+///
+/// @brief Environment variable that makes the simulator call file overlays
+/// through the overlay file cache.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _fileCacheEnvironmentVariable[] KEEP_IN_FLASH
+  = "NANO_OS_SIM_FILE_CACHE";
+
+/// @fn bool posixFileCacheRequested(void)
+///
+/// @brief Report whether the simulator was asked to use the overlay file
+/// cache.
+///
+/// @return Returns true if NANO_OS_SIM_FILE_CACHE is set, false otherwise.
+bool posixFileCacheRequested(void) {
+  return getenv(_fileCacheEnvironmentVariable) != NULL;
 }
 
 /// @def POSIX_UART_RX_BUFFER_SIZE
@@ -1296,6 +1322,20 @@ static void posixCancelTimerWarmupPthreadCancel(void) {
   pthread_join(warmupThread, NULL);
 }
 
+/// @fn size_t posixDefaultMemorySize(uint8_t fileCacheDepth)
+///
+/// @brief Get the simulated memory size to use when none is given, grown to
+/// hold an overlay file cache of the given depth.
+///
+/// @param fileCacheDepth The number of overlays the file cache will hold, or
+///   0 for no file cache.
+///
+/// @return Returns the memory size in bytes.
+size_t posixDefaultMemorySize(uint8_t fileCacheDepth) {
+  return DEFAULT_MEMORY_SIZE
+    + (fileCacheDepth * (OVERLAY_SIZE + POSIX_FILE_CACHE_NODE_OVERHEAD));
+}
+
 int halPosixImplInit(jmp_buf resetBuffer, size_t memorySize,
   NanoOsOverlayMap **overlayMap, size_t *overlaySize,
   NanoOsOverlayMap **contiguousFilesystem, size_t *contiguousFilesystemSize
@@ -1318,7 +1358,8 @@ int halPosixImplInit(jmp_buf resetBuffer, size_t memorySize,
   fprintf(stderr, _topOfStackFormat, (void*) &topOfStack);
 
   if (memorySize == 0) {
-    memorySize = DEFAULT_MEMORY_SIZE;
+    memorySize = posixDefaultMemorySize(
+      posixFileCacheRequested() ? POSIX_FILE_CACHE_DEPTH : 0);
   }
   _bottomOfHeap = (void*) (((uintptr_t) &topOfStack)
     - ((uintptr_t) (memorySize * DEBUG_MULTIPLIER)));

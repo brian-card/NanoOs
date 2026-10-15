@@ -84,6 +84,13 @@ typedef int (*HalMockRestartShellFn)(void *processDescriptor);
 /// be called before halMockInit().
 void halMockSetRestartShell(HalMockRestartShellFn fn);
 
+/// @fn void halMockSetFileCacheDepth(uint8_t depth)
+///
+/// @brief Make the mock platform call file overlays through an overlay file
+/// cache of the given depth, or through no cache if depth is 0.  Must be
+/// called before halMockInit().
+void halMockSetFileCacheDepth(uint8_t depth);
+
 /// @fn void halMockSetPowerHook(void (*hook)(void))
 ///
 /// @brief Register a callback invoked whenever a test drives

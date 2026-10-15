@@ -145,10 +145,14 @@ void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
 /// this tight because _sbrk now enforces the boundary instead of trusting it:
 /// overrunning fails the allocation rather than corrupting the window.
 ///
+/// Raised from 0x20002580 to 0x200025C0 after "Overlay magic was not
+/// NanoOsOL" on real hardware, on the theory that the Arduino core/libraries
+/// were again writing into the bottom of the window.
+///
 /// MUST be kept in sync with:
 ///   - __nanoos_overlay_window in ld/ArduinoSamd21FlashWithBootloader.ld
 ///   - OVERLAY_RAM ORIGIN      in usr/src/NanoOsArduinoSamd21.ld
-#define OVERLAY_ADDRESS 0x20002580
+#define OVERLAY_ADDRESS 0x200025C0
 
 /// @def OVERLAY_SIZE
 ///
@@ -2009,6 +2013,8 @@ static HalFunction arduinoSamD21x18APlatformFunctions[HAL_PLATFORM_NUM_FNS] = {
     = arduinoSamD21x18AStartProcesses,
   [HAL_PLATFORM_INVOKE_PENDING_CALLBACKS]
     = halCommonPlatformInvokePendingCallbacks,
+  [HAL_PLATFORM_LAUNCH_PROCESSES]
+    = halCommonPlatformLaunchProcesses,
 };
 
 // NOTE: avr-g++/arm-none-eabi-g++ cannot compile a designated-initializer
@@ -2531,11 +2537,11 @@ void hardFaultReport(uint32_t *exceptionFrame, uint32_t r4Value) {
     printString(_diagOverlayColon);
     printHex((uint32_t) faultOverlayMap->header.magic);
     printString(_diagOverlayDev);
-    printHex((uintptr_t) faultOverlayMap->header.overlay.blockDevice);
+    printHex((uintptr_t) faultOverlayMap->header.overlay.fileBlockMetadata.blockDevice);
     printString(_diagOverlayStart);
-    printInt((int) faultOverlayMap->header.overlay.startBlock);
+    printInt((int) faultOverlayMap->header.overlay.fileBlockMetadata.startBlock);
     printString(_diagOverlayNum);
-    printInt((int) faultOverlayMap->header.overlay.numBlocks);
+    printInt((int) faultOverlayMap->header.overlay.fileBlockMetadata.numBlocks);
     printString(_diagOverlayOsApi);
     printHex((uintptr_t) faultOverlayMap->header.osApi);
     printString(_diagHardFaultNewline);
@@ -2569,11 +2575,11 @@ void hardFaultReport(uint32_t *exceptionFrame, uint32_t r4Value) {
     if ((faultPid > 0) && (faultPid <= NUM_PROCESSES)) {
       ProcessDescriptor *faultProcess = &_allProcesses[faultPid - 1];
       printString(_diagOverlayWanted);
-      printHex((uintptr_t) faultProcess->overlay.blockDevice);
+      printHex((uintptr_t) faultProcess->overlay.fileBlockMetadata.blockDevice);
       printString(_diagOverlayStart);
-      printInt((int) faultProcess->overlay.startBlock);
+      printInt((int) faultProcess->overlay.fileBlockMetadata.startBlock);
       printString(_diagOverlayNum);
-      printInt((int) faultProcess->overlay.numBlocks);
+      printInt((int) faultProcess->overlay.fileBlockMetadata.numBlocks);
       printString(_diagHardFaultNewline);
     }
 

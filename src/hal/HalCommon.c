@@ -149,6 +149,7 @@ static int halPlatformRestartRootFilesystem(
 static int halPlatformRestartShell(HalRestartShellFn *returnValue);
 static int halPlatformStartProcesses(HalStartProcessesFn *returnValue);
 static int halPlatformInvokePendingCallbacks(void);
+static int halPlatformLaunchProcesses(HalLaunchProcessesFn *returnValue);
 
 static int halMemoryProcessStackSize(bool debug, size_t *returnValue);
 static int halMemoryMemoryManagerStackSize(bool debug, size_t *returnValue);
@@ -244,6 +245,7 @@ static HalPlatform halImplPlatform = {
   .restartShell           = halPlatformRestartShell,
   .startProcesses         = halPlatformStartProcesses,
   .invokePendingCallbacks = halPlatformInvokePendingCallbacks,
+  .launchProcesses        = halPlatformLaunchProcesses,
 };
 
 static HalMemory halImplMemory = {
@@ -563,6 +565,10 @@ static int halPlatformStartProcesses(HalStartProcessesFn *returnValue) {
 
 static int halPlatformInvokePendingCallbacks(void) {
   return callHal(HAL_PLATFORM, HAL_PLATFORM_INVOKE_PENDING_CALLBACKS);
+}
+
+static int halPlatformLaunchProcesses(HalLaunchProcessesFn *returnValue) {
+  return callHal(HAL_PLATFORM, HAL_PLATFORM_LAUNCH_PROCESSES, returnValue);
 }
 
 static int halUartInit(void) {
@@ -1008,13 +1014,11 @@ int halCommonInitLogger(void) {
   processDescriptor->processId = loggerPid;
   processDescriptor->userId = ROOT_USER_ID;
   processDescriptor->name = _loggerName;
-  HAL->platform->callFileOverlay(&processDescriptor->callOverlayFunction);
   // The logger is an executive process, but we're going to start it in
   // supervisor mode until the system comes up far enough to launch it.
   // restartLogger will take care of fixing the level once it launches
   // successfully.
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_SUPERVISOR;
-  processDescriptor->restartFunction = restartLogger;
   registerProcessName(_loggerName, loggerPid);
   logDebug("Initialized logger process\n");
 
@@ -1037,6 +1041,91 @@ int halCommonInitLogger(void) {
   }
 
   return 0;
+}
+
+/// @fn int halCommonInitFileCache(uint8_t depth)
+///
+/// @brief Allocate fileCache from the scheduler's heap with room for depth
+/// overlays of HAL->memory->overlaySize bytes each.  A no-op if fileCache
+/// already exists.
+///
+/// @param depth The number of overlays the cache can hold.
+///
+/// @return Returns 0 on success, -errno on failure.
+int halCommonInitFileCache(uint8_t depth) {
+  if (fileCache != NULL) {
+    return 0;
+  } else if (depth == 0) {
+    return -EINVAL;
+  }
+
+  size_t fifoSize = sizeof(OverlayFifo)
+    + ((depth - 1) * sizeof(OverlayFifoNode));
+  size_t overlaySize = HAL->memory->overlaySize;
+  uint8_t *allocation = (uint8_t*) schedMalloc(
+    fifoSize + (depth * overlaySize));
+  if (allocation == NULL) {
+    logError("Could not allocate the overlay file cache\n");
+    return -ENOMEM;
+  }
+
+  OverlayFifo *overlayFifo = (OverlayFifo*) allocation;
+  memset(overlayFifo, 0, fifoSize);
+  overlayFifo->size = depth;
+  uint8_t *overlayMemory = allocation + fifoSize;
+  for (uint8_t ii = 0; ii < depth; ii++) {
+    overlayFifo->nodes[ii].memory = overlayMemory;
+    overlayMemory += overlaySize;
+  }
+  fileCache = overlayFifo;
+
+  return 0;
+}
+
+/// @fn int halCommonLaunchProcesses(void)
+///
+/// @brief Arm every supervisor- and user-level process that was created
+/// during scheduler startup but not yet queued, and push each one onto its
+/// ready queue.
+///
+/// @return Returns 0 on success, -errno on failure.
+int halCommonLaunchProcesses(void) {
+  ProcessQueue **readyQueues = NULL;
+  HAL->memory->readyQueues(&readyQueues);
+  if (readyQueues == NULL) {
+    return -ENODEV;
+  }
+
+  ProcessId firstShellPid = schedulerGetFirstShellPid();
+  uint8_t numShells = schedulerGetNumShells();
+  int returnValue = 0;
+  for (ProcessId pid = 1; pid <= numProcesses; pid++) {
+    ProcessDescriptor *processDescriptor = &allProcesses[pid - 1];
+    if ((processDescriptor->readyQueue != NULL)
+      || (processDescriptor->privilegeLevel < PRIVILEGE_LEVEL_SUPERVISOR)
+    ) {
+      continue;
+    }
+
+    HAL->platform->callFileOverlay(&processDescriptor->callOverlayFunction);
+    if (pid == loggerPid) {
+      processDescriptor->restartFunction = restartLogger;
+    } else if ((pid >= firstShellPid) && (pid - firstShellPid < numShells)) {
+      HAL->platform->restartShell(&processDescriptor->restartFunction);
+    } else {
+      processDescriptor->restartFunction = NULL;
+    }
+
+    processDescriptor->readyQueue
+      = readyQueues[processDescriptor->privilegeLevel];
+    if (processQueuePush(processDescriptor->readyQueue, processDescriptor)
+      != 0
+    ) {
+      returnValue = -ENOMEM;
+    }
+  }
+
+  return returnValue;
 }
 
 /// @var _builtinFilesystemInitDriver
@@ -1324,6 +1413,22 @@ void halCommonUartMarkReady(int32_t deviceId) {
 
   halUartCallbacksPending[deviceId] = true;
   halPlatformCallbacksAnyPending = true;
+}
+
+/// @fn int halCommonPlatformLaunchProcesses(va_list args)
+///
+/// @brief Platform launchProcesses implementation for platforms that use
+/// halCommonLaunchProcesses unchanged.
+///
+/// @param args A va_list holding a HalLaunchProcessesFn* to populate.
+///
+/// @return Returns 0 on success, -errno on failure.
+int halCommonPlatformLaunchProcesses(va_list args) {
+  HalLaunchProcessesFn *returnValue = va_arg(args, HalLaunchProcessesFn*);
+  if (returnValue != NULL) {
+    *returnValue = halCommonLaunchProcesses;
+  }
+  return 0;
 }
 
 /// @fn int halCommonPlatformInvokePendingCallbacks(va_list args)

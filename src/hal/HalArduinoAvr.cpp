@@ -778,6 +778,7 @@ static HalFunction arduinoAvrPlatformFunctions[HAL_PLATFORM_NUM_FNS] = {
   [HAL_PLATFORM_START_PROCESSES]         = arduinoAvrStartProcesses,
   [HAL_PLATFORM_INVOKE_PENDING_CALLBACKS] =
     halCommonPlatformInvokePendingCallbacks,
+  [HAL_PLATFORM_LAUNCH_PROCESSES]        = halCommonPlatformLaunchProcesses,
 };
 
 static HalFunction arduinoAvrMemoryFunctions[HAL_MEMORY_NUM_FNS] = {

@@ -39,6 +39,7 @@
 #include "HalCommon.h"
 #include "../kernel/Commands.h"
 #include "../kernel/Logger.h"
+#include "../kernel/Overlay.h"
 #include "../user/NanoOsErrno.h"
 #include "../user/NanoOsStdio.h"
 
@@ -53,6 +54,8 @@ extern "C"
 #endif
 void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
   const char *function, void *args);
+void* callOverlayFunctionFromFileCache(const void *overlayDir,
+  const void *overlay, const char *function, void *args);
 
 // Assembly-level functions.
 extern int agonLight2ReadPort(uint16_t port);
@@ -142,8 +145,11 @@ extern void agonLight2Off(void);           // boot/AgonLight2/Boot.asm; no retur
 
 /// @def STATIC_LOGS_ADDRESS
 ///
-/// @brief Static-log metadata/entry area: 4 KB above the bottom of the heap.
-#define STATIC_LOGS_ADDRESS (HEAP_START_ADDRESS + (4 * 1024))
+/// @brief Static-log metadata/entry area: 4 KB above the bottom of the heap,
+/// plus room for the overlay file cache allocated at launch.
+#define STATIC_LOGS_ADDRESS (HEAP_START_ADDRESS + (4 * 1024) \
+  + (AGON_LIGHT_2_FILE_CACHE_DEPTH * OVERLAY_SIZE) + sizeof(OverlayFifo) \
+  + ((AGON_LIGHT_2_FILE_CACHE_DEPTH - 1) * sizeof(OverlayFifoNode)))
 
 /// @def PROCESS_STACK_SIZE
 ///
@@ -166,6 +172,11 @@ extern void agonLight2Off(void);           // boot/AgonLight2/Boot.asm; no retur
 ///
 /// @brief Bytes reserved for the overlay region.
 #define OVERLAY_SIZE 8192 // 8 KB - the size of the internal RAM area
+
+/// @def AGON_LIGHT_2_FILE_CACHE_DEPTH
+///
+/// @brief The number of overlays the overlay file cache holds.
+#define AGON_LIGHT_2_FILE_CACHE_DEPTH 10
 
 /// @def DIO_PIN_UNDEFINED
 ///
@@ -1610,7 +1621,7 @@ int agonLight2RestartBlockDevice(va_list args) {
 int agonLight2CallFileOverlay(va_list args) {
   HalCallFileOverlayFn *returnValue = va_arg(args, HalCallFileOverlayFn*);
   if (returnValue != NULL) {
-    *returnValue = callOverlayFunctionFromFile;
+    *returnValue = callOverlayFunctionFromFileCache;
   }
   return 0;
 }
@@ -1645,6 +1656,29 @@ int agonLight2StartProcesses(va_list args) {
   HalStartProcessesFn *returnValue = va_arg(args, HalStartProcessesFn*);
   if (returnValue != NULL) {
     *returnValue = agonLight2DoStartProcesses;
+  }
+  return 0;
+}
+
+/// @fn static int agonLight2DoLaunchProcesses(void)
+///
+/// @brief Allocate the overlay file cache, then arm and queue the AgonLight2's
+/// supervisor and user processes.
+///
+/// @return Returns 0 on success, -errno on failure.
+static int agonLight2DoLaunchProcesses(void) {
+  int returnValue = halCommonInitFileCache(AGON_LIGHT_2_FILE_CACHE_DEPTH);
+  int launchStatus = halCommonLaunchProcesses();
+  if (launchStatus != 0) {
+    returnValue = launchStatus;
+  }
+  return returnValue;
+}
+
+int agonLight2LaunchProcesses(va_list args) {
+  HalLaunchProcessesFn *returnValue = va_arg(args, HalLaunchProcessesFn*);
+  if (returnValue != NULL) {
+    *returnValue = agonLight2DoLaunchProcesses;
   }
   return 0;
 }
@@ -1778,6 +1812,7 @@ static HalFunction agonLight2PlatformFunctions[HAL_PLATFORM_NUM_FNS] = {
   [HAL_PLATFORM_START_PROCESSES]         = agonLight2StartProcesses,
   [HAL_PLATFORM_INVOKE_PENDING_CALLBACKS] =
     halCommonPlatformInvokePendingCallbacks,
+  [HAL_PLATFORM_LAUNCH_PROCESSES]        = agonLight2LaunchProcesses,
 };
 
 static HalFunction agonLight2MemoryFunctions[HAL_MEMORY_NUM_FNS] = {

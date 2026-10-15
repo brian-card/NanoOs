@@ -45,11 +45,18 @@ extern "C"
 {
 #endif
 
+/// @def POSIX_FILE_CACHE_DEPTH
+///
+/// @brief The number of overlays the overlay file cache holds when the
+/// simulator is asked to use one.
+#define POSIX_FILE_CACHE_DEPTH 10
+
 int halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath,
   size_t memorySize);
 int halPosixImplInit(jmp_buf resetBuffer, size_t memorySize,
   NanoOsOverlayMap **overlayMap, size_t *overlaySize,
   NanoOsOverlayMap **contiguousFilesystem, size_t *contiguousFilesystemSize);
+size_t posixDefaultMemorySize(uint8_t fileCacheDepth);
 
 #ifdef __cplusplus
 } // extern "C"
