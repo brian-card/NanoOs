@@ -9,7 +9,9 @@
  * ------------
  *   FLASH   0x000000..0x01FFFF   128 KB on-chip flash.  Holds .text (the boot
  *                                code and the mode-2 interrupt vector block
- *                                included), the .data load image, and .rodata.
+ *                                included) and the .data load image.  .rodata
+ *                                follows them but is stripped from the shipped
+ *                                image, so only .text + .data must fit.
  *                                Executed / read in place; read-only at runtime.
  *   ext RAM 0x040000..0x0BFFFF   512 KB external SRAM:
  *            0x040000..0x04FFFF  64 KB  contiguous filesystem image window
@@ -43,6 +45,7 @@ ENTRY(_start)
 MEMORY
 {
   FLASH (rx)  : ORIGIN = 0x000000, LENGTH = 0x020000   /* 128 KB on-chip flash   */
+  IMAGE (r)   : ORIGIN = 0x000000, LENGTH = 0x040000   /* addresses .rodata may span; stripped from the shipped image */
   RAM   (rwx) : ORIGIN = 0x050000, LENGTH = 0x070000   /* ext SRAM above the FS window, up to 0x0C0000 */
 }
 
@@ -108,12 +111,12 @@ SECTIONS
     *(.rodata .rodata.*)
     . = ALIGN(4);
     __flash_end = .;
-  } > FLASH
+  } > IMAGE
 
   ASSERT(__data_end__ <= __data_bss_limit,
     ".bss + .data exceed their 6 KB external-RAM reservation (canary at 0x051800)")
-  ASSERT(__flash_end <= 0x020000,
-    "flash image (.text + .data load image + .rodata) overflows the 128 KB on-chip flash")
+  ASSERT(__etext + SIZEOF(.data) <= 0x020000,
+    "shipped flash image (.text + .data load image) overflows the 128 KB on-chip flash")
 
   /* libagon's _sbrk / malloc arena.  NanoOs uses its own MemoryManager and the
    * HAL bans malloc, so this exists only to satisfy libagon's link references;
