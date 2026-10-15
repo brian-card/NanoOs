@@ -119,16 +119,11 @@ int driverFseek(
   } else {
     // Compute how many cluster links to follow from firstCluster.
     //
-    // When the target position sits exactly at end-of-file AND falls on a
-    // cluster boundary, using (fileSize - 1) avoids following the chain
-    // past the last allocated cluster.  The read and write loops handle
-    // the boundary transition at the start of their next iteration.
-    uint32_t clustersToSkip;
-    if (pos >= handle->fileSize) {
-      clustersToSkip = (handle->fileSize - 1) / ds->bytesPerCluster;
-    } else {
-      clustersToSkip = pos / ds->bytesPerCluster;
-    }
+    // When the target position falls on a cluster boundary, using (pos - 1)
+    // leaves currentCluster on the cluster that ends there.  The read and
+    // write loops handle the boundary transition at the start of their next
+    // iteration.
+    uint32_t clustersToSkip = (pos - 1) / ds->bytesPerCluster;
 
     uint32_t cluster = handle->firstCluster;
     for (uint32_t i = 0; i < clustersToSkip; i++) {
