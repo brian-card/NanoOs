@@ -276,7 +276,7 @@ $(BUILD_DIR)/src/%.asm.o: src/%.asm
 # The Agon tools load a MOS image by a fixed file name, so deployment is a
 # copy over that file, leaving its name unchanged.  Pass its path in MOS_BIN.
 
-flash: $(FULL_BIN)
+flash: $(STRIPPED_BIN)
 	@if [ -z "$(MOS_BIN)" ]; then \
 		echo "ERROR: set MOS_BIN to the MOS image file to overwrite:"; \
 		echo "  make -f AgonLight2Makefile flash MOS_BIN=/path/to/MOS.bin"; \
@@ -286,8 +286,8 @@ flash: $(FULL_BIN)
 		echo "ERROR: directory for MOS_BIN does not exist: $(dir $(MOS_BIN))"; \
 		exit 1; \
 	fi
-	@echo "  FLASH   Copying $(FULL_BIN) -> $(MOS_BIN)"
-	@cp $(FULL_BIN) $(MOS_BIN)
+	@echo "  FLASH   Copying $(STRIPPED_BIN) -> $(MOS_BIN)"
+	@cp $(STRIPPED_BIN) $(MOS_BIN)
 	@echo "  Done."
 
 # ---- Utility targets --------------------------------------------------------
