@@ -276,6 +276,9 @@ extern Thread *schedulerThread;
 // The well-known ProcessId of the scheduler.  See Scheduler.c for details.
 extern ProcessId schedulerPid;
 
+// Whether the preemption timer is armed.  See Scheduler.c for details.
+extern bool schedulerPreemptionTimerArmed;
+
 void forceYield(void);
 
 /// @fn void schedulerInhibitPreemption(void)
