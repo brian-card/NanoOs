@@ -56,8 +56,7 @@ OverlayFifoNode* overlayFifoPop(OverlayFifo *overlayFifo);
 OverlayFifoNode* overlayFifoGet(
   OverlayFifo *overlayFifo, void *overlayId, uint8_t overlayIdLength);
 OverlayFifoNode* overlayFifoPush(
-  OverlayFifo *overlayFifo, void *overlayId, uint8_t overlayIdLength,
-  void* (*fifoMalloc)(size_t));
+  OverlayFifo *overlayFifo, void *overlayId, uint8_t overlayIdLength);
 void* callOverlayFunctionFromFileCache(const void *od, const void *oo,
   const char *function, void *args);
 

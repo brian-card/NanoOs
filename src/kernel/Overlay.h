@@ -162,6 +162,12 @@ typedef struct BlockOverlayArgs {
   void *args;
 } BlockOverlayArgs;
 
+/// @def OVERLAY_FIFO_ID_SIZE
+///
+/// @brief The maximum number of bytes in a string overlayId, including its NUL
+/// terminator, that an OverlayFifoNode can hold.
+#define OVERLAY_FIFO_ID_SIZE 64
+
 /// @struct OverlayFifoNode
 ///
 /// @brief Individual node for an OverlayFifo.
@@ -180,12 +186,15 @@ typedef struct BlockOverlayArgs {
 ///   node before it's ejected.  Reset to 3 on insertion or cache hit.
 ///   Decremented each time a node is popped from a full FIFO.
 /// @param fileBlockMetadata The location on disk of the cached overlay.
+/// @param overlayIdStorage The node's own copy of a string overlayId, so that
+///   the ID outlives the process that pushed it.
 typedef struct OverlayFifoNode {
   uint8_t           *memory;
   void              *overlayId;
   uint8_t            overlayIdLength;
   uint8_t            missesRemaining;
   FileBlockMetadata  fileBlockMetadata;
+  char               overlayIdStorage[OVERLAY_FIFO_ID_SIZE];
 } OverlayFifoNode;
 
 /// @struct OverlayFifo
