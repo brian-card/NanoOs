@@ -150,7 +150,7 @@ NANO_OS_KERNEL_TEST_WITH(launch, file_cache_returns_a_pushed_overlay,
 
   char overlayId[] = "/usr/bin/test/main.overlay";
   OverlayFifoNode *pushed = overlayFifoPush(fileCache, overlayId,
-    sizeof(overlayId), memoryManagerMalloc);
+    sizeof(overlayId));
   memset(overlayMap, 0, overlaySize);
   self->overlay.fileBlockMetadata.blockDevice = NULL;
 
