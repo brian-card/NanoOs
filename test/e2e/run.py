@@ -277,6 +277,20 @@ def test_ll_lists_names_of_every_length(s):
     assert s.sh("cat /etc/" + longest) == CATFILE_CONTENTS
 
 
+def test_path_components_match_whole_names(s):
+    # Each directory in a path is looked up as a slice of the path, so a
+    # component that is only a prefix of a directory's name must not match it.
+    s.login()
+    missing = 'ERROR: Could not open file "%s": No such entry found'
+    assert s.sh("mkdir /etc/abcdefgh-long-dir") == ""
+    assert s.sh("touch /etc/abcdefgh-long-dir/f") == ""
+    assert s.sh("cat /etc/abcdefgh-long-dir/f") == ""
+    assert s.sh("cat /etc/ABCDEFGH-Long-Dir/f") == ""
+    assert s.sh("cat /etc/abcdefgh-long/f") == missing % "/etc/abcdefgh-long/f"
+    assert s.sh("cat /etc/abcdefgh-long-dirx/f") == \
+        missing % "/etc/abcdefgh-long-dirx/f"
+
+
 def test_mv_renames_a_file_to_a_long_name(s):
     s.login()
     assert s.sh("mv /etc/catfile /etc/renamed-catfile.txt") == ""
