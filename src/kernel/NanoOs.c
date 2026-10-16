@@ -65,8 +65,8 @@ extern const int NUM_USERS KEEP_IN_FLASH;
 /// @return This function returns no value.
 void defaultSignalHandler(int signum) {
   if ((signum == SIGINT) || (signum == SIGTERM)) {
-    // Kill this process.  Send a message to the scheduler and then yield
-    // immediately.
+    // Kill this process.  Wait rather than yield: the arguments are on this
+    // stack, and the scheduler releases the message of a process killing itself.
     SchedulerKillProcessArgs schedulerKillProcessArgs = {
       .pid = getRunningPid(),
       .returnValue = 0,
@@ -75,12 +75,12 @@ void defaultSignalHandler(int signum) {
     ProcessMessage *processMessage = initSendProcessMessageToPid(
       schedulerPid,
       SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_KILL_PROCESS,
-      &schedulerKillProcessArgs, sizeof(schedulerKillProcessArgs), false);
+      &schedulerKillProcessArgs, sizeof(schedulerKillProcessArgs), true);
     if (processMessage == NULL) {
       logError("Could not communicate with scheduler.\n");
       return;
     }
-    processYield();
+    processMessageWaitForDone(processMessage, NULL);
   }
 }
 
