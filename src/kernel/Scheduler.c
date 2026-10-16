@@ -2281,6 +2281,7 @@ exit:
 FILE* schedFopen(const char *pathname, const char *mode) {
   FILE *returnValue = NULL;
   if (rootFilesystemPid == 0) {
+    errno = ENODEV;
     return returnValue; // NULL
   }
 
@@ -2292,6 +2293,8 @@ FILE* schedFopen(const char *pathname, const char *mode) {
       .mode = (char*) mode,
       .fd = 0, // We don't care
       .now = time(NULL),
+      .returnValue = NULL,
+      .errorNumber = 0,
     };
     logDebug("schedFopen: Sending message\n");
     if (schedulerInitSendMessageToPid(rootFilesystemPid,
@@ -2301,10 +2304,14 @@ FILE* schedFopen(const char *pathname, const char *mode) {
     ) {
       // Nothing we can do.
       _functionInProgress = NULL;
+      errno = EIO;
       return returnValue; // NULL
     }
 
     returnValue = fopenArgs.returnValue;
+    if (returnValue == NULL) {
+      errno = fopenArgs.errorNumber;
+    }
 
     _functionInProgress = NULL;
   } else {
@@ -2674,8 +2681,12 @@ int schedGetFileBlockMetadataFromPath(
   errno = 0;
   FILE *stream = schedFopen(path, _readMode);
   if (stream == NULL) {
-    logError("Could not open file\n");
-    return -EIO;
+    int errorNumber = (errno != 0) ? errno : EIO;
+    // A missing file is routine here: execve and posix_spawn search PATH.
+    if (errorNumber != ENOENT) {
+      logError("Could not open file\n");
+    }
+    return -errorNumber;
   }
   errno = 0;
   int returnValue = schedGetFileBlockMetadataFromFile(stream, metadata);
@@ -2746,9 +2757,6 @@ int loadProcessDescriptorOverlayMetadata(ProcessDescriptor *processDescriptor) {
   } else {
     returnValue = schedGetFileBlockMetadataFromPath(overlayPath,
       &processDescriptor->overlay.fileBlockMetadata);
-    if ((returnValue == -EIO) && (errno == EBUSY)) {
-      returnValue = -EBUSY;
-    }
   }
 
   if ((returnValue == 0) && (useFileCache)) {
@@ -3145,6 +3153,35 @@ int schedulerExecveCommandHandler(
   }
   char **envp = execArgs->envp;
 
+  HalExecCommandFn execCommand = NULL;
+  HAL->platform->execCommand(&execCommand);
+
+  // Resolve the new overlay before anything is done to the calling process so
+  // that a failure can still be reported back to it.
+  void *callerOverlayNamespace = processDescriptor->overlayNamespace;
+  OverlayDescriptor callerOverlay = processDescriptor->overlay;
+  if (execCommand == execOverlayCommand) {
+    processDescriptor->overlayNamespace = pathname;
+  }
+  logDebug("Loading overlay metadata for process %d\n",
+    processDescriptor->processId);
+  returnValue = loadProcessDescriptorOverlayMetadata(processDescriptor);
+  logDebug("Overlay metadata loaded for process %d\n",
+    processDescriptor->processId);
+  if (returnValue != 0) {
+    processDescriptor->overlayNamespace = callerOverlayNamespace;
+    processDescriptor->overlay = callerOverlay;
+    if (returnValue == -EBUSY) {
+      // We're in the middle of a filesystem operation already and can't access
+      // a file right now.  Return error status and try again later.  DO NOT
+      // set the message done or alter its value.
+      return returnValue; // -EBUSY
+    }
+    schedulerExecveArgs->errorNumber = -returnValue;
+    processMessageSetDone(processMessage);
+    return 0; // Don't retry this command
+  }
+
   // The arguments provided to this command are going to replace the ones that
   // spawned the original.  We need to free the original envp if there was one.
   if (processDescriptor->envp != NULL) {
@@ -3230,8 +3267,6 @@ int schedulerExecveCommandHandler(
   execArgs->schedulerState = schedulerState;
   logDebug("Creating new process %d\n",
     processDescriptor->processId);
-  HalExecCommandFn execCommand = NULL;
-  HAL->platform->execCommand(&execCommand);
   if (processCreate(processDescriptor, execCommand, execArgs)
     == processError
   ) {
@@ -3289,25 +3324,6 @@ int schedulerExecveCommandHandler(
         CONSOLE_COMMAND_SIGNATURE, CONSOLE_RETURNING_INPUT);
   }
 
-  if (execCommand == execOverlayCommand) {
-    processDescriptor->overlayNamespace = pathname;
-  }
-  logDebug("Loading overlay metadata for process %d\n",
-    processDescriptor->processId);
-  returnValue = loadProcessDescriptorOverlayMetadata(processDescriptor);
-  logDebug("Overlay metadata loaded for process %d\n",
-    processDescriptor->processId);
-  if (returnValue == -EBUSY) {
-    // We're in the middle of a filesystem operation already and can't access
-    // a file right now.  Return error status and try again later.  DO NOT
-    // set the message done or alter its value.
-    return returnValue; // -EBUSY
-  } else if (returnValue != 0) {
-    schedulerExecveArgs->errorNumber = returnValue;
-    returnValue = 0; // Don't retry this command
-    processMessageSetDone(processMessage);
-    return returnValue; // 0
-  }
   processDescriptor->envp = envp;
   processDescriptor->name = argv[0];
 
@@ -3568,7 +3584,7 @@ int schedulerSpawnCommandHandler(
     // set the message done or alter its value.
     return returnValue; // -EBUSY
   } else if (returnValue != 0) {
-    schedulerSpawnArgs->errorNumber = returnValue;
+    schedulerSpawnArgs->errorNumber = -returnValue;
     returnValue = 0; // Don't retry this command
     processMessageSetDone(processMessage);
 
