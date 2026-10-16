@@ -239,6 +239,24 @@ def ll_names(s, path):
     return sorted(n for n in names if n not in ("./", "../"))
 
 
+def test_long_names_match_on_every_fragment(s):
+    # The two 27-character names share their last two 13-character LFN
+    # fragments, and the 13-character name fills one fragment with no
+    # terminator.
+    s.login()
+    missing = 'ERROR: Could not open file "%s": No such entry found'
+    assert s.sh("mv /etc/catfile /etc/aaaaaaaaaaaaa-same-tail.txt") == ""
+    assert s.sh("touch /etc/abcdefghijklm") == ""
+    assert s.sh("cat /etc/bbbbbbbbbbbbb-same-tail.txt") == \
+        missing % "/etc/bbbbbbbbbbbbb-same-tail.txt"
+    assert s.sh("cat /etc/AAAAAAAAAAAAA-Same-Tail.TXT") == CATFILE_CONTENTS
+    assert s.sh("cat /etc/abcdefghijklmn") == missing % "/etc/abcdefghijklmn"
+    assert s.sh("cat /etc/abcdefghijkl") == missing % "/etc/abcdefghijkl"
+    assert s.sh("cat /etc/abcdefghijklm") == ""
+    assert ll_names(s, "/etc") == \
+        ["aaaaaaaaaaaaa-same-tail.txt", "abcdefghijklm", "hostname", "issue"]
+
+
 def test_mv_renames_a_file_to_a_long_name(s):
     s.login()
     assert s.sh("mv /etc/catfile /etc/renamed-catfile.txt") == ""
