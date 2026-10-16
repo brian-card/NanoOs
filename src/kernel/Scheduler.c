@@ -1587,16 +1587,6 @@ static const char _killSuccessFormat[] KEEP_IN_FLASH
 static const char _killStatusFormat[] KEEP_IN_FLASH
   = "Process termination returned status \"%s\".\n";
 
-/// @var _killTimedOutFormat
-///
-/// @brief printf-style format printed by schedulerKillProcess() when the kill
-/// command times out.  Takes the target PID.
-///
-/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
-/// final binary on some targets.
-static const char _killTimedOutFormat[] KEEP_IN_FLASH
-  = "Command to kill PID %d timed out.\n";
-
 /// @var _killBadStatusFormat
 ///
 /// @brief printf-style format printed by schedulerKillProcess() when the kill
@@ -1641,18 +1631,9 @@ int schedulerKillProcess(ProcessId pid) {
     return 1;
   }
 
-  // We don't know where our message to the scheduler will be in its queue, so
-  // we can't assume it will be processed immediately, but we can't wait forever
-  // either.  Set a 100 ms timeout.
-  struct timespec ts = { 0, 0 };
-  timespec_get(&ts, TIME_UTC);
-  int64_t timeout = (((int64_t) ts.tv_sec) * ((int64_t) 1000000000))
-    + ts.tv_nsec;
-  timeout += 100000000;
-  ts.tv_sec = timeout / ((int64_t) 1000000000);
-  ts.tv_nsec = timeout % ((int64_t) 1000000000);
-
-  int waitStatus = processMessageWaitForDone(processMessage, &ts);
+  // Don't time out: the arguments are on this stack and the message is still
+  // the scheduler's until it's done with it.
+  int waitStatus = processMessageWaitForDone(processMessage, NULL);
   int returnValue = 0;
   if (waitStatus == processSuccess) {
     returnValue = schedulerKillProcessArgs.returnValue;
@@ -1665,14 +1646,13 @@ int schedulerKillProcess(ProcessId pid) {
     }
   } else {
     returnValue = 1;
-    if (waitStatus == processTimedout) {
-      fprintf(stderr, _killTimedOutFormat, pid);
-    } else {
-      fprintf(stderr, _killBadStatusFormat, pid, waitStatus);
-    }
+    fprintf(stderr, _killBadStatusFormat, pid, waitStatus);
   }
 
-  if (processMessageRelease(processMessage) != processSuccess) {
+  // The scheduler releases the message of a process that kills itself.
+  if ((pid != getRunningPid())
+    && (processMessageRelease(processMessage) != processSuccess)
+  ) {
     returnValue = 1;
     fprintf(stderr, _killCouldNotRelease);
   }
