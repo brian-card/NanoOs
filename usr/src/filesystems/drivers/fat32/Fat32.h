@@ -603,9 +603,12 @@ static inline int fat32SearchDirectory(
   BlockDevice *bd = fs->blockDevice;
 
   // The LFN assembly buffer is allocated on demand when the first fragment
-  // of a long-name sequence is encountered, and sized to exactly
-  // (ordinal * 13 + 1) bytes rather than the full 256-byte maximum.
+  // of a long-name sequence is encountered, sized to (ordinal * 13 + 1) bytes
+  // rather than the full 256-byte maximum, and reused by every later sequence
+  // that fits.
   char *lfnBuffer = NULL;
+  uint32_t lfnBufferSize = 0;
+  bool lfnActive = false;
 
   uint32_t currentCluster = dirCluster;
   int      status = FAT32_FILE_NOT_FOUND;
@@ -662,8 +665,7 @@ static inline int fat32SearchDirectory(
 
         // Deleted entry — discard any in-progress LFN assembly.
         if (entry->name[0] == FAT32_ENTRY_FREE) {
-          free(lfnBuffer);
-          lfnBuffer = NULL;
+          lfnActive = false;
           continue;
         }
 
@@ -673,21 +675,26 @@ static inline int fat32SearchDirectory(
           Fat32LfnEntry *lfn = (Fat32LfnEntry *) entry;
           if (lfn->ordinal & FAT32_LFN_LAST_ENTRY_MASK) {
             // First on-disk entry of a new LFN sequence (highest ordinal).
-            // Allocate a buffer sized to exactly this name's length.
-            free(lfnBuffer);
+            // Grow the buffer if this name is longer than any before it.
             uint8_t ordinal =
               lfn->ordinal & FAT32_LFN_ORDINAL_MASK;
             uint32_t bufSize =
               (uint32_t) ordinal * FAT32_LFN_CHARS_PER_ENTRY + 1;
-            lfnBuffer = (char *) malloc(bufSize);
-            if (lfnBuffer == NULL) {
-              status = FAT32_NO_MEMORY;
-              done = true;
-              break;
+            if (bufSize > lfnBufferSize) {
+              free(lfnBuffer);
+              lfnBuffer = (char *) malloc(bufSize);
+              if (lfnBuffer == NULL) {
+                lfnBufferSize = 0;
+                status = FAT32_NO_MEMORY;
+                done = true;
+                break;
+              }
+              lfnBufferSize = bufSize;
             }
-            memset(lfnBuffer, 0, bufSize);
+            memset(lfnBuffer, 0, lfnBufferSize);
+            lfnActive = true;
           }
-          if (lfnBuffer != NULL) {
+          if (lfnActive) {
             fat32AssembleLfnEntry(lfn, lfnBuffer);
           }
           continue;
@@ -698,7 +705,7 @@ static inline int fat32SearchDirectory(
         bool match = false;
 
         // Try the assembled LFN first.
-        if ((lfnBuffer != NULL) && (lfnBuffer[0] != '\0')) {
+        if (lfnActive && (lfnBuffer[0] != '\0')) {
           match = (fat32StrcaseCmp(lfnBuffer, name) == 0);
         }
 
@@ -712,8 +719,8 @@ static inline int fat32SearchDirectory(
         if (match) {
           memcpy(&result->entry, entry, sizeof(Fat32DirectoryEntry));
 
-          if ((lfnBuffer != NULL) && (lfnBuffer[0] != '\0')) {
-            // Transfer ownership of the right-sized lfnBuffer.
+          if (lfnActive && (lfnBuffer[0] != '\0')) {
+            // Transfer ownership of lfnBuffer.
             result->longName = lfnBuffer;
             lfnBuffer = NULL;
           } else {
@@ -739,8 +746,7 @@ static inline int fat32SearchDirectory(
 
         // Reset LFN state between short entries.
         if (!done) {
-          free(lfnBuffer);
-          lfnBuffer = NULL;
+          lfnActive = false;
         }
       }
     }
