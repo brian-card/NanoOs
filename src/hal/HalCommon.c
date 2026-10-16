@@ -563,7 +563,18 @@ static int halPlatformStartProcesses(HalStartProcessesFn *returnValue) {
   return callHal(HAL_PLATFORM, HAL_PLATFORM_START_PROCESSES, returnValue);
 }
 
+/// @var halPlatformCallbacksAnyPending
+///
+/// @brief Whether or not there are currently ANY pending callbacks.
+static volatile bool halPlatformCallbacksAnyPending = false;
+
 static int halPlatformInvokePendingCallbacks(void) {
+  // The scheduler calls this on every pass and there's almost never anything
+  // pending, so don't pay for the dispatch just to have the platform check.
+  if (halPlatformCallbacksAnyPending == false) {
+    return 0;
+  }
+
   return callHal(HAL_PLATFORM, HAL_PLATFORM_INVOKE_PENDING_CALLBACKS);
 }
 
@@ -1338,11 +1349,6 @@ extern HalUartCallback halUartCallbacks[];
 extern ProcessMessage halUartCallbackMessages[];
 extern volatile bool halUartCallbacksPending[];
 
-/// @var halPlatformCallbacksAnyPending
-///
-/// @brief Whether or not there are currently ANY pending callbacks.
-static volatile bool halPlatformCallbacksAnyPending = false;
-
 /// @fn int halCommonUartRegisterCallback(va_list args)
 ///
 /// @brief Common helper function to register a callback to be called when a
@@ -1433,18 +1439,14 @@ int halCommonPlatformLaunchProcesses(va_list args) {
 
 /// @fn int halCommonPlatformInvokePendingCallbacks(va_list args)
 ///
-/// @brief Invoke any pending UART callbacks.
-///
-/// @note This function is intended to be called on every iteration of the
-/// scheduler loop, so it's optimized to be as fast as possible.
+/// @brief Invoke any pending UART callbacks.  Only called through
+/// halPlatformInvokePendingCallbacks, which has already found
+/// halPlatformCallbacksAnyPending set.
 ///
 /// @return Returns 0 on success, -errno on failure.
 int halCommonPlatformInvokePendingCallbacks(va_list args) {
   (void) args;
 
-  if (halPlatformCallbacksAnyPending == false) {
-    return 0;
-  }
   halPlatformCallbacksAnyPending = false;
 
   // BUG:  Look, I know this is cheating.  HAL->uart->numSupported is a uint32_t
