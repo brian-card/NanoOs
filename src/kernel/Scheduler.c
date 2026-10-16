@@ -2730,17 +2730,28 @@ int loadProcessDescriptorOverlayMetadata(ProcessDescriptor *processDescriptor) {
   strcat(overlayPath, _mainOverlayPath);
   strcat(overlayPath, _overlayExt);
 
-  int returnValue
-    = schedGetFileBlockMetadataFromPath(overlayPath,
+  bool useFileCache = (processDescriptor->callOverlayFunction
+    == callOverlayFunctionFromFileCache);
+  OverlayFifoNode *overlayFifoNode = NULL;
+  if (useFileCache) {
+    overlayFifoNode = overlayFifoGet(
+      fileCache, overlayPath, strlen(overlayPath) + 1);
+  }
+  processDescriptor->overlay.overlayFifoNode = overlayFifoNode;
+
+  int returnValue = 0;
+  if (overlayFifoNode != NULL) {
+    processDescriptor->overlay.fileBlockMetadata
+      = overlayFifoNode->fileBlockMetadata;
+  } else {
+    returnValue = schedGetFileBlockMetadataFromPath(overlayPath,
       &processDescriptor->overlay.fileBlockMetadata);
-  if ((returnValue == -EIO) && (errno == EBUSY)) {
-    returnValue = -EBUSY;
+    if ((returnValue == -EIO) && (errno == EBUSY)) {
+      returnValue = -EBUSY;
+    }
   }
 
-  if ((returnValue == 0)
-    && (processDescriptor->callOverlayFunction
-      == callOverlayFunctionFromFileCache)
-  ){
+  if ((returnValue == 0) && (useFileCache)) {
     schedFree(processDescriptor->overlay.overlayId);
     processDescriptor->overlay.overlayId = overlayPath;
     processDescriptor->overlay.overlayIdLength = strlen(overlayPath) + 1;
