@@ -740,6 +740,19 @@ def test_tightloop_is_killed_by_ctrl_c(s):
     assert "tightLoop" not in s.sh("ps"), "tightLoop still listed in ps after Ctrl-C"
 
 
+def test_kill_terminates_a_background_process(s):
+    s.login()
+    s.sh("looseLoop &")
+    m = re.search(r"^(\d+)  root looseLoop$", s.sh("ps"), re.M)
+    assert m, "looseLoop is not running"
+    pid = int(m.group(1))
+    assert s.sh("kill %d" % pid) == "Termination of process %d successful." % pid
+    assert "looseLoop" not in s.sh("ps")
+    assert s.sh("kill 99") == \
+        'Process termination returned status "Invalid argument".'
+    assert s.sh("echo alive") == "alive"
+
+
 def test_dirent_lists_directories_with_correct_type(s):
     # test/e2e/mkimage.sh always builds a root directory containing exactly
     # /etc and /usr (via mmd), both real subdirectories.  mtools writes
