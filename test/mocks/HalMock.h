@@ -91,6 +91,12 @@ void halMockSetRestartShell(HalMockRestartShellFn fn);
 /// called before halMockInit().
 void halMockSetFileCacheDepth(uint8_t depth);
 
+/// @fn void halMockSetExecCommand(void* (*fn)(void *args))
+///
+/// @brief Register the function installed as the platform's execCommand, or
+/// NULL for none.  Must be called before halMockInit().
+void halMockSetExecCommand(void* (*fn)(void *args));
+
 /// @fn void halMockSetPowerHook(void (*hook)(void))
 ///
 /// @brief Register a callback invoked whenever a test drives

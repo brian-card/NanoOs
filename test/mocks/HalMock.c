@@ -160,6 +160,7 @@ static void **_processStorage[NUM_PROCESSES];
 
 static HalCallFileOverlayFn _callFileOverlay = NULL;
 static HalExecCommandFn _execCommand = NULL;
+static HalExecCommandFn _requestedExecCommand = NULL;
 static HalInitRootStorageFn _initRootStorage = NULL;
 static HalRestartRootFilesystemFn _restartRootFilesystemImpl = NULL;
 
@@ -437,6 +438,10 @@ void halMockSetFileCacheDepth(uint8_t depth) {
   _fileCacheDepth = depth;
 }
 
+void halMockSetExecCommand(void* (*fn)(void *args)) {
+  _requestedExecCommand = fn;
+}
+
 void halMockSetPowerHook(void (*hook)(void)) {
   _powerHook = hook;
 }
@@ -564,7 +569,7 @@ int halMockInit(const HalMockConfig *config, jmp_buf *powerReturn) {
   _callFileOverlay       = (_fileCacheDepth > 0)
     ? callOverlayFunctionFromFileCache
     : callOverlayFunctionFromFile;
-  _execCommand           = NULL;
+  _execCommand           = _requestedExecCommand;
   _restartRootFilesystemImpl = NULL;
   if (cfg.storage == MOCK_STORAGE_FILE) {
     // TODO: POSIX SD-card process over cfg.imagePath.
