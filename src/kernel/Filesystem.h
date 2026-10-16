@@ -204,12 +204,15 @@ typedef struct FilesystemSeekArgs {
 ///   Unix epoch.
 /// @param returnValue A pointer to the FILE that's opened on success, NULL
 ///   on failure.
+/// @param errorNumber The errno value that should be set for the calling
+///   process.
 typedef struct FilesystemFopenArgs {
   char   *pathname;
   char   *mode;
   int     fd;
   time_t  now;
   FILE   *returnValue;
+  int     errorNumber;
 } FilesystemFopenArgs;
 
 /// @struct FilesystemFcloseArgs
