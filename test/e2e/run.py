@@ -269,6 +269,18 @@ def test_mv_changes_only_the_case_of_a_name(s):
     assert ll_names(s, "/etc") == ["CatFile", "hostname", "issue"]
 
 
+def test_cat_reports_a_missing_file(s):
+    s.login()
+    assert s.sh("cat /etc/missing") == \
+        'ERROR: Could not open file "/etc/missing": No such entry found'
+
+
+def test_cat_reports_a_directory(s):
+    s.login()
+    assert s.sh("cat /etc") == \
+        'ERROR: Could not open file "/etc": Invalid argument'
+
+
 def test_mv_reports_a_missing_source(s):
     s.login()
     assert s.sh("mv /etc/missing /etc/other") == \
@@ -812,8 +824,16 @@ def test_typed_ahead_lines_both_run_in_order(s):
 
 def test_unknown_command_errors(s):
     s.login()
-    out = s.sh("no_such_command_here").lower()
-    assert any(k in out for k in ("not found", "no such", "cannot", "error")), out
+    assert s.sh("no_such_command_here arg") == \
+        "no_such_command_here: command not found"
+    assert s.sh("echo still-here") == "still-here"
+
+
+def test_unknown_background_command_errors(s):
+    s.login()
+    assert s.sh("no_such_command_here &") == \
+        "no_such_command_here: command not found"
+    assert s.sh("echo still-here") == "still-here"
 
 
 def test_shutdown_halts(s):
