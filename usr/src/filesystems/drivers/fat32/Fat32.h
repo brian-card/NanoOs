@@ -283,8 +283,10 @@ typedef struct Fat32DirHandle {
   uint32_t       nextSequence;      // Next value to hand out as d_off
   struct dirent *entry;             // Storage for the most recently returned
                                      // entry (see driverReaddir).  Owned by
-                                     // this handle: freed and reallocated on
-                                     // every call, freed for good on close.
+                                     // this handle: reused by every call,
+                                     // grown when a name doesn't fit, freed
+                                     // on close.
+  size_t         entrySize;         // Bytes allocated at entry
 } Fat32DirHandle;
 
 /// @struct Fat32DriverState
@@ -985,6 +987,36 @@ static inline int fat32ResolveDirectory(
 
 ///////////////////////////////////////////////////////////////////////////////
 ///
+/// @brief Make sure a directory handle's entry can hold a name of the given
+///        size, growing it if it can't.
+///
+/// @param handle   Pointer to the Fat32DirHandle whose entry is needed.
+/// @param nameSize The number of bytes the name needs, including its NUL
+///                 terminator.
+///
+/// @return true if handle->entry is large enough, false if it couldn't be
+///         grown.  The entry's existing contents are not preserved.
+///
+static inline bool fat32DirHandleReserveEntry(
+    Fat32DirHandle *handle,
+    size_t nameSize
+) {
+  size_t entrySize = offsetof(struct dirent, d_name) + nameSize;
+  if (entrySize <= handle->entrySize) {
+    return true;
+  }
+
+  struct dirent *entry = (struct dirent *) realloc(handle->entry, entrySize);
+  if (entry == NULL) {
+    return false;
+  }
+  handle->entry = entry;
+  handle->entrySize = entrySize;
+  return true;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+///
 /// @brief Read the next entry from an open directory stream, advancing its
 ///        cursor past it.
 ///
@@ -1000,10 +1032,9 @@ static inline int fat32ResolveDirectory(
 /// @param ds      Pointer to an initialized Fat32DriverState.
 /// @param handle  Pointer to the Fat32DirHandle to read from and advance.
 ///
-/// @return FAT32_SUCCESS with handle->entry populated with a freshly
-///         allocated struct dirent, FAT32_FILE_NOT_FOUND with handle->entry
-///         set to NULL if the directory is exhausted, or FAT32_ERROR /
-///         FAT32_NO_MEMORY on failure.
+/// @return FAT32_SUCCESS with handle->entry populated, FAT32_FILE_NOT_FOUND
+///         if the directory is exhausted, or FAT32_ERROR / FAT32_NO_MEMORY on
+///         failure.  handle->entry is only meaningful on FAT32_SUCCESS.
 ///
 /// @note Uses the shared blockBuffer for sector I/O.  The buffer contents are
 ///       undefined on return.
@@ -1015,10 +1046,8 @@ static inline int fat32ReadDirectoryEntry(
   FilesystemState    *fs = ds->filesystemState;
   BlockDevice *bd = fs->blockDevice;
 
-  free(handle->entry);
-  handle->entry = NULL;
-
-  char *lfnBuffer = NULL;
+  // Set when handle->entry->d_name holds the long name assembled so far.
+  bool lfnActive = false;
 
   uint32_t currentCluster = handle->currentCluster;
   uint32_t resumeOffset = handle->offsetInCluster;
@@ -1074,8 +1103,7 @@ static inline int fat32ReadDirectoryEntry(
 
         // Deleted entry -- discard any in-progress LFN assembly and move on.
         if (entry->name[0] == FAT32_ENTRY_FREE) {
-          free(lfnBuffer);
-          lfnBuffer = NULL;
+          lfnActive = false;
           handle->currentCluster = currentCluster;
           handle->offsetInCluster = nextOffsetInCluster;
           continue;
@@ -1086,21 +1114,21 @@ static inline int fat32ReadDirectoryEntry(
             == FAT32_ATTR_LONG_NAME) {
           Fat32LfnEntry *lfn = (Fat32LfnEntry *) entry;
           if (lfn->ordinal & FAT32_LFN_LAST_ENTRY_MASK) {
-            free(lfnBuffer);
+            // Assemble the long name directly into the entry being returned.
             uint8_t ordinal =
               lfn->ordinal & FAT32_LFN_ORDINAL_MASK;
-            uint32_t bufSize =
-              (uint32_t) ordinal * FAT32_LFN_CHARS_PER_ENTRY + 1;
-            lfnBuffer = (char *) malloc(bufSize);
-            if (lfnBuffer == NULL) {
+            size_t nameSize =
+              (size_t) ordinal * FAT32_LFN_CHARS_PER_ENTRY + 1;
+            if (!fat32DirHandleReserveEntry(handle, nameSize)) {
               status = FAT32_NO_MEMORY;
               done = true;
               break;
             }
-            memset(lfnBuffer, 0, bufSize);
+            memset(handle->entry->d_name, 0, nameSize);
+            lfnActive = true;
           }
-          if (lfnBuffer != NULL) {
-            fat32AssembleLfnEntry(lfn, lfnBuffer);
+          if (lfnActive) {
+            fat32AssembleLfnEntry(lfn, handle->entry->d_name);
           }
           handle->currentCluster = currentCluster;
           handle->offsetInCluster = nextOffsetInCluster;
@@ -1109,8 +1137,7 @@ static inline int fat32ReadDirectoryEntry(
 
         // Volume-label entry -- not a real file or directory.
         if (entry->attributes & FAT32_ATTR_VOLUME_ID) {
-          free(lfnBuffer);
-          lfnBuffer = NULL;
+          lfnActive = false;
           handle->currentCluster = currentCluster;
           handle->offsetInCluster = nextOffsetInCluster;
           continue;
@@ -1118,23 +1145,19 @@ static inline int fat32ReadDirectoryEntry(
 
         // ---- Valid short entry: produce a dirent for it ----
 
-        const char *resolvedName;
-        char shortName[13];
-        if ((lfnBuffer != NULL) && (lfnBuffer[0] != '\0')) {
-          resolvedName = lfnBuffer;
-        } else {
-          fat32FormatShortName(entry->name, entry->ntReserved, shortName);
-          resolvedName = shortName;
+        if (!lfnActive || (handle->entry->d_name[0] == '\0')) {
+          // The formatted 8.3 name is at most 12 characters.
+          if (!fat32DirHandleReserveEntry(handle, 13)) {
+            status = FAT32_NO_MEMORY;
+            done = true;
+            break;
+          }
+          fat32FormatShortName(
+            entry->name, entry->ntReserved, handle->entry->d_name);
         }
 
-        size_t nameLen = strlen(resolvedName);
-        struct dirent *newEntry = (struct dirent *) malloc(
-          offsetof(struct dirent, d_name) + nameLen + 1);
-        if (newEntry == NULL) {
-          status = FAT32_NO_MEMORY;
-          done = true;
-          break;
-        }
+        struct dirent *newEntry = handle->entry;
+        size_t nameLen = strlen(newEntry->d_name);
 
         newEntry->d_ino = fat32EntryLocationToIno(
           ds, currentCluster, nextOffsetInCluster - FAT32_DIRECTORY_ENTRY_SIZE);
@@ -1143,9 +1166,6 @@ static inline int fat32ReadDirectoryEntry(
           (unsigned short) (offsetof(struct dirent, d_name) + nameLen + 1);
         newEntry->d_type =
           (entry->attributes & FAT32_ATTR_DIRECTORY) ? DT_DIR : DT_REG;
-        memcpy(newEntry->d_name, resolvedName, nameLen + 1);
-
-        handle->entry = newEntry;
         handle->currentCluster = currentCluster;
         handle->offsetInCluster = nextOffsetInCluster;
 
@@ -1172,7 +1192,6 @@ static inline int fat32ReadDirectoryEntry(
     }
   }
 
-  free(lfnBuffer);
   return status;
 }
 
