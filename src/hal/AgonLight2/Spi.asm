@@ -38,6 +38,7 @@
 .global _agonLight2ConfigureSpiImpl
 .global _agonLight2SetSpiBrgImpl
 .global _agonLight2SpiTransfer8Impl
+.global _agonLight2SpiTransferBytesImpl
 
 ;; -- eZ80F92 Port B GPIO registers ------------------
 PB_DR       .equ 0x9A      ; Port B data register
@@ -152,5 +153,43 @@ _agonLight2SpiTransfer8Impl:
     ld      hl, 0
     ld      l, a
 
+    pop     ix
+    ret
+
+;; -- void agonLight2SpiTransferBytesImpl(uint8_t *data, size_t length) ---
+;;    data passed at sp+3, length at sp+6.  Exchanges each byte of data for
+;;    the byte received in its place.  Looping here rather than calling
+;;    agonLight2SpiTransfer8Impl for every byte saves a call and a frame per
+;;    byte.
+_agonLight2SpiTransferBytesImpl:
+    push    ix
+    ld      ix, 0
+    add     ix, sp
+
+    ld      hl, (ix+6)      ; data
+    ld      de, (ix+9)      ; length
+    add     hl, de
+    ex      de, hl          ; de = data + length
+    ld      hl, (ix+6)      ; hl = data
+
+.spiBytesLoop:
+    or      a
+    sbc     hl, de          ; Z when hl has reached the end
+    add     hl, de          ; restores hl and leaves Z alone
+    jr      z, .spiBytesDone
+
+    ld      a, (hl)
+    out0    (SPI_TSR), a
+.spiBytesWait:
+    in0     a, (SPI_SR)
+    bit     7, a
+    jr      z, .spiBytesWait
+
+    in0     a, (SPI_RBR)
+    ld      (hl), a
+    inc     hl
+    jr      .spiBytesLoop
+
+.spiBytesDone:
     pop     ix
     ret
