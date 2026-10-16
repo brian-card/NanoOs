@@ -136,24 +136,10 @@ void* yieldCallback(void *stateData, Thread *thread, void *arg) {
   (void) stateData;
   (void) thread;
 
-  // Cache the preemption timer's device ID once the scheduler is actually
-  // initialized -- this runs on every yield, so it's worth avoiding the
-  // schedulerGetPreemptionTimer() call once we have a real value.  Can't
-  // cache on the first call unconditionally: this callback is also invoked
-  // before the scheduler has been started (e.g. to fix the stack size of
-  // the scheduler itself before starting it), when there's no real value
-  // to cache yet.
-  static bool preemptionTimerCached = false;
-  static int cachedPreemptionTimer = -1;
-  if (preemptionTimerCached == false) {
-    if (schedulerIsInitialized() == false) {
-      return arg;
-    }
-    cachedPreemptionTimer = schedulerGetPreemptionTimer();
-    preemptionTimerCached = true;
+  if (schedulerPreemptionTimerArmed == true) {
+    HAL->timer->cancel(schedulerGetPreemptionTimer());
+    schedulerPreemptionTimerArmed = false;
   }
-
-  HAL->timer->cancel(cachedPreemptionTimer);
 
   return arg;
 }
