@@ -69,9 +69,15 @@ def build_image():
     return img
 
 
-# Simulated memory size, in bytes, that leaves a little over 2.5 KB of heap at
-# the shell prompt, as on the SAMD21 boards.
-SMALL_MEMORY_SIZE = 75000
+# Heap, in bytes, left at the shell prompt in the small-memory tests:  a little
+# over 2.5 KB, as on the SAMD21 boards.
+SMALL_MEMORY_HEAP_RANGE = (2560, 2816)
+SMALL_MEMORY_HEAP = 2688
+# Simulated memory size, in bytes, booted once to find the size that leaves
+# SMALL_MEMORY_HEAP.  The heap left at a given size depends on the host
+# compiler's stack frame sizes, so it has to be measured on each host.
+SMALL_MEMORY_PROBE_SIZE = 75000
+_small_memory_sizes = {}
 
 
 class Session:
@@ -341,11 +347,29 @@ def test_grep_reads_a_file_line_by_line(s):
         "line-04\nline-14\nline-24\nline-34\nline-40"
 
 
-def test_small_memory_boots_to_a_working_shell(s):
-    s.restart_with_memory(SMALL_MEMORY_SIZE)
-    s.login()
+def heap_at_prompt(s):
     m = re.match(r"- Dynamic memory left: (\d+)$", s.sh("ps").splitlines()[0])
-    assert m and 2560 <= int(m.group(1)) < 2816, m and m.group(1)
+    assert m, s.child.before
+    return int(m.group(1))
+
+
+def small_memory_size(s):
+    # The heap grows byte for byte with the memory size, so one probe boot per
+    # simulator and configuration finds the size.
+    key = (s.sim_bin, tuple(sorted((s.env or {}).items())))
+    if key not in _small_memory_sizes:
+        s.restart_with_memory(SMALL_MEMORY_PROBE_SIZE)
+        s.login()
+        _small_memory_sizes[key] = \
+            SMALL_MEMORY_PROBE_SIZE + SMALL_MEMORY_HEAP - heap_at_prompt(s)
+    return _small_memory_sizes[key]
+
+
+def test_small_memory_boots_to_a_working_shell(s):
+    s.restart_with_memory(small_memory_size(s))
+    s.login()
+    heap = heap_at_prompt(s)
+    assert SMALL_MEMORY_HEAP_RANGE[0] <= heap < SMALL_MEMORY_HEAP_RANGE[1], heap
     assert s.sh("echo small-memory") == "small-memory"
     assert s.sh("cat /etc/hostname") == "nanoe2e"
 
@@ -567,7 +591,7 @@ def test_ed_reports_files_it_cannot_open(s):
     assert ll_names(s, "/etc") == ["catfile", "hostname", "issue"]
 
 
-# More lines than ed's line table can hold at SMALL_MEMORY_SIZE.
+# More lines than ed's line table can hold at SMALL_MEMORY_HEAP.
 OVERSIZED_LINE_COUNT = 300
 
 
@@ -575,7 +599,7 @@ def test_ed_loads_nothing_from_a_file_that_does_not_fit(s):
     big_lines = ["big-%03d" % n for n in range(1, OVERSIZED_LINE_COUNT + 1)]
     s.login()
     ed_session(s, "ed", ["a"] + big_lines + [".", "w /etc/bigfile", "q"])
-    s.restart_with_memory(SMALL_MEMORY_SIZE)
+    s.restart_with_memory(small_memory_size(s))
     s.login()
     out = ed_session(s, "ed /etc/bigfile", ["h", "$=", "f", "w", "Q"])
     assert out.endswith(
@@ -588,7 +612,7 @@ def test_ed_loads_nothing_from_a_file_that_does_not_fit(s):
 def test_ed_discards_typed_text_that_does_not_fit(s):
     # Each typed line is "d", which would delete a line if it were run as a
     # command after the buffer filled up.
-    s.restart_with_memory(SMALL_MEMORY_SIZE)
+    s.restart_with_memory(small_memory_size(s))
     s.login()
     out = ed_session(s, "ed",
                      ["a"] + ["d"] * OVERSIZED_LINE_COUNT + [".", "h", "$=", "Q"])
@@ -601,7 +625,7 @@ def test_ed_discards_typed_text_that_does_not_fit(s):
 
 
 def test_ed_quits_when_too_little_memory_is_left_to_edit(s):
-    s.restart_with_memory(SMALL_MEMORY_SIZE)
+    s.restart_with_memory(small_memory_size(s))
     s.login()
     ed_session(s, "ed /etc/catfile", ["Q"])
     assert s.sh("echo still-alive") == "still-alive"
