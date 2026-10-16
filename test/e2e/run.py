@@ -257,6 +257,20 @@ def test_long_names_match_on_every_fragment(s):
         ["aaaaaaaaaaaaa-same-tail.txt", "abcdefghijklm", "hostname", "issue"]
 
 
+def test_ll_lists_names_of_every_length(s):
+    # readdir reuses one entry for the whole listing, so it has to grow for
+    # the 40-character name and still hold the short names around it.
+    s.login()
+    longest = "a-name-long-enough-to-need-four-lfns.txt"
+    assert s.sh("touch /etc/ab") == ""
+    assert s.sh("mv /etc/catfile /etc/" + longest) == ""
+    assert s.sh("touch /etc/ABC") == ""
+    assert s.sh("touch /etc/medium-length-name") == ""
+    assert ll_names(s, "/etc") == sorted(
+        ["ABC", "ab", "hostname", "issue", longest, "medium-length-name"])
+    assert s.sh("cat /etc/" + longest) == CATFILE_CONTENTS
+
+
 def test_mv_renames_a_file_to_a_long_name(s):
     s.login()
     assert s.sh("mv /etc/catfile /etc/renamed-catfile.txt") == ""
