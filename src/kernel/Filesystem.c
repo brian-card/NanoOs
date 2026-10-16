@@ -216,6 +216,7 @@ FILE* filesystemFopen(const char *pathname, const char *mode) {
   file = fopenArgs.returnValue;
   processMessageRelease(msg);
   if (file == NULL) {
+    errno = fopenArgs.errorNumber;
     goto freeFileDescriptor;
   }
 
@@ -894,8 +895,9 @@ int getFileBlockMetadataFromPath(const char *path,
 
   FILE *stream = fopen(path, _readMode);
   if (stream == NULL) {
+    int errorNumber = (errno != 0) ? errno : EIO;
     logError("Could not open file \"%s\"\n", path);
-    return -EIO;
+    return -errorNumber;
   }
   int returnValue = getFileBlockMetadataFromFile(stream, metadata);
   fclose(stream); stream = NULL;
