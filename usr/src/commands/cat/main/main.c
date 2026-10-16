@@ -28,6 +28,7 @@
 // Doxygen marker
 /// @file
 
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -37,7 +38,8 @@ int main(int argc, char **argv) {
     const char *filename = argv[1];
     FILE *inputFile = fopen(filename, "r");
     if (inputFile == NULL) {
-      fprintf(stderr, "ERROR: Could not open file \"%s\"\n", filename);
+      fprintf(stderr, "ERROR: Could not open file \"%s\": %s\n",
+        filename, strerror(errno));
       return 1;
     }
     size_t bytesRead = fread(buffer, 1, sizeof(buffer), inputFile);
