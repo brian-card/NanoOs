@@ -13,6 +13,7 @@
 #include <string.h>
 
 #include "kernel/Hal.h"
+#include "kernel/Processes.h"
 #include "HalMock.h"
 
 // -------------------------------------------------------------------------
@@ -204,4 +205,10 @@ NANO_OS_KERNEL_TEST(hal_uart, online_mask_is_backed_and_per_device) {
 
   NANO_OS_ASSERT_TRUE(online(HAL->uart, 1));
   NANO_OS_ASSERT_FALSE(online(HAL->uart, 0));
+}
+
+NANO_OS_KERNEL_TEST(hal_platform, nothing_pending_dispatches_no_callbacks) {
+  unsigned int dispatches = mockPendingCallbackDispatchCount();
+  processYield();
+  NANO_OS_ASSERT_EQ_INT(dispatches, mockPendingCallbackDispatchCount());
 }

@@ -174,6 +174,12 @@ bool mockTimerArmed(int32_t deviceId);
 /// @brief Get the number of times any timer has been cancelled since boot.
 unsigned int mockTimerCancelCount(void);
 
+/// @fn unsigned int mockPendingCallbackDispatchCount(void)
+///
+/// @brief Get the number of times the platform's invokePendingCallbacks has
+/// been dispatched since boot.
+unsigned int mockPendingCallbackDispatchCount(void);
+
 /// @fn size_t mockUartFeed(const char *bytes, size_t length)
 ///
 /// @brief Push bytes into the console UART's receive buffer, as if typed.

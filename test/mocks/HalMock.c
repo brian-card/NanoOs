@@ -246,6 +246,29 @@ static int mockDoStartProcesses(void) {
   return returnValue;
 }
 
+/// @var _pendingCallbackDispatches
+///
+/// @brief The number of times the platform's invokePendingCallbacks has been
+/// dispatched since boot.
+static unsigned int _pendingCallbackDispatches = 0;
+
+/// @fn static int mockInvokePendingCallbacksFn(va_list args)
+///
+/// @brief Count a dispatch of invokePendingCallbacks, then run the common
+/// implementation every real platform uses.
+///
+/// @param args The va_list passed to the platform function.
+///
+/// @return Returns the value returned by halCommonPlatformInvokePendingCallbacks.
+static int mockInvokePendingCallbacksFn(va_list args) {
+  _pendingCallbackDispatches++;
+  return halCommonPlatformInvokePendingCallbacks(args);
+}
+
+unsigned int mockPendingCallbackDispatchCount(void) {
+  return _pendingCallbackDispatches;
+}
+
 static int mockStartProcessesFn(va_list args) {
   HalStartProcessesFn *returnValue = va_arg(args, HalStartProcessesFn*);
   if (returnValue != NULL) {
@@ -540,6 +563,8 @@ int halMockInit(const HalMockConfig *config, jmp_buf *powerReturn) {
   _platformFunctions[HAL_PLATFORM_RESTART_SHELL]           = mockRestartShellFn;
   _platformFunctions[HAL_PLATFORM_START_PROCESSES]         = mockStartProcessesFn;
   _platformFunctions[HAL_PLATFORM_LAUNCH_PROCESSES]        = mockLaunchProcessesFn;
+  _platformFunctions[HAL_PLATFORM_INVOKE_PENDING_CALLBACKS]
+    = mockInvokePendingCallbacksFn;
 
   _memoryFunctions[HAL_MEMORY_OVERLAY_MAP]           = mockOverlayMapFn;
   _memoryFunctions[HAL_MEMORY_CONTIGUOUS_FILESYSTEM] = mockContiguousFilesystemFn;
