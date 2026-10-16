@@ -113,6 +113,8 @@ int fat32ParseMode(const char *mode, Fat32OpenMode *flags) {
 /// @param mode         The null-terminated C fopen mode string.
 /// @param now          The time to record if the file is created, in seconds
 ///                     since the Unix epoch.
+/// @param errorNumber  [out] Set to 0 on success, or to the errno value the
+///                     caller should see on failure.
 ///
 /// @return A pointer to a heap-allocated Fat32FileHandle on success, or NULL
 ///         on failure.
@@ -121,8 +123,10 @@ void* driverFopen(
     void *driverState,
     const char *filePath,
     const char *mode,
-    time_t now
+    time_t now,
+    int *errorNumber
 ) {
+  *errorNumber = fat32ErrorToErrno(FAT32_INVALID_PARAMETER);
   Fat32DriverState *ds = (Fat32DriverState *) driverState;
   if (ds == NULL) {
     printString("driverFopen: ds is NULL\n");
@@ -153,6 +157,7 @@ void* driverFopen(
   int resolveResult = fat32ResolveParentDirectory(
     ds, filePath, &parentCluster, &fileName);
   if (resolveResult != FAT32_SUCCESS) {
+    *errorNumber = fat32ErrorToErrno(resolveResult);
     return NULL;
   }
 
@@ -178,8 +183,10 @@ void* driverFopen(
 
     // "w" / "w+" — truncate the existing file to zero length.
     if (modeFlags.truncate) {
-      if (fat32TruncateFile(ds, &searchResult) != FAT32_SUCCESS) {
+      int truncateResult = fat32TruncateFile(ds, &searchResult);
+      if (truncateResult != FAT32_SUCCESS) {
         free(searchResult.longName);
+        *errorNumber = fat32ErrorToErrno(truncateResult);
         return NULL;
       }
     }
@@ -189,6 +196,7 @@ void* driverFopen(
     if (modeFlags.mustExist) {
       // "r" / "r+" — the file must already be present.
       free(searchResult.longName);
+      *errorNumber = fat32ErrorToErrno(searchStatus);
       return NULL;
     }
 
@@ -209,11 +217,13 @@ void* driverFopen(
 #endif // NANO_OS_OVERLAY_FILESYSTEM
     if (createArgs.returnValue != FAT32_SUCCESS) {
       free(searchResult.longName);
+      *errorNumber = fat32ErrorToErrno(createArgs.returnValue);
       return NULL;
     }
   } else {
     // An I/O or allocation error occurred during the search.
     free(searchResult.longName);
+    *errorNumber = fat32ErrorToErrno(searchStatus);
     return NULL;
   }
 
@@ -222,6 +232,8 @@ void* driverFopen(
     = fat32CreateFileHandle(ds, &searchResult, &modeFlags);
   free(searchResult.longName);
 
+  *errorNumber = fat32ErrorToErrno(
+    (handle != NULL) ? FAT32_SUCCESS : FAT32_NO_MEMORY);
   return (void *) handle;
 }
 
