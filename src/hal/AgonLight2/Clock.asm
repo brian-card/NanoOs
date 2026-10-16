@@ -37,7 +37,7 @@
 ;;; @var __nanosecondCount
 ;;;
 ;;; @brief 64-bit, little-endian count of the number of nanoseconds since boot.
-;;; Incremented by 62500 (62.5 microseconds) every time clockTimerIsr fires.
+;;; Incremented by 1000000 (1 millisecond) every time clockTimerIsr fires.
 ;;;
 ;;; Lives in .bss (zeroed by Boot.asm's BSS-clear loop), not .text - .text is
 ;;; ROM in a future standalone/flash build and this counter is written at
@@ -60,16 +60,16 @@ TMR0_RR_H   .equ 0x082     ; W    reload value   - high byte
 
 ;;; @fn void initClockTimer(void)
 ;;;
-;;; @brief Initializes timer 0 to fire every 62.5 microseconds.
+;;; @brief Initializes timer 0 to fire every millisecond.
 ;;;
 ;;; @return This function returns no value.
 _initClockTimer:
     ld      a, 0x00         ; Clear timer 0's configuration while we're working
     out0    (TMR0_CTL), a
 
-    ld      a, 0x48         ; reload low byte  = 0x48  (72 decimal)
+    ld      a, 0x80         ; reload low byte  = 0x80
     out0    (TMR0_RR_L), a
-    ld      a, 0x00         ; reload high byte = 0x00
+    ld      a, 0x04         ; reload high byte = 0x04  (0x0480 = 1152 decimal)
     out0    (TMR0_RR_H), a
 
     ld      a, 0x57         ; IRQ_EN=1, PRT_MODE=1 (continuous)
@@ -122,8 +122,8 @@ tickRead:
 ;;; @fn void clockTimerIsr(void)
 ;;;
 ;;; @brief Interrupt service routine (ISR) that runs every time timer 0 fires.
-;;; Per the configuration in initClockTimer, This fires exactly every 62.5
-;;; microseconds.
+;;; Per the configuration in initClockTimer, This fires exactly every
+;;; millisecond.
 ;;;
 ;;; @return This function returns no value.
 clockTimerIsr:
@@ -131,27 +131,24 @@ clockTimerIsr:
     push    hl
     in0     a, (TMR0_CTL)   ; read of TMR0_CTL clears the PRT_IRQ flag (bit 7)
 
-    ; --- add 62500 (0xf424) to the low 16 bits ---
+    ; --- add 1000000 (0x0f4240) to the low 24 bits ---
     ld      hl, __nanosecondCount
     ld      a, (hl)
-    add     a, 0x24         ; low byte of 62500
+    add     a, 0x40         ; low byte of 1000000
     ld      (hl), a
     inc     hl
     ld      a, (hl)
-    adc     a, 0x0f4        ; high byte of 62500, plus carry from above
+    adc     a, 0x42         ; middle byte of 1000000, plus carry from above
+    ld      (hl), a
+    inc     hl
+    ld      a, (hl)
+    adc     a, 0x0f         ; high byte of 1000000, plus carry from above
     ld      (hl), a
     jr      nc, tickDone    ; no carry out — common case, done
 
-    ; --- propagate the carry through the remaining 6 bytes, one at a time ---
+    ; --- propagate the carry through the remaining 5 bytes, one at a time ---
     ; Each byte is only touched when a carry actually reaches it, so the common
-    ; case (carry stops in byte 2) costs a single inc + compare.  A wide 24-bit
-    ; add would be shorter to write but slower here: it would touch three bytes
-    ; and pay a fixed bc save/restore on every tick.
-    inc     hl
-    ld      a, (hl)
-    inc     a
-    ld      (hl), a
-    jr      nz, tickDone
+    ; case (carry stops in byte 3) costs a single inc + compare.
     inc     hl
     ld      a, (hl)
     inc     a
