@@ -169,8 +169,8 @@ void* driverFopen(
   Fat32DirSearchResult searchResult;
   searchResult.longName = NULL;
 
-  int searchStatus = fat32SearchDirectory(
-    ds, parentCluster, fileName, &searchResult);
+  int searchStatus = fat32SearchDirectoryN(
+    ds, parentCluster, fileName, strlen(fileName), true, &searchResult);
 
   if (searchStatus == FAT32_SUCCESS) {
     // File exists.

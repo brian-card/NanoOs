@@ -396,27 +396,29 @@ static inline ino_t fat32EntryLocationToIno(
 
 ///////////////////////////////////////////////////////////////////////////////
 ///
-/// @brief Case-insensitive comparison of two null-terminated strings using
-///        ASCII rules.
+/// @brief Case-insensitive comparison, using ASCII rules, of a null-terminated
+///        string with a string of known length that need not be terminated.
 ///
-/// @param a  First string.
-/// @param b  Second string.
+/// @param a        The null-terminated string.
+/// @param b        The string of known length.
+/// @param bLength  The number of characters in @p b.
 ///
-/// @return 0 if the strings are equal (ignoring case), a positive value if
-///         a > b, a negative value if a < b.
+/// @return true if the strings are equal (ignoring case), false otherwise.
 ///
-static inline int fat32StrcaseCmp(const char *a, const char *b) {
-  while (*a != '\0' && *b != '\0') {
-    char ca = (*a >= 'a' && *a <= 'z') ? (*a - 32) : *a;
-    char cb = (*b >= 'a' && *b <= 'z') ? (*b - 32) : *b;
+static inline bool fat32StrcaseEqualN(
+    const char *a,
+    const char *b,
+    size_t bLength
+) {
+  for (size_t i = 0; i < bLength; i++) {
+    char ca = ((a[i] >= 'a') && (a[i] <= 'z')) ? (a[i] - 32) : a[i];
+    char cb = ((b[i] >= 'a') && (b[i] <= 'z')) ? (b[i] - 32) : b[i];
     if (ca != cb) {
-      return (int) ca - (int) cb;
+      return false;
     }
-    a++;
-    b++;
   }
 
-  return (int) (unsigned char) *a - (int) (unsigned char) *b;
+  return a[bLength] == '\0';
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -581,12 +583,17 @@ static inline int fat32ReadFatEntry(
 ///////////////////////////////////////////////////////////////////////////////
 ///
 /// @brief Search a directory's cluster chain for an entry whose long or short
-///        name matches @p name (case-insensitive).
+///        name matches the first @p nameLength characters of @p name
+///        (case-insensitive).
 ///
-/// @param ds          Pointer to an initialized Fat32DriverState.
-/// @param dirCluster  The first cluster of the directory to search.
-/// @param name        The name to look for.
-/// @param result      [out] Populated on a successful match.
+/// @param ds            Pointer to an initialized Fat32DriverState.
+/// @param dirCluster    The first cluster of the directory to search.
+/// @param name          The name to look for.  It need not be terminated.
+/// @param nameLength    The number of characters in @p name.
+/// @param wantLongName  Whether result->longName should be set to a
+///                      heap-allocated copy of the entry's name.  If false, it
+///                      is set to NULL.
+/// @param result        [out] Populated on a successful match.
 ///
 /// @return FAT32_SUCCESS if found, FAT32_FILE_NOT_FOUND if the directory was
 ///         exhausted without a match, or FAT32_ERROR / FAT32_NO_MEMORY on
@@ -595,10 +602,12 @@ static inline int fat32ReadFatEntry(
 /// @note Uses the shared blockBuffer for sector I/O.  The buffer contents are
 ///       undefined on return.
 ///
-static inline int fat32SearchDirectory(
+static inline int fat32SearchDirectoryN(
     Fat32DriverState *ds,
     uint32_t dirCluster,
     const char *name,
+    size_t nameLength,
+    bool wantLongName,
     Fat32DirSearchResult *result
 ) {
   FilesystemState    *fs = ds->filesystemState;
@@ -708,20 +717,22 @@ static inline int fat32SearchDirectory(
 
         // Try the assembled LFN first.
         if (lfnActive && (lfnBuffer[0] != '\0')) {
-          match = (fat32StrcaseCmp(lfnBuffer, name) == 0);
+          match = fat32StrcaseEqualN(lfnBuffer, name, nameLength);
         }
 
         // Fall back to the short name.
         if (!match) {
           char shortName[13];
           fat32FormatShortName(entry->name, entry->ntReserved, shortName);
-          match = (fat32StrcaseCmp(shortName, name) == 0);
+          match = fat32StrcaseEqualN(shortName, name, nameLength);
         }
 
         if (match) {
           memcpy(&result->entry, entry, sizeof(Fat32DirectoryEntry));
 
-          if (lfnActive && (lfnBuffer[0] != '\0')) {
+          if (wantLongName == false) {
+            result->longName = NULL;
+          } else if (lfnActive && (lfnBuffer[0] != '\0')) {
             // Transfer ownership of lfnBuffer.
             result->longName = lfnBuffer;
             lfnBuffer = NULL;
@@ -769,6 +780,30 @@ static inline int fat32SearchDirectory(
 
   free(lfnBuffer);
   return status;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+///
+/// @brief Search a directory's cluster chain for an entry whose long or short
+///        name matches the null-terminated @p name (case-insensitive), without
+///        returning the entry's name.
+///
+/// @param ds          Pointer to an initialized Fat32DriverState.
+/// @param dirCluster  The first cluster of the directory to search.
+/// @param name        The name to look for.
+/// @param result      [out] Populated on a successful match.  Its longName is
+///                    set to NULL.
+///
+/// @return The value returned by fat32SearchDirectoryN.
+///
+static inline int fat32SearchDirectory(
+    Fat32DriverState *ds,
+    uint32_t dirCluster,
+    const char *name,
+    Fat32DirSearchResult *result
+) {
+  return fat32SearchDirectoryN(
+    ds, dirCluster, name, strlen(name), false, result);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -842,26 +877,13 @@ static inline int fat32ResolveParentDirectory(
       len = FAT32_MAX_FILENAME_LENGTH;
     }
 
-    char *component = (char *) malloc(len + 1);
-    if (component == NULL) {
-      result = FAT32_NO_MEMORY;
-      break;
-    }
-    memcpy(component, start, len);
-    component[len] = '\0';
-
-    searchResult.longName = NULL;
-    result = fat32SearchDirectory(
-      ds, currentCluster, component, &searchResult);
-    free(component);
-
+    result = fat32SearchDirectoryN(
+      ds, currentCluster, start, len, false, &searchResult);
     if (result != FAT32_SUCCESS) {
-      free(searchResult.longName);
       break;
     }
 
     if (!(searchResult.entry.attributes & FAT32_ATTR_DIRECTORY)) {
-      free(searchResult.longName);
       result = FAT32_FILE_NOT_FOUND;
       break;
     }
@@ -875,9 +897,6 @@ static inline int fat32ResolveParentDirectory(
     currentCluster =
       ((uint32_t) clusterHigh << 16)
       | (uint32_t) clusterLow;
-
-    // The long name is not needed during path traversal.
-    free(searchResult.longName);
 
     start = end;
     if (*start == '/') {
@@ -1937,15 +1956,18 @@ void* Fat32CreateFile(void *args);
 /// @param ds            Pointer to an initialized Fat32DriverState.  Required
 ///                      so that the cluster chain can be walked when the file
 ///                      is opened in append mode.
-/// @param searchResult  The directory search result for the file.
+/// @param searchResult  The directory search result for the file.  On
+///                      success, the handle takes ownership of its longName
+///                      and it is set to NULL.
 /// @param modeFlags     The parsed open-mode flags.
 ///
 /// @return A pointer to a heap-allocated Fat32FileHandle, or NULL if the
-///         allocation failed or a cluster-chain walk failed.
+///         allocation failed, searchResult has no longName, or a cluster-chain
+///         walk failed.
 ///
 static inline Fat32FileHandle* fat32CreateFileHandle(
     Fat32DriverState *ds,
-    const Fat32DirSearchResult *searchResult,
+    Fat32DirSearchResult *searchResult,
     const Fat32OpenMode *modeFlags
 ) {
   Fat32FileHandle *handle =
@@ -1998,9 +2020,9 @@ static inline Fat32FileHandle* fat32CreateFileHandle(
     handle->currentPosition = 0;
   }
 
-  handle->fileName = (char*) malloc(strlen(searchResult->longName) + 1);
+  handle->fileName = searchResult->longName;
   if (handle->fileName != NULL) {
-    strcpy(handle->fileName, searchResult->longName);
+    searchResult->longName = NULL;
   } else {
     free(handle); handle = NULL;
   }
