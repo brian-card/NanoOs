@@ -63,6 +63,7 @@ extern void agonLight2WritePort(uint16_t port, uint8_t c);
 extern void agonLight2ConfigureSpiImpl(uint16_t divisor);
 extern void agonLight2SetSpiBrgImpl(uint16_t divisor);
 extern int agonLight2SpiTransfer8Impl(uint8_t c);
+extern void agonLight2SpiTransferBytesImpl(uint8_t *data, size_t length);
 extern void agonLight2SystemReset(void);   // boot/AgonLight2/Boot.asm; no return
 extern void agonLight2Off(void);           // boot/AgonLight2/Boot.asm; no return
 #ifdef __cplusplus
@@ -1008,11 +1009,7 @@ int agonLight2SpiTransferBytes(va_list args) {
     agonLight2StartSpiTransferImpl(deviceId);
   }
 
-  // A 32-bit counter here would need a library call per byte for the compare
-  // and the increment on the eZ80's 24-bit registers.
-  for (uint8_t *end = data + length; data < end; data++) {
-    *data = (uint8_t) agonLight2SpiTransfer8Impl(*data);
-  }
+  agonLight2SpiTransferBytesImpl(data, (size_t) length);
 
   return 0;
 }
