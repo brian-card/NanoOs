@@ -166,6 +166,14 @@ static SchedulerState *_schedulerState = NULL;
 /// _schedulerState pointer.
 ProcessId schedulerPid = 0;
 
+/// @var schedulerPreemptionTimerArmed
+///
+/// @brief Whether the scheduler has armed the preemption timer and nothing has
+/// cancelled it since.  Set before the timer is armed and cleared after it is
+/// cancelled, so that the timer is never armed while this is false and the
+/// switches to processes that are never preempted make no HAL call.
+bool schedulerPreemptionTimerArmed = false;
+
 /// @var standardKernelFileDescriptors
 ///
 /// @brief The array of file descriptors that all kernel processes use.
@@ -1899,14 +1907,13 @@ const char* schedulerPeekHostname(void) {
 /// ID.  Used by code that cancels/restores the preemption timer around a
 /// critical section and can't afford an IPC round trip to get it.  No
 /// privilege restriction: unlike the hostname, this is read from code that
-/// may run at any privilege level (overlay loads, atomic operations).
+/// may run at any privilege level (overlay loads, yields).
 ///
 /// @return Returns the preemption timer's device ID, or a negative value
 /// if the system is running in cooperative (non-preemptive) mode, or if
 /// the scheduler isn't initialized yet.  Callers that need to distinguish
 /// "not initialized" from "legitimately cooperative" should check
-/// schedulerIsInitialized() themselves before caching this value -- see
-/// NanoOs.c's yieldCallback, which is invoked before the scheduler exists.
+/// schedulerIsInitialized() themselves before caching this value.
 int schedulerGetPreemptionTimer(void) {
   if (_schedulerState == NULL) {
     return -1;
@@ -3720,6 +3727,7 @@ int schedulerSendSignalCommandHandler(
     // Configure the preemption timer to force the process to yield if it
     // doesn't voluntarily give up control within a reasonable amount of time.
     if (_schedulerState->preemptionTimer > -1) {
+      schedulerPreemptionTimerArmed = true;
       HAL->timer->configOneShot(
         _schedulerState->preemptionTimer, 10000000, forceYield);
     }
@@ -3731,8 +3739,9 @@ int schedulerSendSignalCommandHandler(
   // yieldCallback, so the one-shot would otherwise stay armed and fire
   // under the scheduler.  Signal delivery can absolutely end with the
   // target exiting, so this path needs it too.
-  if (_schedulerState->preemptionTimer > -1) {
+  if (schedulerPreemptionTimerArmed) {
     HAL->timer->cancel(_schedulerState->preemptionTimer);
+    schedulerPreemptionTimerArmed = false;
   }
 
   sendSignalArgs->returnValue = 0;
@@ -4952,6 +4961,7 @@ void runScheduler(void) {
       // Configure the preemption timer to force the process to yield if it
       // doesn't voluntarily give up control within a reasonable amount of time.
       if (_schedulerState->preemptionTimer > -1) {
+        schedulerPreemptionTimerArmed = true;
         HAL->timer->configOneShot(
           _schedulerState->preemptionTimer, 10000000, forceYield);
       }
@@ -4960,8 +4970,9 @@ void runScheduler(void) {
   processResume(processDescriptor, NULL);
   // Explicitly cancel the preemption timer.  Don't rely on yeildCallback to
   // have run because the process may have exited rather than yielded.
-  if (_schedulerState->preemptionTimer > -1) {
+  if (schedulerPreemptionTimerArmed) {
     HAL->timer->cancel(_schedulerState->preemptionTimer);
+    schedulerPreemptionTimerArmed = false;
   }
 
   if (processStackOverflowed(processDescriptor)) {
