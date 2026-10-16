@@ -10,6 +10,8 @@
 #include "NanoOsTest.h"
 
 #include "kernel/Coroutines.h"
+#include "kernel/Hal.h"
+#include "kernel/Processes.h"
 #include "kernel/Scheduler.h"
 #include "HalMock.h"
 
@@ -78,4 +80,24 @@ NANO_OS_KERNEL_TEST(preempt, the_depth_is_per_coroutine) {
   NANO_OS_ASSERT_EQ_INT(1, (long long) running->criticalSectionDepth);
   schedulerAllowPreemption();
   NANO_OS_ASSERT_EQ_INT(0, (long long) running->criticalSectionDepth);
+}
+
+NANO_OS_KERNEL_TEST(preempt, switching_to_unpreemptible_processes_cancels_nothing) {
+  // Every process running here is a kernel process, so nothing arms the timer.
+  unsigned int cancelCount = mockTimerCancelCount();
+  processYield();
+  NANO_OS_ASSERT_EQ_INT(cancelCount, mockTimerCancelCount());
+}
+
+NANO_OS_KERNEL_TEST(preempt, an_armed_timer_does_not_outlive_a_yield) {
+  int preemptionTimer = schedulerGetPreemptionTimer();
+  NANO_OS_ASSERT_TRUE(preemptionTimer >= 0);
+
+  schedulerPreemptionTimerArmed = true;
+  HAL->timer->configOneShot(preemptionTimer, 10000000, forceYield);
+  NANO_OS_ASSERT_TRUE(mockTimerArmed(preemptionTimer));
+
+  processYield();
+  NANO_OS_ASSERT_FALSE(mockTimerArmed(preemptionTimer));
+  NANO_OS_ASSERT_FALSE(schedulerPreemptionTimerArmed);
 }

@@ -164,6 +164,16 @@ void mockClockAdvanceNs(uint64_t deltaNs);
 /// @return 0 if a callback fired, -1 if the timer was not armed.
 int mockTimerFire(int32_t deviceId);
 
+/// @fn bool mockTimerArmed(int32_t deviceId)
+///
+/// @brief Determine whether deviceId's one-shot is armed.
+bool mockTimerArmed(int32_t deviceId);
+
+/// @fn unsigned int mockTimerCancelCount(void)
+///
+/// @brief Get the number of times any timer has been cancelled since boot.
+unsigned int mockTimerCancelCount(void);
+
 /// @fn size_t mockUartFeed(const char *bytes, size_t length)
 ///
 /// @brief Push bytes into the console UART's receive buffer, as if typed.

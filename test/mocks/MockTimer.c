@@ -30,8 +30,10 @@ typedef struct MockTimerDevice {
 } MockTimerDevice;
 
 static MockTimerDevice _timers[MOCK_NUM_TIMERS];
+static unsigned int _cancelCount = 0;
 
 void mockTimerReset(void) {
+  _cancelCount = 0;
   for (int ii = 0; ii < MOCK_NUM_TIMERS; ii++) {
     _timers[ii].armed        = false;
     _timers[ii].configuredNs = 0;
@@ -109,8 +111,17 @@ int mockTimerRemainingNanosecondsFn(va_list args) {
   return 0;
 }
 
+bool mockTimerArmed(int32_t deviceId) {
+  return validDevice(deviceId) && _timers[deviceId].armed;
+}
+
+unsigned int mockTimerCancelCount(void) {
+  return _cancelCount;
+}
+
 int mockTimerCancelFn(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
+  _cancelCount++;
   if (!validDevice(deviceId)) {
     return -1;
   }
