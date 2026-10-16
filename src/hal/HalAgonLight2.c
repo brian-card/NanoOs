@@ -1187,11 +1187,15 @@ int agonLight2EnterMode(va_list args) {
 /// @brief Per-device bookkeeping for one PRT-backed HAL timer.  Mirrors the
 /// non-SAMD-specific fields of HardwareTimer in HalArduinoSamD21x18A.cpp.
 typedef struct AgonLight2Timer {
-  bool    initialized;       ///< initDevice() has run for this timer
-  void  (*callback)(void);   ///< fired once, when the timer expires
-  bool    active;            ///< armed and counting
-  int64_t startTimeNs;       ///< readClock() ns when configOneShot armed it
-  int64_t deadlineNs;        ///< startTimeNs + the configured delay
+  bool       initialized;       ///< initDevice() has run for this timer
+  void     (*callback)(void);   ///< fired once, when the timer expires
+  bool       active;            ///< armed and counting
+  int64_t    startTimeNs;       ///< readClock() ns when configOneShot armed it
+  int64_t    deadlineNs;        ///< startTimeNs + the configured delay
+  bool       reloadCached;      ///< reloadNanoseconds/Ctl/Value below are valid
+  uint64_t   reloadNanoseconds; ///< delay last converted by configOneShot
+  uint8_t    reloadCtl;         ///< TMRn_CTL arm value for reloadNanoseconds
+  uint16_t   reloadValue;       ///< TMRn_RR value for reloadNanoseconds
 } AgonLight2Timer;
 
 /// @var _prtTimers
@@ -1290,6 +1294,7 @@ int agonLight2InitTimerDevice(va_list args) {
   timer->active      = false;
   timer->startTimeNs = 0;
   timer->deadlineNs  = 0;
+  timer->reloadCached = false;
   timer->initialized = true;
 
   return 0;
@@ -1316,33 +1321,48 @@ int agonLight2ConfigOneShotTimer(va_list args) {
     return capabilityStatus;
   }
 
-  // Pick the smallest clock divider (4, 16, 64, 256) whose 16-bit reload
-  // covers the requested delay.  reload = ns * SYSTEM_CLOCK_HZ / (clkDiv * 1e9)
-  // - the same prescaler search arduinoSamD21x18AConfigOneShotTimer does.
-  uint32_t clkDivSel = 0;
-  uint64_t reload    = 0;
-  for (clkDivSel = 0; clkDivSel < 4; clkDivSel++) {
-    uint64_t clkDiv = ((uint64_t) 4) << (2 * clkDivSel);   // 4, 16, 64, 256
-    reload = (nanoseconds * (uint64_t) SYSTEM_CLOCK_HZ)
-      / (clkDiv * ((uint64_t) 1000000000));
-    if (reload <= 0xFFFF) {
-      break;
+  // The scheduler arms the same delay every time, so reuse the last
+  // conversion rather than redo its 64-bit math.
+  AgonLight2Timer *timer = &_prtTimers[deviceId];
+  if ((timer->reloadCached == false)
+    || (nanoseconds != timer->reloadNanoseconds)
+  ) {
+    // Pick the smallest clock divider (4, 16, 64, 256) whose 16-bit reload
+    // covers the requested delay.  reload = ns * SYSTEM_CLOCK_HZ /
+    // (clkDiv * 1e9) - the same prescaler search
+    // arduinoSamD21x18AConfigOneShotTimer does.
+    uint32_t clkDivSel = 0;
+    uint64_t reload    = 0;
+    for (clkDivSel = 0; clkDivSel < 4; clkDivSel++) {
+      uint64_t clkDiv = ((uint64_t) 4) << (2 * clkDivSel); // 4, 16, 64, 256
+      reload = (nanoseconds * (uint64_t) SYSTEM_CLOCK_HZ)
+        / (clkDiv * ((uint64_t) 1000000000));
+      if (reload <= 0xFFFF) {
+        break;
+      }
     }
-  }
-  if (clkDivSel >= 4) {
-    // Longer than the PRT can express (~910 ms at /256); clamp to its maximum.
-    clkDivSel = 3;
-    reload    = 0xFFFF;
-  }
-  if (reload == 0) {
-    reload = 1;   // never arm with a zero reload
+    if (clkDivSel >= 4) {
+      // Longer than the PRT can express (~910 ms at /256); clamp to its
+      // maximum.
+      clkDivSel = 3;
+      reload    = 0xFFFF;
+    }
+    if (reload == 0) {
+      reload = 1;   // never arm with a zero reload
+    }
+
+    // TMRn_CTL to arm: EN | RST_EN | IRQ_EN, single-pass (PRT_MODE = 0), with
+    // the chosen divider in bits [3:2].  This is _initClockTimer's 0x57
+    // without the continuous-mode bit.
+    timer->reloadCtl         = (uint8_t) (0x43u | (clkDivSel << 2));
+    timer->reloadValue       = (uint16_t) reload;
+    timer->reloadNanoseconds = nanoseconds;
+    timer->reloadCached      = true;
   }
 
-  // TMRn_CTL to arm: EN | RST_EN | IRQ_EN, single-pass (PRT_MODE = 0), with the
-  // chosen divider in bits [3:2].  This is _initClockTimer's 0x57 without the
-  // continuous-mode bit.
-  uint8_t ctl     = (uint8_t) (0x43u | (clkDivSel << 2));
-  uint8_t ctlPort = _prtCtlPort[deviceId];
+  uint8_t  ctl     = timer->reloadCtl;
+  uint16_t reload  = timer->reloadValue;
+  uint8_t  ctlPort = _prtCtlPort[deviceId];
 
   agonLight2WritePort(ctlPort, 0x00);                            // stop
   agonLight2WritePort(ctlPort + 1, (uint8_t) (reload & 0xFF));   // TMRn_RR_L
@@ -1352,10 +1372,10 @@ int agonLight2ConfigOneShotTimer(va_list args) {
   int64_t nowNs = 0;
   readClock(&nowNs);
 
-  _prtTimers[deviceId].callback    = callback;
-  _prtTimers[deviceId].active      = true;
-  _prtTimers[deviceId].startTimeNs = nowNs;
-  _prtTimers[deviceId].deadlineNs  = nowNs + (int64_t) nanoseconds;
+  timer->callback    = callback;
+  timer->active      = true;
+  timer->startTimeNs = nowNs;
+  timer->deadlineNs  = nowNs + (int64_t) nanoseconds;
 
   return 0;
 }
