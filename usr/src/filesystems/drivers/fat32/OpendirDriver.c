@@ -80,6 +80,7 @@ void* driverOpendir(void *driverState, const char *path, int *errorNumber) {
   handle->offsetInCluster = 0;
   handle->nextSequence = 0;
   handle->entry = NULL;
+  handle->entrySize = 0;
 
   *errorNumber = 0;
   return (void *) handle;
