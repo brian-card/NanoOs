@@ -185,9 +185,8 @@ static int kernelTestRestartShell(void *processDescriptorRaw) {
 
   processDescriptor->userId         = ROOT_USER_ID;
   processDescriptor->privilegeLevel = DRIVER_PRIVILEGE_LEVEL;
-  processDescriptor->halCapabilities = driverHalCapabilities;
-  processDescriptor->numHalCapabilities
-    = sizeof(driverHalCapabilities) / sizeof(driverHalCapabilities[0]);
+  setProcessHalCapabilities(processDescriptor, driverHalCapabilities,
+    sizeof(driverHalCapabilities) / sizeof(driverHalCapabilities[0]));
 
   return 0;
 }
