@@ -459,18 +459,37 @@ static inline __attribute__((always_inline)) int processQueueRemoveInline(
     return processQueueRemoveFailure();
   }
 
-  ProcessDescriptor *poppedDescriptor = NULL;
-  for (uint8_t ii = 0; ii < processQueue->numElements; ii++) {
-    poppedDescriptor = processQueuePopInline(processQueue);
-    if (poppedDescriptor == processDescriptor) {
-      processDescriptor->processQueue = NULL;
-      return 0;
+  coroutineEnterCriticalSection();
+  ProcessDescriptor **slot = processQueue->head;
+  uint8_t ii = 0;
+  for (; ii < processQueue->numElements; ii++) {
+    if (*slot == processDescriptor) {
+      break;
     }
-    // This is not what we're looking for.  Put it back.
-    processQueuePushInline(processQueue, poppedDescriptor);
+    slot++;
+    if (slot == processQueue->end) {
+      slot = processQueue->processes;
+    }
+  }
+  if (ii == processQueue->numElements) {
+    coroutineExitCriticalSection();
+    return processQueueRemoveFailure();
   }
 
-  return processQueueRemoveFailure();
+  for (ii++; ii < processQueue->numElements; ii++) {
+    ProcessDescriptor **next = slot + 1;
+    if (next == processQueue->end) {
+      next = processQueue->processes;
+    }
+    *slot = *next;
+    slot = next;
+  }
+  processQueue->tail = slot;
+  processQueue->numElements--;
+  processDescriptor->processQueue = NULL;
+  coroutineExitCriticalSection();
+
+  return 0;
 }
 
 // Exported functionality
