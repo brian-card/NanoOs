@@ -4668,9 +4668,8 @@ int restartConsole(ProcessDescriptor *processDescriptor) {
   threadSetStackEnd(processDescriptor->mainThread, consoleStackEnd);
   processDescriptor->name = _consoleName;
   processDescriptor->userId = ROOT_USER_ID;
-  processDescriptor->halCapabilities = consoleHalCapabilities;
-  processDescriptor->numHalCapabilities
-    = sizeof(consoleHalCapabilities) / sizeof(consoleHalCapabilities[0]);
+  setProcessHalCapabilities(processDescriptor, consoleHalCapabilities,
+    sizeof(consoleHalCapabilities) / sizeof(consoleHalCapabilities[0]));
   return 0;
 }
 
@@ -4874,9 +4873,8 @@ int restartLogger(ProcessDescriptor *processDescriptor) {
   logDebug("In restartLogger\n");
   logDebug("Starting logger\n");
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
-  processDescriptor->halCapabilities = loggerHalCapabilities;
-  processDescriptor->numHalCapabilities
-    = sizeof(loggerHalCapabilities) / sizeof(loggerHalCapabilities[0]);
+  setProcessHalCapabilities(processDescriptor, loggerHalCapabilities,
+    sizeof(loggerHalCapabilities) / sizeof(loggerHalCapabilities[0]));
   processDescriptor->readyQueue
     = _schedulerState->readyQueues[processDescriptor->privilegeLevel];
   int returnValue = schedulerRunOverlayCommand(processDescriptor,
@@ -5292,15 +5290,13 @@ int setIpcCapabilities(SchedulerState *schedulerState) {
     if (processDescriptor->privilegeLevel == PRIVILEGE_LEVEL_KERNEL) {
       continue;
     } else if (processDescriptor->privilegeLevel == PRIVILEGE_LEVEL_EXECUTIVE) {
-      processDescriptor->halCapabilities = baseExecutiveHalCapabilities;
-      processDescriptor->numHalCapabilities
-        = sizeof(baseExecutiveHalCapabilities)
-        / sizeof(baseExecutiveHalCapabilities[0]);
+      setProcessHalCapabilities(processDescriptor,
+        baseExecutiveHalCapabilities,
+        sizeof(baseExecutiveHalCapabilities)
+        / sizeof(baseExecutiveHalCapabilities[0]));
     } else {
-      processDescriptor->halCapabilities = baseUserHalCapabilities;
-      processDescriptor->numHalCapabilities
-        = sizeof(baseUserHalCapabilities)
-        / sizeof(baseUserHalCapabilities[0]);
+      setProcessHalCapabilities(processDescriptor, baseUserHalCapabilities,
+        sizeof(baseUserHalCapabilities) / sizeof(baseUserHalCapabilities[0]));
     }
   }
 
@@ -5377,9 +5373,8 @@ int initializeProcesses(SchedulerState *schedulerState) {
   processDescriptor->userId = ROOT_USER_ID;
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_KERNEL;
   processDescriptor->restartFunction = restartConsole;
-  processDescriptor->halCapabilities = consoleHalCapabilities;
-  processDescriptor->numHalCapabilities
-    = sizeof(consoleHalCapabilities) / sizeof(consoleHalCapabilities[0]);
+  setProcessHalCapabilities(processDescriptor, consoleHalCapabilities,
+    sizeof(consoleHalCapabilities) / sizeof(consoleHalCapabilities[0]));
   logDebug("Created console process.\n");
 
   uint8_t numExtraConsoleStacksVal = 0;
@@ -5487,10 +5482,9 @@ int initializeProcesses(SchedulerState *schedulerState) {
   processDescriptor->userId = ROOT_USER_ID;
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_KERNEL;
   processDescriptor->restartFunction = restartMemoryManager;
-  processDescriptor->halCapabilities = memoryManagerHalCapabilities;
-  processDescriptor->numHalCapabilities
-    = sizeof(memoryManagerHalCapabilities)
-    / sizeof(memoryManagerHalCapabilities[0]);
+  setProcessHalCapabilities(processDescriptor, memoryManagerHalCapabilities,
+    sizeof(memoryManagerHalCapabilities)
+    / sizeof(memoryManagerHalCapabilities[0]));
   logDebug("Created all processes.\n");
 
   // Now that we have all the processes setup, we can fix the IPC capabilities.
