@@ -96,6 +96,7 @@ INCLUDES := \
 	-I$(AGDEV_HOME)/include \
 	-Isrc \
 	-Isrc/include \
+	-Isrc/kernel/libc/ez80-none-elf-clang \
 	-Isrc/include/ez80-none-elf-clang \
 	-Iusr/src/filesystems/drivers/fat32 \
 
