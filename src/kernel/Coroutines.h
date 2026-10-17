@@ -341,8 +341,41 @@ bool coroutineThreadingSupportEnabled();
 #endif
 int coroutineTerminate(Coroutine *targetCoroutine, Comutex **mutexes,
   bool keepMessageQueue);
-Coroutine* getRunningCoroutine(void);
 void coroutineTakeDeferredPreemption(void);
+
+// Defined in Coroutines.c.  Read only by getRunningCoroutine below.
+extern Coroutine *_globalRunning;
+#ifdef THREAD_SAFE_COROUTINES
+extern bool _coroutineThreadingSupportEnabled;
+extern once_flag _threadMetadataSetup;
+extern tss_t _tssRunning;
+void coroutineSetupThreadMetadata(void);
+bool coroutineInitializeThreadMetadata(Coroutine *first);
+#endif
+
+/// @fn Coroutine* getRunningCoroutine(void)
+///
+/// @brief Get a pointer to the Coroutine that is currently running (the one
+/// that is at the top of the running stack.  Inline because every lock,
+/// unlock, and critical section calls it.
+///
+/// @return Returns a pointer to the currently-running Coroutine on success,
+/// NULL on failure (if coroutines haven't been initialized yet).
+static inline Coroutine* getRunningCoroutine(void) {
+  Coroutine *coroutine = _globalRunning;
+#ifdef THREAD_SAFE_COROUTINES
+  if (_coroutineThreadingSupportEnabled) {
+    call_once(&_threadMetadataSetup, coroutineSetupThreadMetadata);
+    if (!coroutineInitializeThreadMetadata(NULL)) {
+      coroutine = NULL;
+      return coroutine;
+    }
+    coroutine = (Coroutine*) tss_get(_tssRunning);
+  }
+#endif
+
+  return coroutine;
+}
 
 /// @fn void coroutineEnterCriticalSection(void)
 ///

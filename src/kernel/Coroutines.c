@@ -161,15 +161,17 @@ int comessageQueueDestroy(Coroutine *coroutine);
 /// @brief Library-private first (main) routine.
 static Coroutine *_globalFirst = NULL;
 
-/// @var static Coroutine *_globalRunning
+/// @var Coroutine *_globalRunning
 ///
-/// @brief Library-private head of the running list.
+/// @brief Head of the running list.  Not static so that the inline
+/// getRunningCoroutine in Coroutines.h can read it.  Nothing else outside this
+/// file should touch it.
 ///
 /// @details The coroutine at the head of the running LIFO list has the CPU, and
 /// all others are suspended inside coroutineResume(). The first Coroutine
 /// object holds the context for the process's initial stack and also ensures
 /// that all externally-visible list elements have non-NULL next pointers.
-static Coroutine* _globalRunning = NULL;
+Coroutine* _globalRunning = NULL;
 
 /// @var static Coroutine *_globalIdle
 ///
@@ -321,27 +323,29 @@ Coroutine* coroutineGlobalPopAndReplace(Coroutine** list, Coroutine *newHead) {
 #ifdef THREAD_SAFE_COROUTINES
 // Use dynamic memory and C threads mechanisms.
 
-/// @var static bool _coroutineThreadingSupportEnabled
+/// @var bool _coroutineThreadingSupportEnabled
 ///
 /// @brief State variable to determine whether or not threading support is
-/// enabled in systems where threading is possible.  Defaults to false.
-static bool _coroutineThreadingSupportEnabled = false;
+/// enabled in systems where threading is possible.  Defaults to false.  Not
+/// static so that the inline getRunningCoroutine in Coroutines.h can read it.
+bool _coroutineThreadingSupportEnabled = false;
 
 /// @var static tss_t _tssFirst
 ///
 /// @brief Thread-specific first (main) routine.
 ZEROINIT(static tss_t _tssFirst);
 
-/// @var static tss_t _tssRunning
+/// @var tss_t _tssRunning
 ///
-/// @brief Thread-specific head of the running list.
+/// @brief Thread-specific head of the running list.  Not static so that the
+/// inline getRunningCoroutine in Coroutines.h can read it.
 ///
 /// @details The coroutine at the head of the running LIFO list has the CPU, and
 /// all others are suspended inside coroutineResume(). The "first" coro object
 /// holds the context for the process's initial stack and also ensures that all
 /// externally-visible list elements have non-NULL next pointers.  (The "first"
 /// coroutine isn't exposed to the caller.)
-ZEROINIT(static tss_t _tssRunning);
+ZEROINIT(tss_t _tssRunning);
 
 /// @var static tss_t _tssIdle
 ///
@@ -389,11 +393,12 @@ ZEROINIT(static tss_t _tssCoconditionSignalCallback);
 /// outermost critical section with a preemption that was deferred.
 ZEROINIT(static tss_t _tssPreemptionCallback);
 
-/// @var static once_flag _threadMetadataSetup
+/// @var once_flag _threadMetadataSetup
 ///
 /// @brief once_flag to make sure we only initialize the thread-specific storage
-/// once.
-static once_flag _threadMetadataSetup = ONCE_FLAG_INIT;
+/// once.  Not static so that the inline getRunningCoroutine in Coroutines.h
+/// can use it.
+once_flag _threadMetadataSetup = ONCE_FLAG_INIT;
 
 /// @fn void coroutineSetupThreadMetadata(void)
 ///
@@ -708,29 +713,6 @@ Coroutine* coroutineTssPopAndReplace(tss_t* list, Coroutine *newHead) {
   coroutineGlobalPop(&_globalIdle);
 
 #endif // THREAD_SAFE_COROUTINES coroutinePopIdle
-
-/// @fn Coroutine* getRunningCoroutine(void)
-///
-/// @brief Get a pointer to the Coroutine that is currently running (the one
-/// that is at the top of the running stack.
-///
-/// @return Returns a pointer to the currently-running Coroutine on success,
-/// NULL on failure (if coroutines haven't been initialized yet).
-Coroutine* getRunningCoroutine(void) {
-  Coroutine *coroutine = _globalRunning;
-#ifdef THREAD_SAFE_COROUTINES
-  if (_coroutineThreadingSupportEnabled) {
-    call_once(&_threadMetadataSetup, coroutineSetupThreadMetadata);
-    if (!coroutineInitializeThreadMetadata(NULL)) {
-      coroutine = NULL;
-      return coroutine;
-    }
-    coroutine = (Coroutine*) tss_get(_tssRunning);
-  }
-#endif
-  
-  return coroutine;
-}
 
 /// @fn void* coroutinePass(Coroutine currentCoroutine, CoroutineFuncData arg)
 ///
