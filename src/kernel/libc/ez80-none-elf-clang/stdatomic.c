@@ -38,8 +38,7 @@
 
 #ifdef NANO_OS_AGON_LIGHT_2
 
-#define NANO_OS_COMMON_STDATOMIC_C
-#include "../common/stdatomic.c"
+#include "stdatomic.h"
 
 #endif // NANO_OS_AGON_LIGHT_2
 
