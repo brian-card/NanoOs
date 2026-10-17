@@ -399,12 +399,10 @@ static inline __attribute__((always_inline)) int processQueuePushInline(
   }
 
   coroutineEnterCriticalSection();
-  processQueue->processes[processQueue->tail] = processDescriptor;
+  *processQueue->tail = processDescriptor;
   processQueue->tail++;
-  if (processQueue->tail == numProcesses) {
-    // Doing this saves stack space and time relative to
-    // processQueue->head %= numProcesses
-    processQueue->tail = 0;
+  if (processQueue->tail == processQueue->end) {
+    processQueue->tail = processQueue->processes;
   }
   processQueue->numElements++;
   processDescriptor->processQueue = processQueue;
@@ -430,12 +428,10 @@ processQueuePopInline(ProcessQueue *processQueue) {
   }
 
   coroutineEnterCriticalSection();
-  processDescriptor = processQueue->processes[processQueue->head];
+  processDescriptor = *processQueue->head;
   processQueue->head++;
-  if (processQueue->head == numProcesses) {
-    // Doing this saves stack space and time relative to
-    // processQueue->head %= numProcesses
-    processQueue->head = 0;
+  if (processQueue->head == processQueue->end) {
+    processQueue->head = processQueue->processes;
   }
   processQueue->numElements--;
   processDescriptor->processQueue = NULL;
