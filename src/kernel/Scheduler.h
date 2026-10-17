@@ -251,6 +251,7 @@ void* schedMalloc(size_t size);
 ProcessId reserveProcessSlot(void);
 void ipcCapabilityInsert(IpcCapability *capabilities, size_t numCapabilities,
   ProcessId destinationPid, int64_t signature, uint32_t messageType);
+void processQueueInit(ProcessQueue *processQueue, const char *name);
 int processQueuePush(
   ProcessQueue *processQueue, ProcessDescriptor *processDescriptor);
 ProcessDescriptor* processQueuePop(ProcessQueue *processQueue);

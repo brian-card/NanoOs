@@ -917,11 +917,15 @@ int removeProcessIpcCapability(ProcessDescriptor *processDescriptor,
 void runSchedulerQueues(PrivilegeLevel privilegeLevelBound) {
   ProcessQueue *currentReady = _schedulerState->currentReady;
 
+  // Walking a pointer saves a multiplication per iteration relative to
+  // indexing readyQueues.
+  ProcessQueue **readyQueue
+    = &_schedulerState->readyQueues[PRIVILEGE_LEVEL_KERNEL];
   for (PrivilegeLevel ii = PRIVILEGE_LEVEL_KERNEL;
     ii < privilegeLevelBound;
-    ii++
+    ii++, readyQueue++
   ) {
-    _schedulerState->currentReady = _schedulerState->readyQueues[ii];
+    _schedulerState->currentReady = *readyQueue;
     uint8_t queueSize = _schedulerState->currentReady->numElements;
     for (uint8_t jj = 0; jj < queueSize; jj++) {
       runScheduler();
@@ -961,6 +965,22 @@ int processQueuePushFailure(
 /// @return Returns EINVAL.
 int processQueueRemoveFailure(void) {
   return EINVAL;
+}
+
+/// @fn void processQueueInit(ProcessQueue *processQueue, const char *name)
+///
+/// @brief Initialize an empty ProcessQueue that spans numProcesses elements.
+///
+/// @param processQueue A pointer to the ProcessQueue to initialize.
+/// @param name The string name of the queue for use in error messages.
+///
+/// @return This function returns no value.
+void processQueueInit(ProcessQueue *processQueue, const char *name) {
+  processQueue->name = name;
+  processQueue->head = processQueue->processes;
+  processQueue->tail = processQueue->processes;
+  processQueue->end = processQueue->processes + numProcesses;
+  processQueue->numElements = 0;
 }
 
 /// @fn int processQueuePush(
@@ -5115,17 +5135,17 @@ int initializeSchedulerState(
   HAL->memory->overlayMap(&overlayMap);
 
   schedulerState->hostname = NULL;
-  schedulerState->readyQueues[PRIVILEGE_LEVEL_KERNEL]->name
-    = _kernelReadyName;
-  schedulerState->readyQueues[PRIVILEGE_LEVEL_EXECUTIVE]->name
-    = _executiveReadyName;
-  schedulerState->readyQueues[PRIVILEGE_LEVEL_SUPERVISOR]->name
-    = _supervisorReadyName;
-  schedulerState->readyQueues[PRIVILEGE_LEVEL_USER]->name
-    = _userReadyName;
-  schedulerState->waitingQueue->name = _waitingName;
-  schedulerState->timedWaitingQueue->name = _timedWaitingName;
-  schedulerState->freeQueue->name = _freeName;
+  processQueueInit(schedulerState->readyQueues[PRIVILEGE_LEVEL_KERNEL],
+    _kernelReadyName);
+  processQueueInit(schedulerState->readyQueues[PRIVILEGE_LEVEL_EXECUTIVE],
+    _executiveReadyName);
+  processQueueInit(schedulerState->readyQueues[PRIVILEGE_LEVEL_SUPERVISOR],
+    _supervisorReadyName);
+  processQueueInit(schedulerState->readyQueues[PRIVILEGE_LEVEL_USER],
+    _userReadyName);
+  processQueueInit(schedulerState->waitingQueue, _waitingName);
+  processQueueInit(schedulerState->timedWaitingQueue, _timedWaitingName);
+  processQueueInit(schedulerState->freeQueue, _freeName);
   schedulerState->currentReady
     = schedulerState->readyQueues[PRIVILEGE_LEVEL_KERNEL];
   schedulerState->preemptionTimer = -1;
@@ -5771,10 +5791,17 @@ __attribute__((noinline)) void startScheduler(
   }
 
   // Run our scheduler.
+  ProcessQueue **readyQueuesEnd
+    = schedulerState.readyQueues + SCHEDULER_NUM_READY_QUEUES;
   while (1) {
     bool ranProcess = false;
-    for (int ii = 0; ii < SCHEDULER_NUM_READY_QUEUES; ii++) {
-      schedulerState.currentReady = schedulerState.readyQueues[ii];
+    // Walking a pointer saves a multiplication per iteration relative to
+    // indexing readyQueues.
+    for (ProcessQueue **readyQueue = schedulerState.readyQueues;
+      readyQueue != readyQueuesEnd;
+      readyQueue++
+    ) {
+      schedulerState.currentReady = *readyQueue;
       uint8_t queueSize = schedulerState.currentReady->numElements;
       for (uint8_t jj = 0; jj < queueSize; jj++) {
         runScheduler();
