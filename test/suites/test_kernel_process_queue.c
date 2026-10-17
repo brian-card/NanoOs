@@ -1,0 +1,168 @@
+////////////////////////////////////////////////////////////////////////////////
+//
+//                       Copyright (c) 2026 Brian Card
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the
+// Software is furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+// THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// DEALINGS IN THE SOFTWARE.
+//
+//                                 Brian Card
+//                       https://github.com/brian-card
+//
+////////////////////////////////////////////////////////////////////////////////
+
+/// @file test_kernel_process_queue.c
+///
+/// @brief Kernel tests for the ProcessQueue ring buffer.
+
+#include "NanoOsTest.h"
+
+#include <string.h>
+
+#include "kernel/Processes.h"
+#include "kernel/Scheduler.h"
+#include "user/NanoOsErrno.h"
+
+#define QUEUE_TEST_MAX_PROCESSES 16
+
+/// @struct QueueTestStorage
+///
+/// @brief Concrete backing for a ProcessQueue under test.  Layout must match
+/// struct ProcessQueue in NanoOsTypes.h, with the trailing flexible array
+/// given a real size.
+typedef struct QueueTestStorage {
+  const char         *name;
+  ProcessDescriptor **head;
+  ProcessDescriptor **tail;
+  ProcessDescriptor **end;
+  uint8_t             numElements;
+  ProcessDescriptor  *processes[QUEUE_TEST_MAX_PROCESSES];
+} QueueTestStorage;
+
+static QueueTestStorage _queueStorage;
+static ProcessDescriptor _descriptors[QUEUE_TEST_MAX_PROCESSES + 1];
+
+/// @fn static ProcessQueue* queueTestInit(void)
+///
+/// @brief Initialize the queue under test and the descriptors pushed onto it.
+///
+/// @return Returns a pointer to the initialized ProcessQueue.
+static ProcessQueue* queueTestInit(void) {
+  memset(&_queueStorage, 0, sizeof(_queueStorage));
+  memset(_descriptors, 0, sizeof(_descriptors));
+  for (int ii = 0; ii <= QUEUE_TEST_MAX_PROCESSES; ii++) {
+    _descriptors[ii].processId = (ProcessId) (ii + 1);
+  }
+  ProcessQueue *queue = (ProcessQueue*) &_queueStorage;
+  processQueueInit(queue, "test");
+  return queue;
+}
+
+/// @fn static void queueTestAdvance(ProcessQueue *queue, size_t count)
+///
+/// @brief Move an empty queue's head and tail forward by count elements.
+///
+/// @param queue The empty ProcessQueue to advance.
+/// @param count The number of elements to advance by.
+///
+/// @return This function returns no value.
+static void queueTestAdvance(ProcessQueue *queue, size_t count) {
+  for (size_t ii = 0; ii < count; ii++) {
+    processQueuePush(queue, &_descriptors[0]);
+    processQueuePop(queue);
+  }
+}
+
+NANO_OS_KERNEL_TEST(process_queue, init_spans_num_processes) {
+  NANO_OS_ASSERT_TRUE(numProcesses <= QUEUE_TEST_MAX_PROCESSES);
+  ProcessQueue *queue = queueTestInit();
+
+  NANO_OS_ASSERT_STR_EQ("test", queue->name);
+  NANO_OS_ASSERT_EQ_PTR(queue->processes, queue->head);
+  NANO_OS_ASSERT_EQ_PTR(queue->processes, queue->tail);
+  NANO_OS_ASSERT_EQ_PTR(queue->processes + numProcesses, queue->end);
+  NANO_OS_ASSERT_EQ_INT(0, queue->numElements);
+  NANO_OS_ASSERT_NULL(processQueuePop(queue));
+}
+
+NANO_OS_KERNEL_TEST(process_queue, push_and_pop_wrap_in_order) {
+  ProcessQueue *queue = queueTestInit();
+  size_t numSteps = (3 * numProcesses) + 1;
+
+  for (size_t ii = 0; ii < 3; ii++) {
+    NANO_OS_ASSERT_EQ_INT(0, processQueuePush(queue, &_descriptors[ii]));
+  }
+  for (size_t ii = 0; ii < numSteps; ii++) {
+    NANO_OS_ASSERT_EQ_PTR(&_descriptors[ii % numProcesses],
+      processQueuePop(queue));
+    NANO_OS_ASSERT_EQ_INT(0,
+      processQueuePush(queue, &_descriptors[(ii + 3) % numProcesses]));
+    NANO_OS_ASSERT_TRUE((queue->head >= queue->processes)
+      && (queue->head < queue->end));
+    NANO_OS_ASSERT_TRUE((queue->tail >= queue->processes)
+      && (queue->tail < queue->end));
+    NANO_OS_ASSERT_EQ_INT(3, queue->numElements);
+  }
+
+  NANO_OS_ASSERT_EQ_PTR(queue->processes + ((numSteps + 3) % numProcesses),
+    queue->tail);
+  NANO_OS_ASSERT_EQ_PTR(queue->processes + (numSteps % numProcesses),
+    queue->head);
+}
+
+NANO_OS_KERNEL_TEST(process_queue, full_queue_rejects_a_push) {
+  ProcessQueue *queue = queueTestInit();
+  queueTestAdvance(queue, 2);
+
+  for (size_t ii = 0; ii < numProcesses; ii++) {
+    NANO_OS_ASSERT_EQ_INT(0, processQueuePush(queue, &_descriptors[ii]));
+  }
+  ProcessDescriptor *extra = &_descriptors[numProcesses];
+  NANO_OS_ASSERT_EQ_INT(ENOMEM, processQueuePush(queue, extra));
+  NANO_OS_ASSERT_NULL(extra->processQueue);
+  NANO_OS_ASSERT_EQ_INT((int) numProcesses, queue->numElements);
+
+  for (size_t ii = 0; ii < numProcesses; ii++) {
+    ProcessDescriptor *popped = processQueuePop(queue);
+    NANO_OS_ASSERT_EQ_PTR(&_descriptors[ii], popped);
+    NANO_OS_ASSERT_NULL(popped->processQueue);
+  }
+  NANO_OS_ASSERT_NULL(processQueuePop(queue));
+}
+
+NANO_OS_KERNEL_TEST(process_queue, remove_across_the_wrap_rotates_the_rest) {
+  ProcessQueue *queue = queueTestInit();
+  queueTestAdvance(queue, numProcesses - 2);
+
+  for (size_t ii = 0; ii < 5; ii++) {
+    NANO_OS_ASSERT_EQ_INT(0, processQueuePush(queue, &_descriptors[ii]));
+  }
+  NANO_OS_ASSERT_EQ_PTR(queue->processes + 3, queue->tail);
+
+  NANO_OS_ASSERT_EQ_INT(0, processQueueRemove(queue, &_descriptors[2]));
+  NANO_OS_ASSERT_NULL(_descriptors[2].processQueue);
+  NANO_OS_ASSERT_EQ_INT(4, queue->numElements);
+  NANO_OS_ASSERT_EQ_INT(EINVAL, processQueueRemove(queue, &_descriptors[2]));
+
+  // Removal pops and re-pushes up to the match, so the queue comes out rotated.
+  size_t expected[] = { 3, 4, 0, 1 };
+  for (size_t ii = 0; ii < 4; ii++) {
+    ProcessDescriptor *popped = processQueuePop(queue);
+    NANO_OS_ASSERT_EQ_PTR(&_descriptors[expected[ii]], popped);
+  }
+  NANO_OS_ASSERT_NULL(processQueuePop(queue));
+}

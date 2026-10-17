@@ -131,11 +131,12 @@ static char _logBuffer[128];
 /// Layout must match struct ProcessQueue in NanoOsTypes.h, with the trailing
 /// flexible array given a real size.
 typedef struct HalMockProcessQueue {
-  const char        *name;
-  uint8_t            head;
-  uint8_t            tail;
-  uint8_t            numElements;
-  ProcessDescriptor *processes[NUM_PROCESSES];
+  const char         *name;
+  ProcessDescriptor **head;
+  ProcessDescriptor **tail;
+  ProcessDescriptor **end;
+  uint8_t             numElements;
+  ProcessDescriptor  *processes[NUM_PROCESSES];
 } HalMockProcessQueue;
 
 static ProcessDescriptor  _allProcesses[NUM_PROCESSES];

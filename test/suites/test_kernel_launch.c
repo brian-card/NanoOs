@@ -56,9 +56,13 @@ NANO_OS_KERNEL_TEST(launch, no_process_is_on_a_ready_queue_twice) {
   for (ProcessId pid = 2; pid <= numProcesses; pid++) {
     int count = 0;
     for (uint8_t ii = 0; ii < numQueues; ii++) {
+      ProcessDescriptor **slot = queues[ii]->head;
       for (uint8_t jj = 0; jj < queues[ii]->numElements; jj++) {
-        uint8_t index = (queues[ii]->head + jj) % numProcesses;
-        count += (queues[ii]->processes[index] == &allProcesses[pid - 1]);
+        count += (*slot == &allProcesses[pid - 1]);
+        slot++;
+        if (slot == queues[ii]->end) {
+          slot = queues[ii]->processes;
+        }
       }
     }
     NANO_OS_ASSERT_TRUE(count <= 1);
