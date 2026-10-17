@@ -36,6 +36,81 @@
 #include "Hal.h"
 #include "Processes.h"
 
+_Static_assert(HAL_PLATFORM_NUM_FNS + HAL_MEMORY_NUM_FNS + HAL_UART_NUM_FNS
+  + HAL_DIO_NUM_FNS + HAL_SPI_NUM_FNS + HAL_CLOCK_NUM_FNS + HAL_POWER_NUM_FNS
+  + HAL_TIMER_NUM_FNS + HAL_BLOCK_DEVICE_NUM_FNS
+  <= 8 * HAL_CAPABILITY_BITMAP_SIZE,
+  "HAL_CAPABILITY_BITMAP_SIZE is too small for every HAL function");
+
+/// @var halCapabilityBitBase
+///
+/// @brief The index of each HalSubsystem's first function in a
+/// halCapabilityBitmap, followed by the total number of HAL functions.  This
+/// is deliberately not const so that it lives in .data like the capability
+/// arrays rather than in .rodata or flash.
+uint8_t halCapabilityBitBase[HAL_NUM_SUBSYSTEMS + 1] = {
+  [HAL_PLATFORM]       = 0,
+  [HAL_MEMORY]         = HAL_PLATFORM_NUM_FNS,
+  [HAL_UART]           = HAL_PLATFORM_NUM_FNS + HAL_MEMORY_NUM_FNS,
+  [HAL_DIO]            = HAL_PLATFORM_NUM_FNS + HAL_MEMORY_NUM_FNS
+                         + HAL_UART_NUM_FNS,
+  [HAL_SPI]            = HAL_PLATFORM_NUM_FNS + HAL_MEMORY_NUM_FNS
+                         + HAL_UART_NUM_FNS + HAL_DIO_NUM_FNS,
+  [HAL_CLOCK]          = HAL_PLATFORM_NUM_FNS + HAL_MEMORY_NUM_FNS
+                         + HAL_UART_NUM_FNS + HAL_DIO_NUM_FNS + HAL_SPI_NUM_FNS,
+  [HAL_POWER]          = HAL_PLATFORM_NUM_FNS + HAL_MEMORY_NUM_FNS
+                         + HAL_UART_NUM_FNS + HAL_DIO_NUM_FNS + HAL_SPI_NUM_FNS
+                         + HAL_CLOCK_NUM_FNS,
+  [HAL_TIMER]          = HAL_PLATFORM_NUM_FNS + HAL_MEMORY_NUM_FNS
+                         + HAL_UART_NUM_FNS + HAL_DIO_NUM_FNS + HAL_SPI_NUM_FNS
+                         + HAL_CLOCK_NUM_FNS + HAL_POWER_NUM_FNS,
+  [HAL_BLOCK_DEVICE]   = HAL_PLATFORM_NUM_FNS + HAL_MEMORY_NUM_FNS
+                         + HAL_UART_NUM_FNS + HAL_DIO_NUM_FNS + HAL_SPI_NUM_FNS
+                         + HAL_CLOCK_NUM_FNS + HAL_POWER_NUM_FNS
+                         + HAL_TIMER_NUM_FNS,
+  [HAL_NUM_SUBSYSTEMS] = HAL_PLATFORM_NUM_FNS + HAL_MEMORY_NUM_FNS
+                         + HAL_UART_NUM_FNS + HAL_DIO_NUM_FNS + HAL_SPI_NUM_FNS
+                         + HAL_CLOCK_NUM_FNS + HAL_POWER_NUM_FNS
+                         + HAL_TIMER_NUM_FNS + HAL_BLOCK_DEVICE_NUM_FNS,
+};
+
+/// @fn void setProcessHalCapabilities(ProcessDescriptor *processDescriptor,
+///   HalCapability *capabilities, size_t numCapabilities)
+///
+/// @brief Give a process a HalCapability array and build the bitmap that
+/// callHal checks against it.
+///
+/// @param processDescriptor A pointer to the process's ProcessDescriptor.
+/// @param capabilities A pointer to a sorted array of HalCapability objects.
+///   May be NULL if numCapabilities is 0.
+/// @param numCapabilities The number of HalCapability objects in the
+///   capabilities array.
+///
+/// @return This function returns no value.
+void setProcessHalCapabilities(ProcessDescriptor *processDescriptor,
+  HalCapability *capabilities, size_t numCapabilities
+) {
+  processDescriptor->halCapabilities = capabilities;
+  processDescriptor->numHalCapabilities = numCapabilities;
+  uint8_t *bitmap = processDescriptor->halCapabilityBitmap;
+  for (uint8_t ii = 0; ii < HAL_CAPABILITY_BITMAP_SIZE; ii++) {
+    bitmap[ii] = 0;
+  }
+
+  for (size_t ii = 0; ii < numCapabilities; ii++) {
+    uint8_t subsystem = (uint8_t) (capabilities[ii].subsystemFunction >> 8);
+    uint8_t function = (uint8_t) capabilities[ii].subsystemFunction;
+    if ((subsystem >= HAL_NUM_SUBSYSTEMS)
+      || (function >= (halCapabilityBitBase[subsystem + 1]
+        - halCapabilityBitBase[subsystem]))
+    ) {
+      continue;
+    }
+    uint8_t bit = halCapabilityBitBase[subsystem] + function;
+    bitmap[bit >> 3] |= (uint8_t) (1 << (bit & 7));
+  }
+}
+
 /// @fn HalCapability* findHalCapability(
 ///   HalCapability *capabilities, size_t numCapabilities,
 ///   HalSubsystem subsystem, uint32_t function)
