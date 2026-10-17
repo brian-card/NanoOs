@@ -292,19 +292,22 @@ static BlockDevice *blockDevices[] = {
 /// implementation that backs the ProcessQueue structure in the kernel.
 ///
 /// @param name The string name of the queue for use in error messages.
-/// @param head The index of the head of the queue.
-/// @param tail The index of the tail of the queue.
+/// @param head A pointer to the element of processes at the head of the
+///   queue.
+/// @param tail A pointer to the element of processes at the tail of the queue.
+/// @param end A pointer to one past the last element of processes.
 /// @param numElements The number of elements currently in the queue.
 /// @param processes The array of pointers to ProcessDescriptors from the
 ///   allProcesses array.  This is a variable-length array in the kernel.  It's
 ///   declared with definitive size here since this is the actual
 ///   implementationn backing.
 typedef struct HalProcessQueue {
-  const char        *name;
-  uint8_t            head;
-  uint8_t            tail;
-  uint8_t            numElements;
-  ProcessDescriptor *processes[NUM_PROCESSES];
+  const char         *name;
+  ProcessDescriptor **head;
+  ProcessDescriptor **tail;
+  ProcessDescriptor **end;
+  uint8_t             numElements;
+  ProcessDescriptor  *processes[NUM_PROCESSES];
 } HalProcessQueue;
 
 /// @var _kernelReadyQueue
@@ -595,8 +598,9 @@ int agonLight2ReadUart(va_list args) {
     return -ERANGE;
   }
   ssize_t bytesRead = 0;
-  if ((agonLight2ReadUartImpl[deviceId] != NULL) && (length > 0)) {
-    bytesRead = (ssize_t) agonLight2ReadUartImpl[deviceId](data, length);
+  size_t (*readUart)(uint8_t*, size_t) = agonLight2ReadUartImpl[deviceId];
+  if ((readUart != NULL) && (length > 0)) {
+    bytesRead = (ssize_t) readUart(data, length);
   }
   if (returnValue != NULL) {
     *returnValue = bytesRead;
@@ -624,8 +628,9 @@ int agonLight2WriteUart(va_list args) {
     return -ERANGE;
   }
   ssize_t bytesWritten = 0;
+  void (*writeUart)(uint8_t) = agonLight2WriteUartImpl[deviceId];
   for (;bytesWritten < length; bytesWritten++) {
-    agonLight2WriteUartImpl[deviceId](data[bytesWritten]);
+    writeUart(data[bytesWritten]);
   }
   if (returnValue != NULL) {
     *returnValue = bytesWritten;
@@ -898,39 +903,56 @@ int agonLight2ConfigureSpi(va_list args) {
   return 0;
 }
 
+/// @fn static HalSpiDevice* agonLight2ConfiguredSpiDevice(int32_t deviceId)
+///
+/// @brief Look up a configured SPI device.  This is kept out of line because,
+/// inlined, clang recomputes the index multiplication at every use of the
+/// pointer instead of reusing it.
+///
+/// @param deviceId The index of the device in spiDevices.
+///
+/// @return Returns a pointer to the device on success, NULL if deviceId is out
+/// of range or the device is not configured.
+static __attribute__((noinline)) HalSpiDevice* agonLight2ConfiguredSpiDevice(
+  int32_t deviceId
+) {
+  if ((deviceId < 0) || (deviceId >= numSpis)) {
+    return NULL;
+  }
+  HalSpiDevice *spiDevice = &spiDevices[deviceId];
+  if (spiDevice->configured == false) {
+    return NULL;
+  }
+  return spiDevice;
+}
+
 int agonLight2SetSpiSpeed(va_list args) {
   int32_t  deviceId = va_arg(args, int32_t);
   uint32_t baud     = va_arg(args, uint32_t);
 
-  if ((deviceId < 0) || (deviceId >= numSpis)
-    || (spiDevices[deviceId].configured == false)
-  ) {
+  HalSpiDevice *spiDevice = agonLight2ConfiguredSpiDevice(deviceId);
+  if (spiDevice == NULL) {
     return -ENODEV;
   }
   if (baud == 0) {
     return -EINVAL;
   }
 
-  spiDevices[deviceId].baud = baud;
+  spiDevice->baud = baud;
 
   // If this device currently holds the bus, retune the BRG now; otherwise
   // agonLight2StartSpiTransferImpl re-applies it on the next transfer.  Only
   // the baud-rate generator is touched - the pin mux and SPI_CTL are already
   // live and rewriting them mid-session glitches the clock line.
-  if (spiDevices[deviceId].transferInProgress == true) {
+  if (spiDevice->transferInProgress == true) {
     agonLight2SetSpiBrgImpl(agonLight2SpiDivisor(baud));
   }
 
   return 0;
 }
 
-int agonLight2StartSpiTransferImpl(int32_t deviceId) {
-  if ((deviceId < 0) || (deviceId >= numSpis)
-    || (spiDevices[deviceId].configured == false)
-  ) {
-    // Outside the limit of the devices we support.
-    return -ENODEV;
-  } else if ((spiDevices[deviceId].transferInProgress == true)
+int agonLight2StartSpiTransferImpl(HalSpiDevice *spiDevice) {
+  if ((spiDevice->transferInProgress == true)
     || (globalSpiInUse == true)
   ) {
     // This device, or another one on the shared bus, already holds a transfer.
@@ -945,35 +967,39 @@ int agonLight2StartSpiTransferImpl(int32_t deviceId) {
   // has already muxed the pins and programmed SPI_CTL, and re-running the full
   // configure here (pin re-mux + SPI_CTL rewrite) on the idle bus glitched the
   // clock and corrupted the first byte of the transfer.
-  agonLight2SetSpiBrgImpl(agonLight2SpiDivisor(spiDevices[deviceId].baud));
+  agonLight2SetSpiBrgImpl(agonLight2SpiDivisor(spiDevice->baud));
 
   // Drive chip-select low.
-  agonLight2WriteDioImpl(spiDevices[deviceId].chipSelect, false);
-  spiDevices[deviceId].transferInProgress = true;
+  agonLight2WriteDioImpl(spiDevice->chipSelect, false);
+  spiDevice->transferInProgress = true;
 
   return 0;
 }
 
 int agonLight2StartSpiTransfer(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
-  return agonLight2StartSpiTransferImpl(deviceId);
+  HalSpiDevice *spiDevice = agonLight2ConfiguredSpiDevice(deviceId);
+  if (spiDevice == NULL) {
+    // Outside the limit of the devices we support.
+    return -ENODEV;
+  }
+  return agonLight2StartSpiTransferImpl(spiDevice);
 }
 
 int agonLight2EndSpiTransfer(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
-  if ((deviceId < 0) || (deviceId >= numSpis)
-    || (spiDevices[deviceId].configured == false)
-  ) {
+  HalSpiDevice *spiDevice = agonLight2ConfiguredSpiDevice(deviceId);
+  if (spiDevice == NULL) {
     // Outside the limit of the devices we support.
     return -ENODEV;
   }
 
   // Drive chip-select high.
-  agonLight2WriteDioImpl(spiDevices[deviceId].chipSelect, true);
+  agonLight2WriteDioImpl(spiDevice->chipSelect, true);
   for (int ii = 0; ii < 8; ii++) {
     agonLight2SpiTransfer8Impl(0xFF); // 8 clock pulses
   }
-  spiDevices[deviceId].transferInProgress = false;
+  spiDevice->transferInProgress = false;
   globalSpiInUse = false; // release the shared bus
 
   return 0;
@@ -983,13 +1009,12 @@ int agonLight2SpiTransfer8(va_list args) {
   int32_t deviceId = va_arg(args, int32_t);
   uint8_t data = (uint8_t) va_arg(args, int);
 
-  if ((deviceId < 0) || (deviceId >= numSpis)
-    || (spiDevices[deviceId].configured == false)
-  ) {
+  HalSpiDevice *spiDevice = agonLight2ConfiguredSpiDevice(deviceId);
+  if (spiDevice == NULL) {
     // Outside the limit of the devices we support.
     return -ENODEV;
-  } else if (!spiDevices[deviceId].transferInProgress) {
-    agonLight2StartSpiTransferImpl(deviceId);
+  } else if (!spiDevice->transferInProgress) {
+    agonLight2StartSpiTransferImpl(spiDevice);
   }
 
   return (int32_t) agonLight2SpiTransfer8Impl(data);
@@ -1000,13 +1025,12 @@ int agonLight2SpiTransferBytes(va_list args) {
   uint8_t *data = va_arg(args, uint8_t*);
   uint32_t length = va_arg(args, uint32_t);
 
-  if ((deviceId < 0) || (deviceId >= numSpis)
-    || (spiDevices[deviceId].configured == false)
-  ) {
+  HalSpiDevice *spiDevice = agonLight2ConfiguredSpiDevice(deviceId);
+  if (spiDevice == NULL) {
     // Outside the limit of the devices we support.
     return -ENODEV;
-  } else if (!spiDevices[deviceId].transferInProgress) {
-    agonLight2StartSpiTransferImpl(deviceId);
+  } else if (!spiDevice->transferInProgress) {
+    agonLight2StartSpiTransferImpl(spiDevice);
   }
 
   agonLight2SpiTransferBytesImpl(data, (size_t) length);
@@ -1022,15 +1046,14 @@ int agonLight2SpiTransferUntil(va_list args) {
   bool equal = (bool) va_arg(args, int);
   unsigned int maxTransfers = (uint16_t) va_arg(args, int);
 
-  if ((deviceId < 0) || (deviceId >= numSpis)
-    || (spiDevices[deviceId].configured == false)
-  ) {
+  HalSpiDevice *spiDevice = agonLight2ConfiguredSpiDevice(deviceId);
+  if (spiDevice == NULL) {
     // Outside the limit of the devices we support.
     return -ENODEV;
   } else if (maxTransfers == 0) {
     return -EINVAL;
-  } else if (!spiDevices[deviceId].transferInProgress) {
-    agonLight2StartSpiTransferImpl(deviceId);
+  } else if (!spiDevice->transferInProgress) {
+    agonLight2StartSpiTransferImpl(spiDevice);
   }
 
   uint8_t received;
@@ -1297,15 +1320,35 @@ int agonLight2InitTimerDevice(va_list args) {
   return 0;
 }
 
+/// @fn static AgonLight2Timer* agonLight2TimerDevice(int32_t deviceId)
+///
+/// @brief Look up a PRT timer.  This is kept out of line because, inlined,
+/// clang recomputes the index multiplication at every use of the pointer
+/// instead of reusing it.
+///
+/// @param deviceId The index of the timer in _prtTimers.
+///
+/// @return Returns a pointer to the timer on success, NULL if deviceId is out
+/// of range.
+static __attribute__((noinline)) AgonLight2Timer* agonLight2TimerDevice(
+  int32_t deviceId
+) {
+  if ((deviceId < 0) || (deviceId >= _numPrtTimers)) {
+    return NULL;
+  }
+  return &_prtTimers[deviceId];
+}
+
 int agonLight2ConfigOneShotTimer(va_list args) {
   int32_t   deviceId    = va_arg(args, int32_t);
   uint64_t  nanoseconds = va_arg(args, uint64_t);
   void    (*callback)(void) = va_arg(args, void (*)(void));
 
-  if ((deviceId < 0) || (deviceId >= _numPrtTimers)) {
+  AgonLight2Timer *timer = agonLight2TimerDevice(deviceId);
+  if (timer == NULL) {
     return -ERANGE;
   }
-  if (_prtTimers[deviceId].initialized == false) {
+  if (timer->initialized == false) {
     return -EINVAL;
   }
 
@@ -1320,7 +1363,6 @@ int agonLight2ConfigOneShotTimer(va_list args) {
 
   // The scheduler arms the same delay every time, so reuse the last
   // conversion rather than redo its 64-bit math.
-  AgonLight2Timer *timer = &_prtTimers[deviceId];
   if ((timer->reloadCached == false)
     || (nanoseconds != timer->reloadNanoseconds)
   ) {
@@ -1443,10 +1485,11 @@ int agonLight2CancelTimer(va_list args) {
   // its interrupt.
   agonLight2WritePort(_prtCtlPort[deviceId], 0x00);
 
-  _prtTimers[deviceId].callback    = NULL;
-  _prtTimers[deviceId].active      = false;
-  _prtTimers[deviceId].startTimeNs = 0;
-  _prtTimers[deviceId].deadlineNs  = 0;
+  AgonLight2Timer *timer = &_prtTimers[deviceId];
+  timer->callback    = NULL;
+  timer->active      = false;
+  timer->startTimeNs = 0;
+  timer->deadlineNs  = 0;
 
   return 0;
 }
