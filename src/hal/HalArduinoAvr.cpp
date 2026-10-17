@@ -114,19 +114,22 @@ static uint32_t _numDioPins = 0;
 /// implementation that backs the ProcessQueue structure in the kernel.
 ///
 /// @param name The string name of the queue for use in error messages.
-/// @param head The index of the head of the queue.
-/// @param tail The index of the tail of the queue.
+/// @param head A pointer to the element of processes at the head of the
+///   queue.
+/// @param tail A pointer to the element of processes at the tail of the queue.
+/// @param end A pointer to one past the last element of processes.
 /// @param numElements The number of elements currently in the queue.
 /// @param processes The array of pointers to ProcessDescriptors from the
 ///   allProcesses array.  This is a variable-length array in the kernel.  It's
 ///   declared with definitive size here since this is the actual
 ///   implementationn backing.
 typedef struct HalProcessQueue {
-  const char        *name;
-  uint8_t            head;
-  uint8_t            tail;
-  uint8_t            numElements;
-  ProcessDescriptor *processes[NUM_PROCESSES];
+  const char         *name;
+  ProcessDescriptor **head;
+  ProcessDescriptor **tail;
+  ProcessDescriptor **end;
+  uint8_t             numElements;
+  ProcessDescriptor  *processes[NUM_PROCESSES];
 } HalProcessQueue;
 
 /// @var _kernelReadyQueue
