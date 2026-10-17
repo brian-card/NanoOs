@@ -69,6 +69,12 @@ extern "C"
 /// console process's stack.
 #define CONSOLE_NUM_BUFFERS 4
 
+/// @def HAL_CAPABILITY_BITMAP_SIZE
+///
+/// @brief The number of bytes in a ProcessDescriptor's halCapabilityBitmap.
+/// Hal.c verifies that this holds one bit for every HAL function.
+#define HAL_CAPABILITY_BITMAP_SIZE 8
+
 // Forward declarations from other headers
 typedef struct HalCapability HalCapability;
 typedef struct IpcCapability IpcCapability;
@@ -230,6 +236,8 @@ typedef struct ProcessQueue ProcessQueue;
 ///   with the HAL.  This will be NULL for PRIVILEGE_LEVEL_KERNEL processes.
 /// @param numHalCapabilities The number of HalCapability objects in the
 ///   halCapabilities array.
+/// @param halCapabilityBitmap One bit per HAL function, set for each function
+///   granted in halCapabilities.  Built by setProcessHalCapabilities.
 /// @param ipcCapabilities A pointer to a *SORTED* array of IpcCapability
 ///   objects that describe the message that the process is permitted to send to
 ///   other processes.  This will be NULL only for the scheduler process.
@@ -258,6 +266,7 @@ typedef struct ProcessDescriptor {
   void               *restartArgs;
   HalCapability      *halCapabilities;
   size_t              numHalCapabilities;
+  uint8_t             halCapabilityBitmap[HAL_CAPABILITY_BITMAP_SIZE];
   IpcCapability      *ipcCapabilities;
   size_t              numIpcCapabilities;
   bool                ipcCapabilitiesDynamic;
