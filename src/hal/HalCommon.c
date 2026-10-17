@@ -125,9 +125,10 @@ int callHal(HalSubsystem subsystem, uint32_t function, ...) {
     // process -- including the other PRIVILEGE_LEVEL_KERNEL ones (console,
     // memory manager, the SD-over-SPI card process) -- needs a real,
     // explicit grant in its own halCapabilities array.
+    uint8_t bit = halCapabilityBitBase[subsystem] + (uint8_t) function;
     if ((processDescriptor->processId != schedulerPid)
-      && (findHalCapability(processDescriptor->halCapabilities,
-        processDescriptor->numHalCapabilities, subsystem, function) == NULL)
+      && ((processDescriptor->halCapabilityBitmap[bit >> 3]
+        & (1 << (bit & 7))) == 0)
     ) {
       return -EACCES;
     }
@@ -805,8 +806,8 @@ BlockDevice* halCommonInitRootSdSpiStorage(
   processDescriptor->restartFunction = HAL->blockDevice->restart;
   processDescriptor->restartArgs = (void*)(intptr_t)0;
   if (sdCardHalCapabilities != NULL) {
-    processDescriptor->halCapabilities = sdCardHalCapabilities;
-    processDescriptor->numHalCapabilities = numSdCardHalCapabilities;
+    setProcessHalCapabilities(processDescriptor, sdCardHalCapabilities,
+      numSdCardHalCapabilities);
   }
   BlockDevice *sdDevice = (BlockDevice*) coroutineResume(
     processDescriptor->mainThread, NULL);
