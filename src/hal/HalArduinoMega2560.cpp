@@ -453,8 +453,8 @@ int arduinoAvrRestartBlockDevice(va_list args) {
   processDescriptor->name = "SD card";
   processDescriptor->userId = ROOT_USER_ID;
   if (sdCardHalCapabilities != NULL) {
-    processDescriptor->halCapabilities = sdCardHalCapabilities;
-    processDescriptor->numHalCapabilities = numSdCardHalCapabilities;
+    setProcessHalCapabilities(processDescriptor, sdCardHalCapabilities,
+      numSdCardHalCapabilities);
   }
 
   BlockDevice *sdDevice

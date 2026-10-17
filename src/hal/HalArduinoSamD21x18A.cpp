@@ -149,10 +149,13 @@ void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
 /// NanoOsOL" on real hardware, on the theory that the Arduino core/libraries
 /// were again writing into the bottom of the window.
 ///
+/// Raised from 0x200025C0 to 0x20002620 to make room for each process's HAL
+/// capability bitmap.
+///
 /// MUST be kept in sync with:
 ///   - __nanoos_overlay_window in ld/ArduinoSamd21FlashWithBootloader.ld
 ///   - OVERLAY_RAM ORIGIN      in usr/src/NanoOsArduinoSamd21.ld
-#define OVERLAY_ADDRESS 0x200025C0
+#define OVERLAY_ADDRESS 0x20002620
 
 /// @def OVERLAY_SIZE
 ///
@@ -1771,8 +1774,8 @@ int arduinoSamD21x18ARestartBlockDevice(va_list args) {
   processDescriptor->name = _sdCardName;
   processDescriptor->userId = ROOT_USER_ID;
   if (sdCardHalCapabilities != NULL) {
-    processDescriptor->halCapabilities = sdCardHalCapabilities;
-    processDescriptor->numHalCapabilities = numSdCardHalCapabilities;
+    setProcessHalCapabilities(processDescriptor, sdCardHalCapabilities,
+      numSdCardHalCapabilities);
   }
 
   BlockDevice *sdDevice

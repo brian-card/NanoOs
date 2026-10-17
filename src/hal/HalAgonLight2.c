@@ -1657,8 +1657,8 @@ int agonLight2RestartBlockDevice(va_list args) {
   processDescriptor->name = _sdCardName;
   processDescriptor->userId = ROOT_USER_ID;
   if (sdCardHalCapabilities != NULL) {
-    processDescriptor->halCapabilities = sdCardHalCapabilities;
-    processDescriptor->numHalCapabilities = numSdCardHalCapabilities;
+    setProcessHalCapabilities(processDescriptor, sdCardHalCapabilities,
+      numSdCardHalCapabilities);
   }
 
   BlockDevice *sdDevice
