@@ -73,7 +73,7 @@ elif [ "${platform}" = "AgonLight2" ]; then
 	if [ -n "${clangResourceDir}" ]; then
 		extraIncludes="${extraIncludes} -isystem ${clangResourceDir}/include"
 	fi
-	extraIncludes="${extraIncludes} -I$(pwd)/src/include/ez80-none-elf-clang"
+	extraIncludes="${extraIncludes} -I$(pwd)/src/kernel/libc/ez80-none-elf-clang -I$(pwd)/src/include/ez80-none-elf-clang"
 	libcSrc="$(pwd)/src/kernel/libc/ez80-none-elf-clang/stdatomic.c"
 	libcObjDir="$(pwd)/usr/obj/AgonLight2/libc"
 	extraLinks="--start-group -L${agonHome}/lib -lagon ${libcObjDir}/stdatomic.o --end-group"
