@@ -1159,6 +1159,61 @@ static FilesystemDriverInit _builtinFilesystemInitDriver;
 /// in restartBuiltinFilesystem.
 static const FilesystemCommandHandler *_builtinFilesystemCommandHandlers;
 
+/// @var filesystemHalCapabilities
+///
+/// @brief Array of HalCapability items granted specifically to the filesystem
+/// process.  It's the only process that needs direct access to
+/// HAL_MEMORY_ALL_PROCESSES: it captures the pointer at startup to access
+/// attributes (specifically environment variables) of processes at runtime.
+///
+/// @note findHalCapability() does an early-terminating linear search that
+/// assumes this array is sorted in ascending order of subsystemFunction (i.e.
+/// by (subsystem << 8) | function). Keep new entries in the correct sorted
+/// position, not just appended at the end.
+HalCapability filesystemHalCapabilities[] = {
+  {
+    .subsystemFunction = (((uint16_t) HAL_MEMORY) << 8)
+      | HAL_MEMORY_STATIC_LOGS,
+    .deviceIds =         0x01, // Device 0: no device for this function
+  },
+  {
+    .subsystemFunction = (((uint16_t) HAL_MEMORY) << 8)
+      | HAL_MEMORY_LOG_BUFFER,
+    .deviceIds =         0x01, // Device 0: no device for this function
+  },
+  {
+    .subsystemFunction = (((uint16_t) HAL_MEMORY) << 8)
+      | HAL_MEMORY_ALL_PROCESSES,
+    .deviceIds =         0x01, // Device 0: no device for this function
+  },
+  {
+    .subsystemFunction = (((uint16_t) HAL_UART) << 8)
+      | HAL_UART_WRITE,
+    .deviceIds =         0x03, // Bitmask for device IDs 0 and 1
+  },
+  {
+    .subsystemFunction = (((uint16_t) HAL_UART) << 8)
+      | HAL_UART_IS_CONSOLE,
+    .deviceIds =         0x03, // Bitmask for device IDs 0 and 1
+  },
+  {
+    .subsystemFunction = (((uint16_t) HAL_CLOCK) << 8)
+      | HAL_CLOCK_GET_ELAPSED_MILLISECONDS,
+    .deviceIds =         0x01, // Device 0: no device for this function
+  },
+  {
+    .subsystemFunction = (((uint16_t) HAL_CLOCK) << 8)
+      | HAL_CLOCK_GET_ELAPSED_MICROSECONDS,
+    .deviceIds =         0x01, // Device 0: no device for this function
+  },
+  {
+    .subsystemFunction = (((uint16_t) HAL_CLOCK) << 8)
+      | HAL_CLOCK_GET_ELAPSED_NANOSECONDS,
+    .deviceIds =         0x01, // Device 0: no device for this function
+  },
+};
+
+
 /// @fn int restartBuiltinFilesystem(ProcessDescriptor *processDescriptor)
 ///
 /// @brief Restart the filesystem process built into the OS image using the
@@ -1194,6 +1249,8 @@ int restartBuiltinFilesystem(ProcessDescriptor *processDescriptor) {
   processDescriptor->name = _filesystemName;
   processDescriptor->userId = ROOT_USER_ID;
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
+  setProcessHalCapabilities(processDescriptor, filesystemHalCapabilities,
+    sizeof(filesystemHalCapabilities) / sizeof(filesystemHalCapabilities[0]));
   processDescriptor->restartFunction = restartBuiltinFilesystem;
   processDescriptor->callOverlayFunction = callOverlayFunctionFromBlockDevice;
   processQueuePush(processDescriptor->readyQueue, processDescriptor);
@@ -1253,6 +1310,8 @@ int restartOverlayFilesystem(ProcessDescriptor *processDescriptor) {
   processDescriptor->name = _filesystemName;
   processDescriptor->userId = ROOT_USER_ID;
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
+  setProcessHalCapabilities(processDescriptor, filesystemHalCapabilities,
+    sizeof(filesystemHalCapabilities) / sizeof(filesystemHalCapabilities[0]));
   processDescriptor->restartFunction = restartOverlayFilesystem;
   processDescriptor->callOverlayFunction = callOverlayFunctionFromBlockDevice;
   processQueuePush(processDescriptor->readyQueue, processDescriptor);
@@ -1336,6 +1395,8 @@ int restartContiguousFilesystem(ProcessDescriptor *processDescriptor) {
   processDescriptor->name = _filesystemName;
   processDescriptor->userId = ROOT_USER_ID;
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
+  setProcessHalCapabilities(processDescriptor, filesystemHalCapabilities,
+    sizeof(filesystemHalCapabilities) / sizeof(filesystemHalCapabilities[0]));
   processDescriptor->restartFunction = restartContiguousFilesystem;
   processDescriptor->callOverlayFunction = NULL;
   processQueuePush(processDescriptor->readyQueue, processDescriptor);

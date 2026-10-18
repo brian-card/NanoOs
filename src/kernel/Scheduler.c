@@ -427,60 +427,6 @@ HalCapability baseExecutiveHalCapabilities[] = {
   },
 };
 
-/// @var loggerHalCapabilities
-///
-/// @brief Array of HalCapability items granted specifically to the logger
-/// process.  It's the only process that needs direct access to
-/// HAL_MEMORY_STATIC_LOGS/HAL_MEMORY_LOG_BUFFER: it reads staticLogs at
-/// startup to flush messages logged before it existed (see
-/// usr/src/commands/logger/main/main.c), and uses logBuffer to format them.
-/// No other executive or user process talks to the logger this way -- they
-/// just send it IPC messages -- so this is kept separate from
-/// baseExecutiveHalCapabilities rather than extending that (and
-/// baseUserHalCapabilities) for every process.
-///
-/// @note findHalCapability() does an early-terminating linear search that
-/// assumes this array is sorted in ascending order of subsystemFunction (i.e.
-/// by (subsystem << 8) | function). Keep new entries in the correct sorted
-/// position, not just appended at the end.
-HalCapability loggerHalCapabilities[] = {
-  {
-    .subsystemFunction = (((uint16_t) HAL_MEMORY) << 8)
-      | HAL_MEMORY_STATIC_LOGS,
-    .deviceIds =         0x01, // Device 0: no device for this function
-  },
-  {
-    .subsystemFunction = (((uint16_t) HAL_MEMORY) << 8)
-      | HAL_MEMORY_LOG_BUFFER,
-    .deviceIds =         0x01, // Device 0: no device for this function
-  },
-  {
-    .subsystemFunction = (((uint16_t) HAL_UART) << 8)
-      | HAL_UART_WRITE,
-    .deviceIds =         0x03, // Bitmask for device IDs 0 and 1
-  },
-  {
-    .subsystemFunction = (((uint16_t) HAL_UART) << 8)
-      | HAL_UART_IS_CONSOLE,
-    .deviceIds =         0x03, // Bitmask for device IDs 0 and 1
-  },
-  {
-    .subsystemFunction = (((uint16_t) HAL_CLOCK) << 8)
-      | HAL_CLOCK_GET_ELAPSED_MILLISECONDS,
-    .deviceIds =         0x01, // Device 0: no device for this function
-  },
-  {
-    .subsystemFunction = (((uint16_t) HAL_CLOCK) << 8)
-      | HAL_CLOCK_GET_ELAPSED_MICROSECONDS,
-    .deviceIds =         0x01, // Device 0: no device for this function
-  },
-  {
-    .subsystemFunction = (((uint16_t) HAL_CLOCK) << 8)
-      | HAL_CLOCK_GET_ELAPSED_NANOSECONDS,
-    .deviceIds =         0x01, // Device 0: no device for this function
-  },
-};
-
 /// @var baseUserHalCapabilities
 ///
 /// @brief Array of HalCapability items that describe what a process can do
@@ -4873,8 +4819,9 @@ int restartLogger(ProcessDescriptor *processDescriptor) {
   logDebug("In restartLogger\n");
   logDebug("Starting logger\n");
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
-  setProcessHalCapabilities(processDescriptor, loggerHalCapabilities,
-    sizeof(loggerHalCapabilities) / sizeof(loggerHalCapabilities[0]));
+  setProcessHalCapabilities(processDescriptor, baseExecutiveHalCapabilities,
+    sizeof(baseExecutiveHalCapabilities)
+    / sizeof(baseExecutiveHalCapabilities[0]));
   processDescriptor->readyQueue
     = _schedulerState->readyQueues[processDescriptor->privilegeLevel];
   int returnValue = schedulerRunOverlayCommand(processDescriptor,
