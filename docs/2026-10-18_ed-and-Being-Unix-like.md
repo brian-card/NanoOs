@@ -4,7 +4,7 @@ When I first started this effort almost two years ago, I had two goals:
 1. Create a multi-user system that would run on Arduino
 2. Create a system similar to early Unix on similar hardware
 
-I achieved the first goal [about a month after I started](2024-12-19_Multiple-Concurrent-Users.html).  I've been working toward the second one since then.
+I achieved the first goal [about a month after I started](2024-12-19_Multiple-Concurrent-Users.md).  I've been working toward the second one since then.
 
 The thing is, though, that I never really defined what "similar to early Unix" meant.   Early Unix had a monolithic kernel and I definitely wasn't going that route.  I've spent most of the past two years working on bringing infrastructure to make Unix-like infrastructure possible.  I haven't really spent much time on functionality (i.e. applications), nor do I want to.  The larger goal here is to learn about kernel development and implementing commands that are well-trodden doesn't really do anything to satisfy that goal.
 
