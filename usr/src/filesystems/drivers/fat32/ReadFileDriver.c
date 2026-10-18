@@ -95,7 +95,6 @@ int driverFread(
   }
 
   FilesystemState    *fs = ds->filesystemState;
-  BlockDevice *bd = fs->blockDevice;
 
   uint8_t  *dest      = (uint8_t *) ptr;
   uint32_t  totalRead = 0;
@@ -147,8 +146,7 @@ int driverFread(
       fat32ClusterToLba(ds, handle->currentCluster) + sectorInCluster;
 
     // Read one sector into the shared block buffer.
-    int ioResult = bd->readBlocks(
-      bd->context, lba, 1, bd->blockSize, fs->blockBuffer);
+    int ioResult = fat32ReadBlockBuffer(fs, lba);
     if (ioResult != 0) {
       return (totalRead > 0) ? (int) totalRead : FAT32_ERROR;
     }

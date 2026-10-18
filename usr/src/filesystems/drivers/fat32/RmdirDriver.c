@@ -56,7 +56,6 @@ static int fat32CheckDirectoryEmpty(
     uint32_t firstCluster
 ) {
   FilesystemState *fs = ds->filesystemState;
-  BlockDevice     *bd = fs->blockDevice;
   uint32_t entriesPerSector = ds->bytesPerSector / FAT32_DIRECTORY_ENTRY_SIZE;
   uint32_t currentCluster = firstCluster;
 
@@ -65,8 +64,7 @@ static int fat32CheckDirectoryEmpty(
   ) {
     uint32_t clusterLba = fat32ClusterToLba(ds, currentCluster);
     for (uint8_t sector = 0; sector < ds->sectorsPerCluster; sector++) {
-      if (bd->readBlocks(bd->context, clusterLba + sector, 1,
-        bd->blockSize, fs->blockBuffer) != 0
+      if (fat32ReadBlockBuffer(fs, clusterLba + sector) != 0
       ) {
         return FAT32_ERROR;
       }

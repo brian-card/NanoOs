@@ -52,15 +52,13 @@
 /// and filesystemState->args will be set to FAT32_SUCCESS.  On failure,
 /// filesystemState->args will be set to the appropriate FAT32 error code.
 FilesystemState* filesystemInitDriver(FilesystemState *filesystemState) {
-  BlockDevice *blockDevice = filesystemState->blockDevice;
+
+  // getPartitionInfoImpl reads into the block buffer without tracking it.
+  fat32InvalidateBlockBuffer(filesystemState);
 
   // Read the partition's boot sector into the pre-allocated block buffer.
-  int returnValue = blockDevice->readBlocks(
-    blockDevice->context,
-    filesystemState->startLba,
-    1,
-    blockDevice->blockSize,
-    filesystemState->blockBuffer);
+  int returnValue
+    = fat32ReadBlockBuffer(filesystemState, filesystemState->startLba);
   if (returnValue != 0) {
     filesystemState->args = ((void*) FAT32_ERROR);
     return filesystemState;
@@ -148,9 +146,8 @@ FilesystemState* filesystemInitDriver(FilesystemState *filesystemState) {
   // Start cluster searches at the FSInfo sector's next-free hint when it is
   // present and in range.  The hint is advisory, so any value is safe.
   driverState->nextFreeCluster = FAT32_CLUSTER_FIRST_VALID;
-  if (blockDevice->readBlocks(blockDevice->context,
-    filesystemState->startLba + bpbFsInfoSector, 1,
-    blockDevice->blockSize, filesystemState->blockBuffer) == 0
+  if (fat32ReadBlockBuffer(filesystemState,
+    filesystemState->startLba + bpbFsInfoSector) == 0
   ) {
     Fat32FsInfoSector *fsInfo
       = (Fat32FsInfoSector*) filesystemState->blockBuffer;

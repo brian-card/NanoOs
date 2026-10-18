@@ -115,7 +115,6 @@ int driverFwrite(
   }
 
   FilesystemState    *fs = ds->filesystemState;
-  BlockDevice *bd = fs->blockDevice;
 
   const uint8_t *src          = (const uint8_t *) ptr;
   uint32_t       totalWritten = 0;
@@ -177,18 +176,17 @@ int driverFwrite(
     // If the write does not cover the entire sector we must preserve the
     // existing content by reading the sector first.
     if ((offsetInSector != 0) || (toCopy < ds->bytesPerSector)) {
-      int ioResult = bd->readBlocks(
-        bd->context, lba, 1, bd->blockSize, fs->blockBuffer);
+      int ioResult = fat32ReadBlockBuffer(fs, lba);
       if (ioResult != 0) {
         return (totalWritten > 0) ? (int) totalWritten : FAT32_ERROR;
       }
     }
 
     // Copy the caller's data into the block buffer and write the sector.
+    fat32InvalidateBlockBuffer(fs);
     memcpy(fs->blockBuffer + offsetInSector, src + totalWritten, toCopy);
 
-    int ioResult = bd->writeBlocks(
-      bd->context, lba, 1, bd->blockSize, fs->blockBuffer);
+    int ioResult = fat32WriteBlockBuffer(fs, lba);
     if (ioResult != 0) {
       return (totalWritten > 0) ? (int) totalWritten : FAT32_ERROR;
     }

@@ -543,6 +543,60 @@ static inline void fat32FormatShortName(
 
 ///////////////////////////////////////////////////////////////////////////////
 ///
+/// @brief Read one block into the shared blockBuffer, skipping the device
+///        read when blockBuffer already holds that block.
+///
+/// @param fs   Pointer to the FilesystemState that owns blockBuffer.
+/// @param lba  The address of the block to read.
+///
+/// @return 0 on success, or the nonzero value returned by readBlocks.
+///
+static inline int fat32ReadBlockBuffer(FilesystemState *fs, uint32_t lba) {
+  if ((fs->blockBufferValid == true) && (fs->blockBufferLba == lba)) {
+    return 0;
+  }
+
+  BlockDevice *bd = fs->blockDevice;
+  int result = bd->readBlocks(
+    bd->context, lba, 1, bd->blockSize, fs->blockBuffer);
+  fs->blockBufferLba = lba;
+  fs->blockBufferValid = (result == 0);
+  return result;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+///
+/// @brief Write the shared blockBuffer to one block.  blockBuffer holds no
+///        block afterward because SPI block devices exchange the buffer with
+///        the card's responses as they send it.
+///
+/// @param fs   Pointer to the FilesystemState that owns blockBuffer.
+/// @param lba  The address of the block to write.
+///
+/// @return 0 on success, or the nonzero value returned by writeBlocks.
+///
+static inline int fat32WriteBlockBuffer(FilesystemState *fs, uint32_t lba) {
+  fs->blockBufferValid = false;
+  BlockDevice *bd = fs->blockDevice;
+  return bd->writeBlocks(
+    bd->context, lba, 1, bd->blockSize, fs->blockBuffer);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+///
+/// @brief Mark the shared blockBuffer as not holding any block.  Call this
+///        before modifying blockBuffer in memory.
+///
+/// @param fs  Pointer to the FilesystemState that owns blockBuffer.
+///
+/// @return This function returns no value.
+///
+static inline void fat32InvalidateBlockBuffer(FilesystemState *fs) {
+  fs->blockBufferValid = false;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+///
 /// @brief Read a single FAT (File Allocation Table) entry for the given
 ///        cluster.
 ///
@@ -560,15 +614,13 @@ static inline int fat32ReadFatEntry(
     uint32_t *value
 ) {
   FilesystemState    *fs = ds->filesystemState;
-  BlockDevice *bd = fs->blockDevice;
 
   uint32_t fatByteOffset = cluster * sizeof(uint32_t);
   uint32_t fatSector = ds->fatStartSector
     + (fatByteOffset / ds->bytesPerSector);
   uint32_t offsetInSector = fatByteOffset % ds->bytesPerSector;
 
-  int result = bd->readBlocks(
-    bd->context, fatSector, 1, bd->blockSize, fs->blockBuffer);
+  int result = fat32ReadBlockBuffer(fs, fatSector);
   if (result != 0) {
     return FAT32_ERROR;
   }
@@ -611,7 +663,6 @@ static inline int fat32SearchDirectoryN(
     Fat32DirSearchResult *result
 ) {
   FilesystemState    *fs = ds->filesystemState;
-  BlockDevice *bd = fs->blockDevice;
 
   // The LFN assembly buffer is allocated on demand when the first fragment
   // of a long-name sequence is encountered, sized to (ordinal * 13 + 1) bytes
@@ -651,9 +702,7 @@ static inline int fat32SearchDirectoryN(
         (sector < ds->sectorsPerCluster) && !done;
         sector++) {
 
-      int readResult = bd->readBlocks(
-        bd->context, clusterLba + sector, 1,
-        bd->blockSize, fs->blockBuffer);
+      int readResult = fat32ReadBlockBuffer(fs, clusterLba + sector);
       if (readResult != 0) {
         status = FAT32_ERROR;
         done = true;
@@ -1063,7 +1112,6 @@ static inline int fat32ReadDirectoryEntry(
     Fat32DirHandle *handle
 ) {
   FilesystemState    *fs = ds->filesystemState;
-  BlockDevice *bd = fs->blockDevice;
 
   // Set when handle->entry->d_name holds the long name assembled so far.
   bool lfnActive = false;
@@ -1086,9 +1134,7 @@ static inline int fat32ReadDirectoryEntry(
         (sector < ds->sectorsPerCluster) && !done;
         sector++) {
 
-      int readResult = bd->readBlocks(
-        bd->context, clusterLba + sector, 1,
-        bd->blockSize, fs->blockBuffer);
+      int readResult = fat32ReadBlockBuffer(fs, clusterLba + sector);
       if (readResult != 0) {
         status = FAT32_ERROR;
         done = true;
@@ -1233,7 +1279,6 @@ static inline int fat32WriteFatEntry(
     uint32_t value
 ) {
   FilesystemState *fs = ds->filesystemState;
-  BlockDevice     *bd = fs->blockDevice;
 
   uint32_t fatByteOffset = cluster * sizeof(uint32_t);
   uint32_t fatSector = ds->fatStartSector
@@ -1241,8 +1286,7 @@ static inline int fat32WriteFatEntry(
   uint32_t offsetInSector = fatByteOffset % ds->bytesPerSector;
 
   // Read the sector containing the target FAT entry.
-  int result = bd->readBlocks(
-    bd->context, fatSector, 1, bd->blockSize, fs->blockBuffer);
+  int result = fat32ReadBlockBuffer(fs, fatSector);
   if (result != 0) {
     return FAT32_ERROR;
   }
@@ -1252,11 +1296,11 @@ static inline int fat32WriteFatEntry(
   memcpy(&existing, fs->blockBuffer + offsetInSector, sizeof(uint32_t));
   uint32_t updated = (existing & ~FAT32_FAT_ENTRY_MASK)
     | (value & FAT32_FAT_ENTRY_MASK);
+  fat32InvalidateBlockBuffer(fs);
   memcpy(fs->blockBuffer + offsetInSector, &updated, sizeof(uint32_t));
 
   // Write the modified sector back.
-  result = bd->writeBlocks(
-    bd->context, fatSector, 1, bd->blockSize, fs->blockBuffer);
+  result = fat32WriteBlockBuffer(fs, fatSector);
   if (result != 0) {
     return FAT32_ERROR;
   }
@@ -1266,13 +1310,11 @@ static inline int fat32WriteFatEntry(
     uint32_t mirrorSector = fatSector + ds->fatSizeInSectors;
     // Re-read the block buffer (the write call may not guarantee it is still
     // valid on all block devices).
-    result = bd->readBlocks(
-      bd->context, fatSector, 1, bd->blockSize, fs->blockBuffer);
+    result = fat32ReadBlockBuffer(fs, fatSector);
     if (result != 0) {
       return FAT32_ERROR;
     }
-    result = bd->writeBlocks(
-      bd->context, mirrorSector, 1, bd->blockSize, fs->blockBuffer);
+    result = fat32WriteBlockBuffer(fs, mirrorSector);
     if (result != 0) {
       return FAT32_ERROR;
     }
@@ -1335,23 +1377,21 @@ static inline int fat32WriteDirectoryEntry(
     const Fat32DirectoryEntry *entry
 ) {
   FilesystemState *fs = ds->filesystemState;
-  BlockDevice     *bd = fs->blockDevice;
 
   uint32_t sectorIndex   = offsetInCluster / ds->bytesPerSector;
   uint32_t offsetInSector = offsetInCluster % ds->bytesPerSector;
   uint32_t lba = fat32ClusterToLba(ds, dirCluster) + sectorIndex;
 
-  int result = bd->readBlocks(
-    bd->context, lba, 1, bd->blockSize, fs->blockBuffer);
+  int result = fat32ReadBlockBuffer(fs, lba);
   if (result != 0) {
     return FAT32_ERROR;
   }
 
+  fat32InvalidateBlockBuffer(fs);
   memcpy(fs->blockBuffer + offsetInSector, entry,
     sizeof(Fat32DirectoryEntry));
 
-  result = bd->writeBlocks(
-    bd->context, lba, 1, bd->blockSize, fs->blockBuffer);
+  result = fat32WriteBlockBuffer(fs, lba);
   if (result != 0) {
     return FAT32_ERROR;
   }
@@ -1667,7 +1707,6 @@ static inline int fat32FindFreeDirectorySlots(
     uint32_t *foundOffset
 ) {
   FilesystemState *fs = ds->filesystemState;
-  BlockDevice     *bd = fs->blockDevice;
 
   uint32_t runStart       = 0;
   uint32_t runCluster     = dirCluster;
@@ -1681,9 +1720,7 @@ static inline int fat32FindFreeDirectorySlots(
     uint32_t clusterLba = fat32ClusterToLba(ds, currentCluster);
 
     for (uint8_t sector = 0; sector < ds->sectorsPerCluster; sector++) {
-      int readResult = bd->readBlocks(
-        bd->context, clusterLba + sector, 1,
-        bd->blockSize, fs->blockBuffer);
+      int readResult = fat32ReadBlockBuffer(fs, clusterLba + sector);
       if (readResult != 0) {
         return FAT32_ERROR;
       }
@@ -1808,7 +1845,6 @@ static inline int fat32CreateFileEntry(
 
   // --- Write the LFN entries (highest ordinal first) ---
   FilesystemState *fs = ds->filesystemState;
-  BlockDevice     *bd = fs->blockDevice;
 
   // We need to write totalSlots consecutive 32-byte entries starting at
   // (slotCluster, slotOffset).  Iterate entry by entry, reading the sector
@@ -1826,8 +1862,7 @@ static inline int fat32CreateFileEntry(
     uint32_t offsetInSector = writeOffset % ds->bytesPerSector;
     uint32_t lba = fat32ClusterToLba(ds, writeCluster) + sectorIndex;
 
-    int ioResult = bd->readBlocks(
-      bd->context, lba, 1, bd->blockSize, fs->blockBuffer);
+    int ioResult = fat32ReadBlockBuffer(fs, lba);
     if (ioResult != 0) {
       returnValue = FAT32_ERROR;
       break;
@@ -1876,6 +1911,7 @@ static inline int fat32CreateFileEntry(
         memcpy(lfn.name3, &chars[11], 2 * sizeof(uint16_t));
       }
 
+      fat32InvalidateBlockBuffer(fs);
       memcpy(fs->blockBuffer + offsetInSector, &lfn, sizeof(Fat32LfnEntry));
     } else {
       // Short directory entry.
@@ -1883,6 +1919,7 @@ static inline int fat32CreateFileEntry(
       memcpy(shortEntry.name, shortName, FAT32_SHORT_NAME_LENGTH);
       shortEntry.ntReserved = 0;
 
+      fat32InvalidateBlockBuffer(fs);
       memcpy(fs->blockBuffer + offsetInSector,
         &shortEntry, sizeof(Fat32DirectoryEntry));
 
@@ -1900,8 +1937,7 @@ static inline int fat32CreateFileEntry(
       }
     }
 
-    ioResult = bd->writeBlocks(
-      bd->context, lba, 1, bd->blockSize, fs->blockBuffer);
+    ioResult = fat32WriteBlockBuffer(fs, lba);
     if (ioResult != 0) {
       returnValue = FAT32_ERROR;
       break;
@@ -2055,7 +2091,6 @@ static inline int fat32AllocateCluster(
     uint32_t *newCluster
 ) {
   FilesystemState *fs = ds->filesystemState;
-  BlockDevice     *bd = fs->blockDevice;
   uint16_t entriesPerSector = ds->bytesPerSector / sizeof(uint32_t);
   uint32_t endCluster = FAT32_CLUSTER_FIRST_VALID + ds->totalDataClusters;
   uint32_t numSectors = (endCluster + entriesPerSector - 1) / entriesPerSector;
@@ -2070,8 +2105,7 @@ static inline int fat32AllocateCluster(
       sectorIndex = 0;
     }
     uint32_t sectorFirst = sectorIndex * entriesPerSector;
-    if (bd->readBlocks(bd->context, ds->fatStartSector + sectorIndex, 1,
-      bd->blockSize, fs->blockBuffer) != 0
+    if (fat32ReadBlockBuffer(fs, ds->fatStartSector + sectorIndex) != 0
     ) {
       return FAT32_ERROR;
     }
@@ -2162,7 +2196,6 @@ static inline int fat32InvalidateDirectoryEntries(
   uint8_t checksum = fat32ShortNameChecksum(target->entry.name);
 
   FilesystemState    *fs = ds->filesystemState;
-  BlockDevice *bd = fs->blockDevice;
 
   // A 255-character file name requires at most ceil(255 / 13) = 20 LFN
   // entries.  We track their (cluster, offsetInCluster) positions so that
@@ -2187,9 +2220,7 @@ static inline int fat32InvalidateDirectoryEntries(
         (sector < ds->sectorsPerCluster) && !done;
         sector++) {
 
-      int ioResult = bd->readBlocks(
-        bd->context, clusterLba + sector, 1,
-        bd->blockSize, fs->blockBuffer);
+      int ioResult = fat32ReadBlockBuffer(fs, clusterLba + sector);
       if (ioResult != 0) {
         return FAT32_ERROR;
       }
@@ -2251,10 +2282,9 @@ static inline int fat32InvalidateDirectoryEntries(
         ) {
           // This is the target.  Mark it as deleted in the buffer that is
           // still loaded from the most recent readBlocks.
+          fat32InvalidateBlockBuffer(fs);
           fs->blockBuffer[entryByteOffset] = FAT32_ENTRY_FREE;
-          ioResult = bd->writeBlocks(
-            bd->context, clusterLba + sector, 1,
-            bd->blockSize, fs->blockBuffer);
+          ioResult = fat32WriteBlockBuffer(fs, clusterLba + sector);
           if (ioResult != 0) {
             return FAT32_ERROR;
           }
@@ -2268,16 +2298,15 @@ static inline int fat32InvalidateDirectoryEntries(
             uint32_t lfnLba =
               fat32ClusterToLba(ds, runClusters[li]) + lfnSectorIdx;
 
-            ioResult = bd->readBlocks(
-              bd->context, lfnLba, 1, bd->blockSize, fs->blockBuffer);
+            ioResult = fat32ReadBlockBuffer(fs, lfnLba);
             if (ioResult != 0) {
               return FAT32_ERROR;
             }
 
+            fat32InvalidateBlockBuffer(fs);
             fs->blockBuffer[lfnOffInSec] = FAT32_ENTRY_FREE;
 
-            ioResult = bd->writeBlocks(
-              bd->context, lfnLba, 1, bd->blockSize, fs->blockBuffer);
+            ioResult = fat32WriteBlockBuffer(fs, lfnLba);
             if (ioResult != 0) {
               return FAT32_ERROR;
             }

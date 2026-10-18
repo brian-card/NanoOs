@@ -73,7 +73,6 @@ int driverFclose(void *driverState, void *fileHandle) {
   // the on-disk directory entry.
   if (handle->canWrite) {
     FilesystemState    *fs = ds->filesystemState;
-    BlockDevice *bd = fs->blockDevice;
 
     // Compute the sector that contains the short directory entry.
     uint32_t sectorIndex =
@@ -84,11 +83,11 @@ int driverFclose(void *driverState, void *fileHandle) {
       fat32ClusterToLba(ds, handle->directoryCluster) + sectorIndex;
 
     // Read the sector, patch the entry, and write it back.
-    int ioResult = bd->readBlocks(
-      bd->context, lba, 1, bd->blockSize, fs->blockBuffer);
+    int ioResult = fat32ReadBlockBuffer(fs, lba);
     if (ioResult != 0) {
       result = FAT32_ERROR;
     } else {
+      fat32InvalidateBlockBuffer(fs);
       Fat32DirectoryEntry *entry =
         (Fat32DirectoryEntry *) (fs->blockBuffer + offsetInSector);
 
@@ -103,8 +102,7 @@ int driverFclose(void *driverState, void *fileHandle) {
       memcpy(&entry->firstClusterLow, &entryClusterLow,
         sizeof(uint16_t));
 
-      ioResult = bd->writeBlocks(
-        bd->context, lba, 1, bd->blockSize, fs->blockBuffer);
+      ioResult = fat32WriteBlockBuffer(fs, lba);
       if (ioResult != 0) {
         result = FAT32_ERROR;
       }

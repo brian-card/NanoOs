@@ -167,6 +167,7 @@ int driverFormat(
   if ((bd == NULL) || (filesystemState->blockBuffer == NULL)) {
     return FAT32_INVALID_PARAMETER;
   }
+  fat32InvalidateBlockBuffer(filesystemState);
 
   // ---- Derive basic geometry ----
   uint16_t bytesPerSector = (uint16_t) bd->blockSize;
@@ -366,17 +367,15 @@ int driverFormat(
   }
 
   // Write boot sector.
-  int result = bd->writeBlocks(
-    bd->context, filesystemState->startLba, 1, bd->blockSize,
-    filesystemState->blockBuffer);
+  int result = fat32WriteBlockBuffer(filesystemState,
+    filesystemState->startLba);
   if (result != 0) {
     return FAT32_ERROR;
   }
 
   // Write backup boot sector at sector 6 of the partition.
-  result = bd->writeBlocks(
-    bd->context, filesystemState->startLba + backupBootSector,
-    1, bd->blockSize, filesystemState->blockBuffer);
+  result = fat32WriteBlockBuffer(filesystemState,
+    filesystemState->startLba + backupBootSector);
   if (result != 0) {
     return FAT32_ERROR;
   }
@@ -405,10 +404,8 @@ int driverFormat(
     memcpy(&fsi->trailSignature,  &trailSig,  sizeof(uint32_t));
   }
 
-  result = bd->writeBlocks(
-    bd->context,
-    filesystemState->startLba + fsInfoSector,
-    1, bd->blockSize, filesystemState->blockBuffer);
+  result = fat32WriteBlockBuffer(filesystemState,
+    filesystemState->startLba + fsInfoSector);
   if (result != 0) {
     return FAT32_ERROR;
   }
@@ -422,9 +419,8 @@ int driverFormat(
     if (s == backupBootSector) {
       continue;  // Already written above.
     }
-    result = bd->writeBlocks(
-      bd->context, filesystemState->startLba + s,
-      1, bd->blockSize, filesystemState->blockBuffer);
+    result = fat32WriteBlockBuffer(filesystemState,
+      filesystemState->startLba + s);
     if (result != 0) {
       return FAT32_ERROR;
     }
@@ -458,9 +454,7 @@ int driverFormat(
         memcpy(filesystemState->blockBuffer + 8, &entry2, sizeof(uint32_t));
       }
 
-      result = bd->writeBlocks(
-        bd->context, thisFatStart + sector, 1, bd->blockSize,
-        filesystemState->blockBuffer);
+      result = fat32WriteBlockBuffer(filesystemState, thisFatStart + sector);
       if (result != 0) {
         return FAT32_ERROR;
       }
@@ -479,9 +473,7 @@ int driverFormat(
 
     memset(filesystemState->blockBuffer, 0, bytesPerSector);
     for (uint8_t s = 0; s < sectorsPerCluster; s++) {
-      result = bd->writeBlocks(
-        bd->context, rootLba + s, 1, bd->blockSize,
-        filesystemState->blockBuffer);
+      result = fat32WriteBlockBuffer(filesystemState, rootLba + s);
       if (result != 0) {
         return FAT32_ERROR;
       }

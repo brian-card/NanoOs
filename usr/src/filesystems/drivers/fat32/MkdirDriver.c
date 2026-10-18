@@ -59,7 +59,6 @@ static int fat32WriteEmptyDirectory(
     const Fat32DirectoryEntry *dirEntry
 ) {
   FilesystemState *fs = ds->filesystemState;
-  BlockDevice     *bd = fs->blockDevice;
   uint16_t clusterHigh;
   uint16_t clusterLow;
   memcpy(&clusterHigh, &dirEntry->firstClusterHigh, sizeof(uint16_t));
@@ -67,6 +66,7 @@ static int fat32WriteEmptyDirectory(
   uint32_t lba = fat32ClusterToLba(ds,
     ((uint32_t) clusterHigh << 16) | clusterLow);
 
+  fat32InvalidateBlockBuffer(fs);
   for (uint8_t sector = 0; sector < ds->sectorsPerCluster; sector++) {
     memset(fs->blockBuffer, 0, ds->bytesPerSector);
     if (sector == 0) {
@@ -88,8 +88,7 @@ static int fat32WriteEmptyDirectory(
         &entry, sizeof(entry));
     }
 
-    if (bd->writeBlocks(bd->context, lba + sector, 1,
-      bd->blockSize, fs->blockBuffer) != 0
+    if (fat32WriteBlockBuffer(fs, lba + sector) != 0
     ) {
       return FAT32_ERROR;
     }

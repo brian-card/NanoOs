@@ -103,9 +103,7 @@ int driverIstat(
   }
 
   FilesystemState *fs = ds->filesystemState;
-  BlockDevice     *bd = fs->blockDevice;
-  int ioResult = bd->readBlocks(bd->context, lba, 1, bd->blockSize,
-    fs->blockBuffer);
+  int ioResult = fat32ReadBlockBuffer(fs, lba);
   if (ioResult != 0) {
     *errorNumber = fat32ErrorToErrno(FAT32_ERROR);
     return -1;
