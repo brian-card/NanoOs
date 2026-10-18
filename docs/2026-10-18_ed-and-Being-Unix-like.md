@@ -1,0 +1,33 @@
+# 18-Oct-2026 - `ed` and Being "Unix-like"
+
+When I first started this effort almost two years ago, I had two goals:
+1. Create a multi-user system that would run on Arduino
+2. Create a system similar to early Unix on similar hardware
+
+I achieved the first goal [about a month after I started](2024-12-19_Multiple-Concurrent-Users.html).  I've been working toward the second one since then.
+
+The thing is, though, that I never really defined what "similar to early Unix" meant.   Early Unix had a monolithic kernel and I definitely wasn't going that route.  I've spent most of the past two years working on bringing infrastructure to make Unix-like infrastructure possible.  I haven't really spent much time on functionality (i.e. applications), nor do I want to.  The larger goal here is to learn about kernel development and implementing commands that are well-trodden doesn't really do anything to satisfy that goal.
+
+As I mentioned [in my last update](2026-10-06_ll.md), I figured the last thing I really needed to prove out was being able to edit a file since that was really the main purpose behind inventing Unix in the first place.  The simplest, easiest way I could think of to reach that goal was to implement most of an `ed` command.  I say "most of" because I didn't want to get into regular expressions for this work.  My goal is much simpler than that.
+
+Even doing that much, though, turned into a much larger effort than I thought it would be.  The reason was something I hadn't anticipated:  Temporary files.  The command needed to be able to run on my Arduino, which only has something like 2 KB of available dynamic memory at this point.  That meant that holding buffers in memory was not going to happen.  The alternative was to put the edits into a temporary file under `/tmp`.  That raised a problem, though:  The `/tmp` directory didn't yet exist on my images.  That meant that the command itself would need to be able to create a directory, and there was no way to do that in the filesystem driver.  I had Claude implement the `rename`, `mkdir`, and `rmdir` POSIX calls, along with a basic way to create a file without overhead.  With that much in place, I had it draft the basics of `ed`, minus anything that required regular expression support.  This, however, became the beginning of a slog, not the end of a simple command addition.  The first time I attempted to save a file from ed with `wq`, it took over **400 SECONDS!!!**  Aaaahhh!!!
+
+** \*A note about using LLMs to generate code\* **  You have to test what it produces.  You absolutely cannot trust that what it makes is usable.  In my experience, its first pass is always wrong.  On top of that, you really have to be very methodical about test-drive development with it.  If you're not doing that and making sure that you have a good regression test suite to make sure it's not breaking things along the way, you're toast.  The FAT32 driver that I had Claude make for me was before I was religous about these things and it's been a bit piecemeal as I've figured out how to support filesystems on various platforms.  That's why I got burned by this.  Lesson learned for me this round, but beware for your own code.
+
+It turned out that Claude's first pass implementation for FAT32 was pretty naive.  It did MANY redundant reads from the SD card, which was the bulk of what was taking so long.  It was also starting from the very beginning of the disk each time it did a search for a free cluster rather than using the filesystem's next free cluster hint.  Cutting all the redundancy out and starting from a sensible place in a search got the writes down to about 4 seconds.  That was still unacceptable for me, though.  For one thing, it was just a crummy user experience to have to wait that long when saving a file.  More importantly, though, since edits were being backed by temporary files, that meant that edits were going to be impacted by these ridiculous wait times too, which just absolutley wasn't going to fly.
+
+Thus began performance optimizations throughout the entire OS.  I had Claude do an analysis of how much time was being spent in each part of the system for each of the new commands.  One of the biggest ones was memory allocation and deallocation.  In NanoOs, those operations are handled by the Memory Manager process, so they each involve a context switch.  On top of that, with the way that the functions and searches were organized, memory for the same operations was allocated and deallocated over and over again.  I had Claude switch to maintaining one buffer for the lifetime of an operation and just resizing it if needed rather than repeatedly freeing and mallocing.
+
+Another big one was time spent at the SD card level.  Loops that read in blocks of content over SPI were calling the transfer8 function for each byte that needed to be read in.  I switched to a couple of low-level assembly loops that hammered the interface directly for an entire chunk instead of doing the pushes and pops over and over again for a function call.
+
+One of the big things that was costing time in the lifetime of a command was reloading overlays it was made up of.  I knew this was going to be an issue on the eZ80 given that it was so much slower than the Arduinos.  (~18 MHz 8-bit vs. 48 MHz 32-bit)  On the Arduinos, there's no way to do anything about the swapping.  But, the eZ80 has 520 KB of RAM instead of the Arduino's 32 KB.  So, I carved out about 96 KB for an overlay cache (ten 80-KB overlays plus the data structures themselves).  Claude wasn't able to come up with that idea but it was able to find some good bugs in my first-pass implementation once I had it up.  I was pleased that "two heads made better than one."
+
+The last big thing was the FAT32 implementation re-reading blocks it had just read.  I figured out that in quite a few places, the same block was either read multiple times back-to-back or it was written and then immediately re-read.  I added some state to the filesystem to keep track of what LBA the block buffer held and whether or not its contents were valid to use as a read proxy.  That knocked off a bit more time.
+
+So, after all was said and done, writes now take about half a second.  That fifteen-entry `ll` output from my last update that took 5 seconds to generate now also takes about half a second.  This is blazingly fast to me now that I've spent so long with such abysmal performance.  The system is actually quite usable!!
+
+This, I think, is a good place to say that I've met my initial goal.  It's time to move on to the next phase of what I want to look into, which is proper KVM support and a graphical desktop.  Let's see what happens!!
+
+To be continued...
+
+[Table of Contents](.)

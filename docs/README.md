@@ -77,3 +77,5 @@ This work started out as an experiment to see if I could implement an operating 
 [2026-08-31: Agon Light 2 eZ80 Port](2026-08-31_Agon-Light-2-eZ80-Port.md)
 
 [2026-10-06: `ll`](2026-10-06_ll.md)
+
+[2026-10-18: `ed` and Being "Unix-like"](2026-10-18_ed-and-Being-Unix-like.md)
