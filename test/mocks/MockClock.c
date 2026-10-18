@@ -27,12 +27,14 @@ void mockClockAdvanceNs(uint64_t deltaNs) {
   _nowNs += deltaNs;
 }
 
-int mockClockInitFn(va_list args) {
+int mockClockInitFn(int32_t deviceId, va_list args) {
+  (void) deviceId;
   (void) args;
   return 0;
 }
 
-int mockClockSetSystemTimeFn(va_list args) {
+int mockClockSetSystemTimeFn(int32_t deviceId, va_list args) {
+  (void) deviceId;
   (void) args;
   // The virtual clock is monotonic-from-boot; setting wall time is a no-op.
   return 0;
@@ -54,14 +56,17 @@ static int elapsed(va_list args, uint64_t divisor) {
   return 0;
 }
 
-int mockClockGetElapsedMillisecondsFn(va_list args) {
+int mockClockGetElapsedMillisecondsFn(int32_t deviceId, va_list args) {
+  (void) deviceId;
   return elapsed(args, 1000000ULL);
 }
 
-int mockClockGetElapsedMicrosecondsFn(va_list args) {
+int mockClockGetElapsedMicrosecondsFn(int32_t deviceId, va_list args) {
+  (void) deviceId;
   return elapsed(args, 1000ULL);
 }
 
-int mockClockGetElapsedNanosecondsFn(va_list args) {
+int mockClockGetElapsedNanosecondsFn(int32_t deviceId, va_list args) {
+  (void) deviceId;
   return elapsed(args, 1ULL);
 }

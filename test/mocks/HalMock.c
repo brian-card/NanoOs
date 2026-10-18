@@ -41,45 +41,45 @@ void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
 void* callOverlayFunctionFromFileCache(const void *overlayDir,
   const void *overlay, const char *function, void *args);
 
-int posixProcessStackSize(va_list args);
-int posixMemoryManagerStackSize(va_list args);
-int posixBottomOfHeap(va_list args);
-int posixNumExtraSchedulerStacks(va_list args);
-int posixNumExtraConsoleStacks(va_list args);
+int posixProcessStackSize(int32_t deviceId, va_list args);
+int posixMemoryManagerStackSize(int32_t deviceId, va_list args);
+int posixBottomOfHeap(int32_t deviceId, va_list args);
+int posixNumExtraSchedulerStacks(int32_t deviceId, va_list args);
+int posixNumExtraConsoleStacks(int32_t deviceId, va_list args);
 
-int posixInitDio(va_list args);
-int posixConfigureDio(va_list args);
-int posixWriteDio(va_list args);
+int posixInitDio(int32_t deviceId, va_list args);
+int posixConfigureDio(int32_t deviceId, va_list args);
+int posixWriteDio(int32_t deviceId, va_list args);
 
-int posixInitSpi(va_list args);
-int posixConfigureSpiDevice(va_list args);
-int posixSetSpiSpeed(va_list args);
-int posixStartSpiTransfer(va_list args);
-int posixEndSpiTransfer(va_list args);
-int posixSpiTransfer8(va_list args);
-int posixSpiTransferBytes(va_list args);
-int posixSpiTransferUntil(va_list args);
+int posixInitSpi(int32_t deviceId, va_list args);
+int posixConfigureSpiDevice(int32_t deviceId, va_list args);
+int posixSetSpiSpeed(int32_t deviceId, va_list args);
+int posixStartSpiTransfer(int32_t deviceId, va_list args);
+int posixEndSpiTransfer(int32_t deviceId, va_list args);
+int posixSpiTransfer8(int32_t deviceId, va_list args);
+int posixSpiTransferBytes(int32_t deviceId, va_list args);
+int posixSpiTransferUntil(int32_t deviceId, va_list args);
 
-int posixTimeInit(va_list args);
-int posixSetSystemTime(va_list args);
-int posixGetElapsedMilliseconds(va_list args);
-int posixGetElapsedMicroseconds(va_list args);
-int posixGetElapsedNanoseconds(va_list args);
+int posixTimeInit(int32_t deviceId, va_list args);
+int posixSetSystemTime(int32_t deviceId, va_list args);
+int posixGetElapsedMilliseconds(int32_t deviceId, va_list args);
+int posixGetElapsedMicroseconds(int32_t deviceId, va_list args);
+int posixGetElapsedNanoseconds(int32_t deviceId, va_list args);
 
-int posixInitTimer(va_list args);
-int posixInitTimerDevice(va_list args);
-int posixConfigOneShotTimer(va_list args);
-int posixConfiguredTimerNanoseconds(va_list args);
-int posixRemainingTimerNanoseconds(va_list args);
-int posixCancelTimer(va_list args);
-int posixCancelAndGetTimer(va_list args);
+int posixInitTimer(int32_t deviceId, va_list args);
+int posixInitTimerDevice(int32_t deviceId, va_list args);
+int posixConfigOneShotTimer(int32_t deviceId, va_list args);
+int posixConfiguredTimerNanoseconds(int32_t deviceId, va_list args);
+int posixRemainingTimerNanoseconds(int32_t deviceId, va_list args);
+int posixCancelTimer(int32_t deviceId, va_list args);
+int posixCancelAndGetTimer(int32_t deviceId, va_list args);
 
-int posixInitUart(va_list args);
-int posixConfigureUart(va_list args);
-int posixPollUart(va_list args);
-int posixReadUart(va_list args);
-int posixWriteUart(va_list args);
-int posixIsUartConsole(va_list args);
+int posixInitUart(int32_t deviceId, va_list args);
+int posixConfigureUart(int32_t deviceId, va_list args);
+int posixPollUart(int32_t deviceId, va_list args);
+int posixReadUart(int32_t deviceId, va_list args);
+int posixWriteUart(int32_t deviceId, va_list args);
+int posixIsUartConsole(int32_t deviceId, va_list args);
 
 
 // --- state -----------------------------------------------------------
@@ -197,7 +197,8 @@ static HalFunction _blockDeviceFunctions[HAL_BLOCK_DEVICE_NUM_FNS];
 ///
 /// @brief Any power mode hands off to the harness' power hook (which ends the
 /// child) instead of exit()ing the whole test run.
-static int mockEnterPowerModeFn(va_list args) {
+static int mockEnterPowerModeFn(int32_t deviceId, va_list args) {
+  (void) deviceId;
   (void) args;
   if (_powerHook != NULL) {
     _powerHook();
@@ -217,7 +218,8 @@ static int mockInitRootStorageNone(void) {
 
 // --- platform / memory pointer getters --------------------------------
 
-static int mockCallFileOverlayFn(va_list args) {
+static int mockCallFileOverlayFn(int32_t deviceId, va_list args) {
+  (void) deviceId;
   HalCallFileOverlayFn *returnValue = va_arg(args, HalCallFileOverlayFn*);
   if (returnValue != NULL) {
     *returnValue = _callFileOverlay;
@@ -225,7 +227,8 @@ static int mockCallFileOverlayFn(va_list args) {
   return 0;
 }
 
-static int mockExecCommandFn(va_list args) {
+static int mockExecCommandFn(int32_t deviceId, va_list args) {
+  (void) deviceId;
   HalExecCommandFn *returnValue = va_arg(args, HalExecCommandFn*);
   if (returnValue != NULL) {
     *returnValue = _execCommand;
@@ -261,16 +264,18 @@ static unsigned int _pendingCallbackDispatches = 0;
 /// @param args The va_list passed to the platform function.
 ///
 /// @return Returns the value returned by halCommonPlatformInvokePendingCallbacks.
-static int mockInvokePendingCallbacksFn(va_list args) {
+static int mockInvokePendingCallbacksFn(int32_t deviceId, va_list args) {
+  (void) deviceId;
   _pendingCallbackDispatches++;
-  return halCommonPlatformInvokePendingCallbacks(args);
+  return halCommonPlatformInvokePendingCallbacks(deviceId, args);
 }
 
 unsigned int mockPendingCallbackDispatchCount(void) {
   return _pendingCallbackDispatches;
 }
 
-static int mockStartProcessesFn(va_list args) {
+static int mockStartProcessesFn(int32_t deviceId, va_list args) {
+  (void) deviceId;
   HalStartProcessesFn *returnValue = va_arg(args, HalStartProcessesFn*);
   if (returnValue != NULL) {
     *returnValue = mockDoStartProcesses;
@@ -295,7 +300,8 @@ static int mockDoLaunchProcesses(void) {
   return returnValue;
 }
 
-static int mockLaunchProcessesFn(va_list args) {
+static int mockLaunchProcessesFn(int32_t deviceId, va_list args) {
+  (void) deviceId;
   HalLaunchProcessesFn *returnValue = va_arg(args, HalLaunchProcessesFn*);
   if (returnValue != NULL) {
     *returnValue = mockDoLaunchProcesses;
@@ -303,7 +309,8 @@ static int mockLaunchProcessesFn(va_list args) {
   return 0;
 }
 
-static int mockRestartRootFilesystemFn(va_list args) {
+static int mockRestartRootFilesystemFn(int32_t deviceId, va_list args) {
+  (void) deviceId;
   HalRestartRootFilesystemFn *returnValue
     = va_arg(args, HalRestartRootFilesystemFn*);
   if (returnValue != NULL) {
@@ -312,7 +319,8 @@ static int mockRestartRootFilesystemFn(va_list args) {
   return 0;
 }
 
-static int mockRestartShellFn(va_list args) {
+static int mockRestartShellFn(int32_t deviceId, va_list args) {
+  (void) deviceId;
   HalRestartShellFn *returnValue = va_arg(args, HalRestartShellFn*);
   if (returnValue != NULL) {
     *returnValue = (HalRestartShellFn) _restartShell;
@@ -320,7 +328,8 @@ static int mockRestartShellFn(va_list args) {
   return 0;
 }
 
-static int mockOverlayMapFn(va_list args) {
+static int mockOverlayMapFn(int32_t deviceId, va_list args) {
+  (void) deviceId;
   NanoOsOverlayMap **returnValue = va_arg(args, NanoOsOverlayMap**);
   if (returnValue != NULL) {
     *returnValue = _overlayMap;
@@ -328,7 +337,8 @@ static int mockOverlayMapFn(va_list args) {
   return 0;
 }
 
-static int mockContiguousFilesystemFn(va_list args) {
+static int mockContiguousFilesystemFn(int32_t deviceId, va_list args) {
+  (void) deviceId;
   NanoOsOverlayMap **returnValue = va_arg(args, NanoOsOverlayMap**);
   if (returnValue != NULL) {
     *returnValue = _contiguousFilesystem;
@@ -336,7 +346,8 @@ static int mockContiguousFilesystemFn(va_list args) {
   return 0;
 }
 
-static int mockStaticLogsFn(va_list args) {
+static int mockStaticLogsFn(int32_t deviceId, va_list args) {
+  (void) deviceId;
   StaticLogs **returnValue = va_arg(args, StaticLogs**);
   if (returnValue != NULL) {
     *returnValue = _staticLogsPtr;
@@ -344,7 +355,8 @@ static int mockStaticLogsFn(va_list args) {
   return 0;
 }
 
-static int mockLogBufferFn(va_list args) {
+static int mockLogBufferFn(int32_t deviceId, va_list args) {
+  (void) deviceId;
   char **returnValue = va_arg(args, char**);
   if (returnValue != NULL) {
     *returnValue = _logBuffer;
@@ -369,7 +381,8 @@ void halMockSetStaticLogs(StaticLogs *staticLogs) {
   _staticLogsPtr = staticLogs;
 }
 
-static int mockLogEntriesFn(va_list args) {
+static int mockLogEntriesFn(int32_t deviceId, va_list args) {
+  (void) deviceId;
   LogEntry **returnValue = va_arg(args, LogEntry**);
   if (returnValue != NULL) {
     *returnValue = _logEntries;
@@ -377,7 +390,8 @@ static int mockLogEntriesFn(va_list args) {
   return 0;
 }
 
-static int mockLogMessagesFn(va_list args) {
+static int mockLogMessagesFn(int32_t deviceId, va_list args) {
+  (void) deviceId;
   ProcessMessage **returnValue = va_arg(args, ProcessMessage**);
   if (returnValue != NULL) {
     *returnValue = _logMessages;
@@ -385,7 +399,8 @@ static int mockLogMessagesFn(va_list args) {
   return 0;
 }
 
-static int mockAllProcessesFn(va_list args) {
+static int mockAllProcessesFn(int32_t deviceId, va_list args) {
+  (void) deviceId;
   ProcessDescriptor **returnValue = va_arg(args, ProcessDescriptor**);
   if (returnValue != NULL) {
     *returnValue = _allProcesses;
@@ -393,7 +408,8 @@ static int mockAllProcessesFn(va_list args) {
   return 0;
 }
 
-static int mockReadyQueuesFn(va_list args) {
+static int mockReadyQueuesFn(int32_t deviceId, va_list args) {
+  (void) deviceId;
   ProcessQueue ***returnValue = va_arg(args, ProcessQueue***);
   if (returnValue != NULL) {
     *returnValue = _readyQueues;
@@ -401,7 +417,8 @@ static int mockReadyQueuesFn(va_list args) {
   return 0;
 }
 
-static int mockWaitingQueueFn(va_list args) {
+static int mockWaitingQueueFn(int32_t deviceId, va_list args) {
+  (void) deviceId;
   ProcessQueue **returnValue = va_arg(args, ProcessQueue**);
   if (returnValue != NULL) {
     *returnValue = (ProcessQueue*) &_waitingQueue;
@@ -409,7 +426,8 @@ static int mockWaitingQueueFn(va_list args) {
   return 0;
 }
 
-static int mockTimedWaitingQueueFn(va_list args) {
+static int mockTimedWaitingQueueFn(int32_t deviceId, va_list args) {
+  (void) deviceId;
   ProcessQueue **returnValue = va_arg(args, ProcessQueue**);
   if (returnValue != NULL) {
     *returnValue = (ProcessQueue*) &_timedWaitingQueue;
@@ -417,7 +435,8 @@ static int mockTimedWaitingQueueFn(va_list args) {
   return 0;
 }
 
-static int mockFreeQueueFn(va_list args) {
+static int mockFreeQueueFn(int32_t deviceId, va_list args) {
+  (void) deviceId;
   ProcessQueue **returnValue = va_arg(args, ProcessQueue**);
   if (returnValue != NULL) {
     *returnValue = (ProcessQueue*) &_freeQueue;
@@ -425,7 +444,8 @@ static int mockFreeQueueFn(va_list args) {
   return 0;
 }
 
-static int mockProcessErrorNumbersFn(va_list args) {
+static int mockProcessErrorNumbersFn(int32_t deviceId, va_list args) {
+  (void) deviceId;
   int **returnValue = va_arg(args, int**);
   if (returnValue != NULL) {
     *returnValue = _processErrorNumbers;
@@ -433,7 +453,8 @@ static int mockProcessErrorNumbersFn(va_list args) {
   return 0;
 }
 
-static int mockProcessStorageFn(va_list args) {
+static int mockProcessStorageFn(int32_t deviceId, va_list args) {
+  (void) deviceId;
   void ****returnValue = va_arg(args, void****);
   if (returnValue != NULL) {
     *returnValue = _processStorage;

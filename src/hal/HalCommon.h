@@ -57,7 +57,7 @@
 /// @typedef HalFunction
 ///
 /// @brief Type for all HAL implementation functions in the dispatch table.
-typedef int (*HalFunction)(va_list args);
+typedef int (*HalFunction)(int32_t deviceId, va_list args);
 
 /// @struct NamedProcessEntry
 ///
@@ -219,7 +219,7 @@ typedef struct NamedProcessEntry {
   { \
     .subsystemFunction = (((uint16_t) HAL_CLOCK) << 8) \
       | HAL_CLOCK_GET_ELAPSED_NANOSECONDS, \
-    .deviceIds =         0x00, /* No device for this function */ \
+    .deviceIds =         0x01, /* Device 0: no device for this function */ \
   }, \
   { \
     .subsystemFunction = (((uint16_t) HAL_TIMER) << 8) | HAL_TIMER_CANCEL, \
@@ -299,7 +299,7 @@ extern HalCapability *sdCardHalCapabilities;
 /// @brief The number of entries in sdCardHalCapabilities.
 extern size_t numSdCardHalCapabilities;
 
-int callHal(HalSubsystem subsystem, uint32_t function, ...);
+int callHal(HalSubsystem subsystem, uint32_t function, int32_t deviceId, ...);
 int findProcessByName(const char *name, ProcessId *returnValue);
 int registerProcessName(const char *name, ProcessId pid);
 BlockDevice* halCommonInitRootSdSpiStorage(SdCardSpiArgs *sdCardSpiArgs);
@@ -310,10 +310,10 @@ int halCommonLaunchProcesses(void);
 int restartBuiltinFilesystem(ProcessDescriptor *processDescriptor);
 int restartOverlayFilesystem(ProcessDescriptor *processDescriptor);
 int restartContiguousFilesystem(ProcessDescriptor *processDescriptor);
-int halCommonUartRegisterCallback(va_list args);
+int halCommonUartRegisterCallback(int32_t deviceId, va_list args);
 void halCommonUartMarkReady(int32_t deviceId);
-int halCommonPlatformInvokePendingCallbacks(va_list args);
-int halCommonPlatformLaunchProcesses(va_list args);
+int halCommonPlatformInvokePendingCallbacks(int32_t deviceId, va_list args);
+int halCommonPlatformLaunchProcesses(int32_t deviceId, va_list args);
 int halCommonInit(
   FilesystemDriverInit builtinFilesystemInitDriver,
   const FilesystemCommandHandler *builtinFilesystemCommandHandlers,

@@ -41,6 +41,8 @@ _Static_assert(HAL_PLATFORM_NUM_FNS + HAL_MEMORY_NUM_FNS + HAL_UART_NUM_FNS
   + HAL_TIMER_NUM_FNS + HAL_BLOCK_DEVICE_NUM_FNS
   <= 8 * HAL_CAPABILITY_BITMAP_SIZE,
   "HAL_CAPABILITY_BITMAP_SIZE is too small for every HAL function");
+_Static_assert(HAL_DEVICE_MASKS_SIZE == HAL_NUM_SUBSYSTEMS,
+  "HAL_DEVICE_MASKS_SIZE must match HAL_NUM_SUBSYSTEMS");
 
 /// @var halCapabilityBitBase
 ///
@@ -77,8 +79,10 @@ uint8_t halCapabilityBitBase[HAL_NUM_SUBSYSTEMS + 1] = {
 /// @fn void setProcessHalCapabilities(ProcessDescriptor *processDescriptor,
 ///   HalCapability *capabilities, size_t numCapabilities)
 ///
-/// @brief Give a process a HalCapability array and build the bitmap that
-/// callHal checks against it.
+/// @brief Give a process a HalCapability array and build the bitmap and
+/// device masks that callHal checks against it.  A subsystem's device mask
+/// is the intersection of the deviceIds of its grants, so mixed masks fail
+/// closed.
 ///
 /// @param processDescriptor A pointer to the process's ProcessDescriptor.
 /// @param capabilities A pointer to a sorted array of HalCapability objects.
@@ -96,6 +100,11 @@ void setProcessHalCapabilities(ProcessDescriptor *processDescriptor,
   for (uint8_t ii = 0; ii < HAL_CAPABILITY_BITMAP_SIZE; ii++) {
     bitmap[ii] = 0;
   }
+  uint8_t *deviceMasks = processDescriptor->halDeviceMasks;
+  for (uint8_t ii = 0; ii < HAL_DEVICE_MASKS_SIZE; ii++) {
+    deviceMasks[ii] = 0;
+  }
+  uint16_t seenSubsystems = 0;
 
   for (size_t ii = 0; ii < numCapabilities; ii++) {
     uint8_t subsystem = (uint8_t) (capabilities[ii].subsystemFunction >> 8);
@@ -108,6 +117,12 @@ void setProcessHalCapabilities(ProcessDescriptor *processDescriptor,
     }
     uint8_t bit = halCapabilityBitBase[subsystem] + function;
     bitmap[bit >> 3] |= (uint8_t) (1 << (bit & 7));
+    if (seenSubsystems & (1 << subsystem)) {
+      deviceMasks[subsystem] &= capabilities[ii].deviceIds;
+    } else {
+      deviceMasks[subsystem] = capabilities[ii].deviceIds;
+      seenSubsystems |= (uint16_t) (1 << subsystem);
+    }
   }
 }
 

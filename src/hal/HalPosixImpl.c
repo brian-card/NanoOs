@@ -134,7 +134,8 @@ int (*realTcgetattr)(int fd, struct termios *termios_p) = NULL;
 int (*realTcsetattr)(int fd, int optional_actions,
   const struct termios *termios_p) = NULL;
 
-int posixProcessStackSize(va_list args) {
+int posixProcessStackSize(int32_t deviceId, va_list args) {
+  (void) deviceId;
   bool debug = (bool) va_arg(args, int);
   size_t *returnValue = va_arg(args, size_t*);
   (void) debug;
@@ -142,7 +143,8 @@ int posixProcessStackSize(va_list args) {
   return 0;
 }
 
-int posixMemoryManagerStackSize(va_list args) {
+int posixMemoryManagerStackSize(int32_t deviceId, va_list args) {
+  (void) deviceId;
   bool debug = (bool) va_arg(args, int);
   size_t *returnValue = va_arg(args, size_t*);
   if (debug == false) {
@@ -159,7 +161,8 @@ int posixMemoryManagerStackSize(va_list args) {
 /// @brief Where the bottom of the heap will be set to be in memory.
 static void *_bottomOfHeap = NULL;
 
-int posixBottomOfHeap(va_list args) {
+int posixBottomOfHeap(int32_t deviceId, va_list args) {
+  (void) deviceId;
   bool debug = (bool) va_arg(args, int);
   void **returnValue = va_arg(args, void**);
   (void) debug;
@@ -167,7 +170,8 @@ int posixBottomOfHeap(va_list args) {
   return 0;
 }
 
-int posixNumExtraSchedulerStacks(va_list args) {
+int posixNumExtraSchedulerStacks(int32_t deviceId, va_list args) {
+  (void) deviceId;
   bool debug = (bool) va_arg(args, int);
   uint8_t *returnValue = va_arg(args, uint8_t*);
   (void) debug;
@@ -175,7 +179,8 @@ int posixNumExtraSchedulerStacks(va_list args) {
   return 0;
 }
 
-int posixNumExtraConsoleStacks(va_list args) {
+int posixNumExtraConsoleStacks(int32_t deviceId, va_list args) {
+  (void) deviceId;
   bool debug = (bool) va_arg(args, int);
   uint8_t *returnValue = va_arg(args, uint8_t*);
   (void) debug;
@@ -218,7 +223,8 @@ ProcessMessage halUartCallbackMessages[NUM_UARTS];
 /// interrupt is triggered.
 volatile bool halUartCallbacksPending[NUM_UARTS];
 
-int posixInitUart(va_list args) {
+int posixInitUart(int32_t deviceId, va_list args) {
+  (void) deviceId;
   (void) args;
   memset((void*) halUartCallbacks, 0, sizeof(halUartCallbacks));
   memset((void*) halUartCallbackMessages, 0, sizeof(halUartCallbackMessages));
@@ -409,17 +415,17 @@ static void* posixUartRxThreadFunction(void *arg) {
   return NULL;
 }
 
-/// @fn int posixConfigureUart(va_list args)
+/// @fn int posixConfigureUart(int32_t deviceId, va_list args)
 ///
 /// @brief Configure stdin to not echo and launch posixUartRxThreadFunction as
 /// a background thread.
 ///
+/// @param deviceId The device ID that callHal checked the call against.
 /// @param args A va_list of the arguments that were passed to the call.  See
 ///   HalUart.configure for a description of the arguments.
 ///
 /// @return Returns 0 on success, -errno on failure.
-int posixConfigureUart(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int posixConfigureUart(int32_t deviceId, va_list args) {
   uint32_t baud = va_arg(args, uint32_t);
   (void) baud;
 
@@ -491,8 +497,8 @@ int posixConfigureUart(va_list args) {
   return 0;
 }
 
-int posixPollUart(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int posixPollUart(int32_t deviceId, va_list args) {
+  (void) args;
   int serialData = -1;
 
   // While we'll support two outputs, we will only support one input to keep
@@ -519,18 +525,18 @@ int posixPollUart(va_list args) {
   return serialData;
 }
 
-/// @fn int posixReadUart(va_list args)
+/// @fn int posixReadUart(int32_t deviceId, va_list args)
 ///
 /// @brief Copy up to length bytes from the console receive ring without
 /// blocking.  Poll-only devices and devices other than the console report 0
 /// bytes read.
 ///
+/// @param deviceId The device ID that callHal checked the call against.
 /// @param args A va_list holding the int32_t deviceId, uint8_t *data,
 ///   ssize_t length, and ssize_t *returnValue arguments of HalUart.read.
 ///
 /// @return Returns 0 on success, -errno on failure.
-int posixReadUart(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int posixReadUart(int32_t deviceId, va_list args) {
   uint8_t *data = va_arg(args, uint8_t*);
   ssize_t length = va_arg(args, ssize_t);
   ssize_t *returnValue = va_arg(args, ssize_t*);
@@ -563,8 +569,7 @@ int posixReadUart(va_list args) {
   return 0;
 }
 
-int posixWriteUart(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int posixWriteUart(int32_t deviceId, va_list args) {
   const uint8_t *data = va_arg(args, const uint8_t*);
   ssize_t length = va_arg(args, ssize_t);
   ssize_t *returnValue = va_arg(args, ssize_t*);
@@ -582,8 +587,7 @@ int posixWriteUart(va_list args) {
   return (numBytesWritten >= 0) ? 0 : (int) numBytesWritten;
 }
 
-int posixIsUartConsole(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int posixIsUartConsole(int32_t deviceId, va_list args) {
   bool *returnValue = va_arg(args, bool*);
   if (returnValue != NULL) {
     *returnValue = (deviceId == 1);
@@ -591,67 +595,80 @@ int posixIsUartConsole(va_list args) {
   return 0;
 }
 
-int posixInitDio(va_list args) {
+int posixInitDio(int32_t deviceId, va_list args) {
+  (void) deviceId;
   (void) args;
   return -ENOSYS;
 }
 
-int posixConfigureDio(va_list args) {
+int posixConfigureDio(int32_t deviceId, va_list args) {
+  (void) deviceId;
   (void) args;
   return -ENOSYS;
 }
 
-int posixWriteDio(va_list args) {
+int posixWriteDio(int32_t deviceId, va_list args) {
+  (void) deviceId;
   (void) args;
   return -ENOSYS;
 }
 
-int posixInitSpi(va_list args) {
+int posixInitSpi(int32_t deviceId, va_list args) {
+  (void) deviceId;
   (void) args;
   return -ENOSYS;
 }
 
-int posixConfigureSpiDevice(va_list args) {
+int posixConfigureSpiDevice(int32_t deviceId, va_list args) {
+  (void) deviceId;
   (void) args;
   return -ENOSYS;
 }
 
-int posixSetSpiSpeed(va_list args) {
+int posixSetSpiSpeed(int32_t deviceId, va_list args) {
+  (void) deviceId;
   (void) args;
   return -ENOSYS;
 }
 
-int posixStartSpiTransfer(va_list args) {
+int posixStartSpiTransfer(int32_t deviceId, va_list args) {
+  (void) deviceId;
   (void) args;
   return -ENOSYS;
 }
 
-int posixEndSpiTransfer(va_list args) {
+int posixEndSpiTransfer(int32_t deviceId, va_list args) {
+  (void) deviceId;
   (void) args;
   return -ENOSYS;
 }
 
-int posixSpiTransfer8(va_list args) {
+int posixSpiTransfer8(int32_t deviceId, va_list args) {
+  (void) deviceId;
   (void) args;
   return -ENOSYS;
 }
 
-int posixSpiTransferBytes(va_list args) {
+int posixSpiTransferBytes(int32_t deviceId, va_list args) {
+  (void) deviceId;
   (void) args;
   return -ENOSYS;
 }
 
-int posixSpiTransferUntil(va_list args) {
+int posixSpiTransferUntil(int32_t deviceId, va_list args) {
+  (void) deviceId;
   (void) args;
   return -ENOSYS;
 }
 
-int posixTimeInit(va_list args) {
+int posixTimeInit(int32_t deviceId, va_list args) {
+  (void) deviceId;
   (void) args;
   return 0;
 }
 
-int posixSetSystemTime(va_list args) {
+int posixSetSystemTime(int32_t deviceId, va_list args) {
+  (void) deviceId;
   (void) args;
   return 0;
 }
@@ -669,7 +686,8 @@ static int posixGetElapsedNanosecondsImpl(int64_t startTime,
   return 0;
 }
 
-int posixGetElapsedMilliseconds(va_list args) {
+int posixGetElapsedMilliseconds(int32_t deviceId, va_list args) {
+  (void) deviceId;
   int64_t startTime = va_arg(args, int64_t);
   int64_t *returnValue = va_arg(args, int64_t*);
   int64_t nanoseconds = 0;
@@ -681,7 +699,8 @@ int posixGetElapsedMilliseconds(va_list args) {
   return rv;
 }
 
-int posixGetElapsedMicroseconds(va_list args) {
+int posixGetElapsedMicroseconds(int32_t deviceId, va_list args) {
+  (void) deviceId;
   int64_t startTime = va_arg(args, int64_t);
   int64_t *returnValue = va_arg(args, int64_t*);
   int64_t nanoseconds = 0;
@@ -693,7 +712,8 @@ int posixGetElapsedMicroseconds(va_list args) {
   return rv;
 }
 
-int posixGetElapsedNanoseconds(va_list args) {
+int posixGetElapsedNanoseconds(int32_t deviceId, va_list args) {
+  (void) deviceId;
   int64_t startTime = va_arg(args, int64_t);
   int64_t *returnValue = va_arg(args, int64_t*);
   return posixGetElapsedNanosecondsImpl(startTime, returnValue);
@@ -732,7 +752,8 @@ static const char _exitingMessage[] KEEP_IN_FLASH = "Exiting.\n";
 /// halPosixImplInit has run.
 void *_contiguousOverlayMap = NULL;
 
-int posixEnterPowerMode(va_list args) {
+int posixEnterPowerMode(int32_t deviceId, va_list args) {
+  (void) deviceId;
   HalPowerMode powerMode = (HalPowerMode) va_arg(args, int);
   // You can't completely turn off the hardware we're running on.  We're
   // simulating hardware, so do what the hardware would do, which is the same
@@ -928,13 +949,14 @@ SoftwareTimer softwareTimers[] = {
 /// call to posixSetNumTimers.
 static int _numTimers = sizeof(softwareTimers) / sizeof(softwareTimers[0]);
 
-int posixInitTimer(va_list args) {
+int posixInitTimer(int32_t deviceId, va_list args) {
+  (void) deviceId;
   (void) args;
   return 0;
 }
 
-int posixInitTimerDevice(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int posixInitTimerDevice(int32_t deviceId, va_list args) {
+  (void) args;
   if (deviceId >= _numTimers) {
     return -ERANGE;
   }
@@ -958,8 +980,7 @@ int posixInitTimerDevice(va_list args) {
   return 0;
 }
 
-int posixConfigOneShotTimer(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int posixConfigOneShotTimer(int32_t deviceId, va_list args) {
   uint64_t nanoseconds = va_arg(args, uint64_t);
   void (*callback)(void) = va_arg(args, void (*)(void));
 
@@ -983,8 +1004,7 @@ int posixConfigOneShotTimer(va_list args) {
   return 0;
 }
 
-int posixConfiguredTimerNanoseconds(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int posixConfiguredTimerNanoseconds(int32_t deviceId, va_list args) {
   uint64_t *returnValue = va_arg(args, uint64_t*);
 
   if (returnValue != NULL) {
@@ -1005,8 +1025,7 @@ int posixConfiguredTimerNanoseconds(va_list args) {
   return 0;
 }
 
-int posixRemainingTimerNanoseconds(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int posixRemainingTimerNanoseconds(int32_t deviceId, va_list args) {
   uint64_t *returnValue = va_arg(args, uint64_t*);
 
   if (returnValue != NULL) {
@@ -1033,8 +1052,8 @@ int posixRemainingTimerNanoseconds(va_list args) {
   return 0;
 }
 
-int posixCancelTimer(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int posixCancelTimer(int32_t deviceId, va_list args) {
+  (void) args;
 
   // Always validate capabilities first.  Only the scheduler (arming its own
   // preemption timer) gets an unconditional pass here.
@@ -1073,13 +1092,12 @@ int posixCancelTimer(va_list args) {
   return 0;
 }
 
-int posixCancelAndGetTimer(va_list args) {
+int posixCancelAndGetTimer(int32_t deviceId, va_list args) {
   // We need to get `now` as close to the beginning of this function call as
   // possible so that any call to reconfigure the timer later is correct.
   int64_t now = 0;
   posixGetElapsedNanosecondsImpl(0, &now);
 
-  int32_t deviceId = va_arg(args, int32_t);
   uint64_t *configuredNanoseconds = va_arg(args, uint64_t*);
   uint64_t *remainingNanoseconds = va_arg(args, uint64_t*);
   void (**callback)(void) = va_arg(args, void (**)(void));

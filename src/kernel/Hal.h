@@ -351,12 +351,12 @@ typedef struct HalCapability {
   { \
     .subsystemFunction = (((uint16_t) HAL_MEMORY) << 8) \
       | HAL_MEMORY_STATIC_LOGS, \
-    .deviceIds =         0x00, /* No device for this function */ \
+    .deviceIds =         0x01, /* Device 0: no device for this function */ \
   }, \
   { \
     .subsystemFunction = (((uint16_t) HAL_MEMORY) << 8) \
       | HAL_MEMORY_LOG_BUFFER, \
-    .deviceIds =         0x00, /* No device for this function */ \
+    .deviceIds =         0x01, /* Device 0: no device for this function */ \
   }
 
 // HAL subsystems

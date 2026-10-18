@@ -86,9 +86,9 @@ void arduinoAvrSetRootStorageFunctions(
 // HalArduinoAvr.cpp, ensures a board file that's compiled as C++ (currently
 // only HalArduinoMega2560.cpp) defines them with the C linkage that
 // dispatch table (and HalArduinoNanoEvery.c's plain-C definitions) expect.
-int arduinoAvrInitBlockDevice(va_list args);
-int arduinoAvrGetBlockDevice(va_list args);
-int arduinoAvrRestartBlockDevice(va_list args);
+int arduinoAvrInitBlockDevice(int32_t deviceId, va_list args);
+int arduinoAvrGetBlockDevice(int32_t deviceId, va_list args);
+int arduinoAvrRestartBlockDevice(int32_t deviceId, va_list args);
 
 #ifdef __cplusplus
 } // extern "C"

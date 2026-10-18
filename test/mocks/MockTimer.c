@@ -60,19 +60,19 @@ int mockTimerFire(int32_t deviceId) {
   return 0;
 }
 
-int mockTimerInitFn(va_list args) {
+int mockTimerInitFn(int32_t deviceId, va_list args) {
+  (void) deviceId;
   (void) args;
   mockTimerReset();
   return 0;
 }
 
-int mockTimerInitDeviceFn(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int mockTimerInitDeviceFn(int32_t deviceId, va_list args) {
+  (void) args;
   return validDevice(deviceId) ? 0 : -1;
 }
 
-int mockTimerConfigOneShotFn(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int mockTimerConfigOneShotFn(int32_t deviceId, va_list args) {
   uint64_t nanoseconds = va_arg(args, uint64_t);
   void (*callback)(void) = va_arg(args, void (*)(void));
   if (!validDevice(deviceId)) {
@@ -85,8 +85,7 @@ int mockTimerConfigOneShotFn(va_list args) {
   return 0;
 }
 
-int mockTimerConfiguredNanosecondsFn(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int mockTimerConfiguredNanosecondsFn(int32_t deviceId, va_list args) {
   uint64_t *returnValue = va_arg(args, uint64_t*);
   if (!validDevice(deviceId) || (returnValue == NULL)) {
     return -1;
@@ -95,8 +94,7 @@ int mockTimerConfiguredNanosecondsFn(va_list args) {
   return 0;
 }
 
-int mockTimerRemainingNanosecondsFn(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int mockTimerRemainingNanosecondsFn(int32_t deviceId, va_list args) {
   uint64_t *returnValue = va_arg(args, uint64_t*);
   if (!validDevice(deviceId) || (returnValue == NULL)) {
     return -1;
@@ -119,8 +117,8 @@ unsigned int mockTimerCancelCount(void) {
   return _cancelCount;
 }
 
-int mockTimerCancelFn(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int mockTimerCancelFn(int32_t deviceId, va_list args) {
+  (void) args;
   _cancelCount++;
   if (!validDevice(deviceId)) {
     return -1;
@@ -130,8 +128,7 @@ int mockTimerCancelFn(va_list args) {
   return 0;
 }
 
-int mockTimerCancelAndGetFn(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int mockTimerCancelAndGetFn(int32_t deviceId, va_list args) {
   uint64_t *configuredNanoseconds = va_arg(args, uint64_t*);
   uint64_t *remainingNanoseconds = va_arg(args, uint64_t*);
   void (**callback)(void) = va_arg(args, void (**)(void));

@@ -25,36 +25,36 @@ extern "C"
 
 // --- clock (MockClock.c) -----------------------------------------------
 void    mockClockReset(void);
-int mockClockInitFn(va_list args);
-int mockClockSetSystemTimeFn(va_list args);
-int mockClockGetElapsedMillisecondsFn(va_list args);
-int mockClockGetElapsedMicrosecondsFn(va_list args);
-int mockClockGetElapsedNanosecondsFn(va_list args);
+int mockClockInitFn(int32_t deviceId, va_list args);
+int mockClockSetSystemTimeFn(int32_t deviceId, va_list args);
+int mockClockGetElapsedMillisecondsFn(int32_t deviceId, va_list args);
+int mockClockGetElapsedMicrosecondsFn(int32_t deviceId, va_list args);
+int mockClockGetElapsedNanosecondsFn(int32_t deviceId, va_list args);
 
 // --- timer (MockTimer.c) ---------------------------------------------
 void    mockTimerReset(void);
-int mockTimerInitFn(va_list args);
-int mockTimerInitDeviceFn(va_list args);
-int mockTimerConfigOneShotFn(va_list args);
-int mockTimerConfiguredNanosecondsFn(va_list args);
-int mockTimerRemainingNanosecondsFn(va_list args);
-int mockTimerCancelFn(va_list args);
-int mockTimerCancelAndGetFn(va_list args);
+int mockTimerInitFn(int32_t deviceId, va_list args);
+int mockTimerInitDeviceFn(int32_t deviceId, va_list args);
+int mockTimerConfigOneShotFn(int32_t deviceId, va_list args);
+int mockTimerConfiguredNanosecondsFn(int32_t deviceId, va_list args);
+int mockTimerRemainingNanosecondsFn(int32_t deviceId, va_list args);
+int mockTimerCancelFn(int32_t deviceId, va_list args);
+int mockTimerCancelAndGetFn(int32_t deviceId, va_list args);
 
 // --- uart (MockUart.c) ---------------------------------------------
 void    mockUartReset(void);
-int mockUartInitFn(va_list args);
-int mockUartConfigureFn(va_list args);
-int mockUartPollFn(va_list args);
-int mockUartReadFn(va_list args);
-int mockUartWriteFn(va_list args);
-int mockUartIsConsoleFn(va_list args);
+int mockUartInitFn(int32_t deviceId, va_list args);
+int mockUartConfigureFn(int32_t deviceId, va_list args);
+int mockUartPollFn(int32_t deviceId, va_list args);
+int mockUartReadFn(int32_t deviceId, va_list args);
+int mockUartWriteFn(int32_t deviceId, va_list args);
+int mockUartIsConsoleFn(int32_t deviceId, va_list args);
 
 // --- block device (MockBlockDevice.c) -------------------------------
 void    mockBlockDeviceReset(void);
-int mockBlockDeviceInitFn(va_list args);
-int mockBlockDeviceGetFn(va_list args);
-int mockBlockDeviceRestartFn(va_list args);
+int mockBlockDeviceInitFn(int32_t deviceId, va_list args);
+int mockBlockDeviceGetFn(int32_t deviceId, va_list args);
+int mockBlockDeviceRestartFn(int32_t deviceId, va_list args);
 
 #ifdef __cplusplus
 } // extern "C"

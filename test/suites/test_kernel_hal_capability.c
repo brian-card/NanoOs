@@ -79,7 +79,8 @@ static int capabilityTestMismatches(
 static int capabilityTestGranted(const ProcessDescriptor *processDescriptor) {
   int granted = 0;
   for (int ii = 0; ii < HAL_CAPABILITY_BITMAP_SIZE * 8; ii++) {
-    granted += (processDescriptor->halCapabilityBitmap[ii >> 3] >> (ii & 7)) & 1;
+    granted
+      += (processDescriptor->halCapabilityBitmap[ii >> 3] >> (ii & 7)) & 1;
   }
   return granted;
 }
@@ -138,7 +139,7 @@ NANO_OS_KERNEL_TEST(hal_capability, no_capabilities_clears_the_bitmap) {
 NANO_OS_KERNEL_TEST(hal_capability, call_hal_runs_a_granted_function) {
   int64_t elapsed = -1;
   NANO_OS_ASSERT_EQ_INT(0, callHal(HAL_CLOCK,
-    HAL_CLOCK_GET_ELAPSED_MILLISECONDS, (int64_t) 0, &elapsed));
+    HAL_CLOCK_GET_ELAPSED_MILLISECONDS, 0, (int64_t) 0, &elapsed));
   NANO_OS_ASSERT_TRUE(elapsed >= 0);
 }
 
@@ -148,5 +149,108 @@ NANO_OS_KERNEL_TEST(hal_capability, call_hal_denies_an_ungranted_function) {
     runningProcess->numHalCapabilities, HAL_UART, HAL_UART_CONFIGURE));
 
   NANO_OS_ASSERT_EQ_INT(-EACCES,
-    callHal(HAL_UART, HAL_UART_CONFIGURE, (int32_t) 0, (uint32_t) 9600));
+    callHal(HAL_UART, HAL_UART_CONFIGURE, 0, (uint32_t) 9600));
+}
+
+/// @fn static int deviceMaskTestMismatches(
+///   const ProcessDescriptor *processDescriptor)
+///
+/// @brief Count the subsystems whose device mask in a process disagrees with
+/// the intersection of the deviceIds of its grants in that subsystem.
+///
+/// @param processDescriptor The ProcessDescriptor to check.
+///
+/// @return Returns the number of disagreements.
+static int deviceMaskTestMismatches(
+  const ProcessDescriptor *processDescriptor
+) {
+  int mismatches = 0;
+  for (uint8_t subsystem = 0; subsystem < HAL_NUM_SUBSYSTEMS; subsystem++) {
+    bool seen = false;
+    uint8_t expected = 0;
+    for (size_t ii = 0; ii < processDescriptor->numHalCapabilities; ii++) {
+      HalCapability *capability = &processDescriptor->halCapabilities[ii];
+      if ((capability->subsystemFunction >> 8) == subsystem) {
+        expected = seen ? (expected & capability->deviceIds)
+          : capability->deviceIds;
+        seen = true;
+      }
+    }
+    mismatches += (processDescriptor->halDeviceMasks[subsystem] != expected);
+  }
+  return mismatches;
+}
+
+NANO_OS_KERNEL_TEST(hal_capability, every_process_device_mask_matches) {
+  for (size_t pid = 1; pid <= numProcesses; pid++) {
+    NANO_OS_ASSERT_EQ_INT(0, deviceMaskTestMismatches(&allProcesses[pid - 1]));
+  }
+}
+
+NANO_OS_KERNEL_TEST(hal_capability, user_timer_mask_has_the_patched_device) {
+  int usersChecked = 0;
+  for (size_t pid = 1; pid <= numProcesses; pid++) {
+    ProcessDescriptor *processDescriptor = &allProcesses[pid - 1];
+    HalCapability *cancel = findHalCapability(
+      processDescriptor->halCapabilities,
+      processDescriptor->numHalCapabilities, HAL_TIMER, HAL_TIMER_CANCEL);
+    if ((processDescriptor->privilegeLevel != PRIVILEGE_LEVEL_USER)
+      || (cancel == NULL)
+    ) {
+      continue;
+    }
+    // The scheduler patches this grant's device in before building any mask.
+    NANO_OS_ASSERT_NE_INT(0, cancel->deviceIds);
+    NANO_OS_ASSERT_EQ_INT(cancel->deviceIds,
+      processDescriptor->halDeviceMasks[HAL_TIMER]);
+    usersChecked++;
+  }
+  NANO_OS_ASSERT_TRUE(usersChecked > 0);
+}
+
+NANO_OS_KERNEL_TEST(hal_capability, mixed_device_masks_intersect) {
+  HalCapability capabilities[] = {
+    {
+      .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_POLL,
+      .deviceIds =         0x03,
+    },
+    {
+      .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_WRITE,
+      .deviceIds =         0x06,
+    },
+    {
+      .subsystemFunction = (((uint16_t) HAL_SPI) << 8) | HAL_SPI_TRANSFER8,
+      .deviceIds =         0x01,
+    },
+  };
+  ProcessDescriptor processDescriptor;
+  memset(&processDescriptor, 0xff, sizeof(processDescriptor));
+
+  setProcessHalCapabilities(&processDescriptor, capabilities, 3);
+
+  NANO_OS_ASSERT_EQ_INT(0x02, processDescriptor.halDeviceMasks[HAL_UART]);
+  NANO_OS_ASSERT_EQ_INT(0x01, processDescriptor.halDeviceMasks[HAL_SPI]);
+  NANO_OS_ASSERT_EQ_INT(0x00, processDescriptor.halDeviceMasks[HAL_TIMER]);
+}
+
+NANO_OS_KERNEL_TEST(hal_capability, call_hal_checks_the_device) {
+  ProcessDescriptor *runningProcess = getRunningProcess();
+  NANO_OS_ASSERT_EQ_INT(0x03, runningProcess->halDeviceMasks[HAL_UART]);
+
+  bool isConsole0 = false;
+  bool isConsole1 = false;
+  NANO_OS_ASSERT_EQ_INT(0,
+    callHal(HAL_UART, HAL_UART_IS_CONSOLE, 0, &isConsole0));
+  NANO_OS_ASSERT_EQ_INT(0,
+    callHal(HAL_UART, HAL_UART_IS_CONSOLE, 1, &isConsole1));
+  NANO_OS_ASSERT_TRUE(isConsole0 != isConsole1);
+
+  bool untouched = false;
+  NANO_OS_ASSERT_EQ_INT(-EACCES,
+    callHal(HAL_UART, HAL_UART_IS_CONSOLE, 2, &untouched));
+  NANO_OS_ASSERT_EQ_INT(-EACCES,
+    callHal(HAL_UART, HAL_UART_IS_CONSOLE, 8, &untouched));
+  NANO_OS_ASSERT_EQ_INT(-EACCES,
+    callHal(HAL_UART, HAL_UART_IS_CONSOLE, -1, &untouched));
+  NANO_OS_ASSERT_FALSE(untouched);
 }

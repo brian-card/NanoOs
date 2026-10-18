@@ -94,70 +94,70 @@ void* callOverlayFunctionFromFileCache(const void *overlayDir,
 // Forward declarations for all POSIX platform functions (defined in
 // HalArduinoSamD21x18ASimImpl.c), now with va_list signatures.
 // ---------------------------------------------------------------------------
-int posixProcessStackSize(va_list args);
-int posixMemoryManagerStackSize(va_list args);
-int posixBottomOfHeap(va_list args);
-int posixNumExtraSchedulerStacks(va_list args);
-int posixNumExtraConsoleStacks(va_list args);
+int posixProcessStackSize(int32_t deviceId, va_list args);
+int posixMemoryManagerStackSize(int32_t deviceId, va_list args);
+int posixBottomOfHeap(int32_t deviceId, va_list args);
+int posixNumExtraSchedulerStacks(int32_t deviceId, va_list args);
+int posixNumExtraConsoleStacks(int32_t deviceId, va_list args);
 
-int posixInitUart(va_list args);
-int posixConfigureUart(va_list args);
-int posixPollUart(va_list args);
-int posixReadUart(va_list args);
-int posixWriteUart(va_list args);
-int posixIsUartConsole(va_list args);
+int posixInitUart(int32_t deviceId, va_list args);
+int posixConfigureUart(int32_t deviceId, va_list args);
+int posixPollUart(int32_t deviceId, va_list args);
+int posixReadUart(int32_t deviceId, va_list args);
+int posixWriteUart(int32_t deviceId, va_list args);
+int posixIsUartConsole(int32_t deviceId, va_list args);
 bool posixConsolePollOnlyRequested(void);
 bool posixFileCacheRequested(void);
 
-int posixInitDio(va_list args);
-int posixConfigureDio(va_list args);
-int posixWriteDio(va_list args);
+int posixInitDio(int32_t deviceId, va_list args);
+int posixConfigureDio(int32_t deviceId, va_list args);
+int posixWriteDio(int32_t deviceId, va_list args);
 
-int posixInitSpi(va_list args);
-int posixConfigureSpiDevice(va_list args);
-int posixSetSpiSpeed(va_list args);
-int posixStartSpiTransfer(va_list args);
-int posixEndSpiTransfer(va_list args);
-int posixSpiTransfer8(va_list args);
-int posixSpiTransferBytes(va_list args);
-int posixSpiTransferUntil(va_list args);
+int posixInitSpi(int32_t deviceId, va_list args);
+int posixConfigureSpiDevice(int32_t deviceId, va_list args);
+int posixSetSpiSpeed(int32_t deviceId, va_list args);
+int posixStartSpiTransfer(int32_t deviceId, va_list args);
+int posixEndSpiTransfer(int32_t deviceId, va_list args);
+int posixSpiTransfer8(int32_t deviceId, va_list args);
+int posixSpiTransferBytes(int32_t deviceId, va_list args);
+int posixSpiTransferUntil(int32_t deviceId, va_list args);
 
-int posixTimeInit(va_list args);
-int posixSetSystemTime(va_list args);
-int posixGetElapsedMilliseconds(va_list args);
-int posixGetElapsedMicroseconds(va_list args);
-int posixGetElapsedNanoseconds(va_list args);
+int posixTimeInit(int32_t deviceId, va_list args);
+int posixSetSystemTime(int32_t deviceId, va_list args);
+int posixGetElapsedMilliseconds(int32_t deviceId, va_list args);
+int posixGetElapsedMicroseconds(int32_t deviceId, va_list args);
+int posixGetElapsedNanoseconds(int32_t deviceId, va_list args);
 
-int posixEnterPowerMode(va_list args);
+int posixEnterPowerMode(int32_t deviceId, va_list args);
 
-int posixInitTimer(va_list args);
-int posixInitTimerDevice(va_list args);
-int posixConfigOneShotTimer(va_list args);
-int posixConfiguredTimerNanoseconds(va_list args);
-int posixRemainingTimerNanoseconds(va_list args);
-int posixCancelTimer(va_list args);
-int posixCancelAndGetTimer(va_list args);
+int posixInitTimer(int32_t deviceId, va_list args);
+int posixInitTimerDevice(int32_t deviceId, va_list args);
+int posixConfigOneShotTimer(int32_t deviceId, va_list args);
+int posixConfiguredTimerNanoseconds(int32_t deviceId, va_list args);
+int posixRemainingTimerNanoseconds(int32_t deviceId, va_list args);
+int posixCancelTimer(int32_t deviceId, va_list args);
+int posixCancelAndGetTimer(int32_t deviceId, va_list args);
 
 
-static int posixCallFileOverlay(va_list args);
-static int posixExecCommand(va_list args);
-static int posixRestartRootFilesystem(va_list args);
-static int posixRestartShell(va_list args);
-static int posixStartProcesses(va_list args);
+static int posixCallFileOverlay(int32_t deviceId, va_list args);
+static int posixExecCommand(int32_t deviceId, va_list args);
+static int posixRestartRootFilesystem(int32_t deviceId, va_list args);
+static int posixRestartShell(int32_t deviceId, va_list args);
+static int posixStartProcesses(int32_t deviceId, va_list args);
 
-static int posixOverlayMap(va_list args);
-static int posixContiguousFilesystem(va_list args);
-static int posixStaticLogs(va_list args);
-static int posixLogBuffer(va_list args);
-static int posixLogEntries(va_list args);
-static int posixLogMessages(va_list args);
-static int posixAllProcesses(va_list args);
-static int posixReadyQueues(va_list args);
-static int posixWaitingQueue(va_list args);
-static int posixTimedWaitingQueue(va_list args);
-static int posixFreeQueue(va_list args);
-static int posixProcessErrorNumbers(va_list args);
-static int posixProcessStorage(va_list args);
+static int posixOverlayMap(int32_t deviceId, va_list args);
+static int posixContiguousFilesystem(int32_t deviceId, va_list args);
+static int posixStaticLogs(int32_t deviceId, va_list args);
+static int posixLogBuffer(int32_t deviceId, va_list args);
+static int posixLogEntries(int32_t deviceId, va_list args);
+static int posixLogMessages(int32_t deviceId, va_list args);
+static int posixAllProcesses(int32_t deviceId, va_list args);
+static int posixReadyQueues(int32_t deviceId, va_list args);
+static int posixWaitingQueue(int32_t deviceId, va_list args);
+static int posixTimedWaitingQueue(int32_t deviceId, va_list args);
+static int posixFreeQueue(int32_t deviceId, va_list args);
+static int posixProcessErrorNumbers(int32_t deviceId, va_list args);
+static int posixProcessStorage(int32_t deviceId, va_list args);
 
 // ---------------------------------------------------------------------------
 // Per-platform bitmask arrays — pointers are installed on halCommon*
@@ -365,7 +365,8 @@ static IpcCapability _loggerIpcCapabilities[]
 /// final binary on some targets.
 static const char _sdCardName[] KEEP_IN_FLASH = "SD card";
 
-int posixInitBlockDevice(va_list args) {
+int posixInitBlockDevice(int32_t deviceId, va_list args) {
+  (void) deviceId;
   (void) args;
   if (schedulerIsInitialized() == false) {
     return -EBUSY;
@@ -392,8 +393,7 @@ int posixInitBlockDevice(va_list args) {
   return 0;
 }
 
-int posixGetBlockDevice(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int posixGetBlockDevice(int32_t deviceId, va_list args) {
   BlockDevice **returnValue = va_arg(args, BlockDevice**);
 
   if (!online(HAL->blockDevice, deviceId)) {
@@ -409,9 +409,8 @@ int posixGetBlockDevice(va_list args) {
   return 0;
 }
 
-int posixRestartBlockDevice(va_list args) {
+int posixRestartBlockDevice(int32_t deviceId, va_list args) {
   ProcessDescriptor *processDescriptor = va_arg(args, ProcessDescriptor*);
-  int32_t deviceId = (int32_t) (intptr_t) processDescriptor->restartArgs;
 
   if (processCreate(
     processDescriptor, runSdCardPosix, (void*) _sdCardDevicePath)
@@ -460,7 +459,8 @@ static StaticLogs *_staticLogs = NULL;
 /// out of the simulated heap so that the heap's size can be configured.
 static StaticLogs _staticLogsStorage;
 
-static int posixCallFileOverlay(va_list args) {
+static int posixCallFileOverlay(int32_t deviceId, va_list args) {
+  (void) deviceId;
   HalCallFileOverlayFn *returnValue = va_arg(args, HalCallFileOverlayFn*);
   if (returnValue != NULL) {
     *returnValue = posixFileCacheRequested()
@@ -470,7 +470,8 @@ static int posixCallFileOverlay(va_list args) {
   return 0;
 }
 
-static int posixExecCommand(va_list args) {
+static int posixExecCommand(int32_t deviceId, va_list args) {
+  (void) deviceId;
   HalExecCommandFn *returnValue = va_arg(args, HalExecCommandFn*);
   if (returnValue != NULL) {
     // Uncomment to switch to using the built-in shell:
@@ -498,7 +499,8 @@ static int posixDoStartProcesses(void) {
   return returnValue;
 }
 
-static int posixStartProcesses(va_list args) {
+static int posixStartProcesses(int32_t deviceId, va_list args) {
+  (void) deviceId;
   HalStartProcessesFn *returnValue = va_arg(args, HalStartProcessesFn*);
   if (returnValue != NULL) {
     *returnValue = posixDoStartProcesses;
@@ -506,7 +508,8 @@ static int posixStartProcesses(va_list args) {
   return 0;
 }
 
-static int posixRestartRootFilesystem(va_list args) {
+static int posixRestartRootFilesystem(int32_t deviceId, va_list args) {
+  (void) deviceId;
   HalRestartRootFilesystemFn *returnValue
     = va_arg(args, HalRestartRootFilesystemFn*);
   if (returnValue != NULL) {
@@ -515,7 +518,8 @@ static int posixRestartRootFilesystem(va_list args) {
   return 0;
 }
 
-static int posixRestartShell(va_list args) {
+static int posixRestartShell(int32_t deviceId, va_list args) {
+  (void) deviceId;
   HalRestartShellFn *returnValue = va_arg(args, HalRestartShellFn*);
   if (returnValue != NULL) {
     // Uncomment to switch to using the built-in shell:
@@ -525,7 +529,8 @@ static int posixRestartShell(va_list args) {
   return 0;
 }
 
-static int posixOverlayMap(va_list args) {
+static int posixOverlayMap(int32_t deviceId, va_list args) {
+  (void) deviceId;
   NanoOsOverlayMap **returnValue = va_arg(args, NanoOsOverlayMap**);
   if (returnValue != NULL) {
     *returnValue = _overlayMap;
@@ -533,7 +538,8 @@ static int posixOverlayMap(va_list args) {
   return 0;
 }
 
-static int posixContiguousFilesystem(va_list args) {
+static int posixContiguousFilesystem(int32_t deviceId, va_list args) {
+  (void) deviceId;
   NanoOsOverlayMap **returnValue = va_arg(args, NanoOsOverlayMap**);
   if (returnValue != NULL) {
     *returnValue = _contiguousFilesystem;
@@ -541,7 +547,8 @@ static int posixContiguousFilesystem(va_list args) {
   return 0;
 }
 
-static int posixStaticLogs(va_list args) {
+static int posixStaticLogs(int32_t deviceId, va_list args) {
+  (void) deviceId;
   StaticLogs **returnValue = va_arg(args, StaticLogs**);
   if (returnValue != NULL) {
     *returnValue = _staticLogs;
@@ -549,7 +556,8 @@ static int posixStaticLogs(va_list args) {
   return 0;
 }
 
-static int posixLogBuffer(va_list args) {
+static int posixLogBuffer(int32_t deviceId, va_list args) {
+  (void) deviceId;
   char **returnValue = va_arg(args, char**);
   if (returnValue != NULL) {
     *returnValue = _logBuffer;
@@ -557,7 +565,8 @@ static int posixLogBuffer(va_list args) {
   return 0;
 }
 
-static int posixLogEntries(va_list args) {
+static int posixLogEntries(int32_t deviceId, va_list args) {
+  (void) deviceId;
   LogEntry **returnValue = va_arg(args, LogEntry**);
   if (returnValue != NULL) {
     *returnValue = _logEntries;
@@ -565,7 +574,8 @@ static int posixLogEntries(va_list args) {
   return 0;
 }
 
-static int posixLogMessages(va_list args) {
+static int posixLogMessages(int32_t deviceId, va_list args) {
+  (void) deviceId;
   ProcessMessage **returnValue = va_arg(args, ProcessMessage**);
   if (returnValue != NULL) {
     *returnValue = _logMessages;
@@ -573,7 +583,8 @@ static int posixLogMessages(va_list args) {
   return 0;
 }
 
-static int posixAllProcesses(va_list args) {
+static int posixAllProcesses(int32_t deviceId, va_list args) {
+  (void) deviceId;
   ProcessDescriptor **returnValue = va_arg(args, ProcessDescriptor**);
   if (returnValue != NULL) {
     *returnValue = _allProcesses;
@@ -581,7 +592,8 @@ static int posixAllProcesses(va_list args) {
   return 0;
 }
 
-static int posixReadyQueues(va_list args) {
+static int posixReadyQueues(int32_t deviceId, va_list args) {
+  (void) deviceId;
   ProcessQueue ***returnValue = va_arg(args, ProcessQueue***);
   if (returnValue != NULL) {
     *returnValue = _readyQueues;
@@ -589,7 +601,8 @@ static int posixReadyQueues(va_list args) {
   return 0;
 }
 
-static int posixWaitingQueue(va_list args) {
+static int posixWaitingQueue(int32_t deviceId, va_list args) {
+  (void) deviceId;
   ProcessQueue **returnValue = va_arg(args, ProcessQueue**);
   if (returnValue != NULL) {
     *returnValue = (ProcessQueue*) &_waitingQueue;
@@ -597,7 +610,8 @@ static int posixWaitingQueue(va_list args) {
   return 0;
 }
 
-static int posixTimedWaitingQueue(va_list args) {
+static int posixTimedWaitingQueue(int32_t deviceId, va_list args) {
+  (void) deviceId;
   ProcessQueue **returnValue = va_arg(args, ProcessQueue**);
   if (returnValue != NULL) {
     *returnValue = (ProcessQueue*) &_timedWaitingQueue;
@@ -623,7 +637,8 @@ static int posixDoLaunchProcesses(void) {
   return returnValue;
 }
 
-static int posixLaunchProcesses(va_list args) {
+static int posixLaunchProcesses(int32_t deviceId, va_list args) {
+  (void) deviceId;
   HalLaunchProcessesFn *returnValue = va_arg(args, HalLaunchProcessesFn*);
   if (returnValue != NULL) {
     *returnValue = posixDoLaunchProcesses;
@@ -631,7 +646,8 @@ static int posixLaunchProcesses(va_list args) {
   return 0;
 }
 
-static int posixFreeQueue(va_list args) {
+static int posixFreeQueue(int32_t deviceId, va_list args) {
+  (void) deviceId;
   ProcessQueue **returnValue = va_arg(args, ProcessQueue**);
   if (returnValue != NULL) {
     *returnValue = (ProcessQueue*) &_freeQueue;
@@ -639,7 +655,8 @@ static int posixFreeQueue(va_list args) {
   return 0;
 }
 
-static int posixProcessErrorNumbers(va_list args) {
+static int posixProcessErrorNumbers(int32_t deviceId, va_list args) {
+  (void) deviceId;
   int **returnValue = va_arg(args, int**);
   if (returnValue != NULL) {
     *returnValue = _processErrorNumbers;
@@ -647,7 +664,8 @@ static int posixProcessErrorNumbers(va_list args) {
   return 0;
 }
 
-static int posixProcessStorage(va_list args) {
+static int posixProcessStorage(int32_t deviceId, va_list args) {
+  (void) deviceId;
   void ****returnValue = va_arg(args, void****);
   if (returnValue != NULL) {
     *returnValue = _processStorage;

@@ -258,7 +258,8 @@ static IpcCapability _filesystemIpcCapabilities[]
 #define HAL_ARDUINO_AVR_NUM_PINS NUM_DIGITAL_PINS
 #endif
 
-int arduinoAvrProcessStackSize(va_list args) {
+int arduinoAvrProcessStackSize(int32_t deviceId, va_list args) {
+  (void) deviceId;
   bool debug = (bool) va_arg(args, int);
   size_t *returnValue = va_arg(args, size_t*);
   (void) debug;
@@ -268,7 +269,8 @@ int arduinoAvrProcessStackSize(va_list args) {
   return 0;
 }
 
-int arduinoAvrMemoryManagerStackSize(va_list args) {
+int arduinoAvrMemoryManagerStackSize(int32_t deviceId, va_list args) {
+  (void) deviceId;
   bool debug = (bool) va_arg(args, int);
   size_t *returnValue = va_arg(args, size_t*);
   if (returnValue != NULL) {
@@ -279,7 +281,8 @@ int arduinoAvrMemoryManagerStackSize(va_list args) {
   return 0;
 }
 
-int arduinoAvrBottomOfHeap(va_list args) {
+int arduinoAvrBottomOfHeap(int32_t deviceId, va_list args) {
+  (void) deviceId;
   bool debug = (bool) va_arg(args, int);
   void **returnValue = va_arg(args, void**);
   (void) debug;
@@ -291,7 +294,8 @@ int arduinoAvrBottomOfHeap(va_list args) {
   return 0;
 }
 
-int arduinoAvrNumExtraSchedulerStacks(va_list args) {
+int arduinoAvrNumExtraSchedulerStacks(int32_t deviceId, va_list args) {
+  (void) deviceId;
   bool debug = (bool) va_arg(args, int);
   uint8_t *returnValue = va_arg(args, uint8_t*);
   (void) debug;
@@ -301,7 +305,8 @@ int arduinoAvrNumExtraSchedulerStacks(va_list args) {
   return 0;
 }
 
-int arduinoAvrNumExtraConsoleStacks(va_list args) {
+int arduinoAvrNumExtraConsoleStacks(int32_t deviceId, va_list args) {
+  (void) deviceId;
   bool debug = (bool) va_arg(args, int);
   uint8_t *returnValue = va_arg(args, uint8_t*);
   (void) debug;
@@ -346,13 +351,13 @@ ProcessMessage *halUartCallbackMessages = NULL;
 /// so there's no backing storage.
 volatile bool *halUartCallbacksPending = NULL;
 
-int arduinoAvrInitUart(va_list args) {
+int arduinoAvrInitUart(int32_t deviceId, va_list args) {
+  (void) deviceId;
   (void) args;
   return 0;
 }
 
-int arduinoAvrConfigureUart(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int arduinoAvrConfigureUart(int32_t deviceId, va_list args) {
   uint32_t baud = va_arg(args, uint32_t);
   int returnValue = -ERANGE;
 
@@ -365,8 +370,8 @@ int arduinoAvrConfigureUart(va_list args) {
   return returnValue;
 }
 
-int arduinoAvrPollUart(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int arduinoAvrPollUart(int32_t deviceId, va_list args) {
+  (void) args;
   int serialData = -ERANGE;
 
   if ((deviceId >= 0) && (deviceId < _numUarts)) {
@@ -376,17 +381,17 @@ int arduinoAvrPollUart(va_list args) {
   return serialData;
 }
 
-/// @fn int arduinoAvrReadUart(va_list args)
+/// @fn int arduinoAvrReadUart(int32_t deviceId, va_list args)
 ///
 /// @brief Read data from a UART.  UARTs on this platform are poll-only, so this
 /// always reports 0 bytes read.
 ///
+/// @param deviceId The device ID that callHal checked the call against.
 /// @param args A va_list holding the int32_t deviceId, uint8_t *data,
 ///   ssize_t length, and ssize_t *returnValue arguments of HalUart.read.
 ///
 /// @return Returns 0 on success, -errno on failure.
-int arduinoAvrReadUart(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int arduinoAvrReadUart(int32_t deviceId, va_list args) {
   uint8_t *data = va_arg(args, uint8_t*);
   ssize_t length = va_arg(args, ssize_t);
   ssize_t *returnValue = va_arg(args, ssize_t*);
@@ -400,8 +405,7 @@ int arduinoAvrReadUart(va_list args) {
   return 0;
 }
 
-int arduinoAvrWriteUart(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int arduinoAvrWriteUart(int32_t deviceId, va_list args) {
   const uint8_t *data = va_arg(args, const uint8_t*);
   ssize_t length = va_arg(args, ssize_t);
   ssize_t *returnValue = va_arg(args, ssize_t*);
@@ -418,8 +422,7 @@ int arduinoAvrWriteUart(va_list args) {
   return (numBytesWritten >= 0) ? 0 : (int32_t) numBytesWritten;
 }
 
-int arduinoAvrIsUartConsole(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int arduinoAvrIsUartConsole(int32_t deviceId, va_list args) {
   bool *returnValue = va_arg(args, bool*);
   (void) deviceId;
   if (returnValue != NULL) {
@@ -428,7 +431,8 @@ int arduinoAvrIsUartConsole(va_list args) {
   return 0;
 }
 
-int arduinoAvrInitDio(va_list args) {
+int arduinoAvrInitDio(int32_t deviceId, va_list args) {
+  (void) deviceId;
   (void) args;
   return 0;
 }
@@ -449,8 +453,7 @@ int arduinoAvrConfigureDioImpl(int32_t deviceId, bool output) {
   return 0;
 }
 
-int arduinoAvrConfigureDio(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int arduinoAvrConfigureDio(int32_t deviceId, va_list args) {
   bool output = (bool) va_arg(args, int);
   return arduinoAvrConfigureDioImpl(deviceId, output);
 }
@@ -465,8 +468,7 @@ int arduinoAvrWriteDioImpl(int32_t deviceId, bool high) {
   return 0;
 }
 
-int arduinoAvrWriteDio(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int arduinoAvrWriteDio(int32_t deviceId, va_list args) {
   bool high = (bool) va_arg(args, int);
   return arduinoAvrWriteDioImpl(deviceId, high);
 }
@@ -477,12 +479,14 @@ int arduinoAvrWriteDio(va_list args) {
 /// time for the system.
 static int64_t baseSystemTimeMs = 0;
 
-int arduinoAvrTimeInit(va_list args) {
+int arduinoAvrTimeInit(int32_t deviceId, va_list args) {
+  (void) deviceId;
   (void) args;
   return 0;
 }
 
-int arduinoAvrSetSystemTime(va_list args) {
+int arduinoAvrSetSystemTime(int32_t deviceId, va_list args) {
+  (void) deviceId;
   struct timespec *now = va_arg(args, struct timespec*);
   if (now == NULL) {
     return -EINVAL;
@@ -503,7 +507,8 @@ static int64_t arduinoAvrGetElapsedMillisecondsImpl(int64_t startTime) {
   return now - startTime;
 }
 
-int arduinoAvrGetElapsedMilliseconds(va_list args) {
+int arduinoAvrGetElapsedMilliseconds(int32_t deviceId, va_list args) {
+  (void) deviceId;
   int64_t startTime = va_arg(args, int64_t);
   int64_t *returnValue = va_arg(args, int64_t*);
   int64_t result = arduinoAvrGetElapsedMillisecondsImpl(startTime);
@@ -513,7 +518,8 @@ int arduinoAvrGetElapsedMilliseconds(va_list args) {
   return (result >= 0) ? 0 : -EIO;
 }
 
-int arduinoAvrGetElapsedMicroseconds(va_list args) {
+int arduinoAvrGetElapsedMicroseconds(int32_t deviceId, va_list args) {
+  (void) deviceId;
   int64_t startTime = va_arg(args, int64_t);
   int64_t *returnValue = va_arg(args, int64_t*);
   int64_t result = arduinoAvrGetElapsedMillisecondsImpl(
@@ -528,7 +534,8 @@ int arduinoAvrGetElapsedMicroseconds(va_list args) {
   return (result >= 0) ? 0 : -EIO;
 }
 
-int arduinoAvrGetElapsedNanoseconds(va_list args) {
+int arduinoAvrGetElapsedNanoseconds(int32_t deviceId, va_list args) {
+  (void) deviceId;
   int64_t startTime = va_arg(args, int64_t);
   int64_t *returnValue = va_arg(args, int64_t*);
   int64_t result = arduinoAvrGetElapsedMillisecondsImpl(
@@ -543,7 +550,8 @@ int arduinoAvrGetElapsedNanoseconds(va_list args) {
   return (result >= 0) ? 0 : -EIO;
 }
 
-int arduinoAvrEnterPowerMode(va_list args) {
+int arduinoAvrEnterPowerMode(int32_t deviceId, va_list args) {
+  (void) deviceId;
   HalPowerMode powerMode = (HalPowerMode) va_arg(args, int);
 
   if ((powerMode == HAL_POWER_MODE_OFF)
@@ -635,7 +643,8 @@ void arduinoAvrSetRootStorageFunctions(
   _restartRootFilesystem = restartRootFilesystem;
 }
 
-int arduinoAvrExecCommand(va_list args) {
+int arduinoAvrExecCommand(int32_t deviceId, va_list args) {
+  (void) deviceId;
   HalExecCommandFn *returnValue = va_arg(args, HalExecCommandFn*);
   if (returnValue != NULL) {
     *returnValue = execBuiltinCommand;
@@ -664,7 +673,8 @@ static int arduinoAvrDoStartProcesses(void) {
   return returnValue;
 }
 
-int arduinoAvrStartProcesses(va_list args) {
+int arduinoAvrStartProcesses(int32_t deviceId, va_list args) {
+  (void) deviceId;
   HalStartProcessesFn *returnValue = va_arg(args, HalStartProcessesFn*);
   if (returnValue != NULL) {
     *returnValue = arduinoAvrDoStartProcesses;
@@ -672,7 +682,8 @@ int arduinoAvrStartProcesses(va_list args) {
   return 0;
 }
 
-int arduinoAvrRestartRootFilesystem(va_list args) {
+int arduinoAvrRestartRootFilesystem(int32_t deviceId, va_list args) {
+  (void) deviceId;
   HalRestartRootFilesystemFn *returnValue
     = va_arg(args, HalRestartRootFilesystemFn*);
   if (returnValue != NULL) {
@@ -681,7 +692,8 @@ int arduinoAvrRestartRootFilesystem(va_list args) {
   return 0;
 }
 
-int arduinoAvrRestartShell(va_list args) {
+int arduinoAvrRestartShell(int32_t deviceId, va_list args) {
+  (void) deviceId;
   HalRestartShellFn *returnValue = va_arg(args, HalRestartShellFn*);
   if (returnValue != NULL) {
     *returnValue = restartBuiltinShell;
@@ -689,7 +701,8 @@ int arduinoAvrRestartShell(va_list args) {
   return 0;
 }
 
-int arduinoAvrLogBuffer(va_list args) {
+int arduinoAvrLogBuffer(int32_t deviceId, va_list args) {
+  (void) deviceId;
   char **returnValue = va_arg(args, char**);
   if (returnValue != NULL) {
     *returnValue = _logBuffer;
@@ -697,7 +710,8 @@ int arduinoAvrLogBuffer(va_list args) {
   return 0;
 }
 
-int arduinoAvrLogEntries(va_list args) {
+int arduinoAvrLogEntries(int32_t deviceId, va_list args) {
+  (void) deviceId;
   LogEntry **returnValue = va_arg(args, LogEntry**);
   if (returnValue != NULL) {
     *returnValue = _logEntries;
@@ -705,7 +719,8 @@ int arduinoAvrLogEntries(va_list args) {
   return 0;
 }
 
-int arduinoAvrLogMessages(va_list args) {
+int arduinoAvrLogMessages(int32_t deviceId, va_list args) {
+  (void) deviceId;
   ProcessMessage **returnValue = va_arg(args, ProcessMessage**);
   if (returnValue != NULL) {
     *returnValue = _logMessages;
@@ -713,7 +728,8 @@ int arduinoAvrLogMessages(va_list args) {
   return 0;
 }
 
-int arduinoAvrAllProcesses(va_list args) {
+int arduinoAvrAllProcesses(int32_t deviceId, va_list args) {
+  (void) deviceId;
   ProcessDescriptor **returnValue = va_arg(args, ProcessDescriptor**);
   if (returnValue != NULL) {
     *returnValue = _allProcesses;
@@ -721,7 +737,8 @@ int arduinoAvrAllProcesses(va_list args) {
   return 0;
 }
 
-int arduinoAvrReadyQueues(va_list args) {
+int arduinoAvrReadyQueues(int32_t deviceId, va_list args) {
+  (void) deviceId;
   ProcessQueue ***returnValue = va_arg(args, ProcessQueue***);
   if (returnValue != NULL) {
     *returnValue = _readyQueues;
@@ -729,7 +746,8 @@ int arduinoAvrReadyQueues(va_list args) {
   return 0;
 }
 
-int arduinoAvrWaitingQueue(va_list args) {
+int arduinoAvrWaitingQueue(int32_t deviceId, va_list args) {
+  (void) deviceId;
   ProcessQueue **returnValue = va_arg(args, ProcessQueue**);
   if (returnValue != NULL) {
     *returnValue = (ProcessQueue*) &_waitingQueue;
@@ -737,7 +755,8 @@ int arduinoAvrWaitingQueue(va_list args) {
   return 0;
 }
 
-int arduinoAvrTimedWaitingQueue(va_list args) {
+int arduinoAvrTimedWaitingQueue(int32_t deviceId, va_list args) {
+  (void) deviceId;
   ProcessQueue **returnValue = va_arg(args, ProcessQueue**);
   if (returnValue != NULL) {
     *returnValue = (ProcessQueue*) &_timedWaitingQueue;
@@ -745,7 +764,8 @@ int arduinoAvrTimedWaitingQueue(va_list args) {
   return 0;
 }
 
-int arduinoAvrFreeQueue(va_list args) {
+int arduinoAvrFreeQueue(int32_t deviceId, va_list args) {
+  (void) deviceId;
   ProcessQueue **returnValue = va_arg(args, ProcessQueue**);
   if (returnValue != NULL) {
     *returnValue = (ProcessQueue*) &_freeQueue;
@@ -753,7 +773,8 @@ int arduinoAvrFreeQueue(va_list args) {
   return 0;
 }
 
-int arduinoAvrProcessErrorNumbers(va_list args) {
+int arduinoAvrProcessErrorNumbers(int32_t deviceId, va_list args) {
+  (void) deviceId;
   int **returnValue = va_arg(args, int**);
   if (returnValue != NULL) {
     *returnValue = _processErrorNumbers;
@@ -761,7 +782,8 @@ int arduinoAvrProcessErrorNumbers(va_list args) {
   return 0;
 }
 
-int arduinoAvrProcessStorage(va_list args) {
+int arduinoAvrProcessStorage(int32_t deviceId, va_list args) {
+  (void) deviceId;
   void ****returnValue = va_arg(args, void****);
   if (returnValue != NULL) {
     *returnValue = _processStorage;

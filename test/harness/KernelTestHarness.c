@@ -93,17 +93,17 @@ static HalCapability driverHalCapabilities[] = {
   {
     .subsystemFunction = (((uint16_t) HAL_CLOCK) << 8)
       | HAL_CLOCK_GET_ELAPSED_MILLISECONDS,
-    .deviceIds =         0x00,
+    .deviceIds =         0x01,
   },
   {
     .subsystemFunction = (((uint16_t) HAL_CLOCK) << 8)
       | HAL_CLOCK_GET_ELAPSED_MICROSECONDS,
-    .deviceIds =         0x00,
+    .deviceIds =         0x01,
   },
   {
     .subsystemFunction = (((uint16_t) HAL_CLOCK) << 8)
       | HAL_CLOCK_GET_ELAPSED_NANOSECONDS,
-    .deviceIds =         0x00,
+    .deviceIds =         0x01,
   },
   {
     .subsystemFunction = (((uint16_t) HAL_TIMER) << 8)

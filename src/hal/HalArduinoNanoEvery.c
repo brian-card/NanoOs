@@ -78,17 +78,20 @@ static uint32_t halArduinoAvrImplDiosOnline[] = {
   0x00003fff,
 };
 
-int arduinoAvrInitBlockDevice(va_list args) {
+int arduinoAvrInitBlockDevice(int32_t deviceId, va_list args) {
+  (void) deviceId;
   (void) args;
   return -ENODEV;
 }
 
-int arduinoAvrGetBlockDevice(va_list args) {
+int arduinoAvrGetBlockDevice(int32_t deviceId, va_list args) {
+  (void) deviceId;
   (void) va_arg(args, int32_t);
   return -ENODEV;
 }
 
-int arduinoAvrRestartBlockDevice(va_list args) {
+int arduinoAvrRestartBlockDevice(int32_t deviceId, va_list args) {
+  (void) deviceId;
   (void) va_arg(args, ProcessDescriptor*);
   return -ENODEV;
 }

@@ -102,17 +102,21 @@ static const uint32_t halFunctionCounts[HAL_NUM_SUBSYSTEMS] KEEP_IN_FLASH = {
   [HAL_BLOCK_DEVICE] = HAL_BLOCK_DEVICE_NUM_FNS,
 };
 
-/// @fn int callHal(HalSubsystem subsystem, uint32_t function, ...)
+/// @fn int callHal(HalSubsystem subsystem, uint32_t function,
+///   int32_t deviceId, ...)
 ///
 /// @brief Dispatch a call to the registered platform-specific HAL function.
 ///
 /// @param subsystem The HalSubsystem index into halFunctions.
 /// @param function The function-name enum index for the given subsystem.
+/// @param deviceId The device within the subsystem that the call acts on, or
+///   0 for a function that takes no device.
 /// @param ... Arguments to forward to the platform function via va_list.
 ///
-/// @return Returns the value returned by the platform function, or -ENOTSUP if
-/// no function has been registered for the given subsystem/function pair.
-int callHal(HalSubsystem subsystem, uint32_t function, ...) {
+/// @return Returns the value returned by the platform function, -ENOTSUP if
+/// no function has been registered for the given subsystem/function pair, or
+/// -EACCES if the running process may not call the function on deviceId.
+int callHal(HalSubsystem subsystem, uint32_t function, int32_t deviceId, ...) {
   ProcessDescriptor *processDescriptor = getRunningProcess();
   if ((subsystem >= HAL_NUM_SUBSYSTEMS)
     || (halFunctions[subsystem] == NULL)
@@ -124,18 +128,21 @@ int callHal(HalSubsystem subsystem, uint32_t function, ...) {
     // Only the scheduler gets an unconditional pass here.  Every other
     // process -- including the other PRIVILEGE_LEVEL_KERNEL ones (console,
     // memory manager, the SD-over-SPI card process) -- needs a real,
-    // explicit grant in its own halCapabilities array.
+    // explicit grant in its own halCapabilities array, for the device too.
     uint8_t bit = halCapabilityBitBase[subsystem] + (uint8_t) function;
     if ((processDescriptor->processId != schedulerPid)
-      && ((processDescriptor->halCapabilityBitmap[bit >> 3]
-        & (1 << (bit & 7))) == 0)
+      && (((processDescriptor->halCapabilityBitmap[bit >> 3]
+          & (1 << (bit & 7))) == 0)
+        || (((uint32_t) deviceId) >= 8)
+        || ((processDescriptor->halDeviceMasks[subsystem]
+          & (1 << deviceId)) == 0))
     ) {
       return -EACCES;
     }
   }
   va_list args;
-  va_start(args, function);
-  int returnValue = halFunctions[subsystem][function](args);
+  va_start(args, deviceId);
+  int returnValue = halFunctions[subsystem][function](deviceId, args);
   va_end(args);
   return returnValue;
 }
@@ -460,108 +467,108 @@ int registerProcessName(const char *name, ProcessId pid) {
 // ---------------------------------------------------------------------------
 
 static int halMemoryProcessStackSize(bool debug, size_t *returnValue) {
-  return callHal(HAL_MEMORY, HAL_MEMORY_PROCESS_STACK_SIZE,
+  return callHal(HAL_MEMORY, HAL_MEMORY_PROCESS_STACK_SIZE, 0,
     debug, returnValue);
 }
 
 static int halMemoryMemoryManagerStackSize(bool debug,
   size_t *returnValue
 ) {
-  return callHal(HAL_MEMORY, HAL_MEMORY_MEMORY_MANAGER_STACK_SIZE,
+  return callHal(HAL_MEMORY, HAL_MEMORY_MEMORY_MANAGER_STACK_SIZE, 0,
     debug, returnValue);
 }
 
 static int halMemoryBottomOfHeap(bool debug, void **returnValue) {
-  return callHal(HAL_MEMORY, HAL_MEMORY_BOTTOM_OF_HEAP, debug, returnValue);
+  return callHal(HAL_MEMORY, HAL_MEMORY_BOTTOM_OF_HEAP, 0, debug, returnValue);
 }
 
 static int halMemoryNumExtraSchedulerStacks(bool debug,
   uint8_t *returnValue
 ) {
-  return callHal(HAL_MEMORY, HAL_MEMORY_NUM_EXTRA_SCHEDULER_STACKS,
+  return callHal(HAL_MEMORY, HAL_MEMORY_NUM_EXTRA_SCHEDULER_STACKS, 0,
     debug, returnValue);
 }
 
 static int halMemoryNumExtraConsoleStacks(bool debug,
   uint8_t *returnValue
 ) {
-  return callHal(HAL_MEMORY, HAL_MEMORY_NUM_EXTRA_CONSOLE_STACKS,
+  return callHal(HAL_MEMORY, HAL_MEMORY_NUM_EXTRA_CONSOLE_STACKS, 0,
     debug, returnValue);
 }
 
 static int halMemoryOverlayMap(NanoOsOverlayMap **returnValue) {
-  return callHal(HAL_MEMORY, HAL_MEMORY_OVERLAY_MAP, returnValue);
+  return callHal(HAL_MEMORY, HAL_MEMORY_OVERLAY_MAP, 0, returnValue);
 }
 
 static int halMemoryContiguousFilesystem(NanoOsOverlayMap **returnValue) {
-  return callHal(HAL_MEMORY, HAL_MEMORY_CONTIGUOUS_FILESYSTEM, returnValue);
+  return callHal(HAL_MEMORY, HAL_MEMORY_CONTIGUOUS_FILESYSTEM, 0, returnValue);
 }
 
 static int halMemoryStaticLogs(StaticLogs **returnValue) {
-  return callHal(HAL_MEMORY, HAL_MEMORY_STATIC_LOGS, returnValue);
+  return callHal(HAL_MEMORY, HAL_MEMORY_STATIC_LOGS, 0, returnValue);
 }
 
 static int halMemoryLogBuffer(char **returnValue) {
-  return callHal(HAL_MEMORY, HAL_MEMORY_LOG_BUFFER, returnValue);
+  return callHal(HAL_MEMORY, HAL_MEMORY_LOG_BUFFER, 0, returnValue);
 }
 
 static int halMemoryLogEntries(LogEntry **returnValue) {
-  return callHal(HAL_MEMORY, HAL_MEMORY_LOG_ENTRIES, returnValue);
+  return callHal(HAL_MEMORY, HAL_MEMORY_LOG_ENTRIES, 0, returnValue);
 }
 
 static int halMemoryLogMessages(ProcessMessage **returnValue) {
-  return callHal(HAL_MEMORY, HAL_MEMORY_LOG_MESSAGES, returnValue);
+  return callHal(HAL_MEMORY, HAL_MEMORY_LOG_MESSAGES, 0, returnValue);
 }
 
 static int halMemoryAllProcesses(ProcessDescriptor **returnValue) {
-  return callHal(HAL_MEMORY, HAL_MEMORY_ALL_PROCESSES, returnValue);
+  return callHal(HAL_MEMORY, HAL_MEMORY_ALL_PROCESSES, 0, returnValue);
 }
 
 static int halMemoryReadyQueues(ProcessQueue ***returnValue) {
-  return callHal(HAL_MEMORY, HAL_MEMORY_READY_QUEUES, returnValue);
+  return callHal(HAL_MEMORY, HAL_MEMORY_READY_QUEUES, 0, returnValue);
 }
 
 static int halMemoryWaitingQueue(ProcessQueue **returnValue) {
-  return callHal(HAL_MEMORY, HAL_MEMORY_WAITING_QUEUE, returnValue);
+  return callHal(HAL_MEMORY, HAL_MEMORY_WAITING_QUEUE, 0, returnValue);
 }
 
 static int halMemoryTimedWaitingQueue(ProcessQueue **returnValue) {
-  return callHal(HAL_MEMORY, HAL_MEMORY_TIMED_WAITING_QUEUE, returnValue);
+  return callHal(HAL_MEMORY, HAL_MEMORY_TIMED_WAITING_QUEUE, 0, returnValue);
 }
 
 static int halMemoryFreeQueue(ProcessQueue **returnValue) {
-  return callHal(HAL_MEMORY, HAL_MEMORY_FREE_QUEUE, returnValue);
+  return callHal(HAL_MEMORY, HAL_MEMORY_FREE_QUEUE, 0, returnValue);
 }
 
 static int halMemoryProcessErrorNumbers(int **returnValue) {
-  return callHal(HAL_MEMORY, HAL_MEMORY_PROCESS_ERROR_NUMBERS, returnValue);
+  return callHal(HAL_MEMORY, HAL_MEMORY_PROCESS_ERROR_NUMBERS, 0, returnValue);
 }
 
 static int halMemoryProcessStorage(void ****returnValue) {
-  return callHal(HAL_MEMORY, HAL_MEMORY_PROCESS_STORAGE, returnValue);
+  return callHal(HAL_MEMORY, HAL_MEMORY_PROCESS_STORAGE, 0, returnValue);
 }
 
 static int halPlatformCallFileOverlay(HalCallFileOverlayFn *returnValue) {
-  return callHal(HAL_PLATFORM, HAL_PLATFORM_CALL_FILE_OVERLAY, returnValue);
+  return callHal(HAL_PLATFORM, HAL_PLATFORM_CALL_FILE_OVERLAY, 0, returnValue);
 }
 
 static int halPlatformExecCommand(HalExecCommandFn *returnValue) {
-  return callHal(HAL_PLATFORM, HAL_PLATFORM_EXEC_COMMAND, returnValue);
+  return callHal(HAL_PLATFORM, HAL_PLATFORM_EXEC_COMMAND, 0, returnValue);
 }
 
 static int halPlatformRestartRootFilesystem(
   HalRestartRootFilesystemFn *returnValue
 ) {
-  return callHal(HAL_PLATFORM, HAL_PLATFORM_RESTART_ROOT_FILESYSTEM,
+  return callHal(HAL_PLATFORM, HAL_PLATFORM_RESTART_ROOT_FILESYSTEM, 0,
     returnValue);
 }
 
 static int halPlatformRestartShell(HalRestartShellFn *returnValue) {
-  return callHal(HAL_PLATFORM, HAL_PLATFORM_RESTART_SHELL, returnValue);
+  return callHal(HAL_PLATFORM, HAL_PLATFORM_RESTART_SHELL, 0, returnValue);
 }
 
 static int halPlatformStartProcesses(HalStartProcessesFn *returnValue) {
-  return callHal(HAL_PLATFORM, HAL_PLATFORM_START_PROCESSES, returnValue);
+  return callHal(HAL_PLATFORM, HAL_PLATFORM_START_PROCESSES, 0, returnValue);
 }
 
 /// @var halPlatformCallbacksAnyPending
@@ -576,15 +583,15 @@ static int halPlatformInvokePendingCallbacks(void) {
     return 0;
   }
 
-  return callHal(HAL_PLATFORM, HAL_PLATFORM_INVOKE_PENDING_CALLBACKS);
+  return callHal(HAL_PLATFORM, HAL_PLATFORM_INVOKE_PENDING_CALLBACKS, 0);
 }
 
 static int halPlatformLaunchProcesses(HalLaunchProcessesFn *returnValue) {
-  return callHal(HAL_PLATFORM, HAL_PLATFORM_LAUNCH_PROCESSES, returnValue);
+  return callHal(HAL_PLATFORM, HAL_PLATFORM_LAUNCH_PROCESSES, 0, returnValue);
 }
 
 static int halUartInit(void) {
-  return callHal(HAL_UART, HAL_UART_INIT);
+  return callHal(HAL_UART, HAL_UART_INIT, 0);
 }
 
 static int halUartConfigure(int32_t deviceId, uint32_t baud) {
@@ -621,7 +628,7 @@ static int halUartIsConsole(int32_t deviceId, bool *returnValue) {
 }
 
 static int halDioInit(void) {
-  return callHal(HAL_DIO, HAL_DIO_INIT);
+  return callHal(HAL_DIO, HAL_DIO_INIT, 0);
 }
 
 static int halDioConfigure(int32_t deviceId, bool output) {
@@ -633,7 +640,7 @@ static int halDioWrite(int32_t deviceId, bool high) {
 }
 
 static int halSpiInit(void) {
-  return callHal(HAL_SPI, HAL_SPI_INIT);
+  return callHal(HAL_SPI, HAL_SPI_INIT, 0);
 }
 
 static int halSpiConfigure(int32_t deviceId,
@@ -673,40 +680,40 @@ static int halSpiTransferUntil(int32_t deviceId, uint8_t data,
 }
 
 static int halClockInit(void) {
-  return callHal(HAL_CLOCK, HAL_CLOCK_INIT);
+  return callHal(HAL_CLOCK, HAL_CLOCK_INIT, 0);
 }
 
 static int halClockSetSystemTime(struct timespec *ts) {
-  return callHal(HAL_CLOCK, HAL_CLOCK_SET_SYSTEM_TIME, ts);
+  return callHal(HAL_CLOCK, HAL_CLOCK_SET_SYSTEM_TIME, 0, ts);
 }
 
 static int halClockGetElapsedMilliseconds(int64_t startTime,
   int64_t *returnValue
 ) {
-  return callHal(HAL_CLOCK, HAL_CLOCK_GET_ELAPSED_MILLISECONDS,
+  return callHal(HAL_CLOCK, HAL_CLOCK_GET_ELAPSED_MILLISECONDS, 0,
     startTime, returnValue);
 }
 
 static int halClockGetElapsedMicroseconds(int64_t startTime,
   int64_t *returnValue
 ) {
-  return callHal(HAL_CLOCK, HAL_CLOCK_GET_ELAPSED_MICROSECONDS,
+  return callHal(HAL_CLOCK, HAL_CLOCK_GET_ELAPSED_MICROSECONDS, 0,
     startTime, returnValue);
 }
 
 static int halClockGetElapsedNanoseconds(int64_t startTime,
   int64_t *returnValue
 ) {
-  return callHal(HAL_CLOCK, HAL_CLOCK_GET_ELAPSED_NANOSECONDS,
+  return callHal(HAL_CLOCK, HAL_CLOCK_GET_ELAPSED_NANOSECONDS, 0,
     startTime, returnValue);
 }
 
 static int halPowerEnterMode(HalPowerMode powerMode) {
-  return callHal(HAL_POWER, HAL_POWER_ENTER_MODE, (int) powerMode);
+  return callHal(HAL_POWER, HAL_POWER_ENTER_MODE, 0, (int) powerMode);
 }
 
 static int halTimerInit(void) {
-  return callHal(HAL_TIMER, HAL_TIMER_INIT);
+  return callHal(HAL_TIMER, HAL_TIMER_INIT, 0);
 }
 
 static int halTimerInitDevice(int32_t deviceId) {
@@ -747,7 +754,7 @@ static int halTimerCancelAndGet(int32_t deviceId,
 }
 
 static int halBlockDeviceInit(void) {
-  return callHal(HAL_BLOCK_DEVICE, HAL_BLOCK_DEVICE_INIT);
+  return callHal(HAL_BLOCK_DEVICE, HAL_BLOCK_DEVICE_INIT, 0);
 }
 
 static int halBlockDeviceGet(int32_t deviceId, BlockDevice **returnValue) {
@@ -757,7 +764,7 @@ static int halBlockDeviceGet(int32_t deviceId, BlockDevice **returnValue) {
 
 static int halBlockDeviceRestart(ProcessDescriptor *processDescriptor) {
   return callHal(HAL_BLOCK_DEVICE, HAL_BLOCK_DEVICE_RESTART,
-    processDescriptor);
+    (int32_t) (intptr_t) processDescriptor->restartArgs, processDescriptor);
 }
 
 // ---------------------------------------------------------------------------
@@ -1350,17 +1357,17 @@ extern HalUartCallback halUartCallbacks[];
 extern ProcessMessage halUartCallbackMessages[];
 extern volatile bool halUartCallbacksPending[];
 
-/// @fn int halCommonUartRegisterCallback(va_list args)
+/// @fn int halCommonUartRegisterCallback(int32_t deviceId, va_list args)
 ///
 /// @brief Common helper function to register a callback to be called when a
 /// UART interrupt fires.
 ///
+/// @param deviceId The device ID that callHal checked the call against.
 /// @param args A va_list that captures the parameters that were passed to
 ///   HAL->uart->registerCallback.
 ///
 /// @return Returns 0 on success, -errno on failure.
-int halCommonUartRegisterCallback(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int halCommonUartRegisterCallback(int32_t deviceId, va_list args) {
   ProcessDescriptor *processDescriptor = va_arg(args, ProcessDescriptor*);
   int64_t messageType = va_arg(args, int64_t);
   void *priv = va_arg(args, void*);
@@ -1372,17 +1379,6 @@ int halCommonUartRegisterCallback(va_list args) {
   if (pollOnly(HAL->uart, deviceId)) {
     // We can't configure this device with a callback.  It's poll-only.
     return -ENOTSUP;
-  }
-
-  ProcessDescriptor *runningProcess = getRunningProcess();
-  if (runningProcess != NULL) {
-    if ((runningProcess->processId != schedulerPid)
-      && (findHalCapabilityWithDevice(runningProcess->halCapabilities,
-        runningProcess->numHalCapabilities,
-        HAL_UART, HAL_UART_REGISTER_CALLBACK, deviceId) == NULL)
-    ) {
-      return -EACCES;
-    }
   }
 
   HalUartCallback *halUartCallback = &halUartCallbacks[deviceId];
@@ -1422,15 +1418,17 @@ void halCommonUartMarkReady(int32_t deviceId) {
   halPlatformCallbacksAnyPending = true;
 }
 
-/// @fn int halCommonPlatformLaunchProcesses(va_list args)
+/// @fn int halCommonPlatformLaunchProcesses(int32_t deviceId, va_list args)
 ///
 /// @brief Platform launchProcesses implementation for platforms that use
 /// halCommonLaunchProcesses unchanged.
 ///
+/// @param deviceId The device ID that callHal checked the call against.
 /// @param args A va_list holding a HalLaunchProcessesFn* to populate.
 ///
 /// @return Returns 0 on success, -errno on failure.
-int halCommonPlatformLaunchProcesses(va_list args) {
+int halCommonPlatformLaunchProcesses(int32_t deviceId, va_list args) {
+  (void) deviceId;
   HalLaunchProcessesFn *returnValue = va_arg(args, HalLaunchProcessesFn*);
   if (returnValue != NULL) {
     *returnValue = halCommonLaunchProcesses;
@@ -1438,14 +1436,16 @@ int halCommonPlatformLaunchProcesses(va_list args) {
   return 0;
 }
 
-/// @fn int halCommonPlatformInvokePendingCallbacks(va_list args)
+/// @fn int halCommonPlatformInvokePendingCallbacks(int32_t deviceId,
+///   va_list args)
 ///
 /// @brief Invoke any pending UART callbacks.  Only called through
 /// halPlatformInvokePendingCallbacks, which has already found
 /// halPlatformCallbacksAnyPending set.
 ///
 /// @return Returns 0 on success, -errno on failure.
-int halCommonPlatformInvokePendingCallbacks(va_list args) {
+int halCommonPlatformInvokePendingCallbacks(int32_t deviceId, va_list args) {
+  (void) deviceId;
   (void) args;
 
   halPlatformCallbacksAnyPending = false;

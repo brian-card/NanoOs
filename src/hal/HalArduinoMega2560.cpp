@@ -186,13 +186,13 @@ static int arduinoAvrInitSpiImpl(void) {
   return 0;
 }
 
-int arduinoAvrInitSpi(va_list args) {
+int arduinoAvrInitSpi(int32_t deviceId, va_list args) {
+  (void) deviceId;
   (void) args;
   return arduinoAvrInitSpiImpl();
 }
 
-int arduinoAvrConfigureSpiDevice(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int arduinoAvrConfigureSpiDevice(int32_t deviceId, va_list args) {
   uint8_t cs   = (uint8_t) va_arg(args, int);
   uint8_t sck  = (uint8_t) va_arg(args, int);
   uint8_t copi = (uint8_t) va_arg(args, int);
@@ -238,8 +238,7 @@ int arduinoAvrConfigureSpiDevice(va_list args) {
   return 0;
 }
 
-int arduinoAvrSetSpiSpeed(va_list args) {
-  int32_t  deviceId = va_arg(args, int32_t);
+int arduinoAvrSetSpiSpeed(int32_t deviceId, va_list args) {
   uint32_t baud     = va_arg(args, uint32_t);
 
   if ((deviceId < 0) || (deviceId >= numArduinoSpis)
@@ -275,13 +274,13 @@ static int arduinoAvrStartSpiTransferImpl(int32_t deviceId) {
   return 0;
 }
 
-int arduinoAvrStartSpiTransfer(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int arduinoAvrStartSpiTransfer(int32_t deviceId, va_list args) {
+  (void) args;
   return arduinoAvrStartSpiTransferImpl(deviceId);
 }
 
-int arduinoAvrEndSpiTransfer(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int arduinoAvrEndSpiTransfer(int32_t deviceId, va_list args) {
+  (void) args;
 
   if ((deviceId < 0) || (deviceId >= numArduinoSpis)
     || (arduinoAvrSpiDevices[deviceId].configured == false)
@@ -300,8 +299,7 @@ int arduinoAvrEndSpiTransfer(va_list args) {
   return 0;
 }
 
-int arduinoAvrSpiTransfer8(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int arduinoAvrSpiTransfer8(int32_t deviceId, va_list args) {
   uint8_t data = (uint8_t) va_arg(args, int);
 
   if ((deviceId < 0) || (deviceId >= numArduinoSpis)
@@ -315,8 +313,7 @@ int arduinoAvrSpiTransfer8(va_list args) {
   return (int) SPI.transfer(data);
 }
 
-int arduinoAvrSpiTransferBytes(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int arduinoAvrSpiTransferBytes(int32_t deviceId, va_list args) {
   uint8_t *data = va_arg(args, uint8_t*);
   uint32_t length = va_arg(args, uint32_t);
 
@@ -333,8 +330,7 @@ int arduinoAvrSpiTransferBytes(va_list args) {
   return 0;
 }
 
-int arduinoAvrSpiTransferUntil(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int arduinoAvrSpiTransferUntil(int32_t deviceId, va_list args) {
   uint8_t data = (uint8_t) va_arg(args, int);
   uint8_t mask = (uint8_t) va_arg(args, int);
   uint8_t value = (uint8_t) va_arg(args, int);
@@ -393,7 +389,8 @@ static HalCapability _sdCardHalCapabilities[]
 
 extern BlockDevice *blockDevices[];
 
-int arduinoAvrInitBlockDevice(va_list args) {
+int arduinoAvrInitBlockDevice(int32_t deviceId, va_list args) {
+  (void) deviceId;
   (void) args;
   if (schedulerIsInitialized() == false) {
     return -EBUSY;
@@ -415,8 +412,7 @@ int arduinoAvrInitBlockDevice(va_list args) {
   return 0;
 }
 
-int arduinoAvrGetBlockDevice(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int arduinoAvrGetBlockDevice(int32_t deviceId, va_list args) {
   BlockDevice **returnValue = va_arg(args, BlockDevice**);
 
   if (!online(HAL->blockDevice, deviceId)) {
@@ -432,9 +428,8 @@ int arduinoAvrGetBlockDevice(va_list args) {
   return 0;
 }
 
-int arduinoAvrRestartBlockDevice(va_list args) {
+int arduinoAvrRestartBlockDevice(int32_t deviceId, va_list args) {
   ProcessDescriptor *processDescriptor = va_arg(args, ProcessDescriptor*);
-  int32_t deviceId = (int32_t) (intptr_t) processDescriptor->restartArgs;
 
   SdCardSpiArgs sdCardSpiArgs = {
     .spiCsDio   = SD_CARD_PIN_CHIP_SELECT,

@@ -340,7 +340,7 @@ HalCapability consoleHalCapabilities[] = {
   {
     .subsystemFunction = (((uint16_t) HAL_CLOCK) << 8)
       | HAL_CLOCK_GET_ELAPSED_NANOSECONDS,
-    .deviceIds =         0x00, // No device for this function
+    .deviceIds =         0x01, // Device 0: no device for this function
   },
 };
 
@@ -364,12 +364,12 @@ HalCapability memoryManagerHalCapabilities[] = {
   {
     .subsystemFunction = (((uint16_t) HAL_MEMORY) << 8)
       | HAL_MEMORY_MEMORY_MANAGER_STACK_SIZE,
-    .deviceIds =         0x00, // No device for this function
+    .deviceIds =         0x01, // Device 0: no device for this function
   },
   {
     .subsystemFunction = (((uint16_t) HAL_MEMORY) << 8)
       | HAL_MEMORY_BOTTOM_OF_HEAP,
-    .deviceIds =         0x00, // No device for this function
+    .deviceIds =         0x01, // Device 0: no device for this function
   },
   LOG_FALLBACK_HAL_CAPABILITIES,
   {
@@ -383,11 +383,11 @@ HalCapability memoryManagerHalCapabilities[] = {
   {
     .subsystemFunction = (((uint16_t) HAL_CLOCK) << 8)
       | HAL_CLOCK_GET_ELAPSED_NANOSECONDS,
-    .deviceIds =         0x00, // No device for this function
+    .deviceIds =         0x01, // Device 0: no device for this function
   },
   {
     .subsystemFunction = (((uint16_t) HAL_POWER) << 8) | HAL_POWER_ENTER_MODE,
-    .deviceIds =         0x00, // No device for this function
+    .deviceIds =         0x01, // Device 0: no device for this function
   },
 };
 
@@ -413,17 +413,17 @@ HalCapability baseExecutiveHalCapabilities[] = {
   {
     .subsystemFunction = (((uint16_t) HAL_CLOCK) << 8)
       | HAL_CLOCK_GET_ELAPSED_MILLISECONDS,
-    .deviceIds =         0x00, // No device for this function
+    .deviceIds =         0x01, // Device 0: no device for this function
   },
   {
     .subsystemFunction = (((uint16_t) HAL_CLOCK) << 8)
       | HAL_CLOCK_GET_ELAPSED_MICROSECONDS,
-    .deviceIds =         0x00, // No device for this function
+    .deviceIds =         0x01, // Device 0: no device for this function
   },
   {
     .subsystemFunction = (((uint16_t) HAL_CLOCK) << 8)
       | HAL_CLOCK_GET_ELAPSED_NANOSECONDS,
-    .deviceIds =         0x00, // No device for this function
+    .deviceIds =         0x01, // Device 0: no device for this function
   },
 };
 
@@ -447,12 +447,12 @@ HalCapability loggerHalCapabilities[] = {
   {
     .subsystemFunction = (((uint16_t) HAL_MEMORY) << 8)
       | HAL_MEMORY_STATIC_LOGS,
-    .deviceIds =         0x00, // No device for this function
+    .deviceIds =         0x01, // Device 0: no device for this function
   },
   {
     .subsystemFunction = (((uint16_t) HAL_MEMORY) << 8)
       | HAL_MEMORY_LOG_BUFFER,
-    .deviceIds =         0x00, // No device for this function
+    .deviceIds =         0x01, // Device 0: no device for this function
   },
   {
     .subsystemFunction = (((uint16_t) HAL_UART) << 8)
@@ -467,17 +467,17 @@ HalCapability loggerHalCapabilities[] = {
   {
     .subsystemFunction = (((uint16_t) HAL_CLOCK) << 8)
       | HAL_CLOCK_GET_ELAPSED_MILLISECONDS,
-    .deviceIds =         0x00, // No device for this function
+    .deviceIds =         0x01, // Device 0: no device for this function
   },
   {
     .subsystemFunction = (((uint16_t) HAL_CLOCK) << 8)
       | HAL_CLOCK_GET_ELAPSED_MICROSECONDS,
-    .deviceIds =         0x00, // No device for this function
+    .deviceIds =         0x01, // Device 0: no device for this function
   },
   {
     .subsystemFunction = (((uint16_t) HAL_CLOCK) << 8)
       | HAL_CLOCK_GET_ELAPSED_NANOSECONDS,
-    .deviceIds =         0x00, // No device for this function
+    .deviceIds =         0x01, // Device 0: no device for this function
   },
 };
 
@@ -520,17 +520,17 @@ HalCapability baseUserHalCapabilities[] = {
   {
     .subsystemFunction = (((uint16_t) HAL_CLOCK) << 8)
       | HAL_CLOCK_GET_ELAPSED_MILLISECONDS,
-    .deviceIds =         0x00, // No device for this function
+    .deviceIds =         0x01, // Device 0: no device for this function
   },
   {
     .subsystemFunction = (((uint16_t) HAL_CLOCK) << 8)
       | HAL_CLOCK_GET_ELAPSED_MICROSECONDS,
-    .deviceIds =         0x00, // No device for this function
+    .deviceIds =         0x01, // Device 0: no device for this function
   },
   {
     .subsystemFunction = (((uint16_t) HAL_CLOCK) << 8)
       | HAL_CLOCK_GET_ELAPSED_NANOSECONDS,
-    .deviceIds =         0x00, // No device for this function
+    .deviceIds =         0x01, // Device 0: no device for this function
   },
   {
     .subsystemFunction = (((uint16_t) HAL_TIMER) << 8) | HAL_TIMER_CANCEL,

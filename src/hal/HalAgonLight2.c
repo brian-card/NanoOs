@@ -444,7 +444,8 @@ static HalCapability _sdCardHalCapabilities[]
 // Memory subsystem stubs
 // ---------------------------------------------------------------------------
 
-int agonLight2ProcessStackSize(va_list args) {
+int agonLight2ProcessStackSize(int32_t deviceId, va_list args) {
+  (void) deviceId;
   bool    debug       = (bool)   va_arg(args, int);
   size_t *returnValue = va_arg(args, size_t*);
   (void) debug;
@@ -454,7 +455,8 @@ int agonLight2ProcessStackSize(va_list args) {
   return 0;
 }
 
-int agonLight2MemoryManagerStackSize(va_list args) {
+int agonLight2MemoryManagerStackSize(int32_t deviceId, va_list args) {
+  (void) deviceId;
   bool    debug       = (bool)   va_arg(args, int);
   size_t *returnValue = va_arg(args, size_t*);
   if (returnValue != NULL) {
@@ -464,7 +466,8 @@ int agonLight2MemoryManagerStackSize(va_list args) {
   return 0;
 }
 
-int agonLight2BottomOfHeap(va_list args) {
+int agonLight2BottomOfHeap(int32_t deviceId, va_list args) {
+  (void) deviceId;
   bool   debug       = (bool)  va_arg(args, int);
   void **returnValue = va_arg(args, void**);
   (void) debug;
@@ -474,7 +477,8 @@ int agonLight2BottomOfHeap(va_list args) {
   return 0;
 }
 
-int agonLight2NumExtraSchedulerStacks(va_list args) {
+int agonLight2NumExtraSchedulerStacks(int32_t deviceId, va_list args) {
+  (void) deviceId;
   bool     debug       = (bool)    va_arg(args, int);
   uint8_t *returnValue = va_arg(args, uint8_t*);
   (void) debug;
@@ -484,7 +488,8 @@ int agonLight2NumExtraSchedulerStacks(va_list args) {
   return 0;
 }
 
-int agonLight2NumExtraConsoleStacks(va_list args) {
+int agonLight2NumExtraConsoleStacks(int32_t deviceId, va_list args) {
+  (void) deviceId;
   bool     debug       = (bool)    va_arg(args, int);
   uint8_t *returnValue = va_arg(args, uint8_t*);
   (void) debug;
@@ -521,7 +526,8 @@ ProcessMessage halUartCallbackMessages[NUM_UARTS];
 /// interrupt is triggered.
 volatile bool halUartCallbacksPending[NUM_UARTS];
 
-int agonLight2InitUart(va_list args) {
+int agonLight2InitUart(int32_t deviceId, va_list args) {
+  (void) deviceId;
   (void) args;
   memset((void*) halUartCallbacks, 0, sizeof(halUartCallbacks));
   memset((void*) halUartCallbackMessages, 0, sizeof(halUartCallbackMessages));
@@ -536,8 +542,7 @@ void (*agonLight2ConfigureUartImpl[NUM_UARTS])(uint16_t divisor) = {
   agonLight2ConfigureUart1Impl,
 };
 
-int agonLight2ConfigureUart(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int agonLight2ConfigureUart(int32_t deviceId, va_list args) {
   uint32_t baud = va_arg(args, uint32_t);
   int returnValue = -ERANGE;
   if (deviceId >= (sizeof(agonLight2ConfigureUartImpl)
@@ -559,8 +564,8 @@ int (*agonLight2PollUartImpl[NUM_UARTS])(void) = {
   agonLight2PollUart1Impl,
 };
 
-int agonLight2PollUart(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int agonLight2PollUart(int32_t deviceId, va_list args) {
+  (void) args;
   if (deviceId >= (sizeof(agonLight2ConfigureUartImpl)
     / sizeof(agonLight2ConfigureUartImpl[0]))
   ) {
@@ -577,17 +582,17 @@ size_t (*agonLight2ReadUartImpl[NUM_UARTS])(uint8_t *data, size_t length) = {
   agonLight2ReadUart1Impl,
 };
 
-/// @fn int agonLight2ReadUart(va_list args)
+/// @fn int agonLight2ReadUart(int32_t deviceId, va_list args)
 ///
 /// @brief Read whatever bytes a UART's interrupt handler has buffered, up to
 /// the provided length, without blocking.  Poll-only UARTs report 0 bytes.
 ///
+/// @param deviceId The device ID that callHal checked the call against.
 /// @param args A va_list holding the int32_t deviceId, uint8_t *data,
 ///   ssize_t length, and ssize_t *returnValue arguments of HalUart.read.
 ///
 /// @return Returns 0 on success, -errno on failure.
-int agonLight2ReadUart(va_list args) {
-  int32_t  deviceId    = va_arg(args, int32_t);
+int agonLight2ReadUart(int32_t deviceId, va_list args) {
   uint8_t *data        = va_arg(args, uint8_t*);
   ssize_t  length      = va_arg(args, ssize_t);
   ssize_t *returnValue = va_arg(args, ssize_t*);
@@ -616,8 +621,7 @@ void (*agonLight2WriteUartImpl[NUM_UARTS])(uint8_t c) = {
   agonLight2WriteUart1Impl,
 };
 
-int agonLight2WriteUart(va_list args) {
-  int32_t  deviceId    = va_arg(args, int32_t);
+int agonLight2WriteUart(int32_t deviceId, va_list args) {
   const uint8_t *data  = va_arg(args, const uint8_t*);
   ssize_t  length      = va_arg(args, ssize_t);
   ssize_t *returnValue = va_arg(args, ssize_t*);
@@ -639,8 +643,7 @@ int agonLight2WriteUart(va_list args) {
   return 0;
 }
 
-int agonLight2IsUartConsole(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int agonLight2IsUartConsole(int32_t deviceId, va_list args) {
   bool *returnValue = va_arg(args, bool*);
 
   if (returnValue != NULL) {
@@ -706,7 +709,8 @@ static const AgonLight2GpioPort* agonGpioDecode(int32_t dio, uint8_t *bit) {
   return &_agonGpioPorts[port - 0x0B];
 }
 
-int agonLight2InitDio(va_list args) {
+int agonLight2InitDio(int32_t deviceId, va_list args) {
+  (void) deviceId;
   // This function is a no-op on this platform.
   (void) args;
   return 0;
@@ -740,10 +744,9 @@ int agonLight2ConfigureDioImpl(int32_t dio, bool output) {
   return 0;
 }
 
-int agonLight2ConfigureDio(va_list args) {
-  int32_t dio = va_arg(args, int32_t);
+int agonLight2ConfigureDio(int32_t deviceId, va_list args) {
   bool output = (bool) va_arg(args, int);
-  return agonLight2ConfigureDioImpl(dio, output);
+  return agonLight2ConfigureDioImpl(deviceId, output);
 }
 
 int agonLight2WriteDioImpl(int32_t dio, bool high) {
@@ -766,10 +769,9 @@ int agonLight2WriteDioImpl(int32_t dio, bool high) {
   return 0;
 }
 
-int agonLight2WriteDio(va_list args) {
-  int32_t dio = va_arg(args, int32_t);
+int agonLight2WriteDio(int32_t deviceId, va_list args) {
   bool high = (bool) va_arg(args, int);
-  return agonLight2WriteDioImpl(dio, high);
+  return agonLight2WriteDioImpl(deviceId, high);
 }
 
 // ---------------------------------------------------------------------------
@@ -832,7 +834,8 @@ static uint16_t agonLight2SpiDivisor(uint32_t baud) {
   return (uint16_t) divisor;
 }
 
-int agonLight2InitSpi(va_list args) {
+int agonLight2InitSpi(int32_t deviceId, va_list args) {
+  (void) deviceId;
   (void) args;
 
   memset(&spiDevices, 0, numSpis * sizeof(HalSpiDevice));
@@ -842,8 +845,7 @@ int agonLight2InitSpi(va_list args) {
   return 0;
 }
 
-int agonLight2ConfigureSpi(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int agonLight2ConfigureSpi(int32_t deviceId, va_list args) {
   uint8_t cs   = (uint8_t) va_arg(args, int);
   uint8_t sck  = (uint8_t) va_arg(args, int);
   uint8_t copi = (uint8_t) va_arg(args, int);
@@ -926,8 +928,7 @@ static __attribute__((noinline)) HalSpiDevice* agonLight2ConfiguredSpiDevice(
   return spiDevice;
 }
 
-int agonLight2SetSpiSpeed(va_list args) {
-  int32_t  deviceId = va_arg(args, int32_t);
+int agonLight2SetSpiSpeed(int32_t deviceId, va_list args) {
   uint32_t baud     = va_arg(args, uint32_t);
 
   HalSpiDevice *spiDevice = agonLight2ConfiguredSpiDevice(deviceId);
@@ -976,8 +977,8 @@ int agonLight2StartSpiTransferImpl(HalSpiDevice *spiDevice) {
   return 0;
 }
 
-int agonLight2StartSpiTransfer(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int agonLight2StartSpiTransfer(int32_t deviceId, va_list args) {
+  (void) args;
   HalSpiDevice *spiDevice = agonLight2ConfiguredSpiDevice(deviceId);
   if (spiDevice == NULL) {
     // Outside the limit of the devices we support.
@@ -986,8 +987,8 @@ int agonLight2StartSpiTransfer(va_list args) {
   return agonLight2StartSpiTransferImpl(spiDevice);
 }
 
-int agonLight2EndSpiTransfer(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int agonLight2EndSpiTransfer(int32_t deviceId, va_list args) {
+  (void) args;
   HalSpiDevice *spiDevice = agonLight2ConfiguredSpiDevice(deviceId);
   if (spiDevice == NULL) {
     // Outside the limit of the devices we support.
@@ -1005,8 +1006,7 @@ int agonLight2EndSpiTransfer(va_list args) {
   return 0;
 }
 
-int agonLight2SpiTransfer8(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int agonLight2SpiTransfer8(int32_t deviceId, va_list args) {
   uint8_t data = (uint8_t) va_arg(args, int);
 
   HalSpiDevice *spiDevice = agonLight2ConfiguredSpiDevice(deviceId);
@@ -1020,8 +1020,7 @@ int agonLight2SpiTransfer8(va_list args) {
   return (int32_t) agonLight2SpiTransfer8Impl(data);
 }
 
-int agonLight2SpiTransferBytes(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int agonLight2SpiTransferBytes(int32_t deviceId, va_list args) {
   uint8_t *data = va_arg(args, uint8_t*);
   uint32_t length = va_arg(args, uint32_t);
 
@@ -1038,8 +1037,7 @@ int agonLight2SpiTransferBytes(va_list args) {
   return 0;
 }
 
-int agonLight2SpiTransferUntil(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int agonLight2SpiTransferUntil(int32_t deviceId, va_list args) {
   uint8_t data = (uint8_t) va_arg(args, int);
   uint8_t mask = (uint8_t) va_arg(args, int);
   uint8_t value = (uint8_t) va_arg(args, int);
@@ -1077,13 +1075,15 @@ static int64_t _baseSystemTimeNs = 0;
 extern void initClockTimer(void);
 extern void readClock(int64_t *returnValue);
 
-int agonLight2InitClock(va_list args) {
+int agonLight2InitClock(int32_t deviceId, va_list args) {
+  (void) deviceId;
   (void) args;
   initClockTimer();
   return 0;
 }
 
-int agonLight2SetSystemTime(va_list args) {
+int agonLight2SetSystemTime(int32_t deviceId, va_list args) {
+  (void) deviceId;
   struct timespec *ts = va_arg(args, struct timespec*);
   if (ts == NULL) {
     return -EINVAL;
@@ -1094,7 +1094,8 @@ int agonLight2SetSystemTime(va_list args) {
   return 0;
 }
 
-int agonLight2GetElapsedMilliseconds(va_list args) {
+int agonLight2GetElapsedMilliseconds(int32_t deviceId, va_list args) {
+  (void) deviceId;
   int64_t  startTime   = va_arg(args, int64_t);
   int64_t *returnValue = va_arg(args, int64_t*);
   int64_t  nowMs = 0;
@@ -1114,7 +1115,8 @@ int agonLight2GetElapsedMilliseconds(va_list args) {
   return 0;
 }
 
-int agonLight2GetElapsedMicroseconds(va_list args) {
+int agonLight2GetElapsedMicroseconds(int32_t deviceId, va_list args) {
+  (void) deviceId;
   int64_t  startTime   = va_arg(args, int64_t);
   int64_t *returnValue = va_arg(args, int64_t*);
   int64_t  nowUs = 0;
@@ -1134,7 +1136,8 @@ int agonLight2GetElapsedMicroseconds(va_list args) {
   return 0;
 }
 
-int agonLight2GetElapsedNanoseconds(va_list args) {
+int agonLight2GetElapsedNanoseconds(int32_t deviceId, va_list args) {
+  (void) deviceId;
   int64_t  startTime   = va_arg(args, int64_t);
   int64_t *returnValue = va_arg(args, int64_t*);
   int64_t  nowNs = 0;
@@ -1157,7 +1160,8 @@ int agonLight2GetElapsedNanoseconds(va_list args) {
 // Power subsystem stub
 // ---------------------------------------------------------------------------
 
-int agonLight2EnterMode(va_list args) {
+int agonLight2EnterMode(int32_t deviceId, va_list args) {
+  (void) deviceId;
   HalPowerMode powerMode = (HalPowerMode) va_arg(args, int);
 
   if (powerMode == HAL_POWER_MODE_RESET) {
@@ -1279,7 +1283,8 @@ static int agonLight2CheckTimerCancelCapability(int32_t deviceId) {
   return 0;
 }
 
-int agonLight2InitTimer(va_list args) {
+int agonLight2InitTimer(int32_t deviceId, va_list args) {
+  (void) deviceId;
   // Nothing subsystem-wide to do: each eZ80F92 PRT (TMR0..TMR5) is fully
   // independent and clocked straight from the system clock - there is no
   // shared enable, clock gate, or reset the way the SAMD21's GCLK needs.  All
@@ -1288,8 +1293,8 @@ int agonLight2InitTimer(va_list args) {
   return 0;
 }
 
-int agonLight2InitTimerDevice(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int agonLight2InitTimerDevice(int32_t deviceId, va_list args) {
+  (void) args;
 
   if ((deviceId < 0) || (deviceId >= _numPrtTimers)) {
     return -ERANGE;
@@ -1339,8 +1344,7 @@ static __attribute__((noinline)) AgonLight2Timer* agonLight2TimerDevice(
   return &_prtTimers[deviceId];
 }
 
-int agonLight2ConfigOneShotTimer(va_list args) {
-  int32_t   deviceId    = va_arg(args, int32_t);
+int agonLight2ConfigOneShotTimer(int32_t deviceId, va_list args) {
   uint64_t  nanoseconds = va_arg(args, uint64_t);
   void    (*callback)(void) = va_arg(args, void (*)(void));
 
@@ -1419,8 +1423,7 @@ int agonLight2ConfigOneShotTimer(va_list args) {
   return 0;
 }
 
-int agonLight2ConfiguredTimerNanoseconds(va_list args) {
-  int32_t   deviceId    = va_arg(args, int32_t);
+int agonLight2ConfiguredTimerNanoseconds(int32_t deviceId, va_list args) {
   uint64_t *returnValue = va_arg(args, uint64_t*);
 
   if (returnValue != NULL) {
@@ -1442,8 +1445,7 @@ int agonLight2ConfiguredTimerNanoseconds(va_list args) {
   return 0;
 }
 
-int agonLight2RemainingTimerNanoseconds(va_list args) {
-  int32_t   deviceId    = va_arg(args, int32_t);
+int agonLight2RemainingTimerNanoseconds(int32_t deviceId, va_list args) {
   uint64_t *returnValue = va_arg(args, uint64_t*);
 
   if (returnValue != NULL) {
@@ -1469,8 +1471,8 @@ int agonLight2RemainingTimerNanoseconds(va_list args) {
   return 0;
 }
 
-int agonLight2CancelTimer(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int agonLight2CancelTimer(int32_t deviceId, va_list args) {
+  (void) args;
 
   if ((deviceId < 0) || (deviceId >= _numPrtTimers)) {
     return -ERANGE;
@@ -1494,14 +1496,13 @@ int agonLight2CancelTimer(va_list args) {
   return 0;
 }
 
-int agonLight2CancelAndGetTimer(va_list args) {
+int agonLight2CancelAndGetTimer(int32_t deviceId, va_list args) {
   // Snapshot 'now' first: this is critical-path (stdatomic.c wraps every atomic
   // op in cancelAndGet + re-arm) and the remaining-time figure feeds straight
   // back into configOneShot.
   int64_t nowNs = 0;
   readClock(&nowNs);
 
-  int32_t   deviceId              = va_arg(args, int32_t);
   uint64_t *configuredNanoseconds = va_arg(args, uint64_t*);
   uint64_t *remainingNanoseconds  = va_arg(args, uint64_t*);
   void   (**callback)(void)       = va_arg(args, void (**)(void));
@@ -1588,7 +1589,8 @@ void agonLight2TimerInterruptHandler5(void) { agonLight2TimerInterruptHandler(4)
 // Block device subsystem stubs (no SD card driver for eZ80 side yet)
 // ---------------------------------------------------------------------------
 
-int agonLight2InitBlockDevice(va_list args) {
+int agonLight2InitBlockDevice(int32_t deviceId, va_list args) {
+  (void) deviceId;
   (void) args;
   if (schedulerIsInitialized() == false) {
     return -EBUSY;
@@ -1611,8 +1613,7 @@ int agonLight2InitBlockDevice(va_list args) {
   return 0;
 }
 
-int agonLight2GetBlockDevice(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int agonLight2GetBlockDevice(int32_t deviceId, va_list args) {
   BlockDevice **returnValue = va_arg(args, BlockDevice**);
 
   if (!online(HAL->blockDevice, deviceId)) {
@@ -1636,9 +1637,8 @@ int agonLight2GetBlockDevice(va_list args) {
 /// final binary on some targets.
 static const char _sdCardName[] KEEP_IN_FLASH = "SD card";
 
-int agonLight2RestartBlockDevice(va_list args) {
+int agonLight2RestartBlockDevice(int32_t deviceId, va_list args) {
   ProcessDescriptor *processDescriptor = va_arg(args, ProcessDescriptor*);
-  int32_t deviceId = (int32_t) (intptr_t) processDescriptor->restartArgs;
 
   SdCardSpiArgs sdCardSpiArgs = {
     .spiCsDio   = _sdCardPinChipSelect,
@@ -1678,7 +1678,8 @@ int agonLight2RestartBlockDevice(va_list args) {
 // Per-subsystem function tables
 // ---------------------------------------------------------------------------
 
-int agonLight2CallFileOverlay(va_list args) {
+int agonLight2CallFileOverlay(int32_t deviceId, va_list args) {
+  (void) deviceId;
   HalCallFileOverlayFn *returnValue = va_arg(args, HalCallFileOverlayFn*);
   if (returnValue != NULL) {
     *returnValue = callOverlayFunctionFromFileCache;
@@ -1686,7 +1687,8 @@ int agonLight2CallFileOverlay(va_list args) {
   return 0;
 }
 
-int agonLight2ExecCommand(va_list args) {
+int agonLight2ExecCommand(int32_t deviceId, va_list args) {
+  (void) deviceId;
   HalExecCommandFn *returnValue = va_arg(args, HalExecCommandFn*);
   if (returnValue != NULL) {
     *returnValue = execOverlayCommand;
@@ -1712,7 +1714,8 @@ static int agonLight2DoStartProcesses(void) {
   return returnValue;
 }
 
-int agonLight2StartProcesses(va_list args) {
+int agonLight2StartProcesses(int32_t deviceId, va_list args) {
+  (void) deviceId;
   HalStartProcessesFn *returnValue = va_arg(args, HalStartProcessesFn*);
   if (returnValue != NULL) {
     *returnValue = agonLight2DoStartProcesses;
@@ -1735,7 +1738,8 @@ static int agonLight2DoLaunchProcesses(void) {
   return returnValue;
 }
 
-int agonLight2LaunchProcesses(va_list args) {
+int agonLight2LaunchProcesses(int32_t deviceId, va_list args) {
+  (void) deviceId;
   HalLaunchProcessesFn *returnValue = va_arg(args, HalLaunchProcessesFn*);
   if (returnValue != NULL) {
     *returnValue = agonLight2DoLaunchProcesses;
@@ -1743,7 +1747,8 @@ int agonLight2LaunchProcesses(va_list args) {
   return 0;
 }
 
-int agonLight2RestartRootFilesystem(va_list args) {
+int agonLight2RestartRootFilesystem(int32_t deviceId, va_list args) {
+  (void) deviceId;
   HalRestartRootFilesystemFn *returnValue
     = va_arg(args, HalRestartRootFilesystemFn*);
   if (returnValue != NULL) {
@@ -1752,7 +1757,8 @@ int agonLight2RestartRootFilesystem(va_list args) {
   return 0;
 }
 
-int agonLight2RestartShell(va_list args) {
+int agonLight2RestartShell(int32_t deviceId, va_list args) {
+  (void) deviceId;
   HalRestartShellFn *returnValue = va_arg(args, HalRestartShellFn*);
   if (returnValue != NULL) {
     *returnValue = restartOverlayShell;
@@ -1760,7 +1766,8 @@ int agonLight2RestartShell(va_list args) {
   return 0;
 }
 
-int agonLight2OverlayMap(va_list args) {
+int agonLight2OverlayMap(int32_t deviceId, va_list args) {
+  (void) deviceId;
   NanoOsOverlayMap **returnValue = va_arg(args, NanoOsOverlayMap**);
   if (returnValue != NULL) {
     *returnValue = (NanoOsOverlayMap*) OVERLAY_ADDRESS;
@@ -1768,7 +1775,8 @@ int agonLight2OverlayMap(va_list args) {
   return 0;
 }
 
-int agonLight2ContiguousFilesystem(va_list args) {
+int agonLight2ContiguousFilesystem(int32_t deviceId, va_list args) {
+  (void) deviceId;
   NanoOsOverlayMap **returnValue = va_arg(args, NanoOsOverlayMap**);
   if (returnValue != NULL) {
     *returnValue = (NanoOsOverlayMap*) FILESYSTEM_DRIVER_ADDRESS;
@@ -1776,7 +1784,8 @@ int agonLight2ContiguousFilesystem(va_list args) {
   return 0;
 }
 
-int agonLight2StaticLogs(va_list args) {
+int agonLight2StaticLogs(int32_t deviceId, va_list args) {
+  (void) deviceId;
   StaticLogs **returnValue = va_arg(args, StaticLogs**);
   if (returnValue != NULL) {
     *returnValue = (StaticLogs*) STATIC_LOGS_ADDRESS;
@@ -1784,7 +1793,8 @@ int agonLight2StaticLogs(va_list args) {
   return 0;
 }
 
-int agonLight2LogBuffer(va_list args) {
+int agonLight2LogBuffer(int32_t deviceId, va_list args) {
+  (void) deviceId;
   char **returnValue = va_arg(args, char**);
   if (returnValue != NULL) {
     *returnValue = _logBuffer;
@@ -1792,7 +1802,8 @@ int agonLight2LogBuffer(va_list args) {
   return 0;
 }
 
-int agonLight2LogEntries(va_list args) {
+int agonLight2LogEntries(int32_t deviceId, va_list args) {
+  (void) deviceId;
   LogEntry **returnValue = va_arg(args, LogEntry**);
   if (returnValue != NULL) {
     *returnValue = _logEntries;
@@ -1800,7 +1811,8 @@ int agonLight2LogEntries(va_list args) {
   return 0;
 }
 
-int agonLight2LogMessages(va_list args) {
+int agonLight2LogMessages(int32_t deviceId, va_list args) {
+  (void) deviceId;
   ProcessMessage **returnValue = va_arg(args, ProcessMessage**);
   if (returnValue != NULL) {
     *returnValue = _logMessages;
@@ -1808,7 +1820,8 @@ int agonLight2LogMessages(va_list args) {
   return 0;
 }
 
-int agonLight2AllProcesses(va_list args) {
+int agonLight2AllProcesses(int32_t deviceId, va_list args) {
+  (void) deviceId;
   ProcessDescriptor **returnValue = va_arg(args, ProcessDescriptor**);
   if (returnValue != NULL) {
     *returnValue = _allProcesses;
@@ -1816,7 +1829,8 @@ int agonLight2AllProcesses(va_list args) {
   return 0;
 }
 
-int agonLight2ReadyQueues(va_list args) {
+int agonLight2ReadyQueues(int32_t deviceId, va_list args) {
+  (void) deviceId;
   ProcessQueue ***returnValue = va_arg(args, ProcessQueue***);
   if (returnValue != NULL) {
     *returnValue = _readyQueues;
@@ -1824,7 +1838,8 @@ int agonLight2ReadyQueues(va_list args) {
   return 0;
 }
 
-int agonLight2WaitingQueue(va_list args) {
+int agonLight2WaitingQueue(int32_t deviceId, va_list args) {
+  (void) deviceId;
   ProcessQueue **returnValue = va_arg(args, ProcessQueue**);
   if (returnValue != NULL) {
     *returnValue = (ProcessQueue*) &_waitingQueue;
@@ -1832,7 +1847,8 @@ int agonLight2WaitingQueue(va_list args) {
   return 0;
 }
 
-int agonLight2TimedWaitingQueue(va_list args) {
+int agonLight2TimedWaitingQueue(int32_t deviceId, va_list args) {
+  (void) deviceId;
   ProcessQueue **returnValue = va_arg(args, ProcessQueue**);
   if (returnValue != NULL) {
     *returnValue = (ProcessQueue*) &_timedWaitingQueue;
@@ -1840,7 +1856,8 @@ int agonLight2TimedWaitingQueue(va_list args) {
   return 0;
 }
 
-int agonLight2FreeQueue(va_list args) {
+int agonLight2FreeQueue(int32_t deviceId, va_list args) {
+  (void) deviceId;
   ProcessQueue **returnValue = va_arg(args, ProcessQueue**);
   if (returnValue != NULL) {
     *returnValue = (ProcessQueue*) &_freeQueue;
@@ -1848,7 +1865,8 @@ int agonLight2FreeQueue(va_list args) {
   return 0;
 }
 
-int agonLight2ProcessErrorNumbers(va_list args) {
+int agonLight2ProcessErrorNumbers(int32_t deviceId, va_list args) {
+  (void) deviceId;
   int **returnValue = va_arg(args, int**);
   if (returnValue != NULL) {
     *returnValue = _processErrorNumbers;
@@ -1856,7 +1874,8 @@ int agonLight2ProcessErrorNumbers(va_list args) {
   return 0;
 }
 
-int agonLight2ProcessStorage(va_list args) {
+int agonLight2ProcessStorage(int32_t deviceId, va_list args) {
+  (void) deviceId;
   void ****returnValue = va_arg(args, void****);
   if (returnValue != NULL) {
     *returnValue = _processStorage;

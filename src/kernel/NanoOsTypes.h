@@ -75,6 +75,12 @@ extern "C"
 /// Hal.c verifies that this holds one bit for every HAL function.
 #define HAL_CAPABILITY_BITMAP_SIZE 8
 
+/// @def HAL_DEVICE_MASKS_SIZE
+///
+/// @brief The number of entries in a ProcessDescriptor's halDeviceMasks, one
+/// per HalSubsystem.  Hal.c verifies that this matches HAL_NUM_SUBSYSTEMS.
+#define HAL_DEVICE_MASKS_SIZE 9
+
 // Forward declarations from other headers
 typedef struct HalCapability HalCapability;
 typedef struct IpcCapability IpcCapability;
@@ -236,8 +242,6 @@ typedef struct ProcessQueue ProcessQueue;
 ///   with the HAL.  This will be NULL for PRIVILEGE_LEVEL_KERNEL processes.
 /// @param numHalCapabilities The number of HalCapability objects in the
 ///   halCapabilities array.
-/// @param halCapabilityBitmap One bit per HAL function, set for each function
-///   granted in halCapabilities.  Built by setProcessHalCapabilities.
 /// @param ipcCapabilities A pointer to a *SORTED* array of IpcCapability
 ///   objects that describe the message that the process is permitted to send to
 ///   other processes.  This will be NULL only for the scheduler process.
@@ -245,6 +249,11 @@ typedef struct ProcessQueue ProcessQueue;
 ///   ipcCapabilities array.
 /// @param ipcCapabilitiesDynamic Whether or not the ipcCapabilities array is
 ///   dynamically allocated.
+/// @param halCapabilityBitmap One bit per HAL function, set for each function
+///   granted in halCapabilities.  Built by setProcessHalCapabilities.
+/// @param halDeviceMasks For each HalSubsystem, the bitmask of device IDs the
+///   process may use with its granted functions in that subsystem.  Built by
+///   setProcessHalCapabilities.
 typedef struct ProcessDescriptor {
   const char         *name;
   Thread             *mainThread;
@@ -266,10 +275,12 @@ typedef struct ProcessDescriptor {
   void               *restartArgs;
   HalCapability      *halCapabilities;
   size_t              numHalCapabilities;
-  uint8_t             halCapabilityBitmap[HAL_CAPABILITY_BITMAP_SIZE];
   IpcCapability      *ipcCapabilities;
   size_t              numIpcCapabilities;
   bool                ipcCapabilitiesDynamic;
+  // Kept last so that these share the tail padding after the bool above.
+  uint8_t             halCapabilityBitmap[HAL_CAPABILITY_BITMAP_SIZE];
+  uint8_t             halDeviceMasks[HAL_DEVICE_MASKS_SIZE];
 } ProcessDescriptor;
 
 /// @struct ProcessInfoElement

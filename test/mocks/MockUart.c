@@ -86,36 +86,38 @@ size_t mockUartDrain(char *out, size_t max) {
   return copied;
 }
 
-int mockUartInitFn(va_list args) {
+int mockUartInitFn(int32_t deviceId, va_list args) {
+  (void) deviceId;
   (void) args;
   mockUartReset();
   return 0;
 }
 
-int mockUartConfigureFn(va_list args) {
-  (void) args; // deviceId, baud - accepted and ignored
+int mockUartConfigureFn(int32_t deviceId, va_list args) {
+  (void) deviceId;
+  (void) args; // baud - accepted and ignored
   return 0;
 }
 
-int mockUartPollFn(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int mockUartPollFn(int32_t deviceId, va_list args) {
+  (void) args;
   if (deviceId != MOCK_CONSOLE_UART) {
     return -1;
   }
   return ringPop(&_rx);
 }
 
-/// @fn int mockUartReadFn(va_list args)
+/// @fn int mockUartReadFn(int32_t deviceId, va_list args)
 ///
 /// @brief Copy up to length bytes from the console's receive buffer.  Like the
 /// real HALs, a poll-only device reports 0 bytes read.
 ///
+/// @param deviceId The device ID that callHal checked the call against.
 /// @param args A va_list holding the int32_t deviceId, uint8_t *data,
 ///   ssize_t length, and ssize_t *returnValue arguments of HalUart.read.
 ///
 /// @return Returns 0.
-int mockUartReadFn(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int mockUartReadFn(int32_t deviceId, va_list args) {
   uint8_t *data = va_arg(args, uint8_t*);
   ssize_t length = va_arg(args, ssize_t);
   ssize_t *returnValue = va_arg(args, ssize_t*);
@@ -133,8 +135,7 @@ int mockUartReadFn(va_list args) {
   return 0;
 }
 
-int mockUartWriteFn(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int mockUartWriteFn(int32_t deviceId, va_list args) {
   const uint8_t *data = va_arg(args, const uint8_t*);
   intptr_t length = va_arg(args, intptr_t);
   intptr_t *returnValue = va_arg(args, intptr_t*);
@@ -154,8 +155,7 @@ int mockUartWriteFn(va_list args) {
   return (written >= 0) ? 0 : -1;
 }
 
-int mockUartIsConsoleFn(va_list args) {
-  int32_t deviceId = va_arg(args, int32_t);
+int mockUartIsConsoleFn(int32_t deviceId, va_list args) {
   bool *returnValue = va_arg(args, bool*);
   if (returnValue != NULL) {
     *returnValue = (deviceId == MOCK_CONSOLE_UART);
