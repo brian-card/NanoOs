@@ -41,6 +41,7 @@
 #include "../include/NanoOsDirentTypes.h"
 #include "../include/NanoOsStatTypes.h"
 
+#include "stdbool.h"
 #include "stddef.h"
 #include "stdint.h"
 
@@ -123,6 +124,10 @@ typedef struct FilesystemState* (*FilesystemDriverInit)(
 /// @param blockBuffer A pointer to to a dynamically-allocated block of memory
 ///   blockSize bytes in size.
 /// @param blockSize The size of a block as it is known to the filesystem.
+/// @param blockBufferLba The address of the block that blockBuffer holds when
+///   blockBufferValid is true.
+/// @param blockBufferValid Whether blockBuffer matches the block at
+///   blockBufferLba on the device.
 /// @param numOpenFiles The number of files currently open by the filesystem.
 ///   If this number is zero then the blockBuffer pointer may be NULL.
 /// @param openFiles A pointer to the first FILE that's open.
@@ -147,6 +152,8 @@ typedef struct FilesystemState {
   BlockDevice                    *blockDevice;
   uint8_t                        *blockBuffer;
   uint16_t                        blockSize;
+  uint32_t                        blockBufferLba;
+  bool                            blockBufferValid;
   uint8_t                         numOpenFiles;
   FILE                           *openFiles;
   uint32_t                        startLba;
