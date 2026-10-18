@@ -818,6 +818,9 @@ int posixEnterPowerMode(int32_t deviceId, va_list args) {
 /// @param active Whether or not the timer is currently active.
 /// @param startTime The time, in nanoseconds, when the timer was configured.
 /// @param deadline The time, in nanoseconds, when the timer expires.
+/// @param threadRunning Whether timerThread has been created and not yet
+///   joined.
+/// @param fired Whether timerThread has sent its signal to the main thread.
 typedef struct SoftwareTimer {
   pthread_t timerThread;
   int signal;
@@ -827,6 +830,8 @@ typedef struct SoftwareTimer {
   bool active;
   int64_t startTime;
   int64_t deadline;
+  bool threadRunning;
+  bool fired;
 } SoftwareTimer;
 
 /// Forward declaration
@@ -846,9 +851,6 @@ extern SoftwareTimer softwareTimers[];
 void* timerThreadFunction(void *arg) {
   intptr_t timer = (intptr_t) arg;
 
-  // We want to be able to kill this thread if we need to.
-  pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
-
   SoftwareTimer *swTimer = &softwareTimers[timer];
   int64_t delay = swTimer->deadline - swTimer->startTime;
   struct timespec ts = {
@@ -857,6 +859,7 @@ void* timerThreadFunction(void *arg) {
   };
   nanosleep(&ts, NULL);
   if (swTimer->active) {
+    swTimer->fired = true;
     // Send the specified signal to the main thread.
     pthread_kill(_mainThreadId, swTimer->signal);
   }
@@ -874,9 +877,13 @@ void* timerThreadFunction(void *arg) {
 /// callback if one is set.
 void timerSignalHandler(int timer) {
   SoftwareTimer *swTimer = &softwareTimers[timer];
+  if (!swTimer->fired) {
+    // Sent by a timer thread that has since been cancelled.
+    return;
+  }
 
+  swTimer->fired = false;
   swTimer->active = false;
-  swTimer->timerThread = 0;
   swTimer->startTime = 0;
   swTimer->deadline = 0;
 
@@ -929,6 +936,8 @@ SoftwareTimer softwareTimers[] = {
     .active = false,
     .startTime = 0,
     .deadline = 0,
+    .threadRunning = false,
+    .fired = false,
   },
   {
     .timerThread = 1,
@@ -939,6 +948,8 @@ SoftwareTimer softwareTimers[] = {
     .active = false,
     .startTime = 0,
     .deadline = 0,
+    .threadRunning = false,
+    .fired = false,
   },
 };
 
@@ -980,6 +991,29 @@ int posixInitTimerDevice(int32_t deviceId, va_list args) {
   return 0;
 }
 
+/// @fn void reapTimerThread(SoftwareTimer *swTimer)
+///
+/// @brief Cancel and join a timer's thread, if it has one, and discard any
+/// signal it has already sent.
+///
+/// @param swTimer The SoftwareTimer whose thread to reap.
+///
+/// @return This function returns no value.
+static void reapTimerThread(SoftwareTimer *swTimer) {
+  // A timer signal here could switch coroutines in the middle of the join.
+  sigset_t allSignals;
+  sigset_t previousSignals;
+  sigfillset(&allSignals);
+  pthread_sigmask(SIG_SETMASK, &allSignals, &previousSignals);
+  if (swTimer->threadRunning) {
+    pthread_cancel(swTimer->timerThread);
+    pthread_join(swTimer->timerThread, NULL);
+    swTimer->threadRunning = false;
+  }
+  swTimer->fired = false;
+  pthread_sigmask(SIG_SETMASK, &previousSignals, NULL);
+}
+
 int posixConfigOneShotTimer(int32_t deviceId, va_list args) {
   uint64_t nanoseconds = va_arg(args, uint64_t);
   void (*callback)(void) = va_arg(args, void (*)(void));
@@ -993,13 +1027,14 @@ int posixConfigOneShotTimer(int32_t deviceId, va_list args) {
     return -EINVAL;
   }
 
+  swTimer->active = false;
+  reapTimerThread(swTimer);
   swTimer->callback = callback;
   swTimer->active = true;
   posixGetElapsedNanosecondsImpl(0, &swTimer->startTime);
   swTimer->deadline = swTimer->startTime + nanoseconds;
-  pthread_create(&swTimer->timerThread, NULL,
-    timerThreadFunction, (void*) ((intptr_t) deviceId));
-  pthread_detach(swTimer->timerThread);
+  swTimer->threadRunning = (pthread_create(&swTimer->timerThread, NULL,
+    timerThreadFunction, (void*) ((intptr_t) deviceId)) == 0);
 
   return 0;
 }
@@ -1077,14 +1112,9 @@ int posixCancelTimer(int32_t deviceId, va_list args) {
     return -EINVAL;
   }
 
-  bool active = swTimer->active;
   swTimer->active = false;
+  reapTimerThread(swTimer);
 
-  if (active) {
-    pthread_cancel(swTimer->timerThread);
-  }
-
-  swTimer->timerThread = 0;
   swTimer->startTime = 0;
   swTimer->deadline = 0;
   swTimer->callback = NULL;
@@ -1118,12 +1148,8 @@ int posixCancelAndGetTimer(int32_t deviceId, va_list args) {
   // function is in the critical path.  Time is of the essence, so inline the
   // logic.
 
-  bool active = swTimer->active;
   swTimer->active = false;
-
-  if (active) {
-    pthread_cancel(swTimer->timerThread);
-  }
+  reapTimerThread(swTimer);
 
   if (configuredNanoseconds != NULL) {
     if (swTimer->deadline > swTimer->startTime) {
