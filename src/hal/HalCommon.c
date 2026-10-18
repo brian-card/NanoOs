@@ -1234,6 +1234,10 @@ int restartBuiltinFilesystem(ProcessDescriptor *processDescriptor) {
   memset(&fs, 0, sizeof(fs));
   fs.blockDevice = rootBlockDevice;
   fs.blockSize = fs.blockDevice->blockSize;
+  fs.numProcesses = HAL->memory->numProcesses;
+  ProcessDescriptor *processes = NULL;
+  HAL->memory->allProcesses(&processes);
+  fs.allProcesses = processes;
 
   fs.driverInit = _builtinFilesystemInitDriver;
   fs.commandHandlers = _builtinFilesystemCommandHandlers;
@@ -1293,6 +1297,10 @@ int restartOverlayFilesystem(ProcessDescriptor *processDescriptor) {
   memset(&fs, 0, sizeof(fs));
   fs.blockDevice = rootBlockDevice;
   fs.blockSize = fs.blockDevice->blockSize;
+  fs.numProcesses = HAL->memory->numProcesses;
+  ProcessDescriptor *processes = NULL;
+  HAL->memory->allProcesses(&processes);
+  fs.allProcesses = processes;
 
   BlockOverlayArgs blockOverlayArgs = {
     .blockDevice = rootBlockDevice,
@@ -1350,6 +1358,10 @@ int restartContiguousFilesystem(ProcessDescriptor *processDescriptor) {
   memset(&fs, 0, sizeof(fs));
   fs.blockDevice = rootBlockDevice;
   fs.blockSize = fs.blockDevice->blockSize;
+  fs.numProcesses = HAL->memory->numProcesses;
+  ProcessDescriptor *processes = NULL;
+  HAL->memory->allProcesses(&processes);
+  fs.allProcesses = processes;
 
   NanoOsOverlayMap *overlayMap = NULL;
   HAL->memory->contiguousFilesystem(&overlayMap);
