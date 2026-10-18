@@ -473,6 +473,24 @@ def test_touch_creates_a_file_stamped_with_the_current_time(s):
     assert fsck_problems(s) == []
 
 
+def test_relative_paths_resolve_against_the_working_directory(s):
+    s.login()
+    assert s.sh("cd /etc") == ""
+    assert s.sh("cat catfile") == CATFILE_CONTENTS
+    assert ll_names(s, ".") == ["catfile", "hostname", "issue"]
+    assert s.sh("mkdir newdir") == ""
+    assert ll_names(s, "/etc") == ["catfile", "hostname", "issue", "newdir/"]
+    assert s.sh("mv catfile newdir/moved") == ""
+    assert ll_names(s, "/etc/newdir") == ["moved"]
+    assert s.sh("cd newdir") == ""
+    assert s.sh("cat ../newdir/./moved") == CATFILE_CONTENTS
+    assert s.sh("rm moved") == ""
+    assert s.sh("cd ..") == ""
+    assert s.sh("rmdir newdir") == ""
+    assert ll_names(s, "/etc") == ["hostname", "issue"]
+    assert fsck_problems(s) == []
+
+
 def test_mkdir_and_rmdir_report_errors(s):
     s.login()
     assert s.sh("mkdir /etc/issue") == \
