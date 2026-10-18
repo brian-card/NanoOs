@@ -134,6 +134,8 @@ int sdCardPosixWriteBlocksCommandHandler(
     returnValue = sdCardWrite(devFd, buffer,
       sdCardState->blockSize * startSdBlock,
       sdCardState->blockSize * numSdBlocks);
+    // An SPI card clocks 0xFF back into the buffer while the data goes out.
+    memset(buffer, 0xFF, sdCardState->blockSize * numSdBlocks);
   }
 
   processMessageData(processMessage) = (void*) ((intptr_t) returnValue);
