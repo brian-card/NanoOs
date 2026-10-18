@@ -50,6 +50,7 @@
 #include "../user/NanoOsDebug.h"
 
 #define NANO_OS_KERNEL_BUILD
+#include "../../usr/src/filesystems/include/FilesystemPaths.h"
 #include "../../usr/src/filesystems/common/OpenFileCommandHandler.c"
 #include "../../usr/src/filesystems/common/CloseFileCommandHandler.c"
 #include "../../usr/src/filesystems/common/ReadFileCommandHandler.c"

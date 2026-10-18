@@ -42,6 +42,7 @@
 #include "ExecutiveProcesses.h"
 #include "NanoOsUtils.h"
 #include "FilesystemUtils.h"
+#include "FilesystemPaths.h"
 #endif // NANO_OS_KERNEL_BUILD
 
 // Prototype used by this handler.
@@ -81,9 +82,16 @@ void* Lstat(void *args) {
 
   int returnValue = -1;
   int errorNumber = NO_DRIVER_ERRNO;
-  if (filesystemState->driverState != NULL) {
+  char *pathname = filesystemAbsolutePath(
+    filesystemState, processMessage, lstatArgs->pathname);
+  if (pathname == NULL) {
+    errorNumber = FILESYSTEM_PATH_ENOMEM;
+  } else if (filesystemState->driverState != NULL) {
     returnValue = driverLstat(filesystemState->driverState,
-      lstatArgs->pathname, lstatArgs->statbuf, &errorNumber);
+      pathname, lstatArgs->statbuf, &errorNumber);
+  }
+  if (pathname != lstatArgs->pathname) {
+    free(pathname);
   }
 
   if (returnValue == 0) {

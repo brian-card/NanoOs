@@ -40,6 +40,7 @@
 #include "ExecutiveProcesses.h"
 #include "NanoOsUtils.h"
 #include "FilesystemUtils.h"
+#include "FilesystemPaths.h"
 #endif // NANO_OS_KERNEL_BUILD
 
 // Prototypes used by this handler.
@@ -70,9 +71,15 @@ void* Rmdir(void *args) {
   FilesystemPathArgs *filesystemPathArgs
     = (FilesystemPathArgs*) processMessageData(processMessage);
   int returnValue = -RMDIR_NO_DRIVER_ERRNO;
-  if (filesystemState->driverState != NULL) {
-    returnValue = driverRmdir(
-      filesystemState->driverState, filesystemPathArgs->pathname);
+  char *pathname = filesystemAbsolutePath(
+    filesystemState, processMessage, filesystemPathArgs->pathname);
+  if (pathname == NULL) {
+    returnValue = -FILESYSTEM_PATH_ENOMEM;
+  } else if (filesystemState->driverState != NULL) {
+    returnValue = driverRmdir(filesystemState->driverState, pathname);
+  }
+  if (pathname != filesystemPathArgs->pathname) {
+    free(pathname);
   }
 
   filesystemPathArgs->returnValue = returnValue;

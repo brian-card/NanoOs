@@ -42,6 +42,7 @@
 #include "ExecutiveProcesses.h"
 #include "NanoOsUtils.h"
 #include "FilesystemUtils.h"
+#include "FilesystemPaths.h"
 #endif // NANO_OS_KERNEL_BUILD
 
 // Prototypes used by this handler.
@@ -92,10 +93,14 @@ void* OpenFile(void *args) {
   printDebugString("\"\n");
 
   int errorNumber = NO_DRIVER_ERRNO;
-  if (filesystemState->driverState != NULL) {
+  char *pathname = filesystemAbsolutePath(
+    filesystemState, processMessage, fopenArgs->pathname);
+  if (pathname == NULL) {
+    errorNumber = OUT_OF_MEMORY_ERRNO;
+  } else if (filesystemState->driverState != NULL) {
     void *fileHandle = driverFopen(
       filesystemState->driverState,
-      fopenArgs->pathname, fopenArgs->mode, fopenArgs->now, &errorNumber);
+      pathname, fopenArgs->mode, fopenArgs->now, &errorNumber);
     if (fileHandle != NULL) {
       nanoOsFile = (NanoOsFile*) malloc(sizeof(NanoOsFile));
       if (nanoOsFile != NULL) {
@@ -118,6 +123,9 @@ void* OpenFile(void *args) {
     }
   } else {
     printString("ERROR: driverState is not valid!\n");
+  }
+  if (pathname != fopenArgs->pathname) {
+    free(pathname);
   }
 
   fopenArgs->returnValue = nanoOsFile;

@@ -40,6 +40,7 @@
 #include "ExecutiveProcesses.h"
 #include "NanoOsUtils.h"
 #include "FilesystemUtils.h"
+#include "FilesystemPaths.h"
 #endif // NANO_OS_KERNEL_BUILD
 
 // Prototypes used by this handler.
@@ -70,9 +71,20 @@ void* RenameFile(void *args) {
   FilesystemRenameArgs *filesystemRenameArgs
     = (FilesystemRenameArgs*) processMessageData(processMessage);
   int returnValue = -RENAME_NO_DRIVER_ERRNO;
-  if (filesystemState->driverState != NULL) {
-    returnValue = driverRename(filesystemState->driverState,
-      filesystemRenameArgs->oldpath, filesystemRenameArgs->newpath);
+  char *oldpath = filesystemAbsolutePath(
+    filesystemState, processMessage, filesystemRenameArgs->oldpath);
+  char *newpath = filesystemAbsolutePath(
+    filesystemState, processMessage, filesystemRenameArgs->newpath);
+  if ((oldpath == NULL) || (newpath == NULL)) {
+    returnValue = -FILESYSTEM_PATH_ENOMEM;
+  } else if (filesystemState->driverState != NULL) {
+    returnValue = driverRename(filesystemState->driverState, oldpath, newpath);
+  }
+  if (oldpath != filesystemRenameArgs->oldpath) {
+    free(oldpath);
+  }
+  if (newpath != filesystemRenameArgs->newpath) {
+    free(newpath);
   }
 
   filesystemRenameArgs->returnValue = returnValue;

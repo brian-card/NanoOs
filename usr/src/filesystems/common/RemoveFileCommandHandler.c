@@ -40,6 +40,7 @@
 #include "ExecutiveProcesses.h"
 #include "NanoOsUtils.h"
 #include "FilesystemUtils.h"
+#include "FilesystemPaths.h"
 #endif // NANO_OS_KERNEL_BUILD
 
 // Prototypes used by this handler.
@@ -61,9 +62,15 @@ void* RemoveFile(void *args) {
   FilesystemRemoveArgs *filesystemRemoveArgs
     = (FilesystemRemoveArgs*) processMessageData(processMessage);
   int returnValue = 0;
-  if (filesystemState->driverState != NULL) {
-    returnValue = driverRemove(
-      filesystemState->driverState, filesystemRemoveArgs->pathname);
+  char *pathname = filesystemAbsolutePath(
+    filesystemState, processMessage, filesystemRemoveArgs->pathname);
+  if (pathname == NULL) {
+    returnValue = -FILESYSTEM_PATH_ENOMEM;
+  } else if (filesystemState->driverState != NULL) {
+    returnValue = driverRemove(filesystemState->driverState, pathname);
+  }
+  if (pathname != filesystemRemoveArgs->pathname) {
+    free(pathname);
   }
 
   filesystemRemoveArgs->returnValue = returnValue;

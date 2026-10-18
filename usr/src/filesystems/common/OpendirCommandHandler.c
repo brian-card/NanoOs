@@ -42,6 +42,7 @@
 #include "ExecutiveProcesses.h"
 #include "NanoOsUtils.h"
 #include "FilesystemUtils.h"
+#include "FilesystemPaths.h"
 #endif // NANO_OS_KERNEL_BUILD
 
 // Prototype used by this handler.
@@ -81,9 +82,16 @@ void* Opendir(void *args) {
 
   DIR *dirp = NULL;
   int errorNumber = NO_DRIVER_ERRNO;
-  if (filesystemState->driverState != NULL) {
+  char *pathname = filesystemAbsolutePath(
+    filesystemState, processMessage, opendirArgs->pathname);
+  if (pathname == NULL) {
+    errorNumber = FILESYSTEM_PATH_ENOMEM;
+  } else if (filesystemState->driverState != NULL) {
     dirp = (DIR*) driverOpendir(
-      filesystemState->driverState, opendirArgs->pathname, &errorNumber);
+      filesystemState->driverState, pathname, &errorNumber);
+  }
+  if (pathname != opendirArgs->pathname) {
+    free(pathname);
   }
 
   opendirArgs->returnValue = dirp;
