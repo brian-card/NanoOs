@@ -33,67 +33,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stddef.h>
-
-
-/// @fn size_t pathCollapse(char *path)
-///
-/// @brief Collapse a full path that contains relative directories into the
-/// complete absolute path without them.
-///
-/// @param path The full path that may or may not contain relative directories.
-///   This parameter is modified in place.
-///
-/// @return Returns the length of the new path on success, 0 on error.
-size_t pathCollapse(char *path) {
-  if ((path == NULL) || (*path != '/')) {
-    return 0;
-  }
-
-  size_t writeIndex = 1; // path[0] is always the leading '/'
-
-  const char *readPointer = path + 1;
-  while (*readPointer == '/') {
-    // Skip all the leading '/' characters
-    readPointer++;
-  }
-
-  while (*readPointer != '\0') {
-    const char *directoryEnd = readPointer;
-    while ((*directoryEnd != '\0') && (*directoryEnd != '/')) {
-      directoryEnd++;
-    }
-    size_t directoryLength = (size_t) (directoryEnd - readPointer);
-
-    if ((directoryLength == 2)
-      && (readPointer[0] == '.') && (readPointer[1] == '.')
-    ) {
-      // Parent directory; erase the last written directory name and its '/'
-      while ((writeIndex > 1) && (path[writeIndex - 1] != '/')) {
-        writeIndex--;
-      }
-      if (writeIndex > 1) {
-        writeIndex--;
-      }
-    } else if ((directoryLength > 1) || (readPointer[0] != '.')) {
-      // Actual directory name; copy it
-      if (writeIndex > 1) {
-        path[writeIndex++] = '/';
-      }
-      // Ranges may overlap, so use memmove instead of memcpy
-      memmove(path + writeIndex, readPointer, directoryLength);
-      writeIndex += directoryLength;
-    } // else this is just a '.' current directory reference; skip it
-    readPointer = directoryEnd;
-
-    while (*readPointer == '/') {
-      // collapse "//"
-      readPointer++;
-    }
-  }
-
-  path[writeIndex] = '\0';
-  return writeIndex;
-}
+#include "NanoOsUtils.h"
 
 /// @fn void* processBuiltin(void *args)
 ///

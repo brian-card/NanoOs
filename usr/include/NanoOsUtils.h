@@ -46,6 +46,17 @@ extern "C"
 static inline char** parseArgs(char *command, int *argc) {
   return overlayMap.header.osApi->userApi->parseArgs(command, argc);
 }
+/// @fn size_t pathCollapse(char *path)
+///
+/// @brief Collapse the relative directories out of an absolute path in place
+/// by calling the kernel's pathCollapse.
+///
+/// @param path The absolute path to collapse.  Modified in place.
+///
+/// @return Returns the length of the new path on success, 0 on error.
+static inline size_t pathCollapse(char *path) {
+  return overlayMap.header.osApi->userApi->pathCollapse(path);
+}
 static inline size_t getFreeMemory(void) {
   return overlayMap.header.osApi->userApi->getFreeMemory();
 }

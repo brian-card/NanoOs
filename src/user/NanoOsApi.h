@@ -289,6 +289,7 @@ typedef struct NanoOsUserApi {
   
   // NanoOsUtils.h functions:
   char** (*parseArgs)(char *command, int *argc);
+  size_t (*pathCollapse)(char *path);
   size_t (*getFreeMemory)(void);
   int (*dumpMemoryAllocations)(void);
   

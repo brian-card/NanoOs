@@ -262,6 +262,7 @@ static const NanoOsUserApi _nanoOsUserApi = {
   
   // NanoOsUtils.h functions:
   .parseArgs = parseArgs,
+  .pathCollapse = pathCollapse,
   .getFreeMemory = getFreeMemory,
   .dumpMemoryAllocations = dumpMemoryAllocations,
   
