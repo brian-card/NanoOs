@@ -89,7 +89,7 @@ class Session:
         self.env = env
         self.tmp = tempfile.mkdtemp(prefix="nanoe2e-")
         img_copy = os.path.join(self.tmp, "disk.img")
-        shutil.copyfile(image, img_copy)
+        subprocess.run(["cp", "--sparse=always", image, img_copy], check=True)
         self.img_copy = img_copy
         self.spawn([img_copy])
 
@@ -456,8 +456,8 @@ def fsck_problems(s):
     s.child.sendline("shutdown -h")
     s.child.expect(pexpect.EOF, timeout=10)
     partition = os.path.join(s.tmp, "partition.img")
-    subprocess.run(["dd", "if=" + s.img_copy, "of=" + partition, "bs=1M",
-                    "skip=2", "status=none"], check=True)
+    subprocess.run(["dd", "if=" + s.img_copy, "of=" + partition, "bs=64K",
+                    "skip=32", "conv=sparse", "status=none"], check=True)
     out = subprocess.run(["/sbin/fsck.vfat", "-n", partition],
                          capture_output=True, text=True)
     return [line for line in (out.stdout + out.stderr).splitlines()
