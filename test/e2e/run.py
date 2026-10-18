@@ -324,6 +324,54 @@ def test_mv_changes_only_the_case_of_a_name(s):
     assert ll_names(s, "/etc") == ["CatFile", "hostname", "issue"]
 
 
+def test_cp_copies_a_file_to_a_new_name(s):
+    s.login()
+    assert s.sh("cp /etc/catfile /etc/copied-catfile.txt") == ""
+    assert s.sh("cat /etc/copied-catfile.txt") == CATFILE_CONTENTS
+    assert s.sh("cat /etc/catfile") == CATFILE_CONTENTS
+    assert ll_names(s, "/etc") == \
+        ["catfile", "copied-catfile.txt", "hostname", "issue"]
+    assert fsck_problems(s) == []
+
+
+def test_cp_truncates_a_longer_existing_file(s):
+    s.login()
+    issue = s.sh("cat /etc/issue")
+    assert len(issue) < len(CATFILE_CONTENTS)
+    assert s.sh("cp /etc/issue /etc/catfile") == ""
+    assert s.sh("cat /etc/catfile") == issue
+    assert ll_names(s, "/etc") == ["catfile", "hostname", "issue"]
+    assert fsck_problems(s) == []
+
+
+def test_cp_copies_files_into_a_directory(s):
+    s.login()
+    assert s.sh("mkdir /top") == ""
+    assert s.sh("cp /etc/catfile /etc/issue /top") == ""
+    assert ll_names(s, "/top") == ["catfile", "issue"]
+    assert s.sh("cat /top/catfile") == CATFILE_CONTENTS
+    assert s.sh("cd /etc") == ""
+    assert s.sh("cp hostname ../top/") == ""
+    assert ll_names(s, "/top") == ["catfile", "hostname", "issue"]
+    assert s.sh("cat /top/hostname") == s.sh("cat hostname")
+    assert ll_names(s, "/etc") == ["catfile", "hostname", "issue"]
+    assert fsck_problems(s) == []
+
+
+def test_cp_reports_errors(s):
+    s.login()
+    assert s.sh("cp /etc/missing /etc/other") == \
+        'ERROR: Could not open file "/etc/missing": No such entry found'
+    assert s.sh("cp /etc /top") == 'ERROR: "/etc" is a directory'
+    assert s.sh("cp /etc/catfile /etc/CATFILE") == \
+        'ERROR: "/etc/catfile" and "/etc/CATFILE" are the same file'
+    assert s.sh("cp /etc/catfile /etc/issue /etc/hostname") == \
+        'ERROR: "/etc/hostname" is not a directory'
+    assert s.sh("cat /etc/catfile") == CATFILE_CONTENTS
+    assert ll_names(s, "/etc") == ["catfile", "hostname", "issue"]
+    assert "top/" not in ll_names(s, "/")
+
+
 def test_cat_reports_a_missing_file(s):
     s.login()
     assert s.sh("cat /etc/missing") == \
