@@ -48,6 +48,7 @@
 typedef struct NanoOsFile FILE;
 typedef struct msg_t ProcessMessage;
 typedef uint8_t ProcessId;
+typedef struct ProcessDescriptor ProcessDescriptor;
 
 /// @typedef DIR
 ///
@@ -146,6 +147,11 @@ typedef struct FilesystemState* (*FilesystemDriverInit)(
 ///   the future -- is a build-time choice (which driver source is linked
 ///   in), not a runtime one; this is what lets that choice live in the HAL
 ///   layer instead of here.
+/// @param numProcesses The maximum number of processes that can be running in
+///   the system at one time and the number of entries in the allProcesses
+///   array.
+/// @param allProcesses Pointer to the array of ProcessDescriptors that's
+///   managed by the scheduler.
 typedef struct FilesystemState {
   void                           *args;
   void                           *driverState;
@@ -160,6 +166,8 @@ typedef struct FilesystemState {
   uint32_t                        endLba;
   FilesystemDriverInit            driverInit;
   const FilesystemCommandHandler *commandHandlers;
+  size_t                          numProcesses;
+  const ProcessDescriptor        *allProcesses;
 } FilesystemState;
 
 /// @struct FilesystemIoCommandArgs
