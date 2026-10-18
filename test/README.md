@@ -16,7 +16,8 @@ make -C test                    # layers 1 + 2 (build + run)
 make -C test ASAN=1             # layers 1 + 2 under ASan (kernel tests skip)
 ./test/bin/nano-os-test [filter] # filter = substring of "suite/name"
 
-python3 test/e2e/run.py [-v] [filter]   # layer 3 (standalone, TAP output)
+python3 test/e2e/run.py [-v] [-j N] [filter]   # layer 3 (standalone, TAP output)
+                                # N parallel sims; default nproc, 1 with -v
 ```
 
 All runners emit [TAP](https://testanything.org/).

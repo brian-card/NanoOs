@@ -3,13 +3,16 @@
 
 Needs only `pexpect` (no pytest).  Emits TAP on stdout.
 
-    test/e2e/run.py [-v] [name-substring-filter]
+    test/e2e/run.py [-v] [-j JOBS] [name-substring-filter]
 
 Builds (once) a FAT32 disk image via mkimage.sh, then for each simulator
-binary spawns it on a fresh image copy and drives the console.
+binary spawns it on a fresh image copy and drives the console.  Tests run in
+JOBS worker processes, one per available processor by default (one with -v).
 """
 
+import concurrent.futures
 import datetime
+import multiprocessing
 import os
 import re
 import shutil
@@ -367,10 +370,14 @@ def heap_at_prompt(s):
     return int(m.group(1))
 
 
+def small_memory_key(sim_bin, env):
+    return (sim_bin, tuple(sorted((env or {}).items())))
+
+
 def small_memory_size(s):
     # The heap grows byte for byte with the memory size, so one probe boot per
     # simulator and configuration finds the size.
-    key = (s.sim_bin, tuple(sorted((s.env or {}).items())))
+    key = small_memory_key(s.sim_bin, s.env)
     if key not in _small_memory_sizes:
         s.restart_with_memory(SMALL_MEMORY_PROBE_SIZE)
         s.login()
@@ -479,14 +486,56 @@ def test_mkdir_and_rmdir_report_errors(s):
     assert ll_names(s, "/etc") == ["catfile", "hostname", "issue"]
 
 
-def ed_session(s, command, script):
-    # The console echoes a line only when ed reads it, so a typed-ahead script
-    # still comes back with each command followed by its own output.
-    s.child.sendline(command)
-    for line in script:
+def console_pattern(pattern):
+    """Let a pattern's newlines match the carriage returns the console adds.
+
+    @param pattern A regular expression whose newlines are literal or escaped.
+
+    @return The pattern with each newline allowing carriage returns before it.
+    """
+    return pattern.replace("\\\n", "\n").replace("\n", "\r*\n")
+
+
+def ed_session(s, steps):
+    """Type ed's input one line at a time and match the whole transcript.
+
+    @param s The Session to type into.
+    @param steps (line, output) pairs, starting with the command that runs ed.
+      An output is the exact text the line produces, or a compiled pattern
+      for it.
+
+    @return The match of the transcript against every step's line and output.
+    """
+    transcript = ""
+    expected = ""
+    for line, output in steps:
+        if isinstance(output, str):
+            output = re.escape(output)
+        else:
+            output = output.pattern
+        step = re.escape(line + "\n") + output
+        expected += step
         s.child.sendline(line)
+        # Like a terminal, the console echoes the next typed-ahead line as soon
+        # as ed takes this one, which can be before ed prints its output.
+        if output:
+            s.child.expect(console_pattern(step), timeout=30)
+            transcript += s.child.before + s.child.after
     s.child.expect(PROMPT, timeout=30)
-    return s.child.before.replace("\r", "")
+    transcript = (transcript + s.child.before).replace("\r", "")
+    m = re.fullmatch(expected, transcript)
+    assert m, repr(transcript[-300:])
+    return m
+
+
+def ed_input(lines):
+    """Make ed steps for lines of text typed in input mode.
+
+    @param lines The lines of text.
+
+    @return A (line, "") step for each line, since input mode prints nothing.
+    """
+    return [(line, "") for line in lines]
 
 
 CATFILE_LINES = ["line-%02d" % n for n in range(1, 41)]
@@ -497,17 +546,16 @@ def test_ed_writes_a_line_that_starts_on_a_cluster_boundary(s):
     # its second cluster.
     lines = ["cl-%04d" % n for n in range(1, 130)]
     s.login()
-    out = ed_session(s, "ed", ["a"] + lines + [".", "w /etc/clusters", "q"])
-    assert out.endswith(".\nw /etc/clusters\n1032\nq\n"), repr(out[-200:])
+    ed_session(s, [("ed", ""), ("a", "")] + ed_input(lines)
+               + [(".", ""), ("w /etc/clusters", "1032\n"), ("q", "")])
     assert s.sh("cat /etc/clusters") == "\n".join(lines)
 
 
 def test_ed_appends_and_writes_a_new_file(s):
     s.login()
-    out = ed_session(s, "ed", ["a", "one", "two", "three", ".", ",p",
-                               "w /etc/new.txt", "q"])
-    assert out.endswith("ed\na\none\ntwo\nthree\n.\n,p\none\ntwo\nthree\n"
-                        "w /etc/new.txt\n14\nq\n"), repr(out)
+    ed_session(s, [("ed", ""), ("a", "")] + ed_input(["one", "two", "three"])
+               + [(".", ""), (",p", "one\ntwo\nthree\n"),
+                  ("w /etc/new.txt", "14\n"), ("q", "")])
     assert s.sh("cat /etc/new.txt") == "one\ntwo\nthree"
     assert ll_names(s, "/etc") == \
         ["catfile", "hostname", "issue", "new.txt"]
@@ -516,28 +564,27 @@ def test_ed_appends_and_writes_a_new_file(s):
 
 def test_ed_edits_an_existing_file(s):
     s.login()
-    out = ed_session(s, "ed /etc/catfile", [
-        "2,4p", "3d", ".=", "1i", "header", ".", "$a", "footer", ".",
-        "2c", "changed", ".", "w", "q"])
     lines = CATFILE_LINES[:2] + CATFILE_LINES[3:]
     lines = ["header", "changed"] + lines[1:] + ["footer"]
     content = "\n".join(lines) + "\n"
-    assert out.endswith(
-        "ed /etc/catfile\n320\n2,4p\nline-02\nline-03\nline-04\n3d\n.=\n3\n"
-        "1i\nheader\n.\n$a\nfooter\n.\n2c\nchanged\n.\nw\n%d\nq\n"
-        % len(content)), repr(out)
+    ed_session(s, [
+        ("ed /etc/catfile", "320\n"),
+        ("2,4p", "line-02\nline-03\nline-04\n"), ("3d", ""), (".=", "3\n"),
+        ("1i", ""), ("header", ""), (".", ""),
+        ("$a", ""), ("footer", ""), (".", ""),
+        ("2c", ""), ("changed", ""), (".", ""),
+        ("w", "%d\n" % len(content)), ("q", "")])
     assert s.sh("cat /etc/catfile") == content.rstrip("\n")
     assert ll_names(s, "/etc") == ["catfile", "hostname", "issue"]
 
 
 def test_ed_resolves_addresses_and_marks(s):
     s.login()
-    out = ed_session(s, "ed /etc/catfile", [
-        "$=", "5ka", "'a,'a+2n", "-1p", "+2", "", ";+1p", ",=", "Q"])
-    assert out.endswith(
-        "ed /etc/catfile\n320\n$=\n40\n5ka\n'a,'a+2n\n5\tline-05\n"
-        "6\tline-06\n7\tline-07\n-1p\nline-06\n+2\nline-08\n\nline-09\n"
-        ";+1p\nline-09\nline-10\n,=\n40\nQ\n"), repr(out)
+    ed_session(s, [
+        ("ed /etc/catfile", "320\n"), ("$=", "40\n"), ("5ka", ""),
+        ("'a,'a+2n", "5\tline-05\n6\tline-06\n7\tline-07\n"),
+        ("-1p", "line-06\n"), ("+2", "line-08\n"), ("", "line-09\n"),
+        (";+1p", "line-09\nline-10\n"), (",=", "40\n"), ("Q", "")])
 
 
 def ed_model_move(lines, a1, a2, dest):
@@ -560,34 +607,30 @@ def test_ed_moves_copies_and_joins_lines(s):
     lines = ed_model_copy(lines, 1, 1, 0)
     lines = ed_model_copy(lines, 2, 3, 5)
     lines = ed_model_copy(lines, 2, 3, 2)
-    out = ed_session(s, "ed /etc/catfile", [
-        "1,3j", "2,3m$", "10,12m4", "1t0", "2,3t5", "2,3t2", "1,3m2",
-        ",p", "Q"])
-    assert out.endswith(
-        "1,3j\n2,3m$\n10,12m4\n1t0\n2,3t5\n2,3t2\n1,3m2\n?\n,p\n"
-        + "\n".join(lines) + "\nQ\n"), repr(out)
+    ed_session(s, [
+        ("ed /etc/catfile", "320\n"), ("1,3j", ""), ("2,3m$", ""),
+        ("10,12m4", ""), ("1t0", ""), ("2,3t5", ""), ("2,3t2", ""),
+        ("1,3m2", "?\n"), (",p", "\n".join(lines) + "\n"), ("Q", "")])
 
 
 def test_ed_reports_errors_and_guards_unsaved_changes(s):
     s.login()
-    out = ed_session(s, "ed", [
-        "x", "h", "H", "9p", "a", "text", ".", "q", "e /etc/hostname",
-        "e /etc/hostname", ",p", "q"])
-    assert out.endswith(
-        "ed\nx\n?\nh\nunknown command\nH\nunknown command\n9p\n?\n"
-        "invalid address\na\ntext\n.\nq\n?\nwarning: buffer modified\n"
-        "e /etc/hostname\n?\nwarning: buffer modified\ne /etc/hostname\n7\n"
-        ",p\nnanoe2e\nq\n"), repr(out)
+    ed_session(s, [
+        ("ed", ""), ("x", "?\n"), ("h", "unknown command\n"),
+        ("H", "unknown command\n"), ("9p", "?\ninvalid address\n"),
+        ("a", ""), ("text", ""), (".", ""),
+        ("q", "?\nwarning: buffer modified\n"),
+        ("e /etc/hostname", "?\nwarning: buffer modified\n"),
+        ("e /etc/hostname", "7\n"), (",p", "nanoe2e\n"), ("q", "")])
     assert ll_names(s, "/tmp") == []
 
 
 def test_ed_reads_and_appends_files(s):
     s.login()
-    out = ed_session(s, "ed /etc/hostname", [
-        "f", "$r /etc/issue", "w /etc/out.txt", "W /etc/out.txt", "q"])
-    assert out.endswith(
-        "ed /etc/hostname\n7\nf\n/etc/hostname\n$r /etc/issue\n13\n"
-        "w /etc/out.txt\n21\nW /etc/out.txt\n21\nq\n"), repr(out)
+    ed_session(s, [
+        ("ed /etc/hostname", "7\n"), ("f", "/etc/hostname\n"),
+        ("$r /etc/issue", "13\n"), ("w /etc/out.txt", "21\n"),
+        ("W /etc/out.txt", "21\n"), ("q", "")])
     once = "nanoe2e\n\\s \\r \\n \\l\n\n"
     assert s.sh("cat /etc/out.txt") == (once + once).rstrip("\n")
     assert s.sh("cat /etc/hostname") == "nanoe2e"
@@ -595,12 +638,11 @@ def test_ed_reads_and_appends_files(s):
 
 def test_ed_reports_files_it_cannot_open(s):
     s.login()
-    out = ed_session(s, "ed /etc/missing", [
-        "h", "f", "a", "x", ".", "w /missing/out.txt", "h", "Q"])
-    assert out.endswith(
-        "ed /etc/missing\n?\nh\ncannot open input file\nf\n/etc/missing\n"
-        "a\nx\n.\nw /missing/out.txt\n?\nh\ncannot open output file\nQ\n"), \
-        repr(out)
+    ed_session(s, [
+        ("ed /etc/missing", "?\n"), ("h", "cannot open input file\n"),
+        ("f", "/etc/missing\n"), ("a", ""), ("x", ""), (".", ""),
+        ("w /missing/out.txt", "?\n"), ("h", "cannot open output file\n"),
+        ("Q", "")])
     assert ll_names(s, "/tmp") == []
     assert ll_names(s, "/etc") == ["catfile", "hostname", "issue"]
 
@@ -612,13 +654,14 @@ OVERSIZED_LINE_COUNT = 300
 def test_ed_loads_nothing_from_a_file_that_does_not_fit(s):
     big_lines = ["big-%03d" % n for n in range(1, OVERSIZED_LINE_COUNT + 1)]
     s.login()
-    ed_session(s, "ed", ["a"] + big_lines + [".", "w /etc/bigfile", "q"])
+    ed_session(s, [("ed", ""), ("a", "")] + ed_input(big_lines)
+               + [(".", ""), ("w /etc/bigfile", "%d\n" % (8 * len(big_lines))),
+                  ("q", "")])
     s.restart_with_memory(small_memory_size(s))
     s.login()
-    out = ed_session(s, "ed /etc/bigfile", ["h", "$=", "f", "w", "Q"])
-    assert out.endswith(
-        "ed /etc/bigfile\n?\nh\nout of memory\n$=\n0\nf\n?\nw\n?\nQ\n"), \
-        repr(out)
+    ed_session(s, [
+        ("ed /etc/bigfile", "?\n"), ("h", "out of memory\n"), ("$=", "0\n"),
+        ("f", "?\n"), ("w", "?\n"), ("Q", "")])
     assert s.sh("cat /etc/bigfile", timeout=30) == "\n".join(big_lines)
     assert ll_names(s, "/tmp") == []
 
@@ -628,12 +671,11 @@ def test_ed_discards_typed_text_that_does_not_fit(s):
     # command after the buffer filled up.
     s.restart_with_memory(small_memory_size(s))
     s.login()
-    out = ed_session(s, "ed",
-                     ["a"] + ["d"] * OVERSIZED_LINE_COUNT + [".", "h", "$=", "Q"])
-    m = re.search(r"\n\.\n\?\nh\nout of memory\n\$=\n(\d+)\nQ\n$", out)
-    assert m, repr(out[-300:])
+    m = ed_session(s, [("ed", ""), ("a", "")]
+                   + ed_input(["d"] * OVERSIZED_LINE_COUNT)
+                   + [(".", "?\n"), ("h", "out of memory\n"),
+                      ("$=", re.compile("(\\d+)\n")), ("Q", "")])
     assert 0 < int(m.group(1)) < OVERSIZED_LINE_COUNT, m.group(1)
-    assert out.count("?") == 1, repr(out)
     assert s.sh("echo still-alive") == "still-alive"
     assert ll_names(s, "/tmp") == []
 
@@ -641,7 +683,7 @@ def test_ed_discards_typed_text_that_does_not_fit(s):
 def test_ed_quits_when_too_little_memory_is_left_to_edit(s):
     s.restart_with_memory(small_memory_size(s))
     s.login()
-    ed_session(s, "ed /etc/catfile", ["Q"])
+    ed_session(s, [("ed /etc/catfile", "320\n"), ("Q", "")])
     assert s.sh("echo still-alive") == "still-alive"
     assert ll_names(s, "/tmp") == []
 
@@ -934,12 +976,92 @@ TESTS = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
 XFAIL = {}
 
 
+def uses_small_memory(t):
+    """Report whether a test boots the simulator at the small-memory size.
+
+    @param t The test function.
+
+    @return True if the test calls small_memory_size, False otherwise.
+    """
+    return "small_memory_size" in t.__code__.co_names
+
+
+def init_worker(verbose):
+    global VERBOSE
+    VERBOSE = verbose
+
+
+def probe_small_memory_size(sim_bin, env, image):
+    """Boot a simulator once and return the memory size that leaves SMALL_MEMORY_HEAP.
+
+    @param sim_bin The simulator binary to boot.
+    @param env Extra environment for the simulator.
+    @param image The disk image to boot a copy of.
+
+    @return The simulated memory size, in bytes.
+    """
+    s = Session(sim_bin, image, env)
+    try:
+        return small_memory_size(s)
+    finally:
+        s.close()
+
+
+def run_case(i, label, sim_bin, env, test_name, image, small_size):
+    """Run one test against a fresh simulator and return its TAP lines.
+
+    @param i The test's TAP number.
+    @param label The test's TAP description.
+    @param sim_bin The simulator binary to run.
+    @param env Extra environment for the simulator.
+    @param test_name The name of the test function.
+    @param image The disk image to boot a copy of.
+    @param small_size The small-memory size for this configuration, or None.
+
+    @return A tuple of the TAP lines and whether the test counts as a failure.
+    """
+    if small_size is not None:
+        _small_memory_sizes[small_memory_key(sim_bin, env)] = small_size
+    xfail = XFAIL.get(test_name)
+    lines = []
+    failed = False
+    s = None
+    try:
+        s = Session(sim_bin, image, env)
+        globals()[test_name](s)
+        if xfail:
+            lines.append(f"ok {i} - {label} # TODO {xfail} -- PASSES NOW, promote it")
+        else:
+            lines.append(f"ok {i} - {label}")
+    except Exception as e:  # noqa: BLE001
+        msg = str(e).splitlines()[0] if str(e) else type(e).__name__
+        if xfail:
+            lines.append(f"not ok {i} - {label} # TODO {xfail}")
+        else:
+            failed = True
+            lines.append(f"not ok {i} - {label}")
+        lines.append(f"#   {type(e).__name__}: {msg}")
+        if s is not None and s.child.before:
+            tail = s.child.before.replace("\r", "")[-300:]
+            for line in tail.splitlines():
+                lines.append(f"#   | {line}")
+    finally:
+        if s is not None:
+            s.close()
+    return lines, failed
+
+
 def main(argv):
     global VERBOSE
     args = [a for a in argv[1:]]
     if "-v" in args:
         VERBOSE = True
         args.remove("-v")
+    jobs = 1 if VERBOSE else len(os.sched_getaffinity(0))
+    if "-j" in args:
+        at = args.index("-j")
+        jobs = int(args[at + 1])
+        del args[at:at + 2]
     flt = args[0] if args else None
 
     image = build_image()
@@ -954,37 +1076,50 @@ def main(argv):
             cases.append((label, sim_bin, env, t))
 
     print("TAP version 13")
-    print(f"1..{len(cases)}")
+    print(f"1..{len(cases)}", flush=True)
     failures = 0
-    for i, (label, sim_bin, env, t) in enumerate(cases, 1):
-        if not os.path.exists(sim_bin):
-            print(f"ok {i} - {label} # SKIP {os.path.basename(sim_bin)} not built")
-            continue
-        xfail = XFAIL.get(t.__name__)
-        s = None
-        try:
-            s = Session(sim_bin, image, env)
-            t(s)
-            if xfail:
-                print(f"ok {i} - {label} # TODO {xfail} -- PASSES NOW, promote it")
+    context = multiprocessing.get_context("forkserver")
+    with concurrent.futures.ProcessPoolExecutor(
+            max_workers=jobs, mp_context=context,
+            initializer=init_worker, initargs=(VERBOSE,)) as pool:
+        probes = {}
+        for _label, sim_bin, env, t in cases:
+            key = small_memory_key(sim_bin, env)
+            if os.path.exists(sim_bin) and key not in probes \
+                    and uses_small_memory(t):
+                probes[key] = pool.submit(
+                    probe_small_memory_size, sim_bin, env, image)
+
+        runs = [None] * len(cases)
+        waiting = []
+        for i, (label, sim_bin, env, t) in enumerate(cases, 1):
+            if not os.path.exists(sim_bin):
+                continue
+            probe = probes.get(small_memory_key(sim_bin, env))
+            if probe is None or not uses_small_memory(t):
+                runs[i - 1] = pool.submit(run_case, i, label, sim_bin, env,
+                                          t.__name__, image, None)
             else:
-                print(f"ok {i} - {label}")
-        except Exception as e:  # noqa: BLE001
-            msg = str(e).splitlines()[0] if str(e) else type(e).__name__
-            if xfail:
-                print(f"not ok {i} - {label} # TODO {xfail}")
-            else:
-                failures += 1
-                print(f"not ok {i} - {label}")
-            print(f"#   {type(e).__name__}: {msg}")
-            if s is not None and s.child.before:
-                tail = s.child.before.replace("\r", "")[-300:]
-                for line in tail.splitlines():
-                    print(f"#   | {line}")
-        finally:
-            if s is not None:
-                s.close()
-            time.sleep(0.05)
+                waiting.append((i, label, sim_bin, env, t, probe))
+        for i, label, sim_bin, env, t, probe in waiting:
+            size = None if probe.exception() else probe.result()
+            runs[i - 1] = pool.submit(run_case, i, label, sim_bin, env,
+                                      t.__name__, image, size)
+
+        for i, ((label, sim_bin, _env, _t), run) in enumerate(
+                zip(cases, runs), 1):
+            if run is None:
+                print(f"ok {i} - {label} # SKIP "
+                      f"{os.path.basename(sim_bin)} not built", flush=True)
+                continue
+            try:
+                lines, failed = run.result()
+            except Exception as e:  # noqa: BLE001
+                lines = [f"not ok {i} - {label}",
+                         f"#   {type(e).__name__}: {e}"]
+                failed = True
+            failures += failed
+            print("\n".join(lines), flush=True)
 
     print(f"# {len(cases)} test(s), {failures} failure(s)")
     return 1 if failures else 0
