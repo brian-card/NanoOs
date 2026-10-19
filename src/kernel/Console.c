@@ -1305,6 +1305,9 @@ int printSerialString(unsigned char uart, const char *string) {
   int returnValue = 0;
   size_t numBytes = 0;
   ssize_t written = 0;
+  if (HAL->uart == NULL) {
+    return 0;
+  }
 
   char *newlineAt = strchr(string, '\n');
   newlineAt = strchr(string, '\n');
@@ -1351,7 +1354,8 @@ void* runConsole(void *args) {
   ConsoleState consoleState;
   memset(&consoleState, 0, sizeof(ConsoleState));
 
-  consoleState.numConsolePorts = CONSOLE_NUM_PORTS;
+  consoleState.numConsolePorts
+    = (HAL->uart != NULL) ? CONSOLE_NUM_PORTS : 0;
   consoleState.sendSignalArgs = &sendSignalArgs;
 
   // For each console port, use the console buffer at the corresponding index.

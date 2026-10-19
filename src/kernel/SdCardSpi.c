@@ -964,6 +964,11 @@ void handleSdCardSpiMessages(SdCardState *sdCardState) {
 /// @return This function never returns, but would return NULL if it did.
 void* runSdCardSpi(void *args) {
   SdCardSpiArgs *sdCardSpiArgs = (SdCardSpiArgs*) args;
+  if ((HAL->spi == NULL) || (HAL->clock == NULL)) {
+    logError("SD card requires HAL SPI and clock subsystems\n");
+    processYieldValue(NULL);
+    return NULL;
+  }
 
   SdCardState sdCardState;
   memset(&sdCardState, 0, sizeof(sdCardState));

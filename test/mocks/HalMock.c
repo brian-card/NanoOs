@@ -612,6 +612,16 @@ int halMockInit(const HalMockConfig *config, jmp_buf *powerReturn) {
   halFunctions[HAL_TIMER]        = _timerFunctions;
   halFunctions[HAL_BLOCK_DEVICE] = _blockDeviceFunctions;
 
+  halImpl.platform    = &halImplPlatform;
+  halImpl.memory      = &halImplMemory;
+  halImpl.uart        = &halImplUart;
+  halImpl.dio         = &halImplDio;
+  halImpl.spi         = &halImplSpi;
+  halImpl.clock       = &halImplClock;
+  halImpl.power       = &halImplPower;
+  halImpl.timer       = &halImplTimer;
+  halImpl.blockDevice = &halImplBlockDevice;
+
   // Platform hooks.
   _callFileOverlay       = (_fileCacheDepth > 0)
     ? callOverlayFunctionFromFileCache

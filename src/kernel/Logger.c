@@ -246,7 +246,12 @@ int logMessage(LogLevel logLevel,
   // Don't check the return value of getElapsedNanoseconds here.  A failure
   // isn't fatal.  Do this before anything else to get as accurate a timestamp
   // as possible.
-  HAL->clock->getElapsedNanoseconds(0, &temp.i64Value);
+  if (HAL->clock != NULL) {
+    HAL->clock->getElapsedNanoseconds(0, &temp.i64Value);
+  }
+  if (HAL->memory == NULL) {
+    return -ENODEV;
+  }
 
   StaticLogs *staticLogs = NULL;
   char *logBuffer = NULL;

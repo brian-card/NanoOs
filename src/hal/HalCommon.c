@@ -240,13 +240,12 @@ static int halBlockDeviceRestart(ProcessDescriptor *processDescriptor);
 // needs a mutable view.  The read-only HAL pointer below points at the same
 // halImpl instance for general use.
 //
-// Every board links this one file, so these instances always exist; a
-// board with no use for a given subsystem (e.g. the Arduino Nano Every has
-// no SPI bus or block device) simply points halImpl's corresponding member
-// at NULL instead of at the instance below -- see halImpl's initializer.
+// halImpl starts with every subsystem pointer NULL.  Each platform init
+// points halImpl's members at the instances below for the subsystems that
+// platform supports and leaves the rest NULL.
 // ---------------------------------------------------------------------------
 
-static HalPlatform halImplPlatform = {
+HalPlatform halImplPlatform = {
   .callFileOverlay        = halPlatformCallFileOverlay,
   .execCommand            = halPlatformExecCommand,
   .restartRootFilesystem  = halPlatformRestartRootFilesystem,
@@ -256,7 +255,7 @@ static HalPlatform halImplPlatform = {
   .launchProcesses        = halPlatformLaunchProcesses,
 };
 
-static HalMemory halImplMemory = {
+HalMemory halImplMemory = {
   .processStackSize        = halMemoryProcessStackSize,
   .memoryManagerStackSize  = halMemoryMemoryManagerStackSize,
   .bottomOfHeap            = halMemoryBottomOfHeap,
@@ -280,7 +279,7 @@ static HalMemory halImplMemory = {
   .processStorage          = halMemoryProcessStorage,
 };
 
-static HalUart halImplUart = {
+HalUart halImplUart = {
   .numSupported           = 0,
   .online                 = NULL,
   .pollOnly               = NULL,
@@ -293,7 +292,7 @@ static HalUart halImplUart = {
   .isConsole              = halUartIsConsole,
 };
 
-static HalDio halImplDio = {
+HalDio halImplDio = {
   .numSupported = 0,
   .online       = NULL,
   .init         = halDioInit,
@@ -301,7 +300,7 @@ static HalDio halImplDio = {
   .write        = halDioWrite,
 };
 
-static HalSpi halImplSpi = {
+HalSpi halImplSpi = {
   .numSupported  = 0,
   .online        = NULL,
   .init          = halSpiInit,
@@ -314,7 +313,7 @@ static HalSpi halImplSpi = {
   .transferUntil = halSpiTransferUntil,
 };
 
-static HalClock halImplClock = {
+HalClock halImplClock = {
   .init                   = halClockInit,
   .setSystemTime          = halClockSetSystemTime,
   .getElapsedMilliseconds = halClockGetElapsedMilliseconds,
@@ -322,11 +321,11 @@ static HalClock halImplClock = {
   .getElapsedNanoseconds  = halClockGetElapsedNanoseconds,
 };
 
-static HalPower halImplPower = {
+HalPower halImplPower = {
   .enterMode = halPowerEnterMode,
 };
 
-static HalTimer halImplTimer = {
+HalTimer halImplTimer = {
   .numSupported          = 0,
   .online                = NULL,
   .init                  = halTimerInit,
@@ -338,7 +337,7 @@ static HalTimer halImplTimer = {
   .cancelAndGet          = halTimerCancelAndGet,
 };
 
-static HalBlockDevice halImplBlockDevice = {
+HalBlockDevice halImplBlockDevice = {
   .numSupported = 0,
   .online       = NULL,
   .init         = halBlockDeviceInit,
@@ -347,15 +346,15 @@ static HalBlockDevice halImplBlockDevice = {
 };
 
 Hal halImpl = {
-  .platform    = &halImplPlatform,
-  .memory      = &halImplMemory,
-  .uart        = &halImplUart,
-  .dio         = &halImplDio,
-  .spi         = &halImplSpi,
-  .clock       = &halImplClock,
-  .power       = &halImplPower,
-  .timer       = &halImplTimer,
-  .blockDevice = &halImplBlockDevice,
+  .platform    = NULL,
+  .memory      = NULL,
+  .uart        = NULL,
+  .dio         = NULL,
+  .spi         = NULL,
+  .clock       = NULL,
+  .power       = NULL,
+  .timer       = NULL,
+  .blockDevice = NULL,
 };
 
 /// @var HAL
@@ -793,6 +792,10 @@ static const char _sdCardName[] KEEP_IN_FLASH = "SD card";
 BlockDevice* halCommonInitRootSdSpiStorage(
   SdCardSpiArgs *sdCardSpiArgs
 ) {
+  if (HAL->blockDevice == NULL) {
+    return NULL;
+  }
+
   // Create the SD card process.  Its PID is intentionally not exposed as a
   // well-known global: nothing outside this function and the BlockDevice it
   // returns needs to address it directly.
@@ -818,6 +821,9 @@ BlockDevice* halCommonInitRootSdSpiStorage(
   }
   BlockDevice *sdDevice = (BlockDevice*) coroutineResume(
     processDescriptor->mainThread, NULL);
+  if (sdDevice == NULL) {
+    return NULL;
+  }
   sdDevice->partitionNumber = 1;
 
   return sdDevice;
@@ -913,6 +919,8 @@ static int _numExtraFilesystemStacks = 0;
 int halCommonInitRootFilesystem(void) {
   if (schedulerIsInitialized() == false) {
     return -EBUSY;
+  } else if (HAL->blockDevice == NULL) {
+    return -ENODEV;
   }
 
   BlockDevice *rootBlockDevice = NULL;
@@ -946,7 +954,9 @@ int halCommonInitRootFilesystem(void) {
   processDescriptor->userId = ROOT_USER_ID;
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
   HalRestartRootFilesystemFn restartRootFilesystem = NULL;
-  halImpl.platform->restartRootFilesystem(&restartRootFilesystem);
+  if (HAL->platform != NULL) {
+    HAL->platform->restartRootFilesystem(&restartRootFilesystem);
+  }
   processDescriptor->restartFunction = restartRootFilesystem;
   // DO NOT resume the process yet.  Let the scheduler take care of that.
 
@@ -1076,6 +1086,8 @@ int halCommonInitFileCache(uint8_t depth) {
     return 0;
   } else if (depth == 0) {
     return -EINVAL;
+  } else if (HAL->memory == NULL) {
+    return -ENODEV;
   }
 
   size_t fifoSize = sizeof(OverlayFifo)
@@ -1109,6 +1121,10 @@ int halCommonInitFileCache(uint8_t depth) {
 ///
 /// @return Returns 0 on success, -errno on failure.
 int halCommonLaunchProcesses(void) {
+  if ((HAL->memory == NULL) || (HAL->platform == NULL)) {
+    return -ENODEV;
+  }
+
   ProcessQueue **readyQueues = NULL;
   HAL->memory->readyQueues(&readyQueues);
   if (readyQueues == NULL) {
@@ -1224,6 +1240,10 @@ HalCapability filesystemHalCapabilities[] = {
 ///
 /// @return Returns 0 on success, -errno on failure.
 int restartBuiltinFilesystem(ProcessDescriptor *processDescriptor) {
+  if ((HAL->blockDevice == NULL) || (HAL->memory == NULL)) {
+    return -ENODEV;
+  }
+
   BlockDevice *rootBlockDevice = NULL;
   HAL->blockDevice->get(0, &rootBlockDevice);
   if (rootBlockDevice == NULL) {
@@ -1287,6 +1307,10 @@ int restartBuiltinFilesystem(ProcessDescriptor *processDescriptor) {
 ///
 /// @return Returns 0 on success, -errno on failure.
 int restartOverlayFilesystem(ProcessDescriptor *processDescriptor) {
+  if ((HAL->blockDevice == NULL) || (HAL->memory == NULL)) {
+    return -ENODEV;
+  }
+
   BlockDevice *rootBlockDevice = NULL;
   HAL->blockDevice->get(0, &rootBlockDevice);
   if (rootBlockDevice == NULL) {
@@ -1347,7 +1371,9 @@ int restartOverlayFilesystem(ProcessDescriptor *processDescriptor) {
 /// @return Returns 0 on success, -errno on failure.
 int restartContiguousFilesystem(ProcessDescriptor *processDescriptor) {
   BlockDevice *rootBlockDevice = NULL;
-  HAL->blockDevice->get(0, &rootBlockDevice);
+  if ((HAL->blockDevice != NULL) && (HAL->memory != NULL)) {
+    HAL->blockDevice->get(0, &rootBlockDevice);
+  }
   if (rootBlockDevice == NULL) {
     printString(_noRootBlockDeviceMessage);
     processDescriptor->restartFunction = NULL;
@@ -1522,6 +1548,9 @@ int halCommonPlatformInvokePendingCallbacks(int32_t deviceId, va_list args) {
   (void) args;
 
   halPlatformCallbacksAnyPending = false;
+  if (HAL->uart == NULL) {
+    return 0;
+  }
 
   // BUG:  Look, I know this is cheating.  HAL->uart->numSupported is a uint32_t
   // and the smallest platform we run on has 16-bit integers, so this is data
@@ -1612,7 +1641,7 @@ int halCommonInit(
   int32_t ii = 0;
   int32_t defaultUart = -1;
 
-  if (HAL->uart->init() < 0) {
+  if ((HAL->uart == NULL) || (HAL->uart->init() < 0)) {
     return -ENOTTY;
   }
   int32_t numUarts = HAL->uart->numSupported;
@@ -1635,23 +1664,22 @@ int halCommonInit(
     }
   }
 
-  if (HAL->dio->init() != 0) {
+  if ((HAL->dio != NULL) && (HAL->dio->init() != 0)) {
     logWarn("Failed to initialize DIO subsystem\n");
   }
 
-  // HAL->spi is NULL on platforms with no SPI bus wired to anything (e.g.
-  // the Arduino Nano Every) -- nothing to initialize, so skip silently
-  // rather than logging a spurious failure.
   if ((HAL->spi != NULL) && (HAL->spi->init() != 0)) {
     logWarn("Failed to initialize SPI subsystem\n");
   }
 
-  if (HAL->clock->init() != 0) {
+  if ((HAL->clock != NULL) && (HAL->clock->init() != 0)) {
     logWarn("Failed to initialize clock subsystem\n");
   }
 
   do {
-    if (HAL->timer->init() != 0) {
+    if (HAL->timer == NULL) {
+      break;
+    } else if (HAL->timer->init() != 0) {
       logWarn("Failed to initialize timer subsystem\n");
       break;
     }
@@ -1672,16 +1700,18 @@ int halCommonInit(
     }
   } while (0);
 
-  NanoOsOverlayMap *overlayMap = NULL;
-  HAL->memory->overlayMap(&overlayMap);
-  if ((overlayMap != NULL) && (HAL->memory->overlaySize > 0)) {
-    memset(overlayMap, 0, HAL->memory->overlaySize);
-  }
+  if (HAL->memory != NULL) {
+    NanoOsOverlayMap *overlayMap = NULL;
+    HAL->memory->overlayMap(&overlayMap);
+    if ((overlayMap != NULL) && (HAL->memory->overlaySize > 0)) {
+      memset(overlayMap, 0, HAL->memory->overlaySize);
+    }
 
-  char *logBuffer = NULL;
-  HAL->memory->logBuffer(&logBuffer);
-  if ((logBuffer != NULL) && (HAL->memory->logBufferSize > 0)) {
-    memset(logBuffer, 0, HAL->memory->logBufferSize);
+    char *logBuffer = NULL;
+    HAL->memory->logBuffer(&logBuffer);
+    if ((logBuffer != NULL) && (HAL->memory->logBufferSize > 0)) {
+      memset(logBuffer, 0, HAL->memory->logBufferSize);
+    }
   }
 
   _builtinFilesystemInitDriver = builtinFilesystemInitDriver;

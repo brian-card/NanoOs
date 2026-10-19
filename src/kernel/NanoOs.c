@@ -240,7 +240,9 @@ void nanoOsStart(void) {
   Thread _mainThread;
   schedulerThread = &_mainThread;
   size_t processStackSizeVal = 0;
-  HAL->memory->processStackSize(USE_HAL_MEMORY_DEBUG, &processStackSizeVal);
+  if (HAL->memory != NULL) {
+    HAL->memory->processStackSize(USE_HAL_MEMORY_DEBUG, &processStackSizeVal);
+  }
   ThreadsConfigOptions threadsConfigOptions = {
     .stackSize = processStackSizeVal,
     .stateData = &threadStatePointer,
@@ -250,7 +252,7 @@ void nanoOsStart(void) {
     .signalCallback = signalCallback,
     .preemptionCallback = preemptionCallback,
   };
-  if (HAL->timer->numSupported > 0) {
+  if ((HAL->timer != NULL) && (HAL->timer->numSupported > 0)) {
     threadsConfigOptions.yieldCallback = yieldCallback;
   }
   if (threadsConfig(&_mainThread, &threadsConfigOptions) != processSuccess) {
@@ -292,8 +294,10 @@ void nanoOsStart(void) {
 
   logDebug("Extending scheduler stack.\n");
   uint8_t numExtraSchedulerStacksVal = 0;
-  HAL->memory->numExtraSchedulerStacks(
-    USE_HAL_MEMORY_DEBUG, &numExtraSchedulerStacksVal);
+  if (HAL->memory != NULL) {
+    HAL->memory->numExtraSchedulerStacks(
+      USE_HAL_MEMORY_DEBUG, &numExtraSchedulerStacksVal);
+  }
   for (uint8_t ii = 0; ii < numExtraSchedulerStacksVal; ii++) {
     thread = threadProvision(NULL, dummyProcess, NULL);
     if (thread == NULL) {

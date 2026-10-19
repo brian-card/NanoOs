@@ -2171,11 +2171,14 @@ int closeProcessFileDescriptors(ProcessDescriptor *processDescriptor) {
           }
           ProcessQueue *currentReady = _schedulerState->currentReady;
           int64_t startTime = 0;
-          HAL->clock->getElapsedMicroseconds(0, &startTime);
+          if (HAL->clock != NULL) {
+            HAL->clock->getElapsedMicroseconds(0, &startTime);
+          }
           // schedulerKillProcess times out after 100 milliseconds, so
           // timeout after 50 milliseconds.
           int64_t elapsedUs = 0;
           while ((processMessageDone(&processMessage) == false)
+            && (HAL->clock != NULL)
             && (HAL->clock->getElapsedMicroseconds(startTime, &elapsedUs),
               elapsedUs < 50000)
           ) {
@@ -3795,6 +3798,8 @@ int schedulerShutdownCommandHandler(
     // and return good status.
     logError("NULL message provided\n");
     return returnValue; // 0
+  } else if (HAL->power == NULL) {
+    return -ENOTSUP;
   }
 
   SchedulerShutdownArgs *schedulerShutdownArgs
@@ -4063,7 +4068,9 @@ void checkForTimeouts(SchedulerState *schedulerState) {
   }
 
   int64_t now = 0;
-  HAL->clock->getElapsedNanoseconds(0, &now);
+  if (HAL->clock != NULL) {
+    HAL->clock->getElapsedNanoseconds(0, &now);
+  }
   for (uint8_t ii = 0; ii < numElements; ii++) {
     ProcessDescriptor *poppedDescriptor = processQueuePop(timedWaiting);
     Comutex *blockingComutex
@@ -4275,7 +4282,9 @@ int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp) {
         (uint8_t*) overlayMap) != 0
     ) {
       logError("Could not read overlay\n");
-      HAL->power->enterMode(HAL_POWER_MODE_RESET);
+      if (HAL->power != NULL) {
+        HAL->power->enterMode(HAL_POWER_MODE_RESET);
+      }
       return -EIO;
     }
   } else {
@@ -4865,7 +4874,9 @@ void runScheduler(void) {
     &allProcesses[schedulerPid - 1])
   ) {
     logError(_schedulerStackOverflowMessage);
-    HAL->power->enterMode(HAL_POWER_MODE_OFF);
+    if (HAL->power != NULL) {
+      HAL->power->enterMode(HAL_POWER_MODE_OFF);
+    }
   }
 
   ProcessDescriptor *processDescriptor
@@ -5094,7 +5105,7 @@ int initializeSchedulerState(
   schedulerState->currentReady
     = schedulerState->readyQueues[PRIVILEGE_LEVEL_KERNEL];
   schedulerState->preemptionTimer = -1;
-  if (HAL->timer->numSupported > 0) {
+  if ((HAL->timer != NULL) && (HAL->timer->numSupported > 0)) {
     for (int32_t ii = 0; ii < ((int32_t) HAL->timer->numSupported); ii++) {
       if (online(HAL->timer, ii)) {
         schedulerState->preemptionTimer = ii;
@@ -5477,6 +5488,26 @@ int initializeProcesses(SchedulerState *schedulerState) {
   return 0;
 }
 
+#ifdef NANO_OS_DEBUG
+/// @fn static inline void sanityElapsedMilliseconds(
+///   int64_t startTime, int64_t *returnValue)
+///
+/// @brief Get the milliseconds elapsed since startTime from the HAL clock, or
+/// leave returnValue untouched if the HAL has no clock.
+///
+/// @param startTime The start time in milliseconds, or 0 for the current time.
+/// @param returnValue A pointer to the int64_t to populate.
+///
+/// @return This function returns no value.
+static inline void sanityElapsedMilliseconds(
+  int64_t startTime, int64_t *returnValue
+) {
+  if (HAL->clock != NULL) {
+    HAL->clock->getElapsedMilliseconds(startTime, returnValue);
+  }
+}
+#endif // NANO_OS_DEBUG
+
 /// @fn int logSchedulerDebugInfo(SchedulerState *schedulerState)
 ///
 /// @brief Log all the "on-boot" debug information the scheduler emits.
@@ -5542,9 +5573,9 @@ int logSchedulerDebugInfo(SchedulerState *schedulerState) {
   int64_t sanityStepStart = 0;
   int64_t sanityStepElapsed = 0;
   do {
-    HAL->clock->getElapsedMilliseconds(0, &sanityStepStart);
+    sanityElapsedMilliseconds(0, &sanityStepStart);
     FILE *helloFile = schedFopen(_helloFilename, _writeMode);
-    HAL->clock->getElapsedMilliseconds(sanityStepStart, &sanityStepElapsed);
+    sanityElapsedMilliseconds(sanityStepStart, &sanityStepElapsed);
     logDebug("fopen(w) took %ld ms\n", (long int) sanityStepElapsed);
     if (helloFile == NULL) {
       logDebug("ERROR: Could not open hello file for writing!\n");
@@ -5553,9 +5584,9 @@ int logSchedulerDebugInfo(SchedulerState *schedulerState) {
     }
     logDebug("helloFile is non-NULL!\n");
 
-    HAL->clock->getElapsedMilliseconds(0, &sanityStepStart);
+    sanityElapsedMilliseconds(0, &sanityStepStart);
     int fputsStatus = schedFputs(_worldContent, helloFile);
-    HAL->clock->getElapsedMilliseconds(sanityStepStart, &sanityStepElapsed);
+    sanityElapsedMilliseconds(sanityStepStart, &sanityStepElapsed);
     logDebug("fputs took %ld ms\n", (long int) sanityStepElapsed);
     if (fputsStatus == EOF) {
       logDebug("ERROR: Could not write to hello file!\n");
@@ -5564,15 +5595,15 @@ int logSchedulerDebugInfo(SchedulerState *schedulerState) {
       break;
     }
 
-    HAL->clock->getElapsedMilliseconds(0, &sanityStepStart);
+    sanityElapsedMilliseconds(0, &sanityStepStart);
     schedFclose(helloFile);
-    HAL->clock->getElapsedMilliseconds(sanityStepStart, &sanityStepElapsed);
+    sanityElapsedMilliseconds(sanityStepStart, &sanityStepElapsed);
     logDebug("fclose (after write) took %ld ms\n",
       (long int) sanityStepElapsed);
 
-    HAL->clock->getElapsedMilliseconds(0, &sanityStepStart);
+    sanityElapsedMilliseconds(0, &sanityStepStart);
     helloFile = schedFopen(_helloFilename, _readMode);
-    HAL->clock->getElapsedMilliseconds(sanityStepStart, &sanityStepElapsed);
+    sanityElapsedMilliseconds(sanityStepStart, &sanityStepElapsed);
     logDebug("fopen(r) took %ld ms\n", (long int) sanityStepElapsed);
     if (helloFile == NULL) {
       logDebug("ERROR: Could not open hello file for reading after write!\n");
@@ -5583,10 +5614,10 @@ int logSchedulerDebugInfo(SchedulerState *schedulerState) {
     logDebug("Opened helloFile for reading\n");
 
     char worldString[11] = {0};
-    HAL->clock->getElapsedMilliseconds(0, &sanityStepStart);
+    sanityElapsedMilliseconds(0, &sanityStepStart);
     char *fgetsStatus = schedFgets(
       worldString, sizeof(worldString), helloFile);
-    HAL->clock->getElapsedMilliseconds(sanityStepStart, &sanityStepElapsed);
+    sanityElapsedMilliseconds(sanityStepStart, &sanityStepElapsed);
     logDebug("fgets took %ld ms\n", (long int) sanityStepElapsed);
     if (fgetsStatus != worldString) {
       logDebug("ERROR: Could not read worldString after write!\n");
@@ -5663,6 +5694,16 @@ int logSchedulerDebugInfo(SchedulerState *schedulerState) {
   return 0;
 }
 
+/// @var _schedulerMissingHalMessage
+///
+/// @brief Message printed when the HAL lacks a subsystem the scheduler can't
+/// run without.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _schedulerMissingHalMessage[] KEEP_IN_FLASH
+  = "Scheduler requires HAL platform and memory subsystems\n";
+
 /// @fn void startScheduler(SchedulerState **threadStatePointer)
 ///
 /// @brief Initialize and run the round-robin scheduler.
@@ -5675,6 +5716,10 @@ __attribute__((noinline)) void startScheduler(
   SchedulerState **threadStatePointer
 ) {
   logDebug("Starting scheduler in debug mode...\n");
+  if ((HAL->platform == NULL) || (HAL->memory == NULL)) {
+    printString(_schedulerMissingHalMessage);
+    while (1);
+  }
 
   SchedulerState schedulerState;
   memset(&schedulerState, 0, sizeof(schedulerState));

@@ -58,7 +58,8 @@ extern "C"
 /// @param hal Pointer to a HAL subsystem struct (e.g. HAL->uart).
 /// @param deviceId The zero-based index of the device to check.
 #define online(hal, deviceId) ( \
-  ((deviceId >= 0) && (deviceId < ((int32_t) (hal)->numSupported))) \
+  (((hal) != NULL) && (deviceId >= 0) \
+    && (deviceId < ((int32_t) (hal)->numSupported))) \
   ? (((((uint32_t) 1) << (deviceId & 31)) & (hal)->online[deviceId >> 5]) != 0) \
   : false)
 
@@ -88,7 +89,8 @@ extern "C"
 /// @param hal Pointer to a HAL subsystem struct (e.g. HAL->uart).
 /// @param deviceId The zero-based index of the device to check.
 #define pollOnly(hal, deviceId) ( \
-  ((deviceId >= 0) && (deviceId < ((int32_t) (hal)->numSupported))) \
+  (((hal) != NULL) && (deviceId >= 0) \
+    && (deviceId < ((int32_t) (hal)->numSupported))) \
   ? (((((uint32_t) 1) << (deviceId & 31)) \
     & (hal)->pollOnly[deviceId >> 5]) != 0) \
   : false)
@@ -1260,58 +1262,56 @@ typedef struct HalBlockDevice {
 typedef struct Hal {
   /// @var platform
   ///
-  /// @brief Pointer to the HalPlatform managed by the HAL.  This member may
-  /// not be NULL.
+  /// @brief Pointer to the HalPlatform managed by the HAL, or NULL if the platform
+  /// doesn't provide this subsystem.  Callers must check for NULL.
   HalPlatform *platform;
 
   /// @var memory
   ///
-  /// @brief Pointer to the HalMemory managed by the HAL.  This member may
-  /// not be NULL.
+  /// @brief Pointer to the HalMemory managed by the HAL, or NULL if the platform
+  /// doesn't provide this subsystem.  Callers must check for NULL.
   HalMemory *memory;
 
   /// @var uart
   ///
-  /// @brief Pointer to the HalUart managed by the HAL.  This member may not
-  /// be NULL.
+  /// @brief Pointer to the HalUart managed by the HAL, or NULL if the platform
+  /// doesn't provide this subsystem.  Callers must check for NULL.
   HalUart *uart;
 
   /// @var dio
   ///
-  /// @brief Pointer to the HalDio managed by the HAL.  This member may not
-  /// be NULL.
+  /// @brief Pointer to the HalDio managed by the HAL, or NULL if the platform
+  /// doesn't provide this subsystem.  Callers must check for NULL.
   HalDio *dio;
 
   /// @var spi
   ///
-  /// @brief Pointer to the HalSpi managed by the HAL.  NULL on platforms
-  /// that don't have a SPI bus wired to anything (e.g. the Arduino Nano
-  /// Every), in which case no code may dereference this pointer.
+  /// @brief Pointer to the HalSpi managed by the HAL, or NULL if the platform
+  /// doesn't provide this subsystem.  Callers must check for NULL.
   HalSpi *spi;
 
   /// @var clock
   ///
-  /// @brief Pointer to the HalClock managed by the HAL.  This member may
-  /// not be NULL.
+  /// @brief Pointer to the HalClock managed by the HAL, or NULL if the platform
+  /// doesn't provide this subsystem.  Callers must check for NULL.
   HalClock *clock;
 
   /// @var power
   ///
-  /// @brief Pointer to the HalPower managed by the HAL.  This member may
-  /// not be NULL.
+  /// @brief Pointer to the HalPower managed by the HAL, or NULL if the platform
+  /// doesn't provide this subsystem.  Callers must check for NULL.
   HalPower *power;
 
   /// @var timer
   ///
-  /// @brief Pointer to the HalTimer managed by the HAL.  This member may
-  /// not be NULL.
+  /// @brief Pointer to the HalTimer managed by the HAL, or NULL if the platform
+  /// doesn't provide this subsystem.  Callers must check for NULL.
   HalTimer *timer;
 
   /// @var blockDevice
   ///
-  /// @brief Pointer to the HalBlockDevice managed by the HAL.  NULL on
-  /// platforms with no block device of any kind (e.g. the Arduino Nano
-  /// Every), in which case no code may dereference this pointer.
+  /// @brief Pointer to the HalBlockDevice managed by the HAL, or NULL if the platform
+  /// doesn't provide this subsystem.  Callers must check for NULL.
   HalBlockDevice *blockDevice;
 } Hal;
 

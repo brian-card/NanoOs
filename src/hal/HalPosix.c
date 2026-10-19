@@ -776,6 +776,16 @@ int halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath,
   halFunctions[HAL_TIMER]        = posixTimerFunctions;
   halFunctions[HAL_BLOCK_DEVICE] = posixBlockDeviceFunctions;
 
+  halImpl.platform    = &halImplPlatform;
+  halImpl.memory      = &halImplMemory;
+  halImpl.uart        = &halImplUart;
+  halImpl.dio         = &halImplDio;
+  halImpl.spi         = &halImplSpi;
+  halImpl.clock       = &halImplClock;
+  halImpl.power       = &halImplPower;
+  halImpl.timer       = &halImplTimer;
+  halImpl.blockDevice = &halImplBlockDevice;
+
   if (posixConsolePollOnlyRequested()) {
     posixUartsPollOnly[0] |= 0x00000002;
   }

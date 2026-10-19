@@ -503,13 +503,17 @@ void* runBlockOverlay(void *args) {
     // This should be impossible.
     logError("No running process\n");
     return (void*) ((intptr_t) -1);
+  } else if (HAL->memory == NULL) {
+    return (void*) ((intptr_t) -1);
   }
   // Cancel the preemption timer to make sure the load is atomic.
-  if (_preemptionTimerCached == false) {
-    _cachedPreemptionTimer = schedulerGetPreemptionTimer();
-    _preemptionTimerCached = true;
+  if (HAL->timer != NULL) {
+    if (_preemptionTimerCached == false) {
+      _cachedPreemptionTimer = schedulerGetPreemptionTimer();
+      _preemptionTimerCached = true;
+    }
+    HAL->timer->cancel(_cachedPreemptionTimer);
   }
-  HAL->timer->cancel(_cachedPreemptionTimer);
   processDescriptor->overlay.fileBlockMetadata.blockDevice
     = blockOverlayArgs.blockDevice;
   processDescriptor->overlay.fileBlockMetadata.startBlock

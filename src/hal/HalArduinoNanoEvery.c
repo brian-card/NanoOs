@@ -53,7 +53,7 @@
 
 // This board has no SPI bus wired to anything and no block device of any
 // kind: arduinoAvrInitBlockDevice/etc below always return -ENODEV, and
-// halArduinoInit() leaves HAL->spi and HAL->blockDevice NULL.  So, unlike
+// halArduinoInit() never sets HAL->spi or HAL->blockDevice.  So, unlike
 // HalArduinoMega2560.cpp, there are no SPI pin or SD-card chip-select
 // defines here -- there's nothing for them to configure.
 
@@ -106,22 +106,7 @@ int halArduinoInit(void) {
     .diosOnline        = halArduinoAvrImplDiosOnline,
   };
 
-  // This board has no SPI bus wired to anything.  Null the pointer out
-  // before halArduinoAvrInit()/halCommonInit() run, so the generic SPI init
-  // step in halCommonInit() (which checks HAL->spi for NULL) skips over it
-  // instead of logging a spurious "failed to initialize" warning.
-  halImpl.spi = NULL;
-
-  int returnValue = halArduinoAvrInit(&args);
-
-  // halArduinoAvrInit() unconditionally wires up the generic block-device
-  // dispatch table (arduinoAvrInitBlockDevice/etc above, which always
-  // return -ENODEV on this board) and its numSupported/online fields; null
-  // the outer pointer afterward since this board has no real block device
-  // to expose.
-  halImpl.blockDevice = NULL;
-
-  return returnValue;
+  return halArduinoAvrInit(&args);
 }
 
 #endif // ARDUINO_AVR_NANO_EVERY

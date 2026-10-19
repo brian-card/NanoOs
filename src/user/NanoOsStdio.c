@@ -87,6 +87,8 @@ static const char _crlf[] KEEP_IN_FLASH = "\r\n";
 int printString_(const char *string) {
   if (string == NULL) {
     return -EINVAL;
+  } else if (HAL->uart == NULL) {
+    return -ENODEV;
   }
 
   bool printReturnNewline = false;

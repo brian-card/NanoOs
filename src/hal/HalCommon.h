@@ -242,6 +242,18 @@ extern HalFunction *halFunctions[HAL_NUM_SUBSYSTEMS];
 /// exported from Hal.h cannot be written through.
 extern Hal halImpl;
 
+// Common subsystem instances.  A platform init points halImpl's members at
+// the ones for the subsystems it supports.
+extern HalPlatform    halImplPlatform;
+extern HalMemory      halImplMemory;
+extern HalUart        halImplUart;
+extern HalDio         halImplDio;
+extern HalSpi         halImplSpi;
+extern HalClock       halImplClock;
+extern HalPower       halImplPower;
+extern HalTimer       halImplTimer;
+extern HalBlockDevice halImplBlockDevice;
+
 /// @var namedProcessTable
 ///
 /// @brief Pointer to the platform-owned array of NamedProcessEntry slots.

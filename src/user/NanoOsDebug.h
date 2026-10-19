@@ -45,7 +45,9 @@
 #define startDebugMessage(message) \
   do { \
     int64_t _nanoOsDebugTs = 0; \
-    HAL->clock->getElapsedMicroseconds(0, &_nanoOsDebugTs); \
+    if (HAL->clock != NULL) { \
+      HAL->clock->getElapsedMicroseconds(0, &_nanoOsDebugTs); \
+    } \
     printString("["); \
     printInt(_nanoOsDebugTs); \
     printString(" Process "); \

@@ -482,17 +482,14 @@ int halArduinoInit(void) {
   numSdCardHalCapabilities
     = sizeof(_sdCardHalCapabilities) / sizeof(_sdCardHalCapabilities[0]);
 
-  halImpl.memory->stringsPresent = true;
-
-  // This is the only AVR board with an SPI bus wired to anything, so it's
-  // the only one that wires up HAL_SPI -- see HalArduinoAvr.cpp/
-  // HalArduinoNanoEvery.c for the boards that leave halImpl.spi NULL
-  // instead.  This must happen before halArduinoAvrInit() below, since that
-  // call ends in halCommonInit(), which initializes HAL->spi as part of its
-  // generic boot sequence.
+  // This must happen before halArduinoAvrInit() below, since that call
+  // wires up the block device only if halImpl.blockDevice is set and ends in
+  // halCommonInit(), which initializes HAL->spi.
   halFunctions[HAL_SPI]     = arduinoAvrSpiFunctions;
+  halImpl.spi               = &halImplSpi;
   halImpl.spi->numSupported = MAX_SPI_DEVICES;
   halImpl.spi->online       = halArduinoAvrSpisOnline;
+  halImpl.blockDevice       = &halImplBlockDevice;
 
   return halArduinoAvrInit(&args);
 }

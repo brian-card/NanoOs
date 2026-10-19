@@ -1266,6 +1266,10 @@ static const char _dynamicMemorySuffix[] KEEP_IN_FLASH
 /// it would return NULL if it returned anything.
 void* runMemoryManager(void *args) {
   (void) args;
+  if ((HAL->memory == NULL) || (HAL->power == NULL)) {
+    logError("Memory manager requires HAL memory and power subsystems\n");
+    return NULL;
+  }
   printConsoleString(_newline);
 
   // *sigh*  SOME compilers (not mentioning any names because that would be rude

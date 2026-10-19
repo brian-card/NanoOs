@@ -2208,6 +2208,16 @@ int halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
   halFunctions[HAL_TIMER]        = arduinoSamD21x18ATimerFunctions;
   halFunctions[HAL_BLOCK_DEVICE] = arduinoSamD21x18ABlockDeviceFunctions;
 
+  halImpl.platform    = &halImplPlatform;
+  halImpl.memory      = &halImplMemory;
+  halImpl.uart        = &halImplUart;
+  halImpl.dio         = &halImplDio;
+  halImpl.spi         = &halImplSpi;
+  halImpl.clock       = &halImplClock;
+  halImpl.power       = &halImplPower;
+  halImpl.timer       = &halImplTimer;
+  halImpl.blockDevice = &halImplBlockDevice;
+
   // Set per-platform data members from the init args.
   _spiCopiDio          = args->spiCopiDio;
   _spiCipoDio          = args->spiCipoDio;

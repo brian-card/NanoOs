@@ -80,7 +80,9 @@ int* nanoOsDstInEffect(void) {
 /// January 1st, 1970.
 time_t nanoOsTime(time_t *tloc) {
   int64_t elapsedTime = 0;
-  HAL->clock->getElapsedNanoseconds(0, &elapsedTime);
+  if (HAL->clock != NULL) {
+    HAL->clock->getElapsedNanoseconds(0, &elapsedTime);
+  }
   if (tloc != NULL) {
     *tloc = (time_t) (elapsedTime / 1000000000LL);
     return *tloc;
@@ -175,7 +177,9 @@ int nanoOsTimespec_get(struct timespec* spec, int base) {
   }
   
   int64_t now = 0;
-  HAL->clock->getElapsedNanoseconds(0, &now);
+  if (HAL->clock != NULL) {
+    HAL->clock->getElapsedNanoseconds(0, &now);
+  }
   spec->tv_sec = (time_t) (now / ((int64_t) 1000000000));
   spec->tv_nsec = now % ((int64_t) 1000000000);
 

@@ -2022,6 +2022,16 @@ int halAgonLight2Init(void) {
   halFunctions[HAL_TIMER]        = agonLight2TimerFunctions;
   halFunctions[HAL_BLOCK_DEVICE] = agonLight2BlockDeviceFunctions;
 
+  halImpl.platform    = &halImplPlatform;
+  halImpl.memory      = &halImplMemory;
+  halImpl.uart        = &halImplUart;
+  halImpl.dio         = &halImplDio;
+  halImpl.spi         = &halImplSpi;
+  halImpl.clock       = &halImplClock;
+  halImpl.power       = &halImplPower;
+  halImpl.timer       = &halImplTimer;
+  halImpl.blockDevice = &halImplBlockDevice;
+
   halImpl.memory->contiguousFilesystemSize = FILESYSTEM_DRIVER_SIZE;
   halImpl.memory->overlaySize = OVERLAY_SIZE;
 

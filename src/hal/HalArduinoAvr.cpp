@@ -844,9 +844,8 @@ static HalFunction arduinoAvrDioFunctions[HAL_DIO_NUM_FNS] = {
 };
 
 // No arduinoAvrSpiFunctions table here: the SPI implementation (and its
-// HAL_SPI dispatch table) lives entirely in HalArduinoMega2560.cpp now,
-// since the Nano Every has no SPI bus wired to anything -- see
-// HalArduinoNanoEvery.c's halArduinoInit(), which leaves halImpl.spi NULL.
+// HAL_SPI dispatch table) lives entirely in HalArduinoMega2560.cpp, since
+// the Nano Every has no SPI bus wired to anything.
 
 static HalFunction arduinoAvrClockFunctions[HAL_CLOCK_NUM_FNS] = {
   [HAL_CLOCK_INIT]                     = arduinoAvrTimeInit,
@@ -887,18 +886,23 @@ extern const FilesystemCommandHandler
 
 int halArduinoAvrInit(HalArduinoAvrInitArgs *args) {
   // Wire up per-subsystem function arrays.
-  // HAL_TIMER is not supported on this platform — leave halFunctions[HAL_TIMER] NULL.
-  // HAL_SPI is not wired here at all: only the Mega 2560 has an SPI bus
-  // wired to anything, and it wires its own HAL_SPI table (and
-  // halImpl.spi's data members) itself, in HalArduinoMega2560.cpp, before
-  // calling this function.  The Nano Every leaves halImpl.spi NULL.
+  // HAL_TIMER is not supported on this platform, so halImpl.timer stays NULL.
+  // HAL_SPI and HAL_BLOCK_DEVICE are board-specific: a board that has them
+  // points halImpl.spi/halImpl.blockDevice at their instances before calling
+  // this function.
   halFunctions[HAL_PLATFORM]     = arduinoAvrPlatformFunctions;
   halFunctions[HAL_MEMORY]       = arduinoAvrMemoryFunctions;
   halFunctions[HAL_UART]         = arduinoAvrUartFunctions;
   halFunctions[HAL_DIO]          = arduinoAvrDioFunctions;
   halFunctions[HAL_CLOCK]        = arduinoAvrClockFunctions;
   halFunctions[HAL_POWER]        = arduinoAvrPowerFunctions;
-  halFunctions[HAL_BLOCK_DEVICE] = arduinoAvrBlockDeviceFunctions;
+
+  halImpl.platform = &halImplPlatform;
+  halImpl.memory   = &halImplMemory;
+  halImpl.uart     = &halImplUart;
+  halImpl.dio      = &halImplDio;
+  halImpl.clock    = &halImplClock;
+  halImpl.power    = &halImplPower;
 
   // Set per-platform data members from the init args.
   _dioStart   = args->dioStart;
@@ -911,11 +915,11 @@ int halArduinoAvrInit(HalArduinoAvrInitArgs *args) {
   halImpl.dio->numSupported = args->numDiosSupported;
   halImpl.dio->online       = args->diosOnline;
 
-  halImpl.timer->numSupported = 0;
-  halImpl.timer->online       = NULL;
-
-  halImpl.blockDevice->numSupported = _numBlockDevices;
-  halImpl.blockDevice->online       = arduinoAvrBlockDevicesOnline;
+  if (halImpl.blockDevice != NULL) {
+    halFunctions[HAL_BLOCK_DEVICE]    = arduinoAvrBlockDeviceFunctions;
+    halImpl.blockDevice->numSupported = _numBlockDevices;
+    halImpl.blockDevice->online       = arduinoAvrBlockDevicesOnline;
+  }
 
   halImpl.memory->stringsPresent = true;
   halImpl.memory->logBufferSize  = sizeof(_logBuffer);

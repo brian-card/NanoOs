@@ -107,6 +107,7 @@ SUITE_SRCS     := test_smoke test_unit_misc test_unit_strtoll test_unit_console 
                   test_kernel_overlay_cache \
                   test_kernel_process_queue \
                   test_kernel_hal_capability \
+                  test_kernel_hal_absent \
                   test_kernel_fs_paths \
                   test_kernel_posix_timer
 
