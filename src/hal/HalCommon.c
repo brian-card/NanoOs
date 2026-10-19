@@ -906,6 +906,17 @@ static const char _restartContiguousFilesystemFailedMessage[] KEEP_IN_FLASH
 static const char _contiguousFilesystemReadFailedMessage[] KEEP_IN_FLASH
   = "Could not read filesystem binary from block device\n";
 
+/// @var _contiguousFilesystemVersionMessage
+///
+/// @brief Message printed when restartContiguousFilesystem finds a filesystem
+/// binary built for a different overlay version. See
+/// _restartFilesystemFailedMessage for why this stays a raw printString.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _contiguousFilesystemVersionMessage[] KEEP_IN_FLASH
+  = "Filesystem binary was built for a different overlay version\n";
+
 /// @var _numExtraFilesystemStacks
 ///
 /// @brief The number of extra stacks to add for the filesystem.
@@ -1408,6 +1419,12 @@ int restartContiguousFilesystem(ProcessDescriptor *processDescriptor) {
     printString(_contiguousFilesystemReadFailedMessage);
     processDescriptor->restartFunction = NULL;
     return -EIO;
+  } else if ((overlayMap->header.magic != NANO_OS_OVERLAY_MAGIC)
+    || (overlayMap->header.version != NANO_OS_OVERLAY_VERSION)
+  ) {
+    printString(_contiguousFilesystemVersionMessage);
+    processDescriptor->restartFunction = NULL;
+    return -ENOEXEC;
   }
   overlayMap->header.osApi = NANO_OS_API;
 

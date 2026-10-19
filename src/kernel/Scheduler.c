@@ -4321,8 +4321,9 @@ int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp) {
     return -ENOEXEC;
   }
   if (overlayMap->header.version != NANO_OS_OVERLAY_VERSION) {
-    logError("Overlay version is 0x%lx\n",
-      (unsigned long int) overlayMap->header.version);
+    logError("Overlay version is 0x%lx, kernel expects 0x%lx\n",
+      (unsigned long int) overlayMap->header.version,
+      (unsigned long int) NANO_OS_OVERLAY_VERSION);
     return -ENOEXEC;
   }
 

@@ -56,11 +56,12 @@ extern "C"
 
 /// @def NANO_OS_OVERLAY_VERSION
 ///
-/// The version of the overlay metadata, encoded into a 32-bit integer.
+/// The version of the overlay metadata and the NanoOsApi it was built against,
+/// encoded into a 32-bit integer.  Bump it whenever either one changes.
 #define NANO_OS_OVERLAY_VERSION \
   ( (((uint32_t) 0) << 24) \
   | (((uint32_t) 0) << 16) \
-  | (((uint32_t) 1) << 8) \
+  | (((uint32_t) 2) << 8) \
   | (((uint32_t) 0) << 0) \
   )
 

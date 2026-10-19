@@ -93,6 +93,7 @@ typedef struct posix_spawnattr_t posix_spawnattr_t;
 // Forward declarations from other headers.
 struct termios;
 
+// Any change to these API structures must bump NANO_OS_OVERLAY_VERSION.
 typedef struct NanoOsExecutiveApi {
   // Debug functions:
   int (*printString)(const char *string);
