@@ -29,12 +29,18 @@
 ///
 /// @brief Entrypoint into the Agon Light 2 VDP driver process.
 
-#include <stdio.h>
+#include "ExecutiveProcesses.h"
 
 int main(int argc, char **argv) {
   (void) argc;
   (void) argv;
-  printf("vdp.drv started\n");
+
+  while (1) {
+    ProcessMessage *processMessage = processMessageQueueWait(NULL);
+    while (processMessage != NULL) {
+      processMessage = processMessageQueuePop();
+    }
+  }
 
   return 0;
 }
