@@ -38,6 +38,9 @@
  *   __data_bss_limit                             — address of the integrity canary
  * Symbol contracts with HalAgonLight2.c:
  *   __bss_end__                                  — checked against the overlay window
+ *
+ * .persistent sits between .bss and .data and is touched by neither Boot.asm
+ * loop, so its contents survive a soft reset of the eZ80.
  */
 
 ENTRY(_start)
@@ -91,6 +94,15 @@ SECTIONS
     . = ALIGN(4);
     __bss_end__ = .;          /* referenced by HalAgonLight2.c */
     __bss_size  = ABSOLUTE(__bss_end__ - __bss_start);   /* referenced by Boot.asm */
+  } > RAM
+
+  /* ---- Uninitialised data: external SRAM, neither zeroed nor copied by
+   * Boot.asm, so it survives a soft reset ------------------------------- */
+  .persistent (NOLOAD) :
+  {
+    . = ALIGN(4);
+    *(.persistent .persistent.*)
+    . = ALIGN(4);
   } > RAM
 
   /* ---- Initialised data: VMA in external SRAM, LMA in flash after .text -- */
