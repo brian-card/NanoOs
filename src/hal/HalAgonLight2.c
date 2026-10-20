@@ -2224,6 +2224,13 @@ int halAgonLight2Init(void) {
     /* numExtraFilesystemStacks= */ 0
   );
 
+  // halCommonInit asks for 1000000 baud, which the eZ80F92 can't produce.
+  for (int ii = 0; ii < NUM_UARTS; ii++) {
+    if (online(HAL->uart, ii)) {
+      HAL->uart->configure(ii, BASE_BAUD);
+    }
+  }
+
   enableInterrupts();
   agonLight2InitVdp();
 
