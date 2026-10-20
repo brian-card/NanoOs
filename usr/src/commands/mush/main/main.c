@@ -41,11 +41,41 @@
 /// @brief The maximum number of bytes that the CLI can accept in MUSH.
 #define MUSH_COMMAND_LINE_LENGTH 96
 
+/// @def ESCAPE
+///
+/// @brief ASCII <escape> character.
+#define ESCAPE 0x1b
+
+/// @def UP_ARROW
+///
+/// @brief Character sequence sent from the console after the escape character
+/// when the up arrow on the keyboard is pressed.
+#define UP_ARROW {0x5b, 0x41}
+
+/// @def DOWN_ARROW
+///
+/// @brief Character sequence sent from the console after the escape character
+/// when the down arrow on the keyboard is pressed.
+#define DOWN_ARROW {0x5b, 0x42}
+
+#undef printDebug
+#ifdef MUSH_DEBUG
+#define printDebug(...) fprintf(stderr, __VA_ARGS__)
+#else
+#define printDebug(...) {}
+#endif // MUSH_DEBUG
+
+
 int main(int argc, char **argv) {
   (void) argc;
   
-  char *buffer = (char*) malloc(MUSH_COMMAND_LINE_LENGTH);
-  *buffer = '\0';
+  char *buffer = (char*) malloc(2 * MUSH_COMMAND_LINE_LENGTH);
+  char *buffers[2];
+  buffers[0] = buffer;
+  buffers[1] = &buffer[MUSH_COMMAND_LINE_LENGTH];
+  *buffers[0] = '\0';
+  *buffers[1] = '\0';
+  int bufferIndex = 0;
   
   intptr_t returnValue = 0;
   FsCommandArgs fsCommandArgs;
@@ -69,28 +99,25 @@ int main(int argc, char **argv) {
       pwd = "<unknown directory>";
     }
     printf("mush %s@%s:%s%c ", username, hostname, pwd, prompt);
-    char *input = fgets(buffer, MUSH_COMMAND_LINE_LENGTH, stdin);
+    char *input = fgets(buffers[bufferIndex], MUSH_COMMAND_LINE_LENGTH, stdin);
     if (input == NULL) {
       // Our stdin file descriptor has been closed.  Bail.
       break;
     }
-    printDebugString("Read \"");
-    printDebugString(input);
-    printDebugString("\" from command line\n");
-    printDebug("Read \"%s\" from command line\n", input);
-    printDebugString("strlen = 0x");
-    printDebugHex(overlayMap.header.osApi->strlen);
-    printDebugString("\n");
     size_t inputLength = strlen(input);
-    printDebugString("inputLength = ");
-    printDebugInt(inputLength);
-    printDebugString("\n");
+    printDebug("inputLength = %d\n", inputLength);
+    printDebug("Read ");
+#ifdef MUSH_DEBUG
+    for (size_t ii = 0; ii < inputLength; ii++) {
+        printDebug("0x%x ", input[ii]);
+    }
+#endif // MUSH_DEBUG
+    printDebug("\n");
     if ((inputLength > 0) && (input[inputLength - 1] == '\n')) {
       input[inputLength - 1] = '\0';
     }
-    printDebugString("input is now \"");
-    printDebugString(input);
-    printDebugString("\"\n");
+    
+    bufferIndex ^= 1;
     
     // We need to check for exit outside of processing it as a built-in.  This
     // is because, if the system gets into a bad state, we can fail to load
@@ -109,13 +136,13 @@ int main(int argc, char **argv) {
     // The variable 'input' is the same as the variable 'buffer', which is a
     // pointer to dynamic memory.  So, it's safe to pass as a parameter to
     // callOverlayFunction.
-    printDebugString("Checking to see if command is a builtin\n");
+    printDebug("Checking to see if command is a builtin\n");
     returnValue = (intptr_t) callOverlayFunction(
       OVERLAY_SAME_NAMESPACE, "Builtins", "processBuiltin", input);
     if (returnValue < -1)  {
       // The command wasn't processed as a built-in.  Try running it from the
       // filesystem.
-      printDebugString("Command is *NOT* a builtin\n");
+      printDebug("Command is *NOT* a builtin\n");
       if (strchr(input, '|')) {
         // Command line contains pipes.  Process it that way.
         fsCommandArgs.commandLine = input;
