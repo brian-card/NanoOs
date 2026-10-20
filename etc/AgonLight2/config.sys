@@ -1,0 +1,2 @@
+REM NanoOs system configuration for the Agon Light 2
+DEVICE=/usr/lib/vdp.drv
