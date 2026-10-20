@@ -54,9 +54,9 @@
 ///
 ///          The resulting position is validated against the range
 ///          [0, fileSize]; seeking before the start of the file or past
-///          end-of-file is rejected with FAT32_INVALID_PARAMETER.
+///          end-of-file is rejected with EINVAL.
 ///
-///          After the position is updated the cluster chain is walked from
+///          Before the position is updated the cluster chain is walked from
 ///          firstCluster so that currentCluster points to the cluster
 ///          containing the target byte.  When the new position falls exactly
 ///          on a cluster boundary at end-of-file, currentCluster is set to
@@ -68,12 +68,12 @@
 /// @param offset       Signed byte offset relative to @p whence.
 /// @param whence       One of SEEK_SET, SEEK_CUR, or SEEK_END.
 ///
-/// @return FAT32_SUCCESS on success, FAT32_INVALID_PARAMETER if an argument
-///         is NULL, whence is unrecognised, or the computed position is out of
-///         range, or FAT32_ERROR on an I/O failure while walking the cluster
-///         chain.
+/// @return The new position on success; -EINVAL if an argument is NULL,
+///         whence is unrecognised, or the computed position is out of range;
+///         or -EIO on an I/O failure while walking the cluster chain, in which
+///         case the position is unchanged.
 ///
-int driverFseek(
+long driverFseek(
     void *driverState,
     void *fileHandle,
     long offset,
@@ -83,7 +83,7 @@ int driverFseek(
   Fat32FileHandle  *handle = (Fat32FileHandle *)  fileHandle;
 
   if ((ds == NULL) || (handle == NULL)) {
-    return FAT32_INVALID_PARAMETER;
+    return -fat32ErrorToErrno(FAT32_INVALID_PARAMETER);
   }
 
   // ---- Determine the base for the offset ----
@@ -92,21 +92,20 @@ int driverFseek(
     case SEEK_SET: base = 0;                              break;
     case SEEK_CUR: base = (long) handle->currentPosition; break;
     case SEEK_END: base = (long) handle->fileSize;        break;
-    default:       return FAT32_INVALID_PARAMETER;
+    default:       return -fat32ErrorToErrno(FAT32_INVALID_PARAMETER);
   }
 
   long newPosition = base + offset;
 
   // Reject positions outside [0, fileSize].
   if (newPosition < 0) {
-    return FAT32_INVALID_PARAMETER;
+    return -fat32ErrorToErrno(FAT32_INVALID_PARAMETER);
   }
   if ((uint32_t) newPosition > handle->fileSize) {
-    return FAT32_INVALID_PARAMETER;
+    return -fat32ErrorToErrno(FAT32_INVALID_PARAMETER);
   }
 
   uint32_t pos = (uint32_t) newPosition;
-  handle->currentPosition = pos;
 
   // ---- Synchronise currentCluster with the new position ----
   //
@@ -129,7 +128,7 @@ int driverFseek(
     for (uint32_t i = 0; i < clustersToSkip; i++) {
       uint32_t next;
       if (fat32ReadFatEntry(ds, cluster, &next) != FAT32_SUCCESS) {
-        return FAT32_ERROR;
+        return -fat32ErrorToErrno(FAT32_ERROR);
       }
       if (next >= FAT32_CLUSTER_EOC_MIN) {
         break;
@@ -138,7 +137,8 @@ int driverFseek(
     }
     handle->currentCluster = cluster;
   }
+  handle->currentPosition = pos;
 
-  return FAT32_SUCCESS;
+  return (long) pos;
 }
 
