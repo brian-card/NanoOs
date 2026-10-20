@@ -250,7 +250,7 @@ uint8_t schedulerGetNumShells(void);
 void* schedMalloc(size_t size);
 void schedFree(void *ptr);
 FILE* schedFopen(const char *pathname, const char *mode);
-size_t schedFread(void *ptr, size_t size, size_t nmemb, FILE *stream);
+char* schedFgets(char *buffer, int size, FILE *stream);
 int schedFclose(FILE *stream);
 int schedulerRunExecutiveOverlay(ProcessDescriptor *processDescriptor,
   char *commandPath, char **argv);
