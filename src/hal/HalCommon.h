@@ -319,6 +319,8 @@ int halCommonInitRootFilesystem(void);
 int halCommonInitLogger(void);
 int halCommonInitFileCache(uint8_t depth);
 int halCommonLaunchProcesses(void);
+int halCommonLoadConfigSys(void);
+int restartConfigSysDevice(ProcessDescriptor *processDescriptor);
 int restartBuiltinFilesystem(ProcessDescriptor *processDescriptor);
 int restartOverlayFilesystem(ProcessDescriptor *processDescriptor);
 int restartContiguousFilesystem(ProcessDescriptor *processDescriptor);
