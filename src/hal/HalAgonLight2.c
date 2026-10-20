@@ -1998,6 +1998,125 @@ static uint32_t agonLight2BlockDevicesOnline[] = { 0x00000000 };
 // Platform init
 // ---------------------------------------------------------------------------
 
+/// @def VDP_INITIALIZED_MAGIC
+///
+/// @brief Value of _vdpInitialized once the VDP has answered a general poll.
+/// A magic word rather than a bool because external RAM powers up with
+/// arbitrary contents.  This is the string "VDP0" expressed as a 32-bit,
+/// little-endian value.
+#define VDP_INITIALIZED_MAGIC ((uint32_t) 0x30504456)
+
+/// @var _vdpInitialized
+///
+/// @brief Whether the VDP has completed its startup handshake.  Lives in
+/// .persistent so it survives a soft reset of the eZ80, which does not reset
+/// the VDP.  volatile because its value predates this boot; without it the
+/// compiler shrinks the variable to a single bit.
+static volatile uint32_t _vdpInitialized
+  __attribute__((section(".persistent")));
+
+/// @def VDP_GENERAL_POLL_COOKIE
+///
+/// @brief Byte sent in the general poll, which the VDP echoes in its reply.
+/// This is ASCII character 'N' for "NanoOs".
+#define VDP_GENERAL_POLL_COOKIE 0x4e
+
+/// @def VDP_GENERAL_POLL_RETRY_NS
+///
+/// @brief How long to wait for a reply before resending the general poll.
+#define VDP_GENERAL_POLL_RETRY_NS ((int64_t) 100000000)
+
+/// @def VDP_GENERAL_POLL_TIMEOUT_NS
+///
+/// @brief How long to keep polling the VDP before giving up on it.
+#define VDP_GENERAL_POLL_TIMEOUT_NS ((int64_t) 5000000000LL)
+
+/// @var _vdpGeneralPoll
+///
+/// @brief VDU 23,0,&80,cookie: the general poll the VDP waits for after a cold
+/// boot before it will process any other output.
+static const uint8_t _vdpGeneralPoll[] KEEP_IN_FLASH = {
+  23, 0, 0x80, VDP_GENERAL_POLL_COOKIE
+};
+
+/// @var _vdpGeneralPollReply
+///
+/// @brief The packet the VDP sends back in response to _vdpGeneralPoll.
+static const uint8_t _vdpGeneralPollReply[] KEEP_IN_FLASH = {
+  0x80, 0x01, VDP_GENERAL_POLL_COOKIE
+};
+
+/// @fn void agonLight2VdpWrite(const uint8_t *data, size_t length)
+///
+/// @brief Write raw bytes to the VDP over UART0.
+///
+/// @param data The bytes to write.
+/// @param length The number of bytes in data.
+///
+/// @return This function returns no value.
+static void agonLight2VdpWrite(const uint8_t *data, size_t length) {
+  for (size_t ii = 0; ii < length; ii++) {
+    agonLight2WriteUart0Impl(data[ii]);
+  }
+}
+
+/// @fn bool agonLight2VdpGeneralPoll(void)
+///
+/// @brief Send the VDP general polls until it replies or
+/// VDP_GENERAL_POLL_TIMEOUT_NS elapses.
+///
+/// @return Returns true if the VDP replied, false if it did not.
+static bool agonLight2VdpGeneralPoll(void) {
+  int64_t startNs = 0;
+  int64_t nowNs = 0;
+  int64_t lastSendNs = 0;
+  size_t matched = 0;
+
+  readClock(&startNs);
+  lastSendNs = startNs;
+  agonLight2VdpWrite(_vdpGeneralPoll, sizeof(_vdpGeneralPoll));
+
+  for (nowNs = startNs;
+    nowNs - startNs < VDP_GENERAL_POLL_TIMEOUT_NS;
+    readClock(&nowNs)
+  ) {
+    int byte = agonLight2PollUart0Impl();
+    if (byte >= 0) {
+      if (byte == _vdpGeneralPollReply[matched]) {
+        matched++;
+        if (matched == sizeof(_vdpGeneralPollReply)) {
+          return true;
+        }
+      } else {
+        matched = 0;
+        if (byte == _vdpGeneralPollReply[0]) {
+          matched = 1;
+        }
+      }
+    } else if (nowNs - lastSendNs >= VDP_GENERAL_POLL_RETRY_NS) {
+      lastSendNs = nowNs;
+      agonLight2VdpWrite(_vdpGeneralPoll, sizeof(_vdpGeneralPoll));
+    }
+  }
+
+  return false;
+}
+
+/// @fn void agonLight2InitVdp(void)
+///
+/// @brief Complete the VDP's startup handshake if it has not been done since
+/// the VDP last powered up, then write a test line to the screen.
+///
+/// @return This function returns no value.
+static void agonLight2InitVdp(void) {
+  if (_vdpInitialized != VDP_INITIALIZED_MAGIC) {
+    if (agonLight2VdpGeneralPoll() == false) {
+      return;
+    }
+    _vdpInitialized = VDP_INITIALIZED_MAGIC;
+  }
+}
+
 /// @var _dataBssCanaryError
 ///
 /// @brief Message printed when the external-RAM integrity canary that Boot.asm
@@ -2106,6 +2225,7 @@ int halAgonLight2Init(void) {
   );
 
   enableInterrupts();
+  agonLight2InitVdp();
 
   // Final step: verify the external-RAM integrity canary that Boot.asm stamped
   // at DATA_BSS_CANARY_ADDRESS before it copied .data.  halCommonInit() has
