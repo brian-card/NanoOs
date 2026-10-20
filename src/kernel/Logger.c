@@ -174,6 +174,20 @@ static const char _droppedReentrantLogSuffix[] KEEP_IN_FLASH = ".\n";
 /// future if we decide to make kernel processes preemptive.
 static bool _sendingToLogger = false;
 
+/// @var _loggerRunning
+///
+/// @brief Whether the logger process is running and able to receive log
+/// messages.
+static bool _loggerRunning = false;
+
+/// @var _pendingLogMask
+///
+/// @brief Bitmask of the logEntries/logMessages slots holding messages that
+/// were raised while the logger process wasn't running.  A mask rather than a
+/// queue to keep .bss small on the smallest targets; the order of the messages
+/// is recovered from their timestamps.
+static uint16_t _pendingLogMask = 0;
+
 /// @var numLogEntries
 ///
 /// @brief The number of LogEntry objects held in the logEntries array and
@@ -212,6 +226,46 @@ void logDroppedReentrantLog(int lineNumber, const char *fileName) {
   printString(_droppedReentrantLogInfix);
   printHex((uintptr_t) fileName);
   printString(_droppedReentrantLogSuffix);
+}
+
+/// @fn void loggerSetRunning(bool running)
+///
+/// @brief Record whether the logger process is able to receive log messages.
+/// When it becomes able to, send it the messages that were held while it
+/// wasn't.
+///
+/// @param running Whether the logger process is running.
+///
+/// @return This function returns no value.
+void loggerSetRunning(bool running) {
+  _loggerRunning = running;
+  if (running == false) {
+    return;
+  }
+
+  while (_pendingLogMask != 0) {
+    uint8_t oldest = 0;
+    bool found = false;
+    for (uint8_t ii = 0; ii < (sizeof(_pendingLogMask) * 8); ii++) {
+      if (((_pendingLogMask & (((uint16_t) 1) << ii)) != 0)
+        && ((found == false)
+          || (logEntries[ii].timeStamp < logEntries[oldest].timeStamp))
+      ) {
+        oldest = ii;
+        found = true;
+      }
+    }
+    _pendingLogMask &= ~(((uint16_t) 1) << oldest);
+
+    ProcessMessage *processMessage = &logMessages[oldest];
+    _sendingToLogger = true;
+    int sendStatus = sendProcessMessageToPid(loggerPid, processMessage);
+    _sendingToLogger = false;
+    if (sendStatus != 0) {
+      logEntries[oldest].inUse = false;
+      processMessageRelease(processMessage);
+    }
+  }
 }
 
 /// @fn int logMessage(LogLevel logLevel,
@@ -358,6 +412,17 @@ int logMessage(LogLevel logLevel,
     processMessageRelease(processMessage);
     logEntry->inUse = false;
     return -EAGAIN;
+  }
+
+  if (_loggerRunning == false) {
+    size_t index = (size_t) (processMessage - logMessages);
+    if (index >= (sizeof(_pendingLogMask) * 8)) {
+      processMessageRelease(processMessage);
+      logEntry->inUse = false;
+      return -ENOMEM;
+    }
+    _pendingLogMask |= ((uint16_t) 1) << index;
+    return 0;
   }
   
   _sendingToLogger = true;
