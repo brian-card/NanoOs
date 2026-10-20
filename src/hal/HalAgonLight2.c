@@ -1725,12 +1725,17 @@ int agonLight2StartProcesses(int32_t deviceId, va_list args) {
 
 /// @fn static int agonLight2DoLaunchProcesses(void)
 ///
-/// @brief Allocate the overlay file cache, then arm and queue the AgonLight2's
-/// supervisor and user processes.
+/// @brief Allocate the overlay file cache, queue the devices from
+/// /etc/config.sys, then arm and queue the AgonLight2's supervisor and user
+/// processes.
 ///
 /// @return Returns 0 on success, -errno on failure.
 static int agonLight2DoLaunchProcesses(void) {
   int returnValue = halCommonInitFileCache(AGON_LIGHT_2_FILE_CACHE_DEPTH);
+  int configStatus = halCommonLoadConfigSys();
+  if ((returnValue == 0) && (configStatus != 0)) {
+    returnValue = configStatus;
+  }
   int launchStatus = halCommonLaunchProcesses();
   if (launchStatus != 0) {
     returnValue = launchStatus;
