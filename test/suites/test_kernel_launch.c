@@ -197,3 +197,54 @@ NANO_OS_KERNEL_TEST(launch, replacing_an_overlay_copies_its_id) {
     schedulerReplaceOverlay(OVERLAY_SAME_NAMESPACE, &overlay));
   NANO_OS_ASSERT_NULL(self->overlay.overlayId);
 }
+
+/// @var _failedRestartCalls
+///
+/// @brief Number of times failingRestart has been called.
+static int _failedRestartCalls = 0;
+
+/// @fn static int failingRestart(ProcessDescriptor *processDescriptor)
+///
+/// @brief Restart function that counts its calls and always fails
+/// permanently.
+static int failingRestart(ProcessDescriptor *processDescriptor) {
+  (void) processDescriptor;
+  _failedRestartCalls++;
+  return -8; // -ENOENT
+}
+
+/// @fn static void* exitImmediately(void *args)
+///
+/// @brief Process body that exits as soon as it runs.
+static void* exitImmediately(void *args) {
+  return args;
+}
+
+NANO_OS_KERNEL_TEST(launch, failed_restart_is_attempted_once) {
+  ProcessId firstUserSlot
+    = schedulerGetFirstShellPid() + schedulerGetNumShells();
+  ProcessDescriptor *processDescriptor = NULL;
+  for (ProcessId pid = firstUserSlot; pid <= numProcesses; pid++) {
+    if (processFinished(&allProcesses[pid - 1])) {
+      processDescriptor = &allProcesses[pid - 1];
+      break;
+    }
+  }
+  NANO_OS_ASSERT_NOT_NULL(processDescriptor);
+
+  NANO_OS_ASSERT_TRUE(processCreate(processDescriptor, exitImmediately, NULL)
+    == processSuccess);
+  threadSetContext(processDescriptor->mainThread, processDescriptor);
+  processDescriptor->restartFunction = failingRestart;
+  NANO_OS_ASSERT_EQ_INT(0,
+    processQueuePush(processDescriptor->readyQueue, processDescriptor));
+
+  for (int ii = 0; (ii < 100) && (_failedRestartCalls == 0); ii++) {
+    processYield();
+  }
+  NANO_OS_ASSERT_EQ_INT(1, _failedRestartCalls);
+  for (int ii = 0; ii < 100; ii++) {
+    processYield();
+  }
+  NANO_OS_ASSERT_EQ_INT(1, _failedRestartCalls);
+}
