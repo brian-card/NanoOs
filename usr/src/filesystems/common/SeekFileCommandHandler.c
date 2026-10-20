@@ -44,7 +44,7 @@
 #endif // NANO_OS_KERNEL_BUILD
 
 // Prototypes used by this handler.
-int driverFseek(void *driverState, void *fileHandle, long offset, int whence);
+long driverFseek(void *driverState, void *fileHandle, long offset, int whence);
 
 /// @fn void* SeekFile(void *args)
 ///
@@ -63,20 +63,23 @@ void* SeekFile(void *args) {
   FilesystemSeekArgs *filesystemSeekArgs
     = (FilesystemSeekArgs*) processMessageData(processMessage);
   int returnValue = 0;
+  int errorNumber = 0;
   if (filesystemState->driverState != NULL) {
     NanoOsFile *nanoOsFile = filesystemSeekArgs->stream;
-    errno = 0;
-    returnValue = driverFseek(
+    long position = driverFseek(
       filesystemState->driverState, nanoOsFile->file,
       filesystemSeekArgs->offset,
       filesystemSeekArgs->whence);
-    if (returnValue >= 0) {
-      nanoOsFile->currentPosition = returnValue;
+    if (position >= 0) {
+      nanoOsFile->currentPosition = (uint32_t) position;
+    } else {
+      returnValue = -1;
+      errorNumber = (int) -position;
     }
   }
 
   filesystemSeekArgs->returnValue = returnValue;
-  filesystemSeekArgs->errorNumber = errno;
+  filesystemSeekArgs->errorNumber = errorNumber;
   processMessageSetDone(processMessage);
   return filesystemState;
 }
