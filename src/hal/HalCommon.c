@@ -1174,6 +1174,417 @@ int halCommonLaunchProcesses(void) {
   return returnValue;
 }
 
+/// @def CONFIG_SYS_LINE_SIZE
+///
+/// @brief Size of the buffer used to read one line of /etc/config.sys.
+#define CONFIG_SYS_LINE_SIZE 128
+
+/// @struct ConfigSysDevice
+///
+/// @brief A process started from a DEVICE line in /etc/config.sys.
+///
+/// @param next The next device in the list, or NULL.
+/// @param pid The ProcessId of the slot the device runs in.
+/// @param path The full path to the device's overlay on the filesystem.
+/// @param argv The NULL-terminated array of arguments for the device.
+typedef struct ConfigSysDevice {
+  struct ConfigSysDevice *next;
+  ProcessId               pid;
+  char                   *path;
+  char                  **argv;
+} ConfigSysDevice;
+
+/// @var _configSysDevices
+///
+/// @brief List of the devices loaded from /etc/config.sys.
+static ConfigSysDevice *_configSysDevices = NULL;
+
+/// @var _configSysPath
+///
+/// @brief Path to the system configuration file.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _configSysPath[] KEEP_IN_FLASH = "/etc/config.sys";
+
+/// @var _configSysReadMode
+///
+/// @brief Mode used to open /etc/config.sys.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _configSysReadMode[] KEEP_IN_FLASH = "r";
+
+/// @var _configSysDeviceKeyword
+///
+/// @brief Keyword of a /etc/config.sys line that starts a device process.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _configSysDeviceKeyword[] KEEP_IN_FLASH = "DEVICE";
+
+/// @var _configSysRemKeyword
+///
+/// @brief Keyword of a /etc/config.sys comment line.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _configSysRemKeyword[] KEEP_IN_FLASH = "REM";
+
+/// @fn static inline bool configSysIsSpace(char c)
+///
+/// @brief Determine whether a character separates fields in /etc/config.sys.
+///
+/// @param c The character to check.
+///
+/// @return Returns true if c is a space or a tab, false otherwise.
+static inline bool configSysIsSpace(char c) {
+  return (c == ' ') || (c == '\t');
+}
+
+/// @fn static char* configSysTrim(char *string)
+///
+/// @brief Remove leading and trailing whitespace, including line endings,
+/// from a string in place.
+///
+/// @param string The string to trim.
+///
+/// @return Returns a pointer to the first non-whitespace character of string.
+static char* configSysTrim(char *string) {
+  while (configSysIsSpace(*string)) {
+    string++;
+  }
+
+  char *end = string + strlen(string);
+  while ((end > string) && (configSysIsSpace(end[-1])
+    || (end[-1] == '\r') || (end[-1] == '\n'))
+  ) {
+    end--;
+  }
+  *end = '\0';
+
+  return string;
+}
+
+/// @fn static void configSysToUpper(char *string)
+///
+/// @brief Convert the ASCII letters of a string to uppercase in place.
+///
+/// @param string The string to convert.
+///
+/// @return This function returns no value.
+static void configSysToUpper(char *string) {
+  for (; *string != '\0'; string++) {
+    if ((*string >= 'a') && (*string <= 'z')) {
+      *string -= 'a' - 'A';
+    }
+  }
+}
+
+/// @fn static ConfigSysDevice* configSysParseDevice(char *value)
+///
+/// @brief Build a ConfigSysDevice from the value of a DEVICE line: the path to
+/// the device's overlay followed by its arguments.
+///
+/// @param value The trimmed text after the '=' of a DEVICE line.
+///
+/// @return Returns a newly-allocated ConfigSysDevice on success, NULL on
+/// failure.
+static ConfigSysDevice* configSysParseDevice(char *value) {
+  size_t numArgs = 0;
+  for (char *cursor = value; *cursor != '\0';) {
+    while (configSysIsSpace(*cursor)) {
+      cursor++;
+    }
+    if (*cursor != '\0') {
+      numArgs++;
+    }
+    while ((*cursor != '\0') && !configSysIsSpace(*cursor)) {
+      cursor++;
+    }
+  }
+  if (numArgs == 0) {
+    return NULL;
+  }
+
+  ConfigSysDevice *device = (ConfigSysDevice*) schedMalloc(
+    sizeof(ConfigSysDevice) + ((numArgs + 1) * sizeof(char*))
+    + strlen(value) + 1);
+  if (device == NULL) {
+    return NULL;
+  }
+  device->next = NULL;
+  device->pid = 0;
+  device->argv = (char**) &device[1];
+  char *strings = (char*) &device->argv[numArgs + 1];
+  strcpy(strings, value);
+
+  size_t argIndex = 0;
+  for (char *cursor = strings; *cursor != '\0';) {
+    while (configSysIsSpace(*cursor)) {
+      *cursor++ = '\0';
+    }
+    if (*cursor != '\0') {
+      device->argv[argIndex++] = cursor;
+    }
+    while ((*cursor != '\0') && !configSysIsSpace(*cursor)) {
+      cursor++;
+    }
+  }
+  device->argv[argIndex] = NULL;
+
+  device->path = device->argv[0];
+  char *name = strrchr(device->path, '/');
+  if (name != NULL) {
+    device->argv[0] = name + 1;
+  }
+
+  return device;
+}
+
+/// @fn static ProcessDescriptor* configSysNextSlot(void)
+///
+/// @brief Find an unused user-level process slot to run a device in.
+///
+/// @return Returns a pointer to the slot's ProcessDescriptor on success, NULL
+/// if no slot is available.
+static ProcessDescriptor* configSysNextSlot(void) {
+  ProcessId firstPid = schedulerGetFirstShellPid() + schedulerGetNumShells();
+  for (ProcessId pid = firstPid; pid <= numProcesses; pid++) {
+    ProcessDescriptor *processDescriptor = &allProcesses[pid - 1];
+    if ((processDescriptor->privilegeLevel == PRIVILEGE_LEVEL_USER)
+      && (processDescriptor->readyQueue == NULL)
+    ) {
+      return processDescriptor;
+    }
+  }
+
+  return NULL;
+}
+
+/// @fn int restartConfigSysDevice(ProcessDescriptor *processDescriptor)
+///
+/// @brief Implementation of restartFunction to launch a device from
+/// /etc/config.sys, and to re-launch it if it exits.
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor that manages the
+///   device's process.
+///
+/// @return Returns 0 on success, -errno on failure.
+int restartConfigSysDevice(ProcessDescriptor *processDescriptor) {
+  ConfigSysDevice *device = _configSysDevices;
+  while ((device != NULL) && (device->pid != processDescriptor->processId)) {
+    device = device->next;
+  }
+  if (device == NULL) {
+    return -ENOENT;
+  }
+
+  int returnValue = schedulerRunExecutiveOverlay(processDescriptor,
+    device->path, device->argv);
+  if (returnValue == -EBUSY) {
+    return -EAGAIN;
+  } else if (returnValue < 0) {
+    logError("Could not start device %s: %s\n",
+      device->path, strerror(-returnValue));
+  }
+
+  return returnValue;
+}
+
+/// @fn static int configSysAddDevice(char *value)
+///
+/// @brief Assign a process slot to the device described by the value of a
+/// DEVICE line.  The slot is not queued until the whole file has been read.
+///
+/// @param value The trimmed text after the '=' of a DEVICE line.
+///
+/// @return Returns 0 on success, -errno on failure.
+static int configSysAddDevice(char *value) {
+  ProcessDescriptor *processDescriptor = configSysNextSlot();
+  if (processDescriptor == NULL) {
+    logError("No process slot available for device %s\n", value);
+    return -ENOSPC;
+  }
+
+  ConfigSysDevice *device = configSysParseDevice(value);
+  if (device == NULL) {
+    logError("Could not load device \"%s\"\n", value);
+    return -ENOMEM;
+  }
+  device->pid = processDescriptor->processId;
+  ConfigSysDevice **tail = &_configSysDevices;
+  while (*tail != NULL) {
+    tail = &(*tail)->next;
+  }
+  *tail = device;
+
+  HAL->platform->callFileOverlay(&processDescriptor->callOverlayFunction);
+  processDescriptor->userId = ROOT_USER_ID;
+  processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
+  processDescriptor->restartFunction = restartConfigSysDevice;
+
+  return 0;
+}
+
+/// @fn static int configSysQueueDevices(void)
+///
+/// @brief Queue the process slots of the devices from /etc/config.sys.  Each
+/// slot's dummy process runs once as an executive process, and when it exits,
+/// restartConfigSysDevice launches the device in its place.
+///
+/// @return Returns 0 on success, -errno on failure.
+static int configSysQueueDevices(void) {
+  ProcessQueue **readyQueues = NULL;
+  HAL->memory->readyQueues(&readyQueues);
+  if (readyQueues == NULL) {
+    return -ENODEV;
+  }
+
+  int returnValue = 0;
+  for (ConfigSysDevice *device = _configSysDevices; device != NULL;
+    device = device->next
+  ) {
+    ProcessDescriptor *processDescriptor = &allProcesses[device->pid - 1];
+    if (processDescriptor->readyQueue != NULL) {
+      continue;
+    }
+    processDescriptor->readyQueue = readyQueues[PRIVILEGE_LEVEL_EXECUTIVE];
+    if (processQueuePush(processDescriptor->readyQueue, processDescriptor)
+      != 0
+    ) {
+      returnValue = -ENOMEM;
+    }
+  }
+
+  return returnValue;
+}
+
+/// @fn static int configSysProcessLine(char *line)
+///
+/// @brief Act on one line of /etc/config.sys.
+///
+/// @param line The line, without its line ending.
+///
+/// @return Returns 0 on success, -errno on failure.
+static int configSysProcessLine(char *line) {
+  char *keyword = line;
+  char *value = strchr(keyword, '=');
+  if (value != NULL) {
+    *value++ = '\0';
+    value = configSysTrim(value);
+  }
+  keyword = configSysTrim(keyword);
+  char *end = keyword;
+  while ((*end != '\0') && !configSysIsSpace(*end)) {
+    end++;
+  }
+  bool hasArgument = (*end != '\0');
+  *end = '\0';
+  configSysToUpper(keyword);
+
+  if ((*keyword == '\0') || (*keyword == ';')
+    || (strcmp(keyword, _configSysRemKeyword) == 0)
+  ) {
+    return 0;
+  } else if ((value == NULL) || hasArgument) {
+    logError("Invalid line for %s in %s\n", keyword, _configSysPath);
+    return -EINVAL;
+  } else if (strcmp(keyword, _configSysDeviceKeyword) == 0) {
+    return configSysAddDevice(value);
+  }
+
+  logWarn("Unrecognized command %s in %s\n", keyword, _configSysPath);
+  return 0;
+}
+
+/// @fn int halCommonLoadConfigSys(void)
+///
+/// @brief Read /etc/config.sys and queue a process for each DEVICE line in
+/// it.  Only meant to be called by a platform's launchProcesses
+/// implementation, after the root filesystem is running and before
+/// halCommonLaunchProcesses.
+///
+/// @return Returns 0 on success or if there is no /etc/config.sys, -errno on
+/// failure.
+int halCommonLoadConfigSys(void) {
+  if ((HAL->memory == NULL) || (HAL->platform == NULL)) {
+    return -ENODEV;
+  }
+
+  FILE *configSys = schedFopen(_configSysPath, _configSysReadMode);
+  if (configSys == NULL) {
+    return 0;
+  }
+
+  char *buffer = (char*) schedMalloc(CONFIG_SYS_LINE_SIZE);
+  if (buffer == NULL) {
+    schedFclose(configSys);
+    return -ENOMEM;
+  }
+
+  int returnValue = 0;
+  size_t used = 0;
+  bool discarding = false;
+  bool endOfFile = false;
+  while ((endOfFile == false) || (used > 0)) {
+    if (endOfFile == false) {
+      size_t bytesRead = schedFread(buffer + used, 1,
+        CONFIG_SYS_LINE_SIZE - 1 - used, configSys);
+      endOfFile = (bytesRead == 0);
+      used += bytesRead;
+    }
+    buffer[used] = '\0';
+
+    char *line = buffer;
+    char *newline = NULL;
+    while ((newline = strchr(line, '\n')) != NULL) {
+      *newline = '\0';
+      if (discarding) {
+        discarding = false;
+      } else {
+        int lineStatus = configSysProcessLine(line);
+        if (lineStatus != 0) {
+          returnValue = lineStatus;
+        }
+      }
+      line = newline + 1;
+    }
+
+    used = strlen(line);
+    if (endOfFile && (used > 0)) {
+      if (discarding == false) {
+        int lineStatus = configSysProcessLine(line);
+        if (lineStatus != 0) {
+          returnValue = lineStatus;
+        }
+      }
+      used = 0;
+    } else if (used == CONFIG_SYS_LINE_SIZE - 1) {
+      if (discarding == false) {
+        logError("Line too long in %s\n", _configSysPath);
+        returnValue = -EOVERFLOW;
+        discarding = true;
+      }
+      used = 0;
+    } else {
+      memmove(buffer, line, used);
+    }
+  }
+
+  schedFree(buffer);
+  schedFclose(configSys);
+
+  // Nothing may run until the file is closed: every sched* call above runs
+  // the scheduler while it waits on the filesystem.
+  int queueStatus = configSysQueueDevices();
+  if (queueStatus != 0) {
+    returnValue = queueStatus;
+  }
+
+  return returnValue;
+}
+
 /// @var _builtinFilesystemInitDriver
 ///
 /// @brief File-local variable to hold the value to set fs.driverInit to in
