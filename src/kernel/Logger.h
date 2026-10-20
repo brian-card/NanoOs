@@ -255,6 +255,7 @@ typedef int LogLevel;
 
 // Exported functions.
 void logDroppedReentrantLog(int lineNumber, const char *fileName);
+void loggerSetRunning(bool running);
 
 int logMessage(LogLevel logLevel,
   const char *fileName, const char *functionName, int lineNumber,
