@@ -47,9 +47,11 @@
 __ftod:
     ret
 
-; __snot:  short bitwise-NOT helper.  libagon exports __snot_fast; the LLVM
-;          eZ80 backend emits __snot.  Forward to the library implementation.
+; __snot:  short bitwise-NOT helper.  The LLVM eZ80 backend emits __snot but
+;          libagon doesn't provide one.  Forward to __inot, whose low 16 bits
+;          are the same result.  Not __snot_fast: it clobbers DE, which the
+;          compiler keeps live across the call.
 .global __snot
-.extern __snot_fast
+.extern __inot
 __snot:
-    jp __snot_fast
+    jp __inot
