@@ -2470,6 +2470,55 @@ size_t schedFwrite(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   return filesystemIoCommandArgs.length / size;
 }
 
+/// @fn static int schedFseek(FILE *stream, long offset, int whence)
+///
+/// @brief Version of fseek for the scheduler.
+///
+/// @param stream A pointer to the FILE object that was previously opened.
+/// @param offset A signed integer value that will be added to the specified
+///   position.
+/// @param whence The location within the file to apply the offset to.  Valid
+///   values are SEEK_SET, SEEK_CUR, and SEEK_END.
+///
+/// @return Returns 0 on success, -1 on failure.
+static int schedFseek(FILE *stream, long offset, int whence) {
+  if (rootFilesystemPid == 0) {
+    return -1;
+  }
+
+  FilesystemSeekArgs filesystemSeekArgs = {
+    .stream = stream,
+    .offset = offset,
+    .whence = whence,
+    .returnValue = -1,
+    .errorNumber = 0,
+  };
+
+  if (_functionInProgress == NULL) {
+    _functionInProgress = __func__;
+
+    if (schedulerInitSendMessageToPid(rootFilesystemPid,
+      FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_SEEK_FILE,
+      &filesystemSeekArgs, sizeof(filesystemSeekArgs)
+      ) != processSuccess
+    ) {
+      // Nothing we can do.
+      _functionInProgress = NULL;
+      return -1;
+    }
+
+    _functionInProgress = NULL;
+  } else {
+    logError("Cannot execute because 0x%lx is already in progress\n",
+      (long unsigned int) ((intptr_t) _functionInProgress));
+    errno = EBUSY;
+    return -1;
+  }
+
+  errno = filesystemSeekArgs.errorNumber;
+  return filesystemSeekArgs.returnValue;
+}
+
 /// @fn int schedFgets(char *buffer, int size, FILE *stream)
 ///
 /// @brief Version of fgets for the scheduler.
@@ -2481,44 +2530,29 @@ size_t schedFwrite(void *ptr, size_t size, size_t nmemb, FILE *stream) {
 /// @return Returns a pointer to the provided buffer on success, NULL on
 /// failure.
 char* schedFgets(char *buffer, int size, FILE *stream) {
-  if (rootFilesystemPid == 0) {
+  if ((buffer == NULL) || (size <= 0)) {
     return NULL;
   }
 
-  char *returnValue = NULL;
-
-  if (_functionInProgress == NULL) {
-    _functionInProgress = __func__;
-
-    FilesystemIoCommandArgs filesystemIoCommandArgs = {
-      .file = stream,
-      .buffer = buffer,
-      .length = (uint32_t) size - 1
-    };
-
-    if (schedulerInitSendMessageToPid(rootFilesystemPid,
-      FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_READ_FILE,
-      &filesystemIoCommandArgs, sizeof(filesystemIoCommandArgs)
-      ) != processSuccess
-    ) {
-      // Nothing we can do.
-      _functionInProgress = NULL;
-      return NULL;
-    }
-    if (filesystemIoCommandArgs.length > 0) {
-      buffer[filesystemIoCommandArgs.length] = '\0';
-      returnValue = buffer;
-    }
-
-    _functionInProgress = NULL;
-  } else {
-    logError("Cannot execute because 0x%lx is already in progress\n",
-      (long unsigned int) ((intptr_t) _functionInProgress));
-    errno = EBUSY;
-    // returnValue is already NULL.
+  size_t bytesRead = schedFread(buffer, 1, size - 1, stream);
+  if (bytesRead == 0) {
+    return NULL;
   }
 
-  return returnValue;
+  char *newlineAt = (char*) memchr(buffer, '\n', bytesRead);
+  if (newlineAt != NULL) {
+    size_t lineLength = ((size_t) (newlineAt - buffer)) + 1;
+    if ((lineLength < bytesRead)
+      && (schedFseek(stream, -((long) (bytesRead - lineLength)), SEEK_CUR)
+        != 0)
+    ) {
+      return NULL;
+    }
+    bytesRead = lineLength;
+  }
+
+  buffer[bytesRead] = '\0';
+  return buffer;
 }
 
 /// @fn int schedFputs(const char *s, FILE *stream)
@@ -4853,6 +4887,7 @@ int schedulerRunExecutiveOverlay(ProcessDescriptor *processDescriptor,
 /// @return Returns 0 on sucess, -errno onfailure.
 int restartLogger(ProcessDescriptor *processDescriptor) {
   logDebug("In restartLogger\n");
+  loggerSetRunning(false);
   logDebug("Starting logger\n");
   int returnValue = schedulerRunExecutiveOverlay(processDescriptor,
     (char*) _loggerPath, (char**) _loggerArgs);
@@ -4864,6 +4899,7 @@ int restartLogger(ProcessDescriptor *processDescriptor) {
     return -EAGAIN;
   }
 
+  loggerSetRunning(true);
   return 0;
 }
 
