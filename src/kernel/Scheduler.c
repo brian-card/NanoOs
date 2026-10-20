@@ -3929,6 +3929,7 @@ terminateAndRestart:
       return returnValue;
     } else if (returnValue != 0) {
       removeProcess(processDescriptor, _processRestartFailedReason);
+      returnValue = 0;
       goto exit;
     }
   } else if (processDescriptor->envp != NULL) {
@@ -4817,6 +4818,31 @@ int restartOverlayShell(ProcessDescriptor *processDescriptor) {
   return returnValue;
 }
 
+/// @fn int schedulerRunExecutiveOverlay(ProcessDescriptor *processDescriptor,
+///   char *commandPath, char **argv)
+///
+/// @brief Launch an overlay command in a process slot as an executive-level
+/// process.
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor of the slot to
+///   launch the command in.
+/// @param commandPath The full path to the command overlay on the filesystem.
+/// @param argv The NULL-terminated array of arguments for the command.
+///
+/// @return Returns 0 on success, -errno on failure.
+int schedulerRunExecutiveOverlay(ProcessDescriptor *processDescriptor,
+  char *commandPath, char **argv
+) {
+  processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
+  setProcessHalCapabilities(processDescriptor, baseExecutiveHalCapabilities,
+    sizeof(baseExecutiveHalCapabilities)
+    / sizeof(baseExecutiveHalCapabilities[0]));
+  processDescriptor->readyQueue
+    = _schedulerState->readyQueues[processDescriptor->privilegeLevel];
+  return schedulerRunOverlayCommand(processDescriptor, commandPath, argv,
+    NULL);
+}
+
 /// @fn int restartLogger(ProcessDescriptor *processDescriptor)
 ///
 /// @brief Implementation of restartFunction to re-launch the logger if it dies.
@@ -4828,14 +4854,8 @@ int restartOverlayShell(ProcessDescriptor *processDescriptor) {
 int restartLogger(ProcessDescriptor *processDescriptor) {
   logDebug("In restartLogger\n");
   logDebug("Starting logger\n");
-  processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
-  setProcessHalCapabilities(processDescriptor, baseExecutiveHalCapabilities,
-    sizeof(baseExecutiveHalCapabilities)
-    / sizeof(baseExecutiveHalCapabilities[0]));
-  processDescriptor->readyQueue
-    = _schedulerState->readyQueues[processDescriptor->privilegeLevel];
-  int returnValue = schedulerRunOverlayCommand(processDescriptor,
-    (char*) _loggerPath, (char**) _loggerArgs, NULL);
+  int returnValue = schedulerRunExecutiveOverlay(processDescriptor,
+    (char*) _loggerPath, (char**) _loggerArgs);
   if (returnValue == -EBUSY) {
     logError("Starting logger failed.  Returning -EAGAIN\n");
     return -EAGAIN;
