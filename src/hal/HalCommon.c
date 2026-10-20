@@ -1392,24 +1392,27 @@ int restartConfigSysDevice(ProcessDescriptor *processDescriptor) {
   return returnValue;
 }
 
-/// @fn static int configSysAddDevice(char *value)
+/// @fn static int configSysAddDevice(char *value, int lineNumber)
 ///
 /// @brief Assign a process slot to the device described by the value of a
 /// DEVICE line.  The slot is not queued until the whole file has been read.
 ///
 /// @param value The trimmed text after the '=' of a DEVICE line.
+/// @param lineNumber The line of /etc/config.sys the DEVICE line is on.
 ///
 /// @return Returns 0 on success, -errno on failure.
-static int configSysAddDevice(char *value) {
+static int configSysAddDevice(char *value, int lineNumber) {
   ProcessDescriptor *processDescriptor = configSysNextSlot();
   if (processDescriptor == NULL) {
-    logError("No process slot available for device %s\n", value);
+    logError("No process slot for the device on line %d of %s\n",
+      lineNumber, _configSysPath);
     return -ENOSPC;
   }
 
   ConfigSysDevice *device = configSysParseDevice(value);
   if (device == NULL) {
-    logError("Could not load device \"%s\"\n", value);
+    logError("Could not load the device on line %d of %s\n",
+      lineNumber, _configSysPath);
     return -ENOMEM;
   }
   device->pid = processDescriptor->processId;
@@ -1460,14 +1463,15 @@ static int configSysQueueDevices(void) {
   return returnValue;
 }
 
-/// @fn static int configSysProcessLine(char *line)
+/// @fn static int configSysProcessLine(char *line, int lineNumber)
 ///
 /// @brief Act on one line of /etc/config.sys.
 ///
-/// @param line The line, without its line ending.
+/// @param line The line, including any line ending.
+/// @param lineNumber The line's number within /etc/config.sys.
 ///
 /// @return Returns 0 on success, -errno on failure.
-static int configSysProcessLine(char *line) {
+static int configSysProcessLine(char *line, int lineNumber) {
   char *keyword = line;
   char *value = strchr(keyword, '=');
   if (value != NULL) {
@@ -1488,13 +1492,14 @@ static int configSysProcessLine(char *line) {
   ) {
     return 0;
   } else if ((value == NULL) || hasArgument) {
-    logError("Invalid line for %s in %s\n", keyword, _configSysPath);
+    logError("Invalid line %d in %s\n", lineNumber, _configSysPath);
     return -EINVAL;
   } else if (strcmp(keyword, _configSysDeviceKeyword) == 0) {
-    return configSysAddDevice(value);
+    return configSysAddDevice(value, lineNumber);
   }
 
-  logWarn("Unrecognized command %s in %s\n", keyword, _configSysPath);
+  logWarn("Unrecognized command on line %d of %s\n",
+    lineNumber, _configSysPath);
   return 0;
 }
 
@@ -1517,62 +1522,39 @@ int halCommonLoadConfigSys(void) {
     return 0;
   }
 
-  char *buffer = (char*) schedMalloc(CONFIG_SYS_LINE_SIZE);
-  if (buffer == NULL) {
+  char *line = (char*) schedMalloc(CONFIG_SYS_LINE_SIZE);
+  if (line == NULL) {
     schedFclose(configSys);
     return -ENOMEM;
   }
 
   int returnValue = 0;
-  size_t used = 0;
+  int lineNumber = 0;
   bool discarding = false;
-  bool endOfFile = false;
-  while ((endOfFile == false) || (used > 0)) {
-    if (endOfFile == false) {
-      size_t bytesRead = schedFread(buffer + used, 1,
-        CONFIG_SYS_LINE_SIZE - 1 - used, configSys);
-      endOfFile = (bytesRead == 0);
-      used += bytesRead;
-    }
-    buffer[used] = '\0';
-
-    char *line = buffer;
-    char *newline = NULL;
-    while ((newline = strchr(line, '\n')) != NULL) {
-      *newline = '\0';
-      if (discarding) {
-        discarding = false;
-      } else {
-        int lineStatus = configSysProcessLine(line);
-        if (lineStatus != 0) {
-          returnValue = lineStatus;
-        }
-      }
-      line = newline + 1;
-    }
-
-    used = strlen(line);
-    if (endOfFile && (used > 0)) {
+  while (schedFgets(line, CONFIG_SYS_LINE_SIZE, configSys) == line) {
+    size_t length = strlen(line);
+    if ((length == CONFIG_SYS_LINE_SIZE - 1) && (line[length - 1] != '\n')) {
       if (discarding == false) {
-        int lineStatus = configSysProcessLine(line);
-        if (lineStatus != 0) {
-          returnValue = lineStatus;
-        }
-      }
-      used = 0;
-    } else if (used == CONFIG_SYS_LINE_SIZE - 1) {
-      if (discarding == false) {
-        logError("Line too long in %s\n", _configSysPath);
+        lineNumber++;
+        logError("Line %d of %s is too long\n", lineNumber, _configSysPath);
         returnValue = -EOVERFLOW;
         discarding = true;
       }
-      used = 0;
-    } else {
-      memmove(buffer, line, used);
+      continue;
+    } else if (discarding) {
+      // The end of a line that was too long.
+      discarding = false;
+      continue;
+    }
+
+    lineNumber++;
+    int lineStatus = configSysProcessLine(line, lineNumber);
+    if (lineStatus != 0) {
+      returnValue = lineStatus;
     }
   }
 
-  schedFree(buffer);
+  schedFree(line);
   schedFclose(configSys);
 
   // Nothing may run until the file is closed: every sched* call above runs
