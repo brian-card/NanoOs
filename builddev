@@ -150,6 +150,8 @@ if [ -n "${mosImagePath}" ]; then
 	cp "${osStrippedBin}" "${mosImagePath}"
 fi
 
+configSysSource="etc/${platform}/config.sys"
+
 if [ -b "${targetDevice}" ]; then
 	# Make a temporary mountpoint
 	mountDir="$(mktemp -d)"
@@ -172,6 +174,9 @@ if [ -b "${targetDevice}" ]; then
 	sudo mkdir -p "${mountDir}/etc"
 	sudo bash -c "printf \"${hostname}\" >\"${mountDir}/etc/hostname\""
 	sudo bash -c "printf '\\s \\\r \\\n \\l\n\n' >\"${mountDir}/etc/issue\""
+	if [ -f "${configSysSource}" ]; then
+		sudo cp "${configSysSource}" "${mountDir}/etc/config.sys"
+	fi
 	sudo mkdir -p "${mountDir}/root"
 	sudo mkdir -p "${mountDir}/home/user1"
 	sudo mkdir -p "${mountDir}/home/user2"
@@ -250,6 +255,10 @@ else
 		| MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" - ::/etc/hostname
 	printf '\\s \\r \\n \\l\n\n' \
 		| MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" - ::/etc/issue
+	if [ -f "${configSysSource}" ]; then
+		MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" "${configSysSource}" \
+			::/etc/config.sys
+	fi
 	MTOOLS_SKIP_CHECK=1 mdir -i "${fatImage}" ::/root >/dev/null 2>&1 \
 		|| MTOOLS_SKIP_CHECK=1 mmd -i "${fatImage}" ::/root
 	MTOOLS_SKIP_CHECK=1 mdir -i "${fatImage}" ::/home >/dev/null 2>&1 \
