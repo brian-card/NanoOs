@@ -15,6 +15,8 @@
 #include "kernel/Hal.h"
 #include "kernel/Logger.h"
 #include "kernel/MemoryManager.h"
+#include "kernel/Processes.h"
+#include "kernel/Scheduler.h"
 #include "HalMock.h"
 
 // logDroppedReentrantLog only prints the address it's given, so these never
@@ -116,4 +118,56 @@ NANO_OS_KERNEL_TEST(logger, logging_does_not_corrupt_a_heap_block) {
   }
   free(block);
   NANO_OS_ASSERT_EQ_INT(0, (long long) corrupted);
+}
+
+// Messages logged while the logger process can't receive them are held and
+// delivered, in order, once it can.  The logger slot here is a finished
+// process, the way it is between the dummy's exit and restartLogger.
+NANO_OS_KERNEL_TEST(logger, logs_held_until_logger_runs_arrive_in_order) {
+  ProcessId selfPid = getRunningPid();
+  ProcessId stoppedPid = 0;
+  for (ProcessId pid = schedulerGetFirstShellPid() + schedulerGetNumShells();
+    pid <= numProcesses; pid++
+  ) {
+    if (processFinished(&allProcesses[pid - 1])) {
+      stoppedPid = pid;
+      break;
+    }
+  }
+  NANO_OS_ASSERT_TRUE(stoppedPid != 0);
+
+  ProcessDescriptor *self = getRunningProcess();
+  IpcCapability *savedCapabilities = self->ipcCapabilities;
+  size_t savedNumCapabilities = self->numIpcCapabilities;
+  static IpcCapability selfCapability;
+  selfCapability.destinationPid = selfPid;
+  selfCapability.signature = LOGGER_COMMAND_SIGNATURE;
+  selfCapability.messageTypes = ((uint32_t) 1) << LOGGER_LOG_MESSAGE;
+  self->ipcCapabilities = &selfCapability;
+  self->numIpcCapabilities = 1;
+
+  halMockSetStringsPresent(false);
+  loggerPid = stoppedPid;
+  for (int ii = 0; ii < 3; ii++) {
+    logError("held log %d\n", ii);
+  }
+  loggerPid = selfPid;
+  loggerSetRunning(true);
+  halMockSetStringsPresent(true);
+
+  int received = 0;
+  for (ProcessMessage *processMessage = processMessageQueuePop();
+    processMessage != NULL; processMessage = processMessageQueuePop()
+  ) {
+    LogEntry *logEntry = (LogEntry*) processMessageData(processMessage);
+    NANO_OS_ASSERT_EQ_INT(received, (long long) logEntry->args[0]);
+    logEntry->inUse = false;
+    processMessageRelease(processMessage);
+    received++;
+  }
+
+  loggerPid = 0;
+  self->ipcCapabilities = savedCapabilities;
+  self->numIpcCapabilities = savedNumCapabilities;
+  NANO_OS_ASSERT_EQ_INT(3, received);
 }
