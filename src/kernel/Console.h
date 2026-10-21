@@ -229,6 +229,8 @@ void consoleInputReadyCommandHandler(
   ConsoleState *consoleState, ProcessMessage *inputMessage);
 void consoleAddForwardingPort(
   ConsoleState *consoleState, ProcessMessage *inputMessage);
+void consoleReleasePidPortCommandHandler(
+  ConsoleState *consoleState, ProcessMessage *inputMessage);
 
 // Exported processes
 void* runConsole(void *args);
