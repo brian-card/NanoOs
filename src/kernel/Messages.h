@@ -39,6 +39,7 @@
 #include "stdint.h"
 #include "stdbool.h"
 #include "stdlib.h"
+#include "string.h"
 #include "time.h"
 
 // Do forward declarations before including headers from this library to avoid
@@ -303,6 +304,7 @@ static inline __attribute__((always_inline)) int msg_init_inline(
   msg->size = size;
   msg->next = NULL;
   msg->waiting = waiting;
+  memset(&msg->to, 0, sizeof(msg->to));
   msg->done = false;
   // No need to set msg->in_use since we called msg_start_use above.
   // Don't touch msg->from in case this message is being reused.
