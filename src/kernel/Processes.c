@@ -845,6 +845,58 @@ ProcessMessage* getAvailableMessageInline(void) {
   return availableMessage;
 }
 
+/// @fn static void processCompleteMessageTo(
+///   ProcessMessage *processMessage, Coroutine *coroutine)
+///
+/// @brief Complete a message if it was sent to a coroutine and isn't done,
+/// removing it from the coroutine's queue first if it's still there.
+///
+/// @param processMessage A pointer to the ProcessMessage to check.
+/// @param coroutine A pointer to the Coroutine of the exiting process.
+///
+/// @return This function returns no value.
+static void processCompleteMessageTo(
+  ProcessMessage *processMessage, Coroutine *coroutine
+) {
+  if ((processMessageInUse(processMessage) == NULL)
+    || (processMessageDone(processMessage) == true)
+    || (msg_to(processMessage).coro != coroutine)
+  ) {
+    return;
+  }
+
+  comessageQueueRemove(coroutine, processMessage);
+  if (processMessageWaiting(processMessage) == true) {
+    processMessageSetDone(processMessage);
+  } else {
+    processMessageRelease(processMessage);
+  }
+}
+
+/// @fn void processCompleteMessagesTo(ProcessDescriptor *processDescriptor)
+///
+/// @brief Complete every pool message sent to an exiting process that isn't
+/// done, whether it's still queued or was popped and abandoned, so that no
+/// sender waits on the process forever.
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor of the exiting
+///   process.
+///
+/// @return This function returns no value.
+void processCompleteMessagesTo(ProcessDescriptor *processDescriptor) {
+  Coroutine *coroutine = processDescriptor->mainThread;
+  if ((coroutine == NULL) || (messages == NULL)) {
+    return;
+  }
+
+  for (int ii = 0; ii < NANO_OS_NUM_MESSAGES; ii++) {
+    processCompleteMessageTo(&messages[ii], coroutine);
+  }
+  for (size_t ii = 0; ii < numProcesses; ii++) {
+    processCompleteMessageTo(&allProcesses[ii].message, coroutine);
+  }
+}
+
 /// ProcessMessage* getAvailableMessage(void)
 ///
 /// @brief Get a message from the messages array that is not in use.
