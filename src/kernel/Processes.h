@@ -499,6 +499,7 @@ int sendProcessMessageToProcess(
   ProcessDescriptor *processDescriptor, ProcessMessage *processMessage);
 int sendProcessMessageToPid(unsigned int pid, ProcessMessage *processMessage);
 ProcessMessage* getAvailableMessage(void);
+void processCompleteMessagesTo(ProcessDescriptor *processDescriptor);
 ProcessMessage* initSendProcessMessageToPid(int pid, int64_t type,
   void *data, size_t size, bool waiting);
 ProcessMessage* initSendProcessMessageToProcess(
