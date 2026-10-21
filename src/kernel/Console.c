@@ -1058,6 +1058,40 @@ exit:
   return;
 }
 
+/// @fn void consoleGetUartPortCommandHandler(
+///   ConsoleState *consoleState, ProcessMessage *inputMessage)
+///
+/// @brief Find the index of the port that a HAL UART services.
+///
+/// @param consoleState A pointer to the ConsoleState being maintained by the
+///   runConsole function that's running.
+/// @param inputMessage A pointer to the ProcessMessage with the received
+///   command.  Its data is a ConsoleGetUartPortArgs.
+///
+/// @return This function returns no value.
+void consoleGetUartPortCommandHandler(
+  ConsoleState *consoleState, ProcessMessage *inputMessage
+) {
+  ConsoleGetUartPortArgs *consoleGetUartPortArgs
+    = (ConsoleGetUartPortArgs*) processMessageData(inputMessage);
+  ConsolePort *consolePorts = consoleState->consolePorts;
+
+  consoleGetUartPortArgs->portId = -1;
+  for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
+    if ((consolePorts[ii].forwardingPid == PROCESS_ID_NOT_SET)
+      && (consolePorts[ii].uartId == consoleGetUartPortArgs->uartId)
+    ) {
+      consoleGetUartPortArgs->portId = ii;
+      break;
+    }
+  }
+
+  processMessageSetDone(inputMessage);
+  consoleMessageCleanup(inputMessage);
+
+  return;
+}
+
 /// @typedef ConsoleCommandHandler
 ///
 /// @brief Signature of command handler for a console command.
@@ -1083,6 +1117,7 @@ const ConsoleCommandHandler consoleCommandHandlers[] = {
   consoleGetNumPortsCommandHandler,     // CONSOLE_GET_NUM_PORTS
   consoleInputReadyCommandHandler,      // CONSOLE_INPUT_READY
   consoleAddForwardingPort,             // CONSOLE_ADD_FORWARDING_PORT
+  consoleGetUartPortCommandHandler,     // CONSOLE_GET_UART_PORT
 };
 
 /// @fn void handleConsoleMessages(ConsoleState *consoleState, bool block)

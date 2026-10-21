@@ -136,6 +136,18 @@ typedef struct ConsoleAddForwardingPortArgs {
   int           returnValue;
 } ConsoleAddForwardingPortArgs;
 
+/// @struct ConsoleGetUartPortArgs
+///
+/// @brief Arguments and return value for the CONSOLE_GET_UART_PORT command.
+///
+/// @param uartId The ID of the HAL UART to find the port of.
+/// @param portId The index of the port the UART services, or -1 if no port
+///   does.
+typedef struct ConsoleGetUartPortArgs {
+  unsigned char uartId;
+  int           portId;
+} ConsoleGetUartPortArgs;
+
 /// @enum ConsoleCommandResponse
 ///
 /// @brief The commands and responses that the console understands via
@@ -157,6 +169,7 @@ typedef enum ConsoleCommandResponse {
   CONSOLE_GET_NUM_PORTS,
   CONSOLE_INPUT_READY,
   CONSOLE_ADD_FORWARDING_PORT,
+  CONSOLE_GET_UART_PORT,
   NUM_CONSOLE_COMMANDS,
   // Responses:
   CONSOLE_RETURNING_INPUT,
@@ -230,6 +243,8 @@ void consoleInputReadyCommandHandler(
 void consoleAddForwardingPort(
   ConsoleState *consoleState, ProcessMessage *inputMessage);
 void consoleReleasePidPortCommandHandler(
+  ConsoleState *consoleState, ProcessMessage *inputMessage);
+void consoleGetUartPortCommandHandler(
   ConsoleState *consoleState, ProcessMessage *inputMessage);
 
 // Exported processes
