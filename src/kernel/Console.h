@@ -219,6 +219,9 @@ int setConsoleEcho(bool desiredEchoState);
 // Exported for unit tests to use
 ConsoleInputEvent consoleProcessByte(
   ConsolePort *consolePort, uint8_t byte, ConsoleEcho *echo);
+int consoleReadForwardedByte(ConsolePort *consolePort);
+void consoleInputReadyCommandHandler(
+  ConsoleState *consoleState, ProcessMessage *inputMessage);
 
 // Exported processes
 void* runConsole(void *args);
