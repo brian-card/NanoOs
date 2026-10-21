@@ -872,25 +872,52 @@ void consoleGetNumPortsCommandHandler(
 /// @fn void consoleInputReadyCommandHandler(
 ///   ConsoleState *consoleState, ProcessMessage *inputMessage)
 ///
-/// @brief Process input being ready from a console interrupt.
+/// @brief Process notice that a port has input.  A HAL-backed port is read by
+/// the service pass that follows every message.  A forwarding port's message
+/// is held until consoleReadForwardedByte has read all of its bytes, so its
+/// sender must not send again until the message is done.
 ///
 /// @param consoleState A pointer to the ConsoleState being maintained by the
 ///   runConsole function that's running.
 /// @param inputMessage A pointer to the ProcessMessage with the received
-///   command.
+///   command.  Its data is a ConsoleInputReadyArgs.
 ///
 /// @return This function returns no value.
 void consoleInputReadyCommandHandler(
   ConsoleState *consoleState, ProcessMessage *inputMessage
 ) {
-  (void) consoleState;
-  ConsolePort *consolePort = (ConsolePort*) processMessageData(inputMessage);
-  processMessageRelease(inputMessage);
+  ConsoleInputReadyArgs *consoleInputReadyArgs
+    = (ConsoleInputReadyArgs*) processMessageData(inputMessage);
+  ConsolePort *consolePort = NULL;
+  for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
+    if (consoleState->consolePorts[ii].portId
+      == consoleInputReadyArgs->portId
+    ) {
+      consolePort = &consoleState->consolePorts[ii];
+      break;
+    }
+  }
 
   if (consolePort == NULL) {
-    logError("consolePort is NULL\n");
-    return;
+    logError("No console port %d for input\n",
+      (int) consoleInputReadyArgs->portId);
+  } else if (consolePort->forwardingPid != PROCESS_ID_NOT_SET) {
+    if ((processPid(processMessageFrom(inputMessage))
+        != consolePort->forwardingPid)
+      || (consolePort->pendingInput != NULL)
+      || (consoleInputReadyArgs->numBytes > CONSOLE_INPUT_READY_SIZE)
+    ) {
+      logError("Rejecting input for console port %d\n",
+        (int) consoleInputReadyArgs->portId);
+    } else {
+      consolePort->pendingInput = inputMessage;
+      consolePort->pendingInputIndex = 0;
+      return;
+    }
   }
+
+  processMessageSetDone(inputMessage);
+  consoleMessageCleanup(inputMessage);
 
   return;
 }
@@ -1052,6 +1079,40 @@ int readSerialByteAsync(ConsolePort *consolePort) {
   }
 
   return byte;
+}
+
+/// @fn int consoleReadForwardedByte(ConsolePort *consolePort)
+///
+/// @brief Do a non-blocking read of one byte from the CONSOLE_INPUT_READY
+/// message a forwarding port is holding, marking the message done once its
+/// last byte has been read.
+///
+/// @param consolePort A pointer to the ConsolePort to read from.
+///
+/// @return Returns the byte read, cast to an int, on success, -1 if there was
+/// nothing to read.
+int consoleReadForwardedByte(ConsolePort *consolePort) {
+  ProcessMessage *pendingInput = consolePort->pendingInput;
+  if (pendingInput == NULL) {
+    return -1;
+  }
+
+  ConsoleInputReadyArgs *consoleInputReadyArgs
+    = (ConsoleInputReadyArgs*) processMessageData(pendingInput);
+  int byteRead = -1;
+  if (consolePort->pendingInputIndex < consoleInputReadyArgs->numBytes) {
+    byteRead = consoleInputReadyArgs->bytes[consolePort->pendingInputIndex];
+    consolePort->pendingInputIndex++;
+  }
+
+  if (consolePort->pendingInputIndex >= consoleInputReadyArgs->numBytes) {
+    consolePort->pendingInput = NULL;
+    consolePort->pendingInputIndex = 0;
+    processMessageSetDone(pendingInput);
+    consoleMessageCleanup(pendingInput);
+  }
+
+  return byteRead;
 }
 
 /// @fn static bool consoleStoreByte(ConsolePort *consolePort, uint8_t byte)
@@ -1422,11 +1483,17 @@ void* runConsole(void *args) {
     consolePort->inputState = CONSOLE_INPUT_STATE_NORMAL;
     consolePort->echo = true;
     consolePort->consolePrintString = printSerialString;
+    consolePort->forwardingPid = PROCESS_ID_NOT_SET;
+    consolePort->inputReadyArgs.portId = ii;
+    consolePort->inputReadyArgs.numBytes = 0;
+    consolePort->pendingInput = NULL;
+    consolePort->pendingInputIndex = 0;
 
     consolePort->pollOnly = pollOnly(HAL->uart, ii);
     if ((consolePort->pollOnly == false)
       && (HAL->uart->registerCallback(ii, getRunningProcess(),
-        CONSOLE_COMMAND_SIGNATURE | CONSOLE_INPUT_READY, consolePort) != 0)
+        CONSOLE_COMMAND_SIGNATURE | CONSOLE_INPUT_READY,
+        &consolePort->inputReadyArgs) != 0)
     ) {
       logError("Could not register for input from port %d.  Polling it.\n", ii);
       consolePort->pollOnly = true;
