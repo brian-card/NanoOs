@@ -113,7 +113,8 @@ SUITE_SRCS     := test_smoke test_unit_misc test_unit_strtoll test_unit_console 
                   test_kernel_posix_timer \
                   test_kernel_fs_seek \
                   test_kernel_console_input \
-                  test_kernel_exit_messages
+                  test_kernel_exit_messages \
+                  test_kernel_kill
 
 KERNEL_OBJS := $(addprefix $(OBJ_DIR)/kernel_,$(addsuffix .o,$(KERNEL_SRCS)))
 USER_OBJS   := $(addprefix $(OBJ_DIR)/user_,$(addsuffix .o,$(USER_SRCS)))
