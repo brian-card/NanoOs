@@ -368,11 +368,21 @@ typedef struct CommandDescriptor {
 ///
 /// @param owner ProcessId of the process that owned or checked out the buffer.
 ///   Set to PROCESS_ID_NOT_SET when not in use.
+/// @param consoleBufferIndex An index into the buffer provided by consoleBuffer
+///   of the next position to read a byte into.
+/// @param bufferAwaitingRelease Whether consoleBuffer holds input that has
+///   been sent to inputOwner and not yet released.  No input is read while
+///   this is set.
+/// @param holdsCompletedLine Whether consoleBuffer holds a completed line that
+///   is waiting for inputOwner to ask for input.
 /// @param buffer The array of CONSOLE_BUFFER_SIZE characters that the calling
 ///   process can use.
 typedef struct ConsoleBuffer {
-  ProcessId owner;
-  char      buffer[CONSOLE_BUFFER_SIZE];
+  ProcessId     owner;
+  unsigned char consoleBufferIndex;
+  bool          bufferAwaitingRelease;
+  bool          holdsCompletedLine;
+  char          buffer[CONSOLE_BUFFER_SIZE];
 } ConsoleBuffer;
 
 /// @struct ConsolePort
@@ -383,8 +393,6 @@ typedef struct ConsoleBuffer {
 /// @var portId The numerical ID for the port.
 /// @param consoleBuffer A pointer to the ConsoleBuffer used to buffer input
 ///   from the user.
-/// @param consoleBufferIndex An index into the buffer provided by consoleBuffer
-///   of the next position to read a byte into.
 /// @param outputOwner The ID of the process that currently has the ability to
 ///   write output to the port.
 /// @param inputOwner The ID of the process that currently has the ability to
@@ -392,13 +400,8 @@ typedef struct ConsoleBuffer {
 /// @param shell The ID of the process that serves as the console port's shell.
 /// @param waitingForInput Whether or not the owning process is currently
 ///   waiting for input from the user.
-/// @param bufferAwaitingRelease Whether consoleBuffer holds input that has
-///   been sent to inputOwner and not yet released.  No input is read while
-///  this is set.
 /// @param pollOnly Whether or not the port has to be polled for input rather
 ///   than being serviced by a CONSOLE_INPUT_READY message.
-/// @param holdsCompletedLine Whether consoleBuffer holds a completed line that
-///   is waiting for inputOwner to ask for input.
 /// @param readByte A pointer to the non-blocking function that will attempt to
 ///   read a byte of input from the user.
 /// @param echo Whether or not the data read from the port should be echoed back
@@ -409,19 +412,17 @@ typedef struct ConsoleBuffer {
 typedef struct ConsolePort {
   unsigned char       portId;
   ConsoleBuffer      *consoleBuffer;
-  unsigned char       consoleBufferIndex;
   ProcessId           outputOwner;
   ProcessId           inputOwner;
   ProcessId           shell;
   bool                waitingForInput;
-  bool                bufferAwaitingRelease;
   bool                pollOnly;
-  bool                holdsCompletedLine;
   int               (*readByte)(struct ConsolePort *consolePort);
   bool                echo;
   uint8_t             inputState;
   int               (*consolePrintString)(unsigned char port,
                       const char *string);
+  ProcessId           forwardingPid;
 } ConsolePort;
 
 /// @struct ConsoleState

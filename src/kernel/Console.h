@@ -121,6 +121,19 @@ typedef struct ConsoleGetNumPortsArgs {
   int numPorts;
 } ConsoleGetNumPortsArgs;
 
+/// @struct ConsoleAddForwardingPortArgs
+///
+/// @brief Arguments and return value for the CONSOLE_ADD_FORWARDING_PORT
+/// command.
+///
+/// @param forwardingPid The ProcessId of the process to redirect
+///   CONSOLE_WRITE_BUFFER commands to.
+/// @param portId The ID of the port that gets assigned for the process.
+typedef struct ConsoleAddForwardingPortArgs {
+  ProcessId     forwardingPid;
+  unsigned char portId;
+} ConsoleAddForwardingPortArgs;
+
 /// @enum ConsoleCommandResponse
 ///
 /// @brief The commands and responses that the console understands via
@@ -141,6 +154,7 @@ typedef enum ConsoleCommandResponse {
   CONSOLE_RELEASE_BUFFER,
   CONSOLE_GET_NUM_PORTS,
   CONSOLE_INPUT_READY,
+  CONSOLE_ADD_FORWARDING_PORT,
   NUM_CONSOLE_COMMANDS,
   // Responses:
   CONSOLE_RETURNING_INPUT,

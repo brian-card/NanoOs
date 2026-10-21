@@ -145,9 +145,9 @@ static bool consoleBufferHasInput(
   ConsolePort *consolePorts = consoleState->consolePorts;
   for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
     if (consolePorts[ii].consoleBuffer == consoleBuffer) {
-      return (consolePorts[ii].consoleBufferIndex > 0)
-        || (consolePorts[ii].holdsCompletedLine == true)
-        || (consolePorts[ii].bufferAwaitingRelease == true);
+      return (consoleBuffer->consoleBufferIndex > 0)
+        || (consoleBuffer->holdsCompletedLine == true)
+        || (consoleBuffer->bufferAwaitingRelease == true);
     }
   }
 
@@ -208,7 +208,7 @@ int releaseConsoleBuffer(
     if (consolePorts[ii].consoleBuffer == consoleBuffer) {
       // Buffer belongs to a port.  Restore its owner back to the port's shell.
       consoleBuffer->owner = consolePorts[ii].shell;
-      consolePorts[ii].bufferAwaitingRelease = false;
+      consolePorts[ii].consoleBuffer->bufferAwaitingRelease = false;
       return 0;
     }
   }
@@ -536,7 +536,8 @@ void consoleAssignPortHelper(
     }
     consoleState->consolePorts[consolePort].inputOwner = pid;
     consoleState->consolePorts[consolePort].consoleBuffer->owner = pid;
-    consoleState->consolePorts[consolePort].bufferAwaitingRelease = false;
+    consoleState->consolePorts[consolePort
+      ].consoleBuffer->bufferAwaitingRelease = false;
     processMessageSetDone(inputMessage);
     consoleMessageCleanup(inputMessage);
   } else {
@@ -597,7 +598,7 @@ void consoleReleasePortCommandHandler(
     if (consolePorts[ii].inputOwner == owner) {
       consolePorts[ii].inputOwner = consolePorts[ii].shell;
       consolePorts[ii].consoleBuffer->owner = consolePorts[ii].shell;
-      consolePorts[ii].bufferAwaitingRelease = false;
+      consolePorts[ii].consoleBuffer->bufferAwaitingRelease = false;
     }
   }
 
@@ -757,7 +758,7 @@ void consoleWaitForInputCommandHandler(
   for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
     if (consolePorts[ii].inputOwner == owner) {
       consolePorts[ii].waitingForInput = true;
-      consolePorts[ii].bufferAwaitingRelease = false;
+      consolePorts[ii].consoleBuffer->bufferAwaitingRelease = false;
       portFound = true;
     }
   }
@@ -802,7 +803,7 @@ void consoleReleasePidPortCommandHandler(
   for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
     if (consolePorts[ii].inputOwner == consoleReleasePidPortArgs->processId) {
       consolePorts[ii].inputOwner = consolePorts[ii].shell;
-      consolePorts[ii].bufferAwaitingRelease = false;
+      consolePorts[ii].consoleBuffer->bufferAwaitingRelease = false;
     }
     if (consolePorts[ii].outputOwner == consoleReleasePidPortArgs->processId) {
       consolePorts[ii].outputOwner = consolePorts[ii].shell;
@@ -894,6 +895,27 @@ void consoleInputReadyCommandHandler(
   return;
 }
 
+/// @fn void consoleAddForwardingPort(
+///   ConsoleState *consoleState, ProcessMessage *inputMessage)
+///
+/// @brief Forward a CONSOLE_WRITE_BUFFER message on to the process that is
+/// responsible for the port.
+///
+/// @param consoleState A pointer to the ConsoleState being maintained by the
+///   runConsole function that's running.
+/// @param inputMessage A pointer to the ProcessMessage with the received
+///   command.
+///
+/// @return This function returns no value.
+void consoleAddForwardingPort(
+  ConsoleState *consoleState, ProcessMessage *inputMessage
+) {
+  (void) consoleState;
+  processMessageRelease(inputMessage);
+
+  return;
+}
+
 /// @typedef ConsoleCommandHandler
 ///
 /// @brief Signature of command handler for a console command.
@@ -918,6 +940,7 @@ const ConsoleCommandHandler consoleCommandHandlers[] = {
   consoleReleaseBufferCommandHandler,   // CONSOLE_RELEASE_BUFFER
   consoleGetNumPortsCommandHandler,     // CONSOLE_GET_NUM_PORTS
   consoleInputReadyCommandHandler,      // CONSOLE_INPUT_READY
+  consoleAddForwardingPort,             // CONSOLE_ADD_FORWARDING_PORT
 };
 
 /// @fn void handleConsoleMessages(ConsoleState *consoleState, bool block)
@@ -1041,13 +1064,15 @@ int readSerialByteAsync(ConsolePort *consolePort) {
 ///
 /// @return Returns true if the byte was stored, false if the buffer was full.
 static bool consoleStoreByte(ConsolePort *consolePort, uint8_t byte) {
-  if (consolePort->consoleBufferIndex >= (CONSOLE_BUFFER_SIZE - 1)) {
+  if (consolePort->consoleBuffer->consoleBufferIndex
+    >= (CONSOLE_BUFFER_SIZE - 1)
+  ) {
     return false;
   }
 
-  consolePort->consoleBuffer->buffer[consolePort->consoleBufferIndex]
-    = (char) byte;
-  consolePort->consoleBufferIndex++;
+  consolePort->consoleBuffer->buffer[
+    consolePort->consoleBuffer->consoleBufferIndex] = (char) byte;
+  consolePort->consoleBuffer->consoleBufferIndex++;
   return true;
 }
 
@@ -1113,8 +1138,8 @@ ConsoleInputEvent consoleProcessByte(
     *echo = CONSOLE_ECHO_NEWLINE;
     return CONSOLE_INPUT_LINE;
   } else if ((byte == ASCII_BACKSPACE) || (byte == ASCII_DELETE)) {
-    if (consolePort->consoleBufferIndex > 0) {
-      consolePort->consoleBufferIndex--;
+    if (consolePort->consoleBuffer->consoleBufferIndex > 0) {
+      consolePort->consoleBuffer->consoleBufferIndex--;
       *echo = CONSOLE_ECHO_ERASE;
     }
     return CONSOLE_INPUT_NONE;
@@ -1174,15 +1199,16 @@ static const char _ctrlCEcho[] KEEP_IN_FLASH = "^C\n";
 ///
 /// @return This function returns no value.
 static void consoleDeliverLine(ConsolePort *consolePort) {
-  if ((consolePort->holdsCompletedLine == false)
+  if ((consolePort->consoleBuffer->holdsCompletedLine == false)
     || (consolePort->waitingForInput == false)
   ) {
     return;
   }
 
-  consolePort->consoleBuffer->buffer[consolePort->consoleBufferIndex] = '\0';
-  consolePort->consoleBufferIndex = 0;
-  consolePort->holdsCompletedLine = false;
+  consolePort->consoleBuffer->buffer[
+    consolePort->consoleBuffer->consoleBufferIndex] = '\0';
+  consolePort->consoleBuffer->consoleBufferIndex = 0;
+  consolePort->consoleBuffer->holdsCompletedLine = false;
   if (initSendProcessMessageToPid(
     consolePort->inputOwner,
     CONSOLE_COMMAND_SIGNATURE | CONSOLE_RETURNING_INPUT,
@@ -1191,7 +1217,7 @@ static void consoleDeliverLine(ConsolePort *consolePort) {
     logError("Could not send CONSOLE_RETURNING_INPUT to "
       "process ID %d\n", consolePort->inputOwner);
   } else {
-    consolePort->bufferAwaitingRelease = true;
+    consolePort->consoleBuffer->bufferAwaitingRelease = true;
   }
   consolePort->waitingForInput = false;
 }
@@ -1213,16 +1239,16 @@ static void consoleHandleInputEvent(
 ) {
   if ((event == CONSOLE_INPUT_LINE) || (event == CONSOLE_INPUT_ESCAPE)) {
     if (consolePort->inputOwner != PROCESS_ID_NOT_SET) {
-      consolePort->holdsCompletedLine = true;
+      consolePort->consoleBuffer->holdsCompletedLine = true;
       consoleDeliverLine(consolePort);
     } else {
       // Console port is not owned.  Reset our buffer and do nothing.
-      consolePort->consoleBufferIndex = 0;
+      consolePort->consoleBuffer->consoleBufferIndex = 0;
     }
   } else if (event == CONSOLE_INPUT_INTERRUPT) {
     // Like a terminal, an interrupt discards input that hasn't been read.
-    consolePort->holdsCompletedLine = false;
-    consolePort->consoleBufferIndex = 0;
+    consolePort->consoleBuffer->holdsCompletedLine = false;
+    consolePort->consoleBuffer->consoleBufferIndex = 0;
     consolePort->inputState = CONSOLE_INPUT_STATE_NORMAL;
 
     // The user hit Ctrl-C on the keyboard.  Send SIGINT to the input owner.
@@ -1263,9 +1289,11 @@ static void consoleServicePort(
   ConsoleState *consoleState, ConsolePort *consolePort
 ) {
   consoleDeliverLine(consolePort);
-  while (consolePort->bufferAwaitingRelease == false) {
+  while (consolePort->consoleBuffer->bufferAwaitingRelease == false) {
     int byteRead = consolePort->readByte(consolePort);
-    if ((consolePort->holdsCompletedLine == true) && (byteRead != 0x03)) {
+    if ((consolePort->consoleBuffer->holdsCompletedLine == true)
+      && (byteRead != 0x03)
+    ) {
       if (byteRead < 0) {
         break;
       }
@@ -1384,13 +1412,13 @@ void* runConsole(void *args) {
     // Set the port-specific data.
     ConsolePort *consolePort = &consoleState.consolePorts[port];
     consolePort->portId = ii;
-    consolePort->consoleBufferIndex = 0;
+    consolePort->consoleBuffer->consoleBufferIndex = 0;
     consolePort->inputOwner = PROCESS_ID_NOT_SET;
     consolePort->outputOwner = PROCESS_ID_NOT_SET;
     consolePort->shell = PROCESS_ID_NOT_SET;
     consolePort->waitingForInput = false;
-    consolePort->bufferAwaitingRelease = false;
-    consolePort->holdsCompletedLine = false;
+    consolePort->consoleBuffer->bufferAwaitingRelease = false;
+    consolePort->consoleBuffer->holdsCompletedLine = false;
     consolePort->inputState = CONSOLE_INPUT_STATE_NORMAL;
     consolePort->echo = true;
     consolePort->consolePrintString = printSerialString;
