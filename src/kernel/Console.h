@@ -128,10 +128,12 @@ typedef struct ConsoleGetNumPortsArgs {
 ///
 /// @param forwardingPid The ProcessId of the process to redirect
 ///   CONSOLE_WRITE_BUFFER commands to.
-/// @param portId The ID of the port that gets assigned for the process.
+/// @param portId The index of the port that gets assigned for the process.
+/// @param returnValue 0 on success, -errno on failure.
 typedef struct ConsoleAddForwardingPortArgs {
   ProcessId     forwardingPid;
   unsigned char portId;
+  int           returnValue;
 } ConsoleAddForwardingPortArgs;
 
 /// @enum ConsoleCommandResponse
@@ -221,6 +223,8 @@ ConsoleInputEvent consoleProcessByte(
   ConsolePort *consolePort, uint8_t byte, ConsoleEcho *echo);
 int consoleReadForwardedByte(ConsolePort *consolePort);
 void consoleInputReadyCommandHandler(
+  ConsoleState *consoleState, ProcessMessage *inputMessage);
+void consoleAddForwardingPort(
   ConsoleState *consoleState, ProcessMessage *inputMessage);
 
 // Exported processes

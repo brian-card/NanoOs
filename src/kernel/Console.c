@@ -88,7 +88,7 @@ int consolePrintMessage(
   bool portFound = false;
   for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
     if (consolePorts[ii].outputOwner == owner) {
-      consolePorts[ii].consolePrintString(consolePorts[ii].portId, message);
+      consolePorts[ii].consolePrintString(consolePorts[ii].uartId, message);
       portFound = true;
     }
   }
@@ -869,6 +869,38 @@ void consoleGetNumPortsCommandHandler(
   return;
 }
 
+/// @fn static void consoleInitPort(ConsolePort *consolePort,
+///   unsigned char portId, ProcessId forwardingPid)
+///
+/// @brief Reset a port and its input buffer to the state of a port that has
+/// no owners.  The caller sets consoleBuffer before and the port's I/O
+/// functions after.
+///
+/// @param consolePort A pointer to the ConsolePort to initialize.
+/// @param portId The index of the port in the console's port array.
+/// @param forwardingPid The ID of the process that services the port, or
+///   PROCESS_ID_NOT_SET if the port is serviced through the HAL.
+///
+/// @return This function returns no value.
+static void consoleInitPort(ConsolePort *consolePort,
+  unsigned char portId, ProcessId forwardingPid
+) {
+  consolePort->consoleBuffer->consoleBufferIndex = 0;
+  consolePort->inputOwner = PROCESS_ID_NOT_SET;
+  consolePort->outputOwner = PROCESS_ID_NOT_SET;
+  consolePort->shell = PROCESS_ID_NOT_SET;
+  consolePort->waitingForInput = false;
+  consolePort->consoleBuffer->bufferAwaitingRelease = false;
+  consolePort->consoleBuffer->holdsCompletedLine = false;
+  consolePort->inputState = CONSOLE_INPUT_STATE_NORMAL;
+  consolePort->echo = true;
+  consolePort->forwardingPid = forwardingPid;
+  consolePort->inputReadyArgs.portId = portId;
+  consolePort->inputReadyArgs.numBytes = 0;
+  consolePort->pendingInput = NULL;
+  consolePort->pendingInputIndex = 0;
+}
+
 /// @fn void consoleInputReadyCommandHandler(
 ///   ConsoleState *consoleState, ProcessMessage *inputMessage)
 ///
@@ -889,13 +921,8 @@ void consoleInputReadyCommandHandler(
   ConsoleInputReadyArgs *consoleInputReadyArgs
     = (ConsoleInputReadyArgs*) processMessageData(inputMessage);
   ConsolePort *consolePort = NULL;
-  for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
-    if (consoleState->consolePorts[ii].portId
-      == consoleInputReadyArgs->portId
-    ) {
-      consolePort = &consoleState->consolePorts[ii];
-      break;
-    }
+  if (consoleInputReadyArgs->portId < consoleState->numConsolePorts) {
+    consolePort = &consoleState->consolePorts[consoleInputReadyArgs->portId];
   }
 
   if (consolePort == NULL) {
@@ -922,23 +949,115 @@ void consoleInputReadyCommandHandler(
   return;
 }
 
+/// @fn static int consoleDiscardString(unsigned char port, const char *string)
+///
+/// @brief Discard output for a forwarding port, whose output is not forwarded
+/// to its process yet.
+///
+/// @param port The ID of the port being printed to.
+/// @param string A pointer to the string to discard.
+///
+/// @return Always returns 0.
+static int consoleDiscardString(unsigned char port, const char *string) {
+  (void) port;
+  (void) string;
+  return 0;
+}
+
+/// @fn static ConsoleBuffer* consoleGetUnattachedBuffer(
+///   ConsoleState *consoleState)
+///
+/// @brief Find a ConsoleBuffer that is neither checked out nor any port's
+/// input buffer.
+///
+/// @param consoleState A pointer to the ConsoleState structure held by the
+///   runConsole process.
+///
+/// @return Returns a pointer to the ConsoleBuffer on success, NULL if there
+/// is none.
+static ConsoleBuffer* consoleGetUnattachedBuffer(ConsoleState *consoleState) {
+  for (int ii = 0; ii < CONSOLE_NUM_BUFFERS; ii++) {
+    ConsoleBuffer *consoleBuffer = &consoleState->consoleBuffers[ii];
+    if (consoleBuffer->owner != PROCESS_ID_NOT_SET) {
+      continue;
+    }
+
+    bool attached = false;
+    for (int jj = 0; jj < consoleState->numConsolePorts; jj++) {
+      if (consoleState->consolePorts[jj].consoleBuffer == consoleBuffer) {
+        attached = true;
+        break;
+      }
+    }
+    if (attached == false) {
+      return consoleBuffer;
+    }
+  }
+
+  return NULL;
+}
+
 /// @fn void consoleAddForwardingPort(
 ///   ConsoleState *consoleState, ProcessMessage *inputMessage)
 ///
-/// @brief Forward a CONSOLE_WRITE_BUFFER message on to the process that is
-/// responsible for the port.
+/// @brief Add a console port whose input is sent to the console by a process
+/// with CONSOLE_INPUT_READY.  A process that already has a port gets that port
+/// back.
 ///
 /// @param consoleState A pointer to the ConsoleState being maintained by the
 ///   runConsole function that's running.
 /// @param inputMessage A pointer to the ProcessMessage with the received
-///   command.
+///   command.  Its data is a ConsoleAddForwardingPortArgs.
 ///
 /// @return This function returns no value.
 void consoleAddForwardingPort(
   ConsoleState *consoleState, ProcessMessage *inputMessage
 ) {
-  (void) consoleState;
-  processMessageRelease(inputMessage);
+  ConsoleAddForwardingPortArgs *consoleAddForwardingPortArgs
+    = (ConsoleAddForwardingPortArgs*) processMessageData(inputMessage);
+  ProcessId forwardingPid = consoleAddForwardingPortArgs->forwardingPid;
+  ConsolePort *consolePorts = consoleState->consolePorts;
+  unsigned char portId = (unsigned char) consoleState->numConsolePorts;
+  ConsoleBuffer *consoleBuffer = NULL;
+  ConsolePort *consolePort = NULL;
+  int returnValue = 0;
+
+  if (forwardingPid == PROCESS_ID_NOT_SET) {
+    returnValue = -EINVAL;
+    goto exit;
+  }
+
+  for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
+    if (consolePorts[ii].forwardingPid == forwardingPid) {
+      consoleAddForwardingPortArgs->portId = (unsigned char) ii;
+      goto exit;
+    }
+  }
+
+  if (consoleState->numConsolePorts >= CONSOLE_NUM_PORTS) {
+    returnValue = -ENOSPC;
+    goto exit;
+  }
+
+  consoleBuffer = consoleGetUnattachedBuffer(consoleState);
+  if (consoleBuffer == NULL) {
+    returnValue = -EBUSY;
+    goto exit;
+  }
+
+  consolePort = &consolePorts[portId];
+  consolePort->consoleBuffer = consoleBuffer;
+  consoleInitPort(consolePort, portId, forwardingPid);
+  consolePort->pollOnly = false;
+  consolePort->readByte = consoleReadForwardedByte;
+  consolePort->consolePrintString = consoleDiscardString;
+  consoleState->numConsolePorts++;
+  consoleAddForwardingPortArgs->portId = portId;
+
+exit:
+  consoleAddForwardingPortArgs->returnValue = returnValue;
+  processMessageSetDone(inputMessage);
+  consoleMessageCleanup(inputMessage);
 
   return;
 }
@@ -1056,7 +1175,7 @@ static const char _erase[] KEEP_IN_FLASH = "\b \b";
 /// @return Returns the byte read, cast to an int, on success, -1 if there was
 /// nothing to read.
 int readSerialByte(ConsolePort *consolePort) {
-  return HAL->uart->poll((int) consolePort->portId);
+  return HAL->uart->poll((int) consolePort->uartId);
 }
 
 /// @fn int readSerialByteAsync(ConsolePort *consolePort)
@@ -1071,7 +1190,7 @@ int readSerialByte(ConsolePort *consolePort) {
 int readSerialByteAsync(ConsolePort *consolePort) {
   uint8_t byte = 0;
   ssize_t bytesRead = 0;
-  if ((HAL->uart->read((int32_t) consolePort->portId, &byte, 1, &bytesRead)
+  if ((HAL->uart->read((int32_t) consolePort->uartId, &byte, 1, &bytesRead)
       != 0)
     || (bytesRead != 1)
   ) {
@@ -1229,17 +1348,19 @@ ConsoleInputEvent consoleProcessByte(
 static void consoleEchoInput(
   ConsolePort *consolePort, ConsoleEcho echo, uint8_t byte
 ) {
-  if (consolePort->echo == false) {
+  if ((consolePort->echo == false)
+    || (consolePort->forwardingPid != PROCESS_ID_NOT_SET)
+  ) {
     return;
   }
 
-  int portId = (int) consolePort->portId;
+  int uartId = (int) consolePort->uartId;
   if (echo == CONSOLE_ECHO_CHAR) {
-    HAL->uart->write(portId, &byte, 1, NULL);
+    HAL->uart->write(uartId, &byte, 1, NULL);
   } else if (echo == CONSOLE_ECHO_NEWLINE) {
-    HAL->uart->write(portId, (const uint8_t*) _crlf, 2, NULL);
+    HAL->uart->write(uartId, (const uint8_t*) _crlf, 2, NULL);
   } else if (echo == CONSOLE_ECHO_ERASE) {
-    HAL->uart->write(portId, (const uint8_t*) _erase, 3, NULL);
+    HAL->uart->write(uartId, (const uint8_t*) _erase, 3, NULL);
   }
 }
 
@@ -1329,7 +1450,7 @@ static void consoleHandleInputEvent(
       if (processMessage == NULL) {
         logError("Could not communicate with scheduler.\n");
       }
-      consolePort->consolePrintString(consolePort->portId, _ctrlCEcho);
+      consolePort->consolePrintString(consolePort->uartId, _ctrlCEcho);
     }
   }
 }
@@ -1472,22 +1593,9 @@ void* runConsole(void *args) {
 
     // Set the port-specific data.
     ConsolePort *consolePort = &consoleState.consolePorts[port];
-    consolePort->portId = ii;
-    consolePort->consoleBuffer->consoleBufferIndex = 0;
-    consolePort->inputOwner = PROCESS_ID_NOT_SET;
-    consolePort->outputOwner = PROCESS_ID_NOT_SET;
-    consolePort->shell = PROCESS_ID_NOT_SET;
-    consolePort->waitingForInput = false;
-    consolePort->consoleBuffer->bufferAwaitingRelease = false;
-    consolePort->consoleBuffer->holdsCompletedLine = false;
-    consolePort->inputState = CONSOLE_INPUT_STATE_NORMAL;
-    consolePort->echo = true;
+    consoleInitPort(consolePort, port, PROCESS_ID_NOT_SET);
+    consolePort->uartId = ii;
     consolePort->consolePrintString = printSerialString;
-    consolePort->forwardingPid = PROCESS_ID_NOT_SET;
-    consolePort->inputReadyArgs.portId = ii;
-    consolePort->inputReadyArgs.numBytes = 0;
-    consolePort->pendingInput = NULL;
-    consolePort->pendingInputIndex = 0;
 
     consolePort->pollOnly = pollOnly(HAL->uart, ii);
     if ((consolePort->pollOnly == false)

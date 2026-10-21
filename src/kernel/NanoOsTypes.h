@@ -396,7 +396,7 @@ typedef struct ConsoleBuffer {
 /// @brief Arguments for the CONSOLE_INPUT_READY command.  A port that reads
 /// its input from the HAL sends numBytes of 0.
 ///
-/// @param portId The ID of the port the input is for.
+/// @param portId The index of the port the input is for.
 /// @param numBytes The number of valid bytes in bytes.
 /// @param bytes The input bytes, already translated to a terminal byte stream.
 typedef struct ConsoleInputReadyArgs {
@@ -410,7 +410,8 @@ typedef struct ConsoleInputReadyArgs {
 /// @brief Descriptor for a single console port that can be used for input from
 /// a user.
 ///
-/// @var portId The numerical ID for the port.
+/// @param uartId The ID of the HAL UART that services the port.  Unused by a
+///   forwarding port.
 /// @param consoleBuffer A pointer to the ConsoleBuffer used to buffer input
 ///   from the user.
 /// @param outputOwner The ID of the process that currently has the ability to
@@ -438,7 +439,7 @@ typedef struct ConsoleInputReadyArgs {
 /// @param pendingInputIndex The index of the next byte to read from
 ///   pendingInput.
 typedef struct ConsolePort {
-  unsigned char           portId;
+  unsigned char           uartId;
   ConsoleBuffer          *consoleBuffer;
   ProcessId               outputOwner;
   ProcessId               inputOwner;
