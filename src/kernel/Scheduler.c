@@ -2763,7 +2763,8 @@ int loadProcessDescriptorOverlayMetadata(ProcessDescriptor *processDescriptor) {
 /// @fn int schedulerKillProcessCommandHandler(
 ///   SchedulerState *schedulerState, ProcessMessage *processMessage)
 ///
-/// @brief Kill a process identified by its process ID.
+/// @brief Kill a process identified by its process ID.  Kernel and executive
+/// processes can't be killed.
 ///
 /// @param schedulerState A pointer to the SchedulerState maintained by the
 ///   scheduler process.
@@ -2789,12 +2790,14 @@ int schedulerKillProcessCommandHandler(
     selfKill = true;
   }
 
-  if ((pid >= schedulerState->firstUserPid)
+  if ((pid >= 1)
     && (pid <= numProcesses)
     && (processRunning(&allProcesses[processIndex]))
   ) {
-    if ((allProcesses[processIndex].userId == callingUserId)
-      || (callingUserId == ROOT_USER_ID)
+    if ((allProcesses[processIndex].privilegeLevel
+        >= PRIVILEGE_LEVEL_SUPERVISOR)
+      && ((allProcesses[processIndex].userId == callingUserId)
+        || (callingUserId == ROOT_USER_ID))
     ) {
       ProcessDescriptor *processDescriptor = &allProcesses[processIndex];
       // Regardless of whether or not we succeed at terminating it, we have
