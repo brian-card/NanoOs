@@ -88,7 +88,7 @@ int consolePrintMessage(
   bool portFound = false;
   for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
     if (consolePorts[ii].outputOwner == owner) {
-      consolePorts[ii].consolePrintString(consolePorts[ii].uartId, message);
+      consolePorts[ii].consolePrintString(&consolePorts[ii], message);
       portFound = true;
     }
   }
@@ -949,21 +949,6 @@ void consoleInputReadyCommandHandler(
   return;
 }
 
-/// @fn static int consoleDiscardString(unsigned char port, const char *string)
-///
-/// @brief Discard output for a forwarding port, whose output is not forwarded
-/// to its process yet.
-///
-/// @param port The ID of the port being printed to.
-/// @param string A pointer to the string to discard.
-///
-/// @return Always returns 0.
-static int consoleDiscardString(unsigned char port, const char *string) {
-  (void) port;
-  (void) string;
-  return 0;
-}
-
 /// @fn static ConsoleBuffer* consoleGetUnattachedBuffer(
 ///   ConsoleState *consoleState)
 ///
@@ -1050,7 +1035,7 @@ void consoleAddForwardingPort(
   consoleInitPort(consolePort, portId, forwardingPid);
   consolePort->pollOnly = false;
   consolePort->readByte = consoleReadForwardedByte;
-  consolePort->consolePrintString = consoleDiscardString;
+  consolePort->consolePrintString = consoleForwardString;
   consoleState->numConsolePorts++;
   consoleAddForwardingPortArgs->portId = portId;
 
@@ -1334,7 +1319,7 @@ ConsoleInputEvent consoleProcessByte(
   return CONSOLE_INPUT_UNHANDLED;
 }
 
-/// @fn static void consoleEchoInput(
+/// @fn void consoleEchoInput(
 ///   ConsolePort *consolePort, ConsoleEcho echo, uint8_t byte)
 ///
 /// @brief Write what consoleProcessByte decided a byte should echo, if the
@@ -1345,12 +1330,23 @@ ConsoleInputEvent consoleProcessByte(
 /// @param byte The byte that was processed.
 ///
 /// @return This function returns no value.
-static void consoleEchoInput(
+void consoleEchoInput(
   ConsolePort *consolePort, ConsoleEcho echo, uint8_t byte
 ) {
-  if ((consolePort->echo == false)
-    || (consolePort->forwardingPid != PROCESS_ID_NOT_SET)
-  ) {
+  if (consolePort->echo == false) {
+    return;
+  } else if (consolePort->forwardingPid != PROCESS_ID_NOT_SET) {
+    char echoString[2];
+    echoString[0] = (char) byte;
+    echoString[1] = '\0';
+    if (echo == CONSOLE_ECHO_CHAR) {
+      consolePort->consolePrintString(consolePort, echoString);
+    } else if (echo == CONSOLE_ECHO_NEWLINE) {
+      echoString[0] = '\n';
+      consolePort->consolePrintString(consolePort, echoString);
+    } else if (echo == CONSOLE_ECHO_ERASE) {
+      consolePort->consolePrintString(consolePort, _erase);
+    }
     return;
   }
 
@@ -1450,7 +1446,7 @@ static void consoleHandleInputEvent(
       if (processMessage == NULL) {
         logError("Could not communicate with scheduler.\n");
       }
-      consolePort->consolePrintString(consolePort->uartId, _ctrlCEcho);
+      consolePort->consolePrintString(consolePort, _ctrlCEcho);
     }
   }
 }
@@ -1545,6 +1541,49 @@ int printSerialString(unsigned char uart, const char *string) {
   return returnValue;
 }
 
+/// @fn static int consolePrintSerialString(
+///   ConsolePort *consolePort, const char *string)
+///
+/// @brief Print a string to the UART that services a console port.
+///
+/// @param consolePort A pointer to the ConsolePort to print to.
+/// @param string A pointer to the string to print.
+///
+/// @return Returns the number of bytes written to the serial port.
+static int consolePrintSerialString(
+  ConsolePort *consolePort, const char *string
+) {
+  return printSerialString(consolePort->uartId, string);
+}
+
+/// @fn int consoleForwardString(ConsolePort *consolePort, const char *string)
+///
+/// @brief Send a string to the process that services a forwarding port as a
+/// CONSOLE_WRITE_BUFFER command whose data is the string, and wait for it to be
+/// done.  Waiting keeps the string valid while the process reads it, so the
+/// process must never wait on the console.
+///
+/// @param consolePort A pointer to the ConsolePort to print to.
+/// @param string A pointer to the NUL-terminated string to print.
+///
+/// @return Returns the number of bytes sent on success, 0 if the process could
+/// not be sent the string.
+int consoleForwardString(ConsolePort *consolePort, const char *string) {
+  size_t length = strlen(string);
+  ProcessMessage *processMessage = initSendProcessMessageToPid(
+    consolePort->forwardingPid,
+    CONSOLE_COMMAND_SIGNATURE | CONSOLE_WRITE_BUFFER,
+    (void*) string, length, /* waiting= */ true);
+  if (processMessage == NULL) {
+    return 0;
+  }
+
+  processMessageWaitForDone(processMessage, NULL);
+  processMessageRelease(processMessage);
+
+  return (int) length;
+}
+
 /// @fn void* runConsole(void *args)
 ///
 /// @brief Main process for managing console input and output.  Runs in an
@@ -1595,7 +1634,7 @@ void* runConsole(void *args) {
     ConsolePort *consolePort = &consoleState.consolePorts[port];
     consoleInitPort(consolePort, port, PROCESS_ID_NOT_SET);
     consolePort->uartId = ii;
-    consolePort->consolePrintString = printSerialString;
+    consolePort->consolePrintString = consolePrintSerialString;
 
     consolePort->pollOnly = pollOnly(HAL->uart, ii);
     if ((consolePort->pollOnly == false)

@@ -3,8 +3,8 @@
 /// @file              test_kernel_console_input.c
 ///
 /// @brief             Kernel tests for the console's forwarding ports:
-///                    CONSOLE_ADD_FORWARDING_PORT, CONSOLE_INPUT_READY, and
-///                    the forwarding-port byte reader.
+///                    CONSOLE_ADD_FORWARDING_PORT, CONSOLE_INPUT_READY, the
+///                    forwarding-port byte reader, and output forwarding.
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -312,4 +312,115 @@ NANO_OS_KERNEL_TEST(console_add_port, unset_process_id_is_rejected) {
   NANO_OS_ASSERT_TRUE(addPort(PROCESS_ID_NOT_SET));
   NANO_OS_ASSERT_EQ_INT(-EINVAL, addArgs.returnValue);
   NANO_OS_ASSERT_EQ_INT(1, inputState.numConsolePorts);
+}
+
+static char forwardedText[16];
+static int64_t forwardedType;
+static ProcessId forwardedFrom;
+static int numForwarded;
+
+/// @fn static void* fakeDriver(void *args)
+///
+/// @brief Stand in for a forwarding port's process: record each string the
+/// console forwards and mark its message done.
+///
+/// @param args Unused.
+///
+/// @return This function never returns.
+static void* fakeDriver(void *args) {
+  (void) args;
+  while (1) {
+    ProcessMessage *processMessage = processMessageQueueWait(NULL);
+    forwardedType = processMessageType(processMessage);
+    forwardedFrom = processPid(processMessageFrom(processMessage));
+    strncpy(forwardedText, (const char*) processMessageData(processMessage),
+      sizeof(forwardedText) - 1);
+    numForwarded++;
+    processMessageSetDone(processMessage);
+  }
+
+  return NULL;
+}
+
+/// @fn static ConsolePort* forwardFixture(void)
+///
+/// @brief Start fakeDriver in the first user process slot, let this process
+/// send it CONSOLE_WRITE_BUFFER, and set up a forwarding port it services.
+///
+/// @return Returns a pointer to the port, or NULL if fakeDriver couldn't be
+/// started.
+static ConsolePort* forwardFixture(void) {
+  static IpcCapability forwardCapability;
+  memset(forwardedText, 0, sizeof(forwardedText));
+  forwardedType = 0;
+  forwardedFrom = PROCESS_ID_NOT_SET;
+  numForwarded = 0;
+
+  ProcessId driverPid = schedulerGetFirstShellPid() + schedulerGetNumShells();
+  ProcessDescriptor *driver = &allProcesses[driverPid - 1];
+  if (processCreate(driver, fakeDriver, NULL) != processSuccess) {
+    return NULL;
+  }
+  threadSetContext(driver->mainThread, driver);
+  processQueuePush(driver->readyQueue, driver);
+
+  forwardCapability.destinationPid = driverPid;
+  forwardCapability.signature = CONSOLE_COMMAND_SIGNATURE;
+  forwardCapability.messageTypes = ((uint32_t) 1) << CONSOLE_WRITE_BUFFER;
+  getRunningProcess()->ipcCapabilities = &forwardCapability;
+  getRunningProcess()->numIpcCapabilities = 1;
+  getRunningProcess()->ipcCapabilitiesDynamic = false;
+
+  ConsolePort *consolePort = inputFixture(driverPid);
+  consolePort->consolePrintString = consoleForwardString;
+  consolePort->echo = true;
+  return consolePort;
+}
+
+NANO_OS_KERNEL_TEST(console_forward, string_reaches_the_driver_before_return) {
+  ConsolePort *consolePort = forwardFixture();
+  NANO_OS_ASSERT_NOT_NULL(consolePort);
+
+  char text[8];
+  strcpy(text, "hello");
+  NANO_OS_ASSERT_EQ_INT(5, consolePort->consolePrintString(consolePort, text));
+  memset(text, 0, sizeof(text));
+
+  NANO_OS_ASSERT_EQ_INT(1, numForwarded);
+  NANO_OS_ASSERT_STR_EQ("hello", forwardedText);
+  NANO_OS_ASSERT_EQ_INT(CONSOLE_COMMAND_SIGNATURE | CONSOLE_WRITE_BUFFER,
+    forwardedType);
+  NANO_OS_ASSERT_EQ_INT(getRunningPid(), forwardedFrom);
+}
+
+NANO_OS_KERNEL_TEST(console_forward, echo_goes_to_the_driver) {
+  ConsolePort *consolePort = forwardFixture();
+  NANO_OS_ASSERT_NOT_NULL(consolePort);
+
+  consoleEchoInput(consolePort, CONSOLE_ECHO_CHAR, 'a');
+  NANO_OS_ASSERT_EQ_INT(1, numForwarded);
+  NANO_OS_ASSERT_STR_EQ("a", forwardedText);
+
+  consoleEchoInput(consolePort, CONSOLE_ECHO_ERASE, ASCII_BACKSPACE);
+  NANO_OS_ASSERT_EQ_INT(2, numForwarded);
+  NANO_OS_ASSERT_STR_EQ("\b \b", forwardedText);
+
+  memset(forwardedText, 0, sizeof(forwardedText));
+  consoleEchoInput(consolePort, CONSOLE_ECHO_NEWLINE, '\r');
+  NANO_OS_ASSERT_EQ_INT(3, numForwarded);
+  NANO_OS_ASSERT_STR_EQ("\n", forwardedText);
+
+  consoleEchoInput(consolePort, CONSOLE_ECHO_NONE, 'b');
+  consolePort->echo = false;
+  consoleEchoInput(consolePort, CONSOLE_ECHO_CHAR, 'c');
+  NANO_OS_ASSERT_EQ_INT(3, numForwarded);
+}
+
+NANO_OS_KERNEL_TEST(console_forward, unreachable_driver_prints_nothing) {
+  ConsolePort *consolePort = forwardFixture();
+  NANO_OS_ASSERT_NOT_NULL(consolePort);
+  getRunningProcess()->numIpcCapabilities = 0;
+
+  NANO_OS_ASSERT_EQ_INT(0, consolePort->consolePrintString(consolePort, "x"));
+  NANO_OS_ASSERT_EQ_INT(0, numForwarded);
 }

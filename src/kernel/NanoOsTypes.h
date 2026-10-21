@@ -449,7 +449,7 @@ typedef struct ConsolePort {
   int                   (*readByte)(struct ConsolePort *consolePort);
   bool                    echo;
   uint8_t                 inputState;
-  int                   (*consolePrintString)(unsigned char port,
+  int                   (*consolePrintString)(struct ConsolePort *consolePort,
                           const char *string);
   ProcessId               forwardingPid;
   ConsoleInputReadyArgs   inputReadyArgs;

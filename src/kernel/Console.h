@@ -222,6 +222,9 @@ int setConsoleEcho(bool desiredEchoState);
 ConsoleInputEvent consoleProcessByte(
   ConsolePort *consolePort, uint8_t byte, ConsoleEcho *echo);
 int consoleReadForwardedByte(ConsolePort *consolePort);
+int consoleForwardString(ConsolePort *consolePort, const char *string);
+void consoleEchoInput(
+  ConsolePort *consolePort, ConsoleEcho echo, uint8_t byte);
 void consoleInputReadyCommandHandler(
   ConsoleState *consoleState, ProcessMessage *inputMessage);
 void consoleAddForwardingPort(
