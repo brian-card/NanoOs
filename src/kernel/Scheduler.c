@@ -1368,6 +1368,91 @@ int schedulerGetNumConsolePorts(void) {
   return returnValue;
 }
 
+/// @fn int schedulerGetUartConsolePort(uint8_t uartId)
+///
+/// @brief Get the index of the console port that a HAL UART services.
+///
+/// @param uartId The ID of the HAL UART.
+///
+/// @return Returns the index of the port on success, -1 if no port uses the
+/// UART or the console could not be asked.
+int schedulerGetUartConsolePort(uint8_t uartId) {
+  ConsoleGetUartPortArgs consoleGetUartPortArgs = {
+    .uartId = uartId,
+    .portId = -1,
+  };
+  if (schedulerInitSendMessageToPid(
+    consolePid,
+    CONSOLE_COMMAND_SIGNATURE | CONSOLE_GET_UART_PORT,
+    /* data= */ &consoleGetUartPortArgs,
+    /* size= */ sizeof(consoleGetUartPortArgs)) != processSuccess
+  ) {
+    logError("Could not send CONSOLE_GET_UART_PORT to console\n");
+    return -1;
+  }
+
+  return consoleGetUartPortArgs.portId;
+}
+
+/// @fn int schedulerBindShell(uint8_t shellIndex, uint8_t consolePort,
+///   ShellProgram *shellProgram)
+///
+/// @brief Make a reserved shell process slot the shell of a console port and
+/// give it the port.
+///
+/// @param shellIndex The index of the slot among the reserved shell slots.
+/// @param consolePort The index of the console port.  It must be a port the
+///   console is running.
+/// @param shellProgram A pointer to the ShellProgram the slot runs while no
+///   user is logged in, or NULL for getty.
+///
+/// @return Returns 0 on success, -errno on failure.
+int schedulerBindShell(uint8_t shellIndex, uint8_t consolePort,
+  ShellProgram *shellProgram
+) {
+  if (shellIndex >= _schedulerState->numShells) {
+    return -ENOSPC;
+  }
+
+  ProcessId pid = _schedulerState->firstShellPid + shellIndex;
+  if ((schedulerSetPortShell(consolePort, pid) != processSuccess)
+    || (schedulerAssignPortToPid(consolePort, pid) != processSuccess)
+  ) {
+    return -EIO;
+  }
+  allProcesses[pid - 1].restartArgs = shellProgram;
+
+  return 0;
+}
+
+/// @fn void schedulerSetNumShells(uint8_t numShells)
+///
+/// @brief Set how many of the reserved shell process slots are shells,
+/// returning the rest to user processes.
+///
+/// @param numShells The number of shells.  It can't exceed the number of
+///   slots reserved.
+///
+/// @return This function returns no value.
+void schedulerSetNumShells(uint8_t numShells) {
+  if (numShells > _schedulerState->numShells) {
+    return;
+  }
+
+  for (ProcessId pid = _schedulerState->firstShellPid + numShells;
+    pid < _schedulerState->firstShellPid + _schedulerState->numShells;
+    pid++
+  ) {
+    ProcessDescriptor *processDescriptor = &allProcesses[pid - 1];
+    processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_USER;
+    processDescriptor->ipcCapabilities = baseUserIpcCapabilities;
+    processDescriptor->numIpcCapabilities
+      = sizeof(baseUserIpcCapabilities) / sizeof(baseUserIpcCapabilities[0]);
+    processDescriptor->ipcCapabilitiesDynamic = false;
+  }
+  _schedulerState->numShells = numShells;
+}
+
 /// @fn ProcessId schedulerGetNumRunningProcesses(struct timespec *timeout)
 ///
 /// @brief Get the number of running processes from the scheduler.
@@ -4819,8 +4904,15 @@ int restartOverlayShell(ProcessDescriptor *processDescriptor) {
     }
 
     logDebug("Starting getty\n");
-    int returnValue = schedulerRunOverlayCommand(processDescriptor,
-      (char*) _gettyPath, (char**) _gettyArgs, NULL);
+    ShellProgram *shellProgram = (ShellProgram*) processDescriptor->restartArgs;
+    int returnValue = 0;
+    if (shellProgram != NULL) {
+      returnValue = schedulerRunOverlayCommand(processDescriptor,
+        shellProgram->path, shellProgram->argv, NULL);
+    } else {
+      returnValue = schedulerRunOverlayCommand(processDescriptor,
+        (char*) _gettyPath, (char**) _gettyArgs, NULL);
+    }
     if (returnValue == -EBUSY) {
       logDebug(
         "Starting getty failed.  Returning -EAGAIN\n");
@@ -5453,33 +5545,17 @@ int initializeProcesses(SchedulerState *schedulerState) {
   }
   logDebug("Started platform-specific processes\n");
 
-  // Get the number of shells we'll be managing.  This needs to be done before
-  // assigning processes to their ready queues and before we create the user
-  // processes.
-  schedulerState->numShells = schedulerGetNumConsolePorts();
-  if (schedulerState->numShells <= 0) {
+  int numConsolePorts = schedulerGetNumConsolePorts();
+  if (numConsolePorts <= 0) {
     // This should be impossible since the HAL was successfully initialized,
     // but take no chances.
     logError("No console ports running.\nHalting.\n");
     while(1);
   }
-  // Irrespective of how many ports the console may be running, we can't run
-  // more shell processes than what we're configured for.  Make sure we set a
-  // sensible limit.
-  schedulerState->numShells
-    = MIN(schedulerState->numShells, NANO_OS_MAX_NUM_SHELLS);
-  logDebug("Managing %ld shells\n", (long int) schedulerState->numShells);
-
-  // Set the shells for the ports.
-  for (uint8_t ii = 0; ii < schedulerState->numShells; ii++) {
-    if (schedulerSetPortShell(ii, schedulerState->firstShellPid + ii)
-      != processSuccess
-    ) {
-      logWarn("Could not set port for shell %d\n"
-        "Undefined behavior will result.\n", ii);
-    }
-  }
-  logDebug("Set shells for ports.\n");
+  // The HAL decides which shells run on which ports once it can read the
+  // filesystem, so reserve the most slots it can use.  schedulerSetNumShells
+  // gives back the ones it doesn't.
+  schedulerState->numShells = NANO_OS_MAX_NUM_SHELLS;
 
   // We need to do an initial population of all the processes because we need to
   // get to the end of memory to run the memory manager in whatever is left
@@ -5527,7 +5603,7 @@ int initializeProcesses(SchedulerState *schedulerState) {
   setIpcCapabilities(schedulerState);
 
   // Assign the console ports to the memory manager.
-  for (uint8_t ii = 0; ii < schedulerState->numShells; ii++) {
+  for (int ii = 0; ii < numConsolePorts; ii++) {
     if (schedulerAssignPortToPid(
       ii, memoryManagerPid) != processSuccess
     ) {
