@@ -1124,6 +1124,8 @@ int halCommonInitFileCache(uint8_t depth) {
   return 0;
 }
 
+static int configSysStartShells(void);
+
 /// @fn int halCommonLaunchProcesses(void)
 ///
 /// @brief Arm every supervisor- and user-level process that was created
@@ -1142,9 +1144,9 @@ int halCommonLaunchProcesses(void) {
     return -ENODEV;
   }
 
+  int returnValue = configSysStartShells();
   ProcessId firstShellPid = schedulerGetFirstShellPid();
   uint8_t numShells = schedulerGetNumShells();
-  int returnValue = 0;
   for (ProcessId pid = 1; pid <= numProcesses; pid++) {
     ProcessDescriptor *processDescriptor = &allProcesses[pid - 1];
     if ((processDescriptor->readyQueue != NULL)
@@ -1199,6 +1201,25 @@ typedef struct ConfigSysDevice {
 /// @brief List of the devices loaded from /etc/config.sys.
 static ConfigSysDevice *_configSysDevices = NULL;
 
+/// @struct ConfigSysConsole
+///
+/// @brief A console port and the program to run on it, from a CONSOLE line in
+/// /etc/config.sys.
+///
+/// @param next The next console in the list, or NULL.
+/// @param port The name of the port: UART<n> or the path of a DEVICE.
+/// @param program The program to run on the port while no user is logged in.
+typedef struct ConfigSysConsole {
+  struct ConfigSysConsole *next;
+  char                    *port;
+  ShellProgram             program;
+} ConfigSysConsole;
+
+/// @var _configSysConsoles
+///
+/// @brief List of the consoles loaded from /etc/config.sys, in file order.
+static ConfigSysConsole *_configSysConsoles = NULL;
+
 /// @var _configSysPath
 ///
 /// @brief Path to the system configuration file.
@@ -1222,6 +1243,23 @@ static const char _configSysReadMode[] KEEP_IN_FLASH = "r";
 /// @note KEEP_IN_FLASH is required here because .rodata is removed from the
 /// final binary on some targets.
 static const char _configSysDeviceKeyword[] KEEP_IN_FLASH = "DEVICE";
+
+/// @var _configSysConsoleKeyword
+///
+/// @brief Keyword of a /etc/config.sys line that runs a program on a console
+/// port.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _configSysConsoleKeyword[] KEEP_IN_FLASH = "CONSOLE";
+
+/// @var _configSysUartPrefix
+///
+/// @brief Prefix of a CONSOLE line's port when the port is a UART.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _configSysUartPrefix[] KEEP_IN_FLASH = "UART";
 
 /// @var _configSysRemKeyword
 ///
@@ -1430,6 +1468,164 @@ static int configSysAddDevice(char *value, int lineNumber) {
   return 0;
 }
 
+/// @fn static int configSysAddConsole(char *value, int lineNumber)
+///
+/// @brief Record the port and program of a CONSOLE line.  The port is resolved
+/// when the shells are started, after the whole file has been read.
+///
+/// @param value The trimmed text after the '=' of a CONSOLE line.
+/// @param lineNumber The line of /etc/config.sys the CONSOLE line is on.
+///
+/// @return Returns 0 on success, -errno on failure.
+static int configSysAddConsole(char *value, int lineNumber) {
+  char *program = value;
+  while ((*program != '\0') && !configSysIsSpace(*program)) {
+    program++;
+  }
+  if (*program == '\0') {
+    logError("No program for the console on line %d of %s\n",
+      lineNumber, _configSysPath);
+    return -EINVAL;
+  }
+  *program++ = '\0';
+
+  ConfigSysDevice *parsed = configSysParseDevice(configSysTrim(program));
+  ConfigSysConsole *console = (ConfigSysConsole*) schedMalloc(
+    sizeof(ConfigSysConsole) + strlen(value) + 1);
+  if ((parsed == NULL) || (console == NULL)) {
+    logError("Could not load the console on line %d of %s\n",
+      lineNumber, _configSysPath);
+    schedFree(parsed);
+    schedFree(console);
+    return -ENOMEM;
+  }
+  console->next = NULL;
+  console->port = (char*) &console[1];
+  strcpy(console->port, value);
+  console->program.path = parsed->path;
+  console->program.argv = parsed->argv;
+
+  ConfigSysConsole **tail = &_configSysConsoles;
+  while (*tail != NULL) {
+    tail = &(*tail)->next;
+  }
+  *tail = console;
+
+  return 0;
+}
+
+/// @fn static int configSysConsolePort(const char *port)
+///
+/// @brief Find the index of the console port a CONSOLE line names.
+///
+/// @param port The name of the port from the CONSOLE line.
+///
+/// @return Returns the index of the port on success, -errno on failure.
+static int configSysConsolePort(const char *port) {
+  size_t prefixLength = 0;
+  for (; _configSysUartPrefix[prefixLength] != '\0'; prefixLength++) {
+    char c = port[prefixLength];
+    if ((c >= 'a') && (c <= 'z')) {
+      c -= 'a' - 'A';
+    }
+    if (c != _configSysUartPrefix[prefixLength]) {
+      break;
+    }
+  }
+  if ((_configSysUartPrefix[prefixLength] == '\0')
+    && (port[prefixLength] >= '0') && (port[prefixLength] <= '9')
+  ) {
+    unsigned int uartId = 0;
+    const char *digit = &port[prefixLength];
+    for (; (*digit >= '0') && (*digit <= '9'); digit++) {
+      uartId = (uartId * 10) + (unsigned int) (*digit - '0');
+      if (uartId > UINT8_MAX) {
+        return -EINVAL;
+      }
+    }
+    if (*digit != '\0') {
+      return -EINVAL;
+    }
+    int portId = schedulerGetUartConsolePort((uint8_t) uartId);
+    return (portId >= 0) ? portId : -ENODEV;
+  }
+
+  for (ConfigSysDevice *device = _configSysDevices; device != NULL;
+    device = device->next
+  ) {
+    if (strcmp(device->path, port) == 0) {
+      return -ENOTSUP;
+    }
+  }
+
+  return -ENOENT;
+}
+
+/// @fn static int configSysStartShells(void)
+///
+/// @brief Start a shell on each console port that /etc/config.sys names, or
+/// getty on every console port if it names none that can be used, and give
+/// the unused shell process slots back to user processes.
+///
+/// @return Returns 0 on success, -errno if a CONSOLE line could not be used.
+static int configSysStartShells(void) {
+  int numConsolePorts = schedulerGetNumConsolePorts();
+  uint8_t maxShells = schedulerGetNumShells();
+  uint32_t portsUsed = 0;
+  uint8_t numShells = 0;
+  int returnValue = 0;
+
+  for (ConfigSysConsole *console = _configSysConsoles; console != NULL;
+    console = console->next
+  ) {
+    int portId = configSysConsolePort(console->port);
+    if ((portId >= 0) && (portId >= numConsolePorts)) {
+      portId = -ENODEV;
+    }
+    if (portId < 0) {
+      logError("Could not use console port %s from %s: %s\n",
+        console->port, _configSysPath, strerror(-portId));
+      returnValue = portId;
+      continue;
+    } else if ((portsUsed & (((uint32_t) 1) << portId)) != 0) {
+      logError("Console port %s is in %s more than once\n",
+        console->port, _configSysPath);
+      returnValue = -EEXIST;
+      continue;
+    } else if (numShells == maxShells) {
+      logError("Too many consoles in %s\n", _configSysPath);
+      returnValue = -ENOSPC;
+      break;
+    }
+
+    int bindStatus = schedulerBindShell(numShells, (uint8_t) portId,
+      &console->program);
+    if (bindStatus == 0) {
+      portsUsed |= ((uint32_t) 1) << portId;
+      numShells++;
+    } else {
+      returnValue = bindStatus;
+    }
+  }
+
+  if (numShells == 0) {
+    for (int portId = 0;
+      (portId < numConsolePorts) && (numShells < maxShells);
+      portId++
+    ) {
+      int bindStatus = schedulerBindShell(numShells, (uint8_t) portId, NULL);
+      if (bindStatus != 0) {
+        returnValue = bindStatus;
+        break;
+      }
+      numShells++;
+    }
+  }
+
+  schedulerSetNumShells(numShells);
+  return returnValue;
+}
+
 /// @fn static int configSysQueueDevices(void)
 ///
 /// @brief Queue the process slots of the devices from /etc/config.sys.  Each
@@ -1496,6 +1692,8 @@ static int configSysProcessLine(char *line, int lineNumber) {
     return -EINVAL;
   } else if (strcmp(keyword, _configSysDeviceKeyword) == 0) {
     return configSysAddDevice(value, lineNumber);
+  } else if (strcmp(keyword, _configSysConsoleKeyword) == 0) {
+    return configSysAddConsole(value, lineNumber);
   }
 
   logWarn("Unrecognized command on line %d of %s\n",
