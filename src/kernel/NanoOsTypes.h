@@ -69,6 +69,12 @@ extern "C"
 /// console process's stack.
 #define CONSOLE_NUM_BUFFERS 4
 
+/// @def CONSOLE_INPUT_READY_SIZE
+///
+/// @brief The number of bytes of input a single CONSOLE_INPUT_READY command
+/// can carry.
+#define CONSOLE_INPUT_READY_SIZE 8
+
 /// @def HAL_CAPABILITY_BITMAP_SIZE
 ///
 /// @brief The number of bytes in a ProcessDescriptor's halCapabilityBitmap.
@@ -385,6 +391,20 @@ typedef struct ConsoleBuffer {
   char          buffer[CONSOLE_BUFFER_SIZE];
 } ConsoleBuffer;
 
+/// @struct ConsoleInputReadyArgs
+///
+/// @brief Arguments for the CONSOLE_INPUT_READY command.  A port that reads
+/// its input from the HAL sends numBytes of 0.
+///
+/// @param portId The ID of the port the input is for.
+/// @param numBytes The number of valid bytes in bytes.
+/// @param bytes The input bytes, already translated to a terminal byte stream.
+typedef struct ConsoleInputReadyArgs {
+  unsigned char portId;
+  uint8_t       numBytes;
+  uint8_t       bytes[CONSOLE_INPUT_READY_SIZE];
+} ConsoleInputReadyArgs;
+
 /// @struct ConsolePort
 ///
 /// @brief Descriptor for a single console port that can be used for input from
@@ -409,20 +429,31 @@ typedef struct ConsoleBuffer {
 /// @param inputState The ConsoleInputState of the port's line editing.
 /// @param printString A pointer to the function that will print a string of
 ///   output to the console port.
+/// @param forwardingPid The ID of the process that services the port, or
+///   PROCESS_ID_NOT_SET if the port is serviced through the HAL.
+/// @param inputReadyArgs The ConsoleInputReadyArgs that the HAL sends when the
+///   port has input.
+/// @param pendingInput The CONSOLE_INPUT_READY message whose bytes are being
+///   read from a forwarding port, or NULL if there is none.
+/// @param pendingInputIndex The index of the next byte to read from
+///   pendingInput.
 typedef struct ConsolePort {
-  unsigned char       portId;
-  ConsoleBuffer      *consoleBuffer;
-  ProcessId           outputOwner;
-  ProcessId           inputOwner;
-  ProcessId           shell;
-  bool                waitingForInput;
-  bool                pollOnly;
-  int               (*readByte)(struct ConsolePort *consolePort);
-  bool                echo;
-  uint8_t             inputState;
-  int               (*consolePrintString)(unsigned char port,
-                      const char *string);
-  ProcessId           forwardingPid;
+  unsigned char           portId;
+  ConsoleBuffer          *consoleBuffer;
+  ProcessId               outputOwner;
+  ProcessId               inputOwner;
+  ProcessId               shell;
+  bool                    waitingForInput;
+  bool                    pollOnly;
+  int                   (*readByte)(struct ConsolePort *consolePort);
+  bool                    echo;
+  uint8_t                 inputState;
+  int                   (*consolePrintString)(unsigned char port,
+                          const char *string);
+  ProcessId               forwardingPid;
+  ConsoleInputReadyArgs   inputReadyArgs;
+  ProcessMessage         *pendingInput;
+  uint8_t                 pendingInputIndex;
 } ConsolePort;
 
 /// @struct ConsoleState
