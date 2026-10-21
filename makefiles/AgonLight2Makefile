@@ -100,11 +100,18 @@ INCLUDES := \
 	-Isrc/include/ez80-none-elf-clang \
 	-Iusr/src/filesystems/drivers/fat32 \
 
+# ---- Optimization level -----------------------------------------------------
+#
+# Override with OPT_LEVEL=-Os (on the make command line or in the environment,
+# which builddev passes through) to build the kernel at -Os instead.
+
+OPT_LEVEL ?= -Oz
+
 # ---- Compiler flags ---------------------------------------------------------
 
 COMMON_FLAGS := \
 	$(ARCH_FLAGS) \
-	-Os \
+	$(OPT_LEVEL) \
 	-ffunction-sections \
 	-fdata-sections \
 	-fno-jump-tables \
