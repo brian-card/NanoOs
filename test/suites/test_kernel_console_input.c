@@ -424,3 +424,59 @@ NANO_OS_KERNEL_TEST(console_forward, unreachable_driver_prints_nothing) {
   NANO_OS_ASSERT_EQ_INT(0, consolePort->consolePrintString(consolePort, "x"));
   NANO_OS_ASSERT_EQ_INT(0, numForwarded);
 }
+
+/// @fn static void releasePid(ProcessId pid)
+///
+/// @brief Hand the console's CONSOLE_RELEASE_PID_PORT handler a message for a
+/// process ID that appears to come from the scheduler.
+///
+/// @param pid The ProcessId to release.
+///
+/// @return This function returns no value.
+static void releasePid(ProcessId pid) {
+  static ConsoleReleasePidPortArgs releaseArgs;
+  releaseArgs.processId = pid;
+  ProcessMessage *sent = getAvailableMessage();
+  if (sent == NULL) {
+    return;
+  }
+  processMessageInit(sent,
+    CONSOLE_COMMAND_SIGNATURE | CONSOLE_RELEASE_PID_PORT,
+    &releaseArgs, sizeof(releaseArgs), /* waiting= */ false);
+  if (processMessageQueuePush(getRunningProcess(), sent) != processSuccess) {
+    processMessageRelease(sent);
+    return;
+  }
+  ProcessMessage *received = processMessageQueuePop();
+  msg_from(received).coro = allProcesses[schedulerPid - 1].mainThread;
+  consoleReleasePidPortCommandHandler(&inputState, received);
+}
+
+NANO_OS_KERNEL_TEST(console_release, forwarder_exit_drops_its_held_input) {
+  ConsolePort *consolePort = inputFixture(getRunningPid());
+  ProcessMessage *held = sendInput(&inputArgs[0], "\x1b[", 2);
+  NANO_OS_ASSERT_NOT_NULL(held);
+  NANO_OS_ASSERT_EQ_INT('\x1b', consolePort->readByte(consolePort));
+  consolePort->inputState = CONSOLE_INPUT_STATE_ESCAPE;
+
+  releasePid(getRunningPid());
+
+  NANO_OS_ASSERT_NULL(consolePort->pendingInput);
+  NANO_OS_ASSERT_EQ_INT(0, consolePort->pendingInputIndex);
+  NANO_OS_ASSERT_EQ_INT(CONSOLE_INPUT_STATE_NORMAL, consolePort->inputState);
+  NANO_OS_ASSERT_NULL(processMessageInUse(held));
+  NANO_OS_ASSERT_EQ_INT(getRunningPid(), consolePort->forwardingPid);
+  NANO_OS_ASSERT_EQ_INT(-1, consolePort->readByte(consolePort));
+}
+
+NANO_OS_KERNEL_TEST(console_release, other_exit_keeps_held_input) {
+  ConsolePort *consolePort = inputFixture(getRunningPid());
+  ProcessMessage *held = sendInput(&inputArgs[0], "z", 1);
+  NANO_OS_ASSERT_NOT_NULL(held);
+
+  releasePid(consolePid);
+
+  NANO_OS_ASSERT_EQ_PTR(held, consolePort->pendingInput);
+  NANO_OS_ASSERT_EQ_INT('z', consolePort->readByte(consolePort));
+  processMessageRelease(held);
+}
