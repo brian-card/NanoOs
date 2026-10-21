@@ -72,6 +72,18 @@ typedef struct FileBlockMetadata FileBlockMetadata;
 typedef struct IpcCapability IpcCapability;
 typedef struct OverlayDescriptor OverlayDescriptor;
 
+/// @struct ShellProgram
+///
+/// @brief The program a shell process slot runs while no user is logged in on
+/// its console port.
+///
+/// @param path The full path to the program's overlay on the filesystem.
+/// @param argv The NULL-terminated array of arguments for the program.
+typedef struct ShellProgram {
+  char  *path;
+  char **argv;
+} ShellProgram;
+
 /// @struct SchedulerKillProcessArgs
 ///
 /// @brief Arguments and return values for the SCHEDULER_KILL_PROCESS command.
@@ -247,6 +259,11 @@ void schedulerDeinitialize(void);
 
 ProcessId schedulerGetFirstShellPid(void);
 uint8_t schedulerGetNumShells(void);
+int schedulerGetNumConsolePorts(void);
+int schedulerGetUartConsolePort(uint8_t uartId);
+int schedulerBindShell(uint8_t shellIndex, uint8_t consolePort,
+  ShellProgram *shellProgram);
+void schedulerSetNumShells(uint8_t numShells);
 void* schedMalloc(size_t size);
 void schedFree(void *ptr);
 FILE* schedFopen(const char *pathname, const char *mode);
