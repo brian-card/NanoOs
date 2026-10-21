@@ -2816,6 +2816,7 @@ int schedulerKillProcessCommandHandler(
             processDescriptor);
         }
       }
+      processCompleteMessagesTo(processDescriptor);
 
       if (selfKill == false) {
         // Tell the console to release the port for us.  We will forward it
@@ -3915,6 +3916,22 @@ int schedulerCleanupProcessCommandHandler(
     return returnValue;
   }
 
+  processCompleteMessagesTo(processDescriptor);
+  if (processDescriptor->privilegeLevel == PRIVILEGE_LEVEL_EXECUTIVE) {
+    ConsoleReleasePidPortArgs consoleReleasePidPortArgs = {
+      .processId = processDescriptor->processId,
+    };
+    if (schedulerInitSendMessageToPid(
+      consolePid,
+      CONSOLE_COMMAND_SIGNATURE | CONSOLE_RELEASE_PID_PORT,
+      /* data= */ &consoleReleasePidPortArgs,
+      /* size= */ sizeof(consoleReleasePidPortArgs)) != processSuccess
+    ) {
+      logError("Could not send CONSOLE_RELEASE_PID_PORT message "
+        "to console process\n");
+    }
+  }
+
   if (processDescriptor->envp != NULL) {
     if (assignMemory(processDescriptor->envp[0], 0) != 0) {
       logWarn("Could not protect envp memory from process %d\n"
@@ -4217,6 +4234,7 @@ void removeProcess(
   processDescriptor->name = NULL;
   processDescriptor->userId = NO_USER_ID;
   processDescriptor->mainThread->state = PROCESS_STATE_NOT_RUNNING;
+  processCompleteMessagesTo(processDescriptor);
 
   ConsoleReleasePidPortArgs consoleReleasePidPortArgs = {
     .processId = processDescriptor->processId,
