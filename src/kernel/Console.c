@@ -777,7 +777,9 @@ void consoleWaitForInputCommandHandler(
 /// @fn void consoleReleasePidPortCommandHandler(
 ///   ConsoleState *consoleState, ProcessMessage *inputMessage)
 ///
-/// @brief Release all the ports currently owned by a process.
+/// @brief Release all the ports currently owned by a process, and drop any
+/// input it sent for a port it forwards, since it can no longer receive the
+/// done.
 ///
 /// @param consoleState A pointer to the ConsoleState being maintained by the
 ///   runConsole function that's running.
@@ -807,6 +809,15 @@ void consoleReleasePidPortCommandHandler(
     }
     if (consolePorts[ii].outputOwner == consoleReleasePidPortArgs->processId) {
       consolePorts[ii].outputOwner = consolePorts[ii].shell;
+    }
+    if ((consolePorts[ii].forwardingPid
+        == consoleReleasePidPortArgs->processId)
+      && (consolePorts[ii].pendingInput != NULL)
+    ) {
+      processMessageRelease(consolePorts[ii].pendingInput);
+      consolePorts[ii].pendingInput = NULL;
+      consolePorts[ii].pendingInputIndex = 0;
+      consolePorts[ii].inputState = CONSOLE_INPUT_STATE_NORMAL;
     }
   }
 
