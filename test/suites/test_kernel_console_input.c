@@ -480,3 +480,42 @@ NANO_OS_KERNEL_TEST(console_release, other_exit_keeps_held_input) {
   NANO_OS_ASSERT_EQ_INT('z', consolePort->readByte(consolePort));
   processMessageRelease(held);
 }
+
+/// @fn static int getUartPort(unsigned char uartId)
+///
+/// @brief Hand the console's CONSOLE_GET_UART_PORT handler a request.
+///
+/// @param uartId The ID of the HAL UART to look up.
+///
+/// @return Returns the port index the handler reported, or -2 if the request
+/// couldn't be made.
+static int getUartPort(unsigned char uartId) {
+  static ConsoleGetUartPortArgs uartPortArgs;
+  uartPortArgs.uartId = uartId;
+  uartPortArgs.portId = -2;
+  ProcessMessage *sent = getAvailableMessage();
+  if (sent == NULL) {
+    return -2;
+  }
+  processMessageInit(sent, CONSOLE_COMMAND_SIGNATURE | CONSOLE_GET_UART_PORT,
+    &uartPortArgs, sizeof(uartPortArgs), /* waiting= */ false);
+  if (processMessageQueuePush(getRunningProcess(), sent) != processSuccess) {
+    processMessageRelease(sent);
+    return -2;
+  }
+  consoleGetUartPortCommandHandler(&inputState, processMessageQueuePop());
+  return uartPortArgs.portId;
+}
+
+NANO_OS_KERNEL_TEST(console_uart_port, finds_the_port_a_uart_services) {
+  addFixture();
+  inputState.consolePorts[0].uartId = 1;
+  ConsolePort *forwardingPort = &inputState.consolePorts[1];
+  forwardingPort->forwardingPid = getRunningPid();
+  forwardingPort->uartId = 0;
+  inputState.numConsolePorts = 2;
+
+  NANO_OS_ASSERT_EQ_INT(0, getUartPort(1));
+  NANO_OS_ASSERT_EQ_INT(-1, getUartPort(0));
+  NANO_OS_ASSERT_EQ_INT(-1, getUartPort(3));
+}

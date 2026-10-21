@@ -111,6 +111,15 @@ class Session:
         self.child.expect(r"Using (\d+) bytes of dynamic memory", timeout=15)
         return int(self.child.match.group(1))
 
+    def restart_with_config_sys(self, text):
+        """Write /etc/config.sys into this session's image and boot again."""
+        if self.child.isalive():
+            self.child.terminate(force=True)
+        subprocess.run(["mcopy", "-o", "-i", self.img_copy + "@@2097152", "-",
+                        "::/etc/config.sys"], input=text.encode(),
+                       env=dict(os.environ, MTOOLS_SKIP_CHECK="1"), check=True)
+        self.spawn([self.img_copy])
+
     def wait_login_prompt(self):
         self.child.expect("login: ", timeout=15)
 
@@ -159,6 +168,28 @@ def test_getty_prompts_for_login_without_an_issue_file(s):
     s.child.sendline("exit")
     s.child.expect("login: ", timeout=15)
     assert "ERROR" not in s.child.before, repr(s.child.before[-300:])
+    s.child.sendline("root")
+    s.child.expect("password: ", timeout=10)
+    s.child.sendline("rootroot")
+    s.child.expect(PROMPT, timeout=10)
+
+
+def test_config_sys_console_runs_its_program_instead_of_getty(s):
+    s.restart_with_config_sys("CONSOLE=UART1 /usr/bin/echo from-config-sys\n")
+    i = s.child.expect(["from-config-sys", "login: "], timeout=15)
+    assert i == 0, "getty ran instead of the CONSOLE line's program"
+
+
+def test_config_sys_console_port_name_ignores_case(s):
+    s.restart_with_config_sys("console=uart1 /usr/bin/echo lower-case-port\n")
+    i = s.child.expect(["lower-case-port", "login: "], timeout=15)
+    assert i == 0, "getty ran instead of the CONSOLE line's program"
+
+
+def test_config_sys_console_on_unknown_port_falls_back_to_getty(s):
+    s.restart_with_config_sys("CONSOLE=UART7 /usr/bin/echo wrong-port\n")
+    i = s.child.expect(["wrong-port", "login: "], timeout=15)
+    assert i == 1, "the program for a port that doesn't exist ran"
     s.child.sendline("root")
     s.child.expect("password: ", timeout=10)
     s.child.sendline("rootroot")

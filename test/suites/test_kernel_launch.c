@@ -248,3 +248,23 @@ NANO_OS_KERNEL_TEST(launch, failed_restart_is_attempted_once) {
   }
   NANO_OS_ASSERT_EQ_INT(1, _failedRestartCalls);
 }
+
+NANO_OS_KERNEL_TEST(launch, one_getty_shell_per_console_port_by_default) {
+  NANO_OS_ASSERT_EQ_INT(1, schedulerGetNumShells());
+  NANO_OS_ASSERT_NULL(
+    allProcesses[schedulerGetFirstShellPid() - 1].restartArgs);
+}
+
+NANO_OS_KERNEL_TEST(launch, unused_shell_slot_becomes_a_user_slot) {
+  ProcessId unusedShellSlot
+    = schedulerGetFirstShellPid() + schedulerGetNumShells();
+  ProcessDescriptor *slot = &allProcesses[unusedShellSlot - 1];
+  ProcessDescriptor *lastSlot = &allProcesses[numProcesses - 1];
+  NANO_OS_ASSERT_TRUE(unusedShellSlot < numProcesses);
+  NANO_OS_ASSERT_EQ_INT(PRIVILEGE_LEVEL_USER, lastSlot->privilegeLevel);
+
+  NANO_OS_ASSERT_EQ_INT(PRIVILEGE_LEVEL_USER, slot->privilegeLevel);
+  NANO_OS_ASSERT_EQ_PTR(lastSlot->ipcCapabilities, slot->ipcCapabilities);
+  NANO_OS_ASSERT_EQ_INT(lastSlot->numIpcCapabilities,
+    slot->numIpcCapabilities);
+}
