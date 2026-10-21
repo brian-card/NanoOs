@@ -42,7 +42,7 @@ static void testConsoleInit(TestConsole *testConsole) {
 ///
 /// @return Returns a pointer to the line.
 static const char* testConsoleLine(TestConsole *testConsole) {
-  testConsole->buffer.buffer[testConsole->port.consoleBufferIndex] = '\0';
+  testConsole->buffer.buffer[testConsole->buffer.consoleBufferIndex] = '\0';
   return testConsole->buffer.buffer;
 }
 
@@ -80,12 +80,12 @@ NANO_OS_TEST(unit_console, line_feed_after_return_is_swallowed) {
 
   NANO_OS_ASSERT_EQ_INT(CONSOLE_INPUT_LINE,
     consoleProcessByte(&tc.port, '\r', &echo));
-  tc.port.consoleBufferIndex = 0; // as the line's dispatch does
+  tc.buffer.consoleBufferIndex = 0; // as the line's dispatch does
 
   NANO_OS_ASSERT_EQ_INT(CONSOLE_INPUT_NONE,
     consoleProcessByte(&tc.port, '\n', &echo));
   NANO_OS_ASSERT_EQ_INT(CONSOLE_ECHO_NONE, echo);
-  NANO_OS_ASSERT_EQ_INT(0, tc.port.consoleBufferIndex);
+  NANO_OS_ASSERT_EQ_INT(0, tc.buffer.consoleBufferIndex);
 }
 
 NANO_OS_TEST(unit_console, byte_after_return_starts_the_next_line) {
@@ -94,7 +94,7 @@ NANO_OS_TEST(unit_console, byte_after_return_starts_the_next_line) {
   ConsoleEcho echo = CONSOLE_ECHO_NONE;
 
   consoleProcessByte(&tc.port, '\r', &echo);
-  tc.port.consoleBufferIndex = 0; // as the line's dispatch does
+  tc.buffer.consoleBufferIndex = 0; // as the line's dispatch does
 
   NANO_OS_ASSERT_EQ_INT(CONSOLE_INPUT_NONE,
     consoleProcessByte(&tc.port, 'p', &echo));
@@ -122,7 +122,7 @@ NANO_OS_TEST(unit_console, backspace_on_an_empty_line_does_nothing) {
   NANO_OS_ASSERT_EQ_INT(CONSOLE_INPUT_NONE,
     consoleProcessByte(&tc.port, ASCII_BACKSPACE, &echo));
   NANO_OS_ASSERT_EQ_INT(CONSOLE_ECHO_NONE, echo);
-  NANO_OS_ASSERT_EQ_INT(0, tc.port.consoleBufferIndex);
+  NANO_OS_ASSERT_EQ_INT(0, tc.buffer.consoleBufferIndex);
 }
 
 NANO_OS_TEST(unit_console, backspace_and_delete_erase_the_last_byte) {
@@ -148,12 +148,12 @@ NANO_OS_TEST(unit_console, full_line_drops_bytes_without_echoing_them) {
   for (int ii = 0; ii < CONSOLE_BUFFER_SIZE - 1; ii++) {
     consoleProcessByte(&tc.port, 'z', &echo);
   }
-  NANO_OS_ASSERT_EQ_INT(CONSOLE_BUFFER_SIZE - 1, tc.port.consoleBufferIndex);
+  NANO_OS_ASSERT_EQ_INT(CONSOLE_BUFFER_SIZE - 1, tc.buffer.consoleBufferIndex);
 
   NANO_OS_ASSERT_EQ_INT(CONSOLE_INPUT_NONE,
     consoleProcessByte(&tc.port, 'y', &echo));
   NANO_OS_ASSERT_EQ_INT(CONSOLE_ECHO_NONE, echo);
-  NANO_OS_ASSERT_EQ_INT(CONSOLE_BUFFER_SIZE - 1, tc.port.consoleBufferIndex);
+  NANO_OS_ASSERT_EQ_INT(CONSOLE_BUFFER_SIZE - 1, tc.buffer.consoleBufferIndex);
 }
 
 NANO_OS_TEST(unit_console, csi_sequence_completes_on_its_final_byte) {
@@ -206,7 +206,7 @@ NANO_OS_TEST(unit_console, ctrl_c_is_an_interrupt_and_is_not_stored) {
   NANO_OS_ASSERT_EQ_INT(CONSOLE_INPUT_INTERRUPT,
     consoleProcessByte(&tc.port, 0x03, &echo));
   NANO_OS_ASSERT_EQ_INT(CONSOLE_ECHO_NONE, echo);
-  NANO_OS_ASSERT_EQ_INT(0, tc.port.consoleBufferIndex);
+  NANO_OS_ASSERT_EQ_INT(0, tc.buffer.consoleBufferIndex);
 }
 
 NANO_OS_TEST(unit_console, other_control_bytes_are_unhandled) {
@@ -217,5 +217,5 @@ NANO_OS_TEST(unit_console, other_control_bytes_are_unhandled) {
   NANO_OS_ASSERT_EQ_INT(CONSOLE_INPUT_UNHANDLED,
     consoleProcessByte(&tc.port, 0x01, &echo));
   NANO_OS_ASSERT_EQ_INT(CONSOLE_ECHO_NONE, echo);
-  NANO_OS_ASSERT_EQ_INT(0, tc.port.consoleBufferIndex);
+  NANO_OS_ASSERT_EQ_INT(0, tc.buffer.consoleBufferIndex);
 }
