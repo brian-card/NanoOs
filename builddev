@@ -91,6 +91,7 @@ fi
 osFullBin="${osBuildDir}/NanoOs_full.bin"
 osStrippedBin="${osBuildDir}/NanoOs_stripped.bin"
 osRodataBin="${osBuildDir}/NanoOs_rodata.bin"
+osRamBin="${osBuildDir}/NanoOs_ram.bin"
 
 filesystemLinkerScript="${linkerScript}"
 if [ "${blockFilesystem}" = "contiguous" ]; then
@@ -189,6 +190,10 @@ if [ -b "${targetDevice}" ]; then
 		# instead if it grows past what fits before the FAT32 partition.
 		sudo dd if="usr/filesystem/contiguous-filesystem/0.overlay" of="${targetDevice}" \
 			bs=512 seek=1
+		if [ "${platform}" = "AgonLight2" ]; then
+			sudo dd if="${osRamBin}" of="${targetDevice}" bs=512 \
+				seek=$(( 1 + (contiguousMaxSize / 512) ))
+		fi
 	else
 		blockOverlays="$(ls usr/filesystem/${blockFilesystem}-filesystem/*)"
 		for blockOverlay in ${blockOverlays}; do
@@ -278,6 +283,10 @@ else
 		# instead if it grows past what fits before the FAT32 partition.
 		dd if="usr/filesystem/contiguous-filesystem/0.overlay" of="${targetDevice}" \
 			bs=512 seek=1 conv=notrunc
+		if [ "${platform}" = "AgonLight2" ]; then
+			dd if="${osRamBin}" of="${targetDevice}" bs=512 \
+				seek=$(( 1 + (contiguousMaxSize / 512) )) conv=notrunc
+		fi
 	else
 		blockOverlays="$(ls usr/filesystem/${blockFilesystem}-filesystem/*)"
 		for blockOverlay in ${blockOverlays}; do
