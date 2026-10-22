@@ -90,6 +90,12 @@ int posixIsUartConsole(int32_t deviceId, va_list args);
 /// harness via halMockSetPowerHook.
 static void (*_powerHook)(void) = NULL;
 
+/// @var _namedProcesses
+///
+/// @brief The mock's storage for HalCommon.c's named-process lookup table,
+/// sized like the simulator's.
+static NamedProcessEntry _namedProcesses[3];
+
 /// @var _restartShell
 ///
 /// @brief Harness-provided function used to populate the shell process slot.
@@ -647,6 +653,11 @@ int halMockInit(const HalMockConfig *config, jmp_buf *powerReturn) {
   halImpl.timer->online            = _timersOnline;
   halImpl.blockDevice->numSupported = 1;
   halImpl.blockDevice->online      = _blockDevicesOnline;
+
+  memset(_namedProcesses, 0, sizeof(_namedProcesses));
+  namedProcessTable = _namedProcesses;
+  namedProcessTableCapacity
+    = sizeof(_namedProcesses) / sizeof(_namedProcesses[0]);
 
   halImpl.memory->logBufferSize  = sizeof(_logBuffer);
   halImpl.memory->numLogEntries  = NUM_LOG_ENTRIES;
