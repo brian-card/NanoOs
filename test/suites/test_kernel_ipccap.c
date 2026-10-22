@@ -237,3 +237,15 @@ NANO_OS_KERNEL_TEST(executive_api, send_without_the_capability_is_refused) {
   NANO_OS_ASSERT_NULL(target->mainThread->messageQueue.head);
   processMessageRelease(sent);
 }
+
+NANO_OS_KERNEL_TEST(executive_api, available_message_is_marked_in_use) {
+  ProcessMessage *processMessage = nanoOsExecutiveApi.getAvailableMessage();
+  NANO_OS_ASSERT_NOT_NULL(processMessage);
+  NANO_OS_ASSERT_TRUE(processMessageInUse(processMessage));
+
+  ProcessMessage *second = nanoOsExecutiveApi.getAvailableMessage();
+  NANO_OS_ASSERT_NOT_NULL(second);
+  NANO_OS_ASSERT_TRUE(second != processMessage);
+  processMessageRelease(second);
+  processMessageRelease(processMessage);
+}
