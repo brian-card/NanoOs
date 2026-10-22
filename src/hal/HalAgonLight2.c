@@ -114,17 +114,13 @@ extern void agonLight2Off(void);           // boot/AgonLight2/Boot.asm; no retur
 
 /// @def DATA_BSS_REGION_SIZE
 ///
-/// @brief Bytes reserved for .bss + .data + padding.  6 KB leaves head-room as
-/// the HAL and kernel fill in.  Bumped from 5 KB to make room for the UART
-/// interrupt ring buffers (src/hal/AgonLight2/Uart0.asm, Uart1.asm); as of this
-/// change .bss + .data used ~4.7 KB of the prior 5 KB reservation, so the ring
-/// buffers would not have fit.  Kept in sync with __data_bss_limit in
-/// ld/AgonLight2.ld.
-#define DATA_BSS_REGION_SIZE (6 * 1024)
+/// @brief Bytes reserved for .bss + .data + padding.  Kept in sync with
+/// __data_bss_limit in ld/AgonLight2.ld.
+#define DATA_BSS_REGION_SIZE (8 * 1024)
 
 /// @def DATA_BSS_CANARY_ADDRESS
 ///
-/// @brief The 69 KB mark of external RAM: the byte just past the .bss/.data
+/// @brief The 72 KB mark of external RAM: the byte just past the .bss/.data
 /// reservation.  Boot.asm stamps DATA_BSS_CANARY_VALUE here before it copies
 /// .data; halAgonLight2Init() re-reads it as its last step.  A mismatch means
 /// .bss or .data outgrew DATA_BSS_REGION_SIZE and corrupted memory past the
@@ -137,12 +133,35 @@ extern void agonLight2Off(void);           // boot/AgonLight2/Boot.asm; no retur
 /// @brief 64-bit known pattern written at DATA_BSS_CANARY_ADDRESS.
 #define DATA_BSS_CANARY_VALUE ((uint64_t) 0x4abc4abc4abc4abcULL)
 
+/// @var agonLight2RamTextStart
+///
+/// @brief Start of the .ramtext image in external RAM, defined by
+/// ld/AgonLight2.ld.  Its first four bytes are the image's build ID.
+extern uint8_t agonLight2RamTextStart[];
+
+/// @var agonLight2RamTextEnd
+///
+/// @brief End of the .ramtext image in external RAM, rounded up to a whole
+/// block, defined by ld/AgonLight2.ld.
+extern uint8_t agonLight2RamTextEnd[];
+
+/// @var agonLight2FlashBuildId
+///
+/// @brief The build ID that ld/AgonLight2.ld places in flash, which the
+/// .ramtext image read from the SD card must match.
+extern const uint32_t agonLight2FlashBuildId;
+
+/// @def RAM_TEXT_START_BLOCK
+///
+/// @brief The first SD card block of the .ramtext image, immediately after the
+/// contiguous filesystem image that starts at block 1.
+#define RAM_TEXT_START_BLOCK (1 + (FILESYSTEM_DRIVER_SIZE / 512))
+
 /// @def HEAP_START_ADDRESS
 ///
-/// @brief Address of the start (bottom) of the heap.  The 8-byte integrity
-/// canary occupies the first bytes here and is consumed once the heap is first
-/// used, which happens after the boot-time integrity check has run.
-#define HEAP_START_ADDRESS DATA_BSS_CANARY_ADDRESS
+/// @brief Address of the start (bottom) of the heap, just past the .ramtext
+/// image.
+#define HEAP_START_ADDRESS ((uintptr_t) agonLight2RamTextEnd)
 
 /// @def STATIC_LOGS_ADDRESS
 ///
@@ -1609,6 +1628,53 @@ int agonLight2InitBlockDevice(int32_t deviceId, va_list args) {
     return -ENODEV;
   }
   setOnline(HAL->blockDevice, 0);
+
+  return 0;
+}
+
+/// @var _ramTextReadError
+///
+/// @brief Message printed when the .ramtext image can't be read from the SD
+/// card.
+static const char _ramTextReadError[] KEEP_IN_FLASH =
+  "FATAL: Could not read NanoOs_ram.bin from the SD card.\n";
+
+/// @var _ramTextBuildIdError
+///
+/// @brief Message printed when the .ramtext image on the SD card came from a
+/// different build than the flash image.
+static const char _ramTextBuildIdError[] KEEP_IN_FLASH =
+  "FATAL: NanoOs_ram.bin on the SD card is from a different build.\n";
+
+/// @fn int agonLight2LoadRamText(void)
+///
+/// @brief Read the .ramtext image from the SD card into external RAM and verify
+/// that it came from the same build as the flash image.
+///
+/// @return Returns 0 on success, -errno on failure.
+int agonLight2LoadRamText(void) {
+  SdCardSpiArgs sdCardSpiArgs = {
+    .spiCsDio   = _sdCardPinChipSelect,
+    .spiCopiDio = _spiCopiDio,
+    .spiCipoDio = _spiCipoDio,
+    .spiSckDio  = _spiSckDio,
+  };
+
+  int returnValue = sdSpiReadBlocksUnscheduled(&sdCardSpiArgs,
+    RAM_TEXT_START_BLOCK,
+    (uint32_t) (agonLight2RamTextEnd - agonLight2RamTextStart) / 512,
+    agonLight2RamTextStart);
+  // Release SPI device 0 so the SD card process can configure it again.
+  HAL->spi->init();
+  if (returnValue != 0) {
+    printString(_ramTextReadError);
+    return returnValue;
+  }
+
+  if (*((uint32_t*) agonLight2RamTextStart) != agonLight2FlashBuildId) {
+    printString(_ramTextBuildIdError);
+    return -ENOEXEC;
+  }
 
   return 0;
 }
