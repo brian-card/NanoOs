@@ -130,6 +130,13 @@ _agonLight2ConfigureUart0Impl:
     ld      a, 0x07
     out0    (UART0_FCTL), a
 
+    ;; Resetting the FIFO doesn't clear a receive interrupt latched by a byte
+    ;; that arrived before it, so acknowledge every source before enabling.
+    in0     a, (UART0_RBR)
+    in0     a, (UART0_LSR)
+    in0     a, (UART0_IIR)
+    in0     a, (UART0_MSR)
+
     ;; Assert RTS0 (MCTL bit 1) so the peer is permitted to transmit to us.
     ld      a, 0x02
     out0    (UART0_MCTL), a
@@ -309,7 +316,19 @@ uart0Isr:
 .uart0IsrCounted:
     in0     a, (UART0_LSR)
     and     0x01                ; DR - receiver data ready
-    ret     z
+    jr      nz, .uart0IsrRxLoop
+
+    ;; A receive interrupt can be latched with the FIFO empty; only a read of
+    ;; RBR acknowledges it, and without one the interrupt re-fires forever.
+    in0     a, (UART0_IIR)
+    and     0x0E
+    cp      0x04                ; receive data ready
+    jr      z, .uart0IsrStale
+    cp      0x0C                ; character timeout
+    ret     nz
+.uart0IsrStale:
+    in0     a, (UART0_RBR)
+    ret
 
 .uart0IsrRxLoop:
     in0     a, (UART0_RBR)      ; also clears DR for this byte

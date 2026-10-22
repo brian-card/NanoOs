@@ -151,6 +151,13 @@ _agonLight2ConfigureUart1Impl:
     ld      a, 0x07
     out0    (UART1_FCTL), a
 
+    ;; Resetting the FIFO doesn't clear a receive interrupt latched by a byte
+    ;; that arrived before it, so acknowledge every source before enabling.
+    in0     a, (UART1_RBR)
+    in0     a, (UART1_LSR)
+    in0     a, (UART1_IIR)
+    in0     a, (UART1_MSR)
+
     ;; Enable the receive-data-available interrupt.  The transmit-empty
     ;; interrupt stays off until the first write arms it (see
     ;; agonLight2WriteUart1Impl below) - there is nothing to send yet.
