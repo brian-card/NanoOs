@@ -57,6 +57,7 @@
 #undef _PID_T_DECLARED
 
 // NanoOs includes
+#include "../kernel/BootTrace.h"
 #include "../kernel/Console.h"
 #include "../kernel/Coroutines.h"
 #include "../kernel/MemoryManager.h"
@@ -1159,12 +1160,16 @@ int halCommonLaunchProcesses(void) {
 
   registerProcessName(_consoleProcessName, consolePid);
   int returnValue = configSysGrantHardware();
+  bootTraceValue("hardware granted", returnValue);
   int shellStatus = configSysStartShells();
+  bootTraceValue("shells started, status", shellStatus);
+  bootTraceValue("number of shells", (int) schedulerGetNumShells());
   if (shellStatus != 0) {
     returnValue = shellStatus;
   }
   // Devices must not run until their console ports and capabilities exist.
   int queueStatus = configSysQueueDevices();
+  bootTraceValue("devices queued, status", queueStatus);
   if (queueStatus != 0) {
     returnValue = queueStatus;
   }
@@ -1882,8 +1887,10 @@ int halCommonLoadConfigSys(void) {
     return -ENODEV;
   }
 
+  bootTrace("opening config.sys");
   FILE *configSys = schedFopen(_configSysPath, _configSysReadMode);
   if (configSys == NULL) {
+    bootTrace("no config.sys");
     return 0;
   }
 

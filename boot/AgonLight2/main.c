@@ -36,14 +36,23 @@
 
 #include "hal/HalAgonLight2.h"
 #include "kernel/NanoOs.h"
+#include "kernel/BootTrace.h"
 
 int main(void) {
-  if (halAgonLight2Init() != 0) {
+  int returnValue = halAgonLight2Init();
+  bootTraceValue("HAL init returned", returnValue);
+  if (returnValue != 0) {
+    bootTrace("halted: HAL init failed");
     while (true);
   }
-  if (agonLight2LoadRamText() != 0) {
+  bootTrace("loading RAM image");
+  returnValue = agonLight2LoadRamText();
+  bootTraceValue("RAM image load returned", returnValue);
+  if (returnValue != 0) {
+    bootTrace("halted: RAM image not loaded");
     while (true);
   }
+  bootTrace("starting kernel");
   nanoOsStart();
   return 0;
 }

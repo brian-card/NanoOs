@@ -40,6 +40,7 @@
 #include "NanoOs.h"
 #include "OverlayFunctions.h"
 #include "Processes.h"
+#include "BootTrace.h"
 #include "Scheduler.h"
 #include "SdCard.h"
 
@@ -5670,6 +5671,7 @@ int initializeProcesses(SchedulerState *schedulerState) {
   // Start the console by calling processResume.
   processResume(&allProcesses[consolePid - 1], NULL);
   logDebug("Started console process.\n");
+  bootTrace("console process started");
   // Put the console process on the ready queue.
   allProcesses[consolePid - 1].readyQueue
     = schedulerState->readyQueues[PRIVILEGE_LEVEL_KERNEL];
@@ -5690,6 +5692,7 @@ int initializeProcesses(SchedulerState *schedulerState) {
     }
   }
   logDebug("Started platform-specific processes\n");
+  bootTrace("platform processes started");
 
   int numConsolePorts = schedulerGetNumConsolePorts();
   if (numConsolePorts <= 0) {
@@ -5744,6 +5747,7 @@ int initializeProcesses(SchedulerState *schedulerState) {
     sizeof(memoryManagerHalCapabilities)
     / sizeof(memoryManagerHalCapabilities[0]));
   logDebug("Created all processes.\n");
+  bootTrace("all processes created");
 
   // Now that we have all the processes setup, we can fix the IPC capabilities.
   setIpcCapabilities(schedulerState);
@@ -5757,6 +5761,7 @@ int initializeProcesses(SchedulerState *schedulerState) {
     }
   }
   logDebug("Assigned console ports to memory manager.\n");
+  bootTrace("console ports assigned to memory manager");
 
   // Initialize all the kernel process file descriptors.
   for (ProcessId ii = 1; ii < schedulerState->firstUserPid; ii++) {
@@ -5784,6 +5789,7 @@ int initializeProcesses(SchedulerState *schedulerState) {
   // Get the memory manager and filesystem up and running.
   runSchedulerQueues(PRIVILEGE_LEVEL_SUPERVISOR);
   logDebug("Started memory manager and filesystem.\n");
+  bootTrace("memory manager and filesystem started");
 
   return 0;
 }
@@ -6026,10 +6032,12 @@ __attribute__((noinline)) void startScheduler(
   ProcessMessage messagesStorage[NANO_OS_NUM_MESSAGES];
   memset(messagesStorage, 0, sizeof(messagesStorage));
   logDebug("Initializing scheduler state\n");
+  bootTrace("initializing scheduler state");
   initializeSchedulerState(&schedulerState, threadStatePointer,
     messagesStorage);
 
   logDebug("Initializing processes\n");
+  bootTrace("initializing processes");
   initializeProcesses(&schedulerState);
 
   logDebug("Allocating memory for the hostname\n");
@@ -6066,6 +6074,7 @@ __attribute__((noinline)) void startScheduler(
 
   logSchedulerDebugInfo(&schedulerState);
   logDebug("Logged scheduler debug info\n");
+  bootTrace("hostname read; launching processes");
 
   HalLaunchProcessesFn launchProcesses = NULL;
   HAL->platform->launchProcesses(&launchProcesses);
@@ -6076,6 +6085,7 @@ __attribute__((noinline)) void startScheduler(
     }
   }
 
+  bootTrace("processes launched; entering scheduler loop");
   // Run our scheduler.
   ProcessQueue **readyQueuesEnd
     = schedulerState.readyQueues + SCHEDULER_NUM_READY_QUEUES;

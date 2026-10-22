@@ -48,6 +48,7 @@
 #undef __pid_t_defined
 #undef _PID_T_DECLARED
 
+#include "BootTrace.h"
 #include "Console.h"
 #include "Hal.h"
 #include "Logger.h"
@@ -1730,6 +1731,7 @@ void* runConsole(void *args) {
     port++;
   }
   consoleState.numConsolePorts = port;
+  bootTraceValue("console ports", consoleState.numConsolePorts);
 
   // Input that arrived before the callbacks were registered never notified
   // anyone, so the first pass has to service every port.

@@ -141,6 +141,8 @@ _agonLight2ConfigureUart0Impl:
 ;;    Pops one byte from the RX ring.  Returns it in HL, or -1 if the ring is
 ;;    empty.  di/ei for the same reason as agonLight2PollUart1Impl.
 _agonLight2PollUart0Impl:
+    ld      a, i                ; P/V := IEF2 (1 = interrupts were on)
+    push    af
     di
     ld      a, (uart0RxTail)
     ld      hl, uart0RxHead
@@ -156,15 +158,18 @@ _agonLight2PollUart0Impl:
     inc     a
     and     UART0_RING_MASK
     ld      (uart0RxTail), a
-    ei
 
     ld      hl, 0
     ld      l, b
-    ret
+    jr      .pollRestore
 
 .noChar:
-    ei
     ld      hl, -1
+
+.pollRestore:
+    pop     af
+    ret     po                  ; caller had interrupts off, leave them off
+    ei
     ret
 
 ;; -- size_t agonLight2ReadUart0Impl(uint8_t *data, size_t length) ---------
@@ -176,6 +181,8 @@ _agonLight2ReadUart0Impl:
     ld      ix, 0
     add     ix, sp
 
+    ld      a, i                ; P/V := IEF2 (1 = interrupts were on)
+    push    af
     di
     ld      a, (uart0RxTail)
     ld      c, a                ; c = tail
@@ -214,19 +221,21 @@ _agonLight2ReadUart0Impl:
 
     ld      a, c
     ld      (uart0RxTail), a
-    ei
 
     ex      de, hl              ; hl = one past the last byte written
     ld      de, (ix+6)
     or      a
     sbc     hl, de              ; hl = bytes copied
-    pop     ix
-    ret
+    jr      .readRestore
 
 .readEmpty:
-    ei
     ld      hl, 0
+
+.readRestore:
+    pop     af
     pop     ix
+    ret     po                  ; caller had interrupts off, leave them off
+    ei
     ret
 
 ;; -- void agonLight2WriteUart0Impl(uint8_t c) ----------------------

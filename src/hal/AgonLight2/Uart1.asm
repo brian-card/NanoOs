@@ -166,6 +166,8 @@ _agonLight2ConfigureUart1Impl:
 ;;    the whole check-and-pop so a preemption (or the ISR) can't land between
 ;;    reading which slot is next and committing the new tail.
 _agonLight2PollUart1Impl:
+    ld      a, i                ; P/V := IEF2 (1 = interrupts were on)
+    push    af
     di
     ld      a, (uart1RxTail)
     ld      hl, uart1RxHead
@@ -186,15 +188,18 @@ _agonLight2PollUart1Impl:
     inc     a
     and     UART1_RING_MASK
     ld      (uart1RxTail), a
-    ei
 
     ld      hl, 0
     ld      l, b
-    ret
+    jr      .pollRestore
 
 .rxEmpty:
-    ei
     ld      hl, -1
+
+.pollRestore:
+    pop     af
+    ret     po                  ; caller had interrupts off, leave them off
+    ei
     ret
 
 ;; -- size_t agonLight2ReadUart1Impl(uint8_t *data, size_t length) ---------
@@ -206,6 +211,8 @@ _agonLight2ReadUart1Impl:
     ld      ix, 0
     add     ix, sp
 
+    ld      a, i                ; P/V := IEF2 (1 = interrupts were on)
+    push    af
     di
     ld      a, (uart1RxTail)
     ld      c, a                ; c = tail
@@ -244,19 +251,21 @@ _agonLight2ReadUart1Impl:
 
     ld      a, c
     ld      (uart1RxTail), a
-    ei
 
     ex      de, hl              ; hl = one past the last byte written
     ld      de, (ix+6)
     or      a
     sbc     hl, de              ; hl = bytes copied
-    pop     ix
-    ret
+    jr      .readRestore
 
 .readEmpty:
-    ei
     ld      hl, 0
+
+.readRestore:
+    pop     af
     pop     ix
+    ret     po                  ; caller had interrupts off, leave them off
+    ei
     ret
 
 ;; -- void agonLight2WriteUart1Impl(uint8_t c) ------------------------------
@@ -273,11 +282,15 @@ _agonLight2ReadUart1Impl:
 ;;    only one caller (or the ISR) can be touching the ring's bookkeeping at
 ;;    a time. The di/ei must NOT wrap the retry spin below: waiting for room
 ;;    with interrupts off would starve the only thing that ever creates room
-;;    (uart1Isr draining a byte), deadlocking forever.
+;;    (uart1Isr draining a byte), deadlocking forever.  A caller that already
+;;    had interrupts off gets them back off, and its bytes are sent by polling
+;;    instead, since uart1Isr can't run for it.
 _agonLight2WriteUart1Impl:
     push    ix
     ld      ix, 0
     add     ix, sp
+    ld      a, i                ; P/V := IEF2 (1 = interrupts were on)
+    push    af
 
 .txRingWait:
     di
@@ -287,7 +300,14 @@ _agonLight2WriteUart1Impl:
     ld      hl, uart1TxTail
     cp      (hl)
     jr      nz, .txRingHasRoom  ; room - fall through still atomic
+    pop     af
+    push    af
+    jp      po, .txRingFullPolled
     ei                          ; full - let uart1Isr run and retry
+    jr      .txRingWait
+
+.txRingFullPolled:
+    call    uart1TxSendOne      ; interrupts off: no uart1Isr to make room
     jr      .txRingWait
 
 .txRingHasRoom:
@@ -311,9 +331,49 @@ _agonLight2WriteUart1Impl:
     in0     a, (UART1_IER)
     or      UART1_IER_TX_BIT
     out0    (UART1_IER), a
-    ei
 
+    pop     af
+    jp      po, .txDrainPolled
+    ei
     pop     ix
+    ret
+
+    ;; Interrupts were off on entry, so uart1Isr can't send what was queued;
+    ;; send it all now, which also makes output before enableInterrupts()
+    ;; appear immediately.
+.txDrainPolled:
+    ld      a, (uart1TxHead)
+    ld      hl, uart1TxTail
+    cp      (hl)
+    jr      z, .txDrainDone
+    call    uart1TxSendOne
+    jr      .txDrainPolled
+
+.txDrainDone:
+    pop     ix
+    ret
+
+;; -- uart1TxSendOne ----------------------------------------------------
+;;    Waits for the transmit holding register to empty, then sends the byte at
+;;    uart1TxTail and advances the tail.  Only called with interrupts off and
+;;    the ring non-empty.  Clobbers af/bc/hl.
+uart1TxSendOne:
+    in0     a, (UART1_LSR)
+    and     0x20                ; THRE - transmit holding register empty
+    jr      z, uart1TxSendOne
+
+    ld      a, (uart1TxTail)
+    ld      bc, 0               ; clears BCU too - see agonLight2PollUart1Impl
+    ld      c, a
+    ld      hl, uart1TxBuf
+    add     hl, bc
+    ld      a, (hl)
+    out0    (UART1_THR), a
+
+    ld      a, (uart1TxTail)
+    inc     a
+    and     UART1_RING_MASK
+    ld      (uart1TxTail), a
     ret
 
 ;; -- uart1Isr --------------------------------------------------------------

@@ -38,6 +38,7 @@
 
 *(.text._main)
 *(.text._agonLight2LoadRamText)
+*(.text._agonLight2TraceToScreen)
 *(.text._sdSpiReadBlocksUnscheduled)
 *(.text._sdSpiNegotiateFastBaud)
 *(.text._agonLight2ProcessStackSize)

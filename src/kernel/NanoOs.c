@@ -32,6 +32,7 @@
 #include "Console.h"
 #include "Hal.h"
 #include "Logger.h"
+#include "BootTrace.h"
 #include "NanoOs.h"
 #include "Processes.h"
 #include "Scheduler.h"
@@ -236,6 +237,7 @@ void signalCallback(void *stateData, Cocondition *cocondition) {
 ///
 /// @return This function returns no value and never returns.
 void nanoOsStart(void) {
+  bootTrace("nanoOsStart");
   // SchedulerState pointer that we will have to populate in startScheduler.
   SchedulerState *threadStatePointer = NULL;
 

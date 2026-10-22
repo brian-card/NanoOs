@@ -30,6 +30,7 @@
 /// @brief SPI implementation of the SD card logic.
 
 // Custom includes
+#include "BootTrace.h"
 #include "SdCardSpi.h"
 #include "Hal.h"
 #include "Logger.h"
@@ -621,11 +622,14 @@ int sdSpiReadBlocksUnscheduled(SdCardSpiArgs *sdCardSpiArgs,
 ) {
   SdCardState sdCardState;
   memset(&sdCardState, 0, sizeof(sdCardState));
+  bootTrace("SD card init");
   sdCardState.sdCardVersion = sdSpiCardInit(sdCardSpiArgs, &sdCardState);
+  bootTraceValue("SD card version", sdCardState.sdCardVersion);
   if (sdCardState.sdCardVersion <= 0) {
     return (sdCardState.sdCardVersion < 0) ? sdCardState.sdCardVersion : -EIO;
   }
   sdSpiNegotiateFastBaud(SD_CARD_SPI_DEVICE);
+  bootTrace("SD baud negotiated");
   sdCardState.blockSize = 512;
 
   return -sdSpiReadBlocks(&sdCardState, startBlock, numBlocks, buffer);

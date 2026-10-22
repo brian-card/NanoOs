@@ -35,6 +35,7 @@
 
 #ifdef NANO_OS_AGON_LIGHT_2
 
+#include "../kernel/BootTrace.h"
 #include "HalAgonLight2.h"
 #include "HalCommon.h"
 #include "../kernel/Commands.h"
@@ -1661,17 +1662,23 @@ int agonLight2LoadRamText(void) {
     .spiSckDio  = _spiSckDio,
   };
 
+  bootTraceValue("RAM image blocks",
+    (int) ((agonLight2RamTextEnd - agonLight2RamTextStart) / 512));
   int returnValue = sdSpiReadBlocksUnscheduled(&sdCardSpiArgs,
     RAM_TEXT_START_BLOCK,
     (uint32_t) (agonLight2RamTextEnd - agonLight2RamTextStart) / 512,
     agonLight2RamTextStart);
+  bootTraceValue("RAM image read returned", returnValue);
   // Release SPI device 0 so the SD card process can configure it again.
   HAL->spi->init();
+  bootTrace("SPI released");
   if (returnValue != 0) {
     printString(_ramTextReadError);
     return returnValue;
   }
 
+  bootTraceHex("RAM image build ID", *((uint32_t*) agonLight2RamTextStart));
+  bootTraceHex("flash build ID", agonLight2FlashBuildId);
   if (*((uint32_t*) agonLight2RamTextStart) != agonLight2FlashBuildId) {
     printString(_ramTextBuildIdError);
     return -ENOEXEC;
@@ -2132,6 +2139,28 @@ static void agonLight2VdpWrite(const uint8_t *data, size_t length) {
   }
 }
 
+/// @fn void agonLight2TraceToScreen(const char *string)
+///
+/// @brief Write a boot-trace marker to the VDP's screen, translating each
+/// newline to a carriage return and a newline, once the VDP has answered its
+/// general poll.  Lets a boot that never reaches UART1 output be followed on
+/// the screen.
+///
+/// @param string The NUL-terminated marker to write.
+///
+/// @return This function returns no value.
+void agonLight2TraceToScreen(const char *string) {
+  if (_vdpInitialized != VDP_INITIALIZED_MAGIC) {
+    return;
+  }
+  for (; *string != '\0'; string++) {
+    if (*string == '\n') {
+      agonLight2WriteUart0Impl('\r');
+    }
+    agonLight2WriteUart0Impl((uint8_t) *string);
+  }
+}
+
 /// @fn bool agonLight2VdpGeneralPoll(void)
 ///
 /// @brief Send the VDP general polls until it replies or
@@ -2302,9 +2331,14 @@ int halAgonLight2Init(void) {
       HAL->uart->configure(ii, BASE_BAUD);
     }
   }
+  bootTrace("UARTs configured");
 
   enableInterrupts();
+  bootTrace("interrupts enabled");
   agonLight2InitVdp();
+  bootTraceValue("VDP answered its poll",
+    (int) (_vdpInitialized == VDP_INITIALIZED_MAGIC));
+  bootTrace("VDP screen trace started");
 
   // Final step: verify the external-RAM integrity canary that Boot.asm stamped
   // at DATA_BSS_CANARY_ADDRESS before it copied .data.  halCommonInit() has
