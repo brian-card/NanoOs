@@ -69,7 +69,8 @@ TEST_CFLAGS   := $(BASE_CFLAGS) -Wall -Wextra
 # Test code resolves NanoOs headers as "kernel/..." / "user/..." / "hal/..."
 # through the sim/ symlink dir, exactly like the kernel sources do - never
 # via -I../src/kernel, which would shadow the system <sys/*.h>.
-TEST_INC      := -I../sim -Iframework -Iharness -Imocks
+TEST_INC      := -I../sim -Iframework -Iharness -Imocks \
+    -I../usr/src/lib/vdp.drv/include
 
 # --- sources ---------------------------------------------------------
 
@@ -114,7 +115,8 @@ SUITE_SRCS     := test_smoke test_unit_misc test_unit_strtoll test_unit_console 
                   test_kernel_fs_seek \
                   test_kernel_console_input \
                   test_kernel_exit_messages \
-                  test_kernel_kill
+                  test_kernel_kill \
+                  test_unit_vdp_text
 
 KERNEL_OBJS := $(addprefix $(OBJ_DIR)/kernel_,$(addsuffix .o,$(KERNEL_SRCS)))
 USER_OBJS   := $(addprefix $(OBJ_DIR)/user_,$(addsuffix .o,$(USER_SRCS)))
@@ -173,6 +175,11 @@ $(OBJ_DIR)/mock_%.o: mocks/%.c
 $(OBJ_DIR)/suite_%.o: suites/%.c
 	$(MKDIR) "$(OBJ_DIR)"
 	$(COMPILE) $(TEST_CFLAGS) $(TEST_INC) -c $< -o $@
+
+# This suite compiles the VDP driver's translator source directly.
+$(OBJ_DIR)/suite_test_unit_vdp_text.o: \
+    ../usr/src/lib/vdp.drv/main/VdpText.c \
+    ../usr/src/lib/vdp.drv/include/VdpText.h
 
 clean:
 	$(RM) obj obj-asan $(BIN_DIR)
