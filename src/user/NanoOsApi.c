@@ -128,6 +128,7 @@ const NanoOsExecutiveApi nanoOsExecutiveApi = {
   .comessageQueueWaitForType = comessageQueueWaitForType,
 
   // Kernel IPC functions:
+  .getAvailableMessage = getAvailableMessage,
   .sendProcessMessageToPid = sendProcessMessageToPid,
 };
 

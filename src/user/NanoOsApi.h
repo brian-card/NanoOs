@@ -126,6 +126,7 @@ typedef struct NanoOsExecutiveApi {
   msg_t* (*comessageQueueWaitForType)(int64_t type, const struct timespec *ts);
 
   // Kernel IPC functions:
+  msg_t* (*getAvailableMessage)(void);
   int (*sendProcessMessageToPid)(unsigned int pid, msg_t *message);
 } NanoOsExecutiveApi;
 

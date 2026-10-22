@@ -431,6 +431,19 @@ static inline ProcessMessage* processMessageQueueWait(struct timespec *ts) {
   return NULL;
 }
 
+/// @fn static inline ProcessMessage* getAvailableMessage(void)
+///
+/// @brief Get a ProcessMessage that isn't in use and mark it in use.
+///
+/// @return Returns a pointer to the ProcessMessage on success, NULL if none is
+/// available.
+static inline ProcessMessage* getAvailableMessage(void) {
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return overlayMap.header.osApi->executiveApi->getAvailableMessage();
+  }
+  return NULL;
+}
+
 /// @fn static inline int sendProcessMessageToPid(
 ///   unsigned int pid, ProcessMessage *message)
 ///
