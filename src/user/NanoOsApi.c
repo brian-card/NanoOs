@@ -52,6 +52,7 @@ char** parseArgs(char *command, int *argc);
 #include "../kernel/OverlayFunctions.h"
 #include "../kernel/Scheduler.h"
 #include "../kernel/Processes.h"
+#include "../hal/HalCommon.h"
 #include "NanoOsFcntl.h"
 #include "NanoOsLibC.h"
 #include "NanoOsPwd.h"
@@ -130,6 +131,7 @@ const NanoOsExecutiveApi nanoOsExecutiveApi = {
   // Kernel IPC functions:
   .getAvailableMessage = getAvailableMessage,
   .sendProcessMessageToPid = sendProcessMessageToPid,
+  .findProcessByName = findProcessByName,
 };
 
 KEEP_IN_FLASH

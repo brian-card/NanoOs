@@ -128,6 +128,7 @@ typedef struct NanoOsExecutiveApi {
   // Kernel IPC functions:
   msg_t* (*getAvailableMessage)(void);
   int (*sendProcessMessageToPid)(unsigned int pid, msg_t *message);
+  int (*findProcessByName)(const char *name, uint8_t *returnValue);
 } NanoOsExecutiveApi;
 
 typedef struct NanoOsUserApi {

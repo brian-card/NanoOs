@@ -431,6 +431,24 @@ static inline ProcessMessage* processMessageQueueWait(struct timespec *ts) {
   return NULL;
 }
 
+/// @fn static inline int findProcessByName(
+///   const char *name, ProcessId *returnValue)
+///
+/// @brief Look up a system process's PID by the name it was registered under.
+///
+/// @param name The name to search for.
+/// @param returnValue A pointer to a ProcessId that will hold the result on
+///   success.
+///
+/// @return Returns 0 on success, -errno on failure.
+static inline int findProcessByName(const char *name, ProcessId *returnValue) {
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return overlayMap.header.osApi->executiveApi->findProcessByName(
+      name, returnValue);
+  }
+  return -1;
+}
+
 /// @fn static inline ProcessMessage* getAvailableMessage(void)
 ///
 /// @brief Get a ProcessMessage that isn't in use and mark it in use.
