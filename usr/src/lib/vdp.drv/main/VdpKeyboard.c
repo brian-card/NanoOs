@@ -97,8 +97,8 @@ bool vdpParseByte(VdpPacketParser *parser, uint8_t byte) {
   }
 
   if ((parser->command == VDP_PACKET_GENERAL_POLL) && ((byte & 0x80) != 0)) {
-    // A poll reply's data is the cookie, which NanoOs keeps below 0x80, so
-    // this is the header of the next packet and the reply lost its cookie.
+    // VDP_GENERAL_POLL_COOKIE is below 0x80, so this is the header of the
+    // next packet and the reply lost its cookie.
     parser->state = VDP_PACKET_STATE_HEADER;
     return vdpParseByte(parser, byte);
   }
@@ -197,4 +197,20 @@ size_t vdpTranslateKey(const uint8_t *keyData, uint8_t *output) {
   }
 
   return 0;
+}
+
+/// @fn bool vdpIsPollReply(const VdpPacketParser *parser)
+///
+/// @brief Determine whether the packet a parser just completed is the VDP's
+/// reply to the driver's general poll.
+///
+/// @param parser A pointer to the VdpPacketParser whose vdpParseByte call
+///   just returned true.
+///
+/// @return Returns true if the packet is a poll reply carrying
+/// VDP_GENERAL_POLL_COOKIE, false otherwise.
+bool vdpIsPollReply(const VdpPacketParser *parser) {
+  return (parser->command == VDP_PACKET_GENERAL_POLL)
+    && (parser->length == 1)
+    && (parser->data[0] == VDP_GENERAL_POLL_COOKIE);
 }

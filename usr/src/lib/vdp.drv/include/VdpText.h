@@ -45,6 +45,22 @@ extern "C"
 /// @brief The most VDU bytes a single character of text translates to.
 #define VDP_TEXT_MAX_EXPANSION 8
 
+/// @def VDP_OUTPUT_BUFFER_SIZE
+///
+/// @brief The number of VDU bytes kept for the VDP until it is listening.
+#define VDP_OUTPUT_BUFFER_SIZE 256
+
+/// @struct VdpOutputBuffer
+///
+/// @brief The most recent VDU bytes written before the VDP was listening.
+///
+/// @param length The number of bytes in data.
+/// @param data The bytes, oldest first.
+typedef struct VdpOutputBuffer {
+  uint16_t length;
+  uint8_t  data[VDP_OUTPUT_BUFFER_SIZE];
+} VdpOutputBuffer;
+
 /// @struct VdpTextState
 ///
 /// @brief Translation state carried from one piece of text to the next.
@@ -57,6 +73,8 @@ typedef struct VdpTextState {
 
 size_t vdpTranslateText(VdpTextState *state, const char **text,
   uint8_t *output, size_t outputSize);
+void vdpBufferOutput(VdpOutputBuffer *buffer,
+  const uint8_t *data, size_t length);
 
 #ifdef __cplusplus
 } // extern "C"

@@ -228,3 +228,43 @@ NANO_OS_TEST(unit_vdp_keyboard, implausible_lengths_do_not_swallow_keys) {
   NANO_OS_ASSERT_EQ_INT('a', keys[0]);
   NANO_OS_ASSERT_EQ_INT('b', keys[1]);
 }
+
+NANO_OS_TEST(unit_vdp_keyboard, poll_reply_with_cookie_is_recognized) {
+  VdpPacketParser parser;
+  memset(&parser, 0, sizeof(parser));
+  const uint8_t reply[] = { 0x80, 0x01, VDP_GENERAL_POLL_COOKIE };
+
+  NANO_OS_ASSERT_EQ_INT(2, feed(&parser, reply, sizeof(reply)));
+  NANO_OS_ASSERT_TRUE(vdpIsPollReply(&parser));
+}
+
+NANO_OS_TEST(unit_vdp_keyboard, poll_reply_with_another_cookie_is_not_ours) {
+  VdpPacketParser parser;
+  memset(&parser, 0, sizeof(parser));
+  const uint8_t reply[] = { 0x80, 0x01, VDP_GENERAL_POLL_COOKIE + 1 };
+
+  NANO_OS_ASSERT_EQ_INT(2, feed(&parser, reply, sizeof(reply)));
+  NANO_OS_ASSERT_FALSE(vdpIsPollReply(&parser));
+}
+
+NANO_OS_TEST(unit_vdp_keyboard, key_carrying_the_cookie_is_not_a_poll_reply) {
+  VdpPacketParser parser;
+  memset(&parser, 0, sizeof(parser));
+  const uint8_t packet[] = { 0x81, 0x04, VDP_GENERAL_POLL_COOKIE, 0, 0, 1 };
+
+  NANO_OS_ASSERT_EQ_INT(5, feed(&parser, packet, sizeof(packet)));
+  NANO_OS_ASSERT_FALSE(vdpIsPollReply(&parser));
+}
+
+NANO_OS_TEST(unit_vdp_keyboard, cookie_stays_below_the_header_bit) {
+  NANO_OS_ASSERT_TRUE(VDP_GENERAL_POLL_COOKIE < 0x80);
+}
+
+NANO_OS_TEST(unit_vdp_keyboard, other_command_carrying_the_cookie_is_not_ours) {
+  VdpPacketParser parser;
+  memset(&parser, 0, sizeof(parser));
+  const uint8_t packet[] = { 0x82, 0x01, VDP_GENERAL_POLL_COOKIE };
+
+  NANO_OS_ASSERT_EQ_INT(2, feed(&parser, packet, sizeof(packet)));
+  NANO_OS_ASSERT_FALSE(vdpIsPollReply(&parser));
+}

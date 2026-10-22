@@ -36,20 +36,17 @@
 
 #ifdef NANO_OS_AGON_LIGHT_2
 
-void agonLight2TraceToScreen(const char *string);
 void agonLight2TraceString(const char *string);
 void agonLight2TraceValue(
   const char *text, unsigned long value, unsigned int base);
 
 /// @def bootTrace
 ///
-/// @brief Print a boot-stage marker on UART1, by polling, and on the screen
-/// once the VDP has answered its general poll.
+/// @brief Print a boot-stage marker on UART1, by polling.
 #define bootTrace(text) \
   do { \
     static const char _bootTraceText[] KEEP_IN_FLASH = "[boot] " text "\n"; \
     agonLight2TraceString(_bootTraceText); \
-    agonLight2TraceToScreen(_bootTraceText); \
   } while (0)
 
 /// @def bootTraceValue

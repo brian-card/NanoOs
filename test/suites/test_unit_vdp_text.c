@@ -112,3 +112,46 @@ NANO_OS_TEST(unit_vdp_text, minimum_buffer_translates_everything) {
     translateAll(&state, text, output, VDP_TEXT_MAX_EXPANSION));
   NANO_OS_ASSERT_TRUE(memcmp(output, "               x\r\ny", 19) == 0);
 }
+
+NANO_OS_TEST(unit_vdp_text, buffered_output_is_appended_in_order) {
+  VdpOutputBuffer buffer = { .length = 0 };
+
+  vdpBufferOutput(&buffer, (const uint8_t*) "abc", 3);
+  vdpBufferOutput(&buffer, (const uint8_t*) "de", 2);
+
+  NANO_OS_ASSERT_EQ_INT(5, buffer.length);
+  NANO_OS_ASSERT_TRUE(memcmp(buffer.data, "abcde", 5) == 0);
+}
+
+NANO_OS_TEST(unit_vdp_text, full_buffer_drops_its_oldest_bytes) {
+  VdpOutputBuffer buffer = { .length = 0 };
+  uint8_t fill[VDP_OUTPUT_BUFFER_SIZE - 2];
+  memset(fill, 'x', sizeof(fill));
+  fill[0] = 'a';
+  fill[1] = 'b';
+  fill[2] = 'c';
+
+  vdpBufferOutput(&buffer, fill, sizeof(fill));
+  vdpBufferOutput(&buffer, (const uint8_t*) "1234", 4);
+
+  NANO_OS_ASSERT_EQ_INT(VDP_OUTPUT_BUFFER_SIZE, buffer.length);
+  NANO_OS_ASSERT_EQ_INT('c', buffer.data[0]);
+  NANO_OS_ASSERT_EQ_INT('x', buffer.data[1]);
+  NANO_OS_ASSERT_TRUE(
+    memcmp(&buffer.data[VDP_OUTPUT_BUFFER_SIZE - 4], "1234", 4) == 0);
+}
+
+NANO_OS_TEST(unit_vdp_text, oversized_write_keeps_its_last_bytes) {
+  VdpOutputBuffer buffer = { .length = 0 };
+  uint8_t big[VDP_OUTPUT_BUFFER_SIZE + 10];
+  for (size_t ii = 0; ii < sizeof(big); ii++) {
+    big[ii] = (uint8_t) ii;
+  }
+  vdpBufferOutput(&buffer, (const uint8_t*) "old", 3);
+
+  vdpBufferOutput(&buffer, big, sizeof(big));
+
+  NANO_OS_ASSERT_EQ_INT(VDP_OUTPUT_BUFFER_SIZE, buffer.length);
+  NANO_OS_ASSERT_TRUE(
+    memcmp(buffer.data, &big[10], VDP_OUTPUT_BUFFER_SIZE) == 0);
+}

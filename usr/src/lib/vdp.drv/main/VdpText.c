@@ -29,6 +29,8 @@
 /// @brief Translation of console text into the VDU byte stream the Agon
 /// Light 2 VDP draws.
 
+#include <string.h>
+
 #include "VdpText.h"
 
 /// @fn size_t vdpTranslateText(VdpTextState *state, const char **text,
@@ -87,4 +89,31 @@ size_t vdpTranslateText(VdpTextState *state, const char **text,
   }
 
   return length;
+}
+
+/// @fn void vdpBufferOutput(VdpOutputBuffer *buffer,
+///   const uint8_t *data, size_t length)
+///
+/// @brief Append VDU bytes to a VdpOutputBuffer, dropping its oldest bytes
+/// when there isn't room for all of them.
+///
+/// @param buffer A pointer to the VdpOutputBuffer.
+/// @param data The bytes to append.
+/// @param length The number of bytes in data.
+///
+/// @return This function returns no value.
+void vdpBufferOutput(VdpOutputBuffer *buffer,
+  const uint8_t *data, size_t length
+) {
+  if (length >= VDP_OUTPUT_BUFFER_SIZE) {
+    data += length - VDP_OUTPUT_BUFFER_SIZE;
+    length = VDP_OUTPUT_BUFFER_SIZE;
+    buffer->length = 0;
+  } else if (buffer->length + length > VDP_OUTPUT_BUFFER_SIZE) {
+    size_t drop = buffer->length + length - VDP_OUTPUT_BUFFER_SIZE;
+    buffer->length -= (uint16_t) drop;
+    memmove(buffer->data, &buffer->data[drop], buffer->length);
+  }
+  memcpy(&buffer->data[buffer->length], data, length);
+  buffer->length += (uint16_t) length;
 }

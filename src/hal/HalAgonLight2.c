@@ -2077,96 +2077,6 @@ static uint32_t agonLight2BlockDevicesOnline[] = { 0x00000000 };
 // Platform init
 // ---------------------------------------------------------------------------
 
-/// @def VDP_INITIALIZED_MAGIC
-///
-/// @brief Value of _vdpInitialized once the VDP has answered a general poll.
-/// A magic word rather than a bool because external RAM powers up with
-/// arbitrary contents.  This is the string "VDP0" expressed as a 32-bit,
-/// little-endian value.
-#define VDP_INITIALIZED_MAGIC ((uint32_t) 0x30504456)
-
-/// @var _vdpInitialized
-///
-/// @brief Whether the VDP has completed its startup handshake.  Lives in
-/// .persistent so it survives a soft reset of the eZ80, which does not reset
-/// the VDP; agonLight2InitVdp only trusts it after a soft reset.  volatile
-/// because its value predates this boot; without it the compiler shrinks the
-/// variable to a single bit.
-static volatile uint32_t _vdpInitialized
-  __attribute__((section(".persistent")));
-
-/// @def VDP_GENERAL_POLL_COOKIE
-///
-/// @brief Byte sent in the general poll, which the VDP echoes in its reply.
-/// This is ASCII character 'N' for "NanoOs".  It must stay below 0x80:
-/// vdp.drv's packet parser reads a reply byte with the high bit set as the
-/// next packet's header.
-#define VDP_GENERAL_POLL_COOKIE 0x4e
-
-/// @def VDP_GENERAL_POLL_RETRY_NS
-///
-/// @brief How long to wait for a reply before resending the general poll.
-/// The VDP answers every poll it queued while starting up, so a short retry
-/// floods UART0 with replies once it's ready.
-#define VDP_GENERAL_POLL_RETRY_NS ((int64_t) 500000000)
-
-/// @def VDP_GENERAL_POLL_TIMEOUT_NS
-///
-/// @brief How long to keep polling the VDP before giving up on it.  A VDP
-/// powering up alongside the eZ80 takes more than 5 seconds to listen.
-#define VDP_GENERAL_POLL_TIMEOUT_NS ((int64_t) 15000000000LL)
-
-/// @var _vdpGeneralPoll
-///
-/// @brief VDU 23,0,&80,cookie: the general poll the VDP waits for after a cold
-/// boot before it will process any other output.
-static const uint8_t _vdpGeneralPoll[] KEEP_IN_FLASH = {
-  23, 0, 0x80, VDP_GENERAL_POLL_COOKIE
-};
-
-/// @var _vdpGeneralPollReply
-///
-/// @brief The packet the VDP sends back in response to _vdpGeneralPoll.
-static const uint8_t _vdpGeneralPollReply[] KEEP_IN_FLASH = {
-  0x80, 0x01, VDP_GENERAL_POLL_COOKIE
-};
-
-/// @fn void agonLight2VdpWrite(const uint8_t *data, size_t length)
-///
-/// @brief Write raw bytes to the VDP over UART0.
-///
-/// @param data The bytes to write.
-/// @param length The number of bytes in data.
-///
-/// @return This function returns no value.
-static void agonLight2VdpWrite(const uint8_t *data, size_t length) {
-  for (size_t ii = 0; ii < length; ii++) {
-    agonLight2WriteUart0Impl(data[ii]);
-  }
-}
-
-/// @fn void agonLight2TraceToScreen(const char *string)
-///
-/// @brief Write a boot-trace marker to the VDP's screen, translating each
-/// newline to a carriage return and a newline, once the VDP has answered its
-/// general poll.  Lets a boot that never reaches UART1 output be followed on
-/// the screen.
-///
-/// @param string The NUL-terminated marker to write.
-///
-/// @return This function returns no value.
-void agonLight2TraceToScreen(const char *string) {
-  if (_vdpInitialized != VDP_INITIALIZED_MAGIC) {
-    return;
-  }
-  for (; *string != '\0'; string++) {
-    if (*string == '\n') {
-      agonLight2WriteUart0Impl('\r');
-    }
-    agonLight2WriteUart0Impl((uint8_t) *string);
-  }
-}
-
 extern void agonLight2WriteUart1PolledImpl(uint8_t c);
 
 /// @fn void agonLight2TraceString(const char *string)
@@ -2191,7 +2101,7 @@ void agonLight2TraceString(const char *string) {
 ///   const char *text, unsigned long value, unsigned int base)
 ///
 /// @brief Write a boot-trace marker followed by a number and a newline to
-/// UART1 by polling, and to the screen once the VDP has answered its poll.
+/// UART1 by polling.
 ///
 /// @param text The NUL-terminated marker text.
 /// @param value The number to write.
@@ -2220,8 +2130,6 @@ void agonLight2TraceValue(
 
   agonLight2TraceString(text);
   agonLight2TraceString(number);
-  agonLight2TraceToScreen(text);
-  agonLight2TraceToScreen(number);
 }
 
 /// @fn void agonLight2TraceInterrupt(int code)
@@ -2276,80 +2184,6 @@ void agonLight2TraceUartState(int code, int ier, int iir, int lsr, int msr) {
 void agonLight2TraceUart0Stale(int byte) {
   static const char _text[] KEEP_IN_FLASH = "[boot] U0 stale ack read 0x";
   agonLight2TraceValue(_text, (unsigned long) byte, 16);
-}
-
-/// @fn bool agonLight2VdpGeneralPoll(void)
-///
-/// @brief Send the VDP general polls until it replies or
-/// VDP_GENERAL_POLL_TIMEOUT_NS elapses.
-///
-/// @return Returns true if the VDP replied, false if it did not.
-static bool agonLight2VdpGeneralPoll(void) {
-  int64_t startNs = 0;
-  int64_t nowNs = 0;
-  int64_t lastSendNs = 0;
-  size_t matched = 0;
-
-  readClock(&startNs);
-  lastSendNs = startNs;
-  agonLight2VdpWrite(_vdpGeneralPoll, sizeof(_vdpGeneralPoll));
-
-  for (nowNs = startNs;
-    nowNs - startNs < VDP_GENERAL_POLL_TIMEOUT_NS;
-    readClock(&nowNs)
-  ) {
-    int byte = agonLight2PollUart0Impl();
-    if (byte >= 0) {
-      if (byte == _vdpGeneralPollReply[matched]) {
-        matched++;
-        if (matched == sizeof(_vdpGeneralPollReply)) {
-          return true;
-        }
-      } else {
-        matched = 0;
-        if (byte == _vdpGeneralPollReply[0]) {
-          matched = 1;
-        }
-      }
-    } else if (nowNs - lastSendNs >= VDP_GENERAL_POLL_RETRY_NS) {
-      lastSendNs = nowNs;
-      agonLight2VdpWrite(_vdpGeneralPoll, sizeof(_vdpGeneralPoll));
-    }
-  }
-
-  return false;
-}
-
-/// @def WDT_CTL_PORT
-///
-/// @brief I/O address of the eZ80F92 watchdog control register.
-#define WDT_CTL_PORT 0x93
-
-/// @def WDT_CTL_RST_FLAG
-///
-/// @brief WDT_CTL bit that is set when the last reset was a watchdog timeout
-/// and clear after an external reset or power-on.
-#define WDT_CTL_RST_FLAG 0x20
-
-/// @fn void agonLight2InitVdp(void)
-///
-/// @brief Complete the VDP's startup handshake unless this boot is a watchdog
-/// reset (NanoOs's soft reset, which leaves the VDP running) that followed a
-/// completed handshake.  The reset button and power-on reboot the VDP too, so
-/// they always handshake.
-///
-/// @return This function returns no value.
-static void agonLight2InitVdp(void) {
-  bool softReset
-    = (agonLight2ReadPort(WDT_CTL_PORT) & WDT_CTL_RST_FLAG) != 0;
-  bootTraceValue("soft reset", (int) softReset);
-  if ((softReset == false) || (_vdpInitialized != VDP_INITIALIZED_MAGIC)) {
-    _vdpInitialized = 0;
-    if (agonLight2VdpGeneralPoll() == false) {
-      return;
-    }
-    _vdpInitialized = VDP_INITIALIZED_MAGIC;
-  }
 }
 
 /// @var _dataBssCanaryError
@@ -2469,10 +2303,6 @@ int halAgonLight2Init(void) {
 
   enableInterrupts();
   bootTrace("interrupts enabled");
-  agonLight2InitVdp();
-  bootTraceValue("VDP answered its poll",
-    (int) (_vdpInitialized == VDP_INITIALIZED_MAGIC));
-  bootTrace("VDP screen trace started");
 
   // Final step: verify the external-RAM integrity canary that Boot.asm stamped
   // at DATA_BSS_CANARY_ADDRESS before it copied .data.  halCommonInit() has

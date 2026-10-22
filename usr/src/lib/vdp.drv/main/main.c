@@ -29,6 +29,7 @@
 ///
 /// @brief Entrypoint into the Agon Light 2 VDP driver process.
 
+#include <stdlib.h>
 #include <string.h>
 
 #include "ExecutiveProcesses.h"
@@ -64,6 +65,19 @@
 /// driver when it marks one done.
 #define VDP_POLL_NS 10000000L
 
+/// @def VDP_GENERAL_POLL_RETRY_NS
+///
+/// @brief How often, in nanoseconds, the general poll is resent until the VDP
+/// answers.  A VDP that has just been powered on ignores everything for
+/// several seconds.
+#define VDP_GENERAL_POLL_RETRY_NS 500000000LL
+
+/// @def VDP_GENERAL_POLL_TIMEOUT_NS
+///
+/// @brief How long, in nanoseconds, to wait for the VDP to answer the general
+/// poll before writing to it anyway.
+#define VDP_GENERAL_POLL_TIMEOUT_NS 15000000000LL
+
 /// @struct VdpInput
 ///
 /// @brief State of the keyboard input the driver forwards to the console.
@@ -83,6 +97,7 @@
 /// @param pendingLength The number of bytes in pending.
 /// @param pending The translations of the keys not yet sent to the console,
 ///   each preceded by its length so that no key is split between messages.
+/// @param pollAnswered Whether the VDP has replied to the general poll.
 typedef struct VdpInput {
   ProcessId                    consolePid;
   int                          portId;
@@ -93,13 +108,41 @@ typedef struct VdpInput {
   VdpPacketParser              parser;
   uint8_t                      pendingLength;
   uint8_t                      pending[VDP_PENDING_SIZE];
+  bool                         pollAnswered;
 } VdpInput;
+
+/// @struct VdpOutput
+///
+/// @brief State of the output the driver draws on the VDP.  Kept on main's
+/// stack for the same reason as VdpInput.
+///
+/// @param textState The state of the translation of the console's text.
+/// @param listening Whether the VDP is drawing what the driver writes.  The
+///   VDP ignores everything until it has answered a general poll.
+/// @param nextPollNs When to send the next general poll, in nanoseconds.
+/// @param giveUpNs When to stop waiting for the VDP to answer, in nanoseconds.
+/// @param buffer The output written while the VDP wasn't listening, or NULL.
+typedef struct VdpOutput {
+  VdpTextState     textState;
+  bool             listening;
+  int64_t          nextPollNs;
+  int64_t          giveUpNs;
+  VdpOutputBuffer *buffer;
+} VdpOutput;
 
 /// @var _vdpScreenSetup
 ///
-/// @brief VDU commands sent once at startup: clear the screen (VDU 12) and
-/// turn the text cursor on (VDU 23,1,1).
+/// @brief VDU commands sent once the VDP is listening: clear the screen
+/// (VDU 12) and turn the text cursor on (VDU 23,1,1).
 static const uint8_t _vdpScreenSetup[] = { 12, 23, 1, 1 };
+
+/// @var _vdpGeneralPoll
+///
+/// @brief The general poll (VDU 23,0,&80,cookie), which the VDP answers with
+/// a packet carrying the cookie.
+static const uint8_t _vdpGeneralPoll[] = {
+  23, 0, 0x80, VDP_GENERAL_POLL_COOKIE
+};
 
 /// @fn static void vdpWrite(const uint8_t *data, size_t length)
 ///
@@ -113,19 +156,68 @@ static void vdpWrite(const uint8_t *data, size_t length) {
   getHal()->uart->write(VDP_UART, data, (ssize_t) length, NULL);
 }
 
-/// @fn static void vdpWriteText(VdpTextState *state, const char *text)
+/// @fn static int64_t vdpNowNs(void)
 ///
-/// @brief Draw a string of console text on the VDP.
+/// @brief Get the current time in nanoseconds.
 ///
-/// @param state A pointer to the VdpTextState of the console's text.
+/// @return Returns the current time in nanoseconds.
+static int64_t vdpNowNs(void) {
+  struct timespec now;
+  overlayMap.header.osApi->userApi->nanoOsTimespec_get(&now, TIME_UTC);
+  return (((int64_t) now.tv_sec) * 1000000000LL) + now.tv_nsec;
+}
+
+/// @fn static void vdpWriteText(VdpOutput *vdpOutput, const char *text)
+///
+/// @brief Draw a string of console text on the VDP, or buffer it if the VDP
+/// isn't listening yet.
+///
+/// @param vdpOutput A pointer to the driver's VdpOutput.
 /// @param text The NUL-terminated string to draw.
 ///
 /// @return This function returns no value.
-static void vdpWriteText(VdpTextState *state, const char *text) {
+static void vdpWriteText(VdpOutput *vdpOutput, const char *text) {
   uint8_t output[4 * VDP_TEXT_MAX_EXPANSION];
   while (*text != '\0') {
-    size_t length = vdpTranslateText(state, &text, output, sizeof(output));
-    vdpWrite(output, length);
+    size_t length = vdpTranslateText(
+      &vdpOutput->textState, &text, output, sizeof(output));
+    if (vdpOutput->listening == true) {
+      vdpWrite(output, length);
+    } else if (vdpOutput->buffer != NULL) {
+      vdpBufferOutput(vdpOutput->buffer, output, length);
+    }
+  }
+}
+
+/// @fn static void vdpHandshake(VdpOutput *vdpOutput, VdpInput *input)
+///
+/// @brief Send the general poll until the VDP answers it or the wait times
+/// out, then set up the screen and draw the buffered output.
+///
+/// @param vdpOutput A pointer to the driver's VdpOutput.
+/// @param input A pointer to the driver's VdpInput.
+///
+/// @return This function returns no value.
+static void vdpHandshake(VdpOutput *vdpOutput, VdpInput *input) {
+  if (vdpOutput->listening == true) {
+    return;
+  }
+
+  int64_t now = vdpNowNs();
+  if ((input->pollAnswered == false) && (now < vdpOutput->giveUpNs)) {
+    if (now >= vdpOutput->nextPollNs) {
+      vdpWrite(_vdpGeneralPoll, sizeof(_vdpGeneralPoll));
+      vdpOutput->nextPollNs = now + VDP_GENERAL_POLL_RETRY_NS;
+    }
+    return;
+  }
+
+  vdpOutput->listening = true;
+  vdpWrite(_vdpScreenSetup, sizeof(_vdpScreenSetup));
+  if (vdpOutput->buffer != NULL) {
+    vdpWrite(vdpOutput->buffer->data, vdpOutput->buffer->length);
+    free(vdpOutput->buffer);
+    vdpOutput->buffer = NULL;
   }
 }
 
@@ -179,8 +271,14 @@ static void vdpReadKeyboard(VdpInput *input) {
     && (numBytes > 0)
   ) {
     for (ssize_t ii = 0; ii < numBytes; ii++) {
-      if ((vdpParseByte(&input->parser, bytes[ii]) == false)
-        || (input->parser.command != VDP_PACKET_KEYBOARD)
+      if (vdpParseByte(&input->parser, bytes[ii]) == false) {
+        continue;
+      }
+      if (vdpIsPollReply(&input->parser) == true) {
+        input->pollAnswered = true;
+        continue;
+      }
+      if ((input->parser.command != VDP_PACKET_KEYBOARD)
         || (input->parser.length != 4)
       ) {
         continue;
@@ -263,33 +361,43 @@ static void vdpSendInput(VdpInput *input) {
 int main(int argc, char **argv) {
   (void) argc;
   (void) argv;
-  VdpTextState textState = { .column = 0 };
   VdpInput input;
   memset(&input, 0, sizeof(input));
   input.portId = -1;
+  VdpOutput vdpOutput;
+  memset(&vdpOutput, 0, sizeof(vdpOutput));
+  vdpOutput.giveUpNs = vdpNowNs() + VDP_GENERAL_POLL_TIMEOUT_NS;
+  vdpOutput.buffer = (VdpOutputBuffer*) malloc(sizeof(VdpOutputBuffer));
+  if (vdpOutput.buffer != NULL) {
+    vdpOutput.buffer->length = 0;
+  }
 
-  vdpWrite(_vdpScreenSetup, sizeof(_vdpScreenSetup));
   getHal()->uart->registerCallback(VDP_UART, getRunningProcess(),
     VDP_DRIVER_SIGNATURE | VDP_UART_INPUT, NULL);
   // Bytes that arrived before the callback was registered notified no one.
   vdpReadKeyboard(&input);
 
   while (1) {
+    vdpHandshake(&vdpOutput, &input);
     vdpRequestPort(&input);
     vdpSendInput(&input);
 
-    struct timespec deadline;
-    struct timespec *timeout = NULL;
+    int64_t deadlineNs = INT64_MAX;
     if ((input.portMessage != NULL) || (input.inputMessage != NULL)
       || (input.pendingLength > 0)
     ) {
-      overlayMap.header.osApi->userApi->nanoOsTimespec_get(
-        &deadline, TIME_UTC);
-      deadline.tv_nsec += VDP_POLL_NS;
-      if (deadline.tv_nsec >= 1000000000L) {
-        deadline.tv_sec++;
-        deadline.tv_nsec -= 1000000000L;
-      }
+      deadlineNs = vdpNowNs() + VDP_POLL_NS;
+    }
+    if ((vdpOutput.listening == false)
+      && (vdpOutput.nextPollNs < deadlineNs)
+    ) {
+      deadlineNs = vdpOutput.nextPollNs;
+    }
+    struct timespec deadline;
+    struct timespec *timeout = NULL;
+    if (deadlineNs != INT64_MAX) {
+      deadline.tv_sec = (time_t) (deadlineNs / 1000000000LL);
+      deadline.tv_nsec = (long) (deadlineNs % 1000000000LL);
       timeout = &deadline;
     }
 
@@ -299,7 +407,7 @@ int main(int argc, char **argv) {
     }
     int64_t type = processMessageType(processMessage);
     if (type == (CONSOLE_COMMAND_SIGNATURE | CONSOLE_WRITE_BUFFER)) {
-      vdpWriteText(&textState,
+      vdpWriteText(&vdpOutput,
         (const char*) processMessageData(processMessage));
     } else if (type == (VDP_DRIVER_SIGNATURE | VDP_UART_INPUT)) {
       vdpReadKeyboard(&input);

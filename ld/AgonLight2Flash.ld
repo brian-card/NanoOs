@@ -38,7 +38,6 @@
 
 *(.text._main)
 *(.text._agonLight2LoadRamText)
-*(.text._agonLight2TraceToScreen)
 *(.text._agonLight2TraceString)
 *(.text._agonLight2TraceValue)
 *(.text._agonLight2TraceInterrupt)
@@ -118,7 +117,6 @@
 *(.text._agonLight2ProcessErrorNumbers)
 *(.text._agonLight2ProcessStorage)
 *(.text._halAgonLight2Init)
-*(.text._agonLight2VdpWrite)
 *(.text._callHal)
 *(.text._halPlatformCallFileOverlay)
 *(.text._halPlatformExecCommand)
