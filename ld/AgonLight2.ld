@@ -15,22 +15,30 @@
  *                                Executed / read in place; read-only at runtime.
  *   ext RAM 0x040000..0x0BFFFF   512 KB external SRAM:
  *            0x040000..0x04FFFF  64 KB  contiguous filesystem image window
- *            0x050000..0x0517FF  6 KB   .bss then .data  (see HalAgonLight2.c
+ *            0x050000..0x051FFF  8 KB   .bss then .data  (see HalAgonLight2.c
  *                                       DATA_BSS_REGION_ADDRESS / _SIZE)
- *            0x051800            8-byte data/bss integrity canary, then the heap
+ *            0x052000            8-byte data/bss integrity canary
+ *            0x052008            .ramtext, loaded from the SD card at boot
  *            ..0x0BFFFF          heap (grows up) toward the stack at 0x0C0000
  *   int RAM 0xFFE000..0xFFFFFF   8 KB on-chip SRAM, mapped by Boot.asm; the
  *                                overlay window (OVERLAY_ADDRESS).
  *
  * .data has its VMA in external SRAM and its LMA in flash immediately after
  * .text; boot/AgonLight2/Boot.asm copies it across at startup, before it zeroes
- * .bss.  .bss is emitted *before* .data so that overrunning the 4 KB
+ * .bss.  .bss is emitted *before* .data so that overrunning the 8 KB
  * reservation is caught both here (ASSERT below) and at run time: Boot.asm
  * stamps a known pattern at __data_bss_limit before the copy and
  * halAgonLight2Init() rechecks it as its final step.
  *
  * .rodata is placed last in flash so `objcopy -O binary -R .rodata` truncates
  * the shipped image rather than leaving a zero-filled hole.
+ *
+ * Only the functions named in AgonLight2Flash.ld are linked into flash; every
+ * other function falls through to .ramtext, which runs from external SRAM.
+ * Its load image follows .rodata and ships as NanoOs_ram.bin, which
+ * agonLight2LoadRamText() reads off the SD card before nanoOsStart() runs.
+ * Both images carry the same random __nanoOsBuildId (passed with --defsym), so
+ * a RAM image left over from another build is refused rather than run.
  *
  * Symbol contracts with Boot.asm:
  *   __bss_start, __bss_size                      — BSS-zero loop
@@ -54,10 +62,10 @@ MEMORY
 
 SECTIONS
 {
-  /* 6 KB into the .bss/.data region's external SRAM: one byte past the
+  /* 8 KB into the .bss/.data region's external SRAM: one byte past the
    * reservation. Keep in sync with DATA_BSS_CANARY_ADDRESS in
    * src/hal/HalAgonLight2.c. */
-  __data_bss_limit = 0x051800;
+  __data_bss_limit = 0x052000;
 
   /* ---- Code + read-only data: in flash, executed / read in place --------- */
   .text :
@@ -76,7 +84,16 @@ SECTIONS
     KEEP(*(.text.ivt))
     __ivt_end = .;
 
-    *(.text .text.*)
+    INCLUDE AgonLight2Flash.ld
+    *.asm.o(.text .text.*)
+    *libagon.a:*(.text .text.*)
+
+    /* Only KEEP_IN_FLASH data from here on, which the boot-path check in
+     * makefiles/AgonLight2PreloadCheck.py skips. */
+    _agonLight2FlashDataStart = .;
+    *(.text)
+    _agonLight2FlashBuildId = .;
+    LONG(__nanoOsBuildId)
     . = ALIGN(4);
     __etext = .;
   } > FLASH
@@ -125,8 +142,19 @@ SECTIONS
     __flash_end = .;
   } > IMAGE
 
+  /* ---- Code not listed for flash: external SRAM past the canary, loaded
+   * from the SD card in whole 512-byte blocks ----------------------------- */
+  .ramtext (__data_bss_limit + 8) : AT (__flash_end)
+  {
+    _agonLight2RamTextStart = .;
+    LONG(__nanoOsBuildId)
+    *(.text.*)
+    . = _agonLight2RamTextStart + ((. - _agonLight2RamTextStart + 511) & ~511);
+    _agonLight2RamTextEnd = .;
+  } > RAM
+
   ASSERT(__data_end__ <= __data_bss_limit,
-    ".bss + .data exceed their 6 KB external-RAM reservation (canary at 0x051800)")
+    ".bss + .data exceed their 8 KB external-RAM reservation (canary at 0x052000)")
   ASSERT(__etext + SIZEOF(.data) <= 0x020000,
     "shipped flash image (.text + .data load image) overflows the 128 KB on-chip flash")
 
