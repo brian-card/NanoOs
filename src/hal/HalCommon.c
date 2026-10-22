@@ -1124,13 +1124,16 @@ int halCommonInitFileCache(uint8_t depth) {
   return 0;
 }
 
+static int configSysGrantHardware(void);
 static int configSysStartShells(void);
+static int configSysQueueDevices(void);
 
 /// @fn int halCommonLaunchProcesses(void)
 ///
-/// @brief Arm every supervisor- and user-level process that was created
-/// during scheduler startup but not yet queued, and push each one onto its
-/// ready queue.
+/// @brief Grant the devices from /etc/config.sys their hardware, start the
+/// shells on the console ports, and queue the devices, then arm every
+/// supervisor- and user-level process that was created during scheduler
+/// startup but not yet queued, and push each one onto its ready queue.
 ///
 /// @return Returns 0 on success, -errno on failure.
 int halCommonLaunchProcesses(void) {
@@ -1144,7 +1147,16 @@ int halCommonLaunchProcesses(void) {
     return -ENODEV;
   }
 
-  int returnValue = configSysStartShells();
+  int returnValue = configSysGrantHardware();
+  int shellStatus = configSysStartShells();
+  if (shellStatus != 0) {
+    returnValue = shellStatus;
+  }
+  // Devices must not run until their console ports and capabilities exist.
+  int queueStatus = configSysQueueDevices();
+  if (queueStatus != 0) {
+    returnValue = queueStatus;
+  }
   ProcessId firstShellPid = schedulerGetFirstShellPid();
   uint8_t numShells = schedulerGetNumShells();
   for (ProcessId pid = 1; pid <= numProcesses; pid++) {
@@ -1196,11 +1208,6 @@ typedef struct ConfigSysDevice {
   char                  **argv;
 } ConfigSysDevice;
 
-/// @var _configSysDevices
-///
-/// @brief List of the devices loaded from /etc/config.sys.
-static ConfigSysDevice *_configSysDevices = NULL;
-
 /// @struct ConfigSysConsole
 ///
 /// @brief A console port and the program to run on it, from a CONSOLE line in
@@ -1215,10 +1222,25 @@ typedef struct ConfigSysConsole {
   ShellProgram             program;
 } ConfigSysConsole;
 
-/// @var _configSysConsoles
+/// @struct ConfigSys
 ///
-/// @brief List of the consoles loaded from /etc/config.sys, in file order.
-static ConfigSysConsole *_configSysConsoles = NULL;
+/// @brief What /etc/config.sys configured.  Allocated only when the file is
+/// read, so that platforms without one spend a single pointer of .bss on it.
+///
+/// @param devices List of the devices from DEVICE lines.
+/// @param hardware List of the HARDWARE lines, each parsed like a DEVICE line:
+///   the device's path followed by the hardware it gets.
+/// @param consoles List of the consoles from CONSOLE lines, in file order.
+typedef struct ConfigSys {
+  ConfigSysDevice  *devices;
+  ConfigSysDevice  *hardware;
+  ConfigSysConsole *consoles;
+} ConfigSys;
+
+/// @var _configSys
+///
+/// @brief What /etc/config.sys configured, or NULL if it hasn't been read.
+static ConfigSys *_configSys = NULL;
 
 /// @var _configSysPath
 ///
@@ -1252,6 +1274,14 @@ static const char _configSysDeviceKeyword[] KEEP_IN_FLASH = "DEVICE";
 /// @note KEEP_IN_FLASH is required here because .rodata is removed from the
 /// final binary on some targets.
 static const char _configSysConsoleKeyword[] KEEP_IN_FLASH = "CONSOLE";
+
+/// @var _configSysHardwareKeyword
+///
+/// @brief Keyword of a /etc/config.sys line that grants a device hardware.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _configSysHardwareKeyword[] KEEP_IN_FLASH = "HARDWARE";
 
 /// @var _configSysUartPrefix
 ///
@@ -1410,7 +1440,7 @@ static ProcessDescriptor* configSysNextSlot(void) {
 ///
 /// @return Returns 0 on success, -errno on failure.
 int restartConfigSysDevice(ProcessDescriptor *processDescriptor) {
-  ConfigSysDevice *device = _configSysDevices;
+  ConfigSysDevice *device = (_configSys != NULL) ? _configSys->devices : NULL;
   while ((device != NULL) && (device->pid != processDescriptor->processId)) {
     device = device->next;
   }
@@ -1454,7 +1484,7 @@ static int configSysAddDevice(char *value, int lineNumber) {
     return -ENOMEM;
   }
   device->pid = processDescriptor->processId;
-  ConfigSysDevice **tail = &_configSysDevices;
+  ConfigSysDevice **tail = &_configSys->devices;
   while (*tail != NULL) {
     tail = &(*tail)->next;
   }
@@ -1463,6 +1493,7 @@ static int configSysAddDevice(char *value, int lineNumber) {
   HAL->platform->callFileOverlay(&processDescriptor->callOverlayFunction);
   processDescriptor->userId = ROOT_USER_ID;
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
+  schedulerSetBaseHalCapabilities(processDescriptor);
   processDescriptor->restartFunction = restartConfigSysDevice;
 
   return 0;
@@ -1505,7 +1536,7 @@ static int configSysAddConsole(char *value, int lineNumber) {
   console->program.path = parsed->path;
   console->program.argv = parsed->argv;
 
-  ConfigSysConsole **tail = &_configSysConsoles;
+  ConfigSysConsole **tail = &_configSys->consoles;
   while (*tail != NULL) {
     tail = &(*tail)->next;
   }
@@ -1514,51 +1545,174 @@ static int configSysAddConsole(char *value, int lineNumber) {
   return 0;
 }
 
+/// @fn static int configSysParseUart(const char *name)
+///
+/// @brief Parse the name of a UART: UART<n>, in any case.
+///
+/// @param name The name to parse.
+///
+/// @return Returns the ID of the UART on success, -ENOENT if the name doesn't
+/// name a UART, -EINVAL if it names one badly.
+static int configSysParseUart(const char *name) {
+  size_t prefixLength = 0;
+  for (; _configSysUartPrefix[prefixLength] != '\0'; prefixLength++) {
+    char c = name[prefixLength];
+    if ((c >= 'a') && (c <= 'z')) {
+      c -= 'a' - 'A';
+    }
+    if (c != _configSysUartPrefix[prefixLength]) {
+      return -ENOENT;
+    }
+  }
+  if ((name[prefixLength] < '0') || (name[prefixLength] > '9')) {
+    return -ENOENT;
+  }
+
+  unsigned int uartId = 0;
+  const char *digit = &name[prefixLength];
+  for (; (*digit >= '0') && (*digit <= '9'); digit++) {
+    uartId = (uartId * 10) + (unsigned int) (*digit - '0');
+    if (uartId > UINT8_MAX) {
+      return -EINVAL;
+    }
+  }
+  if (*digit != '\0') {
+    return -EINVAL;
+  }
+
+  return (int) uartId;
+}
+
+/// @fn static ConfigSysDevice* configSysFindDevice(const char *path)
+///
+/// @brief Find the device a DEVICE line loaded from its path.
+///
+/// @param path The path of the device's overlay.
+///
+/// @return Returns a pointer to the ConfigSysDevice on success, NULL if no
+/// DEVICE line has the path.
+static ConfigSysDevice* configSysFindDevice(const char *path) {
+  ConfigSysDevice *device = (_configSys != NULL) ? _configSys->devices : NULL;
+  while ((device != NULL) && (strcmp(device->path, path) != 0)) {
+    device = device->next;
+  }
+  return device;
+}
+
 /// @fn static int configSysConsolePort(const char *port)
 ///
-/// @brief Find the index of the console port a CONSOLE line names.
+/// @brief Find the index of the console port a CONSOLE line names, adding a
+/// forwarding port for the device if the port is a DEVICE's path.
 ///
 /// @param port The name of the port from the CONSOLE line.
 ///
 /// @return Returns the index of the port on success, -errno on failure.
 static int configSysConsolePort(const char *port) {
-  size_t prefixLength = 0;
-  for (; _configSysUartPrefix[prefixLength] != '\0'; prefixLength++) {
-    char c = port[prefixLength];
-    if ((c >= 'a') && (c <= 'z')) {
-      c -= 'a' - 'A';
-    }
-    if (c != _configSysUartPrefix[prefixLength]) {
-      break;
-    }
-  }
-  if ((_configSysUartPrefix[prefixLength] == '\0')
-    && (port[prefixLength] >= '0') && (port[prefixLength] <= '9')
-  ) {
-    unsigned int uartId = 0;
-    const char *digit = &port[prefixLength];
-    for (; (*digit >= '0') && (*digit <= '9'); digit++) {
-      uartId = (uartId * 10) + (unsigned int) (*digit - '0');
-      if (uartId > UINT8_MAX) {
-        return -EINVAL;
-      }
-    }
-    if (*digit != '\0') {
-      return -EINVAL;
-    }
+  int uartId = configSysParseUart(port);
+  if (uartId >= 0) {
     int portId = schedulerGetUartConsolePort((uint8_t) uartId);
     return (portId >= 0) ? portId : -ENODEV;
+  } else if (uartId != -ENOENT) {
+    return uartId;
   }
 
-  for (ConfigSysDevice *device = _configSysDevices; device != NULL;
-    device = device->next
+  ConfigSysDevice *device = configSysFindDevice(port);
+  if (device == NULL) {
+    return -ENOENT;
+  }
+  return schedulerAddForwardingPort(device->pid);
+}
+
+/// @fn static int configSysAddHardware(char *value, int lineNumber)
+///
+/// @brief Record the device and hardware of a HARDWARE line.  The grants are
+/// made after the whole file has been read.
+///
+/// @param value The trimmed text after the '=' of a HARDWARE line.
+/// @param lineNumber The line of /etc/config.sys the HARDWARE line is on.
+///
+/// @return Returns 0 on success, -errno on failure.
+static int configSysAddHardware(char *value, int lineNumber) {
+  ConfigSysDevice *hardware = configSysParseDevice(value);
+  if ((hardware == NULL) || (hardware->argv[1] == NULL)) {
+    logError("Invalid hardware on line %d of %s\n",
+      lineNumber, _configSysPath);
+    schedFree(hardware);
+    return (hardware == NULL) ? -ENOMEM : -EINVAL;
+  }
+
+  ConfigSysDevice **tail = &_configSys->hardware;
+  while (*tail != NULL) {
+    tail = &(*tail)->next;
+  }
+  *tail = hardware;
+
+  return 0;
+}
+
+/// @fn static int configSysGrantUart(ProcessDescriptor *processDescriptor,
+///   int uartId)
+///
+/// @brief Grant a process every UART function a driver of the UART uses.
+///
+/// @param processDescriptor A pointer to the process's ProcessDescriptor.
+/// @param uartId The ID of the UART.
+///
+/// @return Returns 0 on success, -errno on failure.
+static int configSysGrantUart(ProcessDescriptor *processDescriptor,
+  int uartId
+) {
+  if (uartId >= 8) {
+    return -EINVAL;
+  }
+
+  for (uint8_t function = HAL_UART_CONFIGURE; function < HAL_UART_NUM_FNS;
+    function++
   ) {
-    if (strcmp(device->path, port) == 0) {
-      return -ENOTSUP;
+    int returnValue = addProcessHalCapability(processDescriptor,
+      (((uint16_t) HAL_UART) << 8) | function, (uint8_t) (1 << uartId));
+    if (returnValue != 0) {
+      return returnValue;
     }
   }
 
-  return -ENOENT;
+  return 0;
+}
+
+/// @fn static int configSysGrantHardware(void)
+///
+/// @brief Grant each device the hardware its HARDWARE lines name.
+///
+/// @return Returns 0 on success, -errno if a HARDWARE line could not be used.
+static int configSysGrantHardware(void) {
+  int returnValue = 0;
+  ConfigSysDevice *first = (_configSys != NULL) ? _configSys->hardware : NULL;
+  for (ConfigSysDevice *hardware = first; hardware != NULL;
+    hardware = hardware->next
+  ) {
+    ConfigSysDevice *device = configSysFindDevice(hardware->path);
+    if (device == NULL) {
+      logError("No device %s for hardware in %s\n",
+        hardware->path, _configSysPath);
+      returnValue = -ENOENT;
+      continue;
+    }
+
+    for (char **resource = &hardware->argv[1]; *resource != NULL; resource++) {
+      int grantStatus = configSysParseUart(*resource);
+      if (grantStatus >= 0) {
+        grantStatus = configSysGrantUart(&allProcesses[device->pid - 1],
+          grantStatus);
+      }
+      if (grantStatus != 0) {
+        logError("Could not grant %s to %s: %s\n",
+          *resource, hardware->path, strerror(-grantStatus));
+        returnValue = grantStatus;
+      }
+    }
+  }
+
+  return returnValue;
 }
 
 /// @fn static int configSysStartShells(void)
@@ -1569,19 +1723,16 @@ static int configSysConsolePort(const char *port) {
 ///
 /// @return Returns 0 on success, -errno if a CONSOLE line could not be used.
 static int configSysStartShells(void) {
-  int numConsolePorts = schedulerGetNumConsolePorts();
   uint8_t maxShells = schedulerGetNumShells();
   uint32_t portsUsed = 0;
   uint8_t numShells = 0;
   int returnValue = 0;
 
-  for (ConfigSysConsole *console = _configSysConsoles; console != NULL;
+  ConfigSysConsole *first = (_configSys != NULL) ? _configSys->consoles : NULL;
+  for (ConfigSysConsole *console = first; console != NULL;
     console = console->next
   ) {
     int portId = configSysConsolePort(console->port);
-    if ((portId >= 0) && (portId >= numConsolePorts)) {
-      portId = -ENODEV;
-    }
     if (portId < 0) {
       logError("Could not use console port %s from %s: %s\n",
         console->port, _configSysPath, strerror(-portId));
@@ -1609,6 +1760,7 @@ static int configSysStartShells(void) {
   }
 
   if (numShells == 0) {
+    int numConsolePorts = schedulerGetNumConsolePorts();
     for (int portId = 0;
       (portId < numConsolePorts) && (numShells < maxShells);
       portId++
@@ -1641,7 +1793,8 @@ static int configSysQueueDevices(void) {
   }
 
   int returnValue = 0;
-  for (ConfigSysDevice *device = _configSysDevices; device != NULL;
+  ConfigSysDevice *first = (_configSys != NULL) ? _configSys->devices : NULL;
+  for (ConfigSysDevice *device = first; device != NULL;
     device = device->next
   ) {
     ProcessDescriptor *processDescriptor = &allProcesses[device->pid - 1];
@@ -1694,6 +1847,8 @@ static int configSysProcessLine(char *line, int lineNumber) {
     return configSysAddDevice(value, lineNumber);
   } else if (strcmp(keyword, _configSysConsoleKeyword) == 0) {
     return configSysAddConsole(value, lineNumber);
+  } else if (strcmp(keyword, _configSysHardwareKeyword) == 0) {
+    return configSysAddHardware(value, lineNumber);
   }
 
   logWarn("Unrecognized command on line %d of %s\n",
@@ -1703,10 +1858,11 @@ static int configSysProcessLine(char *line, int lineNumber) {
 
 /// @fn int halCommonLoadConfigSys(void)
 ///
-/// @brief Read /etc/config.sys and queue a process for each DEVICE line in
-/// it.  Only meant to be called by a platform's launchProcesses
-/// implementation, after the root filesystem is running and before
-/// halCommonLaunchProcesses.
+/// @brief Read /etc/config.sys, assigning a process slot to each DEVICE line
+/// and recording each HARDWARE and CONSOLE line, for halCommonLaunchProcesses
+/// to apply.
+/// Only meant to be called by a platform's launchProcesses implementation,
+/// after the root filesystem is running and before halCommonLaunchProcesses.
 ///
 /// @return Returns 0 on success or if there is no /etc/config.sys, -errno on
 /// failure.
@@ -1718,6 +1874,15 @@ int halCommonLoadConfigSys(void) {
   FILE *configSys = schedFopen(_configSysPath, _configSysReadMode);
   if (configSys == NULL) {
     return 0;
+  }
+
+  if (_configSys == NULL) {
+    _configSys = (ConfigSys*) schedMalloc(sizeof(ConfigSys));
+    if (_configSys == NULL) {
+      schedFclose(configSys);
+      return -ENOMEM;
+    }
+    memset(_configSys, 0, sizeof(ConfigSys));
   }
 
   char *line = (char*) schedMalloc(CONFIG_SYS_LINE_SIZE);
@@ -1754,13 +1919,6 @@ int halCommonLoadConfigSys(void) {
 
   schedFree(line);
   schedFclose(configSys);
-
-  // Nothing may run until the file is closed: every sched* call above runs
-  // the scheduler while it waits on the filesystem.
-  int queueStatus = configSysQueueDevices();
-  if (queueStatus != 0) {
-    returnValue = queueStatus;
-  }
 
   return returnValue;
 }
