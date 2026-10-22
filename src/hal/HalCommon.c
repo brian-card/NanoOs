@@ -57,6 +57,7 @@
 #undef _PID_T_DECLARED
 
 // NanoOs includes
+#include "../kernel/Console.h"
 #include "../kernel/Coroutines.h"
 #include "../kernel/MemoryManager.h"
 #include "../kernel/NanoOs.h"
@@ -1124,14 +1125,23 @@ int halCommonInitFileCache(uint8_t depth) {
   return 0;
 }
 
+/// @var _consoleProcessName
+///
+/// @brief The name the console process is registered under.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _consoleProcessName[] KEEP_IN_FLASH = CONSOLE_PROCESS_NAME;
+
 static int configSysGrantHardware(void);
 static int configSysStartShells(void);
 static int configSysQueueDevices(void);
 
 /// @fn int halCommonLaunchProcesses(void)
 ///
-/// @brief Grant the devices from /etc/config.sys their hardware, start the
-/// shells on the console ports, and queue the devices, then arm every
+/// @brief Register the console's name, grant the devices from
+/// /etc/config.sys their hardware, start the shells on the console ports, and
+/// queue the devices, then arm every
 /// supervisor- and user-level process that was created during scheduler
 /// startup but not yet queued, and push each one onto its ready queue.
 ///
@@ -1147,6 +1157,7 @@ int halCommonLaunchProcesses(void) {
     return -ENODEV;
   }
 
+  registerProcessName(_consoleProcessName, consolePid);
   int returnValue = configSysGrantHardware();
   int shellStatus = configSysStartShells();
   if (shellStatus != 0) {
