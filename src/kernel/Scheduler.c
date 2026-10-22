@@ -723,6 +723,83 @@ void ipcCapabilityInsert(IpcCapability *capabilities, size_t numCapabilities,
   capabilities[insertIndex].messageTypes = ((uint32_t) 1) << messageType;
 }
 
+/// @fn size_t halCapabilityInsert(HalCapability *capabilities,
+///   size_t numCapabilities, uint16_t subsystemFunction, uint8_t deviceIds)
+///
+/// @brief Grant a HAL function on a set of devices in a sorted HalCapability
+/// array, adding the devices to the function's existing entry if it has one
+/// and inserting a new entry in order otherwise.
+///
+/// @param capabilities A pointer to the sorted array, which must have room for
+///   numCapabilities + 1 entries.
+/// @param numCapabilities The number of entries in the array.
+/// @param subsystemFunction The (subsystem << 8) | function value to grant.
+/// @param deviceIds The bitmask of device IDs to grant the function on.
+///
+/// @return Returns the number of entries in the array afterward.
+size_t halCapabilityInsert(HalCapability *capabilities, size_t numCapabilities,
+  uint16_t subsystemFunction, uint8_t deviceIds
+) {
+  size_t insertIndex = numCapabilities;
+  for (size_t ii = 0; ii < numCapabilities; ii++) {
+    if (capabilities[ii].subsystemFunction == subsystemFunction) {
+      capabilities[ii].deviceIds |= deviceIds;
+      return numCapabilities;
+    } else if (capabilities[ii].subsystemFunction > subsystemFunction) {
+      insertIndex = ii;
+      break;
+    }
+  }
+
+  for (size_t ii = numCapabilities; ii > insertIndex; ii--) {
+    capabilities[ii] = capabilities[ii - 1];
+  }
+  capabilities[insertIndex].subsystemFunction = subsystemFunction;
+  capabilities[insertIndex].deviceIds = deviceIds;
+
+  return numCapabilities + 1;
+}
+
+/// @fn int addProcessHalCapability(ProcessDescriptor *processDescriptor,
+///   uint16_t subsystemFunction, uint8_t deviceIds)
+///
+/// @brief Grant a process a HAL function on a set of devices, moving its
+/// HalCapability array to dynamic memory the first time.
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor to update.
+/// @param subsystemFunction The (subsystem << 8) | function value to grant.
+/// @param deviceIds The bitmask of device IDs to grant the function on.
+///
+/// @return Returns 0 on success, -errno on failure.
+int addProcessHalCapability(ProcessDescriptor *processDescriptor,
+  uint16_t subsystemFunction, uint8_t deviceIds
+) {
+  size_t numCapabilities = processDescriptor->numHalCapabilities;
+  HalCapability *capabilities = NULL;
+  if (processDescriptor->halCapabilitiesDynamic == true) {
+    capabilities = (HalCapability*) schedRealloc(
+      processDescriptor->halCapabilities,
+      sizeof(HalCapability) * (numCapabilities + 1));
+  } else {
+    capabilities = (HalCapability*) schedMalloc(
+      sizeof(HalCapability) * (numCapabilities + 1));
+    if (capabilities != NULL) {
+      memcpy(capabilities, processDescriptor->halCapabilities,
+        sizeof(HalCapability) * numCapabilities);
+    }
+  }
+  if (capabilities == NULL) {
+    return -ENOMEM;
+  }
+
+  numCapabilities = halCapabilityInsert(capabilities, numCapabilities,
+    subsystemFunction, deviceIds);
+  processDescriptor->halCapabilitiesDynamic = true;
+  setProcessHalCapabilities(processDescriptor, capabilities, numCapabilities);
+
+  return 0;
+}
+
 /// @fn int addProcessIpcCapability(ProcessDescriptor *processDescriptor,
 ///   ProcessId destinationPid, int64_t signature, uint32_t messageType)
 ///
@@ -1392,6 +1469,50 @@ int schedulerGetUartConsolePort(uint8_t uartId) {
   }
 
   return consoleGetUartPortArgs.portId;
+}
+
+/// @fn int schedulerAddForwardingPort(ProcessId forwardingPid)
+///
+/// @brief Have the console add a port forwarded to a process, and let the
+/// process and the console send each other the messages a forwarding port
+/// uses.
+///
+/// @param forwardingPid The ProcessId of the process that services the port.
+///
+/// @return Returns the index of the port on success, -errno on failure.
+int schedulerAddForwardingPort(ProcessId forwardingPid) {
+  if ((forwardingPid == 0) || (forwardingPid > numProcesses)) {
+    return -EINVAL;
+  }
+
+  ConsoleAddForwardingPortArgs consoleAddForwardingPortArgs = {
+    .forwardingPid = forwardingPid,
+    .portId = 0,
+    .returnValue = 0,
+  };
+  if (schedulerInitSendMessageToPid(
+    consolePid,
+    CONSOLE_COMMAND_SIGNATURE | CONSOLE_ADD_FORWARDING_PORT,
+    /* data= */ &consoleAddForwardingPortArgs,
+    /* size= */ sizeof(consoleAddForwardingPortArgs)) != processSuccess
+  ) {
+    return -EIO;
+  } else if (consoleAddForwardingPortArgs.returnValue != 0) {
+    return consoleAddForwardingPortArgs.returnValue;
+  }
+
+  ProcessDescriptor *forwarder = &allProcesses[forwardingPid - 1];
+  if ((addProcessIpcCapability(forwarder, consolePid,
+      CONSOLE_COMMAND_SIGNATURE, CONSOLE_ADD_FORWARDING_PORT) != 0)
+    || (addProcessIpcCapability(forwarder, consolePid,
+      CONSOLE_COMMAND_SIGNATURE, CONSOLE_INPUT_READY) != 0)
+    || (addProcessIpcCapability(&allProcesses[consolePid - 1], forwardingPid,
+      CONSOLE_COMMAND_SIGNATURE, CONSOLE_WRITE_BUFFER) != 0)
+  ) {
+    return -ENOMEM;
+  }
+
+  return consoleAddForwardingPortArgs.portId;
 }
 
 /// @fn int schedulerBindShell(uint8_t shellIndex, uint8_t consolePort,
@@ -4965,6 +5086,31 @@ int restartOverlayShell(ProcessDescriptor *processDescriptor) {
   return returnValue;
 }
 
+/// @fn void schedulerSetBaseHalCapabilities(
+///   ProcessDescriptor *processDescriptor)
+///
+/// @brief Give a process the base HalCapability array for its privilege
+/// level, replacing any capabilities it was granted beyond that.
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor to update.
+///
+/// @return This function returns no value.
+void schedulerSetBaseHalCapabilities(ProcessDescriptor *processDescriptor) {
+  if (processDescriptor->halCapabilitiesDynamic == true) {
+    schedFree(processDescriptor->halCapabilities);
+    processDescriptor->halCapabilitiesDynamic = false;
+  }
+
+  if (processDescriptor->privilegeLevel == PRIVILEGE_LEVEL_EXECUTIVE) {
+    setProcessHalCapabilities(processDescriptor, baseExecutiveHalCapabilities,
+      sizeof(baseExecutiveHalCapabilities)
+      / sizeof(baseExecutiveHalCapabilities[0]));
+  } else {
+    setProcessHalCapabilities(processDescriptor, baseUserHalCapabilities,
+      sizeof(baseUserHalCapabilities) / sizeof(baseUserHalCapabilities[0]));
+  }
+}
+
 /// @fn int schedulerRunExecutiveOverlay(ProcessDescriptor *processDescriptor,
 ///   char *commandPath, char **argv)
 ///
@@ -4981,9 +5127,9 @@ int schedulerRunExecutiveOverlay(ProcessDescriptor *processDescriptor,
   char *commandPath, char **argv
 ) {
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
-  setProcessHalCapabilities(processDescriptor, baseExecutiveHalCapabilities,
-    sizeof(baseExecutiveHalCapabilities)
-    / sizeof(baseExecutiveHalCapabilities[0]));
+  if (processDescriptor->halCapabilitiesDynamic == false) {
+    schedulerSetBaseHalCapabilities(processDescriptor);
+  }
   processDescriptor->readyQueue
     = _schedulerState->readyQueues[processDescriptor->privilegeLevel];
   return schedulerRunOverlayCommand(processDescriptor, commandPath, argv,
