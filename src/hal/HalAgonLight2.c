@@ -2260,6 +2260,31 @@ void agonLight2TraceUartState(int code, int ier, int iir, int lsr, int msr) {
   agonLight2TraceValue(_msrText, (unsigned long) msr, 16);
 }
 
+/// @fn void agonLight2TraceUart0Byte(int byte)
+///
+/// @brief Boot trace: report a byte UART0 received from the VDP.
+///
+/// @param byte The byte received.
+///
+/// @return This function returns no value.
+void agonLight2TraceUart0Byte(int byte) {
+  static const char _text[] KEEP_IN_FLASH = "[boot] U0 rx 0x";
+  agonLight2TraceValue(_text, (unsigned long) byte, 16);
+}
+
+/// @fn void agonLight2TraceUart0Stale(int byte)
+///
+/// @brief Boot trace: report that uart0Isr acknowledged a receive interrupt
+/// with an empty FIFO by reading RBR, and what the read returned.
+///
+/// @param byte The value the RBR read returned.
+///
+/// @return This function returns no value.
+void agonLight2TraceUart0Stale(int byte) {
+  static const char _text[] KEEP_IN_FLASH = "[boot] U0 stale ack read 0x";
+  agonLight2TraceValue(_text, (unsigned long) byte, 16);
+}
+
 /// @fn bool agonLight2VdpGeneralPoll(void)
 ///
 /// @brief Send the VDP general polls until it replies or
