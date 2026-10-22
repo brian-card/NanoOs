@@ -237,6 +237,26 @@ def test_config_sys_hardware_grant_limits_a_driver_to_its_uart(s):
     assert i == 1, "a driver granted only UART0 wrote to UART1"
 
 
+def test_arrow_key_arriving_in_pieces_is_one_key(s):
+    s.login()
+    s.child.delaybeforesend = None
+    s.child.send("\x1b")
+    time.sleep(0.01)
+    s.child.send("[A")
+    s.child.expect_exact("\x1b[A: command not found", timeout=10)
+    s.child.expect(PROMPT, timeout=10)
+    assert "\x1b: command not found" not in s.child.before
+    assert s.sh("echo after-arrow") == "after-arrow"
+
+
+def test_lone_escape_is_delivered_after_the_escape_delay(s):
+    s.login()
+    s.child.send("\x1b")
+    s.child.expect_exact("\x1b: command not found", timeout=5)
+    s.child.expect(PROMPT, timeout=10)
+    assert s.sh("echo after-escape") == "after-escape"
+
+
 def test_login_rejects_bad_password(s):
     s.wait_login_prompt()
     s.child.sendline("root")

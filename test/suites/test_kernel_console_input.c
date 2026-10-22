@@ -9,6 +9,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "NanoOsTest.h"
+#include "HalMock.h"
 
 #include <string.h>
 
@@ -518,4 +519,176 @@ NANO_OS_KERNEL_TEST(console_uart_port, finds_the_port_a_uart_services) {
   NANO_OS_ASSERT_EQ_INT(0, getUartPort(1));
   NANO_OS_ASSERT_EQ_INT(-1, getUartPort(0));
   NANO_OS_ASSERT_EQ_INT(-1, getUartPort(3));
+}
+
+static const char *uartLikeBytes;
+static size_t uartLikeAvailable;
+static size_t uartLikeRead;
+static char deliveredLines[4][CONSOLE_BUFFER_SIZE];
+static int numDeliveredLines;
+
+/// @fn static int uartLikeReadByte(ConsolePort *consolePort)
+///
+/// @brief Stand in for a UART's readByte: return the next byte that has
+/// "arrived", or -1 if the test hasn't let another one arrive yet.
+///
+/// @param consolePort Unused.
+///
+/// @return Returns the byte, cast to an int, or -1.
+static int uartLikeReadByte(ConsolePort *consolePort) {
+  (void) consolePort;
+  if (uartLikeRead < uartLikeAvailable) {
+    return (uint8_t) uartLikeBytes[uartLikeRead++];
+  }
+  return -1;
+}
+
+/// @fn static void readerFixture(ConsolePort *consolePort)
+///
+/// @brief Make this process the reader of a port, waiting for input, with the
+/// IPC capability the console needs to hand it lines.
+///
+/// @param consolePort A pointer to the ConsolePort to read from.
+///
+/// @return This function returns no value.
+static void readerFixture(ConsolePort *consolePort) {
+  static IpcCapability readerCapability;
+  readerCapability.destinationPid = getRunningPid();
+  readerCapability.signature = CONSOLE_COMMAND_SIGNATURE;
+  readerCapability.messageTypes = ((uint32_t) 1) << CONSOLE_RETURNING_INPUT;
+  getRunningProcess()->ipcCapabilities = &readerCapability;
+  getRunningProcess()->numIpcCapabilities = 1;
+  getRunningProcess()->ipcCapabilitiesDynamic = false;
+
+  consolePort->inputOwner = getRunningPid();
+  consolePort->waitingForInput = true;
+  consolePort->echo = false;
+  memset(deliveredLines, 0, sizeof(deliveredLines));
+  numDeliveredLines = 0;
+}
+
+/// @fn static bool serviceAndRead(ConsolePort *consolePort)
+///
+/// @brief Run a service pass of a port, then read every line it delivered and
+/// wait for the next one, as a reader would.
+///
+/// @param consolePort A pointer to the ConsolePort to service.
+///
+/// @return Returns true if the port is waiting out the escape delay.
+static bool serviceAndRead(ConsolePort *consolePort) {
+  bool escapePending = consoleServicePort(&inputState, consolePort);
+  ProcessMessage *processMessage = NULL;
+  while ((processMessage = processMessageQueuePop()) != NULL) {
+    if ((processMessageType(processMessage)
+        == (CONSOLE_COMMAND_SIGNATURE | CONSOLE_RETURNING_INPUT))
+      && (numDeliveredLines < 4)
+    ) {
+      ConsoleBuffer *consoleBuffer
+        = (ConsoleBuffer*) processMessageData(processMessage);
+      strcpy(deliveredLines[numDeliveredLines++], consoleBuffer->buffer);
+    }
+    processMessageRelease(processMessage);
+  }
+  consolePort->consoleBuffer->bufferAwaitingRelease = false;
+  consolePort->waitingForInput = true;
+  return escapePending;
+}
+
+/// @fn static void deliverByteByByte(const char *bytes)
+///
+/// @brief Let a UART-like port's bytes arrive one at a time, servicing the port
+/// after each one, then let the escape delay pass.
+///
+/// @param bytes The bytes to deliver.
+///
+/// @return This function returns no value.
+static void deliverByteByByte(const char *bytes) {
+  ConsolePort *consolePort = inputFixture(PROCESS_ID_NOT_SET);
+  consolePort->readByte = uartLikeReadByte;
+  readerFixture(consolePort);
+  uartLikeBytes = bytes;
+  uartLikeAvailable = 0;
+  uartLikeRead = 0;
+
+  for (size_t ii = 0; bytes[ii] != '\0'; ii++) {
+    uartLikeAvailable = ii + 1;
+    serviceAndRead(consolePort);
+  }
+  mockClockAdvanceNs((CONSOLE_ESCAPE_DELAY_MS + 1) * 1000000ULL);
+  serviceAndRead(consolePort);
+}
+
+/// @fn static void deliverInBatches(const char **batches)
+///
+/// @brief Send a forwarding port's bytes in CONSOLE_INPUT_READY batches, as
+/// the VDP driver does, servicing the port until each batch is read.
+///
+/// @param batches The NULL-terminated array of batches to send.
+///
+/// @return This function returns no value.
+static void deliverInBatches(const char **batches) {
+  ConsolePort *consolePort = inputFixture(getRunningPid());
+  readerFixture(consolePort);
+
+  for (int ii = 0; batches[ii] != NULL; ii++) {
+    ProcessMessage *sent = sendInput(&inputArgs[0], batches[ii],
+      (uint8_t) strlen(batches[ii]));
+    for (int pass = 0; (pass < 8) && (processMessageDone(sent) == false);
+      pass++
+    ) {
+      serviceAndRead(consolePort);
+    }
+    processMessageRelease(sent);
+  }
+  mockClockAdvanceNs((CONSOLE_ESCAPE_DELAY_MS + 1) * 1000000ULL);
+  serviceAndRead(consolePort);
+}
+
+NANO_OS_KERNEL_TEST(console_escape, uart_arrow_arriving_in_pieces_is_one_key) {
+  deliverByteByByte("\x1b[Aecho ok\r");
+
+  NANO_OS_ASSERT_EQ_INT(2, numDeliveredLines);
+  NANO_OS_ASSERT_STR_EQ("\x1b[A", deliveredLines[0]);
+  NANO_OS_ASSERT_STR_EQ("echo ok\n", deliveredLines[1]);
+}
+
+NANO_OS_KERNEL_TEST(console_escape, forwarded_arrow_is_the_same_key) {
+  const char *batches[] = { "\x1b[Aecho", " ok\r", NULL };
+  deliverInBatches(batches);
+
+  NANO_OS_ASSERT_EQ_INT(2, numDeliveredLines);
+  NANO_OS_ASSERT_STR_EQ("\x1b[A", deliveredLines[0]);
+  NANO_OS_ASSERT_STR_EQ("echo ok\n", deliveredLines[1]);
+}
+
+NANO_OS_KERNEL_TEST(console_escape, lone_escape_waits_for_the_delay) {
+  ConsolePort *consolePort = inputFixture(PROCESS_ID_NOT_SET);
+  consolePort->readByte = uartLikeReadByte;
+  readerFixture(consolePort);
+  uartLikeBytes = "\x1bx";
+  uartLikeAvailable = 1;
+  uartLikeRead = 0;
+  mockClockAdvanceNs(1000000000ULL);
+
+  NANO_OS_ASSERT_TRUE(serviceAndRead(consolePort));
+  mockClockAdvanceNs((CONSOLE_ESCAPE_DELAY_MS - 1) * 1000000ULL);
+  NANO_OS_ASSERT_TRUE(serviceAndRead(consolePort));
+  NANO_OS_ASSERT_EQ_INT(0, numDeliveredLines);
+
+  mockClockAdvanceNs(2 * 1000000ULL);
+  NANO_OS_ASSERT_FALSE(serviceAndRead(consolePort));
+  NANO_OS_ASSERT_EQ_INT(1, numDeliveredLines);
+  NANO_OS_ASSERT_STR_EQ("\x1b", deliveredLines[0]);
+
+  uartLikeAvailable = 2;
+  serviceAndRead(consolePort);
+  NANO_OS_ASSERT_EQ_INT(CONSOLE_INPUT_STATE_NORMAL, consolePort->inputState);
+}
+
+NANO_OS_KERNEL_TEST(console_escape, forwarded_lone_escape_matches_uart) {
+  const char *batches[] = { "\x1b", NULL };
+  deliverInBatches(batches);
+
+  NANO_OS_ASSERT_EQ_INT(1, numDeliveredLines);
+  NANO_OS_ASSERT_STR_EQ("\x1b", deliveredLines[0]);
 }
