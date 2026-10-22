@@ -54,6 +54,12 @@ extern "C"
 #define ASCII_SPACE    32
 #define ASCII_DELETE  127
 
+/// @def CONSOLE_PROCESS_NAME
+///
+/// @brief The name the console process is registered under for
+/// findProcessByName.
+#define CONSOLE_PROCESS_NAME "console"
+
 /// @def CONSOLE_COMMAND_SIGNATURE
 ///
 /// @brief The 64-bit signature used to validate that a command is a console
