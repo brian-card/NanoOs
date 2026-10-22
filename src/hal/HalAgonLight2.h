@@ -51,6 +51,7 @@ extern "C" {
 ///
 /// @return Returns 0 on success, -errno on failure.
 int halAgonLight2Init(void);
+int agonLight2LoadRamText(void);
 
 #ifdef __cplusplus
 } // extern "C"
