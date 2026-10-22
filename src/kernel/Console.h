@@ -60,6 +60,13 @@ extern "C"
 /// findProcessByName.
 #define CONSOLE_PROCESS_NAME "console"
 
+/// @def CONSOLE_ESCAPE_DELAY_MS
+///
+/// @brief How long, in milliseconds, an escape must go without a following
+/// byte before it is taken to be the escape key by itself rather than the
+/// start of an escape sequence.
+#define CONSOLE_ESCAPE_DELAY_MS 50
+
 /// @def CONSOLE_COMMAND_SIGNATURE
 ///
 /// @brief The 64-bit signature used to validate that a command is a console
@@ -241,6 +248,7 @@ int setConsoleEcho(bool desiredEchoState);
 ConsoleInputEvent consoleProcessByte(
   ConsolePort *consolePort, uint8_t byte, ConsoleEcho *echo);
 int consoleReadForwardedByte(ConsolePort *consolePort);
+bool consoleServicePort(ConsoleState *consoleState, ConsolePort *consolePort);
 int consoleForwardString(ConsolePort *consolePort, const char *string);
 void consoleEchoInput(
   ConsolePort *consolePort, ConsoleEcho echo, uint8_t byte);

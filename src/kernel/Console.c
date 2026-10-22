@@ -1120,18 +1120,23 @@ const ConsoleCommandHandler consoleCommandHandlers[] = {
   consoleGetUartPortCommandHandler,     // CONSOLE_GET_UART_PORT
 };
 
-/// @fn void handleConsoleMessages(ConsoleState *consoleState, bool block)
+/// @fn void handleConsoleMessages(ConsoleState *consoleState, bool block,
+///   const struct timespec *deadline)
 ///
 /// @brief Handle all messages currently in the console process's message queue.
 ///
 /// @param consoleState A pointer to the ConsoleState structure maintained by
 ///   the runConsole process.
 /// @param block Whether to wait for a message if none is queued.
+/// @param deadline A pointer to the time to stop waiting at if block is true,
+///   or NULL to wait indefinitely.
 ///
 /// @return This function returns no value.
-void handleConsoleMessages(ConsoleState *consoleState, bool block) {
+void handleConsoleMessages(ConsoleState *consoleState, bool block,
+  const struct timespec *deadline
+) {
   ProcessMessage *message = (block == true)
-    ? processMessageQueueWait(NULL) : processMessageQueuePop();
+    ? processMessageQueueWait(deadline) : processMessageQueuePop();
   ProcessMessage *firstMessage = message;
   while (message != NULL) {
     if ((processMessageType(message) & 0xffffffffffffff00)
@@ -1497,19 +1502,32 @@ static void consoleHandleInputEvent(
   }
 }
 
-/// @fn static void consoleServicePort(
+/// @fn static uint16_t consoleNowMs(void)
+///
+/// @brief Get the current time in milliseconds, modulo 65536.
+///
+/// @return Returns the time.
+static uint16_t consoleNowMs(void) {
+  return (uint16_t) (processGetNanoseconds(NULL) / ((int64_t) 1000000));
+}
+
+/// @fn bool consoleServicePort(
 ///   ConsoleState *consoleState, ConsolePort *consolePort)
 ///
 /// @brief Read and process a port's input until it has nothing more to give or
 /// a completed line has been sent to the port's input owner.  While a line is
-/// held for an owner that isn't waiting, only Ctrl-C is acted on.
+/// held for an owner that isn't waiting, only Ctrl-C is acted on.  An escape
+/// that nothing has followed is only taken to be the escape key by itself once
+/// CONSOLE_ESCAPE_DELAY_MS has passed, so that an escape sequence whose bytes
+/// arrive in separate reads is still read as one.
 ///
 /// @param consoleState A pointer to the ConsoleState being maintained by the
 ///   runConsole function that's running.
 /// @param consolePort A pointer to the ConsolePort to service.
 ///
-/// @return This function returns no value.
-static void consoleServicePort(
+/// @return Returns true if the port is waiting out CONSOLE_ESCAPE_DELAY_MS,
+/// false otherwise.
+bool consoleServicePort(
   ConsoleState *consoleState, ConsolePort *consolePort
 ) {
   consoleDeliverLine(consolePort);
@@ -1524,18 +1542,28 @@ static void consoleServicePort(
       continue;
     }
     if (byteRead < 0) {
-      if (consolePort->inputState == CONSOLE_INPUT_STATE_ESCAPE) {
-        // Nothing followed the escape, so it was the escape key by itself.
-        consolePort->inputState = CONSOLE_INPUT_STATE_NORMAL;
-        consoleHandleInputEvent(
-          consoleState, consolePort, CONSOLE_INPUT_ESCAPE);
+      if (consolePort->inputState != CONSOLE_INPUT_STATE_ESCAPE) {
+        break;
+      } else if ((uint16_t) (consoleNowMs() - consolePort->escapeStartMs)
+        < CONSOLE_ESCAPE_DELAY_MS
+      ) {
+        return true;
       }
+      // Nothing followed the escape, so it was the escape key by itself.
+      consolePort->inputState = CONSOLE_INPUT_STATE_NORMAL;
+      consoleHandleInputEvent(consoleState, consolePort, CONSOLE_INPUT_ESCAPE);
       break;
     }
 
     ConsoleEcho echo = CONSOLE_ECHO_NONE;
+    uint8_t inputState = consolePort->inputState;
     ConsoleInputEvent event
       = consoleProcessByte(consolePort, (uint8_t) byteRead, &echo);
+    if ((consolePort->inputState == CONSOLE_INPUT_STATE_ESCAPE)
+      && (inputState != CONSOLE_INPUT_STATE_ESCAPE)
+    ) {
+      consolePort->escapeStartMs = consoleNowMs();
+    }
     consoleEchoInput(consolePort, echo, (uint8_t) byteRead);
     if (event == CONSOLE_INPUT_UNHANDLED) {
       logDebug("Received unhandled character %ld\n", (long int) byteRead);
@@ -1543,6 +1571,8 @@ static void consoleServicePort(
       consoleHandleInputEvent(consoleState, consolePort, event);
     }
   }
+
+  return false;
 }
 
 /// @fn int printSerialString(unsigned char uart, const char *string)
@@ -1704,14 +1734,27 @@ void* runConsole(void *args) {
   // Input that arrived before the callbacks were registered never notified
   // anyone, so the first pass has to service every port.
   while (1) {
+    bool escapePending = false;
     for (uint8_t ii = 0; ii < consoleState.numConsolePorts; ii++) {
-      consoleServicePort(&consoleState, &consoleState.consolePorts[ii]);
+      escapePending |= consoleServicePort(
+        &consoleState, &consoleState.consolePorts[ii]);
     }
 
     if (pollNeeded > 0) {
       processYield();
+      handleConsoleMessages(&consoleState, false, NULL);
+    } else if (escapePending == true) {
+      struct timespec deadline;
+      timespec_get(&deadline, TIME_UTC);
+      deadline.tv_nsec += CONSOLE_ESCAPE_DELAY_MS * 1000000L;
+      if (deadline.tv_nsec >= 1000000000L) {
+        deadline.tv_sec++;
+        deadline.tv_nsec -= 1000000000L;
+      }
+      handleConsoleMessages(&consoleState, true, &deadline);
+    } else {
+      handleConsoleMessages(&consoleState, true, NULL);
     }
-    handleConsoleMessages(&consoleState, !pollNeeded);
   }
 
   return NULL;
