@@ -424,8 +424,9 @@ static ProcessDescriptor _allProcesses[NUM_PROCESSES];
 ///
 /// @brief This platform's storage for HalCommon.c's named-process lookup
 /// table.  Sized for the processes agonLight2DoStartProcesses can register
-/// (filesystem, logger).
-static NamedProcessEntry _namedProcesses[2];
+/// (filesystem, logger) plus the console, which halCommonLaunchProcesses
+/// registers.
+static NamedProcessEntry _namedProcesses[3];
 
 /// @var _filesystemIpcCapabilities
 ///
