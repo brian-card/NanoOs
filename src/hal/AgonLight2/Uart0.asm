@@ -41,6 +41,7 @@
 .global _agonLight2PollUart0Impl
 .global _agonLight2ReadUart0Impl
 .global _agonLight2WriteUart0Impl
+.extern _agonLight2TraceInterrupt
 .global uart0Isr
 
 ;; -- eZ80F92 Port D GPIO registers ------------------
@@ -72,6 +73,7 @@ UART0_RING_MASK .equ (UART0_RING_SIZE - 1)
 uart0RxHead: .space 1              ; written only by uart0Isr
 uart0RxTail: .space 1              ; written only by the Poll/Read impls
 uart0RxBuf:  .space UART0_RING_SIZE
+uart0IsrCount: .space 3            ; boot trace: uart0Isr entries
 
 .text
 
@@ -277,6 +279,18 @@ _agonLight2WriteUart0Impl:
 ;;    RX FIFO into uart0RxBuf and, if it received anything, calls the device's
 ;;    registered callback.
 uart0Isr:
+    ld      hl, (uart0IsrCount) ; boot trace: report an interrupt storm once
+    inc     hl
+    ld      (uart0IsrCount), hl
+    ld      de, 5000
+    or      a
+    sbc     hl, de
+    jr      nz, .uart0IsrCounted
+    ld      hl, 0x100
+    push    hl
+    call    _agonLight2TraceInterrupt
+    pop     hl
+.uart0IsrCounted:
     in0     a, (UART0_LSR)
     and     0x01                ; DR - receiver data ready
     ret     z

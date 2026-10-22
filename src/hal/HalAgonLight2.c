@@ -2161,6 +2161,77 @@ void agonLight2TraceToScreen(const char *string) {
   }
 }
 
+extern void agonLight2WriteUart1PolledImpl(uint8_t c);
+
+/// @fn void agonLight2TraceString(const char *string)
+///
+/// @brief Write a boot-trace string to UART1 by polling, translating each
+/// newline to a carriage return and a newline, so that it is sent whether or
+/// not UART1's transmit interrupt ever runs.
+///
+/// @param string The NUL-terminated string to write.
+///
+/// @return This function returns no value.
+void agonLight2TraceString(const char *string) {
+  for (; *string != '\0'; string++) {
+    if (*string == '\n') {
+      agonLight2WriteUart1PolledImpl('\r');
+    }
+    agonLight2WriteUart1PolledImpl((uint8_t) *string);
+  }
+}
+
+/// @fn void agonLight2TraceValue(
+///   const char *text, unsigned long value, unsigned int base)
+///
+/// @brief Write a boot-trace marker followed by a number and a newline to
+/// UART1 by polling, and to the screen once the VDP has answered its poll.
+///
+/// @param text The NUL-terminated marker text.
+/// @param value The number to write.
+/// @param base The base to write the number in, 10 or 16.
+///
+/// @return This function returns no value.
+void agonLight2TraceValue(
+  const char *text, unsigned long value, unsigned int base
+) {
+  char digits[12];
+  int numDigits = 0;
+  do {
+    unsigned int digit = (unsigned int) (value % base);
+    digits[numDigits++] = (char) ((digit < 10) ? ('0' + digit)
+      : ('a' + digit - 10));
+    value /= base;
+  } while ((value != 0) && (numDigits < 11));
+
+  char number[14];
+  int length = 0;
+  while (numDigits > 0) {
+    number[length++] = digits[--numDigits];
+  }
+  number[length++] = '\n';
+  number[length] = '\0';
+
+  agonLight2TraceString(text);
+  agonLight2TraceString(number);
+  agonLight2TraceToScreen(text);
+  agonLight2TraceToScreen(number);
+}
+
+/// @fn void agonLight2TraceInterrupt(int code)
+///
+/// @brief Boot trace: report a trap that would otherwise halt silently.  The
+/// code is the RST vector (0x08-0x38), 0x66 for NMI, 0xff for an unclaimed
+/// IM2 vector, or 0x100 / 0x101 for 5000 UART0 / UART1 interrupts.
+///
+/// @param code The code of the trap.
+///
+/// @return This function returns no value.
+void agonLight2TraceInterrupt(int code) {
+  static const char _trapText[] KEEP_IN_FLASH = "[boot] TRAP code 0x";
+  agonLight2TraceValue(_trapText, (unsigned long) code, 16);
+}
+
 /// @fn bool agonLight2VdpGeneralPoll(void)
 ///
 /// @brief Send the VDP general polls until it replies or

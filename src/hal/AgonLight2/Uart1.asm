@@ -56,6 +56,8 @@
 .global _agonLight2PollUart1Impl
 .global _agonLight2ReadUart1Impl
 .global _agonLight2WriteUart1Impl
+.global _agonLight2WriteUart1PolledImpl
+.extern _agonLight2TraceInterrupt
 .global uart1Isr
 
 ;; -- eZ80F92 Port C GPIO registers ------------------
@@ -90,6 +92,7 @@ uart1RxBuf:  .space UART1_RING_SIZE
 uart1TxHead: .space 1              ; written only by _agonLight2WriteUart1Impl
 uart1TxTail: .space 1              ; written only by uart1Isr
 uart1TxBuf:  .space UART1_RING_SIZE
+uart1IsrCount: .space 3            ; boot trace: uart1Isr entries
 
 .text
 
@@ -353,6 +356,27 @@ _agonLight2WriteUart1Impl:
     pop     ix
     ret
 
+;; -- void agonLight2WriteUart1PolledImpl(uint8_t c) ------------------------
+;;    c passed at sp+3.  Boot trace: writes c with interrupts held off, so it
+;;    is sent by polling whether or not uart1Isr ever runs, then restores the
+;;    caller's interrupt state.
+_agonLight2WriteUart1PolledImpl:
+    ld      a, i                ; P/V := IEF2 (1 = interrupts were on)
+    push    af
+    di
+    ld      hl, 6               ; c, past the return address and af
+    add     hl, sp
+    ld      a, (hl)
+    ld      bc, 0
+    ld      c, a
+    push    bc
+    call    _agonLight2WriteUart1Impl
+    pop     bc
+    pop     af
+    ret     po
+    ei
+    ret
+
 ;; -- uart1TxSendOne ----------------------------------------------------
 ;;    Waits for the transmit holding register to empty, then sends the byte at
 ;;    uart1TxTail and advances the tail.  Only called with interrupts off and
@@ -384,6 +408,18 @@ uart1TxSendOne:
 ;;    interrupt on the TX side is deliberate simplicity for a first pass, not
 ;;    a FIFO-depth burst; see the file header.
 uart1Isr:
+    ld      hl, (uart1IsrCount) ; boot trace: report an interrupt storm once
+    inc     hl
+    ld      (uart1IsrCount), hl
+    ld      de, 5000
+    or      a
+    sbc     hl, de
+    jr      nz, .uart1IsrCounted
+    ld      hl, 0x101
+    push    hl
+    call    _agonLight2TraceInterrupt
+    pop     hl
+.uart1IsrCounted:
     in0     a, (UART1_LSR)
     and     0x01                ; DR - receiver data ready
     jr      z, .uart1IsrTx      ; nothing received - no callback

@@ -36,45 +36,46 @@
 
 #ifdef NANO_OS_AGON_LIGHT_2
 
-#include "CoroutineStdio.h"
-
 void agonLight2TraceToScreen(const char *string);
+void agonLight2TraceString(const char *string);
+void agonLight2TraceValue(
+  const char *text, unsigned long value, unsigned int base);
 
 /// @def bootTrace
 ///
-/// @brief Print a boot-stage marker on UART1 and, once the VDP has answered
-/// its general poll, on the screen.
+/// @brief Print a boot-stage marker on UART1, by polling, and on the screen
+/// once the VDP has answered its general poll.
 #define bootTrace(text) \
   do { \
     static const char _bootTraceText[] KEEP_IN_FLASH = "[boot] " text "\n"; \
-    printString(_bootTraceText); \
+    agonLight2TraceString(_bootTraceText); \
     agonLight2TraceToScreen(_bootTraceText); \
   } while (0)
 
 /// @def bootTraceValue
 ///
-/// @brief Print a boot-stage marker followed by a decimal value on UART1.
+/// @brief Print a boot-stage marker followed by a decimal value.
 #define bootTraceValue(text, value) \
   do { \
     static const char _bootTraceText[] KEEP_IN_FLASH = "[boot] " text " "; \
-    static const char _bootTraceEnd[] KEEP_IN_FLASH = "\n"; \
-    printString(_bootTraceText); \
-    printInt(value); \
-    printString(_bootTraceEnd); \
-    agonLight2TraceToScreen(_bootTraceText); \
-    agonLight2TraceToScreen(_bootTraceEnd); \
+    long _bootTraceNumber = (long) (value); \
+    if (_bootTraceNumber < 0) { \
+      static const char _bootTraceMinus[] KEEP_IN_FLASH = "[boot] " text " -"; \
+      agonLight2TraceValue(_bootTraceMinus, \
+        (unsigned long) -_bootTraceNumber, 10); \
+    } else { \
+      agonLight2TraceValue(_bootTraceText, \
+        (unsigned long) _bootTraceNumber, 10); \
+    } \
   } while (0)
 
 /// @def bootTraceHex
 ///
-/// @brief Print a boot-stage marker followed by a hexadecimal value on UART1.
+/// @brief Print a boot-stage marker followed by a hexadecimal value.
 #define bootTraceHex(text, value) \
   do { \
     static const char _bootTraceText[] KEEP_IN_FLASH = "[boot] " text " 0x"; \
-    static const char _bootTraceEnd[] KEEP_IN_FLASH = "\n"; \
-    printString(_bootTraceText); \
-    printHex(value); \
-    printString(_bootTraceEnd); \
+    agonLight2TraceValue(_bootTraceText, (unsigned long) (value), 16); \
   } while (0)
 
 #else // NANO_OS_AGON_LIGHT_2

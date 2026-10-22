@@ -64,6 +64,8 @@
 
 .assume adl=1
 
+.extern _agonLight2TraceInterrupt
+
 ;;; eZ80F92 maskable interrupt vector offsets - byte offset of the 2-byte slot
 ;;; from the start of the table.  From the eZ80F92 Product Specification and
 ;;; Agon MOS src/equs.inc.  Confirm the timer / SPI / I2C values against the
@@ -183,9 +185,14 @@ _enableInterrupts:
 ;;; interrupt means a peripheral was left armed or a slot is wrong, and a
 ;;; silent reti.l would just livelock on the re-asserting source.
 _defaultIsr:
+    ld      hl, 0xff            ; boot trace: report the unclaimed interrupt
+    push    hl
+    call    _agonLight2TraceInterrupt
+    pop     hl
+.defaultIsrHalt:
     di
     halt
-    jr      _defaultIsr
+    jr      .defaultIsrHalt
 
 ;;; ========================================================================
 ;;; PRT1..PRT5 one-shot timer trampolines

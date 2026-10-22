@@ -57,6 +57,7 @@
 ;;; @note This file was generated with assistance from claude.ai.
 
 .section .text.boot,"ax"
+.extern _agonLight2TraceInterrupt
 .globl  _start
 
 ; The eZ80 executes this first instruction in Z80 mode (ADL=0) straight out of
@@ -71,26 +72,41 @@ _start:
 .assume ADL=1
 
     .org 0x08
+    LD  A, 0x08
     JP  unhandledVector
     .org 0x10
+    LD  A, 0x10
     JP  unhandledVector
     .org 0x18
+    LD  A, 0x18
     JP  unhandledVector
     .org 0x20
+    LD  A, 0x20
     JP  unhandledVector
     .org 0x28
+    LD  A, 0x28
     JP  unhandledVector
     .org 0x30
+    LD  A, 0x30
     JP  unhandledVector
     .org 0x38
+    LD  A, 0x38
     JP  unhandledVector
     .org 0x66                   ; NMI
+    LD  A, 0x66
     JP  unhandledVector
     .org 0x70
 
 unhandledVector:
+    ; Boot trace: report which vector was taken (A), then halt.
+    LD  HL, 0
+    LD  L, A
+    PUSH HL
+    CALL _agonLight2TraceInterrupt
+    POP HL
+.unhandledHalt:
     HALT
-    JR  unhandledVector
+    JR  .unhandledHalt
 
 realStart:
     ; --- external memory bus bring-up ------------------------------------------
