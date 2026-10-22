@@ -27,6 +27,7 @@
 #   NanoOs_full.bin     — Flat firmware image including .rodata
 #   NanoOs_stripped.bin — Flat binary without .rodata
 #   NanoOs_rodata.bin   — Flat binary containing only .rodata (for inspection)
+#   NanoOs_ram.bin      — The .ramtext image, loaded from the SD card at boot
 #   NanoOs.map          — Linker map
 #   NanoOs.lst          — Disassembly listing
 # =============================================================================
@@ -51,6 +52,12 @@ TARGET_TRIPLE := ez80-none-elf
 # ---- Linker script --------------------------------------------------------
 
 LINKER_SCRIPT := ld/AgonLight2.ld
+FLASH_LIST    := ld/AgonLight2Flash.ld
+PRELOAD_CHECK := makefiles/AgonLight2PreloadCheck.py
+
+# Stamped into both the flash image and NanoOs_ram.bin so that the loader
+# refuses a RAM image from a different link.
+BUILD_ID := $(shell od -An -N4 -tx4 /dev/urandom | tr -d ' \n')
 
 # ---- Build directory ------------------------------------------------------
 
@@ -145,7 +152,9 @@ ASFLAGS := \
 
 LDFLAGS := \
 	--gc-sections \
+	-Lld \
 	-T$(LINKER_SCRIPT) \
+	--defsym=__nanoOsBuildId=0x$(BUILD_ID) \
 	-Map=$(BUILD_DIR)/NanoOs.map \
 	--cref \
 	--unresolved-symbols=report-all
@@ -202,32 +211,35 @@ ELF          := $(BUILD_DIR)/NanoOs.elf
 FULL_BIN     := $(BUILD_DIR)/NanoOs_full.bin
 STRIPPED_BIN := $(BUILD_DIR)/NanoOs_stripped.bin
 RODATA_BIN   := $(BUILD_DIR)/NanoOs_rodata.bin
+RAM_BIN      := $(BUILD_DIR)/NanoOs_ram.bin
 LST          := $(BUILD_DIR)/NanoOs.lst
 
 # ---- Targets ----------------------------------------------------------------
 
 .PHONY: all flash size sections disasm clean
 
-all: $(FULL_BIN) $(STRIPPED_BIN) $(RODATA_BIN)
+all: $(FULL_BIN) $(STRIPPED_BIN) $(RODATA_BIN) $(RAM_BIN)
 	@echo ""
 	@echo "  Built for:  Agon Light 2 (eZ80F92, ADL mode, primary firmware)"
 	@echo "  Output:     $(BUILD_DIR)/"
 	@echo "  Full:       $(FULL_BIN)"
 	@echo "  Stripped:   $(STRIPPED_BIN)"
 	@echo "  Rodata:     $(RODATA_BIN)"
+	@echo "  RAM image:  $(RAM_BIN)"
 	@echo "  Map:        $(BUILD_DIR)/NanoOs.map"
 
 # ---- Link -------------------------------------------------------------------
 
-$(ELF): $(ALL_OBJS) $(LINKER_SCRIPT)
+$(ELF): $(ALL_OBJS) $(LINKER_SCRIPT) $(FLASH_LIST) $(PRELOAD_CHECK)
 	@echo "  LINK    $@"
 	@$(LD) $(LDFLAGS) -o $@ $(ALL_OBJS) $(LDLIBS)
+	@python3 $(PRELOAD_CHECK) $(OBJDUMP) $(READELF) $@ || { rm -f $@; exit 1; }
 
 # ---- Flat binaries ----------------------------------------------------------
 
 $(FULL_BIN): $(ELF)
 	@echo "  OBJCOPY $@ (full, with .rodata)"
-	@$(OBJCOPY) -O binary $< $@
+	@$(OBJCOPY) -O binary -R .ramtext $< $@
 
 $(STRIPPED_BIN): $(ELF)
 	@consts="$$($(NM) $< | awk '$$2 ~ /^[rR]$$/ && $$3 ~ /__const\./ { print $$3 }')"; \
@@ -238,11 +250,15 @@ $(STRIPPED_BIN): $(ELF)
 	  exit 1; \
 	fi
 	@echo "  OBJCOPY $@ (stripped, no .rodata)"
-	@$(OBJCOPY) -O binary -R .rodata $< $@
+	@$(OBJCOPY) -O binary -R .rodata -R .ramtext $< $@
 
 $(RODATA_BIN): $(ELF)
 	@echo "  OBJCOPY $@ (.rodata only)"
 	@$(OBJCOPY) -O binary -j .rodata $< $@
+
+$(RAM_BIN): $(ELF)
+	@echo "  OBJCOPY $@ (.ramtext only)"
+	@$(OBJCOPY) -O binary -j .ramtext $< $@
 
 # ---- Compile: boot assembly (boot/AgonLight2/Boot.asm) ----------------------
 
@@ -303,11 +319,11 @@ flash: $(STRIPPED_BIN)
 # Reports the two budgets that matter for this target's split memory model:
 #   - the flash image (.text + .data load image + .rodata) against the 128 KB
 #     on-chip flash, for both the shipped (strings-stripped) and full binaries;
-#   - .bss + .data against their fixed 5 KB external-RAM reservation, past which
-#     the boot integrity canary at 0x04D400 gets overwritten.
+#   - .bss + .data against their fixed 8 KB external-RAM reservation, past which
+#     the boot integrity canary at 0x052000 gets overwritten.
 # Everything is derived from linker symbols (see ld/AgonLight2.ld); only the
 # physical flash / SRAM capacities are constants here.
-size: $(ELF) $(FULL_BIN) $(STRIPPED_BIN) $(RODATA_BIN)
+size: $(ELF) $(FULL_BIN) $(STRIPPED_BIN) $(RODATA_BIN) $(RAM_BIN)
 	@echo ""
 	@echo "=== Agon Light 2 (eZ80F92): section sizes ==="
 	@$(SIZE) -A $(ELF)
@@ -315,6 +331,7 @@ size: $(ELF) $(FULL_BIN) $(STRIPPED_BIN) $(RODATA_BIN)
 	@echo "  Full binary file:     $$(stat -c%s $(FULL_BIN)) B"
 	@echo "  Stripped binary file: $$(stat -c%s $(STRIPPED_BIN)) B  (shipped image, no .rodata)"
 	@echo "  Rodata binary file:   $$(stat -c%s $(RODATA_BIN)) B"
+	@echo "  RAM image file:       $$(stat -c%s $(RAM_BIN)) B"
 	@echo ""
 	@$(NM) $(ELF) | awk ' \
 	  { v = strtonum("0x" $$1); n = $$3 } \
@@ -324,6 +341,8 @@ size: $(ELF) $(FULL_BIN) $(STRIPPED_BIN) $(RODATA_BIN)
 	  n == "__bss_size"       { bss_size = v } \
 	  n == "__data_size"      { data_size = v } \
 	  n == "__data_bss_limit" { limit = v } \
+	  n == "_agonLight2RamTextStart" { ram_start = v } \
+	  n == "_agonLight2RamTextEnd"   { ram_end = v } \
 	  END { \
 	    flash_cap = 128 * 1024; \
 	    sram_org  = strtonum("0x40000"); \
@@ -344,7 +363,9 @@ size: $(ELF) $(FULL_BIN) $(STRIPPED_BIN) $(RODATA_BIN)
 	    printf "  0x%06X  .bss + .data ....... %6d B used / %d B reserved  (%d B free)\n", bss_start, used, reserve, reserve - used; \
 	    printf "              .bss ......... %6d B\n", bss_size; \
 	    printf "              .data ........ %6d B\n", data_size; \
-	    printf "  0x%06X  boot canary, then the heap -> grows toward the stack at 0x0C0000\n", limit; \
+	    printf "  0x%06X  boot canary\n", limit; \
+	    printf "  0x%06X  .ramtext ........... %6d B  (loaded from the SD card at boot)\n", ram_start, ram_end - ram_start; \
+	    printf "  0x%06X  heap -> grows toward the stack at 0x0C0000\n", ram_end; \
 	    if (used > reserve) \
 	      printf "  *** .bss + .data OVER reservation by %d B: boot canary at 0x%06X is clobbered ***\n", used - reserve, limit; \
 	  }'
