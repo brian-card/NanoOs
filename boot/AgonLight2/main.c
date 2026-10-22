@@ -41,6 +41,9 @@ int main(void) {
   if (halAgonLight2Init() != 0) {
     while (true);
   }
+  if (agonLight2LoadRamText() != 0) {
+    while (true);
+  }
   nanoOsStart();
   return 0;
 }
