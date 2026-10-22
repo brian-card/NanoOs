@@ -604,6 +604,33 @@ int sdSpiReadBlocks(SdCardState *sdCardState,
   return 0;
 }
 
+/// @fn int sdSpiReadBlocksUnscheduled(SdCardSpiArgs *sdCardSpiArgs,
+///   uint32_t startBlock, uint32_t numBlocks, uint8_t *buffer)
+///
+/// @brief Initialize the SD card and read 512-byte blocks from it directly,
+/// without the SD card process, for use before the scheduler is running.
+///
+/// @param sdCardSpiArgs The pins the SD card is attached to.
+/// @param startBlock The first block to read.
+/// @param numBlocks The number of blocks to read.
+/// @param buffer The memory to read the blocks into.
+///
+/// @return Returns 0 on success, -errno on failure.
+int sdSpiReadBlocksUnscheduled(SdCardSpiArgs *sdCardSpiArgs,
+  uint32_t startBlock, uint32_t numBlocks, uint8_t *buffer
+) {
+  SdCardState sdCardState;
+  memset(&sdCardState, 0, sizeof(sdCardState));
+  sdCardState.sdCardVersion = sdSpiCardInit(sdCardSpiArgs, &sdCardState);
+  if (sdCardState.sdCardVersion <= 0) {
+    return (sdCardState.sdCardVersion < 0) ? sdCardState.sdCardVersion : -EIO;
+  }
+  sdSpiNegotiateFastBaud(SD_CARD_SPI_DEVICE);
+  sdCardState.blockSize = 512;
+
+  return -sdSpiReadBlocks(&sdCardState, startBlock, numBlocks, buffer);
+}
+
 /// @var _bulkWriteCmd
 ///
 /// @brief The command to use when multiple blocks are going to be written.
