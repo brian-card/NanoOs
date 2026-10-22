@@ -42,7 +42,6 @@
 .global _agonLight2ReadUart0Impl
 .global _agonLight2WriteUart0Impl
 .extern _agonLight2TraceUartState
-.extern _agonLight2TraceUart0Byte
 .extern _agonLight2TraceUart0Stale
 .global uart0Isr
 
@@ -77,7 +76,6 @@ uart0RxHead: .space 1              ; written only by uart0Isr
 uart0RxTail: .space 1              ; written only by the Poll/Read impls
 uart0RxBuf:  .space UART0_RING_SIZE
 uart0IsrCount: .space 3            ; boot trace: uart0Isr entries
-uart0RxTraced: .space 1            ; boot trace: received bytes reported
 
 .text
 
@@ -340,21 +338,6 @@ uart0Isr:
 
 .uart0IsrRxLoop:
     in0     a, (UART0_RBR)      ; also clears DR for this byte
-    ld      b, a                ; boot trace: report the first 64 bytes
-    ld      a, (uart0RxTraced)
-    cp      64
-    jr      nc, .uart0IsrRxTraced
-    inc     a
-    ld      (uart0RxTraced), a
-    push    bc
-    ld      hl, 0
-    ld      l, b
-    push    hl
-    call    _agonLight2TraceUart0Byte
-    pop     hl
-    pop     bc
-.uart0IsrRxTraced:
-    ld      a, b
     call    uart0RxPushByte
     in0     a, (UART0_LSR)
     and     0x01

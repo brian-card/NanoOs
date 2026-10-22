@@ -41,10 +41,21 @@ extern "C"
 {
 #endif
 
+/// @def VDP_PACKET_GENERAL_POLL
+///
+/// @brief The command of the VDP's reply to a general poll.
+#define VDP_PACKET_GENERAL_POLL 0x00
+
 /// @def VDP_PACKET_KEYBOARD
 ///
 /// @brief The command of a VDP keyboard event packet.
 #define VDP_PACKET_KEYBOARD 0x01
+
+/// @def VDP_PACKET_MAX_LENGTH
+///
+/// @brief The longest data length VdpPacketParser accepts for a command whose
+/// length it doesn't know.
+#define VDP_PACKET_MAX_LENGTH 16
 
 /// @def VDP_PACKET_MAX_DATA
 ///

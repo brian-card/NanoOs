@@ -154,3 +154,77 @@ NANO_OS_TEST(unit_vdp_keyboard, data_bytes_with_the_high_bit_are_data) {
   NANO_OS_ASSERT_EQ_INT(VDP_PACKET_KEYBOARD, parser.command);
   NANO_OS_ASSERT_EQ_INT(KEYCODE_LEFT, parser.data[2]);
 }
+
+/// @fn static int parseKeys(const uint8_t *bytes, size_t length,
+///   uint8_t *keys, int maxKeys)
+///
+/// @brief Parse bytes from the VDP and collect the ASCII value of each key
+/// that went down.
+///
+/// @param bytes The bytes to parse.
+/// @param length The number of bytes.
+/// @param keys The array to collect the ASCII values in.
+/// @param maxKeys The size of keys.
+///
+/// @return Returns the number of keys collected.
+static int parseKeys(const uint8_t *bytes, size_t length, uint8_t *keys,
+  int maxKeys
+) {
+  VdpPacketParser parser;
+  memset(&parser, 0, sizeof(parser));
+  int numKeys = 0;
+  for (size_t ii = 0; ii < length; ii++) {
+    if (vdpParseByte(&parser, bytes[ii])
+      && (parser.command == VDP_PACKET_KEYBOARD)
+      && (parser.data[3] == 1) && (numKeys < maxKeys)
+    ) {
+      keys[numKeys++] = parser.data[0];
+    }
+  }
+  return numKeys;
+}
+
+NANO_OS_TEST(unit_vdp_keyboard, damaged_poll_replies_do_not_swallow_keys) {
+  // The bytes an Agon Light 2 sent after power-on, Oct 2026: a burst of
+  // replies to queued general polls with bytes lost, then 'a' and 'b'.
+  const uint8_t bytes[] = {
+    0x80, 0x01, 0x4e,
+    0x86, 0x08, 0x80, 0x02, 0xe0, 0x01, 0x50, 0x3c, 0x10, 0x00,
+    0x80, 0x01, 0x4e, 0x80, 0x01, 0x4e,
+    0x80, 0x4e, 0x80, 0x80, 0x01, 0x80, 0x80, 0x80, 0x80,
+    0x81, 0x04, 0x61, 0x00, 0x16, 0x01,
+    0x81, 0x04, 0x61, 0x00, 0x16, 0x00,
+    0x81, 0x04, 0x62, 0x00, 0x17, 0x01,
+    0x81, 0x04, 0x62, 0x00, 0x17, 0x00,
+  };
+  uint8_t keys[4];
+
+  NANO_OS_ASSERT_EQ_INT(2, parseKeys(bytes, sizeof(bytes), keys, 4));
+  NANO_OS_ASSERT_EQ_INT('a', keys[0]);
+  NANO_OS_ASSERT_EQ_INT('b', keys[1]);
+}
+
+NANO_OS_TEST(unit_vdp_keyboard, poll_reply_missing_its_cookie_keeps_next_key) {
+  const uint8_t bytes[] = {
+    0x80, 0x01,
+    0x81, 0x04, 0x61, 0x00, 0x16, 0x01,
+    0x81, 0x04, 0x62, 0x00, 0x17, 0x01,
+  };
+  uint8_t keys[4];
+
+  NANO_OS_ASSERT_EQ_INT(2, parseKeys(bytes, sizeof(bytes), keys, 4));
+  NANO_OS_ASSERT_EQ_INT('a', keys[0]);
+  NANO_OS_ASSERT_EQ_INT('b', keys[1]);
+}
+
+NANO_OS_TEST(unit_vdp_keyboard, implausible_lengths_do_not_swallow_keys) {
+  const uint8_t bytes[] = {
+    0xff, 0x81, 0x04, 0x61, 0x00, 0x16, 0x01,
+    0x81, 0x4e, 0x81, 0x04, 0x62, 0x00, 0x17, 0x01,
+  };
+  uint8_t keys[4];
+
+  NANO_OS_ASSERT_EQ_INT(2, parseKeys(bytes, sizeof(bytes), keys, 4));
+  NANO_OS_ASSERT_EQ_INT('a', keys[0]);
+  NANO_OS_ASSERT_EQ_INT('b', keys[1]);
+}

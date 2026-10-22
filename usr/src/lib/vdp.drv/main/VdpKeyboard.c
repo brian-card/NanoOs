@@ -43,11 +43,30 @@ enum VdpPacketState {
   VDP_PACKET_STATE_DATA,
 };
 
+/// @fn static bool vdpPacketLengthIsValid(uint8_t command, uint8_t length)
+///
+/// @brief Determine whether a length byte can follow a packet's header.
+///
+/// @param command The command of the packet.
+/// @param length The length byte.
+///
+/// @return Returns true if a packet with the command can have the length,
+/// false otherwise.
+static bool vdpPacketLengthIsValid(uint8_t command, uint8_t length) {
+  if (command == VDP_PACKET_GENERAL_POLL) {
+    return length == 1;
+  } else if (command == VDP_PACKET_KEYBOARD) {
+    return length == 4;
+  }
+  return length <= VDP_PACKET_MAX_LENGTH;
+}
+
 /// @fn bool vdpParseByte(VdpPacketParser *parser, uint8_t byte)
 ///
 /// @brief Feed one byte from the VDP to a packet parser.  Bytes that can't
-/// start a packet are skipped, so the parser resynchronizes on the next
-/// header.
+/// start a packet are skipped, and a header followed by a length its command
+/// can't have is abandoned, so a packet that lost a byte in transit costs no
+/// more than itself and the parser resynchronizes on the next header.
 ///
 /// @param parser A pointer to the VdpPacketParser, zeroed before its first
 ///   byte.
@@ -63,6 +82,10 @@ bool vdpParseByte(VdpPacketParser *parser, uint8_t byte) {
     }
     return false;
   } else if (parser->state == VDP_PACKET_STATE_LENGTH) {
+    if (vdpPacketLengthIsValid(parser->command, byte) == false) {
+      parser->state = VDP_PACKET_STATE_HEADER;
+      return vdpParseByte(parser, byte);
+    }
     parser->length = byte;
     parser->received = 0;
     if (byte == 0) {
@@ -73,6 +96,12 @@ bool vdpParseByte(VdpPacketParser *parser, uint8_t byte) {
     return false;
   }
 
+  if ((parser->command == VDP_PACKET_GENERAL_POLL) && ((byte & 0x80) != 0)) {
+    // A poll reply's data is the cookie, which NanoOs keeps below 0x80, so
+    // this is the header of the next packet and the reply lost its cookie.
+    parser->state = VDP_PACKET_STATE_HEADER;
+    return vdpParseByte(parser, byte);
+  }
   if (parser->received < VDP_PACKET_MAX_DATA) {
     parser->data[parser->received] = byte;
   }

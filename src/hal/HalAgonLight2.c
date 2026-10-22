@@ -2098,7 +2098,9 @@ static volatile uint32_t _vdpInitialized
 /// @def VDP_GENERAL_POLL_COOKIE
 ///
 /// @brief Byte sent in the general poll, which the VDP echoes in its reply.
-/// This is ASCII character 'N' for "NanoOs".
+/// This is ASCII character 'N' for "NanoOs".  It must stay below 0x80:
+/// vdp.drv's packet parser reads a reply byte with the high bit set as the
+/// next packet's header.
 #define VDP_GENERAL_POLL_COOKIE 0x4e
 
 /// @def VDP_GENERAL_POLL_RETRY_NS
@@ -2258,18 +2260,6 @@ void agonLight2TraceUartState(int code, int ier, int iir, int lsr, int msr) {
   agonLight2TraceValue(_iirText, (unsigned long) iir, 16);
   agonLight2TraceValue(_lsrText, (unsigned long) lsr, 16);
   agonLight2TraceValue(_msrText, (unsigned long) msr, 16);
-}
-
-/// @fn void agonLight2TraceUart0Byte(int byte)
-///
-/// @brief Boot trace: report a byte UART0 received from the VDP.
-///
-/// @param byte The byte received.
-///
-/// @return This function returns no value.
-void agonLight2TraceUart0Byte(int byte) {
-  static const char _text[] KEEP_IN_FLASH = "[boot] U0 rx 0x";
-  agonLight2TraceValue(_text, (unsigned long) byte, 16);
 }
 
 /// @fn void agonLight2TraceUart0Stale(int byte)
