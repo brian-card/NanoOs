@@ -126,7 +126,9 @@ const NanoOsExecutiveApi nanoOsExecutiveApi = {
   .comessageQueuePopType = comessageQueuePopType,
   .comessageQueueWait = comessageQueueWait,
   .comessageQueueWaitForType = comessageQueueWaitForType,
-  .comessageQueuePush = comessageQueuePush,
+
+  // Kernel IPC functions:
+  .sendProcessMessageToPid = sendProcessMessageToPid,
 };
 
 KEEP_IN_FLASH

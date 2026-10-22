@@ -431,22 +431,22 @@ static inline ProcessMessage* processMessageQueueWait(struct timespec *ts) {
   return NULL;
 }
 
-/// @fn static inline int processMessageQueuePush(
-///   ProcessDescriptor *processDescriptor, ProcessMessage *message)
+/// @fn static inline int sendProcessMessageToPid(
+///   unsigned int pid, ProcessMessage *message)
 ///
-/// @brief Push a process message on to a process's message queue.
+/// @brief Send a process message to another process, if the running process
+/// has the IPC capability to send it that message.
 ///
-/// @param processDescriptor A pointer to the ProcessDescriptor to push the
-///   message onto.
-/// @param message A pointer to the ProcessMessage to push.
+/// @param pid The ID of the process to send the message to.
+/// @param message A pointer to the initialized ProcessMessage to send.
 ///
-/// @return Returns processSuccess on success, process error code on failure.
-static inline int processMessageQueuePush(
-  ProcessDescriptor *processDescriptor, ProcessMessage *message
+/// @return Returns processSuccess on success, processError on failure.
+static inline int sendProcessMessageToPid(
+  unsigned int pid, ProcessMessage *message
 ) {
   if (overlayMap.header.osApi->executiveApi != NULL) {
-    return overlayMap.header.osApi->executiveApi->comessageQueuePush(
-      processDescriptor->mainThread, message);
+    return overlayMap.header.osApi->executiveApi->sendProcessMessageToPid(
+      pid, message);
   }
   return processError;
 }
