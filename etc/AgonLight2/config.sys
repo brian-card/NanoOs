@@ -2,3 +2,4 @@ REM NanoOs system configuration for the Agon Light 2
 DEVICE=/usr/lib/vdp.drv
 HARDWARE=/usr/lib/vdp.drv UART0
 CONSOLE=UART1 /usr/bin/getty
+CONSOLE=/usr/lib/vdp.drv /usr/bin/getty
