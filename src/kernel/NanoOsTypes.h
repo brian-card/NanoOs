@@ -255,6 +255,8 @@ typedef struct ProcessQueue ProcessQueue;
 ///   ipcCapabilities array.
 /// @param ipcCapabilitiesDynamic Whether or not the ipcCapabilities array is
 ///   dynamically allocated.
+/// @param halCapabilitiesDynamic Whether or not the halCapabilities array is
+///   dynamically allocated.
 /// @param halCapabilityBitmap One bit per HAL function, set for each function
 ///   granted in halCapabilities.  Built by setProcessHalCapabilities.
 /// @param halDeviceMasks For each HalSubsystem, the bitmask of device IDs the
@@ -284,7 +286,8 @@ typedef struct ProcessDescriptor {
   IpcCapability      *ipcCapabilities;
   size_t              numIpcCapabilities;
   bool                ipcCapabilitiesDynamic;
-  // Kept last so that these share the tail padding after the bool above.
+  bool                halCapabilitiesDynamic;
+  // Kept last so that these share the tail padding after the bools above.
   uint8_t             halCapabilityBitmap[HAL_CAPABILITY_BITMAP_SIZE];
   uint8_t             halDeviceMasks[HAL_DEVICE_MASKS_SIZE];
 } ProcessDescriptor;
