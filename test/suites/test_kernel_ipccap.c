@@ -16,6 +16,7 @@
 #include "kernel/Scheduler.h"
 #include "kernel/Console.h"
 #include "kernel/Hal.h"
+#include "user/NanoOsApi.h"
 
 #define TEST_CAPABILITY_SLOTS 8
 
@@ -134,4 +135,105 @@ NANO_OS_TEST(halcap, insert_of_a_granted_function_adds_its_devices) {
 
   NANO_OS_ASSERT_EQ_INT(1, numCapabilities);
   NANO_OS_ASSERT_EQ_INT(0x03, capabilities[0].deviceIds);
+}
+
+/// @fn static void* idleProcess(void *args)
+///
+/// @brief Yield forever without ever reading a message.
+///
+/// @param args Unused.
+///
+/// @return This function never returns.
+static void* idleProcess(void *args) {
+  (void) args;
+  while (1) {
+    processYield();
+  }
+
+  return NULL;
+}
+
+/// @fn static ProcessDescriptor* startIdleProcess(void)
+///
+/// @brief Run idleProcess in the first user process slot.
+///
+/// @return Returns a pointer to the process's ProcessDescriptor, or NULL if it
+/// couldn't be started.
+static ProcessDescriptor* startIdleProcess(void) {
+  ProcessId pid = schedulerGetFirstShellPid() + schedulerGetNumShells();
+  ProcessDescriptor *processDescriptor = &allProcesses[pid - 1];
+  if (processCreate(processDescriptor, idleProcess, NULL) != processSuccess) {
+    return NULL;
+  }
+  threadSetContext(processDescriptor->mainThread, processDescriptor);
+  processQueuePush(processDescriptor->readyQueue, processDescriptor);
+  return processDescriptor;
+}
+
+/// @fn static int executiveSend(ProcessDescriptor *target,
+///   IpcCapability *capabilities, size_t numCapabilities,
+///   ProcessMessage **sent)
+///
+/// @brief Send a CONSOLE_WRITE_BUFFER message to a process through the
+/// executive API while this process holds the given IPC capabilities.
+///
+/// @param target A pointer to the ProcessDescriptor to send to.
+/// @param capabilities The IPC capabilities to hold during the send.
+/// @param numCapabilities The number of entries in capabilities.
+/// @param sent Where to store the message that was sent.
+///
+/// @return Returns the executive API's return value.
+static int executiveSend(ProcessDescriptor *target,
+  IpcCapability *capabilities, size_t numCapabilities, ProcessMessage **sent
+) {
+  ProcessDescriptor *self = getRunningProcess();
+  IpcCapability *savedCapabilities = self->ipcCapabilities;
+  size_t savedNumCapabilities = self->numIpcCapabilities;
+  self->ipcCapabilities = capabilities;
+  self->numIpcCapabilities = numCapabilities;
+
+  *sent = getAvailableMessage();
+  processMessageInit(*sent, CONSOLE_COMMAND_SIGNATURE | CONSOLE_WRITE_BUFFER,
+    NULL, 0, /* waiting= */ true);
+  int returnValue = nanoOsExecutiveApi.sendProcessMessageToPid(
+    target->processId, *sent);
+
+  self->ipcCapabilities = savedCapabilities;
+  self->numIpcCapabilities = savedNumCapabilities;
+  return returnValue;
+}
+
+NANO_OS_KERNEL_TEST(executive_api, send_with_the_capability_is_queued) {
+  ProcessDescriptor *target = startIdleProcess();
+  NANO_OS_ASSERT_NOT_NULL(target);
+  IpcCapability capability = {
+    .destinationPid = target->processId,
+    .signature = CONSOLE_COMMAND_SIGNATURE,
+    .messageTypes = ((uint32_t) 1) << CONSOLE_WRITE_BUFFER,
+  };
+  ProcessMessage *sent = NULL;
+
+  NANO_OS_ASSERT_EQ_INT(processSuccess,
+    executiveSend(target, &capability, 1, &sent));
+
+  NANO_OS_ASSERT_EQ_PTR(sent, target->mainThread->messageQueue.head);
+  comessageQueueRemove(target->mainThread, sent);
+  processMessageRelease(sent);
+}
+
+NANO_OS_KERNEL_TEST(executive_api, send_without_the_capability_is_refused) {
+  ProcessDescriptor *target = startIdleProcess();
+  NANO_OS_ASSERT_NOT_NULL(target);
+  IpcCapability capability = {
+    .destinationPid = target->processId,
+    .signature = CONSOLE_COMMAND_SIGNATURE,
+    .messageTypes = ((uint32_t) 1) << CONSOLE_WRITE_VALUE,
+  };
+  ProcessMessage *sent = NULL;
+
+  NANO_OS_ASSERT_EQ_INT(processError,
+    executiveSend(target, &capability, 1, &sent));
+
+  NANO_OS_ASSERT_NULL(target->mainThread->messageQueue.head);
+  processMessageRelease(sent);
 }
