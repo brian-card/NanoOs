@@ -155,8 +155,8 @@ void* yieldCallback(void *stateData, Thread *thread, void *arg) {
 ///   thread pointer has not been cleared.
 ///
 /// @return This function returns no value, but if the head of the Comutex's
-/// lock queue is found in one of the waiting queues, it is removed from the
-/// waiting queue and pushed onto the ready queue.
+/// lock queue is found in one of the process queues, it is removed from that
+/// queue and pushed onto its ready queue.
 void unlockCallback(void *stateData, Comutex *comutex) {
   (void) stateData;
   ProcessDescriptor *processDescriptor = threadContext(comutex->head);
@@ -165,8 +165,12 @@ void unlockCallback(void *stateData, Comutex *comutex) {
     return;
   }
   schedulerInhibitPreemption();
-  processQueueRemove(processDescriptor->processQueue, processDescriptor);
-  processQueuePush(processDescriptor->readyQueue, processDescriptor);
+  // A process in no queue has been popped to run, so it needs no waking.
+  if (processQueueRemove(processDescriptor->processQueue, processDescriptor)
+    == 0
+  ) {
+    processQueuePush(processDescriptor->readyQueue, processDescriptor);
+  }
   schedulerAllowPreemption();
 
   return;
@@ -199,9 +203,9 @@ void preemptionCallback(void *stateData) {
 ///   signalled.  At the time this callback is called, the number of signals has
 ///   been set to the number of waiters that will be signalled.
 ///
-/// @return This function returns no value, but if the head of the Cocondition's
-/// signal queue is found in one of the waiting queues, it is removed from the
-/// waiting queue and pushed onto the ready queue.
+/// @return This function returns no value, but each signalled process that is
+/// found in one of the process queues is removed from that queue and pushed
+/// onto its ready queue.
 void signalCallback(void *stateData, Cocondition *cocondition) {
   (void) stateData;
   Thread *cur = cocondition->head;
@@ -212,9 +216,12 @@ void signalCallback(void *stateData, Cocondition *cocondition) {
     // It's not possible for processDescriptor to be NULL.  We only enter this
     // loop if cocondition->numSignals > 0, so there MUST be something waiting
     // on this condition.
-    processQueueRemoveInline(
-      processDescriptor->processQueue, processDescriptor);
-    processQueuePushInline(processDescriptor->readyQueue, processDescriptor);
+    // A process in no queue has been popped to run, so it needs no waking.
+    if (processQueueRemoveInline(
+      processDescriptor->processQueue, processDescriptor) == 0
+    ) {
+      processQueuePushInline(processDescriptor->readyQueue, processDescriptor);
+    }
     cur = cur->nextToSignal;
   }
   schedulerAllowPreemption();
