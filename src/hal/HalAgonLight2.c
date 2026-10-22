@@ -2089,8 +2089,9 @@ static uint32_t agonLight2BlockDevicesOnline[] = { 0x00000000 };
 ///
 /// @brief Whether the VDP has completed its startup handshake.  Lives in
 /// .persistent so it survives a soft reset of the eZ80, which does not reset
-/// the VDP.  volatile because its value predates this boot; without it the
-/// compiler shrinks the variable to a single bit.
+/// the VDP; agonLight2InitVdp only trusts it after a soft reset.  volatile
+/// because its value predates this boot; without it the compiler shrinks the
+/// variable to a single bit.
 static volatile uint32_t _vdpInitialized
   __attribute__((section(".persistent")));
 
@@ -2301,14 +2302,31 @@ static bool agonLight2VdpGeneralPoll(void) {
   return false;
 }
 
+/// @def WDT_CTL_PORT
+///
+/// @brief I/O address of the eZ80F92 watchdog control register.
+#define WDT_CTL_PORT 0x93
+
+/// @def WDT_CTL_RST_FLAG
+///
+/// @brief WDT_CTL bit that is set when the last reset was a watchdog timeout
+/// and clear after an external reset or power-on.
+#define WDT_CTL_RST_FLAG 0x20
+
 /// @fn void agonLight2InitVdp(void)
 ///
-/// @brief Complete the VDP's startup handshake if it has not been done since
-/// the VDP last powered up, then write a test line to the screen.
+/// @brief Complete the VDP's startup handshake unless this boot is a watchdog
+/// reset (NanoOs's soft reset, which leaves the VDP running) that followed a
+/// completed handshake.  The reset button and power-on reboot the VDP too, so
+/// they always handshake.
 ///
 /// @return This function returns no value.
 static void agonLight2InitVdp(void) {
-  if (_vdpInitialized != VDP_INITIALIZED_MAGIC) {
+  bool softReset
+    = (agonLight2ReadPort(WDT_CTL_PORT) & WDT_CTL_RST_FLAG) != 0;
+  bootTraceValue("soft reset", (int) softReset);
+  if ((softReset == false) || (_vdpInitialized != VDP_INITIALIZED_MAGIC)) {
+    _vdpInitialized = 0;
     if (agonLight2VdpGeneralPoll() == false) {
       return;
     }
