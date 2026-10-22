@@ -431,6 +431,8 @@ typedef struct ConsoleInputReadyArgs {
 /// @param echo Whether or not the data read from the port should be echoed back
 ///   to the port.
 /// @param inputState The ConsoleInputState of the port's line editing.
+/// @param escapeStartMs The time, in milliseconds modulo 65536, that the
+///   escape the port is in CONSOLE_INPUT_STATE_ESCAPE for was read.
 /// @param printString A pointer to the function that will print a string of
 ///   output to the console port.
 /// @param forwardingPid The ID of the process that services the port, or
@@ -452,6 +454,7 @@ typedef struct ConsolePort {
   int                   (*readByte)(struct ConsolePort *consolePort);
   bool                    echo;
   uint8_t                 inputState;
+  uint16_t                escapeStartMs;
   int                   (*consolePrintString)(struct ConsolePort *consolePort,
                           const char *string);
   ProcessId               forwardingPid;
