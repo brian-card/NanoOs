@@ -2106,12 +2106,15 @@ static volatile uint32_t _vdpInitialized
 /// @def VDP_GENERAL_POLL_RETRY_NS
 ///
 /// @brief How long to wait for a reply before resending the general poll.
-#define VDP_GENERAL_POLL_RETRY_NS ((int64_t) 100000000)
+/// The VDP answers every poll it queued while starting up, so a short retry
+/// floods UART0 with replies once it's ready.
+#define VDP_GENERAL_POLL_RETRY_NS ((int64_t) 500000000)
 
 /// @def VDP_GENERAL_POLL_TIMEOUT_NS
 ///
-/// @brief How long to keep polling the VDP before giving up on it.
-#define VDP_GENERAL_POLL_TIMEOUT_NS ((int64_t) 5000000000LL)
+/// @brief How long to keep polling the VDP before giving up on it.  A VDP
+/// powering up alongside the eZ80 takes more than 5 seconds to listen.
+#define VDP_GENERAL_POLL_TIMEOUT_NS ((int64_t) 15000000000LL)
 
 /// @var _vdpGeneralPoll
 ///
