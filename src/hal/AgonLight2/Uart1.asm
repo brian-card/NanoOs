@@ -57,7 +57,7 @@
 .global _agonLight2ReadUart1Impl
 .global _agonLight2WriteUart1Impl
 .global _agonLight2WriteUart1PolledImpl
-.extern _agonLight2TraceInterrupt
+.extern _agonLight2TraceUartState
 .global uart1Isr
 
 ;; -- eZ80F92 Port C GPIO registers ------------------
@@ -73,9 +73,11 @@ UART1_BRG_L .equ 0xD0      ; BRG divisor low  (DLAB=1)
 UART1_IER   .equ 0xD1      ; Interrupt enable
 UART1_BRG_H .equ 0xD1      ; BRG divisor high (DLAB=1)
 UART1_FCTL  .equ 0xD2      ; FIFO control (write)
+UART1_IIR   .equ 0xD2      ; Interrupt identification (read)
 UART1_LCTL  .equ 0xD3      ; Line control
 UART1_MCTL  .equ 0xD4      ; Modem control
 UART1_LSR   .equ 0xD5      ; Line status
+UART1_MSR   .equ 0xD6      ; Modem status
 
 UART1_IER_RX_BIT .equ 0x01 ; ERBI - enable "receive data available" interrupt
 UART1_IER_TX_BIT .equ 0x02 ; ETBEI - enable "transmit holding reg empty" int
@@ -415,10 +417,25 @@ uart1Isr:
     or      a
     sbc     hl, de
     jr      nz, .uart1IsrCounted
+    in0     b, (UART1_IER)    ; read in this order: IIR shows the source
+    in0     c, (UART1_IIR)    ; before LSR / MSR reads acknowledge it
+    in0     d, (UART1_LSR)
+    in0     e, (UART1_MSR)
+    ld      hl, 0
+    ld      l, e
+    push    hl                  ; msr
+    ld      l, d
+    push    hl                  ; lsr
+    ld      l, c
+    push    hl                  ; iir
+    ld      l, b
+    push    hl                  ; ier
     ld      hl, 0x101
-    push    hl
-    call    _agonLight2TraceInterrupt
-    pop     hl
+    push    hl                  ; code
+    call    _agonLight2TraceUartState
+    ld      hl, 15
+    add     hl, sp
+    ld      sp, hl
 .uart1IsrCounted:
     in0     a, (UART1_LSR)
     and     0x01                ; DR - receiver data ready

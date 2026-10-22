@@ -42,6 +42,7 @@
 *(.text._agonLight2TraceString)
 *(.text._agonLight2TraceValue)
 *(.text._agonLight2TraceInterrupt)
+*(.text._agonLight2TraceUartState)
 *(.text._sdSpiReadBlocksUnscheduled)
 *(.text._sdSpiNegotiateFastBaud)
 *(.text._agonLight2ProcessStackSize)

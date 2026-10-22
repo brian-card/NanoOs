@@ -2232,6 +2232,33 @@ void agonLight2TraceInterrupt(int code) {
   agonLight2TraceValue(_trapText, (unsigned long) code, 16);
 }
 
+/// @fn void agonLight2TraceUartState(
+///   int code, int ier, int iir, int lsr, int msr)
+///
+/// @brief Boot trace: report a UART interrupt storm along with the UART's
+/// interrupt enable, interrupt identification, line status, and modem status
+/// registers, read in that order inside the storm.
+///
+/// @param code 0x100 for UART0, 0x101 for UART1.
+/// @param ier The UART's IER.
+/// @param iir The UART's IIR.
+/// @param lsr The UART's LSR.
+/// @param msr The UART's MSR.
+///
+/// @return This function returns no value.
+void agonLight2TraceUartState(int code, int ier, int iir, int lsr, int msr) {
+  static const char _codeText[] KEEP_IN_FLASH = "[boot] TRAP code 0x";
+  static const char _ierText[] KEEP_IN_FLASH = "[boot]   IER 0x";
+  static const char _iirText[] KEEP_IN_FLASH = "[boot]   IIR 0x";
+  static const char _lsrText[] KEEP_IN_FLASH = "[boot]   LSR 0x";
+  static const char _msrText[] KEEP_IN_FLASH = "[boot]   MSR 0x";
+  agonLight2TraceValue(_codeText, (unsigned long) code, 16);
+  agonLight2TraceValue(_ierText, (unsigned long) ier, 16);
+  agonLight2TraceValue(_iirText, (unsigned long) iir, 16);
+  agonLight2TraceValue(_lsrText, (unsigned long) lsr, 16);
+  agonLight2TraceValue(_msrText, (unsigned long) msr, 16);
+}
+
 /// @fn bool agonLight2VdpGeneralPoll(void)
 ///
 /// @brief Send the VDP general polls until it replies or
