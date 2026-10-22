@@ -15,6 +15,7 @@
 #include "kernel/Processes.h"
 #include "kernel/Scheduler.h"
 #include "kernel/Console.h"
+#include "kernel/Hal.h"
 
 #define TEST_CAPABILITY_SLOTS 8
 
@@ -94,4 +95,43 @@ NANO_OS_KERNEL_TEST(ipccap, insert_into_the_middle_keeps_the_neighbors) {
     NANO_OS_ASSERT_TRUE(capabilityPresent(capabilities, 5, expected[ii],
       CONSOLE_RETURNING_INPUT));
   }
+}
+
+#define TEST_UART_WRITE ((((uint16_t) HAL_UART) << 8) | HAL_UART_WRITE)
+#define TEST_UART_READ ((((uint16_t) HAL_UART) << 8) | HAL_UART_READ)
+#define TEST_CLOCK_MS ((((uint16_t) HAL_CLOCK) << 8) \
+  | HAL_CLOCK_GET_ELAPSED_MILLISECONDS)
+
+NANO_OS_TEST(halcap, insert_keeps_the_array_sorted) {
+  HalCapability capabilities[4];
+  size_t numCapabilities = 0;
+  numCapabilities = halCapabilityInsert(capabilities, numCapabilities,
+    TEST_CLOCK_MS, 0x01);
+  numCapabilities = halCapabilityInsert(capabilities, numCapabilities,
+    TEST_UART_WRITE, 0x02);
+  numCapabilities = halCapabilityInsert(capabilities, numCapabilities,
+    TEST_UART_READ, 0x01);
+
+  NANO_OS_ASSERT_EQ_INT(3, numCapabilities);
+  for (size_t ii = 1; ii < numCapabilities; ii++) {
+    NANO_OS_ASSERT_TRUE(capabilities[ii - 1].subsystemFunction
+      < capabilities[ii].subsystemFunction);
+  }
+  NANO_OS_ASSERT_EQ_INT(TEST_UART_READ, capabilities[0].subsystemFunction);
+  NANO_OS_ASSERT_EQ_INT(0x01, capabilities[0].deviceIds);
+  NANO_OS_ASSERT_EQ_INT(TEST_UART_WRITE, capabilities[1].subsystemFunction);
+  NANO_OS_ASSERT_EQ_INT(0x02, capabilities[1].deviceIds);
+  NANO_OS_ASSERT_EQ_INT(TEST_CLOCK_MS, capabilities[2].subsystemFunction);
+}
+
+NANO_OS_TEST(halcap, insert_of_a_granted_function_adds_its_devices) {
+  HalCapability capabilities[2];
+  size_t numCapabilities = 0;
+  numCapabilities = halCapabilityInsert(capabilities, numCapabilities,
+    TEST_UART_WRITE, 0x02);
+  numCapabilities = halCapabilityInsert(capabilities, numCapabilities,
+    TEST_UART_WRITE, 0x01);
+
+  NANO_OS_ASSERT_EQ_INT(1, numCapabilities);
+  NANO_OS_ASSERT_EQ_INT(0x03, capabilities[0].deviceIds);
 }

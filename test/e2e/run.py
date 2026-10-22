@@ -196,6 +196,47 @@ def test_config_sys_console_on_unknown_port_falls_back_to_getty(s):
     s.child.expect(PROMPT, timeout=10)
 
 
+def test_config_sys_console_on_a_device_forwards_its_output(s):
+    s.restart_with_config_sys(
+        "DEVICE=/usr/lib/loopback.drv 1\n"
+        "CONSOLE=/usr/lib/loopback.drv /usr/bin/echo via-forwarding-port\n")
+    i = s.child.expect(["via-forwarding-port", "login: "], timeout=15)
+    assert i == 0, "getty ran instead of the forwarded console's program"
+
+
+def test_config_sys_uart_and_device_consoles_each_get_a_getty(s):
+    s.restart_with_config_sys(
+        "DEVICE=/usr/lib/loopback.drv 1\n"
+        "CONSOLE=UART1 /usr/bin/getty\n"
+        "CONSOLE=/usr/lib/loopback.drv /usr/bin/getty\n")
+    seen = set()
+    while seen != {"tty0", "tty1"}:
+        s.child.expect(r"(tty\d)", timeout=15)
+        seen.add(s.child.match.group(1))
+    s.login()
+
+
+def test_config_sys_hardware_grant_keeps_a_drivers_uart(s):
+    s.restart_with_config_sys(
+        "DEVICE=/usr/lib/loopback.drv 1\n"
+        "HARDWARE=/usr/lib/loopback.drv UART1\n"
+        "CONSOLE=/usr/lib/loopback.drv /usr/bin/echo granted-uart1\n")
+    i = s.child.expect(["granted-uart1", "login: "], timeout=15)
+    assert i == 0, "the driver's output didn't reach UART1"
+
+
+def test_config_sys_hardware_grant_limits_a_driver_to_its_uart(s):
+    s.restart_with_config_sys(
+        "DEVICE=/usr/lib/loopback.drv 1\n"
+        "HARDWARE=/usr/lib/loopback.drv UART0\n"
+        "CONSOLE=UART1 /usr/bin/getty\n"
+        "CONSOLE=/usr/lib/loopback.drv /usr/bin/echo granted-uart0\n")
+    i = s.child.expect(["granted-uart0", "login: "], timeout=15)
+    assert i == 1, "a driver granted only UART0 wrote to UART1"
+    i = s.child.expect(["granted-uart0", pexpect.TIMEOUT], timeout=3)
+    assert i == 1, "a driver granted only UART0 wrote to UART1"
+
+
 def test_login_rejects_bad_password(s):
     s.wait_login_prompt()
     s.child.sendline("root")
