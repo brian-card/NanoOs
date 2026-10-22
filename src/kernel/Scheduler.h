@@ -70,6 +70,7 @@ typedef struct SpawnArgs SpawnArgs;
 typedef uint8_t NanoOsShutdownType;
 typedef struct FileBlockMetadata FileBlockMetadata;
 typedef struct IpcCapability IpcCapability;
+typedef struct HalCapability HalCapability;
 typedef struct OverlayDescriptor OverlayDescriptor;
 
 /// @struct ShellProgram
@@ -261,6 +262,7 @@ ProcessId schedulerGetFirstShellPid(void);
 uint8_t schedulerGetNumShells(void);
 int schedulerGetNumConsolePorts(void);
 int schedulerGetUartConsolePort(uint8_t uartId);
+int schedulerAddForwardingPort(ProcessId forwardingPid);
 int schedulerBindShell(uint8_t shellIndex, uint8_t consolePort,
   ShellProgram *shellProgram);
 void schedulerSetNumShells(uint8_t numShells);
@@ -274,6 +276,11 @@ int schedulerRunExecutiveOverlay(ProcessDescriptor *processDescriptor,
 ProcessId reserveProcessSlot(void);
 void ipcCapabilityInsert(IpcCapability *capabilities, size_t numCapabilities,
   ProcessId destinationPid, int64_t signature, uint32_t messageType);
+size_t halCapabilityInsert(HalCapability *capabilities, size_t numCapabilities,
+  uint16_t subsystemFunction, uint8_t deviceIds);
+int addProcessHalCapability(ProcessDescriptor *processDescriptor,
+  uint16_t subsystemFunction, uint8_t deviceIds);
+void schedulerSetBaseHalCapabilities(ProcessDescriptor *processDescriptor);
 void processQueueInit(ProcessQueue *processQueue, const char *name);
 int processQueuePush(
   ProcessQueue *processQueue, ProcessDescriptor *processDescriptor);
