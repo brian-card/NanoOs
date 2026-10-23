@@ -30,8 +30,31 @@
 
 #include <stdio.h>
 #include <string.h>
+#include "NanoOsUtils.h"
+
+/// @brief Print the usage summary for echo.
+///
+/// @param stream The stream to print to.
+///
+/// @return This function returns no value.
+static void printUsage(FILE *stream) {
+  fputs(
+    "Usage: echo [argument...]\n"
+    "\n"
+    "Write the arguments to standard output, separated by single spaces and\n"
+    "followed by a newline.  A --help after the first argument is printed\n"
+    "like any other argument.\n"
+    "\n"
+    "Options:\n"
+    "  --help  Show this help and exit.\n",
+    stream);
+}
 
 int main(int argc, char **argv) {
+  if ((argc > 1) && isHelpOption(argv[1])) {
+    printUsage(stdout);
+    return 0;
+  }
   for (int ii = 1; ii < argc; ii++) {
     fputs(argv[ii], stdout);
     if (ii < (argc - 1)) {

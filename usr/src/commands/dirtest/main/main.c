@@ -41,6 +41,7 @@
 #include <errno.h>
 #include <stdint.h>
 #include <string.h>
+#include "NanoOsUtils.h"
 
 static void listDir(const char *path) {
   printf("opendir(%s):\n", path);
@@ -60,9 +61,30 @@ static void listDir(const char *path) {
   closedir(dirp);
 }
 
+/// @brief Print the usage summary for dirtest.
+///
+/// @param stream The stream to print to.
+///
+/// @return This function returns no value.
+static void printUsage(FILE *stream) {
+  fputs(
+    "Usage: dirtest\n"
+    "\n"
+    "Exercise the directory-reading functions.  List \"/\", \"/etc\", and \"/usr\"\n"
+    "with opendir and readdir, showing each entry's name, type, inode, and\n"
+    "record length, then show how opendir, readdir, and closedir handle a\n"
+    "missing path, a regular file, the end of a directory, and a NULL handle.\n"
+    "\n"
+    "Options:\n"
+    "  --help  Show this help and exit.\n",
+    stream);
+}
+
 int main(int argc, char **argv) {
-  (void) argc;
-  (void) argv;
+  if ((argc > 1) && isHelpOption(argv[1])) {
+    printUsage(stdout);
+    return 0;
+  }
 
   // Fixed scenario the e2e tests assert against: test/e2e/mkimage.sh always
   // builds a root directory containing exactly /etc and /usr (each in turn

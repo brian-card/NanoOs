@@ -37,6 +37,7 @@
 
 #include "ExecutiveProcesses.h"
 #include "UserspaceLogger.h"
+#include "NanoOsUtils.h"
 
 /// @var _logLevelNames
 ///
@@ -168,7 +169,32 @@ const LoggerCommandHandler loggerCommandHandlers[] = {
   loggerLogMessageCommandHandler,       // LOGGER_LOG_MESSAGE
 };
 
+/// @fn static void printUsage(FILE *stream)
+///
+/// @brief Print the usage summary for logger.
+///
+/// @param stream The stream to print to.
+///
+/// @return This function returns no value.
+static void printUsage(FILE *stream) {
+  fputs(
+    "Usage: logger <string file>\n"
+    "\n"
+    "Run the system logger, which prints the log messages sent to it, reading\n"
+    "the text of the kernel's messages from the string file.  The system\n"
+    "starts it at boot with /usr/lib/NanoOs_rodata.bin; it isn't normally run\n"
+    "by hand.\n"
+    "\n"
+    "Options:\n"
+    "  --help  Show this help and exit.\n",
+    stream);
+}
+
 int main(int argc, char **argv) {
+  if ((argc > 1) && isHelpOption(argv[1])) {
+    printUsage(stdout);
+    return 0;
+  }
   if (argc < 2) {
     printString("ERROR! No binary path provided to logger.  Halting.\n");
     while (1) sched_yield();

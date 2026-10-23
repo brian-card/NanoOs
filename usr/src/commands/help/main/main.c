@@ -31,10 +31,30 @@
 
 // Standard C includes
 #include <stdio.h>
+#include "NanoOsUtils.h"
+
+/// @brief Print the usage summary for help.
+///
+/// @param stream The stream to print to.
+///
+/// @return This function returns no value.
+static void printUsage(FILE *stream) {
+  fputs(
+    "Usage: help\n"
+    "\n"
+    "List the commands with a short description of each.  Run a command with\n"
+    "--help to see its own usage.\n"
+    "\n"
+    "Options:\n"
+    "  --help  Show this help and exit.\n",
+    stream);
+}
 
 int main(int argc, char **argv) {
-  (void) argc;
-  (void) argv;
+  if ((argc > 1) && isHelpOption(argv[1])) {
+    printUsage(stdout);
+    return 0;
+  }
   int returnValue = 0;
 
   printf("%s %s\n",
@@ -118,6 +138,7 @@ int main(int argc, char **argv) {
   printf("%s %s\n",
     "touch:                  ",
     "Create an empty file.");
+  printf("\nRun a command with --help to see its usage.\n");
 
   return returnValue;
 }

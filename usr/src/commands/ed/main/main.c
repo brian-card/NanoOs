@@ -30,6 +30,8 @@
 /// @brief Command loop, addressing, and printing for the `ed` line editor.
 
 #include "ed.h"
+#include <stdio.h>
+#include "NanoOsUtils.h"
 
 /// @var edErrorMessages
 ///
@@ -447,7 +449,51 @@ static void edRunCommand(EdState *state) {
   }
 }
 
+/// @fn static void printUsage(FILE *stream)
+///
+/// @brief Print the usage summary for ed.
+///
+/// @param stream The stream to print to.
+///
+/// @return This function returns no value.
+static void printUsage(FILE *stream) {
+  fputs(
+    "Usage: ed [file]\n"
+    "\n"
+    "Edit a text file a line at a time.  With a file, read it in to start.\n"
+    "Commands have the form [address[,address]]command[parameters].\n"
+    "\n"
+    "Addresses:\n"
+    "  .       current line           $       last line\n"
+    "  n       line n                 'x      line marked x\n"
+    "  +n, -n  n lines after or before the current line\n"
+    "  ,       lines 1 through $      ;       current line through $\n"
+    "Commands:\n"
+    "  a, i      append after or insert before a line; end with \".\"\n"
+    "  c         change lines         d         delete lines\n"
+    "  j         join lines           m addr    move lines after addr\n"
+    "  t addr    copy lines after addr\n"
+    "  p, n      print lines, n with line numbers\n"
+    "  =         print a line number  k x       mark a line as x\n"
+    "  e file    edit another file (E discards unsaved changes)\n"
+    "  r file    read a file in after a line\n"
+    "  w file    write lines (W appends, wq writes and quits)\n"
+    "  f file    set or show the file name\n"
+    "  h, H      explain the last error (H turns explanations on or off)\n"
+    "  P         turn the * prompt on or off\n"
+    "  q, Q      quit (Q discards unsaved changes)\n"
+    "  (newline) print the next line\n"
+    "\n"
+    "Options:\n"
+    "  --help  Show this help and exit.\n",
+    stream);
+}
+
 int main(int argc, char **argv) {
+  if ((argc > 1) && isHelpOption(argv[1])) {
+    printUsage(stdout);
+    return 0;
+  }
   EdState *state = (EdState*) calloc(1, sizeof(EdState));
   if (state != NULL) {
     state->commandBufferSize = ED_BUFFER_SIZE;

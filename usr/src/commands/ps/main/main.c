@@ -38,9 +38,28 @@
 #include "UserProcesses.h"
 #include "NanoOsUtils.h"
 
+/// @brief Print the usage summary for ps.
+///
+/// @param stream The stream to print to.
+///
+/// @return This function returns no value.
+static void printUsage(FILE *stream) {
+  fputs(
+    "Usage: ps\n"
+    "\n"
+    "List the running processes with their process IDs, owners, and names,\n"
+    "between two lines that show the dynamic memory left.\n"
+    "\n"
+    "Options:\n"
+    "  --help  Show this help and exit.\n",
+    stream);
+}
+
 int main(int argc, char **argv) {
-  (void) argc;
-  (void) argv;
+  if ((argc > 1) && isHelpOption(argv[1])) {
+    printUsage(stdout);
+    return 0;
+  }
   int returnValue = 0;
 
   printf("- Dynamic memory left: %d\n", getFreeMemory());

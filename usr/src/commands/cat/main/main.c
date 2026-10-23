@@ -31,8 +31,31 @@
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#include "NanoOsUtils.h"
+
+/// @brief Print the usage summary for cat.
+///
+/// @param stream The stream to print to.
+///
+/// @return This function returns no value.
+static void printUsage(FILE *stream) {
+  fputs(
+    "Usage: cat [file]\n"
+    "\n"
+    "Write the contents of a file to standard output.  With no file, copy\n"
+    "standard input to standard output a line at a time until a line that is\n"
+    "just \"EOF\" or the end of the input.\n"
+    "\n"
+    "Options:\n"
+    "  --help  Show this help and exit.\n",
+    stream);
+}
 
 int main(int argc, char **argv) {
+  if ((argc > 1) && isHelpOption(argv[1])) {
+    printUsage(stdout);
+    return 0;
+  }
   char buffer[96];
   if (argc > 1) {
     const char *filename = argv[1];

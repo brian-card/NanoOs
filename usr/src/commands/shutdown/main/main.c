@@ -35,26 +35,33 @@
 
 // NanoOs includes
 #include "NanoOsHardware.h"
+#include "NanoOsUtils.h"
 
-void usage(const char *argv0) {
-  const char *programName = strrchr(argv0, '/');
-  if (programName != NULL) {
-    programName++;
-  } else {
-    programName = argv0;
-  }
-
-  fprintf(stderr, "Usage: %s <shutdown type>\n", programName);
-  fprintf(stderr, "\n");
-  fprintf(stderr, "Available shutdown types:\n");
-  fprintf(stderr, "-r --reboot    Reboot the system\n");
-  fprintf(stderr, "-h --halt      Halt and power down the system\n");
-  fprintf(stderr, "\n");
+/// @brief Print the usage summary for shutdown.
+///
+/// @param stream The stream to print to.
+///
+/// @return This function returns no value.
+static void printUsage(FILE *stream) {
+  fputs(
+    "Usage: shutdown <-r | --reboot | -h | --halt>\n"
+    "\n"
+    "Shut the system down.\n"
+    "\n"
+    "Options:\n"
+    "  -r, --reboot  Reboot the system.\n"
+    "  -h, --halt    Halt the system and power it off.\n"
+    "  --help        Show this help and exit.\n",
+    stream);
 }
 
 int main(int argc, char **argv) {
+  if ((argc > 1) && isHelpOption(argv[1])) {
+    printUsage(stdout);
+    return 0;
+  }
   if (argc < 2) {
-    usage(argv[0]);
+    printUsage(stderr);
     return 1;
   }
 
@@ -71,7 +78,7 @@ int main(int argc, char **argv) {
     nanoOsShutdown(NANO_OS_SHUTDOWN_OFF);
   } else {
     fprintf(stderr, "Error! Unknown shutdown type: \"%s\"\n", shutdownType);
-    usage(argv[0]);
+    printUsage(stderr);
     return 1;
   }
 

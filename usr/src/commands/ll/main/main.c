@@ -39,6 +39,7 @@
 #include <pwd.h>
 #include <grp.h>
 #include <time.h>
+#include "NanoOsUtils.h"
 
 /// @def INVALID_UID
 ///
@@ -156,7 +157,31 @@ void listDir(const char *path) {
   closedir(dirp);
 }
 
+/// @fn static void printUsage(FILE *stream)
+///
+/// @brief Print the usage summary for ll.
+///
+/// @param stream The stream to print to.
+///
+/// @return This function returns no value.
+static void printUsage(FILE *stream) {
+  fputs(
+    "Usage: ll [directory]\n"
+    "\n"
+    "List a directory, or the current directory, one entry per line with its\n"
+    "permissions, owner, group, size, modification time, and name.  Directory\n"
+    "names end in \"/\".\n"
+    "\n"
+    "Options:\n"
+    "  --help  Show this help and exit.\n",
+    stream);
+}
+
 int main(int argc, char **argv) {
+  if ((argc > 1) && isHelpOption(argv[1])) {
+    printUsage(stdout);
+    return 0;
+  }
   const char *path = getenv("PWD");
   if (argc > 1) {
     path = argv[1];

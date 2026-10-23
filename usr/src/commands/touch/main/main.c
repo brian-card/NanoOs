@@ -34,10 +34,32 @@
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#include "NanoOsUtils.h"
+
+/// @brief Print the usage summary for touch.
+///
+/// @param stream The stream to print to.
+///
+/// @return This function returns no value.
+static void printUsage(FILE *stream) {
+  fputs(
+    "Usage: touch <file>\n"
+    "\n"
+    "Create an empty file if it doesn't exist.  An existing file is left\n"
+    "unchanged.\n"
+    "\n"
+    "Options:\n"
+    "  --help  Show this help and exit.\n",
+    stream);
+}
 
 int main(int argc, char **argv) {
+  if ((argc > 1) && isHelpOption(argv[1])) {
+    printUsage(stdout);
+    return 0;
+  }
   if (argc != 2) {
-    fprintf(stderr, "Usage: %s <file>\n", argv[0]);
+    printUsage(stderr);
     return 1;
   }
 

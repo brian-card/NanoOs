@@ -29,9 +29,11 @@
 /// @file
 
 #include <errno.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "mush.h"
 #include "NanoOsUtils.h"
@@ -66,8 +68,39 @@
 #endif // MUSH_DEBUG
 
 
+/// @brief Print the usage summary for mush.
+///
+/// @param stream The stream to print to.
+///
+/// @return This function returns no value.
+static void printUsage(FILE *stream) {
+  fputs(
+    "Usage: mush\n"
+    "\n"
+    "Run the MUSH shell.  Each line is a command followed by its arguments,\n"
+    "separated by spaces.  Commands are looked up in the directories in PATH.\n"
+    "\n"
+    "  command &          run a command in the background\n"
+    "  command | command  send one command's output to the next one's input\n"
+    "\n"
+    "Built-in commands:\n"
+    "  cd [directory]  change the working directory; cd alone goes to HOME\n"
+    "                  and \"cd -\" goes back to the previous directory\n"
+    "  pwd             print the working directory\n"
+    "  exit            exit the shell\n"
+    "\n"
+    "Options:\n"
+    "  --help  Show this help and exit.\n",
+    stream);
+}
+
 int main(int argc, char **argv) {
-  (void) argc;
+  if ((argc > 1) && isHelpOption(argv[1])) {
+    printUsage(stdout);
+    // Exiting would log the user out; a killed shell is restarted instead.
+    kill(getpid(), SIGKILL);
+    return 0;
+  }
   
   char *buffer = (char*) malloc(2 * MUSH_COMMAND_LINE_LENGTH);
   char *buffers[2];

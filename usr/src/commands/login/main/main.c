@@ -36,6 +36,7 @@
 #include <string.h>
 #include <termios.h>
 #include <unistd.h>
+#include "NanoOsUtils.h"
 
 #undef tcgetattr
 #undef tcsetattr
@@ -51,11 +52,33 @@
 /// This will be used as argv[0] in the args we pass in to execve.
 #define SHELL_NAME "mush"
 
+/// @brief Print the usage summary for login.
+///
+/// @param stream The stream to print to.
+///
+/// @return This function returns no value.
+static void printUsage(FILE *stream) {
+  fputs(
+    "Usage: login <user name>\n"
+    "\n"
+    "Prompt for the user's password and, if it is correct, start the mush\n"
+    "shell as that user in their home directory.  getty runs login; it isn't\n"
+    "normally run by hand.\n"
+    "\n"
+    "Options:\n"
+    "  --help  Show this help and exit.\n",
+    stream);
+}
+
 int main(int argc, char **argv) {
+  if ((argc > 1) && isHelpOption(argv[1])) {
+    printUsage(stdout);
+    return 0;
+  }
   int returnValue = 0;
   
   if (argc != 2) {
-    fprintf(stderr, "Usage: %s <username>\n", argv[0]);
+    printUsage(stderr);
     return 1;
   }
   const char *username = argv[1];

@@ -35,6 +35,7 @@
 #include <string.h>
 #include <sys/utsname.h>
 #include <unistd.h>
+#include "NanoOsUtils.h"
 
 /// @def LOGIN_PATH
 ///
@@ -190,8 +191,30 @@ exit:
   return returnValue;
 }
 
+/// @fn static void printUsage(FILE *stream)
+///
+/// @brief Print the usage summary for getty.
+///
+/// @param stream The stream to print to.
+///
+/// @return This function returns no value.
+static void printUsage(FILE *stream) {
+  fputs(
+    "Usage: getty\n"
+    "\n"
+    "Show /etc/issue, prompt for a user name, and run login with it.  The\n"
+    "system runs getty on each console; it isn't normally run by hand.\n"
+    "\n"
+    "Options:\n"
+    "  --help  Show this help and exit.\n",
+    stream);
+}
+
 int main(int argc, char **argv) {
-  (void) argc;
+  if ((argc > 1) && isHelpOption(argv[1])) {
+    printUsage(stdout);
+    return 0;
+  }
   
   // The banner is informational, so a failure to show it doesn't prevent a
   // login.  showIssue displays its own error message.

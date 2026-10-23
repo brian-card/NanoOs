@@ -30,10 +30,32 @@
 /// @brief Entrypoint into the tightLoop program.
 
 // Standard C includes
+#include <stdio.h>
+#include "NanoOsUtils.h"
+
+/// @brief Print the usage summary for tightLoop.
+///
+/// @param stream The stream to print to.
+///
+/// @return This function returns no value.
+static void printUsage(FILE *stream) {
+  fputs(
+    "Usage: tightLoop\n"
+    "\n"
+    "Loop forever without yielding, so other processes only run when the\n"
+    "scheduler preempts it.  For testing preemption; stop it with Ctrl-C or\n"
+    "kill.\n"
+    "\n"
+    "Options:\n"
+    "  --help  Show this help and exit.\n",
+    stream);
+}
 
 int main(int argc, char **argv) {
-  (void) argc;
-  (void) argv;
+  if ((argc > 1) && isHelpOption(argv[1])) {
+    printUsage(stdout);
+    return 0;
+  }
 
   while (1);
 

@@ -35,12 +35,33 @@
 
 // Unix includes
 #include <signal.h>
+#include "NanoOsUtils.h"
+
+/// @brief Print the usage summary for kill.
+///
+/// @param stream The stream to print to.
+///
+/// @return This function returns no value.
+static void printUsage(FILE *stream) {
+  fputs(
+    "Usage: kill <process ID>\n"
+    "\n"
+    "Terminate the process with the given ID, as shown by ps.  Only root can\n"
+    "terminate another user's processes, and system processes can't be\n"
+    "terminated.\n"
+    "\n"
+    "Options:\n"
+    "  --help  Show this help and exit.\n",
+    stream);
+}
 
 int main(int argc, char **argv) {
+  if ((argc > 1) && isHelpOption(argv[1])) {
+    printUsage(stdout);
+    return 0;
+  }
   if (argc < 2) {
-    printf("Usage:\n");
-    printf("  kill <process ID>\n");
-    printf("\n");
+    printUsage(stderr);
     return 1;
   }
   pid_t processId = (pid_t) strtol(argv[1], NULL, 10);

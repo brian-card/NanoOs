@@ -38,6 +38,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include "NanoOsUtils.h"
 
 /// @brief Copy the contents of a regular file to a new or existing file.
 ///
@@ -105,10 +106,32 @@ static int copyFile(const char *source, const char *destination) {
   return returnValue;
 }
 
+/// @brief Print the usage summary for cp.
+///
+/// @param stream The stream to print to.
+///
+/// @return This function returns no value.
+static void printUsage(FILE *stream) {
+  fputs(
+    "Usage: cp <source> <destination>\n"
+    "       cp <source>... <directory>\n"
+    "\n"
+    "Copy a regular file to a new file, or over an existing one.  When the last\n"
+    "argument is a directory, copy each source into it under the source's own\n"
+    "name.  Directories can't be copied, and a file can't be copied onto itself.\n"
+    "\n"
+    "Options:\n"
+    "  --help  Show this help and exit.\n",
+    stream);
+}
+
 int main(int argc, char **argv) {
+  if ((argc > 1) && isHelpOption(argv[1])) {
+    printUsage(stdout);
+    return 0;
+  }
   if (argc < 3) {
-    fprintf(stderr, "Usage: %s <source> <destination>\n", argv[0]);
-    fprintf(stderr, "       %s <source>... <directory>\n", argv[0]);
+    printUsage(stderr);
     return 1;
   }
 

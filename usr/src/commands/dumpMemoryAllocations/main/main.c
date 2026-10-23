@@ -31,10 +31,30 @@
 
 // NanoOs includes
 #include <NanoOsUtils.h>
+#include <stdio.h>
+
+/// @brief Print the usage summary for dumpMemoryAllocations.
+///
+/// @param stream The stream to print to.
+///
+/// @return This function returns no value.
+static void printUsage(FILE *stream) {
+  fputs(
+    "Usage: dumpMemoryAllocations\n"
+    "\n"
+    "Print each outstanding dynamic memory allocation with its address, size,\n"
+    "and owning process ID, then each block of free memory.\n"
+    "\n"
+    "Options:\n"
+    "  --help  Show this help and exit.\n",
+    stream);
+}
 
 int main(int argc, char **argv) {
-  (void) argc;
-  (void) argv;
+  if ((argc > 1) && isHelpOption(argv[1])) {
+    printUsage(stdout);
+    return 0;
+  }
 
   return dumpMemoryAllocations();
 }

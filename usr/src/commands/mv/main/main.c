@@ -36,6 +36,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include "NanoOsUtils.h"
 
 /// @brief Rename a file or directory, reporting any failure.
 ///
@@ -53,10 +54,32 @@ static int moveFile(const char *source, const char *destination) {
   return 0;
 }
 
+/// @brief Print the usage summary for mv.
+///
+/// @param stream The stream to print to.
+///
+/// @return This function returns no value.
+static void printUsage(FILE *stream) {
+  fputs(
+    "Usage: mv <source> <destination>\n"
+    "       mv <source>... <directory>\n"
+    "\n"
+    "Rename a file or directory, replacing an existing destination file.  When\n"
+    "the last argument is a directory, move each source into it under the\n"
+    "source's own name.\n"
+    "\n"
+    "Options:\n"
+    "  --help  Show this help and exit.\n",
+    stream);
+}
+
 int main(int argc, char **argv) {
+  if ((argc > 1) && isHelpOption(argv[1])) {
+    printUsage(stdout);
+    return 0;
+  }
   if (argc < 3) {
-    fprintf(stderr, "Usage: %s <source> <destination>\n", argv[0]);
-    fprintf(stderr, "       %s <source>... <directory>\n", argv[0]);
+    printUsage(stderr);
     return 1;
   }
 

@@ -31,10 +31,31 @@
 
 // Standard C includes
 #include <sched.h>
+#include <stdio.h>
+#include "NanoOsUtils.h"
+
+/// @brief Print the usage summary for looseLoop.
+///
+/// @param stream The stream to print to.
+///
+/// @return This function returns no value.
+static void printUsage(FILE *stream) {
+  fputs(
+    "Usage: looseLoop\n"
+    "\n"
+    "Loop forever, yielding the processor on every pass.  For testing the\n"
+    "scheduler; stop it with Ctrl-C or kill.\n"
+    "\n"
+    "Options:\n"
+    "  --help  Show this help and exit.\n",
+    stream);
+}
 
 int main(int argc, char **argv) {
-  (void) argc;
-  (void) argv;
+  if ((argc > 1) && isHelpOption(argv[1])) {
+    printUsage(stdout);
+    return 0;
+  }
 
   while (1) sched_yield();
 
