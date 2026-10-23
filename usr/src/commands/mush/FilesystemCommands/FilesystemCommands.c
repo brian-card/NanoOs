@@ -135,6 +135,14 @@ void* runFsCommand(void *args) {
     returnValue = NULL;
     goto exit;
   }
+  if (launchErrno == ENOEXEC) {
+    fputs(argv[0], stdout);
+    fputs(": cannot execute\n", stdout);
+    free(argv); argv = NULL;
+    errno = ENOEXEC;
+    returnValue = NULL;
+    goto exit;
+  }
 
   errno = launchErrno;
   if (fsCommandArgs->launchBackground == true) {
