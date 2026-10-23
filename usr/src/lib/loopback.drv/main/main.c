@@ -33,6 +33,7 @@
 
 #include "ExecutiveProcesses.h"
 #include "Console.h"
+#include "ConsoleOutput.h"
 
 /// @fn static void loopbackWriteString(int32_t uart, const char *string)
 ///
@@ -67,16 +68,11 @@ int main(int argc, char **argv) {
 
   while (1) {
     ProcessMessage *processMessage = processMessageQueueWait(NULL);
-    if (processMessageType(processMessage)
-      == (CONSOLE_COMMAND_SIGNATURE | CONSOLE_WRITE_BUFFER)
-    ) {
-      loopbackWriteString(uart,
-        (const char*) processMessageData(processMessage));
+    const char *text = consoleOutputText(processMessage);
+    if (text != NULL) {
+      loopbackWriteString(uart, text);
     }
-    processMessageSetDone(processMessage);
-    if (processMessageWaiting(processMessage) == false) {
-      processMessageRelease(processMessage);
-    }
+    consoleOutputDone(processMessage);
   }
 
   return 0;

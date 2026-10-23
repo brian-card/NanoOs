@@ -34,6 +34,7 @@
 
 #include "ExecutiveProcesses.h"
 #include "Console.h"
+#include "ConsoleOutput.h"
 #include "VdpKeyboard.h"
 #include "VdpText.h"
 
@@ -415,18 +416,16 @@ int main(int argc, char **argv) {
     if (processMessage == NULL) {
       continue;
     }
-    int64_t type = processMessageType(processMessage);
+    const char *text = consoleOutputText(processMessage);
     bool vdpPresent = true;
-    if (type == (CONSOLE_COMMAND_SIGNATURE | CONSOLE_WRITE_BUFFER)) {
-      vdpWriteText(&vdpOutput,
-        (const char*) processMessageData(processMessage));
-    } else if (type == (VDP_DRIVER_SIGNATURE | VDP_UART_INPUT)) {
+    if (text != NULL) {
+      vdpWriteText(&vdpOutput, text);
+    } else if (processMessageType(processMessage)
+      == (VDP_DRIVER_SIGNATURE | VDP_UART_INPUT)
+    ) {
       vdpPresent = vdpReadKeyboard(&input);
     }
-    processMessageSetDone(processMessage);
-    if (processMessageWaiting(processMessage) == false) {
-      processMessageRelease(processMessage);
-    }
+    consoleOutputDone(processMessage);
     if (vdpPresent == false) {
       // Exiting lets the scheduler restart the driver from scratch.
       return 1;
