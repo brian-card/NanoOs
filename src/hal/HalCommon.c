@@ -1621,9 +1621,12 @@ static ConfigSysDevice* configSysFindDevice(const char *path) {
 /// forwarding port for the device if the port is a DEVICE's path.
 ///
 /// @param port The name of the port from the CONSOLE line.
+/// @param outputPid A pointer to the ProcessId that will hold the ID of the
+///   device's process if the port is a device, or PROCESS_ID_NOT_SET if not.
 ///
 /// @return Returns the index of the port on success, -errno on failure.
-static int configSysConsolePort(const char *port) {
+static int configSysConsolePort(const char *port, ProcessId *outputPid) {
+  *outputPid = PROCESS_ID_NOT_SET;
   int uartId = configSysParseUart(port);
   if (uartId >= 0) {
     int portId = schedulerGetUartConsolePort((uint8_t) uartId);
@@ -1636,6 +1639,7 @@ static int configSysConsolePort(const char *port) {
   if (device == NULL) {
     return -ENOENT;
   }
+  *outputPid = device->pid;
   return schedulerAddForwardingPort(device->pid);
 }
 
@@ -1748,7 +1752,8 @@ static int configSysStartShells(void) {
   for (ConfigSysConsole *console = first; console != NULL;
     console = console->next
   ) {
-    int portId = configSysConsolePort(console->port);
+    ProcessId outputPid = PROCESS_ID_NOT_SET;
+    int portId = configSysConsolePort(console->port, &outputPid);
     if (portId < 0) {
       logError("Could not use console port %s from %s: %s\n",
         console->port, _configSysPath, strerror(-portId));
@@ -1766,7 +1771,7 @@ static int configSysStartShells(void) {
     }
 
     int bindStatus = schedulerBindShell(numShells, (uint8_t) portId,
-      &console->program);
+      &console->program, outputPid);
     if (bindStatus == 0) {
       portsUsed |= ((uint32_t) 1) << portId;
       numShells++;
@@ -1781,7 +1786,8 @@ static int configSysStartShells(void) {
       (portId < numConsolePorts) && (numShells < maxShells);
       portId++
     ) {
-      int bindStatus = schedulerBindShell(numShells, (uint8_t) portId, NULL);
+      int bindStatus = schedulerBindShell(numShells, (uint8_t) portId, NULL,
+        PROCESS_ID_NOT_SET);
       if (bindStatus != 0) {
         returnValue = bindStatus;
         break;
