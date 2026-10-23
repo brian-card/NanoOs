@@ -174,16 +174,24 @@ FILE* filesystemFopen(const char *pathname, const char *mode) {
   }
 
   uint8_t numFileDescriptors = processDescriptor->numFileDescriptors;
-  void *check = realloc(processDescriptor->fileDescriptors,
-    (numFileDescriptors + 1) * sizeof(FileDescriptor*));
-  if (check == NULL) {
-    errno = ENOMEM;
-    goto exit; // return NULL
+  uint8_t fd = 0;
+  while ((fd < numFileDescriptors)
+    && (processDescriptor->fileDescriptors[fd] != NULL)
+  ) {
+    fd++;
   }
-  processDescriptor->fileDescriptors = (FileDescriptor**) check;
-  processDescriptor->fileDescriptors[numFileDescriptors]
+  if (fd == numFileDescriptors) {
+    void *check = realloc(processDescriptor->fileDescriptors,
+      (numFileDescriptors + 1) * sizeof(FileDescriptor*));
+    if (check == NULL) {
+      errno = ENOMEM;
+      goto exit; // return NULL
+    }
+    processDescriptor->fileDescriptors = (FileDescriptor**) check;
+  }
+  processDescriptor->fileDescriptors[fd]
     = (FileDescriptor*) calloc(1, sizeof(FileDescriptor));
-  if (processDescriptor->fileDescriptors[numFileDescriptors] == NULL) {
+  if (processDescriptor->fileDescriptors[fd] == NULL) {
     errno = ENOMEM;
     goto freeFileDescriptor;
   }
@@ -203,7 +211,7 @@ FILE* filesystemFopen(const char *pathname, const char *mode) {
   }
   strcpy(fopenArgs.mode, mode);
 
-  fopenArgs.fd = numFileDescriptors;
+  fopenArgs.fd = fd;
 
   ProcessMessage *msg = initSendProcessMessageToPid(
     rootFilesystemPid,
@@ -220,9 +228,11 @@ FILE* filesystemFopen(const char *pathname, const char *mode) {
     goto freeFileDescriptor;
   }
 
-  processDescriptor->fileDescriptors[numFileDescriptors]->file = file;
-  processDescriptor->fileDescriptors[numFileDescriptors]->refCount = 1;
-  processDescriptor->numFileDescriptors = numFileDescriptors + 1;
+  processDescriptor->fileDescriptors[fd]->file = file;
+  processDescriptor->fileDescriptors[fd]->refCount = 1;
+  if (fd == numFileDescriptors) {
+    processDescriptor->numFileDescriptors = numFileDescriptors + 1;
+  }
 
   goto exit;
 
@@ -230,14 +240,16 @@ freePathname:
   free(fopenArgs.pathname);
 
 freeFileDescriptor:
-  free(processDescriptor->fileDescriptors[numFileDescriptors]);
-  processDescriptor->fileDescriptors[numFileDescriptors] = NULL;
-  // We need to shrink the fileDescriptors array back down to its original size.
-  // Since we're reducing the amount of memory consumed, this is guaranteed to
-  // be successful and not relocate the pointer, so no need to do anything with
-  // the return value.
-  realloc(processDescriptor->fileDescriptors,
-    numFileDescriptors * sizeof(FileDescriptor*));
+  free(processDescriptor->fileDescriptors[fd]);
+  processDescriptor->fileDescriptors[fd] = NULL;
+  if (fd == numFileDescriptors) {
+    // We need to shrink the fileDescriptors array back down to its original
+    // size.  Since we're reducing the amount of memory consumed, this is
+    // guaranteed to be successful and not relocate the pointer, so no need to
+    // do anything with the return value.
+    realloc(processDescriptor->fileDescriptors,
+      numFileDescriptors * sizeof(FileDescriptor*));
+  }
 
 exit:
   return file;
