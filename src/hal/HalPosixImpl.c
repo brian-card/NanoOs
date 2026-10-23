@@ -42,6 +42,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <sys/mman.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 #include </usr/include/time.h>
 #include <termios.h>
 #include <unistd.h>
@@ -259,6 +261,7 @@ static pthread_t _mainThreadId = 0;
 
 // HalCommon.h can't be included here; see the note on Scheduler.h above.
 void halCommonUartMarkReady(int32_t deviceId);
+int posixNanoOsEio(void);
 
 /// @var _pollOnlyEnvironmentVariable
 ///
@@ -302,45 +305,58 @@ bool posixFileCacheRequested(void) {
 
 /// @def POSIX_UART_RX_BUFFER_SIZE
 ///
-/// @brief Size of the console receive ring.  One slot stays empty to tell a
+/// @brief Size of each UART's receive ring.  One slot stays empty to tell a
 /// full ring from an empty one, so it holds one less than this.
 #define POSIX_UART_RX_BUFFER_SIZE 64
 
 /// @def POSIX_UART_RX_SIGNAL
 ///
-/// @brief Signal the receive thread raises on the main thread for each byte it
-/// buffers, standing in for a UART receive interrupt.
+/// @brief Signal the receive threads raise on the main thread for each byte
+/// they buffer, standing in for a UART receive interrupt.
 #define POSIX_UART_RX_SIGNAL SIGIO
 
-/// @var _uartRxBuffer
+/// @struct PosixUartRx
 ///
-/// @brief Ring of bytes read from stdin by the receive thread.
-static uint8_t _uartRxBuffer[POSIX_UART_RX_BUFFER_SIZE];
+/// @brief The receive side of a simulated UART: a thread reading a host file
+/// descriptor into a ring.
+///
+/// @param fd The host file descriptor the UART reads, or -1.
+/// @param buffer The ring of bytes read from fd.
+/// @param head The index of the next slot the receive thread writes.
+/// @param tail The index of the next slot the UART's reader reads.
+/// @param mutex Guards buffer, head, and tail.
+/// @param notFull Signaled by the reader when it frees a slot in a full ring.
+/// @param threadStarted Whether the receive thread has been started.
+/// @param ready Set by the receive thread when it buffers a byte, and cleared
+///   by the signal handler when it reports the UART ready.
+/// @param disconnected Set by the receive thread when fd reaches its end.
+typedef struct PosixUartRx {
+  int                   fd;
+  uint8_t               buffer[POSIX_UART_RX_BUFFER_SIZE];
+  int                   head;
+  int                   tail;
+  pthread_mutex_t       mutex;
+  pthread_cond_t        notFull;
+  bool                  threadStarted;
+  volatile sig_atomic_t ready;
+  volatile sig_atomic_t disconnected;
+} PosixUartRx;
 
-/// @var _uartRxHead
+/// @var _uartRx
 ///
-/// @brief Index of the next slot the receive thread writes.
-static int _uartRxHead = 0;
+/// @brief The receive side of each UART.  UART1 reads stdin.  UART0 reads the
+/// socket named by NANO_OS_SIM_UART0, when it's set.
+static PosixUartRx _uartRx[NUM_UARTS] = {
+  { .fd = -1, .mutex = PTHREAD_MUTEX_INITIALIZER,
+    .notFull = PTHREAD_COND_INITIALIZER },
+  { .fd = STDIN_FILENO, .mutex = PTHREAD_MUTEX_INITIALIZER,
+    .notFull = PTHREAD_COND_INITIALIZER },
+};
 
-/// @var _uartRxTail
+/// @var _uartRxSignalInstalled
 ///
-/// @brief Index of the next slot posixPollUart reads.
-static int _uartRxTail = 0;
-
-/// @var _uartRxMutex
-///
-/// @brief Guards _uartRxBuffer, _uartRxHead, and _uartRxTail.
-static pthread_mutex_t _uartRxMutex = PTHREAD_MUTEX_INITIALIZER;
-
-/// @var _uartRxNotFull
-///
-/// @brief Signaled by posixPollUart when it frees a slot in a full ring.
-static pthread_cond_t _uartRxNotFull = PTHREAD_COND_INITIALIZER;
-
-/// @var _uartRxThreadStarted
-///
-/// @brief Whether posixConfigureUart has already started the receive thread.
-static bool _uartRxThreadStarted = false;
+/// @brief Whether posixUartRxSignalHandler has been installed.
+static bool _uartRxSignalInstalled = false;
 
 /// @def POSIX_UART_RX_SIGNAL_STACK_SIZE
 ///
@@ -353,72 +369,186 @@ static bool _uartRxThreadStarted = false;
 /// over 3 KB of stack on x86-64, which a 4 KB coroutine stack can't absorb.
 static uint8_t _uartRxSignalStack[POSIX_UART_RX_SIGNAL_STACK_SIZE];
 
-/// @fn bool posixUartRxPushLocked(uint8_t byte)
+/// @var _uart0EnvironmentVariable
 ///
-/// @brief Append a byte to the receive ring.  The caller must hold
-/// _uartRxMutex.
+/// @brief Environment variable naming a Unix socket for the simulator to
+/// connect UART0 to.
 ///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _uart0EnvironmentVariable[] KEEP_IN_FLASH
+  = "NANO_OS_SIM_UART0";
+
+/// @fn bool posixUart0Requested(void)
+///
+/// @brief Report whether the simulator was asked to connect UART0 to a
+/// socket.
+///
+/// @return Returns true if NANO_OS_SIM_UART0 is set, false otherwise.
+bool posixUart0Requested(void) {
+  return getenv(_uart0EnvironmentVariable) != NULL;
+}
+
+/// @fn bool posixUartRxPushLocked(PosixUartRx *rx, uint8_t byte)
+///
+/// @brief Append a byte to a receive ring.  The caller must hold rx->mutex.
+///
+/// @param rx A pointer to the PosixUartRx of the UART.
 /// @param byte The byte to append.
 ///
 /// @return Returns true if the byte was stored, false if the ring was full.
-static bool posixUartRxPushLocked(uint8_t byte) {
-  int nextHead = _uartRxHead + 1;
+static bool posixUartRxPushLocked(PosixUartRx *rx, uint8_t byte) {
+  int nextHead = rx->head + 1;
   if (nextHead == POSIX_UART_RX_BUFFER_SIZE) {
     nextHead = 0;
   }
-  if (nextHead == _uartRxTail) {
+  if (nextHead == rx->tail) {
     return false;
   }
-  _uartRxBuffer[_uartRxHead] = byte;
-  _uartRxHead = nextHead;
+  rx->buffer[rx->head] = byte;
+  rx->head = nextHead;
   return true;
 }
 
 /// @fn void posixUartRxSignalHandler(int signal)
 ///
-/// @brief Handle POSIX_UART_RX_SIGNAL on the main thread.  It does nothing
-/// yet; installing it keeps the signal's default action from terminating the
-/// simulator.
+/// @brief Handle POSIX_UART_RX_SIGNAL on the main thread by reporting each
+/// UART that has received bytes as ready.
 ///
 /// @param signal The numeric value of the signal.  Ignored.
 ///
 /// @return This function returns no value.
 static void posixUartRxSignalHandler(int signal) {
   (void) signal;
-  halCommonUartMarkReady(1);
+  for (int ii = 0; ii < NUM_UARTS; ii++) {
+    if (_uartRx[ii].ready) {
+      _uartRx[ii].ready = 0;
+      halCommonUartMarkReady(ii);
+    }
+  }
 }
 
 /// @fn void* posixUartRxThreadFunction(void *arg)
 ///
-/// @brief Block reading stdin, move each byte into the receive ring, and signal the
-/// main thread.  Waits for room rather than dropping bytes when the ring is
-/// full, and exits at end of file.
+/// @brief Block reading a UART's file descriptor, move each byte into its
+/// receive ring, and signal the main thread.  Waits for room rather than
+/// dropping bytes when the ring is full, and exits at end of file.
 ///
-/// @param arg Unused.
+/// @param arg A pointer to the PosixUartRx of the UART.
 ///
 /// @return This function always returns NULL.
 static void* posixUartRxThreadFunction(void *arg) {
-  (void) arg;
+  PosixUartRx *rx = (PosixUartRx*) arg;
 
   // read() rather than getc(): getc() holds stdin's stdio lock while it
   // blocks, and exit() waits on that lock to flush streams.
   uint8_t byte = 0;
-  while (read(STDIN_FILENO, &byte, 1) == 1) {
-    pthread_mutex_lock(&_uartRxMutex);
-    while (!posixUartRxPushLocked(byte)) {
-      pthread_cond_wait(&_uartRxNotFull, &_uartRxMutex);
+  while (read(rx->fd, &byte, 1) == 1) {
+    pthread_mutex_lock(&rx->mutex);
+    while (!posixUartRxPushLocked(rx, byte)) {
+      pthread_cond_wait(&rx->notFull, &rx->mutex);
     }
-    pthread_mutex_unlock(&_uartRxMutex);
+    pthread_mutex_unlock(&rx->mutex);
+    rx->ready = 1;
     pthread_kill(_mainThreadId, POSIX_UART_RX_SIGNAL);
   }
+  pthread_mutex_lock(&rx->mutex);
+  rx->threadStarted = false;
+  rx->disconnected = 1;
+  pthread_mutex_unlock(&rx->mutex);
+  rx->ready = 1;
+  pthread_kill(_mainThreadId, POSIX_UART_RX_SIGNAL);
 
   return NULL;
 }
 
+/// @fn int posixStartUartRx(PosixUartRx *rx)
+///
+/// @brief Start the receive thread of a UART, installing the receive signal
+/// handler first if no UART has yet.
+///
+/// @param rx A pointer to the PosixUartRx of the UART.
+///
+/// @return Returns 0 on success, -errno on failure.
+static int posixStartUartRx(PosixUartRx *rx) {
+  if (rx->threadStarted) {
+    return 0;
+  }
+
+  if (!_uartRxSignalInstalled) {
+    stack_t signalStack;
+    signalStack.ss_sp = _uartRxSignalStack;
+    signalStack.ss_size = sizeof(_uartRxSignalStack);
+    signalStack.ss_flags = 0;
+    if (sigaltstack(&signalStack, NULL) < 0) {
+      return -errno;
+    }
+
+    // Blocking every signal keeps a preemption from switching coroutines
+    // while a frame is live on the alternate stack.
+    struct sigaction sa;
+    sa.sa_handler = posixUartRxSignalHandler;
+    sigfillset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART | SA_ONSTACK;
+    if (sigaction(POSIX_UART_RX_SIGNAL, &sa, NULL) < 0) {
+      return -errno;
+    }
+    _uartRxSignalInstalled = true;
+  }
+
+  // The thread inherits this mask, which keeps process-directed signals like
+  // SIGINT on the main thread.
+  sigset_t allSignals;
+  sigset_t previousSignals;
+  sigfillset(&allSignals);
+  pthread_sigmask(SIG_SETMASK, &allSignals, &previousSignals);
+  pthread_t rxThread;
+  int status = pthread_create(&rxThread, NULL, posixUartRxThreadFunction, rx);
+  pthread_sigmask(SIG_SETMASK, &previousSignals, NULL);
+  if (status != 0) {
+    return -status;
+  }
+  pthread_detach(rxThread);
+  rx->threadStarted = true;
+
+  return 0;
+}
+
+/// @fn int posixConnectUart0(void)
+///
+/// @brief Connect UART0 to the Unix socket named by NANO_OS_SIM_UART0 and
+/// start its receive thread.
+///
+/// @return Returns 0 on success, -errno on failure.
+static int posixConnectUart0(void) {
+  const char *path = getenv(_uart0EnvironmentVariable);
+  struct sockaddr_un address;
+  if ((path == NULL) || (strlen(path) >= sizeof(address.sun_path))) {
+    return -ENOTTY;
+  }
+
+  int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+  if (fd < 0) {
+    return -errno;
+  }
+  memset(&address, 0, sizeof(address));
+  address.sun_family = AF_UNIX;
+  strcpy(address.sun_path, path);
+  if (connect(fd, (struct sockaddr*) &address, sizeof(address)) != 0) {
+    int returnValue = -errno;
+    close(fd);
+    return returnValue;
+  }
+  _uartRx[0].disconnected = 0;
+  _uartRx[0].fd = fd;
+
+  return posixStartUartRx(&_uartRx[0]);
+}
+
 /// @fn int posixConfigureUart(int32_t deviceId, va_list args)
 ///
-/// @brief Configure stdin to not echo and launch posixUartRxThreadFunction as
-/// a background thread.
+/// @brief Configure stdin to not echo and start UART1's receive thread, or
+/// connect UART0 to its socket.
 ///
 /// @param deviceId The device ID that callHal checked the call against.
 /// @param args A va_list of the arguments that were passed to the call.  See
@@ -431,8 +561,8 @@ int posixConfigureUart(int32_t deviceId, va_list args) {
 
   if (deviceId > 1) {
     return -ERANGE;
-  } else if (deviceId != 1) {
-    return -ENOTTY;
+  } else if (deviceId == 0) {
+    return (_uartRx[0].fd >= 0) ? 0 : posixConnectUart0();
   }
 
   // We manage all the prints to screen ourselves, so disable stdin echoing
@@ -456,69 +586,42 @@ int posixConfigureUart(int32_t deviceId, va_list args) {
     return -errno;
   }
 
-  if (_uartRxThreadStarted) {
-    return 0;
-  }
+  return posixStartUartRx(&_uartRx[1]);
+}
 
-  stack_t signalStack;
-  signalStack.ss_sp = _uartRxSignalStack;
-  signalStack.ss_size = sizeof(_uartRxSignalStack);
-  signalStack.ss_flags = 0;
-  if (sigaltstack(&signalStack, NULL) < 0) {
-    return -errno;
-  }
-
-  // Blocking every signal keeps a preemption from switching coroutines while
-  // a frame is live on the alternate stack.
-  struct sigaction sa;
-  sa.sa_handler = posixUartRxSignalHandler;
-  sigfillset(&sa.sa_mask);
-  sa.sa_flags = SA_RESTART | SA_ONSTACK;
-  if (sigaction(POSIX_UART_RX_SIGNAL, &sa, NULL) < 0) {
-    return -errno;
-  }
-
-  // The thread inherits this mask, which keeps process-directed signals like
-  // SIGINT on the main thread.
-  sigset_t allSignals;
-  sigset_t previousSignals;
-  sigfillset(&allSignals);
-  pthread_sigmask(SIG_SETMASK, &allSignals, &previousSignals);
-  pthread_t rxThread;
-  int status = pthread_create(&rxThread, NULL,
-    posixUartRxThreadFunction, NULL);
-  pthread_sigmask(SIG_SETMASK, &previousSignals, NULL);
-  if (status != 0) {
-    return -status;
-  }
-  pthread_detach(rxThread);
-  _uartRxThreadStarted = true;
-
-  return 0;
+/// @fn int posixUartReadable(int32_t deviceId)
+///
+/// @brief Determine whether a UART has a receive ring the kernel may read.
+///
+/// @param deviceId The ID of the UART.
+///
+/// @return Returns true if the UART is UART1, or UART0 connected to its
+/// socket, false otherwise.
+static bool posixUartReadable(int32_t deviceId) {
+  return (deviceId == 1) || ((deviceId == 0) && (_uartRx[0].fd >= 0));
 }
 
 int posixPollUart(int32_t deviceId, va_list args) {
   (void) args;
   int serialData = -1;
 
-  // While we'll support two outputs, we will only support one input to keep
-  // things simple in the simulator.
-  if (deviceId == 1) {
+  if (posixUartReadable(deviceId)) {
+    PosixUartRx *rx = &_uartRx[deviceId];
     // A timer signal here could switch coroutines while the mutex is held.
     sigset_t allSignals;
     sigset_t previousSignals;
     sigfillset(&allSignals);
     pthread_sigmask(SIG_SETMASK, &allSignals, &previousSignals);
-    pthread_mutex_lock(&_uartRxMutex);
-    if (_uartRxTail != _uartRxHead) {
-      serialData = _uartRxBuffer[_uartRxTail];
-      _uartRxTail++;
-      if (_uartRxTail == POSIX_UART_RX_BUFFER_SIZE) {
-        _uartRxTail = 0;
+    pthread_mutex_lock(&rx->mutex);
+    if (rx->tail != rx->head) {
+      serialData = rx->buffer[rx->tail];
+      rx->tail++;
+      if (rx->tail == POSIX_UART_RX_BUFFER_SIZE) {
+        rx->tail = 0;
       }
-      pthread_cond_signal(&_uartRxNotFull);
+      pthread_cond_signal(&rx->notFull);
     }
-    pthread_mutex_unlock(&_uartRxMutex);
+    pthread_mutex_unlock(&rx->mutex);
     pthread_sigmask(SIG_SETMASK, &previousSignals, NULL);
   }
 
@@ -527,9 +630,10 @@ int posixPollUart(int32_t deviceId, va_list args) {
 
 /// @fn int posixReadUart(int32_t deviceId, va_list args)
 ///
-/// @brief Copy up to length bytes from the console receive ring without
-/// blocking.  Poll-only devices and devices other than the console report 0
-/// bytes read.
+/// @brief Copy up to length bytes from a UART's receive ring without
+/// blocking.  Poll-only devices and devices with no receive ring report 0
+/// bytes read.  Once UART0's socket has closed and its ring is empty, the
+/// socket is released and the read fails with NanoOs's -EIO.
 ///
 /// @param deviceId The device ID that callHal checked the call against.
 /// @param args A va_list holding the int32_t deviceId, uint8_t *data,
@@ -542,25 +646,36 @@ int posixReadUart(int32_t deviceId, va_list args) {
   ssize_t *returnValue = va_arg(args, ssize_t*);
 
   ssize_t bytesRead = 0;
-  if ((deviceId == 1) && !pollOnly(HAL->uart, deviceId)) {
+  if (posixUartReadable(deviceId) && !pollOnly(HAL->uart, deviceId)) {
+    PosixUartRx *rx = &_uartRx[deviceId];
     // A timer signal here could switch coroutines while the mutex is held.
     sigset_t allSignals;
     sigset_t previousSignals;
     sigfillset(&allSignals);
     pthread_sigmask(SIG_SETMASK, &allSignals, &previousSignals);
-    pthread_mutex_lock(&_uartRxMutex);
-    while ((bytesRead < length) && (_uartRxTail != _uartRxHead)) {
-      data[bytesRead++] = _uartRxBuffer[_uartRxTail];
-      _uartRxTail++;
-      if (_uartRxTail == POSIX_UART_RX_BUFFER_SIZE) {
-        _uartRxTail = 0;
+    pthread_mutex_lock(&rx->mutex);
+    while ((bytesRead < length) && (rx->tail != rx->head)) {
+      data[bytesRead++] = rx->buffer[rx->tail];
+      rx->tail++;
+      if (rx->tail == POSIX_UART_RX_BUFFER_SIZE) {
+        rx->tail = 0;
       }
     }
     if (bytesRead > 0) {
-      pthread_cond_signal(&_uartRxNotFull);
+      pthread_cond_signal(&rx->notFull);
     }
-    pthread_mutex_unlock(&_uartRxMutex);
+    bool lost = (deviceId == 0) && (bytesRead == 0)
+      && (rx->disconnected != 0) && (rx->threadStarted == false);
+    pthread_mutex_unlock(&rx->mutex);
     pthread_sigmask(SIG_SETMASK, &previousSignals, NULL);
+    if (lost) {
+      close(rx->fd);
+      rx->fd = -1;
+      if (returnValue != NULL) {
+        *returnValue = 0;
+      }
+      return posixNanoOsEio();
+    }
   }
 
   if (returnValue != NULL) {
@@ -576,7 +691,22 @@ int posixWriteUart(int32_t deviceId, va_list args) {
 
   ssize_t numBytesWritten = -ERANGE;
 
-  if ((deviceId >= 0) && (deviceId < NUM_UARTS) && (length >= 0)) {
+  if ((deviceId == 0) && (_uartRx[0].fd < 0) && posixUart0Requested()
+    && (posixConnectUart0() != 0)
+  ) {
+    numBytesWritten = posixNanoOsEio();
+  } else if ((deviceId == 0) && (_uartRx[0].fd >= 0) && (length >= 0)) {
+    numBytesWritten = 0;
+    while (numBytesWritten < length) {
+      ssize_t written = send(_uartRx[0].fd, &data[numBytesWritten],
+        length - numBytesWritten, MSG_NOSIGNAL);
+      if (written <= 0) {
+        numBytesWritten = posixNanoOsEio();
+        break;
+      }
+      numBytesWritten += written;
+    }
+  } else if ((deviceId >= 0) && (deviceId < NUM_UARTS) && (length >= 0)) {
     numBytesWritten = fwrite(data, 1, length, *uarts[deviceId]);
     fflush(*uarts[deviceId]);
   }
@@ -1230,9 +1360,9 @@ void allocateGlobalStack(jmp_buf returnBuffer, char *topOfStack) {
 /// @return This function returns no value.
 void sigintHandler(int signal) {
   if (signal == SIGINT) {
-    pthread_mutex_lock(&_uartRxMutex);
-    posixUartRxPushLocked(0x03);
-    pthread_mutex_unlock(&_uartRxMutex);
+    pthread_mutex_lock(&_uartRx[1].mutex);
+    posixUartRxPushLocked(&_uartRx[1], 0x03);
+    pthread_mutex_unlock(&_uartRx[1].mutex);
     halCommonUartMarkReady(1);
   }
 }

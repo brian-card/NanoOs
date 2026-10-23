@@ -108,6 +108,17 @@ int posixWriteUart(int32_t deviceId, va_list args);
 int posixIsUartConsole(int32_t deviceId, va_list args);
 bool posixConsolePollOnlyRequested(void);
 bool posixFileCacheRequested(void);
+bool posixUart0Requested(void);
+
+/// @fn int posixNanoOsEio(void)
+///
+/// @brief Get NanoOs's -EIO for HalPosixImpl.c, which is compiled against the
+/// host's errno.h and so can't name it.
+///
+/// @return Returns -EIO as user/NanoOsErrno.h defines it.
+int posixNanoOsEio(void) {
+  return -EIO;
+}
 
 int posixInitDio(int32_t deviceId, va_list args);
 int posixConfigureDio(int32_t deviceId, va_list args);
@@ -792,6 +803,9 @@ int halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath,
   halImpl.timer       = &halImplTimer;
   halImpl.blockDevice = &halImplBlockDevice;
 
+  if (posixUart0Requested()) {
+    posixUartsOnline[0] |= 0x00000001;
+  }
   if (posixConsolePollOnlyRequested()) {
     posixUartsPollOnly[0] |= 0x00000002;
   }
