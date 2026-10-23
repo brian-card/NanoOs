@@ -254,7 +254,7 @@ static void vdpRequestPort(VdpInput *input) {
   input->portMessage = message;
 }
 
-/// @fn static void vdpReadKeyboard(VdpInput *input)
+/// @fn static bool vdpReadKeyboard(VdpInput *input)
 ///
 /// @brief Read everything the VDP has sent, adding the translation of each
 /// key that went down to the keys waiting to be sent to the console.  A key
@@ -262,12 +262,14 @@ static void vdpRequestPort(VdpInput *input) {
 ///
 /// @param input A pointer to the driver's VdpInput.
 ///
-/// @return This function returns no value.
-static void vdpReadKeyboard(VdpInput *input) {
+/// @return Returns false if the UART reported that the VDP is gone, true
+/// otherwise.
+static bool vdpReadKeyboard(VdpInput *input) {
   uint8_t bytes[16];
   ssize_t numBytes = 0;
-  while ((getHal()->uart->read(VDP_UART, bytes, sizeof(bytes), &numBytes)
-      == 0)
+  int status = 0;
+  while (((status = getHal()->uart->read(VDP_UART, bytes, sizeof(bytes),
+        &numBytes)) == 0)
     && (numBytes > 0)
   ) {
     for (ssize_t ii = 0; ii < numBytes; ii++) {
@@ -296,6 +298,8 @@ static void vdpReadKeyboard(VdpInput *input) {
       input->pendingLength += (uint8_t) keyLength;
     }
   }
+
+  return status != -EIO;
 }
 
 /// @fn static void vdpSendInput(VdpInput *input)
@@ -375,7 +379,9 @@ int main(int argc, char **argv) {
   getHal()->uart->registerCallback(VDP_UART, getRunningProcess(),
     VDP_DRIVER_SIGNATURE | VDP_UART_INPUT, NULL);
   // Bytes that arrived before the callback was registered notified no one.
-  vdpReadKeyboard(&input);
+  if (vdpReadKeyboard(&input) == false) {
+    return 1;
+  }
 
   while (1) {
     vdpHandshake(&vdpOutput, &input);
@@ -406,15 +412,20 @@ int main(int argc, char **argv) {
       continue;
     }
     int64_t type = processMessageType(processMessage);
+    bool vdpPresent = true;
     if (type == (CONSOLE_COMMAND_SIGNATURE | CONSOLE_WRITE_BUFFER)) {
       vdpWriteText(&vdpOutput,
         (const char*) processMessageData(processMessage));
     } else if (type == (VDP_DRIVER_SIGNATURE | VDP_UART_INPUT)) {
-      vdpReadKeyboard(&input);
+      vdpPresent = vdpReadKeyboard(&input);
     }
     processMessageSetDone(processMessage);
     if (processMessageWaiting(processMessage) == false) {
       processMessageRelease(processMessage);
+    }
+    if (vdpPresent == false) {
+      // Exiting lets the scheduler restart the driver from scratch.
+      return 1;
     }
   }
 
