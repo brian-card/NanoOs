@@ -152,10 +152,13 @@ void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
 /// Raised from 0x200025C0 to 0x20002620 to make room for each process's HAL
 /// capability bitmap, then to 0x20002660 for its HAL device masks.
 ///
+/// Raised from 0x20002660 to 0x200026A0 when .bss ended exactly at
+/// __nanoos_overlay_window and another host's build overran it.
+///
 /// MUST be kept in sync with:
 ///   - __nanoos_overlay_window in ld/ArduinoSamd21FlashWithBootloader.ld
 ///   - OVERLAY_RAM ORIGIN      in usr/src/NanoOsArduinoSamd21.ld
-#define OVERLAY_ADDRESS 0x20002660
+#define OVERLAY_ADDRESS 0x200026A0
 
 /// @def OVERLAY_SIZE
 ///

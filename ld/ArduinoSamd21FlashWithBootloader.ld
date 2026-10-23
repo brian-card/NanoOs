@@ -62,18 +62,20 @@ SECTIONS
 	 * 0x2000269c -- 832 bytes -- which put it inside the window and corrupted
 	 * the overlay header.
 	 *
-	 * This now sits at OVERLAY_ADDRESS (0x20002660) minus an 896-byte
+	 * This now sits at OVERLAY_ADDRESS (0x200026A0) minus an 896-byte
 	 * reservation, which leaves .bss no room to grow before this assert
 	 * fires.  Raised from 0x20002240 to 0x200022A0 (96 bytes) alongside
 	 * OVERLAY_ADDRESS to make room for each process's HAL capability
-	 * bitmap, then to 0x200022E0 (64 bytes) for its HAL device masks.
+	 * bitmap, then to 0x200022E0 (64 bytes) for its HAL device masks, then
+	 * to 0x20002320 (64 bytes) when .bss ended exactly here and another
+	 * host's build overran it.
 	 * _sbrk in HalArduinoSamD21x18A.cpp enforces the other end at runtime,
 	 * so a heap that outgrows the reservation fails its allocation rather
 	 * than running into the window.  If this fires, trim
 	 * static RAM or move the window -- and if you move it, re-measure the
 	 * core's break rather than assuming 832 still holds.
 	 */
-	__nanoos_overlay_window = 0x200022E0;
+	__nanoos_overlay_window = 0x20002320;
 
 	.text :
 	{
