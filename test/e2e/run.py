@@ -352,6 +352,44 @@ def test_vdp_driver_is_restarted_after_losing_the_vdp(s):
     assert s.sh("echo uart1-too") == "uart1-too"
 
 
+def test_vdp_draws_background_output_and_the_uart_console_still_works(s):
+    # Processes on the VDP console write straight to vdp.drv, and the
+    # background job inherits that from the shell.
+    vdp = s.restart_with_vdp()
+    vdp_login(vdp)
+    vdp.clear()
+    vdp.type("helloworld &\r")
+    vdp.expect(r"\r\nHello, world!\r\n")
+    vdp.type("echo vdp-ok\r")
+    vdp.expect(r"\r\nvdp-ok\r\n" + PROMPT)
+    s.login()
+    for n in range(3):
+        assert s.sh("echo uart1-%d" % n) == "uart1-%d" % n
+    assert s.sh("cat /etc/catfile") == CATFILE_CONTENTS
+    vdp.clear()
+    vdp.type("cat /etc/catfile\r")
+    vdp.expect(r"\r\nline-40\r\n" + PROMPT)
+    assert vdp.errors == [], f"unexpected VDU commands: {vdp.errors}"
+
+
+def test_vdp_driver_restarts_after_losing_the_vdp_mid_output(s):
+    vdp = s.restart_with_vdp()
+    vdp_login(vdp)
+    vdp.type("cat /etc/catfile\r")
+    vdp.disconnect()
+    vdp.wait_connections(2)
+    deadline = time.time() + 10
+    while sum(kind == "cls" for _t, kind, _d in vdp.events) < 2:
+        assert time.time() < deadline, \
+            "the restarted driver never set up the screen"
+        time.sleep(0.1)
+    for n in range(6):
+        vdp.type("echo round-%d\r" % n)
+        vdp.expect(r"\r\nround-%d\r\n" % n + PROMPT)
+    s.login()
+    assert s.sh("cat /etc/catfile") == CATFILE_CONTENTS
+
+
 def test_arrow_key_arriving_in_pieces_is_one_key(s):
     s.login()
     s.child.delaybeforesend = None

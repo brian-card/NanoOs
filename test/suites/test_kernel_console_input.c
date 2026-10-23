@@ -346,7 +346,7 @@ static void* fakeDriver(void *args) {
 /// @fn static ConsolePort* forwardFixture(void)
 ///
 /// @brief Start fakeDriver in the first user process slot, let this process
-/// send it CONSOLE_WRITE_BUFFER, and set up a forwarding port it services.
+/// send it CONSOLE_FORWARD_STRING, and set up a forwarding port it services.
 ///
 /// @return Returns a pointer to the port, or NULL if fakeDriver couldn't be
 /// started.
@@ -367,7 +367,7 @@ static ConsolePort* forwardFixture(void) {
 
   forwardCapability.destinationPid = driverPid;
   forwardCapability.signature = CONSOLE_COMMAND_SIGNATURE;
-  forwardCapability.messageTypes = ((uint32_t) 1) << CONSOLE_WRITE_BUFFER;
+  forwardCapability.messageTypes = ((uint32_t) 1) << CONSOLE_FORWARD_STRING;
   getRunningProcess()->ipcCapabilities = &forwardCapability;
   getRunningProcess()->numIpcCapabilities = 1;
   getRunningProcess()->ipcCapabilitiesDynamic = false;
@@ -389,7 +389,7 @@ NANO_OS_KERNEL_TEST(console_forward, string_reaches_the_driver_before_return) {
 
   NANO_OS_ASSERT_EQ_INT(1, numForwarded);
   NANO_OS_ASSERT_STR_EQ("hello", forwardedText);
-  NANO_OS_ASSERT_EQ_INT(CONSOLE_COMMAND_SIGNATURE | CONSOLE_WRITE_BUFFER,
+  NANO_OS_ASSERT_EQ_INT(CONSOLE_COMMAND_SIGNATURE | CONSOLE_FORWARD_STRING,
     forwardedType);
   NANO_OS_ASSERT_EQ_INT(getRunningPid(), forwardedFrom);
 }
