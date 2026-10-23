@@ -86,6 +86,13 @@ void schedulerDeinitialize(void);
 /// @brief The size, in bytes, of a regular process's stack.
 #define PROCESS_STACK_SIZE (4 * 1024)
 
+/// @def POSIX_NUM_PROCESS_STACKS
+///
+/// @brief The number of process-sized stacks carved out of the simulated
+/// memory:  one per process, plus the scheduler's two, the console's extra
+/// one, and the filesystem's extra one.
+#define POSIX_NUM_PROCESS_STACKS 14
+
 /// @def MEMORY_MANAGER_STACK_SIZE
 ///
 /// @brief The size, in bytes, of the memory manager process's stack.
@@ -136,12 +143,25 @@ int (*realTcgetattr)(int fd, struct termios *termios_p) = NULL;
 int (*realTcsetattr)(int fd, int optional_actions,
   const struct termios *termios_p) = NULL;
 
+/// @fn size_t posixSignalFrameSize(void)
+///
+/// @brief Get the stack space the host needs to deliver a signal.  A timer
+/// signal preempts a process on its own stack, where a target's interrupt
+/// frame would take only a few bytes, so every process stack is grown by
+/// this much.
+///
+/// @return Returns the size in bytes.
+static size_t posixSignalFrameSize(void) {
+  long size = sysconf(_SC_MINSIGSTKSZ);
+  return (size > 0) ? (size_t) size : MINSIGSTKSZ;
+}
+
 int posixProcessStackSize(int32_t deviceId, va_list args) {
   (void) deviceId;
   bool debug = (bool) va_arg(args, int);
   size_t *returnValue = va_arg(args, size_t*);
   (void) debug;
-  *returnValue = PROCESS_STACK_SIZE * DEBUG_MULTIPLIER;
+  *returnValue = PROCESS_STACK_SIZE * DEBUG_MULTIPLIER + posixSignalFrameSize();
   return 0;
 }
 
@@ -1534,6 +1554,7 @@ int halPosixImplInit(jmp_buf resetBuffer, size_t memorySize,
     memorySize = posixDefaultMemorySize(
       posixFileCacheRequested() ? POSIX_FILE_CACHE_DEPTH : 0);
   }
+  memorySize += POSIX_NUM_PROCESS_STACKS * posixSignalFrameSize();
   _bottomOfHeap = (void*) (((uintptr_t) &topOfStack)
     - ((uintptr_t) (memorySize * DEBUG_MULTIPLIER)));
   fprintf(stderr, _bottomOfStackFormat, (void*) _bottomOfHeap);
