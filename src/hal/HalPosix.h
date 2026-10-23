@@ -57,6 +57,7 @@ int halPosixImplInit(jmp_buf resetBuffer, size_t memorySize,
   NanoOsOverlayMap **overlayMap, size_t *overlaySize,
   NanoOsOverlayMap **contiguousFilesystem, size_t *contiguousFilesystemSize);
 size_t posixDefaultMemorySize(uint8_t fileCacheDepth);
+int posixErrnoToNanoOs(int linuxErrno);
 
 #ifdef __cplusplus
 } // extern "C"
