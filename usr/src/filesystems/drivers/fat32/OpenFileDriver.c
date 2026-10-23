@@ -206,6 +206,7 @@ void* driverFopen(
       .parentCluster = parentCluster,
       .fileName = fileName,
       .now = now,
+      .entryTemplate = NULL,
       .result = &searchResult,
       .returnValue = FAT32_ERROR,
     };

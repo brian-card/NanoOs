@@ -39,6 +39,9 @@
 #include "NanoOsUtils.h"
 #endif // NANO_OS_KERNEL_BUILD
 #include "Fat32.h"
+#ifdef NANO_OS_OVERLAY_FILESYSTEM
+#include "OverlayFilesystem.h"
+#endif // NANO_OS_OVERLAY_FILESYSTEM
 
 ///////////////////////////////////////////////////////////////////////////////
 ///
@@ -148,8 +151,22 @@ int driverMkdir(void *driverState, const char *pathname, time_t now) {
     result = fat32WriteEmptyDirectory(ds, parentCluster, &entry);
   }
   if (result == FAT32_SUCCESS) {
-    result = fat32CreateFileEntry(
-      ds, parentCluster, name, &entry, &createdEntry);
+    Fat32CreateFileArgs createArgs = {
+      .ds = ds,
+      .parentCluster = parentCluster,
+      .fileName = name,
+      .now = now,
+      .entryTemplate = &entry,
+      .result = &createdEntry,
+      .returnValue = FAT32_ERROR,
+    };
+#ifdef NANO_OS_OVERLAY_FILESYSTEM
+    callOverlayFunction(OVERLAY_SAME_NAMESPACE,
+      blockOverlayId(FIRST_FS_OVERLAY_ID), "Fat32CreateFile", &createArgs);
+#else
+    Fat32CreateFile(&createArgs);
+#endif // NANO_OS_OVERLAY_FILESYSTEM
+    result = createArgs.returnValue;
   }
   if ((result != FAT32_SUCCESS) && (cluster >= FAT32_CLUSTER_FIRST_VALID)) {
     fat32FreeClusterChain(ds, cluster);

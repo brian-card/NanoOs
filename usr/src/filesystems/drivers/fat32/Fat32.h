@@ -1464,7 +1464,9 @@ static inline int fat32TruncateFile(
 /// @param shortName   [out] Caller-supplied buffer of at least 11 bytes that
 ///                    receives the space-padded 8.3 name.
 ///
-static inline void fat32GenerateShortName(
+/// @return true if the name was given a numeric tail, false otherwise.
+///
+static inline bool fat32GenerateShortName(
     const char *longName,
     uint8_t *shortName
 ) {
@@ -1534,6 +1536,8 @@ static inline void fat32GenerateShortName(
       extLen++;
     }
   }
+
+  return lossy;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1680,10 +1684,145 @@ static inline void fat32PopulateStat(
   statbuf->st_atime = fat32DateTimeToUnixTime(lastAccessDate, 0);
 }
 
+static inline int fat32AllocateCluster(
+    Fat32DriverState *ds, uint32_t previousCluster, uint32_t *newCluster);
+
+///////////////////////////////////////////////////////////////////////////////
+///
+/// @brief Append a zeroed cluster to a directory's cluster chain.  The cluster
+///        is zeroed before it is linked so that the directory never ends in
+///        uninitialized entries.
+///
+/// @param ds           Pointer to an initialized Fat32DriverState.
+/// @param lastCluster  The last cluster of the directory's chain.
+/// @param newCluster   [out] The cluster that was appended.
+///
+/// @return FAT32_SUCCESS on success, FAT32_DISK_FULL if no free cluster
+///         exists, or FAT32_ERROR on an I/O failure.
+///
+static inline int fat32ExtendDirectory(
+    Fat32DriverState *ds,
+    uint32_t lastCluster,
+    uint32_t *newCluster
+) {
+  FilesystemState *fs = ds->filesystemState;
+  uint32_t cluster;
+  int status = fat32AllocateCluster(ds, 0, &cluster);
+  if (status != FAT32_SUCCESS) {
+    return status;
+  }
+
+  uint32_t clusterLba = fat32ClusterToLba(ds, cluster);
+  fat32InvalidateBlockBuffer(fs);
+  for (uint8_t sector = 0; sector < ds->sectorsPerCluster; sector++) {
+    memset(fs->blockBuffer, 0, ds->bytesPerSector);
+    if (fat32WriteBlockBuffer(fs, clusterLba + sector) != 0) {
+      status = FAT32_ERROR;
+      break;
+    }
+  }
+  if (status == FAT32_SUCCESS) {
+    status = fat32WriteFatEntry(ds, lastCluster, cluster);
+  }
+  if (status != FAT32_SUCCESS) {
+    fat32WriteFatEntry(ds, cluster, FAT32_CLUSTER_FREE);
+    return FAT32_ERROR;
+  }
+
+  *newCluster = cluster;
+  return FAT32_SUCCESS;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+///
+/// @brief Record the numeric tail of a short directory entry if it is one a
+///        generated short name could collide with.
+///
+/// @param entry      The directory entry to examine.
+/// @param shortName  The generated 11-byte short name.
+/// @param baseLen    The number of characters before the '~' in shortName.
+/// @param used       Bitmap of tails in use, indexed by tail number.
+///
+/// @return This function returns no value.
+///
+static inline void fat32NoteShortNameTail(
+    const Fat32DirectoryEntry *entry,
+    const uint8_t *shortName,
+    uint8_t baseLen,
+    uint8_t *used
+) {
+  const uint8_t *name = entry->name;
+  if (((entry->attributes & FAT32_ATTR_LONG_NAME) == FAT32_ATTR_LONG_NAME)
+      || (memcmp(&name[8], &shortName[8], 3) != 0)
+  ) {
+    return;
+  }
+
+  uint8_t tilde = 0;
+  while ((tilde < 8) && (name[tilde] != '~')) {
+    tilde++;
+  }
+  uint8_t ii = tilde + 1;
+  uint8_t tail = 0;
+  while ((ii < 8) && (name[ii] >= '0') && (name[ii] <= '9')) {
+    tail = (uint8_t) (tail * 10 + (name[ii] - '0'));
+    ii++;
+  }
+  uint8_t digits = ii - tilde - 1;
+  uint8_t prefixLen = (baseLen < 7 - digits) ? baseLen : 7 - digits;
+  if ((digits >= 1) && (digits <= 2) && (tilde == prefixLen)
+      && ((ii == 8) || (name[ii] == ' '))
+      && (memcmp(name, shortName, prefixLen) == 0)
+  ) {
+    used[tail >> 3] |= (uint8_t) (1 << (tail & 7));
+  }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+///
+/// @brief Replace the "~1" tail of a generated short name with the lowest
+///        tail not marked in use.
+///
+/// @param shortName  The generated 11-byte short name, rewritten in place.
+/// @param baseLen    The number of characters before the '~' in shortName.
+/// @param used       Bitmap of tails in use, indexed by tail number.
+///
+/// @return FAT32_SUCCESS on success, FAT32_FILE_EXISTS if tails 1 through 99
+///         are all in use.
+///
+static inline int fat32ApplyShortNameTail(
+    uint8_t *shortName,
+    uint8_t baseLen,
+    const uint8_t *used
+) {
+  uint8_t tail = 1;
+  while (used[tail >> 3] & (1 << (tail & 7))) {
+    tail++;
+  }
+  if (tail >= 100) {
+    return FAT32_FILE_EXISTS;
+  }
+
+  uint8_t pos = (tail < 10) ? 6 : 5;
+  if (pos > baseLen) {
+    pos = baseLen;
+  }
+  memset(&shortName[pos], ' ', 8 - pos);
+  shortName[pos++] = '~';
+  if (tail >= 10) {
+    shortName[pos++] = (uint8_t) ('0' + tail / 10);
+  }
+  shortName[pos] = (uint8_t) ('0' + tail % 10);
+  return FAT32_SUCCESS;
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 ///
 /// @brief Locate a run of contiguous free directory-entry slots in a
-///        directory's cluster chain.
+///        directory's cluster chain, extending the chain if it has none, and
+///        give a generated short name the lowest numeric tail not in use.
+///        Kept out of line because inlining it into its caller makes the eZ80
+///        build much larger.
 ///
 /// @details Scans forward from the first sector of the first cluster, counting
 ///          consecutive free (0xE5) or end-of-directory (0x00) entries.  On
@@ -1695,16 +1834,20 @@ static inline void fat32PopulateStat(
 /// @param foundCluster     [out] Cluster containing the first slot.
 /// @param foundOffset      [out] Byte offset within that cluster of the first
 ///                         slot.
+/// @param shortName        A generated short name whose "~1" tail is to be
+///                         made unique, or NULL.
 ///
-/// @return FAT32_SUCCESS on success, FAT32_DISK_FULL if the directory was
-///         exhausted, or FAT32_ERROR on I/O failure.
+/// @return FAT32_SUCCESS on success, FAT32_DISK_FULL if the directory needed
+///         another cluster and none was free, FAT32_FILE_EXISTS if no tail
+///         was free, or FAT32_ERROR on I/O failure.
 ///
-static inline int fat32FindFreeDirectorySlots(
+static __attribute__((noinline, unused)) int fat32FindFreeDirectorySlots(
     Fat32DriverState *ds,
     uint32_t dirCluster,
     uint32_t slotsNeeded,
     uint32_t *foundCluster,
-    uint32_t *foundOffset
+    uint32_t *foundOffset,
+    uint8_t *shortName
 ) {
   FilesystemState *fs = ds->filesystemState;
 
@@ -1712,10 +1855,34 @@ static inline int fat32FindFreeDirectorySlots(
   uint32_t runCluster     = dirCluster;
   uint32_t runCount       = 0;
   uint32_t currentCluster = dirCluster;
+  uint32_t lastCluster    = dirCluster;
+  bool     runFound       = false;
+  bool     endOfDirectory = (shortName == NULL);
+  uint8_t  baseLen        = 0;
+  uint8_t  used[13];
+  if (dirCluster < FAT32_CLUSTER_FIRST_VALID) {
+    return FAT32_ERROR;
+  }
+  if (shortName != NULL) {
+    while (shortName[baseLen] != '~') {
+      baseLen++;
+    }
+    memset(used, 0, sizeof(used));
+  }
 
-  while ((currentCluster >= FAT32_CLUSTER_FIRST_VALID)
-      && (currentCluster < FAT32_CLUSTER_EOC_MIN)
-  ) {
+  while ((runFound == false) || (endOfDirectory == false)) {
+    if ((currentCluster < FAT32_CLUSTER_FIRST_VALID)
+        || (currentCluster >= FAT32_CLUSTER_EOC_MIN)
+    ) {
+      if (runFound) {
+        break;
+      }
+      int status = fat32ExtendDirectory(ds, lastCluster, &currentCluster);
+      if (status != FAT32_SUCCESS) {
+        return status;
+      }
+    }
+    lastCluster = currentCluster;
 
     uint32_t clusterLba = fat32ClusterToLba(ds, currentCluster);
 
@@ -1732,25 +1899,45 @@ static inline int fat32FindFreeDirectorySlots(
         uint32_t byteOffset =
           (uint32_t) sector * ds->bytesPerSector
           + i * FAT32_DIRECTORY_ENTRY_SIZE;
-        uint8_t marker = fs->blockBuffer[i * FAT32_DIRECTORY_ENTRY_SIZE];
+        const Fat32DirectoryEntry *entry = (const Fat32DirectoryEntry *)
+          &fs->blockBuffer[i * FAT32_DIRECTORY_ENTRY_SIZE];
+        uint8_t marker = entry->name[0];
 
-        if ((marker == FAT32_ENTRY_FREE)
-            || (marker == FAT32_ENTRY_END_OF_DIR)
-        ) {
-          if (runCount == 0) {
-            runCluster = currentCluster;
-            runStart   = byteOffset;
+        if (marker == FAT32_ENTRY_END_OF_DIR) {
+          endOfDirectory = true;
+        } else if ((endOfDirectory == false) && (marker != FAT32_ENTRY_FREE)) {
+          fat32NoteShortNameTail(entry, shortName, baseLen, used);
+        }
+
+        if (runFound == false) {
+          if ((marker == FAT32_ENTRY_FREE)
+              || (marker == FAT32_ENTRY_END_OF_DIR)
+          ) {
+            if (runCount == 0) {
+              runCluster = currentCluster;
+              runStart   = byteOffset;
+            }
+            runCount++;
+            if (runCount >= slotsNeeded) {
+              *foundCluster = runCluster;
+              *foundOffset  = runStart;
+              runFound = true;
+            }
+          } else {
+            runCount = 0;
           }
-          runCount++;
-          if (runCount >= slotsNeeded) {
-            *foundCluster = runCluster;
-            *foundOffset  = runStart;
-            return FAT32_SUCCESS;
-          }
-        } else {
-          runCount = 0;
+        }
+
+        if (runFound && endOfDirectory) {
+          break;
         }
       }
+      if (runFound && endOfDirectory) {
+        break;
+      }
+    }
+    if (runFound && endOfDirectory) {
+      break;
     }
 
     // Follow the cluster chain.
@@ -1761,7 +1948,10 @@ static inline int fat32FindFreeDirectorySlots(
     currentCluster = nextCluster;
   }
 
-  return FAT32_DISK_FULL;
+  if (shortName != NULL) {
+    return fat32ApplyShortNameTail(shortName, baseLen, used);
+  }
+  return FAT32_SUCCESS;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1824,8 +2014,7 @@ static inline int fat32CreateFileEntry(
 ) {
   // Generate the 8.3 short name and compute the LFN checksum.
   uint8_t shortName[FAT32_SHORT_NAME_LENGTH];
-  fat32GenerateShortName(fileName, shortName);
-  uint8_t checksum = fat32ShortNameChecksum(shortName);
+  bool needsTail = fat32GenerateShortName(fileName, shortName);
 
   // Determine how many LFN entries are required.
   size_t nameLen = strlen(fileName);
@@ -1837,11 +2026,12 @@ static inline int fat32CreateFileEntry(
   // Locate a contiguous run of free slots.
   uint32_t slotCluster;
   uint32_t slotOffset;
-  int status = fat32FindFreeDirectorySlots(
-    ds, parentCluster, totalSlots, &slotCluster, &slotOffset);
+  int status = fat32FindFreeDirectorySlots(ds, parentCluster, totalSlots,
+    &slotCluster, &slotOffset, needsTail ? shortName : NULL);
   if (status != FAT32_SUCCESS) {
     return status;
   }
+  uint8_t checksum = fat32ShortNameChecksum(shortName);
 
   // --- Write the LFN entries (highest ordinal first) ---
   FilesystemState *fs = ds->filesystemState;
@@ -1970,16 +2160,19 @@ static inline int fat32CreateFileEntry(
 /// @param parentCluster  First cluster of the parent directory.
 /// @param fileName       The name of the file to create.
 /// @param now            The creation time, in seconds since the Unix epoch.
+/// @param entryTemplate  The short entry to write, or NULL for a new, empty
+///                       regular file created at now.
 /// @param result         [out] Populated with the new directory entry and its
 ///                       location.
 /// @param returnValue    [out] FAT32_SUCCESS or a FAT32 error code.
 typedef struct Fat32CreateFileArgs {
-  Fat32DriverState     *ds;
-  uint32_t              parentCluster;
-  const char           *fileName;
-  time_t                now;
-  Fat32DirSearchResult *result;
-  int                   returnValue;
+  Fat32DriverState          *ds;
+  uint32_t                   parentCluster;
+  const char                *fileName;
+  time_t                     now;
+  const Fat32DirectoryEntry *entryTemplate;
+  Fat32DirSearchResult      *result;
+  int                        returnValue;
 } Fat32CreateFileArgs;
 
 void* Fat32CreateFile(void *args);

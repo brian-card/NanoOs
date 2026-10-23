@@ -39,6 +39,9 @@
 #include "NanoOsUtils.h"
 #endif // NANO_OS_KERNEL_BUILD
 #include "Fat32.h"
+#ifdef NANO_OS_OVERLAY_FILESYSTEM
+#include "OverlayFilesystem.h"
+#endif // NANO_OS_OVERLAY_FILESYSTEM
 
 ///////////////////////////////////////////////////////////////////////////////
 ///
@@ -167,8 +170,22 @@ int driverRename(void *driverState, const char *oldpath, const char *newpath) {
   // The new entry is written before the old one is invalidated so that an
   // interruption leaves the file reachable.
   if (result == FAT32_SUCCESS) {
-    result = fat32CreateFileEntry(ds, newParentCluster, newName,
-      &oldEntry.entry, &createdEntry);
+    Fat32CreateFileArgs createArgs = {
+      .ds = ds,
+      .parentCluster = newParentCluster,
+      .fileName = newName,
+      .now = 0,
+      .entryTemplate = &oldEntry.entry,
+      .result = &createdEntry,
+      .returnValue = FAT32_ERROR,
+    };
+#ifdef NANO_OS_OVERLAY_FILESYSTEM
+    callOverlayFunction(OVERLAY_SAME_NAMESPACE,
+      blockOverlayId(FIRST_FS_OVERLAY_ID), "Fat32CreateFile", &createArgs);
+#else
+    Fat32CreateFile(&createArgs);
+#endif // NANO_OS_OVERLAY_FILESYSTEM
+    result = createArgs.returnValue;
   }
   if (result == FAT32_SUCCESS) {
     result = fat32InvalidateDirectoryEntries(

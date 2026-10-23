@@ -27,8 +27,8 @@
 
 /// @file CreateFileDriver.c
 ///
-/// @brief Creation of a new, empty file for FAT32.  Kept apart from fopen's
-/// driver so that each fits in an overlay on its own.
+/// @brief Creation of new directory entries for FAT32.  Kept apart from the
+/// fopen, mkdir, and rename drivers so that each fits in an overlay on its own.
 
 // Standard C includes
 #include <stdlib.h>
@@ -43,7 +43,8 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 ///
-/// @brief Create a new, empty regular file in a directory.
+/// @brief Create a new entry in a directory:  a new, empty regular file, or
+///        a copy of a given entry under a new name.
 ///
 /// @param args  Pointer to a Fat32CreateFileArgs (passed as void*), whose
 ///              result and returnValue are populated.
@@ -53,9 +54,13 @@
 void* Fat32CreateFile(void *args) {
   Fat32CreateFileArgs *createArgs = (Fat32CreateFileArgs*) args;
   Fat32DirectoryEntry entry;
-  fat32InitNewEntry(&entry, FAT32_ATTR_ARCHIVE, createArgs->now);
+  const Fat32DirectoryEntry *entryTemplate = createArgs->entryTemplate;
+  if (entryTemplate == NULL) {
+    fat32InitNewEntry(&entry, FAT32_ATTR_ARCHIVE, createArgs->now);
+    entryTemplate = &entry;
+  }
   createArgs->returnValue = fat32CreateFileEntry(createArgs->ds,
-    createArgs->parentCluster, createArgs->fileName, &entry,
+    createArgs->parentCluster, createArgs->fileName, entryTemplate,
     createArgs->result);
   return args;
 }
