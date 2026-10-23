@@ -2135,8 +2135,8 @@ void agonLight2TraceValue(
 /// @fn void agonLight2TraceInterrupt(int code)
 ///
 /// @brief Boot trace: report a trap that would otherwise halt silently.  The
-/// code is the RST vector (0x08-0x38), 0x66 for NMI, 0xff for an unclaimed
-/// IM2 vector, or 0x100 / 0x101 for 5000 UART0 / UART1 interrupts.
+/// code is the RST vector (0x08-0x38), 0x66 for NMI, or 0xff for an unclaimed
+/// IM2 vector.
 ///
 /// @param code The code of the trap.
 ///
@@ -2144,33 +2144,6 @@ void agonLight2TraceValue(
 void agonLight2TraceInterrupt(int code) {
   static const char _trapText[] KEEP_IN_FLASH = "[boot] TRAP code 0x";
   agonLight2TraceValue(_trapText, (unsigned long) code, 16);
-}
-
-/// @fn void agonLight2TraceUartState(
-///   int code, int ier, int iir, int lsr, int msr)
-///
-/// @brief Boot trace: report a UART interrupt storm along with the UART's
-/// interrupt enable, interrupt identification, line status, and modem status
-/// registers, read in that order inside the storm.
-///
-/// @param code 0x100 for UART0, 0x101 for UART1.
-/// @param ier The UART's IER.
-/// @param iir The UART's IIR.
-/// @param lsr The UART's LSR.
-/// @param msr The UART's MSR.
-///
-/// @return This function returns no value.
-void agonLight2TraceUartState(int code, int ier, int iir, int lsr, int msr) {
-  static const char _codeText[] KEEP_IN_FLASH = "[boot] TRAP code 0x";
-  static const char _ierText[] KEEP_IN_FLASH = "[boot]   IER 0x";
-  static const char _iirText[] KEEP_IN_FLASH = "[boot]   IIR 0x";
-  static const char _lsrText[] KEEP_IN_FLASH = "[boot]   LSR 0x";
-  static const char _msrText[] KEEP_IN_FLASH = "[boot]   MSR 0x";
-  agonLight2TraceValue(_codeText, (unsigned long) code, 16);
-  agonLight2TraceValue(_ierText, (unsigned long) ier, 16);
-  agonLight2TraceValue(_iirText, (unsigned long) iir, 16);
-  agonLight2TraceValue(_lsrText, (unsigned long) lsr, 16);
-  agonLight2TraceValue(_msrText, (unsigned long) msr, 16);
 }
 
 /// @fn void agonLight2TraceUart0Stale(int byte)

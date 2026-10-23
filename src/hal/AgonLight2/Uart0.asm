@@ -41,7 +41,6 @@
 .global _agonLight2PollUart0Impl
 .global _agonLight2ReadUart0Impl
 .global _agonLight2WriteUart0Impl
-.extern _agonLight2TraceUartState
 .extern _agonLight2TraceUart0Stale
 .global uart0Isr
 
@@ -75,7 +74,6 @@ UART0_RING_MASK .equ (UART0_RING_SIZE - 1)
 uart0RxHead: .space 1              ; written only by uart0Isr
 uart0RxTail: .space 1              ; written only by the Poll/Read impls
 uart0RxBuf:  .space UART0_RING_SIZE
-uart0IsrCount: .space 3            ; boot trace: uart0Isr entries
 
 .text
 
@@ -288,33 +286,6 @@ _agonLight2WriteUart0Impl:
 ;;    RX FIFO into uart0RxBuf and, if it received anything, calls the device's
 ;;    registered callback.
 uart0Isr:
-    ld      hl, (uart0IsrCount) ; boot trace: report an interrupt storm once
-    inc     hl
-    ld      (uart0IsrCount), hl
-    ld      de, 5000
-    or      a
-    sbc     hl, de
-    jr      nz, .uart0IsrCounted
-    in0     b, (UART0_IER)    ; read in this order: IIR shows the source
-    in0     c, (UART0_IIR)    ; before LSR / MSR reads acknowledge it
-    in0     d, (UART0_LSR)
-    in0     e, (UART0_MSR)
-    ld      hl, 0
-    ld      l, e
-    push    hl                  ; msr
-    ld      l, d
-    push    hl                  ; lsr
-    ld      l, c
-    push    hl                  ; iir
-    ld      l, b
-    push    hl                  ; ier
-    ld      hl, 0x100
-    push    hl                  ; code
-    call    _agonLight2TraceUartState
-    ld      hl, 15
-    add     hl, sp
-    ld      sp, hl
-.uart0IsrCounted:
     in0     a, (UART0_LSR)
     and     0x01                ; DR - receiver data ready
     jr      nz, .uart0IsrRxLoop

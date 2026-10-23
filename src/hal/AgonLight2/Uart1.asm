@@ -57,7 +57,6 @@
 .global _agonLight2ReadUart1Impl
 .global _agonLight2WriteUart1Impl
 .global _agonLight2WriteUart1PolledImpl
-.extern _agonLight2TraceUartState
 .global uart1Isr
 
 ;; -- eZ80F92 Port C GPIO registers ------------------
@@ -94,7 +93,6 @@ uart1RxBuf:  .space UART1_RING_SIZE
 uart1TxHead: .space 1              ; written only by _agonLight2WriteUart1Impl
 uart1TxTail: .space 1              ; written only by uart1Isr
 uart1TxBuf:  .space UART1_RING_SIZE
-uart1IsrCount: .space 3            ; boot trace: uart1Isr entries
 
 .text
 
@@ -417,33 +415,6 @@ uart1TxSendOne:
 ;;    interrupt on the TX side is deliberate simplicity for a first pass, not
 ;;    a FIFO-depth burst; see the file header.
 uart1Isr:
-    ld      hl, (uart1IsrCount) ; boot trace: report an interrupt storm once
-    inc     hl
-    ld      (uart1IsrCount), hl
-    ld      de, 5000
-    or      a
-    sbc     hl, de
-    jr      nz, .uart1IsrCounted
-    in0     b, (UART1_IER)    ; read in this order: IIR shows the source
-    in0     c, (UART1_IIR)    ; before LSR / MSR reads acknowledge it
-    in0     d, (UART1_LSR)
-    in0     e, (UART1_MSR)
-    ld      hl, 0
-    ld      l, e
-    push    hl                  ; msr
-    ld      l, d
-    push    hl                  ; lsr
-    ld      l, c
-    push    hl                  ; iir
-    ld      l, b
-    push    hl                  ; ier
-    ld      hl, 0x101
-    push    hl                  ; code
-    call    _agonLight2TraceUartState
-    ld      hl, 15
-    add     hl, sp
-    ld      sp, hl
-.uart1IsrCounted:
     in0     a, (UART1_LSR)
     and     0x01                ; DR - receiver data ready
     jr      z, .uart1IsrTx      ; nothing received - no callback
