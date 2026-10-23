@@ -37,15 +37,27 @@ int main(int argc, char **argv) {
   (void) argv;
   int returnValue = 0;
 
-  printf("%s %-2s\n",
+  printf("%s %s\n",
     "cat:                    ",
     "Write the contents of a file to the current console.");
-  printf("%s %-2s\n",
+  printf("%s %s\n",
+    "cd:                     ",
+    "Change the current working directory.");
+  printf("%s %s\n",
+    "cp:                     ",
+    "Copy files.");
+  printf("%s %s\n",
+    "dirtest:                ",
+    "Exercise the directory-reading functions.");
+  printf("%s %s\n",
     "dumpMemoryAllocations:  ",
     "Dump information about all dynamic memory allocations.");
-  printf("%s %-2s\n",
+  printf("%s %s\n",
     "echo:                   ",
     "Echo a string back to the console.");
+  printf("%s %s\n",
+    "ed:                     ",
+    "Edit a text file.");
   printf("%s %s\n",
     "exit:                   ",
     "Exit the current shell.");
@@ -54,7 +66,7 @@ int main(int argc, char **argv) {
     "Run the getty application.");
   printf("%s %s\n",
     "grep:                   ",
-    "Find text in piped output.");
+    "Find text in a file or in piped output.");
   printf("%s %s\n",
     "helloworld:             ",
     "Run the \"helloworld\" command from the filesystem.");
@@ -65,17 +77,47 @@ int main(int argc, char **argv) {
     "kill:                   ",
     "Kill a running process.");
   printf("%s %s\n",
+    "ll:                     ",
+    "List the contents of a directory.");
+  printf("%s %s\n",
+    "logger:                 ",
+    "Run the system logger.");
+  printf("%s %s\n",
+    "login:                  ",
+    "Log in as a user.");
+  printf("%s %s\n",
     "looseLoop:              ",
     "Run a process in a loop that does yield.");
   printf("%s %s\n",
+    "mkdir:                  ",
+    "Create a directory.");
+  printf("%s %s\n",
+    "mush:                   ",
+    "Run the MUSH shell.");
+  printf("%s %s\n",
+    "mv:                     ",
+    "Move or rename a file.");
+  printf("%s %s\n",
     "ps:                     ",
     "List the running processes.");
+  printf("%s %s\n",
+    "pwd:                    ",
+    "Print the current working directory.");
+  printf("%s %s\n",
+    "rm:                     ",
+    "Remove a file.");
+  printf("%s %s\n",
+    "rmdir:                  ",
+    "Remove an empty directory.");
   printf("%s %s\n",
     "shutdown:               ",
     "Power off or reset the system.");
   printf("%s %s\n",
     "tightLoop:              ",
     "Run a process in a loop that does not yield.");
+  printf("%s %s\n",
+    "touch:                  ",
+    "Create an empty file.");
 
   return returnValue;
 }
