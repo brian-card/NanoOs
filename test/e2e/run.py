@@ -266,9 +266,10 @@ def assert_vdp_set_up_on_answer(vdp):
 
     @param vdp The FakeVdp, after it has drawn the login prompt.
     """
-    kinds = [kind for _t, kind, _d in vdp.events[:3]]
-    assert kinds == ["cls", "cursor", "text"], \
-        f"the screen wasn't set up first: {vdp.events[:3]}"
+    setup = [(kind, detail) for _t, kind, detail in vdp.events[:5]]
+    assert setup == [("mode", 0), ("layout", 1), ("cls", None),
+                     ("cursor", 1), ("text", setup[4][1])], \
+        f"the screen wasn't set up first: {vdp.events[:5]}"
     delay = vdp.events[0][0] - vdp.answered
     assert delay < 1.0, f"the screen was set up {delay:.1f} s after the answer"
 
@@ -301,6 +302,16 @@ def test_vdp_console_logs_in_and_runs_a_command(s):
     assert s.sh("echo uart1-too") == "uart1-too"
 
 
+def test_vdp_keyboard_types_a_pipeline(s):
+    # The VDP starts in the UK layout, where a US keyboard's | key types ~.
+    vdp = s.restart_with_vdp()
+    vdp_login(vdp)
+    vdp.clear()
+    vdp.type("echo pipe-ok | grep pipe\r")
+    vdp.expect(r"echo pipe-ok \| grep pipe\r\npipe-ok\r\n" + PROMPT)
+    assert vdp.errors == [], f"unexpected VDU commands: {vdp.errors}"
+
+
 def test_vdp_driver_replays_output_from_before_the_vdp_answered(s):
     vdp = s.restart_with_vdp(answer_after=2.0)
     vdp.expect(r"NanoOs [^\r\n]*\r\n(.*\r\n)*login: ", timeout=20)
@@ -319,7 +330,7 @@ def test_vdp_driver_writes_anyway_when_the_vdp_never_answers(s):
     vdp = s.restart_with_vdp(answer=False)
     vdp.expect("login: ", timeout=25)
     first_time, first_kind, _ = vdp.events[0]
-    assert first_kind == "cls", \
+    assert first_kind == "mode", \
         f"output was sent before the driver gave up: {vdp.events[:3]}"
     waited = first_time - vdp.first_poll
     assert 14.5 < waited < 16.5, f"gave up after {waited:.1f} s, not 15 s"
@@ -1300,6 +1311,40 @@ def test_looseloop_is_killed_by_ctrl_c(s):
 
 def test_cat_reading_the_console_is_killed_by_ctrl_c(s):
     assert_ctrl_c_kills(s, "cat")
+
+
+def test_commands_that_cannot_load_leave_the_shell_running(s):
+    s.login()
+    before = ps_entries(s)
+    assert s.sh("mkdir /usr/bin/corrupt") == ""
+    assert s.sh("cp /etc/catfile /usr/bin/corrupt/main.overlay") == ""
+    assert s.sh("mkdir /usr/bin/empty") == ""
+    assert s.sh("touch /usr/bin/empty/main.overlay") == ""
+    for command in ("corrupt", "empty", "corrupt &", "empty &"):
+        name = command.split()[0]
+        assert s.sh(command) == name + ": cannot execute"
+        assert ps_entries(s) == before, command
+    for _ in range(3):
+        assert s.sh("looseLoop &") == ""
+    assert [name for _pid, _user, name in ps_entries(s)].count("looseLoop") \
+        == 3
+
+
+def test_failed_background_launches_release_their_slots(s):
+    s.login()
+    # The heap settles once ps and the shell's overlays are in the file cache.
+    for _ in range(3):
+        assert s.sh("no_such_command_here &") == \
+            "no_such_command_here: command not found"
+        heap = heap_at_prompt(s)
+    for _ in range(4):
+        assert s.sh("no_such_command_here &") == \
+            "no_such_command_here: command not found"
+        assert heap_at_prompt(s) == heap
+    for _ in range(3):
+        assert s.sh("looseLoop &") == ""
+    assert [name for _pid, _user, name in ps_entries(s)].count("looseLoop") \
+        == 3
 
 
 def test_typed_ahead_lines_both_run_in_order(s):

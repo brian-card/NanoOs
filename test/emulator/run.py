@@ -400,6 +400,20 @@ def test_ctrl_c_kills_foreground_commands(e):
     assert e.sh("echo alive") == "alive"
 
 
+def test_commands_that_cannot_load_leave_the_shell_running(e):
+    before = ps_entries(e)
+    assert e.sh("mkdir /usr/bin/corrupt") == ""
+    assert e.sh("cp /etc/config.sys /usr/bin/corrupt/main.overlay") == ""
+    for command in ("corrupt", "corrupt &"):
+        assert e.sh(command) == "corrupt: cannot execute"
+        assert ps_entries(e) == before, command
+    assert e.sh("looseLoop &") == ""
+    pids = [pid for pid, _user, name in ps_entries(e) if name == "looseLoop"]
+    assert len(pids) == 1, pids
+    assert e.sh("kill %d" % pids[0]) == \
+        "Termination of process %d successful." % pids[0]
+
+
 def test_soft_reset_boots_again(e):
     e.send("shutdown -r\r")
     e.child.expect(r"NanoOs [^\r\n]* %s tty0" % HOSTNAME, timeout=30)
@@ -411,6 +425,10 @@ def test_soft_reset_boots_again(e):
 def test_no_scheduler_queue_errors(e):
     assert "Could not push process" not in e.output(), \
         "the scheduler reported a queue overflow"
+
+
+def test_no_traps_were_reported(e):
+    assert "TRAP" not in e.output(), "the HAL reported a trap"
 
 
 def test_filesystem_is_consistent_after_shutdown(e):
@@ -446,8 +464,10 @@ TESTS = [test_boots_to_a_login_prompt,
          test_dump_memory_allocations_lists_the_heap,
          test_kill_terminates_a_background_process,
          test_ctrl_c_kills_foreground_commands,
+         test_commands_that_cannot_load_leave_the_shell_running,
          test_soft_reset_boots_again,
          test_no_scheduler_queue_errors,
+         test_no_traps_were_reported,
          test_filesystem_is_consistent_after_shutdown]
 
 
