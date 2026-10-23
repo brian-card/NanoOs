@@ -261,7 +261,6 @@ static pthread_t _mainThreadId = 0;
 
 // HalCommon.h can't be included here; see the note on Scheduler.h above.
 void halCommonUartMarkReady(int32_t deviceId);
-int posixNanoOsEio(void);
 
 /// @var _pollOnlyEnvironmentVariable
 ///
@@ -481,7 +480,7 @@ static int posixStartUartRx(PosixUartRx *rx) {
     signalStack.ss_size = sizeof(_uartRxSignalStack);
     signalStack.ss_flags = 0;
     if (sigaltstack(&signalStack, NULL) < 0) {
-      return -errno;
+      return -posixErrnoToNanoOs(errno);
     }
 
     // Blocking every signal keeps a preemption from switching coroutines
@@ -491,7 +490,7 @@ static int posixStartUartRx(PosixUartRx *rx) {
     sigfillset(&sa.sa_mask);
     sa.sa_flags = SA_RESTART | SA_ONSTACK;
     if (sigaction(POSIX_UART_RX_SIGNAL, &sa, NULL) < 0) {
-      return -errno;
+      return -posixErrnoToNanoOs(errno);
     }
     _uartRxSignalInstalled = true;
   }
@@ -506,7 +505,7 @@ static int posixStartUartRx(PosixUartRx *rx) {
   int status = pthread_create(&rxThread, NULL, posixUartRxThreadFunction, rx);
   pthread_sigmask(SIG_SETMASK, &previousSignals, NULL);
   if (status != 0) {
-    return -status;
+    return -posixErrnoToNanoOs(status);
   }
   pthread_detach(rxThread);
   rx->threadStarted = true;
@@ -524,18 +523,18 @@ static int posixConnectUart0(void) {
   const char *path = getenv(_uart0EnvironmentVariable);
   struct sockaddr_un address;
   if ((path == NULL) || (strlen(path) >= sizeof(address.sun_path))) {
-    return -ENOTTY;
+    return -posixErrnoToNanoOs(ENOTTY);
   }
 
   int fd = socket(AF_UNIX, SOCK_STREAM, 0);
   if (fd < 0) {
-    return -errno;
+    return -posixErrnoToNanoOs(errno);
   }
   memset(&address, 0, sizeof(address));
   address.sun_family = AF_UNIX;
   strcpy(address.sun_path, path);
   if (connect(fd, (struct sockaddr*) &address, sizeof(address)) != 0) {
-    int returnValue = -errno;
+    int returnValue = -posixErrnoToNanoOs(errno);
     close(fd);
     return returnValue;
   }
@@ -560,7 +559,7 @@ int posixConfigureUart(int32_t deviceId, va_list args) {
   (void) baud;
 
   if (deviceId > 1) {
-    return -ERANGE;
+    return -posixErrnoToNanoOs(ERANGE);
   } else if (deviceId == 0) {
     return (_uartRx[0].fd >= 0) ? 0 : posixConnectUart0();
   }
@@ -574,7 +573,7 @@ int posixConfigureUart(int32_t deviceId, va_list args) {
   int stdinFileno = fileno(stdin);
   if (realTcgetattr(stdinFileno, &oldFlags) != 0) {
     fprintf(stderr, _getAttrErrorMessage);
-    return -errno;
+    return -posixErrnoToNanoOs(errno);
   }
 
   // Disable echo to the console.
@@ -583,7 +582,7 @@ int posixConfigureUart(int32_t deviceId, va_list args) {
   newFlags.c_lflag &= ~(ECHO | ICANON);
   if (realTcsetattr(stdinFileno, TCSANOW, &newFlags) != 0) {
     fprintf(stderr, _setAttrErrorMessage);
-    return -errno;
+    return -posixErrnoToNanoOs(errno);
   }
 
   return posixStartUartRx(&_uartRx[1]);
@@ -633,7 +632,7 @@ int posixPollUart(int32_t deviceId, va_list args) {
 /// @brief Copy up to length bytes from a UART's receive ring without
 /// blocking.  Poll-only devices and devices with no receive ring report 0
 /// bytes read.  Once UART0's socket has closed and its ring is empty, the
-/// socket is released and the read fails with NanoOs's -EIO.
+/// socket is released and the read fails with -EIO.
 ///
 /// @param deviceId The device ID that callHal checked the call against.
 /// @param args A va_list holding the int32_t deviceId, uint8_t *data,
@@ -674,7 +673,7 @@ int posixReadUart(int32_t deviceId, va_list args) {
       if (returnValue != NULL) {
         *returnValue = 0;
       }
-      return posixNanoOsEio();
+      return -posixErrnoToNanoOs(EIO);
     }
   }
 
@@ -689,19 +688,19 @@ int posixWriteUart(int32_t deviceId, va_list args) {
   ssize_t length = va_arg(args, ssize_t);
   ssize_t *returnValue = va_arg(args, ssize_t*);
 
-  ssize_t numBytesWritten = -ERANGE;
+  ssize_t numBytesWritten = -posixErrnoToNanoOs(ERANGE);
 
   if ((deviceId == 0) && (_uartRx[0].fd < 0) && posixUart0Requested()
     && (posixConnectUart0() != 0)
   ) {
-    numBytesWritten = posixNanoOsEio();
+    numBytesWritten = -posixErrnoToNanoOs(EIO);
   } else if ((deviceId == 0) && (_uartRx[0].fd >= 0) && (length >= 0)) {
     numBytesWritten = 0;
     while (numBytesWritten < length) {
       ssize_t written = send(_uartRx[0].fd, &data[numBytesWritten],
         length - numBytesWritten, MSG_NOSIGNAL);
       if (written <= 0) {
-        numBytesWritten = posixNanoOsEio();
+        numBytesWritten = -posixErrnoToNanoOs(EIO);
         break;
       }
       numBytesWritten += written;
@@ -728,67 +727,67 @@ int posixIsUartConsole(int32_t deviceId, va_list args) {
 int posixInitDio(int32_t deviceId, va_list args) {
   (void) deviceId;
   (void) args;
-  return -ENOSYS;
+  return -posixErrnoToNanoOs(ENOSYS);
 }
 
 int posixConfigureDio(int32_t deviceId, va_list args) {
   (void) deviceId;
   (void) args;
-  return -ENOSYS;
+  return -posixErrnoToNanoOs(ENOSYS);
 }
 
 int posixWriteDio(int32_t deviceId, va_list args) {
   (void) deviceId;
   (void) args;
-  return -ENOSYS;
+  return -posixErrnoToNanoOs(ENOSYS);
 }
 
 int posixInitSpi(int32_t deviceId, va_list args) {
   (void) deviceId;
   (void) args;
-  return -ENOSYS;
+  return -posixErrnoToNanoOs(ENOSYS);
 }
 
 int posixConfigureSpiDevice(int32_t deviceId, va_list args) {
   (void) deviceId;
   (void) args;
-  return -ENOSYS;
+  return -posixErrnoToNanoOs(ENOSYS);
 }
 
 int posixSetSpiSpeed(int32_t deviceId, va_list args) {
   (void) deviceId;
   (void) args;
-  return -ENOSYS;
+  return -posixErrnoToNanoOs(ENOSYS);
 }
 
 int posixStartSpiTransfer(int32_t deviceId, va_list args) {
   (void) deviceId;
   (void) args;
-  return -ENOSYS;
+  return -posixErrnoToNanoOs(ENOSYS);
 }
 
 int posixEndSpiTransfer(int32_t deviceId, va_list args) {
   (void) deviceId;
   (void) args;
-  return -ENOSYS;
+  return -posixErrnoToNanoOs(ENOSYS);
 }
 
 int posixSpiTransfer8(int32_t deviceId, va_list args) {
   (void) deviceId;
   (void) args;
-  return -ENOSYS;
+  return -posixErrnoToNanoOs(ENOSYS);
 }
 
 int posixSpiTransferBytes(int32_t deviceId, va_list args) {
   (void) deviceId;
   (void) args;
-  return -ENOSYS;
+  return -posixErrnoToNanoOs(ENOSYS);
 }
 
 int posixSpiTransferUntil(int32_t deviceId, va_list args) {
   (void) deviceId;
   (void) args;
-  return -ENOSYS;
+  return -posixErrnoToNanoOs(ENOSYS);
 }
 
 int posixTimeInit(int32_t deviceId, va_list args) {
@@ -1099,7 +1098,7 @@ int posixInitTimer(int32_t deviceId, va_list args) {
 int posixInitTimerDevice(int32_t deviceId, va_list args) {
   (void) args;
   if (deviceId >= _numTimers) {
-    return -ERANGE;
+    return -posixErrnoToNanoOs(ERANGE);
   }
 
   SoftwareTimer *swTimer = &softwareTimers[deviceId];
@@ -1113,7 +1112,7 @@ int posixInitTimerDevice(int32_t deviceId, va_list args) {
   sigemptyset(&sa.sa_mask);
   sa.sa_flags = SA_NODEFER | SA_RESTART;
   if (sigaction(swTimer->signal, &sa, NULL) < 0) {
-    return -errno;
+    return -posixErrnoToNanoOs(errno);
   }
 
   swTimer->initialized = true;
@@ -1149,12 +1148,12 @@ int posixConfigOneShotTimer(int32_t deviceId, va_list args) {
   void (*callback)(void) = va_arg(args, void (*)(void));
 
   if (deviceId >= _numTimers) {
-    return -ERANGE;
+    return -posixErrnoToNanoOs(ERANGE);
   }
 
   SoftwareTimer *swTimer = &softwareTimers[deviceId];
   if (!swTimer->initialized) {
-    return -EINVAL;
+    return -posixErrnoToNanoOs(EINVAL);
   }
 
   swTimer->active = false;
@@ -1176,12 +1175,12 @@ int posixConfiguredTimerNanoseconds(int32_t deviceId, va_list args) {
     *returnValue = 0;
   }
   if (deviceId >= _numTimers) {
-    return -ERANGE;
+    return -posixErrnoToNanoOs(ERANGE);
   }
 
   SoftwareTimer *swTimer = &softwareTimers[deviceId];
   if ((!swTimer->initialized) || (!swTimer->active)) {
-    return -EINVAL;
+    return -posixErrnoToNanoOs(EINVAL);
   }
 
   if (returnValue != NULL) {
@@ -1197,12 +1196,12 @@ int posixRemainingTimerNanoseconds(int32_t deviceId, va_list args) {
     *returnValue = 0;
   }
   if (deviceId >= _numTimers) {
-    return -ERANGE;
+    return -posixErrnoToNanoOs(ERANGE);
   }
 
   SoftwareTimer *swTimer = &softwareTimers[deviceId];
   if ((!swTimer->initialized) || (!swTimer->active)) {
-    return -EINVAL;
+    return -posixErrnoToNanoOs(EINVAL);
   }
 
   int64_t now = 0;
@@ -1229,17 +1228,17 @@ int posixCancelTimer(int32_t deviceId, va_list args) {
         processDescriptor->numHalCapabilities, HAL_TIMER, HAL_TIMER_CANCEL,
         deviceId) == NULL)
     ) {
-      return -EACCES;
+      return -posixErrnoToNanoOs(EACCES);
     }
   }
 
   if (deviceId >= _numTimers) {
-    return -ERANGE;
+    return -posixErrnoToNanoOs(ERANGE);
   }
 
   SoftwareTimer *swTimer = &softwareTimers[deviceId];
   if (!swTimer->initialized) {
-    return -EINVAL;
+    return -posixErrnoToNanoOs(EINVAL);
   }
 
   swTimer->active = false;
@@ -1263,7 +1262,7 @@ int posixCancelAndGetTimer(int32_t deviceId, va_list args) {
   void (**callback)(void) = va_arg(args, void (**)(void));
 
   if ((deviceId < 0) || (deviceId >= _numTimers)) {
-    return -ERANGE;
+    return -posixErrnoToNanoOs(ERANGE);
   }
 
   SoftwareTimer *swTimer = &softwareTimers[deviceId];
@@ -1271,7 +1270,7 @@ int posixCancelAndGetTimer(int32_t deviceId, va_list args) {
     // We cannot populate the provided pointers, so we will error here.  This
     // also signals to the caller that there's no need to call configTimer
     // later.
-    return -EINVAL;
+    return -posixErrnoToNanoOs(EINVAL);
   }
 
   // ***DO NOT*** call posixCancelTimer.  It's expected that this
