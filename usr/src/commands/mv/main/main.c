@@ -31,20 +31,69 @@
 /// @brief Implementation of the standard POSIX `mv` command.
 
 #include <errno.h>
+#include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
-int main(int argc, char **argv) {
-  if (argc != 3) {
-    fprintf(stderr, "Usage: %s <source> <destination>\n", argv[0]);
-    return 1;
-  }
-
-  if (rename(argv[1], argv[2]) != 0) {
+/// @brief Rename a file or directory, reporting any failure.
+///
+/// @param source The path to rename.
+/// @param destination The new path.
+///
+/// @return Returns 0 on success, 1 on failure.
+static int moveFile(const char *source, const char *destination) {
+  if (rename(source, destination) != 0) {
     fprintf(stderr, "ERROR: Could not rename \"%s\" to \"%s\": %s\n",
-      argv[1], argv[2], strerror(errno));
+      source, destination, strerror(errno));
     return 1;
   }
 
   return 0;
+}
+
+int main(int argc, char **argv) {
+  if (argc < 3) {
+    fprintf(stderr, "Usage: %s <source> <destination>\n", argv[0]);
+    fprintf(stderr, "       %s <source>... <directory>\n", argv[0]);
+    return 1;
+  }
+
+  const char *target = argv[argc - 1];
+  struct stat targetStat;
+  bool targetIsDirectory
+    = (lstat(target, &targetStat) == 0) && S_ISDIR(targetStat.st_mode);
+  if (!targetIsDirectory) {
+    if (argc > 3) {
+      fprintf(stderr, "ERROR: \"%s\" is not a directory\n", target);
+      return 1;
+    }
+    return moveFile(argv[1], target);
+  }
+
+  int returnValue = 0;
+  size_t targetLength = strlen(target);
+  bool needsSeparator
+    = (targetLength > 0) && (target[targetLength - 1] != '/');
+  for (int ii = 1; ii < argc - 1; ii++) {
+    const char *baseName = strrchr(argv[ii], '/');
+    baseName = (baseName == NULL) ? argv[ii] : baseName + 1;
+
+    char *destination = (char*) malloc(targetLength + strlen(baseName) + 2);
+    if (destination == NULL) {
+      fprintf(stderr, "ERROR: Out of memory\n");
+      return 1;
+    }
+    strcpy(destination, target);
+    if (needsSeparator) {
+      strcat(destination, "/");
+    }
+    strcat(destination, baseName);
+
+    returnValue |= moveFile(argv[ii], destination);
+    free(destination);
+  }
+
+  return returnValue;
 }
