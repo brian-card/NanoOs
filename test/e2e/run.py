@@ -524,6 +524,35 @@ def test_mv_replaces_an_existing_file(s):
     assert ll_names(s, "/etc") == ["hostname", "issue"]
 
 
+def test_mv_moves_files_into_a_directory(s):
+    s.login()
+    assert s.sh("mkdir /root") == ""
+    assert s.sh("mkdir tmp") == ""
+    assert s.sh("cp /usr/bin/helloworld/main.overlay tmp/main.overlay") == ""
+    assert s.sh("mkdir /usr/bin/hello2") == ""
+    assert s.sh("mv tmp/main.overlay /usr/bin/hello2") == ""
+    assert ll_names(s, "/root/tmp") == []
+    assert ll_names(s, "/usr/bin/hello2") == ["main.overlay"]
+    assert s.sh("hello2") == "Hello, world!"
+    assert s.sh("mv /usr/bin/hello2/main.overlay /root/tmp/") == ""
+    assert ll_names(s, "/root/tmp") == ["main.overlay"]
+    assert s.sh("mv /etc/catfile /etc/hostname /root/tmp") == ""
+    assert ll_names(s, "/root/tmp") == ["catfile", "hostname", "main.overlay"]
+    assert s.sh("cat /root/tmp/catfile") == CATFILE_CONTENTS
+    assert ll_names(s, "/etc") == ["issue"]
+    assert fsck_problems(s) == []
+
+
+def test_mv_reports_a_target_that_is_not_a_directory(s):
+    s.login()
+    assert s.sh("mv /etc/catfile /etc/hostname /etc/issue") == \
+        'ERROR: "/etc/issue" is not a directory'
+    assert s.sh("mv /etc/missing /usr") == \
+        'ERROR: Could not rename "/etc/missing" to "/usr/missing": ' \
+        'No such entry found'
+    assert ll_names(s, "/etc") == ["catfile", "hostname", "issue"]
+
+
 def test_mv_changes_only_the_case_of_a_name(s):
     s.login()
     assert s.sh("mv /etc/catfile /etc/CatFile") == ""

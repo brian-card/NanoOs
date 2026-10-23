@@ -337,6 +337,20 @@ def test_cp_copies_a_command_that_then_runs(e):
     assert e.sh("hello2") == "Hello, world!"
 
 
+def test_mv_moves_a_command_into_its_directory(e):
+    assert e.sh("cd") == ""
+    assert e.sh("mkdir tmp") == ""
+    assert e.sh("cp /usr/bin/helloworld/main.overlay tmp/main.overlay") == ""
+    assert e.sh("mkdir /usr/bin/hello3") == ""
+    assert e.sh("mv tmp/main.overlay /usr/bin/hello3") == ""
+    assert e.sh("hello3") == "Hello, world!"
+    assert e.sh("mv /usr/bin/hello3/main.overlay /root/tmp") == ""
+    assert ll_names(e, "/root/tmp") == ["main.overlay"]
+    assert e.sh("mv /root/tmp/main.overlay /usr/bin/hello3") == ""
+    assert ll_names(e, "/root/tmp") == []
+    assert e.sh("hello3") == "Hello, world!"
+
+
 def test_directories_grow_past_their_first_cluster(e):
     # A 1 KiB cluster holds 32 entries, and each of these names takes three.
     names = ["file-with-long-name-%02d" % n for n in range(16)]
@@ -458,6 +472,7 @@ TESTS = [test_boots_to_a_login_prompt,
          test_mkdir_touch_mv_rm_and_rmdir_manage_files,
          test_cp_copies_text_files,
          test_cp_copies_a_command_that_then_runs,
+         test_mv_moves_a_command_into_its_directory,
          test_directories_grow_past_their_first_cluster,
          test_ed_writes_a_new_file,
          test_dirtest_reports_entry_types,
