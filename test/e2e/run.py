@@ -1273,7 +1273,9 @@ def test_helloworld_prints_its_greeting(s):
 
 def test_help_describes_every_command(s):
     s.login()
-    described = [line.split(":")[0] for line in s.sh("help").splitlines()]
+    lines = s.sh("help").splitlines()
+    assert lines[-2:] == ["", "Run a command with --help to see its usage."]
+    described = [line.split(":")[0] for line in lines[:-2]]
     installed = [name.rstrip("/") for name in ll_names(s, "/usr/bin")]
     assert described == sorted(installed + ["cd", "exit", "pwd"],
                                key=str.lower), described
@@ -1361,19 +1363,76 @@ def test_commands_that_cannot_load_leave_the_shell_running(s):
 
 def test_failed_background_launches_release_their_slots(s):
     s.login()
-    # The heap settles once ps and the shell's overlays are in the file cache.
-    for _ in range(3):
+    heaps = []
+    for _ in range(8):
         assert s.sh("no_such_command_here &") == \
             "no_such_command_here: command not found"
-        heap = heap_at_prompt(s)
-    for _ in range(4):
-        assert s.sh("no_such_command_here &") == \
-            "no_such_command_here: command not found"
-        assert heap_at_prompt(s) == heap
+        heaps.append(heap_at_prompt(s))
+    # The file cache makes the heap alternate, but it must not trend down.
+    assert min(heaps[4:]) >= min(heaps[:4]), heaps
     for _ in range(3):
         assert s.sh("looseLoop &") == ""
     assert [name for _pid, _user, name in ps_entries(s)].count("looseLoop") \
         == 3
+
+
+HELP_OPTION_LINE = "  --help  Show this help and exit."
+
+
+def help_text(s, command):
+    """Run a command and return its output, which must be a usage summary.
+
+    @param s The Session.
+    @param command The command line, which asks for help.
+
+    @return The output.
+    """
+    name = command.split()[0]
+    out = s.sh(command)
+    lines = out.splitlines()
+    assert re.fullmatch(r"Usage: %s( .*)?" % re.escape(name), lines[0]), out
+    assert "Options:" in lines, out
+    return out
+
+
+def test_every_command_prints_its_usage_for_help_options(s):
+    s.login()
+    for name in [n.rstrip("/") for n in ll_names(s, "/usr/bin")]:
+        out = help_text(s, name + " --help")
+        last = out.splitlines()[-1]
+        if name == "shutdown":
+            assert last == "  --help        Show this help and exit.", out
+        else:
+            assert last == HELP_OPTION_LINE, out
+    assert s.sh("echo still-here") == "still-here"
+
+
+def test_mush_help_leaves_the_user_logged_in(s):
+    s.login()
+    assert s.sh("cd /etc") == ""
+    before = ps_entries(s)
+    user, pwd = promptParts(s)
+    heaps = []
+    for _ in range(8):
+        assert help_text(s, "mush --help").splitlines()[0] == "Usage: mush"
+        assert promptParts(s) == (user, pwd)
+        assert s.sh("pwd") == "/etc"
+        assert ps_entries(s) == before
+        heaps.append(heap_at_prompt(s))
+    # The file cache makes the heap alternate, but it must not trend down.
+    assert min(heaps[4:]) >= min(heaps[:4]), heaps
+
+
+def test_usage_errors_print_the_same_summary_as_help(s):
+    s.login()
+    for command in ("cp", "mv", "grep", "kill", "mkdir", "rm", "rmdir",
+                    "touch", "login"):
+        assert s.sh(command) == help_text(s, command + " --help"), command
+    assert s.sh("shutdown") == help_text(s, "shutdown --help")
+    assert s.sh("echo a --help") == "a --help"
+    assert s.sh("echo -h") == "-h"
+    assert s.sh("rm -h") == \
+        'ERROR: Could not remove "-h": No such entry found'
 
 
 def test_typed_ahead_lines_both_run_in_order(s):

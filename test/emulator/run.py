@@ -271,7 +271,9 @@ def test_helloworld_prints_its_greeting(e):
 
 
 def test_help_describes_every_command(e):
-    described = [line.split(":")[0] for line in e.sh("help").splitlines()]
+    lines = e.sh("help").splitlines()
+    assert lines[-2:] == ["", "Run a command with --help to see its usage."]
+    described = [line.split(":")[0] for line in lines[:-2]]
     installed = [name.rstrip("/") for name in ll_names(e, "/usr/bin")]
     assert described == sorted(installed + ["cd", "exit", "pwd"],
                                key=str.lower), (described, installed)
@@ -428,6 +430,18 @@ def test_commands_that_cannot_load_leave_the_shell_running(e):
         "Termination of process %d successful." % pids[0]
 
 
+def test_every_command_prints_its_usage_for_help_options(e):
+    # Earlier tests leave copied and corrupt commands in /usr/bin.
+    built = sorted(os.listdir(os.path.join(REPO_ROOT, "usr", "bin")))
+    installed = [n.rstrip("/") for n in ll_names(e, "/usr/bin")]
+    assert set(built) <= set(installed), (built, installed)
+    for name in built:
+        out = e.sh(name + " --help")
+        assert out.startswith("Usage: " + name), out
+        assert "Options:" in out.splitlines(), out
+    assert e.sh("echo still-here") == "still-here"
+
+
 def test_soft_reset_boots_again(e):
     e.send("shutdown -r\r")
     e.child.expect(r"NanoOs [^\r\n]* %s tty0" % HOSTNAME, timeout=30)
@@ -480,6 +494,7 @@ TESTS = [test_boots_to_a_login_prompt,
          test_kill_terminates_a_background_process,
          test_ctrl_c_kills_foreground_commands,
          test_commands_that_cannot_load_leave_the_shell_running,
+         test_every_command_prints_its_usage_for_help_options,
          test_soft_reset_boots_again,
          test_no_scheduler_queue_errors,
          test_no_traps_were_reported,
