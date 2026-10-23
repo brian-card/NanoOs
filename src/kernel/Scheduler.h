@@ -264,7 +264,7 @@ int schedulerGetNumConsolePorts(void);
 int schedulerGetUartConsolePort(uint8_t uartId);
 int schedulerAddForwardingPort(ProcessId forwardingPid);
 int schedulerBindShell(uint8_t shellIndex, uint8_t consolePort,
-  ShellProgram *shellProgram);
+  ShellProgram *shellProgram, ProcessId outputPid);
 void schedulerSetNumShells(uint8_t numShells);
 void* schedMalloc(size_t size);
 void schedFree(void *ptr);

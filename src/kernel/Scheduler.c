@@ -118,6 +118,9 @@ void forceYield(void);
 ///   multitasking.  If this is < 0 then the processes run in cooperative mode.
 /// @param firstUserPid The ProcessId of the first user process.
 /// @param firstShellPid The ProcessId of the first shell process.
+/// @param shellOutputPids For each shell process, the ProcessId of the process
+///   its stdout and stderr are sent to instead of the console, or
+///   PROCESS_ID_NOT_SET.
 /// @param runSchedulerDepth Recursion counter of how many levels of the
 ///   runScheduler function are in progress.  Needed to avoid non-reentrant
 ///   functions that are run by it.
@@ -133,6 +136,7 @@ struct SchedulerState {
   int                 preemptionTimer;
   ProcessId           firstUserPid;
   ProcessId           firstShellPid;
+  ProcessId           shellOutputPids[NANO_OS_MAX_NUM_SHELLS];
   int                 runSchedulerDepth;
 };
 
@@ -1508,8 +1512,10 @@ int schedulerAddForwardingPort(ProcessId forwardingPid) {
       CONSOLE_COMMAND_SIGNATURE, CONSOLE_ADD_FORWARDING_PORT) != 0)
     || (addProcessIpcCapability(forwarder, consolePid,
       CONSOLE_COMMAND_SIGNATURE, CONSOLE_INPUT_READY) != 0)
+    || (addProcessIpcCapability(forwarder, consolePid,
+      CONSOLE_COMMAND_SIGNATURE, CONSOLE_RELEASE_BUFFER) != 0)
     || (addProcessIpcCapability(&allProcesses[consolePid - 1], forwardingPid,
-      CONSOLE_COMMAND_SIGNATURE, CONSOLE_WRITE_BUFFER) != 0)
+      CONSOLE_COMMAND_SIGNATURE, CONSOLE_FORWARD_STRING) != 0)
   ) {
     return -ENOMEM;
   }
@@ -1528,10 +1534,13 @@ int schedulerAddForwardingPort(ProcessId forwardingPid) {
 ///   console is running.
 /// @param shellProgram A pointer to the ShellProgram the slot runs while no
 ///   user is logged in, or NULL for getty.
+/// @param outputPid The ProcessId of the process that services the port, which
+///   the slot's processes send their output to directly, or PROCESS_ID_NOT_SET
+///   to send it to the console.
 ///
 /// @return Returns 0 on success, -errno on failure.
 int schedulerBindShell(uint8_t shellIndex, uint8_t consolePort,
-  ShellProgram *shellProgram
+  ShellProgram *shellProgram, ProcessId outputPid
 ) {
   if (shellIndex >= _schedulerState->numShells) {
     return -ENOSPC;
@@ -1544,6 +1553,39 @@ int schedulerBindShell(uint8_t shellIndex, uint8_t consolePort,
     return -EIO;
   }
   allProcesses[pid - 1].restartArgs = shellProgram;
+  _schedulerState->shellOutputPids[shellIndex] = outputPid;
+
+  return 0;
+}
+
+/// @fn static int schedulerDirectOutput(ProcessDescriptor *processDescriptor,
+///   ProcessId outputPid)
+///
+/// @brief Send a process's stdout and stderr to another process as
+/// CONSOLE_WRITE_BUFFER commands instead of to the console.  Ends of pipes are
+/// left alone.
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor to update.
+/// @param outputPid The ProcessId of the process to send the output to.
+///
+/// @return Returns 0 on success, -errno on failure.
+static int schedulerDirectOutput(
+  ProcessDescriptor *processDescriptor, ProcessId outputPid
+) {
+  int returnValue = addProcessIpcCapability(processDescriptor, outputPid,
+    CONSOLE_COMMAND_SIGNATURE, CONSOLE_WRITE_BUFFER);
+  if (returnValue != 0) {
+    return returnValue;
+  }
+
+  for (int ii = STDOUT_FILE_DESCRIPTOR_INDEX;
+    ii <= STDERR_FILE_DESCRIPTOR_INDEX; ii++
+  ) {
+    FileDescriptor *fileDescriptor = processDescriptor->fileDescriptors[ii];
+    if ((fileDescriptor != NULL) && (fileDescriptor->pipeEnd == NULL)) {
+      fileDescriptor->outputChannel.pid = outputPid;
+    }
+  }
 
   return 0;
 }
@@ -3761,6 +3803,20 @@ int schedulerSpawnCommandHandler(
       = processDescriptor->processId;
   }
 
+  ProcessDescriptor *caller = processMessageFrom(processMessage);
+  FileDescriptor *callerOutput
+    = (caller->numFileDescriptors > STDOUT_FILE_DESCRIPTOR_INDEX)
+    ? caller->fileDescriptors[STDOUT_FILE_DESCRIPTOR_INDEX] : NULL;
+  if ((callerOutput != NULL) && (callerOutput->pipeEnd == NULL)
+    && (callerOutput->outputChannel.pid != consolePid)
+    && (callerOutput->outputChannel.pid != PROCESS_ID_NOT_SET)
+    && (schedulerDirectOutput(processDescriptor,
+      callerOutput->outputChannel.pid) != 0)
+  ) {
+    logError("Could not send the output of process %d to process %d\n",
+      processDescriptor->processId, callerOutput->outputChannel.pid);
+  }
+
   if (spawnArgs->fileActions != NULL) {
     // Take care of the dup2 file actions.
     for (uint8_t ii = 0; ii < spawnArgs->fileActions->numDup2; ii++) {
@@ -4795,6 +4851,18 @@ int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
       = processDescriptor->processId;
   }
 
+  int shellIndex = ((int) processDescriptor->processId)
+    - ((int) _schedulerState->firstShellPid);
+  if ((shellIndex >= 0) && (shellIndex < _schedulerState->numShells)
+    && (_schedulerState->shellOutputPids[shellIndex] != PROCESS_ID_NOT_SET)
+    && (schedulerDirectOutput(processDescriptor,
+      _schedulerState->shellOutputPids[shellIndex]) != 0)
+  ) {
+    logError("Could not send the output of process %d to process %d\n",
+      processDescriptor->processId,
+      _schedulerState->shellOutputPids[shellIndex]);
+  }
+
   HalExecCommandFn execCommand = NULL;
   HAL->platform->execCommand(&execCommand);
 
@@ -5495,6 +5563,9 @@ int initializeSchedulerState(
   HAL->memory->overlayMap(&overlayMap);
 
   schedulerState->hostname = NULL;
+  for (int ii = 0; ii < NANO_OS_MAX_NUM_SHELLS; ii++) {
+    schedulerState->shellOutputPids[ii] = PROCESS_ID_NOT_SET;
+  }
   processQueueInit(schedulerState->readyQueues[PRIVILEGE_LEVEL_KERNEL],
     _kernelReadyName);
   processQueueInit(schedulerState->readyQueues[PRIVILEGE_LEVEL_EXECUTIVE],
