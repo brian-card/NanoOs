@@ -47,6 +47,12 @@ KEYCODE_a = 22
 KEYCODE_A = 48
 KEYCODE_BACKSPACE = 132
 KEYCODE_RETURN = 143
+KEYBOARD_LAYOUT = 0x81
+LAYOUT_UK = 0
+LAYOUT_US = 1
+# What the VDP's default UK layout gives for the keys of a US keyboard whose
+# characters differ between the two layouts.
+UK_CHARACTER_FOR_US_KEY = {"|": "~", "\\": "#", "@": '"', '"': "@"}
 
 
 def keycode(ch):
@@ -90,6 +96,7 @@ class FakeVdp:
         self.events = []       # (time, kind, detail) once listening
         self.screen = ""       # text drawn since the last clear
         self.dropped = 0       # bytes ignored before listening
+        self.layout = LAYOUT_UK
         self.listening = not answer
         self.errors = []
         if os.path.exists(path):
@@ -118,6 +125,10 @@ class FakeVdp:
             for byte in stream:
                 if byte == 23:
                     self._vdu23(stream)
+                elif byte == 22:
+                    mode = next(stream)
+                    if self.listening:
+                        self._event("mode", mode)
                 elif not self.listening:
                     self.dropped += 1
                 elif byte == 12:
@@ -146,6 +157,12 @@ class FakeVdp:
             command = next(stream)
             if command == GENERAL_POLL:
                 self._poll(next(stream))
+            elif command == KEYBOARD_LAYOUT:
+                layout = next(stream)
+                if self.listening:
+                    with self.lock:
+                        self.layout = layout
+                    self._event("layout", layout)
             else:
                 self.errors.append(f"VDU 23,0,{command:#x}")
         elif first == 1:
@@ -221,14 +238,16 @@ class FakeVdp:
                 self.lock.wait(left)
 
     def key(self, ch):
-        """Press and release the key for a character.
+        """Press and release the key for a character on a US keyboard.
 
         @param ch The character.
         """
-        ascii_value = ord(ch)
         code = keycode(ch)
         with self.lock:
             conn = self.conn
+            if self.layout == LAYOUT_UK:
+                ch = UK_CHARACTER_FOR_US_KEY.get(ch, ch)
+        ascii_value = ord(ch)
         conn.sendall(bytes([0x81, 0x04, ascii_value, 0, code, 1,
                             0x81, 0x04, ascii_value, 0, code, 0]))
 
