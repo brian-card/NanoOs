@@ -186,6 +186,8 @@ typedef enum ConsoleCommandResponse {
   NUM_CONSOLE_COMMANDS,
   // Responses:
   CONSOLE_RETURNING_INPUT,
+  // Sent to the process that services a forwarding port:
+  CONSOLE_FORWARD_STRING,
 } ConsoleCommand;
 
 /// @enum ConsoleInputEvent

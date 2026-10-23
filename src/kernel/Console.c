@@ -1636,8 +1636,8 @@ static int consolePrintSerialString(
 /// @fn int consoleForwardString(ConsolePort *consolePort, const char *string)
 ///
 /// @brief Send a string to the process that services a forwarding port as a
-/// CONSOLE_WRITE_BUFFER command whose data is the string, and wait for it to be
-/// done.  Waiting keeps the string valid while the process reads it, so the
+/// CONSOLE_FORWARD_STRING command whose data is the string, and wait for it to
+/// be done.  Waiting keeps the string valid while the process reads it, so the
 /// process must never wait on the console.
 ///
 /// @param consolePort A pointer to the ConsolePort to print to.
@@ -1649,7 +1649,7 @@ int consoleForwardString(ConsolePort *consolePort, const char *string) {
   size_t length = strlen(string);
   ProcessMessage *processMessage = initSendProcessMessageToPid(
     consolePort->forwardingPid,
-    CONSOLE_COMMAND_SIGNATURE | CONSOLE_WRITE_BUFFER,
+    CONSOLE_COMMAND_SIGNATURE | CONSOLE_FORWARD_STRING,
     (void*) string, length, /* waiting= */ true);
   if (processMessage == NULL) {
     return 0;
