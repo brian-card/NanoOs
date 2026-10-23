@@ -36,6 +36,9 @@
 #ifndef NANO_OS_UTILS_H
 #define NANO_OS_UTILS_H
 
+#include <stdbool.h>
+#include <string.h>
+
 #include "NanoOsUser.h"
 
 #ifdef __cplusplus
@@ -62,6 +65,16 @@ static inline size_t getFreeMemory(void) {
 }
 static inline int dumpMemoryAllocations(void) {
   return overlayMap.header.osApi->userApi->dumpMemoryAllocations();
+}
+
+/// @brief Determine whether a command-line argument asks for a command's
+/// usage summary.
+///
+/// @param arg The argument to examine.
+///
+/// @return Returns true if arg is "--help", false otherwise.
+static inline bool isHelpOption(const char *arg) {
+  return strcmp(arg, "--help") == 0;
 }
 
 #ifdef __cplusplus
