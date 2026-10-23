@@ -132,9 +132,13 @@ typedef struct VdpOutput {
 
 /// @var _vdpScreenSetup
 ///
-/// @brief VDU commands sent once the VDP is listening: clear the screen
-/// (VDU 12) and turn the text cursor on (VDU 23,1,1).
-static const uint8_t _vdpScreenSetup[] = { 12, 23, 1, 1 };
+/// @brief VDU commands sent once the VDP is listening: select the 640x480,
+/// 16-color screen mode (VDU 22,0), select the US keyboard layout
+/// (VDU 23,0,&81,1), clear the screen (VDU 12), and turn the text cursor on
+/// (VDU 23,1,1).
+static const uint8_t _vdpScreenSetup[] = {
+  22, 0, 23, 0, 0x81, 1, 12, 23, 1, 1
+};
 
 /// @var _vdpGeneralPoll
 ///
