@@ -2262,6 +2262,10 @@ size_t nanoOsFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
 /// @return Returns the total number of objects successfully written to the
 /// file.
 size_t nanoOsFwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream) {
+  if ((stream != stdout) && (stream != stderr)) {
+    return filesystemFWrite(ptr, size, nmemb, stream);
+  }
+
   size_t bytesRemaining = size * nmemb;
   size_t bytesWritten = 0;
   const char *charPointer = (const char*) ptr;
