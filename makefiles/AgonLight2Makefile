@@ -169,7 +169,8 @@ LDLIBS := \
 # ---- Source file discovery --------------------------------------------------
 #
 # Include all C/C++ files under src/, excluding:
-#   • HalPosix.c / HalPosixImpl.c  — use POSIX system headers, not portable
+#   • HalPosix.c / HalPosixErrno.c / HalPosixImpl.c  — use POSIX system
+#     headers, not portable
 #
 # All other platform-specific HAL files (SAMD21, Adafruit, Arduino, Seeed)
 # are guarded by target-specific preprocessor macros and compile to empty
@@ -177,6 +178,7 @@ LDLIBS := \
 
 SKETCH_C_SRCS := $(shell find src -name '*.c' \
   | grep -v 'HalPosix\.c' \
+  | grep -v 'HalPosixErrno\.c' \
   | grep -v 'HalPosixImpl\.c' \
   | sort)
 
