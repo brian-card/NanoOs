@@ -100,8 +100,10 @@ read in the simulator then fails with `-EIO`, which makes vdp.drv exit and
 be restarted.
 
 Layer-4 tests are functions `test_*(emulator)` in `emulator/run.py`, run in
-order against a single boot; `emulator.sh("cmd")` strips the SD card log
-lines that can land in the middle of command output.
+order against a single boot, so later tests see the files earlier ones made;
+the last one halts the system and runs `fsck.vfat` on the image.
+`emulator.sh("cmd")` strips the SD card log lines and `[boot]` trace lines
+that can land in the middle of command output.
 
 ## The mock HAL (`HalMock.h`)
 

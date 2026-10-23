@@ -554,6 +554,43 @@ def test_cp_copies_files_into_a_directory(s):
     assert fsck_problems(s) == []
 
 
+def image_file(s, path):
+    """Read a file out of the session's image after the simulator has halted.
+
+    @param s The Session.
+    @param path The file's absolute path on the image.
+
+    @return The file's contents, as bytes.
+    """
+    return subprocess.run(
+        ["mtype", "-i", s.img_copy + "@@2097152", "::" + path],
+        env=dict(os.environ, MTOOLS_SKIP_CHECK="1"), capture_output=True,
+        check=True).stdout
+
+
+def test_cp_copies_a_binary_file_byte_for_byte(s):
+    # An overlay starts with a NULL pointer, so a copy that treats its buffer
+    # as a string writes nothing.
+    s.login()
+    source = "/usr/bin/cp/main.overlay"
+    assert s.sh("cp %s /etc/copied.overlay" % source) == ""
+    original = s.sh("ll /usr/bin/cp").splitlines()[-1].split()
+    copied = s.sh("ll /etc").splitlines()[-1].split()
+    assert copied[-1] == "copied.overlay" and copied[3] == original[3], \
+        (original, copied)
+    assert fsck_problems(s) == []
+    expected = image_file(s, source)
+    assert b"\0" in expected
+    assert image_file(s, "/etc/copied.overlay") == expected
+
+
+def test_copied_command_runs(s):
+    s.login()
+    assert s.sh("mkdir /usr/bin/hello2") == ""
+    assert s.sh("cp /usr/bin/helloworld/main.overlay /usr/bin/hello2") == ""
+    assert s.sh("hello2") == "Hello, world!"
+
+
 def test_cp_reports_errors(s):
     s.login()
     assert s.sh("cp /etc/missing /etc/other") == \
@@ -732,6 +769,21 @@ def test_relative_paths_resolve_against_the_working_directory(s):
     assert s.sh("cd ..") == ""
     assert s.sh("rmdir newdir") == ""
     assert ll_names(s, "/etc") == ["hostname", "issue"]
+    assert fsck_problems(s) == []
+
+
+def test_directories_grow_past_their_first_cluster(s):
+    # A 1 KiB cluster holds 32 entries, and each of these names takes three.
+    s.login()
+    names = ["file-with-long-name-%02d" % n for n in range(40)]
+    assert s.sh("mkdir /etc/many") == ""
+    for name in names:
+        assert s.sh("touch /etc/many/" + name) == ""
+    assert s.sh("cp /etc/catfile /etc/many/catfile") == ""
+    assert ll_names(s, "/etc/many") == sorted(names + ["catfile"])
+    assert s.sh("cat /etc/many/catfile") == CATFILE_CONTENTS
+    assert s.sh("rm /etc/many/" + names[0]) == ""
+    assert ll_names(s, "/etc/many") == sorted(names[1:] + ["catfile"])
     assert fsck_problems(s) == []
 
 
@@ -1033,29 +1085,10 @@ def test_background_jobs_fail_gracefully_past_the_slot_limit(s):
 
 
 def test_tightloop_is_killed_by_ctrl_c(s):
-    # tightLoop is a pure `while (1);` -- it never yields cooperatively and
-    # never calls back into the scheduler on its own.  It exists specifically
-    # so e2e tests can confirm Ctrl-C still kills a foreground process in
-    # that case: the console process detects ^C on the input stream and
-    # sends SIGINT directly to the foreground process, and the scheduler's
-    # preemptive multitasking (not the process yielding) is what lets that
-    # signal actually be delivered and acted on.  See
-    # docs/2026-06-06_Signals-Signatures-and-Stack-Overflows.md.
-    s.login()
-    s.child.sendline("tightLoop")
-    # Give it a moment to actually become the foreground process before
-    # interrupting it, so Ctrl-C exercises the kill path rather than racing
-    # the shell's own dispatch of the command.
-    time.sleep(0.5)
-    s.child.sendcontrol("c")
-    idx = s.child.expect([PROMPT, pexpect.EOF, pexpect.TIMEOUT], timeout=10)
-    assert idx == 0, \
-        "Ctrl-C did not return the shell to a prompt (tightLoop still " \
-        "running or the shell died)"
-    # The shell must be usable afterwards, and tightLoop must really be
-    # gone -- not merely backgrounded.
-    assert "alive" in s.sh("echo alive"), "shell unresponsive after killing tightLoop"
-    assert "tightLoop" not in s.sh("ps"), "tightLoop still listed in ps after Ctrl-C"
+    # tightLoop never yields, so Ctrl-C only gets through because the
+    # preemption timer forces it off the processor; the kill then runs on top
+    # of the preempted context.
+    assert_ctrl_c_kills(s, "tightLoop")
 
 
 def test_kill_terminates_a_background_process(s):
@@ -1191,6 +1224,82 @@ def test_ls_shows_correct_weekday_for_mtime(s):
     # /etc always contains exactly hostname and issue (see mkimage.sh) plus
     # . and .. -- four real entries, not zero.
     assert checked >= 4, f"expected at least 4 entries, got:\n{out}"
+
+
+def test_helloworld_prints_its_greeting(s):
+    s.login()
+    assert s.sh("helloworld") == "Hello, world!"
+
+
+def test_help_describes_every_command(s):
+    s.login()
+    described = [line.split(":")[0] for line in s.sh("help").splitlines()]
+    installed = [name.rstrip("/") for name in ll_names(s, "/usr/bin")]
+    assert described == sorted(installed + ["cd", "exit", "pwd"],
+                               key=str.lower), described
+
+
+def test_dump_memory_allocations_accounts_for_the_heap(s):
+    s.login()
+    out = s.sh("dumpMemoryAllocations").splitlines()
+    assert out[0] == "Outstanding allocations:", out
+    split = out.index("Available memory blocks:")
+    owned = [re.fullmatch(r"  0x[0-9a-f]+: (\d+) bytes owned by (\d+)", line)
+             for line in out[1:split]]
+    free = [re.fullmatch(r"  0x[0-9a-f]+: (\d+) bytes available", line)
+            for line in out[split + 1:]]
+    assert owned and all(owned), out
+    assert free and all(free), out
+    pids = {int(m.group(2)) for m in owned}
+    assert pids <= {pid for pid, _user, _name in ps_entries(s)}, (pids, out)
+
+
+def ps_entries(s):
+    """Run ps and parse its process lines.
+
+    @param s The Session.
+
+    @return A list of (pid, user, name) tuples.
+    """
+    lines = s.sh("ps").splitlines()
+    assert lines[0].startswith("- Dynamic memory left: "), lines
+    assert lines[-1].startswith("- Dynamic memory left: "), lines
+    entries = []
+    for line in lines[1:-1]:
+        m = re.fullmatch(r"(\d+)  (\S+) (.+)", line)
+        assert m, line
+        entries.append((int(m.group(1)), m.group(2), m.group(3)))
+    return entries
+
+
+def assert_ctrl_c_kills(s, command):
+    """Run a foreground command, interrupt it, and check nothing is left over.
+
+    @param s The Session.
+    @param command The command line to run and interrupt.
+    """
+    s.login()
+    before = ps_entries(s)
+    s.child.sendline(command)
+    time.sleep(0.5)
+    s.child.sendcontrol("c")
+    idx = s.child.expect([PROMPT, pexpect.EOF, pexpect.TIMEOUT], timeout=10)
+    assert idx == 0, "Ctrl-C did not return the shell to a prompt"
+    assert "overflowed" not in s.child.before, s.child.before
+    assert ps_entries(s) == before
+    for _ in range(3):
+        assert s.sh("looseLoop &") == ""
+    assert [name for _pid, _user, name in ps_entries(s)].count("looseLoop") \
+        == 3
+    assert s.sh("echo alive") == "alive"
+
+
+def test_looseloop_is_killed_by_ctrl_c(s):
+    assert_ctrl_c_kills(s, "looseLoop")
+
+
+def test_cat_reading_the_console_is_killed_by_ctrl_c(s):
+    assert_ctrl_c_kills(s, "cat")
 
 
 def test_typed_ahead_lines_both_run_in_order(s):

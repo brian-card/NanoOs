@@ -54,8 +54,17 @@ EMULATOR_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(os.path.dirname(EMULATOR_DIR))
 HOSTNAME = "nanoemu"
 PROMPT = r"mush [^\r\n]*@%s:[^\r\n]+[#$] " % HOSTNAME
-# Log lines the SD card driver can print in the middle of other output.
-LOG_LINE = re.compile(r"\[\d+\.\d+ [^\]\r\n]*\][^\n]*\n")
+# Log lines the SD card driver and the HAL's boot trace can print in the
+# middle of other output.
+LOG_LINE = re.compile(r"\[\d+\.\d+ [^\]\r\n]*\][^\n]*\n"
+                      r"|\[boot\] [^\n]*\n")
+# fsck.vfat output that is expected on every image:  mformat's label mismatch,
+# and the FSInfo free count, which the driver never updates.
+FSCK_KNOWN = re.compile(
+    r"^(fsck\.fat \d|Volume label .* different\.|"
+    r"\s+Auto-copying volume label|Free cluster summary wrong|"
+    r"\s+Auto-correcting\.|Leaving filesystem unchanged\.|"
+    r"\S+: \d+ files, \d+/\d+ clusters|$)")
 VERBOSE = False
 
 
@@ -227,11 +236,176 @@ def test_vdp_driver_and_its_getty_are_running(e):
     assert "getty" in names, f"no getty on the VDP console: {names}"
 
 
+def ll_names(e, path):
+    """List a directory's entries the way ll names them.
+
+    @param e The Emulator.
+    @param path The directory to list.
+
+    @return The sorted names, without "./" and "../".
+    """
+    names = [line.split()[-1] for line in e.sh("ll " + path).splitlines()]
+    return sorted(name for name in names if name not in ("./", "../"))
+
+
+def ps_entries(e):
+    """Run ps and parse its process lines.
+
+    @param e The Emulator.
+
+    @return A list of (pid, user, name) tuples.
+    """
+    lines = e.sh("ps").splitlines()
+    assert lines[0].startswith("- Dynamic memory left: "), lines
+    assert lines[-1].startswith("- Dynamic memory left: "), lines
+    entries = []
+    for line in lines[1:-1]:
+        m = re.fullmatch(r"(\d+)  (\S+) (.+)", line)
+        assert m, line
+        entries.append((int(m.group(1)), m.group(2), m.group(3)))
+    return entries
+
+
+def test_helloworld_prints_its_greeting(e):
+    assert e.sh("helloworld") == "Hello, world!"
+
+
+def test_help_describes_every_command(e):
+    described = [line.split(":")[0] for line in e.sh("help").splitlines()]
+    installed = [name.rstrip("/") for name in ll_names(e, "/usr/bin")]
+    assert described == sorted(installed + ["cd", "exit", "pwd"],
+                               key=str.lower), (described, installed)
+
+
+def test_cd_and_pwd_track_the_working_directory(e):
+    assert e.sh("cd /usr/bin") == ""
+    assert e.sh("pwd") == "/usr/bin"
+    assert e.sh("cd ../../etc") == ""
+    assert e.sh("pwd") == "/etc"
+    assert e.sh("cd") == ""
+    assert e.sh("pwd") == "/root"
+
+
+def test_grep_finds_lines_in_a_file_and_a_pipe(e):
+    assert e.sh("grep CONSOLE /etc/config.sys") == \
+        "CONSOLE=UART1 /usr/bin/getty\nCONSOLE=/usr/lib/vdp.drv /usr/bin/getty"
+    assert e.sh("echo needle-in-haystack | grep needle") == \
+        "needle-in-haystack"
+    assert e.sh("echo one-two-three | grep zzz") == ""
+
+
+def test_cat_reports_a_missing_file(e):
+    assert e.sh("cat /etc/missing") == \
+        'ERROR: Could not open file "/etc/missing": No such entry found'
+
+
+def test_mkdir_touch_mv_rm_and_rmdir_manage_files(e):
+    assert e.sh("mkdir /work") == ""
+    assert e.sh("touch /work/first") == ""
+    assert ll_names(e, "/work") == ["first"]
+    assert e.sh("mv /work/first /work/second-with-a-long-name") == ""
+    assert ll_names(e, "/work") == ["second-with-a-long-name"]
+    assert e.sh("rmdir /work") == \
+        'ERROR: Could not remove directory "/work": Directory not empty'
+    assert e.sh("rm /work/second-with-a-long-name") == ""
+    assert e.sh("rm /work/missing") == \
+        'ERROR: Could not remove "/work/missing": No such entry found'
+    assert e.sh("rmdir /work") == ""
+    assert "work/" not in ll_names(e, "/")
+
+
+def test_cp_copies_text_files(e):
+    config = e.sh("cat /etc/config.sys")
+    assert e.sh("cp /etc/config.sys /etc/config.copy") == ""
+    assert e.sh("cat /etc/config.copy") == config
+    assert e.sh("mkdir /copies") == ""
+    assert e.sh("cp /etc/hostname /etc/issue /copies") == ""
+    assert ll_names(e, "/copies") == ["hostname", "issue"]
+    assert e.sh("cat /copies/hostname") == HOSTNAME
+    assert e.sh("cp /etc/missing /copies") == \
+        'ERROR: Could not open file "/etc/missing": No such entry found'
+
+
+def test_cp_copies_a_command_that_then_runs(e):
+    # An overlay starts with a NULL pointer, so a copy that treats its buffer
+    # as a string writes nothing.
+    assert e.sh("mkdir /usr/bin/hello2") == ""
+    assert e.sh("cp /usr/bin/helloworld/main.overlay /usr/bin/hello2") == ""
+    original = e.sh("ll /usr/bin/helloworld").splitlines()[-1].split()
+    copied = e.sh("ll /usr/bin/hello2").splitlines()[-1].split()
+    assert copied[3] == original[3], (original, copied)
+    assert e.sh("hello2") == "Hello, world!"
+
+
+def test_directories_grow_past_their_first_cluster(e):
+    # A 1 KiB cluster holds 32 entries, and each of these names takes three.
+    names = ["file-with-long-name-%02d" % n for n in range(16)]
+    assert e.sh("mkdir /many") == ""
+    for name in names:
+        assert e.sh("touch /many/" + name) == ""
+    assert e.sh("cp /etc/config.sys /many/config.sys") == ""
+    assert ll_names(e, "/many") == sorted(names + ["config.sys"])
+    assert e.sh("cat /many/config.sys") == e.sh("cat /etc/config.sys")
+
+
+def test_ed_writes_a_new_file(e):
+    e.send("ed\r")
+    for line in ("a", "one", "two", "three", "."):
+        time.sleep(0.2)
+        e.send(line + "\r")
+    time.sleep(0.2)
+    e.send("w /etc/ed.txt\r")
+    e.child.expect(r"14\r*\n", timeout=20)
+    e.send("q\r")
+    e.child.expect(PROMPT, timeout=20)
+    assert e.sh("cat /etc/ed.txt") == "one\ntwo\nthree"
+
+
+def test_dirtest_reports_entry_types(e):
+    out = e.sh("dirtest")
+    assert 'd_name="hostname" d_type=8' in out, out
+    assert 'd_name="usr" d_type=4' in out, out
+
+
+def test_dump_memory_allocations_lists_the_heap(e):
+    out = e.sh("dumpMemoryAllocations").splitlines()
+    assert out[0] == "Outstanding allocations:", out
+    split = out.index("Available memory blocks:")
+    owned = [re.fullmatch(r"  0x[0-9a-f]+: \d+ bytes owned by \d+", line)
+             for line in out[1:split]]
+    free = [re.fullmatch(r"  0x[0-9a-f]+: \d+ bytes available", line)
+            for line in out[split + 1:]]
+    assert owned and all(owned), out
+    assert free and all(free), out
+
+
+def test_kill_terminates_a_background_process(e):
+    assert e.sh("looseLoop &") == ""
+    pids = [pid for pid, _user, name in ps_entries(e) if name == "looseLoop"]
+    assert len(pids) == 1, pids
+    assert e.sh("kill %d" % pids[0]) == \
+        "Termination of process %d successful." % pids[0]
+    assert "looseLoop" not in [name for _pid, _user, name in ps_entries(e)]
+
+
+def test_ctrl_c_kills_foreground_commands(e):
+    before = ps_entries(e)
+    for command in ("looseLoop", "tightLoop", "cat"):
+        e.send(command + "\r")
+        time.sleep(1)
+        e.child.send("\x03")
+        e.child.expect(PROMPT, timeout=10)
+        assert "overflowed" not in e.child.before, e.child.before
+        assert ps_entries(e) == before, command
+    assert e.sh("echo alive") == "alive"
+
+
 def test_soft_reset_boots_again(e):
     e.send("shutdown -r\r")
     e.child.expect(r"NanoOs [^\r\n]* %s tty0" % HOSTNAME, timeout=30)
     e.login()
     assert e.sh("echo after-reset") == "after-reset"
+    assert e.sh("hello2") == "Hello, world!"
 
 
 def test_no_scheduler_queue_errors(e):
@@ -239,13 +413,42 @@ def test_no_scheduler_queue_errors(e):
         "the scheduler reported a queue overflow"
 
 
+def test_filesystem_is_consistent_after_shutdown(e):
+    e.send("shutdown -h\r")
+    time.sleep(3)
+    partition = os.path.join(e.tmp, "partition.img")
+    subprocess.run(["dd", "if=" + os.path.join(e.tmp, "NanoOs.img"),
+                    "of=" + partition, "bs=1M", "skip=2", "status=none"],
+                   check=True)
+    out = subprocess.run(["/sbin/fsck.vfat", "-n", partition],
+                         capture_output=True, text=True)
+    problems = [line for line in (out.stdout + out.stderr).splitlines()
+                if not FSCK_KNOWN.match(line)]
+    assert problems == [], problems
+
+
 TESTS = [test_boots_to_a_login_prompt,
          test_echo_roundtrips_its_argument,
          test_ll_lists_the_root_directory,
          test_config_sys_is_the_agon_one,
          test_vdp_driver_and_its_getty_are_running,
+         test_helloworld_prints_its_greeting,
+         test_help_describes_every_command,
+         test_cd_and_pwd_track_the_working_directory,
+         test_grep_finds_lines_in_a_file_and_a_pipe,
+         test_cat_reports_a_missing_file,
+         test_mkdir_touch_mv_rm_and_rmdir_manage_files,
+         test_cp_copies_text_files,
+         test_cp_copies_a_command_that_then_runs,
+         test_directories_grow_past_their_first_cluster,
+         test_ed_writes_a_new_file,
+         test_dirtest_reports_entry_types,
+         test_dump_memory_allocations_lists_the_heap,
+         test_kill_terminates_a_background_process,
+         test_ctrl_c_kills_foreground_commands,
          test_soft_reset_boots_again,
-         test_no_scheduler_queue_errors]
+         test_no_scheduler_queue_errors,
+         test_filesystem_is_consistent_after_shutdown]
 
 
 def main(argv):
