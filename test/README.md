@@ -1,16 +1,17 @@
 # NanoOs test suite
 
-Three layers:
+Four layers:
 
 | layer | what | where | needs |
 |-------|------|-------|-------|
 | **1 - unit** | pure/`static`-ish helpers, no kernel | `suites/test_unit_*.c` | gcc |
 | **2 - kernel** | a **real kernel** booted on the host under a mock HAL; test bodies run as a process inside it | `suites/test_kernel_*.c` | gcc |
 | **3 - e2e** | the **real simulator** driven over a PTY | `e2e/` | `python3` + `pexpect`, `mtools`, `sfdisk` |
+| **4 - emulator** | a **real Agon Light 2 build** booted in fab-agon-emulator, driven over UART1; skipped when the tools are missing | `emulator/` | layer 3's needs + `socat`, the ez80 toolchain (`AGDEV_HOME`, default `~/agondev`), fab-agon-emulator (`NANO_OS_AGON_EMULATOR`, default `~/src/fab-agon-emulator`) |
 
 ```
 test/run-all.sh                 # every layer, with a summary
-test/run-all.sh --no-e2e --no-asan
+test/run-all.sh --no-e2e --no-asan --no-emulator
 
 make -C test                    # layers 1 + 2 (build + run)
 make -C test ASAN=1             # layers 1 + 2 under ASan (kernel tests skip)
@@ -18,6 +19,7 @@ make -C test ASAN=1             # layers 1 + 2 under ASan (kernel tests skip)
 
 python3 test/e2e/run.py [-v] [-j N] [filter]   # layer 3 (standalone, TAP output)
                                 # N parallel sims; default nproc, 1 with -v
+python3 test/emulator/run.py [-v] [regex]     # layer 4 (one emulator boot)
 ```
 
 All runners emit [TAP](https://testanything.org/).
@@ -28,6 +30,11 @@ Layers 1-2 build into `test/obj/` (git-ignored) with the same flags
 `buildsim` uses — never `sim/obj/`. Layer 3's `mkimage.sh` *does* run
 `make -C sim` and `make -C usr/src` (it needs the real artifacts), same as
 `buildsim`; it writes its disk image into `test/e2e/.cache/` (git-ignored).
+
+Layer 4 runs `builddev`, which rebuilds the kernel and `usr/src` for the
+Agon Light 2. It boots a private copy of the emulator in a temporary
+directory, so the copy's MOS image is the one `builddev` overwrites, and runs
+it without a window.
 
 Nothing outside `test/` is modified. The AgonLight2 / Arduino / `buildsim`
 builds cannot see `test/` (they discover sources by explicit lists /
@@ -53,8 +60,10 @@ suites/     test_smoke.c            framework + kernel bring-up
             test_kernel_hal.c      clock / timer / uart HAL calls
             test_kernel_scheduler.c getpid, process table, process count
 e2e/        run.py              standalone PTY-driven runner (pexpect, no pytest)
+            fakevdp.py          a stand-in VDP on the simulator's UART0
             mkimage.sh          builds the FAT32 image (factored from buildsim)
             .cache/            built images (git-ignored)
+emulator/   run.py              Agon Light 2 build in fab-agon-emulator
 BUGS.txt    defects found while writing these tests
 run-all.sh  runs every layer
 ```
@@ -81,6 +90,18 @@ are isolated and a test that calls `shutdown()` is harmless.
 
 Layer-3 tests are plain Python functions `test_*(session)` in
 `e2e/run.py`; `session.login()` / `session.sh("cmd")` drive the console.
+
+`session.restart_with_vdp()` boots with vdp.drv serving a console on a
+`FakeVdp`: the simulator connects UART0 to the Unix socket named by
+`NANO_OS_SIM_UART0`, and the fake answers general polls, records the VDU
+stream as screen text, and sends keyboard packets (`vdp.type("ls\r")`,
+`vdp.expect(regex)`). `vdp.disconnect()` drops the socket; the next UART0
+read in the simulator then fails with `-EIO`, which makes vdp.drv exit and
+be restarted.
+
+Layer-4 tests are functions `test_*(emulator)` in `emulator/run.py`, run in
+order against a single boot; `emulator.sh("cmd")` strips the SD card log
+lines that can land in the middle of command output.
 
 ## The mock HAL (`HalMock.h`)
 

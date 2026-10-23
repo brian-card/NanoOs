@@ -7,12 +7,14 @@
 #   Layer 2  kernel         real kernel boot under mock HAL  (make -C test)
 #   Layer 1  unit + ASan    same plain tests, sanitized      (make -C test ASAN=1)
 #   Layer 3  e2e            real simulator over a PTY        (test/e2e/run.py)
+#   Layer 4  emulator       Agon Light 2 build in the emulator
+#                                                (test/emulator/run.py)
 #
 # Exit status is non-zero if any layer reports a failure.  Known-failing
 # tests that document open bugs (see test/BUGS-*.txt) are expected to be red
 # until those bugs are fixed.
 #
-#   test/run-all.sh [--no-e2e] [--no-asan]
+#   test/run-all.sh [--no-e2e] [--no-asan] [--no-emulator]
 #
 set -u
 
@@ -20,10 +22,12 @@ cd "$(dirname "${0}")/.."   # repo root
 
 RUN_E2E=1
 RUN_ASAN=1
+RUN_EMULATOR=1
 for arg in "$@"; do
 	case "${arg}" in
 		--no-e2e)  RUN_E2E=0 ;;
 		--no-asan) RUN_ASAN=0 ;;
+		--no-emulator) RUN_EMULATOR=0 ;;
 		*) echo "unknown option: ${arg}" >&2; exit 2 ;;
 	esac
 done
@@ -65,6 +69,16 @@ if [ "${RUN_E2E}" = "1" ]; then
 		fi
 	else
 		echo "[e2e] SKIP - python3 'pexpect' module not available"
+	fi
+fi
+
+if [ "${RUN_EMULATOR}" = "1" ]; then
+	section "Layer 4: Agon Light 2 emulator"
+	if python3 test/emulator/run.py; then
+		echo "[emulator] PASS (or SKIP; see above)"
+	else
+		echo "[emulator] FAIL"
+		rc=1
 	fi
 fi
 

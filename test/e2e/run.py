@@ -23,6 +23,8 @@ import time
 
 import pexpect
 
+from fakevdp import FakeVdp
+
 E2E_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(os.path.dirname(E2E_DIR))
 CACHE_DIR = os.path.join(E2E_DIR, ".cache")
@@ -42,6 +44,13 @@ SIM_CONFIGS = [
 PROMPT = r"mush [^\r\n]*@%s:[^\r\n]+[#$] " % HOSTNAME
 # Same prompt, capturing the user and the working directory it reports.
 PROMPT_PARTS = r"mush ([^\r\n@]+)@%s:([^\r\n]+)[#$] " % HOSTNAME
+# A getty on UART1 and another on a VDP console served by vdp.drv, which owns
+# UART0.
+VDP_CONFIG_SYS = (
+    "DEVICE=/usr/lib/vdp.drv\n"
+    "HARDWARE=/usr/lib/vdp.drv UART0\n"
+    "CONSOLE=UART1 /usr/bin/getty\n"
+    "CONSOLE=/usr/lib/vdp.drv /usr/bin/getty\n")
 
 VERBOSE = False
 
@@ -91,6 +100,7 @@ class Session:
         img_copy = os.path.join(self.tmp, "disk.img")
         subprocess.run(["cp", "--sparse=always", image, img_copy], check=True)
         self.img_copy = img_copy
+        self.vdp = None
         self.spawn([img_copy])
 
     def spawn(self, args):
@@ -120,6 +130,18 @@ class Session:
                        env=dict(os.environ, MTOOLS_SKIP_CHECK="1"), check=True)
         self.spawn([self.img_copy])
 
+    def restart_with_vdp(self, **kwargs):
+        """Boot again with vdp.drv serving a console on a FakeVdp.
+
+        @param kwargs Arguments for FakeVdp.
+
+        @return The FakeVdp.
+        """
+        self.vdp = FakeVdp(os.path.join(self.tmp, "vdp.sock"), **kwargs)
+        self.env = dict(self.env or {}, NANO_OS_SIM_UART0=self.vdp.path)
+        self.restart_with_config_sys(VDP_CONFIG_SYS)
+        return self.vdp
+
     def wait_login_prompt(self):
         self.child.expect("login: ", timeout=15)
 
@@ -146,6 +168,8 @@ class Session:
             pass
         if c.isalive():
             c.terminate(force=True)
+        if self.vdp is not None:
+            self.vdp.close()
         shutil.rmtree(self.tmp, ignore_errors=True)
 
 
@@ -235,6 +259,86 @@ def test_config_sys_hardware_grant_limits_a_driver_to_its_uart(s):
     assert i == 1, "a driver granted only UART0 wrote to UART1"
     i = s.child.expect(["granted-uart0", pexpect.TIMEOUT], timeout=3)
     assert i == 1, "a driver granted only UART0 wrote to UART1"
+
+
+def assert_vdp_set_up_on_answer(vdp):
+    """Check that the driver set up a FakeVdp's screen once it answered.
+
+    @param vdp The FakeVdp, after it has drawn the login prompt.
+    """
+    kinds = [kind for _t, kind, _d in vdp.events[:3]]
+    assert kinds == ["cls", "cursor", "text"], \
+        f"the screen wasn't set up first: {vdp.events[:3]}"
+    delay = vdp.events[0][0] - vdp.answered
+    assert delay < 1.0, f"the screen was set up {delay:.1f} s after the answer"
+
+
+def vdp_login(vdp):
+    """Log in as root on a FakeVdp's console.
+
+    @param vdp The FakeVdp.
+    """
+    vdp.expect("login: ")
+    vdp.type("root\r")
+    vdp.expect("password: ")
+    vdp.type("rootroot\r")
+    vdp.expect(PROMPT)
+
+
+def test_vdp_console_logs_in_and_runs_a_command(s):
+    vdp = s.restart_with_vdp()
+    vdp_login(vdp)
+    assert_vdp_set_up_on_answer(vdp)
+    vdp.clear()
+    vdp.type("echo vdp-oops")
+    vdp.type("\b" * 4)
+    vdp.type("ok\r")
+    vdp.expect(r"\r\nvdp-ok\r\n" + PROMPT)
+    assert "oops" not in vdp.screen, \
+        f"Backspace didn't erase: {vdp.screen!r}"
+    assert vdp.errors == [], f"unexpected VDU commands: {vdp.errors}"
+    s.login()
+    assert s.sh("echo uart1-too") == "uart1-too"
+
+
+def test_vdp_driver_replays_output_from_before_the_vdp_answered(s):
+    vdp = s.restart_with_vdp(answer_after=2.0)
+    vdp.expect(r"NanoOs [^\r\n]*\r\n(.*\r\n)*login: ", timeout=20)
+    assert vdp.dropped == 0, \
+        f"{vdp.dropped} bytes were sent before the VDP answered"
+    early = [t for t in vdp.polls if t < vdp.answered]
+    assert len(early) >= 3, f"only {len(early)} polls before the answer"
+    gaps = [b - a for a, b in zip(early, early[1:] + [vdp.answered])]
+    assert all(0.3 < gap < 0.9 for gap in gaps), \
+        f"polls weren't resent every 500 ms: {gaps}"
+    assert_vdp_set_up_on_answer(vdp)
+    vdp_login(vdp)
+
+
+def test_vdp_driver_writes_anyway_when_the_vdp_never_answers(s):
+    vdp = s.restart_with_vdp(answer=False)
+    vdp.expect("login: ", timeout=25)
+    first_time, first_kind, _ = vdp.events[0]
+    assert first_kind == "cls", \
+        f"output was sent before the driver gave up: {vdp.events[:3]}"
+    waited = first_time - vdp.first_poll
+    assert 14.5 < waited < 16.5, f"gave up after {waited:.1f} s, not 15 s"
+    assert vdp.polls[-1] <= first_time, "polls continued after giving up"
+
+
+def test_vdp_driver_is_restarted_after_losing_the_vdp(s):
+    vdp = s.restart_with_vdp()
+    vdp_login(vdp)
+    vdp.disconnect()
+    vdp.wait_connections(2)
+    deadline = time.time() + 10
+    while sum(kind == "cls" for _t, kind, _d in vdp.events) < 2:
+        assert time.time() < deadline, "the restarted driver never set up the screen"
+        time.sleep(0.1)
+    vdp.type("echo after-restart\r")
+    vdp.expect(r"\r\nafter-restart\r\n" + PROMPT)
+    s.login()
+    assert s.sh("echo uart1-too") == "uart1-too"
 
 
 def test_arrow_key_arriving_in_pieces_is_one_key(s):
