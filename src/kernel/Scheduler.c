@@ -65,6 +65,7 @@ int schedulerDumpMemoryAllocations();
 int schedulerDumpOpenFiles();
 void removeProcess(
   ProcessDescriptor *processDescriptor, const char *errorMessage);
+static void schedulerAbortOverlayLoad(ProcessDescriptor *processDescriptor);
 void forceYield(void);
 
 /// @def NUM_STANDARD_FILE_DESCRIPTORS
@@ -3913,7 +3914,18 @@ int schedulerSendSignalCommandHandler(
         sendSignalArgs->errorNumber = ESRCH; // Closest POSIX-compliant value
         schedulerDumpMemoryAllocations();
         schedulerDumpOpenFiles();
-        removeProcess(processDescriptor, _overlayLoadFailureReason);
+        if (processQueueRemove(_schedulerState->waitingQueue,
+          processDescriptor) != 0
+        ) {
+          if (processQueueRemove(processDescriptor->readyQueue,
+            processDescriptor) != 0
+          ) {
+            processQueueRemove(_schedulerState->timedWaitingQueue,
+              processDescriptor);
+          }
+        }
+        schedulerAbortOverlayLoad(processDescriptor);
+        processMessageSetDone(processMessage);
         goto exit; // return 0
       }
     }
@@ -4473,6 +4485,33 @@ void removeProcess(
   }
 
   return;
+}
+
+/// @fn void schedulerAbortOverlayLoad(ProcessDescriptor *processDescriptor)
+///
+/// @brief Terminate a process whose overlay could not be loaded and queue it
+/// for SCHEDULER_CLEANUP_PROCESS, which releases it like any exited process
+/// and restarts it if it has a restart function.  The process must not be on
+/// any process queue.
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor of the process.
+///
+/// @return This function returns no value.
+static void schedulerAbortOverlayLoad(ProcessDescriptor *processDescriptor) {
+  logError("%s in process %d\n",
+    _overlayLoadFailureReason, processDescriptor->processId);
+  processTerminate(processDescriptor, false);
+  threadSetContext(processDescriptor->mainThread, processDescriptor);
+
+  ProcessMessage *processMessage = getAvailableMessage();
+  if (processMessage == NULL) {
+    removeProcess(processDescriptor, _overlayLoadFailureReason);
+    return;
+  }
+  processMessageInit(processMessage,
+    SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_CLEANUP_PROCESS,
+    processDescriptor, sizeof(*processDescriptor), false);
+  processMessageQueuePush(&allProcesses[schedulerPid - 1], processMessage);
 }
 
 /// @fn int schedulerLoadOverlay(
@@ -5225,7 +5264,7 @@ void runScheduler(void) {
         // Permanent failure.  Remove the process.
         schedulerDumpMemoryAllocations();
         schedulerDumpOpenFiles();
-        removeProcess(processDescriptor, _overlayLoadFailureReason);
+        schedulerAbortOverlayLoad(processDescriptor);
         goto exit;
       }
     }
