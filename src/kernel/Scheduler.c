@@ -2913,6 +2913,50 @@ static const char _mainOverlayPath[] KEEP_IN_FLASH = "/main";
 /// final binary on some targets.
 static const char _overlayExt[] KEEP_IN_FLASH = OVERLAY_EXT;
 
+/// @fn int schedulerCheckOverlayHeader(ProcessDescriptor *processDescriptor)
+///
+/// @brief Check that a process's overlay starts with a header this kernel can
+/// run, so that exec and spawn can report a bad command to their caller
+/// instead of it failing to load once the caller is gone.
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor whose overlay
+///   metadata has been loaded.
+///
+/// @return Returns 0 on success, -errno on failure.
+static int schedulerCheckOverlayHeader(ProcessDescriptor *processDescriptor) {
+  FileBlockMetadata *metadata = &processDescriptor->overlay.fileBlockMetadata;
+  BlockDevice *blockDevice = metadata->blockDevice;
+  if ((blockDevice == NULL)
+    || (processDescriptor->overlay.overlayFifoNode != NULL)
+  ) {
+    // Only overlays that loaded successfully are in the file cache.
+    return 0;
+  } else if (metadata->numBlocks == 0) {
+    return -ENOEXEC;
+  }
+
+  uint8_t *block = (uint8_t*) schedMalloc(blockDevice->blockSize);
+  if (block == NULL) {
+    return -ENOMEM;
+  }
+  if (blockDevice->schedReadBlocks(blockDevice->context,
+    metadata->startBlock, 1, blockDevice->blockSize, block) != 0
+  ) {
+    schedFree(block);
+    return -EIO;
+  }
+  const NanoOsOverlayHeader *header = (const NanoOsOverlayHeader*) block;
+
+  int returnValue = 0;
+  if ((header->magic != NANO_OS_OVERLAY_MAGIC)
+    || (header->version != NANO_OS_OVERLAY_VERSION)
+  ) {
+    returnValue = -ENOEXEC;
+  }
+  schedFree(block);
+  return returnValue;
+}
+
 /// @fn int loadProcessDescriptorOverlayMetadata(ProcessDescriptor *processDescriptor)
 ///
 /// @brief Load the FileBlockMetadata for a ProcessDescriptor's overlay.
@@ -2955,6 +2999,9 @@ int loadProcessDescriptorOverlayMetadata(ProcessDescriptor *processDescriptor) {
   } else {
     returnValue = schedGetFileBlockMetadataFromPath(overlayPath,
       &processDescriptor->overlay.fileBlockMetadata);
+  }
+  if (returnValue == 0) {
+    returnValue = schedulerCheckOverlayHeader(processDescriptor);
   }
 
   if ((returnValue == 0) && (useFileCache)) {
@@ -3637,9 +3684,31 @@ int schedulerSpawnCommandHandler(
   // Initialize the new process.
   threadSetContext(processDescriptor->mainThread, processDescriptor);
 
+  // Resolve the overlay before anything is allocated for or handed to the
+  // new process so that a failure only has the slot to give back.
+  HalExecCommandFn execCommand = NULL;
+  HAL->platform->execCommand(&execCommand);
+  if (execCommand == execOverlayCommand) {
+    processDescriptor->overlayNamespace = pathname;
+  }
+  returnValue = loadProcessDescriptorOverlayMetadata(processDescriptor);
+  if (returnValue != 0) {
+    processQueuePush(schedulerState->freeQueue, processDescriptor);
+    if (returnValue == -EBUSY) {
+      // We're in the middle of a filesystem operation already and can't
+      // access a file right now.  Try again later.  DO NOT set the message
+      // done or alter its value.
+      return returnValue; // -EBUSY
+    }
+    schedulerSpawnArgs->errorNumber = -returnValue;
+    processMessageSetDone(processMessage);
+    return 0; // Don't retry this command
+  }
+
   ExecArgs *execArgs = (ExecArgs*) schedMalloc(sizeof(ExecArgs));
   if (execArgs == NULL) {
     logError("Out of memory for ExecArgs.\n");
+    processQueuePush(schedulerState->freeQueue, processDescriptor);
     schedulerSpawnArgs->errorNumber = ENOMEM;
     processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
@@ -3661,6 +3730,7 @@ int schedulerSpawnCommandHandler(
     NUM_STANDARD_FILE_DESCRIPTORS * sizeof(FileDescriptor*));
   if (processDescriptor->fileDescriptors == NULL) {
     logError("Could not allocate file descriptor array for new command\n");
+    processQueuePush(schedulerState->freeQueue, processDescriptor);
     schedulerSpawnArgs->errorNumber = ENOMEM;
     schedFree(execArgs);
     processMessageSetDone(processMessage);
@@ -3678,6 +3748,7 @@ int schedulerSpawnCommandHandler(
       }
       schedFree(processDescriptor->fileDescriptors);
       schedFree(execArgs);
+      processQueuePush(schedulerState->freeQueue, processDescriptor);
       processMessageSetDone(processMessage);
       return returnValue; // 0; Don't retry this command
     }
@@ -3733,8 +3804,6 @@ int schedulerSpawnCommandHandler(
     spawnArgs->fileActions = NULL;
   }
 
-  HalExecCommandFn execCommand = NULL;
-  HAL->platform->execCommand(&execCommand);
   if (processCreate(processDescriptor, execCommand, execArgs)
     == processError
   ) {
@@ -3776,27 +3845,6 @@ int schedulerSpawnCommandHandler(
     }
   }
 
-  if (execCommand == execOverlayCommand) {
-    processDescriptor->overlayNamespace = pathname;
-  }
-  returnValue = loadProcessDescriptorOverlayMetadata(processDescriptor);
-  if (returnValue == -EBUSY) {
-    // We're in the middle of a filesystem operation already and can't access
-    // a file right now.  Return error status and try again later.  DO NOT
-    // set the message done or alter its value.
-    return returnValue; // -EBUSY
-  } else if (returnValue != 0) {
-    schedulerSpawnArgs->errorNumber = -returnValue;
-    returnValue = 0; // Don't retry this command
-    processMessageSetDone(processMessage);
-
-    // We have to terminate the process because something may have pushed a
-    // message onto its message queue.  Set the second parameter to false to
-    // make sure that the message queue is purged.
-    processTerminate(processDescriptor, false);
-    threadSetContext(processDescriptor->mainThread, processDescriptor);
-    return returnValue; // 0
-  }
   processDescriptor->envp = envp;
   processDescriptor->name = argv[0];
 
