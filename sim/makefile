@@ -74,6 +74,7 @@ OS_OBJECTS := \
     $(OBJ_DIR)/Hal.o \
     $(OBJ_DIR)/HalCommon.o \
     $(OBJ_DIR)/HalPosix.o \
+    $(OBJ_DIR)/HalPosixErrno.o \
     $(OBJ_DIR)/HalPosixImpl.o \
     $(OBJ_DIR)/Link.o \
     $(OBJ_DIR)/Logger.o \
