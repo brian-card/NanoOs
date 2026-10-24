@@ -592,8 +592,8 @@ IpcCapability baseSupervisorIpcCapabilities[] = {
       | (((uint32_t) 1) << CONSOLE_WRITE_BUFFER)
       | (((uint32_t) 1) << CONSOLE_RELEASE_PORT)
       | (((uint32_t) 1) << CONSOLE_GET_OWNED_PORT)
-      | (((uint32_t) 1) << CONSOLE_GET_ECHO)
-      | (((uint32_t) 1) << CONSOLE_SET_ECHO)
+      | (((uint32_t) 1) << CONSOLE_GET_MODES)
+      | (((uint32_t) 1) << CONSOLE_SET_MODES)
       | (((uint32_t) 1) << CONSOLE_WAIT_FOR_INPUT)
       | (((uint32_t) 1) << CONSOLE_RELEASE_BUFFER)
   },
