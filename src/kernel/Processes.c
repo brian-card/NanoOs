@@ -356,6 +356,8 @@ void* execOverlayCommand(void *args) {
     releaseConsole();
     return (void*) ((intptr_t) -1);
   }
+  // Input left unread by the slot's previous program isn't this one's.
+  setProcessStorage(FGETS_CONSOLE_BUFFER_KEY, NULL);
 
   FileDescriptor **fileDescriptors = processDescriptor->fileDescriptors;
   while (
