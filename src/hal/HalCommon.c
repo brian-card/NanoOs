@@ -506,6 +506,10 @@ static int halMemoryContiguousFilesystem(NanoOsOverlayMap **returnValue) {
 }
 
 static int halMemoryStaticLogs(StaticLogs **returnValue) {
+  if (loggerStaticLogsStale) {
+    *returnValue = NULL;
+    return 0;
+  }
   return callHal(HAL_MEMORY, HAL_MEMORY_STATIC_LOGS, 0, returnValue);
 }
 
