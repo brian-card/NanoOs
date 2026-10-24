@@ -95,26 +95,17 @@ typedef struct ConsoleGetOwnedPortArgs {
   int ownedPort;
 } ConsoleGetOwnedPortArgs;
 
-/// @struct ConsoleGetEchoArgs
+/// @struct ConsoleModesArgs
 ///
-/// @brief Arguments and return value for the CONSOLE_GET_ECHO command.
+/// @brief Arguments and return value for the CONSOLE_GET_MODES and
+/// CONSOLE_SET_MODES commands.
 ///
-/// @param echoing Whether or not the port is currently echoing.
-typedef struct ConsoleGetEchoArgs {
-  bool echoing;
-} ConsoleGetEchoArgs;
-
-/// @struct ConsoleSetEchoArgs
-///
-/// @brief Arguments and return value for the CONSOLE_SET_ECHO command.
-///
-/// @param desiredEchoState The desired echo state for the port.
-/// @param returnValue The return value for the command from the console
-///   process.
-typedef struct ConsoleSetEchoArgs {
-  bool desiredEchoState;
-  int returnValue;
-} ConsoleSetEchoArgs;
+/// @param modes The CONSOLE_MODE_* flags to set, or that are in effect.
+/// @param returnValue 0 on success, -1 if the process owns no console port.
+typedef struct ConsoleModesArgs {
+  uint8_t modes;
+  int     returnValue;
+} ConsoleModesArgs;
 
 /// @struct ConsoleReleasePidPortArgs
 ///
@@ -174,8 +165,8 @@ typedef enum ConsoleCommandResponse {
   CONSOLE_ASSIGN_PORT,
   CONSOLE_RELEASE_PORT,
   CONSOLE_GET_OWNED_PORT,
-  CONSOLE_GET_ECHO,
-  CONSOLE_SET_ECHO,
+  CONSOLE_GET_MODES,
+  CONSOLE_SET_MODES,
   CONSOLE_WAIT_FOR_INPUT,
   CONSOLE_RELEASE_PID_PORT,
   CONSOLE_RELEASE_BUFFER,
@@ -243,14 +234,20 @@ typedef enum ConsoleValueType {
 // Support functions
 void releaseConsole(void);
 int getOwnedConsolePort(void);
-bool getConsoleEcho(void);
-int setConsoleEcho(bool desiredEchoState);
+int getConsoleModes(void);
+int setConsoleModes(uint8_t modes);
 
 // Exported for unit tests to use
 ConsoleInputEvent consoleProcessByte(
   ConsolePort *consolePort, uint8_t byte, ConsoleEcho *echo);
 int consoleReadForwardedByte(ConsolePort *consolePort);
 bool consoleServicePort(ConsoleState *consoleState, ConsolePort *consolePort);
+void consoleSetModesCommandHandler(
+  ConsoleState *consoleState, ProcessMessage *inputMessage);
+ConsoleBuffer* getAvailableConsoleBuffer(
+  ConsoleState *consoleState, ProcessId pid);
+int releaseConsoleBuffer(
+  ConsoleState *consoleState, ConsoleBuffer *consoleBuffer);
 int consoleForwardString(ConsolePort *consolePort, const char *string);
 void consoleEchoInput(
   ConsolePort *consolePort, ConsoleEcho echo, uint8_t byte);

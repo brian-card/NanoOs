@@ -181,6 +181,8 @@ ConsoleBuffer* getAvailableConsoleBuffer(
       || (consoleBuffers[ii].owner == pid)
     ) {
       consoleBuffers[ii].owner = pid;
+      // Keeps a port from storing input in its buffer while it's lent out.
+      consoleBuffers[ii].bufferAwaitingRelease = true;
       returnValue = &consoleBuffers[ii];
       break;
     }
@@ -216,6 +218,7 @@ int releaseConsoleBuffer(
 
   // Buffer doesn't belong to a port, so release it.
   consoleBuffer->owner = PROCESS_ID_NOT_SET;
+  consoleBuffer->bufferAwaitingRelease = false;
   return 0;
 }
 
@@ -600,6 +603,7 @@ void consoleReleasePortCommandHandler(
       consolePorts[ii].inputOwner = consolePorts[ii].shell;
       consolePorts[ii].consoleBuffer->owner = consolePorts[ii].shell;
       consolePorts[ii].consoleBuffer->bufferAwaitingRelease = false;
+      consolePorts[ii].modes = CONSOLE_MODE_DEFAULT;
     }
   }
 
@@ -655,41 +659,32 @@ void consoleGetOwnedPortCommandHandler(
   return;
 }
 
-/// @fn void consoleGetEchoCommandHandler(
+/// @fn void consoleGetModesCommandHandler(
 ///   ConsoleState *consoleState, ProcessMessage *inputMessage)
 ///
-/// @brief Get whether or not input is echoed back to any console ports owned
-/// by a process.
+/// @brief Get the modes of the console port owned by a process.
 ///
 /// @param consoleState A pointer to the ConsoleState being maintained by the
 ///   runConsole function that's running.
 /// @param inputMessage A pointer to the ProcessMessage with the received
-///   command.
+///   command.  Its data is a ConsoleModesArgs.
 ///
 /// @return This function returns no value.
-void consoleGetEchoCommandHandler(
+void consoleGetModesCommandHandler(
   ConsoleState *consoleState, ProcessMessage *inputMessage
 ) {
-  ConsoleGetEchoArgs *consoleGetEchoArgs
-    = (ConsoleGetEchoArgs*) processMessageData(inputMessage);
+  ConsoleModesArgs *consoleModesArgs
+    = (ConsoleModesArgs*) processMessageData(inputMessage);
   ProcessId owner = processPid(processMessageFrom(inputMessage));
   ConsolePort *consolePorts = consoleState->consolePorts;
-  ProcessMessage *returnMessage = inputMessage;
 
-  bool portFound = false;
-  bool echoing = false;
+  consoleModesArgs->returnValue = -1;
   for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
     if (consolePorts[ii].outputOwner == owner) {
-      consoleGetEchoArgs->echoing |= consolePorts[ii].echo;
-      portFound = true;
+      consoleModesArgs->modes = consolePorts[ii].modes;
+      consoleModesArgs->returnValue = 0;
+      break;
     }
-  }
-
-  if (portFound == true) {
-    processMessageData(returnMessage) = (void*) ((uintptr_t) echoing);
-  } else {
-    logWarn("Request to get echo from non-owning process %ld\n",
-      (long int) owner);
   }
 
   processMessageSetDone(inputMessage);
@@ -697,39 +692,52 @@ void consoleGetEchoCommandHandler(
   return;
 }
 
-/// @fn void consoleSetEchoCommandHandler(
+static void consoleReplayHeldByte(
+  ConsoleState *consoleState, ConsolePort *consolePort);
+
+/// @fn void consoleSetModesCommandHandler(
 ///   ConsoleState *consoleState, ProcessMessage *inputMessage)
 ///
-/// @brief Set whether or not input is echoed back to all console ports owned
-/// by a process.
+/// @brief Set the modes of all console ports owned by a process.
 ///
 /// @param consoleState A pointer to the ConsoleState being maintained by the
 ///   runConsole function that's running.
 /// @param inputMessage A pointer to the ProcessMessage with the received
-///   command.
+///   command.  Its data is a ConsoleModesArgs.
 ///
 /// @return This function returns no value.
-void consoleSetEchoCommandHandler(
+void consoleSetModesCommandHandler(
   ConsoleState *consoleState, ProcessMessage *inputMessage
 ) {
-  ConsoleSetEchoArgs *consoleSetEchoArgs
-    = (ConsoleSetEchoArgs*) processMessageData(inputMessage);
+  ConsoleModesArgs *consoleModesArgs
+    = (ConsoleModesArgs*) processMessageData(inputMessage);
   ProcessId owner = processPid(processMessageFrom(inputMessage));
   ConsolePort *consolePorts = consoleState->consolePorts;
 
-  bool portFound = false;
+  consoleModesArgs->returnValue = -1;
   for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
     if (consolePorts[ii].outputOwner == owner) {
-      consolePorts[ii].echo = consoleSetEchoArgs->desiredEchoState;
-      portFound = true;
+      ConsoleBuffer *consoleBuffer = consolePorts[ii].consoleBuffer;
+      bool replayHeldByte
+        = ((consolePorts[ii].modes & CONSOLE_MODE_CANONICAL) == 0)
+        && ((consoleModesArgs->modes & CONSOLE_MODE_CANONICAL) != 0)
+        && (consoleBuffer->holdsCompletedLine == true)
+        && (consoleBuffer->bufferAwaitingRelease == false);
+      consolePorts[ii].modes = consoleModesArgs->modes;
+      if (consolePorts[ii].inputState != CONSOLE_INPUT_STATE_AFTER_RETURN) {
+        consolePorts[ii].inputState = CONSOLE_INPUT_STATE_NORMAL;
+      }
+      if (replayHeldByte) {
+        consoleReplayHeldByte(consoleState, &consolePorts[ii]);
+      } else if (((consoleModesArgs->modes & CONSOLE_MODE_CANONICAL) == 0)
+        && (consoleBuffer->consoleBufferIndex > 0)
+        && (consoleBuffer->bufferAwaitingRelease == false)
+      ) {
+        // Hand over what was typed of a line as raw input.
+        consoleBuffer->holdsCompletedLine = true;
+      }
+      consoleModesArgs->returnValue = 0;
     }
-  }
-
-  consoleSetEchoArgs->returnValue = 0;
-  if (portFound == false) {
-    logWarn("Request to set echo from non-owning process %ld\n",
-      (long int) owner);
-    consoleSetEchoArgs->returnValue = -1;
   }
 
   processMessageSetDone(inputMessage);
@@ -807,6 +815,7 @@ void consoleReleasePidPortCommandHandler(
     if (consolePorts[ii].inputOwner == consoleReleasePidPortArgs->processId) {
       consolePorts[ii].inputOwner = consolePorts[ii].shell;
       consolePorts[ii].consoleBuffer->bufferAwaitingRelease = false;
+      consolePorts[ii].modes = CONSOLE_MODE_DEFAULT;
     }
     if (consolePorts[ii].outputOwner == consoleReleasePidPortArgs->processId) {
       consolePorts[ii].outputOwner = consolePorts[ii].shell;
@@ -905,7 +914,7 @@ static void consoleInitPort(ConsolePort *consolePort,
   consolePort->consoleBuffer->bufferAwaitingRelease = false;
   consolePort->consoleBuffer->holdsCompletedLine = false;
   consolePort->inputState = CONSOLE_INPUT_STATE_NORMAL;
-  consolePort->echo = true;
+  consolePort->modes = CONSOLE_MODE_DEFAULT;
   consolePort->forwardingPid = forwardingPid;
   consolePort->inputReadyArgs.portId = portId;
   consolePort->inputReadyArgs.numBytes = 0;
@@ -1110,8 +1119,8 @@ const ConsoleCommandHandler consoleCommandHandlers[] = {
   consoleAssignPortCommandHandler,      // CONSOLE_ASSIGN_PORT
   consoleReleasePortCommandHandler,     // CONSOLE_RELEASE_PORT
   consoleGetOwnedPortCommandHandler,    // CONSOLE_GET_OWNED_PORT
-  consoleGetEchoCommandHandler,         // CONSOLE_GET_ECHO,
-  consoleSetEchoCommandHandler,         // CONSOLE_SET_ECHO
+  consoleGetModesCommandHandler,        // CONSOLE_GET_MODES
+  consoleSetModesCommandHandler,        // CONSOLE_SET_MODES
   consoleWaitForInputCommandHandler,    // CONSOLE_WAIT_FOR_INPUT
   consoleReleasePidPortCommandHandler,  // CONSOLE_RELEASE_PID_PORT
   consoleReleaseBufferCommandHandler,   // CONSOLE_RELEASE_BUFFER
@@ -1310,6 +1319,18 @@ ConsoleInputEvent consoleProcessByte(
 ) {
   *echo = CONSOLE_ECHO_NONE;
 
+  if ((byte == 0x03) && (consolePort->modes & CONSOLE_MODE_SIGNALS)) {
+    return CONSOLE_INPUT_INTERRUPT;
+  } else if ((consolePort->modes & CONSOLE_MODE_CANONICAL) == 0) {
+    if (byte == ASCII_RETURN) {
+      consolePort->inputState = CONSOLE_INPUT_STATE_AFTER_RETURN;
+    } else if (byte != ASCII_NEWLINE) {
+      consolePort->inputState = CONSOLE_INPUT_STATE_NORMAL;
+    }
+    consoleStoreByte(consolePort, byte);
+    return CONSOLE_INPUT_LINE;
+  }
+
   if (consolePort->inputState == CONSOLE_INPUT_STATE_AFTER_RETURN) {
     consolePort->inputState = CONSOLE_INPUT_STATE_NORMAL;
     if (byte == ASCII_NEWLINE) {
@@ -1364,8 +1385,6 @@ ConsoleInputEvent consoleProcessByte(
     consoleStoreByte(consolePort, byte);
     consolePort->inputState = CONSOLE_INPUT_STATE_ESCAPE;
     return CONSOLE_INPUT_NONE;
-  } else if (byte == 0x03) {
-    return CONSOLE_INPUT_INTERRUPT;
   }
 
   return CONSOLE_INPUT_UNHANDLED;
@@ -1385,7 +1404,7 @@ ConsoleInputEvent consoleProcessByte(
 void consoleEchoInput(
   ConsolePort *consolePort, ConsoleEcho echo, uint8_t byte
 ) {
-  if (consolePort->echo == false) {
+  if ((consolePort->modes & CONSOLE_MODE_ECHO) == 0) {
     return;
   } else if (consolePort->forwardingPid != PROCESS_ID_NOT_SET) {
     char echoString[2];
@@ -1439,6 +1458,8 @@ static void consoleDeliverLine(ConsolePort *consolePort) {
     consolePort->consoleBuffer->consoleBufferIndex] = '\0';
   consolePort->consoleBuffer->consoleBufferIndex = 0;
   consolePort->consoleBuffer->holdsCompletedLine = false;
+  consolePort->consoleBuffer->rawInput
+    = ((consolePort->modes & CONSOLE_MODE_CANONICAL) == 0);
   if (initSendProcessMessageToPid(
     consolePort->inputOwner,
     CONSOLE_COMMAND_SIGNATURE | CONSOLE_RETURNING_INPUT,
@@ -1512,6 +1533,37 @@ static uint16_t consoleNowMs(void) {
   return (uint16_t) (processGetNanoseconds(NULL) / ((int64_t) 1000000));
 }
 
+/// @fn static void consoleReplayHeldByte(
+///   ConsoleState *consoleState, ConsolePort *consolePort)
+///
+/// @brief Run a key that a port held while it was in raw mode back through the
+/// port's current modes, so that a port that has become canonical starts its
+/// next line with the key instead of delivering the key as a line by itself.
+///
+/// @param consoleState A pointer to the ConsoleState being maintained by the
+///   runConsole function that's running.
+/// @param consolePort A pointer to the ConsolePort holding the key.
+///
+/// @return This function returns no value.
+static void consoleReplayHeldByte(
+  ConsoleState *consoleState, ConsolePort *consolePort
+) {
+  ConsoleBuffer *consoleBuffer = consolePort->consoleBuffer;
+  uint8_t byte = (uint8_t) consoleBuffer->buffer[0];
+  consoleBuffer->holdsCompletedLine = false;
+  consoleBuffer->consoleBufferIndex = 0;
+
+  ConsoleEcho echo = CONSOLE_ECHO_NONE;
+  ConsoleInputEvent event = consoleProcessByte(consolePort, byte, &echo);
+  if (consolePort->inputState == CONSOLE_INPUT_STATE_ESCAPE) {
+    consolePort->escapeStartMs = consoleNowMs();
+  }
+  consoleEchoInput(consolePort, echo, byte);
+  if ((event != CONSOLE_INPUT_NONE) && (event != CONSOLE_INPUT_UNHANDLED)) {
+    consoleHandleInputEvent(consoleState, consolePort, event);
+  }
+}
+
 /// @fn bool consoleServicePort(
 ///   ConsoleState *consoleState, ConsolePort *consolePort)
 ///
@@ -1533,6 +1585,13 @@ bool consoleServicePort(
 ) {
   consoleDeliverLine(consolePort);
   while (consolePort->consoleBuffer->bufferAwaitingRelease == false) {
+    if ((consolePort->consoleBuffer->holdsCompletedLine == true)
+      && ((consolePort->modes & CONSOLE_MODE_CANONICAL) == 0)
+    ) {
+      // Leave input that's typed ahead where it is until it's asked for, in
+      // whatever mode the port is in by then.
+      break;
+    }
     int byteRead = consolePort->readByte(consolePort);
     if ((consolePort->consoleBuffer->holdsCompletedLine == true)
       && (byteRead != 0x03)
@@ -1882,55 +1941,58 @@ int getOwnedConsolePort(void) {
   return returnValue;
 }
 
-/// @fn bool getConsoleEcho(void)
+/// @fn int getConsoleModes(void)
 ///
-/// @brief Get the echo state for all ports owned by the current process.
+/// @brief Get the modes of the console port owned by the current process.
 ///
-/// @return Returns true if the console for the process is echoing, false
-/// otherwise.
-bool getConsoleEcho(void) {
-  ConsoleGetEchoArgs consoleGetEchoArgs = {
-    .echoing = false,
+/// @return Returns the CONSOLE_MODE_* flags on success, -1 if the process owns
+/// no console port.
+int getConsoleModes(void) {
+  ConsoleModesArgs consoleModesArgs = {
+    .modes = 0,
+    .returnValue = -1,
   };
   ProcessMessage *sent = initSendProcessMessageToPid(
     consolePid,
-    CONSOLE_COMMAND_SIGNATURE | CONSOLE_GET_ECHO,
-    /* data= */ &consoleGetEchoArgs,
-    /* size= */ sizeof(consoleGetEchoArgs),
+    CONSOLE_COMMAND_SIGNATURE | CONSOLE_GET_MODES,
+    /* data= */ &consoleModesArgs,
+    /* size= */ sizeof(consoleModesArgs),
     /* waiting= */ true);
+  if (sent == NULL) {
+    return -1;
+  }
 
-  // The console will reuse the message we sent.
   processMessageWaitForDone(sent, NULL);
-
-  bool returnValue = consoleGetEchoArgs.echoing;
   processMessageRelease(sent);
 
-  return returnValue;
+  return (consoleModesArgs.returnValue == 0) ? consoleModesArgs.modes : -1;
 }
 
-/// @fn int setConsoleEcho(bool desiredEchoState)
+/// @fn int setConsoleModes(uint8_t modes)
 ///
-/// @brief Set the echo state for all ports owned by the current process.
+/// @brief Set the modes of all console ports owned by the current process.
 ///
-/// @return Returns 0 if the echo state was set for the current process's
-/// ports, -1 on failure.
-int setConsoleEcho(bool desiredEchoState) {
-  ConsoleSetEchoArgs consoleSetEchoArgs = {
-    .desiredEchoState = desiredEchoState,
-    .returnValue = 0,
+/// @param modes The CONSOLE_MODE_* flags to set.
+///
+/// @return Returns 0 on success, -1 if the process owns no console port.
+int setConsoleModes(uint8_t modes) {
+  ConsoleModesArgs consoleModesArgs = {
+    .modes = modes,
+    .returnValue = -1,
   };
   ProcessMessage *sent = initSendProcessMessageToPid(
     consolePid,
-    CONSOLE_COMMAND_SIGNATURE | CONSOLE_SET_ECHO,
-    /* data= */ &consoleSetEchoArgs,
-    /* size= */ sizeof(consoleSetEchoArgs),
+    CONSOLE_COMMAND_SIGNATURE | CONSOLE_SET_MODES,
+    /* data= */ &consoleModesArgs,
+    /* size= */ sizeof(consoleModesArgs),
     /* waiting= */ true);
+  if (sent == NULL) {
+    return -1;
+  }
 
   processMessageWaitForDone(sent, NULL);
-
-  int returnValue = consoleSetEchoArgs.returnValue;
   processMessageRelease(sent);
 
-  return returnValue;
+  return consoleModesArgs.returnValue;
 }
 
