@@ -14,9 +14,11 @@
 #include <string.h>
 
 #include "kernel/Console.h"
+#include "kernel/NanoOs.h"
 #include "kernel/Processes.h"
 #include "kernel/Scheduler.h"
 #include "user/NanoOsErrno.h"
+#include "user/NanoOsStdio.h"
 
 #define TEST_FORWARDING_PORT_INDEX 0
 
@@ -852,4 +854,54 @@ NANO_OS_KERNEL_TEST(console_raw, a_partial_line_is_delivered_on_going_raw) {
   NANO_OS_ASSERT_EQ_INT(1, numDeliveredLines);
   NANO_OS_ASSERT_STR_EQ("ec", deliveredLines[0]);
   NANO_OS_ASSERT_TRUE(deliveredRaw[0]);
+}
+
+NANO_OS_KERNEL_TEST(console_read, a_process_keeps_its_own_storage) {
+  static int value;
+  NANO_OS_ASSERT_EQ_INT(processSuccess,
+    setProcessStorage(FGETS_CONSOLE_BUFFER_KEY, &value));
+  NANO_OS_ASSERT_TRUE(getProcessStorage(FGETS_CONSOLE_BUFFER_KEY) == &value);
+  setProcessStorage(FGETS_CONSOLE_BUFFER_KEY, NULL);
+}
+
+/// @fn static ConsoleBuffer* heldInput(const char *text, bool rawInput)
+///
+/// @brief Make a ConsoleBuffer holding input as if the console had sent it to
+/// this process and a read had left it unfinished.
+///
+/// @param text The input in the buffer.
+/// @param rawInput Whether the input came from a port in raw mode.
+///
+/// @return Returns a pointer to the buffer.
+static ConsoleBuffer* heldInput(const char *text, bool rawInput) {
+  static ConsoleBuffer consoleBuffer;
+  memset(&consoleBuffer, 0, sizeof(consoleBuffer));
+  strcpy(consoleBuffer.buffer, text);
+  consoleBuffer.rawInput = rawInput;
+  setProcessStorage(FGETS_CONSOLE_BUFFER_KEY, &consoleBuffer);
+  return &consoleBuffer;
+}
+
+NANO_OS_KERNEL_TEST(console_read, raw_input_that_does_not_fit_is_kept) {
+  ConsoleBuffer *consoleBuffer = heldInput("echo two\n", true);
+  char chunk[8];
+
+  NANO_OS_ASSERT_EQ_INT(4, (long long) nanoOsFread(chunk, 1, 4, stdin));
+  NANO_OS_ASSERT_TRUE(memcmp(chunk, "echo", 4) == 0);
+  NANO_OS_ASSERT_TRUE(getProcessStorage(FGETS_CONSOLE_BUFFER_KEY)
+    == consoleBuffer);
+
+  memset(chunk, 'x', sizeof(chunk));
+  NANO_OS_ASSERT_EQ_INT(5, (long long) nanoOsFread(chunk, 1, 4 + 4, stdin));
+  NANO_OS_ASSERT_TRUE(memcmp(chunk, " two\nxxx", 8) == 0);
+  NANO_OS_ASSERT_NULL(getProcessStorage(FGETS_CONSOLE_BUFFER_KEY));
+}
+
+NANO_OS_KERNEL_TEST(console_read, canonical_input_that_does_not_fit_is_dropped) {
+  heldInput("echo two\n", false);
+  char chunk[4];
+
+  NANO_OS_ASSERT_EQ_INT(4, (long long) nanoOsFread(chunk, 1, 4, stdin));
+  NANO_OS_ASSERT_TRUE(memcmp(chunk, "echo", 4) == 0);
+  NANO_OS_ASSERT_NULL(getProcessStorage(FGETS_CONSOLE_BUFFER_KEY));
 }

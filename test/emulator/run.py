@@ -306,8 +306,9 @@ def test_line_editor_moves_edits_and_recalls(e):
     edit(e, "echo ac" + left + "b\r", "abc")
     edit(e, "xecho abxc" + left + left + delete + "\x1b[H" + delete
          + "\x1b[F" + "d\r", "abcd")
-    assert e.sh("pwd") == "/root"
-    edit(e, up + "\r", "/root")
+    edit(e, "echo recalled\r", "recalled")
+    edit(e, "pwd\r", "/root")
+    edit(e, up + up + "\r", "recalled")
 
 
 def test_grep_finds_lines_in_a_file_and_a_pipe(e):

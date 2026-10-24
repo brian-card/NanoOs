@@ -431,26 +431,39 @@ def test_line_editor_delete_and_backspace_remove_mid_line(s):
     edit(s, "xecho abc" + HOME + "\x7f" + DELETE + "\r", "abc")
 
 
-def test_line_editor_up_and_down_recall_the_previous_line(s):
-    # A command that runs replaces the shell, so these use built-ins.
+def test_line_editor_up_and_down_walk_the_history(s):
     s.login()
-    edit(s, UP + "pwd\r", "/root")
-    edit(s, UP + "\r", "/root")
-    assert s.sh("cd /etc") == ""
-    edit(s, UP + "\x7f" * 4 + "\x7f\x7f\x7fpwd\r", "/etc")
-    edit(s, "pw" + UP + DOWN + "d\r", "/etc")
-    edit(s, "x" + UP + UP + DOWN + DOWN + "\x7fpwd\r", "/etc")
-    edit(s, UP + HOME + DELETE + DELETE + DELETE + "cd /\rpwd\r", "/")
+    edit(s, UP + DOWN + "echo first\r", "first")
+    edit(s, UP + "\r", "first")
+    edit(s, "echo second\r", "second")
+    edit(s, "pwd\r", "/root")
+    edit(s, UP + UP + UP + "\r", "first")
+    edit(s, UP + UP + UP + DOWN + "\r", "/root")
+    edit(s, UP + DOWN + "\r" + "echo after-empty\r", "after-empty")
+    edit(s, "echo typed" + UP + "\x7f" * 6 + "-edited\r", "after-edited")
+    edit(s, UP * 8 + "\r", "first")
+    assert s.sh("cat .mush_history") == "\n".join([
+        "echo first", "echo second", "pwd", "echo first", "pwd",
+        "echo after-empty", "echo after-edited", "echo first",
+        "cat .mush_history"])
+
+
+def test_line_editor_history_survives_logging_out(s):
+    s.login()
+    edit(s, "echo remembered\r", "remembered")
+    s.child.sendline("exit")
+    s.login()
+    edit(s, UP + UP + "\r", "remembered")
 
 
 def test_line_editor_ctrl_c_abandons_the_line(s):
     s.login()
-    edit(s, "pwd\r", "/root")
+    edit(s, "echo kept\r", "kept")
     s.child.send("echo dropped" + UP + "\x03")
     s.child.expect_exact("^C", timeout=10)
     s.child.expect(PROMPT, timeout=10)
     assert s.child.before.replace("\r", "") == "\n", repr(s.child.before)
-    edit(s, UP + "\r", "/root")
+    edit(s, UP + "\r", "kept")
 
 
 def test_line_editor_takes_an_arrow_key_arriving_in_pieces(s):
@@ -509,7 +522,8 @@ def test_vdp_line_editor_redraws_the_line(s):
     vdp.press(KEYCODE_UP)
     vdp.expect(r"^a-much-longer-line$")
     vdp.press(KEYCODE_DOWN)
-    vdp.expect(r"^Xcho abcd {9}$")
+    vdp.expect(r"^ {18}$")
+    vdp.type("Xcho abcd")
     vdp.press(KEYCODE_LEFT)
     vdp.press(KEYCODE_LEFT)
     vdp.type("\b")
@@ -679,7 +693,6 @@ def test_mv_replaces_an_existing_file(s):
 
 def test_mv_moves_files_into_a_directory(s):
     s.login()
-    assert s.sh("mkdir /root") == ""
     assert s.sh("mkdir tmp") == ""
     assert s.sh("cp /usr/bin/helloworld/main.overlay tmp/main.overlay") == ""
     assert s.sh("mkdir /usr/bin/hello2") == ""
@@ -1298,8 +1311,8 @@ def test_kill_terminates_a_background_process(s):
 
 
 def test_dirent_lists_directories_with_correct_type(s):
-    # test/e2e/mkimage.sh always builds a root directory containing exactly
-    # /etc and /usr (via mmd), both real subdirectories.  mtools writes
+    # test/e2e/mkimage.sh always builds a root directory containing /etc and
+    # /usr (via mmd), both real subdirectories.  mtools writes
     # lowercase 8.3 names using the ntReserved case bits rather than an LFN,
     # so the case-preserving name comes back lowercase, not the legacy
     # all-uppercase short-name rendering.

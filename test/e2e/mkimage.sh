@@ -68,6 +68,7 @@ MTOOLS_SKIP_CHECK=1 mcopy  -i "${fatImage}" -s usr/bin ::/usr/bin
 MTOOLS_SKIP_CHECK=1 mcopy  -i "${fatImage}" -s usr/lib ::/usr/lib
 MTOOLS_SKIP_CHECK=1 mcopy  -i "${fatImage}" "${osRodataBin}" ::/usr/lib/
 MTOOLS_SKIP_CHECK=1 mmd    -i "${fatImage}" ::/etc
+MTOOLS_SKIP_CHECK=1 mmd    -i "${fatImage}" ::/root
 printf '%s' "${hostname}" \
 	| MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" - ::/etc/hostname
 printf '\\s \\r \\n \\l\n\n' \
