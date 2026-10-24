@@ -33,6 +33,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "MouseCursor.h"
 #include "VdpDriver.h"
 
 /// @var _vdpScreenSetup
@@ -44,6 +45,62 @@
 static const uint8_t _vdpScreenSetup[] = {
   22, 0, 23, 0, 0x81, 1, 12, 23, 1, 1
 };
+
+/// @def VDP_CURSOR_ID
+///
+/// @brief The ID of the VDP buffer, bitmap, and mouse cursor that hold the
+/// driver's mouse cursor.  IDs up to 255 name the VDP's built-in cursors.
+#define VDP_CURSOR_ID 0xF000
+
+/// @def VDP_WORD
+///
+/// @brief The two bytes of a 16-bit VDU argument, low byte first.
+#define VDP_WORD(value) ((value) & 0xff), (((value) >> 8) & 0xff)
+
+/// @var _vdpCursorUploadStart
+///
+/// @brief VDU commands that start the upload of the mouse cursor: clear the
+/// buffer (VDU 23,0,&A0,id;2) so that a restarted driver's upload isn't
+/// appended to the last one, then write the pixels to it
+/// (VDU 23,0,&A0,id;0,length;), which follow as one RGBA2222 byte each.
+static const uint8_t _vdpCursorUploadStart[] = {
+  23, 0, 0xA0, VDP_WORD(VDP_CURSOR_ID), 2,
+  23, 0, 0xA0, VDP_WORD(VDP_CURSOR_ID), 0,
+  VDP_WORD(MOUSE_CURSOR_WIDTH * MOUSE_CURSOR_HEIGHT)
+};
+
+/// @var _vdpCursorUploadEnd
+///
+/// @brief VDU commands sent after the mouse cursor's pixels: select the
+/// buffer as the bitmap (VDU 23,27,&20,id;), make an RGBA2222 bitmap of it
+/// (VDU 23,27,&21,width;height;1), make a mouse cursor of the bitmap with
+/// its hotspot at the top left (VDU 23,27,&40,0,0), enable the mouse
+/// (VDU 23,0,&89,0), and select the cursor (VDU 23,0,&89,3,id;).  The cursor
+/// is selected after the mouse is enabled because the VDP ignores the
+/// selection while the mouse is disabled.
+static const uint8_t _vdpCursorUploadEnd[] = {
+  23, 27, 0x20, VDP_WORD(VDP_CURSOR_ID),
+  23, 27, 0x21, VDP_WORD(MOUSE_CURSOR_WIDTH), VDP_WORD(MOUSE_CURSOR_HEIGHT), 1,
+  23, 27, 0x40, 0, 0,
+  23, 0, 0x89, 0,
+  23, 0, 0x89, 3, VDP_WORD(VDP_CURSOR_ID)
+};
+
+/// @fn static void vdpDefineCursor(void)
+///
+/// @brief Upload the mouse cursor to the VDP, enable the mouse, and make the
+/// cursor its pointer.
+///
+/// @return This function returns no value.
+static void vdpDefineCursor(void) {
+  vdpWrite(_vdpCursorUploadStart, sizeof(_vdpCursorUploadStart));
+  for (uint8_t row = 0; row < MOUSE_CURSOR_HEIGHT; row++) {
+    uint8_t rowPixels[MOUSE_CURSOR_WIDTH];
+    mouseCursorRowToVdp(row, rowPixels);
+    vdpWrite(rowPixels, sizeof(rowPixels));
+  }
+  vdpWrite(_vdpCursorUploadEnd, sizeof(_vdpCursorUploadEnd));
+}
 
 /// @fn void* vdpStartup(void *args)
 ///
@@ -75,8 +132,8 @@ void* vdpStartup(void *args) {
 
 /// @fn void* vdpSetupScreen(void *args)
 ///
-/// @brief Set up the screen once the VDP is listening and draw the output
-/// buffered until then.
+/// @brief Set up the screen and the mouse pointer once the VDP is listening
+/// and draw the output buffered until then.
 ///
 /// @param args A pointer to the driver's VdpOutput.
 ///
@@ -86,6 +143,7 @@ void* vdpSetupScreen(void *args) {
 
   vdpOutput->listening = true;
   vdpWrite(_vdpScreenSetup, sizeof(_vdpScreenSetup));
+  vdpDefineCursor();
   if (vdpOutput->buffer != NULL) {
     vdpWrite(vdpOutput->buffer->data, vdpOutput->buffer->length);
     free(vdpOutput->buffer);
