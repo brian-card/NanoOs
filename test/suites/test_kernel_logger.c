@@ -71,6 +71,7 @@ NANO_OS_KERNEL_TEST(logger, static_logs_never_exceed_their_backing_memory) {
     unsigned char canary;
   } area;
   memset(&area, 0, sizeof(area));
+  area.staticLogs.canary = STATIC_LOGS_CANARY;
   area.canary = 0xA5;
 
   size_t capacity = sizeof(area.staticLogs.logEntries)
@@ -87,6 +88,25 @@ NANO_OS_KERNEL_TEST(logger, static_logs_never_exceed_their_backing_memory) {
   NANO_OS_ASSERT_EQ_INT((long long) capacity,
     (long long) area.staticLogs.numEntries);
   NANO_OS_ASSERT_EQ_INT(0xA5, area.canary);
+}
+
+// The heap may grow into the area before the logger starts, so an overwritten
+// canary means the memory belongs to someone else now.
+NANO_OS_KERNEL_TEST(logger, static_logs_are_not_written_once_overwritten) {
+  static StaticLogs area;
+  memset(&area, 0x5A, sizeof(area));
+  area.numEntries = 0;
+  StaticLogs before = area;
+
+  halMockSetStaticLogs(&area);
+  halMockSetStringsPresent(false);
+  for (int ii = 0; ii < 4; ii++) {
+    logError("written over the static log area (%d)\n", ii);
+  }
+  halMockSetStringsPresent(true);
+  halMockSetStaticLogs(NULL);
+
+  NANO_OS_ASSERT_TRUE(memcmp(&area, &before, sizeof(area)) == 0);
 }
 
 // The area isn't reserved after boot, so a restarted logger would replay
