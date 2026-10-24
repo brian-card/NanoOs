@@ -61,4 +61,3 @@ const uint32_t cursorPixels[] = {
 #undef W
 #undef _
 
-
