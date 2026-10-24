@@ -161,6 +161,26 @@ realStart:
     DEC B
     JR  NZ, .canary_loop
 
+    ; Stamp STATIC_LOGS_CANARY (src/kernel/Logger.h), "NanoLogs", at the start
+    ; of the static log area.  The logger refuses to print the area if the
+    ; heap has grown into it by the time it runs.
+    LD  HL, _agonLight2StaticLogsArea
+    LD  (HL), 0x4E              ; 'N'
+    INC HL
+    LD  (HL), 0x61              ; 'a'
+    INC HL
+    LD  (HL), 0x6E              ; 'n'
+    INC HL
+    LD  (HL), 0x6F              ; 'o'
+    INC HL
+    LD  (HL), 0x4C              ; 'L'
+    INC HL
+    LD  (HL), 0x6F              ; 'o'
+    INC HL
+    LD  (HL), 0x67              ; 'g'
+    INC HL
+    LD  (HL), 0x73              ; 's'
+
     DI                          ; disable maskable interrupts while setting up
 
     ; Map eZ80F92 on-chip 8 KB SRAM to 0xFFE000.
@@ -297,4 +317,5 @@ _agonLight2Off:
     .extern __data_load__
     .extern __data_size
     .extern __data_bss_limit
+    .extern _agonLight2StaticLogsArea
     .extern _main
