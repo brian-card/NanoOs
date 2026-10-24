@@ -75,6 +75,30 @@ typedef struct FsCommandArgs {
   int pipeIndex;
 } FsCommandArgs;
 
+/// @struct LineEditorArgs
+///
+/// @brief Arguments and return value for the LineEditor overlay's readLine.
+///
+/// @param line The buffer the command line is edited in.  It holds the line,
+///   without a newline, when readLine returns.
+/// @param history The buffer holding the previous command line, or an empty
+///   string if there is none.
+/// @param input A buffer to read input into.
+/// @param size The size of each of the line, history, and input buffers.
+/// @param prompt The character that ends the prompt.
+/// @param afterReturn Whether the last line ended with a carriage return, so
+///   that a line feed that follows it is ignored.
+/// @param returnValue 0 if a line was read, -1 if stdin was closed.
+typedef struct LineEditorArgs {
+  char *line;
+  char *history;
+  char *input;
+  int   size;
+  char  prompt;
+  bool  afterReturn;
+  int   returnValue;
+} LineEditorArgs;
+
 #ifdef __cplusplus
 }
 #endif
