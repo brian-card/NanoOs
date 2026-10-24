@@ -35,6 +35,8 @@
 
 #ifdef NANO_OS_AGON_LIGHT_2
 
+#include <stddef.h>
+
 #include "../kernel/BootTrace.h"
 #include "HalAgonLight2.h"
 #include "HalCommon.h"
@@ -164,13 +166,17 @@ extern const uint32_t agonLight2FlashBuildId;
 /// image.
 #define HEAP_START_ADDRESS ((uintptr_t) agonLight2RamTextEnd)
 
+/// @var agonLight2StaticLogsArea
+///
+/// @brief The static log area, defined by ld/AgonLight2.ld so that Boot.asm
+/// can stamp its canary.
+extern StaticLogs agonLight2StaticLogsArea;
+
 /// @def STATIC_LOGS_ADDRESS
 ///
-/// @brief Static-log metadata/entry area: 4 KB above the bottom of the heap,
-/// plus room for the overlay file cache allocated at launch.
-#define STATIC_LOGS_ADDRESS (HEAP_START_ADDRESS + (4 * 1024) \
-  + (AGON_LIGHT_2_FILE_CACHE_DEPTH * OVERLAY_SIZE) + sizeof(OverlayFifo) \
-  + ((AGON_LIGHT_2_FILE_CACHE_DEPTH - 1) * sizeof(OverlayFifoNode)))
+/// @brief Static-log metadata/entry area, inside the heap above the overlay
+/// file cache.
+#define STATIC_LOGS_ADDRESS ((uintptr_t) &agonLight2StaticLogsArea)
 
 /// @def PROCESS_STACK_SIZE
 ///
@@ -2205,7 +2211,9 @@ int halAgonLight2Init(void) {
 #else
   halImpl.memory->stringsPresent = true;
 #endif // NANO_OS_STRINGS_STRIPPED
-  memset((StaticLogs*) STATIC_LOGS_ADDRESS, 0, sizeof(StaticLogs));
+  StaticLogs *staticLogs = (StaticLogs*) STATIC_LOGS_ADDRESS;
+  memset(&staticLogs->numEntries, 0,
+    sizeof(StaticLogs) - offsetof(StaticLogs, numEntries));
 
   memset(_namedProcesses, 0, sizeof(_namedProcesses));
   namedProcessTable = _namedProcesses;
