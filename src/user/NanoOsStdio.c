@@ -2166,12 +2166,13 @@ size_t nanoOsFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   size_t bufferSize = size * nmemb;
 
   if (stream == stdin) {
-    // There are four stop conditions:
+    // There are five stop conditions:
     // 1. nanoOsWaitForInput returns NULL, signalling the end of the input
     //    from the stream.
     // 2. We read a newline.
     // 3. We read an escape sequence.
     // 4. We reach bufferSize - 1 bytes received from the stream.
+    // 5. The input came from a port that isn't in canonical mode.
     if (consoleBuffer == NULL) {
       consoleBuffer = nanoOsWaitForInput();
       setProcessStorage(FGETS_CONSOLE_BUFFER_KEY, consoleBuffer);
@@ -2219,13 +2220,14 @@ size_t nanoOsFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
         numBytesToCopy);
       numBytesReceived += numBytesToCopy;
       charBuffer[numBytesReceived] = '\0';
+      bool rawInput = consoleBuffer->rawInput;
       // Release the buffer.  Fire and forget.
       (void) initSendProcessMessageToPid(
         consolePid,
         CONSOLE_COMMAND_SIGNATURE | CONSOLE_RELEASE_BUFFER,
         /* data= */ consoleBuffer, /* size= */ sizeof(*consoleBuffer), false);
 
-      if ((newlineAt != NULL)
+      if ((newlineAt != NULL) || rawInput
         || (strchr(consoleBuffer->buffer, ASCII_ESCAPE))
       ) {
         // We've reached one of the stop cases, so we're not going to attempt
