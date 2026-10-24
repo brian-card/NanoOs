@@ -868,6 +868,7 @@ int halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath,
   }
   _staticLogs = &_staticLogsStorage;
   memset(_staticLogs, 0, sizeof(StaticLogs));
+  _staticLogs->canary = STATIC_LOGS_CANARY;
 
   NANO_OS_API = &nanoOsApi;
 
