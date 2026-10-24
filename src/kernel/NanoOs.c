@@ -374,6 +374,7 @@ void *getProcessStorage(uint8_t key) {
     // Processes not setup yet.  Fail.
     return returnValue; // NULL
   }
+  processIndex--;
   if (processIndex < numProcesses) {
     // Calling process is not supported and does not have storage.
     returnValue = processStorage[processIndex][key];
@@ -403,11 +404,9 @@ int setProcessStorage_(uint8_t key, void *val, int pid, ...) {
   }
 
   if (pid < 0) {
-    if (getRunningPid() == schedulerPid) {
-      pid = (int) getRunningPid();
-    } else {
-      return returnValue; // processError
-    }
+    pid = (int) getRunningPid();
+  } else if (getRunningPid() != schedulerPid) {
+    return returnValue; // processError
   }
   if (pid == 0) {
     // Invalid destination PID.
