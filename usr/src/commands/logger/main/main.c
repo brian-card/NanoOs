@@ -232,7 +232,10 @@ int main(int argc, char **argv) {
 
   StaticLogs *staticLogs = NULL;
   getHal()->memory->staticLogs(&staticLogs);
-  if (staticLogs != NULL) {
+  if ((staticLogs != NULL) && (staticLogs->canary != STATIC_LOGS_CANARY)) {
+    printString("logger: ERROR! The static log area was overwritten.  "
+      "Not printing the logs from before the logger started.\n");
+  } else if (staticLogs != NULL) {
     uintptr_t numEntries = staticLogs->numEntries;
     uintptr_t capacity = sizeof(staticLogs->logEntries)
       / sizeof(staticLogs->logEntries[0]);
