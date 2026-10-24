@@ -43,23 +43,6 @@
 /// @brief The maximum number of bytes that the CLI can accept in MUSH.
 #define MUSH_COMMAND_LINE_LENGTH 96
 
-/// @def ESCAPE
-///
-/// @brief ASCII <escape> character.
-#define ESCAPE 0x1b
-
-/// @def UP_ARROW
-///
-/// @brief Character sequence sent from the console after the escape character
-/// when the up arrow on the keyboard is pressed.
-#define UP_ARROW {0x5b, 0x41}
-
-/// @def DOWN_ARROW
-///
-/// @brief Character sequence sent from the console after the escape character
-/// when the down arrow on the keyboard is pressed.
-#define DOWN_ARROW {0x5b, 0x42}
-
 #undef printDebug
 #ifdef MUSH_DEBUG
 #define printDebug(...) fprintf(stderr, __VA_ARGS__)
@@ -102,55 +85,50 @@ int main(int argc, char **argv) {
     return 0;
   }
   
-  char *buffer = (char*) malloc(2 * MUSH_COMMAND_LINE_LENGTH);
-  char *buffers[2];
-  buffers[0] = buffer;
-  buffers[1] = &buffer[MUSH_COMMAND_LINE_LENGTH];
-  *buffers[0] = '\0';
-  *buffers[1] = '\0';
-  int bufferIndex = 0;
+  char *buffer = (char*) malloc(3 * MUSH_COMMAND_LINE_LENGTH);
+  LineEditorArgs lineEditorArgs = {
+    .line = buffer,
+    .history = &buffer[MUSH_COMMAND_LINE_LENGTH],
+    .input = &buffer[2 * MUSH_COMMAND_LINE_LENGTH],
+    .size = MUSH_COMMAND_LINE_LENGTH,
+    .prompt = '$',
+    .afterReturn = false,
+    .returnValue = 0,
+  };
+  *lineEditorArgs.history = '\0';
   
   intptr_t returnValue = 0;
   FsCommandArgs fsCommandArgs;
   
-  char prompt = '$';
   if (strcmp(getenv("UID"), "0") == 0) {
-    prompt = '#';
+    lineEditorArgs.prompt = '#';
   }
   
   do {
-    char *username = getenv("USER");
-    if (username == NULL) {
-      username = "<unknown user>";
+    if (callOverlayFunction(
+      OVERLAY_SAME_NAMESPACE, "LineEditor", "readLine", &lineEditorArgs)
+      == NULL
+    ) {
+      // Without the line editor, input still has to be read so exit works.
+      printf("%c ", lineEditorArgs.prompt);
+      lineEditorArgs.returnValue = (fgets(lineEditorArgs.line,
+        MUSH_COMMAND_LINE_LENGTH, stdin) != NULL) ? 0 : -1;
+      lineEditorArgs.line[strcspn(lineEditorArgs.line, "\r\n")] = '\0';
     }
-    char *hostname = getenv("HOSTNAME");
-    if (hostname == NULL) {
-      hostname = "localhost";
-    }
-    char *pwd = getenv("PWD");
-    if (pwd == NULL) {
-      pwd = "<unknown directory>";
-    }
-    printf("mush %s@%s:%s%c ", username, hostname, pwd, prompt);
-    char *input = fgets(buffers[bufferIndex], MUSH_COMMAND_LINE_LENGTH, stdin);
-    if (input == NULL) {
+    if (lineEditorArgs.returnValue != 0) {
       // Our stdin file descriptor has been closed.  Bail.
       break;
     }
+    char *input = lineEditorArgs.line;
+#ifdef MUSH_DEBUG
     size_t inputLength = strlen(input);
     printDebug("inputLength = %d\n", inputLength);
     printDebug("Read ");
-#ifdef MUSH_DEBUG
     for (size_t ii = 0; ii < inputLength; ii++) {
         printDebug("0x%x ", input[ii]);
     }
 #endif // MUSH_DEBUG
     printDebug("\n");
-    if ((inputLength > 0) && (input[inputLength - 1] == '\n')) {
-      input[inputLength - 1] = '\0';
-    }
-    
-    bufferIndex ^= 1;
     
     // We need to check for exit outside of processing it as a built-in.  This
     // is because, if the system gets into a bad state, we can fail to load
