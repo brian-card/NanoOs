@@ -1130,6 +1130,29 @@ const ConsoleCommandHandler consoleCommandHandlers[] = {
   consoleGetUartPortCommandHandler,     // CONSOLE_GET_UART_PORT
 };
 
+/// @fn static bool consoleHoldsInput(
+///   ConsoleState *consoleState, ProcessMessage *message)
+///
+/// @brief Determine whether a message is a forwarding port's input that the
+/// console is holding until its bytes have been read.
+///
+/// @param consoleState A pointer to the ConsoleState structure maintained by
+///   the runConsole process.
+/// @param message A pointer to the ProcessMessage to look for.
+///
+/// @return Returns true if a port holds the message, false otherwise.
+static bool consoleHoldsInput(
+  ConsoleState *consoleState, ProcessMessage *message
+) {
+  for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
+    if (consoleState->consolePorts[ii].pendingInput == message) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 /// @fn void handleConsoleMessages(ConsoleState *consoleState, bool block,
 ///   const struct timespec *deadline)
 ///
@@ -1173,7 +1196,9 @@ void handleConsoleMessages(ConsoleState *consoleState, bool block,
 
     consoleCommandHandlers[messageType](consoleState, message);
 
-    if (processMessageDone(message) == true) {
+    if ((processMessageDone(message) == true)
+      || consoleHoldsInput(consoleState, message)
+    ) {
       // This is the usual case, so list it first.
       firstMessage = NULL;
     } else {
