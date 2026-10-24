@@ -39,6 +39,7 @@ static ConsolePort* inputFixture(ProcessId forwardingPid) {
     = &inputState.consolePorts[TEST_FORWARDING_PORT_INDEX];
   consolePort->consoleBuffer = &inputState.consoleBuffers[0];
   consolePort->inputState = CONSOLE_INPUT_STATE_NORMAL;
+  consolePort->modes = CONSOLE_MODE_DEFAULT;
   consolePort->forwardingPid = forwardingPid;
   consolePort->readByte = consoleReadForwardedByte;
   return consolePort;
@@ -374,7 +375,7 @@ static ConsolePort* forwardFixture(void) {
 
   ConsolePort *consolePort = inputFixture(driverPid);
   consolePort->consolePrintString = consoleForwardString;
-  consolePort->echo = true;
+  consolePort->modes = CONSOLE_MODE_DEFAULT;
   return consolePort;
 }
 
@@ -412,7 +413,7 @@ NANO_OS_KERNEL_TEST(console_forward, echo_goes_to_the_driver) {
   NANO_OS_ASSERT_STR_EQ("\n", forwardedText);
 
   consoleEchoInput(consolePort, CONSOLE_ECHO_NONE, 'b');
-  consolePort->echo = false;
+  consolePort->modes = CONSOLE_MODE_DEFAULT & ~CONSOLE_MODE_ECHO;
   consoleEchoInput(consolePort, CONSOLE_ECHO_CHAR, 'c');
   NANO_OS_ASSERT_EQ_INT(3, numForwarded);
 }
@@ -562,10 +563,15 @@ static void readerFixture(ConsolePort *consolePort) {
 
   consolePort->inputOwner = getRunningPid();
   consolePort->waitingForInput = true;
-  consolePort->echo = false;
+  consolePort->modes = CONSOLE_MODE_DEFAULT & ~CONSOLE_MODE_ECHO;
   memset(deliveredLines, 0, sizeof(deliveredLines));
   numDeliveredLines = 0;
 }
+
+/// @var deliveredRaw
+///
+/// @brief Whether each line serviceAndRead read was marked as raw input.
+static bool deliveredRaw[4];
 
 /// @fn static bool serviceAndRead(ConsolePort *consolePort)
 ///
@@ -585,6 +591,7 @@ static bool serviceAndRead(ConsolePort *consolePort) {
     ) {
       ConsoleBuffer *consoleBuffer
         = (ConsoleBuffer*) processMessageData(processMessage);
+      deliveredRaw[numDeliveredLines] = consoleBuffer->rawInput;
       strcpy(deliveredLines[numDeliveredLines++], consoleBuffer->buffer);
     }
     processMessageRelease(processMessage);
@@ -691,4 +698,158 @@ NANO_OS_KERNEL_TEST(console_escape, forwarded_lone_escape_matches_uart) {
 
   NANO_OS_ASSERT_EQ_INT(1, numDeliveredLines);
   NANO_OS_ASSERT_STR_EQ("\x1b", deliveredLines[0]);
+}
+
+/// @fn static ConsolePort* rawFixture(const char *bytes)
+///
+/// @brief Make this process the reader of a UART-like port in raw mode that
+/// has all of a string's bytes waiting to be read.
+///
+/// @param bytes The bytes waiting on the port.
+///
+/// @return Returns a pointer to the port.
+static ConsolePort* rawFixture(const char *bytes) {
+  ConsolePort *consolePort = inputFixture(PROCESS_ID_NOT_SET);
+  consolePort->readByte = uartLikeReadByte;
+  readerFixture(consolePort);
+  consolePort->modes = 0;
+  uartLikeBytes = bytes;
+  uartLikeAvailable = strlen(bytes);
+  uartLikeRead = 0;
+  return consolePort;
+}
+
+NANO_OS_KERNEL_TEST(console_raw, each_key_is_delivered_by_itself) {
+  ConsolePort *consolePort = rawFixture("ab\r");
+
+  serviceAndRead(consolePort);
+  NANO_OS_ASSERT_EQ_INT(1, numDeliveredLines);
+  NANO_OS_ASSERT_STR_EQ("a", deliveredLines[0]);
+  NANO_OS_ASSERT_TRUE(deliveredRaw[0]);
+  NANO_OS_ASSERT_EQ_INT(1, (long long) uartLikeRead);
+
+  serviceAndRead(consolePort);
+  serviceAndRead(consolePort);
+  NANO_OS_ASSERT_EQ_INT(3, numDeliveredLines);
+  NANO_OS_ASSERT_STR_EQ("b", deliveredLines[1]);
+  NANO_OS_ASSERT_STR_EQ("\r", deliveredLines[2]);
+}
+
+NANO_OS_KERNEL_TEST(console_raw, typed_ahead_keys_wait_for_the_reader) {
+  ConsolePort *consolePort = rawFixture("xy");
+  consolePort->waitingForInput = false;
+
+  consoleServicePort(&inputState, consolePort);
+  NANO_OS_ASSERT_TRUE(consolePort->consoleBuffer->holdsCompletedLine);
+  NANO_OS_ASSERT_EQ_INT(1, (long long) uartLikeRead);
+
+  consolePort->waitingForInput = true;
+  serviceAndRead(consolePort);
+  serviceAndRead(consolePort);
+  NANO_OS_ASSERT_EQ_INT(2, numDeliveredLines);
+  NANO_OS_ASSERT_STR_EQ("x", deliveredLines[0]);
+  NANO_OS_ASSERT_STR_EQ("y", deliveredLines[1]);
+}
+
+NANO_OS_KERNEL_TEST(console_raw, canonical_lines_are_not_marked_raw) {
+  deliverByteByByte("ok\r");
+
+  NANO_OS_ASSERT_EQ_INT(1, numDeliveredLines);
+  NANO_OS_ASSERT_STR_EQ("ok\n", deliveredLines[0]);
+  NANO_OS_ASSERT_FALSE(deliveredRaw[0]);
+}
+
+NANO_OS_KERNEL_TEST(console_raw, releasing_the_port_restores_its_modes) {
+  ConsolePort *consolePort = rawFixture("");
+  consolePort->shell = consolePid;
+
+  releasePid(getRunningPid());
+
+  NANO_OS_ASSERT_EQ_INT(CONSOLE_MODE_DEFAULT, consolePort->modes);
+}
+
+NANO_OS_KERNEL_TEST(console_raw, keys_wait_while_the_buffer_is_lent_out) {
+  ConsolePort *consolePort = rawFixture("x");
+  consolePort->consoleBuffer->owner = getRunningPid();
+
+  ConsoleBuffer *lent = getAvailableConsoleBuffer(&inputState, getRunningPid());
+  NANO_OS_ASSERT_TRUE(lent == consolePort->consoleBuffer);
+  strcpy(lent->buffer, "echo");
+  consoleServicePort(&inputState, consolePort);
+  NANO_OS_ASSERT_EQ_INT(0, (long long) uartLikeRead);
+  NANO_OS_ASSERT_STR_EQ("echo", lent->buffer);
+
+  releaseConsoleBuffer(&inputState, lent);
+  serviceAndRead(consolePort);
+  NANO_OS_ASSERT_EQ_INT(1, numDeliveredLines);
+  NANO_OS_ASSERT_STR_EQ("x", deliveredLines[0]);
+}
+
+/// @fn static void setModes(uint8_t modes)
+///
+/// @brief Hand the console's CONSOLE_SET_MODES handler a message from this
+/// process.
+///
+/// @param modes The CONSOLE_MODE_* flags to set.
+///
+/// @return This function returns no value.
+static void setModes(uint8_t modes) {
+  static ConsoleModesArgs modesArgs;
+  modesArgs.modes = modes;
+  ProcessMessage *sent = getAvailableMessage();
+  if (sent == NULL) {
+    return;
+  }
+  processMessageInit(sent, CONSOLE_COMMAND_SIGNATURE | CONSOLE_SET_MODES,
+    &modesArgs, sizeof(modesArgs), /* waiting= */ false);
+  if (processMessageQueuePush(getRunningProcess(), sent) != processSuccess) {
+    processMessageRelease(sent);
+    return;
+  }
+  consoleSetModesCommandHandler(&inputState, processMessageQueuePop());
+}
+
+NANO_OS_KERNEL_TEST(console_raw, a_held_key_starts_the_next_canonical_line) {
+  ConsolePort *consolePort = rawFixture("echo two\r");
+  consolePort->outputOwner = getRunningPid();
+  consolePort->waitingForInput = false;
+  consoleServicePort(&inputState, consolePort);
+  NANO_OS_ASSERT_EQ_INT(1, (long long) uartLikeRead);
+
+  setModes(CONSOLE_MODE_DEFAULT & ~CONSOLE_MODE_ECHO);
+  consolePort->waitingForInput = true;
+  serviceAndRead(consolePort);
+  NANO_OS_ASSERT_EQ_INT(1, numDeliveredLines);
+  NANO_OS_ASSERT_STR_EQ("echo two\n", deliveredLines[0]);
+  NANO_OS_ASSERT_FALSE(deliveredRaw[0]);
+}
+
+NANO_OS_KERNEL_TEST(console_raw, a_held_line_feed_after_return_is_dropped) {
+  ConsolePort *consolePort = rawFixture("\r\necho two\r");
+  consolePort->outputOwner = getRunningPid();
+  serviceAndRead(consolePort);
+  NANO_OS_ASSERT_STR_EQ("\r", deliveredLines[0]);
+  consolePort->waitingForInput = false;
+  consoleServicePort(&inputState, consolePort);
+  NANO_OS_ASSERT_EQ_INT(2, (long long) uartLikeRead);
+
+  setModes(CONSOLE_MODE_DEFAULT & ~CONSOLE_MODE_ECHO);
+  consolePort->waitingForInput = true;
+  serviceAndRead(consolePort);
+  NANO_OS_ASSERT_EQ_INT(2, numDeliveredLines);
+  NANO_OS_ASSERT_STR_EQ("echo two\n", deliveredLines[1]);
+}
+
+NANO_OS_KERNEL_TEST(console_raw, a_partial_line_is_delivered_on_going_raw) {
+  ConsolePort *consolePort = rawFixture("ec");
+  consolePort->modes = CONSOLE_MODE_DEFAULT & ~CONSOLE_MODE_ECHO;
+  consolePort->outputOwner = getRunningPid();
+  serviceAndRead(consolePort);
+  NANO_OS_ASSERT_EQ_INT(0, numDeliveredLines);
+
+  setModes(0);
+  serviceAndRead(consolePort);
+  NANO_OS_ASSERT_EQ_INT(1, numDeliveredLines);
+  NANO_OS_ASSERT_STR_EQ("ec", deliveredLines[0]);
+  NANO_OS_ASSERT_TRUE(deliveredRaw[0]);
 }

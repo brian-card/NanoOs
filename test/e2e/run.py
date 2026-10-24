@@ -23,7 +23,8 @@ import time
 
 import pexpect
 
-from fakevdp import FakeVdp
+from fakevdp import (FakeVdp, KEYCODE_DELETE, KEYCODE_DOWN, KEYCODE_END,
+                     KEYCODE_HOME, KEYCODE_LEFT, KEYCODE_RIGHT, KEYCODE_UP)
 
 E2E_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(os.path.dirname(E2E_DIR))
@@ -390,24 +391,138 @@ def test_vdp_driver_restarts_after_losing_the_vdp_mid_output(s):
     assert s.sh("cat /etc/catfile") == CATFILE_CONTENTS
 
 
-def test_arrow_key_arriving_in_pieces_is_one_key(s):
+UP, DOWN, RIGHT, LEFT = "\x1b[A", "\x1b[B", "\x1b[C", "\x1b[D"
+HOME, END, DELETE = "\x1b[H", "\x1b[F", "\x1b[3~"
+
+
+def edit(s, keys, output):
+    """Type keys at the shell prompt and wait for the command's output.
+
+    @param s The Session, at a prompt.
+    @param keys The keys to type, ending with Enter.
+    @param output The output the edited command line must print.
+    """
+    s.child.send(keys)
+    s.child.expect(r"\r\n" + re.escape(output) + r"\r*\n" + PROMPT, timeout=10)
+
+
+def test_line_editor_left_and_right_move_the_cursor(s):
+    s.login()
+    edit(s, "echo ac" + LEFT + "b\r", "abc")
+    edit(s, "echo ad" + LEFT + LEFT + RIGHT + "bc\r", "abcd")
+    edit(s, "echo a" + RIGHT + RIGHT + "b\r", "ab")
+
+
+def test_line_editor_home_and_end_jump_to_the_ends(s):
+    s.login()
+    edit(s, "cho a" + HOME + "e\r", "a")
+    edit(s, "echo b" + HOME + END + "c\r", "bc")
+    for home, end in (("\x1bOH", "\x1bOF"), ("\x1b[1~", "\x1b[4~"),
+                      ("\x1b[7~", "\x1b[8~")):
+        edit(s, "cho d" + home + "e" + end + "e\r", "de")
+
+
+def test_line_editor_delete_and_backspace_remove_mid_line(s):
+    s.login()
+    edit(s, "echo abxc" + LEFT + LEFT + DELETE + "\r", "abc")
+    edit(s, "echo abxc" + LEFT + "\x7f\r", "abc")
+    edit(s, "echo abxc" + LEFT + "\b\r", "abc")
+    edit(s, "echo ab" + DELETE + "c\r", "abc")
+    edit(s, "xecho abc" + HOME + "\x7f" + DELETE + "\r", "abc")
+
+
+def test_line_editor_up_and_down_recall_the_previous_line(s):
+    # A command that runs replaces the shell, so these use built-ins.
+    s.login()
+    edit(s, UP + "pwd\r", "/root")
+    edit(s, UP + "\r", "/root")
+    assert s.sh("cd /etc") == ""
+    edit(s, UP + "\x7f" * 4 + "\x7f\x7f\x7fpwd\r", "/etc")
+    edit(s, "pw" + UP + DOWN + "d\r", "/etc")
+    edit(s, "x" + UP + UP + DOWN + DOWN + "\x7fpwd\r", "/etc")
+    edit(s, UP + HOME + DELETE + DELETE + DELETE + "cd /\rpwd\r", "/")
+
+
+def test_line_editor_ctrl_c_abandons_the_line(s):
+    s.login()
+    edit(s, "pwd\r", "/root")
+    s.child.send("echo dropped" + UP + "\x03")
+    s.child.expect_exact("^C", timeout=10)
+    s.child.expect(PROMPT, timeout=10)
+    assert s.child.before.replace("\r", "") == "\n", repr(s.child.before)
+    edit(s, UP + "\r", "/root")
+
+
+def test_line_editor_takes_an_arrow_key_arriving_in_pieces(s):
     s.login()
     s.child.delaybeforesend = None
-    s.child.send("\x1b")
-    time.sleep(0.01)
-    s.child.send("[A")
-    s.child.expect_exact("\x1b[A: command not found", timeout=10)
-    s.child.expect(PROMPT, timeout=10)
-    assert "\x1b: command not found" not in s.child.before
-    assert s.sh("echo after-arrow") == "after-arrow"
+    s.child.send("echo ac\x1b")
+    time.sleep(0.05)
+    s.child.send("[")
+    time.sleep(0.05)
+    s.child.send("D")
+    edit(s, "b\r", "abc")
 
 
-def test_lone_escape_is_delivered_after_the_escape_delay(s):
+def test_line_editor_drops_a_lone_escape(s):
     s.login()
     s.child.send("\x1b")
-    s.child.expect_exact("\x1b: command not found", timeout=5)
+    time.sleep(0.1)
+    edit(s, "echo after-escape\r", "after-escape")
+
+
+def test_line_editor_keeps_lines_typed_ahead(s):
+    s.login()
+    s.child.delaybeforesend = None
+    s.child.send("echo one\recho two\r")
+    s.child.expect(r"\none\r*\n" + PROMPT, timeout=10)
+    s.child.expect(r"\ntwo\r*\n" + PROMPT, timeout=10)
+    assert s.sh("echo after") == "after"
+
+
+def test_line_editor_leaves_other_programs_input_cooked(s):
+    s.login()
+    s.child.sendline("cat")
+    s.child.expect(r"cat\r*\n", timeout=10)
+    s.child.send("abx\x7fc\r")
+    s.child.expect(r"\x08c\r*\nabc\r*\n", timeout=10)
+    s.child.send("\x03")
     s.child.expect(PROMPT, timeout=10)
-    assert s.sh("echo after-escape") == "after-escape"
+    edit(s, "echo ab" + LEFT + "x\r", "axb")
+
+
+def test_vdp_line_editor_redraws_the_line(s):
+    vdp = s.restart_with_vdp()
+    vdp_login(vdp)
+    vdp.type("a-much-longer-line\r")
+    vdp.expect(r"\r\na-much-longer-line: command not found\r\n" + PROMPT)
+    vdp.clear()
+    vdp.type("echo ac")
+    vdp.press(KEYCODE_LEFT)
+    vdp.type("b")
+    vdp.press(KEYCODE_HOME)
+    vdp.press(KEYCODE_DELETE)
+    vdp.type("X")
+    vdp.press(KEYCODE_END)
+    vdp.type("d")
+    vdp.expect(r"^Xcho abcd$")
+    vdp.press(KEYCODE_UP)
+    vdp.expect(r"^a-much-longer-line$")
+    vdp.press(KEYCODE_DOWN)
+    vdp.expect(r"^Xcho abcd {9}$")
+    vdp.press(KEYCODE_LEFT)
+    vdp.press(KEYCODE_LEFT)
+    vdp.type("\b")
+    vdp.press(KEYCODE_RIGHT)
+    vdp.type("\r")
+    vdp.expect(r"^Xcho acd {10}\r\nXcho: command not found\r\n" + PROMPT)
+    vdp.clear()
+    vdp.press(KEYCODE_UP)
+    vdp.press(KEYCODE_HOME)
+    vdp.press(KEYCODE_DELETE)
+    vdp.type("e\r")
+    vdp.expect(r"^echo acd\r\nacd\r\n" + PROMPT)
+    assert vdp.errors == [], f"unexpected VDU commands: {vdp.errors}"
 
 
 def test_login_rejects_bad_password(s):

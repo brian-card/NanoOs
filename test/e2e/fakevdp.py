@@ -45,8 +45,15 @@ KEYCODE_SPACE = 1
 KEYCODE_0 = 2
 KEYCODE_a = 22
 KEYCODE_A = 48
+KEYCODE_DELETE = 130
 KEYCODE_BACKSPACE = 132
+KEYCODE_HOME = 133
+KEYCODE_END = 135
 KEYCODE_RETURN = 143
+KEYCODE_UP = 150
+KEYCODE_DOWN = 152
+KEYCODE_LEFT = 154
+KEYCODE_RIGHT = 156
 KEYBOARD_LAYOUT = 0x81
 LAYOUT_UK = 0
 LAYOUT_US = 1
@@ -95,6 +102,7 @@ class FakeVdp:
         self.answered = None   # time of the first poll answered
         self.events = []       # (time, kind, detail) once listening
         self.screen = ""       # text drawn since the last clear
+        self.cursor = 0        # index in screen of the next character drawn
         self.dropped = 0       # bytes ignored before listening
         self.layout = LAYOUT_UK
         self.listening = not answer
@@ -135,6 +143,7 @@ class FakeVdp:
                     self._event("cls")
                     with self.lock:
                         self.screen = ""
+                        self.cursor = 0
                         self.lock.notify_all()
                 else:
                     self._text(byte)
@@ -194,9 +203,15 @@ class FakeVdp:
     def _text(self, byte):
         with self.lock:
             if byte == 8:
-                self.screen = self.screen[:-1]
-            else:
+                if self.cursor > 0 and self.screen[self.cursor - 1] != "\n":
+                    self.cursor -= 1
+            elif byte in (10, 13):
                 self.screen += chr(byte)
+                self.cursor = len(self.screen)
+            else:
+                self.screen = (self.screen[:self.cursor] + chr(byte)
+                               + self.screen[self.cursor + 1:])
+                self.cursor += 1
             self.events.append((time.time(), "text", byte))
             self.lock.notify_all()
 
@@ -251,6 +266,17 @@ class FakeVdp:
         conn.sendall(bytes([0x81, 0x04, ascii_value, 0, code, 1,
                             0x81, 0x04, ascii_value, 0, code, 0]))
 
+    def press(self, code):
+        """Press and release a key that has no ASCII value.
+
+        @param code The FabGL keycode of the key.
+        """
+        with self.lock:
+            conn = self.conn
+        conn.sendall(bytes([0x81, 0x04, 0, 0, code, 1,
+                            0x81, 0x04, 0, 0, code, 0]))
+        time.sleep(0.01)
+
     def type(self, text):
         """Type a string, one key at a time.
 
@@ -271,6 +297,7 @@ class FakeVdp:
         """Forget the text drawn so far."""
         with self.lock:
             self.screen = ""
+            self.cursor = 0
 
     def close(self):
         """Stop listening and drop the connection."""

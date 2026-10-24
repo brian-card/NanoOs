@@ -288,6 +288,28 @@ def test_cd_and_pwd_track_the_working_directory(e):
     assert e.sh("pwd") == "/root"
 
 
+def edit(e, keys, output):
+    """Type keys at the shell prompt and check the edited command's output.
+
+    @param e The Emulator, at a prompt.
+    @param keys The keys to type, ending with Enter.
+    @param output The output the edited command line must print.
+    """
+    e.send(keys)
+    e.child.expect(PROMPT, timeout=20)
+    text = LOG_LINE.sub("", e.child.before.replace("\r", ""))
+    assert text.partition("\n")[2].strip("\n") == output, repr(text)
+
+
+def test_line_editor_moves_edits_and_recalls(e):
+    left, up, delete = "\x1b[D", "\x1b[A", "\x1b[3~"
+    edit(e, "echo ac" + left + "b\r", "abc")
+    edit(e, "xecho abxc" + left + left + delete + "\x1b[H" + delete
+         + "\x1b[F" + "d\r", "abcd")
+    assert e.sh("pwd") == "/root"
+    edit(e, up + "\r", "/root")
+
+
 def test_grep_finds_lines_in_a_file_and_a_pipe(e):
     assert e.sh("grep CONSOLE /etc/config.sys") == \
         "CONSOLE=UART1 /usr/bin/getty\nCONSOLE=/usr/lib/vdp.drv /usr/bin/getty"
@@ -481,6 +503,7 @@ TESTS = [test_boots_to_a_login_prompt,
          test_helloworld_prints_its_greeting,
          test_help_describes_every_command,
          test_cd_and_pwd_track_the_working_directory,
+         test_line_editor_moves_edits_and_recalls,
          test_grep_finds_lines_in_a_file_and_a_pipe,
          test_cat_reports_a_missing_file,
          test_mkdir_touch_mv_rm_and_rmdir_manage_files,

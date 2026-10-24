@@ -32,6 +32,7 @@ static void testConsoleInit(TestConsole *testConsole) {
   memset(testConsole, 0, sizeof(*testConsole));
   testConsole->port.consoleBuffer = &testConsole->buffer;
   testConsole->port.inputState = CONSOLE_INPUT_STATE_NORMAL;
+  testConsole->port.modes = CONSOLE_MODE_DEFAULT;
 }
 
 /// @fn static const char* testConsoleLine(TestConsole *testConsole)
@@ -218,4 +219,48 @@ NANO_OS_TEST(unit_console, other_control_bytes_are_unhandled) {
     consoleProcessByte(&tc.port, 0x01, &echo));
   NANO_OS_ASSERT_EQ_INT(CONSOLE_ECHO_NONE, echo);
   NANO_OS_ASSERT_EQ_INT(0, tc.buffer.consoleBufferIndex);
+}
+
+NANO_OS_TEST(unit_console, raw_bytes_complete_at_once_without_echo) {
+  TestConsole tc;
+  testConsoleInit(&tc);
+  tc.port.modes = 0;
+  ConsoleEcho echo = CONSOLE_ECHO_CHAR;
+
+  NANO_OS_ASSERT_EQ_INT(CONSOLE_INPUT_LINE,
+    consoleProcessByte(&tc.port, 'l', &echo));
+  NANO_OS_ASSERT_EQ_INT(CONSOLE_ECHO_NONE, echo);
+  NANO_OS_ASSERT_STR_EQ("l", testConsoleLine(&tc));
+
+  tc.buffer.consoleBufferIndex = 0;
+  NANO_OS_ASSERT_EQ_INT(CONSOLE_INPUT_LINE,
+    consoleProcessByte(&tc.port, 0x1b, &echo));
+  NANO_OS_ASSERT_EQ_INT(CONSOLE_INPUT_LINE,
+    consoleProcessByte(&tc.port, '\r', &echo));
+  NANO_OS_ASSERT_EQ_INT(CONSOLE_INPUT_LINE,
+    consoleProcessByte(&tc.port, 0x7f, &echo));
+  NANO_OS_ASSERT_STR_EQ("\x1b\r\x7f", testConsoleLine(&tc));
+  NANO_OS_ASSERT_EQ_INT(CONSOLE_ECHO_NONE, echo);
+  NANO_OS_ASSERT_EQ_INT(CONSOLE_INPUT_STATE_NORMAL, tc.port.inputState);
+}
+
+NANO_OS_TEST(unit_console, ctrl_c_interrupts_only_with_signals_on) {
+  TestConsole tc;
+  testConsoleInit(&tc);
+  ConsoleEcho echo = CONSOLE_ECHO_NONE;
+
+  tc.port.modes = CONSOLE_MODE_SIGNALS;
+  NANO_OS_ASSERT_EQ_INT(CONSOLE_INPUT_INTERRUPT,
+    consoleProcessByte(&tc.port, 0x03, &echo));
+  NANO_OS_ASSERT_STR_EQ("", testConsoleLine(&tc));
+
+  tc.port.modes = 0;
+  NANO_OS_ASSERT_EQ_INT(CONSOLE_INPUT_LINE,
+    consoleProcessByte(&tc.port, 0x03, &echo));
+  NANO_OS_ASSERT_STR_EQ("\x03", testConsoleLine(&tc));
+
+  tc.buffer.consoleBufferIndex = 0;
+  tc.port.modes = CONSOLE_MODE_ECHO | CONSOLE_MODE_CANONICAL;
+  NANO_OS_ASSERT_TRUE(consoleProcessByte(&tc.port, 0x03, &echo)
+    != CONSOLE_INPUT_INTERRUPT);
 }
