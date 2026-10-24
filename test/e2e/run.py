@@ -267,12 +267,51 @@ def assert_vdp_set_up_on_answer(vdp):
 
     @param vdp The FakeVdp, after it has drawn the login prompt.
     """
-    setup = [(kind, detail) for _t, kind, detail in vdp.events[:5]]
+    setup = [(kind, detail) for _t, kind, detail in vdp.events[:6]]
     assert setup == [("mode", 0), ("layout", 1), ("cls", None),
-                     ("cursor", 1), ("text", setup[4][1])], \
-        f"the screen wasn't set up first: {vdp.events[:5]}"
+                     ("cursor", 1), ("pointer", VDP_POINTER_ID),
+                     ("text", setup[5][1])], \
+        f"the screen wasn't set up first: {vdp.events[:6]}"
     delay = vdp.events[0][0] - vdp.answered
     assert delay < 1.0, f"the screen was set up {delay:.1f} s after the answer"
+
+
+VDP_POINTER_ID = 0xF000
+VDP_POINTER = [
+    "B...........",
+    "BB..........",
+    "BWB.........",
+    "BWWB........",
+    "BWWWB.......",
+    "BWWWWB......",
+    "BWWWWWB.....",
+    "BWWWWWWB....",
+    "BWWWWWWWB...",
+    "BWWWWWWWWB..",
+    "BWWWWWBBBB..",
+    "BWWBWWB.....",
+    "BWB.BWWB....",
+    "BB..BWWB....",
+    "B....BWWB...",
+    ".....BWWB...",
+    "......BWB...",
+    ".......B....",
+]
+
+
+def assert_vdp_pointer(vdp):
+    """Check that a FakeVdp shows the driver's mouse pointer.
+
+    @param vdp The FakeVdp, after the driver has set up its screen.
+    """
+    assert vdp.mouse_enabled, "the mouse wasn't enabled"
+    assert vdp.mouse_cursor == VDP_POINTER_ID, \
+        f"the pointer is cursor {vdp.mouse_cursor}"
+    image = vdp.pointer_image()
+    assert image == VDP_POINTER, \
+        "the pointer isn't the driver's cursor:\n" + "\n".join(image or [])
+    _bitmap, hot_x, hot_y = vdp.cursors[VDP_POINTER_ID]
+    assert (hot_x, hot_y) == (0, 0), f"the hotspot is at {hot_x},{hot_y}"
 
 
 def vdp_login(vdp):
@@ -291,6 +330,7 @@ def test_vdp_console_logs_in_and_runs_a_command(s):
     vdp = s.restart_with_vdp()
     vdp_login(vdp)
     assert_vdp_set_up_on_answer(vdp)
+    assert_vdp_pointer(vdp)
     vdp.clear()
     vdp.type("echo vdp-oops")
     vdp.type("\b" * 4)
@@ -349,6 +389,10 @@ def test_vdp_driver_is_restarted_after_losing_the_vdp(s):
         time.sleep(0.1)
     vdp.type("echo after-restart\r")
     vdp.expect(r"\r\nafter-restart\r\n" + PROMPT)
+    pointers = sum(kind == "pointer" for _t, kind, _d in vdp.events)
+    assert pointers == 2, f"the pointer was set {pointers} times, not 2"
+    assert_vdp_pointer(vdp)
+    assert vdp.errors == [], f"unexpected VDU commands: {vdp.errors}"
     s.login()
     assert s.sh("echo uart1-too") == "uart1-too"
 

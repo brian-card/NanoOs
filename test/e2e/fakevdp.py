@@ -55,6 +55,18 @@ KEYCODE_DOWN = 152
 KEYCODE_LEFT = 154
 KEYCODE_RIGHT = 156
 KEYBOARD_LAYOUT = 0x81
+MOUSE = 0x89
+BUFFERED = 0xA0
+BUFFERED_WRITE = 0
+BUFFERED_CLEAR = 2
+MOUSE_ENABLE = 0
+MOUSE_SET_CURSOR = 3
+SPRITES = 27
+SELECT_BITMAP = 0x20
+CREATE_BITMAP = 0x21
+MAKE_CURSOR = 0x40
+FORMAT_RGBA2222 = 1
+BITMAP_BASE_ID = 0xFA00
 LAYOUT_UK = 0
 LAYOUT_US = 1
 # What the VDP's default UK layout gives for the keys of a US keyboard whose
@@ -105,6 +117,13 @@ class FakeVdp:
         self.cursor = 0        # index in screen of the next character drawn
         self.dropped = 0       # bytes ignored before listening
         self.layout = LAYOUT_UK
+        # Like the real VDP's, these outlive a connection.
+        self.buffers = {}      # buffer ID -> list of streams written to it
+        self.bitmaps = {}      # bitmap ID -> (width, height, RGBA2222 bytes)
+        self.bitmap = BITMAP_BASE_ID
+        self.cursors = {}      # cursor ID -> (bitmap, hotspot x, hotspot y)
+        self.mouse_enabled = False
+        self.mouse_cursor = None
         self.listening = not answer
         self.errors = []
         if os.path.exists(path):
@@ -166,6 +185,10 @@ class FakeVdp:
             command = next(stream)
             if command == GENERAL_POLL:
                 self._poll(next(stream))
+            elif command == BUFFERED:
+                self._buffered(stream)
+            elif command == MOUSE:
+                self._mouse(stream)
             elif command == KEYBOARD_LAYOUT:
                 layout = next(stream)
                 if self.listening:
@@ -178,8 +201,107 @@ class FakeVdp:
             mode = next(stream)
             if self.listening:
                 self._event("cursor", mode)
+        elif first == SPRITES:
+            self._sprites(stream)
         else:
             self.errors.append(f"VDU 23,{first}")
+
+    def _word(self, stream):
+        return next(stream) | (next(stream) << 8)
+
+    def _buffered(self, stream):
+        buffer_id = self._word(stream)
+        command = next(stream)
+        if command == BUFFERED_WRITE:
+            length = self._word(stream)
+            data = bytes(next(stream) for _ in range(length))
+            with self.lock:
+                self.buffers.setdefault(buffer_id, []).append(data)
+        elif command == BUFFERED_CLEAR:
+            with self.lock:
+                self.buffers.pop(buffer_id, None)
+        else:
+            self.errors.append(f"VDU 23,0,&A0,{buffer_id};{command}")
+
+    def _sprites(self, stream):
+        command = next(stream)
+        if command == SELECT_BITMAP:
+            self.bitmap = self._word(stream)
+        elif command == CREATE_BITMAP:
+            width = self._word(stream)
+            height = self._word(stream)
+            fmt = next(stream)
+            streams = self.buffers.get(self.bitmap, [])
+            if fmt != FORMAT_RGBA2222:
+                self.errors.append(f"bitmap {self.bitmap} format {fmt}")
+            elif len(streams) != 1:
+                self.errors.append(
+                    f"bitmap {self.bitmap} from {len(streams)} streams")
+            elif len(streams[0]) != width * height:
+                self.errors.append(
+                    f"bitmap {self.bitmap} is {len(streams[0])} bytes, "
+                    f"not {width}x{height}")
+            else:
+                with self.lock:
+                    self.bitmaps[self.bitmap] = (width, height, streams[0])
+        elif command == MAKE_CURSOR:
+            hot_x = next(stream)
+            hot_y = next(stream)
+            if self.bitmap not in self.bitmaps:
+                self.errors.append(f"cursor from missing bitmap {self.bitmap}")
+            else:
+                with self.lock:
+                    self.cursors[self.bitmap] = (
+                        self.bitmaps[self.bitmap], hot_x, hot_y)
+        else:
+            self.errors.append(f"VDU 23,27,{command:#x}")
+
+    def _mouse(self, stream):
+        command = next(stream)
+        if command == MOUSE_ENABLE:
+            with self.lock:
+                self.mouse_enabled = True
+        elif command == MOUSE_SET_CURSOR:
+            cursor = self._word(stream)
+            if not self.mouse_enabled:
+                self.errors.append(f"cursor {cursor} set with the mouse off")
+            elif cursor > 255 and cursor not in self.cursors:
+                self.errors.append(f"cursor {cursor} doesn't exist")
+            else:
+                with self.lock:
+                    self.mouse_cursor = cursor
+                self._event("pointer", cursor)
+        else:
+            self.errors.append(f"VDU 23,0,&89,{command}")
+
+    def pointer_image(self):
+        """Return the mouse pointer as text, one string per row.
+
+        @return '.' for a transparent pixel, 'B' for opaque black, 'W' for
+          opaque white, and '?' for anything else, or None if no custom
+          pointer is shown.
+        """
+        with self.lock:
+            if self.mouse_cursor not in self.cursors:
+                return None
+            (width, height, data), _hx, _hy = self.cursors[self.mouse_cursor]
+        rows = []
+        for y in range(height):
+            row = ""
+            for pixel in data[y * width:(y + 1) * width]:
+                # The VDP's RGBA2222 packs red in the low bits, alpha in the high.
+                rgb = (pixel & 3, (pixel >> 2) & 3, (pixel >> 4) & 3)
+                alpha = pixel >> 6
+                if alpha == 0:
+                    row += "."
+                elif alpha == 3 and rgb == (0, 0, 0):
+                    row += "B"
+                elif alpha == 3 and rgb == (3, 3, 3):
+                    row += "W"
+                else:
+                    row += "?"
+            rows.append(row)
+        return rows
 
     def _poll(self, cookie):
         now = time.time()
