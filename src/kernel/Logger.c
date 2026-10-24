@@ -180,6 +180,18 @@ static bool _sendingToLogger = false;
 /// messages.
 static bool _loggerRunning = false;
 
+/// @var _loggerHasStarted
+///
+/// @brief Whether the logger process has been started before.
+static bool _loggerHasStarted = false;
+
+/// @var loggerStaticLogsStale
+///
+/// @brief Whether the static log area has already been replayed by a logger
+/// process.  The area isn't reserved after boot, so a logger that starts again
+/// would read whatever has since been allocated there.
+bool loggerStaticLogsStale = false;
+
 /// @var _pendingLogMask
 ///
 /// @brief Bitmask of the logEntries/logMessages slots holding messages that
@@ -240,8 +252,12 @@ void logDroppedReentrantLog(int lineNumber, const char *fileName) {
 void loggerSetRunning(bool running) {
   _loggerRunning = running;
   if (running == false) {
+    if (_loggerHasStarted) {
+      loggerStaticLogsStale = true;
+    }
     return;
   }
+  _loggerHasStarted = true;
 
   while (_pendingLogMask != 0) {
     uint8_t oldest = 0;
