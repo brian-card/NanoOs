@@ -112,14 +112,23 @@ typedef struct LogEntry {
   bool      inUse;
 } LogEntry;
 
+/// @def STATIC_LOGS_CANARY
+///
+/// @brief The value of a StaticLogs area's canary while nothing else has
+/// written over the area:  "NanoLogs" in memory order.
+#define STATIC_LOGS_CANARY ((uint64_t) 0x73676F4C6F6E614EULL)
+
 /// @struct StaticLogs
 ///
 /// @brief Metadata and log entries for messages logged before the logger
 /// process was running.
 ///
+/// @param canary STATIC_LOGS_CANARY, written before anything is logged.  Any
+///   other value means something else has written over the area.
 /// @param numEntries The number of entries that the logEntries array holds.
 /// @param logEntries Array of LogEntry objects that is numMessages in size.
 typedef struct StaticLogs {
+  uint64_t  canary;
   uintptr_t numEntries;
   LogEntry logEntries[16];
 } StaticLogs;
