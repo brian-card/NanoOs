@@ -43,9 +43,21 @@ int nanoOsTcgetattr(int fd, struct termios *termios) {
     return -1;
   }
   
+  int modes = getConsoleModes();
+  if (modes < 0) {
+    errno = ENOTTY;
+    return -1;
+  }
+
   memset(termios, 0, sizeof(struct termios));
-  if (getConsoleEcho()) {
+  if (modes & CONSOLE_MODE_ECHO) {
     termios->c_lflag |= ECHO;
+  }
+  if (modes & CONSOLE_MODE_CANONICAL) {
+    termios->c_lflag |= ICANON;
+  }
+  if (modes & CONSOLE_MODE_SIGNALS) {
+    termios->c_lflag |= ISIG;
   }
   
   return 0;
@@ -62,8 +74,20 @@ int nanoOsTcsetattr(int fd, int optionalActions,
   
   (void) optionalActions; // Ignored for now.
   
-  bool echo = ((termios->c_lflag & ECHO));
-  setConsoleEcho(echo);
+  uint8_t modes = 0;
+  if (termios->c_lflag & ECHO) {
+    modes |= CONSOLE_MODE_ECHO;
+  }
+  if (termios->c_lflag & ICANON) {
+    modes |= CONSOLE_MODE_CANONICAL;
+  }
+  if (termios->c_lflag & ISIG) {
+    modes |= CONSOLE_MODE_SIGNALS;
+  }
+  if (setConsoleModes(modes) != 0) {
+    errno = ENOTTY;
+    return -1;
+  }
   
   return 0;
 }
