@@ -526,10 +526,10 @@ void login(void) {
 
     fputs("login: ", stdout);
     fgets(username, USERNAME_BUFFER_SIZE, stdin);
-    setConsoleEcho(false);
+    setConsoleModes(CONSOLE_MODE_DEFAULT & ~CONSOLE_MODE_ECHO);
     fputs("Password: ", stdout);
     fgets(password, PASSWORD_BUFFER_SIZE, stdin);
-    setConsoleEcho(true);
+    setConsoleModes(CONSOLE_MODE_DEFAULT);
     fputs("\n\n", stdout);
 
     newlineAt = strchr(username, '\r');
