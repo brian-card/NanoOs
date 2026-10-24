@@ -905,3 +905,56 @@ NANO_OS_KERNEL_TEST(console_read, canonical_input_that_does_not_fit_is_dropped) 
   NANO_OS_ASSERT_TRUE(memcmp(chunk, "echo", 4) == 0);
   NANO_OS_ASSERT_NULL(getProcessStorage(FGETS_CONSOLE_BUFFER_KEY));
 }
+
+/// @fn static ProcessMessage* queueMessage(
+///   ConsoleCommand command, void *data, size_t size)
+///
+/// @brief Push a waiting console message onto this process's own queue, as if
+/// another process had sent it to the console.
+///
+/// @param command The ConsoleCommand of the message.
+/// @param data The message's data.
+/// @param size The size of the data.
+///
+/// @return Returns the message, which the caller must release.
+static ProcessMessage* queueMessage(
+  ConsoleCommand command, void *data, size_t size
+) {
+  ProcessMessage *message = getAvailableMessage();
+  if (message == NULL) {
+    return NULL;
+  }
+  processMessageInit(message, CONSOLE_COMMAND_SIGNATURE | command,
+    data, size, /* waiting= */ true);
+  if (processMessageQueuePush(getRunningProcess(), message) != processSuccess) {
+    processMessageRelease(message);
+    return NULL;
+  }
+  return message;
+}
+
+NANO_OS_KERNEL_TEST(console_input, held_input_is_not_handled_twice) {
+  ConsolePort *consolePort = inputFixture(getRunningPid());
+  inputArgs[0].portId = TEST_FORWARDING_PORT_INDEX;
+  inputArgs[0].numBytes = 2;
+  memcpy(inputArgs[0].bytes, "ab", 2);
+  static ConsoleGetNumPortsArgs numPortsArgs;
+  ProcessMessage *input = queueMessage(
+    CONSOLE_INPUT_READY, &inputArgs[0], sizeof(inputArgs[0]));
+  ProcessMessage *other = queueMessage(
+    CONSOLE_GET_NUM_PORTS, &numPortsArgs, sizeof(numPortsArgs));
+  NANO_OS_ASSERT_NOT_NULL(input);
+  NANO_OS_ASSERT_NOT_NULL(other);
+
+  handleConsoleMessages(&inputState, false, NULL);
+
+  NANO_OS_ASSERT_TRUE(processMessageDone(other));
+  NANO_OS_ASSERT_EQ_PTR(input, consolePort->pendingInput);
+  NANO_OS_ASSERT_FALSE(processMessageDone(input));
+  NANO_OS_ASSERT_NULL(processMessageQueuePop());
+  NANO_OS_ASSERT_EQ_INT('a', consolePort->readByte(consolePort));
+  NANO_OS_ASSERT_EQ_INT('b', consolePort->readByte(consolePort));
+  NANO_OS_ASSERT_TRUE(processMessageDone(input));
+  processMessageRelease(input);
+  processMessageRelease(other);
+}
