@@ -66,6 +66,9 @@ static void printUsage(FILE *stream) {
     "  command &          run a command in the background\n"
     "  command | command  send one command's output to the next one's input\n"
     "\n"
+    "Up and Down recall earlier commands, which are kept in\n"
+    "$HOME/.mush_history.\n"
+    "\n"
     "Built-in commands:\n"
     "  cd [directory]  change the working directory; cd alone goes to HOME\n"
     "                  and \"cd -\" goes back to the previous directory\n"
@@ -85,17 +88,14 @@ int main(int argc, char **argv) {
     return 0;
   }
   
-  char *buffer = (char*) malloc(3 * MUSH_COMMAND_LINE_LENGTH);
+  char *buffer = (char*) malloc(MUSH_COMMAND_LINE_LENGTH);
   LineEditorArgs lineEditorArgs = {
     .line = buffer,
-    .history = &buffer[MUSH_COMMAND_LINE_LENGTH],
-    .input = &buffer[2 * MUSH_COMMAND_LINE_LENGTH],
     .size = MUSH_COMMAND_LINE_LENGTH,
     .prompt = '$',
     .afterReturn = false,
     .returnValue = 0,
   };
-  *lineEditorArgs.history = '\0';
   
   intptr_t returnValue = 0;
   FsCommandArgs fsCommandArgs;

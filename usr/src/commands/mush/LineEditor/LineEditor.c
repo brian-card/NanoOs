@@ -28,8 +28,9 @@
 
 /// @file LineEditor.c
 ///
-/// @brief Command line editing for the MUSH shell:  cursor movement, history,
-/// and in-place insertion and deletion, with the console in raw mode.
+/// @brief Command line editing for the MUSH shell:  cursor movement, history
+/// kept in a file, and in-place insertion and deletion, with the console in
+/// raw mode.
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -44,6 +45,11 @@
 ///
 /// @brief ASCII <escape> character.
 #define ESCAPE 0x1b
+
+/// @def HISTORY_FILE
+///
+/// @brief The name of the history file, appended to HOME.
+#define HISTORY_FILE "/.mush_history"
 
 /// @def CTRL_C
 ///
@@ -71,13 +77,17 @@ typedef enum LineEditorKey {
 /// @param args The LineEditorArgs readLine was called with.
 /// @param length The number of characters in the line.
 /// @param cursor The index in the line of the character under the cursor.
-/// @param showingHistory Whether the line and history buffers have been
-///   swapped to show the previous command.
+/// @param historyPath The path of the history file, or NULL if there is none.
+/// @param historyStart The offset in the history file of the entry shown, or
+///   -1 if the line being typed is shown.
+/// @param historyEnd The offset in the history file just past the entry shown.
 typedef struct LineEditor {
   LineEditorArgs *args;
   int             length;
   int             cursor;
-  bool            showingHistory;
+  char           *historyPath;
+  long            historyStart;
+  long            historyEnd;
 } LineEditor;
 
 /// @fn static void lineEditorPut(const char *text, int length)
@@ -170,32 +180,193 @@ static void lineEditorDelete(LineEditor *editor) {
   lineEditorRedrawTail(editor, 1);
 }
 
-/// @fn static void lineEditorSwapHistory(LineEditor *editor)
+/// @fn static void lineEditorShow(LineEditor *editor)
 ///
-/// @brief Exchange the line with the history buffer and show the result.
+/// @brief Replace the line on the screen with the contents of the line buffer
+/// and put the cursor at its end.
 ///
 /// @param editor A pointer to the LineEditor.
 ///
 /// @return This function returns no value.
-static void lineEditorSwapHistory(LineEditor *editor) {
-  char *line = editor->args->line;
-  char *history = editor->args->history;
-  for (int ii = 0; ii < editor->args->size; ii++) {
-    char c = line[ii];
-    line[ii] = history[ii];
-    history[ii] = c;
-  }
-  editor->showingHistory = !editor->showingHistory;
-
+static void lineEditorShow(LineEditor *editor) {
   int oldLength = editor->length;
   lineEditorRepeat('\b', editor->cursor);
-  editor->length = (int) strlen(line);
-  lineEditorPut(line, editor->length);
+  editor->length = (int) strlen(editor->args->line);
+  lineEditorPut(editor->args->line, editor->length);
   if (oldLength > editor->length) {
     lineEditorRepeat(' ', oldLength - editor->length);
     lineEditorRepeat('\b', oldLength - editor->length);
   }
   editor->cursor = editor->length;
+}
+
+/// @fn static FILE* lineEditorOpenHistory(LineEditor *editor, long *fileSize)
+///
+/// @brief Open the history file for reading.
+///
+/// @param editor A pointer to the LineEditor.
+/// @param fileSize A pointer to the long that receives the file's size.
+///
+/// @return Returns the open FILE on success, NULL if there's no history.
+static FILE* lineEditorOpenHistory(LineEditor *editor, long *fileSize) {
+  if (editor->historyPath == NULL) {
+    return NULL;
+  }
+  FILE *historyFile = fopen(editor->historyPath, "r");
+  if (historyFile == NULL) {
+    return NULL;
+  }
+  if (fseek(historyFile, 0, SEEK_END) != 0) {
+    fclose(historyFile);
+    return NULL;
+  }
+  *fileSize = ftell(historyFile);
+  return historyFile;
+}
+
+/// @fn static void lineEditorPreviousEntry(LineEditor *editor)
+///
+/// @brief Show the history entry before the one shown, or the newest entry if
+/// the line being typed is shown.  An entry and its newline fit in the line
+/// buffer, so one read that ends where the shown entry starts holds it.
+///
+/// @param editor A pointer to the LineEditor.
+///
+/// @return This function returns no value.
+static void lineEditorPreviousEntry(LineEditor *editor) {
+  long fileSize = 0;
+  FILE *historyFile = lineEditorOpenHistory(editor, &fileSize);
+  if (historyFile == NULL) {
+    return;
+  }
+
+  char *line = editor->args->line;
+  long end = (editor->historyStart < 0) ? fileSize : editor->historyStart;
+  long start = end - editor->args->size;
+  if (start < 0) {
+    start = 0;
+  }
+  int numBytes = 0;
+  if ((end > 0) && (fseek(historyFile, start, SEEK_SET) == 0)) {
+    numBytes = (int) fread(line, 1, (size_t) (end - start), historyFile);
+  }
+  fclose(historyFile);
+  if ((numBytes <= 0) || (numBytes != end - start)) {
+    return;
+  }
+
+  line[numBytes - 1] = '\0';
+  char *entry = strrchr(line, '\n');
+  entry = (entry != NULL) ? (entry + 1) : line;
+  editor->historyStart = start + (entry - line);
+  editor->historyEnd = end;
+  memmove(line, entry, strlen(entry) + 1);
+  lineEditorShow(editor);
+}
+
+/// @fn static void lineEditorNextEntry(LineEditor *editor)
+///
+/// @brief Show the history entry after the one shown, or an empty line after
+/// the newest entry.
+///
+/// @param editor A pointer to the LineEditor.
+///
+/// @return This function returns no value.
+static void lineEditorNextEntry(LineEditor *editor) {
+  if (editor->historyStart < 0) {
+    return;
+  }
+
+  char *line = editor->args->line;
+  long fileSize = 0;
+  FILE *historyFile = lineEditorOpenHistory(editor, &fileSize);
+  int numBytes = 0;
+  if ((historyFile != NULL) && (editor->historyEnd < fileSize)
+    && (fseek(historyFile, editor->historyEnd, SEEK_SET) == 0)
+  ) {
+    numBytes = (int) fread(line, 1, (size_t) editor->args->size, historyFile);
+  }
+  if (historyFile != NULL) {
+    fclose(historyFile);
+  }
+
+  int entryLength = 0;
+  while ((entryLength < numBytes) && (line[entryLength] != '\n')) {
+    entryLength++;
+  }
+  if (entryLength == numBytes) {
+    line[0] = '\0';
+    editor->historyStart = -1;
+  } else {
+    line[entryLength] = '\0';
+    editor->historyStart = editor->historyEnd;
+    editor->historyEnd += entryLength + 1;
+  }
+  lineEditorShow(editor);
+}
+
+/// @fn static bool lineEditorIsNewestEntry(LineEditor *editor)
+///
+/// @brief Determine whether the line is the same as the newest history entry.
+///
+/// @param editor A pointer to the LineEditor.
+///
+/// @return Returns true if it is, false otherwise.
+static bool lineEditorIsNewestEntry(LineEditor *editor) {
+  long fileSize = 0;
+  FILE *historyFile = lineEditorOpenHistory(editor, &fileSize);
+  if (historyFile == NULL) {
+    return false;
+  }
+
+  // The newest entry is the line and a newline, after the previous entry's
+  // newline unless it's the only entry.
+  long start = fileSize - editor->length - 1;
+  int compared = (start > 0) ? -1 : 0;
+  bool same = (start >= 0)
+    && (fseek(historyFile, start + compared, SEEK_SET) == 0);
+  char chunk[8];
+  while (same && (compared <= editor->length)) {
+    int numBytes = (int) fread(chunk, 1, sizeof(chunk), historyFile);
+    if (numBytes <= 0) {
+      same = false;
+    }
+    for (int ii = 0;
+      same && (ii < numBytes) && (compared <= editor->length);
+      ii++, compared++
+    ) {
+      char expected = ((compared < 0) || (compared == editor->length))
+        ? '\n' : editor->args->line[compared];
+      same = (chunk[ii] == expected);
+    }
+  }
+  fclose(historyFile);
+
+  return same;
+}
+
+/// @fn static void lineEditorAddEntry(LineEditor *editor)
+///
+/// @brief Append the line to the history file unless it's empty or the same
+/// as the newest entry.
+///
+/// @param editor A pointer to the LineEditor.
+///
+/// @return This function returns no value.
+static void lineEditorAddEntry(LineEditor *editor) {
+  if ((editor->historyPath == NULL) || (editor->length == 0)
+    || lineEditorIsNewestEntry(editor)
+  ) {
+    return;
+  }
+
+  FILE *historyFile = fopen(editor->historyPath, "a");
+  if (historyFile != NULL) {
+    editor->args->line[editor->length] = '\n';
+    fwrite(editor->args->line, 1, (size_t) editor->length + 1, historyFile);
+    editor->args->line[editor->length] = '\0';
+    fclose(historyFile);
+  }
 }
 
 /// @fn static void lineEditorKey(LineEditor *editor, LineEditorKey key)
@@ -207,12 +378,10 @@ static void lineEditorSwapHistory(LineEditor *editor) {
 ///
 /// @return This function returns no value.
 static void lineEditorKey(LineEditor *editor, LineEditorKey key) {
-  if ((key == KEY_UP) && !editor->showingHistory
-    && (editor->args->history[0] != '\0')
-  ) {
-    lineEditorSwapHistory(editor);
-  } else if ((key == KEY_DOWN) && editor->showingHistory) {
-    lineEditorSwapHistory(editor);
+  if (key == KEY_UP) {
+    lineEditorPreviousEntry(editor);
+  } else if (key == KEY_DOWN) {
+    lineEditorNextEntry(editor);
   } else if ((key == KEY_LEFT) && (editor->cursor > 0)) {
     lineEditorPut("\b", 1);
     editor->cursor--;
@@ -273,15 +442,16 @@ static int lineEditorRead(LineEditor *editor) {
   LineEditorArgs *args = editor->args;
   int escapeState = 0; // 0 none, 1 after ESC, 2 in CSI, 3 after SS3
   int parameter = 0;
+  char input[8];
 
   while (1) {
-    int numBytes = (int) fread(args->input, 1, (size_t) args->size, stdin);
+    int numBytes = (int) fread(input, 1, sizeof(input), stdin);
     if (numBytes == 0) {
       return -1;
     }
 
     for (int ii = 0; ii < numBytes; ii++) {
-      char c = args->input[ii];
+      char c = input[ii];
       bool afterReturn = args->afterReturn;
       args->afterReturn = false;
 
@@ -320,9 +490,6 @@ static int lineEditorRead(LineEditor *editor) {
         lineEditorPut("\n", 1);
         return 0;
       } else if (c == CTRL_C) {
-        if (editor->showingHistory) {
-          lineEditorSwapHistory(editor);
-        }
         lineEditorPut("^C\n", 3);
         args->line[0] = '\0';
         return 0;
@@ -365,9 +532,9 @@ static void lineEditorPrompt(char prompt) {
 /// @fn void* readLine(void *args)
 ///
 /// @brief Print the prompt and read a command line from stdin, letting the
-/// user edit it and recall the previous one.  The console is in raw mode while
-/// the line is read and in its previous mode afterward.  When the line is
-/// entered, it becomes the history.
+/// user edit it and recall earlier ones from the history file in HOME.  The
+/// console is in raw mode while the line is read and in its previous mode
+/// afterward.  An entered line is added to the history file.
 ///
 /// @param args A pointer to a LineEditorArgs.
 ///
@@ -378,7 +545,9 @@ void* readLine(void *args) {
     .args = lineEditorArgs,
     .length = 0,
     .cursor = 0,
-    .showingHistory = false,
+    .historyPath = NULL,
+    .historyStart = -1,
+    .historyEnd = 0,
   };
   lineEditorArgs->line[0] = '\0';
 
@@ -399,10 +568,20 @@ void* readLine(void *args) {
   // Keys typed once the prompt is visible must arrive in raw mode.
   lineEditorPrompt(lineEditorArgs->prompt);
 
-  lineEditorArgs->returnValue = lineEditorRead(&editor);
-  if ((lineEditorArgs->returnValue == 0) && (lineEditorArgs->line[0] != '\0')) {
-    strcpy(lineEditorArgs->history, lineEditorArgs->line);
+  char *home = getenv("HOME");
+  if (home != NULL) {
+    editor.historyPath = (char*) malloc(strlen(home) + sizeof(HISTORY_FILE));
+    if (editor.historyPath != NULL) {
+      strcpy(editor.historyPath, home);
+      strcat(editor.historyPath, HISTORY_FILE);
+    }
   }
+
+  lineEditorArgs->returnValue = lineEditorRead(&editor);
+  if (lineEditorArgs->returnValue == 0) {
+    lineEditorAddEntry(&editor);
+  }
+  free(editor.historyPath);
 
   termios.c_lflag = localModes;
   tcsetattr(STDIN_FILENO, TCSANOW, &termios);
