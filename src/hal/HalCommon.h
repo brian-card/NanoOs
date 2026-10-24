@@ -130,6 +130,11 @@ typedef struct NamedProcessEntry {
       | (((uint32_t) 1) << SCHEDULER_REPLACE_OVERLAY) \
   }, \
   { \
+    .destinationPid = 0, /* Console PID */ \
+    .signature      = CONSOLE_COMMAND_SIGNATURE, \
+    .messageTypes   = (((uint32_t) 1) << CONSOLE_RELEASE_PORT) \
+  }, \
+  { \
     .destinationPid = 0, /* Memory manager PID */ \
     .signature      = MEMORY_MANAGER_COMMAND_SIGNATURE, \
     .messageTypes \
@@ -148,6 +153,11 @@ typedef struct NamedProcessEntry {
       | (((uint32_t) 1) << FILESYSTEM_SEEK_FILE) \
       | (((uint32_t) 1) << FILESYSTEM_GET_FILE_BLOCK_METADATA) \
       | (((uint32_t) 1) << FILESYSTEM_END_OF_FILE) \
+  }, \
+  { \
+    .destinationPid = 0, /* Logger PID */ \
+    .signature      = LOGGER_COMMAND_SIGNATURE, \
+    .messageTypes   = (((uint32_t) 1) << LOGGER_LOG_MESSAGE) \
   }, \
 }
 
