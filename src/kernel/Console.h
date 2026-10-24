@@ -242,6 +242,8 @@ ConsoleInputEvent consoleProcessByte(
   ConsolePort *consolePort, uint8_t byte, ConsoleEcho *echo);
 int consoleReadForwardedByte(ConsolePort *consolePort);
 bool consoleServicePort(ConsoleState *consoleState, ConsolePort *consolePort);
+void handleConsoleMessages(ConsoleState *consoleState, bool block,
+  const struct timespec *deadline);
 void consoleSetModesCommandHandler(
   ConsoleState *consoleState, ProcessMessage *inputMessage);
 ConsoleBuffer* getAvailableConsoleBuffer(
