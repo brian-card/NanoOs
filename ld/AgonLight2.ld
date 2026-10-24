@@ -153,6 +153,12 @@ SECTIONS
     _agonLight2RamTextEnd = .;
   } > RAM
 
+  /* Static log area:  the logs written before the logger process runs.  It is
+   * inside the heap, far enough above its bottom to clear the overlay file
+   * cache and the allocations made before the logger starts.  Boot.asm stamps
+   * its canary; if the logger reports the area overwritten, raise this. */
+  _agonLight2StaticLogsArea = _agonLight2RamTextEnd + 0x19000;
+
   ASSERT(__data_end__ <= __data_bss_limit,
     ".bss + .data exceed their 8 KB external-RAM reservation (canary at 0x052000)")
   ASSERT(__etext + SIZEOF(.data) <= 0x020000,
