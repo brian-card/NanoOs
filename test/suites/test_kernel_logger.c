@@ -89,6 +89,30 @@ NANO_OS_KERNEL_TEST(logger, static_logs_never_exceed_their_backing_memory) {
   NANO_OS_ASSERT_EQ_INT(0xA5, area.canary);
 }
 
+// The area isn't reserved after boot, so a restarted logger would replay
+// whatever has since been allocated there.
+NANO_OS_KERNEL_TEST(logger, restarted_logger_gets_no_static_logs) {
+  static StaticLogs area;
+  memset(&area, 0, sizeof(area));
+  halMockSetStaticLogs(&area);
+
+  StaticLogs *staticLogs = NULL;
+  loggerSetRunning(false);
+  NANO_OS_ASSERT_EQ_INT(0, HAL->memory->staticLogs(&staticLogs));
+  NANO_OS_ASSERT_TRUE(staticLogs == &area);
+  loggerSetRunning(true);
+  NANO_OS_ASSERT_EQ_INT(0, HAL->memory->staticLogs(&staticLogs));
+  NANO_OS_ASSERT_TRUE(staticLogs == &area);
+
+  loggerSetRunning(false);
+  NANO_OS_ASSERT_EQ_INT(0, HAL->memory->staticLogs(&staticLogs));
+  NANO_OS_ASSERT_NULL(staticLogs);
+  loggerSetRunning(true);
+  NANO_OS_ASSERT_EQ_INT(0, HAL->memory->staticLogs(&staticLogs));
+  NANO_OS_ASSERT_NULL(staticLogs);
+  halMockSetStaticLogs(NULL);
+}
+
 // The stash is only valid until a logger process drains it and the heap takes
 // the memory back.  Nothing here starts one, so no area gets published and
 // logMessage formats immediately instead.
