@@ -369,6 +369,30 @@ typedef struct CommandDescriptor {
   SchedulerState    *schedulerState;
 } CommandDescriptor;
 
+/// @def CONSOLE_MODE_ECHO
+///
+/// @brief Console port mode flag:  echo input back to the port.
+#define CONSOLE_MODE_ECHO 0x01
+
+/// @def CONSOLE_MODE_CANONICAL
+///
+/// @brief Console port mode flag:  edit input a line at a time.  Without it,
+/// each byte is sent to the input owner as it arrives.
+#define CONSOLE_MODE_CANONICAL 0x02
+
+/// @def CONSOLE_MODE_SIGNALS
+///
+/// @brief Console port mode flag:  send SIGINT for Ctrl-C rather than passing
+/// it on as input.
+#define CONSOLE_MODE_SIGNALS 0x04
+
+/// @def CONSOLE_MODE_DEFAULT
+///
+/// @brief The modes a console port starts in and returns to when it's
+/// released.
+#define CONSOLE_MODE_DEFAULT \
+  (CONSOLE_MODE_ECHO | CONSOLE_MODE_CANONICAL | CONSOLE_MODE_SIGNALS)
+
 /// @struct ConsoleBuffer
 ///
 /// @brief Definition of a single console buffer that may be returned to a
@@ -379,11 +403,13 @@ typedef struct CommandDescriptor {
 ///   Set to PROCESS_ID_NOT_SET when not in use.
 /// @param consoleBufferIndex An index into the buffer provided by consoleBuffer
 ///   of the next position to read a byte into.
-/// @param bufferAwaitingRelease Whether consoleBuffer holds input that has
-///   been sent to inputOwner and not yet released.  No input is read while
-///   this is set.
+/// @param bufferAwaitingRelease Whether the buffer has been sent to inputOwner
+///   with input or lent out for output and not yet released.  No input is read
+///   while this is set.
 /// @param holdsCompletedLine Whether consoleBuffer holds a completed line that
 ///   is waiting for inputOwner to ask for input.
+/// @param rawInput Whether the input was sent from a port that isn't in
+///   canonical mode, so it is all there is rather than a line.
 /// @param buffer The array of CONSOLE_BUFFER_SIZE characters that the calling
 ///   process can use.
 typedef struct ConsoleBuffer {
@@ -391,6 +417,7 @@ typedef struct ConsoleBuffer {
   unsigned char consoleBufferIndex;
   bool          bufferAwaitingRelease;
   bool          holdsCompletedLine;
+  bool          rawInput;
   char          buffer[CONSOLE_BUFFER_SIZE];
 } ConsoleBuffer;
 
@@ -428,8 +455,7 @@ typedef struct ConsoleInputReadyArgs {
 ///   than being serviced by a CONSOLE_INPUT_READY message.
 /// @param readByte A pointer to the non-blocking function that will attempt to
 ///   read a byte of input from the user.
-/// @param echo Whether or not the data read from the port should be echoed back
-///   to the port.
+/// @param modes The CONSOLE_MODE_* flags in effect for the port.
 /// @param inputState The ConsoleInputState of the port's line editing.
 /// @param escapeStartMs The time, in milliseconds modulo 65536, that the
 ///   escape the port is in CONSOLE_INPUT_STATE_ESCAPE for was read.
@@ -452,7 +478,7 @@ typedef struct ConsolePort {
   bool                    waitingForInput;
   bool                    pollOnly;
   int                   (*readByte)(struct ConsolePort *consolePort);
-  bool                    echo;
+  uint8_t                 modes;
   uint8_t                 inputState;
   uint16_t                escapeStartMs;
   int                   (*consolePrintString)(struct ConsolePort *consolePort,
