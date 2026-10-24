@@ -355,8 +355,9 @@ int logMessage(LogLevel logLevel,
         break;
       }
     }
-  } else if (staticLogs->numEntries
-    < (sizeof(staticLogs->logEntries) / sizeof(staticLogs->logEntries[0]))
+  } else if ((staticLogs->canary == STATIC_LOGS_CANARY)
+    && (staticLogs->numEntries
+      < (sizeof(staticLogs->logEntries) / sizeof(staticLogs->logEntries[0])))
   ) {
     // Select a LogEntry pointer from staticLogs.  No ProcessMessage pointer is
     // necessary.  The bound stops an overrun from running past the entries the
