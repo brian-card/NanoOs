@@ -17,6 +17,8 @@
 #include "kernel/MemoryManager.h"
 #include "kernel/Processes.h"
 #include "kernel/Scheduler.h"
+#include "kernel/Console.h"
+#include "hal/HalCommon.h"
 #include "HalMock.h"
 
 // logDroppedReentrantLog only prints the address it's given, so these never
@@ -214,4 +216,24 @@ NANO_OS_KERNEL_TEST(logger, logs_held_until_logger_runs_arrive_in_order) {
   self->ipcCapabilities = savedCapabilities;
   self->numIpcCapabilities = savedNumCapabilities;
   NANO_OS_ASSERT_EQ_INT(3, received);
+}
+
+// Every process releases its console port when it exits, the logger included,
+// and anything the kernel logs while running as the logger goes to the logger.
+NANO_OS_KERNEL_TEST(logger, logger_can_release_its_port_and_log) {
+  static IpcCapability capabilities[] = LOGGER_IPC_CAPABILITIES_INITIALIZER;
+  loggerIpcCapabilities = capabilities;
+  numLoggerIpcCapabilities = sizeof(capabilities) / sizeof(capabilities[0]);
+
+  NANO_OS_ASSERT_EQ_INT(0, halCommonInitLogger());
+  ProcessDescriptor *logger = &allProcesses[loggerPid - 1];
+  NANO_OS_ASSERT_NOT_NULL(findIpcCapability(logger->ipcCapabilities,
+    logger->numIpcCapabilities, consolePid,
+    CONSOLE_COMMAND_SIGNATURE, CONSOLE_RELEASE_PORT));
+  NANO_OS_ASSERT_NOT_NULL(findIpcCapability(logger->ipcCapabilities,
+    logger->numIpcCapabilities, loggerPid,
+    LOGGER_COMMAND_SIGNATURE, LOGGER_LOG_MESSAGE));
+  NANO_OS_ASSERT_NOT_NULL(findIpcCapability(logger->ipcCapabilities,
+    logger->numIpcCapabilities, memoryManagerPid,
+    MEMORY_MANAGER_COMMAND_SIGNATURE, MEMORY_MANAGER_FREE));
 }
