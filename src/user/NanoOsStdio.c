@@ -2154,100 +2154,60 @@ int nanoOsFileno(FILE *stream) {
 /// @return Returns the total number of objects successfully read from the
 /// file.
 size_t nanoOsFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
-  size_t returnValue = 0;
+  if (stream != stdin) {
+    return filesystemFRead(ptr, size, nmemb, stream);
+  }
+
+  // Reading stops at the end of input, after a newline, after input from a
+  // port that isn't in canonical mode, after an escape sequence, or when the
+  // buffer is full.  Raw input that doesn't fit is kept for the next read.
   char *charBuffer = (char*) ptr;
+  size_t bufferSize = size * nmemb;
+  size_t numBytesReceived = 0;
   ConsoleBuffer *consoleBuffer
     = (ConsoleBuffer*) getProcessStorage(FGETS_CONSOLE_BUFFER_KEY);
-  size_t numBytesReceived = 0;
-  char *newlineAt = NULL;
-  int numBytesToCopy = 0;
-  size_t nanoOsInputLength = 0;
-  int bufferIndex = 0;
-  size_t bufferSize = size * nmemb;
-
-  if (stream == stdin) {
-    // There are five stop conditions:
-    // 1. nanoOsWaitForInput returns NULL, signalling the end of the input
-    //    from the stream.
-    // 2. We read a newline.
-    // 3. We read an escape sequence.
-    // 4. We reach bufferSize - 1 bytes received from the stream.
-    // 5. The input came from a port that isn't in canonical mode.
+  bool done = false;
+  while ((done == false) && (numBytesReceived < bufferSize)) {
     if (consoleBuffer == NULL) {
       consoleBuffer = nanoOsWaitForInput();
-      setProcessStorage(FGETS_CONSOLE_BUFFER_KEY, consoleBuffer);
-    } else {
-      // We're continuing to read from a buffer that contained a newline plus
-      // something else after it.
-      newlineAt = strchr(consoleBuffer->buffer, ASCII_NEWLINE);
-      if (newlineAt == NULL) {
-        newlineAt = strchr(consoleBuffer->buffer, ASCII_RETURN);
-      }
-      if (newlineAt != NULL) {
-        bufferIndex = (((uintptr_t) newlineAt)
-          - ((uintptr_t) consoleBuffer->buffer)) + 1;
-      } else {
-        // This should be impossible given the algorithm below, but assume
-        // nothing.
+      if (consoleBuffer == NULL) {
+        break;
       }
     }
 
-    while (
-      (consoleBuffer != NULL)
-      && (newlineAt == NULL)
-      && (numBytesReceived < bufferSize)
-    ) {
-      newlineAt = strchr(&consoleBuffer->buffer[bufferIndex], '\n');
-      if (newlineAt == NULL) {
-        newlineAt = strchr(consoleBuffer->buffer, '\r');
-      }
+    char *text = consoleBuffer->buffer;
+    size_t textLength = strlen(text);
+    char *newlineAt = strchr(text, ASCII_NEWLINE);
+    if (newlineAt == NULL) {
+      newlineAt = strchr(text, ASCII_RETURN);
+    }
+    size_t available = textLength;
+    if (newlineAt != NULL) {
+      available = ((size_t) (newlineAt - text)) + 1;
+      done = true;
+    } else {
+      done = consoleBuffer->rawInput
+        || (strchr(text, ASCII_ESCAPE) != NULL);
+    }
 
-      if ((newlineAt == NULL) || (newlineAt[1] == '\0')) {
-        // The usual case.
-        nanoOsInputLength = (int) strlen(&consoleBuffer->buffer[bufferIndex]);
-      } else {
-        // We've received a buffer that contains a newline plus something after
-        // it.  Copy everything up to and including the newline.  Return what
-        // we copy and leave the pointer alone so that it's picked up on the
-        // next call.
-        nanoOsInputLength = (int) (((uintptr_t) newlineAt)
-          - ((uintptr_t) &consoleBuffer->buffer[bufferIndex]));
-      }
+    size_t numBytesToCopy = MIN(bufferSize - numBytesReceived, available);
+    memcpy(&charBuffer[numBytesReceived], text, numBytesToCopy);
+    numBytesReceived += numBytesToCopy;
 
-      numBytesToCopy
-        = MIN((bufferSize - numBytesReceived), nanoOsInputLength);
-      memcpy(&charBuffer[numBytesReceived], &consoleBuffer->buffer[bufferIndex],
-        numBytesToCopy);
-      numBytesReceived += numBytesToCopy;
-      charBuffer[numBytesReceived] = '\0';
-      bool rawInput = consoleBuffer->rawInput;
+    if ((numBytesToCopy < textLength) && consoleBuffer->rawInput) {
+      memmove(text, &text[numBytesToCopy], textLength - numBytesToCopy + 1);
+    } else {
       // Release the buffer.  Fire and forget.
       (void) initSendProcessMessageToPid(
         consolePid,
         CONSOLE_COMMAND_SIGNATURE | CONSOLE_RELEASE_BUFFER,
         /* data= */ consoleBuffer, /* size= */ sizeof(*consoleBuffer), false);
-
-      if ((newlineAt != NULL) || rawInput
-        || (strchr(consoleBuffer->buffer, ASCII_ESCAPE))
-      ) {
-        // We've reached one of the stop cases, so we're not going to attempt
-        // to receive any more data from the file descriptor.
-        consoleBuffer = NULL;
-      } else {
-        // There was no newline in this message.  We need to get another one.
-        consoleBuffer = nanoOsWaitForInput();
-        bufferIndex = 0;
-      }
-
-      setProcessStorage(FGETS_CONSOLE_BUFFER_KEY, consoleBuffer);
+      consoleBuffer = NULL;
     }
-    returnValue = numBytesReceived;
-  } else {
-    // stream is a regular FILE.
-    returnValue = filesystemFRead(ptr, size, nmemb, stream);
   }
+  setProcessStorage(FGETS_CONSOLE_BUFFER_KEY, consoleBuffer);
 
-  return returnValue;
+  return numBytesReceived;
 }
 
 /// @fn size_t nanoOsFwrite(const void *ptr, size_t size, size_t nmemb,
