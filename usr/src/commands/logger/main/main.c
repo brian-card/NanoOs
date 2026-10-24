@@ -233,7 +233,13 @@ int main(int argc, char **argv) {
   StaticLogs *staticLogs = NULL;
   getHal()->memory->staticLogs(&staticLogs);
   if (staticLogs != NULL) {
-    for (uintptr_t ii = 0; ii < staticLogs->numEntries; ii++) {
+    uintptr_t numEntries = staticLogs->numEntries;
+    uintptr_t capacity = sizeof(staticLogs->logEntries)
+      / sizeof(staticLogs->logEntries[0]);
+    if (numEntries > capacity) {
+      numEntries = capacity;
+    }
+    for (uintptr_t ii = 0; ii < numEntries; ii++) {
       printLogEntry(&loggerState, &staticLogs->logEntries[ii]);
     }
   }
