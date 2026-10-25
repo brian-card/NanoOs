@@ -43,6 +43,13 @@
 /// driver's mouse cursor.  IDs up to 255 name the VDP's built-in cursors.
 #define VDP_CURSOR_ID 0xF000
 
+/// @def VDP_SETUP_TIMEOUT_NS
+///
+/// @brief How long, in nanoseconds, to wait for the VDP to answer the poll
+/// that follows the screen setup before writing to it anyway.  Resetting the
+/// mouse can take the VDP about 5 seconds when no mouse is plugged in.
+#define VDP_SETUP_TIMEOUT_NS 8000000000LL
+
 /// @def VDP_WORD
 ///
 /// @brief The two bytes of a 16-bit VDU argument, low byte first.
@@ -74,8 +81,7 @@
 /// copper's signal list (VDU 23,0,&C4,4); restore the default sample rate
 /// (VDU 23,0,&85,255,13,16384;) and reset all 32 audio channels; and restore
 /// the default keyboard repeat delay and rate with the LEDs off
-/// (VDU 23,0,&88,500;100;0).  The mouse isn't reset because the VDP can stall
-/// for seconds resetting a PS/2 mouse, longer than UART0 waits on CTS.
+/// (VDU 23,0,&88,500;100;0).  The mouse is reset with the cursor.
 static const uint8_t _vdpReset[] = {
   23, 0, 0xC1, 0,
   23, 0, 0x98, 1,
@@ -107,22 +113,24 @@ static const uint8_t _vdpCursorUploadStart[] = {
 /// @brief VDU commands sent after the mouse cursor's pixels: select the
 /// buffer as the bitmap (VDU 23,27,&20,id;), make an RGBA2222 bitmap of it
 /// (VDU 23,27,&21,width;height;1), make a mouse cursor of the bitmap with
-/// its hotspot at the top left (VDU 23,27,&40,0,0), enable the mouse
-/// (VDU 23,0,&89,0), and select the cursor (VDU 23,0,&89,3,id;).  The cursor
-/// is selected after the mouse is enabled because the VDP ignores the
+/// its hotspot at the top left (VDU 23,27,&40,0,0), reset the mouse
+/// (VDU 23,0,&89,2) so that one plugged in since power-on is detected, enable
+/// it (VDU 23,0,&89,0), and select the cursor (VDU 23,0,&89,3,id;).  The VDP
+/// only enables a mouse its last reset detected, and ignores the cursor
 /// selection while the mouse is disabled.
 static const uint8_t _vdpCursorUploadEnd[] = {
   23, 27, 0x20, VDP_WORD(VDP_CURSOR_ID),
   23, 27, 0x21, VDP_WORD(MOUSE_CURSOR_WIDTH), VDP_WORD(MOUSE_CURSOR_HEIGHT), 1,
   23, 27, 0x40, 0, 0,
+  23, 0, 0x89, 2,
   23, 0, 0x89, 0,
   23, 0, 0x89, 3, VDP_WORD(VDP_CURSOR_ID)
 };
 
 /// @fn static void vdpDefineCursor(void)
 ///
-/// @brief Upload the mouse cursor to the VDP, enable the mouse, and make the
-/// cursor its pointer.
+/// @brief Upload the mouse cursor to the VDP, reset and enable the mouse, and
+/// make the cursor its pointer.
 ///
 /// @return This function returns no value.
 static void vdpDefineCursor(void) {
@@ -146,6 +154,7 @@ void* vdpStartup(void *args) {
 
   memset(input, 0, sizeof(*input));
   input->portId = -1;
+  input->pollCookie = VDP_GENERAL_POLL_COOKIE;
   memset(vdpOutput, 0, sizeof(*vdpOutput));
   vdpOutput->giveUpNs = vdpNowNs() + VDP_GENERAL_POLL_TIMEOUT_NS;
   vdpOutput->buffer = (VdpOutputBuffer*) malloc(sizeof(VdpOutputBuffer));
@@ -159,25 +168,63 @@ void* vdpStartup(void *args) {
   return args;
 }
 
-/// @fn void* vdpSetupScreen(void *args)
+/// @fn static void vdpSendScreenSetup(VdpInput *input, VdpOutput *vdpOutput)
 ///
-/// @brief Reset the VDP, set up the screen and the mouse pointer once the VDP
-/// is listening, and draw the output buffered until then.
+/// @brief Reset the VDP and set up the screen and the mouse pointer, then have
+/// the main overlay poll the VDP, holding back output until the VDP answers,
+/// which it does only once it has finished the setup.  The main overlay sends
+/// the poll because the replies to the setup overrun UART0's receive buffer
+/// before the driver reads them, which a reply sent with the setup would be
+/// lost in.
 ///
-/// @param args A pointer to the driver's VdpOutput.
+/// @param input A pointer to the driver's VdpInput.
+/// @param vdpOutput A pointer to the driver's VdpOutput.
 ///
-/// @return Always returns the provided pointer.
-void* vdpSetupScreen(void *args) {
-  VdpOutput *vdpOutput = (VdpOutput*) args;
-
-  vdpOutput->listening = true;
+/// @return This function returns no value.
+static void vdpSendScreenSetup(VdpInput *input, VdpOutput *vdpOutput) {
   vdpWrite(_vdpReset, sizeof(_vdpReset));
   vdpWrite(vdpScreenSetup, vdpScreenSetupSize);
   vdpDefineCursor();
+
+  input->pollAnswered = false;
+  input->pollCookie = VDP_SETUP_POLL_COOKIE;
+  vdpOutput->screenSetUp = true;
+  vdpOutput->nextPollNs = vdpNowNs();
+  vdpOutput->giveUpNs = vdpOutput->nextPollNs + VDP_SETUP_TIMEOUT_NS;
+}
+
+/// @fn static void vdpFinishSetup(VdpOutput *vdpOutput)
+///
+/// @brief Start drawing on the VDP once it has finished the screen setup, and
+/// draw the output buffered until then.
+///
+/// @param vdpOutput A pointer to the driver's VdpOutput.
+///
+/// @return This function returns no value.
+static void vdpFinishSetup(VdpOutput *vdpOutput) {
+  vdpOutput->listening = true;
   if (vdpOutput->buffer != NULL) {
     vdpWrite(vdpOutput->buffer->data, vdpOutput->buffer->length);
     free(vdpOutput->buffer);
     vdpOutput->buffer = NULL;
+  }
+}
+
+/// @fn void* vdpSetupScreen(void *args)
+///
+/// @brief Called each time a poll the driver waits on is answered or times
+/// out: the first time, send the screen setup, and the second, start drawing.
+///
+/// @param args A pointer to the driver's VdpStartupArgs.
+///
+/// @return Always returns the provided pointer.
+void* vdpSetupScreen(void *args) {
+  VdpStartupArgs *startupArgs = (VdpStartupArgs*) args;
+
+  if (startupArgs->output->screenSetUp == false) {
+    vdpSendScreenSetup(startupArgs->input, startupArgs->output);
+  } else {
+    vdpFinishSetup(startupArgs->output);
   }
 
   return args;
