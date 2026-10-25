@@ -114,15 +114,19 @@ static const uint8_t _vdpCursorUploadStart[] = {
 /// buffer as the bitmap (VDU 23,27,&20,id;), make an RGBA2222 bitmap of it
 /// (VDU 23,27,&21,width;height;1), make a mouse cursor of the bitmap with
 /// its hotspot at the top left (VDU 23,27,&40,0,0), reset the mouse
-/// (VDU 23,0,&89,2) so that one plugged in since power-on is detected, enable
-/// it (VDU 23,0,&89,0), and select the cursor (VDU 23,0,&89,3,id;).  The VDP
-/// only enables a mouse its last reset detected, and ignores the cursor
-/// selection while the mouse is disabled.
+/// (VDU 23,0,&89,2) so that one plugged in or unplugged since the last reset
+/// is noticed, disable it (VDU 23,0,&89,1), enable it (VDU 23,0,&89,0), and
+/// select the cursor (VDU 23,0,&89,3,id;).  The VDP only enables a mouse its
+/// last reset detected, but an enable while the mouse is already enabled
+/// shows the pointer without checking, so the disable comes between; it comes
+/// after the reset because it suspends the mouse's port, which the enable
+/// resumes.  The VDP ignores the cursor selection while the mouse is disabled.
 static const uint8_t _vdpCursorUploadEnd[] = {
   23, 27, 0x20, VDP_WORD(VDP_CURSOR_ID),
   23, 27, 0x21, VDP_WORD(MOUSE_CURSOR_WIDTH), VDP_WORD(MOUSE_CURSOR_HEIGHT), 1,
   23, 27, 0x40, 0, 0,
   23, 0, 0x89, 2,
+  23, 0, 0x89, 1,
   23, 0, 0x89, 0,
   23, 0, 0x89, 3, VDP_WORD(VDP_CURSOR_ID)
 };
