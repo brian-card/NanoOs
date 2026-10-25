@@ -42,6 +42,7 @@
 .global _agonLight2ReadUart0Impl
 .global _agonLight2WriteUart0Impl
 .extern _agonLight2TraceUart0Stale
+.extern _agonLight2Uart0ScanByte
 .global uart0Isr
 
 ;; -- eZ80F92 Port D GPIO registers ------------------
@@ -283,7 +284,8 @@ _agonLight2WriteUart0Impl:
 
 ;; -- uart0Isr --------------------------------------------------------------
 ;;    Called (interrupts off) from uart0Tramp in Interrupts.asm.  Drains the
-;;    RX FIFO into uart0RxBuf and, if it received anything, calls the device's
+;;    RX FIFO into uart0RxBuf, passing each byte to agonLight2Uart0ScanByte
+;;    for Ctrl+Alt+Del, and, if it received anything, calls the device's
 ;;    registered callback.
 uart0Isr:
     in0     a, (UART0_LSR)
@@ -309,7 +311,14 @@ uart0Isr:
 
 .uart0IsrRxLoop:
     in0     a, (UART0_RBR)      ; also clears DR for this byte
+    push    af
     call    uart0RxPushByte
+    pop     af
+    ld      hl, 0               ; clears HLU too - see agonLight2PollUart1Impl
+    ld      l, a
+    push    hl
+    call    _agonLight2Uart0ScanByte
+    pop     hl
     in0     a, (UART0_LSR)
     and     0x01
     jr      nz, .uart0IsrRxLoop
