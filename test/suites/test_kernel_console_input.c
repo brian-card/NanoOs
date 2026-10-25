@@ -18,6 +18,7 @@
 #include "kernel/Processes.h"
 #include "kernel/Scheduler.h"
 #include "user/NanoOsErrno.h"
+#include "user/NanoOsSignal.h"
 #include "user/NanoOsStdio.h"
 
 #define TEST_FORWARDING_PORT_INDEX 0
@@ -957,4 +958,115 @@ NANO_OS_KERNEL_TEST(console_input, held_input_is_not_handled_twice) {
   NANO_OS_ASSERT_TRUE(processMessageDone(input));
   processMessageRelease(input);
   processMessageRelease(other);
+}
+
+/// @def TEST_UNUSED_PID
+///
+/// @brief A process ID past the end of the process table, which the
+/// scheduler refuses to signal, for input owners that must not be signaled.
+#define TEST_UNUSED_PID ((ProcessId) 250)
+
+static SchedulerSendSignalArgs signalArgs[CONSOLE_NUM_PORTS];
+static int numInterruptEchoes;
+
+/// @fn static int recordEcho(ConsolePort *consolePort, const char *string)
+///
+/// @brief Stand in for a port's consolePrintString, counting the "^C" echoes.
+///
+/// @param consolePort Unused.
+/// @param string The string the console printed.
+///
+/// @return Always returns 0.
+static int recordEcho(ConsolePort *consolePort, const char *string) {
+  (void) consolePort;
+  if (strcmp(string, "^C\n") == 0) {
+    numInterruptEchoes++;
+  }
+  return 0;
+}
+
+/// @fn static ConsolePort* signalFixture(const char *bytes, uint8_t modes)
+///
+/// @brief Make a UART-like port, owned by a process that can't be signaled,
+/// that has all of a string's bytes waiting to be read.
+///
+/// @param bytes The bytes waiting on the port.
+/// @param modes The CONSOLE_MODE_* flags of the port.
+///
+/// @return Returns a pointer to the port.
+static ConsolePort* signalFixture(const char *bytes, uint8_t modes) {
+  ConsolePort *consolePort = inputFixture(PROCESS_ID_NOT_SET);
+  consolePort->readByte = uartLikeReadByte;
+  consolePort->consolePrintString = recordEcho;
+  consolePort->modes = modes;
+  consolePort->inputOwner = TEST_UNUSED_PID;
+  memset(signalArgs, 0, sizeof(signalArgs));
+  inputState.sendSignalArgs = signalArgs;
+  numInterruptEchoes = 0;
+  uartLikeBytes = bytes;
+  uartLikeAvailable = strlen(bytes);
+  uartLikeRead = 0;
+  return consolePort;
+}
+
+NANO_OS_KERNEL_TEST(console_signal, ctrl_c_interrupts_while_a_line_is_held) {
+  ConsolePort *consolePort = signalFixture("ls\r\x03",
+    CONSOLE_MODE_DEFAULT & ~CONSOLE_MODE_ECHO);
+
+  consoleServicePort(&inputState, consolePort);
+
+  NANO_OS_ASSERT_EQ_INT(4, (long long) uartLikeRead);
+  NANO_OS_ASSERT_EQ_INT(TEST_UNUSED_PID, signalArgs[0].pid);
+  NANO_OS_ASSERT_EQ_INT(SIGINT, signalArgs[0].signal);
+  NANO_OS_ASSERT_EQ_INT(1, numInterruptEchoes);
+  NANO_OS_ASSERT_FALSE(consolePort->consoleBuffer->holdsCompletedLine);
+}
+
+NANO_OS_KERNEL_TEST(console_signal, ctrl_c_waits_for_a_lent_buffer_only) {
+  ConsolePort *consolePort = signalFixture("\x03",
+    CONSOLE_MODE_DEFAULT & ~CONSOLE_MODE_ECHO);
+  consolePort->consoleBuffer->bufferAwaitingRelease = true;
+
+  consoleServicePort(&inputState, consolePort);
+  NANO_OS_ASSERT_EQ_INT(0, (long long) uartLikeRead);
+  NANO_OS_ASSERT_EQ_INT(0, numInterruptEchoes);
+
+  consolePort->consoleBuffer->bufferAwaitingRelease = false;
+  consoleServicePort(&inputState, consolePort);
+  NANO_OS_ASSERT_EQ_INT(1, (long long) uartLikeRead);
+  NANO_OS_ASSERT_EQ_INT(SIGINT, signalArgs[0].signal);
+  NANO_OS_ASSERT_EQ_INT(1, numInterruptEchoes);
+}
+
+NANO_OS_KERNEL_TEST(console_signal, raw_input_without_signals_keeps_ctrl_c) {
+  ConsolePort *consolePort = signalFixture("\x03", 0);
+  readerFixture(consolePort);
+  consolePort->modes = 0;
+
+  serviceAndRead(consolePort);
+
+  NANO_OS_ASSERT_EQ_INT(0, numInterruptEchoes);
+  NANO_OS_ASSERT_EQ_INT(0, signalArgs[0].signal);
+  NANO_OS_ASSERT_EQ_INT(1, numDeliveredLines);
+  NANO_OS_ASSERT_STR_EQ("\x03", deliveredLines[0]);
+}
+
+NANO_OS_KERNEL_TEST(console_signal, each_port_keeps_its_own_signal_args) {
+  ConsolePort *first = signalFixture("\x03",
+    CONSOLE_MODE_DEFAULT & ~CONSOLE_MODE_ECHO);
+  inputState.numConsolePorts = 2;
+  ConsolePort *second = &inputState.consolePorts[1];
+  *second = *first;
+  second->consoleBuffer = &inputState.consoleBuffers[1];
+  second->inputOwner = TEST_UNUSED_PID + 1;
+
+  consoleServicePort(&inputState, first);
+  uartLikeAvailable = 1;
+  uartLikeRead = 0;
+  consoleServicePort(&inputState, second);
+
+  // Both SIGINT messages are still unhandled, so neither's args may change.
+  NANO_OS_ASSERT_EQ_INT(2, numInterruptEchoes);
+  NANO_OS_ASSERT_EQ_INT(TEST_UNUSED_PID, signalArgs[0].pid);
+  NANO_OS_ASSERT_EQ_INT(TEST_UNUSED_PID + 1, signalArgs[1].pid);
 }
