@@ -92,6 +92,7 @@ extern "C"
 /// @param pending The translations of the keys not yet sent to the console,
 ///   each preceded by its length so that no key is split between messages.
 /// @param pollAnswered Whether the VDP has replied to the general poll.
+/// @param pollCookie The cookie of the general poll being waited on.
 typedef struct VdpInput {
   ProcessId                    consolePid;
   int                          portId;
@@ -103,6 +104,7 @@ typedef struct VdpInput {
   uint8_t                      pendingLength;
   uint8_t                      pending[VDP_PENDING_SIZE];
   bool                         pollAnswered;
+  uint8_t                      pollCookie;
 } VdpInput;
 
 /// @struct VdpOutput
@@ -115,12 +117,15 @@ typedef struct VdpInput {
 ///   VDP ignores everything until it has answered a general poll.
 /// @param nextPollNs When to send the next general poll, in nanoseconds.
 /// @param giveUpNs When to stop waiting for the VDP to answer, in nanoseconds.
+/// @param screenSetUp Whether the screen setup has been sent, so that the
+///   poll being waited on is the one that follows it.
 /// @param buffer The output written while the VDP wasn't listening, or NULL.
 typedef struct VdpOutput {
   VdpTextState     textState;
   bool             listening;
   int64_t          nextPollNs;
   int64_t          giveUpNs;
+  bool             screenSetUp;
   VdpOutputBuffer *buffer;
 } VdpOutput;
 
