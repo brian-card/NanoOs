@@ -267,15 +267,21 @@ def assert_vdp_set_up_on_answer(vdp):
 
     @param vdp The FakeVdp, after it has drawn the login prompt.
     """
-    setup = [(kind, detail) for _t, kind, detail in vdp.events[:8]]
+    kinds = [kind for _t, kind, _d in vdp.events]
+    first_mode = kinds.index("mode")
+    resets = [detail for _t, _k, detail in vdp.events[:first_mode]]
+    assert resets == VDP_RESET, \
+        f"the VDP wasn't reset before the mode change: {resets}"
+    setup = [(kind, detail)
+             for _t, kind, detail in vdp.events[first_mode:first_mode + 8]]
     assert setup == [("mode", 0), ("layout", 1),
                      ("colour", CGA_YELLOW), ("colour", 128 + CGA_BLUE),
                      ("cls", None), ("cursor", 1), ("pointer", VDP_POINTER_ID),
                      ("text", setup[7][1])], \
-        f"the screen wasn't set up first: {vdp.events[:8]}"
+        f"the screen wasn't set up first: {setup}"
     assert vdp.palette == CGA_PALETTE, \
         f"the palette isn't CGA's: {vdp.palette}"
-    delay = vdp.events[0][0] - vdp.answered
+    delay = vdp.events[first_mode][0] - vdp.answered
     assert delay < 1.0, f"the screen was set up {delay:.1f} s after the answer"
 
 
@@ -288,6 +294,14 @@ CGA_PALETTE = dict(enumerate([
     (0xFF, 0xFF, 0xFF),
 ]))
 CGA_BLUE = 1
+# What vdp.drv sends to undo the state an eZ80 reset leaves on the VDP, as
+# FakeVdp records it: (VDU 23,0 or VDU 23 command, detail).
+VDP_RESET = [
+    (0xC1, 0), (0x98, 1), (0xFE, 0), (27, None), (0xA0, 0xFFFF), (0x91, None),
+    (0xC4, 4), (0x85, ("rate", 255, 16384)),
+] + [(0x85, ("reset", channel)) for channel in range(32)] + [
+    (0x88, (500, 100, 0)),
+]
 CGA_YELLOW = 14
 VDP_POINTER_ID = 0xF000
 VDP_POINTER = [
@@ -383,8 +397,8 @@ def test_vdp_driver_replays_output_from_before_the_vdp_answered(s):
 def test_vdp_driver_writes_anyway_when_the_vdp_never_answers(s):
     vdp = s.restart_with_vdp(answer=False)
     vdp.expect("login: ", timeout=25)
-    first_time, first_kind, _ = vdp.events[0]
-    assert first_kind == "mode", \
+    first_time, _kind, first_detail = vdp.events[0]
+    assert first_detail == VDP_RESET[0], \
         f"output was sent before the driver gave up: {vdp.events[:3]}"
     waited = first_time - vdp.first_poll
     assert 14.5 < waited < 16.5, f"gave up after {waited:.1f} s, not 15 s"

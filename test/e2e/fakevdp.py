@@ -67,6 +67,18 @@ CREATE_BITMAP = 0x21
 MAKE_CURSOR = 0x40
 FORMAT_RGBA2222 = 1
 BITMAP_BASE_ID = 0xFA00
+AUDIO = 0x85
+AUDIO_RESET = 10
+AUDIO_SAMPLE_RATE = 13
+KEYSTATE = 0x88
+UDG_RESET = 0x91
+CONTROL_KEYS = 0x98
+LEGACY_MODES = 0xC1
+COPPER = 0xC4
+COPPER_RESET_SIGNALS = 4
+CONSOLE_MODE = 0xFE
+SPRITES_RESET = 16
+ALL_BUFFERS = 0xFFFF
 LAYOUT_UK = 0
 LAYOUT_US = 1
 # What the VDP's default UK layout gives for the keys of a US keyboard whose
@@ -207,6 +219,28 @@ class FakeVdp:
                 self._buffered(stream)
             elif command == MOUSE:
                 self._mouse(stream)
+            elif command in (LEGACY_MODES, CONTROL_KEYS, CONSOLE_MODE):
+                self._reset_event(command, next(stream))
+            elif command == UDG_RESET:
+                self._reset_event(command)
+            elif command == COPPER:
+                sub = next(stream)
+                if sub != COPPER_RESET_SIGNALS:
+                    self.errors.append(f"VDU 23,0,&C4,{sub}")
+                self._reset_event(command, sub)
+            elif command == AUDIO:
+                channel = next(stream)
+                sub = next(stream)
+                if sub == AUDIO_RESET:
+                    self._reset_event(command, ("reset", channel))
+                elif sub == AUDIO_SAMPLE_RATE:
+                    self._reset_event(command,
+                                      ("rate", channel, self._word(stream)))
+                else:
+                    self.errors.append(f"VDU 23,0,&85,{channel},{sub}")
+            elif command == KEYSTATE:
+                self._reset_event(command, (self._word(stream),
+                                            self._word(stream), next(stream)))
             elif command == KEYBOARD_LAYOUT:
                 layout = next(stream)
                 if self.listening:
@@ -224,6 +258,10 @@ class FakeVdp:
         else:
             self.errors.append(f"VDU 23,{first}")
 
+    def _reset_event(self, command, detail=None):
+        if self.listening:
+            self._event("reset", (command, detail))
+
     def _word(self, stream):
         return next(stream) | (next(stream) << 8)
 
@@ -235,6 +273,12 @@ class FakeVdp:
             data = bytes(next(stream) for _ in range(length))
             with self.lock:
                 self.buffers.setdefault(buffer_id, []).append(data)
+        elif command == BUFFERED_CLEAR and buffer_id == ALL_BUFFERS:
+            with self.lock:
+                self.buffers.clear()
+                self.bitmaps.clear()
+                self.cursors.clear()
+            self._reset_event(BUFFERED, buffer_id)
         elif command == BUFFERED_CLEAR:
             with self.lock:
                 self.buffers.pop(buffer_id, None)
@@ -262,6 +306,11 @@ class FakeVdp:
             else:
                 with self.lock:
                     self.bitmaps[self.bitmap] = (width, height, streams[0])
+        elif command == SPRITES_RESET:
+            with self.lock:
+                self.bitmaps.clear()
+                self.cursors.clear()
+            self._reset_event(SPRITES)
         elif command == MAKE_CURSOR:
             hot_x = next(stream)
             hot_y = next(stream)
