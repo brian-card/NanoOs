@@ -34,17 +34,8 @@
 #include <string.h>
 
 #include "MouseCursor.h"
+#include "ScreenSetup.h"
 #include "VdpDriver.h"
-
-/// @var _vdpScreenSetup
-///
-/// @brief VDU commands sent once the VDP is listening: select the 640x480,
-/// 16-color screen mode (VDU 22,0), select the US keyboard layout
-/// (VDU 23,0,&81,1), clear the screen (VDU 12), and turn the text cursor on
-/// (VDU 23,1,1).
-static const uint8_t _vdpScreenSetup[] = {
-  22, 0, 23, 0, 0x81, 1, 12, 23, 1, 1
-};
 
 /// @def VDP_CURSOR_ID
 ///
@@ -138,7 +129,7 @@ void* vdpSetupScreen(void *args) {
   VdpOutput *vdpOutput = (VdpOutput*) args;
 
   vdpOutput->listening = true;
-  vdpWrite(_vdpScreenSetup, sizeof(_vdpScreenSetup));
+  vdpWrite(vdpScreenSetup, vdpScreenSetupSize);
   vdpDefineCursor();
   if (vdpOutput->buffer != NULL) {
     vdpWrite(vdpOutput->buffer->data, vdpOutput->buffer->length);
