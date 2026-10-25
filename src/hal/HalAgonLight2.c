@@ -2171,7 +2171,7 @@ void agonLight2TraceUart0Stale(int byte) {
 /// @brief The watch for Ctrl+Alt+Del in the bytes the VDP sends over UART0.
 static AgonResetKeys _uart0ResetKeys;
 
-/// @fn void agonLight2Uart0ScanByte(int byte)
+/// @fn void agonLight2Uart0ScanByte(uint8_t byte)
 ///
 /// @brief Called by uart0Isr for each byte it receives: restart the machine
 /// if the byte completed a press of Ctrl+Alt+Del.
@@ -2179,8 +2179,8 @@ static AgonResetKeys _uart0ResetKeys;
 /// @param byte The byte received from the VDP.
 ///
 /// @return This function returns no value.
-void agonLight2Uart0ScanByte(int byte) {
-  if (agonResetKeysScanByte(&_uart0ResetKeys, (uint8_t) byte) == true) {
+void agonLight2Uart0ScanByte(uint8_t byte) {
+  if (agonResetKeysScanByte(&_uart0ResetKeys, byte) == true) {
     agonLight2SystemReset();
   }
 }

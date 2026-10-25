@@ -314,8 +314,7 @@ uart0Isr:
     push    af
     call    uart0RxPushByte
     pop     af
-    ld      hl, 0               ; clears HLU too - see agonLight2PollUart1Impl
-    ld      l, a
+    ld      l, a                ; a uint8_t argument is the low byte of its slot
     push    hl
     call    _agonLight2Uart0ScanByte
     pop     hl
