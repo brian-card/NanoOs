@@ -119,6 +119,7 @@ SUITE_SRCS     := test_smoke test_unit_misc test_unit_strtoll test_unit_console 
                   test_kernel_wake \
                   test_unit_vdp_text \
                   test_unit_vdp_keyboard \
+                  test_unit_agon_reset_keys \
                   test_unit_posix_errno
 
 KERNEL_OBJS := $(addprefix $(OBJ_DIR)/kernel_,$(addsuffix .o,$(KERNEL_SRCS)))
@@ -186,6 +187,9 @@ $(OBJ_DIR)/suite_test_unit_vdp_text.o: \
 $(OBJ_DIR)/suite_test_unit_vdp_keyboard.o: \
     ../usr/src/lib/vdp.drv/main/VdpKeyboard.c \
     ../usr/src/lib/vdp.drv/include/VdpKeyboard.h
+$(OBJ_DIR)/suite_test_unit_agon_reset_keys.o: \
+    ../src/hal/AgonLight2/AgonResetKeys.c \
+    ../src/hal/AgonLight2/AgonResetKeys.h
 
 clean:
 	$(RM) obj obj-asan $(BIN_DIR)
