@@ -499,8 +499,9 @@ typedef struct ConsolePort {
 /// @param consoleBuffers The array of ConsoleBuffers that can be used by
 ///   the console ports for input and by processes for output.
 /// @param numConsolePorts The number of active console ports.
-/// @param sendSignalArgs A pointer to the SchedulerSendSignalArgs that Ctrl-C
-///   sends to the scheduler.  It lives in runConsole's frame because the send
+/// @param sendSignalArgs A pointer to the CONSOLE_NUM_PORTS
+///   SchedulerSendSignalArgs, one per port, that Ctrl-C sends to the
+///   scheduler.  They live in runConsole's frame because the send
 ///   doesn't wait for the scheduler to read it.  Declared as a void* poineter
 ///   here so that we dont' have to include the definition of
 ///   SchedulerSendSignalArgs (which is a scheduler structure) in this file.
