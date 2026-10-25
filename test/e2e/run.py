@@ -267,15 +267,28 @@ def assert_vdp_set_up_on_answer(vdp):
 
     @param vdp The FakeVdp, after it has drawn the login prompt.
     """
-    setup = [(kind, detail) for _t, kind, detail in vdp.events[:6]]
-    assert setup == [("mode", 0), ("layout", 1), ("cls", None),
-                     ("cursor", 1), ("pointer", VDP_POINTER_ID),
-                     ("text", setup[5][1])], \
-        f"the screen wasn't set up first: {vdp.events[:6]}"
+    setup = [(kind, detail) for _t, kind, detail in vdp.events[:8]]
+    assert setup == [("mode", 0), ("layout", 1),
+                     ("colour", CGA_YELLOW), ("colour", 128 + CGA_BLUE),
+                     ("cls", None), ("cursor", 1), ("pointer", VDP_POINTER_ID),
+                     ("text", setup[7][1])], \
+        f"the screen wasn't set up first: {vdp.events[:8]}"
+    assert vdp.palette == CGA_PALETTE, \
+        f"the palette isn't CGA's: {vdp.palette}"
     delay = vdp.events[0][0] - vdp.answered
     assert delay < 1.0, f"the screen was set up {delay:.1f} s after the answer"
 
 
+CGA_PALETTE = dict(enumerate([
+    (0x00, 0x00, 0x00), (0x00, 0x00, 0xAA), (0x00, 0xAA, 0x00),
+    (0x00, 0xAA, 0xAA), (0xAA, 0x00, 0x00), (0xAA, 0x00, 0xAA),
+    (0xAA, 0x55, 0x00), (0xAA, 0xAA, 0xAA), (0x55, 0x55, 0x55),
+    (0x55, 0x55, 0xFF), (0x55, 0xFF, 0x55), (0x55, 0xFF, 0xFF),
+    (0xFF, 0x55, 0x55), (0xFF, 0x55, 0xFF), (0xFF, 0xFF, 0x55),
+    (0xFF, 0xFF, 0xFF),
+]))
+CGA_BLUE = 1
+CGA_YELLOW = 14
 VDP_POINTER_ID = 0xF000
 VDP_POINTER = [
     "B...........",

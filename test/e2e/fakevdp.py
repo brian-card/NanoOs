@@ -117,6 +117,7 @@ class FakeVdp:
         self.cursor = 0        # index in screen of the next character drawn
         self.dropped = 0       # bytes ignored before listening
         self.layout = LAYOUT_UK
+        self.palette = {}      # logical color -> (red, green, blue) set by VDU 19
         # Like the real VDP's, these outlive a connection.
         self.buffers = {}      # buffer ID -> list of streams written to it
         self.bitmaps = {}      # bitmap ID -> (width, height, RGBA2222 bytes)
@@ -155,7 +156,24 @@ class FakeVdp:
                 elif byte == 22:
                     mode = next(stream)
                     if self.listening:
+                        with self.lock:
+                            # Changing the mode resets the palette.
+                            self.palette = {}
                         self._event("mode", mode)
+                elif byte == 17:
+                    colour = next(stream)
+                    if self.listening:
+                        self._event("colour", colour)
+                elif byte == 19:
+                    logical, physical, red, green, blue = (
+                        next(stream) for _ in range(5))
+                    if not self.listening:
+                        pass
+                    elif physical != 255:
+                        self.errors.append(f"VDU 19,{logical},{physical}")
+                    else:
+                        with self.lock:
+                            self.palette[logical] = (red, green, blue)
                 elif not self.listening:
                     self.dropped += 1
                 elif byte == 12:
