@@ -38,6 +38,7 @@
 #include <stddef.h>
 
 #include "../kernel/BootTrace.h"
+#include "AgonLight2/AgonResetKeys.h"
 #include "HalAgonLight2.h"
 #include "HalCommon.h"
 #include "../kernel/Commands.h"
@@ -2163,6 +2164,25 @@ void agonLight2TraceInterrupt(int code) {
 void agonLight2TraceUart0Stale(int byte) {
   static const char _text[] KEEP_IN_FLASH = "[boot] U0 stale ack read 0x";
   agonLight2TraceValue(_text, (unsigned long) byte, 16);
+}
+
+/// @var _uart0ResetKeys
+///
+/// @brief The watch for Ctrl+Alt+Del in the bytes the VDP sends over UART0.
+static AgonResetKeys _uart0ResetKeys;
+
+/// @fn void agonLight2Uart0ScanByte(int byte)
+///
+/// @brief Called by uart0Isr for each byte it receives: restart the machine
+/// if the byte completed a press of Ctrl+Alt+Del.
+///
+/// @param byte The byte received from the VDP.
+///
+/// @return This function returns no value.
+void agonLight2Uart0ScanByte(int byte) {
+  if (agonResetKeysScanByte(&_uart0ResetKeys, (uint8_t) byte) == true) {
+    agonLight2SystemReset();
+  }
 }
 
 /// @var _dataBssCanaryError
