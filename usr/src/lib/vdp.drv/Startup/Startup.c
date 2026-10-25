@@ -48,6 +48,48 @@
 /// @brief The two bytes of a 16-bit VDU argument, low byte first.
 #define VDP_WORD(value) ((value) & 0xff), (((value) >> 8) & 0xff)
 
+/// @def VDP_AUDIO_RESET
+///
+/// @brief The bytes of VDU 23,0,&85,channel,10, which resets an audio channel
+/// if it's enabled.
+#define VDP_AUDIO_RESET(channel) 23, 0, 0x85, (channel), 10
+
+/// @def VDP_AUDIO_RESET_8
+///
+/// @brief The bytes of VDP_AUDIO_RESET for eight channels starting at base.
+#define VDP_AUDIO_RESET_8(base) \
+  VDP_AUDIO_RESET((base) + 0), VDP_AUDIO_RESET((base) + 1), \
+  VDP_AUDIO_RESET((base) + 2), VDP_AUDIO_RESET((base) + 3), \
+  VDP_AUDIO_RESET((base) + 4), VDP_AUDIO_RESET((base) + 5), \
+  VDP_AUDIO_RESET((base) + 6), VDP_AUDIO_RESET((base) + 7)
+
+/// @var _vdpReset
+///
+/// @brief VDU commands that return the state an eZ80 reset leaves on the VDP
+/// to its power-on defaults, sent before the screen setup: turn legacy modes
+/// off (VDU 23,0,&C1,0) so that mode 0 is 640x480, control keys on
+/// (VDU 23,0,&98,1), and console mode off (VDU 23,0,&FE,0); reset sprites
+/// (VDU 23,27,16); clear every buffer, bitmap, mouse cursor, font, and sample
+/// (VDU 23,0,&A0,65535;2); restore the system font (VDU 23,0,&91); reset the
+/// copper's signal list (VDU 23,0,&C4,4); restore the default sample rate
+/// (VDU 23,0,&85,255,13,16384;) and reset all 32 audio channels; and restore
+/// the default keyboard repeat delay and rate with the LEDs off
+/// (VDU 23,0,&88,500;100;0).  The mouse isn't reset because the VDP can stall
+/// for seconds resetting a PS/2 mouse, longer than UART0 waits on CTS.
+static const uint8_t _vdpReset[] = {
+  23, 0, 0xC1, 0,
+  23, 0, 0x98, 1,
+  23, 0, 0xFE, 0,
+  23, 27, 16,
+  23, 0, 0xA0, VDP_WORD(0xFFFF), 2,
+  23, 0, 0x91,
+  23, 0, 0xC4, 4,
+  23, 0, 0x85, 255, 13, VDP_WORD(16384),
+  VDP_AUDIO_RESET_8(0), VDP_AUDIO_RESET_8(8),
+  VDP_AUDIO_RESET_8(16), VDP_AUDIO_RESET_8(24),
+  23, 0, 0x88, VDP_WORD(500), VDP_WORD(100), 0
+};
+
 /// @var _vdpCursorUploadStart
 ///
 /// @brief VDU commands that start the upload of the mouse cursor: clear the
@@ -119,8 +161,8 @@ void* vdpStartup(void *args) {
 
 /// @fn void* vdpSetupScreen(void *args)
 ///
-/// @brief Set up the screen and the mouse pointer once the VDP is listening
-/// and draw the output buffered until then.
+/// @brief Reset the VDP, set up the screen and the mouse pointer once the VDP
+/// is listening, and draw the output buffered until then.
 ///
 /// @param args A pointer to the driver's VdpOutput.
 ///
@@ -129,6 +171,7 @@ void* vdpSetupScreen(void *args) {
   VdpOutput *vdpOutput = (VdpOutput*) args;
 
   vdpOutput->listening = true;
+  vdpWrite(_vdpReset, sizeof(_vdpReset));
   vdpWrite(vdpScreenSetup, vdpScreenSetupSize);
   vdpDefineCursor();
   if (vdpOutput->buffer != NULL) {
