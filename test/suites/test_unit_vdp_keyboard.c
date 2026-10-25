@@ -235,16 +235,16 @@ NANO_OS_TEST(unit_vdp_keyboard, poll_reply_with_cookie_is_recognized) {
   const uint8_t reply[] = { 0x80, 0x01, VDP_GENERAL_POLL_COOKIE };
 
   NANO_OS_ASSERT_EQ_INT(2, feed(&parser, reply, sizeof(reply)));
-  NANO_OS_ASSERT_TRUE(vdpIsPollReply(&parser));
+  NANO_OS_ASSERT_TRUE(vdpIsPollReply(&parser, VDP_GENERAL_POLL_COOKIE));
 }
 
 NANO_OS_TEST(unit_vdp_keyboard, poll_reply_with_another_cookie_is_not_ours) {
   VdpPacketParser parser;
   memset(&parser, 0, sizeof(parser));
-  const uint8_t reply[] = { 0x80, 0x01, VDP_GENERAL_POLL_COOKIE + 1 };
+  const uint8_t reply[] = { 0x80, 0x01, VDP_GENERAL_POLL_COOKIE + 2 };
 
   NANO_OS_ASSERT_EQ_INT(2, feed(&parser, reply, sizeof(reply)));
-  NANO_OS_ASSERT_FALSE(vdpIsPollReply(&parser));
+  NANO_OS_ASSERT_FALSE(vdpIsPollReply(&parser, VDP_GENERAL_POLL_COOKIE));
 }
 
 NANO_OS_TEST(unit_vdp_keyboard, key_carrying_the_cookie_is_not_a_poll_reply) {
@@ -253,11 +253,26 @@ NANO_OS_TEST(unit_vdp_keyboard, key_carrying_the_cookie_is_not_a_poll_reply) {
   const uint8_t packet[] = { 0x81, 0x04, VDP_GENERAL_POLL_COOKIE, 0, 0, 1 };
 
   NANO_OS_ASSERT_EQ_INT(5, feed(&parser, packet, sizeof(packet)));
-  NANO_OS_ASSERT_FALSE(vdpIsPollReply(&parser));
+  NANO_OS_ASSERT_FALSE(vdpIsPollReply(&parser, VDP_GENERAL_POLL_COOKIE));
 }
 
 NANO_OS_TEST(unit_vdp_keyboard, cookie_stays_below_the_header_bit) {
   NANO_OS_ASSERT_TRUE(VDP_GENERAL_POLL_COOKIE < 0x80);
+  NANO_OS_ASSERT_TRUE(VDP_SETUP_POLL_COOKIE < 0x80);
+}
+
+NANO_OS_TEST(unit_vdp_keyboard, setup_and_handshake_replies_are_told_apart) {
+  VdpPacketParser parser;
+  memset(&parser, 0, sizeof(parser));
+  const uint8_t handshake[] = { 0x80, 0x01, VDP_GENERAL_POLL_COOKIE };
+  const uint8_t setup[] = { 0x80, 0x01, VDP_SETUP_POLL_COOKIE };
+
+  NANO_OS_ASSERT_TRUE(VDP_SETUP_POLL_COOKIE != VDP_GENERAL_POLL_COOKIE);
+  NANO_OS_ASSERT_EQ_INT(2, feed(&parser, handshake, sizeof(handshake)));
+  NANO_OS_ASSERT_FALSE(vdpIsPollReply(&parser, VDP_SETUP_POLL_COOKIE));
+  NANO_OS_ASSERT_EQ_INT(2, feed(&parser, setup, sizeof(setup)));
+  NANO_OS_ASSERT_TRUE(vdpIsPollReply(&parser, VDP_SETUP_POLL_COOKIE));
+  NANO_OS_ASSERT_FALSE(vdpIsPollReply(&parser, VDP_GENERAL_POLL_COOKIE));
 }
 
 NANO_OS_TEST(unit_vdp_keyboard, other_command_carrying_the_cookie_is_not_ours) {
@@ -266,5 +281,5 @@ NANO_OS_TEST(unit_vdp_keyboard, other_command_carrying_the_cookie_is_not_ours) {
   const uint8_t packet[] = { 0x82, 0x01, VDP_GENERAL_POLL_COOKIE };
 
   NANO_OS_ASSERT_EQ_INT(2, feed(&parser, packet, sizeof(packet)));
-  NANO_OS_ASSERT_FALSE(vdpIsPollReply(&parser));
+  NANO_OS_ASSERT_FALSE(vdpIsPollReply(&parser, VDP_GENERAL_POLL_COOKIE));
 }

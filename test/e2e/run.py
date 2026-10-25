@@ -273,11 +273,11 @@ def assert_vdp_set_up_on_answer(vdp):
     assert resets == VDP_RESET, \
         f"the VDP wasn't reset before the mode change: {resets}"
     setup = [(kind, detail)
-             for _t, kind, detail in vdp.events[first_mode:first_mode + 8]]
+             for _t, kind, detail in vdp.events[first_mode:first_mode + 9]]
     assert setup == [("mode", 0), ("layout", 1),
                      ("colour", CGA_YELLOW), ("colour", 128 + CGA_BLUE),
-                     ("cls", None), ("cursor", 1), ("pointer", VDP_POINTER_ID),
-                     ("text", setup[7][1])], \
+                     ("cls", None), ("cursor", 1), ("mouse", "reset"),
+                     ("pointer", VDP_POINTER_ID), ("text", setup[8][1])], \
         f"the screen wasn't set up first: {setup}"
     assert vdp.palette == CGA_PALETTE, \
         f"the palette isn't CGA's: {vdp.palette}"
@@ -304,6 +304,7 @@ VDP_RESET = [
 ]
 CGA_YELLOW = 14
 VDP_POINTER_ID = 0xF000
+VDP_SETUP_POLL_COOKIE = 0x4f
 VDP_POINTER = [
     "B...........",
     "BB..........",
@@ -402,7 +403,41 @@ def test_vdp_driver_writes_anyway_when_the_vdp_never_answers(s):
         f"output was sent before the driver gave up: {vdp.events[:3]}"
     waited = first_time - vdp.first_poll
     assert 14.5 < waited < 16.5, f"gave up after {waited:.1f} s, not 15 s"
-    assert vdp.polls[-1] <= first_time, "polls continued after giving up"
+    late = [cookie for t, cookie in zip(vdp.polls, vdp.poll_cookies)
+            if t > first_time]
+    assert late and all(cookie == VDP_SETUP_POLL_COOKIE for cookie in late), \
+        f"handshake polls continued after giving up: {late}"
+
+
+def test_vdp_driver_holds_output_until_the_mouse_reset_is_done(s):
+    vdp = s.restart_with_vdp(mouse_reset_seconds=2.0)
+    vdp.expect("login: ", timeout=20)
+    reset_at = next(t for t, kind, _d in vdp.events if kind == "mouse")
+    text_at = next(t for t, kind, _d in vdp.events if kind == "text")
+    assert any(t > reset_at for t in vdp.polls), \
+        "the driver didn't poll after resetting the mouse"
+    answered = vdp.mouse_reset_answered
+    assert (answered is not None) and (text_at >= answered), \
+        "text was sent before the VDP finished resetting the mouse"
+    assert answered - reset_at >= 1.9
+    assert vdp.errors == [], f"unexpected VDU commands: {vdp.errors}"
+
+
+def test_vdp_pointer_appears_once_a_mouse_is_plugged_in(s):
+    vdp = s.restart_with_vdp(mouse=False)
+    vdp.expect("login: ")
+    assert not vdp.mouse_enabled, "the mouse was enabled with none plugged in"
+    assert vdp.mouse_cursor is None, "a pointer was shown with no mouse"
+    vdp.mouse = True
+    vdp.disconnect()
+    vdp.wait_connections(2)
+    deadline = time.time() + 10
+    while vdp.mouse_cursor is None:
+        assert time.time() < deadline, \
+            "the restarted driver never showed the pointer"
+        time.sleep(0.1)
+    assert_vdp_pointer(vdp)
+    assert vdp.errors == [], f"unexpected VDU commands: {vdp.errors}"
 
 
 def test_vdp_driver_is_restarted_after_losing_the_vdp(s):

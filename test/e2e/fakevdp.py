@@ -60,6 +60,7 @@ BUFFERED = 0xA0
 BUFFERED_WRITE = 0
 BUFFERED_CLEAR = 2
 MOUSE_ENABLE = 0
+MOUSE_RESET = 2
 MOUSE_SET_CURSOR = 3
 SPRITES = 27
 SELECT_BITMAP = 0x20
@@ -106,7 +107,8 @@ def keycode(ch):
 class FakeVdp:
     """A fake VDP serving one connection at a time on a Unix socket."""
 
-    def __init__(self, path, answer_after=0.0, answer=True):
+    def __init__(self, path, answer_after=0.0, answer=True, mouse=True,
+                 mouse_reset_seconds=0.0):
         """Start listening.
 
         @param path The path of the Unix socket to create.
@@ -114,6 +116,10 @@ class FakeVdp:
           answered.
         @param answer False to never answer a poll, but record everything sent
           as if listening, to see what the driver does when it gives up.
+        @param mouse Whether a mouse is plugged in, which a mouse reset detects.
+        @param mouse_reset_seconds Seconds a mouse reset takes: polls received
+          meanwhile are answered when it ends.  Unlike the real VDP, this one
+          keeps reading meanwhile, so that output sent early shows up.
         """
         self.path = path
         self.answer_after = answer_after
@@ -123,6 +129,7 @@ class FakeVdp:
         self.connections = 0
         self.first_poll = None
         self.polls = []        # times of the general polls received
+        self.poll_cookies = [] # their cookies
         self.answered = None   # time of the first poll answered
         self.events = []       # (time, kind, detail) once listening
         self.screen = ""       # text drawn since the last clear
@@ -137,6 +144,11 @@ class FakeVdp:
         self.cursors = {}      # cursor ID -> (bitmap, hotspot x, hotspot y)
         self.mouse_enabled = False
         self.mouse_cursor = None
+        self.mouse = mouse
+        self.mouse_detected = False
+        self.mouse_reset_seconds = mouse_reset_seconds
+        self.mouse_reset_until = 0.0
+        self.mouse_reset_answered = None  # time of the poll answered after it
         self.listening = not answer
         self.errors = []
         if os.path.exists(path):
@@ -325,13 +337,19 @@ class FakeVdp:
 
     def _mouse(self, stream):
         command = next(stream)
-        if command == MOUSE_ENABLE:
+        if command == MOUSE_RESET:
             with self.lock:
-                self.mouse_enabled = True
+                self.mouse_detected = self.mouse
+                self.mouse_reset_until = time.time() + self.mouse_reset_seconds
+            self._event("mouse", "reset")
+        elif command == MOUSE_ENABLE:
+            with self.lock:
+                # Like the real VDP, only a mouse the last reset found.
+                self.mouse_enabled = self.mouse_detected
         elif command == MOUSE_SET_CURSOR:
             cursor = self._word(stream)
             if not self.mouse_enabled:
-                self.errors.append(f"cursor {cursor} set with the mouse off")
+                pass  # ignored, as the real VDP does
             elif cursor > 255 and cursor not in self.cursors:
                 self.errors.append(f"cursor {cursor} doesn't exist")
             else:
@@ -374,11 +392,25 @@ class FakeVdp:
         now = time.time()
         with self.lock:
             self.polls.append(now)
+            self.poll_cookies.append(cookie)
             if self.first_poll is None:
                 self.first_poll = now
             due = self.answer and (now - self.first_poll >= self.answer_after)
-            if due:
+            if due and now < self.mouse_reset_until:
+                conn = self.conn
+
+                def answer_after_reset():
+                    with self.lock:
+                        conn.sendall(bytes([0x80, 0x01, cookie]))
+                        if self.mouse_reset_answered is None:
+                            self.mouse_reset_answered = time.time()
+                        self.lock.notify_all()
+                threading.Timer(self.mouse_reset_until - now,
+                                answer_after_reset).start()
+            elif due:
                 self.conn.sendall(bytes([0x80, 0x01, cookie]))
+                if self.mouse_reset_until and self.mouse_reset_answered is None:
+                    self.mouse_reset_answered = now
                 if self.answered is None:
                     self.listening = True
                     self.answered = now
