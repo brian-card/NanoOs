@@ -66,7 +66,7 @@ static const uint8_t _vdpScreenSetup[] = {
 static const uint8_t _vdpCursorUploadStart[] = {
   23, 0, 0xA0, VDP_WORD(VDP_CURSOR_ID), 2,
   23, 0, 0xA0, VDP_WORD(VDP_CURSOR_ID), 0,
-  VDP_WORD(MOUSE_CURSOR_WIDTH * MOUSE_CURSOR_HEIGHT)
+  VDP_WORD(sizeof(cursorPixels))
 };
 
 /// @var _vdpCursorUploadEnd
@@ -94,11 +94,7 @@ static const uint8_t _vdpCursorUploadEnd[] = {
 /// @return This function returns no value.
 static void vdpDefineCursor(void) {
   vdpWrite(_vdpCursorUploadStart, sizeof(_vdpCursorUploadStart));
-  for (uint8_t row = 0; row < MOUSE_CURSOR_HEIGHT; row++) {
-    uint8_t rowPixels[MOUSE_CURSOR_WIDTH];
-    mouseCursorRowToVdp(row, rowPixels);
-    vdpWrite(rowPixels, sizeof(rowPixels));
-  }
+  vdpWrite(cursorPixels, sizeof(cursorPixels));
   vdpWrite(_vdpCursorUploadEnd, sizeof(_vdpCursorUploadEnd));
 }
 

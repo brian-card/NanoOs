@@ -49,17 +49,10 @@ extern "C"
 /// @brief The height of the mouse cursor, in pixels.
 #define MOUSE_CURSOR_HEIGHT 18
 
-/// @fn void mouseCursorRowToVdp(uint8_t row, uint8_t *vdpPixels)
+/// @var cursorPixels
 ///
-/// @brief Convert one row of the mouse cursor to the VDP's RGBA2222 pixels.
-/// This lives with the pixels so that Graphics.h, whose kernel includes
-/// conflict with ExecutiveProcesses.h, stays out of Startup.c.
-///
-/// @param row The index of the row, from the top.
-/// @param vdpPixels The MOUSE_CURSOR_WIDTH bytes to write the row's pixels to.
-///
-/// @return This function returns no value.
-void mouseCursorRowToVdp(uint8_t row, uint8_t *vdpPixels);
+/// @brief The mouse cursor's pixels in the VDP's RGBA2222, row by row.
+extern const uint8_t cursorPixels[MOUSE_CURSOR_WIDTH * MOUSE_CURSOR_HEIGHT];
 
 #ifdef __cplusplus
 } // extern "C"

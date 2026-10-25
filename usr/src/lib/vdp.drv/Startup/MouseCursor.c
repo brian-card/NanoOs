@@ -29,14 +29,14 @@
 ///
 /// @brief Definition of the mouse cursor pixels to use for the VDP pointer.
 
-#include "Graphics.h"
 #include "MouseCursor.h"
+#include "VdpColor.h"
 
-#define B CGA_BLACK        /* black  (border)      */
-#define W CGA_WHITE        /* white  (fill)        */
-#define _ GFX_TRANSPARENT  /* transparent          */
+#define B rgba8888ToVdpRgba2222(CGA_BLACK)        /* black  (border)      */
+#define W rgba8888ToVdpRgba2222(CGA_WHITE)        /* white  (fill)        */
+#define _ rgba8888ToVdpRgba2222(GFX_TRANSPARENT)  /* transparent          */
 
-const GfxColor cursorPixels[MOUSE_CURSOR_WIDTH * MOUSE_CURSOR_HEIGHT] = {
+const uint8_t cursorPixels[MOUSE_CURSOR_WIDTH * MOUSE_CURSOR_HEIGHT] = {
  /* 0    1    2    3    4    5    6    7    8    9   10   11  */
     B,   _,   _,   _,   _,   _,   _,   _,   _,   _,   _,   _,  //  0
     B,   B,   _,   _,   _,   _,   _,   _,   _,   _,   _,   _,  //  1
@@ -61,23 +61,3 @@ const GfxColor cursorPixels[MOUSE_CURSOR_WIDTH * MOUSE_CURSOR_HEIGHT] = {
 #undef B
 #undef W
 #undef _
-
-/// @fn static inline uint8_t rgba2222ToVdp(uint8_t color)
-///
-/// @brief Convert a Graphics.h RGBA2222 color, which packs red in the top two
-/// bits, to the VDP's RGBA2222, which packs red in the bottom two.
-///
-/// @param color The Graphics.h RGBA2222 color.
-///
-/// @return Returns the color in the VDP's RGBA2222 layout.
-static inline uint8_t rgba2222ToVdp(uint8_t color) {
-  return ((color >> 6) & 0x03) | ((color >> 2) & 0x0c)
-    | ((color << 2) & 0x30) | ((color << 6) & 0xc0);
-}
-
-void mouseCursorRowToVdp(uint8_t row, uint8_t *vdpPixels) {
-  const GfxColor *pixel = &cursorPixels[row * MOUSE_CURSOR_WIDTH];
-  for (uint8_t column = 0; column < MOUSE_CURSOR_WIDTH; column++) {
-    vdpPixels[column] = rgba2222ToVdp(rgba8888ToRgba2222(pixel[column]));
-  }
-}
