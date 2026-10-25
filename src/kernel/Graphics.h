@@ -212,16 +212,18 @@ const uint8_t rgb222ToCgaMap[64] = { \
 
 // Common conversions.
 #define rgba8888ToRgb888(color) ((color) >> 8)
+#define colorChannelTo2Bits(color, shift) \
+    ((((((GfxColor) (color)) >> (shift)) & 0xff) + 42) / 85)
 #define rgba8888ToRgba2222(color) ( \
-    ((((((color) >> 24) & 0xff) + 42) / 85) << 6) \
-  | ((((((color) >> 16) & 0xff) + 42) / 85) << 4) \
-  | ((((((color) >>  8) & 0xff) + 42) / 85) << 2) \
-  | ((((((color) >>  0) & 0xff) + 42) / 85) << 0) )
+    (colorChannelTo2Bits(color, 24) << 6) \
+  | (colorChannelTo2Bits(color, 16) << 4) \
+  | (colorChannelTo2Bits(color,  8) << 2) \
+  | (colorChannelTo2Bits(color,  0) << 0) )
 #define rgba8888ToRgb222(color) (rgba8888ToRgba2222(color) >> 2)
 #define rgb888ToRgb222(color) ( \
-    ((((((color) >> 16) & 0xff) + 42) / 85) << 4) \
-  | ((((((color) >>  8) & 0xff) + 42) / 85) << 2) \
-  | ((((((color) >>  0) & 0xff) + 42) / 85) << 0) )
+    (colorChannelTo2Bits(color, 16) << 4) \
+  | (colorChannelTo2Bits(color,  8) << 2) \
+  | (colorChannelTo2Bits(color,  0) << 0) )
 #define rgba2222ToRgb222(color) ((color) >> 2)
 
 #define rgb222ToCga(color)   rgb222ToCgaMap[(color)]
