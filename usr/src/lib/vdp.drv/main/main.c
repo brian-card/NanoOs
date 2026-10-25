@@ -49,14 +49,6 @@
 /// several seconds.
 #define VDP_GENERAL_POLL_RETRY_NS 500000000LL
 
-/// @var _vdpGeneralPoll
-///
-/// @brief The general poll (VDU 23,0,&80,cookie), which the VDP answers with
-/// a packet carrying the cookie.
-static const uint8_t _vdpGeneralPoll[] = {
-  23, 0, 0x80, VDP_GENERAL_POLL_COOKIE
-};
-
 /// @fn static void vdpWriteText(VdpOutput *vdpOutput, const char *text)
 ///
 /// @brief Draw a string of console text on the VDP, or buffer it if the VDP
@@ -79,17 +71,26 @@ static void vdpWriteText(VdpOutput *vdpOutput, const char *text) {
   }
 }
 
-/// @fn static bool vdpHandshake(VdpOutput *vdpOutput, VdpInput *input)
+/// @fn static bool vdpHandshake(VdpOutput *vdpOutput, VdpInput *input,
+///   VdpStartupArgs *startupArgs)
 ///
 /// @brief Send the general poll until the VDP answers it or the wait times
-/// out, then have the Startup overlay set up the screen.
+/// out, then have the Startup overlay set up the screen, and again once the
+/// poll that follows the setup, which is sent the same way, is answered or
+/// times out.  The state is passed
+/// both directly and as startupArgs, which reloading it through costs main
+/// more than the extra argument does.
 ///
 /// @param vdpOutput A pointer to the driver's VdpOutput.
 /// @param input A pointer to the driver's VdpInput.
+/// @param startupArgs A pointer to the VdpStartupArgs pointing to vdpOutput
+///   and input, for the Startup overlay.
 ///
 /// @return Returns false if the Startup overlay couldn't be run, true
 /// otherwise.
-static bool vdpHandshake(VdpOutput *vdpOutput, VdpInput *input) {
+static bool vdpHandshake(VdpOutput *vdpOutput, VdpInput *input,
+  VdpStartupArgs *startupArgs
+) {
   if (vdpOutput->listening == true) {
     return true;
   }
@@ -97,14 +98,16 @@ static bool vdpHandshake(VdpOutput *vdpOutput, VdpInput *input) {
   int64_t now = vdpNowNs();
   if ((input->pollAnswered == false) && (now < vdpOutput->giveUpNs)) {
     if (now >= vdpOutput->nextPollNs) {
-      vdpWrite(_vdpGeneralPoll, sizeof(_vdpGeneralPoll));
+      // VDU 23,0,&80,cookie, which the VDP answers with the cookie.
+      uint8_t poll[] = { 23, 0, 0x80, input->pollCookie };
+      vdpWrite(poll, sizeof(poll));
       vdpOutput->nextPollNs = now + VDP_GENERAL_POLL_RETRY_NS;
     }
     return true;
   }
 
   return callOverlayFunction(OVERLAY_SAME_NAMESPACE,
-    "Startup", "vdpSetupScreen", vdpOutput) == vdpOutput;
+    "Startup", "vdpSetupScreen", startupArgs) == startupArgs;
 }
 
 /// @fn static void vdpRequestPort(VdpInput *input)
@@ -162,7 +165,7 @@ static bool vdpReadKeyboard(VdpInput *input) {
       if (vdpParseByte(&input->parser, bytes[ii]) == false) {
         continue;
       }
-      if (vdpIsPollReply(&input->parser) == true) {
+      if (vdpIsPollReply(&input->parser, input->pollCookie) == true) {
         input->pollAnswered = true;
         continue;
       }
@@ -269,7 +272,7 @@ int main(int argc, char **argv) {
   }
 
   while (1) {
-    if (vdpHandshake(&vdpOutput, &input) == false) {
+    if (vdpHandshake(&vdpOutput, &input, &startupArgs) == false) {
       return 1;
     }
     vdpRequestPort(&input);

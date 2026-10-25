@@ -53,6 +53,14 @@ extern "C"
 /// reply's data byte with the high bit set as the next packet's header.
 #define VDP_GENERAL_POLL_COOKIE 0x4e
 
+/// @def VDP_SETUP_POLL_COOKIE
+///
+/// @brief The byte the driver sends with the general poll that follows its
+/// screen setup, so that a late reply to a handshake poll can't be taken for
+/// its reply.  Must stay below 0x80 for the same reason as
+/// VDP_GENERAL_POLL_COOKIE.
+#define VDP_SETUP_POLL_COOKIE 0x4f
+
 /// @def VDP_PACKET_KEYBOARD
 ///
 /// @brief The command of a VDP keyboard event packet.
@@ -95,7 +103,7 @@ typedef struct VdpPacketParser {
 
 bool vdpParseByte(VdpPacketParser *parser, uint8_t byte);
 size_t vdpTranslateKey(const uint8_t *keyData, uint8_t *output);
-bool vdpIsPollReply(const VdpPacketParser *parser);
+bool vdpIsPollReply(const VdpPacketParser *parser, uint8_t cookie);
 
 #ifdef __cplusplus
 } // extern "C"

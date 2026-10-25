@@ -199,18 +199,19 @@ size_t vdpTranslateKey(const uint8_t *keyData, uint8_t *output) {
   return 0;
 }
 
-/// @fn bool vdpIsPollReply(const VdpPacketParser *parser)
+/// @fn bool vdpIsPollReply(const VdpPacketParser *parser, uint8_t cookie)
 ///
 /// @brief Determine whether the packet a parser just completed is the VDP's
-/// reply to the driver's general poll.
+/// reply to a general poll the driver sent with a given cookie.
 ///
 /// @param parser A pointer to the VdpPacketParser whose vdpParseByte call
 ///   just returned true.
+/// @param cookie The cookie the poll was sent with.
 ///
-/// @return Returns true if the packet is a poll reply carrying
-/// VDP_GENERAL_POLL_COOKIE, false otherwise.
-bool vdpIsPollReply(const VdpPacketParser *parser) {
+/// @return Returns true if the packet is a poll reply carrying cookie, false
+/// otherwise.
+bool vdpIsPollReply(const VdpPacketParser *parser, uint8_t cookie) {
   return (parser->command == VDP_PACKET_GENERAL_POLL)
     && (parser->length == 1)
-    && (parser->data[0] == VDP_GENERAL_POLL_COOKIE);
+    && (parser->data[0] == cookie);
 }
