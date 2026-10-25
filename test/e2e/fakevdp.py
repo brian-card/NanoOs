@@ -60,6 +60,7 @@ BUFFERED = 0xA0
 BUFFERED_WRITE = 0
 BUFFERED_CLEAR = 2
 MOUSE_ENABLE = 0
+MOUSE_DISABLE = 1
 MOUSE_RESET = 2
 MOUSE_SET_CURSOR = 3
 SPRITES = 27
@@ -146,6 +147,8 @@ class FakeVdp:
         self.mouse_cursor = None
         self.mouse = mouse
         self.mouse_detected = False
+        self.mouse_visible = False
+        self.mouse_port_suspended = False
         self.mouse_reset_seconds = mouse_reset_seconds
         self.mouse_reset_until = 0.0
         self.mouse_reset_answered = None  # time of the poll answered after it
@@ -337,15 +340,32 @@ class FakeVdp:
 
     def _mouse(self, stream):
         command = next(stream)
+        # These follow the real VDP's enableMouse, disableMouse, and
+        # MOUSE_RESET, including that a failed reset hides nothing, that
+        # enabling an enabled mouse shows the pointer without a new check, and
+        # that disabling suspends the port, holding the clock line a reset
+        # needs.
         if command == MOUSE_RESET:
             with self.lock:
-                self.mouse_detected = self.mouse
+                self.mouse_detected = (self.mouse
+                                       and not self.mouse_port_suspended)
+                if self.mouse_detected:
+                    self.mouse_visible = True
                 self.mouse_reset_until = time.time() + self.mouse_reset_seconds
             self._event("mouse", "reset")
+        elif command == MOUSE_DISABLE:
+            with self.lock:
+                self.mouse_visible = False
+                if self.mouse_enabled:
+                    self.mouse_port_suspended = True
+                self.mouse_enabled = False
+            self._event("mouse", "disable")
         elif command == MOUSE_ENABLE:
             with self.lock:
-                # Like the real VDP, only a mouse the last reset found.
-                self.mouse_enabled = self.mouse_detected
+                if not self.mouse_enabled:
+                    self.mouse_port_suspended = False
+                    self.mouse_enabled = self.mouse_detected
+                self.mouse_visible = self.mouse_enabled
         elif command == MOUSE_SET_CURSOR:
             cursor = self._word(stream)
             if not self.mouse_enabled:
@@ -355,6 +375,7 @@ class FakeVdp:
             else:
                 with self.lock:
                     self.mouse_cursor = cursor
+                    self.mouse_visible = True
                 self._event("pointer", cursor)
         else:
             self.errors.append(f"VDU 23,0,&89,{command}")

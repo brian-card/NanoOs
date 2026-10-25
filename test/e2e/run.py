@@ -273,11 +273,12 @@ def assert_vdp_set_up_on_answer(vdp):
     assert resets == VDP_RESET, \
         f"the VDP wasn't reset before the mode change: {resets}"
     setup = [(kind, detail)
-             for _t, kind, detail in vdp.events[first_mode:first_mode + 9]]
+             for _t, kind, detail in vdp.events[first_mode:first_mode + 10]]
     assert setup == [("mode", 0), ("layout", 1),
                      ("colour", CGA_YELLOW), ("colour", 128 + CGA_BLUE),
                      ("cls", None), ("cursor", 1), ("mouse", "reset"),
-                     ("pointer", VDP_POINTER_ID), ("text", setup[8][1])], \
+                     ("mouse", "disable"), ("pointer", VDP_POINTER_ID),
+                     ("text", setup[9][1])], \
         f"the screen wasn't set up first: {setup}"
     assert vdp.palette == CGA_PALETTE, \
         f"the palette isn't CGA's: {vdp.palette}"
@@ -333,6 +334,7 @@ def assert_vdp_pointer(vdp):
     @param vdp The FakeVdp, after the driver has set up its screen.
     """
     assert vdp.mouse_enabled, "the mouse wasn't enabled"
+    assert vdp.mouse_visible, "the pointer isn't shown"
     assert vdp.mouse_cursor == VDP_POINTER_ID, \
         f"the pointer is cursor {vdp.mouse_cursor}"
     image = vdp.pointer_image()
@@ -427,16 +429,35 @@ def test_vdp_pointer_appears_once_a_mouse_is_plugged_in(s):
     vdp = s.restart_with_vdp(mouse=False)
     vdp.expect("login: ")
     assert not vdp.mouse_enabled, "the mouse was enabled with none plugged in"
-    assert vdp.mouse_cursor is None, "a pointer was shown with no mouse"
+    assert not vdp.mouse_visible, "a pointer was shown with no mouse"
     vdp.mouse = True
     vdp.disconnect()
     vdp.wait_connections(2)
     deadline = time.time() + 10
-    while vdp.mouse_cursor is None:
+    while not vdp.mouse_visible:
         assert time.time() < deadline, \
             "the restarted driver never showed the pointer"
         time.sleep(0.1)
     assert_vdp_pointer(vdp)
+    assert vdp.errors == [], f"unexpected VDU commands: {vdp.errors}"
+
+
+def test_vdp_pointer_goes_away_once_the_mouse_is_unplugged(s):
+    vdp = s.restart_with_vdp()
+    vdp.expect("login: ")
+    assert_vdp_pointer(vdp)
+    vdp.mouse = False
+    vdp.disconnect()
+    vdp.wait_connections(2)
+    deadline = time.time() + 10
+    while sum(kind == "cls" for _t, kind, _d in vdp.events) < 2:
+        assert time.time() < deadline, \
+            "the restarted driver never set up the screen"
+        time.sleep(0.1)
+    vdp.type("root\r")
+    vdp.expect("password: ")
+    assert not vdp.mouse_enabled, "the mouse is still enabled with none plugged in"
+    assert not vdp.mouse_visible, "the pointer is still shown with no mouse"
     assert vdp.errors == [], f"unexpected VDU commands: {vdp.errors}"
 
 
