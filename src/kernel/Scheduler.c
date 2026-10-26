@@ -2943,6 +2943,35 @@ static const char _mainOverlayPath[] KEEP_IN_FLASH = "/main";
 /// final binary on some targets.
 static const char _overlayExt[] KEEP_IN_FLASH = OVERLAY_EXT;
 
+/// @var _overlayVersionMessage
+///
+/// @brief Start of the message printed when an overlay was built against a
+/// different overlay version than the kernel's.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _overlayVersionMessage[] KEEP_IN_FLASH
+  = "Overlay version is 0x";
+
+/// @var _overlayVersionExpectedMessage
+///
+/// @brief Middle of the message printed when an overlay was built against a
+/// different overlay version than the kernel's.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _overlayVersionExpectedMessage[] KEEP_IN_FLASH
+  = ", kernel expects 0x";
+
+/// @var _overlayVersionNewline
+///
+/// @brief End of the message printed when an overlay was built against a
+/// different overlay version than the kernel's.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _overlayVersionNewline[] KEEP_IN_FLASH = "\n";
+
 /// @fn int schedulerCheckOverlayHeader(ProcessDescriptor *processDescriptor)
 ///
 /// @brief Check that a process's overlay starts with a header this kernel can
@@ -2978,9 +3007,14 @@ static int schedulerCheckOverlayHeader(ProcessDescriptor *processDescriptor) {
   const NanoOsOverlayHeader *header = (const NanoOsOverlayHeader*) block;
 
   int returnValue = 0;
-  if ((header->magic != NANO_OS_OVERLAY_MAGIC)
-    || (header->version != NANO_OS_OVERLAY_VERSION)
-  ) {
+  if (header->magic != NANO_OS_OVERLAY_MAGIC) {
+    returnValue = -ENOEXEC;
+  } else if (header->version != NANO_OS_OVERLAY_VERSION) {
+    printString(_overlayVersionMessage);
+    printHex(header->version);
+    printString(_overlayVersionExpectedMessage);
+    printHex(NANO_OS_OVERLAY_VERSION);
+    printString(_overlayVersionNewline);
     returnValue = -ENOEXEC;
   }
   schedFree(block);
