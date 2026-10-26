@@ -585,12 +585,22 @@ def test_line_editor_history_survives_logging_out(s):
 
 def test_line_editor_ctrl_c_abandons_the_line(s):
     s.login()
+    edit(s, "echo older\r", "older")
     edit(s, "echo kept\r", "kept")
-    s.child.send("echo dropped" + UP + "\x03")
-    s.child.expect_exact("^C", timeout=10)
-    s.child.expect(PROMPT, timeout=10)
-    assert s.child.before.replace("\r", "") == "\n", repr(s.child.before)
+    for keys, shown in (("echo dropped" + UP, "echo kept"),
+                        ("echo typed", "echo typed")):
+        s.child.send(keys)
+        s.child.expect_exact(shown, timeout=10)
+        s.child.send("\x03")
+        s.child.expect_exact("^C", timeout=10)
+        s.child.expect(PROMPT, timeout=10)
+        assert s.child.before.replace("\r", "") == "\n", repr(s.child.before)
     edit(s, UP + "\r", "kept")
+    edit(s, UP + UP + UP + "\r", "older")
+    edit(s, UP * 4 + DOWN + "\r", "kept")
+    assert s.sh("cat .mush_history") == "\n".join([
+        "echo older", "echo kept", "echo older", "echo kept",
+        "cat .mush_history"])
 
 
 def test_line_editor_takes_an_arrow_key_arriving_in_pieces(s):
