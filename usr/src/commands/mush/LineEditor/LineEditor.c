@@ -492,6 +492,7 @@ static int lineEditorRead(LineEditor *editor) {
       } else if (c == CTRL_C) {
         lineEditorPut("^C\n", 3);
         args->line[0] = '\0';
+        editor->length = 0;
         return 0;
       } else if ((c == '\b') || (c == 0x7f)) {
         if (editor->cursor > 0) {
