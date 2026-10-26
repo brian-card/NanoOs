@@ -44,17 +44,11 @@ extern "C"
 {
 #endif
 
-/// @def SD_CARD_COMMAND_SIGNATURE
-///
-/// @brief Signature to be used in SD card commands that take argument
-/// structures.  "\0SDCARDC" expressed as a 64-bit, little-endian value.
-#define SD_CARD_COMMAND_SIGNATURE ((int64_t) 0x4344524143445300)
-
 typedef struct BlockDevice BlockDevice;
 
 /// @struct SdCardState
 ///
-/// @brief State maintained by an SdCard process.
+/// @brief State maintained by the HAL for an SD card.
 ///
 /// @param context A pointer to any implementation-specific context.
 /// @param blockSize The number of bytes per block on the SD card as presented
@@ -76,50 +70,9 @@ typedef struct SdCardState {
   BlockDevice *bsDevice;
 } SdCardState;
 
-/// @struct SdCommandArgs
-///
-/// @param startBlock The block number to start the command on.
-/// @param numBlocks The number of blocks to perform the command on.
-/// @param blockSize The number of bytes in each block.
-/// @param buffer A pointer to the memory to read from or write to.
-typedef struct SdCommandArgs {
-  uint32_t startBlock;
-  uint32_t numBlocks;
-  uint16_t blockSize;
-  uint8_t *buffer;
-} SdCommandArgs;
-
-/// @enum SdCardCommandResponse
-///
-/// @brief Commands and responses understood by the SD card inter-process
-/// message handler.
-typedef enum SdCardCommandResponse {
-  // Commands:
-  SD_CARD_READ_BLOCKS,
-  SD_CARD_WRITE_BLOCKS,
-  NUM_SD_CARD_COMMANDS,
-  // Responses:
-} SdCardCommandResponse;
-
-// Forward declaration to enable the rest of the type definitions.
-typedef struct msg_t ProcessMessage;
-
-/// @typedef SdCardCommandHandler
-///
-/// @brief Definition of a filesystem command handler function.
-typedef int (*SdCardCommandHandler)(SdCardState*, ProcessMessage*);
-
-int sdCardGetReadWriteArgs(
-  SdCardState *sdCardState, SdCommandArgs *sdCommandArgs,
+int sdCardGetReadWriteArgs(SdCardState *sdCardState,
+  uint32_t startBlock, uint32_t numBlocks,
   uint32_t *startSdBlock, uint32_t *numSdBlocks);
-int sdReadBlocks(void *context, uint32_t startBlock,
-  uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer);
-int sdWriteBlocks(void *context, uint32_t startBlock,
-  uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer);
-int schedSdReadBlocks(void *context, uint32_t startBlock,
-  uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer);
-int schedSdWriteBlocks(void *context, uint32_t startBlock,
-  uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer);
 
 #ifdef __cplusplus
 } // extern "C"

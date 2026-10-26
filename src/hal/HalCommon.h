@@ -102,13 +102,6 @@ typedef struct NamedProcessEntry {
       | (((uint32_t) 1) << MEMORY_MANAGER_FREE) \
   }, \
   { \
-    .destinationPid = 0, /* SD card PID (== rootFilesystemPid - 1) */ \
-    .signature      = SD_CARD_COMMAND_SIGNATURE, \
-    .messageTypes \
-      = (((uint32_t) 1) << SD_CARD_READ_BLOCKS) \
-      | (((uint32_t) 1) << SD_CARD_WRITE_BLOCKS) \
-  }, \
-  { \
     .destinationPid = 0, /* Logger PID, patched by halCommonInitLogger */ \
     .signature      = LOGGER_COMMAND_SIGNATURE, \
     .messageTypes   = (((uint32_t) 1) << LOGGER_LOG_MESSAGE) \
@@ -158,82 +151,6 @@ typedef struct NamedProcessEntry {
     .destinationPid = 0, /* Logger PID */ \
     .signature      = LOGGER_COMMAND_SIGNATURE, \
     .messageTypes   = (((uint32_t) 1) << LOGGER_LOG_MESSAGE) \
-  }, \
-}
-
-/// @def SD_CARD_HAL_CAPABILITIES_INITIALIZER
-///
-/// @brief Initializer for a platform's own array of HalCapability entries
-/// granted to the SD-over-SPI card process (see
-/// halCommonInitRootSdSpiStorage).  Kept as a macro, same as the
-/// IpcCapability initializers above, so each platform that actually starts
-/// this process gets its own storage -- see sdCardHalCapabilities below --
-/// rather than every platform carrying it whether or not it's used.
-///
-/// Includes HAL_UART_WRITE/HAL_UART_IS_CONSOLE even though runSdCardSpi
-/// never calls HAL->uart directly: logError/logWarn (used throughout
-/// SdCardSpi.c) fall back to writing straight to the UART -- via
-/// printString_() -- whenever the logger process isn't up yet or
-/// stringsPresent is true, and that fallback runs in the calling process's
-/// own context.  See the identical note on memoryManagerHalCapabilities in
-/// Scheduler.c.  LOG_FALLBACK_HAL_CAPABILITIES (Hal.h) and
-/// HAL_CLOCK_GET_ELAPSED_NANOSECONDS are included for that same fallback:
-/// writing to the UART is only the last step of it, and without the rest
-/// logMessage() can't get the buffer it formats into.
-///
-/// HAL_TIMER_CANCEL must stay the LAST entry: initializeSchedulerState() in
-/// Scheduler.c indexes this array by its last position
-/// (sdCardHalCapabilities[numSdCardHalCapabilities - 1]) to patch in the
-/// preemption timer's device ID once it's known, the same way it does for
-/// baseUserHalCapabilities.  The SD card process needs this so its own
-/// command handlers can cancel a stale preemption timer left armed from
-/// whoever ran before them, right before touching real SPI hardware.
-#define SD_CARD_HAL_CAPABILITIES_INITIALIZER { \
-  LOG_FALLBACK_HAL_CAPABILITIES, \
-  { \
-    .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_WRITE, \
-    .deviceIds =         0x03, /* Bitmask for device IDs 0 and 1 */ \
-  }, \
-  { \
-    .subsystemFunction = (((uint16_t) HAL_UART) << 8) | HAL_UART_IS_CONSOLE, \
-    .deviceIds =         0x03, /* Bitmask for device IDs 0 and 1 */ \
-  }, \
-  { \
-    .subsystemFunction = (((uint16_t) HAL_SPI) << 8) | HAL_SPI_CONFIGURE, \
-    .deviceIds =         0x01, /* Bitmask for device ID 0 */ \
-  }, \
-  { \
-    .subsystemFunction = (((uint16_t) HAL_SPI) << 8) | HAL_SPI_START_TRANSFER, \
-    .deviceIds =         0x01, /* Bitmask for device ID 0 */ \
-  }, \
-  { \
-    .subsystemFunction = (((uint16_t) HAL_SPI) << 8) | HAL_SPI_END_TRANSFER, \
-    .deviceIds =         0x01, /* Bitmask for device ID 0 */ \
-  }, \
-  { \
-    .subsystemFunction = (((uint16_t) HAL_SPI) << 8) | HAL_SPI_TRANSFER8, \
-    .deviceIds =         0x01, /* Bitmask for device ID 0 */ \
-  }, \
-  { \
-    .subsystemFunction = (((uint16_t) HAL_SPI) << 8) | HAL_SPI_TRANSFER_BYTES, \
-    .deviceIds =         0x01, /* Bitmask for device ID 0 */ \
-  }, \
-  { \
-    .subsystemFunction = (((uint16_t) HAL_SPI) << 8) | HAL_SPI_SET_SPEED, \
-    .deviceIds =         0x01, /* Bitmask for device ID 0 */ \
-  }, \
-  { \
-    .subsystemFunction = (((uint16_t) HAL_SPI) << 8) | HAL_SPI_TRANSFER_UNTIL, \
-    .deviceIds =         0x01, /* Bitmask for device ID 0 */ \
-  }, \
-  { \
-    .subsystemFunction = (((uint16_t) HAL_CLOCK) << 8) \
-      | HAL_CLOCK_GET_ELAPSED_NANOSECONDS, \
-    .deviceIds =         0x01, /* Device 0: no device for this function */ \
-  }, \
-  { \
-    .subsystemFunction = (((uint16_t) HAL_TIMER) << 8) | HAL_TIMER_CANCEL, \
-    .deviceIds =         0, /* To be filled in by initializeSchedulerState() */ \
   }, \
 }
 
@@ -307,24 +224,12 @@ extern IpcCapability *loggerIpcCapabilities;
 /// @brief The number of entries in loggerIpcCapabilities.
 extern size_t numLoggerIpcCapabilities;
 
-/// @var sdCardHalCapabilities
-///
-/// @brief Pointer to the platform-owned array of HalCapability entries for
-/// the SD-over-SPI card process, built from
-/// SD_CARD_HAL_CAPABILITIES_INITIALIZER.  NULL (the default) means this
-/// platform never starts an SD-over-SPI card process at all -- most don't;
-/// only the specific boards that call halCommonInitRootSdSpiStorage do.
-extern HalCapability *sdCardHalCapabilities;
-
-/// @var numSdCardHalCapabilities
-///
-/// @brief The number of entries in sdCardHalCapabilities.
-extern size_t numSdCardHalCapabilities;
-
 int callHal(HalSubsystem subsystem, uint32_t function, int32_t deviceId, ...);
 int findProcessByName(const char *name, ProcessId *returnValue);
 int registerProcessName(const char *name, ProcessId pid);
 BlockDevice* halCommonInitRootSdSpiStorage(SdCardSpiArgs *sdCardSpiArgs);
+int halCommonSdSpiReadBlocks(int32_t deviceId, va_list args);
+int halCommonSdSpiWriteBlocks(int32_t deviceId, va_list args);
 int halCommonInitRootFilesystem(void);
 int halCommonInitLogger(void);
 int halCommonInitFileCache(uint8_t depth);

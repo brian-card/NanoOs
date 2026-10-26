@@ -90,9 +90,31 @@ int arduinoAvrGetBlockDevice(int32_t deviceId, va_list args) {
   return -ENODEV;
 }
 
-int arduinoAvrRestartBlockDevice(int32_t deviceId, va_list args) {
+/// @fn int arduinoAvrReadBlocks(int32_t deviceId, va_list args)
+///
+/// @brief HAL_BLOCK_DEVICE_READ_BLOCKS for a board with no block devices.
+///
+/// @param deviceId Ignored.
+/// @param args Ignored.
+///
+/// @return Returns -ENODEV always.
+int arduinoAvrReadBlocks(int32_t deviceId, va_list args) {
   (void) deviceId;
-  (void) va_arg(args, ProcessDescriptor*);
+  (void) args;
+  return -ENODEV;
+}
+
+/// @fn int arduinoAvrWriteBlocks(int32_t deviceId, va_list args)
+///
+/// @brief HAL_BLOCK_DEVICE_WRITE_BLOCKS for a board with no block devices.
+///
+/// @param deviceId Ignored.
+/// @param args Ignored.
+///
+/// @return Returns -ENODEV always.
+int arduinoAvrWriteBlocks(int32_t deviceId, va_list args) {
+  (void) deviceId;
+  (void) args;
   return -ENODEV;
 }
 

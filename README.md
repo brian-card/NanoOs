@@ -102,7 +102,7 @@ The owning process of a piece of dynamically-allocated memory is also tracked.  
 
 ## Filesystem
 
-NanoOs uses a custom FAT32 implementation.  The filesystem is a dedicated process that other processes exchange messages with.  The filesystem, in turn, exchanges messages with the SD card process to perform IO on the card.
+NanoOs uses a custom FAT32 implementation.  The filesystem is a dedicated process that other processes exchange messages with.  The filesystem, in turn, reads and writes the SD card through the HAL's block device interface.
 
 ### Filesystem Variants
 

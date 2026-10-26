@@ -253,7 +253,8 @@ typedef enum HalTimerFunction {
 typedef enum HalBlockDeviceFunction {
   HAL_BLOCK_DEVICE_INIT,
   HAL_BLOCK_DEVICE_GET,
-  HAL_BLOCK_DEVICE_RESTART,
+  HAL_BLOCK_DEVICE_READ_BLOCKS,
+  HAL_BLOCK_DEVICE_WRITE_BLOCKS,
   HAL_BLOCK_DEVICE_NUM_FNS,
 } HalBlockDeviceFunction;
 
@@ -1246,17 +1247,40 @@ typedef struct HalBlockDevice {
   /// @return Returns 0 on success, -errno on failure.
   int (*get)(int32_t deviceId, BlockDevice **returnValue);
 
-  /// @fn int restart(ProcessDescriptor *processDescriptor)
+  /// @fn int readBlocks(void *context, uint32_t startBlock,
+  ///   uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer)
   ///
-  /// @brief Restart the block device process associated with the given
-  /// ProcessDescriptor.  The zero-based device ID to restart is taken from
-  /// processDescriptor->restartArgs, cast to an intptr_t.
+  /// @brief Read blocks from one of the block devices managed by the HAL.
+  /// Preemption is inhibited for the duration of the transfer so that no other
+  /// caller can start a command in the middle of it.
   ///
-  /// @param processDescriptor A pointer to the ProcessDescriptor of the block
-  ///   device process to restart.
+  /// @param context The zero-based ID of the block device, cast to a void*.
+  /// @param startBlock The first block to read.
+  /// @param numBlocks The number of blocks to read.
+  /// @param blockSize The number of bytes per block as known to the caller.
+  /// @param buffer The memory to read the blocks into.
   ///
   /// @return Returns 0 on success, -errno on failure.
-  int (*restart)(ProcessDescriptor *processDescriptor);
+  int (*readBlocks)(void *context, uint32_t startBlock,
+    uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer);
+
+  /// @fn int writeBlocks(void *context, uint32_t startBlock,
+  ///   uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer)
+  ///
+  /// @brief Write blocks to one of the block devices managed by the HAL.
+  /// Preemption is inhibited for the duration of the transfer so that no other
+  /// caller can start a command in the middle of it.
+  ///
+  /// @param context The zero-based ID of the block device, cast to a void*.
+  /// @param startBlock The first block to write.
+  /// @param numBlocks The number of blocks to write.
+  /// @param blockSize The number of bytes per block as known to the caller.
+  /// @param buffer The memory to write the blocks from.  Its contents are
+  ///   undefined after the call.
+  ///
+  /// @return Returns 0 on success, -errno on failure.
+  int (*writeBlocks)(void *context, uint32_t startBlock,
+    uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer);
 } HalBlockDevice;
 
 typedef struct Hal {

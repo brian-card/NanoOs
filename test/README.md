@@ -172,7 +172,7 @@ report red without failing the run.
 
 - **No root filesystem in layer 2.** `MOCK_STORAGE_NONE` boots with
   `rootFsPid == 0`. Filesystem / pipe / overlay-command coverage lives in
-  layer 3 today; `MOCK_STORAGE_FILE` (POSIX SD-card process over a real
+  layer 3 today; `MOCK_STORAGE_FILE` (the POSIX SD card over a real
   image) is stubbed in `MockBlockDevice.c`.
 - **The layer-2 driver process has no NanoOs stdio FDs** — it reports
   through a pipe, not `printf`. Wiring FDs needs

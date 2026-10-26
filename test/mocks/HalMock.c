@@ -581,9 +581,12 @@ int halMockInit(const HalMockConfig *config, jmp_buf *powerReturn) {
 
   _powerFunctions[HAL_POWER_ENTER_MODE] = mockEnterPowerModeFn;
 
-  _blockDeviceFunctions[HAL_BLOCK_DEVICE_INIT]    = mockBlockDeviceInitFn;
-  _blockDeviceFunctions[HAL_BLOCK_DEVICE_GET]     = mockBlockDeviceGetFn;
-  _blockDeviceFunctions[HAL_BLOCK_DEVICE_RESTART] = mockBlockDeviceRestartFn;
+  _blockDeviceFunctions[HAL_BLOCK_DEVICE_INIT]         = mockBlockDeviceInitFn;
+  _blockDeviceFunctions[HAL_BLOCK_DEVICE_GET]          = mockBlockDeviceGetFn;
+  _blockDeviceFunctions[HAL_BLOCK_DEVICE_READ_BLOCKS]
+    = mockBlockDeviceReadBlocksFn;
+  _blockDeviceFunctions[HAL_BLOCK_DEVICE_WRITE_BLOCKS]
+    = mockBlockDeviceWriteBlocksFn;
 
   _platformFunctions[HAL_PLATFORM_CALL_FILE_OVERLAY]       = mockCallFileOverlayFn;
   _platformFunctions[HAL_PLATFORM_EXEC_COMMAND]            = mockExecCommandFn;
@@ -635,7 +638,7 @@ int halMockInit(const HalMockConfig *config, jmp_buf *powerReturn) {
   _execCommand           = _requestedExecCommand;
   _restartRootFilesystemImpl = NULL;
   if (cfg.storage == MOCK_STORAGE_FILE) {
-    // TODO: POSIX SD-card process over cfg.imagePath.
+    // TODO: POSIX SD card over cfg.imagePath.
     _initRootStorage = halCommonInitRootFilesystem;
   } else {
     _initRootStorage = mockInitRootStorageNone;

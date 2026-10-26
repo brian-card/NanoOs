@@ -1665,8 +1665,7 @@ __attribute__((naked)) void TC4_Handler(void) {
 
 /// @var blockDevices
 ///
-/// @brief Array of BlockDevice pointers that are managed by the driver
-/// processes.
+/// @brief Array of BlockDevice pointers that are managed by the HAL.
 static BlockDevice *blockDevices[] = {
   NULL,
 };
@@ -1714,11 +1713,7 @@ static uint32_t halArduinoSamD21x18ASpisOnline[] = {
 int arduinoSamD21x18AInitBlockDevice(int32_t deviceId, va_list args) {
   (void) deviceId;
   (void) args;
-  if (schedulerIsInitialized() == false) {
-    return -EBUSY;
-  }
 
-  // Create the SD card process.
   SdCardSpiArgs sdCardSpiArgs = {
     .spiCsDio   = _sdCardPinChipSelect,
     .spiCopiDio = _spiCopiDio,
@@ -1748,51 +1743,6 @@ int arduinoSamD21x18AGetBlockDevice(int32_t deviceId, va_list args) {
   if (returnValue != NULL) {
     *returnValue = blockDevices[deviceId];
   }
-  return 0;
-}
-
-/// @var _sdCardName
-///
-/// @brief Process name assigned to the SD card process.
-///
-/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
-/// final binary on some targets.
-static const char _sdCardName[] KEEP_IN_FLASH = "SD card";
-
-int arduinoSamD21x18ARestartBlockDevice(int32_t deviceId, va_list args) {
-  ProcessDescriptor *processDescriptor = va_arg(args, ProcessDescriptor*);
-
-  SdCardSpiArgs sdCardSpiArgs = {
-    .spiCsDio   = _sdCardPinChipSelect,
-    .spiCopiDio = _spiCopiDio,
-    .spiCipoDio = _spiCipoDio,
-    .spiSckDio  = _spiSckDio,
-  };
-
-  if (processCreate(processDescriptor, runSdCardSpi, &sdCardSpiArgs)
-    != processSuccess
-  ) {
-    logError("Could not restart SD card process\n");
-    return -ENOMEM;
-  }
-  threadSetContext(processDescriptor->mainThread, processDescriptor);
-  processDescriptor->name = _sdCardName;
-  processDescriptor->userId = ROOT_USER_ID;
-  if (sdCardHalCapabilities != NULL) {
-    setProcessHalCapabilities(processDescriptor, sdCardHalCapabilities,
-      numSdCardHalCapabilities);
-  }
-
-  BlockDevice *sdDevice
-    = (BlockDevice*) coroutineResume(processDescriptor->mainThread, NULL);
-  if (sdDevice == NULL) {
-    logError("SD card restart returned NULL\n");
-    return -ENODEV;
-  }
-  sdDevice->partitionNumber = 1;
-  blockDevices[deviceId] = sdDevice;
-  setOnline(HAL->blockDevice, deviceId);
-
   return 0;
 }
 
@@ -1845,13 +1795,6 @@ static IpcCapability _filesystemIpcCapabilities[]
 static IpcCapability _loggerIpcCapabilities[]
   = LOGGER_IPC_CAPABILITIES_INITIALIZER;
 
-/// @var _sdCardHalCapabilities
-///
-/// @brief This platform's storage for the SD-over-SPI card process's HAL
-/// capabilities.  See SD_CARD_HAL_CAPABILITIES_INITIALIZER.
-static HalCapability _sdCardHalCapabilities[]
-  = SD_CARD_HAL_CAPABILITIES_INITIALIZER;
-
 int arduinoSamD21x18ACallFileOverlay(int32_t deviceId, va_list args) {
   (void) deviceId;
   HalCallFileOverlayFn *returnValue = va_arg(args, HalCallFileOverlayFn*);
@@ -1873,8 +1816,7 @@ int arduinoSamD21x18AExecCommand(int32_t deviceId, va_list args) {
 /// @fn static int arduinoSamD21x18ADoStartProcesses(void)
 ///
 /// @brief Start every process specific to the SAMD21 platform: the root
-/// filesystem (and, transitively, the SD card process), plus the logger if
-/// this build's .rodata was stripped.
+/// filesystem, plus the logger if this build's .rodata was stripped.
 ///
 /// @return Returns 0 on success, -errno on failure.
 static int arduinoSamD21x18ADoStartProcesses(void) {
@@ -2120,9 +2062,10 @@ static HalFunction arduinoSamD21x18ATimerFunctions[HAL_TIMER_NUM_FNS] = {
 };
 
 static HalFunction arduinoSamD21x18ABlockDeviceFunctions[HAL_BLOCK_DEVICE_NUM_FNS] = {
-  [HAL_BLOCK_DEVICE_INIT]    = arduinoSamD21x18AInitBlockDevice,
-  [HAL_BLOCK_DEVICE_GET]     = arduinoSamD21x18AGetBlockDevice,
-  [HAL_BLOCK_DEVICE_RESTART] = arduinoSamD21x18ARestartBlockDevice,
+  [HAL_BLOCK_DEVICE_INIT]         = arduinoSamD21x18AInitBlockDevice,
+  [HAL_BLOCK_DEVICE_GET]          = arduinoSamD21x18AGetBlockDevice,
+  [HAL_BLOCK_DEVICE_READ_BLOCKS]  = halCommonSdSpiReadBlocks,
+  [HAL_BLOCK_DEVICE_WRITE_BLOCKS] = halCommonSdSpiWriteBlocks,
 };
 
 /// @var _bssOverflowErrorPrefix
@@ -2255,10 +2198,6 @@ int halArduinoSamD21x18AInit(HalArduinoSamD21x18AInitArgs *args) {
   loggerIpcCapabilities = _loggerIpcCapabilities;
   numLoggerIpcCapabilities
     = sizeof(_loggerIpcCapabilities) / sizeof(_loggerIpcCapabilities[0]);
-
-  sdCardHalCapabilities = _sdCardHalCapabilities;
-  numSdCardHalCapabilities
-    = sizeof(_sdCardHalCapabilities) / sizeof(_sdCardHalCapabilities[0]);
 
   memset(_allProcesses, 0, sizeof(_allProcesses));
   halImpl.memory->numProcesses   = NUM_PROCESSES;

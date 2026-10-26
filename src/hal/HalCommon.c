@@ -104,6 +104,13 @@ static const uint32_t halFunctionCounts[HAL_NUM_SUBSYSTEMS] KEEP_IN_FLASH = {
   [HAL_BLOCK_DEVICE] = HAL_BLOCK_DEVICE_NUM_FNS,
 };
 
+/// @var _halTrustedProcess
+///
+/// @brief The process running a HAL block-device transfer.  The HAL calls the
+/// transfer makes are made on the HAL's behalf, so they aren't checked against
+/// this process's capabilities.  Only set while preemption is inhibited.
+static ProcessDescriptor *_halTrustedProcess = NULL;
+
 /// @fn int callHal(HalSubsystem subsystem, uint32_t function,
 ///   int32_t deviceId, ...)
 ///
@@ -129,10 +136,11 @@ int callHal(HalSubsystem subsystem, uint32_t function, int32_t deviceId, ...) {
   } else if (processDescriptor != NULL) {
     // Only the scheduler gets an unconditional pass here.  Every other
     // process -- including the other PRIVILEGE_LEVEL_KERNEL ones (console,
-    // memory manager, the SD-over-SPI card process) -- needs a real,
-    // explicit grant in its own halCapabilities array, for the device too.
+    // memory manager) -- needs a real, explicit grant in its own
+    // halCapabilities array, for the device too.
     uint8_t bit = halCapabilityBitBase[subsystem] + (uint8_t) function;
     if ((processDescriptor->processId != schedulerPid)
+      && (processDescriptor != _halTrustedProcess)
       && (((processDescriptor->halCapabilityBitmap[bit >> 3]
           & (1 << (bit & 7))) == 0)
         || (((uint32_t) deviceId) >= 8)
@@ -233,7 +241,10 @@ static int halTimerCancelAndGet(int32_t deviceId,
 
 static int halBlockDeviceInit(void);
 static int halBlockDeviceGet(int32_t deviceId, BlockDevice **returnValue);
-static int halBlockDeviceRestart(ProcessDescriptor *processDescriptor);
+static int halBlockDeviceReadBlocks(void *context, uint32_t startBlock,
+  uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer);
+static int halBlockDeviceWriteBlocks(void *context, uint32_t startBlock,
+  uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer);
 
 // ---------------------------------------------------------------------------
 // Common subsystem instances — function pointers set to typed wrappers
@@ -344,7 +355,8 @@ HalBlockDevice halImplBlockDevice = {
   .online       = NULL,
   .init         = halBlockDeviceInit,
   .get          = halBlockDeviceGet,
-  .restart      = halBlockDeviceRestart,
+  .readBlocks   = halBlockDeviceReadBlocks,
+  .writeBlocks  = halBlockDeviceWriteBlocks,
 };
 
 Hal halImpl = {
@@ -396,17 +408,6 @@ IpcCapability *loggerIpcCapabilities = NULL;
 ///
 /// @brief See the declaration in HalCommon.h.
 size_t numLoggerIpcCapabilities = 0;
-
-/// @var sdCardHalCapabilities
-///
-/// @brief See the declaration in HalCommon.h.  Defaults to NULL; a platform
-/// that starts an SD-over-SPI card process points this at its own storage.
-HalCapability *sdCardHalCapabilities = NULL;
-
-/// @var numSdCardHalCapabilities
-///
-/// @brief See the declaration in HalCommon.h.
-size_t numSdCardHalCapabilities = 0;
 
 /// @fn int findProcessByName(const char *name, ProcessId *returnValue)
 ///
@@ -767,31 +768,76 @@ static int halBlockDeviceGet(int32_t deviceId, BlockDevice **returnValue) {
     deviceId, returnValue);
 }
 
-static int halBlockDeviceRestart(ProcessDescriptor *processDescriptor) {
-  return callHal(HAL_BLOCK_DEVICE, HAL_BLOCK_DEVICE_RESTART,
-    (int32_t) (intptr_t) processDescriptor->restartArgs, processDescriptor);
+/// @fn int halBlockDeviceReadBlocks(void *context, uint32_t startBlock,
+///   uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer)
+///
+/// @brief Read blocks from a HAL block device with preemption inhibited so
+/// that no other caller can start a command in the middle of the transfer.
+///
+/// @param context The zero-based ID of the block device, cast to a void*.
+/// @param startBlock The first block to read.
+/// @param numBlocks The number of blocks to read.
+/// @param blockSize The number of bytes per block as known to the caller.
+/// @param buffer The memory to read the blocks into.
+///
+/// @return Returns 0 on success, -errno on failure.
+static int halBlockDeviceReadBlocks(void *context, uint32_t startBlock,
+  uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer
+) {
+  schedulerInhibitPreemption();
+  int returnValue = callHal(HAL_BLOCK_DEVICE, HAL_BLOCK_DEVICE_READ_BLOCKS,
+    (int32_t) (intptr_t) context, startBlock, numBlocks, blockSize, buffer);
+  schedulerAllowPreemption();
+  return returnValue;
+}
+
+/// @fn int halBlockDeviceWriteBlocks(void *context, uint32_t startBlock,
+///   uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer)
+///
+/// @brief Write blocks to a HAL block device with preemption inhibited so
+/// that no other caller can start a command in the middle of the transfer.
+///
+/// @param context The zero-based ID of the block device, cast to a void*.
+/// @param startBlock The first block to write.
+/// @param numBlocks The number of blocks to write.
+/// @param blockSize The number of bytes per block as known to the caller.
+/// @param buffer The memory to write the blocks from.
+///
+/// @return Returns 0 on success, -errno on failure.
+static int halBlockDeviceWriteBlocks(void *context, uint32_t startBlock,
+  uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer
+) {
+  schedulerInhibitPreemption();
+  int returnValue = callHal(HAL_BLOCK_DEVICE, HAL_BLOCK_DEVICE_WRITE_BLOCKS,
+    (int32_t) (intptr_t) context, startBlock, numBlocks, blockSize, buffer);
+  schedulerAllowPreemption();
+  return returnValue;
 }
 
 // ---------------------------------------------------------------------------
 // Common HAL helper implementations.
 // ---------------------------------------------------------------------------
 
-/// @var _sdCardName
+/// @var _sdSpiCardState
 ///
-/// @brief Process name assigned to the SD card process.
+/// @brief The state of the SD card behind halCommonInitRootSdSpiStorage.
+static SdCardState _sdSpiCardState;
+
+/// @var _sdSpiBlockDevice
 ///
-/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
-/// final binary on some targets.
-static const char _sdCardName[] KEEP_IN_FLASH = "SD card";
+/// @brief The BlockDevice that abstracts the SD card behind
+/// halCommonInitRootSdSpiStorage.
+static BlockDevice _sdSpiBlockDevice;
 
 /// @fn BlockDevice* halCommonInitRootSdSpiStorage(
 ///   SdCardSpiArgs *sdCardSpiArgs)
 ///
 /// @brief Common routine for initializing root storage using an SD card over
-/// SPI.
+/// SPI.  Calling it again after a success returns the same BlockDevice without
+/// touching the card.
 ///
 /// @param sdCardSpiArgs A pointer to an SdCardSpiArgs structure that contains
-///   the values to pass to runSdCardSpi.
+///   the pins the card is attached to.
 ///
 /// @return Returns the initialized BlockDevice pointer on success, NULL on
 /// failure.
@@ -800,39 +846,94 @@ BlockDevice* halCommonInitRootSdSpiStorage(
 ) {
   if (HAL->blockDevice == NULL) {
     return NULL;
+  } else if (_sdSpiBlockDevice.readBlocks != NULL) {
+    return &_sdSpiBlockDevice;
   }
 
-  // Create the SD card process.  Its PID is intentionally not exposed as a
-  // well-known global: nothing outside this function and the BlockDevice it
-  // returns needs to address it directly.
-  ProcessId sdCardPid = reserveProcessSlot();
-  ProcessDescriptor *processDescriptor = &allProcesses[sdCardPid - 1];
-  if (processCreate(
-    processDescriptor, runSdCardSpi, sdCardSpiArgs)
-    != processSuccess
-  ) {
-    logError("Could not start SD card process\n");
+  memset(&_sdSpiCardState, 0, sizeof(_sdSpiCardState));
+  if (sdSpiInit(sdCardSpiArgs, &_sdSpiCardState) <= 0) {
     return NULL;
   }
-  threadSetContext(processDescriptor->mainThread, processDescriptor);
-  processDescriptor->processId = sdCardPid;
-  processDescriptor->name = _sdCardName;
-  processDescriptor->userId = ROOT_USER_ID;
-  processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_KERNEL;
-  processDescriptor->restartFunction = HAL->blockDevice->restart;
-  processDescriptor->restartArgs = (void*)(intptr_t)0;
-  if (sdCardHalCapabilities != NULL) {
-    setProcessHalCapabilities(processDescriptor, sdCardHalCapabilities,
-      numSdCardHalCapabilities);
-  }
-  BlockDevice *sdDevice = (BlockDevice*) coroutineResume(
-    processDescriptor->mainThread, NULL);
-  if (sdDevice == NULL) {
-    return NULL;
-  }
-  sdDevice->partitionNumber = 1;
 
-  return sdDevice;
+  _sdSpiBlockDevice.context = (void*) ((intptr_t) 0);
+  _sdSpiBlockDevice.blockSize = _sdSpiCardState.blockSize;
+  _sdSpiBlockDevice.blockBitShift = 0;
+  _sdSpiBlockDevice.partitionNumber = 1;
+  _sdSpiBlockDevice.writeBlocks = HAL->blockDevice->writeBlocks;
+  _sdSpiBlockDevice.readBlocks = HAL->blockDevice->readBlocks;
+  _sdSpiCardState.bsDevice = &_sdSpiBlockDevice;
+
+  return &_sdSpiBlockDevice;
+}
+
+/// @fn int halCommonSdSpiTransfer(int32_t deviceId, va_list args,
+///   bool isWrite)
+///
+/// @brief Read or write blocks on the SD card behind
+/// halCommonInitRootSdSpiStorage.  The caller must have inhibited preemption.
+///
+/// @param deviceId The zero-based ID of the block device.
+/// @param args The startBlock, numBlocks, blockSize, and buffer arguments of
+///   HalBlockDevice's readBlocks/writeBlocks.
+/// @param isWrite true to write the blocks, false to read them.
+///
+/// @return Returns 0 on success, -errno on failure.
+static int halCommonSdSpiTransfer(int32_t deviceId, va_list args,
+  bool isWrite
+) {
+  uint32_t startBlock = va_arg(args, uint32_t);
+  uint32_t numBlocks = va_arg(args, uint32_t);
+  (void) va_arg(args, int);
+  uint8_t *buffer = va_arg(args, uint8_t*);
+  if ((deviceId != 0) || (_sdSpiBlockDevice.readBlocks == NULL)) {
+    return -ENODEV;
+  }
+
+  uint32_t startSdBlock = 0, numSdBlocks = 0;
+  int returnValue = sdCardGetReadWriteArgs(&_sdSpiCardState,
+    startBlock, numBlocks, &startSdBlock, &numSdBlocks);
+  if (returnValue != 0) {
+    return returnValue;
+  }
+
+  ProcessDescriptor *trustedProcess = _halTrustedProcess;
+  _halTrustedProcess = getRunningProcess();
+  if (isWrite) {
+    returnValue = sdSpiWriteBlocks(&_sdSpiCardState,
+      startSdBlock, numSdBlocks, buffer);
+  } else {
+    returnValue = sdSpiReadBlocks(&_sdSpiCardState,
+      startSdBlock, numSdBlocks, buffer);
+  }
+  _halTrustedProcess = trustedProcess;
+
+  return -returnValue;
+}
+
+/// @fn int halCommonSdSpiReadBlocks(int32_t deviceId, va_list args)
+///
+/// @brief HAL_BLOCK_DEVICE_READ_BLOCKS implementation for a platform whose
+/// root storage comes from halCommonInitRootSdSpiStorage.
+///
+/// @param deviceId The zero-based ID of the block device.
+/// @param args The startBlock, numBlocks, blockSize, and buffer arguments.
+///
+/// @return Returns 0 on success, -errno on failure.
+int halCommonSdSpiReadBlocks(int32_t deviceId, va_list args) {
+  return halCommonSdSpiTransfer(deviceId, args, false);
+}
+
+/// @fn int halCommonSdSpiWriteBlocks(int32_t deviceId, va_list args)
+///
+/// @brief HAL_BLOCK_DEVICE_WRITE_BLOCKS implementation for a platform whose
+/// root storage comes from halCommonInitRootSdSpiStorage.
+///
+/// @param deviceId The zero-based ID of the block device.
+/// @param args The startBlock, numBlocks, blockSize, and buffer arguments.
+///
+/// @return Returns 0 on success, -errno on failure.
+int halCommonSdSpiWriteBlocks(int32_t deviceId, va_list args) {
+  return halCommonSdSpiTransfer(deviceId, args, true);
 }
 
 /// @var _filesystemName
@@ -997,17 +1098,13 @@ int halCommonInitRootFilesystem(void) {
 
   // Grant the filesystem process its IPC capabilities, if this platform has
   // any to grant (see FILESYSTEM_IPC_CAPABILITIES_INITIALIZER).  The logger
-  // entry ([4]) is intentionally left at its default 0 here: the logger
+  // entry ([3]) is intentionally left at its default 0 here: the logger
   // doesn't exist yet at this point in bring-up.  halCommonInitLogger
   // patches it in once/if the logger actually starts.
   if (filesystemIpcCapabilities != NULL) {
     filesystemIpcCapabilities[0].destinationPid = schedulerPid;
     filesystemIpcCapabilities[1].destinationPid = consolePid;
     filesystemIpcCapabilities[2].destinationPid = memoryManagerPid;
-    // The SD card process's PID is never made well-known (see
-    // halCommonInitRootSdSpiStorage): it's always the slot immediately
-    // before the filesystem's own, by construction of reserveProcessSlot.
-    filesystemIpcCapabilities[3].destinationPid = rootFilesystemPid - 1;
     processDescriptor->ipcCapabilities = filesystemIpcCapabilities;
     processDescriptor->numIpcCapabilities = numFilesystemIpcCapabilities;
     processDescriptor->ipcCapabilitiesDynamic = false;
@@ -1083,9 +1180,9 @@ int halCommonInitLogger(void) {
 
   // The logger didn't exist yet when the filesystem's own IPC capabilities
   // were set up (see halCommonInitRootFilesystem).  Now that it does, patch
-  // the filesystem's logger entry ([4]) in too.
+  // the filesystem's logger entry ([3]) in too.
   if ((filesystemIpcCapabilities != NULL) && (rootFilesystemPid > 0)) {
-    filesystemIpcCapabilities[4].destinationPid = loggerPid;
+    filesystemIpcCapabilities[3].destinationPid = loggerPid;
   }
 
   return 0;
@@ -2017,6 +2114,16 @@ HalCapability filesystemHalCapabilities[] = {
       | HAL_CLOCK_GET_ELAPSED_NANOSECONDS,
     .deviceIds =         0x01, // Device 0: no device for this function
   },
+  {
+    .subsystemFunction = (((uint16_t) HAL_BLOCK_DEVICE) << 8)
+      | HAL_BLOCK_DEVICE_READ_BLOCKS,
+    .deviceIds =         0x01, // Bitmask for device ID 0
+  },
+  {
+    .subsystemFunction = (((uint16_t) HAL_BLOCK_DEVICE) << 8)
+      | HAL_BLOCK_DEVICE_WRITE_BLOCKS,
+    .deviceIds =         0x01, // Bitmask for device ID 0
+  },
 };
 
 
@@ -2187,7 +2294,7 @@ int restartContiguousFilesystem(ProcessDescriptor *processDescriptor) {
   // and the scheduler is the one privileged process, but don't take any chances
   // here.  Read the binary into memory as long as overlayMap isn't NULL.
   if ((overlayMap == NULL)
-    || rootBlockDevice->schedReadBlocks(
+    || rootBlockDevice->readBlocks(
     rootBlockDevice->context,
     /* startBlock= */ 1,
     /* numBlocks= */ HAL->memory->contiguousFilesystemSize

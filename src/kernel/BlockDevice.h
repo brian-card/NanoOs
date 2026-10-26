@@ -52,9 +52,11 @@ extern "C"
 ///
 /// @param context The device-specific context to pass to the functions.
 /// @param readBlocks Function pointer for the function to read a given number
-///   of blocks from the storage device.
+///   of blocks from the storage device.  Callable from both process and
+///   scheduler context.
 /// @param writeBlocks Function pointer for the function to write a given number
-///   of blocks to the storage device.
+///   of blocks to the storage device.  Callable from both process and
+///   scheduler context.
 /// @param blockSize The size, in bytes, of the physical blocks on the device.
 /// @param blockBitShift The number of bits to shift to convert filesystem-level
 ///   blocks to physical blocks.
@@ -65,10 +67,6 @@ typedef struct BlockDevice {
   int (*readBlocks)(void *context, uint32_t startBlock,
     uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer);
   int (*writeBlocks)(void *context, uint32_t startBlock,
-    uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer);
-  int (*schedReadBlocks)(void *context, uint32_t startBlock,
-    uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer);
-  int (*schedWriteBlocks)(void *context, uint32_t startBlock,
     uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer);
   uint16_t blockSize;
   uint8_t blockBitShift;

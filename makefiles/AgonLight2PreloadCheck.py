@@ -47,8 +47,8 @@ import sys
 HANDOFF = "_nanoOsStart"
 
 PRELOAD_TABLES = re.compile(
-    r"^_(agonLight2(Uart|Dio|Spi|Clock|Timer|Memory)Functions"
-    r"|halImpl(Uart|Dio|Spi|Clock|Timer|Memory))$")
+    r"^_(agonLight2(Uart|Dio|Spi|Clock|Timer|Memory|BlockDevice)Functions"
+    r"|halImpl(Uart|Dio|Spi|Clock|Timer|Memory|BlockDevice))$")
 
 RAM_TEXT_HEADER_SIZE = 4
 

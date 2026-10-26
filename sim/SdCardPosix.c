@@ -29,6 +29,8 @@
 /// @file
 
 // NanoOs includes
+#include "BlockDevice.h"
+#include "Hal.h"
 #include "Logger.h"
 #include "NanoOs.h"
 #include "NanoOsLibC.h"
@@ -46,194 +48,107 @@ const char* sdCardInit(SdCardState *sdCardState,
 int sdCardRead(int devFd, void *buffer, size_t start, size_t len);
 int sdCardWrite(int devFd, const void *buffer, size_t start, size_t len);
 
-/// @fn int sdCardPosixReadBlocksCommandHandler(
-///   SdCardState *sdCardState, ProcessMessage *processMessage)
+/// @var _sdCardState
 ///
-/// @brief Command handler for the SD_CARD_READ_BLOCKS command.
-///
-/// @param sdCardState A pointer to the SdCardState object maintained by the
-///   SD card process.
-/// @param processMessage A pointer to the ProcessMessage that was received by
-///   the SD card process.
-///
-/// @return Returns 0 on success, a standard POSIX error code on failure.
-int sdCardPosixReadBlocksCommandHandler(
-  SdCardState *sdCardState, ProcessMessage *processMessage
-) {
-  logDebug("sdCardPosixReadBlocksCommandHandler: Enter\n");
-  logDebug("sdCardPosixReadBlocksCommandHandler: Got ProcessMessage\n");
-  
-  int devFd = (int) ((intptr_t) sdCardState->context);
-  if (devFd < 0) {
-    // Nothing we can do.
-    logDebug(
-      "sdCardPosixReadBlocksCommandHandler: Invalid file descriptor\n");
-    processMessageData(processMessage) = (void*) ((intptr_t) EIO);
-    processMessageSetDone(processMessage);
-    logDebug("sdCardPosixReadBlocksCommandHandler: Returning early\n");
-    return 0;
-  }
-  logDebug("sdCardPosixReadBlocksCommandHandler: context is *NOT* NULL\n");
-  
-  SdCommandArgs *sdCommandArgs
-    = (SdCommandArgs*) processMessageData(processMessage);
-  logDebug("sdCardPosixReadBlocksCommandHandler: Got sdCommandArgs\n");
-  uint32_t startSdBlock = 0, numSdBlocks = 0;
-  int returnValue = sdCardGetReadWriteArgs(
-    sdCardState, sdCommandArgs, &startSdBlock, &numSdBlocks);
-  logDebug(
-    "sdCardPosixReadBlocksCommandHandler: Got read/write parameters\n");
+/// @brief The state of the simulated SD card.
+static SdCardState _sdCardState;
 
-  if (returnValue == 0) {
-    uint8_t *buffer = sdCommandArgs->buffer;
-    logDebug("Issuing sdCardRead\n");
-    returnValue = sdCardRead(devFd, buffer,
-      sdCardState->blockSize * startSdBlock,
-      sdCardState->blockSize * numSdBlocks);
+/// @var _sdDevice
+///
+/// @brief The BlockDevice that abstracts the simulated SD card.
+static BlockDevice _sdDevice;
+
+/// @fn BlockDevice* sdCardPosixInit(const char *sdCardDevicePath)
+///
+/// @brief Open the file that backs the simulated SD card.  Calling it again
+/// after a success returns the same BlockDevice.
+///
+/// @param sdCardDevicePath The path on the host to the SD card image.
+///
+/// @return Returns the BlockDevice for the card on success, NULL on failure.
+BlockDevice* sdCardPosixInit(const char *sdCardDevicePath) {
+  if (_sdDevice.readBlocks != NULL) {
+    return &_sdDevice;
   }
 
-  logDebug("sdCardPosixReadBlocksCommandHandler: Exiting\n");
-  processMessageData(processMessage) = (void*) ((intptr_t) returnValue);
-  logDebug("sdCardPosixReadBlocksCommandHandler: Setting message to done\n");
-  processMessageSetDone(processMessage);
-
-  logDebug("sdCardPosixReadBlocksCommandHandler: Returning\n");
-  return 0;
-}
-
-/// @fn int sdCardPosixWriteBlocksCommandHandler(
-///   SdCardState *sdCardState, ProcessMessage *processMessage)
-///
-/// @brief Command handler for the SD_CARD_WRITE_BLOCKS command.
-///
-/// @param sdCardState A pointer to the SdCardState object maintained by the
-///   SD card process.
-/// @param processMessage A pointer to the ProcessMessage that was received by
-///   the SD card process.
-///
-/// @return Returns 0 on success, a standard POSIX error code on failure.
-int sdCardPosixWriteBlocksCommandHandler(
-  SdCardState *sdCardState, ProcessMessage *processMessage
-) {
-  int devFd = (int) ((intptr_t) sdCardState->context);
-  if (devFd < 0) {
-    // Nothing we can do.
-    processMessageData(processMessage) = (void*) ((intptr_t) EIO);
-    processMessageSetDone(processMessage);
-    return 0;
-  }
-  
-  SdCommandArgs *sdCommandArgs
-    = (SdCommandArgs*) processMessageData(processMessage);
-  uint32_t startSdBlock = 0, numSdBlocks = 0;
-  int returnValue = sdCardGetReadWriteArgs(
-    sdCardState, sdCommandArgs, &startSdBlock, &numSdBlocks);
-
-  if (returnValue == 0) {
-    uint8_t *buffer = sdCommandArgs->buffer;
-    returnValue = sdCardWrite(devFd, buffer,
-      sdCardState->blockSize * startSdBlock,
-      sdCardState->blockSize * numSdBlocks);
-    // An SPI card clocks 0xFF back into the buffer while the data goes out.
-    memset(buffer, 0xFF, sdCardState->blockSize * numSdBlocks);
-  }
-
-  processMessageData(processMessage) = (void*) ((intptr_t) returnValue);
-  processMessageSetDone(processMessage);
-
-  return 0;
-}
-
-/// @var sdCardPosixCommandHandlers
-///
-/// @brief Array of SdCardCommandHandler function pointers to handle commands
-/// received by the runSdCard function.
-KEEP_IN_FLASH
-const SdCardCommandHandler sdCardPosixCommandHandlers[] = {
-  sdCardPosixReadBlocksCommandHandler,         // SD_CARD_READ_BLOCKS
-  sdCardPosixWriteBlocksCommandHandler,        // SD_CARD_WRITE_BLOCKS
-};
-
-/// @fn void handleSdCardPosixMessages(SdCardState *sdCardState)
-///
-/// @brief Handle sdCard messages from the process's queue until there are no
-/// more waiting.
-///
-/// @param sdCardState A pointer to the SdCardState structure maintained by the
-///   sdCard process.
-///
-/// @return This function returns no value.
-void handleSdCardPosixMessages(SdCardState *sdCardState) {
-  ProcessMessage *processMessage = processMessageQueueWait(NULL);
-  while (processMessage != NULL) {
-    if ((processMessageType(processMessage) & 0xffffffffffffff00)
-      != SD_CARD_COMMAND_SIGNATURE
-    ) {
-      logError("Received unknown signature 0x%llx from process %d\n",
-        (long long unsigned int)
-          (processMessageType(processMessage) & 0xffffffffffffff00),
-        processPid(processMessageFrom(processMessage)));
-      // Don't attempt to process this message further.
-      processMessage = processMessageQueuePop();
-      continue;
-    }
-
-    SdCardCommandResponse messageType
-      = (SdCardCommandResponse) (processMessageType(processMessage) & 0xff);
-    if (messageType >= NUM_SD_CARD_COMMANDS) {
-      logDebug(
-        "handleSdCardPosixMessages: Received invalid messageType %d\n",
-        messageType);
-      processMessage = processMessageQueuePop();
-      continue;
-    }
-    
-    sdCardPosixCommandHandlers[messageType](sdCardState, processMessage);
-    processMessage = processMessageQueuePop();
-  }
-  
-  return;
-}
-
-/// @fn void* runSdCardPosix(void *args)
-///
-/// @brief Process entry-point for the SD card process.  Sets up and
-/// configures access to the SD card reader and then enters an infinite loop
-/// for processing commands.
-///
-/// @param args Any arguments to this function, cast to a void*.  Currently
-///   ignored by this function.
-///
-/// @return This function never returns, but would return NULL if it did.
-void* runSdCardPosix(void *args) {
-  const char *sdCardDevicePath = (char*) args;
-
-  SdCardState sdCardState;
-  memset(&sdCardState, 0, sizeof(sdCardState));
-  BlockDevice sdDevice = {
-    .context = (void*) ((intptr_t) getRunningPid()),
-    .readBlocks = sdReadBlocks,
-    .writeBlocks = sdWriteBlocks,
-    .schedReadBlocks = schedSdReadBlocks,
-    .schedWriteBlocks = schedSdWriteBlocks,
-    .blockSize = 512,
-    .blockBitShift = 0,
-    .partitionNumber = 0,
-  };
-  const char *openError = sdCardInit(&sdCardState, &sdDevice, sdCardDevicePath);
-
-  processYieldValue(&sdDevice);
-  if (((intptr_t) sdCardState.context) < 0) {
-    logError("Failed to open sdCardDevicePath \"%s\"\n",
-      sdCardDevicePath);
+  const char *openError
+    = sdCardInit(&_sdCardState, &_sdDevice, sdCardDevicePath);
+  if (((intptr_t) _sdCardState.context) < 0) {
+    logError("Failed to open sdCardDevicePath \"%s\"\n", sdCardDevicePath);
     logError("Error returned: %s\n", openError);
+    return NULL;
   }
 
-  while (1) {
-    processYield();
-    handleSdCardPosixMessages(&sdCardState);
-  }
+  _sdDevice.context = (void*) ((intptr_t) 0);
+  _sdDevice.blockSize = _sdCardState.blockSize;
+  _sdDevice.blockBitShift = 0;
+  _sdDevice.partitionNumber = 1;
+  _sdDevice.writeBlocks = HAL->blockDevice->writeBlocks;
+  _sdDevice.readBlocks = HAL->blockDevice->readBlocks;
 
-  return NULL;
+  return &_sdDevice;
 }
 
+/// @fn int sdCardPosixTransfer(int32_t deviceId, va_list args, bool isWrite)
+///
+/// @brief Read or write blocks on the simulated SD card.
+///
+/// @param deviceId The zero-based ID of the block device.
+/// @param args The startBlock, numBlocks, blockSize, and buffer arguments of
+///   HalBlockDevice's readBlocks/writeBlocks.
+/// @param isWrite true to write the blocks, false to read them.
+///
+/// @return Returns 0 on success, -errno on failure.
+static int sdCardPosixTransfer(int32_t deviceId, va_list args, bool isWrite) {
+  uint32_t startBlock = va_arg(args, uint32_t);
+  uint32_t numBlocks = va_arg(args, uint32_t);
+  (void) va_arg(args, int);
+  uint8_t *buffer = va_arg(args, uint8_t*);
+  if ((deviceId != 0) || (_sdDevice.readBlocks == NULL)) {
+    return -ENODEV;
+  }
+
+  uint32_t startSdBlock = 0, numSdBlocks = 0;
+  int returnValue = sdCardGetReadWriteArgs(&_sdCardState,
+    startBlock, numBlocks, &startSdBlock, &numSdBlocks);
+  if (returnValue != 0) {
+    return returnValue;
+  }
+
+  int devFd = (int) ((intptr_t) _sdCardState.context);
+  size_t start = ((size_t) _sdCardState.blockSize) * startSdBlock;
+  size_t length = ((size_t) _sdCardState.blockSize) * numSdBlocks;
+  if (isWrite) {
+    returnValue = sdCardWrite(devFd, buffer, start, length);
+    // An SPI card clocks 0xFF back into the buffer while the data goes out.
+    memset(buffer, 0xFF, length);
+  } else {
+    returnValue = sdCardRead(devFd, buffer, start, length);
+  }
+
+  return (returnValue == 0) ? 0 : -EIO;
+}
+
+/// @fn int sdCardPosixReadBlocks(int32_t deviceId, va_list args)
+///
+/// @brief HAL_BLOCK_DEVICE_READ_BLOCKS implementation for the simulator.
+///
+/// @param deviceId The zero-based ID of the block device.
+/// @param args The startBlock, numBlocks, blockSize, and buffer arguments.
+///
+/// @return Returns 0 on success, -errno on failure.
+int sdCardPosixReadBlocks(int32_t deviceId, va_list args) {
+  return sdCardPosixTransfer(deviceId, args, false);
+}
+
+/// @fn int sdCardPosixWriteBlocks(int32_t deviceId, va_list args)
+///
+/// @brief HAL_BLOCK_DEVICE_WRITE_BLOCKS implementation for the simulator.
+///
+/// @param deviceId The zero-based ID of the block device.
+/// @param args The startBlock, numBlocks, blockSize, and buffer arguments.
+///
+/// @return Returns 0 on success, -errno on failure.
+int sdCardPosixWriteBlocks(int32_t deviceId, va_list args) {
+  return sdCardPosixTransfer(deviceId, args, true);
+}

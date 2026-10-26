@@ -51,8 +51,10 @@ typedef struct SdCardSpiArgs {
   int spiSckDio;
 } SdCardSpiArgs;
 
-void* runSdCardSpi(void *args);
-int sdSpiReadBlocksUnscheduled(SdCardSpiArgs *sdCardSpiArgs,
+int sdSpiInit(SdCardSpiArgs *sdCardSpiArgs, SdCardState *sdCardState);
+int sdSpiReadBlocks(SdCardState *sdCardState,
+  uint32_t startBlock, uint32_t numBlocks, uint8_t *buffer);
+int sdSpiWriteBlocks(SdCardState *sdCardState,
   uint32_t startBlock, uint32_t numBlocks, uint8_t *buffer);
 
 #ifdef __cplusplus

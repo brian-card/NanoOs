@@ -380,21 +380,11 @@ static HalFunction arduinoAvrSpiFunctions[HAL_SPI_NUM_FNS] = {
   [HAL_SPI_TRANSFER_UNTIL] = arduinoAvrSpiTransferUntil,
 };
 
-/// @var _sdCardHalCapabilities
-///
-/// @brief This board's storage for the SD-over-SPI card process's HAL
-/// capabilities.  See SD_CARD_HAL_CAPABILITIES_INITIALIZER.
-static HalCapability _sdCardHalCapabilities[]
-  = SD_CARD_HAL_CAPABILITIES_INITIALIZER;
-
 extern BlockDevice *blockDevices[];
 
 int arduinoAvrInitBlockDevice(int32_t deviceId, va_list args) {
   (void) deviceId;
   (void) args;
-  if (schedulerIsInitialized() == false) {
-    return -EBUSY;
-  }
 
   SdCardSpiArgs sdCardSpiArgs = {
     .spiCsDio   = SD_CARD_PIN_CHIP_SELECT,
@@ -428,41 +418,32 @@ int arduinoAvrGetBlockDevice(int32_t deviceId, va_list args) {
   return 0;
 }
 
-int arduinoAvrRestartBlockDevice(int32_t deviceId, va_list args) {
-  ProcessDescriptor *processDescriptor = va_arg(args, ProcessDescriptor*);
+/// @fn int arduinoAvrReadBlocks(int32_t deviceId, va_list args)
+///
+/// @brief Relay HAL_BLOCK_DEVICE_READ_BLOCKS to halCommonSdSpiReadBlocks.
+/// HalArduinoAvr.cpp's shared dispatch table points here rather than at the
+/// common function so boards without an SD card don't link the SD driver.
+///
+/// @param deviceId The zero-based ID of the block device.
+/// @param args The startBlock, numBlocks, blockSize, and buffer arguments.
+///
+/// @return Returns 0 on success, -errno on failure.
+int arduinoAvrReadBlocks(int32_t deviceId, va_list args) {
+  return halCommonSdSpiReadBlocks(deviceId, args);
+}
 
-  SdCardSpiArgs sdCardSpiArgs = {
-    .spiCsDio   = SD_CARD_PIN_CHIP_SELECT,
-    .spiCopiDio = SPI_COPI_DIO,
-    .spiCipoDio = SPI_CIPO_DIO,
-    .spiSckDio  = SPI_SCK_DIO,
-  };
-
-  if (processCreate(processDescriptor, runSdCardSpi, &sdCardSpiArgs)
-    != processSuccess
-  ) {
-    logError("Could not restart SD card process\n");
-    return -ENOMEM;
-  }
-  threadSetContext(processDescriptor->mainThread, processDescriptor);
-  processDescriptor->name = "SD card";
-  processDescriptor->userId = ROOT_USER_ID;
-  if (sdCardHalCapabilities != NULL) {
-    setProcessHalCapabilities(processDescriptor, sdCardHalCapabilities,
-      numSdCardHalCapabilities);
-  }
-
-  BlockDevice *sdDevice
-    = (BlockDevice*) coroutineResume(processDescriptor->mainThread, NULL);
-  if (sdDevice == NULL) {
-    logError("SD card restart returned NULL\n");
-    return -ENODEV;
-  }
-  sdDevice->partitionNumber = 1;
-  blockDevices[deviceId] = sdDevice;
-  setOnline(HAL->blockDevice, deviceId);
-
-  return 0;
+/// @fn int arduinoAvrWriteBlocks(int32_t deviceId, va_list args)
+///
+/// @brief Relay HAL_BLOCK_DEVICE_WRITE_BLOCKS to halCommonSdSpiWriteBlocks.
+/// HalArduinoAvr.cpp's shared dispatch table points here rather than at the
+/// common function so boards without an SD card don't link the SD driver.
+///
+/// @param deviceId The zero-based ID of the block device.
+/// @param args The startBlock, numBlocks, blockSize, and buffer arguments.
+///
+/// @return Returns 0 on success, -errno on failure.
+int arduinoAvrWriteBlocks(int32_t deviceId, va_list args) {
+  return halCommonSdSpiWriteBlocks(deviceId, args);
 }
 
 int halArduinoInit(void) {
@@ -477,10 +458,6 @@ int halArduinoInit(void) {
 
   arduinoAvrSetRootStorageFunctions(
     halCommonInitRootFilesystem, restartBuiltinFilesystem);
-
-  sdCardHalCapabilities = _sdCardHalCapabilities;
-  numSdCardHalCapabilities
-    = sizeof(_sdCardHalCapabilities) / sizeof(_sdCardHalCapabilities[0]);
 
   // This must happen before halArduinoAvrInit() below, since that call
   // wires up the block device only if halImpl.blockDevice is set and ends in

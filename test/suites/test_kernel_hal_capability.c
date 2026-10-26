@@ -107,25 +107,6 @@ NANO_OS_KERNEL_TEST(hal_capability, every_process_bitmap_matches_its_array) {
   NANO_OS_ASSERT_TRUE(processesWithGrants >= 4);
 }
 
-NANO_OS_KERNEL_TEST(hal_capability, sd_card_bitmap_matches_its_array) {
-  static HalCapability sdCardCapabilities[]
-    = SD_CARD_HAL_CAPABILITIES_INITIALIZER;
-  size_t numSdCardCapabilities
-    = sizeof(sdCardCapabilities) / sizeof(sdCardCapabilities[0]);
-  ProcessDescriptor processDescriptor;
-  memset(&processDescriptor, 0xff, sizeof(processDescriptor));
-
-  setProcessHalCapabilities(&processDescriptor,
-    sdCardCapabilities, numSdCardCapabilities);
-
-  NANO_OS_ASSERT_EQ_PTR(sdCardCapabilities, processDescriptor.halCapabilities);
-  NANO_OS_ASSERT_EQ_INT((int) numSdCardCapabilities,
-    (int) processDescriptor.numHalCapabilities);
-  NANO_OS_ASSERT_EQ_INT(0, capabilityTestMismatches(&processDescriptor));
-  NANO_OS_ASSERT_EQ_INT((int) numSdCardCapabilities,
-    capabilityTestGranted(&processDescriptor));
-}
-
 NANO_OS_KERNEL_TEST(hal_capability, no_capabilities_clears_the_bitmap) {
   ProcessDescriptor processDescriptor;
   memset(&processDescriptor, 0xff, sizeof(processDescriptor));
@@ -150,6 +131,91 @@ NANO_OS_KERNEL_TEST(hal_capability, call_hal_denies_an_ungranted_function) {
 
   NANO_OS_ASSERT_EQ_INT(-EACCES,
     callHal(HAL_UART, HAL_UART_CONFIGURE, 0, (uint32_t) 9600));
+}
+
+/// @var blockDeviceTestInhibited
+///
+/// @brief Whether preemption was inhibited when the block-device HAL function
+/// installed by a test last ran, or -1 if it hasn't run.
+static int blockDeviceTestInhibited = -1;
+
+/// @fn static int blockDeviceTestRecord(int32_t deviceId, va_list args)
+///
+/// @brief Block-device read/write implementation that records whether
+/// preemption was inhibited while it ran.
+///
+/// @param deviceId The zero-based ID of the block device.  Ignored.
+/// @param args The arguments to the call.  Ignored.
+///
+/// @return Returns 0 always.
+static int blockDeviceTestRecord(int32_t deviceId, va_list args) {
+  (void) deviceId;
+  (void) args;
+  blockDeviceTestInhibited = schedulerPreemptionInhibited();
+  return 0;
+}
+
+/// @var blockDeviceTestCapabilities
+///
+/// @brief The block-device grants the root filesystem process gets.
+static HalCapability blockDeviceTestCapabilities[] = {
+  {
+    .subsystemFunction = (((uint16_t) HAL_BLOCK_DEVICE) << 8)
+      | HAL_BLOCK_DEVICE_READ_BLOCKS,
+    .deviceIds =         0x01,
+  },
+  {
+    .subsystemFunction = (((uint16_t) HAL_BLOCK_DEVICE) << 8)
+      | HAL_BLOCK_DEVICE_WRITE_BLOCKS,
+    .deviceIds =         0x01,
+  },
+};
+
+NANO_OS_KERNEL_TEST(hal_capability, block_device_io_needs_its_grant) {
+  halFunctions[HAL_BLOCK_DEVICE][HAL_BLOCK_DEVICE_READ_BLOCKS]
+    = blockDeviceTestRecord;
+  halFunctions[HAL_BLOCK_DEVICE][HAL_BLOCK_DEVICE_WRITE_BLOCKS]
+    = blockDeviceTestRecord;
+  uint8_t block[16];
+
+  NANO_OS_ASSERT_EQ_INT(-EACCES, HAL->blockDevice->readBlocks(
+    (void*) ((intptr_t) 0), 0, 1, sizeof(block), block));
+  NANO_OS_ASSERT_EQ_INT(-EACCES, HAL->blockDevice->writeBlocks(
+    (void*) ((intptr_t) 0), 0, 1, sizeof(block), block));
+  NANO_OS_ASSERT_EQ_INT(-1, blockDeviceTestInhibited);
+
+  setProcessHalCapabilities(getRunningProcess(), blockDeviceTestCapabilities,
+    sizeof(blockDeviceTestCapabilities)
+      / sizeof(blockDeviceTestCapabilities[0]));
+  NANO_OS_ASSERT_EQ_INT(0, HAL->blockDevice->readBlocks(
+    (void*) ((intptr_t) 0), 0, 1, sizeof(block), block));
+  NANO_OS_ASSERT_EQ_INT(0, HAL->blockDevice->writeBlocks(
+    (void*) ((intptr_t) 0), 0, 1, sizeof(block), block));
+  NANO_OS_ASSERT_EQ_INT(-EACCES, HAL->blockDevice->readBlocks(
+    (void*) ((intptr_t) 1), 0, 1, sizeof(block), block));
+}
+
+NANO_OS_KERNEL_TEST(hal_capability, block_device_io_inhibits_preemption) {
+  halFunctions[HAL_BLOCK_DEVICE][HAL_BLOCK_DEVICE_READ_BLOCKS]
+    = blockDeviceTestRecord;
+  halFunctions[HAL_BLOCK_DEVICE][HAL_BLOCK_DEVICE_WRITE_BLOCKS]
+    = blockDeviceTestRecord;
+  setProcessHalCapabilities(getRunningProcess(), blockDeviceTestCapabilities,
+    sizeof(blockDeviceTestCapabilities)
+      / sizeof(blockDeviceTestCapabilities[0]));
+  uint8_t block[16];
+
+  NANO_OS_ASSERT_FALSE(schedulerPreemptionInhibited());
+  NANO_OS_ASSERT_EQ_INT(0, HAL->blockDevice->readBlocks(
+    (void*) ((intptr_t) 0), 0, 1, sizeof(block), block));
+  NANO_OS_ASSERT_EQ_INT(1, blockDeviceTestInhibited);
+  NANO_OS_ASSERT_FALSE(schedulerPreemptionInhibited());
+
+  blockDeviceTestInhibited = -1;
+  NANO_OS_ASSERT_EQ_INT(0, HAL->blockDevice->writeBlocks(
+    (void*) ((intptr_t) 0), 0, 1, sizeof(block), block));
+  NANO_OS_ASSERT_EQ_INT(1, blockDeviceTestInhibited);
+  NANO_OS_ASSERT_FALSE(schedulerPreemptionInhibited());
 }
 
 /// @fn static int deviceMaskTestMismatches(

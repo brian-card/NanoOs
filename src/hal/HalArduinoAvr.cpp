@@ -597,8 +597,8 @@ int arduinoAvrEnterPowerMode(int32_t deviceId, va_list args) {
 
 /// @var blockDevices
 ///
-/// @brief Array of BlockDevice pointers that are managed by the driver
-/// processes.  *DON'T* mark this static.  The individual HAL implementations
+/// @brief Array of BlockDevice pointers that are managed by the HAL.  *DON'T*
+/// mark this static.  The individual HAL implementations
 /// reference it.
 BlockDevice *blockDevices[] = {
   NULL,
@@ -617,8 +617,8 @@ static uint32_t arduinoAvrBlockDevicesOnline[] = {
   0x00000000,
 };
 
-// arduinoAvrInitBlockDevice, arduinoAvrGetBlockDevice, and
-// arduinoAvrRestartBlockDevice are defined in the individual implementations
+// arduinoAvrInitBlockDevice, arduinoAvrGetBlockDevice, arduinoAvrReadBlocks,
+// and arduinoAvrWriteBlocks are defined in the individual implementations
 // (HalArduinoMega2560.cpp / HalArduinoNanoEvery.c); declared with C linkage
 // in HalArduinoAvr.h.
 
@@ -860,9 +860,10 @@ static HalFunction arduinoAvrPowerFunctions[HAL_POWER_NUM_FNS] = {
 };
 
 static HalFunction arduinoAvrBlockDeviceFunctions[HAL_BLOCK_DEVICE_NUM_FNS] = {
-  [HAL_BLOCK_DEVICE_INIT]    = arduinoAvrInitBlockDevice,
-  [HAL_BLOCK_DEVICE_GET]     = arduinoAvrGetBlockDevice,
-  [HAL_BLOCK_DEVICE_RESTART] = arduinoAvrRestartBlockDevice,
+  [HAL_BLOCK_DEVICE_INIT]         = arduinoAvrInitBlockDevice,
+  [HAL_BLOCK_DEVICE_GET]          = arduinoAvrGetBlockDevice,
+  [HAL_BLOCK_DEVICE_READ_BLOCKS]  = arduinoAvrReadBlocks,
+  [HAL_BLOCK_DEVICE_WRITE_BLOCKS] = arduinoAvrWriteBlocks,
 };
 
 // We want to link in the built-in filesystem and FAT32 implementation, so

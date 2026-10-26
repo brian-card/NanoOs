@@ -42,13 +42,8 @@
 #include "Processes.h"
 #include "BootTrace.h"
 #include "Scheduler.h"
-#include "SdCard.h"
 
-// HAL space includes.  Needed for sdCardHalCapabilities/
-// numSdCardHalCapabilities: the preemption timer's device ID isn't known
-// until initializeSchedulerState() runs, so that's the only place its
-// HAL_TIMER_CANCEL capability entry can be patched -- see the patch right
-// next to baseUserHalCapabilities's below.
+// HAL space includes
 #include "../hal/HalCommon.h"
 
 // User space includes
@@ -443,9 +438,9 @@ HalCapability baseExecutiveHalCapabilities[] = {
 /// by (subsystem << 8) | function). Keep new entries in the correct sorted
 /// position. HAL_TIMER_CANCEL must stay the LAST entry:
 /// initializeSchedulerState() patches the preemption timer's device ID into
-/// the last entry, the same way it does for sdCardHalCapabilities.  It used to
-/// index this array by the literal position 5 instead, which silently aimed at
-/// the wrong entry the first time the array grew; it now derives the index
+/// the last entry.  It used to index this array by the literal position 5
+/// instead, which silently aimed at the wrong entry the first time the array
+/// grew; it now derives the index
 /// from sizeof, so extending the array here needs no matching edit there as
 /// long as HAL_TIMER_CANCEL stays last.
 HalCapability baseUserHalCapabilities[] = {
@@ -500,13 +495,6 @@ HalCapability baseUserHalCapabilities[] = {
 /// sendProcessMessageToProcess.  Usually, the scheduler uses its own message
 /// infrastructure that bypasses capability checks.
 IpcCapability baseSchedulerIpcCapabilities[] = {
-  {
-    .destinationPid = 0, // SD card PID to be set by scheduler
-    .signature      = SD_CARD_COMMAND_SIGNATURE,
-    .messageTypes
-      = (((uint32_t) 1) << SD_CARD_READ_BLOCKS)
-      | (((uint32_t) 1) << SD_CARD_WRITE_BLOCKS)
-  },
   {
     .destinationPid = 0, // Logger PID to be set by scheduler
     .signature      = LOGGER_COMMAND_SIGNATURE,
@@ -2981,7 +2969,7 @@ static int schedulerCheckOverlayHeader(ProcessDescriptor *processDescriptor) {
   if (block == NULL) {
     return -ENOMEM;
   }
-  if (blockDevice->schedReadBlocks(blockDevice->context,
+  if (blockDevice->readBlocks(blockDevice->context,
     metadata->startBlock, 1, blockDevice->blockSize, block) != 0
   ) {
     schedFree(block);
@@ -4680,7 +4668,7 @@ int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp) {
   ) {
     // Load the overlay from the filesystem.
     if (processDescriptor->overlay.fileBlockMetadata.blockDevice->
-      schedReadBlocks(
+      readBlocks(
         processDescriptor->overlay.fileBlockMetadata.blockDevice->context,
         processDescriptor->overlay.fileBlockMetadata.startBlock,
         processDescriptor->overlay.fileBlockMetadata.numBlocks,
@@ -5591,14 +5579,6 @@ int initializeSchedulerState(
         baseUserHalCapabilities[
           (sizeof(baseUserHalCapabilities)
             / sizeof(baseUserHalCapabilities[0])) - 1].deviceIds = 1 << ii;
-        if (sdCardHalCapabilities != NULL) {
-          // See SD_CARD_HAL_CAPABILITIES_INITIALIZER's doc comment in
-          // HalCommon.h: HAL_TIMER_CANCEL is kept as its last entry
-          // specifically so it can be patched here the same way as
-          // baseUserHalCapabilities's own HAL_TIMER_CANCEL entry above.
-          sdCardHalCapabilities[numSdCardHalCapabilities - 1].deviceIds
-            = 1 << ii;
-        }
         break;
       }
     }
@@ -5674,11 +5654,7 @@ int initializeSchedulerState(
 /// @return Returns 0 on success, -errno on failure.
 int setIpcCapabilities(SchedulerState *schedulerState) {
   // Fix the IPC capabilities now that all the core processes are started.
-  if (rootFilesystemPid > 0) {
-    baseSchedulerIpcCapabilities[0].destinationPid
-      = rootFilesystemPid - 1;
-  }
-  baseSchedulerIpcCapabilities[1].destinationPid
+  baseSchedulerIpcCapabilities[0].destinationPid
     = loggerPid;
 
   baseConsoleIpcCapabilities[0].destinationPid

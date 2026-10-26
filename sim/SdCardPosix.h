@@ -36,6 +36,9 @@
 #ifndef SD_CARD_POSIX_H
 #define SD_CARD_POSIX_H
 
+// Standard C includes
+#include <stdarg.h>
+
 // Custom includes
 #include "kernel/SdCard.h"
 
@@ -46,7 +49,9 @@ extern "C"
 
 extern const char *sdCardDevicePath;
 
-void* runSdCardPosix(void *args);
+BlockDevice* sdCardPosixInit(const char *sdCardDevicePath);
+int sdCardPosixReadBlocks(int32_t deviceId, va_list args);
+int sdCardPosixWriteBlocks(int32_t deviceId, va_list args);
 
 #ifdef __cplusplus
 } // extern "C"

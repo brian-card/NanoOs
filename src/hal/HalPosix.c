@@ -359,37 +359,14 @@ static IpcCapability _filesystemIpcCapabilities[]
 static IpcCapability _loggerIpcCapabilities[]
   = LOGGER_IPC_CAPABILITIES_INITIALIZER;
 
-/// @var _sdCardName
-///
-/// @brief Process name assigned to the SD card process.
-///
-/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
-/// final binary on some targets.
-static const char _sdCardName[] KEEP_IN_FLASH = "SD card";
-
 int posixInitBlockDevice(int32_t deviceId, va_list args) {
   (void) deviceId;
   (void) args;
-  if (schedulerIsInitialized() == false) {
-    return -EBUSY;
-  }
 
-  ProcessId sdCardPid = reserveProcessSlot();
-  ProcessDescriptor *processDescriptor = &allProcesses[sdCardPid - 1];
-  if (processCreate(
-    processDescriptor, runSdCardPosix, (void*) _sdCardDevicePath)
-    != processSuccess
-  ) {
-    logError("Could not start SD card process.\n");
+  blockDevices[0] = sdCardPosixInit(_sdCardDevicePath);
+  if (blockDevices[0] == NULL) {
+    return -ENODEV;
   }
-  threadSetContext(processDescriptor->mainThread, processDescriptor);
-  processDescriptor->processId = sdCardPid;
-  processDescriptor->name = _sdCardName;
-  processDescriptor->userId = ROOT_USER_ID;
-  BlockDevice *sdDevice = (BlockDevice*) coroutineResume(
-    allProcesses[sdCardPid - 1].mainThread, NULL);
-  sdDevice->partitionNumber = 1;
-  blockDevices[0] = sdDevice;
   setOnline(HAL->blockDevice, 0);
 
   return 0;
@@ -408,33 +385,6 @@ int posixGetBlockDevice(int32_t deviceId, va_list args) {
   if (returnValue != NULL) {
     *returnValue = blockDevices[deviceId];
   }
-  return 0;
-}
-
-int posixRestartBlockDevice(int32_t deviceId, va_list args) {
-  ProcessDescriptor *processDescriptor = va_arg(args, ProcessDescriptor*);
-
-  if (processCreate(
-    processDescriptor, runSdCardPosix, (void*) _sdCardDevicePath)
-    != processSuccess
-  ) {
-    logError("Could not restart SD card process.\n");
-    return -ENOMEM;
-  }
-  threadSetContext(processDescriptor->mainThread, processDescriptor);
-  processDescriptor->name = _sdCardName;
-  processDescriptor->userId = ROOT_USER_ID;
-
-  BlockDevice *sdDevice
-    = (BlockDevice*) coroutineResume(processDescriptor->mainThread, NULL);
-  if (sdDevice == NULL) {
-    logError("SD card restart returned NULL.\n");
-    return -ENODEV;
-  }
-  sdDevice->partitionNumber = 1;
-  blockDevices[deviceId] = sdDevice;
-  setOnline(HAL->blockDevice, deviceId);
-
   return 0;
 }
 
@@ -486,8 +436,7 @@ static int posixExecCommand(int32_t deviceId, va_list args) {
 /// @fn static int posixDoStartProcesses(void)
 ///
 /// @brief Start every process specific to the POSIX platform: the root
-/// filesystem (and, transitively, the SD card process), plus the logger if
-/// this build's .rodata was stripped.
+/// filesystem, plus the logger if this build's .rodata was stripped.
 ///
 /// @return Returns 0 on success, -errno on failure.
 static int posixDoStartProcesses(void) {
@@ -762,9 +711,10 @@ static HalFunction posixTimerFunctions[HAL_TIMER_NUM_FNS] = {
 };
 
 static HalFunction posixBlockDeviceFunctions[HAL_BLOCK_DEVICE_NUM_FNS] = {
-  [HAL_BLOCK_DEVICE_INIT]    = posixInitBlockDevice,
-  [HAL_BLOCK_DEVICE_GET]     = posixGetBlockDevice,
-  [HAL_BLOCK_DEVICE_RESTART] = posixRestartBlockDevice,
+  [HAL_BLOCK_DEVICE_INIT]         = posixInitBlockDevice,
+  [HAL_BLOCK_DEVICE_GET]          = posixGetBlockDevice,
+  [HAL_BLOCK_DEVICE_READ_BLOCKS]  = sdCardPosixReadBlocks,
+  [HAL_BLOCK_DEVICE_WRITE_BLOCKS] = sdCardPosixWriteBlocks,
 };
 
 int halPosixInit(jmp_buf resetBuffer, const char *sdCardDevicePath,

@@ -84,7 +84,7 @@ static int versionTestReadBlocks(void *context, uint32_t startBlock,
 /// @return Returns the value returned by schedulerLoadOverlay.
 static int versionTestLoad(uint32_t version) {
   static BlockDevice blockDevice = {
-    .schedReadBlocks = versionTestReadBlocks,
+    .readBlocks = versionTestReadBlocks,
     .blockSize = 512,
   };
   ProcessDescriptor processDescriptor;

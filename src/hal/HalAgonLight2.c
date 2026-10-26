@@ -215,7 +215,7 @@ extern StaticLogs agonLight2StaticLogsArea;
 ///
 /// @brief Value to indicate the maximum number of processes that can be run
 /// concurrently.
-#define NUM_PROCESSES 10
+#define NUM_PROCESSES 9
 
 // -------------------------------------------------------------------------
 // DIO pin numbering
@@ -307,8 +307,7 @@ static uint8_t _sdCardPinChipSelect = PB4;
 
 /// @var blockDevices
 ///
-/// @brief Array of BlockDevice pointers that are managed by the driver
-/// processes.
+/// @brief Array of BlockDevice pointers that are managed by the HAL.
 static BlockDevice *blockDevices[] = {
   NULL,
 };
@@ -449,13 +448,6 @@ static IpcCapability _filesystemIpcCapabilities[]
 /// capabilities.  See LOGGER_IPC_CAPABILITIES_INITIALIZER.
 static IpcCapability _loggerIpcCapabilities[]
   = LOGGER_IPC_CAPABILITIES_INITIALIZER;
-
-/// @var _sdCardHalCapabilities
-///
-/// @brief This platform's storage for the SD-over-SPI card process's HAL
-/// capabilities.  See SD_CARD_HAL_CAPABILITIES_INITIALIZER.
-static HalCapability _sdCardHalCapabilities[]
-  = SD_CARD_HAL_CAPABILITIES_INITIALIZER;
 
 /// @def _numBlockDevices
 ///
@@ -1614,17 +1606,13 @@ void agonLight2TimerInterruptHandler4(void) { agonLight2TimerInterruptHandler(3)
 void agonLight2TimerInterruptHandler5(void) { agonLight2TimerInterruptHandler(4); }
 
 // ---------------------------------------------------------------------------
-// Block device subsystem stubs (no SD card driver for eZ80 side yet)
+// Block device subsystem
 // ---------------------------------------------------------------------------
 
 int agonLight2InitBlockDevice(int32_t deviceId, va_list args) {
   (void) deviceId;
   (void) args;
-  if (schedulerIsInitialized() == false) {
-    return -EBUSY;
-  }
 
-  // Create the SD card process.
   SdCardSpiArgs sdCardSpiArgs = {
     .spiCsDio   = _sdCardPinChipSelect,
     .spiCopiDio = _spiCopiDio,
@@ -1662,23 +1650,17 @@ static const char _ramTextBuildIdError[] KEEP_IN_FLASH =
 ///
 /// @return Returns 0 on success, -errno on failure.
 int agonLight2LoadRamText(void) {
-  SdCardSpiArgs sdCardSpiArgs = {
-    .spiCsDio   = _sdCardPinChipSelect,
-    .spiCopiDio = _spiCopiDio,
-    .spiCipoDio = _spiCipoDio,
-    .spiSckDio  = _spiSckDio,
-  };
-
   bootTraceValue("RAM image blocks",
     (int) ((agonLight2RamTextEnd - agonLight2RamTextStart) / 512));
-  int returnValue = sdSpiReadBlocksUnscheduled(&sdCardSpiArgs,
-    RAM_TEXT_START_BLOCK,
-    (uint32_t) (agonLight2RamTextEnd - agonLight2RamTextStart) / 512,
-    agonLight2RamTextStart);
+  int returnValue = HAL->blockDevice->init();
+  bootTraceValue("SD card init returned", returnValue);
+  if (returnValue == 0) {
+    returnValue = HAL->blockDevice->readBlocks((void*) ((intptr_t) 0),
+      RAM_TEXT_START_BLOCK,
+      (uint32_t) (agonLight2RamTextEnd - agonLight2RamTextStart) / 512,
+      512, agonLight2RamTextStart);
+  }
   bootTraceValue("RAM image read returned", returnValue);
-  // Release SPI device 0 so the SD card process can configure it again.
-  HAL->spi->init();
-  bootTrace("SPI released");
   if (returnValue != 0) {
     printString(_ramTextReadError);
     return returnValue;
@@ -1707,51 +1689,6 @@ int agonLight2GetBlockDevice(int32_t deviceId, va_list args) {
   if (returnValue != NULL) {
     *returnValue = blockDevices[deviceId];
   }
-  return 0;
-}
-
-/// @var _sdCardName
-///
-/// @brief Process name assigned to the SD card process.
-///
-/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
-/// final binary on some targets.
-static const char _sdCardName[] KEEP_IN_FLASH = "SD card";
-
-int agonLight2RestartBlockDevice(int32_t deviceId, va_list args) {
-  ProcessDescriptor *processDescriptor = va_arg(args, ProcessDescriptor*);
-
-  SdCardSpiArgs sdCardSpiArgs = {
-    .spiCsDio   = _sdCardPinChipSelect,
-    .spiCopiDio = _spiCopiDio,
-    .spiCipoDio = _spiCipoDio,
-    .spiSckDio  = _spiSckDio,
-  };
-
-  if (processCreate(processDescriptor, runSdCardSpi, &sdCardSpiArgs)
-    != processSuccess
-  ) {
-    logError("Could not restart SD card process\n");
-    return -ENOMEM;
-  }
-  threadSetContext(processDescriptor->mainThread, processDescriptor);
-  processDescriptor->name = _sdCardName;
-  processDescriptor->userId = ROOT_USER_ID;
-  if (sdCardHalCapabilities != NULL) {
-    setProcessHalCapabilities(processDescriptor, sdCardHalCapabilities,
-      numSdCardHalCapabilities);
-  }
-
-  BlockDevice *sdDevice
-    = (BlockDevice*) coroutineResume(processDescriptor->mainThread, NULL);
-  if (sdDevice == NULL) {
-    logError("SD card restart returned NULL\n");
-    return -ENODEV;
-  }
-  sdDevice->partitionNumber = 1;
-  blockDevices[deviceId] = sdDevice;
-  setOnline(HAL->blockDevice, deviceId);
-
   return 0;
 }
 
@@ -2051,9 +1988,10 @@ static HalFunction agonLight2TimerFunctions[HAL_TIMER_NUM_FNS] = {
 };
 
 static HalFunction agonLight2BlockDeviceFunctions[HAL_BLOCK_DEVICE_NUM_FNS] = {
-  [HAL_BLOCK_DEVICE_INIT]    = agonLight2InitBlockDevice,
-  [HAL_BLOCK_DEVICE_GET]     = agonLight2GetBlockDevice,
-  [HAL_BLOCK_DEVICE_RESTART] = agonLight2RestartBlockDevice,
+  [HAL_BLOCK_DEVICE_INIT]         = agonLight2InitBlockDevice,
+  [HAL_BLOCK_DEVICE_GET]          = agonLight2GetBlockDevice,
+  [HAL_BLOCK_DEVICE_READ_BLOCKS]  = halCommonSdSpiReadBlocks,
+  [HAL_BLOCK_DEVICE_WRITE_BLOCKS] = halCommonSdSpiWriteBlocks,
 };
 
 // ---------------------------------------------------------------------------
@@ -2247,10 +2185,6 @@ int halAgonLight2Init(void) {
   numLoggerIpcCapabilities
     = sizeof(_loggerIpcCapabilities) / sizeof(_loggerIpcCapabilities[0]);
 
-  sdCardHalCapabilities = _sdCardHalCapabilities;
-  numSdCardHalCapabilities
-    = sizeof(_sdCardHalCapabilities) / sizeof(_sdCardHalCapabilities[0]);
-
   memset(_allProcesses, 0, sizeof(_allProcesses));
   halImpl.memory->numProcesses        = NUM_PROCESSES;
   for (int ii = 0; ii < NUM_READY_QUEUES; ii++) {
@@ -2291,7 +2225,7 @@ int halAgonLight2Init(void) {
   int returnValue = halCommonInit(
     /* builtinFilesystemInitDriver= */ NULL,
     /* builtinFilesystemCommandHandlers= */ NULL,
-    /* numExtraFilesystemStacks= */ 0
+    /* numExtraFilesystemStacks= */ 1
   );
 
   // halCommonInit asks for 1000000 baud, which the eZ80F92 can't produce.

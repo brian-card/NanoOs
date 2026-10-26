@@ -91,8 +91,8 @@
 /// SD_SPI_FAST_BAUD_MAX and lowered by sdSpiNegotiateFastBaud() to the fastest
 /// rate this board / card / wiring combination reads without corruption.  This
 /// is deliberately a runtime variable rather than a constant: the safe ceiling
-/// is a property of the hardware, discovered by probing, and a card-process
-/// restart re-discovers it.
+/// is a property of the hardware, discovered by probing, and re-initializing
+/// the card re-discovers it.
 static uint32_t _sdSpiFastBaud = SD_SPI_FAST_BAUD_MAX;
 
 /// @def SD_SPI_WAIT_TIMEOUT_NS
@@ -510,7 +510,7 @@ static uint8_t _bulkreadCmd = CMD18;
 /// (STOP_TRANSMISSION), avoiding per-block command overhead.
 ///
 /// @param sdCardState A pointer to the SdCardState object maintained by the
-///   runSdCard process.
+///   HAL.
 /// @param startBlock The logical block number on the SD card to start from.
 /// @param numBlocks The number of blocks to read from the device.
 /// @param buffer A pointer to a character buffer to read the blocks into.
@@ -605,36 +605,6 @@ int sdSpiReadBlocks(SdCardState *sdCardState,
   return 0;
 }
 
-/// @fn int sdSpiReadBlocksUnscheduled(SdCardSpiArgs *sdCardSpiArgs,
-///   uint32_t startBlock, uint32_t numBlocks, uint8_t *buffer)
-///
-/// @brief Initialize the SD card and read 512-byte blocks from it directly,
-/// without the SD card process, for use before the scheduler is running.
-///
-/// @param sdCardSpiArgs The pins the SD card is attached to.
-/// @param startBlock The first block to read.
-/// @param numBlocks The number of blocks to read.
-/// @param buffer The memory to read the blocks into.
-///
-/// @return Returns 0 on success, -errno on failure.
-int sdSpiReadBlocksUnscheduled(SdCardSpiArgs *sdCardSpiArgs,
-  uint32_t startBlock, uint32_t numBlocks, uint8_t *buffer
-) {
-  SdCardState sdCardState;
-  memset(&sdCardState, 0, sizeof(sdCardState));
-  bootTrace("SD card init");
-  sdCardState.sdCardVersion = sdSpiCardInit(sdCardSpiArgs, &sdCardState);
-  bootTraceValue("SD card version", sdCardState.sdCardVersion);
-  if (sdCardState.sdCardVersion <= 0) {
-    return (sdCardState.sdCardVersion < 0) ? sdCardState.sdCardVersion : -EIO;
-  }
-  sdSpiNegotiateFastBaud(SD_CARD_SPI_DEVICE);
-  bootTrace("SD baud negotiated");
-  sdCardState.blockSize = 512;
-
-  return -sdSpiReadBlocks(&sdCardState, startBlock, numBlocks, buffer);
-}
-
 /// @var _bulkWriteCmd
 ///
 /// @brief The command to use when multiple blocks are going to be written.
@@ -654,7 +624,7 @@ static uint8_t _bulkWriteCmd = CMD25;
 /// command overhead.
 ///
 /// @param sdCardState A pointer to the SdCardState object maintained by the
-///   runSdCard process.
+///   HAL.
 /// @param startBlock The logical block number to start the write at.
 /// @param numBlocks The number of blocks to write.
 /// @param buffer A pointer to a character buffer to write the blocks from.
@@ -869,181 +839,42 @@ int sdSpiGetBlockCount(int sdCardSpiDevice) {
   return (int) blockCount;
 }
 
-/// @fn int sdCardSpiReadBlocksCommandHandler(
-///   SdCardState *sdCardState, ProcessMessage *processMessage)
+/// @fn int sdSpiInit(SdCardSpiArgs *sdCardSpiArgs, SdCardState *sdCardState)
 ///
-/// @brief Command handler for the SD_CARD_READ_BLOCKS command.
+/// @brief Initialize the SD card, bring the bus up to the fastest rate it
+/// reads reliably at, and fill in the geometry of the card.
 ///
-/// @param sdCardState A pointer to the SdCardState object maintained by the
-///   SD card process.
-/// @param processMessage A pointer to the ProcessMessage that was received by
-///   the SD card process.
+/// @param sdCardSpiArgs A pointer to the pins the SD card is attached to.
+/// @param sdCardState A pointer to the zeroed SdCardState to populate.
 ///
-/// @return Returns 0 on success, a standard POSIX error code on failure.
-int sdCardSpiReadBlocksCommandHandler(
-  SdCardState *sdCardState, ProcessMessage *processMessage
-) {
-  SdCommandArgs *sdCommandArgs
-    = (SdCommandArgs*) processMessageData(processMessage);
-  uint32_t startSdBlock = 0, numSdBlocks = 0;
-  int returnValue = sdCardGetReadWriteArgs(
-    sdCardState, sdCommandArgs, &startSdBlock, &numSdBlocks);
-
-  if (returnValue == 0) {
-    uint8_t *buffer = sdCommandArgs->buffer;
-    returnValue = sdSpiReadBlocks(sdCardState,
-      startSdBlock, numSdBlocks, buffer);
-  }
-
-  processMessageData(processMessage) = (void*) ((intptr_t) returnValue);
-  processMessageSetDone(processMessage);
-
-  return 0;
-}
-
-/// @fn int sdCardSpiWriteBlocksCommandHandler(
-///   SdCardState *sdCardState, ProcessMessage *processMessage)
-///
-/// @brief Command handler for the SD_CARD_WRITE_BLOCKS command.
-///
-/// @param sdCardState A pointer to the SdCardState object maintained by the
-///   SD card process.
-/// @param processMessage A pointer to the ProcessMessage that was received by
-///   the SD card process.
-///
-/// @return Returns 0 on success, a standard POSIX error code on failure.
-int sdCardSpiWriteBlocksCommandHandler(
-  SdCardState *sdCardState, ProcessMessage *processMessage
-) {
-  SdCommandArgs *sdCommandArgs
-    = (SdCommandArgs*) processMessageData(processMessage);
-  uint32_t startSdBlock = 0, numSdBlocks = 0;
-  int returnValue = sdCardGetReadWriteArgs(
-    sdCardState, sdCommandArgs, &startSdBlock, &numSdBlocks);
-
-  if (returnValue == 0) {
-    uint8_t *buffer = sdCommandArgs->buffer;
-    returnValue = sdSpiWriteBlocks(sdCardState,
-      startSdBlock, numSdBlocks, buffer);
-  }
-
-  processMessageData(processMessage) = (void*) ((intptr_t) returnValue);
-  processMessageSetDone(processMessage);
-
-  return 0;
-}
-
-/// @var sdCardSpiCommandHandlers
-///
-/// @brief Array of SdCardCommandHandler function pointers to handle commands
-/// received by the runSdCard function.
-KEEP_IN_FLASH
-const SdCardCommandHandler sdCardSpiCommandHandlers[] = {
-  sdCardSpiReadBlocksCommandHandler,         // SD_CARD_READ_BLOCKS
-  sdCardSpiWriteBlocksCommandHandler,        // SD_CARD_WRITE_BLOCKS
-};
-
-/// @fn void handleSdCardSpiMessages(SdCardState *sdCardState)
-///
-/// @brief Handle sdCard messages from the process's queue until there are no
-/// more waiting.
-///
-/// @param sdCardState A pointer to the SdCardState structure maintained by the
-///   sdCard process.
-///
-/// @return This function returns no value.
-void handleSdCardSpiMessages(SdCardState *sdCardState) {
-  ProcessMessage *processMessage = processMessageQueueWait(NULL);
-  while (processMessage != NULL) {
-    if ((processMessageType(processMessage) & 0xffffffffffffff00)
-      != SD_CARD_COMMAND_SIGNATURE
-    ) {
-      logError("Received unknown signature 0x%lx from process %d\n",
-        (unsigned long int)
-          (processMessageType(processMessage) & 0xffffffffffffff00),
-        processPid(processMessageFrom(processMessage)));
-      // Don't attempt to process this message further.
-      processMessage = processMessageQueuePop();
-      continue;
-    }
-
-    SdCardCommandResponse messageType
-      = (SdCardCommandResponse) (processMessageType(processMessage) & 0xff);
-    if (messageType >= NUM_SD_CARD_COMMANDS) {
-      logError("Invalid message type %ld\n", (long int) messageType);
-
-      processMessage = processMessageQueuePop();
-      continue;
-    }
-    
-    sdCardSpiCommandHandlers[messageType](sdCardState, processMessage);
-    processMessage = processMessageQueuePop();
-  }
-  
-  return;
-}
-
-/// @fn void* runSdCardSpi(void *args)
-///
-/// @brief Process entry-point for the SD card process.  Sets up and
-/// configures access to the SD card reader and then enters an infinite loop
-/// for processing commands.
-///
-/// @param args Any arguments to this function, cast to a void*.  Currently
-///   ignored by this function.
-///
-/// @return This function never returns, but would return NULL if it did.
-void* runSdCardSpi(void *args) {
-  SdCardSpiArgs *sdCardSpiArgs = (SdCardSpiArgs*) args;
+/// @return Returns the version of the connected card on success (1 or 2),
+/// 0 on error, or a negative errno.
+int sdSpiInit(SdCardSpiArgs *sdCardSpiArgs, SdCardState *sdCardState) {
   if ((HAL->spi == NULL) || (HAL->clock == NULL)) {
     logError("SD card requires HAL SPI and clock subsystems\n");
-    processYieldValue(NULL);
-    return NULL;
+    return -ENODEV;
   }
 
-  SdCardState sdCardState;
-  memset(&sdCardState, 0, sizeof(sdCardState));
-  BlockDevice blockStorageDevice = {
-    .context = (void*) ((intptr_t) getRunningPid()),
-    .readBlocks = sdReadBlocks,
-    .writeBlocks = sdWriteBlocks,
-    .schedReadBlocks = schedSdReadBlocks,
-    .schedWriteBlocks = schedSdWriteBlocks,
-    .blockSize = 0,
-    .blockBitShift = 0,
-    .partitionNumber = 0,
-  };
-  sdCardState.bsDevice = &blockStorageDevice;
-
-  sdCardState.sdCardVersion = sdSpiCardInit(sdCardSpiArgs, &sdCardState);
-  if (sdCardState.sdCardVersion > 0) {
-    // Ramp the bus from the (known-good) identification clock up to the fastest
-    // rate this board / card / wiring reads without corrupting data.
-    sdSpiNegotiateFastBaud(SD_CARD_SPI_DEVICE);
-    sdCardState.blockSize = blockStorageDevice.blockSize
-      = sdSpiGetBlockSize(SD_CARD_SPI_DEVICE);
-    sdCardState.numBlocks = sdSpiGetBlockCount(SD_CARD_SPI_DEVICE);
-#ifdef SD_CARD_DEBUG
-    logDetail("Card is %s\n",
-      sdCardState.blockAddressed ? "SDHC/SDXC (block addressed)"
-                                 : "SDSC (byte addressed)");
-    logDetail("Data-phase bus clock = %ld baud\n", (long int) _sdSpiFastBaud);
-    logDetail("Card block size = %ld\n",
-      (long int) blockStorageDevice.blockSize);
-    logDetail("%ld total blocks (%ld total bytes)\n",
-      (long int) sdCardState.numBlocks, ((long int) sdCardState.numBlocks)
-        * ((long int) sdCardState.blockSize));
-#endif // SD_CARD_DEBUG
-  } else {
+  sdCardState->sdCardVersion = sdSpiCardInit(sdCardSpiArgs, sdCardState);
+  if (sdCardState->sdCardVersion <= 0) {
     logError("sdSpiCardInit returned status: %s\n",
-      strerror(-sdCardState.sdCardVersion));
-  }
-  processYieldValue(&blockStorageDevice);
-
-  while (1) {
-    handleSdCardSpiMessages(&sdCardState);
+      strerror(-sdCardState->sdCardVersion));
+    return sdCardState->sdCardVersion;
   }
 
-  return NULL;
+  sdSpiNegotiateFastBaud(SD_CARD_SPI_DEVICE);
+  sdCardState->blockSize = sdSpiGetBlockSize(SD_CARD_SPI_DEVICE);
+  sdCardState->numBlocks = sdSpiGetBlockCount(SD_CARD_SPI_DEVICE);
+#ifdef SD_CARD_DEBUG
+  logDetail("Card is %s\n",
+    sdCardState->blockAddressed ? "SDHC/SDXC (block addressed)"
+                                : "SDSC (byte addressed)");
+  logDetail("Data-phase bus clock = %ld baud\n", (long int) _sdSpiFastBaud);
+  logDetail("Card block size = %ld\n", (long int) sdCardState->blockSize);
+  logDetail("%ld total blocks (%ld total bytes)\n",
+    (long int) sdCardState->numBlocks, ((long int) sdCardState->numBlocks)
+      * ((long int) sdCardState->blockSize));
+#endif // SD_CARD_DEBUG
+
+  return sdCardState->sdCardVersion;
 }
-

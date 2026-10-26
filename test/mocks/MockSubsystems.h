@@ -54,7 +54,8 @@ int mockUartIsConsoleFn(int32_t deviceId, va_list args);
 void    mockBlockDeviceReset(void);
 int mockBlockDeviceInitFn(int32_t deviceId, va_list args);
 int mockBlockDeviceGetFn(int32_t deviceId, va_list args);
-int mockBlockDeviceRestartFn(int32_t deviceId, va_list args);
+int mockBlockDeviceReadBlocksFn(int32_t deviceId, va_list args);
+int mockBlockDeviceWriteBlocksFn(int32_t deviceId, va_list args);
 
 #ifdef __cplusplus
 } // extern "C"

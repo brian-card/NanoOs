@@ -78,8 +78,8 @@ void arduinoAvrSetRootStorageFunctions(
   HalInitRootStorageFn initRootStorage,
   HalRestartRootFilesystemFn restartRootFilesystem);
 
-// arduinoAvrInitBlockDevice, arduinoAvrGetBlockDevice, and
-// arduinoAvrRestartBlockDevice are defined per-board (HalArduinoMega2560.cpp
+// arduinoAvrInitBlockDevice, arduinoAvrGetBlockDevice,
+// arduinoAvrReadBlocks, and arduinoAvrWriteBlocks are defined per-board (HalArduinoMega2560.cpp
 // / HalArduinoNanoEvery.c), not in the shared HalArduinoAvr.cpp, but
 // HalArduinoAvr.cpp's arduinoAvrBlockDeviceFunctions dispatch table
 // references them.  Declaring them here, rather than privately in
@@ -88,7 +88,8 @@ void arduinoAvrSetRootStorageFunctions(
 // dispatch table (and HalArduinoNanoEvery.c's plain-C definitions) expect.
 int arduinoAvrInitBlockDevice(int32_t deviceId, va_list args);
 int arduinoAvrGetBlockDevice(int32_t deviceId, va_list args);
-int arduinoAvrRestartBlockDevice(int32_t deviceId, va_list args);
+int arduinoAvrReadBlocks(int32_t deviceId, va_list args);
+int arduinoAvrWriteBlocks(int32_t deviceId, va_list args);
 
 #ifdef __cplusplus
 } // extern "C"

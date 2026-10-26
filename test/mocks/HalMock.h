@@ -12,7 +12,7 @@
 ///   - clock   : virtual monotonic time (default) or CLOCK_REALTIME.
 ///   - timer   : synchronous, fire-on-demand (default) or pthread-backed.
 ///   - uart    : in-RAM rx/tx buffers (default) or real stdin/stdout.
-///   - storage : none (default) or a POSIX SD-card process over a FAT32 image.
+///   - storage : none (default) or the POSIX SD card over a FAT32 image.
 ///
 /// Defaults give a fully deterministic kernel: no wall-clock, no preemption
 /// unless the test asks for it, console I/O the test drives byte by byte.
