@@ -215,7 +215,7 @@ extern StaticLogs agonLight2StaticLogsArea;
 ///
 /// @brief Value to indicate the maximum number of processes that can be run
 /// concurrently.
-#define NUM_PROCESSES 9
+#define NUM_PROCESSES 18
 
 // -------------------------------------------------------------------------
 // DIO pin numbering
