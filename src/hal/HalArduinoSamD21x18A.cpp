@@ -184,7 +184,7 @@ void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
 ///
 /// @brief Value to indicate the maximum number of processes that can be run
 /// concurrently.
-#define NUM_PROCESSES 9
+#define NUM_PROCESSES 8
 
 /// @var _spiCopiDio
 ///
