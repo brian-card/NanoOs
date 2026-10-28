@@ -1407,7 +1407,7 @@ memoryManagerSendReallocMessage(void *ptr, size_t size, bool zero) {
       // See the note above for why we can't leave the memory uninitialized.
       memset(((char*) returnValue) + reallocMessage.oldSize,
         c,
-        reallocMessage.size - reallocMessage.size);
+        reallocMessage.size - reallocMessage.oldSize);
     }
   }
   
