@@ -469,6 +469,10 @@ typedef struct ConsoleInputReadyArgs {
 ///   read from a forwarding port, or NULL if there is none.
 /// @param pendingInputIndex The index of the next byte to read from
 ///   pendingInput.
+/// @param typeAheadStart The index in consoleBuffer's buffer of the first byte
+///   read from the port while a completed line was held and not yet processed.
+/// @param typeAheadEnd The index in consoleBuffer's buffer just past the last
+///   such byte.
 typedef struct ConsolePort {
   unsigned char           uartId;
   ConsoleBuffer          *consoleBuffer;
@@ -487,6 +491,8 @@ typedef struct ConsolePort {
   ConsoleInputReadyArgs   inputReadyArgs;
   ProcessMessage         *pendingInput;
   uint8_t                 pendingInputIndex;
+  uint8_t                 typeAheadStart;
+  uint8_t                 typeAheadEnd;
 } ConsolePort;
 
 /// @struct ConsoleState

@@ -147,6 +147,7 @@ static bool consoleBufferHasInput(
   for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
     if (consolePorts[ii].consoleBuffer == consoleBuffer) {
       return (consoleBuffer->consoleBufferIndex > 0)
+        || (consolePorts[ii].typeAheadStart < consolePorts[ii].typeAheadEnd)
         || (consoleBuffer->holdsCompletedLine == true)
         || (consoleBuffer->bufferAwaitingRelease == true);
     }
@@ -920,6 +921,8 @@ static void consoleInitPort(ConsolePort *consolePort,
   consolePort->inputReadyArgs.numBytes = 0;
   consolePort->pendingInput = NULL;
   consolePort->pendingInputIndex = 0;
+  consolePort->typeAheadStart = 0;
+  consolePort->typeAheadEnd = 0;
 }
 
 /// @fn void consoleInputReadyCommandHandler(
@@ -1525,6 +1528,8 @@ static void consoleHandleInputEvent(
     // Like a terminal, an interrupt discards input that hasn't been read.
     consolePort->consoleBuffer->holdsCompletedLine = false;
     consolePort->consoleBuffer->consoleBufferIndex = 0;
+    consolePort->typeAheadStart = 0;
+    consolePort->typeAheadEnd = 0;
     consolePort->inputState = CONSOLE_INPUT_STATE_NORMAL;
 
     // The user hit Ctrl-C on the keyboard.  Send SIGINT to the input owner.
@@ -1595,7 +1600,8 @@ static void consoleReplayHeldByte(
 ///
 /// @brief Read and process a port's input until it has nothing more to give or
 /// a completed line has been sent to the port's input owner.  While a line is
-/// held for an owner that isn't waiting, only Ctrl-C is acted on.  An escape
+/// held for an owner that isn't waiting, only Ctrl-C is acted on, and other
+/// input is kept in the rest of the buffer until the line is taken.  An escape
 /// that nothing has followed is only taken to be the escape key by itself once
 /// CONSOLE_ESCAPE_DELAY_MS has passed, so that an escape sequence whose bytes
 /// arrive in separate reads is still read as one.
@@ -1618,13 +1624,32 @@ bool consoleServicePort(
       // whatever mode the port is in by then.
       break;
     }
-    int byteRead = consolePort->readByte(consolePort);
-    if ((consolePort->consoleBuffer->holdsCompletedLine == true)
-      && (byteRead != 0x03)
+    ConsoleBuffer *consoleBuffer = consolePort->consoleBuffer;
+    bool holdsLine = consoleBuffer->holdsCompletedLine;
+    int byteRead = -1;
+    if ((holdsLine == false)
+      && (consolePort->typeAheadStart < consolePort->typeAheadEnd)
     ) {
+      byteRead = (uint8_t) consoleBuffer->buffer[consolePort->typeAheadStart];
+      consolePort->typeAheadStart++;
+    } else if (holdsLine
+      && (consolePort->typeAheadEnd >= CONSOLE_BUFFER_SIZE)
+    ) {
+      // Leave what doesn't fit unread rather than drop it.
+      break;
+    } else {
+      byteRead = consolePort->readByte(consolePort);
+    }
+    if (holdsLine && (byteRead != 0x03)) {
       if (byteRead < 0) {
         break;
       }
+      if (consolePort->typeAheadStart == consolePort->typeAheadEnd) {
+        consolePort->typeAheadStart = consoleBuffer->consoleBufferIndex + 1;
+        consolePort->typeAheadEnd = consolePort->typeAheadStart;
+      }
+      consoleBuffer->buffer[consolePort->typeAheadEnd] = (char) byteRead;
+      consolePort->typeAheadEnd++;
       continue;
     }
     if (byteRead < 0) {
