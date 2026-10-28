@@ -58,6 +58,16 @@ def run(*args):
         check=True).stdout
 
 
+# objdump prints jr and djnz targets truncated to 16 bits.
+def relativeTarget(address, printed):
+    target = (address & ~0xFFFF) | printed
+    if target - address > 0x8000:
+        target -= 0x10000
+    elif address - target > 0x8000:
+        target += 0x10000
+    return target
+
+
 def readSymbols(readelf, elf):
     symbols = []
     for line in run(readelf, "-sW", elf).splitlines():
@@ -149,6 +159,8 @@ def main():
         branch = instruction.startswith(("call", "jp", "jr", "djnz", "rst"))
         for target in re.findall(r"0x([0-9a-f]+)", instruction):
             target = int(target, 16)
+            if instruction.startswith(("jr", "djnz")):
+                target = relativeTarget(address, target)
             if ramStart + RAM_TEXT_HEADER_SIZE <= target < ramEnd:
                 ramReferences.setdefault(current, set()).add(
                     owner(target, ramAddresses, ramNames))

@@ -659,9 +659,6 @@ int memoryManagerReallocCommandHandler(
       processPid(processMessageFrom(incoming)));
 
   if (clientReturnValue != NULL) {
-    if (reallocMessage->zero == true) {
-      memset(clientReturnValue, 0, reallocMessage->size);
-    }
     reallocMessage->size = sizeOfMemory(clientReturnValue);
   } else if ((reallocMessage->size > 0)
     && (processPid(processMessageFrom(incoming))
@@ -1342,8 +1339,8 @@ size_t getFreeMemory(void) {
 ///
 /// @param ptr The pointer to send to the process.
 /// @param size The size to send to the process.
-/// @param zero Whether or not the memory manager needs to zero the memory it
-///   returns before returning it.
+/// @param zero Whether or not to zero the returned memory in the calling
+///   process's context so that the zeroing is preemptable.
 ///
 /// @return Returns the data pointer returned in the reply.
 static inline __attribute__((always_inline)) void*
@@ -1353,7 +1350,6 @@ memoryManagerSendReallocMessage(void *ptr, size_t size, bool zero) {
   ReallocMessage reallocMessage;
   reallocMessage.ptr = ptr;
   reallocMessage.size = size;
-  reallocMessage.zero = zero;
   
   ProcessMessage *sent
     = initSendProcessMessageToProcess(processIdToDescriptor(memoryManagerPid),
@@ -1371,6 +1367,9 @@ memoryManagerSendReallocMessage(void *ptr, size_t size, bool zero) {
   // out of the structure we already have.
   returnValue = reallocMessage.ptr;
   processMessageRelease(sent);
+  if (zero && (returnValue != NULL)) {
+    memset(returnValue, 0, reallocMessage.size);
+  }
   
   return returnValue;
 }

@@ -52,6 +52,27 @@ NANO_OS_KERNEL_TEST(mm, calloc_zeroes_memory) {
   free(p);
 }
 
+NANO_OS_KERNEL_TEST(mm, calloc_zeroes_reused_dirty_block) {
+  size_t n = 128;
+  unsigned char *dirty = (unsigned char*) malloc(n);
+  NANO_OS_ASSERT_NOT_NULL(dirty);
+  memset(dirty, 0xA5, n);
+  free(dirty);
+
+  unsigned char *p = (unsigned char*) calloc(1, n);
+  NANO_OS_ASSERT_NOT_NULL(p);
+  // The test only proves zeroing if calloc hands back the dirtied block.
+  NANO_OS_ASSERT_EQ_INT((intptr_t) dirty, (intptr_t) p);
+  int nonZero = 0;
+  for (size_t ii = 0; ii < n; ii++) {
+    if (p[ii] != 0) {
+      nonZero++;
+    }
+  }
+  NANO_OS_ASSERT_EQ_INT(0, nonZero);
+  free(p);
+}
+
 NANO_OS_KERNEL_TEST(mm, realloc_preserves_contents_and_grows) {
   size_t oldSize = 32;
   size_t newSize = 96;

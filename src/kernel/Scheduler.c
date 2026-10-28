@@ -1240,7 +1240,6 @@ void* schedulerResumeReallocMessage(void *ptr, size_t size) {
   ReallocMessage reallocMessage;
   reallocMessage.ptr = ptr;
   reallocMessage.size = size;
-  reallocMessage.zero = false;
   
   if (schedulerInitSendMessageToPid(memoryManagerPid,
     MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_REALLOC,
