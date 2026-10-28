@@ -50,11 +50,6 @@
 /// mouse can take the VDP about 5 seconds when no mouse is plugged in.
 #define VDP_SETUP_TIMEOUT_NS 8000000000LL
 
-/// @def VDP_WORD
-///
-/// @brief The two bytes of a 16-bit VDU argument, low byte first.
-#define VDP_WORD(value) ((value) & 0xff), (((value) >> 8) & 0xff)
-
 /// @def VDP_AUDIO_RESET
 ///
 /// @brief The bytes of VDU 23,0,&85,channel,10, which resets an audio channel
@@ -79,9 +74,8 @@
 /// (VDU 23,27,16); clear every buffer, bitmap, mouse cursor, font, and sample
 /// (VDU 23,0,&A0,65535;2); restore the system font (VDU 23,0,&91); reset the
 /// copper's signal list (VDU 23,0,&C4,4); restore the default sample rate
-/// (VDU 23,0,&85,255,13,16384;) and reset all 32 audio channels; and restore
-/// the default keyboard repeat delay and rate with the LEDs off
-/// (VDU 23,0,&88,500;100;0).  The mouse is reset with the cursor.
+/// (VDU 23,0,&85,255,13,16384;) and reset all 32 audio channels.  The
+/// keyboard is reset by vdpSetKeyboardLeds and the mouse with the cursor.
 static const uint8_t _vdpReset[] = {
   23, 0, 0xC1, 0,
   23, 0, 0x98, 1,
@@ -92,8 +86,7 @@ static const uint8_t _vdpReset[] = {
   23, 0, 0xC4, 4,
   23, 0, 0x85, 255, 13, VDP_WORD(16384),
   VDP_AUDIO_RESET_8(0), VDP_AUDIO_RESET_8(8),
-  VDP_AUDIO_RESET_8(16), VDP_AUDIO_RESET_8(24),
-  23, 0, 0x88, VDP_WORD(500), VDP_WORD(100), 0
+  VDP_AUDIO_RESET_8(16), VDP_AUDIO_RESET_8(24)
 };
 
 /// @var _vdpCursorUploadStart
@@ -143,10 +136,82 @@ static void vdpDefineCursor(void) {
   vdpWrite(_vdpCursorUploadEnd, sizeof(_vdpCursorUploadEnd));
 }
 
+/// @var _vdpNumLockOn
+///
+/// @brief The argument that turns Num Lock on when the driver starts.
+static const char _vdpNumLockOn[] = "--numlock=on";
+
+/// @var _vdpNumLockOff
+///
+/// @brief The argument that leaves Num Lock off when the driver starts.
+static const char _vdpNumLockOff[] = "--numlock=off";
+
+/// @fn static void vdpBufferString(VdpOutputBuffer *buffer,
+///   const char *string)
+///
+/// @brief Append a string to the output drawn once the VDP is listening, with
+/// any byte that isn't printable ASCII replaced so that it can't start a VDU
+/// command.
+///
+/// @param buffer A pointer to the output buffer, or NULL to drop the string.
+/// @param string The NUL-terminated string to append.
+///
+/// @return This function returns no value.
+static void vdpBufferString(VdpOutputBuffer *buffer, const char *string) {
+  if (buffer == NULL) {
+    return;
+  }
+
+  for (; (*string != '\0') && (buffer->length < VDP_OUTPUT_BUFFER_SIZE);
+    string++
+  ) {
+    char c = *string;
+    if (((c < ' ') || (c > '~')) && (c != '\r') && (c != '\n')) {
+      c = '?';
+    }
+    buffer->data[buffer->length++] = (uint8_t) c;
+  }
+}
+
+/// @fn static void vdpParseArguments(VdpInput *input, VdpOutput *vdpOutput,
+///   char **argv)
+///
+/// @brief Apply the driver's arguments, warning on the driver's own screen
+/// about any it doesn't recognize and ignoring them, so that a mistake in
+/// /etc/config.sys can't take the console away.  The screen is the only place
+/// the driver can report to:  its hardware grant keeps it off the other UARTs.
+///
+/// @param input A pointer to the driver's VdpInput.
+/// @param vdpOutput A pointer to the driver's VdpOutput.
+/// @param argv The driver's NULL-terminated arguments.
+///
+/// @return This function returns no value.
+static void vdpParseArguments(VdpInput *input, VdpOutput *vdpOutput,
+  char **argv
+) {
+  if ((argv == NULL) || (argv[0] == NULL)) {
+    return;
+  }
+
+  for (char **arg = &argv[1]; *arg != NULL; arg++) {
+    if (strcmp(*arg, _vdpNumLockOn) == 0) {
+      input->numLock = true;
+    } else if (strcmp(*arg, _vdpNumLockOff) == 0) {
+      input->numLock = false;
+    } else {
+      vdpBufferString(vdpOutput->buffer, argv[0]);
+      vdpBufferString(vdpOutput->buffer,
+        ": Ignoring unrecognized argument \"");
+      vdpBufferString(vdpOutput->buffer, *arg);
+      vdpBufferString(vdpOutput->buffer, "\"\r\n");
+    }
+  }
+}
+
 /// @fn void* vdpStartup(void *args)
 ///
-/// @brief Initialize the driver's state and register for the bytes the VDP
-/// sends.
+/// @brief Initialize the driver's state from its arguments and register for
+/// the bytes the VDP sends.
 ///
 /// @param args A pointer to the driver's VdpStartupArgs.
 ///
@@ -165,6 +230,7 @@ void* vdpStartup(void *args) {
   if (vdpOutput->buffer != NULL) {
     vdpOutput->buffer->length = 0;
   }
+  vdpParseArguments(input, vdpOutput, startupArgs->argv);
 
   getHal()->uart->registerCallback(VDP_UART, getRunningProcess(),
     VDP_DRIVER_SIGNATURE | VDP_UART_INPUT, NULL);
@@ -187,6 +253,7 @@ void* vdpStartup(void *args) {
 /// @return This function returns no value.
 static void vdpSendScreenSetup(VdpInput *input, VdpOutput *vdpOutput) {
   vdpWrite(_vdpReset, sizeof(_vdpReset));
+  vdpSetKeyboardLeds(input->numLock ? VDP_LED_NUM_LOCK : 0);
   vdpWrite(vdpScreenSetup, vdpScreenSetupSize);
   vdpDefineCursor();
 
