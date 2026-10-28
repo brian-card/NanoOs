@@ -319,6 +319,16 @@ def test_grep_finds_lines_in_a_file_and_a_pipe(e):
     assert e.sh("echo one-two-three | grep zzz") == ""
 
 
+def test_ver_prints_the_version_and_copyright(e):
+    with open(os.path.join(REPO_ROOT, "src", "kernel", "NanoOs.h")) as f:
+        version = re.search(r'#define NANO_OS_VERSION\s+"([^"]+)"',
+                            f.read()).group(1)
+    assert e.sh("ver") == (
+        "NanoOs Version %s\n"
+        "Copyright (c) 2026 Brian Card\n"
+        "Released under the MIT License." % version)
+
+
 def test_cat_reports_a_missing_file(e):
     assert e.sh("cat /etc/missing") == \
         'ERROR: Could not open file "/etc/missing": No such entry found'
@@ -502,6 +512,7 @@ TESTS = [test_boots_to_a_login_prompt,
          test_config_sys_is_the_agon_one,
          test_vdp_driver_and_its_getty_are_running,
          test_helloworld_prints_its_greeting,
+         test_ver_prints_the_version_and_copyright,
          test_help_describes_every_command,
          test_cd_and_pwd_track_the_working_directory,
          test_line_editor_moves_edits_and_recalls,

@@ -837,6 +837,22 @@ def test_echo_roundtrips_argument(s):
     assert "hello-nanoos" in s.sh("echo hello-nanoos")
 
 
+def test_ver_prints_the_version_and_copyright_between_blank_lines(s):
+    with open(os.path.join(REPO_ROOT, "src", "kernel", "NanoOs.h")) as f:
+        version = re.search(r'#define NANO_OS_VERSION\s+"([^"]+)"',
+                            f.read()).group(1)
+    s.login()
+    s.child.sendline("ver")
+    s.child.expect_exact("ver", timeout=10)
+    s.child.expect(PROMPT, timeout=10)
+    assert s.child.before.replace("\r", "") == \
+        ("\n\nNanoOs Version %s\n"
+         "Copyright (c) 2026 Brian Card\n"
+         "Released under the MIT License.\n\n" % version), \
+        repr(s.child.before)
+    assert s.sh("ver extra") == help_text(s, "ver --help")
+
+
 def test_hostname_file(s):
     s.login()
     assert "nanoe2e" in s.sh("cat /etc/hostname")
