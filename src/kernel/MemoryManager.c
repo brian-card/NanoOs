@@ -1367,8 +1367,34 @@ memoryManagerSendReallocMessage(void *ptr, size_t size, bool zero) {
   // out of the structure we already have.
   returnValue = reallocMessage.ptr;
   processMessageRelease(sent);
-  if (zero && (returnValue != NULL)) {
-    memset(returnValue, 0, reallocMessage.size);
+  
+  if (returnValue != NULL) {
+    if (ptr == NULL) {
+      // A note about this block:
+      //
+      // Under no circumstances can we return returnValue as-is.  Memory is
+      // shared from a global pool and what's been allocated may very well have
+      // come from another process.  Returning it as-is would therefore be a
+      // security risk.
+      //
+      // For calloc calls, this is not an issue.  calloc sets the zero bool to
+      // true, so we'd always call memset to zero out the allocated memory for
+      // those calls.  malloc, however, presents a problem.  As mentioned, we
+      // can't just return what was allocated unmodified.  However, we also
+      // can't zero out the memory.  The C standard makes no guarantees about
+      // the contents of memory allocated by malloc.  Zeroing out the memory
+      // could encourage callers to rely on the memory being zeroed out, which
+      // may not be true in a future version of the OS.  So, what do we do?
+      //
+      // We can use a pattern byte.  This will make it easy to recognize if we
+      // accidentally use it somewhere.
+      int c = MEMORY_MANAGER_MALLOC_FILL_BYTE;
+      if (zero == true) {
+        c = 0;
+      }
+      
+      memset(returnValue, c, reallocMessage.size);
+    }
   }
   
   return returnValue;

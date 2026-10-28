@@ -68,6 +68,11 @@ extern "C"
 /// possible while still allowing debug prints to work.
 #define MEMORY_MANAGER_DEBUG_STACK_SIZE 768
 
+/// @def MEMORY_MANAGER_MALLOC_FILL_BYTE
+///
+/// @brief The byte that gets filled into memory allocated with malloc.
+#define MEMORY_MANAGER_MALLOC_FILL_BYTE 0xA5
+
 /// @struct ReallocMessage
 ///
 /// @brief Structure that holds the data needed to make a request to reallocate
