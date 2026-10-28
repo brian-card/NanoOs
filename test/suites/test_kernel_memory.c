@@ -107,6 +107,118 @@ NANO_OS_KERNEL_TEST(mm, realloc_null_behaves_like_malloc) {
   free(p);
 }
 
+/// @fn static size_t countBytesNotEqual(const unsigned char *buffer,
+///   size_t length, unsigned char value)
+///
+/// @brief Count the bytes in a buffer that differ from an expected value.
+///
+/// @param buffer The buffer to examine.
+/// @param length The number of bytes of buffer to examine.
+/// @param value The value every byte is expected to hold.
+///
+/// @return Returns the number of bytes in buffer that are not equal to value.
+static size_t countBytesNotEqual(const unsigned char *buffer,
+  size_t length, unsigned char value
+) {
+  size_t count = 0;
+  for (size_t ii = 0; ii < length; ii++) {
+    if (buffer[ii] != value) {
+      count++;
+    }
+  }
+  return count;
+}
+
+#define DIRTY_BYTE ((unsigned char) (MEMORY_MANAGER_MALLOC_FILL_BYTE ^ 0xFF))
+
+NANO_OS_KERNEL_TEST(mm, malloc_fills_reused_dirty_block_with_pattern) {
+  size_t n = 128;
+  unsigned char *dirty = (unsigned char*) malloc(n);
+  NANO_OS_ASSERT_NOT_NULL(dirty);
+  memset(dirty, DIRTY_BYTE, n);
+  free(dirty);
+
+  unsigned char *p = (unsigned char*) malloc(n);
+  NANO_OS_ASSERT_NOT_NULL(p);
+  // The test only proves filling if malloc hands back the dirtied block.
+  NANO_OS_ASSERT_EQ_PTR(dirty, p);
+  NANO_OS_ASSERT_EQ_INT(0,
+    countBytesNotEqual(p, n, MEMORY_MANAGER_MALLOC_FILL_BYTE));
+  free(p);
+}
+
+NANO_OS_KERNEL_TEST(mm, realloc_null_fills_reused_dirty_block_with_pattern) {
+  size_t n = 128;
+  unsigned char *dirty = (unsigned char*) malloc(n);
+  NANO_OS_ASSERT_NOT_NULL(dirty);
+  memset(dirty, DIRTY_BYTE, n);
+  free(dirty);
+
+  unsigned char *p = (unsigned char*) realloc(NULL, n);
+  NANO_OS_ASSERT_NOT_NULL(p);
+  NANO_OS_ASSERT_EQ_PTR(dirty, p);
+  NANO_OS_ASSERT_EQ_INT(0,
+    countBytesNotEqual(p, n, MEMORY_MANAGER_MALLOC_FILL_BYTE));
+  free(p);
+}
+
+NANO_OS_KERNEL_TEST(mm, realloc_grow_in_place_fills_tail_with_pattern) {
+  size_t oldSize = 32;
+  size_t newSize = 160;
+  unsigned char *p = (unsigned char*) malloc(oldSize);
+  NANO_OS_ASSERT_NOT_NULL(p);
+  for (size_t ii = 0; ii < oldSize; ii++) {
+    p[ii] = (unsigned char) (ii + 1);
+  }
+
+  // Dirty the memory just past p so that growing p in place reuses it.
+  unsigned char *dirty = (unsigned char*) malloc(newSize);
+  NANO_OS_ASSERT_NOT_NULL(dirty);
+  NANO_OS_ASSERT_TRUE(dirty > p);
+  memset(dirty, DIRTY_BYTE, newSize);
+  free(dirty);
+
+  unsigned char *q = (unsigned char*) realloc(p, newSize);
+  NANO_OS_ASSERT_NOT_NULL(q);
+  NANO_OS_ASSERT_EQ_PTR(p, q);
+  for (size_t ii = 0; ii < oldSize; ii++) {
+    NANO_OS_ASSERT_EQ_INT((unsigned char) (ii + 1), q[ii]);
+  }
+  NANO_OS_ASSERT_EQ_INT(0, countBytesNotEqual(q + oldSize,
+    newSize - oldSize, MEMORY_MANAGER_MALLOC_FILL_BYTE));
+  free(q);
+}
+
+NANO_OS_KERNEL_TEST(mm, realloc_grow_by_move_fills_tail_with_pattern) {
+  size_t oldSize = 32;
+  size_t newSize = 160;
+  unsigned char *p = (unsigned char*) malloc(oldSize);
+  NANO_OS_ASSERT_NOT_NULL(p);
+  for (size_t ii = 0; ii < oldSize; ii++) {
+    p[ii] = (unsigned char) (ii + 1);
+  }
+
+  // The blocker keeps p from growing in place, forcing a move into the
+  // dirtied block after it.
+  void *blocker = malloc(16);
+  NANO_OS_ASSERT_NOT_NULL(blocker);
+  unsigned char *dirty = (unsigned char*) malloc(newSize);
+  NANO_OS_ASSERT_NOT_NULL(dirty);
+  memset(dirty, DIRTY_BYTE, newSize);
+  free(dirty);
+
+  unsigned char *q = (unsigned char*) realloc(p, newSize);
+  NANO_OS_ASSERT_NOT_NULL(q);
+  NANO_OS_ASSERT_EQ_PTR(dirty, q);
+  for (size_t ii = 0; ii < oldSize; ii++) {
+    NANO_OS_ASSERT_EQ_INT((unsigned char) (ii + 1), q[ii]);
+  }
+  NANO_OS_ASSERT_EQ_INT(0, countBytesNotEqual(q + oldSize,
+    newSize - oldSize, MEMORY_MANAGER_MALLOC_FILL_BYTE));
+  free(q);
+  free(blocker);
+}
+
 NANO_OS_KERNEL_TEST(mm, oversized_malloc_fails_cleanly) {
   // Far larger than the simulated ~64 KB heap - must return NULL, not crash.
   void *p = malloc((size_t) 16 * 1024 * 1024);
