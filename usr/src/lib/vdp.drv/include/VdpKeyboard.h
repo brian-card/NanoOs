@@ -83,6 +83,21 @@ extern "C"
 /// @brief The most bytes a single key event translates to.
 #define VDP_KEY_MAX_BYTES 4
 
+/// @def VDP_LED_SCROLL_LOCK
+///
+/// @brief The bit of VDU 23,0,&88's LED byte that lights Scroll Lock.
+#define VDP_LED_SCROLL_LOCK 0x01
+
+/// @def VDP_LED_CAPS_LOCK
+///
+/// @brief The bit of VDU 23,0,&88's LED byte that lights Caps Lock.
+#define VDP_LED_CAPS_LOCK 0x02
+
+/// @def VDP_LED_NUM_LOCK
+///
+/// @brief The bit of VDU 23,0,&88's LED byte that lights Num Lock.
+#define VDP_LED_NUM_LOCK 0x04
+
 /// @struct VdpPacketParser
 ///
 /// @brief State of the parse of the packets the VDP sends: a header byte of
@@ -102,7 +117,8 @@ typedef struct VdpPacketParser {
 } VdpPacketParser;
 
 bool vdpParseByte(VdpPacketParser *parser, uint8_t byte);
-size_t vdpTranslateKey(const uint8_t *keyData, uint8_t *output);
+size_t vdpTranslateKey(const uint8_t *keyData, bool numLock, uint8_t *output);
+bool vdpUpdateLocks(const uint8_t *keyData, bool *numLock, uint8_t *leds);
 bool vdpIsPollReply(const VdpPacketParser *parser, uint8_t cookie);
 
 #ifdef __cplusplus

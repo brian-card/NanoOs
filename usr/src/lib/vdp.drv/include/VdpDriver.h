@@ -72,6 +72,21 @@ extern "C"
 /// poll before writing to it anyway.
 #define VDP_GENERAL_POLL_TIMEOUT_NS 15000000000LL
 
+/// @def VDP_WORD
+///
+/// @brief The two bytes of a 16-bit VDU argument, low byte first.
+#define VDP_WORD(value) ((value) & 0xff), (((value) >> 8) & 0xff)
+
+/// @def VDP_KEY_REPEAT_DELAY_MS
+///
+/// @brief The VDP's default keyboard repeat delay, in milliseconds.
+#define VDP_KEY_REPEAT_DELAY_MS 500
+
+/// @def VDP_KEY_REPEAT_RATE_MS
+///
+/// @brief The VDP's default keyboard repeat rate, in milliseconds.
+#define VDP_KEY_REPEAT_RATE_MS 100
+
 /// @struct VdpInput
 ///
 /// @brief State of the keyboard input the driver forwards to the console.
@@ -93,6 +108,7 @@ extern "C"
 ///   each preceded by its length so that no key is split between messages.
 /// @param pollAnswered Whether the VDP has replied to the general poll.
 /// @param pollCookie The cookie of the general poll being waited on.
+/// @param numLock Whether the driver's Num Lock is on.
 typedef struct VdpInput {
   ProcessId                    consolePid;
   int                          portId;
@@ -105,6 +121,7 @@ typedef struct VdpInput {
   uint8_t                      pending[VDP_PENDING_SIZE];
   bool                         pollAnswered;
   uint8_t                      pollCookie;
+  bool                         numLock;
 } VdpInput;
 
 /// @struct VdpOutput
@@ -135,9 +152,11 @@ typedef struct VdpOutput {
 ///
 /// @param input A pointer to the driver's VdpInput.
 /// @param output A pointer to the driver's VdpOutput.
+/// @param argv The driver's NULL-terminated arguments.
 typedef struct VdpStartupArgs {
-  VdpInput  *input;
-  VdpOutput *output;
+  VdpInput   *input;
+  VdpOutput  *output;
+  char      **argv;
 } VdpStartupArgs;
 
 /// @fn static inline int64_t vdpNowNs(void)
@@ -161,6 +180,22 @@ static inline int64_t vdpNowNs(void) {
 /// @return This function returns no value.
 static inline void vdpWrite(const uint8_t *data, size_t length) {
   getHal()->uart->write(VDP_UART, data, (ssize_t) length, NULL);
+}
+
+/// @fn static inline void vdpSetKeyboardLeds(uint8_t leds)
+///
+/// @brief Set the keyboard's LEDs, and its repeat delay and rate to the
+/// VDP's defaults, with VDU 23,0,&88,delay;rate;leds.
+///
+/// @param leds The VDP_LED_* bits of the LEDs to light.
+///
+/// @return This function returns no value.
+static inline void vdpSetKeyboardLeds(uint8_t leds) {
+  const uint8_t keyState[] = {
+    23, 0, 0x88, VDP_WORD(VDP_KEY_REPEAT_DELAY_MS),
+    VDP_WORD(VDP_KEY_REPEAT_RATE_MS), leds
+  };
+  vdpWrite(keyState, sizeof(keyState));
 }
 
 #ifdef __cplusplus

@@ -146,8 +146,9 @@ static void vdpRequestPort(VdpInput *input) {
 /// @fn static bool vdpReadKeyboard(VdpInput *input)
 ///
 /// @brief Read everything the VDP has sent, adding the translation of each
-/// key that went down to the keys waiting to be sent to the console.  A key
-/// that doesn't fit is dropped.
+/// key that went down to the keys waiting to be sent to the console, and
+/// setting the keyboard's LEDs after each lock key.  A key that doesn't fit
+/// is dropped.
 ///
 /// @param input A pointer to the driver's VdpInput.
 ///
@@ -175,8 +176,13 @@ static bool vdpReadKeyboard(VdpInput *input) {
         continue;
       }
 
+      uint8_t leds = 0;
+      if (vdpUpdateLocks(input->parser.data, &input->numLock, &leds)) {
+        vdpSetKeyboardLeds(leds);
+      }
       uint8_t key[VDP_KEY_MAX_BYTES];
-      size_t keyLength = vdpTranslateKey(input->parser.data, key);
+      size_t keyLength
+        = vdpTranslateKey(input->parser.data, input->numLock, key);
       if ((keyLength == 0)
         || (input->pendingLength + 1 + keyLength > VDP_PENDING_SIZE)
       ) {
@@ -253,12 +259,12 @@ static void vdpSendInput(VdpInput *input) {
 
 int main(int argc, char **argv) {
   (void) argc;
-  (void) argv;
   VdpInput input;
   VdpOutput vdpOutput;
   VdpStartupArgs startupArgs = {
     .input = &input,
     .output = &vdpOutput,
+    .argv = argv,
   };
   if (callOverlayFunction(OVERLAY_SAME_NAMESPACE,
     "Startup", "vdpStartup", &startupArgs) != &startupArgs

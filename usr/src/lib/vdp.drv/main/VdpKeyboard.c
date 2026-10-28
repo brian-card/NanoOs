@@ -113,24 +113,73 @@ bool vdpParseByte(VdpPacketParser *parser, uint8_t byte) {
   return false;
 }
 
-/// @fn size_t vdpTranslateKey(const uint8_t *keyData, uint8_t *output)
+/// @var _vdpKeypadNavigation
+///
+/// @brief The keycodes the VDP reports for keypad 0 through 9 and . while its
+/// own Num Lock is off, in that order.
+static const uint8_t _vdpKeypadNavigation[] = {
+  KEYCODE_KEYPAD_INSERT, KEYCODE_KEYPAD_END, KEYCODE_KEYPAD_DOWN,
+  KEYCODE_KEYPAD_PAGEDOWN, KEYCODE_KEYPAD_LEFT, KEYCODE_KEYPAD_CENTER,
+  KEYCODE_KEYPAD_RIGHT, KEYCODE_KEYPAD_HOME, KEYCODE_KEYPAD_UP,
+  KEYCODE_KEYPAD_PAGEUP, KEYCODE_KEYPAD_DELETE,
+};
+
+/// @fn static int vdpKeypadIndex(uint8_t keycode)
+///
+/// @brief Find which of keypad 0 through 9 and . a keycode belongs to, in
+/// either of the forms the VDP reports depending on its own Num Lock.
+///
+/// @param keycode The FabGL keycode of the key.
+///
+/// @return Returns 0 through 9 for the digits, 10 for ., and -1 for a key that
+/// isn't one of them.
+static int vdpKeypadIndex(uint8_t keycode) {
+  if ((keycode >= KEYCODE_KEYPAD_0) && (keycode <= KEYCODE_KEYPAD_9)) {
+    return keycode - KEYCODE_KEYPAD_0;
+  } else if (keycode == KEYCODE_KEYPAD_PERIOD) {
+    return 10;
+  }
+  for (int ii = 0; ii < (int) sizeof(_vdpKeypadNavigation); ii++) {
+    if (_vdpKeypadNavigation[ii] == keycode) {
+      return ii;
+    }
+  }
+
+  return -1;
+}
+
+/// @fn size_t vdpTranslateKey(const uint8_t *keyData, bool numLock,
+///   uint8_t *output)
 ///
 /// @brief Translate the data of a keyboard packet into the bytes a terminal
 /// sends for the key: an escape sequence for a navigation or function key,
-/// the key's ASCII value otherwise, and nothing for a key release.
+/// the key's ASCII value otherwise, and nothing for a key release.  The
+/// keypad follows the driver's Num Lock rather than the VDP's, because the
+/// VDP has no command that sets its own.
 ///
 /// @param keyData The 4 data bytes of a keyboard packet: ASCII value,
 ///   modifiers, FabGL keycode, and 1 if the key went down.
+/// @param numLock Whether the driver's Num Lock is on.
 /// @param output A buffer of at least VDP_KEY_MAX_BYTES bytes to fill.
 ///
 /// @return Returns the number of bytes written to output.
-size_t vdpTranslateKey(const uint8_t *keyData, uint8_t *output) {
+size_t vdpTranslateKey(const uint8_t *keyData, bool numLock, uint8_t *output) {
   if (keyData[3] == 0) {
     return 0;
   }
 
+  uint8_t keycode = keyData[2];
+  int keypadIndex = vdpKeypadIndex(keycode);
+  if (keypadIndex >= 0) {
+    if (numLock && ((keyData[1] & AGON_KEYMOD_SHIFT) == 0)) {
+      output[0] = (uint8_t) "0123456789."[keypadIndex];
+      return 1;
+    }
+    keycode = _vdpKeypadNavigation[keypadIndex];
+  }
+
   const char *sequence = NULL;
-  switch (keyData[2]) {
+  switch (keycode) {
     case KEYCODE_UP:
     case KEYCODE_KEYPAD_UP:
       sequence = "\x1b[A";
@@ -191,12 +240,56 @@ size_t vdpTranslateKey(const uint8_t *keyData, uint8_t *output) {
     size_t length = strlen(sequence);
     memcpy(output, sequence, length);
     return length;
-  } else if (keyData[0] != 0) {
+  } else if ((keypadIndex < 0) && (keyData[0] != 0)) {
     output[0] = keyData[0];
     return 1;
   }
 
   return 0;
+}
+
+/// @fn bool vdpUpdateLocks(const uint8_t *keyData, bool *numLock,
+///   uint8_t *leds)
+///
+/// @brief Toggle the driver's Num Lock on the release of the Num Lock key, and
+/// work out the LEDs the keyboard should show after the release of any lock
+/// key, when the VDP overwrites all three LEDs with its own lock states.
+///
+/// @param keyData The 4 data bytes of a keyboard packet.
+/// @param numLock A pointer to whether the driver's Num Lock is on.
+/// @param leds Set to the LED byte of VDU 23,0,&88 when true is returned.
+///
+/// @return Returns true if the packet is the release of a lock key, so that
+/// leds has to be sent to the VDP, false otherwise.
+bool vdpUpdateLocks(const uint8_t *keyData, bool *numLock, uint8_t *leds) {
+  if (keyData[3] != 0) {
+    return false;
+  }
+
+  // The VDP reports the lock states from before this release toggles them.
+  uint8_t modifiers = keyData[1];
+  if (keyData[2] == KEYCODE_NUMLOCK) {
+    *numLock = !*numLock;
+  } else if (keyData[2] == KEYCODE_CAPSLOCK) {
+    modifiers ^= AGON_KEYMOD_CAPS_LOCK;
+  } else if (keyData[2] == KEYCODE_SCROLLLOCK) {
+    modifiers ^= AGON_KEYMOD_SCROLL_LOCK;
+  } else {
+    return false;
+  }
+
+  *leds = 0;
+  if ((modifiers & AGON_KEYMOD_SCROLL_LOCK) != 0) {
+    *leds |= VDP_LED_SCROLL_LOCK;
+  }
+  if ((modifiers & AGON_KEYMOD_CAPS_LOCK) != 0) {
+    *leds |= VDP_LED_CAPS_LOCK;
+  }
+  if (*numLock) {
+    *leds |= VDP_LED_NUM_LOCK;
+  }
+
+  return true;
 }
 
 /// @fn bool vdpIsPollReply(const VdpPacketParser *parser, uint8_t cookie)
