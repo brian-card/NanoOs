@@ -346,11 +346,13 @@ void localFreeProcessMemory(
 /// @param size The new size desired for the memory block at ptr.  If this value
 ///   is 0, the provided pointer will be freed.
 /// @param pid The ID of the process making the request.
+/// @param ptrSize A pointer to a size_t that will be filled with the size of
+///   the memory block at the time the call was made if ptr is non-NULL.
 ///
 /// @return Returns a pointer to size-adjusted memory on success, NULL on
 /// failure or on free.
 void* localRealloc(volatile MemoryManagerState *memoryManagerState,
-  void *ptr, size_t size, ProcessId pid
+  void *ptr, size_t size, ProcessId pid, size_t *ptrSize
 ) {
   logTrace("In localRealloc\n");
   // We need to fix the size to be aligned with our memory model.
@@ -379,6 +381,10 @@ void* localRealloc(volatile MemoryManagerState *memoryManagerState,
     MemNode *memNode = memNode(ptr);
     size_t oldSize = sizeOfMemory(ptr);
     next = (MemNode*) (charPointer + oldSize);
+    
+    if (ptrSize != NULL) {
+      *ptrSize = oldSize;
+    }
     
     if (size <= oldSize) {
       // We're fitting into a block that's larger than or equal to the size
@@ -656,7 +662,8 @@ int memoryManagerReallocCommandHandler(
   void *clientReturnValue
     = localRealloc(memoryManagerState,
       reallocMessage->ptr, reallocMessage->size,
-      processPid(processMessageFrom(incoming)));
+      processPid(processMessageFrom(incoming)),
+      &reallocMessage->oldSize);
 
   if (clientReturnValue != NULL) {
     reallocMessage->size = sizeOfMemory(clientReturnValue);
@@ -1350,6 +1357,7 @@ memoryManagerSendReallocMessage(void *ptr, size_t size, bool zero) {
   ReallocMessage reallocMessage;
   reallocMessage.ptr = ptr;
   reallocMessage.size = size;
+  reallocMessage.oldSize = 0;
   
   ProcessMessage *sent
     = initSendProcessMessageToProcess(processIdToDescriptor(memoryManagerPid),
@@ -1369,6 +1377,8 @@ memoryManagerSendReallocMessage(void *ptr, size_t size, bool zero) {
   processMessageRelease(sent);
   
   if (returnValue != NULL) {
+    int c = MEMORY_MANAGER_MALLOC_FILL_BYTE;
+    
     if (ptr == NULL) {
       // A note about this block:
       //
@@ -1388,12 +1398,16 @@ memoryManagerSendReallocMessage(void *ptr, size_t size, bool zero) {
       //
       // We can use a pattern byte.  This will make it easy to recognize if we
       // accidentally use it somewhere.
-      int c = MEMORY_MANAGER_MALLOC_FILL_BYTE;
       if (zero == true) {
         c = 0;
       }
       
       memset(returnValue, c, reallocMessage.size);
+    } else if (reallocMessage.size > reallocMessage.oldSize) {
+      // See the note above for why we can't leave the memory uninitialized.
+      memset(((char*) returnValue) + reallocMessage.oldSize,
+        c,
+        reallocMessage.size - reallocMessage.size);
     }
   }
   

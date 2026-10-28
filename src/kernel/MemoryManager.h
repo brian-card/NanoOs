@@ -82,9 +82,12 @@ extern "C"
 ///   memory will be allocated.
 /// @param size The number of bytes to allocate.  If this value is 0, the memory
 ///   at ptr will be freed.
+/// @param oldSize For realloc calls only, this will be filled by the memory
+///   manager with the size of the memory at the time the call was made.
 typedef struct ReallocMessage {
   void     *ptr;
   size_t    size;
+  size_t    oldSize;
 } ReallocMessage;
 
 /// @struct MemoryManagerFreeArgs
