@@ -49,7 +49,45 @@ static size_t key(uint8_t ascii, uint8_t keycode, uint8_t down,
   uint8_t *output
 ) {
   uint8_t keyData[4] = { ascii, 0, keycode, down };
-  return vdpTranslateKey(keyData, output);
+  return vdpTranslateKey(keyData, false, output);
+}
+
+/// @fn static size_t keypad(uint8_t ascii, uint8_t modifiers, uint8_t keycode,
+///   bool numLock, uint8_t *output)
+///
+/// @brief Translate the press of a key with modifiers under a given driver Num
+/// Lock.
+///
+/// @param ascii The key's ASCII value.
+/// @param modifiers The AGON_KEYMOD_* bits of the packet.
+/// @param keycode The key's FabGL keycode.
+/// @param numLock Whether the driver's Num Lock is on.
+/// @param output A buffer of at least VDP_KEY_MAX_BYTES bytes.
+///
+/// @return Returns the number of bytes vdpTranslateKey wrote.
+static size_t keypad(uint8_t ascii, uint8_t modifiers, uint8_t keycode,
+  bool numLock, uint8_t *output
+) {
+  uint8_t keyData[4] = { ascii, modifiers, keycode, 1 };
+  return vdpTranslateKey(keyData, numLock, output);
+}
+
+/// @fn static bool release(uint8_t modifiers, uint8_t keycode, bool *numLock,
+///   uint8_t *leds)
+///
+/// @brief Pass the release of a key to vdpUpdateLocks.
+///
+/// @param modifiers The AGON_KEYMOD_* bits of the packet.
+/// @param keycode The key's FabGL keycode.
+/// @param numLock A pointer to the driver's Num Lock.
+/// @param leds Where vdpUpdateLocks puts the LED byte.
+///
+/// @return Returns what vdpUpdateLocks returns.
+static bool release(uint8_t modifiers, uint8_t keycode, bool *numLock,
+  uint8_t *leds
+) {
+  uint8_t keyData[4] = { 0, modifiers, keycode, 0 };
+  return vdpUpdateLocks(keyData, numLock, leds);
 }
 
 NANO_OS_TEST(unit_vdp_keyboard, keyboard_packet_completes_on_its_last_byte) {
@@ -282,4 +320,107 @@ NANO_OS_TEST(unit_vdp_keyboard, other_command_carrying_the_cookie_is_not_ours) {
 
   NANO_OS_ASSERT_EQ_INT(2, feed(&parser, packet, sizeof(packet)));
   NANO_OS_ASSERT_FALSE(vdpIsPollReply(&parser, VDP_GENERAL_POLL_COOKIE));
+}
+
+NANO_OS_TEST(unit_vdp_keyboard, keypad_types_digits_under_the_drivers_num_lock) {
+  uint8_t output[VDP_KEY_MAX_BYTES];
+
+  NANO_OS_ASSERT_EQ_INT(1,
+    keypad(0, 0, KEYCODE_KEYPAD_END, true, output));
+  NANO_OS_ASSERT_EQ_INT('1', output[0]);
+  NANO_OS_ASSERT_EQ_INT(1,
+    keypad(0, 0, KEYCODE_KEYPAD_INSERT, true, output));
+  NANO_OS_ASSERT_EQ_INT('0', output[0]);
+  NANO_OS_ASSERT_EQ_INT(1,
+    keypad(0, 0, KEYCODE_KEYPAD_CENTER, true, output));
+  NANO_OS_ASSERT_EQ_INT('5', output[0]);
+  NANO_OS_ASSERT_EQ_INT(1,
+    keypad(0, 0, KEYCODE_KEYPAD_PAGEUP, true, output));
+  NANO_OS_ASSERT_EQ_INT('9', output[0]);
+  NANO_OS_ASSERT_EQ_INT(1,
+    keypad(0, 0, KEYCODE_KEYPAD_DELETE, true, output));
+  NANO_OS_ASSERT_EQ_INT('.', output[0]);
+  NANO_OS_ASSERT_EQ_INT(1,
+    keypad('7', AGON_KEYMOD_NUM_LOCK, KEYCODE_KEYPAD_7, true, output));
+  NANO_OS_ASSERT_EQ_INT('7', output[0]);
+}
+
+NANO_OS_TEST(unit_vdp_keyboard, keypad_navigates_without_the_drivers_num_lock) {
+  uint8_t output[VDP_KEY_MAX_BYTES];
+
+  // The VDP's own Num Lock is on here, so it reports the digit forms.
+  NANO_OS_ASSERT_EQ_INT(3,
+    keypad('1', AGON_KEYMOD_NUM_LOCK, KEYCODE_KEYPAD_1, false, output));
+  NANO_OS_ASSERT_TRUE(memcmp(output, "\x1b[F", 3) == 0);
+  NANO_OS_ASSERT_EQ_INT(4,
+    keypad('.', AGON_KEYMOD_NUM_LOCK, KEYCODE_KEYPAD_PERIOD, false, output));
+  NANO_OS_ASSERT_TRUE(memcmp(output, "\x1b[3~", 4) == 0);
+  NANO_OS_ASSERT_EQ_INT(4,
+    keypad('0', AGON_KEYMOD_NUM_LOCK, KEYCODE_KEYPAD_0, false, output));
+  NANO_OS_ASSERT_TRUE(memcmp(output, "\x1b[2~", 4) == 0);
+  NANO_OS_ASSERT_EQ_INT(0,
+    keypad('5', AGON_KEYMOD_NUM_LOCK, KEYCODE_KEYPAD_5, false, output));
+  NANO_OS_ASSERT_EQ_INT(3,
+    keypad(0, 0, KEYCODE_KEYPAD_LEFT, false, output));
+  NANO_OS_ASSERT_TRUE(memcmp(output, "\x1b[D", 3) == 0);
+}
+
+NANO_OS_TEST(unit_vdp_keyboard, shifted_keypad_navigates_under_num_lock) {
+  uint8_t output[VDP_KEY_MAX_BYTES];
+
+  NANO_OS_ASSERT_EQ_INT(3,
+    keypad(0, AGON_KEYMOD_SHIFT, KEYCODE_KEYPAD_UP, true, output));
+  NANO_OS_ASSERT_TRUE(memcmp(output, "\x1b[A", 3) == 0);
+}
+
+NANO_OS_TEST(unit_vdp_keyboard, non_keypad_keys_ignore_num_lock) {
+  uint8_t output[VDP_KEY_MAX_BYTES];
+
+  NANO_OS_ASSERT_EQ_INT(3, keypad(0, 0, KEYCODE_END, true, output));
+  NANO_OS_ASSERT_TRUE(memcmp(output, "\x1b[F", 3) == 0);
+  NANO_OS_ASSERT_EQ_INT(1, keypad('1', 0, KEYCODE_1, false, output));
+  NANO_OS_ASSERT_EQ_INT('1', output[0]);
+  NANO_OS_ASSERT_EQ_INT(1, keypad('-', 0, KEYCODE_KEYPAD_MINUS, false, output));
+  NANO_OS_ASSERT_EQ_INT('-', output[0]);
+}
+
+NANO_OS_TEST(unit_vdp_keyboard, num_lock_release_toggles_and_lights_its_led) {
+  bool numLock = true;
+  uint8_t leds = 0xff;
+
+  NANO_OS_ASSERT_TRUE(release(0, KEYCODE_NUMLOCK, &numLock, &leds));
+  NANO_OS_ASSERT_FALSE(numLock);
+  NANO_OS_ASSERT_EQ_INT(0, leds);
+  NANO_OS_ASSERT_TRUE(release(AGON_KEYMOD_NUM_LOCK, KEYCODE_NUMLOCK,
+    &numLock, &leds));
+  NANO_OS_ASSERT_TRUE(numLock);
+  NANO_OS_ASSERT_EQ_INT(VDP_LED_NUM_LOCK, leds);
+}
+
+NANO_OS_TEST(unit_vdp_keyboard, other_lock_releases_keep_the_num_lock_led) {
+  bool numLock = true;
+  uint8_t leds = 0;
+
+  NANO_OS_ASSERT_TRUE(release(0, KEYCODE_CAPSLOCK, &numLock, &leds));
+  NANO_OS_ASSERT_TRUE(numLock);
+  NANO_OS_ASSERT_EQ_INT(VDP_LED_NUM_LOCK | VDP_LED_CAPS_LOCK, leds);
+  NANO_OS_ASSERT_TRUE(release(AGON_KEYMOD_CAPS_LOCK, KEYCODE_SCROLLLOCK,
+    &numLock, &leds));
+  NANO_OS_ASSERT_EQ_INT(
+    VDP_LED_NUM_LOCK | VDP_LED_CAPS_LOCK | VDP_LED_SCROLL_LOCK, leds);
+  NANO_OS_ASSERT_TRUE(release(
+    AGON_KEYMOD_CAPS_LOCK | AGON_KEYMOD_SCROLL_LOCK, KEYCODE_CAPSLOCK,
+    &numLock, &leds));
+  NANO_OS_ASSERT_EQ_INT(VDP_LED_NUM_LOCK | VDP_LED_SCROLL_LOCK, leds);
+}
+
+NANO_OS_TEST(unit_vdp_keyboard, lock_presses_and_other_releases_change_nothing) {
+  bool numLock = false;
+  uint8_t leds = 0xff;
+  uint8_t press[4] = { 0, 0, KEYCODE_NUMLOCK, 1 };
+
+  NANO_OS_ASSERT_FALSE(vdpUpdateLocks(press, &numLock, &leds));
+  NANO_OS_ASSERT_FALSE(release(0, KEYCODE_a, &numLock, &leds));
+  NANO_OS_ASSERT_FALSE(numLock);
+  NANO_OS_ASSERT_EQ_INT(0xff, leds);
 }

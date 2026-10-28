@@ -54,6 +54,20 @@ KEYCODE_UP = 150
 KEYCODE_DOWN = 152
 KEYCODE_LEFT = 154
 KEYCODE_RIGHT = 156
+KEYCODE_KEYPAD_0 = 12
+KEYCODE_KEYPAD_PERIOD = 88
+# What the VDP reports for keypad 0-9 and . while its Num Lock is off.
+KEYCODE_KEYPAD_NAVIGATION = [129, 136, 153, 149, 155, 158, 157, 134, 151,
+                             147, 131]
+KEYCODE_SCROLLLOCK = 139
+KEYCODE_NUMLOCK = 140
+KEYCODE_CAPSLOCK = 141
+KEYMOD_CAPS_LOCK = 1 << 4
+KEYMOD_NUM_LOCK = 1 << 5
+KEYMOD_SCROLL_LOCK = 1 << 6
+LED_SCROLL_LOCK = 1
+LED_CAPS_LOCK = 2
+LED_NUM_LOCK = 4
 KEYBOARD_LAYOUT = 0x81
 MOUSE = 0x89
 BUFFERED = 0xA0
@@ -143,6 +157,11 @@ class FakeVdp:
         self.bitmaps = {}      # bitmap ID -> (width, height, RGBA2222 bytes)
         self.bitmap = BITMAP_BASE_ID
         self.cursors = {}      # cursor ID -> (bitmap, hotspot x, hotspot y)
+        # FabGL's lock states, which only the lock keys change, and the LEDs.
+        self.num_lock = False
+        self.caps_lock = False
+        self.scroll_lock = False
+        self.leds = 0
         self.mouse_enabled = False
         self.mouse_cursor = None
         self.mouse = mouse
@@ -254,8 +273,12 @@ class FakeVdp:
                 else:
                     self.errors.append(f"VDU 23,0,&85,{channel},{sub}")
             elif command == KEYSTATE:
-                self._reset_event(command, (self._word(stream),
-                                            self._word(stream), next(stream)))
+                state = (self._word(stream), self._word(stream), next(stream))
+                if state[2] != 255:
+                    with self.lock:
+                        self.leds = state[2]
+                        self.lock.notify_all()
+                self._reset_event(command, state)
             elif command == KEYBOARD_LAYOUT:
                 layout = next(stream)
                 if self.listening:
@@ -492,6 +515,70 @@ class FakeVdp:
                     raise AssertionError(
                         f"the simulator connected {self.connections} time(s), "
                         f"not {count}")
+                self.lock.wait(left)
+
+    def _modifiers(self):
+        return ((KEYMOD_CAPS_LOCK if self.caps_lock else 0)
+                | (KEYMOD_NUM_LOCK if self.num_lock else 0)
+                | (KEYMOD_SCROLL_LOCK if self.scroll_lock else 0))
+
+    def lock_key(self, code):
+        """Press and release a lock key the way FabGL handles it: the release
+        toggles the lock and sets every LED to the lock states, and both
+        packets carry the modifiers from before the toggle.
+
+        @param code KEYCODE_NUMLOCK, KEYCODE_CAPSLOCK, or KEYCODE_SCROLLLOCK.
+        """
+        with self.lock:
+            conn = self.conn
+            modifiers = self._modifiers()
+            if code == KEYCODE_NUMLOCK:
+                self.num_lock = not self.num_lock
+            elif code == KEYCODE_CAPSLOCK:
+                self.caps_lock = not self.caps_lock
+            else:
+                self.scroll_lock = not self.scroll_lock
+            self.leds = ((LED_SCROLL_LOCK if self.scroll_lock else 0)
+                         | (LED_CAPS_LOCK if self.caps_lock else 0)
+                         | (LED_NUM_LOCK if self.num_lock else 0))
+        conn.sendall(bytes([0x81, 0x04, 0, modifiers, code, 1,
+                            0x81, 0x04, 0, modifiers, code, 0]))
+        time.sleep(0.01)
+
+    def keypad(self, ch):
+        """Press and release a keypad key the way FabGL reports it under its
+        own Num Lock.
+
+        @param ch One of 0-9 and ., naming the key.
+        """
+        index = 10 if ch == "." else int(ch)
+        with self.lock:
+            conn = self.conn
+            modifiers = self._modifiers()
+            if self.num_lock:
+                code = (KEYCODE_KEYPAD_PERIOD if ch == "."
+                        else KEYCODE_KEYPAD_0 + index)
+                ascii_value = ord(ch)
+            else:
+                code = KEYCODE_KEYPAD_NAVIGATION[index]
+                ascii_value = 0
+        conn.sendall(bytes([0x81, 0x04, ascii_value, modifiers, code, 1,
+                            0x81, 0x04, ascii_value, modifiers, code, 0]))
+        time.sleep(0.01)
+
+    def wait_leds(self, leds, timeout=10):
+        """Wait until the keyboard's LEDs are a given set.
+
+        @param leds The LED_* bits expected.
+        @param timeout Seconds to wait.
+        """
+        deadline = time.time() + timeout
+        with self.lock:
+            while self.leds != leds:
+                left = deadline - time.time()
+                if left <= 0:
+                    raise AssertionError(
+                        f"the LEDs are {self.leds:#x}, not {leds:#x}")
                 self.lock.wait(left)
 
     def key(self, ch):

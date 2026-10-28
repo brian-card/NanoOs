@@ -23,8 +23,10 @@ import time
 
 import pexpect
 
-from fakevdp import (FakeVdp, KEYCODE_DELETE, KEYCODE_DOWN, KEYCODE_END,
-                     KEYCODE_HOME, KEYCODE_LEFT, KEYCODE_RIGHT, KEYCODE_UP)
+from fakevdp import (FakeVdp, KEYCODE_CAPSLOCK, KEYCODE_DELETE, KEYCODE_DOWN,
+                     KEYCODE_END, KEYCODE_HOME, KEYCODE_LEFT, KEYCODE_NUMLOCK,
+                     KEYCODE_RIGHT, KEYCODE_UP, KEYSTATE, LED_CAPS_LOCK,
+                     LED_NUM_LOCK)
 
 E2E_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(os.path.dirname(E2E_DIR))
@@ -131,16 +133,17 @@ class Session:
                        env=dict(os.environ, MTOOLS_SKIP_CHECK="1"), check=True)
         self.spawn([self.img_copy])
 
-    def restart_with_vdp(self, **kwargs):
+    def restart_with_vdp(self, config_sys=VDP_CONFIG_SYS, **kwargs):
         """Boot again with vdp.drv serving a console on a FakeVdp.
 
+        @param config_sys The /etc/config.sys to boot with.
         @param kwargs Arguments for FakeVdp.
 
         @return The FakeVdp.
         """
         self.vdp = FakeVdp(os.path.join(self.tmp, "vdp.sock"), **kwargs)
         self.env = dict(self.env or {}, NANO_OS_SIM_UART0=self.vdp.path)
-        self.restart_with_config_sys(VDP_CONFIG_SYS)
+        self.restart_with_config_sys(config_sys)
         return self.vdp
 
     def wait_login_prompt(self):
@@ -516,6 +519,101 @@ def test_vdp_driver_restarts_after_losing_the_vdp_mid_output(s):
         vdp.expect(r"\r\nround-%d\r\n" % n + PROMPT)
     s.login()
     assert s.sh("cat /etc/catfile") == CATFILE_CONTENTS
+
+
+def wait_vdp_screen_setups(vdp, count):
+    """Wait until a FakeVdp's screen has been set up a number of times.
+
+    @param vdp The FakeVdp.
+    @param count The number of setups to wait for.
+    """
+    deadline = time.time() + 10
+    while sum(kind == "cls" for _t, kind, _d in vdp.events) < count:
+        assert time.time() < deadline, \
+            "the restarted driver never set up the screen"
+        time.sleep(0.1)
+
+
+def test_vdp_numlock_option_turns_num_lock_on(s):
+    vdp = s.restart_with_vdp(VDP_CONFIG_SYS.replace(
+        "DEVICE=/usr/lib/vdp.drv\n", "DEVICE=/usr/lib/vdp.drv --numlock=on\n"))
+    vdp_login(vdp)
+    keystates = [detail[1] for _t, kind, detail in vdp.events
+                 if kind == "reset" and detail[0] == KEYSTATE]
+    assert keystates == [(500, 100, LED_NUM_LOCK)], \
+        f"the keyboard was set to {keystates}"
+    # The VDP's own Num Lock is still off, so it reports navigation keys.
+    vdp.clear()
+    vdp.type("echo ")
+    for ch in "12.":
+        vdp.keypad(ch)
+    vdp.type("\r")
+    vdp.expect(r"\r\n12\.\r\n" + PROMPT)
+
+    vdp.lock_key(KEYCODE_NUMLOCK)
+    vdp.wait_leds(0)
+    vdp.clear()
+    vdp.type("echo ab")
+    vdp.keypad("4")
+    vdp.type("x\r")
+    vdp.expect(r"\r\naxb\r\n" + PROMPT)
+
+    vdp.lock_key(KEYCODE_NUMLOCK)
+    vdp.wait_leds(LED_NUM_LOCK)
+    vdp.lock_key(KEYCODE_CAPSLOCK)
+    vdp.wait_leds(LED_NUM_LOCK | LED_CAPS_LOCK)
+    vdp.lock_key(KEYCODE_CAPSLOCK)
+    vdp.wait_leds(LED_NUM_LOCK)
+
+    # A restarted driver starts from /etc/config.sys again.
+    vdp.lock_key(KEYCODE_NUMLOCK)
+    vdp.wait_leds(0)
+    vdp.disconnect()
+    vdp.wait_connections(2)
+    wait_vdp_screen_setups(vdp, 2)
+    vdp.wait_leds(LED_NUM_LOCK)
+    vdp.clear()
+    vdp.type("echo ")
+    vdp.keypad("7")
+    vdp.type("\r")
+    vdp.expect(r"\r\n7\r\n" + PROMPT)
+    assert vdp.errors == [], f"unexpected VDU commands: {vdp.errors}"
+
+
+def test_vdp_keypad_navigates_without_the_numlock_option(s):
+    vdp = s.restart_with_vdp()
+    vdp_login(vdp)
+    vdp.clear()
+    vdp.type("echo ab")
+    vdp.keypad("4")
+    vdp.type("x\r")
+    vdp.expect(r"\r\naxb\r\n" + PROMPT)
+    vdp.lock_key(KEYCODE_NUMLOCK)
+    vdp.wait_leds(LED_NUM_LOCK)
+    vdp.clear()
+    vdp.type("echo ")
+    vdp.keypad("3")
+    vdp.type("\r")
+    vdp.expect(r"\r\n3\r\n" + PROMPT)
+
+
+def test_vdp_driver_reports_and_ignores_unrecognized_arguments(s):
+    vdp = s.restart_with_vdp(VDP_CONFIG_SYS.replace(
+        "DEVICE=/usr/lib/vdp.drv\n",
+        "DEVICE=/usr/lib/vdp.drv --bogus --numlock=yes stray --numlock=on\n"))
+    vdp.expect(r"^vdp\.drv: Ignoring unrecognized argument \"--bogus\"\r\n"
+               r"vdp\.drv: Ignoring unrecognized argument \"--numlock=yes\"\r\n"
+               r"vdp\.drv: Ignoring unrecognized argument \"stray\"\r\n"
+               r"NanoOs ")
+    vdp_login(vdp)
+    assert vdp.leds == LED_NUM_LOCK, f"the LEDs are {vdp.leds:#x}"
+    vdp.clear()
+    vdp.type("echo ")
+    vdp.keypad("9")
+    vdp.type("\r")
+    vdp.expect(r"\r\n9\r\n" + PROMPT)
+    s.login()
+    assert s.sh("echo uart1-too") == "uart1-too"
 
 
 UP, DOWN, RIGHT, LEFT = "\x1b[A", "\x1b[B", "\x1b[C", "\x1b[D"
