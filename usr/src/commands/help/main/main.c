@@ -138,6 +138,9 @@ int main(int argc, char **argv) {
   printf("%s %s\n",
     "touch:                  ",
     "Create an empty file.");
+  printf("%s %s\n",
+    "ver:                    ",
+    "Display the operating system version.");
   printf("\nRun a command with --help to see its usage.\n");
 
   return returnValue;
