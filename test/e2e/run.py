@@ -1263,6 +1263,8 @@ def ed_session(s, steps):
     """
     transcript = ""
     expected = ""
+    # Typing with no delay makes every run read input that ed hasn't asked for.
+    s.child.delaybeforesend = None
     for line, output in steps:
         if isinstance(output, str):
             output = re.escape(output)

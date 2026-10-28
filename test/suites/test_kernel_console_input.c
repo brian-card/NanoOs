@@ -754,6 +754,61 @@ NANO_OS_KERNEL_TEST(console_raw, typed_ahead_keys_wait_for_the_reader) {
   NANO_OS_ASSERT_STR_EQ("y", deliveredLines[1]);
 }
 
+/// @fn static ConsolePort* typeAheadFixture(const char *bytes)
+///
+/// @brief Make this process the reader of a UART-like port in canonical mode
+/// that has all of a string's bytes waiting to be read while the reader is
+/// busy.
+///
+/// @param bytes The bytes waiting on the port.
+///
+/// @return Returns a pointer to the port.
+static ConsolePort* typeAheadFixture(const char *bytes) {
+  ConsolePort *consolePort = rawFixture(bytes);
+  consolePort->modes = CONSOLE_MODE_DEFAULT & ~CONSOLE_MODE_ECHO;
+  consolePort->waitingForInput = false;
+  return consolePort;
+}
+
+NANO_OS_KERNEL_TEST(console_type_ahead, lines_typed_while_one_is_held_are_kept) {
+  ConsolePort *consolePort = typeAheadFixture("one\rtwo\rthree\r");
+
+  consoleServicePort(&inputState, consolePort);
+  NANO_OS_ASSERT_TRUE(consolePort->consoleBuffer->holdsCompletedLine);
+  NANO_OS_ASSERT_EQ_INT(14, (long long) uartLikeRead);
+
+  consolePort->waitingForInput = true;
+  serviceAndRead(consolePort);
+  serviceAndRead(consolePort);
+  serviceAndRead(consolePort);
+  NANO_OS_ASSERT_EQ_INT(3, numDeliveredLines);
+  NANO_OS_ASSERT_STR_EQ("one\n", deliveredLines[0]);
+  NANO_OS_ASSERT_STR_EQ("two\n", deliveredLines[1]);
+  NANO_OS_ASSERT_STR_EQ("three\n", deliveredLines[2]);
+}
+
+NANO_OS_KERNEL_TEST(console_type_ahead, input_that_does_not_fit_stays_unread) {
+  static const char bytes[]
+    = "first-line-of-thirty-bytes-123\r"
+      "second-line-of-thirty-bytes-12\r"
+      "third-line-of-thirty-bytes-123\r"
+      "fourth-line-of-thirty-bytes-12\r";
+  ConsolePort *consolePort = typeAheadFixture(bytes);
+
+  consoleServicePort(&inputState, consolePort);
+  NANO_OS_ASSERT_EQ_INT(CONSOLE_BUFFER_SIZE - 1, (long long) uartLikeRead);
+
+  consolePort->waitingForInput = true;
+  for (int ii = 0; ii < 4; ii++) {
+    serviceAndRead(consolePort);
+  }
+  NANO_OS_ASSERT_EQ_INT(4, numDeliveredLines);
+  NANO_OS_ASSERT_STR_EQ("first-line-of-thirty-bytes-123\n", deliveredLines[0]);
+  NANO_OS_ASSERT_STR_EQ("second-line-of-thirty-bytes-12\n", deliveredLines[1]);
+  NANO_OS_ASSERT_STR_EQ("third-line-of-thirty-bytes-123\n", deliveredLines[2]);
+  NANO_OS_ASSERT_STR_EQ("fourth-line-of-thirty-bytes-12\n", deliveredLines[3]);
+}
+
 NANO_OS_KERNEL_TEST(console_raw, canonical_lines_are_not_marked_raw) {
   deliverByteByByte("ok\r");
 
@@ -1020,6 +1075,20 @@ NANO_OS_KERNEL_TEST(console_signal, ctrl_c_interrupts_while_a_line_is_held) {
   NANO_OS_ASSERT_EQ_INT(SIGINT, signalArgs[0].signal);
   NANO_OS_ASSERT_EQ_INT(1, numInterruptEchoes);
   NANO_OS_ASSERT_FALSE(consolePort->consoleBuffer->holdsCompletedLine);
+}
+
+NANO_OS_KERNEL_TEST(console_signal, ctrl_c_discards_typed_ahead_lines) {
+  ConsolePort *consolePort = signalFixture("ls\rpwd\r\x03ok\r",
+    CONSOLE_MODE_DEFAULT & ~CONSOLE_MODE_ECHO);
+
+  consoleServicePort(&inputState, consolePort);
+  NANO_OS_ASSERT_EQ_INT(SIGINT, signalArgs[0].signal);
+
+  readerFixture(consolePort);
+  serviceAndRead(consolePort);
+  serviceAndRead(consolePort);
+  NANO_OS_ASSERT_EQ_INT(1, numDeliveredLines);
+  NANO_OS_ASSERT_STR_EQ("ok\n", deliveredLines[0]);
 }
 
 NANO_OS_KERNEL_TEST(console_signal, ctrl_c_waits_for_a_lent_buffer_only) {
