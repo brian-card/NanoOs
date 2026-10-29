@@ -1,6 +1,6 @@
 /**
  *
- *  @author            James Card
+ *  @author            Brian Card
  *  @date              11.22.2025
  *
  *  @file              NanoOsSimContiguous.ld
@@ -14,7 +14,7 @@
  *                     For use with the host OS's gcc.
  *
  *  @copyright
- *                    Copyright (c) 2012-2025 James Card
+ *                       Copyright (c) 2026 Brian Card
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a
  *  copy of this software and associated documentation files (the "Software"),
@@ -34,8 +34,8 @@
  *  FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  *  DEALINGS IN THE SOFTWARE.
  *
- *                                 James Card
- *                          http://www.jamescard.org
+ *                                 Brian Card
+ *                       https://github.com/brian-card
  *
  */
 
