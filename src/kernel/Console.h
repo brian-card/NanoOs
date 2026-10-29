@@ -107,6 +107,20 @@ typedef struct ConsoleModesArgs {
   int     returnValue;
 } ConsoleModesArgs;
 
+/// @struct ConsoleColorsArgs
+///
+/// @brief Arguments and return value for the CONSOLE_GET_COLORS and
+/// CONSOLE_SET_COLORS commands.
+///
+/// @param colors The colors to set, or that were last set, with the
+///   CgaColorIndex of the background in the upper 4 bits and of the
+///   foreground in the lower 4, or CONSOLE_COLORS_DEFAULT.
+/// @param returnValue 0 on success, -1 if the process owns no console port.
+typedef struct ConsoleColorsArgs {
+  int16_t colors;
+  int     returnValue;
+} ConsoleColorsArgs;
+
 /// @struct ConsoleReleasePidPortArgs
 ///
 /// @param Arguments and return value for the CONSOLE_RELEASE_PID_PORT command.
@@ -174,6 +188,8 @@ typedef enum ConsoleCommandResponse {
   CONSOLE_INPUT_READY,
   CONSOLE_ADD_FORWARDING_PORT,
   CONSOLE_GET_UART_PORT,
+  CONSOLE_GET_COLORS,
+  CONSOLE_SET_COLORS,
   NUM_CONSOLE_COMMANDS,
   // Responses:
   CONSOLE_RETURNING_INPUT,
@@ -236,6 +252,8 @@ void releaseConsole(void);
 int getOwnedConsolePort(void);
 int getConsoleModes(void);
 int setConsoleModes(uint8_t modes);
+int getConsoleColors(void);
+int setConsoleColors(uint8_t colors);
 
 // Exported for unit tests to use
 ConsoleInputEvent consoleProcessByte(
@@ -260,6 +278,10 @@ void consoleAddForwardingPort(
 void consoleReleasePidPortCommandHandler(
   ConsoleState *consoleState, ProcessMessage *inputMessage);
 void consoleGetUartPortCommandHandler(
+  ConsoleState *consoleState, ProcessMessage *inputMessage);
+void consoleGetColorsCommandHandler(
+  ConsoleState *consoleState, ProcessMessage *inputMessage);
+void consoleSetColorsCommandHandler(
   ConsoleState *consoleState, ProcessMessage *inputMessage);
 
 // Exported processes

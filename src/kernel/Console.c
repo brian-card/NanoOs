@@ -916,6 +916,7 @@ static void consoleInitPort(ConsolePort *consolePort,
   consolePort->consoleBuffer->holdsCompletedLine = false;
   consolePort->inputState = CONSOLE_INPUT_STATE_NORMAL;
   consolePort->modes = CONSOLE_MODE_DEFAULT;
+  consolePort->colors = CONSOLE_COLORS_DEFAULT;
   consolePort->forwardingPid = forwardingPid;
   consolePort->inputReadyArgs.portId = portId;
   consolePort->inputReadyArgs.numBytes = 0;
@@ -1105,6 +1106,72 @@ void consoleGetUartPortCommandHandler(
   return;
 }
 
+/// @fn void consoleGetColorsCommandHandler(
+///   ConsoleState *consoleState, ProcessMessage *inputMessage)
+///
+/// @brief Get the colors last set for the console port owned by a process.
+///
+/// @param consoleState A pointer to the ConsoleState being maintained by the
+///   runConsole function that's running.
+/// @param inputMessage A pointer to the ProcessMessage with the received
+///   command.  Its data is a ConsoleColorsArgs.
+///
+/// @return This function returns no value.
+void consoleGetColorsCommandHandler(
+  ConsoleState *consoleState, ProcessMessage *inputMessage
+) {
+  ConsoleColorsArgs *consoleColorsArgs
+    = (ConsoleColorsArgs*) processMessageData(inputMessage);
+  ProcessId owner = processPid(processMessageFrom(inputMessage));
+  ConsolePort *consolePorts = consoleState->consolePorts;
+
+  consoleColorsArgs->returnValue = -1;
+  for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
+    if (consolePorts[ii].outputOwner == owner) {
+      consoleColorsArgs->colors = consolePorts[ii].colors;
+      consoleColorsArgs->returnValue = 0;
+      break;
+    }
+  }
+
+  processMessageSetDone(inputMessage);
+
+  return;
+}
+
+/// @fn void consoleSetColorsCommandHandler(
+///   ConsoleState *consoleState, ProcessMessage *inputMessage)
+///
+/// @brief Record the colors of all console ports owned by a process.
+///
+/// @param consoleState A pointer to the ConsoleState being maintained by the
+///   runConsole function that's running.
+/// @param inputMessage A pointer to the ProcessMessage with the received
+///   command.  Its data is a ConsoleColorsArgs.
+///
+/// @return This function returns no value.
+void consoleSetColorsCommandHandler(
+  ConsoleState *consoleState, ProcessMessage *inputMessage
+) {
+  ConsoleColorsArgs *consoleColorsArgs
+    = (ConsoleColorsArgs*) processMessageData(inputMessage);
+  ProcessId owner = processPid(processMessageFrom(inputMessage));
+  ConsolePort *consolePorts = consoleState->consolePorts;
+
+  consoleColorsArgs->returnValue = -1;
+  for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
+    if (consolePorts[ii].outputOwner == owner) {
+      consolePorts[ii].colors = consoleColorsArgs->colors;
+      consoleColorsArgs->returnValue = 0;
+    }
+  }
+
+  processMessageSetDone(inputMessage);
+  consoleMessageCleanup(inputMessage);
+
+  return;
+}
+
 /// @typedef ConsoleCommandHandler
 ///
 /// @brief Signature of command handler for a console command.
@@ -1131,6 +1198,8 @@ const ConsoleCommandHandler consoleCommandHandlers[] = {
   consoleInputReadyCommandHandler,      // CONSOLE_INPUT_READY
   consoleAddForwardingPort,             // CONSOLE_ADD_FORWARDING_PORT
   consoleGetUartPortCommandHandler,     // CONSOLE_GET_UART_PORT
+  consoleGetColorsCommandHandler,       // CONSOLE_GET_COLORS
+  consoleSetColorsCommandHandler,       // CONSOLE_SET_COLORS
 };
 
 /// @fn static bool consoleHoldsInput(
@@ -2045,5 +2114,64 @@ int setConsoleModes(uint8_t modes) {
   processMessageRelease(sent);
 
   return consoleModesArgs.returnValue;
+}
+
+/// @fn int getConsoleColors(void)
+///
+/// @brief Get the colors last set for the console port owned by the current
+/// process.
+///
+/// @return Returns the colors, with the CgaColorIndex of the background in the
+/// upper 4 bits and of the foreground in the lower 4, on success, or -1 if the
+/// colors have never been set or the process owns no console port.
+int getConsoleColors(void) {
+  ConsoleColorsArgs consoleColorsArgs = {
+    .colors = CONSOLE_COLORS_DEFAULT,
+    .returnValue = -1,
+  };
+  ProcessMessage *sent = initSendProcessMessageToPid(
+    consolePid,
+    CONSOLE_COMMAND_SIGNATURE | CONSOLE_GET_COLORS,
+    /* data= */ &consoleColorsArgs,
+    /* size= */ sizeof(consoleColorsArgs),
+    /* waiting= */ true);
+  if (sent == NULL) {
+    return -1;
+  }
+
+  processMessageWaitForDone(sent, NULL);
+  processMessageRelease(sent);
+
+  return (consoleColorsArgs.returnValue == 0) ? consoleColorsArgs.colors : -1;
+}
+
+/// @fn int setConsoleColors(uint8_t colors)
+///
+/// @brief Record the colors of all console ports owned by the current process.
+/// Writing the escape sequence that changes them is left to the caller.
+///
+/// @param colors The colors, with the CgaColorIndex of the background in the
+///   upper 4 bits and of the foreground in the lower 4.
+///
+/// @return Returns 0 on success, -1 if the process owns no console port.
+int setConsoleColors(uint8_t colors) {
+  ConsoleColorsArgs consoleColorsArgs = {
+    .colors = colors,
+    .returnValue = -1,
+  };
+  ProcessMessage *sent = initSendProcessMessageToPid(
+    consolePid,
+    CONSOLE_COMMAND_SIGNATURE | CONSOLE_SET_COLORS,
+    /* data= */ &consoleColorsArgs,
+    /* size= */ sizeof(consoleColorsArgs),
+    /* waiting= */ true);
+  if (sent == NULL) {
+    return -1;
+  }
+
+  processMessageWaitForDone(sent, NULL);
+  processMessageRelease(sent);
+
+  return consoleColorsArgs.returnValue;
 }
 
