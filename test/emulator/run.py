@@ -329,6 +329,13 @@ def test_ver_prints_the_version_and_copyright(e):
         "Released under the MIT License." % version)
 
 
+def test_color_and_clear_write_the_colors_that_were_set(e):
+    assert e.sh("clear") == "\x1b[2J\x1b[H"
+    assert e.sh("color 1e") == "\x1b[44;93m\x1b[2J\x1b[H"
+    assert e.sh("clear") == "\x1b[44;93m\x1b[2J\x1b[H"
+    assert e.sh("color").startswith("Usage: color attr\n")
+
+
 def test_cat_reports_a_missing_file(e):
     assert e.sh("cat /etc/missing") == \
         'ERROR: Could not open file "/etc/missing": No such entry found'
@@ -513,6 +520,7 @@ TESTS = [test_boots_to_a_login_prompt,
          test_vdp_driver_and_its_getty_are_running,
          test_helloworld_prints_its_greeting,
          test_ver_prints_the_version_and_copyright,
+         test_color_and_clear_write_the_colors_that_were_set,
          test_help_describes_every_command,
          test_cd_and_pwd_track_the_working_directory,
          test_line_editor_moves_edits_and_recalls,

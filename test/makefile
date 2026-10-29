@@ -183,7 +183,9 @@ $(OBJ_DIR)/suite_%.o: suites/%.c
 # These suites compile the VDP driver's sources directly.
 $(OBJ_DIR)/suite_test_unit_vdp_text.o: \
     ../usr/src/lib/vdp.drv/main/VdpText.c \
-    ../usr/src/lib/vdp.drv/include/VdpText.h
+    ../usr/src/lib/vdp.drv/include/VdpText.h \
+    ../src/kernel/GraphicsColor.h
+$(OBJ_DIR)/suite_test_unit_vdp_text.o: TEST_INC += -iquote ../src/kernel
 $(OBJ_DIR)/suite_test_unit_vdp_keyboard.o: \
     ../usr/src/lib/vdp.drv/main/VdpKeyboard.c \
     ../usr/src/lib/vdp.drv/include/VdpKeyboard.h

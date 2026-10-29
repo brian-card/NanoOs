@@ -9,9 +9,12 @@
 
 #include "NanoOsTest.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #include "../../usr/src/lib/vdp.drv/main/VdpText.c"
+
+CGA_TO_ANSI_MAP
 
 /// @fn static size_t translateAll(VdpTextState *state, const char *text,
 ///   uint8_t *output, size_t outputSize)
@@ -73,7 +76,7 @@ NANO_OS_TEST(unit_vdp_text, tab_pads_to_the_next_multiple_of_eight) {
 NANO_OS_TEST(unit_vdp_text, vdu_command_bytes_are_dropped) {
   VdpTextState state = { .column = 0 };
   uint8_t output[32];
-  const char *text = "a\x16\x01\x11\x1b" "b\x7f" "c";
+  const char *text = "a\x16\x01\x11" "b\x7f" "c";
 
   NANO_OS_ASSERT_EQ_INT(3, vdpTranslateText(&state, &text, output, 32));
   NANO_OS_ASSERT_TRUE(memcmp(output, "abc", 3) == 0);
@@ -111,6 +114,127 @@ NANO_OS_TEST(unit_vdp_text, minimum_buffer_translates_everything) {
   NANO_OS_ASSERT_EQ_INT(19,
     translateAll(&state, text, output, VDP_TEXT_MAX_EXPANSION));
   NANO_OS_ASSERT_TRUE(memcmp(output, "               x\r\ny", 19) == 0);
+}
+
+NANO_OS_TEST(unit_vdp_text, sgr_colors_become_text_color_commands) {
+  VdpTextState state = { .column = 0 };
+  uint8_t output[32];
+  const char *text = "\x1b[44;93mX";
+  const uint8_t expected[] = { 17, CGA_INDEX_YELLOW,
+    17, 128 + CGA_INDEX_BLUE, 'X' };
+
+  NANO_OS_ASSERT_EQ_INT(sizeof(expected),
+    vdpTranslateText(&state, &text, output, 32));
+  NANO_OS_ASSERT_TRUE(memcmp(output, expected, sizeof(expected)) == 0);
+  NANO_OS_ASSERT_EQ_INT(1, state.column);
+  NANO_OS_ASSERT_EQ_INT(VDP_ESCAPE_NONE, state.escapeState);
+}
+
+NANO_OS_TEST(unit_vdp_text, every_cga_color_round_trips_through_sgr) {
+  for (int ii = 0; ii < CGA_NUM_COLORS; ii++) {
+    VdpTextState state = { .column = 0 };
+    uint8_t output[32];
+    char sequence[16];
+    snprintf(sequence, sizeof(sequence), "\x1b[%d;%dm",
+      cgaToAnsiForeground(ii), cgaToAnsiBackground(ii));
+    const char *text = sequence;
+    const uint8_t expected[] = { 17, (uint8_t) ii, 17, (uint8_t) (128 + ii) };
+
+    NANO_OS_ASSERT_EQ_INT(sizeof(expected),
+      vdpTranslateText(&state, &text, output, 32));
+    NANO_OS_ASSERT_TRUE(memcmp(output, expected, sizeof(expected)) == 0);
+  }
+}
+
+NANO_OS_TEST(unit_vdp_text, sgr_resets_select_the_default_colors) {
+  VdpTextState state = { .column = 0 };
+  uint8_t output[32];
+  const char *text = "\x1b[0m\x1b[m\x1b[39;49m";
+  const uint8_t defaults[] = { 17, VDP_TEXT_DEFAULT_FOREGROUND,
+    17, 128 + VDP_TEXT_DEFAULT_BACKGROUND };
+
+  NANO_OS_ASSERT_EQ_INT(3 * sizeof(defaults),
+    vdpTranslateText(&state, &text, output, 32));
+  for (int ii = 0; ii < 3; ii++) {
+    NANO_OS_ASSERT_TRUE(
+      memcmp(&output[ii * sizeof(defaults)], defaults, sizeof(defaults))
+      == 0);
+  }
+}
+
+NANO_OS_TEST(unit_vdp_text, sgr_sets_only_the_colors_it_names) {
+  VdpTextState state = { .column = 0 };
+  uint8_t output[32];
+  const char *text = "\x1b[31m\x1b[1;102m";
+  const uint8_t expected[] = { 17, CGA_INDEX_RED,
+    17, 128 + CGA_INDEX_LIGHT_GREEN };
+
+  NANO_OS_ASSERT_EQ_INT(sizeof(expected),
+    vdpTranslateText(&state, &text, output, 32));
+  NANO_OS_ASSERT_TRUE(memcmp(output, expected, sizeof(expected)) == 0);
+}
+
+NANO_OS_TEST(unit_vdp_text, oversized_parameter_is_not_mistaken_for_a_color) {
+  VdpTextState state = { .column = 0 };
+  uint8_t output[32];
+  const char *text = "\x1b[1000034;44m";
+  const uint8_t expected[] = { 17, 128 + CGA_INDEX_BLUE };
+
+  NANO_OS_ASSERT_EQ_INT(sizeof(expected),
+    vdpTranslateText(&state, &text, output, 32));
+  NANO_OS_ASSERT_TRUE(memcmp(output, expected, sizeof(expected)) == 0);
+}
+
+NANO_OS_TEST(unit_vdp_text, clear_and_home_become_vdu_commands) {
+  VdpTextState state = { .column = 5 };
+  uint8_t output[32];
+  const char *text = "\x1b[2J\x1b[H\x1b[1;1f";
+  const uint8_t expected[] = { 12, 30, 30 };
+
+  NANO_OS_ASSERT_EQ_INT(sizeof(expected),
+    vdpTranslateText(&state, &text, output, 32));
+  NANO_OS_ASSERT_TRUE(memcmp(output, expected, sizeof(expected)) == 0);
+  NANO_OS_ASSERT_EQ_INT(0, state.column);
+}
+
+NANO_OS_TEST(unit_vdp_text, other_escape_sequences_are_dropped) {
+  VdpTextState state = { .column = 0 };
+  uint8_t output[32];
+  const char *text =
+    "a\x1b[?25lb\x1b[3Jc\x1b[5;10Hd\x1b(Be\x1b" "cf\x1b[1mg\x1b[2\x01h";
+
+  NANO_OS_ASSERT_EQ_INT(8, vdpTranslateText(&state, &text, output, 32));
+  NANO_OS_ASSERT_TRUE(memcmp(output, "abcdefgh", 8) == 0);
+  NANO_OS_ASSERT_EQ_INT(8, state.column);
+}
+
+NANO_OS_TEST(unit_vdp_text, escape_sequence_spans_separate_writes) {
+  VdpTextState state = { .column = 0 };
+  uint8_t output[32];
+  const char *text = "\x1b[4";
+  const uint8_t expected[] = { 17, 128 + CGA_INDEX_RED };
+
+  NANO_OS_ASSERT_EQ_INT(0, vdpTranslateText(&state, &text, output, 32));
+  text = "1m";
+  NANO_OS_ASSERT_EQ_INT(sizeof(expected),
+    vdpTranslateText(&state, &text, output, 32));
+  NANO_OS_ASSERT_TRUE(memcmp(output, expected, sizeof(expected)) == 0);
+}
+
+NANO_OS_TEST(unit_vdp_text, a_full_buffer_never_splits_an_escape_sequence) {
+  VdpTextState state = { .column = 0 };
+  uint8_t output[32];
+  const char *text = "\x1b[44;93m";
+  const uint8_t expected[] = { 17, CGA_INDEX_YELLOW,
+    17, 128 + CGA_INDEX_BLUE };
+
+  NANO_OS_ASSERT_EQ_INT(0, vdpTranslateText(&state, &text, output, 3));
+  NANO_OS_ASSERT_EQ_INT('\x1b', *text);
+  NANO_OS_ASSERT_EQ_INT(VDP_ESCAPE_NONE, state.escapeState);
+  NANO_OS_ASSERT_EQ_INT(sizeof(expected),
+    vdpTranslateText(&state, &text, output, 4));
+  NANO_OS_ASSERT_TRUE(memcmp(output, expected, sizeof(expected)) == 0);
+  NANO_OS_ASSERT_EQ_INT('\0', *text);
 }
 
 NANO_OS_TEST(unit_vdp_text, buffered_output_is_appended_in_order) {

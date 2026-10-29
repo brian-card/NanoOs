@@ -376,6 +376,35 @@ def test_vdp_console_logs_in_and_runs_a_command(s):
     assert s.sh("echo uart1-too") == "uart1-too"
 
 
+def vdp_screen_events(vdp, start):
+    """Return the color, clear and home events the VDP got after an index.
+
+    @param vdp The FakeVdp.
+    @param start The index in vdp.events to start from.
+
+    @return A list of (kind, detail) tuples.
+    """
+    with vdp.lock:
+        return [(kind, detail) for _, kind, detail in vdp.events[start:]
+                if kind in ("colour", "cls", "home")]
+
+
+def test_vdp_color_and_clear_set_the_text_colors_and_clear(s):
+    vdp = s.restart_with_vdp()
+    vdp_login(vdp)
+    expected = [("colour", 15), ("colour", 128 + 2), ("cls", None),
+                ("home", None)]
+    for command in ("color 2f", "clear"):
+        vdp.clear()
+        with vdp.lock:
+            start = len(vdp.events)
+        vdp.type(command + "\r")
+        vdp.expect(PROMPT)
+        assert vdp_screen_events(vdp, start) == expected, command
+        assert re.fullmatch(PROMPT, vdp.screen), repr(vdp.screen)
+    assert vdp.errors == [], f"unexpected VDU commands: {vdp.errors}"
+
+
 def test_vdp_keyboard_types_a_pipeline(s):
     # The VDP starts in the UK layout, where a US keyboard's | key types ~.
     vdp = s.restart_with_vdp()
@@ -851,6 +880,34 @@ def test_ver_prints_the_version_and_copyright_between_blank_lines(s):
          "Released under the MIT License.\n\n" % version), \
         repr(s.child.before)
     assert s.sh("ver extra") == help_text(s, "ver --help")
+
+
+def test_color_sets_the_colors_and_clears_the_screen(s):
+    s.login()
+    assert s.sh("color 1e") == "\x1b[44;93m\x1b[2J\x1b[H"
+    assert s.sh("color 1e") == "\x1b[44;93m\x1b[2J\x1b[H"
+    assert s.sh("color 7") == "\x1b[40;37m\x1b[2J\x1b[H"
+    assert s.sh("color F0") == "\x1b[107;30m\x1b[2J\x1b[H"
+    assert s.sh("color c6") == "\x1b[101;33m\x1b[2J\x1b[H"
+
+
+def test_color_without_a_valid_attribute_prints_its_usage(s):
+    s.login()
+    usage = help_text(s, "color --help")
+    for command in ("color", "color 1g", "color 123", "color 1e 2"):
+        assert s.sh(command) == usage, command
+    assert s.sh("clear") == "\x1b[2J\x1b[H"
+
+
+def test_clear_uses_the_colors_set_before_it_and_a_logout(s):
+    s.login()
+    assert s.sh("clear") == "\x1b[2J\x1b[H"
+    s.sh("color 2f")
+    assert s.sh("clear") == "\x1b[42;97m\x1b[2J\x1b[H"
+    s.child.sendline("exit")
+    s.login()
+    assert s.sh("clear") == "\x1b[42;97m\x1b[2J\x1b[H"
+    assert s.sh("clear extra") == help_text(s, "clear --help")
 
 
 def test_hostname_file(s):

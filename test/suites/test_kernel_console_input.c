@@ -1139,3 +1139,86 @@ NANO_OS_KERNEL_TEST(console_signal, each_port_keeps_its_own_signal_args) {
   NANO_OS_ASSERT_EQ_INT(TEST_UNUSED_PID, signalArgs[0].pid);
   NANO_OS_ASSERT_EQ_INT(TEST_UNUSED_PID + 1, signalArgs[1].pid);
 }
+
+/// @fn static int sendColors(int64_t type, ConsoleColorsArgs *colorsArgs)
+///
+/// @brief Hand the console's CONSOLE_GET_COLORS or CONSOLE_SET_COLORS handler
+/// a message from this process.
+///
+/// @param type CONSOLE_GET_COLORS or CONSOLE_SET_COLORS.
+/// @param colorsArgs A pointer to the ConsoleColorsArgs to send.
+///
+/// @return Returns the returnValue the handler reported, or -2 if the request
+/// couldn't be made.
+static int sendColors(int64_t type, ConsoleColorsArgs *colorsArgs) {
+  colorsArgs->returnValue = -2;
+  ProcessMessage *sent = getAvailableMessage();
+  if (sent == NULL) {
+    return -2;
+  }
+  processMessageInit(sent, CONSOLE_COMMAND_SIGNATURE | type,
+    colorsArgs, sizeof(*colorsArgs), /* waiting= */ false);
+  if (processMessageQueuePush(getRunningProcess(), sent) != processSuccess) {
+    processMessageRelease(sent);
+    return -2;
+  }
+  ProcessMessage *received = processMessageQueuePop();
+  if (type == CONSOLE_GET_COLORS) {
+    consoleGetColorsCommandHandler(&inputState, received);
+    processMessageRelease(received);
+  } else {
+    consoleSetColorsCommandHandler(&inputState, received);
+  }
+  return colorsArgs->returnValue;
+}
+
+NANO_OS_KERNEL_TEST(console_colors, a_new_port_has_the_default_colors) {
+  addFixture();
+
+  NANO_OS_ASSERT_TRUE(addPort(getRunningPid()));
+  NANO_OS_ASSERT_EQ_INT(CONSOLE_COLORS_DEFAULT,
+    inputState.consolePorts[1].colors);
+}
+
+NANO_OS_KERNEL_TEST(console_colors, set_colors_are_read_back_by_the_owner) {
+  static ConsoleColorsArgs colorsArgs;
+  ConsolePort *owned = inputFixture(PROCESS_ID_NOT_SET);
+  owned->outputOwner = getRunningPid();
+  owned->colors = CONSOLE_COLORS_DEFAULT;
+  ConsolePort *other = &inputState.consolePorts[1];
+  other->consoleBuffer = &inputState.consoleBuffers[1];
+  other->outputOwner = consolePid;
+  other->colors = CONSOLE_COLORS_DEFAULT;
+  inputState.numConsolePorts = 2;
+
+  colorsArgs.colors = 0x1e;
+  NANO_OS_ASSERT_EQ_INT(0, sendColors(CONSOLE_SET_COLORS, &colorsArgs));
+  NANO_OS_ASSERT_EQ_INT(0x1e, owned->colors);
+  NANO_OS_ASSERT_EQ_INT(CONSOLE_COLORS_DEFAULT, other->colors);
+
+  colorsArgs.colors = 0;
+  NANO_OS_ASSERT_EQ_INT(0, sendColors(CONSOLE_GET_COLORS, &colorsArgs));
+  NANO_OS_ASSERT_EQ_INT(0x1e, colorsArgs.colors);
+}
+
+NANO_OS_KERNEL_TEST(console_colors, a_process_without_a_port_is_refused) {
+  static ConsoleColorsArgs colorsArgs;
+  ConsolePort *consolePort = inputFixture(PROCESS_ID_NOT_SET);
+  consolePort->outputOwner = consolePid;
+  consolePort->colors = 0x07;
+
+  colorsArgs.colors = 0x1e;
+  NANO_OS_ASSERT_EQ_INT(-1, sendColors(CONSOLE_SET_COLORS, &colorsArgs));
+  NANO_OS_ASSERT_EQ_INT(0x07, consolePort->colors);
+  NANO_OS_ASSERT_EQ_INT(-1, sendColors(CONSOLE_GET_COLORS, &colorsArgs));
+}
+
+NANO_OS_KERNEL_TEST(console_colors, releasing_the_port_keeps_its_colors) {
+  ConsolePort *consolePort = rawFixture("");
+  consolePort->shell = consolePid;
+  consolePort->colors = 0x2f;
+
+  releasePid(getRunningPid());
+
+  NANO_OS_ASSERT_EQ_INT(0x2f, consolePort->colors);
+}

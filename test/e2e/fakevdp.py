@@ -228,6 +228,11 @@ class FakeVdp:
                         self.screen = ""
                         self.cursor = 0
                         self.lock.notify_all()
+                elif byte == 30:
+                    self._event("home")
+                    with self.lock:
+                        self.cursor = 0
+                        self.lock.notify_all()
                 else:
                     self._text(byte)
         except StopIteration:
