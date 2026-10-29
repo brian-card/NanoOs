@@ -61,7 +61,7 @@ extern "C"
 #define NANO_OS_OVERLAY_VERSION \
   ( (((uint32_t) 0) << 24) \
   | (((uint32_t) 0) << 16) \
-  | (((uint32_t) 6) << 8) \
+  | (((uint32_t) 7) << 8) \
   | (((uint32_t) 0) << 0) \
   )
 
