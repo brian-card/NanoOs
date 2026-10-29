@@ -303,6 +303,10 @@ typedef struct NanoOsUserApi {
   
   // NanoOsHardware.h functions:
   int (*shutdown)(NanoOsShutdownType shutdownType);
+  
+  // NanoOsConsole.h functions:
+  int (*getConsoleColors)(void);
+  int (*setConsoleColors)(uint8_t colors);
 } NanoOsUserApi;
 
 typedef struct NanoOsApi {

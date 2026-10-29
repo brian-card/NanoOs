@@ -46,6 +46,7 @@ char** parseArgs(char *command, int *argc);
 // Must come first
 #include "NanoOsApi.h"
 
+#include "../kernel/Console.h"
 #include "../kernel/Coroutines.h"
 #include "../kernel/MemoryManager.h"
 #include "../kernel/NanoOs.h"
@@ -276,6 +277,10 @@ static const NanoOsUserApi _nanoOsUserApi = {
   
   // NanoOsHardware.h functions:
   .shutdown = nanoOsHardwareShutdown,
+  
+  // NanoOsConsole.h functions:
+  .getConsoleColors = getConsoleColors,
+  .setConsoleColors = setConsoleColors,
 };
 
 NanoOsApi nanoOsApi = {
