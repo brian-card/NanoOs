@@ -33,16 +33,7 @@
 
 #include "Graphics.h"
 #include "ScreenSetup.h"
-
-/// @def CGA_INDEX_BLUE
-///
-/// @brief The index of CGA_BLUE in the CGA palette.
-#define CGA_INDEX_BLUE 1
-
-/// @def CGA_INDEX_YELLOW
-///
-/// @brief The index of CGA_YELLOW in the CGA palette.
-#define CGA_INDEX_YELLOW 14
+#include "VdpText.h"
 
 /// @def VDP_PALETTE_ENTRY
 ///
@@ -81,8 +72,8 @@ const uint8_t vdpScreenSetup[] = {
   VDP_PALETTE_ENTRY(13, CGA_LIGHT_MAGENTA),
   VDP_PALETTE_ENTRY(14, CGA_YELLOW),
   VDP_PALETTE_ENTRY(15, CGA_WHITE),
-  17, CGA_INDEX_YELLOW,
-  17, 128 + CGA_INDEX_BLUE,
+  17, VDP_TEXT_DEFAULT_FOREGROUND,
+  17, 128 + VDP_TEXT_DEFAULT_BACKGROUND,
   12,
   23, 1, 1
 };
