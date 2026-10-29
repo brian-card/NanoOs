@@ -584,6 +584,8 @@ IpcCapability baseSupervisorIpcCapabilities[] = {
       | (((uint32_t) 1) << CONSOLE_SET_MODES)
       | (((uint32_t) 1) << CONSOLE_WAIT_FOR_INPUT)
       | (((uint32_t) 1) << CONSOLE_RELEASE_BUFFER)
+      | (((uint32_t) 1) << CONSOLE_GET_COLORS)
+      | (((uint32_t) 1) << CONSOLE_SET_COLORS)
   },
   {
     .destinationPid = 0, // Memory manager PID to be set by scheduler
