@@ -33,13 +33,148 @@
 
 #include "VdpText.h"
 
+/// @def VDU_CLEAR_SCREEN
+///
+/// @brief VDU 12, which clears the text area to the text background and
+/// homes the cursor.
+#define VDU_CLEAR_SCREEN 12
+
+/// @def VDU_TEXT_COLOR
+///
+/// @brief VDU 17,color, which sets the text color, or the text background if
+/// VDU_BACKGROUND is added to the color.
+#define VDU_TEXT_COLOR 17
+
+/// @def VDU_BACKGROUND
+///
+/// @brief The amount added to a VDU_TEXT_COLOR color to set the background.
+#define VDU_BACKGROUND 128
+
+/// @def VDU_HOME
+///
+/// @brief VDU 30, which moves the cursor to the top left corner.
+#define VDU_HOME 30
+
+/// @def VDP_ESCAPE_MAX_OUTPUT
+///
+/// @brief The most VDU bytes a byte of an escape sequence translates to.
+#define VDP_ESCAPE_MAX_OUTPUT 4
+
+ANSI_TO_CGA_MAP
+
+/// @fn static void vdpEndParameter(VdpTextState *state)
+///
+/// @brief Finish reading a control sequence parameter, applying it to the
+/// colors the sequence selects as a Select Graphic Rendition parameter.
+///
+/// @param state A pointer to the VdpTextState of the text being written.
+///
+/// @return This function returns no value.
+static void vdpEndParameter(VdpTextState *state) {
+  uint8_t parameter = state->parameter;
+  if (parameter > state->maxParameter) {
+    state->maxParameter = parameter;
+  }
+  state->parameter = 0;
+
+  if (parameter == ANSI_SGR_RESET) {
+    state->foreground = VDP_TEXT_DEFAULT_FOREGROUND;
+    state->background = VDP_TEXT_DEFAULT_BACKGROUND;
+  } else if (parameter == ANSI_SGR_FOREGROUND_DEFAULT) {
+    state->foreground = VDP_TEXT_DEFAULT_FOREGROUND;
+  } else if (parameter == ANSI_SGR_BACKGROUND_DEFAULT) {
+    state->background = VDP_TEXT_DEFAULT_BACKGROUND;
+  } else {
+    // Folding the bright and background ranges onto the foreground range
+    // keeps this small enough for the overlay to fit on the SAMD21.
+    uint8_t bright = 0;
+    uint8_t *color = &state->foreground;
+    if (parameter >= ANSI_SGR_BRIGHT_FOREGROUND) {
+      parameter -= ANSI_SGR_BRIGHT_FOREGROUND - ANSI_SGR_FOREGROUND;
+      bright = 8;
+    }
+    if (parameter >= ANSI_SGR_BACKGROUND) {
+      parameter -= ANSI_SGR_BACKGROUND - ANSI_SGR_FOREGROUND;
+      color = &state->background;
+    }
+    parameter -= ANSI_SGR_FOREGROUND;
+    if (parameter < 8) {
+      *color = ansiToCgaMap[parameter + bright];
+    }
+  }
+}
+
+/// @fn static size_t vdpTranslateEscape(VdpTextState *state, uint8_t c,
+///   uint8_t *output)
+///
+/// @brief Advance an escape sequence by one byte.  A control sequence that
+/// sets colors, clears the screen, or homes the cursor becomes VDU bytes when
+/// it ends, and every other escape sequence is dropped.
+///
+/// @param state A pointer to the VdpTextState to advance.
+/// @param c The byte of the escape sequence.
+/// @param output A buffer of at least VDP_ESCAPE_MAX_OUTPUT bytes.
+///
+/// @return Returns the number of bytes written to output.
+static size_t vdpTranslateEscape(VdpTextState *state, uint8_t c,
+  uint8_t *output
+) {
+  size_t length = 0;
+
+  if (c == '\033') {
+    state->escapeState = VDP_ESCAPE_STARTED;
+  } else if (state->escapeState == VDP_ESCAPE_STARTED) {
+    if (c == '[') {
+      state->escapeState = VDP_ESCAPE_CSI;
+      state->parameter = 0;
+      state->maxParameter = 0;
+      state->foreground = VDP_TEXT_COLOR_UNCHANGED;
+      state->background = VDP_TEXT_COLOR_UNCHANGED;
+    } else if ((c < 0x20) || (c > 0x2f)) {
+      // Anything but an intermediate byte ends a two-byte escape sequence.
+      state->escapeState = VDP_ESCAPE_NONE;
+    }
+  } else if ((c >= '0') && (c <= '9')) {
+    unsigned int parameter = (state->parameter * 10u) + (c - '0');
+    state->parameter = (parameter > 255) ? 255 : (uint8_t) parameter;
+  } else if (c == ';') {
+    vdpEndParameter(state);
+  } else if ((c >= 0x20) && (c <= 0x3f)) {
+    state->escapeState = VDP_ESCAPE_CSI_IGNORED;
+  } else {
+    if ((state->escapeState == VDP_ESCAPE_CSI) && (c >= 0x40) && (c <= 0x7e)) {
+      vdpEndParameter(state);
+      if (c == 'm') {
+        if (state->foreground != VDP_TEXT_COLOR_UNCHANGED) {
+          output[length++] = VDU_TEXT_COLOR;
+          output[length++] = state->foreground;
+        }
+        if (state->background != VDP_TEXT_COLOR_UNCHANGED) {
+          output[length++] = VDU_TEXT_COLOR;
+          output[length++] = VDU_BACKGROUND + state->background;
+        }
+      } else if ((c == 'J') && (state->maxParameter == 2)) {
+        output[length++] = VDU_CLEAR_SCREEN;
+        state->column = 0;
+      } else if (((c == 'H') || (c == 'f')) && (state->maxParameter <= 1)) {
+        output[length++] = VDU_HOME;
+        state->column = 0;
+      }
+    }
+    state->escapeState = VDP_ESCAPE_NONE;
+  }
+
+  return length;
+}
+
 /// @fn size_t vdpTranslateText(VdpTextState *state, const char **text,
 ///   uint8_t *output, size_t outputSize)
 ///
 /// @brief Translate as much of a NUL-terminated string as fits into a buffer
 /// of VDU bytes.  Newlines become a carriage return and a line feed, tabs
-/// become spaces to the next multiple of 8 columns, and control characters
-/// the VDP would read as the start of a VDU command are dropped.
+/// become spaces to the next multiple of 8 columns, ANSI escape sequences
+/// are translated by vdpTranslateEscape, and other control characters the
+/// VDP would read as the start of a VDU command are dropped.
 ///
 /// @param state A pointer to the VdpTextState of the text being written.
 /// @param text A pointer to the string, advanced past each character that is
@@ -55,6 +190,14 @@ size_t vdpTranslateText(VdpTextState *state, const char **text,
   size_t length = 0;
   for (; **text != '\0'; (*text)++) {
     uint8_t c = (uint8_t) **text;
+    if ((c == '\033') || (state->escapeState != VDP_ESCAPE_NONE)) {
+      if (length + VDP_ESCAPE_MAX_OUTPUT > outputSize) {
+        break;
+      }
+      length += vdpTranslateEscape(state, c, &output[length]);
+      continue;
+    }
+
     size_t needed = 1;
     if (c == '\n') {
       needed = 2;
