@@ -64,6 +64,12 @@ int main(int argc, char **argv) {
     "cd:                     ",
     "Change the current working directory.");
   printf("%s %s\n",
+    "clear:                  ",
+    "Clear the screen.");
+  printf("%s %s\n",
+    "color:                  ",
+    "Set the console's background and foreground colors.");
+  printf("%s %s\n",
     "cp:                     ",
     "Copy files.");
   printf("%s %s\n",
