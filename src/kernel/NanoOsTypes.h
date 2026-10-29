@@ -393,6 +393,12 @@ typedef struct CommandDescriptor {
 #define CONSOLE_MODE_DEFAULT \
   (CONSOLE_MODE_ECHO | CONSOLE_MODE_CANONICAL | CONSOLE_MODE_SIGNALS)
 
+/// @def CONSOLE_COLORS_DEFAULT
+///
+/// @brief The colors of a console port whose colors have never been set,
+/// which are whatever the terminal's own are.
+#define CONSOLE_COLORS_DEFAULT -1
+
 /// @struct ConsoleBuffer
 ///
 /// @brief Definition of a single console buffer that may be returned to a
@@ -453,6 +459,9 @@ typedef struct ConsoleInputReadyArgs {
 ///   waiting for input from the user.
 /// @param pollOnly Whether or not the port has to be polled for input rather
 ///   than being serviced by a CONSOLE_INPUT_READY message.
+/// @param colors The colors last set for the port, with the CgaColorIndex of
+///   the background in the upper 4 bits and of the foreground in the lower 4,
+///   or CONSOLE_COLORS_DEFAULT.
 /// @param readByte A pointer to the non-blocking function that will attempt to
 ///   read a byte of input from the user.
 /// @param modes The CONSOLE_MODE_* flags in effect for the port.
@@ -481,6 +490,7 @@ typedef struct ConsolePort {
   ProcessId               shell;
   bool                    waitingForInput;
   bool                    pollOnly;
+  int16_t                 colors;
   int                   (*readByte)(struct ConsolePort *consolePort);
   uint8_t                 modes;
   uint8_t                 inputState;
