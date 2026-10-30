@@ -73,13 +73,26 @@ NANO_OS_TEST(unit_vdp_text, tab_pads_to_the_next_multiple_of_eight) {
   NANO_OS_ASSERT_EQ_INT(16, state.column);
 }
 
-NANO_OS_TEST(unit_vdp_text, vdu_command_bytes_are_dropped) {
+NANO_OS_TEST(unit_vdp_text, control_bytes_and_del_are_drawn_as_glyphs) {
   VdpTextState state = { .column = 0 };
   uint8_t output[32];
-  const char *text = "a\x16\x01\x11" "b\x7f" "c";
+  const char *text = "a\x16\x01\x11" "b\x7f" "c\x0c\x1f";
 
-  NANO_OS_ASSERT_EQ_INT(3, vdpTranslateText(&state, &text, output, 32));
-  NANO_OS_ASSERT_TRUE(memcmp(output, "abc", 3) == 0);
+  NANO_OS_ASSERT_EQ_INT(15, vdpTranslateText(&state, &text, output, 32));
+  NANO_OS_ASSERT_TRUE(memcmp(output,
+    "a\x1b\x16\x1b\x01\x1b\x11" "b\x1b\x7f" "c\x1b\x0c\x1b\x1f", 15) == 0);
+  NANO_OS_ASSERT_EQ_INT(9, state.column);
+}
+
+NANO_OS_TEST(unit_vdp_text, a_full_buffer_never_splits_a_control_glyph) {
+  VdpTextState state = { .column = 0 };
+  uint8_t output[32];
+  const char *text = "ab\x01";
+
+  NANO_OS_ASSERT_EQ_INT(2, vdpTranslateText(&state, &text, output, 3));
+  NANO_OS_ASSERT_EQ_INT('\x01', *text);
+  NANO_OS_ASSERT_EQ_INT(2, vdpTranslateText(&state, &text, output, 3));
+  NANO_OS_ASSERT_TRUE(memcmp(output, "\x1b\x01", 2) == 0);
   NANO_OS_ASSERT_EQ_INT(3, state.column);
 }
 

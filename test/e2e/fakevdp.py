@@ -241,6 +241,8 @@ class FakeVdp:
                     with self.lock:
                         self.cursor = 0
                         self.lock.notify_all()
+                elif byte == 27:
+                    self._glyph(next(stream))
                 else:
                     self._text(byte)
         except StopIteration:
@@ -537,18 +539,25 @@ class FakeVdp:
             self.events.append((time.time(), kind, detail))
             self.lock.notify_all()
 
+    def _glyph(self, byte):
+        with self.lock:
+            self.screen = (self.screen[:self.cursor] + chr(byte)
+                           + self.screen[self.cursor + 1:])
+            self.cursor += 1
+            self.events.append((time.time(), "text", byte))
+            self.lock.notify_all()
+
     def _text(self, byte):
+        if byte not in (8, 10, 13):
+            self._glyph(byte)
+            return
         with self.lock:
             if byte == 8:
                 if self.cursor > 0 and self.screen[self.cursor - 1] != "\n":
                     self.cursor -= 1
-            elif byte in (10, 13):
+            else:
                 self.screen += chr(byte)
                 self.cursor = len(self.screen)
-            else:
-                self.screen = (self.screen[:self.cursor] + chr(byte)
-                               + self.screen[self.cursor + 1:])
-                self.cursor += 1
             self.events.append((time.time(), "text", byte))
             self.lock.notify_all()
 

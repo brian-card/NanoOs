@@ -443,6 +443,26 @@ def test_vdp_color_and_clear_set_the_text_colors_and_clear(s):
     assert vdp.errors == [], f"unexpected VDU commands: {vdp.errors}"
 
 
+def test_vdp_draws_control_characters_as_glyphs(s):
+    # 0x0c would clear the screen and 0x16 change the mode if sent bare.
+    s.child.terminate(force=True)
+    subprocess.run(["mcopy", "-o", "-i", s.img_copy + "@@2097152", "-",
+                    "::/glyphs.txt"],
+                   input=b"glyphs:\x01\x0c\x16\x1f\x7f:end\n",
+                   env=dict(os.environ, MTOOLS_SKIP_CHECK="1"), check=True)
+    vdp = s.restart_with_vdp()
+    vdp_login(vdp)
+    vdp.clear()
+    with vdp.lock:
+        start = len(vdp.events)
+    vdp.type("cat /glyphs.txt\r")
+    vdp.expect(r"\r\nglyphs:\x01\x0c\x16\x1f\x7f:end\r\n" + PROMPT)
+    with vdp.lock:
+        kinds = {kind for _t, kind, _d in vdp.events[start:]}
+    assert kinds == {"text"}, f"control characters ran as commands: {kinds}"
+    assert vdp.errors == [], f"unexpected VDU commands: {vdp.errors}"
+
+
 def test_vdp_keyboard_types_a_pipeline(s):
     # The VDP starts in the UK layout, where a US keyboard's | key types ~.
     vdp = s.restart_with_vdp()
