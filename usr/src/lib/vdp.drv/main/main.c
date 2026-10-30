@@ -71,11 +71,28 @@ static void vdpWriteText(VdpOutput *vdpOutput, const char *text) {
   }
 }
 
+/// @fn static void vdpGraphics(VdpOutput *vdpOutput, ProcessMessage *message)
+///
+/// @brief Have the Graphics overlay carry out a message, or load the built-in
+/// font if message is NULL.  The overlay checks that the message is a
+/// Graphics.h one, which keeps the check out of the main overlay.
+///
+/// @param vdpOutput A pointer to the driver's VdpOutput.
+/// @param message The message to carry out, or NULL.
+///
+/// @return This function returns no value.
+static void vdpGraphics(VdpOutput *vdpOutput, ProcessMessage *message) {
+  vdpOutput->graphicsMessage = message;
+  callOverlayFunction(OVERLAY_SAME_NAMESPACE,
+    "Graphics", "vdpGraphics", vdpOutput);
+}
+
 /// @fn static bool vdpHandshake(VdpOutput *vdpOutput, VdpInput *input,
 ///   VdpStartupArgs *startupArgs)
 ///
 /// @brief Send the general poll until the VDP answers it or the wait times
-/// out, then have the Startup overlay set up the screen, and again once the
+/// out, then have the Startup overlay set up the screen and the Graphics
+/// overlay load the built-in font, and the Startup overlay again once the
 /// poll that follows the setup, which is sent the same way, is answered or
 /// times out.  The state is passed
 /// both directly and as startupArgs, which reloading it through costs main
@@ -106,8 +123,16 @@ static bool vdpHandshake(VdpOutput *vdpOutput, VdpInput *input,
     return true;
   }
 
-  return callOverlayFunction(OVERLAY_SAME_NAMESPACE,
-    "Startup", "vdpSetupScreen", startupArgs) == startupArgs;
+  bool screenSetUp = vdpOutput->screenSetUp;
+  if (callOverlayFunction(OVERLAY_SAME_NAMESPACE,
+    "Startup", "vdpSetupScreen", startupArgs) != startupArgs
+  ) {
+    return false;
+  }
+  if (screenSetUp == false) {
+    vdpGraphics(vdpOutput, NULL);
+  }
+  return true;
 }
 
 /// @fn static void vdpRequestPort(VdpInput *input)
@@ -315,6 +340,8 @@ int main(int argc, char **argv) {
       == (VDP_DRIVER_SIGNATURE | VDP_UART_INPUT)
     ) {
       vdpPresent = vdpReadKeyboard(&input);
+    } else {
+      vdpGraphics(&vdpOutput, processMessage);
     }
     consoleOutputDone(processMessage);
     if (vdpPresent == false) {
