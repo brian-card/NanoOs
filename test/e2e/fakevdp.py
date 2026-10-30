@@ -87,6 +87,11 @@ AUDIO = 0x85
 AUDIO_RESET = 10
 AUDIO_SAMPLE_RATE = 13
 KEYSTATE = 0x88
+FONT = 0x95
+FONT_SELECT = 0
+FONT_FROM_BUFFER = 1
+FONT_CLEAR = 4
+SYSTEM_FONT = 0xFFFF
 UDG_RESET = 0x91
 CONTROL_KEYS = 0x98
 LEGACY_MODES = 0xC1
@@ -157,6 +162,8 @@ class FakeVdp:
         self.bitmaps = {}      # bitmap ID -> (width, height, RGBA2222 bytes)
         self.bitmap = BITMAP_BASE_ID
         self.cursors = {}      # cursor ID -> (bitmap, hotspot x, hotspot y)
+        self.fonts = {}        # font ID -> (width, height, glyph bytes)
+        self.font = None       # ID of the selected font, None for the system's
         # FabGL's lock states, which only the lock keys change, and the LEDs.
         self.num_lock = False
         self.caps_lock = False
@@ -203,8 +210,9 @@ class FakeVdp:
                     mode = next(stream)
                     if self.listening:
                         with self.lock:
-                            # Changing the mode resets the palette.
+                            # Changing the mode resets the palette and font.
                             self.palette = {}
+                            self.font = None
                         self._event("mode", mode)
                 elif byte == 17:
                     colour = next(stream)
@@ -277,6 +285,8 @@ class FakeVdp:
                                       ("rate", channel, self._word(stream)))
                 else:
                     self.errors.append(f"VDU 23,0,&85,{channel},{sub}")
+            elif command == FONT:
+                self._font(stream)
             elif command == KEYSTATE:
                 state = (self._word(stream), self._word(stream), next(stream))
                 if state[2] != 255:
@@ -321,12 +331,69 @@ class FakeVdp:
                 self.buffers.clear()
                 self.bitmaps.clear()
                 self.cursors.clear()
+                self.fonts.clear()
             self._reset_event(BUFFERED, buffer_id)
         elif command == BUFFERED_CLEAR:
             with self.lock:
                 self.buffers.pop(buffer_id, None)
         else:
             self.errors.append(f"VDU 23,0,&A0,{buffer_id};{command}")
+
+    def _font(self, stream):
+        command = next(stream)
+        font_id = self._word(stream)
+        if command == FONT_FROM_BUFFER:
+            width, height, _ascent, flags = (next(stream) for _ in range(4))
+            streams = self.buffers.get(font_id, [])
+            size = ((width + 7) // 8) * height * 256
+            if flags != 0:
+                self.errors.append(f"font {font_id} flags {flags}")
+            elif len(streams) != 1:
+                self.errors.append(
+                    f"font {font_id} from {len(streams)} streams")
+            elif len(streams[0]) != size:
+                self.errors.append(
+                    f"font {font_id} is {len(streams[0])} bytes, "
+                    f"not {width}x{height}")
+            else:
+                with self.lock:
+                    self.fonts[font_id] = (width, height, streams[0])
+        elif command == FONT_SELECT:
+            next(stream)
+            if font_id != SYSTEM_FONT and font_id not in self.fonts:
+                self.errors.append(f"font {font_id} doesn't exist")
+            else:
+                with self.lock:
+                    self.font = None if font_id == SYSTEM_FONT else font_id
+                self._event("font", font_id)
+        elif command == FONT_CLEAR:
+            with self.lock:
+                self.fonts.pop(font_id, None)
+        else:
+            self.errors.append(f"VDU 23,0,&95,{command}")
+
+    def glyph(self, ch):
+        """Return a character's glyph in the selected font as text.
+
+        @param ch The character.
+
+        @return One string per row, '#' for a set pixel and '.' for a clear
+          one, or None if the system font is selected.
+        """
+        with self.lock:
+            if self.font is None:
+                return None
+            width, height, data = self.fonts[self.font]
+        row_bytes = (width + 7) // 8
+        start = ord(ch) * row_bytes * height
+        rows = []
+        for y in range(height):
+            bits = int.from_bytes(
+                data[start + y * row_bytes:start + (y + 1) * row_bytes], "big")
+            rows.append("".join(
+                "#" if bits & (1 << (row_bytes * 8 - 1 - x)) else "."
+                for x in range(width)))
+        return rows
 
     def _sprites(self, stream):
         command = next(stream)

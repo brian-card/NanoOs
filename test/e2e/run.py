@@ -276,12 +276,12 @@ def assert_vdp_set_up_on_answer(vdp):
     assert resets == VDP_RESET, \
         f"the VDP wasn't reset before the mode change: {resets}"
     setup = [(kind, detail)
-             for _t, kind, detail in vdp.events[first_mode:first_mode + 10]]
+             for _t, kind, detail in vdp.events[first_mode:first_mode + 11]]
     assert setup == [("mode", 0), ("layout", 1),
                      ("colour", CGA_YELLOW), ("colour", 128 + CGA_BLUE),
                      ("cls", None), ("cursor", 1), ("mouse", "reset"),
                      ("mouse", "disable"), ("pointer", VDP_POINTER_ID),
-                     ("text", setup[9][1])], \
+                     ("font", VDP_FONT_ID), ("text", setup[10][1])], \
         f"the screen wasn't set up first: {setup}"
     assert vdp.palette == CGA_PALETTE, \
         f"the palette isn't CGA's: {vdp.palette}"
@@ -331,6 +331,33 @@ VDP_POINTER = [
 ]
 
 
+VDP_FONT_ID = 0xF100
+VDP_GLYPHS = {
+    "A": [".###..", "#...#.", "#...#.", "#####.", "#...#.", "#...#.",
+          "#...#.", "......"],
+    "g": ["......", "......", ".####.", "#...#.", "#...#.", ".####.",
+          "....#.", ".###.."],
+    "~": ["......", "......", ".#....", "#.#.#.", "...#..", "......",
+          "......", "......"],
+    " ": ["......"] * 8,
+    "\x7f": ["......"] * 8,
+    "\xe9": ["......"] * 8,
+}
+
+
+def assert_vdp_font(vdp):
+    """Check that a FakeVdp draws text in the driver's 6x8 font.
+
+    @param vdp The FakeVdp, after the driver has set up its screen.
+    """
+    assert vdp.font == VDP_FONT_ID, f"the selected font is {vdp.font}"
+    width, height, _data = vdp.fonts[VDP_FONT_ID]
+    assert (width, height) == (6, 8), f"the font is {width}x{height}"
+    for ch, rows in VDP_GLYPHS.items():
+        assert vdp.glyph(ch) == rows, \
+            f"the glyph for {ch!r} is:\n" + "\n".join(vdp.glyph(ch))
+
+
 def assert_vdp_pointer(vdp):
     """Check that a FakeVdp shows the driver's mouse pointer.
 
@@ -364,6 +391,7 @@ def test_vdp_console_logs_in_and_runs_a_command(s):
     vdp_login(vdp)
     assert_vdp_set_up_on_answer(vdp)
     assert_vdp_pointer(vdp)
+    assert_vdp_font(vdp)
     vdp.clear()
     vdp.type("echo vdp-oops")
     vdp.type("\b" * 4)
@@ -507,6 +535,9 @@ def test_vdp_driver_is_restarted_after_losing_the_vdp(s):
     pointers = sum(kind == "pointer" for _t, kind, _d in vdp.events)
     assert pointers == 2, f"the pointer was set {pointers} times, not 2"
     assert_vdp_pointer(vdp)
+    fonts = sum(kind == "font" for _t, kind, _d in vdp.events)
+    assert fonts == 2, f"the font was selected {fonts} times, not 2"
+    assert_vdp_font(vdp)
     assert vdp.errors == [], f"unexpected VDU commands: {vdp.errors}"
     s.login()
     assert s.sh("echo uart1-too") == "uart1-too"
