@@ -91,12 +91,13 @@ static void vdpGraphics(VdpOutput *vdpOutput, ProcessMessage *message) {
 ///   VdpStartupArgs *startupArgs)
 ///
 /// @brief Send the general poll until the VDP answers it or the wait times
-/// out, then have the Startup overlay set up the screen and the Graphics
-/// overlay load the built-in font, and the Startup overlay again once the
+/// out, then have the Startup overlay set up the screen, and again once the
 /// poll that follows the setup, which is sent the same way, is answered or
-/// times out.  The state is passed
-/// both directly and as startupArgs, which reloading it through costs main
-/// more than the extra argument does.
+/// times out.  If it was answered, the Graphics overlay loads the built-in
+/// font first:  until then the VDP may be busy resetting the mouse, and the
+/// font overflows its receive buffer.  The state is passed both directly and
+/// as startupArgs, which reloading it through costs main more than the extra
+/// argument does.
 ///
 /// @param vdpOutput A pointer to the driver's VdpOutput.
 /// @param input A pointer to the driver's VdpInput.
@@ -123,16 +124,11 @@ static bool vdpHandshake(VdpOutput *vdpOutput, VdpInput *input,
     return true;
   }
 
-  bool screenSetUp = vdpOutput->screenSetUp;
-  if (callOverlayFunction(OVERLAY_SAME_NAMESPACE,
-    "Startup", "vdpSetupScreen", startupArgs) != startupArgs
-  ) {
-    return false;
-  }
-  if (screenSetUp == false) {
+  if ((vdpOutput->screenSetUp == true) && (input->pollAnswered == true)) {
     vdpGraphics(vdpOutput, NULL);
   }
-  return true;
+  return callOverlayFunction(OVERLAY_SAME_NAMESPACE,
+    "Startup", "vdpSetupScreen", startupArgs) == startupArgs;
 }
 
 /// @fn static void vdpRequestPort(VdpInput *input)
