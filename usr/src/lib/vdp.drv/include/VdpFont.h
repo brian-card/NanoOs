@@ -53,13 +53,13 @@ extern "C"
 /// @def VDP_FONT_FIRST_CHAR
 ///
 /// @brief The first character the built-in font has a glyph for.
-#define VDP_FONT_FIRST_CHAR ' '
+#define VDP_FONT_FIRST_CHAR 0
 
 /// @def VDP_FONT_NUM_CHARS
 ///
-/// @brief The number of characters the built-in font has glyphs for:  the
-/// printable ASCII characters.
-#define VDP_FONT_NUM_CHARS 95
+/// @brief The number of characters the built-in font has glyphs for:  all of
+/// code page 437.
+#define VDP_FONT_NUM_CHARS 256
 
 extern const uint8_t vdpFont[VDP_FONT_NUM_CHARS * VDP_FONT_HEIGHT];
 
