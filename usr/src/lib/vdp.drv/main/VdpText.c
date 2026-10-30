@@ -55,6 +55,11 @@
 /// @brief VDU 30, which moves the cursor to the top left corner.
 #define VDU_HOME 30
 
+/// @def VDU_PRINT_NEXT
+///
+/// @brief VDU 27,c, which draws the glyph of c even if c is a VDU command.
+#define VDU_PRINT_NEXT 27
+
 /// @def VDP_ESCAPE_MAX_OUTPUT
 ///
 /// @brief The most VDU bytes a byte of an escape sequence translates to.
@@ -173,8 +178,8 @@ static size_t vdpTranslateEscape(VdpTextState *state, uint8_t c,
 /// @brief Translate as much of a NUL-terminated string as fits into a buffer
 /// of VDU bytes.  Newlines become a carriage return and a line feed, tabs
 /// become spaces to the next multiple of 8 columns, ANSI escape sequences
-/// are translated by vdpTranslateEscape, and other control characters the
-/// VDP would read as the start of a VDU command are dropped.
+/// are translated by vdpTranslateEscape, and other control characters and
+/// DEL are drawn as their glyphs with VDU_PRINT_NEXT.
 ///
 /// @param state A pointer to the VdpTextState of the text being written.
 /// @param text A pointer to the string, advanced past each character that is
@@ -198,10 +203,8 @@ size_t vdpTranslateText(VdpTextState *state, const char **text,
       continue;
     }
 
-    size_t needed = 1;
-    if (c == '\n') {
-      needed = 2;
-    } else if (c == '\t') {
+    size_t needed = ((c < ' ') || (c == 127)) ? 2 : 1;
+    if (c == '\t') {
       needed = 8 - (state->column & 7);
     }
     if (length + needed > outputSize) {
@@ -225,7 +228,10 @@ size_t vdpTranslateText(VdpTextState *state, const char **text,
       state->column--;
     } else if (c == '\a') {
       output[length++] = c;
-    } else if ((c >= ' ') && (c != 127)) {
+    } else {
+      if ((c < ' ') || (c == 127)) {
+        output[length++] = VDU_PRINT_NEXT;
+      }
       output[length++] = c;
       state->column++;
     }
