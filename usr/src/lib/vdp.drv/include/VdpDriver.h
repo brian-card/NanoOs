@@ -137,6 +137,9 @@ typedef struct VdpInput {
 /// @param screenSetUp Whether the screen setup has been sent, so that the
 ///   poll being waited on is the one that follows it.
 /// @param buffer The output written while the VDP wasn't listening, or NULL.
+/// @param graphicsMessage The Graphics.h message for the Graphics overlay to
+///   handle, or NULL to have it load the driver's built-in font.
+/// @param numFonts The number of fonts uploaded to the VDP.
 typedef struct VdpOutput {
   VdpTextState     textState;
   bool             listening;
@@ -144,6 +147,8 @@ typedef struct VdpOutput {
   int64_t          giveUpNs;
   bool             screenSetUp;
   VdpOutputBuffer *buffer;
+  ProcessMessage  *graphicsMessage;
+  uint8_t          numFonts;
 } VdpOutput;
 
 /// @struct VdpStartupArgs
