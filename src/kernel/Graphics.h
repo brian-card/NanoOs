@@ -330,7 +330,7 @@ typedef struct GfxImageDesc {
 typedef struct GfxFontDesc {
     uint8_t      glyphW, glyphH;  // pixel dimensions of each glyph cell
     uint8_t      firstChar;       // first codepoint in the bitmap
-    uint8_t      numChars;        // number of glyphs
+    uint16_t     numChars;        // number of glyphs
     const void  *bitmap;          // 1-bit glyph rows, MSB leftmost, each
                                   // row padded to a whole byte; not in
                                   // the caller's overlay, which the
@@ -518,7 +518,8 @@ typedef struct GfxMsgOpenDisplayResp {
     uint8_t  displayId;
     uint16_t width, height;
     uint8_t  sysFontW, sysFontH;
-    uint8_t  sysFontFirst, sysFontCount;
+    uint8_t  sysFontFirst;
+    uint16_t sysFontCount;
     GfxError err;
 } GfxMsgOpenDisplayResp;
 
@@ -536,7 +537,8 @@ typedef struct GfxMsgOpenDisplayResp {
 typedef struct GfxFontCacheEntry {
     GfxHandle handle;
     uint8_t   glyphW, glyphH;
-    uint8_t   firstChar, numChars;
+    uint8_t   firstChar;
+    uint16_t  numChars;
 } GfxFontCacheEntry;
 
 typedef struct GfxCtx {
@@ -556,7 +558,8 @@ typedef struct GfxDisplay {
 
     // System font metrics (populated at open time from driver response).
     uint8_t   sysFontW, sysFontH;
-    uint8_t   sysFontFirst, sysFontCount;
+    uint8_t   sysFontFirst;
+    uint16_t  sysFontCount;
 
     // Uploaded font metadata cache (populated by gfxUploadFont,
     // removed by gfxDestroyFont).
@@ -1098,7 +1101,7 @@ static inline bool gfxSetSystemFont(GfxDisplay *disp, GfxHandle font) {
 static inline bool gfxFontLookup_(const GfxDisplay *disp,
                                   GfxHandle font,
                                   uint8_t *outW, uint8_t *outH,
-                                  uint8_t *outFirst, uint8_t *outCount) {
+                                  uint8_t *outFirst, uint16_t *outCount) {
     if (font == GFX_INVALID_HANDLE) {
         // System font.
         if (outW)     *outW     = disp->sysFontW;
@@ -1219,7 +1222,7 @@ static inline uint16_t gfxHitTestText(GfxDisplay *disp,
 static inline bool gfxGetFontRange(GfxDisplay *disp,
                                    GfxHandle font,
                                    uint8_t *outFirst,
-                                   uint8_t *outCount) {
+                                   uint16_t *outCount) {
     return gfxFontLookup_(disp, font, NULL, NULL, outFirst, outCount);
 }
 
