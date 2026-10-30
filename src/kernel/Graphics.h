@@ -112,7 +112,10 @@
 
 // NanoOs includes
 #include "GraphicsColor.h"
+// A driver overlay gets the same message functions from ExecutiveProcesses.h.
+#ifndef EXECUTIVE_PROCESSES_H
 #include "Processes.h"
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -242,6 +245,7 @@ typedef enum GfxMsgType {
     // Resource management - fonts
     GFX_MSG_UPLOAD_FONT,            // -> GfxMsgHandleResp
     GFX_MSG_DESTROY_FONT,           // async, no response
+    GFX_MSG_SET_SYSTEM_FONT,        // -> GfxMsgErrorResp
     // NOTE: gfxGetGlyphSize, gfxMeasureText, gfxMeasureTextSize,
     // gfxFitText, gfxHitTestText, and gfxGetFontRange are client-side
     // operations using cached font metrics. No message types needed.
@@ -327,7 +331,10 @@ typedef struct GfxFontDesc {
     uint8_t      glyphW, glyphH;  // pixel dimensions of each glyph cell
     uint8_t      firstChar;       // first codepoint in the bitmap
     uint8_t      numChars;        // number of glyphs
-    const void  *bitmap;          // packed 1-bit glyph data
+    const void  *bitmap;          // 1-bit glyph rows, MSB leftmost, each
+                                  // row padded to a whole byte; not in
+                                  // the caller's overlay, which the
+                                  // driver's replaces
     size_t       size;
 } GfxFontDesc;
 
@@ -402,6 +409,11 @@ typedef struct GfxMsgDestroyFont {
     uint8_t   displayId;
     GfxHandle handle;
 } GfxMsgDestroyFont;
+
+typedef struct GfxMsgSetSystemFont {
+    uint8_t   displayId;
+    GfxHandle handle;
+} GfxMsgSetSystemFont;
 
 // --- Command buffer submission ---
 
@@ -1041,6 +1053,43 @@ static inline void gfxDestroyFont(GfxDisplay *disp, GfxHandle font) {
     msg->handle    = font;
     disp->ctx->sendMessage(disp->ctx->deviceId, GFX_MSG_DESTROY_FONT,
                            msg, sizeof(*msg), false);
+}
+
+
+/// @fn static inline bool gfxSetSystemFont(GfxDisplay *disp, GfxHandle font)
+///
+/// @brief Make an uploaded font the system font, which console text is drawn
+/// in and GFX_INVALID_HANDLE selects, and cache its metrics as the system
+/// font's.  Sync.
+///
+/// @param disp The display to set the system font of.
+/// @param font The handle gfxUploadFont returned for the font.
+///
+/// @return Returns true if the driver selected the font, false otherwise.
+static inline bool gfxSetSystemFont(GfxDisplay *disp, GfxHandle font) {
+    GfxMsgSetSystemFont msg;
+    msg.displayId = disp->displayId;
+    msg.handle    = font;
+
+    ProcessMessage *sent = disp->ctx->sendMessage(
+        disp->ctx->deviceId, GFX_MSG_SET_SYSTEM_FONT,
+        &msg, sizeof(msg), true);
+    processMessageWaitForDone(sent, NULL);
+    GfxMsgErrorResp *resp = (GfxMsgErrorResp *)processMessageData(sent);
+    GfxError err = resp->err;
+    processMessageRelease(sent);
+
+    if (err != GFX_OK) return false;
+    for (uint8_t i = 0; i < disp->fontCount; i++) {
+        if (disp->fontCache[i].handle == font) {
+            disp->sysFontW     = disp->fontCache[i].glyphW;
+            disp->sysFontH     = disp->fontCache[i].glyphH;
+            disp->sysFontFirst = disp->fontCache[i].firstChar;
+            disp->sysFontCount = disp->fontCache[i].numChars;
+            break;
+        }
+    }
+    return true;
 }
 
 
