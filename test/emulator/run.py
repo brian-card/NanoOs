@@ -506,6 +506,38 @@ def test_every_command_prints_its_usage_for_help_options(e):
     assert e.sh("echo still-here") == "still-here"
 
 
+def passwdChecksum(user, password):
+    """Return the password field login accepts for user and password."""
+    return str(sum(map(ord, user + password)))
+
+
+def test_login_uses_the_passwd_file_when_there_is_one(e):
+    lines = [
+        "root:%s:0:0:Root User:/root:/usr/bin/mush"
+        % passwdChecksum("root", "rootroot"),
+        "alice:%s:5:5:Alice:/root:/usr/bin/mush"
+        % passwdChecksum("alice", "wonderland"),
+    ]
+    e.send("ed\r")
+    for line in ["a"] + lines + ["."]:
+        time.sleep(0.2)
+        e.send(line + "\r")
+    time.sleep(0.2)
+    e.send("w /etc/passwd\r")
+    e.child.expect(r"%d\r*\n" % sum(len(line) + 1 for line in lines),
+                   timeout=20)
+    e.send("q\r")
+    e.child.expect(PROMPT, timeout=20)
+    e.send("exit\r")
+    e.login("alice", "wonderland")
+    assert ("alice", "ps") in [(user, name) for _pid, user, name
+                               in ps_entries(e)]
+    assert e.sh("echo back") == "back"
+    assert e.sh("echo $USER") == "alice"
+    e.send("exit\r")
+    e.login()
+
+
 def test_soft_reset_boots_again(e):
     e.send("shutdown -r\r")
     e.child.expect(r"NanoOs [^\r\n]* %s tty0" % HOSTNAME, timeout=30)
@@ -564,6 +596,7 @@ TESTS = [test_boots_to_a_login_prompt,
          test_ctrl_c_kills_foreground_commands,
          test_commands_that_cannot_load_leave_the_shell_running,
          test_every_command_prints_its_usage_for_help_options,
+         test_login_uses_the_passwd_file_when_there_is_one,
          test_soft_reset_boots_again,
          test_no_scheduler_queue_errors,
          test_no_traps_were_reported,
