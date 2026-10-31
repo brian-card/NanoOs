@@ -32,6 +32,9 @@
 #include "NanoOsLibC.h"
 #include "NanoOsPwd.h"
 #include "../kernel/NanoOs.h"
+#include "../kernel/Processes.h"
+#include "../kernel/Scheduler.h"
+#include "NanoOsStdio.h"
 
 /// @fn int populatePasswd(struct passwd *pwd, char *buf, size_t buflen,
 ///   const char *name, const char *passwd, uid_t uid, gid_t gid,
@@ -207,6 +210,135 @@ static const char _user2Home[] KEEP_IN_FLASH = "/home/user2";
 /// final binary on some targets.
 static const char _user2Passwd[] KEEP_IN_FLASH = "1491";
 
+/// @var _passwdFilePath
+///
+/// @brief Path to the file on the filesystem that holds the passwd database.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _passwdFilePath[] KEEP_IN_FLASH = "/etc/passwd";
+
+/// @var _readMode
+///
+/// @brief fopen() mode string used to open the passwd file for reading.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _readMode[] KEEP_IN_FLASH = "r";
+
+/// @fn static int parsePasswdId(const char *field)
+///
+/// @brief Parse a non-negative decimal user or group ID from a passwd field.
+///
+/// @param field The NUL-terminated field to parse.
+///
+/// @return Returns the ID on success, -1 if the field is not a valid ID.
+static int parsePasswdId(const char *field) {
+  unsigned int id = 0;
+  do {
+    if ((*field < '0') || (*field > '9') || (id > ((INT16_MAX - 9) / 10))) {
+      return -1;
+    }
+    id = (id * 10) + (*field - '0');
+  } while (*++field != '\0');
+  return (int) id;
+}
+
+/// @fn static int passwdFileLookup(const char *name, uid_t uid,
+///   struct passwd *pwd, char *buf, size_t buflen, struct passwd **result)
+///
+/// @brief Look up a user in /etc/passwd by name or, if name is NULL, by user
+/// ID.  Each line is read into buf and split in place, so the strings in the
+/// populated pwd point into buf.
+///
+/// @param name The username to look up, or NULL to look up by uid.
+/// @param uid The user ID to look up when name is NULL.
+/// @param pwd A pointer to a struct passwd to populate.
+/// @param buf A pointer to a character buffer to hold the string data.
+/// @param buflen The number of bytes available in buf.
+/// @param result Set to pwd if the user is found, NULL otherwise.
+///
+/// @return Returns 0 if the file was searched, whether or not the user was
+/// found, ENOENT if /etc/passwd does not exist, and another errno value on
+/// error.
+static int passwdFileLookup(const char *name, uid_t uid,
+  struct passwd *pwd, char *buf, size_t buflen, struct passwd **result
+) {
+  FILE* (*openFile)(const char*, const char*) = fopen;
+  char* (*readLine)(char*, int, FILE*) = fgets;
+  int (*closeFile)(FILE*) = fclose;
+  // restartOverlayShell looks users up from the scheduler's own context.
+  if (getRunningPid() == schedulerPid) {
+    openFile = schedFopen;
+    readLine = schedFgets;
+    closeFile = schedFclose;
+  }
+  *result = NULL;
+
+  errno = 0;
+  FILE *passwdFile = openFile(_passwdFilePath, _readMode);
+  if (passwdFile == NULL) {
+    return (errno != 0) ? errno : EIO;
+  }
+
+  int returnValue = 0;
+  bool atLineStart = true;
+  while (readLine(buf, (int) buflen, passwdFile) != NULL) {
+    size_t length = strlen(buf);
+    bool lineStart = atLineStart;
+    atLineStart = (length > 0) && (buf[length - 1] == '\n');
+    if (!lineStart) {
+      continue;
+    }
+    bool truncated = (!atLineStart) && (length + 1 >= buflen);
+
+    char *fields[7];
+    fields[0] = buf;
+    uint8_t numFields = 1;
+    for (char *cursor = buf; *cursor != '\0'; cursor++) {
+      if ((*cursor == ':') && (numFields < 7)) {
+        *cursor = '\0';
+        fields[numFields++] = cursor + 1;
+      } else if ((*cursor == '\r') || (*cursor == '\n')) {
+        *cursor = '\0';
+      }
+    }
+
+    int fieldUid = (numFields > 2) ? parsePasswdId(fields[2]) : -1;
+    if ((name != NULL)
+      ? (strcmp(fields[0], name) != 0)
+      : ((fieldUid < 0) || (fieldUid != uid))
+    ) {
+      continue;
+    }
+
+    if (truncated) {
+      if (numFields > ((name != NULL) ? 1 : 3)) {
+        returnValue = ERANGE;
+        break;
+      }
+      continue;
+    }
+    int fieldGid = (numFields == 7) ? parsePasswdId(fields[3]) : -1;
+    if ((fieldUid < 0) || (fieldGid < 0)) {
+      continue;
+    }
+
+    pwd->pw_name = fields[0];
+    pwd->pw_passwd = fields[1];
+    pwd->pw_uid = (uid_t) fieldUid;
+    pwd->pw_gid = (gid_t) fieldGid;
+    pwd->pw_gecos = fields[4];
+    pwd->pw_dir = fields[5];
+    pwd->pw_shell = fields[6];
+    *result = pwd;
+    break;
+  }
+
+  closeFile(passwdFile);
+  return returnValue;
+}
+
 /// @fn int nanoOsGetpwnam_r(const char *name, struct passwd *pwd,
 ///   char *buf, size_t buflen, struct passwd **result)
 ///
@@ -241,7 +373,12 @@ int nanoOsGetpwnam_r(
     return EIO;
   }
   
-  int returnValue = 0;
+  int returnValue = passwdFileLookup(name, 0, pwd, buf, buflen, result);
+  if (returnValue != ENOENT) {
+    return returnValue;
+  }
+  
+  returnValue = 0;
   if (strcmp(name, _rootUsername) == 0) {
     returnValue = populatePasswd(pwd, buf, buflen,
     /* name= */ _rootUsername, /* passwd= */ _rootPasswd,
@@ -304,7 +441,12 @@ int nanoOsGetpwuid_r(
     return EIO;
   }
   
-  int returnValue = 0;
+  int returnValue = passwdFileLookup(NULL, uid, pwd, buf, buflen, result);
+  if (returnValue != ENOENT) {
+    return returnValue;
+  }
+  
+  returnValue = 0;
   if (uid == 0) {
     returnValue = populatePasswd(pwd, buf, buflen,
     /* name= */ _rootUsername, /* passwd= */ _rootPasswd,
