@@ -124,14 +124,18 @@ class Session:
         self.child.expect(r"Using (\d+) bytes of dynamic memory", timeout=15)
         return int(self.child.match.group(1))
 
-    def restart_with_config_sys(self, text):
-        """Write /etc/config.sys into this session's image and boot again."""
+    def restart_with_file(self, path, text):
+        """Write a file into this session's image and boot again."""
         if self.child.isalive():
             self.child.terminate(force=True)
         subprocess.run(["mcopy", "-o", "-i", self.img_copy + "@@2097152", "-",
-                        "::/etc/config.sys"], input=text.encode(),
+                        "::" + path], input=text.encode(),
                        env=dict(os.environ, MTOOLS_SKIP_CHECK="1"), check=True)
         self.spawn([self.img_copy])
+
+    def restart_with_config_sys(self, text):
+        """Write /etc/config.sys into this session's image and boot again."""
+        self.restart_with_file("/etc/config.sys", text)
 
     def restart_with_vdp(self, config_sys=VDP_CONFIG_SYS, **kwargs):
         """Boot again with vdp.drv serving a console on a FakeVdp.
@@ -921,6 +925,48 @@ def test_cd_changes_the_working_directory(s):
     assert "/usr/bin" not in s.sh("pwd"), \
         "bare cd did not return to the home directory"
     assert "alive" in s.sh("echo alive")
+
+
+PROFILE = "/root/.mush_profile"
+
+
+def test_login_runs_the_profile_once(s):
+    # Every foreground command restarts the shell, so a profile that ran again
+    # would undo the cd made after it.
+    s.restart_with_file(PROFILE,
+                        "# Set up.\n\n  cd /usr\nexport OLDPWD=/tmp\n")
+    s.login()
+    assert promptParts(s) == ("root", "/usr")
+    assert s.sh("echo restarted") == "restarted"
+    assert s.sh("cd -") == ""
+    assert promptParts(s) == ("root", "/tmp")
+    assert s.sh("cd /etc") == ""
+    assert s.sh("echo restarted") == "restarted"
+    assert help_text(s, "mush --help").splitlines()[0] == "Usage: mush"
+    assert promptParts(s) == ("root", "/etc")
+
+
+def test_profile_reports_lines_it_cannot_run(s):
+    long_line = "export LONG=" + "x" * 100
+    s.restart_with_file(PROFILE, "\n".join([
+        "echo leaked", long_line, "export NAME", "cd /usr", ""]))
+    s.login()
+    out = s.child.before.replace("\r", "")
+    assert out.split("Login successful!\n", 1)[1].strip("\n").splitlines() == [
+        ".mush_profile: line 1: echo: not a built-in command",
+        ".mush_profile: line 2: too long",
+        "Usage: export NAME=value"], out
+    assert promptParts(s) == ("root", "/usr")
+
+
+def test_export_sets_a_variable_later_commands_inherit(s):
+    s.login()
+    for command in ("export", "export =x", "export HOME =/tmp", "export HOME"):
+        assert s.sh(command) == "Usage: export NAME=value", command
+    assert s.sh("export HOME=/tmp  ") == ""
+    assert s.sh("echo restarted") == "restarted"
+    assert s.sh("cd") == ""
+    assert promptParts(s) == ("root", "/tmp")
 
 
 def test_ps_lists_kernel_processes(s):
