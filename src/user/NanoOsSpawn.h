@@ -48,8 +48,21 @@ extern "C"
 // Declared in NanoOsTypes.h.
 typedef struct FileDescriptor FileDescriptor;
 
-// Unimplemented:
-typedef struct posix_spawnattr_t posix_spawnattr_t;
+/// @def POSIX_SPAWN_FOREGROUND
+///
+/// @brief NanoOs extension:  posix_spawn flag that lends the caller's console
+/// port to the new process before it first runs.  The port returns when the
+/// process exits.
+#define POSIX_SPAWN_FOREGROUND 0x0100
+
+/// @struct posix_spawnattr_t
+///
+/// @brief Attributes of a process created by posix_spawn.
+///
+/// @param flags The POSIX_SPAWN_* flags that are set.
+typedef struct posix_spawnattr_t {
+  short flags;
+} posix_spawnattr_t;
 
 /// @struct Dup2
 ///
