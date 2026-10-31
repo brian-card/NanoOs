@@ -254,6 +254,7 @@ static const NanoOsUserApi _nanoOsUserApi = {
   
   // signal.h functions:
   .kill = nanoOsKill,
+  .waitpid = schedulerWaitpid,
   
   // spawn.h functions:
   .posix_spawn_file_actions_init = nanoOsSpawnFileActionsInit,

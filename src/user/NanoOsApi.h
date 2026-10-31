@@ -273,6 +273,9 @@ typedef struct NanoOsUserApi {
   // signal.h functions:
   int (*kill)(pid_t pid, int sig);
   
+  // sys/wait.h functions:
+  pid_t (*waitpid)(pid_t pid, int *status, int options);
+  
   // spawn.h functions:
   int (*posix_spawn_file_actions_init)(
     posix_spawn_file_actions_t *file_actions);
