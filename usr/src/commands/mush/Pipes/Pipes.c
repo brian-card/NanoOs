@@ -153,9 +153,12 @@ void* processPipes(void *args) {
   }
   
   // Make a backup copy of our stdin in case something goes wrong.
-  int stdinDup = dup(STDIN_FILENO);
-  if (stdinDup < 0) {
-    fprintf(stderr, "ERROR: dup of STDIN_FILENO returned %d\n", stdinDup);
+  fsCommandArgs->stdinDup = dup(STDIN_FILENO);
+  if (fsCommandArgs->stdinDup < 0) {
+    fprintf(stderr, "ERROR: dup of STDIN_FILENO returned %d\n",
+      fsCommandArgs->stdinDup);
+  } else {
+    fcntl(fsCommandArgs->stdinDup, F_SETFD, FD_CLOEXEC);
   }
   
   // dup the last command's pipe onto our stdin instead of using file actions
