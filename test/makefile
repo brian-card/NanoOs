@@ -115,7 +115,7 @@ SUITE_SRCS     := test_smoke test_unit_misc test_unit_strtoll test_unit_console 
                   test_kernel_fs_seek \
                   test_kernel_console_input \
                   test_kernel_exit_messages \
-                  test_kernel_kill test_kernel_wait \
+                  test_kernel_kill test_kernel_wait test_kernel_spawn_foreground \
                   test_kernel_wake \
                   test_unit_vdp_text \
                   test_unit_vdp_keyboard \
