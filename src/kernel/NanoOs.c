@@ -70,6 +70,7 @@ void defaultSignalHandler(int signum) {
     // stack, and the scheduler releases the message of a process killing itself.
     SchedulerKillProcessArgs schedulerKillProcessArgs = {
       .pid = getRunningPid(),
+      .signal = signum,
       .returnValue = 0,
       .errorNumber = 0,
     };
