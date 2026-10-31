@@ -512,6 +512,7 @@ def test_vdp_driver_holds_output_until_the_mouse_reset_is_done(s):
     assert (answered is not None) and (text_at >= answered), \
         "text was sent before the VDP finished resetting the mouse"
     assert answered - reset_at >= 1.9
+    assert_vdp_font(vdp)
     assert vdp.errors == [], f"unexpected VDU commands: {vdp.errors}"
 
 

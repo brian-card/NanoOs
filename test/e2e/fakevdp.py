@@ -101,6 +101,9 @@ CONSOLE_MODE = 0xFE
 SPRITES_RESET = 16
 ALL_BUFFERS = 0xFFFF
 LAYOUT_UK = 0
+# The real VDP's UART receive buffer, which bytes sent while it is busy
+# overflow:  the eZ80 stops waiting on CTS after about 17 ms.
+RX_BUFFER_SIZE = 256
 LAYOUT_US = 1
 # What the VDP's default UK layout gives for the keys of a US keyboard whose
 # characters differ between the two layouts.
@@ -178,6 +181,7 @@ class FakeVdp:
         self.mouse_reset_seconds = mouse_reset_seconds
         self.mouse_reset_until = 0.0
         self.mouse_reset_answered = None  # time of the poll answered after it
+        self.busy_bytes = 0    # bytes received during the last mouse reset
         self.listening = not answer
         self.errors = []
         if os.path.exists(path):
@@ -256,7 +260,14 @@ class FakeVdp:
                 return
             if not data:
                 return
-            yield from data
+            for byte in data:
+                if time.time() < self.mouse_reset_until:
+                    self.busy_bytes += 1
+                    if self.busy_bytes == RX_BUFFER_SIZE + 1:
+                        self.errors.append(
+                            "more than the receive buffer was sent during "
+                            "the mouse reset")
+                yield byte
 
     def _vdu23(self, stream):
         first = next(stream)
@@ -449,6 +460,7 @@ class FakeVdp:
                 if self.mouse_detected:
                     self.mouse_visible = True
                 self.mouse_reset_until = time.time() + self.mouse_reset_seconds
+                self.busy_bytes = 0
             self._event("mouse", "reset")
         elif command == MOUSE_DISABLE:
             with self.lock:
