@@ -52,7 +52,7 @@
 /// @def GETTY_COLORS
 ///
 /// @brief The colors getty sets the console to before showing the banner.
-#define GETTY_COLORS ((CGA_INDEX_BLACK << 4) | CGA_INDEX_LIGHT_GRAY)
+#define GETTY_COLORS ((CGA_INDEX_BLACK << 4) | CGA_INDEX_WHITE)
 
 CGA_TO_ANSI_MAP
 
