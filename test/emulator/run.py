@@ -417,6 +417,22 @@ def test_ed_writes_a_new_file(e):
     assert e.sh("cat /etc/ed.txt") == "one\ntwo\nthree"
 
 
+def test_scripts_run_by_path_and_with_mush(e):
+    e.send("ed\r")
+    for line in ("a", "echo s1", "cd /usr", "echo s2", "pwd", "."):
+        time.sleep(0.2)
+        e.send(line + "\r")
+    time.sleep(0.2)
+    e.send("w /etc/script\r")
+    e.child.expect(r"28\r*\n", timeout=20)
+    e.send("q\r")
+    e.child.expect(PROMPT, timeout=20)
+    before = e.sh("pwd")
+    for command in ("/etc/script", "mush /etc/script"):
+        assert e.sh(command) == "s1\ns2\n/usr", command
+        assert e.sh("pwd") == before, command
+
+
 def test_dirtest_reports_entry_types(e):
     out = e.sh("dirtest")
     assert 'd_name="hostname" d_type=8' in out, out
@@ -532,6 +548,7 @@ TESTS = [test_boots_to_a_login_prompt,
          test_mv_moves_a_command_into_its_directory,
          test_directories_grow_past_their_first_cluster,
          test_ed_writes_a_new_file,
+         test_scripts_run_by_path_and_with_mush,
          test_dirtest_reports_entry_types,
          test_dump_memory_allocations_lists_the_heap,
          test_kill_terminates_a_background_process,

@@ -932,31 +932,97 @@ PROFILE = "/root/.mush_profile"
 
 def test_login_runs_the_profile_once(s):
     # Every foreground command restarts the shell, so a profile that ran again
-    # would undo the cd made after it.
-    s.restart_with_file(PROFILE,
-                        "# Set up.\n\n  cd /usr\nexport OLDPWD=/tmp\n")
+    # would undo the cd made after it.  The export after echo shows the profile
+    # resumed after the command replaced the shell.
+    s.restart_with_file(PROFILE, "# Set up.\n\n  cd /usr\necho from-profile\n"
+                        "export OLDPWD=/tmp\n")
     s.login()
+    out = s.child.before.replace("\r", "")
+    assert out.split("Login successful!\n", 1)[1].strip("\n") \
+        == "from-profile", out
     assert promptParts(s) == ("root", "/usr")
     assert s.sh("echo restarted") == "restarted"
     assert s.sh("cd -") == ""
     assert promptParts(s) == ("root", "/tmp")
     assert s.sh("cd /etc") == ""
     assert s.sh("echo restarted") == "restarted"
-    assert help_text(s, "mush --help").splitlines()[0] == "Usage: mush"
+    assert help_text(s, "mush --help").splitlines()[0] == "Usage: mush [script]"
     assert promptParts(s) == ("root", "/etc")
 
 
-def test_profile_reports_lines_it_cannot_run(s):
+def test_profile_skips_a_line_that_is_too_long(s):
     long_line = "export LONG=" + "x" * 100
     s.restart_with_file(PROFILE, "\n".join([
-        "echo leaked", long_line, "export NAME", "cd /usr", ""]))
+        "echo one", long_line, "export NAME", "cd /usr", ""]))
     s.login()
     out = s.child.before.replace("\r", "")
     assert out.split("Login successful!\n", 1)[1].strip("\n").splitlines() == [
-        ".mush_profile: line 1: echo: not a built-in command",
-        ".mush_profile: line 2: too long",
+        "one",
+        PROFILE + ": line 2: too long",
         "Usage: export NAME=value"], out
     assert promptParts(s) == ("root", "/usr")
+
+
+def write_files(s, files):
+    """Write files into the session's image, boot again, and log in as root.
+
+    @param s The Session.
+    @param files A dict of absolute path to file contents.
+    """
+    if s.child.isalive():
+        s.child.terminate(force=True)
+    for path, text in files.items():
+        subprocess.run(["mcopy", "-o", "-i", s.img_copy + "@@2097152", "-",
+                        "::" + path], input=text.encode(),
+                       env=dict(os.environ, MTOOLS_SKIP_CHECK="1"), check=True)
+    s.spawn([s.img_copy])
+    s.login()
+
+
+GREET = "echo hello\ncd /etc\nexport OLDPWD=/tmp\necho world\npwd\n"
+
+
+def test_script_runs_by_name_path_and_mush(s):
+    # Each echo replaces the shell, so every later line runs in a restarted
+    # shell that has to find its place in the script again.
+    write_files(s, {"/root/greet": GREET})
+    home = promptParts(s)[1]
+    assert s.sh("cd /usr") == ""
+    for command in ("/root/greet", "../root/greet", "mush /root/greet"):
+        assert s.sh(command) == "hello\nworld\n/etc", command
+        assert promptParts(s) == ("root", "/usr"), command
+    assert s.sh("cd") == ""
+    assert s.sh("./greet") == "hello\nworld\n/etc"
+    assert s.sh("export PATH=/usr/bin:" + home) == ""
+    assert s.sh("greet") == "hello\nworld\n/etc"
+    assert promptParts(s) == ("root", home)
+    assert s.sh("cd -") == ""
+    assert promptParts(s) == ("root", "/usr"), "the script's export leaked"
+
+
+def test_script_runs_scripts_inside_it(s):
+    write_files(s, {
+        "/root/outer": "echo outer-start\n./inner\nmush inner\necho outer-end\n",
+        "/root/inner": "echo inner\nexit\necho not-reached\n",
+        "/root/again": "echo level\n./again\necho unwound\n",
+    })
+    assert s.sh("./outer") == "outer-start\ninner\ninner\nouter-end"
+    assert s.sh("./again") == "\n".join(
+        ["level"] * 9
+        + ["/root/again: Too many scripts running inside each other"]
+        + ["unwound"] * 9)
+    assert s.sh("echo alive") == "alive"
+
+
+def test_script_refuses_the_background_and_missing_files(s):
+    write_files(s, {"/root/greet": GREET})
+    for command in ("./greet &", "echo a | ./greet"):
+        assert s.sh(command) == \
+            "/root/greet: A script can't run in the background or in a pipeline"
+    assert s.sh("mush missing") == "missing: No such entry found"
+    assert s.sh("./missing") == "./missing: command not found"
+    assert promptParts(s)[1] == "/root"
+    assert s.sh("echo alive") == "alive"
 
 
 def test_export_sets_a_variable_later_commands_inherit(s):
@@ -1634,6 +1700,12 @@ def test_ed_quits_when_too_little_memory_is_left_to_edit(s):
     assert ll_names(s, "/tmp") == []
 
 
+def test_pipe_into_a_missing_command_leaves_the_shell_reading_the_console(s):
+    s.login()
+    assert s.sh("echo a | nosuch") == "nosuch: command not found"
+    assert s.sh("echo alive") == "alive"
+
+
 def test_pipe_between_commands(s):
     s.login()
     assert "needle-in-haystack" in s.sh("echo needle-in-haystack | grep needle")
@@ -2006,7 +2078,7 @@ def test_mush_help_leaves_the_user_logged_in(s):
     user, pwd = promptParts(s)
     heaps = []
     for _ in range(8):
-        assert help_text(s, "mush --help").splitlines()[0] == "Usage: mush"
+        assert help_text(s, "mush --help").splitlines()[0] == "Usage: mush [script]"
         assert promptParts(s) == (user, pwd)
         assert s.sh("pwd") == "/etc"
         assert ps_entries(s) == before
