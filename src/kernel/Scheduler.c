@@ -49,6 +49,7 @@
 // User space includes
 #include "../user/NanoOsLibC.h"
 #include "../user/NanoOsSignal.h"
+#include "../user/NanoOsSpawn.h"
 #include "../user/NanoOsWait.h"
 #include "../user/NanoOsUnistd.h"
 
@@ -3938,6 +3939,22 @@ int schedulerSpawnCommandHandler(
     }
 
     spawnArgs->fileActions = NULL;
+  }
+
+  if ((spawnArgs->attrp != NULL)
+    && (spawnArgs->attrp->flags & POSIX_SPAWN_FOREGROUND)
+  ) {
+    ConsoleLendPortArgs consoleLendPortArgs = {
+      .lender = execArgs->callingPid,
+      .borrower = processDescriptor->processId,
+    };
+    if (schedulerInitSendMessageToPid(consolePid,
+      CONSOLE_COMMAND_SIGNATURE | CONSOLE_LEND_PORT,
+      &consoleLendPortArgs, sizeof(consoleLendPortArgs)) != processSuccess
+    ) {
+      logError("Could not lend process %d's console port to process %d\n",
+        execArgs->callingPid, processDescriptor->processId);
+    }
   }
 
   if (processCreate(processDescriptor, execCommand, execArgs)
