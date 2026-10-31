@@ -331,7 +331,6 @@ void* execOverlayCommand(void *args) {
   ExecArgs *execArgs = (ExecArgs*) args;
   if (execArgs == NULL) {
     logError("No arguments provided to execOverlayCommand.\n");
-    releaseConsole();
     return (void*) ((intptr_t) -1);
   }
   // Let the caller finish its work.
@@ -342,7 +341,6 @@ void* execOverlayCommand(void *args) {
   if ((argv == NULL) || (argv[0] == NULL)) {
     // Fail.
     logError("Invalid argv.\n");
-    releaseConsole();
     return (void*) ((intptr_t) -1);
   }
   int argc = 0;
@@ -353,7 +351,6 @@ void* execOverlayCommand(void *args) {
   if (processDescriptor == NULL) {
     // This should be impossible.
     logError("No running process.\n");
-    releaseConsole();
     return (void*) ((intptr_t) -1);
   }
   // Input left unread by the slot's previous program isn't this one's.
@@ -448,7 +445,6 @@ void* execOverlayCommand(void *args) {
     free(passwdStringBuffer);
   }
 
-  releaseConsole();
 
   // ***DO NOT*** attempt to free the ExecArgs that were passed in, period.
   // The memory will be cleaned up by the scheduler after we exit.  Freeing
