@@ -48,6 +48,7 @@
 
 // User space includes
 #include "../user/NanoOsLibC.h"
+#include "../user/NanoOsSignal.h"
 #include "../user/NanoOsUnistd.h"
 
 // Must come last
@@ -1827,6 +1828,7 @@ static const char _killCouldNotRelease[] KEEP_IN_FLASH
 int schedulerKillProcess(ProcessId pid) {
   SchedulerKillProcessArgs schedulerKillProcessArgs = {
     .pid = pid,
+    .signal = SIGKILL,
     .returnValue = 0,
     .errorNumber = 0,
   };
@@ -3123,6 +3125,8 @@ int schedulerKillProcessCommandHandler(
         || (callingUserId == ROOT_USER_ID))
     ) {
       ProcessDescriptor *processDescriptor = &allProcesses[processIndex];
+      processDescriptor->exitStatus
+        = (uint8_t) (128 + schedulerKillProcessArgs->signal);
       // Regardless of whether or not we succeed at terminating it, we have
       // to remove it from its queue.  We don't know which queue it's on,
       // though.  The fact that we're killing it makes it likely that it's hung.
@@ -5004,8 +5008,15 @@ static const char *_loggerArgs[] = {
 /// process on its own stack.
 static const char *shellArgs[] = {
   NULL, // argv[0], set by runScheduler
+  NULL, // The exit status option, set by restartOverlayShell
   NULL,
 };
+
+/// @var _shellStatusOption
+///
+/// @brief The option that tells a restarted shell the exit status of the
+/// program that ran before it.  The digits are written by restartOverlayShell.
+static char _shellStatusOption[] = "--status=255";
 
 /// @var _consoleName
 ///
@@ -5250,6 +5261,17 @@ int restartOverlayShell(ProcessDescriptor *processDescriptor) {
       break;
     }
     shellArgs[0] = strrchr(pwd->pw_shell, '/') + 1;
+    char *digit = &_shellStatusOption[sizeof("--status=") - 1];
+    uint8_t exitStatus = processDescriptor->exitStatus;
+    if (exitStatus >= 100) {
+      *digit++ = '0' + (exitStatus / 100);
+    }
+    if (exitStatus >= 10) {
+      *digit++ = '0' + ((exitStatus / 10) % 10);
+    }
+    *digit++ = '0' + (exitStatus % 10);
+    *digit = '\0';
+    shellArgs[1] = _shellStatusOption;
     returnValue = schedulerRunOverlayCommand(processDescriptor,
       pwd->pw_shell, (char**) shellArgs, processDescriptor->envp);
     if (returnValue == -EBUSY) {
