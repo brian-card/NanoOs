@@ -121,6 +121,17 @@ typedef struct ConsoleColorsArgs {
   int     returnValue;
 } ConsoleColorsArgs;
 
+/// @struct ConsoleLendPortArgs
+///
+/// @brief Arguments for the CONSOLE_LEND_PORT command.
+///
+/// @param lender The process ID of the process lending its port.
+/// @param borrower The process ID of the process to lend the port to.
+typedef struct ConsoleLendPortArgs {
+  ProcessId lender;
+  ProcessId borrower;
+} ConsoleLendPortArgs;
+
 /// @struct ConsoleReleasePidPortArgs
 ///
 /// @param Arguments and return value for the CONSOLE_RELEASE_PID_PORT command.
@@ -190,6 +201,7 @@ typedef enum ConsoleCommandResponse {
   CONSOLE_GET_UART_PORT,
   CONSOLE_GET_COLORS,
   CONSOLE_SET_COLORS,
+  CONSOLE_LEND_PORT,
   NUM_CONSOLE_COMMANDS,
   // Responses:
   CONSOLE_RETURNING_INPUT,
@@ -282,6 +294,8 @@ void consoleGetUartPortCommandHandler(
 void consoleGetColorsCommandHandler(
   ConsoleState *consoleState, ProcessMessage *inputMessage);
 void consoleSetColorsCommandHandler(
+  ConsoleState *consoleState, ProcessMessage *inputMessage);
+void consoleLendPortCommandHandler(
   ConsoleState *consoleState, ProcessMessage *inputMessage);
 
 // Exported processes

@@ -1172,6 +1172,45 @@ void consoleSetColorsCommandHandler(
   return;
 }
 
+/// @fn void consoleLendPortCommandHandler(
+///   ConsoleState *consoleState, ProcessMessage *inputMessage)
+///
+/// @brief Give the input and output of every console port a process owns to
+/// another process.  Only the scheduler may send this, and a lender that owns
+/// no port lends nothing.
+///
+/// @param consoleState A pointer to the ConsoleState being maintained by the
+///   runConsole function that's running.
+/// @param inputMessage A pointer to the ProcessMessage with the received
+///   command.  Its data is a ConsoleLendPortArgs.
+///
+/// @return This function returns no value.
+void consoleLendPortCommandHandler(
+  ConsoleState *consoleState, ProcessMessage *inputMessage
+) {
+  ConsoleLendPortArgs *consoleLendPortArgs
+    = (ConsoleLendPortArgs*) processMessageData(inputMessage);
+  ConsolePort *consolePorts = consoleState->consolePorts;
+
+  if (processPid(processMessageFrom(inputMessage)) == schedulerPid) {
+    for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
+      if (consolePorts[ii].inputOwner != consoleLendPortArgs->lender) {
+        continue;
+      }
+      consolePorts[ii].inputOwner = consoleLendPortArgs->borrower;
+      consolePorts[ii].outputOwner = consoleLendPortArgs->borrower;
+      consolePorts[ii].consoleBuffer->owner = consoleLendPortArgs->borrower;
+      consolePorts[ii].consoleBuffer->bufferAwaitingRelease = false;
+      consolePorts[ii].modes = CONSOLE_MODE_DEFAULT;
+    }
+  }
+
+  processMessageSetDone(inputMessage);
+  consoleMessageCleanup(inputMessage);
+
+  return;
+}
+
 /// @typedef ConsoleCommandHandler
 ///
 /// @brief Signature of command handler for a console command.
@@ -1200,6 +1239,7 @@ const ConsoleCommandHandler consoleCommandHandlers[] = {
   consoleGetUartPortCommandHandler,     // CONSOLE_GET_UART_PORT
   consoleGetColorsCommandHandler,       // CONSOLE_GET_COLORS
   consoleSetColorsCommandHandler,       // CONSOLE_SET_COLORS
+  consoleLendPortCommandHandler,        // CONSOLE_LEND_PORT
 };
 
 /// @fn static bool consoleHoldsInput(
