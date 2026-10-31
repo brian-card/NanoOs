@@ -946,6 +946,15 @@ def test_passwd_file_replaces_the_built_in_users(s):
     s.login("root", "toor")
 
 
+def test_shipped_passwd_file_matches_the_built_in_users(s):
+    with open(os.path.join(REPO_ROOT, "etc", "passwd")) as passwd:
+        s.restart_with_file("/etc/passwd", passwd.read())
+    for user in ("root", "user1", "user2"):
+        s.login(user, user * 2)
+        assert promptParts(s)[0] == user
+        s.child.sendline("exit")
+
+
 def test_passwd_entry_too_long_for_the_buffer_is_an_error(s):
     s.restart_with_file("/etc/passwd", PASSWD_FILE)
     s.wait_login_prompt()
