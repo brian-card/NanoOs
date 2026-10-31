@@ -56,7 +56,7 @@ extern "C"
 /// @brief Value to be used to indicate that a process ID has not been set for
 /// a ProcessDescriptor object.
 #define PROCESS_ID_NOT_SET \
-  ((uint8_t) 0x0f)
+  ((uint8_t) 0xff)
 
 /// @def PROCESS_STATE_WAIT
 ///
