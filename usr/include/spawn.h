@@ -38,6 +38,7 @@
 #define SPAWN_H
 
 #include "NanoOsUser.h"
+#include "errno.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -62,6 +63,29 @@ static inline int posix_spawn_file_actions_destroy(
 ) {
   return overlayMap.header.osApi->userApi->posix_spawn_file_actions_destroy(
     file_actions);
+}
+static inline int posix_spawnattr_init(posix_spawnattr_t *attr) {
+  attr->flags = 0;
+  return 0;
+}
+static inline int posix_spawnattr_destroy(posix_spawnattr_t *attr) {
+  (void) attr;
+  return 0;
+}
+static inline int posix_spawnattr_setflags(posix_spawnattr_t *attr,
+  short flags
+) {
+  if ((flags & ~POSIX_SPAWN_FOREGROUND) != 0) {
+    return EINVAL;
+  }
+  attr->flags = flags;
+  return 0;
+}
+static inline int posix_spawnattr_getflags(const posix_spawnattr_t *attr,
+  short *flags
+) {
+  *flags = attr->flags;
+  return 0;
 }
 static inline int posix_spawn(pid_t *pid, const char *path,
   const posix_spawn_file_actions_t *file_actions,
