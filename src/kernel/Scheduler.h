@@ -90,10 +90,12 @@ typedef struct ShellProgram {
 /// @brief Arguments and return values for the SCHEDULER_KILL_PROCESS command.
 ///
 /// @param pid The process ID of the process to kill.
+/// @param signal The signal that the process is being killed with.
 /// @param returnValue The returnValue of the command handler.
 /// @param errorNumber The errno value to set in the calling process.
 typedef struct SchedulerKillProcessArgs {
   ProcessId pid;
+  int signal;
   int returnValue;
   int errorNumber;
 } SchedulerKillProcessArgs;
