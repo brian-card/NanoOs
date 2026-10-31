@@ -72,7 +72,8 @@ extern "C"
 #define EAGAIN          24      /* Try again */
 #define ENOTDIR         25      /* Not a directory */
 #define EEXIST          26      /* File exists */
-#define ELAST           26      /* End of error codes */
+#define ECHILD          27      /* No child processes */
+#define ELAST           27      /* End of error codes */
 
 int* errno_(void);
 #define errno (*errno_())

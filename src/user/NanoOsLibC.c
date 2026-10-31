@@ -78,6 +78,7 @@ const char errorStrings[][33] KEEP_IN_FLASH = {
   "Try again",                        // EAGAIN
   "Not a directory",                  // ENOTDIR
   "File exists",                      // EEXIST
+  "No child processes",               // ECHILD
 };
 
 /// @def NUM_ERRORS
