@@ -316,7 +316,7 @@ int nanoOsSpawn(
   if (processMessage == NULL) {
     // The only way this should be possible is if all available messages are
     // in use, so use ENOMEM as the errno.
-    errno = ENOMEM;
+    returnValue = ENOMEM;
     goto freeSpawnArgs;
   }
 
