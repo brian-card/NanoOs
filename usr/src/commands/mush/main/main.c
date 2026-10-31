@@ -43,6 +43,11 @@
 /// @brief The maximum number of bytes that the CLI can accept in MUSH.
 #define MUSH_COMMAND_LINE_LENGTH 96
 
+/// @def MUSH_PROFILE_NAME
+///
+/// @brief The name of the file in HOME that a login shell runs at startup.
+#define MUSH_PROFILE_NAME ".mush_profile"
+
 #undef printDebug
 #ifdef MUSH_DEBUG
 #define printDebug(...) fprintf(stderr, __VA_ARGS__)
@@ -62,6 +67,7 @@ static void printUsage(FILE *stream) {
     "\n"
     "Run the MUSH shell.  Each line is a command followed by its arguments,\n"
     "separated by spaces.  Commands are looked up in the directories in PATH.\n"
+    "Lines starting with # are ignored.\n"
     "\n"
     "  command &          run a command in the background\n"
     "  command | command  send one command's output to the next one's input\n"
@@ -69,10 +75,15 @@ static void printUsage(FILE *stream) {
     "Up and Down recall earlier commands, which are kept in\n"
     "$HOME/.mush_history.\n"
     "\n"
+    "A login shell first runs $HOME/" MUSH_PROFILE_NAME ", which can only use\n"
+    "built-in commands.\n"
+    "\n"
     "Built-in commands:\n"
     "  cd [directory]  change the working directory; cd alone goes to HOME\n"
     "                  and \"cd -\" goes back to the previous directory\n"
     "  pwd             print the working directory\n"
+    "  export NAME=value\n"
+    "                  set an environment variable\n"
     "  exit            exit the shell\n"
     "\n"
     "Options:\n"
@@ -104,8 +115,34 @@ int main(int argc, char **argv) {
     lineEditorArgs.prompt = '#';
   }
   
+  // login starts the shell as "-mush"; restarts after a command use "mush".
+  FILE *profile = NULL;
+  int profileLine = 0;
+  char *home = getenv("HOME");
+  if ((argv[0][0] == '-') && (home != NULL)) {
+    snprintf(buffer, MUSH_COMMAND_LINE_LENGTH, "%s/" MUSH_PROFILE_NAME, home);
+    profile = fopen(buffer, "r");
+  }
+  
   do {
-    if (callOverlayFunction(
+    if (profile != NULL) {
+      if (fgets(lineEditorArgs.line, MUSH_COMMAND_LINE_LENGTH, profile)
+        == NULL
+      ) {
+        fclose(profile);
+        profile = NULL;
+        continue;
+      }
+      profileLine++;
+      if ((strchr(lineEditorArgs.line, '\n') == NULL) && !feof(profile)) {
+        fprintf(stderr, MUSH_PROFILE_NAME ": line %d: too long\n",
+          profileLine);
+        while ((fgets(lineEditorArgs.line, MUSH_COMMAND_LINE_LENGTH, profile)
+          != NULL) && (strchr(lineEditorArgs.line, '\n') == NULL));
+        continue;
+      }
+      lineEditorArgs.line[strcspn(lineEditorArgs.line, "\r\n")] = '\0';
+    } else if (callOverlayFunction(
       OVERLAY_SAME_NAMESPACE, "LineEditor", "readLine", &lineEditorArgs)
       == NULL
     ) {
@@ -135,7 +172,7 @@ int main(int argc, char **argv) {
     // overlays.  We should always be able to exit and release all the process
     // resources.
     input = &input[strspn(input, " \t")];
-    if (*input == '\0') {
+    if ((*input == '\0') || (*input == '#')) {
       continue;
     } else if (strcmp(input, "exit") == 0) {
       break;
@@ -154,7 +191,14 @@ int main(int argc, char **argv) {
       // The command wasn't processed as a built-in.  Try running it from the
       // filesystem.
       printDebug("Command is *NOT* a builtin\n");
-      if (strchr(input, '|')) {
+      if (profile != NULL) {
+        // Running a command would exec over the shell and end the profile.
+        if (returnValue == -2) {
+          fprintf(stderr,
+            MUSH_PROFILE_NAME ": line %d: %.*s: not a built-in command\n",
+            profileLine, (int) strcspn(input, " \t"), input);
+        }
+      } else if (strchr(input, '|')) {
         // Command line contains pipes.  Process it that way.
         fsCommandArgs.commandLine = input;
         fsCommandArgs.launchBackground = false;
@@ -196,6 +240,9 @@ int main(int argc, char **argv) {
       }
     }
   } while (returnValue != -1);
+  if (profile != NULL) {
+    fclose(profile);
+  }
   free(buffer);
   
   printf("Gracefully exiting %s\n", argv[0]);
