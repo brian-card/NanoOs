@@ -544,7 +544,6 @@ IpcCapability baseMemoryManagerIpcCapabilities[] = {
     .signature      = CONSOLE_COMMAND_SIGNATURE,
     .messageTypes
       = (((uint32_t) 1) << CONSOLE_WRITE_VALUE)
-      | (((uint32_t) 1) << CONSOLE_RELEASE_PORT)
   },
   {
     .destinationPid = 0, // Logger PID to be set by scheduler
@@ -582,7 +581,6 @@ IpcCapability baseSupervisorIpcCapabilities[] = {
       = (((uint32_t) 1) << CONSOLE_WRITE_VALUE)
       | (((uint32_t) 1) << CONSOLE_GET_BUFFER)
       | (((uint32_t) 1) << CONSOLE_WRITE_BUFFER)
-      | (((uint32_t) 1) << CONSOLE_RELEASE_PORT)
       | (((uint32_t) 1) << CONSOLE_GET_OWNED_PORT)
       | (((uint32_t) 1) << CONSOLE_GET_MODES)
       | (((uint32_t) 1) << CONSOLE_SET_MODES)
@@ -645,7 +643,6 @@ IpcCapability baseUserIpcCapabilities[] = {
     .messageTypes
       = (((uint32_t) 1) << CONSOLE_GET_BUFFER)
       | (((uint32_t) 1) << CONSOLE_WRITE_BUFFER)
-      | (((uint32_t) 1) << CONSOLE_RELEASE_PORT)
       | (((uint32_t) 1) << CONSOLE_RELEASE_BUFFER)
   },
   {
@@ -803,6 +800,36 @@ int addProcessHalCapability(ProcessDescriptor *processDescriptor,
   return 0;
 }
 
+/// @fn static int ipcCapabilitiesMakePrivate(
+///   ProcessDescriptor *processDescriptor)
+///
+/// @brief Give a process its own copy of its ipcCapabilities array if it's
+/// still using one of the base arrays, which every process at its privilege
+/// level shares.
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor with the
+///   ipcCapabilities array to copy.
+///
+/// @return Returns 0 on success, -ENOMEM on failure.
+static int ipcCapabilitiesMakePrivate(ProcessDescriptor *processDescriptor) {
+  if (processDescriptor->ipcCapabilitiesDynamic == true) {
+    return 0;
+  }
+  IpcCapability *copy = (IpcCapability*) schedMalloc(
+    sizeof(IpcCapability) * (processDescriptor->numIpcCapabilities + 1));
+  if (copy == NULL) {
+    logError("malloc returned NULL when trying to allocate "
+      "%d IpcCapability objects\n",
+      processDescriptor->numIpcCapabilities + 1);
+    return -ENOMEM;
+  }
+  memcpy(copy, processDescriptor->ipcCapabilities,
+    sizeof(IpcCapability) * processDescriptor->numIpcCapabilities);
+  processDescriptor->ipcCapabilities = copy;
+  processDescriptor->ipcCapabilitiesDynamic = true;
+  return 0;
+}
+
 /// @fn int addProcessIpcCapability(ProcessDescriptor *processDescriptor,
 ///   ProcessId destinationPid, int64_t signature, uint32_t messageType)
 ///
@@ -821,6 +848,9 @@ int addProcessHalCapability(ProcessDescriptor *processDescriptor,
 int addProcessIpcCapability(ProcessDescriptor *processDescriptor,
   ProcessId destinationPid, int64_t signature, uint32_t messageType
 ) {
+  if (ipcCapabilitiesMakePrivate(processDescriptor) != 0) {
+    return -ENOMEM;
+  }
   IpcCapability *capability = NULL;
   size_t ii = 0;
   if (processDescriptor->numIpcCapabilities > 0) {
@@ -850,35 +880,16 @@ int addProcessIpcCapability(ProcessDescriptor *processDescriptor,
 
   // If we made it this far then the destination PID doesn't exist in the
   // process's capabilities yet, so we'll have to extend the array.
-  if (processDescriptor->ipcCapabilitiesDynamic == true) {
-    // Resize the existing array.  This is the expected case.
-    logDebug("Extending existing array\n");
-    void *check = schedRealloc(processDescriptor->ipcCapabilities,
-      sizeof(IpcCapability) * (processDescriptor->numIpcCapabilities + 1));
-    if (check == NULL) {
-      logError("realloc returned NULL when trying to allocate "
-        "%d IpcCapability objects\n",
-        processDescriptor->numIpcCapabilities + 1);
-      return -ENOMEM;
-    }
-    processDescriptor->ipcCapabilities = (IpcCapability*) check;
-  } else {
-    // Array is one of the statically-allocated ones.  We'll have to make a
-    // copy first.
-    logDebug("Copying to new array\n");
-    void *copy = schedMalloc(
-      sizeof(IpcCapability) * (processDescriptor->numIpcCapabilities + 1));
-    if (copy == NULL) {
-      logError("malloc returned NULL when trying to allocate "
-        "%d IpcCapability objects\n",
-        processDescriptor->numIpcCapabilities + 1);
-      return -ENOMEM;
-    }
-    memcpy(copy, processDescriptor->ipcCapabilities,
-      sizeof(IpcCapability) * processDescriptor->numIpcCapabilities);
-    processDescriptor->ipcCapabilities = (IpcCapability*) copy;
-    processDescriptor->ipcCapabilitiesDynamic = true;
+  logDebug("Extending existing array\n");
+  void *check = schedRealloc(processDescriptor->ipcCapabilities,
+    sizeof(IpcCapability) * (processDescriptor->numIpcCapabilities + 1));
+  if (check == NULL) {
+    logError("realloc returned NULL when trying to allocate "
+      "%d IpcCapability objects\n",
+      processDescriptor->numIpcCapabilities + 1);
+    return -ENOMEM;
   }
+  processDescriptor->ipcCapabilities = (IpcCapability*) check;
 
   logDebug("Adding new capability to send message type %ld from process "
     "%ld to process %ld\n",
@@ -921,7 +932,14 @@ int removeProcessIpcCapability(ProcessDescriptor *processDescriptor,
     }
   }
 
-  if (capability != NULL) {
+  if ((capability != NULL)
+    && (capability->messageTypes & (((uint32_t) 1) << messageType))
+  ) {
+    size_t index = (size_t) (capability - processDescriptor->ipcCapabilities);
+    if (ipcCapabilitiesMakePrivate(processDescriptor) != 0) {
+      return -ENOMEM;
+    }
+    capability = &processDescriptor->ipcCapabilities[index];
     // Exclude the message type from the existing capability's messageTypes.
     capability->messageTypes &= ~(((uint32_t) 1) << messageType);
   }
@@ -3129,6 +3147,34 @@ int loadProcessDescriptorOverlayMetadata(ProcessDescriptor *processDescriptor) {
   return returnValue;
 }
 
+/// @fn static int schedulerReleaseConsolePorts(
+///   ProcessDescriptor *processDescriptor)
+///
+/// @brief Give the console ports an exiting process owns to its parent, or to
+/// each port's shell if it has no parent.
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor of the exiting
+///   process.
+///
+/// @return Returns processSuccess on success, processError on failure.
+static int schedulerReleaseConsolePorts(ProcessDescriptor *processDescriptor) {
+  ConsoleReleasePidPortArgs consoleReleasePidPortArgs = {
+    .processId = processDescriptor->processId,
+    .newOwner = (processDescriptor->parentPid != 0)
+      ? processDescriptor->parentPid : PROCESS_ID_NOT_SET,
+  };
+  int returnValue = schedulerInitSendMessageToPid(
+    consolePid,
+    CONSOLE_COMMAND_SIGNATURE | CONSOLE_RELEASE_PID_PORT,
+    /* data= */ &consoleReleasePidPortArgs,
+    /* size= */ sizeof(consoleReleasePidPortArgs));
+  if (returnValue != processSuccess) {
+    logError("Could not send CONSOLE_RELEASE_PID_PORT message "
+      "to console process\n");
+  }
+  return returnValue;
+}
+
 /// @fn int schedulerKillProcessCommandHandler(
 ///   SchedulerState *schedulerState, ProcessMessage *processMessage)
 ///
@@ -3201,18 +3247,9 @@ int schedulerKillProcessCommandHandler(
         // the process because, in the event the process we're terminating is
         // one of the shell process slots, the message won't get released
         // because there's no shell blocking waiting for the message.
-        ConsoleReleasePidPortArgs consoleReleasePidPortArgs = {
-          .processId = pid,
-        };
-        if (schedulerInitSendMessageToPid(
-          consolePid,
-          CONSOLE_COMMAND_SIGNATURE | CONSOLE_RELEASE_PID_PORT,
-          /* data= */ &consoleReleasePidPortArgs,
-          /* size= */ sizeof(consoleReleasePidPortArgs)) != processSuccess
+        if (schedulerReleaseConsolePorts(processDescriptor)
+          != processSuccess
         ) {
-          logError(
-            "Could not send CONSOLE_RELEASE_PID_PORT message "
-            "to console process\n");
           schedulerKillProcessArgs->returnValue = 1;
           schedulerKillProcessArgs->errorNumber = EBUSY;
         }
@@ -3836,6 +3873,29 @@ int schedulerSpawnCommandHandler(
   processDescriptor->zombie = false;
   processDescriptor->exitStatus = 0;
   processDescriptor->exitSignal = 0;
+  if (processDescriptor->ipcCapabilitiesDynamic == true) {
+    schedFree(processDescriptor->ipcCapabilities);
+  }
+  processDescriptor->ipcCapabilities = baseUserIpcCapabilities;
+  processDescriptor->numIpcCapabilities
+    = sizeof(baseUserIpcCapabilities) / sizeof(baseUserIpcCapabilities[0]);
+  processDescriptor->ipcCapabilitiesDynamic = false;
+  if ((spawnArgs->attrp != NULL)
+    && (spawnArgs->attrp->flags & POSIX_SPAWN_ALLOW_SPAWN)
+    && (addProcessIpcCapability(processDescriptor, schedulerPid,
+      SCHEDULER_COMMAND_SIGNATURE, SCHEDULER_SPAWN) != 0)
+  ) {
+    logError("Could not let process %d spawn\n",
+      processDescriptor->processId);
+  }
+  if ((spawnArgs->attrp != NULL)
+    && false
+    && (addProcessIpcCapability(processDescriptor, schedulerPid,
+      SCHEDULER_COMMAND_SIGNATURE, SCHEDULER_KILL_PROCESS) != 0)
+  ) {
+    logError("Could not let process %d kill\n",
+      processDescriptor->processId);
+  }
   processDescriptor->waitMessage = NULL;
   execArgs->pathname = spawnArgs->path;
   execArgs->argv = spawnArgs->argv;
@@ -4096,6 +4156,7 @@ int schedulerSendSignalCommandHandler(
     // above, so just return good status here.
     sendSignalArgs->returnValue = 0;
     sendSignalArgs->errorNumber = 0;
+    processMessageSetDone(processMessage);
     goto exit; // return 0
   }
 
@@ -4153,6 +4214,7 @@ int schedulerSendSignalCommandHandler(
 
   sendSignalArgs->returnValue = 0;
   sendSignalArgs->errorNumber = 0;
+  processMessageSetDone(processMessage);
 
 exit:
   if (processMessageWaiting(processMessage) == false) {
@@ -4451,20 +4513,7 @@ int schedulerCleanupProcessCommandHandler(
   }
 
   processCompleteMessagesTo(processDescriptor);
-  if (processDescriptor->privilegeLevel == PRIVILEGE_LEVEL_EXECUTIVE) {
-    ConsoleReleasePidPortArgs consoleReleasePidPortArgs = {
-      .processId = processDescriptor->processId,
-    };
-    if (schedulerInitSendMessageToPid(
-      consolePid,
-      CONSOLE_COMMAND_SIGNATURE | CONSOLE_RELEASE_PID_PORT,
-      /* data= */ &consoleReleasePidPortArgs,
-      /* size= */ sizeof(consoleReleasePidPortArgs)) != processSuccess
-    ) {
-      logError("Could not send CONSOLE_RELEASE_PID_PORT message "
-        "to console process\n");
-    }
-  }
+  schedulerReleaseConsolePorts(processDescriptor);
 
   if (processDescriptor->envp != NULL) {
     if (assignMemory(processDescriptor->envp[0], 0) != 0) {
@@ -4824,19 +4873,7 @@ void removeProcess(
   processDescriptor->userId = NO_USER_ID;
   processDescriptor->mainThread->state = PROCESS_STATE_NOT_RUNNING;
   processCompleteMessagesTo(processDescriptor);
-
-  ConsoleReleasePidPortArgs consoleReleasePidPortArgs = {
-    .processId = processDescriptor->processId,
-  };
-  if (schedulerInitSendMessageToPid(
-    consolePid,
-    CONSOLE_COMMAND_SIGNATURE | CONSOLE_RELEASE_PID_PORT,
-    /* data= */ &consoleReleasePidPortArgs,
-    /* size= */ sizeof(consoleReleasePidPortArgs)) != processSuccess
-  ) {
-    logError("Could not send CONSOLE_RELEASE_PID_PORT message "
-      "to console process\n");
-  }
+  schedulerReleaseConsolePorts(processDescriptor);
 
   MemoryManagerFreeProcessMemoryArgs memoryManagerFreeProcessMemoryArgs = {
     .pid = processDescriptor->processId,
