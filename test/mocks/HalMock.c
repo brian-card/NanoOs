@@ -387,6 +387,10 @@ void halMockSetStaticLogs(StaticLogs *staticLogs) {
   _staticLogsPtr = staticLogs;
 }
 
+ProcessQueue* halMockFreeQueue(void) {
+  return (ProcessQueue*) &_freeQueue;
+}
+
 static int mockLogEntriesFn(int32_t deviceId, va_list args) {
   (void) deviceId;
   LogEntry **returnValue = va_arg(args, LogEntry**);

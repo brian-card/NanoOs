@@ -57,6 +57,7 @@ typedef enum MockStorageMode {
 /// @brief Per-boot configuration for the mock HAL.
 // Declared in kernel/Logger.h; only ever handled by pointer here.
 typedef struct StaticLogs StaticLogs;
+typedef struct ProcessQueue ProcessQueue;
 
 typedef struct HalMockConfig {
   MockClockMode   clock;
@@ -135,6 +136,14 @@ void halMockSetUartPollOnly(int32_t deviceId, bool isPollOnly);
 ///
 /// @return This function returns no value.
 void halMockSetStaticLogs(StaticLogs *staticLogs);
+
+/// @fn ProcessQueue* halMockFreeQueue(void)
+///
+/// @brief Get the queue the mock hands the scheduler for free process slots,
+/// without the HAL capability check that a test process would fail.
+///
+/// @return Returns a pointer to the free queue.
+ProcessQueue* halMockFreeQueue(void);
 
 /// @fn int halMockInit(const HalMockConfig *config, jmp_buf *powerReturn)
 ///
