@@ -65,6 +65,7 @@ enum NanoOsErrnoValue {
   NANO_OS_EAGAIN       = EAGAIN,
   NANO_OS_ENOTDIR      = ENOTDIR,
   NANO_OS_EEXIST       = EEXIST,
+  NANO_OS_ECHILD       = ECHILD,
 };
 
 #undef errno
@@ -95,6 +96,7 @@ enum NanoOsErrnoValue {
 #undef EAGAIN
 #undef ENOTDIR
 #undef EEXIST
+#undef ECHILD
 #undef ELAST
 
 #include <errno.h>
@@ -139,6 +141,7 @@ int posixErrnoToNanoOs(int linuxErrno) {
     case EAGAIN:       return NANO_OS_EAGAIN;
     case ENOTDIR:      return NANO_OS_ENOTDIR;
     case EEXIST:       return NANO_OS_EEXIST;
+    case ECHILD:       return NANO_OS_ECHILD;
     default:           return NANO_OS_EOTHER;
   }
 }
