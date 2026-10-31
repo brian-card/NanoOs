@@ -1,0 +1,3 @@
+# Commands run by mush at login.
+export PATH=${PATH}:${HOME}/bin
+ms
