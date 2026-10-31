@@ -404,6 +404,7 @@ void* execOverlayCommand(void *args) {
   } while (0);
   processDescriptor->exitStatus
     = (returnValue < 0) ? 255 : (uint8_t) returnValue;
+  processDescriptor->exitSignal = 0;
 
   if (processDescriptor->userId != NO_USER_ID) {
     // If this command was a shell process then we need to clear out the user ID
