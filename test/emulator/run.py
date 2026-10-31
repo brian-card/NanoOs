@@ -433,6 +433,14 @@ def test_scripts_run_by_path_and_with_mush(e):
         assert e.sh("pwd") == before, command
 
 
+def test_variables_and_exit_status_expand(e):
+    assert e.sh("echo ${USER} x$USER") == "root xroot"
+    e.sh("cat /missing")
+    assert e.sh("echo $?") == "1"
+    e.sh("nosuch")
+    assert e.sh("echo $?") == "127"
+
+
 def test_dirtest_reports_entry_types(e):
     out = e.sh("dirtest")
     assert 'd_name="hostname" d_type=8' in out, out
@@ -549,6 +557,7 @@ TESTS = [test_boots_to_a_login_prompt,
          test_directories_grow_past_their_first_cluster,
          test_ed_writes_a_new_file,
          test_scripts_run_by_path_and_with_mush,
+         test_variables_and_exit_status_expand,
          test_dirtest_reports_entry_types,
          test_dump_memory_allocations_lists_the_heap,
          test_kill_terminates_a_background_process,

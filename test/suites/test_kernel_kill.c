@@ -14,6 +14,7 @@
 #include "kernel/Processes.h"
 #include "kernel/Scheduler.h"
 #include "user/NanoOsErrno.h"
+#include "user/NanoOsSignal.h"
 
 /// @fn static void* idleProcess(void *args)
 ///
@@ -54,16 +55,18 @@ static ProcessDescriptor* startIdleProcess(PrivilegeLevel privilegeLevel) {
   return processDescriptor;
 }
 
-/// @fn static SchedulerKillProcessArgs killPid(ProcessId pid)
+/// @fn static SchedulerKillProcessArgs killPid(ProcessId pid, int signal)
 ///
 /// @brief Ask the scheduler to kill a process and wait for its answer.
 ///
 /// @param pid The ProcessId of the process to kill.
+/// @param signal The signal to kill the process with.
 ///
 /// @return Returns the SchedulerKillProcessArgs as the scheduler left them.
-static SchedulerKillProcessArgs killPid(ProcessId pid) {
+static SchedulerKillProcessArgs killPid(ProcessId pid, int signal) {
   SchedulerKillProcessArgs schedulerKillProcessArgs = {
     .pid = pid,
+    .signal = signal,
     .returnValue = 0,
     .errorNumber = 0,
   };
@@ -83,7 +86,7 @@ NANO_OS_KERNEL_TEST(kill, executive_process_in_a_user_slot_survives) {
   ProcessDescriptor *target = startIdleProcess(PRIVILEGE_LEVEL_EXECUTIVE);
   NANO_OS_ASSERT_NOT_NULL(target);
 
-  SchedulerKillProcessArgs result = killPid(target->processId);
+  SchedulerKillProcessArgs result = killPid(target->processId, SIGKILL);
 
   NANO_OS_ASSERT_EQ_INT(1, result.returnValue);
   NANO_OS_ASSERT_EQ_INT(EACCES, result.errorNumber);
@@ -93,7 +96,7 @@ NANO_OS_KERNEL_TEST(kill, executive_process_in_a_user_slot_survives) {
 NANO_OS_KERNEL_TEST(kill, kernel_process_survives_root) {
   getRunningProcess()->userId = ROOT_USER_ID;
 
-  SchedulerKillProcessArgs result = killPid(consolePid);
+  SchedulerKillProcessArgs result = killPid(consolePid, SIGKILL);
 
   NANO_OS_ASSERT_EQ_INT(1, result.returnValue);
   NANO_OS_ASSERT_EQ_INT(EACCES, result.errorNumber);
@@ -105,16 +108,27 @@ NANO_OS_KERNEL_TEST(kill, user_process_is_killed) {
   ProcessDescriptor *target = startIdleProcess(PRIVILEGE_LEVEL_USER);
   NANO_OS_ASSERT_NOT_NULL(target);
 
-  SchedulerKillProcessArgs result = killPid(target->processId);
+  SchedulerKillProcessArgs result = killPid(target->processId, SIGKILL);
 
   NANO_OS_ASSERT_EQ_INT(0, result.returnValue);
   NANO_OS_ASSERT_FALSE(processRunning(target));
 }
 
+NANO_OS_KERNEL_TEST(kill, killed_process_exit_status_names_the_signal) {
+  getRunningProcess()->userId = ROOT_USER_ID;
+  ProcessDescriptor *target = startIdleProcess(PRIVILEGE_LEVEL_USER);
+  NANO_OS_ASSERT_NOT_NULL(target);
+
+  SchedulerKillProcessArgs result = killPid(target->processId, SIGTERM);
+
+  NANO_OS_ASSERT_EQ_INT(0, result.returnValue);
+  NANO_OS_ASSERT_EQ_INT(128 + SIGTERM, target->exitStatus);
+}
+
 NANO_OS_KERNEL_TEST(kill, pid_zero_is_invalid) {
   getRunningProcess()->userId = ROOT_USER_ID;
 
-  SchedulerKillProcessArgs result = killPid(0);
+  SchedulerKillProcessArgs result = killPid(0, SIGKILL);
 
   NANO_OS_ASSERT_EQ_INT(1, result.returnValue);
   NANO_OS_ASSERT_EQ_INT(EINVAL, result.errorNumber);

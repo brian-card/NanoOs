@@ -988,6 +988,10 @@ def write_files(s, files):
     if s.child.isalive():
         s.child.terminate(force=True)
     for path, text in files.items():
+        subprocess.run(["mmd", "-i", s.img_copy + "@@2097152",
+                        "::" + os.path.dirname(path)],
+                       env=dict(os.environ, MTOOLS_SKIP_CHECK="1"),
+                       capture_output=True)
         subprocess.run(["mcopy", "-o", "-i", s.img_copy + "@@2097152", "-",
                         "::" + path], input=text.encode(),
                        env=dict(os.environ, MTOOLS_SKIP_CHECK="1"), check=True)
@@ -1039,6 +1043,49 @@ def test_script_refuses_the_background_and_missing_files(s):
     assert s.sh("./missing") == "./missing: command not found"
     assert promptParts(s)[1] == "/root"
     assert s.sh("echo alive") == "alive"
+
+
+def test_profile_adds_a_directory_to_the_path(s):
+    write_files(s, {PROFILE: "export PATH=${PATH}:${HOME}/bin\n",
+                    "/root/bin/hello": "echo hello from bin\n"})
+    assert s.sh("echo $PATH") == "/usr/bin:/root/bin"
+    assert s.sh("hello") == "hello from bin"
+    assert s.sh("echo $?") == "0"
+
+
+def test_variables_expand_in_command_lines(s):
+    s.login()
+    home = promptParts(s)[1]
+    assert s.sh("echo $HOME ${USER} x${USER}y $UNSET- \\$HOME ${HOME $") \
+        == home + " root xrooty - $HOME ${HOME $"
+    assert s.sh("export GREETING=hi") == ""
+    assert s.sh("echo ${GREETING}there") == "hithere"
+    assert s.sh("$UNSET") == ""
+    assert s.sh("cd ${HOME}/../etc") == ""
+    assert promptParts(s) == ("root", "/etc")
+
+
+def test_exit_status_reports_the_last_command(s):
+    s.login()
+    for command, status in (("echo ok", "0"), ("cat /missing", "1"),
+                            ("nosuch", "127"), ("export", "1"),
+                            ("pwd", "0")):
+        s.sh(command)
+        assert s.sh("echo $?") == status, command
+    help_text(s, "mush --help")
+    assert s.sh("echo ${?}") == "0"
+    s.child.sendline("tightLoop")
+    time.sleep(0.5)
+    s.child.sendcontrol("c")
+    s.child.expect(PROMPT, timeout=10)
+    assert s.sh("echo $?") == "130"
+
+
+def test_script_sees_the_exit_status_of_its_commands(s):
+    write_files(s, {"/root/status": "cat /missing\necho status=$?\n"
+                                    "nosuch\necho status=$?\n"})
+    assert s.sh("./status").splitlines()[1:] == [
+        "status=1", "nosuch: command not found", "status=127"]
 
 
 def test_export_sets_a_variable_later_commands_inherit(s):
