@@ -35,6 +35,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/stat.h>
 
 #include "mush.h"
 #include "NanoOsUtils.h"
@@ -86,6 +87,11 @@ void* runFsCommand(void *args) {
   pid_t pid = 0; // We'll return this if posix_spawn is successful.
   int launchErrno = ENOENT;
   const char *path = getenv("PATH");
+  const char *slashAt = strchr(fsCommandArgs->commandLine, '/');
+  if ((slashAt != NULL) && (slashAt < charAt)) {
+    // A name with a slash is a path to the command rather than a name in PATH.
+    path = (*fsCommandArgs->commandLine == '/') ? "/" : getenv("PWD");
+  }
   while ((launchErrno == ENOENT) && (path != NULL) && (*path != '\0')) {
     charAt = strchr(path, ':');
     if (charAt == NULL) {
@@ -112,6 +118,7 @@ void* runFsCommand(void *args) {
     }
     commandPath[pathDirLength] = '\0';
     strncat(commandPath, fsCommandArgs->commandLine, commandNameLength);
+    pathCollapse(commandPath);
 
     if (fsCommandArgs->launchBackground == false) {
       // Run the command in the foreground.  i.e. Replace this shell.  This is
@@ -122,6 +129,17 @@ void* runFsCommand(void *args) {
       // Spawn a new task in the background.
       launchErrno = posix_spawn(&pid, commandPath, fsCommandArgs->fileActions,
         NULL, argv, environ);
+    }
+    struct stat commandStat;
+    if ((launchErrno != 0) && (lstat(commandPath, &commandStat) == 0)
+      && !S_ISDIR(commandStat.st_mode)
+    ) {
+      // Programs are directories, so this is a script for the shell to run.
+      fsCommandArgs->scriptPath = commandPath;
+      free(argv); argv = NULL;
+      errno = 0;
+      returnValue = NULL;
+      goto exit;
     }
     free(commandPath); commandPath = NULL;
   }
