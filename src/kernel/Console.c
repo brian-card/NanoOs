@@ -578,45 +578,6 @@ void consoleAssignPortCommandHandler(
   return;
 }
 
-/// @fn void consoleReleasePortCommandHandler(
-///   ConsoleState *consoleState, ProcessMessage *inputMessage)
-///
-/// @brief Release all the ports currently owned by a process.
-///
-/// @param consoleState A pointer to the ConsoleState being maintained by the
-///   runConsole function that's running.
-/// @param inputMessage A pointer to the ProcessMessage with the received
-///   command.
-///
-/// @return This function returns no value.
-void consoleReleasePortCommandHandler(
-  ConsoleState *consoleState, ProcessMessage *inputMessage
-) {
-  ProcessId owner = processPid(processMessageFrom(inputMessage));
-  ConsolePort *consolePorts = consoleState->consolePorts;
-
-  for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
-    if (consolePorts[ii].outputOwner == owner) {
-      consolePorts[ii].outputOwner = consolePorts[ii].shell;
-      consolePorts[ii].consoleBuffer->owner = consolePorts[ii].shell;
-    }
-    if (consolePorts[ii].inputOwner == owner) {
-      consolePorts[ii].inputOwner = consolePorts[ii].shell;
-      consolePorts[ii].consoleBuffer->owner = consolePorts[ii].shell;
-      consolePorts[ii].consoleBuffer->bufferAwaitingRelease = false;
-      consolePorts[ii].modes = CONSOLE_MODE_DEFAULT;
-    }
-  }
-
-  // Since piped commands still attempt to release a port on completion, we
-  // will not print a warning if we didn't successfully release anything.
-
-  processMessageSetDone(inputMessage);
-  consoleMessageCleanup(inputMessage);
-
-  return;
-}
-
 /// @fn void consoleGetOwnedPortCommandHandler(
 ///   ConsoleState *consoleState, ProcessMessage *inputMessage)
 ///
@@ -812,14 +773,22 @@ void consoleReleasePidPortCommandHandler(
     = (ConsoleReleasePidPortArgs*) processMessageData(inputMessage);
   ConsolePort *consolePorts = consoleState->consolePorts;
 
+  ProcessId processId = consoleReleasePidPortArgs->processId;
   for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
-    if (consolePorts[ii].inputOwner == consoleReleasePidPortArgs->processId) {
-      consolePorts[ii].inputOwner = consolePorts[ii].shell;
+    ProcessId newOwner = consoleReleasePidPortArgs->newOwner;
+    if (newOwner == PROCESS_ID_NOT_SET) {
+      newOwner = consolePorts[ii].shell;
+    }
+    if (consolePorts[ii].consoleBuffer->owner == processId) {
+      consolePorts[ii].consoleBuffer->owner = newOwner;
+    }
+    if (consolePorts[ii].inputOwner == processId) {
+      consolePorts[ii].inputOwner = newOwner;
       consolePorts[ii].consoleBuffer->bufferAwaitingRelease = false;
       consolePorts[ii].modes = CONSOLE_MODE_DEFAULT;
     }
-    if (consolePorts[ii].outputOwner == consoleReleasePidPortArgs->processId) {
-      consolePorts[ii].outputOwner = consolePorts[ii].shell;
+    if (consolePorts[ii].outputOwner == processId) {
+      consolePorts[ii].outputOwner = newOwner;
     }
     if ((consolePorts[ii].forwardingPid
         == consoleReleasePidPortArgs->processId)
@@ -1226,7 +1195,6 @@ const ConsoleCommandHandler consoleCommandHandlers[] = {
   consoleWriteBufferCommandHandler,     // CONSOLE_WRITE_BUFFER
   consoleSetPortShellCommandHandler,    // CONSOLE_SET_PORT_SHELL
   consoleAssignPortCommandHandler,      // CONSOLE_ASSIGN_PORT
-  consoleReleasePortCommandHandler,     // CONSOLE_RELEASE_PORT
   consoleGetOwnedPortCommandHandler,    // CONSOLE_GET_OWNED_PORT
   consoleGetModesCommandHandler,        // CONSOLE_GET_MODES
   consoleSetModesCommandHandler,        // CONSOLE_SET_MODES
@@ -2055,26 +2023,6 @@ int printConsoleString(const char *message) {
 }
 
 // Console port support functions.
-
-/// @fn void releaseConsole(void)
-///
-/// @brief Release the console and display the command prompt to the user again.
-///
-/// @return This function returns no value.
-void releaseConsole(void) {
-  // releaseConsole is sometimes called from within handleCommand, which runs
-  // from within the console process.  That means we can't do blocking prints
-  // from this function.  i.e. We can't use printf here.  Use printConsole
-  // instead.
-  if (initSendProcessMessageToPid(consolePid,
-    CONSOLE_COMMAND_SIGNATURE | CONSOLE_RELEASE_PORT,
-    /* data= */ 0, /* size= */ 0, false) == NULL
-  ) {
-    logError("Could not send CONSOLE_RELEASE_PORT message to "
-      "console process\n");
-  }
-  processYield();
-}
 
 /// @fn int getOwnedConsolePort(void)
 ///

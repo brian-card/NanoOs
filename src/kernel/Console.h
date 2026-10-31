@@ -137,8 +137,11 @@ typedef struct ConsoleLendPortArgs {
 /// @param Arguments and return value for the CONSOLE_RELEASE_PID_PORT command.
 ///
 /// @param processId Process ID of the process to release the port of.
+/// @param newOwner Process ID of the process to give the port to, or
+///   PROCESS_ID_NOT_SET to give it to the port's shell.
 typedef struct ConsoleReleasePidPortArgs {
   ProcessId processId;
+  ProcessId newOwner;
 } ConsoleReleasePidPortArgs;
 
 /// @struct ConsoleGetNumPortsArgs
@@ -188,7 +191,6 @@ typedef enum ConsoleCommandResponse {
   CONSOLE_WRITE_BUFFER,
   CONSOLE_SET_PORT_SHELL,
   CONSOLE_ASSIGN_PORT,
-  CONSOLE_RELEASE_PORT,
   CONSOLE_GET_OWNED_PORT,
   CONSOLE_GET_MODES,
   CONSOLE_SET_MODES,
@@ -260,7 +262,6 @@ typedef enum ConsoleValueType {
 } ConsoleValueType;
 
 // Support functions
-void releaseConsole(void);
 int getOwnedConsolePort(void);
 int getConsoleModes(void);
 int setConsoleModes(uint8_t modes);
