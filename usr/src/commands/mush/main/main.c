@@ -63,7 +63,7 @@
 /// @return This function returns no value.
 static void printUsage(FILE *stream) {
   fputs(
-    "Usage: mush\n"
+    "Usage: mush [script]\n"
     "\n"
     "Run the MUSH shell.  Each line is a command followed by its arguments,\n"
     "separated by spaces.  Commands are looked up in the directories in PATH.\n"
@@ -75,8 +75,10 @@ static void printUsage(FILE *stream) {
     "Up and Down recall earlier commands, which are kept in\n"
     "$HOME/.mush_history.\n"
     "\n"
-    "A login shell first runs $HOME/" MUSH_PROFILE_NAME ", which can only use\n"
-    "built-in commands.\n"
+    "A script is a file of command lines, run with \"mush script\" or by\n"
+    "naming it like a command.  Changes it makes to the environment are undone\n"
+    "when it ends, and exit ends it.  A login shell first runs\n"
+    "$HOME/" MUSH_PROFILE_NAME ", whose changes are kept.\n"
     "\n"
     "Built-in commands:\n"
     "  cd [directory]  change the working directory; cd alone goes to HOME\n"
@@ -115,33 +117,32 @@ int main(int argc, char **argv) {
     lineEditorArgs.prompt = '#';
   }
   
+  ScriptArgs scriptArgs = {
+    .line = buffer,
+    .size = MUSH_COMMAND_LINE_LENGTH,
+    .path = argv[1],
+    .isProfile = false,
+    .inBackground = false,
+  };
   // login starts the shell as "-mush"; restarts after a command use "mush".
-  FILE *profile = NULL;
-  int profileLine = 0;
   char *home = getenv("HOME");
   if ((argv[0][0] == '-') && (home != NULL)) {
     snprintf(buffer, MUSH_COMMAND_LINE_LENGTH, "%s/" MUSH_PROFILE_NAME, home);
-    profile = fopen(buffer, "r");
+    scriptArgs.path = buffer;
+    scriptArgs.isProfile = true;
+  }
+  if (scriptArgs.path != NULL) {
+    callOverlayFunction(
+      OVERLAY_SAME_NAMESPACE, "Script", "startScript", &scriptArgs);
   }
   
   do {
-    if (profile != NULL) {
-      if (fgets(lineEditorArgs.line, MUSH_COMMAND_LINE_LENGTH, profile)
-        == NULL
-      ) {
-        fclose(profile);
-        profile = NULL;
-        continue;
-      }
-      profileLine++;
-      if ((strchr(lineEditorArgs.line, '\n') == NULL) && !feof(profile)) {
-        fprintf(stderr, MUSH_PROFILE_NAME ": line %d: too long\n",
-          profileLine);
-        while ((fgets(lineEditorArgs.line, MUSH_COMMAND_LINE_LENGTH, profile)
-          != NULL) && (strchr(lineEditorArgs.line, '\n') == NULL));
-        continue;
-      }
-      lineEditorArgs.line[strcspn(lineEditorArgs.line, "\r\n")] = '\0';
+    bool fromScript = false;
+    if ((getenv("MUSH_SCRIPT1") != NULL) && (callOverlayFunction(
+      OVERLAY_SAME_NAMESPACE, "Script", "readScriptLine", &scriptArgs)
+      != NULL)
+    ) {
+      fromScript = true;
     } else if (callOverlayFunction(
       OVERLAY_SAME_NAMESPACE, "LineEditor", "readLine", &lineEditorArgs)
       == NULL
@@ -175,6 +176,11 @@ int main(int argc, char **argv) {
     if ((*input == '\0') || (*input == '#')) {
       continue;
     } else if (strcmp(input, "exit") == 0) {
+      if (fromScript) {
+        callOverlayFunction(
+          OVERLAY_SAME_NAMESPACE, "Script", "endScript", NULL);
+        continue;
+      }
       break;
     }
     
@@ -191,14 +197,8 @@ int main(int argc, char **argv) {
       // The command wasn't processed as a built-in.  Try running it from the
       // filesystem.
       printDebug("Command is *NOT* a builtin\n");
-      if (profile != NULL) {
-        // Running a command would exec over the shell and end the profile.
-        if (returnValue == -2) {
-          fprintf(stderr,
-            MUSH_PROFILE_NAME ": line %d: %.*s: not a built-in command\n",
-            profileLine, (int) strcspn(input, " \t"), input);
-        }
-      } else if (strchr(input, '|')) {
+      fsCommandArgs.scriptPath = NULL;
+      if (strchr(input, '|')) {
         // Command line contains pipes.  Process it that way.
         fsCommandArgs.commandLine = input;
         fsCommandArgs.launchBackground = false;
@@ -209,6 +209,7 @@ int main(int argc, char **argv) {
         fsCommandArgs.pipes[1] = NULL;
         fsCommandArgs.numProcessesLaunched = 0;
         fsCommandArgs.pipeIndex = 0;
+        fsCommandArgs.stdinDup = -1;
         errno = 0;
         FsCommandArgs *nextCommand = &fsCommandArgs;
         while (nextCommand == &fsCommandArgs) {
@@ -218,6 +219,12 @@ int main(int argc, char **argv) {
             OVERLAY_SAME_NAMESPACE, "FilesystemCommands", "runFsCommand",
             nextCommand);
         }
+        if (fsCommandArgs.stdinDup >= 0) {
+          // The last command didn't replace the shell, so take stdin back.
+          dup2(fsCommandArgs.stdinDup, STDIN_FILENO);
+          close(fsCommandArgs.stdinDup);
+        }
+        scriptArgs.inBackground = true;
       } else {
         fsCommandArgs.commandLine = input;
         fsCommandArgs.launchBackground = false;
@@ -237,12 +244,17 @@ int main(int argc, char **argv) {
         returnValue = (intptr_t) callOverlayFunction(
           OVERLAY_SAME_NAMESPACE, "FilesystemCommands", "runFsCommand",
           &fsCommandArgs);
+        scriptArgs.inBackground = fsCommandArgs.launchBackground;
+      }
+      if (fsCommandArgs.scriptPath != NULL) {
+        scriptArgs.path = fsCommandArgs.scriptPath;
+        scriptArgs.isProfile = false;
+        callOverlayFunction(
+          OVERLAY_SAME_NAMESPACE, "Script", "startScript", &scriptArgs);
+        free(fsCommandArgs.scriptPath);
       }
     }
   } while (returnValue != -1);
-  if (profile != NULL) {
-    fclose(profile);
-  }
   free(buffer);
   
   printf("Gracefully exiting %s\n", argv[0]);
