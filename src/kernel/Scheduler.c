@@ -49,6 +49,7 @@
 // User space includes
 #include "../user/NanoOsLibC.h"
 #include "../user/NanoOsSignal.h"
+#include "../user/NanoOsWait.h"
 #include "../user/NanoOsUnistd.h"
 
 // Must come last
@@ -570,6 +571,7 @@ IpcCapability baseSupervisorIpcCapabilities[] = {
       | (((uint32_t) 1) << SCHEDULER_SPAWN)
       | (((uint32_t) 1) << SCHEDULER_SEND_SIGNAL)
       | (((uint32_t) 1) << SCHEDULER_REPLACE_OVERLAY)
+      | (((uint32_t) 1) << SCHEDULER_WAIT_PID)
       | (((uint32_t) 1) << SCHEDULER_SHUTDOWN)
   },
   {
@@ -634,6 +636,7 @@ IpcCapability baseUserIpcCapabilities[] = {
       | (((uint32_t) 1) << SCHEDULER_GET_PROCESS_INFO)
       | (((uint32_t) 1) << SCHEDULER_GET_HOSTNAME)
       | (((uint32_t) 1) << SCHEDULER_REPLACE_OVERLAY)
+      | (((uint32_t) 1) << SCHEDULER_WAIT_PID)
   },
   {
     .destinationPid = 0, // Console PID to be set by scheduler
@@ -1868,6 +1871,46 @@ int schedulerKillProcess(ProcessId pid) {
   }
 
   return returnValue;
+}
+
+/// @fn ProcessId schedulerWaitpid(ProcessId pid, int *status, int options)
+///
+/// @brief Wait for a child process to exit, per the POSIX waitpid call.
+///
+/// @param pid The ID of the child to wait for, or (pid_t) -1 for any child.
+/// @param status A pointer to the int to store the child's wait status in, or
+///   NULL.
+/// @param options WNOHANG to return immediately if no child has exited, or 0.
+///
+/// @return Returns the ID of the child that exited, 0 if WNOHANG was given and
+/// none has, or (pid_t) -1 with errno set on failure.
+ProcessId schedulerWaitpid(ProcessId pid, int *status, int options) {
+  SchedulerWaitPidArgs schedulerWaitPidArgs = {
+    .pid = pid,
+    .options = options,
+    .childPid = 0,
+    .status = 0,
+    .errorNumber = 0,
+  };
+  ProcessMessage *processMessage = initSendProcessMessageToPid(
+    schedulerPid,
+    SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_WAIT_PID,
+    &schedulerWaitPidArgs, sizeof(schedulerWaitPidArgs), true);
+  if (processMessage == NULL) {
+    errno = EAGAIN;
+    return (ProcessId) -1;
+  }
+  processMessageWaitForDone(processMessage, NULL);
+  processMessageRelease(processMessage);
+
+  if (schedulerWaitPidArgs.errorNumber != 0) {
+    errno = schedulerWaitPidArgs.errorNumber;
+    return (ProcessId) -1;
+  }
+  if (status != NULL) {
+    *status = schedulerWaitPidArgs.status;
+  }
+  return schedulerWaitPidArgs.childPid;
 }
 
 /// @fn int schedulerSendSignal(ProcessId pid, int signal)
@@ -3127,6 +3170,8 @@ int schedulerKillProcessCommandHandler(
       ProcessDescriptor *processDescriptor = &allProcesses[processIndex];
       processDescriptor->exitStatus
         = (uint8_t) (128 + schedulerKillProcessArgs->signal);
+      processDescriptor->exitSignal
+        = (uint8_t) schedulerKillProcessArgs->signal;
       // Regardless of whether or not we succeed at terminating it, we have
       // to remove it from its queue.  We don't know which queue it's on,
       // though.  The fact that we're killing it makes it likely that it's hung.
@@ -3786,6 +3831,11 @@ int schedulerSpawnCommandHandler(
     return returnValue; // 0; Don't retry this command
   }
   execArgs->callingPid = processPid(processMessageFrom(processMessage));
+  processDescriptor->parentPid = execArgs->callingPid;
+  processDescriptor->zombie = false;
+  processDescriptor->exitStatus = 0;
+  processDescriptor->exitSignal = 0;
+  processDescriptor->waitMessage = NULL;
   execArgs->pathname = spawnArgs->path;
   execArgs->argv = spawnArgs->argv;
   execArgs->envp = spawnArgs->envp;
@@ -4235,6 +4285,117 @@ int schedulerShutdownCommandHandler(
   return returnValue;
 }
 
+/// @fn static int schedulerWaitStatus(ProcessDescriptor *processDescriptor)
+///
+/// @brief Encode how an exited process ended as a wait status.
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor of the exited
+///   process.
+///
+/// @return Returns the wait status, as decoded by the W* macros.
+static int schedulerWaitStatus(ProcessDescriptor *processDescriptor) {
+  if (processDescriptor->exitSignal != 0) {
+    return processDescriptor->exitSignal & 0x7f;
+  }
+  return ((int) processDescriptor->exitStatus) << 8;
+}
+
+/// @fn static void schedulerReapProcess(ProcessDescriptor *processDescriptor)
+///
+/// @brief Return the slot of an exited process to the free queue.
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor of the exited
+///   process.
+///
+/// @return This function returns no value.
+static void schedulerReapProcess(ProcessDescriptor *processDescriptor) {
+  processDescriptor->zombie = false;
+  processDescriptor->parentPid = 0;
+  processQueuePush(_schedulerState->freeQueue, processDescriptor);
+}
+
+/// @fn static bool schedulerDeliverExit(ProcessDescriptor *child)
+///
+/// @brief Complete the SCHEDULER_WAIT_PID message of an exited process's
+/// parent if the parent is waiting for it.
+///
+/// @param child A pointer to the ProcessDescriptor of the exited process.
+///
+/// @return Returns true if the parent was waiting for the process, false if
+/// not.
+static bool schedulerDeliverExit(ProcessDescriptor *child) {
+  ProcessDescriptor *parent = &allProcesses[child->parentPid - 1];
+  ProcessMessage *waitMessage = parent->waitMessage;
+  if (waitMessage == NULL) {
+    return false;
+  }
+  SchedulerWaitPidArgs *schedulerWaitPidArgs
+    = (SchedulerWaitPidArgs*) processMessageData(waitMessage);
+  if ((schedulerWaitPidArgs->pid != (ProcessId) -1)
+    && (schedulerWaitPidArgs->pid != child->processId)
+  ) {
+    return false;
+  }
+
+  schedulerWaitPidArgs->childPid = child->processId;
+  schedulerWaitPidArgs->status = schedulerWaitStatus(child);
+  schedulerWaitPidArgs->errorNumber = 0;
+  parent->waitMessage = NULL;
+  processMessageSetDone(waitMessage);
+  return true;
+}
+
+/// @fn static void schedulerReleaseExitedProcess(
+///   ProcessDescriptor *processDescriptor)
+///
+/// @brief Release the slot of a process that has exited and won't be
+/// restarted, keeping it as a zombie if its parent hasn't waited for it yet.
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor of the exited
+///   process.
+///
+/// @return This function returns no value.
+static void schedulerReleaseExitedProcess(
+  ProcessDescriptor *processDescriptor
+) {
+  if ((processDescriptor->parentPid == 0)
+    || schedulerDeliverExit(processDescriptor)
+  ) {
+    schedulerReapProcess(processDescriptor);
+  } else {
+    processDescriptor->zombie = true;
+  }
+}
+
+/// @fn static void schedulerOrphanChildren(
+///   ProcessDescriptor *processDescriptor)
+///
+/// @brief Detach an exiting process from the wait it was blocked on and from
+/// its children.  Zombie children have no one left to wait for them, so their
+/// slots are freed.
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor of the exiting
+///   process.
+///
+/// @return This function returns no value.
+static void schedulerOrphanChildren(ProcessDescriptor *processDescriptor) {
+  if (processDescriptor->waitMessage != NULL) {
+    processMessageRelease(processDescriptor->waitMessage);
+    processDescriptor->waitMessage = NULL;
+  }
+  for (ProcessId ii = 0; ii < numProcesses; ii++) {
+    ProcessDescriptor *child = &allProcesses[ii];
+    if (child->parentPid != processDescriptor->processId) {
+      continue;
+    }
+    if (child->zombie) {
+      schedulerReapProcess(child);
+    } else {
+      child->parentPid = 0;
+    }
+  }
+}
+
 /// @fn int schedulerCleanupProcessCommandHandler(
 ///   SchedulerState *schedulerState, ProcessMessage *processMessage)
 ///
@@ -4325,6 +4486,7 @@ terminateAndRestart:
   comessageQueueRemove(msg_to(&processDescriptor->message).coro,
     &processDescriptor->message);
   memset(&processDescriptor->message, 0, sizeof(ProcessMessage));
+  schedulerOrphanChildren(processDescriptor);
 
   if (processDescriptor->restartFunction != NULL) {
     logDebug("Process %ld has exited.  Restarting.\n",
@@ -4350,7 +4512,7 @@ terminateAndRestart:
   } else if (processState(processDescriptor) == PROCESS_STATE_TIMEDWAIT) {
     processQueuePush(_schedulerState->timedWaitingQueue, processDescriptor);
   } else if (processFinished(processDescriptor)) {
-    processQueuePush(_schedulerState->freeQueue, processDescriptor);
+    schedulerReleaseExitedProcess(processDescriptor);
   } else { // Process is still running.
     processQueuePush(_schedulerState->currentReady, processDescriptor);
   }
@@ -4360,6 +4522,59 @@ terminateAndRestart:
 exit:
   processMessageRelease(processMessage);
   return returnValue;
+}
+
+/// @fn int schedulerWaitPidCommandHandler(
+///   SchedulerState *schedulerState, ProcessMessage *processMessage)
+///
+/// @brief Wait for a child of the calling process to exit.  The message is
+/// held without being marked done until a child the caller is waiting for
+/// exits.
+///
+/// @param schedulerState A pointer to the SchedulerState maintained by the
+///   scheduler process.
+/// @param processMessage A pointer to the ProcessMessage that was received.
+///
+/// @return Returns 0 on success, non-zero error code on failure.
+int schedulerWaitPidCommandHandler(
+  SchedulerState *schedulerState, ProcessMessage *processMessage
+) {
+  (void) schedulerState;
+
+  ProcessDescriptor *caller = processMessageFrom(processMessage);
+  SchedulerWaitPidArgs *schedulerWaitPidArgs
+    = (SchedulerWaitPidArgs*) processMessageData(processMessage);
+  schedulerWaitPidArgs->childPid = 0;
+  schedulerWaitPidArgs->status = 0;
+  schedulerWaitPidArgs->errorNumber = ECHILD;
+
+  for (ProcessId ii = 0; ii < numProcesses; ii++) {
+    ProcessDescriptor *child = &allProcesses[ii];
+    if ((child->parentPid != caller->processId)
+      || ((schedulerWaitPidArgs->pid != (ProcessId) -1)
+        && (schedulerWaitPidArgs->pid != child->processId))
+    ) {
+      continue;
+    }
+    schedulerWaitPidArgs->errorNumber = 0;
+    if (child->zombie) {
+      schedulerWaitPidArgs->childPid = child->processId;
+      schedulerWaitPidArgs->status = schedulerWaitStatus(child);
+      schedulerReapProcess(child);
+      processMessageSetDone(processMessage);
+      return 0;
+    }
+  }
+
+  if ((schedulerWaitPidArgs->errorNumber != 0)
+    || (schedulerWaitPidArgs->options & WNOHANG)
+  ) {
+    processMessageSetDone(processMessage);
+    return 0;
+  }
+
+  caller->waitMessage = processMessage;
+  return 0;
 }
 
 /// @typedef SchedulerCommandHandler
@@ -4385,6 +4600,7 @@ const SchedulerCommandHandler schedulerCommandHandlers[] = {
   schedulerReplaceOverlayCommandHandler,    // SCHEDULER_REPLACE_OVERLAY
   schedulerShutdownCommandHandler,          // SCHEDULER_SHUTDOWN
   schedulerCleanupProcessCommandHandler,    // SCHEDULER_CLEANUP_PROCESS
+  schedulerWaitPidCommandHandler,           // SCHEDULER_WAIT_PID
 };
 
 /// @fn void handleSchedulerMessage(SchedulerState *schedulerState)
@@ -4634,6 +4850,8 @@ void removeProcess(
 static void schedulerAbortOverlayLoad(ProcessDescriptor *processDescriptor) {
   logError("%s in process %d\n",
     _overlayLoadFailureReason, processDescriptor->processId);
+  processDescriptor->exitStatus = 128 + SIGKILL;
+  processDescriptor->exitSignal = SIGKILL;
   processTerminate(processDescriptor, false);
   threadSetContext(processDescriptor->mainThread, processDescriptor);
 

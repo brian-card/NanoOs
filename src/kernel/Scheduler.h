@@ -100,6 +100,25 @@ typedef struct SchedulerKillProcessArgs {
   int errorNumber;
 } SchedulerKillProcessArgs;
 
+/// @struct SchedulerWaitPidArgs
+///
+/// @brief Arguments and return values for the SCHEDULER_WAIT_PID command.
+///
+/// @param pid The ID of the child to wait for, or (ProcessId) -1 for any
+///   child.
+/// @param options The waitpid options, WNOHANG or 0.
+/// @param childPid The ID of the child that exited, or 0 if WNOHANG was given
+///   and none has.
+/// @param status The child's wait status, as decoded by the W* macros.
+/// @param errorNumber The errno value to set in the calling process, or 0.
+typedef struct SchedulerWaitPidArgs {
+  ProcessId pid;
+  int options;
+  ProcessId childPid;
+  int status;
+  int errorNumber;
+} SchedulerWaitPidArgs;
+
 /// @struct SchedulerGetNumRunningProcessesArgs
 ///
 /// @brief Arguments and return values for the
@@ -236,6 +255,7 @@ typedef enum SchedulerCommandResponse {
   SCHEDULER_REPLACE_OVERLAY,
   SCHEDULER_SHUTDOWN,
   SCHEDULER_CLEANUP_PROCESS,
+  SCHEDULER_WAIT_PID,
   NUM_SCHEDULER_COMMANDS,
   // Responses:
   SCHEDULER_PROCESS_COMPLETE,
@@ -247,6 +267,7 @@ ProcessDescriptor* schedulerGetProcessById(unsigned int pid);
 ProcessId schedulerGetNumRunningProcesses(struct timespec *timeout);
 ProcessInfo* schedulerGetProcessInfo(void);
 int schedulerKillProcess(ProcessId pid);
+ProcessId schedulerWaitpid(ProcessId pid, int *status, int options);
 int schedulerSendSignal(ProcessId pid, int signal);
 int schedulerSetProcessUser(UserId userId);
 FileDescriptor* schedulerGetFileDescriptor(FILE *stream);
