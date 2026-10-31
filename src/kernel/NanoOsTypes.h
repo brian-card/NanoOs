@@ -259,6 +259,14 @@ typedef struct ProcessQueue ProcessQueue;
 ///   dynamically allocated.
 /// @param exitStatus The exit status of the last program to run in the
 ///   process slot:  its return value, or 128 plus the signal that killed it.
+/// @param exitSignal The signal that killed the last program to run in the
+///   process slot, or 0 if it returned.
+/// @param zombie Whether the process has exited but its parent hasn't waited
+///   for it yet, which keeps its slot out of the free queue.
+/// @param parentPid The ID of the process that spawned this one, or 0 if it
+///   has none or its parent has exited.
+/// @param waitMessage The SCHEDULER_WAIT_PID message the process is blocked
+///   on until one of its children exits, or NULL.
 /// @param halCapabilityBitmap One bit per HAL function, set for each function
 ///   granted in halCapabilities.  Built by setProcessHalCapabilities.
 /// @param halDeviceMasks For each HalSubsystem, the bitmask of device IDs the
@@ -290,6 +298,10 @@ typedef struct ProcessDescriptor {
   bool                ipcCapabilitiesDynamic;
   bool                halCapabilitiesDynamic;
   uint8_t             exitStatus;
+  uint8_t             exitSignal;
+  bool                zombie;
+  ProcessId           parentPid;
+  ProcessMessage     *waitMessage;
   // Kept last so that these share the tail padding after the bools above.
   uint8_t             halCapabilityBitmap[HAL_CAPABILITY_BITMAP_SIZE];
   uint8_t             halDeviceMasks[HAL_DEVICE_MASKS_SIZE];
