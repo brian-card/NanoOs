@@ -89,6 +89,27 @@ void* processBuiltin(void *args) {
     setenv("PWD", path, true);
     
     free(path); path = NULL;
+  } else if ((strncmp(input, "export", 6) == 0)
+    && ((input[6] == '\0') || (input[6] == ' ') || (input[6] == '\t'))
+  ) {
+    input = &input[6];
+    input = &input[strspn(input, " \t")];
+    char *equals = &input[strcspn(input, " \t=")];
+    if ((equals == input) || (*equals != '=')) {
+      fputs("Usage: export NAME=value\n", stderr);
+      return (void*) ((intptr_t) 1);
+    }
+    *equals = '\0';
+    char *value = &equals[1];
+    char *end = &value[strlen(value)];
+    while ((end > value) && ((end[-1] == ' ') || (end[-1] == '\t'))) {
+      end--;
+    }
+    *end = '\0';
+    if (setenv(input, value, true) != 0) {
+      fprintf(stderr, "export: %s\n", strerror(errno));
+      return (void*) ((intptr_t) 1);
+    }
   } else {
     returnValue = (void*) ((intptr_t) -2);
   }
