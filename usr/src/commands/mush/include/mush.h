@@ -64,6 +64,10 @@ extern "C"
 ///   processIds.
 /// @param pipeIndex The index into the pipes array that is to be used for the
 ///   next process launched.
+/// @param stdinDup A duplicate of the shell's stdin, taken before the last
+///   command of a pipeline replaces it, or -1.
+/// @param scriptPath The full path to the command, in dynamic memory, if it
+///   turned out to be a script rather than a program.  NULL otherwise.
 typedef struct FsCommandArgs {
   char *commandLine;
   bool launchBackground;
@@ -73,6 +77,8 @@ typedef struct FsCommandArgs {
   int *pipes[2];
   int numProcessesLaunched;
   int pipeIndex;
+  int stdinDup;
+  char *scriptPath;
 } FsCommandArgs;
 
 /// @struct LineEditorArgs
@@ -93,6 +99,26 @@ typedef struct LineEditorArgs {
   bool  afterReturn;
   int   returnValue;
 } LineEditorArgs;
+
+/// @struct ScriptArgs
+///
+/// @brief Arguments for the Script overlay's functions.
+///
+/// @param line The buffer readScriptLine reads the next line of a script into.
+///   It holds the line, without a newline, when readScriptLine returns.
+/// @param size The size of the line buffer.
+/// @param path The path of the script for startScript to start.
+/// @param isProfile Whether startScript is starting the login profile, whose
+///   environment changes outlast it and which may be missing.
+/// @param inBackground Whether the script was asked to run in the background
+///   or in a pipeline, which startScript refuses.
+typedef struct ScriptArgs {
+  char *line;
+  int   size;
+  char *path;
+  bool  isProfile;
+  bool  inBackground;
+} ScriptArgs;
 
 #ifdef __cplusplus
 }
