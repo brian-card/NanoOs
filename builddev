@@ -179,8 +179,7 @@ if [ -b "${targetDevice}" ]; then
 		sudo cp "${configSysSource}" "${mountDir}/etc/config.sys"
 	fi
 	sudo mkdir -p "${mountDir}/root"
-	sudo mkdir -p "${mountDir}/home/user1"
-	sudo mkdir -p "${mountDir}/home/user2"
+	sudo cp -r home "${mountDir}"
 	sudo umount "${mountDir}"
 
 	if [ "${blockFilesystem}" = "contiguous" ]; then
@@ -268,10 +267,7 @@ else
 		|| MTOOLS_SKIP_CHECK=1 mmd -i "${fatImage}" ::/root
 	MTOOLS_SKIP_CHECK=1 mdir -i "${fatImage}" ::/home >/dev/null 2>&1 \
 		|| MTOOLS_SKIP_CHECK=1 mmd -i "${fatImage}" ::/home
-	MTOOLS_SKIP_CHECK=1 mdir -i "${fatImage}" ::/home/user1 >/dev/null 2>&1 \
-		|| MTOOLS_SKIP_CHECK=1 mmd -i "${fatImage}" ::/home/user1
-	MTOOLS_SKIP_CHECK=1 mdir -i "${fatImage}" ::/home/user2 >/dev/null 2>&1 \
-		|| MTOOLS_SKIP_CHECK=1 mmd -i "${fatImage}" ::/home/user2
+	MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s -o home/* ::/home/
 
 	# Write block overlays into the image at their absolute sector positions,
 	# relative to the start of the image. Overlay IDs start at 1 to avoid
