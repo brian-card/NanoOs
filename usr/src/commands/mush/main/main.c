@@ -29,7 +29,6 @@
 /// @file
 
 #include <errno.h>
-#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -67,7 +66,9 @@ static void printUsage(FILE *stream) {
     "\n"
     "Run the MUSH shell.  Each line is a command followed by its arguments,\n"
     "separated by spaces.  Commands are looked up in the directories in PATH.\n"
-    "Lines starting with # are ignored.\n"
+    "Lines starting with # are ignored.  $NAME and ${NAME} are replaced with\n"
+    "the variable's value, $? with the last command's exit status, and \\$\n"
+    "with $.\n"
     "\n"
     "  command &          run a command in the background\n"
     "  command | command  send one command's output to the next one's input\n"
@@ -93,12 +94,124 @@ static void printUsage(FILE *stream) {
     stream);
 }
 
+/// @fn static const char* lookupVariable(const char *name, size_t nameLength)
+///
+/// @brief Look up an environment variable by a name that isn't NUL-terminated.
+///
+/// @param name The start of the variable's name.
+/// @param nameLength The number of characters in the name.
+///
+/// @return Returns the variable's value, or an empty string if it isn't set.
+static const char* lookupVariable(const char *name, size_t nameLength) {
+  for (char **variable = environ; (variable != NULL) && (*variable != NULL);
+    variable++
+  ) {
+    if ((strncmp(*variable, name, nameLength) == 0)
+      && ((*variable)[nameLength] == '=')
+    ) {
+      return &(*variable)[nameLength + 1];
+    }
+  }
+  return "";
+}
+
+/// @fn static bool isNameCharacter(char c, bool first)
+///
+/// @brief Determine whether a character can be part of a variable's name.
+///
+/// @param c The character to check.
+/// @param first Whether the character would be the first one in the name,
+///   which can't be a digit.
+///
+/// @return Returns true if the character can be in the name, false if not.
+static bool isNameCharacter(char c, bool first) {
+  return ((c >= 'A') && (c <= 'Z')) || ((c >= 'a') && (c <= 'z'))
+    || (c == '_') || (!first && (c >= '0') && (c <= '9'));
+}
+
+/// @fn static size_t expandVariables(const char *line, char *expanded,
+///   const char *status)
+///
+/// @brief Replace each $NAME, ${NAME}, and $? in a command line with its
+/// value.  \$ is a literal $.
+///
+/// @param line The command line to expand.
+/// @param expanded The buffer to write the expanded line to, or NULL to only
+///   measure it.
+/// @param status The exit status of the last command, as a string.
+///
+/// @return Returns the length of the expanded line, not counting its NUL
+/// terminator.
+static size_t expandVariables(const char *line, char *expanded,
+  const char *status
+) {
+  size_t length = 0;
+  while (*line != '\0') {
+    const char *value = line;
+    size_t valueLength = 1;
+    const char *next = &line[1];
+    if ((*line == '\\') && (line[1] == '$')) {
+      value = &line[1];
+      next = &line[2];
+    } else if (*line == '$') {
+      const char *name = &line[1];
+      bool braced = (*name == '{');
+      if (braced) {
+        name++;
+      }
+      size_t nameLength = 0;
+      if (*name == '?') {
+        nameLength = 1;
+      } else {
+        while (isNameCharacter(name[nameLength], nameLength == 0)) {
+          nameLength++;
+        }
+      }
+      if ((nameLength > 0) && (!braced || (name[nameLength] == '}'))) {
+        value = ((nameLength == 1) && (*name == '?'))
+          ? status : lookupVariable(name, nameLength);
+        valueLength = strlen(value);
+        next = &name[nameLength + (braced ? 1 : 0)];
+      }
+    }
+    if (expanded != NULL) {
+      memcpy(&expanded[length], value, valueLength);
+    }
+    length += valueLength;
+    line = next;
+  }
+  if (expanded != NULL) {
+    expanded[length] = '\0';
+  }
+  return length;
+}
+
+/// @fn static int launchFailureStatus(void)
+///
+/// @brief Get the exit status for a command that couldn't be launched from the
+/// errno that launching it left.
+///
+/// @return Returns 127 if the command wasn't found, 126 if it couldn't be
+/// executed, and 1 otherwise.
+static int launchFailureStatus(void) {
+  if (errno == ENOENT) {
+    return 127;
+  } else if (errno == ENOEXEC) {
+    return 126;
+  }
+  return 1;
+}
+
 int main(int argc, char **argv) {
+  int exitStatus = 0;
+  char *scriptPath = (argc > 1) ? argv[1] : NULL;
   if ((argc > 1) && isHelpOption(argv[1])) {
     printUsage(stdout);
-    // Exiting would log the user out; a killed shell is restarted instead.
-    kill(getpid(), SIGKILL);
-    return 0;
+    scriptPath = NULL;
+  } else if ((argc > 1) && (strncmp(argv[1], "--status=", 9) == 0)) {
+    // The scheduler passes the exit status of the command that replaced us.
+    exitStatus = (int) strtol(&argv[1][9], NULL, 10);
+    scriptPath = NULL;
   }
   
   char *buffer = (char*) malloc(MUSH_COMMAND_LINE_LENGTH);
@@ -120,7 +233,7 @@ int main(int argc, char **argv) {
   ScriptArgs scriptArgs = {
     .line = buffer,
     .size = MUSH_COMMAND_LINE_LENGTH,
-    .path = argv[1],
+    .path = scriptPath,
     .isProfile = false,
     .inBackground = false,
   };
@@ -131,9 +244,11 @@ int main(int argc, char **argv) {
     scriptArgs.path = buffer;
     scriptArgs.isProfile = true;
   }
-  if (scriptArgs.path != NULL) {
-    callOverlayFunction(
-      OVERLAY_SAME_NAMESPACE, "Script", "startScript", &scriptArgs);
+  if ((scriptArgs.path != NULL) && (callOverlayFunction(
+      OVERLAY_SAME_NAMESPACE, "Script", "startScript", &scriptArgs) == NULL)
+    && !scriptArgs.isProfile
+  ) {
+    exitStatus = 1;
   }
   
   do {
@@ -184,16 +299,36 @@ int main(int argc, char **argv) {
       break;
     }
     
+    char *expanded = NULL;
+    if (strchr(input, '$') != NULL) {
+      char status[4];
+      snprintf(status, sizeof(status), "%d", exitStatus);
+      expanded = (char*) malloc(expandVariables(input, NULL, status) + 1);
+      if (expanded == NULL) {
+        fputs("mush: Out of memory\n", stderr);
+        exitStatus = 1;
+        continue;
+      }
+      expandVariables(input, expanded, status);
+      input = &expanded[strspn(expanded, " \t")];
+      if (*input == '\0') {
+        free(expanded);
+        continue;
+      }
+    }
+    
     // Attempt to process the command line as a built-in first before looking
     // on the filesystem.
     //
-    // The variable 'input' is the same as the variable 'buffer', which is a
-    // pointer to dynamic memory.  So, it's safe to pass as a parameter to
+    // The variable 'input' points into 'buffer' or 'expanded', which are
+    // dynamic memory.  So, it's safe to pass as a parameter to
     // callOverlayFunction.
     printDebug("Checking to see if command is a builtin\n");
     returnValue = (intptr_t) callOverlayFunction(
       OVERLAY_SAME_NAMESPACE, "Builtins", "processBuiltin", input);
-    if (returnValue < -1)  {
+    if (returnValue >= 0) {
+      exitStatus = (int) returnValue;
+    } else if (returnValue < -1)  {
       // The command wasn't processed as a built-in.  Try running it from the
       // filesystem.
       printDebug("Command is *NOT* a builtin\n");
@@ -224,6 +359,7 @@ int main(int argc, char **argv) {
           dup2(fsCommandArgs.stdinDup, STDIN_FILENO);
           close(fsCommandArgs.stdinDup);
         }
+        exitStatus = launchFailureStatus();
         scriptArgs.inBackground = true;
       } else {
         fsCommandArgs.commandLine = input;
@@ -244,16 +380,19 @@ int main(int argc, char **argv) {
         returnValue = (intptr_t) callOverlayFunction(
           OVERLAY_SAME_NAMESPACE, "FilesystemCommands", "runFsCommand",
           &fsCommandArgs);
+        exitStatus = (returnValue != 0) ? 0 : launchFailureStatus();
         scriptArgs.inBackground = fsCommandArgs.launchBackground;
       }
       if (fsCommandArgs.scriptPath != NULL) {
         scriptArgs.path = fsCommandArgs.scriptPath;
         scriptArgs.isProfile = false;
-        callOverlayFunction(
-          OVERLAY_SAME_NAMESPACE, "Script", "startScript", &scriptArgs);
+        exitStatus = (callOverlayFunction(
+          OVERLAY_SAME_NAMESPACE, "Script", "startScript", &scriptArgs)
+          != NULL) ? 0 : 1;
         free(fsCommandArgs.scriptPath);
       }
     }
+    free(expanded);
   } while (returnValue != -1);
   free(buffer);
   
