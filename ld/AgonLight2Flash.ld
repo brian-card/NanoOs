@@ -472,6 +472,8 @@
 *(.text._nanoOsSetenv)
 *(.text._nanoOsUnsetenv)
 *(.text._populatePasswd)
+*(.text._parsePasswdId)
+*(.text._passwdFileLookup)
 *(.text._nanoOsGetpwnam_r)
 *(.text._nanoOsGetpwuid_r)
 *(.text._nanoOsSchedYield)
