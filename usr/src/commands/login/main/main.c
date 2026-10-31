@@ -49,8 +49,9 @@
 /// @def SHELL_NAME
 ///
 /// @brief The desired name to show for the shell program when we exec it.
-/// This will be used as argv[0] in the args we pass in to execve.
-#define SHELL_NAME "mush"
+/// This will be used as argv[0] in the args we pass in to execve.  The
+/// leading '-' tells the shell that it's a login shell.
+#define SHELL_NAME "-mush"
 
 /// @brief Print the usage summary for login.
 ///
