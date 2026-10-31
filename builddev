@@ -178,6 +178,7 @@ if [ -b "${targetDevice}" ]; then
 	if [ -f "${configSysSource}" ]; then
 		sudo cp "${configSysSource}" "${mountDir}/etc/config.sys"
 	fi
+	sudo cp etc/passwd "${mountDir}/etc/passwd"
 	sudo mkdir -p "${mountDir}/root"
 	sudo cp -r home "${mountDir}"
 	sudo umount "${mountDir}"
@@ -263,6 +264,7 @@ else
 		MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" "${configSysSource}" \
 			::/etc/config.sys
 	fi
+	MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -o etc/passwd ::/etc/passwd
 	MTOOLS_SKIP_CHECK=1 mdir -i "${fatImage}" ::/root >/dev/null 2>&1 \
 		|| MTOOLS_SKIP_CHECK=1 mmd -i "${fatImage}" ::/root
 	MTOOLS_SKIP_CHECK=1 mdir -i "${fatImage}" ::/home >/dev/null 2>&1 \

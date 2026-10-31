@@ -84,6 +84,7 @@ printf '%s' "${hostname}" \
 	| MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" - ::/etc/hostname
 printf '\\s \\r \\n \\l\n\n' \
 	| MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" - ::/etc/issue
+MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" etc/passwd ::/etc/passwd
 MTOOLS_SKIP_CHECK=1 mmd -i "${fatImage}" ::/root
 MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s home ::/home
 
