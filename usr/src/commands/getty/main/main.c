@@ -35,6 +35,7 @@
 #include <string.h>
 #include <sys/utsname.h>
 #include <unistd.h>
+#include "NanoOsConsole.h"
 #include "NanoOsUtils.h"
 
 /// @def LOGIN_PATH
@@ -47,6 +48,13 @@
 /// @brief The desired name to show for the login program when we exec it.
 /// This will be used as argv[0] in the args we pass in to execve.
 #define LOGIN_NAME "login"
+
+/// @def GETTY_COLORS
+///
+/// @brief The colors getty sets the console to before showing the banner.
+#define GETTY_COLORS ((CGA_INDEX_BLACK << 4) | CGA_INDEX_LIGHT_GRAY)
+
+CGA_TO_ANSI_MAP
 
 /// @fn int printHostname(void)
 ///
@@ -215,6 +223,11 @@ int main(int argc, char **argv) {
     printUsage(stdout);
     return 0;
   }
+  
+  setConsoleColors(GETTY_COLORS);
+  printf("\033[%d;%dm\033[2J\033[H",
+    cgaToAnsiBackground(GETTY_COLORS >> 4),
+    cgaToAnsiForeground(GETTY_COLORS & 0xf));
   
   // The banner is informational, so a failure to show it doesn't prevent a
   // login.  showIssue displays its own error message.

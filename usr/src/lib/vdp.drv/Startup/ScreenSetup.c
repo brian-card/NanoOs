@@ -33,7 +33,6 @@
 
 #include "Graphics.h"
 #include "ScreenSetup.h"
-#include "VdpText.h"
 
 /// @def VDP_PALETTE_ENTRY
 ///
@@ -49,9 +48,8 @@
 ///
 /// @brief VDU commands sent once the VDP is listening: select the 640x480,
 /// 16-color screen mode (VDU 22,0), select the US keyboard layout
-/// (VDU 23,0,&81,1), set the palette to the CGA colors (VDU 19), draw yellow
-/// text on blue (VDU 17), clear the screen (VDU 12), and turn the text cursor
-/// on (VDU 23,1,1).  The palette follows the mode because changing the mode
+/// (VDU 23,0,&81,1), set the palette to the CGA colors (VDU 19), clear the
+/// screen (VDU 12), and turn the text cursor on (VDU 23,1,1).  The palette follows the mode because changing the mode
 /// resets it.
 const uint8_t vdpScreenSetup[] = {
   22, 0,
@@ -72,8 +70,6 @@ const uint8_t vdpScreenSetup[] = {
   VDP_PALETTE_ENTRY(13, CGA_LIGHT_MAGENTA),
   VDP_PALETTE_ENTRY(14, CGA_YELLOW),
   VDP_PALETTE_ENTRY(15, CGA_WHITE),
-  17, VDP_TEXT_DEFAULT_FOREGROUND,
-  17, 128 + VDP_TEXT_DEFAULT_BACKGROUND,
   12,
   23, 1, 1
 };

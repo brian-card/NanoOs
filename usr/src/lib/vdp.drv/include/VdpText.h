@@ -54,13 +54,15 @@ extern "C"
 
 /// @def VDP_TEXT_DEFAULT_FOREGROUND
 ///
-/// @brief The CgaColorIndex of the text color the screen is set up with.
-#define VDP_TEXT_DEFAULT_FOREGROUND CGA_INDEX_YELLOW
+/// @brief The CgaColorIndex of the text color the VDP selects when the screen
+/// mode is set.
+#define VDP_TEXT_DEFAULT_FOREGROUND CGA_INDEX_WHITE
 
 /// @def VDP_TEXT_DEFAULT_BACKGROUND
 ///
-/// @brief The CgaColorIndex of the text background the screen is set up with.
-#define VDP_TEXT_DEFAULT_BACKGROUND CGA_INDEX_BLUE
+/// @brief The CgaColorIndex of the text background the VDP selects when the
+/// screen mode is set.
+#define VDP_TEXT_DEFAULT_BACKGROUND CGA_INDEX_BLACK
 
 /// @def VDP_TEXT_COLOR_UNCHANGED
 ///

@@ -190,8 +190,15 @@ def test_login_root(s):
 def test_getty_shows_every_line_of_the_issue_file(s):
     s.wait_login_prompt()
     banner = s.child.before.replace("\r", "")
-    assert re.search(r"\nNanoOs \S+ nanoe2e tty\d+\n\n$", banner), \
+    assert re.search(r"(\n|\x1b\[H)NanoOs \S+ nanoe2e tty\d+\n\n$", banner), \
         repr(banner[-120:])
+
+
+def test_getty_resets_the_colors_and_clears_before_the_banner(s):
+    s.wait_login_prompt()
+    banner = s.child.before.replace("\r", "")
+    assert re.search(r"\x1b\[40;37m\x1b\[2J\x1b\[H\n*NanoOs \S+ nanoe2e tty\d+\n\n$",
+                     banner), repr(banner[-120:])
 
 
 def test_getty_prompts_for_login_without_an_issue_file(s):
@@ -280,12 +287,14 @@ def assert_vdp_set_up_on_answer(vdp):
     assert resets == VDP_RESET, \
         f"the VDP wasn't reset before the mode change: {resets}"
     setup = [(kind, detail)
-             for _t, kind, detail in vdp.events[first_mode:first_mode + 11]]
+             for _t, kind, detail in vdp.events[first_mode:first_mode + 13]]
     assert setup == [("mode", 0), ("layout", 1),
-                     ("colour", CGA_YELLOW), ("colour", 128 + CGA_BLUE),
                      ("cls", None), ("cursor", 1), ("mouse", "reset"),
                      ("mouse", "disable"), ("pointer", VDP_POINTER_ID),
-                     ("font", VDP_FONT_ID), ("text", setup[10][1])], \
+                     ("font", VDP_FONT_ID),
+                     ("colour", CGA_LIGHT_GRAY), ("colour", 128 + CGA_BLACK),
+                     ("cls", None), ("home", None),
+                     ("text", setup[12][1])], \
         f"the screen wasn't set up first: {setup}"
     assert vdp.palette == CGA_PALETTE, \
         f"the palette isn't CGA's: {vdp.palette}"
@@ -301,7 +310,8 @@ CGA_PALETTE = dict(enumerate([
     (0xFF, 0x55, 0x55), (0xFF, 0x55, 0xFF), (0xFF, 0xFF, 0x55),
     (0xFF, 0xFF, 0xFF),
 ]))
-CGA_BLUE = 1
+CGA_BLACK = 0
+CGA_LIGHT_GRAY = 7
 # What vdp.drv sends to undo the state an eZ80 reset leaves on the VDP, as
 # FakeVdp records it: (VDU 23,0 or VDU 23 command, detail).
 VDP_RESET = [
@@ -310,7 +320,6 @@ VDP_RESET = [
 ] + [(0x85, ("reset", channel)) for channel in range(32)] + [
     (0x88, (500, 100, 0)),
 ]
-CGA_YELLOW = 14
 VDP_POINTER_ID = 0xF000
 VDP_SETUP_POLL_COOKIE = 0x4f
 VDP_POINTER = [
@@ -704,10 +713,17 @@ def test_vdp_driver_reports_and_ignores_unrecognized_arguments(s):
     vdp = s.restart_with_vdp(VDP_CONFIG_SYS.replace(
         "DEVICE=/usr/lib/vdp.drv\n",
         "DEVICE=/usr/lib/vdp.drv --bogus --numlock=yes stray --numlock=on\n"))
-    vdp.expect(r"^vdp\.drv: Ignoring unrecognized argument \"--bogus\"\r\n"
-               r"vdp\.drv: Ignoring unrecognized argument \"--numlock=yes\"\r\n"
-               r"vdp\.drv: Ignoring unrecognized argument \"stray\"\r\n"
-               r"NanoOs ")
+    vdp.expect("login: ")
+    # getty's clear wipes the warnings, so look for them in what was drawn.
+    with vdp.lock:
+        drawn = "".join("\f" if kind == "cls" else chr(detail)
+                        for _t, kind, detail in vdp.events
+                        if kind in ("cls", "text"))
+    assert re.search(
+        r"\fvdp\.drv: Ignoring unrecognized argument \"--bogus\"\r\n"
+        r"vdp\.drv: Ignoring unrecognized argument \"--numlock=yes\"\r\n"
+        r"vdp\.drv: Ignoring unrecognized argument \"stray\"\r\n"
+        r"\fNanoOs ", drawn), repr(drawn[:300])
     vdp_login(vdp)
     assert vdp.leds == LED_NUM_LOCK, f"the LEDs are {vdp.leds:#x}"
     vdp.clear()
@@ -1078,17 +1094,23 @@ def test_color_without_a_valid_attribute_prints_its_usage(s):
     usage = help_text(s, "color --help")
     for command in ("color", "color 1g", "color 123", "color 1e 2"):
         assert s.sh(command) == usage, command
-    assert s.sh("clear") == "\x1b[2J\x1b[H"
+    assert s.sh("clear") == "\x1b[40;37m\x1b[2J\x1b[H"
 
 
-def test_clear_uses_the_colors_set_before_it_and_a_logout(s):
+def test_clear_uses_the_colors_set_until_getty_resets_them(s):
     s.login()
-    assert s.sh("clear") == "\x1b[2J\x1b[H"
+    assert s.sh("clear") == "\x1b[40;37m\x1b[2J\x1b[H"
     s.sh("color 2f")
     assert s.sh("clear") == "\x1b[42;97m\x1b[2J\x1b[H"
     s.child.sendline("exit")
-    s.login()
-    assert s.sh("clear") == "\x1b[42;97m\x1b[2J\x1b[H"
+    s.wait_login_prompt()
+    assert "\x1b[40;37m\x1b[2J\x1b[H" in s.child.before, \
+        repr(s.child.before[-120:])
+    s.child.sendline("root")
+    s.child.expect("password: ", timeout=10)
+    s.child.sendline("rootroot")
+    s.child.expect(PROMPT, timeout=10)
+    assert s.sh("clear") == "\x1b[40;37m\x1b[2J\x1b[H"
     assert s.sh("clear extra") == help_text(s, "clear --help")
 
 

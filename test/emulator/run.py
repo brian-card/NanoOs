@@ -330,7 +330,7 @@ def test_ver_prints_the_version_and_copyright(e):
 
 
 def test_color_and_clear_write_the_colors_that_were_set(e):
-    assert e.sh("clear") == "\x1b[2J\x1b[H"
+    assert e.sh("clear") == "\x1b[40;37m\x1b[2J\x1b[H"
     assert e.sh("color 1e") == "\x1b[44;93m\x1b[2J\x1b[H"
     assert e.sh("clear") == "\x1b[44;93m\x1b[2J\x1b[H"
     assert e.sh("color").startswith("Usage: color attr\n")

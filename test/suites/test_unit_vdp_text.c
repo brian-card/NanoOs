@@ -163,8 +163,8 @@ NANO_OS_TEST(unit_vdp_text, sgr_resets_select_the_default_colors) {
   VdpTextState state = { .column = 0 };
   uint8_t output[32];
   const char *text = "\x1b[0m\x1b[m\x1b[39;49m";
-  const uint8_t defaults[] = { 17, VDP_TEXT_DEFAULT_FOREGROUND,
-    17, 128 + VDP_TEXT_DEFAULT_BACKGROUND };
+  const uint8_t defaults[] = { 17, CGA_INDEX_WHITE,
+    17, 128 + CGA_INDEX_BLACK };
 
   NANO_OS_ASSERT_EQ_INT(3 * sizeof(defaults),
     vdpTranslateText(&state, &text, output, 32));
