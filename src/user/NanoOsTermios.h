@@ -72,6 +72,10 @@ extern "C"
 // Echo erased characters backward
 #define ECHOPRT 0x0800
 
+/* c_lflag bits - NanoOs extensions */
+// Have the terminal report size changes as input (in-band resize mode 2048)
+#define RESIZEREPORTS 0x1000
+
 /* For tcsetattr */
 #define TCSANOW   0x0001
 #define TCSADRAIN 0x0002
@@ -103,9 +107,26 @@ struct termios {
     cc_t     c_cc[NCCS]; /* control characters */
 };
 
+/// @struct winsize
+///
+/// @brief The size of a terminal, as used by tcgetwinsize and tcsetwinsize.
+///
+/// @param ws_row The number of rows of text.
+/// @param ws_col The number of columns of text.
+/// @param ws_xpixel The width in pixels, or 0 if unknown.
+/// @param ws_ypixel The height in pixels, or 0 if unknown.
+struct winsize {
+    unsigned short ws_row;
+    unsigned short ws_col;
+    unsigned short ws_xpixel;
+    unsigned short ws_ypixel;
+};
+
 int nanoOsTcgetattr(int fd, struct termios *termios_p);
 int nanoOsTcsetattr(int fd, int optional_actions,
   const struct termios *termios_p);
+int nanoOsTcgetwinsize(int fd, struct winsize *winsize);
+int nanoOsTcsetwinsize(int fd, const struct winsize *winsize);
 
 #ifdef __cplusplus
 }

@@ -59,6 +59,9 @@ int nanoOsTcgetattr(int fd, struct termios *termios) {
   if (modes & CONSOLE_MODE_SIGNALS) {
     termios->c_lflag |= ISIG;
   }
+  if (modes & CONSOLE_MODE_RESIZE_REPORTS) {
+    termios->c_lflag |= RESIZEREPORTS;
+  }
   
   return 0;
 }
@@ -84,6 +87,9 @@ int nanoOsTcsetattr(int fd, int optionalActions,
   if (termios->c_lflag & ISIG) {
     modes |= CONSOLE_MODE_SIGNALS;
   }
+  if (termios->c_lflag & RESIZEREPORTS) {
+    modes |= CONSOLE_MODE_RESIZE_REPORTS;
+  }
   if (setConsoleModes(modes) != 0) {
     errno = ENOTTY;
     return -1;
@@ -92,3 +98,53 @@ int nanoOsTcsetattr(int fd, int optionalActions,
   return 0;
 }
 
+/// @fn int nanoOsTcgetwinsize(int fd, struct winsize *winsize)
+///
+/// @brief Get the size of the terminal stdin is connected to.
+///
+/// @param fd The file descriptor of the terminal, which must be stdin.
+/// @param winsize Set to the terminal's size.  The pixel sizes are 0.
+///
+/// @return Returns 0 on success, -1 with errno set on failure.
+int nanoOsTcgetwinsize(int fd, struct winsize *winsize) {
+  if ((winsize == NULL) || (fd != STDIN_FILENO)) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  uint16_t rows = 0;
+  uint16_t columns = 0;
+  if (getConsoleWinsize(&rows, &columns) != 0) {
+    errno = ENOTTY;
+    return -1;
+  }
+
+  winsize->ws_row = rows;
+  winsize->ws_col = columns;
+  winsize->ws_xpixel = 0;
+  winsize->ws_ypixel = 0;
+  return 0;
+}
+
+/// @fn int nanoOsTcsetwinsize(int fd, const struct winsize *winsize)
+///
+/// @brief Record the size of the terminal stdin is connected to.  The pixel
+/// sizes are ignored.
+///
+/// @param fd The file descriptor of the terminal, which must be stdin.
+/// @param winsize The terminal's size.
+///
+/// @return Returns 0 on success, -1 with errno set on failure.
+int nanoOsTcsetwinsize(int fd, const struct winsize *winsize) {
+  if ((winsize == NULL) || (fd != STDIN_FILENO)) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  if (setConsoleWinsize(winsize->ws_row, winsize->ws_col) != 0) {
+    errno = ENOTTY;
+    return -1;
+  }
+
+  return 0;
+}
