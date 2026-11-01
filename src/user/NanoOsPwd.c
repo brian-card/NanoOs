@@ -244,6 +244,105 @@ static int parsePasswdId(const char *field) {
   return (int) id;
 }
 
+/// @def NANO_OS_PASSWD_CACHE_SIZE
+///
+/// @brief The size of the largest /etc/passwd that is kept in memory.
+#define NANO_OS_PASSWD_CACHE_SIZE 512
+
+/// @var _passwdCache
+///
+/// @brief The NUL-terminated contents of /etc/passwd, or NULL if they aren't
+/// in memory.
+static char *_passwdCache = NULL;
+
+/// @var _passwdFileMissing
+///
+/// @brief Whether /etc/passwd didn't exist the last time it was loaded.
+static bool _passwdFileMissing = false;
+
+/// @fn void nanoOsPasswdCacheLoad(void)
+///
+/// @brief Read /etc/passwd into memory so that looking a user up doesn't take
+/// the calling process through the filesystem, whose stack depth the smallest
+/// boards can't afford.  Only the scheduler may call this.  A file that can't
+/// be read for a reason other than not existing leaves what's loaded alone.
+///
+/// @return This function returns no value.
+void nanoOsPasswdCacheLoad(void) {
+  errno = 0;
+  FILE *passwdFile = schedFopen(_passwdFilePath, _readMode);
+  if (passwdFile == NULL) {
+    if (errno == ENOENT) {
+      schedFree(_passwdCache);
+      _passwdCache = NULL;
+      _passwdFileMissing = true;
+    }
+    return;
+  }
+  _passwdFileMissing = false;
+
+  char *cache = (char*) schedMalloc(NANO_OS_PASSWD_CACHE_SIZE + 1);
+  if (cache != NULL) {
+    size_t length = schedFread(cache, 1, NANO_OS_PASSWD_CACHE_SIZE + 1,
+      passwdFile);
+    if (length <= NANO_OS_PASSWD_CACHE_SIZE) {
+      cache[length] = '\0';
+      char *shrunk = (char*) schedRealloc(cache, length + 1);
+      schedFree(_passwdCache);
+      _passwdCache = (shrunk != NULL) ? shrunk : cache;
+    } else {
+      schedFree(cache);
+      schedFree(_passwdCache);
+      _passwdCache = NULL;
+    }
+  }
+  schedFclose(passwdFile);
+}
+
+/// @fn static char* passwdCacheGets(char *buffer, int size, void *source)
+///
+/// @brief fgets for the in-memory copy of /etc/passwd.
+///
+/// @param buffer The buffer to read the line into.
+/// @param size The size of the buffer.
+/// @param source A pointer to the const char* that marks the next line to
+///   read, cast to a void*.  It's advanced past what's read.
+///
+/// @return Returns buffer, or NULL if there's nothing left to read.
+static char* passwdCacheGets(char *buffer, int size, void *source) {
+  const char **cursor = (const char**) source;
+  if (**cursor == '\0') {
+    return NULL;
+  }
+  int length = 0;
+  while ((length < size - 1) && ((*cursor)[length] != '\0')) {
+    char c = (*cursor)[length];
+    buffer[length++] = c;
+    if (c == '\n') {
+      break;
+    }
+  }
+  buffer[length] = '\0';
+  *cursor += length;
+  return buffer;
+}
+
+/// @fn static char* passwdFileGets(char *buffer, int size, void *source)
+///
+/// @brief fgets for /etc/passwd read through the filesystem.
+///
+/// @param buffer The buffer to read the line into.
+/// @param size The size of the buffer.
+/// @param source The FILE* to read from, cast to a void*.
+///
+/// @return Returns buffer, or NULL if there's nothing left to read.
+static char* passwdFileGets(char *buffer, int size, void *source) {
+  if (getRunningPid() == schedulerPid) {
+    return schedFgets(buffer, size, (FILE*) source);
+  }
+  return fgets(buffer, size, (FILE*) source);
+}
+
 /// @fn static int passwdFileLookup(const char *name, uid_t uid,
 ///   struct passwd *pwd, char *buf, size_t buflen, struct passwd **result)
 ///
@@ -264,26 +363,30 @@ static int parsePasswdId(const char *field) {
 static int passwdFileLookup(const char *name, uid_t uid,
   struct passwd *pwd, char *buf, size_t buflen, struct passwd **result
 ) {
-  FILE* (*openFile)(const char*, const char*) = fopen;
-  char* (*readLine)(char*, int, FILE*) = fgets;
-  int (*closeFile)(FILE*) = fclose;
-  // restartOverlayShell looks users up from the scheduler's own context.
-  if (getRunningPid() == schedulerPid) {
-    openFile = schedFopen;
-    readLine = schedFgets;
-    closeFile = schedFclose;
-  }
   *result = NULL;
+  if (_passwdFileMissing) {
+    return ENOENT;
+  }
 
-  errno = 0;
-  FILE *passwdFile = openFile(_passwdFilePath, _readMode);
-  if (passwdFile == NULL) {
-    return (errno != 0) ? errno : EIO;
+  const char *cacheCursor = _passwdCache;
+  void *source = &cacheCursor;
+  char* (*readLine)(char*, int, void*) = passwdCacheGets;
+  FILE *passwdFile = NULL;
+  if (_passwdCache == NULL) {
+    errno = 0;
+    passwdFile = (getRunningPid() == schedulerPid)
+      ? schedFopen(_passwdFilePath, _readMode)
+      : fopen(_passwdFilePath, _readMode);
+    if (passwdFile == NULL) {
+      return (errno != 0) ? errno : EIO;
+    }
+    source = passwdFile;
+    readLine = passwdFileGets;
   }
 
   int returnValue = 0;
   bool atLineStart = true;
-  while (readLine(buf, (int) buflen, passwdFile) != NULL) {
+  while (readLine(buf, (int) buflen, source) != NULL) {
     size_t length = strlen(buf);
     bool lineStart = atLineStart;
     atLineStart = (length > 0) && (buf[length - 1] == '\n');
@@ -335,7 +438,13 @@ static int passwdFileLookup(const char *name, uid_t uid,
     break;
   }
 
-  closeFile(passwdFile);
+  if (passwdFile != NULL) {
+    if (getRunningPid() == schedulerPid) {
+      schedFclose(passwdFile);
+    } else {
+      fclose(passwdFile);
+    }
+  }
   return returnValue;
 }
 
