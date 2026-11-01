@@ -92,6 +92,7 @@ typedef struct posix_spawnattr_t posix_spawnattr_t;
 
 // Forward declarations from other headers.
 struct termios;
+struct winsize;
 
 // Any change to these API structures must bump NANO_OS_OVERLAY_VERSION.
 typedef struct NanoOsExecutiveApi {
@@ -224,6 +225,8 @@ typedef struct NanoOsUserApi {
   int (*tcgetattr)(int fd, struct termios *termios_p);
   int (*tcsetattr)(int fd, int optional_actions,
     const struct termios *termios_p);
+  int (*tcgetwinsize)(int fd, struct winsize *winsize);
+  int (*tcsetwinsize)(int fd, const struct winsize *winsize);
   
   // errno functions:
   int* (*errno_)(void);

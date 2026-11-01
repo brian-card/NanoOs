@@ -226,6 +226,8 @@ static const NanoOsUserApi _nanoOsUserApi = {
   // termios functions:
   .tcgetattr = nanoOsTcgetattr,
   .tcsetattr = nanoOsTcsetattr,
+  .tcgetwinsize = nanoOsTcgetwinsize,
+  .tcsetwinsize = nanoOsTcsetwinsize,
   
   // errno functions:
   .errno_ = errno_,
