@@ -132,15 +132,15 @@ typedef struct VdpOutputBuffer {
 /// @param resizeReports Whether resize reports are turned on.
 /// @param resizeReportWanted Whether a resize report is to be sent.
 typedef struct VdpTextState {
-  uint8_t column;
-  uint8_t escapeState;
-  uint8_t parameter;
-  uint8_t maxParameter;
-  uint8_t foreground;
-  uint8_t background;
+  uint8_t  column;
+  uint8_t  escapeState;
+  uint8_t  parameter;
+  uint8_t  maxParameter;
+  uint8_t  foreground;
+  uint8_t  background;
   uint16_t privateMode;
-  bool    resizeReports;
-  bool    resizeReportWanted;
+  bool     resizeReports;
+  bool     resizeReportWanted;
 } VdpTextState;
 
 size_t vdpTranslateText(VdpTextState *state, const char **text,
