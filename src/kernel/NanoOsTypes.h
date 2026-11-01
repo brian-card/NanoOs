@@ -413,6 +413,13 @@ typedef struct CommandDescriptor {
 /// it on as input.
 #define CONSOLE_MODE_SIGNALS 0x04
 
+/// @def CONSOLE_MODE_RESIZE_REPORTS
+///
+/// @brief Console port mode flag:  have the port's renderer send a report of
+/// the port's size as input when it changes.  Setting or clearing it writes
+/// the escape sequence that turns the reports on or off.
+#define CONSOLE_MODE_RESIZE_REPORTS 0x08
+
 /// @def CONSOLE_MODE_DEFAULT
 ///
 /// @brief The modes a console port starts in and returns to when it's
@@ -425,6 +432,18 @@ typedef struct CommandDescriptor {
 /// @brief The colors of a console port whose colors have never been set,
 /// which are whatever the terminal's own are.
 #define CONSOLE_COLORS_DEFAULT -1
+
+/// @def CONSOLE_DEFAULT_ROWS
+///
+/// @brief The number of rows of a console port whose renderer hasn't set its
+/// size.
+#define CONSOLE_DEFAULT_ROWS 24
+
+/// @def CONSOLE_DEFAULT_COLUMNS
+///
+/// @brief The number of columns of a console port whose renderer hasn't set
+/// its size.
+#define CONSOLE_DEFAULT_COLUMNS 80
 
 /// @struct ConsoleBuffer
 ///
@@ -475,6 +494,7 @@ typedef struct ConsoleInputReadyArgs {
 ///
 /// @param uartId The ID of the HAL UART that services the port.  Unused by a
 ///   forwarding port.
+/// @param rows The number of rows of text the port's renderer displays.
 /// @param consoleBuffer A pointer to the ConsoleBuffer used to buffer input
 ///   from the user.
 /// @param outputOwner The ID of the process that currently has the ability to
@@ -484,8 +504,7 @@ typedef struct ConsoleInputReadyArgs {
 /// @param shell The ID of the process that serves as the console port's shell.
 /// @param waitingForInput Whether or not the owning process is currently
 ///   waiting for input from the user.
-/// @param pollOnly Whether or not the port has to be polled for input rather
-///   than being serviced by a CONSOLE_INPUT_READY message.
+/// @param columns The number of columns of text the port's renderer displays.
 /// @param colors The colors last set for the port, with the CgaColorIndex of
 ///   the background in the upper 4 bits and of the foreground in the lower 4,
 ///   or CONSOLE_COLORS_DEFAULT.
@@ -509,14 +528,17 @@ typedef struct ConsoleInputReadyArgs {
 ///   read from the port while a completed line was held and not yet processed.
 /// @param typeAheadEnd The index in consoleBuffer's buffer just past the last
 ///   such byte.
+/// @param pollOnly Whether or not the port has to be polled for input rather
+///   than being serviced by a CONSOLE_INPUT_READY message.
 typedef struct ConsolePort {
   unsigned char           uartId;
+  uint16_t                rows;
   ConsoleBuffer          *consoleBuffer;
   ProcessId               outputOwner;
   ProcessId               inputOwner;
   ProcessId               shell;
   bool                    waitingForInput;
-  bool                    pollOnly;
+  uint16_t                columns;
   int16_t                 colors;
   int                   (*readByte)(struct ConsolePort *consolePort);
   uint8_t                 modes;
@@ -530,6 +552,7 @@ typedef struct ConsolePort {
   uint8_t                 pendingInputIndex;
   uint8_t                 typeAheadStart;
   uint8_t                 typeAheadEnd;
+  bool                    pollOnly;
 } ConsolePort;
 
 /// @struct ConsoleState
