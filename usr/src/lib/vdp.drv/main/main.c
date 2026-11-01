@@ -243,6 +243,12 @@ static void vdpSendInput(VdpInput *input) {
     processMessageRelease(input->inputMessage);
     input->inputMessage = NULL;
   }
+  if ((input->sizeMessage != NULL)
+    && (processMessageDone(input->sizeMessage) == true)
+  ) {
+    processMessageRelease(input->sizeMessage);
+    input->sizeMessage = NULL;
+  }
   if ((input->portId < 0) || (input->inputMessage != NULL)
     || (input->pendingLength == 0)
   ) {
@@ -303,11 +309,18 @@ int main(int argc, char **argv) {
       return 1;
     }
     vdpRequestPort(&input);
+    if ((input.portId >= 0)
+      && ((vdpOutput.textState.resizeReportWanted == true)
+        || ((vdpOutput.sizeChanged == true) && (input.sizeMessage == NULL)))
+    ) {
+      callOverlayFunction(OVERLAY_SAME_NAMESPACE,
+        "Graphics", "vdpReportSize", &startupArgs);
+    }
     vdpSendInput(&input);
 
     int64_t deadlineNs = INT64_MAX;
     if ((input.portMessage != NULL) || (input.inputMessage != NULL)
-      || (input.pendingLength > 0)
+      || (input.pendingLength > 0) || (input.sizeMessage != NULL)
     ) {
       deadlineNs = vdpNowNs() + VDP_POLL_NS;
     }
