@@ -49,6 +49,7 @@
 // User space includes
 #include "../user/NanoOsLibC.h"
 #include "../user/NanoOsSignal.h"
+#include "../user/NanoOsPwd.h"
 #include "../user/NanoOsSpawn.h"
 #include "../user/NanoOsWait.h"
 #include "../user/NanoOsUnistd.h"
@@ -5507,6 +5508,8 @@ int restartOverlayShell(ProcessDescriptor *processDescriptor) {
   if (processDescriptor->userId == NO_USER_ID) {
     schedFree(processDescriptor->shellPath);
     processDescriptor->shellPath = NULL;
+    // Edits to /etc/passwd take effect at the next login.
+    nanoOsPasswdCacheLoad();
     if (processDescriptor->envp != NULL) {
       // The pointer for the envp block is stored at envp[0], so free that.
       schedFree(processDescriptor->envp[0]);
@@ -6549,6 +6552,7 @@ __attribute__((noinline)) void startScheduler(
     logError("schedulerState.hostname is NULL!\n");
   }
 
+  nanoOsPasswdCacheLoad();
   logSchedulerDebugInfo(&schedulerState);
   logDebug("Logged scheduler debug info\n");
   bootTrace("hostname read; launching processes");
