@@ -117,8 +117,9 @@ typedef struct VdpOutputBuffer {
 ///
 /// @brief Translation state carried from one piece of text to the next.
 ///
-/// @param column The column of the text cursor, used to expand tabs.  Only its
-///   value modulo 8 matters, so it is allowed to wrap.
+/// @param column The column of the text cursor.  It is numColumns only when
+///   the cursor has drawn the last column of the bottom row and is waiting
+///   to wrap.
 /// @param escapeState The VDP_ESCAPE_* state of the escape sequence being read.
 /// @param parameter The value of the control sequence parameter being read,
 ///   limited to 255.
@@ -131,6 +132,14 @@ typedef struct VdpOutputBuffer {
 /// @param privateMode The number of the private mode being read.
 /// @param resizeReports Whether resize reports are turned on.
 /// @param resizeReportWanted Whether a resize report is to be sent.
+/// @param row The row of the text cursor.
+/// @param numRows The number of rows of text on the screen.
+/// @param numColumns The number of columns of text on the screen.
+/// @param numParameters The number of control sequence parameters read.
+/// @param firstParameter The control sequence's first parameter.
+/// @param secondParameter The control sequence's second parameter, or 0.
+/// @param erasePending The number of spaces still to be written to erase to
+///   the end of the line.
 typedef struct VdpTextState {
   uint8_t  column;
   uint8_t  escapeState;
@@ -141,6 +150,13 @@ typedef struct VdpTextState {
   uint16_t privateMode;
   bool     resizeReports;
   bool     resizeReportWanted;
+  uint8_t  row;
+  uint8_t  numRows;
+  uint8_t  numColumns;
+  uint8_t  numParameters;
+  uint8_t  firstParameter;
+  uint8_t  secondParameter;
+  uint8_t  erasePending;
 } VdpTextState;
 
 size_t vdpTranslateText(VdpTextState *state, const char **text,
