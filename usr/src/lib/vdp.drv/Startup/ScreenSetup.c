@@ -47,12 +47,14 @@
 /// @var vdpScreenSetup
 ///
 /// @brief VDU commands sent once the VDP is listening: select the 640x480,
-/// 16-color screen mode (VDU 22,0), select the US keyboard layout
-/// (VDU 23,0,&81,1), set the palette to the CGA colors (VDU 19), clear the
-/// screen (VDU 12), and turn the text cursor on (VDU 23,1,1).  The palette follows the mode because changing the mode
-/// resets it.
+/// 16-color screen mode (VDU 22,0), turn on scroll protection so that drawing
+/// the bottom-right character doesn't scroll (VDU 23,16,1,&FE), select the US
+/// keyboard layout (VDU 23,0,&81,1), set the palette to the CGA colors (VDU
+/// 19), clear the screen (VDU 12), and turn the text cursor on (VDU 23,1,1).
+/// The palette follows the mode because changing the mode resets it.
 const uint8_t vdpScreenSetup[] = {
   22, 0,
+  23, 16, 1, 0xFE,
   23, 0, 0x81, 1,
   VDP_PALETTE_ENTRY( 0, CGA_BLACK),
   VDP_PALETTE_ENTRY( 1, CGA_BLUE),
