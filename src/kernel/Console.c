@@ -94,10 +94,22 @@ int consolePrintMessage(
     }
   }
 
+  ProcessDescriptor *sender = processMessageFrom(inputMessage);
+  if ((portFound == false)
+    && (sender->consolePort < consoleState->numConsolePorts)
+  ) {
+    consolePorts[sender->consolePort].consolePrintString(
+      &consolePorts[sender->consolePort], message);
+    portFound = true;
+  }
+
   if (portFound == false) {
-    logWarn("Request to print message \"%s\" from non-owning "
-      "process %ld\n", message, (long int) owner);
     returnValue = processError;
+    // A user process with no port is a background job its user logged out of.
+    if (sender->privilegeLevel < PRIVILEGE_LEVEL_USER) {
+      logWarn("Request to print message \"%s\" from non-owning "
+        "process %ld\n", message, (long int) owner);
+    }
   }
 
   return returnValue;
@@ -210,8 +222,8 @@ int releaseConsoleBuffer(
   ConsolePort *consolePorts = consoleState->consolePorts;
   for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
     if (consolePorts[ii].consoleBuffer == consoleBuffer) {
-      // Buffer belongs to a port.  Restore its owner back to the port's shell.
-      consoleBuffer->owner = consolePorts[ii].shell;
+      // Buffer belongs to a port.  Keep it for the process printing there.
+      consoleBuffer->owner = consolePorts[ii].outputOwner;
       consolePorts[ii].consoleBuffer->bufferAwaitingRelease = false;
       return 0;
     }
