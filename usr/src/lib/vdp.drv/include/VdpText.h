@@ -32,6 +32,7 @@
 #ifndef VDP_TEXT_H
 #define VDP_TEXT_H
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -90,6 +91,17 @@ extern "C"
 /// acted on.
 #define VDP_ESCAPE_CSI_IGNORED 3
 
+/// @def VDP_ESCAPE_CSI_PRIVATE
+///
+/// @brief VdpTextState escapeState:  reading a control sequence that sets or
+/// resets a private mode.
+#define VDP_ESCAPE_CSI_PRIVATE 4
+
+/// @def VDP_RESIZE_REPORT_MODE
+///
+/// @brief The private mode that turns in-band resize reports on and off.
+#define VDP_RESIZE_REPORT_MODE 2048
+
 /// @struct VdpOutputBuffer
 ///
 /// @brief The most recent VDU bytes written before the VDP was listening.
@@ -116,6 +128,9 @@ typedef struct VdpOutputBuffer {
 ///   selects, or VDP_TEXT_COLOR_UNCHANGED.
 /// @param background The CgaColorIndex of the text background the control
 ///   sequence selects, or VDP_TEXT_COLOR_UNCHANGED.
+/// @param privateMode The number of the private mode being read.
+/// @param resizeReports Whether resize reports are turned on.
+/// @param resizeReportWanted Whether a resize report is to be sent.
 typedef struct VdpTextState {
   uint8_t column;
   uint8_t escapeState;
@@ -123,6 +138,9 @@ typedef struct VdpTextState {
   uint8_t maxParameter;
   uint8_t foreground;
   uint8_t background;
+  uint16_t privateMode;
+  bool    resizeReports;
+  bool    resizeReportWanted;
 } VdpTextState;
 
 size_t vdpTranslateText(VdpTextState *state, const char **text,
