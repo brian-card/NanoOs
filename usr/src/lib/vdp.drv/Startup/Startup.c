@@ -225,6 +225,9 @@ void* vdpStartup(void *args) {
   input->portId = -1;
   input->pollCookie = VDP_GENERAL_POLL_COOKIE;
   memset(vdpOutput, 0, sizeof(*vdpOutput));
+  vdpOutput->glyphWidth = VDP_SYSTEM_GLYPH_SIZE;
+  vdpOutput->glyphHeight = VDP_SYSTEM_GLYPH_SIZE;
+  vdpOutput->sizeChanged = true;
   vdpOutput->giveUpNs = vdpNowNs() + VDP_GENERAL_POLL_TIMEOUT_NS;
   vdpOutput->buffer = (VdpOutputBuffer*) malloc(sizeof(VdpOutputBuffer));
   if (vdpOutput->buffer != NULL) {
