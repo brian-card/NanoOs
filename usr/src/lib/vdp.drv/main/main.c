@@ -42,13 +42,6 @@
 /// driver when it marks one done.
 #define VDP_POLL_NS 10000000L
 
-/// @def VDP_GENERAL_POLL_RETRY_NS
-///
-/// @brief How often, in nanoseconds, the general poll is resent until the VDP
-/// answers.  A VDP that has just been powered on ignores everything for
-/// several seconds.
-#define VDP_GENERAL_POLL_RETRY_NS 500000000LL
-
 /// @fn static void vdpWriteText(VdpOutput *vdpOutput, const char *text)
 ///
 /// @brief Draw a string of console text on the VDP, or buffer it if the VDP
@@ -60,7 +53,7 @@
 /// @return This function returns no value.
 static void vdpWriteText(VdpOutput *vdpOutput, const char *text) {
   uint8_t output[4 * VDP_TEXT_MAX_EXPANSION];
-  while (*text != '\0') {
+  while ((*text != '\0') || (vdpOutput->textState.erasePending > 0)) {
     size_t length = vdpTranslateText(
       &vdpOutput->textState, &text, output, sizeof(output));
     if (vdpOutput->listening == true) {
@@ -85,83 +78,6 @@ static void vdpGraphics(VdpOutput *vdpOutput, ProcessMessage *message) {
   vdpOutput->graphicsMessage = message;
   callOverlayFunction(OVERLAY_SAME_NAMESPACE,
     "Graphics", "vdpGraphics", vdpOutput);
-}
-
-/// @fn static bool vdpHandshake(VdpOutput *vdpOutput, VdpInput *input,
-///   VdpStartupArgs *startupArgs)
-///
-/// @brief Send the general poll until the VDP answers it or the wait times
-/// out, then have the Startup overlay set up the screen, and again once the
-/// poll that follows the setup, which is sent the same way, is answered or
-/// times out.  If it was answered, the Graphics overlay loads the built-in
-/// font first:  until then the VDP may be busy resetting the mouse, and the
-/// font overflows its receive buffer.  The state is passed both directly and
-/// as startupArgs, which reloading it through costs main more than the extra
-/// argument does.
-///
-/// @param vdpOutput A pointer to the driver's VdpOutput.
-/// @param input A pointer to the driver's VdpInput.
-/// @param startupArgs A pointer to the VdpStartupArgs pointing to vdpOutput
-///   and input, for the Startup overlay.
-///
-/// @return Returns false if the Startup overlay couldn't be run, true
-/// otherwise.
-static bool vdpHandshake(VdpOutput *vdpOutput, VdpInput *input,
-  VdpStartupArgs *startupArgs
-) {
-  if (vdpOutput->listening == true) {
-    return true;
-  }
-
-  int64_t now = vdpNowNs();
-  if ((input->pollAnswered == false) && (now < vdpOutput->giveUpNs)) {
-    if (now >= vdpOutput->nextPollNs) {
-      // VDU 23,0,&80,cookie, which the VDP answers with the cookie.
-      uint8_t poll[] = { 23, 0, 0x80, input->pollCookie };
-      vdpWrite(poll, sizeof(poll));
-      vdpOutput->nextPollNs = now + VDP_GENERAL_POLL_RETRY_NS;
-    }
-    return true;
-  }
-
-  if ((vdpOutput->screenSetUp == true) && (input->pollAnswered == true)) {
-    vdpGraphics(vdpOutput, NULL);
-  }
-  return callOverlayFunction(OVERLAY_SAME_NAMESPACE,
-    "Startup", "vdpSetupScreen", startupArgs) == startupArgs;
-}
-
-/// @fn static void vdpRequestPort(VdpInput *input)
-///
-/// @brief Ask the console which port it forwards to this process, without
-/// waiting for the answer: the console may be waiting on this process to draw
-/// its output.
-///
-/// @param input A pointer to the driver's VdpInput.
-///
-/// @return This function returns no value.
-static void vdpRequestPort(VdpInput *input) {
-  if ((input->portId >= 0) || (input->portMessage != NULL)
-    || (findProcessByName(CONSOLE_PROCESS_NAME, &input->consolePid) != 0)
-  ) {
-    return;
-  }
-
-  ProcessMessage *message = getAvailableMessage();
-  if (message == NULL) {
-    return;
-  }
-  input->portArgs.forwardingPid = getRunningPid();
-  input->portArgs.portId = 0;
-  input->portArgs.returnValue = 0;
-  processMessageInit(message,
-    CONSOLE_COMMAND_SIGNATURE | CONSOLE_ADD_FORWARDING_PORT,
-    &input->portArgs, sizeof(input->portArgs), /* waiting= */ true);
-  if (sendProcessMessageToPid(input->consolePid, message) != processSuccess) {
-    processMessageRelease(message);
-    return;
-  }
-  input->portMessage = message;
 }
 
 /// @fn static bool vdpReadKeyboard(VdpInput *input)
@@ -305,10 +221,13 @@ int main(int argc, char **argv) {
   }
 
   while (1) {
-    if (vdpHandshake(&vdpOutput, &input, &startupArgs) == false) {
+    if (((vdpOutput.listening == false)
+        || ((input.portId < 0) && (input.portMessage == NULL)))
+      && (callOverlayFunction(OVERLAY_SAME_NAMESPACE,
+        "Startup", "vdpSetUp", &startupArgs) != &startupArgs)
+    ) {
       return 1;
     }
-    vdpRequestPort(&input);
     if ((input.portId >= 0)
       && ((vdpOutput.textState.resizeReportWanted == true)
         || ((vdpOutput.sizeChanged == true) && (input.sizeMessage == NULL)))
