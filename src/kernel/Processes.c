@@ -403,48 +403,14 @@ void* execOverlayCommand(void *args) {
     = (returnValue < 0) ? 255 : (uint8_t) returnValue;
   processDescriptor->exitSignal = 0;
 
-  if (processDescriptor->userId != NO_USER_ID) {
-    // If this command was a shell process then we need to clear out the user ID
-    // and environment variables.  Check.
-    char *passwdStringBuffer = NULL;
-    struct passwd *pwd = NULL;
-    do {
-      passwdStringBuffer = (char*) malloc(NANO_OS_PASSWD_STRING_BUF_SIZE);
-      if (passwdStringBuffer == NULL) {
-        logError("Could not allocate space for passwdStringBuffer in %s.\n",
-          argv[0]);
-        break;
-      }
-      
-      pwd = (struct passwd*) malloc(sizeof(struct passwd));
-      if (pwd == NULL) {
-        logError("Could not allocate space for pwd in %s.\n", argv[0]);
-        break;
-      }
-      
-      struct passwd *result = NULL;
-      nanoOsGetpwuid_r(processDescriptor->userId, pwd,
-        passwdStringBuffer, NANO_OS_PASSWD_STRING_BUF_SIZE, &result);
-      if (result == NULL) {
-        logError("Could not find passwd info for uid %d\n",
-          processDescriptor->userId);
-        // Assume this is the user's shell exiting.
-        // Clear the processes's user ID.
-        processDescriptor->userId = NO_USER_ID;
-        break;
-      }
-      
-      if (strcmp(pwd->pw_shell,
-        (char*) processDescriptor->overlayNamespace) == 0
-      ) {
-        // This is the user's shell exiting.  Clear the processes's user ID.
-        processDescriptor->userId = NO_USER_ID;
-      }
-    } while (0);
-    free(pwd);
-    free(passwdStringBuffer);
+  if ((processDescriptor->userId != NO_USER_ID)
+    && (processDescriptor->shellPath != NULL)
+    && (strcmp(processDescriptor->shellPath,
+      (char*) processDescriptor->overlayNamespace) == 0)
+  ) {
+    // This is the user's shell exiting.  Clear the processes's user ID.
+    processDescriptor->userId = NO_USER_ID;
   }
-
 
   // ***DO NOT*** attempt to free the ExecArgs that were passed in, period.
   // The memory will be cleaned up by the scheduler after we exit.  Freeing
