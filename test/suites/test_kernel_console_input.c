@@ -1292,3 +1292,148 @@ NANO_OS_KERNEL_TEST(console_colors, releasing_the_port_keeps_its_colors) {
 
   NANO_OS_ASSERT_EQ_INT(0x2f, consolePort->colors);
 }
+
+/// @var printedToPort
+///
+/// @brief Everything recordPrinted was asked to print, concatenated.
+static char printedToPort[64];
+
+/// @fn static int recordPrinted(ConsolePort *consolePort, const char *string)
+///
+/// @brief Stand in for a port's consolePrintString, keeping what it printed.
+///
+/// @param consolePort Unused.
+/// @param string The string the console printed.
+///
+/// @return Always returns 0.
+static int recordPrinted(ConsolePort *consolePort, const char *string) {
+  (void) consolePort;
+  strncat(printedToPort, string,
+    sizeof(printedToPort) - strlen(printedToPort) - 1);
+  return 0;
+}
+
+/// @fn static int sendWinsize(int64_t type, ConsoleWinsizeArgs *winsizeArgs)
+///
+/// @brief Hand the console's CONSOLE_GET_WINSIZE or CONSOLE_SET_WINSIZE
+/// handler a message from this process.
+///
+/// @param type CONSOLE_GET_WINSIZE or CONSOLE_SET_WINSIZE.
+/// @param winsizeArgs A pointer to the ConsoleWinsizeArgs to send.
+///
+/// @return Returns the returnValue the handler reported, or -2 if the request
+/// couldn't be made.
+static int sendWinsize(int64_t type, ConsoleWinsizeArgs *winsizeArgs) {
+  winsizeArgs->returnValue = -2;
+  ProcessMessage *sent = getAvailableMessage();
+  if (sent == NULL) {
+    return -2;
+  }
+  processMessageInit(sent, CONSOLE_COMMAND_SIGNATURE | type,
+    winsizeArgs, sizeof(*winsizeArgs), /* waiting= */ false);
+  if (processMessageQueuePush(getRunningProcess(), sent) != processSuccess) {
+    processMessageRelease(sent);
+    return -2;
+  }
+  ProcessMessage *received = processMessageQueuePop();
+  if (type == CONSOLE_GET_WINSIZE) {
+    consoleGetWinsizeCommandHandler(&inputState, received);
+    processMessageRelease(received);
+  } else {
+    consoleSetWinsizeCommandHandler(&inputState, received);
+  }
+  return winsizeArgs->returnValue;
+}
+
+NANO_OS_KERNEL_TEST(console_winsize, a_new_port_is_80_by_24) {
+  addFixture();
+
+  NANO_OS_ASSERT_TRUE(addPort(getRunningPid()));
+  NANO_OS_ASSERT_EQ_INT(24, inputState.consolePorts[1].rows);
+  NANO_OS_ASSERT_EQ_INT(80, inputState.consolePorts[1].columns);
+}
+
+NANO_OS_KERNEL_TEST(console_winsize, the_renderer_sets_what_the_owner_reads) {
+  static ConsoleWinsizeArgs winsizeArgs;
+  ConsolePort *consolePort = inputFixture(getRunningPid());
+  consolePort->outputOwner = consolePid;
+  consolePort->rows = 24;
+  consolePort->columns = 80;
+
+  winsizeArgs.rows = 60;
+  winsizeArgs.columns = 106;
+  NANO_OS_ASSERT_EQ_INT(0, sendWinsize(CONSOLE_SET_WINSIZE, &winsizeArgs));
+  NANO_OS_ASSERT_EQ_INT(60, consolePort->rows);
+  NANO_OS_ASSERT_EQ_INT(106, consolePort->columns);
+
+  consolePort->forwardingPid = PROCESS_ID_NOT_SET;
+  consolePort->outputOwner = getRunningPid();
+  winsizeArgs.rows = 0;
+  winsizeArgs.columns = 0;
+  NANO_OS_ASSERT_EQ_INT(0, sendWinsize(CONSOLE_GET_WINSIZE, &winsizeArgs));
+  NANO_OS_ASSERT_EQ_INT(60, winsizeArgs.rows);
+  NANO_OS_ASSERT_EQ_INT(106, winsizeArgs.columns);
+}
+
+NANO_OS_KERNEL_TEST(console_winsize, a_process_without_a_port_is_refused) {
+  static ConsoleWinsizeArgs winsizeArgs;
+  ConsolePort *consolePort = inputFixture(PROCESS_ID_NOT_SET);
+  consolePort->outputOwner = consolePid;
+  consolePort->rows = 24;
+  consolePort->columns = 80;
+
+  winsizeArgs.rows = 50;
+  winsizeArgs.columns = 132;
+  NANO_OS_ASSERT_EQ_INT(-1, sendWinsize(CONSOLE_SET_WINSIZE, &winsizeArgs));
+  NANO_OS_ASSERT_EQ_INT(24, consolePort->rows);
+  NANO_OS_ASSERT_EQ_INT(80, consolePort->columns);
+  NANO_OS_ASSERT_EQ_INT(-1, sendWinsize(CONSOLE_GET_WINSIZE, &winsizeArgs));
+}
+
+/// @fn static ConsolePort* resizeFixture(void)
+///
+/// @brief Make this process the owner of a port that records what the
+/// console prints to it.
+///
+/// @return Returns a pointer to the port.
+static ConsolePort* resizeFixture(void) {
+  ConsolePort *consolePort = rawFixture("");
+  consolePort->outputOwner = getRunningPid();
+  consolePort->shell = consolePid;
+  consolePort->consolePrintString = recordPrinted;
+  printedToPort[0] = '\0';
+  return consolePort;
+}
+
+NANO_OS_KERNEL_TEST(console_winsize, resize_reports_are_turned_on_and_off) {
+  ConsolePort *consolePort = resizeFixture();
+
+  setModes(CONSOLE_MODE_RESIZE_REPORTS);
+  NANO_OS_ASSERT_STR_EQ("\x1b[?2048h", printedToPort);
+  NANO_OS_ASSERT_EQ_INT(CONSOLE_MODE_RESIZE_REPORTS, consolePort->modes);
+
+  printedToPort[0] = '\0';
+  setModes(CONSOLE_MODE_RESIZE_REPORTS | CONSOLE_MODE_ECHO);
+  NANO_OS_ASSERT_STR_EQ("", printedToPort);
+
+  setModes(CONSOLE_MODE_ECHO);
+  NANO_OS_ASSERT_STR_EQ("\x1b[?2048l", printedToPort);
+}
+
+NANO_OS_KERNEL_TEST(console_winsize, releasing_the_port_ends_resize_reports) {
+  ConsolePort *consolePort = resizeFixture();
+  setModes(CONSOLE_MODE_RESIZE_REPORTS);
+  printedToPort[0] = '\0';
+
+  releasePid(getRunningPid());
+  NANO_OS_ASSERT_STR_EQ("\x1b[?2048l", printedToPort);
+  NANO_OS_ASSERT_EQ_INT(CONSOLE_MODE_DEFAULT, consolePort->modes);
+}
+
+NANO_OS_KERNEL_TEST(console_winsize, releasing_a_port_without_reports_prints_nothing) {
+  resizeFixture();
+  setModes(0);
+
+  releasePid(getRunningPid());
+  NANO_OS_ASSERT_STR_EQ("", printedToPort);
+}

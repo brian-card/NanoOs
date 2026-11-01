@@ -872,6 +872,39 @@ def test_line_editor_leaves_other_programs_input_cooked(s):
     edit(s, "echo ab" + LEFT + "x\r", "axb")
 
 
+def test_a_uart_console_is_80_by_24(s):
+    s.login()
+    assert s.sh("termtest size") == "24 80"
+
+
+def test_a_resize_report_arrives_in_one_read(s):
+    s.login()
+    s.child.sendline("termtest report")
+    s.child.expect_exact("\x1b[?2048h", timeout=10)
+    s.child.send("\x1b[48;30;100;0;0t")
+    s.child.expect_exact("\x1b[?2048l", timeout=10)
+    s.child.expect(r"\A\^\[\[48;30;100;0;0t\r*\n" + PROMPT, timeout=10)
+
+
+def test_exiting_with_resize_reports_on_turns_them_off(s):
+    s.login()
+    s.child.sendline("termtest leave")
+    s.child.expect_exact("\x1b[?2048h", timeout=10)
+    s.child.expect_exact("\x1b[?2048l", timeout=10)
+    s.child.expect(PROMPT, timeout=10)
+    assert s.sh("echo after") == "after"
+
+
+def test_vdp_console_reports_its_size(s):
+    vdp = s.restart_with_vdp()
+    vdp_login(vdp)
+    vdp.type("termtest size\r")
+    vdp.expect(r"\r\n60 106\r\n" + PROMPT)
+    vdp.type("termtest report\r")
+    vdp.expect(r"\r\n\^\[\[48;60;106;480;640t\r\n" + PROMPT)
+    assert vdp.errors == [], f"unexpected VDU commands: {vdp.errors}"
+
+
 def test_vdp_line_editor_redraws_the_line(s):
     vdp = s.restart_with_vdp()
     vdp_login(vdp)

@@ -221,6 +221,47 @@ NANO_OS_TEST(unit_vdp_text, other_escape_sequences_are_dropped) {
   NANO_OS_ASSERT_EQ_INT(8, state.column);
 }
 
+NANO_OS_TEST(unit_vdp_text, resize_report_mode_is_recorded_not_drawn) {
+  VdpTextState state = { .column = 0 };
+  uint8_t output[32];
+  const char *text = "a\x1b[?2048hb";
+
+  NANO_OS_ASSERT_EQ_INT(2, vdpTranslateText(&state, &text, output, 32));
+  NANO_OS_ASSERT_TRUE(memcmp(output, "ab", 2) == 0);
+  NANO_OS_ASSERT_TRUE(state.resizeReports);
+  NANO_OS_ASSERT_TRUE(state.resizeReportWanted);
+
+  state.resizeReportWanted = false;
+  text = "\x1b[?2048l";
+  NANO_OS_ASSERT_EQ_INT(0, vdpTranslateText(&state, &text, output, 32));
+  NANO_OS_ASSERT_FALSE(state.resizeReports);
+  NANO_OS_ASSERT_FALSE(state.resizeReportWanted);
+}
+
+NANO_OS_TEST(unit_vdp_text, turning_resize_reports_on_again_wants_a_report) {
+  VdpTextState state = { .column = 0 };
+  uint8_t output[32];
+  const char *text = "\x1b[?2048h";
+  translateAll(&state, text, output, 32);
+  state.resizeReportWanted = false;
+
+  text = "\x1b[?20";
+  NANO_OS_ASSERT_EQ_INT(0, vdpTranslateText(&state, &text, output, 32));
+  text = "48h";
+  NANO_OS_ASSERT_EQ_INT(0, vdpTranslateText(&state, &text, output, 32));
+  NANO_OS_ASSERT_TRUE(state.resizeReportWanted);
+}
+
+NANO_OS_TEST(unit_vdp_text, other_private_modes_leave_resize_reports_alone) {
+  VdpTextState state = { .column = 0 };
+  uint8_t output[32];
+  const char *text = "\x1b[?2048h\x1b[?204h\x1b[?20480l\x1b[2048lx";
+
+  NANO_OS_ASSERT_EQ_INT(1, translateAll(&state, text, output, 32));
+  NANO_OS_ASSERT_EQ_INT('x', output[0]);
+  NANO_OS_ASSERT_TRUE(state.resizeReports);
+}
+
 NANO_OS_TEST(unit_vdp_text, escape_sequence_spans_separate_writes) {
   VdpTextState state = { .column = 0 };
   uint8_t output[32];
