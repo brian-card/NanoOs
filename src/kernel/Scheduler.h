@@ -293,6 +293,8 @@ void* schedMalloc(size_t size);
 void schedFree(void *ptr);
 FILE* schedFopen(const char *pathname, const char *mode);
 char* schedFgets(char *buffer, int size, FILE *stream);
+size_t schedFread(void *ptr, size_t size, size_t nmemb, FILE *stream);
+void* schedRealloc(void *ptr, size_t size);
 int schedFclose(FILE *stream);
 int schedulerRunExecutiveOverlay(ProcessDescriptor *processDescriptor,
   char *commandPath, char **argv);
