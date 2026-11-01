@@ -51,9 +51,16 @@ typedef struct FileDescriptor FileDescriptor;
 /// @def POSIX_SPAWN_FOREGROUND
 ///
 /// @brief NanoOs extension:  posix_spawn flag that lends the caller's console
-/// port to the new process before it first runs.  The port returns when the
-/// process exits.
+/// port to the new process before it first runs and lets the process kill
+/// processes, which it needs to stop when interrupted.  The port returns when
+/// the process exits.
 #define POSIX_SPAWN_FOREGROUND 0x0100
+
+/// @def POSIX_SPAWN_ALLOW_SPAWN
+///
+/// @brief NanoOs extension:  posix_spawn flag that lets the new process spawn
+/// processes of its own.  Only a process that can spawn can pass this on.
+#define POSIX_SPAWN_ALLOW_SPAWN 0x0200
 
 /// @struct posix_spawnattr_t
 ///
