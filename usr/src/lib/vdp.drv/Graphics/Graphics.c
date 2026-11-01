@@ -82,7 +82,7 @@ static void vdpWriteZeros(size_t length) {
 /// @param desc The font to upload.
 ///
 /// @return Returns the font's handle on success, GFX_INVALID_HANDLE if the
-/// font isn't one the VDP can hold.
+/// font isn't one the VDP can hold or VDP_MAX_FONTS have been uploaded.
 static GfxHandle vdpUploadFont(VdpOutput *vdpOutput,
   const GfxFontDesc *desc
 ) {
@@ -92,10 +92,13 @@ static GfxHandle vdpUploadFont(VdpOutput *vdpOutput,
   if ((desc->bitmap == NULL) || (glyphSize == 0) || (desc->numChars == 0)
     || (desc->firstChar + desc->numChars > VDP_FONT_NUM_GLYPHS)
     || (desc->size < fontSize) || (bufferSize > 0xFFFF)
+    || (vdpOutput->numFonts >= VDP_MAX_FONTS)
   ) {
     return GFX_INVALID_HANDLE;
   }
 
+  vdpOutput->fontWidths[vdpOutput->numFonts] = desc->glyphW;
+  vdpOutput->fontHeights[vdpOutput->numFonts] = desc->glyphH;
   uint16_t id = VDP_FONT_ID_BASE + vdpOutput->numFonts++;
   const uint8_t upload[] = {
     23, 0, 0xA0, VDP_WORD(id), 2,
@@ -137,7 +140,8 @@ static uint16_t vdpFontId(VdpOutput *vdpOutput, GfxHandle font) {
 /// @fn static GfxError vdpSetSystemFont(VdpOutput *vdpOutput, GfxHandle font)
 ///
 /// @brief Select an uploaded font for console text with
-/// VDU 23,0,&95,0,id;flags.
+/// VDU 23,0,&95,0,id;flags, and note that the screen's rows and columns, and
+/// a resize report if they're on, are to be sent.
 ///
 /// @param vdpOutput A pointer to the driver's VdpOutput.
 /// @param font The handle vdpUploadFont returned for the font.
@@ -152,6 +156,10 @@ static GfxError vdpSetSystemFont(VdpOutput *vdpOutput, GfxHandle font) {
 
   const uint8_t select[] = { 23, 0, 0x95, 0, VDP_WORD(id), 0 };
   vdpWrite(select, sizeof(select));
+  vdpOutput->glyphWidth = vdpOutput->fontWidths[id - VDP_FONT_ID_BASE];
+  vdpOutput->glyphHeight = vdpOutput->fontHeights[id - VDP_FONT_ID_BASE];
+  vdpOutput->sizeChanged = true;
+  vdpOutput->textState.resizeReportWanted = vdpOutput->textState.resizeReports;
   return GFX_OK;
 }
 
@@ -233,6 +241,95 @@ static void vdpLoadBuiltInFont(VdpOutput *vdpOutput) {
   message.select.displayId = 0;
   message.select.handle = font;
   vdpHandleGraphics(vdpOutput, GFX_MSG_SET_SYSTEM_FONT, &message);
+}
+
+/// @fn static char* vdpAppendNumber(char *text, unsigned int number)
+///
+/// @brief Write a number in decimal.
+///
+/// @param text Where to write the number.
+/// @param number The number to write.
+///
+/// @return Returns a pointer just past the last digit written.
+static char* vdpAppendNumber(char *text, unsigned int number) {
+  char digits[5];
+  int numDigits = 0;
+  do {
+    digits[numDigits++] = (char) ('0' + (number % 10));
+    number /= 10;
+  } while ((number > 0) && (numDigits < (int) sizeof(digits)));
+  while (numDigits > 0) {
+    *text++ = digits[--numDigits];
+  }
+  return text;
+}
+
+/// @fn void* vdpReportSize(void *args)
+///
+/// @brief Tell the console the screen's rows and columns once the font sets
+/// them, and queue a resize report for the console as keys of up to
+/// CONSOLE_INPUT_READY_SIZE bytes when one is wanted and there's room for it.
+/// The main overlay calls this only when there is something to send, which
+/// keeps it out of the main overlay.
+///
+/// @param args A pointer to the driver's VdpStartupArgs.
+///
+/// @return Always returns the provided pointer.
+void* vdpReportSize(void *args) {
+  VdpInput *input = ((VdpStartupArgs*) args)->input;
+  VdpOutput *vdpOutput = ((VdpStartupArgs*) args)->output;
+  unsigned int rows = VDP_SCREEN_HEIGHT / vdpOutput->glyphHeight;
+  unsigned int columns = VDP_SCREEN_WIDTH / vdpOutput->glyphWidth;
+
+  if ((vdpOutput->sizeChanged == true) && (input->sizeMessage == NULL)) {
+    ProcessMessage *message = getAvailableMessage();
+    if (message != NULL) {
+      input->sizeArgs.rows = (uint16_t) rows;
+      input->sizeArgs.columns = (uint16_t) columns;
+      input->sizeArgs.returnValue = 0;
+      processMessageInit(message,
+        CONSOLE_COMMAND_SIGNATURE | CONSOLE_SET_WINSIZE,
+        &input->sizeArgs, sizeof(input->sizeArgs), /* waiting= */ true);
+      if (sendProcessMessageToPid(input->consolePid, message)
+        == processSuccess
+      ) {
+        input->sizeMessage = message;
+        vdpOutput->sizeChanged = false;
+      } else {
+        processMessageRelease(message);
+      }
+    }
+  }
+
+  if (vdpOutput->textState.resizeReportWanted == false) {
+    return args;
+  }
+  char report[32] = "\033[48;";
+  char *end = vdpAppendNumber(&report[5], rows);
+  *end++ = ';';
+  end = vdpAppendNumber(end, columns);
+  *end++ = ';';
+  end = vdpAppendNumber(end, VDP_SCREEN_HEIGHT);
+  *end++ = ';';
+  end = vdpAppendNumber(end, VDP_SCREEN_WIDTH);
+  *end++ = 't';
+  uint8_t length = (uint8_t) (end - report);
+  uint8_t numChunks = (uint8_t) ((length + CONSOLE_INPUT_READY_SIZE - 1)
+    / CONSOLE_INPUT_READY_SIZE);
+  if (input->pendingLength + numChunks + length > VDP_PENDING_SIZE) {
+    return args;
+  }
+  for (uint8_t start = 0; start < length; start += CONSOLE_INPUT_READY_SIZE) {
+    uint8_t chunk = length - start;
+    if (chunk > CONSOLE_INPUT_READY_SIZE) {
+      chunk = CONSOLE_INPUT_READY_SIZE;
+    }
+    input->pending[input->pendingLength++] = chunk;
+    memcpy(&input->pending[input->pendingLength], &report[start], chunk);
+    input->pendingLength += chunk;
+  }
+  vdpOutput->textState.resizeReportWanted = false;
+  return args;
 }
 
 /// @fn void* vdpGraphics(void *args)
