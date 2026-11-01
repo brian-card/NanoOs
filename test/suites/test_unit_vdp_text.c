@@ -43,7 +43,7 @@ static size_t translateAll(VdpTextState *state, const char *text,
 }
 
 NANO_OS_TEST(unit_vdp_text, printable_text_passes_through) {
-  VdpTextState state = { .column = 0 };
+  VdpTextState state = { .column = 0, .numRows = 60, .numColumns = 106 };
   uint8_t output[32];
   const char *text = "ls -l";
 
@@ -54,7 +54,7 @@ NANO_OS_TEST(unit_vdp_text, printable_text_passes_through) {
 }
 
 NANO_OS_TEST(unit_vdp_text, newline_becomes_return_and_line_feed) {
-  VdpTextState state = { .column = 4 };
+  VdpTextState state = { .column = 4, .numRows = 60, .numColumns = 106 };
   uint8_t output[32];
   const char *text = "a\nb";
 
@@ -64,7 +64,7 @@ NANO_OS_TEST(unit_vdp_text, newline_becomes_return_and_line_feed) {
 }
 
 NANO_OS_TEST(unit_vdp_text, tab_pads_to_the_next_multiple_of_eight) {
-  VdpTextState state = { .column = 0 };
+  VdpTextState state = { .column = 0, .numRows = 60, .numColumns = 106 };
   uint8_t output[32];
   const char *text = "abc\tx\t";
 
@@ -74,7 +74,7 @@ NANO_OS_TEST(unit_vdp_text, tab_pads_to_the_next_multiple_of_eight) {
 }
 
 NANO_OS_TEST(unit_vdp_text, control_bytes_and_del_are_drawn_as_glyphs) {
-  VdpTextState state = { .column = 0 };
+  VdpTextState state = { .column = 0, .numRows = 60, .numColumns = 106 };
   uint8_t output[32];
   const char *text = "a\x16\x01\x11" "b\x7f" "c\x0c\x1f";
 
@@ -85,7 +85,7 @@ NANO_OS_TEST(unit_vdp_text, control_bytes_and_del_are_drawn_as_glyphs) {
 }
 
 NANO_OS_TEST(unit_vdp_text, a_full_buffer_never_splits_a_control_glyph) {
-  VdpTextState state = { .column = 0 };
+  VdpTextState state = { .column = 0, .numRows = 60, .numColumns = 106 };
   uint8_t output[32];
   const char *text = "ab\x01";
 
@@ -97,7 +97,7 @@ NANO_OS_TEST(unit_vdp_text, a_full_buffer_never_splits_a_control_glyph) {
 }
 
 NANO_OS_TEST(unit_vdp_text, erase_bell_and_high_bytes_pass_through) {
-  VdpTextState state = { .column = 0 };
+  VdpTextState state = { .column = 0, .numRows = 60, .numColumns = 106 };
   uint8_t output[32];
   const char *text = "ab\b \b\a\xe9";
 
@@ -107,7 +107,7 @@ NANO_OS_TEST(unit_vdp_text, erase_bell_and_high_bytes_pass_through) {
 }
 
 NANO_OS_TEST(unit_vdp_text, a_full_buffer_never_splits_a_character) {
-  VdpTextState state = { .column = 0 };
+  VdpTextState state = { .column = 0, .numRows = 60, .numColumns = 106 };
   uint8_t output[32];
   const char *text = "ab\n\t";
 
@@ -120,7 +120,7 @@ NANO_OS_TEST(unit_vdp_text, a_full_buffer_never_splits_a_character) {
 }
 
 NANO_OS_TEST(unit_vdp_text, minimum_buffer_translates_everything) {
-  VdpTextState state = { .column = 1 };
+  VdpTextState state = { .column = 1, .numRows = 60, .numColumns = 106 };
   uint8_t output[64];
   const char *text = "\t\tx\ny";
 
@@ -130,7 +130,7 @@ NANO_OS_TEST(unit_vdp_text, minimum_buffer_translates_everything) {
 }
 
 NANO_OS_TEST(unit_vdp_text, sgr_colors_become_text_color_commands) {
-  VdpTextState state = { .column = 0 };
+  VdpTextState state = { .column = 0, .numRows = 60, .numColumns = 106 };
   uint8_t output[32];
   const char *text = "\x1b[44;93mX";
   const uint8_t expected[] = { 17, CGA_INDEX_YELLOW,
@@ -145,7 +145,7 @@ NANO_OS_TEST(unit_vdp_text, sgr_colors_become_text_color_commands) {
 
 NANO_OS_TEST(unit_vdp_text, every_cga_color_round_trips_through_sgr) {
   for (int ii = 0; ii < CGA_NUM_COLORS; ii++) {
-    VdpTextState state = { .column = 0 };
+    VdpTextState state = { .column = 0, .numRows = 60, .numColumns = 106 };
     uint8_t output[32];
     char sequence[16];
     snprintf(sequence, sizeof(sequence), "\x1b[%d;%dm",
@@ -160,7 +160,7 @@ NANO_OS_TEST(unit_vdp_text, every_cga_color_round_trips_through_sgr) {
 }
 
 NANO_OS_TEST(unit_vdp_text, sgr_resets_select_the_default_colors) {
-  VdpTextState state = { .column = 0 };
+  VdpTextState state = { .column = 0, .numRows = 60, .numColumns = 106 };
   uint8_t output[32];
   const char *text = "\x1b[0m\x1b[m\x1b[39;49m";
   const uint8_t defaults[] = { 17, CGA_INDEX_WHITE,
@@ -176,7 +176,7 @@ NANO_OS_TEST(unit_vdp_text, sgr_resets_select_the_default_colors) {
 }
 
 NANO_OS_TEST(unit_vdp_text, sgr_sets_only_the_colors_it_names) {
-  VdpTextState state = { .column = 0 };
+  VdpTextState state = { .column = 0, .numRows = 60, .numColumns = 106 };
   uint8_t output[32];
   const char *text = "\x1b[31m\x1b[1;102m";
   const uint8_t expected[] = { 17, CGA_INDEX_RED,
@@ -188,7 +188,7 @@ NANO_OS_TEST(unit_vdp_text, sgr_sets_only_the_colors_it_names) {
 }
 
 NANO_OS_TEST(unit_vdp_text, oversized_parameter_is_not_mistaken_for_a_color) {
-  VdpTextState state = { .column = 0 };
+  VdpTextState state = { .column = 0, .numRows = 60, .numColumns = 106 };
   uint8_t output[32];
   const char *text = "\x1b[1000034;44m";
   const uint8_t expected[] = { 17, 128 + CGA_INDEX_BLUE };
@@ -199,10 +199,10 @@ NANO_OS_TEST(unit_vdp_text, oversized_parameter_is_not_mistaken_for_a_color) {
 }
 
 NANO_OS_TEST(unit_vdp_text, clear_and_home_become_vdu_commands) {
-  VdpTextState state = { .column = 5 };
+  VdpTextState state = { .column = 5, .numRows = 60, .numColumns = 106 };
   uint8_t output[32];
   const char *text = "\x1b[2J\x1b[H\x1b[1;1f";
-  const uint8_t expected[] = { 12, 30, 30 };
+  const uint8_t expected[] = { 12, 31, 0, 0, 31, 0, 0 };
 
   NANO_OS_ASSERT_EQ_INT(sizeof(expected),
     vdpTranslateText(&state, &text, output, 32));
@@ -211,10 +211,10 @@ NANO_OS_TEST(unit_vdp_text, clear_and_home_become_vdu_commands) {
 }
 
 NANO_OS_TEST(unit_vdp_text, other_escape_sequences_are_dropped) {
-  VdpTextState state = { .column = 0 };
+  VdpTextState state = { .column = 0, .numRows = 60, .numColumns = 106 };
   uint8_t output[32];
   const char *text =
-    "a\x1b[?25lb\x1b[3Jc\x1b[5;10Hd\x1b(Be\x1b" "cf\x1b[1mg\x1b[2\x01h";
+    "a\x1b[?25lb\x1b[3Jc\x1b[5;10rd\x1b(Be\x1b" "cf\x1b[1mg\x1b[2\x01h";
 
   NANO_OS_ASSERT_EQ_INT(8, vdpTranslateText(&state, &text, output, 32));
   NANO_OS_ASSERT_TRUE(memcmp(output, "abcdefgh", 8) == 0);
@@ -222,7 +222,7 @@ NANO_OS_TEST(unit_vdp_text, other_escape_sequences_are_dropped) {
 }
 
 NANO_OS_TEST(unit_vdp_text, resize_report_mode_is_recorded_not_drawn) {
-  VdpTextState state = { .column = 0 };
+  VdpTextState state = { .column = 0, .numRows = 60, .numColumns = 106 };
   uint8_t output[32];
   const char *text = "a\x1b[?2048hb";
 
@@ -239,7 +239,7 @@ NANO_OS_TEST(unit_vdp_text, resize_report_mode_is_recorded_not_drawn) {
 }
 
 NANO_OS_TEST(unit_vdp_text, turning_resize_reports_on_again_wants_a_report) {
-  VdpTextState state = { .column = 0 };
+  VdpTextState state = { .column = 0, .numRows = 60, .numColumns = 106 };
   uint8_t output[32];
   const char *text = "\x1b[?2048h";
   translateAll(&state, text, output, 32);
@@ -253,7 +253,7 @@ NANO_OS_TEST(unit_vdp_text, turning_resize_reports_on_again_wants_a_report) {
 }
 
 NANO_OS_TEST(unit_vdp_text, other_private_modes_leave_resize_reports_alone) {
-  VdpTextState state = { .column = 0 };
+  VdpTextState state = { .column = 0, .numRows = 60, .numColumns = 106 };
   uint8_t output[32];
   const char *text = "\x1b[?2048h\x1b[?204h\x1b[?20480l\x1b[2048lx";
 
@@ -262,8 +262,106 @@ NANO_OS_TEST(unit_vdp_text, other_private_modes_leave_resize_reports_alone) {
   NANO_OS_ASSERT_TRUE(state.resizeReports);
 }
 
+NANO_OS_TEST(unit_vdp_text, cursor_position_becomes_a_tab_to_the_cell) {
+  VdpTextState state = { .column = 0, .numRows = 60, .numColumns = 106 };
+  uint8_t output[32];
+  const char *text = "\x1b[5;10H\x1b[99;200H\x1b[3H\x1b[;7f";
+  const uint8_t expected[] = {
+    31, 9, 4,  31, 105, 59,  31, 0, 2,  31, 6, 0
+  };
+
+  NANO_OS_ASSERT_EQ_INT(sizeof(expected),
+    translateAll(&state, text, output, 32));
+  NANO_OS_ASSERT_TRUE(memcmp(output, expected, sizeof(expected)) == 0);
+  NANO_OS_ASSERT_EQ_INT(6, state.column);
+  NANO_OS_ASSERT_EQ_INT(0, state.row);
+}
+
+NANO_OS_TEST(unit_vdp_text, erase_writes_spaces_to_the_end_then_moves_back) {
+  VdpTextState state = { .column = 0, .numRows = 60, .numColumns = 106 };
+  uint8_t output[32];
+  const char *text = "\x1b[4;101H\x1b[Kx";
+  const uint8_t expected[] = {
+    31, 100, 3,  ' ', ' ', ' ', ' ', ' ', ' ',  31, 100, 3,  'x'
+  };
+
+  NANO_OS_ASSERT_EQ_INT(sizeof(expected),
+    translateAll(&state, text, output, 32));
+  NANO_OS_ASSERT_TRUE(memcmp(output, expected, sizeof(expected)) == 0);
+  NANO_OS_ASSERT_EQ_INT(101, state.column);
+  NANO_OS_ASSERT_EQ_INT(3, state.row);
+}
+
+NANO_OS_TEST(unit_vdp_text, erase_that_does_not_fit_is_finished_later) {
+  VdpTextState state = { .column = 0, .numRows = 60, .numColumns = 106 };
+  uint8_t output[32];
+  uint8_t all[160];
+  size_t total = 0;
+  const char *text = "\x1b[2;1H\x1b[K";
+
+  int calls = 0;
+  while (((*text != '\0') || (state.erasePending > 0)) && (calls < 20)) {
+    size_t length = vdpTranslateText(&state, &text, output, sizeof(output));
+    NANO_OS_ASSERT_TRUE(length <= sizeof(output));
+    memcpy(&all[total], output, length);
+    total += length;
+    calls++;
+  }
+
+  NANO_OS_ASSERT_EQ_INT(3 + 106 + 3, total);
+  NANO_OS_ASSERT_EQ_INT(31, all[0]);
+  for (size_t ii = 3; ii < 3 + 106; ii++) {
+    NANO_OS_ASSERT_EQ_INT(' ', all[ii]);
+  }
+  const uint8_t back[] = { 31, 0, 1 };
+  NANO_OS_ASSERT_TRUE(memcmp(&all[3 + 106], back, sizeof(back)) == 0);
+}
+
+NANO_OS_TEST(unit_vdp_text, erase_with_a_parameter_is_dropped) {
+  VdpTextState state = { .column = 3, .numRows = 60, .numColumns = 106 };
+  uint8_t output[32];
+  const char *text = "\x1b[1K\x1b[2Ka";
+
+  NANO_OS_ASSERT_EQ_INT(1, translateAll(&state, text, output, 32));
+  NANO_OS_ASSERT_EQ_INT('a', output[0]);
+  NANO_OS_ASSERT_EQ_INT(0, state.erasePending);
+}
+
+NANO_OS_TEST(unit_vdp_text, cursor_wraps_like_the_vdp_with_scroll_protection) {
+  VdpTextState state = { .column = 0, .numRows = 3, .numColumns = 4 };
+  uint8_t output[32];
+
+  translateAll(&state, "abcd", output, 32);
+  NANO_OS_ASSERT_EQ_INT(0, state.column);
+  NANO_OS_ASSERT_EQ_INT(1, state.row);
+
+  translateAll(&state, "\n\x1b[3;4Hz", output, 32);
+  NANO_OS_ASSERT_EQ_INT(4, state.column);
+  NANO_OS_ASSERT_EQ_INT(2, state.row);
+
+  translateAll(&state, "y", output, 32);
+  NANO_OS_ASSERT_EQ_INT(1, state.column);
+  NANO_OS_ASSERT_EQ_INT(2, state.row);
+
+  translateAll(&state, "\n\n\t", output, 32);
+  NANO_OS_ASSERT_EQ_INT(2, state.row);
+}
+
+NANO_OS_TEST(unit_vdp_text, backspace_at_the_left_edge_goes_up_a_row) {
+  VdpTextState state = { .column = 0, .numRows = 3, .numColumns = 4 };
+  uint8_t output[32];
+
+  translateAll(&state, "\x1b[2;1H\b", output, 32);
+  NANO_OS_ASSERT_EQ_INT(3, state.column);
+  NANO_OS_ASSERT_EQ_INT(0, state.row);
+
+  translateAll(&state, "\b\x1b[1;1H\b", output, 32);
+  NANO_OS_ASSERT_EQ_INT(3, state.column);
+  NANO_OS_ASSERT_EQ_INT(0, state.row);
+}
+
 NANO_OS_TEST(unit_vdp_text, escape_sequence_spans_separate_writes) {
-  VdpTextState state = { .column = 0 };
+  VdpTextState state = { .column = 0, .numRows = 60, .numColumns = 106 };
   uint8_t output[32];
   const char *text = "\x1b[4";
   const uint8_t expected[] = { 17, 128 + CGA_INDEX_RED };
@@ -276,7 +374,7 @@ NANO_OS_TEST(unit_vdp_text, escape_sequence_spans_separate_writes) {
 }
 
 NANO_OS_TEST(unit_vdp_text, a_full_buffer_never_splits_an_escape_sequence) {
-  VdpTextState state = { .column = 0 };
+  VdpTextState state = { .column = 0, .numRows = 60, .numColumns = 106 };
   uint8_t output[32];
   const char *text = "\x1b[44;93m";
   const uint8_t expected[] = { 17, CGA_INDEX_YELLOW,

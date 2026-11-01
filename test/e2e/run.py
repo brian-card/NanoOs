@@ -287,14 +287,14 @@ def assert_vdp_set_up_on_answer(vdp):
     assert resets == VDP_RESET, \
         f"the VDP wasn't reset before the mode change: {resets}"
     setup = [(kind, detail)
-             for _t, kind, detail in vdp.events[first_mode:first_mode + 13]]
-    assert setup == [("mode", 0), ("layout", 1),
+             for _t, kind, detail in vdp.events[first_mode:first_mode + 14]]
+    assert setup == [("mode", 0), ("behaviour", (1, 0xFE)), ("layout", 1),
                      ("cls", None), ("cursor", 1), ("mouse", "reset"),
                      ("mouse", "disable"), ("pointer", VDP_POINTER_ID),
                      ("font", VDP_FONT_ID),
                      ("colour", CGA_WHITE), ("colour", 128 + CGA_BLACK),
-                     ("cls", None), ("home", None),
-                     ("text", setup[12][1])], \
+                     ("cls", None), ("tab", (0, 0)),
+                     ("text", setup[13][1])], \
         f"the screen wasn't set up first: {setup}"
     assert vdp.palette == CGA_PALETTE, \
         f"the palette isn't CGA's: {vdp.palette}"
@@ -450,7 +450,8 @@ def test_vdp_console_logs_in_and_runs_a_command(s):
 
 
 def vdp_screen_events(vdp, start):
-    """Return the color, clear and home events the VDP got after an index.
+    """Return the color, clear and cursor move events the VDP got after an
+    index.
 
     @param vdp The FakeVdp.
     @param start The index in vdp.events to start from.
@@ -459,14 +460,14 @@ def vdp_screen_events(vdp, start):
     """
     with vdp.lock:
         return [(kind, detail) for _, kind, detail in vdp.events[start:]
-                if kind in ("colour", "cls", "home")]
+                if kind in ("colour", "cls", "tab")]
 
 
 def test_vdp_color_and_clear_set_the_text_colors_and_clear(s):
     vdp = s.restart_with_vdp()
     vdp_login(vdp)
     expected = [("colour", 15), ("colour", 128 + 2), ("cls", None),
-                ("home", None)]
+                ("tab", (0, 0))]
     for command in ("color 2f", "clear"):
         vdp.clear()
         with vdp.lock:
@@ -895,6 +896,14 @@ def test_exiting_with_resize_reports_on_turns_them_off(s):
     assert s.sh("echo after") == "after"
 
 
+def test_termtest_erase_writes_at_the_position_it_is_given(s):
+    s.login()
+    s.child.sendline("termtest erase 60 100")
+    s.child.expect_exact("\x1b[60;100Habc\x1b[K", timeout=10)
+    s.child.sendline("")
+    s.child.expect(PROMPT, timeout=10)
+
+
 def test_vdp_console_reports_its_size(s):
     vdp = s.restart_with_vdp()
     vdp_login(vdp)
@@ -902,6 +911,31 @@ def test_vdp_console_reports_its_size(s):
     vdp.expect(r"\r\n60 106\r\n" + PROMPT)
     vdp.type("termtest report\r")
     vdp.expect(r"\r\n\^\[\[48;60;106;480;640t\r\n" + PROMPT)
+    assert vdp.errors == [], f"unexpected VDU commands: {vdp.errors}"
+
+
+def test_vdp_console_moves_the_cursor_and_erases_to_the_end_of_the_line(s):
+    vdp = s.restart_with_vdp()
+    vdp_login(vdp)
+    assert vdp.cursor_behaviour & 1, "scroll protect is off"
+    start = len(vdp.events)
+    vdp.type("termtest erase\r")
+    # termtest waits for input, so nothing drawn after the erase can finish it.
+    deadline = time.time() + 10
+    with vdp.lock:
+        while (("tab", (7, 2)) not in
+               [(kind, detail) for _, kind, detail in vdp.events[start:]]):
+            left = deadline - time.time()
+            assert left > 0, "the erase never moved the cursor back"
+            vdp.lock.wait(left)
+        drawn = [(kind, detail) for _, kind, detail in vdp.events[start:]
+                 if kind in ("tab", "text")]
+    at = drawn.index(("tab", (4, 2)))
+    expected = ([("text", ord(c)) for c in "abc"]
+                + [("text", ord(" "))] * 99 + [("tab", (7, 2))])
+    assert drawn[at + 1:at + 1 + len(expected)] == expected, drawn[at:]
+    vdp.type("\r")
+    vdp.expect(PROMPT + r"$")
     assert vdp.errors == [], f"unexpected VDU commands: {vdp.errors}"
 
 

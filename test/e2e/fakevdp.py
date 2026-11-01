@@ -78,6 +78,7 @@ MOUSE_DISABLE = 1
 MOUSE_RESET = 2
 MOUSE_SET_CURSOR = 3
 SPRITES = 27
+CURSOR_BEHAVIOUR = 16
 SELECT_BITMAP = 0x20
 CREATE_BITMAP = 0x21
 MAKE_CURSOR = 0x40
@@ -172,6 +173,7 @@ class FakeVdp:
         self.caps_lock = False
         self.scroll_lock = False
         self.leds = 0
+        self.cursor_behaviour = 0  # VDU 23,16 flags; bit 0 is scroll protect
         self.mouse_enabled = False
         self.mouse_cursor = None
         self.mouse = mouse
@@ -247,6 +249,9 @@ class FakeVdp:
                         self.lock.notify_all()
                 elif byte == 27:
                     self._glyph(next(stream))
+                elif byte == 31:
+                    column, row = next(stream), next(stream)
+                    self._event("tab", (column, row))
                 else:
                     self._text(byte)
         except StopIteration:
@@ -321,6 +326,13 @@ class FakeVdp:
                 self._event("cursor", mode)
         elif first == SPRITES:
             self._sprites(stream)
+        elif first == CURSOR_BEHAVIOUR:
+            setting, mask = next(stream), next(stream)
+            if self.listening:
+                with self.lock:
+                    self.cursor_behaviour = (
+                        (self.cursor_behaviour & mask) ^ setting)
+                self._event("behaviour", (setting, mask))
         else:
             self.errors.append(f"VDU 23,{first}")
 
