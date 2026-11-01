@@ -123,11 +123,6 @@ typedef struct NamedProcessEntry {
       | (((uint32_t) 1) << SCHEDULER_REPLACE_OVERLAY) \
   }, \
   { \
-    .destinationPid = 0, /* Console PID */ \
-    .signature      = CONSOLE_COMMAND_SIGNATURE, \
-    .messageTypes   = (((uint32_t) 1) << CONSOLE_RELEASE_PORT) \
-  }, \
-  { \
     .destinationPid = 0, /* Memory manager PID */ \
     .signature      = MEMORY_MANAGER_COMMAND_SIGNATURE, \
     .messageTypes \

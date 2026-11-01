@@ -1169,10 +1169,9 @@ int halCommonInitLogger(void) {
   // to grant (see LOGGER_IPC_CAPABILITIES_INITIALIZER).
   if (loggerIpcCapabilities != NULL) {
     loggerIpcCapabilities[0].destinationPid = schedulerPid;
-    loggerIpcCapabilities[1].destinationPid = consolePid;
-    loggerIpcCapabilities[2].destinationPid = memoryManagerPid;
-    loggerIpcCapabilities[3].destinationPid = rootFilesystemPid;
-    loggerIpcCapabilities[4].destinationPid = loggerPid;
+    loggerIpcCapabilities[1].destinationPid = memoryManagerPid;
+    loggerIpcCapabilities[2].destinationPid = rootFilesystemPid;
+    loggerIpcCapabilities[3].destinationPid = loggerPid;
     processDescriptor->ipcCapabilities = loggerIpcCapabilities;
     processDescriptor->numIpcCapabilities = numLoggerIpcCapabilities;
     processDescriptor->ipcCapabilitiesDynamic = false;
