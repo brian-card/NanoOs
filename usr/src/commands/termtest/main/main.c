@@ -46,13 +46,15 @@
 /// @return This function returns no value.
 static void printUsage(FILE *stream) {
   fputs(
-    "Usage: termtest size|report|leave\n"
+    "Usage: termtest size|report|leave|erase [row column]\n"
     "\n"
     "Exercise the terminal size functions.\n"
     "  size    Print the terminal's rows and columns.\n"
     "  report  Turn on resize reports in raw mode, print the next input read\n"
     "          with escapes shown as ^[, then restore the terminal.\n"
     "  leave   Turn on resize reports and exit without turning them off.\n"
+    "  erase   Write abc at a row and column (3 and 5 if not given), erase\n"
+    "          to the end of the line, then wait for a line of input.\n"
     "\n"
     "Options:\n"
     "  --help  Show this help and exit.\n",
@@ -120,6 +122,12 @@ int main(int argc, char **argv) {
     return printReport(true);
   } else if ((argc == 2) && (strcmp(argv[1], "leave") == 0)) {
     return printReport(false);
+  } else if (((argc == 2) || (argc == 4)) && (strcmp(argv[1], "erase") == 0)) {
+    printf("\033[%s;%sHabc\033[K",
+      (argc == 4) ? argv[2] : "3", (argc == 4) ? argv[3] : "5");
+    char line[8];
+    fgets(line, sizeof(line), stdin);
+    return 0;
   }
 
   printUsage(stderr);
