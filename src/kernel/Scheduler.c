@@ -805,13 +805,16 @@ int addProcessHalCapability(ProcessDescriptor *processDescriptor,
 ///
 /// @brief Give a process its own copy of its ipcCapabilities array if it's
 /// still using one of the base arrays, which every process at its privilege
-/// level shares.
+/// level shares.  Always inlined so that its frame doesn't deepen the
+/// scheduler's stack when it restarts a shell.
 ///
 /// @param processDescriptor A pointer to the ProcessDescriptor with the
 ///   ipcCapabilities array to copy.
 ///
 /// @return Returns 0 on success, -ENOMEM on failure.
-static int ipcCapabilitiesMakePrivate(ProcessDescriptor *processDescriptor) {
+static inline __attribute__((always_inline)) int ipcCapabilitiesMakePrivate(
+  ProcessDescriptor *processDescriptor
+) {
   if (processDescriptor->ipcCapabilitiesDynamic == true) {
     return 0;
   }
@@ -3587,6 +3590,19 @@ int schedulerExecveCommandHandler(
     return 0; // Don't retry this command
   }
 
+  int shellIndex = ((int) processDescriptor->processId)
+    - ((int) _schedulerState->firstShellPid);
+  if ((processDescriptor->userId != NO_USER_ID)
+    && (processDescriptor->shellPath == NULL)
+    && (shellIndex >= 0) && (shellIndex < _schedulerState->numShells)
+  ) {
+    // Login has set the user and is running the user's shell.
+    processDescriptor->shellPath = (char*) schedMalloc(strlen(pathname) + 1);
+    if (processDescriptor->shellPath != NULL) {
+      strcpy(processDescriptor->shellPath, pathname);
+    }
+  }
+
   // The arguments provided to this command are going to replace the ones that
   // spawned the original.  We need to free the original envp if there was one.
   if (processDescriptor->envp != NULL) {
@@ -5485,7 +5501,12 @@ int restartOverlayShell(ProcessDescriptor *processDescriptor) {
     processDescriptor->processId, CONSOLE_COMMAND_SIGNATURE,
     CONSOLE_RETURNING_INPUT);
 
+  if (processDescriptor->shellPath == NULL) {
+    processDescriptor->userId = NO_USER_ID;
+  }
   if (processDescriptor->userId == NO_USER_ID) {
+    schedFree(processDescriptor->shellPath);
+    processDescriptor->shellPath = NULL;
     if (processDescriptor->envp != NULL) {
       // The pointer for the envp block is stored at envp[0], so free that.
       schedFree(processDescriptor->envp[0]);
@@ -5521,56 +5542,30 @@ int restartOverlayShell(ProcessDescriptor *processDescriptor) {
 
   // User process exited.  Re-launch the shell.
   logDebug("Restarting shell\n");
-  int returnValue = 0;
-  char *passwdStringBuffer
-    = (char*) schedMalloc(NANO_OS_PASSWD_STRING_BUF_SIZE);
-  if (passwdStringBuffer == NULL) {
-    logError("Could not allocate space for passwdStringBuffer\n");
-    return -ENOMEM;
+  shellArgs[0] = strrchr(processDescriptor->shellPath, '/') + 1;
+  char *digit = &_shellStatusOption[sizeof("--status=") - 1];
+  uint8_t exitStatus = processDescriptor->exitStatus;
+  if (exitStatus >= 100) {
+    *digit++ = '0' + (exitStatus / 100);
   }
-  struct passwd *pwd = (struct passwd*) schedMalloc(sizeof(struct passwd));
-  if (pwd == NULL) {
-    logError("Could not allocate space for pwd\n");
-    schedFree(passwdStringBuffer);
-    return -ENOMEM;
+  if (exitStatus >= 10) {
+    *digit++ = '0' + ((exitStatus / 10) % 10);
   }
-  do {
-    struct passwd *result = NULL;
-    nanoOsGetpwuid_r(processDescriptor->userId, pwd,
-      passwdStringBuffer, NANO_OS_PASSWD_STRING_BUF_SIZE, &result);
-    if (result == NULL) {
-      logError("Could not find passwd info for uid %ld\n",
-        (long int) processDescriptor->userId);
-      returnValue = -ENOENT;
-      break;
+  *digit++ = '0' + (exitStatus % 10);
+  *digit = '\0';
+  shellArgs[1] = _shellStatusOption;
+  int returnValue = schedulerRunOverlayCommand(processDescriptor,
+    processDescriptor->shellPath, (char**) shellArgs, processDescriptor->envp);
+  if (returnValue == -EBUSY) {
+    returnValue = -EAGAIN;
+  } else if (returnValue != 0) {
+    if (processDescriptor->envp != NULL) {
+      // The pointer for the envp block is stored at envp[0], so free that.
+      schedFree(processDescriptor->envp[0]);
+      processDescriptor->envp = NULL;
     }
-    shellArgs[0] = strrchr(pwd->pw_shell, '/') + 1;
-    char *digit = &_shellStatusOption[sizeof("--status=") - 1];
-    uint8_t exitStatus = processDescriptor->exitStatus;
-    if (exitStatus >= 100) {
-      *digit++ = '0' + (exitStatus / 100);
-    }
-    if (exitStatus >= 10) {
-      *digit++ = '0' + ((exitStatus / 10) % 10);
-    }
-    *digit++ = '0' + (exitStatus % 10);
-    *digit = '\0';
-    shellArgs[1] = _shellStatusOption;
-    returnValue = schedulerRunOverlayCommand(processDescriptor,
-      pwd->pw_shell, (char**) shellArgs, processDescriptor->envp);
-    if (returnValue == -EBUSY) {
-      returnValue = -EAGAIN;
-    } else if (returnValue != 0) {
-      if (processDescriptor->envp != NULL) {
-        // The pointer for the envp block is stored at envp[0], so free that.
-        schedFree(processDescriptor->envp[0]);
-        processDescriptor->envp = NULL;
-      }
-    }
-  } while (0);
+  }
 
-  schedFree(pwd);
-  schedFree(passwdStringBuffer);
   return returnValue;
 }
 
