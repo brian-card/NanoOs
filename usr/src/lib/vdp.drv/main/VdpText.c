@@ -50,10 +50,10 @@
 /// @brief The amount added to a VDU_TEXT_COLOR color to set the background.
 #define VDU_BACKGROUND 128
 
-/// @def VDU_HOME
+/// @def VDU_TAB
 ///
-/// @brief VDU 30, which moves the cursor to the top left corner.
-#define VDU_HOME 30
+/// @brief VDU 31,column,row, which moves the cursor.
+#define VDU_TAB 31
 
 /// @def VDU_PRINT_NEXT
 ///
@@ -80,6 +80,12 @@ static void vdpEndParameter(VdpTextState *state) {
   if (parameter > state->maxParameter) {
     state->maxParameter = parameter;
   }
+  if (state->numParameters == 0) {
+    state->firstParameter = parameter;
+  } else if (state->numParameters == 1) {
+    state->secondParameter = parameter;
+  }
+  state->numParameters++;
   state->parameter = 0;
 
   if (parameter == ANSI_SGR_RESET) {
@@ -109,13 +115,48 @@ static void vdpEndParameter(VdpTextState *state) {
   }
 }
 
+/// @fn static uint8_t vdpCursorIndex(uint8_t parameter, uint8_t limit)
+///
+/// @brief Convert a one-based cursor position parameter, where 0 means 1, to
+/// a zero-based index less than a limit.
+///
+/// @param parameter The parameter.
+/// @param limit The number of rows or columns.
+///
+/// @return Returns the index.
+static uint8_t vdpCursorIndex(uint8_t parameter, uint8_t limit) {
+  uint8_t index = (parameter > 1) ? (uint8_t) (parameter - 1) : 0;
+  return (index < limit) ? index : (uint8_t) (limit - 1);
+}
+
+/// @fn static void vdpAdvanceCursor(VdpTextState *state)
+///
+/// @brief Track the cursor moving past a character the VDP draws.  With
+/// scroll protection on, the VDP wraps to the next row as soon as the last
+/// column is drawn, except on the bottom row, where it waits for the next
+/// character so that drawing the last column doesn't scroll.
+///
+/// @param state A pointer to the VdpTextState of the text being written.
+///
+/// @return This function returns no value.
+static void vdpAdvanceCursor(VdpTextState *state) {
+  if (state->column >= state->numColumns) {
+    state->column = 0;
+  }
+  state->column++;
+  if ((state->column >= state->numColumns) && (state->row + 1 < state->numRows)) {
+    state->column = 0;
+    state->row++;
+  }
+}
+
 /// @fn static size_t vdpTranslateEscape(VdpTextState *state, uint8_t c,
 ///   uint8_t *output)
 ///
 /// @brief Advance an escape sequence by one byte.  A control sequence that
-/// sets colors, clears the screen, or homes the cursor becomes VDU bytes when
-/// it ends, one that turns resize reports on or off records that it did, and
-/// every other escape sequence is dropped.
+/// sets colors, clears the screen, or moves the cursor becomes VDU bytes when
+/// it ends, one that erases to the end of the line or turns resize reports on
+/// or off records that it did, and every other escape sequence is dropped.
 ///
 /// @param state A pointer to the VdpTextState to advance.
 /// @param c The byte of the escape sequence.
@@ -134,6 +175,8 @@ static size_t vdpTranslateEscape(VdpTextState *state, uint8_t c,
       state->escapeState = VDP_ESCAPE_CSI;
       state->parameter = 0;
       state->maxParameter = 0;
+      state->numParameters = 0;
+      state->secondParameter = 0;
       state->foreground = VDP_TEXT_COLOR_UNCHANGED;
       state->background = VDP_TEXT_COLOR_UNCHANGED;
     } else if ((c < 0x20) || (c > 0x2f)) {
@@ -178,9 +221,17 @@ static size_t vdpTranslateEscape(VdpTextState *state, uint8_t c,
       } else if ((c == 'J') && (state->maxParameter == 2)) {
         output[length++] = VDU_CLEAR_SCREEN;
         state->column = 0;
-      } else if (((c == 'H') || (c == 'f')) && (state->maxParameter <= 1)) {
-        output[length++] = VDU_HOME;
-        state->column = 0;
+        state->row = 0;
+      } else if ((c == 'H') || (c == 'f')) {
+        state->row = vdpCursorIndex(state->firstParameter, state->numRows);
+        state->column = vdpCursorIndex(state->secondParameter, state->numColumns);
+        output[length++] = VDU_TAB;
+        output[length++] = state->column;
+        output[length++] = state->row;
+      } else if ((c == 'K') && (state->maxParameter == 0)
+        && (state->column < state->numColumns)
+      ) {
+        state->erasePending = state->numColumns - state->column;
       }
     }
     state->escapeState = VDP_ESCAPE_NONE;
@@ -196,7 +247,9 @@ static size_t vdpTranslateEscape(VdpTextState *state, uint8_t c,
 /// of VDU bytes.  Newlines become a carriage return and a line feed, tabs
 /// become spaces to the next multiple of 8 columns, ANSI escape sequences
 /// are translated by vdpTranslateEscape, and other control characters and
-/// DEL are drawn as their glyphs with VDU_PRINT_NEXT.
+/// DEL are drawn as their glyphs with VDU_PRINT_NEXT.  An erase to the end of
+/// the line that doesn't fit is finished by the calls that follow, even once
+/// the string is used up.
 ///
 /// @param state A pointer to the VdpTextState of the text being written.
 /// @param text A pointer to the string, advanced past each character that is
@@ -210,8 +263,23 @@ size_t vdpTranslateText(VdpTextState *state, const char **text,
   uint8_t *output, size_t outputSize
 ) {
   size_t length = 0;
-  for (; **text != '\0'; (*text)++) {
+  for (;; (*text)++) {
+    // Erasing writes spaces to the end of the line, then moves back.
+    while (state->erasePending > 0) {
+      if (length + 1 + VDP_ESCAPE_MAX_OUTPUT > outputSize) {
+        return length;
+      }
+      output[length++] = ' ';
+      if (--state->erasePending == 0) {
+        output[length++] = VDU_TAB;
+        output[length++] = state->column;
+        output[length++] = state->row;
+      }
+    }
     uint8_t c = (uint8_t) **text;
+    if (c == '\0') {
+      break;
+    }
     if ((c == '\033') || (state->escapeState != VDP_ESCAPE_NONE)) {
       if (length + VDP_ESCAPE_MAX_OUTPUT > outputSize) {
         break;
@@ -232,17 +300,28 @@ size_t vdpTranslateText(VdpTextState *state, const char **text,
       output[length++] = '\r';
       output[length++] = '\n';
       state->column = 0;
+      if (state->row + 1 < state->numRows) {
+        state->row++;
+      }
     } else if (c == '\t') {
       for (size_t ii = 0; ii < needed; ii++) {
         output[length++] = ' ';
+        vdpAdvanceCursor(state);
       }
-      state->column += (uint8_t) needed;
     } else if (c == '\r') {
       output[length++] = c;
       state->column = 0;
     } else if (c == '\b') {
       output[length++] = c;
-      state->column--;
+      if (state->column > 0) {
+        state->column--;
+      } else {
+        // The VDP wraps to the end of the row above, or scrolls at the top.
+        state->column = state->numColumns - 1;
+        if (state->row > 0) {
+          state->row--;
+        }
+      }
     } else if (c == '\a') {
       output[length++] = c;
     } else {
@@ -250,7 +329,7 @@ size_t vdpTranslateText(VdpTextState *state, const char **text,
         output[length++] = VDU_PRINT_NEXT;
       }
       output[length++] = c;
-      state->column++;
+      vdpAdvanceCursor(state);
     }
   }
 
