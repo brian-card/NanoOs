@@ -218,9 +218,8 @@ NANO_OS_KERNEL_TEST(logger, logs_held_until_logger_runs_arrive_in_order) {
   NANO_OS_ASSERT_EQ_INT(3, received);
 }
 
-// Every process releases its console port when it exits, the logger included,
-// and anything the kernel logs while running as the logger goes to the logger.
-NANO_OS_KERNEL_TEST(logger, logger_can_release_its_port_and_log) {
+// Anything the kernel logs while running as the logger goes to the logger.
+NANO_OS_KERNEL_TEST(logger, logger_capabilities_reach_each_process) {
   static IpcCapability capabilities[] = LOGGER_IPC_CAPABILITIES_INITIALIZER;
   loggerIpcCapabilities = capabilities;
   numLoggerIpcCapabilities = sizeof(capabilities) / sizeof(capabilities[0]);
@@ -228,8 +227,8 @@ NANO_OS_KERNEL_TEST(logger, logger_can_release_its_port_and_log) {
   NANO_OS_ASSERT_EQ_INT(0, halCommonInitLogger());
   ProcessDescriptor *logger = &allProcesses[loggerPid - 1];
   NANO_OS_ASSERT_NOT_NULL(findIpcCapability(logger->ipcCapabilities,
-    logger->numIpcCapabilities, consolePid,
-    CONSOLE_COMMAND_SIGNATURE, CONSOLE_RELEASE_PORT));
+    logger->numIpcCapabilities, schedulerPid,
+    SCHEDULER_COMMAND_SIGNATURE, SCHEDULER_REPLACE_OVERLAY));
   NANO_OS_ASSERT_NOT_NULL(findIpcCapability(logger->ipcCapabilities,
     logger->numIpcCapabilities, loggerPid,
     LOGGER_COMMAND_SIGNATURE, LOGGER_LOG_MESSAGE));

@@ -405,6 +405,20 @@ def assert_vdp_pointer(vdp):
     assert (hot_x, hot_y) == (0, 0), f"the hotspot is at {hot_x},{hot_y}"
 
 
+def test_uart_console_left_out_of_config_sys_is_owned_by_no_one(s):
+    # The memory manager owns every console port until it has printed its boot
+    # message, so a port no shell takes must be released back to no one.
+    vdp = s.restart_with_vdp(config_sys=(
+        "DEVICE=/usr/lib/vdp.drv\n"
+        "HARDWARE=/usr/lib/vdp.drv UART0\n"
+        "CONSOLE=/usr/lib/vdp.drv /usr/bin/getty\n"))
+    vdp.expect("login: ")
+    s.child.sendcontrol("c")
+    i = s.child.expect([r"Killing process \d+|Could not send message|"
+                        r"Could not communicate", pexpect.TIMEOUT], timeout=3)
+    assert i == 1, "Ctrl-C on the unused UART signalled " + s.child.after
+
+
 def vdp_login(vdp):
     """Log in as root on a FakeVdp's console.
 

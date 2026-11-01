@@ -46,18 +46,51 @@
 #include "user/NanoOsSpawn.h"
 #include "user/NanoOsStdio.h"
 #include "user/NanoOsErrno.h"
+#include "user/NanoOsSignal.h"
+#include "user/NanoOsWait.h"
 
 size_t mockUartDrain(char *out, size_t max);
+int removeProcessIpcCapability(ProcessDescriptor *processDescriptor,
+  ProcessId destinationPid, int64_t signature, uint32_t messageType);
+
+/// @var grandchildStatus
+///
+/// @brief What a "spawner" child's spawn of its own child returned, or -1
+/// before it has tried.
+static volatile int grandchildStatus;
 
 /// @fn static void* printingChild(void *args)
 ///
-/// @brief Stand in for a spawned program:  print a line and exit.
+/// @brief Stand in for a spawned program, chosen by argv[0]:  "idle" runs
+/// until killed, "exit" exits, "spawner" spawns a printing child in the
+/// foreground, waits for it, prints a line of its own, and idles, and anything
+/// else prints a line and exits.
 ///
-/// @param args The ExecArgs of the spawn.  Unused.
+/// @param args The ExecArgs of the spawn.
 ///
 /// @return This function always returns NULL.
 static void* printingChild(void *args) {
-  (void) args;
+  ExecArgs *execArgs = (ExecArgs*) args;
+  if (strcmp(execArgs->argv[0], "exit") == 0) {
+    return NULL;
+  } else if (strcmp(execArgs->argv[0], "spawner") == 0) {
+    posix_spawnattr_t attr = { .flags = POSIX_SPAWN_FOREGROUND };
+    pid_t pid = 0;
+    char *argv[] = { "print", NULL };
+    int status = nanoOsSpawn(&pid, "/fgtest", NULL, &attr, argv, NULL);
+    if ((status == 0) && (schedulerWaitpid(pid, NULL, 0) != pid)) {
+      status = -2;
+    }
+    nanoOsFputs("spawner-output\n", nanoOsStdout);
+    grandchildStatus = status;
+  }
+  if ((strcmp(execArgs->argv[0], "idle") == 0)
+    || (strcmp(execArgs->argv[0], "spawner") == 0)
+  ) {
+    while (1) {
+      processYield();
+    }
+  }
   nanoOsFputs("lent-port-output\n", nanoOsStdout);
   return NULL;
 }
@@ -98,6 +131,71 @@ static void collectUart(char *output, size_t size) {
     processYield();
     length += mockUartDrain(&output[length], size - 1 - length);
   }
+}
+
+/// @fn static bool parentOwnsPort(void)
+///
+/// @brief Determine whether the running process owns console port 0.  The
+/// harness's test process has no file descriptors, so it can't find out by
+/// printing.
+///
+/// @return Returns true if the process owns the port, false if not.
+static bool parentOwnsPort(void) {
+  return getOwnedConsolePort() == 0;
+}
+
+/// @fn static pid_t spawnChild(char *name, short flags)
+///
+/// @brief Spawn a printingChild in a given mode.
+///
+/// @param name The mode, passed as argv[0].
+/// @param flags The POSIX_SPAWN_* flags to spawn with.
+///
+/// @return Returns the child's process ID, or 0 on failure.
+static pid_t spawnChild(char *name, short flags) {
+  posix_spawnattr_t attr = { .flags = flags };
+  pid_t pid = 0;
+  char *argv[] = { name, NULL };
+  if (nanoOsSpawn(&pid, "/fgtest", NULL, &attr, argv, NULL) != 0) {
+    return 0;
+  }
+  return pid;
+}
+
+/// @fn static pid_t spawnIdleChild(void)
+///
+/// @brief Spawn a child that runs until killed, lending it the console port.
+///
+/// @return Returns the child's process ID, or 0 on failure.
+static pid_t spawnIdleChild(void) {
+  return spawnChild("idle", POSIX_SPAWN_FOREGROUND);
+}
+
+/// @fn static bool canSpawn(ProcessDescriptor *processDescriptor)
+///
+/// @brief Determine whether a process is allowed to spawn.
+///
+/// @param processDescriptor A pointer to the process's ProcessDescriptor.
+///
+/// @return Returns true if the process can send SCHEDULER_SPAWN.
+static bool canSpawn(ProcessDescriptor *processDescriptor) {
+  return findIpcCapability(processDescriptor->ipcCapabilities,
+    processDescriptor->numIpcCapabilities, schedulerPid,
+    SCHEDULER_COMMAND_SIGNATURE, SCHEDULER_SPAWN) != NULL;
+}
+
+/// @fn static bool yieldUntilSet(volatile int *value)
+///
+/// @brief Yield until a value is no longer -1, giving up after a while.
+///
+/// @param value A pointer to the value to watch.
+///
+/// @return Returns true if the value changed.
+static bool yieldUntilSet(volatile int *value) {
+  for (int ii = 0; (ii < 2000) && (*value == -1); ii++) {
+    processYield();
+  }
+  return *value != -1;
 }
 
 /// @fn static bool spawnAndWait(short flags)
@@ -298,4 +396,150 @@ NANO_OS_KERNEL_TEST(spawn_foreground, lend_from_a_non_scheduler_is_ignored) {
   NANO_OS_ASSERT_EQ_INT(getRunningPid(), consolePort->inputOwner);
   NANO_OS_ASSERT_EQ_INT(getRunningPid(), consolePort->outputOwner);
   processMessageRelease(processMessage);
+}
+
+NANO_OS_KERNEL_TEST_WITH(spawn_foreground, port_returns_when_the_child_exits,
+  spawnForegroundPreBoot
+) {
+  char output[256];
+  NANO_OS_ASSERT_TRUE(
+    spawnAndCollectOutput(POSIX_SPAWN_FOREGROUND, output, sizeof(output)));
+
+  NANO_OS_ASSERT_TRUE(parentOwnsPort());
+}
+
+NANO_OS_KERNEL_TEST_WITH(spawn_foreground, port_returns_when_the_child_is_killed,
+  spawnForegroundPreBoot
+) {
+  pid_t pid = spawnIdleChild();
+  NANO_OS_ASSERT_TRUE(pid > 0);
+  NANO_OS_ASSERT_FALSE(parentOwnsPort());
+
+  NANO_OS_ASSERT_EQ_INT(0, schedulerKillProcess(pid));
+  int status = 0;
+  NANO_OS_ASSERT_EQ_INT(pid, schedulerWaitpid(pid, &status, 0));
+
+  NANO_OS_ASSERT_EQ_INT(SIGKILL, WTERMSIG(status));
+  NANO_OS_ASSERT_TRUE(parentOwnsPort());
+}
+
+NANO_OS_KERNEL_TEST_WITH(spawn_foreground, port_returns_after_an_interrupt,
+  spawnForegroundPreBoot
+) {
+  pid_t pid = spawnIdleChild();
+  NANO_OS_ASSERT_TRUE(pid > 0);
+
+  NANO_OS_ASSERT_EQ_INT(0, schedulerSendSignal(pid, SIGINT));
+  int status = 0;
+  ProcessId exited = 0;
+  for (int ii = 0; (ii < 2000) && (exited == 0); ii++) {
+    processYield();
+    exited = schedulerWaitpid(pid, &status, WNOHANG);
+  }
+  NANO_OS_ASSERT_EQ_INT(pid, exited);
+
+  NANO_OS_ASSERT_EQ_INT(SIGINT, WTERMSIG(status));
+  NANO_OS_ASSERT_TRUE(parentOwnsPort());
+}
+
+NANO_OS_KERNEL_TEST_WITH(spawn_foreground, allowed_child_spawns_and_gets_port_back,
+  spawnForegroundPreBoot
+) {
+  grandchildStatus = -1;
+  drainUart();
+  pid_t pid
+    = spawnChild("spawner", POSIX_SPAWN_FOREGROUND | POSIX_SPAWN_ALLOW_SPAWN);
+  NANO_OS_ASSERT_TRUE(pid > 0);
+  NANO_OS_ASSERT_TRUE(canSpawn(&allProcesses[pid - 1]));
+
+  NANO_OS_ASSERT_TRUE(yieldUntilSet(&grandchildStatus));
+  NANO_OS_ASSERT_EQ_INT(0, grandchildStatus);
+  char output[256];
+  collectUart(output, sizeof(output));
+  // The port went back to the child that lent it, not to the shell.
+  NANO_OS_ASSERT_NOT_NULL(strstr(output, "lent-port-output"));
+  NANO_OS_ASSERT_NOT_NULL(strstr(output, "spawner-output"));
+  NANO_OS_ASSERT_NULL(strstr(output, "non-owning"));
+
+  NANO_OS_ASSERT_EQ_INT(0, schedulerKillProcess(pid));
+  NANO_OS_ASSERT_EQ_INT(pid, schedulerWaitpid(pid, NULL, 0));
+  NANO_OS_ASSERT_TRUE(parentOwnsPort());
+}
+
+NANO_OS_KERNEL_TEST_WITH(spawn_foreground, child_cannot_spawn_unless_allowed,
+  spawnForegroundPreBoot
+) {
+  grandchildStatus = -1;
+  pid_t pid = spawnChild("spawner", POSIX_SPAWN_FOREGROUND);
+  NANO_OS_ASSERT_TRUE(pid > 0);
+  NANO_OS_ASSERT_FALSE(canSpawn(&allProcesses[pid - 1]));
+
+  NANO_OS_ASSERT_TRUE(yieldUntilSet(&grandchildStatus));
+  NANO_OS_ASSERT_EQ_INT(ENOMEM, grandchildStatus);
+  NANO_OS_ASSERT_EQ_INT(0, schedulerKillProcess(pid));
+}
+
+NANO_OS_KERNEL_TEST_WITH(spawn_foreground, allowance_ends_with_the_process,
+  spawnForegroundPreBoot
+) {
+  pid_t allowed = spawnChild("exit", POSIX_SPAWN_ALLOW_SPAWN);
+  NANO_OS_ASSERT_TRUE(allowed > 0);
+  NANO_OS_ASSERT_EQ_INT(allowed, schedulerWaitpid(allowed, NULL, 0));
+
+  pid_t pid = 0;
+  for (int ii = 0; (ii < 2 * (int) numProcesses) && (pid != allowed); ii++) {
+    pid = spawnChild("exit", 0);
+    NANO_OS_ASSERT_TRUE(pid > 0);
+    NANO_OS_ASSERT_FALSE(canSpawn(&allProcesses[pid - 1]));
+    NANO_OS_ASSERT_EQ_INT(pid, schedulerWaitpid(pid, NULL, 0));
+  }
+  NANO_OS_ASSERT_EQ_INT(allowed, pid);
+}
+
+NANO_OS_KERNEL_TEST_WITH(spawn_foreground, allowance_is_not_shared_with_others,
+  spawnForegroundPreBoot
+) {
+  pid_t allowed = spawnChild("idle", POSIX_SPAWN_ALLOW_SPAWN);
+  pid_t other = spawnChild("idle", 0);
+  NANO_OS_ASSERT_TRUE((allowed > 0) && (other > 0));
+
+  NANO_OS_ASSERT_TRUE(canSpawn(&allProcesses[allowed - 1]));
+  NANO_OS_ASSERT_FALSE(canSpawn(&allProcesses[other - 1]));
+}
+
+NANO_OS_KERNEL_TEST_WITH(spawn_foreground, removal_is_not_shared_with_others,
+  spawnForegroundPreBoot
+) {
+  pid_t first = spawnChild("idle", 0);
+  pid_t second = spawnChild("idle", 0);
+  NANO_OS_ASSERT_TRUE((first > 0) && (second > 0));
+  ProcessDescriptor *firstProcess = &allProcesses[first - 1];
+
+  NANO_OS_ASSERT_EQ_INT(0, removeProcessIpcCapability(firstProcess,
+    schedulerPid, SCHEDULER_COMMAND_SIGNATURE, SCHEDULER_WAIT_PID));
+
+  NANO_OS_ASSERT_NULL(findIpcCapability(firstProcess->ipcCapabilities,
+    firstProcess->numIpcCapabilities, schedulerPid,
+    SCHEDULER_COMMAND_SIGNATURE, SCHEDULER_WAIT_PID));
+  NANO_OS_ASSERT_NOT_NULL(findIpcCapability(
+    allProcesses[second - 1].ipcCapabilities,
+    allProcesses[second - 1].numIpcCapabilities, schedulerPid,
+    SCHEDULER_COMMAND_SIGNATURE, SCHEDULER_WAIT_PID));
+}
+
+NANO_OS_KERNEL_TEST_WITH(spawn_foreground, only_foreground_children_can_kill,
+  spawnForegroundPreBoot
+) {
+  pid_t foreground = spawnIdleChild();
+  pid_t background = spawnChild("idle", 0);
+  NANO_OS_ASSERT_TRUE((foreground > 0) && (background > 0));
+
+  NANO_OS_ASSERT_NOT_NULL(findIpcCapability(
+    allProcesses[foreground - 1].ipcCapabilities,
+    allProcesses[foreground - 1].numIpcCapabilities, schedulerPid,
+    SCHEDULER_COMMAND_SIGNATURE, SCHEDULER_KILL_PROCESS));
+  NANO_OS_ASSERT_NULL(findIpcCapability(
+    allProcesses[background - 1].ipcCapabilities,
+    allProcesses[background - 1].numIpcCapabilities, schedulerPid,
+    SCHEDULER_COMMAND_SIGNATURE, SCHEDULER_KILL_PROCESS));
 }
