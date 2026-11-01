@@ -114,7 +114,8 @@ static void vdpEndParameter(VdpTextState *state) {
 ///
 /// @brief Advance an escape sequence by one byte.  A control sequence that
 /// sets colors, clears the screen, or homes the cursor becomes VDU bytes when
-/// it ends, and every other escape sequence is dropped.
+/// it ends, one that turns resize reports on or off records that it did, and
+/// every other escape sequence is dropped.
 ///
 /// @param state A pointer to the VdpTextState to advance.
 /// @param c The byte of the escape sequence.
@@ -139,11 +140,27 @@ static size_t vdpTranslateEscape(VdpTextState *state, uint8_t c,
       // Anything but an intermediate byte ends a two-byte escape sequence.
       state->escapeState = VDP_ESCAPE_NONE;
     }
+  } else if (state->escapeState == VDP_ESCAPE_CSI_PRIVATE) {
+    if ((c >= '0') && (c <= '9')) {
+      state->privateMode = (state->privateMode < 1000)
+        ? (uint16_t) ((state->privateMode * 10) + (c - '0')) : UINT16_MAX;
+    } else if ((c >= 0x40) && (c <= 0x7e)) {
+      if ((state->privateMode == VDP_RESIZE_REPORT_MODE)
+        && ((c == 'h') || (c == 'l'))
+      ) {
+        state->resizeReports = (c == 'h');
+        state->resizeReportWanted = (c == 'h');
+      }
+      state->escapeState = VDP_ESCAPE_NONE;
+    }
   } else if ((c >= '0') && (c <= '9')) {
     unsigned int parameter = (state->parameter * 10u) + (c - '0');
     state->parameter = (parameter > 255) ? 255 : (uint8_t) parameter;
   } else if (c == ';') {
     vdpEndParameter(state);
+  } else if ((c == '?') && (state->escapeState == VDP_ESCAPE_CSI)) {
+    state->escapeState = VDP_ESCAPE_CSI_PRIVATE;
+    state->privateMode = 0;
   } else if ((c >= 0x20) && (c <= 0x3f)) {
     state->escapeState = VDP_ESCAPE_CSI_IGNORED;
   } else {
