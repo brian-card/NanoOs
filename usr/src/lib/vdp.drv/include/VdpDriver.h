@@ -87,6 +87,27 @@ extern "C"
 /// @brief The VDP's default keyboard repeat rate, in milliseconds.
 #define VDP_KEY_REPEAT_RATE_MS 100
 
+/// @def VDP_SCREEN_WIDTH
+///
+/// @brief The width, in pixels, of the screen mode the driver selects.
+#define VDP_SCREEN_WIDTH 640
+
+/// @def VDP_SCREEN_HEIGHT
+///
+/// @brief The height, in pixels, of the screen mode the driver selects.
+#define VDP_SCREEN_HEIGHT 480
+
+/// @def VDP_SYSTEM_GLYPH_SIZE
+///
+/// @brief The width and height, in pixels, of the glyphs of the VDP's own
+/// system font, which it draws text in until another font is selected.
+#define VDP_SYSTEM_GLYPH_SIZE 8
+
+/// @def VDP_MAX_FONTS
+///
+/// @brief The number of fonts that can be uploaded to the VDP.
+#define VDP_MAX_FONTS 4
+
 /// @struct VdpInput
 ///
 /// @brief State of the keyboard input the driver forwards to the console.
@@ -109,6 +130,9 @@ extern "C"
 /// @param pollAnswered Whether the VDP has replied to the general poll.
 /// @param pollCookie The cookie of the general poll being waited on.
 /// @param numLock Whether the driver's Num Lock is on.
+/// @param sizeMessage The CONSOLE_SET_WINSIZE message waiting on the console,
+///   or NULL.
+/// @param sizeArgs The arguments of sizeMessage.
 typedef struct VdpInput {
   ProcessId                    consolePid;
   int                          portId;
@@ -122,6 +146,8 @@ typedef struct VdpInput {
   bool                         pollAnswered;
   uint8_t                      pollCookie;
   bool                         numLock;
+  ProcessMessage              *sizeMessage;
+  ConsoleWinsizeArgs           sizeArgs;
 } VdpInput;
 
 /// @struct VdpOutput
@@ -140,6 +166,12 @@ typedef struct VdpInput {
 /// @param graphicsMessage The Graphics.h message for the Graphics overlay to
 ///   handle, or NULL to have it load the driver's built-in font.
 /// @param numFonts The number of fonts uploaded to the VDP.
+/// @param fontWidths The glyph width of each font uploaded to the VDP.
+/// @param fontHeights The glyph height of each font uploaded to the VDP.
+/// @param glyphWidth The glyph width of the font text is drawn in.
+/// @param glyphHeight The glyph height of the font text is drawn in.
+/// @param sizeChanged Whether the console hasn't yet been told the number of
+///   rows and columns the font gives the screen.
 typedef struct VdpOutput {
   VdpTextState     textState;
   bool             listening;
@@ -149,6 +181,11 @@ typedef struct VdpOutput {
   VdpOutputBuffer *buffer;
   ProcessMessage  *graphicsMessage;
   uint8_t          numFonts;
+  uint8_t          fontWidths[VDP_MAX_FONTS];
+  uint8_t          fontHeights[VDP_MAX_FONTS];
+  uint8_t          glyphWidth;
+  uint8_t          glyphHeight;
+  bool             sizeChanged;
 } VdpOutput;
 
 /// @struct VdpStartupArgs
