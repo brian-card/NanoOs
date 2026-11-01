@@ -1568,6 +1568,7 @@ int schedulerBindShell(uint8_t shellIndex, uint8_t consolePort,
     return -EIO;
   }
   allProcesses[pid - 1].restartArgs = shellProgram;
+  allProcesses[pid - 1].consolePort = consolePort;
   _schedulerState->shellOutputPids[shellIndex] = outputPid;
 
   return 0;
@@ -3870,6 +3871,8 @@ int schedulerSpawnCommandHandler(
   }
   execArgs->callingPid = processPid(processMessageFrom(processMessage));
   processDescriptor->parentPid = execArgs->callingPid;
+  processDescriptor->consolePort
+    = processMessageFrom(processMessage)->consolePort;
   processDescriptor->zombie = false;
   processDescriptor->exitStatus = 0;
   processDescriptor->exitSignal = 0;
@@ -5490,6 +5493,15 @@ int restartOverlayShell(ProcessDescriptor *processDescriptor) {
     }
 
     logDebug("Starting getty\n");
+    // Background jobs left by the user who logged out mustn't print into the
+    // next session.
+    for (ProcessId ii = 1; ii <= numProcesses; ii++) {
+      if ((&allProcesses[ii - 1] != processDescriptor)
+        && (allProcesses[ii - 1].consolePort == processDescriptor->consolePort)
+      ) {
+        allProcesses[ii - 1].consolePort = NO_CONSOLE_PORT;
+      }
+    }
     ShellProgram *shellProgram = (ShellProgram*) processDescriptor->restartArgs;
     int returnValue = 0;
     if (shellProgram != NULL) {
@@ -6228,6 +6240,10 @@ int initializeProcesses(SchedulerState *schedulerState) {
   }
   logDebug("Assigned console ports to memory manager.\n");
   bootTrace("console ports assigned to memory manager");
+
+  for (ProcessId ii = 1; ii <= numProcesses; ii++) {
+    allProcesses[ii - 1].consolePort = NO_CONSOLE_PORT;
+  }
 
   // Initialize all the kernel process file descriptors.
   for (ProcessId ii = 1; ii < schedulerState->firstUserPid; ii++) {
