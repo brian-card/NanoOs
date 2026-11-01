@@ -3889,7 +3889,7 @@ int schedulerSpawnCommandHandler(
       processDescriptor->processId);
   }
   if ((spawnArgs->attrp != NULL)
-    && false
+    && (spawnArgs->attrp->flags & POSIX_SPAWN_FOREGROUND)
     && (addProcessIpcCapability(processDescriptor, schedulerPid,
       SCHEDULER_COMMAND_SIGNATURE, SCHEDULER_KILL_PROCESS) != 0)
   ) {

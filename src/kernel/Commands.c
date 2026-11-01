@@ -437,7 +437,6 @@ void* execBuiltinCommand(void *args) {
   ExecArgs *execArgs = (ExecArgs*) args;
   if (execArgs == NULL) {
     logError("No arguments provided to execOverlayCommand.\n");
-    releaseConsole();
     return (void*) ((intptr_t) -1);
   }
   // Let the caller finish its work.
@@ -448,7 +447,6 @@ void* execBuiltinCommand(void *args) {
   if ((argv == NULL) || (argv[0] == NULL)) {
     // Fail.
     logError("Invalid argv.\n");
-    releaseConsole();
     return (void*) ((intptr_t) -1);
   }
   int argc = 0;
@@ -459,7 +457,6 @@ void* execBuiltinCommand(void *args) {
   if (processDescriptor == NULL) {
     // This should be impossible.
     logError("No running process.\n");
-    releaseConsole();
     return (void*) ((intptr_t) -1);
   }
 
@@ -488,7 +485,6 @@ void* execBuiltinCommand(void *args) {
   }
   int returnValue = commandEntry->func(argc, argv);
 
-  releaseConsole();
 
   // ***DO NOT*** attempt to free the ExecArgs that were passed in, period.
   // The memory will be cleaned up by the scheduler after we exit.  Freeing
