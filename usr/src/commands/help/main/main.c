@@ -139,6 +139,9 @@ int main(int argc, char **argv) {
     "shutdown:               ",
     "Power off or reset the system.");
   printf("%s %s\n",
+    "termtest:               ",
+    "Exercise the terminal size functions.");
+  printf("%s %s\n",
     "tightLoop:              ",
     "Run a process in a loop that does not yield.");
   printf("%s %s\n",
