@@ -324,14 +324,16 @@ NANO_OS_KERNEL_TEST_WITH(spawn_foreground, child_prints_to_the_lent_port,
   NANO_OS_ASSERT_NULL(strstr(output, "non-owning"));
 }
 
-NANO_OS_KERNEL_TEST_WITH(spawn_foreground, child_without_the_flag_gets_no_port,
-  spawnForegroundPreBoot
+NANO_OS_KERNEL_TEST_WITH(spawn_foreground,
+  background_child_prints_to_its_parents_port, spawnForegroundPreBoot
 ) {
   char output[256];
 
   NANO_OS_ASSERT_TRUE(spawnAndCollectOutput(0, output, sizeof(output)));
 
-  NANO_OS_ASSERT_NOT_NULL(strstr(output, "non-owning"));
+  NANO_OS_ASSERT_NOT_NULL(strstr(output, "lent-port-output"));
+  NANO_OS_ASSERT_NULL(strstr(output, "non-owning"));
+  NANO_OS_ASSERT_TRUE(parentOwnsPort());
 }
 
 NANO_OS_KERNEL_TEST_WITH(spawn_foreground, caller_without_a_port_lends_nothing,
@@ -347,7 +349,8 @@ NANO_OS_KERNEL_TEST_WITH(spawn_foreground, caller_without_a_port_lends_nothing,
 
   char output[256];
   collectUart(output, sizeof(output));
-  NANO_OS_ASSERT_NOT_NULL(strstr(output, "non-owning"));
+  NANO_OS_ASSERT_NULL(strstr(output, "lent-port-output"));
+  NANO_OS_ASSERT_NULL(strstr(output, "non-owning"));
 }
 
 NANO_OS_KERNEL_TEST_WITH(spawn_foreground, refused_spawn_reports_failure,
@@ -542,4 +545,19 @@ NANO_OS_KERNEL_TEST_WITH(spawn_foreground, only_foreground_children_can_kill,
     allProcesses[background - 1].ipcCapabilities,
     allProcesses[background - 1].numIpcCapabilities, schedulerPid,
     SCHEDULER_COMMAND_SIGNATURE, SCHEDULER_KILL_PROCESS));
+}
+
+NANO_OS_KERNEL_TEST(spawn_foreground, port_buffer_returns_to_the_output_owner) {
+  memset(&lendState, 0, sizeof(lendState));
+  lendState.numConsolePorts = 1;
+  ConsolePort *consolePort = &lendState.consolePorts[0];
+  consolePort->consoleBuffer = &lendState.consoleBuffers[0];
+  consolePort->shell = getRunningPid();
+  consolePort->outputOwner = consolePid;
+  consolePort->consoleBuffer->owner = consolePid;
+
+  NANO_OS_ASSERT_EQ_INT(0,
+    releaseConsoleBuffer(&lendState, consolePort->consoleBuffer));
+
+  NANO_OS_ASSERT_EQ_INT(consolePid, consolePort->consoleBuffer->owner);
 }

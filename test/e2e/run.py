@@ -1939,6 +1939,33 @@ def test_tightloop_is_killed_by_ctrl_c(s):
     assert_ctrl_c_kills(s, "tightLoop")
 
 
+def test_background_output_reaches_the_uart_console(s):
+    # The typed line is echoed, so only the expanded output reads bg-output.
+    s.login()
+    assert s.sh("export X=put") == ""
+    s.child.sendline("echo bg-out$X &")
+    s.child.expect_exact("echo bg-out$X &", timeout=10)
+    s.child.expect(r"bg-output\r*\n", timeout=10)
+    assert "non-owning" not in s.child.before
+    assert s.sh("echo alive") == "alive"
+
+
+def test_logout_silences_background_jobs(s):
+    s.login()
+    s.child.sendline("looseLoop tick &")
+    s.child.expect_exact("looseLoop tick &", timeout=10)
+    s.child.expect(r"\btick\r*\n", timeout=10)
+    s.child.sendline("exit")
+    s.wait_login_prompt()
+    i = s.child.expect([r"\btick\r*\n|non-owning", pexpect.TIMEOUT], timeout=4)
+    assert i == 1, "a background job printed after its user logged out"
+    s.child.sendline("root")
+    s.child.expect("password: ", timeout=10)
+    s.child.sendline("rootroot")
+    s.child.expect(PROMPT, timeout=10)
+    assert "looseLoop" in s.sh("ps")
+
+
 def test_kill_terminates_a_background_process(s):
     s.login()
     s.sh("looseLoop &")
