@@ -168,8 +168,6 @@ typedef struct VdpInput {
 /// @param numFonts The number of fonts uploaded to the VDP.
 /// @param fontWidths The glyph width of each font uploaded to the VDP.
 /// @param fontHeights The glyph height of each font uploaded to the VDP.
-/// @param glyphWidth The glyph width of the font text is drawn in.
-/// @param glyphHeight The glyph height of the font text is drawn in.
 /// @param sizeChanged Whether the console hasn't yet been told the number of
 ///   rows and columns the font gives the screen.
 typedef struct VdpOutput {
@@ -183,8 +181,6 @@ typedef struct VdpOutput {
   uint8_t          numFonts;
   uint8_t          fontWidths[VDP_MAX_FONTS];
   uint8_t          fontHeights[VDP_MAX_FONTS];
-  uint8_t          glyphWidth;
-  uint8_t          glyphHeight;
   bool             sizeChanged;
 } VdpOutput;
 
