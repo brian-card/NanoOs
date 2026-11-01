@@ -1300,7 +1300,6 @@ void* runMemoryManager(void *args) {
   printConsoleString(_usingPrefix);
   printConsoleUInt(memoryManagerState.firstFree->size);
   printConsoleString(_dynamicMemorySuffix);
-  releaseConsole();
 
   while (1) {
     handleMemoryManagerMessages(&memoryManagerState);
