@@ -666,7 +666,7 @@ void consoleGetModesCommandHandler(
   return;
 }
 
-static void consoleReplayHeldByte(
+static void consoleReplayHeldInput(
   ConsoleState *consoleState, ConsolePort *consolePort);
 
 /// @fn void consoleSetModesCommandHandler(
@@ -692,7 +692,7 @@ void consoleSetModesCommandHandler(
   for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
     if (consolePorts[ii].outputOwner == owner) {
       ConsoleBuffer *consoleBuffer = consolePorts[ii].consoleBuffer;
-      bool replayHeldByte
+      bool replayHeldInput
         = ((consolePorts[ii].modes & CONSOLE_MODE_CANONICAL) == 0)
         && ((consoleModesArgs->modes & CONSOLE_MODE_CANONICAL) != 0)
         && (consoleBuffer->holdsCompletedLine == true)
@@ -701,8 +701,8 @@ void consoleSetModesCommandHandler(
       if (consolePorts[ii].inputState != CONSOLE_INPUT_STATE_AFTER_RETURN) {
         consolePorts[ii].inputState = CONSOLE_INPUT_STATE_NORMAL;
       }
-      if (replayHeldByte) {
-        consoleReplayHeldByte(consoleState, &consolePorts[ii]);
+      if (replayHeldInput) {
+        consoleReplayHeldInput(consoleState, &consolePorts[ii]);
       } else if (((consoleModesArgs->modes & CONSOLE_MODE_CANONICAL) == 0)
         && (consoleBuffer->consoleBufferIndex > 0)
         && (consoleBuffer->bufferAwaitingRelease == false)
@@ -1438,7 +1438,11 @@ ConsoleInputEvent consoleProcessByte(
 
   if ((byte == 0x03) && (consolePort->modes & CONSOLE_MODE_SIGNALS)) {
     return CONSOLE_INPUT_INTERRUPT;
-  } else if ((consolePort->modes & CONSOLE_MODE_CANONICAL) == 0) {
+  } else if (((consolePort->modes & CONSOLE_MODE_CANONICAL) == 0)
+    && (byte != ASCII_ESCAPE)
+    && ((consolePort->inputState == CONSOLE_INPUT_STATE_NORMAL)
+      || (consolePort->inputState == CONSOLE_INPUT_STATE_AFTER_RETURN))
+  ) {
     if (byte == ASCII_RETURN) {
       consolePort->inputState = CONSOLE_INPUT_STATE_AFTER_RETURN;
     } else if (byte != ASCII_NEWLINE) {
@@ -1653,34 +1657,38 @@ static uint16_t consoleNowMs(void) {
   return (uint16_t) (processGetNanoseconds(NULL) / ((int64_t) 1000000));
 }
 
-/// @fn static void consoleReplayHeldByte(
+/// @fn static void consoleReplayHeldInput(
 ///   ConsoleState *consoleState, ConsolePort *consolePort)
 ///
-/// @brief Run a key that a port held while it was in raw mode back through the
-/// port's current modes, so that a port that has become canonical starts its
-/// next line with the key instead of delivering the key as a line by itself.
+/// @brief Run a key or escape sequence that a port held while it was in raw
+/// mode back through the port's current modes, so that a port that has become
+/// canonical starts its next line with the input instead of delivering it as a
+/// line by itself.
 ///
 /// @param consoleState A pointer to the ConsoleState being maintained by the
 ///   runConsole function that's running.
-/// @param consolePort A pointer to the ConsolePort holding the key.
+/// @param consolePort A pointer to the ConsolePort holding the input.
 ///
 /// @return This function returns no value.
-static void consoleReplayHeldByte(
+static void consoleReplayHeldInput(
   ConsoleState *consoleState, ConsolePort *consolePort
 ) {
   ConsoleBuffer *consoleBuffer = consolePort->consoleBuffer;
-  uint8_t byte = (uint8_t) consoleBuffer->buffer[0];
+  int heldLength = consoleBuffer->consoleBufferIndex;
   consoleBuffer->holdsCompletedLine = false;
   consoleBuffer->consoleBufferIndex = 0;
 
-  ConsoleEcho echo = CONSOLE_ECHO_NONE;
-  ConsoleInputEvent event = consoleProcessByte(consolePort, byte, &echo);
-  if (consolePort->inputState == CONSOLE_INPUT_STATE_ESCAPE) {
-    consolePort->escapeStartMs = consoleNowMs();
-  }
-  consoleEchoInput(consolePort, echo, byte);
-  if ((event != CONSOLE_INPUT_NONE) && (event != CONSOLE_INPUT_UNHANDLED)) {
-    consoleHandleInputEvent(consoleState, consolePort, event);
+  for (int ii = 0; ii < heldLength; ii++) {
+    uint8_t byte = (uint8_t) consoleBuffer->buffer[ii];
+    ConsoleEcho echo = CONSOLE_ECHO_NONE;
+    ConsoleInputEvent event = consoleProcessByte(consolePort, byte, &echo);
+    if (consolePort->inputState == CONSOLE_INPUT_STATE_ESCAPE) {
+      consolePort->escapeStartMs = consoleNowMs();
+    }
+    consoleEchoInput(consolePort, echo, byte);
+    if ((event != CONSOLE_INPUT_NONE) && (event != CONSOLE_INPUT_UNHANDLED)) {
+      consoleHandleInputEvent(consoleState, consolePort, event);
+    }
   }
 }
 
