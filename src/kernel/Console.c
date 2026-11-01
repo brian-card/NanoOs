@@ -633,6 +633,41 @@ void consoleGetOwnedPortCommandHandler(
   return;
 }
 
+/// @var _resizeReportsOn
+///
+/// @brief Written to a port to have its renderer start sending resize reports.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _resizeReportsOn[] KEEP_IN_FLASH = "\033[?2048h";
+
+/// @var _resizeReportsOff
+///
+/// @brief Written to a port to have its renderer stop sending resize reports.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _resizeReportsOff[] KEEP_IN_FLASH = "\033[?2048l";
+
+/// @fn static void consoleSetPortModes(ConsolePort *consolePort, uint8_t modes)
+///
+/// @brief Set a port's modes, writing the escape sequence that turns its
+/// renderer's resize reports on or off if CONSOLE_MODE_RESIZE_REPORTS changes.
+///
+/// @param consolePort A pointer to the ConsolePort to set the modes of.
+/// @param modes The CONSOLE_MODE_* flags to set.
+///
+/// @return This function returns no value.
+static void consoleSetPortModes(ConsolePort *consolePort, uint8_t modes) {
+  uint8_t changed = (consolePort->modes ^ modes) & CONSOLE_MODE_RESIZE_REPORTS;
+  consolePort->modes = modes;
+  if (changed != 0) {
+    consolePort->consolePrintString(consolePort,
+      ((modes & CONSOLE_MODE_RESIZE_REPORTS) != 0)
+        ? _resizeReportsOn : _resizeReportsOff);
+  }
+}
+
 /// @fn void consoleGetModesCommandHandler(
 ///   ConsoleState *consoleState, ProcessMessage *inputMessage)
 ///
@@ -697,7 +732,7 @@ void consoleSetModesCommandHandler(
         && ((consoleModesArgs->modes & CONSOLE_MODE_CANONICAL) != 0)
         && (consoleBuffer->holdsCompletedLine == true)
         && (consoleBuffer->bufferAwaitingRelease == false);
-      consolePorts[ii].modes = consoleModesArgs->modes;
+      consoleSetPortModes(&consolePorts[ii], consoleModesArgs->modes);
       if (consolePorts[ii].inputState != CONSOLE_INPUT_STATE_AFTER_RETURN) {
         consolePorts[ii].inputState = CONSOLE_INPUT_STATE_NORMAL;
       }
@@ -797,7 +832,7 @@ void consoleReleasePidPortCommandHandler(
     if (consolePorts[ii].inputOwner == processId) {
       consolePorts[ii].inputOwner = newOwner;
       consolePorts[ii].consoleBuffer->bufferAwaitingRelease = false;
-      consolePorts[ii].modes = CONSOLE_MODE_DEFAULT;
+      consoleSetPortModes(&consolePorts[ii], CONSOLE_MODE_DEFAULT);
     }
     if (consolePorts[ii].outputOwner == processId) {
       consolePorts[ii].outputOwner = newOwner;
@@ -905,6 +940,8 @@ static void consoleInitPort(ConsolePort *consolePort,
   consolePort->pendingInputIndex = 0;
   consolePort->typeAheadStart = 0;
   consolePort->typeAheadEnd = 0;
+  consolePort->rows = CONSOLE_DEFAULT_ROWS;
+  consolePort->columns = CONSOLE_DEFAULT_COLUMNS;
 }
 
 /// @fn void consoleInputReadyCommandHandler(
@@ -1153,6 +1190,78 @@ void consoleSetColorsCommandHandler(
   return;
 }
 
+/// @fn void consoleGetWinsizeCommandHandler(
+///   ConsoleState *consoleState, ProcessMessage *inputMessage)
+///
+/// @brief Get the size of the console port a process owns or renders.
+///
+/// @param consoleState A pointer to the ConsoleState being maintained by the
+///   runConsole function that's running.
+/// @param inputMessage A pointer to the ProcessMessage with the received
+///   command.  Its data is a ConsoleWinsizeArgs.
+///
+/// @return This function returns no value.
+void consoleGetWinsizeCommandHandler(
+  ConsoleState *consoleState, ProcessMessage *inputMessage
+) {
+  ConsoleWinsizeArgs *consoleWinsizeArgs
+    = (ConsoleWinsizeArgs*) processMessageData(inputMessage);
+  ProcessId sender = processPid(processMessageFrom(inputMessage));
+  ConsolePort *consolePorts = consoleState->consolePorts;
+
+  consoleWinsizeArgs->returnValue = -1;
+  for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
+    if ((consolePorts[ii].outputOwner == sender)
+      || (consolePorts[ii].forwardingPid == sender)
+    ) {
+      consoleWinsizeArgs->rows = consolePorts[ii].rows;
+      consoleWinsizeArgs->columns = consolePorts[ii].columns;
+      consoleWinsizeArgs->returnValue = 0;
+      break;
+    }
+  }
+
+  processMessageSetDone(inputMessage);
+
+  return;
+}
+
+/// @fn void consoleSetWinsizeCommandHandler(
+///   ConsoleState *consoleState, ProcessMessage *inputMessage)
+///
+/// @brief Record the size of all console ports a process owns or renders.
+///
+/// @param consoleState A pointer to the ConsoleState being maintained by the
+///   runConsole function that's running.
+/// @param inputMessage A pointer to the ProcessMessage with the received
+///   command.  Its data is a ConsoleWinsizeArgs.
+///
+/// @return This function returns no value.
+void consoleSetWinsizeCommandHandler(
+  ConsoleState *consoleState, ProcessMessage *inputMessage
+) {
+  ConsoleWinsizeArgs *consoleWinsizeArgs
+    = (ConsoleWinsizeArgs*) processMessageData(inputMessage);
+  ProcessId sender = processPid(processMessageFrom(inputMessage));
+  ConsolePort *consolePorts = consoleState->consolePorts;
+
+  consoleWinsizeArgs->returnValue = -1;
+  for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
+    if ((consolePorts[ii].outputOwner == sender)
+      || (consolePorts[ii].forwardingPid == sender)
+    ) {
+      consolePorts[ii].rows = consoleWinsizeArgs->rows;
+      consolePorts[ii].columns = consoleWinsizeArgs->columns;
+      consoleWinsizeArgs->returnValue = 0;
+    }
+  }
+
+  processMessageSetDone(inputMessage);
+  consoleMessageCleanup(inputMessage);
+
+  return;
+}
+
 /// @fn void consoleLendPortCommandHandler(
 ///   ConsoleState *consoleState, ProcessMessage *inputMessage)
 ///
@@ -1220,6 +1329,8 @@ const ConsoleCommandHandler consoleCommandHandlers[] = {
   consoleGetColorsCommandHandler,       // CONSOLE_GET_COLORS
   consoleSetColorsCommandHandler,       // CONSOLE_SET_COLORS
   consoleLendPortCommandHandler,        // CONSOLE_LEND_PORT
+  consoleGetWinsizeCommandHandler,      // CONSOLE_GET_WINSIZE
+  consoleSetWinsizeCommandHandler,      // CONSOLE_SET_WINSIZE
 };
 
 /// @fn static bool consoleHoldsInput(
@@ -2181,5 +2292,70 @@ int setConsoleColors(uint8_t colors) {
   processMessageRelease(sent);
 
   return consoleColorsArgs.returnValue;
+}
+
+/// @fn int getConsoleWinsize(uint16_t *rows, uint16_t *columns)
+///
+/// @brief Get the size of the console port the current process owns or
+/// renders.
+///
+/// @param rows Set to the number of rows of the port.
+/// @param columns Set to the number of columns of the port.
+///
+/// @return Returns 0 on success, -1 if the process neither owns nor renders a
+/// console port.
+int getConsoleWinsize(uint16_t *rows, uint16_t *columns) {
+  ConsoleWinsizeArgs consoleWinsizeArgs;
+  consoleWinsizeArgs.rows = 0;
+  consoleWinsizeArgs.columns = 0;
+  consoleWinsizeArgs.returnValue = -1;
+  ProcessMessage *sent = initSendProcessMessageToPid(
+    consolePid,
+    CONSOLE_COMMAND_SIGNATURE | CONSOLE_GET_WINSIZE,
+    /* data= */ &consoleWinsizeArgs,
+    /* size= */ sizeof(consoleWinsizeArgs),
+    /* waiting= */ true);
+  if (sent == NULL) {
+    return -1;
+  }
+
+  processMessageWaitForDone(sent, NULL);
+  processMessageRelease(sent);
+
+  *rows = consoleWinsizeArgs.rows;
+  *columns = consoleWinsizeArgs.columns;
+  return consoleWinsizeArgs.returnValue;
+}
+
+/// @fn int setConsoleWinsize(uint16_t rows, uint16_t columns)
+///
+/// @brief Record the size of all console ports the current process owns or
+/// renders.
+///
+/// @param rows The number of rows.
+/// @param columns The number of columns.
+///
+/// @return Returns 0 on success, -1 if the process neither owns nor renders a
+/// console port.
+int setConsoleWinsize(uint16_t rows, uint16_t columns) {
+  ConsoleWinsizeArgs consoleWinsizeArgs = {
+    .rows = rows,
+    .columns = columns,
+    .returnValue = -1,
+  };
+  ProcessMessage *sent = initSendProcessMessageToPid(
+    consolePid,
+    CONSOLE_COMMAND_SIGNATURE | CONSOLE_SET_WINSIZE,
+    /* data= */ &consoleWinsizeArgs,
+    /* size= */ sizeof(consoleWinsizeArgs),
+    /* waiting= */ true);
+  if (sent == NULL) {
+    return -1;
+  }
+
+  processMessageWaitForDone(sent, NULL);
+  processMessageRelease(sent);
+
+  return consoleWinsizeArgs.returnValue;
 }
 

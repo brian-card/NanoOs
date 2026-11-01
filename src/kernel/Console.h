@@ -121,6 +121,21 @@ typedef struct ConsoleColorsArgs {
   int     returnValue;
 } ConsoleColorsArgs;
 
+/// @struct ConsoleWinsizeArgs
+///
+/// @brief Arguments and return value for the CONSOLE_GET_WINSIZE and
+/// CONSOLE_SET_WINSIZE commands.
+///
+/// @param rows The number of rows to set, or that the port has.
+/// @param columns The number of columns to set, or that the port has.
+/// @param returnValue 0 on success, -1 if the process neither owns nor
+///   renders a console port.
+typedef struct ConsoleWinsizeArgs {
+  uint16_t rows;
+  uint16_t columns;
+  int      returnValue;
+} ConsoleWinsizeArgs;
+
 /// @struct ConsoleLendPortArgs
 ///
 /// @brief Arguments for the CONSOLE_LEND_PORT command.
@@ -204,6 +219,8 @@ typedef enum ConsoleCommandResponse {
   CONSOLE_GET_COLORS,
   CONSOLE_SET_COLORS,
   CONSOLE_LEND_PORT,
+  CONSOLE_GET_WINSIZE,
+  CONSOLE_SET_WINSIZE,
   NUM_CONSOLE_COMMANDS,
   // Responses:
   CONSOLE_RETURNING_INPUT,
@@ -267,6 +284,8 @@ int getConsoleModes(void);
 int setConsoleModes(uint8_t modes);
 int getConsoleColors(void);
 int setConsoleColors(uint8_t colors);
+int getConsoleWinsize(uint16_t *rows, uint16_t *columns);
+int setConsoleWinsize(uint16_t rows, uint16_t columns);
 
 // Exported for unit tests to use
 ConsoleInputEvent consoleProcessByte(
@@ -297,6 +316,10 @@ void consoleGetColorsCommandHandler(
 void consoleSetColorsCommandHandler(
   ConsoleState *consoleState, ProcessMessage *inputMessage);
 void consoleLendPortCommandHandler(
+  ConsoleState *consoleState, ProcessMessage *inputMessage);
+void consoleGetWinsizeCommandHandler(
+  ConsoleState *consoleState, ProcessMessage *inputMessage);
+void consoleSetWinsizeCommandHandler(
   ConsoleState *consoleState, ProcessMessage *inputMessage);
 
 // Exported processes
