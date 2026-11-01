@@ -55,6 +55,30 @@ static inline int tcsetattr(int fd, int optional_actions,
     fd, optional_actions, termios_p);
 }
 
+/// @fn static inline int tcgetwinsize(int fd, struct winsize *winsize)
+///
+/// @brief Get the size of the terminal a file descriptor refers to.
+///
+/// @param fd The file descriptor of the terminal.
+/// @param winsize Set to the terminal's size.
+///
+/// @return Returns 0 on success, -1 with errno set on failure.
+static inline int tcgetwinsize(int fd, struct winsize *winsize) {
+  return overlayMap.header.osApi->userApi->tcgetwinsize(fd, winsize);
+}
+
+/// @fn static inline int tcsetwinsize(int fd, const struct winsize *winsize)
+///
+/// @brief Record the size of the terminal a file descriptor refers to.
+///
+/// @param fd The file descriptor of the terminal.
+/// @param winsize The terminal's size.
+///
+/// @return Returns 0 on success, -1 with errno set on failure.
+static inline int tcsetwinsize(int fd, const struct winsize *winsize) {
+  return overlayMap.header.osApi->userApi->tcsetwinsize(fd, winsize);
+}
+
 #ifdef __cplusplus
 }
 #endif
