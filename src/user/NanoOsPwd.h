@@ -81,6 +81,7 @@ int nanoOsGetpwuid_r(
   char *buf,
   size_t buflen,
   struct passwd **result);
+void nanoOsPasswdCacheLoad(void);
 
 #ifdef __cplusplus
 }
