@@ -156,8 +156,10 @@ static GfxError vdpSetSystemFont(VdpOutput *vdpOutput, GfxHandle font) {
 
   const uint8_t select[] = { 23, 0, 0x95, 0, VDP_WORD(id), 0 };
   vdpWrite(select, sizeof(select));
-  vdpOutput->glyphWidth = vdpOutput->fontWidths[id - VDP_FONT_ID_BASE];
-  vdpOutput->glyphHeight = vdpOutput->fontHeights[id - VDP_FONT_ID_BASE];
+  vdpOutput->textState.numColumns
+    = VDP_SCREEN_WIDTH / vdpOutput->fontWidths[id - VDP_FONT_ID_BASE];
+  vdpOutput->textState.numRows
+    = VDP_SCREEN_HEIGHT / vdpOutput->fontHeights[id - VDP_FONT_ID_BASE];
   vdpOutput->sizeChanged = true;
   vdpOutput->textState.resizeReportWanted = vdpOutput->textState.resizeReports;
   return GFX_OK;
@@ -278,8 +280,8 @@ static char* vdpAppendNumber(char *text, unsigned int number) {
 void* vdpReportSize(void *args) {
   VdpInput *input = ((VdpStartupArgs*) args)->input;
   VdpOutput *vdpOutput = ((VdpStartupArgs*) args)->output;
-  unsigned int rows = VDP_SCREEN_HEIGHT / vdpOutput->glyphHeight;
-  unsigned int columns = VDP_SCREEN_WIDTH / vdpOutput->glyphWidth;
+  unsigned int rows = vdpOutput->textState.numRows;
+  unsigned int columns = vdpOutput->textState.numColumns;
 
   if ((vdpOutput->sizeChanged == true) && (input->sizeMessage == NULL)) {
     ProcessMessage *message = getAvailableMessage();
