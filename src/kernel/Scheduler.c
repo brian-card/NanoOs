@@ -6542,6 +6542,10 @@ __attribute__((noinline)) void startScheduler(
   logDebug("Logged scheduler debug info\n");
   bootTrace("hostname read; launching processes");
 
+  // The memory manager only owned the ports to print its boot message, which it
+  // finished before it could serve the allocations above.
+  schedulerReleaseConsolePorts(&allProcesses[memoryManagerPid - 1]);
+
   HalLaunchProcessesFn launchProcesses = NULL;
   HAL->platform->launchProcesses(&launchProcesses);
   if (launchProcesses != NULL) {
