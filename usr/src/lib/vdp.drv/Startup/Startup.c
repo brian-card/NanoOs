@@ -225,8 +225,8 @@ void* vdpStartup(void *args) {
   input->portId = -1;
   input->pollCookie = VDP_GENERAL_POLL_COOKIE;
   memset(vdpOutput, 0, sizeof(*vdpOutput));
-  vdpOutput->glyphWidth = VDP_SYSTEM_GLYPH_SIZE;
-  vdpOutput->glyphHeight = VDP_SYSTEM_GLYPH_SIZE;
+  vdpOutput->textState.numColumns = VDP_SCREEN_WIDTH / VDP_SYSTEM_GLYPH_SIZE;
+  vdpOutput->textState.numRows = VDP_SCREEN_HEIGHT / VDP_SYSTEM_GLYPH_SIZE;
   vdpOutput->sizeChanged = true;
   vdpOutput->giveUpNs = vdpNowNs() + VDP_GENERAL_POLL_TIMEOUT_NS;
   vdpOutput->buffer = (VdpOutputBuffer*) malloc(sizeof(VdpOutputBuffer));
@@ -301,5 +301,98 @@ void* vdpSetupScreen(void *args) {
     vdpFinishSetup(startupArgs->output);
   }
 
+  return args;
+}
+
+/// @def VDP_GENERAL_POLL_RETRY_NS
+///
+/// @brief How often, in nanoseconds, the general poll is resent until the VDP
+/// answers.  A VDP that has just been powered on ignores everything for
+/// several seconds.
+#define VDP_GENERAL_POLL_RETRY_NS 500000000LL
+
+/// @fn static void vdpHandshake(VdpStartupArgs *startupArgs)
+///
+/// @brief Send the general poll until the VDP answers it or the wait times
+/// out, then set up the screen, and again once the poll that follows the
+/// setup, which is sent the same way, is answered or times out.  If it was
+/// answered, the Graphics overlay loads the built-in font first:  until then
+/// the VDP may be busy resetting the mouse, and the font overflows its receive
+/// buffer.
+///
+/// @param startupArgs A pointer to the driver's VdpStartupArgs.
+///
+/// @return This function returns no value.
+static void vdpHandshake(VdpStartupArgs *startupArgs) {
+  VdpOutput *vdpOutput = startupArgs->output;
+  VdpInput *input = startupArgs->input;
+  if (vdpOutput->listening == true) {
+    return;
+  }
+
+  int64_t now = vdpNowNs();
+  if ((input->pollAnswered == false) && (now < vdpOutput->giveUpNs)) {
+    if (now >= vdpOutput->nextPollNs) {
+      // VDU 23,0,&80,cookie, which the VDP answers with the cookie.
+      uint8_t poll[] = { 23, 0, 0x80, input->pollCookie };
+      vdpWrite(poll, sizeof(poll));
+      vdpOutput->nextPollNs = now + VDP_GENERAL_POLL_RETRY_NS;
+    }
+    return;
+  }
+
+  if ((vdpOutput->screenSetUp == true) && (input->pollAnswered == true)) {
+    vdpOutput->graphicsMessage = NULL;
+    callOverlayFunction(OVERLAY_SAME_NAMESPACE,
+      "Graphics", "vdpGraphics", vdpOutput);
+  }
+  vdpSetupScreen(startupArgs);
+}
+
+/// @fn static void vdpRequestPort(VdpInput *input)
+///
+/// @brief Ask the console which port it forwards to this process, without
+/// waiting for the answer: the console may be waiting on this process to draw
+/// its output.
+///
+/// @param input A pointer to the driver's VdpInput.
+///
+/// @return This function returns no value.
+static void vdpRequestPort(VdpInput *input) {
+  if ((input->portId >= 0) || (input->portMessage != NULL)
+    || (findProcessByName(CONSOLE_PROCESS_NAME, &input->consolePid) != 0)
+  ) {
+    return;
+  }
+
+  ProcessMessage *message = getAvailableMessage();
+  if (message == NULL) {
+    return;
+  }
+  input->portArgs.forwardingPid = getRunningPid();
+  input->portArgs.portId = 0;
+  input->portArgs.returnValue = 0;
+  processMessageInit(message,
+    CONSOLE_COMMAND_SIGNATURE | CONSOLE_ADD_FORWARDING_PORT,
+    &input->portArgs, sizeof(input->portArgs), /* waiting= */ true);
+  if (sendProcessMessageToPid(input->consolePid, message) != processSuccess) {
+    processMessageRelease(message);
+    return;
+  }
+  input->portMessage = message;
+}
+
+/// @fn void* vdpSetUp(void *args)
+///
+/// @brief Advance the handshake with the VDP and ask the console for the
+/// driver's port.  The main overlay calls this only until the VDP is drawing
+/// and the port is known, which keeps both out of the main overlay.
+///
+/// @param args A pointer to the driver's VdpStartupArgs.
+///
+/// @return Always returns the provided pointer.
+void* vdpSetUp(void *args) {
+  vdpHandshake((VdpStartupArgs*) args);
+  vdpRequestPort(((VdpStartupArgs*) args)->input);
   return args;
 }
