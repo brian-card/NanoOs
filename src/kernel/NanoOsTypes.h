@@ -275,6 +275,8 @@ typedef struct ProcessQueue ProcessQueue;
 ///   on until one of its children exits, or NULL.
 /// @param consolePort The console port whose session the process belongs to,
 ///   which it may print to without owning, or NO_CONSOLE_PORT.
+/// @param shellPath The path of the user's shell in a shell slot, recorded when
+///   the user's login runs it, or NULL.
 /// @param halCapabilityBitmap One bit per HAL function, set for each function
 ///   granted in halCapabilities.  Built by setProcessHalCapabilities.
 /// @param halDeviceMasks For each HalSubsystem, the bitmask of device IDs the
@@ -311,6 +313,7 @@ typedef struct ProcessDescriptor {
   ProcessId           parentPid;
   ProcessMessage     *waitMessage;
   uint8_t             consolePort;
+  char               *shellPath;
   // Kept last so that these share the tail padding after the bools above.
   uint8_t             halCapabilityBitmap[HAL_CAPABILITY_BITMAP_SIZE];
   uint8_t             halDeviceMasks[HAL_DEVICE_MASKS_SIZE];
