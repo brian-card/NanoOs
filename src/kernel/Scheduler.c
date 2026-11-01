@@ -589,6 +589,8 @@ IpcCapability baseSupervisorIpcCapabilities[] = {
       | (((uint32_t) 1) << CONSOLE_RELEASE_BUFFER)
       | (((uint32_t) 1) << CONSOLE_GET_COLORS)
       | (((uint32_t) 1) << CONSOLE_SET_COLORS)
+      | (((uint32_t) 1) << CONSOLE_GET_WINSIZE)
+      | (((uint32_t) 1) << CONSOLE_SET_WINSIZE)
   },
   {
     .destinationPid = 0, // Memory manager PID to be set by scheduler
@@ -645,6 +647,7 @@ IpcCapability baseUserIpcCapabilities[] = {
       = (((uint32_t) 1) << CONSOLE_GET_BUFFER)
       | (((uint32_t) 1) << CONSOLE_WRITE_BUFFER)
       | (((uint32_t) 1) << CONSOLE_RELEASE_BUFFER)
+      | (((uint32_t) 1) << CONSOLE_GET_WINSIZE)
   },
   {
     .destinationPid = 0, // Memory manager PID to be set by scheduler
@@ -1533,6 +1536,8 @@ int schedulerAddForwardingPort(ProcessId forwardingPid) {
       CONSOLE_COMMAND_SIGNATURE, CONSOLE_INPUT_READY) != 0)
     || (addProcessIpcCapability(forwarder, consolePid,
       CONSOLE_COMMAND_SIGNATURE, CONSOLE_RELEASE_BUFFER) != 0)
+    || (addProcessIpcCapability(forwarder, consolePid,
+      CONSOLE_COMMAND_SIGNATURE, CONSOLE_SET_WINSIZE) != 0)
     || (addProcessIpcCapability(&allProcesses[consolePid - 1], forwardingPid,
       CONSOLE_COMMAND_SIGNATURE, CONSOLE_FORWARD_STRING) != 0)
   ) {
