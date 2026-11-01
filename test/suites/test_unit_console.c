@@ -234,14 +234,51 @@ NANO_OS_TEST(unit_console, raw_bytes_complete_at_once_without_echo) {
 
   tc.buffer.consoleBufferIndex = 0;
   NANO_OS_ASSERT_EQ_INT(CONSOLE_INPUT_LINE,
-    consoleProcessByte(&tc.port, 0x1b, &echo));
-  NANO_OS_ASSERT_EQ_INT(CONSOLE_INPUT_LINE,
-    consoleProcessByte(&tc.port, '\r', &echo));
-  NANO_OS_ASSERT_EQ_INT(CONSOLE_INPUT_LINE,
     consoleProcessByte(&tc.port, 0x7f, &echo));
-  NANO_OS_ASSERT_STR_EQ("\x1b\r\x7f", testConsoleLine(&tc));
+  NANO_OS_ASSERT_EQ_INT(CONSOLE_INPUT_LINE,
+    consoleProcessByte(&tc.port, '\b', &echo));
+  NANO_OS_ASSERT_STR_EQ("\x7f\b", testConsoleLine(&tc));
   NANO_OS_ASSERT_EQ_INT(CONSOLE_ECHO_NONE, echo);
   NANO_OS_ASSERT_EQ_INT(CONSOLE_INPUT_STATE_NORMAL, tc.port.inputState);
+}
+
+NANO_OS_TEST(unit_console, raw_escape_sequences_complete_as_one) {
+  TestConsole tc;
+  testConsoleInit(&tc);
+  tc.port.modes = 0;
+  ConsoleEcho echo = CONSOLE_ECHO_CHAR;
+
+  NANO_OS_ASSERT_EQ_INT(CONSOLE_INPUT_NONE,
+    consoleProcessByte(&tc.port, 0x1b, &echo));
+  NANO_OS_ASSERT_EQ_INT(CONSOLE_INPUT_STATE_ESCAPE, tc.port.inputState);
+  NANO_OS_ASSERT_EQ_INT(CONSOLE_INPUT_NONE,
+    consoleProcessByte(&tc.port, '[', &echo));
+  NANO_OS_ASSERT_EQ_INT(CONSOLE_INPUT_NONE,
+    consoleProcessByte(&tc.port, '2', &echo));
+  NANO_OS_ASSERT_EQ_INT(CONSOLE_INPUT_ESCAPE,
+    consoleProcessByte(&tc.port, '~', &echo));
+  NANO_OS_ASSERT_STR_EQ("\x1b[2~", testConsoleLine(&tc));
+  NANO_OS_ASSERT_EQ_INT(CONSOLE_ECHO_NONE, echo);
+  NANO_OS_ASSERT_EQ_INT(CONSOLE_INPUT_STATE_NORMAL, tc.port.inputState);
+
+  tc.buffer.consoleBufferIndex = 0;
+  NANO_OS_ASSERT_EQ_INT(CONSOLE_INPUT_NONE,
+    consoleProcessByte(&tc.port, 0x1b, &echo));
+  NANO_OS_ASSERT_EQ_INT(CONSOLE_INPUT_ESCAPE,
+    consoleProcessByte(&tc.port, 'j', &echo));
+  NANO_OS_ASSERT_STR_EQ("\x1bj", testConsoleLine(&tc));
+
+  tc.buffer.consoleBufferIndex = 0;
+  NANO_OS_ASSERT_EQ_INT(CONSOLE_INPUT_LINE,
+    consoleProcessByte(&tc.port, '\r', &echo));
+  NANO_OS_ASSERT_EQ_INT(CONSOLE_INPUT_STATE_AFTER_RETURN, tc.port.inputState);
+  NANO_OS_ASSERT_EQ_INT(CONSOLE_INPUT_NONE,
+    consoleProcessByte(&tc.port, 0x1b, &echo));
+  NANO_OS_ASSERT_EQ_INT(CONSOLE_INPUT_NONE,
+    consoleProcessByte(&tc.port, 'O', &echo));
+  NANO_OS_ASSERT_EQ_INT(CONSOLE_INPUT_ESCAPE,
+    consoleProcessByte(&tc.port, 'P', &echo));
+  NANO_OS_ASSERT_STR_EQ("\r\x1bOP", testConsoleLine(&tc));
 }
 
 NANO_OS_TEST(unit_console, ctrl_c_interrupts_only_with_signals_on) {
