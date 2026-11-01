@@ -75,7 +75,7 @@ static inline int posix_spawnattr_destroy(posix_spawnattr_t *attr) {
 static inline int posix_spawnattr_setflags(posix_spawnattr_t *attr,
   short flags
 ) {
-  if ((flags & ~POSIX_SPAWN_FOREGROUND) != 0) {
+  if ((flags & ~(POSIX_SPAWN_FOREGROUND | POSIX_SPAWN_ALLOW_SPAWN)) != 0) {
     return EINVAL;
   }
   attr->flags = flags;
