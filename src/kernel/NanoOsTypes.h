@@ -63,6 +63,12 @@ extern "C"
 /// @brief The number of console supports supported.
 #define CONSOLE_NUM_PORTS 2
 
+/// @def NO_CONSOLE_PORT
+///
+/// @brief Value of a ProcessDescriptor's consolePort when the process belongs
+/// to no console port.
+#define NO_CONSOLE_PORT ((uint8_t) 0xff)
+
 /// @def CONSOLE_NUM_BUFFERS
 ///
 /// @brief The number of console buffers that will be allocated within the main
@@ -267,6 +273,8 @@ typedef struct ProcessQueue ProcessQueue;
 ///   has none or its parent has exited.
 /// @param waitMessage The SCHEDULER_WAIT_PID message the process is blocked
 ///   on until one of its children exits, or NULL.
+/// @param consolePort The console port whose session the process belongs to,
+///   which it may print to without owning, or NO_CONSOLE_PORT.
 /// @param halCapabilityBitmap One bit per HAL function, set for each function
 ///   granted in halCapabilities.  Built by setProcessHalCapabilities.
 /// @param halDeviceMasks For each HalSubsystem, the bitmask of device IDs the
@@ -302,6 +310,7 @@ typedef struct ProcessDescriptor {
   bool                zombie;
   ProcessId           parentPid;
   ProcessMessage     *waitMessage;
+  uint8_t             consolePort;
   // Kept last so that these share the tail padding after the bools above.
   uint8_t             halCapabilityBitmap[HAL_CAPABILITY_BITMAP_SIZE];
   uint8_t             halDeviceMasks[HAL_DEVICE_MASKS_SIZE];
