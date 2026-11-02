@@ -1835,12 +1835,14 @@ static void consoleKeepTypeAhead(
 ///   ConsoleState *consoleState, ConsolePort *consolePort)
 ///
 /// @brief Read and process a port's input until it has nothing more to give or
-/// a completed line has been sent to the port's input owner.  While a line is
-/// held for an owner that isn't waiting, only Ctrl-C is acted on, and other
-/// input is kept in the rest of the buffer until the line is taken.  An escape
-/// that nothing has followed is only taken to be the escape key by itself once
-/// CONSOLE_ESCAPE_DELAY_MS has passed, so that an escape sequence whose bytes
-/// arrive in separate reads is still read as one.
+/// a completed line has been sent to the port's input owner.  While a line or
+/// raw key is held for an owner that isn't waiting, only Ctrl-C is acted on,
+/// and only when the port sends signals; other input is kept unprocessed in the
+/// rest of the buffer until the line is taken, and then processed in whatever
+/// mode the port is in by then.  An escape that nothing has followed is only
+/// taken to be the escape key by itself once CONSOLE_ESCAPE_DELAY_MS has
+/// passed, so that an escape sequence whose bytes arrive in separate reads is
+/// still read as one.
 ///
 /// @param consoleState A pointer to the ConsoleState being maintained by the
 ///   runConsole function that's running.
@@ -1853,13 +1855,6 @@ bool consoleServicePort(
 ) {
   consoleDeliverLine(consolePort);
   while (consolePort->consoleBuffer->bufferAwaitingRelease == false) {
-    if ((consolePort->consoleBuffer->holdsCompletedLine == true)
-      && ((consolePort->modes & CONSOLE_MODE_CANONICAL) == 0)
-    ) {
-      // Leave input that's typed ahead where it is until it's asked for, in
-      // whatever mode the port is in by then.
-      break;
-    }
     ConsoleBuffer *consoleBuffer = consolePort->consoleBuffer;
     bool holdsLine = consoleBuffer->holdsCompletedLine;
     bool typedAhead = false;
@@ -1878,7 +1873,9 @@ bool consoleServicePort(
     } else {
       byteRead = consolePort->readByte(consolePort);
     }
-    if (holdsLine && (byteRead != 0x03)) {
+    if (holdsLine && ((byteRead != 0x03)
+      || ((consolePort->modes & CONSOLE_MODE_SIGNALS) == 0))
+    ) {
       if (byteRead < 0) {
         break;
       }
