@@ -106,6 +106,11 @@ LAYOUT_UK = 0
 # overflow:  the eZ80 stops waiting on CTS after about 17 ms.
 RX_BUFFER_SIZE = 256
 LAYOUT_US = 1
+# The size, in pixels, of the screen mode vdp.drv uses, and of the system
+# font's glyphs.
+SCREEN_WIDTH = 640
+SCREEN_HEIGHT = 480
+SYSTEM_GLYPH_SIZE = 8
 # What the VDP's default UK layout gives for the keys of a US keyboard whose
 # characters differ between the two layouts.
 UK_CHARACTER_FOR_US_KEY = {"|": "~", "\\": "#", "@": '"', '"': "@"}
@@ -158,6 +163,12 @@ class FakeVdp:
         self.events = []       # (time, kind, detail) once listening
         self.screen = ""       # text drawn since the last clear
         self.cursor = 0        # index in screen of the next character drawn
+        # The screen as rows and columns of the selected font's glyphs, and
+        # the cell the next character is drawn in.  grid_column is
+        # grid_columns while a wrap is held back.
+        self.grid_columns = SCREEN_WIDTH // SYSTEM_GLYPH_SIZE
+        self.grid_rows = SCREEN_HEIGHT // SYSTEM_GLYPH_SIZE
+        self._grid_clear()
         self.dropped = 0       # bytes ignored before listening
         self.layout = LAYOUT_UK
         self.palette = {}      # logical color -> (red, green, blue) set by VDU 19
@@ -241,16 +252,21 @@ class FakeVdp:
                     with self.lock:
                         self.screen = ""
                         self.cursor = 0
+                        self._grid_clear()
                         self.lock.notify_all()
                 elif byte == 30:
                     self._event("home")
                     with self.lock:
                         self.cursor = 0
+                        self.grid_row = self.grid_column = 0
                         self.lock.notify_all()
                 elif byte == 27:
                     self._glyph(next(stream))
                 elif byte == 31:
                     column, row = next(stream), next(stream)
+                    if column < self.grid_columns and row < self.grid_rows:
+                        with self.lock:
+                            self.grid_row, self.grid_column = row, column
                     self._event("tab", (column, row))
                 else:
                     self._text(byte)
@@ -390,6 +406,12 @@ class FakeVdp:
             else:
                 with self.lock:
                     self.font = None if font_id == SYSTEM_FONT else font_id
+                    width, height = (
+                        (SYSTEM_GLYPH_SIZE, SYSTEM_GLYPH_SIZE)
+                        if self.font is None else self.fonts[font_id][:2])
+                    self.grid_columns = SCREEN_WIDTH // width
+                    self.grid_rows = SCREEN_HEIGHT // height
+                    self._grid_clear()
                 self._event("font", font_id)
         elif command == FONT_CLEAR:
             with self.lock:
@@ -563,11 +585,38 @@ class FakeVdp:
             self.events.append((time.time(), kind, detail))
             self.lock.notify_all()
 
+    def _grid_clear(self):
+        self.grid = [[" "] * self.grid_columns for _ in range(self.grid_rows)]
+        self.grid_row = self.grid_column = 0
+
+    def _grid_line_feed(self):
+        if self.grid_row + 1 < self.grid_rows:
+            self.grid_row += 1
+        else:
+            del self.grid[0]
+            self.grid.append([" "] * self.grid_columns)
+
+    def _grid_draw(self, ch):
+        """Draw a glyph on the grid the way the VDP does.  With scroll
+        protection on, a glyph in the last column wraps at once, except on
+        the bottom row, where the wrap waits for the next glyph."""
+        if self.grid_column >= self.grid_columns:
+            self.grid_column = 0
+            self._grid_line_feed()
+        self.grid[self.grid_row][self.grid_column] = ch
+        self.grid_column += 1
+        held = (self.cursor_behaviour & 1) and (
+            self.grid_row == self.grid_rows - 1)
+        if self.grid_column >= self.grid_columns and not held:
+            self.grid_column = 0
+            self._grid_line_feed()
+
     def _glyph(self, byte):
         with self.lock:
             self.screen = (self.screen[:self.cursor] + chr(byte)
                            + self.screen[self.cursor + 1:])
             self.cursor += 1
+            self._grid_draw(chr(byte))
             self.events.append((time.time(), "text", byte))
             self.lock.notify_all()
 
@@ -579,9 +628,18 @@ class FakeVdp:
             if byte == 8:
                 if self.cursor > 0 and self.screen[self.cursor - 1] != "\n":
                     self.cursor -= 1
+                if self.grid_column > 0:
+                    self.grid_column -= 1
+                elif self.grid_row > 0:
+                    self.grid_row -= 1
+                    self.grid_column = self.grid_columns - 1
             else:
                 self.screen += chr(byte)
                 self.cursor = len(self.screen)
+                if byte == 13:
+                    self.grid_column = 0
+                else:
+                    self._grid_line_feed()
             self.events.append((time.time(), "text", byte))
             self.lock.notify_all()
 
@@ -605,6 +663,26 @@ class FakeVdp:
                         f"VDP screen never matched {pattern!r}; "
                         f"screen ends {self.screen[-200:]!r}")
                 self.lock.wait(left)
+
+    def grid_lines(self):
+        """Return each row of the grid without trailing spaces."""
+        with self.lock:
+            return ["".join(row).rstrip() for row in self.grid]
+
+    def wait_grid(self, check, timeout=15):
+        """Wait until the grid passes a check.
+
+        @param check A function that takes the list of grid_lines() and
+          returns whether it shows what is wanted.
+        @param timeout Seconds to wait.
+        """
+        deadline = time.time() + timeout
+        while not check(self.grid_lines()):
+            if time.time() > deadline:
+                raise AssertionError(
+                    f"VDP grid never matched: {self.grid_lines()!r}")
+            with self.lock:
+                self.lock.wait(0.1)
 
     def wait_connections(self, count, timeout=15):
         """Wait until the simulator has connected a number of times.

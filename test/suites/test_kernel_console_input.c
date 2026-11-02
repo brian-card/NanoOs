@@ -797,6 +797,27 @@ NANO_OS_KERNEL_TEST(console_raw, a_lone_escape_waits_for_the_delay) {
   NANO_OS_ASSERT_STR_EQ("j", deliveredLines[1]);
 }
 
+NANO_OS_KERNEL_TEST(console_raw, an_escape_ends_a_lone_escape_before_it) {
+  ConsolePort *consolePort = rawFixture("\x1b\x1b[Ax");
+
+  serviceAndRead(consolePort);
+  serviceAndRead(consolePort);
+  serviceAndRead(consolePort);
+  NANO_OS_ASSERT_EQ_INT(3, numDeliveredLines);
+  NANO_OS_ASSERT_STR_EQ("\x1b", deliveredLines[0]);
+  NANO_OS_ASSERT_STR_EQ("\x1b[A", deliveredLines[1]);
+  NANO_OS_ASSERT_STR_EQ("x", deliveredLines[2]);
+}
+
+NANO_OS_KERNEL_TEST(console_escape, forwarded_escape_then_arrow_are_two_keys) {
+  const char *batches[] = { "\x1b\x1b[A", NULL };
+  deliverInBatches(batches);
+
+  NANO_OS_ASSERT_EQ_INT(2, numDeliveredLines);
+  NANO_OS_ASSERT_STR_EQ("\x1b", deliveredLines[0]);
+  NANO_OS_ASSERT_STR_EQ("\x1b[A", deliveredLines[1]);
+}
+
 /// @fn static ConsolePort* typeAheadFixture(const char *bytes)
 ///
 /// @brief Make this process the reader of a UART-like port in canonical mode
@@ -998,18 +1019,33 @@ static ConsoleBuffer* heldInput(const char *text, bool rawInput) {
   return &consoleBuffer;
 }
 
-NANO_OS_KERNEL_TEST(console_read, raw_input_that_does_not_fit_is_kept) {
-  ConsoleBuffer *consoleBuffer = heldInput("echo two\n", true);
+NANO_OS_KERNEL_TEST(console_read, raw_input_is_read_one_key_at_a_time) {
+  ConsoleBuffer *consoleBuffer = heldInput("e\x1b[Ax", true);
   char chunk[8];
 
-  NANO_OS_ASSERT_EQ_INT(4, (long long) nanoOsFread(chunk, 1, 4, stdin));
-  NANO_OS_ASSERT_TRUE(memcmp(chunk, "echo", 4) == 0);
+  NANO_OS_ASSERT_EQ_INT(1, (long long) nanoOsFread(chunk, 1, 8, stdin));
+  NANO_OS_ASSERT_EQ_INT('e', chunk[0]);
   NANO_OS_ASSERT_TRUE(getProcessStorage(FGETS_CONSOLE_BUFFER_KEY)
     == consoleBuffer);
+  NANO_OS_ASSERT_EQ_INT(3, (long long) nanoOsFread(chunk, 1, 8, stdin));
+  NANO_OS_ASSERT_TRUE(memcmp(chunk, "\x1b[A", 3) == 0);
+  NANO_OS_ASSERT_EQ_INT(1, (long long) nanoOsFread(chunk, 1, 8, stdin));
+  NANO_OS_ASSERT_EQ_INT('x', chunk[0]);
+  NANO_OS_ASSERT_NULL(getProcessStorage(FGETS_CONSOLE_BUFFER_KEY));
+}
 
-  memset(chunk, 'x', sizeof(chunk));
-  NANO_OS_ASSERT_EQ_INT(5, (long long) nanoOsFread(chunk, 1, 4 + 4, stdin));
-  NANO_OS_ASSERT_TRUE(memcmp(chunk, " two\nxxx", 8) == 0);
+NANO_OS_KERNEL_TEST(console_read, raw_input_that_does_not_fit_is_kept) {
+  ConsoleBuffer *consoleBuffer = heldInput("\x1b[Ax", true);
+  char chunk[8];
+
+  NANO_OS_ASSERT_EQ_INT(2, (long long) nanoOsFread(chunk, 1, 2, stdin));
+  NANO_OS_ASSERT_TRUE(memcmp(chunk, "\x1b[", 2) == 0);
+  NANO_OS_ASSERT_TRUE(getProcessStorage(FGETS_CONSOLE_BUFFER_KEY)
+    == consoleBuffer);
+  NANO_OS_ASSERT_EQ_INT(1, (long long) nanoOsFread(chunk, 1, 8, stdin));
+  NANO_OS_ASSERT_EQ_INT('A', chunk[0]);
+  NANO_OS_ASSERT_EQ_INT(1, (long long) nanoOsFread(chunk, 1, 8, stdin));
+  NANO_OS_ASSERT_EQ_INT('x', chunk[0]);
   NANO_OS_ASSERT_NULL(getProcessStorage(FGETS_CONSOLE_BUFFER_KEY));
 }
 

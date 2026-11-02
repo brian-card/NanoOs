@@ -708,6 +708,56 @@ def test_vdp_numlock_option_turns_num_lock_on(s):
     assert vdp.errors == [], f"unexpected VDU commands: {vdp.errors}"
 
 
+def test_vi_draws_on_the_vdp_console(s):
+    vdp = s.restart_with_vdp()
+    vdp_login(vdp)
+    rows, columns = vdp.grid_rows, vdp.grid_columns
+
+    def shows(lines, status=None):
+        def check(grid):
+            return (grid[:rows - 1] == lines + ["~"] * (rows - 1 - len(lines))
+                    and (status is None or grid[rows - 1] == status))
+        return check
+
+    def type_shown(text, shown):
+        # Wait for vi to catch up before typing more, since keys typed while
+        # it falls far behind are dropped.
+        for start in range(0, len(text), 8):
+            vdp.type(text[start:start + 8])
+            vdp.wait_grid(lambda grid: shown(text[:start + 8], grid))
+
+    vdp.type("vi /etc/vdp.txt\r")
+    vdp.wait_grid(shows([""], '"/etc/vdp.txt" [New File]'))
+    long_line = "".join(chr(ord("a") + n % 26) for n in range(columns + 3))
+    vdp.type("i")
+    type_shown(long_line, lambda typed, grid: (
+        grid[0] + (grid[1] if len(typed) > columns else "")) == typed)
+    vdp.type("\rx\tyz\x1b")
+    vdp.wait_grid(shows([long_line[:columns], long_line[columns:],
+                         "x       yz"], ""))
+    # Erasing to the end of a wrapped line's last row.
+    vdp.press(KEYCODE_UP)
+    vdp.type("$x")
+    vdp.wait_grid(shows([long_line[:columns], long_line[columns:-1],
+                         "x       yz"]))
+    count = rows + 10
+    vdp.type("Go")
+    for n in range(1, count + 1):
+        line = "l%02d" % n
+        vdp.type(line + ("\r" if n < count else "\x1b"))
+        vdp.wait_grid(lambda grid: line in grid)
+    screen_rows = [long_line[:columns], long_line[columns:-1],
+                   "x       yz"] + ["l%02d" % n for n in range(1, count + 1)]
+    vdp.wait_grid(lambda grid: grid[:rows - 1] == screen_rows[-(rows - 1):]
+                  and grid[rows - 1] == "")
+    vdp.type("gg")
+    vdp.wait_grid(lambda grid: grid[:rows - 1] == screen_rows[:rows - 1])
+    vdp.type(":wq\r")
+    vdp.expect(r"%dL, \d+C written" % (count + 2))
+    vdp.expect(PROMPT)
+    assert vdp.errors == [], f"unexpected VDU commands: {vdp.errors}"
+
+
 def test_vdp_keypad_navigates_without_the_numlock_option(s):
     vdp = s.restart_with_vdp()
     vdp_login(vdp)
@@ -1379,6 +1429,16 @@ def test_vi_repeats_the_last_change_with_dot(s):
     vi.wait_exit()
     assert s.sh("cat /etc/dot.txt") == \
         "ONE\nONE\nsix!\nseven!\nnew\nnea\nbw"
+
+
+def test_vi_keeps_keys_typed_before_it_reads_them(s):
+    s.login()
+    alphabet = "abcdefghijklmnopqrstuvwxyz"
+    # Everything is typed before vi has started, so it arrives in one batch.
+    s.child.delaybeforesend = None
+    s.child.send("vi /etc/ahead.txt\ri" + alphabet * 2 + "\x1b0x:wq\r")
+    s.child.expect(PROMPT, timeout=30)
+    assert s.sh("cat /etc/ahead.txt") == (alphabet * 2)[1:]
 
 
 def test_vi_inserts_a_control_character_typed_after_ctrl_v(s):
