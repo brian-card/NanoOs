@@ -31,22 +31,16 @@
 
 #include "vi.h"
 
-/// @var viHistoryMessages
-///
-/// @brief The messages for running out of changes to undo or redo.
-static const char *const viHistoryMessages[] = {
-  "Already at oldest change",
-  "Already at newest change",
-};
-
 /// @fn void* viUndo(void *args)
 ///
-/// @brief Undo (state->ex.command u) or redo (r) a change and redraw the
-/// screen, keeping the top line if the cursor's line can be shown with it.
+/// @brief Undo (state->ex.command u) or redo (r) a change and ask for the
+/// screen to be redrawn, keeping the top line if the cursor's line can be
+/// shown with it.
 ///
 /// @param args A pointer to the ViState of the running `vi`, cast to a void*.
 ///
-/// @return Returns the args pointer provided.
+/// @return Returns the args pointer provided.  Errors are left in
+/// state->ex.store.error.
 void* viUndo(void *args) {
   ViState *state = (ViState*) args;
   if (callOverlayFunction(EX_LIBRARY_PATH, "Undo", "exUndo", &state->ex)
@@ -54,27 +48,19 @@ void* viUndo(void *args) {
   ) {
     state->ex.store.error = EX_ERROR_MEMORY;
   }
-  uint8_t error = state->ex.store.error;
-  if (error != EX_ERROR_NONE) {
-    if ((error == EX_ERROR_OLDEST) || (error == EX_ERROR_NEWEST)) {
-      viStatus(state, viHistoryMessages[error - EX_ERROR_OLDEST]);
-      state->ex.store.error = EX_ERROR_NONE;
-    }
+  if (state->ex.store.error != EX_ERROR_NONE) {
     return args;
   }
 
+  int numLines = (state->ex.store.numLines > 0) ? state->ex.store.numLines : 1;
   int line = (state->ex.current > 0) ? state->ex.current : 1;
-  int row = -1;
-  if (line >= state->top) {
-    row = 0;
-    for (int ii = state->top; (ii < line) && (row < state->rows); ii++) {
-      row += viRowsFor(state, viReadLine(state, ii, false));
-    }
+  line = (line > numLines) ? numLines : line;
+  if (state->top > numLines) {
+    state->top = 1;
   }
-  state->index = state->ex.column;
-  if (viShowLine(state, line, row, false)) {
-    viDrawFrom(state, 0, state->top);
+  if (viLoadLine(state, line)) {
+    state->index = state->ex.column;
+    viRequest(state, line, viRowOf(state, line), VI_REQUEST_REDRAW);
   }
-  viStatus(state, "");
   return args;
 }

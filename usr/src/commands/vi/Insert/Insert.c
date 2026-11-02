@@ -37,7 +37,8 @@
 /// cursor (i), after it (a), at the first non-blank (I), or at the end of the
 /// line (A).  The changed line is left for the Put overlay to commit, and to
 /// split for Return, so that this overlay has no code that changes the store.
-/// state->ex.command is set to the key that ended insertion.
+/// state->ex.command is set to the key that ended insertion.  A key typed
+/// after Ctrl-V is inserted as it is.
 ///
 /// @param args A pointer to the ViState of the running `vi`, cast to a
 ///   void*.
@@ -47,6 +48,7 @@
 void* viInsert(void *args) {
   ViState *state = (ViState*) args;
   char command = state->ex.command;
+  viApplyRequest(state);
 
   if (state->truncated) {
     viStatus(state, "Line too long");
@@ -56,20 +58,19 @@ void* viInsert(void *args) {
   } else if (command == 'A') {
     state->index = state->length;
   } else if (command == 'I') {
-    state->index = 0;
-    while ((state->text[state->index] == ' ')
-      || (state->text[state->index] == '\t')
-    ) {
-      state->index++;
-    }
+    state->index = (int16_t) viFirstNonBlank(state);
   }
 
   viStatus(state, "-- INSERT --");
   while (state->ex.store.error == EX_ERROR_NONE) {
     viPlaceCursor(state);
     int key = viReadKey(state);
+    bool literal = (key == 0x16);
+    if (literal) {
+      key = viReadKey(state);
+    }
     int oldRows = viRowsFor(state, state->width);
-    if ((key == VI_KEY_ESCAPE) || (key == VI_KEY_EOF)) {
+    if ((key == VI_KEY_EOF) || ((key == VI_KEY_ESCAPE) && !literal)) {
       state->ex.command = VI_KEY_ESCAPE;
       break;
     } else if (key == VI_KEY_RESIZE) {
@@ -78,10 +79,10 @@ void* viInsert(void *args) {
       viShowLine(state, state->line, -1, true);
       viStatus(state, "-- INSERT --");
       continue;
-    } else if ((key == '\r') || (key == '\n')) {
+    } else if (((key == '\r') || (key == '\n')) && !literal) {
       state->ex.command = '\n';
       return args;
-    } else if ((key == '\b') || (key == 0x7f)) {
+    } else if (((key == '\b') || (key == 0x7f)) && !literal) {
       if (state->index == 0) {
         continue;
       }
@@ -89,7 +90,9 @@ void* viInsert(void *args) {
         (size_t) (state->length - state->index + 1));
       state->index--;
       state->length--;
-    } else if ((key == '\t') || ((key >= ' ') && (key <= 0xff))) {
+    } else if ((key > 0) && (key <= 0xff)
+      && (literal || (key == '\t') || (key >= ' '))
+    ) {
       if (state->length >= VI_LINE_MAX - 1) {
         viStatus(state, "Line too long");
         continue;

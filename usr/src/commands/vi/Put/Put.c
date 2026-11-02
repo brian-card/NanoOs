@@ -27,50 +27,82 @@
 
 /// @file Put.c
 ///
-/// @brief The `vi` work that adds a line:  p and P put a copy of the yanked
-/// line, o and O open an empty one for insert mode to fill, and Return in
-/// insert mode splits the current line.  The current line is also committed
-/// here when insert mode ends.
+/// @brief The `vi` work that adds lines:  p and P put copies of yanked lines,
+/// o and O open an empty line for insert mode to fill, and Return in insert
+/// mode splits the current line.  The current line is also committed here
+/// when insert mode ends.
 
 #include "vi.h"
 
-/// @fn static void viPutLine(ViState *state, bool after, bool empty)
+/// @fn static void viOpenLine(ViState *state, bool after)
 ///
-/// @brief Put a copy of the yanked line, or an empty line, after the current
-/// line or before it, and make the new line current.
+/// @brief Add an empty line after the current line or before it, and make
+/// the new line current.
 ///
 /// @param state The ViState of the running `vi`.
-/// @param after Whether to put it after the current line.
-/// @param empty Whether to put an empty line rather than the yanked one.
+/// @param after Whether to add it after the current line.
 ///
 /// @return This function returns no value.  Errors are left in
 /// state->ex.store.error.
-static void viPutLine(ViState *state, bool after, bool empty) {
-  TextStore *store = &state->ex.store;
-  if ((!empty && !state->haveYank)
-    || ((store->numLines == 0) && !viAddEmptyLine(state, 0))
-  ) {
+static void viOpenLine(ViState *state, bool after) {
+  if ((state->ex.store.numLines == 0) && !viAddEmptyLine(state, 0)) {
     return;
   }
   int line = after ? state->line : state->line - 1;
-  if (empty) {
-    if (!viAddEmptyLine(state, line)) {
-      return;
-    }
-  } else {
-    uint32_t offset = store->textEnd;
-    if (!viBeginChange(state)
-      || (textstoreCopyText(store, state->yank, store->text, true) < 0)
-      || !exInsertLine(&state->ex, line, offset)
-    ) {
-      return;
-    }
-    state->ex.modified = true;
+  if (!viAddEmptyLine(state, line)) {
+    return;
   }
   int row = after
     ? state->lineRow + viRowsFor(state, state->width) : state->lineRow;
   state->index = 0;
   viRequest(state, line + 1, row, VI_REQUEST_SHOW);
+}
+
+/// @fn static void viPutLines(ViState *state, bool after, int count)
+///
+/// @brief Put copies of the yanked lines after the current line or before
+/// it, and make the first line put current.
+///
+/// @param state The ViState of the running `vi`.
+/// @param after Whether to put them after the current line.
+/// @param count The number of copies.
+///
+/// @return This function returns no value.  Errors are left in
+/// state->ex.store.error.
+static void viPutLines(ViState *state, bool after, int count) {
+  TextStore *store = &state->ex.store;
+  if (!viBeginChange(state)
+    || ((store->numLines == 0) && !viAddEmptyLine(state, 0))
+  ) {
+    return;
+  }
+  int line = after ? state->line : state->line - 1;
+  int first = line + 1;
+  for (int ii = 0; ii < count; ii++) {
+    TextStoreChain cursor = state->yank;
+    cursor.block = cursor.first;
+    cursor.index = 0;
+    ViYank yank;
+    while (textstoreChainNext(store, &cursor, &yank)) {
+      uint32_t offset = store->textEnd;
+      if ((textstoreCopyText(store, yank.offset, store->text, true) < 0)
+        || !exInsertLine(&state->ex, line, offset)
+      ) {
+        return;
+      }
+      line++;
+    }
+    if (store->error != EX_ERROR_NONE) {
+      return;
+    }
+  }
+  state->ex.modified = true;
+  int row = after
+    ? state->lineRow + viRowsFor(state, state->width) : state->lineRow;
+  if (viLoadLine(state, first)) {
+    state->index = (int16_t) viFirstNonBlank(state);
+    viRequest(state, first, row, VI_REQUEST_SHOW);
+  }
 }
 
 /// @fn static bool viSplitLine(ViState *state)
@@ -107,7 +139,7 @@ static bool viSplitLine(ViState *state) {
 
 /// @fn void* viPut(void *args)
 ///
-/// @brief Run p, P, o, or O, or, for the key that ended insert mode, commit
+/// @brief Run p or P for yanked lines, o, or O, or, for the key that ended insert mode, commit
 /// the current line and split it for Return.
 ///
 /// @param args A pointer to the ViState of the running `vi`, cast to a void*.
@@ -124,7 +156,12 @@ void* viPut(void *args) {
     viCommitLine(state);
     return args;
   }
-  viPutLine(state, (command == 'p') || (command == 'o'),
-    (command == 'o') || (command == 'O'));
+  bool after = (command == 'p') || (command == 'o');
+  int count = (state->count > 0) ? state->count : 1;
+  if ((command == 'o') || (command == 'O')) {
+    viOpenLine(state, after);
+  } else if (state->yankKind == VI_YANK_LINES) {
+    viPutLines(state, after, count);
+  }
   return args;
 }

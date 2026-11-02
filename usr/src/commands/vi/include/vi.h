@@ -55,6 +55,40 @@ extern "C"
 /// one key.
 #define VI_PENDING_SIZE 8
 
+/// @def VI_PATTERN_POSITION
+///
+/// @brief The position in the block file's header area of the last search
+/// pattern, after the marks the ex library keeps there.
+#define VI_PATTERN_POSITION (EX_MARK_POSITION('z') + sizeof(uint32_t))
+
+/// @def VI_PATTERN_SIZE
+///
+/// @brief The size, in bytes, of the search pattern, with its NUL.
+#define VI_PATTERN_SIZE 32
+
+/// @enum ViYankKind
+///
+/// @brief What the yank chain holds.
+typedef enum ViYankKind {
+  VI_YANK_NONE,
+  VI_YANK_LINES,
+  VI_YANK_TEXT,
+} ViYankKind;
+
+/// @struct ViYank
+///
+/// @brief A record of the yank chain:  a yanked line, or the yanked text
+/// within a line, kept in the text file.
+///
+/// @param offset The text-file offset of the line or text.
+/// @param length For text within a line, its length.
+/// @param unused Padding to the chain's record size.
+typedef struct ViYank {
+  uint32_t offset;
+  int32_t  length;
+  uint32_t unused;
+} ViYank;
+
 /// @def VI_TAB_STOP
 ///
 /// @brief The number of columns between tab stops.
@@ -66,9 +100,24 @@ extern "C"
 /// has the drawing code, to show once it returns.
 typedef enum ViRequest {
   VI_REQUEST_NONE,
+  VI_REQUEST_MOVE,
   VI_REQUEST_SHOW,
   VI_REQUEST_SPLIT,
+  VI_REQUEST_REDRAW,
 } ViRequest;
+
+/// @enum ViError
+///
+/// @brief The errors of `vi`'s own, numbered after the ExErrors so that both
+/// share the TextStore's error member.  VI_ERROR_MOTION has no message:  a
+/// motion that can't move just doesn't.
+typedef enum ViError {
+  VI_ERROR_MOTION = NUM_EX_ERRORS,
+  VI_ERROR_NOT_FOUND,
+  VI_ERROR_NO_PATTERN,
+  VI_ERROR_TOO_LONG,
+  NUM_VI_ERRORS
+} ViError;
 
 /// @enum ViKey
 ///
@@ -89,52 +138,67 @@ typedef enum ViKey {
 /// @brief Everything `vi` keeps.  It is the only memory `vi` allocates.  Its
 /// members are ordered by size so that no padding is needed between them.
 ///
-/// @param ex The ExState of the editing commands.
+/// @param ex The ExState of the editing commands.  vi uses its addr2 for the
+///   line a motion reaches.
+/// @param yank The yank chain of ViYank records.
 /// @param terminal The terminal settings to restore on exit, or NULL if stdin
 ///   isn't a terminal.
 /// @param top The number of the line at the top of the screen.
 /// @param line The number of the current line.  With no lines, it is 1.
 /// @param width The number of columns the whole current line takes up.
 /// @param requestLine The line to make current for a request.
-/// @param yank The text-file offset of the yanked line.
 /// @param rows The number of rows on the screen.  The last is the status line.
 /// @param columns The number of columns on the screen.
 /// @param lineRow The screen row, from 0, that the current line starts on.
 /// @param index The index in text of the character under the cursor.
 /// @param length The number of characters in text.
 /// @param requestRow The screen row to show requestLine at.
+/// @param width The number of columns the whole current line takes up, at
+///   most INT16_MAX.
+/// @param count The count typed before the command, or 0 if none was.
+/// @param targetIndex The index in the line a motion reaches.
 /// @param truncated Whether the current line is longer than text holds.
 /// @param changed Whether text differs from the line in the store.
-/// @param haveYank Whether a line has been yanked.
 /// @param quit Whether `vi` is to exit.
 /// @param beginChange Whether the command being run has yet to start a change
 ///   in the undo history.
 /// @param request The ViRequest:  show requestLine at requestRow and redraw
 ///   below it, after redrawing the current line for VI_REQUEST_SPLIT.
+/// @param yankKind The ViYankKind of the yank chain.
+/// @param operator The operator a motion is for, or '\0' to move the cursor.
+/// @param motion The key of the motion.
+/// @param argument The character typed after the command, for r, m, and '.
+/// @param linewise Whether the motion's range is whole lines.
 /// @param numPending The number of bytes in pending.
 /// @param pending Input read with an earlier key, not yet used.
 /// @param text The current line, NUL-terminated, without its newline.
 /// @param buffer The buffer the TextStore and key reading move text through.
 typedef struct ViState {
   ExState         ex;
+  TextStoreChain  yank;
   struct termios *terminal;
   int             top;
   int             line;
-  int             width;
   int             requestLine;
-  uint32_t        yank;
   int16_t         rows;
   int16_t         columns;
   int16_t         lineRow;
   int16_t         index;
   int16_t         length;
   int16_t         requestRow;
+  int16_t         width;
+  int16_t         count;
+  int16_t         targetIndex;
   bool            truncated;
   bool            changed;
-  bool            haveYank;
   bool            quit;
   bool            beginChange;
   uint8_t         request;
+  uint8_t         yankKind;
+  char            operator;
+  char            motion;
+  char            argument;
+  bool            linewise;
   uint8_t         numPending;
   char            pending[VI_PENDING_SIZE];
   char            text[VI_LINE_MAX];
@@ -198,6 +262,26 @@ static inline void viStatus(ViState *state, const char *message) {
   screenClearToEndOfLine();
 }
 
+/// @fn static inline void viFileStatus(ViState *state, const char *name,
+///   int numLines, const char *suffix)
+///
+/// @brief Show a file's name, its number of lines, and the last number of
+/// bytes read or written on the status line.
+///
+/// @param state The ViState of the running `vi`.
+/// @param name The file's name.
+/// @param numLines The number of lines.
+/// @param suffix The text to end the message with.
+///
+/// @return This function returns no value.
+static inline void viFileStatus(
+  ViState *state, const char *name, int numLines, const char *suffix
+) {
+  screenMoveTo(state->rows, 1);
+  printf("\"%s\" %dL, %ldC%s", name, numLines, state->ex.byteCount, suffix);
+  screenClearToEndOfLine();
+}
+
 /// @fn static inline void viMeasure(ViState *state)
 ///
 /// @brief Recompute the width of the current line after a change to text.
@@ -215,7 +299,7 @@ static inline void viMeasure(ViState *state) {
 /// @fn static inline int viReadLine(ViState *state, int line, bool keep)
 ///
 /// @brief Measure a line from the store, keeping its text as the current
-/// line's if asked to.
+/// line's if asked to.  An error already set is kept unless this fails.
 ///
 /// @param state The ViState of the running `vi`.
 /// @param line The number of the line.
@@ -231,6 +315,8 @@ static inline int viReadLine(ViState *state, int line, bool keep) {
     state->truncated = false;
   }
   if (line <= store->numLines) {
+    uint8_t error = store->error;
+    store->error = TEXTSTORE_ERROR_NONE;
     uint32_t offset = textstoreLineOffset(store, line);
     if ((store->error != TEXTSTORE_ERROR_NONE)
       || (fseek(store->text, (long) offset, SEEK_SET) != 0)
@@ -238,6 +324,7 @@ static inline int viReadLine(ViState *state, int line, bool keep) {
       store->error = TEXTSTORE_ERROR_IO;
       return -1;
     }
+    store->error = error;
     bool ended = false;
     while (!ended
       && (fgets(state->buffer, TEXTSTORE_BUFFER_SIZE, store->text) != NULL)
@@ -261,7 +348,7 @@ static inline int viReadLine(ViState *state, int line, bool keep) {
   }
   if (keep) {
     state->text[state->length] = '\0';
-    state->width = width;
+    state->width = (int16_t) ((width > INT16_MAX) ? INT16_MAX : width);
   }
   return width;
 }
@@ -292,8 +379,10 @@ static inline bool viLoadLine(ViState *state, int line) {
 /// @param state The ViState of the running `vi`.
 /// @param line The number of the line to make current.
 /// @param row The screen row to show it at.
-/// @param request VI_REQUEST_SHOW, or VI_REQUEST_SPLIT to redraw the current
-///   line first.
+/// @param request VI_REQUEST_MOVE to redraw only if the screen scrolls,
+///   VI_REQUEST_SHOW to redraw from the line down, VI_REQUEST_SPLIT to
+///   redraw the current line first as well, or VI_REQUEST_REDRAW to redraw
+///   the whole screen.
 ///
 /// @return This function returns no value.
 static inline void viRequest(ViState *state, int line, int row,
@@ -302,6 +391,34 @@ static inline void viRequest(ViState *state, int line, int row,
   state->requestLine = line;
   state->requestRow = (int16_t) row;
   state->request = request;
+}
+
+/// @fn static inline int viFirstNonBlank(ViState *state)
+///
+/// @brief Find the first character of the current line that isn't a space or
+/// a tab.
+///
+/// @param state The ViState of the running `vi`.
+///
+/// @return Returns its index, or the line's length if there is none.
+static inline int viFirstNonBlank(ViState *state) {
+  int index = 0;
+  while ((state->text[index] == ' ') || (state->text[index] == '\t')) {
+    index++;
+  }
+  return index;
+}
+
+/// @fn static inline void viClearYank(ViState *state)
+///
+/// @brief Empty the yank chain, putting its blocks on the free list.
+///
+/// @param state The ViState of the running `vi`.
+///
+/// @return This function returns no value.
+static inline void viClearYank(ViState *state) {
+  textstoreChainFreeAfter(&state->ex.store, &state->yank, TEXTSTORE_NO_BLOCK);
+  state->yankKind = VI_YANK_NONE;
 }
 
 /// @fn static inline bool viBeginChange(ViState *state)
@@ -563,6 +680,49 @@ static inline bool viShowLine(ViState *state, int line, int row, bool redraw) {
   }
   viDrawFrom(state, 0, state->top);
   return true;
+}
+
+/// @fn static inline void viApplyRequest(ViState *state)
+///
+/// @brief Show what an overlay that changed the buffer asked to be shown.
+///
+/// @param state The ViState of the running `vi`.
+///
+/// @return This function returns no value.
+static inline void viApplyRequest(ViState *state) {
+  uint8_t request = state->request;
+  state->request = VI_REQUEST_NONE;
+  if (request == VI_REQUEST_SPLIT) {
+    viDrawLine(state, state->line, state->lineRow);
+  }
+  if ((request != VI_REQUEST_NONE)
+    && viShowLine(state, state->requestLine, state->requestRow,
+      (request == VI_REQUEST_SHOW) || (request == VI_REQUEST_SPLIT))
+    && (request == VI_REQUEST_REDRAW)
+  ) {
+    viDrawFrom(state, 0, state->top);
+  }
+}
+
+/// @fn static inline int viRowOf(ViState *state, int line)
+///
+/// @brief Find the screen row a line starts on, from the line at the top.
+///
+/// @param state The ViState of the running `vi`.
+/// @param line The number of the line.
+///
+/// @return Returns the row, -1 if the line is above the screen, or the number
+/// of rows if it starts below the last row above the status line.
+static inline int viRowOf(ViState *state, int line) {
+  if (line < state->top) {
+    return -1;
+  }
+  int row = 0;
+  for (int ii = state->top; (ii < line) && (row < state->rows); ii++) {
+    row += viRowsFor(state, (ii == state->line)
+      ? state->width : viReadLine(state, ii, false));
+  }
+  return (row < state->rows - 1) ? row : state->rows;
 }
 
 /// @fn static inline void viRedrawCurrent(ViState *state, int oldRows)

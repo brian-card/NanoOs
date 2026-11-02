@@ -57,29 +57,21 @@ static void viCallOverlay(
   ) {
     state->ex.store.error = EX_ERROR_MEMORY;
   }
-  if (state->request == VI_REQUEST_SPLIT) {
-    viDrawLine(state, state->line, state->lineRow);
-  }
-  if (state->request != VI_REQUEST_NONE) {
-    viShowLine(state, state->requestLine, state->requestRow, true);
-  }
+  viApplyRequest(state);
 }
 
 /// @fn static void viRunKey(ViState *state, int key)
 ///
-/// @brief Run a normal-mode command.
+/// @brief Run a normal-mode command.  The commonest movements are run here;
+/// every other command is run by the Normal overlay.
 ///
 /// @param state The ViState of the running `vi`.
 /// @param key The key that starts the command.
 ///
 /// @return This function returns no value.
 static void viRunKey(ViState *state, int key) {
-  int numLines = state->ex.store.numLines;
-  state->beginChange = true;
-  state->ex.column = (int16_t) state->index;
   switch (key) {
     case 'h':
-    case '\b':
     case VI_KEY_LEFT:
       if (state->index > 0) {
         state->index--;
@@ -87,7 +79,6 @@ static void viRunKey(ViState *state, int key) {
       break;
 
     case 'l':
-    case ' ':
     case VI_KEY_RIGHT:
       if (state->index + 1 < state->length) {
         state->index++;
@@ -96,7 +87,7 @@ static void viRunKey(ViState *state, int key) {
 
     case 'j':
     case VI_KEY_DOWN:
-      if (state->line < numLines) {
+      if (state->line < state->ex.store.numLines) {
         viShowLine(state, state->line + 1,
           state->lineRow + viRowsFor(state, state->width), false);
       }
@@ -121,59 +112,6 @@ static void viRunKey(ViState *state, int key) {
       state->index = state->length;
       break;
 
-    case 'o':
-    case 'O':
-      state->ex.command = (char) key;
-      viCallOverlay(state, "Put", "viPut");
-      key = 'i';
-      // fall through
-    case 'i':
-    case 'a':
-    case 'I':
-    case 'A':
-      // Return in insert mode splits the line and goes on inserting.
-      state->ex.command = (char) key;
-      while (state->ex.store.error == EX_ERROR_NONE) {
-        viCallOverlay(state, "Insert", "viInsert");
-        key = state->ex.command;
-        if ((key != '\n') && (key != VI_KEY_ESCAPE)) {
-          break;
-        }
-        viCallOverlay(state, "Put", "viPut");
-        if (key != '\n') {
-          break;
-        }
-        state->ex.command = 'i';
-      }
-      break;
-
-    case 'p':
-    case 'P':
-      state->ex.command = (char) key;
-      viCallOverlay(state, "Put", "viPut");
-      break;
-
-    case 'd':
-    case 'y':
-      if (viReadKey(state) != key) {
-        break;
-      }
-      // fall through
-    case 'x':
-      state->ex.command = (char) key;
-      viCallOverlay(state, "Change", "viChange");
-      break;
-
-    case ':':
-      viCallOverlay(state, "Command", "viCommand");
-      break;
-
-    case 'u':
-    case 0x12:
-      state->ex.command = (key == 'u') ? 'u' : 'r';
-      viCallOverlay(state, "History", "viUndo");
-      break;
-
     case VI_KEY_RESIZE:
       // The old layout may not fit, so start over with this line at the top.
       screenClear();
@@ -184,9 +122,16 @@ static void viRunKey(ViState *state, int key) {
       screenClear();
       viDrawFrom(state, 0, state->top);
       break;
+
+    default:
+      if (key < VI_KEY_NONE) {
+        state->ex.command = (char) key;
+        viCallOverlay(state, "Normal", "viNormal");
+      }
+      break;
   }
   if (state->ex.store.error != EX_ERROR_NONE) {
-    viCallOverlay(state, "Command", "viReport");
+    viCallOverlay(state, "Session", "viReport");
   }
 }
 
@@ -229,7 +174,7 @@ int main(int argc, char **argv) {
 
   struct termios saved;
   state->terminal = &saved;
-  viCallOverlay(state, "Command", "viStart");
+  viCallOverlay(state, "Session", "viStart");
   int returnValue = (state->ex.store.text == NULL) ? 1 : 0;
   state->quit = (returnValue != 0);
   state->top = 1;
@@ -249,7 +194,7 @@ int main(int argc, char **argv) {
     viRunKey(state, key);
   }
 
-  viCallOverlay(state, "Command", "viFinish");
+  viCallOverlay(state, "Session", "viFinish");
   free(state->ex.filename);
   free(state);
   return returnValue;
