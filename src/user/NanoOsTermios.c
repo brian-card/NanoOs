@@ -35,6 +35,7 @@
 #include "../kernel/NanoOs.h"
 #include "NanoOsTermios.h"
 #include "NanoOsUnistd.h"
+#include "NanoOsStdio.h"
 
 int nanoOsTcgetattr(int fd, struct termios *termios) {
   if ((termios == NULL) || (fd != STDIN_FILENO)) {
@@ -76,6 +77,7 @@ int nanoOsTcsetattr(int fd, int optionalActions,
   }
   
   (void) optionalActions; // Ignored for now.
+  nanoOsFlushStdout();
   
   uint8_t modes = 0;
   if (termios->c_lflag & ECHO) {
