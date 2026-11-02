@@ -81,7 +81,9 @@ typedef enum ExError {
 ///
 /// @param store The TextStore holding the buffer's lines.
 /// @param name The name of the program running the commands, which names its
-///   text file and starts its messages.
+///   text file and starts its messages.  It is copied here rather than
+///   pointed to because a string in the caller's overlay is gone while an ex
+///   overlay runs.
 /// @param current The current line number.
 /// @param addr1 The first address of the command being run.
 /// @param addr2 The second address of the command being run.
@@ -96,9 +98,12 @@ typedef enum ExError {
 /// @param modified Whether the buffer has changed since it was last written.
 /// @param warnedCommand The command, q or e, that was just refused because
 ///   the buffer was modified, or '\0' if none.
+/// @param quiet Whether to leave out the byte count that reading and writing
+///   a file print.
+/// @param byteCount The number of bytes the last file read or written held.
 typedef struct ExState {
   TextStore   store;
-  const char *name;
+  char        name[4];
   int         current;
   int         addr1;
   int         addr2;
@@ -110,6 +115,8 @@ typedef struct ExState {
   uint32_t    marks;
   bool        modified;
   char        warnedCommand;
+  bool        quiet;
+  long        byteCount;
 } ExState;
 
 /// @fn static inline bool exSetFilename(ExState *state, const char *name)
