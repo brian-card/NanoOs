@@ -186,6 +186,8 @@ int nanoOsFileno(FILE *stream);
 
 size_t nanoOsFread(void *ptr, size_t size, size_t nmemb, FILE *stream);
 size_t nanoOsFwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream);
+void nanoOsFlushStdout(void);
+void nanoOsCloseStdout(void);
 
 #ifdef __cplusplus
 } // extern "C"
