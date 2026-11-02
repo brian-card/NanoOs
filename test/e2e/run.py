@@ -1848,6 +1848,16 @@ def test_ed_reports_errors_and_guards_unsaved_changes(s):
     assert ll_names(s, "/tmp") == []
 
 
+def test_ed_counts_each_change_as_unsaved(s):
+    s.login()
+    for command, output in (("1t1", ""), ("1m2", ""), ("1,2j", ""),
+                            ("r /etc/hostname", "7\n")):
+        ed_session(s, [
+            ("ed /etc/issue", "13\n"), (command, output),
+            ("q", "?\n"), ("h", "warning: buffer modified\n"), ("Q", "")])
+    assert ll_names(s, "/tmp") == []
+
+
 def test_ed_reads_and_appends_files(s):
     s.login()
     ed_session(s, [
@@ -1886,6 +1896,21 @@ def test_ed_loads_nothing_from_a_file_that_does_not_fit(s):
         ("ed /etc/bigfile", "?\n"), ("h", "out of memory\n"), ("$=", "0\n"),
         ("f", "?\n"), ("w", "?\n"), ("Q", "")])
     assert s.sh("cat /etc/bigfile", timeout=30) == "\n".join(big_lines)
+    assert ll_names(s, "/tmp") == []
+
+
+def test_ed_read_that_does_not_fit_leaves_the_buffer_unchanged(s):
+    big_lines = ["big-%03d" % n for n in range(1, OVERSIZED_LINE_COUNT + 1)]
+    s.login()
+    ed_session(s, [("ed", ""), ("a", "")] + ed_input(big_lines)
+               + [(".", ""), ("w /etc/bigfile", "%d\n" % (8 * len(big_lines))),
+                  ("q", "")])
+    s.restart_with_memory(small_memory_size(s))
+    s.login()
+    ed_session(s, [
+        ("ed /etc/issue", "13\n"), ("r /etc/bigfile", "?\n"),
+        ("h", "out of memory\n"), ("$=", "2\n"), (",p", "\\s \\r \\n \\l\n\n"),
+        ("q", "")])
     assert ll_names(s, "/tmp") == []
 
 
