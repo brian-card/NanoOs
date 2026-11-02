@@ -1803,6 +1803,34 @@ static void consoleReplayHeldInput(
   }
 }
 
+/// @fn static void consoleKeepTypeAhead(ConsolePort *consolePort, int byte,
+///   bool typedAhead)
+///
+/// @brief Keep a byte read while a port holds a line, to be processed once the
+/// line is taken.
+///
+/// @param consolePort A pointer to the ConsolePort the byte was read from.
+/// @param byte The byte.
+/// @param typedAhead Whether the byte was just taken from the port's
+///   type-ahead, where it is put back.
+///
+/// @return This function returns no value.
+static void consoleKeepTypeAhead(
+  ConsolePort *consolePort, int byte, bool typedAhead
+) {
+  if (typedAhead) {
+    consolePort->typeAheadStart--;
+    return;
+  }
+  ConsoleBuffer *consoleBuffer = consolePort->consoleBuffer;
+  if (consolePort->typeAheadStart == consolePort->typeAheadEnd) {
+    consolePort->typeAheadStart = consoleBuffer->consoleBufferIndex + 1;
+    consolePort->typeAheadEnd = consolePort->typeAheadStart;
+  }
+  consoleBuffer->buffer[consolePort->typeAheadEnd] = (char) byte;
+  consolePort->typeAheadEnd++;
+}
+
 /// @fn bool consoleServicePort(
 ///   ConsoleState *consoleState, ConsolePort *consolePort)
 ///
@@ -1834,12 +1862,14 @@ bool consoleServicePort(
     }
     ConsoleBuffer *consoleBuffer = consolePort->consoleBuffer;
     bool holdsLine = consoleBuffer->holdsCompletedLine;
+    bool typedAhead = false;
     int byteRead = -1;
     if ((holdsLine == false)
       && (consolePort->typeAheadStart < consolePort->typeAheadEnd)
     ) {
       byteRead = (uint8_t) consoleBuffer->buffer[consolePort->typeAheadStart];
       consolePort->typeAheadStart++;
+      typedAhead = true;
     } else if (holdsLine
       && (consolePort->typeAheadEnd >= CONSOLE_BUFFER_SIZE)
     ) {
@@ -1852,12 +1882,7 @@ bool consoleServicePort(
       if (byteRead < 0) {
         break;
       }
-      if (consolePort->typeAheadStart == consolePort->typeAheadEnd) {
-        consolePort->typeAheadStart = consoleBuffer->consoleBufferIndex + 1;
-        consolePort->typeAheadEnd = consolePort->typeAheadStart;
-      }
-      consoleBuffer->buffer[consolePort->typeAheadEnd] = (char) byteRead;
-      consolePort->typeAheadEnd++;
+      consoleKeepTypeAhead(consolePort, byteRead, false);
       continue;
     }
     if (byteRead < 0) {
@@ -1872,6 +1897,18 @@ bool consoleServicePort(
       consolePort->inputState = CONSOLE_INPUT_STATE_NORMAL;
       consoleHandleInputEvent(consoleState, consolePort, CONSOLE_INPUT_ESCAPE);
       break;
+    }
+
+    if ((consolePort->inputState == CONSOLE_INPUT_STATE_ESCAPE)
+      && (byteRead == ASCII_ESCAPE)
+    ) {
+      // The escape before this one was the escape key by itself.
+      consolePort->inputState = CONSOLE_INPUT_STATE_NORMAL;
+      consoleHandleInputEvent(consoleState, consolePort, CONSOLE_INPUT_ESCAPE);
+      if (consoleBuffer->holdsCompletedLine) {
+        consoleKeepTypeAhead(consolePort, byteRead, typedAhead);
+        continue;
+      }
     }
 
     ConsoleEcho echo = CONSOLE_ECHO_NONE;
