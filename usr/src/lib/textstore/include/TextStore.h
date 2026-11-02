@@ -925,26 +925,22 @@ static inline void textstoreMoveLines(
   store->cachedFirstLine = 0;
 }
 
-/// @fn static inline long textstoreCopyLine(TextStore *store, int line,
-///   FILE *out, bool newline)
+/// @fn static inline long textstoreCopyText(TextStore *store,
+///   uint32_t position, FILE *out, bool newline)
 ///
-/// @brief Copy the text of a line to a stream, which may be the text file
-/// itself.
+/// @brief Copy the line of text at a text-file offset to a stream, which may
+/// be the text file itself.
 ///
-/// @param store The TextStore holding the line.
-/// @param line The number of the line to copy.
-/// @param out The stream to copy the line to.
-/// @param newline Whether to copy the line's terminating newline.
+/// @param store The TextStore holding the text.
+/// @param position The text-file offset of the text.
+/// @param out The stream to copy the text to.
+/// @param newline Whether to copy the text's terminating newline.
 ///
 /// @return Returns the number of bytes copied on success, -1 with
 /// store->error set on failure.
-static inline long textstoreCopyLine(
-  TextStore *store, int line, FILE *out, bool newline
+static inline long textstoreCopyText(
+  TextStore *store, uint32_t position, FILE *out, bool newline
 ) {
-  uint32_t position = textstoreLineOffset(store, line);
-  if (store->error != TEXTSTORE_ERROR_NONE) {
-    return -1;
-  }
   long copied = 0;
   bool lineEnded = false;
   while (!lineEnded) {
@@ -974,6 +970,29 @@ static inline long textstoreCopyLine(
   }
 
   return copied;
+}
+
+/// @fn static inline long textstoreCopyLine(TextStore *store, int line,
+///   FILE *out, bool newline)
+///
+/// @brief Copy the text of a line to a stream, which may be the text file
+/// itself.
+///
+/// @param store The TextStore holding the line.
+/// @param line The number of the line to copy.
+/// @param out The stream to copy the line to.
+/// @param newline Whether to copy the line's terminating newline.
+///
+/// @return Returns the number of bytes copied on success, -1 with
+/// store->error set on failure.
+static inline long textstoreCopyLine(
+  TextStore *store, int line, FILE *out, bool newline
+) {
+  uint32_t position = textstoreLineOffset(store, line);
+  if (store->error != TEXTSTORE_ERROR_NONE) {
+    return -1;
+  }
+  return textstoreCopyText(store, position, out, newline);
 }
 
 /// @fn static inline int textstoreReadLines(TextStore *store, FILE *in,
