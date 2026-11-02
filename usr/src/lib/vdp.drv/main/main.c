@@ -264,6 +264,9 @@ int main(int argc, char **argv) {
     bool vdpPresent = true;
     if (text != NULL) {
       vdpWriteText(&vdpOutput, text);
+      // A burst of output can outlast the UART's receive ring, so keys are
+      // read here as well as when the UART reports them.
+      vdpPresent = vdpReadKeyboard(&input);
     } else if (processMessageType(processMessage)
       == (VDP_DRIVER_SIGNATURE | VDP_UART_INPUT)
     ) {
