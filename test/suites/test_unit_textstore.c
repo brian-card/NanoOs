@@ -312,3 +312,105 @@ NANO_OS_TEST(unit_textstore, reset_removes_every_line) {
   NANO_OS_ASSERT_EQ_INT(9, textstoreLineOffset(&store, 1));
   textstoreClose(&store);
 }
+
+/// @def CHAIN_MAX_RECORDS
+///
+/// @brief The most records the model of a chain holds.
+#define CHAIN_MAX_RECORDS 400
+
+/// @fn static void makeRecord(uint8_t *record, uint32_t value)
+///
+/// @brief Fill a chain record with bytes that identify a value.
+///
+/// @param record The TEXTSTORE_CHAIN_RECORD_SIZE bytes to fill.
+/// @param value The value.
+///
+/// @return This function returns no value.
+static void makeRecord(uint8_t *record, uint32_t value) {
+  for (int ii = 0; ii < TEXTSTORE_CHAIN_RECORD_SIZE; ii++) {
+    record[ii] = (uint8_t) (value >> (8 * (ii % 4))) ^ (uint8_t) ii;
+  }
+}
+
+NANO_OS_TEST(unit_textstore, chains_move_back_and_forward_and_truncate) {
+  static uint32_t chainModel[CHAIN_MAX_RECORDS];
+  TextStore store;
+  NANO_OS_ASSERT_TRUE(openStore(&store));
+  TextStoreChain chain;
+  textstoreChainInit(&chain);
+  int numRecords = 0;
+  int position = 0;
+  uint32_t nextValue = 1;
+  uint8_t record[TEXTSTORE_CHAIN_RECORD_SIZE];
+  uint8_t expected[TEXTSTORE_CHAIN_RECORD_SIZE];
+
+  for (int step = 0; step < 4000; step++) {
+    int choice = randomBelow(10);
+    if ((choice < 4) && (position < CHAIN_MAX_RECORDS)) {
+      makeRecord(record, nextValue);
+      NANO_OS_ASSERT_TRUE(textstoreChainAppend(&store, &chain, record));
+      chainModel[position++] = nextValue++;
+      numRecords = position;
+    } else if (choice < 7) {
+      bool moved = textstoreChainPrevious(&store, &chain, record);
+      NANO_OS_ASSERT_EQ_INT(position > 0, moved);
+      if (moved) {
+        makeRecord(expected, chainModel[--position]);
+        NANO_OS_ASSERT_TRUE(memcmp(record, expected, sizeof(record)) == 0);
+      }
+    } else if (choice < 9) {
+      bool moved = textstoreChainNext(&store, &chain, record);
+      NANO_OS_ASSERT_EQ_INT(position < numRecords, moved);
+      if (moved) {
+        makeRecord(expected, chainModel[position++]);
+        NANO_OS_ASSERT_TRUE(memcmp(record, expected, sizeof(record)) == 0);
+      }
+    } else {
+      // Line edits share the block file and its free list with the chain.
+      int after = randomBelow(modelLines + 1);
+      NANO_OS_ASSERT_TRUE(textstoreInsertLine(&store, after, nextValue));
+      memmove(&model[after + 1], &model[after],
+        (size_t) (modelLines - after) * sizeof(uint32_t));
+      model[after] = nextValue++;
+      modelLines++;
+      if (randomBelow(3) == 0) {
+        int first = 1 + randomBelow(modelLines);
+        textstoreDeleteLines(&store, first, first);
+        memmove(&model[first - 1], &model[first],
+          (size_t) (modelLines - first) * sizeof(uint32_t));
+        modelLines--;
+      }
+    }
+    NANO_OS_ASSERT_EQ_INT(TEXTSTORE_ERROR_NONE, store.error);
+  }
+  NANO_OS_ASSERT_TRUE(storeMatchesModel(&store));
+  textstoreClose(&store);
+}
+
+NANO_OS_TEST(unit_textstore, appending_after_moving_back_frees_the_rest) {
+  TextStore store;
+  NANO_OS_ASSERT_TRUE(openStore(&store));
+  TextStoreChain chain;
+  textstoreChainInit(&chain);
+  uint8_t record[TEXTSTORE_CHAIN_RECORD_SIZE];
+
+  for (int round = 0; round < 5; round++) {
+    for (int ii = 0; ii < 20 * (int) TEXTSTORE_CHAIN_RECORDS; ii++) {
+      makeRecord(record, (uint32_t) ii);
+      NANO_OS_ASSERT_TRUE(textstoreChainAppend(&store, &chain, record));
+    }
+    while (textstoreChainPrevious(&store, &chain, record)) {
+    }
+  }
+
+  NANO_OS_ASSERT_EQ_INT(20, store.numBlocks);
+  NANO_OS_ASSERT_TRUE(textstoreChainFreeAfter(&store, &chain,
+    TEXTSTORE_NO_BLOCK));
+  NANO_OS_ASSERT_EQ_INT(TEXTSTORE_NO_BLOCK, chain.first);
+  for (int ii = 0; ii < 20 * TEXTSTORE_BLOCK_LINES; ii++) {
+    NANO_OS_ASSERT_TRUE(textstoreInsertLine(&store, ii, (uint32_t) ii));
+  }
+  NANO_OS_ASSERT_EQ_INT(20, store.numBlocks);
+  textstoreClose(&store);
+}
+

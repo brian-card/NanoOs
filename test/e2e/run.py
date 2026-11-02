@@ -1139,6 +1139,41 @@ def test_vi_edits_a_file_larger_than_the_heap(s):
     assert ll_names(s, "/tmp") == []
 
 
+def test_vi_undoes_and_redoes_whole_changes(s):
+    s.login()
+    vi = ViTerminal(s, "vi /etc/undo.txt")
+    vi.wait_status('"/etc/undo.txt" [New File]')
+    vi.keys("u")
+    vi.wait_status("Already at oldest change")
+    vi.keys("ione\rtwo\rthree\x1b")
+    vi.wait_lines(vi_lines(["one", "two", "three"]))
+    vi.wait_status("")
+    vi.keys("u")
+    vi.wait_lines(vi_lines([""]))
+    vi.keys("\x12")
+    vi.wait_lines(vi_lines(["one", "two", "three"]))
+    vi.keys("\x12")
+    vi.wait_status("Already at newest change")
+    # Redo leaves the cursor where the change started, on line 1.
+    vi.keys("jdd")
+    vi.wait_lines(vi_lines(["one", "three"]))
+    vi.keys("u")
+    vi.wait_lines(vi_lines(["one", "two", "three"]))
+    vi.keys("yyp")
+    vi.wait_lines(vi_lines(["one", "two", "two", "three"]))
+    vi.keys("u")
+    vi.wait_lines(vi_lines(["one", "two", "three"]))
+    vi.keys("0x")
+    vi.wait_lines(vi_lines(["one", "wo", "three"]))
+    vi.keys("u")
+    vi.wait_lines(vi_lines(["one", "two", "three"]))
+    vi.keys("\x12")
+    vi.wait_lines(vi_lines(["one", "wo", "three"]))
+    vi.keys(":wq\r")
+    vi.wait_exit()
+    assert s.sh("cat /etc/undo.txt") == "one\nwo\nthree"
+
+
 def test_vi_redraws_for_a_resize_report(s):
     s.login()
     vi = ViTerminal(s, "vi /etc/resize.txt")
@@ -2088,6 +2123,25 @@ def test_ed_counts_each_change_as_unsaved(s):
         ed_session(s, [
             ("ed /etc/issue", "13\n"), (command, output),
             ("q", "?\n"), ("h", "warning: buffer modified\n"), ("Q", "")])
+    assert ll_names(s, "/tmp") == []
+
+
+def test_ed_undoes_and_redoes_each_change(s):
+    s.login()
+    ed_session(s, [
+        ("ed", ""), ("u", "?\n"), ("h", "nothing to undo\n"),
+        ("a", "")] + ed_input(["one", "two", "three", "four"]) + [
+        (".", ""), ("u", ""), ("$=", "0\n"), ("u", ""), ("$=", "4\n"),
+        ("2,3d", ""), (",p", "one\nfour\n"), ("u", ""),
+        (",p", "one\ntwo\nthree\nfour\n"), ("u", ""), (",p", "one\nfour\n"),
+        ("u", ""), ("1,2j", ""), (",p", "onetwo\nthree\nfour\n"), ("u", ""),
+        (",p", "one\ntwo\nthree\nfour\n"), ("1,2m$", ""),
+        (",p", "three\nfour\none\ntwo\n"), ("u", ""),
+        (",p", "one\ntwo\nthree\nfour\n"), ("3,4t0", ""),
+        (",p", "three\nfour\none\ntwo\nthree\nfour\n"), ("u", ""),
+        (",p", "one\ntwo\nthree\nfour\n"),
+        ("2r /etc/hostname", "7\n"), (",p", "one\ntwo\nnanoe2e\nthree\nfour\n"),
+        ("u", ""), (",p", "one\ntwo\nthree\nfour\n"), ("Q", "")])
     assert ll_names(s, "/tmp") == []
 
 
