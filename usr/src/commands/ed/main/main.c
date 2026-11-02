@@ -29,27 +29,59 @@
 ///
 /// @brief Command loop, addressing, and printing for the `ed` line editor.
 
-#include "ed.h"
+#include "Ex.h"
 #include <stdio.h>
 #include "NanoOsUtils.h"
 
+/// @def ED_BUFFER_SIZE
+///
+/// @brief The size, in bytes, that the command buffer starts at and grows by.
+#define ED_BUFFER_SIZE 96
+
+/// @def ED_MEMORY_RESERVE
+///
+/// @brief The number of bytes of dynamic memory that `ed` leaves free for the
+/// rest of the system when it grows its command buffer.
+#define ED_MEMORY_RESERVE 256
+
+/// @struct EdState
+///
+/// @brief Everything `ed` keeps between commands.
+///
+/// @param ex The ExState of the editing commands.
+/// @param commandBuffer The buffer a command line is read into.
+/// @param commandBufferSize The size, in bytes, of commandBuffer.
+/// @param lastError The ExError of the last command that failed.
+/// @param prompt Whether to print a prompt before reading a command.
+/// @param verbose Whether to print the text of each error.
+/// @param quit Whether `ed` is to exit.
+typedef struct EdState {
+  ExState  ex;
+  char    *commandBuffer;
+  int      commandBufferSize;
+  uint8_t  lastError;
+  bool     prompt;
+  bool     verbose;
+  bool     quit;
+} EdState;
+
 /// @var edErrorMessages
 ///
-/// @brief The text of each EdError, printed by the h and H commands.
-static const char *const edErrorMessages[NUM_ED_ERRORS] = {
+/// @brief The text of each ExError, printed by the h and H commands.
+static const char *const edErrorMessages[NUM_EX_ERRORS] = {
   "",
+  "scratch file error",
+  "out of memory",
+  "cannot write file",
   "invalid address",
   "unknown command",
   "invalid command suffix",
   "no current filename",
   "cannot open input file",
   "cannot open output file",
-  "cannot write file",
-  "out of memory",
   "warning: buffer modified",
   "invalid mark",
   "invalid destination",
-  "scratch file error",
 };
 
 /// @fn static bool edReadCommand(EdState *state)
@@ -82,10 +114,10 @@ static bool edReadCommand(EdState *state) {
       }
       if (commandBuffer == NULL) {
         // Discard the rest of the line so it isn't run as a command.
-        while ((fgets(state->textBuffer, ED_BUFFER_SIZE, stdin) != NULL)
-          && (strchr(state->textBuffer, '\n') == NULL));
+        while ((fgets(state->ex.store.buffer, ED_BUFFER_SIZE, stdin) != NULL)
+          && (strchr(state->ex.store.buffer, '\n') == NULL));
         state->commandBuffer[0] = '\0';
-        state->error = ED_ERROR_MEMORY;
+        state->ex.store.error = EX_ERROR_MEMORY;
         return true;
       }
       state->commandBuffer = commandBuffer;
@@ -97,166 +129,31 @@ static bool edReadCommand(EdState *state) {
   return length > 0;
 }
 
-/// @fn static int edParseNumber(char **text)
-///
-/// @brief Parse a decimal number.
-///
-/// @param text A pointer to the text to parse, advanced past the number.
-///
-/// @return Returns the number, or -1 if the text doesn't start with a digit.
-static int edParseNumber(char **text) {
-  if ((**text < '0') || (**text > '9')) {
-    return -1;
-  }
-
-  int number = 0;
-  while ((**text >= '0') && (**text <= '9')) {
-    number = (number * 10) + (**text - '0');
-    (*text)++;
-  }
-
-  return number;
-}
-
-/// @fn static bool edParseAddress(EdState *state, char **text, int *line)
-///
-/// @brief Parse one address:  a base of ".", "$", a number, or a mark,
-/// followed by any number of "+n" and "-n" offsets.
-///
-/// @param state The EdState of the running `ed`.
-/// @param text A pointer to the text to parse, advanced past the address.
-/// @param line Set to the line number the address refers to.
-///
-/// @return Returns true if an address was parsed, false if the text doesn't
-/// start with one or it is invalid, in which case state->error is set.
-static bool edParseAddress(EdState *state, char **text, int *line) {
-  char *start = *text;
-  int number = edParseNumber(text);
-  if (number >= 0) {
-    *line = number;
-  } else if (**text == '.') {
-    *line = state->current;
-    (*text)++;
-  } else if (**text == '$') {
-    *line = state->numLines;
-    (*text)++;
-  } else if (**text == '\'') {
-    char mark = (*text)[1];
-    if ((mark < 'a') || (mark > 'z') || (state->marks == NULL)) {
-      state->error = ED_ERROR_MARK;
-      return false;
-    }
-    *text += 2;
-    *line = 0;
-    for (int ii = 0; ii < state->numLines; ii++) {
-      if (state->lines[ii] == state->marks[mark - 'a']) {
-        *line = ii + 1;
-        break;
-      }
-    }
-    if (*line == 0) {
-      state->error = ED_ERROR_MARK;
-      return false;
-    }
-  } else if ((**text == '+') || (**text == '-')) {
-    *line = state->current;
-  } else {
-    return false;
-  }
-
-  while ((**text == '+') || (**text == '-')) {
-    int sign = (**text == '+') ? 1 : -1;
-    (*text)++;
-    int offset = edParseNumber(text);
-    *line += sign * ((offset < 0) ? 1 : offset);
-  }
-
-  if ((*line < 0) || (*line > state->numLines)) {
-    *text = start;
-    state->error = ED_ERROR_ADDRESS;
-    return false;
-  }
-
-  return true;
-}
-
-/// @fn static char* edParseCommandLine(EdState *state)
-///
-/// @brief Parse the addresses and command character of the command line in
-/// state->commandBuffer into state.
-///
-/// @param state The EdState of the running `ed`.
-///
-/// @return Returns a pointer to the text after the command character, or
-/// NULL with state->error set if the addresses are invalid.
-static char* edParseCommandLine(EdState *state) {
-  char *text = state->commandBuffer;
-  int line = 0;
-  bool haveAddress = edParseAddress(state, &text, &line);
-  if (state->error != ED_ERROR_NONE) {
-    return NULL;
-  }
-
-  state->numAddresses = 0;
-  state->addr1 = state->addr2 = state->current;
-  if ((*text == ',') || (*text == ';')) {
-    char separator = *text++;
-    if (!haveAddress) {
-      line = (separator == ',') ? 1 : state->current;
-    }
-    if (separator == ';') {
-      state->current = line;
-    }
-    state->addr1 = line;
-    if (!edParseAddress(state, &text, &state->addr2)) {
-      if (state->error != ED_ERROR_NONE) {
-        return NULL;
-      }
-      state->addr2 = state->numLines;
-    }
-    state->numAddresses = 2;
-  } else if (haveAddress) {
-    state->addr1 = state->addr2 = line;
-    state->numAddresses = 1;
-  }
-
-  if (state->addr1 > state->addr2) {
-    state->error = ED_ERROR_ADDRESS;
-    return NULL;
-  }
-
-  state->command = *text;
-  if (*text != '\0') {
-    text++;
-  }
-  return text;
-}
-
 /// @fn static bool edPrintLines(EdState *state, bool numbered)
 ///
-/// @brief Print the lines from state->addr1 to state->addr2 and make the last
+/// @brief Print the lines from state->ex.addr1 to state->ex.addr2 and make the last
 /// one the current line.
 ///
 /// @param state The EdState of the running `ed`.
 /// @param numbered Whether to print each line's number before it.
 ///
-/// @return Returns true on success, false with state->error set on failure.
+/// @return Returns true on success, false with state->ex.store.error set on failure.
 static bool edPrintLines(EdState *state, bool numbered) {
-  if (state->addr1 < 1) {
-    state->error = ED_ERROR_ADDRESS;
+  if (state->ex.addr1 < 1) {
+    state->ex.store.error = EX_ERROR_ADDRESS;
     return false;
   }
 
-  for (int line = state->addr1; line <= state->addr2; line++) {
+  for (int line = state->ex.addr1; line <= state->ex.addr2; line++) {
     if (numbered) {
       printf("%d\t", line);
     }
-    if (edCopyLine(state, line, stdout, true) < 0) {
+    if (textstoreCopyLine(&state->ex.store, line, stdout, true) < 0) {
       return false;
     }
   }
 
-  state->current = state->addr2;
+  state->ex.current = state->ex.addr2;
   return true;
 }
 
@@ -271,17 +168,15 @@ static bool edPrintLines(EdState *state, bool numbered) {
 ///
 /// @return This function returns no value.
 static void edQuit(EdState *state) {
-  if ((state->command == 'q') && state->modified
-    && (state->warnedCommand != 'q')
+  if ((state->ex.command == 'q') && state->ex.modified
+    && (state->ex.warnedCommand != 'q')
   ) {
-    state->warnedCommand = 'q';
-    state->error = ED_ERROR_MODIFIED;
+    state->ex.warnedCommand = 'q';
+    state->ex.store.error = EX_ERROR_MODIFIED;
     return;
   }
 
-  fclose(state->scratch);
-  remove(state->scratchPath);
-  state->scratch = NULL;
+  textstoreClose(&state->ex.store);
   state->quit = true;
 }
 
@@ -295,14 +190,14 @@ static void edQuit(EdState *state) {
 /// @param function The name of the function to run.
 ///
 /// @return This function returns no value.  If the overlay can't be loaded,
-/// state->error is set.
+/// state->ex.store.error is set.
 static void edCallOverlay(
   EdState *state, const char *overlay, const char *function
 ) {
-  if (callOverlayFunction(OVERLAY_SAME_NAMESPACE, overlay, function, state)
+  if (callOverlayFunction(EX_LIBRARY_PATH, overlay, function, &state->ex)
     == NULL
   ) {
-    state->error = ED_ERROR_MEMORY;
+    state->ex.store.error = EX_ERROR_MEMORY;
   }
 }
 
@@ -312,9 +207,9 @@ static void edCallOverlay(
 ///
 /// @param state The EdState of the running `ed`.
 ///
-/// @return This function returns no value.  Errors are left in state->error.
+/// @return This function returns no value.  Errors are left in state->ex.store.error.
 static void edRunCommand(EdState *state) {
-  char *text = edParseCommandLine(state);
+  char *text = exParseCommandLine(&state->ex, state->commandBuffer);
   if (text == NULL) {
     return;
   }
@@ -322,33 +217,33 @@ static void edRunCommand(EdState *state) {
   while (*text == ' ') {
     text++;
   }
-  state->params = (*text != '\0') ? text : NULL;
+  state->ex.params = (*text != '\0') ? text : NULL;
 
-  switch (state->command) {
+  switch (state->ex.command) {
     case '\0':
-      if (state->numAddresses == 0) {
-        state->addr1 = state->addr2 = state->current + 1;
-        if (state->addr2 > state->numLines) {
-          state->error = ED_ERROR_ADDRESS;
+      if (state->ex.numAddresses == 0) {
+        state->ex.addr1 = state->ex.addr2 = state->ex.current + 1;
+        if (state->ex.addr2 > state->ex.store.numLines) {
+          state->ex.store.error = EX_ERROR_ADDRESS;
           break;
         }
       }
-      state->addr1 = state->addr2;
+      state->ex.addr1 = state->ex.addr2;
       edPrintLines(state, false);
       break;
 
     case 'p':
     case 'n':
-      if (state->params != NULL) {
-        state->error = ED_ERROR_SUFFIX;
+      if (state->ex.params != NULL) {
+        state->ex.store.error = EX_ERROR_SUFFIX;
         break;
       }
-      edPrintLines(state, state->command == 'n');
+      edPrintLines(state, state->ex.command == 'n');
       break;
 
     case '=':
       printf("%d\n",
-        (state->numAddresses == 0) ? state->numLines : state->addr2);
+        (state->ex.numAddresses == 0) ? state->ex.store.numLines : state->ex.addr2);
       break;
 
     case 'P':
@@ -359,58 +254,59 @@ static void edRunCommand(EdState *state) {
       state->verbose = !state->verbose;
       // fall through
     case 'h':
-      if (state->lastError != ED_ERROR_NONE) {
+      if (state->lastError != EX_ERROR_NONE) {
         printf("%s\n", edErrorMessages[state->lastError]);
       }
       break;
 
     case 'f':
-      if (state->params != NULL) {
+      if (state->ex.params != NULL) {
         char *filename = (char*) realloc(
-          state->filename, strlen(state->params) + 1);
+          state->ex.filename, strlen(state->ex.params) + 1);
         if (filename == NULL) {
-          state->error = ED_ERROR_MEMORY;
+          state->ex.store.error = EX_ERROR_MEMORY;
           break;
         }
-        state->filename = strcpy(filename, state->params);
+        state->ex.filename = strcpy(filename, state->ex.params);
       }
-      if (state->filename == NULL) {
-        state->error = ED_ERROR_NO_FILENAME;
+      if (state->ex.filename == NULL) {
+        state->ex.store.error = EX_ERROR_NO_FILENAME;
         break;
       }
-      printf("%s\n", state->filename);
+      printf("%s\n", state->ex.filename);
       break;
 
     case 'k':
-      if ((state->params == NULL) || (state->params[0] < 'a')
-        || (state->params[0] > 'z') || (state->params[1] != '\0')
+      if ((state->ex.params == NULL) || (state->ex.params[0] < 'a')
+        || (state->ex.params[0] > 'z') || (state->ex.params[1] != '\0')
       ) {
-        state->error = ED_ERROR_MARK;
+        state->ex.store.error = EX_ERROR_MARK;
         break;
       }
-      if (state->addr2 < 1) {
-        state->error = ED_ERROR_ADDRESS;
+      if (state->ex.addr2 < 1) {
+        state->ex.store.error = EX_ERROR_ADDRESS;
         break;
       }
-      if (state->marks == NULL) {
-        state->marks = (uint32_t*) calloc(ED_NUM_MARKS, sizeof(uint32_t));
-        if (state->marks == NULL) {
-          state->error = ED_ERROR_MEMORY;
+      if (state->ex.marks == NULL) {
+        state->ex.marks = (uint32_t*) calloc(EX_NUM_MARKS, sizeof(uint32_t));
+        if (state->ex.marks == NULL) {
+          state->ex.store.error = EX_ERROR_MEMORY;
           break;
         }
       }
-      state->marks[state->params[0] - 'a'] = state->lines[state->addr2 - 1];
+      state->ex.marks[state->ex.params[0] - 'a']
+        = textstoreLineOffset(&state->ex.store, state->ex.addr2);
       break;
 
     case 'm':
     case 't': {
-      char *destinationText = state->params;
+      char *destinationText = state->ex.params;
       if ((destinationText == NULL)
-        || !edParseAddress(state, &destinationText, &state->destination)
+        || !exParseAddress(&state->ex, &destinationText, &state->ex.destination)
         || (*destinationText != '\0')
       ) {
-        if (state->error == ED_ERROR_NONE) {
-          state->error = ED_ERROR_DESTINATION;
+        if (state->ex.store.error == EX_ERROR_NONE) {
+          state->ex.store.error = EX_ERROR_DESTINATION;
         }
         break;
       }
@@ -421,7 +317,7 @@ static void edRunCommand(EdState *state) {
     case 'd':
     case 'i':
     case 'j':
-      edCallOverlay(state, "Edit", "edEdit");
+      edCallOverlay(state, "Edit", "exEdit");
       break;
 
     case 'e':
@@ -429,22 +325,22 @@ static void edRunCommand(EdState *state) {
     case 'r':
     case 'w':
     case 'W':
-      edCallOverlay(state, "File", "edFile");
-      if ((state->error != ED_ERROR_NONE) || (state->command != 'q')) {
+      edCallOverlay(state, "File", "exFile");
+      if ((state->ex.store.error != EX_ERROR_NONE) || (state->ex.command != 'q')) {
         break;
       }
       // fall through
     case 'q':
     case 'Q':
-      if ((state->numAddresses != 0) || (state->params != NULL)) {
-        state->error = ED_ERROR_SUFFIX;
+      if ((state->ex.numAddresses != 0) || (state->ex.params != NULL)) {
+        state->ex.store.error = EX_ERROR_SUFFIX;
         break;
       }
       edQuit(state);
       break;
 
     default:
-      state->error = ED_ERROR_COMMAND;
+      state->ex.store.error = EX_ERROR_COMMAND;
       break;
   }
 }
@@ -498,30 +394,33 @@ int main(int argc, char **argv) {
   if (state != NULL) {
     state->commandBufferSize = ED_BUFFER_SIZE;
     state->commandBuffer = (char*) malloc(ED_BUFFER_SIZE);
-    state->textBuffer = (char*) malloc(ED_BUFFER_SIZE);
+    state->ex.store.buffer = (char*) malloc(TEXTSTORE_BUFFER_SIZE);
   }
   if ((state == NULL) || (state->commandBuffer == NULL)
-    || (state->textBuffer == NULL)
+    || (state->ex.store.buffer == NULL)
   ) {
     fputs("ed: out of memory\n", stderr);
     if (state != NULL) {
-      free(state->textBuffer);
+      free(state->ex.store.buffer);
       free(state->commandBuffer);
       free(state);
     }
     return 1;
   }
 
-  state->params = (argc > 1) ? argv[1] : NULL;
-  edCallOverlay(state, "File", "edStart");
-  if ((state->scratch == NULL) && (state->error == ED_ERROR_MEMORY)) {
+  state->ex.name = "ed";
+  state->ex.params = (argc > 1) ? argv[1] : NULL;
+  edCallOverlay(state, "File", "exStart");
+  if ((state->ex.store.text == NULL)
+    && (state->ex.store.error == EX_ERROR_MEMORY)
+  ) {
     fputs("ed: out of memory\n", stderr);
   }
 
-  while ((state->scratch != NULL) && !state->quit) {
-    if (state->error != ED_ERROR_NONE) {
-      state->lastError = state->error;
-      state->error = ED_ERROR_NONE;
+  while ((state->ex.store.text != NULL) && !state->quit) {
+    if (state->ex.store.error != EX_ERROR_NONE) {
+      state->lastError = state->ex.store.error;
+      state->ex.store.error = EX_ERROR_NONE;
       fputs("?\n", stdout);
       if (state->verbose) {
         printf("%s\n", edErrorMessages[state->lastError]);
@@ -532,25 +431,25 @@ int main(int argc, char **argv) {
       fputs("*", stdout);
     }
     if (!edReadCommand(state)) {
-      state->command = 'Q';
+      state->ex.command = 'Q';
       edQuit(state);
       break;
     }
-    if (state->error == ED_ERROR_NONE) {
+    if (state->ex.store.error == EX_ERROR_NONE) {
       edRunCommand(state);
     }
 
     // A refused q or e only lets the same command through right after it.
-    if (state->error != ED_ERROR_MODIFIED) {
-      state->warnedCommand = '\0';
+    if (state->ex.store.error != EX_ERROR_MODIFIED) {
+      state->ex.warnedCommand = '\0';
     }
   }
 
   int returnValue = state->quit ? 0 : 1;
-  free(state->marks);
-  free(state->filename);
-  free(state->lines);
-  free(state->textBuffer);
+  free(state->ex.marks);
+  free(state->ex.filename);
+  free(state->ex.store.lines);
+  free(state->ex.store.buffer);
   free(state->commandBuffer);
   free(state);
   return returnValue;

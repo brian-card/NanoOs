@@ -27,138 +27,99 @@
 
 /// @file Edit.c
 ///
-/// @brief The commands of the `ed` line editor that change lines:  a, c, d,
-/// i, j, m, and t.
+/// @brief The editing commands that change lines:  a, c, d, i, j, m, and t.
 
-#include "ed.h"
+#include "Ex.h"
 
-/// @fn static void edDeleteLines(EdState *state, int first, int last)
-///
-/// @brief Remove a range of lines from the buffer.
-///
-/// @param state The EdState of the running `ed`.
-/// @param first The number of the first line to remove.
-/// @param last The number of the last line to remove.
-///
-/// @return This function returns no value.
-static void edDeleteLines(EdState *state, int first, int last) {
-  memmove(&state->lines[first - 1], &state->lines[last],
-    (size_t) (state->numLines - last) * sizeof(uint32_t));
-  state->numLines -= last - first + 1;
-}
-
-/// @fn static void edReverse(uint32_t *lines, int count)
-///
-/// @brief Reverse the order of a run of line-table entries.
-///
-/// @param lines The first entry of the run.
-/// @param count The number of entries in the run.
-///
-/// @return This function returns no value.
-static void edReverse(uint32_t *lines, int count) {
-  for (int ii = 0, jj = count - 1; ii < jj; ii++, jj--) {
-    uint32_t swap = lines[ii];
-    lines[ii] = lines[jj];
-    lines[jj] = swap;
-  }
-}
-
-/// @fn static void edMoveLines(EdState *state)
+/// @fn static void exMoveLines(ExState *state)
 ///
 /// @brief Move the lines from state->addr1 to state->addr2 to after
-/// state->destination.  Moving them is a rotation of the line table, done by
-/// three reversals so that it needs no extra memory.
+/// state->destination.
 ///
-/// @param state The EdState of the running `ed`.
+/// @param state The ExState of the running editor.
 ///
 /// @return This function returns no value.
-static void edMoveLines(EdState *state) {
-  int count = state->addr2 - state->addr1 + 1;
+static void exMoveLines(ExState *state) {
   if ((state->destination >= state->addr1)
     && (state->destination < state->addr2)
   ) {
-    state->error = ED_ERROR_DESTINATION;
+    state->store.error = EX_ERROR_DESTINATION;
     return;
   }
 
-  int first = state->addr1 - 1;
-  int end = state->addr2;
-  if (state->destination < state->addr1) {
-    first = state->destination;
-    state->current = state->destination + count;
-  } else {
-    end = state->destination;
-    state->current = state->destination;
-  }
-  edReverse(&state->lines[first], end - first);
-  if (state->destination < state->addr1) {
-    edReverse(&state->lines[first], count);
-    edReverse(&state->lines[first + count], end - first - count);
-  } else {
-    edReverse(&state->lines[first], end - first - count);
-    edReverse(&state->lines[end - count], count);
-  }
+  textstoreMoveLines(&state->store,
+    state->addr1, state->addr2, state->destination);
+  state->current = (state->destination < state->addr1)
+    ? state->destination + (state->addr2 - state->addr1 + 1)
+    : state->destination;
   state->modified = true;
 }
 
-/// @fn static void edCopyLines(EdState *state)
+/// @fn static void exCopyLines(ExState *state)
 ///
 /// @brief Copy the lines from state->addr1 to state->addr2 to after
 /// state->destination.  Lines are never changed in place, so a copy shares
 /// its text with the original.
 ///
-/// @param state The EdState of the running `ed`.
+/// @param state The ExState of the running editor.
 ///
 /// @return This function returns no value.
-static void edCopyLines(EdState *state) {
+static void exCopyLines(ExState *state) {
   int count = state->addr2 - state->addr1 + 1;
   for (int ii = 0; ii < count; ii++) {
-    int source = state->addr1 - 1 + ii;
-    if (source >= state->destination) {
+    int source = state->addr1 + ii;
+    if (source > state->destination) {
       source += ii;
     }
-    if (!edInsertLine(state, state->destination + ii,
-      state->lines[source])
+    if (!textstoreInsertLine(&state->store, state->destination + ii,
+      textstoreLineOffset(&state->store, source))
+    ) {
+      if (ii > 0) {
+        state->modified = true;
+      }
+      return;
+    }
+  }
+
+  state->modified = true;
+  state->current = state->destination + count;
+}
+
+/// @fn static void exJoinLines(ExState *state)
+///
+/// @brief Replace the lines from state->addr1 to state->addr2 with one line
+/// holding their text.
+///
+/// @param state The ExState of the running editor.
+///
+/// @return This function returns no value.
+static void exJoinLines(ExState *state) {
+  uint32_t offset = state->store.textEnd;
+  for (int line = state->addr1; line <= state->addr2; line++) {
+    if (textstoreCopyLine(&state->store, line, state->store.text,
+      line == state->addr2) < 0
     ) {
       return;
     }
   }
 
-  state->current = state->destination + count;
-}
-
-/// @fn static void edJoinLines(EdState *state)
-///
-/// @brief Replace the lines from state->addr1 to state->addr2 with one line
-/// holding their text.
-///
-/// @param state The EdState of the running `ed`.
-///
-/// @return This function returns no value.
-static void edJoinLines(EdState *state) {
-  uint32_t offset = state->scratchEnd;
-  for (int line = state->addr1; line <= state->addr2; line++) {
-    if (edCopyLine(state, line, state->scratch, line == state->addr2) < 0) {
-      return;
-    }
-  }
-
-  edDeleteLines(state, state->addr1 + 1, state->addr2);
-  state->lines[state->addr1 - 1] = offset;
+  textstoreDeleteLines(&state->store, state->addr1 + 1, state->addr2);
+  textstoreSetLineOffset(&state->store, state->addr1, offset);
   state->current = state->addr1;
   state->modified = true;
 }
 
-/// @fn void* edEdit(void *args)
+/// @fn void* exEdit(void *args)
 ///
 /// @brief Run one of the commands that change lines.
 ///
-/// @param args A pointer to the EdState of the running `ed`, cast to a void*.
+/// @param args A pointer to the ExState of the running editor, cast to a
+///   void*.
 ///
 /// @return Returns the args pointer provided.  Errors are left in the
-/// EdState's error member.
-void* edEdit(void *args) {
-  EdState *state = (EdState*) args;
+/// ExState's store.error member.
+void* exEdit(void *args) {
+  ExState *state = (ExState*) args;
   char command = state->command;
 
   if (state->numAddresses == 0) {
@@ -170,41 +131,41 @@ void* edEdit(void *args) {
     && ((command == 'c') || (command == 'd') || (command == 'j')
       || (command == 'm') || (command == 't'))
   ) {
-    state->error = ED_ERROR_ADDRESS;
+    state->store.error = EX_ERROR_ADDRESS;
     return args;
   }
-  if (state->addr2 > state->numLines) {
-    state->error = ED_ERROR_ADDRESS;
+  if (state->addr2 > state->store.numLines) {
+    state->store.error = EX_ERROR_ADDRESS;
     return args;
   }
   if ((state->params != NULL)
     && (command != 'm') && (command != 't')
   ) {
-    state->error = ED_ERROR_SUFFIX;
+    state->store.error = EX_ERROR_SUFFIX;
     return args;
   }
 
   switch (command) {
     case 'm':
-      edMoveLines(state);
+      exMoveLines(state);
       break;
 
     case 't':
-      edCopyLines(state);
+      exCopyLines(state);
       break;
 
     case 'j':
       if (state->addr1 < state->addr2) {
-        edJoinLines(state);
+        exJoinLines(state);
       }
       break;
 
     case 'd':
     case 'c':
-      edDeleteLines(state, state->addr1, state->addr2);
+      textstoreDeleteLines(&state->store, state->addr1, state->addr2);
       state->modified = true;
-      state->current = (state->addr1 <= state->numLines)
-        ? state->addr1 : state->numLines;
+      state->current = (state->addr1 <= state->store.numLines)
+        ? state->addr1 : state->store.numLines;
       if (command == 'd') {
         break;
       }
@@ -216,8 +177,13 @@ void* edEdit(void *args) {
       if ((command == 'i') && (after > 0)) {
         after--;
       }
+      int numLines = state->store.numLines;
       long bytesRead = 0;
-      int last = edReadLines(state, stdin, after, true, &bytesRead);
+      int last = textstoreReadLines(&state->store, stdin, after, true,
+        &bytesRead);
+      if (state->store.numLines > numLines) {
+        state->modified = true;
+      }
       if (last > after) {
         state->current = last;
       } else if (command != 'c') {
