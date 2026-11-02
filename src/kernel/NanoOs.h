@@ -77,12 +77,18 @@ extern "C"
 /// @def NUM_PROCESS_STORAGE_KEYS
 ///
 /// @brief The total number of keys supported by the per-process storage.
-#define NUM_PROCESS_STORAGE_KEYS                          1
+#define NUM_PROCESS_STORAGE_KEYS                          2
 
 /// @def FGETS_CONSOLE_BUFFER_KEY
 ///
 /// @brief Per-process storage key for the consoleBufer pointer in nanoOsFgets.
 #define FGETS_CONSOLE_BUFFER_KEY                          0
+
+/// @def STDOUT_BUFFER_KEY
+///
+/// @brief Per-process storage key for the StdoutBuffer of output written to
+/// stdout and not yet sent.
+#define STDOUT_BUFFER_KEY                                 1
 
 /// @def MAX_GET_MESSAGE_RETRIES
 ///
