@@ -284,6 +284,7 @@ int nanoOsSpawn(
   if ((pid == NULL) || (path == NULL) || (argv == NULL) || (argv[0] == NULL)) {
     return EFAULT;
   }
+  nanoOsFlushStdout();
 
   SpawnArgs *spawnArgs
     = (SpawnArgs*) calloc(1, spawnArgsSize(path, file_actions, argv));
