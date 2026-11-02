@@ -107,6 +107,35 @@ typedef struct TextStoreBlock {
 /// @brief The number of bytes of a TextStoreBlock before its offsets.
 #define TEXTSTORE_BLOCK_HEADER_SIZE (4 * sizeof(uint16_t))
 
+/// @def TEXTSTORE_CHAIN_RECORD_SIZE
+///
+/// @brief The size, in bytes, of a record in a chain.
+#define TEXTSTORE_CHAIN_RECORD_SIZE 12
+
+/// @def TEXTSTORE_CHAIN_RECORDS
+///
+/// @brief The number of records a block of a chain holds.
+#define TEXTSTORE_CHAIN_RECORDS \
+  ((TEXTSTORE_BLOCK_LINES * sizeof(uint32_t)) / TEXTSTORE_CHAIN_RECORD_SIZE)
+
+/// @struct TextStoreChain
+///
+/// @brief A list of fixed-size records kept in blocks of the block file, with
+/// a position in it that can move back and forward.  Appending at the
+/// position drops every record after it.
+///
+/// @param first The number of the chain's first block, or TEXTSTORE_NO_BLOCK
+///   if the chain has never had a record.
+/// @param last The number of the chain's last block.
+/// @param block The number of the block holding the position.
+/// @param index The number of records in that block before the position.
+typedef struct TextStoreChain {
+  uint16_t first;
+  uint16_t last;
+  uint16_t block;
+  uint8_t  index;
+} TextStoreChain;
+
 /// @struct TextStore
 ///
 /// @brief The text file and block file of a sequence of lines.
@@ -332,7 +361,8 @@ static inline bool textstoreWriteBlock(TextStore *store, uint16_t block,
   uint16_t links[4] = { prev, next, count, 0 };
   if (!textstoreSeek(store, block, 0)
     || (fwrite(links, sizeof(links), 1, store->blocks) != 1)
-    || (fwrite(offsets, sizeof(uint32_t), count, store->blocks) != count)
+    || ((count > 0)
+      && (fwrite(offsets, sizeof(uint32_t), count, store->blocks) != count))
     || (fwrite(zeros, sizeof(uint32_t), TEXTSTORE_BLOCK_LINES - count,
       store->blocks) != (size_t) (TEXTSTORE_BLOCK_LINES - count))
   ) {
@@ -607,6 +637,234 @@ static inline int textstoreFindLine(TextStore *store, uint32_t offset) {
     first += store->cache.count;
   }
   return 0;
+}
+
+/// @fn static inline void textstoreChainInit(TextStoreChain *chain)
+///
+/// @brief Make a chain empty.  A chain whose blocks are in a block file that
+/// has been reset is made empty this way too.
+///
+/// @param chain The chain.
+///
+/// @return This function returns no value.
+static inline void textstoreChainInit(TextStoreChain *chain) {
+  chain->first = TEXTSTORE_NO_BLOCK;
+  chain->last = TEXTSTORE_NO_BLOCK;
+  chain->block = TEXTSTORE_NO_BLOCK;
+  chain->index = 0;
+}
+
+/// @fn static inline bool textstoreChainSetCount(TextStore *store,
+///   uint16_t block, uint16_t count)
+///
+/// @brief Set the number of records in a block of a chain.
+///
+/// @param store The TextStore holding the chain.
+/// @param block The number of the block.
+/// @param count The number of records.
+///
+/// @return Returns true on success, false with store->error set on failure.
+static inline bool textstoreChainSetCount(
+  TextStore *store, uint16_t block, uint16_t count
+) {
+  if (!textstoreSeek(store, block, 2 * sizeof(uint16_t))
+    || (fwrite(&count, sizeof(count), 1, store->blocks) != 1)
+  ) {
+    store->error = TEXTSTORE_ERROR_IO;
+    return false;
+  }
+  return true;
+}
+
+/// @fn static inline bool textstoreChainRecord(TextStore *store,
+///   uint16_t block, uint8_t index, void *record, bool write)
+///
+/// @brief Read or write a record of a chain.
+///
+/// @param store The TextStore holding the chain.
+/// @param block The number of the block holding the record.
+/// @param index The record's index in the block.
+/// @param record The TEXTSTORE_CHAIN_RECORD_SIZE bytes of the record.
+/// @param write Whether to write the record rather than read it.
+///
+/// @return Returns true on success, false with store->error set on failure.
+static inline bool textstoreChainRecord(TextStore *store, uint16_t block,
+  uint8_t index, void *record, bool write
+) {
+  if (!textstoreSeek(store, block, TEXTSTORE_BLOCK_HEADER_SIZE
+      + ((size_t) index * TEXTSTORE_CHAIN_RECORD_SIZE))
+    || ((write ? fwrite(record, TEXTSTORE_CHAIN_RECORD_SIZE, 1, store->blocks)
+      : fread(record, TEXTSTORE_CHAIN_RECORD_SIZE, 1, store->blocks)) != 1)
+  ) {
+    store->error = TEXTSTORE_ERROR_IO;
+    return false;
+  }
+  return true;
+}
+
+/// @fn static inline bool textstoreChainFreeAfter(TextStore *store,
+///   TextStoreChain *chain, uint16_t block)
+///
+/// @brief Put the blocks of a chain after one of them on the free list, as
+/// one run, however many there are.
+///
+/// @param store The TextStore holding the chain.
+/// @param chain The chain.
+/// @param block The number of the block to keep as the last one, or
+///   TEXTSTORE_NO_BLOCK to free every block.
+///
+/// @return Returns true on success, false with store->error set on failure.
+static inline bool textstoreChainFreeAfter(
+  TextStore *store, TextStoreChain *chain, uint16_t block
+) {
+  uint16_t start = chain->first;
+  if (block != TEXTSTORE_NO_BLOCK) {
+    TextStoreBlock links;
+    if (!textstoreReadLinks(store, block, &links)) {
+      return false;
+    }
+    start = links.next;
+  }
+  if (start == TEXTSTORE_NO_BLOCK) {
+    return true;
+  }
+  if (!textstoreSetLink(store, chain->last, true, store->freeBlocks)
+    || ((block != TEXTSTORE_NO_BLOCK)
+      && !textstoreSetLink(store, block, true, TEXTSTORE_NO_BLOCK))
+  ) {
+    return false;
+  }
+  store->freeBlocks = start;
+  chain->last = block;
+  if (block == TEXTSTORE_NO_BLOCK) {
+    textstoreChainInit(chain);
+  }
+  return true;
+}
+
+/// @fn static inline bool textstoreChainAppend(TextStore *store,
+///   TextStoreChain *chain, void *record)
+///
+/// @brief Drop the records after a chain's position, add a record there, and
+/// move the position past it.
+///
+/// @param store The TextStore holding the chain.
+/// @param chain The chain.
+/// @param record The TEXTSTORE_CHAIN_RECORD_SIZE bytes of the record.
+///
+/// @return Returns true on success, false with store->error set on failure.
+static inline bool textstoreChainAppend(
+  TextStore *store, TextStoreChain *chain, void *record
+) {
+  if (chain->block == TEXTSTORE_NO_BLOCK) {
+    uint16_t block = textstoreAllocBlock(store);
+    if ((block == TEXTSTORE_NO_BLOCK)
+      || !textstoreWriteBlock(store, block, TEXTSTORE_NO_BLOCK,
+        TEXTSTORE_NO_BLOCK, NULL, 0)
+    ) {
+      return false;
+    }
+    chain->first = chain->last = chain->block = block;
+    chain->index = 0;
+  } else if (!textstoreChainFreeAfter(store, chain, chain->block)) {
+    return false;
+  }
+
+  if (chain->index == TEXTSTORE_CHAIN_RECORDS) {
+    uint16_t block = textstoreAllocBlock(store);
+    if ((block == TEXTSTORE_NO_BLOCK)
+      || !textstoreWriteBlock(store, block, chain->block,
+        TEXTSTORE_NO_BLOCK, NULL, 0)
+      || !textstoreSetLink(store, chain->block, true, block)
+    ) {
+      return false;
+    }
+    chain->last = chain->block = block;
+    chain->index = 0;
+  }
+  if (!textstoreChainRecord(store, chain->block, chain->index, record, true)) {
+    return false;
+  }
+  chain->index++;
+  return textstoreChainSetCount(store, chain->block, chain->index);
+}
+
+/// @fn static inline bool textstoreChainPrevious(TextStore *store,
+///   TextStoreChain *chain, void *record)
+///
+/// @brief Move a chain's position back over a record and read it.
+///
+/// @param store The TextStore holding the chain.
+/// @param chain The chain.
+/// @param record Set to the TEXTSTORE_CHAIN_RECORD_SIZE bytes of the record.
+///
+/// @return Returns true if there was a record before the position, false if
+/// there wasn't or on failure, when store->error is set.
+static inline bool textstoreChainPrevious(
+  TextStore *store, TextStoreChain *chain, void *record
+) {
+  if (chain->block == TEXTSTORE_NO_BLOCK) {
+    return false;
+  }
+  if (chain->index == 0) {
+    TextStoreBlock links;
+    if (!textstoreReadLinks(store, chain->block, &links)
+      || (links.prev == TEXTSTORE_NO_BLOCK)
+    ) {
+      return false;
+    }
+    uint16_t prev = links.prev;
+    if (!textstoreReadLinks(store, prev, &links)) {
+      return false;
+    }
+    chain->block = prev;
+    chain->index = (uint8_t) links.count;
+  }
+  chain->index--;
+  return textstoreChainRecord(store, chain->block, chain->index, record,
+    false);
+}
+
+/// @fn static inline bool textstoreChainNext(TextStore *store,
+///   TextStoreChain *chain, void *record)
+///
+/// @brief Read the record at a chain's position and move the position past
+/// it.
+///
+/// @param store The TextStore holding the chain.
+/// @param chain The chain.
+/// @param record Set to the TEXTSTORE_CHAIN_RECORD_SIZE bytes of the record.
+///
+/// @return Returns true if there was a record after the position, false if
+/// there wasn't or on failure, when store->error is set.
+static inline bool textstoreChainNext(
+  TextStore *store, TextStoreChain *chain, void *record
+) {
+  if (chain->block == TEXTSTORE_NO_BLOCK) {
+    return false;
+  }
+  TextStoreBlock links;
+  if (!textstoreReadLinks(store, chain->block, &links)) {
+    return false;
+  }
+  if (chain->index == links.count) {
+    uint16_t next = links.next;
+    if ((next == TEXTSTORE_NO_BLOCK)
+      || !textstoreReadLinks(store, next, &links)
+      || (links.count == 0)
+    ) {
+      return false;
+    }
+    chain->block = next;
+    chain->index = 0;
+  }
+  if (!textstoreChainRecord(store, chain->block, chain->index, record,
+    false)
+  ) {
+    return false;
+  }
+  chain->index++;
+  return true;
 }
 
 /// @fn static inline bool textstoreAppendText(TextStore *store,
