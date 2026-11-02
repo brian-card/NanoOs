@@ -129,34 +129,6 @@ static bool edReadCommand(EdState *state) {
   return length > 0;
 }
 
-/// @fn static bool edPrintLines(EdState *state, bool numbered)
-///
-/// @brief Print the lines from state->ex.addr1 to state->ex.addr2 and make the last
-/// one the current line.
-///
-/// @param state The EdState of the running `ed`.
-/// @param numbered Whether to print each line's number before it.
-///
-/// @return Returns true on success, false with state->ex.store.error set on failure.
-static bool edPrintLines(EdState *state, bool numbered) {
-  if (state->ex.addr1 < 1) {
-    state->ex.store.error = EX_ERROR_ADDRESS;
-    return false;
-  }
-
-  for (int line = state->ex.addr1; line <= state->ex.addr2; line++) {
-    if (numbered) {
-      printf("%d\t", line);
-    }
-    if (textstoreCopyLine(&state->ex.store, line, stdout, true) < 0) {
-      return false;
-    }
-  }
-
-  state->ex.current = state->ex.addr2;
-  return true;
-}
-
 /// @fn static void edQuit(EdState *state)
 ///
 /// @brief Run the q or Q command:  remove the scratch file and exit, unless
@@ -207,7 +179,8 @@ static void edCallOverlay(
 ///
 /// @param state The EdState of the running `ed`.
 ///
-/// @return This function returns no value.  Errors are left in state->ex.store.error.
+/// @return This function returns no value.  Errors are left in
+/// state->ex.store.error.
 static void edRunCommand(EdState *state) {
   char *text = exParseCommandLine(&state->ex, state->commandBuffer);
   if (text == NULL) {
@@ -221,29 +194,14 @@ static void edRunCommand(EdState *state) {
 
   switch (state->ex.command) {
     case '\0':
-      if (state->ex.numAddresses == 0) {
-        state->ex.addr1 = state->ex.addr2 = state->ex.current + 1;
-        if (state->ex.addr2 > state->ex.store.numLines) {
-          state->ex.store.error = EX_ERROR_ADDRESS;
-          break;
-        }
-      }
-      state->ex.addr1 = state->ex.addr2;
-      edPrintLines(state, false);
-      break;
-
     case 'p':
     case 'n':
-      if (state->ex.params != NULL) {
-        state->ex.store.error = EX_ERROR_SUFFIX;
-        break;
-      }
-      edPrintLines(state, state->ex.command == 'n');
+      edCallOverlay(state, "Print", "exPrint");
       break;
 
     case '=':
-      printf("%d\n",
-        (state->ex.numAddresses == 0) ? state->ex.store.numLines : state->ex.addr2);
+      printf("%d\n", (state->ex.numAddresses == 0)
+        ? state->ex.store.numLines : state->ex.addr2);
       break;
 
     case 'P':
@@ -276,28 +234,6 @@ static void edRunCommand(EdState *state) {
       printf("%s\n", state->ex.filename);
       break;
 
-    case 'k':
-      if ((state->ex.params == NULL) || (state->ex.params[0] < 'a')
-        || (state->ex.params[0] > 'z') || (state->ex.params[1] != '\0')
-      ) {
-        state->ex.store.error = EX_ERROR_MARK;
-        break;
-      }
-      if (state->ex.addr2 < 1) {
-        state->ex.store.error = EX_ERROR_ADDRESS;
-        break;
-      }
-      if (state->ex.marks == NULL) {
-        state->ex.marks = (uint32_t*) calloc(EX_NUM_MARKS, sizeof(uint32_t));
-        if (state->ex.marks == NULL) {
-          state->ex.store.error = EX_ERROR_MEMORY;
-          break;
-        }
-      }
-      state->ex.marks[state->ex.params[0] - 'a']
-        = textstoreLineOffset(&state->ex.store, state->ex.addr2);
-      break;
-
     case 'm':
     case 't': {
       char *destinationText = state->ex.params;
@@ -312,6 +248,10 @@ static void edRunCommand(EdState *state) {
       }
     }
       // fall through
+    case 'k':
+      edCallOverlay(state, "Move", "exMove");
+      break;
+
     case 'a':
     case 'c':
     case 'd':
@@ -323,10 +263,15 @@ static void edRunCommand(EdState *state) {
     case 'e':
     case 'E':
     case 'r':
+      edCallOverlay(state, "File", "exFile");
+      break;
+
     case 'w':
     case 'W':
-      edCallOverlay(state, "File", "exFile");
-      if ((state->ex.store.error != EX_ERROR_NONE) || (state->ex.command != 'q')) {
+      edCallOverlay(state, "Write", "exWrite");
+      if ((state->ex.store.error != EX_ERROR_NONE)
+        || (state->ex.command != 'q')
+      ) {
         break;
       }
       // fall through
@@ -446,9 +391,7 @@ int main(int argc, char **argv) {
   }
 
   int returnValue = state->quit ? 0 : 1;
-  free(state->ex.marks);
   free(state->ex.filename);
-  free(state->ex.store.lines);
   free(state->ex.store.buffer);
   free(state->commandBuffer);
   free(state);
