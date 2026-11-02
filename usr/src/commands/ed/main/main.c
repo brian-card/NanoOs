@@ -353,7 +353,7 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  state->ex.name = "ed";
+  strcpy(state->ex.name, "ed");
   state->ex.params = (argc > 1) ? argv[1] : NULL;
   edCallOverlay(state, "File", "exStart");
   if ((state->ex.store.text == NULL)
