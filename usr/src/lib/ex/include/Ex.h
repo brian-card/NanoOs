@@ -70,8 +70,38 @@ typedef enum ExError {
   EX_ERROR_MODIFIED,
   EX_ERROR_MARK,
   EX_ERROR_DESTINATION,
+  EX_ERROR_OLDEST,
+  EX_ERROR_NEWEST,
   NUM_EX_ERRORS
 } ExError;
+
+/// @enum ExChangeKind
+///
+/// @brief The kinds of record in the undo history.
+typedef enum ExChangeKind {
+  EX_CHANGE_GROUP,
+  EX_CHANGE_INSERT,
+  EX_CHANGE_DELETE,
+} ExChangeKind;
+
+/// @struct ExChange
+///
+/// @brief A record of the undo history.  Each change to the buffer is a group
+/// record followed by the line insertions and deletions it made, in order.
+///
+/// @param kind The ExChangeKind of the record.
+/// @param unused Padding.
+/// @param column For a group, the cursor's column before the change.
+/// @param line For a group, the current line before the change; otherwise
+///   the number the line had when it was inserted or deleted.
+/// @param offset The text-file offset of the line inserted or deleted.
+typedef struct ExChange {
+  uint8_t  kind;
+  uint8_t  unused;
+  uint16_t column;
+  int32_t  line;
+  uint32_t offset;
+} ExChange;
 
 /// @struct ExState
 ///
@@ -101,23 +131,156 @@ typedef enum ExError {
 /// @param quiet Whether to leave out the byte count that reading and writing
 ///   a file print.
 /// @param byteCount The number of bytes the last file read or written held.
+/// @param history The undo history:  a chain of ExChange records whose
+///   position is between the changes undone and the ones not.
+/// @param column The cursor's column, recorded with each change for an
+///   editor with a cursor, and set by undo.
+/// @param undone Whether the last command was an undo, for ed's u, which
+///   redoes after an undo.
 typedef struct ExState {
-  TextStore   store;
-  char        name[4];
-  int         current;
-  int         addr1;
-  int         addr2;
-  int         numAddresses;
-  int         destination;
-  char        command;
-  char       *params;
-  char       *filename;
-  uint32_t    marks;
-  bool        modified;
-  char        warnedCommand;
-  bool        quiet;
-  long        byteCount;
+  TextStore       store;
+  char            name[4];
+  int             current;
+  int             addr1;
+  int             addr2;
+  int             numAddresses;
+  int             destination;
+  char            command;
+  char           *params;
+  char           *filename;
+  uint32_t        marks;
+  bool            modified;
+  char            warnedCommand;
+  bool            quiet;
+  long            byteCount;
+  TextStoreChain  history;
+  int16_t         column;
+  bool            undone;
 } ExState;
+
+/// @fn static inline bool exRecord(ExState *state, uint8_t kind, int line,
+///   uint32_t offset)
+///
+/// @brief Add a record to the undo history, dropping any changes undone.
+///
+/// @param state The ExState of the running editor.
+/// @param kind The ExChangeKind of the record.
+/// @param line The record's line.
+/// @param offset The record's offset.
+///
+/// @return Returns true on success, false with state->store.error set on
+/// failure.
+static inline bool exRecord(
+  ExState *state, uint8_t kind, int line, uint32_t offset
+) {
+  ExChange change;
+  change.kind = kind;
+  change.unused = 0;
+  change.column = (uint16_t) state->column;
+  change.line = line;
+  change.offset = offset;
+  return textstoreChainAppend(&state->store, &state->history, &change);
+}
+
+/// @fn static inline bool exBeginChange(ExState *state)
+///
+/// @brief Start a change to the buffer in the undo history, with the current
+/// line and column as they are before it.
+///
+/// @param state The ExState of the running editor.
+///
+/// @return Returns true on success, false with state->store.error set on
+/// failure.
+static inline bool exBeginChange(ExState *state) {
+  state->undone = false;
+  return exRecord(state, EX_CHANGE_GROUP, state->current, 0);
+}
+
+/// @fn static inline bool exRecordLines(ExState *state, int first, int last)
+///
+/// @brief Record in the undo history lines that were just inserted.
+///
+/// @param state The ExState of the running editor.
+/// @param first The number of the first line inserted.
+/// @param last The number of the last line inserted.
+///
+/// @return Returns true on success, false with state->store.error set on
+/// failure.
+static inline bool exRecordLines(ExState *state, int first, int last) {
+  for (int line = first; line <= last; line++) {
+    uint32_t offset = textstoreLineOffset(&state->store, line);
+    if ((state->store.error != EX_ERROR_NONE)
+      || !exRecord(state, EX_CHANGE_INSERT, line, offset)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/// @fn static inline bool exInsertLine(ExState *state, int after,
+///   uint32_t offset)
+///
+/// @brief Insert a line and record it in the undo history.
+///
+/// @param state The ExState of the running editor.
+/// @param after The number of the line to insert after, 0 for the start.
+/// @param offset The text-file offset of the line's text.
+///
+/// @return Returns true on success, false with state->store.error set on
+/// failure.
+static inline bool exInsertLine(ExState *state, int after, uint32_t offset) {
+  return textstoreInsertLine(&state->store, after, offset)
+    && exRecord(state, EX_CHANGE_INSERT, after + 1, offset);
+}
+
+/// @fn static inline bool exDeleteLines(ExState *state, int first, int last)
+///
+/// @brief Record a range of lines in the undo history and remove them.
+///
+/// @param state The ExState of the running editor.
+/// @param first The number of the first line to remove.
+/// @param last The number of the last line to remove.
+///
+/// @return Returns true on success, false with state->store.error set on
+/// failure.
+static inline bool exDeleteLines(ExState *state, int first, int last) {
+  for (int line = first; line <= last; line++) {
+    uint32_t offset = textstoreLineOffset(&state->store, line);
+    // Each line is the first of the range by the time it is removed.
+    if ((state->store.error != EX_ERROR_NONE)
+      || !exRecord(state, EX_CHANGE_DELETE, first, offset)
+    ) {
+      return false;
+    }
+  }
+  textstoreDeleteLines(&state->store, first, last);
+  return state->store.error == EX_ERROR_NONE;
+}
+
+/// @fn static inline bool exSetLineOffset(ExState *state, int line,
+///   uint32_t offset)
+///
+/// @brief Give a line new text, recorded in the undo history as the old
+/// line's deletion and the new one's insertion.
+///
+/// @param state The ExState of the running editor.
+/// @param line The number of the line.
+/// @param offset The text-file offset of the line's new text.
+///
+/// @return Returns true on success, false with state->store.error set on
+/// failure.
+static inline bool exSetLineOffset(ExState *state, int line, uint32_t offset) {
+  uint32_t old = textstoreLineOffset(&state->store, line);
+  if ((state->store.error != EX_ERROR_NONE)
+    || !exRecord(state, EX_CHANGE_DELETE, line, old)
+    || !exRecord(state, EX_CHANGE_INSERT, line, offset)
+  ) {
+    return false;
+  }
+  textstoreSetLineOffset(&state->store, line, offset);
+  return state->store.error == EX_ERROR_NONE;
+}
 
 /// @fn static inline bool exSetFilename(ExState *state, const char *name)
 ///
