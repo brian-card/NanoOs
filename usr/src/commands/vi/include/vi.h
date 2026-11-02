@@ -66,6 +66,46 @@ extern "C"
 /// @brief The size, in bytes, of the search pattern, with its NUL.
 #define VI_PATTERN_SIZE 32
 
+/// @def VI_DOT_KEYS
+///
+/// @brief The most keys of a command, after its count, that . can repeat.
+#define VI_DOT_KEYS 5
+
+/// @struct ViDot
+///
+/// @brief The last change, kept in the block file's header area after the
+/// search pattern for . to repeat.
+///
+/// @param count The command's count, or 0 if it had none.
+/// @param numKeys The number of keys in keys, or 0 if there is no change to
+///   repeat.
+/// @param textLength The number of characters the command inserted.
+/// @param next The index in keys of the next key to repeat.
+/// @param keys The keys of the command, without its counts.
+typedef struct ViDot {
+  int16_t count;
+  uint8_t numKeys;
+  uint8_t textLength;
+  uint8_t next;
+  char    keys[VI_DOT_KEYS];
+} ViDot;
+
+/// @def VI_DOT_POSITION
+///
+/// @brief The position in the block file's header area of the ViDot.
+#define VI_DOT_POSITION (VI_PATTERN_POSITION + VI_PATTERN_SIZE)
+
+/// @def VI_DOT_TEXT_POSITION
+///
+/// @brief The position in the block file's header area of the text the last
+/// change inserted.
+#define VI_DOT_TEXT_POSITION (VI_DOT_POSITION + sizeof(ViDot))
+
+/// @def VI_DOT_TEXT_SIZE
+///
+/// @brief The most characters of inserted text that . can repeat.
+#define VI_DOT_TEXT_SIZE (TEXTSTORE_HEADER_SIZE - VI_DOT_TEXT_POSITION)
+
 /// @enum ViYankKind
 ///
 /// @brief What the yank chain holds.
@@ -156,12 +196,17 @@ typedef enum ViKey {
 /// @param width The number of columns the whole current line takes up, at
 ///   most INT16_MAX.
 /// @param count The count typed before the command, or 0 if none was.
-/// @param targetIndex The index in the line a motion reaches.
+/// @param targetIndex The index in the line a motion reaches.  When insert
+///   mode ends, the index after the last character inserted; when . repeats
+///   an insertion, the number of characters to insert.
+/// @param insertStart The index insert mode started inserting at, or -1 if
+///   it erased characters from before there.
 /// @param truncated Whether the current line is longer than text holds.
 /// @param changed Whether text differs from the line in the store.
 /// @param quit Whether `vi` is to exit.
 /// @param beginChange Whether the command being run has yet to start a change
 ///   in the undo history.
+/// @param repeating Whether . is repeating the command being run.
 /// @param request The ViRequest:  show requestLine at requestRow and redraw
 ///   below it, after redrawing the current line for VI_REQUEST_SPLIT.
 /// @param yankKind The ViYankKind of the yank chain.
@@ -189,10 +234,12 @@ typedef struct ViState {
   int16_t         width;
   int16_t         count;
   int16_t         targetIndex;
+  int16_t         insertStart;
   bool            truncated;
   bool            changed;
   bool            quit;
   bool            beginChange;
+  bool            repeating;
   uint8_t         request;
   uint8_t         yankKind;
   char            operator;

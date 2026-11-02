@@ -31,14 +31,47 @@
 
 #include "vi.h"
 
+/// @fn static void viRepeatInsert(ViState *state)
+///
+/// @brief Insert the text the last change inserted, for . to repeat it.
+/// state->targetIndex is its length.
+///
+/// @param state The ViState of the running `vi`.
+///
+/// @return This function returns no value.  Errors are left in
+/// state->ex.store.error.
+static void viRepeatInsert(ViState *state) {
+  int length = state->targetIndex;
+  int oldRows = viRowsFor(state, state->width);
+  if (state->length + length > VI_LINE_MAX - 1) {
+    state->ex.store.error = VI_ERROR_TOO_LONG;
+    return;
+  }
+  memmove(&state->text[state->index + length], &state->text[state->index],
+    (size_t) (state->length - state->index + 1));
+  if ((length > 0)
+    && !textstoreReadHeader(&state->ex.store, VI_DOT_TEXT_POSITION,
+      &state->text[state->index], (size_t) length)
+  ) {
+    viLoadLine(state, state->line);
+    return;
+  }
+  state->index = (int16_t) (state->index + length);
+  state->length = (int16_t) (state->length + length);
+  state->changed = true;
+  viRedrawCurrent(state, oldRows);
+}
+
 /// @fn void* viInsert(void *args)
 ///
 /// @brief Insert text typed until Escape or Return is pressed:  before the
 /// cursor (i), after it (a), at the first non-blank (I), or at the end of the
 /// line (A).  The changed line is left for the Put overlay to commit, and to
 /// split for Return, so that this overlay has no code that changes the store.
-/// state->ex.command is set to the key that ended insertion.  A key typed
-/// after Ctrl-V is inserted as it is.
+/// state->ex.command is set to the key that ended insertion, and, for
+/// Escape, state->targetIndex to the index after the last character
+/// inserted.  A key typed after Ctrl-V is inserted as it is.  When . is
+/// repeating a change, its text is inserted instead.
 ///
 /// @param args A pointer to the ViState of the running `vi`, cast to a
 ///   void*.
@@ -60,9 +93,15 @@ void* viInsert(void *args) {
   } else if (command == 'I') {
     state->index = (int16_t) viFirstNonBlank(state);
   }
+  state->insertStart = state->index;
 
-  viStatus(state, "-- INSERT --");
-  while (state->ex.store.error == EX_ERROR_NONE) {
+  if (state->repeating) {
+    viRepeatInsert(state);
+    state->ex.command = VI_KEY_ESCAPE;
+  } else {
+    viStatus(state, "-- INSERT --");
+  }
+  while (!state->repeating && (state->ex.store.error == EX_ERROR_NONE)) {
     viPlaceCursor(state);
     int key = viReadKey(state);
     bool literal = (key == 0x16);
@@ -85,6 +124,8 @@ void* viInsert(void *args) {
     } else if (((key == '\b') || (key == 0x7f)) && !literal) {
       if (state->index == 0) {
         continue;
+      } else if (state->index <= state->insertStart) {
+        state->insertStart = -1;
       }
       memmove(&state->text[state->index - 1], &state->text[state->index],
         (size_t) (state->length - state->index + 1));
@@ -108,6 +149,7 @@ void* viInsert(void *args) {
     viRedrawCurrent(state, oldRows);
   }
 
+  state->targetIndex = state->index;
   if (state->index > 0) {
     state->index--;
   }
