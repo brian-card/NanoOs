@@ -1441,6 +1441,25 @@ def test_vi_keeps_keys_typed_before_it_reads_them(s):
     assert s.sh("cat /etc/ahead.txt") == (alphabet * 2)[1:]
 
 
+def test_vi_keeps_editing_after_an_ex_command_empties_the_buffer(s):
+    s.login()
+    vi = ViTerminal(s, "vi /etc/empty.txt")
+    vi.wait_status('"/etc/empty.txt" [New File]')
+    vi.keys("ia\rb\rc\x1b")
+    vi.wait_lines(vi_lines(["a", "b", "c"]))
+    vi.keys(":1,$d\r")
+    vi.wait_lines(vi_lines([""]))
+    vi.keys("u")
+    vi.wait_lines(vi_lines(["a", "b", "c"]))
+    vi.keys(":1,3d\r")
+    vi.wait_lines(vi_lines([""]))
+    vi.keys("ix\ry\x1b")
+    vi.wait_lines(vi_lines(["x", "y"]))
+    vi.keys(":wq\r")
+    vi.wait_exit()
+    assert s.sh("cat /etc/empty.txt") == "x\ny"
+
+
 def test_vi_inserts_a_control_character_typed_after_ctrl_v(s):
     s.login()
     vi = ViTerminal(s, "vi /etc/ctrlv.txt")

@@ -740,13 +740,13 @@ NANO_OS_KERNEL_TEST(console_raw, each_key_is_delivered_by_itself) {
   NANO_OS_ASSERT_STR_EQ("\r", deliveredLines[2]);
 }
 
-NANO_OS_KERNEL_TEST(console_raw, typed_ahead_keys_wait_for_the_reader) {
+NANO_OS_KERNEL_TEST(console_raw, typed_ahead_keys_are_kept_for_the_reader) {
   ConsolePort *consolePort = rawFixture("xy");
   consolePort->waitingForInput = false;
 
   consoleServicePort(&inputState, consolePort);
   NANO_OS_ASSERT_TRUE(consolePort->consoleBuffer->holdsCompletedLine);
-  NANO_OS_ASSERT_EQ_INT(1, (long long) uartLikeRead);
+  NANO_OS_ASSERT_EQ_INT(2, (long long) uartLikeRead);
 
   consolePort->waitingForInput = true;
   serviceAndRead(consolePort);
@@ -754,6 +754,24 @@ NANO_OS_KERNEL_TEST(console_raw, typed_ahead_keys_wait_for_the_reader) {
   NANO_OS_ASSERT_EQ_INT(2, numDeliveredLines);
   NANO_OS_ASSERT_STR_EQ("x", deliveredLines[0]);
   NANO_OS_ASSERT_STR_EQ("y", deliveredLines[1]);
+}
+
+NANO_OS_KERNEL_TEST(console_raw, ctrl_c_typed_ahead_without_signals_is_a_key) {
+  ConsolePort *consolePort = rawFixture("x\x03y");
+  consolePort->waitingForInput = false;
+
+  consoleServicePort(&inputState, consolePort);
+  NANO_OS_ASSERT_EQ_INT(3, (long long) uartLikeRead);
+  NANO_OS_ASSERT_STR_EQ("x", consolePort->consoleBuffer->buffer);
+
+  consolePort->waitingForInput = true;
+  serviceAndRead(consolePort);
+  serviceAndRead(consolePort);
+  serviceAndRead(consolePort);
+  NANO_OS_ASSERT_EQ_INT(3, numDeliveredLines);
+  NANO_OS_ASSERT_STR_EQ("x", deliveredLines[0]);
+  NANO_OS_ASSERT_STR_EQ("\x03", deliveredLines[1]);
+  NANO_OS_ASSERT_STR_EQ("y", deliveredLines[2]);
 }
 
 NANO_OS_KERNEL_TEST(console_raw, an_arrow_arriving_in_pieces_is_one_read) {
@@ -936,7 +954,7 @@ NANO_OS_KERNEL_TEST(console_raw, a_held_key_starts_the_next_canonical_line) {
   consolePort->outputOwner = getRunningPid();
   consolePort->waitingForInput = false;
   consoleServicePort(&inputState, consolePort);
-  NANO_OS_ASSERT_EQ_INT(1, (long long) uartLikeRead);
+  NANO_OS_ASSERT_EQ_INT(9, (long long) uartLikeRead);
 
   setModes(CONSOLE_MODE_DEFAULT & ~CONSOLE_MODE_ECHO);
   consolePort->waitingForInput = true;
@@ -951,7 +969,7 @@ NANO_OS_KERNEL_TEST(console_raw, a_held_arrow_is_a_key_after_going_canonical) {
   consolePort->outputOwner = getRunningPid();
   consolePort->waitingForInput = false;
   consoleServicePort(&inputState, consolePort);
-  NANO_OS_ASSERT_EQ_INT(3, (long long) uartLikeRead);
+  NANO_OS_ASSERT_EQ_INT(12, (long long) uartLikeRead);
 
   setModes(CONSOLE_MODE_DEFAULT & ~CONSOLE_MODE_ECHO);
   consolePort->waitingForInput = true;
@@ -970,7 +988,7 @@ NANO_OS_KERNEL_TEST(console_raw, a_held_line_feed_after_return_is_dropped) {
   NANO_OS_ASSERT_STR_EQ("\r", deliveredLines[0]);
   consolePort->waitingForInput = false;
   consoleServicePort(&inputState, consolePort);
-  NANO_OS_ASSERT_EQ_INT(2, (long long) uartLikeRead);
+  NANO_OS_ASSERT_EQ_INT(11, (long long) uartLikeRead);
 
   setModes(CONSOLE_MODE_DEFAULT & ~CONSOLE_MODE_ECHO);
   consolePort->waitingForInput = true;
