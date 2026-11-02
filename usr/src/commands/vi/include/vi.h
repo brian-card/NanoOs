@@ -47,7 +47,7 @@ extern "C"
 ///
 /// @brief The size, in bytes, of the buffer holding the current line.  A line
 /// longer than this can be shown but not changed within the line.
-#define VI_LINE_MAX 120
+#define VI_LINE_MAX 112
 
 /// @def VI_PENDING_SIZE
 ///
@@ -59,6 +59,16 @@ extern "C"
 ///
 /// @brief The number of columns between tab stops.
 #define VI_TAB_STOP 8
+
+/// @enum ViRequest
+///
+/// @brief What an overlay that changed the buffer asks the main overlay, which
+/// has the drawing code, to show once it returns.
+typedef enum ViRequest {
+  VI_REQUEST_NONE,
+  VI_REQUEST_SHOW,
+  VI_REQUEST_SPLIT,
+} ViRequest;
 
 /// @enum ViKey
 ///
@@ -76,48 +86,59 @@ typedef enum ViKey {
 
 /// @struct ViState
 ///
-/// @brief Everything `vi` keeps.  It is the only memory `vi` allocates.
+/// @brief Everything `vi` keeps.  It is the only memory `vi` allocates.  Its
+/// members are ordered by size so that no padding is needed between them.
 ///
 /// @param ex The ExState of the editing commands.
-/// @param rows The number of rows on the screen.  The last is the status line.
-/// @param columns The number of columns on the screen.
+/// @param terminal The terminal settings to restore on exit, or NULL if stdin
+///   isn't a terminal.
 /// @param top The number of the line at the top of the screen.
 /// @param line The number of the current line.  With no lines, it is 1.
+/// @param width The number of columns the whole current line takes up.
+/// @param requestLine The line to make current for a request.
+/// @param yank The text-file offset of the yanked line.
+/// @param rows The number of rows on the screen.  The last is the status line.
+/// @param columns The number of columns on the screen.
 /// @param lineRow The screen row, from 0, that the current line starts on.
 /// @param index The index in text of the character under the cursor.
 /// @param length The number of characters in text.
-/// @param width The number of columns the whole current line takes up.
+/// @param requestRow The screen row to show requestLine at.
 /// @param truncated Whether the current line is longer than text holds.
 /// @param changed Whether text differs from the line in the store.
 /// @param haveYank Whether a line has been yanked.
 /// @param quit Whether `vi` is to exit.
-/// @param yank The text-file offset of the yanked line.
+/// @param beginChange Whether the command being run has yet to start a change
+///   in the undo history.
+/// @param request The ViRequest:  show requestLine at requestRow and redraw
+///   below it, after redrawing the current line for VI_REQUEST_SPLIT.
 /// @param numPending The number of bytes in pending.
 /// @param pending Input read with an earlier key, not yet used.
 /// @param text The current line, NUL-terminated, without its newline.
 /// @param buffer The buffer the TextStore and key reading move text through.
-/// @param terminal The terminal settings to restore on exit, or NULL if stdin
-///   isn't a terminal.
 typedef struct ViState {
-  ExState  ex;
-  int      rows;
-  int      columns;
-  int      top;
-  int      line;
-  int      lineRow;
-  int      index;
-  int      length;
-  int      width;
-  bool     truncated;
-  bool     changed;
-  bool     haveYank;
-  bool     quit;
-  uint32_t yank;
-  uint8_t  numPending;
-  char     pending[VI_PENDING_SIZE];
-  char     text[VI_LINE_MAX];
-  char     buffer[TEXTSTORE_BUFFER_SIZE];
+  ExState         ex;
   struct termios *terminal;
+  int             top;
+  int             line;
+  int             width;
+  int             requestLine;
+  uint32_t        yank;
+  int16_t         rows;
+  int16_t         columns;
+  int16_t         lineRow;
+  int16_t         index;
+  int16_t         length;
+  int16_t         requestRow;
+  bool            truncated;
+  bool            changed;
+  bool            haveYank;
+  bool            quit;
+  bool            beginChange;
+  uint8_t         request;
+  uint8_t         numPending;
+  char            pending[VI_PENDING_SIZE];
+  char            text[VI_LINE_MAX];
+  char            buffer[TEXTSTORE_BUFFER_SIZE];
 } ViState;
 
 /// @struct ViDraw
@@ -262,6 +283,44 @@ static inline bool viLoadLine(ViState *state, int line) {
   return viReadLine(state, line, true) >= 0;
 }
 
+/// @fn static inline void viRequest(ViState *state, int line, int row,
+///   uint8_t request)
+///
+/// @brief Ask the main overlay to show a line at a screen row and redraw the
+/// screen below it.
+///
+/// @param state The ViState of the running `vi`.
+/// @param line The number of the line to make current.
+/// @param row The screen row to show it at.
+/// @param request VI_REQUEST_SHOW, or VI_REQUEST_SPLIT to redraw the current
+///   line first.
+///
+/// @return This function returns no value.
+static inline void viRequest(ViState *state, int line, int row,
+  uint8_t request
+) {
+  state->requestLine = line;
+  state->requestRow = (int16_t) row;
+  state->request = request;
+}
+
+/// @fn static inline bool viBeginChange(ViState *state)
+///
+/// @brief Start a change in the undo history if the command being run hasn't
+/// started one yet, so that all a command changes is undone together.
+///
+/// @param state The ViState of the running `vi`.
+///
+/// @return Returns true on success, false with state->ex.store.error set on
+/// failure.
+static inline bool viBeginChange(ViState *state) {
+  if (!state->beginChange) {
+    return true;
+  }
+  state->beginChange = false;
+  return exBeginChange(&state->ex);
+}
+
 /// @fn static inline bool viCommitLine(ViState *state)
 ///
 /// @brief Put the current line's text in the store if it has changed.  The
@@ -277,17 +336,13 @@ static inline bool viCommitLine(ViState *state) {
     return true;
   }
   uint32_t offset = store->textEnd;
-  if (!textstoreAppendText(store, state->text)
+  if (!viBeginChange(state)
+    || !textstoreAppendText(store, state->text)
     || !textstoreAppendText(store, "\n")
+    || ((state->line > store->numLines)
+      ? !exInsertLine(&state->ex, store->numLines, offset)
+      : !exSetLineOffset(&state->ex, state->line, offset))
   ) {
-    return false;
-  }
-  if (state->line > store->numLines) {
-    textstoreInsertLine(store, store->numLines, offset);
-  } else {
-    textstoreSetLineOffset(store, state->line, offset);
-  }
-  if (store->error != TEXTSTORE_ERROR_NONE) {
     return false;
   }
   state->ex.modified = true;
@@ -307,8 +362,9 @@ static inline bool viCommitLine(ViState *state) {
 static inline bool viAddEmptyLine(ViState *state, int after) {
   TextStore *store = &state->ex.store;
   uint32_t offset = store->textEnd;
-  if (!textstoreAppendText(store, "\n")
-    || !textstoreInsertLine(store, after, offset)
+  if (!viBeginChange(state)
+    || !textstoreAppendText(store, "\n")
+    || !exInsertLine(&state->ex, after, offset)
   ) {
     return false;
   }
@@ -569,10 +625,14 @@ static inline int viReadKey(ViState *state) {
       used++;
     }
     char final = input[used++];
+    int rows = 0;
+    int columns = 0;
     key = VI_KEY_NONE;
     if ((final >= 'A') && (final <= 'D')) {
       key = VI_KEY_UP + (final - 'A');
-    } else if (screenParseResize(input, &state->rows, &state->columns)) {
+    } else if (screenParseResize(input, &rows, &columns)) {
+      state->rows = (int16_t) rows;
+      state->columns = (int16_t) columns;
       key = VI_KEY_RESIZE;
     }
   }

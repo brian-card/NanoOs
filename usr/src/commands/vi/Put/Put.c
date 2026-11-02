@@ -59,8 +59,9 @@ static void viPutLine(ViState *state, bool after, bool empty) {
     }
   } else {
     uint32_t offset = store->textEnd;
-    if ((textstoreCopyText(store, state->yank, store->text, true) < 0)
-      || !textstoreInsertLine(store, line, offset)
+    if (!viBeginChange(state)
+      || (textstoreCopyText(store, state->yank, store->text, true) < 0)
+      || !exInsertLine(&state->ex, line, offset)
     ) {
       return;
     }
@@ -69,7 +70,7 @@ static void viPutLine(ViState *state, bool after, bool empty) {
   int row = after
     ? state->lineRow + viRowsFor(state, state->width) : state->lineRow;
   state->index = 0;
-  viShowLine(state, line + 1, row, true);
+  viRequest(state, line + 1, row, VI_REQUEST_SHOW);
 }
 
 /// @fn static bool viSplitLine(ViState *state)
@@ -93,15 +94,15 @@ static bool viSplitLine(ViState *state) {
   state->length = state->index;
   state->changed = true;
   if (!viCommitLine(state)
-    || !textstoreInsertLine(store, state->line, offset)
+    || !exInsertLine(&state->ex, state->line, offset)
   ) {
     return false;
   }
   viMeasure(state);
-  viDrawLine(state, state->line, state->lineRow);
   state->index = 0;
-  return viShowLine(state, state->line + 1,
-    state->lineRow + viRowsFor(state, state->width), true);
+  viRequest(state, state->line + 1,
+    state->lineRow + viRowsFor(state, state->width), VI_REQUEST_SPLIT);
+  return true;
 }
 
 /// @fn void* viPut(void *args)

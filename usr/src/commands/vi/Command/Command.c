@@ -50,6 +50,8 @@ static const char *const viErrorMessages[NUM_EX_ERRORS] = {
   "No write since last change (add ! to override)",
   "Mark not set",
   "Invalid destination",
+  "Already at oldest change",
+  "Already at newest change",
 };
 
 /// @fn static void viShowError(ViState *state)
@@ -196,7 +198,11 @@ void* viStart(void *args) {
   } else {
     state->terminal = NULL;
   }
-  screenGetSize(&state->rows, &state->columns);
+  int rows = 0;
+  int columns = 0;
+  screenGetSize(&rows, &columns);
+  state->rows = (int16_t) rows;
+  state->columns = (int16_t) columns;
 
   if (callOverlayFunction(EX_LIBRARY_PATH, "File", "exStart", &state->ex)
     == NULL

@@ -39,7 +39,8 @@
 /// @fn static void viCallOverlay(ViState *state, const char *overlay,
 ///   const char *function)
 ///
-/// @brief Run a function in another of `vi`'s overlays.
+/// @brief Run a function in another of `vi`'s overlays, then show what it
+/// asked to be shown.
 ///
 /// @param state The ViState of the running `vi`.
 /// @param overlay The name of the overlay.
@@ -50,10 +51,17 @@
 static void viCallOverlay(
   ViState *state, const char *overlay, const char *function
 ) {
+  state->request = VI_REQUEST_NONE;
   if (callOverlayFunction(OVERLAY_SAME_NAMESPACE, overlay, function, state)
     == NULL
   ) {
     state->ex.store.error = EX_ERROR_MEMORY;
+  }
+  if (state->request == VI_REQUEST_SPLIT) {
+    viDrawLine(state, state->line, state->lineRow);
+  }
+  if (state->request != VI_REQUEST_NONE) {
+    viShowLine(state, state->requestLine, state->requestRow, true);
   }
 }
 
@@ -67,6 +75,8 @@ static void viCallOverlay(
 /// @return This function returns no value.
 static void viRunKey(ViState *state, int key) {
   int numLines = state->ex.store.numLines;
+  state->beginChange = true;
+  state->ex.column = (int16_t) state->index;
   switch (key) {
     case 'h':
     case '\b':
@@ -156,6 +166,12 @@ static void viRunKey(ViState *state, int key) {
 
     case ':':
       viCallOverlay(state, "Command", "viCommand");
+      break;
+
+    case 'u':
+    case 0x12:
+      state->ex.command = (key == 'u') ? 'u' : 'r';
+      viCallOverlay(state, "History", "viUndo");
       break;
 
     case VI_KEY_RESIZE:

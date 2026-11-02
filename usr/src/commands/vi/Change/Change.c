@@ -47,8 +47,9 @@ static void viDeleteLine(ViState *state) {
     return;
   }
   state->yank = textstoreLineOffset(store, line);
-  textstoreDeleteLines(store, line, line);
-  if (store->error != TEXTSTORE_ERROR_NONE) {
+  if ((store->error != TEXTSTORE_ERROR_NONE) || !viBeginChange(state)
+    || !exDeleteLines(&state->ex, line, line)
+  ) {
     return;
   }
   state->haveYank = true;
@@ -64,7 +65,7 @@ static void viDeleteLine(ViState *state) {
     row -= viRowsFor(state, width);
   }
   state->index = 0;
-  viShowLine(state, line, row, true);
+  viRequest(state, line, row, VI_REQUEST_SHOW);
 }
 
 /// @fn void* viChange(void *args)
@@ -84,13 +85,13 @@ void* viChange(void *args) {
       if (state->truncated || (state->length == 0)) {
         break;
       }
-      int oldRows = viRowsFor(state, state->width);
       memmove(&state->text[state->index], &state->text[state->index + 1],
         (size_t) (state->length - state->index));
       state->length--;
       state->changed = true;
-      viRedrawCurrent(state, oldRows);
-      viCommitLine(state);
+      if (viCommitLine(state)) {
+        viRequest(state, state->line, state->lineRow, VI_REQUEST_SHOW);
+      }
       break;
     }
 
