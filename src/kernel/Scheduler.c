@@ -1914,6 +1914,7 @@ int schedulerKillProcess(ProcessId pid) {
 /// @return Returns the ID of the child that exited, 0 if WNOHANG was given and
 /// none has, or (pid_t) -1 with errno set on failure.
 ProcessId schedulerWaitpid(ProcessId pid, int *status, int options) {
+  nanoOsFlushStdout();
   SchedulerWaitPidArgs schedulerWaitPidArgs = {
     .pid = pid,
     .options = options,
@@ -2361,6 +2362,7 @@ int schedulerExecve(const char *pathname,
     errno = EFAULT;
     return -1;
   }
+  nanoOsCloseStdout();
 
   ExecArgs *execArgs = (ExecArgs*) calloc(1, execArgsSize(pathname, argv));
   if (execArgs == NULL) {
