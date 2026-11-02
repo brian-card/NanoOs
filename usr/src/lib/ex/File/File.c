@@ -59,7 +59,10 @@ static int exReadFile(ExState *state, FILE *in, int after) {
   if (state->store.numLines > numLines) {
     state->modified = true;
   }
-  printf("%ld\n", bytesRead);
+  state->byteCount = bytesRead;
+  if (!state->quiet) {
+    printf("%ld\n", bytesRead);
+  }
   return last;
 }
 

@@ -107,7 +107,10 @@ static void exWriteFile(ExState *state) {
     return;
   }
 
-  printf("%ld\n", bytesWritten);
+  state->byteCount = bytesWritten;
+  if (!state->quiet) {
+    printf("%ld\n", bytesWritten);
+  }
   if ((state->addr1 == 1) && (state->addr2 == state->store.numLines)) {
     state->modified = false;
   }
