@@ -1731,11 +1731,13 @@ int nanoOsSprintf(char *buffer, const char *format, ...) {
 
 /// @fn ConsoleBuffer* nanoOsWaitForInput(void)
 ///
-/// @brief Wait for input from the nanoOs port owned by the current process.
+/// @brief Wait for input from the nanoOs port owned by the current process,
+/// first sending the output written to stdout so far.
 ///
 /// @return Returns a pointer to the input retrieved on success, NULL on
 /// failure.
 ConsoleBuffer* nanoOsWaitForInput(void) {
+  nanoOsFlushStdout();
   ConsoleBuffer *consoleBuffer = NULL;
   FileDescriptor *inputFd = schedulerGetFileDescriptor(stdin);
   if (inputFd == NULL) {
@@ -2023,6 +2025,82 @@ int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *consoleBuffer) {
   return returnValue;
 }
 
+/// @def STDOUT_BUFFER_SIZE
+///
+/// @brief The most bytes written to stdout that are held before they're sent:
+/// what one ConsoleBuffer holds.
+#define STDOUT_BUFFER_SIZE (CONSOLE_BUFFER_SIZE - 1)
+
+/// @struct StdoutBuffer
+///
+/// @brief Output written to stdout and not yet sent, so that many small writes
+/// cost one message to the console.
+///
+/// @param length The number of bytes held.
+/// @param data The bytes, with room for the NUL vsnprintf writes.
+typedef struct StdoutBuffer {
+  uint8_t length;
+  char    data[STDOUT_BUFFER_SIZE + 1];
+} StdoutBuffer;
+
+/// @fn static StdoutBuffer* nanoOsStdoutBuffer(void)
+///
+/// @brief Get the running process's StdoutBuffer, allocating it on first use.
+///
+/// @return Returns a pointer to the StdoutBuffer, or NULL if it couldn't be
+/// allocated, in which case output is sent unbuffered.
+static StdoutBuffer* nanoOsStdoutBuffer(void) {
+  StdoutBuffer *stdoutBuffer
+    = (StdoutBuffer*) getProcessStorage(STDOUT_BUFFER_KEY);
+  if (stdoutBuffer == NULL) {
+    stdoutBuffer = (StdoutBuffer*) malloc(sizeof(StdoutBuffer));
+    if (stdoutBuffer != NULL) {
+      stdoutBuffer->length = 0;
+      setProcessStorage(STDOUT_BUFFER_KEY, stdoutBuffer);
+    }
+  }
+  return stdoutBuffer;
+}
+
+/// @fn void nanoOsFlushStdout(void)
+///
+/// @brief Send the output written to stdout that the running process's
+/// StdoutBuffer holds.
+///
+/// @return This function returns no value.
+void nanoOsFlushStdout(void) {
+  StdoutBuffer *stdoutBuffer
+    = (StdoutBuffer*) getProcessStorage(STDOUT_BUFFER_KEY);
+  if ((stdoutBuffer == NULL) || (stdoutBuffer->length == 0)) {
+    return;
+  }
+  size_t length = stdoutBuffer->length;
+  stdoutBuffer->length = 0;
+  ConsoleBuffer *consoleBuffer = nanoOsGetBuffer();
+  if (consoleBuffer == NULL) {
+    return;
+  }
+  memcpy(consoleBuffer->buffer, stdoutBuffer->data, length);
+  consoleBuffer->buffer[length] = '\0';
+  nanoOsWriteBuffer(stdout, consoleBuffer);
+}
+
+/// @fn void nanoOsCloseStdout(void)
+///
+/// @brief Send the output the running process's StdoutBuffer holds and free
+/// the buffer, before the process execs or exits.
+///
+/// @return This function returns no value.
+void nanoOsCloseStdout(void) {
+  StdoutBuffer *stdoutBuffer
+    = (StdoutBuffer*) getProcessStorage(STDOUT_BUFFER_KEY);
+  if (stdoutBuffer != NULL) {
+    nanoOsFlushStdout();
+    setProcessStorage(STDOUT_BUFFER_KEY, NULL);
+    free(stdoutBuffer);
+  }
+}
+
 /// @fn int nanoOsFputs(const char *s, FILE *stream)
 ///
 /// @brief Print a raw string to a file stream.
@@ -2046,10 +2124,10 @@ int nanoOsFputs(const char *s, FILE *stream) {
 
 /// @fn int nanoOsVfprintf(FILE *stream, const char *format, va_list args)
 ///
-/// @brief Print a formatted string to the nanoOs.  Gets a string buffer from
-/// the nanoOs, writes the formatted string to that buffer, then sends a
-/// command to the nanoOs to print the buffer.  If the stream being printed to
-/// is stderr, blocks until the buffer is printed to the nanoOs.
+/// @brief Print a formatted string to the nanoOs.  Output to stdout is added
+/// to the process's StdoutBuffer; other output gets a string buffer from the
+/// nanoOs, writes the formatted string to that buffer, then sends a command to
+/// the nanoOs to print the buffer.
 ///
 /// @param stream A pointer to the FILE stream to print to (stdout or stderr).
 /// @param format The format string for the printf message.
@@ -2059,6 +2137,35 @@ int nanoOsFputs(const char *s, FILE *stream) {
 /// @return Returns the number of bytes printed on success, -1 on error.
 int nanoOsVfprintf(FILE *stream, const char *format, va_list args) {
   int returnValue = -1;
+  if (stream == stdout) {
+    StdoutBuffer *stdoutBuffer = nanoOsStdoutBuffer();
+    if (stdoutBuffer != NULL) {
+      va_list retryArgs;
+      va_copy(retryArgs, args);
+      size_t room = STDOUT_BUFFER_SIZE - stdoutBuffer->length;
+      returnValue = vsnprintf(&stdoutBuffer->data[stdoutBuffer->length],
+        room + 1, format, args);
+      if ((returnValue > (int) room) && (stdoutBuffer->length > 0)) {
+        nanoOsFlushStdout();
+        room = STDOUT_BUFFER_SIZE;
+        returnValue = vsnprintf(stdoutBuffer->data, room + 1, format,
+          retryArgs);
+      }
+      va_end(retryArgs);
+      if (returnValue > 0) {
+        size_t added = MIN((size_t) returnValue, room);
+        char *start = &stdoutBuffer->data[stdoutBuffer->length];
+        stdoutBuffer->length = (uint8_t) (stdoutBuffer->length + added);
+        if (memchr(start, ASCII_NEWLINE, added) != NULL) {
+          nanoOsFlushStdout();
+        }
+      }
+      return returnValue;
+    }
+  } else if (stream == stderr) {
+    nanoOsFlushStdout();
+  }
+
   ConsoleBuffer *consoleBuffer = nanoOsGetBuffer();
   if (consoleBuffer == NULL) {
     // Nothing we can do.
@@ -2256,6 +2363,27 @@ size_t nanoOsFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
 size_t nanoOsFwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream) {
   if ((stream != stdout) && (stream != stderr)) {
     return filesystemFWrite(ptr, size, nmemb, stream);
+  }
+
+  size_t length = size * nmemb;
+  StdoutBuffer *stdoutBuffer = NULL;
+  if (stream == stderr) {
+    nanoOsFlushStdout();
+  } else if ((length > 0) && (length <= STDOUT_BUFFER_SIZE)) {
+    stdoutBuffer = nanoOsStdoutBuffer();
+  }
+  if (stdoutBuffer != NULL) {
+    if (stdoutBuffer->length + length > STDOUT_BUFFER_SIZE) {
+      nanoOsFlushStdout();
+    }
+    memcpy(&stdoutBuffer->data[stdoutBuffer->length], ptr, length);
+    stdoutBuffer->length = (uint8_t) (stdoutBuffer->length + length);
+    if (memchr(ptr, ASCII_NEWLINE, length) != NULL) {
+      nanoOsFlushStdout();
+    }
+    return nmemb;
+  } else if (stream == stdout) {
+    nanoOsFlushStdout();
   }
 
   size_t bytesRemaining = size * nmemb;
