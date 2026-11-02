@@ -46,10 +46,11 @@ extern "C"
 /// @brief The directory holding the overlays of the ex library.
 #define EX_LIBRARY_PATH "/usr/lib/ex"
 
-/// @def EX_NUM_MARKS
+/// @def EX_MARK_POSITION
 ///
-/// @brief The number of marks, 'a' through 'z'.
-#define EX_NUM_MARKS 26
+/// @brief The position in the TextStore's header area of the text-file offset
+/// of a marked line.
+#define EX_MARK_POSITION(mark) (((mark) - 'a') * sizeof(uint32_t))
 
 /// @enum ExError
 ///
@@ -89,8 +90,9 @@ typedef enum ExError {
 /// @param command The command character of the command being run.
 /// @param params The text after the command character, or NULL if none.
 /// @param filename The current filename, or NULL if none.
-/// @param marks The text-file offset of each marked line, or NULL if no line
-///   has been marked.
+/// @param marks A bit for each mark, 'a' in bit 0, set once the mark is.  The
+///   text-file offset of each marked line is in the store's header area, at
+///   EX_MARK_POSITION.
 /// @param modified Whether the buffer has changed since it was last written.
 /// @param warnedCommand The command, q or e, that was just refused because
 ///   the buffer was modified, or '\0' if none.
@@ -105,10 +107,53 @@ typedef struct ExState {
   char        command;
   char       *params;
   char       *filename;
-  uint32_t   *marks;
+  uint32_t    marks;
   bool        modified;
   char        warnedCommand;
 } ExState;
+
+/// @fn static inline bool exSetFilename(ExState *state, const char *name)
+///
+/// @brief Make a name the current filename.
+///
+/// @param state The ExState of the running editor.
+/// @param name The name to use.
+///
+/// @return Returns true on success, false with state->store.error set on
+/// failure.
+static inline bool exSetFilename(ExState *state, const char *name) {
+  char *filename = (char*) realloc(state->filename, strlen(name) + 1);
+  if (filename == NULL) {
+    state->store.error = EX_ERROR_MEMORY;
+    return false;
+  }
+  state->filename = strcpy(filename, name);
+  return true;
+}
+
+/// @fn static inline const char* exFilename(ExState *state)
+///
+/// @brief Get the filename a command operates on:  the one given with it,
+/// which becomes the current filename if there isn't one yet, or else the
+/// current filename.
+///
+/// @param state The ExState of the running editor.
+///
+/// @return Returns the filename, or NULL with state->store.error set if there
+/// is none.
+static inline const char* exFilename(ExState *state) {
+  if (state->params == NULL) {
+    if (state->filename == NULL) {
+      state->store.error = EX_ERROR_NO_FILENAME;
+    }
+    return state->filename;
+  }
+
+  if ((state->filename == NULL) && !exSetFilename(state, state->params)) {
+    return NULL;
+  }
+  return state->params;
+}
 
 /// @fn static inline int exParseNumber(char **text)
 ///
@@ -156,12 +201,17 @@ static inline bool exParseAddress(ExState *state, char **text, int *line) {
     (*text)++;
   } else if (**text == '\'') {
     char mark = (*text)[1];
-    if ((mark < 'a') || (mark > 'z') || (state->marks == NULL)) {
+    uint32_t offset = 0;
+    if ((mark < 'a') || (mark > 'z')
+      || ((state->marks & (((uint32_t) 1) << (mark - 'a'))) == 0)
+      || !textstoreReadHeader(&state->store, EX_MARK_POSITION(mark),
+        &offset, sizeof(offset))
+    ) {
       state->store.error = EX_ERROR_MARK;
       return false;
     }
     *text += 2;
-    *line = textstoreFindLine(&state->store, state->marks[mark - 'a']);
+    *line = textstoreFindLine(&state->store, offset);
     if (*line == 0) {
       state->store.error = EX_ERROR_MARK;
       return false;

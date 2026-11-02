@@ -27,63 +27,10 @@
 
 /// @file Edit.c
 ///
-/// @brief The editing commands that change lines:  a, c, d, i, j, m, and t.
+/// @brief The editing commands that add, change, or remove lines:  a, c, d,
+/// i, and j.
 
 #include "Ex.h"
-
-/// @fn static void exMoveLines(ExState *state)
-///
-/// @brief Move the lines from state->addr1 to state->addr2 to after
-/// state->destination.
-///
-/// @param state The ExState of the running editor.
-///
-/// @return This function returns no value.
-static void exMoveLines(ExState *state) {
-  if ((state->destination >= state->addr1)
-    && (state->destination < state->addr2)
-  ) {
-    state->store.error = EX_ERROR_DESTINATION;
-    return;
-  }
-
-  textstoreMoveLines(&state->store,
-    state->addr1, state->addr2, state->destination);
-  state->current = (state->destination < state->addr1)
-    ? state->destination + (state->addr2 - state->addr1 + 1)
-    : state->destination;
-  state->modified = true;
-}
-
-/// @fn static void exCopyLines(ExState *state)
-///
-/// @brief Copy the lines from state->addr1 to state->addr2 to after
-/// state->destination.  Lines are never changed in place, so a copy shares
-/// its text with the original.
-///
-/// @param state The ExState of the running editor.
-///
-/// @return This function returns no value.
-static void exCopyLines(ExState *state) {
-  int count = state->addr2 - state->addr1 + 1;
-  for (int ii = 0; ii < count; ii++) {
-    int source = state->addr1 + ii;
-    if (source > state->destination) {
-      source += ii;
-    }
-    if (!textstoreInsertLine(&state->store, state->destination + ii,
-      textstoreLineOffset(&state->store, source))
-    ) {
-      if (ii > 0) {
-        state->modified = true;
-      }
-      return;
-    }
-  }
-
-  state->modified = true;
-  state->current = state->destination + count;
-}
 
 /// @fn static void exJoinLines(ExState *state)
 ///
@@ -111,7 +58,7 @@ static void exJoinLines(ExState *state) {
 
 /// @fn void* exEdit(void *args)
 ///
-/// @brief Run one of the commands that change lines.
+/// @brief Run one of the commands that add, change, or remove lines.
 ///
 /// @param args A pointer to the ExState of the running editor, cast to a
 ///   void*.
@@ -128,8 +75,7 @@ void* exEdit(void *args) {
     }
   }
   if ((state->addr1 < 1)
-    && ((command == 'c') || (command == 'd') || (command == 'j')
-      || (command == 'm') || (command == 't'))
+    && ((command == 'c') || (command == 'd') || (command == 'j'))
   ) {
     state->store.error = EX_ERROR_ADDRESS;
     return args;
@@ -138,22 +84,12 @@ void* exEdit(void *args) {
     state->store.error = EX_ERROR_ADDRESS;
     return args;
   }
-  if ((state->params != NULL)
-    && (command != 'm') && (command != 't')
-  ) {
+  if (state->params != NULL) {
     state->store.error = EX_ERROR_SUFFIX;
     return args;
   }
 
   switch (command) {
-    case 'm':
-      exMoveLines(state);
-      break;
-
-    case 't':
-      exCopyLines(state);
-      break;
-
     case 'j':
       if (state->addr1 < state->addr2) {
         exJoinLines(state);

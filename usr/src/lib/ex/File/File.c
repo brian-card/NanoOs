@@ -28,60 +28,18 @@
 /// @file File.c
 ///
 /// @brief Reading the file named on the command line, and the editing
-/// commands that read or write files:  e, E, r, w, and W.
+/// commands that read files:  e, E, and r.
 
 #include <sys/stat.h>
 #include <unistd.h>
 #include "Ex.h"
-
-/// @fn static bool exSetFilename(ExState *state, const char *name)
-///
-/// @brief Make a name the current filename.
-///
-/// @param state The ExState of the running `ed`.
-/// @param name The name to use.
-///
-/// @return Returns true on success, false with state->store.error set on failure.
-static bool exSetFilename(ExState *state, const char *name) {
-  char *filename = (char*) realloc(state->filename, strlen(name) + 1);
-  if (filename == NULL) {
-    state->store.error = EX_ERROR_MEMORY;
-    return false;
-  }
-  state->filename = strcpy(filename, name);
-  return true;
-}
-
-/// @fn static const char* exFilename(ExState *state)
-///
-/// @brief Get the filename a command operates on:  the one given with it,
-/// which becomes the current filename if there isn't one yet, or else the
-/// current filename.
-///
-/// @param state The ExState of the running `ed`.
-///
-/// @return Returns the filename, or NULL with state->store.error set if there is
-/// none.
-static const char* exFilename(ExState *state) {
-  if (state->params == NULL) {
-    if (state->filename == NULL) {
-      state->store.error = EX_ERROR_NO_FILENAME;
-    }
-    return state->filename;
-  }
-
-  if ((state->filename == NULL) && !exSetFilename(state, state->params)) {
-    return NULL;
-  }
-  return state->params;
-}
 
 /// @fn static int exReadFile(ExState *state, FILE *in, int after)
 ///
 /// @brief Read a file into the buffer, print the number of bytes read, and
 /// close the file.  If the whole file can't be read, none of it is kept.
 ///
-/// @param state The ExState of the running `ed`.
+/// @param state The ExState of the running editor.
 /// @param in The open file to read.
 /// @param after The number of the line to insert the file's lines after.
 ///
@@ -110,7 +68,7 @@ static int exReadFile(ExState *state, FILE *in, int after) {
 /// @brief Replace the buffer with the contents of a file:  the e and E
 /// commands.
 ///
-/// @param state The ExState of the running `ed`.
+/// @param state The ExState of the running editor.
 ///
 /// @return This function returns no value.
 static void exEditFile(ExState *state) {
@@ -142,8 +100,7 @@ static void exEditFile(ExState *state) {
     fclose(in);
     return;
   }
-  free(state->marks);
-  state->marks = NULL;
+  state->marks = 0;
 
   if (exReadFile(state, in, 0) < 0) {
     // A later w must not replace the file with an empty buffer.
@@ -152,91 +109,6 @@ static void exEditFile(ExState *state) {
   }
   state->current = state->store.numLines;
   state->modified = false;
-}
-
-/// @fn static void exWriteFile(ExState *state)
-///
-/// @brief Write lines to a file:  the w and W commands.  The w command
-/// writes to a temporary file that replaces the target only once it is
-/// complete, so a failed write leaves the target as it was.
-///
-/// @param state The ExState of the running `ed`.
-///
-/// @return This function returns no value.
-static void exWriteFile(ExState *state) {
-  bool quitAfter = false;
-  if ((state->command == 'w') && (state->params != NULL)
-    && (state->params[0] == 'q')
-    && ((state->params[1] == '\0') || (state->params[1] == ' '))
-  ) {
-    quitAfter = true;
-    state->params = (state->params[1] == ' ') ? &state->params[2] : NULL;
-  }
-
-  if (state->numAddresses == 0) {
-    state->addr1 = 1;
-    state->addr2 = state->store.numLines;
-  } else if (state->addr1 < 1) {
-    state->store.error = EX_ERROR_ADDRESS;
-    return;
-  }
-  const char *name = exFilename(state);
-  if (name == NULL) {
-    return;
-  }
-
-  char *tempName = NULL;
-  FILE *out = NULL;
-  if (state->command == 'W') {
-    out = fopen(name, "a");
-  } else {
-    tempName = (char*) malloc(strlen(name) + 2);
-    if (tempName == NULL) {
-      state->store.error = EX_ERROR_MEMORY;
-      return;
-    }
-    strcat(strcpy(tempName, name), "~");
-    out = fopen(tempName, "w");
-  }
-  if (out == NULL) {
-    free(tempName);
-    state->store.error = EX_ERROR_OPEN_OUTPUT;
-    return;
-  }
-
-  long bytesWritten = 0;
-  for (int line = state->addr1;
-    (line <= state->addr2) && (state->store.error == EX_ERROR_NONE); line++
-  ) {
-    long copied = textstoreCopyLine(&state->store, line, out, true);
-    if (copied >= 0) {
-      bytesWritten += copied;
-    }
-  }
-  fclose(out);
-
-  if (tempName != NULL) {
-    if ((state->store.error == EX_ERROR_NONE) && (rename(tempName, name) != 0)) {
-      state->store.error = EX_ERROR_WRITE;
-    }
-    if (state->store.error != EX_ERROR_NONE) {
-      remove(tempName);
-    }
-    free(tempName);
-  }
-  if (state->store.error != EX_ERROR_NONE) {
-    return;
-  }
-
-  printf("%ld\n", bytesWritten);
-  if ((state->addr1 == 1) && (state->addr2 == state->store.numLines)) {
-    state->modified = false;
-  }
-  if (quitAfter) {
-    state->command = 'q';
-    state->params = NULL;
-    state->numAddresses = 0;
-  }
 }
 
 /// @fn void* exStart(void *args)
@@ -282,13 +154,13 @@ void* exStart(void *args) {
 
 /// @fn void* exFile(void *args)
 ///
-/// @brief Run one of the commands that read or write files.  After a
-/// successful wq, the ExState's command member is changed to q.
+/// @brief Run one of the commands that read files.
 ///
-/// @param args A pointer to the ExState of the running `ed`, cast to a void*.
+/// @param args A pointer to the ExState of the running editor, cast to a
+///   void*.
 ///
 /// @return Returns the args pointer provided.  Errors are left in the
-/// ExState's error member.
+/// ExState's store.error member.
 void* exFile(void *args) {
   ExState *state = (ExState*) args;
 
@@ -324,10 +196,6 @@ void* exFile(void *args) {
       return args;
     }
 
-    case 'w':
-    case 'W':
-      exWriteFile(state);
-      break;
   }
 
   return args;
