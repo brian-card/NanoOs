@@ -804,7 +804,8 @@ static inline void viRedrawCurrent(ViState *state, int oldRows) {
 /// @param state The ViState of the running `vi`.
 ///
 /// @return Returns the byte, a ViKey, or VI_KEY_EOF at the end of input.  For
-/// VI_KEY_RESIZE, state->rows and state->columns are set.
+/// VI_KEY_RESIZE, state->rows and state->columns are set; a resize report of
+/// the size already in use is VI_KEY_NONE.
 static inline int viReadKey(ViState *state) {
   char *input = state->buffer;
   int length = state->numPending;
@@ -837,7 +838,9 @@ static inline int viReadKey(ViState *state) {
     key = VI_KEY_NONE;
     if ((final >= 'A') && (final <= 'D')) {
       key = VI_KEY_UP + (final - 'A');
-    } else if (screenParseResize(input, &rows, &columns)) {
+    } else if (screenParseResize(input, &rows, &columns)
+      && ((rows != state->rows) || (columns != state->columns))
+    ) {
       state->rows = (int16_t) rows;
       state->columns = (int16_t) columns;
       key = VI_KEY_RESIZE;
