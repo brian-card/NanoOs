@@ -2141,6 +2141,33 @@ int nanoOsFileno(FILE *stream) {
   return stream->fd;
 }
 
+/// @fn static size_t nanoOsRawKeyLength(const char *text, size_t textLength)
+///
+/// @brief Get the length of the key at the start of raw console input:  a
+/// control sequence through its final byte, an escape followed by O and one
+/// more byte, or else a single byte.
+///
+/// @param text The input.
+/// @param textLength The number of bytes of input, at least 1.
+///
+/// @return Returns the number of bytes in the key.
+static size_t nanoOsRawKeyLength(const char *text, size_t textLength) {
+  if ((textLength < 2) || (text[0] != ASCII_ESCAPE)) {
+    return 1;
+  } else if (text[1] == 'O') {
+    return MIN(textLength, 3);
+  } else if (text[1] != '[') {
+    return 1;
+  }
+  size_t length = 2;
+  while ((length < textLength)
+    && ((text[length] < 0x40) || (text[length] > 0x7e))
+  ) {
+    length++;
+  }
+  return MIN(textLength, length + 1);
+}
+
 /// @fn size_t nanoOsFread(void *ptr, size_t size, size_t nmemb, FILE *stream)
 ///
 /// @brief Custom implementation of fread for this library.
@@ -2158,9 +2185,9 @@ size_t nanoOsFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     return filesystemFRead(ptr, size, nmemb, stream);
   }
 
-  // Reading stops at the end of input, after a newline, after input from a
+  // Reading stops at the end of input, after a newline, after one key from a
   // port that isn't in canonical mode, after an escape sequence, or when the
-  // buffer is full.  Raw input that doesn't fit is kept for the next read.
+  // buffer is full.  Raw input that isn't read is kept for the next read.
   char *charBuffer = (char*) ptr;
   size_t bufferSize = size * nmemb;
   size_t numBytesReceived = 0;
@@ -2182,7 +2209,10 @@ size_t nanoOsFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
       newlineAt = strchr(text, ASCII_RETURN);
     }
     size_t available = textLength;
-    if (newlineAt != NULL) {
+    if (consoleBuffer->rawInput && (textLength > 0)) {
+      available = nanoOsRawKeyLength(text, textLength);
+      done = true;
+    } else if (newlineAt != NULL) {
       available = ((size_t) (newlineAt - text)) + 1;
       done = true;
     } else {
