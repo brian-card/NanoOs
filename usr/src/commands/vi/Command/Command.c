@@ -150,7 +150,7 @@ static void viRunCommand(ViState *state, char *text) {
         ex->numAddresses = 1;
       }
       viCallEx(state, "File", "exFile");
-      line = ex->current;
+      line = (ex->current > 0) ? ex->current : 1;
       break;
 
     case 'm':
@@ -169,13 +169,13 @@ static void viRunCommand(ViState *state, char *text) {
       // fall through
     case 'k':
       viCallEx(state, "Move", "exMove");
-      line = ex->current;
+      line = (ex->current > 0) ? ex->current : 1;
       break;
 
     case 'd':
     case 'j':
       viCallEx(state, "Edit", "exEdit");
-      line = ex->current;
+      line = (ex->current > 0) ? ex->current : 1;
       break;
 
     default:
