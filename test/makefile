@@ -120,7 +120,8 @@ SUITE_SRCS     := test_smoke test_unit_misc test_unit_strtoll test_unit_console 
                   test_unit_vdp_text \
                   test_unit_vdp_keyboard \
                   test_unit_agon_reset_keys \
-                  test_unit_posix_errno
+                  test_unit_posix_errno \
+                  test_unit_textstore
 
 KERNEL_OBJS := $(addprefix $(OBJ_DIR)/kernel_,$(addsuffix .o,$(KERNEL_SRCS)))
 USER_OBJS   := $(addprefix $(OBJ_DIR)/user_,$(addsuffix .o,$(USER_SRCS)))
@@ -179,6 +180,10 @@ $(OBJ_DIR)/mock_%.o: mocks/%.c
 $(OBJ_DIR)/suite_%.o: suites/%.c
 	$(MKDIR) "$(OBJ_DIR)"
 	$(COMPILE) $(TEST_CFLAGS) $(TEST_INC) -c $< -o $@
+
+# This suite compiles the textstore library's header directly.
+$(OBJ_DIR)/suite_test_unit_textstore.o: \
+    ../usr/src/lib/textstore/include/TextStore.h
 
 # These suites compile the VDP driver's sources directly.
 $(OBJ_DIR)/suite_test_unit_vdp_text.o: \

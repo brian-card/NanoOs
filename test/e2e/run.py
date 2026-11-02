@@ -1821,6 +1821,16 @@ def ed_model_copy(lines, a1, a2, dest):
     return lines[:dest] + lines[a1 - 1:a2] + lines[dest:]
 
 
+def test_ed_refuses_marks_that_are_not_set(s):
+    s.login()
+    ed_session(s, [
+        ("ed /etc/issue", "13\n"), ("2ka", ""), ("'bp", "?\n"),
+        ("h", "invalid mark\n"), ("'a=", "2\n"),
+        ("e /etc/hostname", "7\n"), ("'a=", "?\n"),
+        ("h", "invalid mark\n"), ("q", "")])
+    assert ll_names(s, "/tmp") == []
+
+
 def test_ed_moves_copies_and_joins_lines(s):
     s.login()
     lines = list(CATFILE_LINES)
@@ -1880,51 +1890,63 @@ def test_ed_reports_files_it_cannot_open(s):
     assert ll_names(s, "/etc") == ["catfile", "hostname", "issue"]
 
 
-# More lines than ed's line table can hold at SMALL_MEMORY_HEAP.
+# More lines than a table of them in memory could hold at SMALL_MEMORY_HEAP.
 OVERSIZED_LINE_COUNT = 300
 
 
-def test_ed_loads_nothing_from_a_file_that_does_not_fit(s):
+def write_oversized_file(s):
+    """Write /etc/bigfile with OVERSIZED_LINE_COUNT lines, using ed.
+
+    @param s The Session, logged in.
+
+    @return The file's lines.
+    """
     big_lines = ["big-%03d" % n for n in range(1, OVERSIZED_LINE_COUNT + 1)]
-    s.login()
     ed_session(s, [("ed", ""), ("a", "")] + ed_input(big_lines)
                + [(".", ""), ("w /etc/bigfile", "%d\n" % (8 * len(big_lines))),
                   ("q", "")])
+    return big_lines
+
+
+def test_ed_edits_a_file_larger_than_the_heap(s):
+    s.login()
+    lines = write_oversized_file(s)
     s.restart_with_memory(small_memory_size(s))
     s.login()
+    del lines[0:10]
+    lines[0:0] = lines[99:110]
+    del lines[110:121]
     ed_session(s, [
-        ("ed /etc/bigfile", "?\n"), ("h", "out of memory\n"), ("$=", "0\n"),
-        ("f", "?\n"), ("w", "?\n"), ("Q", "")])
-    assert s.sh("cat /etc/bigfile", timeout=30) == "\n".join(big_lines)
+        ("ed /etc/bigfile", "%d\n" % (8 * OVERSIZED_LINE_COUNT)),
+        ("$=", "%d\n" % OVERSIZED_LINE_COUNT), ("150p", "big-150\n"),
+        ("1,10d", ""), ("$=", "%d\n" % (OVERSIZED_LINE_COUNT - 10)),
+        ("100,110m0", ""), ("1p", lines[0] + "\n"), ("$p", lines[-1] + "\n"),
+        ("w", "%d\n" % (8 * len(lines))), ("q", "")])
+    assert s.sh("cat /etc/bigfile", timeout=30) == "\n".join(lines)
     assert ll_names(s, "/tmp") == []
 
 
-def test_ed_read_that_does_not_fit_leaves_the_buffer_unchanged(s):
-    big_lines = ["big-%03d" % n for n in range(1, OVERSIZED_LINE_COUNT + 1)]
-    s.login()
-    ed_session(s, [("ed", ""), ("a", "")] + ed_input(big_lines)
-               + [(".", ""), ("w /etc/bigfile", "%d\n" % (8 * len(big_lines))),
-                  ("q", "")])
+def test_ed_keeps_typed_text_larger_than_the_heap(s):
     s.restart_with_memory(small_memory_size(s))
     s.login()
-    ed_session(s, [
-        ("ed /etc/issue", "13\n"), ("r /etc/bigfile", "?\n"),
-        ("h", "out of memory\n"), ("$=", "2\n"), (",p", "\\s \\r \\n \\l\n\n"),
-        ("q", "")])
-    assert ll_names(s, "/tmp") == []
-
-
-def test_ed_discards_typed_text_that_does_not_fit(s):
-    # Each typed line is "d", which would delete a line if it were run as a
-    # command after the buffer filled up.
-    s.restart_with_memory(small_memory_size(s))
-    s.login()
-    m = ed_session(s, [("ed", ""), ("a", "")]
-                   + ed_input(["d"] * OVERSIZED_LINE_COUNT)
-                   + [(".", "?\n"), ("h", "out of memory\n"),
-                      ("$=", re.compile("(\\d+)\n")), ("Q", "")])
-    assert 0 < int(m.group(1)) < OVERSIZED_LINE_COUNT, m.group(1)
+    typed = ["t%03d" % n for n in range(1, OVERSIZED_LINE_COUNT + 1)]
+    ed_session(s, [("ed", ""), ("a", "")] + ed_input(typed)
+               + [(".", ""), ("$=", "%d\n" % OVERSIZED_LINE_COUNT),
+                  ("150p", "t150\n"), ("Q", "")])
     assert s.sh("echo still-alive") == "still-alive"
+    assert ll_names(s, "/tmp") == []
+
+
+def test_ed_reads_a_file_larger_than_the_heap_into_the_buffer(s):
+    s.login()
+    write_oversized_file(s)
+    s.restart_with_memory(small_memory_size(s))
+    s.login()
+    ed_session(s, [
+        ("ed /etc/issue", "13\n"),
+        ("r /etc/bigfile", "%d\n" % (8 * OVERSIZED_LINE_COUNT)),
+        ("$=", "%d\n" % (OVERSIZED_LINE_COUNT + 2)), ("3p", "big-001\n"),
+        ("$p", "big-%03d\n" % OVERSIZED_LINE_COUNT), ("Q", "")])
     assert ll_names(s, "/tmp") == []
 
 
