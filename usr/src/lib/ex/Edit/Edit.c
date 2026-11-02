@@ -50,8 +50,12 @@ static void exJoinLines(ExState *state) {
     }
   }
 
-  textstoreDeleteLines(&state->store, state->addr1 + 1, state->addr2);
-  textstoreSetLineOffset(&state->store, state->addr1, offset);
+  if (!exBeginChange(state)
+    || !exDeleteLines(state, state->addr1 + 1, state->addr2)
+    || !exSetLineOffset(state, state->addr1, offset)
+  ) {
+    return;
+  }
   state->current = state->addr1;
   state->modified = true;
 }
@@ -98,7 +102,11 @@ void* exEdit(void *args) {
 
     case 'd':
     case 'c':
-      textstoreDeleteLines(&state->store, state->addr1, state->addr2);
+      if (!exBeginChange(state)
+        || !exDeleteLines(state, state->addr1, state->addr2)
+      ) {
+        break;
+      }
       state->modified = true;
       state->current = (state->addr1 <= state->store.numLines)
         ? state->addr1 : state->store.numLines;
@@ -119,6 +127,12 @@ void* exEdit(void *args) {
         &bytesRead);
       if (state->store.numLines > numLines) {
         state->modified = true;
+        if (((command != 'c') && !exBeginChange(state))
+          || !exRecordLines(state, after + 1,
+            after + (state->store.numLines - numLines))
+        ) {
+          break;
+        }
       }
       if (last > after) {
         state->current = last;

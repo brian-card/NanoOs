@@ -103,6 +103,7 @@ static void exEditFile(ExState *state) {
     fclose(in);
     return;
   }
+  textstoreChainInit(&state->history);
   state->marks = 0;
 
   if (exReadFile(state, in, 0) < 0) {
@@ -128,6 +129,7 @@ static void exEditFile(ExState *state) {
 void* exStart(void *args) {
   ExState *state = (ExState*) args;
 
+  textstoreChainInit(&state->history);
   if (!textstoreOpen(&state->store, state->name)) {
     fprintf(stderr, "%s: cannot create %s\n", state->name, state->store.path);
     return args;
@@ -193,7 +195,9 @@ void* exFile(void *args) {
         return args;
       }
       int last = exReadFile(state, in, after);
-      if (last > after) {
+      if ((last > after)
+        && exBeginChange(state) && exRecordLines(state, after + 1, last)
+      ) {
         state->current = last;
       }
       return args;

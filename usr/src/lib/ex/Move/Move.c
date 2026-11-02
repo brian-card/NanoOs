@@ -48,6 +48,26 @@ static void exMoveLines(ExState *state) {
     return;
   }
 
+  // The undo history sees the move as the range deleted and inserted again.
+  int count = state->addr2 - state->addr1 + 1;
+  int base = (state->destination >= state->addr2)
+    ? state->destination - count : state->destination;
+  if (!exBeginChange(state)) {
+    return;
+  }
+  for (int pass = 0; pass < 2; pass++) {
+    for (int ii = 0; ii < count; ii++) {
+      uint32_t offset
+        = textstoreLineOffset(&state->store, state->addr1 + ii);
+      if ((state->store.error != EX_ERROR_NONE)
+        || !exRecord(state,
+          (pass == 0) ? EX_CHANGE_DELETE : EX_CHANGE_INSERT,
+          (pass == 0) ? state->addr1 : base + 1 + ii, offset)
+      ) {
+        return;
+      }
+    }
+  }
   textstoreMoveLines(&state->store,
     state->addr1, state->addr2, state->destination);
   state->current = (state->destination < state->addr1)
@@ -67,12 +87,15 @@ static void exMoveLines(ExState *state) {
 /// @return This function returns no value.
 static void exCopyLines(ExState *state) {
   int count = state->addr2 - state->addr1 + 1;
+  if (!exBeginChange(state)) {
+    return;
+  }
   for (int ii = 0; ii < count; ii++) {
     int source = state->addr1 + ii;
     if (source > state->destination) {
       source += ii;
     }
-    if (!textstoreInsertLine(&state->store, state->destination + ii,
+    if (!exInsertLine(state, state->destination + ii,
       textstoreLineOffset(&state->store, source))
     ) {
       if (ii > 0) {
