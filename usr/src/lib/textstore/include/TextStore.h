@@ -52,7 +52,7 @@ extern "C"
 /// @def TEXTSTORE_BUFFER_SIZE
 ///
 /// @brief The size, in bytes, of the buffer text is moved through.
-#define TEXTSTORE_BUFFER_SIZE 96
+#define TEXTSTORE_BUFFER_SIZE 88
 
 /// @def TEXTSTORE_BLOCK_LINES
 ///
@@ -68,7 +68,7 @@ extern "C"
 ///
 /// @brief The size, in bytes, of the area at the start of the block file that
 /// a client can keep its own data in.
-#define TEXTSTORE_HEADER_SIZE 128
+#define TEXTSTORE_HEADER_SIZE 192
 
 /// @enum TextStoreError
 ///
