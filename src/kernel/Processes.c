@@ -355,6 +355,7 @@ void* execOverlayCommand(void *args) {
   }
   // Input left unread by the slot's previous program isn't this one's.
   setProcessStorage(FGETS_CONSOLE_BUFFER_KEY, NULL);
+  setProcessStorage(STDOUT_BUFFER_KEY, NULL);
 
   FileDescriptor **fileDescriptors = processDescriptor->fileDescriptors;
   while (
@@ -399,6 +400,7 @@ void* execOverlayCommand(void *args) {
       returnValue = -EOTHER;
     }
   } while (0);
+  nanoOsCloseStdout();
   processDescriptor->exitStatus
     = (returnValue < 0) ? 255 : (uint8_t) returnValue;
   processDescriptor->exitSignal = 0;
@@ -497,7 +499,9 @@ void* runBlockOverlay(void *args) {
     logError("No main function in block overlay\n");
     return (void*) ((intptr_t) -1);
   }
-  return main(blockOverlayArgs.args);
+  void *returnValue = main(blockOverlayArgs.args);
+  nanoOsCloseStdout();
+  return returnValue;
 }
 
 /// @fn IpcCapability* ipcCapabilitySearch(
