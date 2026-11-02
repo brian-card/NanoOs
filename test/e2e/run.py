@@ -23,6 +23,7 @@ import time
 
 import pexpect
 
+from vtscreen import VtScreen
 from fakevdp import (FakeVdp, KEYCODE_CAPSLOCK, KEYCODE_DELETE, KEYCODE_DOWN,
                      KEYCODE_END, KEYCODE_HOME, KEYCODE_LEFT, KEYCODE_NUMLOCK,
                      KEYCODE_RIGHT, KEYCODE_UP, KEYSTATE, LED_CAPS_LOCK,
@@ -937,6 +938,228 @@ def test_vdp_console_moves_the_cursor_and_erases_to_the_end_of_the_line(s):
     vdp.type("\r")
     vdp.expect(PROMPT + r"$")
     assert vdp.errors == [], f"unexpected VDU commands: {vdp.errors}"
+
+
+class ViTerminal:
+    """Run vi in a Session and keep a VtScreen of what it draws."""
+
+    def __init__(self, s, command, rows=24, columns=80):
+        """Start a command that draws on the screen.
+
+        @param s The Session, logged in.
+        @param command The command line to run.
+        @param rows The number of rows of the screen model.
+        @param columns The number of columns of the screen model.
+        """
+        self.s = s
+        self.screen = VtScreen(rows, columns)
+        self.output = ""
+        s.child.delaybeforesend = None
+        s.child.sendline(command)
+
+    def _pump(self, timeout):
+        try:
+            data = self.s.child.read_nonblocking(4096, timeout)
+        except pexpect.TIMEOUT:
+            return
+        self.output += data
+        self.screen.feed(data)
+
+    def wait(self, check, timeout=15):
+        """Read output until the screen passes a check.
+
+        @param check A function that takes the VtScreen and returns whether
+          it shows what is wanted.
+        @param timeout Seconds to wait.
+        """
+        deadline = time.time() + timeout
+        while not check(self.screen):
+            if time.time() > deadline:
+                raise AssertionError("screen never matched:\n%s" % self.screen)
+            self._pump(0.1)
+
+    def wait_lines(self, expected, timeout=15):
+        """Read output until the screen's top rows are exactly some lines.
+
+        @param expected The text of the rows, from the top.
+        @param timeout Seconds to wait.
+        """
+        self.wait(lambda screen: screen.lines()[:len(expected)] == expected,
+                  timeout)
+
+    def wait_status(self, text, timeout=15):
+        """Read output until the status line is exactly some text.
+
+        @param text The text.
+        @param timeout Seconds to wait.
+        """
+        self.wait(lambda screen: screen.line(screen.rows - 1) == text, timeout)
+
+    def keys(self, text):
+        """Type keys.
+
+        @param text The keys.
+        """
+        self.s.child.send(text)
+
+    def wait_exit(self, timeout=15):
+        """Read output until the shell's prompt follows vi's output."""
+        deadline = time.time() + timeout
+        while not re.search(PROMPT + "$", self.output):
+            if time.time() > deadline:
+                raise AssertionError("vi never exited:\n%s" % self.screen)
+            self._pump(0.1)
+
+
+def vi_lines(texts, rows=24):
+    """Return the rows vi shows for some lines on a screen with no wrapping.
+
+    @param texts The lines.
+    @param rows The number of rows on the screen.
+    """
+    return list(texts) + ["~"] * (rows - 1 - len(texts))
+
+
+def test_vi_creates_a_file(s):
+    s.login()
+    vi = ViTerminal(s, "vi /etc/new.txt")
+    vi.wait_status('"/etc/new.txt" [New File]')
+    vi.wait_lines(vi_lines([""]))
+    vi.keys("ihello")
+    vi.wait_lines(["hello"])
+    assert vi.screen.line(23) == "-- INSERT --"
+    vi.keys("\x1b")
+    vi.wait_status("")
+    vi.keys(":wq\r")
+    vi.wait_exit()
+    assert s.sh("cat /etc/new.txt") == "hello"
+
+
+def test_vi_deletes_yanks_and_puts_lines(s):
+    s.login()
+    vi = ViTerminal(s, "vi /etc/lines.txt")
+    vi.wait_status('"/etc/lines.txt" [New File]')
+    vi.keys("ione\rtwo\rthree\x1b")
+    vi.wait_lines(vi_lines(["one", "two", "three"]))
+    vi.keys("kdd")
+    vi.wait_lines(vi_lines(["one", "three"]))
+    vi.keys("p")
+    vi.wait_lines(vi_lines(["one", "three", "two"]))
+    vi.keys("kkyyjP")
+    vi.wait_lines(vi_lines(["one", "one", "three", "two"]))
+    vi.keys("jjx")
+    vi.wait_lines(vi_lines(["one", "one", "three", "wo"]))
+    vi.keys("$xx")
+    vi.wait_lines(vi_lines(["one", "one", "three", ""]))
+    vi.keys("dd")
+    vi.wait_lines(vi_lines(["one", "one", "three"]))
+    vi.keys(":w\r")
+    vi.wait_status('"/etc/lines.txt" 3L, 14C written')
+    vi.keys(":q\r")
+    vi.wait_exit()
+    assert s.sh("cat /etc/lines.txt") == "one\none\nthree"
+
+
+def test_vi_splits_and_edits_lines_in_insert_mode(s):
+    s.login()
+    vi = ViTerminal(s, "vi /etc/split.txt")
+    vi.wait_status('"/etc/split.txt" [New File]')
+    vi.keys("iabcdef\x1b")
+    vi.wait_lines(["abcdef"])
+    vi.keys("hhi\r\x1b")
+    vi.wait_lines(vi_lines(["abc", "def"]))
+    vi.keys("A\x7f\x7fX\x1bkIY\x1bOtop\x1bjoend\x1b")
+    vi.wait_lines(vi_lines(["top", "Yabc", "end", "dX"]))
+    vi.keys(":wq\r")
+    vi.wait_exit()
+    assert s.sh("cat /etc/split.txt") == "top\nYabc\nend\ndX"
+
+
+def test_vi_guards_unsaved_changes(s):
+    s.login()
+    vi = ViTerminal(s, "vi /etc/unsaved.txt")
+    vi.wait_status('"/etc/unsaved.txt" [New File]')
+    vi.keys("ix\x1b:q\r")
+    vi.wait_status("No write since last change (add ! to override)")
+    vi.keys(":qq\r")
+    vi.wait_status("Trailing characters")
+    vi.keys(":e\r")
+    vi.wait_status("Not an editor command")
+    vi.keys(":q!\r")
+    vi.wait_exit()
+    assert "unsaved.txt" not in ll_names(s, "/etc")
+
+
+def test_vi_wraps_long_lines_and_expands_tabs(s):
+    s.login()
+    long_line = "".join(chr(ord("a") + n % 26) for n in range(100))
+    vi = ViTerminal(s, "vi /etc/wrap.txt")
+    vi.wait_status('"/etc/wrap.txt" [New File]')
+    vi.keys("i" + long_line + "\rx\tyz\x1b")
+    vi.wait_lines(vi_lines([long_line[:80], long_line[80:], "x       yz"]))
+    vi.keys("k$x")
+    vi.wait_lines(vi_lines([long_line[:80], long_line[80:99],
+                            "x       yz"]))
+    vi.keys(":q!\r")
+    vi.wait_exit()
+
+
+def test_vi_scrolls_to_keep_the_cursor_on_the_screen(s):
+    s.login()
+    lines = ["line%02d" % n for n in range(1, 31)]
+    vi = ViTerminal(s, "vi /etc/scroll.txt")
+    vi.wait_status('"/etc/scroll.txt" [New File]')
+    vi.keys("i" + "\r".join(lines) + "\x1b")
+    vi.wait_lines(lines[7:30])
+    vi.keys(":w\r")
+    vi.wait_status('"/etc/scroll.txt" 30L, 210C written')
+    vi.keys("k" * 29)
+    vi.wait_lines(lines[0:23])
+    vi.keys("j" * 23)
+    vi.wait_lines(lines[1:24])
+    vi.keys(":q\r")
+    vi.wait_exit()
+
+
+def test_vi_edits_a_file_larger_than_the_heap(s):
+    s.login()
+    lines = write_oversized_file(s)
+    s.restart_with_memory(small_memory_size(s))
+    s.login()
+    vi = ViTerminal(s, "vi /etc/bigfile")
+    vi.wait_status('"/etc/bigfile" %dL, %dC' % (len(lines), 8 * len(lines)))
+    vi.wait_lines(lines[:23])
+    vi.keys("j" * 29 + "dd")
+    del lines[29]
+    vi.wait_lines(lines[7:30])
+    vi.keys("x:wq\r")
+    lines[29] = lines[29][1:]
+    vi.wait_exit()
+    assert s.sh("cat /etc/bigfile", timeout=30) == "\n".join(lines)
+    assert ll_names(s, "/tmp") == []
+
+
+def test_vi_redraws_for_a_resize_report(s):
+    s.login()
+    vi = ViTerminal(s, "vi /etc/resize.txt")
+    vi.wait_status('"/etc/resize.txt" [New File]')
+    vi.keys("iabcdefghij\x1b")
+    vi.wait_lines(["abcdefghij"])
+    # A report sent within the escape delay would join the Escape key's input.
+    vi.wait_status("")
+    vi.keys("\x1b[48;6;4;0;0t")
+    vi.wait_lines(["abcd", "efgh", "ij", "~", "~"])
+    vi.keys("A")
+    vi.wait(lambda screen: screen.line(5) == "-- INSERT --")
+    vi.keys("k")
+    vi.wait_lines(["abcd", "efgh", "ijk"])
+    vi.keys("\x1b[48;24;80;0;0t")
+    vi.wait(lambda screen: screen.line(23) == "-- INSERT --")
+    vi.wait_lines(vi_lines(["abcdefghijk"]))
+    vi.keys("l")
+    vi.wait_lines(vi_lines(["abcdefghijkl"]))
+    vi.keys("\x1b:q!\r")
+    vi.wait_exit()
 
 
 def test_vdp_line_editor_redraws_the_line(s):

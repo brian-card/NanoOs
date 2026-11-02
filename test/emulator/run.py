@@ -417,6 +417,20 @@ def test_ed_writes_a_new_file(e):
     assert e.sh("cat /etc/ed.txt") == "one\ntwo\nthree"
 
 
+def test_vi_edits_and_writes_a_file(e):
+    e.send("vi /etc/vi.txt\r")
+    e.child.expect(r'"/etc/vi.txt" \[New File\]', timeout=20)
+    e.send("ione\rtwo\rthree\x1b")
+    time.sleep(1)
+    e.send("kddp")
+    time.sleep(1)
+    e.send("kkx")
+    time.sleep(1)
+    e.send(":wq\r")
+    e.child.expect(PROMPT, timeout=30)
+    assert e.sh("cat /etc/vi.txt") == "ne\nthree\ntwo"
+
+
 def test_scripts_run_by_path_and_with_mush(e):
     e.send("ed\r")
     for line in ("a", "echo s1", "cd /usr", "echo s2", "pwd", "."):
@@ -588,6 +602,7 @@ TESTS = [test_boots_to_a_login_prompt,
          test_mv_moves_a_command_into_its_directory,
          test_directories_grow_past_their_first_cluster,
          test_ed_writes_a_new_file,
+         test_vi_edits_and_writes_a_file,
          test_scripts_run_by_path_and_with_mush,
          test_variables_and_exit_status_expand,
          test_dirtest_reports_entry_types,
