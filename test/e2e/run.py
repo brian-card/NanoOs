@@ -1353,6 +1353,34 @@ def test_vi_runs_ex_commands(s):
     assert s.sh("cat /etc/exa.txt") == "threefour\nive\none"
 
 
+def test_vi_repeats_the_last_change_with_dot(s):
+    s.login()
+    vi_file(s, "/etc/dot.txt", ["one two three", "four five", "six", "seven"])
+    vi = ViTerminal(s, "vi /etc/dot.txt")
+    vi.wait_status('"/etc/dot.txt" 4L, 34C')
+    vi.keys("dw.")
+    vi.wait_lines(vi_lines(["three", "four five", "six", "seven"]))
+    vi.keys("j2x.")
+    vi.wait_lines(vi_lines(["three", " five", "six", "seven"]))
+    # A count given to . replaces the change's count for later repeats too.
+    vi.keys("1..")
+    vi.wait_lines(vi_lines(["three", "ive", "six", "seven"]))
+    vi.keys("jA!\x1bj.")
+    vi.wait_lines(vi_lines(["three", "ive", "six!", "seven!"]))
+    vi.keys("ggcwONE\x1bj0.")
+    vi.wait_lines(vi_lines(["ONE", "ONE", "six!", "seven!"]))
+    vi.keys("Gonew\x1b.")
+    vi.wait_lines(vi_lines(["ONE", "ONE", "six!", "seven!", "new", "new"]))
+    # Text inserted across a Return can't be repeated.
+    vi.keys("ia\rb\x1b.")
+    vi.wait_lines(vi_lines(["ONE", "ONE", "six!", "seven!", "new", "nea",
+                            "bw"]))
+    vi.keys(":wq\r")
+    vi.wait_exit()
+    assert s.sh("cat /etc/dot.txt") == \
+        "ONE\nONE\nsix!\nseven!\nnew\nnea\nbw"
+
+
 def test_vi_inserts_a_control_character_typed_after_ctrl_v(s):
     s.login()
     vi = ViTerminal(s, "vi /etc/ctrlv.txt")
