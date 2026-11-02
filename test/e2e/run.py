@@ -1083,8 +1083,10 @@ def test_vi_guards_unsaved_changes(s):
     vi.wait_status("No write since last change (add ! to override)")
     vi.keys(":qq\r")
     vi.wait_status("Trailing characters")
-    vi.keys(":e\r")
+    vi.keys(":z\r")
     vi.wait_status("Not an editor command")
+    vi.keys(":e\r")
+    vi.wait_status("No write since last change (add ! to override)")
     vi.keys(":q!\r")
     vi.wait_exit()
     assert "unsaved.txt" not in ll_names(s, "/etc")
@@ -1172,6 +1174,215 @@ def test_vi_undoes_and_redoes_whole_changes(s):
     vi.keys(":wq\r")
     vi.wait_exit()
     assert s.sh("cat /etc/undo.txt") == "one\nwo\nthree"
+
+
+def vi_file(s, path, lines):
+    """Write a file for vi to edit.
+
+    @param s The Session, logged in.
+    @param path The file's path.
+    @param lines The file's lines.
+    """
+    size = sum(len(line) + 1 for line in lines)
+    ed_session(s, [("ed", ""), ("a", "")] + ed_input(lines)
+               + [(".", ""), ("w " + path, "%d\n" % size), ("q", "")])
+
+
+def test_vi_moves_by_words_lines_and_counts(s):
+    s.login()
+    vi_file(s, "/etc/words.txt", ["one two three four", "five six", "seven"])
+    vi = ViTerminal(s, "vi /etc/words.txt")
+    vi.wait_status('"/etc/words.txt" 3L, 34C')
+    vi.keys("wx")
+    vi.wait_lines(vi_lines(["one wo three four", "five six", "seven"]))
+    vi.keys("2wx")
+    vi.wait_lines(vi_lines(["one wo three our", "five six", "seven"]))
+    vi.keys("bx")
+    vi.wait_lines(vi_lines(["one wo hree our", "five six", "seven"]))
+    vi.keys("ex")
+    vi.wait_lines(vi_lines(["one wo hre our", "five six", "seven"]))
+    vi.keys("0x$x")
+    vi.wait_lines(vi_lines(["ne wo hre ou", "five six", "seven"]))
+    vi.keys("wx")
+    vi.wait_lines(vi_lines(["ne wo hre ou", "ive six", "seven"]))
+    vi.keys("3x")
+    vi.wait_lines(vi_lines(["ne wo hre ou", " six", "seven"]))
+    vi.keys("^x")
+    vi.wait_lines(vi_lines(["ne wo hre ou", " ix", "seven"]))
+    vi.keys("Gx")
+    vi.wait_lines(vi_lines(["ne wo hre ou", " ix", "even"]))
+    vi.keys("ggx")
+    vi.wait_lines(vi_lines(["e wo hre ou", " ix", "even"]))
+    vi.keys("2Gx")
+    vi.wait_lines(vi_lines(["e wo hre ou", " x", "even"]))
+    vi.keys("Lx")
+    vi.wait_lines(vi_lines(["e wo hre ou", " x", "ven"]))
+    vi.keys("Hx")
+    vi.wait_lines(vi_lines([" wo hre ou", " x", "ven"]))
+    vi.keys("\rx-X")
+    vi.wait_lines(vi_lines(["wo hre ou", "", "ven"]))
+    vi.keys(":q!\r")
+    vi.wait_exit()
+
+
+def test_vi_runs_operators_over_motions(s):
+    s.login()
+    vi_file(s, "/etc/ops.txt",
+            ["alpha beta gamma", "delta epsilon", "zeta eta", "theta"])
+    vi = ViTerminal(s, "vi /etc/ops.txt")
+    vi.wait_status('"/etc/ops.txt" 4L, 46C')
+    vi.keys("dw")
+    vi.wait_lines(vi_lines(["beta gamma", "delta epsilon", "zeta eta",
+                            "theta"]))
+    # cw changes only the word, not the blank after it.
+    vi.keys("cwBETA\x1b")
+    vi.wait_lines(vi_lines(["BETA gamma", "delta epsilon", "zeta eta",
+                            "theta"]))
+    vi.keys("jD")
+    vi.wait_lines(vi_lines(["BETA gamma", "del", "zeta eta", "theta"]))
+    vi.keys("0ye$p")
+    vi.wait_lines(vi_lines(["BETA gamma", "deldel", "zeta eta", "theta"]))
+    vi.keys("jdj")
+    vi.wait_lines(vi_lines(["BETA gamma", "deldel"]))
+    vi.keys("kyjGp")
+    vi.wait_lines(vi_lines(["BETA gamma", "deldel", "BETA gamma",
+                            "deldel"]))
+    vi.keys("3GccNEW\x1b")
+    vi.wait_lines(vi_lines(["BETA gamma", "deldel", "NEW", "deldel"]))
+    vi.keys("0C new\x1b")
+    vi.wait_lines(vi_lines(["BETA gamma", "deldel", " new", "deldel"]))
+    vi.keys("ggdG")
+    vi.wait_lines(vi_lines([""]))
+    vi.keys("u")
+    vi.wait_lines(vi_lines(["BETA gamma", "deldel", " new", "deldel"]))
+    vi.keys("3G2dd")
+    vi.wait_lines(vi_lines(["BETA gamma", "deldel"]))
+    vi.keys(":wq\r")
+    vi.wait_exit()
+    assert s.sh("cat /etc/ops.txt") == "BETA gamma\ndeldel"
+
+
+def test_vi_repeats_puts_and_operators_with_counts(s):
+    s.login()
+    vi = ViTerminal(s, "vi /etc/counts.txt")
+    vi.wait_status('"/etc/counts.txt" [New File]')
+    vi.keys("iab\x1b")
+    vi.wait_lines(vi_lines(["ab"]))
+    vi.keys("yl3p")
+    vi.wait_lines(vi_lines(["abbbb"]))
+    vi.keys("yy2p")
+    vi.wait_lines(vi_lines(["abbbb", "abbbb", "abbbb"]))
+    vi.keys("2yyP")
+    vi.wait_lines(vi_lines(["abbbb", "abbbb", "abbbb", "abbbb", "abbbb"]))
+    vi.keys("ggd2j")
+    vi.wait_lines(vi_lines(["abbbb", "abbbb"]))
+    vi.keys("9dd")
+    vi.wait_lines(vi_lines([""]))
+    vi.keys("ixyz\x1b0y$2P")
+    vi.wait_lines(vi_lines(["xyzxyzxyz"]))
+    vi.keys(":q!\r")
+    vi.wait_exit()
+
+
+def test_vi_searches_marks_replaces_and_joins(s):
+    s.login()
+    vi_file(s, "/etc/find.txt", ["apple", "banana", "cherry", "banana split"])
+    vi = ViTerminal(s, "vi /etc/find.txt")
+    vi.wait_status('"/etc/find.txt" 4L, 33C')
+    vi.keys("n")
+    vi.wait_status("No previous search pattern")
+    vi.keys("/ana\r")
+    vi.keys("x")
+    vi.wait_lines(vi_lines(["apple", "bnana", "cherry", "banana split"]))
+    vi.keys("nrX")
+    vi.wait_lines(vi_lines(["apple", "bnXna", "cherry", "banana split"]))
+    vi.keys("nx")
+    vi.wait_lines(vi_lines(["apple", "bnXna", "cherry", "bnana split"]))
+    vi.keys("?err\rx")
+    vi.wait_lines(vi_lines(["apple", "bnXna", "chrry", "bnana split"]))
+    vi.keys("/zzz\r")
+    vi.wait_status("Pattern not found")
+    vi.keys("ma'b")
+    vi.wait_status("Mark not set")
+    vi.keys("gg'aJ")
+    vi.wait_lines(vi_lines(["apple", "bnXna", "chrry bnana split"]))
+    vi.keys("gg2J")
+    vi.wait_lines(vi_lines(["apple bnXna", "chrry bnana split"]))
+    # ? searches backward, and N the other way.
+    vi.keys("G?a\rx")
+    vi.wait_lines(vi_lines(["apple bnXn", "chrry bnana split"]))
+    vi.keys("Nx")
+    vi.wait_lines(vi_lines(["apple bnXn", "chrry bnna split"]))
+    vi.keys("ZZ")
+    vi.wait_exit()
+    assert s.sh("cat /etc/find.txt") == "apple bnXn\nchrry bnna split"
+
+
+def test_vi_runs_ex_commands(s):
+    s.login()
+    vi_file(s, "/etc/exa.txt", ["one", "two", "three"])
+    vi_file(s, "/etc/exb.txt", ["four", "five"])
+    vi = ViTerminal(s, "vi /etc/exa.txt")
+    vi.wait_status('"/etc/exa.txt" 3L, 14C')
+    vi.keys(":2\rx")
+    vi.wait_lines(vi_lines(["one", "wo", "three"]))
+    vi.keys(":1t$\r")
+    vi.wait_lines(vi_lines(["one", "wo", "three", "one"]))
+    vi.keys(":1,2d\r")
+    vi.wait_lines(vi_lines(["three", "one"]))
+    vi.keys(":r /etc/exb.txt\r")
+    vi.wait_lines(vi_lines(["three", "four", "five", "one"]))
+    vi.keys("x")
+    vi.wait_lines(vi_lines(["three", "four", "ive", "one"]))
+    vi.keys(":1,2j\r")
+    vi.wait_lines(vi_lines(["threefour", "ive", "one"]))
+    vi.keys(":x\r")
+    vi.wait_exit()
+    assert s.sh("cat /etc/exa.txt") == "threefour\nive\none"
+    vi = ViTerminal(s, "vi /etc/exa.txt")
+    vi.wait_status('"/etc/exa.txt" 3L, 18C')
+    vi.keys("x:e /etc/exb.txt\r")
+    vi.wait_status("No write since last change (add ! to override)")
+    vi.keys(":e! /etc/exb.txt\r")
+    vi.wait_status('"/etc/exb.txt" 2L, 10C')
+    vi.wait_lines(vi_lines(["four", "five"]))
+    vi.keys("p")
+    vi.keys("Gx:x\r")
+    vi.wait_exit()
+    assert s.sh("cat /etc/exb.txt") == "four\nive"
+    assert s.sh("cat /etc/exa.txt") == "threefour\nive\none"
+
+
+def test_vi_inserts_a_control_character_typed_after_ctrl_v(s):
+    s.login()
+    vi = ViTerminal(s, "vi /etc/ctrlv.txt")
+    vi.wait_status('"/etc/ctrlv.txt" [New File]')
+    vi.keys("ia\x16\x01b\x16\x1bc\x1b")
+    vi.wait_lines(vi_lines(["a^Ab^[c"]))
+    vi.keys(":wq\r")
+    vi.wait_exit()
+    assert s.sh("cat /etc/ctrlv.txt") == "a\x01b\x1bc"
+
+
+def test_vi_pages_and_moves_within_the_screen(s):
+    s.login()
+    lines = ["line%02d" % n for n in range(1, 61)]
+    vi = ViTerminal(s, "vi /etc/pages.txt")
+    vi.wait_status('"/etc/pages.txt" [New File]')
+    vi.keys("i" + "\r".join(lines) + "\x1b")
+    vi.wait_lines(lines[37:60])
+    vi.keys("gg")
+    vi.wait_lines(lines[0:23])
+    vi.keys("\x06")
+    vi.wait_lines(lines[22:45])
+    vi.keys("Mx")
+    vi.wait_lines(lines[22:33] + ["ine34"] + lines[34:45])
+    vi.keys("\x02")
+    vi.wait_lines(lines[0:23])
+    vi.keys("Lx")
+    vi.wait_lines(lines[0:22] + ["ine23"])
+    vi.keys(":q!\r")
+    vi.wait_exit()
 
 
 def test_vi_redraws_for_a_resize_report(s):
