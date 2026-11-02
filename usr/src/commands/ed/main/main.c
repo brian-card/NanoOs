@@ -82,6 +82,8 @@ static const char *const edErrorMessages[NUM_EX_ERRORS] = {
   "warning: buffer modified",
   "invalid mark",
   "invalid destination",
+  "nothing to undo",
+  "nothing to undo",
 };
 
 /// @fn static bool edReadCommand(EdState *state)
@@ -266,6 +268,18 @@ static void edRunCommand(EdState *state) {
       edCallOverlay(state, "File", "exFile");
       break;
 
+    case 'u':
+      if ((state->ex.numAddresses != 0) || (state->ex.params != NULL)) {
+        state->ex.store.error = EX_ERROR_SUFFIX;
+        break;
+      }
+      // A u right after a u redoes what it undid.
+      state->ex.command = state->ex.undone ? 'r' : 'u';
+      edCallOverlay(state, "Undo", "exUndo");
+      state->ex.undone = (state->ex.store.error == EX_ERROR_NONE)
+        && !state->ex.undone;
+      break;
+
     case 'w':
     case 'W':
       edCallOverlay(state, "Write", "exWrite");
@@ -322,6 +336,7 @@ static void printUsage(FILE *stream) {
     "  f file    set or show the file name\n"
     "  h, H      explain the last error (H turns explanations on or off)\n"
     "  P         turn the * prompt on or off\n"
+    "  u         undo the last change, or redo it after a u\n"
     "  q, Q      quit (Q discards unsaved changes)\n"
     "  (newline) print the next line\n"
     "\n"
