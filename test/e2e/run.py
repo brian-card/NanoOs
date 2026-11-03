@@ -125,13 +125,17 @@ class Session:
         self.child.expect(r"Using (\d+) bytes of dynamic memory", timeout=15)
         return int(self.child.match.group(1))
 
-    def restart_with_file(self, path, text):
-        """Write a file into this session's image and boot again."""
+    def write_file(self, path, text):
+        """Stop the simulator and write a file into this session's image."""
         if self.child.isalive():
             self.child.terminate(force=True)
         subprocess.run(["mcopy", "-o", "-i", self.img_copy + "@@2097152", "-",
                         "::" + path], input=text.encode(),
                        env=dict(os.environ, MTOOLS_SKIP_CHECK="1"), check=True)
+
+    def restart_with_file(self, path, text):
+        """Write a file into this session's image and boot again."""
+        self.write_file(path, text)
         self.spawn([self.img_copy])
 
     def restart_with_config_sys(self, text):
@@ -1094,6 +1098,16 @@ class ViTerminal:
         """
         self.s.child.send(text)
 
+    def settle(self, quiet=0.5):
+        """Read output until none arrives for a while.
+
+        @param quiet Seconds without output that count as settled.
+        """
+        length = -1
+        while length != len(self.output):
+            length = len(self.output)
+            self._pump(quiet)
+
     def wait_exit(self, timeout=15):
         """Read output until the shell's prompt follows vi's output."""
         deadline = time.time() + timeout
@@ -1110,6 +1124,184 @@ def vi_lines(texts, rows=24):
     @param rows The number of rows on the screen.
     """
     return list(texts) + ["~"] * (rows - 1 - len(texts))
+
+
+def vi_rows(lines, rows, columns):
+    """Return the text rows vi shows for lines from the top of the screen.
+
+    @param lines The lines, from the one at the top.
+    @param rows The number of rows on the screen, with the status line.
+    @param columns The number of columns on the screen.
+    """
+    shown = []
+    for line in lines:
+        line = line.expandtabs(8)
+        shown += [line[at:at + columns].rstrip()
+                  for at in range(0, len(line), columns)] or [""]
+    return (shown + ["~"] * rows)[:rows - 1]
+
+
+def vi_row_lines(rows, columns):
+    """Return a file's lines for vi_replaces_rows:  enough to fill the screen
+    and more, with every fourth line wrapping onto two rows and a | in its
+    middle, and line 9 one column longer than a row.  The wrapped lines are
+    mostly tabs, so that they are short enough to edit and to join.
+
+    @param rows The number of rows on the screen.
+    @param columns The number of columns on the screen.
+    """
+    lines = []
+    for n in range(1, rows + 12):
+        if n == 9:
+            lines.append(("w%02d" % n).ljust(columns + 1, "w"))
+        elif n % 4 == 3:
+            tabs = (columns * 3) // 32
+            lines.append("L%02d" % n + "\t" * tabs + "|"
+                         + "+" * (columns - tabs * 8 + 16))
+        else:
+            lines.append("line%02d" % n)
+    return lines
+
+
+def vi_replaces_rows(show, lines):
+    """Check the screen after each command that adds, removes, or changes
+    lines in the middle of it, with wrapped lines above and below.
+
+    @param show A function that types keys at vi, then waits until its text
+      rows show a list of lines from the top.
+    @param lines The file's lines, from vi_row_lines, which vi is showing
+      from the first with the cursor on it.
+
+    @return The lines after the last command, which leaves the cursor on the
+    last of them.
+    """
+    lines = list(lines)
+
+    def find(prefix):
+        return next(n for n, line in enumerate(lines)
+                    if line.startswith(prefix))
+
+    lines[5:5] = ["new"]
+    show("5Gonew\x1b", lines)
+    lines[4:4] = ["above"]
+    show("5GOabove\x1b", lines)
+    lines[1:2] = ["li", "ne02"]
+    show("2G0lli\r\x1b", lines)
+    at = find("L03")
+    middle = lines[at].index("|")
+    lines[at:at + 1] = [lines[at][:middle], lines[at][middle:]]
+    show("%dG0/|\ri\r\x1b" % (at + 1), lines)
+    at = find("L07")
+    lines[at + 1:at + 1] = [lines[at]]
+    show("%dGyyp" % (at + 1), lines)
+    lines[3:3] = [lines[3]] * 2
+    show("4Gyy2P", lines)
+    at = find("L07")
+    del lines[at + 1]
+    show("%dGdd" % (at + 2), lines)
+    del lines[at - 1:at + 2]
+    show("%dG3dd" % at, lines)
+    at = find("L11")
+    lines[at - 1:at + 1] = [lines[at - 1] + " " + lines[at]]
+    show("%dGJ" % at, lines)
+    at = find("w09")
+    lines[at] = lines[at][:-1]
+    show("%dG$x" % (at + 1), lines)
+    lines[at] += "w"
+    show("p", lines)
+    removed = lines[1:4]
+    del lines[1:4]
+    show(":2,4d\r", lines)
+    lines[1:1] = removed
+    show("u", lines)
+    del lines[12:]
+    show("13GdG", lines)
+    del lines[11:]
+    show("dd", lines)
+    del lines[8:]
+    show(":9,$d\r", lines)
+    return lines
+
+
+def vi_written(name, lines):
+    """Return the status vi shows after writing lines to a file.
+
+    @param name The file's name.
+    @param lines The lines.
+    """
+    return '"%s" %dL, %dC written' % (
+        name, len(lines), sum(len(line) + 1 for line in lines))
+
+
+def test_vi_replaces_only_the_rows_that_change(s):
+    lines = vi_row_lines(24, 80)
+    s.restart_with_file("/etc/rows.txt", "".join(l + "\n" for l in lines))
+    s.login()
+    vi = ViTerminal(s, "vi /etc/rows.txt")
+    vi.wait_lines(vi_rows(lines, 24, 80))
+
+    def show(keys, expected):
+        vi.keys(keys)
+        vi.wait_lines(vi_rows(expected, 24, 80))
+
+    lines = vi_replaces_rows(show, lines)
+    written = vi_written("/etc/rows.txt", lines)
+    vi.keys(":w\r")
+    vi.wait_status(written)
+    # Moving the rows below a change never moves the status line.
+    vi.keys("kdd")
+    del lines[-2]
+    vi.wait_lines(vi_rows(lines, 24, 80))
+    assert vi.screen.line(23) == written, str(vi.screen)
+    vi.keys(":q!\r")
+    vi.wait_exit()
+
+
+def test_vi_replaces_only_the_rows_that_change_on_the_vdp(s):
+    lines = vi_row_lines(60, 106)
+    s.write_file("/etc/rows.txt", "".join(l + "\n" for l in lines))
+    vdp = s.restart_with_vdp()
+    vdp_login(vdp)
+    rows, columns = vdp.grid_rows, vdp.grid_columns
+    assert (rows, columns) == (60, 106)
+
+    def show(keys, expected):
+        vdp.type(keys)
+        vdp.wait_grid(lambda grid:
+                      grid[:rows - 1] == vi_rows(expected, rows, columns))
+
+    show("vi /etc/rows.txt\r", lines)
+    vi_replaces_rows(show, lines)
+    vdp.type(":q!\r")
+    vdp.expect(PROMPT)
+    assert vdp.errors == [], f"unexpected VDU commands: {vdp.errors}"
+
+
+def test_vi_writes_only_the_changed_rows_for_a_return(s):
+    lines = ["line%02d" % n for n in range(1, 41)]
+    s.restart_with_file("/etc/ret.txt", "".join(l + "\n" for l in lines))
+    s.login()
+    vi = ViTerminal(s, "vi /etc/ret.txt")
+    vi.wait_lines(vi_lines(lines[:23]))
+
+    def written(keys, expected):
+        vi.settle()
+        start = len(vi.output)
+        vi.keys(keys)
+        vi.wait_lines(expected)
+        vi.settle()
+        return vi.output[start:]
+
+    vi.keys("10G")
+    redraw = written("\x0c", vi_lines(lines[:23]))
+    vi.keys("A")
+    vi.wait_status("-- INSERT --")
+    lines[10:10] = [""]
+    split = written("\r", vi_lines(lines[:23]))
+    assert re.findall(r"line\d\d", split) == ["line10"], repr(split)
+    assert len(split) * 3 < len(redraw), (len(split), len(redraw))
+    vi.keys("\x1b:q!\r")
+    vi.wait_exit()
 
 
 def test_vi_creates_a_file(s):
