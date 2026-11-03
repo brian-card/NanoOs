@@ -472,10 +472,11 @@ OverlayFifoNode* overlayFifoGet(
   return overlayFifoNode;
 }
 
-/// @fn OverlayFifoNode* overlayFifoPush(
-///   OverlayFifo *overlayFifo, void *overlayId, uint8_t overlayIdLength)
+/// @fn OverlayFifoNode* overlayFifoPush(OverlayFifo *overlayFifo,
+///   void *overlayId, uint8_t overlayIdLength,
+///   const FileBlockMetadata *fileBlockMetadata)
 ///
-/// @brief Push an overlay into an overlay FIFO.
+/// @brief Push the overlay currently in overlayMap into an overlay FIFO.
 ///
 /// @param overlayFifo A pointer to an OverlayFifo to push the overlay onto.
 /// @param overlayId The full path to a file-based overlay or the block index of
@@ -484,6 +485,7 @@ OverlayFifoNode* overlayFifoGet(
 ///   overlayId parameter.  If this value is 0 then the overlayId in the FIFO
 ///   will be set with `=`, otherwise, the memory contents will be copied into
 ///   the node.  It may be at most OVERLAY_FIFO_ID_SIZE.
+/// @param fileBlockMetadata The location on disk of the overlay in overlayMap.
 ///
 /// @note As this is an implementation of an LRU cache, this function will evict
 /// the entry that's least-recently used if the FIFO is full in order to make
@@ -492,8 +494,9 @@ OverlayFifoNode* overlayFifoGet(
 ///
 /// @return Returns a pointer to the OverlayFifoNode used on success, NULL on
 /// failure.
-OverlayFifoNode* overlayFifoPush(
-  OverlayFifo *overlayFifo, void *overlayId, uint8_t overlayIdLength
+OverlayFifoNode* overlayFifoPush(OverlayFifo *overlayFifo,
+  void *overlayId, uint8_t overlayIdLength,
+  const FileBlockMetadata *fileBlockMetadata
 ) {
   if (overlayFifo == NULL) {
     errno = EINVAL;
@@ -563,12 +566,9 @@ setOverlayFifoNode:
 
   // The overlay is already loaded into the overlayMap pointer at the time this
   // function is called, so just copy it from there.
-  ProcessDescriptor *processDescriptor = getRunningProcess();
   memcpy(overlayFifoNode->memory, overlayMap,
-    processDescriptor->overlay.fileBlockMetadata.numBlocks
-    * processDescriptor->overlay.fileBlockMetadata.blockDevice->blockSize);
-  overlayFifoNode->fileBlockMetadata
-    = processDescriptor->overlay.fileBlockMetadata;
+    fileBlockMetadata->numBlocks * fileBlockMetadata->blockDevice->blockSize);
+  overlayFifoNode->fileBlockMetadata = *fileBlockMetadata;
 
   if (overlayIdLength == 0) {
     overlayFifoNode->overlayId = overlayId;
@@ -685,7 +685,8 @@ void* callOverlayFunctionFromFileCache(const void *od, const void *oo,
   ) {
     // Put ourselves back into the cache.
     overlayArray[0].overlayFifoNode = overlayFifoPush(
-      fileCache, overlayArray[0].overlayId, overlayArray[0].overlayIdLength);
+      fileCache, overlayArray[0].overlayId, overlayArray[0].overlayIdLength,
+      &overlayArray[0].fileBlockMetadata);
   }
 
   strcpy(overlayInfo, newOverlayDir);
@@ -731,10 +732,6 @@ loadAndCallFunction:
   if (schedulerReplaceOverlay(overlayDir, &overlayArray[1]) != 0) {
     logError("Could not load file overlay via the scheduler\n");
     goto freeOverlayInfo;
-  }
-  if (overlayArray[1].overlayFifoNode == NULL) {
-    runningProcess->overlay.overlayFifoNode = overlayFifoPush(
-      fileCache, overlayArray[1].overlayId, overlayArray[1].overlayIdLength);
   }
 
   // If we made it this far, then our new overlay has been successuflly loaded.
