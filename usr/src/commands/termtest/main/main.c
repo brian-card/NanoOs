@@ -28,7 +28,8 @@
 /// @file main.c
 ///
 /// @brief Test-fixture command for the e2e regression suite:  exercises
-/// tcgetwinsize and in-band resize reports.  Not a general-purpose utility,
+/// tcgetwinsize, in-band resize reports, and the terminal subset's erase,
+/// insert, and delete sequences.  Not a general-purpose utility,
 /// like dirtest, looseLoop, and tightLoop.
 
 #include <stdio.h>
@@ -47,6 +48,7 @@
 static void printUsage(FILE *stream) {
   fputs(
     "Usage: termtest size|report|leave|erase [row column]\n"
+    "       termtest insert|delete [row count]\n"
     "\n"
     "Exercise the terminal size functions.\n"
     "  size    Print the terminal's rows and columns.\n"
@@ -55,6 +57,10 @@ static void printUsage(FILE *stream) {
     "  leave   Turn on resize reports and exit without turning them off.\n"
     "  erase   Write abc at a row and column (3 and 5 if not given), erase\n"
     "          to the end of the line, then wait for a line of input.\n"
+    "  insert  Clear the screen, write a to e on rows 1 to 5 and z on the\n"
+    "          last row, insert count rows at a row (2 and 1 if not given),\n"
+    "          then wait for a line of input.\n"
+    "  delete  The same, deleting rows.\n"
     "\n"
     "Options:\n"
     "  --help  Show this help and exit.\n",
@@ -125,6 +131,16 @@ int main(int argc, char **argv) {
   } else if (((argc == 2) || (argc == 4)) && (strcmp(argv[1], "erase") == 0)) {
     printf("\033[%s;%sHabc\033[K",
       (argc == 4) ? argv[2] : "3", (argc == 4) ? argv[3] : "5");
+    char line[8];
+    fgets(line, sizeof(line), stdin);
+    return 0;
+  } else if (((argc == 2) || (argc == 4))
+    && ((strcmp(argv[1], "insert") == 0) || (strcmp(argv[1], "delete") == 0))
+  ) {
+    printf("\033[2J\033[Ha\r\nb\r\nc\r\nd\r\ne\033[999;1Hz"
+      "\033[%s;1H\033[%s%c",
+      (argc == 4) ? argv[2] : "2", (argc == 4) ? argv[3] : "1",
+      (argv[1][0] == 'i') ? 'L' : 'M');
     char line[8];
     fgets(line, sizeof(line), stdin);
     return 0;
