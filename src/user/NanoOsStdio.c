@@ -2275,23 +2275,19 @@ static size_t nanoOsRawKeyLength(const char *text, size_t textLength) {
   return MIN(textLength, length + 1);
 }
 
-/// @fn size_t nanoOsFread(void *ptr, size_t size, size_t nmemb, FILE *stream)
+/// @fn static size_t nanoOsFreadStdin(void *ptr, size_t size, size_t nmemb)
 ///
-/// @brief Custom implementation of fread for this library.
+/// @brief Read from stdin for nanoOsFread.  It is kept out of line so that a
+/// read from a file doesn't pay for this function's stack frame.
 ///
 /// @param ptr A pointer to the memory to read data into.
-/// @param size The size, in bytes, of each element that is to be read from the
-///   file.
-/// @param nmemb The number of elements that are to be read from the file.
-/// @param stream A pointer to the previously-opened file.
+/// @param size The size, in bytes, of each element to read.
+/// @param nmemb The number of elements to read.
 ///
-/// @return Returns the total number of objects successfully read from the
-/// file.
-size_t nanoOsFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
-  if (stream != stdin) {
-    return filesystemFRead(ptr, size, nmemb, stream);
-  }
-
+/// @return Returns the number of bytes read.
+static __attribute__((noinline)) size_t nanoOsFreadStdin(
+  void *ptr, size_t size, size_t nmemb
+) {
   // Reading stops at the end of input, after a newline, after one key from a
   // port that isn't in canonical mode, after an escape sequence, or when the
   // buffer is full.  Raw input that isn't read is kept for the next read.
@@ -2347,24 +2343,40 @@ size_t nanoOsFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   return numBytesReceived;
 }
 
-/// @fn size_t nanoOsFwrite(const void *ptr, size_t size, size_t nmemb,
-///   FILE *stream)
+/// @fn size_t nanoOsFread(void *ptr, size_t size, size_t nmemb, FILE *stream)
 ///
-/// @brief Write data to a previously-opened file or output stream.
+/// @brief Custom implementation of fread for this library.
 ///
-/// @param ptr A pointer to the memory to write data from.
-/// @param size The size, in bytes, of each element that is to be written to
-///   the file.
-/// @param nmemb The number of elements that are to be written to the file.
+/// @param ptr A pointer to the memory to read data into.
+/// @param size The size, in bytes, of each element that is to be read from the
+///   file.
+/// @param nmemb The number of elements that are to be read from the file.
 /// @param stream A pointer to the previously-opened file.
 ///
-/// @return Returns the total number of objects successfully written to the
+/// @return Returns the total number of objects successfully read from the
 /// file.
-size_t nanoOsFwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream) {
-  if ((stream != stdout) && (stream != stderr)) {
-    return filesystemFWrite(ptr, size, nmemb, stream);
+size_t nanoOsFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
+  if (stream != stdin) {
+    return filesystemFRead(ptr, size, nmemb, stream);
   }
+  return nanoOsFreadStdin(ptr, size, nmemb);
+}
 
+/// @fn static size_t nanoOsFwriteConsole(const void *ptr, size_t size,
+///   size_t nmemb, FILE *stream)
+///
+/// @brief Write to stdout or stderr for nanoOsFwrite.  It is kept out of line
+/// so that a write to a file doesn't pay for this function's stack frame.
+///
+/// @param ptr A pointer to the memory to write data from.
+/// @param size The size, in bytes, of each element to write.
+/// @param nmemb The number of elements to write.
+/// @param stream stdout or stderr.
+///
+/// @return Returns the number of elements written.
+static __attribute__((noinline)) size_t nanoOsFwriteConsole(
+  const void *ptr, size_t size, size_t nmemb, FILE *stream
+) {
   size_t length = size * nmemb;
   StdoutBuffer *stdoutBuffer = NULL;
   if (stream == stderr) {
@@ -2410,5 +2422,25 @@ size_t nanoOsFwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream) {
   }
 
   return bytesWritten / size;
+}
+
+/// @fn size_t nanoOsFwrite(const void *ptr, size_t size, size_t nmemb,
+///   FILE *stream)
+///
+/// @brief Write data to a previously-opened file or output stream.
+///
+/// @param ptr A pointer to the memory to write data from.
+/// @param size The size, in bytes, of each element that is to be written to
+///   the file.
+/// @param nmemb The number of elements that are to be written to the file.
+/// @param stream A pointer to the previously-opened file.
+///
+/// @return Returns the total number of objects successfully written to the
+/// file.
+size_t nanoOsFwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream) {
+  if ((stream != stdout) && (stream != stderr)) {
+    return filesystemFWrite(ptr, size, nmemb, stream);
+  }
+  return nanoOsFwriteConsole(ptr, size, nmemb, stream);
 }
 
