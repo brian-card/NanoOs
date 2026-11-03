@@ -76,6 +76,30 @@ static inline void screenClearToEndOfLine(void) {
   fputs("\033[K", stdout);
 }
 
+/// @fn static inline void screenInsertLines(int count)
+///
+/// @brief Insert blank rows at the cursor's row, moving the rows from there
+/// down and losing those pushed off the bottom.
+///
+/// @param count The number of rows.
+///
+/// @return This function returns no value.
+static inline void screenInsertLines(int count) {
+  printf("\033[%dL", count);
+}
+
+/// @fn static inline void screenDeleteLines(int count)
+///
+/// @brief Delete rows from the cursor's row down, moving the rows below up
+/// and leaving blank rows at the bottom.
+///
+/// @param count The number of rows.
+///
+/// @return This function returns no value.
+static inline void screenDeleteLines(int count) {
+  printf("\033[%dM", count);
+}
+
 /// @fn static inline void screenClear(void)
 ///
 /// @brief Erase the screen and move the cursor to its top left corner.
