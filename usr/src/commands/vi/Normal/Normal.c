@@ -198,13 +198,14 @@ static void viKeepInsertedText(ViState *state) {
 /// @fn static void viStartInsert(ViState *state, char command,
 ///   bool afterStep)
 ///
-/// @brief Make insert mode the next step.  When . is repeating a change and
-/// insert mode follows another step, the Insert overlay is given the length of
-/// the text to insert again; viBeginCommand gives it when insert mode is the
-/// first step.
+/// @brief Make insert mode the next step, and remember whether it replaces, so
+/// that it carries on the same way after Return.  When . is repeating a change
+/// and insert mode follows another step, the Insert overlay is given the
+/// length of the text to insert again; viBeginCommand gives it when insert
+/// mode is the first step.
 ///
 /// @param state The ViState of the running `vi`.
-/// @param command The command that starts insert mode:  i, a, I, or A.
+/// @param command The command that starts insert mode:  i, a, I, A, or R.
 /// @param afterStep Whether insert mode follows another step.
 ///
 /// @return This function returns no value.
@@ -215,6 +216,7 @@ static void viStartInsert(ViState *state, char command, bool afterStep) {
     state->targetIndex = dot.textLength;
   }
   state->ex.command = command;
+  state->argument = (command == 'R') ? 'R' : 'i';
   state->step = VI_STEP_INSERT;
 }
 
@@ -313,6 +315,7 @@ static void viParse(ViState *state, ViDot *dot, int key) {
     case 'a':
     case 'I':
     case 'A':
+    case 'R':
       viStartInsert(state, (char) key, false);
       break;
 
@@ -362,8 +365,10 @@ static void viContinue(ViState *state) {
       viStartInsert(state, 'i', true);
     }
   } else if (step == VI_STEP_PUT) {
-    if ((command == 'o') || (command == 'O') || (command == '\n')) {
+    if ((command == 'o') || (command == 'O')) {
       viStartInsert(state, 'i', true);
+    } else if (command == '\n') {
+      viStartInsert(state, state->argument, true);
     }
   } else if (step == VI_STEP_INSERT) {
     if (command == '\n') {

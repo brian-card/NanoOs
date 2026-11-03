@@ -31,24 +31,31 @@
 
 #include "vi.h"
 
-/// @fn static void viRepeatInsert(ViState *state)
+/// @fn static void viRepeatInsert(ViState *state, bool replace)
 ///
-/// @brief Insert the text the last change inserted, for . to repeat it.
-/// state->targetIndex is its length.
+/// @brief Insert the text the last change inserted, or type it over the line
+/// for R, for . to repeat it.  state->targetIndex is its length.
 ///
 /// @param state The ViState of the running `vi`.
+/// @param replace Whether to type the text over the line.
 ///
 /// @return This function returns no value.  Errors are left in
 /// state->ex.store.error.
-static void viRepeatInsert(ViState *state) {
+static void viRepeatInsert(ViState *state, bool replace) {
   int length = state->targetIndex;
   int oldRows = viRowsFor(state, state->width);
-  if (state->length + length > VI_LINE_MAX - 1) {
+  int end = replace ? state->index + length : state->length + length;
+  if (end < state->length) {
+    end = state->length;
+  }
+  if (end > VI_LINE_MAX - 1) {
     state->ex.store.error = VI_ERROR_TOO_LONG;
     return;
   }
-  memmove(&state->text[state->index + length], &state->text[state->index],
-    (size_t) (state->length - state->index + 1));
+  if (!replace) {
+    memmove(&state->text[state->index + length], &state->text[state->index],
+      (size_t) (state->length - state->index + 1));
+  }
   if ((length > 0)
     && !textstoreReadHeader(&state->ex.store, VI_DOT_TEXT_POSITION,
       &state->text[state->index], (size_t) length)
@@ -57,7 +64,8 @@ static void viRepeatInsert(ViState *state) {
     return;
   }
   state->index = (int16_t) (state->index + length);
-  state->length = (int16_t) (state->length + length);
+  state->length = (int16_t) end;
+  state->text[end] = '\0';
   state->changed = true;
   viRedrawCurrent(state, oldRows);
 }
@@ -66,7 +74,8 @@ static void viRepeatInsert(ViState *state) {
 ///
 /// @brief Insert text typed until Escape or Return is pressed:  before the
 /// cursor (i), after it (a), at the first non-blank (I), or at the end of the
-/// line (A).  The changed line is left for the Put overlay to commit, and to
+/// line (A), or type it over the line from the cursor (R), where Backspace
+/// only moves back.  The changed line is left for the Put overlay to commit, and to
 /// split for Return, so that this overlay has no code that changes the store.
 /// state->ex.command is set to the key that ended insertion, and, for
 /// Escape, state->targetIndex to the index after the last character
@@ -81,6 +90,8 @@ static void viRepeatInsert(ViState *state) {
 void* viRun(void *args) {
   ViState *state = (ViState*) args;
   char command = state->ex.command;
+  bool replace = (command == 'R');
+  const char *mode = replace ? "-- REPLACE --" : "-- INSERT --";
 
   if (state->truncated) {
     viStatus(state, "Line too long");
@@ -95,10 +106,10 @@ void* viRun(void *args) {
   state->insertStart = state->index;
 
   if (state->repeating) {
-    viRepeatInsert(state);
+    viRepeatInsert(state, replace);
     state->ex.command = VI_KEY_ESCAPE;
   } else {
-    viStatus(state, "-- INSERT --");
+    viStatus(state, mode);
   }
   while (!state->repeating && (state->ex.store.error == EX_ERROR_NONE)) {
     viPlaceCursor(state);
@@ -115,7 +126,7 @@ void* viRun(void *args) {
       // The old layout may not fit, so start over with this line at the top.
       screenClear();
       viShowLine(state, state->line, -1, true);
-      viStatus(state, "-- INSERT --");
+      viStatus(state, mode);
       continue;
     } else if (((key == '\r') || (key == '\n')) && !literal) {
       state->ex.command = '\n';
@@ -123,8 +134,12 @@ void* viRun(void *args) {
     } else if (((key == '\b') || (key == 0x7f)) && !literal) {
       if (state->index == 0) {
         continue;
-      } else if (state->index <= state->insertStart) {
+      } else if (replace || (state->index <= state->insertStart)) {
         state->insertStart = -1;
+      }
+      if (replace) {
+        state->index--;
+        continue;
       }
       memmove(&state->text[state->index - 1], &state->text[state->index],
         (size_t) (state->length - state->index + 1));
@@ -133,14 +148,17 @@ void* viRun(void *args) {
     } else if ((key > 0) && (key <= 0xff)
       && (literal || (key == '\t') || (key >= ' '))
     ) {
-      if (state->length >= VI_LINE_MAX - 1) {
+      if (replace && (state->index < state->length)) {
+        state->text[state->index++] = (char) key;
+      } else if (state->length >= VI_LINE_MAX - 1) {
         viStatus(state, "Line too long");
         continue;
+      } else {
+        memmove(&state->text[state->index + 1], &state->text[state->index],
+          (size_t) (state->length - state->index + 1));
+        state->text[state->index++] = (char) key;
+        state->length++;
       }
-      memmove(&state->text[state->index + 1], &state->text[state->index],
-        (size_t) (state->length - state->index + 1));
-      state->text[state->index++] = (char) key;
-      state->length++;
     } else {
       continue;
     }

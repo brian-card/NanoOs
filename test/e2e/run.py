@@ -1460,6 +1460,33 @@ def test_vi_keeps_editing_after_an_ex_command_empties_the_buffer(s):
     assert s.sh("cat /etc/empty.txt") == "x\ny"
 
 
+def test_vi_replaces_text_with_R(s):
+    s.login()
+    vi_file(s, "/etc/replace.txt", ["abcdef", "ghijkl"])
+    vi = ViTerminal(s, "vi /etc/replace.txt")
+    vi.wait_status('"/etc/replace.txt" 2L, 14C')
+    vi.keys("Rx")
+    vi.wait_status("-- REPLACE --")
+    vi.keys("y\x1b")
+    vi.wait_lines(vi_lines(["xycdef", "ghijkl"]))
+    vi.keys("j0.")
+    vi.wait_lines(vi_lines(["xycdef", "xyijkl"]))
+    # Past the end of the line, R appends.
+    vi.keys("k$Rpq\x1b")
+    vi.wait_lines(vi_lines(["xycdepq", "xyijkl"]))
+    # Backspace only moves back, and makes the change one . can't repeat.
+    vi.keys("0lRm\bn\x1b")
+    vi.wait_lines(vi_lines(["xncdepq", "xyijkl"]))
+    vi.keys("j$.0x")
+    vi.wait_lines(vi_lines(["xncdepq", "yijkl"]))
+    # Return splits the line, and replacing carries on on the new one.
+    vi.keys("0Ra\rb\x1b")
+    vi.wait_lines(vi_lines(["xncdepq", "a", "bjkl"]))
+    vi.keys(":wq\r")
+    vi.wait_exit()
+    assert s.sh("cat /etc/replace.txt") == "xncdepq\na\nbjkl"
+
+
 def test_vi_inserts_a_control_character_typed_after_ctrl_v(s):
     s.login()
     vi = ViTerminal(s, "vi /etc/ctrlv.txt")

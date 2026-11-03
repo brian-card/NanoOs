@@ -238,7 +238,8 @@ typedef enum ViKey {
 /// @param step The ViStep of the command being run.
 /// @param operator The operator a motion is for, or '\0' to move the cursor.
 /// @param motion The key of the motion.
-/// @param argument The character typed after the command, for r, m, and '.
+/// @param argument The character typed after the command, for r, m, and ';
+///   during insert mode, R if it replaces and i if it doesn't.
 /// @param linewise Whether the motion's range is whole lines.
 /// @param numPending The number of bytes in pending.
 /// @param pending Input read with an earlier key, not yet used.
