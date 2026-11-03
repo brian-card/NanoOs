@@ -53,7 +53,9 @@
 /// @return This function returns no value.
 static void vdpWriteText(VdpOutput *vdpOutput, const char *text) {
   uint8_t output[4 * VDP_TEXT_MAX_EXPANSION];
-  while ((*text != '\0') || (vdpOutput->textState.erasePending > 0)) {
+  while ((*text != '\0') || (vdpOutput->textState.erasePending > 0)
+    || (vdpOutput->textState.scrollDirection != 0)
+  ) {
     size_t length = vdpTranslateText(
       &vdpOutput->textState, &text, output, sizeof(output));
     if (vdpOutput->listening == true) {

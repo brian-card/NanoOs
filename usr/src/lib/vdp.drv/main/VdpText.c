@@ -60,10 +60,54 @@
 /// @brief VDU 27,c, which draws the glyph of c even if c is a VDU command.
 #define VDU_PRINT_NEXT 27
 
+/// @def VDU_RESET_VIEWPORTS
+///
+/// @brief VDU 26, which makes the text viewport the whole screen again and
+/// homes the cursor.
+#define VDU_RESET_VIEWPORTS 26
+
+/// @def VDU_TEXT_VIEWPORT
+///
+/// @brief VDU 28,left,bottom,right,top, which limits text, and scrolling, to
+/// a rectangle of character cells.
+#define VDU_TEXT_VIEWPORT 28
+
+/// @def VDU_SYSTEM
+///
+/// @brief VDU 23, which starts a system command.
+#define VDU_SYSTEM 23
+
+/// @def VDU_SYSTEM_SCROLL
+///
+/// @brief VDU 23,7,extent,direction,movement, which scrolls a viewport.  A
+/// movement of 0 scrolls by one character row.
+#define VDU_SYSTEM_SCROLL 7
+
+/// @def VDU_SCROLL_DOWN
+///
+/// @brief The VDU 23,7 direction that moves the text down the screen.
+#define VDU_SCROLL_DOWN 2
+
+/// @def VDU_SCROLL_UP
+///
+/// @brief The VDU 23,7 direction that moves the text up the screen.
+#define VDU_SCROLL_UP 3
+
+/// @def VDP_SCROLL_VIEWPORT
+///
+/// @brief The flag added to a VdpTextState's scrollDirection while the text
+/// viewport to scroll has yet to be set.
+#define VDP_SCROLL_VIEWPORT 0x80
+
 /// @def VDP_ESCAPE_MAX_OUTPUT
 ///
 /// @brief The most VDU bytes a byte of an escape sequence translates to.
 #define VDP_ESCAPE_MAX_OUTPUT 4
+
+/// @def VDP_SCROLL_MAX_OUTPUT
+///
+/// @brief The most VDU bytes a step of inserting or deleting rows writes.
+#define VDP_SCROLL_MAX_OUTPUT 5
 
 ANSI_TO_CGA_MAP
 
@@ -155,8 +199,9 @@ static void vdpAdvanceCursor(VdpTextState *state) {
 ///
 /// @brief Advance an escape sequence by one byte.  A control sequence that
 /// sets colors, clears the screen, or moves the cursor becomes VDU bytes when
-/// it ends, one that erases to the end of the line or turns resize reports on
-/// or off records that it did, and every other escape sequence is dropped.
+/// it ends, one that inserts or deletes rows, erases to the end of the line,
+/// or turns resize reports on or off records that it did, and every other
+/// escape sequence is dropped.
 ///
 /// @param state A pointer to the VdpTextState to advance.
 /// @param c The byte of the escape sequence.
@@ -232,6 +277,12 @@ static size_t vdpTranslateEscape(VdpTextState *state, uint8_t c,
         && (state->column < state->numColumns)
       ) {
         state->erasePending = state->numColumns - state->column;
+      } else if ((c == 'L') || (c == 'M')) {
+        state->scrollRows = vdpCursorIndex(state->firstParameter,
+          state->numRows - state->row) + 1;
+        state->scrollDirection = VDP_SCROLL_VIEWPORT
+          + ((c == 'L') ? VDU_SCROLL_DOWN : VDU_SCROLL_UP);
+        state->column = 0;
       }
     }
     state->escapeState = VDP_ESCAPE_NONE;
@@ -248,8 +299,8 @@ static size_t vdpTranslateEscape(VdpTextState *state, uint8_t c,
 /// become spaces to the next multiple of 8 columns, ANSI escape sequences
 /// are translated by vdpTranslateEscape, and other control characters and
 /// DEL are drawn as their glyphs with VDU_PRINT_NEXT.  An erase to the end of
-/// the line that doesn't fit is finished by the calls that follow, even once
-/// the string is used up.
+/// the line, or an insertion or deletion of rows, that doesn't fit is
+/// finished by the calls that follow, even once the string is used up.
 ///
 /// @param state A pointer to the VdpTextState of the text being written.
 /// @param text A pointer to the string, advanced past each character that is
@@ -264,6 +315,37 @@ size_t vdpTranslateText(VdpTextState *state, const char **text,
 ) {
   size_t length = 0;
   for (;; (*text)++) {
+    // Rows are inserted or deleted by scrolling a text viewport from the
+    // cursor's row to the bottom.  Filling a step and copying it is smaller
+    // on the eZ80 than writing each byte to output.
+    while (state->scrollDirection != 0) {
+      if (length + VDP_SCROLL_MAX_OUTPUT > outputSize) {
+        return length;
+      }
+      uint8_t step[VDP_SCROLL_MAX_OUTPUT] = {
+        VDU_SYSTEM, VDU_SYSTEM_SCROLL, 0, state->scrollDirection, 0
+      };
+      size_t stepLength = VDP_SCROLL_MAX_OUTPUT;
+      if (state->scrollDirection & VDP_SCROLL_VIEWPORT) {
+        step[0] = VDU_TEXT_VIEWPORT;
+        step[1] = 0;
+        step[2] = state->numRows - 1;
+        step[3] = state->numColumns - 1;
+        step[4] = state->row;
+        state->scrollDirection &= ~VDP_SCROLL_VIEWPORT;
+      } else if (state->scrollRows > 0) {
+        state->scrollRows--;
+      } else {
+        step[0] = VDU_RESET_VIEWPORTS;
+        step[1] = VDU_TAB;
+        step[2] = state->column;
+        step[3] = state->row;
+        stepLength = 4;
+        state->scrollDirection = 0;
+      }
+      memcpy(&output[length], step, stepLength);
+      length += stepLength;
+    }
     // Erasing writes spaces to the end of the line, then moves back.
     while (state->erasePending > 0) {
       if (length + 1 + VDP_ESCAPE_MAX_OUTPUT > outputSize) {
