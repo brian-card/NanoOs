@@ -140,6 +140,10 @@ typedef struct VdpOutputBuffer {
 /// @param secondParameter The control sequence's second parameter, or 0.
 /// @param erasePending The number of spaces still to be written to erase to
 ///   the end of the line.
+/// @param scrollRows The number of rows still to be scrolled to insert or
+///   delete rows.
+/// @param scrollDirection The VDU 23,7 direction of the rows being inserted or
+///   deleted, or 0 if none are.
 typedef struct VdpTextState {
   uint8_t  column;
   uint8_t  escapeState;
@@ -157,6 +161,8 @@ typedef struct VdpTextState {
   uint8_t  firstParameter;
   uint8_t  secondParameter;
   uint8_t  erasePending;
+  uint8_t  scrollRows;
+  uint8_t  scrollDirection;
 } VdpTextState;
 
 size_t vdpTranslateText(VdpTextState *state, const char **text,
