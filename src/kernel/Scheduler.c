@@ -5000,13 +5000,23 @@ int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp) {
     return 0;
   }
 
-  if ((processDescriptor->overlay.overlayFifoNode == NULL)
-    || (processDescriptor->overlay.overlayIdLength
-      != processDescriptor->overlay.overlayFifoNode->overlayIdLength)
-    || (memcmp(processDescriptor->overlay.overlayId,
-      processDescriptor->overlay.overlayFifoNode->overlayId,
-      processDescriptor->overlay.overlayIdLength) != 0)
+  uint8_t overlayIdLength = processDescriptor->overlay.overlayIdLength;
+  OverlayFifoNode *overlayFifoNode = processDescriptor->overlay.overlayFifoNode;
+  if ((overlayFifoNode != NULL)
+    && ((overlayIdLength != overlayFifoNode->overlayIdLength)
+      || (memcmp(processDescriptor->overlay.overlayId,
+        overlayFifoNode->overlayId, overlayIdLength) != 0))
   ) {
+    // The node was evicted and now holds another overlay.
+    overlayFifoNode = NULL;
+  }
+  if ((overlayFifoNode == NULL) && (overlayIdLength > 0)) {
+    overlayFifoNode = overlayFifoGet(
+      fileCache, processDescriptor->overlay.overlayId, overlayIdLength);
+  }
+  processDescriptor->overlay.overlayFifoNode = overlayFifoNode;
+
+  if (overlayFifoNode == NULL) {
     // Load the overlay from the filesystem.
     if (processDescriptor->overlay.fileBlockMetadata.blockDevice->
       readBlocks(
@@ -5024,7 +5034,8 @@ int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp) {
     }
   } else {
     // Copy the overlay from its cache in RAM.
-    memcpy(overlayMap, processDescriptor->overlay.overlayFifoNode->memory,
+    overlayFifoNode->missesRemaining = 3;
+    memcpy(overlayMap, overlayFifoNode->memory,
       processDescriptor->overlay.fileBlockMetadata.numBlocks
       * processDescriptor->overlay.fileBlockMetadata.blockDevice->blockSize);
   }
@@ -5060,6 +5071,14 @@ int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp) {
       (unsigned long int) overlayMap->header.version,
       (unsigned long int) NANO_OS_OVERLAY_VERSION);
     return -ENOEXEC;
+  }
+
+  if ((overlayFifoNode == NULL) && (overlayIdLength > 0)
+    && (fileCache != NULL)
+  ) {
+    processDescriptor->overlay.overlayFifoNode = overlayFifoPush(fileCache,
+      processDescriptor->overlay.overlayId, overlayIdLength,
+      &processDescriptor->overlay.fileBlockMetadata);
   }
 
   // Set the pieces of the overlay header that the program needs to run.
