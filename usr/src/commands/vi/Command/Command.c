@@ -276,7 +276,7 @@ static void viCommandLine(ViState *state) {
   }
 }
 
-/// @fn void* viCommand(void *args)
+/// @fn void* viRun(void *args)
 ///
 /// @brief Read and run an ex command line or a search prompt, or, for ZZ,
 /// which state->ex.command gives as x, write the file if it has changed and
@@ -285,7 +285,7 @@ static void viCommandLine(ViState *state) {
 /// @param args A pointer to the ViState of the running `vi`, cast to a void*.
 ///
 /// @return Returns the args pointer provided.
-void* viCommand(void *args) {
+void* viRun(void *args) {
   ViState *state = (ViState*) args;
   state->request = VI_REQUEST_NONE;
   if (state->ex.command == 'x') {

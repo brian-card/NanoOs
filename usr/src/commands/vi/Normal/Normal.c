@@ -29,29 +29,12 @@
 ///
 /// @brief Normal-mode commands of the `vi` screen editor other than the
 /// commonest movements:  reading a count, an operator and its motion, and the
-/// character some commands take, running the overlay that does the work, and
-/// recording a change for . to repeat.
+/// character some commands take, choosing the overlays that do the work, and
+/// recording a change for . to repeat.  The main overlay runs each overlay
+/// chosen and then this one again, so that no overlay call is nested inside
+/// another one.
 
 #include "vi.h"
-
-/// @fn static void viRun(ViState *state, const char *overlay,
-///   const char *function)
-///
-/// @brief Run a function in another of `vi`'s overlays.
-///
-/// @param state The ViState of the running `vi`.
-/// @param overlay The name of the overlay.
-/// @param function The name of the function to run.
-///
-/// @return This function returns no value.  If the overlay can't be loaded,
-/// state->ex.store.error is set.
-static void viRun(ViState *state, const char *overlay, const char *function) {
-  if (callOverlayFunction(OVERLAY_SAME_NAMESPACE, overlay, function, state)
-    == NULL
-  ) {
-    state->ex.store.error = EX_ERROR_MEMORY;
-  }
-}
 
 /// @fn static void viRecordKey(ViDot *dot, int key)
 ///
@@ -168,65 +151,78 @@ static bool viReadMotion(ViState *state, ViDot *dot, int key) {
   return true;
 }
 
-/// @fn static void viKeepInsertedText(ViState *state, ViDot *dot, bool exact)
+/// @fn static void viReadDot(ViState *state, size_t position, ViDot *dot)
+///
+/// @brief Read a ViDot from the block file's header area.  A ViDot that
+/// can't be read is one with no keys.
+///
+/// @param state The ViState of the running `vi`.
+/// @param position The ViDot's position in the header area.
+/// @param dot Set to the ViDot.
+///
+/// @return This function returns no value.
+static void viReadDot(ViState *state, size_t position, ViDot *dot) {
+  if (!textstoreReadHeader(&state->ex.store, position, dot, sizeof(*dot))) {
+    dot->numKeys = 0;
+    dot->textLength = 0;
+  }
+}
+
+/// @fn static void viKeepInsertedText(ViState *state)
 ///
 /// @brief Keep the text insert mode inserted for . to repeat, or make the
 /// command one . can't repeat if the text isn't simply what was inserted on
 /// one line, or is too long to keep.
 ///
 /// @param state The ViState of the running `vi`, with insert mode just ended.
-/// @param dot The command being recorded.
-/// @param exact Whether insert mode stayed on one line.
 ///
 /// @return This function returns no value.
-static void viKeepInsertedText(ViState *state, ViDot *dot, bool exact) {
+static void viKeepInsertedText(ViState *state) {
+  ViDot dot;
+  viReadDot(state, VI_DOT_PENDING_POSITION, &dot);
   int length = state->targetIndex - state->insertStart;
-  if (!exact || (state->insertStart < 0) || (length > (int) VI_DOT_TEXT_SIZE)) {
-    dot->numKeys = 0;
+  if (!state->exact || (state->insertStart < 0)
+    || (length > (int) VI_DOT_TEXT_SIZE)
+  ) {
+    dot.numKeys = 0;
   } else if ((length == 0)
     || textstoreWriteHeader(&state->ex.store, VI_DOT_TEXT_POSITION,
       &state->text[state->insertStart], (size_t) length)
   ) {
-    dot->textLength = (uint8_t) length;
+    dot.textLength = (uint8_t) length;
   }
+  textstoreWriteHeader(&state->ex.store, VI_DOT_PENDING_POSITION, &dot,
+    sizeof(dot));
 }
 
-/// @fn static void viInsertLoop(ViState *state, ViDot *dot, char command)
+/// @fn static void viStartInsert(ViState *state, char command,
+///   bool afterStep)
 ///
-/// @brief Run insert mode, splitting the line at each Return, until Escape.
+/// @brief Make insert mode the next step.  When . is repeating a change and
+/// insert mode follows another step, the Insert overlay is given the length of
+/// the text to insert again; viBeginCommand gives it when insert mode is the
+/// first step.
 ///
 /// @param state The ViState of the running `vi`.
-/// @param dot The command being recorded or repeated.
 /// @param command The command that starts insert mode:  i, a, I, or A.
+/// @param afterStep Whether insert mode follows another step.
 ///
 /// @return This function returns no value.
-static void viInsertLoop(ViState *state, ViDot *dot, char command) {
-  bool exact = true;
-  state->ex.command = command;
-  state->targetIndex = dot->textLength;
-  while (state->ex.store.error == EX_ERROR_NONE) {
-    viRun(state, "Insert", "viInsert");
-    char key = state->ex.command;
-    if ((key != '\n') && (key != VI_KEY_ESCAPE)) {
-      break;
-    } else if (key == '\n') {
-      exact = false;
-    } else if (!state->repeating) {
-      viKeepInsertedText(state, dot, exact);
-    }
-    viRun(state, "Put", "viPut");
-    if (key != '\n') {
-      break;
-    }
-    state->ex.command = 'i';
+static void viStartInsert(ViState *state, char command, bool afterStep) {
+  if (state->repeating && afterStep) {
+    ViDot dot;
+    viReadDot(state, VI_DOT_PENDING_POSITION, &dot);
+    state->targetIndex = dot.textLength;
   }
+  state->ex.command = command;
+  state->step = VI_STEP_INSERT;
 }
 
 /// @fn static void viOperate(ViState *state, ViDot *dot, char operator,
 ///   int key)
 ///
-/// @brief Run an operator over the range of a motion.  A doubled operator,
-/// such as dd, works on whole lines.
+/// @brief Read the motion of an operator and make the motion the next step.
+/// A doubled operator, such as dd, works on whole lines.
 ///
 /// @param state The ViState of the running `vi`.
 /// @param dot The command being recorded or repeated.
@@ -252,31 +248,20 @@ static void viOperate(ViState *state, ViDot *dot, char operator, int key) {
     return;
   }
   state->operator = operator;
-  viRun(state, "Motion", "viMotion");
-  if (state->ex.store.error == EX_ERROR_NONE) {
-    viRun(state, "Operator", "viOperator");
-  }
-  if ((operator == 'c') && (state->ex.store.error == EX_ERROR_NONE)) {
-    viInsertLoop(state, dot, 'i');
-  }
+  state->step = VI_STEP_MOTION;
 }
 
-/// @fn static void viDispatch(ViState *state, ViDot *dot, int key)
+/// @fn static void viParse(ViState *state, ViDot *dot, int key)
 ///
-/// @brief Run a normal-mode command from the key after its count.
+/// @brief Read a normal-mode command from the key after its count and choose
+/// its first step.
 ///
 /// @param state The ViState of the running `vi`.
 /// @param dot The command being recorded or repeated.
 /// @param key The key.
 ///
-/// @return This function returns no value.  Errors are left in
-/// state->ex.store.error.
-static void viDispatch(ViState *state, ViDot *dot, int key) {
-  if (viReadMotion(state, dot, key)) {
-    viRun(state, "Motion", "viMotion");
-    return;
-  }
-
+/// @return This function returns no value.
+static void viParse(ViState *state, ViDot *dot, int key) {
   switch (key) {
     case 'd':
     case 'c':
@@ -308,31 +293,27 @@ static void viDispatch(ViState *state, ViDot *dot, int key) {
       // fall through
     case 'J':
       state->ex.command = (char) key;
-      viRun(state, "Change", "viChange");
+      state->step = VI_STEP_CHANGE;
       break;
 
     case 'p':
     case 'P':
-      if (state->yankKind == VI_YANK_TEXT) {
-        state->ex.command = (char) key;
-        viRun(state, "Change", "viChange");
-        break;
-      }
-      // fall through
+      state->ex.command = (char) key;
+      state->step = (state->yankKind == VI_YANK_TEXT)
+        ? VI_STEP_CHANGE : VI_STEP_PUT;
+      break;
+
     case 'o':
     case 'O':
       state->ex.command = (char) key;
-      viRun(state, "Put", "viPut");
-      if ((key == 'o') || (key == 'O')) {
-        viInsertLoop(state, dot, 'i');
-      }
+      state->step = VI_STEP_PUT;
       break;
 
     case 'i':
     case 'a':
     case 'I':
     case 'A':
-      viInsertLoop(state, dot, (char) key);
+      viStartInsert(state, (char) key, false);
       break;
 
     case 'Z':
@@ -345,40 +326,99 @@ static void viDispatch(ViState *state, ViDot *dot, int key) {
     case '/':
     case '?':
       state->ex.command = (char) key;
-      viRun(state, "Command", "viCommand");
-      if ((key == '/') || (key == '?')) {
-        if ((state->ex.store.error == EX_ERROR_NONE) && !state->quit) {
-          state->motion = 'n';
-          viRun(state, "Motion", "viMotion");
-        }
-      }
+      state->motion = ((key == '/') || (key == '?')) ? 'n' : '\0';
+      state->step = VI_STEP_COMMAND;
       break;
 
     case 'u':
     case 0x12:
       state->ex.command = (key == 'u') ? 'u' : 'r';
-      viRun(state, "History", "viUndo");
+      state->step = VI_STEP_HISTORY;
       break;
   }
 }
 
-/// @fn void* viNormal(void *args)
+/// @fn static void viContinue(ViState *state)
 ///
-/// @brief Run a normal-mode command.  state->ex.command is its first key.  A
-/// command that changes the buffer is recorded for . to repeat.
+/// @brief Choose the step that follows the one just run, if any.
 ///
-/// @param args A pointer to the ViState of the running `vi`, cast to a void*.
+/// @param state The ViState of the running `vi`.
 ///
-/// @return Returns the args pointer provided.  Errors are left in
-/// state->ex.store.error.
-void* viNormal(void *args) {
-  ViState *state = (ViState*) args;
-  TextStore *store = &state->ex.store;
+/// @return This function returns no value.
+static void viContinue(ViState *state) {
+  uint8_t step = state->step;
+  char command = state->ex.command;
+  state->step = VI_STEP_NONE;
+  if (state->ex.store.error != EX_ERROR_NONE) {
+    return;
+  }
+
+  if (step == VI_STEP_MOTION) {
+    if (state->operator != '\0') {
+      state->step = VI_STEP_OPERATOR;
+    }
+  } else if (step == VI_STEP_OPERATOR) {
+    if (state->operator == 'c') {
+      viStartInsert(state, 'i', true);
+    }
+  } else if (step == VI_STEP_PUT) {
+    if ((command == 'o') || (command == 'O') || (command == '\n')) {
+      viStartInsert(state, 'i', true);
+    }
+  } else if (step == VI_STEP_INSERT) {
+    if (command == '\n') {
+      state->exact = false;
+      state->step = VI_STEP_PUT;
+    } else if (command == VI_KEY_ESCAPE) {
+      if (!state->repeating) {
+        viKeepInsertedText(state);
+      }
+      state->step = VI_STEP_PUT;
+    }
+  } else if (step == VI_STEP_COMMAND) {
+    if ((state->motion == 'n') && !state->quit) {
+      state->step = VI_STEP_MOTION;
+    }
+  }
+}
+
+/// @fn static void viEndCommand(ViState *state)
+///
+/// @brief Make the command just run the one . repeats, with its count, if it
+/// changed the buffer.
+///
+/// @param state The ViState of the running `vi`.
+///
+/// @return This function returns no value.
+static void viEndCommand(ViState *state) {
+  if (state->beginChange) {
+    return;
+  }
+  ViDot dot;
+  viReadDot(state, VI_DOT_PENDING_POSITION, &dot);
+  if ((dot.numKeys > VI_DOT_KEYS) || !state->exact) {
+    dot.numKeys = 0;
+  }
+  dot.count = state->count;
+  textstoreWriteHeader(&state->ex.store, VI_DOT_POSITION, &dot, sizeof(dot));
+}
+
+/// @fn static void viBeginCommand(ViState *state)
+///
+/// @brief Read a normal-mode command, whose first key is state->ex.command,
+/// and choose its first step.  A command that might change the buffer is
+/// recorded in the header area, for . to repeat if it does.
+///
+/// @param state The ViState of the running `vi`.
+///
+/// @return This function returns no value.
+static void viBeginCommand(ViState *state) {
   ViDot dot;
   dot.numKeys = 0;
   dot.textLength = 0;
   dot.next = 0;
   state->repeating = false;
+  state->exact = true;
   state->count = 0;
   int key = (unsigned char) state->ex.command;
   viRecordKey(&dot, key);
@@ -389,10 +429,9 @@ void* viNormal(void *args) {
 
   if (key == '.') {
     int16_t count = state->count;
-    if (!textstoreReadHeader(store, VI_DOT_POSITION, &dot, sizeof(dot))
-      || (dot.numKeys == 0) || (dot.numKeys > VI_DOT_KEYS)
-    ) {
-      return args;
+    viReadDot(state, VI_DOT_POSITION, &dot);
+    if ((dot.numKeys == 0) || (dot.numKeys > VI_DOT_KEYS)) {
+      return;
     }
     state->count = (count > 0) ? count : dot.count;
     dot.next = 0;
@@ -400,13 +439,40 @@ void* viNormal(void *args) {
     key = viNextKey(state, &dot);
   }
 
-  viDispatch(state, &dot, key);
-  if (!state->beginChange) {
-    if (dot.numKeys > VI_DOT_KEYS) {
-      dot.numKeys = 0;
-    }
-    dot.count = state->count;
-    textstoreWriteHeader(store, VI_DOT_POSITION, &dot, sizeof(dot));
+  if (viReadMotion(state, &dot, key)) {
+    state->step = VI_STEP_MOTION;
+    return;
+  }
+  viParse(state, &dot, key);
+  if (state->repeating && (state->step == VI_STEP_INSERT)) {
+    state->targetIndex = dot.textLength;
+  }
+  if (state->step != VI_STEP_NONE) {
+    textstoreWriteHeader(&state->ex.store, VI_DOT_PENDING_POSITION, &dot,
+      sizeof(dot));
+  }
+}
+
+/// @fn void* viNormal(void *args)
+///
+/// @brief Run the next part of a normal-mode command:  read it if
+/// state->step is VI_STEP_NONE, or else choose what follows that step, and,
+/// when nothing does, end the command.
+///
+/// @param args A pointer to the ViState of the running `vi`, cast to a void*.
+///
+/// @return Returns the args pointer provided.  state->step is the next step,
+/// or VI_STEP_NONE if the command is done.  Errors are left in
+/// state->ex.store.error.
+void* viNormal(void *args) {
+  ViState *state = (ViState*) args;
+  if (state->step == VI_STEP_NONE) {
+    viBeginCommand(state);
+  } else {
+    viContinue(state);
+  }
+  if (state->step == VI_STEP_NONE) {
+    viEndCommand(state);
   }
   return args;
 }

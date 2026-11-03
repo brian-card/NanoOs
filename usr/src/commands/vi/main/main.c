@@ -60,6 +60,38 @@ static void viCallOverlay(
   viApplyRequest(state);
 }
 
+/// @var viStepOverlays
+///
+/// @brief The overlay of each ViStep after VI_STEP_NONE.  Each one's function
+/// is viRun.
+static const char *const viStepOverlays[] = {
+  "Motion", "Operator", "Change", "Put", "Insert", "Command", "History",
+};
+
+/// @fn static void viRunCommand(ViState *state, int key)
+///
+/// @brief Run a normal-mode command in the Normal overlay, and each overlay it
+/// chooses as a step, until the command is done.
+///
+/// @param state The ViState of the running `vi`.
+/// @param key The key that starts the command.
+///
+/// @return This function returns no value.  Errors are left in
+/// state->ex.store.error.
+static void viRunCommand(ViState *state, int key) {
+  state->ex.command = (char) key;
+  state->step = VI_STEP_NONE;
+  while (true) {
+    viCallOverlay(state, "Normal", "viNormal");
+    if ((state->step == VI_STEP_NONE)
+      || (state->ex.store.error != EX_ERROR_NONE)
+    ) {
+      break;
+    }
+    viCallOverlay(state, viStepOverlays[state->step - 1], "viRun");
+  }
+}
+
 /// @fn static void viRunKey(ViState *state, int key)
 ///
 /// @brief Run a normal-mode command.  The commonest movements are run here;
@@ -125,8 +157,7 @@ static void viRunKey(ViState *state, int key) {
 
     default:
       if (key < VI_KEY_NONE) {
-        state->ex.command = (char) key;
-        viCallOverlay(state, "Normal", "viNormal");
+        viRunCommand(state, key);
       }
       break;
   }
@@ -172,8 +203,6 @@ int main(int argc, char **argv) {
   state->ex.quiet = true;
   state->ex.params = (argc > 1) ? argv[1] : NULL;
 
-  struct termios saved;
-  state->terminal = &saved;
   viCallOverlay(state, "Session", "viStart");
   int returnValue = (state->ex.store.text == NULL) ? 1 : 0;
   state->quit = (returnValue != 0);

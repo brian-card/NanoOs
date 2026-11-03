@@ -77,7 +77,7 @@ static bool openStore(TextStore *store) {
 ///
 /// @return Returns true if the list is sound, false otherwise.
 static bool structureIsSound(TextStore *store) {
-  TextStoreBlock links;
+  TextStoreLinks links;
   uint16_t prev = TEXTSTORE_NO_BLOCK;
   int lines = 0;
   for (uint16_t block = store->head; block != TEXTSTORE_NO_BLOCK;

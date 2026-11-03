@@ -62,7 +62,7 @@ static void viRepeatInsert(ViState *state) {
   viRedrawCurrent(state, oldRows);
 }
 
-/// @fn void* viInsert(void *args)
+/// @fn void* viRun(void *args)
 ///
 /// @brief Insert text typed until Escape or Return is pressed:  before the
 /// cursor (i), after it (a), at the first non-blank (I), or at the end of the
@@ -78,10 +78,9 @@ static void viRepeatInsert(ViState *state) {
 ///
 /// @return Returns the args pointer provided.  Errors are left in
 /// state->ex.store.error.
-void* viInsert(void *args) {
+void* viRun(void *args) {
   ViState *state = (ViState*) args;
   char command = state->ex.command;
-  viApplyRequest(state);
 
   if (state->truncated) {
     viStatus(state, "Line too long");

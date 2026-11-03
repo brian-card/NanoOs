@@ -81,20 +81,19 @@ static void viShowError(ViState *state) {
 /// status line.
 ///
 /// @param args A pointer to the ViState of the running `vi`, cast to a void*.
-///   Its ex.params member is the file named on the command line, or NULL, and
-///   its terminal member is where to save the terminal's settings.
+///   Its ex.params member is the file named on the command line, or NULL.
 ///
 /// @return Returns the args pointer provided.  If the text file can't be
 /// created, state->ex.store.text is left NULL.
 void* viStart(void *args) {
   ViState *state = (ViState*) args;
-  if (tcgetattr(STDIN_FILENO, state->terminal) == 0) {
-    struct termios raw = *state->terminal;
+  struct termios raw;
+  if (tcgetattr(STDIN_FILENO, &raw) == 0) {
+    state->savedModes = raw.c_lflag;
+    state->haveTerminal = true;
     raw.c_lflag &= ~(ECHO | ICANON | ISIG);
     raw.c_lflag |= RESIZEREPORTS;
     tcsetattr(STDIN_FILENO, TCSANOW, &raw);
-  } else {
-    state->terminal = NULL;
   }
   int rows = 0;
   int columns = 0;
@@ -149,8 +148,10 @@ void* viFinish(void *args) {
   ViState *state = (ViState*) args;
   screenMoveTo(state->rows, 1);
   screenClearToEndOfLine();
-  if (state->terminal != NULL) {
-    tcsetattr(STDIN_FILENO, TCSANOW, state->terminal);
+  struct termios modes;
+  if (state->haveTerminal && (tcgetattr(STDIN_FILENO, &modes) == 0)) {
+    modes.c_lflag = state->savedModes;
+    tcsetattr(STDIN_FILENO, TCSANOW, &modes);
   }
   if (state->ex.store.text != NULL) {
     textstoreClose(&state->ex.store);

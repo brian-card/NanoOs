@@ -137,7 +137,7 @@ static bool viSplitLine(ViState *state) {
   return true;
 }
 
-/// @fn void* viPut(void *args)
+/// @fn void* viRun(void *args)
 ///
 /// @brief Run p or P for yanked lines, o, or O, or, for the key that ended insert mode, commit
 /// the current line and split it for Return.
@@ -146,7 +146,7 @@ static bool viSplitLine(ViState *state) {
 ///
 /// @return Returns the args pointer provided.  Errors are left in
 /// state->ex.store.error.
-void* viPut(void *args) {
+void* viRun(void *args) {
   ViState *state = (ViState*) args;
   char command = state->ex.command;
   if (command == '\n') {

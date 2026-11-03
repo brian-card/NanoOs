@@ -206,7 +206,7 @@ static int viLastVisible(ViState *state, int top) {
   return (line > top) ? line - 1 : top;
 }
 
-/// @fn void* viMotion(void *args)
+/// @fn void* viRun(void *args)
 ///
 /// @brief Find where state->motion reaches from the cursor, state->count
 /// times.  For an operator, put the line in state->ex.addr2, the index in
@@ -218,7 +218,7 @@ static int viLastVisible(ViState *state, int top) {
 ///
 /// @return Returns the args pointer provided.  If the motion can't be made,
 /// state->ex.store.error is set.
-void* viMotion(void *args) {
+void* viRun(void *args) {
   ViState *state = (ViState*) args;
   int count = (state->count > 0) ? state->count : 1;
   int numLines = (state->ex.store.numLines > 0) ? state->ex.store.numLines : 1;

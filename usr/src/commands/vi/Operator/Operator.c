@@ -144,7 +144,7 @@ static void viOperateOnLines(ViState *state) {
   viRequest(state, first, row, VI_REQUEST_SHOW);
 }
 
-/// @fn void* viOperator(void *args)
+/// @fn void* viRun(void *args)
 ///
 /// @brief Run state->operator over the range from the cursor to the line in
 /// state->ex.addr2 and the index in state->targetIndex.  A range within a
@@ -155,7 +155,7 @@ static void viOperateOnLines(ViState *state) {
 ///
 /// @return Returns the args pointer provided.  Errors are left in
 /// state->ex.store.error.
-void* viOperator(void *args) {
+void* viRun(void *args) {
   ViState *state = (ViState*) args;
   if (state->linewise) {
     viOperateOnLines(state);

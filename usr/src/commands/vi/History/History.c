@@ -31,7 +31,7 @@
 
 #include "vi.h"
 
-/// @fn void* viUndo(void *args)
+/// @fn void* viRun(void *args)
 ///
 /// @brief Undo (state->ex.command u) or redo (r) a change and ask for the
 /// screen to be redrawn, keeping the top line if the cursor's line can be
@@ -41,7 +41,7 @@
 ///
 /// @return Returns the args pointer provided.  Errors are left in
 /// state->ex.store.error.
-void* viUndo(void *args) {
+void* viRun(void *args) {
   ViState *state = (ViState*) args;
   if (callOverlayFunction(EX_LIBRARY_PATH, "Undo", "exUndo", &state->ex)
     == NULL

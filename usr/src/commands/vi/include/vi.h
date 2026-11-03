@@ -52,8 +52,8 @@ extern "C"
 /// @def VI_PENDING_SIZE
 ///
 /// @brief The most input bytes kept for later when one read holds more than
-/// one key.
-#define VI_PENDING_SIZE 8
+/// one key:  the O and letter after an escape that isn't an arrow key.
+#define VI_PENDING_SIZE 4
 
 /// @def VI_PATTERN_POSITION
 ///
@@ -95,16 +95,38 @@ typedef struct ViDot {
 /// @brief The position in the block file's header area of the ViDot.
 #define VI_DOT_POSITION (VI_PATTERN_POSITION + VI_PATTERN_SIZE)
 
+/// @def VI_DOT_PENDING_POSITION
+///
+/// @brief The position in the block file's header area of the ViDot of the
+/// command being run, which becomes the one at VI_DOT_POSITION if the command
+/// changes the buffer.
+#define VI_DOT_PENDING_POSITION (VI_DOT_POSITION + sizeof(ViDot))
+
 /// @def VI_DOT_TEXT_POSITION
 ///
 /// @brief The position in the block file's header area of the text the last
 /// change inserted.
-#define VI_DOT_TEXT_POSITION (VI_DOT_POSITION + sizeof(ViDot))
+#define VI_DOT_TEXT_POSITION (VI_DOT_PENDING_POSITION + sizeof(ViDot))
 
 /// @def VI_DOT_TEXT_SIZE
 ///
 /// @brief The most characters of inserted text that . can repeat.
 #define VI_DOT_TEXT_SIZE (TEXTSTORE_HEADER_SIZE - VI_DOT_TEXT_POSITION)
+
+/// @enum ViStep
+///
+/// @brief The overlay the main overlay runs next for a command the Normal
+/// overlay is running, after which it runs the Normal overlay again.
+typedef enum ViStep {
+  VI_STEP_NONE,
+  VI_STEP_MOTION,
+  VI_STEP_OPERATOR,
+  VI_STEP_CHANGE,
+  VI_STEP_PUT,
+  VI_STEP_INSERT,
+  VI_STEP_COMMAND,
+  VI_STEP_HISTORY,
+} ViStep;
 
 /// @enum ViYankKind
 ///
@@ -181,8 +203,7 @@ typedef enum ViKey {
 /// @param ex The ExState of the editing commands.  vi uses its addr2 for the
 ///   line a motion reaches.
 /// @param yank The yank chain of ViYank records.
-/// @param terminal The terminal settings to restore on exit, or NULL if stdin
-///   isn't a terminal.
+/// @param savedModes The terminal's local modes (c_lflag) to restore on exit.
 /// @param top The number of the line at the top of the screen.
 /// @param line The number of the current line.  With no lines, it is 1.
 /// @param width The number of columns the whole current line takes up.
@@ -207,9 +228,14 @@ typedef enum ViKey {
 /// @param beginChange Whether the command being run has yet to start a change
 ///   in the undo history.
 /// @param repeating Whether . is repeating the command being run.
+/// @param haveTerminal Whether stdin is a terminal, whose modes are saved in
+///   savedModes.
+/// @param exact Whether the insert mode of the command being run has stayed
+///   on one line.
 /// @param request The ViRequest:  show requestLine at requestRow and redraw
 ///   below it, after redrawing the current line for VI_REQUEST_SPLIT.
 /// @param yankKind The ViYankKind of the yank chain.
+/// @param step The ViStep of the command being run.
 /// @param operator The operator a motion is for, or '\0' to move the cursor.
 /// @param motion The key of the motion.
 /// @param argument The character typed after the command, for r, m, and '.
@@ -221,7 +247,7 @@ typedef enum ViKey {
 typedef struct ViState {
   ExState         ex;
   TextStoreChain  yank;
-  struct termios *terminal;
+  tcflag_t        savedModes;
   int             top;
   int             line;
   int             requestLine;
@@ -240,8 +266,11 @@ typedef struct ViState {
   bool            quit;
   bool            beginChange;
   bool            repeating;
+  bool            haveTerminal;
+  bool            exact;
   uint8_t         request;
   uint8_t         yankKind;
+  uint8_t         step;
   char            operator;
   char            motion;
   char            argument;

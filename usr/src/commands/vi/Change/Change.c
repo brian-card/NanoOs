@@ -134,7 +134,7 @@ static void viPutText(ViState *state, bool after, int count) {
   }
 }
 
-/// @fn void* viChange(void *args)
+/// @fn void* viRun(void *args)
 ///
 /// @brief Run r, J, p, P, or m, as state->ex.command says, state->count
 /// times for all but m.  The current line is committed before returning.
@@ -144,7 +144,7 @@ static void viPutText(ViState *state, bool after, int count) {
 ///
 /// @return Returns the args pointer provided.  Errors are left in
 /// state->ex.store.error.
-void* viChange(void *args) {
+void* viRun(void *args) {
   ViState *state = (ViState*) args;
   TextStore *store = &state->ex.store;
   int count = (state->count > 0) ? state->count : 1;

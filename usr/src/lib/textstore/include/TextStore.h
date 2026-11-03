@@ -68,7 +68,7 @@ extern "C"
 ///
 /// @brief The size, in bytes, of the area at the start of the block file that
 /// a client can keep its own data in.
-#define TEXTSTORE_HEADER_SIZE 192
+#define TEXTSTORE_HEADER_SIZE 256
 
 /// @enum TextStoreError
 ///
@@ -106,6 +106,22 @@ typedef struct TextStoreBlock {
 ///
 /// @brief The number of bytes of a TextStoreBlock before its offsets.
 #define TEXTSTORE_BLOCK_HEADER_SIZE (4 * sizeof(uint16_t))
+
+/// @struct TextStoreLinks
+///
+/// @brief The header of a TextStoreBlock, laid out as the block's first
+/// members, for code that needs only a block's links.
+///
+/// @param prev The block's prev.
+/// @param next The block's next.
+/// @param count The block's count.
+/// @param unused The block's padding.
+typedef struct TextStoreLinks {
+  uint16_t prev;
+  uint16_t next;
+  uint16_t count;
+  uint16_t unused;
+} TextStoreLinks;
 
 /// @def TEXTSTORE_CHAIN_RECORD_SIZE
 ///
@@ -252,17 +268,17 @@ static inline bool textstoreLoad(
 }
 
 /// @fn static inline bool textstoreReadLinks(TextStore *store,
-///   uint16_t block, TextStoreBlock *links)
+///   uint16_t block, TextStoreLinks *links)
 ///
 /// @brief Get a block's prev, next, and count, from the cache if it's cached.
 ///
 /// @param store The TextStore holding the block.
 /// @param block The number of the block.
-/// @param links Set to the block's header.  Its offsets are not read.
+/// @param links Set to the block's header.
 ///
 /// @return Returns true on success, false with store->error set on failure.
 static inline bool textstoreReadLinks(
-  TextStore *store, uint16_t block, TextStoreBlock *links
+  TextStore *store, uint16_t block, TextStoreLinks *links
 ) {
   if (block == TEXTSTORE_NO_BLOCK) {
     store->error = TEXTSTORE_ERROR_IO;
@@ -332,7 +348,7 @@ static inline uint16_t textstoreAllocBlock(TextStore *store) {
   }
 
   uint16_t block = store->freeBlocks;
-  TextStoreBlock links;
+  TextStoreLinks links;
   if (!textstoreReadLinks(store, block, &links)) {
     return TEXTSTORE_NO_BLOCK;
   }
@@ -391,7 +407,7 @@ static inline int textstoreLocate(TextStore *store, int line) {
     return line - store->cachedFirstLine;
   }
 
-  TextStoreBlock links;
+  TextStoreLinks links;
   uint16_t block = store->head;
   int first = 1;
   int distance = line - 1;
@@ -719,7 +735,7 @@ static inline bool textstoreChainFreeAfter(
 ) {
   uint16_t start = chain->first;
   if (block != TEXTSTORE_NO_BLOCK) {
-    TextStoreBlock links;
+    TextStoreLinks links;
     if (!textstoreReadLinks(store, block, &links)) {
       return false;
     }
@@ -807,7 +823,7 @@ static inline bool textstoreChainPrevious(
     return false;
   }
   if (chain->index == 0) {
-    TextStoreBlock links;
+    TextStoreLinks links;
     if (!textstoreReadLinks(store, chain->block, &links)
       || (links.prev == TEXTSTORE_NO_BLOCK)
     ) {
@@ -843,7 +859,7 @@ static inline bool textstoreChainNext(
   if (chain->block == TEXTSTORE_NO_BLOCK) {
     return false;
   }
-  TextStoreBlock links;
+  TextStoreLinks links;
   if (!textstoreReadLinks(store, chain->block, &links)) {
     return false;
   }
@@ -1134,7 +1150,7 @@ static inline void textstoreMoveLines(
   }
 
   // Unlink the run of blocks from start to end.
-  TextStoreBlock links;
+  TextStoreLinks links;
   if (!textstoreReadLinks(store, start, &links)) {
     return;
   }
