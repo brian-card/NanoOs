@@ -65,30 +65,18 @@ static void overlayCacheTestPreBoot(void) {
 
 /// @fn static OverlayFifoNode* overlayCacheTestPush(const char *id)
 ///
-/// @brief Push an ID into the file cache as the running process, with a
-/// one-block stand-in overlay that matches what's already in overlayMap so
-/// that no scheduler resume reloads it.
+/// @brief Push an ID into the file cache with a one-block stand-in overlay.
 ///
 /// @param id The NUL-terminated overlay ID to push.
 ///
 /// @return Returns the value returned by overlayFifoPush.
 static OverlayFifoNode* overlayCacheTestPush(const char *id) {
   static BlockDevice blockDevice = { .blockSize = 16 };
-  ProcessDescriptor *runningProcess = getRunningProcess();
-  FileBlockMetadata saved = runningProcess->overlay.fileBlockMetadata;
   FileBlockMetadata standIn = {
     .blockDevice = &blockDevice, .startBlock = 1, .numBlocks = 1,
   };
-  FileBlockMetadata savedHeader = overlayMap->header.overlay.fileBlockMetadata;
-  overlayMap->header.overlay.fileBlockMetadata = standIn;
-  runningProcess->overlay.fileBlockMetadata = standIn;
-
-  OverlayFifoNode *node
-    = overlayFifoPush(fileCache, (void*) id, (uint8_t) (strlen(id) + 1));
-
-  runningProcess->overlay.fileBlockMetadata = saved;
-  overlayMap->header.overlay.fileBlockMetadata = savedHeader;
-  return node;
+  return overlayFifoPush(
+    fileCache, (void*) id, (uint8_t) (strlen(id) + 1), &standIn);
 }
 
 /// @fn static OverlayFifoNode* overlayCacheTestGet(const char *id)
@@ -213,4 +201,150 @@ NANO_OS_KERNEL_TEST_WITH(overlay_cache, spawn_finds_a_cached_main_overlay,
   NANO_OS_ASSERT_EQ_INT(0,
     nanoOsSpawn(&pid, "/cachetest", NULL, NULL, argv, NULL));
   NANO_OS_ASSERT_TRUE(pid > 0);
+}
+
+// Defined in Scheduler.c
+int schedulerLoadOverlay(ProcessDescriptor *processDescriptor, char **envp);
+
+/// @var _cacheTestDiskReads
+///
+/// @brief The number of times cacheTestReadBlocks has been called.
+static int _cacheTestDiskReads = 0;
+
+/// @fn static int cacheTestReadBlocks(void *context, uint32_t startBlock,
+///   uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer)
+///
+/// @brief Count a disk read and fill buffer with a valid overlay header.
+///
+/// @param context Unused.
+/// @param startBlock Unused.
+/// @param numBlocks Unused.
+/// @param blockSize Unused.
+/// @param buffer The overlay memory to fill.
+///
+/// @return Returns 0.
+static int cacheTestReadBlocks(void *context, uint32_t startBlock,
+  uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer
+) {
+  (void) context;
+  (void) startBlock;
+  (void) numBlocks;
+  (void) blockSize;
+  _cacheTestDiskReads++;
+  NanoOsOverlayMap *map = (NanoOsOverlayMap*) buffer;
+  memset(&map->header, 0, sizeof(map->header));
+  map->header.version = NANO_OS_OVERLAY_VERSION;
+  map->header.magic = NANO_OS_OVERLAY_MAGIC;
+  return 0;
+}
+
+/// @fn static void cacheTestInitDescriptor(
+///   ProcessDescriptor *processDescriptor, const char *id)
+///
+/// @brief Set up a process descriptor whose file overlay is read through
+/// cacheTestReadBlocks.
+///
+/// @param processDescriptor The descriptor to set up.
+/// @param id The NUL-terminated overlay ID of the process's overlay.
+///
+/// @return This function returns no value.
+static void cacheTestInitDescriptor(
+  ProcessDescriptor *processDescriptor, const char *id
+) {
+  static BlockDevice blockDevice = {
+    .readBlocks = cacheTestReadBlocks,
+    .blockSize = 512,
+  };
+  memset(processDescriptor, 0, sizeof(*processDescriptor));
+  processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_USER;
+  processDescriptor->overlay.fileBlockMetadata.blockDevice = &blockDevice;
+  processDescriptor->overlay.fileBlockMetadata.startBlock = 7;
+  processDescriptor->overlay.fileBlockMetadata.numBlocks = 1;
+  processDescriptor->overlay.overlayId = (void*) id;
+  processDescriptor->overlay.overlayIdLength = (uint8_t) (strlen(id) + 1);
+}
+
+/// @fn static int cacheTestSwitchTo(ProcessDescriptor *processDescriptor)
+///
+/// @brief Load a process's overlay as the scheduler does when it resumes the
+/// process after another overlay has run.
+///
+/// @param processDescriptor The descriptor whose overlay to load.
+///
+/// @return Returns the value returned by schedulerLoadOverlay.
+static int cacheTestSwitchTo(ProcessDescriptor *processDescriptor) {
+  overlayMap->header.overlay.fileBlockMetadata.startBlock = 0;
+  return schedulerLoadOverlay(processDescriptor, NULL);
+}
+
+NANO_OS_KERNEL_TEST_WITH(overlay_cache, evicted_overlay_is_cached_again_on_load,
+  overlayCacheTestPreBoot
+) {
+  ProcessDescriptor processDescriptor;
+  cacheTestInitDescriptor(&processDescriptor, _cacheTestIds[0]);
+  _cacheTestDiskReads = 0;
+
+  NANO_OS_ASSERT_EQ_INT(0, cacheTestSwitchTo(&processDescriptor));
+  NANO_OS_ASSERT_EQ_INT(1, _cacheTestDiskReads);
+  NANO_OS_ASSERT_NOT_NULL(overlayCacheTestGet(_cacheTestIds[0]));
+
+  for (int ii = 1; ii <= CACHE_TEST_DEPTH; ii++) {
+    NANO_OS_ASSERT_NOT_NULL(overlayCacheTestPush(_cacheTestIds[ii]));
+  }
+  NANO_OS_ASSERT_NULL(overlayCacheTestGet(_cacheTestIds[0]));
+
+  NANO_OS_ASSERT_EQ_INT(0, cacheTestSwitchTo(&processDescriptor));
+  NANO_OS_ASSERT_EQ_INT(2, _cacheTestDiskReads);
+  NANO_OS_ASSERT_NOT_NULL(overlayCacheTestGet(_cacheTestIds[0]));
+
+  NANO_OS_ASSERT_EQ_INT(0, cacheTestSwitchTo(&processDescriptor));
+  NANO_OS_ASSERT_EQ_INT(2, _cacheTestDiskReads);
+}
+
+NANO_OS_KERNEL_TEST_WITH(overlay_cache, load_from_cache_marks_the_overlay_used,
+  overlayCacheTestPreBoot
+) {
+  ProcessDescriptor processDescriptor;
+  cacheTestInitDescriptor(&processDescriptor, "/usr/lib/x/main.overlay");
+
+  // Leave the hand on the process's node with no misses remaining.
+  NANO_OS_ASSERT_NOT_NULL(overlayCacheTestPush(_cacheTestIds[0]));
+  NANO_OS_ASSERT_NOT_NULL(overlayCacheTestPush(_cacheTestIds[1]));
+  NANO_OS_ASSERT_NOT_NULL(overlayCacheTestPush(_cacheTestIds[2]));
+  NANO_OS_ASSERT_NOT_NULL(overlayCacheTestPush(_cacheTestIds[3]));
+  NANO_OS_ASSERT_EQ_INT(0, cacheTestSwitchTo(&processDescriptor));
+  NANO_OS_ASSERT_NOT_NULL(overlayCacheTestPush(_cacheTestIds[4]));
+  NANO_OS_ASSERT_NOT_NULL(overlayCacheTestPush(_cacheTestIds[0]));
+  OverlayFifoNode *node = processDescriptor.overlay.overlayFifoNode;
+  NANO_OS_ASSERT_NOT_NULL(node);
+  NANO_OS_ASSERT_STR_EQ("/usr/lib/x/main.overlay", (char*) node->overlayId);
+  NANO_OS_ASSERT_EQ_INT(0, node->missesRemaining);
+
+  NANO_OS_ASSERT_EQ_INT(0, cacheTestSwitchTo(&processDescriptor));
+  NANO_OS_ASSERT_NOT_NULL(overlayCacheTestPush(_cacheTestIds[1]));
+  NANO_OS_ASSERT_NOT_NULL(overlayFifoGet(fileCache,
+    processDescriptor.overlay.overlayId,
+    processDescriptor.overlay.overlayIdLength));
+}
+
+NANO_OS_KERNEL_TEST_WITH(overlay_cache, stale_node_finds_an_overlay_cached_again,
+  overlayCacheTestPreBoot
+) {
+  ProcessDescriptor first;
+  ProcessDescriptor second;
+  cacheTestInitDescriptor(&first, _cacheTestIds[0]);
+  cacheTestInitDescriptor(&second, _cacheTestIds[0]);
+  _cacheTestDiskReads = 0;
+
+  NANO_OS_ASSERT_EQ_INT(0, cacheTestSwitchTo(&first));
+  for (int ii = 1; ii <= CACHE_TEST_DEPTH; ii++) {
+    NANO_OS_ASSERT_NOT_NULL(overlayCacheTestPush(_cacheTestIds[ii]));
+  }
+  NANO_OS_ASSERT_EQ_INT(0, cacheTestSwitchTo(&second));
+  NANO_OS_ASSERT_EQ_INT(2, _cacheTestDiskReads);
+
+  NANO_OS_ASSERT_EQ_INT(0, cacheTestSwitchTo(&first));
+  NANO_OS_ASSERT_EQ_INT(2, _cacheTestDiskReads);
+  NANO_OS_ASSERT_TRUE(first.overlay.overlayFifoNode
+    == second.overlay.overlayFifoNode);
 }

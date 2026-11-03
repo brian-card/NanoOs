@@ -145,18 +145,18 @@ NANO_OS_KERNEL_TEST_WITH(launch, file_cache_returns_a_pushed_overlay,
   memset(&blockDevice, 0, sizeof(blockDevice));
   blockDevice.blockSize = 512;
 
-  ProcessDescriptor *self = getRunningProcess();
-  self->overlay.fileBlockMetadata.blockDevice = &blockDevice;
-  self->overlay.fileBlockMetadata.numBlocks = overlaySize / 512;
+  FileBlockMetadata fileBlockMetadata = {
+    .blockDevice = &blockDevice,
+    .numBlocks = overlaySize / 512,
+  };
   for (size_t ii = 0; ii < overlaySize; ii++) {
     ((uint8_t*) overlayMap)[ii] = (uint8_t) (ii * 7);
   }
 
   char overlayId[] = "/usr/bin/test/main.overlay";
   OverlayFifoNode *pushed = overlayFifoPush(fileCache, overlayId,
-    sizeof(overlayId));
+    sizeof(overlayId), &fileBlockMetadata);
   memset(overlayMap, 0, overlaySize);
-  self->overlay.fileBlockMetadata.blockDevice = NULL;
 
   NANO_OS_ASSERT_NOT_NULL(pushed);
   NANO_OS_ASSERT_EQ_INT(1, fileCache->numElements);
