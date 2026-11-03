@@ -20,7 +20,8 @@ CGA_TO_ANSI_MAP
 ///   uint8_t *output, size_t outputSize)
 ///
 /// @brief Translate a whole string through a buffer of outputSize bytes,
-/// concatenating the results.
+/// concatenating the results, and finish what it leaves pending, as
+/// vdp.drv's vdpWriteText does.
 ///
 /// @param state A pointer to the VdpTextState to use.
 /// @param text The NUL-terminated string to translate.
@@ -32,7 +33,9 @@ static size_t translateAll(VdpTextState *state, const char *text,
   uint8_t *output, size_t outputSize
 ) {
   size_t total = 0;
-  while (*text != '\0') {
+  while ((*text != '\0') || (state->erasePending > 0)
+    || (state->scrollDirection != 0)
+  ) {
     size_t length = vdpTranslateText(state, &text, &output[total], outputSize);
     if (length == 0) {
       break;
@@ -325,6 +328,107 @@ NANO_OS_TEST(unit_vdp_text, erase_with_a_parameter_is_dropped) {
   NANO_OS_ASSERT_EQ_INT(1, translateAll(&state, text, output, 32));
   NANO_OS_ASSERT_EQ_INT('a', output[0]);
   NANO_OS_ASSERT_EQ_INT(0, state.erasePending);
+}
+
+NANO_OS_TEST(unit_vdp_text, insert_line_scrolls_down_from_the_cursor_row) {
+  VdpTextState state = { .column = 0, .numRows = 60, .numColumns = 106 };
+  uint8_t output[64];
+  const uint8_t expected[] = {
+    31, 8, 4,  28, 0, 59, 105, 4,  23, 7, 0, 2, 0,  26, 31, 0, 4,  'x'
+  };
+
+  NANO_OS_ASSERT_EQ_INT(sizeof(expected),
+    translateAll(&state, "\x1b[5;9H\x1b[Lx", output, 32));
+  NANO_OS_ASSERT_TRUE(memcmp(output, expected, sizeof(expected)) == 0);
+  NANO_OS_ASSERT_EQ_INT(1, state.column);
+  NANO_OS_ASSERT_EQ_INT(4, state.row);
+}
+
+NANO_OS_TEST(unit_vdp_text, delete_lines_scroll_up_once_per_row) {
+  VdpTextState state = { .column = 7, .row = 10, .numRows = 60,
+    .numColumns = 106 };
+  uint8_t output[64];
+  const uint8_t expected[] = {
+    28, 0, 59, 105, 10,
+    23, 7, 0, 3, 0,  23, 7, 0, 3, 0,  23, 7, 0, 3, 0,
+    26, 31, 0, 10
+  };
+
+  NANO_OS_ASSERT_EQ_INT(sizeof(expected),
+    translateAll(&state, "\x1b[3M", output, 32));
+  NANO_OS_ASSERT_TRUE(memcmp(output, expected, sizeof(expected)) == 0);
+  NANO_OS_ASSERT_EQ_INT(0, state.column);
+  NANO_OS_ASSERT_EQ_INT(10, state.row);
+  NANO_OS_ASSERT_EQ_INT(0, state.scrollDirection);
+}
+
+NANO_OS_TEST(unit_vdp_text, a_zero_count_inserts_or_deletes_one_row) {
+  VdpTextState state = { .row = 2, .numRows = 60, .numColumns = 106 };
+  uint8_t output[64];
+  const uint8_t expected[] = {
+    28, 0, 59, 105, 2,  23, 7, 0, 3, 0,  26, 31, 0, 2
+  };
+
+  NANO_OS_ASSERT_EQ_INT(sizeof(expected),
+    translateAll(&state, "\x1b[0M", output, 32));
+  NANO_OS_ASSERT_TRUE(memcmp(output, expected, sizeof(expected)) == 0);
+}
+
+NANO_OS_TEST(unit_vdp_text, insert_and_delete_never_scroll_past_the_bottom) {
+  VdpTextState state = { .row = 1, .numRows = 3, .numColumns = 4 };
+  uint8_t output[64];
+  const uint8_t expected[] = {
+    28, 0, 2, 3, 1,  23, 7, 0, 2, 0,  23, 7, 0, 2, 0,  26, 31, 0, 1
+  };
+
+  NANO_OS_ASSERT_EQ_INT(sizeof(expected),
+    translateAll(&state, "\x1b[9L", output, 32));
+  NANO_OS_ASSERT_TRUE(memcmp(output, expected, sizeof(expected)) == 0);
+
+  state.row = 2;
+  const uint8_t bottom[] = { 28, 0, 2, 3, 2,  23, 7, 0, 3, 0,  26, 31, 0, 2 };
+  NANO_OS_ASSERT_EQ_INT(sizeof(bottom),
+    translateAll(&state, "\x1b[200M", output, 32));
+  NANO_OS_ASSERT_TRUE(memcmp(output, bottom, sizeof(bottom)) == 0);
+}
+
+NANO_OS_TEST(unit_vdp_text, insert_line_split_across_calls_is_translated) {
+  VdpTextState state = { .row = 6, .numRows = 60, .numColumns = 106 };
+  uint8_t output[64];
+  size_t total = translateAll(&state, "\x1b[", output, 32);
+  total += translateAll(&state, "2", &output[total], 32);
+  total += translateAll(&state, "L", &output[total], 32);
+  const uint8_t expected[] = {
+    28, 0, 59, 105, 6,  23, 7, 0, 2, 0,  23, 7, 0, 2, 0,  26, 31, 0, 6
+  };
+
+  NANO_OS_ASSERT_EQ_INT(sizeof(expected), total);
+  NANO_OS_ASSERT_TRUE(memcmp(output, expected, sizeof(expected)) == 0);
+}
+
+NANO_OS_TEST(unit_vdp_text, insert_lines_that_do_not_fit_are_finished_later) {
+  VdpTextState state = { .row = 20, .numRows = 60, .numColumns = 106 };
+  uint8_t output[VDP_TEXT_MAX_EXPANSION];
+  uint8_t all[128];
+  size_t total = 0;
+  const char *text = "\x1b[4Lab";
+
+  int calls = 0;
+  while (((*text != '\0') || (state.scrollDirection != 0)) && (calls < 40)) {
+    size_t length = vdpTranslateText(&state, &text, output, sizeof(output));
+    NANO_OS_ASSERT_TRUE(length <= sizeof(output));
+    memcpy(&all[total], output, length);
+    total += length;
+    calls++;
+  }
+
+  const uint8_t expected[] = {
+    28, 0, 59, 105, 20,
+    23, 7, 0, 2, 0,  23, 7, 0, 2, 0,  23, 7, 0, 2, 0,  23, 7, 0, 2, 0,
+    26, 31, 0, 20,  'a', 'b'
+  };
+  NANO_OS_ASSERT_EQ_INT(sizeof(expected), total);
+  NANO_OS_ASSERT_TRUE(memcmp(all, expected, sizeof(expected)) == 0);
 }
 
 NANO_OS_TEST(unit_vdp_text, cursor_wraps_like_the_vdp_with_scroll_protection) {

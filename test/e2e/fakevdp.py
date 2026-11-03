@@ -79,6 +79,9 @@ MOUSE_RESET = 2
 MOUSE_SET_CURSOR = 3
 SPRITES = 27
 CURSOR_BEHAVIOUR = 16
+SCROLL = 7
+SCROLL_DOWN = 2
+SCROLL_UP = 3
 SELECT_BITMAP = 0x20
 CREATE_BITMAP = 0x21
 MAKE_CURSOR = 0x40
@@ -185,6 +188,9 @@ class FakeVdp:
         self.scroll_lock = False
         self.leds = 0
         self.cursor_behaviour = 0  # VDU 23,16 flags; bit 0 is scroll protect
+        # The text viewport set by VDU 28 as (left, top, right, bottom) cells,
+        # or None for the whole screen.
+        self.viewport = None
         self.mouse_enabled = False
         self.mouse_cursor = None
         self.mouse = mouse
@@ -227,9 +233,11 @@ class FakeVdp:
                     mode = next(stream)
                     if self.listening:
                         with self.lock:
-                            # Changing the mode resets the palette and font.
+                            # Changing the mode resets the palette, font, and
+                            # viewports.
                             self.palette = {}
                             self.font = None
+                            self.viewport = None
                         self._event("mode", mode)
                 elif byte == 17:
                     colour = next(stream)
@@ -245,8 +253,19 @@ class FakeVdp:
                     else:
                         with self.lock:
                             self.palette[logical] = (red, green, blue)
+                elif byte == 28:
+                    left, bottom, right, top = (next(stream) for _ in range(4))
+                    if self.listening:
+                        self._set_viewport(left, top, right, bottom)
                 elif not self.listening:
                     self.dropped += 1
+                elif byte == 26:
+                    self._event("viewports")
+                    with self.lock:
+                        self.viewport = None
+                        self.cursor = 0
+                        self.grid_row = self.grid_column = 0
+                        self.lock.notify_all()
                 elif byte == 12:
                     self._event("cls")
                     with self.lock:
@@ -264,6 +283,7 @@ class FakeVdp:
                     self._glyph(next(stream))
                 elif byte == 31:
                     column, row = next(stream), next(stream)
+                    self._check_no_viewport(f"VDU 31,{column},{row}")
                     if column < self.grid_columns and row < self.grid_rows:
                         with self.lock:
                             self.grid_row, self.grid_column = row, column
@@ -340,6 +360,10 @@ class FakeVdp:
             mode = next(stream)
             if self.listening:
                 self._event("cursor", mode)
+        elif first == SCROLL:
+            extent, direction, movement = (next(stream) for _ in range(3))
+            if self.listening:
+                self._scroll(extent, direction, movement)
         elif first == SPRITES:
             self._sprites(stream)
         elif first == CURSOR_BEHAVIOUR:
@@ -585,6 +609,59 @@ class FakeVdp:
             self.events.append((time.time(), kind, detail))
             self.lock.notify_all()
 
+    def _set_viewport(self, left, top, right, bottom):
+        """Set the text viewport, as VDU 28 does.
+
+        @param left The leftmost column.
+        @param top The top row.
+        @param right The rightmost column.
+        @param bottom The bottom row.
+        """
+        with self.lock:
+            if (left <= right < self.grid_columns
+                    and top <= bottom < self.grid_rows):
+                self.viewport = (left, top, right, bottom)
+            else:
+                self.errors.append(
+                    f"VDU 28,{left},{bottom},{right},{top} is off the screen")
+
+    def _check_no_viewport(self, what):
+        """Record an error for drawing or moving the cursor while a text
+        viewport is set, since the real VDP then measures from the viewport's
+        corner, which this grid doesn't model.
+
+        @param what The VDU command, for the error.
+        """
+        if self.viewport is not None:
+            self.errors.append(f"{what} inside the text viewport")
+
+    def _scroll(self, extent, direction, movement):
+        """Scroll the text viewport by a character row, as VDU 23,7 does
+        with an extent of 0 and a movement of 0, blanking the row scrolled in.
+
+        @param extent The VDU 23,7 extent.
+        @param direction The VDU 23,7 direction.
+        @param movement The VDU 23,7 movement, in pixels.
+        """
+        if (extent != 0 or direction not in (SCROLL_DOWN, SCROLL_UP)
+                or movement != 0):
+            self.errors.append(f"VDU 23,7,{extent},{direction},{movement}")
+            return
+        with self.lock:
+            left, top, right, bottom = self.viewport or (
+                0, 0, self.grid_columns - 1, self.grid_rows - 1)
+            rows = [self.grid[row][left:right + 1]
+                    for row in range(top, bottom + 1)]
+            blank = [" "] * (right - left + 1)
+            if direction == SCROLL_DOWN:
+                rows = [blank] + rows[:-1]
+            else:
+                rows = rows[1:] + [blank]
+            for row, cells in zip(range(top, bottom + 1), rows):
+                self.grid[row][left:right + 1] = cells
+            self.lock.notify_all()
+        self._event("scroll", direction)
+
     def _grid_clear(self):
         self.grid = [[" "] * self.grid_columns for _ in range(self.grid_rows)]
         self.grid_row = self.grid_column = 0
@@ -613,6 +690,7 @@ class FakeVdp:
 
     def _glyph(self, byte):
         with self.lock:
+            self._check_no_viewport(f"glyph {byte}")
             self.screen = (self.screen[:self.cursor] + chr(byte)
                            + self.screen[self.cursor + 1:])
             self.cursor += 1
@@ -625,6 +703,7 @@ class FakeVdp:
             self._glyph(byte)
             return
         with self.lock:
+            self._check_no_viewport(f"VDU {byte}")
             if byte == 8:
                 if self.cursor > 0 and self.screen[self.cursor - 1] != "\n":
                     self.cursor -= 1

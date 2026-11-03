@@ -955,6 +955,48 @@ def test_termtest_erase_writes_at_the_position_it_is_given(s):
     s.child.expect(PROMPT, timeout=10)
 
 
+def test_termtest_inserts_and_deletes_rows_at_the_row_it_is_given(s):
+    s.login()
+    s.child.sendline("termtest insert 3 2")
+    s.child.expect_exact("\x1b[999;1Hz\x1b[3;1H\x1b[2L", timeout=10)
+    s.child.sendline("")
+    s.child.expect(PROMPT, timeout=10)
+    s.child.sendline("termtest delete")
+    s.child.expect_exact("\x1b[999;1Hz\x1b[2;1H\x1b[1M", timeout=10)
+    s.child.sendline("")
+    s.child.expect(PROMPT, timeout=10)
+
+
+def test_vdp_console_inserts_and_deletes_rows(s):
+    vdp = s.restart_with_vdp()
+    vdp_login(vdp)
+    rows = vdp.grid_rows
+
+    def shows(top, bottom):
+        def check(grid):
+            return (grid[:len(top)] == top
+                    and grid[len(top):rows - len(bottom)]
+                    == [""] * (rows - len(top) - len(bottom))
+                    and grid[rows - len(bottom):] == bottom)
+        return check
+
+    # termtest waits for input, so the insertion is the last thing it writes.
+    vdp.type("termtest insert 2 2\r")
+    vdp.wait_grid(shows(["a", "", "", "b", "c", "d", "e"], []))
+    assert (vdp.grid_row, vdp.grid_column) == (1, 0)
+    vdp.type("\r")
+    vdp.expect(PROMPT + r"$")
+    vdp.type("termtest delete 2 2\r")
+    vdp.wait_grid(shows(["a", "d", "e"], ["z", "", ""]))
+    vdp.type("\r")
+    vdp.expect(PROMPT + r"$")
+    vdp.type("termtest delete 1 99\r")
+    vdp.wait_grid(shows([], []))
+    vdp.type("\r")
+    vdp.expect(PROMPT + r"$")
+    assert vdp.errors == [], f"unexpected VDU commands: {vdp.errors}"
+
+
 def test_vdp_console_reports_its_size(s):
     vdp = s.restart_with_vdp()
     vdp_login(vdp)

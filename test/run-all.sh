@@ -60,6 +60,12 @@ fi
 
 if [ "${RUN_E2E}" = "1" ]; then
 	section "Layer 3: end-to-end (real simulator)"
+	if python3 test/e2e/test_models.py; then
+		echo "[e2e models] PASS"
+	else
+		echo "[e2e models] FAIL"
+		rc=1
+	fi
 	if python3 -c "import pexpect" 2>/dev/null; then
 		if python3 test/e2e/run.py; then
 			echo "[e2e] PASS"

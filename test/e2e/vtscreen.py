@@ -30,7 +30,8 @@
 
 It understands the NanoOs terminal subset: printable characters, carriage
 return, line feed, backspace, ESC[r;cH and ESC[r;cf (move the cursor),
-ESC[K (erase to the end of the row), and ESC[2J (erase the screen).  Writing in
+ESC[K (erase to the end of the row), ESC[2J (erase the screen), and ESC[nL and
+ESC[nM (insert and delete n rows at the cursor's row).  Writing in
 the last column leaves a wrap pending until the next printable character, as
 xterm does.  Every other escape sequence is ignored.
 """
@@ -134,3 +135,14 @@ class VtScreen:
                 self.cells[self.row][column] = " "
         elif (final == "J") and (numbers[0] == 2):
             self.cells = [[" "] * self.columns for _ in range(self.rows)]
+        elif final in "LM":
+            count = min(numbers[0] if numbers[0] else 1, self.rows - self.row)
+            blank = [[" "] * self.columns for _ in range(count)]
+            if final == "L":
+                self.cells[self.row:self.row] = blank
+                del self.cells[self.rows:]
+            else:
+                del self.cells[self.row:self.row + count]
+                self.cells.extend(blank)
+            self.column = 0
+            self.wrap_pending = False
