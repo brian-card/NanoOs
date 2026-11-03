@@ -117,31 +117,25 @@ static void viOperateOnLines(ViState *state) {
   if (!viBeginChange(state)) {
     return;
   }
+  int oldRows = viRowsOfLines(state, first, last, row);
   if (state->operator == 'd') {
-    if (!exDeleteLines(&state->ex, first, last)) {
-      return;
+    if (exDeleteLines(&state->ex, first, last)) {
+      state->ex.modified = true;
+      viRequestDeleted(state, first, row, oldRows);
     }
-    state->ex.modified = true;
-    if (first > store->numLines) {
-      first = (store->numLines > 0) ? store->numLines : 1;
-      row = viRowOf(state, first);
-    }
-    viLoadLine(state, first);
-    state->index = (int16_t) viFirstNonBlank(state);
-  } else {
-    if ((last > first) && !exDeleteLines(&state->ex, first + 1, last)) {
-      return;
-    }
-    viLoadLine(state, first);
-    state->length = 0;
-    state->text[0] = '\0';
-    state->changed = true;
-    state->index = 0;
-    if (!viCommitLine(state)) {
-      return;
-    }
+    return;
   }
-  viRequest(state, first, row, VI_REQUEST_SHOW);
+  if ((last > first) && !exDeleteLines(&state->ex, first + 1, last)) {
+    return;
+  }
+  viLoadLine(state, first);
+  state->length = 0;
+  state->text[0] = '\0';
+  state->changed = true;
+  state->index = 0;
+  if (viCommitLine(state)) {
+    viRequestRows(state, first, row, VI_REQUEST_SHOW, oldRows, 1);
+  }
 }
 
 /// @fn void* viRun(void *args)
@@ -191,7 +185,8 @@ void* viRun(void *args) {
   state->length = (int16_t) (state->length - (end - start));
   state->changed = true;
   if (viCommitLine(state)) {
-    viRequest(state, state->line, state->lineRow, VI_REQUEST_SHOW);
+    viRequestRows(state, state->line, state->lineRow, VI_REQUEST_SHOW,
+      viRowsFor(state, state->width), 1);
   }
   return args;
 }

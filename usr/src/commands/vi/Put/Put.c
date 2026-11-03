@@ -55,7 +55,7 @@ static void viOpenLine(ViState *state, bool after) {
   int row = after
     ? state->lineRow + viRowsFor(state, state->width) : state->lineRow;
   state->index = 0;
-  viRequest(state, line + 1, row, VI_REQUEST_SHOW);
+  viRequestRows(state, line + 1, row, VI_REQUEST_SHOW, 0, 1);
 }
 
 /// @fn static void viPutLines(ViState *state, bool after, int count)
@@ -101,7 +101,7 @@ static void viPutLines(ViState *state, bool after, int count) {
     ? state->lineRow + viRowsFor(state, state->width) : state->lineRow;
   if (viLoadLine(state, first)) {
     state->index = (int16_t) viFirstNonBlank(state);
-    viRequest(state, first, row, VI_REQUEST_SHOW);
+    viRequestRows(state, first, row, VI_REQUEST_SHOW, 0, line - first + 1);
   }
 }
 
@@ -130,10 +130,12 @@ static bool viSplitLine(ViState *state) {
   ) {
     return false;
   }
+  int oldRows = viRowsFor(state, state->width);
   viMeasure(state);
+  int rows = viRowsFor(state, state->width);
   state->index = 0;
-  viRequest(state, state->line + 1,
-    state->lineRow + viRowsFor(state, state->width), VI_REQUEST_SPLIT);
+  viRequestRows(state, state->line + 1, state->lineRow + rows,
+    VI_REQUEST_SPLIT, oldRows - rows, 1);
   return true;
 }
 

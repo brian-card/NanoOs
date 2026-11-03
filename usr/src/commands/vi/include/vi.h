@@ -158,8 +158,9 @@ typedef struct ViYank {
 
 /// @enum ViRequest
 ///
-/// @brief What an overlay that changed the buffer asks the main overlay, which
-/// has the drawing code, to show once it returns.
+/// @brief What an overlay that changed the buffer asks to be shown once it
+/// returns:  the main overlay moves to a line or redraws the screen, and the
+/// Show overlay shows lines that replaced others.
 typedef enum ViRequest {
   VI_REQUEST_NONE,
   VI_REQUEST_MOVE,
@@ -232,8 +233,8 @@ typedef enum ViKey {
 ///   savedModes.
 /// @param exact Whether the insert mode of the command being run has stayed
 ///   on one line.
-/// @param request The ViRequest:  show requestLine at requestRow and redraw
-///   below it, after redrawing the current line for VI_REQUEST_SPLIT.
+/// @param request The ViRequest:  show requestLine at requestRow, as
+///   viRequest and viRequestRows describe.
 /// @param yankKind The ViYankKind of the yank chain.
 /// @param step The ViStep of the command being run.
 /// @param operator The operator a motion is for, or '\0' to move the cursor.
@@ -315,14 +316,21 @@ static inline int viCharWidth(unsigned char c, int column) {
 
 /// @fn static inline int viRowsFor(ViState *state, int width)
 ///
-/// @brief Get the number of screen rows a line of a width takes up.
+/// @brief Get the number of screen rows a line of a width takes up.  It
+/// subtracts rather than divides, since a division costs the SAMD21 a
+/// 460-byte library routine in each overlay that has one.
 ///
 /// @param state The ViState of the running `vi`.
 /// @param width The line's width in columns.
 ///
 /// @return Returns the number of rows, at least 1.
 static inline int viRowsFor(ViState *state, int width) {
-  return (width == 0) ? 1 : ((width + state->columns - 1) / state->columns);
+  int rows = 1;
+  while (width > state->columns) {
+    width -= state->columns;
+    rows++;
+  }
+  return rows;
 }
 
 /// @fn static inline void viStatus(ViState *state, const char *message)
@@ -450,16 +458,13 @@ static inline bool viLoadLine(ViState *state, int line) {
 /// @fn static inline void viRequest(ViState *state, int line, int row,
 ///   uint8_t request)
 ///
-/// @brief Ask the main overlay to show a line at a screen row and redraw the
-/// screen below it.
+/// @brief Ask the main overlay to show a line at a screen row.
 ///
 /// @param state The ViState of the running `vi`.
 /// @param line The number of the line to make current.
 /// @param row The screen row to show it at.
-/// @param request VI_REQUEST_MOVE to redraw only if the screen scrolls,
-///   VI_REQUEST_SHOW to redraw from the line down, VI_REQUEST_SPLIT to
-///   redraw the current line first as well, or VI_REQUEST_REDRAW to redraw
-///   the whole screen.
+/// @param request VI_REQUEST_MOVE to redraw only if the screen scrolls, or
+///   VI_REQUEST_REDRAW to redraw the whole screen.
 ///
 /// @return This function returns no value.
 static inline void viRequest(ViState *state, int line, int row,
@@ -468,6 +473,31 @@ static inline void viRequest(ViState *state, int line, int row,
   state->requestLine = line;
   state->requestRow = (int16_t) row;
   state->request = request;
+}
+
+/// @fn static inline void viRequestRows(ViState *state, int line, int row,
+///   uint8_t request, int oldRows, int numLines)
+///
+/// @brief Ask the Show overlay to show numLines lines from a line at a screen
+/// row, in place of lines that took up oldRows rows there.  The counts are
+/// kept in ex.addr1 and ex.destination, which only the Command overlay's
+/// address parsing uses, since ViState has no room for them.
+///
+/// @param state The ViState of the running `vi`.
+/// @param line The number of the first line, which is made current.
+/// @param row The screen row it starts on.
+/// @param request VI_REQUEST_SHOW, or VI_REQUEST_SPLIT to redraw the current
+///   line first.
+/// @param oldRows The number of rows the replaced lines took up.
+/// @param numLines The number of lines that replace them.
+///
+/// @return This function returns no value.
+static inline void viRequestRows(ViState *state, int line, int row,
+  uint8_t request, int oldRows, int numLines
+) {
+  viRequest(state, line, row, request);
+  state->ex.addr1 = oldRows;
+  state->ex.destination = numLines;
 }
 
 /// @fn static inline int viFirstNonBlank(ViState *state)
@@ -692,6 +722,33 @@ static inline void viDrawFrom(ViState *state, int row, int line) {
   }
 }
 
+/// @fn static inline void viShiftRows(ViState *state, int row, int count)
+///
+/// @brief Move the rows from a screen row to the last row above the status
+/// line down, inserting blank rows, or up, deleting rows and leaving blank
+/// ones above the status line.  Each is a deletion and an insertion, so that
+/// the status line stays where it is.
+///
+/// @param state The ViState of the running `vi`.
+/// @param row The screen row, from 0.
+/// @param count The number of rows to insert, or minus the number to delete.
+///
+/// @return This function returns no value.
+static inline void viShiftRows(ViState *state, int row, int count) {
+  int textRows = state->rows - 1;
+  int rows = (count < 0) ? -count : count;
+  if (rows > textRows - row) {
+    rows = textRows - row;
+  }
+  if (rows <= 0) {
+    return;
+  }
+  screenMoveTo(((count > 0) ? textRows - rows : row) + 1, 1);
+  screenDeleteLines(rows);
+  screenMoveTo(((count > 0) ? row : textRows - rows) + 1, 1);
+  screenInsertLines(rows);
+}
+
 /// @fn static inline void viPlaceCursor(ViState *state)
 ///
 /// @brief Move the cursor to the character at state->index.
@@ -759,28 +816,6 @@ static inline bool viShowLine(ViState *state, int line, int row, bool redraw) {
   return true;
 }
 
-/// @fn static inline void viApplyRequest(ViState *state)
-///
-/// @brief Show what an overlay that changed the buffer asked to be shown.
-///
-/// @param state The ViState of the running `vi`.
-///
-/// @return This function returns no value.
-static inline void viApplyRequest(ViState *state) {
-  uint8_t request = state->request;
-  state->request = VI_REQUEST_NONE;
-  if (request == VI_REQUEST_SPLIT) {
-    viDrawLine(state, state->line, state->lineRow);
-  }
-  if ((request != VI_REQUEST_NONE)
-    && viShowLine(state, state->requestLine, state->requestRow,
-      (request == VI_REQUEST_SHOW) || (request == VI_REQUEST_SPLIT))
-    && (request == VI_REQUEST_REDRAW)
-  ) {
-    viDrawFrom(state, 0, state->top);
-  }
-}
-
 /// @fn static inline int viRowOf(ViState *state, int line)
 ///
 /// @brief Find the screen row a line starts on, from the line at the top.
@@ -800,6 +835,62 @@ static inline int viRowOf(ViState *state, int line) {
       ? state->width : viReadLine(state, ii, false));
   }
   return (row < state->rows - 1) ? row : state->rows;
+}
+
+/// @fn static inline int viRowsOfLines(ViState *state, int first, int last,
+///   int row)
+///
+/// @brief Count the screen rows a range of lines takes up from a screen row,
+/// stopping at the last row above the status line.
+///
+/// @param state The ViState of the running `vi`.
+/// @param first The number of the first line.
+/// @param last The number of the last line.
+/// @param row The screen row the first line starts on, or -1 if it is above
+///   the screen.
+///
+/// @return Returns the number of rows, 0 if the first line is above the
+/// screen.
+static inline int viRowsOfLines(ViState *state, int first, int last, int row) {
+  int rows = 0;
+  for (int line = first;
+    (line <= last) && (row >= 0) && (row + rows < state->rows - 1); line++
+  ) {
+    rows += viRowsFor(state, (line == state->line)
+      ? state->width : viReadLine(state, line, false));
+  }
+  return rows;
+}
+
+/// @fn static inline void viRequestDeleted(ViState *state, int first,
+///   int row, int oldRows)
+///
+/// @brief After lines were deleted, make the line that took their place
+/// current, or the new last line if they were the last ones, and ask the
+/// Show overlay to show it.
+///
+/// @param state The ViState of the running `vi`.
+/// @param first The number of the first line deleted.
+/// @param row The screen row it started on.
+/// @param oldRows The number of rows the deleted lines took up.
+///
+/// @return This function returns no value.
+static inline void viRequestDeleted(
+  ViState *state, int first, int row, int oldRows
+) {
+  TextStore *store = &state->ex.store;
+  int numLines = 0;
+  if (first > store->numLines) {
+    numLines = 1;
+    if (store->numLines > 0) {
+      first = store->numLines;
+      row = viRowOf(state, first);
+      oldRows += viRowsFor(state, viReadLine(state, first, false));
+    }
+  }
+  viLoadLine(state, first);
+  state->index = (int16_t) viFirstNonBlank(state);
+  viRequestRows(state, first, row, VI_REQUEST_SHOW, oldRows, numLines);
 }
 
 /// @fn static inline void viRedrawCurrent(ViState *state, int oldRows)

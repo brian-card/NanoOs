@@ -172,7 +172,19 @@ static void viRunCommand(ViState *state, char *text) {
       line = (ex->current > 0) ? ex->current : 1;
       break;
 
-    case 'd':
+    case 'd': {
+      int first = ex->addr1;
+      int row = viRowOf(state, first);
+      int oldRows = viRowsOfLines(state, first, ex->addr2, row);
+      viCallEx(state, "Edit", "exEdit");
+      if (ex->store.error == EX_ERROR_NONE) {
+        viRequestDeleted(state, first, row, oldRows);
+      } else {
+        line = (ex->current > 0) ? ex->current : 1;
+      }
+      break;
+    }
+
     case 'j':
       viCallEx(state, "Edit", "exEdit");
       line = (ex->current > 0) ? ex->current : 1;

@@ -36,11 +36,10 @@
 #include "vi.h"
 #include "NanoOsUtils.h"
 
-/// @fn static void viCallOverlay(ViState *state, const char *overlay,
+/// @fn static void viRunOverlay(ViState *state, const char *overlay,
 ///   const char *function)
 ///
-/// @brief Run a function in another of `vi`'s overlays, then show what it
-/// asked to be shown.
+/// @brief Run a function in another of `vi`'s overlays.
 ///
 /// @param state The ViState of the running `vi`.
 /// @param overlay The name of the overlay.
@@ -48,16 +47,43 @@
 ///
 /// @return This function returns no value.  If the overlay can't be loaded,
 /// state->ex.store.error is set.
-static void viCallOverlay(
+static void viRunOverlay(
   ViState *state, const char *overlay, const char *function
 ) {
-  state->request = VI_REQUEST_NONE;
   if (callOverlayFunction(OVERLAY_SAME_NAMESPACE, overlay, function, state)
     == NULL
   ) {
     state->ex.store.error = EX_ERROR_MEMORY;
   }
-  viApplyRequest(state);
+}
+
+/// @fn static void viCallOverlay(ViState *state, const char *overlay,
+///   const char *function)
+///
+/// @brief Run a function in another of `vi`'s overlays, then show what it
+/// asked to be shown:  lines that replaced others by the Show overlay, and a
+/// move or a redraw here.
+///
+/// @param state The ViState of the running `vi`.
+/// @param overlay The name of the overlay.
+/// @param function The name of the function to run.
+///
+/// @return This function returns no value.  If an overlay can't be loaded,
+/// state->ex.store.error is set.
+static void viCallOverlay(
+  ViState *state, const char *overlay, const char *function
+) {
+  state->request = VI_REQUEST_NONE;
+  viRunOverlay(state, overlay, function);
+  uint8_t request = state->request;
+  if ((request == VI_REQUEST_SHOW) || (request == VI_REQUEST_SPLIT)) {
+    viRunOverlay(state, "Show", "viRun");
+  } else if ((request != VI_REQUEST_NONE)
+    && viShowLine(state, state->requestLine, state->requestRow, false)
+    && (request == VI_REQUEST_REDRAW)
+  ) {
+    viDrawFrom(state, 0, state->top);
+  }
 }
 
 /// @var viStepOverlays

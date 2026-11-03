@@ -130,7 +130,8 @@ static void viPutText(ViState *state, bool after, int count) {
   state->index = (int16_t) (at + total - 1);
   state->changed = true;
   if (viCommitLine(state)) {
-    viRequest(state, state->line, state->lineRow, VI_REQUEST_SHOW);
+    viRequestRows(state, state->line, state->lineRow, VI_REQUEST_SHOW,
+      viRowsFor(state, state->width), 1);
   }
 }
 
@@ -149,6 +150,7 @@ void* viRun(void *args) {
   TextStore *store = &state->ex.store;
   int count = (state->count > 0) ? state->count : 1;
   char argument = state->argument;
+  int oldRows = viRowsFor(state, state->width);
 
   if (state->ex.command == 'm') {
     uint32_t offset = textstoreLineOffset(store, state->line);
@@ -184,9 +186,15 @@ void* viRun(void *args) {
     viCommitLine(state);
   } else {
     count = (count > 2) ? count - 1 : 1;
-    for (int ii = 0; (ii < count) && viJoinLine(state); ii++) {
+    for (int ii = 0; ii < count; ii++) {
+      int width = viReadLine(state, state->line + 1, false);
+      if (!viJoinLine(state)) {
+        break;
+      }
+      oldRows += viRowsFor(state, width);
     }
   }
-  viRequest(state, state->line, state->lineRow, VI_REQUEST_SHOW);
+  viRequestRows(state, state->line, state->lineRow, VI_REQUEST_SHOW,
+    oldRows, 1);
   return args;
 }
