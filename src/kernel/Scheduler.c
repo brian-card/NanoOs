@@ -4600,14 +4600,12 @@ terminateAndRestart:
     processDescriptor->envp = NULL;
   }
 
-  if (processState(processDescriptor) == PROCESS_STATE_WAIT) {
-    processQueuePush(_schedulerState->waitingQueue, processDescriptor);
-  } else if (processState(processDescriptor) == PROCESS_STATE_TIMEDWAIT) {
-    processQueuePush(_schedulerState->timedWaitingQueue, processDescriptor);
-  } else if (processFinished(processDescriptor)) {
-    schedulerReleaseExitedProcess(processDescriptor);
-  } else { // Process is still running.
-    processQueuePush(_schedulerState->currentReady, processDescriptor);
+  if (schedulerQueueWaitingProcess(processDescriptor) == false) {
+    if (processFinished(processDescriptor)) {
+      schedulerReleaseExitedProcess(processDescriptor);
+    } else { // Process is still running.
+      processQueuePush(_schedulerState->currentReady, processDescriptor);
+    }
   }
 
   returnValue = 0;
@@ -4809,6 +4807,55 @@ void checkForTimeouts(SchedulerState *schedulerState) {
   }
 
   return;
+}
+
+/// @fn bool schedulerQueueWaitingProcess(ProcessDescriptor *processDescriptor)
+///
+/// @brief Queue a process that has yielded to wait:  on its waiting or timed
+/// waiting queue, or on its ready queue if what it waits for has already
+/// happened.  That happens when a condition is signalled or a mutex unlocked
+/// while the process is in no queue, where signalCallback and unlockCallback
+/// leave it.
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor of the process.
+///
+/// @return Returns true if the process was waiting and has been queued, false
+/// if it wasn't waiting and hasn't been.
+bool schedulerQueueWaitingProcess(ProcessDescriptor *processDescriptor) {
+  ProcessQueue *processQueue = NULL;
+  if (processState(processDescriptor) == PROCESS_STATE_WAIT) {
+    processQueue = _schedulerState->waitingQueue;
+  } else if (processState(processDescriptor) == PROCESS_STATE_TIMEDWAIT) {
+    processQueue = _schedulerState->timedWaitingQueue;
+  } else {
+    return false;
+  }
+
+  Coroutine *thread = processDescriptor->mainThread;
+  Cocondition *cocondition = thread->blockingCocondition;
+  if (cocondition != NULL) {
+    Coroutine *cur = cocondition->head;
+    for (int ii = 0; (ii < cocondition->numSignals) && (cur != NULL); ii++) {
+      if (cur == thread) {
+        // Already signaled.  *DON'T* put it on a waiting queue, put it back
+        // on its ready queue.
+        processQueue = processDescriptor->readyQueue;
+        break;
+      }
+      cur = cur->nextToSignal;
+    }
+  }
+  Comutex *comutex = thread->blockingComutex;
+  if ((comutex != NULL) && (comutex->head == thread)
+    && (atomic_load(&comutex->coroutine) == NULL)
+  ) {
+    // Already unlocked.  *DON'T* put it on a waiting queue.  Put it back on
+    // its ready queue.
+    processQueue = processDescriptor->readyQueue;
+  }
+
+  processQueuePush(processQueue, processDescriptor);
+  return true;
 }
 
 /// @fn void forceYield(void)
@@ -5785,14 +5832,12 @@ void runScheduler(void) {
     } while (0);
   }
 
-  if (processState(processDescriptor) == PROCESS_STATE_WAIT) {
-    processQueuePush(_schedulerState->waitingQueue, processDescriptor);
-  } else if (processState(processDescriptor) == PROCESS_STATE_TIMEDWAIT) {
-    processQueuePush(_schedulerState->timedWaitingQueue, processDescriptor);
-  } else if (processFinished(processDescriptor)) {
-    processQueuePush(_schedulerState->freeQueue, processDescriptor);
-  } else { // Process is still running.
-    processQueuePush(_schedulerState->currentReady, processDescriptor);
+  if (schedulerQueueWaitingProcess(processDescriptor) == false) {
+    if (processFinished(processDescriptor)) {
+      processQueuePush(_schedulerState->freeQueue, processDescriptor);
+    } else { // Process is still running.
+      processQueuePush(_schedulerState->currentReady, processDescriptor);
+    }
   }
 
 exit:
