@@ -283,6 +283,21 @@ typedef struct ViState {
   char            buffer[TEXTSTORE_BUFFER_SIZE];
 } ViState;
 
+/// @def VI_SHOW_KEEP
+///
+/// @brief The viShowLine way of showing a line that draws nothing if it fits.
+#define VI_SHOW_KEEP 0
+
+/// @def VI_SHOW_REDRAW
+///
+/// @brief The viShowLine way of showing a line that redraws from it down.
+#define VI_SHOW_REDRAW 1
+
+/// @def VI_SHOW_FIT
+///
+/// @brief The viShowLine way of showing a line only if it fits.
+#define VI_SHOW_FIT 2
+
 /// @struct ViDraw
 ///
 /// @brief Where drawing a line has reached.
@@ -727,7 +742,8 @@ static inline void viDrawFrom(ViState *state, int row, int line) {
 /// @brief Move the rows from a screen row to the last row above the status
 /// line down, inserting blank rows, or up, deleting rows and leaving blank
 /// ones above the status line.  Each is a deletion and an insertion, so that
-/// the status line stays where it is.
+/// the status line stays where it is, written with one printf rather than
+/// screenDeleteLines and screenInsertLines, which is smaller.
 ///
 /// @param state The ViState of the running `vi`.
 /// @param row The screen row, from 0.
@@ -743,10 +759,9 @@ static inline void viShiftRows(ViState *state, int row, int count) {
   if (rows <= 0) {
     return;
   }
-  screenMoveTo(((count > 0) ? textRows - rows : row) + 1, 1);
-  screenDeleteLines(rows);
-  screenMoveTo(((count > 0) ? row : textRows - rows) + 1, 1);
-  screenInsertLines(rows);
+  printf("\033[%d;1H\033[%dM\033[%d;1H\033[%dL",
+    ((count > 0) ? textRows - rows : row) + 1, rows,
+    ((count > 0) ? row : textRows - rows) + 1, rows);
 }
 
 /// @fn static inline void viPlaceCursor(ViState *state)
@@ -769,20 +784,23 @@ static inline void viPlaceCursor(ViState *state) {
 }
 
 /// @fn static inline bool viShowLine(ViState *state, int line, int row,
-///   bool redraw)
+///   uint8_t how)
 ///
 /// @brief Make a line the current line and show it at a screen row if it
-/// fits there, or else scroll so that it is the top line, if it is above the
-/// screen, or the bottom one.  The current line's changed text is kept.
+/// fits there, or else, unless asked not to, scroll so that it is the top
+/// line, if it is above the screen, or the bottom one, and redraw the
+/// screen.  The current line's changed text is kept.
 ///
 /// @param state The ViState of the running `vi`.
 /// @param line The number of the line.
-/// @param row The screen row to show it at, or -1 to put it at the top.
-/// @param redraw Whether to redraw from the line down even if it fits.
+/// @param row The screen row to show it at, or -1 for above the screen.
+/// @param how VI_SHOW_KEEP to draw nothing if it fits, VI_SHOW_REDRAW to
+///   redraw from the line down even if it fits, or VI_SHOW_FIT to draw
+///   nothing and not scroll if it doesn't fit.
 ///
-/// @return Returns true on success, false with state->ex.store.error set on
-/// failure.
-static inline bool viShowLine(ViState *state, int line, int row, bool redraw) {
+/// @return Returns true if it is shown, false if VI_SHOW_FIT was given and it
+/// doesn't fit, or false with state->ex.store.error set on failure.
+static inline bool viShowLine(ViState *state, int line, int row, uint8_t how) {
   int textRows = state->rows - 1;
   if (((line != state->line) || !state->changed) && !viLoadLine(state, line)) {
     return false;
@@ -790,10 +808,12 @@ static inline bool viShowLine(ViState *state, int line, int row, bool redraw) {
   int lineRows = viRowsFor(state, state->width);
   if ((row >= 0) && (row + lineRows <= textRows)) {
     state->lineRow = row;
-    if (redraw) {
+    if (how == VI_SHOW_REDRAW) {
       viDrawFrom(state, row, line);
     }
     return true;
+  } else if (how == VI_SHOW_FIT) {
+    return false;
   }
 
   if (row < 0) {
@@ -895,8 +915,8 @@ static inline void viRequestDeleted(
 
 /// @fn static inline void viRedrawCurrent(ViState *state, int oldRows)
 ///
-/// @brief Redraw the current line after its text changed, and the lines
-/// below it if it now takes up a different number of rows.
+/// @brief Redraw the current line after its text changed.  If it now takes
+/// up more rows, the lines below it move down; if fewer, they are redrawn.
 ///
 /// @param state The ViState of the running `vi`.
 /// @param oldRows The number of rows the line took up before the change.
@@ -906,10 +926,11 @@ static inline void viRedrawCurrent(ViState *state, int oldRows) {
   viMeasure(state);
   int lineRows = viRowsFor(state, state->width);
   if (state->lineRow + lineRows > state->rows - 1) {
-    viShowLine(state, state->line, state->rows, true);
-  } else if (lineRows != oldRows) {
+    viShowLine(state, state->line, state->rows, VI_SHOW_REDRAW);
+  } else if (lineRows < oldRows) {
     viDrawFrom(state, state->lineRow, state->line);
   } else {
+    viShiftRows(state, state->lineRow + oldRows, lineRows - oldRows);
     viDrawLine(state, state->line, state->lineRow);
   }
 }

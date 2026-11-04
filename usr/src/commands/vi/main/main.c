@@ -57,12 +57,51 @@ static void viRunOverlay(
   }
 }
 
+/// @fn static void viShow(ViState *state, int line, int row,
+///   uint8_t request)
+///
+/// @brief Have the Show overlay show a line at a screen row, which is all the
+/// drawing of the screen this overlay asks for.  Keeping the drawing code
+/// there leaves room here for the key loop.
+///
+/// @param state The ViState of the running `vi`.
+/// @param line The number of the line to make current.
+/// @param row The screen row to show it at, or -1 for above the screen.
+/// @param request VI_REQUEST_MOVE to scroll to it, or VI_REQUEST_REDRAW to
+///   redraw the screen as well.
+///
+/// @return This function returns no value.  Errors are left in
+/// state->ex.store.error.
+static void viShow(ViState *state, int line, int row, uint8_t request) {
+  viRequest(state, line, row, request);
+  viRunOverlay(state, "Show", "viRun");
+}
+
+/// @fn static void viMoveTo(ViState *state, int line, int row)
+///
+/// @brief Make a line the current line at a screen row, having the Show
+/// overlay scroll if it doesn't fit there.
+///
+/// @param state The ViState of the running `vi`.
+/// @param line The number of the line.
+/// @param row The screen row to show it at, or -1 for above the screen.
+///
+/// @return This function returns no value.  Errors are left in
+/// state->ex.store.error.
+static void viMoveTo(ViState *state, int line, int row) {
+  if (!viShowLine(state, line, row, VI_SHOW_FIT)
+    && (state->ex.store.error == EX_ERROR_NONE)
+  ) {
+    viShow(state, line, row, VI_REQUEST_MOVE);
+  }
+}
+
 /// @fn static void viCallOverlay(ViState *state, const char *overlay,
 ///   const char *function)
 ///
 /// @brief Run a function in another of `vi`'s overlays, then show what it
-/// asked to be shown:  lines that replaced others by the Show overlay, and a
-/// move or a redraw here.
+/// asked to be shown:  a move that doesn't scroll here, and anything else by
+/// the Show overlay.
 ///
 /// @param state The ViState of the running `vi`.
 /// @param overlay The name of the overlay.
@@ -76,13 +115,10 @@ static void viCallOverlay(
   state->request = VI_REQUEST_NONE;
   viRunOverlay(state, overlay, function);
   uint8_t request = state->request;
-  if ((request == VI_REQUEST_SHOW) || (request == VI_REQUEST_SPLIT)) {
+  if (request == VI_REQUEST_MOVE) {
+    viMoveTo(state, state->requestLine, state->requestRow);
+  } else if (request != VI_REQUEST_NONE) {
     viRunOverlay(state, "Show", "viRun");
-  } else if ((request != VI_REQUEST_NONE)
-    && viShowLine(state, state->requestLine, state->requestRow, false)
-    && (request == VI_REQUEST_REDRAW)
-  ) {
-    viDrawFrom(state, 0, state->top);
   }
 }
 
@@ -146,8 +182,8 @@ static void viRunKey(ViState *state, int key) {
     case 'j':
     case VI_KEY_DOWN:
       if (state->line < state->ex.store.numLines) {
-        viShowLine(state, state->line + 1,
-          state->lineRow + viRowsFor(state, state->width), false);
+        viMoveTo(state, state->line + 1,
+          state->lineRow + viRowsFor(state, state->width));
       }
       break;
 
@@ -156,8 +192,8 @@ static void viRunKey(ViState *state, int key) {
       if (state->line > 1) {
         int width = viReadLine(state, state->line - 1, false);
         if (width >= 0) {
-          viShowLine(state, state->line - 1,
-            state->lineRow - viRowsFor(state, width), false);
+          viMoveTo(state, state->line - 1,
+            state->lineRow - viRowsFor(state, width));
         }
       }
       break;
@@ -173,12 +209,12 @@ static void viRunKey(ViState *state, int key) {
     case VI_KEY_RESIZE:
       // The old layout may not fit, so start over with this line at the top.
       screenClear();
-      viShowLine(state, state->line, -1, true);
+      viShow(state, state->line, -1, VI_REQUEST_REDRAW);
       break;
 
     case 0x0c:
       screenClear();
-      viDrawFrom(state, 0, state->top);
+      viShow(state, state->line, state->lineRow, VI_REQUEST_REDRAW);
       break;
 
     default:
@@ -234,7 +270,7 @@ int main(int argc, char **argv) {
   state->quit = (returnValue != 0);
   state->top = 1;
   if (!state->quit) {
-    viShowLine(state, 1, 0, true);
+    viShow(state, 1, 0, VI_REQUEST_REDRAW);
   }
 
   while (!state->quit) {

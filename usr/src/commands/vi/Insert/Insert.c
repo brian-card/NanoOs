@@ -125,7 +125,7 @@ void* viRun(void *args) {
     } else if (key == VI_KEY_RESIZE) {
       // The old layout may not fit, so start over with this line at the top.
       screenClear();
-      viShowLine(state, state->line, -1, true);
+      viShowLine(state, state->line, -1, VI_SHOW_REDRAW);
       viStatus(state, mode);
       continue;
     } else if (((key == '\r') || (key == '\n')) && !literal) {
