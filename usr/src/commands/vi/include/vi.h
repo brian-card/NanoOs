@@ -45,9 +45,16 @@ extern "C"
 
 /// @def VI_LINE_MAX
 ///
-/// @brief The size, in bytes, of the buffer holding the current line.  A line
-/// longer than this can be shown but not changed within the line.
-#define VI_LINE_MAX 112
+/// @brief The size, in bytes, of the buffer holding the current line, or the
+/// window onto it of a line too long for the buffer.
+#define VI_LINE_MAX 104
+
+/// @def VI_WINDOW_SIZE
+///
+/// @brief The most characters a window onto a line too long for the line
+/// buffer holds when it is read, which leaves the rest of the buffer for
+/// insert mode to fill before the window must move.
+#define VI_WINDOW_SIZE ((VI_LINE_MAX - 1) / 2)
 
 /// @def VI_PENDING_SIZE
 ///
@@ -126,7 +133,15 @@ typedef enum ViStep {
   VI_STEP_INSERT,
   VI_STEP_COMMAND,
   VI_STEP_HISTORY,
+  VI_STEP_WINDOW,
 } ViStep;
+
+/// @def VI_COMMAND_WINDOW
+///
+/// @brief The state->ex.command insert mode returns when it can't go on until
+/// the window onto the line moves or the screen is shown again, and that it
+/// is run with to carry on afterwards.
+#define VI_COMMAND_WINDOW 'W'
 
 /// @enum ViYankKind
 ///
@@ -214,6 +229,16 @@ typedef enum ViKey {
 /// @param lineRow The screen row, from 0, that the current line starts on.
 /// @param index The index in text of the character under the cursor.
 /// @param length The number of characters in text.
+/// @param windowStart The index in the current line of text's first
+///   character.
+/// @param windowLength The number of characters text held when the line was
+///   read, which the line's text in the store has between the characters
+///   before the window and those after it.
+/// @param lineLength The number of characters in the current line in the
+///   store, at most INT16_MAX, as of the last time a window onto it was read
+///   with viLoadWindow.
+/// @param prefixWidth The number of columns the characters before the window
+///   take up.
 /// @param requestRow The screen row to show requestLine at.
 /// @param width The number of columns the whole current line takes up, at
 ///   most INT16_MAX.
@@ -223,7 +248,8 @@ typedef enum ViKey {
 ///   an insertion, the number of characters to insert.
 /// @param insertStart The index insert mode started inserting at, or -1 if
 ///   it erased characters from before there.
-/// @param truncated Whether the current line is longer than text holds.
+/// @param truncated Whether text holds only a window onto the current line,
+///   which has characters before or after it.
 /// @param changed Whether text differs from the line in the store.
 /// @param quit Whether `vi` is to exit.
 /// @param beginChange Whether the command being run has yet to start a change
@@ -258,6 +284,10 @@ typedef struct ViState {
   int16_t         lineRow;
   int16_t         index;
   int16_t         length;
+  int16_t         windowStart;
+  int16_t         windowLength;
+  int16_t         lineLength;
+  int16_t         prefixWidth;
   int16_t         requestRow;
   int16_t         width;
   int16_t         count;
@@ -384,13 +414,14 @@ static inline void viFileStatus(
 
 /// @fn static inline void viMeasure(ViState *state)
 ///
-/// @brief Recompute the width of the current line after a change to text.
+/// @brief Recompute the width of the current line after a change to text, up
+/// to the end of the window onto it.
 ///
 /// @param state The ViState of the running `vi`.
 ///
 /// @return This function returns no value.
 static inline void viMeasure(ViState *state) {
-  state->width = 0;
+  state->width = state->prefixWidth;
   for (int ii = 0; ii < state->length; ii++) {
     state->width += viCharWidth((unsigned char) state->text[ii], state->width);
   }
@@ -399,7 +430,9 @@ static inline void viMeasure(ViState *state) {
 /// @fn static inline int viReadLine(ViState *state, int line, bool keep)
 ///
 /// @brief Measure a line from the store, keeping its text as the current
-/// line's if asked to.  An error already set is kept unless this fails.
+/// line's if asked to:  all of it if it fits in text with room to spare, or
+/// else a window of VI_WINDOW_SIZE characters from its start.  An error
+/// already set is kept unless this fails.
 ///
 /// @param state The ViState of the running `vi`.
 /// @param line The number of the line.
@@ -412,7 +445,6 @@ static inline int viReadLine(ViState *state, int line, bool keep) {
   int width = 0;
   if (keep) {
     state->length = 0;
-    state->truncated = false;
   }
   if (line <= store->numLines) {
     uint8_t error = store->error;
@@ -436,17 +468,18 @@ static inline int viReadLine(ViState *state, int line, bool keep) {
       }
       for (int ii = 0; ii < length; ii++) {
         width += viCharWidth((unsigned char) state->buffer[ii], width);
-        if (!keep) {
-          continue;
-        } else if (state->length < VI_LINE_MAX - 1) {
+        if (keep && (state->length < VI_LINE_MAX - 1)) {
           state->text[state->length++] = state->buffer[ii];
-        } else {
-          state->truncated = true;
         }
       }
     }
   }
   if (keep) {
+    state->truncated = (state->length >= VI_LINE_MAX - 1);
+    if (state->truncated) {
+      state->length = VI_WINDOW_SIZE;
+    }
+    state->windowLength = state->length;
     state->text[state->length] = '\0';
     state->width = (int16_t) ((width > INT16_MAX) ? INT16_MAX : width);
   }
@@ -455,8 +488,8 @@ static inline int viReadLine(ViState *state, int line, bool keep) {
 
 /// @fn static inline bool viLoadLine(ViState *state, int line)
 ///
-/// @brief Make a line the current line.  The cursor keeps its index, which
-/// may be past the line's end.
+/// @brief Make a line the current line, read from its start.  The cursor
+/// keeps its index, which may be past the line's end.
 ///
 /// @param state The ViState of the running `vi`.
 /// @param line The number of the line.
@@ -467,7 +500,73 @@ static inline bool viLoadLine(ViState *state, int line) {
   state->line = line;
   state->ex.current = line;
   state->changed = false;
+  state->windowStart = 0;
+  state->prefixWidth = 0;
   return viReadLine(state, line, true) >= 0;
+}
+
+/// @fn static inline bool viLoadWindow(ViState *state)
+///
+/// @brief Read the current line again as a window from the index
+/// state->windowStart, or, if the line no longer reaches that far, as a
+/// window onto its end.  Only the overlays that move the window use this, so
+/// that the others don't carry its code.
+///
+/// @param state The ViState of the running `vi`.
+///
+/// @return Returns true on success, false with state->ex.store.error set on
+/// failure.
+static inline bool viLoadWindow(ViState *state) {
+  TextStore *store = &state->ex.store;
+  while (true) {
+    int start = state->windowStart;
+    int width = 0;
+    int index = 0;
+    int length = 0;
+    int prefixWidth = 0;
+    uint32_t offset = textstoreLineOffset(store, state->line);
+    if ((store->error != TEXTSTORE_ERROR_NONE)
+      || (fseek(store->text, (long) offset, SEEK_SET) != 0)
+    ) {
+      store->error = TEXTSTORE_ERROR_IO;
+      return false;
+    }
+    bool ended = false;
+    while (!ended
+      && (fgets(state->buffer, TEXTSTORE_BUFFER_SIZE, store->text) != NULL)
+    ) {
+      for (char *c = state->buffer; *c != '\0'; c++) {
+        ended = (*c == '\n');
+        if (ended) {
+          break;
+        } else if (index == start) {
+          prefixWidth = width;
+        }
+        width += viCharWidth((unsigned char) *c, width);
+        if ((index++ >= start) && (length < VI_LINE_MAX - 1)) {
+          state->text[length++] = *c;
+        }
+      }
+    }
+    if ((start > 0) && (length == 0)) {
+      start = index - VI_WINDOW_SIZE;
+      state->windowStart = (int16_t) ((start > 0) ? start : 0);
+      continue;
+    }
+    state->truncated = (start > 0) || (length >= VI_LINE_MAX - 1);
+    if (state->truncated && (length > VI_WINDOW_SIZE)) {
+      length = VI_WINDOW_SIZE;
+    }
+    state->text[length] = '\0';
+    state->length = (int16_t) length;
+    state->windowLength = (int16_t) length;
+    state->changed = false;
+    state->width = (int16_t) ((width > INT16_MAX) ? INT16_MAX : width);
+    state->prefixWidth = (int16_t) ((prefixWidth > INT16_MAX)
+      ? INT16_MAX : prefixWidth);
+    state->lineLength = (int16_t) ((index > INT16_MAX) ? INT16_MAX : index);
+    return true;
+  }
 }
 
 /// @fn static inline void viRequest(ViState *state, int line, int row,
@@ -563,7 +662,10 @@ static inline bool viBeginChange(ViState *state) {
 /// @fn static inline bool viCommitLine(ViState *state)
 ///
 /// @brief Put the current line's text in the store if it has changed.  The
-/// line with no lines in the buffer becomes line 1.
+/// line with no lines in the buffer becomes line 1.  A window onto a longer
+/// line is left changed for the Window overlay, which the main overlay runs
+/// once the overlay that changed it returns, since putting it back needs the
+/// text around it copied too.
 ///
 /// @param state The ViState of the running `vi`.
 ///
@@ -571,7 +673,7 @@ static inline bool viBeginChange(ViState *state) {
 /// failure.
 static inline bool viCommitLine(ViState *state) {
   TextStore *store = &state->ex.store;
-  if (!state->changed) {
+  if (!state->changed || state->truncated) {
     return true;
   }
   uint32_t offset = store->textEnd;
@@ -686,9 +788,35 @@ static inline void viDrawText(
   }
 }
 
+/// @fn static inline void viDrawFile(ViState *state, ViDraw *draw,
+///   uint32_t offset)
+///
+/// @brief Draw the text of a line in the store from a text-file offset to the
+/// line's end.
+///
+/// @param state The ViState of the running `vi`.
+/// @param draw Where drawing has reached.
+/// @param offset The text-file offset.
+///
+/// @return This function returns no value.
+static inline void viDrawFile(ViState *state, ViDraw *draw, uint32_t offset) {
+  TextStore *store = &state->ex.store;
+  bool ended = (store->error != TEXTSTORE_ERROR_NONE)
+    || (fseek(store->text, (long) offset, SEEK_SET) != 0);
+  while (!ended
+    && (fgets(state->buffer, TEXTSTORE_BUFFER_SIZE, store->text) != NULL)
+  ) {
+    int length = (int) strlen(state->buffer);
+    ended = (length > 0) && (state->buffer[length - 1] == '\n');
+    viDrawText(state, draw, state->buffer, ended ? length - 1 : length);
+  }
+}
+
 /// @fn static inline int viDrawLine(ViState *state, int line, int row)
 ///
-/// @brief Draw a line, or ~ past the last line, starting at a screen row.
+/// @brief Draw a line, or ~ past the last line, starting at a screen row.  The
+/// current line is drawn from the store if text holds a window onto it, which
+/// is never changed here.
 ///
 /// @param state The ViState of the running `vi`.
 /// @param line The number of the line.
@@ -704,16 +832,7 @@ static inline int viDrawLine(ViState *state, int line, int row) {
   } else if (line > store->numLines) {
     viDrawCells(state, &draw, "~", 1);
   } else {
-    uint32_t offset = textstoreLineOffset(store, line);
-    bool ended = (store->error != TEXTSTORE_ERROR_NONE)
-      || (fseek(store->text, (long) offset, SEEK_SET) != 0);
-    while (!ended
-      && (fgets(state->buffer, TEXTSTORE_BUFFER_SIZE, store->text) != NULL)
-    ) {
-      int length = (int) strlen(state->buffer);
-      ended = (length > 0) && (state->buffer[length - 1] == '\n');
-      viDrawText(state, &draw, state->buffer, ended ? length - 1 : length);
-    }
+    viDrawFile(state, &draw, textstoreLineOffset(store, line));
   }
   if ((draw.row <= draw.lastRow) && (draw.column < state->columns)) {
     screenClearToEndOfLine();
@@ -772,7 +891,7 @@ static inline void viShiftRows(ViState *state, int row, int count) {
 ///
 /// @return This function returns no value.
 static inline void viPlaceCursor(ViState *state) {
-  int column = 0;
+  int column = state->prefixWidth;
   for (int ii = 0; ii < state->index; ii++) {
     column += viCharWidth((unsigned char) state->text[ii], column);
   }
@@ -789,7 +908,8 @@ static inline void viPlaceCursor(ViState *state) {
 /// @brief Make a line the current line and show it at a screen row if it
 /// fits there, or else, unless asked not to, scroll so that it is the top
 /// line, if it is above the screen, or the bottom one, and redraw the
-/// screen.  The current line's changed text is kept.
+/// screen.  The current line's changed text is kept, as is a window onto it
+/// away from its start, which only the overlays that move it read.
 ///
 /// @param state The ViState of the running `vi`.
 /// @param line The number of the line.
@@ -802,7 +922,9 @@ static inline void viPlaceCursor(ViState *state) {
 /// doesn't fit, or false with state->ex.store.error set on failure.
 static inline bool viShowLine(ViState *state, int line, int row, uint8_t how) {
   int textRows = state->rows - 1;
-  if (((line != state->line) || !state->changed) && !viLoadLine(state, line)) {
+  if (((line != state->line) || (!state->changed && (state->windowStart == 0)))
+    && !viLoadLine(state, line)
+  ) {
     return false;
   }
   int lineRows = viRowsFor(state, state->width);
@@ -911,28 +1033,6 @@ static inline void viRequestDeleted(
   viLoadLine(state, first);
   state->index = (int16_t) viFirstNonBlank(state);
   viRequestRows(state, first, row, VI_REQUEST_SHOW, oldRows, numLines);
-}
-
-/// @fn static inline void viRedrawCurrent(ViState *state, int oldRows)
-///
-/// @brief Redraw the current line after its text changed.  If it now takes
-/// up more rows, the lines below it move down; if fewer, they are redrawn.
-///
-/// @param state The ViState of the running `vi`.
-/// @param oldRows The number of rows the line took up before the change.
-///
-/// @return This function returns no value.
-static inline void viRedrawCurrent(ViState *state, int oldRows) {
-  viMeasure(state);
-  int lineRows = viRowsFor(state, state->width);
-  if (state->lineRow + lineRows > state->rows - 1) {
-    viShowLine(state, state->line, state->rows, VI_SHOW_REDRAW);
-  } else if (lineRows < oldRows) {
-    viDrawFrom(state, state->lineRow, state->line);
-  } else {
-    viShiftRows(state, state->lineRow + oldRows, lineRows - oldRows);
-    viDrawLine(state, state->line, state->lineRow);
-  }
 }
 
 /// @fn static inline int viReadKey(ViState *state)
