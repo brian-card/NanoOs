@@ -956,6 +956,22 @@ static inline void viShiftRows(ViState *state, int row, int count) {
     ((count > 0) ? row : textRows - rows) + 1, rows);
 }
 
+/// @fn static inline int viCursorColumn(ViState *state)
+///
+/// @brief Find the column within the current line where the character at
+/// state->index starts.
+///
+/// @param state The ViState of the running `vi`.
+///
+/// @return Returns the column, from 0.
+static inline int viCursorColumn(ViState *state) {
+  int column = state->prefixWidth;
+  for (int ii = 0; ii < state->index; ii++) {
+    column += viCharWidth((unsigned char) state->text[ii], column);
+  }
+  return column;
+}
+
 /// @fn static inline void viPlaceCursor(ViState *state)
 ///
 /// @brief Move the cursor to the character at state->index.
@@ -964,10 +980,7 @@ static inline void viShiftRows(ViState *state, int row, int count) {
 ///
 /// @return This function returns no value.
 static inline void viPlaceCursor(ViState *state) {
-  int column = state->prefixWidth;
-  for (int ii = 0; ii < state->index; ii++) {
-    column += viCharWidth((unsigned char) state->text[ii], column);
-  }
+  int column = viCursorColumn(state);
   int row = state->lineRow + (column / state->columns);
   if (row > state->rows - 2) {
     row = state->rows - 2;

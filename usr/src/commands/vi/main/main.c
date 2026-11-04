@@ -243,6 +243,45 @@ static void viRunKey(ViState *state, int key) {
   }
 }
 
+/// @fn static __attribute__((noinline)) void viRuler(ViState *state)
+///
+/// @brief Show the cursor's line and column at the right of the status line,
+/// as vim's ruler does:  the line, the index of the character plus 1 (0 on an
+/// empty line), and, if it differs, the last screen column the character
+/// takes up.  It is kept out of line so that its buffer isn't on the stack
+/// under the overlays main runs.
+///
+/// @param state The ViState of the running `vi`.
+///
+/// @return This function returns no value.
+static __attribute__((noinline)) void viRuler(ViState *state) {
+  int start = state->columns - 18;
+  if (start < (state->columns + 1) / 2) {
+    start = (state->columns + 1) / 2;
+  }
+  // The last column is left alone, since writing it can scroll the screen.
+  int room = state->columns - 1 - start;
+  if (room <= 0) {
+    return;
+  }
+  int column = viCursorColumn(state);
+  int screenColumn = column + ((state->index < state->length)
+    ? viCharWidth((unsigned char) state->text[state->index], column) : 1);
+  int index = (state->length > 0)
+    ? state->windowStart + state->index + 1 : 0;
+  char ruler[24];
+  int length = snprintf(ruler, sizeof(ruler), "%d,%d",
+    (state->ex.store.numLines > 0) ? state->line : 0, index);
+  if (screenColumn != index) {
+    snprintf(&ruler[length], sizeof(ruler) - (size_t) length, "-%d",
+      screenColumn);
+  }
+  ruler[room] = '\0';
+  screenMoveTo(state->rows, start + 1);
+  fputs(ruler, stdout);
+  screenClearToEndOfLine();
+}
+
 /// @fn static void printUsage(FILE *stream)
 ///
 /// @brief Print the usage summary for vi.
@@ -292,6 +331,7 @@ int main(int argc, char **argv) {
     if ((state->index >= state->length) && (state->index > 0)) {
       state->index = (state->length > 0) ? state->length - 1 : 0;
     }
+    viRuler(state);
     viPlaceCursor(state);
     int key = viReadKey(state);
     if (key == VI_KEY_EOF) {
