@@ -65,11 +65,14 @@ static void viFillBottom(ViState *state, int row, int line, int blankRow) {
 /// row, is the top line if the row is above the screen, or else the bottom
 /// one.  If asked to keep the rows on the screen, a scroll of at most half
 /// the screen moves them and draws only the rows that come into view; any
-/// other scroll redraws the screen.
+/// other scroll redraws the screen.  A row below the screen that is known,
+/// as viRowOf's is not past the screen, is reached by dropping lines from the
+/// top, which reads only those lines rather than every line on the screen.
 ///
 /// @param state The ViState of the running `vi`.
 /// @param line The number of the current line.
-/// @param row The screen row it didn't fit at.
+/// @param row The screen row it didn't fit at, or the number of rows for a
+///   line below the screen whose row isn't known.
 /// @param keepRows Whether the rows on the screen show the buffer's lines
 ///   from the top line down to the current line.
 ///
@@ -78,10 +81,20 @@ static void viScrollTo(ViState *state, int line, int row, bool keepRows) {
   int textRows = state->rows - 1;
   int lineRows = viRowsFor(state, state->width);
   int oldTop = state->top;
-  int top = line;
-  int used = lineRows;
-  if (row >= 0) {
-    while (top > 1) {
+  int top = oldTop;
+  int used = row + lineRows;
+  int distance = 0;
+  if ((row >= 0) && (row < state->rows)) {
+    while ((used > textRows) && (top < line)) {
+      int rows = viRowsFor(state, viReadLine(state, top, false));
+      used -= rows;
+      distance += rows;
+      top++;
+    }
+  } else {
+    top = line;
+    used = lineRows;
+    while ((row >= 0) && (top > 1)) {
       int width = viReadLine(state, top - 1, false);
       if ((width < 0) || (used + viRowsFor(state, width) > textRows)) {
         break;
@@ -89,17 +102,16 @@ static void viScrollTo(ViState *state, int line, int row, bool keepRows) {
       used += viRowsFor(state, width);
       top--;
     }
+    int first = (top < oldTop) ? top : oldTop;
+    int last = (top < oldTop) ? oldTop : top;
+    for (int ii = first; (ii < last) && (distance <= textRows / 2); ii++) {
+      distance += viRowsFor(state,
+        (ii == line) ? state->width : viReadLine(state, ii, false));
+    }
   }
   state->top = top;
   state->lineRow = used - lineRows;
 
-  int distance = 0;
-  int first = (top < oldTop) ? top : oldTop;
-  int last = (top < oldTop) ? oldTop : top;
-  for (int ii = first; (ii < last) && (distance <= textRows / 2); ii++) {
-    distance += viRowsFor(state,
-      (ii == line) ? state->width : viReadLine(state, ii, false));
-  }
   if (!keepRows || (distance > textRows / 2) || ((top < oldTop) != (row < 0))) {
     viDrawFrom(state, 0, top);
   } else if (top < oldTop) {
