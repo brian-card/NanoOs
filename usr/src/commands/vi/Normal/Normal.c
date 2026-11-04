@@ -178,21 +178,32 @@ static void viReadDot(ViState *state, size_t position, ViDot *dot) {
 ///
 /// @return This function returns no value.
 static void viKeepInsertedText(ViState *state) {
+  TextStore *store = &state->ex.store;
   ViDot dot;
   viReadDot(state, VI_DOT_PENDING_POSITION, &dot);
   int length = state->targetIndex - state->insertStart;
-  if (!state->exact || (state->insertStart < 0)
+  if (!state->exact || (state->insertStart == VI_NO_INSERT_START)
     || (length > (int) VI_DOT_TEXT_SIZE)
   ) {
     dot.numKeys = 0;
+  } else if (state->truncated) {
+    // The main overlay has put the window back, so the text is in the store.
+    uint32_t offset = textstoreLineOffset(store, state->line)
+      + (uint32_t) (state->windowStart + state->insertStart);
+    if ((store->error == EX_ERROR_NONE)
+      && (fseek(store->blocks, (long) VI_DOT_TEXT_POSITION, SEEK_SET) == 0)
+      && (textstoreCopyRange(store, offset, (uint32_t) length, store->blocks)
+        >= 0)
+    ) {
+      dot.textLength = (uint8_t) length;
+    }
   } else if ((length == 0)
-    || textstoreWriteHeader(&state->ex.store, VI_DOT_TEXT_POSITION,
+    || textstoreWriteHeader(store, VI_DOT_TEXT_POSITION,
       &state->text[state->insertStart], (size_t) length)
   ) {
     dot.textLength = (uint8_t) length;
   }
-  textstoreWriteHeader(&state->ex.store, VI_DOT_PENDING_POSITION, &dot,
-    sizeof(dot));
+  textstoreWriteHeader(store, VI_DOT_PENDING_POSITION, &dot, sizeof(dot));
 }
 
 /// @fn static void viStartInsert(ViState *state, char command,
@@ -294,10 +305,13 @@ static void viParse(ViState *state, ViDot *dot, int key) {
     case 'r':
     case 'm':
       state->argument = (char) viNextKey(state, dot);
-      // fall through
-    case 'J':
       state->ex.command = (char) key;
       state->step = VI_STEP_CHANGE;
+      break;
+
+    case 'J':
+      state->ex.command = (char) key;
+      state->step = VI_STEP_RANGE;
       break;
 
     case 'p':
@@ -359,10 +373,17 @@ static void viContinue(ViState *state) {
   }
 
   if (step == VI_STEP_MOTION) {
-    if (state->operator != '\0') {
+    if (state->operator == '\0') {
+      return;
+    } else if (state->truncated && !state->linewise) {
+      state->ex.command = state->operator;
+      state->step = VI_STEP_RANGE;
+    } else {
       state->step = VI_STEP_OPERATOR;
     }
-  } else if (step == VI_STEP_OPERATOR) {
+  } else if ((step == VI_STEP_OPERATOR)
+    || ((step == VI_STEP_RANGE) && (command == 'c'))
+  ) {
     if (state->operator == 'c') {
       viStartInsert(state, 'i', true);
     }
@@ -378,6 +399,8 @@ static void viContinue(ViState *state) {
       state->step = state->truncated ? VI_STEP_WINDOW : VI_STEP_PUT;
     } else if (command == VI_COMMAND_WINDOW) {
       state->step = VI_STEP_WINDOW;
+    } else if (command == VI_COMMAND_REPEAT) {
+      state->step = VI_STEP_CHANGE;
     } else if (command == VI_KEY_ESCAPE) {
       if (!state->repeating) {
         viKeepInsertedText(state);

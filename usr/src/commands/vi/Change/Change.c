@@ -28,64 +28,55 @@
 /// @file Change.c
 ///
 /// @brief The `vi` commands that change the current line in place or mark
-/// it:  r, J, p and P for yanked text, and m.
+/// it:  r, p and P for yanked text, m, and . repeating an insertion that
+/// doesn't fit in the line buffer.  The last two build the line from ranges
+/// of the text file, so that they work on a line of any length.
 
 #include "vi.h"
 
-/// @fn static bool viJoinLine(ViState *state)
+/// @fn static void viSplice(ViState *state, int at, int skip,
+///   const ViYank *text, int count)
 ///
-/// @brief Append the line after the current one to it, without its leading
-/// blanks and after a space unless either side is empty, then delete it.
+/// @brief Put copies of text from the text file into the current line at an
+/// index, in place of some of the line's characters, and leave the cursor on
+/// the last character put.
 ///
 /// @param state The ViState of the running `vi`.
+/// @param at The index in the whole line.
+/// @param skip The number of the line's characters to replace.
+/// @param text The text's offset and length.
+/// @param count The number of copies.
 ///
-/// @return Returns true on success, false with state->ex.store.error set on
-/// failure.
-static bool viJoinLine(ViState *state) {
+/// @return This function returns no value.  Errors are left in
+/// state->ex.store.error.
+static void viSplice(
+  ViState *state, int at, int skip, const ViYank *text, int count
+) {
   TextStore *store = &state->ex.store;
-  int next = state->line + 1;
-  if (next > store->numLines) {
-    store->error = VI_ERROR_MOTION;
-    return false;
-  }
-  uint32_t offset = textstoreLineOffset(store, next);
-  if ((store->error != EX_ERROR_NONE)
-    || (fseek(store->text, (long) offset, SEEK_SET) != 0)
+  uint32_t old = textstoreLineOffset(store, state->line);
+  uint32_t offset = store->textEnd;
+  int oldRows = viRowsFor(state, state->width);
+  if ((store->error != EX_ERROR_NONE) || !viBeginChange(state)
+    || !viCopyLine(state, old, 0, at)
   ) {
-    store->error = EX_ERROR_SCRATCH;
-    return false;
+    return;
   }
-  int length = state->length;
-  bool blank = true;
-  bool ended = false;
-  while (!ended
-    && (fgets(state->buffer, TEXTSTORE_BUFFER_SIZE, store->text) != NULL)
-  ) {
-    for (char *c = state->buffer; (*c != '\0') && !ended; c++) {
-      ended = (*c == '\n');
-      if (ended || (blank && ((*c == ' ') || (*c == '\t')))) {
-        continue;
-      }
-      if (blank && (length > 0)) {
-        state->text[length++] = ' ';
-      }
-      blank = false;
-      if (length >= VI_LINE_MAX - 1) {
-        state->text[state->length] = '\0';
-        store->error = VI_ERROR_TOO_LONG;
-        return false;
-      }
-      state->text[length++] = *c;
+  for (int ii = 0; ii < count; ii++) {
+    if (!viCopyLine(state, text->offset, 0, (int) text->length)) {
+      return;
     }
   }
-  state->index = (int16_t) state->length;
-  state->text[length] = '\0';
-  state->length = (int16_t) length;
-  state->changed = true;
-  return viCommitLine(state) && exDeleteLines(&state->ex, next, next);
+  if (!viCopyLine(state, old, at + skip, INT16_MAX)
+    || !viReplaceLine(state, offset)
+  ) {
+    return;
+  }
+  viPlaceWindow(state, at + ((int) text->length * count) - 1);
+  viRequestRows(state, state->line, state->lineRow, VI_REQUEST_SHOW,
+    oldRows, 1);
 }
 
-/// @fn static void viPutText(ViState *state, bool after, int count)
+/// @fn static void viPut(ViState *state, bool after, int count)
 ///
 /// @brief Put copies of the yanked text after the cursor or before it, and
 /// leave the cursor on the last character put.
@@ -96,49 +87,52 @@ static bool viJoinLine(ViState *state) {
 ///
 /// @return This function returns no value.  Errors are left in
 /// state->ex.store.error.
-static void viPutText(ViState *state, bool after, int count) {
-  TextStore *store = &state->ex.store;
+static void viPut(ViState *state, bool after, int count) {
   TextStoreChain cursor = state->yank;
   cursor.block = cursor.first;
   cursor.index = 0;
   ViYank yank;
-  if (!textstoreChainNext(store, &cursor, &yank)) {
+  if (!textstoreChainNext(&state->ex.store, &cursor, &yank)) {
     return;
   }
-  int length = (int) yank.length;
-  int total = length * count;
-  if (state->length + total > VI_LINE_MAX - 1) {
-    store->error = VI_ERROR_TOO_LONG;
-    return;
+  int at = state->windowStart + state->index
+    + ((after && (state->length > 0)) ? 1 : 0);
+  if ((state->line <= state->ex.store.numLines) || viAddEmptyLine(state, 0)) {
+    viSplice(state, at, 0, &yank, count);
   }
-  int at = state->index + ((after && (state->length > 0)) ? 1 : 0);
-  memmove(&state->text[at + total], &state->text[at],
-    (size_t) (state->length - at + 1));
-  if ((fseek(store->text, (long) yank.offset, SEEK_SET) != 0)
-    || (fread(&state->text[at], 1, (size_t) length, store->text)
-      != (size_t) length)
+}
+
+/// @fn static void viRepeat(ViState *state)
+///
+/// @brief Insert the text the last change inserted at the cursor, or type it
+/// over the line for R, for . to repeat it when insert mode can't do so in
+/// the line buffer.  state->targetIndex is its length.  The text is copied
+/// to the text file first, to be put like yanked text.
+///
+/// @param state The ViState of the running `vi`.
+///
+/// @return This function returns no value.  Errors are left in
+/// state->ex.store.error.
+static void viRepeat(ViState *state) {
+  TextStore *store = &state->ex.store;
+  int length = state->targetIndex;
+  ViYank text = { store->textEnd, length, 0 };
+  // The line is in the store, so text is free to hold the inserted text.
+  state->text[length] = '\0';
+  if (textstoreReadHeader(store, VI_DOT_TEXT_POSITION, state->text,
+      (size_t) length)
+    && textstoreAppendText(store, state->text)
   ) {
-    store->error = EX_ERROR_SCRATCH;
-    viLoadLine(state, state->line);
-    return;
-  }
-  for (int ii = 1; ii < count; ii++) {
-    memcpy(&state->text[at + (ii * length)], &state->text[at],
-      (size_t) length);
-  }
-  state->length = (int16_t) (state->length + total);
-  state->index = (int16_t) (at + total - 1);
-  state->changed = true;
-  if (viCommitLine(state)) {
-    viRequestRows(state, state->line, state->lineRow, VI_REQUEST_SHOW,
-      viRowsFor(state, state->width), 1);
+    viSplice(state, state->windowStart + state->index,
+      (state->argument == 'R') ? length : 0, &text, 1);
   }
 }
 
 /// @fn void* viRun(void *args)
 ///
-/// @brief Run r, J, p, P, or m, as state->ex.command says, state->count
-/// times for all but m.  The current line is committed before returning.
+/// @brief Run r, p, P, or m, as state->ex.command says, state->count times
+/// for all but m, or repeat an insertion for . if it is VI_COMMAND_REPEAT.
+/// The current line is committed before returning.
 ///
 /// @param args A pointer to the ViState of the running `vi`, cast to a
 ///   void*.
@@ -150,7 +144,6 @@ void* viRun(void *args) {
   TextStore *store = &state->ex.store;
   int count = (state->count > 0) ? state->count : 1;
   char argument = state->argument;
-  int oldRows = viRowsFor(state, state->width);
 
   if (state->ex.command == 'm') {
     uint32_t offset = textstoreLineOffset(store, state->line);
@@ -164,37 +157,22 @@ void* viRun(void *args) {
     ) {
       state->ex.marks |= ((uint32_t) 1) << (argument - 'a');
     }
-    return args;
-  } else if (state->truncated && (state->ex.command == 'J')) {
-    store->error = VI_ERROR_TOO_LONG;
-    return args;
-  }
-
-  if ((state->ex.command == 'p') || (state->ex.command == 'P')) {
-    viPutText(state, state->ex.command == 'p', count);
-    return args;
-  } else if (state->ex.command == 'r') {
-    if ((state->index + count > state->length)
-      || ((unsigned char) argument < ' ')
-    ) {
-      store->error = VI_ERROR_MOTION;
-      return args;
-    }
+  } else if (state->ex.command == VI_COMMAND_REPEAT) {
+    viRepeat(state);
+  } else if ((state->ex.command == 'p') || (state->ex.command == 'P')) {
+    viPut(state, state->ex.command == 'p', count);
+  } else if ((state->index + count > state->length)
+    || ((unsigned char) argument < ' ')
+  ) {
+    store->error = VI_ERROR_MOTION;
+  } else {
+    int oldRows = viRowsFor(state, state->width);
     memset(&state->text[state->index], argument, (size_t) count);
     state->index = (int16_t) (state->index + count - 1);
     state->changed = true;
     viCommitLine(state);
-  } else {
-    count = (count > 2) ? count - 1 : 1;
-    for (int ii = 0; ii < count; ii++) {
-      int width = viReadLine(state, state->line + 1, false);
-      if (!viJoinLine(state)) {
-        break;
-      }
-      oldRows += viRowsFor(state, width);
-    }
+    viRequestRows(state, state->line, state->lineRow, VI_REQUEST_SHOW,
+      oldRows, 1);
   }
-  viRequestRows(state, state->line, state->lineRow, VI_REQUEST_SHOW,
-    oldRows, 1);
   return args;
 }

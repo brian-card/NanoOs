@@ -50,6 +50,59 @@ static int viClass(char c) {
     || ((u >= '0') && (u <= '9')) || (u == '_') || (u >= 0x80)) ? 1 : 2;
 }
 
+/// @fn static int viAt(ViState *state, int at)
+///
+/// @brief Get the character at an index of the current line, moving the
+/// window onto a long line to hold it.
+///
+/// @param state The ViState of the running `vi`.
+/// @param at The index in the whole line.
+///
+/// @return Returns the character, or -1 if the index is outside the line.
+static int viAt(ViState *state, int at) {
+  if (at < 0) {
+    return -1;
+  } else if (state->truncated && ((at < state->windowStart)
+      || (at >= state->windowStart + state->length))
+  ) {
+    int start = at - (VI_WINDOW_SIZE / 2);
+    state->windowStart = (int16_t) ((start > 0) ? start : 0);
+    viLoadWindow(state);
+  }
+  at -= state->windowStart;
+  return (at < state->length) ? (unsigned char) state->text[at] : -1;
+}
+
+/// @fn static int viEnd(ViState *state)
+///
+/// @brief Get the length of the current line, moving the window onto a long
+/// line to its end.
+///
+/// @param state The ViState of the running `vi`.
+///
+/// @return Returns the length.
+static int viEnd(ViState *state) {
+  viAt(state, INT16_MAX);
+  return state->windowStart + state->length;
+}
+
+/// @fn static int viFirst(ViState *state)
+///
+/// @brief Find the first character of the current line that isn't a space or
+/// a tab, in the whole of a long line.
+///
+/// @param state The ViState of the running `vi`.
+///
+/// @return Returns its index, or the line's length if there is none.
+static int viFirst(ViState *state) {
+  int at = 0;
+  int c;
+  while (((c = viAt(state, at)) == ' ') || (c == '\t')) {
+    at++;
+  }
+  return at;
+}
+
 /// @fn static bool viWordStep(ViState *state, int *line, int *index,
 ///   char motion)
 ///
@@ -59,7 +112,7 @@ static int viClass(char c) {
 ///
 /// @param state The ViState of the running `vi`.
 /// @param line The line, updated.
-/// @param index The index, updated.
+/// @param index The index in the whole line, updated.
 /// @param motion w, e, or b.
 ///
 /// @return Returns true if it moved, false if it was already at the end of
@@ -68,9 +121,10 @@ static bool viWordStep(ViState *state, int *line, int *index, char motion) {
   int numLines = state->ex.store.numLines;
   int at = *index;
   int startLine = *line;
+  int c;
   if (motion == 'b') {
     at--;
-    while ((at < 0) || (viClass(state->text[at]) == 0)) {
+    while (((c = viAt(state, at)) < 0) || (viClass((char) c) == 0)) {
       if (at >= 0) {
         at--;
       } else if (*line == 1) {
@@ -78,33 +132,38 @@ static bool viWordStep(ViState *state, int *line, int *index, char motion) {
         break;
       } else {
         viLoadLine(state, --*line);
-        at = state->length - 1;
+        at = viEnd(state) - 1;
         if (at < 0) {
           at = 0;
           break;
         }
       }
     }
-    int class = viClass(state->text[at]);
-    while ((at > 0) && (class != 0) && (viClass(state->text[at - 1]) == class)) {
+    int class = viClass((char) viAt(state, at));
+    while ((at > 0) && (class != 0)
+      && (viClass((char) viAt(state, at - 1)) == class)
+    ) {
       at--;
     }
   } else {
-    int class = (at < state->length) ? viClass(state->text[at]) : 0;
+    c = viAt(state, at);
+    int class = (c >= 0) ? viClass((char) c) : 0;
     if (motion == 'e') {
       at++;
       class = 0;
     }
-    while ((at < state->length) && (class != 0)
-      && (viClass(state->text[at]) == class)
+    while ((class != 0) && ((c = viAt(state, at)) >= 0)
+      && (viClass((char) c) == class)
     ) {
       at++;
     }
-    while ((at >= state->length) || (viClass(state->text[at]) == 0)) {
-      if (at < state->length) {
+    while (((c = viAt(state, at)) < 0) || (viClass((char) c) == 0)) {
+      if (c >= 0) {
         at++;
       } else if (*line >= numLines) {
-        at = (state->length > 0) ? state->length - 1 : 0;
+        // The failed viAt left the window at the line's end.
+        at = state->windowStart + state->length - 1;
+        at = (at > 0) ? at : 0;
         break;
       } else {
         viLoadLine(state, ++*line);
@@ -114,10 +173,10 @@ static bool viWordStep(ViState *state, int *line, int *index, char motion) {
         }
       }
     }
-    if ((motion == 'e') && (at < state->length)) {
-      class = viClass(state->text[at]);
-      while ((at + 1 < state->length)
-        && (viClass(state->text[at + 1]) == class)
+    if ((motion == 'e') && ((c = viAt(state, at)) >= 0)) {
+      class = viClass((char) c);
+      while (((c = viAt(state, at + 1)) >= 0)
+        && (viClass((char) c) == class)
       ) {
         at++;
       }
@@ -128,15 +187,69 @@ static bool viWordStep(ViState *state, int *line, int *index, char motion) {
   return moved;
 }
 
+/// @fn static int viFind(ViState *state, int line, const char *pattern,
+///   int from, bool forward)
+///
+/// @brief Find text in a line in the store, reading it in pieces that overlap
+/// by the text's length so that a line of any length is searched whole.
+///
+/// @param state The ViState of the running `vi`.
+/// @param line The number of the line.
+/// @param pattern The text.
+/// @param from The index to search from.
+/// @param forward Whether to find the first match at or after from, rather
+///   than the last one before it.
+///
+/// @return Returns the match's index, or -1 if there is none.
+static int viFind(
+  ViState *state, int line, const char *pattern, int from, bool forward
+) {
+  TextStore *store = &state->ex.store;
+  int keep = (int) strlen(pattern) - 1;
+  int base = 0;
+  int kept = 0;
+  int found = -1;
+  uint32_t offset = textstoreLineOffset(store, line);
+  if ((store->error != EX_ERROR_NONE)
+    || (fseek(store->text, (long) offset, SEEK_SET) != 0)
+  ) {
+    return -1;
+  }
+  while (fgets(&state->buffer[kept], TEXTSTORE_BUFFER_SIZE - kept,
+    store->text) != NULL
+  ) {
+    char *end = strchr(state->buffer, '\n');
+    if (end != NULL) {
+      *end = '\0';
+    }
+    for (char *match = state->buffer;
+      (match = strstr(match, pattern)) != NULL; match++
+    ) {
+      int at = base + (int) (match - state->buffer);
+      if (at >= from) {
+        return forward ? at : found;
+      }
+      found = at;
+    }
+    if (end != NULL) {
+      break;
+    }
+    int got = (int) strlen(state->buffer);
+    kept = (keep < 0) ? 0 : ((keep < got) ? keep : got);
+    memmove(state->buffer, &state->buffer[got - kept], (size_t) kept);
+    base += got - kept;
+  }
+  return forward ? -1 : found;
+}
+
 /// @fn static bool viSearch(ViState *state, int *line, int *index)
 ///
 /// @brief Find the next match of the last search pattern, in the pattern's
-/// direction for n or the other one for N, wrapping around the buffer.  Only
-/// the part of each line the line buffer holds is searched.
+/// direction for n or the other one for N, wrapping around the buffer.
 ///
 /// @param state The ViState of the running `vi`.
 /// @param line The line to start from, updated.
-/// @param index The index to start from, updated.
+/// @param index The index in the whole line to start from, updated.
 ///
 /// @return Returns true if a match was found, false with
 /// state->ex.store.error set otherwise.
@@ -151,36 +264,22 @@ static bool viSearch(ViState *state, int *line, int *index) {
   }
   bool forward = (pattern[0] == '/') == (state->motion == 'n');
   int numLines = state->ex.store.numLines;
-  if (numLines == 0) {
-    state->ex.store.error = VI_ERROR_NOT_FOUND;
-    return false;
-  }
-  int at = *index;
-  for (int ii = 0; ii <= numLines; ii++) {
-    char *match = NULL;
-    if (forward) {
-      if (at < state->length) {
-        match = strstr(&state->text[at + 1 - (ii > 0)], &pattern[1]);
-      }
-    } else {
-      for (char *found = state->text;
-        ((found = strstr(found, &pattern[1])) != NULL)
-          && ((ii > 0) || (found - state->text < at));
-        found++
-      ) {
-        match = found;
-      }
-    }
-    if (match != NULL) {
-      *index = (int) (match - state->text);
+  int from = *index + (forward ? 1 : 0);
+  for (int ii = 0; (ii <= numLines) && (numLines > 0)
+    && (state->ex.store.error == EX_ERROR_NONE); ii++
+  ) {
+    int found = viFind(state, *line, &pattern[1], from, forward);
+    if (found >= 0) {
+      *index = found;
       return true;
     }
     *line = forward ? ((*line % numLines) + 1)
       : ((*line > 1) ? *line - 1 : numLines);
-    viLoadLine(state, *line);
-    at = 0;
+    from = forward ? 0 : INT16_MAX;
   }
-  state->ex.store.error = VI_ERROR_NOT_FOUND;
+  if (state->ex.store.error == EX_ERROR_NONE) {
+    state->ex.store.error = VI_ERROR_NOT_FOUND;
+  }
   return false;
 }
 
@@ -212,7 +311,10 @@ static int viLastVisible(ViState *state, int top) {
 /// times.  For an operator, put the line in state->ex.addr2, the index in
 /// state->targetIndex, and whether the range is whole lines in
 /// state->linewise, past the end for motions that include their last
-/// character.  With no operator, move the cursor there.
+/// character.  The indexes of the cursor and the target are then from the
+/// start of the window the cursor was in, and may be outside it on a long
+/// line.  With no operator, move the cursor there, moving the window onto a
+/// long line to hold it.
 ///
 /// @param args A pointer to the ViState of the running `vi`, cast to a void*.
 ///
@@ -224,7 +326,9 @@ void* viRun(void *args) {
   int numLines = (state->ex.store.numLines > 0) ? state->ex.store.numLines : 1;
   int startLine = state->line;
   int line = startLine;
-  int index = state->index;
+  int base = state->windowStart;
+  int cursor = base + state->index;
+  int index = cursor;
   bool linewise = false;
   bool inclusive = false;
   int row = 0;
@@ -238,11 +342,10 @@ void* viRun(void *args) {
       index += count;
       break;
     case '0':
-      index = -state->windowStart;
+      index = 0;
       break;
     case '^':
-      index = (state->windowStart > 0)
-        ? -state->windowStart : viFirstNonBlank(state);
+      index = viFirst(state);
       break;
     case '$':
       line += count - 1;
@@ -307,7 +410,6 @@ void* viRun(void *args) {
     case 'n':
     case 'N':
       if (!viSearch(state, &line, &index)) {
-        viLoadLine(state, startLine);
         return args;
       }
       break;
@@ -341,53 +443,35 @@ void* viRun(void *args) {
     viLoadLine(state, line);
   }
   if (linewise && (motion != 'j') && (motion != 'k')) {
-    index = viFirstNonBlank(state);
-  } else if ((line == startLine) && state->truncated
-    && ((index < 0) || (index >= state->length))
-  ) {
-    if (state->operator != '\0') {
-      if ((index < 0) || (index > state->length)) {
-        state->ex.store.error = VI_ERROR_TOO_LONG;
-        return args;
-      }
-    } else {
-      int absolute = state->windowStart + index;
-      absolute = (absolute < 0) ? 0
-        : ((absolute > INT16_MAX) ? INT16_MAX : absolute);
-      int start = absolute - (VI_WINDOW_SIZE / 2);
-      state->windowStart = (int16_t) ((start > 0) ? start : 0);
-      viLoadWindow(state);
-      index = (motion == '^')
-        ? viFirstNonBlank(state) : absolute - state->windowStart;
-    }
+    index = viFirst(state);
   }
-  if (index > state->length) {
-    index = state->length;
-  }
-  if (index < 0) {
-    index = 0;
+  index = (index < 0) ? 0 : ((index > INT16_MAX) ? INT16_MAX : index);
+  if (viAt(state, index) < 0) {
+    index = state->windowStart + state->length;
   }
 
   if (state->operator != '\0') {
-    if (inclusive && (index < state->length)) {
+    if (inclusive && (index < state->windowStart + state->length)) {
       index++;
     }
     state->ex.addr2 = line;
-    state->targetIndex = (int16_t) index;
     state->linewise = linewise;
-    if (state->line != startLine) {
+    if ((state->line != startLine) || (state->windowStart != base)) {
       viLoadLine(state, startLine);
+      state->windowStart = (int16_t) base;
+      if (base > 0) {
+        viLoadWindow(state);
+      }
     }
+    state->index = (int16_t) (cursor - base);
+    state->targetIndex = (int16_t) (index - base);
     return args;
   }
 
   if (row == 0) {
-    if (state->line != startLine) {
-      viLoadLine(state, startLine);
-    }
     row = viRowOf(state, line);
   }
-  state->index = (int16_t) index;
+  state->index = (int16_t) (index - state->windowStart);
   viRequest(state, line, row, VI_REQUEST_MOVE);
   return args;
 }

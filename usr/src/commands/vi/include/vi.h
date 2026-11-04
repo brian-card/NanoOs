@@ -134,6 +134,7 @@ typedef enum ViStep {
   VI_STEP_COMMAND,
   VI_STEP_HISTORY,
   VI_STEP_WINDOW,
+  VI_STEP_RANGE,
 } ViStep;
 
 /// @def VI_COMMAND_WINDOW
@@ -142,6 +143,18 @@ typedef enum ViStep {
 /// the window onto the line moves or the screen is shown again, and that it
 /// is run with to carry on afterwards.
 #define VI_COMMAND_WINDOW 'W'
+
+/// @def VI_COMMAND_REPEAT
+///
+/// @brief The state->ex.command insert mode returns when the text . repeats
+/// is left for the Change overlay to put in the line.
+#define VI_COMMAND_REPEAT '.'
+
+/// @def VI_NO_INSERT_START
+///
+/// @brief The state->insertStart of an insertion that erased characters from
+/// before where it started, which . can't repeat.
+#define VI_NO_INSERT_START INT16_MIN
 
 /// @enum ViYankKind
 ///
@@ -193,7 +206,6 @@ typedef enum ViError {
   VI_ERROR_MOTION = NUM_EX_ERRORS,
   VI_ERROR_NOT_FOUND,
   VI_ERROR_NO_PATTERN,
-  VI_ERROR_TOO_LONG,
   NUM_VI_ERRORS
 } ViError;
 
@@ -246,8 +258,9 @@ typedef enum ViKey {
 /// @param targetIndex The index in the line a motion reaches.  When insert
 ///   mode ends, the index after the last character inserted; when . repeats
 ///   an insertion, the number of characters to insert.
-/// @param insertStart The index insert mode started inserting at, or -1 if
-///   it erased characters from before there.
+/// @param insertStart The index insert mode started inserting at, from the
+///   start of the window and so possibly negative, or VI_NO_INSERT_START if it
+///   erased characters from before there.
 /// @param truncated Whether text holds only a window onto the current line,
 ///   which has characters before or after it.
 /// @param changed Whether text differs from the line in the store.
@@ -569,6 +582,27 @@ static inline bool viLoadWindow(ViState *state) {
   }
 }
 
+/// @fn static inline void viPlaceWindow(ViState *state, int at)
+///
+/// @brief Read the current line again after it changed in the store:  all of
+/// it if it fits in the line buffer, or else a window with an index of the
+/// line in its middle.  The cursor is put at that index.
+///
+/// @param state The ViState of the running `vi`.
+/// @param at The index in the whole line.
+///
+/// @return This function returns no value.  Errors are left in
+/// state->ex.store.error.
+static inline void viPlaceWindow(ViState *state, int at) {
+  state->windowStart = 0;
+  if (viLoadWindow(state) && state->truncated) {
+    int start = at - (VI_WINDOW_SIZE / 2);
+    state->windowStart = (int16_t) ((start > 0) ? start : 0);
+    viLoadWindow(state);
+  }
+  state->index = (int16_t) (at - state->windowStart);
+}
+
 /// @fn static inline void viRequest(ViState *state, int line, int row,
 ///   uint8_t request)
 ///
@@ -657,6 +691,45 @@ static inline bool viBeginChange(ViState *state) {
   }
   state->beginChange = false;
   return exBeginChange(&state->ex);
+}
+
+/// @fn static inline bool viCopyLine(ViState *state, uint32_t offset,
+///   int from, int length)
+///
+/// @brief Append part of a line in the text file to the text file.
+///
+/// @param state The ViState of the running `vi`.
+/// @param offset The text-file offset of the line.
+/// @param from The index in the line of the part.
+/// @param length The most characters to copy.
+///
+/// @return Returns true on success, false with state->ex.store.error set on
+/// failure.
+static inline bool viCopyLine(
+  ViState *state, uint32_t offset, int from, int length
+) {
+  return textstoreCopyRange(&state->ex.store, offset + (uint32_t) from,
+    (uint32_t) length, state->ex.store.text) >= 0;
+}
+
+/// @fn static inline bool viReplaceLine(ViState *state, uint32_t offset)
+///
+/// @brief End the text appended to the text file since an offset with a
+/// newline and make it the current line.
+///
+/// @param state The ViState of the running `vi`.
+/// @param offset The text-file offset of the new line.
+///
+/// @return Returns true on success, false with state->ex.store.error set on
+/// failure.
+static inline bool viReplaceLine(ViState *state, uint32_t offset) {
+  if (!textstoreAppendText(&state->ex.store, "\n")
+    || !exSetLineOffset(&state->ex, state->line, offset)
+  ) {
+    return false;
+  }
+  state->ex.modified = true;
+  return true;
 }
 
 /// @fn static inline bool viCommitLine(ViState *state)

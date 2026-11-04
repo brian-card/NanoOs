@@ -124,23 +124,26 @@ static bool viRedrawCurrent(ViState *state, int oldRows) {
 /// @fn static void viRepeatInsert(ViState *state, bool replace)
 ///
 /// @brief Insert the text the last change inserted, or type it over the line
-/// for R, for . to repeat it.  state->targetIndex is its length.
+/// for R, for . to repeat it.  state->targetIndex is its length.  Text that
+/// doesn't fit in the line buffer, or that R types past the end of a window,
+/// is left for the Change overlay to put in the line.
 ///
 /// @param state The ViState of the running `vi`.
 /// @param replace Whether to type the text over the line.
 ///
-/// @return This function returns no value.  Errors are left in
-/// state->ex.store.error.
-static void viRepeatInsert(ViState *state, bool replace) {
+/// @return Returns false if the text was left for the Change overlay, true
+/// otherwise.  Errors are left in state->ex.store.error.
+static bool viRepeatInsert(ViState *state, bool replace) {
   int length = state->targetIndex;
   int oldRows = viRowsFor(state, state->width);
   int end = replace ? state->index + length : state->length + length;
   if (end < state->length) {
     end = state->length;
   }
-  if (end > VI_LINE_MAX - 1) {
-    state->ex.store.error = VI_ERROR_TOO_LONG;
-    return;
+  if ((end > VI_LINE_MAX - 1) || (replace && state->truncated
+      && (end > state->length))
+  ) {
+    return false;
   }
   if (!replace) {
     memmove(&state->text[state->index + length], &state->text[state->index],
@@ -151,13 +154,14 @@ static void viRepeatInsert(ViState *state, bool replace) {
       &state->text[state->index], (size_t) length)
   ) {
     viRequest(state, state->line, state->lineRow, VI_REQUEST_MOVE);
-    return;
+    return true;
   }
   state->index = (int16_t) (state->index + length);
   state->length = (int16_t) end;
   state->text[end] = '\0';
   state->changed = true;
   viRedrawCurrent(state, oldRows);
+  return true;
 }
 
 /// @fn void* viRun(void *args)
@@ -199,7 +203,10 @@ void* viRun(void *args) {
   }
 
   if (state->repeating) {
-    viRepeatInsert(state, replace);
+    if (!viRepeatInsert(state, replace)) {
+      state->ex.command = VI_COMMAND_REPEAT;
+      return args;
+    }
     state->ex.command = VI_KEY_ESCAPE;
   } else {
     viStatus(state, mode);
@@ -236,7 +243,7 @@ void* viRun(void *args) {
       if (state->index == 0) {
         continue;
       } else if (replace || (state->index <= state->insertStart)) {
-        state->insertStart = -1;
+        state->insertStart = VI_NO_INSERT_START;
       }
       if (replace) {
         state->index--;

@@ -132,7 +132,7 @@ static void viCallOverlay(
 /// is viRun.
 static const char *const viStepOverlays[] = {
   "Motion", "Operator", "Change", "Put", "Insert", "Command", "History",
-  "Window",
+  "Window", "Range",
 };
 
 /// @fn static void viRunCommand(ViState *state, int key)

@@ -170,11 +170,6 @@ void* viRun(void *args) {
   }
   if (start == end) {
     return args;
-  } else if (state->truncated && (state->ex.addr2 != state->line)
-    && (state->operator != 'y')
-  ) {
-    state->ex.store.error = VI_ERROR_TOO_LONG;
-    return args;
   }
   if (!viYankText(state, start, end)) {
     return args;

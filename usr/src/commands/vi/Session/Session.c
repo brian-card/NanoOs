@@ -54,7 +54,6 @@ static const char *const viErrorMessages[NUM_VI_ERRORS] = {
   "",
   "Pattern not found",
   "No previous search pattern",
-  "Line too long",
 };
 
 /// @fn static void viShowError(ViState *state)

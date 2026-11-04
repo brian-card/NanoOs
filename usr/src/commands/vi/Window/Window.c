@@ -53,10 +53,9 @@ static void viCenterWindow(ViState *state) {
   state->index = (int16_t) (index - state->windowStart);
   state->targetIndex = (int16_t)
     (state->targetIndex - (state->windowStart - oldStart));
-  if (state->insertStart >= 0) {
-    int insertStart = state->insertStart - (state->windowStart - oldStart);
-    state->insertStart = (int16_t) (((insertStart >= 0)
-      && (insertStart <= state->length)) ? insertStart : -1);
+  if (state->insertStart != VI_NO_INSERT_START) {
+    state->insertStart = (int16_t)
+      (state->insertStart - (state->windowStart - oldStart));
   }
 }
 
