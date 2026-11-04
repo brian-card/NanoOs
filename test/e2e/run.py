@@ -720,7 +720,9 @@ def test_vi_draws_on_the_vdp_console(s):
     def shows(lines, status=None):
         def check(grid):
             return (grid[:rows - 1] == lines + ["~"] * (rows - 1 - len(lines))
-                    and (status is None or grid[rows - 1] == status))
+                    and (status is None
+                         or (grid[rows - 1][:vi_ruler_start(columns)].rstrip()
+                             == status)))
         return check
 
     def type_shown(text, shown):
@@ -752,8 +754,10 @@ def test_vi_draws_on_the_vdp_console(s):
         vdp.wait_grid(lambda grid: line in grid)
     screen_rows = [long_line[:columns], long_line[columns:-1],
                    "x       yz"] + ["l%02d" % n for n in range(1, count + 1)]
+    # The ruler shows the last line and the cursor on its last character.
+    ruler = " " * vi_ruler_start(columns) + "%d,3" % (count + 2)
     vdp.wait_grid(lambda grid: grid[:rows - 1] == screen_rows[-(rows - 1):]
-                  and grid[rows - 1] == "")
+                  and grid[rows - 1] == ruler)
     vdp.type("gg")
     vdp.wait_grid(lambda grid: grid[:rows - 1] == screen_rows[:rows - 1])
     vdp.type(":wq\r")
@@ -1084,12 +1088,13 @@ class ViTerminal:
                   timeout)
 
     def wait_status(self, text, timeout=15):
-        """Read output until the status line is exactly some text.
+        """Read output until the status line's message, left of the ruler,
+        is exactly some text.
 
         @param text The text.
         @param timeout Seconds to wait.
         """
-        self.wait(lambda screen: screen.line(screen.rows - 1) == text, timeout)
+        self.wait(lambda screen: vi_message(screen) == text, timeout)
 
     def keys(self, text):
         """Type keys.
@@ -1115,6 +1120,31 @@ class ViTerminal:
             if time.time() > deadline:
                 raise AssertionError("vi never exited:\n%s" % self.screen)
             self._pump(0.1)
+
+
+def vi_ruler_start(columns):
+    """Return the column vi's ruler starts at on the status line.
+
+    @param columns The number of columns on the screen.
+    """
+    return max(columns - 18, (columns + 1) // 2)
+
+
+def vi_message(screen):
+    """Return the message on a VtScreen's status line, left of vi's ruler.
+
+    @param screen The VtScreen.
+    """
+    line = screen.line(screen.rows - 1)
+    return line[:vi_ruler_start(screen.columns)].rstrip()
+
+
+def vi_ruler(screen):
+    """Return vi's ruler on a VtScreen's status line.
+
+    @param screen The VtScreen.
+    """
+    return screen.line(screen.rows - 1)[vi_ruler_start(screen.columns):]
 
 
 def vi_lines(texts, rows=24):
@@ -1396,7 +1426,7 @@ def test_vi_replaces_only_the_rows_that_change(s):
     vi.keys("kdd")
     del lines[-2]
     vi.wait_lines(vi_rows(lines, 24, 80))
-    assert vi.screen.line(23) == written, str(vi.screen)
+    assert vi_message(vi.screen) == written, str(vi.screen)
     vi.keys(":q!\r")
     vi.wait_exit()
 
@@ -2203,6 +2233,35 @@ def test_vi_pages_and_moves_within_the_screen(s):
     vi.wait_lines(lines[0:23])
     vi.keys("Lx")
     vi.wait_lines(lines[0:22] + ["ine23"])
+    vi.keys(":q!\r")
+    vi.wait_exit()
+
+
+def test_vi_shows_the_cursor_position_on_the_status_line(s):
+    s.login()
+    vi = ViTerminal(s, "vi /etc/ruler.txt")
+    vi.wait_status('"/etc/ruler.txt" [New File]')
+
+    def ruler(keys, text):
+        vi.keys(keys)
+        vi.wait(lambda screen: vi_ruler(screen) == text)
+
+    ruler("", "0,0-1")
+    ruler("i\tab\r" + vi_long_line(300) + "\x1b", "2,300")
+    ruler("0200l", "2,201")
+    ruler("k0", "1,1-8")
+    ruler("l", "1,2-9")
+    ruler("$", "1,3-10")
+    vi.keys("a")
+    # Insert mode shows only its mode on the status line.
+    vi.wait(lambda screen: screen.line(23) == "-- INSERT --")
+    ruler("\x1b", "1,3-10")
+    # On a narrow screen the ruler starts in the middle.
+    vi.keys("\x1b[48;24;30;0;0t")
+    vi.settle()
+    vi.screen = VtScreen(24, 30)
+    ruler("\x0cj", "2,3")
+    assert vi.screen.line(23) == " " * 15 + "2,3"
     vi.keys(":q!\r")
     vi.wait_exit()
 
