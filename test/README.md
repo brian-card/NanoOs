@@ -60,6 +60,8 @@ suites/     test_smoke.c            framework + kernel bring-up
             test_kernel_hal.c      clock / timer / uart HAL calls
             test_kernel_scheduler.c getpid, process table, process count
 e2e/        run.py              standalone PTY-driven runner (pexpect, no pytest)
+            harness.py          Session and the helpers the tests share
+            tests/<command>.py  the tests, one module per command tested
             fakevdp.py          a stand-in VDP on the simulator's UART0
             mkimage.sh          builds the FAT32 image (factored from buildsim)
             .cache/            built images (git-ignored)
@@ -89,7 +91,10 @@ fatal (abort the body, mark it failed, continue with the next test).
 are isolated and a test that calls `shutdown()` is harmless.
 
 Layer-3 tests are plain Python functions `test_*(session)` in
-`e2e/run.py`; `session.login()` / `session.sh("cmd")` drive the console.
+`e2e/tests/<command>.py`, one module per command tested; run.py collects
+every `test_*` function in `e2e/tests/`, and test names must be unique across
+modules.  `session.login()` / `session.sh("cmd")` drive the console.  A
+helper that tests in more than one module use goes in `e2e/harness.py`.
 
 `session.restart_with_vdp()` boots with vdp.drv serving a console on a
 `FakeVdp`: the simulator connects UART0 to the Unix socket named by
