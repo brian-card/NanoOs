@@ -132,6 +132,7 @@ static void viOperateOnLines(ViState *state) {
   state->length = 0;
   state->text[0] = '\0';
   state->changed = true;
+  state->truncated = false;
   state->index = 0;
   if (viCommitLine(state)) {
     viRequestRows(state, first, row, VI_REQUEST_SHOW, oldRows, 1);
@@ -169,7 +170,9 @@ void* viRun(void *args) {
   }
   if (start == end) {
     return args;
-  } else if (state->truncated && (state->operator != 'y')) {
+  } else if (state->truncated && (state->ex.addr2 != state->line)
+    && (state->operator != 'y')
+  ) {
     state->ex.store.error = VI_ERROR_TOO_LONG;
     return args;
   }

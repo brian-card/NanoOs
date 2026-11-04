@@ -238,10 +238,11 @@ void* viRun(void *args) {
       index += count;
       break;
     case '0':
-      index = 0;
+      index = -state->windowStart;
       break;
     case '^':
-      index = viFirstNonBlank(state);
+      index = (state->windowStart > 0)
+        ? -state->windowStart : viFirstNonBlank(state);
       break;
     case '$':
       line += count - 1;
@@ -341,6 +342,24 @@ void* viRun(void *args) {
   }
   if (linewise && (motion != 'j') && (motion != 'k')) {
     index = viFirstNonBlank(state);
+  } else if ((line == startLine) && state->truncated
+    && ((index < 0) || (index >= state->length))
+  ) {
+    if (state->operator != '\0') {
+      if ((index < 0) || (index > state->length)) {
+        state->ex.store.error = VI_ERROR_TOO_LONG;
+        return args;
+      }
+    } else {
+      int absolute = state->windowStart + index;
+      absolute = (absolute < 0) ? 0
+        : ((absolute > INT16_MAX) ? INT16_MAX : absolute);
+      int start = absolute - (VI_WINDOW_SIZE / 2);
+      state->windowStart = (int16_t) ((start > 0) ? start : 0);
+      viLoadWindow(state);
+      index = (motion == '^')
+        ? viFirstNonBlank(state) : absolute - state->windowStart;
+    }
   }
   if (index > state->length) {
     index = state->length;
@@ -356,12 +375,16 @@ void* viRun(void *args) {
     state->ex.addr2 = line;
     state->targetIndex = (int16_t) index;
     state->linewise = linewise;
-    viLoadLine(state, startLine);
+    if (state->line != startLine) {
+      viLoadLine(state, startLine);
+    }
     return args;
   }
 
   if (row == 0) {
-    viLoadLine(state, startLine);
+    if (state->line != startLine) {
+      viLoadLine(state, startLine);
+    }
     row = viRowOf(state, line);
   }
   state->index = (int16_t) index;

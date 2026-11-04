@@ -52,6 +52,7 @@ static void viOpenLine(ViState *state, bool after) {
   if (!viAddEmptyLine(state, line)) {
     return;
   }
+  state->windowStart = 0;
   int row = after
     ? state->lineRow + viRowsFor(state, state->width) : state->lineRow;
   state->index = 0;

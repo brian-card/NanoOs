@@ -107,7 +107,7 @@ static void viPutText(ViState *state, bool after, int count) {
   }
   int length = (int) yank.length;
   int total = length * count;
-  if (state->truncated || (state->length + total > VI_LINE_MAX - 1)) {
+  if (state->length + total > VI_LINE_MAX - 1) {
     store->error = VI_ERROR_TOO_LONG;
     return;
   }
@@ -165,7 +165,7 @@ void* viRun(void *args) {
       state->ex.marks |= ((uint32_t) 1) << (argument - 'a');
     }
     return args;
-  } else if (state->truncated) {
+  } else if (state->truncated && (state->ex.command == 'J')) {
     store->error = VI_ERROR_TOO_LONG;
     return args;
   }

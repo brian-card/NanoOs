@@ -202,7 +202,8 @@ static void viKeepInsertedText(ViState *state) {
 /// that it carries on the same way after Return.  When . is repeating a change
 /// and insert mode follows another step, the Insert overlay is given the
 /// length of the text to insert again; viBeginCommand gives it when insert
-/// mode is the first step.
+/// mode is the first step.  I and A on a window onto a long line first move
+/// the window to the line's start or end.
 ///
 /// @param state The ViState of the running `vi`.
 /// @param command The command that starts insert mode:  i, a, I, A, or R.
@@ -217,7 +218,8 @@ static void viStartInsert(ViState *state, char command, bool afterStep) {
   }
   state->ex.command = command;
   state->argument = (command == 'R') ? 'R' : 'i';
-  state->step = VI_STEP_INSERT;
+  state->step = (state->truncated && ((command == 'I') || (command == 'A')))
+    ? VI_STEP_WINDOW : VI_STEP_INSERT;
 }
 
 /// @fn static void viOperate(ViState *state, ViDot *dot, char operator,
@@ -373,12 +375,20 @@ static void viContinue(ViState *state) {
   } else if (step == VI_STEP_INSERT) {
     if (command == '\n') {
       state->exact = false;
-      state->step = VI_STEP_PUT;
+      state->step = state->truncated ? VI_STEP_WINDOW : VI_STEP_PUT;
+    } else if (command == VI_COMMAND_WINDOW) {
+      state->step = VI_STEP_WINDOW;
     } else if (command == VI_KEY_ESCAPE) {
       if (!state->repeating) {
         viKeepInsertedText(state);
       }
       state->step = VI_STEP_PUT;
+    }
+  } else if (step == VI_STEP_WINDOW) {
+    if (command == '\n') {
+      viStartInsert(state, state->argument, true);
+    } else {
+      state->step = VI_STEP_INSERT;
     }
   } else if (step == VI_STEP_COMMAND) {
     if ((state->motion == 'n') && !state->quit) {

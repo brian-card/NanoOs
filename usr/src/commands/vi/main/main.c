@@ -29,8 +29,8 @@
 ///
 /// @brief The key loop and normal-mode movement of the `vi` screen editor.
 /// The current line is never left changed here:  the overlays that change it
-/// commit it before they return, which keeps the code that does so out of
-/// this overlay.
+/// commit it before they return, or the Window overlay does for a window onto
+/// a long line, which keeps the code that does so out of this overlay.
 
 #include <stdio.h>
 #include "vi.h"
@@ -99,9 +99,10 @@ static void viMoveTo(ViState *state, int line, int row) {
 /// @fn static void viCallOverlay(ViState *state, const char *overlay,
 ///   const char *function)
 ///
-/// @brief Run a function in another of `vi`'s overlays, then show what it
-/// asked to be shown:  a move that doesn't scroll here, and anything else by
-/// the Show overlay.
+/// @brief Run a function in another of `vi`'s overlays, put a window onto a
+/// long line that it left changed back in the store, then show what it asked
+/// to be shown:  a move that doesn't scroll here, and anything else by the
+/// Show overlay.
 ///
 /// @param state The ViState of the running `vi`.
 /// @param overlay The name of the overlay.
@@ -114,6 +115,9 @@ static void viCallOverlay(
 ) {
   state->request = VI_REQUEST_NONE;
   viRunOverlay(state, overlay, function);
+  if (state->changed && state->truncated) {
+    viRunOverlay(state, "Window", "viCommit");
+  }
   uint8_t request = state->request;
   if (request == VI_REQUEST_MOVE) {
     viMoveTo(state, state->requestLine, state->requestRow);
@@ -128,6 +132,7 @@ static void viCallOverlay(
 /// is viRun.
 static const char *const viStepOverlays[] = {
   "Motion", "Operator", "Change", "Put", "Insert", "Command", "History",
+  "Window",
 };
 
 /// @fn static void viRunCommand(ViState *state, int key)
@@ -164,16 +169,26 @@ static void viRunCommand(ViState *state, int key) {
 ///
 /// @return This function returns no value.
 static void viRunKey(ViState *state, int key) {
+  if ((key == VI_KEY_LEFT) || (key == VI_KEY_RIGHT)) {
+    key = (key == VI_KEY_LEFT) ? 'h' : 'l';
+  }
+  if (state->truncated
+    && (((key == 'h') && (state->index == 0))
+      || ((key == 'l') && (state->index + 1 >= state->length))
+      || (key == '0') || (key == '$'))
+  ) {
+    // The window onto the line must move, which the Motion overlay does.
+    viRunCommand(state, key);
+    key = VI_KEY_NONE;
+  }
   switch (key) {
     case 'h':
-    case VI_KEY_LEFT:
       if (state->index > 0) {
         state->index--;
       }
       break;
 
     case 'l':
-    case VI_KEY_RIGHT:
       if (state->index + 1 < state->length) {
         state->index++;
       }

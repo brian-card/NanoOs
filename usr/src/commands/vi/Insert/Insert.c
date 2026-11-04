@@ -31,6 +31,82 @@
 
 #include "vi.h"
 
+/// @fn static uint32_t viSuffixOffset(ViState *state)
+///
+/// @brief Get the text-file offset of the characters after the window onto
+/// the current line.
+///
+/// @param state The ViState of the running `vi`.
+///
+/// @return Returns the offset.
+static uint32_t viSuffixOffset(ViState *state) {
+  return textstoreLineOffset(&state->ex.store, state->line)
+    + (uint32_t) state->windowStart + (uint32_t) state->windowLength;
+}
+
+/// @fn static void viMeasureSuffix(ViState *state)
+///
+/// @brief Add the width of the characters after the window onto the current
+/// line in the store to state->width.
+///
+/// @param state The ViState of the running `vi`.
+///
+/// @return This function returns no value.
+static void viMeasureSuffix(ViState *state) {
+  TextStore *store = &state->ex.store;
+  int width = state->width;
+  bool ended = (fseek(store->text, (long) viSuffixOffset(state), SEEK_SET)
+    != 0);
+  while (!ended
+    && (fgets(state->buffer, TEXTSTORE_BUFFER_SIZE, store->text) != NULL)
+  ) {
+    for (char *c = state->buffer; (*c != '\0') && !ended; c++) {
+      ended = (*c == '\n');
+      if (!ended) {
+        width += viCharWidth((unsigned char) *c, width);
+      }
+    }
+  }
+  state->width = (int16_t) ((width > INT16_MAX) ? INT16_MAX : width);
+}
+
+/// @fn static bool viRedrawCurrent(ViState *state, int oldRows)
+///
+/// @brief Redraw the current line from the start of the window onto it after
+/// its text changed, or, if it now takes up a different number of rows, ask
+/// the Show overlay to show it.  This is here rather than with the other
+/// drawing in vi.h because only insert mode draws a window that has changed.
+///
+/// @param state The ViState of the running `vi`.
+/// @param oldRows The number of rows the line took up before the change.
+///
+/// @return Returns true if the line was redrawn, false if showing it was
+/// requested.
+static bool viRedrawCurrent(ViState *state, int oldRows) {
+  viMeasure(state);
+  if (state->truncated) {
+    viMeasureSuffix(state);
+  }
+  if (viRowsFor(state, state->width) != oldRows) {
+    viRequestRows(state, state->line, state->lineRow, VI_REQUEST_SHOW,
+      oldRows, 1);
+    return false;
+  }
+  ViDraw draw = {
+    state->lineRow + (state->prefixWidth / state->columns),
+    state->prefixWidth % state->columns, state->rows - 2, state->prefixWidth
+  };
+  screenMoveTo(draw.row + 1, draw.column + 1);
+  viDrawText(state, &draw, state->text, state->length);
+  if (state->truncated) {
+    viDrawFile(state, &draw, viSuffixOffset(state));
+  }
+  if ((draw.row <= draw.lastRow) && (draw.column < state->columns)) {
+    screenClearToEndOfLine();
+  }
+  return true;
+}
+
 /// @fn static void viRepeatInsert(ViState *state, bool replace)
 ///
 /// @brief Insert the text the last change inserted, or type it over the line
@@ -60,7 +136,7 @@ static void viRepeatInsert(ViState *state, bool replace) {
     && !textstoreReadHeader(&state->ex.store, VI_DOT_TEXT_POSITION,
       &state->text[state->index], (size_t) length)
   ) {
-    viLoadLine(state, state->line);
+    viRequest(state, state->line, state->lineRow, VI_REQUEST_MOVE);
     return;
   }
   state->index = (int16_t) (state->index + length);
@@ -74,13 +150,17 @@ static void viRepeatInsert(ViState *state, bool replace) {
 ///
 /// @brief Insert text typed until Escape or Return is pressed:  before the
 /// cursor (i), after it (a), at the first non-blank (I), or at the end of the
-/// line (A), or type it over the line from the cursor (R), where Backspace
-/// only moves back.  The changed line is left for the Put overlay to commit, and to
-/// split for Return, so that this overlay has no code that changes the store.
-/// state->ex.command is set to the key that ended insertion, and, for
-/// Escape, state->targetIndex to the index after the last character
-/// inserted.  A key typed after Ctrl-V is inserted as it is.  When . is
-/// repeating a change, its text is inserted instead.
+/// line (A), or type it over the line from the cursor if state->argument is
+/// R, where Backspace only moves back.  The changed line is left for the Put
+/// overlay to commit, and to split for Return, so that this overlay has no
+/// code that changes the store.  state->ex.command is set to the key that
+/// ended insertion, and, for Escape, state->targetIndex to the index after
+/// the last character inserted.  It is set to VI_COMMAND_WINDOW, with a
+/// request to show the screen if one is needed, when the window onto the line
+/// must move, the screen was resized, or the line now takes up a different
+/// number of rows; insert mode carries on when run again with that command.  A key typed
+/// after Ctrl-V is inserted as it is.  When . is repeating a change, its text
+/// is inserted instead.
 ///
 /// @param args A pointer to the ViState of the running `vi`, cast to a
 ///   void*.
@@ -90,20 +170,19 @@ static void viRepeatInsert(ViState *state, bool replace) {
 void* viRun(void *args) {
   ViState *state = (ViState*) args;
   char command = state->ex.command;
-  bool replace = (command == 'R');
+  bool replace = (state->argument == 'R');
   const char *mode = replace ? "-- REPLACE --" : "-- INSERT --";
 
-  if (state->truncated) {
-    viStatus(state, "Line too long");
-    return args;
-  } else if ((command == 'a') && (state->length > 0)) {
+  if ((command == 'a') && (state->length > 0)) {
     state->index++;
   } else if (command == 'A') {
     state->index = state->length;
   } else if (command == 'I') {
     state->index = (int16_t) viFirstNonBlank(state);
   }
-  state->insertStart = state->index;
+  if (command != VI_COMMAND_WINDOW) {
+    state->insertStart = state->index;
+  }
 
   if (state->repeating) {
     viRepeatInsert(state, replace);
@@ -112,6 +191,12 @@ void* viRun(void *args) {
     viStatus(state, mode);
   }
   while (!state->repeating && (state->ex.store.error == EX_ERROR_NONE)) {
+    if ((state->length >= VI_LINE_MAX - 1)
+      || ((state->index == 0) && (state->windowStart > 0))
+    ) {
+      state->ex.command = VI_COMMAND_WINDOW;
+      return args;
+    }
     viPlaceCursor(state);
     int key = viReadKey(state);
     bool literal = (key == 0x16);
@@ -125,9 +210,9 @@ void* viRun(void *args) {
     } else if (key == VI_KEY_RESIZE) {
       // The old layout may not fit, so start over with this line at the top.
       screenClear();
-      viShowLine(state, state->line, -1, VI_SHOW_REDRAW);
-      viStatus(state, mode);
-      continue;
+      viRequest(state, state->line, -1, VI_REQUEST_REDRAW);
+      state->ex.command = VI_COMMAND_WINDOW;
+      return args;
     } else if (((key == '\r') || (key == '\n')) && !literal) {
       state->ex.command = '\n';
       return args;
@@ -150,9 +235,6 @@ void* viRun(void *args) {
     ) {
       if (replace && (state->index < state->length)) {
         state->text[state->index++] = (char) key;
-      } else if (state->length >= VI_LINE_MAX - 1) {
-        viStatus(state, "Line too long");
-        continue;
       } else {
         memmove(&state->text[state->index + 1], &state->text[state->index],
           (size_t) (state->length - state->index + 1));
@@ -163,7 +245,10 @@ void* viRun(void *args) {
       continue;
     }
     state->changed = true;
-    viRedrawCurrent(state, oldRows);
+    if (!viRedrawCurrent(state, oldRows)) {
+      state->ex.command = VI_COMMAND_WINDOW;
+      return args;
+    }
   }
 
   state->targetIndex = state->index;
