@@ -44,6 +44,20 @@ static uint32_t viSuffixOffset(ViState *state) {
     + (uint32_t) state->windowStart + (uint32_t) state->windowLength;
 }
 
+/// @fn static bool viHasSuffix(ViState *state)
+///
+/// @brief Find out whether the current line has characters after the window
+/// onto it.
+///
+/// @param state The ViState of the running `vi`.
+///
+/// @return Returns true if it does, false if it doesn't.
+static bool viHasSuffix(ViState *state) {
+  FILE *text = state->ex.store.text;
+  return (fseek(text, (long) viSuffixOffset(state), SEEK_SET) == 0)
+    && (fgets(state->buffer, 2, text) != NULL) && (state->buffer[0] != '\n');
+}
+
 /// @fn static void viMeasureSuffix(ViState *state)
 ///
 /// @brief Add the width of the characters after the window onto the current
@@ -193,6 +207,8 @@ void* viRun(void *args) {
   while (!state->repeating && (state->ex.store.error == EX_ERROR_NONE)) {
     if ((state->length >= VI_LINE_MAX - 1)
       || ((state->index == 0) && (state->windowStart > 0))
+      || (replace && state->truncated && (state->index == state->length)
+        && viHasSuffix(state))
     ) {
       state->ex.command = VI_COMMAND_WINDOW;
       return args;

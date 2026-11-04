@@ -36,7 +36,7 @@
 /// @fn static void viCenterWindow(ViState *state)
 ///
 /// @brief Read the current line again with the cursor in the middle of the
-/// window.  The index insert mode started at moves with it.
+/// window.  The indexes insert mode started and ended at move with it.
 ///
 /// @param state The ViState of the running `vi`.
 ///
@@ -51,6 +51,8 @@ static void viCenterWindow(ViState *state) {
     return;
   }
   state->index = (int16_t) (index - state->windowStart);
+  state->targetIndex = (int16_t)
+    (state->targetIndex - (state->windowStart - oldStart));
   if (state->insertStart >= 0) {
     int insertStart = state->insertStart - (state->windowStart - oldStart);
     state->insertStart = (int16_t) (((insertStart >= 0)
