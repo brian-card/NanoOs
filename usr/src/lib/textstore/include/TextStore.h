@@ -1246,6 +1246,59 @@ static inline long textstoreCopyText(
   return copied;
 }
 
+/// @fn static inline long textstoreCopyRange(TextStore *store,
+///   uint32_t position, uint32_t length, FILE *out)
+///
+/// @brief Copy a range of a line's text, starting at a text-file offset, to a
+/// stream, which may be the text file itself.  The range ends at the line's
+/// newline, which isn't copied, if that comes first.
+///
+/// @param store The TextStore holding the text.
+/// @param position The text-file offset of the range.
+/// @param length The number of bytes in the range.
+/// @param out The stream to copy the range to.
+///
+/// @return Returns the number of bytes copied on success, -1 with
+/// store->error set on failure.
+static inline long textstoreCopyRange(
+  TextStore *store, uint32_t position, uint32_t length, FILE *out
+) {
+  long copied = 0;
+  while (length > 0) {
+    size_t chunk = (length < TEXTSTORE_BUFFER_SIZE - 1)
+      ? (size_t) length : TEXTSTORE_BUFFER_SIZE - 1;
+    if (fseek(store->text, (long) position, SEEK_SET) != 0) {
+      store->error = TEXTSTORE_ERROR_IO;
+      return -1;
+    }
+    size_t got = fread(store->buffer, 1, chunk, store->text);
+    store->buffer[got] = '\0';
+    char *newline = strchr(store->buffer, '\n');
+    if (newline != NULL) {
+      *newline = '\0';
+      got = (size_t) (newline - store->buffer);
+      length = (uint32_t) got;
+    } else if (got < chunk) {
+      store->error = TEXTSTORE_ERROR_IO;
+      return -1;
+    }
+
+    if (out == store->text) {
+      if (!textstoreAppendText(store, store->buffer)) {
+        return -1;
+      }
+    } else if (fputs(store->buffer, out) == EOF) {
+      store->error = TEXTSTORE_ERROR_WRITE;
+      return -1;
+    }
+    position += (uint32_t) got;
+    length -= (uint32_t) got;
+    copied += (long) got;
+  }
+
+  return copied;
+}
+
 /// @fn static inline long textstoreCopyLine(TextStore *store, int line,
 ///   FILE *out, bool newline)
 ///
