@@ -1181,29 +1181,43 @@ def vi_replaces_rows(show, lines):
         return next(n for n, line in enumerate(lines)
                     if line.startswith(prefix))
 
+    def undo_and_redo(before):
+        show("u", before)
+        show("\x12", lines)
+
+    before = list(lines)
     lines[5:5] = ["new"]
     show("5Gonew\x1b", lines)
+    undo_and_redo(before)
     lines[4:4] = ["above"]
     show("5GOabove\x1b", lines)
     lines[1:2] = ["li", "ne02"]
     show("2G0lli\r\x1b", lines)
     at = find("L03")
     middle = lines[at].index("|")
+    before = list(lines)
     lines[at:at + 1] = [lines[at][:middle], lines[at][middle:]]
     show("%dG0/|\ri\r\x1b" % (at + 1), lines)
+    undo_and_redo(before)
     at = find("L07")
+    before = list(lines)
     lines[at + 1:at + 1] = [lines[at]]
     show("%dGyyp" % (at + 1), lines)
+    undo_and_redo(before)
     lines[3:3] = [lines[3]] * 2
     show("4Gyy2P", lines)
     at = find("L07")
     del lines[at + 1]
     show("%dGdd" % (at + 2), lines)
+    before = list(lines)
     del lines[at - 1:at + 2]
     show("%dG3dd" % at, lines)
+    undo_and_redo(before)
     at = find("L11")
+    before = list(lines)
     lines[at - 1:at + 1] = [lines[at - 1] + " " + lines[at]]
     show("%dGJ" % at, lines)
+    undo_and_redo(before)
     at = find("w09")
     lines[at] = lines[at][:-1]
     show("%dG$x" % (at + 1), lines)
@@ -1231,6 +1245,136 @@ def vi_written(name, lines):
     """
     return '"%s" %dL, %dC written' % (
         name, len(lines), sum(len(line) + 1 for line in lines))
+
+
+def vi_line_rows(line, columns):
+    """Return the number of screen rows vi shows a line on.
+
+    @param line The line.
+    @param columns The number of columns on the screen.
+    """
+    return max(1, -(-len(line.expandtabs(8)) // columns))
+
+
+def vi_top_for_bottom(lines, line, rows, columns):
+    """Return the number of the top line when vi scrolls a line to the
+    bottom of the screen.
+
+    @param lines The lines.
+    @param line The number of the line at the bottom.
+    @param rows The number of rows on the screen.
+    @param columns The number of columns on the screen.
+    """
+    used = vi_line_rows(lines[line - 1], columns)
+    top = line
+    while top > 1 and used + vi_line_rows(lines[top - 2], columns) <= rows - 1:
+        used += vi_line_rows(lines[top - 2], columns)
+        top -= 1
+    return top
+
+
+def vi_last_shown(lines, top, rows, columns):
+    """Return the number of the last line that fits on the screen whole.
+
+    @param lines The lines.
+    @param top The number of the top line.
+    @param rows The number of rows on the screen.
+    @param columns The number of columns on the screen.
+    """
+    used = 0
+    line = top
+    while used + vi_line_rows(lines[line - 1], columns) <= rows - 1:
+        used += vi_line_rows(lines[line - 1], columns)
+        line += 1
+    return line - 1
+
+
+def vi_scrolls_rows(show, lines, rows, columns):
+    """Check the screen as vi scrolls down and up a line at a time, and as a
+    line typed in insert mode grows onto another row, with wrapped lines
+    scrolling off and onto the screen.
+
+    @param show A function that types keys at vi, then waits until its text
+      rows show a list of lines from the top.
+    @param lines The file's lines, from vi_row_lines, which vi is showing
+      from the first with the cursor on it.
+    """
+    lines = list(lines)
+    top = 1
+    last = vi_last_shown(lines, top, rows, columns)
+    show("%dG" % last, lines)
+    for line in range(last + 1, last + 5):
+        top = vi_top_for_bottom(lines, line, rows, columns)
+        show("j", lines[top - 1:])
+    show("H", lines[top - 1:])
+    assert top > 2
+    for _ in range(min(4, top - 1)):
+        top -= 1
+        show("k", lines[top - 1:])
+    last = vi_last_shown(lines, top, rows, columns)
+    show("%dG" % last, lines[top - 1:])
+    for line in (last + 3, last + 6):
+        top = vi_top_for_bottom(lines, line, rows, columns)
+        show("3j", lines[top - 1:])
+    assert top > 4
+    show("H", lines[top - 1:])
+    top -= 3
+    show("3k", lines[top - 1:])
+    last = vi_last_shown(lines, top, rows, columns)
+    lines[last:last] = ["new"]
+    top = vi_top_for_bottom(lines, last + 1, rows, columns)
+    show("%dGA\rnew\x1b" % last, lines[top - 1:])
+    lines[last + 1:last + 1] = ["open"]
+    top = vi_top_for_bottom(lines, last + 2, rows, columns)
+    show("oopen\x1b", lines[top - 1:])
+    grow = "g" * (columns - len(lines[top + 2]))
+    lines[top + 2] += grow
+    show("%dGA%s" % (top + 3, grow), lines[top - 1:])
+    lines[top + 2] += "rows"
+    show("rows\x1b", lines[top - 1:])
+    last = vi_last_shown(lines, top, rows, columns)
+    grow = "b" * (columns - len(lines[last - 1]))
+    lines[last - 1] += grow + "z"
+    top = vi_top_for_bottom(lines, last, rows, columns)
+    show("%dGA%sz\x1b" % (last, grow), lines[top - 1:])
+    show("G", lines[vi_top_for_bottom(lines, len(lines), rows, columns) - 1:])
+    show("1G", lines)
+    return lines
+
+
+def test_vi_scrolls_by_moving_the_rows_on_the_screen(s):
+    lines = vi_row_lines(24, 80)
+    s.restart_with_file("/etc/scroll.txt", "".join(l + "\n" for l in lines))
+    s.login()
+    vi = ViTerminal(s, "vi /etc/scroll.txt")
+    vi.wait_lines(vi_rows(lines, 24, 80))
+
+    def show(keys, expected):
+        vi.keys(keys)
+        vi.wait_lines(vi_rows(expected, 24, 80))
+
+    vi_scrolls_rows(show, lines, 24, 80)
+    vi.keys(":q!\r")
+    vi.wait_exit()
+
+
+def test_vi_scrolls_by_moving_the_rows_on_the_vdp(s):
+    lines = vi_row_lines(60, 106)
+    s.write_file("/etc/scroll.txt", "".join(l + "\n" for l in lines))
+    vdp = s.restart_with_vdp()
+    vdp_login(vdp)
+    rows, columns = vdp.grid_rows, vdp.grid_columns
+
+    def show(keys, expected):
+        vdp.type(keys)
+        vdp.wait_grid(lambda grid:
+                      grid[:rows - 1] == vi_rows(expected, rows, columns))
+
+    show("vi /etc/scroll.txt\r", lines)
+    vi_scrolls_rows(show, lines, rows, columns)
+    vdp.type(":q!\r")
+    vdp.expect(PROMPT)
+    assert vdp.errors == [], f"unexpected VDU commands: {vdp.errors}"
 
 
 def test_vi_replaces_only_the_rows_that_change(s):
@@ -1277,7 +1421,7 @@ def test_vi_replaces_only_the_rows_that_change_on_the_vdp(s):
     assert vdp.errors == [], f"unexpected VDU commands: {vdp.errors}"
 
 
-def test_vi_writes_only_the_changed_rows_for_a_return(s):
+def test_vi_writes_only_the_rows_that_change_or_come_into_view(s):
     lines = ["line%02d" % n for n in range(1, 41)]
     s.restart_with_file("/etc/ret.txt", "".join(l + "\n" for l in lines))
     s.login()
@@ -1299,6 +1443,21 @@ def test_vi_writes_only_the_changed_rows_for_a_return(s):
     lines[10:10] = [""]
     split = written("\r", vi_lines(lines[:23]))
     assert re.findall(r"line\d\d", split) == ["line10"], repr(split)
+    assert len(split) * 3 < len(redraw), (len(split), len(redraw))
+    vi.keys("\x1b")
+    vi.wait_status("")
+    del lines[10]
+    undo = written("u", vi_lines(lines[:23]))
+    assert re.findall(r"line\d\d", undo) == ["line10", "line23"], repr(undo)
+    assert len(undo) * 3 < len(redraw), (len(undo), len(redraw))
+    vi.keys("23G")
+    scroll = written("j", vi_lines(lines[1:24]))
+    assert re.findall(r"line\d\d", scroll) == ["line24"], repr(scroll)
+    vi.keys("A")
+    vi.wait_status("-- INSERT --")
+    lines[24:24] = [""]
+    split = written("\r", vi_lines(lines[2:25]))
+    assert re.findall(r"line\d\d", split) == ["line24"], repr(split)
     assert len(split) * 3 < len(redraw), (len(split), len(redraw))
     vi.keys("\x1b:q!\r")
     vi.wait_exit()
