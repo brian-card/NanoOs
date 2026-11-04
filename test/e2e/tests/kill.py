@@ -1,0 +1,45 @@
+################################################################################
+#
+#                       Copyright (c) 2026 Brian Card
+#
+# Permission is hereby granted, free of charge, to any person obtaining a
+# copy of this software and associated documentation files (the "Software"),
+# to deal in the Software without restriction, including without limitation
+# the rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Software, and to permit persons to whom the
+# Software is furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included
+# in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+# DEALINGS IN THE SOFTWARE.
+#
+#                                 Brian Card
+#                       https://github.com/brian-card
+#
+
+"""End-to-end tests of kill."""
+
+import re
+
+
+def test_kill_terminates_a_background_process(s):
+    s.login()
+    s.sh("looseLoop &")
+    m = re.search(r"^(\d+)  root looseLoop$", s.sh("ps"), re.M)
+    assert m, "looseLoop is not running"
+    pid = int(m.group(1))
+    # The scheduler's asynchronous "Killing process" log line can land either
+    # side of the prompt.
+    assert s.sh("kill %d" % pid).splitlines()[0] == \
+        "Termination of process %d successful." % pid
+    assert "looseLoop" not in s.sh("ps")
+    assert s.sh("kill 99") == \
+        'Process termination returned status "Invalid argument".'
+    assert s.sh("echo alive") == "alive"

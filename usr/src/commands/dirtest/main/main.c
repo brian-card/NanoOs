@@ -30,7 +30,7 @@
 /// @file main.c
 ///
 /// @brief Test-fixture command for the e2e regression suite (see
-/// test/e2e/run.py's test_dirent_* tests): exercises opendir/readdir/closedir
+/// test/e2e/tests/dirtest.py): exercises opendir/readdir/closedir
 /// against the real FAT32 image every e2e test runs against.  Not a
 /// general-purpose utility -- follows the same pattern as the looseLoop and
 /// tightLoop commands, which likewise exist only to give e2e tests something
