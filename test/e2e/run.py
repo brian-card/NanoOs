@@ -1623,17 +1623,18 @@ def test_vi_edits_a_line_longer_than_its_buffer(s):
 
 
 def test_vi_repeats_and_replaces_on_a_line_longer_than_its_buffer(s):
-    lines = ["first", vi_long_line(300), "last"]
+    lines = ["first", vi_long_line(300), "last", "s" * 95]
     s.restart_with_file("/etc/long.txt", "".join(l + "\n" for l in lines))
     s.login()
     vi = ViTerminal(s, "vi /etc/long.txt")
     vi.wait_lines(vi_rows(lines, 24, 80))
 
-    def show(keys, line, index):
-        lines[1] = line
+    def show(keys, line, index, at=1):
+        lines[at] = line
         vi.keys(keys)
         expected = vi_rows(lines, 24, 80)
-        cursor = (1 + index // 80, index % 80)
+        cursor = (sum(vi_line_rows(l, 80) for l in lines[:at]) + index // 80,
+                  index % 80)
         vi.wait(lambda screen: (screen.lines()[:len(expected)] == expected)
                 and ((screen.row, screen.column) == cursor))
 
@@ -1652,11 +1653,168 @@ def test_vi_repeats_and_replaces_on_a_line_longer_than_its_buffer(s):
     show("0200lR%s\x1b" % typed, line[:200] + typed + line[236:], 235)
     line = lines[1]
     show("$Rxyz\x1b", line[:-1] + "xyz", len(line) + 1)
+    # . puts text that doesn't fit in the line buffer in the line from the
+    # text file.
+    line = lines[1]
+    typed = "".join(chr(ord("a") + n % 26) for n in range(60))
+    show("0100li%s\x1b" % typed, line[:100] + typed + line[100:], 159)
+    line = lines[1]
+    show(".", line[:159] + typed + line[159:], 218)
+    line = lines[1]
+    show("0150lR%s\x1b" % ("Z" * 30), line[:150] + "Z" * 30 + line[180:], 179)
+    line = lines[1]
+    show("0250l.", line[:250] + "Z" * 30 + line[280:], 279)
+    show(":3\r0iABCDEFGHIJ\x1b", "ABCDEFGHIJlast", 9, 2)
+    show(":4\r0.", "ABCDEFGHIJ" + lines[3], 9, 3)
     vi.keys(":w\r")
     vi.wait_status(vi_written("/etc/long.txt", lines))
     vi.keys(":q\r")
     vi.wait_exit()
     assert s.sh("cat /etc/long.txt", timeout=30) == "\n".join(lines)
+
+
+def vi_word_line(letter, length):
+    """Return a line of words, punctuation, and blanks whose words are each
+    unique:  the letter and the word's index, a comma, then a space.
+
+    @param letter The letter each word starts with.
+    @param length The length of the line.
+    """
+    return "".join("%s%04d, " % (letter, n)
+                   for n in range(0, length, 7))[:length]
+
+
+def vi_class(c):
+    """Return the class vi's word motions give a character:  0 for a blank,
+    1 for a letter, digit, or underscore, and 2 for anything else.
+
+    @param c The character.
+    """
+    return 0 if c in " \t" else (1 if (c.isalnum() or c == "_") else 2)
+
+
+def vi_word_motion(line, at, motion):
+    """Return the index a word motion reaches within a line.
+
+    @param line The line.
+    @param at The index to move from.
+    @param motion w, e, or b.
+    """
+    if motion == "b":
+        at -= 1
+        while vi_class(line[at]) == 0:
+            at -= 1
+        while at > 0 and vi_class(line[at - 1]) == vi_class(line[at]):
+            at -= 1
+        return at
+    if motion == "e":
+        at += 1
+        while vi_class(line[at]) == 0:
+            at += 1
+        while (at + 1 < len(line)
+               and vi_class(line[at + 1]) == vi_class(line[at])):
+            at += 1
+        return at
+    word = vi_class(line[at])
+    while at < len(line) and word != 0 and vi_class(line[at]) == word:
+        at += 1
+    while at < len(line) and vi_class(line[at]) == 0:
+        at += 1
+    return at
+
+
+def test_vi_operates_across_the_window_onto_a_long_line(s):
+    lines = ["first", vi_word_line("a", 112), vi_word_line("b", 200),
+             "  joined", "last"]
+    s.restart_with_file("/etc/words.txt", "".join(l + "\n" for l in lines))
+    s.login()
+    vi = ViTerminal(s, "vi /etc/words.txt")
+    vi.wait_lines(vi_rows(lines, 24, 80))
+
+    def show(keys, at, line, index):
+        lines[at] = line
+        vi.keys(keys)
+        expected = vi_rows(lines, 24, 80)
+        cursor = None if index is None else (
+            sum(vi_line_rows(l, 80) for l in lines[:at]) + index // 80,
+            index % 80)
+        vi.wait(lambda screen: (screen.lines()[:len(expected)] == expected)
+                and ((cursor is None)
+                     or ((screen.row, screen.column) == cursor)))
+
+    for at in (1, 2):
+        line = lines[at]
+        for p in (3, len(line) // 2, len(line) - 9):
+            go = ":%d\r0%dl" % (at + 1, p)
+            for motion in "web":
+                show(go + motion, at, line,
+                     vi_word_motion(line, p, motion))
+            show(go + "$", at, line, len(line) - 1)
+            # Moving to p passes through index 0, so get there first.
+            show(go, at, line, p)
+            show("y0", at, line, 0)
+            w = vi_word_motion(line, p, "w")
+            e = vi_word_motion(line, p, "e")
+            show(go + "dw", at, line[:p] + line[w:], p)
+            show("u", at, line, None)
+            show(go + "cwXY\x1b", at, line[:p] + "XY" + line[e + 1:], p + 1)
+            show("u", at, line, None)
+            show(go + "y$0P", at, line[p:] + line, len(line) - p - 1)
+            show("u", at, line, None)
+            show(go + "D", at, line[:p], p - 1)
+            show("u", at, line, None)
+            show(go + "d0", at, line[p:], 0)
+            show("u", at, line, None)
+            show(go + "ylp", at, line[:p + 1] + line[p:], p + 1)
+            show("u", at, line, None)
+            show(go + "x.", at, line[:p] + line[p + 2:], p)
+            show("uu", at, line, None)
+        late = len(line) - 20
+        late -= late % 7
+        show("%s/%s\r" % (go, line[late:late + 5]), at, line, late)
+        # The search reads the line in pieces, the first ending in this word.
+        show("%s?%s\r" % (go, line[84:89]), at, line, 84)
+        following = lines.pop(at + 1)
+        show(":%d\rJ" % (at + 1), at, line + " " + following.lstrip(),
+             len(line))
+        lines.insert(at + 1, following)
+        show("u", at, line, None)
+    show(":3\r0b", 1, lines[1], 110)
+    show(":5\r0ld9l", 4, "l", 0)
+    show("u", 4, "last", None)
+    show(":1\r/b0175\r", 2, lines[2], 175)
+    vi.keys(":q!\r")
+    vi.wait_exit()
+
+
+def test_vi_operates_on_a_line_thousands_of_characters_long(s):
+    line = vi_word_line("c", 3000)
+    lines = ["first", line, "  joined", "last"]
+    s.restart_with_file("/etc/many.txt", "".join(l + "\n" for l in lines))
+    s.login()
+    vi = ViTerminal(s, "vi /etc/many.txt")
+    vi.wait_status('"/etc/many.txt" 4L, %dC' % (len(line) + 21))
+    for p in (2990, 1500, 3):
+        w = vi_word_motion(line, p, "w")
+        vi.keys(":2\r0%dldw" % p)
+        line = line[:p] + line[w:]
+        e = vi_word_motion(line, p, "e")
+        vi.keys("0%dlcwXY\x1b" % p)
+        line = line[:p] + "XY" + line[e + 1:]
+        vi.keys("0%dly$0P" % p)
+        line = line[p:] + line
+    found = line.index("c1400")
+    vi.keys("0/c1400\rx")
+    line = line[:found] + line[found + 1:]
+    vi.keys("0%dlD" % (len(line) - 50))
+    line = line[:len(line) - 50]
+    vi.keys("J")
+    lines[1:3] = [line + " joined"]
+    vi.keys(":w\r")
+    vi.wait_status(vi_written("/etc/many.txt", lines), timeout=60)
+    vi.keys(":q\r")
+    vi.wait_exit(timeout=60)
+    assert s.sh("cat /etc/many.txt", timeout=30) == "\n".join(lines)
 
 
 def test_vi_edits_a_line_thousands_of_characters_long(s):
