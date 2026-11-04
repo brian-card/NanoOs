@@ -414,3 +414,59 @@ NANO_OS_TEST(unit_textstore, appending_after_moving_back_frees_the_rest) {
   textstoreClose(&store);
 }
 
+
+NANO_OS_TEST(unit_textstore, copy_range_copies_exactly_the_range) {
+  TextStore store;
+  NANO_OS_ASSERT_TRUE(openStore(&store));
+  char line[3 * TEXTSTORE_BUFFER_SIZE];
+  for (size_t ii = 0; ii < sizeof(line) - 1; ii++) {
+    line[ii] = (char) ('a' + (ii % 26));
+  }
+  line[sizeof(line) - 1] = '\0';
+  uint32_t offset = store.textEnd;
+  NANO_OS_ASSERT_TRUE(textstoreAppendText(&store, line));
+  NANO_OS_ASSERT_TRUE(textstoreAppendText(&store, "\n"));
+  uint32_t lineLength = (uint32_t) strlen(line);
+  uint32_t b = TEXTSTORE_BUFFER_SIZE - 1;
+  const uint32_t ranges[][2] = {
+    { 0, 0 }, { 0, 1 }, { 5, 10 }, { 0, b }, { 0, b + 1 }, { b, b },
+    { b - 1, 2 }, { 3, 2 * b + 7 }, { lineLength - 4, 4 },
+    { lineLength - 4, 100 }, { 0, lineLength + 50 },
+  };
+
+  for (size_t ii = 0; ii < sizeof(ranges) / sizeof(ranges[0]); ii++) {
+    uint32_t start = ranges[ii][0];
+    uint32_t length = ranges[ii][1];
+    uint32_t expected = (start + length > lineLength)
+      ? lineLength - start : length;
+    FILE *out = tmpfile();
+    NANO_OS_ASSERT_NOT_NULL(out);
+    NANO_OS_ASSERT_EQ_INT((long) expected,
+      textstoreCopyRange(&store, offset + start, length, out));
+    rewind(out);
+    char text[sizeof(line) + 8] = { 0 };
+    NANO_OS_ASSERT_EQ_INT((long) expected,
+      (long) fread(text, 1, sizeof(text) - 1, out));
+    fclose(out);
+    NANO_OS_ASSERT_TRUE(memcmp(text, &line[start], expected) == 0);
+  }
+
+  // Within the text file itself:  the prefix and the suffix around a range,
+  // then a newline, make the line without that range.
+  uint32_t copyAt = store.textEnd;
+  NANO_OS_ASSERT_EQ_INT(10, textstoreCopyRange(&store, offset, 10, store.text));
+  NANO_OS_ASSERT_EQ_INT((long) (lineLength - 2 * b),
+    textstoreCopyRange(&store, offset + 2 * b, lineLength, store.text));
+  NANO_OS_ASSERT_TRUE(textstoreAppendText(&store, "\n"));
+  FILE *out = tmpfile();
+  NANO_OS_ASSERT_NOT_NULL(out);
+  NANO_OS_ASSERT_TRUE(textstoreCopyText(&store, copyAt, out, false) > 0);
+  rewind(out);
+  char text[sizeof(line) + 8] = { 0 };
+  size_t got = fread(text, 1, sizeof(text) - 1, out);
+  fclose(out);
+  NANO_OS_ASSERT_EQ_INT((long) (10 + lineLength - 2 * b), (long) got);
+  NANO_OS_ASSERT_TRUE(memcmp(text, line, 10) == 0);
+  NANO_OS_ASSERT_TRUE(memcmp(&text[10], &line[2 * b], lineLength - 2 * b) == 0);
+  textstoreClose(&store);
+}

@@ -1549,6 +1549,106 @@ def test_vi_wraps_long_lines_and_expands_tabs(s):
     vi.wait_exit()
 
 
+def vi_long_line(length):
+    """Return a line whose text shows where each part of it is:  the index of
+    every fifth character, then a |.
+
+    @param length The length of the line, a multiple of 5.
+    """
+    return "".join("%04d|" % n for n in range(0, length, 5))
+
+
+def test_vi_edits_a_line_longer_than_its_buffer(s):
+    long_line = vi_long_line(300)
+    short = "s" * 100
+    lines = ["first", long_line, short, "last"]
+    s.restart_with_file("/etc/long.txt", "".join(l + "\n" for l in lines))
+    s.login()
+    vi = ViTerminal(s, "vi /etc/long.txt")
+    vi.wait_lines(vi_rows(lines, 24, 80))
+
+    def show(keys, line, at=1, index=None):
+        before = list(lines)
+        lines[at] = line
+        vi.keys(keys)
+        expected = vi_rows(lines, 24, 80)
+        cursor = (None if index is None
+                  else (sum(vi_line_rows(l, 80) for l in lines[:at])
+                        + index // 80, index % 80))
+        vi.wait(lambda screen: (screen.lines()[:len(expected)] == expected)
+                and ((cursor is None)
+                     or ((screen.row, screen.column) == cursor)))
+        return before
+
+    show("jylp", long_line[0] + long_line)
+    show("$x", lines[1][:-1])
+    show("p", lines[1] + "|")
+    show("0200lrX", lines[1][:200] + "X" + lines[1][201:], index=200)
+    vi.keys("a")
+    vi.wait_status("-- INSERT --")
+    vi.settle()
+    start = len(vi.output)
+    before = show("Q", lines[1][:201] + "Q" + lines[1][201:], index=202)
+    vi.settle()
+    # Only the window onto the line and what follows it are drawn again.
+    assert "0000|" not in vi.output[start:], repr(vi.output[start:])
+    show("\x1bu", before[1])
+    typed = "abcdefghij" * 15
+    inserted = lines[1][:100] + typed + lines[1][100:]
+    before = show("0100li%s\x1b" % typed, inserted)
+    show("u", before[1])
+    show("\x12", inserted)
+    before = show("0250li" + "\b" * 80 + "\x1b",
+                  lines[1][:170] + lines[1][250:])
+    show("u", before[1])
+    show("Aend\x1b", lines[1] + "end", index=len(lines[1]) + 2)
+    before = show("Istart\x1b", "start" + lines[1])
+    show("u", before[1])
+    show("jA" + "t" * 20 + "\x1b", short + "t" * 20, 2)
+    show("0x", short[1:] + "t" * 20, 2)
+    whole = lines[1]
+    lines[1:2] = [whole[:150], whole[150:]]
+    vi.keys("k0150li\r\x1b")
+    vi.wait_lines(vi_rows(lines, 24, 80))
+    lines[1:3] = [whole]
+    vi.keys("u")
+    vi.wait_lines(vi_rows(lines, 24, 80))
+    lines[1:1] = [""]
+    show("$Oabove\x1b", "above")
+    vi.keys(":w\r")
+    vi.wait_status(vi_written("/etc/long.txt", lines))
+    vi.keys(":q\r")
+    vi.wait_exit()
+    assert s.sh("cat /etc/long.txt", timeout=30) == "\n".join(lines)
+
+
+def test_vi_edits_a_line_thousands_of_characters_long(s):
+    long_line = vi_long_line(3000)
+    lines = ["first", long_line, "last"]
+    s.restart_with_file("/etc/huge.txt", "".join(l + "\n" for l in lines))
+    s.login()
+    vi = ViTerminal(s, "vi /etc/huge.txt")
+    vi.wait_status('"/etc/huge.txt" 3L, %dC' % (len(long_line) + 12))
+    vi.keys("j$x")
+    line = long_line[:-1]
+    vi.keys("0x")
+    line = line[1:]
+    vi.keys("01500lrQ")
+    line = line[:1500] + "Q" + line[1501:]
+    vi.keys("02000li" + "w" * 120 + "\x1b")
+    line = line[:2000] + "w" * 120 + line[2000:]
+    vi.keys("A" + "z" * 60 + "\x1b")
+    line += "z" * 60
+    vi.keys("I<\x1b")
+    line = "<" + line
+    lines[1] = line
+    vi.keys(":w\r")
+    vi.wait_status(vi_written("/etc/huge.txt", lines), timeout=60)
+    vi.keys("uuuuuu:q!\r")
+    vi.wait_exit(timeout=60)
+    assert s.sh("cat /etc/huge.txt", timeout=30) == "\n".join(lines)
+
+
 def test_vi_scrolls_to_keep_the_cursor_on_the_screen(s):
     s.login()
     lines = ["line%02d" % n for n in range(1, 31)]
