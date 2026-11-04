@@ -336,6 +336,7 @@ extern ProcessId schedulerPid;
 extern bool schedulerPreemptionTimerArmed;
 
 void forceYield(void);
+bool schedulerQueueWaitingProcess(ProcessDescriptor *processDescriptor);
 
 /// @fn void schedulerInhibitPreemption(void)
 ///
