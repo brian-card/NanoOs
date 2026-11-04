@@ -64,6 +64,30 @@ static const char *weekdays[7] = {
   "Sat",
 };
 
+/// @struct ListDirState
+///
+/// @brief What listDir keeps while it lists a directory.  It is allocated
+/// rather than kept on the stack, which the calls listDir makes for each
+/// entry need on the SAMD21.
+///
+/// @param st The status of the entry being listed.
+/// @param tm The entry's modification time.
+/// @param id The owner or group of the entry, looked up with buffer.
+/// @param buffer The buffer for lookups and for the line's format.
+/// @param lastUsername The name of the owner of the last entry.
+/// @param lastGroupname The name of the group of the last entry.
+typedef struct ListDirState {
+  struct stat st;
+  struct tm tm;
+  union {
+    struct passwd pwd;
+    struct group grp;
+  } id;
+  char buffer[96];
+  char lastUsername[NANO_OS_MAX_USERNAME_LENGTH];
+  char lastGroupname[NANO_OS_MAX_GROUPNAME_LENGTH];
+} ListDirState;
+
 /// @fn void listDir(const char *path)
 ///
 /// @brief List the contents of a directory.
@@ -73,57 +97,57 @@ static const char *weekdays[7] = {
 /// @return This function returns no value.
 void listDir(const char *path) {
   uid_t lastUid = INVALID_UID;
-  char lastUsername[NANO_OS_MAX_USERNAME_LENGTH];
   gid_t lastGid = INVALID_GID;
-  char lastGroupname[NANO_OS_MAX_GROUPNAME_LENGTH];
 
+  ListDirState *state = (ListDirState*) malloc(sizeof(ListDirState));
+  if (state == NULL) {
+    puts(strerror(ENOMEM));
+    return;
+  }
   DIR *dirp = opendir(path);
   if (dirp == NULL) {
     puts(strerror(errno));
+    free(state);
     return;
   }
 
   struct dirent *entry;
-  char buffer[96];
-  struct stat st;
-  struct tm tm;
+  char *buffer = state->buffer;
+  struct stat *st = &state->st;
+  struct tm *tm = &state->tm;
   while ((entry = readdir(dirp)) != NULL) {
-    if (istat(entry->d_ino, &st) < 0) {
+    if (istat(entry->d_ino, st) < 0) {
       printf("%s%s\n", entry->d_name, (entry->d_type == DT_DIR) ? "/" : "");
       continue;
     }
 
     // st is valid.  Make sure our username and groupname are filled in.
-    if (st.st_uid != lastUid) {
-      struct passwd pwd;
+    if (st->st_uid != lastUid) {
       struct passwd *result = NULL;
-      getpwuid_r(st.st_uid, &pwd, buffer, sizeof(buffer), &result);
-      if (result != NULL) {
-        strncpy(lastUsername, pwd.pw_name, NANO_OS_MAX_USERNAME_LENGTH);
-      } else {
-        strncpy(lastUsername, "UNKNOWN", NANO_OS_MAX_USERNAME_LENGTH);
-      }
-      lastUid = st.st_uid;
+      getpwuid_r(st->st_uid, &state->id.pwd, buffer, sizeof(state->buffer),
+        &result);
+      strncpy(state->lastUsername,
+        (result != NULL) ? state->id.pwd.pw_name : "UNKNOWN",
+        NANO_OS_MAX_USERNAME_LENGTH);
+      lastUid = st->st_uid;
     }
-    if (st.st_gid != lastGid) {
-      struct group grp;
+    if (st->st_gid != lastGid) {
       struct group *result = NULL;
-      getgrgid_r(st.st_gid, &grp, buffer, sizeof(buffer), &result);
-      if (result != NULL) {
-        strncpy(lastGroupname, grp.gr_name, NANO_OS_MAX_GROUPNAME_LENGTH);
-      } else {
-        strncpy(lastGroupname, "UNKNOWN", NANO_OS_MAX_GROUPNAME_LENGTH);
-      }
-      lastGid = st.st_gid;
+      getgrgid_r(st->st_gid, &state->id.grp, buffer, sizeof(state->buffer),
+        &result);
+      strncpy(state->lastGroupname,
+        (result != NULL) ? state->id.grp.gr_name : "UNKNOWN",
+        NANO_OS_MAX_GROUPNAME_LENGTH);
+      lastGid = st->st_gid;
     }
 
     // Parse the last-modified time
-    localtime_r(&st.st_mtime, &tm);
+    localtime_r(&st->st_mtime, tm);
 
     // Print the full thing.  Format:
     // drwxrwxrwx <user> <group> <size> Day YYYY-MM-DD hh:mm:ss <entry name>[/]
-    mode_t mode = st.st_mode;
-    snprintf(buffer, sizeof(buffer),
+    mode_t mode = st->st_mode;
+    snprintf(buffer, sizeof(state->buffer),
       "%c%c%c%c%c%c%c%c%c%c ",
       S_ISDIR(mode)    ? 'd' : '-',
       (mode & S_IRUSR) ? 'r' : '-',
@@ -137,24 +161,25 @@ void listDir(const char *path) {
       (mode & S_IXOTH) ? 'x' : '-'
     );
     strcat(buffer, "%s %s %7lld ");
-    snprintf(&buffer[23], sizeof(buffer) - 23, "%s %d-%02d-%02d ",
-      weekdays[tm.tm_wday],
-      tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday
+    snprintf(&buffer[23], sizeof(state->buffer) - 23, "%s %d-%02d-%02d ",
+      weekdays[tm->tm_wday],
+      tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday
     );
-    snprintf(&buffer[38], sizeof(buffer) - 38, "%02d:%02d:%02d ",
-      tm.tm_hour, tm.tm_min, tm.tm_sec
+    snprintf(&buffer[38], sizeof(state->buffer) - 38, "%02d:%02d:%02d ",
+      tm->tm_hour, tm->tm_min, tm->tm_sec
     );
     strcat(buffer, "%s%s\n");
     printf(/* format= */ buffer,
-      lastUsername,
-      lastGroupname,
-      (long long int) st.st_size,
+      state->lastUsername,
+      state->lastGroupname,
+      (long long int) st->st_size,
       entry->d_name,
       (entry->d_type == DT_DIR) ? "/" : ""
     );
   }
 
   closedir(dirp);
+  free(state);
 }
 
 /// @fn static void printUsage(FILE *stream)

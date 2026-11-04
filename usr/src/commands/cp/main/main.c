@@ -47,22 +47,28 @@
 ///
 /// @return Returns 0 on success, 1 on failure.
 static int copyFile(const char *source, const char *destination) {
-  struct stat sourceStat;
-  if (lstat(source, &sourceStat) != 0) {
+  // The status isn't needed once copying starts, so the copy buffer shares
+  // its space, which keeps this frame small enough for the SAMD21.
+  union {
+    struct stat st;
+    char buffer[96];
+  } scratch;
+  if (lstat(source, &scratch.st) != 0) {
     fprintf(stderr, "ERROR: Could not open file \"%s\": %s\n",
       source, strerror(errno));
     return 1;
   }
-  if (S_ISDIR(sourceStat.st_mode)) {
+  if (S_ISDIR(scratch.st.st_mode)) {
     fprintf(stderr, "ERROR: \"%s\" is a directory\n", source);
     return 1;
   }
+  dev_t sourceDev = scratch.st.st_dev;
+  ino_t sourceIno = scratch.st.st_ino;
 
   // Opening the destination for writing would truncate the source.
-  struct stat destinationStat;
-  if ((lstat(destination, &destinationStat) == 0)
-    && (destinationStat.st_dev == sourceStat.st_dev)
-    && (destinationStat.st_ino == sourceStat.st_ino)
+  if ((lstat(destination, &scratch.st) == 0)
+    && (scratch.st.st_dev == sourceDev)
+    && (scratch.st.st_ino == sourceIno)
   ) {
     fprintf(stderr, "ERROR: \"%s\" and \"%s\" are the same file\n",
       source, destination);
@@ -84,8 +90,8 @@ static int copyFile(const char *source, const char *destination) {
   }
 
   int returnValue = 0;
-  char buffer[96];
-  size_t bytesRead = fread(buffer, 1, sizeof(buffer), inputFile);
+  char *buffer = scratch.buffer;
+  size_t bytesRead = fread(buffer, 1, sizeof(scratch.buffer), inputFile);
   while (bytesRead > 0) {
     if (fwrite(buffer, 1, bytesRead, outputFile) != bytesRead) {
       fprintf(stderr, "ERROR: Could not write \"%s\": %s\n",
@@ -93,7 +99,7 @@ static int copyFile(const char *source, const char *destination) {
       returnValue = 1;
       break;
     }
-    bytesRead = fread(buffer, 1, sizeof(buffer), inputFile);
+    bytesRead = fread(buffer, 1, sizeof(scratch.buffer), inputFile);
   }
 
   fclose(inputFile);

@@ -530,6 +530,30 @@ static void lineEditorPrompt(char prompt) {
   printf("mush %s@%s:%s%c ", username, hostname, pwd, prompt);
 }
 
+/// @fn static __attribute__((noinline)) int lineEditorSetLocalModes(
+///   tcflag_t clear, tcflag_t set, tcflag_t *oldModes)
+///
+/// @brief Change the console's local modes.  It is kept out of line so that
+/// the struct termios it needs isn't on the stack while a line is edited.
+///
+/// @param clear The local mode flags to clear.
+/// @param set The local mode flags to set after clearing.
+/// @param oldModes Set to the local modes before the change.
+///
+/// @return Returns 0 on success, -1 if stdin isn't a console.
+static __attribute__((noinline)) int lineEditorSetLocalModes(
+  tcflag_t clear, tcflag_t set, tcflag_t *oldModes
+) {
+  struct termios termios;
+  if (tcgetattr(STDIN_FILENO, &termios) != 0) {
+    return -1;
+  }
+  *oldModes = termios.c_lflag;
+  termios.c_lflag = (termios.c_lflag & ~clear) | set;
+  tcsetattr(STDIN_FILENO, TCSANOW, &termios);
+  return 0;
+}
+
 /// @fn void* readLine(void *args)
 ///
 /// @brief Print the prompt and read a command line from stdin, letting the
@@ -552,8 +576,8 @@ void* readLine(void *args) {
   };
   lineEditorArgs->line[0] = '\0';
 
-  struct termios termios;
-  if (tcgetattr(STDIN_FILENO, &termios) != 0) {
+  tcflag_t localModes = 0;
+  if (lineEditorSetLocalModes(ECHO | ICANON | ISIG, 0, &localModes) != 0) {
     // Not a console:  read the line as it comes.
     lineEditorPrompt(lineEditorArgs->prompt);
     char *input = fgets(lineEditorArgs->line, lineEditorArgs->size, stdin);
@@ -563,9 +587,6 @@ void* readLine(void *args) {
     }
     return args;
   }
-  tcflag_t localModes = termios.c_lflag;
-  termios.c_lflag &= ~(ECHO | ICANON | ISIG);
-  tcsetattr(STDIN_FILENO, TCSANOW, &termios);
   // Keys typed once the prompt is visible must arrive in raw mode.
   lineEditorPrompt(lineEditorArgs->prompt);
 
@@ -584,7 +605,6 @@ void* readLine(void *args) {
   }
   free(editor.historyPath);
 
-  termios.c_lflag = localModes;
-  tcsetattr(STDIN_FILENO, TCSANOW, &termios);
+  lineEditorSetLocalModes((tcflag_t) ~0, localModes, &localModes);
   return args;
 }

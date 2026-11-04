@@ -1731,13 +1731,13 @@ int nanoOsSprintf(char *buffer, const char *format, ...) {
 
 /// @fn ConsoleBuffer* nanoOsWaitForInput(void)
 ///
-/// @brief Wait for input from the nanoOs port owned by the current process,
-/// first sending the output written to stdout so far.
+/// @brief Wait for input from the nanoOs port owned by the current process.
+/// Callers send the output written to stdout so far before calling this, which
+/// keeps that send's stack off the top of this function's.
 ///
 /// @return Returns a pointer to the input retrieved on success, NULL on
 /// failure.
 ConsoleBuffer* nanoOsWaitForInput(void) {
-  nanoOsFlushStdout();
   ConsoleBuffer *consoleBuffer = NULL;
   FileDescriptor *inputFd = schedulerGetFileDescriptor(stdin);
   if (inputFd == NULL) {
@@ -1829,6 +1829,7 @@ int nanoOsVfscanf(FILE *stream, const char *format, va_list args) {
   int returnValue = EOF;
 
   if (stream == stdin) {
+    nanoOsFlushStdout();
     ConsoleBuffer *consoleBuffer = nanoOsWaitForInput();
     if (consoleBuffer == NULL) {
       return returnValue; // EOF
@@ -1930,6 +1931,46 @@ ConsoleBuffer* nanoOsGetBuffer(void) {
   return consoleGetBufferArgs.consoleBuffer;
 }
 
+/// @fn static __attribute__((noinline)) int nanoOsWriteBufferToFile(
+///   FILE *stream, ConsoleBuffer *consoleBuffer)
+///
+/// @brief Write a ConsoleBuffer's text to a regular file and release the
+/// buffer.  It is separate from nanoOsWriteBuffer so that writes to stdout and
+/// stderr don't pay for its stack frame.
+///
+/// @param stream The file.
+/// @param consoleBuffer The ConsoleBuffer.
+///
+/// @return Returns 0 on success, EOF on failure.
+static __attribute__((noinline)) int nanoOsWriteBufferToFile(
+  FILE *stream, ConsoleBuffer *consoleBuffer
+) {
+  int returnValue = 0;
+  FilesystemIoCommandArgs filesystemIoCommandArgs = {
+    .file = stream,
+    .buffer = consoleBuffer->buffer,
+    .length = (uint32_t) strlen(consoleBuffer->buffer)
+  };
+  ProcessMessage *processMessage = initSendProcessMessageToPid(
+    rootFilesystemPid,
+    FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_WRITE_FILE,
+    /* data= */ &filesystemIoCommandArgs,
+    /* size= */ sizeof(filesystemIoCommandArgs),
+    true);
+  processMessageWaitForDone(processMessage, NULL);
+  if (filesystemIoCommandArgs.length == 0) {
+    returnValue = EOF;
+  }
+  processMessageRelease(processMessage);
+
+  // Release the buffer to avoid creating a leak.  Fire and forget.
+  (void) initSendProcessMessageToPid(
+    consolePid,
+    CONSOLE_COMMAND_SIGNATURE | CONSOLE_RELEASE_BUFFER,
+    /* data= */ consoleBuffer, /* size= */ sizeof(*consoleBuffer), false);
+  return returnValue;
+}
+
 /// @fn int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *consoleBuffer)
 ///
 /// @brief Send a CONSOLE_WRITE_BUFFER command to the nanoOs process.
@@ -1941,88 +1982,38 @@ ConsoleBuffer* nanoOsGetBuffer(void) {
 ///
 /// @return Returns 0 on success, EOF on failure.
 int nanoOsWriteBuffer(FILE *stream, ConsoleBuffer *consoleBuffer) {
-  int returnValue = 0;
-  if ((stream == stdout) || (stream == stderr)) {
-    FileDescriptor *outputFd = schedulerGetFileDescriptor(stream);
-    if (outputFd == NULL) {
-      logError("Could not get output file descriptor for process %d"
-        " and stream %d\n", getRunningPid(), (int) (intptr_t) stream);
-
-      // Release the buffer to avoid creating a leak.  Fire and forget.
-      (void) initSendProcessMessageToPid(
-        consolePid,
-        CONSOLE_COMMAND_SIGNATURE | CONSOLE_RELEASE_BUFFER,
-        /* data= */ consoleBuffer, /* size= */ sizeof(*consoleBuffer), false);
-
-      // We can't proceed, so bail.
-      returnValue = EOF;
-      return returnValue;
-    }
-    IoChannel *outputChannel = &outputFd->outputChannel;
-
-    if ((outputChannel != NULL) && (outputChannel->pid != PROCESS_ID_NOT_SET)) {
-      if ((stream == stdout) || (stream == stderr)) {
-        ProcessMessage *processMessage = initSendProcessMessageToProcess(
-          processIdToDescriptor(outputChannel->pid),
-          CONSOLE_COMMAND_SIGNATURE | outputChannel->messageType,
-          /* data= */ consoleBuffer, /* size= */ sizeof(*consoleBuffer), true);
-        if (processMessage != NULL) {
-          processMessageWaitForDone(processMessage, NULL);
-          processMessageRelease(processMessage);
-        } else {
-          returnValue = EOF;
-        }
-      } else {
-        logError("Request to write to invalid stream %d from process %d.\n",
-          (int) (intptr_t) stream, getRunningPid());
-
-        // Release the buffer to avoid creating a leak.  Fire and forget.
-        (void) initSendProcessMessageToPid(
-          consolePid,
-          CONSOLE_COMMAND_SIGNATURE | CONSOLE_RELEASE_BUFFER,
-          /* data= */ consoleBuffer, /* size= */ sizeof(*consoleBuffer), false);
-
-        returnValue = EOF;
-      }
-    } else {
-      logError("Request to write with no output pipe set from process %d.\n",
-        getRunningPid());
-
-      // Release the buffer to avoid creating a leak.  Fire and forget.
-      (void) initSendProcessMessageToPid(
-        consolePid,
-        CONSOLE_COMMAND_SIGNATURE | CONSOLE_RELEASE_BUFFER,
-        /* data= */ consoleBuffer, /* size= */ sizeof(*consoleBuffer), false);
-
-      returnValue = EOF;
-    }
-  } else {
-    // stream is a regular FILE.
-    FilesystemIoCommandArgs filesystemIoCommandArgs = {
-      .file = stream,
-      .buffer = consoleBuffer->buffer,
-      .length = (uint32_t) strlen(consoleBuffer->buffer)
-    };
-    ProcessMessage *processMessage = initSendProcessMessageToPid(
-      rootFilesystemPid,
-      FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_WRITE_FILE,
-      /* data= */ &filesystemIoCommandArgs,
-      /* size= */ sizeof(filesystemIoCommandArgs),
-      true);
-    processMessageWaitForDone(processMessage, NULL);
-    if (filesystemIoCommandArgs.length == 0) {
-      returnValue = EOF;
-    }
-    processMessageRelease(processMessage);
-
-    // Release the buffer to avoid creating a leak.  Fire and forget.
+  FileDescriptor *outputFd = schedulerGetFileDescriptor(stream);
+  if (outputFd == NULL) {
+    logError("Could not get output file descriptor for process %d"
+      " and stream %d\n", getRunningPid(), (int) (intptr_t) stream);
     (void) initSendProcessMessageToPid(
       consolePid,
       CONSOLE_COMMAND_SIGNATURE | CONSOLE_RELEASE_BUFFER,
       /* data= */ consoleBuffer, /* size= */ sizeof(*consoleBuffer), false);
+    return EOF;
   }
 
-  return returnValue;
+  IoChannel *outputChannel = &outputFd->outputChannel;
+  if (outputChannel->pid == PROCESS_ID_NOT_SET) {
+    logError("Request to write with no output pipe set from process %d.\n",
+      getRunningPid());
+    (void) initSendProcessMessageToPid(
+      consolePid,
+      CONSOLE_COMMAND_SIGNATURE | CONSOLE_RELEASE_BUFFER,
+      /* data= */ consoleBuffer, /* size= */ sizeof(*consoleBuffer), false);
+    return EOF;
+  }
+
+  ProcessMessage *processMessage = initSendProcessMessageToProcess(
+    processIdToDescriptor(outputChannel->pid),
+    CONSOLE_COMMAND_SIGNATURE | outputChannel->messageType,
+    /* data= */ consoleBuffer, /* size= */ sizeof(*consoleBuffer), true);
+  if (processMessage == NULL) {
+    return EOF;
+  }
+  processMessageWaitForDone(processMessage, NULL);
+  processMessageRelease(processMessage);
+  return 0;
 }
 
 /// @def STDOUT_BUFFER_SIZE
@@ -2174,7 +2165,10 @@ int nanoOsVfprintf(FILE *stream, const char *format, va_list args) {
 
   returnValue
     = vsnprintf(consoleBuffer->buffer, CONSOLE_BUFFER_SIZE, format, args);
-  if (nanoOsWriteBuffer(stream, consoleBuffer) == EOF) {
+  if ((((stream == stdout) || (stream == stderr))
+      ? nanoOsWriteBuffer(stream, consoleBuffer)
+      : nanoOsWriteBufferToFile(stream, consoleBuffer)) == EOF
+  ) {
     returnValue = -1;
   }
 
@@ -2343,6 +2337,26 @@ static __attribute__((noinline)) size_t nanoOsFreadStdin(
   return numBytesReceived;
 }
 
+/// @fn static __attribute__((noinline)) size_t nanoOsFlushAndFreadStdin(
+///   void *ptr, size_t size, size_t nmemb)
+///
+/// @brief Send the output written to stdout so far, then read from stdin for
+/// nanoOsFread.  Sending it here, before nanoOsFreadStdin's frame is on the
+/// stack, keeps the send off the top of the read's stack, and keeping it out
+/// of nanoOsFread keeps reads from files from paying for this frame.
+///
+/// @param ptr A pointer to the memory to read data into.
+/// @param size The size, in bytes, of each element to read.
+/// @param nmemb The number of elements to read.
+///
+/// @return Returns the number of bytes read.
+static __attribute__((noinline)) size_t nanoOsFlushAndFreadStdin(
+  void *ptr, size_t size, size_t nmemb
+) {
+  nanoOsFlushStdout();
+  return nanoOsFreadStdin(ptr, size, nmemb);
+}
+
 /// @fn size_t nanoOsFread(void *ptr, size_t size, size_t nmemb, FILE *stream)
 ///
 /// @brief Custom implementation of fread for this library.
@@ -2359,7 +2373,7 @@ size_t nanoOsFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   if (stream != stdin) {
     return filesystemFRead(ptr, size, nmemb, stream);
   }
-  return nanoOsFreadStdin(ptr, size, nmemb);
+  return nanoOsFlushAndFreadStdin(ptr, size, nmemb);
 }
 
 /// @fn static size_t nanoOsFwriteConsole(const void *ptr, size_t size,
