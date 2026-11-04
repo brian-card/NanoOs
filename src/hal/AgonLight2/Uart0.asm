@@ -67,8 +67,9 @@ UART0_MSR   .equ 0xC6      ; Modem status (bit 4 = CTS)
 UART0_IER_RX_BIT .equ 0x01 ; ERBI - enable "receive data available" interrupt
 
 ;; -- RX ring buffer: uart0Isr is the only producer, the Poll/Read impls the
-;; only consumers.
-UART0_RING_SIZE .equ 64            ; must be a power of two
+;; only consumers.  The VDP sends 12 bytes per keystroke, and vdp.drv drains
+;; the ring only between console writes, so a long redraw needs the room.
+UART0_RING_SIZE .equ 256           ; a power of two, at most 256 (1-byte indexes)
 UART0_RING_MASK .equ (UART0_RING_SIZE - 1)
 
 .bss
