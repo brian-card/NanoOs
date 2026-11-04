@@ -1622,6 +1622,43 @@ def test_vi_edits_a_line_longer_than_its_buffer(s):
     assert s.sh("cat /etc/long.txt", timeout=30) == "\n".join(lines)
 
 
+def test_vi_repeats_and_replaces_on_a_line_longer_than_its_buffer(s):
+    lines = ["first", vi_long_line(300), "last"]
+    s.restart_with_file("/etc/long.txt", "".join(l + "\n" for l in lines))
+    s.login()
+    vi = ViTerminal(s, "vi /etc/long.txt")
+    vi.wait_lines(vi_rows(lines, 24, 80))
+
+    def show(keys, line, index):
+        lines[1] = line
+        vi.keys(keys)
+        expected = vi_rows(lines, 24, 80)
+        cursor = (1 + index // 80, index % 80)
+        vi.wait(lambda screen: (screen.lines()[:len(expected)] == expected)
+                and ((screen.row, screen.column) == cursor))
+
+    line = lines[1]
+    show("j0200lix\b\x1b", line, 199)
+    show("0200lhhhhhiab\x1b", line[:195] + "ab" + line[195:], 196)
+    line = lines[1]
+    show(".", line[:196] + "ab" + line[196:], 197)
+    line = lines[1]
+    end = len(line) - 1
+    show("$i0123456789\x1b", line[:end] + "0123456789" + line[end:], end + 9)
+    line = lines[1]
+    show(".", line[:end + 9] + "0123456789" + line[end + 9:], end + 18)
+    line = lines[1]
+    typed = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij"
+    show("0200lR%s\x1b" % typed, line[:200] + typed + line[236:], 235)
+    line = lines[1]
+    show("$Rxyz\x1b", line[:-1] + "xyz", len(line) + 1)
+    vi.keys(":w\r")
+    vi.wait_status(vi_written("/etc/long.txt", lines))
+    vi.keys(":q\r")
+    vi.wait_exit()
+    assert s.sh("cat /etc/long.txt", timeout=30) == "\n".join(lines)
+
+
 def test_vi_edits_a_line_thousands_of_characters_long(s):
     long_line = vi_long_line(3000)
     lines = ["first", long_line, "last"]
