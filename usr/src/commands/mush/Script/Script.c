@@ -45,20 +45,10 @@
 /// @brief The maximum number of scripts that can be running inside each other.
 #define MUSH_MAX_SCRIPT_DEPTH 9
 
-/// @def MUSH_SCRIPT_DIGIT
-///
-/// @brief The index of the digit in the name of a script's variable.
-#define MUSH_SCRIPT_DIGIT 11
-
 /// @def MUSH_ENV_DIGIT
 ///
 /// @brief The index of the digit in the name of a saved environment's variable.
 #define MUSH_ENV_DIGIT 8
-
-/// @def MUSH_ENV_SEPARATOR
-///
-/// @brief The string between the variables of a saved environment.
-#define MUSH_ENV_SEPARATOR "\x1f"
 
 /// @fn static int scriptDepth(char *scriptName)
 ///
@@ -186,7 +176,46 @@ static void endInnermostScript(const char *scriptName) {
   envName[MUSH_ENV_DIGIT] = scriptName[MUSH_SCRIPT_DIGIT];
   restoreEnvironment(envName);
   unsetenv(envName);
+  char argsName[] = "MUSH_ARGS0";
+  argsName[MUSH_ARGS_DIGIT] = scriptName[MUSH_SCRIPT_DIGIT];
+  unsetenv(argsName);
   unsetenv(scriptName);
+}
+
+/// @fn static int saveArguments(char digit, char **argv)
+///
+/// @brief Save a script's name and arguments into MUSH_ARGS<digit>, separated
+/// the same way as a saved environment's variables.  A script without them
+/// still gets an empty variable, which marks the arguments of the scripts
+/// it's running inside as not its own.
+///
+/// @param digit The digit of the script the arguments are saved for.
+/// @param argv The script's name followed by its arguments, ending with NULL,
+///   or NULL if the script has neither.
+///
+/// @return Returns 0 on success, -1 on failure.
+static int saveArguments(char digit, char **argv) {
+  char argsName[] = "MUSH_ARGS0";
+  argsName[MUSH_ARGS_DIGIT] = digit;
+  if ((argv == NULL) || (*argv == NULL)) {
+    return setenv(argsName, "", true);
+  }
+  size_t size = 0;
+  for (char **arg = argv; *arg != NULL; arg++) {
+    size += strlen(*arg) + 1;
+  }
+  char *saved = (char*) malloc(size);
+  if (saved == NULL) {
+    return -1;
+  }
+  strcpy(saved, *argv);
+  for (char **arg = &argv[1]; *arg != NULL; arg++) {
+    strcat(saved, MUSH_ENV_SEPARATOR);
+    strcat(saved, *arg);
+  }
+  int returnValue = setenv(argsName, saved, true);
+  free(saved);
+  return returnValue;
 }
 
 /// @fn void* readScriptLine(void *args)
@@ -316,6 +345,7 @@ void* startScript(void *args) {
   scriptName[MUSH_SCRIPT_DIGIT] = '1' + depth;
   if ((!scriptArgs->isProfile
       && (saveEnvironment(scriptName[MUSH_SCRIPT_DIGIT]) != 0))
+    || (saveArguments(scriptName[MUSH_SCRIPT_DIGIT], scriptArgs->argv) != 0)
     || (setenv(scriptName, value, true) != 0)
   ) {
     fputs(scriptArgs->path, stderr);
@@ -343,4 +373,37 @@ void* endScript(void *args) {
     endInnermostScript(scriptName);
   }
   return NULL;
+}
+
+/// @fn void* shiftArguments(void *args)
+///
+/// @brief Drop the first argument of the innermost script, so that each later
+/// one moves down by one.
+///
+/// @param args A pointer to a ScriptArgs structure, cast to a void*.
+///
+/// @return Returns args on success, NULL if there was no argument to drop or
+/// the arguments could not be saved.
+void* shiftArguments(void *args) {
+  char scriptName[sizeof("MUSH_SCRIPT0")];
+  char argsName[] = "MUSH_ARGS0";
+  argsName[MUSH_ARGS_DIGIT] = '0' + scriptDepth(scriptName);
+  const char *value = getenv(argsName);
+  const char *first
+    = (value != NULL) ? strchr(value, *MUSH_ENV_SEPARATOR) : NULL;
+  if (first == NULL) {
+    return NULL;
+  }
+  // setenv moves the environment, value included.
+  char *shifted = (char*) malloc(strlen(value) + 1);
+  if (shifted == NULL) {
+    return NULL;
+  }
+  size_t nameLength = first - value;
+  strncpy(shifted, value, nameLength);
+  const char *second = strchr(&first[1], *MUSH_ENV_SEPARATOR);
+  strcpy(&shifted[nameLength], (second != NULL) ? second : "");
+  void *returnValue = (setenv(argsName, shifted, true) == 0) ? args : NULL;
+  free(shifted);
+  return returnValue;
 }

@@ -136,7 +136,7 @@ void* runFsCommand(void *args) {
     ) {
       // Programs are directories, so this is a script for the shell to run.
       fsCommandArgs->scriptPath = commandPath;
-      free(argv); argv = NULL;
+      fsCommandArgs->scriptArgv = argv;
       errno = 0;
       returnValue = NULL;
       goto exit;

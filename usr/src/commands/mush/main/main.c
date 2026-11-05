@@ -62,13 +62,13 @@
 /// @return This function returns no value.
 static void printUsage(FILE *stream) {
   fputs(
-    "Usage: mush [script]\n"
+    "Usage: mush [script [argument ...]]\n"
     "\n"
     "Run the MUSH shell.  Each line is a command followed by its arguments,\n"
     "separated by spaces.  Commands are looked up in the directories in PATH.\n"
     "Lines starting with # are ignored.  $NAME and ${NAME} are replaced with\n"
     "the variable's value, $? with the last command's exit status, and \\$\n"
-    "with $.\n"
+    "with $.  In a script, $0 is its name and $1 to $9 its arguments.\n"
     "\n"
     "  command &          run a command in the background\n"
     "  command | command  send one command's output to the next one's input\n"
@@ -87,6 +87,7 @@ static void printUsage(FILE *stream) {
     "  pwd             print the working directory\n"
     "  export NAME=value\n"
     "                  set an environment variable\n"
+    "  shift           drop a script's first argument, moving the rest down\n"
     "  exit            exit the shell\n"
     "\n"
     "Options:\n"
@@ -115,6 +116,38 @@ static const char* lookupVariable(const char *name, size_t nameLength) {
   return "";
 }
 
+/// @fn static const char* positionalParameter(char digit)
+///
+/// @brief Look up the innermost script's name or one of its arguments.  Every
+/// running script has a MUSH_ARGS<depth> variable, so the innermost one is the
+/// one with the highest digit.
+///
+/// @param digit '0' for the script's name, or '1' to '9' for an argument.
+///
+/// @return Returns the start of the value, which ends at a NUL or at
+/// MUSH_ENV_SEPARATOR.  It is an empty string if there is no such value.
+static const char* positionalParameter(char digit) {
+  const char *value = "";
+  char depth = '0';
+  for (char **variable = environ; (variable != NULL) && (*variable != NULL);
+    variable++
+  ) {
+    if ((strncmp(*variable, "MUSH_ARGS", MUSH_ARGS_DIGIT) == 0)
+      && ((*variable)[MUSH_ARGS_DIGIT] > depth)
+    ) {
+      depth = (*variable)[MUSH_ARGS_DIGIT];
+      value = &(*variable)[MUSH_ARGS_DIGIT + 2];
+    }
+  }
+  for (; digit > '0'; digit--) {
+    value = &value[strcspn(value, MUSH_ENV_SEPARATOR)];
+    if (*value != '\0') {
+      value++;
+    }
+  }
+  return value;
+}
+
 /// @fn static bool isNameCharacter(char c, bool first)
 ///
 /// @brief Determine whether a character can be part of a variable's name.
@@ -132,8 +165,8 @@ static bool isNameCharacter(char c, bool first) {
 /// @fn static size_t expandVariables(const char *line, char *expanded,
 ///   const char *status)
 ///
-/// @brief Replace each $NAME, ${NAME}, and $? in a command line with its
-/// value.  \$ is a literal $.
+/// @brief Replace each $NAME, ${NAME}, $?, and $0 to $9 in a command line
+/// with its value.  \$ is a literal $.
 ///
 /// @param line The command line to expand.
 /// @param expanded The buffer to write the expanded line to, or NULL to only
@@ -160,7 +193,7 @@ static size_t expandVariables(const char *line, char *expanded,
         name++;
       }
       size_t nameLength = 0;
-      if (*name == '?') {
+      if ((*name == '?') || ((*name >= '0') && (*name <= '9'))) {
         nameLength = 1;
       } else {
         while (isNameCharacter(name[nameLength], nameLength == 0)) {
@@ -168,9 +201,16 @@ static size_t expandVariables(const char *line, char *expanded,
         }
       }
       if ((nameLength > 0) && (!braced || (name[nameLength] == '}'))) {
-        value = ((nameLength == 1) && (*name == '?'))
-          ? status : lookupVariable(name, nameLength);
-        valueLength = strlen(value);
+        if (*name == '?') {
+          value = status;
+          valueLength = strlen(value);
+        } else if (*name <= '9') {
+          value = positionalParameter(*name);
+          valueLength = strcspn(value, MUSH_ENV_SEPARATOR);
+        } else {
+          value = lookupVariable(name, nameLength);
+          valueLength = strlen(value);
+        }
         next = &name[nameLength + (braced ? 1 : 0)];
       }
     }
@@ -236,6 +276,7 @@ int main(int argc, char **argv) {
     .path = scriptPath,
     .isProfile = false,
     .inBackground = false,
+    .argv = (scriptPath != NULL) ? &argv[1] : NULL,
   };
   // login starts the shell as "-mush"; restarts after a command use "mush".
   char *home = getenv("HOME");
@@ -243,6 +284,7 @@ int main(int argc, char **argv) {
     snprintf(buffer, MUSH_COMMAND_LINE_LENGTH, "%s/" MUSH_PROFILE_NAME, home);
     scriptArgs.path = buffer;
     scriptArgs.isProfile = true;
+    scriptArgs.argv = NULL;
   }
   if ((scriptArgs.path != NULL) && (callOverlayFunction(
       OVERLAY_SAME_NAMESPACE, "Script", "startScript", &scriptArgs) == NULL)
@@ -297,6 +339,11 @@ int main(int argc, char **argv) {
         continue;
       }
       break;
+    } else if (strcmp(input, "shift") == 0) {
+      exitStatus = (callOverlayFunction(
+        OVERLAY_SAME_NAMESPACE, "Script", "shiftArguments", &scriptArgs)
+        != NULL) ? 0 : 1;
+      continue;
     }
     
     char *expanded = NULL;
@@ -333,6 +380,7 @@ int main(int argc, char **argv) {
       // filesystem.
       printDebug("Command is *NOT* a builtin\n");
       fsCommandArgs.scriptPath = NULL;
+      fsCommandArgs.scriptArgv = NULL;
       if (strchr(input, '|')) {
         // Command line contains pipes.  Process it that way.
         fsCommandArgs.commandLine = input;
@@ -386,10 +434,12 @@ int main(int argc, char **argv) {
       if (fsCommandArgs.scriptPath != NULL) {
         scriptArgs.path = fsCommandArgs.scriptPath;
         scriptArgs.isProfile = false;
+        scriptArgs.argv = fsCommandArgs.scriptArgv;
         exitStatus = (callOverlayFunction(
           OVERLAY_SAME_NAMESPACE, "Script", "startScript", &scriptArgs)
           != NULL) ? 0 : 1;
         free(fsCommandArgs.scriptPath);
+        free(fsCommandArgs.scriptArgv);
       }
     }
     free(expanded);

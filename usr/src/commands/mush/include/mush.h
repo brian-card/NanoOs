@@ -43,6 +43,22 @@ extern "C"
 {
 #endif
 
+/// @def MUSH_SCRIPT_DIGIT
+///
+/// @brief The index of the digit in the name of a script's variable.
+#define MUSH_SCRIPT_DIGIT 11
+
+/// @def MUSH_ARGS_DIGIT
+///
+/// @brief The index of the digit in the name of a script's arguments' variable.
+#define MUSH_ARGS_DIGIT 9
+
+/// @def MUSH_ENV_SEPARATOR
+///
+/// @brief The string between the variables of a saved environment and between
+/// a script's arguments.
+#define MUSH_ENV_SEPARATOR "\x1f"
+
 /// @struct FsCommandArgs
 ///
 /// @brief Structure to hold the arguments required to launch a command from the
@@ -68,6 +84,8 @@ extern "C"
 ///   command of a pipeline replaces it, or -1.
 /// @param scriptPath The full path to the command, in dynamic memory, if it
 ///   turned out to be a script rather than a program.  NULL otherwise.
+/// @param scriptArgv The command's name and arguments, in dynamic memory, if it
+///   turned out to be a script.  NULL otherwise.
 typedef struct FsCommandArgs {
   char *commandLine;
   bool launchBackground;
@@ -79,6 +97,7 @@ typedef struct FsCommandArgs {
   int pipeIndex;
   int stdinDup;
   char *scriptPath;
+  char **scriptArgv;
 } FsCommandArgs;
 
 /// @struct LineEditorArgs
@@ -112,12 +131,15 @@ typedef struct LineEditorArgs {
 ///   environment changes outlast it and which may be missing.
 /// @param inBackground Whether the script was asked to run in the background
 ///   or in a pipeline, which startScript refuses.
+/// @param argv The name and arguments startScript gives the script, ending
+///   with NULL, or NULL for none.
 typedef struct ScriptArgs {
   char *line;
   int   size;
   char *path;
   bool  isProfile;
   bool  inBackground;
+  char **argv;
 } ScriptArgs;
 
 #ifdef __cplusplus
