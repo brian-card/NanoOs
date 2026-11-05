@@ -754,6 +754,53 @@ def test_vi_repeats_and_replaces_on_a_line_longer_than_its_buffer(s):
     assert s.sh("cat /etc/long.txt", timeout=30) == "\n".join(lines)
 
 
+def test_vi_toggles_case(s):
+    long_line = "abcdeFGHIJ" * 30
+    lines = ["Hello, World", "abc", "", long_line]
+    s.restart_with_file("/etc/case.txt", "".join(l + "\n" for l in lines))
+    s.login()
+    vi = ViTerminal(s, "vi /etc/case.txt")
+    vi.wait_lines(vi_rows(lines, 24, 80))
+
+    def show(keys, at, line, index=None):
+        lines[at] = line
+        vi.keys(keys)
+        expected = vi_rows(lines, 24, 80)
+        cursor = (None if index is None
+                  else (sum(vi_line_rows(l, 80) for l in lines[:at])
+                        + index // 80, index % 80))
+        vi.wait(lambda screen: (screen.lines()[:len(expected)] == expected)
+                and ((cursor is None)
+                     or ((screen.row, screen.column) == cursor)))
+
+    def toggled(line, start, end):
+        return line[:start] + line[start:end].swapcase() + line[end:]
+
+    show("~", 0, "hello, World", 1)
+    show("6~", 0, "hELLO, World", 7)
+    # Toggling stops at the line's end and leaves the cursor on its last
+    # character.
+    show(".", 0, "hELLO, wORLD", 11)
+    show("~", 0, "hELLO, wORLd", 11)
+    show("u", 0, "hELLO, wORLD", 11)
+    show("j0~~~~", 1, "ABc", 2)
+    vi.keys("j~")
+    vi.settle()
+    assert vi.screen.lines()[:4] == vi_rows(lines, 24, 80)[:4]
+    line = toggled(lines[3], 100, 120)
+    show("j0100l20~", 3, line, 120)
+    # The count runs on past the end of the window onto the long line.
+    line = toggled(line, 30, 230)
+    show("030l200~", 3, line, 230)
+    line = toggled(line, 298, 300)
+    show("$h5~", 3, line, 299)
+    show("0.", 3, toggled(line, 0, 5), 5)
+    show("u", 3, line)
+    vi.keys(":wq\r")
+    vi.wait_exit()
+    assert s.sh("cat /etc/case.txt", timeout=30) == "\n".join(lines)
+
+
 def vi_word_line(letter, length):
     """Return a line of words, punctuation, and blanks whose words are each
     unique:  the letter and the word's index, a comma, then a space.
