@@ -29,7 +29,8 @@
 ///
 /// @brief The `vi` work on a line too long for the line buffer, which holds a
 /// window onto it:  putting a changed window back between the line's text
-/// before and after it, moving the window, and splitting the line.
+/// before and after it, moving the window, and splitting the line.  ~ is
+/// here too, since its count can run past the end of a window.
 
 #include "vi.h"
 
@@ -157,13 +158,47 @@ static void viSplitWindow(ViState *state) {
     VI_REQUEST_SPLIT, oldRows - rows, 1);
 }
 
+/// @fn static void viToggleCase(ViState *state)
+///
+/// @brief Reverse the case of the letters from the cursor to
+/// state->targetIndex or the line's end, putting each window back and moving
+/// on as the letters run past it, and leave the cursor after them.
+///
+/// @param state The ViState of the running `vi`.
+///
+/// @return This function returns no value.  Errors are left in
+/// state->ex.store.error.
+static void viToggleCase(ViState *state) {
+  int oldRows = viRowsFor(state, state->width);
+  while (true) {
+    int end = (state->targetIndex < state->length)
+      ? state->targetIndex : state->length;
+    if (state->index >= end) {
+      break;
+    }
+    for (char *c = &state->text[state->index]; c < &state->text[end]; c++) {
+      char lower = (char) (*c | 0x20);
+      if ((lower >= 'a') && (lower <= 'z')) {
+        *c = (char) (*c ^ 0x20);
+      }
+    }
+    state->index = (int16_t) end;
+    state->changed = true;
+    if (!viCommitWindow(state)) {
+      return;
+    }
+  }
+  viRequestRows(state, state->line, state->lineRow, VI_REQUEST_SHOW,
+    oldRows, 1);
+}
+
 /// @fn void* viRun(void *args)
 ///
 /// @brief Split the current line for Return in insert mode (state->ex.command
 /// is a newline), move the window to the line's start for I or its end for
-/// A, or else, when the cursor is at the start of a window after the line's
-/// start or the line buffer is full, put the line back and move the window
-/// to have the cursor in its middle.
+/// A, reverse the case of letters for ~, or else, when the cursor is at the
+/// start of a window after the line's start or the line buffer is full, put
+/// the line back and move the window to have the cursor in its middle.
 ///
 /// @param args A pointer to the ViState of the running `vi`, cast to a void*.
 ///
@@ -174,6 +209,8 @@ void* viRun(void *args) {
   char command = state->ex.command;
   if (command == '\n') {
     viSplitWindow(state);
+  } else if (command == '~') {
+    viToggleCase(state);
   } else if ((command == 'I') || (command == 'A')) {
     state->windowStart = (command == 'A') ? INT16_MAX : 0;
     viLoadWindow(state);

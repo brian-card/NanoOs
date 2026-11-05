@@ -314,6 +314,13 @@ static void viParse(ViState *state, ViDot *dot, int key) {
       state->step = VI_STEP_RANGE;
       break;
 
+    case '~':
+      state->ex.command = (char) key;
+      state->targetIndex = (int16_t)
+        (state->index + ((state->count > 0) ? state->count : 1));
+      state->step = VI_STEP_WINDOW;
+      break;
+
     case 'p':
     case 'P':
       state->ex.command = (char) key;
@@ -410,7 +417,7 @@ static void viContinue(ViState *state) {
   } else if (step == VI_STEP_WINDOW) {
     if (command == '\n') {
       viStartInsert(state, state->argument, true);
-    } else {
+    } else if (command != '~') {
       state->step = VI_STEP_INSERT;
     }
   } else if (step == VI_STEP_COMMAND) {
