@@ -66,6 +66,7 @@ pid_t nanoOsGetpid(void);
 int nanoOsPipe(int pipefd[2]);
 int nanoOsSethostname(const char *name, size_t len);
 int nanoOsTtyname_r(int fd, char *buf, size_t buflen);
+unsigned int nanoOsSleep(unsigned int seconds);
 
 #ifdef __cplusplus
 }

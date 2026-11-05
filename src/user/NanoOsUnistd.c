@@ -51,8 +51,10 @@
 #include "string.h"
 
 #include "NanoOsLibC.h"
+#include "NanoOsTime.h"
 #include "NanoOsUnistd.h"
 #include "../kernel/Console.h"
+#include "../kernel/Hal.h"
 #include "../kernel/Logger.h"
 #include "../kernel/NanoOs.h"
 #include "../kernel/Scheduler.h"
@@ -451,3 +453,36 @@ int nanoOsTtyname_r(int fd, char *buf, size_t buflen) {
 pid_t nanoOsGetpid(void) {
   return getRunningPid();
 }
+
+/// @fn unsigned int nanoOsSleep(unsigned int seconds)
+///
+/// @brief NanoOs implementation of the standard POSIX sleep function.  Suspend
+/// execution of the running thread for the specified number of seconds.
+///
+/// @param seconds The number of seconds to suspend execution.
+///
+/// @return Returns 0 if the requested amount of time has elapsed, the number of
+/// seconds remaining to sleep otherwise.
+unsigned int nanoOsSleep(unsigned int seconds) {
+  if (HAL->clock != NULL) {
+    int64_t now = 0;
+    if (HAL->clock->getElapsedNanoseconds(0, &now) == 0) {
+      int64_t deadline = (now + ((int64_t) seconds)) * ((int64_t) 1000000000);
+      struct timespec ts;
+      ts.tv_sec = deadline / ((int64_t) 1000000000);
+      ts.tv_nsec = deadline % ((int64_t) 1000000000);
+      
+      struct timespec rem;
+      if (nanoOsNanosleep(&ts, &rem) == 0) {
+        return 0;
+      } else if (errno == EINTR) {
+        return rem.tv_sec;
+      }
+      // Anything else means we didn't sleep at all, so fall through to the
+      // return value below.
+    }
+  }
+  
+  return seconds;
+}
+
