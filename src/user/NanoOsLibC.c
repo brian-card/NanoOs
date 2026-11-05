@@ -79,6 +79,7 @@ const char errorStrings[][33] KEEP_IN_FLASH = {
   "Not a directory",                  // ENOTDIR
   "File exists",                      // EEXIST
   "No child processes",               // ECHILD
+  "Interrupted system call",          // EINTR
 };
 
 /// @def NUM_ERRORS

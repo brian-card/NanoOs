@@ -73,7 +73,8 @@ extern "C"
 #define ENOTDIR         25      /* Not a directory */
 #define EEXIST          26      /* File exists */
 #define ECHILD          27      /* No child processes */
-#define ELAST           27      /* End of error codes */
+#define EINTR           28      /* Interrupted system call */
+#define ELAST           28      /* End of error codes */
 
 int* errno_(void);
 #define errno (*errno_())
