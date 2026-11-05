@@ -41,6 +41,7 @@ from harness import (heap_at_prompt, help_text, PROMPT, PROMPT_PARTS,
 
 UP, DOWN, RIGHT, LEFT = "\x1b[A", "\x1b[B", "\x1b[C", "\x1b[D"
 HOME, END, DELETE = "\x1b[H", "\x1b[F", "\x1b[3~"
+MUSH_USAGE = "Usage: mush [script [argument ...]]"
 
 
 def edit(s, keys, output):
@@ -250,7 +251,7 @@ def test_login_runs_the_profile_once(s):
     assert promptParts(s) == ("root", "/tmp")
     assert s.sh("cd /etc") == ""
     assert s.sh("echo restarted") == "restarted"
-    assert help_text(s, "mush --help").splitlines()[0] == "Usage: mush [script]"
+    assert help_text(s, "mush --help").splitlines()[0] == MUSH_USAGE
     assert promptParts(s) == ("root", "/etc")
 
 
@@ -331,6 +332,41 @@ def test_script_refuses_the_background_and_missing_files(s):
     assert s.sh("./missing") == "./missing: command not found"
     assert promptParts(s)[1] == "/root"
     assert s.sh("echo alive") == "alive"
+
+
+ARGS = """echo 0=$0 1=$1 2=${2} 3=$3 9=$9
+shift
+echo 0=$0 1=$1 2=$2
+./inner x$1
+mush inner
+echo back 1=$1
+shift
+shift
+echo $? 1=$1
+shift
+echo $? 1=$1
+"""
+
+
+def test_script_sees_its_positional_parameters(s):
+    # Each script's arguments are its own:  inner's don't replace args', and
+    # the ones shift drops stay dropped across the shell restarting.
+    write_files(s, {"/root/args": ARGS,
+                    "/root/inner": "echo inner 0=$0 1=$1 2=$2\n",
+                    "/root/nine": "echo $9 ${9} $10\nshift\necho $9\n"})
+    assert s.sh('./args a "b c" d') == "\n".join([
+        "0=./args 1=a 2=b c 3=d 9=",
+        "0=./args 1=b c 2=d",
+        "inner 0=./inner 1=xb 2=c",
+        "inner 0=inner 1= 2=",
+        "back 1=b c",
+        "0 1=",
+        "1 1="])
+    assert s.sh("mush /root/inner p q") == "inner 0=/root/inner 1=p 2=q"
+    assert s.sh("./nine 1 2 3 4 5 6 7 8 nine ten") == "nine nine 10\nten"
+    assert s.sh("echo [$0] [$1] [${9}]") == "[] [] []"
+    assert s.sh("shift") == ""
+    assert s.sh("echo $?") == "1"
 
 
 def test_profile_adds_a_directory_to_the_path(s):
@@ -540,7 +576,7 @@ def test_mush_help_leaves_the_user_logged_in(s):
     user, pwd = promptParts(s)
     heaps = []
     for _ in range(8):
-        assert help_text(s, "mush --help").splitlines()[0] == "Usage: mush [script]"
+        assert help_text(s, "mush --help").splitlines()[0] == MUSH_USAGE
         assert promptParts(s) == (user, pwd)
         assert s.sh("pwd") == "/etc"
         assert ps_entries(s) == before
