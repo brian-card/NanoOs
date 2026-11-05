@@ -68,7 +68,8 @@ static void printUsage(FILE *stream) {
     "separated by spaces.  Commands are looked up in the directories in PATH.\n"
     "Lines starting with # are ignored.  $NAME and ${NAME} are replaced with\n"
     "the variable's value, $? with the last command's exit status, and \\$\n"
-    "with $.  In a script, $0 is its name and $1 to $9 its arguments.\n"
+    "with $.  In a script, $0 is its name, $1 to $9 its arguments, and $* or\n"
+    "$@ all of its arguments.\n"
     "\n"
     "  command &          run a command in the background\n"
     "  command | command  send one command's output to the next one's input\n"
@@ -165,8 +166,8 @@ static bool isNameCharacter(char c, bool first) {
 /// @fn static size_t expandVariables(const char *line, char *expanded,
 ///   const char *status)
 ///
-/// @brief Replace each $NAME, ${NAME}, $?, and $0 to $9 in a command line
-/// with its value.  \$ is a literal $.
+/// @brief Replace each $NAME, ${NAME}, $?, $0 to $9, $*, and $@ in a command
+/// line with its value.  \$ is a literal $.
 ///
 /// @param line The command line to expand.
 /// @param expanded The buffer to write the expanded line to, or NULL to only
@@ -183,6 +184,7 @@ static size_t expandVariables(const char *line, char *expanded,
     const char *value = line;
     size_t valueLength = 1;
     const char *next = &line[1];
+    bool allArguments = false;
     if ((*line == '\\') && (line[1] == '$')) {
       value = &line[1];
       next = &line[2];
@@ -193,7 +195,9 @@ static size_t expandVariables(const char *line, char *expanded,
         name++;
       }
       size_t nameLength = 0;
-      if ((*name == '?') || ((*name >= '0') && (*name <= '9'))) {
+      if ((*name == '?') || (*name == '*') || (*name == '@')
+        || ((*name >= '0') && (*name <= '9'))
+      ) {
         nameLength = 1;
       } else {
         while (isNameCharacter(name[nameLength], nameLength == 0)) {
@@ -204,6 +208,10 @@ static size_t expandVariables(const char *line, char *expanded,
         if (*name == '?') {
           value = status;
           valueLength = strlen(value);
+        } else if ((*name == '*') || (*name == '@')) {
+          value = positionalParameter('1');
+          valueLength = strlen(value);
+          allArguments = true;
         } else if (*name <= '9') {
           value = positionalParameter(*name);
           valueLength = strcspn(value, MUSH_ENV_SEPARATOR);
@@ -216,6 +224,13 @@ static size_t expandVariables(const char *line, char *expanded,
     }
     if (expanded != NULL) {
       memcpy(&expanded[length], value, valueLength);
+      for (size_t ii = length; allArguments && (ii < length + valueLength);
+        ii++
+      ) {
+        if (expanded[ii] == *MUSH_ENV_SEPARATOR) {
+          expanded[ii] = ' ';
+        }
+      }
     }
     length += valueLength;
     line = next;

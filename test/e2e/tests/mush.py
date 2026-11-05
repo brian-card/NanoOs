@@ -335,6 +335,7 @@ def test_script_refuses_the_background_and_missing_files(s):
 
 
 ARGS = """echo 0=$0 1=$1 2=${2} 3=$3 9=$9
+echo [$*] [${@}]
 shift
 echo 0=$0 1=$1 2=$2
 ./inner x$1
@@ -344,7 +345,7 @@ shift
 shift
 echo $? 1=$1
 shift
-echo $? 1=$1
+echo $? 1=$1 [$*]
 """
 
 
@@ -353,18 +354,20 @@ def test_script_sees_its_positional_parameters(s):
     # the ones shift drops stay dropped across the shell restarting.
     write_files(s, {"/root/args": ARGS,
                     "/root/inner": "echo inner 0=$0 1=$1 2=$2\n",
-                    "/root/nine": "echo $9 ${9} $10\nshift\necho $9\n"})
+                    "/root/nine": "echo $9 ${9} $10\nshift\necho $9\necho $@\n"})
     assert s.sh('./args a "b c" d') == "\n".join([
         "0=./args 1=a 2=b c 3=d 9=",
+        "[a b c d] [a b c d]",
         "0=./args 1=b c 2=d",
         "inner 0=./inner 1=xb 2=c",
         "inner 0=inner 1= 2=",
         "back 1=b c",
         "0 1=",
-        "1 1="])
+        "1 1= []"])
     assert s.sh("mush /root/inner p q") == "inner 0=/root/inner 1=p 2=q"
-    assert s.sh("./nine 1 2 3 4 5 6 7 8 nine ten") == "nine nine 10\nten"
-    assert s.sh("echo [$0] [$1] [${9}]") == "[] [] []"
+    assert s.sh("./nine 1 2 3 4 5 6 7 8 nine ten") == \
+        "nine nine 10\nten\n2 3 4 5 6 7 8 nine ten"
+    assert s.sh("echo [$0] [$1] [${9}] [$*] [${@}]") == "[] [] [] [] []"
     assert s.sh("shift") == ""
     assert s.sh("echo $?") == "1"
 
