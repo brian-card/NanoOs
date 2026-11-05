@@ -681,7 +681,7 @@ def test_vi_edits_a_line_longer_than_its_buffer(s):
     show("\x12", inserted)
     before = show("0250li" + "\b" * 80 + "\x1b",
                   lines[1][:170] + lines[1][250:])
-    show("u", before[1])
+    show("u", before[1], index=250)
     show("Aend\x1b", lines[1] + "end", index=len(lines[1]) + 2)
     before = show("Istart\x1b", "start" + lines[1])
     show("u", before[1])
@@ -795,7 +795,11 @@ def test_vi_toggles_case(s):
     line = toggled(line, 298, 300)
     show("$h5~", 3, line, 299)
     show("0.", 3, toggled(line, 0, 5), 5)
-    show("u", 3, line)
+    show("u", 3, line, 0)
+    show("$h5~", 3, toggled(line, 298, 300), 299)
+    # Undo puts the cursor back where it was in the whole line, not in the
+    # window.
+    show("u", 3, line, 298)
     vi.keys(":wq\r")
     vi.wait_exit()
     assert s.sh("cat /etc/case.txt", timeout=30) == "\n".join(lines)
