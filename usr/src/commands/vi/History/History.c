@@ -106,6 +106,23 @@ static int viSpanChange(ViState *state, ViSpan *span) {
   return line;
 }
 
+/// @fn static void viRestoreColumn(ViState *state)
+///
+/// @brief Put the cursor at the index in the whole current line that the undo
+/// history recorded, moving the window onto a long line to hold it.
+///
+/// @param state The ViState of the running `vi`, with the line just loaded.
+///
+/// @return This function returns no value.  Errors are left in
+/// state->ex.store.error.
+static void viRestoreColumn(ViState *state) {
+  if (state->truncated && (state->ex.column >= state->length)) {
+    viPlaceWindow(state, state->ex.column);
+  } else {
+    state->index = state->ex.column;
+  }
+}
+
 /// @fn void* viRun(void *args)
 ///
 /// @brief Undo (state->ex.command u) or redo (r) a change.  The lines it
@@ -147,8 +164,11 @@ void* viRun(void *args) {
     && (state->top <= numLines)
   ) {
     viLoadLine(state, first);
-    state->index = (first == line)
-      ? state->ex.column : (int16_t) viFirstNonBlank(state);
+    if (first == line) {
+      viRestoreColumn(state);
+    } else {
+      state->index = (int16_t) viFirstNonBlank(state);
+    }
     viRequestRows(state, first, row, VI_REQUEST_SHOW, oldRows,
       (span.last >= first) ? span.last - first + 1 : 0);
     return args;
@@ -157,7 +177,7 @@ void* viRun(void *args) {
     state->top = 1;
   }
   if (viLoadLine(state, line)) {
-    state->index = state->ex.column;
+    viRestoreColumn(state);
     viRequest(state, line, viRowOf(state, line), VI_REQUEST_REDRAW);
   }
   return args;

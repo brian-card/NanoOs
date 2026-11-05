@@ -469,7 +469,7 @@ static void viBeginCommand(ViState *state) {
   viRecordKey(&dot, key);
   key = viReadCount(state, &dot, key, &state->count);
   state->beginChange = true;
-  state->ex.column = state->index;
+  state->ex.column = (int16_t) (state->windowStart + state->index);
   state->operator = '\0';
 
   if (key == '.') {
