@@ -29,9 +29,12 @@
 ///
 /// @brief Kernel-side implementation of Unix time.h functionality.
 
+#include "NanoOsErrno.h"
 #include "NanoOsTime.h"
 #include "../kernel/Hal.h"
 #include "../kernel/NanoOs.h"
+// NanoOsThreads.h needs to come after anything that includes Messages.h.
+#include "NanoOsThreads.h"
 
 // Standard C includes
 #include <stddef.h> // For NULL
@@ -184,5 +187,54 @@ int nanoOsTimespec_get(struct timespec* spec, int base) {
   spec->tv_nsec = now % ((int64_t) 1000000000);
 
   return base;
+}
+
+/// @fn int nanoOsNanosleep(const struct timespec *duration,
+///   struct timespec *rem)
+///
+/// @brief NanoOs implementation of the POSIX nanosleep function.
+///
+/// @param duration A pointer to a struct timespec holding a future time to
+///   sleep until.
+/// @param rem The amount of time remaining until the deadline if this function
+///   returns before the deadline.  This parameter may be NULL.
+///
+/// @return On success, 0 is returned.  On failure, -1 is returned and errno is
+/// set to the appropriate error.  If the function returns early and rem is non-
+/// NULL, it will be populated with the amount of time remaining.
+int nanoOsNanosleep(const struct timespec *duration, struct timespec *rem) {
+  if ((duration->tv_nsec < 0) || (duration->tv_nsec > 999999999)
+    || (duration->tv_sec < 0)
+  ) {
+    errno = EINVAL;
+    return -1;
+  }
+  
+  int64_t deadline = (((int64_t) duration->tv_sec) * 1000000000LL)
+    + ((int64_t) duration->tv_nsec);
+  
+  mtx_t lock;
+  mtx_init(&lock, mtx_plain | mtx_timed);
+  mtx_lock(&lock);
+  // The mutex isn't recursive, so attempting to lock it a second time will
+  // block and cause us to be put on the timed waiting queue.
+  mtx_timedlock(&lock, duration);
+  // The mutex is local and we don't care about it, so no point in unlocking it.
+  
+  if ((rem != NULL) && (HAL->clock != NULL)) {
+    int64_t now = 0;
+    if (HAL->clock->getElapsedNanoseconds(0, &now) == 0) {
+      if ((now > 0) && (now < deadline)) {
+        // deadline > now, so do the subtraction in the right order.
+        int64_t delta = deadline - now;
+        rem->tv_sec = (time_t) (delta / ((int64_t) 1000000000));
+        rem->tv_nsec = delta % ((int64_t) 1000000000);
+        errno = EINTR;
+        return -1;
+      }
+    }
+  }
+  
+  return 0;
 }
 
