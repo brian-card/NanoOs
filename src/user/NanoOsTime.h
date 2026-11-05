@@ -109,6 +109,7 @@ struct tm* nanoOsLocaltime_r(const time_t *timep, struct tm *result);
 #define localtime_r(timep, result) nanoOsLocaltime_r(timep, result)
 int nanoOsTimespec_get(struct timespec* spec, int base);
 #define timespec_get(spec, base) nanoOsTimespec_get(spec, base)
+int nanoOsNanosleep(const struct timespec *duration, struct timespec *rem);
 
 #ifdef __cplusplus
 }
