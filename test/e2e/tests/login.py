@@ -28,6 +28,7 @@
 
 import os
 import re
+import time
 
 import pexpect
 
@@ -45,6 +46,28 @@ def test_login_rejects_bad_password(s):
     s.child.sendline("wrongpassword")
     idx = s.child.expect([PROMPT, "login: ", pexpect.TIMEOUT], timeout=10)
     assert idx != 0, "bad password produced a shell prompt"
+
+
+def failedLoginDelay(s, user, password):
+    """Return the seconds between "Login failed!" and the next login prompt."""
+    s.wait_login_prompt()
+    s.child.sendline(user)
+    s.child.expect("password: ", timeout=10)
+    s.child.sendline(password)
+    s.child.expect("Login failed!", timeout=10)
+    start = time.monotonic()
+    s.child.expect("login: ", timeout=15)
+    return time.monotonic() - start
+
+
+def test_login_sleeps_after_a_bad_password(s):
+    delay = failedLoginDelay(s, "root", "wrongpassword")
+    assert 2.9 <= delay < 4.5, f"failed login took {delay:.3f} s"
+
+
+def test_login_sleeps_after_a_bad_username(s):
+    delay = failedLoginDelay(s, "nosuchuser", "rootroot")
+    assert 2.9 <= delay < 4.5, f"failed login took {delay:.3f} s"
 
 
 def passwdChecksum(user, password):
