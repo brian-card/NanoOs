@@ -168,6 +168,7 @@ int main(int argc, char **argv) {
   
   if (result == NULL) {
     fputs("Login failed!\n", stderr);
+    sleep(3);
     returnValue = 1;
     goto freeNew;
   }
@@ -187,6 +188,7 @@ int main(int argc, char **argv) {
     fputs("Login successful!\n", stderr);
   } else {
     fputs("Login failed!\n", stderr);
+    sleep(3);
     returnValue = 1;
     goto freeNew;
   }
