@@ -220,6 +220,7 @@ typedef struct NanoOsUserApi {
   int (*execve)(const char *pathname, char *const argv[], char *const envp[]);
   int (*setuid)(uid_t uid);
   int (*pipe)(int pipefd[2]);
+  unsigned int (*sleep)(unsigned int seconds);
   
   // termios functions:
   int (*tcgetattr)(int fd, struct termios *termios_p);
@@ -241,6 +242,7 @@ typedef struct NanoOsUserApi {
   struct tm* (*nanoOsGmtime_r)(const time_t *timep, struct tm *result);
   struct tm* (*nanoOsLocaltime_r)(const time_t *timep, struct tm *result);
   int (*nanoOsTimespec_get)(struct timespec* spec, int base);
+  int (*nanoOsNanosleep)(const struct timespec *duration, struct timespec *rem);
   
   // pwd.h functions:
   int (*getpwnam_r)(

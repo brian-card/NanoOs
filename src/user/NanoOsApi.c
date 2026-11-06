@@ -222,6 +222,7 @@ static const NanoOsUserApi _nanoOsUserApi = {
   .execve = schedulerExecve,
   .setuid = schedulerSetProcessUser,
   .pipe = nanoOsPipe,
+  .sleep = nanoOsSleep,
   
   // termios functions:
   .tcgetattr = nanoOsTcgetattr,
@@ -242,6 +243,7 @@ static const NanoOsUserApi _nanoOsUserApi = {
   .nanoOsGmtime_r = nanoOsGmtime_r,
   .nanoOsLocaltime_r = nanoOsLocaltime_r,
   .nanoOsTimespec_get = nanoOsTimespec_get,
+  .nanoOsNanosleep = nanoOsNanosleep,
   
   // pwd.h functions:
   .getpwnam_r = nanoOsGetpwnam_r,
