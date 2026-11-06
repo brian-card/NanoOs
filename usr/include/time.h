@@ -99,6 +99,9 @@ static inline struct tm* localtime_r(const time_t *timep, struct tm *result) {
 static inline int timespec_get(struct timespec* spec, int base) {
   return overlayMap.header.osApi->userApi->nanoOsTimespec_get(spec, base);
 }
+static inline int nanosleep(const struct timespec *duration, struct timespec *rem) {
+  return overlayMap.header.osApi->userApi->nanoOsNanosleep(duration, rem);
+}
 
 #ifdef __cplusplus
 }

@@ -80,6 +80,9 @@ static inline int setuid(uid_t uid) {
 static inline int pipe(int pipefd[2]) {
   return overlayMap.header.osApi->userApi->pipe(pipefd);
 }
+static inline unsigned int sleep(unsigned int seconds) {
+  return overlayMap.header.osApi->userApi->sleep(seconds);
+}
 
 #ifdef __cplusplus
 }
