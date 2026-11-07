@@ -29,18 +29,16 @@ endif
 OBJ_DIR := ../../../obj/contiguous-filesystem
 BIN_DIR := ../../../filesystem/contiguous-filesystem
 
-VPATH := common:fat32
-
-# Full paths (needed by mkOverlayMap.sh) and the command handlers' basenames
-# (needed to compute object file paths via VPATH).
+# Full paths, needed by mkOverlayMap.sh.
+HANDLER_PATHS := $(wildcard common/*.c)
 DRIVER_PATHS := $(wildcard fat32/*.c)
-SOURCE_PATHS := $(wildcard common/*.c) $(DRIVER_PATHS)
-COMMON_SOURCES := $(notdir $(wildcard common/*.c))
+SOURCE_PATHS := $(HANDLER_PATHS) $(DRIVER_PATHS)
 
-# The driver sources are compiled as a single translation unit, as the
-# kernel-linked build does in src/kernel/Fat32Filesystem.c, so that each of the
-# driver header's static inline helpers is emitted once instead of once per
-# driver file.
+# The command handlers and the driver sources are each compiled as a single
+# translation unit, as the kernel-linked build does in
+# src/kernel/Fat32Filesystem.c, so that each static inline helper they share
+# is emitted once instead of once per source file.
+HANDLER_UNIT := $(OBJ_DIR)/Handlers.c
 DRIVER_UNIT := $(OBJ_DIR)/Driver.c
 
 ELF := $(OBJ_DIR)/overlay.elf
@@ -48,7 +46,7 @@ BINARY := $(BIN_DIR)/0.overlay
 
 OBJECTS := \
     $(OBJ_DIR)/OverlayMap.o \
-    $(addprefix $(OBJ_DIR)/,$(COMMON_SOURCES:.c=.o)) \
+    $(OBJ_DIR)/Handlers.o \
     $(OBJ_DIR)/Driver.o \
 
 INCLUDES += \
@@ -92,14 +90,6 @@ $(ELF): $(OBJECTS)
 	$(LINKER) $(LDFLAGS) $(OBJECTS) $(LINKS) -o $@
 	$(SIZE) $@
 
-$(OBJ_DIR)/%.o: %.c
-	@echo "Compiling: $<"
-	$(MKDIR) "$(OBJ_DIR)"
-	$(COMPILE) $(WARNINGS) $(CFLAGS) $(INCLUDES) -c $< -o $@
-
-# OverlayMap.c is generated directly into OBJ_DIR, so it isn't reachable via
-# VPATH -- give it an explicit compile rule rather than relying on the
-# generic pattern rule above.
 $(OBJ_DIR)/OverlayMap.o: $(OBJ_DIR)/OverlayMap.c
 	@echo "Compiling: $<"
 	$(COMPILE) $(WARNINGS) $(CFLAGS) $(INCLUDES) -c $< -o $@
@@ -107,6 +97,15 @@ $(OBJ_DIR)/OverlayMap.o: $(OBJ_DIR)/OverlayMap.c
 $(OBJ_DIR)/Driver.o: $(DRIVER_UNIT)
 	@echo "Compiling: $<"
 	$(COMPILE) $(WARNINGS) $(CFLAGS) $(INCLUDES) -c $< -o $@
+
+$(OBJ_DIR)/Handlers.o: $(HANDLER_UNIT)
+	@echo "Compiling: $<"
+	$(COMPILE) $(WARNINGS) $(CFLAGS) $(INCLUDES) -c $< -o $@
+
+$(HANDLER_UNIT): $(HANDLER_PATHS)
+	@echo "Creating $@"
+	$(MKDIR) "$(OBJ_DIR)"
+	printf '#include "%s"\n' $(abspath $(HANDLER_PATHS)) > $@
 
 $(DRIVER_UNIT): $(DRIVER_PATHS)
 	@echo "Creating $@"
