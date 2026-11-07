@@ -17,8 +17,10 @@ import glob
 import importlib
 import multiprocessing
 import os
+import signal
 import subprocess
 import sys
+import traceback
 
 import harness
 from harness import (E2E_DIR, HOSTNAME, REPO_ROOT, Session, small_memory_key,
@@ -26,6 +28,11 @@ from harness import (E2E_DIR, HOSTNAME, REPO_ROOT, Session, small_memory_key,
 
 CACHE_DIR = os.path.join(E2E_DIR, ".cache")
 BLOCK_FS = "contiguous"
+
+# Every expect has its own timeout, so a test still running after this many
+# seconds is blocked somewhere a timeout can't reach.
+TEST_TIME_LIMIT = 300
+CLOSE_TIME_LIMIT = 30
 
 # (label, binary, extra environment).  The poll-only pass makes the console
 # UART report poll-only so the console's polling path stays covered.  The
@@ -104,8 +111,41 @@ def uses_small_memory(t):
     return "small_memory_size" in t.__code__.co_names
 
 
+class TimeLimitExceeded(Exception):
+    """Raised in a worker when a test runs past TEST_TIME_LIMIT."""
+
+
+def time_limit_exceeded(_signum, frame):
+    """Abort the running test from wherever it is blocked.
+
+    @param _signum The signal number.
+    @param frame The frame that was running.
+    """
+    stack = traceback.extract_stack(frame)
+    ours = [f for f in stack if f.filename.startswith(E2E_DIR)] or stack
+    places = [ours[-1]] if ours[-1] is stack[-1] else [ours[-1], stack[-1]]
+    raise TimeLimitExceeded(
+        "still running after %d s, at %s" % (TEST_TIME_LIMIT, ", then ".join(
+            "%s:%d in %s" % (os.path.basename(f.filename), f.lineno, f.name)
+            for f in places)))
+
+
+def close_session(s):
+    """Close a test's Session, if it has one, under a time limit of its own.
+
+    @param s The Session, or None.
+    """
+    signal.alarm(CLOSE_TIME_LIMIT)
+    try:
+        if s is not None:
+            s.close()
+    finally:
+        signal.alarm(0)
+
+
 def init_worker(verbose):
     harness.VERBOSE = verbose
+    signal.signal(signal.SIGALRM, time_limit_exceeded)
 
 
 def probe_small_memory_size(sim_bin, env, image):
@@ -117,11 +157,13 @@ def probe_small_memory_size(sim_bin, env, image):
 
     @return The simulated memory size, in bytes.
     """
-    s = Session(sim_bin, image, env)
+    signal.alarm(TEST_TIME_LIMIT)
+    s = None
     try:
+        s = Session(sim_bin, image, env)
         return small_memory_size(s)
     finally:
-        s.close()
+        close_session(s)
 
 
 def run_case(i, label, sim_bin, env, test_module, test_name, image,
@@ -146,6 +188,7 @@ def run_case(i, label, sim_bin, env, test_module, test_name, image,
     failed = False
     s = None
     try:
+        signal.alarm(TEST_TIME_LIMIT)
         s = Session(sim_bin, image, env)
         getattr(importlib.import_module(test_module), test_name)(s)
         if xfail:
@@ -165,8 +208,7 @@ def run_case(i, label, sim_bin, env, test_module, test_name, image,
             for line in tail.splitlines():
                 lines.append(f"#   | {line}")
     finally:
-        if s is not None:
-            s.close()
+        close_session(s)
     return lines, failed
 
 
