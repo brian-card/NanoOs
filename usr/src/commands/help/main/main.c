@@ -153,6 +153,9 @@ int main(int argc, char **argv) {
   printf("%s %s\n",
     "vi:                     ",
     "Edit a file on the full screen.");
+  printf("%s %s\n",
+    "vim:                    ",
+    "Run vi.");
   printf("\nRun a command with --help to see its usage.\n");
 
   return returnValue;
