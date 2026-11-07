@@ -46,7 +46,7 @@ set -e
 WORK=${WORK:?set WORK to a scratch directory}
 REPO=${REPO:-$(cd "$(dirname "$0")/../.." && pwd)}
 EMULATOR=${EMULATOR:-$HOME/src/fab-agon-emulator}
-TOOLS=$REPO/docs/plans/2026-11-03_vi-tools
+TOOLS=$(cd "$(dirname "$0")" && pwd)
 export DISPLAY=${DISPLAY:-:1}
 E=$WORK/emu
 rm -rf "$E"; mkdir -p "$E/firmware"
