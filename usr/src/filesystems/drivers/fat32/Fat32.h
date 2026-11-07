@@ -396,23 +396,29 @@ static inline ino_t fat32EntryLocationToIno(
 
 ///////////////////////////////////////////////////////////////////////////////
 ///
-/// @brief Case-insensitive comparison, using ASCII rules, of a null-terminated
-///        string with a string of known length that need not be terminated.
+/// @brief Compare a null-terminated string with a string of known length that
+///        need not be terminated, exactly or ignoring ASCII case.
 ///
-/// @param a        The null-terminated string.
-/// @param b        The string of known length.
-/// @param bLength  The number of characters in @p b.
+/// @param a           The null-terminated string.
+/// @param b           The string of known length.
+/// @param bLength     The number of characters in @p b.
+/// @param ignoreCase  Whether ASCII letters that differ only in case match.
 ///
-/// @return true if the strings are equal (ignoring case), false otherwise.
+/// @return true if the strings are equal, false otherwise.
 ///
-static inline bool fat32StrcaseEqualN(
+static inline bool fat32NameEqualN(
     const char *a,
     const char *b,
-    size_t bLength
+    size_t bLength,
+    bool ignoreCase
 ) {
   for (size_t i = 0; i < bLength; i++) {
-    char ca = ((a[i] >= 'a') && (a[i] <= 'z')) ? (a[i] - 32) : a[i];
-    char cb = ((b[i] >= 'a') && (b[i] <= 'z')) ? (b[i] - 32) : b[i];
+    char ca = a[i];
+    char cb = b[i];
+    if (ignoreCase) {
+      ca = ((ca >= 'a') && (ca <= 'z')) ? (ca - 32) : ca;
+      cb = ((cb >= 'a') && (cb <= 'z')) ? (cb - 32) : cb;
+    }
     if (ca != cb) {
       return false;
     }
@@ -634,9 +640,9 @@ static inline int fat32ReadFatEntry(
 
 ///////////////////////////////////////////////////////////////////////////////
 ///
-/// @brief Search a directory's cluster chain for an entry whose long or short
-///        name matches the first @p nameLength characters of @p name
-///        (case-insensitive).
+/// @brief Search a directory's cluster chain for an entry named exactly the
+///        first @p nameLength characters of @p name, or, when @p caseConflict
+///        is not NULL, for any entry that name would collide with.
 ///
 /// @param ds            Pointer to an initialized Fat32DriverState.
 /// @param dirCluster    The first cluster of the directory to search.
@@ -646,6 +652,11 @@ static inline int fat32ReadFatEntry(
 ///                      heap-allocated copy of the entry's name.  If false, it
 ///                      is set to NULL.
 /// @param result        [out] Populated on a successful match.
+/// @param caseConflict  NULL to match only an entry's own name exactly: its
+///                      long name, or its short name if it has no long name.
+///                      Otherwise the search also matches, ignoring case, an
+///                      entry's long name or its short name, and this is set
+///                      to whether the entry found differs from @p name.
 ///
 /// @return FAT32_SUCCESS if found, FAT32_FILE_NOT_FOUND if the directory was
 ///         exhausted without a match, or FAT32_ERROR / FAT32_NO_MEMORY on
@@ -660,9 +671,13 @@ static inline int fat32SearchDirectoryN(
     const char *name,
     size_t nameLength,
     bool wantLongName,
-    Fat32DirSearchResult *result
+    Fat32DirSearchResult *result,
+    bool *caseConflict
 ) {
   FilesystemState    *fs = ds->filesystemState;
+  if (caseConflict != NULL) {
+    *caseConflict = false;
+  }
 
   // The LFN assembly buffer is allocated on demand when the first fragment
   // of a long-name sequence is encountered, sized to (ordinal * 13 + 1) bytes
@@ -762,18 +777,15 @@ static inline int fat32SearchDirectoryN(
 
         // ---- Short entry: check for a match ----
 
-        bool match = false;
-
-        // Try the assembled LFN first.
-        if (lfnActive && (lfnBuffer[0] != '\0')) {
-          match = fat32StrcaseEqualN(lfnBuffer, name, nameLength);
-        }
-
-        // Fall back to the short name.
-        if (!match) {
-          char shortName[13];
-          fat32FormatShortName(entry->name, entry->ntReserved, shortName);
-          match = fat32StrcaseEqualN(shortName, name, nameLength);
+        bool hasLongName = lfnActive && (lfnBuffer[0] != '\0');
+        char shortName[13];
+        fat32FormatShortName(entry->name, entry->ntReserved, shortName);
+        const char *ownName = hasLongName ? lfnBuffer : shortName;
+        bool match = fat32NameEqualN(ownName, name, nameLength, false);
+        if (!match && (caseConflict != NULL)) {
+          match = fat32NameEqualN(ownName, name, nameLength, true)
+            || fat32NameEqualN(shortName, name, nameLength, true);
+          *caseConflict = match;
         }
 
         if (match) {
@@ -833,9 +845,8 @@ static inline int fat32SearchDirectoryN(
 
 ///////////////////////////////////////////////////////////////////////////////
 ///
-/// @brief Search a directory's cluster chain for an entry whose long or short
-///        name matches the null-terminated @p name (case-insensitive), without
-///        returning the entry's name.
+/// @brief Search a directory's cluster chain for an entry named exactly the
+///        null-terminated @p name, without returning the entry's name.
 ///
 /// @param ds          Pointer to an initialized Fat32DriverState.
 /// @param dirCluster  The first cluster of the directory to search.
@@ -852,7 +863,7 @@ static inline int fat32SearchDirectory(
     Fat32DirSearchResult *result
 ) {
   return fat32SearchDirectoryN(
-    ds, dirCluster, name, strlen(name), false, result);
+    ds, dirCluster, name, strlen(name), false, result, NULL);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -927,7 +938,7 @@ static inline int fat32ResolveParentDirectory(
     }
 
     result = fat32SearchDirectoryN(
-      ds, currentCluster, start, len, false, &searchResult);
+      ds, currentCluster, start, len, false, &searchResult, NULL);
     if (result != FAT32_SUCCESS) {
       break;
     }

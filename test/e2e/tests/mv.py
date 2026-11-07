@@ -84,6 +84,8 @@ def test_mv_changes_only_the_case_of_a_name(s):
     s.login()
     assert s.sh("mv /etc/catfile /etc/CatFile") == ""
     assert s.sh("cat /etc/CatFile") == CATFILE_CONTENTS
+    assert s.sh("cat /etc/catfile") == \
+        'ERROR: Could not open file "/etc/catfile": No such entry found'
     assert ll_names(s, "/etc") == ["CatFile", "hostname", "issue"]
 
 

@@ -41,13 +41,34 @@ static void expectResolved(const char *expected, const char *path) {
   free(input);
 }
 
-NANO_OS_KERNEL_TEST(fs_paths, absolute_path_is_passed_through) {
+static void expectUnchanged(const char *path) {
+  char *input = strdup(path);
+  NANO_OS_ASSERT_EQ_PTR(input,
+    filesystemAbsolutePath(&pathState, &pathMessage, input));
+  NANO_OS_ASSERT_STR_EQ(path, input);
+  free(input);
+}
+
+NANO_OS_KERNEL_TEST(fs_paths, collapsed_absolute_path_is_passed_through) {
   pathFixture();
   NANO_OS_ASSERT_EQ_INT(0, nanoOsSetenv("PWD", "/etc", 1));
-  char path[] = "/usr/../bin";
-  NANO_OS_ASSERT_EQ_PTR(path,
-    filesystemAbsolutePath(&pathState, &pathMessage, path));
-  NANO_OS_ASSERT_STR_EQ("/usr/../bin", path);
+  expectUnchanged("/");
+  expectUnchanged("/usr/bin");
+  expectUnchanged("/home/briana/.mush_history");
+  expectUnchanged("/a/..b/.c/...");
+}
+
+NANO_OS_KERNEL_TEST(fs_paths, absolute_path_is_collapsed) {
+  pathFixture();
+  NANO_OS_ASSERT_EQ_INT(0, nanoOsSetenv("PWD", "/etc", 1));
+  expectResolved("/bin", "/usr/../bin");
+  expectResolved("/etc/passwd", "/home/briana/../../etc/passwd");
+  expectResolved("/etc/passwd", "/../etc/passwd");
+  expectResolved("/etc/passwd", "//etc//passwd");
+  expectResolved("/etc", "/./etc/.");
+  expectResolved("/etc", "/etc/");
+  expectResolved("/", "/..");
+  expectResolved("/", "//");
 }
 
 NANO_OS_KERNEL_TEST(fs_paths, relative_path_is_resolved_against_pwd) {

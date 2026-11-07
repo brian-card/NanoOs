@@ -102,6 +102,7 @@ int driverRename(void *driverState, const char *oldpath, const char *newpath) {
   const char *oldName = NULL;
   const char *newName = NULL;
   bool        targetExists = false;
+  bool        caseConflict = false;
 
   int result = fat32ResolveEntryPath(
     ds, oldpath, &oldParentCluster, &oldName);
@@ -113,7 +114,8 @@ int driverRename(void *driverState, const char *oldpath, const char *newpath) {
       ds, newpath, &newParentCluster, &newName);
   }
   if (result == FAT32_SUCCESS) {
-    result = fat32SearchDirectory(ds, newParentCluster, newName, &newEntry);
+    result = fat32SearchDirectoryN(ds, newParentCluster, newName,
+      strlen(newName), false, &newEntry, &caseConflict);
     if (result == FAT32_SUCCESS) {
       targetExists = true;
     } else if (result == FAT32_FILE_NOT_FOUND) {
@@ -137,7 +139,9 @@ int driverRename(void *driverState, const char *oldpath, const char *newpath) {
     && (newEntry.offsetInCluster == oldEntry.offsetInCluster);
 
   if ((result == FAT32_SUCCESS) && targetExists && !targetIsSource) {
-    if (oldIsDirectory
+    if (caseConflict) {
+      result = FAT32_FILE_EXISTS;
+    } else if (oldIsDirectory
       || ((newEntry.entry.attributes & FAT32_ATTR_DIRECTORY) != 0)
     ) {
       result = FAT32_INVALID_PARAMETER;

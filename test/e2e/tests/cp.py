@@ -108,8 +108,8 @@ def test_cp_reports_errors(s):
     assert s.sh("cp /etc/missing /etc/other") == \
         'ERROR: Could not open file "/etc/missing": No such entry found'
     assert s.sh("cp /etc /top") == 'ERROR: "/etc" is a directory'
-    assert s.sh("cp /etc/catfile /etc/CATFILE") == \
-        'ERROR: "/etc/catfile" and "/etc/CATFILE" are the same file'
+    assert s.sh("cp /etc/catfile /etc/../etc/catfile") == \
+        'ERROR: "/etc/catfile" and "/etc/../etc/catfile" are the same file'
     assert s.sh("cp /etc/catfile /etc/issue /etc/hostname") == \
         'ERROR: "/etc/hostname" is not a directory'
     assert s.sh("cat /etc/catfile") == CATFILE_CONTENTS

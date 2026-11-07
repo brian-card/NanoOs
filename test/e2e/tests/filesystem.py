@@ -39,7 +39,7 @@ def test_long_names_match_on_every_fragment(s):
     assert s.sh("touch /etc/abcdefghijklm") == ""
     assert s.sh("cat /etc/bbbbbbbbbbbbb-same-tail.txt") == \
         missing % "/etc/bbbbbbbbbbbbb-same-tail.txt"
-    assert s.sh("cat /etc/AAAAAAAAAAAAA-Same-Tail.TXT") == CATFILE_CONTENTS
+    assert s.sh("cat /etc/aaaaaaaaaaaaa-same-tail.txt") == CATFILE_CONTENTS
     assert s.sh("cat /etc/abcdefghijklmn") == missing % "/etc/abcdefghijklmn"
     assert s.sh("cat /etc/abcdefghijkl") == missing % "/etc/abcdefghijkl"
     assert s.sh("cat /etc/abcdefghijklm") == ""
@@ -55,7 +55,8 @@ def test_path_components_match_whole_names(s):
     assert s.sh("mkdir /etc/abcdefgh-long-dir") == ""
     assert s.sh("touch /etc/abcdefgh-long-dir/f") == ""
     assert s.sh("cat /etc/abcdefgh-long-dir/f") == ""
-    assert s.sh("cat /etc/ABCDEFGH-Long-Dir/f") == ""
+    assert s.sh("cat /etc/ABCDEFGH-Long-Dir/f") == \
+        missing % "/etc/ABCDEFGH-Long-Dir/f"
     assert s.sh("cat /etc/abcdefgh-long/f") == missing % "/etc/abcdefgh-long/f"
     assert s.sh("cat /etc/abcdefgh-long-dirx/f") == \
         missing % "/etc/abcdefgh-long-dirx/f"
@@ -92,3 +93,54 @@ def test_directories_grow_past_their_first_cluster(s):
     assert s.sh("rm /etc/many/" + names[0]) == ""
     assert ll_names(s, "/etc/many") == sorted(names[1:] + ["catfile"])
     assert fsck_problems(s) == []
+
+
+def test_names_match_only_in_their_exact_case(s):
+    s.login()
+    missing = 'ERROR: Could not open file "%s": No such entry found'
+    assert s.sh("cat /etc/catfile") == CATFILE_CONTENTS
+    assert s.sh("cat /etc/CatFile") == missing % "/etc/CatFile"
+    assert s.sh("cat /ETC/catfile") == missing % "/ETC/catfile"
+    assert s.sh("mkdir /etc/Mixed-Case-Dir") == ""
+    assert s.sh("touch /etc/Mixed-Case-Dir/f") == ""
+    assert s.sh("cat /etc/mixed-case-dir/f") == \
+        missing % "/etc/mixed-case-dir/f"
+    assert s.sh("cat /etc/Mixed-Case-Dir/f") == ""
+
+
+def test_short_aliases_of_long_names_do_not_resolve(s):
+    # NanoOs gives "a-long-file-name.txt" the 8.3 alias "A-LONG~1.TXT".
+    s.login()
+    assert s.sh("cp /etc/catfile /etc/a-long-file-name.txt") == ""
+    assert s.sh("cat /etc/A-LONG~1.TXT") == \
+        'ERROR: Could not open file "/etc/A-LONG~1.TXT": No such entry found'
+    assert s.sh("cat /etc/a-long~1.txt") == \
+        'ERROR: Could not open file "/etc/a-long~1.txt": No such entry found'
+    assert s.sh("touch /etc/A-LONG~1.TXT") == \
+        'ERROR: Could not create "/etc/A-LONG~1.TXT": File exists'
+    assert s.sh("cat /etc/a-long-file-name.txt") == CATFILE_CONTENTS
+
+
+def test_names_that_differ_only_in_case_cannot_be_created(s):
+    # Other systems treat these as the same file, so both can't exist.
+    s.login()
+    assert s.sh("touch /etc/CATFILE") == \
+        'ERROR: Could not create "/etc/CATFILE": File exists'
+    assert s.sh("cp /etc/issue /etc/CatFile") == \
+        'ERROR: Could not create "/etc/CatFile": File exists'
+    assert s.sh("mkdir /etc/Issue") == \
+        'ERROR: Could not create directory "/etc/Issue": File exists'
+    assert s.sh("mv /etc/issue /etc/HostName") == \
+        'ERROR: Could not rename "/etc/issue" to "/etc/HostName": File exists'
+    assert s.sh("cat /etc/catfile") == CATFILE_CONTENTS
+    assert ll_names(s, "/etc") == ["catfile", "hostname", "issue"]
+    assert fsck_problems(s) == []
+
+
+def test_absolute_paths_are_collapsed_before_lookup(s):
+    s.login()
+    assert s.sh("cat /../etc/catfile") == CATFILE_CONTENTS
+    assert s.sh("cat //etc//catfile") == CATFILE_CONTENTS
+    assert s.sh("cat /etc/./catfile") == CATFILE_CONTENTS
+    assert s.sh("cat /usr/bin/../../etc/catfile") == CATFILE_CONTENTS
+    assert ll_names(s, "/etc/") == ["catfile", "hostname", "issue"]

@@ -37,6 +37,7 @@
 #ifndef FILESYSTEMS_FILESYSTEM_PATHS_H
 #define FILESYSTEMS_FILESYSTEM_PATHS_H
 
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -60,33 +61,67 @@ extern "C"
 /// ***WARNING*** This value has to match ENOMEM in src/user/NanoOsErrno.h.
 #define FILESYSTEM_PATH_ENOMEM 3 // ENOMEM
 
+/// @fn static inline bool filesystemPathIsCollapsed(const char *path)
+///
+/// @brief Determine whether an absolute path is already in the form that
+/// pathCollapse produces, so that resolving it needs no copy.
+///
+/// @param path The absolute path to check.
+///
+/// @return Returns true if path has no empty, "." or ".." components and no
+/// trailing '/' (other than the root itself), false otherwise.
+static inline bool filesystemPathIsCollapsed(const char *path) {
+  for (const char *slash = path; *slash != '\0'; slash++) {
+    if (*slash != '/') {
+      continue;
+    }
+    const char *component = slash + 1;
+    if ((*component == '/') || ((*component == '\0') && (slash != path))) {
+      return false;
+    }
+    if ((component[0] == '.')
+      && ((component[1] == '/') || (component[1] == '\0')
+        || ((component[1] == '.')
+          && ((component[2] == '/') || (component[2] == '\0'))))
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 /// @fn static inline char* filesystemAbsolutePath(
 ///   FilesystemState *filesystemState, ProcessMessage *processMessage,
 ///   char *path)
 ///
-/// @brief Resolve a path sent by another process into an absolute path by
-/// prefixing a relative path with the sender's PWD (or "/" if it has none) and
-/// collapsing the result.
+/// @brief Resolve a path sent by another process into a collapsed absolute
+/// path by prefixing a relative path with the sender's PWD (or "/" if it has
+/// none) and collapsing the result.
 ///
 /// @param filesystemState A pointer to the filesystem process's
 ///   FilesystemState.
 /// @param processMessage The ProcessMessage that carried the path.
 /// @param path The path as provided by the sending process.
 ///
-/// @return Returns path itself if it is NULL or already absolute, a newly
-/// allocated absolute path that the caller must free otherwise, or NULL if
-/// the new path could not be allocated.
+/// @return Returns path itself if it is NULL or already an absolute,
+/// collapsed path, a newly allocated absolute path that the caller must free
+/// otherwise, or NULL if the new path could not be allocated.
 static inline char* filesystemAbsolutePath(
   FilesystemState *filesystemState, ProcessMessage *processMessage,
   char *path
 ) {
-  if ((path == NULL) || (*path == '/')) {
+  if (path == NULL) {
     return path;
   }
 
   const char *pwd = NULL;
   const ProcessDescriptor *from = processMessageFrom(processMessage);
-  if ((from >= filesystemState->allProcesses)
+  if (*path == '/') {
+    if (filesystemPathIsCollapsed(path)) {
+      return path;
+    }
+  } else if ((from >= filesystemState->allProcesses)
     && (from < filesystemState->allProcesses + filesystemState->numProcesses)
     && (from->envp != NULL)
   ) {

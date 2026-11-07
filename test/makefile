@@ -122,7 +122,8 @@ SUITE_SRCS     := test_smoke test_unit_misc test_unit_strtoll test_unit_console 
                   test_unit_vdp_keyboard \
                   test_unit_agon_reset_keys \
                   test_unit_posix_errno \
-                  test_unit_textstore
+                  test_unit_textstore \
+                  test_unit_fat32_names
 
 KERNEL_OBJS := $(addprefix $(OBJ_DIR)/kernel_,$(addsuffix .o,$(KERNEL_SRCS)))
 USER_OBJS   := $(addprefix $(OBJ_DIR)/user_,$(addsuffix .o,$(USER_SRCS)))

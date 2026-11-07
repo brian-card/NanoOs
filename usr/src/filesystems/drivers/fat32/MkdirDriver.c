@@ -128,7 +128,10 @@ int driverMkdir(void *driverState, const char *pathname, time_t now) {
 
   int result = fat32ResolveEntryPath(ds, pathname, &parentCluster, &name);
   if (result == FAT32_SUCCESS) {
-    result = fat32SearchDirectory(ds, parentCluster, name, &existingEntry);
+    // Passing caseConflict makes a name that differs only in case count.
+    bool caseConflict = false;
+    result = fat32SearchDirectoryN(ds, parentCluster, name, strlen(name),
+      false, &existingEntry, &caseConflict);
     if (result == FAT32_SUCCESS) {
       result = FAT32_FILE_EXISTS;
     } else if (result == FAT32_FILE_NOT_FOUND) {
