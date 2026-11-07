@@ -515,6 +515,13 @@ def test_every_command_prints_its_usage_for_help_options(e):
     assert set(built) <= set(installed), (built, installed)
     for name in built:
         out = e.sh(name + " --help")
+        path = os.path.join(REPO_ROOT, "usr", "bin", name)
+        if os.path.isfile(path):
+            # A file in /usr/bin is a script that runs another command.
+            with open(path) as script:
+                target = script.read().split()[0]
+            assert out == e.sh(target + " --help"), out
+            name = target
         assert out.startswith("Usage: " + name), out
         assert "Options:" in out.splitlines(), out
     assert e.sh("echo still-here") == "still-here"

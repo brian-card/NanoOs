@@ -34,8 +34,16 @@ HELP_OPTION_LINE = "  --help  Show this help and exit."
 
 def test_every_command_prints_its_usage_for_help_options(s):
     s.login()
-    for name in [n.rstrip("/") for n in ll_names(s, "/usr/bin")]:
-        out = help_text(s, name + " --help")
+    for entry in ll_names(s, "/usr/bin"):
+        name = entry.rstrip("/")
+        if entry.endswith("/"):
+            out = help_text(s, name + " --help")
+        else:
+            # A file in /usr/bin is a script that runs another command.
+            target = s.sh("cat /usr/bin/" + name).split()[0]
+            out = s.sh(name + " --help")
+            assert out == help_text(s, target + " --help"), out
+            name = target
         last = out.splitlines()[-1]
         if name == "shutdown":
             assert last == "  --help        Show this help and exit.", out
