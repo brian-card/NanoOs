@@ -267,7 +267,12 @@ int nanoOsGethostname(char *name, size_t len) {
 /// @return Returns 0 on success.  On failure, -1 is returned and errno is set.
 int nanoOsPipe(int pipefd[2]) {
   int returnValue = 0;
-  
+
+  if (pipefd == NULL) {
+    errno = EFAULT;
+    return -1;
+  }
+
   ProcessDescriptor *processDescriptor = getRunningProcess();
   if (processDescriptor == NULL) {
     // This should be impossible, but check anyway.
@@ -425,7 +430,9 @@ static const char _ttyPathFormat[] KEEP_IN_FLASH = "/dev/tty%d";
 ///
 /// @return Returns 0 on success, an error number on failure.
 int nanoOsTtyname_r(int fd, char *buf, size_t buflen) {
-  if (fd < 0) {
+  if (buf == NULL) {
+    return EINVAL;
+  } else if (fd < 0) {
     return EBADF;
   } else if (fd > 2) {
     return ENOTTY;
