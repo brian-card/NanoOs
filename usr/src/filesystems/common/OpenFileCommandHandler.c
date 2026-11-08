@@ -67,6 +67,24 @@ int driverFclose(void *driverState, void *fileHandle);
 /// src/user/NanoOsErrno.h.
 #define OUT_OF_MEMORY_ERRNO 3 // ENOMEM
 
+/// @fn static uint8_t openFileAccess(const char *mode)
+///
+/// @brief Get the access a file's fopen mode grants.
+///
+/// @param mode The mode.
+///
+/// @return Returns the DIRCAP_READ and DIRCAP_WRITE bits of the mode.
+static uint8_t openFileAccess(const char *mode) {
+  uint8_t access = (*mode == 'r') ? DIRCAP_READ : DIRCAP_WRITE;
+  for (; *mode != '\0'; mode++) {
+    if (*mode == '+') {
+      return DIRCAP_READ | DIRCAP_WRITE;
+    }
+  }
+
+  return access;
+}
+
 /// @fn void* OpenFile(void *args)
 ///
 /// @brief Command handler for an fopen call.
@@ -108,6 +126,7 @@ void* OpenFile(void *args) {
         nanoOsFile->currentPosition = 0;
         nanoOsFile->fd = fopenArgs->fd;
         nanoOsFile->owner = processPid(processMessageFrom(processMessage));
+        nanoOsFile->access = openFileAccess(fopenArgs->mode);
         filesystemState->numOpenFiles++;
 
         nanoOsFile->next = filesystemState->openFiles;
