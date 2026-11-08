@@ -66,11 +66,19 @@ static inline int posix_spawn_file_actions_destroy(
 }
 static inline int posix_spawnattr_init(posix_spawnattr_t *attr) {
   attr->flags = 0;
+  attr->dirCapabilities = NULL;
   return 0;
 }
 static inline int posix_spawnattr_destroy(posix_spawnattr_t *attr) {
-  (void) attr;
+  overlayMap.header.osApi->userApi->free(attr->dirCapabilities);
+  attr->dirCapabilities = NULL;
   return 0;
+}
+static inline int posix_spawnattr_adddircap(posix_spawnattr_t *attr,
+  const char *directory, uint8_t mask
+) {
+  return overlayMap.header.osApi->userApi->posix_spawnattr_adddircap(
+    attr, directory, mask);
 }
 static inline int posix_spawnattr_setflags(posix_spawnattr_t *attr,
   short flags
