@@ -1356,7 +1356,7 @@ HalCapability* findHalCapability(
 HalCapability* findHalCapabilityWithDevice(
   HalCapability *capabilities, size_t numCapabilities,
   HalSubsystem subsystem, uint32_t function, int32_t deviceId);
-void setProcessHalCapabilities(ProcessDescriptor *processDescriptor,
+int setProcessHalCapabilities(ProcessDescriptor *processDescriptor,
   HalCapability *capabilities, size_t numCapabilities);
 
 #ifdef __cplusplus

@@ -35,6 +35,7 @@
 // NanoOs includes
 #include "Hal.h"
 #include "Processes.h"
+#include "../user/NanoOsErrno.h"
 
 _Static_assert(HAL_PLATFORM_NUM_FNS + HAL_MEMORY_NUM_FNS + HAL_UART_NUM_FNS
   + HAL_DIO_NUM_FNS + HAL_SPI_NUM_FNS + HAL_CLOCK_NUM_FNS + HAL_POWER_NUM_FNS
@@ -82,7 +83,7 @@ uint8_t halCapabilityBitBase[HAL_NUM_SUBSYSTEMS + 1] = {
 /// @brief Give a process a HalCapability array and build the bitmap and
 /// device masks that callHal checks against it.  A subsystem's device mask
 /// is the intersection of the deviceIds of its grants, so mixed masks fail
-/// closed.
+/// closed.  Only the scheduler may call this.
 ///
 /// @param processDescriptor A pointer to the process's ProcessDescriptor.
 /// @param capabilities A pointer to a sorted array of HalCapability objects.
@@ -90,10 +91,14 @@ uint8_t halCapabilityBitBase[HAL_NUM_SUBSYSTEMS + 1] = {
 /// @param numCapabilities The number of HalCapability objects in the
 ///   capabilities array.
 ///
-/// @return This function returns no value.
-void setProcessHalCapabilities(ProcessDescriptor *processDescriptor,
+/// @return Returns 0 on success, -EPERM if the caller isn't the scheduler.
+int setProcessHalCapabilities(ProcessDescriptor *processDescriptor,
   HalCapability *capabilities, size_t numCapabilities
 ) {
+  if (!runningInScheduler()) {
+    return -EPERM;
+  }
+
   processDescriptor->halCapabilities = capabilities;
   processDescriptor->numHalCapabilities = numCapabilities;
   uint8_t *bitmap = processDescriptor->halCapabilityBitmap;
@@ -124,6 +129,8 @@ void setProcessHalCapabilities(ProcessDescriptor *processDescriptor,
       seenSubsystems |= (uint16_t) (1 << subsystem);
     }
   }
+
+  return 0;
 }
 
 /// @fn HalCapability* findHalCapability(
