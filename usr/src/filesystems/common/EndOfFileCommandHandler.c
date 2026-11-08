@@ -42,6 +42,7 @@
 #include "NanoOsUtils.h"
 #include "FilesystemUtils.h"
 #endif // NANO_OS_KERNEL_BUILD
+#include "../include/FilesystemHandles.h"
 
 // Prototypes used by this handler.
 int driverFeof(void *fileHandle);
@@ -62,7 +63,12 @@ void* EndOfFile(void *args) {
   FeofArgs *feofArgs = (FeofArgs*) processMessageData(processMessage);
   feofArgs->returnValue = 0;
 
-  if (filesystemState->driverState != NULL) {
+  if (!filesystemFileAllowed(filesystemState, processMessage,
+    feofArgs->stream, 0)
+  ) {
+    feofArgs->returnValue = 1;
+    feofArgs->errorNumber = FILESYSTEM_EBADF;
+  } else if (filesystemState->driverState != NULL) {
     feofArgs->returnValue = driverFeof(feofArgs->stream->file);
   }
 
