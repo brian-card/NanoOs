@@ -37,9 +37,12 @@ static void seekFixture(uint32_t fileSize, uint32_t position) {
   memset(&seekFile, 0, sizeof(seekFile));
   seekFile.file = &seekHandle;
   seekFile.currentPosition = position;
+  seekFile.owner = getRunningPid();
   memset(&seekState, 0, sizeof(seekState));
   seekState.driverState = &seekDriverState;
   seekState.args = &seekMessage;
+  seekState.allProcesses = allProcesses;
+  seekState.numProcesses = numProcesses;
 }
 
 /// @fn static void seek(long offset, int whence)
@@ -52,6 +55,7 @@ static void seek(long offset, int whence) {
   seekArgs.whence = whence;
   memset(&seekMessage, 0, sizeof(seekMessage));
   processMessageInit(&seekMessage, 0, &seekArgs, sizeof(seekArgs), false);
+  seekMessage.from.coro = getRunningProcess()->mainThread;
   SeekFile(&seekState);
   processMessageRelease(&seekMessage);
 }
