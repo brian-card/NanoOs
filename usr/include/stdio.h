@@ -174,7 +174,7 @@ static inline int sprintf(char *str, const char *format, ...) {
 // Character I/O:
 static inline int fputs(const char *s, FILE *stream) {
   int returnValue = 0;
-  if (s == NULL) {
+  if ((s == NULL) || (stream == NULL)) {
     return EOF;
   }
   size_t len = overlayMap.header.osApi->userApi->strlen(s);
