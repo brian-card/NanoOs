@@ -294,6 +294,8 @@ typedef struct NanoOsUserApi {
     const posix_spawn_file_actions_t *file_actions,
     const posix_spawnattr_t *attrp,
     char *const argv[], char *const envp[]);
+  int (*posix_spawnattr_adddircap)(posix_spawnattr_t *attr,
+    const char *directory, uint8_t mask);
   
   // fcntl.h functions:
   int (*fcntl)(int fd, int op, va_list arg);
@@ -308,6 +310,11 @@ typedef struct NanoOsUserApi {
   
   // NanoOsProcesses.h functions:
   ProcessInfo* (*getProcessInfo)(void);
+
+  // sys/dircap.h functions:
+  int (*dircapAdd)(const char *directory, uint8_t mask);
+  int (*dircapDrop)(const char *directory);
+  int (*dircapGet)(DirCapabilities *buffer, size_t bufferSize);
   
   // NanoOsHardware.h functions:
   int (*shutdown)(NanoOsShutdownType shutdownType);

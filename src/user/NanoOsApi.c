@@ -54,6 +54,7 @@ char** parseArgs(char *command, int *argc);
 #include "../kernel/Scheduler.h"
 #include "../kernel/Processes.h"
 #include "../hal/HalCommon.h"
+#include "NanoOsDirCap.h"
 #include "NanoOsFcntl.h"
 #include "NanoOsLibC.h"
 #include "NanoOsPwd.h"
@@ -265,6 +266,7 @@ static const NanoOsUserApi _nanoOsUserApi = {
   .posix_spawn_file_actions_adddup2 = nanoOsSpawnFileActionsAdddup2,
   .posix_spawn_file_actions_destroy = nanoOsSpawnFileActionsDestroy,
   .posix_spawn = nanoOsSpawn,
+  .posix_spawnattr_adddircap = nanoOsSpawnattrAdddircap,
   
   // fcntl.h functions:
   .fcntl = nanoOsFcntl,
@@ -279,6 +281,11 @@ static const NanoOsUserApi _nanoOsUserApi = {
   
   // NanoOsProcesses.h functions:
   .getProcessInfo = schedulerGetProcessInfo,
+
+  // sys/dircap.h functions:
+  .dircapAdd = nanoOsDircapAdd,
+  .dircapDrop = nanoOsDircapDrop,
+  .dircapGet = nanoOsDircapGet,
   
   // NanoOsHardware.h functions:
   .shutdown = nanoOsHardwareShutdown,
