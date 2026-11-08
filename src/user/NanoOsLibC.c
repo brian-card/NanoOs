@@ -139,6 +139,287 @@ void msleep(int durationMs) {
 /// final binary on some targets.
 static const char _whitespace[] KEEP_IN_FLASH = " \t\r\n";
 
+/// @fn void* nanoOsCheckedMemcpy(void *dest, const void *src, size_t n)
+///
+/// @brief Copy memory for a user process.
+/// A NULL pointer, which the C library routine can't take, stops here.
+///
+/// @param dest The destination.
+/// @param src The source.
+/// @param n The number of bytes to copy.
+///
+/// @return Returns dest.
+void* nanoOsCheckedMemcpy(void *dest, const void *src, size_t n) {
+  if ((dest == NULL) || (src == NULL)) {
+    return dest;
+  }
+
+  return memcpy(dest, src, n);
+}
+
+/// @fn void* nanoOsCheckedMemmove(void *dest, const void *src, size_t n)
+///
+/// @brief Copy possibly overlapping memory for a user process.
+/// A NULL pointer, which the C library routine can't take, stops here.
+///
+/// @param dest The destination.
+/// @param src The source.
+/// @param n The number of bytes to copy.
+///
+/// @return Returns dest.
+void* nanoOsCheckedMemmove(void *dest, const void *src, size_t n) {
+  if ((dest == NULL) || (src == NULL)) {
+    return dest;
+  }
+
+  return memmove(dest, src, n);
+}
+
+/// @fn char* nanoOsCheckedStrcpy(char *dst, const char *src)
+///
+/// @brief Copy a string for a user process.
+/// A NULL pointer, which the C library routine can't take, stops here.
+///
+/// @param dst The destination.
+/// @param src The string to copy.
+///
+/// @return Returns dst.
+char* nanoOsCheckedStrcpy(char *dst, const char *src) {
+  if ((dst == NULL) || (src == NULL)) {
+    return dst;
+  }
+
+  return strcpy(dst, src);
+}
+
+/// @fn char* nanoOsCheckedStrncpy(char *dst, const char *src, size_t dsize)
+///
+/// @brief Copy a string of bounded length for a user process.
+/// A NULL pointer, which the C library routine can't take, stops here.
+///
+/// @param dst The destination.
+/// @param src The string to copy.
+/// @param dsize The number of bytes to write.
+///
+/// @return Returns dst.
+char* nanoOsCheckedStrncpy(char *dst, const char *src, size_t dsize) {
+  if ((dst == NULL) || (src == NULL)) {
+    return dst;
+  }
+
+  return strncpy(dst, src, dsize);
+}
+
+/// @fn char* nanoOsCheckedStrcat(char *dst, const char *src)
+///
+/// @brief Append a string for a user process.
+/// A NULL pointer, which the C library routine can't take, stops here.
+///
+/// @param dst The string to append to.
+/// @param src The string to append.
+///
+/// @return Returns dst.
+char* nanoOsCheckedStrcat(char *dst, const char *src) {
+  if ((dst == NULL) || (src == NULL)) {
+    return dst;
+  }
+
+  return strcat(dst, src);
+}
+
+/// @fn char* nanoOsCheckedStrncat(char *dst, const char *src, size_t ssize)
+///
+/// @brief Append a string of bounded length for a user process.
+/// A NULL pointer, which the C library routine can't take, stops here.
+///
+/// @param dst The string to append to.
+/// @param src The string to append.
+/// @param ssize The most bytes of src to append.
+///
+/// @return Returns dst.
+char* nanoOsCheckedStrncat(char *dst, const char *src, size_t ssize) {
+  if ((dst == NULL) || (src == NULL)) {
+    return dst;
+  }
+
+  return strncat(dst, src, ssize);
+}
+
+/// @fn void* nanoOsCheckedMemset(void *s, int c, size_t n)
+///
+/// @brief Fill memory for a user process.
+/// A NULL pointer, which the C library routine can't take, stops here.
+///
+/// @param s The memory to fill.
+/// @param c The byte to fill it with.
+/// @param n The number of bytes to fill.
+///
+/// @return Returns s.
+void* nanoOsCheckedMemset(void *s, int c, size_t n) {
+  if (s == NULL) {
+    return s;
+  }
+
+  return memset(s, c, n);
+}
+
+/// @fn char* nanoOsCheckedStrstr(const char *haystack, const char *needle)
+///
+/// @brief Find a substring for a user process.
+/// A NULL pointer, which the C library routine can't take, stops here.
+///
+/// @param haystack The string to search.
+/// @param needle The string to find.
+///
+/// @return Returns a pointer to the match, or NULL if there is none or either
+/// pointer is NULL.
+char* nanoOsCheckedStrstr(const char *haystack, const char *needle) {
+  if ((haystack == NULL) || (needle == NULL)) {
+    return NULL;
+  }
+
+  return strstr(haystack, needle);
+}
+
+/// @fn char* nanoOsCheckedStrchr(const char *s, int c)
+///
+/// @brief Find the first occurrence of a character for a user process.
+/// A NULL pointer, which the C library routine can't take, stops here.
+///
+/// @param s The string to search.
+/// @param c The character to find.
+///
+/// @return Returns a pointer to the match, or NULL if there is none or s is
+/// NULL.
+char* nanoOsCheckedStrchr(const char *s, int c) {
+  if (s == NULL) {
+    return NULL;
+  }
+
+  return strchr(s, c);
+}
+
+/// @fn char* nanoOsCheckedStrrchr(const char *s, int c)
+///
+/// @brief Find the last occurrence of a character for a user process.
+/// A NULL pointer, which the C library routine can't take, stops here.
+///
+/// @param s The string to search.
+/// @param c The character to find.
+///
+/// @return Returns a pointer to the match, or NULL if there is none or s is
+/// NULL.
+char* nanoOsCheckedStrrchr(const char *s, int c) {
+  if (s == NULL) {
+    return NULL;
+  }
+
+  return strrchr(s, c);
+}
+
+/// @fn size_t nanoOsCheckedStrspn(const char *s, const char *accept)
+///
+/// @brief Measure a span of accepted characters for a user process.
+/// A NULL pointer, which the C library routine can't take, stops here.
+///
+/// @param s The string to measure.
+/// @param accept The accepted characters.
+///
+/// @return Returns the length of the span, or 0 if either pointer is NULL.
+size_t nanoOsCheckedStrspn(const char *s, const char *accept) {
+  if ((s == NULL) || (accept == NULL)) {
+    return 0;
+  }
+
+  return strspn(s, accept);
+}
+
+/// @fn size_t nanoOsCheckedStrcspn(const char *s, const char *reject)
+///
+/// @brief Measure a span free of rejected characters for a user process.
+/// A NULL pointer, which the C library routine can't take, stops here.
+///
+/// @param s The string to measure.
+/// @param reject The rejected characters.
+///
+/// @return Returns the length of the span, or 0 if either pointer is NULL.
+size_t nanoOsCheckedStrcspn(const char *s, const char *reject) {
+  if ((s == NULL) || (reject == NULL)) {
+    return 0;
+  }
+
+  return strcspn(s, reject);
+}
+
+/// @fn size_t nanoOsCheckedStrlen(const char *s)
+///
+/// @brief Measure a string for a user process.
+/// A NULL pointer, which the C library routine can't take, stops here.
+///
+/// @param s The string to measure.
+///
+/// @return Returns the length of the string, or 0 if s is NULL.
+size_t nanoOsCheckedStrlen(const char *s) {
+  if (s == NULL) {
+    return 0;
+  }
+
+  return strlen(s);
+}
+
+/// @fn int nanoOsCheckedMemcmp(const void *s1, const void *s2, size_t n)
+///
+/// @brief Compare memory for a user process.
+/// A NULL pointer, which the C library routine can't take, stops here.
+///
+/// @param s1 The first block.
+/// @param s2 The second block.
+/// @param n The number of bytes to compare.
+///
+/// @return Returns the comparison, where a NULL pointer sorts before any other.
+int nanoOsCheckedMemcmp(const void *s1, const void *s2, size_t n) {
+  if ((s1 == NULL) || (s2 == NULL)) {
+    return (s1 != NULL) - (s2 != NULL);
+  }
+
+  return memcmp(s1, s2, n);
+}
+
+/// @fn int nanoOsCheckedStrcmp(const char *s1, const char *s2)
+///
+/// @brief Compare strings for a user process.
+/// A NULL pointer, which the C library routine can't take, stops here.
+///
+/// @param s1 The first string.
+/// @param s2 The second string.
+///
+/// @return Returns the comparison, where a NULL pointer sorts before any other.
+int nanoOsCheckedStrcmp(const char *s1, const char *s2) {
+  if ((s1 == NULL) || (s2 == NULL)) {
+    return (s1 != NULL) - (s2 != NULL);
+  }
+
+  return strcmp(s1, s2);
+}
+
+/// @fn int nanoOsCheckedStrncmp(const char *s1, const char *s2, size_t n)
+///
+/// @brief Compare strings of bounded length for a user process.
+/// A NULL pointer, which the C library routine can't take, stops here.
+///
+/// @param s1 The first string.
+/// @param s2 The second string.
+/// @param n The most bytes to compare.
+///
+/// @return Returns the comparison, where a NULL pointer sorts before any other.
+int nanoOsCheckedStrncmp(const char *s1, const char *s2, size_t n) {
+  if ((s1 == NULL) || (s2 == NULL)) {
+    return (s1 != NULL) - (s2 != NULL);
+  }
+
+  return strncmp(s1, s2, n);
+}
+
 /// @fn long long nanoOsStrtoll(const char *nptr, char **endptr, int base)
 ///
 /// @brief NanoOs implementation of the standard C strtoll function.

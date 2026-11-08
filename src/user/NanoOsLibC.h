@@ -101,6 +101,22 @@ char* nanoOsStrError(int errnum);
 #endif
 #define strerror nanoOsStrError
 
+void* nanoOsCheckedMemcpy(void *dest, const void *src, size_t n);
+void* nanoOsCheckedMemmove(void *dest, const void *src, size_t n);
+char* nanoOsCheckedStrcpy(char *dst, const char *src);
+char* nanoOsCheckedStrncpy(char *dst, const char *src, size_t dsize);
+char* nanoOsCheckedStrcat(char *dst, const char *src);
+char* nanoOsCheckedStrncat(char *dst, const char *src, size_t ssize);
+void* nanoOsCheckedMemset(void *s, int c, size_t n);
+char* nanoOsCheckedStrstr(const char *haystack, const char *needle);
+char* nanoOsCheckedStrchr(const char *s, int c);
+char* nanoOsCheckedStrrchr(const char *s, int c);
+size_t nanoOsCheckedStrspn(const char *s, const char *accept);
+size_t nanoOsCheckedStrcspn(const char *s, const char *reject);
+size_t nanoOsCheckedStrlen(const char *s);
+int nanoOsCheckedMemcmp(const void *s1, const void *s2, size_t n);
+int nanoOsCheckedStrcmp(const char *s1, const char *s2);
+int nanoOsCheckedStrncmp(const char *s1, const char *s2, size_t n);
 long long nanoOsStrtoll(const char *nptr, char **endptr, int base);
 
 int nanoOsSetenv(const char *name, const char *value, int overwrite);
