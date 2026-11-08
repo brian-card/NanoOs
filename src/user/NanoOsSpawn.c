@@ -51,6 +51,10 @@
 ///
 /// @return Returns 0 on success, errno on failure.
 int nanoOsSpawnFileActionsInit(posix_spawn_file_actions_t *fileActions) {
+  if (fileActions == NULL) {
+    return EINVAL;
+  }
+
   fileActions->numDup2 = 0;
 
   return 0;
@@ -78,6 +82,10 @@ int nanoOsSpawnFileActionsAdddup2(
 ) {
   int returnValue = 0;
   
+  if (fileActions == NULL) {
+    return EINVAL;
+  }
+
   ProcessDescriptor *processDescriptor = getRunningProcess();
   if (processDescriptor == NULL) {
     // This should be impossible, but check anyway.
