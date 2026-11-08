@@ -1,0 +1,598 @@
+///////////////////////////////////////////////////////////////////////////////
+///
+/// @author            Brian Card
+/// @date              11.07.2026
+///
+/// @file              test_kernel_dircap.c
+///
+/// @brief             Kernel tests of how processes get, share, change, and
+///                    release their directory capabilities.
+///
+/// @copyright
+///                      Copyright (c) 2026 Brian Card
+///
+/// Permission is hereby granted, free of charge, to any person obtaining a
+/// copy of this software and associated documentation files (the "Software"),
+/// to deal in the Software without restriction, including without limitation
+/// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+/// and/or sell copies of the Software, and to permit persons to whom the
+/// Software is furnished to do so, subject to the following conditions:
+///
+/// The above copyright notice and this permission notice shall be included
+/// in all copies or substantial portions of the Software.
+///
+/// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+/// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+/// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+/// THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+/// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+/// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+/// DEALINGS IN THE SOFTWARE.
+///
+///                                Brian Card
+///                      https://github.com/brian-card
+///
+///////////////////////////////////////////////////////////////////////////////
+
+#include "NanoOsTest.h"
+#include "HalMock.h"
+
+#include <string.h>
+
+#include "kernel/Console.h"
+#include "kernel/DirCapabilities.h"
+#include "kernel/MemoryManager.h"
+#include "kernel/NanoOs.h"
+#include "kernel/Processes.h"
+#include "kernel/Scheduler.h"
+#include "user/NanoOsDirCap.h"
+#include "user/NanoOsErrno.h"
+#include "user/NanoOsSignal.h"
+#include "user/NanoOsSpawn.h"
+#include "user/NanoOsStdio.h"
+
+/// @var childStatus
+///
+/// @brief What the last child's directory capability call returned, or -1
+/// before it has made one.
+static volatile int childStatus;
+
+/// @var reported
+///
+/// @brief Whether a child has copied its set into reportedSet.
+static volatile bool reported;
+
+/// @var reportedSetAddress
+///
+/// @brief The address of the set the reporting child held.
+static DirCapabilities *volatile reportedSetAddress;
+
+/// @union ReportedSet
+///
+/// @brief Room for a copy of a set, aligned as a set is.
+typedef union ReportedSet {
+  DirCapabilities set;
+  uint8_t bytes[128];
+} ReportedSet;
+
+/// @var reportedSet
+///
+/// @brief A copy of the set the reporting child held.
+static ReportedSet reportedSet;
+
+/// @fn static void reportSet(void)
+///
+/// @brief Copy the running process's set where the test can see it.
+///
+/// @return This function returns no value.
+static void reportSet(void) {
+  DirCapabilities *set = getRunningProcess()->dirCapabilities;
+  reportedSetAddress = set;
+  memset(&reportedSet, 0, sizeof(reportedSet));
+  if ((set != NULL) && (set->size <= sizeof(reportedSet))) {
+    memcpy(&reportedSet, set, set->size);
+  }
+  reported = true;
+}
+
+/// @fn static void* dircapChild(void *args)
+///
+/// @brief Stand in for a spawned program, chosen by argv[0]:  "idle" runs
+/// until killed, "narrow" adds an entry below one it holds and reports its
+/// set, "getty" and "mush" report their set and idle, and anything else
+/// reports its set and exits.
+///
+/// @param args The ExecArgs of the spawn.
+///
+/// @return This function returns NULL.
+static void* dircapChild(void *args) {
+  ExecArgs *execArgs = (ExecArgs*) args;
+  const char *name = execArgs->argv[0];
+  if (strcmp(name, "narrow") == 0) {
+    childStatus = nanoOsDircapAdd("/tmp/sub/", DIRCAP_READ);
+  }
+  if (strcmp(name, "idle") != 0) {
+    reportSet();
+  }
+  if ((strcmp(name, "idle") == 0) || (strcmp(name, "getty") == 0)
+    || (strcmp(name, "mush") == 0)
+  ) {
+    while (1) {
+      processYield();
+    }
+  }
+  return NULL;
+}
+
+/// @fn static void dircapPreBoot(void)
+///
+/// @brief Make spawned processes run dircapChild instead of an overlay.
+///
+/// @return This function returns no value.
+static void dircapPreBoot(void) {
+  halMockSetExecCommand(dircapChild);
+}
+
+/// @fn static pid_t spawnChild(char *name, posix_spawnattr_t *attr,
+///   int *status)
+///
+/// @brief Spawn a dircapChild.
+///
+/// @param name The mode, passed as argv[0].
+/// @param attr The spawn attribute, or NULL.
+/// @param status Where to store what nanoOsSpawn returned, or NULL.
+///
+/// @return Returns the child's process ID, or 0 on failure.
+static pid_t spawnChild(char *name, posix_spawnattr_t *attr, int *status) {
+  pid_t pid = 0;
+  char *argv[] = { name, NULL };
+  childStatus = -1;
+  reported = false;
+  int returnValue = nanoOsSpawn(&pid, "/dctest", NULL, attr, argv, NULL);
+  if (status != NULL) {
+    *status = returnValue;
+  }
+  return (returnValue == 0) ? pid : 0;
+}
+
+/// @fn static bool spawnAndWait(char *name, posix_spawnattr_t *attr)
+///
+/// @brief Spawn a dircapChild and wait for it to exit.
+///
+/// @param name The mode, passed as argv[0].
+/// @param attr The spawn attribute, or NULL.
+///
+/// @return Returns true if the child was spawned and waited for.
+static bool spawnAndWait(char *name, posix_spawnattr_t *attr) {
+  pid_t pid = spawnChild(name, attr, NULL);
+  return (pid != 0) && (schedulerWaitpid(pid, NULL, 0) == pid);
+}
+
+/// @fn static bool yieldUntilReported(void)
+///
+/// @brief Yield until a child has reported its set, giving up after a while.
+///
+/// @return Returns true if a child reported.
+static bool yieldUntilReported(void) {
+  for (int ii = 0; (ii < 2000) && !reported; ii++) {
+    processYield();
+  }
+  return reported;
+}
+
+/// @fn static DirCapabilities* narrowOwnSet(void)
+///
+/// @brief Narrow the running process's set so that it holds a block of its
+/// own, with /tmp/ read-only.
+///
+/// @return Returns the process's set.
+static DirCapabilities* narrowOwnSet(void) {
+  NANO_OS_ASSERT_EQ_INT(0, nanoOsDircapAdd("/tmp/", DIRCAP_READ));
+  DirCapabilities *set = getRunningProcess()->dirCapabilities;
+  NANO_OS_ASSERT_NOT_NULL(set);
+  NANO_OS_ASSERT_EQ_INT(1, set->refCount);
+  return set;
+}
+
+/// @fn static bool setAllows(const DirCapabilities *set, const char *path,
+///   uint8_t bits)
+///
+/// @brief Check a file path against a set.
+///
+/// @return Returns what dirCapabilityAllows returns.
+static bool setAllows(const DirCapabilities *set, const char *path,
+  uint8_t bits
+) {
+  return dirCapabilityAllows(set, path, strlen(path), false, bits);
+}
+
+NANO_OS_KERNEL_TEST(dircap, processes_start_with_the_compiled_sets) {
+  NANO_OS_ASSERT_EQ_PTR(rootDirCapabilities,
+    allProcesses[schedulerPid - 1].dirCapabilities);
+  NANO_OS_ASSERT_EQ_PTR(kernelDirCapabilities,
+    allProcesses[consolePid - 1].dirCapabilities);
+  NANO_OS_ASSERT_EQ_PTR(kernelDirCapabilities,
+    allProcesses[memoryManagerPid - 1].dirCapabilities);
+  NANO_OS_ASSERT_EQ_PTR(supervisorDirCapabilities,
+    getRunningProcess()->dirCapabilities);
+}
+
+NANO_OS_KERNEL_TEST_WITH(dircap,
+  a_child_spawned_without_the_attribute_shares_its_parents_set, dircapPreBoot
+) {
+  DirCapabilities *parentSet = narrowOwnSet();
+
+  pid_t pid = spawnChild("idle", NULL, NULL);
+  NANO_OS_ASSERT_TRUE(pid != 0);
+  NANO_OS_ASSERT_EQ_PTR(parentSet, allProcesses[pid - 1].dirCapabilities);
+  NANO_OS_ASSERT_EQ_INT(2, parentSet->refCount);
+
+  NANO_OS_ASSERT_EQ_INT(0, schedulerKillProcess(pid));
+  NANO_OS_ASSERT_EQ_INT(pid, schedulerWaitpid(pid, NULL, 0));
+  NANO_OS_ASSERT_EQ_INT(1, parentSet->refCount);
+  NANO_OS_ASSERT_NULL(allProcesses[pid - 1].dirCapabilities);
+}
+
+NANO_OS_KERNEL_TEST_WITH(dircap, a_childs_add_leaves_the_parents_set_unchanged,
+  dircapPreBoot
+) {
+  DirCapabilities *parentSet = narrowOwnSet();
+  ReportedSet before;
+  memcpy(&before, parentSet, parentSet->size);
+
+  NANO_OS_ASSERT_TRUE(spawnAndWait("narrow", NULL));
+  NANO_OS_ASSERT_EQ_INT(0, childStatus);
+  NANO_OS_ASSERT_TRUE(reported);
+  NANO_OS_ASSERT_TRUE(reportedSetAddress != parentSet);
+  NANO_OS_ASSERT_EQ_INT(before.set.numCapabilities + 1,
+    reportedSet.set.numCapabilities);
+  NANO_OS_ASSERT_TRUE(setAllows(&reportedSet.set, "/tmp/sub/x", DIRCAP_READ));
+
+  NANO_OS_ASSERT_EQ_PTR(parentSet, getRunningProcess()->dirCapabilities);
+  NANO_OS_ASSERT_EQ_INT(1, parentSet->refCount);
+  NANO_OS_ASSERT_EQ_INT(0, memcmp(&before, parentSet, before.set.size));
+}
+
+NANO_OS_KERNEL_TEST_WITH(dircap,
+  a_spawn_with_the_attribute_gives_the_child_exactly_those_entries,
+  dircapPreBoot
+) {
+  posix_spawnattr_t attr = { .flags = 0, .dirCapabilities = NULL };
+  NANO_OS_ASSERT_EQ_INT(0,
+    nanoOsSpawnattrAdddircap(&attr, "/tmp/", DIRCAP_READ));
+  NANO_OS_ASSERT_EQ_INT(0,
+    nanoOsSpawnattrAdddircap(&attr, "/home/x/../briana", DIRCAP_LIST));
+  NANO_OS_ASSERT_NOT_NULL(attr.dirCapabilities);
+
+  NANO_OS_ASSERT_TRUE(spawnAndWait("report", &attr));
+  NANO_OS_ASSERT_TRUE(reported);
+  NANO_OS_ASSERT_TRUE(reportedSetAddress != attr.dirCapabilities);
+  NANO_OS_ASSERT_EQ_INT(attr.dirCapabilities->size, reportedSet.set.size);
+  NANO_OS_ASSERT_EQ_INT(2, reportedSet.set.numCapabilities);
+  NANO_OS_ASSERT_EQ_INT(0, memcmp(attr.dirCapabilities->capabilities,
+    reportedSet.set.capabilities,
+    attr.dirCapabilities->size - DIR_CAPABILITIES_HEADER_SIZE));
+  const DirCapability *first = &reportedSet.set.capabilities[0];
+  const DirCapability *second = (const DirCapability*) &first->name[first->len];
+  NANO_OS_ASSERT_EQ_INT(5, first->len);
+  NANO_OS_ASSERT_EQ_INT(0, memcmp(first->name, "/tmp/", 5));
+  NANO_OS_ASSERT_EQ_INT(13, second->len);
+  NANO_OS_ASSERT_EQ_INT(0, memcmp(second->name, "/home/briana/", 13));
+  NANO_OS_ASSERT_TRUE(setAllows(&reportedSet.set, "/home/briana/x",
+    DIRCAP_LIST));
+  NANO_OS_ASSERT_FALSE(setAllows(&reportedSet.set, "/tmp/x", DIRCAP_WRITE));
+  NANO_OS_ASSERT_FALSE(setAllows(&reportedSet.set, "/usr/bin/x", DIRCAP_EXEC));
+  free(attr.dirCapabilities);
+}
+
+NANO_OS_KERNEL_TEST_WITH(dircap, a_superset_entry_fails_the_spawn_with_EACCES,
+  dircapPreBoot
+) {
+  posix_spawnattr_t attr = { .flags = 0, .dirCapabilities = NULL };
+  NANO_OS_ASSERT_EQ_INT(0,
+    nanoOsSpawnattrAdddircap(&attr, "/tmp/", DIRCAP_READ));
+  NANO_OS_ASSERT_EQ_INT(0,
+    nanoOsSpawnattrAdddircap(&attr, "/usr/lib/", DIRCAP_READ));
+
+  int status = 0;
+  NANO_OS_ASSERT_EQ_INT(0, spawnChild("report", &attr, &status));
+  NANO_OS_ASSERT_EQ_INT(EACCES, status);
+  for (int ii = 0; ii < 100; ii++) {
+    processYield();
+  }
+  NANO_OS_ASSERT_FALSE(reported);
+  free(attr.dirCapabilities);
+}
+
+NANO_OS_KERNEL_TEST(dircap, names_are_made_absolute_and_end_in_a_slash) {
+  char *name = NULL;
+  size_t length = 0;
+  NANO_OS_ASSERT_EQ_INT(0, nanoOsDircapName("/a/./b//../c", &name, &length));
+  NANO_OS_ASSERT_STR_EQ("/a/c/", name);
+  NANO_OS_ASSERT_EQ_INT(5, length);
+  free(name);
+  NANO_OS_ASSERT_EQ_INT(0, nanoOsDircapName("/", &name, &length));
+  NANO_OS_ASSERT_STR_EQ("/", name);
+  NANO_OS_ASSERT_EQ_INT(1, length);
+  free(name);
+  NANO_OS_ASSERT_EQ_INT(0, nanoOsDircapName("rel/dir/", &name, &length));
+  NANO_OS_ASSERT_STR_EQ("/rel/dir/", name);
+  free(name);
+  NANO_OS_ASSERT_EQ_INT(EINVAL, nanoOsDircapName("", &name, &length));
+}
+
+NANO_OS_KERNEL_TEST(dircap, get_copies_the_set_only_when_it_fits) {
+  ReportedSet buffer;
+  memset(&buffer, 0xa5, sizeof(buffer));
+  int size = supervisorDirCapabilities->size;
+  NANO_OS_ASSERT_EQ_INT(size, nanoOsDircapGet(NULL, 0));
+  NANO_OS_ASSERT_EQ_INT(size, nanoOsDircapGet(&buffer.set, size - 1));
+  NANO_OS_ASSERT_EQ_INT(0xa5, buffer.bytes[0]);
+  NANO_OS_ASSERT_EQ_INT(size, nanoOsDircapGet(&buffer.set, sizeof(buffer)));
+  NANO_OS_ASSERT_EQ_INT(0, memcmp(&buffer, supervisorDirCapabilities, size));
+}
+
+NANO_OS_KERNEL_TEST(dircap, add_and_drop_change_only_the_callers_set) {
+  NANO_OS_ASSERT_EQ_INT(-1, nanoOsDircapAdd("/usr/lib/", DIRCAP_READ));
+  NANO_OS_ASSERT_EQ_INT(EACCES, errno);
+  NANO_OS_ASSERT_EQ_PTR(supervisorDirCapabilities,
+    getRunningProcess()->dirCapabilities);
+
+  NANO_OS_ASSERT_EQ_INT(0, nanoOsDircapDrop("/tmp"));
+  DirCapabilities *set = getRunningProcess()->dirCapabilities;
+  NANO_OS_ASSERT_TRUE(set != supervisorDirCapabilities);
+  NANO_OS_ASSERT_FALSE(setAllows(set, "/tmp/x", DIRCAP_READ));
+  NANO_OS_ASSERT_TRUE(setAllows(set, "/etc/x", DIRCAP_READ));
+  NANO_OS_ASSERT_TRUE(dirCapabilitiesValid(supervisorDirCapabilities));
+  NANO_OS_ASSERT_TRUE(setAllows(supervisorDirCapabilities, "/tmp/x",
+    DIRCAP_READ));
+}
+
+/// @fn static ProcessDescriptor* startProcess(void* (*body)(void*),
+///   UserId userId, bool supervisor)
+///
+/// @brief Run a function in a free process slot with the supervisor base set.
+///
+/// @param body The function for the process to run.
+/// @param userId The user the process runs as.
+/// @param supervisor Whether the process gets the running process's
+///   supervisor-level IPC capabilities.
+///
+/// @return Returns a pointer to the process's ProcessDescriptor, or NULL if
+/// it couldn't be started.
+static ProcessDescriptor* startProcess(void* (*body)(void*), UserId userId,
+  bool supervisor
+) {
+  ProcessDescriptor *processDescriptor = processQueuePop(halMockFreeQueue());
+  if ((processDescriptor == NULL)
+    || (processCreate(processDescriptor, body, NULL) != processSuccess)
+  ) {
+    return NULL;
+  }
+  threadSetContext(processDescriptor->mainThread, processDescriptor);
+  if (supervisor) {
+    processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_SUPERVISOR;
+    processDescriptor->ipcCapabilities = getRunningProcess()->ipcCapabilities;
+    processDescriptor->numIpcCapabilities
+      = getRunningProcess()->numIpcCapabilities;
+  }
+  processDescriptor->userId = userId;
+  processDescriptor->dirCapabilities = supervisorDirCapabilities;
+  return processDescriptor;
+}
+
+/// @fn static void* execNarrowed(void *args)
+///
+/// @brief Narrow the set, then exec "report".
+///
+/// @param args Unused.
+///
+/// @return This function returns NULL only if the exec fails.
+static void* execNarrowed(void *args) {
+  (void) args;
+  childStatus = nanoOsDircapAdd("/tmp/", DIRCAP_READ);
+  char *argv[] = { "report", NULL };
+  schedulerExecve("/dctest", argv, NULL);
+  childStatus = -errno;
+  return NULL;
+}
+
+NANO_OS_KERNEL_TEST_WITH(dircap, a_set_narrowed_before_execve_survives_it,
+  dircapPreBoot
+) {
+  childStatus = -1;
+  reported = false;
+  ProcessDescriptor *processDescriptor
+    = startProcess(execNarrowed, getRunningUid(), true);
+  NANO_OS_ASSERT_NOT_NULL(processDescriptor);
+  // Exec reads the caller's stdout, and the kernel's descriptors are never
+  // freed.
+  processDescriptor->fileDescriptors
+    = allProcesses[consolePid - 1].fileDescriptors;
+  processDescriptor->numFileDescriptors
+    = allProcesses[consolePid - 1].numFileDescriptors;
+  processQueuePush(processDescriptor->readyQueue, processDescriptor);
+
+  NANO_OS_ASSERT_TRUE(yieldUntilReported());
+  NANO_OS_ASSERT_EQ_INT(0, childStatus);
+  NANO_OS_ASSERT_TRUE(setAllows(&reportedSet.set, "/tmp/x", DIRCAP_READ));
+  NANO_OS_ASSERT_FALSE(setAllows(&reportedSet.set, "/tmp/x", DIRCAP_WRITE));
+  NANO_OS_ASSERT_TRUE(setAllows(&reportedSet.set, "/usr/bin/x", DIRCAP_EXEC));
+}
+
+/// @var exitedSet
+///
+/// @brief The set loggedInShell held when it exited.
+static DirCapabilities *volatile exitedSet;
+
+/// @fn static void* loggedInShell(void *args)
+///
+/// @brief Stand in for a logged-in user's program in a shell slot:  narrow
+/// the set, as login will, and exit.
+///
+/// @param args Unused.
+///
+/// @return This function returns NULL.
+static void* loggedInShell(void *args) {
+  (void) args;
+  childStatus = nanoOsDircapAdd("/tmp/", DIRCAP_READ);
+  exitedSet = getRunningProcess()->dirCapabilities;
+  return NULL;
+}
+
+/// @fn static ProcessDescriptor* startShellSlot(UserId userId,
+///   char *shellPath)
+///
+/// @brief Run loggedInShell in a free slot that restarts the way a shell
+/// slot does.
+///
+/// @param userId The user the slot is logged in as.
+/// @param shellPath The user's shell, or NULL once the user has logged out.
+///
+/// @return Returns a pointer to the slot's ProcessDescriptor.
+static ProcessDescriptor* startShellSlot(UserId userId, char *shellPath) {
+  childStatus = -1;
+  reported = false;
+  exitedSet = NULL;
+  ProcessDescriptor *processDescriptor
+    = startProcess(loggedInShell, userId, true);
+  NANO_OS_ASSERT_NOT_NULL(processDescriptor);
+  processDescriptor->restartFunction = restartOverlayShell;
+  processDescriptor->restartArgs = NULL;
+  processDescriptor->shellPath = shellPath;
+  processQueuePush(processDescriptor->readyQueue, processDescriptor);
+  return processDescriptor;
+}
+
+NANO_OS_KERNEL_TEST_WITH(dircap, a_logged_out_slot_restarts_with_the_base_set,
+  dircapPreBoot
+) {
+  startShellSlot(NO_USER_ID, NULL);
+  NANO_OS_ASSERT_TRUE(yieldUntilReported());
+  NANO_OS_ASSERT_EQ_INT(0, childStatus);
+  NANO_OS_ASSERT_NOT_NULL(exitedSet);
+  NANO_OS_ASSERT_TRUE(exitedSet != supervisorDirCapabilities);
+  NANO_OS_ASSERT_EQ_PTR(supervisorDirCapabilities, reportedSetAddress);
+}
+
+NANO_OS_KERNEL_TEST_WITH(dircap, a_restarted_users_shell_keeps_the_users_set,
+  dircapPreBoot
+) {
+  startShellSlot(5, "/usr/bin/mush");
+  NANO_OS_ASSERT_TRUE(yieldUntilReported());
+  NANO_OS_ASSERT_EQ_INT(0, childStatus);
+  NANO_OS_ASSERT_NOT_NULL(exitedSet);
+  NANO_OS_ASSERT_EQ_PTR(exitedSet, reportedSetAddress);
+  NANO_OS_ASSERT_EQ_INT(1, reportedSet.set.refCount);
+  NANO_OS_ASSERT_FALSE(setAllows(&reportedSet.set, "/tmp/x", DIRCAP_WRITE));
+}
+
+/// @fn static void spawnRound(posix_spawnattr_t *attr)
+///
+/// @brief Spawn and wait for one child of each kind that changes reference
+/// counts or allocates a set:  one that shares and adds, one that only
+/// shares, and one that gets a copy of a spawn attribute's entries.
+///
+/// @param attr A spawn attribute with entries.
+///
+/// @return This function returns no value.
+static void spawnRound(posix_spawnattr_t *attr) {
+  NANO_OS_ASSERT_TRUE(spawnAndWait("narrow", NULL));
+  NANO_OS_ASSERT_EQ_INT(0, childStatus);
+  NANO_OS_ASSERT_TRUE(spawnAndWait("report", NULL));
+  NANO_OS_ASSERT_TRUE(spawnAndWait("report", attr));
+}
+
+NANO_OS_KERNEL_TEST_WITH(dircap, the_heap_returns_to_its_level_after_spawns,
+  dircapPreBoot
+) {
+  DirCapabilities *parentSet = narrowOwnSet();
+  posix_spawnattr_t attr = { .flags = 0, .dirCapabilities = NULL };
+  NANO_OS_ASSERT_EQ_INT(0,
+    nanoOsSpawnattrAdddircap(&attr, "/tmp/", DIRCAP_READ));
+
+  for (int ii = 0; ii < 2; ii++) {
+    spawnRound(&attr);
+  }
+  size_t before = getFreeMemory();
+  for (int ii = 0; ii < 10; ii++) {
+    spawnRound(&attr);
+  }
+  NANO_OS_ASSERT_EQ_INT((int) before, (int) getFreeMemory());
+  NANO_OS_ASSERT_EQ_INT(1, parentSet->refCount);
+  free(attr.dirCapabilities);
+}
+
+/// @var signalStatuses
+///
+/// @brief What signalSender's two signals returned, and the errno of each.
+static volatile int signalStatuses[4];
+
+/// @var signalTargets
+///
+/// @brief The processes signalSender signals:  one of another user, then one
+/// of its own.
+static volatile pid_t signalTargets[2];
+
+/// @var signalsSent
+///
+/// @brief Whether signalSender has sent both signals.
+static volatile bool signalsSent;
+
+/// @fn static void* idleBody(void *args)
+///
+/// @brief Run until killed.
+///
+/// @param args Unused.
+///
+/// @return This function never returns.
+static void* idleBody(void *args) {
+  (void) args;
+  while (1) {
+    processYield();
+  }
+  return NULL;
+}
+
+/// @fn static void* signalSender(void *args)
+///
+/// @brief Send signal 0 to each of signalTargets, record the results, and
+/// idle.
+///
+/// @param args Unused.
+///
+/// @return This function never returns.
+static void* signalSender(void *args) {
+  (void) args;
+  for (int ii = 0; ii < 2; ii++) {
+    signalStatuses[ii * 2] = schedulerSendSignal(signalTargets[ii], 0);
+    signalStatuses[(ii * 2) + 1] = errno;
+  }
+  signalsSent = true;
+  return idleBody(NULL);
+}
+
+NANO_OS_KERNEL_TEST(dircap, only_the_same_user_or_root_may_signal_a_process) {
+  ProcessDescriptor *other = startProcess(idleBody, 5, false);
+  ProcessDescriptor *same = startProcess(idleBody, 7, false);
+  NANO_OS_ASSERT_NOT_NULL(other);
+  NANO_OS_ASSERT_NOT_NULL(same);
+  processQueuePush(other->readyQueue, other);
+  processQueuePush(same->readyQueue, same);
+  signalTargets[0] = other->processId;
+  signalTargets[1] = same->processId;
+  signalsSent = false;
+
+  ProcessDescriptor *sender = startProcess(signalSender, 7, true);
+  NANO_OS_ASSERT_NOT_NULL(sender);
+  processQueuePush(sender->readyQueue, sender);
+  for (int ii = 0; (ii < 2000) && !signalsSent; ii++) {
+    processYield();
+  }
+
+  NANO_OS_ASSERT_TRUE(signalsSent);
+  NANO_OS_ASSERT_EQ_INT(-1, signalStatuses[0]);
+  NANO_OS_ASSERT_EQ_INT(EPERM, signalStatuses[1]);
+  NANO_OS_ASSERT_EQ_INT(0, signalStatuses[2]);
+  NANO_OS_ASSERT_EQ_INT(0, schedulerSendSignal(other->processId, 0));
+}
