@@ -75,7 +75,8 @@ TEST_INC      := -I../sim -Iframework -Iharness -Imocks \
 # --- sources ---------------------------------------------------------
 
 KERNEL_SRCS := \
-    Commands Console Coroutines CTypeSupport Fat32Filesystem Filesystem \
+    Commands Console Coroutines CTypeSupport DirCapabilities Fat32Filesystem \
+    Filesystem \
     FilesystemCommandHandlers \
     Hal Link Logger MemoryManager Messages NanoOs Overlay Processes \
     Scheduler SdCard SdCardSpi
@@ -123,7 +124,8 @@ SUITE_SRCS     := test_smoke test_unit_misc test_unit_strtoll test_unit_console 
                   test_unit_agon_reset_keys \
                   test_unit_posix_errno \
                   test_unit_textstore \
-                  test_unit_fat32_names
+                  test_unit_fat32_names \
+                  test_unit_dircap
 
 KERNEL_OBJS := $(addprefix $(OBJ_DIR)/kernel_,$(addsuffix .o,$(KERNEL_SRCS)))
 USER_OBJS   := $(addprefix $(OBJ_DIR)/user_,$(addsuffix .o,$(USER_SRCS)))
