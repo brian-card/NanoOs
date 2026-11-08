@@ -41,6 +41,7 @@
 #include "NanoOsUtils.h"
 #include "FilesystemUtils.h"
 #endif // NANO_OS_KERNEL_BUILD
+#include "../include/FilesystemHandles.h"
 
 // Prototypes used by this handler.
 int driverFclose(void *driverState, void *fileHandle);
@@ -70,6 +71,14 @@ void* CloseFile(void *args) {
   // JBC 2026-02-17
   FilesystemFcloseArgs *fcloseArgs
     = (FilesystemFcloseArgs*) processMessageData(processMessage);
+  if (!filesystemFileAllowed(filesystemState, processMessage,
+    fcloseArgs->stream, 0)
+  ) {
+    fcloseArgs->returnValue = -FILESYSTEM_EBADF;
+    processMessageSetDone(processMessage);
+    return filesystemState;
+  }
+
   if (filesystemState->driverState != NULL) {
     fcloseArgs->returnValue = driverFclose(
       filesystemState->driverState, fcloseArgs->stream->file);
