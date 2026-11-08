@@ -277,7 +277,7 @@ def write_files(s, files):
     if s.child.isalive():
         s.child.terminate(force=True)
     for path, text in files.items():
-        subprocess.run(["mmd", "-i", s.img_copy + "@@2097152",
+        subprocess.run(["mmd", "-D", "s", "-i", s.img_copy + "@@2097152",
                         "::" + os.path.dirname(path)],
                        env=dict(os.environ, MTOOLS_SKIP_CHECK="1"),
                        capture_output=True)
