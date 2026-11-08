@@ -44,6 +44,7 @@
 #include "FilesystemUtils.h"
 #include "FilesystemPaths.h"
 #endif // NANO_OS_KERNEL_BUILD
+#include "../include/FilesystemHandles.h"
 
 // Prototype used by this handler.
 void* driverOpendir(void *driverState, const char *path, int *errorNumber);
@@ -61,6 +62,48 @@ void* driverOpendir(void *driverState, const char *path, int *errorNumber);
 /// ***WARNING*** This value has to match ENODEV in src/user/NanoOsErrno.h.
 /// If you change the numbering there, you MUST update this value too!
 #define NO_DRIVER_ERRNO 14 // ENODEV
+
+/// @fn static FilesystemOpenDir* opendirFindSlot(
+///   FilesystemState *filesystemState, int *errorNumber)
+///
+/// @brief Find the free slot with the lowest generation, so that use is
+/// spread evenly across the table.  The first call allocates the table.
+///
+/// @param filesystemState The filesystem's state.
+/// @param errorNumber Where to store the errno value on failure.
+///
+/// @return Returns the slot, or NULL on failure.
+static FilesystemOpenDir* opendirFindSlot(
+  FilesystemState *filesystemState, int *errorNumber
+) {
+  uint8_t numSlots = filesystemNumDirSlots(filesystemState);
+  if (filesystemState->openDirs == NULL) {
+    filesystemState->openDirs
+      = (FilesystemOpenDir*) calloc(numSlots, sizeof(FilesystemOpenDir));
+    if (filesystemState->openDirs == NULL) {
+      *errorNumber = FILESYSTEM_ENOMEM;
+      return NULL;
+    }
+    for (uint8_t ii = 0; ii < numSlots; ii++) {
+      filesystemState->openDirs[ii].generation = 1;
+    }
+  }
+
+  FilesystemOpenDir *lowest = NULL;
+  for (uint8_t ii = 0; ii < numSlots; ii++) {
+    FilesystemOpenDir *slot = &filesystemState->openDirs[ii];
+    if ((slot->owner == 0)
+      && ((lowest == NULL) || (slot->generation < lowest->generation))
+    ) {
+      lowest = slot;
+    }
+  }
+  if (lowest == NULL) {
+    *errorNumber = FILESYSTEM_EMFILE;
+  }
+
+  return lowest;
+}
 
 /// @fn void* Opendir(void *args)
 ///
@@ -87,8 +130,22 @@ void* Opendir(void *args) {
   if (pathname == NULL) {
     errorNumber = FILESYSTEM_PATH_ENOMEM;
   } else if (filesystemState->driverState != NULL) {
-    dirp = (DIR*) driverOpendir(
+    ProcessId sender = filesystemSenderPid(filesystemState, processMessage);
+    FilesystemOpenDir *slot = NULL;
+    if (sender == 0) {
+      errorNumber = FILESYSTEM_EBADF;
+    } else {
+      slot = opendirFindSlot(filesystemState, &errorNumber);
+    }
+    void *driverHandle = (slot == NULL) ? NULL : driverOpendir(
       filesystemState->driverState, pathname, &errorNumber);
+    if (driverHandle != NULL) {
+      slot->driverHandle = driverHandle;
+      slot->owner = sender;
+      dirp = (DIR*) ((((uintptr_t) slot->generation)
+          << FILESYSTEM_DIR_INDEX_BITS)
+        | (uintptr_t) (slot - filesystemState->openDirs));
+    }
   }
   if (pathname != opendirArgs->pathname) {
     free(pathname);

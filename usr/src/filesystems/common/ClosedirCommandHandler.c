@@ -43,6 +43,7 @@
 #include "NanoOsUtils.h"
 #include "FilesystemUtils.h"
 #endif // NANO_OS_KERNEL_BUILD
+#include "../include/FilesystemHandles.h"
 
 // Prototype used by this handler.
 int driverClosedir(void *driverState, void *dirHandle);
@@ -64,9 +65,14 @@ void* Closedir(void *args) {
     = (FilesystemClosedirArgs*) processMessageData(processMessage);
 
   int returnValue = 0;
-  if (filesystemState->driverState != NULL) {
+  FilesystemOpenDir *slot
+    = filesystemDirLookup(filesystemState, processMessage, closedirArgs->dirp);
+  if (slot == NULL) {
+    returnValue = -1;
+  } else if (filesystemState->driverState != NULL) {
     returnValue = driverClosedir(
-      filesystemState->driverState, closedirArgs->dirp);
+      filesystemState->driverState, slot->driverHandle);
+    filesystemDirRelease(slot);
   }
 
   closedirArgs->returnValue = returnValue;

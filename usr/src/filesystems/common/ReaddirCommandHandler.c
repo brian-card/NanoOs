@@ -43,6 +43,7 @@
 #include "NanoOsUtils.h"
 #include "FilesystemUtils.h"
 #endif // NANO_OS_KERNEL_BUILD
+#include "../include/FilesystemHandles.h"
 
 // Prototype used by this handler.
 struct dirent* driverReaddir(
@@ -82,9 +83,13 @@ void* Readdir(void *args) {
 
   struct dirent *entry = NULL;
   int errorNumber = NO_DRIVER_ERRNO;
-  if (filesystemState->driverState != NULL) {
+  FilesystemOpenDir *slot
+    = filesystemDirLookup(filesystemState, processMessage, readdirArgs->dirp);
+  if (slot == NULL) {
+    errorNumber = FILESYSTEM_EBADF;
+  } else if (filesystemState->driverState != NULL) {
     entry = driverReaddir(
-      filesystemState->driverState, readdirArgs->dirp, &errorNumber);
+      filesystemState->driverState, slot->driverHandle, &errorNumber);
   }
 
   readdirArgs->returnValue = entry;
