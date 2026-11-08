@@ -165,6 +165,8 @@ typedef intptr_t ssize_t;
 /// @param currentPosition The current position within the file.
 /// @param fd The numeric file descriptor for the file.
 /// @param owner The ProcessId of the process that owns the file.
+/// @param access The DIRCAP_READ and DIRCAP_WRITE bits the file was opened
+///   with.
 typedef struct NanoOsFile {
   void              *file;
   struct NanoOsFile *next;
@@ -172,6 +174,7 @@ typedef struct NanoOsFile {
   uint32_t           currentPosition;
   int                fd;
   ProcessId          owner;
+  uint8_t            access;
 } NanoOsFile;
 
 /// @struct IoChannel
@@ -281,6 +284,9 @@ typedef struct ProcessQueue ProcessQueue;
 /// @param dirCapabilities The directories the process may use and what it may
 ///   do in each, or NULL if the slot runs no process.  Only the scheduler
 ///   changes it.
+/// @param numFilesystemHandles How many files and directories the process
+///   has open, so that exiting costs a filesystem message only if it left
+///   any open.
 /// @param halCapabilityBitmap One bit per HAL function, set for each function
 ///   granted in halCapabilities.  Built by setProcessHalCapabilities.
 /// @param halDeviceMasks For each HalSubsystem, the bitmask of device IDs the
@@ -319,6 +325,7 @@ typedef struct ProcessDescriptor {
   uint8_t             consolePort;
   char               *shellPath;
   DirCapabilities    *dirCapabilities;
+  uint8_t             numFilesystemHandles;
   // Kept last so that these share the tail padding after the bools above.
   uint8_t             halCapabilityBitmap[HAL_CAPABILITY_BITMAP_SIZE];
   uint8_t             halDeviceMasks[HAL_DEVICE_MASKS_SIZE];
