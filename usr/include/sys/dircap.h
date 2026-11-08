@@ -47,11 +47,9 @@ extern "C"
 static inline int dircapAdd(const char *directory, uint8_t mask) {
   return overlayMap.header.osApi->userApi->dircapAdd(directory, mask);
 }
-
 static inline int dircapDrop(const char *directory) {
   return overlayMap.header.osApi->userApi->dircapDrop(directory);
 }
-
 static inline int dircapGet(DirCapabilities *buffer, size_t bufferSize) {
   return overlayMap.header.osApi->userApi->dircapGet(buffer, bufferSize);
 }
