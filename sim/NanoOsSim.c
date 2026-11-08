@@ -61,8 +61,10 @@
 #undef FILE
 
 // Standard C includes
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 //// #define printDebug(format, ...) fprintf(stderr, format, ##__VA_ARGS__)
 #define printDebug(format, ...) {}
@@ -89,6 +91,41 @@ void usage(const char *argv0) {
   fprintf(stderr, _usageFormat, programName);
 }
 
+/// @var _selfPath
+///
+/// @brief The path that names the running simulator's own executable.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _selfPath[] KEEP_IN_FLASH = "/proc/self/exe";
+
+/// @var _restartErrorMessage
+///
+/// @brief The perror prefix used when the simulator can't run itself again.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _restartErrorMessage[] KEEP_IN_FLASH
+  = "Could not restart the simulator";
+
+/// @fn void restartSimulator(char **argv)
+///
+/// @brief Run the simulator again from the start, so that every global
+/// variable has its initial value again, as it does when hardware resets.
+///
+/// @param argv The simulator's command line.
+///
+/// @return This function does not return.
+void restartSimulator(char **argv) {
+  sigset_t noSignals;
+  sigemptyset(&noSignals);
+  sigprocmask(SIG_SETMASK, &noSignals, NULL);
+  fflush(NULL);
+  execv(_selfPath, argv);
+  perror(_restartErrorMessage);
+  exit(1);
+}
+
 int main(int argc, char **argv) {
   if ((argc != 2) && (argc != 3)) {
     usage(argv[0]);
@@ -106,7 +143,9 @@ int main(int argc, char **argv) {
   }
 
   jmp_buf resetBuffer;
-  setjmp(resetBuffer);
+  if (setjmp(resetBuffer) != 0) {
+    restartSimulator(argv);
+  }
 
   if (halPosixInit(resetBuffer, argv[1], memorySize) != 0) {
     return 1;
