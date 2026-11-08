@@ -596,3 +596,89 @@ NANO_OS_KERNEL_TEST(dircap, only_the_same_user_or_root_may_signal_a_process) {
   NANO_OS_ASSERT_EQ_INT(0, signalStatuses[2]);
   NANO_OS_ASSERT_EQ_INT(0, schedulerSendSignal(other->processId, 0));
 }
+
+NANO_OS_KERNEL_TEST(dircap, only_the_scheduler_may_set_a_processs_set) {
+  ProcessDescriptor *self = getRunningProcess();
+  NANO_OS_ASSERT_TRUE(self->processId != schedulerPid);
+  DirCapabilities *before = self->dirCapabilities;
+  NANO_OS_ASSERT_EQ_PTR(supervisorDirCapabilities, before);
+
+  NANO_OS_ASSERT_EQ_INT(-EPERM, dirCapabilityPut(&self->dirCapabilities,
+    "/nowhere/", 9, DIRCAP_ALL, schedRealloc));
+  NANO_OS_ASSERT_EQ_PTR(before, self->dirCapabilities);
+  NANO_OS_ASSERT_EQ_INT(-EPERM,
+    schedulerSetDirCapabilities(self, rootDirCapabilities));
+  NANO_OS_ASSERT_EQ_PTR(before, self->dirCapabilities);
+}
+
+NANO_OS_KERNEL_TEST(dircap, null_pointers_from_a_user_are_rejected) {
+  char *name = NULL;
+  size_t length = 0;
+  posix_spawnattr_t attr = { .flags = 0, .dirCapabilities = NULL };
+
+  NANO_OS_ASSERT_EQ_INT(EINVAL, nanoOsDircapName(NULL, &name, &length));
+  NANO_OS_ASSERT_EQ_INT(EINVAL, nanoOsDircapName("/a", NULL, &length));
+  NANO_OS_ASSERT_EQ_INT(EINVAL, nanoOsDircapName("/a", &name, NULL));
+  NANO_OS_ASSERT_EQ_INT(-1, nanoOsDircapAdd(NULL, DIRCAP_READ));
+  NANO_OS_ASSERT_EQ_INT(EINVAL, errno);
+  errno = 0;
+  NANO_OS_ASSERT_EQ_INT(-1, nanoOsDircapDrop(NULL));
+  NANO_OS_ASSERT_EQ_INT(EINVAL, errno);
+  NANO_OS_ASSERT_EQ_INT(EINVAL,
+    nanoOsSpawnattrAdddircap(NULL, "/tmp/", DIRCAP_READ));
+  NANO_OS_ASSERT_EQ_INT(EINVAL,
+    nanoOsSpawnattrAdddircap(&attr, NULL, DIRCAP_READ));
+  NANO_OS_ASSERT_NULL(attr.dirCapabilities);
+}
+
+NANO_OS_KERNEL_TEST(dircap, a_message_with_no_payload_is_answered) {
+  static const int commands[] = {
+    SCHEDULER_ADD_DIR_CAPABILITY,
+    SCHEDULER_DROP_DIR_CAPABILITY,
+    SCHEDULER_GET_DIR_CAPABILITIES,
+  };
+  DirCapabilities *before = getRunningProcess()->dirCapabilities;
+
+  for (size_t ii = 0; ii < sizeof(commands) / sizeof(commands[0]); ii++) {
+    ProcessMessage *processMessage = initSendProcessMessageToPid(schedulerPid,
+      SCHEDULER_COMMAND_SIGNATURE | commands[ii], NULL, 0, true);
+    NANO_OS_ASSERT_NOT_NULL(processMessage);
+    processMessageWaitForDone(processMessage, NULL);
+    NANO_OS_ASSERT_TRUE(processMessageDone(processMessage));
+    processMessageRelease(processMessage);
+  }
+  NANO_OS_ASSERT_EQ_PTR(before, getRunningProcess()->dirCapabilities);
+}
+
+NANO_OS_KERNEL_TEST(dircap, a_spawn_attribute_builds_a_well_formed_request) {
+  posix_spawnattr_t attr = { .flags = 0, .dirCapabilities = NULL };
+  NANO_OS_ASSERT_EQ_INT(0,
+    nanoOsSpawnattrAdddircap(&attr, "/tmp", DIRCAP_READ));
+  NANO_OS_ASSERT_EQ_INT(0,
+    nanoOsSpawnattrAdddircap(&attr, "/home/", DIRCAP_LIST));
+  NANO_OS_ASSERT_EQ_INT(0,
+    nanoOsSpawnattrAdddircap(&attr, "/tmp/", DIRCAP_WRITE));
+
+  NANO_OS_ASSERT_NOT_NULL(attr.dirCapabilities);
+  NANO_OS_ASSERT_TRUE(dirCapabilitiesValid(attr.dirCapabilities));
+  NANO_OS_ASSERT_EQ_INT(2, attr.dirCapabilities->numCapabilities);
+  const DirCapability *first = attr.dirCapabilities->capabilities;
+  NANO_OS_ASSERT_EQ_INT(DIRCAP_WRITE, first->mask);
+  NANO_OS_ASSERT_EQ_INT(5, first->len);
+  NANO_OS_ASSERT_EQ_INT(0, memcmp("/tmp/", first->name, 5));
+  free(attr.dirCapabilities);
+}
+
+NANO_OS_KERNEL_TEST(dircap, a_spawn_attribute_refuses_a_bad_entry) {
+  posix_spawnattr_t attr = { .flags = 0, .dirCapabilities = NULL };
+  NANO_OS_ASSERT_EQ_INT(EINVAL, nanoOsSpawnattrAdddircap(&attr, "/tmp/", 0));
+  NANO_OS_ASSERT_EQ_INT(EINVAL, nanoOsSpawnattrAdddircap(&attr, "/tmp/", 0x80));
+
+  char longName[260];
+  memset(longName, 'a', sizeof(longName) - 1);
+  longName[0] = '/';
+  longName[sizeof(longName) - 1] = '\0';
+  NANO_OS_ASSERT_EQ_INT(EINVAL,
+    nanoOsSpawnattrAdddircap(&attr, longName, DIRCAP_READ));
+  NANO_OS_ASSERT_NULL(attr.dirCapabilities);
+}

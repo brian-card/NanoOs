@@ -97,6 +97,27 @@ NANO_OS_KERNEL_TEST(hal_capability, bit_bases_follow_function_counts) {
     <= HAL_CAPABILITY_BITMAP_SIZE * 8);
 }
 
+/// @fn static void grantAsScheduler(ProcessDescriptor *processDescriptor,
+///   HalCapability *capabilities, size_t numCapabilities)
+///
+/// @brief Set a process's HalCapability array as the scheduler would, for a
+/// test body that needs a grant its own slot isn't allowed to make.
+///
+/// @param processDescriptor A pointer to the process to update.
+/// @param capabilities The array to give it.
+/// @param numCapabilities The number of objects in capabilities.
+///
+/// @return This function returns no value.
+static void grantAsScheduler(ProcessDescriptor *processDescriptor,
+  HalCapability *capabilities, size_t numCapabilities
+) {
+  Coroutine *running = getRunningCoroutine();
+  void *context = coroutineContext(running);
+  coroutineSetContext(running, &allProcesses[schedulerPid - 1]);
+  setProcessHalCapabilities(processDescriptor, capabilities, numCapabilities);
+  coroutineSetContext(running, context);
+}
+
 NANO_OS_KERNEL_TEST(hal_capability, every_process_bitmap_matches_its_array) {
   int processesWithGrants = 0;
   for (size_t pid = 1; pid <= numProcesses; pid++) {
@@ -111,7 +132,7 @@ NANO_OS_KERNEL_TEST(hal_capability, no_capabilities_clears_the_bitmap) {
   ProcessDescriptor processDescriptor;
   memset(&processDescriptor, 0xff, sizeof(processDescriptor));
 
-  setProcessHalCapabilities(&processDescriptor, NULL, 0);
+  grantAsScheduler(&processDescriptor, NULL, 0);
 
   NANO_OS_ASSERT_NULL(processDescriptor.halCapabilities);
   NANO_OS_ASSERT_EQ_INT(0, capabilityTestGranted(&processDescriptor));
@@ -184,7 +205,7 @@ NANO_OS_KERNEL_TEST(hal_capability, block_device_io_needs_its_grant) {
     (void*) ((intptr_t) 0), 0, 1, sizeof(block), block));
   NANO_OS_ASSERT_EQ_INT(-1, blockDeviceTestInhibited);
 
-  setProcessHalCapabilities(getRunningProcess(), blockDeviceTestCapabilities,
+  grantAsScheduler(getRunningProcess(), blockDeviceTestCapabilities,
     sizeof(blockDeviceTestCapabilities)
       / sizeof(blockDeviceTestCapabilities[0]));
   NANO_OS_ASSERT_EQ_INT(0, HAL->blockDevice->readBlocks(
@@ -200,7 +221,7 @@ NANO_OS_KERNEL_TEST(hal_capability, block_device_io_inhibits_preemption) {
     = blockDeviceTestRecord;
   halFunctions[HAL_BLOCK_DEVICE][HAL_BLOCK_DEVICE_WRITE_BLOCKS]
     = blockDeviceTestRecord;
-  setProcessHalCapabilities(getRunningProcess(), blockDeviceTestCapabilities,
+  grantAsScheduler(getRunningProcess(), blockDeviceTestCapabilities,
     sizeof(blockDeviceTestCapabilities)
       / sizeof(blockDeviceTestCapabilities[0]));
   uint8_t block[16];
@@ -292,7 +313,7 @@ NANO_OS_KERNEL_TEST(hal_capability, mixed_device_masks_intersect) {
   ProcessDescriptor processDescriptor;
   memset(&processDescriptor, 0xff, sizeof(processDescriptor));
 
-  setProcessHalCapabilities(&processDescriptor, capabilities, 3);
+  grantAsScheduler(&processDescriptor, capabilities, 3);
 
   NANO_OS_ASSERT_EQ_INT(0x02, processDescriptor.halDeviceMasks[HAL_UART]);
   NANO_OS_ASSERT_EQ_INT(0x01, processDescriptor.halDeviceMasks[HAL_SPI]);
@@ -319,4 +340,31 @@ NANO_OS_KERNEL_TEST(hal_capability, call_hal_checks_the_device) {
   NANO_OS_ASSERT_EQ_INT(-EACCES,
     callHal(HAL_UART, HAL_UART_IS_CONSOLE, -1, &untouched));
   NANO_OS_ASSERT_FALSE(untouched);
+}
+
+NANO_OS_KERNEL_TEST(hal_capability,
+  only_the_scheduler_may_change_capabilities
+) {
+  ProcessDescriptor *self = getRunningProcess();
+  NANO_OS_ASSERT_TRUE(self->processId != schedulerPid);
+  HalCapability *capabilities = self->halCapabilities;
+  size_t numCapabilities = self->numHalCapabilities;
+  PrivilegeLevel privilegeLevel = self->privilegeLevel;
+  uint8_t bitmap[HAL_CAPABILITY_BITMAP_SIZE];
+  memcpy(bitmap, self->halCapabilityBitmap, sizeof(bitmap));
+  static char *argv[] = {(char*) "nothing", NULL};
+
+  NANO_OS_ASSERT_EQ_INT(-EPERM, addProcessHalCapability(self,
+    (((uint16_t) HAL_POWER) << 8) | HAL_POWER_ENTER_MODE, 0x01));
+  NANO_OS_ASSERT_EQ_INT(-EPERM, setProcessHalCapabilities(self, NULL, 0));
+  NANO_OS_ASSERT_EQ_INT(-EPERM, schedulerSetBaseHalCapabilities(self));
+  NANO_OS_ASSERT_EQ_INT(-EPERM,
+    schedulerRunExecutiveOverlay(self, (char*) "/nothing", argv));
+
+  NANO_OS_ASSERT_EQ_PTR(capabilities, self->halCapabilities);
+  NANO_OS_ASSERT_EQ_INT((int) numCapabilities,
+    (int) self->numHalCapabilities);
+  NANO_OS_ASSERT_EQ_INT((int) privilegeLevel, (int) self->privilegeLevel);
+  NANO_OS_ASSERT_EQ_INT(0,
+    memcmp(bitmap, self->halCapabilityBitmap, sizeof(bitmap)));
 }
