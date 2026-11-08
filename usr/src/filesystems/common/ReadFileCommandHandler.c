@@ -41,6 +41,7 @@
 #include "NanoOsUtils.h"
 #include "FilesystemUtils.h"
 #endif // NANO_OS_KERNEL_BUILD
+#include "../include/FilesystemHandles.h"
 
 // Prototypes used by this handler.
 int driverFread(
@@ -62,7 +63,12 @@ void* ReadFile(void *args) {
   FilesystemIoCommandArgs *filesystemIoCommandArgs
     = (FilesystemIoCommandArgs*) processMessageData(processMessage);
   int returnValue = 0;
-  if (filesystemState->driverState != NULL) {
+  if (!filesystemFileAllowed(filesystemState, processMessage,
+    filesystemIoCommandArgs->file, DIRCAP_READ)
+  ) {
+    filesystemIoCommandArgs->length = 0;
+    filesystemIoCommandArgs->errorNumber = FILESYSTEM_EBADF;
+  } else if (filesystemState->driverState != NULL) {
     uint32_t length = filesystemIoCommandArgs->length;
     if (length > (uint32_t) (~0u >> 1)) {
       // Clamp to the platform INT_MAX: driverFread/driverFwrite return an int.
