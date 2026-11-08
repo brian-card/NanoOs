@@ -39,6 +39,7 @@
 #include <stdint.h>
 #include "stdbool.h"
 #include "Coroutines.h"
+#include "DirCapabilities.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -238,6 +239,40 @@ typedef struct SchedulerShutdownArgs {
   int returnValue;
 } SchedulerShutdownArgs;
 
+/// @struct SchedulerDirCapabilityArgs
+///
+/// @brief Arguments and return values for the SCHEDULER_ADD_DIR_CAPABILITY
+/// and SCHEDULER_DROP_DIR_CAPABILITY commands.
+///
+/// @param name The canonical absolute directory path, ending in '/'.  It
+///   doesn't have to be NUL-terminated.
+/// @param nameLength The length of name.
+/// @param mask The DIRCAP_* bits to allow.  Not used to drop.
+/// @param errorNumber The errno value to set in the calling process.
+typedef struct SchedulerDirCapabilityArgs {
+  const char *name;
+  size_t nameLength;
+  uint8_t mask;
+  int errorNumber;
+} SchedulerDirCapabilityArgs;
+
+/// @struct SchedulerGetDirCapabilitiesArgs
+///
+/// @brief Arguments and return values for the SCHEDULER_GET_DIR_CAPABILITIES
+/// command.
+///
+/// @param buffer Where to copy the calling process's set, or NULL.
+/// @param bufferSize The size of buffer, in bytes.  The set is copied only if
+///   it fits.
+/// @param size The size of the set, in bytes.
+/// @param errorNumber The errno value to set in the calling process.
+typedef struct SchedulerGetDirCapabilitiesArgs {
+  DirCapabilities *buffer;
+  size_t bufferSize;
+  size_t size;
+  int errorNumber;
+} SchedulerGetDirCapabilitiesArgs;
+
 /// @enum SchedulerCommandResponse
 ///
 /// @brief Commands and responses understood by the scheduler inter-process
@@ -256,6 +291,9 @@ typedef enum SchedulerCommandResponse {
   SCHEDULER_SHUTDOWN,
   SCHEDULER_CLEANUP_PROCESS,
   SCHEDULER_WAIT_PID,
+  SCHEDULER_ADD_DIR_CAPABILITY,
+  SCHEDULER_DROP_DIR_CAPABILITY,
+  SCHEDULER_GET_DIR_CAPABILITIES,
   NUM_SCHEDULER_COMMANDS,
   // Responses:
   SCHEDULER_PROCESS_COMPLETE,
@@ -305,6 +343,8 @@ size_t halCapabilityInsert(HalCapability *capabilities, size_t numCapabilities,
 int addProcessHalCapability(ProcessDescriptor *processDescriptor,
   uint16_t subsystemFunction, uint8_t deviceIds);
 void schedulerSetBaseHalCapabilities(ProcessDescriptor *processDescriptor);
+void schedulerSetDirCapabilities(ProcessDescriptor *processDescriptor,
+  DirCapabilities *dirCapabilities);
 void processQueueInit(ProcessQueue *processQueue, const char *name);
 int processQueuePush(
   ProcessQueue *processQueue, ProcessDescriptor *processDescriptor);
@@ -333,6 +373,11 @@ extern ProcessId schedulerPid;
 
 // Whether the preemption timer is armed.  See Scheduler.c for details.
 extern bool schedulerPreemptionTimerArmed;
+
+// The static directory capability sets.  See Scheduler.c for details.
+extern DirCapabilities *const rootDirCapabilities;
+extern DirCapabilities *const kernelDirCapabilities;
+extern DirCapabilities *const supervisorDirCapabilities;
 
 void forceYield(void);
 bool schedulerQueueWaitingProcess(ProcessDescriptor *processDescriptor);

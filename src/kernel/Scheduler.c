@@ -574,6 +574,9 @@ IpcCapability baseSupervisorIpcCapabilities[] = {
       | (((uint32_t) 1) << SCHEDULER_REPLACE_OVERLAY)
       | (((uint32_t) 1) << SCHEDULER_WAIT_PID)
       | (((uint32_t) 1) << SCHEDULER_SHUTDOWN)
+      | (((uint32_t) 1) << SCHEDULER_ADD_DIR_CAPABILITY)
+      | (((uint32_t) 1) << SCHEDULER_DROP_DIR_CAPABILITY)
+      | (((uint32_t) 1) << SCHEDULER_GET_DIR_CAPABILITIES)
   },
   {
     .destinationPid = 0, // Console PID to be set by scheduler
@@ -639,6 +642,9 @@ IpcCapability baseUserIpcCapabilities[] = {
       | (((uint32_t) 1) << SCHEDULER_GET_HOSTNAME)
       | (((uint32_t) 1) << SCHEDULER_REPLACE_OVERLAY)
       | (((uint32_t) 1) << SCHEDULER_WAIT_PID)
+      | (((uint32_t) 1) << SCHEDULER_ADD_DIR_CAPABILITY)
+      | (((uint32_t) 1) << SCHEDULER_DROP_DIR_CAPABILITY)
+      | (((uint32_t) 1) << SCHEDULER_GET_DIR_CAPABILITIES)
   },
   {
     .destinationPid = 0, // Console PID to be set by scheduler
@@ -684,6 +690,109 @@ IpcCapability baseUserIpcCapabilities[] = {
 
 void* schedRealloc(void *ptr, size_t size);
 void* schedMalloc(size_t size);
+
+/// @def ROOT_DIR_CAPABILITY_ENTRIES
+///
+/// @brief The packed entries of the scheduler's set:  rwcdlsx on /.
+#define ROOT_DIR_CAPABILITY_ENTRIES "\x7f" "\x01" "/"
+
+/// @var _rootDirCapabilities
+///
+/// @brief The scheduler's set, which holds every directory with every bit.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const DIR_CAPABILITIES_STATIC(ROOT_DIR_CAPABILITY_ENTRIES)
+  _rootDirCapabilities KEEP_IN_FLASH
+  = DIR_CAPABILITIES_STATIC_INITIALIZER(1, ROOT_DIR_CAPABILITY_ENTRIES);
+
+/// @def KERNEL_DIR_CAPABILITY_ENTRIES
+///
+/// @brief The packed entries of the kernel processes' set:  rx on /usr/lib/,
+/// where the logger's string table and the drivers are, and rx on
+/// /usr/bin/logger/, the logger's own overlays.
+#define KERNEL_DIR_CAPABILITY_ENTRIES \
+  "\x41" "\x09" "/usr/lib/" \
+  "\x41" "\x10" "/usr/bin/logger/"
+
+/// @var _kernelDirCapabilities
+///
+/// @brief The set of every process other than the scheduler that the kernel
+/// starts itself, and of the devices in /etc/config.sys.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const DIR_CAPABILITIES_STATIC(KERNEL_DIR_CAPABILITY_ENTRIES)
+  _kernelDirCapabilities KEEP_IN_FLASH
+  = DIR_CAPABILITIES_STATIC_INITIALIZER(2, KERNEL_DIR_CAPABILITY_ENTRIES);
+
+/// @def SUPERVISOR_DIR_CAPABILITY_ENTRIES
+///
+/// @brief The packed entries of the compiled supervisor base set:  rx on
+/// /usr/bin/, rls on /etc/, rwcdls on /secure/, rwcdlsx on /home/, and
+/// rwcdls on /root/ and /tmp/.
+#define SUPERVISOR_DIR_CAPABILITY_ENTRIES \
+  "\x41" "\x09" "/usr/bin/" \
+  "\x31" "\x05" "/etc/" \
+  "\x3f" "\x08" "/secure/" \
+  "\x7f" "\x06" "/home/" \
+  "\x3f" "\x06" "/root/" \
+  "\x3f" "\x05" "/tmp/"
+
+/// @var _supervisorDirCapabilities
+///
+/// @brief The set every shell slot starts from.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const DIR_CAPABILITIES_STATIC(SUPERVISOR_DIR_CAPABILITY_ENTRIES)
+  _supervisorDirCapabilities KEEP_IN_FLASH
+  = DIR_CAPABILITIES_STATIC_INITIALIZER(6, SUPERVISOR_DIR_CAPABILITY_ENTRIES);
+
+/// @var rootDirCapabilities
+///
+/// @brief The scheduler's set.  Static, so it is never changed or freed.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+DirCapabilities *const rootDirCapabilities KEEP_IN_FLASH
+  = (DirCapabilities*) &_rootDirCapabilities;
+
+/// @var kernelDirCapabilities
+///
+/// @brief The kernel processes' set.  Static, so it is never changed or freed.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+DirCapabilities *const kernelDirCapabilities KEEP_IN_FLASH
+  = (DirCapabilities*) &_kernelDirCapabilities;
+
+/// @var supervisorDirCapabilities
+///
+/// @brief The supervisor base set.  Static, so it is never changed or freed.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+DirCapabilities *const supervisorDirCapabilities KEEP_IN_FLASH
+  = (DirCapabilities*) &_supervisorDirCapabilities;
+
+/// @fn void schedulerSetDirCapabilities(ProcessDescriptor *processDescriptor,
+///   DirCapabilities *dirCapabilities)
+///
+/// @brief Give a process a set, releasing the reference to the one it had.
+///
+/// @param processDescriptor A pointer to the process's ProcessDescriptor.
+/// @param dirCapabilities The set, which must already hold a reference for
+///   the process, or NULL.
+///
+/// @return This function returns no value.
+void schedulerSetDirCapabilities(ProcessDescriptor *processDescriptor,
+  DirCapabilities *dirCapabilities
+) {
+  DirCapabilities *old = processDescriptor->dirCapabilities;
+  processDescriptor->dirCapabilities = dirCapabilities;
+  dirCapabilitiesRelease(old, schedRealloc);
+}
 
 /// @fn void ipcCapabilityInsert(IpcCapability *capabilities,
 ///   size_t numCapabilities, ProcessId destinationPid, int64_t signature,
@@ -3782,6 +3891,36 @@ int schedulerExecveCommandHandler(
   return returnValue;
 }
 
+/// @fn static int schedulerSpawnDirCapabilities(ProcessDescriptor *parent,
+///   const posix_spawnattr_t *attrp, DirCapabilities **dirCapabilities)
+///
+/// @brief Get the set a spawned process starts with:  the entries of its
+/// spawn attribute, each of which the parent's set must allow, or else the
+/// parent's set, shared.
+///
+/// @param parent A pointer to the ProcessDescriptor of the spawning process.
+/// @param attrp The spawn attribute, which may be NULL.
+/// @param dirCapabilities Where to store the set, which holds a reference for
+///   the new process.
+///
+/// @return Returns 0 on success, -EINVAL if the attribute's entries are
+/// malformed, -EACCES if the parent's set doesn't allow one of them, -ENOMEM
+/// if memory ran out, or -EAGAIN if the parent's set can't be shared again.
+static int schedulerSpawnDirCapabilities(ProcessDescriptor *parent,
+  const posix_spawnattr_t *attrp, DirCapabilities **dirCapabilities
+) {
+  if ((attrp != NULL) && (attrp->dirCapabilities != NULL)) {
+    return dirCapabilitiesCopy(dirCapabilities, attrp->dirCapabilities,
+      parent->dirCapabilities, schedRealloc);
+  } else if (parent->dirCapabilities == NULL) {
+    *dirCapabilities = NULL;
+    return 0;
+  }
+
+  *dirCapabilities = dirCapabilitiesShare(parent->dirCapabilities);
+  return (*dirCapabilities != NULL) ? 0 : -EAGAIN;
+}
+
 /// @fn int schedulerSpawnCommandHandler(
 ///   SchedulerState *schedulerState, ProcessMessage *processMessage)
 ///
@@ -3840,10 +3979,20 @@ int schedulerSpawnCommandHandler(
   }
   char **envp = spawnArgs->envp;
 
+  DirCapabilities *dirCapabilities = NULL;
+  returnValue = schedulerSpawnDirCapabilities(
+    processMessageFrom(processMessage), spawnArgs->attrp, &dirCapabilities);
+  if (returnValue != 0) {
+    schedulerSpawnArgs->errorNumber = -returnValue;
+    processMessageSetDone(processMessage);
+    return 0; // Don't retry this command
+  }
+
   ProcessDescriptor *processDescriptor
     = processQueuePop(schedulerState->freeQueue);
   if (processDescriptor == NULL) {
     logError("Out of process slots to launch process.\n");
+    dirCapabilitiesRelease(dirCapabilities, schedRealloc);
     schedulerSpawnArgs->errorNumber = EINVAL;
     processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
@@ -3862,6 +4011,7 @@ int schedulerSpawnCommandHandler(
   }
   returnValue = loadProcessDescriptorOverlayMetadata(processDescriptor);
   if (returnValue != 0) {
+    dirCapabilitiesRelease(dirCapabilities, schedRealloc);
     processQueuePush(schedulerState->freeQueue, processDescriptor);
     if (returnValue == -EBUSY) {
       // We're in the middle of a filesystem operation already and can't
@@ -3877,6 +4027,7 @@ int schedulerSpawnCommandHandler(
   ExecArgs *execArgs = (ExecArgs*) schedMalloc(sizeof(ExecArgs));
   if (execArgs == NULL) {
     logError("Out of memory for ExecArgs.\n");
+    dirCapabilitiesRelease(dirCapabilities, schedRealloc);
     processQueuePush(schedulerState->freeQueue, processDescriptor);
     schedulerSpawnArgs->errorNumber = ENOMEM;
     processMessageSetDone(processMessage);
@@ -3929,6 +4080,7 @@ int schedulerSpawnCommandHandler(
     NUM_STANDARD_FILE_DESCRIPTORS * sizeof(FileDescriptor*));
   if (processDescriptor->fileDescriptors == NULL) {
     logError("Could not allocate file descriptor array for new command\n");
+    dirCapabilitiesRelease(dirCapabilities, schedRealloc);
     processQueuePush(schedulerState->freeQueue, processDescriptor);
     schedulerSpawnArgs->errorNumber = ENOMEM;
     schedFree(execArgs);
@@ -3947,6 +4099,7 @@ int schedulerSpawnCommandHandler(
       }
       schedFree(processDescriptor->fileDescriptors);
       schedFree(execArgs);
+      dirCapabilitiesRelease(dirCapabilities, schedRealloc);
       processQueuePush(schedulerState->freeQueue, processDescriptor);
       processMessageSetDone(processMessage);
       return returnValue; // 0; Don't retry this command
@@ -4076,6 +4229,7 @@ int schedulerSpawnCommandHandler(
 
   processDescriptor->envp = envp;
   processDescriptor->name = argv[0];
+  schedulerSetDirCapabilities(processDescriptor, dirCapabilities);
 
   // Resume the thread so that it picks up all the pointers it needs before
   // we release the message we were sent.
@@ -4155,6 +4309,17 @@ int schedulerSendSignalCommandHandler(
     sendSignalArgs->returnValue = -1;
     sendSignalArgs->errorNumber = ESRCH;
     logError("Invalid process ID specified\n");
+    processMessageSetDone(processMessage);
+    goto exit; // return 0
+  }
+
+  ProcessDescriptor *sender = processMessageFrom(processMessage);
+  if ((processPid(sender) != consolePid)
+    && (sender->userId != ROOT_USER_ID)
+    && (sender->userId != processDescriptor->userId)
+  ) {
+    sendSignalArgs->returnValue = -1;
+    sendSignalArgs->errorNumber = EPERM;
     processMessageSetDone(processMessage);
     goto exit; // return 0
   }
@@ -4569,6 +4734,9 @@ terminateAndRestart:
     &processDescriptor->message);
   memset(&processDescriptor->message, 0, sizeof(ProcessMessage));
   schedulerOrphanChildren(processDescriptor);
+  if (processDescriptor->restartFunction == NULL) {
+    schedulerSetDirCapabilities(processDescriptor, NULL);
+  }
 
   if (processDescriptor->restartFunction != NULL) {
     logDebug("Process %ld has exited.  Restarting.\n",
@@ -4657,6 +4825,97 @@ int schedulerWaitPidCommandHandler(
   return 0;
 }
 
+/// @fn int schedulerAddDirCapabilityCommandHandler(
+///   SchedulerState *schedulerState, ProcessMessage *processMessage)
+///
+/// @brief Add an entry to the calling process's set, or narrow the mask of
+/// one it holds.
+///
+/// @param schedulerState A pointer to the SchedulerState maintained by the
+///   scheduler process.
+/// @param processMessage A pointer to the ProcessMessage that was received.
+///
+/// @return This function always returns 0.
+int schedulerAddDirCapabilityCommandHandler(
+  SchedulerState *schedulerState, ProcessMessage *processMessage
+) {
+  (void) schedulerState;
+  SchedulerDirCapabilityArgs *schedulerDirCapabilityArgs
+    = (SchedulerDirCapabilityArgs*) processMessageData(processMessage);
+  ProcessDescriptor *caller = processMessageFrom(processMessage);
+
+  schedulerDirCapabilityArgs->errorNumber
+    = -dirCapabilityAdd(&caller->dirCapabilities,
+      schedulerDirCapabilityArgs->name, schedulerDirCapabilityArgs->nameLength,
+      schedulerDirCapabilityArgs->mask, schedRealloc);
+  processMessageSetDone(processMessage);
+  return 0;
+}
+
+/// @fn int schedulerDropDirCapabilityCommandHandler(
+///   SchedulerState *schedulerState, ProcessMessage *processMessage)
+///
+/// @brief Remove an entry from the calling process's set.
+///
+/// @param schedulerState A pointer to the SchedulerState maintained by the
+///   scheduler process.
+/// @param processMessage A pointer to the ProcessMessage that was received.
+///
+/// @return This function always returns 0.
+int schedulerDropDirCapabilityCommandHandler(
+  SchedulerState *schedulerState, ProcessMessage *processMessage
+) {
+  (void) schedulerState;
+  SchedulerDirCapabilityArgs *schedulerDirCapabilityArgs
+    = (SchedulerDirCapabilityArgs*) processMessageData(processMessage);
+  ProcessDescriptor *caller = processMessageFrom(processMessage);
+
+  schedulerDirCapabilityArgs->errorNumber
+    = -dirCapabilityDrop(&caller->dirCapabilities,
+      schedulerDirCapabilityArgs->name, schedulerDirCapabilityArgs->nameLength,
+      schedRealloc);
+  processMessageSetDone(processMessage);
+  return 0;
+}
+
+/// @fn int schedulerGetDirCapabilitiesCommandHandler(
+///   SchedulerState *schedulerState, ProcessMessage *processMessage)
+///
+/// @brief Copy the calling process's set into a buffer it provides, if the
+/// set fits, and report the set's size.
+///
+/// @param schedulerState A pointer to the SchedulerState maintained by the
+///   scheduler process.
+/// @param processMessage A pointer to the ProcessMessage that was received.
+///
+/// @return This function always returns 0.
+int schedulerGetDirCapabilitiesCommandHandler(
+  SchedulerState *schedulerState, ProcessMessage *processMessage
+) {
+  (void) schedulerState;
+  SchedulerGetDirCapabilitiesArgs *schedulerGetDirCapabilitiesArgs
+    = (SchedulerGetDirCapabilitiesArgs*) processMessageData(processMessage);
+  DirCapabilities *set = processMessageFrom(processMessage)->dirCapabilities;
+  DirCapabilities *buffer = schedulerGetDirCapabilitiesArgs->buffer;
+  size_t size = (set != NULL) ? set->size : DIR_CAPABILITIES_HEADER_SIZE;
+
+  if ((buffer != NULL)
+    && (schedulerGetDirCapabilitiesArgs->bufferSize >= size)
+  ) {
+    if (set != NULL) {
+      memcpy(buffer, set, size);
+    } else {
+      memset(buffer, 0, size);
+      buffer->size = (uint16_t) size;
+    }
+    buffer->refCount = 0;
+  }
+  schedulerGetDirCapabilitiesArgs->size = size;
+  schedulerGetDirCapabilitiesArgs->errorNumber = 0;
+  processMessageSetDone(processMessage);
+  return 0;
+}
+
 /// @typedef SchedulerCommandHandler
 ///
 /// @brief Signature of command handler for a scheduler command.
@@ -4681,6 +4940,12 @@ const SchedulerCommandHandler schedulerCommandHandlers[] = {
   schedulerShutdownCommandHandler,          // SCHEDULER_SHUTDOWN
   schedulerCleanupProcessCommandHandler,    // SCHEDULER_CLEANUP_PROCESS
   schedulerWaitPidCommandHandler,           // SCHEDULER_WAIT_PID
+  // SCHEDULER_ADD_DIR_CAPABILITY:
+  schedulerAddDirCapabilityCommandHandler,
+  // SCHEDULER_DROP_DIR_CAPABILITY:
+  schedulerDropDirCapabilityCommandHandler,
+  // SCHEDULER_GET_DIR_CAPABILITIES:
+  schedulerGetDirCapabilitiesCommandHandler,
 };
 
 /// @fn void handleSchedulerMessage(SchedulerState *schedulerState)
@@ -4937,6 +5202,7 @@ void removeProcess(
   processDescriptor->mainThread->state = PROCESS_STATE_NOT_RUNNING;
   processCompleteMessagesTo(processDescriptor);
   schedulerReleaseConsolePorts(processDescriptor);
+  schedulerSetDirCapabilities(processDescriptor, NULL);
 
   MemoryManagerFreeProcessMemoryArgs memoryManagerFreeProcessMemoryArgs = {
     .pid = processDescriptor->processId,
@@ -5486,6 +5752,9 @@ int restartBuiltinShell(ProcessDescriptor *processDescriptor) {
     &allProcesses[consolePid - 1],
     processDescriptor->processId, CONSOLE_COMMAND_SIGNATURE,
     CONSOLE_RETURNING_INPUT);
+  if (processDescriptor->userId == NO_USER_ID) {
+    schedulerSetDirCapabilities(processDescriptor, supervisorDirCapabilities);
+  }
 
   int returnValue = 0;
   processDescriptor->numFileDescriptors = NUM_STANDARD_FILE_DESCRIPTORS;
@@ -5570,6 +5839,7 @@ int restartOverlayShell(ProcessDescriptor *processDescriptor) {
   if (processDescriptor->userId == NO_USER_ID) {
     schedFree(processDescriptor->shellPath);
     processDescriptor->shellPath = NULL;
+    schedulerSetDirCapabilities(processDescriptor, supervisorDirCapabilities);
     // Edits to /etc/passwd take effect at the next login.
     nanoOsPasswdCacheLoad();
     if (processDescriptor->envp != NULL) {
@@ -6308,6 +6578,15 @@ int initializeProcesses(SchedulerState *schedulerState) {
     allProcesses[ii - 1].numFileDescriptors = NUM_STANDARD_FILE_DESCRIPTORS;
     allProcesses[ii - 1].fileDescriptors
       = standardKernelFileDescriptorsPointers;
+    allProcesses[ii - 1].dirCapabilities = (ii == schedulerPid)
+      ? rootDirCapabilities : kernelDirCapabilities;
+  }
+  for (ProcessId ii = schedulerState->firstShellPid;
+    (ii <= numProcesses) && (ii - schedulerState->firstShellPid
+      < schedulerState->numShells);
+    ii++
+  ) {
+    allProcesses[ii - 1].dirCapabilities = supervisorDirCapabilities;
   }
   logDebug("Initialized kernel process file descriptors.\n");
 
