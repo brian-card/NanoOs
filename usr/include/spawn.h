@@ -65,11 +65,17 @@ static inline int posix_spawn_file_actions_destroy(
     file_actions);
 }
 static inline int posix_spawnattr_init(posix_spawnattr_t *attr) {
+  if (attr == NULL) {
+    return EINVAL;
+  }
   attr->flags = 0;
   attr->dirCapabilities = NULL;
   return 0;
 }
 static inline int posix_spawnattr_destroy(posix_spawnattr_t *attr) {
+  if (attr == NULL) {
+    return EINVAL;
+  }
   overlayMap.header.osApi->userApi->free(attr->dirCapabilities);
   attr->dirCapabilities = NULL;
   return 0;
@@ -83,7 +89,9 @@ static inline int posix_spawnattr_adddircap(posix_spawnattr_t *attr,
 static inline int posix_spawnattr_setflags(posix_spawnattr_t *attr,
   short flags
 ) {
-  if ((flags & ~(POSIX_SPAWN_FOREGROUND | POSIX_SPAWN_ALLOW_SPAWN)) != 0) {
+  if ((attr == NULL)
+    || ((flags & ~(POSIX_SPAWN_FOREGROUND | POSIX_SPAWN_ALLOW_SPAWN)) != 0)
+  ) {
     return EINVAL;
   }
   attr->flags = flags;
@@ -92,6 +100,9 @@ static inline int posix_spawnattr_setflags(posix_spawnattr_t *attr,
 static inline int posix_spawnattr_getflags(const posix_spawnattr_t *attr,
   short *flags
 ) {
+  if ((attr == NULL) || (flags == NULL)) {
+    return EINVAL;
+  }
   *flags = attr->flags;
   return 0;
 }
