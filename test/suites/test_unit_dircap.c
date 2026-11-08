@@ -40,6 +40,7 @@
 #include <string.h>
 
 #include "kernel/DirCapabilities.h"
+#include "kernel/Scheduler.h"
 #include "user/NanoOsErrno.h"
 
 /// @struct Entry
@@ -501,5 +502,185 @@ NANO_OS_TEST(unit_dircap, running_out_of_memory_leaves_the_set_unchanged) {
   NANO_OS_ASSERT_TRUE(allows(parent, "/home/f", false, DIRCAP_WRITE));
   release(child);
   release(parent);
+  NANO_OS_ASSERT_EQ_INT(0, liveBlocks);
+}
+
+/// @fn static int put(DirCapabilities **setp, const char *name, uint8_t mask)
+///
+/// @brief Put an entry with the counting allocator.
+///
+/// @return Returns what dirCapabilityPut returns.
+static int put(DirCapabilities **setp, const char *name, uint8_t mask) {
+  return dirCapabilityPut(setp, name, strlen(name), mask, countingRealloc);
+}
+
+NANO_OS_TEST(unit_dircap, a_put_builds_a_set_from_nothing) {
+  resetCounts();
+  DirCapabilities *set = NULL;
+  NANO_OS_ASSERT_EQ_INT(0, put(&set, "/tmp/", DIRCAP_READ));
+  NANO_OS_ASSERT_EQ_INT(0, put(&set, "/home/", DIRCAP_LIST));
+
+  Entry entries[] = {{"/tmp/", DIRCAP_READ}, {"/home/", DIRCAP_LIST}};
+  uint8_t expected[64];
+  size_t size = fillSet(expected, 1, entries, 2);
+  NANO_OS_ASSERT_NOT_NULL(set);
+  NANO_OS_ASSERT_EQ_INT((int) size, set->size);
+  NANO_OS_ASSERT_EQ_INT(0, memcmp(expected, set, size));
+  NANO_OS_ASSERT_EQ_INT(1, liveBlocks);
+  release(set);
+  NANO_OS_ASSERT_EQ_INT(0, liveBlocks);
+}
+
+NANO_OS_TEST(unit_dircap, a_put_does_not_check_the_set) {
+  resetCounts();
+  Entry entries[] = {{"/tmp/", DIRCAP_READ}};
+  DirCapabilities *set = makeSet(entries, 1);
+  NANO_OS_ASSERT_EQ_INT(-EACCES, add(&set, "/", DIRCAP_ALL));
+  NANO_OS_ASSERT_EQ_INT(0, put(&set, "/", DIRCAP_ALL));
+  NANO_OS_ASSERT_TRUE(allows(set, "/etc/passwd", false, DIRCAP_WRITE));
+  NANO_OS_ASSERT_EQ_INT(-EINVAL, put(&set, "/etc", DIRCAP_READ));
+  NANO_OS_ASSERT_EQ_INT(-EINVAL, put(&set, "/etc/", 0x80));
+  release(set);
+  NANO_OS_ASSERT_EQ_INT(0, liveBlocks);
+}
+
+NANO_OS_TEST(unit_dircap, the_compiled_sets_are_well_formed) {
+  NANO_OS_ASSERT_TRUE(dirCapabilitiesValid(rootDirCapabilities));
+  NANO_OS_ASSERT_TRUE(dirCapabilitiesValid(kernelDirCapabilities));
+  NANO_OS_ASSERT_TRUE(dirCapabilitiesValid(supervisorDirCapabilities));
+  NANO_OS_ASSERT_EQ_INT(0, rootDirCapabilities->refCount);
+  NANO_OS_ASSERT_EQ_INT(0, kernelDirCapabilities->refCount);
+  NANO_OS_ASSERT_EQ_INT(0, supervisorDirCapabilities->refCount);
+}
+
+NANO_OS_TEST(unit_dircap, the_compiled_sets_hold_what_they_document) {
+  NANO_OS_ASSERT_TRUE(allows(rootDirCapabilities, "/secure/shadow", false,
+    DIRCAP_ALL));
+
+  NANO_OS_ASSERT_TRUE(allows(kernelDirCapabilities,
+    "/usr/lib/NanoOs_rodata.bin", false, DIRCAP_READ | DIRCAP_EXEC));
+  NANO_OS_ASSERT_TRUE(allows(kernelDirCapabilities,
+    "/usr/bin/logger/main.overlay", false, DIRCAP_READ | DIRCAP_EXEC));
+  NANO_OS_ASSERT_FALSE(allows(kernelDirCapabilities, "/usr/bin/mush", false,
+    DIRCAP_READ));
+  NANO_OS_ASSERT_FALSE(allows(kernelDirCapabilities, "/usr/lib/x", false,
+    DIRCAP_WRITE));
+
+  const DirCapabilities *supervisor = supervisorDirCapabilities;
+  NANO_OS_ASSERT_TRUE(allows(supervisor, "/usr/bin/mush", false,
+    DIRCAP_READ | DIRCAP_EXEC));
+  NANO_OS_ASSERT_FALSE(allows(supervisor, "/usr/bin/mush", false,
+    DIRCAP_WRITE));
+  NANO_OS_ASSERT_TRUE(allows(supervisor, "/etc", true,
+    DIRCAP_READ | DIRCAP_LIST | DIRCAP_STAT));
+  NANO_OS_ASSERT_FALSE(allows(supervisor, "/etc/passwd", false,
+    DIRCAP_WRITE));
+  NANO_OS_ASSERT_TRUE(allows(supervisor, "/secure/shadow", false,
+    DIRCAP_READ | DIRCAP_WRITE | DIRCAP_CREATE | DIRCAP_DELETE));
+  NANO_OS_ASSERT_TRUE(allows(supervisor, "/home/briana/bin/x", false,
+    DIRCAP_ALL));
+  NANO_OS_ASSERT_TRUE(allows(supervisor, "/root/.mush_history", false,
+    DIRCAP_READ | DIRCAP_WRITE | DIRCAP_CREATE | DIRCAP_DELETE
+    | DIRCAP_LIST | DIRCAP_STAT));
+  NANO_OS_ASSERT_FALSE(allows(supervisor, "/root/x", false, DIRCAP_EXEC));
+  NANO_OS_ASSERT_TRUE(allows(supervisor, "/tmp/x", false,
+    DIRCAP_READ | DIRCAP_WRITE | DIRCAP_CREATE | DIRCAP_DELETE
+    | DIRCAP_LIST | DIRCAP_STAT));
+  NANO_OS_ASSERT_FALSE(allows(supervisor, "/tmp/x", false, DIRCAP_EXEC));
+  NANO_OS_ASSERT_FALSE(allows(supervisor, "/usr/lib/x", false, DIRCAP_READ));
+}
+
+/// @union TestBlock
+///
+/// @brief Room for a set that a test writes by hand, aligned as a set is.
+typedef union TestBlock {
+  DirCapabilities set;
+  uint8_t bytes[64];
+} TestBlock;
+
+NANO_OS_TEST(unit_dircap, a_malformed_set_is_invalid) {
+  Entry entries[] = {{"/tmp/", DIRCAP_READ}, {"/home/", DIRCAP_LIST}};
+  TestBlock block;
+  size_t size = fillSet(&block, 1, entries, 2);
+  NANO_OS_ASSERT_TRUE(dirCapabilitiesValid(&block.set));
+
+  block.set.size = (uint16_t) (size + 1);
+  NANO_OS_ASSERT_FALSE(dirCapabilitiesValid(&block.set));
+  block.set.size = (uint16_t) (size - 1);
+  NANO_OS_ASSERT_FALSE(dirCapabilitiesValid(&block.set));
+  block.set.size = 2;
+  NANO_OS_ASSERT_FALSE(dirCapabilitiesValid(&block.set));
+
+  fillSet(&block, 1, entries, 2);
+  block.set.numCapabilities = 3;
+  NANO_OS_ASSERT_FALSE(dirCapabilitiesValid(&block.set));
+
+  fillSet(&block, 1, entries, 2);
+  block.set.capabilities[0].len = 40;
+  NANO_OS_ASSERT_FALSE(dirCapabilitiesValid(&block.set));
+
+  fillSet(&block, 1, entries, 2);
+  block.set.capabilities[0].mask = 0;
+  NANO_OS_ASSERT_FALSE(dirCapabilitiesValid(&block.set));
+  block.set.capabilities[0].mask = 0x81;
+  NANO_OS_ASSERT_FALSE(dirCapabilitiesValid(&block.set));
+
+  fillSet(&block, 1, entries, 2);
+  block.set.capabilities[0].name[1] = '.';
+  block.set.capabilities[0].name[2] = '.';
+  block.set.capabilities[0].name[3] = '/';
+  block.set.capabilities[0].len = 4;
+  NANO_OS_ASSERT_FALSE(dirCapabilitiesValid(&block.set));
+
+  NANO_OS_ASSERT_FALSE(dirCapabilitiesValid(NULL));
+}
+
+NANO_OS_TEST(unit_dircap, a_copy_takes_entries_the_bound_allows) {
+  resetCounts();
+  Entry boundEntries[] = {{"/home/", DIRCAP_READ | DIRCAP_LIST}};
+  DirCapabilities *bound = makeSet(boundEntries, 1);
+  Entry entries[] = {{"/home/a/", DIRCAP_READ}, {"/home/b/", DIRCAP_LIST}};
+  TestBlock source;
+  size_t size = fillSet(&source, 0, entries, 2);
+
+  DirCapabilities *copy = NULL;
+  NANO_OS_ASSERT_EQ_INT(0,
+    dirCapabilitiesCopy(&copy, &source.set, bound, countingRealloc));
+  NANO_OS_ASSERT_NOT_NULL(copy);
+  NANO_OS_ASSERT_TRUE(copy != &source.set);
+  NANO_OS_ASSERT_EQ_INT(1, copy->refCount);
+  source.set.refCount = 1;
+  NANO_OS_ASSERT_EQ_INT(0, memcmp(&source.set, copy, size));
+  release(copy);
+  release(bound);
+  NANO_OS_ASSERT_EQ_INT(0, liveBlocks);
+}
+
+NANO_OS_TEST(unit_dircap, a_copy_refuses_an_entry_the_bound_does_not_allow) {
+  resetCounts();
+  Entry boundEntries[] = {{"/home/", DIRCAP_READ | DIRCAP_LIST}};
+  DirCapabilities *bound = makeSet(boundEntries, 1);
+  Entry entries[] = {{"/home/a/", DIRCAP_READ}, {"/etc/", DIRCAP_READ}};
+  TestBlock source;
+  fillSet(&source, 0, entries, 2);
+
+  DirCapabilities *copy = NULL;
+  NANO_OS_ASSERT_EQ_INT(-EACCES,
+    dirCapabilitiesCopy(&copy, &source.set, bound, countingRealloc));
+  NANO_OS_ASSERT_NULL(copy);
+  NANO_OS_ASSERT_EQ_INT(0, allocations);
+
+  Entry wider[] = {{"/home/a/", DIRCAP_READ | DIRCAP_WRITE}};
+  fillSet(&source, 0, wider, 1);
+  NANO_OS_ASSERT_EQ_INT(-EACCES,
+    dirCapabilitiesCopy(&copy, &source.set, bound, countingRealloc));
+
+  fillSet(&source, 0, entries, 1);
+  source.set.size++;
+  NANO_OS_ASSERT_EQ_INT(-EINVAL,
+    dirCapabilitiesCopy(&copy, &source.set, bound, countingRealloc));
+  NANO_OS_ASSERT_NULL(copy);
+  NANO_OS_ASSERT_EQ_INT(0, allocations);
+  release(bound);
   NANO_OS_ASSERT_EQ_INT(0, liveBlocks);
 }
