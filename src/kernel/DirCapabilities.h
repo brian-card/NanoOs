@@ -127,6 +127,30 @@ typedef struct DirCapabilities {
 #define DIR_CAPABILITY_SIZE(nameLength) \
   (offsetof(DirCapability, name) + (nameLength))
 
+/// @def DIR_CAPABILITIES_STATIC
+///
+/// @brief The type of a static set whose packed entries are the bytes of the
+/// string literal entryBytes.  Its layout matches DirCapabilities, plus the
+/// literal's NUL, which size doesn't count.
+#define DIR_CAPABILITIES_STATIC(entryBytes) \
+  struct { \
+    uint16_t size; \
+    uint8_t  refCount; \
+    uint8_t  numCapabilities; \
+    char     capabilities[sizeof(entryBytes)]; \
+  }
+
+/// @def DIR_CAPABILITIES_STATIC_INITIALIZER
+///
+/// @brief The initializer for a DIR_CAPABILITIES_STATIC(entryBytes) set with
+/// numEntries entries.
+#define DIR_CAPABILITIES_STATIC_INITIALIZER(numEntries, entryBytes) { \
+    .size = DIR_CAPABILITIES_HEADER_SIZE + sizeof(entryBytes) - 1, \
+    .refCount = 0, \
+    .numCapabilities = (numEntries), \
+    .capabilities = entryBytes, \
+  }
+
 /// @typedef DirCapabilitiesRealloc
 ///
 /// @brief The allocator a set is changed with:  realloc semantics, where a
@@ -135,11 +159,18 @@ typedef void* (*DirCapabilitiesRealloc)(void *ptr, size_t size);
 
 bool dirCapabilityAllows(const DirCapabilities *set,
   const char *path, size_t pathLength, bool isDirectory, uint8_t bits);
+int dirCapabilityPut(DirCapabilities **setp,
+  const char *name, size_t nameLength, uint8_t mask,
+  DirCapabilitiesRealloc reallocFn);
 int dirCapabilityAdd(DirCapabilities **setp,
   const char *name, size_t nameLength, uint8_t mask,
   DirCapabilitiesRealloc reallocFn);
 int dirCapabilityDrop(DirCapabilities **setp,
   const char *name, size_t nameLength, DirCapabilitiesRealloc reallocFn);
+bool dirCapabilitiesValid(const DirCapabilities *set);
+int dirCapabilitiesCopy(DirCapabilities **copyp,
+  const DirCapabilities *source, const DirCapabilities *bound,
+  DirCapabilitiesRealloc reallocFn);
 DirCapabilities* dirCapabilitiesShare(DirCapabilities *set);
 void dirCapabilitiesRelease(DirCapabilities *set,
   DirCapabilitiesRealloc reallocFn);

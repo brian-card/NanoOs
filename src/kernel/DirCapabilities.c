@@ -216,6 +216,80 @@ bool dirCapabilityAllows(const DirCapabilities *set,
   return false;
 }
 
+/// @fn int dirCapabilityPut(DirCapabilities **setp,
+///   const char *name, size_t nameLength, uint8_t mask,
+///   DirCapabilitiesRealloc reallocFn)
+///
+/// @brief Add an entry to a set, or replace the mask of the entry it already
+/// has with that name, without checking the mask against the set.  Used to
+/// build a set whose entries are checked elsewhere.
+///
+/// @param setp A pointer to the set, updated if the block changes.  A NULL
+///   set is created.
+/// @param name The canonical absolute directory path, ending in '/'.
+/// @param nameLength The length of name.
+/// @param mask The DIRCAP_* bits to allow.
+/// @param reallocFn The allocator.
+///
+/// @return Returns 0 on success, -EINVAL for an invalid name or mask, -ENOSPC
+/// if the set is full, or -ENOMEM if memory ran out.
+int dirCapabilityPut(DirCapabilities **setp,
+  const char *name, size_t nameLength, uint8_t mask,
+  DirCapabilitiesRealloc reallocFn
+) {
+  if ((setp == NULL) || (name == NULL)
+    || (mask == 0) || ((mask & ~DIRCAP_ALL) != 0)
+    || !dirCapabilityNameIsValid(name, nameLength)
+  ) {
+    return -EINVAL;
+  }
+
+  DirCapabilities *set = *setp;
+  if (set == NULL) {
+    set = (DirCapabilities*) reallocFn(NULL, DIR_CAPABILITIES_HEADER_SIZE);
+    if (set == NULL) {
+      return -ENOMEM;
+    }
+    set->size = DIR_CAPABILITIES_HEADER_SIZE;
+    set->refCount = 1;
+    set->numCapabilities = 0;
+    *setp = set;
+  }
+
+  DirCapability *existing = dirCapabilityFind(set, name, nameLength);
+  if (existing != NULL) {
+    if (existing->mask == mask) {
+      return 0;
+    }
+
+    size_t offset = (size_t) ((char*) existing - (char*) set);
+    set = dirCapabilitiesUnshare(setp, set->size, reallocFn);
+    if (set == NULL) {
+      return -ENOMEM;
+    }
+    ((DirCapability*) ((char*) set + offset))->mask = mask;
+    return 0;
+  }
+
+  size_t oldSize = set->size;
+  size_t newSize = oldSize + DIR_CAPABILITY_SIZE(nameLength);
+  if ((newSize > UINT16_MAX) || (set->numCapabilities == UINT8_MAX)) {
+    return -ENOSPC;
+  }
+  set = dirCapabilitiesUnshare(setp, newSize, reallocFn);
+  if (set == NULL) {
+    return -ENOMEM;
+  }
+
+  DirCapability *capability = (DirCapability*) ((char*) set + oldSize);
+  capability->mask = mask;
+  capability->len = (uint8_t) nameLength;
+  memcpy(capability->name, name, nameLength);
+  set->size = (uint16_t) newSize;
+  set->numCapabilities++;
+  return 0;
+}
+
 /// @fn int dirCapabilityAdd(DirCapabilities **setp,
 ///   const char *name, size_t nameLength, uint8_t mask,
 ///   DirCapabilitiesRealloc reallocFn)
@@ -246,43 +320,7 @@ int dirCapabilityAdd(DirCapabilities **setp,
     return -EACCES;
   }
 
-  DirCapabilities *set = *setp;
-  DirCapability *existing = dirCapabilityFind(set, name, nameLength);
-  if (existing != NULL) {
-    if (existing->mask == mask) {
-      return 0;
-    }
-
-    // If we made it this far then we're being asked to restrict the bitmask
-    // of an existing capability.
-    size_t offset = (size_t) ((char*) existing - (char*) set);
-    set = dirCapabilitiesUnshare(setp, set->size, reallocFn);
-    if (set == NULL) {
-      return -ENOMEM;
-    }
-    ((DirCapability*) ((char*) set + offset))->mask = mask;
-    return 0;
-  }
-
-  // If we made it this far then we're being asked to add a capability for a
-  // subdirectory of an existing capability.
-  size_t oldSize = set->size;
-  size_t newSize = oldSize + DIR_CAPABILITY_SIZE(nameLength);
-  if ((newSize > UINT16_MAX) || (set->numCapabilities == UINT8_MAX)) {
-    return -ENOSPC;
-  }
-  set = dirCapabilitiesUnshare(setp, newSize, reallocFn);
-  if (set == NULL) {
-    return -ENOMEM;
-  }
-
-  DirCapability *capability = (DirCapability*) ((char*) set + oldSize);
-  capability->mask = mask;
-  capability->len = (uint8_t) nameLength;
-  memcpy(capability->name, name, nameLength);
-  set->size = (uint16_t) newSize;
-  set->numCapabilities++;
-  return 0;
+  return dirCapabilityPut(setp, name, nameLength, mask, reallocFn);
 }
 
 /// @fn int dirCapabilityDrop(DirCapabilities **setp,
@@ -339,6 +377,80 @@ int dirCapabilityDrop(DirCapabilities **setp,
   set->size = (uint16_t) newSize;
   set->numCapabilities--;
   *setp = set;
+  return 0;
+}
+
+/// @fn bool dirCapabilitiesValid(const DirCapabilities *set)
+///
+/// @brief Determine whether a block is a well-formed set:  its entries fill
+/// exactly its size, and each has a valid name and mask.
+///
+/// @param set The block to check.
+///
+/// @return Returns true if the set is well formed, false if not.
+bool dirCapabilitiesValid(const DirCapabilities *set) {
+  if ((set == NULL) || (set->size < DIR_CAPABILITIES_HEADER_SIZE)) {
+    return false;
+  }
+
+  size_t offset = DIR_CAPABILITIES_HEADER_SIZE;
+  for (uint8_t ii = 0; ii < set->numCapabilities; ii++) {
+    if (offset + DIR_CAPABILITY_SIZE(0) > set->size) {
+      return false;
+    }
+    const DirCapability *capability
+      = (const DirCapability*) ((const char*) set + offset);
+    offset += DIR_CAPABILITY_SIZE(capability->len);
+    if ((offset > set->size) || (capability->mask == 0)
+      || ((capability->mask & ~DIRCAP_ALL) != 0)
+      || !dirCapabilityNameIsValid(capability->name, capability->len)
+    ) {
+      return false;
+    }
+  }
+
+  return offset == set->size;
+}
+
+/// @fn int dirCapabilitiesCopy(DirCapabilities **copyp,
+///   const DirCapabilities *source, const DirCapabilities *bound,
+///   DirCapabilitiesRealloc reallocFn)
+///
+/// @brief Copy a set into a new block that no other process shares, after
+/// checking that it is well formed and that bound allows every entry.
+///
+/// @param copyp Where to store the new block.  Unchanged on failure.
+/// @param source The set to copy, which may be in another process's memory.
+/// @param bound The set every entry of source must be allowed by.
+/// @param reallocFn The allocator.
+///
+/// @return Returns 0 on success, -EINVAL if source is malformed, -EACCES if
+/// bound doesn't allow an entry, or -ENOMEM if memory ran out.
+int dirCapabilitiesCopy(DirCapabilities **copyp,
+  const DirCapabilities *source, const DirCapabilities *bound,
+  DirCapabilitiesRealloc reallocFn
+) {
+  if ((copyp == NULL) || !dirCapabilitiesValid(source)) {
+    return -EINVAL;
+  }
+
+  const DirCapability *capability = source->capabilities;
+  for (uint8_t ii = 0; ii < source->numCapabilities; ii++) {
+    if (!dirCapabilityAllows(bound, capability->name, capability->len, false,
+      capability->mask)
+    ) {
+      return -EACCES;
+    }
+    capability = dirCapabilityNext(capability);
+  }
+
+  DirCapabilities *copy = (DirCapabilities*) reallocFn(NULL, source->size);
+  if (copy == NULL) {
+    return -ENOMEM;
+  }
+  memcpy(copy, source, source->size);
+  copy->refCount = 1;
+  *copyp = copy;
   return 0;
 }
 
