@@ -28,9 +28,39 @@
 
 import pexpect
 
+from tests.login import PASSWD_FILE
+
 
 def test_shutdown_halts(s):
     s.login()
     s.child.sendline("shutdown -h")
     assert s.child.expect([pexpect.EOF, pexpect.TIMEOUT], timeout=10) == 0, \
         "shutdown -h did not terminate the simulator"
+
+
+def reboot_twice(s, user="root", password="rootroot"):
+    """Reboot from a login shell twice, then run a command.
+
+    @param s The Session.
+    @param user The user to log in as.
+    @param password The user's password.
+    """
+    for _ in range(2):
+        s.login(user, password)
+        s.child.sendline("shutdown -r")
+    s.login(user, password)
+    assert s.sh("echo after-reboot") == "after-reboot"
+
+
+def test_shutdown_reboots(s):
+    reboot_twice(s)
+
+
+def test_shutdown_reboots_with_a_passwd_file(s):
+    s.restart_with_file("/etc/passwd", PASSWD_FILE)
+    reboot_twice(s, "alice", "wonderland")
+
+
+def test_shutdown_reboots_with_a_config_sys(s):
+    s.restart_with_config_sys("DEVICE=/usr/lib/loopback.drv 1\n")
+    reboot_twice(s)
