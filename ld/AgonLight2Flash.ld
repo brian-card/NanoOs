@@ -509,7 +509,7 @@
 *(.text._nanoOsDircapDrop)
 *(.text._nanoOsDircapGet)
 *(.text._nanoOsSpawnattrAdddircap)
-*(.text._spawnattrRealloc)
+*(.text._spawnattrPutEntry)
 *(.text._printChar_)
 *(.text._printString_)
 *(.text._ullToString)
