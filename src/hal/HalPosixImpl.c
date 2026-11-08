@@ -57,11 +57,8 @@
 // Scheduler.h is deliberately *NOT* included here: it #define's FILE to
 // NanoOsFile, which would break this file's legitimate use of the real
 // system FILE (see posixConfigOneShotTimer et al. below). schedulerPid is
-// just a plain ProcessId global; forward-declare it instead.  Same reason
-// schedulerDeinitialize is forward-declared rather than pulled in via the
-// header.
+// just a plain ProcessId global; forward-declare it instead.
 extern ProcessId schedulerPid;
-void schedulerDeinitialize(void);
 
 /// @def DEBUG_MULTIPLIER
 ///
@@ -870,29 +867,9 @@ int posixGetElapsedNanoseconds(int32_t deviceId, va_list args) {
 
 /// @var _resetBuffer
 ///
-/// @brief Copy of the jmp_buf that was initialized prior to initializing the
-/// HAL so that we can jump back to before hardware initialization in the
-/// simulation.
+/// @brief Copy of the jmp_buf that main initialized before initializing the
+/// HAL, which a reset jumps back to so that main can run the simulator again.
 static jmp_buf _resetBuffer;
-
-/// @var _munmapErrorFormat
-///
-/// @brief printf-style format string used to report a failed munmap() of
-/// the overlay region during a simulated reset.
-///
-/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
-/// final binary on some targets.
-static const char _munmapErrorFormat[] KEEP_IN_FLASH
-  = "ERROR: munmap returned: %s\n";
-
-/// @var _exitingMessage
-///
-/// @brief Printed immediately before exiting due to a fatal munmap()
-/// failure during a simulated reset.
-///
-/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
-/// final binary on some targets.
-static const char _exitingMessage[] KEEP_IN_FLASH = "Exiting.\n";
 
 /// @var _contiguousOverlayMap
 ///
@@ -912,38 +889,6 @@ int posixEnterPowerMode(int32_t deviceId, va_list args) {
   ) {
     exit(0);
   } else if (powerMode == HAL_POWER_MODE_RESET) {
-    // Unmap the overlay so that we can map it again when we reset.
-    long pageSize = sysconf(_SC_PAGESIZE);
-    size_t overlayBaseSize
-      = ((size_t) (OVERLAY_OFFSET + OVERLAY_SIZE + (pageSize - 1)))
-      & ~((size_t) (pageSize - 1));
-
-    if (munmap((void*) OVERLAY_BASE_ADDRESS, overlayBaseSize) < 0) {
-      fprintf(stderr, _munmapErrorFormat, strerror(errno));
-      fprintf(stderr, _exitingMessage);
-      exit(1);
-    }
-
-    // Unmap the contiguous filesystem overlay so that it can be mapped
-    // again when we reset.
-    size_t contiguousOverlayBaseSize
-      = ((size_t) (CONTIGUOUS_OVERLAY_SIZE + (pageSize - 1)))
-      & ~((size_t) (pageSize - 1));
-
-    if (munmap((void*) CONTIGUOUS_OVERLAY_BASE_ADDRESS,
-      contiguousOverlayBaseSize) < 0
-    ) {
-      fprintf(stderr, _munmapErrorFormat, strerror(errno));
-      fprintf(stderr, _exitingMessage);
-      exit(1);
-    }
-    _contiguousOverlayMap = NULL;
-
-    // Reset the block storage device online map so that initialization works
-    // properly on reset.
-    HAL->blockDevice->online[0] = 0;
-    schedulerDeinitialize();
-    threadsDeconfig();
     longjmp(_resetBuffer, 1);
   }
 
