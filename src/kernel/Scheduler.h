@@ -342,8 +342,8 @@ size_t halCapabilityInsert(HalCapability *capabilities, size_t numCapabilities,
   uint16_t subsystemFunction, uint8_t deviceIds);
 int addProcessHalCapability(ProcessDescriptor *processDescriptor,
   uint16_t subsystemFunction, uint8_t deviceIds);
-void schedulerSetBaseHalCapabilities(ProcessDescriptor *processDescriptor);
-void schedulerSetDirCapabilities(ProcessDescriptor *processDescriptor,
+int schedulerSetBaseHalCapabilities(ProcessDescriptor *processDescriptor);
+int schedulerSetDirCapabilities(ProcessDescriptor *processDescriptor,
   DirCapabilities *dirCapabilities);
 void processQueueInit(ProcessQueue *processQueue, const char *name);
 int processQueuePush(

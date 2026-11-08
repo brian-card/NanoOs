@@ -780,18 +780,24 @@ DirCapabilities *const supervisorDirCapabilities KEEP_IN_FLASH
 ///   DirCapabilities *dirCapabilities)
 ///
 /// @brief Give a process a set, releasing the reference to the one it had.
+/// Only the scheduler may call this.
 ///
 /// @param processDescriptor A pointer to the process's ProcessDescriptor.
 /// @param dirCapabilities The set, which must already hold a reference for
 ///   the process, or NULL.
 ///
-/// @return This function returns no value.
-void schedulerSetDirCapabilities(ProcessDescriptor *processDescriptor,
+/// @return Returns 0 on success, -EPERM if the caller isn't the scheduler.
+int schedulerSetDirCapabilities(ProcessDescriptor *processDescriptor,
   DirCapabilities *dirCapabilities
 ) {
+  if (!runningInScheduler()) {
+    return -EPERM;
+  }
+
   DirCapabilities *old = processDescriptor->dirCapabilities;
   processDescriptor->dirCapabilities = dirCapabilities;
   dirCapabilitiesRelease(old, schedRealloc);
+  return 0;
 }
 
 /// @fn void ipcCapabilityInsert(IpcCapability *capabilities,
@@ -877,7 +883,8 @@ size_t halCapabilityInsert(HalCapability *capabilities, size_t numCapabilities,
 ///   uint16_t subsystemFunction, uint8_t deviceIds)
 ///
 /// @brief Grant a process a HAL function on a set of devices, moving its
-/// HalCapability array to dynamic memory the first time.
+/// HalCapability array to dynamic memory the first time.  Only the scheduler
+/// may call this.
 ///
 /// @param processDescriptor A pointer to the ProcessDescriptor to update.
 /// @param subsystemFunction The (subsystem << 8) | function value to grant.
@@ -887,6 +894,10 @@ size_t halCapabilityInsert(HalCapability *capabilities, size_t numCapabilities,
 int addProcessHalCapability(ProcessDescriptor *processDescriptor,
   uint16_t subsystemFunction, uint8_t deviceIds
 ) {
+  if (!runningInScheduler()) {
+    return -EPERM;
+  }
+
   size_t numCapabilities = processDescriptor->numHalCapabilities;
   HalCapability *capabilities = NULL;
   if (processDescriptor->halCapabilitiesDynamic == true) {
@@ -4842,6 +4853,10 @@ int schedulerAddDirCapabilityCommandHandler(
   (void) schedulerState;
   SchedulerDirCapabilityArgs *schedulerDirCapabilityArgs
     = (SchedulerDirCapabilityArgs*) processMessageData(processMessage);
+  if (schedulerDirCapabilityArgs == NULL) {
+    processMessageSetDone(processMessage);
+    return 0;
+  }
   ProcessDescriptor *caller = processMessageFrom(processMessage);
 
   schedulerDirCapabilityArgs->errorNumber
@@ -4868,6 +4883,10 @@ int schedulerDropDirCapabilityCommandHandler(
   (void) schedulerState;
   SchedulerDirCapabilityArgs *schedulerDirCapabilityArgs
     = (SchedulerDirCapabilityArgs*) processMessageData(processMessage);
+  if (schedulerDirCapabilityArgs == NULL) {
+    processMessageSetDone(processMessage);
+    return 0;
+  }
   ProcessDescriptor *caller = processMessageFrom(processMessage);
 
   schedulerDirCapabilityArgs->errorNumber
@@ -4895,6 +4914,10 @@ int schedulerGetDirCapabilitiesCommandHandler(
   (void) schedulerState;
   SchedulerGetDirCapabilitiesArgs *schedulerGetDirCapabilitiesArgs
     = (SchedulerGetDirCapabilitiesArgs*) processMessageData(processMessage);
+  if (schedulerGetDirCapabilitiesArgs == NULL) {
+    processMessageSetDone(processMessage);
+    return 0;
+  }
   DirCapabilities *set = processMessageFrom(processMessage)->dirCapabilities;
   DirCapabilities *buffer = schedulerGetDirCapabilitiesArgs->buffer;
   size_t size = (set != NULL) ? set->size : DIR_CAPABILITIES_HEADER_SIZE;
@@ -5908,12 +5931,17 @@ int restartOverlayShell(ProcessDescriptor *processDescriptor) {
 ///   ProcessDescriptor *processDescriptor)
 ///
 /// @brief Give a process the base HalCapability array for its privilege
-/// level, replacing any capabilities it was granted beyond that.
+/// level, replacing any capabilities it was granted beyond that.  Only the
+/// scheduler may call this.
 ///
 /// @param processDescriptor A pointer to the ProcessDescriptor to update.
 ///
-/// @return This function returns no value.
-void schedulerSetBaseHalCapabilities(ProcessDescriptor *processDescriptor) {
+/// @return Returns 0 on success, -EPERM if the caller isn't the scheduler.
+int schedulerSetBaseHalCapabilities(ProcessDescriptor *processDescriptor) {
+  if (!runningInScheduler()) {
+    return -EPERM;
+  }
+
   if (processDescriptor->halCapabilitiesDynamic == true) {
     schedFree(processDescriptor->halCapabilities);
     processDescriptor->halCapabilitiesDynamic = false;
@@ -5927,13 +5955,15 @@ void schedulerSetBaseHalCapabilities(ProcessDescriptor *processDescriptor) {
     setProcessHalCapabilities(processDescriptor, baseUserHalCapabilities,
       sizeof(baseUserHalCapabilities) / sizeof(baseUserHalCapabilities[0]));
   }
+
+  return 0;
 }
 
 /// @fn int schedulerRunExecutiveOverlay(ProcessDescriptor *processDescriptor,
 ///   char *commandPath, char **argv)
 ///
 /// @brief Launch an overlay command in a process slot as an executive-level
-/// process.
+/// process.  Only the scheduler may call this.
 ///
 /// @param processDescriptor A pointer to the ProcessDescriptor of the slot to
 ///   launch the command in.
@@ -5944,6 +5974,10 @@ void schedulerSetBaseHalCapabilities(ProcessDescriptor *processDescriptor) {
 int schedulerRunExecutiveOverlay(ProcessDescriptor *processDescriptor,
   char *commandPath, char **argv
 ) {
+  if (!runningInScheduler()) {
+    return -EPERM;
+  }
+
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
   if (processDescriptor->halCapabilitiesDynamic == false) {
     schedulerSetBaseHalCapabilities(processDescriptor);
