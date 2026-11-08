@@ -34,6 +34,7 @@
 #include "NanoOsDirCap.h"
 #include "NanoOsErrno.h"
 #include "NanoOsSpawn.h"
+#include "NanoOsUnistd.h"
 #include "../kernel/MemoryManager.h"
 #include "../kernel/NanoOsTypes.h"
 #include "../kernel/Scheduler.h"
@@ -93,6 +94,12 @@ int nanoOsSpawnFileActionsAdddup2(
     goto exit;
   }
 
+  FileDescriptor *fileDescriptor = nanoOsGetFileDescriptor(fildes);
+  if ((fileDescriptor == NULL) || (newfildes < 0)) {
+    returnValue = EBADF;
+    goto exit;
+  }
+
   if (fileActions->numDup2
     >= (sizeof(fileActions->dup2) / sizeof(fileActions->dup2[0]))
   ) {
@@ -102,8 +109,7 @@ int nanoOsSpawnFileActionsAdddup2(
   }
 
   fileActions->dup2[fileActions->numDup2].fd = newfildes;
-  fileActions->dup2[fileActions->numDup2].dup
-    = processDescriptor->fileDescriptors[fildes];
+  fileActions->dup2[fileActions->numDup2].dup = fileDescriptor;
   // We have to increment refCount here so that it doesn't get freed if the
   // caller closes the file descriptor before the scheduler runs again.
   fileActions->dup2[fileActions->numDup2].dup->refCount++;
