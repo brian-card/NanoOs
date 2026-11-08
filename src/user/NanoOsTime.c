@@ -160,6 +160,10 @@ struct tm* nanoOsGmtime_r(const time_t *timep, struct tm *result) {
 /// @return This function always succeeds and always returns the value of the
 /// result pointer provided.
 struct tm* nanoOsLocaltime_r(const time_t *timep, struct tm *result) {
+  if (timep == NULL) {
+    return NULL;
+  }
+
   time_t timev = *timep;
   timev -= (time_t) _timezone;
   timev += (time_t) ((_dstInEffect > 0) * 3600);
@@ -203,7 +207,10 @@ int nanoOsTimespec_get(struct timespec* spec, int base) {
 /// set to the appropriate error.  If the function returns early and rem is non-
 /// NULL, it will be populated with the amount of time remaining.
 int nanoOsNanosleep(const struct timespec *duration, struct timespec *rem) {
-  if ((duration->tv_nsec < 0) || (duration->tv_nsec > 999999999)
+  if (duration == NULL) {
+    errno = EFAULT;
+    return -1;
+  } else if ((duration->tv_nsec < 0) || (duration->tv_nsec > 999999999)
     || (duration->tv_sec < 0)
   ) {
     errno = EINVAL;
