@@ -31,6 +31,7 @@
 
 #include <string.h>
 
+#include "NanoOsDirCap.h"
 #include "NanoOsErrno.h"
 #include "NanoOsSpawn.h"
 #include "../kernel/MemoryManager.h"
@@ -118,6 +119,54 @@ int nanoOsSpawnFileActionsDestroy(posix_spawn_file_actions_t *fileActions) {
   (void) fileActions;
 
   return 0;
+}
+
+/// @fn static void* spawnattrRealloc(void *ptr, size_t size)
+///
+/// @brief The allocator a spawn attribute's set is built with.  It exists
+/// because realloc is a macro here, and building the set needs a function.
+///
+/// @param ptr The block to resize, or NULL.
+/// @param size The new size.
+///
+/// @return Returns the resized block, or NULL if memory ran out.
+static void* spawnattrRealloc(void *ptr, size_t size) {
+  return realloc(ptr, size);
+}
+
+/// @fn int nanoOsSpawnattrAdddircap(posix_spawnattr_t *attr,
+///   const char *directory, uint8_t mask)
+///
+/// @brief NanoOs extension:  give a process spawned with a spawn attribute a
+/// capability for a directory.  A process spawned with any such entries
+/// starts with exactly those entries, each of which the spawning process's
+/// set must allow.
+///
+/// @param attr The spawn attribute.
+/// @param directory The directory, absolute or relative to PWD.
+/// @param mask The DIRCAP_* bits to allow.
+///
+/// @return Returns 0 on success, EINVAL for an invalid directory or mask,
+/// ENOSPC if the attribute holds as many entries as it can, or ENOMEM if
+/// memory ran out.
+int nanoOsSpawnattrAdddircap(posix_spawnattr_t *attr,
+  const char *directory, uint8_t mask
+) {
+  if (attr == NULL) {
+    return EINVAL;
+  }
+
+  char *name = NULL;
+  size_t nameLength = 0;
+  int returnValue = nanoOsDircapName(directory, &name, &nameLength);
+  if (returnValue != 0) {
+    return returnValue;
+  }
+  returnValue = -dirCapabilityPut(&attr->dirCapabilities, name, nameLength,
+    mask, spawnattrRealloc);
+  free(name);
+
+  return returnValue;
 }
 
 /// @fn size_t spawnArgsSize(const char *path,

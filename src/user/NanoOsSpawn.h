@@ -38,6 +38,7 @@
 #define NANO_OS_USER_SPAWN_H
 
 #include "sys/types.h"
+#include "../kernel/DirCapabilities.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -67,8 +68,11 @@ typedef struct FileDescriptor FileDescriptor;
 /// @brief Attributes of a process created by posix_spawn.
 ///
 /// @param flags The POSIX_SPAWN_* flags that are set.
+/// @param dirCapabilities The set the new process starts with, or NULL for
+///   the spawning process's own set.
 typedef struct posix_spawnattr_t {
   short flags;
+  DirCapabilities *dirCapabilities;
 } posix_spawnattr_t;
 
 /// @struct Dup2
@@ -103,6 +107,8 @@ int nanoOsSpawnFileActionsAdddup2(
   int fildes,
   int newfildes);
 int nanoOsSpawnFileActionsDestroy(posix_spawn_file_actions_t *file_actions);
+int nanoOsSpawnattrAdddircap(posix_spawnattr_t *attr,
+  const char *directory, uint8_t mask);
 int nanoOsSpawn(
   pid_t *pid, const char *path,
   const posix_spawn_file_actions_t *file_actions,
