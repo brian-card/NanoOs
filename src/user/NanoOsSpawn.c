@@ -121,17 +121,63 @@ int nanoOsSpawnFileActionsDestroy(posix_spawn_file_actions_t *fileActions) {
   return 0;
 }
 
-/// @fn static void* spawnattrRealloc(void *ptr, size_t size)
+/// @fn static int spawnattrPutEntry(posix_spawnattr_t *attr,
+///   const char *name, size_t nameLength, uint8_t mask)
 ///
-/// @brief The allocator a spawn attribute's set is built with.  It exists
-/// because realloc is a macro here, and building the set needs a function.
+/// @brief Add an entry to a spawn attribute's request, or replace the mask of
+/// the entry it already has with that name.  The request grants nothing until
+/// the scheduler checks it against the spawning process's set at spawn time.
 ///
-/// @param ptr The block to resize, or NULL.
-/// @param size The new size.
+/// @param attr The spawn attribute.
+/// @param name The directory's capability name.
+/// @param nameLength The length of name, at most UINT8_MAX.
+/// @param mask The DIRCAP_* bits to request.
 ///
-/// @return Returns the resized block, or NULL if memory ran out.
-static void* spawnattrRealloc(void *ptr, size_t size) {
-  return realloc(ptr, size);
+/// @return Returns 0 on success, ENOSPC if the request is full, or ENOMEM if
+/// memory ran out.
+static int spawnattrPutEntry(posix_spawnattr_t *attr,
+  const char *name, size_t nameLength, uint8_t mask
+) {
+  DirCapabilities *set = attr->dirCapabilities;
+  size_t oldSize = DIR_CAPABILITIES_HEADER_SIZE;
+  if (set != NULL) {
+    DirCapability *capability = set->capabilities;
+    for (uint8_t ii = 0; ii < set->numCapabilities; ii++) {
+      if ((capability->len == nameLength)
+        && (memcmp(capability->name, name, nameLength) == 0)
+      ) {
+        capability->mask = mask;
+        return 0;
+      }
+      capability = (DirCapability*) &capability->name[capability->len];
+    }
+    if (set->numCapabilities == UINT8_MAX) {
+      return ENOSPC;
+    }
+    oldSize = set->size;
+  }
+
+  size_t newSize = oldSize + DIR_CAPABILITY_SIZE(nameLength);
+  if (newSize > UINT16_MAX) {
+    return ENOSPC;
+  }
+  DirCapabilities *grown = (DirCapabilities*) realloc(set, newSize);
+  if (grown == NULL) {
+    return ENOMEM;
+  }
+  if (set == NULL) {
+    grown->refCount = 1;
+    grown->numCapabilities = 0;
+  }
+
+  DirCapability *capability = (DirCapability*) ((char*) grown + oldSize);
+  capability->mask = mask;
+  capability->len = (uint8_t) nameLength;
+  memcpy(capability->name, name, nameLength);
+  grown->size = (uint16_t) newSize;
+  grown->numCapabilities++;
+  attr->dirCapabilities = grown;
+  return 0;
 }
 
 /// @fn int nanoOsSpawnattrAdddircap(posix_spawnattr_t *attr,
@@ -152,7 +198,7 @@ static void* spawnattrRealloc(void *ptr, size_t size) {
 int nanoOsSpawnattrAdddircap(posix_spawnattr_t *attr,
   const char *directory, uint8_t mask
 ) {
-  if (attr == NULL) {
+  if ((attr == NULL) || (mask == 0) || ((mask & ~DIRCAP_ALL) != 0)) {
     return EINVAL;
   }
 
@@ -162,8 +208,8 @@ int nanoOsSpawnattrAdddircap(posix_spawnattr_t *attr,
   if (returnValue != 0) {
     return returnValue;
   }
-  returnValue = -dirCapabilityPut(&attr->dirCapabilities, name, nameLength,
-    mask, spawnattrRealloc);
+  returnValue = (nameLength <= UINT8_MAX)
+    ? spawnattrPutEntry(attr, name, nameLength, mask) : EINVAL;
   free(name);
 
   return returnValue;
