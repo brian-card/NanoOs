@@ -1612,6 +1612,7 @@ static int configSysAddDevice(char *value, int lineNumber) {
   processDescriptor->userId = ROOT_USER_ID;
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
   schedulerSetBaseHalCapabilities(processDescriptor);
+  schedulerSetDirCapabilities(processDescriptor, kernelDirCapabilities);
   processDescriptor->restartFunction = restartConfigSysDevice;
 
   return 0;
