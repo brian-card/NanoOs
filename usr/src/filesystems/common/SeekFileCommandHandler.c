@@ -42,6 +42,7 @@
 #include "NanoOsUtils.h"
 #include "FilesystemUtils.h"
 #endif // NANO_OS_KERNEL_BUILD
+#include "../include/FilesystemHandles.h"
 
 // Prototypes used by this handler.
 long driverFseek(void *driverState, void *fileHandle, long offset, int whence);
@@ -64,7 +65,12 @@ void* SeekFile(void *args) {
     = (FilesystemSeekArgs*) processMessageData(processMessage);
   int returnValue = 0;
   int errorNumber = 0;
-  if (filesystemState->driverState != NULL) {
+  if (!filesystemFileAllowed(filesystemState, processMessage,
+    filesystemSeekArgs->stream, 0)
+  ) {
+    returnValue = -1;
+    errorNumber = FILESYSTEM_EBADF;
+  } else if (filesystemState->driverState != NULL) {
     NanoOsFile *nanoOsFile = filesystemSeekArgs->stream;
     long position = driverFseek(
       filesystemState->driverState, nanoOsFile->file,
