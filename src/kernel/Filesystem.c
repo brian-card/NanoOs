@@ -230,6 +230,7 @@ FILE* filesystemFopen(const char *pathname, const char *mode) {
 
   processDescriptor->fileDescriptors[fd]->file = file;
   processDescriptor->fileDescriptors[fd]->refCount = 1;
+  processDescriptor->numFilesystemHandles++;
   if (fd == numFileDescriptors) {
     processDescriptor->numFileDescriptors = numFileDescriptors + 1;
   }
@@ -311,6 +312,8 @@ int filesystemFclose(FILE *stream) {
     if (fcloseArgs.returnValue != 0) {
       errno = -fcloseArgs.returnValue;
       returnValue = EOF;
+    } else if (processDescriptor->numFilesystemHandles > 0) {
+      processDescriptor->numFilesystemHandles--;
     }
 
     processMessageRelease(msg);
@@ -512,6 +515,8 @@ DIR* filesystemOpendir(const char *pathname) {
   DIR *returnValue = filesystemOpendirArgs.returnValue;
   if (returnValue == NULL) {
     errno = filesystemOpendirArgs.errorNumber;
+  } else {
+    getRunningProcess()->numFilesystemHandles++;
   }
   processMessageRelease(msg);
   return returnValue;
@@ -584,6 +589,8 @@ int filesystemClosedir(DIR *dirp) {
     // The only way the driver can fail a closedir is a bad handle.
     errno = EBADF;
     returnValue = -1;
+  } else if (getRunningProcess()->numFilesystemHandles > 0) {
+    getRunningProcess()->numFilesystemHandles--;
   }
   processMessageRelease(msg);
   return returnValue;
@@ -784,6 +791,9 @@ size_t filesystemFRead(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     true);
   processMessageWaitForDone(processMessage, NULL);
   returnValue = (filesystemIoCommandArgs.length / size);
+  if (filesystemIoCommandArgs.errorNumber != 0) {
+    errno = filesystemIoCommandArgs.errorNumber;
+  }
   processMessageRelease(processMessage);
 
   logDebug("Returning %ld from read of file 0x%lx into address 0x%lx\n",
@@ -828,6 +838,9 @@ size_t filesystemFWrite(
     true);
   processMessageWaitForDone(processMessage, NULL);
   returnValue = (filesystemIoCommandArgs.length / size);
+  if (filesystemIoCommandArgs.errorNumber != 0) {
+    errno = filesystemIoCommandArgs.errorNumber;
+  }
   processMessageRelease(processMessage);
 
   return returnValue;
@@ -932,6 +945,7 @@ int filesystemEndOfFile(FILE *stream) {
   FeofArgs feofArgs = {
     .stream = stream,
     .returnValue = 0,
+    .errorNumber = 0,
   };
 
   if (stream != NULL) {
@@ -940,6 +954,9 @@ int filesystemEndOfFile(FILE *stream) {
       FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_END_OF_FILE,
       &feofArgs, sizeof(feofArgs), true);
     processMessageWaitForDone(processMessage, NULL);
+    if (feofArgs.errorNumber != 0) {
+      errno = feofArgs.errorNumber;
+    }
     processMessageRelease(processMessage);
   }
 
