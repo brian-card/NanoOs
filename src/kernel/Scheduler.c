@@ -157,7 +157,7 @@ Thread *schedulerThread = NULL;
 /// scheduler process.  Not exposed outside this file -- everything else
 /// goes through the accessor functions below (schedulerIsInitialized,
 /// schedulerPeekHostname, schedulerGetPreemptionTimer,
-/// schedulerDeinitialize, schedulerGetFirstShellPid, reserveProcessSlot)
+/// schedulerGetFirstShellPid, reserveProcessSlot)
 /// or the schedulerState parameter threaded through the scheduler's own
 /// command handlers.
 static SchedulerState *_schedulerState = NULL;
@@ -2183,17 +2183,6 @@ int schedulerGetPreemptionTimer(void) {
   }
 
   return _schedulerState->preemptionTimer;
-}
-
-/// @fn void schedulerDeinitialize(void)
-///
-/// @brief Reset the scheduler's state pointer back to NULL.  Used by a
-/// platform's power-mode handling when it needs to unwind back to a fresh
-/// boot (e.g. the POSIX simulator's HAL_POWER_MODE_RESET).
-///
-/// @return This function returns no value.
-void schedulerDeinitialize(void) {
-  _schedulerState = NULL;
 }
 
 /// @fn ProcessId schedulerGetFirstShellPid(void)

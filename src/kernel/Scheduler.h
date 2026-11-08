@@ -279,7 +279,6 @@ int schedulerAssignMemory(void *ptr);
 bool schedulerIsInitialized(void);
 const char* schedulerPeekHostname(void);
 int schedulerGetPreemptionTimer(void);
-void schedulerDeinitialize(void);
 
 ProcessId schedulerGetFirstShellPid(void);
 uint8_t schedulerGetNumShells(void);
