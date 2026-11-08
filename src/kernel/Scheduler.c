@@ -4142,11 +4142,16 @@ int schedulerSpawnCommandHandler(
     // Take care of the dup2 file actions.
     for (uint8_t ii = 0; ii < spawnArgs->fileActions->numDup2; ii++) {
       Dup2 *dup2 = &spawnArgs->fileActions->dup2[ii];
-      if (dup2->fd >= processDescriptor->numFileDescriptors) {
+      if ((dup2->fd < 0)
+        || (dup2->fd >= processDescriptor->numFileDescriptors)
+      ) {
         // This is technically legal in Unix, but we're not going to support it.
         // We're handling a spawn call here, so the only things that it makes
         // sense to dup are stdin, stdout, and stderr.
-        schedFree(dup2->dup);
+        dup2->dup->refCount--;
+        if (dup2->dup->refCount == 0) {
+          schedFree(dup2->dup);
+        }
         continue;
       }
 
