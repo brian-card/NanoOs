@@ -32,6 +32,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "NanoOsTest.h"
+#include "HalMock.h"
 
 #include <stdarg.h>
 #include <string.h>
@@ -42,6 +43,7 @@
 #include "user/NanoOsApi.h"
 #include "user/NanoOsErrno.h"
 #include "user/NanoOsStdio.h"
+#include "user/NanoOsSpawn.h"
 
 // The kernel's headers rename these, which would rename the table's members.
 #undef fread
@@ -210,4 +212,204 @@ NANO_OS_KERNEL_TEST(user_api, spawn_file_actions_refuse_a_null_pointer) {
     USER_API->posix_spawn_file_actions_init(NULL));
   NANO_OS_ASSERT_EQ_INT(EINVAL,
     USER_API->posix_spawn_file_actions_adddup2(NULL, 0, 1));
+}
+
+/// @var BAD_FDS
+///
+/// @brief File descriptor numbers that are out of range for any process.
+static const int BAD_FDS[] = {-1, -1000000, 1000000};
+
+/// @def NUM_BAD_FDS
+///
+/// @brief The number of elements in BAD_FDS.
+#define NUM_BAD_FDS ((int) (sizeof(BAD_FDS) / sizeof(BAD_FDS[0])))
+
+/// @fn static int openPipeAndCloseOneEnd(int *openFd)
+///
+/// @brief Make a pipe and close its write end, for a closed descriptor number
+/// inside the process's table.
+///
+/// @param openFd Where to store the read end, which stays open.
+///
+/// @return Returns the closed descriptor number.
+static int openPipeAndCloseOneEnd(int *openFd) {
+  int fds[2] = {-1, -1};
+  NANO_OS_ASSERT_EQ_INT(0, USER_API->pipe(fds));
+  NANO_OS_ASSERT_EQ_INT(0, USER_API->close(fds[1]));
+  *openFd = fds[0];
+  return fds[1];
+}
+
+/// @fn static void assertEbadf(int returnValue)
+///
+/// @brief Assert that a call failed with EBADF.
+///
+/// @param returnValue What the call returned.
+///
+/// @return This function returns no value.
+static void assertEbadf(int returnValue) {
+  NANO_OS_ASSERT_EQ_INT(-1, returnValue);
+  NANO_OS_ASSERT_EQ_INT(EBADF, errno);
+  errno = 0;
+}
+
+NANO_OS_KERNEL_TEST(user_api, close_refuses_a_bad_descriptor) {
+  for (int ii = 0; ii < NUM_BAD_FDS; ii++) {
+    assertEbadf(USER_API->close(BAD_FDS[ii]));
+  }
+
+  int openFd = -1;
+  int closedFd = openPipeAndCloseOneEnd(&openFd);
+  assertEbadf(USER_API->close(closedFd));
+}
+
+NANO_OS_KERNEL_TEST(user_api, close_refuses_the_descriptor_just_past_the_end) {
+  ProcessDescriptor *self = getRunningProcess();
+  int fds[2] = {-1, -1};
+  NANO_OS_ASSERT_EQ_INT(0, USER_API->pipe(fds));
+  FileDescriptor *last = self->fileDescriptors[self->numFileDescriptors - 1];
+  NANO_OS_ASSERT_NOT_NULL(last);
+  int refCount = last->refCount;
+
+  self->numFileDescriptors--;
+  assertEbadf(USER_API->close(self->numFileDescriptors));
+  self->numFileDescriptors++;
+
+  NANO_OS_ASSERT_EQ_PTR(last,
+    self->fileDescriptors[self->numFileDescriptors - 1]);
+  NANO_OS_ASSERT_EQ_INT(refCount, last->refCount);
+}
+
+NANO_OS_KERNEL_TEST(user_api, dup_refuses_a_bad_descriptor) {
+  ProcessDescriptor *self = getRunningProcess();
+  for (int ii = 0; ii < NUM_BAD_FDS; ii++) {
+    assertEbadf(USER_API->dup(BAD_FDS[ii]));
+  }
+
+  int openFd = -1;
+  int closedFd = openPipeAndCloseOneEnd(&openFd);
+  uint8_t numFileDescriptors = self->numFileDescriptors;
+  assertEbadf(USER_API->dup(closedFd));
+  NANO_OS_ASSERT_EQ_INT(numFileDescriptors, self->numFileDescriptors);
+}
+
+NANO_OS_KERNEL_TEST(user_api, dup2_refuses_a_bad_descriptor) {
+  int openFd = -1;
+  int closedFd = openPipeAndCloseOneEnd(&openFd);
+  for (int ii = 0; ii < NUM_BAD_FDS; ii++) {
+    assertEbadf(USER_API->dup2(BAD_FDS[ii], openFd));
+    assertEbadf(USER_API->dup2(openFd, BAD_FDS[ii]));
+  }
+  assertEbadf(USER_API->dup2(closedFd, openFd));
+  NANO_OS_ASSERT_NOT_NULL(getRunningProcess()->fileDescriptors[openFd]);
+}
+
+NANO_OS_KERNEL_TEST(user_api, dup2_onto_a_closed_descriptor_opens_it) {
+  ProcessDescriptor *self = getRunningProcess();
+  int openFd = -1;
+  int closedFd = openPipeAndCloseOneEnd(&openFd);
+  FileDescriptor *open = self->fileDescriptors[openFd];
+  int refCount = open->refCount;
+
+  NANO_OS_ASSERT_EQ_INT(closedFd, USER_API->dup2(openFd, closedFd));
+  NANO_OS_ASSERT_EQ_PTR(open, self->fileDescriptors[closedFd]);
+  NANO_OS_ASSERT_EQ_INT(refCount + 1, open->refCount);
+}
+
+NANO_OS_KERNEL_TEST(user_api, dup2_onto_itself_changes_nothing) {
+  ProcessDescriptor *self = getRunningProcess();
+  int fds[2] = {-1, -1};
+  NANO_OS_ASSERT_EQ_INT(0, USER_API->pipe(fds));
+  FileDescriptor *open = self->fileDescriptors[fds[0]];
+  FileDescriptor *otherEnd = self->fileDescriptors[fds[1]];
+  int refCount = open->refCount;
+
+  NANO_OS_ASSERT_EQ_INT(fds[0], USER_API->dup2(fds[0], fds[0]));
+  NANO_OS_ASSERT_EQ_PTR(open, self->fileDescriptors[fds[0]]);
+  NANO_OS_ASSERT_EQ_INT(refCount, open->refCount);
+  NANO_OS_ASSERT_EQ_PTR(open, otherEnd->pipeEnd);
+}
+
+NANO_OS_KERNEL_TEST(user_api, spawn_dup2_refuses_a_bad_descriptor) {
+  posix_spawn_file_actions_t fileActions;
+  NANO_OS_ASSERT_EQ_INT(0,
+    USER_API->posix_spawn_file_actions_init(&fileActions));
+  int openFd = -1;
+  int closedFd = openPipeAndCloseOneEnd(&openFd);
+  FileDescriptor *open = getRunningProcess()->fileDescriptors[openFd];
+  int refCount = open->refCount;
+
+  for (int ii = 0; ii < NUM_BAD_FDS; ii++) {
+    NANO_OS_ASSERT_EQ_INT(EBADF, USER_API->posix_spawn_file_actions_adddup2(
+      &fileActions, BAD_FDS[ii], 1));
+  }
+  NANO_OS_ASSERT_EQ_INT(EBADF, USER_API->posix_spawn_file_actions_adddup2(
+    &fileActions, closedFd, 1));
+  NANO_OS_ASSERT_EQ_INT(EBADF, USER_API->posix_spawn_file_actions_adddup2(
+    &fileActions, openFd, -1));
+  NANO_OS_ASSERT_EQ_INT(0, fileActions.numDup2);
+  NANO_OS_ASSERT_EQ_INT(refCount, open->refCount);
+}
+
+/// @fn static void* exitingChild(void *args)
+///
+/// @brief Stand in for a spawned program that exits at once.
+///
+/// @param args The ExecArgs of the spawn, which aren't used.
+///
+/// @return This function returns NULL.
+static void* exitingChild(void *args) {
+  (void) args;
+  return NULL;
+}
+
+/// @fn static void useExitingChild(void)
+///
+/// @brief Make spawned processes run exitingChild instead of an overlay.
+///
+/// @return This function returns no value.
+static void useExitingChild(void) {
+  halMockSetExecCommand(exitingChild);
+}
+
+/// @fn static void spawnAndAssertDescriptorSurvives(int targetFd)
+///
+/// @brief Spawn a child with a file action that targets a descriptor number
+/// the child doesn't have, and assert that the parent's descriptor survives.
+///
+/// @param targetFd The out-of-range descriptor number in the child.
+///
+/// @return This function returns no value.
+static void spawnAndAssertDescriptorSurvives(int targetFd) {
+  int openFd = -1;
+  (void) openPipeAndCloseOneEnd(&openFd);
+  FileDescriptor *open = getRunningProcess()->fileDescriptors[openFd];
+  int refCount = open->refCount;
+
+  posix_spawn_file_actions_t fileActions;
+  fileActions.numDup2 = 1;
+  fileActions.dup2[0].fd = targetFd;
+  fileActions.dup2[0].dup = open;
+  open->refCount++;
+
+  pid_t pid = 0;
+  char *argv[] = { (char*) "child", NULL };
+  NANO_OS_ASSERT_EQ_INT(0, USER_API->posix_spawn(&pid, "/child", &fileActions,
+    NULL, argv, NULL));
+  NANO_OS_ASSERT_EQ_INT(pid, USER_API->waitpid(pid, NULL, 0));
+
+  NANO_OS_ASSERT_EQ_PTR(open, getRunningProcess()->fileDescriptors[openFd]);
+  NANO_OS_ASSERT_EQ_INT(refCount, open->refCount);
+}
+
+NANO_OS_KERNEL_TEST_WITH(user_api,
+  a_spawn_past_the_childs_table_keeps_the_descriptor, useExitingChild
+) {
+  spawnAndAssertDescriptorSurvives(99);
+}
+
+NANO_OS_KERNEL_TEST_WITH(user_api,
+  a_spawn_to_a_negative_fd_keeps_the_descriptor, useExitingChild
+) {
+  spawnAndAssertDescriptorSurvives(-1);
 }
