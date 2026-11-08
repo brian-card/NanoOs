@@ -67,6 +67,7 @@ void* Istat(void *args);
 void* RenameFile(void *args);
 void* Mkdir(void *args);
 void* Rmdir(void *args);
+void* CloseProcess(void *args);
 
 /// @typedef FilesystemCommandHandler
 ///
@@ -95,6 +96,7 @@ static const FilesystemCommandHandler filesystemCommandHandlers[] = {
   RenameFile,           // FILESYSTEM_RENAME_FILE
   Mkdir,                // FILESYSTEM_MKDIR
   Rmdir,                // FILESYSTEM_RMDIR
+  CloseProcess,         // FILESYSTEM_CLOSE_PROCESS
 };
 
 void* main(void *args) {

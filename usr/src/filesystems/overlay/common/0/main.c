@@ -93,6 +93,8 @@ const OverlayFilesystemCommandEntry filesystemCommandHandlers[] = {
   {MKDIR_OVERLAY, "Mkdir"},
   // FILESYSTEM_RMDIR:
   {RMDIR_OVERLAY, "Rmdir"},
+  // FILESYSTEM_CLOSE_PROCESS:
+  {CLOSE_PROCESS_OVERLAY, "CloseProcess"},
 };
 
 void* main(void *args) {

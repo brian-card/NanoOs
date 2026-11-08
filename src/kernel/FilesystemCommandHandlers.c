@@ -69,6 +69,7 @@
 #include "../../usr/src/filesystems/common/RenameFileCommandHandler.c"
 #include "../../usr/src/filesystems/common/MkdirCommandHandler.c"
 #include "../../usr/src/filesystems/common/RmdirCommandHandler.c"
+#include "../../usr/src/filesystems/common/CloseProcessCommandHandler.c"
 
 /// @var fat32CommandHandlers
 ///
@@ -99,5 +100,6 @@ const FilesystemCommandHandler fat32CommandHandlers[NUM_FILESYSTEM_COMMANDS] = {
   RenameFile,           // FILESYSTEM_RENAME_FILE
   Mkdir,                // FILESYSTEM_MKDIR
   Rmdir,                // FILESYSTEM_RMDIR
+  CloseProcess,         // FILESYSTEM_CLOSE_PROCESS
 };
 

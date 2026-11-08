@@ -65,6 +65,7 @@ extern "C"
 #define MKDIR_OVERLAY                   blockOverlayId(19)
 #define RMDIR_OVERLAY                   blockOverlayId(20)
 #define FIRST_FS_OVERLAY_ID             21
+#define CLOSE_PROCESS_OVERLAY           blockOverlayId(22)
 
 #ifdef __cplusplus
 }
