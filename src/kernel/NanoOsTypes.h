@@ -39,6 +39,7 @@
 // Custom includes
 #include "BlockDevice.h"
 #include "Coroutines.h"
+#include "DirCapabilities.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -277,6 +278,9 @@ typedef struct ProcessQueue ProcessQueue;
 ///   which it may print to without owning, or NO_CONSOLE_PORT.
 /// @param shellPath The path of the user's shell in a shell slot, recorded when
 ///   the user's login runs it, or NULL.
+/// @param dirCapabilities The directories the process may use and what it may
+///   do in each, or NULL if the slot runs no process.  Only the scheduler
+///   changes it.
 /// @param halCapabilityBitmap One bit per HAL function, set for each function
 ///   granted in halCapabilities.  Built by setProcessHalCapabilities.
 /// @param halDeviceMasks For each HalSubsystem, the bitmask of device IDs the
@@ -314,6 +318,7 @@ typedef struct ProcessDescriptor {
   ProcessMessage     *waitMessage;
   uint8_t             consolePort;
   char               *shellPath;
+  DirCapabilities    *dirCapabilities;
   // Kept last so that these share the tail padding after the bools above.
   uint8_t             halCapabilityBitmap[HAL_CAPABILITY_BITMAP_SIZE];
   uint8_t             halDeviceMasks[HAL_DEVICE_MASKS_SIZE];
