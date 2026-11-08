@@ -400,13 +400,13 @@ exit:
 /// final binary on some targets.
 static const char _hostnameFilePath[] KEEP_IN_FLASH = "/etc/hostname";
 
-/// @var _readMode
+/// @var _writeMode
 ///
-/// @brief fopen() mode string used to open the hostname file for reading.
+/// @brief fopen() mode string used to open the hostname file for writeing.
 ///
 /// @note KEEP_IN_FLASH is required here because .rodata is removed from the
 /// final binary on some targets.
-static const char _readMode[] KEEP_IN_FLASH = "r";
+static const char _writeMode[] KEEP_IN_FLASH = "w";
 
 /// @fn int nanoOsSethostname(const char *name, size_t len)
 ///
@@ -427,7 +427,7 @@ int nanoOsSethostname(const char *name, size_t len) {
     return -1;
   }
   
-  FILE *hostnameFile = fopen(_hostnameFilePath, _readMode);
+  FILE *hostnameFile = fopen(_hostnameFilePath, _writeMode);
   if (hostnameFile == NULL) {
     logError("fopen of hostname returned NULL!\n");
     return -1;
