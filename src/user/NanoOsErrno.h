@@ -74,7 +74,8 @@ extern "C"
 #define EEXIST          26      /* File exists */
 #define ECHILD          27      /* No child processes */
 #define EINTR           28      /* Interrupted system call */
-#define ELAST           28      /* End of error codes */
+#define EMFILE          29      /* Too many open files */
+#define ELAST           29      /* End of error codes */
 
 int* errno_(void);
 #define errno (*errno_())

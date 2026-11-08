@@ -80,6 +80,7 @@ const char errorStrings[][33] KEEP_IN_FLASH = {
   "File exists",                      // EEXIST
   "No child processes",               // ECHILD
   "Interrupted system call",          // EINTR
+  "Too many open files",              // EMFILE
 };
 
 /// @def NUM_ERRORS
