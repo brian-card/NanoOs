@@ -95,6 +95,18 @@ static inline ProcessId getRunningPid(void) {
   return (runningProcess != NULL) ? runningProcess->processId : 0;
 }
 
+/// @fn static inline bool runningInScheduler(void)
+///
+/// @brief Determine whether the scheduler is the running process, which only
+/// the scheduler can be for a function that changes a process's capabilities.
+/// Before the scheduler is up, nothing else can be running.
+///
+/// @return Returns true if the scheduler is running, false if not.
+extern ProcessId schedulerPid;
+static inline bool runningInScheduler(void) {
+  return getRunningPid() == schedulerPid;
+}
+
 /// @def getRunningUid
 ///
 /// @brief Get the user ID for the currently-running process.
