@@ -112,6 +112,38 @@ typedef void* (*FilesystemCommandHandler)(void *args);
 typedef struct FilesystemState* (*FilesystemDriverInit)(
   struct FilesystemState *fs);
 
+/// @def FILESYSTEM_DIR_INDEX_BITS
+///
+/// @brief The number of bits of a DIR handle that hold the slot index.
+#define FILESYSTEM_DIR_INDEX_BITS 4
+
+/// @def FILESYSTEM_DIR_GENERATION_BITS
+///
+/// @brief The number of bits of a DIR handle that hold the slot's generation.
+#define FILESYSTEM_DIR_GENERATION_BITS 12
+
+_Static_assert(FILESYSTEM_DIR_INDEX_BITS + FILESYSTEM_DIR_GENERATION_BITS == 16,
+  "A DIR handle must be 16 bits so that it fits AVR's pointers");
+
+/// @def FILESYSTEM_MAX_OPEN_DIRS
+///
+/// @brief The most open-directory slots a handle can address.
+#define FILESYSTEM_MAX_OPEN_DIRS (1 << FILESYSTEM_DIR_INDEX_BITS)
+
+/// @struct FilesystemOpenDir
+///
+/// @brief One slot of the table of open directories.
+///
+/// @param driverHandle The driver's handle for the directory.
+/// @param generation The generation a handle to this slot must carry.
+/// @param owner The process that opened the directory, or 0 if the slot is
+///   free.
+typedef struct FilesystemOpenDir {
+  void      *driverHandle;
+  uint16_t   generation;
+  ProcessId  owner;
+} FilesystemOpenDir;
+
 /// @struct FilesystemState
 ///
 /// @brief State metadata the filesystem process uses to provide access to
@@ -132,6 +164,8 @@ typedef struct FilesystemState* (*FilesystemDriverInit)(
 /// @param numOpenFiles The number of files currently open by the filesystem.
 ///   If this number is zero then the blockBuffer pointer may be NULL.
 /// @param openFiles A pointer to the first FILE that's open.
+/// @param openDirs The table of open directories, allocated by the first
+///   opendir.  It has filesystemNumDirSlots slots.
 /// @param startLba The address of the first block of the filesystem.
 /// @param endLba The address of the last block of the filesystem.
 /// @param driverInit Pointer to the driver's initialization function, or
@@ -162,6 +196,7 @@ typedef struct FilesystemState {
   bool                            blockBufferValid;
   uint8_t                         numOpenFiles;
   FILE                           *openFiles;
+  FilesystemOpenDir              *openDirs;
   uint32_t                        startLba;
   uint32_t                        endLba;
   FilesystemDriverInit            driverInit;
@@ -179,10 +214,12 @@ typedef struct FilesystemState {
 ///   written to.
 /// @param length The number of bytes to read into the buffer or write from the
 ///   buffer.
+/// @param errorNumber The errno value of a failed check, or 0.
 typedef struct FilesystemIoCommandArgs {
   FILE     *file;
   void     *buffer;
   uint32_t  length;
+  int       errorNumber;
 } FilesystemIoCommandArgs;
 
 /// @struct FilesystemSeekArgs
@@ -373,6 +410,15 @@ typedef struct FilesystemClosedirArgs {
   int  returnValue;
 } FilesystemClosedirArgs;
 
+/// @struct FilesystemCloseProcessArgs
+///
+/// @brief Function parameters for closing everything a process left open.
+///
+/// @param pid The process ID of the process that has exited.
+typedef struct FilesystemCloseProcessArgs {
+  ProcessId pid;
+} FilesystemCloseProcessArgs;
+
 /// @struct FilesystemDumpOpenFilesArgs
 ///
 /// @brief Function parameters and return value for FILESYSTEM_DUMP_OPEN_FILES.
@@ -404,9 +450,11 @@ typedef struct GetFileBlockMetadataArgs {
 /// @param stream A pointer to the FILE the caller wants to interrogate.
 /// @param returnValue The return value of the operation that will be passed
 ///   back from the handler.
+/// @param errorNumber The errno value of a failed check, or 0.
 typedef struct FeofArgs {
   FILE *stream;
   int   returnValue;
+  int   errorNumber;
 } FeofArgs;
 
 /// @def FAT32_FORMAT_SIGNATURE
@@ -478,6 +526,7 @@ typedef enum FilesystemCommandResponse {
   FILESYSTEM_RENAME_FILE,
   FILESYSTEM_MKDIR,
   FILESYSTEM_RMDIR,
+  FILESYSTEM_CLOSE_PROCESS,
   NUM_FILESYSTEM_COMMANDS,
   // Responses:
 } FilesystemCommandResponse;
