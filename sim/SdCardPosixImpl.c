@@ -120,7 +120,8 @@ const char* sdCardInit(SdCardState *sdCardState,
   sdCardState->blockSize = 512;
   sdCardState->numBlocks = 204800; // 100 MB
   sdCardState->sdCardVersion = 2;
-  sdCardState->context = (void*) ((intptr_t) open(sdCardDevicePath, O_RDWR));
+  sdCardState->context
+    = (void*) ((intptr_t) open(sdCardDevicePath, O_RDWR | O_CLOEXEC));
 
   return strerror(errno);
 }
