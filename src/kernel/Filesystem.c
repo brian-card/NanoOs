@@ -358,6 +358,9 @@ int filesystemRemove(const char *pathname) {
       returnValue = -1;
     }
     processMessageRelease(msg);
+  } else {
+    errno = ENOENT;
+    returnValue = -1;
   }
   return returnValue;
 }
