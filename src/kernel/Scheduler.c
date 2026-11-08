@@ -2529,6 +2529,38 @@ freeExecArgs:
 // Scheduler command handlers and support functions
 ////////////////////////////////////////////////////////////////////////////////
 
+/// @fn static void schedulerCloseProcessHandles(
+///   ProcessDescriptor *processDescriptor)
+///
+/// @brief Tell the filesystem to close everything a process left open, before
+/// its pid can be reused.  A process that closed everything costs nothing.
+///
+/// @param processDescriptor A pointer to the process's ProcessDescriptor.
+///
+/// @return This function returns no value.
+static void schedulerCloseProcessHandles(
+  ProcessDescriptor *processDescriptor
+) {
+  if ((processDescriptor->numFilesystemHandles == 0)
+    || (rootFilesystemPid == 0)
+  ) {
+    return;
+  }
+
+  FilesystemCloseProcessArgs closeProcessArgs = {
+    .pid = processDescriptor->processId,
+  };
+  if (schedulerInitSendMessageToPid(rootFilesystemPid,
+    FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_CLOSE_PROCESS,
+    &closeProcessArgs, sizeof(closeProcessArgs)
+    ) != processSuccess
+  ) {
+    logError("Could not close the handles of process %d\n",
+      processDescriptor->processId);
+  }
+  processDescriptor->numFilesystemHandles = 0;
+}
+
 /// @fn int closeProcessFileDescriptors(ProcessDescriptor *processDescriptor)
 ///
 /// @brief Helper function to close out the file descriptors owned by a process
@@ -2550,6 +2582,8 @@ int closeProcessFileDescriptors(ProcessDescriptor *processDescriptor) {
 
   int returnValue = 0;
   _functionInProgress = __func__;
+
+  schedulerCloseProcessHandles(processDescriptor);
 
   FileDescriptor **fileDescriptors = processDescriptor->fileDescriptors;
   if ((fileDescriptors == NULL)
