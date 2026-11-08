@@ -44,6 +44,8 @@ extern "C"
 {
 #endif
 
+typedef struct FileDescriptor FileDescriptor;
+
 #define _POSIX_HOST_NAME_MAX 255
 
 #ifndef HOST_NAME_MAX
@@ -58,6 +60,7 @@ extern "C"
 #define STDOUT_FILENO 1
 #define STDERR_FILENO 2
 
+FileDescriptor* nanoOsGetFileDescriptor(int fd);
 int nanoOsClose(int fd);
 int nanoOsDup(int oldfd);
 int nanoOsDup2(int oldfd, int newfd);
