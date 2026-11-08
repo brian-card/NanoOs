@@ -185,27 +185,27 @@ static const NanoOsUserApi _nanoOsUserApi = {
   .calloc = memoryManagerCalloc,
   
   // Copying functions:
-  .memcpy = memcpy,
-  .memmove = memmove,
-  .strcpy = strcpy,
-  .strncpy = strncpy,
-  .strcat = strcat,
-  .strncat = strncat,
+  .memcpy = nanoOsCheckedMemcpy,
+  .memmove = nanoOsCheckedMemmove,
+  .strcpy = nanoOsCheckedStrcpy,
+  .strncpy = nanoOsCheckedStrncpy,
+  .strcat = nanoOsCheckedStrcat,
+  .strncat = nanoOsCheckedStrncat,
   
   // Search functions:
-  .memcmp = memcmp,
-  .strcmp = strcmp,
-  .strncmp = strncmp,
-  .strstr = strstr,
-  .strchr = strchr,
-  .strrchr = strrchr,
-  .strspn = strspn,
-  .strcspn = strcspn,
+  .memcmp = nanoOsCheckedMemcmp,
+  .strcmp = nanoOsCheckedStrcmp,
+  .strncmp = nanoOsCheckedStrncmp,
+  .strstr = nanoOsCheckedStrstr,
+  .strchr = nanoOsCheckedStrchr,
+  .strrchr = nanoOsCheckedStrrchr,
+  .strspn = nanoOsCheckedStrspn,
+  .strcspn = nanoOsCheckedStrcspn,
   
   // Miscellaaneous string functions:
-  .memset = memset,
+  .memset = nanoOsCheckedMemset,
   .strerror = nanoOsStrError,
-  .strlen = strlen,
+  .strlen = nanoOsCheckedStrlen,
   
   // Other stdlib functions:
   .strtoll = nanoOsStrtoll,
