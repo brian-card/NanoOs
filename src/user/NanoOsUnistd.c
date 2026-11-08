@@ -62,6 +62,26 @@
 // Must come last
 #include "NanoOsStdio.h"
 
+/// @fn FileDescriptor* nanoOsGetFileDescriptor(int fd)
+///
+/// @brief Get the running process's FileDescriptor for a file descriptor
+/// number supplied by a user.
+///
+/// @param fd The file descriptor number.
+///
+/// @return Returns the FileDescriptor, or NULL if fd is out of range or
+/// closed.
+FileDescriptor* nanoOsGetFileDescriptor(int fd) {
+  ProcessDescriptor *processDescriptor = getRunningProcess();
+  if ((processDescriptor == NULL) || (fd < 0)
+    || (fd >= processDescriptor->numFileDescriptors)
+  ) {
+    return NULL;
+  }
+
+  return processDescriptor->fileDescriptors[fd];
+}
+
 /// @fn int nanoOsClose(int fd)
 ///
 /// @brief Implementation of the standard POSIX close function.
@@ -81,9 +101,7 @@ int nanoOsClose(int fd) {
     goto exit;
   }
   
-  if ((fd > processDescriptor->numFileDescriptors)
-    || (processDescriptor->fileDescriptors[fd] == NULL)
-  ) {
+  if (nanoOsGetFileDescriptor(fd) == NULL) {
     errno = EBADF;
     returnValue = -1;
     goto exit;
@@ -131,7 +149,12 @@ int nanoOsDup(int oldfd) {
     goto exit;
   }
   
-  FileDescriptor *oldFileDescriptor = processDescriptor->fileDescriptors[oldfd];
+  FileDescriptor *oldFileDescriptor = nanoOsGetFileDescriptor(oldfd);
+  if (oldFileDescriptor == NULL) {
+    errno = EBADF;
+    goto exit;
+  }
+
   int newfd = 0;
   for (; newfd < processDescriptor->numFileDescriptors; newfd++) {
     if (processDescriptor->fileDescriptors[newfd] == NULL) {
@@ -179,25 +202,36 @@ int nanoOsDup2(int oldfd, int newfd) {
     // This should be impossible, but check anyway.
     errno = EOTHER;
     goto exit;
-  } else if (newfd >= processDescriptor->numFileDescriptors) {
+  } else if ((newfd < 0) || (newfd >= processDescriptor->numFileDescriptors)) {
     errno = EBADF;
     goto exit;
   }
   
-  FileDescriptor *oldFileDescriptor = processDescriptor->fileDescriptors[oldfd];
-  FileDescriptor *newFileDescriptor = processDescriptor->fileDescriptors[newfd];
-  if (newFileDescriptor->pipeEnd != NULL) {
-    // We're about to free this FileDescriptor, so terminate the other end of
-    // the pipe.
-    newFileDescriptor->pipeEnd->pipeEnd = NULL;
+  FileDescriptor *oldFileDescriptor = nanoOsGetFileDescriptor(oldfd);
+  if (oldFileDescriptor == NULL) {
+    errno = EBADF;
+    goto exit;
+  } else if (oldfd == newfd) {
+    returnValue = newfd;
+    goto exit;
   }
-  if (newFileDescriptor->file != NULL) {
-    // filesystemFclose will manage the refCount and freeing the file descriptor
-    filesystemFclose(newFileDescriptor->file);
-  } else {
-    newFileDescriptor->refCount--;
-    if (newFileDescriptor->refCount == 0) {
-      free(newFileDescriptor); newFileDescriptor = NULL;
+
+  FileDescriptor *newFileDescriptor = processDescriptor->fileDescriptors[newfd];
+  if (newFileDescriptor != NULL) {
+    if (newFileDescriptor->pipeEnd != NULL) {
+      // We're about to free this FileDescriptor, so terminate the other end of
+      // the pipe.
+      newFileDescriptor->pipeEnd->pipeEnd = NULL;
+    }
+    if (newFileDescriptor->file != NULL) {
+      // filesystemFclose will manage the refCount and freeing the file
+      // descriptor
+      filesystemFclose(newFileDescriptor->file);
+    } else {
+      newFileDescriptor->refCount--;
+      if (newFileDescriptor->refCount == 0) {
+        free(newFileDescriptor); newFileDescriptor = NULL;
+      }
     }
   }
   
