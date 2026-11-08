@@ -36,6 +36,8 @@
 #include <string.h>
 
 #include "DirCapabilities.h"
+#include "NanoOsTypes.h"
+#include "Processes.h"
 #include "../user/NanoOsErrno.h"
 
 /// @fn static inline DirCapability* dirCapabilityNext(
@@ -221,8 +223,8 @@ bool dirCapabilityAllows(const DirCapabilities *set,
 ///   DirCapabilitiesRealloc reallocFn)
 ///
 /// @brief Add an entry to a set, or replace the mask of the entry it already
-/// has with that name, without checking the mask against the set.  Used to
-/// build a set whose entries are checked elsewhere.
+/// has with that name, without checking the mask against the set.  Only the
+/// scheduler may call this.
 ///
 /// @param setp A pointer to the set, updated if the block changes.  A NULL
 ///   set is created.
@@ -231,13 +233,16 @@ bool dirCapabilityAllows(const DirCapabilities *set,
 /// @param mask The DIRCAP_* bits to allow.
 /// @param reallocFn The allocator.
 ///
-/// @return Returns 0 on success, -EINVAL for an invalid name or mask, -ENOSPC
-/// if the set is full, or -ENOMEM if memory ran out.
+/// @return Returns 0 on success, -EPERM if the caller isn't the scheduler,
+/// -EINVAL for an invalid name or mask, -ENOSPC if the set is full, or -ENOMEM
+/// if memory ran out.
 int dirCapabilityPut(DirCapabilities **setp,
   const char *name, size_t nameLength, uint8_t mask,
   DirCapabilitiesRealloc reallocFn
 ) {
-  if ((setp == NULL) || (name == NULL)
+  if (!runningInScheduler()) {
+    return -EPERM;
+  } else if ((setp == NULL) || (name == NULL)
     || (mask == 0) || ((mask & ~DIRCAP_ALL) != 0)
     || !dirCapabilityNameIsValid(name, nameLength)
   ) {
@@ -305,8 +310,9 @@ int dirCapabilityPut(DirCapabilities **setp,
 /// @param reallocFn The allocator.
 ///
 /// @return Returns 0 on success, -EINVAL for an invalid name or an empty mask,
-/// -EACCES if the set doesn't already allow the mask, -ENOSPC if the set is
-/// full, or -ENOMEM if memory ran out.
+/// -EACCES if the set doesn't already allow the mask, -EPERM if the caller
+/// isn't the scheduler, -ENOSPC if the set is full, or -ENOMEM if memory ran
+/// out.
 int dirCapabilityAdd(DirCapabilities **setp,
   const char *name, size_t nameLength, uint8_t mask,
   DirCapabilitiesRealloc reallocFn
