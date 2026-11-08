@@ -1372,7 +1372,7 @@ int nanoOsVsnprintf(
   SprintfState state;
   state.cursor = buffer;
   state.length = 0;
-  if (size == 0) {
+  if ((size == 0) || (buffer == NULL)) {
     state.limit = buffer;
   } else if (size == SPRINTF_UNBOUNDED) {
     state.limit = (char*) ((uintptr_t) -1);
@@ -1668,7 +1668,7 @@ int nanoOsVsnprintf(
     }
   }
 
-  if (size != 0) {
+  if ((size != 0) && (buffer != NULL)) {
     *(state.cursor) = '\0';
   }
 
@@ -2128,6 +2128,10 @@ int nanoOsFputs(const char *s, FILE *stream) {
 /// @return Returns the number of bytes printed on success, -1 on error.
 int nanoOsVfprintf(FILE *stream, const char *format, va_list args) {
   int returnValue = -1;
+  if ((stream == NULL) || (format == NULL)) {
+    return returnValue; // -1
+  }
+
   if (stream == stdout) {
     StdoutBuffer *stdoutBuffer = nanoOsStdoutBuffer();
     if (stdoutBuffer != NULL) {
@@ -2372,6 +2376,8 @@ static __attribute__((noinline)) size_t nanoOsFlushAndFreadStdin(
 size_t nanoOsFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   if (stream != stdin) {
     return filesystemFRead(ptr, size, nmemb, stream);
+  } else if (ptr == NULL) {
+    return 0;
   }
   return nanoOsFlushAndFreadStdin(ptr, size, nmemb);
 }
@@ -2454,6 +2460,8 @@ static __attribute__((noinline)) size_t nanoOsFwriteConsole(
 size_t nanoOsFwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream) {
   if ((stream != stdout) && (stream != stderr)) {
     return filesystemFWrite(ptr, size, nmemb, stream);
+  } else if ((ptr == NULL) || (size == 0) || (nmemb == 0)) {
+    return 0;
   }
   return nanoOsFwriteConsole(ptr, size, nmemb, stream);
 }
