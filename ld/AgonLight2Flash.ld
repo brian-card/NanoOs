@@ -512,6 +512,7 @@
 *(.text._spawnattrPutEntry)
 *(.text._runningInScheduler)
 *(.text._nanoOsGetFileDescriptor)
+*(.text._schedulerCloseProcessHandles)
 *(.text._nanoOsCheckedMemcpy)
 *(.text._nanoOsCheckedMemmove)
 *(.text._nanoOsCheckedStrcpy)
