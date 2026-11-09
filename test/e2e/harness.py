@@ -56,13 +56,25 @@ PROMPT = r"mush [^\r\n]*@%s:[^\r\n]+[#$] " % HOSTNAME
 PROMPT_PARTS = r"mush ([^\r\n@]+)@%s:([^\r\n]+)[#$] " % HOSTNAME
 
 
+def image_path(path):
+    """Get where the kernel stores a path on the image.
+
+    @param path The path as a process names it, or a system tree path.
+
+    @return The path from the real root of the image.
+    """
+    if path.startswith(("/system/", "/secure/")):
+        return path
+    return "/userspace" + path
+
+
 # A getty on UART1 and another on a VDP console served by vdp.drv, which owns
 # UART0.
 VDP_CONFIG_SYS = (
-    "DEVICE=/usr/lib/vdp.drv\n"
-    "HARDWARE=/usr/lib/vdp.drv UART0\n"
-    "CONSOLE=UART1 /usr/bin/getty\n"
-    "CONSOLE=/usr/lib/vdp.drv /usr/bin/getty\n")
+    "DEVICE=/system/drivers/vdp.drv\n"
+    "HARDWARE=/system/drivers/vdp.drv UART0\n"
+    "CONSOLE=UART1 /system/bin/getty\n"
+    "CONSOLE=/system/drivers/vdp.drv /system/bin/getty\n")
 
 
 VERBOSE = False
@@ -119,7 +131,7 @@ class Session:
         if self.child.isalive():
             self.child.terminate(force=True)
         subprocess.run(["mcopy", "-o", "-i", self.img_copy + "@@2097152", "-",
-                        "::" + path], input=text.encode(),
+                        "::" + image_path(path)], input=text.encode(),
                        env=dict(os.environ, MTOOLS_SKIP_CHECK="1"), check=True)
 
     def restart_with_file(self, path, text):
@@ -128,13 +140,13 @@ class Session:
         self.spawn([self.img_copy])
 
     def restart_with_config_sys(self, text):
-        """Write /etc/config.sys into this session's image and boot again."""
-        self.restart_with_file("/etc/config.sys", text)
+        """Write /system/data/config.sys into this session's image and boot again."""
+        self.restart_with_file("/system/data/config.sys", text)
 
     def restart_with_vdp(self, config_sys=VDP_CONFIG_SYS, **kwargs):
         """Boot again with vdp.drv serving a console on a FakeVdp.
 
-        @param config_sys The /etc/config.sys to boot with.
+        @param config_sys The /system/data/config.sys to boot with.
         @param kwargs Arguments for FakeVdp.
 
         @return The FakeVdp.

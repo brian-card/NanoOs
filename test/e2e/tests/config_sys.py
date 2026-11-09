@@ -24,7 +24,7 @@
 #                       https://github.com/brian-card
 #
 
-"""End-to-end tests of the kernel's handling of /etc/config.sys."""
+"""End-to-end tests of the kernel's handling of /system/data/config.sys."""
 
 import pexpect
 
@@ -32,19 +32,19 @@ from harness import PROMPT
 
 
 def test_config_sys_console_runs_its_program_instead_of_getty(s):
-    s.restart_with_config_sys("CONSOLE=UART1 /usr/bin/echo from-config-sys\n")
+    s.restart_with_config_sys("CONSOLE=UART1 /userspace/usr/bin/echo from-config-sys\n")
     i = s.child.expect(["from-config-sys", "login: "], timeout=15)
     assert i == 0, "getty ran instead of the CONSOLE line's program"
 
 
 def test_config_sys_console_port_name_ignores_case(s):
-    s.restart_with_config_sys("console=uart1 /usr/bin/echo lower-case-port\n")
+    s.restart_with_config_sys("console=uart1 /userspace/usr/bin/echo lower-case-port\n")
     i = s.child.expect(["lower-case-port", "login: "], timeout=15)
     assert i == 0, "getty ran instead of the CONSOLE line's program"
 
 
 def test_config_sys_console_on_unknown_port_falls_back_to_getty(s):
-    s.restart_with_config_sys("CONSOLE=UART7 /usr/bin/echo wrong-port\n")
+    s.restart_with_config_sys("CONSOLE=UART7 /userspace/usr/bin/echo wrong-port\n")
     i = s.child.expect(["wrong-port", "login: "], timeout=15)
     assert i == 1, "the program for a port that doesn't exist ran"
     s.child.sendline("root")
@@ -55,17 +55,17 @@ def test_config_sys_console_on_unknown_port_falls_back_to_getty(s):
 
 def test_config_sys_console_on_a_device_forwards_its_output(s):
     s.restart_with_config_sys(
-        "DEVICE=/usr/lib/loopback.drv 1\n"
-        "CONSOLE=/usr/lib/loopback.drv /usr/bin/echo via-forwarding-port\n")
+        "DEVICE=/system/drivers/loopback.drv 1\n"
+        "CONSOLE=/system/drivers/loopback.drv /userspace/usr/bin/echo via-forwarding-port\n")
     i = s.child.expect(["via-forwarding-port", "login: "], timeout=15)
     assert i == 0, "getty ran instead of the forwarded console's program"
 
 
 def test_config_sys_uart_and_device_consoles_each_get_a_getty(s):
     s.restart_with_config_sys(
-        "DEVICE=/usr/lib/loopback.drv 1\n"
-        "CONSOLE=UART1 /usr/bin/getty\n"
-        "CONSOLE=/usr/lib/loopback.drv /usr/bin/getty\n")
+        "DEVICE=/system/drivers/loopback.drv 1\n"
+        "CONSOLE=UART1 /system/bin/getty\n"
+        "CONSOLE=/system/drivers/loopback.drv /system/bin/getty\n")
     seen = set()
     while seen != {"tty0", "tty1"}:
         s.child.expect(r"(tty\d)", timeout=15)
@@ -75,19 +75,19 @@ def test_config_sys_uart_and_device_consoles_each_get_a_getty(s):
 
 def test_config_sys_hardware_grant_keeps_a_drivers_uart(s):
     s.restart_with_config_sys(
-        "DEVICE=/usr/lib/loopback.drv 1\n"
-        "HARDWARE=/usr/lib/loopback.drv UART1\n"
-        "CONSOLE=/usr/lib/loopback.drv /usr/bin/echo granted-uart1\n")
+        "DEVICE=/system/drivers/loopback.drv 1\n"
+        "HARDWARE=/system/drivers/loopback.drv UART1\n"
+        "CONSOLE=/system/drivers/loopback.drv /userspace/usr/bin/echo granted-uart1\n")
     i = s.child.expect(["granted-uart1", "login: "], timeout=15)
     assert i == 0, "the driver's output didn't reach UART1"
 
 
 def test_config_sys_hardware_grant_limits_a_driver_to_its_uart(s):
     s.restart_with_config_sys(
-        "DEVICE=/usr/lib/loopback.drv 1\n"
-        "HARDWARE=/usr/lib/loopback.drv UART0\n"
-        "CONSOLE=UART1 /usr/bin/getty\n"
-        "CONSOLE=/usr/lib/loopback.drv /usr/bin/echo granted-uart0\n")
+        "DEVICE=/system/drivers/loopback.drv 1\n"
+        "HARDWARE=/system/drivers/loopback.drv UART0\n"
+        "CONSOLE=UART1 /system/bin/getty\n"
+        "CONSOLE=/system/drivers/loopback.drv /userspace/usr/bin/echo granted-uart0\n")
     i = s.child.expect(["granted-uart0", "login: "], timeout=15)
     assert i == 1, "a driver granted only UART0 wrote to UART1"
     i = s.child.expect(["granted-uart0", pexpect.TIMEOUT], timeout=3)
@@ -98,11 +98,25 @@ def test_uart_console_left_out_of_config_sys_is_owned_by_no_one(s):
     # The memory manager owns every console port until it has printed its boot
     # message, so a port no shell takes must be released back to no one.
     vdp = s.restart_with_vdp(config_sys=(
-        "DEVICE=/usr/lib/vdp.drv\n"
-        "HARDWARE=/usr/lib/vdp.drv UART0\n"
-        "CONSOLE=/usr/lib/vdp.drv /usr/bin/getty\n"))
+        "DEVICE=/system/drivers/vdp.drv\n"
+        "HARDWARE=/system/drivers/vdp.drv UART0\n"
+        "CONSOLE=/system/drivers/vdp.drv /system/bin/getty\n"))
     vdp.expect("login: ")
     s.child.sendcontrol("c")
     i = s.child.expect([r"Killing process \d+|Could not send message|"
                         r"Could not communicate", pexpect.TIMEOUT], timeout=3)
     assert i == 1, "Ctrl-C on the unused UART signalled " + s.child.after
+
+
+def assert_device_is_refused(s, path):
+    s.restart_with_config_sys("DEVICE=" + path + "\n")
+    s.login()
+    assert "looseLoop" not in s.sh("ps")
+
+
+def test_config_sys_device_under_userspace_is_refused(s):
+    assert_device_is_refused(s, "/userspace/usr/bin/looseLoop")
+
+
+def test_config_sys_device_cannot_hide_userspace_with_dots(s):
+    assert_device_is_refused(s, "/system/../userspace/usr/bin/looseLoop")

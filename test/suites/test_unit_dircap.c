@@ -556,15 +556,21 @@ NANO_OS_TEST(unit_dircap, the_compiled_sets_are_well_formed) {
 NANO_OS_TEST(unit_dircap, the_compiled_sets_hold_what_they_document) {
   NANO_OS_ASSERT_TRUE(allows(rootDirCapabilities, "/secure/shadow", false,
     DIRCAP_ALL));
+  NANO_OS_ASSERT_TRUE(allows(rootDirCapabilities, "/secure/shadow", false,
+    DIRCAP_ALL | DIRCAP_FULL_PATH));
 
   NANO_OS_ASSERT_TRUE(allows(kernelDirCapabilities,
-    "/usr/lib/NanoOs_rodata.bin", false, DIRCAP_READ | DIRCAP_EXEC));
+    "/system/data/NanoOs_rodata.bin", false,
+    DIRCAP_READ | DIRCAP_EXEC | DIRCAP_FULL_PATH));
   NANO_OS_ASSERT_TRUE(allows(kernelDirCapabilities,
-    "/usr/bin/logger/main.overlay", false, DIRCAP_READ | DIRCAP_EXEC));
+    "/system/bin/logger/main.overlay", false,
+    DIRCAP_READ | DIRCAP_EXEC | DIRCAP_FULL_PATH));
+  NANO_OS_ASSERT_FALSE(allows(kernelDirCapabilities,
+    "/system/bin/logger/main.overlay", false, DIRCAP_READ));
   NANO_OS_ASSERT_FALSE(allows(kernelDirCapabilities, "/usr/bin/mush", false,
     DIRCAP_READ));
-  NANO_OS_ASSERT_FALSE(allows(kernelDirCapabilities, "/usr/lib/x", false,
-    DIRCAP_WRITE));
+  NANO_OS_ASSERT_FALSE(allows(kernelDirCapabilities, "/system/x", false,
+    DIRCAP_WRITE | DIRCAP_FULL_PATH));
 
   const DirCapabilities *supervisor = supervisorDirCapabilities;
   NANO_OS_ASSERT_TRUE(allows(supervisor, "/usr/bin/mush", false,
@@ -575,10 +581,14 @@ NANO_OS_TEST(unit_dircap, the_compiled_sets_hold_what_they_document) {
     DIRCAP_WRITE));
   NANO_OS_ASSERT_TRUE(allows(supervisor, "/etc", true,
     DIRCAP_READ | DIRCAP_LIST | DIRCAP_STAT));
-  NANO_OS_ASSERT_FALSE(allows(supervisor, "/etc/passwd", false,
+  NANO_OS_ASSERT_TRUE(allows(supervisor, "/etc/passwd", false,
     DIRCAP_WRITE));
-  NANO_OS_ASSERT_TRUE(allows(supervisor, "/secure/shadow", false,
-    DIRCAP_READ | DIRCAP_WRITE | DIRCAP_CREATE | DIRCAP_DELETE));
+  NANO_OS_ASSERT_FALSE(allows(supervisor, "/etc/passwd", false,
+    DIRCAP_EXEC));
+  NANO_OS_ASSERT_FALSE(allows(supervisor, "/secure/shadow", false,
+    DIRCAP_READ));
+  NANO_OS_ASSERT_FALSE(allows(supervisor, "/secure/shadow", false,
+    DIRCAP_WRITE));
   NANO_OS_ASSERT_TRUE(allows(supervisor, "/home/briana/bin/x", false,
     DIRCAP_ALL));
   NANO_OS_ASSERT_TRUE(allows(supervisor, "/root/.mush_history", false,
@@ -599,6 +609,21 @@ typedef union TestBlock {
   DirCapabilities set;
   uint8_t bytes[64];
 } TestBlock;
+
+NANO_OS_TEST(unit_dircap, an_entry_only_matches_requests_of_its_own_kind) {
+  Entry entries[] = {
+    {"/usr/", DIRCAP_READ},
+    {"/system/", DIRCAP_READ | DIRCAP_FULL_PATH},
+  };
+  DirCapabilities *set = makeSet(entries, 2);
+  NANO_OS_ASSERT_TRUE(allows(set, "/usr/x", false, DIRCAP_READ));
+  NANO_OS_ASSERT_FALSE(allows(set, "/usr/x", false,
+    DIRCAP_READ | DIRCAP_FULL_PATH));
+  NANO_OS_ASSERT_TRUE(allows(set, "/system/x", false,
+    DIRCAP_READ | DIRCAP_FULL_PATH));
+  NANO_OS_ASSERT_FALSE(allows(set, "/system/x", false, DIRCAP_READ));
+  free(set);
+}
 
 NANO_OS_TEST(unit_dircap, a_malformed_set_is_invalid) {
   Entry entries[] = {{"/tmp/", DIRCAP_READ}, {"/home/", DIRCAP_LIST}};
@@ -624,8 +649,10 @@ NANO_OS_TEST(unit_dircap, a_malformed_set_is_invalid) {
   fillSet(&block, 1, entries, 2);
   block.set.capabilities[0].mask = 0;
   NANO_OS_ASSERT_FALSE(dirCapabilitiesValid(&block.set));
-  block.set.capabilities[0].mask = 0x81;
+  block.set.capabilities[0].mask = DIRCAP_FULL_PATH;
   NANO_OS_ASSERT_FALSE(dirCapabilitiesValid(&block.set));
+  block.set.capabilities[0].mask = DIRCAP_FULL_PATH | DIRCAP_READ;
+  NANO_OS_ASSERT_TRUE(dirCapabilitiesValid(&block.set));
 
   fillSet(&block, 1, entries, 2);
   block.set.capabilities[0].name[1] = '.';

@@ -111,6 +111,7 @@ class Emulator:
             shutil.copy(os.path.join(source, "firmware", name),
                         os.path.join(tmp, "firmware"))
         image = os.path.join(tmp, "NanoOs.img")
+        self.image = image
         print("# building the Agon Light 2 image ...", flush=True)
         subprocess.run(
             ["./builddev", "AgonLight2", HOSTNAME, image, "contiguous", "",
@@ -219,14 +220,29 @@ def test_echo_roundtrips_its_argument(e):
 
 def test_ll_lists_the_root_directory(e):
     names = [line.split()[-1] for line in e.sh("ll /").splitlines()]
-    for name in ("usr/", "bin/", "etc/"):
+    for name in ("usr/", "root/", "etc/"):
         assert name in names, f"{name} missing from {names}"
+
+
+def image_text(e, path):
+    """Read a file out of the running emulator's image.
+
+    @param e The Emulator.
+    @param path The file's absolute path on the image.
+
+    @return The file's contents, as text, without trailing newlines.
+    """
+    return subprocess.run(
+        ["mtype", "-i", e.image + "@@2097152", "::" + path],
+        env=dict(os.environ, MTOOLS_SKIP_CHECK="1"), capture_output=True,
+        check=True).stdout.decode().strip("\n")
 
 
 def test_config_sys_is_the_agon_one(e):
     expected = open(os.path.join(REPO_ROOT, "etc", "AgonLight2",
                                  "config.sys")).read().strip("\n")
-    assert e.sh("cat /etc/config.sys") == expected
+    assert "No such" in e.sh("cat /system/data/config.sys")
+    assert image_text(e, "/system/data/config.sys") == expected
 
 
 def test_vdp_driver_and_its_getty_are_running(e):
@@ -312,8 +328,8 @@ def test_line_editor_moves_edits_and_recalls(e):
 
 
 def test_grep_finds_lines_in_a_file_and_a_pipe(e):
-    assert e.sh("grep CONSOLE /etc/config.sys") == \
-        "CONSOLE=UART1 /usr/bin/getty\nCONSOLE=/usr/lib/vdp.drv /usr/bin/getty"
+    assert e.sh("grep user1 /etc/passwd") == \
+        "user1:1488:1:1:User 1:/home/user1:/usr/bin/mush"
     assert e.sh("echo needle-in-haystack | grep needle") == \
         "needle-in-haystack"
     assert e.sh("echo one-two-three | grep zzz") == ""
@@ -357,9 +373,9 @@ def test_mkdir_touch_mv_rm_and_rmdir_manage_files(e):
 
 
 def test_cp_copies_text_files(e):
-    config = e.sh("cat /etc/config.sys")
-    assert e.sh("cp /etc/config.sys /etc/config.copy") == ""
-    assert e.sh("cat /etc/config.copy") == config
+    passwd = e.sh("cat /etc/passwd")
+    assert e.sh("cp /etc/passwd /etc/passwd.copy") == ""
+    assert e.sh("cat /etc/passwd.copy") == passwd
     assert e.sh("mkdir /copies") == ""
     assert e.sh("cp /etc/hostname /etc/issue /copies") == ""
     assert ll_names(e, "/copies") == ["hostname", "issue"]
@@ -399,9 +415,9 @@ def test_directories_grow_past_their_first_cluster(e):
     assert e.sh("mkdir /many") == ""
     for name in names:
         assert e.sh("touch /many/" + name) == ""
-    assert e.sh("cp /etc/config.sys /many/config.sys") == ""
-    assert ll_names(e, "/many") == sorted(names + ["config.sys"])
-    assert e.sh("cat /many/config.sys") == e.sh("cat /etc/config.sys")
+    assert e.sh("cp /etc/passwd /many/passwd") == ""
+    assert ll_names(e, "/many") == sorted(names + ["passwd"])
+    assert e.sh("cat /many/passwd") == e.sh("cat /etc/passwd")
 
 
 def test_ed_writes_a_new_file(e):
@@ -497,7 +513,7 @@ def test_ctrl_c_kills_foreground_commands(e):
 def test_commands_that_cannot_load_leave_the_shell_running(e):
     before = ps_entries(e)
     assert e.sh("mkdir /usr/bin/corrupt") == ""
-    assert e.sh("cp /etc/config.sys /usr/bin/corrupt/main.overlay") == ""
+    assert e.sh("cp /etc/passwd /usr/bin/corrupt/main.overlay") == ""
     for command in ("corrupt", "corrupt &"):
         assert e.sh(command) == "corrupt: cannot execute"
         assert ps_entries(e) == before, command
@@ -510,7 +526,8 @@ def test_commands_that_cannot_load_leave_the_shell_running(e):
 
 def test_every_command_prints_its_usage_for_help_options(e):
     # Earlier tests leave copied and corrupt commands in /usr/bin.
-    built = sorted(os.listdir(os.path.join(REPO_ROOT, "usr", "bin")))
+    built = sorted(set(os.listdir(os.path.join(REPO_ROOT, "usr", "bin")))
+                   - {"getty", "login", "logger"})
     installed = [n.rstrip("/") for n in ll_names(e, "/usr/bin")]
     assert set(built) <= set(installed), (built, installed)
     for name in built:

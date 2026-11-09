@@ -29,7 +29,7 @@
 import os
 import subprocess
 
-from harness import CATFILE_CONTENTS, fsck_problems, ll_names
+from harness import CATFILE_CONTENTS, fsck_problems, image_path, ll_names
 
 
 def test_cp_copies_a_file_to_a_new_name(s):
@@ -75,7 +75,7 @@ def image_file(s, path):
     @return The file's contents, as bytes.
     """
     return subprocess.run(
-        ["mtype", "-i", s.img_copy + "@@2097152", "::" + path],
+        ["mtype", "-i", s.img_copy + "@@2097152", "::" + image_path(path)],
         env=dict(os.environ, MTOOLS_SKIP_CHECK="1"), capture_output=True,
         check=True).stdout
 

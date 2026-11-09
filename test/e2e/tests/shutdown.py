@@ -62,5 +62,5 @@ def test_shutdown_reboots_with_a_passwd_file(s):
 
 
 def test_shutdown_reboots_with_a_config_sys(s):
-    s.restart_with_config_sys("DEVICE=/usr/lib/loopback.drv 1\n")
+    s.restart_with_config_sys("DEVICE=/system/drivers/loopback.drv 1\n")
     reboot_twice(s)

@@ -63,19 +63,29 @@ partitionOffsetBytes=$(( partitionOffsetMB * 1024 * 1024 ))
 fatImage="${outImage}@@${partitionOffsetBytes}"
 
 MTOOLS_SKIP_CHECK=1 mformat -i "${fatImage}" -F -v NanoOs ::
-MTOOLS_SKIP_CHECK=1 mmd    -i "${fatImage}" ::/usr
-MTOOLS_SKIP_CHECK=1 mcopy  -i "${fatImage}" -s usr/bin ::/usr/bin
-MTOOLS_SKIP_CHECK=1 mcopy  -i "${fatImage}" -s usr/lib ::/usr/lib
-MTOOLS_SKIP_CHECK=1 mcopy  -i "${fatImage}" "${osRodataBin}" ::/usr/lib/
-MTOOLS_SKIP_CHECK=1 mmd    -i "${fatImage}" ::/etc
-MTOOLS_SKIP_CHECK=1 mmd    -i "${fatImage}" ::/root
+for directory in /secure /system /system/bin /system/data \
+	/system/drivers /userspace /userspace/usr \
+	/userspace/etc /userspace/root /userspace/tmp; do
+	MTOOLS_SKIP_CHECK=1 mmd -i "${fatImage}" "::${directory}"
+done
+MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s usr/bin ::/userspace/usr/bin
+MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s usr/lib ::/userspace/usr/lib
+for program in getty login logger; do
+	MTOOLS_SKIP_CHECK=1 mmove -i "${fatImage}" \
+		"::/userspace/usr/bin/${program}" "::/system/bin/${program}"
+done
+for driver in usr/lib/*.drv; do
+	MTOOLS_SKIP_CHECK=1 mmove -i "${fatImage}" \
+		"::/userspace/usr/lib/$(basename "${driver}")" ::/system/drivers/
+done
+MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" "${osRodataBin}" ::/system/data/
 printf '%s' "${hostname}" \
-	| MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" - ::/etc/hostname
+	| MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" - ::/userspace/etc/hostname
 printf '\\s \\r \\n \\l\n\n' \
-	| MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" - ::/etc/issue
+	| MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" - ::/userspace/etc/issue
 for lineNumber in $(seq -w 1 40); do
 	printf 'line-%s\n' "${lineNumber}"
-done | MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" - ::/etc/catfile
+done | MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" - ::/userspace/etc/catfile
 
 if [ "${blockFilesystem}" = "contiguous" ]; then
 	dd if="usr/filesystem/contiguous-filesystem/0.overlay" of="${outImage}" \

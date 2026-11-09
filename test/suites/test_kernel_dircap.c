@@ -39,6 +39,7 @@
 
 #include <string.h>
 
+#include "kernel/Hal.h"
 #include "kernel/Console.h"
 #include "kernel/DirCapabilities.h"
 #include "kernel/MemoryManager.h"
@@ -67,6 +68,26 @@ static volatile bool reported;
 /// @brief The address of the set the reporting child held.
 static DirCapabilities *volatile reportedSetAddress;
 
+/// @var reportedPrivilege
+///
+/// @brief The privilege level the reporting child ran at.
+static volatile PrivilegeLevel reportedPrivilege;
+
+/// @var reportedHal
+///
+/// @brief The HAL capabilities the reporting child held.
+static HalCapability *volatile reportedHal;
+
+/// @var reportedUser
+///
+/// @brief The user ID setuidChild ended with.
+static volatile UserId reportedUser;
+
+/// @var reportedQueue
+///
+/// @brief The ready queue the reporting child belongs to.
+static ProcessQueue *volatile reportedQueue;
+
 /// @union ReportedSet
 ///
 /// @brief Room for a copy of a set, aligned as a set is.
@@ -80,6 +101,11 @@ typedef union ReportedSet {
 /// @brief A copy of the set the reporting child held.
 static ReportedSet reportedSet;
 
+/// @var reportedPath
+///
+/// @brief The path of the program dircapChild stood in for.
+static char reportedPath[64];
+
 /// @fn static void reportSet(void)
 ///
 /// @brief Copy the running process's set where the test can see it.
@@ -88,6 +114,9 @@ static ReportedSet reportedSet;
 static void reportSet(void) {
   DirCapabilities *set = getRunningProcess()->dirCapabilities;
   reportedSetAddress = set;
+  reportedPrivilege = getRunningProcess()->privilegeLevel;
+  reportedQueue = getRunningProcess()->readyQueue;
+  reportedHal = getRunningProcess()->halCapabilities;
   memset(&reportedSet, 0, sizeof(reportedSet));
   if ((set != NULL) && (set->size <= sizeof(reportedSet))) {
     memcpy(&reportedSet, set, set->size);
@@ -108,6 +137,7 @@ static void reportSet(void) {
 static void* dircapChild(void *args) {
   ExecArgs *execArgs = (ExecArgs*) args;
   const char *name = execArgs->argv[0];
+  strcpy(reportedPath, execArgs->pathname);
   if (strcmp(name, "narrow") == 0) {
     childStatus = nanoOsDircapAdd("/tmp/sub/", DIRCAP_READ);
   }
@@ -471,8 +501,9 @@ NANO_OS_KERNEL_TEST_WITH(dircap, a_logged_out_slot_restarts_with_the_base_set,
   NANO_OS_ASSERT_TRUE(yieldUntilReported());
   NANO_OS_ASSERT_EQ_INT(0, childStatus);
   NANO_OS_ASSERT_NOT_NULL(exitedSet);
-  NANO_OS_ASSERT_TRUE(exitedSet != supervisorDirCapabilities);
-  NANO_OS_ASSERT_EQ_PTR(supervisorDirCapabilities, reportedSetAddress);
+  NANO_OS_ASSERT_TRUE(exitedSet != loginDirCapabilities);
+  NANO_OS_ASSERT_EQ_PTR(loginDirCapabilities, reportedSetAddress);
+  NANO_OS_ASSERT_EQ_INT(PRIVILEGE_LEVEL_EXECUTIVE, reportedPrivilege);
 }
 
 NANO_OS_KERNEL_TEST_WITH(dircap, a_restarted_users_shell_keeps_the_users_set,
@@ -681,4 +712,380 @@ NANO_OS_KERNEL_TEST(dircap, a_spawn_attribute_refuses_a_bad_entry) {
   NANO_OS_ASSERT_EQ_INT(EINVAL,
     nanoOsSpawnattrAdddircap(&attr, longName, DIRCAP_READ));
   NANO_OS_ASSERT_NULL(attr.dirCapabilities);
+}
+
+extern HalCapability baseUserHalCapabilities[];
+extern HalCapability baseExecutiveHalCapabilities[];
+
+/// @var execPath
+///
+/// @brief The path execProgram asks for.
+static char execPath[64];
+
+/// @var execFullPath
+///
+/// @brief Whether execProgram uses the executive call.
+static volatile bool execFullPath;
+
+/// @var execFinished
+///
+/// @brief Whether execProgram's exec returned, which means that it failed.
+static volatile bool execFinished;
+
+/// @fn static void* execProgram(void *args)
+///
+/// @brief Exec execPath with argv[0] "report".
+///
+/// @param args Unused.
+///
+/// @return This function returns NULL only if the exec fails.
+static void* execProgram(void *args) {
+  (void) args;
+  char *argv[] = { "report", NULL };
+  if (execFullPath) {
+    schedulerExecveFullPath(execPath, argv, NULL);
+  } else {
+    schedulerExecve(execPath, argv, NULL);
+  }
+  childStatus = errno;
+  reportedPrivilege = getRunningProcess()->privilegeLevel;
+  execFinished = true;
+  return NULL;
+}
+
+/// @fn static void startExec(const char *path, PrivilegeLevel privilegeLevel)
+///
+/// @brief Run execProgram in a free slot at a privilege level.
+///
+/// @param path The path to exec.
+/// @param privilegeLevel The level of the slot.
+///
+/// @return This function returns no value.
+static void startExec(const char *path, PrivilegeLevel privilegeLevel) {
+  strcpy(execPath, path);
+  childStatus = -1;
+  reported = false;
+  execFinished = false;
+  ProcessDescriptor *processDescriptor
+    = startProcess(execProgram, getRunningUid(), true);
+  NANO_OS_ASSERT_NOT_NULL(processDescriptor);
+  processDescriptor->privilegeLevel = privilegeLevel;
+  processDescriptor->readyQueue = allProcesses[consolePid - 1].readyQueue;
+  if (privilegeLevel == PRIVILEGE_LEVEL_EXECUTIVE) {
+    processDescriptor->halCapabilities = baseExecutiveHalCapabilities;
+  }
+  processDescriptor->fileDescriptors
+    = allProcesses[consolePid - 1].fileDescriptors;
+  processDescriptor->numFileDescriptors
+    = allProcesses[consolePid - 1].numFileDescriptors;
+  processQueuePush(processDescriptor->readyQueue, processDescriptor);
+}
+
+/// @fn static void expectExecRunsAt(const char *path, PrivilegeLevel from,
+///   PrivilegeLevel expected, const char *expectedPath)
+///
+/// @brief Check the level and full path a program runs with after an exec.
+///
+/// @param path The path to exec.
+/// @param from The level of the caller.
+/// @param expected The level the program should run at.
+/// @param expectedPath The full path the program should be loaded from.
+///
+/// @return This function returns no value.
+static void expectExecRunsAt(const char *path, PrivilegeLevel from,
+  PrivilegeLevel expected, const char *expectedPath
+) {
+  startExec(path, from);
+  NANO_OS_ASSERT_TRUE(yieldUntilReported());
+  NANO_OS_ASSERT_FALSE(execFinished);
+  NANO_OS_ASSERT_EQ_INT(expected, reportedPrivilege);
+  NANO_OS_ASSERT_STR_EQ(expectedPath, reportedPath);
+}
+
+/// @fn static void expectFullPathExecRefused(PrivilegeLevel privilegeLevel)
+///
+/// @brief Check that the executive call fails with EPERM at a level.
+///
+/// @param privilegeLevel The level of the caller.
+///
+/// @return This function returns no value.
+static void expectFullPathExecRefused(PrivilegeLevel privilegeLevel) {
+  execFullPath = true;
+  startExec("/system/bin/login", privilegeLevel);
+  for (int ii = 0; (ii < 2000) && !execFinished && !reported; ii++) {
+    processYield();
+  }
+  NANO_OS_ASSERT_TRUE(execFinished);
+  NANO_OS_ASSERT_FALSE(reported);
+  NANO_OS_ASSERT_EQ_INT(EPERM, childStatus);
+  NANO_OS_ASSERT_EQ_INT(privilegeLevel, reportedPrivilege);
+}
+
+NANO_OS_KERNEL_TEST_WITH(dircap, a_supervisor_exec_of_system_stays_in_userspace,
+  dircapPreBoot
+) {
+  expectExecRunsAt("/system/bin/login", PRIVILEGE_LEVEL_SUPERVISOR,
+    PRIVILEGE_LEVEL_SUPERVISOR, "/userspace/system/bin/login");
+}
+
+NANO_OS_KERNEL_TEST_WITH(dircap, a_user_exec_of_secure_stays_in_userspace,
+  dircapPreBoot
+) {
+  expectExecRunsAt("/secure/shadow", PRIVILEGE_LEVEL_USER,
+    PRIVILEGE_LEVEL_USER, "/userspace/secure/shadow");
+}
+
+NANO_OS_KERNEL_TEST_WITH(dircap, exec_cannot_climb_out_of_userspace_through_dots,
+  dircapPreBoot
+) {
+  expectExecRunsAt("/usr/../../system/bin/login", PRIVILEGE_LEVEL_SUPERVISOR,
+    PRIVILEGE_LEVEL_SUPERVISOR, "/userspace/system/bin/login");
+}
+
+NANO_OS_KERNEL_TEST_WITH(dircap, a_relative_exec_path_stays_in_userspace,
+  dircapPreBoot
+) {
+  expectExecRunsAt("system/bin/login", PRIVILEGE_LEVEL_SUPERVISOR,
+    PRIVILEGE_LEVEL_SUPERVISOR, "/userspace/system/bin/login");
+}
+
+NANO_OS_KERNEL_TEST_WITH(dircap, a_user_api_exec_from_an_executive_drops_privilege,
+  dircapPreBoot
+) {
+  expectExecRunsAt("/system/bin/login", PRIVILEGE_LEVEL_EXECUTIVE,
+    PRIVILEGE_LEVEL_SUPERVISOR, "/userspace/system/bin/login");
+}
+
+NANO_OS_KERNEL_TEST_WITH(dircap, an_executive_full_path_exec_stays_executive,
+  dircapPreBoot
+) {
+  execFullPath = true;
+  expectExecRunsAt("/system/bin/login", PRIVILEGE_LEVEL_EXECUTIVE,
+    PRIVILEGE_LEVEL_EXECUTIVE, "/system/bin/login");
+}
+
+NANO_OS_KERNEL_TEST_WITH(dircap, a_full_path_exec_is_not_tied_to_a_directory_name,
+  dircapPreBoot
+) {
+  execFullPath = true;
+  expectExecRunsAt("/vendor/bin/x", PRIVILEGE_LEVEL_EXECUTIVE,
+    PRIVILEGE_LEVEL_EXECUTIVE, "/vendor/bin/x");
+}
+
+NANO_OS_KERNEL_TEST_WITH(dircap, a_full_path_exec_of_userspace_drops_privilege,
+  dircapPreBoot
+) {
+  execFullPath = true;
+  expectExecRunsAt("/userspace/usr/bin/mush", PRIVILEGE_LEVEL_EXECUTIVE,
+    PRIVILEGE_LEVEL_SUPERVISOR, "/userspace/usr/bin/mush");
+}
+
+NANO_OS_KERNEL_TEST_WITH(dircap, a_full_path_exec_cannot_hide_userspace_with_dots,
+  dircapPreBoot
+) {
+  execFullPath = true;
+  expectExecRunsAt("/system/../userspace/usr/bin/mush",
+    PRIVILEGE_LEVEL_EXECUTIVE, PRIVILEGE_LEVEL_SUPERVISOR,
+    "/userspace/usr/bin/mush");
+}
+
+NANO_OS_KERNEL_TEST_WITH(dircap, a_supervisor_cannot_use_the_full_path_exec,
+  dircapPreBoot
+) {
+  expectFullPathExecRefused(PRIVILEGE_LEVEL_SUPERVISOR);
+}
+
+NANO_OS_KERNEL_TEST_WITH(dircap, a_user_cannot_use_the_full_path_exec,
+  dircapPreBoot
+) {
+  expectFullPathExecRefused(PRIVILEGE_LEVEL_USER);
+}
+
+NANO_OS_KERNEL_TEST(dircap, the_full_path_exec_checks_its_arguments) {
+  char *argv[] = { "report", NULL };
+  NANO_OS_ASSERT_EQ_INT(-1, schedulerExecveFullPath(NULL, argv, NULL));
+  NANO_OS_ASSERT_EQ_INT(EFAULT, errno);
+  NANO_OS_ASSERT_EQ_INT(-1, schedulerExecveFullPath("/x", NULL, NULL));
+  NANO_OS_ASSERT_EQ_INT(EFAULT, errno);
+}
+
+NANO_OS_KERNEL_TEST_WITH(dircap, exec_outside_the_system_tree_runs_at_supervisor,
+  dircapPreBoot
+) {
+  expectExecRunsAt("/usr/bin/mush", PRIVILEGE_LEVEL_EXECUTIVE,
+    PRIVILEGE_LEVEL_SUPERVISOR, "/userspace/usr/bin/mush");
+  ProcessQueue *supervisorQueue = NULL;
+  for (ProcessId pid = 1; supervisorQueue == NULL; pid++) {
+    NANO_OS_ASSERT_TRUE(pid <= numProcesses);
+    if ((allProcesses[pid - 1].privilegeLevel == PRIVILEGE_LEVEL_SUPERVISOR)
+      && (allProcesses[pid - 1].readyQueue != NULL)
+      && (allProcesses[pid - 1].readyQueue
+        != allProcesses[consolePid - 1].readyQueue)
+    ) {
+      supervisorQueue = allProcesses[pid - 1].readyQueue;
+    }
+  }
+  NANO_OS_ASSERT_EQ_PTR(supervisorQueue, reportedQueue);
+  NANO_OS_ASSERT_EQ_PTR(baseUserHalCapabilities, reportedHal);
+}
+
+NANO_OS_KERNEL_TEST_WITH(dircap, exec_never_raises_privilege, dircapPreBoot) {
+  expectExecRunsAt("/usr/bin/mush", PRIVILEGE_LEVEL_SUPERVISOR,
+    PRIVILEGE_LEVEL_SUPERVISOR, "/userspace/usr/bin/mush");
+}
+
+NANO_OS_KERNEL_TEST_WITH(dircap, exec_keeps_a_user_at_user_level,
+  dircapPreBoot
+) {
+  expectExecRunsAt("/usr/bin/mush", PRIVILEGE_LEVEL_USER,
+    PRIVILEGE_LEVEL_USER, "/userspace/usr/bin/mush");
+}
+
+NANO_OS_KERNEL_TEST_WITH(dircap, a_spawn_of_system_stays_in_userspace,
+  dircapPreBoot
+) {
+  pid_t pid = 0;
+  char *argv[] = { "report", NULL };
+  getRunningProcess()->privilegeLevel = PRIVILEGE_LEVEL_SUPERVISOR;
+  NANO_OS_ASSERT_EQ_INT(0,
+    nanoOsSpawn(&pid, "/tmp/../../system/bin/login", NULL, NULL, argv, NULL));
+  NANO_OS_ASSERT_TRUE(yieldUntilReported());
+  NANO_OS_ASSERT_STR_EQ("/userspace/system/bin/login", reportedPath);
+  NANO_OS_ASSERT_EQ_INT(PRIVILEGE_LEVEL_USER, reportedPrivilege);
+}
+
+NANO_OS_KERNEL_TEST_WITH(dircap, spawn_never_runs_a_child_at_executive_level,
+  dircapPreBoot
+) {
+  ProcessQueue *freeQueue = halMockFreeQueue();
+  ProcessDescriptor **slot = freeQueue->head;
+  for (uint8_t ii = 0; ii < freeQueue->numElements; ii++) {
+    slot[ii]->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
+  }
+  NANO_OS_ASSERT_TRUE(spawnAndWait("report", NULL));
+  NANO_OS_ASSERT_EQ_INT(PRIVILEGE_LEVEL_SUPERVISOR, reportedPrivilege);
+}
+
+/// @fn static void* setuidChild(void *args)
+///
+/// @brief Call setuid with execPath's first byte selecting the ID:  'a' asks
+/// for -1, anything else for user 5.
+///
+/// @param args Unused.
+///
+/// @return This function returns NULL.
+static void* setuidChild(void *args) {
+  (void) args;
+  errno = 0;
+  int returnValue = schedulerSetProcessUser(
+    (execPath[0] == 'a') ? ((UserId) -1) : 5);
+  childStatus = (returnValue == 0) ? 0 : errno;
+  reportedUser = getRunningProcess()->userId;
+  reported = true;
+  return NULL;
+}
+
+/// @fn static void expectSetuid(UserId startId, PrivilegeLevel privilegeLevel,
+///   char selector, int expectedStatus, UserId expectedId)
+///
+/// @brief Run setuidChild and check the result.
+///
+/// @param startId The user ID the process starts with.
+/// @param privilegeLevel The level the process runs at.
+/// @param selector What setuidChild asks for.
+/// @param expectedStatus The errno expected, or 0 for success.
+/// @param expectedId The user ID the process should end with.
+///
+/// @return This function returns no value.
+static void expectSetuid(UserId startId, PrivilegeLevel privilegeLevel,
+  char selector, int expectedStatus, UserId expectedId
+) {
+  execPath[0] = selector;
+  childStatus = -1;
+  reported = false;
+  ProcessDescriptor *processDescriptor
+    = startProcess(setuidChild, startId, true);
+  NANO_OS_ASSERT_NOT_NULL(processDescriptor);
+  processDescriptor->privilegeLevel = privilegeLevel;
+  processDescriptor->readyQueue = getRunningProcess()->readyQueue;
+  processQueuePush(processDescriptor->readyQueue, processDescriptor);
+  NANO_OS_ASSERT_TRUE(yieldUntilReported());
+  NANO_OS_ASSERT_EQ_INT(expectedStatus, childStatus);
+  NANO_OS_ASSERT_EQ_INT(expectedId, reportedUser);
+}
+
+NANO_OS_KERNEL_TEST(dircap, a_supervisor_cannot_setuid) {
+  expectSetuid(7, PRIVILEGE_LEVEL_SUPERVISOR, 'a', EPERM, 7);
+  expectSetuid(7, PRIVILEGE_LEVEL_SUPERVISOR, 'b', EPERM, 7);
+  expectSetuid(NO_USER_ID, PRIVILEGE_LEVEL_SUPERVISOR, 'b', EPERM, NO_USER_ID);
+}
+
+NANO_OS_KERNEL_TEST(dircap, a_user_process_cannot_setuid) {
+  expectSetuid(7, PRIVILEGE_LEVEL_USER, 'a', EPERM, 7);
+  expectSetuid(NO_USER_ID, PRIVILEGE_LEVEL_USER, 'b', EPERM, NO_USER_ID);
+}
+
+NANO_OS_KERNEL_TEST(dircap, an_executive_process_can_setuid) {
+  expectSetuid(NO_USER_ID, PRIVILEGE_LEVEL_EXECUTIVE, 'b', 0, 5);
+}
+
+NANO_OS_KERNEL_TEST(dircap, an_executive_process_cannot_change_a_set_user) {
+  expectSetuid(7, PRIVILEGE_LEVEL_EXECUTIVE, 'b', EACCES, 7);
+}
+
+/// @var consoleEchoArgv
+///
+/// @brief The arguments of a CONSOLE line's program in the tests.
+static char *consoleEchoArgv[] = { "echo", NULL };
+
+/// @var consoleProgram
+///
+/// @brief The program of a shell slot's CONSOLE line in the tests.
+static ShellProgram consoleProgram = { NULL, consoleEchoArgv };
+
+NANO_OS_KERNEL_TEST_WITH(dircap, a_console_program_outside_system_is_supervisor,
+  dircapPreBoot
+) {
+  static char path[] = "/userspace/usr/bin/echo";
+  consoleProgram.path = path;
+  ProcessDescriptor *processDescriptor = startShellSlot(NO_USER_ID, NULL);
+  processDescriptor->restartArgs = &consoleProgram;
+  processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
+  NANO_OS_ASSERT_TRUE(yieldUntilReported());
+  NANO_OS_ASSERT_EQ_PTR(supervisorDirCapabilities, reportedSetAddress);
+  NANO_OS_ASSERT_EQ_INT(PRIVILEGE_LEVEL_SUPERVISOR, reportedPrivilege);
+}
+
+NANO_OS_KERNEL_TEST_WITH(dircap, a_console_program_in_system_is_executive,
+  dircapPreBoot
+) {
+  static char path[] = "/system/bin/echo";
+  consoleProgram.path = path;
+  ProcessDescriptor *processDescriptor = startShellSlot(NO_USER_ID, NULL);
+  processDescriptor->restartArgs = &consoleProgram;
+  NANO_OS_ASSERT_TRUE(yieldUntilReported());
+  NANO_OS_ASSERT_EQ_PTR(loginDirCapabilities, reportedSetAddress);
+  NANO_OS_ASSERT_EQ_INT(PRIVILEGE_LEVEL_EXECUTIVE, reportedPrivilege);
+}
+
+NANO_OS_KERNEL_TEST(dircap, the_login_set_holds_what_it_documents) {
+  NANO_OS_ASSERT_TRUE(dirCapabilitiesValid(loginDirCapabilities));
+  NANO_OS_ASSERT_TRUE(setAllows(loginDirCapabilities, "/system/bin/login/x",
+    DIRCAP_EXEC | DIRCAP_FULL_PATH));
+  NANO_OS_ASSERT_FALSE(setAllows(loginDirCapabilities, "/system/bin/login/x",
+    DIRCAP_READ | DIRCAP_FULL_PATH));
+  NANO_OS_ASSERT_FALSE(setAllows(loginDirCapabilities, "/system/bin/login/x",
+    DIRCAP_EXEC));
+  NANO_OS_ASSERT_TRUE(setAllows(loginDirCapabilities, "/secure/shadow",
+    DIRCAP_READ | DIRCAP_FULL_PATH));
+  NANO_OS_ASSERT_FALSE(setAllows(loginDirCapabilities, "/secure/shadow",
+    DIRCAP_WRITE | DIRCAP_FULL_PATH));
+  NANO_OS_ASSERT_FALSE(setAllows(loginDirCapabilities, "/secure/shadow",
+    DIRCAP_READ));
+  NANO_OS_ASSERT_TRUE(setAllows(loginDirCapabilities, "/usr/bin/mush",
+    DIRCAP_EXEC));
+  NANO_OS_ASSERT_FALSE(setAllows(supervisorDirCapabilities,
+    "/system/bin/login/x", DIRCAP_EXEC));
+  NANO_OS_ASSERT_FALSE(setAllows(supervisorDirCapabilities, "/secure/shadow",
+    DIRCAP_READ));
 }

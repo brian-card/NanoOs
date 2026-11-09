@@ -98,7 +98,7 @@ def test_login_uses_the_passwd_file_when_there_is_one(s):
 
 def test_passwd_line_with_a_bad_uid_matches_no_user(s):
     s.restart_with_file("/etc/passwd", PASSWD_FILE)
-    s.restart_with_config_sys("CONSOLE=UART1 /usr/bin/ps\n")
+    s.restart_with_config_sys("CONSOLE=UART1 /userspace/usr/bin/ps\n")
     s.child.expect(r"\d+  (\S+) ps\r*\n", timeout=15)
     assert s.child.match.group(1) == "unknown", s.child.match.group(1)
 

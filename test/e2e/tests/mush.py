@@ -35,7 +35,7 @@ import pexpect
 
 from fakevdp import (KEYCODE_DELETE, KEYCODE_DOWN, KEYCODE_END, KEYCODE_HOME,
                      KEYCODE_LEFT, KEYCODE_RIGHT, KEYCODE_UP)
-from harness import (heap_at_prompt, help_text, PROMPT, PROMPT_PARTS,
+from harness import (heap_at_prompt, image_path, help_text, PROMPT, PROMPT_PARTS,
                      promptParts, ps_entries, vdp_login)
 
 
@@ -278,11 +278,11 @@ def write_files(s, files):
         s.child.terminate(force=True)
     for path, text in files.items():
         subprocess.run(["mmd", "-D", "s", "-i", s.img_copy + "@@2097152",
-                        "::" + os.path.dirname(path)],
+                        "::" + image_path(os.path.dirname(path))],
                        env=dict(os.environ, MTOOLS_SKIP_CHECK="1"),
                        capture_output=True)
         subprocess.run(["mcopy", "-o", "-i", s.img_copy + "@@2097152", "-",
-                        "::" + path], input=text.encode(),
+                        "::" + image_path(path)], input=text.encode(),
                        env=dict(os.environ, MTOOLS_SKIP_CHECK="1"), check=True)
     s.spawn([s.img_copy])
     s.login()

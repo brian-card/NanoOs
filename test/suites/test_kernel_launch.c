@@ -12,11 +12,15 @@
 
 #include <string.h>
 
+#include "kernel/Console.h"
+#include "kernel/Filesystem.h"
 #include "kernel/Hal.h"
+#include "kernel/NanoOs.h"
 #include "kernel/MemoryManager.h"
 #include "kernel/OverlayFunctions.h"
 #include "kernel/Processes.h"
 #include "kernel/Scheduler.h"
+#include "user/NanoOsErrno.h"
 
 void* callOverlayFunctionFromFileCache(const void *overlayDir,
   const void *overlay, const char *function, void *args);
@@ -267,4 +271,235 @@ NANO_OS_KERNEL_TEST(launch, unused_shell_slot_becomes_a_user_slot) {
   NANO_OS_ASSERT_EQ_PTR(lastSlot->ipcCapabilities, slot->ipcCapabilities);
   NANO_OS_ASSERT_EQ_INT(lastSlot->numIpcCapabilities,
     slot->numIpcCapabilities);
+}
+
+/// @var fakeOpens
+///
+/// @brief The number of files the fake filesystem has been asked to open.
+static volatile int fakeOpens;
+
+/// @var fakeOpenPath
+///
+/// @brief The path of the last open.
+static char fakeOpenPath[64];
+
+/// @var fakeOpenFullPath
+///
+/// @brief Whether the last open carried a full path.
+static volatile bool fakeOpenFullPath;
+
+/// @fn static void* refusingFilesystem(void *args)
+///
+/// @brief Stand in for the filesystem, finding no file it's asked to open.
+///
+/// @param args Not used.
+///
+/// @return This function never returns.
+static void* refusingFilesystem(void *args) {
+  (void) args;
+  while (1) {
+    ProcessMessage *message = processMessageQueueWait(NULL);
+    if (message == NULL) {
+      continue;
+    }
+
+    if ((processMessageType(message) & FILESYSTEM_COMMAND_MASK)
+      == FILESYSTEM_OPEN_FILE
+    ) {
+      FilesystemFopenArgs *fopenArgs
+        = (FilesystemFopenArgs*) processMessageData(message);
+      fopenArgs->returnValue = NULL;
+      fakeOpens++;
+      strcpy(fakeOpenPath, fopenArgs->pathname);
+      fakeOpenFullPath
+        = (processMessageType(message) & FILESYSTEM_FULL_PATH) != 0;
+    }
+    processMessageSetDone(message);
+  }
+  return NULL;
+}
+
+/// @fn static void useRefusingFilesystem(void)
+///
+/// @brief Start refusingFilesystem and route filesystem messages to it.
+///
+/// @return This function returns no value.
+static void useRefusingFilesystem(void) {
+  fakeOpens = 0;
+  ProcessDescriptor *processDescriptor = processQueuePop(halMockFreeQueue());
+  NANO_OS_ASSERT_NOT_NULL(processDescriptor);
+  NANO_OS_ASSERT_EQ_INT(processSuccess,
+    processCreate(processDescriptor, refusingFilesystem, NULL));
+  threadSetContext(processDescriptor->mainThread, processDescriptor);
+  processDescriptor->userId = ROOT_USER_ID;
+  // The scheduler's blocking send only runs the levels above supervisor.
+  processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_KERNEL;
+  processDescriptor->readyQueue = allProcesses[consolePid - 1].readyQueue;
+  processQueuePush(processDescriptor->readyQueue, processDescriptor);
+  rootFilesystemPid = processDescriptor->processId;
+
+  ProcessDescriptor *running = getRunningProcess();
+  static IpcCapability ipcCapabilities[64];
+  NANO_OS_ASSERT_TRUE(running->numIpcCapabilities + 1 < 64);
+  memcpy(ipcCapabilities, running->ipcCapabilities,
+    sizeof(IpcCapability) * running->numIpcCapabilities);
+  ipcCapabilityInsert(ipcCapabilities, running->numIpcCapabilities,
+    rootFilesystemPid, FILESYSTEM_COMMAND_SIGNATURE, 0);
+  running->ipcCapabilities = ipcCapabilities;
+  running->numIpcCapabilities++;
+  for (size_t ii = 0; ii < running->numIpcCapabilities; ii++) {
+    if (ipcCapabilities[ii].destinationPid == rootFilesystemPid) {
+      ipcCapabilities[ii].messageTypes = UINT32_MAX;
+    }
+  }
+
+  for (int ii = 0; ii < 10; ii++) {
+    processYield();
+  }
+}
+
+/// @fn static void useFileCacheOfOne(void)
+///
+/// @brief Pre-boot hook that makes the mock platform launch with a one-deep
+/// overlay file cache, which leaves the heap room for the code under test.
+static void useFileCacheOfOne(void) {
+  halMockSetFileCacheDepth(1);
+}
+
+/// @fn static int failingReadBlocks(void *context, uint32_t startBlock,
+///   uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer)
+///
+/// @brief Stand in for a block device that can't be read.
+///
+/// @param context Unused.
+/// @param startBlock Unused.
+/// @param numBlocks Unused.
+/// @param blockSize Unused.
+/// @param buffer Unused.
+///
+/// @return Returns -EIO.
+static int failingReadBlocks(void *context, uint32_t startBlock,
+  uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer
+) {
+  (void) context;
+  (void) startBlock;
+  (void) numBlocks;
+  (void) blockSize;
+  (void) buffer;
+  return -EIO;
+}
+
+/// @fn static OverlayFifoNode* pushCachedOverlay(char *overlayId,
+///   size_t overlayIdSize)
+///
+/// @brief Put an overlay in the file cache.
+///
+/// @param overlayId The full path of the overlay.
+/// @param overlayIdSize The size of overlayId, including its NUL.
+///
+/// @return Returns the cache node.
+static OverlayFifoNode* pushCachedOverlay(char *overlayId,
+  size_t overlayIdSize
+) {
+  static BlockDevice blockDevice = {
+    .readBlocks = failingReadBlocks,
+    .blockSize = 512,
+  };
+  FileBlockMetadata fileBlockMetadata = {
+    .blockDevice = &blockDevice,
+    .startBlock = 1,
+    .numBlocks = 1,
+  };
+  return overlayFifoPush(fileCache, overlayId, overlayIdSize,
+    &fileBlockMetadata);
+}
+
+NANO_OS_KERNEL_TEST_WITH(launch, a_named_overlay_cannot_hit_a_system_cache_entry,
+  useFileCacheOfOne
+) {
+  useRefusingFilesystem();
+  char overlayId[] = "/system/bin/logger/f.overlay";
+  NANO_OS_ASSERT_NOT_NULL(pushCachedOverlay(overlayId, sizeof(overlayId)));
+
+  getRunningProcess()->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
+  NANO_OS_ASSERT_NULL(callOverlayFunctionFromFileCache(
+    "/system/bin/logger", "f", "run", NULL));
+  NANO_OS_ASSERT_EQ_INT(1, fakeOpens);
+  NANO_OS_ASSERT_STR_EQ("/system/bin/logger/f.overlay", fakeOpenPath);
+  NANO_OS_ASSERT_FALSE(fakeOpenFullPath);
+}
+
+NANO_OS_KERNEL_TEST_WITH(launch, a_named_overlay_cannot_climb_out_of_userspace,
+  useFileCacheOfOne
+) {
+  useRefusingFilesystem();
+  getRunningProcess()->privilegeLevel = PRIVILEGE_LEVEL_USER;
+  NANO_OS_ASSERT_NULL(callOverlayFunctionFromFileCache(
+    "/usr/../../system/bin/logger", "f", "run", NULL));
+  NANO_OS_ASSERT_EQ_INT(1, fakeOpens);
+  NANO_OS_ASSERT_STR_EQ("/system/bin/logger/f.overlay", fakeOpenPath);
+  NANO_OS_ASSERT_FALSE(fakeOpenFullPath);
+}
+
+NANO_OS_KERNEL_TEST(launch, a_user_overlay_is_opened_as_a_user_api_path) {
+  useRefusingFilesystem();
+  FileBlockMetadata metadata;
+  getRunningProcess()->privilegeLevel = PRIVILEGE_LEVEL_USER;
+  NANO_OS_ASSERT_TRUE(
+    getFileBlockMetadataFromPath("/userspace/usr/bin/x/main.overlay", &metadata)
+    < 0);
+  NANO_OS_ASSERT_STR_EQ("/usr/bin/x/main.overlay", fakeOpenPath);
+  NANO_OS_ASSERT_FALSE(fakeOpenFullPath);
+}
+
+NANO_OS_KERNEL_TEST(launch, a_system_overlay_is_opened_by_its_full_path) {
+  useRefusingFilesystem();
+  FileBlockMetadata metadata;
+  getRunningProcess()->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
+  NANO_OS_ASSERT_TRUE(
+    getFileBlockMetadataFromPath("/system/bin/x/main.overlay", &metadata) < 0);
+  NANO_OS_ASSERT_STR_EQ("/system/bin/x/main.overlay", fakeOpenPath);
+  NANO_OS_ASSERT_TRUE(fakeOpenFullPath);
+}
+
+NANO_OS_KERNEL_TEST(launch, an_executive_can_open_a_full_path) {
+  useRefusingFilesystem();
+  getRunningProcess()->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
+  NANO_OS_ASSERT_NULL(filesystemFopenFullPath("/secure/shadow", "r"));
+  NANO_OS_ASSERT_EQ_INT(1, fakeOpens);
+  NANO_OS_ASSERT_STR_EQ("/secure/shadow", fakeOpenPath);
+  NANO_OS_ASSERT_TRUE(fakeOpenFullPath);
+}
+
+NANO_OS_KERNEL_TEST(launch, fopen_never_asks_for_a_full_path) {
+  useRefusingFilesystem();
+  getRunningProcess()->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
+  NANO_OS_ASSERT_NULL(filesystemFopen("/secure/shadow", "r"));
+  NANO_OS_ASSERT_EQ_INT(1, fakeOpens);
+  NANO_OS_ASSERT_FALSE(fakeOpenFullPath);
+}
+
+NANO_OS_KERNEL_TEST(launch, a_supervisor_cannot_open_a_full_path) {
+  useRefusingFilesystem();
+  getRunningProcess()->privilegeLevel = PRIVILEGE_LEVEL_SUPERVISOR;
+  errno = 0;
+  NANO_OS_ASSERT_NULL(filesystemFopenFullPath("/secure/shadow", "r"));
+  NANO_OS_ASSERT_EQ_INT(EPERM, errno);
+  NANO_OS_ASSERT_EQ_INT(0, fakeOpens);
+}
+
+NANO_OS_KERNEL_TEST(launch, the_userspace_rule_is_exact) {
+  NANO_OS_ASSERT_TRUE(filesystemPathIsUserspace("/userspace"));
+  NANO_OS_ASSERT_TRUE(filesystemPathIsUserspace("/userspace/usr/bin/x"));
+  NANO_OS_ASSERT_FALSE(filesystemPathIsUserspace("/userspaces/x"));
+  NANO_OS_ASSERT_FALSE(filesystemPathIsUserspace("/system/bin/x"));
+}
+
+NANO_OS_KERNEL_TEST(launch, a_user_path_is_collapsed_before_userspace_is_added) {
+  char buffer[64];
+  NANO_OS_ASSERT_EQ_INT(16,
+    (int) userspacePathCopy(buffer, "/usr/../../etc/x/../y"));
+  NANO_OS_ASSERT_STR_EQ("/userspace/etc/y", buffer);
+  NANO_OS_ASSERT_EQ_INT(10, (int) userspacePathCopy(buffer, "/"));
+  NANO_OS_ASSERT_STR_EQ("/userspace", buffer);
 }

@@ -55,7 +55,7 @@ def test_every_command_prints_its_usage_for_help_options(s):
 def test_usage_errors_print_the_same_summary_as_help(s):
     s.login()
     for command in ("cp", "mv", "grep", "kill", "mkdir", "rm", "rmdir",
-                    "touch", "login"):
+                    "touch"):
         assert s.sh(command) == help_text(s, command + " --help"), command
     assert s.sh("shutdown") == help_text(s, "shutdown --help")
     assert s.sh("echo a --help") == "a --help"

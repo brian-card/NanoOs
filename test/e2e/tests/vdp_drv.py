@@ -231,7 +231,7 @@ def test_vdp_draws_control_characters_as_glyphs(s):
     # 0x0c would clear the screen and 0x16 change the mode if sent bare.
     s.child.terminate(force=True)
     subprocess.run(["mcopy", "-o", "-i", s.img_copy + "@@2097152", "-",
-                    "::/glyphs.txt"],
+                    "::/userspace/glyphs.txt"],
                    input=b"glyphs:\x01\x0c\x16\x1f\x7f:end\n",
                    env=dict(os.environ, MTOOLS_SKIP_CHECK="1"), check=True)
     vdp = s.restart_with_vdp()
@@ -411,7 +411,7 @@ def wait_vdp_screen_setups(vdp, count):
 
 def test_vdp_numlock_option_turns_num_lock_on(s):
     vdp = s.restart_with_vdp(VDP_CONFIG_SYS.replace(
-        "DEVICE=/usr/lib/vdp.drv\n", "DEVICE=/usr/lib/vdp.drv --numlock=on\n"))
+        "DEVICE=/system/drivers/vdp.drv\n", "DEVICE=/system/drivers/vdp.drv --numlock=on\n"))
     vdp_login(vdp)
     keystates = [detail[1] for _t, kind, detail in vdp.events
                  if kind == "reset" and detail[0] == KEYSTATE]
@@ -440,7 +440,7 @@ def test_vdp_numlock_option_turns_num_lock_on(s):
     vdp.lock_key(KEYCODE_CAPSLOCK)
     vdp.wait_leds(LED_NUM_LOCK)
 
-    # A restarted driver starts from /etc/config.sys again.
+    # A restarted driver starts from /system/data/config.sys again.
     vdp.lock_key(KEYCODE_NUMLOCK)
     vdp.wait_leds(0)
     vdp.disconnect()
@@ -474,8 +474,8 @@ def test_vdp_keypad_navigates_without_the_numlock_option(s):
 
 def test_vdp_driver_reports_and_ignores_unrecognized_arguments(s):
     vdp = s.restart_with_vdp(VDP_CONFIG_SYS.replace(
-        "DEVICE=/usr/lib/vdp.drv\n",
-        "DEVICE=/usr/lib/vdp.drv --bogus --numlock=yes stray --numlock=on\n"))
+        "DEVICE=/system/drivers/vdp.drv\n",
+        "DEVICE=/system/drivers/vdp.drv --bogus --numlock=yes stray --numlock=on\n"))
     vdp.expect("login: ")
     # getty's clear wipes the warnings, so look for them in what was drawn.
     with vdp.lock:
