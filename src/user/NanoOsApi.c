@@ -137,6 +137,10 @@ const NanoOsExecutiveApi nanoOsExecutiveApi = {
 
   // Directory capability functions:
   .dirCapabilityAllows = dirCapabilityAllows,
+
+  // Full-path functions:
+  .execveFullPath = schedulerExecveFullPath,
+  .fopenFullPath = filesystemFopenFullPath,
 };
 
 KEEP_IN_FLASH

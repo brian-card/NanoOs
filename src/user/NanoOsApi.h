@@ -134,6 +134,11 @@ typedef struct NanoOsExecutiveApi {
   // Directory capability functions:
   bool (*dirCapabilityAllows)(const DirCapabilities *set,
     const char *path, size_t pathLength, bool isDirectory, uint8_t bits);
+
+  // Full-path functions:
+  int (*execveFullPath)(const char *pathname,
+    char *const argv[], char *const envp[]);
+  FILE* (*fopenFullPath)(const char *pathname, const char *mode);
 } NanoOsExecutiveApi;
 
 typedef struct NanoOsUserApi {
