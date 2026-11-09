@@ -61,12 +61,6 @@ extern "C"
 /// @brief NanoOs's ENOMEM.
 #define FILESYSTEM_ENOMEM 3
 
-/// @def FILESYSTEM_EACCES
-///
-/// @brief The value of EACCES in src/user/NanoOsErrno.h, which the handlers
-/// can't include.
-#define FILESYSTEM_EACCES 4
-
 /// @def FILESYSTEM_DIR_GENERATION_MASK
 ///
 /// @brief The bits a slot's generation can use.

@@ -53,6 +53,12 @@ extern "C"
 {
 #endif
 
+/// @def FILESYSTEM_EACCES
+///
+/// @brief The value of EACCES in src/user/NanoOsErrno.h, which the handlers
+/// can't include.
+#define FILESYSTEM_EACCES 4
+
 /// @def readBytes
 ///
 /// @brief Read a value from a memory address that may be unaligned.
