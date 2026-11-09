@@ -86,6 +86,7 @@ void* runFsCommand(void *args) {
   // returns on failure, and fails with ENOENT if the command isn't there.
   pid_t pid = 0; // We'll return this if posix_spawn is successful.
   int launchErrno = ENOENT;
+  bool denied = false;
   const char *path = getenv("PATH");
   const char *slashAt = strchr(fsCommandArgs->commandLine, '/');
   if ((slashAt != NULL) && (slashAt < charAt)) {
@@ -131,9 +132,8 @@ void* runFsCommand(void *args) {
         NULL, argv, environ);
     }
     struct stat commandStat;
-    if ((launchErrno != 0) && (lstat(commandPath, &commandStat) == 0)
-      && !S_ISDIR(commandStat.st_mode)
-    ) {
+    bool found = (launchErrno != 0) && (lstat(commandPath, &commandStat) == 0);
+    if (found && !S_ISDIR(commandStat.st_mode)) {
       // Programs are directories, so this is a script for the shell to run.
       fsCommandArgs->scriptPath = commandPath;
       fsCommandArgs->scriptArgv = argv;
@@ -142,8 +142,21 @@ void* runFsCommand(void *args) {
       goto exit;
     }
     free(commandPath); commandPath = NULL;
+    if (launchErrno == EACCES) {
+      // A directory in PATH that can't run programs doesn't end the search.
+      denied |= found;
+      launchErrno = ENOENT;
+    }
   }
 
+  if ((launchErrno == ENOENT) && denied) {
+    fputs(argv[0], stdout);
+    fputs(": Permission denied\n", stdout);
+    free(argv); argv = NULL;
+    errno = EACCES;
+    returnValue = NULL;
+    goto exit;
+  }
   if (launchErrno == ENOENT) {
     // No such command on the filesystem.
     fputs(argv[0], stdout);
