@@ -206,7 +206,9 @@ bool dirCapabilityAllows(const DirCapabilities *set,
   uint8_t held = 0;
   const DirCapability *capability = set->capabilities;
   for (uint8_t ii = 0; ii < set->numCapabilities; ii++) {
-    if (dirCapabilityMatches(capability, path, pathLength, isDirectory)) {
+    if (((capability->mask & DIRCAP_FULL_PATH) == (bits & DIRCAP_FULL_PATH))
+      && dirCapabilityMatches(capability, path, pathLength, isDirectory)
+    ) {
       held |= capability->mask;
       if ((held & bits) == bits) {
         return true;
@@ -407,8 +409,7 @@ bool dirCapabilitiesValid(const DirCapabilities *set) {
     const DirCapability *capability
       = (const DirCapability*) ((const char*) set + offset);
     offset += DIR_CAPABILITY_SIZE(capability->len);
-    if ((offset > set->size) || (capability->mask == 0)
-      || ((capability->mask & ~DIRCAP_ALL) != 0)
+    if ((offset > set->size) || ((capability->mask & DIRCAP_ALL) == 0)
       || !dirCapabilityNameIsValid(capability->name, capability->len)
     ) {
       return false;

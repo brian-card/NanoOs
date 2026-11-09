@@ -84,6 +84,12 @@ extern "C"
 /// @brief Every capability bit.
 #define DIRCAP_ALL    ((uint8_t) 0x7f)
 
+/// @def DIRCAP_FULL_PATH
+///
+/// @brief Marks an entry whose name is a full path on the volume rather than
+/// a path under /userspace.  An entry only matches requests of its own kind.
+#define DIRCAP_FULL_PATH ((uint8_t) 0x80)
+
 /// @struct DirCapability
 ///
 /// @brief One directory and the operations allowed in it and in every
