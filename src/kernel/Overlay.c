@@ -149,7 +149,7 @@ void* callOverlayFunctionFromFile(const void *od, const void *oo,
     (2 * sizeof(OverlayDescriptor))
     + ((overlayDir == OVERLAY_SAME_NAMESPACE)
       ? strlen(previousOverlayDir)
-      : strlen(overlayDir)
+      : (FILESYSTEM_USERSPACE_LENGTH + strlen(overlayDir) + 1)
     )
     + 1
     + strlen(overlay)
@@ -173,8 +173,13 @@ void* callOverlayFunctionFromFile(const void *od, const void *oo,
   overlayArray[0].overlayIdLength = 0;
   overlayArray[0].overlayFifoNode = NULL;
 
-  strcpy(overlayInfo,
-    (overlayDir == OVERLAY_SAME_NAMESPACE) ? previousOverlayDir : overlayDir);
+  size_t overlayDirLength = 0;
+  if (overlayDir == OVERLAY_SAME_NAMESPACE) {
+    strcpy(overlayInfo, previousOverlayDir);
+    overlayDirLength = strlen(previousOverlayDir);
+  } else {
+    overlayDirLength = userspacePathCopy(overlayInfo, overlayDir);
+  }
   strcat(overlayInfo, _pathSeparator);
   strcat(overlayInfo, overlay);
   strcat(overlayInfo, _overlayExt);
@@ -194,9 +199,7 @@ void* callOverlayFunctionFromFile(const void *od, const void *oo,
   strcpy(functionCopy, function);
   
   // Terminate the overlayInfo string at the end of the directory path.
-  overlayInfo[strlen(
-    (overlayDir == OVERLAY_SAME_NAMESPACE) ? previousOverlayDir : overlayDir)]
-    = '\0';
+  overlayInfo[overlayDirLength] = '\0';
   
   // args does not get copied.  We have no way of knowing what the proper way
   // to copy the data would be.  The caller is responsible for allocating data
@@ -632,9 +635,9 @@ void* callOverlayFunctionFromFileCache(const void *od, const void *oo,
   // all of the strings we need.  For the strings, we need the overlay
   // directory, a slash, the name of the overlay, the overlay extension, a NUL
   // byte, the function name, and a trailing NUL byte.
-  const char *newOverlayDir
-    = (overlayDir == OVERLAY_SAME_NAMESPACE) ? previousOverlayDir : overlayDir;
-  size_t newOverlayDirLength = strlen(newOverlayDir);
+  size_t newOverlayDirLength = (overlayDir == OVERLAY_SAME_NAMESPACE)
+    ? strlen(previousOverlayDir)
+    : (FILESYSTEM_USERSPACE_LENGTH + strlen(overlayDir) + 1);
   char *allocation = (char*) malloc(
     (2 * sizeof(OverlayDescriptor))
     + newOverlayDirLength
@@ -689,7 +692,11 @@ void* callOverlayFunctionFromFileCache(const void *od, const void *oo,
       &overlayArray[0].fileBlockMetadata);
   }
 
-  strcpy(overlayInfo, newOverlayDir);
+  if (overlayDir == OVERLAY_SAME_NAMESPACE) {
+    strcpy(overlayInfo, previousOverlayDir);
+  } else {
+    newOverlayDirLength = userspacePathCopy(overlayInfo, overlayDir);
+  }
   strcat(overlayInfo, _pathSeparator);
   strcat(overlayInfo, overlay);
   strcat(overlayInfo, _overlayExt);
@@ -720,7 +727,8 @@ loadAndCallFunction:
   // The new namespace needs its own copy of the directory because overlayInfo
   // has to stay the full path that identifies the overlay in the cache.
   char *newOverlayDirCopy = functionCopy + strlen(functionCopy) + 1;
-  strcpy(newOverlayDirCopy, newOverlayDir);
+  memcpy(newOverlayDirCopy, overlayInfo, newOverlayDirLength);
+  newOverlayDirCopy[newOverlayDirLength] = '\0';
   
   // args does not get copied.  We have no way of knowing what the proper way
   // to copy the data would be.  The caller is responsible for allocating data
