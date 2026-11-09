@@ -88,9 +88,6 @@ int main(int argc, char **argv) {
     "exit:                   ",
     "Exit the current shell.");
   printf("%s %s\n",
-    "getty:                  ",
-    "Run the getty application.");
-  printf("%s %s\n",
     "grep:                   ",
     "Find text in a file or in piped output.");
   printf("%s %s\n",
@@ -105,12 +102,6 @@ int main(int argc, char **argv) {
   printf("%s %s\n",
     "ll:                     ",
     "List the contents of a directory.");
-  printf("%s %s\n",
-    "logger:                 ",
-    "Run the system logger.");
-  printf("%s %s\n",
-    "login:                  ",
-    "Log in as a user.");
   printf("%s %s\n",
     "looseLoop:              ",
     "Run a process in a loop that does yield.");
