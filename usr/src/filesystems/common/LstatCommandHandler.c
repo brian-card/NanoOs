@@ -86,6 +86,10 @@ void* Lstat(void *args) {
     filesystemState, processMessage, lstatArgs->pathname);
   if (pathname == NULL) {
     errorNumber = FILESYSTEM_PATH_ENOMEM;
+  } else if (!filesystemPathAllowed(filesystemState, processMessage, pathname,
+    true, DIRCAP_STAT)
+  ) {
+    errorNumber = FILESYSTEM_EACCES;
   } else if (filesystemState->driverState != NULL) {
     returnValue = driverLstat(filesystemState->driverState,
       pathname, lstatArgs->statbuf, &errorNumber);

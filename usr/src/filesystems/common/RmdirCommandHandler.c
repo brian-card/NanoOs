@@ -75,6 +75,10 @@ void* Rmdir(void *args) {
     filesystemState, processMessage, filesystemPathArgs->pathname);
   if (pathname == NULL) {
     returnValue = -FILESYSTEM_PATH_ENOMEM;
+  } else if (!filesystemPathAllowed(filesystemState, processMessage, pathname,
+    false, DIRCAP_DELETE)
+  ) {
+    returnValue = -FILESYSTEM_EACCES;
   } else if (filesystemState->driverState != NULL) {
     returnValue = driverRmdir(filesystemState->driverState, pathname);
   }
