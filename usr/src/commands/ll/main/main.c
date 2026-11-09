@@ -116,7 +116,7 @@ void listDir(const char *path) {
   struct stat *st = &state->st;
   struct tm *tm = &state->tm;
   while ((entry = readdir(dirp)) != NULL) {
-    if (istat(entry->d_ino, st) < 0) {
+    if (dirstat(entry, st) < 0) {
       printf("%s%s\n", entry->d_name, (entry->d_type == DT_DIR) ? "/" : "");
       continue;
     }

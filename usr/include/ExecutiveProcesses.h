@@ -449,6 +449,32 @@ static inline int findProcessByName(const char *name, ProcessId *returnValue) {
   return -1;
 }
 
+/// @fn static inline bool executiveDirCapabilityAllows(
+///   const DirCapabilities *set, const char *path, size_t pathLength,
+///   bool isDirectory, uint8_t bits)
+///
+/// @brief Determine whether a set allows an operation on a path.  This has a
+/// different name from the kernel's function because DirCapabilities.h
+/// declares that one in the same translation units.
+///
+/// @param set The caller's set.
+/// @param path The canonical absolute path.
+/// @param pathLength The length of path.
+/// @param isDirectory Whether path names a directory being used as one.
+/// @param bits The DIRCAP_* bits the operation needs.
+///
+/// @return Returns true if the operation is allowed, false if not.
+static inline bool executiveDirCapabilityAllows(const DirCapabilities *set,
+  const char *path, size_t pathLength, bool isDirectory, uint8_t bits
+) {
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return overlayMap.header.osApi->executiveApi->dirCapabilityAllows(
+      set, path, pathLength, isDirectory, bits);
+  }
+  return false;
+}
+#define dirCapabilityAllows executiveDirCapabilityAllows
+
 /// @fn static inline ProcessMessage* getAvailableMessage(void)
 ///
 /// @brief Get a ProcessMessage that isn't in use and mark it in use.

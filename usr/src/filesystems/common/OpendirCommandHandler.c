@@ -142,6 +142,10 @@ void* Opendir(void *args) {
     if (driverHandle != NULL) {
       slot->driverHandle = driverHandle;
       slot->owner = sender;
+      slot->flags = dirCapabilityAllows(
+        processMessageFrom(processMessage)->dirCapabilities,
+        pathname, strlen(pathname), true, DIRCAP_STAT)
+        ? FILESYSTEM_DIR_CAN_STAT : 0;
       dirp = (DIR*) ((((uintptr_t) slot->generation)
           << FILESYSTEM_DIR_INDEX_BITS)
         | (uintptr_t) (slot - filesystemState->openDirs));

@@ -63,7 +63,7 @@ void* Opendir(void *args);
 void* Readdir(void *args);
 void* Closedir(void *args);
 void* Lstat(void *args);
-void* Istat(void *args);
+void* Dirstat(void *args);
 void* RenameFile(void *args);
 void* Mkdir(void *args);
 void* Rmdir(void *args);
@@ -92,7 +92,7 @@ static const FilesystemCommandHandler filesystemCommandHandlers[] = {
   Readdir,              // FILESYSTEM_READ_DIR
   Closedir,             // FILESYSTEM_CLOSE_DIR
   Lstat,                // FILESYSTEM_LSTAT
-  Istat,                // FILESYSTEM_ISTAT
+  Dirstat,              // FILESYSTEM_DIRSTAT
   RenameFile,           // FILESYSTEM_RENAME_FILE
   Mkdir,                // FILESYSTEM_MKDIR
   Rmdir,                // FILESYSTEM_RMDIR

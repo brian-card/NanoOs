@@ -130,18 +130,35 @@ _Static_assert(FILESYSTEM_DIR_INDEX_BITS + FILESYSTEM_DIR_GENERATION_BITS == 16,
 /// @brief The most open-directory slots a handle can address.
 #define FILESYSTEM_MAX_OPEN_DIRS (1 << FILESYSTEM_DIR_INDEX_BITS)
 
+/// @def FILESYSTEM_DIR_CAN_STAT
+///
+/// @brief The FilesystemOpenDir flag set if the owner held STAT on the
+/// directory when it opened it.
+#define FILESYSTEM_DIR_CAN_STAT   ((uint8_t) 0x01)
+
+/// @def FILESYSTEM_DIR_HAS_ENTRY
+///
+/// @brief The FilesystemOpenDir flag set while ino holds the entry that
+/// readdir most recently returned.
+#define FILESYSTEM_DIR_HAS_ENTRY  ((uint8_t) 0x02)
+
 /// @struct FilesystemOpenDir
 ///
-/// @brief One slot of the table of open directories.
+/// @brief One slot of the table of open directories.  ino comes first because
+/// any other position pads the slot on 32-bit targets.
 ///
+/// @param ino The inode of the entry that readdir most recently returned.
 /// @param driverHandle The driver's handle for the directory.
 /// @param generation The generation a handle to this slot must carry.
 /// @param owner The process that opened the directory, or 0 if the slot is
 ///   free.
+/// @param flags The FILESYSTEM_DIR_* flags of the slot.
 typedef struct FilesystemOpenDir {
+  ino_t      ino;
   void      *driverHandle;
   uint16_t   generation;
   ProcessId  owner;
+  uint8_t    flags;
 } FilesystemOpenDir;
 
 /// @struct FilesystemState
@@ -378,25 +395,22 @@ typedef struct FilesystemLstatArgs {
   int          errorNumber;
 } FilesystemLstatArgs;
 
-/// @struct FilesystemIstatArgs
+/// @struct FilesystemDirstatArgs
 ///
-/// @brief Function parameters and return value for an istat call.
+/// @brief Function parameters and return value for a dirstat call.
 ///
-/// @param ino The inode number of the file to stat, as previously returned
-///   in st_ino/d_ino by lstat/readdir on the same file.
+/// @param dirp The handle of the DIR the entry came from.
 /// @param statbuf A pointer to a caller-supplied struct stat to be populated.
 /// @param returnValue The return value of the operation that will be passed
 ///   back from the handler: 0 on success, -1 on failure.
 /// @param errorNumber The errno value that should be used for the calling
-///   process when returnValue is -1.  Populated by the driver (which knows
-///   what its own failure actually means); this struct and the command
-///   handler that fills it in never interpret it themselves.
-typedef struct FilesystemIstatArgs {
-  ino_t        ino;
+///   process when returnValue is -1.
+typedef struct FilesystemDirstatArgs {
+  DIR         *dirp;
   struct stat *statbuf;
   int          returnValue;
   int          errorNumber;
-} FilesystemIstatArgs;
+} FilesystemDirstatArgs;
 
 /// @struct FilesystemClosedirArgs
 ///
@@ -522,7 +536,7 @@ typedef enum FilesystemCommandResponse {
   FILESYSTEM_READ_DIR,
   FILESYSTEM_CLOSE_DIR,
   FILESYSTEM_LSTAT,
-  FILESYSTEM_ISTAT,
+  FILESYSTEM_DIRSTAT,
   FILESYSTEM_RENAME_FILE,
   FILESYSTEM_MKDIR,
   FILESYSTEM_RMDIR,
@@ -623,34 +637,14 @@ int filesystemLstat(const char *pathname, struct stat *statbuf);
 #endif // lstat
 #define lstat filesystemLstat
 
-/// @fn int filesystemIstat(ino_t ino, struct stat *statbuf)
-///
-/// @brief Populate a struct stat directly from an inode number, bypassing
-/// the path-resolution and directory-search work lstat has to do.
-///
-/// @details Not a POSIX function: it exists because, unlike a filesystem
-/// with real inodes, a filesystem-agnostic caller has no other way to ask
-/// for "the file lstat/readdir already told me has inode N" without walking
-/// a path back down to it.  Behaves exactly like filesystemLstat otherwise,
-/// including the same driver-agnostic ownership/permission fixup (see
-/// filesystemFixupUnknownOwnership) -- the only difference is how the
-/// driver locates the entry.
-///
-/// @param ino A value previously returned in st_ino/d_ino by lstat/readdir
-///   on the same filesystem.
-/// @param statbuf A pointer to a caller-supplied struct stat to populate.
-///
-/// @return Returns 0 on success, -1 and sets the value of errno on failure
-/// (including when ino no longer refers to a real file, e.g. it was
-/// deleted after the caller obtained it).
-int filesystemIstat(ino_t ino, struct stat *statbuf);
-#ifdef istat
-#undef istat
-#endif // istat
-#define istat filesystemIstat
+int filesystemDirstat(const struct dirent *entry, struct stat *statbuf);
+#ifdef dirstat
+#undef dirstat
+#endif // dirstat
+#define dirstat filesystemDirstat
 
 // filesystemFixupUnknownOwnership (used by both the FILESYSTEM_LSTAT and
-// FILESYSTEM_ISTAT command handlers) is defined in NanoOsStatTypes.h, not
+// FILESYSTEM_DIRSTAT command handlers) is defined in NanoOsStatTypes.h, not
 // here, alongside the FILESYSTEM_UID_UNKNOWN/FILESYSTEM_GID_UNKNOWN
 // sentinels it checks: that macro expands to "((uid_t) -1)", and uid_t is
 // renamed to a different, undefined name (see e.g. HalCommon.c) around

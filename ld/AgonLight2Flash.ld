@@ -298,7 +298,7 @@
 *(.text._filesystemReaddir)
 *(.text._filesystemClosedir)
 *(.text._filesystemLstat)
-*(.text._filesystemIstat)
+*(.text._filesystemDirstat)
 *(.text._fat32Format)
 *(.text._filesystemFSeek)
 *(.text._filesystemFRead)

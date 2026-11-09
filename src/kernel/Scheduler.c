@@ -621,7 +621,7 @@ IpcCapability baseSupervisorIpcCapabilities[] = {
       | (((uint32_t) 1) << FILESYSTEM_READ_DIR)
       | (((uint32_t) 1) << FILESYSTEM_CLOSE_DIR)
       | (((uint32_t) 1) << FILESYSTEM_LSTAT)
-      | (((uint32_t) 1) << FILESYSTEM_ISTAT)
+      | (((uint32_t) 1) << FILESYSTEM_DIRSTAT)
       | (((uint32_t) 1) << FILESYSTEM_RENAME_FILE)
       | (((uint32_t) 1) << FILESYSTEM_MKDIR)
       | (((uint32_t) 1) << FILESYSTEM_RMDIR)
@@ -681,7 +681,7 @@ IpcCapability baseUserIpcCapabilities[] = {
       | (((uint32_t) 1) << FILESYSTEM_READ_DIR)
       | (((uint32_t) 1) << FILESYSTEM_CLOSE_DIR)
       | (((uint32_t) 1) << FILESYSTEM_LSTAT)
-      | (((uint32_t) 1) << FILESYSTEM_ISTAT)
+      | (((uint32_t) 1) << FILESYSTEM_DIRSTAT)
       | (((uint32_t) 1) << FILESYSTEM_RENAME_FILE)
       | (((uint32_t) 1) << FILESYSTEM_MKDIR)
       | (((uint32_t) 1) << FILESYSTEM_RMDIR)
@@ -728,11 +728,11 @@ static const DIR_CAPABILITIES_STATIC(KERNEL_DIR_CAPABILITY_ENTRIES)
 
 /// @def SUPERVISOR_DIR_CAPABILITY_ENTRIES
 ///
-/// @brief The packed entries of the compiled supervisor base set:  rx on
-/// /usr/bin/, rls on /etc/, rwcdls on /secure/, rwcdlsx on /home/, and
+/// @brief The packed entries of the compiled supervisor base set:  rwcdlsx on
+/// /usr/, rls on /etc/, rwcdls on /secure/, rwcdlsx on /home/, and
 /// rwcdls on /root/ and /tmp/.
 #define SUPERVISOR_DIR_CAPABILITY_ENTRIES \
-  "\x41" "\x09" "/usr/bin/" \
+  "\x7f" "\x05" "/usr/" \
   "\x31" "\x05" "/etc/" \
   "\x3f" "\x08" "/secure/" \
   "\x7f" "\x06" "/home/" \

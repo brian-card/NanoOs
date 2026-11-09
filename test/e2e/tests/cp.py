@@ -54,14 +54,14 @@ def test_cp_truncates_a_longer_existing_file(s):
 
 def test_cp_copies_files_into_a_directory(s):
     s.login()
-    assert s.sh("mkdir /top") == ""
-    assert s.sh("cp /etc/catfile /etc/issue /top") == ""
-    assert ll_names(s, "/top") == ["catfile", "issue"]
-    assert s.sh("cat /top/catfile") == CATFILE_CONTENTS
+    assert s.sh("mkdir /root/top") == ""
+    assert s.sh("cp /etc/catfile /etc/issue /root/top") == ""
+    assert ll_names(s, "/root/top") == ["catfile", "issue"]
+    assert s.sh("cat /root/top/catfile") == CATFILE_CONTENTS
     assert s.sh("cd /etc") == ""
-    assert s.sh("cp hostname ../top/") == ""
-    assert ll_names(s, "/top") == ["catfile", "hostname", "issue"]
-    assert s.sh("cat /top/hostname") == s.sh("cat hostname")
+    assert s.sh("cp hostname ../root/top/") == ""
+    assert ll_names(s, "/root/top") == ["catfile", "hostname", "issue"]
+    assert s.sh("cat /root/top/hostname") == s.sh("cat hostname")
     assert ll_names(s, "/etc") == ["catfile", "hostname", "issue"]
     assert fsck_problems(s) == []
 

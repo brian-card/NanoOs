@@ -85,8 +85,8 @@ const OverlayFilesystemCommandEntry filesystemCommandHandlers[] = {
   {CLOSE_DIR_OVERLAY, "Closedir"},
   // FILESYSTEM_LSTAT:
   {LSTAT_OVERLAY, "Lstat"},
-  // FILESYSTEM_ISTAT:
-  {ISTAT_OVERLAY, "Istat"},
+  // FILESYSTEM_DIRSTAT:
+  {DIRSTAT_OVERLAY, "Dirstat"},
   // FILESYSTEM_RENAME_FILE:
   {RENAME_FILE_OVERLAY, "RenameFile"},
   // FILESYSTEM_MKDIR:

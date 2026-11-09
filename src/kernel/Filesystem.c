@@ -635,23 +635,24 @@ int filesystemLstat(const char *pathname, struct stat *statbuf) {
   return returnValue;
 }
 
-/// @fn int filesystemIstat(ino_t ino, struct stat *statbuf)
+/// @fn int filesystemDirstat(const struct dirent *entry,
+///   struct stat *statbuf)
 ///
-/// @brief Implementation of filesystemIstat: like filesystemLstat, but
-/// looks the file up by inode number instead of by path.
+/// @brief Populate a struct stat for the entry that readdir most recently
+/// returned from a DIR.
 ///
-/// @param ino A value previously returned in st_ino/d_ino by lstat/readdir.
+/// @param entry The entry readdir returned.
 /// @param statbuf A pointer to a caller-supplied struct stat to populate.
 ///
 /// @return Returns 0 on success, -1 and sets the value of errno on failure.
-int filesystemIstat(ino_t ino, struct stat *statbuf) {
-  if (statbuf == NULL) {
+int filesystemDirstat(const struct dirent *entry, struct stat *statbuf) {
+  if ((entry == NULL) || (statbuf == NULL)) {
     errno = EINVAL;
     return -1;
   }
 
-  FilesystemIstatArgs filesystemIstatArgs = {
-    .ino = ino,
+  FilesystemDirstatArgs filesystemDirstatArgs = {
+    .dirp = (DIR*) entry->priv,
     .statbuf = statbuf,
     .returnValue = 0,
     .errorNumber = 0,
@@ -659,12 +660,12 @@ int filesystemIstat(ino_t ino, struct stat *statbuf) {
 
   ProcessMessage *msg = initSendProcessMessageToPid(
     rootFilesystemPid,
-    FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_ISTAT,
-    &filesystemIstatArgs, sizeof(filesystemIstatArgs), true);
+    FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_DIRSTAT,
+    &filesystemDirstatArgs, sizeof(filesystemDirstatArgs), true);
   processMessageWaitForDone(msg, NULL);
-  int returnValue = filesystemIstatArgs.returnValue;
+  int returnValue = filesystemDirstatArgs.returnValue;
   if (returnValue != 0) {
-    errno = filesystemIstatArgs.errorNumber;
+    errno = filesystemDirstatArgs.errorNumber;
     returnValue = -1;
   }
   processMessageRelease(msg);

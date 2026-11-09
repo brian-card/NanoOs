@@ -118,6 +118,9 @@ typedef int32_t off_t;
 ///   C99 flexible array member ([]) so this still compiles under a C++
 ///   compiler.
 struct dirent {
+  // `priv` is first because ino_t and off_t have different widths in the
+  // kernel and the overlays on hosted builds, and both sides use this member.
+  void          *priv;
   ino_t          d_ino;
   off_t          d_off;
   unsigned short d_reclen;

@@ -60,7 +60,7 @@ extern "C"
 #define READ_DIR_OVERLAY                blockOverlayId(14)
 #define CLOSE_DIR_OVERLAY               blockOverlayId(15)
 #define LSTAT_OVERLAY                   blockOverlayId(16)
-#define ISTAT_OVERLAY                   blockOverlayId(17)
+#define DIRSTAT_OVERLAY                 blockOverlayId(17)
 #define RENAME_FILE_OVERLAY             blockOverlayId(18)
 #define MKDIR_OVERLAY                   blockOverlayId(19)
 #define RMDIR_OVERLAY                   blockOverlayId(20)

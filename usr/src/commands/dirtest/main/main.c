@@ -41,6 +41,8 @@
 #include <errno.h>
 #include <stdint.h>
 #include <string.h>
+#include <sys/dircap.h>
+#include <sys/stat.h>
 #include "NanoOsUtils.h"
 
 static void listDir(const char *path) {
@@ -61,6 +63,38 @@ static void listDir(const char *path) {
   closedir(dirp);
 }
 
+/// @brief Show what dirstat reports for /etc's first entry, and how it fails.
+/// Must run last, because it drops the process's capability on /etc/.
+///
+/// @return This function returns no value.
+static void showDirstat(void) {
+  struct stat st;
+
+  DIR *dirp = opendir("/etc");
+  struct dirent *entry = readdir(dirp);
+  ino_t ino = entry->d_ino;
+  int result = dirstat(entry, &st);
+  printf("dirstat -> %d, ino_matches=%d\n", result, st.st_ino == ino);
+
+  entry->d_ino = ino + 1;
+  result = dirstat(entry, &st);
+  printf("dirstat changed d_ino -> %d, ino_matches=%d\n",
+    result, st.st_ino == ino);
+
+  closedir(dirp);
+  errno = 0;
+  result = dirstat(entry, &st);
+  printf("dirstat after closedir -> %d, errno=%d\n", result, errno);
+
+  dircapDrop("/etc/");
+  dirp = opendir("/etc");
+  entry = readdir(dirp);
+  errno = 0;
+  result = dirstat(entry, &st);
+  printf("dirstat without STAT -> %d, errno=%d\n", result, errno);
+  closedir(dirp);
+}
+
 /// @brief Print the usage summary for dirtest.
 ///
 /// @param stream The stream to print to.
@@ -73,7 +107,9 @@ static void printUsage(FILE *stream) {
     "Exercise the directory-reading functions.  List \"/\", \"/etc\", and \"/usr\"\n"
     "with opendir and readdir, showing each entry's name, type, inode, and\n"
     "record length, then show how opendir, readdir, and closedir handle a\n"
-    "missing path, a regular file, the end of a directory, and a NULL handle.\n"
+    "missing path, a regular file, the end of a directory, and a NULL handle,\n"
+    "and how dirstat handles a changed d_ino, a closed directory, and a\n"
+    "directory opened without the stat capability.\n"
     "\n"
     "Options:\n"
     "  --help  Show this help and exit.\n",
@@ -119,6 +155,8 @@ int main(int argc, char **argv) {
   errno = 0;
   int closeResult = closedir(NULL);
   printf("closedir(NULL) -> %d, errno=%d\n", closeResult, errno);
+
+  showDirstat();
 
   return 0;
 }

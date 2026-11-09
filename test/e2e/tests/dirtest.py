@@ -79,3 +79,29 @@ def test_dirent_sets_errno_correctly(s):
     assert "readdir past end of /etc -> NULL, errno=0" in out, out
     # closedir on a NULL DIR must fail (-1) and set errno (EBADF = 13).
     assert "closedir(NULL) -> -1, errno=13" in out, out
+
+
+def test_dirstat_reports_the_entry(s):
+    s.login()
+    out = s.sh("dirtest")
+    assert "dirstat -> 0, ino_matches=1" in out, out
+
+
+def test_dirstat_ignores_a_changed_d_ino(s):
+    s.login()
+    out = s.sh("dirtest")
+    assert "dirstat changed d_ino -> 0, ino_matches=1" in out, out
+
+
+def test_dirstat_after_closedir_is_ebadf(s):
+    # EBADF is 13 in src/user/NanoOsErrno.h.
+    s.login()
+    out = s.sh("dirtest")
+    assert "dirstat after closedir -> -1, errno=13" in out, out
+
+
+def test_dirstat_without_the_capability_is_eacces(s):
+    # EACCES is 4 in src/user/NanoOsErrno.h.
+    s.login()
+    out = s.sh("dirtest")
+    assert "dirstat without STAT -> -1, errno=4" in out, out

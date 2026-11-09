@@ -48,8 +48,8 @@ static inline int lstat(const char *pathname, struct stat *statbuf) {
   return overlayMap.header.osApi->userApi->lstat(pathname, statbuf);
 }
 
-static inline int istat(ino_t ino, struct stat *statbuf) {
-  return overlayMap.header.osApi->userApi->istat(ino, statbuf);
+static inline int dirstat(const struct dirent *entry, struct stat *statbuf) {
+  return overlayMap.header.osApi->userApi->dirstat(entry, statbuf);
 }
 
 static inline int mkdir(const char *pathname, mode_t mode) {

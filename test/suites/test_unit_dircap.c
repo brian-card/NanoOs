@@ -569,7 +569,9 @@ NANO_OS_TEST(unit_dircap, the_compiled_sets_hold_what_they_document) {
   const DirCapabilities *supervisor = supervisorDirCapabilities;
   NANO_OS_ASSERT_TRUE(allows(supervisor, "/usr/bin/mush", false,
     DIRCAP_READ | DIRCAP_EXEC));
-  NANO_OS_ASSERT_FALSE(allows(supervisor, "/usr/bin/mush", false,
+  NANO_OS_ASSERT_TRUE(allows(supervisor, "/usr/bin", true,
+    DIRCAP_LIST | DIRCAP_STAT));
+  NANO_OS_ASSERT_TRUE(allows(supervisor, "/usr/bin/mush", false,
     DIRCAP_WRITE));
   NANO_OS_ASSERT_TRUE(allows(supervisor, "/etc", true,
     DIRCAP_READ | DIRCAP_LIST | DIRCAP_STAT));
@@ -587,7 +589,7 @@ NANO_OS_TEST(unit_dircap, the_compiled_sets_hold_what_they_document) {
     DIRCAP_READ | DIRCAP_WRITE | DIRCAP_CREATE | DIRCAP_DELETE
     | DIRCAP_LIST | DIRCAP_STAT));
   NANO_OS_ASSERT_FALSE(allows(supervisor, "/tmp/x", false, DIRCAP_EXEC));
-  NANO_OS_ASSERT_FALSE(allows(supervisor, "/usr/lib/x", false, DIRCAP_READ));
+  NANO_OS_ASSERT_FALSE(allows(supervisor, "/var/lib/x", false, DIRCAP_READ));
 }
 
 /// @union TestBlock

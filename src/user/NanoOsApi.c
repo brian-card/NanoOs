@@ -97,7 +97,7 @@ char** parseArgs(char *command, int *argc);
 #undef readdir
 #undef closedir
 #undef lstat
-#undef istat
+#undef dirstat
 
 KEEP_IN_FLASH
 const NanoOsExecutiveApi nanoOsExecutiveApi = {
@@ -134,6 +134,9 @@ const NanoOsExecutiveApi nanoOsExecutiveApi = {
   .getAvailableMessage = getAvailableMessage,
   .sendProcessMessageToPid = sendProcessMessageToPid,
   .findProcessByName = findProcessByName,
+
+  // Directory capability functions:
+  .dirCapabilityAllows = dirCapabilityAllows,
 };
 
 KEEP_IN_FLASH
@@ -165,7 +168,7 @@ static const NanoOsUserApi _nanoOsUserApi = {
 
   // File status:
   .lstat = filesystemLstat,
-  .istat = filesystemIstat,
+  .dirstat = filesystemDirstat,
 
   // Formatted I/O:
   .vsscanf = vsscanf,

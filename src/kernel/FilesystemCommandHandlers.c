@@ -65,7 +65,7 @@
 #include "../../usr/src/filesystems/common/ReaddirCommandHandler.c"
 #include "../../usr/src/filesystems/common/ClosedirCommandHandler.c"
 #include "../../usr/src/filesystems/common/LstatCommandHandler.c"
-#include "../../usr/src/filesystems/common/IstatCommandHandler.c"
+#include "../../usr/src/filesystems/common/DirstatCommandHandler.c"
 #include "../../usr/src/filesystems/common/RenameFileCommandHandler.c"
 #include "../../usr/src/filesystems/common/MkdirCommandHandler.c"
 #include "../../usr/src/filesystems/common/RmdirCommandHandler.c"
@@ -96,7 +96,7 @@ const FilesystemCommandHandler fat32CommandHandlers[NUM_FILESYSTEM_COMMANDS] = {
   Readdir,              // FILESYSTEM_READ_DIR
   Closedir,             // FILESYSTEM_CLOSE_DIR
   Lstat,                // FILESYSTEM_LSTAT
-  Istat,                // FILESYSTEM_ISTAT
+  Dirstat,              // FILESYSTEM_DIRSTAT
   RenameFile,           // FILESYSTEM_RENAME_FILE
   Mkdir,                // FILESYSTEM_MKDIR
   Rmdir,                // FILESYSTEM_RMDIR

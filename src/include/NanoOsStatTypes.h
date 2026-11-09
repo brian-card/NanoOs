@@ -163,7 +163,7 @@ struct stat {
 /// @brief Replace a driver's FILESYSTEM_UID_UNKNOWN/FILESYSTEM_GID_UNKNOWN
 /// sentinels with real defaults.
 ///
-/// @details Shared by the FILESYSTEM_LSTAT and FILESYSTEM_ISTAT command
+/// @details Shared by the FILESYSTEM_LSTAT and FILESYSTEM_DIRSTAT command
 /// handlers (see usr/src/filesystems/common/) so the two apply an
 /// identical, driver-agnostic policy: this is the entire extent of what
 /// either handler knows about *why* a driver couldn't populate ownership --

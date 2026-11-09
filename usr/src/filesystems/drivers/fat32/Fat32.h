@@ -1628,7 +1628,7 @@ static inline time_t fat32DateTimeToUnixTime(uint16_t fatDate, uint16_t fatTime)
 ///
 ///          Leaves st_uid/st_gid at the FILESYSTEM_*_UNKNOWN sentinels (see
 ///          NanoOsStatTypes.h): FAT32 has no concept of ownership, and it's
-///          the driver-agnostic FILESYSTEM_LSTAT/FILESYSTEM_ISTAT command
+///          the driver-agnostic FILESYSTEM_LSTAT/FILESYSTEM_DIRSTAT command
 ///          handlers' job, not this driver's, to decide what to report in
 ///          its place (see filesystemFixupUnknownOwnership in
 ///          NanoOsStatTypes.h). Permission bits are a different matter:

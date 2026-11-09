@@ -25,9 +25,9 @@
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-/// @file IstatCommandHandler.c
+/// @file DirstatCommandHandler.c
 ///
-/// @brief Filesystem-driver-agnostic implementation of a FILESYSTEM_ISTAT
+/// @brief Filesystem-driver-agnostic implementation of a FILESYSTEM_DIRSTAT
 /// command handler.  Shared verbatim by the kernel-linked, contiguous, and
 /// overlay filesystem builds; calls the selected driver's driverIstat
 /// directly, since which driver is linked in is a build-time choice, not a
@@ -43,6 +43,7 @@
 #include "NanoOsUtils.h"
 #include "FilesystemUtils.h"
 #endif // NANO_OS_KERNEL_BUILD
+#include "../include/FilesystemHandles.h"
 
 // Prototype used by this handler.
 int driverIstat(void *driverState, ino_t ino, struct stat *statbuf,
@@ -62,38 +63,48 @@ int driverIstat(void *driverState, ino_t ino, struct stat *statbuf,
 /// If you change the numbering there, you MUST update this value too!
 #define NO_DRIVER_ERRNO 14 // ENODEV
 
-/// @fn void* Istat(void *args)
+/// @fn void* Dirstat(void *args)
 ///
-/// @brief Command handler for an istat call.
+/// @brief Command handler for a dirstat call.  The inode comes from the slot,
+/// never from the caller's dirent, which the caller can change.
 ///
 /// @param args A pointer to a FilesystemState, cast to a void*.  The args
 ///   member variable is a pointer to a ProcessMessage.
 ///
-/// @return Sets the returnValue member of the provided FilesystemIstatArgs
+/// @return Sets the returnValue member of the provided FilesystemDirstatArgs
 /// to 0 on success (with errorNumber set to 0), or to -1 with errorNumber
 /// set to the errno value the caller should see on failure.  This function
 /// always returns the filesystemState pointer provided as args.
-void* Istat(void *args) {
+void* Dirstat(void *args) {
   FilesystemState *filesystemState = (FilesystemState*) args;
   ProcessMessage *processMessage = (ProcessMessage*) filesystemState->args;
-  FilesystemIstatArgs *istatArgs
-    = (FilesystemIstatArgs*) processMessageData(processMessage);
+  FilesystemDirstatArgs *dirstatArgs
+    = (FilesystemDirstatArgs*) processMessageData(processMessage);
 
   int returnValue = -1;
   int errorNumber = NO_DRIVER_ERRNO;
-  if (filesystemState->driverState != NULL) {
+  FilesystemOpenDir *slot
+    = filesystemDirLookup(filesystemState, processMessage, dirstatArgs->dirp);
+  if (slot == NULL) {
+    errorNumber = FILESYSTEM_EBADF;
+  } else if ((slot->flags & FILESYSTEM_DIR_CAN_STAT) == 0) {
+    errorNumber = FILESYSTEM_EACCES;
+  } else if ((slot->flags & FILESYSTEM_DIR_HAS_ENTRY) == 0) {
+    errorNumber = FILESYSTEM_EBADF;
+  } else if (filesystemState->driverState != NULL) {
     returnValue = driverIstat(filesystemState->driverState,
-      istatArgs->ino, istatArgs->statbuf, &errorNumber);
+      slot->ino, dirstatArgs->statbuf, &errorNumber);
   }
 
   if (returnValue == 0) {
     // Identical fixup to FILESYSTEM_LSTAT's, and for the same reason -- see
     // filesystemFixupUnknownOwnership's doc comment (NanoOsStatTypes.h).
-    filesystemFixupUnknownOwnership(istatArgs->statbuf);
+    filesystemFixupUnknownOwnership(dirstatArgs->statbuf);
   }
 
-  istatArgs->returnValue = returnValue;
-  istatArgs->errorNumber = errorNumber;
+  dirstatArgs->returnValue = returnValue;
+  dirstatArgs->errorNumber = errorNumber;
   processMessageSetDone(processMessage);
   return filesystemState;
 }
+

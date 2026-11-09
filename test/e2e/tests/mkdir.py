@@ -44,17 +44,17 @@ def test_mkdir_and_rmdir_manage_an_empty_directory(s):
 
 def test_mkdir_nests_directories_and_holds_files(s):
     s.login()
-    assert s.sh("mkdir /top") == ""
-    assert s.sh("mkdir /top/inner") == ""
-    assert ll_names(s, "/top/inner/..") == ["inner/"]
-    assert s.sh("mv /etc/catfile /top/inner/catfile") == ""
-    assert s.sh("cat /top/inner/catfile") == CATFILE_CONTENTS
-    assert s.sh("rmdir /top/inner") == \
-        'ERROR: Could not remove directory "/top/inner": Directory not empty'
-    assert s.sh("rm /top/inner/catfile") == ""
-    assert s.sh("rmdir /top/inner") == ""
-    assert s.sh("rmdir /top") == ""
-    assert "top/" not in ll_names(s, "/")
+    assert s.sh("mkdir /root/top") == ""
+    assert s.sh("mkdir /root/top/inner") == ""
+    assert ll_names(s, "/root/top/inner/..") == ["inner/"]
+    assert s.sh("mv /etc/catfile /root/top/inner/catfile") == ""
+    assert s.sh("cat /root/top/inner/catfile") == CATFILE_CONTENTS
+    assert s.sh("rmdir /root/top/inner") == \
+        'ERROR: Could not remove directory "/root/top/inner": Directory not empty'
+    assert s.sh("rm /root/top/inner/catfile") == ""
+    assert s.sh("rmdir /root/top/inner") == ""
+    assert s.sh("rmdir /root/top") == ""
+    assert "top/" not in ll_names(s, "/root")
     assert fsck_problems(s) == []
 
 

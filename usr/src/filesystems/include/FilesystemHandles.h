@@ -61,6 +61,12 @@ extern "C"
 /// @brief NanoOs's ENOMEM.
 #define FILESYSTEM_ENOMEM 3
 
+/// @def FILESYSTEM_EACCES
+///
+/// @brief The value of EACCES in src/user/NanoOsErrno.h, which the handlers
+/// can't include.
+#define FILESYSTEM_EACCES 4
+
 /// @def FILESYSTEM_DIR_GENERATION_MASK
 ///
 /// @brief The bits a slot's generation can use.
@@ -175,8 +181,10 @@ static inline FilesystemOpenDir* filesystemDirLookup(
 ///
 /// @return This function returns no value.
 static inline void filesystemDirRelease(FilesystemOpenDir *slot) {
+  slot->ino = 0;
   slot->driverHandle = NULL;
   slot->owner = 0;
+  slot->flags = 0;
   slot->generation = (uint16_t) ((slot->generation + 1u)
     & FILESYSTEM_DIR_GENERATION_MASK);
   if (slot->generation == 0) {

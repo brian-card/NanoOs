@@ -130,6 +130,10 @@ typedef struct NanoOsExecutiveApi {
   msg_t* (*getAvailableMessage)(void);
   int (*sendProcessMessageToPid)(unsigned int pid, msg_t *message);
   int (*findProcessByName)(const char *name, uint8_t *returnValue);
+
+  // Directory capability functions:
+  bool (*dirCapabilityAllows)(const DirCapabilities *set,
+    const char *path, size_t pathLength, bool isDirectory, uint8_t bits);
 } NanoOsExecutiveApi;
 
 typedef struct NanoOsUserApi {
@@ -157,7 +161,7 @@ typedef struct NanoOsUserApi {
 
   // File status:
   int (*lstat)(const char *pathname, struct stat *statbuf);
-  int (*istat)(ino_t ino, struct stat *statbuf);
+  int (*dirstat)(const struct dirent *entry, struct stat *statbuf);
 
   // NanoOs extensions with no filesystem-agnostic name (see fat32Format's
   // own doc comment for why): unlike the operations above, these depend on

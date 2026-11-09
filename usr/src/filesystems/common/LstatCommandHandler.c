@@ -98,7 +98,7 @@ void* Lstat(void *args) {
     // The driver has no notion of ownership for a filesystem type that
     // doesn't track it, and signals that by leaving st_uid and st_gid set
     // to the FILESYSTEM_*_UNKNOWN sentinels.  Fixing those up is the only
-    // thing this handler (and FILESYSTEM_ISTAT's, identically) ever does to
+    // thing this handler (and FILESYSTEM_DIRSTAT's, identically) ever does to
     // the driver's struct stat: st_mode's permission bits -- and everything
     // else about it, including which filesystem driver produced it in the
     // first place -- are passed through untouched, since a driver that

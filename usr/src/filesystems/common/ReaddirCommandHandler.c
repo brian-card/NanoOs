@@ -90,6 +90,13 @@ void* Readdir(void *args) {
   } else if (filesystemState->driverState != NULL) {
     entry = driverReaddir(
       filesystemState->driverState, slot->driverHandle, &errorNumber);
+    if (entry != NULL) {
+      entry->priv = readdirArgs->dirp;
+      slot->ino = entry->d_ino;
+      slot->flags |= FILESYSTEM_DIR_HAS_ENTRY;
+    } else {
+      slot->flags &= (uint8_t) ~FILESYSTEM_DIR_HAS_ENTRY;
+    }
   }
 
   readdirArgs->returnValue = entry;

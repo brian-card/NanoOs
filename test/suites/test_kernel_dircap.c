@@ -292,7 +292,7 @@ NANO_OS_KERNEL_TEST_WITH(dircap, a_superset_entry_fails_the_spawn_with_EACCES,
   NANO_OS_ASSERT_EQ_INT(0,
     nanoOsSpawnattrAdddircap(&attr, "/tmp/", DIRCAP_READ));
   NANO_OS_ASSERT_EQ_INT(0,
-    nanoOsSpawnattrAdddircap(&attr, "/usr/lib/", DIRCAP_READ));
+    nanoOsSpawnattrAdddircap(&attr, "/var/lib/", DIRCAP_READ));
 
   int status = 0;
   NANO_OS_ASSERT_EQ_INT(0, spawnChild("report", &attr, &status));
@@ -333,7 +333,7 @@ NANO_OS_KERNEL_TEST(dircap, get_copies_the_set_only_when_it_fits) {
 }
 
 NANO_OS_KERNEL_TEST(dircap, add_and_drop_change_only_the_callers_set) {
-  NANO_OS_ASSERT_EQ_INT(-1, nanoOsDircapAdd("/usr/lib/", DIRCAP_READ));
+  NANO_OS_ASSERT_EQ_INT(-1, nanoOsDircapAdd("/var/lib/", DIRCAP_READ));
   NANO_OS_ASSERT_EQ_INT(EACCES, errno);
   NANO_OS_ASSERT_EQ_PTR(supervisorDirCapabilities,
     getRunningProcess()->dirCapabilities);
