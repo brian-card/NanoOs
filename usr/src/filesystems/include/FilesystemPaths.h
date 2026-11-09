@@ -225,6 +225,41 @@ static inline const char* filesystemCallerPath(const char *realPath,
   return &realPath[FILESYSTEM_USERSPACE_LENGTH];
 }
 
+/// @fn static bool filesystemPathAllowed(
+///   FilesystemState *filesystemState, ProcessMessage *processMessage,
+///   const char *realPath, bool isDirectory, uint8_t bits)
+///
+/// @brief Determine whether a request's sender holds the capabilities for an
+/// operation on a path.  Not inlined because the handlers' combined copies
+/// don't fit the Agon's contiguous filesystem region.
+///
+/// @param filesystemState A pointer to the filesystem process's
+///   FilesystemState.
+/// @param processMessage The ProcessMessage that carried the path.
+/// @param realPath A path returned by filesystemAbsolutePath.
+/// @param isDirectory Whether the path is being used as a directory rather
+///   than as an entry being created or removed.
+/// @param bits The DIRCAP_* bits the operation needs.
+///
+/// @return Returns true if the operation is allowed, false if not.
+static __attribute__((noinline, unused)) bool filesystemPathAllowed(
+  FilesystemState *filesystemState, ProcessMessage *processMessage,
+  const char *realPath, bool isDirectory, uint8_t bits
+) {
+  const ProcessDescriptor *from = processMessageFrom(processMessage);
+  if ((from < filesystemState->allProcesses)
+    || (from >= filesystemState->allProcesses + filesystemState->numProcesses)
+  ) {
+    return false;
+  }
+
+  bool fullPath = filesystemMessageHasFullPath(filesystemState, processMessage);
+  size_t length = 0;
+  const char *name = filesystemCallerPath(realPath, fullPath, &length);
+  return dirCapabilityAllows(from->dirCapabilities, name, length, isDirectory,
+    bits | (fullPath ? DIRCAP_FULL_PATH : 0));
+}
+
 #ifdef __cplusplus
 }
 #endif
