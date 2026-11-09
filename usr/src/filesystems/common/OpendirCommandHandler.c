@@ -142,9 +142,15 @@ void* Opendir(void *args) {
     if (driverHandle != NULL) {
       slot->driverHandle = driverHandle;
       slot->owner = sender;
+      bool fullPath
+        = filesystemMessageHasFullPath(filesystemState, processMessage);
+      size_t callerPathLength = 0;
+      const char *callerPath
+        = filesystemCallerPath(pathname, fullPath, &callerPathLength);
       slot->flags = dirCapabilityAllows(
         processMessageFrom(processMessage)->dirCapabilities,
-        pathname, strlen(pathname), true, DIRCAP_STAT)
+        callerPath, callerPathLength, true,
+        DIRCAP_STAT | (fullPath ? DIRCAP_FULL_PATH : 0))
         ? FILESYSTEM_DIR_CAN_STAT : 0;
       dirp = (DIR*) ((((uintptr_t) slot->generation)
           << FILESYSTEM_DIR_INDEX_BITS)
