@@ -58,7 +58,8 @@ static void handleFilesystemMessages(FilesystemState *filesystemState) {
       }
 
       FilesystemCommandResponse type =
-        (FilesystemCommandResponse) (processMessageType(msg) & 0xff);
+        (FilesystemCommandResponse) (processMessageType(msg)
+          & FILESYSTEM_COMMAND_MASK);
       if (type >= NUM_FILESYSTEM_COMMANDS) {
         logError("Received unknown filesystem message type "
           "%ld from process %ld\n", (long int) type,
@@ -145,18 +146,21 @@ void* runFilesystem(void *args) {
   return NULL;
 }
 
-/// @fn FILE* filesystemFopen(const char *pathname, const char *mode)
+/// @fn static FILE* filesystemOpenFile(const char *pathname, const char *mode,
+///   int64_t pathFlag)
 ///
-/// @brief Implementation of the standard C fopen call.
+/// @brief Open a file for the running process.
 ///
-/// @param pathname The full pathname to the file.  NOTE:  This implementation
-///   can only open files in the root directory.  Subdirectories are NOT
-///   supported.
+/// @param pathname The path to the file.
 /// @param mode The standard C file mode to open the file as.
+/// @param pathFlag FILESYSTEM_FULL_PATH if pathname is the full path on the
+///   volume, 0 if it's a path under /userspace.
 ///
 /// @return Returns a pointer to an initialized FILE object on success, NULL on
 /// failure.
-FILE* filesystemFopen(const char *pathname, const char *mode) {
+static FILE* filesystemOpenFile(const char *pathname, const char *mode,
+  int64_t pathFlag
+) {
   FILE *file = NULL;
 
   ProcessDescriptor *processDescriptor = getRunningProcess();
@@ -215,7 +219,7 @@ FILE* filesystemFopen(const char *pathname, const char *mode) {
 
   ProcessMessage *msg = initSendProcessMessageToPid(
     rootFilesystemPid,
-    FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_OPEN_FILE,
+    FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_OPEN_FILE | pathFlag,
     &fopenArgs, sizeof(fopenArgs), true);
   processMessageWaitForDone(msg, NULL);
   free(fopenArgs.mode);
@@ -254,6 +258,106 @@ freeFileDescriptor:
 
 exit:
   return file;
+}
+
+/// @fn FILE* filesystemFopen(const char *pathname, const char *mode)
+///
+/// @brief Implementation of the standard C fopen call.  The path is always
+/// under /userspace.
+///
+/// @param pathname The path to the file.
+/// @param mode The standard C file mode to open the file as.
+///
+/// @return Returns a pointer to an initialized FILE object on success, NULL on
+/// failure.
+FILE* filesystemFopen(const char *pathname, const char *mode) {
+  return filesystemOpenFile(pathname, mode, 0);
+}
+
+/// @fn FILE* filesystemFopenFullPath(const char *pathname, const char *mode)
+///
+/// @brief Open a file by its full path on the volume, for a kernel or
+/// executive process.
+///
+/// @param pathname The full path to the file.
+/// @param mode The standard C file mode to open the file as.
+///
+/// @return Returns a pointer to an initialized FILE object on success, NULL on
+/// failure.  errno is EPERM if the caller is below executive level.
+FILE* filesystemFopenFullPath(const char *pathname, const char *mode) {
+  ProcessDescriptor *processDescriptor = getRunningProcess();
+  if ((processDescriptor == NULL)
+    || (processDescriptor->privilegeLevel > PRIVILEGE_LEVEL_EXECUTIVE)
+  ) {
+    errno = EPERM;
+    return NULL;
+  }
+
+  return filesystemOpenFile(pathname, mode, FILESYSTEM_FULL_PATH);
+}
+
+/// @var _userspacePath
+///
+/// @brief The directory that every path a process names through the User API
+/// is under.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _userspacePath[] KEEP_IN_FLASH = "/userspace";
+
+/// @fn bool filesystemPathIsUserspace(const char *path)
+///
+/// @brief Determine whether a full, collapsed path is /userspace or below it.
+///
+/// @param path The path to check.
+///
+/// @return Returns true if the path is in /userspace, false if not.
+bool filesystemPathIsUserspace(const char *path) {
+  return (strncmp(path, _userspacePath, FILESYSTEM_USERSPACE_LENGTH) == 0)
+    && ((path[FILESYSTEM_USERSPACE_LENGTH] == '/')
+      || (path[FILESYSTEM_USERSPACE_LENGTH] == '\0'));
+}
+
+/// @fn size_t userspacePathCopy(char *destination, const char *path)
+///
+/// @brief Write the full path of a path that a process named.  The path is
+/// collapsed before /userspace goes on the front so that it can't climb out.
+///
+/// @param destination Where to write the full path, which must have room for
+///   FILESYSTEM_USERSPACE_LENGTH plus the length of path plus 2 bytes.
+/// @param path The path the process named.
+///
+/// @return Returns the length of the full path.
+size_t userspacePathCopy(char *destination, const char *path) {
+  char *absolutePath = &destination[FILESYSTEM_USERSPACE_LENGTH];
+  absolutePath[0] = '/';
+  strcpy(&absolutePath[1], path);
+  size_t length = pathCollapse(absolutePath);
+  memcpy(destination, _userspacePath, FILESYSTEM_USERSPACE_LENGTH);
+  if (length == 1) {
+    absolutePath[0] = '\0';
+    length = 0;
+  }
+
+  return FILESYSTEM_USERSPACE_LENGTH + length;
+}
+
+/// @fn char* userspacePathNew(const char *path)
+///
+/// @brief Allocate the full path of a path that a process named.
+///
+/// @param path The path the process named.
+///
+/// @return Returns the full path, which the caller must free, or NULL if
+/// memory ran out.
+char* userspacePathNew(const char *path) {
+  char *fullPath
+    = (char*) malloc(FILESYSTEM_USERSPACE_LENGTH + strlen(path) + 2);
+  if (fullPath != NULL) {
+    userspacePathCopy(fullPath, path);
+  }
+
+  return fullPath;
 }
 
 /// @fn int filesystemFclose(FILE *stream)
@@ -922,7 +1026,12 @@ int getFileBlockMetadataFromPath(const char *path,
     return -EINVAL;
   }
 
-  FILE *stream = fopen(path, _readMode);
+  // A process below executive level only ever runs overlays under /userspace,
+  // and the filesystem would ignore a full path from it.
+  bool underUserspace = filesystemPathIsUserspace(path);
+  FILE *stream = filesystemOpenFile(
+    underUserspace ? &path[FILESYSTEM_USERSPACE_LENGTH] : path, _readMode,
+    underUserspace ? 0 : FILESYSTEM_FULL_PATH);
   if (stream == NULL) {
     int errorNumber = (errno != 0) ? errno : EIO;
     logError("Could not open file \"%s\"\n", path);

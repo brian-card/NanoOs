@@ -122,13 +122,33 @@ typedef struct FilesystemState* (*FilesystemDriverInit)(
 /// @brief The number of bits of a DIR handle that hold the slot's generation.
 #define FILESYSTEM_DIR_GENERATION_BITS 12
 
-_Static_assert(FILESYSTEM_DIR_INDEX_BITS + FILESYSTEM_DIR_GENERATION_BITS == 16,
-  "A DIR handle must be 16 bits so that it fits AVR's pointers");
+#if (FILESYSTEM_DIR_INDEX_BITS + FILESYSTEM_DIR_GENERATION_BITS) != 16
+#error "A DIR handle must be 16 bits so that it fits AVR's pointers"
+#endif
 
 /// @def FILESYSTEM_MAX_OPEN_DIRS
 ///
 /// @brief The most open-directory slots a handle can address.
 #define FILESYSTEM_MAX_OPEN_DIRS (1 << FILESYSTEM_DIR_INDEX_BITS)
+
+/// @def FILESYSTEM_USERSPACE_LENGTH
+///
+/// @brief The length of "/userspace", the real directory that every path
+/// outside the system tree is under.
+#define FILESYSTEM_USERSPACE_LENGTH 10
+
+/// @def FILESYSTEM_FULL_PATH
+///
+/// @brief Bit in the command byte of a filesystem message saying that its path
+/// is the full path on the volume rather than one under /userspace.  The
+/// filesystem honors it only from a kernel or executive process.
+#define FILESYSTEM_FULL_PATH 0x80
+
+/// @def FILESYSTEM_COMMAND_MASK
+///
+/// @brief The part of the command byte of a filesystem message that is the
+/// command.
+#define FILESYSTEM_COMMAND_MASK 0x7f
 
 /// @def FILESYSTEM_DIR_CAN_STAT
 ///
@@ -638,6 +658,10 @@ int filesystemLstat(const char *pathname, struct stat *statbuf);
 #define lstat filesystemLstat
 
 int filesystemDirstat(const struct dirent *entry, struct stat *statbuf);
+FILE* filesystemFopenFullPath(const char *pathname, const char *mode);
+bool filesystemPathIsUserspace(const char *path);
+size_t userspacePathCopy(char *destination, const char *path);
+char* userspacePathNew(const char *path);
 #ifdef dirstat
 #undef dirstat
 #endif // dirstat
