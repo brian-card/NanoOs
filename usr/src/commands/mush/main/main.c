@@ -247,11 +247,11 @@ static size_t expandVariables(const char *line, char *expanded,
 /// errno that launching it left.
 ///
 /// @return Returns 127 if the command wasn't found, 126 if it couldn't be
-/// executed, and 1 otherwise.
+/// executed or the caller may not run it, and 1 otherwise.
 static int launchFailureStatus(void) {
   if (errno == ENOENT) {
     return 127;
-  } else if (errno == ENOEXEC) {
+  } else if ((errno == ENOEXEC) || (errno == EACCES)) {
     return 126;
   }
   return 1;
