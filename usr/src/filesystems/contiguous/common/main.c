@@ -143,7 +143,8 @@ void* main(void *args) {
       }
 
       FilesystemCommandResponse type =
-        (FilesystemCommandResponse) (processMessageType(msg) & 0xff);
+        (FilesystemCommandResponse) (processMessageType(msg)
+          & FILESYSTEM_COMMAND_MASK);
       if (type >= NUM_FILESYSTEM_COMMANDS) {
         printString(__func__);
         printString(": ERROR: Received unknown filesystem message type ");
