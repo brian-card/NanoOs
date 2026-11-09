@@ -693,8 +693,9 @@ void* schedMalloc(size_t size);
 
 /// @def ROOT_DIR_CAPABILITY_ENTRIES
 ///
-/// @brief The packed entries of the scheduler's set:  rwcdlsx on /.
-#define ROOT_DIR_CAPABILITY_ENTRIES "\x7f" "\x01" "/"
+/// @brief The packed entries of the scheduler's set:  rwcdlsx on / as a path
+/// under /userspace and as a full path.
+#define ROOT_DIR_CAPABILITY_ENTRIES "\x7f" "\x01" "/" "\xff" "\x01" "/"
 
 /// @var _rootDirCapabilities
 ///
@@ -704,37 +705,33 @@ void* schedMalloc(size_t size);
 /// final binary on some targets.
 static const DIR_CAPABILITIES_STATIC(ROOT_DIR_CAPABILITY_ENTRIES)
   _rootDirCapabilities KEEP_IN_FLASH
-  = DIR_CAPABILITIES_STATIC_INITIALIZER(1, ROOT_DIR_CAPABILITY_ENTRIES);
+  = DIR_CAPABILITIES_STATIC_INITIALIZER(2, ROOT_DIR_CAPABILITY_ENTRIES);
 
 /// @def KERNEL_DIR_CAPABILITY_ENTRIES
 ///
-/// @brief The packed entries of the kernel processes' set:  rx on /usr/lib/,
-/// where the logger's string table and the drivers are, and rx on
-/// /usr/bin/logger/, the logger's own overlays.
+/// @brief The packed entries of the kernel processes' set:  rx on the full
+/// path /system/, where the logger, its string table, and the drivers are.
 #define KERNEL_DIR_CAPABILITY_ENTRIES \
-  "\x41" "\x09" "/usr/lib/" \
-  "\x41" "\x10" "/usr/bin/logger/"
+  "\xc1" "\x08" "/system/"
 
 /// @var _kernelDirCapabilities
 ///
 /// @brief The set of every process other than the scheduler that the kernel
-/// starts itself, and of the devices in /etc/config.sys.
+/// starts itself, and of the devices in config.sys.
 ///
 /// @note KEEP_IN_FLASH is required here because .rodata is removed from the
 /// final binary on some targets.
 static const DIR_CAPABILITIES_STATIC(KERNEL_DIR_CAPABILITY_ENTRIES)
   _kernelDirCapabilities KEEP_IN_FLASH
-  = DIR_CAPABILITIES_STATIC_INITIALIZER(2, KERNEL_DIR_CAPABILITY_ENTRIES);
+  = DIR_CAPABILITIES_STATIC_INITIALIZER(1, KERNEL_DIR_CAPABILITY_ENTRIES);
 
 /// @def SUPERVISOR_DIR_CAPABILITY_ENTRIES
 ///
 /// @brief The packed entries of the compiled supervisor base set:  rwcdlsx on
-/// /usr/, rls on /etc/, rwcdls on /secure/, rwcdlsx on /home/, and
-/// rwcdls on /root/ and /tmp/.
+/// /usr/ and /home/, and rwcdls on /etc/, /root/, and /tmp/.
 #define SUPERVISOR_DIR_CAPABILITY_ENTRIES \
   "\x7f" "\x05" "/usr/" \
-  "\x31" "\x05" "/etc/" \
-  "\x3f" "\x08" "/secure/" \
+  "\x3f" "\x05" "/etc/" \
   "\x7f" "\x06" "/home/" \
   "\x3f" "\x06" "/root/" \
   "\x3f" "\x05" "/tmp/"
@@ -747,7 +744,26 @@ static const DIR_CAPABILITIES_STATIC(KERNEL_DIR_CAPABILITY_ENTRIES)
 /// final binary on some targets.
 static const DIR_CAPABILITIES_STATIC(SUPERVISOR_DIR_CAPABILITY_ENTRIES)
   _supervisorDirCapabilities KEEP_IN_FLASH
-  = DIR_CAPABILITIES_STATIC_INITIALIZER(6, SUPERVISOR_DIR_CAPABILITY_ENTRIES);
+  = DIR_CAPABILITIES_STATIC_INITIALIZER(5, SUPERVISOR_DIR_CAPABILITY_ENTRIES);
+
+/// @def LOGIN_DIR_CAPABILITY_ENTRIES
+///
+/// @brief The packed entries of the login set:  the supervisor base set plus
+/// x on the full path /system/ and r on the full path /secure/.
+#define LOGIN_DIR_CAPABILITY_ENTRIES \
+  SUPERVISOR_DIR_CAPABILITY_ENTRIES \
+  "\xc0" "\x08" "/system/" \
+  "\x81" "\x08" "/secure/"
+
+/// @var _loginDirCapabilities
+///
+/// @brief The set of a shell slot running a program from outside /userspace.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const DIR_CAPABILITIES_STATIC(LOGIN_DIR_CAPABILITY_ENTRIES)
+  _loginDirCapabilities KEEP_IN_FLASH
+  = DIR_CAPABILITIES_STATIC_INITIALIZER(7, LOGIN_DIR_CAPABILITY_ENTRIES);
 
 /// @var rootDirCapabilities
 ///
@@ -775,6 +791,15 @@ DirCapabilities *const kernelDirCapabilities KEEP_IN_FLASH
 /// final binary on some targets.
 DirCapabilities *const supervisorDirCapabilities KEEP_IN_FLASH
   = (DirCapabilities*) &_supervisorDirCapabilities;
+
+/// @var loginDirCapabilities
+///
+/// @brief The set of a shell slot running a program from /system/.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+DirCapabilities *const loginDirCapabilities KEEP_IN_FLASH
+  = (DirCapabilities*) &_loginDirCapabilities;
 
 /// @fn void schedulerSetDirCapabilities(ProcessDescriptor *processDescriptor,
 ///   DirCapabilities *dirCapabilities)
@@ -2450,36 +2475,54 @@ static __attribute__((noinline)) char** envpBlockFill(char *block,
   return envpArray;
 }
 
-/// @fn int schedulerExecve(const char *pathname,
-///   char *const argv[], char *const envp[])
+/// @fn static int schedulerExecvePath(const char *pathname,
+///   char *const argv[], char *const envp[], bool isFullPath)
 ///
-/// @brief NanoOs implementation of Unix execve function.
+/// @brief Replace the running process with a program.
 ///
-/// @param pathname The full, absolute path on disk to the program to run.
-/// @param argv The NULL-terminated array of arguments for the command.  argv[0]
-///   must be valid and should be the name of the program.
-/// @param envp The NULL-terminated array of environment variables in
-///   "name=value" format.  This array may be NULL.
+/// @param pathname The path to the program.
+/// @param argv The NULL-terminated array of arguments for the command.
+/// @param envp The NULL-terminated array of environment variables.  This array
+///   may be NULL.
+/// @param isFullPath Whether pathname is the full path on the volume rather
+///   than a path under /userspace.
 ///
 /// @return This function will not return to the caller on success.  On failure,
-/// -1 will be returned and the value of errno will be set to indicate the
-/// reason for the failure.
-int schedulerExecve(const char *pathname,
-  char *const argv[], char *const envp[]
+/// -1 will be returned and errno will be set.
+static int schedulerExecvePath(const char *pathname,
+  char *const argv[], char *const envp[], bool isFullPath
 ) {
   if ((pathname == NULL) || (argv == NULL) || (argv[0] == NULL)) {
     errno = EFAULT;
     return -1;
   }
+
+  char *fullPath = NULL;
+  if (isFullPath) {
+    fullPath = (char*) malloc(strlen(pathname) + 1);
+    if (fullPath != NULL) {
+      strcpy(fullPath, pathname);
+      pathCollapse(fullPath);
+    }
+  } else {
+    fullPath = userspacePathNew(pathname);
+  }
+  if (fullPath == NULL) {
+    errno = ENOMEM;
+    return -1;
+  }
+
   nanoOsCloseStdout();
 
-  ExecArgs *execArgs = (ExecArgs*) calloc(1, execArgsSize(pathname, argv));
+  ExecArgs *execArgs = (ExecArgs*) calloc(1, execArgsSize(fullPath, argv));
   if (execArgs == NULL) {
+    free(fullPath);
     logError("Allocating execArgs failed\n");
     errno = ENOMEM;
     return -1;
   }
-  execArgsFill(execArgs, pathname, argv);
+  execArgsFill(execArgs, fullPath, argv);
+  free(fullPath);
 
   if (envp != NULL) {
     size_t envpBytes = envpBlockSize(envp);
@@ -2523,6 +2566,56 @@ freeExecArgs:
   execArgs = execArgsDestroy(execArgs);
 
   return -1;
+}
+
+/// @fn int schedulerExecve(const char *pathname,
+///   char *const argv[], char *const envp[])
+///
+/// @brief NanoOs implementation of Unix execve function.  The path is always
+/// under /userspace.
+///
+/// @param pathname The absolute path to the program to run.
+/// @param argv The NULL-terminated array of arguments for the command.  argv[0]
+///   must be valid and should be the name of the program.
+/// @param envp The NULL-terminated array of environment variables in
+///   "name=value" format.  This array may be NULL.
+///
+/// @return This function will not return to the caller on success.  On failure,
+/// -1 will be returned and the value of errno will be set to indicate the
+/// reason for the failure.
+int schedulerExecve(const char *pathname,
+  char *const argv[], char *const envp[]
+) {
+  return schedulerExecvePath(pathname, argv, envp, false);
+}
+
+/// @fn int schedulerExecveFullPath(const char *pathname,
+///   char *const argv[], char *const envp[])
+///
+/// @brief Version of execve for a kernel or executive process that takes the
+/// full path on the volume.  A program outside /userspace keeps running at
+/// executive level.
+///
+/// @param pathname The full path to the program to run.
+/// @param argv The NULL-terminated array of arguments for the command.
+/// @param envp The NULL-terminated array of environment variables.  This array
+///   may be NULL.
+///
+/// @return This function will not return to the caller on success.  On failure,
+/// -1 will be returned and errno will be set, to EPERM if the caller is below
+/// executive level.
+int schedulerExecveFullPath(const char *pathname,
+  char *const argv[], char *const envp[]
+) {
+  ProcessDescriptor *processDescriptor = getRunningProcess();
+  if ((processDescriptor == NULL)
+    || (processDescriptor->privilegeLevel > PRIVILEGE_LEVEL_EXECUTIVE)
+  ) {
+    errno = EPERM;
+    return -1;
+  }
+
+  return schedulerExecvePath(pathname, argv, envp, true);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2686,16 +2779,20 @@ exit:
   return returnValue;
 }
 
-/// @fn FILE* schedFopen(const char *pathname, const char *mode)
+/// @fn static FILE* schedOpenFile(const char *pathname, const char *mode,
+///   int64_t pathFlag)
 ///
-/// @brief Version of fopen for the scheduler.
+/// @brief Open a file for the scheduler.
 ///
-/// @param pathname A pointer to the C string with the full path to the file to
-///   open.
+/// @param pathname A pointer to the C string with the path to the file.
 /// @param mode A pointer to the C string that defines the way to open the file.
+/// @param pathFlag FILESYSTEM_FULL_PATH if pathname is the full path on the
+///   volume, 0 if it's a path under /userspace.
 ///
 /// @return Returns a pointer to the opened file on success, NULL on failure.
-FILE* schedFopen(const char *pathname, const char *mode) {
+static FILE* schedOpenFile(const char *pathname, const char *mode,
+  int64_t pathFlag
+) {
   FILE *returnValue = NULL;
   if (rootFilesystemPid == 0) {
     errno = ENODEV;
@@ -2713,9 +2810,9 @@ FILE* schedFopen(const char *pathname, const char *mode) {
       .returnValue = NULL,
       .errorNumber = 0,
     };
-    logDebug("schedFopen: Sending message\n");
+    logDebug("schedOpenFile: Sending message\n");
     if (schedulerInitSendMessageToPid(rootFilesystemPid,
-      FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_OPEN_FILE,
+      FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_OPEN_FILE | pathFlag,
       &fopenArgs, sizeof(fopenArgs)
       ) != processSuccess
     ) {
@@ -2738,6 +2835,31 @@ FILE* schedFopen(const char *pathname, const char *mode) {
   }
 
   return returnValue;
+}
+
+/// @fn FILE* schedFopen(const char *pathname, const char *mode)
+///
+/// @brief Version of fopen for the scheduler.  The path is under /userspace.
+///
+/// @param pathname A pointer to the C string with the path to the file.
+/// @param mode A pointer to the C string that defines the way to open the file.
+///
+/// @return Returns a pointer to the opened file on success, NULL on failure.
+FILE* schedFopen(const char *pathname, const char *mode) {
+  return schedOpenFile(pathname, mode, 0);
+}
+
+/// @fn FILE* schedFopenFullPath(const char *pathname, const char *mode)
+///
+/// @brief Version of fopen for the scheduler that takes the full path on the
+/// volume.
+///
+/// @param pathname A pointer to the C string with the full path to the file.
+/// @param mode A pointer to the C string that defines the way to open the file.
+///
+/// @return Returns a pointer to the opened file on success, NULL on failure.
+FILE* schedFopenFullPath(const char *pathname, const char *mode) {
+  return schedOpenFile(pathname, mode, FILESYSTEM_FULL_PATH);
 }
 
 /// @fn int schedFclose(FILE *stream)
@@ -3130,7 +3252,7 @@ int schedGetFileBlockMetadataFromPath(
   }
 
   errno = 0;
-  FILE *stream = schedFopen(path, _readMode);
+  FILE *stream = schedFopenFullPath(path, _readMode);
   if (stream == NULL) {
     int errorNumber = (errno != 0) ? errno : EIO;
     // A missing file is routine here: execve and posix_spawn search PATH.
@@ -3587,6 +3709,46 @@ int schedulerGetProcessInfoCommandHandler(
   return returnValue;
 }
 
+/// @fn static void schedulerSetExecutivePrivilege(
+///   ProcessDescriptor *processDescriptor)
+///
+/// @brief Run a process slot at executive level.
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor of the slot.
+///
+/// @return This function returns no value.
+static void schedulerSetExecutivePrivilege(
+  ProcessDescriptor *processDescriptor
+) {
+  processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
+  if (processDescriptor->halCapabilitiesDynamic == false) {
+    schedulerSetBaseHalCapabilities(processDescriptor);
+  }
+  processDescriptor->readyQueue
+    = _schedulerState->readyQueues[PRIVILEGE_LEVEL_EXECUTIVE];
+}
+
+/// @fn static void schedulerDropExecutivePrivilege(
+///   ProcessDescriptor *processDescriptor)
+///
+/// @brief Take a process slot that's at executive level down to supervisor.
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor of the slot.
+///
+/// @return This function returns no value.
+static void schedulerDropExecutivePrivilege(
+  ProcessDescriptor *processDescriptor
+) {
+  if (processDescriptor->privilegeLevel != PRIVILEGE_LEVEL_EXECUTIVE) {
+    return;
+  }
+
+  processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_SUPERVISOR;
+  schedulerSetBaseHalCapabilities(processDescriptor);
+  processDescriptor->readyQueue
+    = _schedulerState->readyQueues[PRIVILEGE_LEVEL_SUPERVISOR];
+}
+
 /// @fn int schedulerSetProcessUserCommandHandler(
 ///   SchedulerState *schedulerState, ProcessMessage *processMessage)
 ///
@@ -3608,7 +3770,12 @@ int schedulerSetProcessUserCommandHandler(
   ProcessId callingPid = processPid(processMessageFrom(processMessage));
 
   if ((callingPid > 0) && (callingPid <= numProcesses)) {
-    if ((allProcesses[callingPid - 1].userId == -1)
+    if (allProcesses[callingPid - 1].privilegeLevel
+      > PRIVILEGE_LEVEL_EXECUTIVE
+    ) {
+      schedulerSetProcessUserArgs->returnValue = -1;
+      schedulerSetProcessUserArgs->errorNumber = EPERM;
+    } else if ((allProcesses[callingPid - 1].userId == -1)
       || (schedulerSetProcessUserArgs->userId == -1)
     ) {
       allProcesses[callingPid - 1].userId = schedulerSetProcessUserArgs->userId;
@@ -3898,6 +4065,9 @@ int schedulerExecveCommandHandler(
 
   processDescriptor->envp = envp;
   processDescriptor->name = argv[0];
+  if (filesystemPathIsUserspace(pathname)) {
+    schedulerDropExecutivePrivilege(processDescriptor);
+  }
 
   /*
    * This shouldn't be necessary.  In hindsight, perhaps I shouldn't be
@@ -4279,6 +4449,7 @@ int schedulerSpawnCommandHandler(
 
   processDescriptor->envp = envp;
   processDescriptor->name = argv[0];
+  schedulerDropExecutivePrivilege(processDescriptor);
   schedulerSetDirCapabilities(processDescriptor, dirCapabilities);
 
   // Resume the thread so that it picks up all the pointers it needs before
@@ -5637,7 +5808,7 @@ exit:
 ///
 /// @note KEEP_IN_FLASH is required here because .rodata is removed from the
 /// final binary on some targets.
-static const char _gettyPath[] KEEP_IN_FLASH = "/usr/bin/getty";
+static const char _gettyPath[] KEEP_IN_FLASH = "/system/bin/getty";
 
 /// @var _gettyName
 ///
@@ -5660,7 +5831,7 @@ static const char *_gettyArgs[] = {
 /// @var _loggerPath
 ///
 /// @brief Path to the logger overlay command on the filesystem.
-static const char _loggerPath[] KEEP_IN_FLASH = "/usr/bin/logger";
+static const char _loggerPath[] KEEP_IN_FLASH = "/system/bin/logger";
 
 /// @var _loggerName
 ///
@@ -5672,7 +5843,7 @@ static const char _loggerName[] KEEP_IN_FLASH = "logger";
 /// @brief Path to the data file the logger needs to use.  This will be argv[1]
 /// from within the logger process.
 static const char _loggerData[] KEEP_IN_FLASH
-  = "/usr/lib/NanoOs_rodata.bin";
+  = "/system/data/NanoOs_rodata.bin";
 
 /// @var _loggerArgs
 ///
@@ -5790,6 +5961,31 @@ int restartMemoryManager(ProcessDescriptor *processDescriptor) {
   return 0;
 }
 
+/// @fn static int schedulerRunShellSlotProgram(
+///   ProcessDescriptor *processDescriptor, char *path, char **argv)
+///
+/// @brief Start the program of a shell slot with no user logged in.  A program
+/// under /userspace runs at supervisor level and any other at executive level
+/// with the login set.
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor of the slot.
+/// @param path The full path to the program.
+/// @param argv The NULL-terminated array of arguments for the program.
+///
+/// @return Returns 0 on success, -errno on failure.
+static int schedulerRunShellSlotProgram(ProcessDescriptor *processDescriptor,
+  char *path, char **argv
+) {
+  if (!filesystemPathIsUserspace(path)) {
+    schedulerSetDirCapabilities(processDescriptor, loginDirCapabilities);
+    return schedulerRunExecutiveOverlay(processDescriptor, path, argv);
+  }
+
+  schedulerDropExecutivePrivilege(processDescriptor);
+  schedulerSetDirCapabilities(processDescriptor, supervisorDirCapabilities);
+  return schedulerRunOverlayCommand(processDescriptor, path, argv, NULL);
+}
+
 /// @fn int restartBuiltinShell(ProcessDescriptor *processDescriptor)
 ///
 /// @brief Implementation of restartFunction to re-launch a built-in shell if
@@ -5815,8 +6011,10 @@ int restartBuiltinShell(ProcessDescriptor *processDescriptor) {
     processDescriptor->processId, CONSOLE_COMMAND_SIGNATURE,
     CONSOLE_RETURNING_INPUT);
   if (processDescriptor->userId == NO_USER_ID) {
-    schedulerSetDirCapabilities(processDescriptor, supervisorDirCapabilities);
+    schedulerSetDirCapabilities(processDescriptor, loginDirCapabilities);
   }
+  // Every command this shell runs is kernel code, and its login needs setuid.
+  schedulerSetExecutivePrivilege(processDescriptor);
 
   int returnValue = 0;
   processDescriptor->numFileDescriptors = NUM_STANDARD_FILE_DESCRIPTORS;
@@ -5901,7 +6099,6 @@ int restartOverlayShell(ProcessDescriptor *processDescriptor) {
   if (processDescriptor->userId == NO_USER_ID) {
     schedFree(processDescriptor->shellPath);
     processDescriptor->shellPath = NULL;
-    schedulerSetDirCapabilities(processDescriptor, supervisorDirCapabilities);
     // Edits to /etc/passwd take effect at the next login.
     nanoOsPasswdCacheLoad();
     if (processDescriptor->envp != NULL) {
@@ -5923,11 +6120,11 @@ int restartOverlayShell(ProcessDescriptor *processDescriptor) {
     ShellProgram *shellProgram = (ShellProgram*) processDescriptor->restartArgs;
     int returnValue = 0;
     if (shellProgram != NULL) {
-      returnValue = schedulerRunOverlayCommand(processDescriptor,
-        shellProgram->path, shellProgram->argv, NULL);
+      returnValue = schedulerRunShellSlotProgram(processDescriptor,
+        shellProgram->path, shellProgram->argv);
     } else {
-      returnValue = schedulerRunOverlayCommand(processDescriptor,
-        (char*) _gettyPath, (char**) _gettyArgs, NULL);
+      returnValue = schedulerRunShellSlotProgram(processDescriptor,
+        (char*) _gettyPath, (char**) _gettyArgs);
     }
     if (returnValue == -EBUSY) {
       logDebug(
@@ -6002,7 +6199,8 @@ int schedulerSetBaseHalCapabilities(ProcessDescriptor *processDescriptor) {
 ///   char *commandPath, char **argv)
 ///
 /// @brief Launch an overlay command in a process slot as an executive-level
-/// process.  Only the scheduler may call this.
+/// process.  Only the scheduler may call this, and never for a program under
+/// /userspace.
 ///
 /// @param processDescriptor A pointer to the ProcessDescriptor of the slot to
 ///   launch the command in.
@@ -6013,16 +6211,11 @@ int schedulerSetBaseHalCapabilities(ProcessDescriptor *processDescriptor) {
 int schedulerRunExecutiveOverlay(ProcessDescriptor *processDescriptor,
   char *commandPath, char **argv
 ) {
-  if (!runningInScheduler()) {
+  if ((!runningInScheduler()) || filesystemPathIsUserspace(commandPath)) {
     return -EPERM;
   }
 
-  processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
-  if (processDescriptor->halCapabilitiesDynamic == false) {
-    schedulerSetBaseHalCapabilities(processDescriptor);
-  }
-  processDescriptor->readyQueue
-    = _schedulerState->readyQueues[processDescriptor->privilegeLevel];
+  schedulerSetExecutivePrivilege(processDescriptor);
   return schedulerRunOverlayCommand(processDescriptor, commandPath, argv,
     NULL);
 }
