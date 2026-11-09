@@ -35,13 +35,14 @@
 #include <string.h>
 #include <sys/utsname.h>
 #include <unistd.h>
+#include "ExecutiveProcesses.h"
 #include "NanoOsConsole.h"
 #include "NanoOsUtils.h"
 
 /// @def LOGIN_PATH
 ///
 /// @brief The absolute path to the login program on the filesystem.
-#define LOGIN_PATH "/usr/bin/login"
+#define LOGIN_PATH "/system/bin/login"
 
 /// @def LOGIN_NAME
 ///
@@ -254,7 +255,7 @@ int main(int argc, char **argv) {
     NULL,
   };
   
-  execve(LOGIN_PATH, loginArgv, NULL);
+  execveFullPath(LOGIN_PATH, loginArgv, NULL);
   // If we get here then the exec failed.  We don't really have to check the
   // return value but we do need to print out what happened as documented by
   // errno.
