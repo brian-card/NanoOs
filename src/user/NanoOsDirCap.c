@@ -67,7 +67,8 @@ int nanoOsDircapName(const char *directory, char **name, size_t *nameLength) {
     return EINVAL;
   }
 
-  const char *pwd = "";
+  // NULL, not "", because .rodata is removed on some targets.
+  const char *pwd = NULL;
   ProcessDescriptor *processDescriptor = getRunningProcess();
   if ((*directory != '/') && (processDescriptor != NULL)
     && (processDescriptor->envp != NULL)
@@ -80,13 +81,15 @@ int nanoOsDircapName(const char *directory, char **name, size_t *nameLength) {
     }
   }
 
-  size_t pwdLength = strlen(pwd);
+  size_t pwdLength = (pwd != NULL) ? strlen(pwd) : 0;
   size_t directoryLength = strlen(directory);
   char *path = (char*) malloc(pwdLength + directoryLength + 3);
   if (path == NULL) {
     return ENOMEM;
   }
-  memcpy(path, pwd, pwdLength);
+  if (pwd != NULL) {
+    memcpy(path, pwd, pwdLength);
+  }
   path[pwdLength] = '/';
   memcpy(&path[pwdLength + 1], directory, directoryLength + 1);
 
