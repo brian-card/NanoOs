@@ -56,7 +56,7 @@ cp "$EMULATOR/firmware/mos_platform.bin" "$EMULATOR/firmware/vdp_platform.so" "$
   AgonLight2 nanoemu "$E/NanoOs.img" contiguous "" "$E/firmware/mos_platform.bin" \
   > "$WORK/agon-build.log" 2>&1)
 python3 -c 'print("\n".join("u%02d" % n for n in range(1, 60)))' > "$WORK/ops.txt"
-mcopy -o -i "$E/NanoOs.img@@2097152" "$WORK/ops.txt" ::/etc/ops.txt
+mcopy -o -i "$E/NanoOs.img@@2097152" "$WORK/ops.txt" ::/userspace/etc/ops.txt
 
 cd "$E"
 NANOOS_PROFILE=$WORK/prof NANOOS_PROFILE_CALLEES=${CALLEES:-} SDL_AUDIODRIVER=dummy setsid ./fab-agon-emulator --sdcard-img NanoOs.img > "$E/emu.log" 2>&1 &
