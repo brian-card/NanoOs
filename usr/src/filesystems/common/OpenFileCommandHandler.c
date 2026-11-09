@@ -47,7 +47,7 @@
 
 // Prototypes used by this handler.
 void* driverFopen(void *driverState, const char *filePath, const char *mode,
-    time_t now, int *errorNumber);
+    time_t now, bool mayCreate, int *errorNumber);
 int driverFclose(void *driverState, void *fileHandle);
 
 /// @def NO_DRIVER_ERRNO
@@ -69,12 +69,17 @@ int driverFclose(void *driverState, void *fileHandle);
 
 /// @fn static uint8_t openFileAccess(const char *mode)
 ///
-/// @brief Get the access a file's fopen mode grants.
+/// @brief Get the access a file's fopen mode grants.  The kernel's "rx" mode
+/// opens an overlay to find its blocks and grants neither reading nor writing.
 ///
 /// @param mode The mode.
 ///
 /// @return Returns the DIRCAP_READ and DIRCAP_WRITE bits of the mode.
 static uint8_t openFileAccess(const char *mode) {
+  if ((mode[0] == 'r') && (mode[1] == 'x') && (mode[2] == '\0')) {
+    return 0;
+  }
+
   uint8_t access = (*mode == 'r') ? DIRCAP_READ : DIRCAP_WRITE;
   for (; *mode != '\0'; mode++) {
     if (*mode == '+') {
@@ -111,14 +116,22 @@ void* OpenFile(void *args) {
   printDebugString("\"\n");
 
   int errorNumber = NO_DRIVER_ERRNO;
+  uint8_t access = openFileAccess(fopenArgs->mode);
   char *pathname = filesystemAbsolutePath(
     filesystemState, processMessage, fopenArgs->pathname);
   if (pathname == NULL) {
     errorNumber = OUT_OF_MEMORY_ERRNO;
+  } else if (!filesystemPathAllowed(filesystemState, processMessage, pathname,
+    false, (access != 0) ? access : DIRCAP_EXEC)
+  ) {
+    errorNumber = FILESYSTEM_EACCES;
   } else if (filesystemState->driverState != NULL) {
+    bool mayCreate = (fopenArgs->mode[0] != 'r')
+      && filesystemPathAllowed(filesystemState, processMessage, pathname,
+        false, DIRCAP_CREATE);
     void *fileHandle = driverFopen(
       filesystemState->driverState,
-      pathname, fopenArgs->mode, fopenArgs->now, &errorNumber);
+      pathname, fopenArgs->mode, fopenArgs->now, mayCreate, &errorNumber);
     if (fileHandle != NULL) {
       nanoOsFile = (NanoOsFile*) malloc(sizeof(NanoOsFile));
       if (nanoOsFile != NULL) {
@@ -126,7 +139,7 @@ void* OpenFile(void *args) {
         nanoOsFile->currentPosition = 0;
         nanoOsFile->fd = fopenArgs->fd;
         nanoOsFile->owner = processPid(processMessageFrom(processMessage));
-        nanoOsFile->access = openFileAccess(fopenArgs->mode);
+        nanoOsFile->access = access;
         filesystemState->numOpenFiles++;
 
         nanoOsFile->next = filesystemState->openFiles;

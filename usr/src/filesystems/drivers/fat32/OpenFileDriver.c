@@ -113,6 +113,7 @@ int fat32ParseMode(const char *mode, Fat32OpenMode *flags) {
 /// @param mode         The null-terminated C fopen mode string.
 /// @param now          The time to record if the file is created, in seconds
 ///                     since the Unix epoch.
+/// @param mayCreate    Whether the caller may create the file if it's missing.
 /// @param errorNumber  [out] Set to 0 on success, or to the errno value the
 ///                     caller should see on failure.
 ///
@@ -124,6 +125,7 @@ void* driverFopen(
     const char *filePath,
     const char *mode,
     time_t now,
+    bool mayCreate,
     int *errorNumber
 ) {
   *errorNumber = fat32ErrorToErrno(FAT32_INVALID_PARAMETER);
@@ -204,6 +206,12 @@ void* driverFopen(
       // "r" / "r+" — the file must already be present.
       free(searchResult.longName);
       *errorNumber = fat32ErrorToErrno(searchStatus);
+      return NULL;
+    }
+
+    if (!mayCreate) {
+      free(searchResult.longName);
+      *errorNumber = fat32ErrorToErrno(FAT32_ACCESS_DENIED);
       return NULL;
     }
 
