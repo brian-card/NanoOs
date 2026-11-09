@@ -1243,7 +1243,7 @@ static int configSysQueueDevices(void);
 /// @fn int halCommonLaunchProcesses(void)
 ///
 /// @brief Register the console's name, grant the devices from
-/// /etc/config.sys their hardware, start the shells on the console ports, and
+/// config.sys their hardware, start the shells on the console ports, and
 /// queue the devices, then arm every
 /// supervisor- and user-level process that was created during scheduler
 /// startup but not yet queued, and push each one onto its ready queue.
@@ -1308,12 +1308,12 @@ int halCommonLaunchProcesses(void) {
 
 /// @def CONFIG_SYS_LINE_SIZE
 ///
-/// @brief Size of the buffer used to read one line of /etc/config.sys.
+/// @brief Size of the buffer used to read one line of config.sys.
 #define CONFIG_SYS_LINE_SIZE 128
 
 /// @struct ConfigSysDevice
 ///
-/// @brief A process started from a DEVICE line in /etc/config.sys.
+/// @brief A process started from a DEVICE line in config.sys.
 ///
 /// @param next The next device in the list, or NULL.
 /// @param pid The ProcessId of the slot the device runs in.
@@ -1329,7 +1329,7 @@ typedef struct ConfigSysDevice {
 /// @struct ConfigSysConsole
 ///
 /// @brief A console port and the program to run on it, from a CONSOLE line in
-/// /etc/config.sys.
+/// config.sys.
 ///
 /// @param next The next console in the list, or NULL.
 /// @param port The name of the port: UART<n> or the path of a DEVICE.
@@ -1342,7 +1342,7 @@ typedef struct ConfigSysConsole {
 
 /// @struct ConfigSys
 ///
-/// @brief What /etc/config.sys configured.  Allocated only when the file is
+/// @brief What config.sys configured.  Allocated only when the file is
 /// read, so that platforms without one spend a single pointer of .bss on it.
 ///
 /// @param devices List of the devices from DEVICE lines.
@@ -1357,7 +1357,7 @@ typedef struct ConfigSys {
 
 /// @var _configSys
 ///
-/// @brief What /etc/config.sys configured, or NULL if it hasn't been read.
+/// @brief What config.sys configured, or NULL if it hasn't been read.
 static ConfigSys *_configSys = NULL;
 
 /// @var _configSysPath
@@ -1366,11 +1366,11 @@ static ConfigSys *_configSys = NULL;
 ///
 /// @note KEEP_IN_FLASH is required here because .rodata is removed from the
 /// final binary on some targets.
-static const char _configSysPath[] KEEP_IN_FLASH = "/etc/config.sys";
+static const char _configSysPath[] KEEP_IN_FLASH = "/system/data/config.sys";
 
 /// @var _configSysReadMode
 ///
-/// @brief Mode used to open /etc/config.sys.
+/// @brief Mode used to open config.sys.
 ///
 /// @note KEEP_IN_FLASH is required here because .rodata is removed from the
 /// final binary on some targets.
@@ -1378,7 +1378,7 @@ static const char _configSysReadMode[] KEEP_IN_FLASH = "r";
 
 /// @var _configSysDeviceKeyword
 ///
-/// @brief Keyword of a /etc/config.sys line that starts a device process.
+/// @brief Keyword of a config.sys line that starts a device process.
 ///
 /// @note KEEP_IN_FLASH is required here because .rodata is removed from the
 /// final binary on some targets.
@@ -1386,7 +1386,7 @@ static const char _configSysDeviceKeyword[] KEEP_IN_FLASH = "DEVICE";
 
 /// @var _configSysConsoleKeyword
 ///
-/// @brief Keyword of a /etc/config.sys line that runs a program on a console
+/// @brief Keyword of a config.sys line that runs a program on a console
 /// port.
 ///
 /// @note KEEP_IN_FLASH is required here because .rodata is removed from the
@@ -1395,7 +1395,7 @@ static const char _configSysConsoleKeyword[] KEEP_IN_FLASH = "CONSOLE";
 
 /// @var _configSysHardwareKeyword
 ///
-/// @brief Keyword of a /etc/config.sys line that grants a device hardware.
+/// @brief Keyword of a config.sys line that grants a device hardware.
 ///
 /// @note KEEP_IN_FLASH is required here because .rodata is removed from the
 /// final binary on some targets.
@@ -1411,7 +1411,7 @@ static const char _configSysUartPrefix[] KEEP_IN_FLASH = "UART";
 
 /// @var _configSysRemKeyword
 ///
-/// @brief Keyword of a /etc/config.sys comment line.
+/// @brief Keyword of a config.sys comment line.
 ///
 /// @note KEEP_IN_FLASH is required here because .rodata is removed from the
 /// final binary on some targets.
@@ -1419,7 +1419,7 @@ static const char _configSysRemKeyword[] KEEP_IN_FLASH = "REM";
 
 /// @fn static inline bool configSysIsSpace(char c)
 ///
-/// @brief Determine whether a character separates fields in /etc/config.sys.
+/// @brief Determine whether a character separates fields in config.sys.
 ///
 /// @param c The character to check.
 ///
@@ -1520,6 +1520,7 @@ static ConfigSysDevice* configSysParseDevice(char *value) {
   device->argv[argIndex] = NULL;
 
   device->path = device->argv[0];
+  pathCollapse(device->path);
   char *name = strrchr(device->path, '/');
   if (name != NULL) {
     device->argv[0] = name + 1;
@@ -1551,7 +1552,7 @@ static ProcessDescriptor* configSysNextSlot(void) {
 /// @fn int restartConfigSysDevice(ProcessDescriptor *processDescriptor)
 ///
 /// @brief Implementation of restartFunction to launch a device from
-/// /etc/config.sys, and to re-launch it if it exits.
+/// config.sys, and to re-launch it if it exits.
 ///
 /// @param processDescriptor A pointer to the ProcessDescriptor that manages the
 ///   device's process.
@@ -1584,7 +1585,7 @@ int restartConfigSysDevice(ProcessDescriptor *processDescriptor) {
 /// DEVICE line.  The slot is not queued until the whole file has been read.
 ///
 /// @param value The trimmed text after the '=' of a DEVICE line.
-/// @param lineNumber The line of /etc/config.sys the DEVICE line is on.
+/// @param lineNumber The line of config.sys the DEVICE line is on.
 ///
 /// @return Returns 0 on success, -errno on failure.
 static int configSysAddDevice(char *value, int lineNumber) {
@@ -1624,7 +1625,7 @@ static int configSysAddDevice(char *value, int lineNumber) {
 /// when the shells are started, after the whole file has been read.
 ///
 /// @param value The trimmed text after the '=' of a CONSOLE line.
-/// @param lineNumber The line of /etc/config.sys the CONSOLE line is on.
+/// @param lineNumber The line of config.sys the CONSOLE line is on.
 ///
 /// @return Returns 0 on success, -errno on failure.
 static int configSysAddConsole(char *value, int lineNumber) {
@@ -1752,7 +1753,7 @@ static int configSysConsolePort(const char *port, ProcessId *outputPid) {
 /// made after the whole file has been read.
 ///
 /// @param value The trimmed text after the '=' of a HARDWARE line.
-/// @param lineNumber The line of /etc/config.sys the HARDWARE line is on.
+/// @param lineNumber The line of config.sys the HARDWARE line is on.
 ///
 /// @return Returns 0 on success, -errno on failure.
 static int configSysAddHardware(char *value, int lineNumber) {
@@ -1840,7 +1841,7 @@ static int configSysGrantHardware(void) {
 
 /// @fn static int configSysStartShells(void)
 ///
-/// @brief Start a shell on each console port that /etc/config.sys names, or
+/// @brief Start a shell on each console port that config.sys names, or
 /// getty on every console port if it names none that can be used, and give
 /// the unused shell process slots back to user processes.
 ///
@@ -1905,7 +1906,7 @@ static int configSysStartShells(void) {
 
 /// @fn static int configSysQueueDevices(void)
 ///
-/// @brief Queue the process slots of the devices from /etc/config.sys.  Each
+/// @brief Queue the process slots of the devices from config.sys.  Each
 /// slot's dummy process runs once as an executive process, and when it exits,
 /// restartConfigSysDevice launches the device in its place.
 ///
@@ -1939,10 +1940,10 @@ static int configSysQueueDevices(void) {
 
 /// @fn static int configSysProcessLine(char *line, int lineNumber)
 ///
-/// @brief Act on one line of /etc/config.sys.
+/// @brief Act on one line of config.sys.
 ///
 /// @param line The line, including any line ending.
-/// @param lineNumber The line's number within /etc/config.sys.
+/// @param lineNumber The line's number within config.sys.
 ///
 /// @return Returns 0 on success, -errno on failure.
 static int configSysProcessLine(char *line, int lineNumber) {
@@ -1983,13 +1984,13 @@ static int configSysProcessLine(char *line, int lineNumber) {
 
 /// @fn int halCommonLoadConfigSys(void)
 ///
-/// @brief Read /etc/config.sys, assigning a process slot to each DEVICE line
+/// @brief Read config.sys, assigning a process slot to each DEVICE line
 /// and recording each HARDWARE and CONSOLE line, for halCommonLaunchProcesses
 /// to apply.
 /// Only meant to be called by a platform's launchProcesses implementation,
 /// after the root filesystem is running and before halCommonLaunchProcesses.
 ///
-/// @return Returns 0 on success or if there is no /etc/config.sys, -errno on
+/// @return Returns 0 on success or if there is no config.sys, -errno on
 /// failure.
 int halCommonLoadConfigSys(void) {
   if ((HAL->memory == NULL) || (HAL->platform == NULL)) {
@@ -1997,7 +1998,7 @@ int halCommonLoadConfigSys(void) {
   }
 
   bootTrace("opening config.sys");
-  FILE *configSys = schedFopen(_configSysPath, _configSysReadMode);
+  FILE *configSys = schedFopenFullPath(_configSysPath, _configSysReadMode);
   if (configSys == NULL) {
     bootTrace("no config.sys");
     return 0;

@@ -575,7 +575,7 @@ static int posixTimedWaitingQueue(int32_t deviceId, va_list args) {
 /// @fn static int posixDoLaunchProcesses(void)
 ///
 /// @brief Allocate the overlay file cache if the simulator was asked to use
-/// one, load /etc/config.sys, then arm and queue the supervisor and user
+/// one, load config.sys, then arm and queue the supervisor and user
 /// processes.
 ///
 /// @return Returns 0 on success, -errno on failure.
