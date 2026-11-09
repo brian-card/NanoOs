@@ -533,6 +533,7 @@ ipcCapabilitySearch(
     IpcCapability *capability = &capabilities[ii];
     if ((capability->destinationPid == destinationPid)
       && (capability->signature == signature)
+      && (messageType < 32)
       && (capability->messageTypes & (((uint32_t) 1) << messageType))
     ) {
       return capability;
@@ -735,7 +736,7 @@ int sendProcessMessageToProcess(
       runningProcess->ipcCapabilities, runningProcess->numIpcCapabilities,
       processDescriptor->processId,
       processMessageType(processMessage) & 0xffffffffffffff00,
-      processMessageType(processMessage) & 0xff) == NULL)
+      processMessageType(processMessage) & FILESYSTEM_COMMAND_MASK) == NULL)
   ) {
     errno = EPERM;
     returnValue = processError;
