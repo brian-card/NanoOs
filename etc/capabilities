@@ -1,0 +1,10 @@
+# entity    permissions  directory
+*           home         /home/
+root        home         /root/
+*           rxls         /usr/bin/
+*           rx           /usr/lib/
+*           rls          /etc/
+*           rwcdls       ~/
+*           rwcdls       /tmp/
+root        rwcdls       /etc/
+root        rwcdlsx      /usr/
