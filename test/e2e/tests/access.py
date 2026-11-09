@@ -96,3 +96,52 @@ def test_a_rename_to_a_new_name_needs_no_delete_on_the_destination(s):
     out = s.sh("dirtest access")
     assert "rename to new name -> 0, errno=0" in out, out
     assert "stat renamed -> 0, errno=0" in out, out
+
+
+def install_hello(s, directory):
+    assert s.sh("mkdir " + directory) == ""
+    assert s.sh("cp /usr/bin/helloworld/main.overlay " + directory) == ""
+
+
+def test_a_program_in_a_directory_without_x_is_refused(s):
+    s.login()
+    install_hello(s, "/root/hi")
+    assert s.sh("/root/hi") == "/root/hi: Permission denied"
+    assert s.sh("echo $?") == "126"
+    assert s.sh("echo still-here") == "still-here"
+
+
+def test_a_program_in_a_directory_with_x_runs(s):
+    s.login()
+    install_hello(s, "/usr/bin/hi")
+    assert s.sh("hi") == "Hello, world!"
+    assert s.sh("/usr/bin/hi") == "Hello, world!"
+
+
+def test_a_refused_program_in_a_pipeline_leaves_the_shell_running(s):
+    s.login()
+    install_hello(s, "/root/hi")
+    assert DENIED in s.sh("/root/hi | cat")
+    assert s.sh("echo still-here") == "still-here"
+
+
+def test_a_directory_without_x_does_not_end_a_path_search(s):
+    s.login()
+    install_hello(s, "/root/echo")
+    assert s.sh("export PATH=/root:/usr/bin") == ""
+    assert s.sh("echo found") == "found"
+
+
+def test_a_missing_command_is_not_found_with_a_path_without_x(s):
+    s.login()
+    assert s.sh("export PATH=/root:/usr/bin") == ""
+    assert s.sh("nosuch") == "nosuch: command not found"
+    assert s.sh("echo $?") == "127"
+
+
+def test_a_program_only_in_a_path_directory_without_x_is_refused(s):
+    s.login()
+    install_hello(s, "/root/hi")
+    assert s.sh("export PATH=/usr/bin:/root") == ""
+    assert s.sh("hi") == "hi: Permission denied"
+    assert s.sh("echo $?") == "126"

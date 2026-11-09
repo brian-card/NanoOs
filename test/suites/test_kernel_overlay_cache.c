@@ -38,6 +38,7 @@
 #include "kernel/Overlay.h"
 #include "kernel/OverlayFunctions.h"
 #include "kernel/Processes.h"
+#include "kernel/Scheduler.h"
 #include "user/NanoOsErrno.h"
 #include "user/NanoOsSpawn.h"
 
@@ -193,6 +194,7 @@ static void overlayCacheTestSpawnPreBoot(void) {
 NANO_OS_KERNEL_TEST_WITH(overlay_cache, spawn_finds_a_cached_main_overlay,
   overlayCacheTestSpawnPreBoot
 ) {
+  getRunningProcess()->dirCapabilities = rootDirCapabilities;
   // There's no root filesystem here, so only the cache can resolve the path.
   NANO_OS_ASSERT_NOT_NULL(overlayCacheTestPush("/userspace/cachetest/main.overlay"));
 

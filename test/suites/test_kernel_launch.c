@@ -477,6 +477,238 @@ NANO_OS_KERNEL_TEST(launch, a_system_overlay_is_opened_by_its_full_path) {
   NANO_OS_ASSERT_TRUE(fakeOpenFullPath);
 }
 
+/// @fn static void useOverlayCommands(void)
+///
+/// @brief Pre-boot hook that makes programs overlays, which are what the exec
+/// check covers.
+static void useOverlayCommands(void) {
+  halMockSetExecCommand(execOverlayCommand);
+}
+
+/// @var execSet
+///
+/// @brief The set the exec tests give the running process.
+static union {
+  DirCapabilities set;
+  uint8_t bytes[64];
+} execSet;
+
+/// @fn static void holdOnly(uint8_t mask, const char *name)
+///
+/// @brief Give the running process a set of one entry and the refusing
+/// filesystem.
+///
+/// @param mask The entry's mask.
+/// @param name The entry's name.
+///
+/// @return This function returns no value.
+static void holdOnly(uint8_t mask, const char *name) {
+  useRefusingFilesystem();
+  size_t length = strlen(name);
+  memset(&execSet, 0, sizeof(execSet));
+  execSet.set.numCapabilities = 1;
+  execSet.set.size = (uint16_t) (DIR_CAPABILITIES_HEADER_SIZE
+    + DIR_CAPABILITY_SIZE(length));
+  execSet.set.capabilities[0].mask = mask;
+  execSet.set.capabilities[0].len = (uint8_t) length;
+  memcpy(execSet.set.capabilities[0].name, name, length);
+  getRunningProcess()->dirCapabilities = &execSet.set;
+}
+
+/// @fn static int trySpawn(const char *path)
+///
+/// @brief Spawn a program.
+///
+/// @param path The path to the program.
+///
+/// @return Returns what posix_spawn returned.
+static int trySpawn(const char *path) {
+  pid_t pid = 0;
+  char *argv[] = { "x", NULL };
+  return nanoOsSpawn(&pid, path, NULL, NULL, argv, NULL);
+}
+
+/// @fn static int tryExec(const char *path)
+///
+/// @brief Exec a program, which fails in every test that uses this.
+///
+/// @param path The path to the program.
+///
+/// @return Returns errno.
+static int tryExec(const char *path) {
+  char *argv[] = { "x", NULL };
+  errno = 0;
+  schedulerExecve(path, argv, NULL);
+  return errno;
+}
+
+/// @fn static int trySpawnRawPath(char *path)
+///
+/// @brief Send the scheduler a spawn whose path didn't come through the API.
+///
+/// @param path The full path, which need not be collapsed.
+///
+/// @return Returns the errno value the scheduler reported.
+static int trySpawnRawPath(char *path) {
+  uint8_t newPid = 0;
+  char *argv[] = { "x", NULL };
+  SpawnArgs *spawnArgs = (SpawnArgs*) calloc(1, sizeof(SpawnArgs));
+  NANO_OS_ASSERT_NOT_NULL(spawnArgs);
+  spawnArgs->newPid = &newPid;
+  spawnArgs->path = path;
+  spawnArgs->argv = argv;
+  SchedulerSpawnArgs schedulerSpawnArgs = {
+    .spawnArgs = spawnArgs,
+    .errorNumber = 0,
+  };
+  ProcessMessage *message = initSendProcessMessageToPid(schedulerPid,
+    SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_SPAWN,
+    &schedulerSpawnArgs, sizeof(schedulerSpawnArgs), true);
+  NANO_OS_ASSERT_NOT_NULL(message);
+  processMessageWaitForDone(message, NULL);
+  processMessageRelease(message);
+  free(spawnArgs);
+  return schedulerSpawnArgs.errorNumber;
+}
+
+NANO_OS_KERNEL_TEST_WITH(launch, exec_needs_x_on_the_program,
+  useOverlayCommands
+) {
+  holdOnly((uint8_t) (DIRCAP_ALL & ~DIRCAP_EXEC), "/usr/bin/");
+  NANO_OS_ASSERT_EQ_INT(EACCES, tryExec("/usr/bin/x"));
+  NANO_OS_ASSERT_EQ_INT(0, fakeOpens);
+}
+
+NANO_OS_KERNEL_TEST_WITH(launch, a_refused_exec_leaves_the_caller_as_it_was,
+  useOverlayCommands
+) {
+  holdOnly(DIRCAP_READ, "/usr/bin/");
+  ProcessDescriptor *running = getRunningProcess();
+  void *overlayNamespace = running->overlayNamespace;
+  char **envp = running->envp;
+  NANO_OS_ASSERT_EQ_INT(EACCES, tryExec("/usr/bin/x"));
+  NANO_OS_ASSERT_EQ_PTR(overlayNamespace, running->overlayNamespace);
+  NANO_OS_ASSERT_EQ_PTR(envp, running->envp);
+  NANO_OS_ASSERT_EQ_PTR(&execSet.set, running->dirCapabilities);
+}
+
+NANO_OS_KERNEL_TEST_WITH(launch, exec_with_x_goes_on_to_load_the_program,
+  useOverlayCommands
+) {
+  holdOnly(DIRCAP_EXEC, "/usr/bin/");
+  NANO_OS_ASSERT_TRUE(tryExec("/usr/bin/x") != EACCES);
+  NANO_OS_ASSERT_EQ_INT(1, fakeOpens);
+  NANO_OS_ASSERT_STR_EQ("/userspace/usr/bin/x/main.overlay", fakeOpenPath);
+}
+
+NANO_OS_KERNEL_TEST_WITH(launch, spawn_needs_x_on_the_program,
+  useOverlayCommands
+) {
+  holdOnly((uint8_t) (DIRCAP_ALL & ~DIRCAP_EXEC), "/usr/bin/");
+  NANO_OS_ASSERT_EQ_INT(EACCES, trySpawn("/usr/bin/x"));
+  NANO_OS_ASSERT_EQ_INT(0, fakeOpens);
+}
+
+NANO_OS_KERNEL_TEST_WITH(launch, spawn_with_x_goes_on_to_load_the_program,
+  useOverlayCommands
+) {
+  holdOnly(DIRCAP_EXEC, "/usr/bin/");
+  NANO_OS_ASSERT_TRUE(trySpawn("/usr/bin/x") != EACCES);
+  NANO_OS_ASSERT_EQ_INT(1, fakeOpens);
+}
+
+NANO_OS_KERNEL_TEST_WITH(launch, refused_spawns_do_not_use_up_process_slots,
+  useOverlayCommands
+) {
+  holdOnly(DIRCAP_READ, "/usr/bin/");
+  for (int ii = 0; ii < (2 * (int) numProcesses); ii++) {
+    NANO_OS_ASSERT_EQ_INT(EACCES, trySpawn("/usr/bin/x"));
+  }
+}
+
+NANO_OS_KERNEL_TEST_WITH(launch, a_capability_on_the_program_itself_covers_it,
+  useOverlayCommands
+) {
+  holdOnly(DIRCAP_EXEC, "/usr/bin/x/");
+  NANO_OS_ASSERT_TRUE(trySpawn("/usr/bin/x") != EACCES);
+  NANO_OS_ASSERT_EQ_INT(1, fakeOpens);
+}
+
+NANO_OS_KERNEL_TEST_WITH(launch, a_near_miss_gives_no_exec,
+  useOverlayCommands
+) {
+  holdOnly(DIRCAP_EXEC, "/usr/bin/x/");
+  NANO_OS_ASSERT_EQ_INT(EACCES, trySpawn("/usr/bin/xy"));
+  NANO_OS_ASSERT_EQ_INT(EACCES, trySpawn("/usr/bin"));
+}
+
+NANO_OS_KERNEL_TEST_WITH(launch, a_normal_path_needs_a_normal_entry,
+  useOverlayCommands
+) {
+  holdOnly(DIRCAP_EXEC | DIRCAP_FULL_PATH, "/usr/bin/");
+  NANO_OS_ASSERT_EQ_INT(EACCES, trySpawn("/usr/bin/x"));
+  NANO_OS_ASSERT_EQ_INT(0, fakeOpens);
+}
+
+NANO_OS_KERNEL_TEST_WITH(launch, a_full_path_needs_a_full_path_entry,
+  useOverlayCommands
+) {
+  holdOnly(DIRCAP_EXEC, "/system/bin/");
+  getRunningProcess()->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
+  char *argv[] = { "x", NULL };
+  errno = 0;
+  schedulerExecveFullPath("/system/bin/x", argv, NULL);
+  NANO_OS_ASSERT_EQ_INT(EACCES, errno);
+  NANO_OS_ASSERT_EQ_INT(0, fakeOpens);
+}
+
+NANO_OS_KERNEL_TEST_WITH(launch, a_full_path_entry_allows_a_full_path_exec,
+  useOverlayCommands
+) {
+  holdOnly(DIRCAP_EXEC | DIRCAP_FULL_PATH, "/system/bin/");
+  getRunningProcess()->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
+  char *argv[] = { "x", NULL };
+  errno = 0;
+  schedulerExecveFullPath("/system/bin/x", argv, NULL);
+  NANO_OS_ASSERT_TRUE(errno != EACCES);
+  NANO_OS_ASSERT_EQ_INT(1, fakeOpens);
+  NANO_OS_ASSERT_STR_EQ("/system/bin/x/main.overlay", fakeOpenPath);
+}
+
+NANO_OS_KERNEL_TEST_WITH(launch, a_full_path_entry_on_the_program_covers_it,
+  useOverlayCommands
+) {
+  holdOnly(DIRCAP_EXEC | DIRCAP_FULL_PATH, "/system/bin/x/");
+  getRunningProcess()->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
+  char *argv[] = { "x", NULL };
+  errno = 0;
+  schedulerExecveFullPath("/system/bin/x", argv, NULL);
+  NANO_OS_ASSERT_TRUE(errno != EACCES);
+  NANO_OS_ASSERT_EQ_INT(1, fakeOpens);
+}
+
+NANO_OS_KERNEL_TEST_WITH(launch, the_scheduler_collapses_a_path_before_checking,
+  useOverlayCommands
+) {
+  holdOnly(DIRCAP_EXEC, "/usr/");
+  static char escape[] = "/userspace/usr/../../secure/x";
+  NANO_OS_ASSERT_EQ_INT(EACCES, trySpawnRawPath(escape));
+  NANO_OS_ASSERT_EQ_INT(0, fakeOpens);
+
+  static char inside[] = "/userspace/tmp/../usr/bin/x";
+  NANO_OS_ASSERT_TRUE(trySpawnRawPath(inside) != EACCES);
+  NANO_OS_ASSERT_EQ_INT(1, fakeOpens);
+  NANO_OS_ASSERT_STR_EQ("/userspace/usr/bin/x/main.overlay", fakeOpenPath);
+}
+
+NANO_OS_KERNEL_TEST_WITH(launch, a_process_with_no_set_cannot_exec,
+  useOverlayCommands
+) {
+  holdOnly(DIRCAP_EXEC, "/usr/bin/");
+  getRunningProcess()->dirCapabilities = NULL;
+  NANO_OS_ASSERT_EQ_INT(EACCES, trySpawn("/usr/bin/x"));
+}
+
 NANO_OS_KERNEL_TEST(launch, an_executive_can_open_a_full_path) {
   useRefusingFilesystem();
   getRunningProcess()->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
