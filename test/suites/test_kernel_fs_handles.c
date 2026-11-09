@@ -73,6 +73,11 @@ _Static_assert(EINVAL == 5, "NANO_OS_EINVAL must match EINVAL");
 #define driverReaddir stubReaddir
 #define driverClosedir stubClosedir
 #define driverIstat stubIstat
+#define driverRemove stubRemove
+#define driverRename stubRename
+#define driverMkdir stubMkdir
+#define driverRmdir stubRmdir
+#define driverLstat stubLstat
 #define OpenFile testOpenFile
 #define CloseFile testCloseFile
 #define ReadFile testReadFile
@@ -84,6 +89,11 @@ _Static_assert(EINVAL == 5, "NANO_OS_EINVAL must match EINVAL");
 #define Closedir testClosedir
 #define CloseProcess testCloseProcess
 #define Dirstat testDirstat
+#define RemoveFile testRemoveFile
+#define RenameFile testRenameFile
+#define Mkdir testMkdir
+#define Rmdir testRmdir
+#define Lstat testLstat
 #include "../../usr/src/filesystems/include/FilesystemPaths.h"
 #include "../../usr/src/filesystems/common/OpenFileCommandHandler.c"
 #include "../../usr/src/filesystems/common/CloseFileCommandHandler.c"
@@ -96,6 +106,11 @@ _Static_assert(EINVAL == 5, "NANO_OS_EINVAL must match EINVAL");
 #include "../../usr/src/filesystems/common/ClosedirCommandHandler.c"
 #include "../../usr/src/filesystems/common/CloseProcessCommandHandler.c"
 #include "../../usr/src/filesystems/common/DirstatCommandHandler.c"
+#include "../../usr/src/filesystems/common/RemoveFileCommandHandler.c"
+#include "../../usr/src/filesystems/common/RenameFileCommandHandler.c"
+#include "../../usr/src/filesystems/common/MkdirCommandHandler.c"
+#include "../../usr/src/filesystems/common/RmdirCommandHandler.c"
+#include "../../usr/src/filesystems/common/LstatCommandHandler.c"
 
 #undef errno
 #define errno (*errno_())
@@ -140,10 +155,87 @@ static int stubIoCalls;
 /// @brief Whether stubReaddir reports the end of the directory.
 static bool stubReaddirAtEnd;
 
+/// @var stubFopenCalls
+///
+/// @brief The number of files the stub driver has opened.
+static int stubFopenCalls;
+
+/// @var stubPathCalls
+///
+/// @brief The number of path commands that have reached the stub driver.
+static int stubPathCalls;
+
+/// @var stubMayCreate
+///
+/// @brief The mayCreate value stubFopen was last given.
+static bool stubMayCreate;
+
+/// @var stubMayReplace
+///
+/// @brief The mayReplace value stubRename was last given.
+static bool stubMayReplace;
+
+/// @var stubLastPath
+///
+/// @brief The path the stub driver was last given.
+static char stubLastPath[64];
+
+/// @fn static void stubRecordPath(const char *path)
+///
+/// @brief Record a path command that reached the stub driver.
+///
+/// @param path The path.
+///
+/// @return This function returns no value.
+static void stubRecordPath(const char *path) {
+  stubPathCalls++;
+  strncpy(stubLastPath, path, sizeof(stubLastPath) - 1);
+}
+
+int stubRemove(void *driverState, const char *pathname) {
+  (void) driverState;
+  stubRecordPath(pathname);
+  return 0;
+}
+
+int stubRename(void *driverState, const char *oldpath, const char *newpath,
+  bool mayReplace
+) {
+  (void) driverState; (void) oldpath;
+  stubRecordPath(newpath);
+  stubMayReplace = mayReplace;
+  return 0;
+}
+
+int stubMkdir(void *driverState, const char *pathname, time_t now) {
+  (void) driverState; (void) now;
+  stubRecordPath(pathname);
+  return 0;
+}
+
+int stubRmdir(void *driverState, const char *pathname) {
+  (void) driverState;
+  stubRecordPath(pathname);
+  return 0;
+}
+
+int stubLstat(void *driverState, const char *path, struct stat *statbuf,
+  int *errorNumber
+) {
+  (void) driverState;
+  stubRecordPath(path);
+  memset(statbuf, 0, sizeof(*statbuf));
+  *errorNumber = 0;
+  return 0;
+}
+
 void* stubFopen(void *driverState, const char *filePath, const char *mode,
-  time_t now, int *errorNumber
+  time_t now, bool mayCreate, int *errorNumber
 ) {
   (void) driverState; (void) filePath; (void) mode; (void) now;
+  stubMayCreate = mayCreate;
+  stubFopenCalls++;
+  strncpy(stubLastPath, filePath, sizeof(stubLastPath) - 1);
   *errorNumber = 0;
   return &stubFileHandle;
 }
@@ -230,31 +322,15 @@ static FilesystemState handleState;
 /// @brief A non-NULL driverState for handleState.
 static int handleDriverState;
 
+/// @var handleMessageFlags
+///
+/// @brief The type byte of the messages the handlers are sent.
+static int handleMessageFlags;
+
 /// @var handleMessage
 ///
 /// @brief The message the handlers are sent.
 static ProcessMessage handleMessage;
-
-/// @fn static void handleFixture(void)
-///
-/// @brief Start from an empty filesystem.
-///
-/// @return This function returns no value.
-static void handleFixture(void) {
-  memset(&handleState, 0, sizeof(handleState));
-  handleState.driverState = &handleDriverState;
-  handleState.args = &handleMessage;
-  handleState.allProcesses = allProcesses;
-  handleState.numProcesses = numProcesses;
-  stubDirsClosed = 0;
-  stubFilesClosed = 0;
-  stubIoCalls = 0;
-  stubIstatCalls = 0;
-  stubIstatIno = 0;
-  stubReaddirAtEnd = false;
-  memset(&stubEntry, 0, sizeof(stubEntry));
-  stubEntry.d_ino = STUB_ENTRY_INO;
-}
 
 /// @fn static ProcessDescriptor* self(void)
 ///
@@ -274,6 +350,34 @@ static ProcessDescriptor* otherProcess(void) {
   return &allProcesses[consolePid - 1];
 }
 
+/// @fn static void handleFixture(void)
+///
+/// @brief Start from an empty filesystem.
+///
+/// @return This function returns no value.
+static void handleFixture(void) {
+  memset(&handleState, 0, sizeof(handleState));
+  handleState.driverState = &handleDriverState;
+  handleState.args = &handleMessage;
+  handleState.allProcesses = allProcesses;
+  handleState.numProcesses = numProcesses;
+  otherProcess()->dirCapabilities = supervisorDirCapabilities;
+  stubDirsClosed = 0;
+  stubFilesClosed = 0;
+  stubFopenCalls = 0;
+  stubPathCalls = 0;
+  stubMayCreate = false;
+  stubMayReplace = false;
+  memset(stubLastPath, 0, sizeof(stubLastPath));
+  handleMessageFlags = 0;
+  stubIoCalls = 0;
+  stubIstatCalls = 0;
+  stubIstatIno = 0;
+  stubReaddirAtEnd = false;
+  memset(&stubEntry, 0, sizeof(stubEntry));
+  stubEntry.d_ino = STUB_ENTRY_INO;
+}
+
 /// @fn static void runHandler(void* (*handler)(void*),
 ///   ProcessDescriptor *sender, void *data)
 ///
@@ -288,7 +392,7 @@ static void runHandler(void* (*handler)(void*), ProcessDescriptor *sender,
   void *data
 ) {
   memset(&handleMessage, 0, sizeof(handleMessage));
-  processMessageInit(&handleMessage, 0, data, 0, false);
+  processMessageInit(&handleMessage, handleMessageFlags, data, 0, false);
   handleMessage.from.coro = sender->mainThread;
   handler(&handleState);
   processMessageRelease(&handleMessage);
@@ -1058,13 +1162,13 @@ NANO_OS_KERNEL_TEST(fs_handles, sethostname_opens_the_file_for_writing) {
   NANO_OS_ASSERT_STR_EQ("w", fakeMode);
 }
 
-#define STAT_ON_TMP_ENTRIES "\x20" "\x05" "/tmp/"
+#define STAT_ON_TMP_ENTRIES "\x30" "\x05" "/tmp/" "\x10" "\x05" "/etc/"
 
 /// @var statOnTmp
 ///
-/// @brief A set holding only STAT on /tmp/.
+/// @brief A set holding LIST and STAT on /tmp/ and only LIST on /etc/.
 static const DIR_CAPABILITIES_STATIC(STAT_ON_TMP_ENTRIES) statOnTmp
-  = DIR_CAPABILITIES_STATIC_INITIALIZER(1, STAT_ON_TMP_ENTRIES);
+  = DIR_CAPABILITIES_STATIC_INITIALIZER(2, STAT_ON_TMP_ENTRIES);
 
 #define NO_STAT_ON_TMP_ENTRIES "\x5f" "\x05" "/tmp/"
 
@@ -1074,13 +1178,14 @@ static const DIR_CAPABILITIES_STATIC(STAT_ON_TMP_ENTRIES) statOnTmp
 static const DIR_CAPABILITIES_STATIC(NO_STAT_ON_TMP_ENTRIES) noStatOnTmp
   = DIR_CAPABILITIES_STATIC_INITIALIZER(1, NO_STAT_ON_TMP_ENTRIES);
 
-#define STAT_ON_ETC_ENTRIES "\x20" "\x05" "/etc/"
+#define STAT_ON_ETC_ENTRIES "\x30" "\x05" "/etc/" "\x10" "\x05" "/tmp/"
 
 /// @var statOnEtc
 ///
-/// @brief A set holding STAT on a directory other than the one the tests open.
+/// @brief A set holding STAT on a directory other than the one the tests open,
+/// and LIST on both.
 static const DIR_CAPABILITIES_STATIC(STAT_ON_ETC_ENTRIES) statOnEtc
-  = DIR_CAPABILITIES_STATIC_INITIALIZER(1, STAT_ON_ETC_ENTRIES);
+  = DIR_CAPABILITIES_STATIC_INITIALIZER(2, STAT_ON_ETC_ENTRIES);
 
 /// @fn static DIR* openDirWithSet(const void *set)
 ///
@@ -1240,14 +1345,10 @@ NANO_OS_KERNEL_TEST(fs_handles, stat_is_checked_on_the_canonical_path) {
   NANO_OS_ASSERT_EQ_INT(0, dirStat(self(), dirp, &st));
 }
 
-NANO_OS_KERNEL_TEST(fs_handles, a_process_with_no_set_cannot_dirstat) {
+NANO_OS_KERNEL_TEST(fs_handles, a_process_with_no_set_cannot_open_a_directory) {
   handleFixture();
-  struct stat st;
   self()->dirCapabilities = NULL;
-  DIR *dirp = openDir(self());
-  NANO_OS_ASSERT_NOT_NULL(dirp);
-  NANO_OS_ASSERT_EQ_INT(0, readDir(self(), dirp));
-  NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EACCES, dirStat(self(), dirp, &st));
+  NANO_OS_ASSERT_NULL(openDir(self()));
 }
 
 NANO_OS_KERNEL_TEST(fs_handles, dirstat_after_closedir_is_a_bad_handle) {
@@ -1366,4 +1467,545 @@ NANO_OS_KERNEL_TEST(fs_handles, the_dirstat_call_reports_the_error) {
   errno = 0;
   NANO_OS_ASSERT_EQ_INT(-1, filesystemDirstat(&entry, &st));
   NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EACCES, errno);
+}
+
+/// @var accessSet
+///
+/// @brief The set the fs_access tests give the running process.
+static union {
+  DirCapabilities set;
+  uint8_t bytes[128];
+} accessSet;
+
+/// @fn static void accessFixture(void)
+///
+/// @brief Start from an empty filesystem and a running process with an empty
+/// set at supervisor level.
+///
+/// @return This function returns no value.
+static void accessFixture(void) {
+  handleFixture();
+  memset(&accessSet, 0, sizeof(accessSet));
+  accessSet.set.size = DIR_CAPABILITIES_HEADER_SIZE;
+  self()->dirCapabilities = &accessSet.set;
+  self()->privilegeLevel = PRIVILEGE_LEVEL_SUPERVISOR;
+  self()->envp = NULL;
+}
+
+/// @fn static void hold(uint8_t mask, const char *name)
+///
+/// @brief Add an entry to the running process's set.
+///
+/// @param mask The entry's mask.
+/// @param name The entry's name.
+///
+/// @return This function returns no value.
+static void hold(uint8_t mask, const char *name) {
+  size_t length = strlen(name);
+  DirCapability *capability
+    = (DirCapability*) &accessSet.bytes[accessSet.set.size];
+  capability->mask = mask;
+  capability->len = (uint8_t) length;
+  memcpy(capability->name, name, length);
+  accessSet.set.size += DIR_CAPABILITY_SIZE(length);
+  accessSet.set.numCapabilities++;
+}
+
+/// @fn static int tryOpen(const char *path, const char *mode, uint8_t *access)
+///
+/// @brief Open a file as the running process.
+///
+/// @param path The path.
+/// @param mode The fopen mode.
+/// @param access Where to store the access the handle was given, or NULL.
+///
+/// @return Returns 0 on success, otherwise the errno value.
+static int tryOpen(const char *path, const char *mode, uint8_t *access) {
+  FilesystemFopenArgs args;
+  memset(&args, 0, sizeof(args));
+  args.pathname = (char*) path;
+  args.mode = (char*) mode;
+  runHandler(testOpenFile, self(), &args);
+  if (args.returnValue == NULL) {
+    return args.errorNumber;
+  }
+  if (access != NULL) {
+    *access = args.returnValue->access;
+  }
+  return 0;
+}
+
+/// @fn static void assertOpenRefused(const char *path, const char *mode)
+///
+/// @brief Assert that an open fails with EACCES and never reaches the driver.
+///
+/// @return This function returns no value.
+static void assertOpenRefused(const char *path, const char *mode) {
+  int calls = stubFopenCalls;
+  NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EACCES, tryOpen(path, mode, NULL));
+  NANO_OS_ASSERT_EQ_INT(calls, stubFopenCalls);
+}
+
+/// @fn static int tryPathCommand(void* (*handler)(void*), const char *path)
+///
+/// @brief Run remove, mkdir, or rmdir as the running process.
+///
+/// @param handler The handler.
+/// @param path The path.
+///
+/// @return Returns what the handler returned.
+static int tryPathCommand(void* (*handler)(void*), const char *path) {
+  if (handler == testRemoveFile) {
+    FilesystemRemoveArgs args;
+    memset(&args, 0, sizeof(args));
+    args.pathname = (char*) path;
+    runHandler(handler, self(), &args);
+    return args.returnValue;
+  }
+
+  FilesystemPathArgs args;
+  memset(&args, 0, sizeof(args));
+  args.pathname = (char*) path;
+  runHandler(handler, self(), &args);
+  return args.returnValue;
+}
+
+/// @fn static int tryLstat(const char *path)
+///
+/// @brief Run lstat as the running process.
+///
+/// @param path The path.
+///
+/// @return Returns 0 on success, otherwise the errno value.
+static int tryLstat(const char *path) {
+  struct stat st;
+  FilesystemLstatArgs args;
+  memset(&args, 0, sizeof(args));
+  args.pathname = (char*) path;
+  args.statbuf = &st;
+  runHandler(testLstat, self(), &args);
+  return (args.returnValue == 0) ? 0 : args.errorNumber;
+}
+
+/// @fn static int tryOpendir(const char *path)
+///
+/// @brief Run opendir as the running process.
+///
+/// @param path The path.
+///
+/// @return Returns 0 on success, otherwise the errno value.
+static int tryOpendir(const char *path) {
+  FilesystemOpendirArgs args;
+  memset(&args, 0, sizeof(args));
+  args.pathname = (char*) path;
+  runHandler(testOpendir, self(), &args);
+  return (args.returnValue != NULL) ? 0 : args.errorNumber;
+}
+
+/// @fn static int tryRename(const char *oldpath, const char *newpath)
+///
+/// @brief Run rename as the running process.
+///
+/// @param oldpath The current path.
+/// @param newpath The new path.
+///
+/// @return Returns what the handler returned.
+static int tryRename(const char *oldpath, const char *newpath) {
+  FilesystemRenameArgs args;
+  memset(&args, 0, sizeof(args));
+  args.oldpath = (char*) oldpath;
+  args.newpath = (char*) newpath;
+  runHandler(testRenameFile, self(), &args);
+  return args.returnValue;
+}
+
+/// @fn static void assertPathCommand(void* (*handler)(void*), uint8_t bit)
+///
+/// @brief Assert that a remove, mkdir, or rmdir of /tmp/x needs a bit, and
+/// that a refusal never reaches the driver.
+///
+/// @param handler The handler.
+/// @param bit The DIRCAP_* bit it needs.
+///
+/// @return This function returns no value.
+static void assertPathCommand(void* (*handler)(void*), uint8_t bit) {
+  accessFixture();
+  hold((uint8_t) (DIRCAP_ALL & ~bit), "/tmp/");
+  NANO_OS_ASSERT_EQ_INT(-FILESYSTEM_EACCES, tryPathCommand(handler, "/tmp/x"));
+  NANO_OS_ASSERT_EQ_INT(0, stubPathCalls);
+
+  accessFixture();
+  hold(bit, "/tmp/");
+  NANO_OS_ASSERT_EQ_INT(0, tryPathCommand(handler, "/tmp/x"));
+  NANO_OS_ASSERT_EQ_INT(1, stubPathCalls);
+  NANO_OS_ASSERT_STR_EQ("/userspace/tmp/x", stubLastPath);
+}
+
+NANO_OS_KERNEL_TEST(fs_access, read_mode_needs_read) {
+  accessFixture();
+  hold((uint8_t) (DIRCAP_ALL & ~DIRCAP_READ), "/tmp/");
+  assertOpenRefused("/tmp/f", "r");
+
+  accessFixture();
+  hold(DIRCAP_READ, "/tmp/");
+  uint8_t access = 0;
+  NANO_OS_ASSERT_EQ_INT(0, tryOpen("/tmp/f", "r", &access));
+  NANO_OS_ASSERT_EQ_INT(DIRCAP_READ, access);
+}
+
+NANO_OS_KERNEL_TEST(fs_access, write_and_append_modes_need_write) {
+  static const char *const modes[] = {"w", "a"};
+  for (int ii = 0; ii < 2; ii++) {
+    accessFixture();
+    hold((uint8_t) (DIRCAP_ALL & ~DIRCAP_WRITE), "/tmp/");
+    assertOpenRefused("/tmp/f", modes[ii]);
+
+    accessFixture();
+    hold(DIRCAP_WRITE, "/tmp/");
+    uint8_t access = 0;
+    NANO_OS_ASSERT_EQ_INT(0, tryOpen("/tmp/f", modes[ii], &access));
+    NANO_OS_ASSERT_EQ_INT(DIRCAP_WRITE, access);
+  }
+}
+
+NANO_OS_KERNEL_TEST(fs_access, plus_modes_need_read_and_write) {
+  static const char *const modes[] = {"r+", "w+", "a+"};
+  for (int ii = 0; ii < 3; ii++) {
+    accessFixture();
+    hold(DIRCAP_READ, "/tmp/");
+    assertOpenRefused("/tmp/f", modes[ii]);
+
+    accessFixture();
+    hold(DIRCAP_WRITE, "/tmp/");
+    assertOpenRefused("/tmp/f", modes[ii]);
+
+    accessFixture();
+    hold(DIRCAP_READ, "/tmp/");
+    hold(DIRCAP_WRITE, "/tmp/");
+    uint8_t access = 0;
+    NANO_OS_ASSERT_EQ_INT(0, tryOpen("/tmp/f", modes[ii], &access));
+    NANO_OS_ASSERT_EQ_INT(DIRCAP_READ | DIRCAP_WRITE, access);
+  }
+}
+
+NANO_OS_KERNEL_TEST(fs_access, the_driver_may_create_only_with_the_create_bit) {
+  accessFixture();
+  hold(DIRCAP_WRITE, "/tmp/");
+  NANO_OS_ASSERT_EQ_INT(0, tryOpen("/tmp/f", "w", NULL));
+  NANO_OS_ASSERT_FALSE(stubMayCreate);
+
+  accessFixture();
+  hold(DIRCAP_WRITE | DIRCAP_CREATE, "/tmp/");
+  NANO_OS_ASSERT_EQ_INT(0, tryOpen("/tmp/f", "w", NULL));
+  NANO_OS_ASSERT_TRUE(stubMayCreate);
+}
+
+NANO_OS_KERNEL_TEST(fs_access, a_read_never_asks_to_create) {
+  accessFixture();
+  hold(DIRCAP_READ | DIRCAP_WRITE | DIRCAP_CREATE, "/tmp/");
+  NANO_OS_ASSERT_EQ_INT(0, tryOpen("/tmp/f", "r+", NULL));
+  NANO_OS_ASSERT_FALSE(stubMayCreate);
+}
+
+NANO_OS_KERNEL_TEST(fs_access, loading_an_overlay_needs_exec_and_not_read) {
+  accessFixture();
+  hold((uint8_t) (DIRCAP_ALL & ~DIRCAP_EXEC), "/usr/");
+  assertOpenRefused("/usr/lib/ex/File.overlay", "rx");
+
+  accessFixture();
+  hold(DIRCAP_EXEC, "/usr/");
+  NANO_OS_ASSERT_EQ_INT(0, tryOpen("/usr/lib/ex/File.overlay", "rx", NULL));
+}
+
+NANO_OS_KERNEL_TEST(fs_access,
+  an_overlay_handle_can_be_neither_read_nor_written
+) {
+  accessFixture();
+  hold(DIRCAP_EXEC, "/usr/");
+  FilesystemFopenArgs args;
+  memset(&args, 0, sizeof(args));
+  args.pathname = (char*) "/usr/lib/x";
+  args.mode = (char*) "rx";
+  runHandler(testOpenFile, self(), &args);
+  NANO_OS_ASSERT_NOT_NULL(args.returnValue);
+  NANO_OS_ASSERT_EQ_INT(0, args.returnValue->access);
+  assertIoRefused(testReadFile, self(), args.returnValue);
+  assertIoRefused(testWriteFile, self(), args.returnValue);
+}
+
+NANO_OS_KERNEL_TEST(fs_access, execute_does_not_allow_a_plain_read) {
+  accessFixture();
+  hold(DIRCAP_EXEC, "/usr/");
+  assertOpenRefused("/usr/lib/x", "r");
+}
+
+NANO_OS_KERNEL_TEST(fs_access, remove_needs_delete) {
+  assertPathCommand(testRemoveFile, DIRCAP_DELETE);
+}
+
+NANO_OS_KERNEL_TEST(fs_access, mkdir_needs_create) {
+  assertPathCommand(testMkdir, DIRCAP_CREATE);
+}
+
+NANO_OS_KERNEL_TEST(fs_access, rmdir_needs_delete) {
+  assertPathCommand(testRmdir, DIRCAP_DELETE);
+}
+
+NANO_OS_KERNEL_TEST(fs_access,
+  a_capabilitys_own_directory_belongs_to_its_parent
+) {
+  accessFixture();
+  hold(DIRCAP_ALL, "/home/briana/");
+  NANO_OS_ASSERT_EQ_INT(-FILESYSTEM_EACCES,
+    tryPathCommand(testRmdir, "/home/briana"));
+  NANO_OS_ASSERT_EQ_INT(-FILESYSTEM_EACCES,
+    tryPathCommand(testRemoveFile, "/home/briana"));
+  NANO_OS_ASSERT_EQ_INT(-FILESYSTEM_EACCES,
+    tryPathCommand(testMkdir, "/home/briana"));
+  NANO_OS_ASSERT_EQ_INT(0, stubPathCalls);
+  NANO_OS_ASSERT_EQ_INT(0, tryPathCommand(testMkdir, "/home/briana/bin"));
+}
+
+NANO_OS_KERNEL_TEST(fs_access, lstat_needs_stat) {
+  accessFixture();
+  hold((uint8_t) (DIRCAP_ALL & ~DIRCAP_STAT), "/tmp/");
+  NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EACCES, tryLstat("/tmp/x"));
+  NANO_OS_ASSERT_EQ_INT(0, stubPathCalls);
+
+  accessFixture();
+  hold(DIRCAP_STAT, "/tmp/");
+  NANO_OS_ASSERT_EQ_INT(0, tryLstat("/tmp/x"));
+}
+
+NANO_OS_KERNEL_TEST(fs_access, lstat_covers_the_capabilitys_own_directory) {
+  accessFixture();
+  hold(DIRCAP_STAT, "/tmp/");
+  NANO_OS_ASSERT_EQ_INT(0, tryLstat("/tmp"));
+}
+
+NANO_OS_KERNEL_TEST(fs_access, opendir_needs_list) {
+  accessFixture();
+  hold((uint8_t) (DIRCAP_ALL & ~DIRCAP_LIST), "/tmp/");
+  NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EACCES, tryOpendir("/tmp"));
+
+  accessFixture();
+  hold(DIRCAP_LIST, "/tmp/");
+  NANO_OS_ASSERT_EQ_INT(0, tryOpendir("/tmp"));
+}
+
+NANO_OS_KERNEL_TEST(fs_access, a_refused_opendir_takes_no_slot) {
+  accessFixture();
+  NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EACCES, tryOpendir("/tmp"));
+  NANO_OS_ASSERT_NULL(handleState.openDirs);
+}
+
+NANO_OS_KERNEL_TEST(fs_access, no_entry_names_the_root_of_userspace) {
+  accessFixture();
+  self()->dirCapabilities = supervisorDirCapabilities;
+  NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EACCES, tryOpendir("/"));
+  NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EACCES, tryLstat("/"));
+}
+
+NANO_OS_KERNEL_TEST(fs_access, rename_needs_delete_on_the_source) {
+  accessFixture();
+  hold((uint8_t) (DIRCAP_ALL & ~DIRCAP_DELETE), "/tmp/");
+  hold(DIRCAP_CREATE, "/etc/");
+  NANO_OS_ASSERT_EQ_INT(-FILESYSTEM_EACCES, tryRename("/tmp/a", "/etc/b"));
+  NANO_OS_ASSERT_EQ_INT(0, stubPathCalls);
+}
+
+NANO_OS_KERNEL_TEST(fs_access, rename_needs_create_on_the_destination) {
+  accessFixture();
+  hold(DIRCAP_DELETE, "/tmp/");
+  hold((uint8_t) (DIRCAP_ALL & ~DIRCAP_CREATE), "/etc/");
+  NANO_OS_ASSERT_EQ_INT(-FILESYSTEM_EACCES, tryRename("/tmp/a", "/etc/b"));
+  NANO_OS_ASSERT_EQ_INT(0, stubPathCalls);
+}
+
+NANO_OS_KERNEL_TEST(fs_access, delete_on_the_destination_allows_replacing) {
+  accessFixture();
+  hold(DIRCAP_DELETE, "/tmp/");
+  hold(DIRCAP_CREATE, "/etc/");
+  NANO_OS_ASSERT_EQ_INT(0, tryRename("/tmp/a", "/etc/b"));
+  NANO_OS_ASSERT_EQ_INT(1, stubPathCalls);
+  NANO_OS_ASSERT_FALSE(stubMayReplace);
+
+  accessFixture();
+  hold(DIRCAP_DELETE, "/tmp/");
+  hold(DIRCAP_CREATE | DIRCAP_DELETE, "/etc/");
+  NANO_OS_ASSERT_EQ_INT(0, tryRename("/tmp/a", "/etc/b"));
+  NANO_OS_ASSERT_TRUE(stubMayReplace);
+}
+
+NANO_OS_KERNEL_TEST(fs_access, delete_on_the_source_does_not_allow_replacing) {
+  accessFixture();
+  hold(DIRCAP_DELETE, "/tmp/");
+  hold(DIRCAP_CREATE, "/tmp/d/");
+  NANO_OS_ASSERT_EQ_INT(0, tryRename("/etc/../tmp/a", "/tmp/d/b"));
+  NANO_OS_ASSERT_TRUE(stubMayReplace);
+
+  accessFixture();
+  hold(DIRCAP_DELETE, "/tmp/a/");
+  hold(DIRCAP_CREATE, "/tmp/d/");
+  NANO_OS_ASSERT_EQ_INT(0, tryRename("/tmp/a/x", "/tmp/d/y"));
+  NANO_OS_ASSERT_FALSE(stubMayReplace);
+}
+
+NANO_OS_KERNEL_TEST(fs_access, dot_dot_cannot_climb_out_of_a_capability) {
+  static const char escape[] = "/tmp/../etc/passwd";
+  accessFixture();
+  hold(DIRCAP_ALL, "/tmp/");
+  assertOpenRefused(escape, "r");
+  assertOpenRefused(escape, "w");
+  NANO_OS_ASSERT_EQ_INT(-FILESYSTEM_EACCES,
+    tryPathCommand(testRemoveFile, escape));
+  NANO_OS_ASSERT_EQ_INT(-FILESYSTEM_EACCES, tryPathCommand(testMkdir, escape));
+  NANO_OS_ASSERT_EQ_INT(-FILESYSTEM_EACCES, tryPathCommand(testRmdir, escape));
+  NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EACCES, tryLstat(escape));
+  NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EACCES, tryOpendir("/tmp/../etc"));
+  NANO_OS_ASSERT_EQ_INT(-FILESYSTEM_EACCES, tryRename(escape, "/tmp/x"));
+  NANO_OS_ASSERT_EQ_INT(-FILESYSTEM_EACCES, tryRename("/tmp/x", escape));
+  NANO_OS_ASSERT_EQ_INT(0, stubPathCalls);
+}
+
+NANO_OS_KERNEL_TEST(fs_access,
+  dot_dot_above_the_root_cannot_reach_the_real_tree
+) {
+  accessFixture();
+  hold(DIRCAP_ALL, "/secure/");
+  NANO_OS_ASSERT_EQ_INT(0, tryOpen("/../../secure/shadow", "r", NULL));
+  NANO_OS_ASSERT_STR_EQ("/userspace/secure/shadow", stubLastPath);
+}
+
+NANO_OS_KERNEL_TEST(fs_access, dot_dot_is_resolved_before_the_check) {
+  accessFixture();
+  hold(DIRCAP_READ, "/etc/");
+  NANO_OS_ASSERT_EQ_INT(0, tryOpen("/tmp/../etc/passwd", "r", NULL));
+  NANO_OS_ASSERT_STR_EQ("/userspace/etc/passwd", stubLastPath);
+}
+
+NANO_OS_KERNEL_TEST(fs_access, a_relative_path_is_checked_from_pwd) {
+  static char pwd[] = "PWD=/tmp";
+  static char *envp[] = {pwd, NULL};
+  accessFixture();
+  self()->envp = envp;
+  hold(DIRCAP_READ, "/tmp/");
+  NANO_OS_ASSERT_EQ_INT(0, tryOpen("f", "r", NULL));
+  NANO_OS_ASSERT_STR_EQ("/userspace/tmp/f", stubLastPath);
+  assertOpenRefused("../etc/passwd", "r");
+}
+
+NANO_OS_KERNEL_TEST(fs_access, a_case_variant_does_not_match_a_capability) {
+  accessFixture();
+  hold(DIRCAP_ALL, "/tmp/");
+  assertOpenRefused("/TMP/f", "r");
+  assertOpenRefused("/Tmp/f", "w");
+  NANO_OS_ASSERT_EQ_INT(-FILESYSTEM_EACCES,
+    tryPathCommand(testRemoveFile, "/TMP/f"));
+  NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EACCES, tryLstat("/TMP/f"));
+  NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EACCES, tryOpendir("/TMP"));
+  NANO_OS_ASSERT_EQ_INT(-FILESYSTEM_EACCES, tryRename("/TMP/a", "/tmp/b"));
+}
+
+NANO_OS_KERNEL_TEST(fs_access, a_near_miss_does_not_match_a_capability) {
+  accessFixture();
+  hold(DIRCAP_ALL, "/home/briana/");
+  assertOpenRefused("/home/brian/f", "r");
+  assertOpenRefused("/home/brianaX/f", "r");
+}
+
+NANO_OS_KERNEL_TEST(fs_access, a_full_path_needs_a_full_path_entry) {
+  accessFixture();
+  self()->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
+  hold(DIRCAP_READ, "/system/");
+  handleMessageFlags = FILESYSTEM_FULL_PATH;
+  assertOpenRefused("/system/data/config.sys", "r");
+
+  accessFixture();
+  self()->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
+  hold(DIRCAP_READ | DIRCAP_FULL_PATH, "/system/");
+  handleMessageFlags = FILESYSTEM_FULL_PATH;
+  NANO_OS_ASSERT_EQ_INT(0, tryOpen("/system/data/config.sys", "r", NULL));
+  NANO_OS_ASSERT_STR_EQ("/system/data/config.sys", stubLastPath);
+}
+
+NANO_OS_KERNEL_TEST(fs_access, a_full_path_entry_does_not_cover_a_normal_path) {
+  accessFixture();
+  self()->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
+  hold(DIRCAP_READ | DIRCAP_FULL_PATH, "/system/");
+  assertOpenRefused("/system/data/config.sys", "r");
+}
+
+NANO_OS_KERNEL_TEST(fs_access,
+  a_forged_full_path_flag_is_checked_as_a_normal_path
+) {
+  accessFixture();
+  hold(DIRCAP_READ | DIRCAP_FULL_PATH, "/secure/");
+  handleMessageFlags = FILESYSTEM_FULL_PATH;
+  assertOpenRefused("/secure/shadow", "r");
+
+  accessFixture();
+  hold(DIRCAP_READ, "/secure/");
+  handleMessageFlags = FILESYSTEM_FULL_PATH;
+  NANO_OS_ASSERT_EQ_INT(0, tryOpen("/secure/shadow", "r", NULL));
+  NANO_OS_ASSERT_STR_EQ("/userspace/secure/shadow", stubLastPath);
+}
+
+NANO_OS_KERNEL_TEST(fs_access,
+  a_full_path_write_needs_the_full_path_write_bit
+) {
+  accessFixture();
+  self()->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
+  hold(DIRCAP_READ | DIRCAP_FULL_PATH, "/secure/");
+  hold(DIRCAP_WRITE, "/secure/");
+  handleMessageFlags = FILESYSTEM_FULL_PATH;
+  assertOpenRefused("/secure/shadow", "w");
+}
+
+NANO_OS_KERNEL_TEST(fs_access, a_process_with_no_set_is_refused_everything) {
+  accessFixture();
+  self()->dirCapabilities = NULL;
+  assertOpenRefused("/tmp/f", "r");
+  NANO_OS_ASSERT_EQ_INT(-FILESYSTEM_EACCES,
+    tryPathCommand(testRemoveFile, "/tmp/f"));
+  NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EACCES, tryLstat("/tmp/f"));
+  NANO_OS_ASSERT_EQ_INT(0, stubPathCalls);
+}
+
+NANO_OS_KERNEL_TEST(fs_access, a_sender_outside_the_table_is_refused_a_path) {
+  handleFixture();
+  ProcessDescriptor forged;
+  memset(&forged, 0, sizeof(forged));
+  forged.dirCapabilities = rootDirCapabilities;
+  ProcessDescriptor *carrier = otherProcess();
+  void *context = coroutineContext(carrier->mainThread);
+  coroutineSetContext(carrier->mainThread, &forged);
+  FilesystemRemoveArgs args;
+  memset(&args, 0, sizeof(args));
+  args.pathname = (char*) "/tmp/f";
+  runHandler(testRemoveFile, carrier, &args);
+  coroutineSetContext(carrier->mainThread, context);
+  NANO_OS_ASSERT_EQ_INT(-FILESYSTEM_EACCES, args.returnValue);
+  NANO_OS_ASSERT_EQ_INT(0, stubPathCalls);
+}
+
+NANO_OS_KERNEL_TEST(fs_access, the_scheduler_set_reaches_both_namespaces) {
+  accessFixture();
+  self()->dirCapabilities = rootDirCapabilities;
+  self()->privilegeLevel = PRIVILEGE_LEVEL_KERNEL;
+  NANO_OS_ASSERT_EQ_INT(0, tryOpen("/etc/hostname", "r", NULL));
+  handleMessageFlags = FILESYSTEM_FULL_PATH;
+  NANO_OS_ASSERT_EQ_INT(0, tryOpen("/system/data/config.sys", "r", NULL));
+}
+
+NANO_OS_KERNEL_TEST(fs_access, the_login_set_runs_but_cannot_read_system) {
+  accessFixture();
+  self()->dirCapabilities = loginDirCapabilities;
+  self()->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
+  handleMessageFlags = FILESYSTEM_FULL_PATH;
+  NANO_OS_ASSERT_EQ_INT(0,
+    tryOpen("/system/bin/login/main.overlay", "rx", NULL));
+  assertOpenRefused("/system/data/config.sys", "r");
+  NANO_OS_ASSERT_EQ_INT(0, tryOpen("/secure/shadow", "r", NULL));
+  assertOpenRefused("/secure/shadow", "w");
 }

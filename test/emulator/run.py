@@ -218,10 +218,14 @@ def test_echo_roundtrips_its_argument(e):
     assert e.sh("echo hello-agon") == "hello-agon"
 
 
-def test_ll_lists_the_root_directory(e):
-    names = [line.split()[-1] for line in e.sh("ll /").splitlines()]
-    for name in ("usr/", "root/", "etc/"):
+def test_ll_lists_a_directory(e):
+    names = [line.split()[-1] for line in e.sh("ll /usr").splitlines()]
+    for name in ("bin/", "lib/"):
         assert name in names, f"{name} missing from {names}"
+
+
+def test_no_one_can_list_the_root_directory(e):
+    assert "Permission denied" in e.sh("ll /")
 
 
 def image_text(e, path):
@@ -241,7 +245,7 @@ def image_text(e, path):
 def test_config_sys_is_the_agon_one(e):
     expected = open(os.path.join(REPO_ROOT, "etc", "AgonLight2",
                                  "config.sys")).read().strip("\n")
-    assert "No such" in e.sh("cat /system/data/config.sys")
+    assert "Permission denied" in e.sh("cat /system/data/config.sys")
     assert image_text(e, "/system/data/config.sys") == expected
 
 
@@ -358,29 +362,29 @@ def test_cat_reports_a_missing_file(e):
 
 
 def test_mkdir_touch_mv_rm_and_rmdir_manage_files(e):
-    assert e.sh("mkdir /work") == ""
-    assert e.sh("touch /work/first") == ""
-    assert ll_names(e, "/work") == ["first"]
-    assert e.sh("mv /work/first /work/second-with-a-long-name") == ""
-    assert ll_names(e, "/work") == ["second-with-a-long-name"]
-    assert e.sh("rmdir /work") == \
-        'ERROR: Could not remove directory "/work": Directory not empty'
-    assert e.sh("rm /work/second-with-a-long-name") == ""
-    assert e.sh("rm /work/missing") == \
-        'ERROR: Could not remove "/work/missing": No such entry found'
-    assert e.sh("rmdir /work") == ""
-    assert "work/" not in ll_names(e, "/")
+    assert e.sh("mkdir /root/work") == ""
+    assert e.sh("touch /root/work/first") == ""
+    assert ll_names(e, "/root/work") == ["first"]
+    assert e.sh("mv /root/work/first /root/work/second-with-a-long-name") == ""
+    assert ll_names(e, "/root/work") == ["second-with-a-long-name"]
+    assert e.sh("rmdir /root/work") == \
+        'ERROR: Could not remove directory "/root/work": Directory not empty'
+    assert e.sh("rm /root/work/second-with-a-long-name") == ""
+    assert e.sh("rm /root/work/missing") == \
+        'ERROR: Could not remove "/root/work/missing": No such entry found'
+    assert e.sh("rmdir /root/work") == ""
+    assert "work/" not in ll_names(e, "/root")
 
 
 def test_cp_copies_text_files(e):
     passwd = e.sh("cat /etc/passwd")
     assert e.sh("cp /etc/passwd /etc/passwd.copy") == ""
     assert e.sh("cat /etc/passwd.copy") == passwd
-    assert e.sh("mkdir /copies") == ""
-    assert e.sh("cp /etc/hostname /etc/issue /copies") == ""
-    assert ll_names(e, "/copies") == ["hostname", "issue"]
-    assert e.sh("cat /copies/hostname") == HOSTNAME
-    assert e.sh("cp /etc/missing /copies") == \
+    assert e.sh("mkdir /root/copies") == ""
+    assert e.sh("cp /etc/hostname /etc/issue /root/copies") == ""
+    assert ll_names(e, "/root/copies") == ["hostname", "issue"]
+    assert e.sh("cat /root/copies/hostname") == HOSTNAME
+    assert e.sh("cp /etc/missing /root/copies") == \
         'ERROR: Could not open file "/etc/missing": No such entry found'
 
 
@@ -412,12 +416,12 @@ def test_mv_moves_a_command_into_its_directory(e):
 def test_directories_grow_past_their_first_cluster(e):
     # A 1 KiB cluster holds 32 entries, and each of these names takes three.
     names = ["file-with-long-name-%02d" % n for n in range(16)]
-    assert e.sh("mkdir /many") == ""
+    assert e.sh("mkdir /root/many") == ""
     for name in names:
-        assert e.sh("touch /many/" + name) == ""
-    assert e.sh("cp /etc/passwd /many/passwd") == ""
-    assert ll_names(e, "/many") == sorted(names + ["passwd"])
-    assert e.sh("cat /many/passwd") == e.sh("cat /etc/passwd")
+        assert e.sh("touch /root/many/" + name) == ""
+    assert e.sh("cp /etc/passwd /root/many/passwd") == ""
+    assert ll_names(e, "/root/many") == sorted(names + ["passwd"])
+    assert e.sh("cat /root/many/passwd") == e.sh("cat /etc/passwd")
 
 
 def test_ed_writes_a_new_file(e):
@@ -465,16 +469,17 @@ def test_scripts_run_by_path_and_with_mush(e):
 
 def test_variables_and_exit_status_expand(e):
     assert e.sh("echo ${USER} x$USER") == "root xroot"
-    e.sh("cat /missing")
+    e.sh("cat /etc/missing")
     assert e.sh("echo $?") == "1"
     e.sh("nosuch")
     assert e.sh("echo $?") == "127"
 
 
 def test_dirtest_reports_entry_types(e):
-    out = e.sh("dirtest")
+    # dirtest narrows its own set; in a pipeline it can't narrow this shell's.
+    out = e.sh("dirtest | cat")
     assert 'd_name="hostname" d_type=8' in out, out
-    assert 'd_name="usr" d_type=4' in out, out
+    assert 'd_name="bin" d_type=4' in out, out
 
 
 def test_dump_memory_allocations_lists_the_heap(e):
@@ -609,7 +614,8 @@ def test_filesystem_is_consistent_after_shutdown(e):
 
 TESTS = [test_boots_to_a_login_prompt,
          test_echo_roundtrips_its_argument,
-         test_ll_lists_the_root_directory,
+         test_ll_lists_a_directory,
+    test_no_one_can_list_the_root_directory,
          test_config_sys_is_the_agon_one,
          test_vdp_driver_and_its_getty_are_running,
          test_helloworld_prints_its_greeting,

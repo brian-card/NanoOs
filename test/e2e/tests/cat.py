@@ -47,8 +47,8 @@ def test_cat_reports_a_missing_file(s):
 
 def test_cat_reports_a_directory(s):
     s.login()
-    assert s.sh("cat /etc") == \
-        'ERROR: Could not open file "/etc": Invalid argument'
+    assert s.sh("cat /usr/bin") == \
+        'ERROR: Could not open file "/usr/bin": Invalid argument'
 
 
 def test_cat_reading_the_console_is_killed_by_ctrl_c(s):

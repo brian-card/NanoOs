@@ -231,7 +231,7 @@ def test_vdp_draws_control_characters_as_glyphs(s):
     # 0x0c would clear the screen and 0x16 change the mode if sent bare.
     s.child.terminate(force=True)
     subprocess.run(["mcopy", "-o", "-i", s.img_copy + "@@2097152", "-",
-                    "::/userspace/glyphs.txt"],
+                    "::/userspace/etc/glyphs.txt"],
                    input=b"glyphs:\x01\x0c\x16\x1f\x7f:end\n",
                    env=dict(os.environ, MTOOLS_SKIP_CHECK="1"), check=True)
     vdp = s.restart_with_vdp()
@@ -239,7 +239,7 @@ def test_vdp_draws_control_characters_as_glyphs(s):
     vdp.clear()
     with vdp.lock:
         start = len(vdp.events)
-    vdp.type("cat /glyphs.txt\r")
+    vdp.type("cat /etc/glyphs.txt\r")
     vdp.expect(r"\r\nglyphs:\x01\x0c\x16\x1f\x7f:end\r\n" + PROMPT)
     with vdp.lock:
         kinds = {kind for _t, kind, _d in vdp.events[start:]}

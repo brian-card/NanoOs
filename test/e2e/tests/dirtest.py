@@ -30,15 +30,22 @@
 
 
 def test_dirent_lists_directories_with_correct_type(s):
-    # test/e2e/mkimage.sh always builds a root directory containing /etc and
-    # /usr (via mmd), both real subdirectories.  mtools writes
-    # lowercase 8.3 names using the ntReserved case bits rather than an LFN,
-    # so the case-preserving name comes back lowercase, not the legacy
-    # all-uppercase short-name rendering.
+    # test/e2e/mkimage.sh always builds /usr containing bin and lib (via
+    # mmd), both real subdirectories.  mtools writes lowercase 8.3 names
+    # using the ntReserved case bits rather than an LFN, so the
+    # case-preserving name comes back lowercase, not the legacy all-uppercase
+    # short-name rendering.
     s.login()
     out = s.sh("dirtest")
-    for name in ("usr", "etc"):
+    for name in ("bin", "lib"):
         assert f'd_name="{name}" d_type=4' in out, out
+
+
+def test_dirent_cannot_list_the_root(s):
+    # EACCES is 4 in src/user/NanoOsErrno.h.
+    s.login()
+    out = s.sh("dirtest")
+    assert "opendir(/):\n  opendir failed, errno=4" in out, out
 
 
 def test_dirent_lists_files_with_correct_type(s):
@@ -62,7 +69,7 @@ def test_dirent_opendir_rejects_missing_path_and_regular_file(s):
     # that names a regular file rather than a directory.
     s.login()
     out = s.sh("dirtest")
-    assert "opendir(/nonexistent) -> NULL" in out, out
+    assert "opendir(/etc/nonexistent) -> NULL" in out, out
     assert "opendir(/etc/hostname) -> NULL" in out, out
 
 
@@ -72,7 +79,7 @@ def test_dirent_sets_errno_correctly(s):
     # for the numbering) -- distinct values, not the same generic failure.
     s.login()
     out = s.sh("dirtest")
-    assert "opendir(/nonexistent) -> NULL, errno=8" in out, out
+    assert "opendir(/etc/nonexistent) -> NULL, errno=8" in out, out
     assert 'opendir(/etc/hostname) -> NULL, errno=25, strerror="Not a directory"' in out, out
     # readdir must leave errno untouched when it returns NULL only because
     # the directory was exhausted -- that's not an error.

@@ -34,6 +34,7 @@ import subprocess
 
 RODATA = "/system/data/NanoOs_rodata.bin"
 NOT_FOUND = "No such entry found"
+DENIED = "Permission denied"
 
 
 def image_names(s, path):
@@ -53,16 +54,16 @@ def image_names(s, path):
 
 def test_a_login_shell_cannot_read_the_system_tree(s):
     s.login()
-    assert NOT_FOUND in s.sh("cat " + RODATA)
-    assert NOT_FOUND in s.sh("cat /secure/shadow")
+    assert DENIED in s.sh("cat " + RODATA)
+    assert DENIED in s.sh("cat /secure/shadow")
 
 
 def test_dots_do_not_climb_out_of_userspace(s):
     s.login()
-    assert NOT_FOUND in s.sh("cat /etc/../.." + RODATA)
+    assert DENIED in s.sh("cat /etc/../.." + RODATA)
     assert s.sh("cd /etc") == ""
-    assert NOT_FOUND in s.sh("cat ../.." + RODATA)
-    assert NOT_FOUND in s.sh("cat ../../userspace/etc/issue")
+    assert DENIED in s.sh("cat ../.." + RODATA)
+    assert DENIED in s.sh("cat ../../userspace/etc/issue")
 
 
 def test_a_shell_cannot_run_a_system_program(s):

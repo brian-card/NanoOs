@@ -283,6 +283,11 @@ static volatile int fakeOpens;
 /// @brief The path of the last open.
 static char fakeOpenPath[64];
 
+/// @var fakeOpenMode
+///
+/// @brief The mode of the last open the fake filesystem saw.
+static char fakeOpenMode[4];
+
 /// @var fakeOpenFullPath
 ///
 /// @brief Whether the last open carried a full path.
@@ -311,6 +316,7 @@ static void* refusingFilesystem(void *args) {
       fopenArgs->returnValue = NULL;
       fakeOpens++;
       strcpy(fakeOpenPath, fopenArgs->pathname);
+      strcpy(fakeOpenMode, fopenArgs->mode);
       fakeOpenFullPath
         = (processMessageType(message) & FILESYSTEM_FULL_PATH) != 0;
     }
@@ -450,6 +456,15 @@ NANO_OS_KERNEL_TEST(launch, a_user_overlay_is_opened_as_a_user_api_path) {
     < 0);
   NANO_OS_ASSERT_STR_EQ("/usr/bin/x/main.overlay", fakeOpenPath);
   NANO_OS_ASSERT_FALSE(fakeOpenFullPath);
+}
+
+NANO_OS_KERNEL_TEST(launch, an_overlay_is_opened_to_run_and_not_to_read) {
+  useRefusingFilesystem();
+  FileBlockMetadata metadata;
+  NANO_OS_ASSERT_TRUE(
+    getFileBlockMetadataFromPath("/userspace/usr/bin/x/main.overlay", &metadata)
+    < 0);
+  NANO_OS_ASSERT_STR_EQ("rx", fakeOpenMode);
 }
 
 NANO_OS_KERNEL_TEST(launch, a_system_overlay_is_opened_by_its_full_path) {

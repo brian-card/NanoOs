@@ -67,8 +67,9 @@ def test_mkdir_and_rmdir_report_errors(s):
     s.login()
     assert s.sh("mkdir /etc/issue") == \
         'ERROR: Could not create directory "/etc/issue": File exists'
-    assert s.sh("mkdir /missing/dir") == \
-        'ERROR: Could not create directory "/missing/dir": No such entry found'
+    assert s.sh("mkdir /etc/missing/dir") == \
+        'ERROR: Could not create directory "/etc/missing/dir": ' \
+        'No such entry found'
     assert s.sh("rmdir /etc/issue") == \
         'ERROR: Could not remove directory "/etc/issue": Not a directory'
     assert s.sh("rmdir /etc/missing") == \

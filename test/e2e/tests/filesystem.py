@@ -100,7 +100,8 @@ def test_names_match_only_in_their_exact_case(s):
     missing = 'ERROR: Could not open file "%s": No such entry found'
     assert s.sh("cat /etc/catfile") == CATFILE_CONTENTS
     assert s.sh("cat /etc/CatFile") == missing % "/etc/CatFile"
-    assert s.sh("cat /ETC/catfile") == missing % "/ETC/catfile"
+    assert s.sh("cat /ETC/catfile") == \
+        'ERROR: Could not open file "/ETC/catfile": Permission denied'
     assert s.sh("mkdir /etc/Mixed-Case-Dir") == ""
     assert s.sh("touch /etc/Mixed-Case-Dir/f") == ""
     assert s.sh("cat /etc/mixed-case-dir/f") == \
