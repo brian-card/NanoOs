@@ -44,7 +44,8 @@
 #endif // NANO_OS_KERNEL_BUILD
 
 // Prototypes used by this handler.
-int driverRename(void *driverState, const char *oldpath, const char *newpath);
+int driverRename(void *driverState, const char *oldpath, const char *newpath,
+  bool mayReplace);
 
 /// @def RENAME_NO_DRIVER_ERRNO
 ///
@@ -77,8 +78,16 @@ void* RenameFile(void *args) {
     filesystemState, processMessage, filesystemRenameArgs->newpath);
   if ((oldpath == NULL) || (newpath == NULL)) {
     returnValue = -FILESYSTEM_PATH_ENOMEM;
+  } else if (!filesystemPathAllowed(filesystemState, processMessage, oldpath,
+      false, DIRCAP_DELETE)
+    || !filesystemPathAllowed(filesystemState, processMessage, newpath,
+      false, DIRCAP_CREATE)
+  ) {
+    returnValue = -FILESYSTEM_EACCES;
   } else if (filesystemState->driverState != NULL) {
-    returnValue = driverRename(filesystemState->driverState, oldpath, newpath);
+    returnValue = driverRename(filesystemState->driverState, oldpath, newpath,
+      filesystemPathAllowed(filesystemState, processMessage, newpath,
+        false, DIRCAP_DELETE));
   }
   if (oldpath != filesystemRenameArgs->oldpath) {
     free(oldpath);
