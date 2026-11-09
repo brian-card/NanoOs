@@ -311,6 +311,8 @@ int schedulerSetProcessUser(UserId userId);
 FileDescriptor* schedulerGetFileDescriptor(FILE *stream);
 int schedulerCloseAllFileDescriptors(void);
 const char* schedulerGetHostname(void);
+int schedulerExecveFullPath(const char *pathname,
+  char *const argv[], char *const envp[]);
 int schedulerExecve(const char *pathname,
   char *const argv[], char *const envp[]);
 int schedulerAssignMemory(void *ptr);
@@ -329,6 +331,7 @@ void schedulerSetNumShells(uint8_t numShells);
 void* schedMalloc(size_t size);
 void schedFree(void *ptr);
 FILE* schedFopen(const char *pathname, const char *mode);
+FILE* schedFopenFullPath(const char *pathname, const char *mode);
 char* schedFgets(char *buffer, int size, FILE *stream);
 size_t schedFread(void *ptr, size_t size, size_t nmemb, FILE *stream);
 void* schedRealloc(void *ptr, size_t size);
@@ -378,6 +381,7 @@ extern bool schedulerPreemptionTimerArmed;
 extern DirCapabilities *const rootDirCapabilities;
 extern DirCapabilities *const kernelDirCapabilities;
 extern DirCapabilities *const supervisorDirCapabilities;
+extern DirCapabilities *const loginDirCapabilities;
 
 void forceYield(void);
 bool schedulerQueueWaitingProcess(ProcessDescriptor *processDescriptor);
