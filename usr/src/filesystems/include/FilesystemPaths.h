@@ -91,22 +91,45 @@ static inline bool filesystemPathIsCollapsed(const char *path) {
   return true;
 }
 
+/// @fn static inline bool filesystemMessageHasFullPath(
+///   FilesystemState *filesystemState, ProcessMessage *processMessage)
+///
+/// @brief Determine whether a request's path is the full path on the volume.
+/// Only a kernel or executive process may send one.
+///
+/// @param filesystemState A pointer to the filesystem process's
+///   FilesystemState.
+/// @param processMessage The ProcessMessage that carried the path.
+///
+/// @return Returns true if the path is the full path, false if it is under
+/// /userspace.
+static inline bool filesystemMessageHasFullPath(
+  FilesystemState *filesystemState, ProcessMessage *processMessage
+) {
+  const ProcessDescriptor *from = processMessageFrom(processMessage);
+  return ((processMessageType(processMessage) & FILESYSTEM_FULL_PATH) != 0)
+    && (from >= filesystemState->allProcesses)
+    && (from < filesystemState->allProcesses + filesystemState->numProcesses)
+    && (from->privilegeLevel <= PRIVILEGE_LEVEL_EXECUTIVE);
+}
+
 /// @fn static inline char* filesystemAbsolutePath(
 ///   FilesystemState *filesystemState, ProcessMessage *processMessage,
 ///   char *path)
 ///
-/// @brief Resolve a path sent by another process into a collapsed absolute
-/// path by prefixing a relative path with the sender's PWD (or "/" if it has
-/// none) and collapsing the result.
+/// @brief Resolve a path sent by another process into the real path on the
+/// volume:  make it absolute with the sender's PWD (or "/" if it has none),
+/// collapse it, and put it under /userspace unless the request carries a full
+/// path.
 ///
 /// @param filesystemState A pointer to the filesystem process's
 ///   FilesystemState.
 /// @param processMessage The ProcessMessage that carried the path.
 /// @param path The path as provided by the sending process.
 ///
-/// @return Returns path itself if it is NULL or already an absolute,
-/// collapsed path, a newly allocated absolute path that the caller must free
-/// otherwise, or NULL if the new path could not be allocated.
+/// @return Returns path itself if it is NULL or is already the real path, a
+/// newly allocated real path that the caller must free otherwise, or NULL if
+/// the new path could not be allocated.
 static inline char* filesystemAbsolutePath(
   FilesystemState *filesystemState, ProcessMessage *processMessage,
   char *path
@@ -115,16 +138,17 @@ static inline char* filesystemAbsolutePath(
     return path;
   }
 
-  const char *pwd = NULL;
   const ProcessDescriptor *from = processMessageFrom(processMessage);
+  bool validSender = (from >= filesystemState->allProcesses)
+    && (from < filesystemState->allProcesses + filesystemState->numProcesses);
+  bool fullPath = filesystemMessageHasFullPath(filesystemState, processMessage);
+
+  const char *pwd = NULL;
   if (*path == '/') {
-    if (filesystemPathIsCollapsed(path)) {
+    if (fullPath && filesystemPathIsCollapsed(path)) {
       return path;
     }
-  } else if ((from >= filesystemState->allProcesses)
-    && (from < filesystemState->allProcesses + filesystemState->numProcesses)
-    && (from->envp != NULL)
-  ) {
+  } else if (!fullPath && validSender && (from->envp != NULL)) {
     for (char **envp = from->envp; *envp != NULL; envp++) {
       const char *entry = *envp;
       if ((entry[0] == 'P') && (entry[1] == 'W') && (entry[2] == 'D')
@@ -138,18 +162,67 @@ static inline char* filesystemAbsolutePath(
 
   size_t pwdLength = (pwd != NULL) ? strlen(pwd) : 0;
   size_t pathLength = strlen(path);
-  char *absolutePath = (char*) malloc(pwdLength + pathLength + 2);
-  if (absolutePath == NULL) {
+  char *realPath = (char*) malloc(
+    FILESYSTEM_USERSPACE_LENGTH + pwdLength + pathLength + 2);
+  if (realPath == NULL) {
     return NULL;
   }
+  char *absolutePath = &realPath[FILESYSTEM_USERSPACE_LENGTH];
   if (pwd != NULL) {
     memcpy(absolutePath, pwd, pwdLength);
   }
   absolutePath[pwdLength] = '/';
   memcpy(&absolutePath[pwdLength + 1], path, pathLength + 1);
-  pathCollapse(absolutePath);
+  size_t length = pathCollapse(absolutePath);
 
-  return absolutePath;
+  if (fullPath) {
+    memmove(realPath, absolutePath, length + 1);
+    return realPath;
+  }
+
+  realPath[0] = '/';
+  realPath[1] = 'u';
+  realPath[2] = 's';
+  realPath[3] = 'e';
+  realPath[4] = 'r';
+  realPath[5] = 's';
+  realPath[6] = 'p';
+  realPath[7] = 'a';
+  realPath[8] = 'c';
+  realPath[9] = 'e';
+  if (length == 1) {
+    // The driver rejects a path that ends in a separator.
+    absolutePath[0] = '\0';
+  }
+
+  return realPath;
+}
+
+/// @fn static inline const char* filesystemCallerPath(const char *realPath,
+///   bool fullPath, size_t *length)
+///
+/// @brief Get the name that a capability uses for a real path.
+///
+/// @param realPath A path returned by filesystemAbsolutePath.
+/// @param fullPath Whether the request carried a full path.
+/// @param length Where to store the length of the name.
+///
+/// @return Returns the name, which is not NUL-terminated for the directory
+/// callers see as /.
+static inline const char* filesystemCallerPath(const char *realPath,
+  bool fullPath, size_t *length
+) {
+  size_t realLength = strlen(realPath);
+  if (fullPath) {
+    *length = realLength;
+    return realPath;
+  } else if (realLength == FILESYSTEM_USERSPACE_LENGTH) {
+    *length = 1;
+    return realPath;
+  }
+
+  *length = realLength - FILESYSTEM_USERSPACE_LENGTH;
+  return &realPath[FILESYSTEM_USERSPACE_LENGTH];
 }
 
 #ifdef __cplusplus
