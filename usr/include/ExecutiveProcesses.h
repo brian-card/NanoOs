@@ -475,6 +475,43 @@ static inline bool executiveDirCapabilityAllows(const DirCapabilities *set,
 }
 #define dirCapabilityAllows executiveDirCapabilityAllows
 
+/// @fn static inline int execveFullPath(const char *pathname,
+///   char *const argv[], char *const envp[])
+///
+/// @brief Replace this process with the program at a full path on the volume.
+/// A program outside /userspace keeps running at executive level.
+///
+/// @param pathname The full path to the program.
+/// @param argv The NULL-terminated array of arguments for the program.
+/// @param envp The NULL-terminated array of environment variables, or NULL.
+///
+/// @return Doesn't return on success, returns -1 and sets errno on failure.
+static inline int execveFullPath(const char *pathname,
+  char *const argv[], char *const envp[]
+) {
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return overlayMap.header.osApi->executiveApi->execveFullPath(
+      pathname, argv, envp);
+  }
+  return -1;
+}
+
+/// @fn static inline FILE* fopenFullPath(const char *pathname,
+///   const char *mode)
+///
+/// @brief Open a file by its full path on the volume.
+///
+/// @param pathname The full path to the file.
+/// @param mode The standard C file mode to open the file as.
+///
+/// @return Returns the opened file on success, NULL and sets errno on failure.
+static inline FILE* fopenFullPath(const char *pathname, const char *mode) {
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return overlayMap.header.osApi->executiveApi->fopenFullPath(pathname, mode);
+  }
+  return NULL;
+}
+
 /// @fn static inline ProcessMessage* getAvailableMessage(void)
 ///
 /// @brief Get a ProcessMessage that isn't in use and mark it in use.
