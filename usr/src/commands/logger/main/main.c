@@ -182,8 +182,8 @@ static void printUsage(FILE *stream) {
     "\n"
     "Run the system logger, which prints the log messages sent to it, reading\n"
     "the text of the kernel's messages from the string file.  The system\n"
-    "starts it at boot with /usr/lib/NanoOs_rodata.bin; it isn't normally run\n"
-    "by hand.\n"
+    "starts it at boot with /system/data/NanoOs_rodata.bin; it isn't\n"
+    "normally run by hand.\n"
     "\n"
     "Options:\n"
     "  --help  Show this help and exit.\n",
@@ -202,7 +202,7 @@ int main(int argc, char **argv) {
   
   LoggerState loggerState;
   *loggerState.buffer = '\0';
-  loggerState.binaryFile = fopen(argv[1], "r");
+  loggerState.binaryFile = fopenFullPath(argv[1], "r");
   if (loggerState.binaryFile == NULL) {
     printString("logger: Could not open binary file \"");
     printString(argv[1]);
