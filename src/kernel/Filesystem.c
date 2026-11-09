@@ -1001,13 +1001,14 @@ int getFileBlockMetadataFromFile(FILE *stream, FileBlockMetadata *metadata) {
   return 0;
 }
 
-/// @var _readMode
+/// @var _overlayOpenMode
 ///
-/// @brief fopen() mode string used to open a file for reading.
+/// @brief fopen() mode string the filesystem takes as a request to run the
+/// file, which needs execute rather than read permission.
 ///
 /// @note KEEP_IN_FLASH is required here because .rodata is removed from the
 /// final binary on some targets.
-static const char _readMode[] KEEP_IN_FLASH = "r";
+static const char _overlayOpenMode[] KEEP_IN_FLASH = "rx";
 
 /// @fn int getFileBlockMetadataFromPath(const char *path,
 ///   FileBlockMetadata *metadata)
@@ -1030,7 +1031,8 @@ int getFileBlockMetadataFromPath(const char *path,
   // and the filesystem would ignore a full path from it.
   bool underUserspace = filesystemPathIsUserspace(path);
   FILE *stream = filesystemOpenFile(
-    underUserspace ? &path[FILESYSTEM_USERSPACE_LENGTH] : path, _readMode,
+    underUserspace ? &path[FILESYSTEM_USERSPACE_LENGTH] : path,
+    _overlayOpenMode,
     underUserspace ? 0 : FILESYSTEM_FULL_PATH);
   if (stream == NULL) {
     int errorNumber = (errno != 0) ? errno : EIO;
