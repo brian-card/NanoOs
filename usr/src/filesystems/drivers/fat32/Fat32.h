@@ -124,6 +124,7 @@ typedef struct FilesystemState FilesystemState;
 #define FAT32_NOT_A_DIRECTORY        -8
 #define FAT32_FILE_EXISTS            -9
 #define FAT32_DIRECTORY_NOT_EMPTY    -10
+#define FAT32_ACCESS_DENIED          -11
 
 ///////////////////////////////////////////////////////////////////////////////
 ///
@@ -155,6 +156,7 @@ static inline int fat32ErrorToErrno(int fat32Status) {
   switch (fat32Status) {
     case FAT32_SUCCESS:             return 0;  // ENOERR
     case FAT32_FILE_NOT_FOUND:      return 8;  // ENOENT
+    case FAT32_ACCESS_DENIED:       return 4;  // EACCES
     case FAT32_NOT_A_DIRECTORY:     return 25; // ENOTDIR
     case FAT32_FILE_EXISTS:         return 26; // EEXIST
     case FAT32_DIRECTORY_NOT_EMPTY: return 9;  // ENOTEMPTY
