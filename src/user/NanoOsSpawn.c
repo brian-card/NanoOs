@@ -395,12 +395,19 @@ int nanoOsSpawn(
   }
   nanoOsFlushStdout();
 
-  SpawnArgs *spawnArgs
-    = (SpawnArgs*) calloc(1, spawnArgsSize(path, file_actions, argv));
-  if (spawnArgs == NULL) {
+  char *fullPath = userspacePathNew(path);
+  if (fullPath == NULL) {
     return ENOMEM;
   }
-  spawnArgsFill(spawnArgs, pid, path, file_actions, attrp, argv);
+
+  SpawnArgs *spawnArgs
+    = (SpawnArgs*) calloc(1, spawnArgsSize(fullPath, file_actions, argv));
+  if (spawnArgs == NULL) {
+    free(fullPath);
+    return ENOMEM;
+  }
+  spawnArgsFill(spawnArgs, pid, fullPath, file_actions, attrp, argv);
+  free(fullPath);
 
   if (envp != NULL) {
     size_t envpBytes = envpBlockSize(envp);
