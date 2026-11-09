@@ -3819,6 +3819,36 @@ int schedulerGetHostnameCommandHandler(
   return returnValue;
 }
 
+/// @fn static bool schedulerMayExec(const ProcessDescriptor *caller,
+///   char *pathname, HalExecCommandFn execCommand)
+///
+/// @brief Determine whether a process may run a program.  A command built
+/// into the kernel isn't a file, so it always may.
+///
+/// @param caller The process asking to run the program.
+/// @param pathname The full path to the program.  It is collapsed in place,
+///   because the message that carried it isn't trusted to have done so.
+/// @param execCommand The platform's HalExecCommandFn.
+///
+/// @return Returns true if the program may run, false if not.
+static bool schedulerMayExec(const ProcessDescriptor *caller,
+  char *pathname, HalExecCommandFn execCommand
+) {
+  if (execCommand != execOverlayCommand) {
+    return true;
+  }
+
+  size_t length = pathCollapse(pathname);
+  if (filesystemPathIsUserspace(pathname)) {
+    return dirCapabilityAllows(caller->dirCapabilities,
+      &pathname[FILESYSTEM_USERSPACE_LENGTH],
+      length - FILESYSTEM_USERSPACE_LENGTH, true, DIRCAP_EXEC);
+  }
+
+  return dirCapabilityAllows(caller->dirCapabilities, pathname, length, true,
+    DIRCAP_EXEC | DIRCAP_FULL_PATH);
+}
+
 /// @fn int schedulerExecveCommandHandler(
 ///   SchedulerState *schedulerState, ProcessMessage *processMessage)
 ///
@@ -3891,7 +3921,9 @@ int schedulerExecveCommandHandler(
   }
   logDebug("Loading overlay metadata for process %d\n",
     processDescriptor->processId);
-  returnValue = loadProcessDescriptorOverlayMetadata(processDescriptor);
+  returnValue = schedulerMayExec(processMessageFrom(processMessage), pathname,
+    execCommand) ? loadProcessDescriptorOverlayMetadata(processDescriptor)
+    : -EACCES;
   logDebug("Overlay metadata loaded for process %d\n",
     processDescriptor->processId);
   if (returnValue != 0) {
@@ -4224,7 +4256,9 @@ int schedulerSpawnCommandHandler(
   if (execCommand == execOverlayCommand) {
     processDescriptor->overlayNamespace = pathname;
   }
-  returnValue = loadProcessDescriptorOverlayMetadata(processDescriptor);
+  returnValue = schedulerMayExec(processMessageFrom(processMessage), pathname,
+    execCommand) ? loadProcessDescriptorOverlayMetadata(processDescriptor)
+    : -EACCES;
   if (returnValue != 0) {
     dirCapabilitiesRelease(dirCapabilities, schedRealloc);
     processQueuePush(schedulerState->freeQueue, processDescriptor);
