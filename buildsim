@@ -96,6 +96,10 @@ printf '%s' "${hostname}" \
 printf '\\s \\r \\n \\l\n\n' \
 	| MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" - ::/userspace/etc/issue
 MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" etc/passwd ::/userspace/etc/passwd
+MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" etc/capabilities \
+	::/userspace/etc/capabilities
+MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" etc/system/capabilities \
+	::/system/data/capabilities
 MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s home ::/userspace/home
 
 # Write block overlays into the image at their absolute sector positions,
