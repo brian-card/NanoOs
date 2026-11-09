@@ -178,7 +178,7 @@ static void vdpBufferString(VdpOutputBuffer *buffer, const char *string) {
 ///
 /// @brief Apply the driver's arguments, warning on the driver's own screen
 /// about any it doesn't recognize and ignoring them, so that a mistake in
-/// /etc/config.sys can't take the console away.  The screen is the only place
+/// config.sys can't take the console away.  The screen is the only place
 /// the driver can report to:  its hardware grant keeps it off the other UARTs.
 ///
 /// @param input A pointer to the driver's VdpInput.
