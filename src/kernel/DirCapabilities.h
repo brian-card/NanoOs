@@ -122,6 +122,70 @@ typedef struct DirCapabilities {
   DirCapability capabilities[1];
 } DirCapabilities;
 
+/// @fn static inline uint8_t dirCapabilityMaskFromLetters(const char *letters)
+///
+/// @brief Convert the permission letters of a capabilities file to a mask.
+///
+/// @param letters The NUL-terminated letters.
+///
+/// @return Returns the DIRCAP_* bits, or 0 if a letter is invalid or there
+/// are none.
+static inline uint8_t dirCapabilityMaskFromLetters(const char *letters) {
+  uint8_t mask = 0;
+  for (; *letters != '\0'; letters++) {
+    if (*letters == 'r') {
+      mask |= DIRCAP_READ;
+    } else if (*letters == 'w') {
+      mask |= DIRCAP_WRITE;
+    } else if (*letters == 'c') {
+      mask |= DIRCAP_CREATE;
+    } else if (*letters == 'd') {
+      mask |= DIRCAP_DELETE;
+    } else if (*letters == 'l') {
+      mask |= DIRCAP_LIST;
+    } else if (*letters == 's') {
+      mask |= DIRCAP_STAT;
+    } else if (*letters == 'x') {
+      mask |= DIRCAP_EXEC;
+    } else {
+      return 0;
+    }
+  }
+  return mask;
+}
+
+/// @fn static inline uint8_t dirCapabilitySplitLine(char *line, char **fields)
+///
+/// @brief Split a line of a capabilities file in place.  A comment or a blank
+/// line has no fields.
+///
+/// @param line The NUL-terminated line.
+/// @param fields Where to store pointers to the three fields.
+///
+/// @return Returns the number of fields, up to four, so that a result other
+/// than 0 or 3 is a malformed line.
+static inline uint8_t dirCapabilitySplitLine(char *line, char **fields) {
+  uint8_t numFields = 0;
+  bool inField = false;
+  for (char *cursor = line; *cursor != '\0'; cursor++) {
+    bool isSpace = (*cursor == ' ') || (*cursor == '\t')
+      || (*cursor == '\r') || (*cursor == '\n');
+    if (isSpace) {
+      *cursor = '\0';
+      inField = false;
+    } else if (!inField) {
+      if ((numFields == 0) && (*cursor == '#')) {
+        return 0;
+      } else if (numFields == 3) {
+        return 4;
+      }
+      fields[numFields++] = cursor;
+      inField = true;
+    }
+  }
+  return numFields;
+}
+
 /// @def DIR_CAPABILITIES_HEADER_SIZE
 ///
 /// @brief The size of a DirCapabilities block with no entries.
