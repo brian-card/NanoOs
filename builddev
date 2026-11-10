@@ -191,6 +191,7 @@ if [ -b "${targetDevice}" ]; then
 	sudo cp etc/passwd "${mountDir}/userspace/etc/passwd"
 	sudo cp etc/capabilities "${mountDir}/userspace/etc/capabilities"
 	sudo cp etc/system/capabilities "${mountDir}/system/data/capabilities"
+	sudo cp etc/secure/shadow "${mountDir}/secure/shadow"
 	sudo mkdir -p "${mountDir}/userspace/root"
 	sudo cp -r home "${mountDir}/userspace"
 	sudo umount "${mountDir}"
@@ -296,6 +297,8 @@ else
 		::/userspace/etc/capabilities
 	MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -o etc/system/capabilities \
 		::/system/data/capabilities
+	MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -o etc/secure/shadow \
+		::/secure/shadow
 	MTOOLS_SKIP_CHECK=1 mdir -i "${fatImage}" ::/userspace/root >/dev/null 2>&1 \
 		|| MTOOLS_SKIP_CHECK=1 mmd -i "${fatImage}" ::/userspace/root
 	MTOOLS_SKIP_CHECK=1 mdir -i "${fatImage}" ::/userspace/home >/dev/null 2>&1 \
