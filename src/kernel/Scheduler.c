@@ -728,13 +728,9 @@ static const DIR_CAPABILITIES_STATIC(KERNEL_DIR_CAPABILITY_ENTRIES)
 /// @def SUPERVISOR_DIR_CAPABILITY_ENTRIES
 ///
 /// @brief The packed entries of the compiled supervisor base set:  rwcdlsx on
-/// /usr/ and /home/, and rwcdls on /etc/, /root/, and /tmp/.
+/// everything under /userspace.
 #define SUPERVISOR_DIR_CAPABILITY_ENTRIES \
-  "\x7f" "\x05" "/usr/" \
-  "\x3f" "\x05" "/etc/" \
-  "\x7f" "\x06" "/home/" \
-  "\x3f" "\x06" "/root/" \
-  "\x3f" "\x05" "/tmp/"
+  "\x7f" "\x01" "/"
 
 /// @var _supervisorDirCapabilities
 ///
@@ -744,7 +740,7 @@ static const DIR_CAPABILITIES_STATIC(KERNEL_DIR_CAPABILITY_ENTRIES)
 /// final binary on some targets.
 static const DIR_CAPABILITIES_STATIC(SUPERVISOR_DIR_CAPABILITY_ENTRIES)
   _supervisorDirCapabilities KEEP_IN_FLASH
-  = DIR_CAPABILITIES_STATIC_INITIALIZER(5, SUPERVISOR_DIR_CAPABILITY_ENTRIES);
+  = DIR_CAPABILITIES_STATIC_INITIALIZER(1, SUPERVISOR_DIR_CAPABILITY_ENTRIES);
 
 /// @def LOGIN_ONLY_DIR_CAPABILITY_ENTRIES
 ///
@@ -778,7 +774,7 @@ static const char _loginOnlyDirCapabilities[] KEEP_IN_FLASH
 /// final binary on some targets.
 static const DIR_CAPABILITIES_STATIC(LOGIN_DIR_CAPABILITY_ENTRIES)
   _loginDirCapabilities KEEP_IN_FLASH
-  = DIR_CAPABILITIES_STATIC_INITIALIZER(7, LOGIN_DIR_CAPABILITY_ENTRIES);
+  = DIR_CAPABILITIES_STATIC_INITIALIZER(3, LOGIN_DIR_CAPABILITY_ENTRIES);
 
 /// @def SYSTEM_COMMAND_DIR_CAPABILITY_ENTRIES
 ///
