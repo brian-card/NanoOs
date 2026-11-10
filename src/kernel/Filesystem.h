@@ -659,6 +659,9 @@ int filesystemLstat(const char *pathname, struct stat *statbuf);
 
 int filesystemDirstat(const struct dirent *entry, struct stat *statbuf);
 FILE* filesystemFopenFullPath(const char *pathname, const char *mode);
+int filesystemRenameFullPath(const char *oldpath, const char *newpath);
+int filesystemMkdirFullPath(const char *pathname, mode_t mode);
+int filesystemRmdirFullPath(const char *pathname);
 bool filesystemPathIsUserspace(const char *path);
 size_t userspacePathCopy(char *destination, const char *path);
 char* userspacePathNew(const char *path);
