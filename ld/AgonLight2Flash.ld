@@ -290,7 +290,7 @@
 *(.text._filesystemFopen)
 *(.text._filesystemFclose)
 *(.text._filesystemRemove)
-*(.text._filesystemRename)
+*(.text._filesystemRenamePaths)
 *(.text._filesystemMkdir)
 *(.text._filesystemSendPathCommand)
 *(.text._filesystemRmdir)
