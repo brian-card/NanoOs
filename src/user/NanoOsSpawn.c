@@ -366,6 +366,42 @@ static __attribute__((noinline)) char** envpBlockFill(char *block,
   return envpArray;
 }
 
+/// @fn static int spawnPathNew(const char *path,
+///   const posix_spawnattr_t *attrp, char *const **envp, char **fullPath)
+///
+/// @brief Allocate the full path of the program a spawn names, and drop the
+/// environment of a system command.  It isn't inlined so that it stays out of
+/// the Agon's flash, which has no room for it.
+///
+/// @param path The path the process named, or a bare name in
+///   /system/commands/ for a system command.
+/// @param attrp The spawn attributes, or NULL.
+/// @param envp The address of the spawn's environment, set to NULL for a
+///   system command.
+/// @param fullPath Where to store the full path, which the caller must free.
+///
+/// @return Returns 0 on success, EINVAL for an invalid system command name, or
+/// ENOMEM if memory ran out.
+static __attribute__((noinline)) int spawnPathNew(const char *path,
+  const posix_spawnattr_t *attrp, char *const **envp, char **fullPath
+) {
+  if ((attrp == NULL) || ((attrp->flags & POSIX_SPAWN_SYSTEM) == 0)) {
+    *fullPath = userspacePathNew(path);
+  } else if (!schedulerSystemCommandNameValid(path)) {
+    return EINVAL;
+  } else {
+    *envp = NULL;
+    *fullPath
+      = (char*) malloc(SYSTEM_COMMANDS_PATH_LENGTH + strlen(path) + 1);
+    if (*fullPath != NULL) {
+      strcpy(*fullPath, schedulerSystemCommandsPath);
+      strcpy(&(*fullPath)[SYSTEM_COMMANDS_PATH_LENGTH], path);
+    }
+  }
+
+  return (*fullPath != NULL) ? 0 : ENOMEM;
+}
+
 /// @fn int nanoOsSpawn(
 ///   pid_t *pid, const char *path,
 ///   const posix_spawn_file_actions_t *file_actions,
@@ -395,9 +431,10 @@ int nanoOsSpawn(
   }
   nanoOsFlushStdout();
 
-  char *fullPath = userspacePathNew(path);
-  if (fullPath == NULL) {
-    return ENOMEM;
+  char *fullPath = NULL;
+  returnValue = spawnPathNew(path, attrp, &envp, &fullPath);
+  if (returnValue != 0) {
+    return returnValue;
   }
 
   SpawnArgs *spawnArgs
