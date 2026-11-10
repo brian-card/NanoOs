@@ -246,16 +246,7 @@ int main(int argc, char **argv) {
     goto freeNew;
   }
   
-  long int checksum = 0;
-  size_t usernameLength = strlen(username);
-  size_t passwordLength = strlen(userPassword);
-  
-  for (size_t ii = 0; ii < usernameLength; ii++) {
-    checksum += (unsigned int) username[ii];
-  }
-  for (size_t ii = 0; ii < passwordLength; ii++) {
-    checksum += (unsigned int) userPassword[ii];
-  }
+  long int checksum = passwordChecksum(username, userPassword);
   
   LoginPolicyArgs policyArgs = {
     .username = username,
