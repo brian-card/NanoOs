@@ -494,6 +494,16 @@ pid_t nanoOsGetpid(void) {
   return getRunningPid();
 }
 
+/// @fn uid_t nanoOsGetuid(void)
+///
+/// @brief Get the user ID the kernel holds for the currently-executing process.
+///
+/// @return Returns the user ID, or -1 if no user is logged in.
+uid_t nanoOsGetuid(void) {
+  ProcessDescriptor *processDescriptor = getRunningProcess();
+  return (processDescriptor != NULL) ? processDescriptor->userId : NO_USER_ID;
+}
+
 /// @fn unsigned int nanoOsSleep(unsigned int seconds)
 ///
 /// @brief NanoOs implementation of the standard POSIX sleep function.  Suspend
