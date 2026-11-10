@@ -512,6 +512,54 @@ static inline FILE* fopenFullPath(const char *pathname, const char *mode) {
   return NULL;
 }
 
+/// @fn static inline int renameFullPath(const char *oldpath,
+///   const char *newpath)
+///
+/// @brief Rename a file by full paths on the volume, replacing any file at the
+/// new path.
+///
+/// @param oldpath The full path to the file to rename.
+/// @param newpath The full path the file is to have.
+///
+/// @return Returns 0 on success, -1 and sets errno on failure.
+static inline int renameFullPath(const char *oldpath, const char *newpath) {
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return overlayMap.header.osApi->executiveApi->renameFullPath(
+      oldpath, newpath);
+  }
+  return -1;
+}
+
+/// @fn static inline int mkdirFullPath(const char *pathname, mode_t mode)
+///
+/// @brief Create a directory by its full path on the volume.
+///
+/// @param pathname The full path of the directory to create.
+/// @param mode The permissions for the new directory, which are ignored.
+///
+/// @return Returns 0 on success, -1 and sets errno on failure.
+static inline int mkdirFullPath(const char *pathname, mode_t mode) {
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return overlayMap.header.osApi->executiveApi->mkdirFullPath(
+      pathname, mode);
+  }
+  return -1;
+}
+
+/// @fn static inline int rmdirFullPath(const char *pathname)
+///
+/// @brief Remove an empty directory by its full path on the volume.
+///
+/// @param pathname The full path of the directory to remove.
+///
+/// @return Returns 0 on success, -1 and sets errno on failure.
+static inline int rmdirFullPath(const char *pathname) {
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return overlayMap.header.osApi->executiveApi->rmdirFullPath(pathname);
+  }
+  return -1;
+}
+
 /// @fn static inline ProcessMessage* getAvailableMessage(void)
 ///
 /// @brief Get a ProcessMessage that isn't in use and mark it in use.
