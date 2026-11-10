@@ -77,6 +77,25 @@ static inline bool isHelpOption(const char *arg) {
   return strcmp(arg, "--help") == 0;
 }
 
+/// @brief Compute the checksum that /secure/shadow stores for a password.
+///
+/// @param username The user's name.
+/// @param password The password.
+///
+/// @return Returns the checksum.
+static inline long int passwordChecksum(const char *username,
+  const char *password
+) {
+  long int checksum = 0;
+  for (; *username != '\0'; username++) {
+    checksum += (unsigned char) *username;
+  }
+  for (; *password != '\0'; password++) {
+    checksum += (unsigned char) *password;
+  }
+  return checksum;
+}
+
 #ifdef __cplusplus
 }
 #endif
