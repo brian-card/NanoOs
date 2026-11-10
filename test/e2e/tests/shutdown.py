@@ -28,7 +28,7 @@
 
 import pexpect
 
-from tests.login import PASSWD_FILE
+from tests.login import restart_with_users
 
 
 def test_shutdown_halts(s):
@@ -57,7 +57,7 @@ def test_shutdown_reboots(s):
 
 
 def test_shutdown_reboots_with_a_passwd_file(s):
-    s.restart_with_file("/etc/passwd", PASSWD_FILE)
+    restart_with_users(s)
     reboot_twice(s, "alice", "wonderland")
 
 

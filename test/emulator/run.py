@@ -340,7 +340,7 @@ def test_line_editor_moves_edits_and_recalls(e):
 
 def test_grep_finds_lines_in_a_file_and_a_pipe(e):
     assert e.sh("grep user1 /etc/passwd") == \
-        "user1:1488:1:1:User 1:/home/user1:/usr/bin/mush"
+        "user1:x:1:1:User 1:/home/user1:/usr/bin/mush"
     assert e.sh("echo needle-in-haystack | grep needle") == \
         "needle-in-haystack"
     assert e.sh("echo one-two-three | grep zzz") == ""
@@ -556,17 +556,10 @@ def test_every_command_prints_its_usage_for_help_options(e):
     assert e.sh("echo still-here") == "still-here"
 
 
-def passwdChecksum(user, password):
-    """Return the password field login accepts for user and password."""
-    return str(sum(map(ord, user + password)))
-
-
 def test_login_uses_the_passwd_file_when_there_is_one(e):
     lines = [
-        "root:%s:0:0:Root User:/root:/usr/bin/mush"
-        % passwdChecksum("root", "rootroot"),
-        "alice:%s:5:5:Alice:/root:/usr/bin/mush"
-        % passwdChecksum("alice", "wonderland"),
+        "root:x:0:0:Root User:/root:/usr/bin/mush",
+        "user1:x:5:5:Renamed:/root:/usr/bin/mush",
     ]
     e.send("ed\r")
     for line in ["a"] + lines + ["."]:
@@ -579,11 +572,13 @@ def test_login_uses_the_passwd_file_when_there_is_one(e):
     e.send("q\r")
     e.child.expect(PROMPT, timeout=20)
     e.send("exit\r")
-    e.login("alice", "wonderland")
-    assert ("alice", "ps") in [(user, name) for _pid, user, name
+    e.login("user1", "user1user1")
+    assert ("user1", "ps") in [(user, name) for _pid, user, name
                                in ps_entries(e)]
     assert e.sh("echo back") == "back"
-    assert e.sh("echo $USER") == "alice"
+    assert e.sh("echo $USER") == "user1"
+    assert e.sh("cat /etc/hostname") == HOSTNAME
+    assert "Permission denied" in e.sh("cat /secure/shadow")
     e.send("exit\r")
     e.login()
 

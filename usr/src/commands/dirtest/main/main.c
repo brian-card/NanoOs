@@ -40,6 +40,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/dircap.h>
 #include <sys/stat.h>
@@ -175,6 +176,27 @@ static void showAccess(void) {
   showResult("stat renamed", lstat("/tmp/acc/to/z", &st));
 }
 
+/// @brief Print the process's directory capabilities, one per line.
+///
+/// @return This function returns no value.
+static void showCapabilities(void) {
+  int size = dircapGet(NULL, 0);
+  DirCapabilities *set = (size > 0) ? (DirCapabilities*) malloc(size) : NULL;
+  if ((set == NULL) || (dircapGet(set, size) != size)) {
+    printf("dircapGet failed\n");
+    free(set);
+    return;
+  }
+
+  DirCapability *capability = set->capabilities;
+  for (uint8_t ii = 0; ii < set->numCapabilities; ii++) {
+    printf("cap %02x %.*s\n", (unsigned int) capability->mask,
+      (int) capability->len, capability->name);
+    capability = (DirCapability*) &capability->name[capability->len];
+  }
+  free(set);
+}
+
 /// @brief Print the usage summary for dirtest.
 ///
 /// @param stream The stream to print to.
@@ -182,7 +204,7 @@ static void showAccess(void) {
 /// @return This function returns no value.
 static void printUsage(FILE *stream) {
   fputs(
-    "Usage: dirtest [access]\n"
+    "Usage: dirtest [access|caps]\n"
     "\n"
     "Exercise the directory-reading functions.  List \"/\", \"/etc\", and \"/usr\"\n"
     "with opendir and readdir, showing each entry's name, type, inode, and\n"
@@ -190,7 +212,8 @@ static void printUsage(FILE *stream) {
     "missing path, a regular file, the end of a directory, and a NULL handle,\n"
     "and how dirstat handles a changed d_ino, a closed directory, and a\n"
     "directory opened without the stat capability.  With \"access\", narrow\n"
-    "the process's capabilities and show the operations they refuse.\n"
+    "the process's capabilities and show the operations they refuse.  With\n"
+    "\"caps\", print the process's capabilities.\n"
     "\n"
     "Options:\n"
     "  --help  Show this help and exit.\n",
@@ -205,6 +228,11 @@ int main(int argc, char **argv) {
 
   if ((argc > 1) && (strcmp(argv[1], "access") == 0)) {
     showAccess();
+    return 0;
+  }
+
+  if ((argc > 1) && (strcmp(argv[1], "caps") == 0)) {
+    showCapabilities();
     return 0;
   }
 

@@ -76,16 +76,25 @@ def passwdChecksum(user, password):
 
 
 PASSWD_FILE = (
-    "bad:1:x:0:Bad UID:/root:/usr/bin/mush\n"
-    "root:%s:0:0:Root User:/root:/usr/bin/mush\n"
-    "big:1:7:7:%s:/root:/usr/bin/mush\n"
-    "alice:%s:5:5:Alice:/root:/usr/bin/mush\n"
-) % (passwdChecksum("root", "toor"), "g" * 100,
-     passwdChecksum("alice", "wonderland"))
+    "bad:x:x:0:Bad UID:/root:/usr/bin/mush\n"
+    "root:x:0:0:Root User:/root:/usr/bin/mush\n"
+    "big:x:7:7:%s:/root:/usr/bin/mush\n"
+    "alice:x:5:5:Alice:/root:/usr/bin/mush\n"
+) % ("g" * 100)
+
+SHADOW_FILE = "root:%s\nalice:%s\n" % (
+    passwdChecksum("root", "toor"), passwdChecksum("alice", "wonderland"))
+
+
+def restart_with_users(s, passwd=PASSWD_FILE, shadow=SHADOW_FILE):
+    """Boot again with a passwd file and, if given, a shadow file."""
+    if shadow is not None:
+        s.write_file("/secure/shadow", shadow)
+    s.restart_with_file("/etc/passwd", passwd)
 
 
 def test_login_uses_the_passwd_file_when_there_is_one(s):
-    s.restart_with_file("/etc/passwd", PASSWD_FILE)
+    restart_with_users(s)
     s.login("alice", "wonderland")
     user, _ = promptParts(s)
     assert user == "alice", f"prompt user is {user!r}"
@@ -97,14 +106,14 @@ def test_login_uses_the_passwd_file_when_there_is_one(s):
 
 
 def test_passwd_line_with_a_bad_uid_matches_no_user(s):
-    s.restart_with_file("/etc/passwd", PASSWD_FILE)
+    restart_with_users(s)
     s.restart_with_config_sys("CONSOLE=UART1 /userspace/usr/bin/ps\n")
     s.child.expect(r"\d+  (\S+) ps\r*\n", timeout=15)
     assert s.child.match.group(1) == "unknown", s.child.match.group(1)
 
 
 def test_passwd_file_replaces_the_built_in_users(s):
-    s.restart_with_file("/etc/passwd", PASSWD_FILE)
+    restart_with_users(s)
     for user, password in (("root", "rootroot"), ("user1", "user1user1")):
         s.wait_login_prompt()
         s.child.sendline(user)
@@ -115,16 +124,43 @@ def test_passwd_file_replaces_the_built_in_users(s):
 
 
 def test_shipped_passwd_file_matches_the_built_in_users(s):
-    with open(os.path.join(REPO_ROOT, "etc", "passwd")) as passwd:
-        s.restart_with_file("/etc/passwd", passwd.read())
+    with open(os.path.join(REPO_ROOT, "etc", "passwd")) as passwd, \
+            open(os.path.join(REPO_ROOT, "etc", "secure", "shadow")) as shadow:
+        restart_with_users(s, passwd.read(), shadow.read())
     for user in ("root", "user1", "user2"):
         s.login(user, user * 2)
         assert promptParts(s)[0] == user
         s.child.sendline("exit")
 
 
+def assert_login_fails(s, user, password):
+    s.wait_login_prompt()
+    s.child.sendline(user)
+    s.child.expect("password: ", timeout=10)
+    s.child.sendline(password)
+    s.child.expect("Login failed!", timeout=10)
+
+
+def test_a_checksum_in_the_passwd_file_does_not_authenticate(s):
+    field = passwdChecksum("alice", "editedpassword")
+    restart_with_users(
+        s, "alice:%s:5:5:Alice:/root:/usr/bin/mush\n" % field)
+    assert_login_fails(s, "alice", "editedpassword")
+    s.login("alice", "wonderland")
+
+
+def test_a_user_with_no_shadow_line_cannot_log_in(s):
+    restart_with_users(s, "carol:x:6:6:Carol:/root:/usr/bin/mush\n")
+    assert_login_fails(s, "carol", "carolcarol")
+
+
+def test_no_one_can_log_in_without_a_shadow_file(s):
+    restart_with_users(s, shadow=None)
+    assert_login_fails(s, "root", "rootroot")
+
+
 def test_passwd_entry_too_long_for_the_buffer_is_an_error(s):
-    s.restart_with_file("/etc/passwd", PASSWD_FILE)
+    restart_with_users(s)
     s.wait_login_prompt()
     s.child.sendline("big")
     s.child.expect("getpwnam_r returned status (\\d+)", timeout=10)

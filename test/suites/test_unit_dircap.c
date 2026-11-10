@@ -713,3 +713,47 @@ NANO_OS_TEST(unit_dircap, a_copy_refuses_an_entry_the_bound_does_not_allow) {
   release(bound);
   NANO_OS_ASSERT_EQ_INT(0, liveBlocks);
 }
+
+NANO_OS_TEST(unit_dircap, permission_letters_become_a_mask) {
+  NANO_OS_ASSERT_EQ_INT(DIRCAP_ALL, dirCapabilityMaskFromLetters("rwcdlsx"));
+  NANO_OS_ASSERT_EQ_INT(DIRCAP_READ | DIRCAP_LIST,
+    dirCapabilityMaskFromLetters("lr"));
+  NANO_OS_ASSERT_EQ_INT(DIRCAP_WRITE, dirCapabilityMaskFromLetters("w"));
+  NANO_OS_ASSERT_EQ_INT(DIRCAP_CREATE, dirCapabilityMaskFromLetters("c"));
+  NANO_OS_ASSERT_EQ_INT(DIRCAP_DELETE, dirCapabilityMaskFromLetters("d"));
+  NANO_OS_ASSERT_EQ_INT(DIRCAP_STAT, dirCapabilityMaskFromLetters("s"));
+  NANO_OS_ASSERT_EQ_INT(DIRCAP_EXEC, dirCapabilityMaskFromLetters("x"));
+}
+
+NANO_OS_TEST(unit_dircap, an_invalid_permission_letter_gives_no_mask) {
+  NANO_OS_ASSERT_EQ_INT(0, dirCapabilityMaskFromLetters("rq"));
+  NANO_OS_ASSERT_EQ_INT(0, dirCapabilityMaskFromLetters("R"));
+  NANO_OS_ASSERT_EQ_INT(0, dirCapabilityMaskFromLetters(""));
+}
+
+NANO_OS_TEST(unit_dircap, a_line_splits_on_spaces_and_tabs) {
+  char line[] = "  root \t rwx   /usr/\r\n";
+  char *fields[3];
+  NANO_OS_ASSERT_EQ_INT(3, dirCapabilitySplitLine(line, fields));
+  NANO_OS_ASSERT_STR_EQ("root", fields[0]);
+  NANO_OS_ASSERT_STR_EQ("rwx", fields[1]);
+  NANO_OS_ASSERT_STR_EQ("/usr/", fields[2]);
+}
+
+NANO_OS_TEST(unit_dircap, comments_and_blank_lines_have_no_fields) {
+  char comment[] = "# entity permissions directory\n";
+  char indented[] = "   # note\n";
+  char blank[] = " \t\r\n";
+  char *fields[3];
+  NANO_OS_ASSERT_EQ_INT(0, dirCapabilitySplitLine(comment, fields));
+  NANO_OS_ASSERT_EQ_INT(0, dirCapabilitySplitLine(indented, fields));
+  NANO_OS_ASSERT_EQ_INT(0, dirCapabilitySplitLine(blank, fields));
+}
+
+NANO_OS_TEST(unit_dircap, a_line_with_too_many_or_few_fields_is_reported) {
+  char *fields[3];
+  char many[] = "a b c d\n";
+  NANO_OS_ASSERT_EQ_INT(4, dirCapabilitySplitLine(many, fields));
+  char few[] = "a b\n";
+  NANO_OS_ASSERT_EQ_INT(2, dirCapabilitySplitLine(few, fields));
+}
