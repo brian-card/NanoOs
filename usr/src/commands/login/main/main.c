@@ -37,6 +37,7 @@
 #include <termios.h>
 #include <unistd.h>
 #include "NanoOsUtils.h"
+#include "../include/LoginPolicy.h"
 
 #undef tcgetattr
 #undef tcsetattr
@@ -69,6 +70,78 @@ static void printUsage(FILE *stream) {
     "Options:\n"
     "  --help  Show this help and exit.\n",
     stream);
+}
+
+/// @brief Exec the user's shell.  This is separate from main so that the
+/// environment's buffers aren't on the stack while login reads its files.
+///
+/// @param username The name of the user.
+/// @param pwd The user's passwd entry.
+///
+/// @return This function returns only if the exec failed.
+static __attribute__((noinline)) void startShell(const char *username,
+  const struct passwd *pwd
+) {
+  // The login succeeded, so exec the shell rather than exiting.
+  char *shellArgv[] = {
+    SHELL_NAME,
+    NULL,
+  };
+  // Maximum user home directory is strlen("/home/") + LOGIN_NAME_MAX.
+  // Environment variable will be strlen("HOME=") plus the above.
+  // Need one character for NULL terminator.
+  char envHome[LOGIN_NAME_MAX + 11 + 1];
+  strcpy(envHome, "HOME=");
+  strcat(envHome, pwd->pw_dir);
+  
+  // The PWD variable will be one less than HOME since it's only 3 characters.
+  char envPwd[LOGIN_NAME_MAX + 10 + 1];
+  strcpy(envPwd, "PWD=");
+  strcat(envPwd, pwd->pw_dir);
+  
+  // The OLDPWD variable will be three more than PWD.
+  char envOldpwd[LOGIN_NAME_MAX + 13 + 1];
+  strcpy(envOldpwd, "OLDPWD=");
+  strcat(envOldpwd, pwd->pw_dir);
+  
+  // The UID variable will be strlen("UID=") = 4 plus one character since we
+  // only have single-digit user IDs right now.
+  char envUid[4 + 1 + 1];
+  sprintf(envUid, "UID=%u", pwd->pw_uid);
+  
+  // strlen("HOSTNAME=") = 9.
+  char envHostname[HOST_NAME_MAX + 9 + 1];
+  strcpy(envHostname, "HOSTNAME=");
+  if (gethostname(&envHostname[9], HOST_NAME_MAX) != 0) {
+    fprintf(stderr, "gethostname failed with status: \"%s\"\n",
+      strerror(errno));
+    strcpy(&envHostname[9], "localhost");
+  }
+  envHostname[HOST_NAME_MAX] = '\0';
+  
+  // The USER variable will just be LOGIN_NAME_MAX + 5 (strlen("USER=")).
+  char envUser[LOGIN_NAME_MAX + 5 + 1];
+  strcpy(envUser, "USER=");
+  strcat(envUser, username);
+  
+  char *shellEnvp[] = {
+    envHome,
+    envHostname,
+    envOldpwd,
+    envPwd,
+    envUid,
+    envUser,
+    "PATH=/usr/bin",
+    NULL,
+  };
+  
+  execve(SHELL_PATH, shellArgv, shellEnvp);
+  // If we get here then the exec failed.  We don't really have to check the
+  // return value but we do need to print out what happened as documented by
+  // errno.
+  fputs("ERROR! execve failed with status: ", stderr);
+  fputs(strerror(errno), stderr);
+  fputs("\n", stderr);
 }
 
 int main(int argc, char **argv) {
@@ -184,7 +257,16 @@ int main(int argc, char **argv) {
     checksum += (unsigned int) userPassword[ii];
   }
   
-  if (strtol(pwd->pw_passwd, NULL, 10) == checksum) {
+  LoginPolicyArgs policyArgs = {
+    .username = username,
+    .homeDirectory = pwd->pw_dir,
+    .checksum = strtol(pwd->pw_passwd, NULL, 10),
+  };
+  bool haveChecksum = (strcmp(pwd->pw_passwd, "x") != 0)
+    || (callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Policy",
+      "loginLookupShadow", &policyArgs) != NULL);
+
+  if (haveChecksum && (policyArgs.checksum == checksum)) {
     fputs("Login successful!\n", stderr);
   } else {
     fputs("Login failed!\n", stderr);
@@ -196,67 +278,17 @@ int main(int argc, char **argv) {
   if (setuid(pwd->pw_uid) != 0) {
     fputs("ERROR:  Could not set the user ID of the process.\n", stderr);
   }
-  
-  // The login succeeded, so exec the shell rather than exiting.
-  char *shellArgv[] = {
-    SHELL_NAME,
-    NULL,
-  };
-  // Maximum user home directory is strlen("/home/") + LOGIN_NAME_MAX.
-  // Environment variable will be strlen("HOME=") plus the above.
-  // Need one character for NULL terminator.
-  char envHome[LOGIN_NAME_MAX + 11 + 1];
-  strcpy(envHome, "HOME=");
-  strcat(envHome, pwd->pw_dir);
-  
-  // The PWD variable will be one less than HOME since it's only 3 characters.
-  char envPwd[LOGIN_NAME_MAX + 10 + 1];
-  strcpy(envPwd, "PWD=");
-  strcat(envPwd, pwd->pw_dir);
-  
-  // The OLDPWD variable will be three more than PWD.
-  char envOldpwd[LOGIN_NAME_MAX + 13 + 1];
-  strcpy(envOldpwd, "OLDPWD=");
-  strcat(envOldpwd, pwd->pw_dir);
-  
-  // The UID variable will be strlen("UID=") = 4 plus one character since we
-  // only have single-digit user IDs right now.
-  char envUid[4 + 1 + 1];
-  sprintf(envUid, "UID=%u", pwd->pw_uid);
-  
-  // strlen("HOSTNAME=") = 9.
-  char envHostname[HOST_NAME_MAX + 9 + 1];
-  strcpy(envHostname, "HOSTNAME=");
-  if (gethostname(&envHostname[9], HOST_NAME_MAX) != 0) {
-    fprintf(stderr, "gethostname failed with status: \"%s\"\n",
-      strerror(errno));
-    strcpy(&envHostname[9], "localhost");
+
+  // The shell must never start with more than the user was given.
+  if (callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Policy",
+    "loginApplyCapabilities", &policyArgs) == NULL
+  ) {
+    fputs("ERROR:  Could not apply the user's capabilities.\n", stderr);
+    returnValue = 1;
+    goto freeNew;
   }
-  envHostname[HOST_NAME_MAX] = '\0';
   
-  // The USER variable will just be LOGIN_NAME_MAX + 5 (strlen("USER=")).
-  char envUser[LOGIN_NAME_MAX + 5 + 1];
-  strcpy(envUser, "USER=");
-  strcat(envUser, username);
-  
-  char *shellEnvp[] = {
-    envHome,
-    envHostname,
-    envOldpwd,
-    envPwd,
-    envUid,
-    envUser,
-    "PATH=/usr/bin",
-    NULL,
-  };
-  
-  execve(SHELL_PATH, shellArgv, shellEnvp);
-  // If we get here then the exec failed.  We don't really have to check the
-  // return value but we do need to print out what happened as documented by
-  // errno.
-  fputs("ERROR! execve failed with status: ", stderr);
-  fputs(strerror(errno), stderr);
-  fputs("\n", stderr);
+  startShell(username, pwd);
   
 freeNew:
   free(new);
