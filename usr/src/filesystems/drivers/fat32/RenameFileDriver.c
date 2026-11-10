@@ -161,23 +161,8 @@ int driverRename(void *driverState, const char *oldpath, const char *newpath,
     result = FAT32_TOO_MANY_OPEN_FILES;
   }
 
-  if ((result == FAT32_SUCCESS) && targetExists && !targetIsSource) {
-    uint16_t clusterHigh;
-    uint16_t clusterLow;
-    memcpy(&clusterHigh, &newEntry.entry.firstClusterHigh, sizeof(uint16_t));
-    memcpy(&clusterLow, &newEntry.entry.firstClusterLow, sizeof(uint16_t));
-    uint32_t firstCluster = ((uint32_t) clusterHigh << 16) | clusterLow;
-    if (firstCluster >= FAT32_CLUSTER_FIRST_VALID) {
-      result = fat32FreeClusterChain(ds, firstCluster);
-    }
-    if (result == FAT32_SUCCESS) {
-      result = fat32InvalidateDirectoryEntries(
-        ds, newParentCluster, &newEntry);
-    }
-  }
-
-  // The new entry is written before the old one is invalidated so that an
-  // interruption leaves the file reachable.
+  // The new entry is written before the old one and the replaced file are
+  // invalidated so that an interruption leaves a file at the new path.
   if (result == FAT32_SUCCESS) {
     Fat32CreateFileArgs createArgs = {
       .ds = ds,
@@ -199,6 +184,19 @@ int driverRename(void *driverState, const char *oldpath, const char *newpath,
   if (result == FAT32_SUCCESS) {
     result = fat32InvalidateDirectoryEntries(
       ds, oldParentCluster, &oldEntry);
+  }
+  if ((result == FAT32_SUCCESS) && targetExists && !targetIsSource) {
+    uint16_t clusterHigh;
+    uint16_t clusterLow;
+    memcpy(&clusterHigh, &newEntry.entry.firstClusterHigh, sizeof(uint16_t));
+    memcpy(&clusterLow, &newEntry.entry.firstClusterLow, sizeof(uint16_t));
+    uint32_t firstCluster = ((uint32_t) clusterHigh << 16) | clusterLow;
+    result = fat32InvalidateDirectoryEntries(ds, newParentCluster, &newEntry);
+    if ((result == FAT32_SUCCESS)
+      && (firstCluster >= FAT32_CLUSTER_FIRST_VALID)
+    ) {
+      result = fat32FreeClusterChain(ds, firstCluster);
+    }
   }
 
   free(createdEntry.longName);
