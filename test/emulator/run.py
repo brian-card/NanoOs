@@ -539,7 +539,7 @@ def test_commands_that_cannot_load_leave_the_shell_running(e):
 def test_every_command_prints_its_usage_for_help_options(e):
     # Earlier tests leave copied and corrupt commands in /usr/bin.
     built = sorted(set(os.listdir(os.path.join(REPO_ROOT, "usr", "bin")))
-                   - {"getty", "login", "logger"})
+                   - {"getty", "login", "logger", "syspasswd"})
     installed = [n.rstrip("/") for n in ll_names(e, "/usr/bin")]
     assert set(built) <= set(installed), (built, installed)
     for name in built:

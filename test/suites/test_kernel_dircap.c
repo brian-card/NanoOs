@@ -51,6 +51,7 @@
 #include "user/NanoOsSignal.h"
 #include "user/NanoOsSpawn.h"
 #include "user/NanoOsStdio.h"
+#include "user/NanoOsUnistd.h"
 
 /// @var childStatus
 ///
@@ -88,6 +89,11 @@ static volatile UserId reportedUser;
 /// @brief The ready queue the reporting child belongs to.
 static ProcessQueue *volatile reportedQueue;
 
+/// @var reportedEnvp
+///
+/// @brief The environment the reporting child was given.
+static char **volatile reportedEnvp;
+
 /// @union ReportedSet
 ///
 /// @brief Room for a copy of a set, aligned as a set is.
@@ -117,6 +123,8 @@ static void reportSet(void) {
   reportedPrivilege = getRunningProcess()->privilegeLevel;
   reportedQueue = getRunningProcess()->readyQueue;
   reportedHal = getRunningProcess()->halCapabilities;
+  reportedEnvp = getRunningProcess()->envp;
+  reportedUser = getRunningProcess()->userId;
   memset(&reportedSet, 0, sizeof(reportedSet));
   if ((set != NULL) && (set->size <= sizeof(reportedSet))) {
     memcpy(&reportedSet, set, set->size);
@@ -963,7 +971,7 @@ NANO_OS_KERNEL_TEST_WITH(dircap, spawn_never_runs_a_child_at_executive_level,
     slot[ii]->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
   }
   NANO_OS_ASSERT_TRUE(spawnAndWait("report", NULL));
-  NANO_OS_ASSERT_EQ_INT(PRIVILEGE_LEVEL_SUPERVISOR, reportedPrivilege);
+  NANO_OS_ASSERT_EQ_INT(PRIVILEGE_LEVEL_USER, reportedPrivilege);
 }
 
 /// @fn static void* setuidChild(void *args)
@@ -1088,4 +1096,186 @@ NANO_OS_KERNEL_TEST(dircap, the_login_set_holds_what_it_documents) {
     "/system/bin/login/x", DIRCAP_EXEC));
   NANO_OS_ASSERT_FALSE(setAllows(supervisorDirCapabilities, "/secure/shadow",
     DIRCAP_READ));
+}
+
+/// @fn static int spawnSystem(const char *name, posix_spawnattr_t *attr,
+///   char *const envp[], pid_t *pid)
+///
+/// @brief Spawn a dircapChild that reports and exits as a system command.
+///
+/// @param name The system command's name.
+/// @param attr The spawn attribute, which this sets POSIX_SPAWN_SYSTEM on.
+/// @param envp The environment to ask for, or NULL.
+/// @param pid Where to store the child's process ID.
+///
+/// @return Returns what nanoOsSpawn returned.
+static int spawnSystem(const char *name, posix_spawnattr_t *attr,
+  char *const envp[], pid_t *pid
+) {
+  char *argv[] = { "report", NULL };
+  attr->flags |= POSIX_SPAWN_SYSTEM;
+  childStatus = -1;
+  reported = false;
+  *pid = 0;
+  return nanoOsSpawn(pid, name, NULL, attr, argv, envp);
+}
+
+/// @var systemCommandSetEntries
+///
+/// @brief The packed entries the set of a system command should hold.
+static const char systemCommandSetEntries[]
+  = "\x8f" "\x08" "/secure/" "\x01" "\x05" "/etc/";
+
+NANO_OS_KERNEL_TEST_WITH(dircap, a_system_command_runs_at_executive_level,
+  dircapPreBoot
+) {
+  ProcessDescriptor *parent = getRunningProcess();
+  DirCapabilities *parentSet = parent->dirCapabilities;
+  UserId parentUser = parent->userId;
+  parent->userId = 3;
+  posix_spawnattr_t attr = { 0, NULL };
+  char envUser[] = "USER=root";
+  char *envp[] = { envUser, NULL };
+  pid_t pid = 0;
+  NANO_OS_ASSERT_EQ_INT(0, spawnSystem("passwd", &attr, envp, &pid));
+  NANO_OS_ASSERT_EQ_INT(pid, schedulerWaitpid(pid, NULL, 0));
+  parent->userId = parentUser;
+  NANO_OS_ASSERT_TRUE(reported);
+  NANO_OS_ASSERT_STR_EQ("/system/commands/passwd", reportedPath);
+  NANO_OS_ASSERT_EQ_INT(PRIVILEGE_LEVEL_EXECUTIVE, reportedPrivilege);
+  NANO_OS_ASSERT_NOT_NULL(reportedQueue);
+  NANO_OS_ASSERT_STR_EQ("executive ready", reportedQueue->name);
+  NANO_OS_ASSERT_EQ_PTR(baseExecutiveHalCapabilities, reportedHal);
+  NANO_OS_ASSERT_EQ_INT(3, reportedUser);
+  NANO_OS_ASSERT_NULL(reportedEnvp);
+  NANO_OS_ASSERT_EQ_INT(2, reportedSet.set.numCapabilities);
+  NANO_OS_ASSERT_EQ_INT(DIR_CAPABILITIES_HEADER_SIZE
+    + sizeof(systemCommandSetEntries) - 1, reportedSet.set.size);
+  NANO_OS_ASSERT_EQ_INT(0, memcmp(reportedSet.set.capabilities,
+    systemCommandSetEntries, sizeof(systemCommandSetEntries) - 1));
+  NANO_OS_ASSERT_EQ_PTR(parentSet, parent->dirCapabilities);
+}
+
+NANO_OS_KERNEL_TEST_WITH(dircap, a_system_command_needs_a_bare_name,
+  dircapPreBoot
+) {
+  static const char *const names[] = {
+    "", ".", "..", "bin/login", "../bin/login", "/system/bin/login",
+    "x/../../bin/login", "x/..", "./passwd",
+  };
+  for (size_t ii = 0; ii < sizeof(names) / sizeof(names[0]); ii++) {
+    posix_spawnattr_t attr = { 0, NULL };
+    pid_t pid = 0;
+    NANO_OS_ASSERT_EQ_INT(EINVAL, spawnSystem(names[ii], &attr, NULL, &pid));
+    NANO_OS_ASSERT_EQ_INT(0, pid);
+  }
+  for (int ii = 0; ii < 50; ii++) {
+    processYield();
+  }
+  NANO_OS_ASSERT_FALSE(reported);
+}
+
+NANO_OS_KERNEL_TEST_WITH(dircap, a_system_command_cannot_be_narrowed_by_its_caller,
+  dircapPreBoot
+) {
+  posix_spawnattr_t attr = { 0, NULL };
+  NANO_OS_ASSERT_EQ_INT(0, nanoOsSpawnattrAdddircap(&attr, "/etc/",
+    DIRCAP_READ));
+  pid_t pid = 0;
+  NANO_OS_ASSERT_EQ_INT(EINVAL, spawnSystem("passwd", &attr, NULL, &pid));
+  free(attr.dirCapabilities);
+}
+
+/// @fn static int sendRawSpawn(char *path, char **envp, short flags)
+///
+/// @brief Send the scheduler a spawn request built by hand, the way a program
+/// that skipped nanoOsSpawn's checks could.
+///
+/// @param path The full path to put in the request.
+/// @param envp The environment to put in the request, or NULL.
+/// @param flags The POSIX_SPAWN_* flags.
+///
+/// @return Returns the errno the scheduler replied with.
+static int sendRawSpawn(char *path, char **envp, short flags) {
+  static char argv0[] = "report";
+  char *argv[] = { argv0, NULL };
+  posix_spawnattr_t attr = { flags, NULL };
+  pid_t pid = 0;
+  SpawnArgs spawnArgs = {
+    .newPid = (uint8_t*) &pid,
+    .path = path,
+    .fileActions = NULL,
+    .attrp = &attr,
+    .argv = argv,
+    .envp = envp,
+  };
+  SchedulerSpawnArgs schedulerSpawnArgs = { &spawnArgs, 0 };
+  reported = false;
+  ProcessMessage *processMessage = initSendProcessMessageToPid(schedulerPid,
+    SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_SPAWN,
+    &schedulerSpawnArgs, sizeof(schedulerSpawnArgs), true);
+  NANO_OS_ASSERT_NOT_NULL(processMessage);
+  processMessageWaitForDone(processMessage, NULL);
+  processMessageRelease(processMessage);
+  return schedulerSpawnArgs.errorNumber;
+}
+
+NANO_OS_KERNEL_TEST_WITH(dircap, the_scheduler_checks_a_system_command_itself,
+  dircapPreBoot
+) {
+  static char climbs[] = "/system/commands/../bin/login";
+  static char outside[] = "/system/bin/login";
+  static char dot[] = "/system/commands/..";
+  static char through[] = "/system/commands/x/../../bin/login";
+  static char good[] = "/system/commands/passwd";
+  static char envUser[] = "USER=root";
+  char *envp[] = { envUser, NULL };
+  NANO_OS_ASSERT_EQ_INT(EINVAL, sendRawSpawn(climbs, NULL, POSIX_SPAWN_SYSTEM));
+  NANO_OS_ASSERT_EQ_INT(EINVAL,
+    sendRawSpawn(outside, NULL, POSIX_SPAWN_SYSTEM));
+  NANO_OS_ASSERT_EQ_INT(EINVAL, sendRawSpawn(dot, NULL, POSIX_SPAWN_SYSTEM));
+  NANO_OS_ASSERT_EQ_INT(EINVAL,
+    sendRawSpawn(through, NULL, POSIX_SPAWN_SYSTEM));
+  NANO_OS_ASSERT_EQ_INT(EINVAL, sendRawSpawn(good, envp, POSIX_SPAWN_SYSTEM));
+  for (int ii = 0; ii < 50; ii++) {
+    processYield();
+  }
+  NANO_OS_ASSERT_FALSE(reported);
+}
+
+NANO_OS_KERNEL_TEST(dircap, the_system_command_set_holds_what_it_documents) {
+  DirCapabilities *set = (DirCapabilities*) malloc(
+    DIR_CAPABILITIES_HEADER_SIZE + sizeof(systemCommandSetEntries) - 1);
+  NANO_OS_ASSERT_NOT_NULL(set);
+  set->refCount = 1;
+  set->numCapabilities = 2;
+  set->size = (uint16_t) (DIR_CAPABILITIES_HEADER_SIZE
+    + sizeof(systemCommandSetEntries) - 1);
+  memcpy(set->capabilities, systemCommandSetEntries,
+    sizeof(systemCommandSetEntries) - 1);
+  NANO_OS_ASSERT_TRUE(dirCapabilitiesValid(set));
+  NANO_OS_ASSERT_TRUE(setAllows(set, "/secure/shadow",
+    DIRCAP_READ | DIRCAP_WRITE | DIRCAP_CREATE | DIRCAP_DELETE
+    | DIRCAP_FULL_PATH));
+  NANO_OS_ASSERT_FALSE(setAllows(set, "/secure/shadow",
+    DIRCAP_EXEC | DIRCAP_FULL_PATH));
+  NANO_OS_ASSERT_TRUE(setAllows(set, "/etc/passwd", DIRCAP_READ));
+  NANO_OS_ASSERT_FALSE(setAllows(set, "/etc/passwd", DIRCAP_WRITE));
+  NANO_OS_ASSERT_FALSE(setAllows(set, "/system/bin/login/x",
+    DIRCAP_EXEC | DIRCAP_FULL_PATH));
+  free(set);
+}
+
+NANO_OS_KERNEL_TEST(dircap, getuid_reports_the_user_the_kernel_holds) {
+  ProcessDescriptor *running = getRunningProcess();
+  UserId userId = running->userId;
+  // The kernel's uid_t is 16 bits and this file's is glibc's 32, so only the
+  // low 16 bits of the result are defined here.
+  running->userId = 4;
+  UserId reportedId = (UserId) nanoOsGetuid();
+  running->userId = NO_USER_ID;
+  UserId noUser = (UserId) nanoOsGetuid();
+  running->userId = userId;
+  NANO_OS_ASSERT_EQ_INT(4, reportedId);
+  NANO_OS_ASSERT_EQ_INT(-1, noUser);
 }

@@ -82,12 +82,13 @@ def test_the_real_tree_is_three_directories(s):
 def test_the_system_programs_are_only_in_system(s):
     s.login()
     out = s.sh("ll /usr/bin")
-    for name in ("getty/", "login/", "logger/"):
+    for name in ("getty/", "login/", "logger/", "syspasswd/"):
         assert name not in out.split(), out
     assert NOT_FOUND in s.sh("cat /usr/lib/vdp.drv/main.overlay")
     s.child.terminate(force=True)
-    assert image_names(s, "/system") == ["bin", "data", "drivers"]
+    assert image_names(s, "/system") == ["bin", "commands", "data", "drivers"]
     assert image_names(s, "/system/bin") == ["getty", "logger", "login"]
+    assert image_names(s, "/system/commands") == ["passwd"]
     assert "NanoOs_rodata.bin" in image_names(s, "/system/data")
 
 

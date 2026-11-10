@@ -293,6 +293,28 @@ static char fakeOpenMode[4];
 /// @brief Whether the last open carried a full path.
 static volatile bool fakeOpenFullPath;
 
+/// @var fakePathCommands
+///
+/// @brief The number of rename, mkdir, and rmdir requests the fake filesystem
+/// has seen.
+static volatile int fakePathCommands;
+
+/// @var fakePathCommand
+///
+/// @brief The FILESYSTEM_* command of the last rename, mkdir, or rmdir.
+static volatile int fakePathCommand;
+
+/// @var fakePathCommandPath
+///
+/// @brief The path of the last mkdir or rmdir, or the new path of the last
+/// rename.
+static char fakePathCommandPath[64];
+
+/// @var fakePathCommandFullPath
+///
+/// @brief Whether the last rename, mkdir, or rmdir carried a full path.
+static volatile bool fakePathCommandFullPath;
+
 /// @fn static void* refusingFilesystem(void *args)
 ///
 /// @brief Stand in for the filesystem, finding no file it's asked to open.
@@ -320,6 +342,26 @@ static void* refusingFilesystem(void *args) {
       fakeOpenFullPath
         = (processMessageType(message) & FILESYSTEM_FULL_PATH) != 0;
     }
+    int command = (int) (processMessageType(message) & FILESYSTEM_COMMAND_MASK);
+    if (command == FILESYSTEM_RENAME_FILE) {
+      FilesystemRenameArgs *renameArgs
+        = (FilesystemRenameArgs*) processMessageData(message);
+      strcpy(fakePathCommandPath, renameArgs->newpath);
+      renameArgs->returnValue = 0;
+    } else if ((command == FILESYSTEM_MKDIR) || (command == FILESYSTEM_RMDIR)) {
+      FilesystemPathArgs *pathArgs
+        = (FilesystemPathArgs*) processMessageData(message);
+      strcpy(fakePathCommandPath, pathArgs->pathname);
+      pathArgs->returnValue = 0;
+    }
+    if ((command == FILESYSTEM_RENAME_FILE) || (command == FILESYSTEM_MKDIR)
+      || (command == FILESYSTEM_RMDIR)
+    ) {
+      fakePathCommands++;
+      fakePathCommand = command;
+      fakePathCommandFullPath
+        = (processMessageType(message) & FILESYSTEM_FULL_PATH) != 0;
+    }
     processMessageSetDone(message);
   }
   return NULL;
@@ -332,6 +374,7 @@ static void* refusingFilesystem(void *args) {
 /// @return This function returns no value.
 static void useRefusingFilesystem(void) {
   fakeOpens = 0;
+  fakePathCommands = 0;
   ProcessDescriptor *processDescriptor = processQueuePop(halMockFreeQueue());
   NANO_OS_ASSERT_NOT_NULL(processDescriptor);
   NANO_OS_ASSERT_EQ_INT(processSuccess,
@@ -733,6 +776,64 @@ NANO_OS_KERNEL_TEST(launch, a_supervisor_cannot_open_a_full_path) {
   NANO_OS_ASSERT_NULL(filesystemFopenFullPath("/secure/shadow", "r"));
   NANO_OS_ASSERT_EQ_INT(EPERM, errno);
   NANO_OS_ASSERT_EQ_INT(0, fakeOpens);
+}
+
+/// @fn static void expectPathCommand(int command, const char *path,
+///   bool fullPath)
+///
+/// @brief Check that the fake filesystem saw exactly one rename, mkdir, or
+/// rmdir, and what it carried.
+///
+/// @param command The FILESYSTEM_* command expected.
+/// @param path The path expected, or the new path for a rename.
+/// @param fullPath Whether the request should carry a full path.
+///
+/// @return This function returns no value.
+static void expectPathCommand(int command, const char *path, bool fullPath) {
+  NANO_OS_ASSERT_EQ_INT(1, fakePathCommands);
+  NANO_OS_ASSERT_EQ_INT(command, fakePathCommand);
+  NANO_OS_ASSERT_STR_EQ(path, fakePathCommandPath);
+  NANO_OS_ASSERT_EQ_INT(fullPath, fakePathCommandFullPath);
+  fakePathCommands = 0;
+}
+
+NANO_OS_KERNEL_TEST(launch, an_executive_can_change_full_paths) {
+  useRefusingFilesystem();
+  getRunningProcess()->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
+  NANO_OS_ASSERT_EQ_INT(0, filesystemMkdirFullPath("/secure/lock", 0));
+  expectPathCommand(FILESYSTEM_MKDIR, "/secure/lock", true);
+  NANO_OS_ASSERT_EQ_INT(0, filesystemRmdirFullPath("/secure/lock"));
+  expectPathCommand(FILESYSTEM_RMDIR, "/secure/lock", true);
+  NANO_OS_ASSERT_EQ_INT(0,
+    filesystemRenameFullPath("/secure/new", "/secure/old"));
+  expectPathCommand(FILESYSTEM_RENAME_FILE, "/secure/old", true);
+}
+
+NANO_OS_KERNEL_TEST(launch, the_user_path_calls_never_ask_for_a_full_path) {
+  useRefusingFilesystem();
+  getRunningProcess()->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
+  NANO_OS_ASSERT_EQ_INT(0, filesystemMkdir("/tmp/lock", 0));
+  expectPathCommand(FILESYSTEM_MKDIR, "/tmp/lock", false);
+  NANO_OS_ASSERT_EQ_INT(0, filesystemRmdir("/tmp/lock"));
+  expectPathCommand(FILESYSTEM_RMDIR, "/tmp/lock", false);
+  NANO_OS_ASSERT_EQ_INT(0, filesystemRename("/tmp/new", "/tmp/old"));
+  expectPathCommand(FILESYSTEM_RENAME_FILE, "/tmp/old", false);
+}
+
+NANO_OS_KERNEL_TEST(launch, a_supervisor_cannot_change_full_paths) {
+  useRefusingFilesystem();
+  getRunningProcess()->privilegeLevel = PRIVILEGE_LEVEL_SUPERVISOR;
+  errno = 0;
+  NANO_OS_ASSERT_EQ_INT(-1, filesystemMkdirFullPath("/secure/lock", 0));
+  NANO_OS_ASSERT_EQ_INT(EPERM, errno);
+  errno = 0;
+  NANO_OS_ASSERT_EQ_INT(-1, filesystemRmdirFullPath("/secure/lock"));
+  NANO_OS_ASSERT_EQ_INT(EPERM, errno);
+  errno = 0;
+  NANO_OS_ASSERT_EQ_INT(-1,
+    filesystemRenameFullPath("/secure/new", "/secure/shadow"));
+  NANO_OS_ASSERT_EQ_INT(EPERM, errno);
+  NANO_OS_ASSERT_EQ_INT(0, fakePathCommands);
 }
 
 NANO_OS_KERNEL_TEST(launch, the_userspace_rule_is_exact) {

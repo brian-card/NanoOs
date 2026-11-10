@@ -39,11 +39,13 @@
 #include <stdio.h>
 #include <dirent.h>
 #include <errno.h>
+#include <spawn.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/dircap.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include "NanoOsUtils.h"
 
@@ -197,6 +199,26 @@ static void showCapabilities(void) {
   free(set);
 }
 
+/// @brief Run a program with POSIX_SPAWN_SYSTEM in the foreground and print
+/// what the spawn returned and how the program exited.
+///
+/// @param argv The name to run followed by its arguments.
+///
+/// @return This function returns no value.
+static void runSystemCommand(char **argv) {
+  posix_spawnattr_t attr;
+  posix_spawnattr_init(&attr);
+  posix_spawnattr_setflags(&attr, POSIX_SPAWN_SYSTEM | POSIX_SPAWN_FOREGROUND);
+  pid_t pid = 0;
+  int returnValue = posix_spawn(&pid, argv[0], NULL, &attr, argv, environ);
+  posix_spawnattr_destroy(&attr);
+  int status = 0;
+  if (returnValue == 0) {
+    waitpid(pid, &status, 0);
+  }
+  printf("system spawn %d status %d\n", returnValue, WEXITSTATUS(status));
+}
+
 /// @brief Print the usage summary for dirtest.
 ///
 /// @param stream The stream to print to.
@@ -204,7 +226,7 @@ static void showCapabilities(void) {
 /// @return This function returns no value.
 static void printUsage(FILE *stream) {
   fputs(
-    "Usage: dirtest [access|caps]\n"
+    "Usage: dirtest [access|caps|system <name> [argument...]]\n"
     "\n"
     "Exercise the directory-reading functions.  List \"/\", \"/etc\", and \"/usr\"\n"
     "with opendir and readdir, showing each entry's name, type, inode, and\n"
@@ -213,7 +235,8 @@ static void printUsage(FILE *stream) {
     "and how dirstat handles a changed d_ino, a closed directory, and a\n"
     "directory opened without the stat capability.  With \"access\", narrow\n"
     "the process's capabilities and show the operations they refuse.  With\n"
-    "\"caps\", print the process's capabilities.\n"
+    "\"caps\", print the process's capabilities.  With \"system\", run a\n"
+    "program from /system/commands with the arguments given.\n"
     "\n"
     "Options:\n"
     "  --help  Show this help and exit.\n",
@@ -233,6 +256,11 @@ int main(int argc, char **argv) {
 
   if ((argc > 1) && (strcmp(argv[1], "caps") == 0)) {
     showCapabilities();
+    return 0;
+  }
+
+  if ((argc > 2) && (strcmp(argv[1], "system") == 0)) {
+    runSystemCommand(&argv[2]);
     return 0;
   }
 
