@@ -323,9 +323,25 @@ NANO_OS_KERNEL_TEST_WITH(dircap,
   free(attr.dirCapabilities);
 }
 
+/// @fn static int narrowLikeLogin(void)
+///
+/// @brief Narrow the running process's set the way login narrows a user's:
+/// add rwcdlsx on /usr/ and r on /tmp/, then drop the base set's /.
+///
+/// @return Returns 0 on success, -1 if a call failed.
+static int narrowLikeLogin(void) {
+  if ((nanoOsDircapAdd("/usr/", DIRCAP_ALL) != 0)
+    || (nanoOsDircapAdd("/tmp/", DIRCAP_READ) != 0)
+  ) {
+    return -1;
+  }
+  return nanoOsDircapDrop("/");
+}
+
 NANO_OS_KERNEL_TEST_WITH(dircap, a_superset_entry_fails_the_spawn_with_EACCES,
   dircapPreBoot
 ) {
+  NANO_OS_ASSERT_EQ_INT(0, narrowLikeLogin());
   posix_spawnattr_t attr = { .flags = 0, .dirCapabilities = NULL };
   NANO_OS_ASSERT_EQ_INT(0,
     nanoOsSpawnattrAdddircap(&attr, "/tmp/", DIRCAP_READ));
@@ -371,16 +387,16 @@ NANO_OS_KERNEL_TEST(dircap, get_copies_the_set_only_when_it_fits) {
 }
 
 NANO_OS_KERNEL_TEST(dircap, add_and_drop_change_only_the_callers_set) {
-  NANO_OS_ASSERT_EQ_INT(-1, nanoOsDircapAdd("/var/lib/", DIRCAP_READ));
-  NANO_OS_ASSERT_EQ_INT(EACCES, errno);
-  NANO_OS_ASSERT_EQ_PTR(supervisorDirCapabilities,
-    getRunningProcess()->dirCapabilities);
-
-  NANO_OS_ASSERT_EQ_INT(0, nanoOsDircapDrop("/tmp"));
+  NANO_OS_ASSERT_EQ_INT(0, nanoOsDircapAdd("/usr/", DIRCAP_ALL));
+  NANO_OS_ASSERT_EQ_INT(0, nanoOsDircapDrop("/"));
   DirCapabilities *set = getRunningProcess()->dirCapabilities;
   NANO_OS_ASSERT_TRUE(set != supervisorDirCapabilities);
+
+  NANO_OS_ASSERT_EQ_INT(-1, nanoOsDircapAdd("/var/lib/", DIRCAP_READ));
+  NANO_OS_ASSERT_EQ_INT(EACCES, errno);
+  NANO_OS_ASSERT_EQ_PTR(set, getRunningProcess()->dirCapabilities);
   NANO_OS_ASSERT_FALSE(setAllows(set, "/tmp/x", DIRCAP_READ));
-  NANO_OS_ASSERT_TRUE(setAllows(set, "/etc/x", DIRCAP_READ));
+  NANO_OS_ASSERT_TRUE(setAllows(set, "/usr/x", DIRCAP_READ));
   NANO_OS_ASSERT_TRUE(dirCapabilitiesValid(supervisorDirCapabilities));
   NANO_OS_ASSERT_TRUE(setAllows(supervisorDirCapabilities, "/tmp/x",
     DIRCAP_READ));
@@ -428,7 +444,7 @@ static ProcessDescriptor* startProcess(void* (*body)(void*), UserId userId,
 /// @return This function returns NULL only if the exec fails.
 static void* execNarrowed(void *args) {
   (void) args;
-  childStatus = nanoOsDircapAdd("/tmp/", DIRCAP_READ);
+  childStatus = narrowLikeLogin();
   char *argv[] = { "report", NULL };
   schedulerExecve("/dctest", argv, NULL);
   childStatus = -errno;
@@ -473,7 +489,7 @@ static DirCapabilities *volatile exitedSet;
 /// @return This function returns NULL.
 static void* loggedInShell(void *args) {
   (void) args;
-  childStatus = nanoOsDircapAdd("/tmp/", DIRCAP_READ);
+  childStatus = narrowLikeLogin();
   exitedSet = getRunningProcess()->dirCapabilities;
   return NULL;
 }
@@ -1082,20 +1098,19 @@ NANO_OS_KERNEL_TEST(dircap, the_login_set_holds_what_it_documents) {
     DIRCAP_EXEC | DIRCAP_FULL_PATH));
   NANO_OS_ASSERT_FALSE(setAllows(loginDirCapabilities, "/system/bin/login/x",
     DIRCAP_READ | DIRCAP_FULL_PATH));
-  NANO_OS_ASSERT_FALSE(setAllows(loginDirCapabilities, "/system/bin/login/x",
-    DIRCAP_EXEC));
   NANO_OS_ASSERT_TRUE(setAllows(loginDirCapabilities, "/secure/shadow",
     DIRCAP_READ | DIRCAP_FULL_PATH));
   NANO_OS_ASSERT_FALSE(setAllows(loginDirCapabilities, "/secure/shadow",
     DIRCAP_WRITE | DIRCAP_FULL_PATH));
-  NANO_OS_ASSERT_FALSE(setAllows(loginDirCapabilities, "/secure/shadow",
-    DIRCAP_READ));
   NANO_OS_ASSERT_TRUE(setAllows(loginDirCapabilities, "/usr/bin/mush",
     DIRCAP_EXEC));
+  NANO_OS_ASSERT_TRUE(dirCapabilitiesValid(supervisorDirCapabilities));
+  NANO_OS_ASSERT_TRUE(setAllows(supervisorDirCapabilities, "/menu/x",
+    DIRCAP_ALL));
   NANO_OS_ASSERT_FALSE(setAllows(supervisorDirCapabilities,
-    "/system/bin/login/x", DIRCAP_EXEC));
+    "/system/bin/login/x", DIRCAP_EXEC | DIRCAP_FULL_PATH));
   NANO_OS_ASSERT_FALSE(setAllows(supervisorDirCapabilities, "/secure/shadow",
-    DIRCAP_READ));
+    DIRCAP_READ | DIRCAP_FULL_PATH));
 }
 
 /// @fn static int spawnSystem(const char *name, posix_spawnattr_t *attr,

@@ -1799,11 +1799,14 @@ NANO_OS_KERNEL_TEST(fs_access, a_refused_opendir_takes_no_slot) {
   NANO_OS_ASSERT_NULL(handleState.openDirs);
 }
 
-NANO_OS_KERNEL_TEST(fs_access, no_entry_names_the_root_of_userspace) {
+NANO_OS_KERNEL_TEST(fs_access, only_an_entry_on_the_root_of_userspace_lists_it) {
   accessFixture();
-  self()->dirCapabilities = supervisorDirCapabilities;
+  hold(DIRCAP_ALL, "/usr/");
+  hold(DIRCAP_ALL, "/tmp/");
   NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EACCES, tryOpendir("/"));
   NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EACCES, tryLstat("/"));
+  self()->dirCapabilities = supervisorDirCapabilities;
+  NANO_OS_ASSERT_EQ_INT(0, tryOpendir("/"));
 }
 
 NANO_OS_KERNEL_TEST(fs_access, rename_needs_delete_on_the_source) {

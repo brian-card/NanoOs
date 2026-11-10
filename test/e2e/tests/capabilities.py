@@ -62,6 +62,16 @@ def boot_with(s, files=None, directories=()):
 
 HOMES = ("/home", "/home/user1", "/home/user2")
 
+# A supervisor file narrower than the compiled base set, which is everything
+# under /userspace.
+NARROW_BASE = (
+    "supervisor rwcdlsx /usr/\n"
+    "supervisor rwcdls /etc/\n"
+    "supervisor rwcdlsx /home/\n"
+    "supervisor rwcdls /root/\n"
+    "supervisor rwcdls /tmp/\n"
+)
+
 
 def caps_of(s):
     """Return the running login's set as a dict of name to mask."""
@@ -137,15 +147,48 @@ def test_a_user_with_x_on_their_bin_can_run_their_own_programs(s):
     assert s.sh("/home/user1/bin/hi") == "Hello, world!"
 
 
-def test_the_shipped_files_give_the_same_sets_as_the_defaults(s):
+def test_the_shipped_files_give_the_default_sets_and_menu(s):
     boot_with(s, {"/etc/capabilities": repo_file("etc", "capabilities"),
                   "/system/data/capabilities":
-                  repo_file("etc", "system", "capabilities")}, HOMES)
+                  repo_file("etc", "system", "capabilities")},
+              HOMES + ("/menu",))
     s.login()
     assert caps_of(s) == {
         "/usr/": "7f", "/usr/bin/": "71", "/usr/lib/": "41", "/etc/": "3f",
-        "/root/": "3f", "/tmp/": "3f",
+        "/root/": "3f", "/tmp/": "3f", "/menu/": "33",
     }
+
+
+def test_root_can_grant_a_new_top_level_directory(s):
+    if s.child.isalive():
+        s.child.terminate(force=True)
+    env = dict(os.environ, MTOOLS_SKIP_CHECK="1")
+    image = s.img_copy + "@@2097152"
+    subprocess.run(["mmd", "-i", image, "::/userspace/apps"], env=env,
+                   check=True)
+    subprocess.run(["mcopy", "-s", "-i", image,
+                    os.path.join(REPO_ROOT, "usr", "bin", "helloworld"),
+                    "::/userspace/apps/hi"], env=env, check=True)
+    boot_with(s, {"/etc/capabilities": repo_file("etc", "capabilities")
+                  + "* rxls /apps/\n"}, HOMES)
+    s.login("user1", "user1user1")
+    assert caps_of(s)["/apps/"] == "71"
+    assert s.sh("/apps/hi") == "Hello, world!"
+    assert DENIED in s.sh("touch /apps/mine")
+    assert DENIED in s.sh("ll /")
+
+
+def test_etc_capabilities_cannot_reach_the_other_namespaces(s):
+    boot_with(s, {"/etc/capabilities": repo_file("etc", "capabilities")
+                  + "* rwcdlsx /secure/\n* rwcdlsx /system/\n"}, HOMES)
+    s.login("user1", "user1user1")
+    caps = caps_of(s)
+    assert caps["/secure/"] == "7f" and caps["/system/"] == "7f", caps
+    for command in (READ_SHADOW, "cat /system/data/capabilities",
+                    "/system/bin/login"):
+        out = s.sh(command)
+        assert "No such" in out or "not found" in out, (command, out)
+    assert "root:" not in s.sh(READ_SHADOW)
 
 
 def test_a_line_for_another_user_gives_this_user_nothing(s):
@@ -178,7 +221,8 @@ def test_a_supervisor_line_in_etc_capabilities_widens_nothing(s):
 
 
 def test_a_line_beyond_the_base_set_is_logged_and_skipped(s):
-    boot_with(s, {"/etc/capabilities": repo_file("etc", "capabilities")
+    boot_with(s, {"/system/data/capabilities": NARROW_BASE,
+                  "/etc/capabilities": repo_file("etc", "capabilities")
                   + "user1 rwcdls /opt/\n"},
               HOMES + ("/opt",))
     s.login("user1", "user1user1")
@@ -254,8 +298,7 @@ def test_the_supervisor_file_narrows_every_login(s):
 def test_the_supervisor_file_can_widen_what_a_user_may_be_given(s):
     boot_with(s, {
         "/system/data/capabilities":
-        repo_file("etc", "system", "capabilities")
-        + "supervisor rwcdls /opt/\n",
+        NARROW_BASE + "supervisor rwcdls /opt/\n",
         "/etc/capabilities":
         repo_file("etc", "capabilities") + "user1 rwcdls /opt/\n",
     }, HOMES + ("/opt",))
@@ -281,9 +324,11 @@ def test_a_user_logging_in_after_another_starts_from_the_base_set(s):
 def test_a_supervisor_file_of_the_same_size_is_not_the_compiled_set(s):
     boot_with(s, {"/system/data/capabilities":
                   repo_file("etc", "system", "capabilities")
-                  .replace("/tmp/", "/var/")})
+                  .replace("rwcdlsx", "rwclsx")})
     s.login()
-    assert "/tmp/" not in caps_of(s)
+    caps = caps_of(s)
+    assert "/usr/" not in caps and "/etc/" not in caps, caps
+    assert caps["/usr/bin/"] == "71", caps
 
 
 def test_a_custom_supervisor_file_still_lets_login_read_the_shadow_file(s):
@@ -300,8 +345,7 @@ def test_a_custom_supervisor_file_still_lets_login_read_the_shadow_file(s):
 
 def test_lines_for_others_in_the_supervisor_file_are_ignored(s):
     boot_with(s, {"/system/data/capabilities":
-                  repo_file("etc", "system", "capabilities")
-                  + "root rwcdls /opt/\n",
+                  NARROW_BASE + "root rwcdls /opt/\n",
                   "/etc/capabilities": repo_file("etc", "capabilities")
                   + "root rwcdls /opt/\n"}, ("/opt",))
     s.login()
@@ -321,7 +365,8 @@ def test_a_normal_grant_of_a_protected_name_drops_the_full_path_entry(s):
 
 
 def test_a_refused_entry_is_not_left_held(s):
-    boot_with(s, {"/etc/capabilities": repo_file("etc", "capabilities")
+    boot_with(s, {"/system/data/capabilities": NARROW_BASE,
+                  "/etc/capabilities": repo_file("etc", "capabilities")
                   + "user1 x /etc/\n"}, HOMES)
     s.login("user1", "user1user1")
     assert "not in the supervisor base set" in s.child.before
