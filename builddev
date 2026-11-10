@@ -163,7 +163,8 @@ if [ -b "${targetDevice}" ]; then
 	sudo mount "${targetDevice}p1" "${mountDir}"
 
 	sudo mkdir -p "${mountDir}/secure" "${mountDir}/system/bin" \
-		"${mountDir}/system/data" "${mountDir}/system/drivers" \
+		"${mountDir}/system/commands" "${mountDir}/system/data" \
+		"${mountDir}/system/drivers" \
 		"${mountDir}/userspace/usr" "${mountDir}/userspace/tmp"
 	if [ -n "${rootFilesystemSource}" ]; then
 		sudo cp -r "${rootFilesystemSource}/." "${mountDir}/userspace"
@@ -175,6 +176,8 @@ if [ -b "${targetDevice}" ]; then
 		sudo mv "${mountDir}/userspace/usr/bin/${program}" \
 			"${mountDir}/system/bin/"
 	done
+	sudo mv "${mountDir}/userspace/usr/bin/syspasswd" \
+		"${mountDir}/system/commands/passwd"
 	for driver in usr/lib/*.drv; do
 		sudo mv "${mountDir}/userspace/usr/lib/$(basename "${driver}")" \
 			"${mountDir}/system/drivers/"
@@ -250,8 +253,8 @@ else
 
 	MTOOLS_SKIP_CHECK=1 mformat -i "${fatImage}" -F -v NanoOs ::
 
-	for directory in /secure /system /system/bin /system/data \
-		/system/drivers /userspace; do
+	for directory in /secure /system /system/bin /system/commands \
+		/system/data /system/drivers /userspace; do
 		MTOOLS_SKIP_CHECK=1 mmd -i "${fatImage}" "::${directory}"
 	done
 
@@ -274,6 +277,10 @@ else
 		MTOOLS_SKIP_CHECK=1 mmove -i "${fatImage}" \
 			"::/userspace/usr/bin/${program}" "::/system/bin/${program}"
 	done
+	MTOOLS_SKIP_CHECK=1 mdeltree -i "${fatImage}" \
+		::/userspace/usr/bin/syspasswd
+	MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s usr/bin/syspasswd \
+		::/system/commands/passwd
 	for driver in usr/lib/*.drv; do
 		MTOOLS_SKIP_CHECK=1 mmove -i "${fatImage}" \
 			"::/userspace/usr/lib/$(basename "${driver}")" ::/system/drivers/

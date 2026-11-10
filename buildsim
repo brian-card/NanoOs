@@ -75,7 +75,7 @@ partitionOffsetBytes=$(( partitionOffsetMB * 1024 * 1024 ))
 fatImage="${imageFile}@@${partitionOffsetBytes}"
 
 MTOOLS_SKIP_CHECK=1 mformat -i "${fatImage}" -F -v NanoOs ::
-for directory in /secure /system /system/bin /system/data \
+for directory in /secure /system /system/bin /system/commands /system/data \
 	/system/drivers /userspace /userspace/usr \
 	/userspace/etc /userspace/root /userspace/tmp; do
 	MTOOLS_SKIP_CHECK=1 mmd -i "${fatImage}" "::${directory}"
@@ -86,6 +86,9 @@ for program in getty login logger; do
 	MTOOLS_SKIP_CHECK=1 mmove -i "${fatImage}" \
 		"::/userspace/usr/bin/${program}" "::/system/bin/${program}"
 done
+MTOOLS_SKIP_CHECK=1 mdeltree -i "${fatImage}" ::/userspace/usr/bin/syspasswd
+MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s usr/bin/syspasswd \
+	::/system/commands/passwd
 for driver in usr/lib/*.drv; do
 	MTOOLS_SKIP_CHECK=1 mmove -i "${fatImage}" \
 		"::/userspace/usr/lib/$(basename "${driver}")" ::/system/drivers/
