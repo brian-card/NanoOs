@@ -66,6 +66,7 @@ int nanoOsDup(int oldfd);
 int nanoOsDup2(int oldfd, int newfd);
 int nanoOsGethostname(char *name, size_t len);
 pid_t nanoOsGetpid(void);
+uid_t nanoOsGetuid(void);
 int nanoOsPipe(int pipefd[2]);
 int nanoOsSethostname(const char *name, size_t len);
 int nanoOsTtyname_r(int fd, char *buf, size_t buflen);
