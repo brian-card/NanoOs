@@ -6,5 +6,6 @@ root        home         /root/
 *           rls          /etc/
 *           rwcdls       ~/
 *           rwcdls       /tmp/
+*           rwls         /menu/
 root        rwcdls       /etc/
 root        rwcdlsx      /usr/
