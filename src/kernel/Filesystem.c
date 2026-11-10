@@ -472,15 +472,21 @@ int filesystemRemove(const char *pathname) {
   return returnValue;
 }
 
-/// @fn int filesystemRename(const char *oldpath, const char *newpath)
+/// @fn static int filesystemRenamePaths(const char *oldpath,
+///   const char *newpath, int pathFlag)
 ///
-/// @brief Implementation of the standard C rename call.
+/// @brief Rename a file for the running process.  It isn't inlined so that it
+/// stays in the Agon's flash, where its body has always been.
 ///
-/// @param oldpath The full pathname to the file to rename.
-/// @param newpath The full pathname the file is to have.
+/// @param oldpath The path to the file to rename.
+/// @param newpath The path the file is to have.
+/// @param pathFlag FILESYSTEM_FULL_PATH if the paths are full paths on the
+///   volume, 0 if they're paths under /userspace.
 ///
 /// @return Returns 0 on success, -1 and sets the value of errno on failure.
-int filesystemRename(const char *oldpath, const char *newpath) {
+static __attribute__((noinline)) int filesystemRenamePaths(
+  const char *oldpath, const char *newpath, int pathFlag
+) {
   if ((oldpath == NULL) || (*oldpath == '\0')
     || (newpath == NULL) || (*newpath == '\0')
   ) {
@@ -503,7 +509,7 @@ int filesystemRename(const char *oldpath, const char *newpath) {
 
   ProcessMessage *msg = initSendProcessMessageToPid(
     rootFilesystemPid,
-    FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_RENAME_FILE,
+    FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_RENAME_FILE | pathFlag,
     &filesystemRenameArgs, sizeof(filesystemRenameArgs), true);
   processMessageWaitForDone(msg, NULL);
   free(filesystemRenameArgs.oldpath); filesystemRenameArgs.oldpath = NULL;
@@ -519,14 +525,28 @@ int filesystemRename(const char *oldpath, const char *newpath) {
   return returnValue;
 }
 
+/// @fn int filesystemRename(const char *oldpath, const char *newpath)
+///
+/// @brief Implementation of the standard C rename call.  The paths are always
+/// under /userspace.
+///
+/// @param oldpath The path to the file to rename.
+/// @param newpath The path the file is to have.
+///
+/// @return Returns 0 on success, -1 and sets the value of errno on failure.
+int filesystemRename(const char *oldpath, const char *newpath) {
+  return filesystemRenamePaths(oldpath, newpath, 0);
+}
+
 /// @fn static int filesystemSendPathCommand(
 ///   FilesystemCommandResponse command, const char *pathname)
 ///
 /// @brief Send a filesystem command whose only argument is a path and wait
 /// for its result.
 ///
-/// @param command The FILESYSTEM_* command to send.
-/// @param pathname The full pathname to operate on.
+/// @param command The FILESYSTEM_* command to send, with FILESYSTEM_FULL_PATH
+///   or'd in if pathname is the full path on the volume.
+/// @param pathname The path to operate on.
 ///
 /// @return Returns 0 on success, -1 and sets the value of errno on failure.
 static int filesystemSendPathCommand(
@@ -585,6 +605,80 @@ int filesystemMkdir(const char *pathname, mode_t mode) {
 /// @return Returns 0 on success, -1 and sets the value of errno on failure.
 int filesystemRmdir(const char *pathname) {
   return filesystemSendPathCommand(FILESYSTEM_RMDIR, pathname);
+}
+
+/// @fn static bool filesystemCallerIsExecutive(void)
+///
+/// @brief Determine whether the running process may name a full path on the
+/// volume, and set errno to EPERM if not.
+///
+/// @return Returns true if the running process is at kernel or executive
+/// level, false if not.
+static bool filesystemCallerIsExecutive(void) {
+  ProcessDescriptor *processDescriptor = getRunningProcess();
+  if ((processDescriptor == NULL)
+    || (processDescriptor->privilegeLevel > PRIVILEGE_LEVEL_EXECUTIVE)
+  ) {
+    errno = EPERM;
+    return false;
+  }
+  return true;
+}
+
+/// @fn int filesystemRenameFullPath(const char *oldpath, const char *newpath)
+///
+/// @brief Rename a file by full paths on the volume, for a kernel or executive
+/// process.
+///
+/// @param oldpath The full path to the file to rename.
+/// @param newpath The full path the file is to have.
+///
+/// @return Returns 0 on success, -1 and sets the value of errno on failure.
+/// errno is EPERM if the caller is below executive level.
+int filesystemRenameFullPath(const char *oldpath, const char *newpath) {
+  if (!filesystemCallerIsExecutive()) {
+    return -1;
+  }
+  return filesystemRenamePaths(oldpath, newpath, FILESYSTEM_FULL_PATH);
+}
+
+/// @fn int filesystemMkdirFullPath(const char *pathname, mode_t mode)
+///
+/// @brief Create a directory by its full path on the volume, for a kernel or
+/// executive process.
+///
+/// @param pathname The full path of the directory to create.
+/// @param mode The permissions for the new directory.  Ignored, since the
+///   filesystem does not store permissions.
+///
+/// @return Returns 0 on success, -1 and sets the value of errno on failure.
+/// errno is EPERM if the caller is below executive level.
+int filesystemMkdirFullPath(const char *pathname, mode_t mode) {
+  (void) mode;
+  if (!filesystemCallerIsExecutive()) {
+    return -1;
+  }
+  return filesystemSendPathCommand(
+    (FilesystemCommandResponse) (FILESYSTEM_MKDIR | FILESYSTEM_FULL_PATH),
+    pathname);
+}
+
+/// @fn int filesystemRmdirFullPath(const char *pathname)
+///
+/// @brief Remove an empty directory by its full path on the volume, for a
+/// kernel or executive process.
+///
+/// @param pathname The full path of the directory to remove.
+///
+/// @return Returns 0 on success, -1 and sets the value of errno on failure.
+/// errno is EPERM if the caller is below executive level.
+int filesystemRmdirFullPath(const char *pathname) {
+  if (!filesystemCallerIsExecutive()) {
+    return -1;
+  }
+  return filesystemSendPathCommand(
+    (FilesystemCommandResponse) (FILESYSTEM_RMDIR | FILESYSTEM_FULL_PATH),
+    pathname);
 }
 
 /// @fn DIR* filesystemOpendir(const char *pathname)
