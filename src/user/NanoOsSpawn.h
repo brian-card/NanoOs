@@ -63,6 +63,14 @@ typedef struct FileDescriptor FileDescriptor;
 /// processes of its own.  Only a process that can spawn can pass this on.
 #define POSIX_SPAWN_ALLOW_SPAWN 0x0200
 
+/// @def POSIX_SPAWN_SYSTEM
+///
+/// @brief NanoOs extension:  posix_spawn flag that runs a trusted program from
+/// /system/commands/, named by a bare file name.  The new process runs at
+/// executive level as the caller's user, with no environment and a compiled
+/// set of directory capabilities.
+#define POSIX_SPAWN_SYSTEM 0x0400
+
 /// @struct posix_spawnattr_t
 ///
 /// @brief Attributes of a process created by posix_spawn.
