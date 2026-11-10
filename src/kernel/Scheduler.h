@@ -383,6 +383,15 @@ extern DirCapabilities *const kernelDirCapabilities;
 extern DirCapabilities *supervisorDirCapabilities;
 extern DirCapabilities *loginDirCapabilities;
 
+/// @def SYSTEM_COMMANDS_PATH_LENGTH
+///
+/// @brief The length of schedulerSystemCommandsPath.
+#define SYSTEM_COMMANDS_PATH_LENGTH 17
+
+// The directory POSIX_SPAWN_SYSTEM runs programs from.  See Scheduler.c.
+extern const char schedulerSystemCommandsPath[];
+bool schedulerSystemCommandNameValid(const char *name);
+
 void forceYield(void);
 bool schedulerQueueWaitingProcess(ProcessDescriptor *processDescriptor);
 
