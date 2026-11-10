@@ -90,7 +90,8 @@ static inline int posix_spawnattr_setflags(posix_spawnattr_t *attr,
   short flags
 ) {
   if ((attr == NULL)
-    || ((flags & ~(POSIX_SPAWN_FOREGROUND | POSIX_SPAWN_ALLOW_SPAWN)) != 0)
+    || ((flags & ~(POSIX_SPAWN_FOREGROUND | POSIX_SPAWN_ALLOW_SPAWN
+      | POSIX_SPAWN_SYSTEM)) != 0)
   ) {
     return EINVAL;
   }
