@@ -746,14 +746,29 @@ static const DIR_CAPABILITIES_STATIC(SUPERVISOR_DIR_CAPABILITY_ENTRIES)
   _supervisorDirCapabilities KEEP_IN_FLASH
   = DIR_CAPABILITIES_STATIC_INITIALIZER(5, SUPERVISOR_DIR_CAPABILITY_ENTRIES);
 
+/// @def LOGIN_ONLY_DIR_CAPABILITY_ENTRIES
+///
+/// @brief The packed entries the login set adds to the supervisor base set.
+#define LOGIN_ONLY_DIR_CAPABILITY_ENTRIES \
+  "\xc0" "\x08" "/system/" \
+  "\x81" "\x08" "/secure/"
+
+/// @var _loginOnlyDirCapabilities
+///
+/// @brief The packed entries the login set adds to the supervisor base set.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _loginOnlyDirCapabilities[] KEEP_IN_FLASH
+  = LOGIN_ONLY_DIR_CAPABILITY_ENTRIES;
+
 /// @def LOGIN_DIR_CAPABILITY_ENTRIES
 ///
 /// @brief The packed entries of the login set:  the supervisor base set plus
 /// x on the full path /system/ and r on the full path /secure/.
 #define LOGIN_DIR_CAPABILITY_ENTRIES \
   SUPERVISOR_DIR_CAPABILITY_ENTRIES \
-  "\xc0" "\x08" "/system/" \
-  "\x81" "\x08" "/secure/"
+  LOGIN_ONLY_DIR_CAPABILITY_ENTRIES
 
 /// @var _loginDirCapabilities
 ///
@@ -789,7 +804,7 @@ DirCapabilities *const kernelDirCapabilities KEEP_IN_FLASH
 ///
 /// @note KEEP_IN_FLASH is required here because .rodata is removed from the
 /// final binary on some targets.
-DirCapabilities *const supervisorDirCapabilities KEEP_IN_FLASH
+DirCapabilities *supervisorDirCapabilities
   = (DirCapabilities*) &_supervisorDirCapabilities;
 
 /// @var loginDirCapabilities
@@ -798,7 +813,7 @@ DirCapabilities *const supervisorDirCapabilities KEEP_IN_FLASH
 ///
 /// @note KEEP_IN_FLASH is required here because .rodata is removed from the
 /// final binary on some targets.
-DirCapabilities *const loginDirCapabilities KEEP_IN_FLASH
+DirCapabilities *loginDirCapabilities
   = (DirCapabilities*) &_loginDirCapabilities;
 
 /// @fn void schedulerSetDirCapabilities(ProcessDescriptor *processDescriptor,
@@ -6467,6 +6482,114 @@ static const char _timedWaitingName[] KEEP_IN_FLASH = "timed waiting";
 /// final binary on some targets.
 static const char _freeName[] KEEP_IN_FLASH = "free";
 
+/// @def DIR_CAPABILITY_FILE_LINE_SIZE
+///
+/// @brief The size of the buffer a line of /system/data/capabilities is read
+/// into.
+#define DIR_CAPABILITY_FILE_LINE_SIZE 128
+
+/// @var _capabilitiesFilePath
+///
+/// @brief The full path of the file that holds the supervisor base set.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _capabilitiesFilePath[] KEEP_IN_FLASH
+  = "/system/data/capabilities";
+
+/// @var _supervisorEntity
+///
+/// @brief The entity the lines of the supervisor base set name.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _supervisorEntity[] KEEP_IN_FLASH = "supervisor";
+
+/// @fn static DirCapabilities* schedulerReadSupervisorCapabilities(FILE *file)
+///
+/// @brief Build a set from the lines of an open capabilities file that name
+/// the supervisor, logging and skipping any others.
+///
+/// @param file The file.
+///
+/// @return Returns the new set, or NULL if it has no entries.
+static DirCapabilities* schedulerReadSupervisorCapabilities(FILE *file) {
+  DirCapabilities *set = NULL;
+  char *line = (char*) schedMalloc(DIR_CAPABILITY_FILE_LINE_SIZE);
+  while ((line != NULL)
+    && (schedFgets(line, DIR_CAPABILITY_FILE_LINE_SIZE, file) != NULL)
+  ) {
+    char *fields[3];
+    uint8_t numFields = dirCapabilitySplitLine(line, fields);
+    if (numFields == 0) {
+      continue;
+    }
+
+    uint8_t mask = ((numFields == 3)
+      && (strcmp(fields[0], _supervisorEntity) == 0))
+      ? dirCapabilityMaskFromLetters(fields[1]) : 0;
+    if ((mask == 0)
+      || (dirCapabilityPut(&set, fields[2], strlen(fields[2]), mask,
+        schedRealloc) != 0)
+    ) {
+      logError("Skipping a bad line in the capabilities file\n");
+    }
+  }
+  schedFree(line);
+  return set;
+}
+
+/// @fn static void schedulerLoadSupervisorCapabilities(void)
+///
+/// @brief Replace the compiled supervisor base set and login set with the ones
+/// /system/data/capabilities describes, if it has any supervisor lines.  A
+/// file that matches the compiled set costs no memory.  It isn't inlined so
+/// that it stays out of the Agon's flash, which has no room for it.
+///
+/// @return This function returns no value.
+static __attribute__((noinline)) void schedulerLoadSupervisorCapabilities(void)
+{
+  FILE *file = schedFopenFullPath(_capabilitiesFilePath, _readMode);
+  if (file == NULL) {
+    return;
+  }
+  DirCapabilities *set = schedulerReadSupervisorCapabilities(file);
+  schedFclose(file);
+  if (set == NULL) {
+    return;
+  }
+
+  size_t compiledSize = supervisorDirCapabilities->size;
+  if ((set->size == compiledSize)
+    && (memcmp(set->capabilities, supervisorDirCapabilities->capabilities,
+      compiledSize - DIR_CAPABILITIES_HEADER_SIZE) == 0)
+  ) {
+    dirCapabilitiesRelease(set, schedRealloc);
+    return;
+  }
+
+  size_t loginOnlySize = sizeof(_loginOnlyDirCapabilities) - 1;
+  DirCapabilities *loginSet
+    = (DirCapabilities*) schedMalloc(set->size + loginOnlySize);
+  if (loginSet == NULL) {
+    logError("No memory for the login capabilities\n");
+    dirCapabilitiesRelease(set, schedRealloc);
+    return;
+  }
+  memcpy(loginSet, set, set->size);
+  memcpy((char*) loginSet + set->size, _loginOnlyDirCapabilities,
+    loginOnlySize);
+  loginSet->size += loginOnlySize;
+  loginSet->numCapabilities += 2;
+
+  // A reference count of 0 makes these static, so they're never changed or
+  // freed.
+  loginSet->refCount = 0;
+  set->refCount = 0;
+  loginDirCapabilities = loginSet;
+  supervisorDirCapabilities = set;
+}
+
 /// @var _hostnameFilePath
 ///
 /// @brief Path to the file on the filesystem that stores the system
@@ -7192,6 +7315,7 @@ __attribute__((noinline)) void startScheduler(
   }
 
   nanoOsPasswdCacheLoad();
+  schedulerLoadSupervisorCapabilities();
   logSchedulerDebugInfo(&schedulerState);
   logDebug("Logged scheduler debug info\n");
   bootTrace("hostname read; launching processes");

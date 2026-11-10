@@ -380,8 +380,8 @@ extern bool schedulerPreemptionTimerArmed;
 // The static directory capability sets.  See Scheduler.c for details.
 extern DirCapabilities *const rootDirCapabilities;
 extern DirCapabilities *const kernelDirCapabilities;
-extern DirCapabilities *const supervisorDirCapabilities;
-extern DirCapabilities *const loginDirCapabilities;
+extern DirCapabilities *supervisorDirCapabilities;
+extern DirCapabilities *loginDirCapabilities;
 
 void forceYield(void);
 bool schedulerQueueWaitingProcess(ProcessDescriptor *processDescriptor);
