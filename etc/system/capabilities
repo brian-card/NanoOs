@@ -4,3 +4,4 @@ supervisor  rwcdls       /etc/
 supervisor  rwcdlsx      /home/
 supervisor  rwcdls       /root/
 supervisor  rwcdls       /tmp/
+supervisor  rwls         /
