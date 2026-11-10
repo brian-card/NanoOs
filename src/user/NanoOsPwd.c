@@ -210,6 +210,15 @@ static const char _user2Home[] KEEP_IN_FLASH = "/home/user2";
 /// final binary on some targets.
 static const char _user2Passwd[] KEEP_IN_FLASH = "1491";
 
+/// @var _shadowedPassword
+///
+/// @brief What pw_passwd holds for a user in /etc/passwd.  The field in the
+/// file is ignored so that whoever can edit that file can't set a password.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _shadowedPassword[] KEEP_IN_FLASH = "x";
+
 /// @var _passwdFilePath
 ///
 /// @brief Path to the file on the filesystem that holds the passwd database.
@@ -428,7 +437,7 @@ static int passwdFileLookup(const char *name, uid_t uid,
     }
 
     pwd->pw_name = fields[0];
-    pwd->pw_passwd = fields[1];
+    pwd->pw_passwd = (char*) _shadowedPassword;
     pwd->pw_uid = (uid_t) fieldUid;
     pwd->pw_gid = (gid_t) fieldGid;
     pwd->pw_gecos = fields[4];
