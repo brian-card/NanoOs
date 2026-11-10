@@ -780,6 +780,48 @@ static const DIR_CAPABILITIES_STATIC(LOGIN_DIR_CAPABILITY_ENTRIES)
   _loginDirCapabilities KEEP_IN_FLASH
   = DIR_CAPABILITIES_STATIC_INITIALIZER(7, LOGIN_DIR_CAPABILITY_ENTRIES);
 
+/// @def SYSTEM_COMMAND_DIR_CAPABILITY_ENTRIES
+///
+/// @brief The packed entries of the set of a program run with
+/// POSIX_SPAWN_SYSTEM:  rwcd on the full path /secure/ and r on /etc/.
+#define SYSTEM_COMMAND_DIR_CAPABILITY_ENTRIES \
+  "\x8f" "\x08" "/secure/" \
+  "\x01" "\x05" "/etc/"
+
+/// @var _systemCommandDirCapabilities
+///
+/// @brief The set of every program run with POSIX_SPAWN_SYSTEM.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const DIR_CAPABILITIES_STATIC(SYSTEM_COMMAND_DIR_CAPABILITY_ENTRIES)
+  _systemCommandDirCapabilities KEEP_IN_FLASH
+  = DIR_CAPABILITIES_STATIC_INITIALIZER(2,
+    SYSTEM_COMMAND_DIR_CAPABILITY_ENTRIES);
+
+/// @var schedulerSystemCommandsPath
+///
+/// @brief The directory POSIX_SPAWN_SYSTEM runs programs from.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+const char schedulerSystemCommandsPath[] KEEP_IN_FLASH = "/system/commands/";
+
+/// @fn bool schedulerSystemCommandNameValid(const char *name)
+///
+/// @brief Determine whether a name can only name a file directly in
+/// /system/commands/.
+///
+/// @param name The name to check.
+///
+/// @return Returns true if the name is a bare file name, false if it is empty,
+/// contains a '/', or is "." or "..".
+bool schedulerSystemCommandNameValid(const char *name) {
+  bool dots = (name[0] == '.')
+    && ((name[1] == '\0') || ((name[1] == '.') && (name[2] == '\0')));
+  return (name[0] != '\0') && (strchr(name, '/') == NULL) && !dots;
+}
+
 /// @var rootDirCapabilities
 ///
 /// @brief The scheduler's set.  Static, so it is never changed or freed.
@@ -3764,6 +3806,27 @@ static void schedulerDropExecutivePrivilege(
     = _schedulerState->readyQueues[PRIVILEGE_LEVEL_SUPERVISOR];
 }
 
+/// @fn static void schedulerSetSpawnPrivilege(
+///   ProcessDescriptor *processDescriptor, bool systemCommand)
+///
+/// @brief Set the privilege level of the slot a spawned process will run in:
+/// executive for a program run with POSIX_SPAWN_SYSTEM and user for any other.
+/// A slot keeps its level after its process exits, so every spawn sets it.
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor of the slot.
+/// @param systemCommand Whether the program was run with POSIX_SPAWN_SYSTEM.
+///
+/// @return This function returns no value.
+static void schedulerSetSpawnPrivilege(ProcessDescriptor *processDescriptor,
+  bool systemCommand
+) {
+  processDescriptor->privilegeLevel = systemCommand
+    ? PRIVILEGE_LEVEL_EXECUTIVE : PRIVILEGE_LEVEL_USER;
+  schedulerSetBaseHalCapabilities(processDescriptor);
+  processDescriptor->readyQueue
+    = _schedulerState->readyQueues[processDescriptor->privilegeLevel];
+}
+
 /// @fn int schedulerSetProcessUserCommandHandler(
 ///   SchedulerState *schedulerState, ProcessMessage *processMessage)
 ///
@@ -4241,9 +4304,21 @@ int schedulerSpawnCommandHandler(
   }
   char **envp = spawnArgs->envp;
 
+  bool systemCommand = (spawnArgs->attrp != NULL)
+    && ((spawnArgs->attrp->flags & POSIX_SPAWN_SYSTEM) != 0);
   DirCapabilities *dirCapabilities = NULL;
-  returnValue = schedulerSpawnDirCapabilities(
-    processMessageFrom(processMessage), spawnArgs->attrp, &dirCapabilities);
+  if (systemCommand) {
+    returnValue = ((strncmp(pathname, schedulerSystemCommandsPath,
+        SYSTEM_COMMANDS_PATH_LENGTH) == 0)
+      && schedulerSystemCommandNameValid(
+        &pathname[SYSTEM_COMMANDS_PATH_LENGTH])
+      && (envp == NULL) && (spawnArgs->attrp->dirCapabilities == NULL))
+      ? 0 : -EINVAL;
+    dirCapabilities = (DirCapabilities*) &_systemCommandDirCapabilities;
+  } else {
+    returnValue = schedulerSpawnDirCapabilities(
+      processMessageFrom(processMessage), spawnArgs->attrp, &dirCapabilities);
+  }
   if (returnValue != 0) {
     schedulerSpawnArgs->errorNumber = -returnValue;
     processMessageSetDone(processMessage);
@@ -4271,8 +4346,9 @@ int schedulerSpawnCommandHandler(
   if (execCommand == execOverlayCommand) {
     processDescriptor->overlayNamespace = pathname;
   }
-  returnValue = schedulerMayExec(processMessageFrom(processMessage), pathname,
-    execCommand) ? loadProcessDescriptorOverlayMetadata(processDescriptor)
+  returnValue = (systemCommand
+    || schedulerMayExec(processMessageFrom(processMessage), pathname,
+      execCommand)) ? loadProcessDescriptorOverlayMetadata(processDescriptor)
     : -EACCES;
   if (returnValue != 0) {
     dirCapabilitiesRelease(dirCapabilities, schedRealloc);
@@ -4311,12 +4387,27 @@ int schedulerSpawnCommandHandler(
   processDescriptor->numIpcCapabilities
     = sizeof(baseUserIpcCapabilities) / sizeof(baseUserIpcCapabilities[0]);
   processDescriptor->ipcCapabilitiesDynamic = false;
-  if ((spawnArgs->attrp != NULL)
+  if ((spawnArgs->attrp != NULL) && !systemCommand
     && (spawnArgs->attrp->flags & POSIX_SPAWN_ALLOW_SPAWN)
     && (addProcessIpcCapability(processDescriptor, schedulerPid,
       SCHEDULER_COMMAND_SIGNATURE, SCHEDULER_SPAWN) != 0)
   ) {
     logError("Could not let process %d spawn\n",
+      processDescriptor->processId);
+  }
+  // A system command may read a password from the console with echo off.
+  if (systemCommand
+    && ((addProcessIpcCapability(processDescriptor, consolePid,
+        CONSOLE_COMMAND_SIGNATURE, CONSOLE_GET_MODES) != 0)
+      || (addProcessIpcCapability(processDescriptor, consolePid,
+        CONSOLE_COMMAND_SIGNATURE, CONSOLE_SET_MODES) != 0)
+      || (addProcessIpcCapability(processDescriptor, consolePid,
+        CONSOLE_COMMAND_SIGNATURE, CONSOLE_WAIT_FOR_INPUT) != 0)
+      || (addProcessIpcCapability(&allProcesses[consolePid - 1],
+        processDescriptor->processId, CONSOLE_COMMAND_SIGNATURE,
+        CONSOLE_RETURNING_INPUT) != 0))
+  ) {
+    logError("Could not let process %d read the console\n",
       processDescriptor->processId);
   }
   if ((spawnArgs->attrp != NULL)
@@ -4498,7 +4589,7 @@ int schedulerSpawnCommandHandler(
 
   processDescriptor->envp = envp;
   processDescriptor->name = argv[0];
-  schedulerDropExecutivePrivilege(processDescriptor);
+  schedulerSetSpawnPrivilege(processDescriptor, systemCommand);
   schedulerSetDirCapabilities(processDescriptor, dirCapabilities);
 
   // Resume the thread so that it picks up all the pointers it needs before
@@ -6590,6 +6681,32 @@ static __attribute__((noinline)) void schedulerLoadSupervisorCapabilities(void)
   supervisorDirCapabilities = set;
 }
 
+/// @var _shadowLockPath
+///
+/// @brief The full path of the directory passwd creates while it rewrites
+/// /secure/shadow.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _shadowLockPath[] KEEP_IN_FLASH = "/secure/shadow.lock";
+
+/// @fn static void schedulerRemoveShadowLock(void)
+///
+/// @brief Remove the shadow lock at boot, when no process can hold it, so
+/// that losing power while passwd held it doesn't keep passwords from ever
+/// changing again.  It isn't inlined so that it stays out of the Agon's flash.
+///
+/// @return This function returns no value.
+static __attribute__((noinline)) void schedulerRemoveShadowLock(void) {
+  FilesystemPathArgs rmdirArgs;
+  rmdirArgs.pathname = (char*) _shadowLockPath;
+  rmdirArgs.now = 0;
+  rmdirArgs.returnValue = 0;
+  schedulerInitSendMessageToPid(rootFilesystemPid,
+    FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_RMDIR | FILESYSTEM_FULL_PATH,
+    &rmdirArgs, sizeof(rmdirArgs));
+}
+
 /// @var _hostnameFilePath
 ///
 /// @brief Path to the file on the filesystem that stores the system
@@ -7316,6 +7433,7 @@ __attribute__((noinline)) void startScheduler(
 
   nanoOsPasswdCacheLoad();
   schedulerLoadSupervisorCapabilities();
+  schedulerRemoveShadowLock();
   logSchedulerDebugInfo(&schedulerState);
   logDebug("Logged scheduler debug info\n");
   bootTrace("hostname read; launching processes");
