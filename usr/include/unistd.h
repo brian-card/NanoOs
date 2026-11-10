@@ -60,6 +60,9 @@ static inline int gethostname(char *name, size_t len) {
 static inline int getpid(void) {
   return overlayMap.header.osApi->userApi->getpid();
 }
+static inline uid_t getuid(void) {
+  return overlayMap.header.osApi->userApi->getuid();
+}
 static inline int rmdir(const char *pathname) {
   return overlayMap.header.osApi->userApi->rmdir(pathname);
 }
