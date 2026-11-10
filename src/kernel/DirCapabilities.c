@@ -81,21 +81,23 @@ static inline bool dirCapabilityMatches(const DirCapability *capability,
 }
 
 /// @fn static DirCapability* dirCapabilityFind(const DirCapabilities *set,
-///   const char *name, size_t nameLength)
+///   const char *name, size_t nameLength, uint8_t kind)
 ///
-/// @brief Find the entry with exactly a given name.
+/// @brief Find the entry of a given kind with exactly a given name.
 ///
 /// @param set The set to search.
-/// @param name The name to find.
+/// @param name The name to look for.
 /// @param nameLength The length of name.
+/// @param kind DIRCAP_FULL_PATH for a full-path entry, 0 for any other.
 ///
 /// @return Returns a pointer to the entry, or NULL if the set doesn't hold it.
 static DirCapability* dirCapabilityFind(const DirCapabilities *set,
-  const char *name, size_t nameLength
+  const char *name, size_t nameLength, uint8_t kind
 ) {
   const DirCapability *capability = set->capabilities;
   for (uint8_t ii = 0; ii < set->numCapabilities; ii++) {
     if ((capability->len == nameLength)
+      && ((capability->mask & DIRCAP_FULL_PATH) == kind)
       && (memcmp(capability->name, name, nameLength) == 0)
     ) {
       // We have to cast away the const qualifier here.
@@ -263,7 +265,7 @@ int dirCapabilityPut(DirCapabilities **setp,
     *setp = set;
   }
 
-  DirCapability *existing = dirCapabilityFind(set, name, nameLength);
+  DirCapability *existing = dirCapabilityFind(set, name, nameLength, 0);
   if (existing != NULL) {
     if (existing->mask == mask) {
       return 0;
@@ -337,7 +339,9 @@ int dirCapabilityAdd(DirCapabilities **setp,
 /// @brief Remove the entry with a given name from a set.
 ///
 /// @param setp A pointer to the caller's set, updated if the block changes.
-/// @param name The name of the entry to remove.
+/// @param name The name of the entry to remove.  A full-path entry with the
+///   name goes first, so that login can give up the real tree and keep a
+///   directory of the same name under /userspace.
 /// @param nameLength The length of name.
 /// @param reallocFn The allocator.
 ///
@@ -351,7 +355,11 @@ int dirCapabilityDrop(DirCapabilities **setp,
   }
 
   DirCapabilities *set = *setp;
-  DirCapability *capability = dirCapabilityFind(set, name, nameLength);
+  DirCapability *capability
+    = dirCapabilityFind(set, name, nameLength, DIRCAP_FULL_PATH);
+  if (capability == NULL) {
+    capability = dirCapabilityFind(set, name, nameLength, 0);
+  }
   if (capability == NULL) {
     return 0;
   }
