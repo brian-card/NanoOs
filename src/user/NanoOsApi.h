@@ -139,6 +139,9 @@ typedef struct NanoOsExecutiveApi {
   int (*execveFullPath)(const char *pathname,
     char *const argv[], char *const envp[]);
   FILE* (*fopenFullPath)(const char *pathname, const char *mode);
+  int (*renameFullPath)(const char *oldpath, const char *newpath);
+  int (*mkdirFullPath)(const char *pathname, mode_t mode);
+  int (*rmdirFullPath)(const char *pathname);
 } NanoOsExecutiveApi;
 
 typedef struct NanoOsUserApi {
@@ -224,6 +227,7 @@ typedef struct NanoOsUserApi {
   int (*dup2)(int oldfd, int newfd);
   int (*gethostname)(char *name, size_t len);
   pid_t (*getpid)(void);
+  uid_t (*getuid)(void);
   int (*sethostname)(const char *name, size_t len);
   int (*ttyname_r)(int fd, char *buf, size_t buflen);
   int (*execve)(const char *pathname, char *const argv[], char *const envp[]);

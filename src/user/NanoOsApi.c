@@ -141,6 +141,9 @@ const NanoOsExecutiveApi nanoOsExecutiveApi = {
   // Full-path functions:
   .execveFullPath = schedulerExecveFullPath,
   .fopenFullPath = filesystemFopenFullPath,
+  .renameFullPath = filesystemRenameFullPath,
+  .mkdirFullPath = filesystemMkdirFullPath,
+  .rmdirFullPath = filesystemRmdirFullPath,
 };
 
 KEEP_IN_FLASH
@@ -225,6 +228,7 @@ static const NanoOsUserApi _nanoOsUserApi = {
   .dup2 = nanoOsDup2,
   .gethostname = nanoOsGethostname,
   .getpid = nanoOsGetpid,
+  .getuid = nanoOsGetuid,
   .sethostname = nanoOsSethostname,
   .ttyname_r = nanoOsTtyname_r,
   .execve = schedulerExecve,
