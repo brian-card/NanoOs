@@ -115,6 +115,9 @@ int main(int argc, char **argv) {
     "mv:                     ",
     "Move or rename a file.");
   printf("%s %s\n",
+    "passwd:                 ",
+    "Change a password.");
+  printf("%s %s\n",
     "ps:                     ",
     "List the running processes.");
   printf("%s %s\n",
