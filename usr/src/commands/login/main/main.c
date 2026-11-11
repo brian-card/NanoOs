@@ -34,6 +34,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <termios.h>
 #include <unistd.h>
 #include "NanoOsUtils.h"
@@ -94,6 +95,16 @@ static __attribute__((noinline)) void startShell(const char *username,
   strcpy(envHome, "HOME=");
   strcat(envHome, pwd->pw_dir);
   
+  // strlen("TMPDIR=") + strlen("/home/") + LOGIN_NAME_MAX + strlen("/tmp").
+  // /tmp is used if the user's own directory can't be made.
+  char envTmpdir[7 + 6 + LOGIN_NAME_MAX + 4 + 1];
+  if ((snprintf(envTmpdir, sizeof(envTmpdir), "TMPDIR=%s/tmp", pwd->pw_dir)
+      >= (int) sizeof(envTmpdir))
+    || ((mkdir(&envTmpdir[7], 0777) != 0) && (errno != EEXIST))
+  ) {
+    strcpy(envTmpdir, "TMPDIR=/tmp");
+  }
+
   // The PWD variable will be one less than HOME since it's only 3 characters.
   char envPwd[LOGIN_NAME_MAX + 10 + 1];
   strcpy(envPwd, "PWD=");
@@ -129,6 +140,7 @@ static __attribute__((noinline)) void startShell(const char *username,
     envHostname,
     envOldpwd,
     envPwd,
+    envTmpdir,
     envUid,
     envUser,
     "PATH=/usr/bin",
