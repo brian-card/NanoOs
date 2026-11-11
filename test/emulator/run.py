@@ -235,6 +235,18 @@ def test_no_one_can_list_the_root_directory(e):
     assert "Permission denied" in e.sh("ll /")
 
 
+def test_caps_prints_roots_set(e):
+    assert e.sh("caps").splitlines() == [
+        "rlsx     /usr/bin/",
+        "rx       /usr/lib/",
+        "rwcdls   /root/",
+        "rwls     /menu/",
+        "rwcdls   /etc/",
+        "rwcdls   /tmp/",
+        "rwcdlsx  /usr/",
+    ]
+
+
 def image_text(e, path):
     """Read a file out of the running emulator's image.
 
@@ -620,6 +632,7 @@ TESTS = [test_boots_to_a_login_prompt,
          test_ll_lists_a_directory,
     test_no_one_can_list_the_root_directory,
     test_exec_needs_the_execute_capability,
+    test_caps_prints_roots_set,
          test_config_sys_is_the_agon_one,
          test_vdp_driver_and_its_getty_are_running,
          test_helloworld_prints_its_greeting,
