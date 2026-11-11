@@ -29,16 +29,14 @@
 ///
 /// @brief The editing commands that write files:  w and W.
 
-#include <errno.h>
 #include "Ex.h"
 
 /// @fn static void exWriteFile(ExState *state)
 ///
 /// @brief Write lines to a file:  the w and W commands.  The w command
-/// writes to a temporary file that replaces the target only once it is
-/// complete, so a failed write leaves the target as it was, unless the
-/// directory doesn't allow creating and deleting it.  Then the target is
-/// written in place.
+/// writes to a temporary file beside the editor's own in the temporary
+/// directory, and renames it over the target only once it is complete, so a
+/// failed write leaves the target as it was.
 ///
 /// @param state The ExState of the running editor.
 ///
@@ -70,23 +68,13 @@ static void exWriteFile(ExState *state) {
   if (state->command == 'W') {
     out = fopen(name, "a");
   } else {
-    tempName = (char*) malloc(strlen(name) + 2);
+    tempName = (char*) malloc(strlen(state->store.path) + 3);
     if (tempName == NULL) {
       state->store.error = EX_ERROR_MEMORY;
       return;
     }
-    strcat(strcpy(tempName, name), "~");
-    // Removing the temporary file is refused exactly when renaming it over
-    // the target would be, so check that before creating it.
-    bool inPlace = (remove(tempName) != 0) && (errno == EACCES);
-    if (!inPlace) {
-      out = fopen(tempName, "w");
-      inPlace = (out == NULL) && (errno == EACCES);
-    }
-    if (inPlace) {
-      free(tempName); tempName = NULL;
-      out = fopen(name, "w");
-    }
+    strcat(strcpy(tempName, state->store.path), ".w");
+    out = fopen(tempName, "w");
   }
   if (out == NULL) {
     free(tempName);
@@ -109,7 +97,8 @@ static void exWriteFile(ExState *state) {
     if ((state->store.error == EX_ERROR_NONE)
       && (rename(tempName, name) != 0)
     ) {
-      state->store.error = EX_ERROR_WRITE;
+      // The rename is where the target is opened for writing.
+      state->store.error = EX_ERROR_OPEN_OUTPUT;
     }
     if (state->store.error != EX_ERROR_NONE) {
       remove(tempName);
