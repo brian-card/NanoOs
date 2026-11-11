@@ -408,11 +408,18 @@ def boot_with_menu(s, permissions):
     assert "%-7s  /menu/" % permissions in s.sh("caps").splitlines()
 
 
+def assert_nothing_left(s, text):
+    """Check that /menu holds only main.mnu with the text given, and that
+    the editor left nothing in its temporary directory."""
+    assert s.sh("cat /menu/main.mnu") == text
+    assert ll_names(s, "/menu") == ["main.mnu"]
+    assert ll_names(s, "/home/user1/tmp") == []
+
+
 def rewrite_with_ed(s):
     ed_session(s, [("ed /menu/main.mnu", "9\n"), ("1c", ""), ("new menu", ""),
                    (".", ""), ("w", "9\n"), ("q", "")])
-    assert s.sh("cat /menu/main.mnu") == "new menu"
-    assert ll_names(s, "/menu") == ["main.mnu"]
+    assert_nothing_left(s, "new menu")
 
 
 def rewrite_with_vi(s):
@@ -424,8 +431,7 @@ def rewrite_with_vi(s):
     vi.wait_status('"/menu/main.mnu" 1L, 9C written')
     vi.keys(":q\r")
     vi.wait_exit()
-    assert s.sh("cat /menu/main.mnu") == "new menu"
-    assert ll_names(s, "/menu") == ["main.mnu"]
+    assert_nothing_left(s, "new menu")
 
 
 def test_ed_rewrites_a_file_in_a_directory_without_create(s):
@@ -446,6 +452,32 @@ def test_ed_rewrites_a_file_in_a_directory_without_delete(s):
 def test_vi_rewrites_a_file_in_a_directory_without_delete(s):
     boot_with_menu(s, "rwcls")
     rewrite_with_vi(s)
+
+
+def test_ed_saves_through_home_tmp_when_tmpdir_is_empty(s):
+    boot_with_menu(s, "rwls")
+    s.sh("export TMPDIR=")
+    rewrite_with_ed(s)
+
+
+def test_ed_cannot_save_without_write_and_leaves_nothing(s):
+    boot_with_menu(s, "rls")
+    ed_session(s, [("ed /menu/main.mnu", "9\n"), ("1c", ""), ("new menu", ""),
+                   (".", ""), ("w", "?\n"), ("q", "?\n"), ("q", "")])
+    assert_nothing_left(s, "old menu")
+
+
+def test_vi_cannot_save_without_write_and_leaves_nothing(s):
+    boot_with_menu(s, "rls")
+    vi = ViTerminal(s, "vi /menu/main.mnu")
+    vi.wait_lines(vi_lines(["old menu"]))
+    vi.keys("xxxinew\x1b")
+    vi.wait_lines(vi_lines(["new menu"]))
+    vi.keys(":w\r")
+    vi.wait_status("Cannot open file for writing")
+    vi.keys(":q!\r")
+    vi.wait_exit()
+    assert_nothing_left(s, "old menu")
 
 
 def test_ed_rewrites_a_file_in_a_directory_with_delete_but_not_create(s):
