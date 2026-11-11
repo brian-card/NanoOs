@@ -29,13 +29,16 @@
 ///
 /// @brief The editing commands that write files:  w and W.
 
+#include <errno.h>
 #include "Ex.h"
 
 /// @fn static void exWriteFile(ExState *state)
 ///
 /// @brief Write lines to a file:  the w and W commands.  The w command
 /// writes to a temporary file that replaces the target only once it is
-/// complete, so a failed write leaves the target as it was.
+/// complete, so a failed write leaves the target as it was, unless the
+/// directory doesn't allow creating and deleting it.  Then the target is
+/// written in place.
 ///
 /// @param state The ExState of the running editor.
 ///
@@ -73,7 +76,17 @@ static void exWriteFile(ExState *state) {
       return;
     }
     strcat(strcpy(tempName, name), "~");
-    out = fopen(tempName, "w");
+    // Removing the temporary file is refused exactly when renaming it over
+    // the target would be, so check that before creating it.
+    bool inPlace = (remove(tempName) != 0) && (errno == EACCES);
+    if (!inPlace) {
+      out = fopen(tempName, "w");
+      inPlace = (out == NULL) && (errno == EACCES);
+    }
+    if (inPlace) {
+      free(tempName); tempName = NULL;
+      out = fopen(name, "w");
+    }
   }
   if (out == NULL) {
     free(tempName);
