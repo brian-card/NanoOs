@@ -50,18 +50,21 @@ extern "C"
 
 /// @def DIRCAP_WRITE
 ///
-/// @brief Open a file for writing, appending, or reading and writing.
+/// @brief Open a file for writing, appending, or reading and writing, or
+/// replace an existing file by renaming another over it.
 #define DIRCAP_WRITE  ((uint8_t) 0x02)
 
 /// @def DIRCAP_CREATE
 ///
-/// @brief Create a file or directory, or be the destination of a rename.
+/// @brief Create a file or directory, or be the destination of a rename to a
+/// name that doesn't exist yet.  With DIRCAP_DELETE, also replace an existing
+/// file by rename.
 #define DIRCAP_CREATE ((uint8_t) 0x04)
 
 /// @def DIRCAP_DELETE
 ///
-/// @brief Remove a file or directory, or be the source of a rename or the
-/// existing destination it replaces.
+/// @brief Remove a file or directory, or be the source of a rename.  With
+/// DIRCAP_CREATE, also replace an existing file by rename.
 #define DIRCAP_DELETE ((uint8_t) 0x08)
 
 /// @def DIRCAP_LIST
