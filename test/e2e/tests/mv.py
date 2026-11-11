@@ -54,18 +54,20 @@ def test_mv_replaces_an_existing_file(s):
 
 def test_mv_moves_files_into_a_directory(s):
     s.login()
-    assert s.sh("mkdir tmp") == ""
-    assert s.sh("cp /usr/bin/helloworld/main.overlay tmp/main.overlay") == ""
+    assert s.sh("mkdir scratch") == ""
+    assert s.sh("cp /usr/bin/helloworld/main.overlay scratch/main.overlay") \
+        == ""
     assert s.sh("mkdir /usr/bin/hello2") == ""
-    assert s.sh("mv tmp/main.overlay /usr/bin/hello2") == ""
-    assert ll_names(s, "/root/tmp") == []
+    assert s.sh("mv scratch/main.overlay /usr/bin/hello2") == ""
+    assert ll_names(s, "/root/scratch") == []
     assert ll_names(s, "/usr/bin/hello2") == ["main.overlay"]
     assert s.sh("hello2") == "Hello, world!"
-    assert s.sh("mv /usr/bin/hello2/main.overlay /root/tmp/") == ""
-    assert ll_names(s, "/root/tmp") == ["main.overlay"]
-    assert s.sh("mv /etc/catfile /etc/hostname /root/tmp") == ""
-    assert ll_names(s, "/root/tmp") == ["catfile", "hostname", "main.overlay"]
-    assert s.sh("cat /root/tmp/catfile") == CATFILE_CONTENTS
+    assert s.sh("mv /usr/bin/hello2/main.overlay /root/scratch/") == ""
+    assert ll_names(s, "/root/scratch") == ["main.overlay"]
+    assert s.sh("mv /etc/catfile /etc/hostname /root/scratch") == ""
+    assert ll_names(s, "/root/scratch") == \
+        ["catfile", "hostname", "main.overlay"]
+    assert s.sh("cat /root/scratch/catfile") == CATFILE_CONTENTS
     assert ll_names(s, "/etc") == ["issue"]
     assert fsck_problems(s) == []
 

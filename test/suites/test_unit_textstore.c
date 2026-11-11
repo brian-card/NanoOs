@@ -10,7 +10,9 @@
 #include "NanoOsTest.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "../../usr/src/lib/textstore/include/TextStore.h"
@@ -52,14 +54,65 @@ static int randomBelow(int limit) {
   return (int) ((randomState >> 8) % (uint32_t) limit);
 }
 
+/// @var tempDirectory
+///
+/// @brief A directory made for the running test.
+static char tempDirectory[32];
+
+/// @fn static void removeTempDirectory(void)
+///
+/// @brief Remove the running test's directory, and the tmp directory a
+/// TextStore may have made in it, when the test's process exits.
+///
+/// @return This function returns no value.
+static void removeTempDirectory(void) {
+  char path[48];
+  snprintf(path, sizeof(path), "%s/tmp", tempDirectory);
+  rmdir(path);
+  rmdir(tempDirectory);
+}
+
+/// @fn static const char* makeTempDirectory(void)
+///
+/// @brief Make an empty directory for the running test, removed when the
+/// test's process exits.
+///
+/// @return Returns the directory's path.
+static const char* makeTempDirectory(void) {
+  if (tempDirectory[0] == '\0') {
+    atexit(removeTempDirectory);
+  } else {
+    removeTempDirectory();
+  }
+  strcpy(tempDirectory, "/tmp/textstoreXXXXXX");
+  NANO_OS_ASSERT_NOT_NULL(mkdtemp(tempDirectory));
+  return tempDirectory;
+}
+
+/// @fn static bool fileIn(const char *directory, const char *name)
+///
+/// @brief Determine whether a file exists in a directory.
+///
+/// @param directory The directory.
+/// @param name The file's name.
+///
+/// @return Returns true if the file exists.
+static bool fileIn(const char *directory, const char *name) {
+  char path[96];
+  snprintf(path, sizeof(path), "%s/%s", directory, name);
+  return access(path, F_OK) == 0;
+}
+
 /// @fn static bool openStore(TextStore *store)
 ///
-/// @brief Open an empty TextStore and an empty model of it.
+/// @brief Open an empty TextStore, in a directory of the test's own, and an
+/// empty model of it.
 ///
 /// @param store The TextStore to open.
 ///
 /// @return Returns true on success, false on failure.
 static bool openStore(TextStore *store) {
+  setenv("TMPDIR", makeTempDirectory(), 1);
   memset(store, 0, sizeof(*store));
   store->buffer = textBuffer;
   modelLines = 0;
@@ -289,13 +342,79 @@ NANO_OS_TEST(unit_textstore, text_round_trips_and_close_removes_both_files) {
   fclose(out);
   NANO_OS_ASSERT_STR_EQ("three\ntwo\none\n", text);
 
-  char blockPath[sizeof(store.path) + 2];
+  char textPath[96];
+  char blockPath[100];
+  snprintf(textPath, sizeof(textPath), "%s", store.path);
   snprintf(blockPath, sizeof(blockPath), "%s.b", store.path);
-  NANO_OS_ASSERT_EQ_INT(0, access(store.path, F_OK));
+  NANO_OS_ASSERT_EQ_INT(0, access(textPath, F_OK));
   NANO_OS_ASSERT_EQ_INT(0, access(blockPath, F_OK));
   textstoreClose(&store);
-  NANO_OS_ASSERT_TRUE(access(store.path, F_OK) != 0);
+  NANO_OS_ASSERT_NULL(store.path);
+  NANO_OS_ASSERT_TRUE(access(textPath, F_OK) != 0);
   NANO_OS_ASSERT_TRUE(access(blockPath, F_OK) != 0);
+}
+
+/// @fn static void expectStoreIn(const char *directory)
+///
+/// @brief Open a TextStore with the environment the test set up, check that
+/// its files and only its files are in a directory, reset it, and close it.
+///
+/// @param directory The directory the files should be in.
+///
+/// @return This function returns no value.
+static void expectStoreIn(const char *directory) {
+  TextStore store;
+  memset(&store, 0, sizeof(store));
+  store.buffer = textBuffer;
+  NANO_OS_ASSERT_TRUE(textstoreOpen(&store, "tst"));
+  char expected[16];
+  snprintf(expected, sizeof(expected), "tst%d", (int) getpid());
+  char expectedPath[96];
+  snprintf(expectedPath, sizeof(expectedPath), "%s/%s", directory, expected);
+  NANO_OS_ASSERT_STR_EQ(expectedPath, store.path);
+  char blockName[sizeof(expected) + 2];
+  snprintf(blockName, sizeof(blockName), "%s.b", expected);
+  NANO_OS_ASSERT_TRUE(fileIn(directory, expected));
+  NANO_OS_ASSERT_TRUE(fileIn(directory, blockName));
+  NANO_OS_ASSERT_TRUE(textstoreReset(&store));
+  NANO_OS_ASSERT_TRUE(fileIn(directory, expected));
+  textstoreClose(&store);
+  NANO_OS_ASSERT_FALSE(fileIn(directory, expected));
+  NANO_OS_ASSERT_FALSE(fileIn(directory, blockName));
+}
+
+NANO_OS_TEST(unit_textstore, files_go_in_tmpdir) {
+  const char *directory = makeTempDirectory();
+  setenv("TMPDIR", directory, 1);
+  setenv("HOME", "/nonexistent", 1);
+  expectStoreIn(directory);
+}
+
+NANO_OS_TEST(unit_textstore, without_tmpdir_files_go_in_home_tmp) {
+  const char *home = makeTempDirectory();
+  unsetenv("TMPDIR");
+  setenv("HOME", home, 1);
+  char directory[48];
+  snprintf(directory, sizeof(directory), "%s/tmp", home);
+  expectStoreIn(directory);
+  struct stat st;
+  NANO_OS_ASSERT_EQ_INT(0, stat(directory, &st));
+  NANO_OS_ASSERT_TRUE(S_ISDIR(st.st_mode));
+}
+
+NANO_OS_TEST(unit_textstore, an_empty_tmpdir_counts_as_unset) {
+  const char *home = makeTempDirectory();
+  setenv("TMPDIR", "", 1);
+  setenv("HOME", home, 1);
+  char directory[48];
+  snprintf(directory, sizeof(directory), "%s/tmp", home);
+  expectStoreIn(directory);
+}
+
+NANO_OS_TEST(unit_textstore, without_tmpdir_or_home_files_go_in_tmp) {
+  unsetenv("TMPDIR");
+  unsetenv("HOME");
+  expectStoreIn("/tmp");
 }
 
 NANO_OS_TEST(unit_textstore, reset_removes_every_line) {

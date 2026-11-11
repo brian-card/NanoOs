@@ -408,15 +408,16 @@ def test_cp_copies_a_command_that_then_runs(e):
 
 def test_mv_moves_a_command_into_its_directory(e):
     assert e.sh("cd") == ""
-    assert e.sh("mkdir tmp") == ""
-    assert e.sh("cp /usr/bin/helloworld/main.overlay tmp/main.overlay") == ""
+    assert e.sh("mkdir scratch") == ""
+    assert e.sh("cp /usr/bin/helloworld/main.overlay scratch/main.overlay") \
+        == ""
     assert e.sh("mkdir /usr/bin/hello3") == ""
-    assert e.sh("mv tmp/main.overlay /usr/bin/hello3") == ""
+    assert e.sh("mv scratch/main.overlay /usr/bin/hello3") == ""
     assert e.sh("hello3") == "Hello, world!"
-    assert e.sh("mv /usr/bin/hello3/main.overlay /root/tmp") == ""
-    assert ll_names(e, "/root/tmp") == ["main.overlay"]
-    assert e.sh("mv /root/tmp/main.overlay /usr/bin/hello3") == ""
-    assert ll_names(e, "/root/tmp") == []
+    assert e.sh("mv /usr/bin/hello3/main.overlay /root/scratch") == ""
+    assert ll_names(e, "/root/scratch") == ["main.overlay"]
+    assert e.sh("mv /root/scratch/main.overlay /usr/bin/hello3") == ""
+    assert ll_names(e, "/root/scratch") == []
     assert e.sh("hello3") == "Hello, world!"
 
 
