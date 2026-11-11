@@ -167,7 +167,7 @@ static int stubPathCalls;
 
 /// @var stubMayCreate
 ///
-/// @brief The mayCreate value stubFopen was last given.
+/// @brief The mayCreate value stubFopen or stubRename was last given.
 static bool stubMayCreate;
 
 /// @var stubMayReplace
@@ -199,10 +199,11 @@ int stubRemove(void *driverState, const char *pathname) {
 }
 
 int stubRename(void *driverState, const char *oldpath, const char *newpath,
-  bool mayReplace
+  bool mayCreate, bool mayReplace
 ) {
   (void) driverState; (void) oldpath;
   stubRecordPath(newpath);
+  stubMayCreate = mayCreate;
   stubMayReplace = mayReplace;
   return 0;
 }
@@ -1817,27 +1818,57 @@ NANO_OS_KERNEL_TEST(fs_access, rename_needs_delete_on_the_source) {
   NANO_OS_ASSERT_EQ_INT(0, stubPathCalls);
 }
 
-NANO_OS_KERNEL_TEST(fs_access, rename_needs_create_on_the_destination) {
+NANO_OS_KERNEL_TEST(fs_access, rename_needs_create_or_write_on_the_destination) {
   accessFixture();
   hold(DIRCAP_DELETE, "/tmp/");
-  hold((uint8_t) (DIRCAP_ALL & ~DIRCAP_CREATE), "/etc/");
+  hold((uint8_t) (DIRCAP_ALL & ~(DIRCAP_CREATE | DIRCAP_WRITE)), "/etc/");
   NANO_OS_ASSERT_EQ_INT(-FILESYSTEM_EACCES, tryRename("/tmp/a", "/etc/b"));
   NANO_OS_ASSERT_EQ_INT(0, stubPathCalls);
 }
 
-NANO_OS_KERNEL_TEST(fs_access, delete_on_the_destination_allows_replacing) {
+NANO_OS_KERNEL_TEST(fs_access, create_alone_allows_a_new_name_only) {
   accessFixture();
   hold(DIRCAP_DELETE, "/tmp/");
   hold(DIRCAP_CREATE, "/etc/");
   NANO_OS_ASSERT_EQ_INT(0, tryRename("/tmp/a", "/etc/b"));
   NANO_OS_ASSERT_EQ_INT(1, stubPathCalls);
+  NANO_OS_ASSERT_TRUE(stubMayCreate);
   NANO_OS_ASSERT_FALSE(stubMayReplace);
+}
 
+NANO_OS_KERNEL_TEST(fs_access, create_and_delete_on_the_destination_allow_both) {
   accessFixture();
   hold(DIRCAP_DELETE, "/tmp/");
   hold(DIRCAP_CREATE | DIRCAP_DELETE, "/etc/");
   NANO_OS_ASSERT_EQ_INT(0, tryRename("/tmp/a", "/etc/b"));
+  NANO_OS_ASSERT_TRUE(stubMayCreate);
   NANO_OS_ASSERT_TRUE(stubMayReplace);
+}
+
+NANO_OS_KERNEL_TEST(fs_access, write_on_the_destination_allows_replacing_only) {
+  accessFixture();
+  hold(DIRCAP_DELETE, "/tmp/");
+  hold(DIRCAP_WRITE, "/etc/");
+  NANO_OS_ASSERT_EQ_INT(0, tryRename("/tmp/a", "/etc/b"));
+  NANO_OS_ASSERT_EQ_INT(1, stubPathCalls);
+  NANO_OS_ASSERT_FALSE(stubMayCreate);
+  NANO_OS_ASSERT_TRUE(stubMayReplace);
+}
+
+NANO_OS_KERNEL_TEST(fs_access, delete_without_create_on_the_destination_is_refused) {
+  accessFixture();
+  hold(DIRCAP_DELETE, "/tmp/");
+  hold((uint8_t) (DIRCAP_DELETE | DIRCAP_READ), "/etc/");
+  NANO_OS_ASSERT_EQ_INT(-FILESYSTEM_EACCES, tryRename("/tmp/a", "/etc/b"));
+  NANO_OS_ASSERT_EQ_INT(0, stubPathCalls);
+}
+
+NANO_OS_KERNEL_TEST(fs_access, write_on_the_destination_does_not_excuse_the_source) {
+  accessFixture();
+  hold((uint8_t) (DIRCAP_ALL & ~DIRCAP_DELETE), "/tmp/");
+  hold(DIRCAP_WRITE, "/etc/");
+  NANO_OS_ASSERT_EQ_INT(-FILESYSTEM_EACCES, tryRename("/tmp/a", "/etc/b"));
+  NANO_OS_ASSERT_EQ_INT(0, stubPathCalls);
 }
 
 NANO_OS_KERNEL_TEST(fs_access, delete_on_the_source_does_not_allow_replacing) {

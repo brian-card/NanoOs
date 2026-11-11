@@ -389,17 +389,21 @@ def test_a_shadow_line_must_match_the_whole_name(s):
 
 
 def boot_with_menu(s, permissions):
-    """Boot with the shipped files, which give everyone rwls on /menu/, and
-    a line that makes it the permissions given.
+    """Boot with the shipped files, with everyone's permissions on /menu/
+    changed to the ones given, a /menu/main.mnu, and a file in user1's home
+    to move over it.
 
     @param s The Session.
     @param permissions The permissions everyone should have on /menu/.
     """
-    boot_with(s, {"/etc/capabilities": repo_file("etc", "capabilities")
-                  + "* %s /menu/\n" % permissions,
+    lines = [line for line in repo_file("etc", "capabilities").splitlines()
+             if not line.endswith(" /menu/")]
+    boot_with(s, {"/etc/capabilities": "\n".join(lines)
+                  + "\n* %s /menu/\n" % permissions,
                   "/system/data/capabilities":
                   repo_file("etc", "system", "capabilities"),
-                  "/menu/main.mnu": "old menu\n"}, HOMES + ("/menu",))
+                  "/menu/main.mnu": "old menu\n",
+                  "/home/user1/new.mnu": "new menu\n"}, HOMES + ("/menu",))
     s.login("user1", "user1user1")
     assert "%-7s  /menu/" % permissions in s.sh("caps").splitlines()
 
@@ -452,6 +456,46 @@ def test_ed_rewrites_a_file_in_a_directory_with_delete_but_not_create(s):
 def test_vi_rewrites_a_file_in_a_directory_with_delete_but_not_create(s):
     boot_with_menu(s, "rwdls")
     rewrite_with_vi(s)
+
+
+def test_mv_replaces_a_file_with_only_write_on_its_directory(s):
+    boot_with_menu(s, "rwls")
+    assert s.sh("mv /home/user1/new.mnu /menu/main.mnu") == ""
+    assert s.sh("cat /menu/main.mnu") == "new menu"
+    assert ll_names(s, "/menu") == ["main.mnu"]
+    assert "new.mnu" not in ll_names(s, "/home/user1")
+
+
+def test_mv_replaces_a_file_with_create_and_delete_but_not_write(s):
+    boot_with_menu(s, "rcdls")
+    assert s.sh("mv /home/user1/new.mnu /menu/main.mnu") == ""
+    assert s.sh("cat /menu/main.mnu") == "new menu"
+
+
+def test_mv_to_a_new_name_needs_create(s):
+    boot_with_menu(s, "rwls")
+    assert s.sh("mv /home/user1/new.mnu /menu/other.mnu") == (
+        'ERROR: Could not rename "/home/user1/new.mnu" to "/menu/other.mnu": '
+        + DENIED)
+    assert ll_names(s, "/menu") == ["main.mnu"]
+    assert s.sh("cat /home/user1/new.mnu") == "new menu"
+
+
+def test_mv_cannot_replace_without_write(s):
+    boot_with_menu(s, "rls")
+    assert s.sh("mv /home/user1/new.mnu /menu/main.mnu") == (
+        'ERROR: Could not rename "/home/user1/new.mnu" to "/menu/main.mnu": '
+        + DENIED)
+    assert s.sh("cat /menu/main.mnu") == "old menu"
+    assert s.sh("cat /home/user1/new.mnu") == "new menu"
+
+
+def test_changing_only_a_names_case_needs_create(s):
+    boot_with_menu(s, "rwdls")
+    assert s.sh("mv /menu/main.mnu /menu/MAIN.mnu") == (
+        'ERROR: Could not rename "/menu/main.mnu" to "/menu/MAIN.mnu": '
+        + DENIED)
+    assert ll_names(s, "/menu") == ["main.mnu"]
 
 
 def test_ed_cannot_create_a_file_in_a_directory_without_create(s):
