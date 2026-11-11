@@ -45,7 +45,7 @@
 
 // Prototypes used by this handler.
 int driverRename(void *driverState, const char *oldpath, const char *newpath,
-  bool mayReplace);
+  bool mayCreate, bool mayReplace);
 
 /// @def RENAME_NO_DRIVER_ERRNO
 ///
@@ -80,14 +80,21 @@ void* RenameFile(void *args) {
     returnValue = -FILESYSTEM_PATH_ENOMEM;
   } else if (!filesystemPathAllowed(filesystemState, processMessage, oldpath,
       false, DIRCAP_DELETE)
-    || !filesystemPathAllowed(filesystemState, processMessage, newpath,
-      false, DIRCAP_CREATE)
   ) {
     returnValue = -FILESYSTEM_EACCES;
-  } else if (filesystemState->driverState != NULL) {
-    returnValue = driverRename(filesystemState->driverState, oldpath, newpath,
-      filesystemPathAllowed(filesystemState, processMessage, newpath,
-        false, DIRCAP_DELETE));
+  } else {
+    bool mayCreate = filesystemPathAllowed(filesystemState, processMessage,
+      newpath, false, DIRCAP_CREATE);
+    bool mayReplace = filesystemPathAllowed(filesystemState, processMessage,
+        newpath, false, DIRCAP_WRITE)
+      || (mayCreate && filesystemPathAllowed(filesystemState, processMessage,
+        newpath, false, DIRCAP_DELETE));
+    if (!mayCreate && !mayReplace) {
+      returnValue = -FILESYSTEM_EACCES;
+    } else if (filesystemState->driverState != NULL) {
+      returnValue = driverRename(filesystemState->driverState,
+        oldpath, newpath, mayCreate, mayReplace);
+    }
   }
   if (oldpath != filesystemRenameArgs->oldpath) {
     free(oldpath);

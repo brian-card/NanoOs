@@ -80,12 +80,14 @@ static bool fat32EntryIsOpen(
 /// @param driverState  Pointer to a Fat32DriverState (passed as void*).
 /// @param oldpath      The null-terminated current path of the file.
 /// @param newpath      The null-terminated path the file is to have.
+/// @param mayCreate    Whether the caller may give the file a name that
+///                     doesn't exist yet.
 /// @param mayReplace   Whether the caller may replace a file at the new path.
 ///
 /// @return 0 on success, or the negated errno value on failure.
 ///
 int driverRename(void *driverState, const char *oldpath, const char *newpath,
-  bool mayReplace
+  bool mayCreate, bool mayReplace
 ) {
   Fat32DriverState *ds = (Fat32DriverState *) driverState;
 
@@ -140,6 +142,12 @@ int driverRename(void *driverState, const char *oldpath, const char *newpath,
   bool targetIsSource = targetExists
     && (newEntry.dirCluster == oldEntry.dirCluster)
     && (newEntry.offsetInCluster == oldEntry.offsetInCluster);
+
+  if ((result == FAT32_SUCCESS) && (!targetExists || targetIsSource)
+    && !mayCreate
+  ) {
+    result = FAT32_ACCESS_DENIED;
+  }
 
   if ((result == FAT32_SUCCESS) && targetExists && !targetIsSource) {
     if (caseConflict) {
