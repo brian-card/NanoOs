@@ -91,6 +91,15 @@ def test_the_driver_refuses_to_replace_without_the_delete_bit(s):
     assert "/tmp/acc/to/y holds original" in out, out
 
 
+def test_the_driver_refuses_to_open_for_writing_without_the_write_bit(s):
+    s.login()
+    out = s.sh("dirtest access")
+    assert "create without w -> -1, errno=4" in out, out
+    assert "stat refused create without w -> -1, errno=8" in out, out
+    assert "write existing without w -> -1, errno=4" in out, out
+    assert out.count("/tmp/acc/to/y holds original") == 2, out
+
+
 def test_a_rename_to_a_new_name_needs_no_delete_on_the_destination(s):
     s.login()
     out = s.sh("dirtest access")

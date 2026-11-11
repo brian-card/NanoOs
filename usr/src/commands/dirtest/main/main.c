@@ -138,6 +138,21 @@ static void showResult(const char *label, int result) {
   errno = 0;
 }
 
+/// @brief Open a file, print the outcome, and close it if it opened.
+///
+/// @param label What the call was.
+/// @param path The file's path.
+/// @param mode The fopen mode.
+///
+/// @return This function returns no value.
+static void showOpen(const char *label, const char *path, const char *mode) {
+  FILE *file = fopen(path, mode);
+  showResult(label, (file == NULL) ? -1 : 0);
+  if (file != NULL) {
+    fclose(file);
+  }
+}
+
 /// @brief Narrow the process's set so that the filesystem driver has to
 /// refuse to create and to replace a file, and show that it does.
 ///
@@ -176,6 +191,11 @@ static void showAccess(void) {
   showLine("/tmp/acc/to/y");
   showResult("rename to new name", rename("/tmp/acc/from/x", "/tmp/acc/to/z"));
   showResult("stat renamed", lstat("/tmp/acc/to/z", &st));
+
+  showOpen("create without w", "/tmp/acc/to/new", "w");
+  showResult("stat refused create without w", lstat("/tmp/acc/to/new", &st));
+  showOpen("write existing without w", "/tmp/acc/to/y", "w");
+  showLine("/tmp/acc/to/y");
 }
 
 /// @brief Print the process's directory capabilities, one per line.

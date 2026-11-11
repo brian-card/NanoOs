@@ -29,7 +29,8 @@
 import os
 import subprocess
 
-from harness import REPO_ROOT
+from harness import REPO_ROOT, ed_session, ll_names
+from tests.vi import ViTerminal, vi_lines
 
 DENIED = "Permission denied"
 READ_SHADOW = "cat /secure/shadow"
@@ -385,3 +386,76 @@ def test_a_shadow_line_must_match_the_whole_name(s):
     s.child.expect("password: ", timeout=10)
     s.child.sendline("wonderland")
     s.child.expect("Login failed!", timeout=10)
+
+
+def boot_with_menu(s, permissions):
+    """Boot with the shipped files, which give everyone rwls on /menu/, and
+    a line that makes it the permissions given.
+
+    @param s The Session.
+    @param permissions The permissions everyone should have on /menu/.
+    """
+    boot_with(s, {"/etc/capabilities": repo_file("etc", "capabilities")
+                  + "* %s /menu/\n" % permissions,
+                  "/system/data/capabilities":
+                  repo_file("etc", "system", "capabilities"),
+                  "/menu/main.mnu": "old menu\n"}, HOMES + ("/menu",))
+    s.login("user1", "user1user1")
+    assert "%-7s  /menu/" % permissions in s.sh("caps").splitlines()
+
+
+def rewrite_with_ed(s):
+    ed_session(s, [("ed /menu/main.mnu", "9\n"), ("1c", ""), ("new menu", ""),
+                   (".", ""), ("w", "9\n"), ("q", "")])
+    assert s.sh("cat /menu/main.mnu") == "new menu"
+    assert ll_names(s, "/menu") == ["main.mnu"]
+
+
+def rewrite_with_vi(s):
+    vi = ViTerminal(s, "vi /menu/main.mnu")
+    vi.wait_lines(vi_lines(["old menu"]))
+    vi.keys("xxxinew\x1b")
+    vi.wait_lines(vi_lines(["new menu"]))
+    vi.keys(":w\r")
+    vi.wait_status('"/menu/main.mnu" 1L, 9C written')
+    vi.keys(":q\r")
+    vi.wait_exit()
+    assert s.sh("cat /menu/main.mnu") == "new menu"
+    assert ll_names(s, "/menu") == ["main.mnu"]
+
+
+def test_ed_rewrites_a_file_in_a_directory_without_create(s):
+    boot_with_menu(s, "rwls")
+    rewrite_with_ed(s)
+
+
+def test_vi_rewrites_a_file_in_a_directory_without_create(s):
+    boot_with_menu(s, "rwls")
+    rewrite_with_vi(s)
+
+
+def test_ed_rewrites_a_file_in_a_directory_without_delete(s):
+    boot_with_menu(s, "rwcls")
+    rewrite_with_ed(s)
+
+
+def test_vi_rewrites_a_file_in_a_directory_without_delete(s):
+    boot_with_menu(s, "rwcls")
+    rewrite_with_vi(s)
+
+
+def test_ed_rewrites_a_file_in_a_directory_with_delete_but_not_create(s):
+    boot_with_menu(s, "rwdls")
+    rewrite_with_ed(s)
+
+
+def test_vi_rewrites_a_file_in_a_directory_with_delete_but_not_create(s):
+    boot_with_menu(s, "rwdls")
+    rewrite_with_vi(s)
+
+
+def test_ed_cannot_create_a_file_in_a_directory_without_create(s):
+    boot_with_menu(s, "rwls")
+    ed_session(s, [("ed", ""), ("a", ""), ("text", ""), (".", ""),
+                   ("w /menu/new.mnu", "?\n"), ("q", "?\n"), ("q", "")])
+    assert ll_names(s, "/menu") == ["main.mnu"]
