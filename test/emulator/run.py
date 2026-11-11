@@ -615,7 +615,7 @@ def test_no_traps_were_reported(e):
 
 def test_filesystem_is_consistent_after_shutdown(e):
     e.send("shutdown -h\r")
-    time.sleep(3)
+    assert e.process.wait(timeout=15) == 0, "the emulator did not exit cleanly"
     partition = os.path.join(e.tmp, "partition.img")
     subprocess.run(["dd", "if=" + os.path.join(e.tmp, "NanoOs.img"),
                     "of=" + partition, "bs=1M", "skip=2", "status=none"],
