@@ -58,6 +58,9 @@ int main(int argc, char **argv) {
   int returnValue = 0;
 
   printf("%s %s\n",
+    "caps:                   ",
+    "Print the directories this process may use.");
+  printf("%s %s\n",
     "cat:                    ",
     "Write the contents of a file to the current console.");
   printf("%s %s\n",
