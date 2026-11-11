@@ -131,7 +131,7 @@ void* exStart(void *args) {
 
   textstoreChainInit(&state->history);
   if (!textstoreOpen(&state->store, state->name)) {
-    fprintf(stderr, "%s: cannot create %s\n", state->name, state->store.path);
+    fprintf(stderr, "%s: cannot create a temporary file\n", state->name);
     return args;
   }
   if (state->params == NULL) {
