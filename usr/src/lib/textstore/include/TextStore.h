@@ -49,6 +49,11 @@ extern "C"
 {
 #endif
 
+#ifndef environ
+// NanoOs defines environ as a macro; a host build declares it here.
+extern char **environ;
+#endif
+
 /// @def TEXTSTORE_BUFFER_SIZE
 ///
 /// @brief The size, in bytes, of the buffer text is moved through.
@@ -173,8 +178,8 @@ typedef struct TextStoreChain {
 ///   through, provided by the client.
 /// @param error The TextStoreError of the operation that failed, or a code of
 ///   the client's own.
-/// @param path The path of the text file.  The block file's is the same with
-///   ".b" added.
+/// @param path The full path of the text file, allocated while the store is
+///   open.  The block file's is the same with ".b" added.
 typedef struct TextStore {
   FILE           *text;
   uint32_t        textEnd;
@@ -190,7 +195,7 @@ typedef struct TextStore {
   TextStoreBlock  cache;
   char           *buffer;
   uint8_t         error;
-  char            path[16];
+  char           *path;
 } TextStore;
 
 /// @fn static inline bool textstoreSeek(TextStore *store, uint16_t block,
@@ -454,6 +459,43 @@ static inline int textstoreLocate(TextStore *store, int line) {
   return line - first;
 }
 
+/// @fn static inline char* textstorePathNew(const char *name)
+///
+/// @brief Allocate the full path of a file in the temporary directory:
+/// $TMPDIR, or $HOME/tmp if TMPDIR is unset or empty, or /tmp if HOME is too.
+/// The path has room for ".b" to be added.
+///
+/// @param name The file's name.
+///
+/// @return Returns the path, which the caller must free, or NULL if memory ran
+/// out.
+static inline char* textstorePathNew(const char *name) {
+  const char *tmpdir = "";
+  const char *home = "";
+  for (char **variable = environ; (variable != NULL) && (*variable != NULL);
+    variable++
+  ) {
+    if (strncmp(*variable, "TMPDIR=", 7) == 0) {
+      tmpdir = &(*variable)[7];
+    } else if (strncmp(*variable, "HOME=", 5) == 0) {
+      home = &(*variable)[5];
+    }
+  }
+
+  bool useHome = (*tmpdir == '\0');
+  char *path = (char*) malloc(strlen(useHome ? home : tmpdir) + strlen(name)
+    + 8);
+  if (path != NULL) {
+    strcpy(path, useHome ? home : tmpdir);
+    if (useHome) {
+      strcat(path, "/tmp");
+    }
+    strcat(path, "/");
+    strcat(path, name);
+  }
+  return path;
+}
+
 /// @fn static inline bool textstoreInit(TextStore *store, const char *mode)
 ///
 /// @brief Open the text file and block file and start with no lines.
@@ -465,11 +507,11 @@ static inline int textstoreLocate(TextStore *store, int line) {
 /// in which case neither file is open.
 static inline bool textstoreInit(TextStore *store, const char *mode) {
   static const uint8_t zeros[32] = { 0 };
-  char blockPath[sizeof(store->path) + 2];
-  strcpy(blockPath, store->path);
-  strcat(blockPath, ".b");
+  size_t length = strlen(store->path);
   store->text = fopen(store->path, mode);
-  store->blocks = fopen(blockPath, mode);
+  strcpy(&store->path[length], ".b");
+  store->blocks = fopen(store->path, mode);
+  store->path[length] = '\0';
   bool ok = (store->text != NULL) && (store->blocks != NULL);
   for (size_t ii = 0; ok && (ii < TEXTSTORE_HEADER_SIZE); ii += sizeof(zeros)) {
     ok = (fwrite(zeros, sizeof(zeros), 1, store->blocks) == 1);
@@ -501,19 +543,36 @@ static inline bool textstoreInit(TextStore *store, const char *mode) {
 
 /// @fn static inline bool textstoreOpen(TextStore *store, const char *prefix)
 ///
-/// @brief Create an empty text file and block file under /tmp, named with a
-/// prefix and the process ID.
+/// @brief Create an empty text file and block file in the temporary
+/// directory, named with a prefix and the process ID.
 ///
 /// @param store The TextStore to open.
 /// @param prefix The start of the text file's name.
 ///
 /// @return Returns true on success, false with store->error set on failure.
 static inline bool textstoreOpen(TextStore *store, const char *prefix) {
-  // /tmp may already exist, so a failure here is only a problem if the files
-  // can't be created below.
-  mkdir("/tmp", 0777);
-  snprintf(store->path, sizeof(store->path), "/tmp/%s%d", prefix, getpid());
-  return textstoreInit(store, "w+");
+  char name[16];
+  snprintf(name, sizeof(name), "%s%d", prefix, getpid());
+  store->path = textstorePathNew(name);
+  if (store->path == NULL) {
+    store->text = NULL;
+    store->blocks = NULL;
+    store->error = TEXTSTORE_ERROR_IO;
+    return false;
+  }
+
+  // The directory may already exist, so a failure here is only a problem if
+  // the files can't be created below.
+  char *slash = strrchr(store->path, '/');
+  *slash = '\0';
+  mkdir(store->path, 0777);
+  *slash = '/';
+  if (!textstoreInit(store, "w+")) {
+    free(store->path);
+    store->path = NULL;
+    return false;
+  }
+  return true;
 }
 
 /// @fn static inline bool textstoreReset(TextStore *store)
@@ -541,10 +600,13 @@ static inline bool textstoreReset(TextStore *store) {
 static inline void textstoreClose(TextStore *store) {
   fclose(store->text);
   fclose(store->blocks);
-  remove(store->path);
-  strcat(store->path, ".b");
-  remove(store->path);
-  store->path[strlen(store->path) - 2] = '\0';
+  if (store->path != NULL) {
+    remove(store->path);
+    strcat(store->path, ".b");
+    remove(store->path);
+    free(store->path);
+    store->path = NULL;
+  }
   store->text = NULL;
   store->blocks = NULL;
 }
