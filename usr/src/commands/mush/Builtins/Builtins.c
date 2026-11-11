@@ -33,6 +33,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stddef.h>
+#include <sys/stat.h>
 #include "NanoOsUtils.h"
 
 /// @fn void* processBuiltin(void *args)
@@ -73,20 +74,38 @@ void* processBuiltin(void *args) {
       return returnValue;
     }
     
-    char *path = (char*) malloc(96);
+    // The stat buffer shares the path's allocation to keep it off the stack.
+    char *path = (char*) malloc(96 + sizeof(struct stat));
     if (path == NULL) {
       errno = ENOMEM;
       return (void*) ((intptr_t) -3);
     }
     
-    if (*input == '/') {
-      strcpy(path, input);
+    int length = (*input == '/') ? snprintf(path, 96, "%s", input)
+      : snprintf(path, 96, "%s/%s", getenv("PWD"), input);
+    struct stat *st = (struct stat*) &path[96];
+    int error = 0;
+    if (length >= 96) {
+      error = ENAMETOOLONG;
     } else {
-      snprintf(path, 96, "%s/%s", getenv("PWD"), input);
+      pathCollapse(path);
+      if (lstat(path, st) != 0) {
+        error = errno;
+      } else if (!S_ISDIR(st->st_mode)) {
+        error = ENOTDIR;
+      }
     }
-    pathCollapse(path);
-    setenv("OLDPWD", getenv("PWD"), true);
-    setenv("PWD", path, true);
+    if (error != 0) {
+      fputs("cd: ", stderr);
+      fputs(input, stderr);
+      fputs(": ", stderr);
+      fputs(strerror(error), stderr);
+      fputs("\n", stderr);
+      returnValue = (void*) ((intptr_t) 1);
+    } else {
+      setenv("OLDPWD", getenv("PWD"), true);
+      setenv("PWD", path, true);
+    }
     
     free(path); path = NULL;
   } else if ((strncmp(input, "export", 6) == 0)
