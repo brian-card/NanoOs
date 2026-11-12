@@ -136,6 +136,9 @@ int killCommandHandler(int argc, char **argv) {
   ProcessId processId = (ProcessId) strtol(argv[1], NULL, 10);
 
   int returnValue = schedulerKillProcess(processId);
+  if (returnValue == 0) {
+    printf("Termination of process %d successful.\n", (int) processId);
+  }
 
   return returnValue;
 }
