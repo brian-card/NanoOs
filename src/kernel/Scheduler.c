@@ -2791,6 +2791,9 @@ int closeProcessFileDescriptors(ProcessDescriptor *processDescriptor) {
       // Clear the pid of the waiting process's stdin file descriptor.
       fileDescriptor->pipeEnd->pipeEnd = NULL;
       fileDescriptor->pipeEnd->inputChannel.pid = PROCESS_ID_NOT_SET;
+      // Another process may still hold this end, and the other end can now be
+      // freed without clearing this link.
+      fileDescriptor->pipeEnd = NULL;
 
       ProcessId waitingOutputPid = fileDescriptor->outputChannel.pid;
       if (waitingOutputPid != PROCESS_ID_NOT_SET) {
