@@ -2537,6 +2537,37 @@ static __attribute__((noinline)) char** envpBlockFill(char *block,
   return envpArray;
 }
 
+/// @fn char** envpLower(char **envp)
+///
+/// @brief Move an envp block to the first free block that holds it, if that is
+/// lower in memory.  A block allocated while other processes held memory
+/// otherwise stays in the middle of the free space for as long as the process
+/// that inherits it runs.
+///
+/// @param envp The envp array whose block to move.  May be NULL.
+///
+/// @return Returns the envp array to use, which is envp itself if the block
+/// was not moved.
+static __attribute__((noinline)) char** envpLower(char **envp) {
+  if (envp == NULL) {
+    return envp;
+  }
+  size_t envpBytes = envpBlockSize(envp);
+  if (envpBytes == 0) {
+    return envp;
+  }
+  char *block = (char*) schedCalloc(1, envpBytes);
+  if (block == NULL) {
+    return envp;
+  } else if (((uintptr_t) block) > ((uintptr_t) envp[0])) {
+    schedFree(block);
+    return envp;
+  }
+  char **lowered = envpBlockFill(block, envp);
+  schedFree(envp[0]);
+  return lowered;
+}
+
 /// @fn static int schedulerExecvePath(const char *pathname,
 ///   char *const argv[], char *const envp[], bool isFullPath)
 ///
@@ -3296,40 +3327,6 @@ int schedGetFileBlockMetadataFromFile(
 /// final binary on some targets.
 static const char _readMode[] KEEP_IN_FLASH = "r";
 
-/// @fn int schedGetFileBlockMetadataFromPath(const char *path,
-///   FileBlockMetadata *metadata)
-///
-/// @brief Get the block-level metadata for a given path.
-///
-/// @param path A string representing a path to a file on the filesystem.
-/// @param metadata A pointer to a FileBlockMetadata structure the caller wants
-///   populated.
-///
-/// @return Returns 0 on success, -errno on failure.
-int schedGetFileBlockMetadataFromPath(
-  const char *path, FileBlockMetadata *metadata
-) {
-  if ((path == NULL) || (metadata == NULL)) {
-    return -EINVAL;
-  }
-
-  errno = 0;
-  FILE *stream = schedFopenFullPath(path, _readMode);
-  if (stream == NULL) {
-    int errorNumber = (errno != 0) ? errno : EIO;
-    // A missing file is routine here: execve and posix_spawn search PATH.
-    if (errorNumber != ENOENT) {
-      logError("Could not open file\n");
-    }
-    return -errorNumber;
-  }
-  errno = 0;
-  int returnValue = schedGetFileBlockMetadataFromFile(stream, metadata);
-  schedFclose(stream); stream = NULL;
-
-  return returnValue;
-}
-
 /// @var _mainOverlayPath
 ///
 /// @brief Path suffix used to locate an overlay namespace's main overlay
@@ -3379,42 +3376,38 @@ static const char _overlayVersionExpectedMessage[] KEEP_IN_FLASH
 /// final binary on some targets.
 static const char _overlayVersionNewline[] KEEP_IN_FLASH = "\n";
 
-/// @fn int schedulerCheckOverlayHeader(ProcessDescriptor *processDescriptor)
+/// @fn static int schedulerCheckOverlayHeader(FILE *stream,
+///   FileBlockMetadata *metadata)
 ///
-/// @brief Check that a process's overlay starts with a header this kernel can
+/// @brief Check that an open overlay file starts with a header this kernel can
 /// run, so that exec and spawn can report a bad command to their caller
-/// instead of it failing to load once the caller is gone.
+/// instead of it failing to load once the caller is gone.  The header is read
+/// through the stream so that the check doesn't need a block-sized allocation
+/// at the peak of a launch.
 ///
-/// @param processDescriptor A pointer to the ProcessDescriptor whose overlay
-///   metadata has been loaded.
+/// @param stream A pointer to the overlay file, open at its beginning.
+/// @param metadata A pointer to the overlay's FileBlockMetadata.
 ///
 /// @return Returns 0 on success, -errno on failure.
-static int schedulerCheckOverlayHeader(ProcessDescriptor *processDescriptor) {
-  FileBlockMetadata *metadata = &processDescriptor->overlay.fileBlockMetadata;
-  BlockDevice *blockDevice = metadata->blockDevice;
-  if ((blockDevice == NULL)
-    || (processDescriptor->overlay.overlayFifoNode != NULL)
-  ) {
-    // Only overlays that loaded successfully are in the file cache.
+static int schedulerCheckOverlayHeader(
+  FILE *stream, FileBlockMetadata *metadata
+) {
+  if (metadata->blockDevice == NULL) {
     return 0;
   } else if (metadata->numBlocks == 0) {
     return -ENOEXEC;
   }
 
-  uint8_t *block = (uint8_t*) schedMalloc(blockDevice->blockSize);
-  if (block == NULL) {
+  NanoOsOverlayHeader *header
+    = (NanoOsOverlayHeader*) schedMalloc(sizeof(NanoOsOverlayHeader));
+  if (header == NULL) {
     return -ENOMEM;
   }
-  if (blockDevice->readBlocks(blockDevice->context,
-    metadata->startBlock, 1, blockDevice->blockSize, block) != 0
-  ) {
-    schedFree(block);
-    return -EIO;
-  }
-  const NanoOsOverlayHeader *header = (const NanoOsOverlayHeader*) block;
 
   int returnValue = 0;
-  if (header->magic != NANO_OS_OVERLAY_MAGIC) {
+  if (schedFread(header, sizeof(NanoOsOverlayHeader), 1, stream) != 1) {
+    returnValue = -ENOEXEC;
+  } else if (header->magic != NANO_OS_OVERLAY_MAGIC) {
     returnValue = -ENOEXEC;
   } else if (header->version != NANO_OS_OVERLAY_VERSION) {
     printString(_overlayVersionMessage);
@@ -3424,7 +3417,41 @@ static int schedulerCheckOverlayHeader(ProcessDescriptor *processDescriptor) {
     printString(_overlayVersionNewline);
     returnValue = -ENOEXEC;
   }
-  schedFree(block);
+  schedFree(header);
+  return returnValue;
+}
+
+/// @fn static int schedGetOverlayMetadataFromPath(const char *path,
+///   FileBlockMetadata *metadata)
+///
+/// @brief Get the block-level metadata for an overlay file and check its
+/// header.
+///
+/// @param path A string representing a path to a file on the filesystem.
+/// @param metadata A pointer to a FileBlockMetadata structure the caller wants
+///   populated.
+///
+/// @return Returns 0 on success, -errno on failure.
+static int schedGetOverlayMetadataFromPath(
+  const char *path, FileBlockMetadata *metadata
+) {
+  errno = 0;
+  FILE *stream = schedFopenFullPath(path, _readMode);
+  if (stream == NULL) {
+    int errorNumber = (errno != 0) ? errno : EIO;
+    // A missing file is routine here: execve and posix_spawn search PATH.
+    if (errorNumber != ENOENT) {
+      logError("Could not open file\n");
+    }
+    return -errorNumber;
+  }
+  errno = 0;
+  int returnValue = schedGetFileBlockMetadataFromFile(stream, metadata);
+  if (returnValue == 0) {
+    returnValue = schedulerCheckOverlayHeader(stream, metadata);
+  }
+  schedFclose(stream); stream = NULL;
+
   return returnValue;
 }
 
@@ -3468,11 +3495,8 @@ int loadProcessDescriptorOverlayMetadata(ProcessDescriptor *processDescriptor) {
     processDescriptor->overlay.fileBlockMetadata
       = overlayFifoNode->fileBlockMetadata;
   } else {
-    returnValue = schedGetFileBlockMetadataFromPath(overlayPath,
+    returnValue = schedGetOverlayMetadataFromPath(overlayPath,
       &processDescriptor->overlay.fileBlockMetadata);
-  }
-  if (returnValue == 0) {
-    returnValue = schedulerCheckOverlayHeader(processDescriptor);
   }
 
   if ((returnValue == 0) && (useFileCache)) {
@@ -4117,6 +4141,8 @@ int schedulerExecveCommandHandler(
     logWarn("Could not release memory for process %ld\nMemory leak.\n",
       (long int) processDescriptor->processId);
   }
+  envp = envpLower(envp);
+  execArgs->envp = envp;
 
   execArgs->schedulerState = schedulerState;
   logDebug("Creating new process %d\n",
@@ -6293,6 +6319,7 @@ int restartOverlayShell(ProcessDescriptor *processDescriptor) {
   *digit++ = '0' + (exitStatus % 10);
   *digit = '\0';
   shellArgs[1] = _shellStatusOption;
+  processDescriptor->envp = envpLower(processDescriptor->envp);
   int returnValue = schedulerRunOverlayCommand(processDescriptor,
     processDescriptor->shellPath, (char**) shellArgs, processDescriptor->envp);
   if (returnValue == -EBUSY) {
