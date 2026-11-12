@@ -848,6 +848,14 @@ void consoleReleasePidPortCommandHandler(
     }
   }
 
+  ConsoleBuffer *consoleBuffers = consoleState->consoleBuffers;
+  for (int ii = consoleState->numConsolePorts; ii < CONSOLE_NUM_BUFFERS; ii++) {
+    if (consoleBuffers[ii].owner == processId) {
+      consoleBuffers[ii].owner = PROCESS_ID_NOT_SET;
+      consoleBuffers[ii].bufferAwaitingRelease = false;
+    }
+  }
+
   processMessageSetDone(inputMessage);
   consoleMessageCleanup(inputMessage);
 
