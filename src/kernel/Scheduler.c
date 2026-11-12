@@ -1035,6 +1035,27 @@ static inline __attribute__((always_inline)) int ipcCapabilitiesMakePrivate(
   return 0;
 }
 
+/// @fn static void ipcCapabilitiesReset(ProcessDescriptor *processDescriptor)
+///
+/// @brief Free a process's private ipcCapabilities array, if it has one, and
+/// put it back on the base user array.  Always inlined so that its frame
+/// doesn't deepen the scheduler's stack when it cleans up an exited process.
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor to reset.
+///
+/// @return This function returns no value.
+static inline __attribute__((always_inline)) void ipcCapabilitiesReset(
+  ProcessDescriptor *processDescriptor
+) {
+  if (processDescriptor->ipcCapabilitiesDynamic == true) {
+    schedFree(processDescriptor->ipcCapabilities);
+  }
+  processDescriptor->ipcCapabilities = baseUserIpcCapabilities;
+  processDescriptor->numIpcCapabilities
+    = sizeof(baseUserIpcCapabilities) / sizeof(baseUserIpcCapabilities[0]);
+  processDescriptor->ipcCapabilitiesDynamic = false;
+}
+
 /// @fn int addProcessIpcCapability(ProcessDescriptor *processDescriptor,
 ///   ProcessId destinationPid, int64_t signature, uint32_t messageType)
 ///
@@ -2006,16 +2027,6 @@ exit:
 static const char _killCouldNotCommunicate[] KEEP_IN_FLASH
   = "Could not communicate with scheduler.\n";
 
-/// @var _killSuccessFormat
-///
-/// @brief printf-style format printed by schedulerKillProcess() on a
-/// successful termination.  Takes the killed PID.
-///
-/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
-/// final binary on some targets.
-static const char _killSuccessFormat[] KEEP_IN_FLASH
-  = "Termination of process %d successful.\n";
-
 /// @var _killStatusFormat
 ///
 /// @brief printf-style format printed by schedulerKillProcess() when the
@@ -2077,9 +2088,7 @@ int schedulerKillProcess(ProcessId pid) {
   int returnValue = 0;
   if (waitStatus == processSuccess) {
     returnValue = schedulerKillProcessArgs.returnValue;
-    if (returnValue == 0) {
-      printf(_killSuccessFormat, pid);
-    } else {
+    if (returnValue != 0) {
       fprintf(stderr, _killStatusFormat,
         strerror(schedulerKillProcessArgs.errorNumber));
       errno = schedulerKillProcessArgs.errorNumber;
@@ -4376,13 +4385,7 @@ int schedulerSpawnCommandHandler(
   processDescriptor->zombie = false;
   processDescriptor->exitStatus = 0;
   processDescriptor->exitSignal = 0;
-  if (processDescriptor->ipcCapabilitiesDynamic == true) {
-    schedFree(processDescriptor->ipcCapabilities);
-  }
-  processDescriptor->ipcCapabilities = baseUserIpcCapabilities;
-  processDescriptor->numIpcCapabilities
-    = sizeof(baseUserIpcCapabilities) / sizeof(baseUserIpcCapabilities[0]);
-  processDescriptor->ipcCapabilitiesDynamic = false;
+  ipcCapabilitiesReset(processDescriptor);
   if ((spawnArgs->attrp != NULL) && !systemCommand
     && (spawnArgs->attrp->flags & POSIX_SPAWN_ALLOW_SPAWN)
     && (addProcessIpcCapability(processDescriptor, schedulerPid,
@@ -5093,6 +5096,12 @@ terminateAndRestart:
   schedulerOrphanChildren(processDescriptor);
   if (processDescriptor->restartFunction == NULL) {
     schedulerSetDirCapabilities(processDescriptor, NULL);
+    ipcCapabilitiesReset(processDescriptor);
+    if (processDescriptor->overlay.overlayIdLength > 0) {
+      schedFree(processDescriptor->overlay.overlayId);
+    }
+    processDescriptor->overlay.overlayId = NULL;
+    processDescriptor->overlay.overlayIdLength = 0;
   }
 
   if (processDescriptor->restartFunction != NULL) {
