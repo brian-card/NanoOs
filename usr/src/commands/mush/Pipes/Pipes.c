@@ -174,13 +174,6 @@ void* processPipes(void *args) {
   // Launch the last command in the foreground by having the caller run the
   // runFsCommand overlay function.
   fsCommandArgs->launchBackground = false;
-  free(fsCommandArgs->fileActions); fsCommandArgs->fileActions = NULL;
-  fsCommandArgs->numPipes = 0;
-  fsCommandArgs->pids = NULL;
-  fsCommandArgs->pipes[0] = NULL;
-  fsCommandArgs->pipes[1] = NULL;
-  fsCommandArgs->numProcessesLaunched = 0;
-  fsCommandArgs->pipeIndex = 0;
   return fsCommandArgs;
   
   // No error is possible here, so we're done and we don't need to do any

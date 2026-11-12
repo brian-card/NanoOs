@@ -30,12 +30,14 @@
 /// @brief Overlay for handling commands that run from the filesystem.
 
 #include <errno.h>
+#include <signal.h>
 #include <spawn.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 
 #include "mush.h"
 #include "NanoOsUtils.h"
@@ -189,7 +191,16 @@ void* runFsCommand(void *args) {
           // of posix_spawn, but don't chance it.
           errno = EAGAIN; // Generic "try again later" error.
         }
-        close(fsCommandArgs->pipes[fsCommandArgs->pipeIndex ^ 1][1]);
+        launchErrno = errno;
+        close(fsCommandArgs->pipes[fsCommandArgs->pipeIndex][0]);
+        close(fsCommandArgs->pipes[fsCommandArgs->pipeIndex][1]);
+        if (fsCommandArgs->numProcessesLaunched > 0) {
+          close(fsCommandArgs->pipes[fsCommandArgs->pipeIndex ^ 1][0]);
+          close(fsCommandArgs->pipes[fsCommandArgs->pipeIndex ^ 1][1]);
+        }
+        fsCommandArgs->pids[fsCommandArgs->numProcessesLaunched] = -1;
+        free(argv);
+        errno = launchErrno;
         return fsCommandArgs;
       }
       if (fsCommandArgs->numProcessesLaunched > 0) {
@@ -214,6 +225,20 @@ void* runFsCommand(void *args) {
   }
   
 exit:
+  if ((fsCommandArgs->pids != NULL) && !fsCommandArgs->launchBackground) {
+    launchErrno = errno;
+    if (fsCommandArgs->scriptPath == NULL) {
+      // Nothing will read what the earlier commands write.
+      for (int ii = 0; ii < fsCommandArgs->numProcessesLaunched; ii++) {
+        kill(fsCommandArgs->pids[ii], SIGKILL);
+        waitpid(fsCommandArgs->pids[ii], NULL, 0);
+      }
+    }
+    free(fsCommandArgs->fileActions); fsCommandArgs->fileActions = NULL;
+    fsCommandArgs->pids = NULL;
+    fsCommandArgs->numProcessesLaunched = 0;
+    errno = launchErrno;
+  }
   return returnValue;
 }
 
