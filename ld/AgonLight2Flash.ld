@@ -431,7 +431,7 @@
 *(.text._schedFread)
 *(.text._schedFgets)
 *(.text._schedGetFileBlockMetadataFromFile)
-*(.text._schedGetFileBlockMetadataFromPath)
+*(.text._schedGetOverlayMetadataFromPath)
 *(.text._loadProcessDescriptorOverlayMetadata)
 *(.text._schedulerGetNumProcessDescriptorsCommandHandler)
 *(.text._schedulerGetProcessInfoCommandHandler)
