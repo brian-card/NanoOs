@@ -20,7 +20,7 @@ Well, last week, I finally got the KVM console port working on this board. To do
 
 The default font on the VDP is an 8x8 font that I didn't like. It looked "clunky" to me. So, I implemented a 6x8 font instead. Once I'd done that, I thought about what the non-ASCII bytes should be and decided to go with the old IBM code page 437 character set used on IBM PCs.
 
-Full disclosure: I absolutely used AI to implement the VDP driver. First off, understanding VDP protocol was not something I wanted to do. Secondly, no living human should have to implement a code page 437 bitmap in this day and age. Claude is absolutely the right tool for the job for that.
+I absolutely used Claude to implement the VDP driver. First off, understanding VDP protocol was not something I wanted to do. Secondly, no living human should have to implement a code page 437 bitmap in this day and age. Claude is definitely the right tool for the job for that.
 
 Once I had that implemented, I thought about the old text-based menus I had on my XT as a kid. We had this system of menus and batch files that would make things a little simpler to navigate back in the DOS days. I knew I still had a copy of them on a CD somewhere but I couldn't remember where I put the CD. Well, I never found the CD, but I did flip through a pile of floppy disks I had and one of them was labeled "Menus and Batch Files". I grabbed my USB floppy drive and made an image of the disk, mounted it in Linux and... voila!! All the menus were still there!!!
 
