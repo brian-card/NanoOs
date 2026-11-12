@@ -66,3 +66,14 @@ def test_three_stage_pipeline_fits_a_tight_heap_after_login(s):
     s.login()
     for _ in range(3):
         assert_pipeline_runs(s)
+
+
+def test_pipelines_run_when_the_file_cache_does_not_fit(s):
+    if not (s.env or {}).get("NANO_OS_SIM_FILE_CACHE"):
+        raise SkipTest("only the file-cache configurations call overlays "
+                       "through the cache")
+    # The cache needs about 80 KB, so it can't be allocated in this heap.
+    s.restart_with_memory(small_memory_size(s) + 16384 - SMALL_MEMORY_HEAP)
+    s.login()
+    for _ in range(3):
+        assert_pipeline_runs(s)
