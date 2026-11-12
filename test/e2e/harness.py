@@ -97,6 +97,10 @@ SMALL_MEMORY_PROBE_SIZE = 75000
 _small_memory_sizes = {}
 
 
+class SkipTest(Exception):
+    """Raised by a test that doesn't apply to the configuration it runs in."""
+
+
 class Session:
     def __init__(self, sim_bin, image, env=None):
         self.sim_bin = sim_bin

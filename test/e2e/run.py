@@ -195,6 +195,8 @@ def run_case(i, label, sim_bin, env, test_module, test_name, image,
             lines.append(f"ok {i} - {label} # TODO {xfail} -- PASSES NOW, promote it")
         else:
             lines.append(f"ok {i} - {label}")
+    except harness.SkipTest as e:
+        lines.append(f"ok {i} - {label} # SKIP {e}")
     except Exception as e:  # noqa: BLE001
         msg = str(e).splitlines()[0] if str(e) else type(e).__name__
         if xfail:
