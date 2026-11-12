@@ -43,6 +43,20 @@ UP, DOWN, RIGHT, LEFT = "\x1b[A", "\x1b[B", "\x1b[C", "\x1b[D"
 HOME, END, DELETE = "\x1b[H", "\x1b[F", "\x1b[3~"
 MUSH_USAGE = "Usage: mush [script [argument ...]]"
 
+# A kernel log line, which can arrive in the middle of a command's output.
+LOG_LINE = re.compile(r"\[\d+\.\d+ [^\]]*\][^\n]*\n?")
+
+
+def sh_without_logs(s, command):
+    """Run a command and return its output with kernel log lines removed.
+
+    @param s The Session.
+    @param command The command line.
+
+    @return The output.
+    """
+    return LOG_LINE.sub("", s.sh(command)).strip("\n")
+
 
 def edit(s, keys, output):
     """Type keys at the shell prompt and wait for the command's output.
@@ -429,6 +443,35 @@ def test_pipe_into_a_missing_command_leaves_the_shell_reading_the_console(s):
     s.login()
     assert s.sh("echo a | nosuch") == "nosuch: command not found"
     assert s.sh("echo alive") == "alive"
+
+
+def test_failed_pipelines_leave_no_processes_input_or_memory_behind(s):
+    s.login()
+    heaps = []
+    for _ in range(10):
+        assert sh_without_logs(s, "ps | grep p | nosuch") == \
+            "nosuch: command not found"
+        assert sh_without_logs(s, "echo alive") == "alive"
+        ps_lines = sh_without_logs(s, "ps").splitlines()
+        assert [line.split()[-1] for line in ps_lines[1:-1]] == \
+            ["init", "console", "manager", "filesystem", "logger", "ps"], \
+            ps_lines
+        heaps.append(int(ps_lines[0].split()[-1]))
+    # The file cache fills over the first few, then the heap must hold.
+    assert min(heaps[6:]) >= min(heaps[3:6]), heaps
+
+
+def test_pipelines_return_their_memory(s):
+    s.login()
+    # Fill the file cache with a pipeline that uses only one slot, so that the
+    # slots measured below have never run a piped command.
+    for _ in range(2):
+        assert re.fullmatch(r"\d+  root ps", s.sh("ps | grep ps"))
+    before = min(heap_at_prompt(s), heap_at_prompt(s))
+    for _ in range(3):
+        assert s.sh("ps | grep p | grep t").splitlines()[0].endswith(" ps")
+    after = min(heap_at_prompt(s), heap_at_prompt(s))
+    assert after >= before, (before, after)
 
 
 def test_pipe_between_commands(s):
