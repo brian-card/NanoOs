@@ -67,6 +67,9 @@ int main(int argc, char **argv) {
   pid_t processId = (pid_t) strtol(argv[1], NULL, 10);
 
   int returnValue = kill(processId, SIGKILL);
+  if (returnValue == 0) {
+    printf("Termination of process %d successful.\n", (int) processId);
+  }
 
   return returnValue;
 }
