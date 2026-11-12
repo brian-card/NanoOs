@@ -686,10 +686,13 @@ void* callOverlayFunctionFromFileCache(const void *od, const void *oo,
   if ((overlayArray[0].overlayFifoNode == NULL)
     && (overlayArray[0].overlayId != NULL)
   ) {
-    // Put ourselves back into the cache.
+    // Put ourselves back into the cache.  A failure here is no failure of the
+    // call, so don't let it change the caller's errno.
+    int callerErrno = errno;
     overlayArray[0].overlayFifoNode = overlayFifoPush(
       fileCache, overlayArray[0].overlayId, overlayArray[0].overlayIdLength,
       &overlayArray[0].fileBlockMetadata);
+    errno = callerErrno;
   }
 
   if (overlayDir == OVERLAY_SAME_NAMESPACE) {
