@@ -95,7 +95,8 @@ void* processPipes(void *args) {
     fsCommandArgs->pipes[0] = &fsCommandArgs->pids[fsCommandArgs->numPipes];
     fsCommandArgs->pipes[1] = &fsCommandArgs->pipes[0][2];
     fsCommandArgs->pipeIndex = 0;
-  } else if ((fsCommandArgs->pids[fsCommandArgs->numProcessesLaunched] < 0)
+  } else if (((fsCommandArgs->numProcessesLaunched < fsCommandArgs->numPipes)
+      && (fsCommandArgs->pids[fsCommandArgs->numProcessesLaunched] < 0))
     || (errno != 0)
   ) {
     goto freeFileActions;
