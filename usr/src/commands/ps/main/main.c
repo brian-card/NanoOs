@@ -85,8 +85,12 @@ int main(int argc, char **argv) {
         // returnValue is 0 but the result passwd struct is NULL.  This means
         // that the function completed successfully but that there's no such
         // user.  This is not an error for the function but we need to have
-        // something to show for this user.  Set it to "unknown".
-        pwd.pw_name = "unknown";
+        // something to show for this user.
+        if (processes[ii].userId == SYSTEM_USER_ID) {
+          pwd.pw_name = "system";
+        } else {
+          pwd.pw_name = "unknown";
+        }
       }
       
       printf("%d  %s %s\n",
