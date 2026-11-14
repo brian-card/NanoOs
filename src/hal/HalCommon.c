@@ -1069,7 +1069,7 @@ int halCommonInitRootFilesystem(void) {
   threadSetContext(processDescriptor->mainThread, processDescriptor);
   processDescriptor->processId = rootFilesystemPid;
   processDescriptor->name = _filesystemName;
-  processDescriptor->userId = ROOT_USER_ID;
+  processDescriptor->userId = SYSTEM_USER_ID;
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
   HalRestartRootFilesystemFn restartRootFilesystem = NULL;
   if (HAL->platform != NULL) {
@@ -1155,7 +1155,7 @@ int halCommonInitLogger(void) {
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
   processDescriptor->processId = loggerPid;
-  processDescriptor->userId = ROOT_USER_ID;
+  processDescriptor->userId = SYSTEM_USER_ID;
   processDescriptor->name = _loggerName;
   // The logger is an executive process, but we're going to start it in
   // supervisor mode until the system comes up far enough to launch it.
@@ -1610,7 +1610,7 @@ static int configSysAddDevice(char *value, int lineNumber) {
   *tail = device;
 
   HAL->platform->callFileOverlay(&processDescriptor->callOverlayFunction);
-  processDescriptor->userId = ROOT_USER_ID;
+  processDescriptor->userId = SYSTEM_USER_ID;
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
   schedulerSetBaseHalCapabilities(processDescriptor);
   schedulerSetDirCapabilities(processDescriptor, kernelDirCapabilities);
@@ -2169,7 +2169,7 @@ int restartBuiltinFilesystem(ProcessDescriptor *processDescriptor) {
 
   threadSetContext(processDescriptor->mainThread, processDescriptor);
   processDescriptor->name = _filesystemName;
-  processDescriptor->userId = ROOT_USER_ID;
+  processDescriptor->userId = SYSTEM_USER_ID;
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
   setProcessHalCapabilities(processDescriptor, filesystemHalCapabilities,
     sizeof(filesystemHalCapabilities) / sizeof(filesystemHalCapabilities[0]));
@@ -2238,7 +2238,7 @@ int restartOverlayFilesystem(ProcessDescriptor *processDescriptor) {
 
   threadSetContext(processDescriptor->mainThread, processDescriptor);
   processDescriptor->name = _filesystemName;
-  processDescriptor->userId = ROOT_USER_ID;
+  processDescriptor->userId = SYSTEM_USER_ID;
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
   setProcessHalCapabilities(processDescriptor, filesystemHalCapabilities,
     sizeof(filesystemHalCapabilities) / sizeof(filesystemHalCapabilities[0]));
@@ -2335,7 +2335,7 @@ int restartContiguousFilesystem(ProcessDescriptor *processDescriptor) {
 
   threadSetContext(processDescriptor->mainThread, processDescriptor);
   processDescriptor->name = _filesystemName;
-  processDescriptor->userId = ROOT_USER_ID;
+  processDescriptor->userId = SYSTEM_USER_ID;
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
   setProcessHalCapabilities(processDescriptor, filesystemHalCapabilities,
     sizeof(filesystemHalCapabilities) / sizeof(filesystemHalCapabilities[0]));
