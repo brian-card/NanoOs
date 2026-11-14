@@ -12,7 +12,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "../../usr/src/lib/vdp.drv/main/VdpText.c"
+#include "../../userspace/usr/src/lib/vdp.drv/main/VdpText.c"
 
 CGA_TO_ANSI_MAP
 

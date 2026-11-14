@@ -18,12 +18,12 @@
 // getPartitionInfoImpl is filesystem-agnostic (it only parses the MBR
 // partition table), so it's compiled in unconditionally and shared by every
 // filesystem build -- contiguous and overlay reach it by symlinking
-// usr/src/filesystems/drivers/common/GetPartitionInfoImpl.c into their own
+// userspace/usr/src/filesystems/drivers/common/GetPartitionInfoImpl.c into their own
 // source trees; the kernel-linked build here pulls it in with #include
 // instead, since Arduino IDE only discovers source files physically under
 // src/kernel.
 #define NANO_OS_KERNEL_BUILD
-#include "../../usr/src/filesystems/drivers/common/GetPartitionInfoImpl.c"
+#include "../../userspace/usr/src/filesystems/drivers/common/GetPartitionInfoImpl.c"
 
 /// @var rootFilesystemPid
 ///

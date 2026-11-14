@@ -15,7 +15,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "../../usr/src/lib/textstore/include/TextStore.h"
+#include "../../userspace/usr/src/lib/textstore/include/TextStore.h"
 
 /// @def MODEL_MAX_LINES
 ///

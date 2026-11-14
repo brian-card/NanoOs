@@ -11,7 +11,7 @@
 
 #include <string.h>
 
-#include "../../usr/src/lib/vdp.drv/main/VdpKeyboard.c"
+#include "../../userspace/usr/src/lib/vdp.drv/main/VdpKeyboard.c"
 
 /// @fn static int feed(VdpPacketParser *parser, const uint8_t *bytes,
 ///   size_t length)

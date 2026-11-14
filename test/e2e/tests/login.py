@@ -124,8 +124,8 @@ def test_passwd_file_replaces_the_built_in_users(s):
 
 
 def test_shipped_passwd_file_matches_the_built_in_users(s):
-    with open(os.path.join(REPO_ROOT, "etc", "passwd")) as passwd, \
-            open(os.path.join(REPO_ROOT, "etc", "secure", "shadow")) as shadow:
+    with open(os.path.join(REPO_ROOT, "userspace", "etc", "passwd")) as passwd, \
+            open(os.path.join(REPO_ROOT, "secure", "shadow")) as shadow:
         restart_with_users(s, passwd.read(), shadow.read())
     for user in ("root", "user1", "user2"):
         s.login(user, user * 2)

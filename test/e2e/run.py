@@ -53,7 +53,7 @@ def build_image():
     stamp = img + ".stamp"
 
     newest = 0.0
-    for base in ("src", "sim", "usr/src"):
+    for base in ("src", "sim", "userspace/usr/src"):
         for root, _d, files in os.walk(os.path.join(REPO_ROOT, base)):
             if "/obj" in root or "/bin" in root:
                 continue

@@ -41,7 +41,7 @@
 
 #include "kernel/Filesystem.h"
 #define NANO_OS_KERNEL_BUILD
-#include "../../usr/src/filesystems/drivers/fat32/Fat32.h"
+#include "../../userspace/usr/src/filesystems/drivers/fat32/Fat32.h"
 
 #define NAMES_SECTOR_SIZE 512
 #define NAMES_NUM_SECTORS 8

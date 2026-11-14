@@ -52,7 +52,7 @@ E=$WORK/emu
 rm -rf "$E"; mkdir -p "$E/firmware"
 cp -L "$EMULATOR/fab-agon-emulator" "$E/"
 cp "$EMULATOR/firmware/mos_platform.bin" "$EMULATOR/firmware/vdp_platform.so" "$E/firmware/"
-(cd "$REPO" && rm -rf usr/obj && AGDEV_HOME=${AGDEV_HOME:-$HOME/agondev} ./builddev \
+(cd "$REPO" && rm -rf userspace/usr/obj && AGDEV_HOME=${AGDEV_HOME:-$HOME/agondev} ./builddev \
   AgonLight2 nanoemu "$E/NanoOs.img" contiguous "" "$E/firmware/mos_platform.bin" \
   > "$WORK/agon-build.log" 2>&1)
 python3 -c 'print("\n".join("u%02d" % n for n in range(1, 60)))' > "$WORK/ops.txt"

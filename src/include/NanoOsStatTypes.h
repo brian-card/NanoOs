@@ -125,7 +125,7 @@ typedef int32_t blkcnt_t;
 /// struct stat it has no concept of file ownership for (FAT32 being the
 /// first example).  This is the entire contract between such a driver and
 /// the driver-agnostic FILESYSTEM_LSTAT command handler (see
-/// usr/src/filesystems/common/LstatCommandHandler.c): the handler recognizes
+/// userspace/usr/src/filesystems/common/LstatCommandHandler.c): the handler recognizes
 /// these two values and fills in real defaults (and a fully-open permission
 /// mode) in their place, without ever knowing *why* a given driver couldn't
 /// populate them itself.
@@ -164,7 +164,7 @@ struct stat {
 /// sentinels with real defaults.
 ///
 /// @details Shared by the FILESYSTEM_LSTAT and FILESYSTEM_DIRSTAT command
-/// handlers (see usr/src/filesystems/common/) so the two apply an
+/// handlers (see userspace/usr/src/filesystems/common/) so the two apply an
 /// identical, driver-agnostic policy: this is the entire extent of what
 /// either handler knows about *why* a driver couldn't populate ownership --
 /// it never learns which filesystem produced the sentinel, only that it

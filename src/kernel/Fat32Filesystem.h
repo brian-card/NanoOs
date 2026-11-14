@@ -57,12 +57,12 @@ extern "C"
 // This is the kernel-linked build's entry point into the FAT32 driver.
 // Arduino IDE only discovers source files under src/kernel, so the actual
 // implementation -- shared verbatim with the contiguous and overlay
-// filesystem builds -- lives under usr/src/filesystems/drivers/fat32/ and is
+// filesystem builds -- lives under userspace/usr/src/filesystems/drivers/fat32/ and is
 // pulled in from Fat32Filesystem.c by #include rather than by symlink (the
 // technique those other two builds use).  This header just forwards to the
 // single canonical set of FAT32 type and constant definitions.
 #define NANO_OS_KERNEL_BUILD
-#include "../../usr/src/filesystems/drivers/fat32/Fat32.h"
+#include "../../userspace/usr/src/filesystems/drivers/fat32/Fat32.h"
 
 #ifdef __cplusplus
 } // extern "C"

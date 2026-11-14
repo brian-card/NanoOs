@@ -14,7 +14,7 @@
 #include "kernel/Filesystem.h"
 #include "kernel/Processes.h"
 #define NANO_OS_KERNEL_BUILD
-#include "../../usr/src/filesystems/drivers/fat32/Fat32.h"
+#include "../../userspace/usr/src/filesystems/drivers/fat32/Fat32.h"
 
 void* SeekFile(void *args);
 

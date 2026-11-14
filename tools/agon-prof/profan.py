@@ -58,10 +58,10 @@ def fingerprint(image):
 
 repo = sys.argv[1]
 kernel = symbols(os.path.join(repo, "build/agon/NanoOs.elf"))
-fs = symbols(os.path.join(repo, "usr/obj/contiguous-filesystem/overlay.elf"))
+fs = symbols(os.path.join(repo, "userspace/usr/obj/contiguous-filesystem/overlay.elf"))
 overlays = {}
-for elf in glob.glob(os.path.join(repo, "usr/obj/**/overlay.elf"), recursive=True):
-    rel = os.path.relpath(elf, os.path.join(repo, "usr/obj")).replace("/overlay.elf", "")
+for elf in glob.glob(os.path.join(repo, "userspace/usr/obj/**/overlay.elf"), recursive=True):
+    rel = os.path.relpath(elf, os.path.join(repo, "userspace/usr/obj")).replace("/overlay.elf", "")
     if "contiguous-filesystem" in rel:
         continue
     with tempfile.NamedTemporaryFile(suffix=".bin") as tmp:

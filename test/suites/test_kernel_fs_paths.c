@@ -18,7 +18,7 @@
 #include "user/NanoOsLibC.h"
 
 #define NANO_OS_KERNEL_BUILD
-#include "../../usr/src/filesystems/include/FilesystemPaths.h"
+#include "../../userspace/usr/src/filesystems/include/FilesystemPaths.h"
 
 static FilesystemState pathState;
 static ProcessMessage pathMessage;

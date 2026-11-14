@@ -28,10 +28,10 @@ All runners emit [TAP](https://testanything.org/).
 
 Layers 1-2 build into `test/obj/` (git-ignored) with the same flags
 `buildsim` uses — never `sim/obj/`. Layer 3's `mkimage.sh` *does* run
-`make -C sim` and `make -C usr/src` (it needs the real artifacts), same as
+`make -C sim` and `make -C userspace/usr/src` (it needs the real artifacts), same as
 `buildsim`; it writes its disk image into `test/e2e/.cache/` (git-ignored).
 
-Layer 4 runs `builddev`, which rebuilds the kernel and `usr/src` for the
+Layer 4 runs `builddev`, which rebuilds the kernel and `userspace/usr/src` for the
 Agon Light 2. It boots a private copy of the emulator in a temporary
 directory, so the copy's MOS image is the one `builddev` overwrites, and runs
 it without a window.

@@ -41,7 +41,7 @@ INCLUDES := \
     -Ihal \
     -Ikernel \
     -Iuser \
-    -I../usr/src/filesystems/drivers/fat32 \
+    -I../userspace/usr/src/filesystems/drivers/fat32 \
 
 WARNINGS := \
     -Wall \

@@ -32,10 +32,10 @@
 /// There are three ways NanoOs can run a filesystem: linked directly into
 /// the kernel binary (this file; used by targets too small to spare a
 /// process/overlay for it, e.g. the Mega 2560), as a single contiguous
-/// overlay process (usr/src/filesystems/contiguous/), or as a set of
-/// individually-loaded block overlays (usr/src/filesystems/overlay/).  All
+/// overlay process (userspace/usr/src/filesystems/contiguous/), or as a set of
+/// individually-loaded block overlays (userspace/usr/src/filesystems/overlay/).  All
 /// three run the exact same FAT32 driver logic, which lives once under
-/// usr/src/filesystems/drivers/fat32/.  The contiguous and overlay builds
+/// userspace/usr/src/filesystems/drivers/fat32/.  The contiguous and overlay builds
 /// reach it by symlinking those files into their own source trees; Arduino
 /// IDE only discovers source files physically under src/kernel, so this
 /// file instead pulls them in with #include.  Each driver file exports a
@@ -53,24 +53,24 @@
 #include "../user/NanoOsStdio.h"
 #include "../user/NanoOsDebug.h"
 
-#include "../../usr/src/filesystems/drivers/fat32/FilesystemInitDriver.c"
-#include "../../usr/src/filesystems/drivers/fat32/OpenFileDriver.c"
-#include "../../usr/src/filesystems/drivers/fat32/CreateFileDriver.c"
-#include "../../usr/src/filesystems/drivers/fat32/CloseFileDriver.c"
-#include "../../usr/src/filesystems/drivers/fat32/ReadFileDriver.c"
-#include "../../usr/src/filesystems/drivers/fat32/WriteFileDriver.c"
-#include "../../usr/src/filesystems/drivers/fat32/RemoveFileDriver.c"
-#include "../../usr/src/filesystems/drivers/fat32/SeekFileDriver.c"
-#include "../../usr/src/filesystems/drivers/fat32/GetFileBlockMetadataDriver.c"
-#include "../../usr/src/filesystems/drivers/fat32/GetFilenameDriver.c"
-#include "../../usr/src/filesystems/drivers/fat32/EndOfFileDriver.c"
-#include "../../usr/src/filesystems/drivers/fat32/FormatDriver.c"
-#include "../../usr/src/filesystems/drivers/fat32/OpendirDriver.c"
-#include "../../usr/src/filesystems/drivers/fat32/ReaddirDriver.c"
-#include "../../usr/src/filesystems/drivers/fat32/ClosedirDriver.c"
-#include "../../usr/src/filesystems/drivers/fat32/LstatDriver.c"
-#include "../../usr/src/filesystems/drivers/fat32/IstatDriver.c"
-#include "../../usr/src/filesystems/drivers/fat32/RenameFileDriver.c"
-#include "../../usr/src/filesystems/drivers/fat32/MkdirDriver.c"
-#include "../../usr/src/filesystems/drivers/fat32/RmdirDriver.c"
+#include "../../userspace/usr/src/filesystems/drivers/fat32/FilesystemInitDriver.c"
+#include "../../userspace/usr/src/filesystems/drivers/fat32/OpenFileDriver.c"
+#include "../../userspace/usr/src/filesystems/drivers/fat32/CreateFileDriver.c"
+#include "../../userspace/usr/src/filesystems/drivers/fat32/CloseFileDriver.c"
+#include "../../userspace/usr/src/filesystems/drivers/fat32/ReadFileDriver.c"
+#include "../../userspace/usr/src/filesystems/drivers/fat32/WriteFileDriver.c"
+#include "../../userspace/usr/src/filesystems/drivers/fat32/RemoveFileDriver.c"
+#include "../../userspace/usr/src/filesystems/drivers/fat32/SeekFileDriver.c"
+#include "../../userspace/usr/src/filesystems/drivers/fat32/GetFileBlockMetadataDriver.c"
+#include "../../userspace/usr/src/filesystems/drivers/fat32/GetFilenameDriver.c"
+#include "../../userspace/usr/src/filesystems/drivers/fat32/EndOfFileDriver.c"
+#include "../../userspace/usr/src/filesystems/drivers/fat32/FormatDriver.c"
+#include "../../userspace/usr/src/filesystems/drivers/fat32/OpendirDriver.c"
+#include "../../userspace/usr/src/filesystems/drivers/fat32/ReaddirDriver.c"
+#include "../../userspace/usr/src/filesystems/drivers/fat32/ClosedirDriver.c"
+#include "../../userspace/usr/src/filesystems/drivers/fat32/LstatDriver.c"
+#include "../../userspace/usr/src/filesystems/drivers/fat32/IstatDriver.c"
+#include "../../userspace/usr/src/filesystems/drivers/fat32/RenameFileDriver.c"
+#include "../../userspace/usr/src/filesystems/drivers/fat32/MkdirDriver.c"
+#include "../../userspace/usr/src/filesystems/drivers/fat32/RmdirDriver.c"
 

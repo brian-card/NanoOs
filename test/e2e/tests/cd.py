@@ -62,7 +62,7 @@ def test_cd_needs_stat_on_the_directory(s):
 
 
 def test_stat_alone_is_enough_for_cd(s):
-    boot_with(s, {"/etc/capabilities": repo_file("etc", "capabilities")
+    boot_with(s, {"/etc/capabilities": repo_file("userspace", "etc", "capabilities")
                   + "* s /drop/\n"}, HOMES + ("/drop",))
     s.login("user1", "user1user1")
     assert s.sh("cd /drop") == ""

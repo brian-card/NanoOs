@@ -262,8 +262,8 @@ def image_text(e, path):
 
 
 def test_config_sys_is_the_agon_one(e):
-    expected = open(os.path.join(REPO_ROOT, "etc", "AgonLight2",
-                                 "config.sys")).read().strip("\n")
+    expected = open(os.path.join(REPO_ROOT, "system", "data",
+                                 "AgonLight2", "config.sys")).read().strip("\n")
     assert "Permission denied" in e.sh("cat /system/data/config.sys")
     assert image_text(e, "/system/data/config.sys") == expected
 
@@ -551,13 +551,13 @@ def test_commands_that_cannot_load_leave_the_shell_running(e):
 
 def test_every_command_prints_its_usage_for_help_options(e):
     # Earlier tests leave copied and corrupt commands in /usr/bin.
-    built = sorted(set(os.listdir(os.path.join(REPO_ROOT, "usr", "bin")))
+    built = sorted(set(os.listdir(os.path.join(REPO_ROOT, "userspace", "usr", "bin")))
                    - {"getty", "login", "logger", "syspasswd"})
     installed = [n.rstrip("/") for n in ll_names(e, "/usr/bin")]
     assert set(built) <= set(installed), (built, installed)
     for name in built:
         out = e.sh(name + " --help")
-        path = os.path.join(REPO_ROOT, "usr", "bin", name)
+        path = os.path.join(REPO_ROOT, "userspace", "usr", "bin", name)
         if os.path.isfile(path):
             # A file in /usr/bin is a script that runs another command.
             with open(path) as script:

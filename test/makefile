@@ -54,7 +54,7 @@ endif
 # Mirrors of the per-directory makefiles (paths rebased to test/ as cwd).
 KERNEL_CFLAGS := $(BASE_CFLAGS) -rdynamic
 KERNEL_INC    := -I../src/user -I../src/include \
-    -I../usr/src/filesystems/drivers/fat32
+    -I../userspace/usr/src/filesystems/drivers/fat32
 
 USER_CFLAGS   := $(BASE_CFLAGS) -rdynamic
 USER_INC      := -I../src/kernel -I../src/include
@@ -70,7 +70,7 @@ TEST_CFLAGS   := $(BASE_CFLAGS) -Wall -Wextra
 # through the sim/ symlink dir, exactly like the kernel sources do - never
 # via -I../src/kernel, which would shadow the system <sys/*.h>.
 TEST_INC      := -I../sim -Iframework -Iharness -Imocks \
-    -I../usr/src/lib/vdp.drv/include -I../src/hal/AgonLight2
+    -I../userspace/usr/src/lib/vdp.drv/include -I../src/hal/AgonLight2
 
 # --- sources ---------------------------------------------------------
 
@@ -188,17 +188,17 @@ $(OBJ_DIR)/suite_%.o: suites/%.c
 
 # This suite compiles the textstore library's header directly.
 $(OBJ_DIR)/suite_test_unit_textstore.o: \
-    ../usr/src/lib/textstore/include/TextStore.h
+    ../userspace/usr/src/lib/textstore/include/TextStore.h
 
 # These suites compile the VDP driver's sources directly.
 $(OBJ_DIR)/suite_test_unit_vdp_text.o: \
-    ../usr/src/lib/vdp.drv/main/VdpText.c \
-    ../usr/src/lib/vdp.drv/include/VdpText.h \
+    ../userspace/usr/src/lib/vdp.drv/main/VdpText.c \
+    ../userspace/usr/src/lib/vdp.drv/include/VdpText.h \
     ../src/kernel/GraphicsColor.h
 $(OBJ_DIR)/suite_test_unit_vdp_text.o: TEST_INC += -iquote ../src/kernel
 $(OBJ_DIR)/suite_test_unit_vdp_keyboard.o: \
-    ../usr/src/lib/vdp.drv/main/VdpKeyboard.c \
-    ../usr/src/lib/vdp.drv/include/VdpKeyboard.h
+    ../userspace/usr/src/lib/vdp.drv/main/VdpKeyboard.c \
+    ../userspace/usr/src/lib/vdp.drv/include/VdpKeyboard.h
 $(OBJ_DIR)/suite_test_unit_agon_reset_keys.o: \
     ../src/hal/AgonLight2/AgonResetKeys.c \
     ../src/hal/AgonLight2/AgonResetKeys.h

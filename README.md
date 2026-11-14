@@ -125,7 +125,7 @@ The makefiles for the NanoOs image always produce three artifacts:
 2. The image with the strings stripped from it
 3. The strings stripped from the image
 
-On systems with limited flash, the image with strings stripped can be loaded and a logger process can be run.  The logger process is a normal process on the filesystem (found at `/usr/bin/logger`) that is run with Executive privileges.  This allows it to directly access the HAL and retrieve messages that are logged by the kernel and other executive processes.  The logger process utilizes the strings artifact (found on the filesystem at `/usr/lib/NanoOs_rodata.bin`) to reconstruct the intended log messages and print them to UART0.
+On systems with limited flash, the image with strings stripped can be loaded and a logger process can be run.  The logger process is a normal process on the filesystem (found at `/system/bin/logger`) that is run with Executive privileges.  This allows it to directly access the HAL and retrieve messages that are logged by the kernel and other executive processes.  The logger process utilizes the strings artifact (found on the filesystem at `/system/data/NanoOs_rodata.bin`) to reconstruct the intended log messages and print them to UART0.
 
 ## Hardware
 

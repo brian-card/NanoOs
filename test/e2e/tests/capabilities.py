@@ -141,7 +141,7 @@ def test_a_plain_user_cannot_run_their_own_programs(s):
 
 
 def test_a_user_with_x_on_their_bin_can_run_their_own_programs(s):
-    boot_with(s, {"/etc/capabilities": repo_file("etc", "capabilities")
+    boot_with(s, {"/etc/capabilities": repo_file("userspace", "etc", "capabilities")
                   + "user1 rwcdlsx ~/bin/\n"}, HOMES)
     s.login("user1", "user1user1")
     install_hello_in_home(s)
@@ -149,9 +149,9 @@ def test_a_user_with_x_on_their_bin_can_run_their_own_programs(s):
 
 
 def test_the_shipped_files_give_the_default_sets_and_menu(s):
-    boot_with(s, {"/etc/capabilities": repo_file("etc", "capabilities"),
+    boot_with(s, {"/etc/capabilities": repo_file("userspace", "etc", "capabilities"),
                   "/system/data/capabilities":
-                  repo_file("etc", "system", "capabilities")},
+                  repo_file("system", "data", "capabilities")},
               HOMES + ("/menu",))
     s.login()
     assert caps_of(s) == {
@@ -168,9 +168,9 @@ def test_root_can_grant_a_new_top_level_directory(s):
     subprocess.run(["mmd", "-i", image, "::/userspace/apps"], env=env,
                    check=True)
     subprocess.run(["mcopy", "-s", "-i", image,
-                    os.path.join(REPO_ROOT, "usr", "bin", "helloworld"),
+                    os.path.join(REPO_ROOT, "userspace", "usr", "bin", "helloworld"),
                     "::/userspace/apps/hi"], env=env, check=True)
-    boot_with(s, {"/etc/capabilities": repo_file("etc", "capabilities")
+    boot_with(s, {"/etc/capabilities": repo_file("userspace", "etc", "capabilities")
                   + "* rxls /apps/\n"}, HOMES)
     s.login("user1", "user1user1")
     assert caps_of(s)["/apps/"] == "71"
@@ -180,7 +180,7 @@ def test_root_can_grant_a_new_top_level_directory(s):
 
 
 def test_etc_capabilities_cannot_reach_the_other_namespaces(s):
-    boot_with(s, {"/etc/capabilities": repo_file("etc", "capabilities")
+    boot_with(s, {"/etc/capabilities": repo_file("userspace", "etc", "capabilities")
                   + "* rwcdlsx /secure/\n* rwcdlsx /system/\n"}, HOMES)
     s.login("user1", "user1user1")
     caps = caps_of(s)
@@ -194,13 +194,13 @@ def test_etc_capabilities_cannot_reach_the_other_namespaces(s):
 
 def test_a_line_for_another_user_gives_this_user_nothing(s):
     boot_with(s, {"/etc/capabilities": "user2 rwcdls /etc/\n"
-                  + repo_file("etc", "capabilities")}, HOMES)
+                  + repo_file("userspace", "etc", "capabilities")}, HOMES)
     s.login("user1", "user1user1")
     assert DENIED in s.sh("touch /etc/mine")
 
 
 def test_a_users_own_line_adds_to_the_star_lines(s):
-    boot_with(s, {"/etc/capabilities": repo_file("etc", "capabilities")
+    boot_with(s, {"/etc/capabilities": repo_file("userspace", "etc", "capabilities")
                   + "user1 w /etc/\n"}, HOMES)
     s.login("user1", "user1user1")
     assert caps_of(s)["/etc/"] == "33"
@@ -214,7 +214,7 @@ def test_a_subdirectory_can_keep_bits_its_parent_loses(s):
 
 
 def test_a_supervisor_line_in_etc_capabilities_widens_nothing(s):
-    boot_with(s, {"/etc/capabilities": repo_file("etc", "capabilities")
+    boot_with(s, {"/etc/capabilities": repo_file("userspace", "etc", "capabilities")
                   + "supervisor rwcdlsx /etc/\n"}, HOMES)
     s.login("user1", "user1user1")
     assert "supervisor line" in s.child.before
@@ -223,7 +223,7 @@ def test_a_supervisor_line_in_etc_capabilities_widens_nothing(s):
 
 def test_a_line_beyond_the_base_set_is_logged_and_skipped(s):
     boot_with(s, {"/system/data/capabilities": NARROW_BASE,
-                  "/etc/capabilities": repo_file("etc", "capabilities")
+                  "/etc/capabilities": repo_file("userspace", "etc", "capabilities")
                   + "user1 rwcdls /opt/\n"},
               HOMES + ("/opt",))
     s.login("user1", "user1user1")
@@ -234,7 +234,7 @@ def test_a_line_beyond_the_base_set_is_logged_and_skipped(s):
 
 
 def test_a_malformed_line_is_logged_and_skipped(s):
-    boot_with(s, {"/etc/capabilities": repo_file("etc", "capabilities")
+    boot_with(s, {"/etc/capabilities": repo_file("userspace", "etc", "capabilities")
                   + "user1 rwz /etc/\n* rw\nuser1 r x /etc/\n"}, HOMES)
     s.login("user1", "user1user1")
     assert "invalid permissions" in s.child.before
@@ -301,7 +301,7 @@ def test_the_supervisor_file_can_widen_what_a_user_may_be_given(s):
         "/system/data/capabilities":
         NARROW_BASE + "supervisor rwcdls /opt/\n",
         "/etc/capabilities":
-        repo_file("etc", "capabilities") + "user1 rwcdls /opt/\n",
+        repo_file("userspace", "etc", "capabilities") + "user1 rwcdls /opt/\n",
     }, HOMES + ("/opt",))
     s.login("user1", "user1user1")
     assert s.sh("touch /opt/mine") == ""
@@ -324,7 +324,7 @@ def test_a_user_logging_in_after_another_starts_from_the_base_set(s):
 
 def test_a_supervisor_file_of_the_same_size_is_not_the_compiled_set(s):
     boot_with(s, {"/system/data/capabilities":
-                  repo_file("etc", "system", "capabilities")
+                  repo_file("system", "data", "capabilities")
                   .replace("rwcdlsx", "rwclsx")})
     s.login()
     caps = caps_of(s)
@@ -334,10 +334,10 @@ def test_a_supervisor_file_of_the_same_size_is_not_the_compiled_set(s):
 
 def test_a_custom_supervisor_file_still_lets_login_read_the_shadow_file(s):
     boot_with(s, {
-        "/system/data/capabilities": repo_file("etc", "system", "capabilities")
+        "/system/data/capabilities": repo_file("system", "data", "capabilities")
         + "supervisor rwcdls /opt/\n",
-        "/etc/passwd": repo_file("etc", "passwd"),
-        "/secure/shadow": repo_file("etc", "secure", "shadow"),
+        "/etc/passwd": repo_file("userspace", "etc", "passwd"),
+        "/secure/shadow": repo_file("secure", "shadow"),
     })
     s.login()
     assert s.sh("echo logged-in") == "logged-in"
@@ -347,7 +347,7 @@ def test_a_custom_supervisor_file_still_lets_login_read_the_shadow_file(s):
 def test_lines_for_others_in_the_supervisor_file_are_ignored(s):
     boot_with(s, {"/system/data/capabilities":
                   NARROW_BASE + "root rwcdls /opt/\n",
-                  "/etc/capabilities": repo_file("etc", "capabilities")
+                  "/etc/capabilities": repo_file("userspace", "etc", "capabilities")
                   + "root rwcdls /opt/\n"}, ("/opt",))
     s.login()
     assert "/opt/" not in caps_of(s)
@@ -355,9 +355,9 @@ def test_lines_for_others_in_the_supervisor_file_are_ignored(s):
 
 def test_a_normal_grant_of_a_protected_name_drops_the_full_path_entry(s):
     boot_with(s, {"/system/data/capabilities":
-                  repo_file("etc", "system", "capabilities")
+                  repo_file("system", "data", "capabilities")
                   + "supervisor r /secure/\n",
-                  "/etc/capabilities": repo_file("etc", "capabilities")
+                  "/etc/capabilities": repo_file("userspace", "etc", "capabilities")
                   + "root r /secure/\n"})
     s.login()
     held = [line for line in s.sh("dirtest caps").splitlines()
@@ -367,7 +367,7 @@ def test_a_normal_grant_of_a_protected_name_drops_the_full_path_entry(s):
 
 def test_a_refused_entry_is_not_left_held(s):
     boot_with(s, {"/system/data/capabilities": NARROW_BASE,
-                  "/etc/capabilities": repo_file("etc", "capabilities")
+                  "/etc/capabilities": repo_file("userspace", "etc", "capabilities")
                   + "user1 x /etc/\n"}, HOMES)
     s.login("user1", "user1user1")
     assert "not in the supervisor base set" in s.child.before
@@ -396,12 +396,12 @@ def boot_with_menu(s, permissions):
     @param s The Session.
     @param permissions The permissions everyone should have on /menu/.
     """
-    lines = [line for line in repo_file("etc", "capabilities").splitlines()
+    lines = [line for line in repo_file("userspace", "etc", "capabilities").splitlines()
              if not line.endswith(" /menu/")]
     boot_with(s, {"/etc/capabilities": "\n".join(lines)
                   + "\n* %s /menu/\n" % permissions,
                   "/system/data/capabilities":
-                  repo_file("etc", "system", "capabilities"),
+                  repo_file("system", "data", "capabilities"),
                   "/menu/main.mnu": "old menu\n",
                   "/home/user1/new.mnu": "new menu\n"}, HOMES + ("/menu",))
     s.login("user1", "user1user1")

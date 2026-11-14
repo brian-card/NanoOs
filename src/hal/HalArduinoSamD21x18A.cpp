@@ -157,7 +157,7 @@ void* callOverlayFunctionFromFile(const void *overlayDir, const void *overlay,
 ///
 /// MUST be kept in sync with:
 ///   - __nanoos_overlay_window in ld/ArduinoSamd21FlashWithBootloader.ld
-///   - OVERLAY_RAM ORIGIN      in usr/src/NanoOsArduinoSamd21.ld
+///   - OVERLAY_RAM ORIGIN      in userspace/usr/src/NanoOsArduinoSamd21.ld
 #define OVERLAY_ADDRESS 0x200026A0
 
 /// @def OVERLAY_SIZE

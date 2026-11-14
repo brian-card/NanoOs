@@ -30,8 +30,8 @@ imageSizeMB=100
 partitionOffsetMB=2
 blocksPerOverlay=16
 
-if [ ! -f "usr/src/filesystems/${blockFilesystem}/makefile" ]; then
-	echo "ERROR: No block filesystem at usr/src/filesystems/${blockFilesystem}." >&2
+if [ ! -f "userspace/usr/src/filesystems/${blockFilesystem}/makefile" ]; then
+	echo "ERROR: No block filesystem at userspace/usr/src/filesystems/${blockFilesystem}." >&2
 	exit 1
 fi
 
@@ -42,12 +42,12 @@ else
 fi
 
 echo "mkimage: building applications + simulator..."
-make -j "$(nproc)" -C usr/src clean
-make -j "$(nproc)" -C "usr/src/filesystems/${blockFilesystem}" clean
+make -j "$(nproc)" -C userspace/usr/src clean
+make -j "$(nproc)" -C "userspace/usr/src/filesystems/${blockFilesystem}" clean
 make -j "$(nproc)" -C sim clean
-make -j "$(nproc)" -C usr/src COMPILE=gcc LINK=ld OBJCOPY=objcopy \
+make -j "$(nproc)" -C userspace/usr/src COMPILE=gcc LINK=ld OBJCOPY=objcopy \
 	OBJDUMP=objdump SIZE=size LINKER_SCRIPT=NanoOsSim.ld overlays
-make -j "$(nproc)" -C "usr/src/filesystems/${blockFilesystem}" COMPILE=gcc \
+make -j "$(nproc)" -C "userspace/usr/src/filesystems/${blockFilesystem}" COMPILE=gcc \
 	LINK=ld OBJCOPY=objcopy OBJDUMP=objdump SIZE=size \
 	LINKER_SCRIPT="${filesystemLinkerScript}" FILESYSTEM="${filesystem}" overlays
 make -j "$(nproc)" -C sim
@@ -68,16 +68,16 @@ for directory in /secure /system /system/bin /system/commands /system/data \
 	/userspace/etc /userspace/root /userspace/tmp; do
 	MTOOLS_SKIP_CHECK=1 mmd -i "${fatImage}" "::${directory}"
 done
-MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s usr/bin ::/userspace/usr/bin
-MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s usr/lib ::/userspace/usr/lib
+MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s userspace/usr/bin ::/userspace/usr/bin
+MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s userspace/usr/lib ::/userspace/usr/lib
 for program in getty login logger; do
 	MTOOLS_SKIP_CHECK=1 mmove -i "${fatImage}" \
 		"::/userspace/usr/bin/${program}" "::/system/bin/${program}"
 done
 MTOOLS_SKIP_CHECK=1 mdeltree -i "${fatImage}" ::/userspace/usr/bin/syspasswd
-MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s usr/bin/syspasswd \
+MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s userspace/usr/bin/syspasswd \
 	::/system/commands/passwd
-for driver in usr/lib/*.drv; do
+for driver in userspace/usr/lib/*.drv; do
 	MTOOLS_SKIP_CHECK=1 mmove -i "${fatImage}" \
 		"::/userspace/usr/lib/$(basename "${driver}")" ::/system/drivers/
 done
@@ -91,10 +91,10 @@ for lineNumber in $(seq -w 1 40); do
 done | MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" - ::/userspace/etc/catfile
 
 if [ "${blockFilesystem}" = "contiguous" ]; then
-	dd if="usr/filesystem/contiguous-filesystem/0.overlay" of="${outImage}" \
+	dd if="userspace/usr/filesystem/contiguous-filesystem/0.overlay" of="${outImage}" \
 		bs=512 seek=1 conv=notrunc status=none
 else
-	for blockOverlay in usr/filesystem/${blockFilesystem}-filesystem/*; do
+	for blockOverlay in userspace/usr/filesystem/${blockFilesystem}-filesystem/*; do
 		overlayId="$(basename "${blockOverlay}" .overlay)"
 		startBlock=$(( (overlayId * blocksPerOverlay) + 1 ))
 		dd if="${blockOverlay}" of="${outImage}" bs=512 seek=${startBlock} \

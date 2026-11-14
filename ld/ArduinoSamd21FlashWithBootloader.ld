@@ -48,7 +48,7 @@ SECTIONS
 	 *
 	 * MUST be kept in sync with:
 	 *   - OVERLAY_ADDRESS      in src/hal/HalArduinoSamD21x18A.cpp
-	 *   - OVERLAY_RAM ORIGIN   in usr/src/NanoOsArduinoSamd21.ld
+	 *   - OVERLAY_RAM ORIGIN   in userspace/usr/src/NanoOsArduinoSamd21.ld
 	 *
 	 * Raised from 0x20002300 to 0x20002320 (32 bytes) alongside
 	 * OVERLAY_ADDRESS moving from 0x20002500 to 0x20002520, to make room for
@@ -231,7 +231,7 @@ SECTIONS
 	 * reservation.  Fix by trimming static RAM, or by raising
 	 * __nanoos_overlay_window here together with OVERLAY_ADDRESS in
 	 * src/hal/HalArduinoSamD21x18A.cpp and OVERLAY_RAM ORIGIN in
-	 * usr/src/NanoOsArduinoSamd21.ld (and shrinking OVERLAY_SIZE or the heap
+	 * userspace/usr/src/NanoOsArduinoSamd21.ld (and shrinking OVERLAY_SIZE or the heap
 	 * to pay for it).
 	 */
 	ASSERT(__bss_end__ <= __nanoos_overlay_window,

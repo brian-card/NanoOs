@@ -65,9 +65,9 @@ def test_root_sees_the_set_the_file_grants(s):
 
 
 def test_every_line_matches_the_mask_the_process_holds(s):
-    boot_with(s, {"/etc/capabilities": repo_file("etc", "capabilities"),
+    boot_with(s, {"/etc/capabilities": repo_file("userspace", "etc", "capabilities"),
                   "/system/data/capabilities":
-                  repo_file("etc", "system", "capabilities")},
+                  repo_file("system", "data", "capabilities")},
               HOMES + ("/menu",))
     s.login()
     held = [line.split()[1:] for line in s.sh("dirtest caps").splitlines()
@@ -82,7 +82,7 @@ def test_a_full_path_entry_is_marked(s):
     if s.child.isalive():
         s.child.terminate(force=True)
     subprocess.run(["mcopy", "-s", "-i", s.img_copy + "@@2097152",
-                    os.path.join(REPO_ROOT, "usr", "bin", "caps"),
+                    os.path.join(REPO_ROOT, "userspace", "usr", "bin", "caps"),
                     "::/system/commands/caps"],
                    env=dict(os.environ, MTOOLS_SKIP_CHECK="1"), check=True)
     s.spawn([s.img_copy])

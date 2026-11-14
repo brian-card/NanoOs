@@ -30,7 +30,7 @@
 /// @brief Kernel-linked build's copy of the filesystem command handlers.
 ///
 /// The logic that answers each FILESYSTEM_* message (FILESYSTEM_OPEN_FILE,
-/// FILESYSTEM_CLOSE_FILE, etc.) lives once, under usr/src/filesystems/common/,
+/// FILESYSTEM_CLOSE_FILE, etc.) lives once, under userspace/usr/src/filesystems/common/,
 /// and is shared verbatim by the kernel-linked, contiguous, and overlay
 /// filesystem builds.  The contiguous and overlay builds reach it by
 /// symlinking those files into their own source trees; Arduino IDE only
@@ -50,26 +50,26 @@
 #include "../user/NanoOsDebug.h"
 
 #define NANO_OS_KERNEL_BUILD
-#include "../../usr/src/filesystems/include/FilesystemPaths.h"
-#include "../../usr/src/filesystems/common/OpenFileCommandHandler.c"
-#include "../../usr/src/filesystems/common/CloseFileCommandHandler.c"
-#include "../../usr/src/filesystems/common/ReadFileCommandHandler.c"
-#include "../../usr/src/filesystems/common/WriteFileCommandHandler.c"
-#include "../../usr/src/filesystems/common/RemoveFileCommandHandler.c"
-#include "../../usr/src/filesystems/common/SeekFileCommandHandler.c"
-#include "../../usr/src/filesystems/common/DumpOpenFilesCommandHandler.c"
-#include "../../usr/src/filesystems/common/GetFileBlockMetadataCommandHandler.c"
-#include "../../usr/src/filesystems/common/EndOfFileCommandHandler.c"
-#include "../../usr/src/filesystems/common/FormatCommandHandler.c"
-#include "../../usr/src/filesystems/common/OpendirCommandHandler.c"
-#include "../../usr/src/filesystems/common/ReaddirCommandHandler.c"
-#include "../../usr/src/filesystems/common/ClosedirCommandHandler.c"
-#include "../../usr/src/filesystems/common/LstatCommandHandler.c"
-#include "../../usr/src/filesystems/common/DirstatCommandHandler.c"
-#include "../../usr/src/filesystems/common/RenameFileCommandHandler.c"
-#include "../../usr/src/filesystems/common/MkdirCommandHandler.c"
-#include "../../usr/src/filesystems/common/RmdirCommandHandler.c"
-#include "../../usr/src/filesystems/common/CloseProcessCommandHandler.c"
+#include "../../userspace/usr/src/filesystems/include/FilesystemPaths.h"
+#include "../../userspace/usr/src/filesystems/common/OpenFileCommandHandler.c"
+#include "../../userspace/usr/src/filesystems/common/CloseFileCommandHandler.c"
+#include "../../userspace/usr/src/filesystems/common/ReadFileCommandHandler.c"
+#include "../../userspace/usr/src/filesystems/common/WriteFileCommandHandler.c"
+#include "../../userspace/usr/src/filesystems/common/RemoveFileCommandHandler.c"
+#include "../../userspace/usr/src/filesystems/common/SeekFileCommandHandler.c"
+#include "../../userspace/usr/src/filesystems/common/DumpOpenFilesCommandHandler.c"
+#include "../../userspace/usr/src/filesystems/common/GetFileBlockMetadataCommandHandler.c"
+#include "../../userspace/usr/src/filesystems/common/EndOfFileCommandHandler.c"
+#include "../../userspace/usr/src/filesystems/common/FormatCommandHandler.c"
+#include "../../userspace/usr/src/filesystems/common/OpendirCommandHandler.c"
+#include "../../userspace/usr/src/filesystems/common/ReaddirCommandHandler.c"
+#include "../../userspace/usr/src/filesystems/common/ClosedirCommandHandler.c"
+#include "../../userspace/usr/src/filesystems/common/LstatCommandHandler.c"
+#include "../../userspace/usr/src/filesystems/common/DirstatCommandHandler.c"
+#include "../../userspace/usr/src/filesystems/common/RenameFileCommandHandler.c"
+#include "../../userspace/usr/src/filesystems/common/MkdirCommandHandler.c"
+#include "../../userspace/usr/src/filesystems/common/RmdirCommandHandler.c"
+#include "../../userspace/usr/src/filesystems/common/CloseProcessCommandHandler.c"
 
 /// @var fat32CommandHandlers
 ///
