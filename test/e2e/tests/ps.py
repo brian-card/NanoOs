@@ -26,7 +26,7 @@
 
 """End-to-end tests of ps."""
 
-
+import re
 
 
 def test_ps_lists_kernel_processes(s):
@@ -35,3 +35,12 @@ def test_ps_lists_kernel_processes(s):
     assert "console" in out, out
     assert "memory manager" in out, out
     assert "ps" in out, out
+
+
+def test_ps_shows_system_processes_owned_by_the_system(s):
+    s.login()
+    out = s.sh("ps")
+    assert re.search(r"^\d+  system console$", out, re.M), out
+    assert re.search(r"^\d+  system memory manager$", out, re.M), out
+    assert re.search(r"^\d+  system filesystem$", out, re.M), out
+    assert re.search(r"^\d+  root ps$", out, re.M), out

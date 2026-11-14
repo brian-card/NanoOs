@@ -98,5 +98,5 @@ def test_the_logger_runs_from_the_system_tree(s):
     boot_output = io.StringIO()
     s.child.logfile_read = boot_output
     s.login()
-    assert re.search(r"^\d+  root logger$", s.sh("ps"), re.M)
+    assert re.search(r"^\d+  system logger$", s.sh("ps"), re.M)
     assert "Could not open binary file" not in boot_output.getvalue()

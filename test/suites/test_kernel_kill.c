@@ -153,6 +153,70 @@ NANO_OS_KERNEL_TEST(kill, pid_zero_is_invalid) {
   NANO_OS_ASSERT_EQ_INT(EINVAL, result.errorNumber);
 }
 
+NANO_OS_KERNEL_TEST(kill, system_processes_are_owned_by_the_system) {
+  NANO_OS_ASSERT_EQ_INT(SYSTEM_USER_ID, allProcesses[schedulerPid - 1].userId);
+  NANO_OS_ASSERT_EQ_INT(SYSTEM_USER_ID, allProcesses[consolePid - 1].userId);
+  NANO_OS_ASSERT_EQ_INT(SYSTEM_USER_ID,
+    allProcesses[memoryManagerPid - 1].userId);
+}
+
+NANO_OS_KERNEL_TEST(kill, system_owned_process_survives_root) {
+  // A supervisor-level target isolates the user ID check from the privilege
+  // check, which would protect a kernel or executive process on its own.
+  ProcessDescriptor *target = startIdleProcess(PRIVILEGE_LEVEL_SUPERVISOR);
+  NANO_OS_ASSERT_NOT_NULL(target);
+  target->userId = SYSTEM_USER_ID;
+  getRunningProcess()->userId = ROOT_USER_ID;
+
+  SchedulerKillProcessArgs result = killPid(target->processId, SIGKILL);
+
+  NANO_OS_ASSERT_EQ_INT(1, result.returnValue);
+  NANO_OS_ASSERT_EQ_INT(EACCES, result.errorNumber);
+  NANO_OS_ASSERT_TRUE(processRunning(target));
+}
+
+NANO_OS_KERNEL_TEST(kill, root_kills_another_users_process) {
+  ProcessDescriptor *target = startIdleProcess(PRIVILEGE_LEVEL_USER);
+  NANO_OS_ASSERT_NOT_NULL(target);
+  target->userId = 1000;
+  getRunningProcess()->userId = ROOT_USER_ID;
+
+  SchedulerKillProcessArgs result = killPid(target->processId, SIGKILL);
+
+  NANO_OS_ASSERT_EQ_INT(0, result.returnValue);
+  NANO_OS_ASSERT_FALSE(processRunning(target));
+}
+
+NANO_OS_KERNEL_TEST(kill, root_cannot_signal_a_system_process) {
+  getRunningProcess()->userId = ROOT_USER_ID;
+  errno = 0;
+
+  NANO_OS_ASSERT_EQ_INT(-1, schedulerSendSignal(consolePid, 0));
+  NANO_OS_ASSERT_EQ_INT(EPERM, errno);
+}
+
+NANO_OS_KERNEL_TEST(kill, root_signals_another_users_process) {
+  ProcessDescriptor *target = startIdleProcess(PRIVILEGE_LEVEL_USER);
+  NANO_OS_ASSERT_NOT_NULL(target);
+  target->userId = 1000;
+  getRunningProcess()->userId = ROOT_USER_ID;
+  errno = 0;
+
+  NANO_OS_ASSERT_EQ_INT(0, schedulerSendSignal(target->processId, 0));
+  NANO_OS_ASSERT_EQ_INT(0, errno);
+}
+
+NANO_OS_KERNEL_TEST(kill, a_user_cannot_signal_another_users_process) {
+  ProcessDescriptor *target = startIdleProcess(PRIVILEGE_LEVEL_USER);
+  NANO_OS_ASSERT_NOT_NULL(target);
+  target->userId = 1001;
+  getRunningProcess()->userId = 1000;
+  errno = 0;
+
+  NANO_OS_ASSERT_EQ_INT(-1, schedulerSendSignal(target->processId, 0));
+  NANO_OS_ASSERT_EQ_INT(EPERM, errno);
+}
+
 /// @fn static void giveFileDescriptors(ProcessDescriptor *processDescriptor,
 ///   FileDescriptor *first, FileDescriptor *second)
 ///

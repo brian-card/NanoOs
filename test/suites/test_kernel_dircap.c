@@ -993,7 +993,7 @@ NANO_OS_KERNEL_TEST_WITH(dircap, spawn_never_runs_a_child_at_executive_level,
 /// @fn static void* setuidChild(void *args)
 ///
 /// @brief Call setuid with execPath's first byte selecting the ID:  'a' asks
-/// for -1, anything else for user 5.
+/// for -1, 's' for SYSTEM_USER_ID, anything else for user 5.
 ///
 /// @param args Unused.
 ///
@@ -1001,8 +1001,13 @@ NANO_OS_KERNEL_TEST_WITH(dircap, spawn_never_runs_a_child_at_executive_level,
 static void* setuidChild(void *args) {
   (void) args;
   errno = 0;
-  int returnValue = schedulerSetProcessUser(
-    (execPath[0] == 'a') ? ((UserId) -1) : 5);
+  UserId userId = 5;
+  if (execPath[0] == 'a') {
+    userId = -1;
+  } else if (execPath[0] == 's') {
+    userId = SYSTEM_USER_ID;
+  }
+  int returnValue = schedulerSetProcessUser(userId);
   childStatus = (returnValue == 0) ? 0 : errno;
   reportedUser = getRunningProcess()->userId;
   reported = true;
@@ -1055,6 +1060,10 @@ NANO_OS_KERNEL_TEST(dircap, an_executive_process_can_setuid) {
 
 NANO_OS_KERNEL_TEST(dircap, an_executive_process_cannot_change_a_set_user) {
   expectSetuid(7, PRIVILEGE_LEVEL_EXECUTIVE, 'b', EACCES, 7);
+}
+
+NANO_OS_KERNEL_TEST(dircap, no_process_can_setuid_to_the_system) {
+  expectSetuid(NO_USER_ID, PRIVILEGE_LEVEL_EXECUTIVE, 's', EINVAL, NO_USER_ID);
 }
 
 /// @var consoleEchoArgv
