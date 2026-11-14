@@ -3541,6 +3541,21 @@ static int schedulerReleaseConsolePorts(ProcessDescriptor *processDescriptor) {
   return returnValue;
 }
 
+/// @fn static inline bool userMaySignal(UserId senderId, UserId targetId)
+///
+/// @brief Determine whether a process owned by one user may signal or kill a
+/// process owned by another.  Root may act on any user's processes except
+/// those owned by SYSTEM_USER_ID.
+///
+/// @param senderId The UserId of the process sending the signal.
+/// @param targetId The UserId of the process receiving the signal.
+///
+/// @return Returns true if the signal is permitted, false if not.
+static inline bool userMaySignal(UserId senderId, UserId targetId) {
+  return (senderId == targetId)
+    || ((senderId == ROOT_USER_ID) && (targetId != SYSTEM_USER_ID));
+}
+
 /// @fn int schedulerKillProcessCommandHandler(
 ///   SchedulerState *schedulerState, ProcessMessage *processMessage)
 ///
@@ -3577,8 +3592,7 @@ int schedulerKillProcessCommandHandler(
   ) {
     if ((allProcesses[processIndex].privilegeLevel
         >= PRIVILEGE_LEVEL_SUPERVISOR)
-      && ((allProcesses[processIndex].userId == callingUserId)
-        || (callingUserId == ROOT_USER_ID))
+      && (userMaySignal(callingUserId, allProcesses[processIndex].userId))
     ) {
       ProcessDescriptor *processDescriptor = &allProcesses[processIndex];
       processDescriptor->exitStatus
@@ -3885,6 +3899,9 @@ int schedulerSetProcessUserCommandHandler(
     ) {
       schedulerSetProcessUserArgs->returnValue = -1;
       schedulerSetProcessUserArgs->errorNumber = EPERM;
+    } else if (schedulerSetProcessUserArgs->userId < NO_USER_ID) {
+      schedulerSetProcessUserArgs->returnValue = -1;
+      schedulerSetProcessUserArgs->errorNumber = EINVAL;
     } else if ((allProcesses[callingPid - 1].userId == -1)
       || (schedulerSetProcessUserArgs->userId == -1)
     ) {
@@ -4704,8 +4721,7 @@ int schedulerSendSignalCommandHandler(
 
   ProcessDescriptor *sender = processMessageFrom(processMessage);
   if ((processPid(sender) != consolePid)
-    && (sender->userId != ROOT_USER_ID)
-    && (sender->userId != processDescriptor->userId)
+    && (!userMaySignal(sender->userId, processDescriptor->userId))
   ) {
     sendSignalArgs->returnValue = -1;
     sendSignalArgs->errorNumber = EPERM;
@@ -6105,7 +6121,7 @@ int restartConsole(ProcessDescriptor *processDescriptor) {
   threadSetContext(processDescriptor->mainThread, processDescriptor);
   threadSetStackEnd(processDescriptor->mainThread, consoleStackEnd);
   processDescriptor->name = _consoleName;
-  processDescriptor->userId = ROOT_USER_ID;
+  processDescriptor->userId = SYSTEM_USER_ID;
   setProcessHalCapabilities(processDescriptor, consoleHalCapabilities,
     sizeof(consoleHalCapabilities) / sizeof(consoleHalCapabilities[0]));
   return 0;
@@ -6131,7 +6147,7 @@ int restartMemoryManager(ProcessDescriptor *processDescriptor) {
   }
   threadSetContext(processDescriptor->mainThread, processDescriptor);
   processDescriptor->name = _memoryManagerName;
-  processDescriptor->userId = ROOT_USER_ID;
+  processDescriptor->userId = SYSTEM_USER_ID;
   return 0;
 }
 
@@ -6853,7 +6869,7 @@ int initializeSchedulerState(
   allProcesses[schedulerPid - 1].processId
     = schedulerPid;
   allProcesses[schedulerPid - 1].name = _initName;
-  allProcesses[schedulerPid - 1].userId = ROOT_USER_ID;
+  allProcesses[schedulerPid - 1].userId = SYSTEM_USER_ID;
   allProcesses[schedulerPid - 1].privilegeLevel
     = PRIVILEGE_LEVEL_KERNEL;
   threadSetContext(allProcesses[schedulerPid - 1].mainThread,
@@ -7026,7 +7042,7 @@ int initializeProcesses(SchedulerState *schedulerState) {
   threadSetContext(processDescriptor->mainThread, processDescriptor);
   processDescriptor->processId = consolePid;
   processDescriptor->name = _consoleName;
-  processDescriptor->userId = ROOT_USER_ID;
+  processDescriptor->userId = SYSTEM_USER_ID;
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_KERNEL;
   processDescriptor->restartFunction = restartConsole;
   setProcessHalCapabilities(processDescriptor, consoleHalCapabilities,
@@ -7121,7 +7137,7 @@ int initializeProcesses(SchedulerState *schedulerState) {
   threadSetContext(processDescriptor->mainThread, processDescriptor);
   processDescriptor->processId = memoryManagerPid;
   processDescriptor->name = _memoryManagerName;
-  processDescriptor->userId = ROOT_USER_ID;
+  processDescriptor->userId = SYSTEM_USER_ID;
   processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_KERNEL;
   processDescriptor->restartFunction = restartMemoryManager;
   setProcessHalCapabilities(processDescriptor, memoryManagerHalCapabilities,
