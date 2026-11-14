@@ -482,6 +482,14 @@ unsigned int raiseUInt(unsigned int x, unsigned int y) {
 /// final binary on some targets.
 static const char _unownedUsername[] KEEP_IN_FLASH = "unowned";
 
+/// @var _systemUsername
+///
+/// @brief Username reported for SYSTEM_USER_ID.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _systemUsername[] KEEP_IN_FLASH = "system";
+
 /// @fn const char* getUsernameByUserId(UserId userId)
 ///
 /// @brief Get the username for a user given their numeric user ID.
@@ -491,6 +499,9 @@ static const char _unownedUsername[] KEEP_IN_FLASH = "unowned";
 /// @return Returns the username of the user on success, NULL on failure.
 const char* getUsernameByUserId(UserId userId) {
   const char *username = _unownedUsername;
+  if (userId == SYSTEM_USER_ID) {
+    return _systemUsername;
+  }
 
   for (int ii = 0; ii < NUM_USERS; ii++) {
     if (users[ii].userId == userId) {
