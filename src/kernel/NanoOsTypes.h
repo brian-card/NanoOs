@@ -148,6 +148,22 @@ typedef int (*CommandFunction)(int argc, char **argv);
 /// @brief The type to use to represent a numeric user ID.
 typedef int16_t UserId;
 
+/// @def ROOT_USER_ID
+///
+/// @brief The numerical ID of the root user.
+#define ROOT_USER_ID                                      0
+
+/// @def NO_USER_ID
+///
+/// @brief The numerical value that indicates that a process is not owned.
+#define NO_USER_ID                                       -1
+
+/// @def SYSTEM_USER_ID
+///
+/// @brief The numerical ID that owns kernel and executive system processes,
+/// which not even root may signal or kill.
+#define SYSTEM_USER_ID                                   -2
+
 /// @typedef ssize_t
 ///
 /// @brief Signed, register-width integer.

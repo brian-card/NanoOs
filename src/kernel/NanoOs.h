@@ -64,16 +64,6 @@ extern "C"
 /// @brief The version string for NanoOs
 #define NANO_OS_VERSION                             "0.3.0"
 
-/// @def ROOT_USER_ID
-///
-/// @brief The numerical ID of the root user.
-#define ROOT_USER_ID                                      0
-
-/// @def NO_USER_ID
-///
-/// @brief The numerical value that indicates that a process is not owned.
-#define NO_USER_ID                                       -1
-
 /// @def NUM_PROCESS_STORAGE_KEYS
 ///
 /// @brief The total number of keys supported by the per-process storage.
