@@ -131,6 +131,30 @@ typedef struct FilesystemState* (*FilesystemDriverInit)(
 /// @brief The most open-directory slots a handle can address.
 #define FILESYSTEM_MAX_OPEN_DIRS (1 << FILESYSTEM_DIR_INDEX_BITS)
 
+/// @def FILESYSTEM_FILE_INDEX_BITS
+///
+/// @brief The number of bits of a FILE handle that hold the slot index.
+#define FILESYSTEM_FILE_INDEX_BITS 6
+
+/// @def FILESYSTEM_FILE_GENERATION_BITS
+///
+/// @brief The number of bits of a FILE handle that hold the slot's generation.
+#define FILESYSTEM_FILE_GENERATION_BITS 10
+
+#if (FILESYSTEM_FILE_INDEX_BITS + FILESYSTEM_FILE_GENERATION_BITS) != 16
+#error "A FILE handle must be 16 bits so that it fits AVR's pointers"
+#endif
+
+/// @def FILESYSTEM_MAX_OPEN_FILES
+///
+/// @brief The most open-file slots a handle can address.
+#define FILESYSTEM_MAX_OPEN_FILES (1 << FILESYSTEM_FILE_INDEX_BITS)
+
+/// @def FILESYSTEM_FILE_SLOT_GROWTH
+///
+/// @brief The number of slots the table of open files grows by when it's full.
+#define FILESYSTEM_FILE_SLOT_GROWTH 4
+
 /// @def FILESYSTEM_USERSPACE_LENGTH
 ///
 /// @brief The length of "/userspace", the real directory that every path
@@ -181,6 +205,17 @@ typedef struct FilesystemOpenDir {
   uint8_t    flags;
 } FilesystemOpenDir;
 
+/// @struct FilesystemOpenFile
+///
+/// @brief One slot of the table of open files.
+///
+/// @param file The open file, or NULL if the slot is free.
+/// @param generation The generation a handle to this slot must carry.
+typedef struct FilesystemOpenFile {
+  struct NanoOsFile *file;
+  uint16_t           generation;
+} FilesystemOpenFile;
+
 /// @struct FilesystemState
 ///
 /// @brief State metadata the filesystem process uses to provide access to
@@ -200,7 +235,9 @@ typedef struct FilesystemOpenDir {
 ///   blockBufferLba on the device.
 /// @param numOpenFiles The number of files currently open by the filesystem.
 ///   If this number is zero then the blockBuffer pointer may be NULL.
-/// @param openFiles A pointer to the first FILE that's open.
+/// @param numOpenFileSlots The number of slots in openFileSlots.
+/// @param openFileSlots The table of open files, which grows as files are
+///   opened and never shrinks.  A FILE handle names one of its slots.
 /// @param openDirs The table of open directories, allocated by the first
 ///   opendir.  It has filesystemNumDirSlots slots.
 /// @param startLba The address of the first block of the filesystem.
@@ -232,7 +269,8 @@ typedef struct FilesystemState {
   uint32_t                        blockBufferLba;
   bool                            blockBufferValid;
   uint8_t                         numOpenFiles;
-  FILE                           *openFiles;
+  uint8_t                         numOpenFileSlots;
+  FilesystemOpenFile             *openFileSlots;
   FilesystemOpenDir              *openDirs;
   uint32_t                        startLba;
   uint32_t                        endLba;
@@ -290,7 +328,6 @@ typedef struct FilesystemSeekArgs {
 ///
 /// @param pathname A string containing the full path to the file.
 /// @param mode A string containing the mode to open the file with.
-/// @param fd The numeric file descriptor to use for the file.
 /// @param now The time to record if the file is created, in seconds since the
 ///   Unix epoch.
 /// @param returnValue A pointer to the FILE that's opened on success, NULL
@@ -300,7 +337,6 @@ typedef struct FilesystemSeekArgs {
 typedef struct FilesystemFopenArgs {
   char   *pathname;
   char   *mode;
-  int     fd;
   time_t  now;
   FILE   *returnValue;
   int     errorNumber;
@@ -473,9 +509,11 @@ typedef struct FilesystemDumpOpenFilesArgs {
 /// @param stream A pointer to a FILE the caller wants to find the metadata of.
 /// @param metadata A pointer to a caller-supplied FileBlockMetadata structure
 ///   that is to be populated by the command.
+/// @param errorNumber The errno value if the command was refused, or 0.
 typedef struct GetFileBlockMetadataArgs {
   FILE              *stream;
   FileBlockMetadata *metadata;
+  int                errorNumber;
 } GetFileBlockMetadataArgs;
 
 /// @struct FeofArgs
