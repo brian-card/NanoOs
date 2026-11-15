@@ -903,10 +903,20 @@ NANO_OS_KERNEL_TEST(fs_handles, closing_pid_zero_touches_no_free_slot) {
   NANO_OS_ASSERT_EQ_INT(1, stubDirsClosed);
 }
 
-/// @var fakeFile
+/// @var fakeFiles
 ///
-/// @brief The file the fake filesystem process opens.
-static NanoOsFile fakeFile;
+/// @brief The files the fake filesystem process opens, in turn.
+static NanoOsFile fakeFiles[2];
+
+/// @var fakeFilesOpened
+///
+/// @brief The number of files the fake filesystem process has opened.
+static volatile int fakeFilesOpened;
+
+/// @var fakeFilesClosed
+///
+/// @brief The number of FILESYSTEM_CLOSE_FILE messages received.
+static volatile int fakeFilesClosed;
 
 /// @var fakeMode
 ///
@@ -968,10 +978,16 @@ static void* fakeFilesystem(void *args) {
       case FILESYSTEM_OPEN_FILE: {
         FilesystemFopenArgs *fopenArgs = (FilesystemFopenArgs*) data;
         strncpy(fakeMode, fopenArgs->mode, sizeof(fakeMode) - 1);
-        fakeFile.fd = fopenArgs->fd;
-        fopenArgs->returnValue = &fakeFile;
+        NanoOsFile *file = &fakeFiles[fakeFilesOpened % 2];
+        fakeFilesOpened++;
+        file->fd = fopenArgs->fd;
+        fopenArgs->returnValue = file;
         break;
       }
+
+      case FILESYSTEM_CLOSE_FILE:
+        fakeFilesClosed++;
+        break;
 
       case FILESYSTEM_OPEN_DIR:
         ((FilesystemOpendirArgs*) data)->returnValue
@@ -1020,6 +1036,8 @@ static void useFakeFilesystem(void) {
   fakeDirstatDirp = NULL;
   fakeDirstatBuf = NULL;
   fakeIoError = 0;
+  fakeFilesOpened = 0;
+  fakeFilesClosed = 0;
   memset(fakeMode, 0, sizeof(fakeMode));
   ProcessDescriptor *processDescriptor = processQueuePop(halMockFreeQueue());
   NANO_OS_ASSERT_NOT_NULL(processDescriptor);
@@ -1155,6 +1173,123 @@ NANO_OS_KERNEL_TEST(fs_handles, a_refused_io_sets_errno) {
   errno = 0;
   (void) filesystemEndOfFile(file);
   NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EBADF, errno);
+}
+
+NANO_OS_KERNEL_TEST(fs_handles, closing_a_dup_of_a_file_leaves_the_original) {
+  useFakeFilesystem();
+  FILE *file = filesystemFopen("/tmp/f", "r");
+  NANO_OS_ASSERT_NOT_NULL(file);
+  int fd = nanoOsFileno(file);
+  int dupFd = nanoOsDup(fd);
+  NANO_OS_ASSERT_TRUE(dupFd > fd);
+
+  NANO_OS_ASSERT_EQ_INT(0, nanoOsClose(dupFd));
+  NANO_OS_ASSERT_NULL(nanoOsGetFileDescriptor(dupFd));
+  NANO_OS_ASSERT_NOT_NULL(nanoOsGetFileDescriptor(fd));
+  NANO_OS_ASSERT_EQ_PTR(file, nanoOsGetFileDescriptor(fd)->file);
+  NANO_OS_ASSERT_EQ_INT(0, fakeFilesClosed);
+
+  NANO_OS_ASSERT_EQ_INT(0, nanoOsClose(fd));
+  NANO_OS_ASSERT_NULL(nanoOsGetFileDescriptor(fd));
+  NANO_OS_ASSERT_EQ_INT(1, fakeFilesClosed);
+}
+
+NANO_OS_KERNEL_TEST(fs_handles, closing_the_original_of_a_file_leaves_the_dup) {
+  useFakeFilesystem();
+  FILE *file = filesystemFopen("/tmp/f", "r");
+  NANO_OS_ASSERT_NOT_NULL(file);
+  int fd = nanoOsFileno(file);
+  int dupFd = nanoOsDup(fd);
+  NANO_OS_ASSERT_TRUE(dupFd > fd);
+
+  NANO_OS_ASSERT_EQ_INT(0, nanoOsClose(fd));
+  NANO_OS_ASSERT_NULL(nanoOsGetFileDescriptor(fd));
+  NANO_OS_ASSERT_NOT_NULL(nanoOsGetFileDescriptor(dupFd));
+  NANO_OS_ASSERT_EQ_PTR(file, nanoOsGetFileDescriptor(dupFd)->file);
+  NANO_OS_ASSERT_EQ_INT(0, fakeFilesClosed);
+
+  NANO_OS_ASSERT_EQ_INT(0, nanoOsClose(dupFd));
+  NANO_OS_ASSERT_NULL(nanoOsGetFileDescriptor(dupFd));
+  NANO_OS_ASSERT_EQ_INT(1, fakeFilesClosed);
+}
+
+NANO_OS_KERNEL_TEST(fs_handles, dup2_over_a_file_closes_it_once) {
+  useFakeFilesystem();
+  FILE *first = filesystemFopen("/tmp/a", "r");
+  FILE *second = filesystemFopen("/tmp/b", "r");
+  NANO_OS_ASSERT_NOT_NULL(first);
+  NANO_OS_ASSERT_NOT_NULL(second);
+  NANO_OS_ASSERT_TRUE(first != second);
+  int firstFd = nanoOsFileno(first);
+  int secondFd = nanoOsFileno(second);
+
+  NANO_OS_ASSERT_EQ_INT(secondFd, nanoOsDup2(firstFd, secondFd));
+  NANO_OS_ASSERT_EQ_INT(1, fakeFilesClosed);
+  NANO_OS_ASSERT_EQ_PTR(first, nanoOsGetFileDescriptor(secondFd)->file);
+  NANO_OS_ASSERT_EQ_PTR(first, nanoOsGetFileDescriptor(firstFd)->file);
+
+  NANO_OS_ASSERT_EQ_INT(0, nanoOsClose(secondFd));
+  NANO_OS_ASSERT_NULL(nanoOsGetFileDescriptor(secondFd));
+  NANO_OS_ASSERT_EQ_PTR(first, nanoOsGetFileDescriptor(firstFd)->file);
+  NANO_OS_ASSERT_EQ_INT(1, fakeFilesClosed);
+
+  NANO_OS_ASSERT_EQ_INT(0, nanoOsClose(firstFd));
+  NANO_OS_ASSERT_NULL(nanoOsGetFileDescriptor(firstFd));
+  NANO_OS_ASSERT_EQ_INT(2, fakeFilesClosed);
+}
+
+NANO_OS_KERNEL_TEST(fs_handles, fclose_of_a_dupd_file_leaves_the_dup) {
+  useFakeFilesystem();
+  FILE *file = filesystemFopen("/tmp/f", "r");
+  NANO_OS_ASSERT_NOT_NULL(file);
+  int fd = nanoOsFileno(file);
+  int dupFd = nanoOsDup(fd);
+  NANO_OS_ASSERT_TRUE(dupFd > fd);
+
+  NANO_OS_ASSERT_EQ_INT(0, filesystemFclose(file));
+  NANO_OS_ASSERT_NULL(nanoOsGetFileDescriptor(fd));
+  NANO_OS_ASSERT_NOT_NULL(nanoOsGetFileDescriptor(dupFd));
+  NANO_OS_ASSERT_EQ_INT(0, fakeFilesClosed);
+
+  NANO_OS_ASSERT_EQ_INT(0, nanoOsClose(dupFd));
+  NANO_OS_ASSERT_NULL(nanoOsGetFileDescriptor(dupFd));
+  NANO_OS_ASSERT_EQ_INT(1, fakeFilesClosed);
+}
+
+NANO_OS_KERNEL_TEST(fs_handles, dup2_over_a_moved_file_closes_it) {
+  useFakeFilesystem();
+  FILE *first = filesystemFopen("/tmp/a", "r");
+  FILE *second = filesystemFopen("/tmp/b", "r");
+  NANO_OS_ASSERT_NOT_NULL(first);
+  NANO_OS_ASSERT_NOT_NULL(second);
+  int firstFd = nanoOsFileno(first);
+  int secondFd = nanoOsFileno(second);
+  int movedFd = nanoOsDup(secondFd);
+  NANO_OS_ASSERT_EQ_INT(0, nanoOsClose(secondFd));
+
+  NANO_OS_ASSERT_EQ_INT(movedFd, nanoOsDup2(firstFd, movedFd));
+  NANO_OS_ASSERT_EQ_INT(1, fakeFilesClosed);
+  NANO_OS_ASSERT_EQ_PTR(first, nanoOsGetFileDescriptor(movedFd)->file);
+  NANO_OS_ASSERT_NULL(nanoOsGetFileDescriptor(secondFd));
+}
+
+NANO_OS_KERNEL_TEST(fs_handles, fclose_of_a_stream_whose_fd_was_reused_fails) {
+  useFakeFilesystem();
+  FILE *first = filesystemFopen("/tmp/a", "r");
+  NANO_OS_ASSERT_NOT_NULL(first);
+  int fd = nanoOsFileno(first);
+  int dupFd = nanoOsDup(fd);
+  NANO_OS_ASSERT_EQ_INT(0, nanoOsClose(fd));
+  FILE *second = filesystemFopen("/tmp/b", "r");
+  NANO_OS_ASSERT_NOT_NULL(second);
+  NANO_OS_ASSERT_EQ_INT(fd, nanoOsFileno(second));
+
+  errno = 0;
+  NANO_OS_ASSERT_EQ_INT(EOF, filesystemFclose(first));
+  NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EBADF, errno);
+  NANO_OS_ASSERT_EQ_PTR(second, nanoOsGetFileDescriptor(fd)->file);
+  NANO_OS_ASSERT_EQ_PTR(first, nanoOsGetFileDescriptor(dupFd)->file);
+  NANO_OS_ASSERT_EQ_INT(0, fakeFilesClosed);
 }
 
 NANO_OS_KERNEL_TEST(fs_handles, sethostname_opens_the_file_for_writing) {
