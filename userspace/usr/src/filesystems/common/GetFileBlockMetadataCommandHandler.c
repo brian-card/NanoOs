@@ -42,6 +42,7 @@
 #include "NanoOsUtils.h"
 #include "FilesystemUtils.h"
 #endif // NANO_OS_KERNEL_BUILD
+#include "../include/FilesystemHandles.h"
 
 // Prototypes used by this handler.
 int driverGetFileBlockMetadata(
@@ -63,11 +64,14 @@ void* GetFileBlockMetadata(void *args) {
   ProcessMessage *processMessage = (ProcessMessage*) filesystemState->args;
   GetFileBlockMetadataArgs *metadataArgs
     = (GetFileBlockMetadataArgs*) processMessageData(processMessage);
-  metadataArgs->metadata->blockDevice = filesystemState->blockDevice;
-
-  if (filesystemState->driverState != NULL) {
+  FilesystemOpenFile *slot = filesystemFileLookup(filesystemState,
+    processMessage, metadataArgs->stream, 0);
+  if (slot == NULL) {
+    metadataArgs->errorNumber = FILESYSTEM_EBADF;
+  } else if (filesystemState->driverState != NULL) {
+    metadataArgs->metadata->blockDevice = filesystemState->blockDevice;
     driverGetFileBlockMetadata(
-      filesystemState->driverState, metadataArgs->stream->file,
+      filesystemState->driverState, slot->file->file,
       &metadataArgs->metadata->startBlock, &metadataArgs->metadata->numBlocks);
   }
 
