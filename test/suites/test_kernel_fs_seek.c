@@ -21,6 +21,7 @@ void* SeekFile(void *args);
 static Fat32DriverState seekDriverState;
 static Fat32FileHandle seekHandle;
 static NanoOsFile seekFile;
+static FilesystemOpenFile seekSlot;
 static FilesystemState seekState;
 static ProcessMessage seekMessage;
 static FilesystemSeekArgs seekArgs;
@@ -43,6 +44,10 @@ static void seekFixture(uint32_t fileSize, uint32_t position) {
   seekState.args = &seekMessage;
   seekState.allProcesses = allProcesses;
   seekState.numProcesses = numProcesses;
+  seekSlot.file = &seekFile;
+  seekSlot.generation = 1;
+  seekState.openFileSlots = &seekSlot;
+  seekState.numOpenFileSlots = 1;
 }
 
 /// @fn static void seek(long offset, int whence)
@@ -50,7 +55,7 @@ static void seekFixture(uint32_t fileSize, uint32_t position) {
 /// @brief Run the fseek command handler on the fixture's file.
 static void seek(long offset, int whence) {
   memset(&seekArgs, 0, sizeof(seekArgs));
-  seekArgs.stream = &seekFile;
+  seekArgs.stream = (FILE*) (uintptr_t) (1u << FILESYSTEM_FILE_INDEX_BITS);
   seekArgs.offset = offset;
   seekArgs.whence = whence;
   memset(&seekMessage, 0, sizeof(seekMessage));

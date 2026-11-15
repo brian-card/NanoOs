@@ -78,6 +78,7 @@ _Static_assert(EINVAL == 5, "NANO_OS_EINVAL must match EINVAL");
 #define driverMkdir stubMkdir
 #define driverRmdir stubRmdir
 #define driverLstat stubLstat
+#define driverGetFileBlockMetadata stubGetFileBlockMetadata
 #define OpenFile testOpenFile
 #define CloseFile testCloseFile
 #define ReadFile testReadFile
@@ -94,6 +95,7 @@ _Static_assert(EINVAL == 5, "NANO_OS_EINVAL must match EINVAL");
 #define Mkdir testMkdir
 #define Rmdir testRmdir
 #define Lstat testLstat
+#define GetFileBlockMetadata testGetFileBlockMetadata
 #include "../../userspace/usr/src/filesystems/include/FilesystemPaths.h"
 #include "../../userspace/usr/src/filesystems/common/OpenFileCommandHandler.c"
 #include "../../userspace/usr/src/filesystems/common/CloseFileCommandHandler.c"
@@ -111,6 +113,7 @@ _Static_assert(EINVAL == 5, "NANO_OS_EINVAL must match EINVAL");
 #include "../../userspace/usr/src/filesystems/common/MkdirCommandHandler.c"
 #include "../../userspace/usr/src/filesystems/common/RmdirCommandHandler.c"
 #include "../../userspace/usr/src/filesystems/common/LstatCommandHandler.c"
+#include "../../userspace/usr/src/filesystems/common/GetFileBlockMetadataCommandHandler.c"
 
 #undef errno
 #define errno (*errno_())
@@ -230,6 +233,11 @@ int stubLstat(void *driverState, const char *path, struct stat *statbuf,
   return 0;
 }
 
+/// @var stubFopenError
+///
+/// @brief The errno value stubFopen fails with, or 0 to succeed.
+static int stubFopenError;
+
 void* stubFopen(void *driverState, const char *filePath, const char *mode,
   time_t now, bool mayCreate, int *errorNumber
 ) {
@@ -237,8 +245,8 @@ void* stubFopen(void *driverState, const char *filePath, const char *mode,
   stubMayCreate = mayCreate;
   stubFopenCalls++;
   strncpy(stubLastPath, filePath, sizeof(stubLastPath) - 1);
-  *errorNumber = 0;
-  return &stubFileHandle;
+  *errorNumber = stubFopenError;
+  return (stubFopenError == 0) ? &stubFileHandle : NULL;
 }
 
 int stubFclose(void *driverState, void *fileHandle) {
@@ -261,11 +269,23 @@ int stubFwrite(void *driverState, void *ptr, uint32_t length, void *handle) {
 
 long stubFseek(void *driverState, void *handle, long offset, int whence) {
   (void) driverState; (void) handle; (void) whence;
+  stubIoCalls++;
   return offset;
 }
 
 int stubFeof(void *handle) {
   (void) handle;
+  stubIoCalls++;
+  return 0;
+}
+
+int stubGetFileBlockMetadata(void *driverState, void *fileHandle,
+  uint32_t *startBlock, uint32_t *numBlocks
+) {
+  (void) driverState; (void) fileHandle;
+  stubIoCalls++;
+  *startBlock = 7;
+  *numBlocks = 3;
   return 0;
 }
 
@@ -366,6 +386,7 @@ static void handleFixture(void) {
   stubDirsClosed = 0;
   stubFilesClosed = 0;
   stubFopenCalls = 0;
+  stubFopenError = 0;
   stubPathCalls = 0;
   stubMayCreate = false;
   stubMayReplace = false;
@@ -548,6 +569,33 @@ static uint8_t numSlots(void) {
   return filesystemNumDirSlots(&handleState);
 }
 
+/// @fn static uint8_t fileIndex(NanoOsFile *handle)
+///
+/// @brief Get the slot index a FILE handle carries.
+///
+/// @return Returns the index.
+static uint8_t fileIndex(NanoOsFile *handle) {
+  return (uint8_t) (((uintptr_t) handle) & (FILESYSTEM_MAX_OPEN_FILES - 1));
+}
+
+/// @fn static uint16_t fileGeneration(NanoOsFile *handle)
+///
+/// @brief Get the generation a FILE handle carries.
+///
+/// @return Returns the generation.
+static uint16_t fileGeneration(NanoOsFile *handle) {
+  return (uint16_t) (((uintptr_t) handle) >> FILESYSTEM_FILE_INDEX_BITS);
+}
+
+/// @fn static NanoOsFile* fileOf(NanoOsFile *handle)
+///
+/// @brief Get the open file in the slot a FILE handle names.
+///
+/// @return Returns the file, or NULL if the slot is free.
+static NanoOsFile* fileOf(NanoOsFile *handle) {
+  return handleState.openFileSlots[fileIndex(handle)].file;
+}
+
 NANO_OS_KERNEL_TEST(fs_handles, access_follows_the_mode) {
   handleFixture();
   NanoOsFile *reader = openFile(self(), "r");
@@ -583,7 +631,7 @@ NANO_OS_KERNEL_TEST(fs_handles, another_process_cannot_use_a_file) {
   runHandler(testSeekFile, otherProcess(), &seekArgs);
   NANO_OS_ASSERT_EQ_INT(-1, seekArgs.returnValue);
   NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EBADF, seekArgs.errorNumber);
-  NANO_OS_ASSERT_EQ_INT(0, (int) file->currentPosition);
+  NANO_OS_ASSERT_EQ_INT(0, (int) fileOf(file)->currentPosition);
 
   FeofArgs feofArgs;
   memset(&feofArgs, 0, sizeof(feofArgs));
@@ -598,14 +646,14 @@ NANO_OS_KERNEL_TEST(fs_handles, another_process_cannot_use_a_file) {
   runHandler(testCloseFile, otherProcess(), &closeArgs);
   NANO_OS_ASSERT_EQ_INT(-FILESYSTEM_EBADF, closeArgs.returnValue);
   NANO_OS_ASSERT_EQ_INT(0, stubFilesClosed);
-  NANO_OS_ASSERT_EQ_PTR(file, handleState.openFiles);
+  NANO_OS_ASSERT_NOT_NULL(fileOf(file));
   NANO_OS_ASSERT_EQ_INT(1, handleState.numOpenFiles);
 }
 
 NANO_OS_KERNEL_TEST(fs_handles, the_owner_can_use_a_file) {
   handleFixture();
   NanoOsFile *file = openFile(self(), "r");
-  NANO_OS_ASSERT_EQ_INT(self()->processId, file->owner);
+  NANO_OS_ASSERT_EQ_INT(self()->processId, fileOf(file)->owner);
 
   FilesystemSeekArgs seekArgs;
   memset(&seekArgs, 0, sizeof(seekArgs));
@@ -613,7 +661,7 @@ NANO_OS_KERNEL_TEST(fs_handles, the_owner_can_use_a_file) {
   seekArgs.offset = 2;
   runHandler(testSeekFile, self(), &seekArgs);
   NANO_OS_ASSERT_EQ_INT(0, seekArgs.returnValue);
-  NANO_OS_ASSERT_EQ_INT(2, (int) file->currentPosition);
+  NANO_OS_ASSERT_EQ_INT(2, (int) fileOf(file)->currentPosition);
 
   FeofArgs feofArgs;
   memset(&feofArgs, 0, sizeof(feofArgs));
@@ -628,7 +676,8 @@ NANO_OS_KERNEL_TEST(fs_handles, the_owner_can_use_a_file) {
   runHandler(testCloseFile, self(), &closeArgs);
   NANO_OS_ASSERT_EQ_INT(0, closeArgs.returnValue);
   NANO_OS_ASSERT_EQ_INT(1, stubFilesClosed);
-  NANO_OS_ASSERT_NULL(handleState.openFiles);
+  NANO_OS_ASSERT_NULL(fileOf(file));
+  NANO_OS_ASSERT_EQ_INT(0, handleState.numOpenFiles);
 }
 
 NANO_OS_KERNEL_TEST(fs_handles, a_null_file_is_refused) {
@@ -640,6 +689,276 @@ NANO_OS_KERNEL_TEST(fs_handles, a_null_file_is_refused) {
   memset(&closeArgs, 0, sizeof(closeArgs));
   runHandler(testCloseFile, self(), &closeArgs);
   NANO_OS_ASSERT_EQ_INT(-FILESYSTEM_EBADF, closeArgs.returnValue);
+}
+
+/// @fn static int fileCommandsAllowed(ProcessDescriptor *sender,
+///   NanoOsFile *handle)
+///
+/// @brief Send read, write, seek, end-of-file, get-block-metadata, and close
+/// for a handle, stopping at the first one refused.
+///
+/// @param sender The process asking.
+/// @param handle The handle.
+///
+/// @return Returns the number of commands that were allowed, 0 to 6.  Each one
+/// that was refused reported EBADF and never reached the driver.
+static int fileCommandsAllowed(ProcessDescriptor *sender, NanoOsFile *handle) {
+  int ioCalls = stubIoCalls;
+  int filesClosed = stubFilesClosed;
+  int allowed = 0;
+
+  FilesystemIoCommandArgs ioArgs = doIo(testReadFile, sender, handle);
+  if (ioArgs.errorNumber != 0) {
+    NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EBADF, ioArgs.errorNumber);
+    NANO_OS_ASSERT_EQ_INT(ioCalls, stubIoCalls);
+    return allowed;
+  }
+  allowed++;
+
+  ioCalls = stubIoCalls;
+  ioArgs = doIo(testWriteFile, sender, handle);
+  if (ioArgs.errorNumber != 0) {
+    NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EBADF, ioArgs.errorNumber);
+    NANO_OS_ASSERT_EQ_INT(ioCalls, stubIoCalls);
+    return allowed;
+  }
+  allowed++;
+
+  ioCalls = stubIoCalls;
+  FilesystemSeekArgs seekArgs;
+  memset(&seekArgs, 0, sizeof(seekArgs));
+  seekArgs.stream = handle;
+  runHandler(testSeekFile, sender, &seekArgs);
+  if (seekArgs.returnValue != 0) {
+    NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EBADF, seekArgs.errorNumber);
+    NANO_OS_ASSERT_EQ_INT(ioCalls, stubIoCalls);
+    return allowed;
+  }
+  allowed++;
+
+  ioCalls = stubIoCalls;
+  FeofArgs feofArgs;
+  memset(&feofArgs, 0, sizeof(feofArgs));
+  feofArgs.stream = handle;
+  runHandler(testEndOfFile, sender, &feofArgs);
+  if (feofArgs.errorNumber != 0) {
+    NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EBADF, feofArgs.errorNumber);
+    NANO_OS_ASSERT_EQ_INT(ioCalls, stubIoCalls);
+    return allowed;
+  }
+  allowed++;
+
+  ioCalls = stubIoCalls;
+  FileBlockMetadata metadata;
+  memset(&metadata, 0, sizeof(metadata));
+  GetFileBlockMetadataArgs metadataArgs;
+  memset(&metadataArgs, 0, sizeof(metadataArgs));
+  metadataArgs.stream = handle;
+  metadataArgs.metadata = &metadata;
+  runHandler(testGetFileBlockMetadata, sender, &metadataArgs);
+  if (metadataArgs.errorNumber != 0) {
+    NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EBADF, metadataArgs.errorNumber);
+    NANO_OS_ASSERT_EQ_INT(ioCalls, stubIoCalls);
+    NANO_OS_ASSERT_EQ_INT(0, (int) metadata.numBlocks);
+    return allowed;
+  }
+  NANO_OS_ASSERT_EQ_INT(3, (int) metadata.numBlocks);
+  allowed++;
+
+  FilesystemFcloseArgs closeArgs;
+  memset(&closeArgs, 0, sizeof(closeArgs));
+  closeArgs.stream = handle;
+  runHandler(testCloseFile, sender, &closeArgs);
+  if (closeArgs.returnValue != 0) {
+    NANO_OS_ASSERT_EQ_INT(-FILESYSTEM_EBADF, closeArgs.returnValue);
+    NANO_OS_ASSERT_EQ_INT(filesClosed, stubFilesClosed);
+    return allowed;
+  }
+  allowed++;
+
+  return allowed;
+}
+
+NANO_OS_KERNEL_TEST(fs_handles, a_forged_file_is_refused_by_every_command) {
+  handleFixture();
+  NanoOsFile *real = openFile(self(), "r+");
+  static int forgedDriverHandle;
+  NanoOsFile forged;
+  memset(&forged, 0, sizeof(forged));
+  forged.file = &forgedDriverHandle;
+  forged.owner = self()->processId;
+  forged.access = DIRCAP_READ | DIRCAP_WRITE;
+
+  NANO_OS_ASSERT_EQ_INT(0, fileCommandsAllowed(self(), &forged));
+  NANO_OS_ASSERT_EQ_INT(1, handleState.numOpenFiles);
+  NANO_OS_ASSERT_NOT_NULL(fileOf(real));
+}
+
+NANO_OS_KERNEL_TEST(fs_handles, the_owner_can_use_every_file_command) {
+  handleFixture();
+  NanoOsFile *file = openFile(self(), "r+");
+  NANO_OS_ASSERT_EQ_INT(6, fileCommandsAllowed(self(), file));
+  NANO_OS_ASSERT_EQ_INT(1, stubFilesClosed);
+}
+
+NANO_OS_KERNEL_TEST(fs_handles, another_process_cannot_get_block_metadata) {
+  handleFixture();
+  NanoOsFile *file = openFile(self(), "r+");
+  int ioCalls = stubIoCalls;
+  FileBlockMetadata metadata;
+  memset(&metadata, 0, sizeof(metadata));
+  GetFileBlockMetadataArgs metadataArgs;
+  memset(&metadataArgs, 0, sizeof(metadataArgs));
+  metadataArgs.stream = file;
+  metadataArgs.metadata = &metadata;
+  runHandler(testGetFileBlockMetadata, otherProcess(), &metadataArgs);
+  NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EBADF, metadataArgs.errorNumber);
+  NANO_OS_ASSERT_EQ_INT(ioCalls, stubIoCalls);
+  NANO_OS_ASSERT_NULL(metadata.blockDevice);
+}
+
+NANO_OS_KERNEL_TEST(fs_handles, file_handles_are_never_null_or_stdio) {
+  handleFixture();
+  NanoOsFile *file = openFile(self(), "r");
+  NANO_OS_ASSERT_TRUE((uintptr_t) file >= (1u << FILESYSTEM_FILE_INDEX_BITS));
+  NANO_OS_ASSERT_TRUE((uintptr_t) file <= UINT16_MAX);
+}
+
+NANO_OS_KERNEL_TEST(fs_handles, a_closed_file_handle_fails_after_reuse) {
+  handleFixture();
+  NanoOsFile *first = openFile(self(), "r+");
+  NANO_OS_ASSERT_EQ_INT(6, fileCommandsAllowed(self(), first));
+  for (uint8_t ii = 0; ii < handleState.numOpenFileSlots; ii++) {
+    if (ii != fileIndex(first)) {
+      handleState.openFileSlots[ii].generation = 100;
+    }
+  }
+
+  NanoOsFile *second = openFile(self(), "r+");
+  NANO_OS_ASSERT_EQ_INT(fileIndex(first), fileIndex(second));
+  NANO_OS_ASSERT_TRUE(first != second);
+  NANO_OS_ASSERT_EQ_INT(0, fileCommandsAllowed(self(), first));
+  NANO_OS_ASSERT_EQ_INT(6, fileCommandsAllowed(self(), second));
+  NANO_OS_ASSERT_TRUE(handleState.openFileSlots[fileIndex(first)].generation
+    < 100);
+
+  NanoOsFile *theirs = openFile(otherProcess(), "r+");
+  NANO_OS_ASSERT_EQ_INT(fileIndex(first), fileIndex(theirs));
+  NANO_OS_ASSERT_EQ_INT(0, fileCommandsAllowed(otherProcess(), first));
+  NANO_OS_ASSERT_EQ_INT(0, fileCommandsAllowed(self(), theirs));
+  NANO_OS_ASSERT_EQ_INT(1, handleState.numOpenFiles);
+}
+
+NANO_OS_KERNEL_TEST(fs_handles, a_wrapping_file_generation_skips_zero) {
+  handleFixture();
+  NanoOsFile *file = openFile(self(), "r+");
+  handleState.openFileSlots[fileIndex(file)].generation
+    = FILESYSTEM_FILE_GENERATION_MASK;
+  file = filesystemFileHandle(&handleState,
+    &handleState.openFileSlots[fileIndex(file)]);
+  NANO_OS_ASSERT_EQ_INT(6, fileCommandsAllowed(self(), file));
+  NANO_OS_ASSERT_EQ_INT(1, handleState.openFileSlots[fileIndex(file)].generation);
+}
+
+NANO_OS_KERNEL_TEST(fs_handles, garbage_file_handles_are_refused) {
+  handleFixture();
+  NanoOsFile *file = openFile(self(), "r+");
+  uintptr_t handle = (uintptr_t) file;
+  uintptr_t pastTable = (handle & ~((uintptr_t) FILESYSTEM_MAX_OPEN_FILES - 1))
+    | handleState.numOpenFileSlots;
+  uintptr_t generationZero = handle & (FILESYSTEM_MAX_OPEN_FILES - 1);
+  uintptr_t above16Bits = handle | (((uintptr_t) 1) << 16);
+
+  NANO_OS_ASSERT_EQ_INT(0, fileCommandsAllowed(self(), NULL));
+  NANO_OS_ASSERT_EQ_INT(0, fileCommandsAllowed(self(), (NanoOsFile*) pastTable));
+  NANO_OS_ASSERT_EQ_INT(0,
+    fileCommandsAllowed(self(), (NanoOsFile*) generationZero));
+  NANO_OS_ASSERT_EQ_INT(0,
+    fileCommandsAllowed(self(), (NanoOsFile*) above16Bits));
+  NANO_OS_ASSERT_EQ_INT(6, fileCommandsAllowed(self(), file));
+}
+
+NANO_OS_KERNEL_TEST(fs_handles, growing_the_file_table_keeps_handles_valid) {
+  handleFixture();
+  NanoOsFile *files[FILESYSTEM_FILE_SLOT_GROWTH + 1];
+  for (int ii = 0; ii < FILESYSTEM_FILE_SLOT_GROWTH; ii++) {
+    files[ii] = openFile(self(), "r+");
+  }
+  NANO_OS_ASSERT_EQ_INT(FILESYSTEM_FILE_SLOT_GROWTH,
+    handleState.numOpenFileSlots);
+  files[FILESYSTEM_FILE_SLOT_GROWTH] = openFile(self(), "r+");
+  NANO_OS_ASSERT_EQ_INT(2 * FILESYSTEM_FILE_SLOT_GROWTH,
+    handleState.numOpenFileSlots);
+  NANO_OS_ASSERT_EQ_INT(FILESYSTEM_FILE_SLOT_GROWTH + 1,
+    handleState.numOpenFiles);
+
+  for (int ii = 0; ii <= FILESYSTEM_FILE_SLOT_GROWTH; ii++) {
+    NANO_OS_ASSERT_EQ_INT(6, fileCommandsAllowed(self(), files[ii]));
+  }
+  NANO_OS_ASSERT_EQ_INT(0, handleState.numOpenFiles);
+  NANO_OS_ASSERT_EQ_INT(2 * FILESYSTEM_FILE_SLOT_GROWTH,
+    handleState.numOpenFileSlots);
+}
+
+NANO_OS_KERNEL_TEST(fs_handles, a_full_file_table_returns_EMFILE) {
+  handleFixture();
+  for (int ii = 0; ii < FILESYSTEM_MAX_OPEN_FILES; ii++) {
+    (void) openFile(self(), "r");
+  }
+  NANO_OS_ASSERT_EQ_INT(FILESYSTEM_MAX_OPEN_FILES,
+    handleState.numOpenFileSlots);
+
+  int fopenCalls = stubFopenCalls;
+  static char path[] = "/tmp/f";
+  FilesystemFopenArgs args;
+  memset(&args, 0, sizeof(args));
+  args.pathname = path;
+  args.mode = (char*) "r";
+  runHandler(testOpenFile, self(), &args);
+  NANO_OS_ASSERT_NULL(args.returnValue);
+  NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EMFILE, args.errorNumber);
+  NANO_OS_ASSERT_EQ_INT(fopenCalls, stubFopenCalls);
+  NANO_OS_ASSERT_EQ_INT(FILESYSTEM_MAX_OPEN_FILES,
+    handleState.numOpenFileSlots);
+}
+
+NANO_OS_KERNEL_TEST(fs_handles, a_failed_open_takes_no_slot_and_frees_its_file) {
+  handleFixture();
+  NanoOsFile *file = openFile(self(), "r+");
+  NANO_OS_ASSERT_EQ_INT(6, fileCommandsAllowed(self(), file));
+  size_t freeMemory = getFreeMemory();
+
+  stubFopenError = 2;
+  static char path[] = "/tmp/missing";
+  FilesystemFopenArgs args;
+  memset(&args, 0, sizeof(args));
+  args.pathname = path;
+  args.mode = (char*) "r";
+  runHandler(testOpenFile, self(), &args);
+  NANO_OS_ASSERT_NULL(args.returnValue);
+  NANO_OS_ASSERT_EQ_INT(2, args.errorNumber);
+  NANO_OS_ASSERT_EQ_INT(0, handleState.numOpenFiles);
+  for (uint8_t ii = 0; ii < handleState.numOpenFileSlots; ii++) {
+    NANO_OS_ASSERT_NULL(handleState.openFileSlots[ii].file);
+  }
+  NANO_OS_ASSERT_EQ_INT((int) freeMemory, (int) getFreeMemory());
+}
+
+NANO_OS_KERNEL_TEST(fs_handles, fopen_takes_the_lowest_file_generation) {
+  handleFixture();
+  NanoOsFile *held = openFile(self(), "r");
+  NANO_OS_ASSERT_EQ_INT(0, fileIndex(held));
+  for (uint8_t ii = 1; ii < handleState.numOpenFileSlots; ii++) {
+    handleState.openFileSlots[ii].generation = 50 + ii;
+  }
+  handleState.openFileSlots[3].generation = 7;
+  handleState.openFileSlots[2].generation = 2;
+  NanoOsFile *other = openFile(otherProcess(), "r");
+  NANO_OS_ASSERT_EQ_INT(2, fileIndex(other));
+
+  NanoOsFile *file = openFile(self(), "r");
+  NANO_OS_ASSERT_EQ_INT(3, fileIndex(file));
+  NANO_OS_ASSERT_EQ_INT(7, fileGeneration(file));
 }
 
 NANO_OS_KERNEL_TEST(fs_handles, a_directory_handle_works_for_its_owner) {
@@ -857,10 +1176,12 @@ NANO_OS_KERNEL_TEST(fs_handles, closing_a_process_frees_only_what_it_owned) {
   NANO_OS_ASSERT_EQ_INT(0, handleState.openDirs[theirIndex].owner);
   NANO_OS_ASSERT_EQ_INT(self()->processId, handleState.openDirs[myIndex].owner);
   NANO_OS_ASSERT_EQ_INT(1, handleState.numOpenFiles);
-  NANO_OS_ASSERT_EQ_PTR(myFile, handleState.openFiles);
-  NANO_OS_ASSERT_NULL(handleState.openFiles->next);
-  NANO_OS_ASSERT_NULL(handleState.openFiles->prev);
-  (void) theirFile;
+  NANO_OS_ASSERT_NOT_NULL(fileOf(myFile));
+  NANO_OS_ASSERT_NULL(fileOf(theirFile));
+  NANO_OS_ASSERT_EQ_INT(fileGeneration(theirFile) + 1,
+    handleState.openFileSlots[fileIndex(theirFile)].generation);
+  NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EBADF,
+    doIo(testReadFile, otherProcess(), theirFile).errorNumber);
 }
 
 NANO_OS_KERNEL_TEST(fs_handles,
@@ -886,7 +1207,7 @@ NANO_OS_KERNEL_TEST(fs_handles, only_a_kernel_process_can_close_a_process) {
 
   NANO_OS_ASSERT_EQ_INT(0, stubDirsClosed);
   NANO_OS_ASSERT_EQ_INT(0, stubFilesClosed);
-  NANO_OS_ASSERT_EQ_PTR(file, handleState.openFiles);
+  NANO_OS_ASSERT_NOT_NULL(fileOf(file));
   NANO_OS_ASSERT_EQ_INT(0, readDir(otherProcess(), dirp));
 }
 
@@ -998,10 +1319,8 @@ static void* fakeFilesystem(void *args) {
       case FILESYSTEM_OPEN_FILE: {
         FilesystemFopenArgs *fopenArgs = (FilesystemFopenArgs*) data;
         strncpy(fakeMode, fopenArgs->mode, sizeof(fakeMode) - 1);
-        NanoOsFile *file = &fakeFiles[fakeFilesOpened % 2];
+        fopenArgs->returnValue = &fakeFiles[fakeFilesOpened % 2];
         fakeFilesOpened++;
-        file->fd = fopenArgs->fd;
-        fopenArgs->returnValue = file;
         break;
       }
 
@@ -1396,7 +1715,6 @@ NANO_OS_KERNEL_TEST(fs_handles, fclose_of_a_stream_not_held_sends_nothing) {
   NANO_OS_ASSERT_NOT_NULL(file);
   NanoOsFile notHeld;
   memset(&notHeld, 0, sizeof(notHeld));
-  notHeld.fd = nanoOsFileno(file);
 
   errno = 0;
   NANO_OS_ASSERT_EQ_INT(EOF, filesystemFclose(&notHeld));
@@ -1779,7 +2097,7 @@ static int tryOpen(const char *path, const char *mode, uint8_t *access) {
     return args.errorNumber;
   }
   if (access != NULL) {
-    *access = args.returnValue->access;
+    *access = fileOf(args.returnValue)->access;
   }
   return 0;
 }
@@ -1977,7 +2295,7 @@ NANO_OS_KERNEL_TEST(fs_access,
   args.mode = (char*) "rx";
   runHandler(testOpenFile, self(), &args);
   NANO_OS_ASSERT_NOT_NULL(args.returnValue);
-  NANO_OS_ASSERT_EQ_INT(0, args.returnValue->access);
+  NANO_OS_ASSERT_EQ_INT(0, fileOf(args.returnValue)->access);
   assertIoRefused(testReadFile, self(), args.returnValue);
   assertIoRefused(testWriteFile, self(), args.returnValue);
 }
