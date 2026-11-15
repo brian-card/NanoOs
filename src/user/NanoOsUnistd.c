@@ -108,9 +108,7 @@ int nanoOsClose(int fd) {
   }
   
   if (processDescriptor->fileDescriptors[fd]->file != NULL) {
-    // filesystemFclose will manage the refCount and freeing the FileDescriptor
-    returnValue = filesystemFclose(
-      processDescriptor->fileDescriptors[fd]->file);
+    returnValue = filesystemCloseFileDescriptor(fd);
   } else {
     processDescriptor->fileDescriptors[fd]->refCount--;
     if (processDescriptor->fileDescriptors[fd]->refCount == 0) {
@@ -224,9 +222,7 @@ int nanoOsDup2(int oldfd, int newfd) {
       newFileDescriptor->pipeEnd->pipeEnd = NULL;
     }
     if (newFileDescriptor->file != NULL) {
-      // filesystemFclose will manage the refCount and freeing the file
-      // descriptor
-      filesystemFclose(newFileDescriptor->file);
+      filesystemCloseFileDescriptor(newfd);
     } else {
       newFileDescriptor->refCount--;
       if (newFileDescriptor->refCount == 0) {
