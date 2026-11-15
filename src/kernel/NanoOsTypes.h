@@ -176,19 +176,13 @@ typedef intptr_t ssize_t;
 /// @brief Definition of the FILE structure used internally to NanoOs.
 ///
 /// @param file Pointer to the real file metadata.
-/// @param next A pointer to the next open NanoOsFile.
-/// @param prev A pointer to the previous open NanoOsFile.
 /// @param currentPosition The current position within the file.
-/// @param fd The numeric file descriptor for the file.
 /// @param owner The ProcessId of the process that owns the file.
 /// @param access The DIRCAP_READ and DIRCAP_WRITE bits the file was opened
 ///   with.
 typedef struct NanoOsFile {
   void              *file;
-  struct NanoOsFile *next;
-  struct NanoOsFile *prev;
   uint32_t           currentPosition;
-  int                fd;
   ProcessId          owner;
   uint8_t            access;
 } NanoOsFile;
