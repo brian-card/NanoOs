@@ -572,6 +572,7 @@ FILE* filesystemFopen(const char *pathname, const char *mode);
 #endif // fopen
 #define fopen filesystemFopen
 
+int filesystemCloseFileDescriptor(int fd);
 int filesystemFclose(FILE *stream);
 #ifdef fclose
 #undef fclose
