@@ -63,13 +63,13 @@ void* EndOfFile(void *args) {
   FeofArgs *feofArgs = (FeofArgs*) processMessageData(processMessage);
   feofArgs->returnValue = 0;
 
-  if (!filesystemFileAllowed(filesystemState, processMessage,
-    feofArgs->stream, 0)
-  ) {
+  FilesystemOpenFile *slot = filesystemFileLookup(filesystemState,
+    processMessage, feofArgs->stream, 0);
+  if (slot == NULL) {
     feofArgs->returnValue = 1;
     feofArgs->errorNumber = FILESYSTEM_EBADF;
   } else if (filesystemState->driverState != NULL) {
-    feofArgs->returnValue = driverFeof(feofArgs->stream->file);
+    feofArgs->returnValue = driverFeof(slot->file->file);
   }
 
   processMessageSetDone(processMessage);
