@@ -37,6 +37,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 #include "FilesystemUtils.h"
 
@@ -90,26 +91,144 @@ static inline ProcessId filesystemSenderPid(
   return processPid(sender);
 }
 
-/// @fn static inline bool filesystemFileAllowed(
-///   const FilesystemState *filesystemState, ProcessMessage *processMessage,
-///   const NanoOsFile *file, uint8_t access)
+/// @def FILESYSTEM_FILE_GENERATION_MASK
 ///
-/// @brief Determine whether a message's sender may use an open file.
+/// @brief The bits an open-file slot's generation can use.
+#define FILESYSTEM_FILE_GENERATION_MASK \
+  ((uint16_t) ((1u << FILESYSTEM_FILE_GENERATION_BITS) - 1u))
+
+/// @fn static inline FILE* filesystemFileHandle(
+///   const FilesystemState *filesystemState, const FilesystemOpenFile *slot)
+///
+/// @brief Get the handle that names an open-file slot.
 ///
 /// @param filesystemState The filesystem's state.
-/// @param processMessage The message.
-/// @param file The file, which may be NULL.
+/// @param slot The slot.
+///
+/// @return Returns the handle.
+static inline FILE* filesystemFileHandle(
+  const FilesystemState *filesystemState, const FilesystemOpenFile *slot
+) {
+  return (FILE*) (uintptr_t) (
+    (((uintptr_t) slot->generation) << FILESYSTEM_FILE_INDEX_BITS)
+    | (uintptr_t) (slot - filesystemState->openFileSlots));
+}
+
+/// @fn static FilesystemOpenFile* filesystemFileLookup(
+///   const FilesystemState *filesystemState, ProcessMessage *processMessage,
+///   const FILE *stream, uint8_t access)
+///
+/// @brief Find the slot a FILE handle names, without ever dereferencing the
+/// handle, if the message's sender may use it.  Not inlined because a copy in
+/// every handler doesn't fit the Agon's contiguous filesystem region as well
+/// as one call does.
+///
+/// @param filesystemState The filesystem's state.
+/// @param processMessage The message that carried the handle.
+/// @param stream The handle.
 /// @param access The DIRCAP_READ and DIRCAP_WRITE bits the operation needs.
 ///
-/// @return Returns true if the sender owns the file and it was opened with
-/// every bit of access, false if not.
-static inline bool filesystemFileAllowed(
+/// @return Returns the slot if the handle is current, the sender owns the file,
+/// and the file was opened with every bit of access, NULL if not.
+static __attribute__((noinline, unused)) FilesystemOpenFile*
+filesystemFileLookup(
   const FilesystemState *filesystemState, ProcessMessage *processMessage,
-  const NanoOsFile *file, uint8_t access
+  const FILE *stream, uint8_t access
 ) {
+  uintptr_t handle = (uintptr_t) stream;
   ProcessId sender = filesystemSenderPid(filesystemState, processMessage);
-  return (sender != 0) && (file != NULL) && (file->owner == sender)
-    && ((file->access & access) == access);
+  uint8_t index = (uint8_t) (handle & (FILESYSTEM_MAX_OPEN_FILES - 1));
+  if ((sender == 0) || (handle > (uintptr_t) UINT16_MAX)
+    || (index >= filesystemState->numOpenFileSlots)
+  ) {
+    return NULL;
+  }
+
+  FilesystemOpenFile *slot = &filesystemState->openFileSlots[index];
+  if ((slot->file == NULL)
+    || (slot->generation != (uint16_t) (handle >> FILESYSTEM_FILE_INDEX_BITS))
+    || (slot->file->owner != sender)
+    || ((slot->file->access & access) != access)
+  ) {
+    return NULL;
+  }
+
+  return slot;
+}
+
+/// @fn static inline FilesystemOpenFile* filesystemFileAllocate(
+///   FilesystemState *filesystemState, int *errorNumber)
+///
+/// @brief Find the free open-file slot with the lowest generation, growing the
+/// table if every slot is in use.
+///
+/// @param filesystemState The filesystem's state.
+/// @param errorNumber Where to store the errno value on failure.
+///
+/// @return Returns the slot, or NULL if the table can't grow.
+static inline FilesystemOpenFile* filesystemFileAllocate(
+  FilesystemState *filesystemState, int *errorNumber
+) {
+  uint8_t numSlots = filesystemState->numOpenFileSlots;
+  FilesystemOpenFile *slot = NULL;
+  for (uint8_t ii = 0; ii < numSlots; ii++) {
+    FilesystemOpenFile *candidate = &filesystemState->openFileSlots[ii];
+    if ((candidate->file == NULL)
+      && ((slot == NULL) || (candidate->generation < slot->generation))
+    ) {
+      slot = candidate;
+    }
+  }
+  if (slot != NULL) {
+    return slot;
+  }
+
+  if (numSlots >= FILESYSTEM_MAX_OPEN_FILES) {
+    *errorNumber = FILESYSTEM_EMFILE;
+    return NULL;
+  }
+  FilesystemOpenFile *slots = (FilesystemOpenFile*) realloc(
+    filesystemState->openFileSlots,
+    (numSlots + FILESYSTEM_FILE_SLOT_GROWTH) * sizeof(FilesystemOpenFile));
+  if (slots == NULL) {
+    *errorNumber = FILESYSTEM_ENOMEM;
+    return NULL;
+  }
+  for (uint8_t ii = numSlots; ii < numSlots + FILESYSTEM_FILE_SLOT_GROWTH;
+    ii++
+  ) {
+    slots[ii].file = NULL;
+    slots[ii].generation = 1;
+  }
+  filesystemState->openFileSlots = slots;
+  filesystemState->numOpenFileSlots = numSlots + FILESYSTEM_FILE_SLOT_GROWTH;
+
+  return &slots[numSlots];
+}
+
+/// @fn static inline void filesystemFileRelease(
+///   FilesystemState *filesystemState, FilesystemOpenFile *slot)
+///
+/// @brief Free an open-file slot's file and move the slot to its next
+/// generation, skipping 0 so that a handle is never NULL.
+///
+/// @param filesystemState The filesystem's state.
+/// @param slot The slot.
+///
+/// @return This function returns no value.
+static inline void filesystemFileRelease(
+  FilesystemState *filesystemState, FilesystemOpenFile *slot
+) {
+  free(slot->file);
+  slot->file = NULL;
+  slot->generation = (uint16_t) ((slot->generation + 1u)
+    & FILESYSTEM_FILE_GENERATION_MASK);
+  if (slot->generation == 0) {
+    slot->generation = 1;
+  }
+  if (filesystemState->numOpenFiles > 0) {
+    filesystemState->numOpenFiles--;
+  }
 }
 
 /// @fn static inline uint8_t filesystemNumDirSlots(
