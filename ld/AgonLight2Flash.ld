@@ -288,6 +288,7 @@
 *(.text._comessageQueuePush)
 *(.text._comessageQueueRemove)
 *(.text._filesystemFopen)
+*(.text._filesystemCloseFileDescriptor)
 *(.text._filesystemFclose)
 *(.text._filesystemRemove)
 *(.text._filesystemRenamePaths)
