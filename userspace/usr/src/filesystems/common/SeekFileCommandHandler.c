@@ -78,6 +78,7 @@ void* SeekFile(void *args) {
       filesystemSeekArgs->whence);
     if (position >= 0) {
       nanoOsFile->currentPosition = (uint32_t) position;
+      filesystemSeekArgs->position = position;
     } else {
       returnValue = -1;
       errorNumber = (int) -position;
