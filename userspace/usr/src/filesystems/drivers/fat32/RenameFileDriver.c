@@ -56,10 +56,12 @@ static bool fat32EntryIsOpen(
     Fat32DriverState *ds,
     const Fat32DirSearchResult *entry
 ) {
-  for (NanoOsFile *nanoOsFile = ds->filesystemState->openFiles;
-    nanoOsFile != NULL;
-    nanoOsFile = nanoOsFile->next
-  ) {
+  FilesystemState *filesystemState = ds->filesystemState;
+  for (uint8_t ii = 0; ii < filesystemState->numOpenFileSlots; ii++) {
+    NanoOsFile *nanoOsFile = filesystemState->openFileSlots[ii].file;
+    if (nanoOsFile == NULL) {
+      continue;
+    }
     Fat32FileHandle *handle = (Fat32FileHandle*) nanoOsFile->file;
     if ((handle != NULL)
       && (handle->directoryCluster == entry->dirCluster)
