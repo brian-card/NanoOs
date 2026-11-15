@@ -29,9 +29,9 @@
 ///
 /// @brief Filesystem-driver-agnostic implementation of a FILESYSTEM_OPEN_FILE
 /// command handler.  Shared verbatim by the kernel-linked, contiguous, and
-/// overlay filesystem builds; calls the selected driver's driverFopen and
-/// driverFclose directly, since which driver is linked in is a build-time
-/// choice, not a runtime one.
+/// overlay filesystem builds; calls the selected driver's driverFopen
+/// directly, since which driver is linked in is a build-time choice, not a
+/// runtime one.
 
 // Standard C includes
 #include <stdlib.h>
@@ -44,11 +44,11 @@
 #include "FilesystemUtils.h"
 #include "FilesystemPaths.h"
 #endif // NANO_OS_KERNEL_BUILD
+#include "../include/FilesystemHandles.h"
 
 // Prototypes used by this handler.
 void* driverFopen(void *driverState, const char *filePath, const char *mode,
     time_t now, bool mayCreate, int *errorNumber);
-int driverFclose(void *driverState, void *fileHandle);
 
 /// @def NO_DRIVER_ERRNO
 ///
@@ -116,6 +116,7 @@ void* OpenFile(void *args) {
   printDebugString("\"\n");
 
   int errorNumber = NO_DRIVER_ERRNO;
+  FILE *handle = NULL;
   uint8_t access = openFileAccess(fopenArgs->mode);
   char *pathname = filesystemAbsolutePath(
     filesystemState, processMessage, fopenArgs->pathname);
@@ -129,28 +130,28 @@ void* OpenFile(void *args) {
     bool mayCreate = (fopenArgs->mode[0] != 'r')
       && filesystemPathAllowed(filesystemState, processMessage, pathname,
         false, DIRCAP_CREATE);
-    void *fileHandle = driverFopen(
-      filesystemState->driverState,
-      pathname, fopenArgs->mode, fopenArgs->now, mayCreate, &errorNumber);
-    if (fileHandle != NULL) {
+    FilesystemOpenFile *slot
+      = filesystemFileAllocate(filesystemState, &errorNumber);
+    if (slot != NULL) {
+      // Allocated before the driver opens the file so that a failure here
+      // never needs driverFclose, which doesn't fit OpenFile's overlay slot.
       nanoOsFile = (NanoOsFile*) malloc(sizeof(NanoOsFile));
-      if (nanoOsFile != NULL) {
-        nanoOsFile->file = fileHandle;
-        nanoOsFile->currentPosition = 0;
-        nanoOsFile->fd = fopenArgs->fd;
-        nanoOsFile->owner = processPid(processMessageFrom(processMessage));
-        nanoOsFile->access = access;
-        filesystemState->numOpenFiles++;
-
-        nanoOsFile->next = filesystemState->openFiles;
-        nanoOsFile->prev = NULL;
-        if (filesystemState->openFiles != NULL) {
-          filesystemState->openFiles->prev = nanoOsFile;
-        }
-        filesystemState->openFiles = nanoOsFile;
-      } else {
-        driverFclose(filesystemState->driverState, fileHandle);
+      if (nanoOsFile == NULL) {
         errorNumber = OUT_OF_MEMORY_ERRNO;
+      } else {
+        nanoOsFile->file = driverFopen(
+          filesystemState->driverState,
+          pathname, fopenArgs->mode, fopenArgs->now, mayCreate, &errorNumber);
+        if (nanoOsFile->file == NULL) {
+          free(nanoOsFile);
+        } else {
+          nanoOsFile->currentPosition = 0;
+          nanoOsFile->owner = processPid(processMessageFrom(processMessage));
+          nanoOsFile->access = access;
+          filesystemState->numOpenFiles++;
+          slot->file = nanoOsFile;
+          handle = filesystemFileHandle(filesystemState, slot);
+        }
       }
     }
   } else {
@@ -160,7 +161,7 @@ void* OpenFile(void *args) {
     free(pathname);
   }
 
-  fopenArgs->returnValue = nanoOsFile;
+  fopenArgs->returnValue = handle;
   fopenArgs->errorNumber = errorNumber;
   processMessageSetDone(processMessage);
   return filesystemState;
