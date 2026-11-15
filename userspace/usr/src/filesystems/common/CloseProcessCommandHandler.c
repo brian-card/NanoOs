@@ -80,25 +80,13 @@ static void closeProcessDirs(FilesystemState *filesystemState, ProcessId pid) {
 ///
 /// @return This function returns no value.
 static void closeProcessFiles(FilesystemState *filesystemState, ProcessId pid) {
-  NanoOsFile *file = filesystemState->openFiles;
-  while (file != NULL) {
-    NanoOsFile *next = file->next;
-    if (file->owner == pid) {
-      driverFclose(filesystemState->driverState, file->file);
-      if (next != NULL) {
-        next->prev = file->prev;
-      }
-      if (file->prev != NULL) {
-        file->prev->next = next;
-      } else {
-        filesystemState->openFiles = next;
-      }
-      if (filesystemState->numOpenFiles > 0) {
-        filesystemState->numOpenFiles--;
-      }
-      free(file);
+  uint8_t numSlots = filesystemState->numOpenFileSlots;
+  for (uint8_t ii = 0; ii < numSlots; ii++) {
+    FilesystemOpenFile *slot = &filesystemState->openFileSlots[ii];
+    if ((slot->file != NULL) && (slot->file->owner == pid)) {
+      driverFclose(filesystemState->driverState, slot->file->file);
+      filesystemFileRelease(filesystemState, slot);
     }
-    file = next;
   }
 }
 
