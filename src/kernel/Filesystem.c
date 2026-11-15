@@ -215,8 +215,6 @@ static FILE* filesystemOpenFile(const char *pathname, const char *mode,
   }
   strcpy(fopenArgs.mode, mode);
 
-  fopenArgs.fd = fd;
-
   ProcessMessage *msg = initSendProcessMessageToPid(
     rootFilesystemPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_OPEN_FILE | pathFlag,
@@ -1154,7 +1152,7 @@ int getFileBlockMetadataFromFile(FILE *stream, FileBlockMetadata *metadata) {
   processMessageWaitForDone(processMessage, NULL);
   processMessageRelease(processMessage);
 
-  return 0;
+  return -args.errorNumber;
 }
 
 /// @var _overlayOpenMode

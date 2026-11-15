@@ -2901,7 +2901,6 @@ static FILE* schedOpenFile(const char *pathname, const char *mode,
     FilesystemFopenArgs fopenArgs = {
       .pathname = (char*) pathname,
       .mode = (char*) mode,
-      .fd = 0, // We don't care
       .now = time(NULL),
       .returnValue = NULL,
       .errorNumber = 0,
@@ -3319,7 +3318,7 @@ int schedGetFileBlockMetadataFromFile(
     return -EIO;
   }
 
-  return 0;
+  return -args.errorNumber;
 }
 
 /// @var _readMode
