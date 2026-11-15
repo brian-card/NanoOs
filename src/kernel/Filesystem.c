@@ -360,6 +360,62 @@ char* userspacePathNew(const char *path) {
   return fullPath;
 }
 
+/// @fn int filesystemCloseFileDescriptor(int fd)
+///
+/// @brief Close one of the running process's file descriptors that holds an
+/// open file.  The file itself is closed when its last descriptor is.
+///
+/// @param fd The file descriptor to close.
+///
+/// @return Returns 0 on success, sets errno to the appropriate value and
+/// returns EOF on failure.
+int filesystemCloseFileDescriptor(int fd) {
+  ProcessDescriptor *processDescriptor = getRunningProcess();
+  if (processDescriptor == NULL) {
+    // This should be impossible, but check anyway.
+    errno = EOTHER;
+    return EOF;
+  }
+
+  if ((fd < 0) || (fd >= processDescriptor->numFileDescriptors)
+    || (processDescriptor->fileDescriptors[fd] == NULL)
+    || (processDescriptor->fileDescriptors[fd]->file == NULL)
+  ) {
+    errno = EBADF;
+    return EOF;
+  }
+
+  FileDescriptor *fileDescriptor = processDescriptor->fileDescriptors[fd];
+  processDescriptor->fileDescriptors[fd] = NULL;
+  fileDescriptor->refCount--;
+  if (fileDescriptor->refCount > 0) {
+    return 0;
+  }
+
+  int returnValue = 0;
+  FilesystemFcloseArgs fcloseArgs;
+  fcloseArgs.stream = fileDescriptor->file;
+  fcloseArgs.returnValue = 0;
+
+  ProcessMessage *msg = initSendProcessMessageToPid(
+    rootFilesystemPid,
+    FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_CLOSE_FILE,
+    &fcloseArgs, sizeof(fcloseArgs), true);
+  processMessageWaitForDone(msg, NULL);
+
+  if (fcloseArgs.returnValue != 0) {
+    errno = -fcloseArgs.returnValue;
+    returnValue = EOF;
+  } else if (processDescriptor->numFilesystemHandles > 0) {
+    processDescriptor->numFilesystemHandles--;
+  }
+
+  processMessageRelease(msg);
+  free(fileDescriptor);
+
+  return returnValue;
+}
+
 /// @fn int filesystemFclose(FILE *stream)
 ///
 /// @brief Implementation of the standard C fclose call.
@@ -369,65 +425,23 @@ char* userspacePathNew(const char *path) {
 /// @return Returns 0 on success, sets errno to the appropriate value and
 /// returns EOF on failure.
 int filesystemFclose(FILE *stream) {
-  int returnValue = 0;
-
-  ProcessDescriptor *processDescriptor = getRunningProcess();
-  if (processDescriptor == NULL) {
-    // This should be impossible, but check anyway.
-    errno = EOTHER;
-    returnValue = EOF;
-    goto exit; // return NULL
-  }
-
   if (stream == NULL) {
     errno = EBADF;
-    returnValue = EOF;
-    goto exit;
+    return EOF;
   }
 
-  if (stream->fd >= processDescriptor->numFileDescriptors) {
+  ProcessDescriptor *processDescriptor = getRunningProcess();
+  if ((processDescriptor != NULL)
+    && ((stream->fd < 0)
+      || (stream->fd >= processDescriptor->numFileDescriptors)
+      || (processDescriptor->fileDescriptors[stream->fd] == NULL)
+      || (processDescriptor->fileDescriptors[stream->fd]->file != stream))
+  ) {
     errno = EBADF;
-    returnValue = EOF;
-    goto exit;
+    return EOF;
   }
 
-  FileDescriptor *fileDescriptor
-    = processDescriptor->fileDescriptors[stream->fd];
-  if (fileDescriptor == NULL) {
-    errno = EBADF;
-    returnValue = EOF;
-    goto exit;
-  }
-
-  fileDescriptor->refCount--;
-  if (fileDescriptor->refCount == 0) {
-    int fd = stream->fd;
-
-    FilesystemFcloseArgs fcloseArgs;
-    fcloseArgs.stream = stream;
-    fcloseArgs.returnValue = 0;
-
-    ProcessMessage *msg = initSendProcessMessageToPid(
-      rootFilesystemPid,
-      FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_CLOSE_FILE,
-      &fcloseArgs, sizeof(fcloseArgs), true);
-    processMessageWaitForDone(msg, NULL);
-
-    if (fcloseArgs.returnValue != 0) {
-      errno = -fcloseArgs.returnValue;
-      returnValue = EOF;
-    } else if (processDescriptor->numFilesystemHandles > 0) {
-      processDescriptor->numFilesystemHandles--;
-    }
-
-    processMessageRelease(msg);
-
-    free(fileDescriptor); fileDescriptor = NULL;
-    processDescriptor->fileDescriptors[fd] = NULL;
-  }
-
-exit:
-  return returnValue;
+  return filesystemCloseFileDescriptor(stream->fd);
 }
 
 /// @fn int filesystemRemove(const char *pathname)
