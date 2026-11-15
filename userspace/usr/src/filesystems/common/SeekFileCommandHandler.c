@@ -65,13 +65,13 @@ void* SeekFile(void *args) {
     = (FilesystemSeekArgs*) processMessageData(processMessage);
   int returnValue = 0;
   int errorNumber = 0;
-  if (!filesystemFileAllowed(filesystemState, processMessage,
-    filesystemSeekArgs->stream, 0)
-  ) {
+  FilesystemOpenFile *slot = filesystemFileLookup(filesystemState,
+    processMessage, filesystemSeekArgs->stream, 0);
+  if (slot == NULL) {
     returnValue = -1;
     errorNumber = FILESYSTEM_EBADF;
   } else if (filesystemState->driverState != NULL) {
-    NanoOsFile *nanoOsFile = filesystemSeekArgs->stream;
+    NanoOsFile *nanoOsFile = slot->file;
     long position = driverFseek(
       filesystemState->driverState, nanoOsFile->file,
       filesystemSeekArgs->offset,
