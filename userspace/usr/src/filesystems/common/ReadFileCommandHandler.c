@@ -63,9 +63,9 @@ void* ReadFile(void *args) {
   FilesystemIoCommandArgs *filesystemIoCommandArgs
     = (FilesystemIoCommandArgs*) processMessageData(processMessage);
   int returnValue = 0;
-  if (!filesystemFileAllowed(filesystemState, processMessage,
-    filesystemIoCommandArgs->file, DIRCAP_READ)
-  ) {
+  FilesystemOpenFile *slot = filesystemFileLookup(filesystemState,
+    processMessage, filesystemIoCommandArgs->file, DIRCAP_READ);
+  if (slot == NULL) {
     filesystemIoCommandArgs->length = 0;
     filesystemIoCommandArgs->errorNumber = FILESYSTEM_EBADF;
   } else if (filesystemState->driverState != NULL) {
@@ -74,7 +74,7 @@ void* ReadFile(void *args) {
       // Clamp to the platform INT_MAX: driverFread/driverFwrite return an int.
       length = (uint32_t) (~0u >> 1);
     }
-    NanoOsFile *nanoOsFile = filesystemIoCommandArgs->file;
+    NanoOsFile *nanoOsFile = slot->file;
     returnValue = driverFread(filesystemState->driverState,
       filesystemIoCommandArgs->buffer, length, nanoOsFile->file);
     if (returnValue >= 0) {
