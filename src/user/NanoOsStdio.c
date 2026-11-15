@@ -2242,8 +2242,14 @@ int nanoOsFileno(FILE *stream) {
   } else if (stream == nanoOsStderr) {
     return 2;
   }
-  
-  return stream->fd;
+
+  FileDescriptor *fileDescriptor = filesystemStreamFileDescriptor(stream);
+  if (fileDescriptor == NULL) {
+    errno = EBADF;
+    return -1;
+  }
+
+  return fileDescriptor->streamFd;
 }
 
 /// @fn static size_t nanoOsRawKeyLength(const char *text, size_t textLength)
