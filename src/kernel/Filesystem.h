@@ -270,6 +270,7 @@ typedef struct FilesystemIoCommandArgs {
 /// @param whence The position the offset is understood to be relative to.  One
 ///   of SEEK_SET (beginning of the file), SEEK_CUR (the current position of
 ///   the file) or SEEK_END (the end of the file).
+/// @param position The position after the seek, set when returnValue is 0.
 /// @param returnValue The return value that should be used for the calling
 ///   process.
 /// @param errorNumber The errno value that should be set for the calling
@@ -278,6 +279,7 @@ typedef struct FilesystemSeekArgs {
   FILE *stream;
   long  offset;
   int   whence;
+  long  position;
   int   returnValue;
   int   errorNumber;
 } FilesystemSeekArgs;
@@ -574,6 +576,8 @@ FILE* filesystemFopen(const char *pathname, const char *mode);
 
 int filesystemCloseFileDescriptor(int fd);
 int filesystemFclose(FILE *stream);
+struct FileDescriptor;
+struct FileDescriptor* filesystemStreamFileDescriptor(FILE *stream);
 #ifdef fclose
 #undef fclose
 #endif // fclose
@@ -604,6 +608,7 @@ int filesystemRmdir(const char *pathname);
 #define rmdir filesystemRmdir
 
 int filesystemFSeek(FILE *stream, long offset, int whence);
+long filesystemSeekAndTell(FILE *stream, long offset, int whence);
 #ifdef fseek
 #undef feek
 #endif // fseek

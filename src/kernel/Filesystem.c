@@ -233,6 +233,7 @@ static FILE* filesystemOpenFile(const char *pathname, const char *mode,
   }
 
   processDescriptor->fileDescriptors[fd]->file = file;
+  processDescriptor->fileDescriptors[fd]->streamFd = fd;
   processDescriptor->fileDescriptors[fd]->refCount = 1;
   processDescriptor->numFilesystemHandles++;
   if (fd == numFileDescriptors) {
@@ -431,17 +432,47 @@ int filesystemFclose(FILE *stream) {
   }
 
   ProcessDescriptor *processDescriptor = getRunningProcess();
-  if ((processDescriptor != NULL)
-    && ((stream->fd < 0)
-      || (stream->fd >= processDescriptor->numFileDescriptors)
-      || (processDescriptor->fileDescriptors[stream->fd] == NULL)
-      || (processDescriptor->fileDescriptors[stream->fd]->file != stream))
+  if (processDescriptor == NULL) {
+    // This should be impossible, but check anyway.
+    errno = EOTHER;
+    return EOF;
+  }
+
+  FileDescriptor *fileDescriptor = filesystemStreamFileDescriptor(stream);
+  if ((fileDescriptor == NULL)
+    || (fileDescriptor->streamFd >= processDescriptor->numFileDescriptors)
+    || (processDescriptor->fileDescriptors[fileDescriptor->streamFd]
+      != fileDescriptor)
   ) {
     errno = EBADF;
     return EOF;
   }
 
-  return filesystemCloseFileDescriptor(stream->fd);
+  return filesystemCloseFileDescriptor(fileDescriptor->streamFd);
+}
+
+/// @fn FileDescriptor* filesystemStreamFileDescriptor(FILE *stream)
+///
+/// @brief Find the running process's FileDescriptor for an open stream.
+///
+/// @param stream The stream.
+///
+/// @return Returns the FileDescriptor, or NULL if no file descriptor of the
+/// running process holds the stream.
+FileDescriptor* filesystemStreamFileDescriptor(FILE *stream) {
+  ProcessDescriptor *processDescriptor = getRunningProcess();
+  if ((stream == NULL) || (processDescriptor == NULL)) {
+    return NULL;
+  }
+
+  for (uint8_t fd = 0; fd < processDescriptor->numFileDescriptors; fd++) {
+    FileDescriptor *fileDescriptor = processDescriptor->fileDescriptors[fd];
+    if ((fileDescriptor != NULL) && (fileDescriptor->file == stream)) {
+      return fileDescriptor;
+    }
+  }
+
+  return NULL;
 }
 
 /// @fn int filesystemRemove(const char *pathname)
@@ -942,6 +973,21 @@ int fat32Format(const char *volumeLabel, uint32_t clusterSize) {
 ///
 /// @return Returns 0 on success, -1 on failure.
 int filesystemFSeek(FILE *stream, long offset, int whence) {
+  return (filesystemSeekAndTell(stream, offset, whence) < 0) ? -1 : 0;
+}
+
+/// @fn long filesystemSeekAndTell(FILE *stream, long offset, int whence)
+///
+/// @brief Move the position within an open FILE stream and report where it
+/// ends up, for fseek and ftell.
+///
+/// @param stream A pointer to a previously-opened FILE.
+/// @param offset A signed integer value that will be added to the specified
+///   position.
+/// @param whence The location within the file to apply the offset to.
+///
+/// @return Returns the new position on success, -1 on failure.
+long filesystemSeekAndTell(FILE *stream, long offset, int whence) {
   if (stream == NULL) {
     return -1;
   }
@@ -950,6 +996,7 @@ int filesystemFSeek(FILE *stream, long offset, int whence) {
     .stream = stream,
     .offset = offset,
     .whence = whence,
+    .position = -1,
     .returnValue = 0,
     .errorNumber = 0,
   };
@@ -958,10 +1005,11 @@ int filesystemFSeek(FILE *stream, long offset, int whence) {
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_SEEK_FILE,
     &filesystemSeekArgs, sizeof(filesystemSeekArgs), true);
   processMessageWaitForDone(msg, NULL);
-  int returnValue = filesystemSeekArgs.returnValue;
+  long position = (filesystemSeekArgs.returnValue == 0)
+    ? filesystemSeekArgs.position : -1;
   errno = filesystemSeekArgs.errorNumber;
   processMessageRelease(msg);
-  return returnValue;
+  return position;
 }
 
 /// @fn size_t filesystemFRead(
@@ -1192,12 +1240,6 @@ int filesystemEndOfFile(FILE *stream) {
 /// @return Returns the current offeset into the provided stream on success,
 /// -1 on failure.
 long filesystemFtell(FILE *stream) {
-  long returnValue = -1;
-
-  if (stream != NULL) {
-    returnValue = (long) stream->currentPosition;
-  }
-
-  return returnValue;
+  return filesystemSeekAndTell(stream, 0, SEEK_CUR);
 }
 
