@@ -918,6 +918,26 @@ static volatile int fakeFilesOpened;
 /// @brief The number of FILESYSTEM_CLOSE_FILE messages received.
 static volatile int fakeFilesClosed;
 
+/// @var fakeSeekPosition
+///
+/// @brief The position the fake filesystem process reports for a seek.
+static volatile long fakeSeekPosition;
+
+/// @var fakeSeekOffset
+///
+/// @brief The offset of the last seek the fake filesystem process received.
+static volatile long fakeSeekOffset;
+
+/// @var fakeSeekWhence
+///
+/// @brief The whence of the last seek the fake filesystem process received.
+static volatile int fakeSeekWhence;
+
+/// @var fakeSeekCount
+///
+/// @brief The number of seeks the fake filesystem process has received.
+static volatile int fakeSeekCount;
+
 /// @var fakeMode
 ///
 /// @brief The mode of the last fopen the fake filesystem process received.
@@ -989,6 +1009,19 @@ static void* fakeFilesystem(void *args) {
         fakeFilesClosed++;
         break;
 
+      case FILESYSTEM_SEEK_FILE: {
+        FilesystemSeekArgs *seekArgs = (FilesystemSeekArgs*) data;
+        fakeSeekOffset = seekArgs->offset;
+        fakeSeekWhence = seekArgs->whence;
+        fakeSeekCount++;
+        seekArgs->returnValue = (fakeIoError != 0) ? -1 : 0;
+        seekArgs->errorNumber = fakeIoError;
+        if (fakeIoError == 0) {
+          seekArgs->position = fakeSeekPosition;
+        }
+        break;
+      }
+
       case FILESYSTEM_OPEN_DIR:
         ((FilesystemOpendirArgs*) data)->returnValue
           = (DIR*) (uintptr_t) 0x10;
@@ -1038,6 +1071,10 @@ static void useFakeFilesystem(void) {
   fakeIoError = 0;
   fakeFilesOpened = 0;
   fakeFilesClosed = 0;
+  fakeSeekPosition = 0;
+  fakeSeekOffset = -1;
+  fakeSeekWhence = -1;
+  fakeSeekCount = 0;
   memset(fakeMode, 0, sizeof(fakeMode));
   ProcessDescriptor *processDescriptor = processQueuePop(halMockFreeQueue());
   NANO_OS_ASSERT_NOT_NULL(processDescriptor);
@@ -1290,6 +1327,82 @@ NANO_OS_KERNEL_TEST(fs_handles, fclose_of_a_stream_whose_fd_was_reused_fails) {
   NANO_OS_ASSERT_EQ_PTR(second, nanoOsGetFileDescriptor(fd)->file);
   NANO_OS_ASSERT_EQ_PTR(first, nanoOsGetFileDescriptor(dupFd)->file);
   NANO_OS_ASSERT_EQ_INT(0, fakeFilesClosed);
+}
+
+NANO_OS_KERNEL_TEST(fs_handles, ftell_reports_the_filesystems_position) {
+  useFakeFilesystem();
+  FILE *file = filesystemFopen("/tmp/f", "r");
+  NANO_OS_ASSERT_NOT_NULL(file);
+  fakeSeekPosition = 1234;
+
+  NANO_OS_ASSERT_EQ_INT(1234, (int) filesystemFtell(file));
+  NANO_OS_ASSERT_EQ_INT(1, fakeSeekCount);
+  NANO_OS_ASSERT_EQ_INT(0, (int) fakeSeekOffset);
+  NANO_OS_ASSERT_EQ_INT(SEEK_CUR, fakeSeekWhence);
+}
+
+NANO_OS_KERNEL_TEST(fs_handles, ftell_reports_a_refused_seek) {
+  useFakeFilesystem();
+  FILE *file = filesystemFopen("/tmp/f", "r");
+  NANO_OS_ASSERT_NOT_NULL(file);
+  fakeSeekPosition = 1234;
+  fakeIoError = FILESYSTEM_EBADF;
+
+  errno = 0;
+  NANO_OS_ASSERT_EQ_INT(-1, (int) filesystemFtell(file));
+  NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EBADF, errno);
+}
+
+NANO_OS_KERNEL_TEST(fs_handles, fseek_returns_zero_not_the_position) {
+  useFakeFilesystem();
+  FILE *file = filesystemFopen("/tmp/f", "r");
+  NANO_OS_ASSERT_NOT_NULL(file);
+  fakeSeekPosition = 77;
+
+  NANO_OS_ASSERT_EQ_INT(0, filesystemFSeek(file, -3, SEEK_END));
+  NANO_OS_ASSERT_EQ_INT(-3, (int) fakeSeekOffset);
+  NANO_OS_ASSERT_EQ_INT(SEEK_END, fakeSeekWhence);
+  fakeIoError = FILESYSTEM_EBADF;
+  NANO_OS_ASSERT_EQ_INT(-1, filesystemFSeek(file, 0, SEEK_SET));
+}
+
+NANO_OS_KERNEL_TEST(fs_handles, fileno_reports_the_fd_a_file_was_opened_on) {
+  useFakeFilesystem();
+  FILE *first = filesystemFopen("/tmp/a", "r");
+  FILE *second = filesystemFopen("/tmp/b", "r");
+  NANO_OS_ASSERT_NOT_NULL(first);
+  NANO_OS_ASSERT_NOT_NULL(second);
+  int firstFd = nanoOsFileno(first);
+  int secondFd = nanoOsFileno(second);
+  NANO_OS_ASSERT_TRUE(firstFd != secondFd);
+  NANO_OS_ASSERT_EQ_PTR(first, nanoOsGetFileDescriptor(firstFd)->file);
+  NANO_OS_ASSERT_EQ_PTR(second, nanoOsGetFileDescriptor(secondFd)->file);
+
+  int dupFd = nanoOsDup(secondFd);
+  NANO_OS_ASSERT_EQ_INT(0, nanoOsClose(firstFd));
+  NANO_OS_ASSERT_EQ_INT(secondFd, nanoOsFileno(second));
+  NANO_OS_ASSERT_EQ_INT(0, nanoOsClose(secondFd));
+  NANO_OS_ASSERT_EQ_INT(secondFd, nanoOsFileno(second));
+  NANO_OS_ASSERT_EQ_INT(0, nanoOsClose(dupFd));
+
+  errno = 0;
+  NANO_OS_ASSERT_EQ_INT(-1, nanoOsFileno(second));
+  NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EBADF, errno);
+}
+
+NANO_OS_KERNEL_TEST(fs_handles, fclose_of_a_stream_not_held_sends_nothing) {
+  useFakeFilesystem();
+  FILE *file = filesystemFopen("/tmp/a", "r");
+  NANO_OS_ASSERT_NOT_NULL(file);
+  NanoOsFile notHeld;
+  memset(&notHeld, 0, sizeof(notHeld));
+  notHeld.fd = nanoOsFileno(file);
+
+  errno = 0;
+  NANO_OS_ASSERT_EQ_INT(EOF, filesystemFclose(&notHeld));
+  NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EBADF, errno);
+  NANO_OS_ASSERT_EQ_INT(0, fakeFilesClosed);
+  NANO_OS_ASSERT_EQ_PTR(file, nanoOsGetFileDescriptor(nanoOsFileno(file))->file);
 }
 
 NANO_OS_KERNEL_TEST(fs_handles, sethostname_opens_the_file_for_writing) {

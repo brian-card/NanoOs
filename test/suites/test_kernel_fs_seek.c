@@ -65,7 +65,8 @@ NANO_OS_KERNEL_TEST(fs_seek, seek_set_moves_ftell) {
   seek(40, SEEK_SET);
   NANO_OS_ASSERT_EQ_INT(0, seekArgs.returnValue);
   NANO_OS_ASSERT_EQ_INT(0, seekArgs.errorNumber);
-  NANO_OS_ASSERT_EQ_INT(40, filesystemFtell(&seekFile));
+  NANO_OS_ASSERT_EQ_INT(40, seekArgs.position);
+  NANO_OS_ASSERT_EQ_INT(40, seekFile.currentPosition);
   NANO_OS_ASSERT_EQ_INT(40, seekHandle.currentPosition);
 }
 
@@ -73,14 +74,14 @@ NANO_OS_KERNEL_TEST(fs_seek, seek_cur_is_relative_to_the_position) {
   seekFixture(100, 30);
   seek(-10, SEEK_CUR);
   NANO_OS_ASSERT_EQ_INT(0, seekArgs.returnValue);
-  NANO_OS_ASSERT_EQ_INT(20, filesystemFtell(&seekFile));
+  NANO_OS_ASSERT_EQ_INT(20, seekArgs.position);
 }
 
 NANO_OS_KERNEL_TEST(fs_seek, seek_end_is_relative_to_the_size) {
   seekFixture(100, 0);
   seek(-1, SEEK_END);
   NANO_OS_ASSERT_EQ_INT(0, seekArgs.returnValue);
-  NANO_OS_ASSERT_EQ_INT(99, filesystemFtell(&seekFile));
+  NANO_OS_ASSERT_EQ_INT(99, seekArgs.position);
 }
 
 NANO_OS_KERNEL_TEST(fs_seek, seek_past_the_end_fails_and_keeps_the_position) {
@@ -88,6 +89,6 @@ NANO_OS_KERNEL_TEST(fs_seek, seek_past_the_end_fails_and_keeps_the_position) {
   seek(101, SEEK_SET);
   NANO_OS_ASSERT_EQ_INT(-1, seekArgs.returnValue);
   NANO_OS_ASSERT_EQ_INT(5, seekArgs.errorNumber); // EINVAL
-  NANO_OS_ASSERT_EQ_INT(30, filesystemFtell(&seekFile));
+  NANO_OS_ASSERT_EQ_INT(30, seekFile.currentPosition);
   NANO_OS_ASSERT_EQ_INT(30, seekHandle.currentPosition);
 }
