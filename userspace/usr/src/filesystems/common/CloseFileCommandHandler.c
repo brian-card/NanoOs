@@ -71,9 +71,9 @@ void* CloseFile(void *args) {
   // JBC 2026-02-17
   FilesystemFcloseArgs *fcloseArgs
     = (FilesystemFcloseArgs*) processMessageData(processMessage);
-  if (!filesystemFileAllowed(filesystemState, processMessage,
-    fcloseArgs->stream, 0)
-  ) {
+  FilesystemOpenFile *slot = filesystemFileLookup(filesystemState,
+    processMessage, fcloseArgs->stream, 0);
+  if (slot == NULL) {
     fcloseArgs->returnValue = -FILESYSTEM_EBADF;
     processMessageSetDone(processMessage);
     return filesystemState;
@@ -81,21 +81,9 @@ void* CloseFile(void *args) {
 
   if (filesystemState->driverState != NULL) {
     fcloseArgs->returnValue = driverFclose(
-      filesystemState->driverState, fcloseArgs->stream->file);
-    if (filesystemState->numOpenFiles > 0) {
-      filesystemState->numOpenFiles--;
-    }
-    if (fcloseArgs->stream->next != NULL) {
-      fcloseArgs->stream->next->prev = fcloseArgs->stream->prev;
-    }
-    if (fcloseArgs->stream->prev != NULL) {
-      fcloseArgs->stream->prev->next = fcloseArgs->stream->next;
-    }
-    if (fcloseArgs->stream == filesystemState->openFiles) {
-      filesystemState->openFiles = fcloseArgs->stream->next;
-    }
+      filesystemState->driverState, slot->file->file);
   }
-  free(fcloseArgs->stream);
+  filesystemFileRelease(filesystemState, slot);
 
   processMessageSetDone(processMessage);
   return filesystemState;
