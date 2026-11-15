@@ -171,11 +171,6 @@ typedef struct NanoOsUserApi {
   int (*lstat)(const char *pathname, struct stat *statbuf);
   int (*dirstat)(const struct dirent *entry, struct stat *statbuf);
 
-  // NanoOs extensions with no filesystem-agnostic name (see fat32Format's
-  // own doc comment for why): unlike the operations above, these depend on
-  // which filesystem driver this build actually links in.
-  int (*fat32Format)(const char *volumeLabel, uint32_t clusterSize);
-  
   // Formatted I/O:
   int (*vsscanf)(const char *buffer, const char *format, va_list args);
   int (*vfscanf)(FILE *stream, const char *format, va_list ap);

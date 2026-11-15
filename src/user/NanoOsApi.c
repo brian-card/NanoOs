@@ -166,7 +166,6 @@ static const NanoOsUserApi _nanoOsUserApi = {
   .fileno = nanoOsFileno,
   .feof = filesystemEndOfFile,
   .ftell = filesystemFtell,
-  .fat32Format = fat32Format,
 
   // Directory operations:
   .opendir = filesystemOpendir,
