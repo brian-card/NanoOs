@@ -215,6 +215,8 @@ typedef struct IoChannel {
 ///   descriptor gets its input, if any.
 /// @param outputChannel An IoChannel object that describes where the file
 ///   descriptor sends its output, if any.
+/// @param streamFd The file descriptor that file was opened on, which is the
+///   one its stream's fclose and fileno use.
 /// @param pipeEnd Pointer to the FileDescriptor at the other end of a pipe if
 ///   this FileDescriptor is part of a pipe.
 /// @param refCount The number of references to this FileDescriptor.
@@ -224,6 +226,7 @@ typedef struct FileDescriptor {
   ProcessId              lastOwner;
   IoChannel              inputChannel;
   IoChannel              outputChannel;
+  uint8_t                streamFd;
   struct FileDescriptor *pipeEnd;
   int                    refCount;
   NanoOsFile            *file;
