@@ -63,9 +63,9 @@ void* WriteFile(void *args) {
   FilesystemIoCommandArgs *filesystemIoCommandArgs
     = (FilesystemIoCommandArgs*) processMessageData(processMessage);
   int returnValue = 0;
-  if (!filesystemFileAllowed(filesystemState, processMessage,
-    filesystemIoCommandArgs->file, DIRCAP_WRITE)
-  ) {
+  FilesystemOpenFile *slot = filesystemFileLookup(filesystemState,
+    processMessage, filesystemIoCommandArgs->file, DIRCAP_WRITE);
+  if (slot == NULL) {
     filesystemIoCommandArgs->length = 0;
     filesystemIoCommandArgs->errorNumber = FILESYSTEM_EBADF;
   } else if (filesystemState->driverState != NULL) {
@@ -74,7 +74,7 @@ void* WriteFile(void *args) {
       // Clamp to the platform INT_MAX: driverFread/driverFwrite return an int.
       length = (uint32_t) (~0u >> 1);
     }
-    NanoOsFile *nanoOsFile = filesystemIoCommandArgs->file;
+    NanoOsFile *nanoOsFile = slot->file;
     returnValue = driverFwrite(filesystemState->driverState,
       filesystemIoCommandArgs->buffer,
       length, nanoOsFile->file);
