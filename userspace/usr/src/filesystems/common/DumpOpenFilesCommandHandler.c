@@ -41,6 +41,7 @@
 #include "NanoOsUtils.h"
 #include "FilesystemUtils.h"
 #endif // NANO_OS_KERNEL_BUILD
+#include "../include/FilesystemHandles.h"
 
 // Prototypes used by this handler.
 const char *driverGetFilename(void *fileHandle);
@@ -63,12 +64,14 @@ void* DumpOpenFiles(void *args) {
     = (FilesystemDumpOpenFilesArgs*) processMessageData(processMessage);
 
   printString("Open files:\n");
-  for (NanoOsFile *nanoOsFile = filesystemState->openFiles;
-    nanoOsFile != NULL;
-    nanoOsFile = nanoOsFile->next
-  ) {
+  for (uint8_t ii = 0; ii < filesystemState->numOpenFileSlots; ii++) {
+    FilesystemOpenFile *slot = &filesystemState->openFileSlots[ii];
+    NanoOsFile *nanoOsFile = slot->file;
+    if (nanoOsFile == NULL) {
+      continue;
+    }
     printString("0x");
-    printHex((uintptr_t) nanoOsFile);
+    printHex((uintptr_t) filesystemFileHandle(filesystemState, slot));
     printString(": \"");
     printString(driverGetFilename(nanoOsFile->file));
     printString("\" owned by ");
