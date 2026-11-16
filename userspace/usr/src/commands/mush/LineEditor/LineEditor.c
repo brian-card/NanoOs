@@ -81,6 +81,8 @@ typedef enum LineEditorKey {
 /// @param historyStart The offset in the history file of the entry shown, or
 ///   -1 if the line being typed is shown.
 /// @param historyEnd The offset in the history file just past the entry shown.
+/// @param historySize The size of the history file, or -1 if it hasn't been
+///   read.
 typedef struct LineEditor {
   LineEditorArgs *args;
   int             length;
@@ -88,6 +90,7 @@ typedef struct LineEditor {
   char           *historyPath;
   long            historyStart;
   long            historyEnd;
+  long            historySize;
 } LineEditor;
 
 /// @fn static void lineEditorPut(const char *text, int length)
@@ -202,7 +205,8 @@ static void lineEditorShow(LineEditor *editor) {
 
 /// @fn static FILE* lineEditorOpenHistory(LineEditor *editor, long *fileSize)
 ///
-/// @brief Open the history file for reading.
+/// @brief Open the history file for reading.  The file's size is read only
+/// if the editor doesn't already have it.
 ///
 /// @param editor A pointer to the LineEditor.
 /// @param fileSize A pointer to the long that receives the file's size.
@@ -216,11 +220,14 @@ static FILE* lineEditorOpenHistory(LineEditor *editor, long *fileSize) {
   if (historyFile == NULL) {
     return NULL;
   }
-  if (fseek(historyFile, 0, SEEK_END) != 0) {
-    fclose(historyFile);
-    return NULL;
+  if (editor->historySize < 0) {
+    if (fseek(historyFile, 0, SEEK_END) != 0) {
+      fclose(historyFile);
+      return NULL;
+    }
+    editor->historySize = ftell(historyFile);
   }
-  *fileSize = ftell(historyFile);
+  *fileSize = editor->historySize;
   return historyFile;
 }
 
@@ -313,6 +320,8 @@ static void lineEditorNextEntry(LineEditor *editor) {
 ///
 /// @return Returns true if it is, false otherwise.
 static bool lineEditorIsNewestEntry(LineEditor *editor) {
+  // Another shell may have added to the history since its size was read.
+  editor->historySize = -1;
   long fileSize = 0;
   FILE *historyFile = lineEditorOpenHistory(editor, &fileSize);
   if (historyFile == NULL) {
@@ -573,6 +582,7 @@ void* readLine(void *args) {
     .historyPath = NULL,
     .historyStart = -1,
     .historyEnd = 0,
+    .historySize = -1,
   };
   lineEditorArgs->line[0] = '\0';
 
