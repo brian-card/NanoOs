@@ -250,19 +250,23 @@ void* readScriptLine(void *args) {
     } else {
       if (fseek(script, offset, SEEK_SET) == 0) {
         while (fgets(scriptArgs->line, scriptArgs->size, script) != NULL) {
+          offset += strlen(scriptArgs->line);
           lineNumber++;
           if ((strchr(scriptArgs->line, '\n') == NULL) && !feof(script)) {
             fputs(path, stderr);
             fprintf(stderr, ": line %ld: too long\n", lineNumber);
-            while ((fgets(scriptArgs->line, scriptArgs->size, script) != NULL)
-              && (strchr(scriptArgs->line, '\n') == NULL));
+            while (fgets(scriptArgs->line, scriptArgs->size, script) != NULL) {
+              offset += strlen(scriptArgs->line);
+              if (strchr(scriptArgs->line, '\n') != NULL) {
+                break;
+              }
+            }
             continue;
           }
           haveLine = true;
           break;
         }
       }
-      offset = ftell(script);
       fclose(script);
     }
 
