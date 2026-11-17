@@ -64,11 +64,6 @@ typedef uint8_t MessageArgsOwnership;
 /// waiting.
 #define MESSAGE_ARGS_ONE_WAY ((MessageArgsOwnership) 0x02)
 
-/// @def MESSAGE_ARGS_PERSISTENT
-///
-/// @brief Added to MESSAGE_ARGS_ROUND_TRIP for storage the sender keeps for
-/// its whole life and reuses for messages it doesn't wait on.
-#define MESSAGE_ARGS_PERSISTENT ((MessageArgsOwnership) 0x04)
 
 /// @typedef MessageBufferDirection
 ///
@@ -136,7 +131,7 @@ typedef void (*MessageArgsCopyFn)(void *destination, const void *source);
 
 /// @def MESSAGE_ARGS_ERROR_FIRE_AND_FORGET
 ///
-/// @brief Round-trip storage that isn't persistent was sent without waiting.
+/// @brief Round-trip storage was sent without waiting.
 #define MESSAGE_ARGS_ERROR_FIRE_AND_FORGET   6
 
 /// @def MESSAGE_ARGS_ERROR_MEMORY_MANAGER
@@ -244,6 +239,13 @@ void messageArgsResetCounts(void);
 /// @brief Free storage from MESSAGE_ARGS_CREATE or MESSAGE_ARGS_CREATE_BYTES.
 #define MESSAGE_ARGS_DESTROY(ptr) messageArgsFree(ptr)
 
+/// @def MESSAGE_ARGS_DESTROY_WITH
+///
+/// @brief Free storage from MESSAGE_ARGS_CREATE or MESSAGE_ARGS_CREATE_BYTES
+/// in a process that can't use the normal allocator, such as the scheduler,
+/// with `freeFunction` in place of free.
+#define MESSAGE_ARGS_DESTROY_WITH(ptr, freeFunction) messageArgsFree(ptr)
+
 /// @def MESSAGE_ARGS_ADOPT
 ///
 /// @brief Take a sender's round-trip block for process `pid`, updating `ptr`
@@ -308,6 +310,8 @@ void messageArgsResetCounts(void);
 #define MESSAGE_ARGS_CREATE_BYTES(size, ownership) calloc(1, (size))
 
 #define MESSAGE_ARGS_DESTROY(ptr) free(ptr)
+
+#define MESSAGE_ARGS_DESTROY_WITH(ptr, freeFunction) freeFunction(ptr)
 
 #define MESSAGE_ARGS_ADOPT(ptr, pid, copyFn) assignMemory((ptr), (pid))
 

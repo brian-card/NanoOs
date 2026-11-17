@@ -648,7 +648,6 @@ void messageArgsSending(ProcessMessage *processMessage, ProcessId recipient) {
     block->carrier = processMessage;
     block->recipient = recipient;
     if (((block->ownership & MESSAGE_ARGS_ONE_WAY) == 0)
-      && ((block->ownership & MESSAGE_ARGS_PERSISTENT) == 0)
       && (processMessageWaiting(processMessage) == false)
     ) {
       record(MESSAGE_ARGS_ERROR_FIRE_AND_FORGET, data, pid);
