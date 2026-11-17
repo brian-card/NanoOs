@@ -131,6 +131,10 @@ typedef struct NanoOsExecutiveApi {
   int (*sendProcessMessageToPid)(unsigned int pid, msg_t *message);
   int (*findProcessByName)(const char *name, uint8_t *returnValue);
 
+  // Message argument storage functions:
+  void* (*messageArgsCreate)(size_t size, uint8_t ownership);
+  void (*messageArgsDestroy)(void *ptr);
+
   // Directory capability functions:
   bool (*dirCapabilityAllows)(const DirCapabilities *set,
     const char *path, size_t pathLength, bool isDirectory, uint8_t bits);

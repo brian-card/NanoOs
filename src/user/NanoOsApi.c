@@ -99,6 +99,34 @@ char** parseArgs(char *command, int *argc);
 #undef lstat
 #undef dirstat
 
+/// @fn static void* overlayMessageArgsCreate(size_t size, uint8_t ownership)
+///
+/// @brief Allocate zeroed message argument storage for an overlay.  This
+/// exists because MESSAGE_ARGS_CREATE_BYTES is a macro whose expansion depends
+/// on the kernel's configuration, which an overlay can't see.
+///
+/// @param size The number of bytes to allocate.
+/// @param ownership The MESSAGE_ARGS_* ownership of the storage.
+///
+/// @return Returns a pointer to the storage on success, NULL on failure.
+static void* overlayMessageArgsCreate(size_t size, uint8_t ownership) {
+  (void) ownership;
+  return MESSAGE_ARGS_CREATE_BYTES(size, ownership);
+}
+
+/// @fn static void overlayMessageArgsDestroy(void *ptr)
+///
+/// @brief Free message argument storage an overlay allocated.  This exists
+/// because MESSAGE_ARGS_DESTROY is a macro whose expansion depends on the
+/// kernel's configuration, which an overlay can't see.
+///
+/// @param ptr The storage, or NULL.
+///
+/// @return This function returns no value.
+static void overlayMessageArgsDestroy(void *ptr) {
+  MESSAGE_ARGS_DESTROY(ptr);
+}
+
 KEEP_IN_FLASH
 const NanoOsExecutiveApi nanoOsExecutiveApi = {
   // Debug functions:
@@ -134,6 +162,10 @@ const NanoOsExecutiveApi nanoOsExecutiveApi = {
   .getAvailableMessage = getAvailableMessage,
   .sendProcessMessageToPid = sendProcessMessageToPid,
   .findProcessByName = findProcessByName,
+
+  // Message argument storage functions:
+  .messageArgsCreate = overlayMessageArgsCreate,
+  .messageArgsDestroy = overlayMessageArgsDestroy,
 
   // Directory capability functions:
   .dirCapabilityAllows = dirCapabilityAllows,
