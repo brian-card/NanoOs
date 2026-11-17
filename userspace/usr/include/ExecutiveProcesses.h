@@ -351,12 +351,6 @@ static inline int processMessageInit(ProcessMessage *processMessage,
 /// recipient frees the storage.
 #define MESSAGE_ARGS_ONE_WAY ((uint8_t) 0x02)
 
-/// @def MESSAGE_ARGS_PERSISTENT
-///
-/// @brief Added to MESSAGE_ARGS_ROUND_TRIP for storage the sender keeps for
-/// its whole life and reuses for messages it doesn't wait on.
-#define MESSAGE_ARGS_PERSISTENT ((uint8_t) 0x04)
-
 /// @fn static inline void* messageArgsCreate(size_t size, uint8_t ownership)
 ///
 /// @brief Allocate zeroed storage for a message's arguments whose lifetime the
