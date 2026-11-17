@@ -1,5 +1,5 @@
 # This makefile exist for the simulator, so make the paths relative to that.
-OBJ_DIR = ../../sim/obj
+OBJ_DIR = ../../sim/obj$(OBJ_SUFFIX)
 BIN_DIR = ../../sim/bin
 
 # CLI tools
@@ -38,7 +38,7 @@ LDFLAGS =
 # AgonLight2/SAMD21 shipped-binary build, so a jump table there would crash
 # on first use just like it would on real hardware. Matches
 # makefiles/AgonLight2Makefile.
-CFLAGS = $(CPU) -std=gnu17 -g -rdynamic -fno-jump-tables
+CFLAGS = $(CPU) -std=gnu17 -g -rdynamic -fno-jump-tables $(EXTRA_CFLAGS)
 
 LINKS = \
 
@@ -68,6 +68,7 @@ OBJECTS = \
     $(OBJ_DIR)/Link.o \
     $(OBJ_DIR)/Logger.o \
     $(OBJ_DIR)/MemoryManager.o \
+    $(OBJ_DIR)/MessageArgs.o \
     $(OBJ_DIR)/Messages.o \
     $(OBJ_DIR)/NanoOs.o \
     $(OBJ_DIR)/Overlay.o \
