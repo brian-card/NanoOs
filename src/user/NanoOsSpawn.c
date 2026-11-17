@@ -458,25 +458,30 @@ int nanoOsSpawn(
     }
   }
 
-  SchedulerSpawnArgs schedulerSpawnArgs = {
-    .spawnArgs = spawnArgs,
-    .errorNumber = 0,
-  };
+  MESSAGE_ARGS_ALLOCATE(SchedulerSpawnArgs, schedulerSpawnArgs);
+  if (schedulerSpawnArgs == NULL) {
+    returnValue = ENOMEM;
+    goto freeSpawnArgs;
+  }
+  schedulerSpawnArgs->spawnArgs = spawnArgs;
+  schedulerSpawnArgs->errorNumber = 0;
   ProcessMessage *processMessage
     = initSendProcessMessageToPid(
     schedulerPid,
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_SPAWN,
-    &schedulerSpawnArgs, sizeof(schedulerSpawnArgs), true);
+    schedulerSpawnArgs, sizeof(*schedulerSpawnArgs), true);
   if (processMessage == NULL) {
     // The only way this should be possible is if all available messages are
     // in use, so use ENOMEM as the errno.
+    MESSAGE_ARGS_FREE(schedulerSpawnArgs);
     returnValue = ENOMEM;
     goto freeSpawnArgs;
   }
 
   processMessageWaitForDone(processMessage, NULL);
-  returnValue = schedulerSpawnArgs.errorNumber;
+  returnValue = schedulerSpawnArgs->errorNumber;
   processMessageRelease(processMessage);
+  MESSAGE_ARGS_FREE(schedulerSpawnArgs);
 
   if (returnValue != 0) {
     goto freeSpawnArgs;
