@@ -701,8 +701,7 @@ void consoleGetModesCommandHandler(
   return;
 }
 
-static void consoleReplayHeldInput(
-  ConsoleState *consoleState, ConsolePort *consolePort);
+static void consoleReplayHeldInput(ConsolePort *consolePort);
 
 /// @fn void consoleSetModesCommandHandler(
 ///   ConsoleState *consoleState, ProcessMessage *inputMessage)
@@ -737,7 +736,7 @@ void consoleSetModesCommandHandler(
         consolePorts[ii].inputState = CONSOLE_INPUT_STATE_NORMAL;
       }
       if (replayHeldInput) {
-        consoleReplayHeldInput(consoleState, &consolePorts[ii]);
+        consoleReplayHeldInput(&consolePorts[ii]);
       } else if (((consoleModesArgs->modes & CONSOLE_MODE_CANONICAL) == 0)
         && (consoleBuffer->consoleBufferIndex > 0)
         && (consoleBuffer->bufferAwaitingRelease == false)
@@ -1713,20 +1712,17 @@ static void consoleDeliverLine(ConsolePort *consolePort) {
   consolePort->waitingForInput = false;
 }
 
-/// @fn static void consoleHandleInputEvent(ConsoleState *consoleState,
+/// @fn static void consoleHandleInputEvent(
 ///   ConsolePort *consolePort, ConsoleInputEvent event)
 ///
 /// @brief Act on a completed line, escape sequence, or Ctrl-C from a port.
 ///
-/// @param consoleState A pointer to the ConsoleState being maintained by the
-///   runConsole function that's running.
 /// @param consolePort A pointer to the ConsolePort the input came from.
 /// @param event The ConsoleInputEvent returned by consoleProcessByte.
 ///
 /// @return This function returns no value.
 static void consoleHandleInputEvent(
-  ConsoleState *consoleState, ConsolePort *consolePort,
-  ConsoleInputEvent event
+  ConsolePort *consolePort, ConsoleInputEvent event
 ) {
   if ((event == CONSOLE_INPUT_LINE) || (event == CONSOLE_INPUT_ESCAPE)) {
     if (consolePort->inputOwner != PROCESS_ID_NOT_SET) {
@@ -1746,16 +1742,13 @@ static void consoleHandleInputEvent(
 
     // The user hit Ctrl-C on the keyboard.  Send SIGINT to the input owner.
     if (consolePort->inputOwner != PROCESS_ID_NOT_SET) {
-      void **slot = &consoleState->sendSignalArgs[
-        consolePort - consoleState->consolePorts];
+      SchedulerSendSignalArgs *sendSignalArgs = NULL;
       // The memory manager owns the ports only while it prints its boot
       // message, waiting on this process, so allocating then would deadlock.
-      if ((*slot == NULL) && (consolePort->inputOwner != memoryManagerPid)) {
-        *slot = MESSAGE_ARGS_CREATE(SchedulerSendSignalArgs,
-          MESSAGE_ARGS_ROUND_TRIP | MESSAGE_ARGS_PERSISTENT);
+      if (consolePort->inputOwner != memoryManagerPid) {
+        sendSignalArgs = MESSAGE_ARGS_CREATE(SchedulerSendSignalArgs,
+          MESSAGE_ARGS_ONE_WAY);
       }
-      SchedulerSendSignalArgs *sendSignalArgs
-        = (SchedulerSendSignalArgs*) *slot;
       ProcessMessage *processMessage = NULL;
       if (sendSignalArgs != NULL) {
         sendSignalArgs->pid = consolePort->inputOwner;
@@ -1767,6 +1760,9 @@ static void consoleHandleInputEvent(
           SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_SEND_SIGNAL,
           /* data= */ sendSignalArgs, /* size= */ sizeof(*sendSignalArgs),
           false);
+        if (processMessage == NULL) {
+          MESSAGE_ARGS_DESTROY(sendSignalArgs);
+        }
       }
       if (processMessage == NULL) {
         logError("Could not communicate with scheduler.\n");
@@ -1785,22 +1781,17 @@ static uint16_t consoleNowMs(void) {
   return (uint16_t) (processGetNanoseconds(NULL) / ((int64_t) 1000000));
 }
 
-/// @fn static void consoleReplayHeldInput(
-///   ConsoleState *consoleState, ConsolePort *consolePort)
+/// @fn static void consoleReplayHeldInput(ConsolePort *consolePort)
 ///
 /// @brief Run a key or escape sequence that a port held while it was in raw
 /// mode back through the port's current modes, so that a port that has become
 /// canonical starts its next line with the input instead of delivering it as a
 /// line by itself.
 ///
-/// @param consoleState A pointer to the ConsoleState being maintained by the
-///   runConsole function that's running.
 /// @param consolePort A pointer to the ConsolePort holding the input.
 ///
 /// @return This function returns no value.
-static void consoleReplayHeldInput(
-  ConsoleState *consoleState, ConsolePort *consolePort
-) {
+static void consoleReplayHeldInput(ConsolePort *consolePort) {
   ConsoleBuffer *consoleBuffer = consolePort->consoleBuffer;
   int heldLength = consoleBuffer->consoleBufferIndex;
   consoleBuffer->holdsCompletedLine = false;
@@ -1815,7 +1806,7 @@ static void consoleReplayHeldInput(
     }
     consoleEchoInput(consolePort, echo, byte);
     if ((event != CONSOLE_INPUT_NONE) && (event != CONSOLE_INPUT_UNHANDLED)) {
-      consoleHandleInputEvent(consoleState, consolePort, event);
+      consoleHandleInputEvent(consolePort, event);
     }
   }
 }
@@ -1870,6 +1861,7 @@ static void consoleKeepTypeAhead(
 bool consoleServicePort(
   ConsoleState *consoleState, ConsolePort *consolePort
 ) {
+  (void) consoleState;
   consoleDeliverLine(consolePort);
   while (consolePort->consoleBuffer->bufferAwaitingRelease == false) {
     ConsoleBuffer *consoleBuffer = consolePort->consoleBuffer;
@@ -1909,7 +1901,7 @@ bool consoleServicePort(
       }
       // Nothing followed the escape, so it was the escape key by itself.
       consolePort->inputState = CONSOLE_INPUT_STATE_NORMAL;
-      consoleHandleInputEvent(consoleState, consolePort, CONSOLE_INPUT_ESCAPE);
+      consoleHandleInputEvent(consolePort, CONSOLE_INPUT_ESCAPE);
       break;
     }
 
@@ -1918,7 +1910,7 @@ bool consoleServicePort(
     ) {
       // The escape before this one was the escape key by itself.
       consolePort->inputState = CONSOLE_INPUT_STATE_NORMAL;
-      consoleHandleInputEvent(consoleState, consolePort, CONSOLE_INPUT_ESCAPE);
+      consoleHandleInputEvent(consolePort, CONSOLE_INPUT_ESCAPE);
       if (consoleBuffer->holdsCompletedLine) {
         consoleKeepTypeAhead(consolePort, byteRead, typedAhead);
         continue;
@@ -1938,7 +1930,7 @@ bool consoleServicePort(
     if (event == CONSOLE_INPUT_UNHANDLED) {
       logDebug("Received unhandled character %ld\n", (long int) byteRead);
     } else if (event != CONSOLE_INPUT_NONE) {
-      consoleHandleInputEvent(consoleState, consolePort, event);
+      consoleHandleInputEvent(consolePort, event);
     }
   }
 

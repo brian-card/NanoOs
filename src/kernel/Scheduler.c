@@ -4787,7 +4787,8 @@ static const char _processRestartFailedReason[] KEEP_IN_FLASH
 /// @fn int schedulerSendSignalCommandHandler(
 ///   SchedulerState *schedulerState, ProcessMessage *processMessage)
 ///
-/// @brief Send a signal to a process.
+/// @brief Send a signal to a process.  A message its sender doesn't wait on
+/// carries MESSAGE_ARGS_ONE_WAY arguments, which this frees.
 ///
 /// @param schedulerState A pointer to the SchedulerState maintained by the
 ///   scheduler process.
@@ -4909,6 +4910,7 @@ int schedulerSendSignalCommandHandler(
 exit:
   if (processMessageWaiting(processMessage) == false) {
     processMessageRelease(processMessage);
+    MESSAGE_ARGS_DESTROY_WITH(sendSignalArgs, schedFree);
   }
   // else DO NOT release the message since that's done by the caller.
 
