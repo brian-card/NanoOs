@@ -340,12 +340,23 @@ def test_script_runs_scripts_inside_it(s):
 def test_script_refuses_the_background_and_missing_files(s):
     write_files(s, {"/root/greet": GREET})
     for command in ("./greet &", "echo a | ./greet"):
-        assert s.sh(command) == \
+        assert sh_without_logs(s, command) == \
             "/root/greet: A script can't run in the background or in a pipeline"
     assert s.sh("mush missing") == "missing: No such entry found"
     assert s.sh("./missing") == "./missing: command not found"
     assert promptParts(s)[1] == "/root"
     assert s.sh("echo alive") == "alive"
+
+
+def test_a_pipeline_into_a_script_stops_the_commands_before_it(s):
+    # looseLoop prints its first tick a second after it starts, long after
+    # the script is refused, so a stage left running types it at the shell.
+    write_files(s, {"/root/greet": GREET})
+    assert sh_without_logs(s, "looseLoop tick | ./greet") == \
+        "/root/greet: A script can't run in the background or in a pipeline"
+    time.sleep(2.5)
+    assert sh_without_logs(s, "echo alive") == "alive"
+    assert "looseLoop" not in sh_without_logs(s, "ps")
 
 
 ARGS = """echo 0=$0 1=$1 2=${2} 3=$3 9=$9

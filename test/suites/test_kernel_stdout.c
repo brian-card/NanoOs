@@ -132,3 +132,50 @@ NANO_OS_KERNEL_TEST(stdout, a_full_buffer_is_sent_before_more_is_held) {
   nanoOsCloseStdout();
   NANO_OS_ASSERT_EQ_INT(sizeof(line), (long long) drainConsole(out, sizeof(out)));
 }
+
+ConsoleBuffer* nanoOsWaitForInput(void);
+
+/// @fn static ProcessMessage* queueInputFrom(ProcessId pid,
+///   ConsoleBuffer *consoleBuffer)
+///
+/// @brief Put input on this process's queue as if process pid had sent it.
+///
+/// @param pid The process the input is from.
+/// @param consoleBuffer The buffer the input is in.
+///
+/// @return Returns the message queued, or NULL if there was none.
+static ProcessMessage* queueInputFrom(ProcessId pid,
+  ConsoleBuffer *consoleBuffer
+) {
+  ProcessMessage *processMessage = getAvailableMessage();
+  if (processMessage == NULL) {
+    return NULL;
+  }
+  processMessageInit(processMessage,
+    CONSOLE_COMMAND_SIGNATURE | CONSOLE_RETURNING_INPUT,
+    consoleBuffer, sizeof(*consoleBuffer), false);
+  processMessageQueuePush(getRunningProcess(), processMessage);
+  msg_from(processMessage).coro = allProcesses[pid - 1].mainThread;
+  return processMessage;
+}
+
+NANO_OS_KERNEL_TEST(stdin, input_from_a_writer_stdin_no_longer_reads_is_dropped) {
+  static ConsoleBuffer strayInput;
+  static ConsoleBuffer writerInput;
+  ProcessId strayPid = getRunningPid() + 1;
+  ProcessId writerPid = getRunningPid() + 2;
+  // A sender with no process context counts as the kernel, which is accepted.
+  NANO_OS_ASSERT_NOT_NULL(
+    coroutineContext(allProcesses[strayPid - 1].mainThread));
+  NANO_OS_ASSERT_NOT_NULL(
+    coroutineContext(allProcesses[writerPid - 1].mainThread));
+  stdioFixture();
+  testFileDescriptors[0].inputChannel.pid = writerPid;
+  testFileDescriptors[0].inputChannel.messageType = CONSOLE_RETURNING_INPUT;
+
+  NANO_OS_ASSERT_NOT_NULL(queueInputFrom(strayPid, &strayInput));
+  NANO_OS_ASSERT_NOT_NULL(queueInputFrom(writerPid, &writerInput));
+
+  NANO_OS_ASSERT_EQ_PTR(&writerInput, nanoOsWaitForInput());
+  NANO_OS_ASSERT_NULL(processMessageQueuePop());
+}
