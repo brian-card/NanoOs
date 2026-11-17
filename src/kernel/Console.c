@@ -2204,20 +2204,23 @@ int printConsoleString(const char *message) {
 /// @return Returns the numerical index of the console port the process owns on
 /// success, -1 on failure.
 int getOwnedConsolePort(void) {
-  ConsoleGetOwnedPortArgs consoleGetOwnedPortArgs = {
-    .ownedPort = -1,
-  };
+  MESSAGE_ARGS_ALLOCATE(ConsoleGetOwnedPortArgs, consoleGetOwnedPortArgs);
+  if (consoleGetOwnedPortArgs == NULL) {
+    return -1;
+  }
+  consoleGetOwnedPortArgs->ownedPort = -1;
   ProcessMessage *sent = initSendProcessMessageToPid(
     consolePid,
     CONSOLE_COMMAND_SIGNATURE | CONSOLE_GET_OWNED_PORT,
-    /* data= */ &consoleGetOwnedPortArgs,
-    /* size= */ sizeof(consoleGetOwnedPortArgs),
+    /* data= */ consoleGetOwnedPortArgs,
+    /* size= */ sizeof(*consoleGetOwnedPortArgs),
     /* waiting= */ true);
 
   processMessageWaitForDone(sent, NULL);
 
-  int returnValue = consoleGetOwnedPortArgs.ownedPort;
+  int returnValue = consoleGetOwnedPortArgs->ownedPort;
   processMessageRelease(sent);
+  MESSAGE_ARGS_FREE(consoleGetOwnedPortArgs);
 
   return returnValue;
 }
@@ -2229,24 +2232,32 @@ int getOwnedConsolePort(void) {
 /// @return Returns the CONSOLE_MODE_* flags on success, -1 if the process owns
 /// no console port.
 int getConsoleModes(void) {
-  ConsoleModesArgs consoleModesArgs = {
-    .modes = 0,
-    .returnValue = -1,
-  };
+  MESSAGE_ARGS_ALLOCATE(ConsoleModesArgs, consoleModesArgs);
+  if (consoleModesArgs == NULL) {
+    return -1;
+  }
+  consoleModesArgs->modes = 0;
+  consoleModesArgs->returnValue = -1;
   ProcessMessage *sent = initSendProcessMessageToPid(
     consolePid,
     CONSOLE_COMMAND_SIGNATURE | CONSOLE_GET_MODES,
-    /* data= */ &consoleModesArgs,
-    /* size= */ sizeof(consoleModesArgs),
+    /* data= */ consoleModesArgs,
+    /* size= */ sizeof(*consoleModesArgs),
     /* waiting= */ true);
   if (sent == NULL) {
+    MESSAGE_ARGS_FREE(consoleModesArgs);
     return -1;
   }
 
   processMessageWaitForDone(sent, NULL);
   processMessageRelease(sent);
 
-  return (consoleModesArgs.returnValue == 0) ? consoleModesArgs.modes : -1;
+  int returnValue = -1;
+  if (consoleModesArgs->returnValue == 0) {
+    returnValue = consoleModesArgs->modes;
+  }
+  MESSAGE_ARGS_FREE(consoleModesArgs);
+  return returnValue;
 }
 
 /// @fn int setConsoleModes(uint8_t modes)
@@ -2257,24 +2268,29 @@ int getConsoleModes(void) {
 ///
 /// @return Returns 0 on success, -1 if the process owns no console port.
 int setConsoleModes(uint8_t modes) {
-  ConsoleModesArgs consoleModesArgs = {
-    .modes = modes,
-    .returnValue = -1,
-  };
+  MESSAGE_ARGS_ALLOCATE(ConsoleModesArgs, consoleModesArgs);
+  if (consoleModesArgs == NULL) {
+    return -1;
+  }
+  consoleModesArgs->modes = modes;
+  consoleModesArgs->returnValue = -1;
   ProcessMessage *sent = initSendProcessMessageToPid(
     consolePid,
     CONSOLE_COMMAND_SIGNATURE | CONSOLE_SET_MODES,
-    /* data= */ &consoleModesArgs,
-    /* size= */ sizeof(consoleModesArgs),
+    /* data= */ consoleModesArgs,
+    /* size= */ sizeof(*consoleModesArgs),
     /* waiting= */ true);
   if (sent == NULL) {
+    MESSAGE_ARGS_FREE(consoleModesArgs);
     return -1;
   }
 
   processMessageWaitForDone(sent, NULL);
   processMessageRelease(sent);
 
-  return consoleModesArgs.returnValue;
+  int returnValue = consoleModesArgs->returnValue;
+  MESSAGE_ARGS_FREE(consoleModesArgs);
+  return returnValue;
 }
 
 /// @fn int getConsoleColors(void)
@@ -2286,24 +2302,32 @@ int setConsoleModes(uint8_t modes) {
 /// upper 4 bits and of the foreground in the lower 4, on success, or -1 if the
 /// colors have never been set or the process owns no console port.
 int getConsoleColors(void) {
-  ConsoleColorsArgs consoleColorsArgs = {
-    .colors = CONSOLE_COLORS_DEFAULT,
-    .returnValue = -1,
-  };
+  MESSAGE_ARGS_ALLOCATE(ConsoleColorsArgs, consoleColorsArgs);
+  if (consoleColorsArgs == NULL) {
+    return -1;
+  }
+  consoleColorsArgs->colors = CONSOLE_COLORS_DEFAULT;
+  consoleColorsArgs->returnValue = -1;
   ProcessMessage *sent = initSendProcessMessageToPid(
     consolePid,
     CONSOLE_COMMAND_SIGNATURE | CONSOLE_GET_COLORS,
-    /* data= */ &consoleColorsArgs,
-    /* size= */ sizeof(consoleColorsArgs),
+    /* data= */ consoleColorsArgs,
+    /* size= */ sizeof(*consoleColorsArgs),
     /* waiting= */ true);
   if (sent == NULL) {
+    MESSAGE_ARGS_FREE(consoleColorsArgs);
     return -1;
   }
 
   processMessageWaitForDone(sent, NULL);
   processMessageRelease(sent);
 
-  return (consoleColorsArgs.returnValue == 0) ? consoleColorsArgs.colors : -1;
+  int returnValue = -1;
+  if (consoleColorsArgs->returnValue == 0) {
+    returnValue = consoleColorsArgs->colors;
+  }
+  MESSAGE_ARGS_FREE(consoleColorsArgs);
+  return returnValue;
 }
 
 /// @fn int setConsoleColors(uint8_t colors)
@@ -2316,24 +2340,29 @@ int getConsoleColors(void) {
 ///
 /// @return Returns 0 on success, -1 if the process owns no console port.
 int setConsoleColors(uint8_t colors) {
-  ConsoleColorsArgs consoleColorsArgs = {
-    .colors = colors,
-    .returnValue = -1,
-  };
+  MESSAGE_ARGS_ALLOCATE(ConsoleColorsArgs, consoleColorsArgs);
+  if (consoleColorsArgs == NULL) {
+    return -1;
+  }
+  consoleColorsArgs->colors = colors;
+  consoleColorsArgs->returnValue = -1;
   ProcessMessage *sent = initSendProcessMessageToPid(
     consolePid,
     CONSOLE_COMMAND_SIGNATURE | CONSOLE_SET_COLORS,
-    /* data= */ &consoleColorsArgs,
-    /* size= */ sizeof(consoleColorsArgs),
+    /* data= */ consoleColorsArgs,
+    /* size= */ sizeof(*consoleColorsArgs),
     /* waiting= */ true);
   if (sent == NULL) {
+    MESSAGE_ARGS_FREE(consoleColorsArgs);
     return -1;
   }
 
   processMessageWaitForDone(sent, NULL);
   processMessageRelease(sent);
 
-  return consoleColorsArgs.returnValue;
+  int returnValue = consoleColorsArgs->returnValue;
+  MESSAGE_ARGS_FREE(consoleColorsArgs);
+  return returnValue;
 }
 
 /// @fn int getConsoleWinsize(uint16_t *rows, uint16_t *columns)
@@ -2347,26 +2376,32 @@ int setConsoleColors(uint8_t colors) {
 /// @return Returns 0 on success, -1 if the process neither owns nor renders a
 /// console port.
 int getConsoleWinsize(uint16_t *rows, uint16_t *columns) {
-  ConsoleWinsizeArgs consoleWinsizeArgs;
-  consoleWinsizeArgs.rows = 0;
-  consoleWinsizeArgs.columns = 0;
-  consoleWinsizeArgs.returnValue = -1;
+  MESSAGE_ARGS_ALLOCATE(ConsoleWinsizeArgs, consoleWinsizeArgs);
+  if (consoleWinsizeArgs == NULL) {
+    return -1;
+  }
+  consoleWinsizeArgs->rows = 0;
+  consoleWinsizeArgs->columns = 0;
+  consoleWinsizeArgs->returnValue = -1;
   ProcessMessage *sent = initSendProcessMessageToPid(
     consolePid,
     CONSOLE_COMMAND_SIGNATURE | CONSOLE_GET_WINSIZE,
-    /* data= */ &consoleWinsizeArgs,
-    /* size= */ sizeof(consoleWinsizeArgs),
+    /* data= */ consoleWinsizeArgs,
+    /* size= */ sizeof(*consoleWinsizeArgs),
     /* waiting= */ true);
   if (sent == NULL) {
+    MESSAGE_ARGS_FREE(consoleWinsizeArgs);
     return -1;
   }
 
   processMessageWaitForDone(sent, NULL);
   processMessageRelease(sent);
 
-  *rows = consoleWinsizeArgs.rows;
-  *columns = consoleWinsizeArgs.columns;
-  return consoleWinsizeArgs.returnValue;
+  *rows = consoleWinsizeArgs->rows;
+  *columns = consoleWinsizeArgs->columns;
+  int returnValue = consoleWinsizeArgs->returnValue;
+  MESSAGE_ARGS_FREE(consoleWinsizeArgs);
+  return returnValue;
 }
 
 /// @fn int setConsoleWinsize(uint16_t rows, uint16_t columns)
@@ -2380,24 +2415,29 @@ int getConsoleWinsize(uint16_t *rows, uint16_t *columns) {
 /// @return Returns 0 on success, -1 if the process neither owns nor renders a
 /// console port.
 int setConsoleWinsize(uint16_t rows, uint16_t columns) {
-  ConsoleWinsizeArgs consoleWinsizeArgs = {
-    .rows = rows,
-    .columns = columns,
-    .returnValue = -1,
-  };
+  MESSAGE_ARGS_ALLOCATE(ConsoleWinsizeArgs, consoleWinsizeArgs);
+  if (consoleWinsizeArgs == NULL) {
+    return -1;
+  }
+  consoleWinsizeArgs->rows = rows;
+  consoleWinsizeArgs->columns = columns;
+  consoleWinsizeArgs->returnValue = -1;
   ProcessMessage *sent = initSendProcessMessageToPid(
     consolePid,
     CONSOLE_COMMAND_SIGNATURE | CONSOLE_SET_WINSIZE,
-    /* data= */ &consoleWinsizeArgs,
-    /* size= */ sizeof(consoleWinsizeArgs),
+    /* data= */ consoleWinsizeArgs,
+    /* size= */ sizeof(*consoleWinsizeArgs),
     /* waiting= */ true);
   if (sent == NULL) {
+    MESSAGE_ARGS_FREE(consoleWinsizeArgs);
     return -1;
   }
 
   processMessageWaitForDone(sent, NULL);
   processMessageRelease(sent);
 
-  return consoleWinsizeArgs.returnValue;
+  int returnValue = consoleWinsizeArgs->returnValue;
+  MESSAGE_ARGS_FREE(consoleWinsizeArgs);
+  return returnValue;
 }
 
