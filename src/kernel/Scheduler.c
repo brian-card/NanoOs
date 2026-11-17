@@ -1374,8 +1374,10 @@ int schedulerSendProcessMessageToProcess(
     goto exit;
   }
 
+  MESSAGE_ARGS_SENDING(processMessage, processDescriptor->processId);
   returnValue = processMessageQueuePush(processDescriptor, processMessage);
   if (returnValue != processSuccess) {
+    MESSAGE_ARGS_SEND_FAILED(processMessage);
     logError("Could not push message onto process %ld's message queue\n",
       (long int) processDescriptor->processId);
     // returnValue is already set.  Don't modify it.
@@ -1385,6 +1387,7 @@ int schedulerSendProcessMessageToProcess(
   while (processMessageDone(processMessage) == false) {
     runSchedulerQueues(PRIVILEGE_LEVEL_SUPERVISOR);
   }
+  MESSAGE_ARGS_SEND_COMPLETE(processMessage);
 
 exit:
   return returnValue;
@@ -3643,6 +3646,7 @@ int schedulerKillProcessCommandHandler(
           return -EBUSY;
         }
 
+        MESSAGE_ARGS_PROCESS_ENDED(pid, false);
         MemoryManagerFreeProcessMemoryArgs memoryManagerFreeProcessMemoryArgs
         = {
           .pid = pid,
@@ -4147,6 +4151,7 @@ int schedulerExecveCommandHandler(
   // it do it immediately.
   logDebug("Freeing process memory for process %d\n",
     processDescriptor->processId);
+  MESSAGE_ARGS_PROCESS_ENDED(processDescriptor->processId, false);
   MemoryManagerFreeProcessMemoryArgs memoryManagerFreeProcessMemoryArgs = {
     .pid = processDescriptor->processId,
     .returnValue = 0,
@@ -5114,6 +5119,7 @@ int schedulerCleanupProcessCommandHandler(
     return returnValue;
   }
 
+  MESSAGE_ARGS_PROCESS_ENDED(processDescriptor->processId, true);
   MemoryManagerFreeProcessMemoryArgs memoryManagerFreeProcessMemoryArgs = {
     .pid = processDescriptor->processId,
     .returnValue = 0,
@@ -5626,6 +5632,7 @@ void removeProcess(
   schedulerReleaseConsolePorts(processDescriptor);
   schedulerSetDirCapabilities(processDescriptor, NULL);
 
+  MESSAGE_ARGS_PROCESS_ENDED(processDescriptor->processId, false);
   MemoryManagerFreeProcessMemoryArgs memoryManagerFreeProcessMemoryArgs = {
     .pid = processDescriptor->processId,
     .returnValue = 0,
@@ -7506,6 +7513,7 @@ __attribute__((noinline)) void startScheduler(
   ProcessQueue **readyQueuesEnd
     = schedulerState.readyQueues + SCHEDULER_NUM_READY_QUEUES;
   while (1) {
+    MESSAGE_ARGS_FLUSH_REPORTS();
     bool ranProcess = false;
     // Walking a pointer saves a multiplication per iteration relative to
     // indexing readyQueues.
