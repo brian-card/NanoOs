@@ -38,6 +38,7 @@
 
 // Custom includes
 #include "NanoOsTypes.h"
+#include "MessageArgs.h"
 
 #ifdef __cplusplus
 extern "C"
