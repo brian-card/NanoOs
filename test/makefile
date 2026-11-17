@@ -46,6 +46,11 @@ TARGET := $(BIN_DIR)/nano-os-test$(VARIANT)
 # same as the shipped-firmware builds.
 BASE_CFLAGS := -std=gnu17 -g -fno-jump-tables
 
+# The harness always runs the checked message-argument storage of
+# src/kernel/MessageArgs.c, except in the suite that tests the production
+# expansions (see below).
+BASE_CFLAGS += -DNANO_OS_MESSAGE_ARGS_CHECKED
+
 ifdef ASAN
   BASE_CFLAGS += -fsanitize=address,undefined -fno-omit-frame-pointer
   LDFLAGS     += -fsanitize=address,undefined
@@ -78,7 +83,8 @@ KERNEL_SRCS := \
     Commands Console Coroutines CTypeSupport DirCapabilities Fat32Filesystem \
     Filesystem \
     FilesystemCommandHandlers \
-    Hal Link Logger MemoryManager Messages NanoOs Overlay Processes \
+    Hal Link Logger MemoryManager MessageArgs Messages NanoOs Overlay \
+    Processes \
     Scheduler SdCard SdCardSpi
 
 USER_SRCS := \
@@ -126,7 +132,9 @@ SUITE_SRCS     := test_smoke test_unit_misc test_unit_strtoll test_unit_console 
                   test_unit_posix_errno \
                   test_unit_textstore \
                   test_unit_fat32_names \
-                  test_unit_dircap
+                  test_unit_dircap \
+                  test_kernel_message_args \
+                  test_unit_message_args_production
 
 KERNEL_OBJS := $(addprefix $(OBJ_DIR)/kernel_,$(addsuffix .o,$(KERNEL_SRCS)))
 USER_OBJS   := $(addprefix $(OBJ_DIR)/user_,$(addsuffix .o,$(USER_SRCS)))
@@ -199,6 +207,8 @@ $(OBJ_DIR)/suite_test_unit_vdp_text.o: TEST_INC += -iquote ../src/kernel
 $(OBJ_DIR)/suite_test_unit_vdp_keyboard.o: \
     ../userspace/usr/src/lib/vdp.drv/main/VdpKeyboard.c \
     ../userspace/usr/src/lib/vdp.drv/include/VdpKeyboard.h
+$(OBJ_DIR)/suite_test_unit_message_args_production.o: \
+    TEST_CFLAGS += -UNANO_OS_MESSAGE_ARGS_CHECKED
 $(OBJ_DIR)/suite_test_unit_agon_reset_keys.o: \
     ../src/hal/AgonLight2/AgonResetKeys.c \
     ../src/hal/AgonLight2/AgonResetKeys.h

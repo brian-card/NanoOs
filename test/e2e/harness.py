@@ -101,10 +101,46 @@ class SkipTest(Exception):
     """Raised by a test that doesn't apply to the configuration it runs in."""
 
 
+# The prefix of every report the checked simulator's message-argument checker
+# prints.
+MESSAGE_ARGS_MARKER = "MESSAGE_ARGS: "
+
+
+class Transcript:
+    """Everything a session's simulators print, copied to stdout with -v."""
+
+    def __init__(self):
+        self.parts = []
+
+    def write(self, text):
+        self.parts.append(text)
+        if VERBOSE:
+            sys.stdout.write(text)
+
+    def flush(self):
+        if VERBOSE:
+            sys.stdout.flush()
+
+    def getvalue(self):
+        return "".join(self.parts)
+
+
+def message_args_reports(s):
+    """Return the message-argument checker's reports from a session's output.
+
+    @param s The Session.
+
+    @return The lines that hold a report, in order.
+    """
+    return [line.strip() for line in s.transcript.getvalue().splitlines()
+            if MESSAGE_ARGS_MARKER in line]
+
+
 class Session:
     def __init__(self, sim_bin, image, env=None):
         self.sim_bin = sim_bin
         self.env = env
+        self.transcript = Transcript()
         self.tmp = tempfile.mkdtemp(prefix="nanoe2e-")
         img_copy = os.path.join(self.tmp, "disk.img")
         subprocess.run(["cp", "--sparse=always", image, img_copy], check=True)
@@ -120,8 +156,7 @@ class Session:
         self.child = pexpect.spawn(self.sim_bin, args, encoding="utf-8",
                                    codec_errors="replace", timeout=15,
                                    env=dict(os.environ, **(self.env or {})))
-        if VERBOSE:
-            self.child.logfile_read = sys.stdout
+        self.child.logfile_read = self.transcript
 
     def restart_with_memory(self, memory_size):
         if self.child.isalive():

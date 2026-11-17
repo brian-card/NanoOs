@@ -51,6 +51,7 @@ make -j "$(nproc)" -C "userspace/usr/src/filesystems/${blockFilesystem}" COMPILE
 	LINK=ld OBJCOPY=objcopy OBJDUMP=objdump SIZE=size \
 	LINKER_SCRIPT="${filesystemLinkerScript}" FILESYSTEM="${filesystem}" overlays
 make -j "$(nproc)" -C sim
+make -j "$(nproc)" -C sim checked
 
 echo "mkimage: writing ${outImage}..."
 dd if=/dev/zero of="${outImage}" bs=1M count=${imageSizeMB} status=none

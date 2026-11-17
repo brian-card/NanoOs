@@ -104,6 +104,16 @@ stream as screen text, and sends keyboard packets (`vdp.type("ls\r")`,
 read in the simulator then fails with `-EIO`, which makes vdp.drv exit and
 be restarted.
 
+Layers 1-2 are built with `NANO_OS_MESSAGE_ARGS_CHECKED`, so message
+argument storage (`src/kernel/MessageArgs.h`) comes from the checked arena in
+`MessageArgs.c`. A kernel test that ends with any error counted by that
+checker fails. A test that provokes an error on purpose asserts the count and
+then calls `messageArgsResetCounts()`. `suites/test_unit_message_args_production.c`
+is compiled without the define to test the production expansions. Layer 3
+runs every test against `sim/bin/nano-os-sim-checked` too (`make -C sim
+checked`, built by `mkimage.sh`), and fails any test whose output contains a
+`MESSAGE_ARGS: ` report.
+
 Layer-4 tests are functions `test_*(emulator)` in `emulator/run.py`, run in
 order against a single boot, so later tests see the files earlier ones made;
 the last one halts the system and runs `fsck.vfat` on the image.

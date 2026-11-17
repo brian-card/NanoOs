@@ -91,6 +91,10 @@ void nanoOsTestForceFail(const char *fmt, ...) {
   _currentFailed = true;
 }
 
+bool nanoOsTestCurrentFailed(void) {
+  return _currentFailed;
+}
+
 void nanoOsTestParentBegin(void) {
   _currentFailed = false;
   _currentDiag[0] = '\0';

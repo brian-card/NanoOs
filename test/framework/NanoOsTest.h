@@ -122,6 +122,11 @@ void nanoOsTestRecordFailure(const char *file, int line, const char *fmt, ...)
 void nanoOsTestForceFail(const char *fmt, ...)
   __attribute__((format(printf, 1, 2)));
 
+/// @fn bool nanoOsTestCurrentFailed(void)
+///
+/// @brief Report whether the current test has already been marked failed.
+bool nanoOsTestCurrentFailed(void);
+
 // --- kernel-runner / cross-process result plumbing ----------------------
 //
 // A kernel test body runs in a forked child.  The child serializes its

@@ -36,7 +36,9 @@ CLOSE_TIME_LIMIT = 30
 
 # (label, binary, extra environment).  The poll-only pass makes the console
 # UART report poll-only so the console's polling path stays covered.  The
-# cache passes call file overlays through the overlay file cache.
+# cache passes call file overlays through the overlay file cache.  The checked
+# pass runs the simulator built with the message-argument checker; any report
+# it prints fails the test.
 SIM_CONFIGS = [
     ("nano-os-sim_stripped", "nano-os-sim_stripped", {}),
     ("nano-os-sim", "nano-os-sim", {}),
@@ -44,6 +46,7 @@ SIM_CONFIGS = [
     ("nano-os-sim_stripped-cache", "nano-os-sim_stripped",
      {"NANO_OS_SIM_FILE_CACHE": "1"}),
     ("nano-os-sim-cache", "nano-os-sim", {"NANO_OS_SIM_FILE_CACHE": "1"}),
+    ("nano-os-sim-checked", "nano-os-sim-checked", {}),
 ]
 
 
@@ -61,8 +64,11 @@ def build_image():
                 if f.endswith((".c", ".h", ".cpp", ".ld")) or f == "makefile":
                     newest = max(newest, os.path.getmtime(os.path.join(root, f)))
 
+    binaries = [os.path.join(REPO_ROOT, "sim", "bin", sim_name)
+                for _config, sim_name, _env in SIM_CONFIGS]
     if os.path.exists(img) and os.path.exists(stamp) \
-            and os.path.getmtime(stamp) >= newest:
+            and os.path.getmtime(stamp) >= newest \
+            and all(os.path.exists(b) for b in binaries):
         return img
 
     print(f"# building {img} ...")
@@ -191,6 +197,8 @@ def run_case(i, label, sim_bin, env, test_module, test_name, image,
         signal.alarm(TEST_TIME_LIMIT)
         s = Session(sim_bin, image, env)
         getattr(importlib.import_module(test_module), test_name)(s)
+        reports = harness.message_args_reports(s)
+        assert not reports, f"{len(reports)} checker report(s): {reports[0]}"
         if xfail:
             lines.append(f"ok {i} - {label} # TODO {xfail} -- PASSES NOW, promote it")
         else:

@@ -149,6 +149,15 @@ static void* driverProcessMain(void *args) {
   if (_driverBody != NULL) {
     _driverBody();
   }
+#ifdef NANO_OS_MESSAGE_ARGS_CHECKED
+  const MessageArgsCounts *counts = messageArgsCounts();
+  for (int ii = 0; ii < MESSAGE_ARGS_NUM_ERRORS; ii++) {
+    if ((counts->errors[ii] != 0) && !nanoOsTestCurrentFailed()) {
+      nanoOsTestForceFail("message argument checker counted %u error(s) of "
+        "kind %d", (unsigned int) counts->errors[ii], ii);
+    }
+  }
+#endif
   driverReportAndExit(0);
   return NULL; // not reached
 }
