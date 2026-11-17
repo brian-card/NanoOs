@@ -1318,23 +1318,28 @@ void* runMemoryManager(void *args) {
 size_t getFreeMemory(void) {
   size_t returnValue = 0;
   
-  MemoryManagerGetFreeMemoryArgs memoryManagerGetFreeMemoryArgs = {
-    .bytesFree = 0,
-  };
+  MESSAGE_ARGS_ALLOCATE(MemoryManagerGetFreeMemoryArgs,
+    memoryManagerGetFreeMemoryArgs);
+  if (memoryManagerGetFreeMemoryArgs == NULL) {
+    return returnValue; // 0
+  }
 
   ProcessMessage *sent
     = initSendProcessMessageToPid(memoryManagerPid,
     MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_GET_FREE_MEMORY,
-    &memoryManagerGetFreeMemoryArgs,
-    sizeof(memoryManagerGetFreeMemoryArgs), true);
+    memoryManagerGetFreeMemoryArgs,
+    sizeof(*memoryManagerGetFreeMemoryArgs), true);
   if (sent == NULL) {
     logError("initSendProcessMessageToPid returned NULL\n");
+    MESSAGE_ARGS_FREE(memoryManagerGetFreeMemoryArgs);
     return returnValue; // 0
   }
 
   processMessageWaitForDone(sent, NULL);
   processMessageRelease(sent);
-  return memoryManagerGetFreeMemoryArgs.bytesFree;
+  returnValue = memoryManagerGetFreeMemoryArgs->bytesFree;
+  MESSAGE_ARGS_FREE(memoryManagerGetFreeMemoryArgs);
+  return returnValue;
 }
 
 /// @fn void* memoryManagerSendReallocMessage(void *ptr, size_t size,
@@ -1353,18 +1358,22 @@ static inline __attribute__((always_inline)) void*
 memoryManagerSendReallocMessage(void *ptr, size_t size, bool zero) {
   void *returnValue = NULL;
   
-  ReallocMessage reallocMessage;
-  reallocMessage.ptr = ptr;
-  reallocMessage.size = size;
-  reallocMessage.oldSize = 0;
+  MESSAGE_ARGS_ALLOCATE(ReallocMessage, reallocMessage);
+  if (reallocMessage == NULL) {
+    return returnValue; // NULL
+  }
+  reallocMessage->ptr = ptr;
+  reallocMessage->size = size;
+  reallocMessage->oldSize = 0;
   
   ProcessMessage *sent
     = initSendProcessMessageToProcess(processIdToDescriptor(memoryManagerPid),
     MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_REALLOC,
-    &reallocMessage, sizeof(reallocMessage), true);
+    reallocMessage, sizeof(*reallocMessage), true);
   
   if (sent == NULL) {
     // Nothing more we can do.
+    MESSAGE_ARGS_FREE(reallocMessage);
     return returnValue; // NULL
   }
   
@@ -1372,7 +1381,7 @@ memoryManagerSendReallocMessage(void *ptr, size_t size, bool zero) {
   
   // The handler set the pointer back in the structure we sent it, so grab it
   // out of the structure we already have.
-  returnValue = reallocMessage.ptr;
+  returnValue = reallocMessage->ptr;
   processMessageRelease(sent);
   
   if (returnValue != NULL) {
@@ -1401,14 +1410,15 @@ memoryManagerSendReallocMessage(void *ptr, size_t size, bool zero) {
         c = 0;
       }
       
-      memset(returnValue, c, reallocMessage.size);
-    } else if (reallocMessage.size > reallocMessage.oldSize) {
+      memset(returnValue, c, reallocMessage->size);
+    } else if (reallocMessage->size > reallocMessage->oldSize) {
       // See the note above for why we can't leave the memory uninitialized.
-      memset(((char*) returnValue) + reallocMessage.oldSize,
+      memset(((char*) returnValue) + reallocMessage->oldSize,
         c,
-        reallocMessage.size - reallocMessage.oldSize);
+        reallocMessage->size - reallocMessage->oldSize);
     }
   }
+  MESSAGE_ARGS_FREE(reallocMessage);
   
   return returnValue;
 }
@@ -1427,21 +1437,25 @@ void memoryManagerFree(void *ptr) {
     return;
   }
 
-  MemoryManagerFreeArgs memoryManagerFreeArgs = {
-    .ptr = ptr,
-  };
+  MESSAGE_ARGS_ALLOCATE(MemoryManagerFreeArgs, memoryManagerFreeArgs);
+  if (memoryManagerFreeArgs == NULL) {
+    return;
+  }
+  memoryManagerFreeArgs->ptr = ptr;
   ProcessMessage *processMessage = initSendProcessMessageToProcess(
     processIdToDescriptor(memoryManagerPid),
     MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_FREE,
-    &memoryManagerFreeArgs, sizeof(memoryManagerFreeArgs), true);
+    memoryManagerFreeArgs, sizeof(*memoryManagerFreeArgs), true);
   if (processMessage == NULL) {
     logError("Could not send MEMORY_MANAGER_FREE message to "
       "memory manager; memory leak\n");
+    MESSAGE_ARGS_FREE(memoryManagerFreeArgs);
     return;
   }
 
   processMessageWaitForDone(processMessage, NULL);
   processMessageRelease(processMessage);
+  MESSAGE_ARGS_FREE(memoryManagerFreeArgs);
 
   return;
 }
