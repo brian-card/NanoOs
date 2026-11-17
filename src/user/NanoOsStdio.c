@@ -1729,6 +1729,25 @@ int nanoOsSprintf(char *buffer, const char *format, ...) {
 
 // Input support functions.
 
+/// @fn static bool nanoOsInputIsFromWriter(
+///   ProcessMessage *response, ProcessId writerPid)
+///
+/// @brief Determine whether input came from the process a stream reads from
+/// or from the kernel.  Kept out of line so that nanoOsWaitForInput, which
+/// the Agon keeps in flash, doesn't grow.
+///
+/// @param response The CONSOLE_RETURNING_INPUT message received.
+/// @param writerPid The process the stream reads from.
+///
+/// @return Returns true if the input is the stream's, false if not.
+static __attribute__((noinline)) bool nanoOsInputIsFromWriter(
+  ProcessMessage *response, ProcessId writerPid
+) {
+  ProcessDescriptor *from = processMessageFrom(response);
+  return (from == NULL) || (from->privilegeLevel == PRIVILEGE_LEVEL_KERNEL)
+    || (processPid(from) == writerPid);
+}
+
 /// @fn ConsoleBuffer* nanoOsWaitForInput(void)
 ///
 /// @brief Wait for input from the nanoOs port owned by the current process.
@@ -1757,11 +1776,15 @@ ConsoleBuffer* nanoOsWaitForInput(void) {
       /* data= */ 0, /* size= */ 0, false);
   }
 
-  if (inputChannel->pid != PROCESS_ID_NOT_SET) {
+  ProcessId writerPid = inputChannel->pid;
+  while (writerPid != PROCESS_ID_NOT_SET) {
     ProcessMessage *response
       = processMessageQueueWaitForType(
       CONSOLE_COMMAND_SIGNATURE | CONSOLE_RETURNING_INPUT, NULL);
-    consoleBuffer = (ConsoleBuffer*) processMessageData(response);
+    bool accepted = nanoOsInputIsFromWriter(response, writerPid);
+    if (accepted) {
+      consoleBuffer = (ConsoleBuffer*) processMessageData(response);
+    }
 
     if (processMessageWaiting(response) == false) {
       // The usual case.
@@ -1770,6 +1793,11 @@ ConsoleBuffer* nanoOsWaitForInput(void) {
       // Just tell the sender that we're done.
       processMessageSetDone(response);
     }
+    if (accepted) {
+      break;
+    }
+    // Otherwise it's from a writer this stream no longer reads, such as an
+    // earlier stage of a pipeline whose last command didn't run.
   }
 
   return consoleBuffer;
