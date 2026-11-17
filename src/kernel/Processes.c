@@ -750,9 +750,11 @@ int sendProcessMessageToProcess(
     goto exit;
   }
 
+  MESSAGE_ARGS_SENDING(processMessage, processDescriptor->processId);
   returnValue
     = processMessageQueuePushInline(processDescriptor, processMessage);
   if (returnValue != processSuccess) {
+    MESSAGE_ARGS_SEND_FAILED(processMessage);
     errno = EAGAIN;
   }
 
