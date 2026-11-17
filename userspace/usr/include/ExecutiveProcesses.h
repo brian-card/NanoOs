@@ -339,6 +339,73 @@ static inline int processMessageInit(ProcessMessage *processMessage,
   return processError;
 }
 
+/// @def MESSAGE_ARGS_ROUND_TRIP
+///
+/// @brief The sender owns the storage before and after the exchange and frees
+/// it.
+#define MESSAGE_ARGS_ROUND_TRIP ((uint8_t) 0x01)
+
+/// @def MESSAGE_ARGS_ONE_WAY
+///
+/// @brief Ownership passes to the recipient when the message is sent, and the
+/// recipient frees the storage.
+#define MESSAGE_ARGS_ONE_WAY ((uint8_t) 0x02)
+
+/// @def MESSAGE_ARGS_PERSISTENT
+///
+/// @brief Added to MESSAGE_ARGS_ROUND_TRIP for storage the sender keeps for
+/// its whole life and reuses for messages it doesn't wait on.
+#define MESSAGE_ARGS_PERSISTENT ((uint8_t) 0x04)
+
+/// @fn static inline void* messageArgsCreate(size_t size, uint8_t ownership)
+///
+/// @brief Allocate zeroed storage for a message's arguments whose lifetime the
+/// caller manages.
+///
+/// @param size The number of bytes to allocate.
+/// @param ownership The MESSAGE_ARGS_* ownership of the storage.
+///
+/// @return Returns a pointer to the storage on success, NULL on failure.
+static inline void* messageArgsCreate(size_t size, uint8_t ownership) {
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    return overlayMap.header.osApi->executiveApi->messageArgsCreate(
+      size, ownership);
+  }
+  return NULL;
+}
+
+/// @fn static inline void messageArgsDestroy(void *ptr)
+///
+/// @brief Free storage from messageArgsCreate.
+///
+/// @param ptr The storage, or NULL.
+///
+/// @return This function returns no value.
+static inline void messageArgsDestroy(void *ptr) {
+  if (overlayMap.header.osApi->executiveApi != NULL) {
+    overlayMap.header.osApi->executiveApi->messageArgsDestroy(ptr);
+  }
+}
+
+/// @def MESSAGE_ARGS_CREATE
+///
+/// @brief Allocate zeroed storage for a `type` whose lifetime the caller
+/// manages, or NULL if there was none.
+#define MESSAGE_ARGS_CREATE(type, ownership) \
+  ((type*) messageArgsCreate(sizeof(type), (ownership)))
+
+/// @def MESSAGE_ARGS_CREATE_BYTES
+///
+/// @brief Allocate `size` zeroed bytes whose lifetime the caller manages, or
+/// NULL if there were none.
+#define MESSAGE_ARGS_CREATE_BYTES(size, ownership) \
+  messageArgsCreate((size), (ownership))
+
+/// @def MESSAGE_ARGS_DESTROY
+///
+/// @brief Free storage from MESSAGE_ARGS_CREATE or MESSAGE_ARGS_CREATE_BYTES.
+#define MESSAGE_ARGS_DESTROY(ptr) messageArgsDestroy(ptr)
+
 /// @fn static inline int processMessageSetDone(ProcessMessage *processMessage)
 ///
 /// @brief Set a process message to the 'done' state.  If a process is waiting
