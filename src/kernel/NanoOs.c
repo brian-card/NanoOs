@@ -68,21 +68,26 @@ void defaultSignalHandler(int signum) {
   if ((signum == SIGINT) || (signum == SIGTERM)) {
     // Kill this process.  Wait rather than yield: the arguments are on this
     // stack, and the scheduler releases the message of a process killing itself.
-    SchedulerKillProcessArgs schedulerKillProcessArgs = {
-      .pid = getRunningPid(),
-      .signal = signum,
-      .returnValue = 0,
-      .errorNumber = 0,
-    };
-    ProcessMessage *processMessage = initSendProcessMessageToPid(
-      schedulerPid,
-      SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_KILL_PROCESS,
-      &schedulerKillProcessArgs, sizeof(schedulerKillProcessArgs), true);
-    if (processMessage == NULL) {
+    MESSAGE_ARGS_ALLOCATE(SchedulerKillProcessArgs, schedulerKillProcessArgs);
+    if (schedulerKillProcessArgs == NULL) {
       logError("Could not communicate with scheduler.\n");
       return;
     }
+    schedulerKillProcessArgs->pid = getRunningPid();
+    schedulerKillProcessArgs->signal = signum;
+    schedulerKillProcessArgs->returnValue = 0;
+    schedulerKillProcessArgs->errorNumber = 0;
+    ProcessMessage *processMessage = initSendProcessMessageToPid(
+      schedulerPid,
+      SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_KILL_PROCESS,
+      schedulerKillProcessArgs, sizeof(*schedulerKillProcessArgs), true);
+    if (processMessage == NULL) {
+      logError("Could not communicate with scheduler.\n");
+      MESSAGE_ARGS_FREE(schedulerKillProcessArgs);
+      return;
+    }
     processMessageWaitForDone(processMessage, NULL);
+    MESSAGE_ARGS_FREE(schedulerKillProcessArgs);
   }
 }
 
