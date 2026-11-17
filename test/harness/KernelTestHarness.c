@@ -150,6 +150,7 @@ static void* driverProcessMain(void *args) {
     _driverBody();
   }
 #ifdef NANO_OS_MESSAGE_ARGS_CHECKED
+  messageArgsProcessEnded(getRunningPid(), true);
   const MessageArgsCounts *counts = messageArgsCounts();
   for (int ii = 0; ii < MESSAGE_ARGS_NUM_ERRORS; ii++) {
     if ((counts->errors[ii] != 0) && !nanoOsTestCurrentFailed()) {

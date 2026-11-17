@@ -35,6 +35,14 @@ done
 rc=0
 section() { printf '\n============ %s ============\n' "$1"; }
 
+section "Message argument storage"
+if python3 tools/check-message-args.py; then
+	echo "[message args] PASS"
+else
+	echo "[message args] FAIL"
+	rc=1
+fi
+
 section "Layer 1 + 2: kernel test harness"
 make -C test clean >/dev/null
 if make -C test run; then
