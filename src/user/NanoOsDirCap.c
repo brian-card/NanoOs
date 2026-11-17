@@ -118,26 +118,32 @@ int nanoOsDircapName(const char *directory, char **name, size_t *nameLength) {
 static int nanoOsDircapChange(SchedulerCommand command,
   const char *directory, uint8_t mask
 ) {
-  SchedulerDirCapabilityArgs schedulerDirCapabilityArgs = {
-    .name = NULL,
-    .nameLength = 0,
-    .mask = mask,
-    .errorNumber = 0,
-  };
+  MESSAGE_ARGS_ALLOCATE(SchedulerDirCapabilityArgs,
+    schedulerDirCapabilityArgs);
+  if (schedulerDirCapabilityArgs == NULL) {
+    errno = ENOMEM;
+    return -1;
+  }
+  schedulerDirCapabilityArgs->name = NULL;
+  schedulerDirCapabilityArgs->nameLength = 0;
+  schedulerDirCapabilityArgs->mask = mask;
+  schedulerDirCapabilityArgs->errorNumber = 0;
   char *name = NULL;
   int errorNumber = nanoOsDircapName(directory, &name,
-    &schedulerDirCapabilityArgs.nameLength);
+    &schedulerDirCapabilityArgs->nameLength);
   if (errorNumber != 0) {
+    MESSAGE_ARGS_FREE(schedulerDirCapabilityArgs);
     errno = errorNumber;
     return -1;
   }
-  schedulerDirCapabilityArgs.name = name;
+  schedulerDirCapabilityArgs->name = name;
 
   ProcessMessage *processMessage = initSendProcessMessageToPid(schedulerPid,
     SCHEDULER_COMMAND_SIGNATURE | command,
-    &schedulerDirCapabilityArgs, sizeof(schedulerDirCapabilityArgs), true);
+    schedulerDirCapabilityArgs, sizeof(*schedulerDirCapabilityArgs), true);
   if (processMessage == NULL) {
     free(name);
+    MESSAGE_ARGS_FREE(schedulerDirCapabilityArgs);
     errno = ENOMEM;
     return -1;
   }
@@ -145,10 +151,12 @@ static int nanoOsDircapChange(SchedulerCommand command,
   processMessageRelease(processMessage);
   free(name);
 
-  if (schedulerDirCapabilityArgs.errorNumber != 0) {
-    errno = schedulerDirCapabilityArgs.errorNumber;
+  if (schedulerDirCapabilityArgs->errorNumber != 0) {
+    errno = schedulerDirCapabilityArgs->errorNumber;
+    MESSAGE_ARGS_FREE(schedulerDirCapabilityArgs);
     return -1;
   }
+  MESSAGE_ARGS_FREE(schedulerDirCapabilityArgs);
   return 0;
 }
 
@@ -188,26 +196,33 @@ int nanoOsDircapDrop(const char *directory) {
 /// @return Returns the size of the set in bytes, which is more than
 /// bufferSize if nothing was copied, or -1 and sets errno on failure.
 int nanoOsDircapGet(DirCapabilities *buffer, size_t bufferSize) {
-  SchedulerGetDirCapabilitiesArgs schedulerGetDirCapabilitiesArgs = {
-    .buffer = buffer,
-    .bufferSize = bufferSize,
-    .size = 0,
-    .errorNumber = 0,
-  };
+  MESSAGE_ARGS_ALLOCATE(SchedulerGetDirCapabilitiesArgs,
+    schedulerGetDirCapabilitiesArgs);
+  if (schedulerGetDirCapabilitiesArgs == NULL) {
+    errno = ENOMEM;
+    return -1;
+  }
+  schedulerGetDirCapabilitiesArgs->buffer = buffer;
+  schedulerGetDirCapabilitiesArgs->bufferSize = bufferSize;
+  schedulerGetDirCapabilitiesArgs->size = 0;
+  schedulerGetDirCapabilitiesArgs->errorNumber = 0;
   ProcessMessage *processMessage = initSendProcessMessageToPid(schedulerPid,
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_GET_DIR_CAPABILITIES,
-    &schedulerGetDirCapabilitiesArgs, sizeof(schedulerGetDirCapabilitiesArgs),
+    schedulerGetDirCapabilitiesArgs, sizeof(*schedulerGetDirCapabilitiesArgs),
     true);
   if (processMessage == NULL) {
+    MESSAGE_ARGS_FREE(schedulerGetDirCapabilitiesArgs);
     errno = ENOMEM;
     return -1;
   }
   processMessageWaitForDone(processMessage, NULL);
   processMessageRelease(processMessage);
 
-  if (schedulerGetDirCapabilitiesArgs.errorNumber != 0) {
-    errno = schedulerGetDirCapabilitiesArgs.errorNumber;
-    return -1;
+  int returnValue = (int) schedulerGetDirCapabilitiesArgs->size;
+  if (schedulerGetDirCapabilitiesArgs->errorNumber != 0) {
+    errno = schedulerGetDirCapabilitiesArgs->errorNumber;
+    returnValue = -1;
   }
-  return (int) schedulerGetDirCapabilitiesArgs.size;
+  MESSAGE_ARGS_FREE(schedulerGetDirCapabilitiesArgs);
+  return returnValue;
 }
