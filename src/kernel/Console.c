@@ -1746,19 +1746,28 @@ static void consoleHandleInputEvent(
 
     // The user hit Ctrl-C on the keyboard.  Send SIGINT to the input owner.
     if (consolePort->inputOwner != PROCESS_ID_NOT_SET) {
+      void **slot = &consoleState->sendSignalArgs[
+        consolePort - consoleState->consolePorts];
+      // The memory manager owns the ports only while it prints its boot
+      // message, waiting on this process, so allocating then would deadlock.
+      if ((*slot == NULL) && (consolePort->inputOwner != memoryManagerPid)) {
+        *slot = MESSAGE_ARGS_CREATE(SchedulerSendSignalArgs,
+          MESSAGE_ARGS_ROUND_TRIP | MESSAGE_ARGS_PERSISTENT);
+      }
       SchedulerSendSignalArgs *sendSignalArgs
-        = &((SchedulerSendSignalArgs*) consoleState->sendSignalArgs)[
-          consolePort - consoleState->consolePorts];
-      sendSignalArgs->pid = consolePort->inputOwner;
-      sendSignalArgs->signal = SIGINT;
-      sendSignalArgs->returnValue = 0;
-      sendSignalArgs->errorNumber = 0;
-      ProcessMessage *processMessage
-        = initSendProcessMessageToPid(
-        schedulerPid,
-        SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_SEND_SIGNAL,
-        /* data= */ sendSignalArgs, /* size= */ sizeof(*sendSignalArgs),
-        false);
+        = (SchedulerSendSignalArgs*) *slot;
+      ProcessMessage *processMessage = NULL;
+      if (sendSignalArgs != NULL) {
+        sendSignalArgs->pid = consolePort->inputOwner;
+        sendSignalArgs->signal = SIGINT;
+        sendSignalArgs->returnValue = 0;
+        sendSignalArgs->errorNumber = 0;
+        processMessage = initSendProcessMessageToPid(
+          schedulerPid,
+          SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_SEND_SIGNAL,
+          /* data= */ sendSignalArgs, /* size= */ sizeof(*sendSignalArgs),
+          false);
+      }
       if (processMessage == NULL) {
         logError("Could not communicate with scheduler.\n");
       }
@@ -2036,13 +2045,11 @@ int consoleForwardString(ConsolePort *consolePort, const char *string) {
 void* runConsole(void *args) {
   (void) args;
 
-  SchedulerSendSignalArgs sendSignalArgs[CONSOLE_NUM_PORTS];
   ConsoleState consoleState;
   memset(&consoleState, 0, sizeof(ConsoleState));
 
   consoleState.numConsolePorts
     = (HAL->uart != NULL) ? CONSOLE_NUM_PORTS : 0;
-  consoleState.sendSignalArgs = sendSignalArgs;
 
   // For each console port, use the console buffer at the corresponding index.
   for (uint8_t ii = 0; ii < consoleState.numConsolePorts; ii++) {
