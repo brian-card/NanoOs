@@ -200,35 +200,41 @@ static FILE* filesystemOpenFile(const char *pathname, const char *mode,
     goto freeFileDescriptor;
   }
 
-  FilesystemFopenArgs fopenArgs;
-  memset(&fopenArgs, 0, sizeof(fopenArgs));
-  fopenArgs.now = time(NULL);
-  fopenArgs.pathname = (char*) malloc(strlen(pathname) + 1);
-  if (fopenArgs.pathname == NULL) {
+  MESSAGE_ARGS_ALLOCATE(FilesystemFopenArgs, fopenArgs);
+  if (fopenArgs == NULL) {
+    errno = ENOMEM;
     goto freeFileDescriptor;
   }
-  strcpy(fopenArgs.pathname, pathname);
+  fopenArgs->now = time(NULL);
+  fopenArgs->pathname = (char*) malloc(strlen(pathname) + 1);
+  if (fopenArgs->pathname == NULL) {
+    MESSAGE_ARGS_FREE(fopenArgs);
+    goto freeFileDescriptor;
+  }
+  strcpy(fopenArgs->pathname, pathname);
 
-  fopenArgs.mode = (char*) malloc(strlen(mode) + 1);
-  if (fopenArgs.mode == NULL) {
+  fopenArgs->mode = (char*) malloc(strlen(mode) + 1);
+  if (fopenArgs->mode == NULL) {
     goto freePathname;
   }
-  strcpy(fopenArgs.mode, mode);
+  strcpy(fopenArgs->mode, mode);
 
   ProcessMessage *msg = initSendProcessMessageToPid(
     rootFilesystemPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_OPEN_FILE | pathFlag,
-    &fopenArgs, sizeof(fopenArgs), true);
+    fopenArgs, sizeof(*fopenArgs), true);
   processMessageWaitForDone(msg, NULL);
-  free(fopenArgs.mode);
-  free(fopenArgs.pathname);
+  free(fopenArgs->mode);
+  free(fopenArgs->pathname);
 
-  file = fopenArgs.returnValue;
+  file = fopenArgs->returnValue;
   processMessageRelease(msg);
   if (file == NULL) {
-    errno = fopenArgs.errorNumber;
+    errno = fopenArgs->errorNumber;
+    MESSAGE_ARGS_FREE(fopenArgs);
     goto freeFileDescriptor;
   }
+  MESSAGE_ARGS_FREE(fopenArgs);
 
   processDescriptor->fileDescriptors[fd]->file = file;
   processDescriptor->fileDescriptors[fd]->streamFd = fd;
@@ -241,7 +247,8 @@ static FILE* filesystemOpenFile(const char *pathname, const char *mode,
   goto exit;
 
 freePathname:
-  free(fopenArgs.pathname);
+  free(fopenArgs->pathname);
+  MESSAGE_ARGS_FREE(fopenArgs);
 
 freeFileDescriptor:
   free(processDescriptor->fileDescriptors[fd]);
@@ -392,24 +399,29 @@ int filesystemCloseFileDescriptor(int fd) {
   }
 
   int returnValue = 0;
-  FilesystemFcloseArgs fcloseArgs;
-  fcloseArgs.stream = fileDescriptor->file;
-  fcloseArgs.returnValue = 0;
+  MESSAGE_ARGS_ALLOCATE(FilesystemFcloseArgs, fcloseArgs);
+  if (fcloseArgs == NULL) {
+    errno = ENOMEM;
+    return EOF;
+  }
+  fcloseArgs->stream = fileDescriptor->file;
+  fcloseArgs->returnValue = 0;
 
   ProcessMessage *msg = initSendProcessMessageToPid(
     rootFilesystemPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_CLOSE_FILE,
-    &fcloseArgs, sizeof(fcloseArgs), true);
+    fcloseArgs, sizeof(*fcloseArgs), true);
   processMessageWaitForDone(msg, NULL);
 
-  if (fcloseArgs.returnValue != 0) {
-    errno = -fcloseArgs.returnValue;
+  if (fcloseArgs->returnValue != 0) {
+    errno = -fcloseArgs->returnValue;
     returnValue = EOF;
   } else if (processDescriptor->numFilesystemHandles > 0) {
     processDescriptor->numFilesystemHandles--;
   }
 
   processMessageRelease(msg);
+  MESSAGE_ARGS_FREE(fcloseArgs);
   free(fileDescriptor);
 
   return returnValue;
@@ -485,22 +497,26 @@ FileDescriptor* filesystemStreamFileDescriptor(FILE *stream) {
 int filesystemRemove(const char *pathname) {
   int returnValue = 0;
   if ((pathname != NULL) && (*pathname != '\0')) {
-    FilesystemRemoveArgs filesystemRemoveArgs;
-    memset(&filesystemRemoveArgs, 0, sizeof(filesystemRemoveArgs));
-    filesystemRemoveArgs.pathname = (char*) malloc(strlen(pathname) + 1);
-    if (filesystemRemoveArgs.pathname == NULL) {
+    MESSAGE_ARGS_ALLOCATE(FilesystemRemoveArgs, filesystemRemoveArgs);
+    if (filesystemRemoveArgs == NULL) {
       errno = ENOMEM;
       return -1;
     }
-    strcpy(filesystemRemoveArgs.pathname, pathname);
+    filesystemRemoveArgs->pathname = (char*) malloc(strlen(pathname) + 1);
+    if (filesystemRemoveArgs->pathname == NULL) {
+      MESSAGE_ARGS_FREE(filesystemRemoveArgs);
+      errno = ENOMEM;
+      return -1;
+    }
+    strcpy(filesystemRemoveArgs->pathname, pathname);
 
     ProcessMessage *msg = initSendProcessMessageToPid(
       rootFilesystemPid,
       FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_REMOVE_FILE,
-      &filesystemRemoveArgs, sizeof(filesystemRemoveArgs), true);
+      filesystemRemoveArgs, sizeof(*filesystemRemoveArgs), true);
     processMessageWaitForDone(msg, NULL);
-    free(filesystemRemoveArgs.pathname); filesystemRemoveArgs.pathname = NULL;
-    returnValue = filesystemRemoveArgs.returnValue;
+    free(filesystemRemoveArgs->pathname); filesystemRemoveArgs->pathname = NULL;
+    returnValue = filesystemRemoveArgs->returnValue;
     if (returnValue != 0) {
       // returnValue holds a negative errno.  Set errno for the current process
       // and return -1 like we're supposed to.
@@ -508,6 +524,7 @@ int filesystemRemove(const char *pathname) {
       returnValue = -1;
     }
     processMessageRelease(msg);
+    MESSAGE_ARGS_FREE(filesystemRemoveArgs);
   } else {
     errno = ENOENT;
     returnValue = -1;
@@ -537,26 +554,30 @@ static __attribute__((noinline)) int filesystemRenamePaths(
     return -1;
   }
 
-  FilesystemRenameArgs filesystemRenameArgs;
-  memset(&filesystemRenameArgs, 0, sizeof(filesystemRenameArgs));
-  size_t oldpathSize = strlen(oldpath) + 1;
-  filesystemRenameArgs.oldpath
-    = (char*) malloc(oldpathSize + strlen(newpath) + 1);
-  if (filesystemRenameArgs.oldpath == NULL) {
+  MESSAGE_ARGS_ALLOCATE(FilesystemRenameArgs, filesystemRenameArgs);
+  if (filesystemRenameArgs == NULL) {
     errno = ENOMEM;
     return -1;
   }
-  strcpy(filesystemRenameArgs.oldpath, oldpath);
-  filesystemRenameArgs.newpath = filesystemRenameArgs.oldpath + oldpathSize;
-  strcpy(filesystemRenameArgs.newpath, newpath);
+  size_t oldpathSize = strlen(oldpath) + 1;
+  filesystemRenameArgs->oldpath
+    = (char*) malloc(oldpathSize + strlen(newpath) + 1);
+  if (filesystemRenameArgs->oldpath == NULL) {
+    MESSAGE_ARGS_FREE(filesystemRenameArgs);
+    errno = ENOMEM;
+    return -1;
+  }
+  strcpy(filesystemRenameArgs->oldpath, oldpath);
+  filesystemRenameArgs->newpath = filesystemRenameArgs->oldpath + oldpathSize;
+  strcpy(filesystemRenameArgs->newpath, newpath);
 
   ProcessMessage *msg = initSendProcessMessageToPid(
     rootFilesystemPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_RENAME_FILE | pathFlag,
-    &filesystemRenameArgs, sizeof(filesystemRenameArgs), true);
+    filesystemRenameArgs, sizeof(*filesystemRenameArgs), true);
   processMessageWaitForDone(msg, NULL);
-  free(filesystemRenameArgs.oldpath); filesystemRenameArgs.oldpath = NULL;
-  int returnValue = filesystemRenameArgs.returnValue;
+  free(filesystemRenameArgs->oldpath); filesystemRenameArgs->oldpath = NULL;
+  int returnValue = filesystemRenameArgs->returnValue;
   if (returnValue != 0) {
     // returnValue holds a negative errno.  Set errno for the current process
     // and return -1 like we're supposed to.
@@ -564,6 +585,7 @@ static __attribute__((noinline)) int filesystemRenamePaths(
     returnValue = -1;
   }
   processMessageRelease(msg);
+  MESSAGE_ARGS_FREE(filesystemRenameArgs);
 
   return returnValue;
 }
@@ -600,27 +622,32 @@ static int filesystemSendPathCommand(
     return -1;
   }
 
-  FilesystemPathArgs filesystemPathArgs;
-  memset(&filesystemPathArgs, 0, sizeof(filesystemPathArgs));
-  filesystemPathArgs.pathname = (char*) malloc(strlen(pathname) + 1);
-  if (filesystemPathArgs.pathname == NULL) {
+  MESSAGE_ARGS_ALLOCATE(FilesystemPathArgs, filesystemPathArgs);
+  if (filesystemPathArgs == NULL) {
     errno = ENOMEM;
     return -1;
   }
-  strcpy(filesystemPathArgs.pathname, pathname);
-  filesystemPathArgs.now = time(NULL);
+  filesystemPathArgs->pathname = (char*) malloc(strlen(pathname) + 1);
+  if (filesystemPathArgs->pathname == NULL) {
+    MESSAGE_ARGS_FREE(filesystemPathArgs);
+    errno = ENOMEM;
+    return -1;
+  }
+  strcpy(filesystemPathArgs->pathname, pathname);
+  filesystemPathArgs->now = time(NULL);
 
   ProcessMessage *msg = initSendProcessMessageToPid(
     rootFilesystemPid, FILESYSTEM_COMMAND_SIGNATURE | command,
-    &filesystemPathArgs, sizeof(filesystemPathArgs), true);
+    filesystemPathArgs, sizeof(*filesystemPathArgs), true);
   processMessageWaitForDone(msg, NULL);
-  free(filesystemPathArgs.pathname); filesystemPathArgs.pathname = NULL;
-  int returnValue = filesystemPathArgs.returnValue;
+  free(filesystemPathArgs->pathname); filesystemPathArgs->pathname = NULL;
+  int returnValue = filesystemPathArgs->returnValue;
   if (returnValue != 0) {
     errno = -returnValue;
     returnValue = -1;
   }
   processMessageRelease(msg);
+  MESSAGE_ARGS_FREE(filesystemPathArgs);
 
   return returnValue;
 }
@@ -738,28 +765,33 @@ DIR* filesystemOpendir(const char *pathname) {
     return NULL;
   }
 
-  FilesystemOpendirArgs filesystemOpendirArgs;
-  memset(&filesystemOpendirArgs, 0, sizeof(filesystemOpendirArgs));
-  filesystemOpendirArgs.pathname = (char*) malloc(strlen(pathname) + 1);
-  if (filesystemOpendirArgs.pathname == NULL) {
+  MESSAGE_ARGS_ALLOCATE(FilesystemOpendirArgs, filesystemOpendirArgs);
+  if (filesystemOpendirArgs == NULL) {
     errno = ENOMEM;
     return NULL;
   }
-  strcpy(filesystemOpendirArgs.pathname, pathname);
+  filesystemOpendirArgs->pathname = (char*) malloc(strlen(pathname) + 1);
+  if (filesystemOpendirArgs->pathname == NULL) {
+    MESSAGE_ARGS_FREE(filesystemOpendirArgs);
+    errno = ENOMEM;
+    return NULL;
+  }
+  strcpy(filesystemOpendirArgs->pathname, pathname);
 
   ProcessMessage *msg = initSendProcessMessageToPid(
     rootFilesystemPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_OPEN_DIR,
-    &filesystemOpendirArgs, sizeof(filesystemOpendirArgs), true);
+    filesystemOpendirArgs, sizeof(*filesystemOpendirArgs), true);
   processMessageWaitForDone(msg, NULL);
-  free(filesystemOpendirArgs.pathname); filesystemOpendirArgs.pathname = NULL;
-  DIR *returnValue = filesystemOpendirArgs.returnValue;
+  free(filesystemOpendirArgs->pathname); filesystemOpendirArgs->pathname = NULL;
+  DIR *returnValue = filesystemOpendirArgs->returnValue;
   if (returnValue == NULL) {
-    errno = filesystemOpendirArgs.errorNumber;
+    errno = filesystemOpendirArgs->errorNumber;
   } else {
     getRunningProcess()->numFilesystemHandles++;
   }
   processMessageRelease(msg);
+  MESSAGE_ARGS_FREE(filesystemOpendirArgs);
   return returnValue;
 }
 
@@ -781,26 +813,31 @@ struct dirent* filesystemReaddir(DIR *dirp) {
     return NULL;
   }
 
-  FilesystemReaddirArgs filesystemReaddirArgs = {
-    .dirp = dirp,
-    .returnValue = NULL,
-    .errorNumber = 0,
-  };
+  MESSAGE_ARGS_ALLOCATE(FilesystemReaddirArgs, filesystemReaddirArgs);
+  if (filesystemReaddirArgs == NULL) {
+    errno = ENOMEM;
+    return NULL;
+  }
+  filesystemReaddirArgs->dirp = dirp;
+  filesystemReaddirArgs->returnValue = NULL;
+  filesystemReaddirArgs->errorNumber = 0;
 
   ProcessMessage *msg = initSendProcessMessageToPid(
     rootFilesystemPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_READ_DIR,
-    &filesystemReaddirArgs, sizeof(filesystemReaddirArgs), true);
+    filesystemReaddirArgs, sizeof(*filesystemReaddirArgs), true);
   processMessageWaitForDone(msg, NULL);
   processMessageRelease(msg);
 
-  if ((filesystemReaddirArgs.returnValue == NULL)
-    && (filesystemReaddirArgs.errorNumber != 0)
+  if ((filesystemReaddirArgs->returnValue == NULL)
+    && (filesystemReaddirArgs->errorNumber != 0)
   ) {
-    errno = filesystemReaddirArgs.errorNumber;
+    errno = filesystemReaddirArgs->errorNumber;
   }
 
-  return filesystemReaddirArgs.returnValue;
+  struct dirent *returnValue = filesystemReaddirArgs->returnValue;
+  MESSAGE_ARGS_FREE(filesystemReaddirArgs);
+  return returnValue;
 }
 
 /// @fn int filesystemClosedir(DIR *dirp)
@@ -816,17 +853,20 @@ int filesystemClosedir(DIR *dirp) {
     return -1;
   }
 
-  FilesystemClosedirArgs filesystemClosedirArgs = {
-    .dirp = dirp,
-    .returnValue = 0,
-  };
+  MESSAGE_ARGS_ALLOCATE(FilesystemClosedirArgs, filesystemClosedirArgs);
+  if (filesystemClosedirArgs == NULL) {
+    errno = ENOMEM;
+    return -1;
+  }
+  filesystemClosedirArgs->dirp = dirp;
+  filesystemClosedirArgs->returnValue = 0;
   ProcessMessage *msg = initSendProcessMessageToPid(
     rootFilesystemPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_CLOSE_DIR,
-    &filesystemClosedirArgs, sizeof(filesystemClosedirArgs), true);
+    filesystemClosedirArgs, sizeof(*filesystemClosedirArgs), true);
   processMessageWaitForDone(msg, NULL);
   int returnValue = 0;
-  if (filesystemClosedirArgs.returnValue != 0) {
+  if (filesystemClosedirArgs->returnValue != 0) {
     // The only way the driver can fail a closedir is a bad handle.
     errno = EBADF;
     returnValue = -1;
@@ -834,6 +874,7 @@ int filesystemClosedir(DIR *dirp) {
     getRunningProcess()->numFilesystemHandles--;
   }
   processMessageRelease(msg);
+  MESSAGE_ARGS_FREE(filesystemClosedirArgs);
   return returnValue;
 }
 
@@ -851,28 +892,33 @@ int filesystemLstat(const char *pathname, struct stat *statbuf) {
     return -1;
   }
 
-  FilesystemLstatArgs filesystemLstatArgs;
-  memset(&filesystemLstatArgs, 0, sizeof(filesystemLstatArgs));
-  filesystemLstatArgs.pathname = (char*) malloc(strlen(pathname) + 1);
-  if (filesystemLstatArgs.pathname == NULL) {
+  MESSAGE_ARGS_ALLOCATE(FilesystemLstatArgs, filesystemLstatArgs);
+  if (filesystemLstatArgs == NULL) {
     errno = ENOMEM;
     return -1;
   }
-  strcpy(filesystemLstatArgs.pathname, pathname);
-  filesystemLstatArgs.statbuf = statbuf;
+  filesystemLstatArgs->pathname = (char*) malloc(strlen(pathname) + 1);
+  if (filesystemLstatArgs->pathname == NULL) {
+    MESSAGE_ARGS_FREE(filesystemLstatArgs);
+    errno = ENOMEM;
+    return -1;
+  }
+  strcpy(filesystemLstatArgs->pathname, pathname);
+  filesystemLstatArgs->statbuf = statbuf;
 
   ProcessMessage *msg = initSendProcessMessageToPid(
     rootFilesystemPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_LSTAT,
-    &filesystemLstatArgs, sizeof(filesystemLstatArgs), true);
+    filesystemLstatArgs, sizeof(*filesystemLstatArgs), true);
   processMessageWaitForDone(msg, NULL);
-  free(filesystemLstatArgs.pathname); filesystemLstatArgs.pathname = NULL;
-  int returnValue = filesystemLstatArgs.returnValue;
+  free(filesystemLstatArgs->pathname); filesystemLstatArgs->pathname = NULL;
+  int returnValue = filesystemLstatArgs->returnValue;
   if (returnValue != 0) {
-    errno = filesystemLstatArgs.errorNumber;
+    errno = filesystemLstatArgs->errorNumber;
     returnValue = -1;
   }
   processMessageRelease(msg);
+  MESSAGE_ARGS_FREE(filesystemLstatArgs);
   return returnValue;
 }
 
@@ -892,24 +938,28 @@ int filesystemDirstat(const struct dirent *entry, struct stat *statbuf) {
     return -1;
   }
 
-  FilesystemDirstatArgs filesystemDirstatArgs = {
-    .dirp = (DIR*) entry->priv,
-    .statbuf = statbuf,
-    .returnValue = 0,
-    .errorNumber = 0,
-  };
+  MESSAGE_ARGS_ALLOCATE(FilesystemDirstatArgs, filesystemDirstatArgs);
+  if (filesystemDirstatArgs == NULL) {
+    errno = ENOMEM;
+    return -1;
+  }
+  filesystemDirstatArgs->dirp = (DIR*) entry->priv;
+  filesystemDirstatArgs->statbuf = statbuf;
+  filesystemDirstatArgs->returnValue = 0;
+  filesystemDirstatArgs->errorNumber = 0;
 
   ProcessMessage *msg = initSendProcessMessageToPid(
     rootFilesystemPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_DIRSTAT,
-    &filesystemDirstatArgs, sizeof(filesystemDirstatArgs), true);
+    filesystemDirstatArgs, sizeof(*filesystemDirstatArgs), true);
   processMessageWaitForDone(msg, NULL);
-  int returnValue = filesystemDirstatArgs.returnValue;
+  int returnValue = filesystemDirstatArgs->returnValue;
   if (returnValue != 0) {
-    errno = filesystemDirstatArgs.errorNumber;
+    errno = filesystemDirstatArgs->errorNumber;
     returnValue = -1;
   }
   processMessageRelease(msg);
+  MESSAGE_ARGS_FREE(filesystemDirstatArgs);
   return returnValue;
 }
 
@@ -929,32 +979,37 @@ int filesystemDirstat(const struct dirent *entry, struct stat *statbuf) {
 /// @return Returns 0 on success, -1 and sets the value of errno on failure.
 int fat32Format(const char *volumeLabel, uint32_t clusterSize) {
   int returnValue = 0;
-  Fat32FormatArgs fat32FormatArgs;
-  memset(&fat32FormatArgs, 0, sizeof(fat32FormatArgs));
-  fat32FormatArgs.signature = FAT32_FORMAT_SIGNATURE;
-  fat32FormatArgs.clusterSize = clusterSize;
+  MESSAGE_ARGS_ALLOCATE(Fat32FormatArgs, fat32FormatArgs);
+  if (fat32FormatArgs == NULL) {
+    errno = ENOMEM;
+    return -1;
+  }
+  fat32FormatArgs->signature = FAT32_FORMAT_SIGNATURE;
+  fat32FormatArgs->clusterSize = clusterSize;
   if ((volumeLabel != NULL) && (*volumeLabel != '\0')) {
-    fat32FormatArgs.volumeLabel = (char*) malloc(strlen(volumeLabel) + 1);
-    if (fat32FormatArgs.volumeLabel == NULL) {
+    fat32FormatArgs->volumeLabel = (char*) malloc(strlen(volumeLabel) + 1);
+    if (fat32FormatArgs->volumeLabel == NULL) {
+      MESSAGE_ARGS_FREE(fat32FormatArgs);
       errno = ENOMEM;
       return -1;
     }
-    strcpy(fat32FormatArgs.volumeLabel, volumeLabel);
+    strcpy(fat32FormatArgs->volumeLabel, volumeLabel);
   }
 
   ProcessMessage *msg = initSendProcessMessageToPid(
     rootFilesystemPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_FORMAT,
-    &fat32FormatArgs, sizeof(fat32FormatArgs), true);
+    fat32FormatArgs, sizeof(*fat32FormatArgs), true);
   processMessageWaitForDone(msg, NULL);
-  free(fat32FormatArgs.volumeLabel); fat32FormatArgs.volumeLabel = NULL;
-  if (fat32FormatArgs.returnValue != 0) {
+  free(fat32FormatArgs->volumeLabel); fat32FormatArgs->volumeLabel = NULL;
+  if (fat32FormatArgs->returnValue != 0) {
     // returnValue holds a FAT32 driver error code, not an errno value; there
     // is no clean mapping between the two, so report a generic I/O error.
     errno = EIO;
     returnValue = -1;
   }
   processMessageRelease(msg);
+  MESSAGE_ARGS_FREE(fat32FormatArgs);
   return returnValue;
 }
 
@@ -990,23 +1045,26 @@ long filesystemSeekAndTell(FILE *stream, long offset, int whence) {
     return -1;
   }
 
-  FilesystemSeekArgs filesystemSeekArgs = {
-    .stream = stream,
-    .offset = offset,
-    .whence = whence,
-    .position = -1,
-    .returnValue = 0,
-    .errorNumber = 0,
-  };
+  MESSAGE_ARGS_ALLOCATE(FilesystemSeekArgs, filesystemSeekArgs);
+  if (filesystemSeekArgs == NULL) {
+    return -1;
+  }
+  filesystemSeekArgs->stream = stream;
+  filesystemSeekArgs->offset = offset;
+  filesystemSeekArgs->whence = whence;
+  filesystemSeekArgs->position = -1;
+  filesystemSeekArgs->returnValue = 0;
+  filesystemSeekArgs->errorNumber = 0;
   ProcessMessage *msg = initSendProcessMessageToPid(
     rootFilesystemPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_SEEK_FILE,
-    &filesystemSeekArgs, sizeof(filesystemSeekArgs), true);
+    filesystemSeekArgs, sizeof(*filesystemSeekArgs), true);
   processMessageWaitForDone(msg, NULL);
-  long position = (filesystemSeekArgs.returnValue == 0)
-    ? filesystemSeekArgs.position : -1;
-  errno = filesystemSeekArgs.errorNumber;
+  long position = (filesystemSeekArgs->returnValue == 0)
+    ? filesystemSeekArgs->position : -1;
+  errno = filesystemSeekArgs->errorNumber;
   processMessageRelease(msg);
+  MESSAGE_ARGS_FREE(filesystemSeekArgs);
   return position;
 }
 
@@ -1030,11 +1088,13 @@ size_t filesystemFRead(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     return returnValue; // 0
   }
 
-  FilesystemIoCommandArgs filesystemIoCommandArgs = {
-    .file = stream,
-    .buffer = ptr,
-    .length = (uint32_t) (size * nmemb)
-  };
+  MESSAGE_ARGS_ALLOCATE(FilesystemIoCommandArgs, filesystemIoCommandArgs);
+  if (filesystemIoCommandArgs == NULL) {
+    return returnValue; // 0
+  }
+  filesystemIoCommandArgs->file = stream;
+  filesystemIoCommandArgs->buffer = ptr;
+  filesystemIoCommandArgs->length = (uint32_t) (size * nmemb);
 
   logDebug("Sending message to filesystem process to read %ld "
     "elements %ld bytes in size from file 0x%lx into address 0x%lx\n",
@@ -1045,20 +1105,21 @@ size_t filesystemFRead(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   ProcessMessage *processMessage = initSendProcessMessageToPid(
     rootFilesystemPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_READ_FILE,
-    /* data= */ &filesystemIoCommandArgs,
-    /* size= */ sizeof(filesystemIoCommandArgs),
+    /* data= */ filesystemIoCommandArgs,
+    /* size= */ sizeof(*filesystemIoCommandArgs),
     true);
   processMessageWaitForDone(processMessage, NULL);
-  returnValue = (filesystemIoCommandArgs.length / size);
-  if (filesystemIoCommandArgs.errorNumber != 0) {
-    errno = filesystemIoCommandArgs.errorNumber;
+  returnValue = (filesystemIoCommandArgs->length / size);
+  if (filesystemIoCommandArgs->errorNumber != 0) {
+    errno = filesystemIoCommandArgs->errorNumber;
   }
   processMessageRelease(processMessage);
+  MESSAGE_ARGS_FREE(filesystemIoCommandArgs);
 
   logDebug("Returning %ld from read of file 0x%lx into address 0x%lx\n",
     (long int) returnValue,
-    (unsigned long int) (uintptr_t) filesystemIoCommandArgs.file,
-    (unsigned long int) (uintptr_t) filesystemIoCommandArgs.buffer);
+    (unsigned long int) (uintptr_t) stream,
+    (unsigned long int) (uintptr_t) ptr);
   return returnValue;
 }
 
@@ -1084,23 +1145,26 @@ size_t filesystemFWrite(
     return returnValue; // 0
   }
 
-  FilesystemIoCommandArgs filesystemIoCommandArgs = {
-    .file = stream,
-    .buffer = (void*) ptr,
-    .length = (uint32_t) (size * nmemb)
-  };
+  MESSAGE_ARGS_ALLOCATE(FilesystemIoCommandArgs, filesystemIoCommandArgs);
+  if (filesystemIoCommandArgs == NULL) {
+    return returnValue; // 0
+  }
+  filesystemIoCommandArgs->file = stream;
+  filesystemIoCommandArgs->buffer = (void*) ptr;
+  filesystemIoCommandArgs->length = (uint32_t) (size * nmemb);
   ProcessMessage *processMessage = initSendProcessMessageToPid(
     rootFilesystemPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_WRITE_FILE,
-    /* data= */ &filesystemIoCommandArgs,
-    /* size= */ sizeof(filesystemIoCommandArgs),
+    /* data= */ filesystemIoCommandArgs,
+    /* size= */ sizeof(*filesystemIoCommandArgs),
     true);
   processMessageWaitForDone(processMessage, NULL);
-  returnValue = (filesystemIoCommandArgs.length / size);
-  if (filesystemIoCommandArgs.errorNumber != 0) {
-    errno = filesystemIoCommandArgs.errorNumber;
+  returnValue = (filesystemIoCommandArgs->length / size);
+  if (filesystemIoCommandArgs->errorNumber != 0) {
+    errno = filesystemIoCommandArgs->errorNumber;
   }
   processMessageRelease(processMessage);
+  MESSAGE_ARGS_FREE(filesystemIoCommandArgs);
 
   return returnValue;
 }
@@ -1120,10 +1184,12 @@ int getFileBlockMetadataFromFile(FILE *stream, FileBlockMetadata *metadata) {
     return -EINVAL;
   }
 
-  GetFileBlockMetadataArgs args = {
-    .stream = stream,
-    .metadata = metadata,
-  };
+  MESSAGE_ARGS_ALLOCATE(GetFileBlockMetadataArgs, args);
+  if (args == NULL) {
+    return -ENOMEM;
+  }
+  args->stream = stream;
+  args->metadata = metadata;
 
   ProcessMessage *processMessage = getAvailableMessage();
   for (int ii = 0;
@@ -1135,24 +1201,28 @@ int getFileBlockMetadataFromFile(FILE *stream, FileBlockMetadata *metadata) {
   }
   if (processMessage == NULL) {
     logError("ERROR: Out of process messages\n");
+    MESSAGE_ARGS_FREE(args);
     return -ENOMEM;
   }
 
   processMessageInit(processMessage,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_GET_FILE_BLOCK_METADATA,
-    &args, sizeof(args), true);
+    args, sizeof(*args), true);
   if (sendProcessMessageToPid(rootFilesystemPid, processMessage)
     != processSuccess
   ) {
     logError("Failed to send message to filesystem to get file "
       "block metadata\n");
     processMessageRelease(processMessage);
+    MESSAGE_ARGS_FREE(args);
     return -EIO;
   }
   processMessageWaitForDone(processMessage, NULL);
   processMessageRelease(processMessage);
+  int returnValue = -args->errorNumber;
+  MESSAGE_ARGS_FREE(args);
 
-  return -args.errorNumber;
+  return returnValue;
 }
 
 /// @var _overlayOpenMode
@@ -1208,25 +1278,29 @@ int getFileBlockMetadataFromPath(const char *path,
 /// @return Returns 0 if the provided FILE is not positioned at its end, nonzero
 /// if it is.
 int filesystemEndOfFile(FILE *stream) {
-  FeofArgs feofArgs = {
-    .stream = stream,
-    .returnValue = 0,
-    .errorNumber = 0,
-  };
+  MESSAGE_ARGS_ALLOCATE(FeofArgs, feofArgs);
+  if (feofArgs == NULL) {
+    return 0;
+  }
+  feofArgs->stream = stream;
+  feofArgs->returnValue = 0;
+  feofArgs->errorNumber = 0;
 
   if (stream != NULL) {
     ProcessMessage *processMessage = initSendProcessMessageToPid(
       rootFilesystemPid,
       FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_END_OF_FILE,
-      &feofArgs, sizeof(feofArgs), true);
+      feofArgs, sizeof(*feofArgs), true);
     processMessageWaitForDone(processMessage, NULL);
-    if (feofArgs.errorNumber != 0) {
-      errno = feofArgs.errorNumber;
+    if (feofArgs->errorNumber != 0) {
+      errno = feofArgs->errorNumber;
     }
     processMessageRelease(processMessage);
   }
 
-  return feofArgs.returnValue;
+  int returnValue = feofArgs->returnValue;
+  MESSAGE_ARGS_FREE(feofArgs);
+  return returnValue;
 }
 
 /// @fn long filesystemFtell(FILE *stream)
