@@ -81,3 +81,5 @@ This work started out as an experiment to see if I could implement an operating 
 [2026-10-18: `ed` and Being "Unix-like"](2026-10-18_ed-and-Being-Unix-like.md)
 
 [2026-11-01: Graphics!! (Well, kind of...)](2026-11-01_Graphics-Well-Kind-Of.md)
+
+[2026-11-16: Accidental Security](2026-11-16_Accidental-Security.md)
