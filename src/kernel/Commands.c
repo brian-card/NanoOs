@@ -322,26 +322,31 @@ int shutdownCommandHandler(int argc, char **argv) {
     goto usage;
   }
 
-  SchedulerShutdownArgs schedulerShutdownArgs = {
-    .shutdownType = shutdownType,
-    .returnValue = 0,
-  };
+  MESSAGE_ARGS_ALLOCATE(SchedulerShutdownArgs, schedulerShutdownArgs);
+  if (schedulerShutdownArgs == NULL) {
+    fprintf(stderr, "ERROR: Could not communicate with scheduler.\n");
+    return returnValue; // 1
+  }
+  schedulerShutdownArgs->shutdownType = shutdownType;
+  schedulerShutdownArgs->returnValue = 0;
   ProcessMessage *processMessage
     = initSendProcessMessageToPid(
     schedulerPid,
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_SHUTDOWN,
-    /* data= */ &schedulerShutdownArgs,
-    /* size= */ sizeof(schedulerShutdownArgs),
+    /* data= */ schedulerShutdownArgs,
+    /* size= */ sizeof(*schedulerShutdownArgs),
     true);
   if (processMessage == NULL) {
     fprintf(stderr, "ERROR: Could not communicate with scheduler.\n");
+    MESSAGE_ARGS_FREE(schedulerShutdownArgs);
     return returnValue; // 1
   }
 
   processMessageWaitForDone(processMessage, NULL);
   processMessageRelease(processMessage);
 
-  returnValue = schedulerShutdownArgs.returnValue;
+  returnValue = schedulerShutdownArgs->returnValue;
+  MESSAGE_ARGS_FREE(schedulerShutdownArgs);
 
   return returnValue;
 
