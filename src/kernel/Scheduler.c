@@ -6644,6 +6644,8 @@ void runScheduler(void) {
 
   if (processStackOverflowed(processDescriptor)) {
     logError("Process %d's stack overflowed\n", processDescriptor->processId);
+    processDescriptor->exitStatus = 128 + SIGSEGV;
+    processDescriptor->exitSignal = SIGSEGV;
     processTerminate(processDescriptor, false);
     threadSetContext(processDescriptor->mainThread, processDescriptor);
     comessageQueueRemove(msg_to(&processDescriptor->message).coro,
