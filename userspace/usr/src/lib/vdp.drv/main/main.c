@@ -149,8 +149,8 @@ static void vdpSendInput(VdpInput *input) {
   if ((input->portMessage != NULL)
     && (processMessageDone(input->portMessage) == true)
   ) {
-    if (input->portArgs.returnValue == 0) {
-      input->portId = input->portArgs.portId;
+    if (input->portArgs->returnValue == 0) {
+      input->portId = input->portArgs->portId;
     }
     processMessageRelease(input->portMessage);
     input->portMessage = NULL;
@@ -174,16 +174,16 @@ static void vdpSendInput(VdpInput *input) {
   }
 
   uint8_t consumed = 0;
-  input->inputArgs.portId = (unsigned char) input->portId;
-  input->inputArgs.numBytes = 0;
+  input->inputArgs->portId = (unsigned char) input->portId;
+  input->inputArgs->numBytes = 0;
   while ((consumed < input->pendingLength)
-    && (input->inputArgs.numBytes + input->pending[consumed]
+    && (input->inputArgs->numBytes + input->pending[consumed]
       <= CONSOLE_INPUT_READY_SIZE)
   ) {
     uint8_t keyLength = input->pending[consumed];
-    memcpy(&input->inputArgs.bytes[input->inputArgs.numBytes],
+    memcpy(&input->inputArgs->bytes[input->inputArgs->numBytes],
       &input->pending[consumed + 1], keyLength);
-    input->inputArgs.numBytes += keyLength;
+    input->inputArgs->numBytes += keyLength;
     consumed += 1 + keyLength;
   }
 
@@ -192,7 +192,7 @@ static void vdpSendInput(VdpInput *input) {
     return;
   }
   processMessageInit(message, CONSOLE_COMMAND_SIGNATURE | CONSOLE_INPUT_READY,
-    &input->inputArgs, sizeof(input->inputArgs), /* waiting= */ true);
+    input->inputArgs, sizeof(*input->inputArgs), /* waiting= */ true);
   if (sendProcessMessageToPid(input->consolePid, message) != processSuccess) {
     processMessageRelease(message);
     return;
@@ -219,7 +219,7 @@ int main(int argc, char **argv) {
 
   // Bytes that arrived before the callback was registered notified no one.
   if (vdpReadKeyboard(&input) == false) {
-    return 1;
+    goto exit;
   }
 
   while (1) {
@@ -228,7 +228,7 @@ int main(int argc, char **argv) {
       && (callOverlayFunction(OVERLAY_SAME_NAMESPACE,
         "Startup", "vdpSetUp", &startupArgs) != &startupArgs)
     ) {
-      return 1;
+      goto exit;
     }
     if ((input.portId >= 0)
       && ((vdpOutput.textState.resizeReportWanted == true)
@@ -279,9 +279,12 @@ int main(int argc, char **argv) {
     consoleOutputDone(processMessage);
     if (vdpPresent == false) {
       // Exiting lets the scheduler restart the driver from scratch.
-      return 1;
+      goto exit;
     }
   }
 
-  return 0;
+exit:
+  callOverlayFunction(OVERLAY_SAME_NAMESPACE,
+    "Startup", "vdpShutdown", &startupArgs);
+  return 1;
 }

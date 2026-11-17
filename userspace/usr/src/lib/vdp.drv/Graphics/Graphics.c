@@ -286,12 +286,12 @@ void* vdpReportSize(void *args) {
   if ((vdpOutput->sizeChanged == true) && (input->sizeMessage == NULL)) {
     ProcessMessage *message = getAvailableMessage();
     if (message != NULL) {
-      input->sizeArgs.rows = (uint16_t) rows;
-      input->sizeArgs.columns = (uint16_t) columns;
-      input->sizeArgs.returnValue = 0;
+      input->sizeArgs->rows = (uint16_t) rows;
+      input->sizeArgs->columns = (uint16_t) columns;
+      input->sizeArgs->returnValue = 0;
       processMessageInit(message,
         CONSOLE_COMMAND_SIGNATURE | CONSOLE_SET_WINSIZE,
-        &input->sizeArgs, sizeof(input->sizeArgs), /* waiting= */ true);
+        input->sizeArgs, sizeof(*input->sizeArgs), /* waiting= */ true);
       if (sendProcessMessageToPid(input->consolePid, message)
         == processSuccess
       ) {

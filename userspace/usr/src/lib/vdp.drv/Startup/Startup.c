@@ -208,6 +208,52 @@ static void vdpParseArguments(VdpInput *input, VdpOutput *vdpOutput,
   }
 }
 
+/// @fn static void* vdpCreateArgs(size_t size)
+///
+/// @brief Create the arguments of one of the messages to the console.  Kept
+/// out of line because each inlined MESSAGE_ARGS_CREATE costs more than the
+/// call.
+///
+/// @param size The size of the arguments.
+///
+/// @return Returns a pointer to the zeroed arguments on success, NULL on
+/// failure.
+static __attribute__((noinline)) void* vdpCreateArgs(size_t size) {
+  return MESSAGE_ARGS_CREATE_BYTES(size, MESSAGE_ARGS_ROUND_TRIP);
+}
+
+/// @fn static void vdpDestroyArgs(ProcessMessage *message, void *args)
+///
+/// @brief Free the arguments of a message to the console unless the console
+/// hasn't finished with them, in which case the kernel reclaims them once it
+/// has.
+///
+/// @param message The message the arguments were sent with, or NULL.
+/// @param args The arguments.
+///
+/// @return This function returns no value.
+static void vdpDestroyArgs(ProcessMessage *message, void *args) {
+  if ((message == NULL) || (processMessageDone(message) == true)) {
+    MESSAGE_ARGS_DESTROY(args);
+  }
+}
+
+/// @fn void* vdpShutdown(void *args)
+///
+/// @brief Free the arguments of the messages to the console before the driver
+/// exits.
+///
+/// @param args A pointer to the driver's VdpStartupArgs.
+///
+/// @return Always returns the provided pointer.
+void* vdpShutdown(void *args) {
+  VdpInput *input = ((VdpStartupArgs*) args)->input;
+  vdpDestroyArgs(input->portMessage, input->portArgs);
+  vdpDestroyArgs(input->inputMessage, input->inputArgs);
+  vdpDestroyArgs(input->sizeMessage, input->sizeArgs);
+  return args;
+}
+
 /// @fn void* vdpStartup(void *args)
 ///
 /// @brief Initialize the driver's state from its arguments and register for
@@ -215,13 +261,26 @@ static void vdpParseArguments(VdpInput *input, VdpOutput *vdpOutput,
 ///
 /// @param args A pointer to the driver's VdpStartupArgs.
 ///
-/// @return Always returns the provided pointer.
+/// @return Returns the provided pointer on success, NULL if there was no
+/// memory for the arguments of the messages to the console.
 void* vdpStartup(void *args) {
   VdpStartupArgs *startupArgs = (VdpStartupArgs*) args;
   VdpInput *input = startupArgs->input;
   VdpOutput *vdpOutput = startupArgs->output;
 
   memset(input, 0, sizeof(*input));
+  input->portArgs = (ConsoleAddForwardingPortArgs*) vdpCreateArgs(
+    sizeof(*input->portArgs));
+  input->inputArgs = (ConsoleInputReadyArgs*) vdpCreateArgs(
+    sizeof(*input->inputArgs));
+  input->sizeArgs = (ConsoleWinsizeArgs*) vdpCreateArgs(
+    sizeof(*input->sizeArgs));
+  if ((input->portArgs == NULL) || (input->inputArgs == NULL)
+    || (input->sizeArgs == NULL)
+  ) {
+    vdpShutdown(args);
+    return NULL;
+  }
   input->portId = -1;
   input->pollCookie = VDP_GENERAL_POLL_COOKIE;
   memset(vdpOutput, 0, sizeof(*vdpOutput));
@@ -369,12 +428,12 @@ static void vdpRequestPort(VdpInput *input) {
   if (message == NULL) {
     return;
   }
-  input->portArgs.forwardingPid = getRunningPid();
-  input->portArgs.portId = 0;
-  input->portArgs.returnValue = 0;
+  input->portArgs->forwardingPid = getRunningPid();
+  input->portArgs->portId = 0;
+  input->portArgs->returnValue = 0;
   processMessageInit(message,
     CONSOLE_COMMAND_SIGNATURE | CONSOLE_ADD_FORWARDING_PORT,
-    &input->portArgs, sizeof(input->portArgs), /* waiting= */ true);
+    input->portArgs, sizeof(*input->portArgs), /* waiting= */ true);
   if (sendProcessMessageToPid(input->consolePid, message) != processSuccess) {
     processMessageRelease(message);
     return;

@@ -119,10 +119,10 @@ extern "C"
 ///   console has said which it is.
 /// @param portMessage The CONSOLE_ADD_FORWARDING_PORT message waiting on the
 ///   console, or NULL.
-/// @param portArgs The arguments of portMessage.
+/// @param portArgs The arguments of portMessage, created at startup.
 /// @param inputMessage The CONSOLE_INPUT_READY message waiting on the
 ///   console, or NULL.
-/// @param inputArgs The arguments of inputMessage.
+/// @param inputArgs The arguments of inputMessage, created at startup.
 /// @param parser The parser of the bytes the VDP sends.
 /// @param pendingLength The number of bytes in pending.
 /// @param pending The translations of the keys not yet sent to the console,
@@ -132,14 +132,14 @@ extern "C"
 /// @param numLock Whether the driver's Num Lock is on.
 /// @param sizeMessage The CONSOLE_SET_WINSIZE message waiting on the console,
 ///   or NULL.
-/// @param sizeArgs The arguments of sizeMessage.
+/// @param sizeArgs The arguments of sizeMessage, created at startup.
 typedef struct VdpInput {
   ProcessId                    consolePid;
   int                          portId;
   ProcessMessage              *portMessage;
-  ConsoleAddForwardingPortArgs portArgs;
+  ConsoleAddForwardingPortArgs *portArgs;
   ProcessMessage              *inputMessage;
-  ConsoleInputReadyArgs        inputArgs;
+  ConsoleInputReadyArgs        *inputArgs;
   VdpPacketParser              parser;
   uint8_t                      pendingLength;
   uint8_t                      pending[VDP_PENDING_SIZE];
@@ -147,7 +147,7 @@ typedef struct VdpInput {
   uint8_t                      pollCookie;
   bool                         numLock;
   ProcessMessage              *sizeMessage;
-  ConsoleWinsizeArgs           sizeArgs;
+  ConsoleWinsizeArgs           *sizeArgs;
 } VdpInput;
 
 /// @struct VdpOutput
