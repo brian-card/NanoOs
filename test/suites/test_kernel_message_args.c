@@ -509,6 +509,26 @@ static void* holdingChild(void *args) {
   return NULL;
 }
 
+/// @fn static void* overflowingChild(void *args)
+///
+/// @brief A process that allocates argument storage, then clobbers its stack's
+/// end marker so the scheduler terminates it as overflowed.
+///
+/// @param args Unused.
+///
+/// @return This function never returns.
+static void* overflowingChild(void *args) {
+  (void) args;
+  MESSAGE_ARGS_ALLOCATE(TestArgs, held);
+  _childArgs = held;
+  _childDone = true;
+  *coroutineStackEnd(getRunningProcess()->mainThread) = 0;
+  while (1) {
+    processYield();
+  }
+  return NULL;
+}
+
 /// @fn static void* freeingChild(void *args)
 ///
 /// @brief A process that frees storage another process allocated, then exits.
@@ -583,6 +603,26 @@ NANO_OS_KERNEL_TEST(message_args, a_killed_process_storage_is_reclaimed) {
   NANO_OS_ASSERT_EQ_INT(0, killArgs->returnValue);
   MESSAGE_ARGS_FREE(killArgs);
 
+  NANO_OS_ASSERT_EQ_INT(1, messageArgsCounts()->reclaimed);
+  NANO_OS_ASSERT_EQ_INT(0, messageArgsCounts()->live);
+  NANO_OS_ASSERT_EQ_INT(0, messageArgsErrorTotal());
+}
+
+NANO_OS_KERNEL_TEST(message_args, a_stack_overflow_storage_is_reclaimed) {
+  _childDone = false;
+  ProcessDescriptor *child = startChild(overflowingChild);
+  NANO_OS_ASSERT_NOT_NULL(child);
+  for (int ii = 0;
+    (ii < MAX_YIELDS)
+      && ((messageArgsCounts()->reclaimed == 0)
+        && (messageArgsErrorTotal() == 0));
+    ii++
+  ) {
+    processYield();
+  }
+  NANO_OS_ASSERT_TRUE(_childDone);
+  NANO_OS_ASSERT_EQ_INT(SIGSEGV, child->exitSignal);
+  NANO_OS_ASSERT_EQ_INT(0, errors(MESSAGE_ARGS_ERROR_LEAK));
   NANO_OS_ASSERT_EQ_INT(1, messageArgsCounts()->reclaimed);
   NANO_OS_ASSERT_EQ_INT(0, messageArgsCounts()->live);
   NANO_OS_ASSERT_EQ_INT(0, messageArgsErrorTotal());

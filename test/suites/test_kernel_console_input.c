@@ -1170,7 +1170,9 @@ static ConsolePort* signalFixture(const char *bytes, uint8_t modes) {
   consolePort->modes = modes;
   consolePort->inputOwner = TEST_UNUSED_PID;
   memset(signalArgs, 0, sizeof(signalArgs));
-  inputState.sendSignalArgs = signalArgs;
+  for (int ii = 0; ii < CONSOLE_NUM_PORTS; ii++) {
+    inputState.sendSignalArgs[ii] = &signalArgs[ii];
+  }
   numInterruptEchoes = 0;
   uartLikeBytes = bytes;
   uartLikeAvailable = strlen(bytes);
@@ -1262,6 +1264,45 @@ NANO_OS_KERNEL_TEST(console_signal, each_port_keeps_its_own_signal_args) {
   NANO_OS_ASSERT_EQ_INT(2, numInterruptEchoes);
   NANO_OS_ASSERT_EQ_INT(TEST_UNUSED_PID, signalArgs[0].pid);
   NANO_OS_ASSERT_EQ_INT(TEST_UNUSED_PID + 1, signalArgs[1].pid);
+}
+
+NANO_OS_KERNEL_TEST(console_signal, the_first_ctrl_c_creates_args_it_keeps) {
+  ConsolePort *consolePort = signalFixture("\x03\x03",
+    CONSOLE_MODE_DEFAULT & ~CONSOLE_MODE_ECHO);
+  inputState.sendSignalArgs[0] = NULL;
+  uint16_t live = messageArgsCounts()->live;
+
+  consoleServicePort(&inputState, consolePort);
+
+  SchedulerSendSignalArgs *created
+    = (SchedulerSendSignalArgs*) inputState.sendSignalArgs[0];
+  NANO_OS_ASSERT_NOT_NULL(created);
+  NANO_OS_ASSERT_EQ_INT(2, numInterruptEchoes);
+  NANO_OS_ASSERT_EQ_INT(live + 1, messageArgsCounts()->live);
+  NANO_OS_ASSERT_EQ_INT(TEST_UNUSED_PID, created->pid);
+  NANO_OS_ASSERT_EQ_INT(SIGINT, created->signal);
+  NANO_OS_ASSERT_EQ_INT(0, signalArgs[0].signal);
+
+  for (int ii = 0; ii < 100; ii++) {
+    processYield();
+  }
+  MESSAGE_ARGS_DESTROY(created);
+  NANO_OS_ASSERT_EQ_INT(live, messageArgsCounts()->live);
+  NANO_OS_ASSERT_EQ_INT(0, messageArgsErrorTotal());
+}
+
+NANO_OS_KERNEL_TEST(console_signal, ctrl_c_to_the_memory_manager_creates_nothing) {
+  ConsolePort *consolePort = signalFixture("\x03",
+    CONSOLE_MODE_DEFAULT & ~CONSOLE_MODE_ECHO);
+  inputState.sendSignalArgs[0] = NULL;
+  consolePort->inputOwner = memoryManagerPid;
+  uint16_t live = messageArgsCounts()->live;
+
+  consoleServicePort(&inputState, consolePort);
+
+  NANO_OS_ASSERT_NULL(inputState.sendSignalArgs[0]);
+  NANO_OS_ASSERT_EQ_INT(live, messageArgsCounts()->live);
+  NANO_OS_ASSERT_EQ_INT(1, numInterruptEchoes);
 }
 
 /// @fn static int sendColors(int64_t type, ConsoleColorsArgs *colorsArgs)
