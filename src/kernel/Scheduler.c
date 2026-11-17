@@ -1493,22 +1493,24 @@ int schedulerInitSendMessageToPid(
 void* schedulerResumeReallocMessage(void *ptr, size_t size) {
   void *returnValue = NULL;
   
-  ReallocMessage reallocMessage;
-  reallocMessage.ptr = ptr;
-  reallocMessage.size = size;
-  reallocMessage.oldSize = 0;
+  MESSAGE_ARGS_ALLOCATE(ReallocMessage, reallocMessage);
+  if (reallocMessage == NULL) {
+    return returnValue; // NULL
+  }
+  reallocMessage->ptr = ptr;
+  reallocMessage->size = size;
+  reallocMessage->oldSize = 0;
   
   if (schedulerInitSendMessageToPid(memoryManagerPid,
     MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_REALLOC,
-    &reallocMessage, sizeof(reallocMessage)
-    ) != processSuccess
+    reallocMessage, sizeof(*reallocMessage)
+    ) == processSuccess
   ) {
-    // Nothing we can do.
-    return returnValue; // NULL
+    // The handler set the pointer back in the structure we sent it, so grab
+    // it out of the structure we already have.
+    returnValue = reallocMessage->ptr;
   }
-  // The handler set the pointer back in the structure we sent it, so grab it
-  // out of the structure we already have.
-  returnValue = reallocMessage.ptr;
+  MESSAGE_ARGS_FREE(reallocMessage);
 
   // The message that was sent to us is the one that we allocated on the stack,
   // so, there's no reason to call processMessageRelease here.
@@ -1577,14 +1579,17 @@ void schedFree(void *ptr) {
     return;
   }
 
+  MESSAGE_ARGS_ALLOCATE(MemoryManagerFreeArgs, memoryManagerFreeArgs);
+  if (memoryManagerFreeArgs == NULL) {
+    return;
+  }
+  memoryManagerFreeArgs->ptr = ptr;
   // No need to check the return value here.  There's nothing we can do if we
   // fail to send the message for some reason.
-  MemoryManagerFreeArgs memoryManagerFreeArgs = {
-    .ptr = ptr,
-  };
   schedulerInitSendMessageToPid(memoryManagerPid,
     MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_FREE,
-    &memoryManagerFreeArgs, sizeof(memoryManagerFreeArgs));
+    memoryManagerFreeArgs, sizeof(*memoryManagerFreeArgs));
+  MESSAGE_ARGS_FREE(memoryManagerFreeArgs);
   return;
 }
 
@@ -1597,20 +1602,23 @@ void schedFree(void *ptr) {
 ///
 /// @return Returns 0 on success, -errno on failure.
 int assignMemory(void *ptr, ProcessId pid) {
-  AssignMemoryArgs assignMemoryArgs = {
-    .ptr = ptr,
-    .pid = pid,
-  };
+  MESSAGE_ARGS_ALLOCATE(AssignMemoryArgs, assignMemoryArgs);
+  if (assignMemoryArgs == NULL) {
+    return -ENOMEM;
+  }
+  assignMemoryArgs->ptr = ptr;
+  assignMemoryArgs->pid = pid;
 
   int returnValue = 0;
   if (schedulerInitSendMessageToPid(memoryManagerPid,
     MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_ASSIGN_MEMORY,
-    &assignMemoryArgs, sizeof(assignMemoryArgs)) != processSuccess
+    assignMemoryArgs, sizeof(*assignMemoryArgs)) != processSuccess
   ) {
     // Nothing we can do.
     returnValue = -ENOMEM;
 
   }
+  MESSAGE_ARGS_FREE(assignMemoryArgs);
 
   return returnValue;
 }
@@ -1677,20 +1685,22 @@ int schedulerSetPortShell(uint8_t consolePort, ProcessId shell) {
 int schedulerGetNumConsolePorts(void) {
   int returnValue = -1;
 
-  ConsoleGetNumPortsArgs consoleGetNumPortsArgs = {
-    .numPorts = 0,
-  };
+  MESSAGE_ARGS_ALLOCATE(ConsoleGetNumPortsArgs, consoleGetNumPortsArgs);
+  if (consoleGetNumPortsArgs == NULL) {
+    return returnValue; // -1
+  }
+  consoleGetNumPortsArgs->numPorts = 0;
   if (schedulerInitSendMessageToPid(
     consolePid,
     CONSOLE_COMMAND_SIGNATURE | CONSOLE_GET_NUM_PORTS,
-    /* data= */ &consoleGetNumPortsArgs,
-    /* size= */ sizeof(consoleGetNumPortsArgs)) != processSuccess
+    /* data= */ consoleGetNumPortsArgs,
+    /* size= */ sizeof(*consoleGetNumPortsArgs)) != processSuccess
   ) {
     logError("Could not send CONSOLE_GET_NUM_PORTS to console\n");
-    return returnValue; // -1
+  } else {
+    returnValue = consoleGetNumPortsArgs->numPorts;
   }
-
-  returnValue = consoleGetNumPortsArgs.numPorts;
+  MESSAGE_ARGS_FREE(consoleGetNumPortsArgs);
 
   return returnValue;
 }
@@ -1704,21 +1714,26 @@ int schedulerGetNumConsolePorts(void) {
 /// @return Returns the index of the port on success, -1 if no port uses the
 /// UART or the console could not be asked.
 int schedulerGetUartConsolePort(uint8_t uartId) {
-  ConsoleGetUartPortArgs consoleGetUartPortArgs = {
-    .uartId = uartId,
-    .portId = -1,
-  };
+  int portId = -1;
+  MESSAGE_ARGS_ALLOCATE(ConsoleGetUartPortArgs, consoleGetUartPortArgs);
+  if (consoleGetUartPortArgs == NULL) {
+    return portId; // -1
+  }
+  consoleGetUartPortArgs->uartId = uartId;
+  consoleGetUartPortArgs->portId = -1;
   if (schedulerInitSendMessageToPid(
     consolePid,
     CONSOLE_COMMAND_SIGNATURE | CONSOLE_GET_UART_PORT,
-    /* data= */ &consoleGetUartPortArgs,
-    /* size= */ sizeof(consoleGetUartPortArgs)) != processSuccess
+    /* data= */ consoleGetUartPortArgs,
+    /* size= */ sizeof(*consoleGetUartPortArgs)) != processSuccess
   ) {
     logError("Could not send CONSOLE_GET_UART_PORT to console\n");
-    return -1;
+  } else {
+    portId = consoleGetUartPortArgs->portId;
   }
+  MESSAGE_ARGS_FREE(consoleGetUartPortArgs);
 
-  return consoleGetUartPortArgs.portId;
+  return portId;
 }
 
 /// @fn int schedulerAddForwardingPort(ProcessId forwardingPid)
@@ -1735,20 +1750,28 @@ int schedulerAddForwardingPort(ProcessId forwardingPid) {
     return -EINVAL;
   }
 
-  ConsoleAddForwardingPortArgs consoleAddForwardingPortArgs = {
-    .forwardingPid = forwardingPid,
-    .portId = 0,
-    .returnValue = 0,
-  };
+  MESSAGE_ARGS_ALLOCATE(ConsoleAddForwardingPortArgs,
+    consoleAddForwardingPortArgs);
+  if (consoleAddForwardingPortArgs == NULL) {
+    return -ENOMEM;
+  }
+  consoleAddForwardingPortArgs->forwardingPid = forwardingPid;
+  consoleAddForwardingPortArgs->portId = 0;
+  consoleAddForwardingPortArgs->returnValue = 0;
+  int returnValue = -EIO;
+  int portId = 0;
   if (schedulerInitSendMessageToPid(
     consolePid,
     CONSOLE_COMMAND_SIGNATURE | CONSOLE_ADD_FORWARDING_PORT,
-    /* data= */ &consoleAddForwardingPortArgs,
-    /* size= */ sizeof(consoleAddForwardingPortArgs)) != processSuccess
+    /* data= */ consoleAddForwardingPortArgs,
+    /* size= */ sizeof(*consoleAddForwardingPortArgs)) == processSuccess
   ) {
-    return -EIO;
-  } else if (consoleAddForwardingPortArgs.returnValue != 0) {
-    return consoleAddForwardingPortArgs.returnValue;
+    returnValue = consoleAddForwardingPortArgs->returnValue;
+    portId = consoleAddForwardingPortArgs->portId;
+  }
+  MESSAGE_ARGS_FREE(consoleAddForwardingPortArgs);
+  if (returnValue != 0) {
+    return returnValue;
   }
 
   ProcessDescriptor *forwarder = &allProcesses[forwardingPid - 1];
@@ -1766,7 +1789,7 @@ int schedulerAddForwardingPort(ProcessId forwardingPid) {
     return -ENOMEM;
   }
 
-  return consoleAddForwardingPortArgs.portId;
+  return portId;
 }
 
 /// @fn int schedulerBindShell(uint8_t shellIndex, uint8_t consolePort,
@@ -1880,15 +1903,18 @@ ProcessId schedulerGetNumRunningProcesses(struct timespec *timeout) {
   int waitStatus = processSuccess;
   ProcessId numProcessDescriptors = 0;
 
-  SchedulerGetNumRunningProcessesArgs schedulerGetNumRunningProcessesArgs = {
-    .returnValue = 0,
-    .errorNumber = 0,
-  };
+  MESSAGE_ARGS_ALLOCATE(SchedulerGetNumRunningProcessesArgs,
+    schedulerGetNumRunningProcessesArgs);
+  if (schedulerGetNumRunningProcessesArgs == NULL) {
+    return numProcessDescriptors; // 0
+  }
+  schedulerGetNumRunningProcessesArgs->returnValue = 0;
+  schedulerGetNumRunningProcessesArgs->errorNumber = 0;
   processMessage = initSendProcessMessageToPid(
     schedulerPid,
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_GET_NUM_RUNNING_PROCESSES,
-    &schedulerGetNumRunningProcessesArgs,
-    sizeof(schedulerGetNumRunningProcessesArgs), true);
+    schedulerGetNumRunningProcessesArgs,
+    sizeof(*schedulerGetNumRunningProcessesArgs), true);
   if (processMessage == NULL) {
     logError("Could not communicate with scheduler.\n");
     goto exit;
@@ -1906,10 +1932,10 @@ ProcessId schedulerGetNumRunningProcesses(struct timespec *timeout) {
     goto releaseMessage;
   }
 
-  numProcessDescriptors = schedulerGetNumRunningProcessesArgs.returnValue;
+  numProcessDescriptors = schedulerGetNumRunningProcessesArgs->returnValue;
   if (numProcessDescriptors == 0) {
     logError("Number of running processes returned from the scheduler is 0.\n");
-    errno = schedulerGetNumRunningProcessesArgs.errorNumber;
+    errno = schedulerGetNumRunningProcessesArgs->errorNumber;
     goto releaseMessage;
   }
 
@@ -1920,6 +1946,7 @@ releaseMessage:
   }
 
 exit:
+  MESSAGE_ARGS_FREE(schedulerGetNumRunningProcessesArgs);
   return numProcessDescriptors;
 }
 
@@ -1966,16 +1993,19 @@ ProcessInfo* schedulerGetProcessInfo(void) {
   // ProcessInfoElements it can populated.
   processInfo->numProcesses = numProcessDescriptors;
 
-  SchedulerGetProcessInfoArgs schedulerGetProcessInfoArgs = {
-    .processInfo = processInfo,
-    .returnValue = 0,
-    .errorNumber = 0,
-  };
+  MESSAGE_ARGS_ALLOCATE(SchedulerGetProcessInfoArgs,
+    schedulerGetProcessInfoArgs);
+  if (schedulerGetProcessInfoArgs == NULL) {
+    goto freeMemory;
+  }
+  schedulerGetProcessInfoArgs->processInfo = processInfo;
+  schedulerGetProcessInfoArgs->returnValue = 0;
+  schedulerGetProcessInfoArgs->errorNumber = 0;
   processMessage
     = initSendProcessMessageToPid(schedulerPid,
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_GET_PROCESS_INFO,
-    &schedulerGetProcessInfoArgs,
-    sizeof(schedulerGetProcessInfoArgs), true);
+    schedulerGetProcessInfoArgs,
+    sizeof(*schedulerGetProcessInfoArgs), true);
 
   if (processMessage == NULL) {
     logError("Could not send scheduler message to get process info.\n");
@@ -1994,8 +2024,8 @@ ProcessInfo* schedulerGetProcessInfo(void) {
     goto releaseMessage;
   }
 
-  if (schedulerGetProcessInfoArgs.returnValue != 0) {
-    errno = schedulerGetProcessInfoArgs.errorNumber;
+  if (schedulerGetProcessInfoArgs->returnValue != 0) {
+    errno = schedulerGetProcessInfoArgs->errorNumber;
     logError("Scheduler returned status: %s\n", strerror(errno));
     goto releaseMessage;
   }
@@ -2004,6 +2034,7 @@ ProcessInfo* schedulerGetProcessInfo(void) {
     logError("Could not release message sent to scheduler for "
       "getting the number of running processes.\n");
   }
+  MESSAGE_ARGS_FREE(schedulerGetProcessInfoArgs);
 
   return processInfo;
 
@@ -2014,6 +2045,7 @@ releaseMessage:
   }
 
 freeMemory:
+  MESSAGE_ARGS_FREE(schedulerGetProcessInfoArgs);
   free(processInfo); processInfo = NULL;
 
 exit:
@@ -2070,18 +2102,22 @@ static const char _killCouldNotRelease[] KEEP_IN_FLASH
 ///
 /// @return Returns 0 on success, 1 on failure.
 int schedulerKillProcess(ProcessId pid) {
-  SchedulerKillProcessArgs schedulerKillProcessArgs = {
-    .pid = pid,
-    .signal = SIGKILL,
-    .returnValue = 0,
-    .errorNumber = 0,
-  };
+  MESSAGE_ARGS_ALLOCATE(SchedulerKillProcessArgs, schedulerKillProcessArgs);
+  if (schedulerKillProcessArgs == NULL) {
+    fprintf(stderr, _killCouldNotCommunicate);
+    return 1;
+  }
+  schedulerKillProcessArgs->pid = pid;
+  schedulerKillProcessArgs->signal = SIGKILL;
+  schedulerKillProcessArgs->returnValue = 0;
+  schedulerKillProcessArgs->errorNumber = 0;
   ProcessMessage *processMessage = initSendProcessMessageToPid(
     schedulerPid,
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_KILL_PROCESS,
-    &schedulerKillProcessArgs, sizeof(schedulerKillProcessArgs), true);
+    schedulerKillProcessArgs, sizeof(*schedulerKillProcessArgs), true);
   if (processMessage == NULL) {
     fprintf(stderr, _killCouldNotCommunicate);
+    MESSAGE_ARGS_FREE(schedulerKillProcessArgs);
     return 1;
   }
 
@@ -2090,11 +2126,11 @@ int schedulerKillProcess(ProcessId pid) {
   int waitStatus = processMessageWaitForDone(processMessage, NULL);
   int returnValue = 0;
   if (waitStatus == processSuccess) {
-    returnValue = schedulerKillProcessArgs.returnValue;
+    returnValue = schedulerKillProcessArgs->returnValue;
     if (returnValue != 0) {
       fprintf(stderr, _killStatusFormat,
-        strerror(schedulerKillProcessArgs.errorNumber));
-      errno = schedulerKillProcessArgs.errorNumber;
+        strerror(schedulerKillProcessArgs->errorNumber));
+      errno = schedulerKillProcessArgs->errorNumber;
     }
   } else {
     returnValue = 1;
@@ -2108,6 +2144,7 @@ int schedulerKillProcess(ProcessId pid) {
     returnValue = 1;
     fprintf(stderr, _killCouldNotRelease);
   }
+  MESSAGE_ARGS_FREE(schedulerKillProcessArgs);
 
   return returnValue;
 }
@@ -2125,32 +2162,39 @@ int schedulerKillProcess(ProcessId pid) {
 /// none has, or (pid_t) -1 with errno set on failure.
 ProcessId schedulerWaitpid(ProcessId pid, int *status, int options) {
   nanoOsFlushStdout();
-  SchedulerWaitPidArgs schedulerWaitPidArgs = {
-    .pid = pid,
-    .options = options,
-    .childPid = 0,
-    .status = 0,
-    .errorNumber = 0,
-  };
+  MESSAGE_ARGS_ALLOCATE(SchedulerWaitPidArgs, schedulerWaitPidArgs);
+  if (schedulerWaitPidArgs == NULL) {
+    errno = EAGAIN;
+    return (ProcessId) -1;
+  }
+  schedulerWaitPidArgs->pid = pid;
+  schedulerWaitPidArgs->options = options;
+  schedulerWaitPidArgs->childPid = 0;
+  schedulerWaitPidArgs->status = 0;
+  schedulerWaitPidArgs->errorNumber = 0;
   ProcessMessage *processMessage = initSendProcessMessageToPid(
     schedulerPid,
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_WAIT_PID,
-    &schedulerWaitPidArgs, sizeof(schedulerWaitPidArgs), true);
+    schedulerWaitPidArgs, sizeof(*schedulerWaitPidArgs), true);
   if (processMessage == NULL) {
+    MESSAGE_ARGS_FREE(schedulerWaitPidArgs);
     errno = EAGAIN;
     return (ProcessId) -1;
   }
   processMessageWaitForDone(processMessage, NULL);
   processMessageRelease(processMessage);
 
-  if (schedulerWaitPidArgs.errorNumber != 0) {
-    errno = schedulerWaitPidArgs.errorNumber;
+  if (schedulerWaitPidArgs->errorNumber != 0) {
+    errno = schedulerWaitPidArgs->errorNumber;
+    MESSAGE_ARGS_FREE(schedulerWaitPidArgs);
     return (ProcessId) -1;
   }
   if (status != NULL) {
-    *status = schedulerWaitPidArgs.status;
+    *status = schedulerWaitPidArgs->status;
   }
-  return schedulerWaitPidArgs.childPid;
+  ProcessId childPid = schedulerWaitPidArgs->childPid;
+  MESSAGE_ARGS_FREE(schedulerWaitPidArgs);
+  return childPid;
 }
 
 /// @fn int schedulerSendSignal(ProcessId pid, int signal)
@@ -2165,19 +2209,23 @@ ProcessId schedulerWaitpid(ProcessId pid, int *status, int options) {
 int schedulerSendSignal(ProcessId pid, int signal) {
   int returnValue = -1;
 
-  SchedulerSendSignalArgs sendSignalArgs = {
-    .pid = pid,
-    .signal = signal,
-    .returnValue = 0,
-    .errorNumber = 0,
-  };
+  MESSAGE_ARGS_ALLOCATE(SchedulerSendSignalArgs, sendSignalArgs);
+  if (sendSignalArgs == NULL) {
+    errno = EOTHER;
+    return returnValue; // -1
+  }
+  sendSignalArgs->pid = pid;
+  sendSignalArgs->signal = signal;
+  sendSignalArgs->returnValue = 0;
+  sendSignalArgs->errorNumber = 0;
   ProcessMessage *processMessage
     = initSendProcessMessageToPid(
     schedulerPid,
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_SEND_SIGNAL,
-    /* data= */ &sendSignalArgs, /* size= */ sizeof(sendSignalArgs), true);
+    /* data= */ sendSignalArgs, /* size= */ sizeof(*sendSignalArgs), true);
   if (processMessage == NULL) {
     logError("Could not communicate with scheduler.\n");
+    MESSAGE_ARGS_FREE(sendSignalArgs);
     errno = EOTHER;
     return returnValue; // -1
   }
@@ -2185,8 +2233,9 @@ int schedulerSendSignal(ProcessId pid, int signal) {
   processMessageWaitForDone(processMessage, NULL);
   processMessageRelease(processMessage);
 
-  returnValue = sendSignalArgs.returnValue;
-  errno = sendSignalArgs.errorNumber;
+  returnValue = sendSignalArgs->returnValue;
+  errno = sendSignalArgs->errorNumber;
+  MESSAGE_ARGS_FREE(sendSignalArgs);
 
   return returnValue;
 }
@@ -2211,27 +2260,32 @@ int schedulerReplaceOverlay(const void *overlayNamespace,
     return returnValue;
   }
 
-  SchedulerReplaceOverlayArgs schedulerReplaceOverlayArgs = {
-    .overlayNamespace = (void*) overlayNamespace,
-    .overlay = overlay,
-    .returnValue = 0,
-  };
+  MESSAGE_ARGS_ALLOCATE(SchedulerReplaceOverlayArgs,
+    schedulerReplaceOverlayArgs);
+  if (schedulerReplaceOverlayArgs == NULL) {
+    return returnValue; // -EOTHER
+  }
+  schedulerReplaceOverlayArgs->overlayNamespace = (void*) overlayNamespace;
+  schedulerReplaceOverlayArgs->overlay = overlay;
+  schedulerReplaceOverlayArgs->returnValue = 0;
   ProcessMessage *processMessage
     = initSendProcessMessageToPid(
     schedulerPid,
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_REPLACE_OVERLAY,
-    /* data= */ &schedulerReplaceOverlayArgs,
-    /* size= */ sizeof(schedulerReplaceOverlayArgs),
+    /* data= */ schedulerReplaceOverlayArgs,
+    /* size= */ sizeof(*schedulerReplaceOverlayArgs),
     true);
   if (processMessage == NULL) {
     logError("Could not communicate with scheduler.\n");
+    MESSAGE_ARGS_FREE(schedulerReplaceOverlayArgs);
     return returnValue; // -EOTHER
   }
 
   processMessageWaitForDone(processMessage, NULL);
   processMessageRelease(processMessage);
 
-  returnValue = schedulerReplaceOverlayArgs.returnValue;
+  returnValue = schedulerReplaceOverlayArgs->returnValue;
+  MESSAGE_ARGS_FREE(schedulerReplaceOverlayArgs);
 
   return returnValue;
 }
@@ -2243,30 +2297,35 @@ int schedulerReplaceOverlay(const void *overlayNamespace,
 /// @return Returns 0 on success, -1 on failure.
 int schedulerSetProcessUser(UserId userId) {
   int returnValue = -1;
-  SchedulerSetProcessUserArgs schedulerSetProcessUserArgs = {
-    .userId = userId,
-    .returnValue = returnValue,
-    .errorNumber = 0,
-  };
+  MESSAGE_ARGS_ALLOCATE(SchedulerSetProcessUserArgs,
+    schedulerSetProcessUserArgs);
+  if (schedulerSetProcessUserArgs == NULL) {
+    return returnValue; // -1
+  }
+  schedulerSetProcessUserArgs->userId = userId;
+  schedulerSetProcessUserArgs->returnValue = returnValue;
+  schedulerSetProcessUserArgs->errorNumber = 0;
   ProcessMessage *processMessage
     = initSendProcessMessageToPid(
     schedulerPid,
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_SET_PROCESS_USER,
-    &schedulerSetProcessUserArgs, sizeof(schedulerSetProcessUserArgs), true);
+    schedulerSetProcessUserArgs, sizeof(*schedulerSetProcessUserArgs), true);
   if (processMessage == NULL) {
     logError("Could not communicate with scheduler.\n");
+    MESSAGE_ARGS_FREE(schedulerSetProcessUserArgs);
     return returnValue; // -1
   }
 
   processMessageWaitForDone(processMessage, NULL);
-  returnValue = schedulerSetProcessUserArgs.returnValue;
+  returnValue = schedulerSetProcessUserArgs->returnValue;
   processMessageRelease(processMessage);
 
   if (returnValue != 0) {
-    errno = schedulerSetProcessUserArgs.errorNumber;
+    errno = schedulerSetProcessUserArgs->errorNumber;
     logError("Scheduler returned \"%s\" for setProcessUser.\n",
       strerror(errno));
   }
+  MESSAGE_ARGS_FREE(schedulerSetProcessUserArgs);
 
   return returnValue;
 }
@@ -2304,27 +2363,33 @@ FileDescriptor* schedulerGetFileDescriptor(FILE *stream) {
 /// @return Returns the hostname that's read during startup on success, NULL on
 /// failure.
 const char* schedulerGetHostname(void) {
-  SchedulerGetHostnameArgs schedulerGetHostnameArgs = {
-    .hostname = NULL,
-    .errorNumber = 0,
-  };
+  const char *hostname = NULL;
+  MESSAGE_ARGS_ALLOCATE(SchedulerGetHostnameArgs, schedulerGetHostnameArgs);
+  if (schedulerGetHostnameArgs == NULL) {
+    return hostname; // NULL
+  }
+  schedulerGetHostnameArgs->hostname = NULL;
+  schedulerGetHostnameArgs->errorNumber = 0;
   ProcessMessage *processMessage
     = initSendProcessMessageToPid(
     schedulerPid,
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_GET_HOSTNAME,
-    &schedulerGetHostnameArgs, sizeof(schedulerGetHostnameArgs), true);
+    schedulerGetHostnameArgs, sizeof(*schedulerGetHostnameArgs), true);
   if (processMessage == NULL) {
     logError("Could not communicate with scheduler.\n");
-    return schedulerGetHostnameArgs.hostname; // NULL
+    MESSAGE_ARGS_FREE(schedulerGetHostnameArgs);
+    return hostname; // NULL
   }
 
   processMessageWaitForDone(processMessage, NULL);
-  if (schedulerGetHostnameArgs.errorNumber != 0) {
-    errno = schedulerGetHostnameArgs.errorNumber;
+  if (schedulerGetHostnameArgs->errorNumber != 0) {
+    errno = schedulerGetHostnameArgs->errorNumber;
   }
   processMessageRelease(processMessage);
+  hostname = schedulerGetHostnameArgs->hostname;
+  MESSAGE_ARGS_FREE(schedulerGetHostnameArgs);
 
-  return schedulerGetHostnameArgs.hostname;
+  return hostname;
 }
 
 /// @var _emptyHostname
@@ -2635,18 +2700,22 @@ static int schedulerExecvePath(const char *pathname,
 
   execArgs->schedulerState = NULL; // Set by the scheduler
 
-  SchedulerExecveArgs schedulerExecveArgs = {
-    .execArgs = execArgs,
-    .errorNumber = 0,
-  };
+  MESSAGE_ARGS_ALLOCATE(SchedulerExecveArgs, schedulerExecveArgs);
+  if (schedulerExecveArgs == NULL) {
+    errno = ENOMEM;
+    goto freeExecArgs;
+  }
+  schedulerExecveArgs->execArgs = execArgs;
+  schedulerExecveArgs->errorNumber = 0;
   ProcessMessage *processMessage
     = initSendProcessMessageToPid(
     schedulerPid,
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_EXECVE,
-    &schedulerExecveArgs, sizeof(schedulerExecveArgs), true);
+    schedulerExecveArgs, sizeof(*schedulerExecveArgs), true);
   if (processMessage == NULL) {
     // The only way this should be possible is if all available messages are
     // in use, so use ENOMEM as the errno.
+    MESSAGE_ARGS_FREE(schedulerExecveArgs);
     errno = ENOMEM;
     goto freeExecArgs;
   }
@@ -2655,8 +2724,9 @@ static int schedulerExecvePath(const char *pathname,
 
   // If we got this far then the exec failed for some reason.  The error will
   // be in the data portion of the message we sent to the scheduler.
-  errno = schedulerExecveArgs.errorNumber;
+  errno = schedulerExecveArgs->errorNumber;
   processMessageRelease(processMessage);
+  MESSAGE_ARGS_FREE(schedulerExecveArgs);
 
 freeExecArgs:
   execArgs = execArgsDestroy(execArgs);
@@ -2736,17 +2806,20 @@ static void schedulerCloseProcessHandles(
     return;
   }
 
-  FilesystemCloseProcessArgs closeProcessArgs = {
-    .pid = processDescriptor->processId,
-  };
+  MESSAGE_ARGS_ALLOCATE(FilesystemCloseProcessArgs, closeProcessArgs);
+  if (closeProcessArgs == NULL) {
+    return;
+  }
+  closeProcessArgs->pid = processDescriptor->processId;
   if (schedulerInitSendMessageToPid(rootFilesystemPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_CLOSE_PROCESS,
-    &closeProcessArgs, sizeof(closeProcessArgs)
+    closeProcessArgs, sizeof(*closeProcessArgs)
     ) != processSuccess
   ) {
     logError("Could not close the handles of process %d\n",
       processDescriptor->processId);
   }
+  MESSAGE_ARGS_FREE(closeProcessArgs);
   processDescriptor->numFilesystemHandles = 0;
 }
 
@@ -2901,29 +2974,35 @@ static FILE* schedOpenFile(const char *pathname, const char *mode,
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    FilesystemFopenArgs fopenArgs = {
-      .pathname = (char*) pathname,
-      .mode = (char*) mode,
-      .now = time(NULL),
-      .returnValue = NULL,
-      .errorNumber = 0,
-    };
+    MESSAGE_ARGS_ALLOCATE(FilesystemFopenArgs, fopenArgs);
+    if (fopenArgs == NULL) {
+      _functionInProgress = NULL;
+      errno = ENOMEM;
+      return returnValue; // NULL
+    }
+    fopenArgs->pathname = (char*) pathname;
+    fopenArgs->mode = (char*) mode;
+    fopenArgs->now = time(NULL);
+    fopenArgs->returnValue = NULL;
+    fopenArgs->errorNumber = 0;
     logDebug("schedOpenFile: Sending message\n");
     if (schedulerInitSendMessageToPid(rootFilesystemPid,
       FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_OPEN_FILE | pathFlag,
-      &fopenArgs, sizeof(fopenArgs)
+      fopenArgs, sizeof(*fopenArgs)
       ) != processSuccess
     ) {
       // Nothing we can do.
+      MESSAGE_ARGS_FREE(fopenArgs);
       _functionInProgress = NULL;
       errno = EIO;
       return returnValue; // NULL
     }
 
-    returnValue = fopenArgs.returnValue;
+    returnValue = fopenArgs->returnValue;
     if (returnValue == NULL) {
-      errno = fopenArgs.errorNumber;
+      errno = fopenArgs->errorNumber;
     }
+    MESSAGE_ARGS_FREE(fopenArgs);
 
     _functionInProgress = NULL;
   } else {
@@ -2978,25 +3057,28 @@ int schedFclose(FILE *stream) {
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    FilesystemFcloseArgs fcloseArgs;
-    fcloseArgs.stream = stream;
-    fcloseArgs.returnValue = 0;
+    MESSAGE_ARGS_ALLOCATE(FilesystemFcloseArgs, fcloseArgs);
+    if (fcloseArgs == NULL) {
+      errno = ENOMEM;
+      _functionInProgress = NULL;
+      return EOF;
+    }
+    fcloseArgs->stream = stream;
+    fcloseArgs->returnValue = 0;
 
     if (schedulerInitSendMessageToPid(rootFilesystemPid,
       FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_CLOSE_FILE,
-      &fcloseArgs, sizeof(fcloseArgs)
+      fcloseArgs, sizeof(*fcloseArgs)
       ) != processSuccess
     ) {
       // Nothing we can do.
       errno = EOTHER;
-      _functionInProgress = NULL;
-      return EOF;
-    }
-
-    if (fcloseArgs.returnValue != 0) {
-      errno = -fcloseArgs.returnValue;
+      returnValue = EOF;
+    } else if (fcloseArgs->returnValue != 0) {
+      errno = -fcloseArgs->returnValue;
       returnValue = EOF;
     }
+    MESSAGE_ARGS_FREE(fcloseArgs);
 
     _functionInProgress = NULL;
   } else {
@@ -3027,28 +3109,30 @@ int schedRemove(const char *pathname) {
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    FilesystemRemoveArgs filesystemRemoveArgs = {
-      .pathname = (char*) pathname,
-      .returnValue = 0,
-    };
+    MESSAGE_ARGS_ALLOCATE(FilesystemRemoveArgs, filesystemRemoveArgs);
+    if (filesystemRemoveArgs == NULL) {
+      errno = ENOMEM;
+      _functionInProgress = NULL;
+      return -1;
+    }
+    filesystemRemoveArgs->pathname = (char*) pathname;
+    filesystemRemoveArgs->returnValue = 0;
 
     if (schedulerInitSendMessageToPid(rootFilesystemPid,
       FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_REMOVE_FILE,
-      &filesystemRemoveArgs, sizeof(filesystemRemoveArgs)
+      filesystemRemoveArgs, sizeof(*filesystemRemoveArgs)
       ) != processSuccess
     ) {
       // Nothing we can do.
       errno = EOTHER;
-      _functionInProgress = NULL;
-      return -1;
-    }
-
-    if (filesystemRemoveArgs.returnValue != 0) {
+      returnValue = -1;
+    } else if (filesystemRemoveArgs->returnValue != 0) {
       // returnValue holds a negative errno.  Set errno for the current process
       // and return -1 like we're supposed to.
-      errno = -filesystemRemoveArgs.returnValue;
+      errno = -filesystemRemoveArgs->returnValue;
       returnValue = -1;
     }
+    MESSAGE_ARGS_FREE(filesystemRemoveArgs);
 
     _functionInProgress = NULL;
   } else {
@@ -3076,34 +3160,34 @@ size_t schedFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     return 0;
   }
 
-  FilesystemIoCommandArgs filesystemIoCommandArgs = {
-    .file = stream,
-    .buffer = ptr,
-    .length = size * nmemb
-  };
-
+  size_t returnValue = 0;
   if (_functionInProgress == NULL) {
+    MESSAGE_ARGS_ALLOCATE(FilesystemIoCommandArgs, filesystemIoCommandArgs);
+    if (filesystemIoCommandArgs == NULL) {
+      return returnValue; // 0
+    }
+    filesystemIoCommandArgs->file = stream;
+    filesystemIoCommandArgs->buffer = ptr;
+    filesystemIoCommandArgs->length = size * nmemb;
     _functionInProgress = __func__;
 
     if (schedulerInitSendMessageToPid(rootFilesystemPid,
       FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_READ_FILE,
-      &filesystemIoCommandArgs, sizeof(filesystemIoCommandArgs)
-      ) != processSuccess
+      filesystemIoCommandArgs, sizeof(*filesystemIoCommandArgs)
+      ) == processSuccess
     ) {
-      // Nothing we can do.
-      _functionInProgress = NULL;
-      return 0;
+      returnValue = filesystemIoCommandArgs->length / size;
     }
+    MESSAGE_ARGS_FREE(filesystemIoCommandArgs);
 
     _functionInProgress = NULL;
   } else {
     logError("Cannot execute because 0x%lx is already in progress\n",
       (long unsigned int) ((intptr_t) _functionInProgress));
     errno = EBUSY;
-    return 0;
   }
 
-  return filesystemIoCommandArgs.length / size;
+  return returnValue;
 }
 
 /// @fn size_t schedFwrite(void *ptr, size_t size, size_t nmemb, FILE *stream)
@@ -3121,34 +3205,34 @@ size_t schedFwrite(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     return 0;
   }
 
-  FilesystemIoCommandArgs filesystemIoCommandArgs = {
-    .file = stream,
-    .buffer = ptr,
-    .length = size * nmemb
-  };
-
+  size_t returnValue = 0;
   if (_functionInProgress == NULL) {
+    MESSAGE_ARGS_ALLOCATE(FilesystemIoCommandArgs, filesystemIoCommandArgs);
+    if (filesystemIoCommandArgs == NULL) {
+      return returnValue; // 0
+    }
+    filesystemIoCommandArgs->file = stream;
+    filesystemIoCommandArgs->buffer = ptr;
+    filesystemIoCommandArgs->length = size * nmemb;
     _functionInProgress = __func__;
 
     if (schedulerInitSendMessageToPid(rootFilesystemPid,
       FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_WRITE_FILE,
-      &filesystemIoCommandArgs, sizeof(filesystemIoCommandArgs)
-      ) != processSuccess
+      filesystemIoCommandArgs, sizeof(*filesystemIoCommandArgs)
+      ) == processSuccess
     ) {
-      // Nothing we can do.
-      _functionInProgress = NULL;
-      return 0;
+      returnValue = filesystemIoCommandArgs->length / size;
     }
+    MESSAGE_ARGS_FREE(filesystemIoCommandArgs);
 
     _functionInProgress = NULL;
   } else {
     logError("Cannot execute because 0x%lx is already in progress\n",
       (long unsigned int) ((intptr_t) _functionInProgress));
     errno = EBUSY;
-    return 0;
   }
 
-  return filesystemIoCommandArgs.length / size;
+  return returnValue;
 }
 
 /// @fn static int schedFseek(FILE *stream, long offset, int whence)
@@ -3167,37 +3251,37 @@ static int schedFseek(FILE *stream, long offset, int whence) {
     return -1;
   }
 
-  FilesystemSeekArgs filesystemSeekArgs = {
-    .stream = stream,
-    .offset = offset,
-    .whence = whence,
-    .returnValue = -1,
-    .errorNumber = 0,
-  };
-
+  int returnValue = -1;
   if (_functionInProgress == NULL) {
+    MESSAGE_ARGS_ALLOCATE(FilesystemSeekArgs, filesystemSeekArgs);
+    if (filesystemSeekArgs == NULL) {
+      return returnValue; // -1
+    }
+    filesystemSeekArgs->stream = stream;
+    filesystemSeekArgs->offset = offset;
+    filesystemSeekArgs->whence = whence;
+    filesystemSeekArgs->returnValue = -1;
+    filesystemSeekArgs->errorNumber = 0;
     _functionInProgress = __func__;
 
     if (schedulerInitSendMessageToPid(rootFilesystemPid,
       FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_SEEK_FILE,
-      &filesystemSeekArgs, sizeof(filesystemSeekArgs)
-      ) != processSuccess
+      filesystemSeekArgs, sizeof(*filesystemSeekArgs)
+      ) == processSuccess
     ) {
-      // Nothing we can do.
-      _functionInProgress = NULL;
-      return -1;
+      errno = filesystemSeekArgs->errorNumber;
+      returnValue = filesystemSeekArgs->returnValue;
     }
+    MESSAGE_ARGS_FREE(filesystemSeekArgs);
 
     _functionInProgress = NULL;
   } else {
     logError("Cannot execute because 0x%lx is already in progress\n",
       (long unsigned int) ((intptr_t) _functionInProgress));
     errno = EBUSY;
-    return -1;
   }
 
-  errno = filesystemSeekArgs.errorNumber;
-  return filesystemSeekArgs.returnValue;
+  return returnValue;
 }
 
 /// @fn int schedFgets(char *buffer, int size, FILE *stream)
@@ -3256,24 +3340,24 @@ int schedFputs(const char *s, FILE *stream) {
   if (_functionInProgress == NULL) {
     _functionInProgress = __func__;
 
-    FilesystemIoCommandArgs filesystemIoCommandArgs = {
-      .file = stream,
-      .buffer = (void*) s,
-      .length = (uint32_t) strlen(s)
-    };
-
-    if (schedulerInitSendMessageToPid(rootFilesystemPid,
-      FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_WRITE_FILE,
-      &filesystemIoCommandArgs, sizeof(filesystemIoCommandArgs)
-      ) != processSuccess
-    ) {
-      // Nothing we can do.
+    MESSAGE_ARGS_ALLOCATE(FilesystemIoCommandArgs, filesystemIoCommandArgs);
+    if (filesystemIoCommandArgs == NULL) {
       _functionInProgress = NULL;
       return EOF;
     }
-    if (filesystemIoCommandArgs.length == 0) {
+    filesystemIoCommandArgs->file = stream;
+    filesystemIoCommandArgs->buffer = (void*) s;
+    filesystemIoCommandArgs->length = (uint32_t) strlen(s);
+
+    if ((schedulerInitSendMessageToPid(rootFilesystemPid,
+        FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_WRITE_FILE,
+        filesystemIoCommandArgs, sizeof(*filesystemIoCommandArgs)
+        ) != processSuccess)
+      || (filesystemIoCommandArgs->length == 0)
+    ) {
       returnValue = EOF;
     }
+    MESSAGE_ARGS_FREE(filesystemIoCommandArgs);
 
     _functionInProgress = NULL;
   } else {
@@ -3307,21 +3391,24 @@ int schedGetFileBlockMetadataFromFile(
     return -EINVAL;
   }
 
-  GetFileBlockMetadataArgs args = {
-    .stream = stream,
-    .metadata = metadata,
-  };
+  MESSAGE_ARGS_ALLOCATE(GetFileBlockMetadataArgs, args);
+  if (args == NULL) {
+    return -ENOMEM;
+  }
+  args->stream = stream;
+  args->metadata = metadata;
 
+  int returnValue = -EIO;
   if (schedulerInitSendMessageToPid(rootFilesystemPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_GET_FILE_BLOCK_METADATA,
-    &args, sizeof(args)
-    ) != processSuccess
+    args, sizeof(*args)
+    ) == processSuccess
   ) {
-    // Nothing we can do.
-    return -EIO;
+    returnValue = -args->errorNumber;
   }
+  MESSAGE_ARGS_FREE(args);
 
-  return -args.errorNumber;
+  return returnValue;
 }
 
 /// @var _readMode
@@ -3526,20 +3613,23 @@ int loadProcessDescriptorOverlayMetadata(ProcessDescriptor *processDescriptor) {
 ///
 /// @return Returns processSuccess on success, processError on failure.
 static int schedulerReleaseConsolePorts(ProcessDescriptor *processDescriptor) {
-  ConsoleReleasePidPortArgs consoleReleasePidPortArgs = {
-    .processId = processDescriptor->processId,
-    .newOwner = (processDescriptor->parentPid != 0)
-      ? processDescriptor->parentPid : PROCESS_ID_NOT_SET,
-  };
+  MESSAGE_ARGS_ALLOCATE(ConsoleReleasePidPortArgs, consoleReleasePidPortArgs);
+  if (consoleReleasePidPortArgs == NULL) {
+    return processError;
+  }
+  consoleReleasePidPortArgs->processId = processDescriptor->processId;
+  consoleReleasePidPortArgs->newOwner = (processDescriptor->parentPid != 0)
+    ? processDescriptor->parentPid : PROCESS_ID_NOT_SET;
   int returnValue = schedulerInitSendMessageToPid(
     consolePid,
     CONSOLE_COMMAND_SIGNATURE | CONSOLE_RELEASE_PID_PORT,
-    /* data= */ &consoleReleasePidPortArgs,
-    /* size= */ sizeof(consoleReleasePidPortArgs));
+    /* data= */ consoleReleasePidPortArgs,
+    /* size= */ sizeof(*consoleReleasePidPortArgs));
   if (returnValue != processSuccess) {
     logError("Could not send CONSOLE_RELEASE_PID_PORT message "
       "to console process\n");
   }
+  MESSAGE_ARGS_FREE(consoleReleasePidPortArgs);
   return returnValue;
 }
 
@@ -3647,17 +3737,20 @@ int schedulerKillProcessCommandHandler(
         }
 
         MESSAGE_ARGS_PROCESS_ENDED(pid, false);
-        MemoryManagerFreeProcessMemoryArgs memoryManagerFreeProcessMemoryArgs
-        = {
-          .pid = pid,
-          .returnValue = 0,
-        };
-        if (schedulerInitSendMessageToPid(
-          memoryManagerPid,
-          MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_FREE_PROCESS_MEMORY,
-          &memoryManagerFreeProcessMemoryArgs,
-          sizeof(memoryManagerFreeProcessMemoryArgs)) != processSuccess
-        ) {
+        MESSAGE_ARGS_ALLOCATE(MemoryManagerFreeProcessMemoryArgs,
+          memoryManagerFreeProcessMemoryArgs);
+        int freeStatus = processError;
+        if (memoryManagerFreeProcessMemoryArgs != NULL) {
+          memoryManagerFreeProcessMemoryArgs->pid = pid;
+          memoryManagerFreeProcessMemoryArgs->returnValue = 0;
+          freeStatus = schedulerInitSendMessageToPid(
+            memoryManagerPid,
+            MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_FREE_PROCESS_MEMORY,
+            memoryManagerFreeProcessMemoryArgs,
+            sizeof(*memoryManagerFreeProcessMemoryArgs));
+          MESSAGE_ARGS_FREE(memoryManagerFreeProcessMemoryArgs);
+        }
+        if (freeStatus != processSuccess) {
           logError(
             "Could not send MEMORY_MANAGER_FREE_PROCESS_MEMORY"
             "message to memory manager process\n");
@@ -4152,16 +4245,20 @@ int schedulerExecveCommandHandler(
   logDebug("Freeing process memory for process %d\n",
     processDescriptor->processId);
   MESSAGE_ARGS_PROCESS_ENDED(processDescriptor->processId, false);
-  MemoryManagerFreeProcessMemoryArgs memoryManagerFreeProcessMemoryArgs = {
-    .pid = processDescriptor->processId,
-    .returnValue = 0,
-  };
-  if (schedulerInitSendMessageToPid(
-    memoryManagerPid,
-    MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_FREE_PROCESS_MEMORY,
-    &memoryManagerFreeProcessMemoryArgs,
-    sizeof(memoryManagerFreeProcessMemoryArgs))
-  ) {
+  MESSAGE_ARGS_ALLOCATE(MemoryManagerFreeProcessMemoryArgs,
+    memoryManagerFreeProcessMemoryArgs);
+  int freeStatus = processError;
+  if (memoryManagerFreeProcessMemoryArgs != NULL) {
+    memoryManagerFreeProcessMemoryArgs->pid = processDescriptor->processId;
+    memoryManagerFreeProcessMemoryArgs->returnValue = 0;
+    freeStatus = schedulerInitSendMessageToPid(
+      memoryManagerPid,
+      MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_FREE_PROCESS_MEMORY,
+      memoryManagerFreeProcessMemoryArgs,
+      sizeof(*memoryManagerFreeProcessMemoryArgs));
+    MESSAGE_ARGS_FREE(memoryManagerFreeProcessMemoryArgs);
+  }
+  if (freeStatus != processSuccess) {
     logWarn("Could not release memory for process %ld\nMemory leak.\n",
       (long int) processDescriptor->processId);
   }
@@ -4582,14 +4679,17 @@ int schedulerSpawnCommandHandler(
   if ((spawnArgs->attrp != NULL)
     && (spawnArgs->attrp->flags & POSIX_SPAWN_FOREGROUND)
   ) {
-    ConsoleLendPortArgs consoleLendPortArgs = {
-      .lender = execArgs->callingPid,
-      .borrower = processDescriptor->processId,
-    };
-    if (schedulerInitSendMessageToPid(consolePid,
-      CONSOLE_COMMAND_SIGNATURE | CONSOLE_LEND_PORT,
-      &consoleLendPortArgs, sizeof(consoleLendPortArgs)) != processSuccess
-    ) {
+    int lendStatus = processError;
+    MESSAGE_ARGS_ALLOCATE(ConsoleLendPortArgs, consoleLendPortArgs);
+    if (consoleLendPortArgs != NULL) {
+      consoleLendPortArgs->lender = execArgs->callingPid;
+      consoleLendPortArgs->borrower = processDescriptor->processId;
+      lendStatus = schedulerInitSendMessageToPid(consolePid,
+        CONSOLE_COMMAND_SIGNATURE | CONSOLE_LEND_PORT,
+        consoleLendPortArgs, sizeof(*consoleLendPortArgs));
+      MESSAGE_ARGS_FREE(consoleLendPortArgs);
+    }
+    if (lendStatus != processSuccess) {
       logError("Could not lend process %d's console port to process %d\n",
         execArgs->callingPid, processDescriptor->processId);
     }
@@ -5119,17 +5219,22 @@ int schedulerCleanupProcessCommandHandler(
     return returnValue;
   }
 
-  MESSAGE_ARGS_PROCESS_ENDED(processDescriptor->processId, true);
-  MemoryManagerFreeProcessMemoryArgs memoryManagerFreeProcessMemoryArgs = {
-    .pid = processDescriptor->processId,
-    .returnValue = 0,
-  };
-  if (schedulerInitSendMessageToPid(
-    memoryManagerPid,
-    MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_FREE_PROCESS_MEMORY,
-    &memoryManagerFreeProcessMemoryArgs,
-    sizeof(memoryManagerFreeProcessMemoryArgs)) != processSuccess
-  ) {
+  MESSAGE_ARGS_PROCESS_ENDED(processDescriptor->processId,
+    processDescriptor->exitSignal == 0);
+  MESSAGE_ARGS_ALLOCATE(MemoryManagerFreeProcessMemoryArgs,
+    memoryManagerFreeProcessMemoryArgs);
+  int freeStatus = processError;
+  if (memoryManagerFreeProcessMemoryArgs != NULL) {
+    memoryManagerFreeProcessMemoryArgs->pid = processDescriptor->processId;
+    memoryManagerFreeProcessMemoryArgs->returnValue = 0;
+    freeStatus = schedulerInitSendMessageToPid(
+      memoryManagerPid,
+      MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_FREE_PROCESS_MEMORY,
+      memoryManagerFreeProcessMemoryArgs,
+      sizeof(*memoryManagerFreeProcessMemoryArgs));
+    MESSAGE_ARGS_FREE(memoryManagerFreeProcessMemoryArgs);
+  }
+  if (freeStatus != processSuccess) {
     logError("Could not send MEMORY_MANAGER_FREE_PROCESS_MEMORY "
       "message to memory manager\n");
   }
@@ -5591,21 +5696,26 @@ int schedulerDumpOpenFiles(void) {
     return -1;
   }
 
-  FilesystemDumpOpenFilesArgs filesystemDumpOpenFilesArgs = {
-    .returnValue = 0,
-  };
-  
+  MESSAGE_ARGS_ALLOCATE(FilesystemDumpOpenFilesArgs,
+    filesystemDumpOpenFilesArgs);
+  if (filesystemDumpOpenFilesArgs == NULL) {
+    return -1;
+  }
+  filesystemDumpOpenFilesArgs->returnValue = 0;
+
   if (schedulerInitSendMessageToPid(
     rootFilesystemPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_DUMP_OPEN_FILES,
-    /* data= */ &filesystemDumpOpenFilesArgs,
-    /* size= */ sizeof(filesystemDumpOpenFilesArgs)) != processSuccess
-  ) { 
+    /* data= */ filesystemDumpOpenFilesArgs,
+    /* size= */ sizeof(*filesystemDumpOpenFilesArgs)) != processSuccess
+  ) {
     logError("Could not send FILESYSTEM_DUMP_OPEN_FILES message "
       "to root FS process ID %d\n", rootFilesystemPid);
   }
-  
-  return filesystemDumpOpenFilesArgs.returnValue;
+  int returnValue = filesystemDumpOpenFilesArgs->returnValue;
+  MESSAGE_ARGS_FREE(filesystemDumpOpenFilesArgs);
+
+  return returnValue;
 }
 
 /// @fn void removeProcess(
@@ -5633,16 +5743,20 @@ void removeProcess(
   schedulerSetDirCapabilities(processDescriptor, NULL);
 
   MESSAGE_ARGS_PROCESS_ENDED(processDescriptor->processId, false);
-  MemoryManagerFreeProcessMemoryArgs memoryManagerFreeProcessMemoryArgs = {
-    .pid = processDescriptor->processId,
-    .returnValue = 0,
-  };
-  if (schedulerInitSendMessageToPid(
-    memoryManagerPid,
-    MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_FREE_PROCESS_MEMORY,
-    &memoryManagerFreeProcessMemoryArgs,
-    sizeof(memoryManagerFreeProcessMemoryArgs)) != processSuccess
-  ) {
+  MESSAGE_ARGS_ALLOCATE(MemoryManagerFreeProcessMemoryArgs,
+    memoryManagerFreeProcessMemoryArgs);
+  int freeStatus = processError;
+  if (memoryManagerFreeProcessMemoryArgs != NULL) {
+    memoryManagerFreeProcessMemoryArgs->pid = processDescriptor->processId;
+    memoryManagerFreeProcessMemoryArgs->returnValue = 0;
+    freeStatus = schedulerInitSendMessageToPid(
+      memoryManagerPid,
+      MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_FREE_PROCESS_MEMORY,
+      memoryManagerFreeProcessMemoryArgs,
+      sizeof(*memoryManagerFreeProcessMemoryArgs));
+    MESSAGE_ARGS_FREE(memoryManagerFreeProcessMemoryArgs);
+  }
+  if (freeStatus != processSuccess) {
     logError("Could not free process memory. Memory leak.\n");
   }
 
@@ -6755,13 +6869,17 @@ static const char _shadowLockPath[] KEEP_IN_FLASH = "/secure/shadow.lock";
 ///
 /// @return This function returns no value.
 static __attribute__((noinline)) void schedulerRemoveShadowLock(void) {
-  FilesystemPathArgs rmdirArgs;
-  rmdirArgs.pathname = (char*) _shadowLockPath;
-  rmdirArgs.now = 0;
-  rmdirArgs.returnValue = 0;
+  MESSAGE_ARGS_ALLOCATE(FilesystemPathArgs, rmdirArgs);
+  if (rmdirArgs == NULL) {
+    return;
+  }
+  rmdirArgs->pathname = (char*) _shadowLockPath;
+  rmdirArgs->now = 0;
+  rmdirArgs->returnValue = 0;
   schedulerInitSendMessageToPid(rootFilesystemPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_RMDIR | FILESYSTEM_FULL_PATH,
-    &rmdirArgs, sizeof(rmdirArgs));
+    rmdirArgs, sizeof(*rmdirArgs));
+  MESSAGE_ARGS_FREE(rmdirArgs);
 }
 
 /// @var _hostnameFilePath
