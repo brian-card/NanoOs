@@ -227,12 +227,11 @@ void* runFsCommand(void *args) {
 exit:
   if ((fsCommandArgs->pids != NULL) && !fsCommandArgs->launchBackground) {
     launchErrno = errno;
-    if (fsCommandArgs->scriptPath == NULL) {
-      // Nothing will read what the earlier commands write.
-      for (int ii = 0; ii < fsCommandArgs->numProcessesLaunched; ii++) {
-        kill(fsCommandArgs->pids[ii], SIGKILL);
-        waitpid(fsCommandArgs->pids[ii], NULL, 0);
-      }
+    // Nothing will read what the earlier commands write:  a script can't be
+    // the end of a pipeline.
+    for (int ii = 0; ii < fsCommandArgs->numProcessesLaunched; ii++) {
+      kill(fsCommandArgs->pids[ii], SIGKILL);
+      waitpid(fsCommandArgs->pids[ii], NULL, 0);
     }
     free(fsCommandArgs->fileActions); fsCommandArgs->fileActions = NULL;
     fsCommandArgs->pids = NULL;
