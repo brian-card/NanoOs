@@ -150,6 +150,29 @@ NANO_OS_TEST(message_args_production, create_is_zeroed_heap_storage) {
   MESSAGE_ARGS_DESTROY(bytes);
 }
 
+/// @var _destroyed
+///
+/// @brief The pointer recordDestroy was last given.
+static void *_destroyed = NULL;
+
+/// @fn static void recordDestroy(void *ptr)
+///
+/// @brief A free function whose calls the tests can see.
+///
+/// @param ptr The pointer to record.
+///
+/// @return This function returns no value.
+static void recordDestroy(void *ptr) {
+  _destroyed = ptr;
+}
+
+NANO_OS_TEST(message_args_production, destroy_with_calls_the_function_given) {
+  int storage = 0;
+  _destroyed = NULL;
+  MESSAGE_ARGS_DESTROY_WITH(&storage, recordDestroy);
+  NANO_OS_ASSERT_EQ_PTR(&storage, _destroyed);
+}
+
 /// @fn int messageArgsProductionAdopt(ExecArgs *execArgs, ProcessId pid)
 ///
 /// @brief Compile the production expansion of MESSAGE_ARGS_ADOPT, which only

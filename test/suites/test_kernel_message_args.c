@@ -188,14 +188,16 @@ NANO_OS_KERNEL_TEST(message_args, round_trip_sent_without_waiting_is_counted) {
   assertOnlyError(MESSAGE_ARGS_ERROR_FIRE_AND_FORGET, 1);
 }
 
-NANO_OS_KERNEL_TEST(message_args, persistent_storage_may_be_sent_without_waiting) {
-  TestArgs *args = MESSAGE_ARGS_CREATE(TestArgs,
-    MESSAGE_ARGS_ROUND_TRIP | MESSAGE_ARGS_PERSISTENT);
+NANO_OS_KERNEL_TEST(message_args, one_way_storage_may_be_sent_without_waiting) {
+  TestArgs *args = MESSAGE_ARGS_CREATE(TestArgs, MESSAGE_ARGS_ONE_WAY);
   ProcessMessage *processMessage = claimMessage(args, false);
+  NANO_OS_ASSERT_NOT_NULL(processMessage);
+  NANO_OS_ASSERT_EQ_INT(0, messageArgsErrorTotal());
   processMessageSetDone(processMessage);
   processMessageRelease(processMessage);
+  // Only the recipient may free it, and the recipient here is a stand-in.
   MESSAGE_ARGS_DESTROY(args);
-  NANO_OS_ASSERT_EQ_INT(0, messageArgsErrorTotal());
+  assertOnlyError(MESSAGE_ARGS_ERROR_WRONG_RECIPIENT, 1);
 }
 
 NANO_OS_KERNEL_TEST(message_args, a_real_send_without_waiting_is_counted) {
