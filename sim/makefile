@@ -1,4 +1,4 @@
-OBJ_DIR    := obj
+OBJ_DIR    := obj$(OBJ_SUFFIX)
 BIN_DIR    := bin
 
 # CLI tools
@@ -33,7 +33,7 @@ endif
 # $(STRIPPED_BINARY) below removes .rodata to mirror the AgonLight2/SAMD21
 # shipped-binary build, so a jump table there would crash on first use just
 # like it would on real hardware. Matches makefiles/AgonLight2Makefile.
-CFLAGS := $(CPU) -std=gnu17 -g -rdynamic -fno-jump-tables
+CFLAGS := $(CPU) -std=gnu17 -g -rdynamic -fno-jump-tables $(EXTRA_CFLAGS)
 
 LINKS := \
 
@@ -62,6 +62,9 @@ BINARY := $(BIN_DIR)/$(TARGET)
 # platform (see makefiles/AgonLight2Makefile, ArduinoSamd21Makefile).
 RODATA_BIN := $(BIN_DIR)/NanoOs_rodata.bin
 STRIPPED_BINARY := $(BIN_DIR)/$(TARGET)_stripped
+# The simulator with the checked message-argument storage of
+# src/kernel/MessageArgs.c, built from its own object tree.
+CHECKED_BINARY := $(BIN_DIR)/$(TARGET)-checked
 
 OS_OBJECTS := \
     $(OBJ_DIR)/Commands.o \
@@ -80,6 +83,7 @@ OS_OBJECTS := \
     $(OBJ_DIR)/Link.o \
     $(OBJ_DIR)/Logger.o \
     $(OBJ_DIR)/MemoryManager.o \
+    $(OBJ_DIR)/MessageArgs.o \
     $(OBJ_DIR)/Messages.o \
     $(OBJ_DIR)/NanoOs.o \
     $(OBJ_DIR)/NanoOsHardware.o \
@@ -132,9 +136,14 @@ $(RODATA_BIN): $(BINARY)
 $(STRIPPED_BINARY): $(BINARY)
 	$(OBJCOPY) -R .rodata $< $@
 
+checked:
+	$(MAKE) OBJ_SUFFIX=-checked EXTRA_CFLAGS=-DNANO_OS_MESSAGE_ARGS_CHECKED \
+		BINARY=$(CHECKED_BINARY) $(CHECKED_BINARY)
+
 ../src/%: FORCE
 	$(MAKE) -C $@ COMPILE=$(COMPILE) LINK=$(LINK) \
-		OBJCOPY=$(OBJCOPY) OBJDUMP=$(OBJDUMP) SIZE=$(SIZE)
+		OBJCOPY=$(OBJCOPY) OBJDUMP=$(OBJDUMP) SIZE=$(SIZE) \
+		OBJ_SUFFIX=$(OBJ_SUFFIX) EXTRA_CFLAGS="$(EXTRA_CFLAGS)"
 
 # Compile object files
 $(OBJ_DIR)/%.o: %.c
@@ -157,6 +166,7 @@ symbols: $(BINARY)
 # Clean build artifacts
 clean:
 	$(RM) $(SIM_OBJECTS) $(BINARY) $(RODATA_BIN) $(STRIPPED_BINARY) $(TARGET).dis
+	$(RM) obj-checked $(CHECKED_BINARY)
 	for component in $(COMPONENTS); do $(MAKE) -C $${component} clean; done
 
 # Show help
@@ -164,6 +174,7 @@ help:
 	@echo "NanoOS Overlay Build System"
 	@echo "Usage:"
 	@echo "  make          - Build the simulator and its .rodata-only/-stripped artifacts"
+	@echo "  make checked  - Build the simulator with checked message-argument storage"
 	@echo "  make disasm   - Generate disassembly listing"
 	@echo "  make sections - Show ELF section information"  
 	@echo "  make symbols  - Show symbol table"
@@ -176,5 +187,5 @@ help:
 FORCE:
 
 # Phony targets
-.PHONY: all clean disasm sections symbols help
+.PHONY: all checked clean disasm sections symbols help
 
