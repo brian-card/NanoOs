@@ -1433,7 +1433,7 @@ void memoryManagerFree(void *ptr) {
   ProcessMessage *processMessage = initSendProcessMessageToProcess(
     processIdToDescriptor(memoryManagerPid),
     MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_FREE,
-    &memoryManagerFreeArgs, sizeof(memoryManagerFreeArgs), false);
+    &memoryManagerFreeArgs, sizeof(memoryManagerFreeArgs), true);
   if (processMessage == NULL) {
     logError("Could not send MEMORY_MANAGER_FREE message to "
       "memory manager; memory leak\n");
