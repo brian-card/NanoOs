@@ -329,6 +329,7 @@ int schedulerBindShell(uint8_t shellIndex, uint8_t consolePort,
   ShellProgram *shellProgram, ProcessId outputPid);
 void schedulerSetNumShells(uint8_t numShells);
 void* schedMalloc(size_t size);
+int assignMemory(void *ptr, ProcessId pid);
 void schedFree(void *ptr);
 FILE* schedFopen(const char *pathname, const char *mode);
 FILE* schedFopenFullPath(const char *pathname, const char *mode);
