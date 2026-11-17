@@ -1,5 +1,5 @@
 # This makefile exist for the simulator, so make the paths relative to that.
-OBJ_DIR = ../../sim/obj
+OBJ_DIR = ../../sim/obj$(OBJ_SUFFIX)
 BIN_DIR = ../../sim/bin
 
 # CLI tools
@@ -45,7 +45,7 @@ LDFLAGS =
 # dereferenceable at runtime, same as those two real targets - even though
 # native POSIX .rodata isn't actually stripped, this keeps the sim
 # exercising the same code paths real hardware does.
-CFLAGS = $(CPU) -std=gnu17 -g -fno-jump-tables -DNANO_OS_STRINGS_STRIPPED
+CFLAGS = $(CPU) -std=gnu17 -g -fno-jump-tables -DNANO_OS_STRINGS_STRIPPED $(EXTRA_CFLAGS)
 
 LINKS = \
 
