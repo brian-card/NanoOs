@@ -1,4 +1,5 @@
 bin
 obj
+obj-checked
 *.swp
 build
