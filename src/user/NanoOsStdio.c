@@ -1896,18 +1896,20 @@ int nanoOsScanf(const char *format, ...) {
 /// @return Returns a pointer to a ConsoleBuffer from the runConsole process on
 /// success, NULL on failure.
 ConsoleBuffer* nanoOsGetBuffer(void) {
-  ConsoleGetBufferArgs consoleGetBufferArgs = {
-    .consoleBuffer = NULL,
-  };
+  MESSAGE_ARGS_ALLOCATE(ConsoleGetBufferArgs, consoleGetBufferArgs);
+  if (consoleGetBufferArgs == NULL) {
+    return NULL;
+  }
+  consoleGetBufferArgs->consoleBuffer = NULL;
 
   // It's possible that all the nanoOs buffers are in use at the time this call
   // is made, so we may have to try multiple times.  Do a while loop until we
   // get a buffer back or until an error occurs.
-  while (consoleGetBufferArgs.consoleBuffer == NULL) {
+  while (consoleGetBufferArgs->consoleBuffer == NULL) {
     ProcessMessage *processMessage = initSendProcessMessageToProcess(
       processIdToDescriptor(consolePid),
       CONSOLE_COMMAND_SIGNATURE | CONSOLE_GET_BUFFER,
-      &consoleGetBufferArgs, sizeof(consoleGetBufferArgs), true);
+      consoleGetBufferArgs, sizeof(*consoleGetBufferArgs), true);
     if (processMessage == NULL) {
       break; // will return returnValue, which is NULL
     }
@@ -1921,14 +1923,16 @@ ConsoleBuffer* nanoOsGetBuffer(void) {
     }
 
     processMessageRelease(processMessage);
-    if (consoleGetBufferArgs.consoleBuffer == NULL) {
+    if (consoleGetBufferArgs->consoleBuffer == NULL) {
       // Yield control to give the OS a chance to get done processing the
       // buffers that are in use.
       processYield();
     }
   }
 
-  return consoleGetBufferArgs.consoleBuffer;
+  ConsoleBuffer *consoleBuffer = consoleGetBufferArgs->consoleBuffer;
+  MESSAGE_ARGS_FREE(consoleGetBufferArgs);
+  return consoleBuffer;
 }
 
 /// @fn static __attribute__((noinline)) int nanoOsWriteBufferToFile(
@@ -1946,23 +1950,28 @@ static __attribute__((noinline)) int nanoOsWriteBufferToFile(
   FILE *stream, ConsoleBuffer *consoleBuffer
 ) {
   int returnValue = 0;
-  FilesystemIoCommandArgs filesystemIoCommandArgs = {
-    .file = stream,
-    .buffer = consoleBuffer->buffer,
-    .length = (uint32_t) strlen(consoleBuffer->buffer)
-  };
+  MESSAGE_ARGS_ALLOCATE(FilesystemIoCommandArgs, filesystemIoCommandArgs);
+  if (filesystemIoCommandArgs == NULL) {
+    returnValue = EOF;
+    goto releaseBuffer;
+  }
+  filesystemIoCommandArgs->file = stream;
+  filesystemIoCommandArgs->buffer = consoleBuffer->buffer;
+  filesystemIoCommandArgs->length = (uint32_t) strlen(consoleBuffer->buffer);
   ProcessMessage *processMessage = initSendProcessMessageToPid(
     rootFilesystemPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_WRITE_FILE,
-    /* data= */ &filesystemIoCommandArgs,
-    /* size= */ sizeof(filesystemIoCommandArgs),
+    /* data= */ filesystemIoCommandArgs,
+    /* size= */ sizeof(*filesystemIoCommandArgs),
     true);
   processMessageWaitForDone(processMessage, NULL);
-  if (filesystemIoCommandArgs.length == 0) {
+  if (filesystemIoCommandArgs->length == 0) {
     returnValue = EOF;
   }
   processMessageRelease(processMessage);
+  MESSAGE_ARGS_FREE(filesystemIoCommandArgs);
 
+releaseBuffer:
   // Release the buffer to avoid creating a leak.  Fire and forget.
   (void) initSendProcessMessageToPid(
     consolePid,
