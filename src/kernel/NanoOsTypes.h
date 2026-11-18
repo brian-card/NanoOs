@@ -681,8 +681,6 @@ typedef struct posix_spawnattr_t posix_spawnattr_t;
 ///
 /// @brief Arguments for the standard POSIX posix_spawn call.
 ///
-/// @param newProcessId A pointer to the pid_t that will hold the process ID of the
-///   new process.
 /// @param path The full path to the to the program to execute on disk.
 /// @param fileActions A pointer to the posix_spawn_file_actions_t that
 ///   specifies the operations to do on the file descriptors of the new process.
@@ -697,8 +695,6 @@ typedef struct posix_spawnattr_t posix_spawnattr_t;
 /// @param envp The NULL-terminated array of environment variables in
 ///   "name=value" format.  This array may be NULL.
 typedef struct SpawnArgs {
-  // Change this type if we change the size of pid_t or Pid!!!
-  uint8_t                     *newPid;
   char                        *path;
   posix_spawn_file_actions_t  *fileActions;
   posix_spawnattr_t           *attrp;
