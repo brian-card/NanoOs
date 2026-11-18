@@ -2646,6 +2646,72 @@ static __attribute__((noinline)) char** envpBlockFill(char *block,
   return envpArray;
 }
 
+#ifdef NANO_OS_MESSAGE_ARGS_CHECKED
+
+/// @fn static void execArgsCopy(void *destination, const void *source,
+///   size_t size)
+///
+/// @brief Rebuild an ExecArgs block at a new address for MESSAGE_ARGS_ADOPT.
+///
+/// @param destination The new block.
+/// @param source The block to rebuild.
+/// @param size The size of the block.
+///
+/// @return This function returns no value.
+static void execArgsCopy(void *destination, const void *source, size_t size) {
+  const ExecArgs *from = (const ExecArgs*) source;
+  ExecArgs *to = (ExecArgs*) destination;
+  memset(to, 0, size);
+  execArgsFill(to, from->pathname, from->argv);
+  to->callingPid = from->callingPid;
+  to->envp = from->envp;
+  to->schedulerState = from->schedulerState;
+}
+
+/// @fn static void envpBlockCopy(void *destination, const void *source,
+///   size_t size)
+///
+/// @brief Rebuild an envp block at a new address for MESSAGE_ARGS_ADOPT.  The
+/// block's array ends the block, and its first entry is the block's start.
+///
+/// @param destination The new block.
+/// @param source The block to rebuild.
+/// @param size The size of the block.
+///
+/// @return This function returns no value.
+static void envpBlockCopy(void *destination, const void *source, size_t size) {
+  char *const *envp
+    = (char *const*) &((const char*) source)[size - (2 * sizeof(char*))];
+  while (*envp != (const char*) source) {
+    envp--;
+  }
+  memset(destination, 0, size);
+  envpBlockFill((char*) destination, envp);
+}
+
+#endif // NANO_OS_MESSAGE_ARGS_CHECKED
+
+/// @fn static inline int envpAdopt(char ***envp, ProcessId pid)
+///
+/// @brief Adopt an envp block for a process with MESSAGE_ARGS_ADOPT and point
+/// envp at the block's array wherever the block now lives.
+///
+/// @param envp The address of the envp array, which must not be NULL.
+/// @param pid The process to give the block to.
+///
+/// @return Returns what MESSAGE_ARGS_ADOPT returned.
+static inline __attribute__((always_inline)) int envpAdopt(char ***envp,
+  ProcessId pid
+) {
+  char *oldBlock = (*envp)[0];
+  char *block = oldBlock;
+  int returnValue = MESSAGE_ARGS_ADOPT(block, pid, envpBlockCopy);
+  if (MESSAGE_ARGS_ADOPT_MOVES) {
+    *envp = (char**) &block[((char*) *envp) - oldBlock];
+  }
+  return returnValue;
+}
+
 /// @fn char** envpLower(char **envp)
 ///
 /// @brief Move an envp block to the first free block that holds it, if that is
@@ -2716,7 +2782,8 @@ static int schedulerExecvePath(const char *pathname,
 
   nanoOsCloseStdout();
 
-  ExecArgs *execArgs = (ExecArgs*) calloc(1, execArgsSize(fullPath, argv));
+  ExecArgs *execArgs = (ExecArgs*) MESSAGE_ARGS_CREATE_BYTES(
+    execArgsSize(fullPath, argv), MESSAGE_ARGS_ROUND_TRIP);
   if (execArgs == NULL) {
     free(fullPath);
     logError("Allocating execArgs failed\n");
@@ -2729,7 +2796,8 @@ static int schedulerExecvePath(const char *pathname,
   if (envp != NULL) {
     size_t envpBytes = envpBlockSize(envp);
     if (envpBytes > 0) {
-      char *envpBlock = (char*) calloc(1, envpBytes);
+      char *envpBlock = (char*) MESSAGE_ARGS_CREATE_BYTES(envpBytes,
+        MESSAGE_ARGS_ROUND_TRIP);
       if (envpBlock == NULL) {
         logError("Allocating execArgs->envp failed\n");
         errno = ENOMEM;
@@ -2770,7 +2838,10 @@ static int schedulerExecvePath(const char *pathname,
   MESSAGE_ARGS_FREE(schedulerExecveArgs);
 
 freeExecArgs:
-  execArgs = execArgsDestroy(execArgs);
+  if (execArgs->envp != NULL) {
+    MESSAGE_ARGS_DESTROY(execArgs->envp[0]);
+  }
+  MESSAGE_ARGS_DESTROY(execArgs);
 
   return -1;
 }
@@ -4284,15 +4355,20 @@ int schedulerExecveCommandHandler(
   }
 
   logDebug("Assigning execArgs to PID 0\n");
-  if (assignMemory(execArgs, 0) != 0) {
+  if (MESSAGE_ARGS_ADOPT(execArgs, 0, execArgsCopy) != 0) {
     logWarn("Could not protect execArgs memory.\nUndefined behavior.\n");
   }
-
-
+  if (MESSAGE_ARGS_ADOPT_MOVES) {
+    pathname = execArgs->pathname;
+    argv = execArgs->argv;
+    if (execCommand == execOverlayCommand) {
+      processDescriptor->overlayNamespace = pathname;
+    }
+  }
 
   if (envp != NULL) {
     logDebug("Assigning envp to PID 0\n");
-    if (assignMemory(envp[0], 0) != 0) {
+    if (envpAdopt(&envp, 0) != 0) {
       logWarn("Could not protect envp memory.\nUndefined behavior.\n");
     }
   }
@@ -4585,7 +4661,6 @@ int schedulerSpawnCommandHandler(
     processMessageSetDone(processMessage);
     return returnValue; // 0; Don't retry this command
   }
-  *spawnArgs->newPid = processDescriptor->processId;
 
   // Initialize the new process.
   threadSetContext(processDescriptor->mainThread, processDescriptor);
@@ -4805,15 +4880,26 @@ int schedulerSpawnCommandHandler(
       "Undefined behavior.\n");
   }
 
-  if (assignMemory(spawnArgs, processDescriptor->processId) != 0) {
+  if (MESSAGE_ARGS_ADOPT(spawnArgs, processDescriptor->processId,
+    spawnArgsCopy) != 0
+  ) {
     logWarn("Could not assign spawnArgs to spawn process.\n"
       "Undefined behavior.\n");
   }
 
   if (envp != NULL) {
-    if (assignMemory(envp[0], processDescriptor->processId) != 0) {
+    if (envpAdopt(&envp, processDescriptor->processId) != 0) {
       logWarn("Could not assign envp to spawn process.\n"
         "Undefined behavior.\n");
+    }
+  }
+  if (MESSAGE_ARGS_ADOPT_MOVES) {
+    argv = spawnArgs->argv;
+    execArgs->pathname = spawnArgs->path;
+    execArgs->argv = argv;
+    execArgs->envp = envp;
+    if (execCommand == execOverlayCommand) {
+      processDescriptor->overlayNamespace = spawnArgs->path;
     }
   }
 
@@ -4847,6 +4933,7 @@ int schedulerSpawnCommandHandler(
   // Put the process on the ready queue.
   processQueuePush(processDescriptor->readyQueue, processDescriptor);
 
+  schedulerSpawnArgs->newPid = processDescriptor->processId;
   schedulerSpawnArgs->errorNumber = 0;
   processMessageSetDone(processMessage);
 
