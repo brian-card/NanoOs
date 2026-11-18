@@ -122,6 +122,9 @@ int nanoOsSpawn(
   const posix_spawn_file_actions_t *file_actions,
   const posix_spawnattr_t *attrp,
   char *const argv[], char *const envp[]);
+#ifdef NANO_OS_MESSAGE_ARGS_CHECKED
+void spawnArgsCopy(void *destination, const void *source, size_t size);
+#endif // NANO_OS_MESSAGE_ARGS_CHECKED
 
 #ifdef __cplusplus
 }
