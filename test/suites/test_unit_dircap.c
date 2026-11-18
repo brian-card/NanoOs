@@ -638,9 +638,10 @@ NANO_OS_TEST(unit_dircap, a_malformed_set_is_invalid) {
   NANO_OS_ASSERT_TRUE(dirCapabilitiesValid(&block.set));
 
   fillSet(&block, 1, entries, 2);
-  block.set.capabilities[0].name[1] = '.';
-  block.set.capabilities[0].name[2] = '.';
-  block.set.capabilities[0].name[3] = '/';
+  char *name = block.set.capabilities[0].name;
+  name[1] = '.';
+  name[2] = '.';
+  name[3] = '/';
   block.set.capabilities[0].len = 4;
   NANO_OS_ASSERT_FALSE(dirCapabilitiesValid(&block.set));
 

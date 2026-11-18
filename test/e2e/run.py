@@ -17,9 +17,11 @@ import glob
 import importlib
 import multiprocessing
 import os
+import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import traceback
 
 import harness
@@ -149,9 +151,44 @@ def close_session(s):
         signal.alarm(0)
 
 
+def stop_worker(_signum, _frame):
+    """Kill this worker's simulators and exit at once.
+
+    @param _signum The signal number.
+    @param _frame The frame that was running.
+    """
+    harness.kill_open_sessions()
+    os._exit(1)
+
+
 def init_worker(verbose):
     harness.VERBOSE = verbose
     signal.signal(signal.SIGALRM, time_limit_exceeded)
+    # A Ctrl-C landing in a worker can strand it holding a pool lock, so only
+    # the main process takes it and stops the workers with SIGTERM.
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    signal.signal(signal.SIGTERM, stop_worker)
+
+
+def stop_pool(pool):
+    """Cancel an interrupted run's queued tests and stop its workers.
+
+    @param pool The ProcessPoolExecutor running the tests.
+    """
+    workers = list(pool._processes.values())
+    pool.shutdown(wait=False, cancel_futures=True)
+    for w in workers:
+        w.terminate()
+    for w in workers:
+        w.join(CLOSE_TIME_LIMIT)
+
+
+def remove_session_dirs():
+    """Remove every Session temporary directory, including any a run leaked."""
+    pattern = os.path.join(tempfile.gettempdir(),
+                           harness.SESSION_DIR_PREFIX + "*")
+    for d in glob.glob(pattern):
+        shutil.rmtree(d, ignore_errors=True)
 
 
 def probe_small_memory_size(sim_bin, env, image):
@@ -249,9 +286,10 @@ def main(argv):
     print(f"1..{len(cases)}", flush=True)
     failures = 0
     context = multiprocessing.get_context("forkserver")
-    with concurrent.futures.ProcessPoolExecutor(
-            max_workers=jobs, mp_context=context,
-            initializer=init_worker, initargs=(harness.VERBOSE,)) as pool:
+    pool = concurrent.futures.ProcessPoolExecutor(
+        max_workers=jobs, mp_context=context,
+        initializer=init_worker, initargs=(harness.VERBOSE,))
+    try:
         probes = {}
         for _label, sim_bin, env, t in cases:
             key = small_memory_key(sim_bin, env)
@@ -291,6 +329,15 @@ def main(argv):
                 failed = True
             failures += failed
             print("\n".join(lines), flush=True)
+    except KeyboardInterrupt:
+        stop_pool(pool)
+        remove_session_dirs()
+        print("# interrupted", flush=True)
+        # Dying of SIGINT, not exiting, is what stops a calling script too.
+        signal.signal(signal.SIGINT, signal.SIG_DFL)
+        os.kill(os.getpid(), signal.SIGINT)
+    pool.shutdown()
+    remove_session_dirs()
 
     print(f"# {len(cases)} test(s), {failures} failure(s)")
     return 1 if failures else 0

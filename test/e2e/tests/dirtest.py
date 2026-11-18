@@ -26,7 +26,7 @@
 
 """End-to-end tests of the dirent API, through dirtest."""
 
-
+import re
 
 
 def test_dirent_lists_directories_with_correct_type(s):
@@ -112,3 +112,25 @@ def test_dirstat_without_the_capability_is_eacces(s):
     s.login()
     out = s.sh("dirtest")
     assert "dirstat without STAT -> -1, errno=4" in out, out
+
+
+def test_readdir_returns_a_maximum_length_name_whole(s):
+    # A new stream's entry buffer holds an 8.3 name, so readdir has to grow
+    # it and fetch the same entry again.
+    s.login()
+    assert s.sh("dirtest long /tmp") == "created"
+    name = "".join(str(ii % 10) for ii in range(255))
+    names = s.sh("dirtest list /tmp").splitlines()
+    assert name in names, names
+
+
+def test_interleaved_readdirs_keep_their_own_entries(s):
+    s.login()
+    etc = s.sh("dirtest list /etc").splitlines()
+    usr = s.sh("dirtest list /usr").splitlines()
+    out = s.sh("dirtest interleave /etc /usr").splitlines()
+    pairs = [re.fullmatch(r'a="([^"]*)" b="([^"]*)"', line) for line in out]
+    assert all(pairs), out
+    assert [m.group(1) for m in pairs if m.group(1)] == etc, out
+    assert [m.group(2) for m in pairs if m.group(2)] == usr, out
+    assert set(etc) != set(usr), (etc, usr)

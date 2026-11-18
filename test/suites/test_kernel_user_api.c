@@ -40,6 +40,7 @@
 #include "kernel/Console.h"
 #include "kernel/NanoOs.h"
 #include "kernel/Processes.h"
+#include "kernel/Scheduler.h"
 #include "user/NanoOsApi.h"
 #include "user/NanoOsErrno.h"
 #include "user/NanoOsStdio.h"
@@ -412,4 +413,47 @@ NANO_OS_KERNEL_TEST_WITH(user_api,
   a_spawn_to_a_negative_fd_keeps_the_descriptor, useExitingChild
 ) {
   spawnAndAssertDescriptorSurvives(-1);
+}
+
+/// @def TEST_HOSTNAME
+///
+/// @brief A hostname the scheduler can't have made up, so a test sees that
+/// the copy came from the scheduler.
+#define TEST_HOSTNAME "harness-host"
+
+/// @fn static void setSchedulerHostname(void)
+///
+/// @brief Give the scheduler TEST_HOSTNAME as its hostname.
+static void setSchedulerHostname(void) {
+  strcpy((char*) schedulerPeekHostname(), TEST_HOSTNAME);
+}
+
+NANO_OS_KERNEL_TEST(user_api, gethostname_copies_the_schedulers_hostname) {
+  setSchedulerHostname();
+  char name[HOST_NAME_MAX + 1];
+  memset(name, 'x', sizeof(name));
+  NANO_OS_ASSERT_EQ_INT(0, USER_API->gethostname(name, sizeof(name)));
+  NANO_OS_ASSERT_STR_EQ(TEST_HOSTNAME, name);
+}
+
+NANO_OS_KERNEL_TEST(user_api, gethostname_fills_a_buffer_of_exactly_its_length) {
+  setSchedulerHostname();
+  size_t length = strlen(TEST_HOSTNAME);
+  char name[sizeof(TEST_HOSTNAME) + 1];
+  memset(name, 'x', sizeof(name));
+  NANO_OS_ASSERT_EQ_INT(0, USER_API->gethostname(name, length));
+  NANO_OS_ASSERT_EQ_INT(0, memcmp(name, TEST_HOSTNAME, length));
+  NANO_OS_ASSERT_EQ_INT('x', name[length]);
+}
+
+NANO_OS_KERNEL_TEST(user_api, gethostname_reports_a_buffer_one_byte_short) {
+  setSchedulerHostname();
+  size_t length = strlen(TEST_HOSTNAME) - 1;
+  char name[sizeof(TEST_HOSTNAME) + 1];
+  memset(name, 'x', sizeof(name));
+  errno = 0;
+  NANO_OS_ASSERT_EQ_INT(-1, USER_API->gethostname(name, length));
+  NANO_OS_ASSERT_EQ_INT(ENAMETOOLONG, errno);
+  NANO_OS_ASSERT_EQ_INT(0, memcmp(name, TEST_HOSTNAME, length));
+  NANO_OS_ASSERT_EQ_INT('x', name[length]);
 }

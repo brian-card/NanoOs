@@ -34,6 +34,7 @@
 #include "NanoOsTest.h"
 #include "HalMock.h"
 
+#include <stddef.h>
 #include <string.h>
 
 #include "kernel/Console.h"
@@ -133,10 +134,39 @@ static int stubDirHandle;
 /// @brief What stubFopen returns.
 static int stubFileHandle;
 
+/// @union EntryBuffer
+///
+/// @brief Room for an entry with a name of up to 255 characters, aligned as an
+/// entry is.
+typedef union EntryBuffer {
+  struct dirent entry;
+  char          bytes[offsetof(struct dirent, d_name) + 256];
+} EntryBuffer;
+
 /// @var stubEntry
 ///
-/// @brief What stubReaddir returns.
+/// @brief The entry stubReaddir returns unless a test names another.
 static struct dirent stubEntry;
+
+/// @var stubNamedEntry
+///
+/// @brief An entry with room for a name, for the tests that need one.
+static EntryBuffer stubNamedEntry;
+
+/// @var stubReaddirResult
+///
+/// @brief The entry stubReaddir returns.
+static struct dirent *stubReaddirResult;
+
+/// @var stubReaddirCalls
+///
+/// @brief The number of times the stub driver has read a directory.
+static int stubReaddirCalls;
+
+/// @var readBuffer
+///
+/// @brief The buffer readDir has the handler copy entries into.
+static EntryBuffer readBuffer;
 
 /// @var stubDirsClosed
 ///
@@ -299,7 +329,8 @@ struct dirent* stubReaddir(void *driverState, void *handle, int *errorNumber) {
   (void) driverState;
   NANO_OS_ASSERT_EQ_PTR(&stubDirHandle, handle);
   *errorNumber = 0;
-  return stubReaddirAtEnd ? NULL : &stubEntry;
+  stubReaddirCalls++;
+  return stubReaddirAtEnd ? NULL : stubReaddirResult;
 }
 
 int stubClosedir(void *driverState, void *handle) {
@@ -398,6 +429,9 @@ static void handleFixture(void) {
   stubReaddirAtEnd = false;
   memset(&stubEntry, 0, sizeof(stubEntry));
   stubEntry.d_ino = STUB_ENTRY_INO;
+  memset(&stubNamedEntry, 0, sizeof(stubNamedEntry));
+  stubReaddirResult = &stubEntry;
+  stubReaddirCalls = 0;
 }
 
 /// @fn static void runHandler(void* (*handler)(void*),
@@ -420,14 +454,14 @@ static void runHandler(void* (*handler)(void*), ProcessDescriptor *sender,
   processMessageRelease(&handleMessage);
 }
 
-/// @fn static DIR* openDir(ProcessDescriptor *sender)
+/// @fn static void* openDir(ProcessDescriptor *sender)
 ///
 /// @brief Open a directory.
 ///
 /// @param sender The process asking.
 ///
 /// @return Returns the handle.
-static DIR* openDir(ProcessDescriptor *sender) {
+static void* openDir(ProcessDescriptor *sender) {
   static char path[] = "/tmp";
   FilesystemOpendirArgs args;
   memset(&args, 0, sizeof(args));
@@ -436,26 +470,61 @@ static DIR* openDir(ProcessDescriptor *sender) {
   return args.returnValue;
 }
 
-/// @fn static int readDir(ProcessDescriptor *sender, DIR *dirp)
+/// @fn static void readDirInto(ProcessDescriptor *sender, void *dirp,
+///   size_t size, bool repeat, FilesystemReaddirArgs *args)
 ///
-/// @brief Read a directory.
+/// @brief Read a directory into readBuffer, using only part of it.
+///
+/// @param sender The process asking.
+/// @param dirp The handle.
+/// @param size The number of bytes of readBuffer to offer.
+/// @param repeat Whether to ask for the entry the last read found again.
+/// @param args The arguments to send, which hold the reply afterward.
+///
+/// @return This function returns no value.
+static void readDirInto(ProcessDescriptor *sender, void *dirp, size_t size,
+  bool repeat, FilesystemReaddirArgs *args
+) {
+  memset(args, 0, sizeof(*args));
+  args->handle = dirp;
+  args->entry = &readBuffer.entry;
+  args->entrySize = size;
+  args->repeat = repeat;
+  runHandler(testReaddir, sender, args);
+}
+
+/// @fn static int readDir(ProcessDescriptor *sender, void *dirp)
+///
+/// @brief Read a directory into all of readBuffer.
 ///
 /// @param sender The process asking.
 /// @param dirp The handle.
 ///
-/// @return Returns 0 if an entry came back, otherwise the errno value.
-static int readDir(ProcessDescriptor *sender, DIR *dirp) {
+/// @return Returns 0 if an entry came back, otherwise the errno value, or -1
+/// at the end of the directory.
+static int readDir(ProcessDescriptor *sender, void *dirp) {
   FilesystemReaddirArgs args;
-  memset(&args, 0, sizeof(args));
-  args.dirp = dirp;
-  runHandler(testReaddir, sender, &args);
-  if (args.returnValue != NULL) {
-    return 0;
+  readDirInto(sender, dirp, sizeof(readBuffer), false, &args);
+  if (args.errorNumber != 0) {
+    return args.errorNumber;
   }
-  return (args.errorNumber != 0) ? args.errorNumber : -1;
+  return (args.entrySize != 0) ? 0 : -1;
 }
 
-/// @fn static int closeDir(ProcessDescriptor *sender, DIR *dirp)
+/// @fn static void nameStubEntry(const char *name)
+///
+/// @brief Have stubReaddir return an entry with a name.
+///
+/// @param name The entry's name.
+///
+/// @return This function returns no value.
+static void nameStubEntry(const char *name) {
+  stubNamedEntry.entry.d_ino = STUB_ENTRY_INO;
+  strcpy(stubNamedEntry.entry.d_name, name);
+  stubReaddirResult = &stubNamedEntry.entry;
+}
+
+/// @fn static int closeDir(ProcessDescriptor *sender, void *dirp)
 ///
 /// @brief Close a directory.
 ///
@@ -463,10 +532,10 @@ static int readDir(ProcessDescriptor *sender, DIR *dirp) {
 /// @param dirp The handle.
 ///
 /// @return Returns what the handler returned.
-static int closeDir(ProcessDescriptor *sender, DIR *dirp) {
+static int closeDir(ProcessDescriptor *sender, void *dirp) {
   FilesystemClosedirArgs args;
   memset(&args, 0, sizeof(args));
-  args.dirp = dirp;
+  args.handle = dirp;
   runHandler(testClosedir, sender, &args);
   return args.returnValue;
 }
@@ -542,21 +611,21 @@ static void assertIoRefused(void* (*handler)(void*),
   NANO_OS_ASSERT_EQ_INT(ioCalls, stubIoCalls);
 }
 
-/// @fn static uint16_t dirGeneration(DIR *dirp)
+/// @fn static uint16_t dirGeneration(void *dirp)
 ///
 /// @brief Get the generation a handle carries.
 ///
 /// @return Returns the generation.
-static uint16_t dirGeneration(DIR *dirp) {
+static uint16_t dirGeneration(void *dirp) {
   return (uint16_t) (((uintptr_t) dirp) >> FILESYSTEM_DIR_INDEX_BITS);
 }
 
-/// @fn static uint8_t dirIndex(DIR *dirp)
+/// @fn static uint8_t dirIndex(void *dirp)
 ///
 /// @brief Get the slot index a handle carries.
 ///
 /// @return Returns the index.
-static uint8_t dirIndex(DIR *dirp) {
+static uint8_t dirIndex(void *dirp) {
   return (uint8_t) (((uintptr_t) dirp) & (FILESYSTEM_MAX_OPEN_DIRS - 1));
 }
 
@@ -963,7 +1032,7 @@ NANO_OS_KERNEL_TEST(fs_handles, fopen_takes_the_lowest_file_generation) {
 
 NANO_OS_KERNEL_TEST(fs_handles, a_directory_handle_works_for_its_owner) {
   handleFixture();
-  DIR *dirp = openDir(self());
+  void *dirp = openDir(self());
   NANO_OS_ASSERT_NOT_NULL(dirp);
   NANO_OS_ASSERT_TRUE((uintptr_t) dirp <= UINT16_MAX);
   NANO_OS_ASSERT_EQ_INT(0, readDir(self(), dirp));
@@ -973,7 +1042,7 @@ NANO_OS_KERNEL_TEST(fs_handles, a_directory_handle_works_for_its_owner) {
 
 NANO_OS_KERNEL_TEST(fs_handles, another_process_cannot_use_a_directory) {
   handleFixture();
-  DIR *dirp = openDir(self());
+  void *dirp = openDir(self());
   NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EBADF, readDir(otherProcess(), dirp));
   NANO_OS_ASSERT_EQ_INT(-1, closeDir(otherProcess(), dirp));
   NANO_OS_ASSERT_EQ_INT(0, stubDirsClosed);
@@ -982,7 +1051,7 @@ NANO_OS_KERNEL_TEST(fs_handles, another_process_cannot_use_a_directory) {
 
 NANO_OS_KERNEL_TEST(fs_handles, a_closed_handle_fails_even_after_reuse) {
   handleFixture();
-  DIR *stale = openDir(self());
+  void *stale = openDir(self());
   NANO_OS_ASSERT_EQ_INT(0, closeDir(self(), stale));
   NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EBADF, readDir(self(), stale));
   NANO_OS_ASSERT_EQ_INT(-1, closeDir(self(), stale));
@@ -993,7 +1062,7 @@ NANO_OS_KERNEL_TEST(fs_handles, a_closed_handle_fails_even_after_reuse) {
       handleState.openDirs[ii].owner = consolePid;
     }
   }
-  DIR *fresh = openDir(self());
+  void *fresh = openDir(self());
   NANO_OS_ASSERT_EQ_INT(dirIndex(stale), dirIndex(fresh));
   NANO_OS_ASSERT_TRUE(fresh != stale);
   NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EBADF, readDir(self(), stale));
@@ -1004,7 +1073,7 @@ NANO_OS_KERNEL_TEST(fs_handles,
   a_closed_slot_is_free_with_the_next_generation
 ) {
   handleFixture();
-  DIR *dirp = openDir(self());
+  void *dirp = openDir(self());
   FilesystemOpenDir *slot = &handleState.openDirs[dirIndex(dirp)];
   uint16_t generation = slot->generation;
   NANO_OS_ASSERT_EQ_INT(1, generation);
@@ -1018,10 +1087,10 @@ NANO_OS_KERNEL_TEST(fs_handles,
 
 NANO_OS_KERNEL_TEST(fs_handles, a_wrapping_generation_skips_zero) {
   handleFixture();
-  DIR *first = openDir(self());
+  void *first = openDir(self());
   FilesystemOpenDir *slot = &handleState.openDirs[dirIndex(first)];
   slot->generation = FILESYSTEM_DIR_GENERATION_MASK;
-  DIR *dirp = (DIR*) (((uintptr_t) slot->generation
+  void *dirp = (void*) (((uintptr_t) slot->generation
       << FILESYSTEM_DIR_INDEX_BITS) | dirIndex(first));
   NANO_OS_ASSERT_EQ_INT(0, closeDir(self(), dirp));
   NANO_OS_ASSERT_EQ_INT(1, slot->generation);
@@ -1030,19 +1099,19 @@ NANO_OS_KERNEL_TEST(fs_handles, a_wrapping_generation_skips_zero) {
 NANO_OS_KERNEL_TEST(fs_handles, garbage_handles_are_refused) {
   handleFixture();
   NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EBADF,
-    readDir(self(), (DIR*) (uintptr_t) 0x1234));
+    readDir(self(), (void*) (uintptr_t) 0x1234));
 
-  DIR *dirp = openDir(self());
+  void *dirp = openDir(self());
   static const uintptr_t garbage[] = {
     0, 1, 0xffff, 0x10000, (uintptr_t) -1,
   };
   for (size_t ii = 0; ii < sizeof(garbage) / sizeof(garbage[0]); ii++) {
     NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EBADF,
-      readDir(self(), (DIR*) garbage[ii]));
-    NANO_OS_ASSERT_EQ_INT(-1, closeDir(self(), (DIR*) garbage[ii]));
+      readDir(self(), (void*) garbage[ii]));
+    NANO_OS_ASSERT_EQ_INT(-1, closeDir(self(), (void*) garbage[ii]));
   }
   NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EBADF, readDir(self(),
-    (DIR*) (((uintptr_t) dirp) + (((uintptr_t) 1) << 20))));
+    (void*) (((uintptr_t) dirp) + (((uintptr_t) 1) << 20))));
   NANO_OS_ASSERT_EQ_INT(0, readDir(self(), dirp));
 }
 
@@ -1050,7 +1119,7 @@ NANO_OS_KERNEL_TEST(fs_handles, an_index_past_the_table_is_refused) {
   handleFixture();
   NANO_OS_ASSERT_TRUE(numSlots() > 3);
   NANO_OS_ASSERT_TRUE(consolePid <= 3);
-  DIR *fourth = NULL;
+  void *fourth = NULL;
   for (int ii = 0; ii < 4; ii++) {
     fourth = openDir(otherProcess());
   }
@@ -1089,15 +1158,15 @@ NANO_OS_KERNEL_TEST(fs_handles, opendir_takes_the_lowest_generation) {
   handleState.openDirs[1].owner = consolePid;
   handleState.openDirs[1].generation = 2;
 
-  DIR *dirp = openDir(self());
+  void *dirp = openDir(self());
   NANO_OS_ASSERT_EQ_INT(3, dirIndex(dirp));
   NANO_OS_ASSERT_EQ_INT(7, dirGeneration(dirp));
 }
 
 NANO_OS_KERNEL_TEST(fs_handles, a_sender_outside_the_table_is_refused) {
   handleFixture();
-  DIR *open = openDir(self());
-  DIR *closed = openDir(self());
+  void *open = openDir(self());
+  void *closed = openDir(self());
   NANO_OS_ASSERT_EQ_INT(0, closeDir(self(), closed));
 
   // A descriptor outside allProcesses that claims the owner's pid, and one
@@ -1110,7 +1179,7 @@ NANO_OS_KERNEL_TEST(fs_handles, a_sender_outside_the_table_is_refused) {
 
   // A handle carrying the closed slot's current generation, which a lookup
   // that treated the sender as pid 0 would match against the slot's owner.
-  DIR *current = (DIR*) (((uintptr_t) closed)
+  void *current = (void*) (((uintptr_t) closed)
     + (((uintptr_t) 1) << FILESYSTEM_DIR_INDEX_BITS));
 
   for (int ii = 0; ii < 3; ii++) {
@@ -1161,8 +1230,8 @@ static void closeProcess(ProcessDescriptor *sender, ProcessId pid) {
 
 NANO_OS_KERNEL_TEST(fs_handles, closing_a_process_frees_only_what_it_owned) {
   handleFixture();
-  DIR *mine = openDir(self());
-  DIR *theirs = openDir(otherProcess());
+  void *mine = openDir(self());
+  void *theirs = openDir(otherProcess());
   NanoOsFile *myFile = openFile(self(), "r");
   NanoOsFile *theirFile = openFile(otherProcess(), "r");
   (void) myFile;
@@ -1188,7 +1257,7 @@ NANO_OS_KERNEL_TEST(fs_handles,
   the_old_handle_fails_for_a_process_given_the_pid
 ) {
   handleFixture();
-  DIR *dirp = openDir(otherProcess());
+  void *dirp = openDir(otherProcess());
   closeProcess(&allProcesses[schedulerPid - 1], otherProcess()->processId);
 
   // The same pid, so the same descriptor, asks with the dead process's handle.
@@ -1198,7 +1267,7 @@ NANO_OS_KERNEL_TEST(fs_handles,
 NANO_OS_KERNEL_TEST(fs_handles, only_a_kernel_process_can_close_a_process) {
   handleFixture();
   NanoOsFile *file = openFile(otherProcess(), "r");
-  DIR *dirp = openDir(otherProcess());
+  void *dirp = openDir(otherProcess());
 
   PrivilegeLevel privilegeLevel = self()->privilegeLevel;
   self()->privilegeLevel = PRIVILEGE_LEVEL_SUPERVISOR;
@@ -1213,7 +1282,7 @@ NANO_OS_KERNEL_TEST(fs_handles, only_a_kernel_process_can_close_a_process) {
 
 NANO_OS_KERNEL_TEST(fs_handles, closing_pid_zero_touches_no_free_slot) {
   handleFixture();
-  DIR *dirp = openDir(self());
+  void *dirp = openDir(self());
   NANO_OS_ASSERT_EQ_INT(0, closeDir(self(), dirp));
   FilesystemOpenDir *slot = &handleState.openDirs[dirIndex(dirp)];
   uint16_t generation = slot->generation;
@@ -1279,10 +1348,10 @@ static volatile int fakeClosedCount;
 /// @brief The errno value the fake filesystem process reports for I/O.
 static volatile int fakeIoError;
 
-/// @var fakeDirstatDirp
+/// @var fakeDirstatHandle
 ///
 /// @brief The handle in the last dirstat the fake filesystem received.
-static DIR *fakeDirstatDirp;
+static void *fakeDirstatHandle;
 
 /// @def FAKE_DIRSTAT_SIZE
 ///
@@ -1293,6 +1362,63 @@ static DIR *fakeDirstatDirp;
 ///
 /// @brief The number of dirstats the fake filesystem has received.
 static volatile int fakeDirstatCount;
+
+/// @def FAKE_DIR_HANDLE
+///
+/// @brief The handle the fake filesystem gives the first directory it opens.
+/// Each later one gets the next value.
+#define FAKE_DIR_HANDLE 0x10
+
+/// @var fakeDirsOpened
+///
+/// @brief The number of directories the fake filesystem has opened.
+static volatile int fakeDirsOpened;
+
+/// @var fakeDirNames
+///
+/// @brief The name the fake filesystem gives every entry of the first and
+/// second directories it opens.
+static const char *fakeDirNames[2];
+
+/// @var fakeReaddirCount
+///
+/// @brief The number of readdirs the fake filesystem has received.
+static volatile int fakeReaddirCount;
+
+/// @var fakeReaddirRepeats
+///
+/// @brief The number of those readdirs that asked for a repeat.
+static volatile int fakeReaddirRepeats;
+
+/// @var fakeClosedirHandle
+///
+/// @brief The handle in the last closedir the fake filesystem received.
+static void *fakeClosedirHandle;
+
+/// @fn static void fakeReaddir(FilesystemReaddirArgs *readdirArgs)
+///
+/// @brief Answer a readdir the way the real handler does, with an entry named
+/// for the directory.
+///
+/// @param readdirArgs The readdir's arguments.
+///
+/// @return This function returns no value.
+static void fakeReaddir(FilesystemReaddirArgs *readdirArgs) {
+  fakeReaddirCount++;
+  fakeReaddirRepeats += readdirArgs->repeat;
+  uintptr_t index = ((uintptr_t) readdirArgs->handle) - FAKE_DIR_HANDLE;
+  const char *name = fakeDirNames[index];
+  size_t needed = offsetof(struct dirent, d_name) + strlen(name) + 1;
+  readdirArgs->errorNumber = 0;
+  if (needed > readdirArgs->entrySize) {
+    readdirArgs->errorNumber = FILESYSTEM_ERANGE;
+  } else {
+    memset(readdirArgs->entry, 0, needed);
+    strcpy(readdirArgs->entry->d_name, name);
+    readdirArgs->entry->priv = readdirArgs->handle;
+  }
+  readdirArgs->entrySize = needed;
+}
 
 /// @fn static void* fakeFilesystem(void *args)
 ///
@@ -1343,11 +1469,20 @@ static void* fakeFilesystem(void *args) {
 
       case FILESYSTEM_OPEN_DIR:
         ((FilesystemOpendirArgs*) data)->returnValue
-          = (DIR*) (uintptr_t) 0x10;
+          = (void*) (uintptr_t) (FAKE_DIR_HANDLE + fakeDirsOpened);
+        fakeDirsOpened++;
+        break;
+
+      case FILESYSTEM_READ_DIR:
+        fakeReaddir((FilesystemReaddirArgs*) data);
+        break;
+
+      case FILESYSTEM_CLOSE_DIR:
+        fakeClosedirHandle = ((FilesystemClosedirArgs*) data)->handle;
         break;
 
       case FILESYSTEM_DIRSTAT:
-        fakeDirstatDirp = ((FilesystemDirstatArgs*) data)->dirp;
+        fakeDirstatHandle = ((FilesystemDirstatArgs*) data)->handle;
         ((FilesystemDirstatArgs*) data)->statbuf->st_size = FAKE_DIRSTAT_SIZE;
         ((FilesystemDirstatArgs*) data)->returnValue
           = (fakeIoError != 0) ? -1 : 0;
@@ -1385,7 +1520,13 @@ static void useFakeFilesystem(void) {
   fakeClosedPid = 0;
   fakeClosedCount = 0;
   fakeDirstatCount = 0;
-  fakeDirstatDirp = NULL;
+  fakeDirstatHandle = NULL;
+  fakeDirsOpened = 0;
+  fakeDirNames[0] = "first";
+  fakeDirNames[1] = "second";
+  fakeReaddirCount = 0;
+  fakeReaddirRepeats = 0;
+  fakeClosedirHandle = NULL;
   fakeIoError = 0;
   fakeFilesOpened = 0;
   fakeFilesClosed = 0;
@@ -1753,21 +1894,21 @@ static const DIR_CAPABILITIES_STATIC(NO_STAT_ON_TMP_ENTRIES) noStatOnTmp
 static const DIR_CAPABILITIES_STATIC(STAT_ON_ETC_ENTRIES) statOnEtc
   = DIR_CAPABILITIES_STATIC_INITIALIZER(2, STAT_ON_ETC_ENTRIES);
 
-/// @fn static DIR* openDirWithSet(const void *set)
+/// @fn static void* openDirWithSet(const void *set)
 ///
 /// @brief Open a directory as the running process, holding a given set.
 ///
 /// @param set The set.
 ///
 /// @return Returns the handle.
-static DIR* openDirWithSet(const void *set) {
+static void* openDirWithSet(const void *set) {
   self()->dirCapabilities = (DirCapabilities*) set;
-  DIR *dirp = openDir(self());
+  void *dirp = openDir(self());
   NANO_OS_ASSERT_NOT_NULL(dirp);
   return dirp;
 }
 
-/// @fn static int dirStat(ProcessDescriptor *sender, DIR *dirp,
+/// @fn static int dirStat(ProcessDescriptor *sender, void *dirp,
 ///   struct stat *statbuf)
 ///
 /// @brief Stat the most recent entry of a directory.
@@ -1777,12 +1918,12 @@ static DIR* openDirWithSet(const void *set) {
 /// @param statbuf Where to store the result.
 ///
 /// @return Returns 0 on success, otherwise the errno value.
-static int dirStat(ProcessDescriptor *sender, DIR *dirp,
+static int dirStat(ProcessDescriptor *sender, void *dirp,
   struct stat *statbuf
 ) {
   FilesystemDirstatArgs args;
   memset(&args, 0, sizeof(args));
-  args.dirp = dirp;
+  args.handle = dirp;
   args.statbuf = statbuf;
   runHandler(testDirstat, sender, &args);
   if (args.returnValue == 0) {
@@ -1794,15 +1935,96 @@ static int dirStat(ProcessDescriptor *sender, DIR *dirp,
 
 NANO_OS_KERNEL_TEST(fs_handles, readdir_stamps_the_entry_with_its_handle) {
   handleFixture();
-  DIR *dirp = openDirWithSet(&statOnTmp);
+  void *dirp = openDirWithSet(&statOnTmp);
   NANO_OS_ASSERT_EQ_INT(0, readDir(self(), dirp));
-  NANO_OS_ASSERT_EQ_PTR(dirp, stubEntry.priv);
+  NANO_OS_ASSERT_EQ_PTR(dirp, readBuffer.entry.priv);
+}
+
+NANO_OS_KERNEL_TEST(fs_handles, readdir_copies_the_entry_into_the_buffer) {
+  handleFixture();
+  nameStubEntry("file.txt");
+  void *dirp = openDirWithSet(&statOnTmp);
+  FilesystemReaddirArgs args;
+  readDirInto(self(), dirp, sizeof(readBuffer), false, &args);
+  NANO_OS_ASSERT_EQ_INT(0, args.errorNumber);
+  NANO_OS_ASSERT_EQ_INT(offsetof(struct dirent, d_name) + 9, args.entrySize);
+  NANO_OS_ASSERT_STR_EQ("file.txt", readBuffer.entry.d_name);
+  NANO_OS_ASSERT_TRUE(readBuffer.entry.d_ino == STUB_ENTRY_INO);
+}
+
+NANO_OS_KERNEL_TEST(fs_handles, readdir_copies_a_maximum_length_name) {
+  handleFixture();
+  char name[256];
+  memset(name, 'n', 255);
+  name[255] = '\0';
+  nameStubEntry(name);
+  void *dirp = openDirWithSet(&statOnTmp);
+  FilesystemReaddirArgs args;
+  readDirInto(self(), dirp, sizeof(readBuffer), false, &args);
+  NANO_OS_ASSERT_EQ_INT(0, args.errorNumber);
+  NANO_OS_ASSERT_EQ_INT(offsetof(struct dirent, d_name) + 256,
+    args.entrySize);
+  NANO_OS_ASSERT_STR_EQ(name, readBuffer.entry.d_name);
+}
+
+NANO_OS_KERNEL_TEST(fs_handles, readdir_reports_the_size_an_entry_needs) {
+  handleFixture();
+  nameStubEntry("file.txt");
+  void *dirp = openDirWithSet(&statOnTmp);
+  memset(&readBuffer, 'x', sizeof(readBuffer));
+  size_t needed = offsetof(struct dirent, d_name) + 9;
+  FilesystemReaddirArgs args;
+  readDirInto(self(), dirp, needed - 1, false, &args);
+  NANO_OS_ASSERT_EQ_INT(FILESYSTEM_ERANGE, args.errorNumber);
+  NANO_OS_ASSERT_EQ_INT(needed, args.entrySize);
+  NANO_OS_ASSERT_EQ_INT('x', readBuffer.bytes[0]);
+}
+
+NANO_OS_KERNEL_TEST(fs_handles, a_repeat_copies_the_entry_without_reading_on) {
+  handleFixture();
+  nameStubEntry("file.txt");
+  void *dirp = openDirWithSet(&statOnTmp);
+  FilesystemReaddirArgs args;
+  readDirInto(self(), dirp, 1, false, &args);
+  NANO_OS_ASSERT_EQ_INT(FILESYSTEM_ERANGE, args.errorNumber);
+  NANO_OS_ASSERT_EQ_INT(1, stubReaddirCalls);
+
+  readDirInto(self(), dirp, sizeof(readBuffer), true, &args);
+  NANO_OS_ASSERT_EQ_INT(0, args.errorNumber);
+  NANO_OS_ASSERT_STR_EQ("file.txt", readBuffer.entry.d_name);
+  NANO_OS_ASSERT_EQ_PTR(dirp, readBuffer.entry.priv);
+  NANO_OS_ASSERT_EQ_INT(1, stubReaddirCalls);
+
+  NANO_OS_ASSERT_EQ_INT(0, readDir(self(), dirp));
+  NANO_OS_ASSERT_EQ_INT(2, stubReaddirCalls);
+}
+
+NANO_OS_KERNEL_TEST(fs_handles, a_repeat_at_the_end_reports_the_end) {
+  handleFixture();
+  void *dirp = openDirWithSet(&statOnTmp);
+  stubReaddirAtEnd = true;
+  NANO_OS_ASSERT_EQ_INT(-1, readDir(self(), dirp));
+  FilesystemReaddirArgs args;
+  readDirInto(self(), dirp, sizeof(readBuffer), true, &args);
+  NANO_OS_ASSERT_EQ_INT(0, args.errorNumber);
+  NANO_OS_ASSERT_EQ_INT(0, args.entrySize);
+}
+
+NANO_OS_KERNEL_TEST(fs_handles, readdir_without_a_buffer_is_erange) {
+  handleFixture();
+  void *dirp = openDirWithSet(&statOnTmp);
+  FilesystemReaddirArgs args;
+  memset(&args, 0, sizeof(args));
+  args.handle = dirp;
+  args.entrySize = sizeof(readBuffer);
+  runHandler(testReaddir, self(), &args);
+  NANO_OS_ASSERT_EQ_INT(FILESYSTEM_ERANGE, args.errorNumber);
 }
 
 NANO_OS_KERNEL_TEST(fs_handles, dirstat_reports_the_most_recent_entry) {
   handleFixture();
   struct stat st;
-  DIR *dirp = openDirWithSet(&statOnTmp);
+  void *dirp = openDirWithSet(&statOnTmp);
   NANO_OS_ASSERT_EQ_INT(0, readDir(self(), dirp));
   NANO_OS_ASSERT_EQ_INT(0, dirStat(self(), dirp, &st));
   NANO_OS_ASSERT_EQ_INT(1, stubIstatCalls);
@@ -1817,7 +2039,7 @@ NANO_OS_KERNEL_TEST(fs_handles, dirstat_reports_the_most_recent_entry) {
 NANO_OS_KERNEL_TEST(fs_handles, dirstat_fixes_up_unknown_ownership) {
   handleFixture();
   struct stat st;
-  DIR *dirp = openDirWithSet(&statOnTmp);
+  void *dirp = openDirWithSet(&statOnTmp);
   NANO_OS_ASSERT_EQ_INT(0, readDir(self(), dirp));
   NANO_OS_ASSERT_EQ_INT(0, dirStat(self(), dirp, &st));
   NANO_OS_ASSERT_TRUE(st.st_uid != FILESYSTEM_UID_UNKNOWN);
@@ -1827,17 +2049,18 @@ NANO_OS_KERNEL_TEST(fs_handles, dirstat_fixes_up_unknown_ownership) {
 NANO_OS_KERNEL_TEST(fs_handles, dirstat_ignores_a_changed_d_ino) {
   handleFixture();
   struct stat st;
-  DIR *dirp = openDirWithSet(&statOnTmp);
+  void *dirp = openDirWithSet(&statOnTmp);
   NANO_OS_ASSERT_EQ_INT(0, readDir(self(), dirp));
-  stubEntry.d_ino = 99;
+  readBuffer.entry.d_ino = 99;
   NANO_OS_ASSERT_EQ_INT(0, dirStat(self(), dirp, &st));
   NANO_OS_ASSERT_TRUE(stubIstatIno == STUB_ENTRY_INO);
+  NANO_OS_ASSERT_TRUE(stubEntry.d_ino == STUB_ENTRY_INO);
 }
 
 NANO_OS_KERNEL_TEST(fs_handles, dirstat_needs_stat_when_the_directory_opens) {
   handleFixture();
   struct stat st;
-  DIR *dirp = openDirWithSet(&noStatOnTmp);
+  void *dirp = openDirWithSet(&noStatOnTmp);
   NANO_OS_ASSERT_EQ_INT(0, readDir(self(), dirp));
   NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EACCES, dirStat(self(), dirp, &st));
   NANO_OS_ASSERT_EQ_INT(0, stubIstatCalls);
@@ -1850,7 +2073,7 @@ NANO_OS_KERNEL_TEST(fs_handles, dirstat_needs_stat_when_the_directory_opens) {
 NANO_OS_KERNEL_TEST(fs_handles, dirstat_keeps_stat_after_the_set_narrows) {
   handleFixture();
   struct stat st;
-  DIR *dirp = openDirWithSet(&statOnTmp);
+  void *dirp = openDirWithSet(&statOnTmp);
   NANO_OS_ASSERT_EQ_INT(0, readDir(self(), dirp));
   self()->dirCapabilities = (DirCapabilities*) &noStatOnTmp;
   NANO_OS_ASSERT_EQ_INT(0, dirStat(self(), dirp, &st));
@@ -1859,12 +2082,12 @@ NANO_OS_KERNEL_TEST(fs_handles, dirstat_keeps_stat_after_the_set_narrows) {
 NANO_OS_KERNEL_TEST(fs_handles, stat_on_another_directory_does_not_count) {
   handleFixture();
   struct stat st;
-  DIR *dirp = openDirWithSet(&statOnEtc);
+  void *dirp = openDirWithSet(&statOnEtc);
   NANO_OS_ASSERT_EQ_INT(0, readDir(self(), dirp));
   NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EACCES, dirStat(self(), dirp, &st));
 }
 
-/// @fn static DIR* openPathWithSet(const void *set, char *path)
+/// @fn static void* openPathWithSet(const void *set, char *path)
 ///
 /// @brief Open a given directory as the running process, holding a given set.
 ///
@@ -1872,7 +2095,7 @@ NANO_OS_KERNEL_TEST(fs_handles, stat_on_another_directory_does_not_count) {
 /// @param path The directory.
 ///
 /// @return Returns the handle.
-static DIR* openPathWithSet(const void *set, char *path) {
+static void* openPathWithSet(const void *set, char *path) {
   self()->dirCapabilities = (DirCapabilities*) set;
   FilesystemOpendirArgs args;
   memset(&args, 0, sizeof(args));
@@ -1886,7 +2109,7 @@ NANO_OS_KERNEL_TEST(fs_handles, stat_is_checked_on_the_directory_opened) {
   handleFixture();
   struct stat st;
   static char etc[] = "/etc";
-  DIR *dirp = openPathWithSet(&statOnEtc, etc);
+  void *dirp = openPathWithSet(&statOnEtc, etc);
   NANO_OS_ASSERT_EQ_INT(0, readDir(self(), dirp));
   NANO_OS_ASSERT_EQ_INT(0, dirStat(self(), dirp, &st));
   NANO_OS_ASSERT_EQ_INT(0, closeDir(self(), dirp));
@@ -1900,7 +2123,7 @@ NANO_OS_KERNEL_TEST(fs_handles, stat_is_checked_on_the_canonical_path) {
   handleFixture();
   struct stat st;
   static char escape[] = "/etc/../tmp";
-  DIR *dirp = openPathWithSet(&statOnEtc, escape);
+  void *dirp = openPathWithSet(&statOnEtc, escape);
   NANO_OS_ASSERT_EQ_INT(0, readDir(self(), dirp));
   NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EACCES, dirStat(self(), dirp, &st));
   NANO_OS_ASSERT_EQ_INT(0, closeDir(self(), dirp));
@@ -1920,7 +2143,7 @@ NANO_OS_KERNEL_TEST(fs_handles, a_process_with_no_set_cannot_open_a_directory) {
 NANO_OS_KERNEL_TEST(fs_handles, dirstat_after_closedir_is_a_bad_handle) {
   handleFixture();
   struct stat st;
-  DIR *dirp = openDirWithSet(&statOnTmp);
+  void *dirp = openDirWithSet(&statOnTmp);
   NANO_OS_ASSERT_EQ_INT(0, readDir(self(), dirp));
   NANO_OS_ASSERT_EQ_INT(0, closeDir(self(), dirp));
   NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EBADF, dirStat(self(), dirp, &st));
@@ -1930,7 +2153,7 @@ NANO_OS_KERNEL_TEST(fs_handles, dirstat_after_closedir_is_a_bad_handle) {
 NANO_OS_KERNEL_TEST(fs_handles, another_process_cannot_dirstat) {
   handleFixture();
   struct stat st;
-  DIR *dirp = openDirWithSet(&statOnTmp);
+  void *dirp = openDirWithSet(&statOnTmp);
   NANO_OS_ASSERT_EQ_INT(0, readDir(self(), dirp));
   NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EBADF,
     dirStat(otherProcess(), dirp, &st));
@@ -1942,14 +2165,14 @@ NANO_OS_KERNEL_TEST(fs_handles, a_garbage_handle_cannot_dirstat) {
   struct stat st;
   (void) openDirWithSet(&statOnTmp);
   NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EBADF,
-    dirStat(self(), (DIR*) (uintptr_t) 0xdead, &st));
+    dirStat(self(), (void*) (uintptr_t) 0xdead, &st));
   NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EBADF, dirStat(self(), NULL, &st));
 }
 
 NANO_OS_KERNEL_TEST(fs_handles, dirstat_before_any_readdir_is_a_bad_handle) {
   handleFixture();
   struct stat st;
-  DIR *dirp = openDirWithSet(&statOnTmp);
+  void *dirp = openDirWithSet(&statOnTmp);
   NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EBADF, dirStat(self(), dirp, &st));
   NANO_OS_ASSERT_EQ_INT(0, stubIstatCalls);
 }
@@ -1957,7 +2180,7 @@ NANO_OS_KERNEL_TEST(fs_handles, dirstat_before_any_readdir_is_a_bad_handle) {
 NANO_OS_KERNEL_TEST(fs_handles, dirstat_at_the_end_of_a_directory_is_refused) {
   handleFixture();
   struct stat st;
-  DIR *dirp = openDirWithSet(&statOnTmp);
+  void *dirp = openDirWithSet(&statOnTmp);
   NANO_OS_ASSERT_EQ_INT(0, readDir(self(), dirp));
   stubReaddirAtEnd = true;
   NANO_OS_ASSERT_EQ_INT(-1, readDir(self(), dirp));
@@ -1968,19 +2191,19 @@ NANO_OS_KERNEL_TEST(fs_handles, dirstat_at_the_end_of_a_directory_is_refused) {
 NANO_OS_KERNEL_TEST(fs_handles, a_reopened_slot_starts_clean) {
   handleFixture();
   struct stat st;
-  DIR *first = openDirWithSet(&statOnTmp);
+  void *first = openDirWithSet(&statOnTmp);
   NANO_OS_ASSERT_EQ_INT(0, readDir(self(), first));
   uint8_t index = dirIndex(first);
   NANO_OS_ASSERT_EQ_INT(0, closeDir(self(), first));
-  NANO_OS_ASSERT_TRUE(handleState.openDirs[index].ino == 0);
+  NANO_OS_ASSERT_NULL(handleState.openDirs[index].entry);
   NANO_OS_ASSERT_EQ_INT(0, handleState.openDirs[index].flags);
 
-  DIR *second = openDirWithSet(&statOnTmp);
-  NANO_OS_ASSERT_EQ_INT(0, handleState.openDirs[dirIndex(second)].ino);
+  void *second = openDirWithSet(&statOnTmp);
+  NANO_OS_ASSERT_NULL(handleState.openDirs[dirIndex(second)].entry);
   NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EBADF, dirStat(self(), second, &st));
   NANO_OS_ASSERT_EQ_INT(0, closeDir(self(), second));
 
-  DIR *third = openDirWithSet(&noStatOnTmp);
+  void *third = openDirWithSet(&noStatOnTmp);
   NANO_OS_ASSERT_EQ_INT(0, readDir(self(), third));
   NANO_OS_ASSERT_EQ_INT(FILESYSTEM_EACCES, dirStat(self(), third, &st));
 }
@@ -1988,10 +2211,52 @@ NANO_OS_KERNEL_TEST(fs_handles, a_reopened_slot_starts_clean) {
 NANO_OS_KERNEL_TEST(fs_handles, dirstat_without_a_driver_is_enodev) {
   handleFixture();
   struct stat st;
-  DIR *dirp = openDirWithSet(&statOnTmp);
+  void *dirp = openDirWithSet(&statOnTmp);
   NANO_OS_ASSERT_EQ_INT(0, readDir(self(), dirp));
   handleState.driverState = NULL;
   NANO_OS_ASSERT_EQ_INT(NO_DRIVER_ERRNO, dirStat(self(), dirp, &st));
+}
+
+NANO_OS_KERNEL_TEST(fs_handles, readdir_grows_its_buffer_for_a_long_name) {
+  useFakeFilesystem();
+  static const char longName[] = "a-name-long-enough-to-need-four-lfns.txt";
+  fakeDirNames[0] = longName;
+  DIR *dirp = filesystemOpendir("/tmp");
+  NANO_OS_ASSERT_NOT_NULL(dirp);
+
+  struct dirent *entry = filesystemReaddir(dirp);
+  NANO_OS_ASSERT_NOT_NULL(entry);
+  NANO_OS_ASSERT_STR_EQ(longName, entry->d_name);
+  NANO_OS_ASSERT_EQ_PTR((void*) (uintptr_t) FAKE_DIR_HANDLE, entry->priv);
+  NANO_OS_ASSERT_EQ_INT(2, fakeReaddirCount);
+  NANO_OS_ASSERT_EQ_INT(1, fakeReaddirRepeats);
+
+  NANO_OS_ASSERT_NOT_NULL(filesystemReaddir(dirp));
+  NANO_OS_ASSERT_EQ_INT(3, fakeReaddirCount);
+  NANO_OS_ASSERT_EQ_INT(1, fakeReaddirRepeats);
+  NANO_OS_ASSERT_EQ_INT(0, filesystemClosedir(dirp));
+}
+
+NANO_OS_KERNEL_TEST(fs_handles, interleaved_directories_keep_their_entries) {
+  useFakeFilesystem();
+  DIR *first = filesystemOpendir("/tmp");
+  DIR *second = filesystemOpendir("/usr");
+  NANO_OS_ASSERT_NOT_NULL(first);
+  NANO_OS_ASSERT_NOT_NULL(second);
+
+  struct dirent *firstEntry = filesystemReaddir(first);
+  struct dirent *secondEntry = filesystemReaddir(second);
+  NANO_OS_ASSERT_NOT_NULL(firstEntry);
+  NANO_OS_ASSERT_NOT_NULL(secondEntry);
+  NANO_OS_ASSERT_STR_EQ("first", firstEntry->d_name);
+  NANO_OS_ASSERT_STR_EQ("second", secondEntry->d_name);
+
+  NANO_OS_ASSERT_EQ_INT(0, filesystemClosedir(second));
+  NANO_OS_ASSERT_EQ_PTR((void*) (uintptr_t) (FAKE_DIR_HANDLE + 1),
+    fakeClosedirHandle);
+  NANO_OS_ASSERT_EQ_INT(0, filesystemClosedir(first));
+  NANO_OS_ASSERT_EQ_PTR((void*) (uintptr_t) FAKE_DIR_HANDLE,
+    fakeClosedirHandle);
 }
 
 NANO_OS_KERNEL_TEST(fs_handles, the_dirstat_call_refuses_null_pointers) {
@@ -2019,7 +2284,7 @@ NANO_OS_KERNEL_TEST(fs_handles, the_dirstat_call_sends_the_entrys_handle) {
 
   NANO_OS_ASSERT_EQ_INT(0, filesystemDirstat(&entry, &st));
   NANO_OS_ASSERT_EQ_INT(1, fakeDirstatCount);
-  NANO_OS_ASSERT_EQ_PTR(entry.priv, fakeDirstatDirp);
+  NANO_OS_ASSERT_EQ_PTR(entry.priv, fakeDirstatHandle);
   NANO_OS_ASSERT_EQ_INT(FAKE_DIRSTAT_SIZE, (long long) st.st_size);
 }
 

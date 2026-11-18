@@ -105,6 +105,18 @@ class SkipTest(Exception):
 # prints.
 MESSAGE_ARGS_MARKER = "MESSAGE_ARGS: "
 
+# The prefix of every Session's temporary directory.
+SESSION_DIR_PREFIX = "nanoe2e-"
+
+# Every Session not yet closed in this process.
+_open_sessions = set()
+
+
+def kill_open_sessions():
+    """Kill the simulator of every Session not yet closed in this process."""
+    for s in list(_open_sessions):
+        s.kill()
+
 
 class Transcript:
     """Everything a session's simulators print, copied to stdout with -v."""
@@ -141,11 +153,13 @@ class Session:
         self.sim_bin = sim_bin
         self.env = env
         self.transcript = Transcript()
-        self.tmp = tempfile.mkdtemp(prefix="nanoe2e-")
+        self.tmp = tempfile.mkdtemp(prefix=SESSION_DIR_PREFIX)
         img_copy = os.path.join(self.tmp, "disk.img")
         subprocess.run(["cp", "--sparse=always", image, img_copy], check=True)
         self.img_copy = img_copy
         self.vdp = None
+        self.child = None
+        _open_sessions.add(self)
         self.spawn([img_copy])
 
     def spawn(self, args):
@@ -219,7 +233,13 @@ class Session:
                 c.expect(pexpect.EOF, timeout=8)
         except Exception:
             pass
-        if c.isalive():
+        self.kill()
+
+    def kill(self):
+        """Kill the simulator without shutting it down and remove its files."""
+        _open_sessions.discard(self)
+        c = self.child
+        if c is not None and c.isalive():
             c.terminate(force=True)
         if self.vdp is not None:
             self.vdp.close()

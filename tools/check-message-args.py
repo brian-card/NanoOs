@@ -75,6 +75,7 @@ SHARED_MEMBERS = {
     "FilesystemOpendirArgs": {"pathname"},
     "FilesystemLstatArgs": {"pathname", "statbuf"},
     "FilesystemDirstatArgs": {"statbuf"},
+    "FilesystemReaddirArgs": {"entry"},
     "Fat32FormatArgs": {"volumeLabel"},
     "FilesystemIoCommandArgs": {"buffer"},
     "GetFileBlockMetadataArgs": {"metadata"},
@@ -82,11 +83,16 @@ SHARED_MEMBERS = {
     "SchedulerReplaceOverlayArgs": {"overlay", "overlayId"},
     "SchedulerDirCapabilityArgs": {"name"},
     "SchedulerGetDirCapabilitiesArgs": {"buffer"},
+    "SchedulerGetHostnameArgs": {"name"},
 }
 
 SEND_CALL = re.compile(r"\b(%s)\s*\(" % "|".join(PAYLOAD_INDEX))
 ADDRESS_OF_STORAGE = re.compile(r"^&\s*\(?\s*[A-Za-z_]\w*(\s*\.\s*\w+)*\s*\)?$")
 ALLOCATE = re.compile(r"\bMESSAGE_ARGS_ALLOCATE\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)")
+# The parameter list just before a function body, and each pointer parameter
+# in it, so that arguments a helper is handed are checked like its own.
+PARAMETER_LIST = re.compile(r"\(([^()]*)\)\s*$")
+POINTER_PARAMETER = re.compile(r"\b(\w+)\s*\*\s*(\w+)\s*(?=[,)]|$)")
 
 
 def strip(text):
@@ -195,6 +201,13 @@ def check(path, relative):
             for member in sorted(SHARED_MEMBERS.get(m.group(1), ())):
                 problems.extend(check_member(
                     relative, text, start, body, name, member))
+        parameters = PARAMETER_LIST.search(text, 0, start)
+        if parameters is None:
+            continue
+        for m in POINTER_PARAMETER.finditer(parameters.group(1)):
+            for member in sorted(SHARED_MEMBERS.get(m.group(1), ())):
+                problems.extend(check_member(
+                    relative, text, start, body, m.group(2), member))
     return problems
 
 
