@@ -123,7 +123,7 @@ void* Opendir(void *args) {
   FilesystemOpendirArgs *opendirArgs
     = (FilesystemOpendirArgs*) processMessageData(processMessage);
 
-  DIR *dirp = NULL;
+  void *handle = NULL;
   int errorNumber = NO_DRIVER_ERRNO;
   char *pathname = filesystemAbsolutePath(
     filesystemState, processMessage, opendirArgs->pathname);
@@ -148,7 +148,7 @@ void* Opendir(void *args) {
       slot->owner = sender;
       slot->flags = filesystemPathAllowed(filesystemState, processMessage,
         pathname, true, DIRCAP_STAT) ? FILESYSTEM_DIR_CAN_STAT : 0;
-      dirp = (DIR*) ((((uintptr_t) slot->generation)
+      handle = (void*) ((((uintptr_t) slot->generation)
           << FILESYSTEM_DIR_INDEX_BITS)
         | (uintptr_t) (slot - filesystemState->openDirs));
     }
@@ -157,7 +157,7 @@ void* Opendir(void *args) {
     free(pathname);
   }
 
-  opendirArgs->returnValue = dirp;
+  opendirArgs->returnValue = handle;
   opendirArgs->errorNumber = errorNumber;
   processMessageSetDone(processMessage);
   return filesystemState;

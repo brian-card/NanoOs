@@ -65,8 +65,8 @@ void* Closedir(void *args) {
     = (FilesystemClosedirArgs*) processMessageData(processMessage);
 
   int returnValue = 0;
-  FilesystemOpenDir *slot
-    = filesystemDirLookup(filesystemState, processMessage, closedirArgs->dirp);
+  FilesystemOpenDir *slot = filesystemDirLookup(
+    filesystemState, processMessage, closedirArgs->handle);
   if (slot == NULL) {
     returnValue = -1;
   } else if (filesystemState->driverState != NULL) {

@@ -34,6 +34,7 @@
 /// runtime one.
 
 // Standard C includes
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -65,16 +66,18 @@ struct dirent* driverReaddir(
 
 /// @fn void* Readdir(void *args)
 ///
-/// @brief Command handler for a readdir call.
+/// @brief Command handler for a readdir call.  It copies the next entry, or
+/// with repeat the one the last call found, into the caller's buffer.
 ///
 /// @param args A pointer to a FilesystemState, cast to a void*.  The args
 ///   member variable is a pointer to a ProcessMessage.
 ///
-/// @return Sets the returnValue member of the provided FilesystemReaddirArgs
-/// to a pointer to the next directory entry, with errorNumber set to 0; or
-/// to NULL at the end of the directory (errorNumber 0 -- not an error) or on
-/// failure (errorNumber set to the errno value the caller should see).  This
-/// function always returns the filesystemState pointer provided as args.
+/// @return Sets the entrySize member of the provided FilesystemReaddirArgs
+/// to the size of the entry, or 0 at the end of the directory, and
+/// errorNumber to 0, to ERANGE if the entry is larger than the buffer (the
+/// directory position is kept, so a repeat can fetch it), or to the errno
+/// value the caller should see.  This function always returns the
+/// filesystemState pointer provided as args.
 void* Readdir(void *args) {
   FilesystemState *filesystemState = (FilesystemState*) args;
   ProcessMessage *processMessage = (ProcessMessage*) filesystemState->args;
@@ -84,22 +87,30 @@ void* Readdir(void *args) {
   struct dirent *entry = NULL;
   int errorNumber = NO_DRIVER_ERRNO;
   FilesystemOpenDir *slot
-    = filesystemDirLookup(filesystemState, processMessage, readdirArgs->dirp);
+    = filesystemDirLookup(filesystemState, processMessage, readdirArgs->handle);
   if (slot == NULL) {
     errorNumber = FILESYSTEM_EBADF;
+  } else if (readdirArgs->repeat) {
+    entry = slot->entry;
+    errorNumber = 0;
   } else if (filesystemState->driverState != NULL) {
     entry = driverReaddir(
       filesystemState->driverState, slot->driverHandle, &errorNumber);
-    if (entry != NULL) {
-      entry->priv = readdirArgs->dirp;
-      slot->ino = entry->d_ino;
-      slot->flags |= FILESYSTEM_DIR_HAS_ENTRY;
+    slot->entry = entry;
+  }
+
+  size_t entrySize = 0;
+  if (entry != NULL) {
+    entrySize = offsetof(struct dirent, d_name) + strlen(entry->d_name) + 1;
+    if ((readdirArgs->entry == NULL) || (entrySize > readdirArgs->entrySize)) {
+      errorNumber = FILESYSTEM_ERANGE;
     } else {
-      slot->flags &= (uint8_t) ~FILESYSTEM_DIR_HAS_ENTRY;
+      memcpy(readdirArgs->entry, entry, entrySize);
+      readdirArgs->entry->priv = readdirArgs->handle;
     }
   }
 
-  readdirArgs->returnValue = entry;
+  readdirArgs->entrySize = entrySize;
   readdirArgs->errorNumber = errorNumber;
   processMessageSetDone(processMessage);
   return filesystemState;

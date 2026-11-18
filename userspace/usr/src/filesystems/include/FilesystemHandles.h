@@ -62,6 +62,11 @@ extern "C"
 /// @brief NanoOs's ENOMEM.
 #define FILESYSTEM_ENOMEM 3
 
+/// @def FILESYSTEM_ERANGE
+///
+/// @brief NanoOs's ERANGE.
+#define FILESYSTEM_ERANGE 16
+
 /// @def FILESYSTEM_DIR_GENERATION_MASK
 ///
 /// @brief The bits a slot's generation can use.
@@ -250,26 +255,26 @@ static inline uint8_t filesystemNumDirSlots(
 
 /// @fn static inline FilesystemOpenDir* filesystemDirLookup(
 ///   const FilesystemState *filesystemState, ProcessMessage *processMessage,
-///   const DIR *dirp)
+///   const void *handle)
 ///
-/// @brief Find the slot a DIR handle names, without ever dereferencing the
-/// handle.
+/// @brief Find the slot a directory handle names, without ever dereferencing
+/// the handle.
 ///
 /// @param filesystemState The filesystem's state.
 /// @param processMessage The message that carried the handle.
-/// @param dirp The handle.
+/// @param handle The handle.
 ///
 /// @return Returns the slot if the handle is current and the sender owns it,
 /// NULL if not.
 static inline FilesystemOpenDir* filesystemDirLookup(
   const FilesystemState *filesystemState, ProcessMessage *processMessage,
-  const DIR *dirp
+  const void *handle
 ) {
-  uintptr_t handle = (uintptr_t) dirp;
+  uintptr_t value = (uintptr_t) handle;
   ProcessId sender = filesystemSenderPid(filesystemState, processMessage);
-  uint8_t index = (uint8_t) (handle & (FILESYSTEM_MAX_OPEN_DIRS - 1));
+  uint8_t index = (uint8_t) (value & (FILESYSTEM_MAX_OPEN_DIRS - 1));
   if ((sender == 0) || (filesystemState->openDirs == NULL)
-    || (handle > (uintptr_t) UINT16_MAX)
+    || (value > (uintptr_t) UINT16_MAX)
     || (index >= filesystemNumDirSlots(filesystemState))
   ) {
     return NULL;
@@ -277,7 +282,7 @@ static inline FilesystemOpenDir* filesystemDirLookup(
 
   FilesystemOpenDir *slot = &filesystemState->openDirs[index];
   if ((slot->owner == 0) || (slot->owner != sender)
-    || (slot->generation != (uint16_t) (handle >> FILESYSTEM_DIR_INDEX_BITS))
+    || (slot->generation != (uint16_t) (value >> FILESYSTEM_DIR_INDEX_BITS))
   ) {
     return NULL;
   }
@@ -294,7 +299,7 @@ static inline FilesystemOpenDir* filesystemDirLookup(
 ///
 /// @return This function returns no value.
 static inline void filesystemDirRelease(FilesystemOpenDir *slot) {
-  slot->ino = 0;
+  slot->entry = NULL;
   slot->driverHandle = NULL;
   slot->owner = 0;
   slot->flags = 0;

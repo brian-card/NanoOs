@@ -52,10 +52,9 @@ typedef struct ProcessDescriptor ProcessDescriptor;
 
 /// @typedef DIR
 ///
-/// @brief Opaque handle to an open directory stream.  The concrete storage is
-/// owned entirely by whichever filesystem driver is linked in (see
-/// Fat32DirHandle) and is never examined here; nothing outside the driver
-/// dereferences a DIR.
+/// @brief Opaque handle to an open directory stream.  A caller's DIR is a
+/// client-side stream (see Filesystem.c) that holds the filesystem's own
+/// handle for the directory.
 typedef struct NanoOsDirStream DIR;
 
 // struct dirent and its DT_* constants are defined in
@@ -114,16 +113,17 @@ typedef struct FilesystemState* (*FilesystemDriverInit)(
 
 /// @def FILESYSTEM_DIR_INDEX_BITS
 ///
-/// @brief The number of bits of a DIR handle that hold the slot index.
+/// @brief The number of bits of a directory handle that hold the slot index.
 #define FILESYSTEM_DIR_INDEX_BITS 4
 
 /// @def FILESYSTEM_DIR_GENERATION_BITS
 ///
-/// @brief The number of bits of a DIR handle that hold the slot's generation.
+/// @brief The number of bits of a directory handle that hold the slot's
+/// generation.
 #define FILESYSTEM_DIR_GENERATION_BITS 12
 
 #if (FILESYSTEM_DIR_INDEX_BITS + FILESYSTEM_DIR_GENERATION_BITS) != 16
-#error "A DIR handle must be 16 bits so that it fits AVR's pointers"
+#error "A directory handle must be 16 bits so that it fits AVR's pointers"
 #endif
 
 /// @def FILESYSTEM_MAX_OPEN_DIRS
@@ -180,29 +180,23 @@ typedef struct FilesystemState* (*FilesystemDriverInit)(
 /// directory when it opened it.
 #define FILESYSTEM_DIR_CAN_STAT   ((uint8_t) 0x01)
 
-/// @def FILESYSTEM_DIR_HAS_ENTRY
-///
-/// @brief The FilesystemOpenDir flag set while ino holds the entry that
-/// readdir most recently returned.
-#define FILESYSTEM_DIR_HAS_ENTRY  ((uint8_t) 0x02)
-
 /// @struct FilesystemOpenDir
 ///
-/// @brief One slot of the table of open directories.  ino comes first because
-/// any other position pads the slot on 32-bit targets.
+/// @brief One slot of the table of open directories.
 ///
-/// @param ino The inode of the entry that readdir most recently returned.
+/// @param entry The driver's entry that readdir most recently returned, or
+///   NULL if there isn't one.
 /// @param driverHandle The driver's handle for the directory.
 /// @param generation The generation a handle to this slot must carry.
 /// @param owner The process that opened the directory, or 0 if the slot is
 ///   free.
 /// @param flags The FILESYSTEM_DIR_* flags of the slot.
 typedef struct FilesystemOpenDir {
-  ino_t      ino;
-  void      *driverHandle;
-  uint16_t   generation;
-  ProcessId  owner;
-  uint8_t    flags;
+  struct dirent *entry;
+  void          *driverHandle;
+  uint16_t       generation;
+  ProcessId      owner;
+  uint8_t        flags;
 } FilesystemOpenDir;
 
 /// @struct FilesystemOpenFile
@@ -405,15 +399,15 @@ typedef struct FilesystemPathArgs {
 /// @brief Function parameters and return value for an opendir call.
 ///
 /// @param pathname A string containing the full path to the directory.
-/// @param returnValue A pointer to the DIR that's opened on success, NULL on
-///   failure.
+/// @param returnValue The filesystem's handle for the directory on success,
+///   NULL on failure.
 /// @param errorNumber The errno value that should be used for the calling
 ///   process when returnValue is NULL.  Populated by the driver (which
 ///   knows what its own failure actually means); this struct and the
 ///   command handler that fills it in never interpret it themselves.
 typedef struct FilesystemOpendirArgs {
   char *pathname;
-  DIR  *returnValue;
+  void *returnValue;
   int   errorNumber;
 } FilesystemOpendirArgs;
 
@@ -421,16 +415,19 @@ typedef struct FilesystemOpendirArgs {
 ///
 /// @brief Function parameters and return value for a readdir call.
 ///
-/// @param dirp A pointer to a previously-opened DIR object.
-/// @param returnValue A pointer to the next directory entry, or NULL at the
-///   end of the directory or on failure.
-/// @param errorNumber The errno value that should be used for the calling
-///   process when returnValue is NULL, or 0 if returnValue is NULL only
-///   because the directory was exhausted (not an error -- the calling
-///   process's errno must be left unchanged in that case).
+/// @param handle The filesystem's handle for the directory.
+/// @param entry The caller's buffer for the entry.
+/// @param entrySize The number of bytes at entry on the way in.  On the way
+///   out, the size of the entry, or 0 at the end of the directory.
+/// @param repeat Whether to copy the entry the last readdir found again
+///   rather than reading the next one.
+/// @param errorNumber The errno value for the calling process, 0 on success
+///   and at the end of the directory, or ERANGE if the entry doesn't fit.
 typedef struct FilesystemReaddirArgs {
-  DIR           *dirp;
-  struct dirent *returnValue;
+  void          *handle;
+  struct dirent *entry;
+  size_t         entrySize;
+  bool           repeat;
   int            errorNumber;
 } FilesystemReaddirArgs;
 
@@ -457,14 +454,15 @@ typedef struct FilesystemLstatArgs {
 ///
 /// @brief Function parameters and return value for a dirstat call.
 ///
-/// @param dirp The handle of the DIR the entry came from.
+/// @param handle The filesystem's handle for the directory the entry came
+///   from.
 /// @param statbuf A pointer to a caller-supplied struct stat to be populated.
 /// @param returnValue The return value of the operation that will be passed
 ///   back from the handler: 0 on success, -1 on failure.
 /// @param errorNumber The errno value that should be used for the calling
 ///   process when returnValue is -1.
 typedef struct FilesystemDirstatArgs {
-  DIR         *dirp;
+  void        *handle;
   struct stat *statbuf;
   int          returnValue;
   int          errorNumber;
@@ -474,12 +472,12 @@ typedef struct FilesystemDirstatArgs {
 ///
 /// @brief Function parameters and return value for a closedir call.
 ///
-/// @param dirp A pointer to the DIR to close.
+/// @param handle The filesystem's handle for the directory to close.
 /// @param returnValue The return value of the operation that will be passed
 ///   back from the handler.
 typedef struct FilesystemClosedirArgs {
-  DIR *dirp;
-  int  returnValue;
+  void *handle;
+  int   returnValue;
 } FilesystemClosedirArgs;
 
 /// @struct FilesystemCloseProcessArgs

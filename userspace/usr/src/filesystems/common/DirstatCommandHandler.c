@@ -83,17 +83,17 @@ void* Dirstat(void *args) {
 
   int returnValue = -1;
   int errorNumber = NO_DRIVER_ERRNO;
-  FilesystemOpenDir *slot
-    = filesystemDirLookup(filesystemState, processMessage, dirstatArgs->dirp);
+  FilesystemOpenDir *slot = filesystemDirLookup(
+    filesystemState, processMessage, dirstatArgs->handle);
   if (slot == NULL) {
     errorNumber = FILESYSTEM_EBADF;
   } else if ((slot->flags & FILESYSTEM_DIR_CAN_STAT) == 0) {
     errorNumber = FILESYSTEM_EACCES;
-  } else if ((slot->flags & FILESYSTEM_DIR_HAS_ENTRY) == 0) {
+  } else if (slot->entry == NULL) {
     errorNumber = FILESYSTEM_EBADF;
   } else if (filesystemState->driverState != NULL) {
     returnValue = driverIstat(filesystemState->driverState,
-      slot->ino, dirstatArgs->statbuf, &errorNumber);
+      slot->entry->d_ino, dirstatArgs->statbuf, &errorNumber);
   }
 
   if (returnValue == 0) {

@@ -794,20 +794,34 @@ int filesystemRmdirFullPath(const char *pathname) {
     pathname);
 }
 
-/// @fn DIR* filesystemOpendir(const char *pathname)
+/// @struct NanoOsDirStream
 ///
-/// @brief Implementation of the standard C opendir call.
+/// @brief A caller's open directory.
+///
+/// @param handle The filesystem's handle for the directory.
+/// @param entry The buffer readdir copies entries into, which only grows.
+/// @param entrySize The number of bytes at entry.
+struct NanoOsDirStream {
+  void          *handle;
+  struct dirent *entry;
+  size_t         entrySize;
+};
+
+/// @def DIR_STREAM_FIRST_ENTRY_SIZE
+///
+/// @brief The size of a new directory stream's entry buffer: room for an 8.3
+/// name and its NUL.
+#define DIR_STREAM_FIRST_ENTRY_SIZE (offsetof(struct dirent, d_name) + 13)
+
+/// @fn static void* filesystemOpendirHandle(const char *pathname)
+///
+/// @brief Ask the filesystem to open a directory.
 ///
 /// @param pathname The full pathname to the directory.
 ///
-/// @return Returns a pointer to an opened DIR object on success, NULL and
-/// sets the value of errno on failure.
-DIR* filesystemOpendir(const char *pathname) {
-  if ((pathname == NULL) || (*pathname == '\0')) {
-    errno = EINVAL;
-    return NULL;
-  }
-
+/// @return Returns the filesystem's handle for the directory on success, NULL
+/// and sets the value of errno on failure.
+static void* filesystemOpendirHandle(const char *pathname) {
   MESSAGE_ARGS_ALLOCATE(FilesystemOpendirArgs, filesystemOpendirArgs);
   if (filesystemOpendirArgs == NULL) {
     errno = ENOMEM;
@@ -837,7 +851,7 @@ DIR* filesystemOpendir(const char *pathname) {
   MESSAGE_BUFFER_UNSHARE(filesystemOpendirArgs->pathname, pathnameCopy,
     MESSAGE_BUFFER_IN);
   free(pathnameCopy);
-  DIR *returnValue = filesystemOpendirArgs->returnValue;
+  void *returnValue = filesystemOpendirArgs->returnValue;
   if (returnValue == NULL) {
     errno = filesystemOpendirArgs->errorNumber;
   } else {
@@ -846,6 +860,77 @@ DIR* filesystemOpendir(const char *pathname) {
   processMessageRelease(msg);
   MESSAGE_ARGS_FREE(filesystemOpendirArgs);
   return returnValue;
+}
+
+/// @fn DIR* filesystemOpendir(const char *pathname)
+///
+/// @brief Implementation of the standard C opendir call.
+///
+/// @param pathname The full pathname to the directory.
+///
+/// @return Returns a pointer to an opened DIR object on success, NULL and
+/// sets the value of errno on failure.
+DIR* filesystemOpendir(const char *pathname) {
+  if ((pathname == NULL) || (*pathname == '\0')) {
+    errno = EINVAL;
+    return NULL;
+  }
+
+  DIR *dirp = (DIR*) malloc(sizeof(*dirp));
+  if (dirp == NULL) {
+    errno = ENOMEM;
+    return NULL;
+  }
+
+  dirp->entry = (struct dirent*) malloc(DIR_STREAM_FIRST_ENTRY_SIZE);
+  dirp->entrySize = DIR_STREAM_FIRST_ENTRY_SIZE;
+  dirp->handle = NULL;
+  if (dirp->entry == NULL) {
+    errno = ENOMEM;
+  } else {
+    dirp->handle = filesystemOpendirHandle(pathname);
+  }
+
+  if (dirp->handle == NULL) {
+    free(dirp->entry);
+    free(dirp);
+    return NULL;
+  }
+  return dirp;
+}
+
+/// @fn static int filesystemReaddirExchange(DIR *dirp,
+///   FilesystemReaddirArgs *filesystemReaddirArgs)
+///
+/// @brief Send one readdir for a directory stream and wait for the reply.
+/// Having this out of line keeps the retry after growing the entry buffer
+/// from duplicating the exchange.
+///
+/// @param dirp The directory stream.
+/// @param filesystemReaddirArgs The arguments, with handle and repeat set.
+///
+/// @return Returns the errorNumber the filesystem reported, or ENOMEM.
+static __attribute__((noinline)) int filesystemReaddirExchange(DIR *dirp,
+  FilesystemReaddirArgs *filesystemReaddirArgs
+) {
+  filesystemReaddirArgs->entry = (struct dirent*) MESSAGE_BUFFER_SHARE(
+    dirp->entry, dirp->entrySize, MESSAGE_BUFFER_OUT);
+  if ((dirp->entry != NULL) && (filesystemReaddirArgs->entry == NULL)) {
+    return ENOMEM;
+  }
+  filesystemReaddirArgs->entrySize = dirp->entrySize;
+  filesystemReaddirArgs->errorNumber = 0;
+
+  ProcessMessage *msg = initSendProcessMessageToPid(
+    rootFilesystemPid,
+    FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_READ_DIR,
+    filesystemReaddirArgs, sizeof(*filesystemReaddirArgs), true);
+  processMessageWaitForDone(msg, NULL);
+  processMessageRelease(msg);
+  MESSAGE_BUFFER_UNSHARE(filesystemReaddirArgs->entry, dirp->entry,
+    MESSAGE_BUFFER_OUT);
+
+  return filesystemReaddirArgs->errorNumber;
 }
 
 /// @fn struct dirent* filesystemReaddir(DIR *dirp)
@@ -871,24 +956,29 @@ struct dirent* filesystemReaddir(DIR *dirp) {
     errno = ENOMEM;
     return NULL;
   }
-  filesystemReaddirArgs->dirp = dirp;
-  filesystemReaddirArgs->returnValue = NULL;
-  filesystemReaddirArgs->errorNumber = 0;
+  filesystemReaddirArgs->handle = dirp->handle;
+  filesystemReaddirArgs->repeat = false;
 
-  ProcessMessage *msg = initSendProcessMessageToPid(
-    rootFilesystemPid,
-    FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_READ_DIR,
-    filesystemReaddirArgs, sizeof(*filesystemReaddirArgs), true);
-  processMessageWaitForDone(msg, NULL);
-  processMessageRelease(msg);
-
-  if ((filesystemReaddirArgs->returnValue == NULL)
-    && (filesystemReaddirArgs->errorNumber != 0)
-  ) {
-    errno = filesystemReaddirArgs->errorNumber;
+  int errorNumber = filesystemReaddirExchange(dirp, filesystemReaddirArgs);
+  if (errorNumber == ERANGE) {
+    struct dirent *entry = (struct dirent*) realloc(
+      dirp->entry, filesystemReaddirArgs->entrySize);
+    if (entry == NULL) {
+      errorNumber = ENOMEM;
+    } else {
+      dirp->entry = entry;
+      dirp->entrySize = filesystemReaddirArgs->entrySize;
+      filesystemReaddirArgs->repeat = true;
+      errorNumber = filesystemReaddirExchange(dirp, filesystemReaddirArgs);
+    }
   }
 
-  struct dirent *returnValue = filesystemReaddirArgs->returnValue;
+  struct dirent *returnValue = NULL;
+  if (errorNumber != 0) {
+    errno = errorNumber;
+  } else if (filesystemReaddirArgs->entrySize != 0) {
+    returnValue = dirp->entry;
+  }
   MESSAGE_ARGS_FREE(filesystemReaddirArgs);
   return returnValue;
 }
@@ -911,7 +1001,7 @@ int filesystemClosedir(DIR *dirp) {
     errno = ENOMEM;
     return -1;
   }
-  filesystemClosedirArgs->dirp = dirp;
+  filesystemClosedirArgs->handle = dirp->handle;
   filesystemClosedirArgs->returnValue = 0;
   ProcessMessage *msg = initSendProcessMessageToPid(
     rootFilesystemPid,
@@ -928,6 +1018,8 @@ int filesystemClosedir(DIR *dirp) {
   }
   processMessageRelease(msg);
   MESSAGE_ARGS_FREE(filesystemClosedirArgs);
+  free(dirp->entry);
+  free(dirp);
   return returnValue;
 }
 
@@ -1015,7 +1107,7 @@ int filesystemDirstat(const struct dirent *entry, struct stat *statbuf) {
     errno = ENOMEM;
     return -1;
   }
-  filesystemDirstatArgs->dirp = (DIR*) entry->priv;
+  filesystemDirstatArgs->handle = entry->priv;
   filesystemDirstatArgs->statbuf = (struct stat*) MESSAGE_BUFFER_SHARE(
     statbuf, sizeof(*statbuf), MESSAGE_BUFFER_OUT);
   if (filesystemDirstatArgs->statbuf == NULL) {
