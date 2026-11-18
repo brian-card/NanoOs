@@ -112,6 +112,11 @@ static ReportedSet reportedSet;
 /// @brief The path of the program dircapChild stood in for.
 static char reportedPath[64];
 
+/// @var reportedName
+///
+/// @brief The name the reporting child's process had.
+static char reportedName[16];
+
 /// @fn static void reportSet(void)
 ///
 /// @brief Copy the running process's set where the test can see it.
@@ -125,6 +130,7 @@ static void reportSet(void) {
   reportedHal = getRunningProcess()->halCapabilities;
   reportedEnvp = getRunningProcess()->envp;
   reportedUser = getRunningProcess()->userId;
+  strncpy(reportedName, getRunningProcess()->name, sizeof(reportedName) - 1);
   memset(&reportedSet, 0, sizeof(reportedSet));
   if ((set != NULL) && (set->size <= sizeof(reportedSet))) {
     memcpy(&reportedSet, set, set->size);
@@ -469,6 +475,8 @@ NANO_OS_KERNEL_TEST_WITH(dircap, a_set_narrowed_before_execve_survives_it,
 
   NANO_OS_ASSERT_TRUE(yieldUntilReported());
   NANO_OS_ASSERT_EQ_INT(0, childStatus);
+  NANO_OS_ASSERT_STR_EQ("report", reportedName);
+  NANO_OS_ASSERT_STR_EQ("/userspace/dctest", reportedPath);
   NANO_OS_ASSERT_TRUE(setAllows(&reportedSet.set, "/tmp/x", DIRCAP_READ));
   NANO_OS_ASSERT_FALSE(setAllows(&reportedSet.set, "/tmp/x", DIRCAP_WRITE));
   NANO_OS_ASSERT_TRUE(setAllows(&reportedSet.set, "/usr/bin/x", DIRCAP_EXEC));
@@ -1224,16 +1232,14 @@ static int sendRawSpawn(char *path, char **envp, short flags) {
   static char argv0[] = "report";
   char *argv[] = { argv0, NULL };
   posix_spawnattr_t attr = { flags, NULL };
-  pid_t pid = 0;
   SpawnArgs spawnArgs = {
-    .newPid = (uint8_t*) &pid,
     .path = path,
     .fileActions = NULL,
     .attrp = &attr,
     .argv = argv,
     .envp = envp,
   };
-  SchedulerSpawnArgs schedulerSpawnArgs = { &spawnArgs, 0 };
+  SchedulerSpawnArgs schedulerSpawnArgs = { &spawnArgs, 0, 0 };
   reported = false;
   ProcessMessage *processMessage = initSendProcessMessageToPid(schedulerPid,
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_SPAWN,

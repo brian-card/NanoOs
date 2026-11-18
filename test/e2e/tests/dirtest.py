@@ -124,6 +124,16 @@ def test_readdir_returns_a_maximum_length_name_whole(s):
     assert name in names, names
 
 
+def test_a_spawned_stage_runs_its_own_overlays(s):
+    # The second command of a pipeline is spawned, and dirtest list runs in
+    # its Modes overlay.
+    s.login()
+    direct = s.sh("dirtest list /etc").splitlines()
+    piped = s.sh("dirtest list /etc | cat").splitlines()
+    assert "hostname" in direct, direct
+    assert piped == direct, piped
+
+
 def test_interleaved_readdirs_keep_their_own_entries(s):
     s.login()
     etc = s.sh("dirtest list /etc").splitlines()

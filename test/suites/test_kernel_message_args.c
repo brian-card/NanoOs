@@ -381,20 +381,24 @@ static int testAssign(void *ptr, ProcessId pid) {
   return 0;
 }
 
-/// @fn static void reversingCopy(void *destination, const void *source)
+/// @fn static void reversingCopy(void *destination, const void *source,
+///   size_t size)
 ///
-/// @brief A copy function for adoption tests that stores a 4-byte block
-/// reversed, so the test can tell it ran.
+/// @brief A copy function for adoption tests that stores a block reversed, so
+/// the test can tell it ran and was given the block's size.
 ///
 /// @param destination The new block.
 /// @param source The arena block.
+/// @param size The size of the block.
 ///
 /// @return This function returns no value.
-static void reversingCopy(void *destination, const void *source) {
+static void reversingCopy(void *destination, const void *source,
+  size_t size
+) {
   const uint8_t *from = (const uint8_t*) source;
   uint8_t *to = (uint8_t*) destination;
-  for (int ii = 0; ii < 4; ii++) {
-    to[ii] = from[3 - ii];
+  for (size_t ii = 0; ii < size; ii++) {
+    to[ii] = from[size - 1 - ii];
   }
 }
 

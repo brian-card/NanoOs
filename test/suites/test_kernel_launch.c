@@ -593,11 +593,9 @@ static int tryExec(const char *path) {
 ///
 /// @return Returns the errno value the scheduler reported.
 static int trySpawnRawPath(char *path) {
-  uint8_t newPid = 0;
   char *argv[] = { "x", NULL };
   SpawnArgs *spawnArgs = (SpawnArgs*) calloc(1, sizeof(SpawnArgs));
   NANO_OS_ASSERT_NOT_NULL(spawnArgs);
-  spawnArgs->newPid = &newPid;
   spawnArgs->path = path;
   spawnArgs->argv = argv;
   SchedulerSpawnArgs schedulerSpawnArgs = {
