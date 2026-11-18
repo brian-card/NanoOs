@@ -85,9 +85,10 @@ static void showDirstat(void) {
   printf("dirstat changed d_ino -> %d, ino_matches=%d\n",
     result, st.st_ino == ino);
 
+  struct dirent stale = *entry;
   closedir(dirp);
   errno = 0;
-  result = dirstat(entry, &st);
+  result = dirstat(&stale, &st);
   printf("dirstat after closedir -> %d, errno=%d\n", result, errno);
 
   dircapAdd("/etc/", DIRCAP_LIST);
@@ -99,146 +100,6 @@ static void showDirstat(void) {
   closedir(dirp);
 }
 
-/// @brief Create a file holding one line.
-///
-/// @param path The path of the file.
-///
-/// @return This function returns no value.
-static void writeLine(const char *path) {
-  FILE *file = fopen(path, "w");
-  if (file != NULL) {
-    fputs("original\n", file);
-    fclose(file);
-  }
-}
-
-/// @brief Print the first line of a file.
-///
-/// @param path The path of the file.
-///
-/// @return This function returns no value.
-static void showLine(const char *path) {
-  char line[16] = {0};
-  FILE *file = fopen(path, "r");
-  if (file != NULL) {
-    fgets(line, sizeof(line), file);
-    fclose(file);
-  }
-  printf("%s holds %s", path, line);
-}
-
-/// @brief Print the outcome of a call that returned an int.
-///
-/// @param label What the call was.
-/// @param result What it returned.
-///
-/// @return This function returns no value.
-static void showResult(const char *label, int result) {
-  printf("%s -> %d, errno=%d\n", label, result, errno);
-  errno = 0;
-}
-
-/// @brief Open a file, print the outcome, and close it if it opened.
-///
-/// @param label What the call was.
-/// @param path The file's path.
-/// @param mode The fopen mode.
-///
-/// @return This function returns no value.
-static void showOpen(const char *label, const char *path, const char *mode) {
-  FILE *file = fopen(path, mode);
-  showResult(label, (file == NULL) ? -1 : 0);
-  if (file != NULL) {
-    fclose(file);
-  }
-}
-
-/// @brief Narrow the process's set so that the filesystem driver has to
-/// refuse to create and to replace a file, and show that it does.
-///
-/// @return This function returns no value.
-static void showAccess(void) {
-  struct stat st;
-  mkdir("/tmp/acc", 0777);
-  mkdir("/tmp/acc/ro", 0777);
-  mkdir("/tmp/acc/from", 0777);
-  mkdir("/tmp/acc/to", 0777);
-  writeLine("/tmp/acc/ro/old");
-  writeLine("/tmp/acc/from/x");
-  writeLine("/tmp/acc/to/y");
-
-  uint8_t noCreate = DIRCAP_READ | DIRCAP_WRITE | DIRCAP_LIST | DIRCAP_STAT;
-  dircapAdd("/tmp/acc/ro/", noCreate);
-  dircapAdd("/tmp/acc/from/", DIRCAP_READ | DIRCAP_DELETE | DIRCAP_STAT);
-  dircapAdd("/tmp/acc/to/", DIRCAP_READ | DIRCAP_CREATE | DIRCAP_STAT);
-  dircapDrop("/tmp/");
-  errno = 0;
-
-  FILE *created = fopen("/tmp/acc/ro/new", "w");
-  showResult("create without c", (created == NULL) ? -1 : 0);
-  showResult("stat refused create", lstat("/tmp/acc/ro/new", &st));
-
-  FILE *existing = fopen("/tmp/acc/ro/old", "a");
-  showResult("append to existing", (existing == NULL) ? -1 : 0);
-  fclose(existing);
-
-  showResult("remove without d", remove("/tmp/acc/ro/old"));
-  showResult("mkdir without c", mkdir("/tmp/acc/ro/dir", 0777));
-  showResult("rmdir without d", rmdir("/tmp/acc/ro"));
-
-  showResult("replace without d", rename("/tmp/acc/from/x", "/tmp/acc/to/y"));
-  showResult("stat source", lstat("/tmp/acc/from/x", &st));
-  showLine("/tmp/acc/to/y");
-  showResult("rename to new name", rename("/tmp/acc/from/x", "/tmp/acc/to/z"));
-  showResult("stat renamed", lstat("/tmp/acc/to/z", &st));
-
-  showOpen("create without w", "/tmp/acc/to/new", "w");
-  showResult("stat refused create without w", lstat("/tmp/acc/to/new", &st));
-  showOpen("write existing without w", "/tmp/acc/to/y", "w");
-  showLine("/tmp/acc/to/y");
-}
-
-/// @brief Print the process's directory capabilities, one per line.
-///
-/// @return This function returns no value.
-static void showCapabilities(void) {
-  int size = dircapGet(NULL, 0);
-  DirCapabilities *set = (size > 0) ? (DirCapabilities*) malloc(size) : NULL;
-  if ((set == NULL) || (dircapGet(set, size) != size)) {
-    printf("dircapGet failed\n");
-    free(set);
-    return;
-  }
-
-  DirCapability *capability = set->capabilities;
-  for (uint8_t ii = 0; ii < set->numCapabilities; ii++) {
-    printf("cap %02x %.*s\n", (unsigned int) capability->mask,
-      (int) capability->len, capability->name);
-    capability = (DirCapability*) &capability->name[capability->len];
-  }
-  free(set);
-}
-
-/// @brief Run a program with POSIX_SPAWN_SYSTEM in the foreground and print
-/// what the spawn returned and how the program exited.
-///
-/// @param argv The name to run followed by its arguments.
-///
-/// @return This function returns no value.
-static void runSystemCommand(char **argv) {
-  posix_spawnattr_t attr;
-  posix_spawnattr_init(&attr);
-  posix_spawnattr_setflags(&attr, POSIX_SPAWN_SYSTEM | POSIX_SPAWN_FOREGROUND);
-  pid_t pid = 0;
-  int returnValue = posix_spawn(&pid, argv[0], NULL, &attr, argv, environ);
-  posix_spawnattr_destroy(&attr);
-  int status = 0;
-  if (returnValue == 0) {
-    waitpid(pid, &status, 0);
-  }
-  printf("system spawn %d status %d\n", returnValue, WEXITSTATUS(status));
-}
-
 /// @brief Print the usage summary for dirtest.
 ///
 /// @param stream The stream to print to.
@@ -246,7 +107,8 @@ static void runSystemCommand(char **argv) {
 /// @return This function returns no value.
 static void printUsage(FILE *stream) {
   fputs(
-    "Usage: dirtest [access|caps|system <name> [argument...]]\n"
+    "Usage: dirtest [access|caps|list <dir>|interleave <dir> <dir>|\n"
+    "               long <dir>|system <name> [argument...]]\n"
     "\n"
     "Exercise the directory-reading functions.  List \"/\", \"/etc\", and \"/usr\"\n"
     "with opendir and readdir, showing each entry's name, type, inode, and\n"
@@ -255,8 +117,12 @@ static void printUsage(FILE *stream) {
     "and how dirstat handles a changed d_ino, a closed directory, and a\n"
     "directory opened without the stat capability.  With \"access\", narrow\n"
     "the process's capabilities and show the operations they refuse.  With\n"
-    "\"caps\", print the process's capabilities.  With \"system\", run a\n"
-    "program from /system/commands with the arguments given.\n"
+    "\"caps\", print the process's capabilities.  With \"list\", print the\n"
+    "names in a directory.  With \"interleave\", read two directories in\n"
+    "turn, printing both entries after each pair of reads.  With \"long\",\n"
+    "create a file with a 255-character name in a directory.  With\n"
+    "\"system\", run a program from /system/commands with the arguments\n"
+    "given.\n"
     "\n"
     "Options:\n"
     "  --help  Show this help and exit.\n",
@@ -269,18 +135,9 @@ int main(int argc, char **argv) {
     return 0;
   }
 
-  if ((argc > 1) && (strcmp(argv[1], "access") == 0)) {
-    showAccess();
-    return 0;
-  }
-
-  if ((argc > 1) && (strcmp(argv[1], "caps") == 0)) {
-    showCapabilities();
-    return 0;
-  }
-
-  if ((argc > 2) && (strcmp(argv[1], "system") == 0)) {
-    runSystemCommand(&argv[2]);
+  if ((argc > 1) && (callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Modes",
+    "dirtestMode", &argv[1]) != NULL)
+  ) {
     return 0;
   }
 
