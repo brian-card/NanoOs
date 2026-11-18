@@ -206,26 +206,37 @@ static FILE* filesystemOpenFile(const char *pathname, const char *mode,
     goto freeFileDescriptor;
   }
   fopenArgs->now = time(NULL);
-  fopenArgs->pathname = (char*) malloc(strlen(pathname) + 1);
-  if (fopenArgs->pathname == NULL) {
+  char *pathnameCopy = (char*) malloc(strlen(pathname) + 1);
+  if (pathnameCopy == NULL) {
     MESSAGE_ARGS_FREE(fopenArgs);
     goto freeFileDescriptor;
   }
-  strcpy(fopenArgs->pathname, pathname);
-
-  fopenArgs->mode = (char*) malloc(strlen(mode) + 1);
-  if (fopenArgs->mode == NULL) {
+  strcpy(pathnameCopy, pathname);
+  char *modeCopy = (char*) malloc(strlen(mode) + 1);
+  if (modeCopy == NULL) {
     goto freePathname;
   }
-  strcpy(fopenArgs->mode, mode);
+  strcpy(modeCopy, mode);
+  fopenArgs->pathname = (char*) MESSAGE_BUFFER_SHARE(
+    pathnameCopy, strlen(pathnameCopy) + 1, MESSAGE_BUFFER_IN);
+  fopenArgs->mode = (char*) MESSAGE_BUFFER_SHARE(
+    modeCopy, strlen(modeCopy) + 1, MESSAGE_BUFFER_IN);
+  if ((fopenArgs->pathname == NULL) || (fopenArgs->mode == NULL)) {
+    MESSAGE_BUFFER_UNSHARE(fopenArgs->mode, modeCopy, MESSAGE_BUFFER_IN);
+    free(modeCopy);
+    goto freePathname;
+  }
 
   ProcessMessage *msg = initSendProcessMessageToPid(
     rootFilesystemPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_OPEN_FILE | pathFlag,
     fopenArgs, sizeof(*fopenArgs), true);
   processMessageWaitForDone(msg, NULL);
-  free(fopenArgs->mode);
-  free(fopenArgs->pathname);
+  MESSAGE_BUFFER_UNSHARE(fopenArgs->mode, modeCopy, MESSAGE_BUFFER_IN);
+  MESSAGE_BUFFER_UNSHARE(fopenArgs->pathname, pathnameCopy,
+    MESSAGE_BUFFER_IN);
+  free(modeCopy);
+  free(pathnameCopy);
 
   file = fopenArgs->returnValue;
   processMessageRelease(msg);
@@ -247,7 +258,9 @@ static FILE* filesystemOpenFile(const char *pathname, const char *mode,
   goto exit;
 
 freePathname:
-  free(fopenArgs->pathname);
+  MESSAGE_BUFFER_UNSHARE(fopenArgs->pathname, pathnameCopy,
+    MESSAGE_BUFFER_IN);
+  free(pathnameCopy);
   MESSAGE_ARGS_FREE(fopenArgs);
 
 freeFileDescriptor:
@@ -502,20 +515,30 @@ int filesystemRemove(const char *pathname) {
       errno = ENOMEM;
       return -1;
     }
-    filesystemRemoveArgs->pathname = (char*) malloc(strlen(pathname) + 1);
-    if (filesystemRemoveArgs->pathname == NULL) {
+    char *pathnameCopy = (char*) malloc(strlen(pathname) + 1);
+    if (pathnameCopy == NULL) {
       MESSAGE_ARGS_FREE(filesystemRemoveArgs);
       errno = ENOMEM;
       return -1;
     }
-    strcpy(filesystemRemoveArgs->pathname, pathname);
+    strcpy(pathnameCopy, pathname);
+    filesystemRemoveArgs->pathname = (char*) MESSAGE_BUFFER_SHARE(
+      pathnameCopy, strlen(pathnameCopy) + 1, MESSAGE_BUFFER_IN);
+    if (filesystemRemoveArgs->pathname == NULL) {
+      free(pathnameCopy);
+      MESSAGE_ARGS_FREE(filesystemRemoveArgs);
+      errno = ENOMEM;
+      return -1;
+    }
 
     ProcessMessage *msg = initSendProcessMessageToPid(
       rootFilesystemPid,
       FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_REMOVE_FILE,
       filesystemRemoveArgs, sizeof(*filesystemRemoveArgs), true);
     processMessageWaitForDone(msg, NULL);
-    free(filesystemRemoveArgs->pathname); filesystemRemoveArgs->pathname = NULL;
+    MESSAGE_BUFFER_UNSHARE(filesystemRemoveArgs->pathname, pathnameCopy,
+      MESSAGE_BUFFER_IN);
+    free(pathnameCopy);
     returnValue = filesystemRemoveArgs->returnValue;
     if (returnValue != 0) {
       // returnValue holds a negative errno.  Set errno for the current process
@@ -560,23 +583,33 @@ static __attribute__((noinline)) int filesystemRenamePaths(
     return -1;
   }
   size_t oldpathSize = strlen(oldpath) + 1;
-  filesystemRenameArgs->oldpath
-    = (char*) malloc(oldpathSize + strlen(newpath) + 1);
-  if (filesystemRenameArgs->oldpath == NULL) {
+  size_t pathsSize = oldpathSize + strlen(newpath) + 1;
+  char *paths = (char*) malloc(pathsSize);
+  if (paths == NULL) {
     MESSAGE_ARGS_FREE(filesystemRenameArgs);
     errno = ENOMEM;
     return -1;
   }
-  strcpy(filesystemRenameArgs->oldpath, oldpath);
+  strcpy(paths, oldpath);
+  strcpy(paths + oldpathSize, newpath);
+  filesystemRenameArgs->oldpath = (char*) MESSAGE_BUFFER_SHARE(
+    paths, pathsSize, MESSAGE_BUFFER_IN);
+  if (filesystemRenameArgs->oldpath == NULL) {
+    free(paths);
+    MESSAGE_ARGS_FREE(filesystemRenameArgs);
+    errno = ENOMEM;
+    return -1;
+  }
   filesystemRenameArgs->newpath = filesystemRenameArgs->oldpath + oldpathSize;
-  strcpy(filesystemRenameArgs->newpath, newpath);
 
   ProcessMessage *msg = initSendProcessMessageToPid(
     rootFilesystemPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_RENAME_FILE | pathFlag,
     filesystemRenameArgs, sizeof(*filesystemRenameArgs), true);
   processMessageWaitForDone(msg, NULL);
-  free(filesystemRenameArgs->oldpath); filesystemRenameArgs->oldpath = NULL;
+  MESSAGE_BUFFER_UNSHARE(filesystemRenameArgs->oldpath, paths,
+    MESSAGE_BUFFER_IN);
+  free(paths);
   int returnValue = filesystemRenameArgs->returnValue;
   if (returnValue != 0) {
     // returnValue holds a negative errno.  Set errno for the current process
@@ -627,20 +660,30 @@ static int filesystemSendPathCommand(
     errno = ENOMEM;
     return -1;
   }
-  filesystemPathArgs->pathname = (char*) malloc(strlen(pathname) + 1);
-  if (filesystemPathArgs->pathname == NULL) {
+  char *pathnameCopy = (char*) malloc(strlen(pathname) + 1);
+  if (pathnameCopy == NULL) {
     MESSAGE_ARGS_FREE(filesystemPathArgs);
     errno = ENOMEM;
     return -1;
   }
-  strcpy(filesystemPathArgs->pathname, pathname);
+  strcpy(pathnameCopy, pathname);
+  filesystemPathArgs->pathname = (char*) MESSAGE_BUFFER_SHARE(
+    pathnameCopy, strlen(pathnameCopy) + 1, MESSAGE_BUFFER_IN);
+  if (filesystemPathArgs->pathname == NULL) {
+    free(pathnameCopy);
+    MESSAGE_ARGS_FREE(filesystemPathArgs);
+    errno = ENOMEM;
+    return -1;
+  }
   filesystemPathArgs->now = time(NULL);
 
   ProcessMessage *msg = initSendProcessMessageToPid(
     rootFilesystemPid, FILESYSTEM_COMMAND_SIGNATURE | command,
     filesystemPathArgs, sizeof(*filesystemPathArgs), true);
   processMessageWaitForDone(msg, NULL);
-  free(filesystemPathArgs->pathname); filesystemPathArgs->pathname = NULL;
+  MESSAGE_BUFFER_UNSHARE(filesystemPathArgs->pathname, pathnameCopy,
+    MESSAGE_BUFFER_IN);
+  free(pathnameCopy);
   int returnValue = filesystemPathArgs->returnValue;
   if (returnValue != 0) {
     errno = -returnValue;
@@ -770,20 +813,30 @@ DIR* filesystemOpendir(const char *pathname) {
     errno = ENOMEM;
     return NULL;
   }
-  filesystemOpendirArgs->pathname = (char*) malloc(strlen(pathname) + 1);
-  if (filesystemOpendirArgs->pathname == NULL) {
+  char *pathnameCopy = (char*) malloc(strlen(pathname) + 1);
+  if (pathnameCopy == NULL) {
     MESSAGE_ARGS_FREE(filesystemOpendirArgs);
     errno = ENOMEM;
     return NULL;
   }
-  strcpy(filesystemOpendirArgs->pathname, pathname);
+  strcpy(pathnameCopy, pathname);
+  filesystemOpendirArgs->pathname = (char*) MESSAGE_BUFFER_SHARE(
+    pathnameCopy, strlen(pathnameCopy) + 1, MESSAGE_BUFFER_IN);
+  if (filesystemOpendirArgs->pathname == NULL) {
+    free(pathnameCopy);
+    MESSAGE_ARGS_FREE(filesystemOpendirArgs);
+    errno = ENOMEM;
+    return NULL;
+  }
 
   ProcessMessage *msg = initSendProcessMessageToPid(
     rootFilesystemPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_OPEN_DIR,
     filesystemOpendirArgs, sizeof(*filesystemOpendirArgs), true);
   processMessageWaitForDone(msg, NULL);
-  free(filesystemOpendirArgs->pathname); filesystemOpendirArgs->pathname = NULL;
+  MESSAGE_BUFFER_UNSHARE(filesystemOpendirArgs->pathname, pathnameCopy,
+    MESSAGE_BUFFER_IN);
+  free(pathnameCopy);
   DIR *returnValue = filesystemOpendirArgs->returnValue;
   if (returnValue == NULL) {
     errno = filesystemOpendirArgs->errorNumber;
@@ -897,21 +950,40 @@ int filesystemLstat(const char *pathname, struct stat *statbuf) {
     errno = ENOMEM;
     return -1;
   }
-  filesystemLstatArgs->pathname = (char*) malloc(strlen(pathname) + 1);
-  if (filesystemLstatArgs->pathname == NULL) {
+  char *pathnameCopy = (char*) malloc(strlen(pathname) + 1);
+  if (pathnameCopy == NULL) {
     MESSAGE_ARGS_FREE(filesystemLstatArgs);
     errno = ENOMEM;
     return -1;
   }
-  strcpy(filesystemLstatArgs->pathname, pathname);
-  filesystemLstatArgs->statbuf = statbuf;
+  strcpy(pathnameCopy, pathname);
+  filesystemLstatArgs->pathname = (char*) MESSAGE_BUFFER_SHARE(
+    pathnameCopy, strlen(pathnameCopy) + 1, MESSAGE_BUFFER_IN);
+  filesystemLstatArgs->statbuf = (struct stat*) MESSAGE_BUFFER_SHARE(
+    statbuf, sizeof(*statbuf), MESSAGE_BUFFER_OUT);
+  if ((filesystemLstatArgs->pathname == NULL)
+    || (filesystemLstatArgs->statbuf == NULL)
+  ) {
+    MESSAGE_BUFFER_UNSHARE(filesystemLstatArgs->pathname, pathnameCopy,
+      MESSAGE_BUFFER_IN);
+    MESSAGE_BUFFER_UNSHARE(filesystemLstatArgs->statbuf, statbuf,
+      MESSAGE_BUFFER_OUT);
+    free(pathnameCopy);
+    MESSAGE_ARGS_FREE(filesystemLstatArgs);
+    errno = ENOMEM;
+    return -1;
+  }
 
   ProcessMessage *msg = initSendProcessMessageToPid(
     rootFilesystemPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_LSTAT,
     filesystemLstatArgs, sizeof(*filesystemLstatArgs), true);
   processMessageWaitForDone(msg, NULL);
-  free(filesystemLstatArgs->pathname); filesystemLstatArgs->pathname = NULL;
+  MESSAGE_BUFFER_UNSHARE(filesystemLstatArgs->pathname, pathnameCopy,
+    MESSAGE_BUFFER_IN);
+  free(pathnameCopy);
+  MESSAGE_BUFFER_UNSHARE(filesystemLstatArgs->statbuf, statbuf,
+    MESSAGE_BUFFER_OUT);
   int returnValue = filesystemLstatArgs->returnValue;
   if (returnValue != 0) {
     errno = filesystemLstatArgs->errorNumber;
@@ -944,7 +1016,13 @@ int filesystemDirstat(const struct dirent *entry, struct stat *statbuf) {
     return -1;
   }
   filesystemDirstatArgs->dirp = (DIR*) entry->priv;
-  filesystemDirstatArgs->statbuf = statbuf;
+  filesystemDirstatArgs->statbuf = (struct stat*) MESSAGE_BUFFER_SHARE(
+    statbuf, sizeof(*statbuf), MESSAGE_BUFFER_OUT);
+  if (filesystemDirstatArgs->statbuf == NULL) {
+    MESSAGE_ARGS_FREE(filesystemDirstatArgs);
+    errno = ENOMEM;
+    return -1;
+  }
   filesystemDirstatArgs->returnValue = 0;
   filesystemDirstatArgs->errorNumber = 0;
 
@@ -953,6 +1031,8 @@ int filesystemDirstat(const struct dirent *entry, struct stat *statbuf) {
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_DIRSTAT,
     filesystemDirstatArgs, sizeof(*filesystemDirstatArgs), true);
   processMessageWaitForDone(msg, NULL);
+  MESSAGE_BUFFER_UNSHARE(filesystemDirstatArgs->statbuf, statbuf,
+    MESSAGE_BUFFER_OUT);
   int returnValue = filesystemDirstatArgs->returnValue;
   if (returnValue != 0) {
     errno = filesystemDirstatArgs->errorNumber;
@@ -986,14 +1066,23 @@ int fat32Format(const char *volumeLabel, uint32_t clusterSize) {
   }
   fat32FormatArgs->signature = FAT32_FORMAT_SIGNATURE;
   fat32FormatArgs->clusterSize = clusterSize;
+  char *volumeLabelCopy = NULL;
   if ((volumeLabel != NULL) && (*volumeLabel != '\0')) {
-    fat32FormatArgs->volumeLabel = (char*) malloc(strlen(volumeLabel) + 1);
-    if (fat32FormatArgs->volumeLabel == NULL) {
+    volumeLabelCopy = (char*) malloc(strlen(volumeLabel) + 1);
+    if (volumeLabelCopy == NULL) {
       MESSAGE_ARGS_FREE(fat32FormatArgs);
       errno = ENOMEM;
       return -1;
     }
-    strcpy(fat32FormatArgs->volumeLabel, volumeLabel);
+    strcpy(volumeLabelCopy, volumeLabel);
+    fat32FormatArgs->volumeLabel = (char*) MESSAGE_BUFFER_SHARE(
+      volumeLabelCopy, strlen(volumeLabelCopy) + 1, MESSAGE_BUFFER_IN);
+    if (fat32FormatArgs->volumeLabel == NULL) {
+      free(volumeLabelCopy);
+      MESSAGE_ARGS_FREE(fat32FormatArgs);
+      errno = ENOMEM;
+      return -1;
+    }
   }
 
   ProcessMessage *msg = initSendProcessMessageToPid(
@@ -1001,7 +1090,9 @@ int fat32Format(const char *volumeLabel, uint32_t clusterSize) {
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_FORMAT,
     fat32FormatArgs, sizeof(*fat32FormatArgs), true);
   processMessageWaitForDone(msg, NULL);
-  free(fat32FormatArgs->volumeLabel); fat32FormatArgs->volumeLabel = NULL;
+  MESSAGE_BUFFER_UNSHARE(fat32FormatArgs->volumeLabel, volumeLabelCopy,
+    MESSAGE_BUFFER_IN);
+  free(volumeLabelCopy);
   if (fat32FormatArgs->returnValue != 0) {
     // returnValue holds a FAT32 driver error code, not an errno value; there
     // is no clean mapping between the two, so report a generic I/O error.
@@ -1093,7 +1184,13 @@ size_t filesystemFRead(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     return returnValue; // 0
   }
   filesystemIoCommandArgs->file = stream;
-  filesystemIoCommandArgs->buffer = ptr;
+  filesystemIoCommandArgs->buffer = MESSAGE_BUFFER_SHARE(
+    ptr, size * nmemb, MESSAGE_BUFFER_INOUT);
+  if (filesystemIoCommandArgs->buffer == NULL) {
+    MESSAGE_ARGS_FREE(filesystemIoCommandArgs);
+    errno = ENOMEM;
+    return returnValue; // 0
+  }
   filesystemIoCommandArgs->length = (uint32_t) (size * nmemb);
 
   logDebug("Sending message to filesystem process to read %ld "
@@ -1109,6 +1206,8 @@ size_t filesystemFRead(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     /* size= */ sizeof(*filesystemIoCommandArgs),
     true);
   processMessageWaitForDone(processMessage, NULL);
+  MESSAGE_BUFFER_UNSHARE(filesystemIoCommandArgs->buffer, ptr,
+    MESSAGE_BUFFER_INOUT);
   returnValue = (filesystemIoCommandArgs->length / size);
   if (filesystemIoCommandArgs->errorNumber != 0) {
     errno = filesystemIoCommandArgs->errorNumber;
@@ -1150,7 +1249,13 @@ size_t filesystemFWrite(
     return returnValue; // 0
   }
   filesystemIoCommandArgs->file = stream;
-  filesystemIoCommandArgs->buffer = (void*) ptr;
+  filesystemIoCommandArgs->buffer = MESSAGE_BUFFER_SHARE(
+    (void*) ptr, size * nmemb, MESSAGE_BUFFER_IN);
+  if (filesystemIoCommandArgs->buffer == NULL) {
+    MESSAGE_ARGS_FREE(filesystemIoCommandArgs);
+    errno = ENOMEM;
+    return returnValue; // 0
+  }
   filesystemIoCommandArgs->length = (uint32_t) (size * nmemb);
   ProcessMessage *processMessage = initSendProcessMessageToPid(
     rootFilesystemPid,
@@ -1159,6 +1264,8 @@ size_t filesystemFWrite(
     /* size= */ sizeof(*filesystemIoCommandArgs),
     true);
   processMessageWaitForDone(processMessage, NULL);
+  MESSAGE_BUFFER_UNSHARE(filesystemIoCommandArgs->buffer, (void*) ptr,
+    MESSAGE_BUFFER_IN);
   returnValue = (filesystemIoCommandArgs->length / size);
   if (filesystemIoCommandArgs->errorNumber != 0) {
     errno = filesystemIoCommandArgs->errorNumber;
@@ -1189,7 +1296,12 @@ int getFileBlockMetadataFromFile(FILE *stream, FileBlockMetadata *metadata) {
     return -ENOMEM;
   }
   args->stream = stream;
-  args->metadata = metadata;
+  args->metadata = (FileBlockMetadata*) MESSAGE_BUFFER_SHARE(
+    metadata, sizeof(*metadata), MESSAGE_BUFFER_OUT);
+  if (args->metadata == NULL) {
+    MESSAGE_ARGS_FREE(args);
+    return -ENOMEM;
+  }
 
   ProcessMessage *processMessage = getAvailableMessage();
   for (int ii = 0;
@@ -1201,6 +1313,7 @@ int getFileBlockMetadataFromFile(FILE *stream, FileBlockMetadata *metadata) {
   }
   if (processMessage == NULL) {
     logError("ERROR: Out of process messages\n");
+    MESSAGE_BUFFER_UNSHARE(args->metadata, metadata, MESSAGE_BUFFER_OUT);
     MESSAGE_ARGS_FREE(args);
     return -ENOMEM;
   }
@@ -1214,11 +1327,13 @@ int getFileBlockMetadataFromFile(FILE *stream, FileBlockMetadata *metadata) {
     logError("Failed to send message to filesystem to get file "
       "block metadata\n");
     processMessageRelease(processMessage);
+    MESSAGE_BUFFER_UNSHARE(args->metadata, metadata, MESSAGE_BUFFER_OUT);
     MESSAGE_ARGS_FREE(args);
     return -EIO;
   }
   processMessageWaitForDone(processMessage, NULL);
   processMessageRelease(processMessage);
+  MESSAGE_BUFFER_UNSHARE(args->metadata, metadata, MESSAGE_BUFFER_OUT);
   int returnValue = -args->errorNumber;
   MESSAGE_ARGS_FREE(args);
 
