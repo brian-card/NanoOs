@@ -270,20 +270,18 @@ int nanoOsGethostname(char *name, size_t len) {
     return -1;
   }
   
-  const char *hostname = schedulerGetHostname();
-  if (hostname == NULL) {
-    hostname = _localhost;
+  int hostnameLength = schedulerGetHostname(name, len);
+  if (hostnameLength < 0) {
+    strncpy(name, _localhost, len);
+    hostnameLength = (int) (sizeof(_localhost) - 1);
   }
-  size_t hostnameLen = strlen(hostname);
-  
-  int returnValue = 0;
-  if (len < hostnameLen) {
-    returnValue = -1;
+
+  if (len < (size_t) hostnameLength) {
     errno = ENAMETOOLONG;
+    return -1;
   }
-  strncpy(name, hostname, len);
-  
-  return returnValue;
+
+  return 0;
 }
 
 /// @fn int nanoOsPipe(int pipefd[2])

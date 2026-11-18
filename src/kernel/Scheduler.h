@@ -166,10 +166,14 @@ typedef struct SchedulerSetProcessUserArgs {
 ///
 /// @brief Arguments and return values for the SCHEDULER_GET_HOSTNAME command.
 ///
-/// @param hostname The hostname string returned by the scheduler.
-/// @param errorNumber The errno value to set in the calling process.
+/// @param name The caller's buffer, which the handler fills as strncpy would.
+/// @param length The number of bytes at name.
+/// @param hostnameLength The length of the hostname, without its NUL.
+/// @param errorNumber ENOENT if the scheduler has no hostname, 0 otherwise.
 typedef struct SchedulerGetHostnameArgs {
-  const char *hostname;
+  char *name;
+  size_t length;
+  size_t hostnameLength;
   int errorNumber;
 } SchedulerGetHostnameArgs;
 
@@ -313,7 +317,7 @@ int schedulerSendSignal(ProcessId pid, int signal);
 int schedulerSetProcessUser(UserId userId);
 FileDescriptor* schedulerGetFileDescriptor(FILE *stream);
 int schedulerCloseAllFileDescriptors(void);
-const char* schedulerGetHostname(void);
+int schedulerGetHostname(char *name, size_t length);
 int schedulerExecveFullPath(const char *pathname,
   char *const argv[], char *const envp[]);
 int schedulerExecve(const char *pathname,

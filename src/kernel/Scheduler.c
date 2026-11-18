@@ -2385,40 +2385,52 @@ FileDescriptor* schedulerGetFileDescriptor(FILE *stream) {
   return returnValue;
 }
 
-/// @fn char* schedulerGetHostname(void)
+/// @fn int schedulerGetHostname(char *name, size_t length)
 ///
-/// @brief Get the hostname that's read during startup.
+/// @brief Copy the hostname that's read during startup into a buffer, as
+/// strncpy would.
 ///
-/// @return Returns the hostname that's read during startup on success, NULL on
-/// failure.
-const char* schedulerGetHostname(void) {
-  const char *hostname = NULL;
+/// @param name The buffer to fill.
+/// @param length The number of bytes at name.
+///
+/// @return Returns the length of the hostname, without its NUL, on success.
+/// Returns -1, leaving name's contents undefined, if the scheduler has no
+/// hostname or can't be reached.
+int schedulerGetHostname(char *name, size_t length) {
+  int hostnameLength = -1;
   MESSAGE_ARGS_ALLOCATE(SchedulerGetHostnameArgs, schedulerGetHostnameArgs);
   if (schedulerGetHostnameArgs == NULL) {
-    return hostname; // NULL
+    return hostnameLength; // -1
   }
-  schedulerGetHostnameArgs->hostname = NULL;
+  schedulerGetHostnameArgs->name = (char*) MESSAGE_BUFFER_SHARE(
+    name, length, MESSAGE_BUFFER_OUT);
+  if ((name != NULL) && (schedulerGetHostnameArgs->name == NULL)) {
+    MESSAGE_ARGS_FREE(schedulerGetHostnameArgs);
+    return hostnameLength; // -1
+  }
+  schedulerGetHostnameArgs->length = length;
+  schedulerGetHostnameArgs->hostnameLength = 0;
   schedulerGetHostnameArgs->errorNumber = 0;
   ProcessMessage *processMessage
     = initSendProcessMessageToPid(
     schedulerPid,
     SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_GET_HOSTNAME,
     schedulerGetHostnameArgs, sizeof(*schedulerGetHostnameArgs), true);
+  if (processMessage != NULL) {
+    processMessageWaitForDone(processMessage, NULL);
+    processMessageRelease(processMessage);
+  }
+  MESSAGE_BUFFER_UNSHARE(schedulerGetHostnameArgs->name, name,
+    MESSAGE_BUFFER_OUT);
+
   if (processMessage == NULL) {
     logError("Could not communicate with scheduler.\n");
-    MESSAGE_ARGS_FREE(schedulerGetHostnameArgs);
-    return hostname; // NULL
+  } else if (schedulerGetHostnameArgs->errorNumber == 0) {
+    hostnameLength = (int) schedulerGetHostnameArgs->hostnameLength;
   }
-
-  processMessageWaitForDone(processMessage, NULL);
-  if (schedulerGetHostnameArgs->errorNumber != 0) {
-    errno = schedulerGetHostnameArgs->errorNumber;
-  }
-  processMessageRelease(processMessage);
-  hostname = schedulerGetHostnameArgs->hostname;
   MESSAGE_ARGS_FREE(schedulerGetHostnameArgs);
 
-  return hostname;
+  return hostnameLength;
 }
 
 /// @var _emptyHostname
@@ -4098,7 +4110,8 @@ int schedulerSetProcessUserCommandHandler(
 /// @fn int schedulerGetHostnameCommandHandler(
 ///   SchedulerState *schedulerState, ProcessMessage *processMessage)
 ///
-/// @brief Get the hostname that's read when the scheduler starts.
+/// @brief Copy the hostname that's read when the scheduler starts into the
+/// caller's buffer.
 ///
 /// @param schedulerState A pointer to the SchedulerState maintained by the
 ///   scheduler process.
@@ -4113,8 +4126,16 @@ int schedulerGetHostnameCommandHandler(
   SchedulerGetHostnameArgs *schedulerGetHostnameArgs
     = (SchedulerGetHostnameArgs*) processMessageData(processMessage);
 
-  schedulerGetHostnameArgs->hostname = schedulerState->hostname;
-  schedulerGetHostnameArgs->errorNumber = 0;
+  const char *hostname = schedulerState->hostname;
+  if (hostname == NULL) {
+    schedulerGetHostnameArgs->errorNumber = ENOENT;
+  } else {
+    schedulerGetHostnameArgs->hostnameLength = strlen(hostname);
+    if (schedulerGetHostnameArgs->name != NULL) {
+      strncpy(schedulerGetHostnameArgs->name, hostname,
+        schedulerGetHostnameArgs->length);
+    }
+  }
 
   processMessageSetDone(processMessage);
   return returnValue;

@@ -60,6 +60,7 @@
 #include "../user/NanoOsErrno.h"
 #include "../user/NanoOsHardware.h"
 #include "../user/NanoOsSpawn.h"
+#include "../user/NanoOsUnistd.h"
 
 // Must come last
 #include "../user/NanoOsStdio.h"
@@ -605,9 +606,15 @@ void* runBuiltinShell(void *args) {
     consolePort = getOwnedConsolePort();
   }
 
+  char *hostname = (char*) calloc(1, HOST_NAME_MAX + 1);
+  if (hostname == NULL) {
+    return NULL;
+  }
+  schedulerGetHostname(hostname, HOST_NAME_MAX + 1);
+
   if (getRunningProcess()->userId == NO_USER_ID) {
     printf("\nNanoOs " NANO_OS_VERSION " %s tty%d\n\n",
-      schedulerGetHostname(), consolePort);
+      hostname, consolePort);
     login();
   }
 
@@ -619,7 +626,7 @@ void* runBuiltinShell(void *args) {
     = getUsernameByUserId(getRunningProcess()->userId);
   while (1) {
     printf("built-in %s@%s %s ",
-      processUsername, schedulerGetHostname(), prompt);
+      processUsername, hostname, prompt);
     commandBuffer[0] = '\0';
     char *input = fgets(commandBuffer, sizeof(commandBuffer), stdin);
     if (input == NULL) {
@@ -663,6 +670,7 @@ void* runBuiltinShell(void *args) {
     }
   }
 
+  free(hostname);
   return NULL;
 }
 
