@@ -195,9 +195,11 @@ typedef struct SchedulerExecveArgs {
 ///
 /// @param spawnArgs A pointer to the SpawnArgs structure that contains the
 ///   arguments to posix_spawn.
+/// @param newPid The process ID of the new process, set on success.
 /// @param errorNumber The errno value to return as the userspace return value.
 typedef struct SchedulerSpawnArgs {
   SpawnArgs *spawnArgs;
+  ProcessId newPid;
   int errorNumber;
 } SchedulerSpawnArgs;
 
