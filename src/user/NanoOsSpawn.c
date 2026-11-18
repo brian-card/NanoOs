@@ -229,8 +229,46 @@ int nanoOsSpawnattrAdddircap(posix_spawnattr_t *attr,
   return returnValue;
 }
 
+/// @fn static size_t spawnattrBlockFill(SpawnArgs *spawnArgs,
+///   const posix_spawnattr_t *attrp, char *nextField)
+///
+/// @brief Copy the spawn attributes and their directory capabilities into a
+/// spawn block, or measure them when spawnArgs is NULL.  It isn't inlined so
+/// that it stays out of the Agon's flash, which has no room for it.
+///
+/// @param spawnArgs The block to copy into, or NULL to only measure.
+/// @param attrp The spawn attributes.  This parameter may be NULL.
+/// @param nextField Where in the block the copy starts, which must be
+///   aligned for a pointer.
+///
+/// @return Returns the number of bytes the copy takes.
+static __attribute__((noinline)) size_t spawnattrBlockFill(
+  SpawnArgs *spawnArgs, const posix_spawnattr_t *attrp, char *nextField
+) {
+  if (attrp == NULL) {
+    return 0;
+  }
+  size_t capabilityBytes = 0;
+  if (attrp->dirCapabilities != NULL) {
+    capabilityBytes = attrp->dirCapabilities->size;
+  }
+  if (spawnArgs != NULL) {
+    spawnArgs->attrp = (posix_spawnattr_t*) nextField;
+    memcpy(nextField, attrp, sizeof(*attrp));
+    if (capabilityBytes != 0) {
+      spawnArgs->attrp->dirCapabilities
+        = (DirCapabilities*) &nextField[sizeof(*attrp)];
+      memcpy(spawnArgs->attrp->dirCapabilities, attrp->dirCapabilities,
+        capabilityBytes);
+    }
+  }
+
+  return sizeof(*attrp) + capabilityBytes;
+}
+
 /// @fn size_t spawnArgsSize(const char *path,
-///   const posix_spawn_file_actions_t *fileActions, char *const argv[])
+///   const posix_spawn_file_actions_t *fileActions,
+///   const posix_spawnattr_t *attrp, char *const argv[])
 ///
 /// @brief Calculate the size of the single block that holds a SpawnArgs
 ///   structure and all its contents.
@@ -238,11 +276,13 @@ int nanoOsSpawnattrAdddircap(posix_spawnattr_t *attr,
 /// @param path The path to the executable the spawned process will run.
 /// @param fileActions The file actions to use for the posix_spawn operation.
 ///   This parameter may be NULL.
+/// @param attrp The spawn attributes.  This parameter may be NULL.
 /// @param argv The argument array to use for the posix_spawn call.
 ///
 /// @return Returns the total size of the contiguous block in bytes.
 static __attribute__((noinline)) size_t spawnArgsSize(const char *path,
-  const posix_spawn_file_actions_t *fileActions, char *const argv[]
+  const posix_spawn_file_actions_t *fileActions,
+  const posix_spawnattr_t *attrp, char *const argv[]
 ) {
   size_t numArgs = 0;
   size_t stringBytes = 0;
@@ -257,10 +297,11 @@ static __attribute__((noinline)) size_t spawnArgsSize(const char *path,
   }
 
   return sizeof(SpawnArgs) + fileActionBytes + (numArgs * sizeof(char*))
-    + stringBytes + strlen(path) + 1;
+    + spawnattrBlockFill(NULL, attrp, NULL) + stringBytes
+    + strlen(path) + 1;
 }
 
-/// @fn void spawnArgsFill(SpawnArgs *spawnArgs, pid_t *pid, const char *path,
+/// @fn void spawnArgsFill(SpawnArgs *spawnArgs, const char *path,
 ///   const posix_spawn_file_actions_t *fileActions,
 ///   const posix_spawnattr_t *attrp, char *const argv[])
 ///
@@ -268,23 +309,19 @@ static __attribute__((noinline)) size_t spawnArgsSize(const char *path,
 /// block of contiguous memory.
 ///
 /// @param spawnArgs A pointer to SpawnArgs structure to populate.
-/// @param pid The address the spawned process's PID is to be written to.
 /// @param path The path to the executable the spawned process will run.
 /// @param fileActions The file actions to copy into the block.  This parameter
 ///   may be NULL
-/// @param attrp The spawn attributes.  This parameter is currently only set
-///   by pointer.  Its contents, if any, are not copied into the block.
+/// @param attrp The spawn attributes to copy into the block, with their
+///   directory capabilities.  This parameter may be NULL.
 /// @param argv The argument array the spawned process will use.
 ///
 /// @return This function returns no value.
 static __attribute__((noinline)) void spawnArgsFill(SpawnArgs *spawnArgs,
-  pid_t *pid, const char *path,
+  const char *path,
   const posix_spawn_file_actions_t *fileActions,
   const posix_spawnattr_t *attrp, char *const argv[]
 ) {
-  spawnArgs->newPid = pid;
-  spawnArgs->attrp = (posix_spawnattr_t*) attrp;
-
   char *nextField = &((char*) spawnArgs)[sizeof(SpawnArgs)];
   if (fileActions != NULL) {
     spawnArgs->fileActions = (posix_spawn_file_actions_t*) nextField;
@@ -298,6 +335,7 @@ static __attribute__((noinline)) void spawnArgsFill(SpawnArgs *spawnArgs,
 
   spawnArgs->argv = (char**) nextField;
   char *nextString = (char*) &spawnArgs->argv[numArgs];
+  nextString += spawnattrBlockFill(spawnArgs, attrp, nextString);
   size_t index = 0;
   for (; index < (numArgs - 1); index++) {
     spawnArgs->argv[index] = nextString;
@@ -308,6 +346,27 @@ static __attribute__((noinline)) void spawnArgsFill(SpawnArgs *spawnArgs,
   spawnArgs->path = nextString;
   strcpy(spawnArgs->path, path);
 }
+
+#ifdef NANO_OS_MESSAGE_ARGS_CHECKED
+
+/// @fn void spawnArgsCopy(void *destination, const void *source, size_t size)
+///
+/// @brief Rebuild a SpawnArgs block at a new address for MESSAGE_ARGS_ADOPT.
+///
+/// @param destination The new block.
+/// @param source The block to rebuild.
+/// @param size The size of the block.
+///
+/// @return This function returns no value.
+void spawnArgsCopy(void *destination, const void *source, size_t size) {
+  const SpawnArgs *from = (const SpawnArgs*) source;
+  SpawnArgs *to = (SpawnArgs*) destination;
+  memset(to, 0, size);
+  spawnArgsFill(to, from->path, from->fileActions, from->attrp, from->argv);
+  to->envp = from->envp;
+}
+
+#endif // NANO_OS_MESSAGE_ARGS_CHECKED
 
 /// @fn size_t envpBlockSize(char *const envp[])
 ///
@@ -437,19 +496,21 @@ int nanoOsSpawn(
     return returnValue;
   }
 
-  SpawnArgs *spawnArgs
-    = (SpawnArgs*) calloc(1, spawnArgsSize(fullPath, file_actions, argv));
+  SpawnArgs *spawnArgs = (SpawnArgs*) MESSAGE_ARGS_CREATE_BYTES(
+    spawnArgsSize(fullPath, file_actions, attrp, argv),
+    MESSAGE_ARGS_ROUND_TRIP);
   if (spawnArgs == NULL) {
     free(fullPath);
     return ENOMEM;
   }
-  spawnArgsFill(spawnArgs, pid, fullPath, file_actions, attrp, argv);
+  spawnArgsFill(spawnArgs, fullPath, file_actions, attrp, argv);
   free(fullPath);
 
   if (envp != NULL) {
     size_t envpBytes = envpBlockSize(envp);
     if (envpBytes > 0) {
-      char *envpBlock = (char*) calloc(1, envpBytes);
+      char *envpBlock = (char*) MESSAGE_ARGS_CREATE_BYTES(envpBytes,
+        MESSAGE_ARGS_ROUND_TRIP);
       if (envpBlock == NULL) {
         returnValue = ENOMEM;
         goto freeSpawnArgs;
@@ -480,6 +541,9 @@ int nanoOsSpawn(
 
   processMessageWaitForDone(processMessage, NULL);
   returnValue = schedulerSpawnArgs->errorNumber;
+  if (returnValue == 0) {
+    *pid = schedulerSpawnArgs->newPid;
+  }
   processMessageRelease(processMessage);
   MESSAGE_ARGS_FREE(schedulerSpawnArgs);
 
@@ -490,7 +554,10 @@ int nanoOsSpawn(
   return returnValue;
 
 freeSpawnArgs:
-  spawnArgs = spawnArgsDestroy(spawnArgs);
+  if (spawnArgs->envp != NULL) {
+    MESSAGE_ARGS_DESTROY(spawnArgs->envp[0]);
+  }
+  MESSAGE_ARGS_DESTROY(spawnArgs);
 
   return returnValue;
 }
