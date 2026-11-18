@@ -365,8 +365,6 @@
 *(.text._overlayFifoGet)
 *(.text._overlayFifoPush)
 *(.text._callOverlayFunctionFromFileCache)
-*(.text._execArgsDestroy)
-*(.text._spawnArgsDestroy)
 *(.text._getNumTokens)
 *(.text._getNumLeadingBackslashes)
 *(.text._findEndQuote)
