@@ -518,8 +518,6 @@ ProcessMessage* initSendProcessMessageToPid(int pid, int64_t type,
 ProcessMessage* initSendProcessMessageToProcess(
   ProcessDescriptor *processDescriptor, int64_t type,
   void *data, size_t size, bool waiting);
-ExecArgs* execArgsDestroy(ExecArgs *execArgs);
-SpawnArgs* spawnArgsDestroy(SpawnArgs *spawnArgs);
 size_t pathCollapse(char *path);
 IpcCapability* findIpcCapability(
   IpcCapability *capabilities, size_t numCapabilities,

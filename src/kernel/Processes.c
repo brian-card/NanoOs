@@ -78,42 +78,6 @@ char** stringArrayDestroy(char **stringArray) {
   return NULL;
 }
 
-/// @fn ExecArgs* execArgsDestroy(ExecArgs *execArgs)
-///
-/// @brief Free all of an ExecArgs structure.
-///
-/// @param execArgs A pointer to an ExecArgs structure.
-///
-/// @return This function always succeeds and always returns NULL.
-ExecArgs* execArgsDestroy(ExecArgs *execArgs) {
-  if (execArgs->envp != NULL) {
-    free(execArgs->envp[0]);
-  }
-
-  // We don't need to and SHOULD NOT touch execArgs->schedulerState.
-
-  free(execArgs);
-  return NULL;
-}
-
-/// @fn SpawnArgs* spawnArgsDestroy(SpawnArgs *execArgs)
-///
-/// @brief Free all of an SpawnArgs structure.
-///
-/// @param spawnArgs A pointer to an SpawnArgs structure.
-///
-/// @return This function always succeeds and always returns NULL.
-SpawnArgs* spawnArgsDestroy(SpawnArgs *spawnArgs) {
-  if (spawnArgs->envp != NULL) {
-    free(spawnArgs->envp[0]);
-  }
-
-  // We don't need to and SHOULD NOT touch spawnArgs->schedulerState.
-
-  free(spawnArgs);
-  return NULL;
-}
-
 /// @var _whitespace
 ///
 /// @brief Set of characters considered whitespace when tokenizing input.
