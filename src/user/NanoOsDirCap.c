@@ -136,12 +136,21 @@ static int nanoOsDircapChange(SchedulerCommand command,
     errno = errorNumber;
     return -1;
   }
-  schedulerDirCapabilityArgs->name = name;
+  schedulerDirCapabilityArgs->name = (const char*) MESSAGE_BUFFER_SHARE(
+    name, schedulerDirCapabilityArgs->nameLength + 1, MESSAGE_BUFFER_IN);
+  if ((name != NULL) && (schedulerDirCapabilityArgs->name == NULL)) {
+    free(name);
+    MESSAGE_ARGS_FREE(schedulerDirCapabilityArgs);
+    errno = ENOMEM;
+    return -1;
+  }
 
   ProcessMessage *processMessage = initSendProcessMessageToPid(schedulerPid,
     SCHEDULER_COMMAND_SIGNATURE | command,
     schedulerDirCapabilityArgs, sizeof(*schedulerDirCapabilityArgs), true);
   if (processMessage == NULL) {
+    MESSAGE_BUFFER_UNSHARE((void*) schedulerDirCapabilityArgs->name, name,
+      MESSAGE_BUFFER_IN);
     free(name);
     MESSAGE_ARGS_FREE(schedulerDirCapabilityArgs);
     errno = ENOMEM;
@@ -149,6 +158,8 @@ static int nanoOsDircapChange(SchedulerCommand command,
   }
   processMessageWaitForDone(processMessage, NULL);
   processMessageRelease(processMessage);
+  MESSAGE_BUFFER_UNSHARE((void*) schedulerDirCapabilityArgs->name, name,
+    MESSAGE_BUFFER_IN);
   free(name);
 
   if (schedulerDirCapabilityArgs->errorNumber != 0) {
@@ -202,7 +213,14 @@ int nanoOsDircapGet(DirCapabilities *buffer, size_t bufferSize) {
     errno = ENOMEM;
     return -1;
   }
-  schedulerGetDirCapabilitiesArgs->buffer = buffer;
+  schedulerGetDirCapabilitiesArgs->buffer
+    = (DirCapabilities*) MESSAGE_BUFFER_SHARE(
+      buffer, bufferSize, MESSAGE_BUFFER_INOUT);
+  if ((buffer != NULL) && (schedulerGetDirCapabilitiesArgs->buffer == NULL)) {
+    MESSAGE_ARGS_FREE(schedulerGetDirCapabilitiesArgs);
+    errno = ENOMEM;
+    return -1;
+  }
   schedulerGetDirCapabilitiesArgs->bufferSize = bufferSize;
   schedulerGetDirCapabilitiesArgs->size = 0;
   schedulerGetDirCapabilitiesArgs->errorNumber = 0;
@@ -211,12 +229,16 @@ int nanoOsDircapGet(DirCapabilities *buffer, size_t bufferSize) {
     schedulerGetDirCapabilitiesArgs, sizeof(*schedulerGetDirCapabilitiesArgs),
     true);
   if (processMessage == NULL) {
+    MESSAGE_BUFFER_UNSHARE(schedulerGetDirCapabilitiesArgs->buffer, buffer,
+      MESSAGE_BUFFER_INOUT);
     MESSAGE_ARGS_FREE(schedulerGetDirCapabilitiesArgs);
     errno = ENOMEM;
     return -1;
   }
   processMessageWaitForDone(processMessage, NULL);
   processMessageRelease(processMessage);
+  MESSAGE_BUFFER_UNSHARE(schedulerGetDirCapabilitiesArgs->buffer, buffer,
+    MESSAGE_BUFFER_INOUT);
 
   int returnValue = (int) schedulerGetDirCapabilitiesArgs->size;
   if (schedulerGetDirCapabilitiesArgs->errorNumber != 0) {
