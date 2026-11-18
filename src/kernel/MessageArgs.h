@@ -90,9 +90,10 @@ typedef uint8_t MessageBufferDirection;
 
 /// @typedef MessageArgsCopyFn
 ///
-/// @brief A function that rebuilds an adopted block at a new address, fixing
-/// up the pointers the block holds into itself.
-typedef void (*MessageArgsCopyFn)(void *destination, const void *source);
+/// @brief A function that rebuilds an adopted block of `size` bytes at a new
+/// address, fixing up the pointers the block holds into itself.
+typedef void (*MessageArgsCopyFn)(void *destination, const void *source,
+  size_t size);
 
 #ifdef NANO_OS_MESSAGE_ARGS_CHECKED
 
@@ -253,6 +254,12 @@ void messageArgsResetCounts(void);
 #define MESSAGE_ARGS_ADOPT(ptr, pid, copyFn) \
   messageArgsAdopt((void**) &(ptr), (pid), (copyFn))
 
+/// @def MESSAGE_ARGS_ADOPT_MOVES
+///
+/// @brief Whether MESSAGE_ARGS_ADOPT can move a block, so that a caller
+/// re-derives the pointers it took from the block only when it has to.
+#define MESSAGE_ARGS_ADOPT_MOVES true
+
 /// @def MESSAGE_BUFFER_SHARE
 ///
 /// @brief Yield the pointer to put in an argument structure for a buffer of
@@ -314,6 +321,8 @@ void messageArgsResetCounts(void);
 #define MESSAGE_ARGS_DESTROY_WITH(ptr, freeFunction) freeFunction(ptr)
 
 #define MESSAGE_ARGS_ADOPT(ptr, pid, copyFn) assignMemory((ptr), (pid))
+
+#define MESSAGE_ARGS_ADOPT_MOVES false
 
 #define MESSAGE_BUFFER_SHARE(ptr, size, direction) ((void*) (ptr))
 

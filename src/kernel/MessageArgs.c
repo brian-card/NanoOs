@@ -509,7 +509,7 @@ int messageArgsAdoptWith(void **ptr, ProcessId pid, MessageArgsCopyFn copyFn,
     return -ENOMEM;
   }
   if (copyFn != NULL) {
-    copyFn(copy, *ptr);
+    copyFn(copy, *ptr, requested);
   } else {
     memcpy(copy, *ptr, requested);
   }
