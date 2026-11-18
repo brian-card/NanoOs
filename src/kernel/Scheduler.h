@@ -221,10 +221,13 @@ typedef struct SchedulerSendSignalArgs {
 ///   the overlay is in.
 /// @param overlay A pointer to the OverlayDescriptor to use as the process's
 ///   new overlay.
+/// @param overlayId The overlay->overlayIdLength bytes of the overlay's ID,
+///   which the handler copies in place of overlay->overlayId.
 /// @returnValue The returnValue of the command handler.
 typedef struct SchedulerReplaceOverlayArgs {
   void *overlayNamespace;
   OverlayDescriptor *overlay;
+  void *overlayId;
   int returnValue;
 } SchedulerReplaceOverlayArgs;
 
