@@ -111,7 +111,8 @@ checker, or with storage its body allocated and didn't free, fails. A test
 that provokes an error on purpose asserts the count and then calls
 `messageArgsResetCounts()`. `tools/check-message-args.py`, which
 `run-all.sh` runs first, fails on a send whose payload is the address of a
-local or global, or an allocation with no free in its function. `suites/test_unit_message_args_production.c`
+local or global, an allocation with no free in its function, or a pointer
+member that carries sender memory without `MESSAGE_BUFFER_SHARE`. `suites/test_unit_message_args_production.c`
 is compiled without the define to test the production expansions. Layer 3
 runs every test against `sim/bin/nano-os-sim-checked` too (`make -C sim
 checked`, built by `mkimage.sh`), and fails any test whose output contains a

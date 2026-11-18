@@ -31,8 +31,12 @@
     tools/check-message-args.py [file ...]
 
 With no files, checks every .c and .h file under src/ and userspace/.  Fails
-if a send passes the address of a local or global as its payload, or if a
-function's MESSAGE_ARGS_ALLOCATE has no MESSAGE_ARGS_FREE of the same name.
+if a send passes the address of a local or global as its payload, if a
+function's MESSAGE_ARGS_ALLOCATE has no MESSAGE_ARGS_FREE of the same name, or
+if a function sets a pointer member that carries sender memory to anything
+but a MESSAGE_BUFFER_SHARE it later unshares, storage from
+MESSAGE_ARGS_CREATE it later destroys, NULL, or a pointer derived from the same
+arguments.
 """
 
 import glob
@@ -62,9 +66,27 @@ EXCLUDED = {
     "src/kernel/MessageArgs.h",
 }
 
+# Pointer members that carry sender memory, by argument structure.
+SHARED_MEMBERS = {
+    "FilesystemFopenArgs": {"pathname", "mode"},
+    "FilesystemRemoveArgs": {"pathname"},
+    "FilesystemRenameArgs": {"oldpath", "newpath"},
+    "FilesystemPathArgs": {"pathname"},
+    "FilesystemOpendirArgs": {"pathname"},
+    "FilesystemLstatArgs": {"pathname", "statbuf"},
+    "FilesystemDirstatArgs": {"statbuf"},
+    "Fat32FormatArgs": {"volumeLabel"},
+    "FilesystemIoCommandArgs": {"buffer"},
+    "GetFileBlockMetadataArgs": {"metadata"},
+    "SchedulerGetProcessInfoArgs": {"processInfo"},
+    "SchedulerReplaceOverlayArgs": {"overlay", "overlayId"},
+    "SchedulerDirCapabilityArgs": {"name"},
+    "SchedulerGetDirCapabilitiesArgs": {"buffer"},
+}
+
 SEND_CALL = re.compile(r"\b(%s)\s*\(" % "|".join(PAYLOAD_INDEX))
 ADDRESS_OF_STORAGE = re.compile(r"^&\s*\(?\s*[A-Za-z_]\w*(\s*\.\s*\w+)*\s*\)?$")
-ALLOCATE = re.compile(r"\bMESSAGE_ARGS_ALLOCATE\s*\(\s*\w+\s*,\s*(\w+)\s*\)")
+ALLOCATE = re.compile(r"\bMESSAGE_ARGS_ALLOCATE\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)")
 
 
 def strip(text):
@@ -163,13 +185,50 @@ def check(path, relative):
     for start, end in function_bodies(text):
         body = text[start:end]
         for m in ALLOCATE.finditer(body):
-            name = m.group(1)
+            name = m.group(2)
             if not re.search(r"\bMESSAGE_ARGS_FREE\s*\(\s*%s\s*\)" % name,
                              body):
                 problems.append("%s:%d: MESSAGE_ARGS_ALLOCATE of %s has no "
                                 "MESSAGE_ARGS_FREE" % (
                                     relative, line_of(text, start + m.start()),
                                     name))
+            for member in sorted(SHARED_MEMBERS.get(m.group(1), ())):
+                problems.extend(check_member(
+                    relative, text, start, body, name, member))
+    return problems
+
+
+def check_member(relative, text, start, body, name, member):
+    """Check every assignment to one pointer member of one argument variable.
+
+    @param relative The path to report.
+    @param text The stripped source.
+    @param start The index of the function body in text.
+    @param body The function body.
+    @param name The argument variable.
+    @param member The pointer member.
+
+    @return The list of problems, one string each.
+    """
+    problems = []
+    target = r"\b%s\s*->\s*%s" % (name, member)
+    for m in re.finditer(target + r"\s*=(?!=)\s*([^;]*);", body):
+        value = m.group(1)
+        where = "%s:%d: %s->%s" % (
+            relative, line_of(text, start + m.start()), name, member)
+        if "MESSAGE_BUFFER_SHARE" in value:
+            if not re.search(r"\bMESSAGE_BUFFER_UNSHARE\s*\(\s*(\(\s*\w+\s*\*\s*\)\s*)?"
+                             + target, body):
+                problems.append(where + " is shared but never unshared")
+        elif "MESSAGE_ARGS_CREATE" in value:
+            if not re.search(r"\bMESSAGE_ARGS_DESTROY\s*\(\s*" + target,
+                             body):
+                problems.append(where + " is created but never destroyed")
+        elif value.strip() == "NULL" or re.search(r"\b%s\s*->" % name, value):
+            continue
+        else:
+            problems.append(where + " carries sender memory without "
+                            "MESSAGE_BUFFER_SHARE")
     return problems
 
 

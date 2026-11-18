@@ -1284,10 +1284,10 @@ static volatile int fakeIoError;
 /// @brief The handle in the last dirstat the fake filesystem received.
 static DIR *fakeDirstatDirp;
 
-/// @var fakeDirstatBuf
+/// @def FAKE_DIRSTAT_SIZE
 ///
-/// @brief The statbuf in the last dirstat the fake filesystem received.
-static struct stat *fakeDirstatBuf;
+/// @brief The st_size the fake filesystem reports for a dirstat.
+#define FAKE_DIRSTAT_SIZE 1234
 
 /// @var fakeDirstatCount
 ///
@@ -1348,7 +1348,7 @@ static void* fakeFilesystem(void *args) {
 
       case FILESYSTEM_DIRSTAT:
         fakeDirstatDirp = ((FilesystemDirstatArgs*) data)->dirp;
-        fakeDirstatBuf = ((FilesystemDirstatArgs*) data)->statbuf;
+        ((FilesystemDirstatArgs*) data)->statbuf->st_size = FAKE_DIRSTAT_SIZE;
         ((FilesystemDirstatArgs*) data)->returnValue
           = (fakeIoError != 0) ? -1 : 0;
         ((FilesystemDirstatArgs*) data)->errorNumber = fakeIoError;
@@ -1386,7 +1386,6 @@ static void useFakeFilesystem(void) {
   fakeClosedCount = 0;
   fakeDirstatCount = 0;
   fakeDirstatDirp = NULL;
-  fakeDirstatBuf = NULL;
   fakeIoError = 0;
   fakeFilesOpened = 0;
   fakeFilesClosed = 0;
@@ -2021,7 +2020,7 @@ NANO_OS_KERNEL_TEST(fs_handles, the_dirstat_call_sends_the_entrys_handle) {
   NANO_OS_ASSERT_EQ_INT(0, filesystemDirstat(&entry, &st));
   NANO_OS_ASSERT_EQ_INT(1, fakeDirstatCount);
   NANO_OS_ASSERT_EQ_PTR(entry.priv, fakeDirstatDirp);
-  NANO_OS_ASSERT_EQ_PTR(&st, fakeDirstatBuf);
+  NANO_OS_ASSERT_EQ_INT(FAKE_DIRSTAT_SIZE, (long long) st.st_size);
 }
 
 NANO_OS_KERNEL_TEST(fs_handles, the_dirstat_call_reports_the_error) {
