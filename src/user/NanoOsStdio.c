@@ -1984,8 +1984,15 @@ static __attribute__((noinline)) int nanoOsWriteBufferToFile(
     goto releaseBuffer;
   }
   filesystemIoCommandArgs->file = stream;
-  filesystemIoCommandArgs->buffer = consoleBuffer->buffer;
   filesystemIoCommandArgs->length = (uint32_t) strlen(consoleBuffer->buffer);
+  filesystemIoCommandArgs->buffer = MESSAGE_BUFFER_SHARE(
+    consoleBuffer->buffer, filesystemIoCommandArgs->length,
+    MESSAGE_BUFFER_IN);
+  if (filesystemIoCommandArgs->buffer == NULL) {
+    MESSAGE_ARGS_FREE(filesystemIoCommandArgs);
+    returnValue = EOF;
+    goto releaseBuffer;
+  }
   ProcessMessage *processMessage = initSendProcessMessageToPid(
     rootFilesystemPid,
     FILESYSTEM_COMMAND_SIGNATURE | FILESYSTEM_WRITE_FILE,
@@ -1993,6 +2000,8 @@ static __attribute__((noinline)) int nanoOsWriteBufferToFile(
     /* size= */ sizeof(*filesystemIoCommandArgs),
     true);
   processMessageWaitForDone(processMessage, NULL);
+  MESSAGE_BUFFER_UNSHARE(filesystemIoCommandArgs->buffer,
+    consoleBuffer->buffer, MESSAGE_BUFFER_IN);
   if (filesystemIoCommandArgs->length == 0) {
     returnValue = EOF;
   }
