@@ -166,10 +166,16 @@ typedef void (*MessageArgsCopyFn)(void *destination, const void *source,
 /// @brief An allocation failed because the arena was full.
 #define MESSAGE_ARGS_ERROR_ARENA_FULL       12
 
+/// @def MESSAGE_ARGS_ERROR_OVERLAY_POINTER
+///
+/// @brief A buffer in the overlay window was shared, where another process's
+/// overlay can replace it before the recipient reads or writes it.
+#define MESSAGE_ARGS_ERROR_OVERLAY_POINTER  13
+
 /// @def MESSAGE_ARGS_NUM_ERRORS
 ///
 /// @brief The number of kinds of error the checker counts.
-#define MESSAGE_ARGS_NUM_ERRORS             13
+#define MESSAGE_ARGS_NUM_ERRORS             14
 
 /// @struct MessageArgsCounts
 ///
