@@ -37,6 +37,7 @@
 #include <string.h>
 
 #include "kernel/Console.h"
+#include "kernel/Filesystem.h"
 #include "kernel/Hal.h"
 #include "kernel/MemoryManager.h"
 #include "kernel/NanoOs.h"
@@ -290,7 +291,7 @@ NANO_OS_KERNEL_TEST(message_args, a_failed_send_is_forgotten) {
 NANO_OS_KERNEL_TEST(message_args, in_buffer_is_a_copy) {
   char path[] = "/etc/passwd";
   char *shared = (char*) MESSAGE_BUFFER_SHARE(path, sizeof(path),
-    MESSAGE_BUFFER_IN);
+    MESSAGE_BUFFER_IN, rootFilesystemPid);
   NANO_OS_ASSERT_NOT_NULL(shared);
   NANO_OS_ASSERT_TRUE(shared != path);
   NANO_OS_ASSERT_STR_EQ(path, shared);
@@ -302,7 +303,7 @@ NANO_OS_KERNEL_TEST(message_args, in_buffer_is_a_copy) {
 NANO_OS_KERNEL_TEST(message_args, in_buffer_written_by_the_recipient_is_counted) {
   char path[] = "/etc/passwd";
   char *shared = (char*) MESSAGE_BUFFER_SHARE(path, sizeof(path),
-    MESSAGE_BUFFER_IN);
+    MESSAGE_BUFFER_IN, rootFilesystemPid);
   shared[1] = 'X';
   MESSAGE_BUFFER_UNSHARE(shared, path, MESSAGE_BUFFER_IN);
   NANO_OS_ASSERT_STR_EQ("/etc/passwd", path);
@@ -312,7 +313,7 @@ NANO_OS_KERNEL_TEST(message_args, in_buffer_written_by_the_recipient_is_counted)
 NANO_OS_KERNEL_TEST(message_args, out_buffer_is_copied_back_at_unshare) {
   char result[8] = "xxxxxxx";
   char *shared = (char*) MESSAGE_BUFFER_SHARE(result, sizeof(result),
-    MESSAGE_BUFFER_OUT);
+    MESSAGE_BUFFER_OUT, rootFilesystemPid);
   NANO_OS_ASSERT_NOT_NULL(shared);
   NANO_OS_ASSERT_EQ_INT(0, shared[0]);
   strcpy(shared, "abc");
@@ -325,7 +326,7 @@ NANO_OS_KERNEL_TEST(message_args, out_buffer_is_copied_back_at_unshare) {
 NANO_OS_KERNEL_TEST(message_args, a_retained_buffer_reads_poison) {
   char secret[] = "secret";
   volatile char *shared = (volatile char*) MESSAGE_BUFFER_SHARE(secret,
-    sizeof(secret), MESSAGE_BUFFER_IN);
+    sizeof(secret), MESSAGE_BUFFER_IN, rootFilesystemPid);
   MESSAGE_BUFFER_UNSHARE(shared, secret, MESSAGE_BUFFER_IN);
   for (size_t ii = 0; ii < sizeof(secret); ii++) {
     NANO_OS_ASSERT_EQ_INT(POISON, (uint8_t) shared[ii]);
@@ -335,7 +336,8 @@ NANO_OS_KERNEL_TEST(message_args, a_retained_buffer_reads_poison) {
 NANO_OS_KERNEL_TEST(message_args, unshare_with_the_wrong_original_is_counted) {
   char path[] = "/a";
   char other[] = "/b";
-  void *shared = MESSAGE_BUFFER_SHARE(path, sizeof(path), MESSAGE_BUFFER_IN);
+  void *shared = MESSAGE_BUFFER_SHARE(path, sizeof(path), MESSAGE_BUFFER_IN,
+    rootFilesystemPid);
   MESSAGE_BUFFER_UNSHARE(shared, other, MESSAGE_BUFFER_IN);
   MESSAGE_BUFFER_UNSHARE(shared, path, MESSAGE_BUFFER_IN);
   assertOnlyError(MESSAGE_ARGS_ERROR_BAD_POINTER, 1);
@@ -347,15 +349,18 @@ NANO_OS_KERNEL_TEST(message_args, a_buffer_in_the_overlay_window_is_counted) {
   NANO_OS_ASSERT_TRUE(HAL->memory->overlaySize > 0);
   uint8_t *window = (uint8_t*) overlayMap;
   uint8_t *last = &window[HAL->memory->overlaySize - 1];
-  void *shared = MESSAGE_BUFFER_SHARE(last, 1, MESSAGE_BUFFER_IN);
+  void *shared
+    = MESSAGE_BUFFER_SHARE(last, 1, MESSAGE_BUFFER_IN, rootFilesystemPid);
   MESSAGE_BUFFER_UNSHARE(shared, last, MESSAGE_BUFFER_IN);
-  shared = MESSAGE_BUFFER_SHARE(window, 1, MESSAGE_BUFFER_IN);
+  shared
+    = MESSAGE_BUFFER_SHARE(window, 1, MESSAGE_BUFFER_IN, rootFilesystemPid);
   MESSAGE_BUFFER_UNSHARE(shared, window, MESSAGE_BUFFER_IN);
   assertOnlyError(MESSAGE_ARGS_ERROR_OVERLAY_POINTER, 2);
 }
 
 NANO_OS_KERNEL_TEST(message_args, sharing_null_yields_null) {
-  NANO_OS_ASSERT_NULL(MESSAGE_BUFFER_SHARE(NULL, 4, MESSAGE_BUFFER_IN));
+  NANO_OS_ASSERT_NULL(
+    MESSAGE_BUFFER_SHARE(NULL, 4, MESSAGE_BUFFER_IN, rootFilesystemPid));
   MESSAGE_BUFFER_UNSHARE(NULL, NULL, MESSAGE_BUFFER_IN);
   NANO_OS_ASSERT_EQ_INT(0, messageArgsErrorTotal());
 }

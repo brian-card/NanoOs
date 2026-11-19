@@ -107,7 +107,7 @@ NANO_OS_TEST(message_args_production, allocate_points_at_its_own_storage) {
 
 /// @var _evaluations
 ///
-/// @brief The number of times countedSize has run.
+/// @brief The number of times countedSize and countedRecipient have run.
 static int _evaluations = 0;
 
 /// @fn static size_t countedSize(void)
@@ -120,14 +120,25 @@ static size_t countedSize(void) {
   return 4;
 }
 
+/// @fn static ProcessId countedRecipient(void)
+///
+/// @brief A recipient argument whose evaluation the tests can see.
+///
+/// @return Returns 1.
+static ProcessId countedRecipient(void) {
+  _evaluations++;
+  return 1;
+}
+
 NANO_OS_TEST(message_args_production, share_returns_the_buffer_unevaluated) {
   char buffer[] = "path";
   _evaluations = 0;
   NANO_OS_ASSERT_EQ_INT(4, (int) countedSize());
-  NANO_OS_ASSERT_EQ_INT(1, _evaluations);
+  NANO_OS_ASSERT_EQ_INT(1, (int) countedRecipient());
+  NANO_OS_ASSERT_EQ_INT(2, _evaluations);
   _evaluations = 0;
   void *shared = MESSAGE_BUFFER_SHARE(buffer, countedSize(),
-    MESSAGE_BUFFER_IN);
+    MESSAGE_BUFFER_IN, countedRecipient());
   NANO_OS_ASSERT_EQ_PTR(buffer, shared);
   MESSAGE_BUFFER_UNSHARE(shared, buffer + countedSize(), MESSAGE_BUFFER_IN);
   NANO_OS_ASSERT_EQ_INT(0, _evaluations);
