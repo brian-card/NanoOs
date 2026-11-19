@@ -100,6 +100,8 @@
 /// @param owner The process that allocated the block.
 /// @param recipient The process the block was last sent to, or
 ///   PROCESS_ID_NOT_SET.
+/// @param sharedWith The process a shared buffer was shared with, or
+///   PROCESS_ID_NOT_SET.
 typedef struct MessageArgsBlock {
   uint32_t                magic;
   uint32_t                size;
@@ -112,6 +114,7 @@ typedef struct MessageArgsBlock {
   MessageBufferDirection  direction;
   ProcessId               owner;
   ProcessId               recipient;
+  ProcessId               sharedWith;
 } MessageArgsBlock;
 
 /// @def HEADER_SIZE
@@ -395,6 +398,7 @@ static MessageArgsBlock* blockAllocate(size_t requested,
   found->direction = 0;
   found->owner = getRunningPid();
   found->recipient = PROCESS_ID_NOT_SET;
+  found->sharedWith = PROCESS_ID_NOT_SET;
   memset(payload, 0, found->size);
   _counts.live++;
   coroutineExitCriticalSection();
@@ -542,7 +546,7 @@ int messageArgsAdopt(void **ptr, ProcessId pid, MessageArgsCopyFn copyFn) {
 }
 
 /// @fn void* messageBufferShare(void *ptr, size_t size,
-///   MessageBufferDirection direction)
+///   MessageBufferDirection direction, ProcessId recipient)
 ///
 /// @brief Copy a buffer into the arena for a recipient.  An IN buffer is
 /// followed by a reference copy that unsharing compares against.
@@ -550,10 +554,11 @@ int messageArgsAdopt(void **ptr, ProcessId pid, MessageArgsCopyFn copyFn) {
 /// @param ptr The sender's buffer, or NULL.
 /// @param size The buffer's length in bytes.
 /// @param direction The MessageBufferDirection of the buffer.
+/// @param recipient The process the buffer is shared with.
 ///
 /// @return Returns the copy, or NULL if ptr was NULL or the arena is full.
 void* messageBufferShare(void *ptr, size_t size,
-  MessageBufferDirection direction
+  MessageBufferDirection direction, ProcessId recipient
 ) {
   if (ptr == NULL) {
     return NULL;
@@ -582,6 +587,7 @@ void* messageBufferShare(void *ptr, size_t size,
   block->original = ptr;
   block->requested = size;
   block->direction = direction;
+  block->sharedWith = recipient;
   if ((direction & MESSAGE_BUFFER_IN) != 0) {
     memcpy(payload, ptr, size);
     memcpy(payload + size, ptr, size);

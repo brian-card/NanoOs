@@ -218,9 +218,10 @@ static FILE* filesystemOpenFile(const char *pathname, const char *mode,
   }
   strcpy(modeCopy, mode);
   fopenArgs->pathname = (char*) MESSAGE_BUFFER_SHARE(
-    pathnameCopy, strlen(pathnameCopy) + 1, MESSAGE_BUFFER_IN);
+    pathnameCopy, strlen(pathnameCopy) + 1, MESSAGE_BUFFER_IN,
+    rootFilesystemPid);
   fopenArgs->mode = (char*) MESSAGE_BUFFER_SHARE(
-    modeCopy, strlen(modeCopy) + 1, MESSAGE_BUFFER_IN);
+    modeCopy, strlen(modeCopy) + 1, MESSAGE_BUFFER_IN, rootFilesystemPid);
   if ((fopenArgs->pathname == NULL) || (fopenArgs->mode == NULL)) {
     MESSAGE_BUFFER_UNSHARE(fopenArgs->mode, modeCopy, MESSAGE_BUFFER_IN);
     free(modeCopy);
@@ -523,7 +524,8 @@ int filesystemRemove(const char *pathname) {
     }
     strcpy(pathnameCopy, pathname);
     filesystemRemoveArgs->pathname = (char*) MESSAGE_BUFFER_SHARE(
-      pathnameCopy, strlen(pathnameCopy) + 1, MESSAGE_BUFFER_IN);
+      pathnameCopy, strlen(pathnameCopy) + 1, MESSAGE_BUFFER_IN,
+      rootFilesystemPid);
     if (filesystemRemoveArgs->pathname == NULL) {
       free(pathnameCopy);
       MESSAGE_ARGS_FREE(filesystemRemoveArgs);
@@ -593,7 +595,7 @@ static __attribute__((noinline)) int filesystemRenamePaths(
   strcpy(paths, oldpath);
   strcpy(paths + oldpathSize, newpath);
   filesystemRenameArgs->oldpath = (char*) MESSAGE_BUFFER_SHARE(
-    paths, pathsSize, MESSAGE_BUFFER_IN);
+    paths, pathsSize, MESSAGE_BUFFER_IN, rootFilesystemPid);
   if (filesystemRenameArgs->oldpath == NULL) {
     free(paths);
     MESSAGE_ARGS_FREE(filesystemRenameArgs);
@@ -668,7 +670,8 @@ static int filesystemSendPathCommand(
   }
   strcpy(pathnameCopy, pathname);
   filesystemPathArgs->pathname = (char*) MESSAGE_BUFFER_SHARE(
-    pathnameCopy, strlen(pathnameCopy) + 1, MESSAGE_BUFFER_IN);
+    pathnameCopy, strlen(pathnameCopy) + 1, MESSAGE_BUFFER_IN,
+    rootFilesystemPid);
   if (filesystemPathArgs->pathname == NULL) {
     free(pathnameCopy);
     MESSAGE_ARGS_FREE(filesystemPathArgs);
@@ -835,7 +838,8 @@ static void* filesystemOpendirHandle(const char *pathname) {
   }
   strcpy(pathnameCopy, pathname);
   filesystemOpendirArgs->pathname = (char*) MESSAGE_BUFFER_SHARE(
-    pathnameCopy, strlen(pathnameCopy) + 1, MESSAGE_BUFFER_IN);
+    pathnameCopy, strlen(pathnameCopy) + 1, MESSAGE_BUFFER_IN,
+    rootFilesystemPid);
   if (filesystemOpendirArgs->pathname == NULL) {
     free(pathnameCopy);
     MESSAGE_ARGS_FREE(filesystemOpendirArgs);
@@ -914,7 +918,7 @@ static __attribute__((noinline)) int filesystemReaddirExchange(DIR *dirp,
   FilesystemReaddirArgs *filesystemReaddirArgs
 ) {
   filesystemReaddirArgs->entry = (struct dirent*) MESSAGE_BUFFER_SHARE(
-    dirp->entry, dirp->entrySize, MESSAGE_BUFFER_OUT);
+    dirp->entry, dirp->entrySize, MESSAGE_BUFFER_OUT, rootFilesystemPid);
   if ((dirp->entry != NULL) && (filesystemReaddirArgs->entry == NULL)) {
     return ENOMEM;
   }
@@ -1050,9 +1054,10 @@ int filesystemLstat(const char *pathname, struct stat *statbuf) {
   }
   strcpy(pathnameCopy, pathname);
   filesystemLstatArgs->pathname = (char*) MESSAGE_BUFFER_SHARE(
-    pathnameCopy, strlen(pathnameCopy) + 1, MESSAGE_BUFFER_IN);
+    pathnameCopy, strlen(pathnameCopy) + 1, MESSAGE_BUFFER_IN,
+    rootFilesystemPid);
   filesystemLstatArgs->statbuf = (struct stat*) MESSAGE_BUFFER_SHARE(
-    statbuf, sizeof(*statbuf), MESSAGE_BUFFER_OUT);
+    statbuf, sizeof(*statbuf), MESSAGE_BUFFER_OUT, rootFilesystemPid);
   if ((filesystemLstatArgs->pathname == NULL)
     || (filesystemLstatArgs->statbuf == NULL)
   ) {
@@ -1109,7 +1114,7 @@ int filesystemDirstat(const struct dirent *entry, struct stat *statbuf) {
   }
   filesystemDirstatArgs->handle = entry->priv;
   filesystemDirstatArgs->statbuf = (struct stat*) MESSAGE_BUFFER_SHARE(
-    statbuf, sizeof(*statbuf), MESSAGE_BUFFER_OUT);
+    statbuf, sizeof(*statbuf), MESSAGE_BUFFER_OUT, rootFilesystemPid);
   if (filesystemDirstatArgs->statbuf == NULL) {
     MESSAGE_ARGS_FREE(filesystemDirstatArgs);
     errno = ENOMEM;
@@ -1168,7 +1173,8 @@ int fat32Format(const char *volumeLabel, uint32_t clusterSize) {
     }
     strcpy(volumeLabelCopy, volumeLabel);
     fat32FormatArgs->volumeLabel = (char*) MESSAGE_BUFFER_SHARE(
-      volumeLabelCopy, strlen(volumeLabelCopy) + 1, MESSAGE_BUFFER_IN);
+      volumeLabelCopy, strlen(volumeLabelCopy) + 1, MESSAGE_BUFFER_IN,
+      rootFilesystemPid);
     if (fat32FormatArgs->volumeLabel == NULL) {
       free(volumeLabelCopy);
       MESSAGE_ARGS_FREE(fat32FormatArgs);
@@ -1277,7 +1283,7 @@ size_t filesystemFRead(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   }
   filesystemIoCommandArgs->file = stream;
   filesystemIoCommandArgs->buffer = MESSAGE_BUFFER_SHARE(
-    ptr, size * nmemb, MESSAGE_BUFFER_INOUT);
+    ptr, size * nmemb, MESSAGE_BUFFER_INOUT, rootFilesystemPid);
   if (filesystemIoCommandArgs->buffer == NULL) {
     MESSAGE_ARGS_FREE(filesystemIoCommandArgs);
     errno = ENOMEM;
@@ -1342,7 +1348,7 @@ size_t filesystemFWrite(
   }
   filesystemIoCommandArgs->file = stream;
   filesystemIoCommandArgs->buffer = MESSAGE_BUFFER_SHARE(
-    (void*) ptr, size * nmemb, MESSAGE_BUFFER_IN);
+    (void*) ptr, size * nmemb, MESSAGE_BUFFER_IN, rootFilesystemPid);
   if (filesystemIoCommandArgs->buffer == NULL) {
     MESSAGE_ARGS_FREE(filesystemIoCommandArgs);
     errno = ENOMEM;
@@ -1389,7 +1395,7 @@ int getFileBlockMetadataFromFile(FILE *stream, FileBlockMetadata *metadata) {
   }
   args->stream = stream;
   args->metadata = (FileBlockMetadata*) MESSAGE_BUFFER_SHARE(
-    metadata, sizeof(*metadata), MESSAGE_BUFFER_OUT);
+    metadata, sizeof(*metadata), MESSAGE_BUFFER_OUT, rootFilesystemPid);
   if (args->metadata == NULL) {
     MESSAGE_ARGS_FREE(args);
     return -ENOMEM;

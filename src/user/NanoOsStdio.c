@@ -1987,7 +1987,7 @@ static __attribute__((noinline)) int nanoOsWriteBufferToFile(
   filesystemIoCommandArgs->length = (uint32_t) strlen(consoleBuffer->buffer);
   filesystemIoCommandArgs->buffer = MESSAGE_BUFFER_SHARE(
     consoleBuffer->buffer, filesystemIoCommandArgs->length,
-    MESSAGE_BUFFER_IN);
+    MESSAGE_BUFFER_IN, rootFilesystemPid);
   if (filesystemIoCommandArgs->buffer == NULL) {
     MESSAGE_ARGS_FREE(filesystemIoCommandArgs);
     returnValue = EOF;

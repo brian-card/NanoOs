@@ -137,7 +137,8 @@ static int nanoOsDircapChange(SchedulerCommand command,
     return -1;
   }
   schedulerDirCapabilityArgs->name = (const char*) MESSAGE_BUFFER_SHARE(
-    name, schedulerDirCapabilityArgs->nameLength + 1, MESSAGE_BUFFER_IN);
+    name, schedulerDirCapabilityArgs->nameLength + 1, MESSAGE_BUFFER_IN,
+    schedulerPid);
   if ((name != NULL) && (schedulerDirCapabilityArgs->name == NULL)) {
     free(name);
     MESSAGE_ARGS_FREE(schedulerDirCapabilityArgs);
@@ -215,7 +216,7 @@ int nanoOsDircapGet(DirCapabilities *buffer, size_t bufferSize) {
   }
   schedulerGetDirCapabilitiesArgs->buffer
     = (DirCapabilities*) MESSAGE_BUFFER_SHARE(
-      buffer, bufferSize, MESSAGE_BUFFER_INOUT);
+      buffer, bufferSize, MESSAGE_BUFFER_INOUT, schedulerPid);
   if ((buffer != NULL) && (schedulerGetDirCapabilitiesArgs->buffer == NULL)) {
     MESSAGE_ARGS_FREE(schedulerGetDirCapabilitiesArgs);
     errno = ENOMEM;

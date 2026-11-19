@@ -202,7 +202,7 @@ int messageArgsAdopt(void **ptr, ProcessId pid, MessageArgsCopyFn copyFn);
 int messageArgsAdoptWith(void **ptr, ProcessId pid, MessageArgsCopyFn copyFn,
   void* (*allocate)(size_t size), int (*assign)(void *ptr, ProcessId pid));
 void* messageBufferShare(void *ptr, size_t size,
-  MessageBufferDirection direction);
+  MessageBufferDirection direction, ProcessId recipient);
 void messageBufferUnshare(void *shared, void *original,
   MessageBufferDirection direction);
 void messageArgsSending(ProcessMessage *processMessage, ProcessId recipient);
@@ -269,9 +269,10 @@ void messageArgsResetCounts(void);
 /// @def MESSAGE_BUFFER_SHARE
 ///
 /// @brief Yield the pointer to put in an argument structure for a buffer of
-/// `size` bytes at `ptr`, or NULL if it couldn't be shared.
-#define MESSAGE_BUFFER_SHARE(ptr, size, direction) \
-  messageBufferShare((void*) (ptr), (size), (direction))
+/// `size` bytes at `ptr` shared with process `recipient`, or NULL if it
+/// couldn't be shared.
+#define MESSAGE_BUFFER_SHARE(ptr, size, direction, recipient) \
+  messageBufferShare((void*) (ptr), (size), (direction), (recipient))
 
 /// @def MESSAGE_BUFFER_UNSHARE
 ///
@@ -330,7 +331,7 @@ void messageArgsResetCounts(void);
 
 #define MESSAGE_ARGS_ADOPT_MOVES false
 
-#define MESSAGE_BUFFER_SHARE(ptr, size, direction) ((void*) (ptr))
+#define MESSAGE_BUFFER_SHARE(ptr, size, direction, recipient) ((void*) (ptr))
 
 #define MESSAGE_BUFFER_UNSHARE(shared, original, direction) ((void) 0)
 

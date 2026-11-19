@@ -2001,7 +2001,7 @@ ProcessInfo* schedulerGetProcessInfo(void) {
   }
   schedulerGetProcessInfoArgs->processInfo
     = (ProcessInfo*) MESSAGE_BUFFER_SHARE(
-      processInfo, processInfoSize, MESSAGE_BUFFER_INOUT);
+      processInfo, processInfoSize, MESSAGE_BUFFER_INOUT, schedulerPid);
   if (schedulerGetProcessInfoArgs->processInfo == NULL) {
     goto freeMemory;
   }
@@ -2280,9 +2280,10 @@ int schedulerReplaceOverlay(const void *overlayNamespace,
   schedulerReplaceOverlayArgs->overlayNamespace = (void*) overlayNamespace;
   schedulerReplaceOverlayArgs->overlay
     = (OverlayDescriptor*) MESSAGE_BUFFER_SHARE(
-      overlay, sizeof(*overlay), MESSAGE_BUFFER_IN);
+      overlay, sizeof(*overlay), MESSAGE_BUFFER_IN, schedulerPid);
   schedulerReplaceOverlayArgs->overlayId = MESSAGE_BUFFER_SHARE(
-    overlay->overlayId, overlay->overlayIdLength, MESSAGE_BUFFER_IN);
+    overlay->overlayId, overlay->overlayIdLength, MESSAGE_BUFFER_IN,
+    schedulerPid);
   schedulerReplaceOverlayArgs->returnValue = 0;
   ProcessMessage *processMessage = NULL;
   if ((schedulerReplaceOverlayArgs->overlay != NULL)
@@ -2403,7 +2404,7 @@ int schedulerGetHostname(char *name, size_t length) {
     return hostnameLength; // -1
   }
   schedulerGetHostnameArgs->name = (char*) MESSAGE_BUFFER_SHARE(
-    name, length, MESSAGE_BUFFER_OUT);
+    name, length, MESSAGE_BUFFER_OUT, schedulerPid);
   if ((name != NULL) && (schedulerGetHostnameArgs->name == NULL)) {
     MESSAGE_ARGS_FREE(schedulerGetHostnameArgs);
     return hostnameLength; // -1
@@ -3093,9 +3094,10 @@ static FILE* schedOpenFile(const char *pathname, const char *mode,
       return returnValue; // NULL
     }
     fopenArgs->pathname = (char*) MESSAGE_BUFFER_SHARE(
-      (void*) pathname, strlen(pathname) + 1, MESSAGE_BUFFER_IN);
+      (void*) pathname, strlen(pathname) + 1, MESSAGE_BUFFER_IN,
+      rootFilesystemPid);
     fopenArgs->mode = (char*) MESSAGE_BUFFER_SHARE(
-      (void*) mode, strlen(mode) + 1, MESSAGE_BUFFER_IN);
+      (void*) mode, strlen(mode) + 1, MESSAGE_BUFFER_IN, rootFilesystemPid);
     if (((pathname != NULL) && (fopenArgs->pathname == NULL))
       || ((mode != NULL) && (fopenArgs->mode == NULL))
     ) {
@@ -3244,7 +3246,8 @@ int schedRemove(const char *pathname) {
       return -1;
     }
     filesystemRemoveArgs->pathname = (char*) MESSAGE_BUFFER_SHARE(
-      (void*) pathname, strlen(pathname) + 1, MESSAGE_BUFFER_IN);
+      (void*) pathname, strlen(pathname) + 1, MESSAGE_BUFFER_IN,
+      rootFilesystemPid);
     if ((pathname != NULL) && (filesystemRemoveArgs->pathname == NULL)) {
       MESSAGE_ARGS_FREE(filesystemRemoveArgs);
       errno = ENOMEM;
@@ -3304,7 +3307,7 @@ size_t schedFread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     }
     filesystemIoCommandArgs->file = stream;
     filesystemIoCommandArgs->buffer = MESSAGE_BUFFER_SHARE(
-      ptr, size * nmemb, MESSAGE_BUFFER_INOUT);
+      ptr, size * nmemb, MESSAGE_BUFFER_INOUT, rootFilesystemPid);
     if ((ptr != NULL) && (filesystemIoCommandArgs->buffer == NULL)) {
       MESSAGE_ARGS_FREE(filesystemIoCommandArgs);
       return returnValue; // 0
@@ -3355,7 +3358,7 @@ size_t schedFwrite(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     }
     filesystemIoCommandArgs->file = stream;
     filesystemIoCommandArgs->buffer = MESSAGE_BUFFER_SHARE(
-      ptr, size * nmemb, MESSAGE_BUFFER_IN);
+      ptr, size * nmemb, MESSAGE_BUFFER_IN, rootFilesystemPid);
     if ((ptr != NULL) && (filesystemIoCommandArgs->buffer == NULL)) {
       MESSAGE_ARGS_FREE(filesystemIoCommandArgs);
       return returnValue; // 0
@@ -3496,7 +3499,8 @@ int schedFputs(const char *s, FILE *stream) {
     filesystemIoCommandArgs->file = stream;
     filesystemIoCommandArgs->length = (uint32_t) strlen(s);
     filesystemIoCommandArgs->buffer = MESSAGE_BUFFER_SHARE(
-      (void*) s, filesystemIoCommandArgs->length, MESSAGE_BUFFER_IN);
+      (void*) s, filesystemIoCommandArgs->length, MESSAGE_BUFFER_IN,
+      rootFilesystemPid);
     if ((s != NULL) && (filesystemIoCommandArgs->buffer == NULL)) {
       MESSAGE_ARGS_FREE(filesystemIoCommandArgs);
       _functionInProgress = NULL;
@@ -3553,7 +3557,7 @@ int schedGetFileBlockMetadataFromFile(
   }
   args->stream = stream;
   args->metadata = (FileBlockMetadata*) MESSAGE_BUFFER_SHARE(
-    metadata, sizeof(*metadata), MESSAGE_BUFFER_OUT);
+    metadata, sizeof(*metadata), MESSAGE_BUFFER_OUT, rootFilesystemPid);
   if (args->metadata == NULL) {
     MESSAGE_ARGS_FREE(args);
     return -ENOMEM;
@@ -7065,7 +7069,8 @@ static __attribute__((noinline)) void schedulerRemoveShadowLock(void) {
     return;
   }
   rmdirArgs->pathname = (char*) MESSAGE_BUFFER_SHARE(
-    (void*) _shadowLockPath, sizeof(_shadowLockPath), MESSAGE_BUFFER_IN);
+    (void*) _shadowLockPath, sizeof(_shadowLockPath), MESSAGE_BUFFER_IN,
+    rootFilesystemPid);
   if (rmdirArgs->pathname == NULL) {
     MESSAGE_ARGS_FREE(rmdirArgs);
     return;
