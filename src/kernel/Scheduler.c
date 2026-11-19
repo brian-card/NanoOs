@@ -35,6 +35,7 @@
 // Kernel space includes
 #include "Commands.h"
 #include "Console.h"
+#include "GraphicsProtocol.h"
 #include "Hal.h"
 #include "Logger.h"
 #include "NanoOs.h"
@@ -506,6 +507,9 @@ _Static_assert(NUM_MEMORY_MANAGER_COMMANDS
 _Static_assert(NUM_LOGGER_COMMANDS
   <= 8 * sizeof(((IpcCapability*) 0)->messageTypes),
   "IpcCapability.messageTypes is too small for every logger command");
+_Static_assert(GFX_NUM_MESSAGE_TYPES
+  <= 8 * sizeof(((IpcCapability*) 0)->messageTypes),
+  "IpcCapability.messageTypes is too small for every graphics message");
 
 /// @var baseSchedulerIpcCapabilities
 ///
@@ -3834,8 +3838,9 @@ static inline bool userMaySignal(UserId senderId, UserId targetId) {
 /// @fn int schedulerKillProcessCommandHandler(
 ///   SchedulerState *schedulerState, ProcessMessage *processMessage)
 ///
-/// @brief Kill a process identified by its process ID.  Kernel and executive
-/// processes can't be killed.
+/// @brief Kill a process identified by its process ID.  A user may kill their
+/// own processes, and root may kill any process not owned by SYSTEM_USER_ID,
+/// whatever its privilege level.
 ///
 /// @param schedulerState A pointer to the SchedulerState maintained by the
 ///   scheduler process.
@@ -3865,10 +3870,7 @@ int schedulerKillProcessCommandHandler(
     && (pid <= numProcesses)
     && (processRunning(&allProcesses[processIndex]))
   ) {
-    if ((allProcesses[processIndex].privilegeLevel
-        >= PRIVILEGE_LEVEL_SUPERVISOR)
-      && (userMaySignal(callingUserId, allProcesses[processIndex].userId))
-    ) {
+    if (userMaySignal(callingUserId, allProcesses[processIndex].userId)) {
       ProcessDescriptor *processDescriptor = &allProcesses[processIndex];
       processDescriptor->exitStatus
         = (uint8_t) (128 + schedulerKillProcessArgs->signal);
