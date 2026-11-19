@@ -100,16 +100,53 @@ static SchedulerKillProcessArgs killPid(ProcessId pid, int signal) {
   return schedulerKillProcessArgs;
 }
 
-NANO_OS_KERNEL_TEST(kill, executive_process_in_a_user_slot_survives) {
+NANO_OS_KERNEL_TEST(kill, root_kills_its_own_executive_process) {
   getRunningProcess()->userId = ROOT_USER_ID;
   ProcessDescriptor *target = startIdleProcess(PRIVILEGE_LEVEL_EXECUTIVE);
   NANO_OS_ASSERT_NOT_NULL(target);
+  NANO_OS_ASSERT_EQ_INT(ROOT_USER_ID, target->userId);
+
+  SchedulerKillProcessArgs result = killPid(target->processId, SIGKILL);
+
+  NANO_OS_ASSERT_EQ_INT(0, result.returnValue);
+  NANO_OS_ASSERT_FALSE(processRunning(target));
+}
+
+NANO_OS_KERNEL_TEST(kill, user_kills_their_own_executive_process) {
+  getRunningProcess()->userId = 1000;
+  ProcessDescriptor *target = startIdleProcess(PRIVILEGE_LEVEL_EXECUTIVE);
+  NANO_OS_ASSERT_NOT_NULL(target);
+  NANO_OS_ASSERT_EQ_INT(1000, target->userId);
+
+  SchedulerKillProcessArgs result = killPid(target->processId, SIGKILL);
+
+  NANO_OS_ASSERT_EQ_INT(0, result.returnValue);
+  NANO_OS_ASSERT_FALSE(processRunning(target));
+}
+
+NANO_OS_KERNEL_TEST(kill, a_user_cannot_kill_another_users_executive_process) {
+  ProcessDescriptor *target = startIdleProcess(PRIVILEGE_LEVEL_EXECUTIVE);
+  NANO_OS_ASSERT_NOT_NULL(target);
+  target->userId = 1001;
+  getRunningProcess()->userId = 1000;
 
   SchedulerKillProcessArgs result = killPid(target->processId, SIGKILL);
 
   NANO_OS_ASSERT_EQ_INT(1, result.returnValue);
   NANO_OS_ASSERT_EQ_INT(EACCES, result.errorNumber);
   NANO_OS_ASSERT_TRUE(processRunning(target));
+}
+
+NANO_OS_KERNEL_TEST(kill, root_kills_another_users_executive_process) {
+  ProcessDescriptor *target = startIdleProcess(PRIVILEGE_LEVEL_EXECUTIVE);
+  NANO_OS_ASSERT_NOT_NULL(target);
+  target->userId = 1000;
+  getRunningProcess()->userId = ROOT_USER_ID;
+
+  SchedulerKillProcessArgs result = killPid(target->processId, SIGKILL);
+
+  NANO_OS_ASSERT_EQ_INT(0, result.returnValue);
+  NANO_OS_ASSERT_FALSE(processRunning(target));
 }
 
 NANO_OS_KERNEL_TEST(kill, kernel_process_survives_root) {
@@ -161,9 +198,7 @@ NANO_OS_KERNEL_TEST(kill, system_processes_are_owned_by_the_system) {
 }
 
 NANO_OS_KERNEL_TEST(kill, system_owned_process_survives_root) {
-  // A supervisor-level target isolates the user ID check from the privilege
-  // check, which would protect a kernel or executive process on its own.
-  ProcessDescriptor *target = startIdleProcess(PRIVILEGE_LEVEL_SUPERVISOR);
+  ProcessDescriptor *target = startIdleProcess(PRIVILEGE_LEVEL_EXECUTIVE);
   NANO_OS_ASSERT_NOT_NULL(target);
   target->userId = SYSTEM_USER_ID;
   getRunningProcess()->userId = ROOT_USER_ID;
