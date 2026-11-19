@@ -14,7 +14,8 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 CHECKER = 'src/kernel/MessageArgs.c'
 HEADER = 'src/kernel/MessageArgs.h'
 
-# (name, file, old, new, header?, tests that must fail)
+# (name, file, old, new, header?, tests that must fail); old and new may be
+# tuples of replacements made together.
 DISABLE_KIND = ('static void record(uint8_t error, const void *address, ProcessId pid) {\n',
                 'static void record(uint8_t error, const void *address, ProcessId pid) {\n'
                 '  if (error == {kind}) return;\n')
@@ -76,9 +77,11 @@ MUTATIONS = [
      '  MESSAGE_ARGS_PROCESS_ENDED(processDescriptor->processId,\n'
      '    false);\n', False,
      ['storage_left_at_exit_is_a_leak']),
-    ('no-cleanup-hook', 'src/kernel/Scheduler.c',
-     '  MESSAGE_ARGS_PROCESS_ENDED(processDescriptor->processId,\n'
-     '    processDescriptor->exitSignal == 0);\n', '', False,
+    # The cleanup handler's hook also reclaims a killed process, so both go.
+    ('no-kill-or-cleanup-hook', 'src/kernel/Scheduler.c',
+     ('        MESSAGE_ARGS_PROCESS_ENDED(pid, false);\n',
+      '  MESSAGE_ARGS_PROCESS_ENDED(processDescriptor->processId,\n'
+      '    processDescriptor->exitSignal == 0);\n'), ('', ''), False,
      ['a_killed_process_storage_is_reclaimed',
       'a_stack_overflow_storage_is_reclaimed']),
     ('harness-check-off', 'test/suites/test_kernel_message_args.c',
@@ -116,9 +119,14 @@ def main(names):
             continue
         full = os.path.join(REPO, path)
         original = open(full).read()
-        assert original.count(old) == 1, f'{name}: pattern not found once in {path}'
+        olds = old if isinstance(old, tuple) else (old,)
+        news = new if isinstance(new, tuple) else (new,)
+        mutated = original
+        for o, n in zip(olds, news):
+            assert mutated.count(o) == 1, f'{name}: pattern not found once in {path}'
+            mutated = mutated.replace(o, n)
         try:
-            open(full, 'w').write(original.replace(old, new))
+            open(full, 'w').write(mutated)
             if header:
                 run('make -C test clean')
             build = run('make -C test build')
