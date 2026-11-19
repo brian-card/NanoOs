@@ -489,6 +489,24 @@ HalCapability baseUserHalCapabilities[] = {
   },
 };
 
+// Verify that none of the message types contain command values that are too
+// large to be represented.
+_Static_assert(NUM_SCHEDULER_COMMANDS
+  <= 8 * sizeof(((IpcCapability*) 0)->messageTypes),
+  "IpcCapability.messageTypes is too small for every scheduler command");
+_Static_assert(NUM_CONSOLE_COMMANDS
+  <= 8 * sizeof(((IpcCapability*) 0)->messageTypes),
+  "IpcCapability.messageTypes is too small for every console command");
+_Static_assert(NUM_FILESYSTEM_COMMANDS
+  <= 8 * sizeof(((IpcCapability*) 0)->messageTypes),
+  "IpcCapability.messageTypes is too small for every filesystem command");
+_Static_assert(NUM_MEMORY_MANAGER_COMMANDS
+  <= 8 * sizeof(((IpcCapability*) 0)->messageTypes),
+  "IpcCapability.messageTypes is too small for every memory manager command");
+_Static_assert(NUM_LOGGER_COMMANDS
+  <= 8 * sizeof(((IpcCapability*) 0)->messageTypes),
+  "IpcCapability.messageTypes is too small for every logger command");
+
 /// @var baseSchedulerIpcCapabilities
 ///
 /// @brief Array of IpcCapability items that describe what messages the
