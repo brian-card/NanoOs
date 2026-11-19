@@ -172,10 +172,16 @@ typedef void (*MessageArgsCopyFn)(void *destination, const void *source,
 /// overlay can replace it before the recipient reads or writes it.
 #define MESSAGE_ARGS_ERROR_OVERLAY_POINTER  13
 
+/// @def MESSAGE_ARGS_ERROR_SHARE_RECIPIENT
+///
+/// @brief A message carried a buffer shared with a process other than the one
+/// the message was sent to.
+#define MESSAGE_ARGS_ERROR_SHARE_RECIPIENT  14
+
 /// @def MESSAGE_ARGS_NUM_ERRORS
 ///
 /// @brief The number of kinds of error the checker counts.
-#define MESSAGE_ARGS_NUM_ERRORS             14
+#define MESSAGE_ARGS_NUM_ERRORS             15
 
 /// @struct MessageArgsCounts
 ///
