@@ -6,7 +6,7 @@
 # Usage:  WORK=<dir> [REPO=<repo>] measure-ovl.sh
 set -e
 WORK=${WORK:?set WORK to a scratch directory}
-REPO=${REPO:-/home/jbcard/src/NanoOs}
+REPO=${REPO:-$(cd "$(dirname "$0")/.." && pwd)}
 A=${ARM_BIN:-$HOME/.arduino15/packages/adafruit/tools/arm-none-eabi-gcc/9-2019q4/bin}
 mkdir -p "$WORK"
 cd "$REPO"

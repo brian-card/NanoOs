@@ -18,8 +18,8 @@ models vi before step 8, when Normal called the other overlays itself.
 import glob, os, re, subprocess, sys
 
 WORK = os.environ['WORK']
-REPO = os.environ.get('REPO', '/home/jbcard/src/NanoOs') or os.path.abspath((
-    os.path.join(os.path.dirname(__file__), '..', '..', '..')))
+REPO = os.environ.get('REPO') or os.path.abspath(
+    os.path.join(os.path.dirname(__file__), '..'))
 OBJDUMP = os.path.expanduser(
     '~/.arduino15/packages/adafruit/tools/arm-none-eabi-gcc/9-2019q4/bin/'
     'arm-none-eabi-objdump')
