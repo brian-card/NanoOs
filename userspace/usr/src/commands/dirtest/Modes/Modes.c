@@ -142,7 +142,10 @@ static void createLongName(const char *dirPath) {
 static void writeLine(const char *path) {
   FILE *file = fopen(path, "w");
   if (file != NULL) {
-    fputs("original\n", file);
+    // Copied off the overlay, which another process's can replace before the
+    // filesystem reads it.
+    char line[] = "original\n";
+    fputs(line, file);
     fclose(file);
   }
 }
