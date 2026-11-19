@@ -47,7 +47,10 @@ def add_dis(text, prefix=''):
                 calls[cur].add(prefix + m.group(1).split('.')[0])
 
 
-for su in glob.glob(os.path.join(REPO, 'build/su/**/*.su'), recursive=True):
+kernel_su = glob.glob(os.path.join(REPO, 'build/su/**/*.su'), recursive=True)
+if not kernel_su:
+    sys.exit('vistack: no kernel .su files in build/su; run measure-ovl.sh first')
+for su in kernel_su:
     add_su(su)
 add_dis(open(os.path.join(WORK, 'kernel.dis')).read())
 add_su(os.path.join(WORK, 'start.su'), 'vimain__')
@@ -57,8 +60,13 @@ for elf in sorted(glob.glob(os.path.join(REPO, 'userspace/usr/obj/vi/*/overlay.e
     o = os.path.basename(os.path.dirname(elf))
     o = 'vimain' if o == 'main' else o
     overlays.append(o)
-    add_dis(subprocess.run([OBJDUMP, '-d', elf], capture_output=True,
-                           text=True).stdout, o + '__')
+    dis = subprocess.run([OBJDUMP, '-d', elf], capture_output=True, text=True)
+    if dis.returncode != 0:
+        sys.exit('vistack: %s is not an ARM overlay; run measure-ovl.sh first'
+                 % elf)
+    add_dis(dis.stdout, o + '__')
+if not overlays:
+    sys.exit('vistack: no vi overlays in userspace/usr/obj; run measure-ovl.sh first')
 for su in glob.glob(os.path.join(WORK, 'su', '*.su')):
     o = os.path.basename(su).split('_')[0]
     add_su(su, ('vimain' if o == 'main' else o) + '__')
@@ -128,7 +136,7 @@ def depth(fn, stack):
     if fn in memo:
         return memo[fn]
     best, chain, cut = 0, [], False
-    for c in calls.get(fn, ()):
+    for c in sorted(calls.get(fn, ())):
         if exclude.search(c):
             continue
         if c in stack:
