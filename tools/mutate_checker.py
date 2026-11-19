@@ -92,8 +92,14 @@ MUTATIONS = [
      '  type name##Storage = {0}; \\\n', '  type name##Storage; \\\n', True,
      ['allocate_zeroes_dirty_stack_storage']),
     ('production-share-evaluates-size', HEADER,
-     '#define MESSAGE_BUFFER_SHARE(ptr, size, direction) ((void*) (ptr))',
-     '#define MESSAGE_BUFFER_SHARE(ptr, size, direction) ((void) (size), (void*) (ptr))',
+     '#define MESSAGE_BUFFER_SHARE(ptr, size, direction, recipient) ((void*) (ptr))',
+     '#define MESSAGE_BUFFER_SHARE(ptr, size, direction, recipient) '
+     '((void) (size), (void*) (ptr))',
+     True, ['share_returns_the_buffer_unevaluated']),
+    ('production-share-evaluates-recipient', HEADER,
+     '#define MESSAGE_BUFFER_SHARE(ptr, size, direction, recipient) ((void*) (ptr))',
+     '#define MESSAGE_BUFFER_SHARE(ptr, size, direction, recipient) '
+     '((void) (recipient), (void*) (ptr))',
      True, ['share_returns_the_buffer_unevaluated']),
 ]
 
