@@ -161,6 +161,8 @@ static const char _sendAfterFree[] KEEP_IN_FLASH = "use after free";
 static const char _leak[] KEEP_IN_FLASH = "leak";
 static const char _arenaFull[] KEEP_IN_FLASH = "arena full";
 static const char _overlayPointer[] KEEP_IN_FLASH = "overlay pointer shared";
+static const char _shareRecipient[] KEEP_IN_FLASH
+  = "buffer shared with another process";
 
 /// @var _errorNames
 ///
@@ -172,6 +174,7 @@ static const char *const _errorNames[MESSAGE_ARGS_NUM_ERRORS] KEEP_IN_FLASH = {
   _doubleFree, _badPointer, _writeAfterFree, _freeInFlight, _wrongOwner,
   _wrongRecipient, _fireAndForget, _memoryManager, _inModified,
   _freeAfterAdopt, _sendAfterFree, _leak, _arenaFull, _overlayPointer,
+  _shareRecipient,
 };
 
 static const char _reportPrefix[] KEEP_IN_FLASH = "MESSAGE_ARGS: ";
@@ -645,7 +648,8 @@ void messageBufferUnshare(void *shared, void *original,
 ///   ProcessId recipient)
 ///
 /// @brief Record that a message carrying arena storage is about to be pushed,
-/// and check that the storage may be sent this way.
+/// and check that the storage, and every shared buffer it points to, may be
+/// sent this way.
 ///
 /// @param processMessage The message.
 /// @param recipient The process it is being sent to.
@@ -675,6 +679,21 @@ void messageArgsSending(ProcessMessage *processMessage, ProcessId recipient) {
       && (recipient == memoryManagerPid)
     ) {
       record(MESSAGE_ARGS_ERROR_MEMORY_MANAGER, data, pid);
+    }
+    const uint8_t *payload = blockPayload(block);
+    for (size_t ii = 0; ii + sizeof(void*) <= block->requested;
+      ii += _Alignof(void*)
+    ) {
+      void *member;
+      memcpy(&member, &payload[ii], sizeof(member));
+      MessageArgsBlock *shared = blockOf(member);
+      if ((shared != NULL)
+        && ((shared->flags & BLOCK_BUFFER) != 0)
+        && (shared->state == BLOCK_ALLOCATED)
+        && (shared->sharedWith != recipient)
+      ) {
+        record(MESSAGE_ARGS_ERROR_SHARE_RECIPIENT, member, pid);
+      }
     }
   }
   coroutineExitCriticalSection();
