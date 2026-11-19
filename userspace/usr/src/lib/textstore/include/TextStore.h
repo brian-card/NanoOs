@@ -365,7 +365,9 @@ static inline uint16_t textstoreAllocBlock(TextStore *store) {
 ///   uint16_t block, uint16_t prev, uint16_t next, const uint32_t *offsets,
 ///   uint16_t count)
 ///
-/// @brief Write a block that isn't cached, padding its unused offsets.
+/// @brief Write a block that isn't cached, padding its unused offsets with
+/// whatever the cached block holds, since nothing reads past the count and a
+/// buffer in the overlay could be replaced before the filesystem reads it.
 ///
 /// @param store The TextStore holding the block.
 /// @param block The number of the block.
@@ -378,14 +380,14 @@ static inline uint16_t textstoreAllocBlock(TextStore *store) {
 static inline bool textstoreWriteBlock(TextStore *store, uint16_t block,
   uint16_t prev, uint16_t next, const uint32_t *offsets, uint16_t count
 ) {
-  static const uint32_t zeros[TEXTSTORE_BLOCK_LINES] = { 0 };
   uint16_t links[4] = { prev, next, count, 0 };
   if (!textstoreSeek(store, block, 0)
     || (fwrite(links, sizeof(links), 1, store->blocks) != 1)
     || ((count > 0)
       && (fwrite(offsets, sizeof(uint32_t), count, store->blocks) != count))
-    || (fwrite(zeros, sizeof(uint32_t), TEXTSTORE_BLOCK_LINES - count,
-      store->blocks) != (size_t) (TEXTSTORE_BLOCK_LINES - count))
+    || (fwrite(store->cache.offsets, sizeof(uint32_t),
+      TEXTSTORE_BLOCK_LINES - count, store->blocks)
+      != (size_t) (TEXTSTORE_BLOCK_LINES - count))
   ) {
     store->error = TEXTSTORE_ERROR_IO;
     return false;
@@ -506,15 +508,21 @@ static inline char* textstorePathNew(const char *name) {
 /// @return Returns true on success, false with store->error set on failure,
 /// in which case neither file is open.
 static inline bool textstoreInit(TextStore *store, const char *mode) {
-  static const uint8_t zeros[32] = { 0 };
   size_t length = strlen(store->path);
   store->text = fopen(store->path, mode);
   strcpy(&store->path[length], ".b");
   store->blocks = fopen(store->path, mode);
   store->path[length] = '\0';
   bool ok = (store->text != NULL) && (store->blocks != NULL);
-  for (size_t ii = 0; ok && (ii < TEXTSTORE_HEADER_SIZE); ii += sizeof(zeros)) {
-    ok = (fwrite(zeros, sizeof(zeros), 1, store->blocks) == 1);
+  // The header starts as zeros written from the cache, which this discards,
+  // since a buffer in the overlay could be replaced before the filesystem
+  // reads it.
+  memset(store->cache.offsets, 0, sizeof(store->cache.offsets));
+  for (size_t ii = 0; ok && (ii < TEXTSTORE_HEADER_SIZE);
+    ii += sizeof(store->cache.offsets)
+  ) {
+    ok = (fwrite(store->cache.offsets, sizeof(store->cache.offsets), 1,
+      store->blocks) == 1);
   }
   if (!ok) {
     if (store->text != NULL) {
@@ -945,19 +953,23 @@ static inline bool textstoreChainNext(
   return true;
 }
 
-/// @fn static inline bool textstoreAppendText(TextStore *store,
-///   const char *text)
+/// @fn static inline bool textstoreAppendBytes(TextStore *store,
+///   const char *bytes, size_t length)
 ///
-/// @brief Append text to the end of the text file.
+/// @brief Append bytes to the end of the text file.
 ///
 /// @param store The TextStore to append to.
-/// @param text The text to append.
+/// @param bytes The bytes to append.  They must not be in the overlay, such as
+///   a string literal, since the filesystem reads them after another process's
+///   overlay may have replaced this one.
+/// @param length The number of bytes.
 ///
 /// @return Returns true on success, false with store->error set on failure.
-static inline bool textstoreAppendText(TextStore *store, const char *text) {
-  size_t length = strlen(text);
+static inline bool textstoreAppendBytes(
+  TextStore *store, const char *bytes, size_t length
+) {
   if ((fseek(store->text, (long) store->textEnd, SEEK_SET) != 0)
-    || (fwrite(text, 1, length, store->text) != length)
+    || (fwrite(bytes, 1, length, store->text) != length)
   ) {
     store->error = TEXTSTORE_ERROR_IO;
     return false;
@@ -965,6 +977,32 @@ static inline bool textstoreAppendText(TextStore *store, const char *text) {
 
   store->textEnd += length;
   return true;
+}
+
+/// @fn static inline bool textstoreAppendText(TextStore *store,
+///   const char *text)
+///
+/// @brief Append text that isn't in the overlay to the end of the text file.
+///
+/// @param store The TextStore to append to.
+/// @param text The text to append.
+///
+/// @return Returns true on success, false with store->error set on failure.
+static inline bool textstoreAppendText(TextStore *store, const char *text) {
+  return textstoreAppendBytes(store, text, strlen(text));
+}
+
+/// @fn static inline bool textstoreAppendChar(TextStore *store, char c)
+///
+/// @brief Append one character to the end of the text file, from the stack, so
+/// that callers need no string literal for it.
+///
+/// @param store The TextStore to append to.
+/// @param c The character to append.
+///
+/// @return Returns true on success, false with store->error set on failure.
+static inline bool textstoreAppendChar(TextStore *store, char c) {
+  return textstoreAppendBytes(store, &c, 1);
 }
 
 /// @fn static inline bool textstoreInsertLine(TextStore *store, int after,
@@ -1428,8 +1466,13 @@ static inline int textstoreReadLines(
     return -1;
   }
 
-  if (!lineStart && !textstoreAppendText(store, "\n")) {
-    return -1;
+  // From the buffer, now free, rather than textstoreAppendChar, whose
+  // character on the stack deepens vi's deepest chain.
+  if (!lineStart) {
+    store->buffer[0] = '\n';
+    if (!textstoreAppendBytes(store, store->buffer, 1)) {
+      return -1;
+    }
   }
 
   return after;
