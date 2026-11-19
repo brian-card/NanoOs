@@ -37,6 +37,7 @@
 #include <string.h>
 
 #include "kernel/Console.h"
+#include "kernel/Hal.h"
 #include "kernel/MemoryManager.h"
 #include "kernel/NanoOs.h"
 #include "kernel/Processes.h"
@@ -338,6 +339,19 @@ NANO_OS_KERNEL_TEST(message_args, unshare_with_the_wrong_original_is_counted) {
   MESSAGE_BUFFER_UNSHARE(shared, other, MESSAGE_BUFFER_IN);
   MESSAGE_BUFFER_UNSHARE(shared, path, MESSAGE_BUFFER_IN);
   assertOnlyError(MESSAGE_ARGS_ERROR_BAD_POINTER, 1);
+}
+
+NANO_OS_KERNEL_TEST(message_args, a_buffer_in_the_overlay_window_is_counted) {
+  extern NanoOsOverlayMap *overlayMap;
+  NANO_OS_ASSERT_NOT_NULL(overlayMap);
+  NANO_OS_ASSERT_TRUE(HAL->memory->overlaySize > 0);
+  uint8_t *window = (uint8_t*) overlayMap;
+  uint8_t *last = &window[HAL->memory->overlaySize - 1];
+  void *shared = MESSAGE_BUFFER_SHARE(last, 1, MESSAGE_BUFFER_IN);
+  MESSAGE_BUFFER_UNSHARE(shared, last, MESSAGE_BUFFER_IN);
+  shared = MESSAGE_BUFFER_SHARE(window, 1, MESSAGE_BUFFER_IN);
+  MESSAGE_BUFFER_UNSHARE(shared, window, MESSAGE_BUFFER_IN);
+  assertOnlyError(MESSAGE_ARGS_ERROR_OVERLAY_POINTER, 2);
 }
 
 NANO_OS_KERNEL_TEST(message_args, sharing_null_yields_null) {

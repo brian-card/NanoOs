@@ -138,12 +138,22 @@ class Transcript:
 
 
 def message_args_reports(s):
-    """Return the message-argument checker's reports from a session's output.
+    """Return the message-argument checker's reports from a session's output,
+    including output no expect has read yet, as in a test that only watches a
+    FakeVdp.
 
     @param s The Session.
 
     @return The lines that hold a report, in order.
     """
+    if s.sim_bin.endswith("-checked") and s.child.isalive():
+        # Bounded, since a simulator may never stop printing.
+        deadline = time.time() + 2
+        try:
+            while time.time() < deadline:
+                s.child.read_nonblocking(4096, timeout=0.2)
+        except (pexpect.TIMEOUT, pexpect.EOF):
+            pass
     return [line.strip() for line in s.transcript.getvalue().splitlines()
             if MESSAGE_ARGS_MARKER in line]
 
