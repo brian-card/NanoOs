@@ -90,7 +90,7 @@ static bool viCommitWindow(ViState *state) {
     || !textstoreAppendText(store, state->text)
     || (textstoreCopyRange(store, old + (uint32_t) state->windowStart
       + (uint32_t) state->windowLength, UINT32_MAX, store->text) < 0)
-    || !textstoreAppendText(store, "\n")
+    || !textstoreAppendChar(store, '\n')
     || !exSetLineOffset(&state->ex, state->line, offset)
   ) {
     return false;
@@ -135,13 +135,13 @@ static void viSplitWindow(ViState *state) {
   if ((store->error != EX_ERROR_NONE)
     || !viBeginChange(state)
     || (textstoreCopyRange(store, old + at, UINT32_MAX, store->text) < 0)
-    || !textstoreAppendText(store, "\n")
+    || !textstoreAppendChar(store, '\n')
   ) {
     return;
   }
   uint32_t first = store->textEnd;
   if ((textstoreCopyRange(store, old, at, store->text) < 0)
-    || !textstoreAppendText(store, "\n")
+    || !textstoreAppendChar(store, '\n')
     || !exSetLineOffset(&state->ex, state->line, first)
     || !exInsertLine(&state->ex, state->line, second)
   ) {

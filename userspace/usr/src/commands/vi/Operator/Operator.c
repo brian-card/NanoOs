@@ -77,7 +77,7 @@ static bool viYankText(ViState *state, int start, int end) {
   state->text[end] = '\0';
   bool ok = textstoreAppendText(store, &state->text[start]);
   state->text[end] = saved;
-  if (!ok || !textstoreAppendText(store, "\n")
+  if (!ok || !textstoreAppendChar(store, '\n')
     || !textstoreChainAppend(store, &state->yank, &yank)
   ) {
     return false;

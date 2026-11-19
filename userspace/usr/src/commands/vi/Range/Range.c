@@ -67,7 +67,7 @@ static void viOperate(ViState *state) {
   }
   yank.length = (int32_t) length;
   viClearYank(state);
-  if (!textstoreAppendText(store, "\n")
+  if (!textstoreAppendChar(store, '\n')
     || !textstoreChainAppend(store, &state->yank, &yank)
   ) {
     return;
@@ -134,7 +134,7 @@ static bool viJoin(ViState *state) {
   long length = (!viBeginChange(state)) ? -1
     : textstoreCopyRange(store, first, UINT32_MAX, store->text);
   if ((length < 0)
-    || (((length > 0) && !empty) && !textstoreAppendText(store, " "))
+    || (((length > 0) && !empty) && !textstoreAppendChar(store, ' '))
     || !viCopyLine(state, second, blanks, INT16_MAX)
     || !viReplaceLine(state, offset)
     || !exDeleteLines(&state->ex, next, next)

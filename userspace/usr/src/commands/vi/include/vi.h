@@ -723,7 +723,7 @@ static inline bool viCopyLine(
 /// @return Returns true on success, false with state->ex.store.error set on
 /// failure.
 static inline bool viReplaceLine(ViState *state, uint32_t offset) {
-  if (!textstoreAppendText(&state->ex.store, "\n")
+  if (!textstoreAppendChar(&state->ex.store, '\n')
     || !exSetLineOffset(&state->ex, state->line, offset)
   ) {
     return false;
@@ -752,7 +752,7 @@ static inline bool viCommitLine(ViState *state) {
   uint32_t offset = store->textEnd;
   if (!viBeginChange(state)
     || !textstoreAppendText(store, state->text)
-    || !textstoreAppendText(store, "\n")
+    || !textstoreAppendChar(store, '\n')
     || ((state->line > store->numLines)
       ? !exInsertLine(&state->ex, store->numLines, offset)
       : !exSetLineOffset(&state->ex, state->line, offset))
@@ -777,7 +777,7 @@ static inline bool viAddEmptyLine(ViState *state, int after) {
   TextStore *store = &state->ex.store;
   uint32_t offset = store->textEnd;
   if (!viBeginChange(state)
-    || !textstoreAppendText(store, "\n")
+    || !textstoreAppendChar(store, '\n')
     || !exInsertLine(&state->ex, after, offset)
   ) {
     return false;

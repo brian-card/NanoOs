@@ -119,7 +119,7 @@ static bool viSplitLine(ViState *state) {
   TextStore *store = &state->ex.store;
   uint32_t offset = store->textEnd;
   if (!textstoreAppendText(store, &state->text[state->index])
-    || !textstoreAppendText(store, "\n")
+    || !textstoreAppendChar(store, '\n')
   ) {
     return false;
   }
