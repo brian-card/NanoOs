@@ -39,6 +39,7 @@
 
 #include <string.h>
 
+#include "Hal.h"
 #include "MemoryManager.h"
 #include "NanoOs.h"
 #include "Processes.h"
@@ -156,6 +157,7 @@ static const char _freeAfterAdopt[] KEEP_IN_FLASH = "free after adopt";
 static const char _sendAfterFree[] KEEP_IN_FLASH = "use after free";
 static const char _leak[] KEEP_IN_FLASH = "leak";
 static const char _arenaFull[] KEEP_IN_FLASH = "arena full";
+static const char _overlayPointer[] KEEP_IN_FLASH = "overlay pointer shared";
 
 /// @var _errorNames
 ///
@@ -166,7 +168,7 @@ static const char _arenaFull[] KEEP_IN_FLASH = "arena full";
 static const char *const _errorNames[MESSAGE_ARGS_NUM_ERRORS] KEEP_IN_FLASH = {
   _doubleFree, _badPointer, _writeAfterFree, _freeInFlight, _wrongOwner,
   _wrongRecipient, _fireAndForget, _memoryManager, _inModified,
-  _freeAfterAdopt, _sendAfterFree, _leak, _arenaFull,
+  _freeAfterAdopt, _sendAfterFree, _leak, _arenaFull, _overlayPointer,
 };
 
 static const char _reportPrefix[] KEEP_IN_FLASH = "MESSAGE_ARGS: ";
@@ -555,6 +557,17 @@ void* messageBufferShare(void *ptr, size_t size,
 ) {
   if (ptr == NULL) {
     return NULL;
+  }
+
+  extern NanoOsOverlayMap *overlayMap;
+  if ((overlayMap != NULL)
+    && (((uintptr_t) ptr) - ((uintptr_t) overlayMap)
+      < HAL->memory->overlaySize)
+  ) {
+    coroutineEnterCriticalSection();
+    record(MESSAGE_ARGS_ERROR_OVERLAY_POINTER, ptr, getRunningPid());
+    coroutineExitCriticalSection();
+    flushIfScheduler();
   }
 
   size_t capacity = ((direction & MESSAGE_BUFFER_IN) != 0) ? 2 * size : size;
