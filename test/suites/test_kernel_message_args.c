@@ -288,6 +288,60 @@ NANO_OS_KERNEL_TEST(message_args, a_failed_send_is_forgotten) {
   NANO_OS_ASSERT_EQ_INT(0, messageArgsErrorTotal());
 }
 
+/// @struct SharingArgs
+///
+/// @brief An argument structure whose shared buffer comes after other
+/// members.
+///
+/// @param value An unshared member.
+/// @param bytes More unshared members.
+/// @param buffer The shared buffer.
+typedef struct SharingArgs {
+  uint32_t value;
+  uint8_t bytes[20];
+  char *buffer;
+} SharingArgs;
+
+/// @fn static void sendSharedWith(ProcessId sharedWith)
+///
+/// @brief Announce to the send hook a message to the console whose argument
+/// structure carries a buffer shared with another process, then finish the
+/// exchange.
+///
+/// @param sharedWith The process the buffer is shared with.
+///
+/// @return This function returns no value.
+static void sendSharedWith(ProcessId sharedWith) {
+  char path[] = "/etc/passwd";
+  MESSAGE_ARGS_ALLOCATE(SharingArgs, args);
+  args->buffer = (char*) MESSAGE_BUFFER_SHARE(path, sizeof(path),
+    MESSAGE_BUFFER_IN, sharedWith);
+  NANO_OS_ASSERT_NOT_NULL(args->buffer);
+  ProcessMessage *processMessage = getAvailableMessage();
+  NANO_OS_ASSERT_NOT_NULL(processMessage);
+  processMessageInit(processMessage, 0, args, sizeof(*args), true);
+  MESSAGE_ARGS_SENDING(processMessage, consolePid);
+  processMessageSetDone(processMessage);
+  processMessageRelease(processMessage);
+  MESSAGE_BUFFER_UNSHARE(args->buffer, path, MESSAGE_BUFFER_IN);
+  MESSAGE_ARGS_FREE(args);
+}
+
+NANO_OS_KERNEL_TEST(message_args, a_buffer_shared_with_the_recipient_is_clean) {
+  sendSharedWith(consolePid);
+  NANO_OS_ASSERT_EQ_INT(0, messageArgsErrorTotal());
+}
+
+NANO_OS_KERNEL_TEST(message_args, a_buffer_shared_with_another_process_is_counted) {
+  sendSharedWith(memoryManagerPid);
+  assertOnlyError(MESSAGE_ARGS_ERROR_SHARE_RECIPIENT, 1);
+}
+
+NANO_OS_KERNEL_TEST(message_args, a_buffer_shared_with_no_process_is_counted) {
+  sendSharedWith(PROCESS_ID_NOT_SET);
+  assertOnlyError(MESSAGE_ARGS_ERROR_SHARE_RECIPIENT, 1);
+}
+
 NANO_OS_KERNEL_TEST(message_args, in_buffer_is_a_copy) {
   char path[] = "/etc/passwd";
   char *shared = (char*) MESSAGE_BUFFER_SHARE(path, sizeof(path),
