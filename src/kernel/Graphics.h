@@ -5,74 +5,10 @@
 ///
 /// @file              Graphics.h
 ///
-/// @brief             A minimal graphics API common to command-stream GPU
-///                    architectures and the Agon Light 2 VDP.
-///
-/// @details
-/// MESSAGE-PASSING ARCHITECTURE
-///
-///   The graphics driver runs as a separate NanoOS process. All API functions
-///   in this header are static inline wrappers that send messages to the
-///   driver via the HAL:
-///
-///     ProcessMessage *sent = sendMessage(deviceId, type, data, size, waiting);
-///
-///   Messages are zero-copy. For synchronous calls (waiting = true), the
-///   caller blocks until the driver marks the message done, then reads the
-///   response:
-///
-///     processMessageWaitForDone(sent, NULL);
-///     void *resp = processMessageData(sent);
-///     processMessageRelease(sent);
-///
-///   For asynchronous calls (waiting = false), the payload must generally
-///   be malloc'd by the caller. The driver frees it when processing is
-///   complete. The caller does not call processMessageRelease.
-///   Exception: GFX_MSG_SUBMIT payloads are embedded in the GfxCmdBuf
-///   struct - the driver signals completion via a done flag instead.
-///
-///   FIFO ordering is guaranteed: messages to a given deviceId are processed
-///   in the order they were sent.
-///
-/// COMMAND BUFFER MODEL
-///
-///   Draw calls and state changes are recorded client-side into a GfxCmdBuf
-///   as abstract command records (a uint8_t tag followed by parameters). No
-///   messages are sent during recording - zero IPC overhead.
-///
-///   The command buffer is double-buffered internally. When gfxSubmit is
-///   called (or when the active write buffer fills and auto-flushes), the
-///   buffer is sent zero-copy to the driver and the write pointer swaps
-///   to the other buffer. If the other buffer is still being read by the
-///   driver, the caller blocks (yielding) until the driver signals
-///   completion.
-///
-///   This keeps all backend encoding knowledge in the driver process and all
-///   client code backend-agnostic.
-///
-/// FONT MEASUREMENT CACHING
-///
-///   Font metrics (glyph width, height, codepoint range) are cached
-///   client-side in the GfxDisplay struct at upload time. Text measurement
-///   functions (gfxMeasureText, gfxFitText, gfxHitTestText, etc.) are
-///   pure client-side computations - no IPC. System font metrics are
-///   received in the gfxOpenDisplay response.
-///
-/// Design principles (unchanged from original):
-///
-///   1. COMMAND BUFFER MODEL
-///   2. STATE IS RECORDED, NOT GLOBAL
-///   3. OPAQUE HANDLES FOR RESOURCES
-///   4. EXPLICIT SYNCHRONIZATION
-///   5. NO HEAP IN THE HOT PATH
-///   6. DISPLAY-CENTRIC ADDRESSING
-///
-/// What this API deliberately omits:
-///   - Shaders / programmable pipeline stages
-///   - Vertex and index buffers
-///   - Depth/stencil buffers
-///   - Render passes
-///   - Compute
+/// @brief             The client side of the graphics driver protocol in
+///                    GraphicsProtocol.h:  display ownership, resources,
+///                    command recording and submission, and text
+///                    measurement from cached font metrics.
 ///
 /// @copyright
 ///                      Copyright (c) 2026 Brian Card
@@ -112,22 +48,31 @@
 
 // NanoOs includes
 #include "GraphicsProtocol.h"
-// A driver overlay gets the same message functions from ExecutiveProcesses.h.
-#ifndef EXECUTIVE_PROCESSES_H
+#ifdef NANO_OS_OVERLAY_BUILD
+#include "ExecutiveProcesses.h"
+#else
 #include "Processes.h"
+#include "../hal/HalCommon.h"
 #endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// Function pointer type for the HAL sendMessage call.
-// Stored in GfxCtx so that Graphics.h does not depend on HAL struct layout.
-typedef ProcessMessage *(*GfxSendMessageFn)(int deviceId, int64_t type,
-                                            void *data, size_t size,
-                                            bool waiting);
+/// @def GFX_OUT_OF_LINE
+///
+/// @brief Declare a helper that every wrapper calls out of line, so that each
+/// wrapper costs a call rather than a copy of the helper.  `unused` keeps a
+/// translation unit that calls none of a helper's wrappers warning-free.
+#define GFX_OUT_OF_LINE static __attribute__((noinline, unused))
 
-
+/// @fn static inline const char *gfxErrorString(GfxError err)
+///
+/// @brief Describe a GfxError.
+///
+/// @param err The error to describe.
+///
+/// @return Returns a constant string.
 static inline const char *gfxErrorString(GfxError err) {
     switch (err) {
     case GFX_OK:                  return "no error";
@@ -138,20 +83,34 @@ static inline const char *gfxErrorString(GfxError err) {
     case GFX_ERR_INVALID_STATE:   return "invalid state";
     case GFX_ERR_DEVICE_LOST:     return "device lost";
     case GFX_ERR_NOT_SUPPORTED:   return "not supported";
+    case GFX_ERR_DISPLAY_BUSY:    return "display busy";
+    case GFX_ERR_NOT_OWNER:       return "not the display owner";
     default:                      return "unknown error";
     }
 }
 
 
 // =========================================================================
-// CLIENT-SIDE CONTEXT AND DISPLAY STRUCTS
-//
-// These are concrete, caller-owned structs (not opaque). GfxCtx holds the
-// HAL sendMessage function pointer and device ID. GfxDisplay holds cached
-// surface dimensions and font metrics for client-side text measurement.
+// CLIENT-SIDE STRUCTURES
 // =========================================================================
 
-#define GFX_MAX_FONTS 8
+typedef struct GfxImageDesc {
+    uint16_t       width, height;
+    GfxPixelFmt    format;
+    const void    *pixels;    // may be NULL to allocate without initializing;
+                              // not in the caller's overlay
+    size_t         size;      // byte count of pixels buffer
+} GfxImageDesc;
+
+typedef struct GfxFontDesc {
+    uint8_t      glyphW, glyphH;  // pixel dimensions of each glyph cell
+    uint8_t      firstChar;       // first codepoint in the bitmap
+    uint16_t     numChars;        // number of glyphs
+    const void  *bitmap;          // 1-bit glyph rows, MSB leftmost, each row
+                                  // padded to a whole byte; not in the
+                                  // caller's overlay
+    size_t       size;
+} GfxFontDesc;
 
 typedef struct GfxFontCacheEntry {
     GfxHandle handle;
@@ -160,900 +119,1428 @@ typedef struct GfxFontCacheEntry {
     uint16_t  numChars;
 } GfxFontCacheEntry;
 
-typedef struct GfxCtx {
-    GfxSendMessageFn sendMessage;
-    int              deviceId;
-} GfxCtx;
-
-typedef struct GfxCtxDesc {
-    uint16_t    maxResources;
-    const void *backendCfg;
-} GfxCtxDesc;
-
+/// @struct GfxDisplay
+///
+/// @brief A client's connection to the display driver.
+///
+/// @param driverPid The ProcessId of the driver.
+/// @param width The width of the display, in pixels.
+/// @param height The height of the display, in pixels.
+/// @param builtInFont The metrics of the driver's built-in font.
+/// @param defaultFont The font GFX_INVALID_HANDLE stands for, or
+///   GFX_INVALID_HANDLE for the built-in font.
+/// @param fontCount The number of entries in fontCache.
+/// @param fontCache The metrics of each font the client has uploaded.
 typedef struct GfxDisplay {
-    GfxCtx   *ctx;
-    uint8_t   displayId;
-    uint16_t  width, height;
-
-    // System font metrics (populated at open time from driver response).
-    uint8_t   sysFontW, sysFontH;
-    uint8_t   sysFontFirst;
-    uint16_t  sysFontCount;
-
-    // Uploaded font metadata cache (populated by gfxUploadFont,
-    // removed by gfxDestroyFont).
-    uint8_t          fontCount;
+    ProcessId         driverPid;
+    uint16_t          width, height;
+    GfxFontCacheEntry builtInFont;
+    GfxHandle         defaultFont;
+    uint8_t           fontCount;
     GfxFontCacheEntry fontCache[GFX_MAX_FONTS];
 } GfxDisplay;
 
-typedef struct GfxDisplayDesc {
-    uint16_t    width, height;
-    const void *displayCfg;
-} GfxDisplayDesc;
-
 
 // =========================================================================
-// COMMAND BUFFER
-//
-// Double-buffered command recording. Two equal-size backing buffers are
-// allocated by gfxCmdBufCreate. Commands are recorded into the active write
-// buffer. On gfxSubmit (explicit or auto-flush when the write buffer
-// fills), the active buffer is sent zero-copy to the driver and the
-// write pointer swaps to the other buffer. If the other buffer is
-// still being read by the driver, the caller blocks (yielding to the
-// scheduler) until the driver signals completion.
-//
-// States:
-//   INITIAL    - after gfxCmdBufCreate().
-//   RECORDING  - after gfxCmdBufBegin(); commands may be written.
-//   EXECUTABLE - after gfxCmdBufEnd().
+// TRANSPORT
 // =========================================================================
 
-#define GFX_CMDBUF_STATE_INITIAL    0
-#define GFX_CMDBUF_STATE_RECORDING  1
-#define GFX_CMDBUF_STATE_EXECUTABLE 2
-
-typedef struct GfxCmdBuf {
-    uint8_t       *data[2];       // double-buffered backing stores
-    size_t         capacity;      // byte capacity of each buffer
-    size_t         used;          // bytes written to data[writeIdx]
-    uint8_t        writeIdx;      // 0 or 1: which buffer is being written
-    volatile bool  available[2];  // driver sets true when done reading
-    GfxMsgSubmit   submitMsg[2];  // embedded message structs (no malloc)
-    GfxDisplay    *disp;          // back-pointer for auto-flush
-    uint8_t        _state;
-} GfxCmdBuf;
-
-
-// ---- Command buffer lifecycle ----
-
-// Create a double-buffered command buffer. Allocates the GfxCmdBuf
-// struct and both backing buffers. Returns NULL on allocation failure.
-//
-// The GfxDisplay pointer is stored for auto-flush support.
-// Use gfxCmdBufDestroy to free all associated memory.
-static inline GfxCmdBuf *gfxCmdBufCreate(GfxDisplay *disp, size_t capacity) {
-    GfxCmdBuf *buf = (GfxCmdBuf *)calloc(1, sizeof(*buf));
-    if (!buf) return NULL;
-    buf->data[0] = (uint8_t *)malloc(capacity);
-    buf->data[1] = (uint8_t *)malloc(capacity);
-    if (!buf->data[0] || !buf->data[1]) {
-        free(buf->data[0]);
-        free(buf->data[1]);
-        free(buf);
-        return NULL;
+/// @fn static inline GfxError gfxCall_(GfxDisplay *disp, uint8_t type,
+///   void *args, size_t size)
+///
+/// @brief Send the driver a synchronous message and wait for it to be done,
+/// with the status at the start of its arguments preset to
+/// GFX_ERR_DEVICE_LOST.  The wait has no timeout because the kernel marks
+/// done every message to a driver that ends.
+///
+/// @param disp The display.
+/// @param type The GfxMsgType.
+/// @param args The arguments, from MESSAGE_ARGS_ALLOCATE, or NULL if there
+///   was no storage for them.
+/// @param size The size of the arguments.
+///
+/// @return Returns the status the driver set, GFX_ERR_OUT_OF_MEMORY if there
+/// was no storage or message, or GFX_ERR_DEVICE_LOST if the send failed.
+GFX_OUT_OF_LINE GfxError gfxCall_(GfxDisplay *disp, uint8_t type,
+    void *args, size_t size
+) {
+    if (args == NULL) {
+        return GFX_ERR_OUT_OF_MEMORY;
     }
-    buf->capacity     = capacity;
-    buf->writeIdx     = 0;
-    buf->available[0] = true;
-    buf->available[1] = true;
-    buf->disp         = disp;
-    buf->_state       = GFX_CMDBUF_STATE_INITIAL;
-    return buf;
+    *((uint8_t*) args) = GFX_ERR_DEVICE_LOST;
+    ProcessMessage *message = getAvailableMessage();
+    if (message == NULL) {
+        return GFX_ERR_OUT_OF_MEMORY;
+    }
+    processMessageInit(message, GFX_COMMAND_SIGNATURE | type,
+        args, size, /* waiting= */ true);
+    if (sendProcessMessageToPid(disp->driverPid, message) != processSuccess) {
+        processMessageRelease(message);
+        return GFX_ERR_DEVICE_LOST;
+    }
+    processMessageWaitForDone(message, NULL);
+    processMessageRelease(message);
+    return (GfxError) *((uint8_t*) args);
 }
 
-// Destroy a command buffer. Blocks until any in-flight buffer completes,
-// then frees both backing stores and the GfxCmdBuf struct itself.
-// Always returns NULL so the caller can write:
-//
-//   cmdBuf = gfxCmdBufDestroy(cmdBuf);
-static inline GfxCmdBuf *gfxCmdBufDestroy(GfxCmdBuf *buf) {
-    if (!buf) return NULL;
-    for (int i = 0; i < 2; i++) {
-        while (!buf->available[i])
-            processYield();
-        free(buf->data[i]);
+/// @fn static inline GfxError gfxPost_(GfxDisplay *disp, uint8_t type,
+///   void *args, size_t size)
+///
+/// @brief Send the driver a one-way message, which then owns its arguments,
+/// or destroy the arguments if it couldn't be sent.
+///
+/// @param disp The display.
+/// @param type The GfxMsgType.
+/// @param args The arguments, from MESSAGE_ARGS_CREATE with
+///   MESSAGE_ARGS_ONE_WAY, or NULL for a message that has none.
+/// @param size The size of the arguments.
+///
+/// @return Returns GFX_OK if the message was sent, GFX_ERR_OUT_OF_MEMORY if
+/// there was no message, or GFX_ERR_DEVICE_LOST if the send failed.
+GFX_OUT_OF_LINE GfxError gfxPost_(GfxDisplay *disp, uint8_t type,
+    void *args, size_t size
+) {
+    GfxError status = GFX_ERR_OUT_OF_MEMORY;
+    ProcessMessage *message = getAvailableMessage();
+    if (message != NULL) {
+        processMessageInit(message, GFX_COMMAND_SIGNATURE | type,
+            args, size, /* waiting= */ false);
+        if (sendProcessMessageToPid(disp->driverPid, message)
+            == processSuccess
+        ) {
+            return GFX_OK;
+        }
+        processMessageRelease(message);
+        status = GFX_ERR_DEVICE_LOST;
     }
-    free(buf);
+    if (args != NULL) {
+        MESSAGE_ARGS_DESTROY(args);
+    }
+    return status;
+}
+
+/// @fn static inline GfxError gfxPostHandle_(GfxDisplay *disp, uint8_t type,
+///   GfxHandle handle)
+///
+/// @brief Send the driver a one-way message whose only argument is a handle.
+///
+/// @param disp The display.
+/// @param type The GfxMsgType.
+/// @param handle The handle.
+///
+/// @return Returns the result of gfxPost_, or GFX_ERR_OUT_OF_MEMORY if there
+/// was no storage for the arguments.
+GFX_OUT_OF_LINE GfxError gfxPostHandle_(GfxDisplay *disp,
+    uint8_t type, GfxHandle handle
+) {
+    GfxHandleArgs *args = MESSAGE_ARGS_CREATE(GfxHandleArgs,
+        MESSAGE_ARGS_ONE_WAY);
+    if (args == NULL) {
+        return GFX_ERR_OUT_OF_MEMORY;
+    }
+    args->handle = handle;
+    return gfxPost_(disp, type, args, sizeof(*args));
+}
+
+
+// =========================================================================
+// DISPLAY
+// =========================================================================
+
+/// @fn static inline GfxError gfxOpenDisplay(GfxDisplay *disp,
+///   const char *driverName, uint16_t width, uint16_t height)
+///
+/// @brief Find the driver registered under a name and take ownership of its
+/// display, caching the display's size and the built-in font's metrics.
+///
+/// @param disp The display to initialize.
+/// @param driverName The name the driver is registered under, normally
+///   GFX_DRIVER_PROCESS_NAME.
+/// @param width The requested width, in pixels.
+/// @param height The requested height, in pixels.
+///
+/// @return Returns GFX_OK on success, GFX_ERR_DEVICE_LOST if no driver has
+/// the name, or the driver's status otherwise.
+static inline GfxError gfxOpenDisplay(GfxDisplay *disp,
+    const char *driverName, uint16_t width, uint16_t height
+) {
+    memset(disp, 0, sizeof(*disp));
+    ProcessId driverPid = PROCESS_ID_NOT_SET;
+    if (findProcessByName(driverName, &driverPid) != 0) {
+        disp->driverPid = PROCESS_ID_NOT_SET;
+        return GFX_ERR_DEVICE_LOST;
+    }
+    disp->driverPid = driverPid;
+
+    MESSAGE_ARGS_ALLOCATE(GfxOpenDisplayArgs, args);
+    if (args != NULL) {
+        args->width  = width;
+        args->height = height;
+    }
+    GfxError status = gfxCall_(disp, GFX_MSG_OPEN_DISPLAY,
+        args, sizeof(*args));
+    if (status == GFX_OK) {
+        disp->width                 = args->width;
+        disp->height                = args->height;
+        disp->builtInFont.glyphW    = args->defaultFontW;
+        disp->builtInFont.glyphH    = args->defaultFontH;
+        disp->builtInFont.firstChar = args->defaultFontFirst;
+        disp->builtInFont.numChars  = args->defaultFontCount;
+    }
+    MESSAGE_ARGS_FREE(args);
+    return status;
+}
+
+/// @fn static inline GfxError gfxCloseDisplay(GfxDisplay *disp)
+///
+/// @brief Give up ownership of the display, which frees everything the
+/// client created on it.
+///
+/// @param disp The display.
+///
+/// @return Returns the result of gfxPost_.
+static inline GfxError gfxCloseDisplay(GfxDisplay *disp) {
+    GfxError status = gfxPost_(disp, GFX_MSG_CLOSE_DISPLAY, NULL, 0);
+    disp->fontCount   = 0;
+    disp->defaultFont = GFX_INVALID_HANDLE;
+    return status;
+}
+
+/// @fn static inline GfxError gfxGetSurfaceSize(GfxDisplay *disp,
+///   uint16_t *outWidth, uint16_t *outHeight)
+///
+/// @brief Ask the driver for the display's size, and update the cached size
+/// with the answer.
+///
+/// @param disp The display.
+/// @param outWidth Where to store the width, or NULL.
+/// @param outHeight Where to store the height, or NULL.
+///
+/// @return Returns the status of the query.  The outputs are written only on
+/// GFX_OK.
+static inline GfxError gfxGetSurfaceSize(GfxDisplay *disp,
+    uint16_t *outWidth, uint16_t *outHeight
+) {
+    MESSAGE_ARGS_ALLOCATE(GfxSurfaceSizeArgs, args);
+    GfxError status = gfxCall_(disp, GFX_MSG_GET_SURFACE_SIZE,
+        args, sizeof(*args));
+    if (status == GFX_OK) {
+        disp->width  = args->width;
+        disp->height = args->height;
+        if (outWidth)  *outWidth  = args->width;
+        if (outHeight) *outHeight = args->height;
+    }
+    MESSAGE_ARGS_FREE(args);
+    return status;
+}
+
+
+// =========================================================================
+// IMAGES
+// =========================================================================
+
+/// @fn static inline GfxError gfxUploadImage(GfxDisplay *disp,
+///   const GfxImageDesc *desc, GfxHandle *outImage)
+///
+/// @brief Upload an image to the driver.
+///
+/// @param disp The display.
+/// @param desc The image.
+/// @param outImage Where to store the new image's handle, which is
+///   GFX_INVALID_HANDLE on failure.
+///
+/// @return Returns the status of the upload.
+static inline GfxError gfxUploadImage(GfxDisplay *disp,
+    const GfxImageDesc *desc, GfxHandle *outImage
+) {
+    *outImage = GFX_INVALID_HANDLE;
+    MESSAGE_ARGS_ALLOCATE(GfxUploadImageArgs, args);
+    if (args == NULL) {
+        return GFX_ERR_OUT_OF_MEMORY;
+    }
+    args->format = (uint8_t) desc->format;
+    args->width  = desc->width;
+    args->height = desc->height;
+    args->size   = (uint32_t) desc->size;
+    args->pixels = MESSAGE_BUFFER_SHARE(desc->pixels, desc->size,
+        MESSAGE_BUFFER_IN, disp->driverPid);
+    GfxError status = GFX_ERR_OUT_OF_MEMORY;
+    if ((args->pixels != NULL) || (desc->pixels == NULL)) {
+        status = gfxCall_(disp, GFX_MSG_UPLOAD_IMAGE, args, sizeof(*args));
+        MESSAGE_BUFFER_UNSHARE(args->pixels, desc->pixels,
+            MESSAGE_BUFFER_IN);
+    }
+    if (status == GFX_OK) {
+        *outImage = args->handle;
+    }
+    MESSAGE_ARGS_FREE(args);
+    return status;
+}
+
+/// @fn static inline GfxError gfxDestroyImage(GfxDisplay *disp,
+///   GfxHandle image)
+///
+/// @brief Free an uploaded or captured image.  One-way.
+///
+/// @param disp The display.
+/// @param image The image, or GFX_INVALID_HANDLE to do nothing.
+///
+/// @return Returns the result of sending the message.
+static inline GfxError gfxDestroyImage(GfxDisplay *disp, GfxHandle image) {
+    if (image == GFX_INVALID_HANDLE) {
+        return GFX_OK;
+    }
+    return gfxPostHandle_(disp, GFX_MSG_DESTROY_IMAGE, image);
+}
+
+/// @fn static inline GfxError gfxGetImageSize(GfxDisplay *disp,
+///   GfxHandle image, uint16_t *outW, uint16_t *outH)
+///
+/// @brief Ask the driver for an image's size.
+///
+/// @param disp The display.
+/// @param image The image.
+/// @param outW Where to store the width, or NULL.
+/// @param outH Where to store the height, or NULL.
+///
+/// @return Returns the status of the query.  The outputs are written only on
+/// GFX_OK.
+static inline GfxError gfxGetImageSize(GfxDisplay *disp, GfxHandle image,
+    uint16_t *outW, uint16_t *outH
+) {
+    MESSAGE_ARGS_ALLOCATE(GfxImageSizeArgs, args);
+    if (args != NULL) {
+        args->handle = image;
+    }
+    GfxError status = gfxCall_(disp, GFX_MSG_GET_IMAGE_SIZE,
+        args, sizeof(*args));
+    if (status == GFX_OK) {
+        if (outW) *outW = args->width;
+        if (outH) *outH = args->height;
+    }
+    MESSAGE_ARGS_FREE(args);
+    return status;
+}
+
+/// @fn static inline GfxError gfxCaptureRect(GfxDisplay *disp,
+///   const GfxRect *rect, GfxHandle *outImage)
+///
+/// @brief Copy a rectangle of the screen into a new image, which the caller
+/// frees with gfxDestroyImage.
+///
+/// @param disp The display.
+/// @param rect The rectangle, in screen coordinates.
+/// @param outImage Where to store the image's handle, which is
+///   GFX_INVALID_HANDLE on failure.
+///
+/// @return Returns the status of the capture.
+static inline GfxError gfxCaptureRect(GfxDisplay *disp, const GfxRect *rect,
+    GfxHandle *outImage
+) {
+    *outImage = GFX_INVALID_HANDLE;
+    MESSAGE_ARGS_ALLOCATE(GfxCaptureRectArgs, args);
+    if (args != NULL) {
+        args->rect = *rect;
+    }
+    GfxError status = gfxCall_(disp, GFX_MSG_CAPTURE_RECT,
+        args, sizeof(*args));
+    if (status == GFX_OK) {
+        *outImage = args->handle;
+    }
+    MESSAGE_ARGS_FREE(args);
+    return status;
+}
+
+
+// =========================================================================
+// FONTS
+// =========================================================================
+
+/// @fn static inline GfxFontCacheEntry* gfxFontEntry_(GfxDisplay *disp,
+///   GfxHandle font)
+///
+/// @brief Find the cached metrics of a font, with GFX_INVALID_HANDLE standing
+/// for the default font.
+///
+/// @param disp The display.
+/// @param font The font.
+///
+/// @return Returns the font's metrics, or NULL if the client didn't upload
+/// it.
+GFX_OUT_OF_LINE GfxFontCacheEntry* gfxFontEntry_(
+    GfxDisplay *disp, GfxHandle font
+) {
+    if (font == GFX_INVALID_HANDLE) {
+        font = disp->defaultFont;
+        if (font == GFX_INVALID_HANDLE) {
+            return &disp->builtInFont;
+        }
+    }
+    for (uint8_t ii = 0; ii < disp->fontCount; ii++) {
+        if (disp->fontCache[ii].handle == font) {
+            return &disp->fontCache[ii];
+        }
+    }
     return NULL;
 }
 
-static inline void gfxCmdBufBegin(GfxCmdBuf *buf) {
-    buf->used   = 0;
-    buf->_state = GFX_CMDBUF_STATE_RECORDING;
-}
-
-static inline void gfxCmdBufEnd(GfxCmdBuf *buf) {
-    buf->_state = GFX_CMDBUF_STATE_EXECUTABLE;
-}
-
-static inline void gfxCmdBufReset(GfxCmdBuf *buf) {
-    buf->used   = 0;
-    buf->_state = GFX_CMDBUF_STATE_RECORDING;
-}
-
-
-// ---- Internal: forward declaration for auto-flush ----
-
-static inline void gfxSubmit(GfxDisplay *disp, GfxCmdBuf *buf);
-
-// ---- Internal: write bytes to the command buffer ----
-
-// Write n bytes to the active buffer. If the write would overflow,
-// auto-flush: submit the current buffer, swap to the other one
-// (blocking if it's still in flight), and then write into the fresh
-// buffer.
-//
-// Returns false only if the record is larger than an entire buffer,
-// which indicates a programming error.
-static inline bool gfxCmdBufWrite_(GfxCmdBuf *buf,
-                                   const void *src, size_t n) {
-    if (buf->used + n > buf->capacity) {
-        /* Record too large for any single buffer - cannot proceed. */
-        if (n > buf->capacity)
-            return false;
-
-        /* Auto-flush: submit current buffer and swap. */
-        gfxSubmit(buf->disp, buf);
+/// @fn static inline GfxError gfxUploadFont(GfxDisplay *disp,
+///   const GfxFontDesc *desc, GfxHandle *outFont)
+///
+/// @brief Upload a font and cache its metrics for text measurement.
+///
+/// @param disp The display.
+/// @param desc The font.
+/// @param outFont Where to store the font's handle, which is
+///   GFX_INVALID_HANDLE on failure.
+///
+/// @return Returns GFX_ERR_OUT_OF_HANDLES without sending anything if
+/// GFX_MAX_FONTS fonts are already uploaded, the status of the upload
+/// otherwise.
+static inline GfxError gfxUploadFont(GfxDisplay *disp,
+    const GfxFontDesc *desc, GfxHandle *outFont
+) {
+    *outFont = GFX_INVALID_HANDLE;
+    if (disp->fontCount >= GFX_MAX_FONTS) {
+        return GFX_ERR_OUT_OF_HANDLES;
     }
-    memcpy(buf->data[buf->writeIdx] + buf->used, src, n);
-    buf->used += n;
-    return true;
+    MESSAGE_ARGS_ALLOCATE(GfxUploadFontArgs, args);
+    if (args == NULL) {
+        return GFX_ERR_OUT_OF_MEMORY;
+    }
+    args->glyphW    = desc->glyphW;
+    args->glyphH    = desc->glyphH;
+    args->firstChar = desc->firstChar;
+    args->numChars  = desc->numChars;
+    args->size      = (uint32_t) desc->size;
+    args->bitmap    = MESSAGE_BUFFER_SHARE(desc->bitmap, desc->size,
+        MESSAGE_BUFFER_IN, disp->driverPid);
+    GfxError status = GFX_ERR_OUT_OF_MEMORY;
+    if ((args->bitmap != NULL) || (desc->bitmap == NULL)) {
+        status = gfxCall_(disp, GFX_MSG_UPLOAD_FONT, args, sizeof(*args));
+        MESSAGE_BUFFER_UNSHARE(args->bitmap, desc->bitmap,
+            MESSAGE_BUFFER_IN);
+    }
+    if (status == GFX_OK) {
+        GfxFontCacheEntry *entry = &disp->fontCache[disp->fontCount++];
+        entry->handle    = args->handle;
+        entry->glyphW    = desc->glyphW;
+        entry->glyphH    = desc->glyphH;
+        entry->firstChar = desc->firstChar;
+        entry->numChars  = desc->numChars;
+        *outFont     = args->handle;
+    }
+    MESSAGE_ARGS_FREE(args);
+    return status;
 }
 
-static inline void gfxCmdBufTag_(GfxCmdBuf *buf, GfxCmdType type) {
-    uint8_t tag = (uint8_t)type;
-    gfxCmdBufWrite_(buf, &tag, 1);
-}
-
-
-// =========================================================================
-// COMMAND RECORDING - STATE COMMANDS  (client-side, no IPC)
-// =========================================================================
-
-static inline void gfxCmdSetViewport(GfxCmdBuf *buf, const GfxRect *rect) {
-    gfxCmdBufTag_(buf, GFX_CMD_SET_VIEWPORT);
-    gfxCmdBufWrite_(buf, rect, sizeof(*rect));
-}
-
-static inline void gfxCmdSetScissor(GfxCmdBuf *buf, const GfxRect *rect) {
-    gfxCmdBufTag_(buf, GFX_CMD_SET_SCISSOR);
-    gfxCmdBufWrite_(buf, rect, sizeof(*rect));
-}
-
-static inline void gfxCmdPushScissor(GfxCmdBuf *buf, const GfxRect *rect) {
-    gfxCmdBufTag_(buf, GFX_CMD_PUSH_SCISSOR);
-    gfxCmdBufWrite_(buf, rect, sizeof(*rect));
-}
-
-static inline void gfxCmdPopScissor(GfxCmdBuf *buf) {
-    gfxCmdBufTag_(buf, GFX_CMD_POP_SCISSOR);
-}
-
-static inline void gfxCmdSetFgColor(GfxCmdBuf *buf, GfxColor fg) {
-    gfxCmdBufTag_(buf, GFX_CMD_SET_FG_COLOR);
-    gfxCmdBufWrite_(buf, &fg, sizeof(fg));
-}
-
-static inline void gfxCmdSetBgColor(GfxCmdBuf *buf, GfxColor bg) {
-    gfxCmdBufTag_(buf, GFX_CMD_SET_BG_COLOR);
-    gfxCmdBufWrite_(buf, &bg, sizeof(bg));
-}
-
-static inline void gfxCmdSetBlend(GfxCmdBuf *buf, GfxBlendMode mode) {
-    gfxCmdBufTag_(buf, GFX_CMD_SET_BLEND);
-    uint8_t m = (uint8_t)mode;
-    gfxCmdBufWrite_(buf, &m, 1);
-}
-
-static inline void gfxCmdSetFont(GfxCmdBuf *buf, GfxHandle font) {
-    gfxCmdBufTag_(buf, GFX_CMD_SET_FONT);
-    gfxCmdBufWrite_(buf, &font, sizeof(font));
-}
-
-static inline void gfxCmdSetTransform(GfxCmdBuf *buf, const GfxMat3 *m) {
-    gfxCmdBufTag_(buf, GFX_CMD_SET_TRANSFORM);
-    gfxCmdBufWrite_(buf, m, sizeof(*m));
-}
-
-
-// =========================================================================
-// COMMAND RECORDING - DRAW COMMANDS  (client-side, no IPC)
-// =========================================================================
-
-static inline void gfxCmdClear(GfxCmdBuf *buf) {
-    gfxCmdBufTag_(buf, GFX_CMD_CLEAR);
-}
-
-static inline void gfxCmdDrawRect(GfxCmdBuf *buf,
-                                  const GfxRect *rect, bool filled) {
-    gfxCmdBufTag_(buf, GFX_CMD_DRAW_RECT);
-    gfxCmdBufWrite_(buf, rect, sizeof(*rect));
-    uint8_t f = filled ? 1 : 0;
-    gfxCmdBufWrite_(buf, &f, 1);
-}
-
-static inline void gfxCmdDrawLine(GfxCmdBuf *buf,
-                                  GfxPoint a, GfxPoint b) {
-    gfxCmdBufTag_(buf, GFX_CMD_DRAW_LINE);
-    gfxCmdBufWrite_(buf, &a, sizeof(a));
-    gfxCmdBufWrite_(buf, &b, sizeof(b));
-}
-
-static inline void gfxCmdDrawTriangle(GfxCmdBuf *buf,
-                                      GfxPoint a, GfxPoint b, GfxPoint c,
-                                      bool filled) {
-    gfxCmdBufTag_(buf, GFX_CMD_DRAW_TRIANGLE);
-    gfxCmdBufWrite_(buf, &a, sizeof(a));
-    gfxCmdBufWrite_(buf, &b, sizeof(b));
-    gfxCmdBufWrite_(buf, &c, sizeof(c));
-    uint8_t f = filled ? 1 : 0;
-    gfxCmdBufWrite_(buf, &f, 1);
-}
-
-static inline void gfxCmdDrawCircle(GfxCmdBuf *buf,
-                                    GfxPoint center,
-                                    int16_t radius,
-                                    bool filled) {
-    gfxCmdBufTag_(buf, GFX_CMD_DRAW_CIRCLE);
-    gfxCmdBufWrite_(buf, &center, sizeof(center));
-    gfxCmdBufWrite_(buf, &radius, sizeof(radius));
-    uint8_t f = filled ? 1 : 0;
-    gfxCmdBufWrite_(buf, &f, 1);
-}
-
-static inline void gfxCmdDrawImage(GfxCmdBuf *buf,
-                                   GfxHandle image, GfxPoint pos) {
-    gfxCmdBufTag_(buf, GFX_CMD_DRAW_IMAGE);
-    gfxCmdBufWrite_(buf, &image, sizeof(image));
-    gfxCmdBufWrite_(buf, &pos, sizeof(pos));
-}
-
-static inline void gfxCmdDrawSubImage(GfxCmdBuf *buf,
-                                      GfxHandle image,
-                                      const GfxRect *srcRect,
-                                      GfxPoint pos) {
-    gfxCmdBufTag_(buf, GFX_CMD_DRAW_SUB_IMAGE);
-    gfxCmdBufWrite_(buf, &image, sizeof(image));
-    GfxRect src = srcRect ? *srcRect : (GfxRect){0, 0, 0, 0};
-    gfxCmdBufWrite_(buf, &src, sizeof(src));
-    gfxCmdBufWrite_(buf, &pos, sizeof(pos));
-}
-
-// Record a text draw command.
-//
-// The string is copied into the command buffer at record time. The format
-// in the buffer is: [tag][GfxPoint pos][uint16_t len][char str[len+1]]
-// where len is strlen(str) and the string is null-terminated.
-static inline void gfxCmdDrawText(GfxCmdBuf *buf,
-                                  GfxPoint pos,
-                                  const char *str) {
-    if (!str) return;
-    uint16_t len = (uint16_t)strlen(str);
-    gfxCmdBufTag_(buf, GFX_CMD_DRAW_TEXT);
-    gfxCmdBufWrite_(buf, &pos, sizeof(pos));
-    gfxCmdBufWrite_(buf, &len, sizeof(len));
-    gfxCmdBufWrite_(buf, str, len + 1);  /* include null terminator */
-}
-
-static inline void gfxCmdCall(GfxCmdBuf *buf, GfxHandle preloaded) {
-    gfxCmdBufTag_(buf, GFX_CMD_CALL);
-    gfxCmdBufWrite_(buf, &preloaded, sizeof(preloaded));
-}
-
-static inline void gfxCmdScrollRect(GfxCmdBuf *buf,
-                                    const GfxRect *rect,
-                                    int16_t dx, int16_t dy) {
-    gfxCmdBufTag_(buf, GFX_CMD_SCROLL_RECT);
-    gfxCmdBufWrite_(buf, rect, sizeof(*rect));
-    gfxCmdBufWrite_(buf, &dx, sizeof(dx));
-    gfxCmdBufWrite_(buf, &dy, sizeof(dy));
-}
-
-
-// =========================================================================
-// CONTEXT LIFECYCLE  (messages to driver)
-// =========================================================================
-
-// Initialize a graphics context and notify the driver.
-//
-// The caller provides storage for the GfxCtx struct and the sendMessage
-// function pointer (typically HAL->gfx->sendMessage). Returns true on
-// success.
-static inline bool gfxCreateContext(GfxCtx *ctx,
-                                    GfxSendMessageFn sendMessage,
-                                    int deviceId,
-                                    const GfxCtxDesc *desc) {
-    ctx->sendMessage = sendMessage;
-    ctx->deviceId    = deviceId;
-
-    GfxMsgCreateContext msg;
-    msg.maxResources = desc->maxResources;
-    msg.backendCfg   = desc->backendCfg;
-
-    ProcessMessage *sent = ctx->sendMessage(
-        ctx->deviceId, GFX_MSG_CREATE_CONTEXT,
-        &msg, sizeof(msg), true);
-    processMessageWaitForDone(sent, NULL);
-    GfxMsgErrorResp *resp = (GfxMsgErrorResp *)processMessageData(sent);
-    GfxError err = resp->err;
-    processMessageRelease(sent);
-    return err == GFX_OK;
-}
-
-// Tear down the graphics context. Async - driver handles cleanup.
-static inline void gfxDestroyContext(GfxCtx *ctx) {
-    // No payload needed; deviceId identifies the target. Send a
-    // zero-byte message so there's nothing for the driver to free.
-    ctx->sendMessage(ctx->deviceId, GFX_MSG_DESTROY_CONTEXT,
-                     NULL, 0, false);
-}
-
-
-// =========================================================================
-// DISPLAY LIFECYCLE  (messages to driver)
-// =========================================================================
-
-// Open a display. The driver response includes the actual surface
-// dimensions (may differ from requested if the backend snapped to the
-// nearest mode) and system font metrics for client-side caching.
-//
-// Returns true on success.
-static inline bool gfxOpenDisplay(GfxDisplay *disp,
-                                  GfxCtx *ctx,
-                                  const GfxDisplayDesc *desc) {
-    memset(disp, 0, sizeof(*disp));
-    disp->ctx = ctx;
-
-    GfxMsgOpenDisplay msg;
-    msg.width      = desc->width;
-    msg.height     = desc->height;
-    msg.displayCfg = desc->displayCfg;
-
-    ProcessMessage *sent = ctx->sendMessage(
-        ctx->deviceId, GFX_MSG_OPEN_DISPLAY,
-        &msg, sizeof(msg), true);
-    processMessageWaitForDone(sent, NULL);
-    GfxMsgOpenDisplayResp *resp =
-        (GfxMsgOpenDisplayResp *)processMessageData(sent);
-
-    if (resp->err != GFX_OK) {
-        processMessageRelease(sent);
-        return false;
+/// @fn static inline GfxError gfxDestroyFont(GfxDisplay *disp,
+///   GfxHandle font)
+///
+/// @brief Free an uploaded font and forget its metrics.  One-way.
+///
+/// @param disp The display.
+/// @param font The font, or GFX_INVALID_HANDLE to do nothing.
+///
+/// @return Returns GFX_ERR_INVALID_STATE without sending anything if the font
+/// is the default font, which gfxSetDefaultFont(disp, GFX_INVALID_HANDLE)
+/// changes back to the built-in one, or the result of sending the message
+/// otherwise.
+static inline GfxError gfxDestroyFont(GfxDisplay *disp, GfxHandle font) {
+    if (font == GFX_INVALID_HANDLE) {
+        return GFX_OK;
+    }
+    if (font == disp->defaultFont) {
+        return GFX_ERR_INVALID_STATE;
     }
 
-    disp->displayId    = resp->displayId;
-    disp->width        = resp->width;
-    disp->height       = resp->height;
-    disp->sysFontW     = resp->sysFontW;
-    disp->sysFontH     = resp->sysFontH;
-    disp->sysFontFirst = resp->sysFontFirst;
-    disp->sysFontCount = resp->sysFontCount;
-
-    processMessageRelease(sent);
-    return true;
-}
-
-// Close a display. Async - driver frees device-side resources.
-static inline void gfxCloseDisplay(GfxDisplay *disp) {
-    GfxMsgCloseDisplay *msg = (GfxMsgCloseDisplay *)malloc(sizeof(*msg));
-    if (!msg) return;
-    msg->displayId = disp->displayId;
-    disp->ctx->sendMessage(disp->ctx->deviceId, GFX_MSG_CLOSE_DISPLAY,
-                           msg, sizeof(*msg), false);
-}
-
-// Query the actual surface dimensions. Sync - returns from driver.
-static inline void gfxGetSurfaceSize(const GfxDisplay *disp,
-                                     uint16_t *outWidth,
-                                     uint16_t *outHeight) {
-    // Surface size is cached at open time. If a mode change could
-    // occur dynamically, uncomment the sync message below.
-    if (outWidth)  *outWidth  = disp->width;
-    if (outHeight) *outHeight = disp->height;
-}
-
-
-// =========================================================================
-// RESOURCE MANAGEMENT - IMAGES  (messages to driver)
-// =========================================================================
-
-// Upload pixel data to device memory. Sync - blocks until the driver
-// returns a handle. The desc->pixels pointer is valid for the duration
-// of the call (zero-copy, caller blocks).
-static inline GfxHandle gfxUploadImage(GfxDisplay *disp,
-                                       const GfxImageDesc *desc) {
-    GfxMsgUploadImage msg;
-    msg.displayId = disp->displayId;
-    msg.desc      = *desc;
-
-    ProcessMessage *sent = disp->ctx->sendMessage(
-        disp->ctx->deviceId, GFX_MSG_UPLOAD_IMAGE,
-        &msg, sizeof(msg), true);
-    processMessageWaitForDone(sent, NULL);
-    GfxMsgHandleResp *resp = (GfxMsgHandleResp *)processMessageData(sent);
-    GfxHandle handle = resp->handle;
-    processMessageRelease(sent);
-    return handle;
-}
-
-// Free device-side image memory. Async. Safe with GFX_INVALID_HANDLE.
-static inline void gfxDestroyImage(GfxDisplay *disp, GfxHandle image) {
-    if (image == GFX_INVALID_HANDLE) return;
-    GfxMsgDestroyImage *msg = (GfxMsgDestroyImage *)malloc(sizeof(*msg));
-    if (!msg) return;
-    msg->displayId = disp->displayId;
-    msg->handle    = image;
-    disp->ctx->sendMessage(disp->ctx->deviceId, GFX_MSG_DESTROY_IMAGE,
-                           msg, sizeof(*msg), false);
-}
-
-// Query pixel dimensions of an uploaded image. Sync.
-static inline bool gfxGetImageSize(GfxDisplay *disp,
-                                   GfxHandle image,
-                                   uint16_t *outW,
-                                   uint16_t *outH) {
-    GfxMsgGetImageSize msg;
-    msg.displayId = disp->displayId;
-    msg.handle    = image;
-
-    ProcessMessage *sent = disp->ctx->sendMessage(
-        disp->ctx->deviceId, GFX_MSG_GET_IMAGE_SIZE,
-        &msg, sizeof(msg), true);
-    processMessageWaitForDone(sent, NULL);
-    GfxMsgSizeResp *resp = (GfxMsgSizeResp *)processMessageData(sent);
-    bool ok = (resp->w != 0 || resp->h != 0);
-    if (outW) *outW = resp->w;
-    if (outH) *outH = resp->h;
-    processMessageRelease(sent);
-    return ok;
-}
-
-
-// =========================================================================
-// RESOURCE MANAGEMENT - FONTS  (messages + client-side cache)
-// =========================================================================
-
-// Upload a font. Sync - returns handle. Caches glyph metrics locally
-// for client-side text measurement.
-static inline GfxHandle gfxUploadFont(GfxDisplay *disp,
-                                      const GfxFontDesc *desc) {
-    GfxMsgUploadFont msg;
-    msg.displayId = disp->displayId;
-    msg.desc      = *desc;
-
-    ProcessMessage *sent = disp->ctx->sendMessage(
-        disp->ctx->deviceId, GFX_MSG_UPLOAD_FONT,
-        &msg, sizeof(msg), true);
-    processMessageWaitForDone(sent, NULL);
-    GfxMsgHandleResp *resp = (GfxMsgHandleResp *)processMessageData(sent);
-    GfxHandle handle = resp->handle;
-    processMessageRelease(sent);
-
-    // Cache font metrics for client-side text measurement.
-    if (handle != GFX_INVALID_HANDLE &&
-        disp->fontCount < GFX_MAX_FONTS) {
-        GfxFontCacheEntry *e = &disp->fontCache[disp->fontCount++];
-        e->handle   = handle;
-        e->glyphW   = desc->glyphW;
-        e->glyphH   = desc->glyphH;
-        e->firstChar = desc->firstChar;
-        e->numChars  = desc->numChars;
-    }
-
-    return handle;
-}
-
-// Destroy a font. Async. Removes the font from the client-side cache.
-static inline void gfxDestroyFont(GfxDisplay *disp, GfxHandle font) {
-    if (font == GFX_INVALID_HANDLE) return;
-
-    // Remove from client-side cache.
-    for (uint8_t i = 0; i < disp->fontCount; i++) {
-        if (disp->fontCache[i].handle == font) {
-            // Shift remaining entries down.
-            for (uint8_t j = i; j + 1 < disp->fontCount; j++)
-                disp->fontCache[j] = disp->fontCache[j + 1];
+    for (uint8_t ii = 0; ii < disp->fontCount; ii++) {
+        if (disp->fontCache[ii].handle == font) {
+            for (uint8_t jj = ii; jj + 1 < disp->fontCount; jj++)
+                disp->fontCache[jj] = disp->fontCache[jj + 1];
             disp->fontCount--;
             break;
         }
     }
-
-    GfxMsgDestroyFont *msg = (GfxMsgDestroyFont *)malloc(sizeof(*msg));
-    if (!msg) return;
-    msg->displayId = disp->displayId;
-    msg->handle    = font;
-    disp->ctx->sendMessage(disp->ctx->deviceId, GFX_MSG_DESTROY_FONT,
-                           msg, sizeof(*msg), false);
+    return gfxPostHandle_(disp, GFX_MSG_DESTROY_FONT, font);
 }
 
-
-/// @fn static inline bool gfxSetSystemFont(GfxDisplay *disp, GfxHandle font)
+/// @fn static inline GfxError gfxSetDefaultFont(GfxDisplay *disp,
+///   GfxHandle font)
 ///
-/// @brief Make an uploaded font the system font, which console text is drawn
-/// in and GFX_INVALID_HANDLE selects, and cache its metrics as the system
-/// font's.  Sync.
+/// @brief Make an uploaded font, or the built-in one, the font that
+/// GFX_INVALID_HANDLE stands for in records and measurements.
 ///
-/// @param disp The display to set the system font of.
-/// @param font The handle gfxUploadFont returned for the font.
+/// @param disp The display.
+/// @param font The font, or GFX_INVALID_HANDLE for the built-in font.
 ///
-/// @return Returns true if the driver selected the font, false otherwise.
-static inline bool gfxSetSystemFont(GfxDisplay *disp, GfxHandle font) {
-    GfxMsgSetSystemFont msg;
-    msg.displayId = disp->displayId;
-    msg.handle    = font;
-
-    ProcessMessage *sent = disp->ctx->sendMessage(
-        disp->ctx->deviceId, GFX_MSG_SET_SYSTEM_FONT,
-        &msg, sizeof(msg), true);
-    processMessageWaitForDone(sent, NULL);
-    GfxMsgErrorResp *resp = (GfxMsgErrorResp *)processMessageData(sent);
-    GfxError err = resp->err;
-    processMessageRelease(sent);
-
-    if (err != GFX_OK) return false;
-    for (uint8_t i = 0; i < disp->fontCount; i++) {
-        if (disp->fontCache[i].handle == font) {
-            disp->sysFontW     = disp->fontCache[i].glyphW;
-            disp->sysFontH     = disp->fontCache[i].glyphH;
-            disp->sysFontFirst = disp->fontCache[i].firstChar;
-            disp->sysFontCount = disp->fontCache[i].numChars;
-            break;
-        }
+/// @return Returns the driver's status.
+static inline GfxError gfxSetDefaultFont(GfxDisplay *disp, GfxHandle font) {
+    MESSAGE_ARGS_ALLOCATE(GfxSetDefaultFontArgs, args);
+    if (args != NULL) {
+        args->handle = font;
     }
-    return true;
-}
-
-
-// ---- Internal: look up cached font metrics ----
-
-static inline bool gfxFontLookup_(const GfxDisplay *disp,
-                                  GfxHandle font,
-                                  uint8_t *outW, uint8_t *outH,
-                                  uint8_t *outFirst, uint16_t *outCount) {
-    if (font == GFX_INVALID_HANDLE) {
-        // System font.
-        if (outW)     *outW     = disp->sysFontW;
-        if (outH)     *outH     = disp->sysFontH;
-        if (outFirst) *outFirst = disp->sysFontFirst;
-        if (outCount) *outCount = disp->sysFontCount;
-        return true;
+    GfxError status = gfxCall_(disp, GFX_MSG_SET_DEFAULT_FONT,
+        args, sizeof(*args));
+    if (status == GFX_OK) {
+        disp->defaultFont = font;
     }
-    for (uint8_t i = 0; i < disp->fontCount; i++) {
-        if (disp->fontCache[i].handle == font) {
-            if (outW)     *outW     = disp->fontCache[i].glyphW;
-            if (outH)     *outH     = disp->fontCache[i].glyphH;
-            if (outFirst) *outFirst = disp->fontCache[i].firstChar;
-            if (outCount) *outCount = disp->fontCache[i].numChars;
-            return true;
-        }
-    }
-    return false;  // handle not found in cache
+    MESSAGE_ARGS_FREE(args);
+    return status;
 }
 
 
 // =========================================================================
 // TEXT MEASUREMENT  (client-side, no IPC)
 //
-// All text measurement uses cached font metrics. These functions never
-// send messages. For fixed-width fonts (the only kind currently
-// supported), the calculations are trivial multiplications. The
-// functions exist so the contract remains correct if proportional font
-// support is added in the future.
+// Every measurement uses cached metrics of fixed-width fonts, works in
+// uint32_t, and saturates at UINT16_MAX.
 // =========================================================================
 
-// Query glyph cell dimensions.
-static inline void gfxGetGlyphSize(GfxDisplay *disp,
-                                   GfxHandle font,
-                                   uint8_t *outW,
-                                   uint8_t *outH) {
-    if (!gfxFontLookup_(disp, font, outW, outH, NULL, NULL)) {
-        if (outW) *outW = 0;
-        if (outH) *outH = 0;
-    }
+/// @fn static inline uint16_t gfxSaturate_(uint32_t value)
+///
+/// @brief Clamp a measurement to what a uint16_t holds.
+///
+/// @param value The measurement.
+///
+/// @return Returns value, or UINT16_MAX if it's larger.
+static inline uint16_t gfxSaturate_(uint32_t value) {
+    return (value > UINT16_MAX) ? UINT16_MAX : (uint16_t) value;
 }
 
-// Measure pixel width of a string.
-static inline uint16_t gfxMeasureText(GfxDisplay *disp,
-                                      GfxHandle font,
-                                      const char *str) {
-    if (!str) return 0;
-    uint8_t w;
-    if (!gfxFontLookup_(disp, font, &w, NULL, NULL, NULL)) return 0;
-    return (uint16_t)(strlen(str) * w);
+/// @fn static inline void gfxGetGlyphSize(GfxDisplay *disp, GfxHandle font,
+///   uint8_t *outW, uint8_t *outH)
+///
+/// @brief Get a font's glyph cell size.
+///
+/// @param disp The display.
+/// @param font The font.
+/// @param outW Where to store the width, or NULL; 0 for an unknown font.
+/// @param outH Where to store the height, or NULL; 0 for an unknown font.
+///
+/// @return This function returns no value.
+static inline void gfxGetGlyphSize(GfxDisplay *disp, GfxHandle font,
+    uint8_t *outW, uint8_t *outH
+) {
+    GfxFontCacheEntry *entry = gfxFontEntry_(disp, font);
+    if (outW) *outW = (entry != NULL) ? entry->glyphW : 0;
+    if (outH) *outH = (entry != NULL) ? entry->glyphH : 0;
 }
 
-// Measure pixel width and height of a (possibly multi-line) string.
-static inline bool gfxMeasureTextSize(GfxDisplay *disp,
-                                      GfxHandle font,
-                                      const char *str,
-                                      uint16_t *outW,
-                                      uint16_t *outH) {
-    uint8_t gw, gh;
-    if (!gfxFontLookup_(disp, font, &gw, &gh, NULL, NULL))
-        return false;
+/// @fn static inline uint16_t gfxMeasureText(GfxDisplay *disp,
+///   GfxHandle font, const char *str)
+///
+/// @brief Measure the width of a single-line string.
+///
+/// @param disp The display.
+/// @param font The font.
+/// @param str The string, or NULL.
+///
+/// @return Returns the width in pixels, 0 for an unknown font.
+static inline uint16_t gfxMeasureText(GfxDisplay *disp, GfxHandle font,
+    const char *str
+) {
+    GfxFontCacheEntry *entry = gfxFontEntry_(disp, font);
+    if ((str == NULL) || (entry == NULL)) return 0;
+    size_t len = strlen(str);
+    if (len > UINT16_MAX) len = UINT16_MAX;
+    return gfxSaturate_(((uint32_t) len) * entry->glyphW);
+}
 
-    if (!str || *str == '\0') {
-        if (outW) *outW = 0;
-        if (outH) *outH = gh;
-        return true;
-    }
+/// @fn static inline bool gfxMeasureTextSize(GfxDisplay *disp,
+///   GfxHandle font, const char *str, uint16_t *outW, uint16_t *outH)
+///
+/// @brief Measure the width of the longest line and the height of a string
+/// whose lines are separated by '\\n'.
+///
+/// @param disp The display.
+/// @param font The font.
+/// @param str The string, or NULL for an empty one.
+/// @param outW Where to store the width, or NULL.
+/// @param outH Where to store the height, or NULL.
+///
+/// @return Returns false for an unknown font, true otherwise.
+static inline bool gfxMeasureTextSize(GfxDisplay *disp, GfxHandle font,
+    const char *str, uint16_t *outW, uint16_t *outH
+) {
+    GfxFontCacheEntry *entry = gfxFontEntry_(disp, font);
+    if (entry == NULL) return false;
 
-    uint16_t maxLineLen = 0;
-    uint16_t curLineLen = 0;
-    uint16_t lines = 1;
-    for (const char *p = str; *p; p++) {
-        if (*p == '\n') {
+    uint32_t maxLineLen = 0;
+    uint32_t curLineLen = 0;
+    uint32_t lines = 1;
+    for (const char *character = str;
+        (character != NULL) && (*character != '\0'); character++
+    ) {
+        if (*character == '\n') {
             if (curLineLen > maxLineLen) maxLineLen = curLineLen;
             curLineLen = 0;
-            lines++;
-        } else {
+            if (lines < UINT16_MAX) lines++;
+        } else if (curLineLen < UINT16_MAX) {
             curLineLen++;
         }
     }
     if (curLineLen > maxLineLen) maxLineLen = curLineLen;
 
-    if (outW) *outW = maxLineLen * gw;
-    if (outH) *outH = lines * gh;
+    if (outW) *outW = gfxSaturate_(maxLineLen * entry->glyphW);
+    if (outH) *outH = gfxSaturate_(lines * entry->glyphH);
     return true;
 }
 
-// How many leading characters fit within maxWidth pixels.
-static inline uint16_t gfxFitText(GfxDisplay *disp,
-                                  GfxHandle font,
-                                  const char *str,
-                                  uint16_t maxWidth) {
-    if (!str || maxWidth == 0) return 0;
-    uint8_t w;
-    if (!gfxFontLookup_(disp, font, &w, NULL, NULL, NULL) || w == 0)
-        return 0;
-    uint16_t fits = maxWidth / w;
-    uint16_t len  = (uint16_t)strlen(str);
-    return fits < len ? fits : len;
+/// @fn static inline uint16_t gfxFitText(GfxDisplay *disp, GfxHandle font,
+///   const char *str, uint16_t maxWidth)
+///
+/// @brief Count how many leading characters of a string fit a width.
+///
+/// @param disp The display.
+/// @param font The font.
+/// @param str The string, or NULL.
+/// @param maxWidth The width in pixels.
+///
+/// @return Returns the count, 0 for an unknown font.
+static inline uint16_t gfxFitText(GfxDisplay *disp, GfxHandle font,
+    const char *str, uint16_t maxWidth
+) {
+    GfxFontCacheEntry *entry = gfxFontEntry_(disp, font);
+    if ((str == NULL) || (entry == NULL) || (entry->glyphW == 0)) return 0;
+    uint32_t fits = maxWidth / entry->glyphW;
+    size_t len = strlen(str);
+    return (fits < len) ? (uint16_t) fits : gfxSaturate_((uint32_t) len);
 }
 
-// Map a pixel X offset to a character index (nearest-edge rounding).
-static inline uint16_t gfxHitTestText(GfxDisplay *disp,
-                                      GfxHandle font,
-                                      const char *str,
-                                      uint16_t pixelX) {
-    if (!str) return 0;
-    uint8_t w;
-    if (!gfxFontLookup_(disp, font, &w, NULL, NULL, NULL) || w == 0)
-        return 0;
-    /* Nearest-edge: add half a glyph width before dividing. */
-    uint16_t idx = (pixelX + w / 2) / w;
-    uint16_t len = (uint16_t)strlen(str);
-    return idx < len ? idx : len;
+/// @fn static inline uint16_t gfxHitTestText(GfxDisplay *disp,
+///   GfxHandle font, const char *str, uint16_t pixelX)
+///
+/// @brief Map a pixel offset into a string to the index of the nearest
+/// character boundary.
+///
+/// @param disp The display.
+/// @param font The font.
+/// @param str The string, or NULL.
+/// @param pixelX The offset in pixels.
+///
+/// @return Returns the index, at most the string's length, 0 for an unknown
+/// font.
+static inline uint16_t gfxHitTestText(GfxDisplay *disp, GfxHandle font,
+    const char *str, uint16_t pixelX
+) {
+    GfxFontCacheEntry *entry = gfxFontEntry_(disp, font);
+    if ((str == NULL) || (entry == NULL) || (entry->glyphW == 0)) return 0;
+    uint32_t idx = (((uint32_t) pixelX) + (entry->glyphW / 2)) / entry->glyphW;
+    size_t len = strlen(str);
+    return (idx < len) ? (uint16_t) idx : gfxSaturate_((uint32_t) len);
 }
 
-// Query the codepoint range of a font.
-static inline bool gfxGetFontRange(GfxDisplay *disp,
-                                   GfxHandle font,
-                                   uint8_t *outFirst,
-                                   uint16_t *outCount) {
-    return gfxFontLookup_(disp, font, NULL, NULL, outFirst, outCount);
+/// @fn static inline bool gfxGetFontRange(GfxDisplay *disp, GfxHandle font,
+///   uint8_t *outFirst, uint16_t *outCount)
+///
+/// @brief Get the codepoints a font has glyphs for.
+///
+/// @param disp The display.
+/// @param font The font.
+/// @param outFirst Where to store the first codepoint, or NULL.
+/// @param outCount Where to store the number of glyphs, or NULL.
+///
+/// @return Returns false for an unknown font, true otherwise.
+static inline bool gfxGetFontRange(GfxDisplay *disp, GfxHandle font,
+    uint8_t *outFirst, uint16_t *outCount
+) {
+    GfxFontCacheEntry *entry = gfxFontEntry_(disp, font);
+    if (entry == NULL) return false;
+    if (outFirst) *outFirst = entry->firstChar;
+    if (outCount) *outCount = entry->numChars;
+    return true;
 }
 
 
 // =========================================================================
-// COMMAND BUFFER SUBMISSION  (messages to driver)
+// COMMAND BUFFER
+//
+// Two equal buffers.  Records go into the write buffer; a submit shares it
+// with the driver, sends it as a persistent round trip, and switches to the
+// other buffer, first waiting for the driver to be done with that one.
 // =========================================================================
 
-// Submit a command buffer for execution. Async, zero-copy.
-//
-// Sends the current write buffer directly to the driver (no malloc,
-// no memcpy). Marks the buffer as in-flight, swaps to the other
-// buffer, and resets the write position. If the other buffer is still
-// being processed by the driver, blocks (yielding to the scheduler)
-// until the driver signals completion.
-//
-// Does nothing if the current write buffer is empty.
-static inline void gfxSubmit(GfxDisplay *disp, GfxCmdBuf *buf) {
-    if (buf->used == 0)
+/// @def GFX_CMDBUF_NO_FLUSH
+///
+/// @brief A gfxCmdBufBegin flag:  a record that doesn't fit sets
+/// GFX_ERR_CMDBUF_OVERFLOW instead of submitting what has been recorded.
+#define GFX_CMDBUF_NO_FLUSH 0x01
+
+/// @struct GfxCmdBuf
+///
+/// @brief A double-buffered command recording.
+///
+/// @param disp The display it submits to.
+/// @param data The two buffers.
+/// @param capacity The size of each buffer.
+/// @param used The bytes recorded in data[writeIdx].
+/// @param writeIdx The buffer being recorded into.
+/// @param flags The GFX_CMDBUF_* flags of the recording.
+/// @param error The first GfxError since gfxCmdBufBegin or gfxSubmit.
+/// @param inFlight The GFX_MSG_SUBMIT of each buffer the driver may still be
+///   reading, or NULL.
+/// @param submitArgs The arguments of each buffer's GFX_MSG_SUBMIT, which
+///   live as long as the command buffer.
+typedef struct GfxCmdBuf {
+    GfxDisplay     *disp;
+    uint8_t        *data[2];
+    size_t          capacity;
+    size_t          used;
+    uint8_t         writeIdx;
+    uint8_t         flags;
+    uint8_t         error;
+    ProcessMessage *inFlight[2];
+    GfxSubmitArgs  *submitArgs[2];
+} GfxCmdBuf;
+
+/// @fn static inline void gfxCmdBufFail_(GfxCmdBuf *buf, GfxError error)
+///
+/// @brief Record an error in a command buffer unless one is already there.
+///
+/// @param buf The command buffer.
+/// @param error The error.
+///
+/// @return This function returns no value.
+static inline void gfxCmdBufFail_(GfxCmdBuf *buf, GfxError error) {
+    if (buf->error == GFX_OK) {
+        buf->error = (uint8_t) error;
+    }
+}
+
+/// @fn static inline void gfxCmdBufSlot_(GfxCmdBuf *buf,
+///   GfxSubmitArgs *args, uint8_t idx, bool send)
+///
+/// @brief Wait for the driver to be done with one buffer, folding its status
+/// into the sticky error and ending its sharing, then, if asked, share and
+/// submit that buffer's recording.  Settling and sending are one function so
+/// that every share of a buffer is paired with its unshare in one place.
+///
+/// @param buf The command buffer.
+/// @param args buf->submitArgs[idx].
+/// @param idx The buffer.
+/// @param send Whether to submit the buffer once it is settled.
+///
+/// @return This function returns no value.
+GFX_OUT_OF_LINE void gfxCmdBufSlot_(GfxCmdBuf *buf,
+    GfxSubmitArgs *args, uint8_t idx, bool send
+) {
+    ProcessMessage *message = buf->inFlight[idx];
+    if (message != NULL) {
+        processMessageWaitForDone(message, NULL);
+        if (args->status != GFX_OK) {
+            gfxCmdBufFail_(buf, (GfxError) args->status);
+        }
+        MESSAGE_BUFFER_UNSHARE(args->cmdData, buf->data[idx],
+            MESSAGE_BUFFER_IN);
+        args->cmdData = NULL;
+        processMessageRelease(message);
+        buf->inFlight[idx] = NULL;
+    }
+    if (send == false) {
         return;
+    }
 
+    args->status  = GFX_ERR_DEVICE_LOST;
+    args->cmdSize = (uint32_t) buf->used;
+    args->cmdData = MESSAGE_BUFFER_SHARE(buf->data[idx], buf->used,
+        MESSAGE_BUFFER_IN, buf->disp->driverPid);
+    if (args->cmdData == NULL) {
+        gfxCmdBufFail_(buf, GFX_ERR_OUT_OF_MEMORY);
+        return;
+    }
+    message = getAvailableMessage();
+    GfxError status = GFX_ERR_OUT_OF_MEMORY;
+    if (message != NULL) {
+        processMessageInit(message, GFX_COMMAND_SIGNATURE | GFX_MSG_SUBMIT,
+            args, sizeof(*args), /* waiting= */ true);
+        if (sendProcessMessageToPid(buf->disp->driverPid, message)
+            == processSuccess
+        ) {
+            buf->inFlight[idx] = message;
+            return;
+        }
+        processMessageRelease(message);
+        status = GFX_ERR_DEVICE_LOST;
+    }
+    MESSAGE_BUFFER_UNSHARE(args->cmdData, buf->data[idx], MESSAGE_BUFFER_IN);
+    args->cmdData = NULL;
+    gfxCmdBufFail_(buf, status);
+}
+
+/// @fn static inline void gfxCmdBufFlush_(GfxCmdBuf *buf)
+///
+/// @brief Submit the write buffer if anything is recorded in it, then switch
+/// to the other buffer once the driver is done with it.
+///
+/// @param buf The command buffer.
+///
+/// @return This function returns no value.
+GFX_OUT_OF_LINE void gfxCmdBufFlush_(GfxCmdBuf *buf) {
     uint8_t idx = buf->writeIdx;
-
-    // Fill the embedded message struct for this buffer slot.
-    GfxMsgSubmit *msg = &buf->submitMsg[idx];
-    msg->displayId = disp->displayId;
-    msg->cmdSize   = buf->used;
-    msg->cmdData   = buf->data[idx];
-    msg->doneFlag  = &buf->available[idx];
-
-    // Mark this buffer as in-flight.
-    buf->available[idx] = false;
-
-    // Send zero-copy - the driver reads directly from data[idx] and
-    // sets *doneFlag = true when finished.
-    disp->ctx->sendMessage(disp->ctx->deviceId, GFX_MSG_SUBMIT,
-                           msg, sizeof(*msg), false);
-
-    // Swap to the other buffer.
-    buf->writeIdx = 1 - idx;
-    buf->used     = 0;
-
-    // If the other buffer is still in flight, block until done.
-    while (!buf->available[buf->writeIdx])
-        processYield();
+    if (buf->used == 0) {
+        return;
+    }
+    gfxCmdBufSlot_(buf, buf->submitArgs[idx], idx, true);
+    idx ^= 1;
+    buf->writeIdx = idx;
+    buf->used = 0;
+    gfxCmdBufSlot_(buf, buf->submitArgs[idx], idx, false);
 }
 
-// Pre-upload a command buffer to device memory. Sync - returns handle.
-//
-// The active write buffer is passed by pointer (zero-copy). The caller
-// blocks until the driver has finished reading and uploading.
-static inline GfxHandle gfxPreupload(GfxDisplay *disp,
-                                     GfxCmdBuf *buf) {
-    GfxMsgPreupload msg;
-    msg.displayId = disp->displayId;
-    msg.cmdSize   = buf->used;
-    msg.cmdData   = buf->data[buf->writeIdx];
-
-    ProcessMessage *sent = disp->ctx->sendMessage(
-        disp->ctx->deviceId, GFX_MSG_PREUPLOAD,
-        &msg, sizeof(msg), true);
-    processMessageWaitForDone(sent, NULL);
-    GfxMsgHandleResp *resp = (GfxMsgHandleResp *)processMessageData(sent);
-    GfxHandle handle = resp->handle;
-    processMessageRelease(sent);
-    return handle;
+/// @fn static inline GfxCmdBuf *gfxCmdBufCreate(GfxDisplay *disp,
+///   size_t capacity)
+///
+/// @brief Allocate a command buffer of two buffers of a given size.
+///
+/// @param disp The display it submits to.
+/// @param capacity The size of each buffer.
+///
+/// @return Returns the command buffer, or NULL on failure.
+static inline GfxCmdBuf *gfxCmdBufCreate(GfxDisplay *disp, size_t capacity) {
+    GfxCmdBuf *buf = (GfxCmdBuf *)calloc(1, sizeof(*buf));
+    if (!buf) return NULL;
+    buf->disp     = disp;
+    buf->capacity = capacity;
+    for (int ii = 0; ii < 2; ii++) {
+        buf->data[ii] = (uint8_t *)malloc(capacity);
+        buf->submitArgs[ii] = MESSAGE_ARGS_CREATE(GfxSubmitArgs,
+            MESSAGE_ARGS_ROUND_TRIP);
+    }
+    if (!buf->data[0] || !buf->data[1]
+        || !buf->submitArgs[0] || !buf->submitArgs[1]
+    ) {
+        for (int ii = 0; ii < 2; ii++) {
+            free(buf->data[ii]);
+            if (buf->submitArgs[ii] != NULL) {
+                MESSAGE_ARGS_DESTROY(buf->submitArgs[ii]);
+            }
+        }
+        free(buf);
+        return NULL;
+    }
+    return buf;
 }
 
-// Free a pre-uploaded buffer from device memory. Async.
-static inline void gfxDiscardPreupload(GfxDisplay *disp, GfxHandle handle) {
-    GfxMsgDiscardPreupload *msg =
-        (GfxMsgDiscardPreupload *)malloc(sizeof(*msg));
-    if (!msg) return;
-    msg->displayId = disp->displayId;
-    msg->handle    = handle;
-    disp->ctx->sendMessage(disp->ctx->deviceId, GFX_MSG_DISCARD_PREUPLOAD,
-                           msg, sizeof(*msg), false);
+/// @fn static inline GfxCmdBuf *gfxCmdBufDestroy(GfxCmdBuf *buf)
+///
+/// @brief Wait for the driver to be done with both buffers, then free the
+/// command buffer.  Anything recorded and not submitted is discarded.
+///
+/// @param buf The command buffer, or NULL.
+///
+/// @return Always returns NULL, for `buf = gfxCmdBufDestroy(buf);`.
+static inline GfxCmdBuf *gfxCmdBufDestroy(GfxCmdBuf *buf) {
+    if (!buf) return NULL;
+    for (uint8_t ii = 0; ii < 2; ii++) {
+        gfxCmdBufSlot_(buf, buf->submitArgs[ii], ii, false);
+        free(buf->data[ii]);
+        MESSAGE_ARGS_DESTROY(buf->submitArgs[ii]);
+    }
+    free(buf);
+    return NULL;
 }
 
-// Execute a pre-uploaded buffer. Async - very cheap (small message).
-static inline void gfxSubmitPreloaded(GfxDisplay *disp, GfxHandle handle) {
-    GfxMsgSubmitPreloaded *msg =
-        (GfxMsgSubmitPreloaded *)malloc(sizeof(*msg));
-    if (!msg) return;
-    msg->displayId = disp->displayId;
-    msg->handle    = handle;
-    disp->ctx->sendMessage(disp->ctx->deviceId, GFX_MSG_SUBMIT_PRELOADED,
-                           msg, sizeof(*msg), false);
+/// @fn static inline void gfxCmdBufBegin(GfxCmdBuf *buf, uint8_t flags)
+///
+/// @brief Start a recording, discarding anything recorded and not submitted
+/// and clearing the sticky error.
+///
+/// @param buf The command buffer.
+/// @param flags GFX_CMDBUF_* flags, or 0.
+///
+/// @return This function returns no value.
+static inline void gfxCmdBufBegin(GfxCmdBuf *buf, uint8_t flags) {
+    buf->used  = 0;
+    buf->flags = flags;
+    buf->error = GFX_OK;
+}
+
+/// @fn static inline uint8_t* gfxCmdBufReserve_(GfxCmdBuf *buf, size_t size)
+///
+/// @brief Make room for a whole record in the write buffer, submitting what
+/// is already recorded if the record doesn't fit after it.
+///
+/// @param buf The command buffer.
+/// @param size The record's size, its tag included.
+///
+/// @return Returns where to write the record, or NULL, with
+/// GFX_ERR_CMDBUF_OVERFLOW recorded, if it can't fit in an empty buffer or
+/// the recording is GFX_CMDBUF_NO_FLUSH.
+GFX_OUT_OF_LINE uint8_t* gfxCmdBufReserve_(GfxCmdBuf *buf,
+    size_t size
+) {
+    if (size > buf->capacity - buf->used) {
+        if ((size > buf->capacity)
+            || ((buf->flags & GFX_CMDBUF_NO_FLUSH) != 0)
+        ) {
+            gfxCmdBufFail_(buf, GFX_ERR_CMDBUF_OVERFLOW);
+            return NULL;
+        }
+        gfxCmdBufFlush_(buf);
+    }
+    uint8_t *record = buf->data[buf->writeIdx] + buf->used;
+    buf->used += size;
+    return record;
+}
+
+/// @fn static inline void gfxCmdRecord_(GfxCmdBuf *buf, GfxCmdType tag,
+///   const void *params, size_t size)
+///
+/// @brief Record a fixed-size record.
+///
+/// @param buf The command buffer.
+/// @param tag The record's GfxCmdType.
+/// @param params The record's packed parameters.
+/// @param size The size of the parameters.
+///
+/// @return This function returns no value.
+GFX_OUT_OF_LINE void gfxCmdRecord_(GfxCmdBuf *buf, GfxCmdType tag,
+    const void *params, size_t size
+) {
+    uint8_t *record = gfxCmdBufReserve_(buf, 1 + size);
+    if (record != NULL) {
+        record[0] = (uint8_t) tag;
+        if (size > 0) {
+            memcpy(&record[1], params, size);
+        }
+    }
+}
+
+/// @fn static inline void gfxCmdRecordRect_(GfxCmdBuf *buf, GfxCmdType tag,
+///   const GfxRect *rect, const void *extra, size_t extraSize)
+///
+/// @brief Record a record whose parameters are a rectangle and up to four
+/// more bytes, or record GFX_ERR_INVALID_STATE if the rectangle is NULL.
+///
+/// @param buf The command buffer.
+/// @param tag The record's GfxCmdType.
+/// @param rect The rectangle.
+/// @param extra The bytes after the rectangle.
+/// @param extraSize The number of bytes at extra.
+///
+/// @return This function returns no value.
+GFX_OUT_OF_LINE void gfxCmdRecordRect_(GfxCmdBuf *buf,
+    GfxCmdType tag, const GfxRect *rect, const void *extra, size_t extraSize
+) {
+    if (rect == NULL) {
+        gfxCmdBufFail_(buf, GFX_ERR_INVALID_STATE);
+        return;
+    }
+    uint8_t params[sizeof(GfxRect) + 4];
+    memcpy(params, rect, sizeof(GfxRect));
+    if (extraSize > 0) {
+        memcpy(&params[sizeof(GfxRect)], extra, extraSize);
+    }
+    gfxCmdRecord_(buf, tag, params, sizeof(GfxRect) + extraSize);
+}
+
+/// @fn static inline GfxError gfxSubmit(GfxCmdBuf *buf)
+///
+/// @brief Submit what has been recorded, and get and clear the sticky error.
+/// The driver's status for a submit is folded into the error once the
+/// client next waits for that buffer.
+///
+/// @param buf The command buffer.
+///
+/// @return Returns the first error since gfxCmdBufBegin or the last
+/// gfxSubmit.
+static inline GfxError gfxSubmit(GfxCmdBuf *buf) {
+    gfxCmdBufFlush_(buf);
+    GfxError error = (GfxError) buf->error;
+    buf->error = GFX_OK;
+    return error;
+}
+
+/// @fn static inline GfxError gfxPreupload(GfxCmdBuf *buf,
+///   GfxHandle *outHandle)
+///
+/// @brief Upload a whole recording, begun with GFX_CMDBUF_NO_FLUSH, for later
+/// GFX_CMD_CALL records, instead of executing it.  The recording is consumed
+/// either way.
+///
+/// @param buf The command buffer.
+/// @param outHandle Where to store the preupload's handle, which is
+///   GFX_INVALID_HANDLE on failure.
+///
+/// @return Returns the recording's sticky error without sending anything if
+/// there is one, the status of the preupload otherwise.
+static inline GfxError gfxPreupload(GfxCmdBuf *buf, GfxHandle *outHandle) {
+    *outHandle = GFX_INVALID_HANDLE;
+    GfxError status = (GfxError) buf->error;
+    uint8_t *data = buf->data[buf->writeIdx];
+    size_t used = buf->used;
+    buf->used  = 0;
+    buf->error = GFX_OK;
+    if (status != GFX_OK) {
+        return status;
+    }
+
+    MESSAGE_ARGS_ALLOCATE(GfxPreuploadArgs, args);
+    if (args == NULL) {
+        return GFX_ERR_OUT_OF_MEMORY;
+    }
+    args->cmdSize = (uint32_t) used;
+    args->cmdData = MESSAGE_BUFFER_SHARE(data, used, MESSAGE_BUFFER_IN,
+        buf->disp->driverPid);
+    status = GFX_ERR_OUT_OF_MEMORY;
+    if (args->cmdData != NULL) {
+        status = gfxCall_(buf->disp, GFX_MSG_PREUPLOAD, args, sizeof(*args));
+        MESSAGE_BUFFER_UNSHARE(args->cmdData, data, MESSAGE_BUFFER_IN);
+    }
+    if (status == GFX_OK) {
+        *outHandle = args->handle;
+    }
+    MESSAGE_ARGS_FREE(args);
+    return status;
+}
+
+/// @fn static inline GfxError gfxDiscardPreupload(GfxDisplay *disp,
+///   GfxHandle handle)
+///
+/// @brief Free a preupload.  One-way.
+///
+/// @param disp The display.
+/// @param handle The preupload, or GFX_INVALID_HANDLE to do nothing.
+///
+/// @return Returns the result of sending the message.
+static inline GfxError gfxDiscardPreupload(GfxDisplay *disp,
+    GfxHandle handle
+) {
+    if (handle == GFX_INVALID_HANDLE) {
+        return GFX_OK;
+    }
+    return gfxPostHandle_(disp, GFX_MSG_DISCARD_PREUPLOAD, handle);
 }
 
 
 // =========================================================================
-// SYNCHRONIZATION AND PRESENTATION  (messages to driver)
+// COMMAND RECORDING  (client-side, no IPC)
 // =========================================================================
 
-// Present the current frame and wait for vertical sync. Sync.
-static inline void gfxPresent(GfxDisplay *disp) {
-    GfxMsgPresent msg;
-    msg.displayId = disp->displayId;
-
-    ProcessMessage *sent = disp->ctx->sendMessage(
-        disp->ctx->deviceId, GFX_MSG_PRESENT,
-        &msg, sizeof(msg), true);
-    processMessageWaitForDone(sent, NULL);
-    processMessageRelease(sent);
+/// @fn static inline void gfxCmdSetViewport(GfxCmdBuf *buf,
+///   const GfxRect *rect)
+///
+/// @brief Record GFX_CMD_SET_VIEWPORT.
+///
+/// @param buf The command buffer.
+/// @param rect The viewport, in screen coordinates.
+///
+/// @return This function returns no value.
+static inline void gfxCmdSetViewport(GfxCmdBuf *buf, const GfxRect *rect) {
+    gfxCmdRecordRect_(buf, GFX_CMD_SET_VIEWPORT, rect, NULL, 0);
 }
 
-// Insert a fence. Sync - returns the fence token.
-static inline GfxFence gfxInsertFence(GfxDisplay *disp) {
-    GfxMsgInsertFence msg;
-    msg.displayId = disp->displayId;
-
-    ProcessMessage *sent = disp->ctx->sendMessage(
-        disp->ctx->deviceId, GFX_MSG_INSERT_FENCE,
-        &msg, sizeof(msg), true);
-    processMessageWaitForDone(sent, NULL);
-    GfxMsgFenceResp *resp = (GfxMsgFenceResp *)processMessageData(sent);
-    GfxFence fence = resp->fence;
-    processMessageRelease(sent);
-    return fence;
+/// @fn static inline void gfxCmdSetOrigin(GfxCmdBuf *buf, GfxPoint origin)
+///
+/// @brief Record GFX_CMD_SET_ORIGIN.
+///
+/// @param buf The command buffer.
+/// @param origin The screen position of record coordinate (0,0).
+///
+/// @return This function returns no value.
+static inline void gfxCmdSetOrigin(GfxCmdBuf *buf, GfxPoint origin) {
+    gfxCmdRecord_(buf, GFX_CMD_SET_ORIGIN, &origin, sizeof(origin));
 }
 
-// Wait for a fence. Sync - blocks until signalled or timeout.
-//
-// timeoutUs: microseconds to wait; 0 = poll; UINT32_MAX = indefinite.
-// Returns true if the fence was signalled.
-static inline bool gfxWaitFence(GfxDisplay *disp,
-                                GfxFence fence,
-                                uint32_t timeoutUs) {
-    GfxMsgWaitFence msg;
-    msg.displayId = disp->displayId;
-    msg.fence     = fence;
-    msg.timeoutUs = timeoutUs;
+/// @fn static inline void gfxCmdPushScissor(GfxCmdBuf *buf,
+///   const GfxRect *rect)
+///
+/// @brief Record GFX_CMD_PUSH_SCISSOR.
+///
+/// @param buf The command buffer.
+/// @param rect The scissor, relative to the origin.
+///
+/// @return This function returns no value.
+static inline void gfxCmdPushScissor(GfxCmdBuf *buf, const GfxRect *rect) {
+    gfxCmdRecordRect_(buf, GFX_CMD_PUSH_SCISSOR, rect, NULL, 0);
+}
 
-    ProcessMessage *sent = disp->ctx->sendMessage(
-        disp->ctx->deviceId, GFX_MSG_WAIT_FENCE,
-        &msg, sizeof(msg), true);
-    processMessageWaitForDone(sent, NULL);
-    GfxMsgBoolResp *resp = (GfxMsgBoolResp *)processMessageData(sent);
-    bool signaled = resp->result;
-    processMessageRelease(sent);
-    return signaled;
+/// @fn static inline void gfxCmdPopScissor(GfxCmdBuf *buf)
+///
+/// @brief Record GFX_CMD_POP_SCISSOR.
+///
+/// @param buf The command buffer.
+///
+/// @return This function returns no value.
+static inline void gfxCmdPopScissor(GfxCmdBuf *buf) {
+    gfxCmdRecord_(buf, GFX_CMD_POP_SCISSOR, NULL, 0);
+}
+
+/// @fn static inline void gfxCmdSetFgColor(GfxCmdBuf *buf, GfxColor fg)
+///
+/// @brief Record GFX_CMD_SET_FG_COLOR.
+///
+/// @param buf The command buffer.
+/// @param fg The foreground color.
+///
+/// @return This function returns no value.
+static inline void gfxCmdSetFgColor(GfxCmdBuf *buf, GfxColor fg) {
+    gfxCmdRecord_(buf, GFX_CMD_SET_FG_COLOR, &fg, sizeof(fg));
+}
+
+/// @fn static inline void gfxCmdSetBgColor(GfxCmdBuf *buf, GfxColor bg)
+///
+/// @brief Record GFX_CMD_SET_BG_COLOR.
+///
+/// @param buf The command buffer.
+/// @param bg The background color.
+///
+/// @return This function returns no value.
+static inline void gfxCmdSetBgColor(GfxCmdBuf *buf, GfxColor bg) {
+    gfxCmdRecord_(buf, GFX_CMD_SET_BG_COLOR, &bg, sizeof(bg));
+}
+
+/// @fn static inline void gfxCmdSetBlend(GfxCmdBuf *buf, GfxBlendMode mode)
+///
+/// @brief Record GFX_CMD_SET_BLEND.
+///
+/// @param buf The command buffer.
+/// @param mode The blend mode.
+///
+/// @return This function returns no value.
+static inline void gfxCmdSetBlend(GfxCmdBuf *buf, GfxBlendMode mode) {
+    uint8_t blendMode = (uint8_t) mode;
+    gfxCmdRecord_(buf, GFX_CMD_SET_BLEND, &blendMode, sizeof(blendMode));
+}
+
+/// @fn static inline void gfxCmdSetFont(GfxCmdBuf *buf, GfxHandle font)
+///
+/// @brief Record GFX_CMD_SET_FONT.
+///
+/// @param buf The command buffer.
+/// @param font The font, or GFX_INVALID_HANDLE for the default font.
+///
+/// @return This function returns no value.
+static inline void gfxCmdSetFont(GfxCmdBuf *buf, GfxHandle font) {
+    gfxCmdRecord_(buf, GFX_CMD_SET_FONT, &font, sizeof(font));
+}
+
+/// @fn static inline void gfxCmdClear(GfxCmdBuf *buf)
+///
+/// @brief Record GFX_CMD_CLEAR.
+///
+/// @param buf The command buffer.
+///
+/// @return This function returns no value.
+static inline void gfxCmdClear(GfxCmdBuf *buf) {
+    gfxCmdRecord_(buf, GFX_CMD_CLEAR, NULL, 0);
+}
+
+/// @fn static inline void gfxCmdDrawRect(GfxCmdBuf *buf,
+///   const GfxRect *rect, bool filled)
+///
+/// @brief Record GFX_CMD_DRAW_RECT.
+///
+/// @param buf The command buffer.
+/// @param rect The rectangle.
+/// @param filled Whether to fill it rather than outline it.
+///
+/// @return This function returns no value.
+static inline void gfxCmdDrawRect(GfxCmdBuf *buf, const GfxRect *rect,
+    bool filled
+) {
+    uint8_t filledByte = filled ? 1 : 0;
+    gfxCmdRecordRect_(buf, GFX_CMD_DRAW_RECT, rect,
+        &filledByte, sizeof(filledByte));
+}
+
+/// @fn static inline void gfxCmdDrawLine(GfxCmdBuf *buf, GfxPoint start,
+///   GfxPoint end)
+///
+/// @brief Record GFX_CMD_DRAW_LINE.
+///
+/// @param buf The command buffer.
+/// @param start One end.
+/// @param end The other end.
+///
+/// @return This function returns no value.
+static inline void gfxCmdDrawLine(GfxCmdBuf *buf, GfxPoint start,
+    GfxPoint end
+) {
+    GfxPoint points[2] = { start, end };
+    gfxCmdRecord_(buf, GFX_CMD_DRAW_LINE, points, sizeof(points));
+}
+
+/// @fn static inline void gfxCmdDrawTriangle(GfxCmdBuf *buf, GfxPoint first,
+///   GfxPoint second, GfxPoint third, bool filled)
+///
+/// @brief Record GFX_CMD_DRAW_TRIANGLE.
+///
+/// @param buf The command buffer.
+/// @param first The first corner.
+/// @param second The second corner.
+/// @param third The third corner.
+/// @param filled Whether to fill it rather than outline it.
+///
+/// @return This function returns no value.
+static inline void gfxCmdDrawTriangle(GfxCmdBuf *buf, GfxPoint first,
+    GfxPoint second, GfxPoint third, bool filled
+) {
+    uint8_t params[3 * sizeof(GfxPoint) + 1];
+    memcpy(&params[0], &first, sizeof(first));
+    memcpy(&params[4], &second, sizeof(second));
+    memcpy(&params[8], &third, sizeof(third));
+    params[12] = filled ? 1 : 0;
+    gfxCmdRecord_(buf, GFX_CMD_DRAW_TRIANGLE, params, sizeof(params));
+}
+
+/// @fn static inline void gfxCmdDrawCircle(GfxCmdBuf *buf, GfxPoint center,
+///   int16_t radius, bool filled)
+///
+/// @brief Record GFX_CMD_DRAW_CIRCLE.
+///
+/// @param buf The command buffer.
+/// @param center The center.
+/// @param radius The radius, in pixels.
+/// @param filled Whether to fill it rather than outline it.
+///
+/// @return This function returns no value.
+static inline void gfxCmdDrawCircle(GfxCmdBuf *buf, GfxPoint center,
+    int16_t radius, bool filled
+) {
+    uint8_t params[sizeof(GfxPoint) + sizeof(int16_t) + 1];
+    memcpy(&params[0], &center, sizeof(center));
+    memcpy(&params[4], &radius, sizeof(radius));
+    params[6] = filled ? 1 : 0;
+    gfxCmdRecord_(buf, GFX_CMD_DRAW_CIRCLE, params, sizeof(params));
+}
+
+/// @fn static inline void gfxCmdDrawImage(GfxCmdBuf *buf, GfxHandle image,
+///   GfxPoint pos)
+///
+/// @brief Record GFX_CMD_DRAW_IMAGE.
+///
+/// @param buf The command buffer.
+/// @param image The image.
+/// @param pos Where to draw its top-left corner.
+///
+/// @return This function returns no value.
+static inline void gfxCmdDrawImage(GfxCmdBuf *buf, GfxHandle image,
+    GfxPoint pos
+) {
+    uint8_t params[sizeof(GfxHandle) + sizeof(GfxPoint)];
+    memcpy(&params[0], &image, sizeof(image));
+    memcpy(&params[2], &pos, sizeof(pos));
+    gfxCmdRecord_(buf, GFX_CMD_DRAW_IMAGE, params, sizeof(params));
+}
+
+/// @fn static inline void gfxCmdDrawSubImage(GfxCmdBuf *buf,
+///   GfxHandle image, const GfxRect *srcRect, GfxPoint pos)
+///
+/// @brief Record GFX_CMD_DRAW_SUB_IMAGE, or record GFX_ERR_INVALID_STATE if
+/// there is no source rectangle.
+///
+/// @param buf The command buffer.
+/// @param image The image.
+/// @param srcRect The part of the image to draw.
+/// @param pos Where to draw the part's top-left corner.
+///
+/// @return This function returns no value.
+static inline void gfxCmdDrawSubImage(GfxCmdBuf *buf, GfxHandle image,
+    const GfxRect *srcRect, GfxPoint pos
+) {
+    if (srcRect == NULL) {
+        gfxCmdBufFail_(buf, GFX_ERR_INVALID_STATE);
+        return;
+    }
+    uint8_t params[sizeof(GfxHandle) + sizeof(GfxRect) + sizeof(GfxPoint)];
+    memcpy(&params[0], &image, sizeof(image));
+    memcpy(&params[2], srcRect, sizeof(*srcRect));
+    memcpy(&params[10], &pos, sizeof(pos));
+    gfxCmdRecord_(buf, GFX_CMD_DRAW_SUB_IMAGE, params, sizeof(params));
+}
+
+/// @fn static inline void gfxCmdDrawText(GfxCmdBuf *buf, GfxPoint pos,
+///   const char *str)
+///
+/// @brief Record GFX_CMD_DRAW_TEXT, or record GFX_ERR_CMDBUF_OVERFLOW if the
+/// string is longer than GFX_TEXT_MAX bytes.  The record holds a copy.
+///
+/// @param buf The command buffer.
+/// @param pos Where to draw the first glyph's top-left corner.
+/// @param str The text, or NULL to record nothing.
+///
+/// @return This function returns no value.
+static inline void gfxCmdDrawText(GfxCmdBuf *buf, GfxPoint pos,
+    const char *str
+) {
+    if (!str) return;
+    size_t len = strlen(str);
+    if (len > GFX_TEXT_MAX) {
+        gfxCmdBufFail_(buf, GFX_ERR_CMDBUF_OVERFLOW);
+        return;
+    }
+    uint8_t *record = gfxCmdBufReserve_(buf, GFX_CMD_DRAW_TEXT_SIZE(len));
+    if (record != NULL) {
+        record[0] = GFX_CMD_DRAW_TEXT;
+        memcpy(&record[1], &pos, sizeof(pos));
+        record[5] = (uint8_t) len;
+        memcpy(&record[6], str, len);
+    }
+}
+
+/// @fn static inline void gfxCmdCall(GfxCmdBuf *buf, GfxHandle preloaded)
+///
+/// @brief Record GFX_CMD_CALL.
+///
+/// @param buf The command buffer.
+/// @param preloaded A handle from gfxPreupload.
+///
+/// @return This function returns no value.
+static inline void gfxCmdCall(GfxCmdBuf *buf, GfxHandle preloaded) {
+    gfxCmdRecord_(buf, GFX_CMD_CALL, &preloaded, sizeof(preloaded));
+}
+
+/// @fn static inline void gfxCmdCopyRect(GfxCmdBuf *buf,
+///   const GfxRect *src, GfxPoint dst)
+///
+/// @brief Record GFX_CMD_COPY_RECT.
+///
+/// @param buf The command buffer.
+/// @param src The rectangle to copy.
+/// @param dst Where to copy its top-left corner to.
+///
+/// @return This function returns no value.
+static inline void gfxCmdCopyRect(GfxCmdBuf *buf, const GfxRect *src,
+    GfxPoint dst
+) {
+    gfxCmdRecordRect_(buf, GFX_CMD_COPY_RECT, src, &dst, sizeof(dst));
+}
+
+/// @fn static inline void gfxCmdScrollRect(GfxCmdBuf *buf,
+///   const GfxRect *rect, int16_t deltaX, int16_t deltaY)
+///
+/// @brief Record GFX_CMD_SCROLL_RECT.
+///
+/// @param buf The command buffer.
+/// @param rect The rectangle to scroll.
+/// @param deltaX The distance to move its contents right, in pixels.
+/// @param deltaY The distance to move its contents down, in pixels.
+///
+/// @return This function returns no value.
+static inline void gfxCmdScrollRect(GfxCmdBuf *buf, const GfxRect *rect,
+    int16_t deltaX, int16_t deltaY
+) {
+    int16_t delta[2] = { deltaX, deltaY };
+    gfxCmdRecordRect_(buf, GFX_CMD_SCROLL_RECT, rect, delta, sizeof(delta));
 }
 
 
 // =========================================================================
-// READBACK  (messages to driver)
-//
-// Expensive - stalls the pipeline. Never use in the hot rendering path.
+// SYNCHRONIZATION, ERRORS, AND THE CURSOR  (messages to driver)
 // =========================================================================
 
-// Read a single pixel color. Sync.
-static inline bool gfxReadPixel(GfxDisplay *disp,
-                                GfxPoint pos,
-                                GfxColor *outColor) {
-    GfxMsgReadPixel msg;
-    msg.displayId = disp->displayId;
-    msg.pos       = pos;
-
-    ProcessMessage *sent = disp->ctx->sendMessage(
-        disp->ctx->deviceId, GFX_MSG_READ_PIXEL,
-        &msg, sizeof(msg), true);
-    processMessageWaitForDone(sent, NULL);
-    GfxMsgColorResp *resp = (GfxMsgColorResp *)processMessageData(sent);
-    if (outColor) *outColor = resp->color;
-    processMessageRelease(sent);
-    // Convention: color == GFX_TRANSPARENT on failure.
-    return resp->color != GFX_TRANSPARENT;
+/// @fn static inline GfxError gfxStatusCall_(GfxDisplay *disp, uint8_t type)
+///
+/// @brief Send a synchronous message whose arguments are only a status.
+///
+/// @param disp The display.
+/// @param type The GfxMsgType.
+///
+/// @return Returns the result of gfxCall_.
+static inline GfxError gfxStatusCall_(GfxDisplay *disp, uint8_t type) {
+    MESSAGE_ARGS_ALLOCATE(GfxFinishArgs, args);
+    GfxError status = gfxCall_(disp, type, args, sizeof(*args));
+    MESSAGE_ARGS_FREE(args);
+    return status;
 }
 
-// Capture a rectangular region of the display to a new image. Sync.
-//
-// Returns a handle to the captured bitmap, or GFX_INVALID_HANDLE on
-// failure. The caller must eventually call gfxDestroyImage.
-static inline GfxHandle gfxCaptureRect(GfxDisplay *disp,
-                                       const GfxRect *rect) {
-    GfxMsgCaptureRect msg;
-    msg.displayId = disp->displayId;
-    msg.rect      = *rect;
-
-    ProcessMessage *sent = disp->ctx->sendMessage(
-        disp->ctx->deviceId, GFX_MSG_CAPTURE_RECT,
-        &msg, sizeof(msg), true);
-    processMessageWaitForDone(sent, NULL);
-    GfxMsgHandleResp *resp = (GfxMsgHandleResp *)processMessageData(sent);
-    GfxHandle handle = resp->handle;
-    processMessageRelease(sent);
-    return handle;
+/// @fn static inline GfxError gfxFinish(GfxDisplay *disp)
+///
+/// @brief Wait until the driver has drawn everything sent before this call.
+///
+/// @param disp The display.
+///
+/// @return Returns the driver's status.
+static inline GfxError gfxFinish(GfxDisplay *disp) {
+    return gfxStatusCall_(disp, GFX_MSG_FINISH);
 }
 
-
-// =========================================================================
-// ERROR HANDLING  (message to driver + client-side string lookup)
-// =========================================================================
-
-// Return the last error from the driver, then clear it. Sync.
+/// @fn static inline GfxError gfxGetError(GfxDisplay *disp)
+///
+/// @brief Get and clear the driver's sticky error.
+///
+/// @param disp The display.
+///
+/// @return Returns the driver's sticky error, or the status of the query if
+/// it failed.
 static inline GfxError gfxGetError(GfxDisplay *disp) {
-    GfxMsgGetError msg;
-    msg.displayId = disp->displayId;
-
-    ProcessMessage *sent = disp->ctx->sendMessage(
-        disp->ctx->deviceId, GFX_MSG_GET_ERROR,
-        &msg, sizeof(msg), true);
-    processMessageWaitForDone(sent, NULL);
-    GfxMsgErrorResp *resp = (GfxMsgErrorResp *)processMessageData(sent);
-    GfxError err = resp->err;
-    processMessageRelease(sent);
-    return err;
+    MESSAGE_ARGS_ALLOCATE(GfxGetErrorArgs, args);
+    GfxError status = gfxCall_(disp, GFX_MSG_GET_ERROR, args, sizeof(*args));
+    if (status == GFX_OK) {
+        status = (GfxError) args->error;
+    }
+    MESSAGE_ARGS_FREE(args);
+    return status;
 }
 
-// gfxErrorString is defined above with the error enum - pure lookup,
-// no IPC.
+/// @fn static inline GfxError gfxSetCursor(GfxDisplay *disp,
+///   GfxHandle image, uint8_t hotX, uint8_t hotY)
+///
+/// @brief Make an image the pointer's cursor.
+///
+/// @param disp The display.
+/// @param image One of the client's images, or GFX_INVALID_HANDLE for the
+///   driver's own cursor.
+/// @param hotX The hotspot's column within the image.
+/// @param hotY The hotspot's row within the image.
+///
+/// @return Returns the driver's status.
+static inline GfxError gfxSetCursor(GfxDisplay *disp, GfxHandle image,
+    uint8_t hotX, uint8_t hotY
+) {
+    MESSAGE_ARGS_ALLOCATE(GfxSetCursorArgs, args);
+    if (args != NULL) {
+        args->image = image;
+        args->hotX  = hotX;
+        args->hotY  = hotY;
+    }
+    GfxError status = gfxCall_(disp, GFX_MSG_SET_CURSOR, args, sizeof(*args));
+    MESSAGE_ARGS_FREE(args);
+    return status;
+}
+
+/// @fn static inline GfxError gfxShowCursor(GfxDisplay *disp, bool show)
+///
+/// @brief Show or hide the pointer's cursor.  One-way.
+///
+/// @param disp The display.
+/// @param show Whether to show it.
+///
+/// @return Returns the result of sending the message.
+static inline GfxError gfxShowCursor(GfxDisplay *disp, bool show) {
+    GfxShowCursorArgs *args = MESSAGE_ARGS_CREATE(GfxShowCursorArgs,
+        MESSAGE_ARGS_ONE_WAY);
+    if (args == NULL) {
+        return GFX_ERR_OUT_OF_MEMORY;
+    }
+    args->show = show ? 1 : 0;
+    return gfxPost_(disp, GFX_MSG_SHOW_CURSOR, args, sizeof(*args));
+}
+
+/// @fn static inline GfxError gfxWarpCursor(GfxDisplay *disp,
+///   int16_t pointerX, int16_t pointerY)
+///
+/// @brief Move the pointer.  One-way.
+///
+/// @param disp The display.
+/// @param pointerX The new column, in pixels.
+/// @param pointerY The new row, in pixels.
+///
+/// @return Returns the result of sending the message.
+static inline GfxError gfxWarpCursor(GfxDisplay *disp, int16_t pointerX,
+    int16_t pointerY
+) {
+    GfxWarpCursorArgs *args = MESSAGE_ARGS_CREATE(GfxWarpCursorArgs,
+        MESSAGE_ARGS_ONE_WAY);
+    if (args == NULL) {
+        return GFX_ERR_OUT_OF_MEMORY;
+    }
+    args->x = pointerX;
+    args->y = pointerY;
+    return gfxPost_(disp, GFX_MSG_WARP_CURSOR, args, sizeof(*args));
+}
 
 
 #ifdef __cplusplus
