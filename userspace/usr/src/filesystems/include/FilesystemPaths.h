@@ -255,14 +255,14 @@ static __attribute__((noinline, unused)) bool filesystemPathAllowed(
     return false;
   }
 
-  const char *ns = (const char*) from->overlayNamespace;
-  if ((bits == DIRCAP_EXEC) && (ns != NULL)) {
+  const char *namespacePath = (const char*) from->overlayNamespace;
+  if ((bits == DIRCAP_EXEC) && (namespacePath != NULL)) {
     const char *path = realPath;
-    while ((*ns != '\0') && (*ns == *path)) {
-      ns++;
+    while ((*namespacePath != '\0') && (*namespacePath == *path)) {
+      namespacePath++;
       path++;
     }
-    if ((*ns == '\0') && (*path == '/')) {
+    if ((*namespacePath == '\0') && (*path == '/')) {
       return true;
     }
   }
