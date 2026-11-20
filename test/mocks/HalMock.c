@@ -107,6 +107,18 @@ static HalMockRestartShellFn _restartShell = NULL;
 /// 0 for no cache.
 static uint8_t _fileCacheDepth = 0;
 
+/// @var _graphicsClientPath
+///
+/// @brief The client program path to register with the scheduler at launch,
+/// or NULL for no display driver.
+static const char *_graphicsClientPath = NULL;
+
+/// @var _graphicsDriverSlot
+///
+/// @brief The user slot, counted from the first user process, whose process
+/// is registered as the display driver at launch.
+static uint8_t _graphicsDriverSlot = 0;
+
 // online bitmasks (pointed at from halImpl at init time)
 static uint32_t _uartsOnline[]        = { 0x00000002 };
 static uint32_t _uartsPollOnly[]      = { 0x00000002 };
@@ -303,6 +315,14 @@ static int mockDoLaunchProcesses(void) {
   if (launchStatus != 0) {
     returnValue = launchStatus;
   }
+  if (_graphicsClientPath != NULL) {
+    ProcessId driverPid = schedulerGetFirstShellPid() + schedulerGetNumShells()
+      + _graphicsDriverSlot;
+    int graphicsStatus = schedulerSetGraphics(driverPid, _graphicsClientPath);
+    if (graphicsStatus != 0) {
+      returnValue = graphicsStatus;
+    }
+  }
   return returnValue;
 }
 
@@ -389,6 +409,10 @@ void halMockSetStaticLogs(StaticLogs *staticLogs) {
 
 ProcessQueue* halMockFreeQueue(void) {
   return (ProcessQueue*) &_freeQueue;
+}
+
+ProcessQueue* halMockReadyQueue(int privilegeLevel) {
+  return _readyQueues[privilegeLevel];
 }
 
 static int mockLogEntriesFn(int32_t deviceId, va_list args) {
@@ -491,6 +515,11 @@ void halMockSetRestartShell(HalMockRestartShellFn fn) {
 
 void halMockSetFileCacheDepth(uint8_t depth) {
   _fileCacheDepth = depth;
+}
+
+void halMockSetGraphics(uint8_t driverSlot, const char *clientPath) {
+  _graphicsDriverSlot = driverSlot;
+  _graphicsClientPath = clientPath;
 }
 
 void halMockSetExecCommand(void* (*fn)(void *args)) {

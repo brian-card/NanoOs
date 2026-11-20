@@ -92,6 +92,15 @@ void halMockSetRestartShell(HalMockRestartShellFn fn);
 /// called before halMockInit().
 void halMockSetFileCacheDepth(uint8_t depth);
 
+/// @fn void halMockSetGraphics(uint8_t driverSlot, const char *clientPath)
+///
+/// @brief Register a display driver with the scheduler at launch, as
+/// config.sys's GRAPHICS line does: the process in the given user slot,
+/// counted from the first user process, serving the program at clientPath.
+/// The test starts the driver's process itself.  Must be called before
+/// halMockInit().
+void halMockSetGraphics(uint8_t driverSlot, const char *clientPath);
+
 /// @fn void halMockSetExecCommand(void* (*fn)(void *args))
 ///
 /// @brief Register the function installed as the platform's execCommand, or
@@ -144,6 +153,16 @@ void halMockSetStaticLogs(StaticLogs *staticLogs);
 ///
 /// @return Returns a pointer to the free queue.
 ProcessQueue* halMockFreeQueue(void);
+
+/// @fn ProcessQueue* halMockReadyQueue(int privilegeLevel)
+///
+/// @brief Get the ready queue the mock hands the scheduler for a privilege
+/// level, without the HAL capability check that a test process would fail.
+///
+/// @param privilegeLevel The PrivilegeLevel of the queue.
+///
+/// @return Returns a pointer to the ready queue.
+ProcessQueue* halMockReadyQueue(int privilegeLevel);
 
 /// @fn int halMockInit(const HalMockConfig *config, jmp_buf *powerReturn)
 ///
