@@ -56,6 +56,8 @@ PAYLOAD_INDEX = {
     "msg_init_inline": 3,
     "schedulerInitSendMessageToPid": 2,
     "schedulerInitSendMessageToProcess": 2,
+    "gfxCall_": 2,
+    "gfxPost_": 2,
 }
 
 # Files that define the wrappers or the macros themselves.
@@ -84,6 +86,10 @@ SHARED_MEMBERS = {
     "SchedulerDirCapabilityArgs": {"name"},
     "SchedulerGetDirCapabilitiesArgs": {"buffer"},
     "SchedulerGetHostnameArgs": {"name"},
+    "GfxUploadImageArgs": {"pixels"},
+    "GfxUploadFontArgs": {"bitmap"},
+    "GfxSubmitArgs": {"cmdData"},
+    "GfxPreuploadArgs": {"cmdData"},
 }
 
 SEND_CALL = re.compile(r"\b(%s)\s*\(" % "|".join(PAYLOAD_INDEX))
@@ -93,6 +99,9 @@ ALLOCATE = re.compile(r"\bMESSAGE_ARGS_ALLOCATE\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)")
 # in it, so that arguments a helper is handed are checked like its own.
 PARAMETER_LIST = re.compile(r"\(([^()]*)\)\s*$")
 POINTER_PARAMETER = re.compile(r"\b(\w+)\s*\*\s*(\w+)\s*(?=[,)]|$)")
+# An `extern "C" {` block, whose string strip() has blanked, which holds
+# function bodies rather than being one.
+EXTERN_BLOCK = re.compile(r"\bextern\s*$")
 
 
 def strip(text):
@@ -138,7 +147,8 @@ def call_arguments(text, start):
 
 
 def function_bodies(text):
-    """Find the top-level brace blocks that are function bodies.
+    """Find the top-level brace blocks that are function bodies, looking
+    inside extern "C" blocks.
 
     @param text The stripped source.
 
@@ -147,13 +157,20 @@ def function_bodies(text):
     bodies = []
     depth = 0
     start = None
+    linkage = 0
     for i, ch in enumerate(text):
         if ch == "{":
             if depth == 0:
                 before = text[:i].rstrip()
+                if EXTERN_BLOCK.search(before):
+                    linkage += 1
+                    continue
                 start = i if before.endswith(")") else None
             depth += 1
         elif ch == "}":
+            if depth == 0 and linkage > 0:
+                linkage -= 1
+                continue
             depth -= 1
             if depth == 0 and start is not None:
                 bodies.append((start, i + 1))
