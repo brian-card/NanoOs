@@ -43,6 +43,7 @@
 #include "kernel/NanoOs.h"
 #include "kernel/Processes.h"
 #include "kernel/Scheduler.h"
+#include "user/NanoOsApi.h"
 #include "user/NanoOsSignal.h"
 
 #ifndef NANO_OS_MESSAGE_ARGS_CHECKED
@@ -727,4 +728,66 @@ NANO_OS_KERNEL_TEST(message_args, sending_freed_storage_is_counted) {
   processMessageSetDone(processMessage);
   processMessageRelease(processMessage);
   assertOnlyError(MESSAGE_ARGS_ERROR_SEND_AFTER_FREE, 1);
+}
+
+NANO_OS_KERNEL_TEST(message_args, overlay_api_reports_the_checked_configuration) {
+  NANO_OS_ASSERT_TRUE(nanoOsExecutiveApi.messageArgsChecked);
+}
+
+NANO_OS_KERNEL_TEST(message_args, overlay_allocate_is_scoped_round_trip_storage) {
+  TestArgs *args = (TestArgs*) nanoOsExecutiveApi.messageArgsAllocate(
+    sizeof(TestArgs));
+  NANO_OS_ASSERT_NOT_NULL(args);
+  NANO_OS_ASSERT_EQ_INT(0, args->value);
+  NANO_OS_ASSERT_EQ_INT(1, messageArgsCounts()->live);
+  ProcessMessage *processMessage = claimMessage(args, true);
+  NANO_OS_ASSERT_NOT_NULL(processMessage);
+  nanoOsExecutiveApi.messageArgsFree(args);
+  processMessageRelease(processMessage);
+  NANO_OS_ASSERT_EQ_INT(0, messageArgsCounts()->live);
+  assertOnlyError(MESSAGE_ARGS_ERROR_FREE_IN_FLIGHT, 1);
+}
+
+NANO_OS_KERNEL_TEST(message_args, overlay_free_twice_is_counted) {
+  void *args = nanoOsExecutiveApi.messageArgsAllocate(sizeof(TestArgs));
+  NANO_OS_ASSERT_NOT_NULL(args);
+  nanoOsExecutiveApi.messageArgsFree(args);
+  nanoOsExecutiveApi.messageArgsFree(args);
+  assertOnlyError(MESSAGE_ARGS_ERROR_DOUBLE_FREE, 1);
+}
+
+NANO_OS_KERNEL_TEST(message_args, overlay_in_buffer_is_a_copy) {
+  char path[] = "/etc/passwd";
+  char *shared = (char*) nanoOsExecutiveApi.messageBufferShare(path,
+    sizeof(path), MESSAGE_BUFFER_IN, rootFilesystemPid);
+  NANO_OS_ASSERT_NOT_NULL(shared);
+  NANO_OS_ASSERT_TRUE(shared != path);
+  NANO_OS_ASSERT_STR_EQ(path, shared);
+  nanoOsExecutiveApi.messageBufferUnshare(shared, path, MESSAGE_BUFFER_IN);
+  NANO_OS_ASSERT_EQ_INT(0, messageArgsErrorTotal());
+  NANO_OS_ASSERT_EQ_INT(0, messageArgsCounts()->live);
+}
+
+NANO_OS_KERNEL_TEST(message_args, overlay_in_buffer_written_by_the_recipient_is_counted) {
+  char path[] = "/etc/passwd";
+  char *shared = (char*) nanoOsExecutiveApi.messageBufferShare(path,
+    sizeof(path), MESSAGE_BUFFER_IN, rootFilesystemPid);
+  NANO_OS_ASSERT_NOT_NULL(shared);
+  shared[1] = 'X';
+  nanoOsExecutiveApi.messageBufferUnshare(shared, path, MESSAGE_BUFFER_IN);
+  NANO_OS_ASSERT_STR_EQ("/etc/passwd", path);
+  assertOnlyError(MESSAGE_ARGS_ERROR_IN_MODIFIED, 1);
+}
+
+NANO_OS_KERNEL_TEST(message_args, overlay_out_buffer_is_copied_back_at_unshare) {
+  char result[8] = "xxxxxxx";
+  char *shared = (char*) nanoOsExecutiveApi.messageBufferShare(result,
+    sizeof(result), MESSAGE_BUFFER_OUT, rootFilesystemPid);
+  NANO_OS_ASSERT_NOT_NULL(shared);
+  NANO_OS_ASSERT_TRUE(shared != result);
+  strcpy(shared, "written");
+  nanoOsExecutiveApi.messageBufferUnshare(shared, result, MESSAGE_BUFFER_OUT);
+  NANO_OS_ASSERT_STR_EQ("written", result);
+  NANO_OS_ASSERT_EQ_INT(0, messageArgsErrorTotal());
+  NANO_OS_ASSERT_EQ_INT(0, messageArgsCounts()->live);
 }

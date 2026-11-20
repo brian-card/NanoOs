@@ -134,7 +134,9 @@ SUITE_SRCS     := test_smoke test_unit_misc test_unit_strtoll test_unit_console 
                   test_unit_fat32_names \
                   test_unit_dircap \
                   test_kernel_message_args \
-                  test_unit_message_args_production
+                  test_unit_message_args_production \
+                  test_unit_overlay_message_args \
+                  test_kernel_graphics_client
 
 KERNEL_OBJS := $(addprefix $(OBJ_DIR)/kernel_,$(addsuffix .o,$(KERNEL_SRCS)))
 USER_OBJS   := $(addprefix $(OBJ_DIR)/user_,$(addsuffix .o,$(USER_SRCS)))
