@@ -40,6 +40,7 @@
 #include "NanoOsUser.h"
 #include "../../../src/kernel/Coroutines.h"
 #include "../../../src/kernel/Messages.h"
+#include "../../../src/kernel/MessageArgsConstants.h"
 #include "../../../src/kernel/NanoOsTypes.h"
 
 #ifdef __cplusplus
@@ -339,18 +340,6 @@ static inline int processMessageInit(ProcessMessage *processMessage,
   return processError;
 }
 
-/// @def MESSAGE_ARGS_ROUND_TRIP
-///
-/// @brief The sender owns the storage before and after the exchange and frees
-/// it.
-#define MESSAGE_ARGS_ROUND_TRIP ((uint8_t) 0x01)
-
-/// @def MESSAGE_ARGS_ONE_WAY
-///
-/// @brief Ownership passes to the recipient when the message is sent, and the
-/// recipient frees the storage.
-#define MESSAGE_ARGS_ONE_WAY ((uint8_t) 0x02)
-
 /// @fn static inline void* messageArgsCreate(size_t size, uint8_t ownership)
 ///
 /// @brief Allocate zeroed storage for a message's arguments whose lifetime the
@@ -399,6 +388,119 @@ static inline void messageArgsDestroy(void *ptr) {
 ///
 /// @brief Free storage from MESSAGE_ARGS_CREATE or MESSAGE_ARGS_CREATE_BYTES.
 #define MESSAGE_ARGS_DESTROY(ptr) messageArgsDestroy(ptr)
+
+/// @fn static inline bool messageArgsChecked(void)
+///
+/// @brief Determine whether the kernel backs message argument storage with
+/// the checker's arena, which the scoped and sharing macros below go through
+/// only when it does.
+///
+/// @return Returns true in the checked configuration, false otherwise.
+static inline bool messageArgsChecked(void) {
+  return (overlayMap.header.osApi->executiveApi != NULL)
+    && overlayMap.header.osApi->executiveApi->messageArgsChecked;
+}
+
+/// @fn static inline void* messageArgsAllocate(size_t size)
+///
+/// @brief Allocate the checker's storage for a scoped, blocking, round-trip
+/// message.
+///
+/// @param size The number of bytes to allocate.
+///
+/// @return Returns a pointer to zeroed storage on success, NULL on failure.
+static inline void* messageArgsAllocate(size_t size) {
+  return overlayMap.header.osApi->executiveApi->messageArgsAllocate(size);
+}
+
+/// @fn static inline void messageArgsFree(void *ptr)
+///
+/// @brief Free storage from messageArgsAllocate.
+///
+/// @param ptr The storage.
+///
+/// @return This function returns no value.
+static inline void messageArgsFree(void *ptr) {
+  overlayMap.header.osApi->executiveApi->messageArgsFree(ptr);
+}
+
+/// @fn static inline void* messageBufferShare(void *ptr, size_t size,
+///   uint8_t direction, ProcessId recipient)
+///
+/// @brief Share a buffer with the process a message carrying it is sent to.
+///
+/// @param ptr The buffer.
+/// @param size The number of bytes in the buffer.
+/// @param direction The MESSAGE_BUFFER_* direction of the buffer's data.
+/// @param recipient The ProcessId of the process the buffer is shared with.
+///
+/// @return Returns the pointer to put in the argument structure, or NULL if
+/// the buffer couldn't be shared.
+static inline void* messageBufferShare(void *ptr, size_t size,
+  uint8_t direction, ProcessId recipient
+) {
+  return overlayMap.header.osApi->executiveApi->messageBufferShare(
+    ptr, size, direction, recipient);
+}
+
+/// @fn static inline void messageBufferUnshare(void *shared, void *original,
+///   uint8_t direction)
+///
+/// @brief End the sharing of a buffer once the exchange is done.
+///
+/// @param shared What messageBufferShare returned.
+/// @param original The buffer that was shared.
+/// @param direction The MESSAGE_BUFFER_* direction it was shared with.
+///
+/// @return This function returns no value.
+static inline void messageBufferUnshare(void *shared, void *original,
+  uint8_t direction
+) {
+  overlayMap.header.osApi->executiveApi->messageBufferUnshare(
+    shared, original, direction);
+}
+
+/// @def MESSAGE_ARGS_ALLOCATE
+///
+/// @brief Declare `type *name` pointing at zeroed storage for a scoped,
+/// blocking, round-trip message.  `name` is NULL if there was no storage.
+#define MESSAGE_ARGS_ALLOCATE(type, name) \
+  type name##Storage = {0}; \
+  type *name = messageArgsChecked() \
+    ? (type*) messageArgsAllocate(sizeof(type)) : &name##Storage
+
+/// @def MESSAGE_ARGS_FREE
+///
+/// @brief Free storage from MESSAGE_ARGS_ALLOCATE.
+#define MESSAGE_ARGS_FREE(name) \
+  do { \
+    if (messageArgsChecked()) { \
+      messageArgsFree(name); \
+    } \
+  } while (0)
+
+/// @def MESSAGE_BUFFER_SHARE
+///
+/// @brief Yield the pointer to put in an argument structure for a buffer of
+/// `size` bytes at `ptr` shared with process `recipient`, or NULL if it
+/// couldn't be shared.  Outside the checked configuration, `size` and
+/// `recipient` are not evaluated.
+#define MESSAGE_BUFFER_SHARE(ptr, size, direction, recipient) \
+  (messageArgsChecked() \
+    ? messageBufferShare((void*) (ptr), (size), (direction), (recipient)) \
+    : (void*) (ptr))
+
+/// @def MESSAGE_BUFFER_UNSHARE
+///
+/// @brief End the sharing of `original` through `shared` once the exchange is
+/// done.
+#define MESSAGE_BUFFER_UNSHARE(shared, original, direction) \
+  do { \
+    if (messageArgsChecked()) { \
+      messageBufferUnshare((void*) (shared), (void*) (original), \
+        (direction)); \
+    } \
+  } while (0)
 
 /// @fn static inline int processMessageSetDone(ProcessMessage *processMessage)
 ///
