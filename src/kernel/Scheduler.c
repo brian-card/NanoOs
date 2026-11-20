@@ -124,6 +124,10 @@ void forceYield(void);
 /// @param runSchedulerDepth Recursion counter of how many levels of the
 ///   runScheduler function are in progress.  Needed to avoid non-reentrant
 ///   functions that are run by it.
+/// @param graphicsDriverPid The ProcessId of the device config.sys's GRAPHICS
+///   line names as the display driver, or 0 if there is none.
+/// @param graphicsClientPath The full path of the program whose processes
+///   may use the display driver, or NULL.
 struct SchedulerState {
   size_t              numManagedProcesses;
   ProcessQueue      **readyQueues;
@@ -138,6 +142,8 @@ struct SchedulerState {
   ProcessId           firstShellPid;
   ProcessId           shellOutputPids[NANO_OS_MAX_NUM_SHELLS];
   int                 runSchedulerDepth;
+  ProcessId           graphicsDriverPid;
+  const char         *graphicsClientPath;
 };
 
 /// @var _functionInProgress
@@ -1197,6 +1203,87 @@ int removeProcessIpcCapability(ProcessDescriptor *processDescriptor,
   return 0;
 }
 
+/// @fn static int addProcessIpcCapabilityMask(
+///   ProcessDescriptor *processDescriptor, ProcessId destinationPid,
+///   int64_t signature, uint32_t messageTypes)
+///
+/// @brief Let a process send every message type in a mask to a destination.
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor with the
+///   ipcCapabilities array to update.
+/// @param destinationPid The ProcessId that the IPC messages are destined for.
+/// @param signature The signature of the messages.
+/// @param messageTypes The mask of message types, bit n for type n.
+///
+/// @return Returns 0 on success, -errno on failure.
+static int addProcessIpcCapabilityMask(
+  ProcessDescriptor *processDescriptor, ProcessId destinationPid,
+  int64_t signature, uint32_t messageTypes
+) {
+  if (messageTypes == 0) {
+    return 0;
+  }
+
+  // Add the first type explicitly to make sure the capability is allocated
+  // on the ProcessDescriptor if it's not already.
+  uint32_t firstType = 0;
+  while ((messageTypes & (((uint32_t) 1) << firstType)) == 0) {
+    firstType++;
+  }
+  int returnValue = addProcessIpcCapability(processDescriptor, destinationPid,
+    signature, firstType);
+  if (returnValue != 0) {
+    return returnValue;
+  }
+
+  // Find the capability and bring in ALL of the message types.
+  for (size_t ii = 0; ii < processDescriptor->numIpcCapabilities; ii++) {
+    IpcCapability *capability = &processDescriptor->ipcCapabilities[ii];
+    if ((capability->destinationPid == destinationPid)
+      && (capability->signature == signature)
+    ) {
+      capability->messageTypes |= messageTypes;
+      break;
+    }
+  }
+
+  return 0;
+}
+
+/// @fn static void removeProcessIpcCapabilityMask(
+///   ProcessDescriptor *processDescriptor, ProcessId destinationPid,
+///   int64_t signature, uint32_t messageTypes)
+///
+/// @brief Stop a process from sending any message type in a mask to a
+/// destination.  Only a private array can hold types that
+/// addProcessIpcCapabilityMask added, so a shared base array is left alone
+/// and nothing is allocated, which keeps the end-of-process paths shallow.
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor with the
+///   ipcCapabilities array to update.
+/// @param destinationPid The ProcessId that the IPC messages are destined for.
+/// @param signature The signature of the messages.
+/// @param messageTypes The mask of message types, bit n for type n.
+///
+/// @return This function returns no value.
+static void removeProcessIpcCapabilityMask(
+  ProcessDescriptor *processDescriptor, ProcessId destinationPid,
+  int64_t signature, uint32_t messageTypes
+) {
+  if (processDescriptor->ipcCapabilitiesDynamic == false) {
+    return;
+  }
+  for (size_t ii = 0; ii < processDescriptor->numIpcCapabilities; ii++) {
+    IpcCapability *capability = &processDescriptor->ipcCapabilities[ii];
+    if ((capability->destinationPid == destinationPid)
+      && (capability->signature == signature)
+    ) {
+      capability->messageTypes &= ~messageTypes;
+      break;
+    }
+  }
+}
+
 /// @fn void runSchedulerQueues(PrivilegeLevel privilegeLevelBound)
 ///
 /// @brief Make one pass through all the process queues less than the provided
@@ -1812,6 +1899,146 @@ int schedulerAddForwardingPort(ProcessId forwardingPid) {
   }
 
   return portId;
+}
+
+/// @fn int schedulerSetGraphics(ProcessId driverPid, const char *clientPath)
+///
+/// @brief Record the display driver and the program whose processes may use
+/// it, from config.sys's GRAPHICS line.  Only the scheduler may call this.
+///
+/// @param driverPid The ProcessId of the display driver.
+/// @param clientPath The full path of the client program.  Only the pointer
+///   is kept, so it must stay valid for the life of the system.
+///
+/// @return Returns 0 on success, -EPERM if the caller isn't the scheduler,
+/// -EINVAL if either argument is invalid.
+int schedulerSetGraphics(ProcessId driverPid, const char *clientPath) {
+  if (!runningInScheduler()) {
+    return -EPERM;
+  } else if ((driverPid == 0) || (driverPid > numProcesses)
+    || (clientPath == NULL)
+  ) {
+    return -EINVAL;
+  }
+
+  _schedulerState->graphicsDriverPid = driverPid;
+  _schedulerState->graphicsClientPath = clientPath;
+  return 0;
+}
+
+/// @fn static void schedulerRevokeGraphics(
+///   ProcessDescriptor *processDescriptor)
+///
+/// @brief Take away a graphics client's IPC grants to and from the display
+/// driver.
+///
+/// @param processDescriptor A pointer to the client's ProcessDescriptor.
+///
+/// @return This function returns no value.
+static void schedulerRevokeGraphics(ProcessDescriptor *processDescriptor) {
+  ProcessId driverPid = _schedulerState->graphicsDriverPid;
+  removeProcessIpcCapabilityMask(processDescriptor, driverPid,
+    GFX_COMMAND_SIGNATURE, GFX_CLIENT_MESSAGE_MASK);
+  removeProcessIpcCapabilityMask(&allProcesses[driverPid - 1],
+    processDescriptor->processId, GFX_COMMAND_SIGNATURE,
+    GFX_DRIVER_MESSAGE_MASK);
+  processDescriptor->graphicsClient = false;
+}
+
+/// @fn static void schedulerGraphicsClientEnded(
+///   ProcessDescriptor *processDescriptor)
+///
+/// @brief Take away an ending graphics client's grants and tell the display
+/// driver with GFX_MSG_CLIENT_ENDED, without waiting, because a driver that
+/// runs from overlays needs the scheduler to switch them.  Kept out of line
+/// so that the end-of-process handlers carry its frame only for a graphics
+/// client.
+///
+/// @param processDescriptor A pointer to the client's ProcessDescriptor.
+///
+/// @return This function returns no value.
+static __attribute__((noinline)) void schedulerGraphicsClientEnded(
+  ProcessDescriptor *processDescriptor
+) {
+  schedulerRevokeGraphics(processDescriptor);
+
+  ProcessMessage *processMessage = getAvailableMessage();
+  if (processMessage != NULL) {
+    processMessageInitInline(processMessage,
+      GFX_COMMAND_SIGNATURE | GFX_MSG_CLIENT_ENDED,
+      (void*) (uintptr_t) processDescriptor->processId, 0,
+      /* waiting= */ false);
+    if (processMessageQueuePush(
+        &allProcesses[_schedulerState->graphicsDriverPid - 1], processMessage)
+      == processSuccess
+    ) {
+      return;
+    }
+    processMessageRelease(processMessage);
+  }
+  logError("Could not tell the graphics driver process %d ended\n",
+    processDescriptor->processId);
+}
+
+/// @fn static inline void schedulerEndGraphicsClient(
+///   ProcessDescriptor *processDescriptor)
+///
+/// @brief Run schedulerGraphicsClientEnded for a process that is ending, if
+/// it's a graphics client.
+///
+/// @param processDescriptor A pointer to the ending process's
+///   ProcessDescriptor.
+///
+/// @return This function returns no value.
+static inline void schedulerEndGraphicsClient(
+  ProcessDescriptor *processDescriptor
+) {
+  if (processDescriptor->graphicsClient) {
+    schedulerGraphicsClientEnded(processDescriptor);
+  }
+}
+
+/// @fn void schedulerGraphicsProgramChanged(
+///   ProcessDescriptor *processDescriptor, const char *newPath)
+///
+/// @brief End a process's time as a graphics client, if it was one, because
+/// it's starting a new program, then make it a client if the new program is
+/// the one config.sys's GRAPHICS line names and it runs at executive level.
+/// Only the scheduler may call this.
+///
+/// @param processDescriptor A pointer to the process's ProcessDescriptor.
+/// @param newPath The full path of the program the process is starting.
+///
+/// @return This function returns no value.
+void schedulerGraphicsProgramChanged(ProcessDescriptor *processDescriptor,
+  const char *newPath
+) {
+  if (!runningInScheduler()) {
+    return;
+  }
+
+  schedulerEndGraphicsClient(processDescriptor);
+  ProcessId driverPid = _schedulerState->graphicsDriverPid;
+  if ((driverPid == 0)
+    || (processDescriptor->privilegeLevel != PRIVILEGE_LEVEL_EXECUTIVE)
+    || (newPath == NULL)
+    || (strcmp(newPath, _schedulerState->graphicsClientPath) != 0)
+  ) {
+    return;
+  }
+
+  if ((addProcessIpcCapabilityMask(processDescriptor, driverPid,
+      GFX_COMMAND_SIGNATURE, GFX_CLIENT_MESSAGE_MASK) != 0)
+    || (addProcessIpcCapabilityMask(&allProcesses[driverPid - 1],
+      processDescriptor->processId, GFX_COMMAND_SIGNATURE,
+      GFX_DRIVER_MESSAGE_MASK) != 0)
+  ) {
+    logError("Could not give process %d the display driver\n",
+      processDescriptor->processId);
+    schedulerRevokeGraphics(processDescriptor);
+    return;
+  }
+  processDescriptor->graphicsClient = true;
 }
 
 /// @fn int schedulerBindShell(uint8_t shellIndex, uint8_t consolePort,
@@ -4432,6 +4659,7 @@ int schedulerExecveCommandHandler(
   // though, and if we're using pipes, something may have already sent us a
   // message that the replacement is expected to process.  So, keep the message
   // queue (set the second argument to true).
+  schedulerGraphicsProgramChanged(processDescriptor, pathname);
   logDebug("Terminating process %d\n",
     processDescriptor->processId);
   processTerminate(processDescriptor, true);
@@ -4949,6 +5177,7 @@ int schedulerSpawnCommandHandler(
   processDescriptor->name = argv[0];
   schedulerSetSpawnPrivilege(processDescriptor, systemCommand);
   schedulerSetDirCapabilities(processDescriptor, dirCapabilities);
+  schedulerGraphicsProgramChanged(processDescriptor, execArgs->pathname);
 
   // Resume the thread so that it picks up all the pointers it needs before
   // we release the message we were sent.
@@ -5417,6 +5646,7 @@ int schedulerCleanupProcessCommandHandler(
 
   processCompleteMessagesTo(processDescriptor);
   schedulerReleaseConsolePorts(processDescriptor);
+  schedulerEndGraphicsClient(processDescriptor);
 
   if (processDescriptor->envp != NULL) {
     if (assignMemory(processDescriptor->envp[0], 0) != 0) {
@@ -5953,6 +6183,7 @@ void removeProcess(
   processDescriptor->mainThread->state = PROCESS_STATE_NOT_RUNNING;
   processCompleteMessagesTo(processDescriptor);
   schedulerReleaseConsolePorts(processDescriptor);
+  schedulerEndGraphicsClient(processDescriptor);
   schedulerSetDirCapabilities(processDescriptor, NULL);
 
   MESSAGE_ARGS_PROCESS_ENDED(processDescriptor->processId, false);
