@@ -27,11 +27,9 @@
 
 /// @file ScreenSetup.c
 ///
-/// @brief The VDU commands the VDP driver sets up the screen with, kept apart
-/// from Startup.c so that Graphics.h, whose kernel includes conflict with
-/// ExecutiveProcesses.h, can supply the colors.
+/// @brief The VDU commands the VDP driver sets up the screen with.
 
-#include "Graphics.h"
+#include "GraphicsColor.h"
 #include "ScreenSetup.h"
 
 /// @def VDP_PALETTE_ENTRY

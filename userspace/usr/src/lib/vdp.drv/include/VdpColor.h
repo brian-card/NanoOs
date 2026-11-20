@@ -33,7 +33,7 @@
 #ifndef VDP_COLOR_H
 #define VDP_COLOR_H
 
-#include "Graphics.h"
+#include "GraphicsColor.h"
 
 #ifdef __cplusplus
 extern "C"
