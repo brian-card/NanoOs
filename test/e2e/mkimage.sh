@@ -78,6 +78,9 @@ done
 MTOOLS_SKIP_CHECK=1 mdeltree -i "${fatImage}" ::/userspace/usr/bin/syspasswd
 MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s userspace/usr/bin/syspasswd \
 	::/system/commands/passwd
+MTOOLS_SKIP_CHECK=1 mdeltree -i "${fatImage}" ::/userspace/usr/bin/gfxprobe
+MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s userspace/usr/bin/gfxprobe \
+	::/system/commands/gfxprobe
 for driver in userspace/usr/lib/*.drv; do
 	MTOOLS_SKIP_CHECK=1 mmove -i "${fatImage}" \
 		"::/userspace/usr/lib/$(basename "${driver}")" ::/system/drivers/
