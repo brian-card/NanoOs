@@ -92,18 +92,18 @@ typedef uint16_t GfxHandle;
 // GFX_BLEND_XOR      - XOR with destination   (VDP GCOL mode 3)
 // GFX_BLEND_INVERT   - invert destination      (VDP GCOL mode 4)
 typedef enum GfxBlendMode {
-    GFX_BLEND_OPAQUE = 0,
-    GFX_BLEND_AND,
-    GFX_BLEND_OR,
-    GFX_BLEND_XOR,
-    GFX_BLEND_INVERT,
+  GFX_BLEND_OPAQUE = 0,
+  GFX_BLEND_AND,
+  GFX_BLEND_OR,
+  GFX_BLEND_XOR,
+  GFX_BLEND_INVERT,
 } GfxBlendMode;
 
 // Pixel format for uploaded images.
 typedef enum GfxPixelFmt {
-    GFX_FMT_RGBA8888 = 0,  // 4 bytes/pixel: R G B A
-    GFX_FMT_RGBA2222,      // 1 byte/pixel:  RR GG BB AA packed
-    GFX_FMT_RGB888,        // 3 bytes/pixel: R G B (alpha treated as 0xFF)
+  GFX_FMT_RGBA8888 = 0,  // 4 bytes/pixel: R G B A
+  GFX_FMT_RGBA2222,      // 1 byte/pixel:  RR GG BB AA packed
+  GFX_FMT_RGB888,        // 3 bytes/pixel: R G B (alpha treated as 0xFF)
 } GfxPixelFmt;
 
 
@@ -114,16 +114,16 @@ typedef enum GfxPixelFmt {
 // =========================================================================
 
 typedef enum GfxError {
-    GFX_OK = 0,
-    GFX_ERR_OUT_OF_MEMORY,      // device or host memory exhausted
-    GFX_ERR_OUT_OF_HANDLES,     // handle table full
-    GFX_ERR_CMDBUF_OVERFLOW,    // a record doesn't fit the command buffer
-    GFX_ERR_INVALID_HANDLE,     // stale or uninitialized handle
-    GFX_ERR_INVALID_STATE,      // API misuse
-    GFX_ERR_DEVICE_LOST,        // the driver is gone or never answered
-    GFX_ERR_NOT_SUPPORTED,      // feature not available in this driver
-    GFX_ERR_DISPLAY_BUSY,       // another process owns the display
-    GFX_ERR_NOT_OWNER,          // the sender doesn't own the display
+  GFX_OK = 0,
+  GFX_ERR_OUT_OF_MEMORY,      // device or host memory exhausted
+  GFX_ERR_OUT_OF_HANDLES,     // handle table full
+  GFX_ERR_CMDBUF_OVERFLOW,    // a record doesn't fit the command buffer
+  GFX_ERR_INVALID_HANDLE,     // stale or uninitialized handle
+  GFX_ERR_INVALID_STATE,      // API misuse
+  GFX_ERR_DEVICE_LOST,        // the driver is gone or never answered
+  GFX_ERR_NOT_SUPPORTED,      // feature not available in this driver
+  GFX_ERR_DISPLAY_BUSY,       // another process owns the display
+  GFX_ERR_NOT_OWNER,          // the sender doesn't own the display
 } GfxError;
 
 
@@ -138,35 +138,35 @@ typedef enum GfxError {
 // =========================================================================
 
 typedef enum GfxMsgType {
-    // Client to driver
-    GFX_MSG_OPEN_DISPLAY = 0,       // sync, GfxOpenDisplayArgs; takes ownership
-    GFX_MSG_CLOSE_DISPLAY,          // one-way, no arguments
-    GFX_MSG_GET_SURFACE_SIZE,       // sync, GfxSurfaceSizeArgs
-    GFX_MSG_UPLOAD_IMAGE,           // sync, GfxUploadImageArgs
-    GFX_MSG_DESTROY_IMAGE,          // one-way, GfxHandleArgs
-    GFX_MSG_GET_IMAGE_SIZE,         // sync, GfxImageSizeArgs
-    GFX_MSG_UPLOAD_FONT,            // sync, GfxUploadFontArgs
-    GFX_MSG_DESTROY_FONT,           // one-way, GfxHandleArgs
-    GFX_MSG_SET_DEFAULT_FONT,       // sync, GfxSetDefaultFontArgs
-    GFX_MSG_SUBMIT,                 // persistent round trip, GfxSubmitArgs
-    GFX_MSG_PREUPLOAD,              // sync, GfxPreuploadArgs
-    GFX_MSG_DISCARD_PREUPLOAD,      // one-way, GfxHandleArgs
-    GFX_MSG_FINISH,                 // sync, GfxFinishArgs; done once drawn
-    GFX_MSG_CAPTURE_RECT,           // sync, GfxCaptureRectArgs
-    GFX_MSG_GET_ERROR,              // sync, GfxGetErrorArgs
-    GFX_MSG_SET_CURSOR,             // sync, GfxSetCursorArgs
-    GFX_MSG_SHOW_CURSOR,            // one-way, GfxShowCursorArgs
-    GFX_MSG_WARP_CURSOR,            // one-way, GfxWarpCursorArgs
+  // Client to driver
+  GFX_MSG_OPEN_DISPLAY = 0,       // sync, GfxOpenDisplayArgs; takes ownership
+  GFX_MSG_CLOSE_DISPLAY,          // one-way, no arguments
+  GFX_MSG_GET_SURFACE_SIZE,       // sync, GfxSurfaceSizeArgs
+  GFX_MSG_UPLOAD_IMAGE,           // sync, GfxUploadImageArgs
+  GFX_MSG_DESTROY_IMAGE,          // one-way, GfxHandleArgs
+  GFX_MSG_GET_IMAGE_SIZE,         // sync, GfxImageSizeArgs
+  GFX_MSG_UPLOAD_FONT,            // sync, GfxUploadFontArgs
+  GFX_MSG_DESTROY_FONT,           // one-way, GfxHandleArgs
+  GFX_MSG_SET_DEFAULT_FONT,       // sync, GfxSetDefaultFontArgs
+  GFX_MSG_SUBMIT,                 // persistent round trip, GfxSubmitArgs
+  GFX_MSG_PREUPLOAD,              // sync, GfxPreuploadArgs
+  GFX_MSG_DISCARD_PREUPLOAD,      // one-way, GfxHandleArgs
+  GFX_MSG_FINISH,                 // sync, GfxFinishArgs; done once drawn
+  GFX_MSG_CAPTURE_RECT,           // sync, GfxCaptureRectArgs
+  GFX_MSG_GET_ERROR,              // sync, GfxGetErrorArgs
+  GFX_MSG_SET_CURSOR,             // sync, GfxSetCursorArgs
+  GFX_MSG_SHOW_CURSOR,            // one-way, GfxShowCursorArgs
+  GFX_MSG_WARP_CURSOR,            // one-way, GfxWarpCursorArgs
 
-    GFX_MSG_COUNT,
+  GFX_MSG_COUNT,
 
-    // Driver to client
-    GFX_MSG_INPUT_EVENTS = 24,      // persistent round trip, GfxInputEventsArgs
-    GFX_MSG_DISPLAY_REVOKED = 25,   // one-way, no arguments
+  // Driver to client
+  GFX_MSG_INPUT_EVENTS = 24,      // persistent round trip, GfxInputEventsArgs
+  GFX_MSG_DISPLAY_REVOKED = 25,   // one-way, no arguments
 
-    // Scheduler to driver, one-way: the driver's graphics client ended.  The
-    // data pointer is the client's ProcessId, not a pointer to storage.
-    GFX_MSG_CLIENT_ENDED = 31,
+  // Scheduler to driver, one-way: the driver's graphics client ended.  The
+  // data pointer is the client's ProcessId, not a pointer to storage.
+  GFX_MSG_CLIENT_ENDED = 31,
 } GfxMsgType;
 
 /// @def GFX_NUM_MESSAGE_TYPES
@@ -230,92 +230,92 @@ GFX_STATIC_ASSERT(
 // =========================================================================
 
 typedef struct GfxOpenDisplayArgs {
-    uint8_t   status;
-    uint16_t  width, height;      // in: requested; out: actual
-    uint8_t   defaultFontW, defaultFontH, defaultFontFirst;  // out
-    uint16_t  defaultFontCount;   // out
+  uint8_t   status;
+  uint16_t  width, height;      // in: requested; out: actual
+  uint8_t   defaultFontW, defaultFontH, defaultFontFirst;  // out
+  uint16_t  defaultFontCount;   // out
 } GfxOpenDisplayArgs;
 
 typedef struct GfxSurfaceSizeArgs {
-    uint8_t   status;
-    uint16_t  width, height;      // out
+  uint8_t   status;
+  uint16_t  width, height;      // out
 } GfxSurfaceSizeArgs;
 
 typedef struct GfxUploadImageArgs {
-    uint8_t     status;
-    uint8_t     format;           // in: GfxPixelFmt
-    uint16_t    width, height;    // in
-    uint32_t    size;             // in: bytes at pixels
-    const void *pixels;           // in: NULL allocates without initializing
-    GfxHandle   handle;           // out
+  uint8_t     status;
+  uint8_t     format;           // in: GfxPixelFmt
+  uint16_t    width, height;    // in
+  uint32_t    size;             // in: bytes at pixels
+  const void *pixels;           // in: NULL allocates without initializing
+  GfxHandle   handle;           // out
 } GfxUploadImageArgs;
 
 typedef struct GfxImageSizeArgs {
-    uint8_t   status;
-    GfxHandle handle;             // in
-    uint16_t  width, height;      // out
+  uint8_t   status;
+  GfxHandle handle;             // in
+  uint16_t  width, height;      // out
 } GfxImageSizeArgs;
 
 typedef struct GfxUploadFontArgs {
-    uint8_t     status;
-    uint8_t     glyphW, glyphH;   // in: pixel size of each glyph cell
-    uint8_t     firstChar;        // in: first codepoint in the bitmap
-    uint16_t    numChars;         // in: number of glyphs
-    uint32_t    size;             // in: bytes at bitmap
-    const void *bitmap;           // in: 1-bit glyph rows, MSB leftmost, each
-                                  // row padded to a whole byte
-    GfxHandle   handle;           // out
+  uint8_t     status;
+  uint8_t     glyphW, glyphH;   // in: pixel size of each glyph cell
+  uint8_t     firstChar;        // in: first codepoint in the bitmap
+  uint16_t    numChars;         // in: number of glyphs
+  uint32_t    size;             // in: bytes at bitmap
+  const void *bitmap;           // in: 1-bit glyph rows, MSB leftmost, each
+                                // row padded to a whole byte
+  GfxHandle   handle;           // out
 } GfxUploadFontArgs;
 
 typedef struct GfxSetDefaultFontArgs {
-    uint8_t   status;
-    GfxHandle handle;             // in: GFX_INVALID_HANDLE is the built-in font
+  uint8_t   status;
+  GfxHandle handle;             // in: GFX_INVALID_HANDLE is the built-in font
 } GfxSetDefaultFontArgs;
 
 typedef struct GfxSubmitArgs {
-    uint8_t        status;
-    uint32_t       cmdSize;       // in
-    const uint8_t *cmdData;       // in
+  uint8_t        status;
+  uint32_t       cmdSize;       // in
+  const uint8_t *cmdData;       // in
 } GfxSubmitArgs;
 
 typedef struct GfxPreuploadArgs {
-    uint8_t        status;
-    uint32_t       cmdSize;       // in
-    const uint8_t *cmdData;       // in
-    GfxHandle      handle;        // out
+  uint8_t        status;
+  uint32_t       cmdSize;       // in
+  const uint8_t *cmdData;       // in
+  GfxHandle      handle;        // out
 } GfxPreuploadArgs;
 
 typedef struct GfxFinishArgs {
-    uint8_t status;
+  uint8_t status;
 } GfxFinishArgs;
 
 typedef struct GfxCaptureRectArgs {
-    uint8_t   status;
-    GfxRect   rect;               // in: screen coordinates
-    GfxHandle handle;             // out: a new image
+  uint8_t   status;
+  GfxRect   rect;               // in: screen coordinates
+  GfxHandle handle;             // out: a new image
 } GfxCaptureRectArgs;
 
 typedef struct GfxGetErrorArgs {
-    uint8_t status;
-    uint8_t error;                // out: the driver's sticky GfxError
+  uint8_t status;
+  uint8_t error;                // out: the driver's sticky GfxError
 } GfxGetErrorArgs;
 
 typedef struct GfxSetCursorArgs {
-    uint8_t   status;
-    GfxHandle image;              // in: GFX_INVALID_HANDLE is the driver's own
-    uint8_t   hotX, hotY;         // in: the hotspot within the image
+  uint8_t   status;
+  GfxHandle image;              // in: GFX_INVALID_HANDLE is the driver's own
+  uint8_t   hotX, hotY;         // in: the hotspot within the image
 } GfxSetCursorArgs;
 
 typedef struct GfxHandleArgs {
-    GfxHandle handle;
+  GfxHandle handle;
 } GfxHandleArgs;
 
 typedef struct GfxShowCursorArgs {
-    uint8_t show;
+  uint8_t show;
 } GfxShowCursorArgs;
 
 typedef struct GfxWarpCursorArgs {
-    int16_t x, y;
+  int16_t x, y;
 } GfxWarpCursorArgs;
 
 
@@ -329,25 +329,25 @@ typedef struct GfxWarpCursorArgs {
 #define GFX_EVENTS_PER_MESSAGE 8
 
 typedef enum GfxEventType {
-    GFX_EVENT_POINTER = 0,
-    GFX_EVENT_KEY,
-    GFX_EVENT_OVERFLOW,           // events were dropped after this one
+  GFX_EVENT_POINTER = 0,
+  GFX_EVENT_KEY,
+  GFX_EVENT_OVERFLOW,           // events were dropped after this one
 } GfxEventType;
 
 typedef struct GfxEvent {
-    uint8_t type;                 // GfxEventType
-    uint8_t buttons;              // pointer: button bits after this event
-    int8_t  wheel;                // pointer: wheel delta
-    uint8_t ascii;                // key
-    uint8_t keycode;              // key: FabGL virtual key
-    uint8_t modifiers;            // key: the VDP's modifier bits
-    uint8_t down;                 // key: 1 pressed, 0 released
-    int16_t x, y;                 // pointer: position in pixels
+  uint8_t type;                 // GfxEventType
+  uint8_t buttons;              // pointer: button bits after this event
+  int8_t  wheel;                // pointer: wheel delta
+  uint8_t ascii;                // key
+  uint8_t keycode;              // key: FabGL virtual key
+  uint8_t modifiers;            // key: the VDP's modifier bits
+  uint8_t down;                 // key: 1 pressed, 0 released
+  int16_t x, y;                 // pointer: position in pixels
 } GfxEvent;
 
 typedef struct GfxInputEventsArgs {
-    uint8_t  count;
-    GfxEvent events[GFX_EVENTS_PER_MESSAGE];
+  uint8_t  count;
+  GfxEvent events[GFX_EVENTS_PER_MESSAGE];
 } GfxInputEventsArgs;
 
 
@@ -367,30 +367,30 @@ typedef struct GfxInputEventsArgs {
 // =========================================================================
 
 typedef enum GfxCmdType {
-    GFX_CMD_SET_VIEWPORT = 0,   // GfxRect, screen coordinates; empties the
-                                // scissor stack
-    GFX_CMD_SET_ORIGIN,         // GfxPoint, the screen position of (0,0)
-    GFX_CMD_PUSH_SCISSOR,       // GfxRect, intersected with the current clip
-    GFX_CMD_POP_SCISSOR,        // (no parameters)
-    GFX_CMD_SET_FG_COLOR,       // GfxColor
-    GFX_CMD_SET_BG_COLOR,       // GfxColor
-    GFX_CMD_SET_BLEND,          // uint8_t GfxBlendMode
-    GFX_CMD_SET_FONT,           // GfxHandle; GFX_INVALID_HANDLE is the default
-    GFX_CMD_CLEAR,              // (no parameters); fills the clip with the
-                                // background
-    GFX_CMD_DRAW_RECT,          // GfxRect, uint8_t filled
-    GFX_CMD_DRAW_LINE,          // GfxPoint a, b
-    GFX_CMD_DRAW_TRIANGLE,      // GfxPoint a, b, c, uint8_t filled
-    GFX_CMD_DRAW_CIRCLE,        // GfxPoint center, int16_t r, uint8_t filled
-    GFX_CMD_DRAW_IMAGE,         // GfxHandle, GfxPoint; alpha 0 isn't drawn
-    GFX_CMD_DRAW_SUB_IMAGE,     // GfxHandle, GfxRect src, GfxPoint
-    GFX_CMD_DRAW_TEXT,          // GfxPoint, uint8_t len, len bytes
-    GFX_CMD_CALL,               // GfxHandle from a preupload
-    GFX_CMD_COPY_RECT,          // GfxRect src, GfxPoint dst; clipped at dst
-    GFX_CMD_SCROLL_RECT,        // GfxRect, int16_t dx, dy; the uncovered strip
-                                // is cleared to the background
+  GFX_CMD_SET_VIEWPORT = 0,   // GfxRect, screen coordinates; empties the
+                              // scissor stack
+  GFX_CMD_SET_ORIGIN,         // GfxPoint, the screen position of (0,0)
+  GFX_CMD_PUSH_SCISSOR,       // GfxRect, intersected with the current clip
+  GFX_CMD_POP_SCISSOR,        // (no parameters)
+  GFX_CMD_SET_FG_COLOR,       // GfxColor
+  GFX_CMD_SET_BG_COLOR,       // GfxColor
+  GFX_CMD_SET_BLEND,          // uint8_t GfxBlendMode
+  GFX_CMD_SET_FONT,           // GfxHandle; GFX_INVALID_HANDLE is the default
+  GFX_CMD_CLEAR,              // (no parameters); fills the clip with the
+                              // background
+  GFX_CMD_DRAW_RECT,          // GfxRect, uint8_t filled
+  GFX_CMD_DRAW_LINE,          // GfxPoint a, b
+  GFX_CMD_DRAW_TRIANGLE,      // GfxPoint a, b, c, uint8_t filled
+  GFX_CMD_DRAW_CIRCLE,        // GfxPoint center, int16_t r, uint8_t filled
+  GFX_CMD_DRAW_IMAGE,         // GfxHandle, GfxPoint; alpha 0 isn't drawn
+  GFX_CMD_DRAW_SUB_IMAGE,     // GfxHandle, GfxRect src, GfxPoint
+  GFX_CMD_DRAW_TEXT,          // GfxPoint, uint8_t len, len bytes
+  GFX_CMD_CALL,               // GfxHandle from a preupload
+  GFX_CMD_COPY_RECT,          // GfxRect src, GfxPoint dst; clipped at dst
+  GFX_CMD_SCROLL_RECT,        // GfxRect, int16_t dx, dy; the uncovered strip
+                              // is cleared to the background
 
-    GFX_CMD_COUNT
+  GFX_CMD_COUNT
 } GfxCmdType;
 
 // The size of each record, its tag included.
