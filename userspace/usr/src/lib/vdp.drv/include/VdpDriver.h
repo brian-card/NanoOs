@@ -37,6 +37,7 @@
 
 #include "ExecutiveProcesses.h"
 #include "Console.h"
+#include "GraphicsProtocol.h"
 #include "VdpKeyboard.h"
 #include "VdpText.h"
 
@@ -105,8 +106,9 @@ extern "C"
 
 /// @def VDP_MAX_FONTS
 ///
-/// @brief The number of fonts that can be uploaded to the VDP.
-#define VDP_MAX_FONTS 4
+/// @brief The number of font slots:  slot 0 for the built-in font, and one
+/// for each font a client can upload.
+#define VDP_MAX_FONTS (1 + GFX_MAX_FONTS)
 
 /// @struct VdpInput
 ///
@@ -165,9 +167,11 @@ typedef struct VdpInput {
 /// @param buffer The output written while the VDP wasn't listening, or NULL.
 /// @param graphicsMessage The Graphics.h message for the Graphics overlay to
 ///   handle, or NULL to have it load the driver's built-in font.
-/// @param numFonts The number of fonts uploaded to the VDP.
-/// @param fontWidths The glyph width of each font uploaded to the VDP.
-/// @param fontHeights The glyph height of each font uploaded to the VDP.
+/// @param fontsUsed A bit for each font slot that holds a font.
+/// @param fontWidths The glyph width of the font in each slot.
+/// @param fontHeights The glyph height of the font in each slot.
+/// @param ownerDefaultFont The slot of the font a client's records draw in
+///   unless they select another.
 /// @param sizeChanged Whether the console hasn't yet been told the number of
 ///   rows and columns the font gives the screen.
 typedef struct VdpOutput {
@@ -178,9 +182,10 @@ typedef struct VdpOutput {
   bool             screenSetUp;
   VdpOutputBuffer *buffer;
   ProcessMessage  *graphicsMessage;
-  uint8_t          numFonts;
+  uint8_t          fontsUsed;
   uint8_t          fontWidths[VDP_MAX_FONTS];
   uint8_t          fontHeights[VDP_MAX_FONTS];
+  uint8_t          ownerDefaultFont;
   bool             sizeChanged;
 } VdpOutput;
 
