@@ -41,7 +41,7 @@ import os, re, subprocess, sys, time
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 SCHED = 'src/kernel/Scheduler.c'
-M = [
+MUTATIONS = [
  ('no-grant', SCHED, '  processDescriptor->graphicsClient = true;\n}\n', '  processDescriptor->graphicsClient = false;\n}\n',
   ['the_client_program_is_granted_both_ways', 'an_exiting_client_is_reported_once', 'a_client_execing_itself_is_reported_and_granted_again']),
  ('no-exit-hook', SCHED, '  schedulerReleaseConsolePorts(processDescriptor);\n  schedulerEndGraphicsClient(processDescriptor);\n\n  if (processDescriptor->envp != NULL) {',
@@ -60,29 +60,29 @@ M = [
   ['an_exiting_client_is_reported_once', 'a_killed_client_is_reported_once', 'a_removed_client_is_reported_once']),
 ]
 TESTS = ['the_client_program_is_granted_both_ways','another_system_command_is_not_granted','a_user_level_spawn_of_the_client_is_not_granted','an_exiting_client_is_reported_once','a_killed_client_is_reported_once','a_client_whose_stack_overflowed_is_reported_once','a_removed_client_is_reported_once','a_client_execing_another_program_is_reported','a_client_execing_itself_is_reported_and_granted_again']
-def run(c, t=None):
-    try: return subprocess.run(c, cwd=REPO, shell=True, capture_output=True, text=True, timeout=t)
+def run(command, timeout=None):
+    try: return subprocess.run(command, cwd=REPO, shell=True, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired: return None
 def status():
-    st={}
-    for t in TESTS:
-        p = run(f'./test/bin/nano-os-test graphics_client/{t}', 40)
-        st[t] = (p is not None) and re.search(r'^ok \d+ - graphics_client/'+t, p.stdout, re.M) is not None
-    return st
+    results={}
+    for test in TESTS:
+        process = run(f'./test/bin/nano-os-test graphics_client/{test}', 40)
+        results[test] = (process is not None) and re.search(r'^ok \d+ - graphics_client/'+test, process.stdout, re.M) is not None
+    return results
 fails=0
-for name, path, old, new, expect in M:
+for name, path, old, new, expect in MUTATIONS:
     full=os.path.join(REPO,path); orig=open(full).read()
     assert orig.count(old)==1, name
     try:
         open(full,'w').write(orig.replace(old,new))
-        b=run('make -C test build')
-        if b.returncode: print('FAIL',name,'build'); fails+=1; continue
-        st=status(); green=[t for t in expect if st[t]]
-        extra=[t for t in TESTS if not st[t] and t not in expect]
+        build=run('make -C test build')
+        if build.returncode: print('FAIL',name,'build'); fails+=1; continue
+        results=status(); green=[test for test in expect if results[test]]
+        extra=[test for test in TESTS if not results[test] and test not in expect]
         print(('FAIL ' if green else 'ok   ')+name, 'still green:' if green else 'red:', ' '.join(green or expect), ('| also red: '+' '.join(extra)) if extra else '')
         fails+=bool(green)
     finally:
         open(full,'w').write(orig); now=time.time()+2; os.utime(full,(now,now))
-run('make -C test build'); st=status()
-print('restored, red:', [t for t,v in st.items() if not v] or 'none')
+run('make -C test build'); results=status()
+print('restored, red:', [test for test,passed in results.items() if not passed] or 'none')
 sys.exit(1 if fails else 0)

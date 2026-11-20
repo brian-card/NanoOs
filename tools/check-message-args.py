@@ -111,8 +111,8 @@ def strip(text):
 
     @return The source with the same length and line breaks.
     """
-    def blank(m):
-        return re.sub(r"[^\n]", " ", m.group(0))
+    def blank(match):
+        return re.sub(r"[^\n]", " ", match.group(0))
     return re.sub(
         r'//[^\n]*|/\*.*?\*/|"(\\.|[^"\\\n])*"|\'(\\.|[^\'\\\n])*\'',
         blank, text, flags=re.S)
@@ -129,19 +129,19 @@ def call_arguments(text, start):
     depth = 1
     arguments = []
     current = []
-    i = start
-    while i < len(text) and depth > 0:
-        ch = text[i]
-        if ch in "([{":
+    ii = start
+    while ii < len(text) and depth > 0:
+        character = text[ii]
+        if character in "([{":
             depth += 1
-        elif ch in ")]}":
+        elif character in ")]}":
             depth -= 1
-        if depth == 1 and ch == ",":
+        if depth == 1 and character == ",":
             arguments.append("".join(current).strip())
             current = []
         elif depth > 0:
-            current.append(ch)
-        i += 1
+            current.append(character)
+        ii += 1
     arguments.append("".join(current).strip())
     return arguments
 
@@ -158,22 +158,22 @@ def function_bodies(text):
     depth = 0
     start = None
     linkage = 0
-    for i, ch in enumerate(text):
-        if ch == "{":
+    for ii, character in enumerate(text):
+        if character == "{":
             if depth == 0:
-                before = text[:i].rstrip()
+                before = text[:ii].rstrip()
                 if EXTERN_BLOCK.search(before):
                     linkage += 1
                     continue
-                start = i if before.endswith(")") else None
+                start = ii if before.endswith(")") else None
             depth += 1
-        elif ch == "}":
+        elif character == "}":
             if depth == 0 and linkage > 0:
                 linkage -= 1
                 continue
             depth -= 1
             if depth == 0 and start is not None:
-                bodies.append((start, i + 1))
+                bodies.append((start, ii + 1))
                 start = None
     return bodies
 
@@ -191,40 +191,41 @@ def check(path, relative):
 
     @return The list of problems, one string each.
     """
-    with open(path, errors="replace") as f:
-        text = strip(f.read())
+    with open(path, errors="replace") as source:
+        text = strip(source.read())
     problems = []
 
-    for m in SEND_CALL.finditer(text):
-        arguments = call_arguments(text, m.end())
-        index = PAYLOAD_INDEX[m.group(1)]
+    for match in SEND_CALL.finditer(text):
+        arguments = call_arguments(text, match.end())
+        index = PAYLOAD_INDEX[match.group(1)]
         if index >= len(arguments):
             continue
         if ADDRESS_OF_STORAGE.match(arguments[index]):
             problems.append("%s:%d: %s payload %s is not message storage" % (
-                relative, line_of(text, m.start()), m.group(1),
+                relative, line_of(text, match.start()), match.group(1),
                 arguments[index]))
 
     for start, end in function_bodies(text):
         body = text[start:end]
-        for m in ALLOCATE.finditer(body):
-            name = m.group(2)
+        for match in ALLOCATE.finditer(body):
+            name = match.group(2)
             if not re.search(r"\bMESSAGE_ARGS_FREE\s*\(\s*%s\s*\)" % name,
                              body):
                 problems.append("%s:%d: MESSAGE_ARGS_ALLOCATE of %s has no "
                                 "MESSAGE_ARGS_FREE" % (
-                                    relative, line_of(text, start + m.start()),
+                                    relative,
+                                    line_of(text, start + match.start()),
                                     name))
-            for member in sorted(SHARED_MEMBERS.get(m.group(1), ())):
+            for member in sorted(SHARED_MEMBERS.get(match.group(1), ())):
                 problems.extend(check_member(
                     relative, text, start, body, name, member))
         parameters = PARAMETER_LIST.search(text, 0, start)
         if parameters is None:
             continue
-        for m in POINTER_PARAMETER.finditer(parameters.group(1)):
-            for member in sorted(SHARED_MEMBERS.get(m.group(1), ())):
+        for match in POINTER_PARAMETER.finditer(parameters.group(1)):
+            for member in sorted(SHARED_MEMBERS.get(match.group(1), ())):
                 problems.extend(check_member(
-                    relative, text, start, body, m.group(2), member))
+                    relative, text, start, body, match.group(2), member))
     return problems
 
 
@@ -242,10 +243,10 @@ def check_member(relative, text, start, body, name, member):
     """
     problems = []
     target = r"\b%s\s*->\s*%s" % (name, member)
-    for m in re.finditer(target + r"\s*=(?!=)\s*([^;]*);", body):
-        value = m.group(1)
+    for match in re.finditer(target + r"\s*=(?!=)\s*([^;]*);", body):
+        value = match.group(1)
         where = "%s:%d: %s->%s" % (
-            relative, line_of(text, start + m.start()), name, member)
+            relative, line_of(text, start + match.start()), name, member)
         if "MESSAGE_BUFFER_SHARE" in value:
             if not re.search(r"\bMESSAGE_BUFFER_UNSHARE\s*\(\s*(\(\s*\w+\s*\*\s*\)\s*)?"
                              + target, body):

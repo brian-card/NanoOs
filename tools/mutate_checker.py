@@ -163,9 +163,9 @@ def results():
     proc = run('./test/bin/nano-os-test message_args')
     status = {}
     for line in proc.stdout.splitlines():
-        m = re.match(r'^(not ok|ok) \d+ - \S+/(\S+)', line)
-        if m:
-            status[m.group(2)] = m.group(1) == 'ok'
+        match = re.match(r'^(not ok|ok) \d+ - \S+/(\S+)', line)
+        if match:
+            status[match.group(2)] = match.group(1) == 'ok'
     # run() goes through a shell, which reports a signal as 128 + signal.
     return status, (proc.returncode < 0) or (proc.returncode > 128)
 
@@ -180,9 +180,9 @@ def main(names):
         olds = old if isinstance(old, tuple) else (old,)
         news = new if isinstance(new, tuple) else (new,)
         mutated = original
-        for o, n in zip(olds, news):
-            assert mutated.count(o) == 1, f'{name}: pattern not found once in {path}'
-            mutated = mutated.replace(o, n)
+        for oldText, newText in zip(olds, news):
+            assert mutated.count(oldText) == 1, f'{name}: pattern not found once in {path}'
+            mutated = mutated.replace(oldText, newText)
         try:
             open(full, 'w').write(mutated)
             if header:
@@ -193,8 +193,8 @@ def main(names):
                 failures += 1
                 continue
             status, crashed = results()
-            missing = [t for t in tests if t not in status]
-            green = [t for t in tests if status.get(t, False)]
+            missing = [test for test in tests if test not in status]
+            green = [test for test in tests if status.get(test, False)]
             if green:
                 print(f'FAIL {name}: still green: {" ".join(green)}')
                 failures += 1
@@ -213,7 +213,7 @@ def main(names):
     run('make -C test clean')
     build = run('make -C test build')
     status, crashed = results()
-    red = [t for t, ok in status.items() if not ok]
+    red = [test for test, passed in status.items() if not passed]
     print(f'restored: {len(status)} message_args tests, red after restore: '
           f'{red or "none"}{", crashed" if crashed else ""}')
     return 1 if failures or red or crashed or build.returncode != 0 else 0
