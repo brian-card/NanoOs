@@ -134,6 +134,13 @@ typedef struct NanoOsExecutiveApi {
   // Message argument storage functions:
   void* (*messageArgsCreate)(size_t size, uint8_t ownership);
   void (*messageArgsDestroy)(void *ptr);
+  bool messageArgsChecked;
+  void* (*messageArgsAllocate)(size_t size);
+  void (*messageArgsFree)(void *ptr);
+  void* (*messageBufferShare)(void *ptr, size_t size, uint8_t direction,
+    uint8_t recipient);
+  void (*messageBufferUnshare)(void *shared, void *original,
+    uint8_t direction);
 
   // Directory capability functions:
   bool (*dirCapabilityAllows)(const DirCapabilities *set,

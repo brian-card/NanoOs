@@ -127,6 +127,77 @@ static void overlayMessageArgsDestroy(void *ptr) {
   MESSAGE_ARGS_DESTROY(ptr);
 }
 
+/// @fn static void* overlayMessageArgsAllocate(size_t size)
+///
+/// @brief Allocate zeroed storage for an overlay's scoped, blocking,
+/// round-trip message.  Overlays call this only when messageArgsChecked is
+/// set, because in production their MESSAGE_ARGS_ALLOCATE uses the stack.
+///
+/// @param size The number of bytes to allocate.
+///
+/// @return Returns a pointer to the storage on success, NULL on failure or in
+/// production.
+static void* overlayMessageArgsAllocate(size_t size) {
+#ifdef NANO_OS_MESSAGE_ARGS_CHECKED
+  return messageArgsAllocate(size, MESSAGE_ARGS_ROUND_TRIP, false);
+#else
+  (void) size;
+  return NULL;
+#endif
+}
+
+/// @fn static void overlayMessageArgsFree(void *ptr)
+///
+/// @brief Free storage from overlayMessageArgsAllocate.
+///
+/// @param ptr The storage.
+///
+/// @return This function returns no value.
+static void overlayMessageArgsFree(void *ptr) {
+  MESSAGE_ARGS_FREE(ptr);
+}
+
+/// @fn static void* overlayMessageBufferShare(void *ptr, size_t size,
+///   uint8_t direction, uint8_t recipient)
+///
+/// @brief Share an overlay's buffer with the process a message carrying it is
+/// sent to.
+///
+/// @param ptr The buffer.
+/// @param size The number of bytes in the buffer.
+/// @param direction The MESSAGE_BUFFER_* direction of the buffer's data.
+/// @param recipient The ProcessId of the process the buffer is shared with.
+///
+/// @return Returns the pointer to put in the argument structure, or NULL if
+/// the buffer couldn't be shared.
+static void* overlayMessageBufferShare(void *ptr, size_t size,
+  uint8_t direction, uint8_t recipient
+) {
+  (void) size;
+  (void) direction;
+  (void) recipient;
+  return MESSAGE_BUFFER_SHARE(ptr, size, direction, recipient);
+}
+
+/// @fn static void overlayMessageBufferUnshare(void *shared, void *original,
+///   uint8_t direction)
+///
+/// @brief End the sharing of an overlay's buffer once the exchange is done.
+///
+/// @param shared What overlayMessageBufferShare returned.
+/// @param original The buffer that was shared.
+/// @param direction The MESSAGE_BUFFER_* direction it was shared with.
+///
+/// @return This function returns no value.
+static void overlayMessageBufferUnshare(void *shared, void *original,
+  uint8_t direction
+) {
+  (void) shared;
+  (void) original;
+  (void) direction;
+  MESSAGE_BUFFER_UNSHARE(shared, original, direction);
+}
+
 KEEP_IN_FLASH
 const NanoOsExecutiveApi nanoOsExecutiveApi = {
   // Debug functions:
@@ -166,6 +237,15 @@ const NanoOsExecutiveApi nanoOsExecutiveApi = {
   // Message argument storage functions:
   .messageArgsCreate = overlayMessageArgsCreate,
   .messageArgsDestroy = overlayMessageArgsDestroy,
+#ifdef NANO_OS_MESSAGE_ARGS_CHECKED
+  .messageArgsChecked = true,
+#else
+  .messageArgsChecked = false,
+#endif
+  .messageArgsAllocate = overlayMessageArgsAllocate,
+  .messageArgsFree = overlayMessageArgsFree,
+  .messageBufferShare = overlayMessageBufferShare,
+  .messageBufferUnshare = overlayMessageBufferUnshare,
 
   // Directory capability functions:
   .dirCapabilityAllows = dirCapabilityAllows,
