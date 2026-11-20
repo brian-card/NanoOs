@@ -230,8 +230,10 @@ static inline const char* filesystemCallerPath(const char *realPath,
 ///   const char *realPath, bool isDirectory, uint8_t bits)
 ///
 /// @brief Determine whether a request's sender holds the capabilities for an
-/// operation on a path.  Not inlined because the handlers' combined copies
-/// don't fit the Agon's contiguous filesystem region.
+/// operation on a path.  An exec check of a path inside the overlay namespace
+/// of the program the sender is running always passes, because the sender is
+/// already running code from there.  Not inlined because the handlers'
+/// combined copies don't fit the Agon's contiguous filesystem region.
 ///
 /// @param filesystemState A pointer to the filesystem process's
 ///   FilesystemState.
@@ -251,6 +253,18 @@ static __attribute__((noinline, unused)) bool filesystemPathAllowed(
     || (from >= filesystemState->allProcesses + filesystemState->numProcesses)
   ) {
     return false;
+  }
+
+  const char *ns = (const char*) from->overlayNamespace;
+  if ((bits == DIRCAP_EXEC) && (ns != NULL)) {
+    const char *path = realPath;
+    while ((*ns != '\0') && (*ns == *path)) {
+      ns++;
+      path++;
+    }
+    if ((*ns == '\0') && (*path == '/')) {
+      return true;
+    }
   }
 
   bool fullPath = filesystemMessageHasFullPath(filesystemState, processMessage);
