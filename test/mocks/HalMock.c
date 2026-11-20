@@ -22,6 +22,7 @@
 // lands on the include path.
 #include "hal/HalCommon.h"
 #include "hal/HalPosix.h"
+#include "kernel/GraphicsProtocol.h"
 #include "kernel/NanoOs.h"
 #include "kernel/Processes.h"
 #include "kernel/Scheduler.h"
@@ -94,7 +95,7 @@ static void (*_powerHook)(void) = NULL;
 ///
 /// @brief The mock's storage for HalCommon.c's named-process lookup table,
 /// sized like the simulator's.
-static NamedProcessEntry _namedProcesses[3];
+static NamedProcessEntry _namedProcesses[4];
 
 /// @var _restartShell
 ///
@@ -319,6 +320,9 @@ static int mockDoLaunchProcesses(void) {
     ProcessId driverPid = schedulerGetFirstShellPid() + schedulerGetNumShells()
       + _graphicsDriverSlot;
     int graphicsStatus = schedulerSetGraphics(driverPid, _graphicsClientPath);
+    if (graphicsStatus == 0) {
+      graphicsStatus = registerProcessName(GFX_DRIVER_PROCESS_NAME, driverPid);
+    }
     if (graphicsStatus != 0) {
       returnValue = graphicsStatus;
     }

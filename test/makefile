@@ -136,7 +136,8 @@ SUITE_SRCS     := test_smoke test_unit_misc test_unit_strtoll test_unit_console 
                   test_kernel_message_args \
                   test_unit_message_args_production \
                   test_unit_overlay_message_args \
-                  test_kernel_graphics_client
+                  test_kernel_graphics_client \
+                  test_kernel_graphics_header
 
 KERNEL_OBJS := $(addprefix $(OBJ_DIR)/kernel_,$(addsuffix .o,$(KERNEL_SRCS)))
 USER_OBJS   := $(addprefix $(OBJ_DIR)/user_,$(addsuffix .o,$(USER_SRCS)))
@@ -211,6 +212,9 @@ $(OBJ_DIR)/suite_test_unit_vdp_keyboard.o: \
     ../userspace/usr/src/lib/vdp.drv/include/VdpKeyboard.h
 $(OBJ_DIR)/suite_test_unit_message_args_production.o: \
     TEST_CFLAGS += -UNANO_OS_MESSAGE_ARGS_CHECKED
+$(OBJ_DIR)/suite_test_kernel_graphics_client.o \
+$(OBJ_DIR)/suite_test_kernel_graphics_header.o: \
+    ../src/kernel/Graphics.h ../src/kernel/GraphicsProtocol.h
 $(OBJ_DIR)/suite_test_unit_agon_reset_keys.o: \
     ../src/hal/AgonLight2/AgonResetKeys.c \
     ../src/hal/AgonLight2/AgonResetKeys.h

@@ -96,7 +96,8 @@ void halMockSetFileCacheDepth(uint8_t depth);
 ///
 /// @brief Register a display driver with the scheduler at launch, as
 /// config.sys's GRAPHICS line does: the process in the given user slot,
-/// counted from the first user process, serving the program at clientPath.
+/// counted from the first user process, serving the program at clientPath
+/// and registered as GFX_DRIVER_PROCESS_NAME.
 /// The test starts the driver's process itself.  Must be called before
 /// halMockInit().
 void halMockSetGraphics(uint8_t driverSlot, const char *clientPath);

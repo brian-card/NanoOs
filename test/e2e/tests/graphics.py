@@ -24,12 +24,14 @@
 #                       https://github.com/brian-card
 #
 
-"""End-to-end tests of config.sys's GRAPHICS line: the display driver's
-registered name and the IPC grant to the program the line names."""
+"""End-to-end tests of config.sys's GRAPHICS line and the display driver's
+side of Graphics.h: the driver's registered name, the IPC grant to the
+program the line names, and the driver's answer to every client message."""
 
 import re
 
-from harness import VDP_CONFIG_SYS
+from harness import VDP_CONFIG_SYS, message_args_reports
+from tests.vdp_drv import assert_vdp_font
 
 
 GRAPHICS_LINE = "GRAPHICS=/system/drivers/vdp.drv /system/commands/gfxprobe\n"
@@ -61,7 +63,7 @@ def probe(s, mode):
     """Run gfxprobe as a system command.
 
     @param s The session.
-    @param mode The gfxprobe mode: "find" or "send".
+    @param mode The gfxprobe mode: "find", "send", "all" or "fonts".
 
     @return The probe's output lines, without dirtest's status line, and the
       probe's exit status.
@@ -84,7 +86,7 @@ def test_graphics_client_may_message_the_display_driver(s):
     boot(s, GRAPHICS_LINE)
     lines, status = probe(s, "send")
     assert lines == [f"gfxprobe: graphics driver is pid {vdp_pid(s)}",
-                     "gfxprobe: send done"], lines
+                     "gfxprobe: GET_ERROR not supported"], lines
     assert status == 0
 
 
@@ -92,7 +94,7 @@ def test_graphics_refuses_another_program(s):
     boot(s, "GRAPHICS=/system/drivers/vdp.drv /system/commands/passwd\n")
     lines, status = probe(s, "send")
     assert lines == [f"gfxprobe: graphics driver is pid {vdp_pid(s)}",
-                     "gfxprobe: send refused"], lines
+                     "gfxprobe: GET_ERROR device lost"], lines
     assert status == 1
 
 
@@ -122,5 +124,53 @@ def test_only_the_first_graphics_line_is_used(s):
          + GRAPHICS_LINE)
     lines, status = probe(s, "send")
     assert lines == [f"gfxprobe: graphics driver is pid {vdp_pid(s)}",
-                     "gfxprobe: send refused"], lines
+                     "gfxprobe: GET_ERROR device lost"], lines
     assert status == 1
+
+
+def test_graphics_driver_answers_every_client_message(s):
+    boot(s, GRAPHICS_LINE)
+    lines, status = probe(s, "all")
+    assert lines == [
+        f"gfxprobe: graphics driver is pid {vdp_pid(s)}",
+        "gfxprobe: OPEN_DISPLAY not supported",
+        "gfxprobe: CLOSE_DISPLAY no error",
+        "gfxprobe: GET_SURFACE_SIZE not supported",
+        "gfxprobe: UPLOAD_IMAGE not supported",
+        "gfxprobe: DESTROY_IMAGE no error",
+        "gfxprobe: GET_IMAGE_SIZE not supported",
+        "gfxprobe: UPLOAD_FONT no error",
+        "gfxprobe: DESTROY_FONT no error",
+        "gfxprobe: SET_DEFAULT_FONT no error",
+        "gfxprobe: SUBMIT not supported",
+        "gfxprobe: PREUPLOAD not supported",
+        "gfxprobe: DISCARD_PREUPLOAD no error",
+        "gfxprobe: FINISH not supported",
+        "gfxprobe: CAPTURE_RECT not supported",
+        "gfxprobe: GET_ERROR not supported",
+        "gfxprobe: SET_CURSOR not supported",
+        "gfxprobe: SHOW_CURSOR no error",
+        "gfxprobe: WARP_CURSOR no error",
+        "gfxprobe: WRONG_SIZE invalid state",
+    ], lines
+    assert status == 0
+    assert message_args_reports(s) == []
+    assert s.vdp.errors == [], s.vdp.errors
+    assert_vdp_font(s.vdp)
+
+
+def test_graphics_font_slots_are_reused_and_destroyed_fonts_refused(s):
+    boot(s, GRAPHICS_LINE)
+    lines, status = probe(s, "fonts")
+    uploads = []
+    for ii in range(1, 5):
+        uploads += [f"gfxprobe: upload {ii} no error 0xf101",
+                    "gfxprobe: destroy no error"]
+    assert lines == ([f"gfxprobe: graphics driver is pid {vdp_pid(s)}"]
+                     + uploads
+                     + ["gfxprobe: default destroyed invalid handle"]), lines
+    assert status == 0
+    assert message_args_reports(s) == []
+    assert s.vdp.errors == [], s.vdp.errors
+    assert 0xF101 not in s.vdp.fonts, sorted(s.vdp.fonts)
+    assert_vdp_font(s.vdp)
