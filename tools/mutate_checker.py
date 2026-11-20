@@ -13,6 +13,8 @@ import os, re, subprocess, sys, time
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 CHECKER = 'src/kernel/MessageArgs.c'
 HEADER = 'src/kernel/MessageArgs.h'
+OVERLAY_API = 'src/user/NanoOsApi.c'
+OVERLAY_HEADER = 'userspace/usr/include/ExecutiveProcesses.h'
 
 # (name, file, old, new, header?, tests that must fail); old and new may be
 # tuples of replacements made together.
@@ -118,6 +120,32 @@ MUTATIONS = [
      '#define MESSAGE_BUFFER_SHARE(ptr, size, direction, recipient) '
      '((void) (recipient), (void*) (ptr))',
      True, ['share_returns_the_buffer_unevaluated']),
+    ('overlay-api-share-is-identity', OVERLAY_API,
+     '  return MESSAGE_BUFFER_SHARE(ptr, size, direction, recipient);\n',
+     '  return ptr;\n', False,
+     ['overlay_in_buffer_is_a_copy',
+      'overlay_in_buffer_written_by_the_recipient_is_counted',
+      'overlay_out_buffer_is_copied_back_at_unshare']),
+    ('overlay-api-reports-production', OVERLAY_API,
+     '  .messageArgsChecked = true,\n', '  .messageArgsChecked = false,\n', False,
+     ['overlay_api_reports_the_checked_configuration']),
+    ('overlay-share-ignores-flag', OVERLAY_HEADER,
+     '#define MESSAGE_BUFFER_SHARE(ptr, size, direction, recipient) \\\n'
+     '  (messageArgsChecked() \\\n',
+     '#define MESSAGE_BUFFER_SHARE(ptr, size, direction, recipient) \\\n'
+     '  (1 \\\n', True,
+     ['production_share_returns_the_buffer_unevaluated']),
+    ('overlay-allocate-ignores-flag', OVERLAY_HEADER,
+     '  type *name = messageArgsChecked() \\\n', '  type *name = 1 \\\n', True,
+     ['production_allocate_uses_its_own_storage',
+      'no_executive_api_means_production']),
+    ('overlay-free-skipped', OVERLAY_HEADER,
+     '      messageArgsFree(name); \\\n', '', True,
+     ['checked_allocate_and_free_go_through_the_api']),
+    ('overlay-unshare-skipped', OVERLAY_HEADER,
+     '      messageBufferUnshare((void*) (shared), (void*) (original), \\\n'
+     '        (direction)); \\\n', '', True,
+     ['checked_share_and_unshare_go_through_the_api']),
 ]
 
 
@@ -126,13 +154,20 @@ def run(cmd):
 
 
 def results():
-    out = run('./test/bin/nano-os-test message_args').stdout
+    """Run the message_args suites.
+
+    @return (status, crashed): each reported test's name mapped to whether it
+      passed, and whether the test binary died of a signal, which leaves
+      every test after the crash unreported.
+    """
+    proc = run('./test/bin/nano-os-test message_args')
     status = {}
-    for line in out.splitlines():
+    for line in proc.stdout.splitlines():
         m = re.match(r'^(not ok|ok) \d+ - \S+/(\S+)', line)
         if m:
             status[m.group(2)] = m.group(1) == 'ok'
-    return status
+    # run() goes through a shell, which reports a signal as 128 + signal.
+    return status, (proc.returncode < 0) or (proc.returncode > 128)
 
 
 def main(names):
@@ -157,11 +192,18 @@ def main(names):
                 print(f'FAIL {name}: did not build\n{build.stderr[-2000:]}')
                 failures += 1
                 continue
-            status = results()
-            green = [t for t in tests if status.get(t, True)]
+            status, crashed = results()
+            missing = [t for t in tests if t not in status]
+            green = [t for t in tests if status.get(t, False)]
             if green:
                 print(f'FAIL {name}: still green: {" ".join(green)}')
                 failures += 1
+            elif missing and not crashed:
+                print(f'FAIL {name}: did not report: {" ".join(missing)}')
+                failures += 1
+            elif missing:
+                print(f'ok   {name}: {" ".join(tests)} went red '
+                      f'(the test binary crashed before {" ".join(missing)})')
             else:
                 print(f'ok   {name}: {" ".join(tests)} went red')
         finally:
@@ -170,10 +212,11 @@ def main(names):
             os.utime(full, (now, now))
     run('make -C test clean')
     build = run('make -C test build')
-    status = results()
+    status, crashed = results()
     red = [t for t, ok in status.items() if not ok]
-    print(f'restored: {len(status)} message_args tests, red after restore: {red or "none"}')
-    return 1 if failures or red or build.returncode != 0 else 0
+    print(f'restored: {len(status)} message_args tests, red after restore: '
+          f'{red or "none"}{", crashed" if crashed else ""}')
+    return 1 if failures or red or crashed or build.returncode != 0 else 0
 
 
 if __name__ == '__main__':
