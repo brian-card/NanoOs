@@ -177,8 +177,13 @@ typedef enum GfxMsgType {
 
     GFX_MSG_COUNT,
 
-    // Scheduler to driver: the driver's graphics client ended.
-    GFX_MSG_CLIENT_ENDED = 31,           // GfxClientEndedArgs
+    // Driver to client
+    GFX_MSG_INPUT_EVENTS = 24,
+    GFX_MSG_DISPLAY_REVOKED = 25,
+
+    // Scheduler to driver, one-way: the driver's graphics client ended.  The
+    // data pointer is the client's ProcessId, not a pointer to storage.
+    GFX_MSG_CLIENT_ENDED = 31,
 } GfxMsgType;
 
 /// @def GFX_NUM_MESSAGE_TYPES
@@ -187,6 +192,30 @@ typedef enum GfxMsgType {
 /// capability's message-type mask has to hold.  The types are not
 /// contiguous, so this is not a count.
 #define GFX_NUM_MESSAGE_TYPES (GFX_MSG_CLIENT_ENDED + 1)
+
+/// @def GFX_CLIENT_MESSAGE_MASK
+///
+/// @brief The message types a graphics client may send its driver.
+#define GFX_CLIENT_MESSAGE_MASK ((((uint32_t) 1) << GFX_MSG_COUNT) - 1)
+
+/// @def GFX_DRIVER_MESSAGE_MASK
+///
+/// @brief The message types a graphics driver may send its client.
+#define GFX_DRIVER_MESSAGE_MASK \
+  ((((uint32_t) 1) << GFX_MSG_INPUT_EVENTS) \
+  | (((uint32_t) 1) << GFX_MSG_DISPLAY_REVOKED))
+
+_Static_assert((GFX_CLIENT_MESSAGE_MASK & GFX_DRIVER_MESSAGE_MASK) == 0,
+  "A graphics message type can't go both ways");
+_Static_assert(
+  (GFX_CLIENT_MESSAGE_MASK & (((uint32_t) 1) << GFX_MSG_CLIENT_ENDED)) == 0,
+  "Only the scheduler may send GFX_MSG_CLIENT_ENDED");
+
+/// @def GFX_DRIVER_PROCESS_NAME
+///
+/// @brief The name the display driver from config.sys's GRAPHICS line is
+/// registered under, for findProcessByName.
+#define GFX_DRIVER_PROCESS_NAME "graphics"
 
 
 // =========================================================================
@@ -399,18 +428,6 @@ typedef struct GfxMsgGetError {
     uint8_t displayId;
 } GfxMsgGetError;
 
-
-/// @struct GfxClientEndedArgs
-///
-/// @brief The payload of GFX_MSG_CLIENT_ENDED, which the scheduler sends the
-/// graphics driver when its client exits, execs another program, or is
-/// removed.
-///
-/// @param pid The ProcessId of the client.  A uint8_t rather than ProcessId
-///   so that this header needs no kernel types.
-typedef struct GfxClientEndedArgs {
-    uint8_t pid;
-} GfxClientEndedArgs;
 
 
 // =========================================================================
