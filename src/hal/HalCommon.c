@@ -60,6 +60,7 @@
 #include "../kernel/BootTrace.h"
 #include "../kernel/Console.h"
 #include "../kernel/Coroutines.h"
+#include "../kernel/GraphicsProtocol.h"
 #include "../kernel/MemoryManager.h"
 #include "../kernel/NanoOs.h"
 #include "../kernel/Overlay.h"
@@ -1236,9 +1237,18 @@ int halCommonInitFileCache(uint8_t depth) {
 /// final binary on some targets.
 static const char _consoleProcessName[] KEEP_IN_FLASH = CONSOLE_PROCESS_NAME;
 
+/// @var _graphicsDriverName
+///
+/// @brief Name the display driver is registered under.
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _graphicsDriverName[] KEEP_IN_FLASH
+  = GFX_DRIVER_PROCESS_NAME;
+
 static int configSysGrantHardware(void);
 static int configSysStartShells(void);
 static int configSysQueueDevices(void);
+static __attribute__((noinline)) int configSysStartGraphics(void);
 
 /// @fn int halCommonLaunchProcesses(void)
 ///
@@ -1263,6 +1273,10 @@ int halCommonLaunchProcesses(void) {
   registerProcessName(_consoleProcessName, consolePid);
   int returnValue = configSysGrantHardware();
   bootTraceValue("hardware granted", returnValue);
+  int graphicsStatus = configSysStartGraphics();
+  if (graphicsStatus != 0) {
+    returnValue = graphicsStatus;
+  }
   int shellStatus = configSysStartShells();
   bootTraceValue("shells started, status", shellStatus);
   bootTraceValue("number of shells", (int) schedulerGetNumShells());
@@ -1349,10 +1363,13 @@ typedef struct ConfigSysConsole {
 /// @param hardware List of the HARDWARE lines, each parsed like a DEVICE line:
 ///   the device's path followed by the hardware it gets.
 /// @param consoles List of the consoles from CONSOLE lines, in file order.
+/// @param graphics The GRAPHICS line, parsed like a DEVICE line: the display
+///   driver's path followed by its client program's path, or NULL.
 typedef struct ConfigSys {
   ConfigSysDevice  *devices;
   ConfigSysDevice  *hardware;
   ConfigSysConsole *consoles;
+  ConfigSysDevice  *graphics;
 } ConfigSys;
 
 /// @var _configSys
@@ -1400,6 +1417,13 @@ static const char _configSysConsoleKeyword[] KEEP_IN_FLASH = "CONSOLE";
 /// @note KEEP_IN_FLASH is required here because .rodata is removed from the
 /// final binary on some targets.
 static const char _configSysHardwareKeyword[] KEEP_IN_FLASH = "HARDWARE";
+
+/// @var _configSysGraphicsKeyword
+/// @brief Keyword of a config.sys line that names the display driver and the
+/// program that may use it.
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _configSysGraphicsKeyword[] KEEP_IN_FLASH = "GRAPHICS";
 
 /// @var _configSysUartPrefix
 ///
@@ -1774,6 +1798,40 @@ static int configSysAddHardware(char *value, int lineNumber) {
   return 0;
 }
 
+/// @fn static int configSysAddGraphics(char *value, int lineNumber)
+///
+/// @brief Record the display driver and client program of a GRAPHICS line.
+/// The driver is resolved after the whole file has been read.  Kept out of
+/// line so that it loads into RAM on the Agon rather than growing
+/// halCommonLoadConfigSys in flash.
+///
+/// @param value The trimmed text after the '=' of a GRAPHICS line.
+/// @param lineNumber The line of config.sys the GRAPHICS line is on.
+///
+/// @return Returns 0 on success, -errno on failure.
+static __attribute__((noinline)) int configSysAddGraphics(char *value,
+  int lineNumber
+) {
+  if (_configSys->graphics != NULL) {
+    logError("More than one GRAPHICS line in %s\n", _configSysPath);
+    return -EEXIST;
+  }
+
+  ConfigSysDevice *graphics = configSysParseDevice(value);
+  if ((graphics == NULL) || (graphics->argv[1] == NULL)
+    || (graphics->argv[2] != NULL)
+  ) {
+    logError("Invalid graphics on line %d of %s\n",
+      lineNumber, _configSysPath);
+    schedFree(graphics);
+    return (graphics == NULL) ? -ENOMEM : -EINVAL;
+  }
+  pathCollapse(graphics->argv[1]);
+  _configSys->graphics = graphics;
+
+  return 0;
+}
+
 /// @fn static int configSysGrantUart(ProcessDescriptor *processDescriptor,
 ///   int uartId)
 ///
@@ -1836,6 +1894,40 @@ static int configSysGrantHardware(void) {
     }
   }
 
+  return returnValue;
+}
+
+/// @fn static int configSysStartGraphics(void)
+///
+/// @brief Register the display driver from config.sys's GRAPHICS line under
+/// GFX_DRIVER_PROCESS_NAME and tell the scheduler which program may use it.
+/// Kept out of line so that it loads into RAM on the Agon rather than growing
+/// halCommonLaunchProcesses in flash.
+///
+/// @return Returns 0 on success or if there is no GRAPHICS line, -errno if it
+/// could not be used.
+static __attribute__((noinline)) int configSysStartGraphics(void) {
+  ConfigSysDevice *graphics
+    = (_configSys != NULL) ? _configSys->graphics : NULL;
+  if (graphics == NULL) {
+    return 0;
+  }
+
+  ConfigSysDevice *device = configSysFindDevice(graphics->path);
+  if (device == NULL) {
+    logError("No device %s for graphics in %s\n",
+      graphics->path, _configSysPath);
+    return -ENOENT;
+  }
+
+  int returnValue = schedulerSetGraphics(device->pid, graphics->argv[1]);
+  if (returnValue == 0) {
+    returnValue = registerProcessName(_graphicsDriverName, device->pid);
+  }
+  if (returnValue != 0) {
+    logError("Could not use graphics device %s: %s\n",
+      graphics->path, strerror(-returnValue));
+  }
   return returnValue;
 }
 
@@ -1975,6 +2067,8 @@ static int configSysProcessLine(char *line, int lineNumber) {
     return configSysAddConsole(value, lineNumber);
   } else if (strcmp(keyword, _configSysHardwareKeyword) == 0) {
     return configSysAddHardware(value, lineNumber);
+  } else if (strcmp(keyword, _configSysGraphicsKeyword) == 0) {
+    return configSysAddGraphics(value, lineNumber);
   }
 
   logWarn("Unrecognized command on line %d of %s\n",
