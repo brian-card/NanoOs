@@ -166,6 +166,118 @@ static void vdpDestroyFont(VdpOutput *vdpOutput, GfxHandle font) {
   if (vdpOutput->ownerDefaultFont == slot) {
     vdpOutput->ownerDefaultFont = 0;
   }
+  if ((vdpOutput->draw != NULL) && (vdpOutput->draw->pen.font == slot)) {
+    vdpOutput->draw->pen.font = vdpOutput->ownerDefaultFont;
+  }
+}
+
+/// @fn static void vdpClearBuffer(GfxHandle id)
+///
+/// @brief Delete a VDP buffer, and the bitmap made from it, with
+/// VDU 23,0,&A0,id;2.
+///
+/// @param id The buffer's ID.
+///
+/// @return This function returns no value.
+static void vdpClearBuffer(GfxHandle id) {
+  const uint8_t clear[] = { 23, 0, 0xA0, VDP_WORD(id), 2 };
+  vdpWrite(clear, sizeof(clear));
+}
+
+/// @fn static void vdpDestroyImage(VdpOutput *vdpOutput, GfxHandle image)
+///
+/// @brief Delete an image and free its slot.
+///
+/// @param vdpOutput A pointer to the driver's VdpOutput.
+/// @param image The image's handle.
+///
+/// @return This function returns no value.
+static void vdpDestroyImage(VdpOutput *vdpOutput, GfxHandle image) {
+  VdpDrawState *draw = vdpOutput->draw;
+  uint8_t slot = vdpSlot(draw->imagesUsed, image, VDP_IMAGE_ID_BASE,
+    VDP_MAX_IMAGES);
+  if (slot < VDP_MAX_IMAGES) {
+    vdpClearBuffer(image);
+    draw->imagesUsed ^= (uint16_t) (1 << slot);
+  }
+}
+
+/// @fn static void vdpDiscardPreload(VdpOutput *vdpOutput, GfxHandle preload)
+///
+/// @brief Delete a preuploaded command buffer and free its slot.
+///
+/// @param vdpOutput A pointer to the driver's VdpOutput.
+/// @param preload The preload's handle.
+///
+/// @return This function returns no value.
+static void vdpDiscardPreload(VdpOutput *vdpOutput, GfxHandle preload) {
+  VdpDrawState *draw = vdpOutput->draw;
+  uint8_t slot = vdpSlot(draw->preloadsUsed, preload, VDP_PRELOAD_ID_BASE,
+    VDP_MAX_PRELOADS);
+  if (slot < VDP_MAX_PRELOADS) {
+    vdpClearBuffer(preload);
+    draw->preloadsUsed ^= (uint16_t) (1 << slot);
+  }
+}
+
+/// @fn static uint8_t vdpFinish(VdpOutput *vdpOutput, ProcessMessage *message)
+///
+/// @brief Hold a GFX_MSG_FINISH until the VDP has drawn everything sent
+/// before it:  flush its drawing queue with VDU 23,0,&CA, then send a general
+/// poll, whose reply the main overlay waits for.  Each poll takes the next
+/// cookie, so that the late reply to one whose GFX_MSG_FINISH was revoked
+/// can't end the next.  Clearing graphicsMessage tells the main overlay not
+/// to mark the message done.
+///
+/// @param vdpOutput A pointer to the driver's VdpOutput.
+/// @param message The message.
+///
+/// @return Returns GFX_OK, which stays the status if the VDP answers, or
+/// GFX_ERR_INVALID_STATE if a GFX_MSG_FINISH is already held.
+static uint8_t vdpFinish(VdpOutput *vdpOutput, ProcessMessage *message) {
+  if (vdpOutput->finishMessage != NULL) {
+    return GFX_ERR_INVALID_STATE;
+  }
+  uint8_t cookie = (uint8_t) (vdpOutput->input->pollCookie + 1);
+  if ((cookie < VDP_FINISH_POLL_COOKIE) || (cookie > VDP_LAST_POLL_COOKIE)) {
+    cookie = VDP_FINISH_POLL_COOKIE;
+  }
+  const uint8_t finish[] = {
+    23, 0, 0xCA,
+    23, 0, 0x80, cookie
+  };
+  vdpOutput->input->pollCookie = cookie;
+  vdpOutput->input->pollAnswered = false;
+  vdpWrite(finish, sizeof(finish));
+  vdpOutput->nextPollNs = vdpNowNs() + VDP_GENERAL_POLL_TIMEOUT_NS;
+  vdpOutput->finishMessage = message;
+  vdpOutput->graphicsMessage = NULL;
+  return GFX_OK;
+}
+
+/// @fn static void vdpFinishDone(VdpOutput *vdpOutput, uint8_t status)
+///
+/// @brief Mark the held GFX_MSG_FINISH done with a status, or, if the status
+/// is VDP_UNKNOWN, release it untouched, since its sender has ended and its
+/// arguments are gone with it.
+///
+/// @param vdpOutput A pointer to the driver's VdpOutput.
+/// @param status The GfxError to answer with, or VDP_UNKNOWN.
+///
+/// @return This function returns no value.
+static void vdpFinishDone(VdpOutput *vdpOutput, uint8_t status) {
+  ProcessMessage *message = vdpOutput->finishMessage;
+  if (message == NULL) {
+    return;
+  }
+  vdpOutput->finishMessage = NULL;
+  vdpOutput->nextPollNs = INT64_MAX;
+  if (status == VDP_UNKNOWN) {
+    processMessageRelease(message);
+    return;
+  }
+  ((GfxFinishArgs*) processMessageData(message))->status = status;
+  processMessageSetDone(message);
 }
 
 /// @var _vdpEnterGraphics
@@ -173,12 +285,16 @@ static void vdpDestroyFont(VdpOutput *vdpOutput, GfxHandle font) {
 /// @brief VDU commands that give the display to its owner:  select context 1,
 /// which the VDP makes as a copy of the console's context 0
 /// (VDU 23,0,&C8,0,1), use pixel coordinates (VDU 23,0,&C0,0), turn the text
-/// cursor off (VDU 23,1,0), reset the viewports (VDU 26) and the graphics
-/// origin (VDU 29,0;0;), and clear the screen (VDU 16).
+/// cursor off (VDU 23,1,0), draw text at the graphics cursor (VDU 5) without
+/// wrapping it at the viewport's edge (VDU 23,16,&40,&BF), reset the
+/// viewports (VDU 26) and the graphics origin (VDU 29,0;0;), and clear the
+/// screen (VDU 16).
 static const uint8_t _vdpEnterGraphics[] = {
   23, 0, 0xC8, 0, 1,
   23, 0, 0xC0, 0,
   23, 1, 0,
+  5,
+  23, 16, 0x40, 0xBF,
   26,
   29, 0, 0, 0, 0,
   16
@@ -208,12 +324,40 @@ static void vdpFreeFonts(VdpOutput *vdpOutput) {
   }
 }
 
+/// @fn static void vdpFreeImages(VdpOutput *vdpOutput)
+///
+/// @brief Delete every image a display owner uploaded or captured.
+///
+/// @param vdpOutput A pointer to the driver's VdpOutput.
+///
+/// @return This function returns no value.
+static void vdpFreeImages(VdpOutput *vdpOutput) {
+  for (uint8_t slot = 0; slot < VDP_MAX_IMAGES; slot++) {
+    vdpDestroyImage(vdpOutput, (GfxHandle) (VDP_IMAGE_ID_BASE + slot));
+  }
+}
+
+/// @fn static void vdpFreePreloads(VdpOutput *vdpOutput)
+///
+/// @brief Delete every command buffer a display owner preuploaded.
+///
+/// @param vdpOutput A pointer to the driver's VdpOutput.
+///
+/// @return This function returns no value.
+static void vdpFreePreloads(VdpOutput *vdpOutput) {
+  for (uint8_t slot = 0; slot < VDP_MAX_PRELOADS; slot++) {
+    vdpDiscardPreload(vdpOutput, (GfxHandle) (VDP_PRELOAD_ID_BASE + slot));
+  }
+}
+
 /// @var _vdpOwnerFrees
 ///
 /// @brief The functions that free each kind of resource a display owner can
 /// create, all of which run when ownership ends.
 static void (*const _vdpOwnerFrees[])(VdpOutput *vdpOutput) = {
   vdpFreeFonts,
+  vdpFreeImages,
+  vdpFreePreloads,
 };
 
 /// @fn static void vdpHoldReplay(VdpOutput *vdpOutput)
@@ -251,7 +395,9 @@ static void vdpHoldReplay(VdpOutput *vdpOutput) {
 ///
 /// @brief End the display's ownership:  free everything the owner created,
 /// give the screen back to the console's context, and have the console's
-/// held text redrawn from the top of a cleared screen.
+/// held text redrawn from the top of a cleared screen.  A GFX_MSG_FINISH the
+/// owner is waiting on is answered with GFX_ERR_NOT_OWNER if the owner is
+/// still running, which only a revoke leaves it.
 ///
 /// @param vdpOutput A pointer to the driver's VdpOutput.
 /// @param revoke Whether to tell the owner with GFX_MSG_DISPLAY_REVOKED,
@@ -259,11 +405,14 @@ static void vdpHoldReplay(VdpOutput *vdpOutput) {
 ///
 /// @return This function returns no value.
 static void vdpRelease(VdpOutput *vdpOutput, bool revoke) {
+  vdpFinishDone(vdpOutput, (revoke == true) ? GFX_ERR_NOT_OWNER : VDP_UNKNOWN);
   for (uint8_t ii = 0;
     ii < sizeof(_vdpOwnerFrees) / sizeof(_vdpOwnerFrees[0]); ii++
   ) {
     _vdpOwnerFrees[ii](vdpOutput);
   }
+  free(vdpOutput->draw);
+  vdpOutput->draw = NULL;
   vdpOutput->ownerDefaultFont = 0;
   vdpWrite(_vdpLeaveGraphics, sizeof(_vdpLeaveGraphics));
   vdpOutput->textState.row = 0;
@@ -303,17 +452,33 @@ static void vdpRelease(VdpOutput *vdpOutput, bool revoke) {
 /// @param args The message's arguments.
 ///
 /// @return Returns GFX_OK on success, GFX_ERR_DISPLAY_BUSY if another process
-/// owns the display, or GFX_ERR_OUT_OF_MEMORY if there was no memory to hold
-/// the console's text.
+/// owns the display or the driver hasn't finished setting up the screen, whose
+/// setup would undo the owner's drawing, or GFX_ERR_OUT_OF_MEMORY if there was
+/// no memory to hold the console's text.
 static uint8_t vdpOpenDisplay(VdpOutput *vdpOutput,
   ProcessDescriptor *sender, GfxOpenDisplayArgs *args
 ) {
-  if (vdpOutput->owner == PROCESS_ID_NOT_SET) {
+  if (vdpOutput->listening == false) {
+    return GFX_ERR_DISPLAY_BUSY;
+  } else if (vdpOutput->owner == PROCESS_ID_NOT_SET) {
+    VdpDrawState *draw = (VdpDrawState*) calloc(1, sizeof(VdpDrawState));
     vdpOutput->heldText = (VdpOutputBuffer*) malloc(sizeof(VdpOutputBuffer));
-    if (vdpOutput->heldText == NULL) {
+    if ((draw == NULL) || (vdpOutput->heldText == NULL)) {
+      free(draw);
+      free(vdpOutput->heldText);
+      vdpOutput->heldText = NULL;
       return GFX_ERR_OUT_OF_MEMORY;
     }
     vdpOutput->heldText->length = 0;
+    draw->clip[0].w = VDP_SCREEN_WIDTH;
+    draw->clip[0].h = VDP_SCREEN_HEIGHT;
+    draw->vdpClip = draw->clip[0];
+    draw->pen.fg = CGA_INDEX_WHITE;
+    draw->pen.vdpFg = VDP_UNKNOWN;
+    draw->pen.vdpBg = VDP_UNKNOWN;
+    draw->pen.vdpBlend = VDP_UNKNOWN;
+    draw->pen.vdpFont = VDP_UNKNOWN;
+    vdpOutput->draw = draw;
     vdpOutput->owner = processPid(sender);
     vdpOutput->ownerDescriptor = sender;
     vdpWrite(_vdpEnterGraphics, sizeof(_vdpEnterGraphics));
@@ -407,6 +572,20 @@ static void vdpHandleGraphics(VdpOutput *vdpOutput, ProcessMessage *message,
       ((GfxSetDefaultFontArgs*) payload)->handle);
   } else if (type == GFX_MSG_DESTROY_FONT) {
     vdpDestroyFont(vdpOutput, ((GfxHandleArgs*) payload)->handle);
+  } else if ((type == GFX_MSG_UPLOAD_IMAGE) || (type == GFX_MSG_GET_IMAGE_SIZE)
+    || (type == GFX_MSG_CAPTURE_RECT)
+  ) {
+    // The Images overlay answers in the arguments, which keep the client's
+    // GFX_ERR_DEVICE_LOST if the overlay can't be called.
+    callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Images", "vdpImages",
+      vdpOutput);
+    status = *((uint8_t*) payload);
+  } else if (type == GFX_MSG_DESTROY_IMAGE) {
+    vdpDestroyImage(vdpOutput, ((GfxHandleArgs*) payload)->handle);
+  } else if (type == GFX_MSG_DISCARD_PREUPLOAD) {
+    vdpDiscardPreload(vdpOutput, ((GfxHandleArgs*) payload)->handle);
+  } else if (type == GFX_MSG_FINISH) {
+    status = vdpFinish(vdpOutput, message);
   }
 
   if (oneWay == true) {
@@ -512,7 +691,8 @@ void* vdpReportSize(void *args) {
 /// @brief Answer the GraphicsProtocol.h message in the driver's
 /// graphicsMessage, ignoring any other message.  GFX_MSG_CLIENT_ENDED carries
 /// a ProcessId, not storage, and ends the display's ownership if that process
-/// owns it.
+/// owns it.  With no message, finish the held GFX_MSG_FINISH once the VDP has
+/// answered its poll, or with GFX_ERR_DEVICE_LOST once it is too late to.
 ///
 /// @param args A pointer to the driver's VdpOutput.
 ///
@@ -521,7 +701,13 @@ void* vdpGraphics(void *args) {
   VdpOutput *vdpOutput = (VdpOutput*) args;
   ProcessMessage *message = vdpOutput->graphicsMessage;
 
-  if ((processMessageType(message) & ~((int64_t) 0xff))
+  if (message == NULL) {
+    if (vdpOutput->input->pollAnswered == true) {
+      vdpFinishDone(vdpOutput, GFX_OK);
+    } else if (vdpNowNs() >= vdpOutput->nextPollNs) {
+      vdpFinishDone(vdpOutput, GFX_ERR_DEVICE_LOST);
+    }
+  } else if ((processMessageType(message) & ~((int64_t) 0xff))
     == GFX_COMMAND_SIGNATURE
   ) {
     uint8_t type = (uint8_t) processMessageType(message);
