@@ -287,6 +287,7 @@ void* vdpStartup(void *args) {
   memset(vdpOutput, 0, sizeof(*vdpOutput));
   vdpOutput->owner = PROCESS_ID_NOT_SET;
   input->output = vdpOutput;
+  vdpOutput->input = input;
   vdpOutput->textState.numColumns = VDP_SCREEN_WIDTH / VDP_SYSTEM_GLYPH_SIZE;
   vdpOutput->textState.numRows = VDP_SCREEN_HEIGHT / VDP_SYSTEM_GLYPH_SIZE;
   vdpOutput->sizeChanged = true;
@@ -332,13 +333,15 @@ static void vdpSendScreenSetup(VdpInput *input, VdpOutput *vdpOutput) {
 /// @fn static void vdpFinishSetup(VdpOutput *vdpOutput)
 ///
 /// @brief Start drawing on the VDP once it has finished the screen setup, and
-/// draw the output buffered until then.
+/// draw the output buffered until then.  No poll is due until a
+/// GFX_MSG_FINISH sends one.
 ///
 /// @param vdpOutput A pointer to the driver's VdpOutput.
 ///
 /// @return This function returns no value.
 static void vdpFinishSetup(VdpOutput *vdpOutput) {
   vdpOutput->listening = true;
+  vdpOutput->nextPollNs = INT64_MAX;
   if (vdpOutput->buffer != NULL) {
     vdpWrite(vdpOutput->buffer->data, vdpOutput->buffer->length);
     free(vdpOutput->buffer);
@@ -403,13 +406,30 @@ static void vdpLoadBuiltInFont(VdpOutput *vdpOutput) {
   vdpOutput->textState.resizeReportWanted = vdpOutput->textState.resizeReports;
 }
 
+/// @fn static void vdpClearOwnerBuffers(void)
+///
+/// @brief Delete the images and preuploads that a display owner of an
+/// earlier run of the driver left on the VDP, with VDU 23,0,&A0,id;2.
+///
+/// @return This function returns no value.
+static void vdpClearOwnerBuffers(void) {
+  for (uint8_t slot = 0; slot < VDP_MAX_IMAGES; slot++) {
+    const uint8_t clear[] = {
+      23, 0, 0xA0, VDP_WORD(VDP_IMAGE_ID_BASE + slot), 2,
+      23, 0, 0xA0, VDP_WORD(VDP_PRELOAD_ID_BASE + slot), 2
+    };
+    vdpWrite(clear, sizeof(clear));
+  }
+}
+
 /// @fn static void vdpHandshake(VdpStartupArgs *startupArgs)
 ///
 /// @brief Send the general poll until the VDP answers it or the wait times
 /// out, then set up the screen, and again once the poll that follows the
 /// setup, which is sent the same way, is answered or times out.  If it was
-/// answered, the built-in font is loaded first:  until then the VDP may be
-/// busy resetting the mouse, and the font overflows its receive buffer.
+/// answered, an earlier owner's buffers are deleted and the built-in font is
+/// loaded first:  until then the VDP may be busy resetting the mouse, and the
+/// font overflows its receive buffer.
 ///
 /// @param startupArgs A pointer to the driver's VdpStartupArgs.
 ///
@@ -433,6 +453,7 @@ static void vdpHandshake(VdpStartupArgs *startupArgs) {
   }
 
   if ((vdpOutput->screenSetUp == true) && (input->pollAnswered == true)) {
+    vdpClearOwnerBuffers();
     vdpLoadBuiltInFont(vdpOutput);
   }
   vdpSetupScreen(startupArgs);
