@@ -190,11 +190,13 @@ class Session:
         return int(self.child.match.group(1))
 
     def write_file(self, path, text):
-        """Stop the simulator and write a file into this session's image."""
+        """Stop the simulator and write a file, text or bytes, into this
+        session's image."""
         if self.child.isalive():
             self.child.terminate(force=True)
+        data = text if isinstance(text, bytes) else text.encode()
         subprocess.run(["mcopy", "-o", "-i", self.img_copy + "@@2097152", "-",
-                        "::" + image_path(path)], input=text.encode(),
+                        "::" + image_path(path)], input=data,
                        env=dict(os.environ, MTOOLS_SKIP_CHECK="1"), check=True)
 
     def restart_with_file(self, path, text):

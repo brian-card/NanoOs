@@ -515,7 +515,13 @@ def test_vdp_console_inserts_and_deletes_rows(s):
     # termtest waits for input, so the insertion is the last thing it writes.
     vdp.type("termtest insert 2 2\r")
     vdp.wait_grid(shows(["a", "", "", "b", "c", "d", "e"], []))
-    assert (vdp.grid_row, vdp.grid_column) == (1, 0)
+    # VDU 26 homes the cursor before the VDU 31 that puts it on row 1.
+    deadline = time.time() + 5
+    while (vdp.grid_row, vdp.grid_column) != (1, 0) \
+            and time.time() < deadline:
+        time.sleep(0.05)
+    assert (vdp.grid_row, vdp.grid_column) == (1, 0), \
+        (vdp.grid_row, vdp.grid_column)
     vdp.type("\r")
     vdp.expect(PROMPT + r"$")
     vdp.type("termtest delete 2 2\r")
