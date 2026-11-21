@@ -112,6 +112,65 @@ class BytesConnection:
         return data
 
 
+class FakeVdpContextTest(unittest.TestCase):
+    """VDU 23,0,&C8 context select and delete in the VDP model."""
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.vdp = FakeVdp(os.path.join(self.directory.name, "vdp"),
+                           answer=False)
+        self.send([17, 4, 17, 129, 31, 5, 3, 23, 1, 1])
+
+    def tearDown(self):
+        self.vdp.close()
+        self.directory.cleanup()
+
+    def send(self, data):
+        """Have the fake VDP read bytes.
+
+        @param data The bytes.
+        """
+        self.vdp._read(BytesConnection(data))
+
+    def state(self):
+        """Return the fields of the active context that the tests set.
+
+        @return (text_fg, text_bg, grid_row, grid_column, logical_coords,
+          cursor_enabled).
+        """
+        vdp = self.vdp
+        return (vdp.text_fg, vdp.text_bg, vdp.grid_row, vdp.grid_column,
+                vdp.logical_coords, vdp.cursor_enabled)
+
+    def test_selecting_back_restores_the_first_context_exactly(self):
+        self.send([23, 0, 0xC8, 0, 1])
+        self.assertEqual((4, 1, 3, 5, True, True), self.state())
+        self.send([17, 2, 17, 128, 31, 0, 0, 23, 0, 0xC0, 0, 23, 1, 0]
+                  + list(b"x"))
+        self.assertEqual((2, 0, 0, 1, False, False), self.state())
+        self.send([23, 0, 0xC8, 0, 0])
+        self.assertEqual(0, self.vdp.context_id)
+        self.assertEqual((4, 1, 3, 5, True, True), self.state())
+        self.send([23, 0, 0xC8, 0, 1])
+        self.assertEqual((2, 0, 0, 1, False, False), self.state())
+        self.assertEqual("x", self.vdp.grid_lines()[0])
+        self.assertEqual([], self.vdp.errors)
+
+    def test_deleting_the_active_context_does_nothing(self):
+        self.send([23, 0, 0xC8, 0, 1, 17, 2, 23, 0, 0xC8, 1, 1])
+        self.send([23, 0, 0xC8, 0, 0, 23, 0, 0xC8, 0, 1])
+        self.assertEqual(2, self.vdp.text_fg)
+
+    def test_a_deleted_context_comes_back_as_a_copy(self):
+        self.send([23, 0, 0xC8, 0, 1, 17, 2, 23, 0, 0xC8, 0, 0])
+        self.send([23, 0, 0xC8, 1, 1, 23, 0, 0xC8, 0, 1])
+        self.assertEqual((4, 1, 3, 5, True, True), self.state())
+        selects = [detail for _time, kind, detail in self.vdp.events
+                   if kind == "context"]
+        self.assertEqual([("select", 1), ("select", 0), ("delete", 1),
+                          ("select", 1)], selects)
+
+
 class FakeVdpScrollTest(unittest.TestCase):
     """VDU 28, VDU 26, and VDU 23,7 in the fake VDP."""
 

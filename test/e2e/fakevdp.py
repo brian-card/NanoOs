@@ -32,6 +32,13 @@ The simulator connects UART0 to the Unix socket named by NANO_OS_SIM_UART0.
 FakeVdp listens on that socket, parses the VDU stream vdp.drv sends, and sends
 keyboard packets back.  Like the real VDP, it ignores everything but general
 polls until it has answered one.
+
+Contexts (VDU 23,0,&C8) are modelled for select and delete only.  A context
+holds the text cursor, text viewport, font, text colours, cursor behaviour
+and visibility, and the logical-coordinates flag; the grid of characters on
+the screen is shared, as the real VDP's pixels are.  Graphics colours,
+origin, paint options, and a context's own stack (commands 2 to 7) aren't
+modelled; those commands are recorded as errors.
 """
 
 import os
@@ -62,6 +69,8 @@ KEYCODE_KEYPAD_NAVIGATION = [129, 136, 153, 149, 155, 158, 157, 134, 151,
 KEYCODE_SCROLLLOCK = 139
 KEYCODE_NUMLOCK = 140
 KEYCODE_CAPSLOCK = 141
+KEYMOD_CTRL = 1 << 0
+KEYMOD_ALT_LEFT = 1 << 2
 KEYMOD_CAPS_LOCK = 1 << 4
 KEYMOD_NUM_LOCK = 1 << 5
 KEYMOD_SCROLL_LOCK = 1 << 6
@@ -103,6 +112,18 @@ COPPER = 0xC4
 COPPER_RESET_SIGNALS = 4
 CONSOLE_MODE = 0xFE
 SPRITES_RESET = 16
+LOGICAL_COORDS = 0xC0
+CONTEXT = 0xC8
+CONTEXT_SELECT = 0
+CONTEXT_DELETE = 1
+PACKET_MODE = 0x86
+COLOUR_DEPTH = 16
+# The state each VDP context keeps of its own.
+CONTEXT_FIELDS = ("grid_row", "grid_column", "grid_columns", "grid_rows",
+                  "viewport", "font", "cursor_behaviour", "cursor_enabled",
+                  "logical_coords", "text_fg", "text_bg")
+DEFAULT_TEXT_FG = 15
+DEFAULT_TEXT_BG = 0
 ALL_BUFFERS = 0xFFFF
 LAYOUT_UK = 0
 # The real VDP's UART receive buffer, which bytes sent while it is busy
@@ -191,6 +212,13 @@ class FakeVdp:
         # The text viewport set by VDU 28 as (left, top, right, bottom) cells,
         # or None for the whole screen.
         self.viewport = None
+        self.cursor_enabled = True
+        self.logical_coords = True
+        self.text_fg = DEFAULT_TEXT_FG
+        self.text_bg = DEFAULT_TEXT_BG
+        self.context_id = 0
+        self.contexts = {}     # context ID -> its fields, for inactive ones
+        self.mode = 0
         self.mouse_enabled = False
         self.mouse_cursor = None
         self.mouse = mouse
@@ -238,10 +266,20 @@ class FakeVdp:
                             self.palette = {}
                             self.font = None
                             self.viewport = None
+                            self.logical_coords = True
+                            self.cursor_enabled = True
+                            self.text_fg = DEFAULT_TEXT_FG
+                            self.text_bg = DEFAULT_TEXT_BG
+                            self.mode = mode
                         self._event("mode", mode)
                 elif byte == 17:
                     colour = next(stream)
                     if self.listening:
+                        with self.lock:
+                            if colour & 0x80:
+                                self.text_bg = colour & 0x7F
+                            else:
+                                self.text_fg = colour
                         self._event("colour", colour)
                 elif byte == 19:
                     logical, physical, red, green, blue = (
@@ -265,6 +303,16 @@ class FakeVdp:
                         self.viewport = None
                         self.cursor = 0
                         self.grid_row = self.grid_column = 0
+                        self.lock.notify_all()
+                elif byte == 29:
+                    origin = (self._word(stream), self._word(stream))
+                    if self.listening:
+                        self._event("origin", origin)
+                elif byte == 16:
+                    self._event("clg")
+                    with self.lock:
+                        self.grid = [[" "] * self.grid_columns
+                                     for _ in range(self.grid_rows)]
                         self.lock.notify_all()
                 elif byte == 12:
                     self._event("cls")
@@ -341,6 +389,14 @@ class FakeVdp:
                     self.errors.append(f"VDU 23,0,&85,{channel},{sub}")
             elif command == FONT:
                 self._font(stream)
+            elif command == CONTEXT:
+                self._context(next(stream), next(stream))
+            elif command == LOGICAL_COORDS:
+                setting = next(stream)
+                if self.listening:
+                    with self.lock:
+                        self.logical_coords = setting != 0
+                    self._event("logical", setting)
             elif command == KEYSTATE:
                 state = (self._word(stream), self._word(stream), next(stream))
                 if state[2] != 255:
@@ -359,6 +415,9 @@ class FakeVdp:
         elif first == 1:
             mode = next(stream)
             if self.listening:
+                if mode in (0, 1):
+                    with self.lock:
+                        self.cursor_enabled = mode == 1
                 self._event("cursor", mode)
         elif first == SCROLL:
             extent, direction, movement = (next(stream) for _ in range(3))
@@ -375,6 +434,46 @@ class FakeVdp:
                 self._event("behaviour", (setting, mask))
         else:
             self.errors.append(f"VDU 23,{first}")
+
+    def _context(self, command, context_id):
+        """Select or delete a context, as VDU 23,0,&C8 does.  Selecting an ID
+        that doesn't exist yet copies the current context, and selecting
+        sends a mode packet back.  Deleting the active context does nothing.
+
+        @param command CONTEXT_SELECT or CONTEXT_DELETE.
+        @param context_id The context's ID.
+        """
+        if not self.listening:
+            return
+        if command == CONTEXT_SELECT:
+            with self.lock:
+                self.contexts[self.context_id] = {
+                    field: getattr(self, field) for field in CONTEXT_FIELDS}
+                for field, value in self.contexts.get(
+                        context_id, self.contexts[self.context_id]).items():
+                    setattr(self, field, value)
+                self.contexts.pop(context_id, None)
+                self.context_id = context_id
+                conn = self.conn
+                packet = bytes([PACKET_MODE, 8,
+                                SCREEN_WIDTH & 0xFF, SCREEN_WIDTH >> 8,
+                                SCREEN_HEIGHT & 0xFF, SCREEN_HEIGHT >> 8,
+                                self.grid_columns, self.grid_rows,
+                                COLOUR_DEPTH, self.mode])
+                self.lock.notify_all()
+            if conn is not None:
+                try:
+                    conn.sendall(packet)
+                except OSError:
+                    pass
+            self._event("context", ("select", context_id))
+        elif command == CONTEXT_DELETE:
+            with self.lock:
+                if context_id != self.context_id:
+                    self.contexts.pop(context_id, None)
+            self._event("context", ("delete", context_id))
+        else:
+            self.errors.append(f"VDU 23,0,&C8,{command}")
 
     def _reset_event(self, command, detail=None):
         if self.listening:
@@ -867,6 +966,43 @@ class FakeVdp:
         conn.sendall(bytes([0x81, 0x04, 0, 0, code, 1,
                             0x81, 0x04, 0, 0, code, 0]))
         time.sleep(0.01)
+
+    def release_display(self):
+        """Press and release Ctrl+Alt+Backspace, which takes the display back
+        from its owner.  Outside ownership it is an ordinary Backspace."""
+        with self.lock:
+            conn = self.conn
+            modifiers = self._modifiers() | KEYMOD_CTRL | KEYMOD_ALT_LEFT
+        conn.sendall(bytes([0x81, 0x04, 8, modifiers, KEYCODE_BACKSPACE, 1,
+                            0x81, 0x04, 8, modifiers, KEYCODE_BACKSPACE, 0]))
+        time.sleep(0.01)
+
+    def context_events(self):
+        """Return the context selects and deletes received, in order.
+
+        @return A list of ("select", id) and ("delete", id).
+        """
+        with self.lock:
+            return [detail for _time, kind, detail in self.events
+                    if kind == "context"]
+
+    def wait_context_events(self, count, timeout=15):
+        """Wait until a number of context selects and deletes have arrived.
+
+        @param count The number to wait for.
+        @param timeout Seconds to wait.
+
+        @return The list context_events() returns.
+        """
+        deadline = time.time() + timeout
+        while len(self.context_events()) < count:
+            if time.time() > deadline:
+                raise AssertionError(
+                    f"only these context commands arrived: "
+                    f"{self.context_events()!r}")
+            with self.lock:
+                self.lock.wait(0.1)
+        return self.context_events()
 
     def type(self, text):
         """Type a string, one key at a time.
