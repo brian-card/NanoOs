@@ -87,8 +87,8 @@ typedef uint16_t GfxHandle;
 // Blend mode applied to draw operations.
 //
 // GFX_BLEND_OPAQUE   - overwrite destination (VDP GCOL mode 0)
-// GFX_BLEND_AND      - AND with destination   (VDP GCOL mode 1)
-// GFX_BLEND_OR       - OR with destination    (VDP GCOL mode 2)
+// GFX_BLEND_AND      - AND with destination   (VDP GCOL mode 2)
+// GFX_BLEND_OR       - OR with destination    (VDP GCOL mode 1)
 // GFX_BLEND_XOR      - XOR with destination   (VDP GCOL mode 3)
 // GFX_BLEND_INVERT   - invert destination      (VDP GCOL mode 4)
 typedef enum GfxBlendMode {
@@ -102,7 +102,7 @@ typedef enum GfxBlendMode {
 // Pixel format for uploaded images.
 typedef enum GfxPixelFmt {
   GFX_FMT_RGBA8888 = 0,  // 4 bytes/pixel: R G B A
-  GFX_FMT_RGBA2222,      // 1 byte/pixel:  RR GG BB AA packed
+  GFX_FMT_RGBA2222,      // 1 byte/pixel:  RR GG BB AA packed, red highest
   GFX_FMT_RGB888,        // 3 bytes/pixel: R G B (alpha treated as 0xFF)
 } GfxPixelFmt;
 
@@ -122,7 +122,8 @@ typedef enum GfxError {
   GFX_ERR_INVALID_STATE,      // API misuse
   GFX_ERR_DEVICE_LOST,        // the driver is gone or never answered
   GFX_ERR_NOT_SUPPORTED,      // feature not available in this driver
-  GFX_ERR_DISPLAY_BUSY,       // another process owns the display
+  GFX_ERR_DISPLAY_BUSY,       // another process owns the display, or the
+                              // driver is still setting it up
   GFX_ERR_NOT_OWNER,          // the sender doesn't own the display
 } GfxError;
 
@@ -363,7 +364,17 @@ typedef struct GfxInputEventsArgs {
 // Every coordinate in a record is relative to the origin.  The clip is the
 // viewport intersected with the top of the scissor stack, which holds
 // GFX_MAX_SCISSOR_DEPTH entries; pushing onto a full stack or popping an
-// empty one sets the driver's sticky error, and the record is ignored.
+// empty one sets the driver's sticky error, and the record is ignored.  An
+// unknown or short record, or a bad handle, stops the buffer.  An opened
+// display starts with the whole screen as its viewport, the origin at
+// (0,0), a white foreground, a black background, GFX_BLEND_OPAQUE, and the
+// default font.
+//
+// A preupload holds only color, blend, font and drawing records, and no
+// GFX_CMD_DRAW_SUB_IMAGE or GFX_CMD_CALL.  It starts with the colors, blend
+// and font current when it was uploaded, draws relative to the origin and
+// inside the clip current when it is called, and leaves the caller's colors,
+// blend and font as they were.
 // =========================================================================
 
 typedef enum GfxCmdType {
