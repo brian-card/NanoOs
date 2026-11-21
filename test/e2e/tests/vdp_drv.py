@@ -78,13 +78,14 @@ CGA_BLACK = 0
 CGA_WHITE = 15
 
 
-# What vdp.drv sends to undo the state an eZ80 reset leaves on the VDP, as
-# FakeVdp records it: (VDU 23,0 or VDU 23 command, detail).
+# What vdp.drv sends to undo the state an eZ80 reset or an earlier run of the
+# driver leaves on the VDP, as FakeVdp records it:  (VDU 23,0 or VDU 23
+# command, detail), then the context selected and deleted.
 VDP_RESET = [
     (0xC1, 0), (0x98, 1), (0xFE, 0), (27, None), (0xA0, 0xFFFF), (0x91, None),
     (0xC4, 4), (0x85, ("rate", 255, 16384)),
 ] + [(0x85, ("reset", channel)) for channel in range(32)] + [
-    (0x88, (500, 100, 0)),
+    (0x88, (500, 100, 0)), ("select", 0), ("delete", 1),
 ]
 
 

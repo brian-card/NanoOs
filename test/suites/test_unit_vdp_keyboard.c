@@ -424,3 +424,24 @@ NANO_OS_TEST(unit_vdp_keyboard, lock_presses_and_other_releases_change_nothing) 
   NANO_OS_ASSERT_FALSE(numLock);
   NANO_OS_ASSERT_EQ_INT(0xff, leds);
 }
+
+NANO_OS_TEST(unit_vdp_keyboard, ctrl_alt_backspace_going_down_is_the_release_key) {
+  uint8_t keyData[4] = { 8, AGON_KEYMOD_CTRL | AGON_KEYMOD_ALT_LEFT,
+    KEYCODE_BACKSPACE, 1 };
+  NANO_OS_ASSERT_TRUE(vdpIsReleaseKey(keyData));
+  keyData[1] = AGON_KEYMOD_CTRL | AGON_KEYMOD_ALT_RIGHT | AGON_KEYMOD_SHIFT;
+  NANO_OS_ASSERT_TRUE(vdpIsReleaseKey(keyData));
+}
+
+NANO_OS_TEST(unit_vdp_keyboard, anything_short_of_ctrl_alt_backspace_down_is_not) {
+  const uint8_t notRelease[][4] = {
+    { 8, AGON_KEYMOD_CTRL | AGON_KEYMOD_ALT_LEFT, KEYCODE_BACKSPACE, 0 },
+    { 8, AGON_KEYMOD_CTRL, KEYCODE_BACKSPACE, 1 },
+    { 8, AGON_KEYMOD_ALT_LEFT, KEYCODE_BACKSPACE, 1 },
+    { 8, 0, KEYCODE_BACKSPACE, 1 },
+    { 0, AGON_KEYMOD_CTRL | AGON_KEYMOD_ALT_LEFT, KEYCODE_DELETE, 1 },
+  };
+  for (size_t ii = 0; ii < sizeof(notRelease) / sizeof(notRelease[0]); ii++) {
+    NANO_OS_ASSERT_FALSE(vdpIsReleaseKey(notRelease[ii]));
+  }
+}
