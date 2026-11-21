@@ -122,6 +122,88 @@ extern "C"
 /// for each font a client can upload.
 #define VDP_MAX_FONTS (1 + GFX_MAX_FONTS)
 
+/// @def VDP_MAX_IMAGES
+///
+/// @brief The number of images a display owner can have at once.
+#define VDP_MAX_IMAGES 16
+
+/// @def VDP_IMAGE_ID_BASE
+///
+/// @brief The ID of the VDP buffer and bitmap of image slot 0.  Each slot
+/// after it takes the next ID, which is also the image's GfxHandle.
+#define VDP_IMAGE_ID_BASE 0xF200
+
+/// @def VDP_MAX_PRELOADS
+///
+/// @brief The number of preuploaded command buffers a display owner can have
+/// at once.
+#define VDP_MAX_PRELOADS 16
+
+/// @def VDP_PRELOAD_ID_BASE
+///
+/// @brief The ID of the VDP buffer of preload slot 0.  Each slot after it
+/// takes the next ID, which is also the preload's GfxHandle.
+#define VDP_PRELOAD_ID_BASE 0xF300
+
+GFX_STATIC_ASSERT(VDP_MAX_IMAGES == VDP_MAX_PRELOADS,
+  "The Startup overlay clears an image and a preload slot together");
+
+/// @def VDP_UNKNOWN
+///
+/// @brief A VdpPen value the VDP may not have, which is always sent.
+#define VDP_UNKNOWN 0xFF
+
+/// @struct VdpPen
+///
+/// @brief The colors, blend mode and font records draw with, and what the VDP
+/// has of each, so that only changes are sent.
+///
+/// @param fg The CGA index of the foreground.
+/// @param bg The CGA index of the background.
+/// @param blend The GfxBlendMode.
+/// @param font The font slot.
+/// @param vdpFg The foreground the VDP has, or VDP_UNKNOWN.
+/// @param vdpBg The background the VDP has, or VDP_UNKNOWN.
+/// @param vdpBlend The blend mode the VDP has, or VDP_UNKNOWN.
+/// @param vdpFont The font slot the VDP has selected, or VDP_UNKNOWN.
+typedef struct VdpPen {
+  uint8_t fg;
+  uint8_t bg;
+  uint8_t blend;
+  uint8_t font;
+  uint8_t vdpFg;
+  uint8_t vdpBg;
+  uint8_t vdpBlend;
+  uint8_t vdpFont;
+} VdpPen;
+
+/// @struct VdpDrawState
+///
+/// @brief The drawing state and resources of the display's owner, allocated
+/// when the display is opened and freed when its ownership ends.
+///
+/// @param origin The screen position of records' (0,0).
+/// @param clip The viewport, in screen coordinates and on the screen, then
+///   each scissor intersected with the entry below it.
+/// @param clipDepth The index in clip of the current clip.
+/// @param vdpClip The graphics viewport the VDP has.
+/// @param pen The pen records draw with.
+/// @param imagesUsed A bit for each image slot that holds an image.
+/// @param preloadsUsed A bit for each preload slot that holds a preload.
+/// @param imageWidths The width of the image in each slot.
+/// @param imageHeights The height of the image in each slot.
+typedef struct VdpDrawState {
+  GfxPoint origin;
+  GfxRect  clip[GFX_MAX_SCISSOR_DEPTH + 1];
+  uint8_t  clipDepth;
+  GfxRect  vdpClip;
+  VdpPen   pen;
+  uint16_t imagesUsed;
+  uint16_t preloadsUsed;
+  uint16_t imageWidths[VDP_MAX_IMAGES];
+  uint16_t imageHeights[VDP_MAX_IMAGES];
+} VdpDrawState;
+
 /// @struct VdpInput
 ///
 /// @brief State of the keyboard input the driver forwards to the console.
@@ -175,7 +257,9 @@ typedef struct VdpInput {
 /// @param textState The state of the translation of the console's text.
 /// @param listening Whether the VDP is drawing what the driver writes.  The
 ///   VDP ignores everything until it has answered a general poll.
-/// @param nextPollNs When to send the next general poll, in nanoseconds.
+/// @param nextPollNs When to send the next general poll, or to stop waiting
+///   for the reply to a GFX_MSG_FINISH's, in nanoseconds:  INT64_MAX while
+///   neither is due.
 /// @param giveUpNs When to stop waiting for the VDP to answer, in nanoseconds.
 /// @param screenSetUp Whether the screen setup has been sent, so that the
 ///   poll being waited on is the one that follows it.
@@ -196,6 +280,12 @@ typedef struct VdpInput {
 ///   owned, untranslated.  Allocated exactly while the display is owned.
 /// @param replayText The held text to draw once the console has the display
 ///   back, or NULL.
+/// @param draw The owner's drawing state, or NULL while the console has the
+///   display.
+/// @param finishMessage The owner's GFX_MSG_FINISH waiting on the VDP's
+///   reply to a general poll, or NULL.
+/// @param input A pointer to the driver's VdpInput, whose poll cookie a
+///   GFX_MSG_FINISH uses.
 typedef struct VdpOutput {
   VdpTextState       textState;
   bool               listening;
@@ -214,6 +304,9 @@ typedef struct VdpOutput {
   uint8_t            error;
   VdpOutputBuffer   *heldText;
   char              *replayText;
+  VdpDrawState      *draw;
+  ProcessMessage    *finishMessage;
+  struct VdpInput   *input;
 } VdpOutput;
 
 /// @struct VdpStartupArgs
@@ -231,6 +324,58 @@ typedef struct VdpStartupArgs {
 
 uint8_t vdpUploadFontSlot(VdpOutput *vdpOutput, uint8_t slot,
   const GfxUploadFontArgs *font);
+void vdpWriteZeros(size_t length);
+
+/// @fn static inline uint8_t vdpSlot(uint16_t used, GfxHandle handle,
+///   GfxHandle base, uint8_t numSlots)
+///
+/// @brief Get the slot of an image or preload from its handle.
+///
+/// @param used A bit for each slot that is used.
+/// @param handle The handle.
+/// @param base The handle of slot 0.
+/// @param numSlots The number of slots.
+///
+/// @return Returns the slot, or numSlots if the handle names no used slot.
+static inline uint8_t vdpSlot(uint16_t used, GfxHandle handle,
+  GfxHandle base, uint8_t numSlots
+) {
+  uint16_t slot = (uint16_t) (handle - base);
+  if ((slot >= numSlots) || (((used >> slot) & 1) == 0)) {
+    return numSlots;
+  }
+  return (uint8_t) slot;
+}
+
+/// @fn static inline void vdpSetError(VdpOutput *vdpOutput, uint8_t error)
+///
+/// @brief Make an error the sticky error unless there already is one.
+///
+/// @param vdpOutput A pointer to the driver's VdpOutput.
+/// @param error The GfxError.
+///
+/// @return This function returns no value.
+static inline void vdpSetError(VdpOutput *vdpOutput, uint8_t error) {
+  if (vdpOutput->error == GFX_OK) {
+    vdpOutput->error = error;
+  }
+}
+
+/// @fn static inline uint8_t vdpFreeSlot(uint16_t used, uint8_t numSlots)
+///
+/// @brief Find the first slot that isn't used.
+///
+/// @param used A bit for each slot that is used.
+/// @param numSlots The number of slots.
+///
+/// @return Returns the slot, or numSlots if every slot is used.
+static inline uint8_t vdpFreeSlot(uint16_t used, uint8_t numSlots) {
+  uint8_t slot = 0;
+  while ((slot < numSlots) && (((used >> slot) & 1) != 0)) {
+    slot++;
+  }
+  return slot;
+}
 
 /// @fn static inline int64_t vdpNowNs(void)
 ///
