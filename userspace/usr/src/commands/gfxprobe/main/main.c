@@ -113,9 +113,66 @@ static int sendEveryType(void) {
   return probeArgs.status;
 }
 
+/// @fn static char** expandSteps(int numArgs, char **args, char **scripts,
+///   int *numSteps)
+///
+/// @brief Make the list of steps of the "do" mode:  its arguments, each one
+/// that is "@" and a path replaced by the words of that file, which keeps a
+/// long sequence within the console's line length.
+///
+/// @param numArgs The number of arguments after "do".
+/// @param args The arguments after "do".
+/// @param scripts Where to keep the contents of up to four files, which the
+///   steps point into and the caller frees.
+/// @param numSteps Where to store the number of steps.
+///
+/// @return Returns the steps, which the caller frees, or NULL on failure.
+static char** expandSteps(int numArgs, char **args, char **scripts,
+  int *numSteps
+) {
+  int numScripts = 0;
+  int capacity = numArgs;
+  for (int ii = 0; ii < numArgs; ii++) {
+    if ((args[ii][0] != '@') || (numScripts == 4)) {
+      continue;
+    }
+    size_t length = 0;
+    scripts[numScripts] = (char*) readFile(&args[ii][1], &length);
+    if (scripts[numScripts] == NULL) {
+      printf("gfxprobe: can't read %s\n", &args[ii][1]);
+      return NULL;
+    }
+    capacity += (int) (length / 2) + 1;
+    numScripts++;
+  }
+
+  char **steps = (char**) malloc(sizeof(char*) * (size_t) capacity);
+  if (steps == NULL) {
+    return NULL;
+  }
+  int count = 0;
+  numScripts = 0;
+  for (int ii = 0; ii < numArgs; ii++) {
+    if ((args[ii][0] != '@') || (numScripts == 4)) {
+      steps[count++] = args[ii];
+      continue;
+    }
+    char *word = scripts[numScripts++];
+    while (*(word += strspn(word, " \t\r\n")) != '\0') {
+      steps[count++] = word;
+      word += strcspn(word, " \t\r\n");
+      if (*word != '\0') {
+        *word++ = '\0';
+      }
+    }
+  }
+  *numSteps = count;
+  return steps;
+}
+
 int main(int argc, char **argv) {
   if ((argc == 2) && (strcmp(argv[1], "--help") == 0)) {
-    printf("Usage: gfxprobe find|send|all|fonts|do <step>...\n");
+    printf("Usage: gfxprobe find|send|all|fonts|do <step>|@<file>...\n");
     return 0;
   } else if ((argc == 2) && (strcmp(argv[1], "find") == 0)) {
     ProcessId pid = 0;
@@ -127,17 +184,24 @@ int main(int argc, char **argv) {
   } else if ((argc == 2) && (strcmp(argv[1], "all") == 0)) {
     return sendEveryType();
   } else if ((argc > 2) && (strcmp(argv[1], "do") == 0)) {
-    StepsArgs stepsArgs = {
-      .numSteps = argc - 2, .steps = &argv[2], .status = 1,
-    };
-    if (callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Steps", "gfxprobeSteps",
-      &stepsArgs) != &stepsArgs
+    StepsArgs stepsArgs = { .numSteps = 0, .steps = NULL, .status = 1 };
+    char *scripts[4] = { NULL };
+    stepsArgs.steps = expandSteps(argc - 2, &argv[2], scripts,
+      &stepsArgs.numSteps);
+    if ((stepsArgs.steps == NULL)
+      || (callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Steps",
+        "gfxprobeSteps", &stepsArgs) != &stepsArgs)
     ) {
-      return 1;
+      stepsArgs.status = 1;
+    }
+    free(stepsArgs.steps);
+    for (size_t ii = 0; ii < sizeof(scripts) / sizeof(scripts[0]); ii++) {
+      free(scripts[ii]);
     }
     return stepsArgs.status;
   }
 
-  fprintf(stderr, "Usage: gfxprobe find|send|all|fonts|do <step>...\n");
+  fprintf(stderr,
+    "Usage: gfxprobe find|send|all|fonts|do <step>|@<file>...\n");
   return 2;
 }

@@ -66,7 +66,8 @@ static void holdUntilRevoked(void) {
 /// @brief Carry out a sequence of steps against the display driver, printing
 /// the result of each:  "open", "close", "error", "font" (upload the probe's
 /// font), "hold" (wait until the display is taken back), "print <text>",
-/// "burst <count>" (print that many numbered lines), and "sleep <seconds>".
+/// "burst <count>" (print that many numbered lines), "sleep <seconds>", and
+/// the Paint and Media overlays' steps.
 ///
 /// @param numSteps The number of words in steps.
 /// @param steps The steps and their arguments.
@@ -85,6 +86,8 @@ static int runSteps(int numSteps, char **steps) {
   }
 
   int returnValue = 0;
+  struct timespec mark;
+  timespec_get(&mark, TIME_UTC);
   for (int ii = 0; ii < numSteps; ii++) {
     const char *step = steps[ii];
     const char *argument = (ii + 1 < numSteps) ? steps[ii + 1] : "";
@@ -121,9 +124,22 @@ static int runSteps(int numSteps, char **steps) {
       sleep((unsigned int) strtol(argument, NULL, 10));
       ii++;
     } else {
-      printf("gfxprobe: unknown step %s\n", step);
-      returnValue = 2;
-      break;
+      PaintArgs paintArgs = {
+        .disp = &disp, .words = &steps[ii], .numWords = numSteps - ii,
+        .consumed = 0, .mark = &mark,
+      };
+      callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Paint", "gfxprobePaint",
+        &paintArgs);
+      if (paintArgs.consumed == 0) {
+        callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Media", "gfxprobeMedia",
+          &paintArgs);
+      }
+      if (paintArgs.consumed == 0) {
+        printf("gfxprobe: unknown step %s\n", step);
+        returnValue = 2;
+        break;
+      }
+      ii += paintArgs.consumed - 1;
     }
   }
 

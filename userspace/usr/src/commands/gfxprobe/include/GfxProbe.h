@@ -38,6 +38,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include "ExecutiveProcesses.h"
 #include "../../../src/kernel/Graphics.h"
 
@@ -70,6 +71,25 @@ typedef struct StepsArgs {
   char **steps;
   int    status;
 } StepsArgs;
+
+/// @struct PaintArgs
+///
+/// @brief The arguments of the Paint overlay's gfxprobePaint and the Media
+/// overlay's gfxprobeMedia, each of which carries out one step.
+///
+/// @param disp The display.
+/// @param words The step, then the words after it.
+/// @param numWords The number of words at words.
+/// @param consumed Set to the number of words the step used, left 0 if the
+///   step isn't one of the overlay's.
+/// @param mark The time of the last "time" step, or of the first step.
+typedef struct PaintArgs {
+  GfxDisplay      *disp;
+  char           **words;
+  int              numWords;
+  int              consumed;
+  struct timespec *mark;
+} PaintArgs;
 
 /// @fn static inline int findDriver(ProcessId *pid)
 ///
@@ -133,6 +153,31 @@ static inline void* probeFont(GfxFontDesc *desc) {
   desc->bitmap = bitmap;
   desc->size = PROBE_FONT_SIZE;
   return bitmap;
+}
+
+/// @fn static inline void* readFile(const char *path, size_t *size)
+///
+/// @brief Read a whole file into memory, with a NUL after it.
+///
+/// @param path The file's path.
+/// @param size Where to store the number of bytes read.
+///
+/// @return Returns the bytes, which the caller frees, or NULL on failure.
+static inline void* readFile(const char *path, size_t *size) {
+  FILE *file = fopen(path, "r");
+  if (file == NULL) {
+    return NULL;
+  }
+  fseek(file, 0, SEEK_END);
+  long length = ftell(file);
+  fseek(file, 0, SEEK_SET);
+  char *data = (char*) malloc((size_t) length + 1);
+  if (data != NULL) {
+    *size = fread(data, 1, (size_t) length, file);
+    data[*size] = '\0';
+  }
+  fclose(file);
+  return data;
 }
 
 #endif // GFX_PROBE_H
