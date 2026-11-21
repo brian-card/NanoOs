@@ -516,25 +516,6 @@ static void vdpScissor(VdpWalk *walk, uint8_t tag, const int16_t *words) {
   }
 }
 
-/// @fn static uint8_t vdpChannelBits(uint8_t channel)
-///
-/// @brief Round an 8-bit color channel to 2 bits as colorChannelTo2Bits
-/// does, with comparisons, which the eZ80 does far faster than its division.
-///
-/// @param channel The channel.
-///
-/// @return Returns the channel's 2 bits.
-static uint8_t vdpChannelBits(uint8_t channel) {
-  if (channel < 43) {
-    return 0;
-  } else if (channel < 128) {
-    return 1;
-  } else if (channel < 213) {
-    return 2;
-  }
-  return 3;
-}
-
 /// @fn static uint8_t vdpSetPen(VdpWalk *walk, uint8_t tag,
 ///   const uint8_t *params)
 ///
