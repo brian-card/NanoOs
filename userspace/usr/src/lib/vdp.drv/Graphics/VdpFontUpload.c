@@ -29,7 +29,8 @@
 ///
 /// @brief Uploading a font to one of the driver's font slots, which both the
 /// Startup overlay, for the built-in font, and the Graphics overlay, for a
-/// client's, link.
+/// client's, link, and writing zeros, which the Graphics overlay also uses
+/// for an image uploaded without pixels.
 
 #include "VdpDriver.h"
 
@@ -39,14 +40,14 @@
 /// for.
 static const uint8_t _vdpZeros[32] = { 0 };
 
-/// @fn static void vdpWriteZeros(size_t length)
+/// @fn void vdpWriteZeros(size_t length)
 ///
 /// @brief Write zero bytes to the VDP.
 ///
 /// @param length The number of zero bytes to write.
 ///
 /// @return This function returns no value.
-static void vdpWriteZeros(size_t length) {
+void vdpWriteZeros(size_t length) {
   while (length > 0) {
     size_t chunk
       = (length < sizeof(_vdpZeros)) ? length : sizeof(_vdpZeros);
