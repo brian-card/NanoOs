@@ -61,6 +61,19 @@ extern "C"
 /// VDP_GENERAL_POLL_COOKIE.
 #define VDP_SETUP_POLL_COOKIE 0x4f
 
+/// @def VDP_FINISH_POLL_COOKIE
+///
+/// @brief The first of the bytes the driver sends with the general polls that
+/// answer a client's GFX_MSG_FINISH once the VDP has drawn everything before
+/// it.  Each poll takes the next byte, up to VDP_LAST_POLL_COOKIE.
+#define VDP_FINISH_POLL_COOKIE 0x50
+
+/// @def VDP_LAST_POLL_COOKIE
+///
+/// @brief The highest poll cookie, below 0x80 for the same reason as
+/// VDP_GENERAL_POLL_COOKIE.
+#define VDP_LAST_POLL_COOKIE 0x7F
+
 /// @def VDP_PACKET_KEYBOARD
 ///
 /// @brief The command of a VDP keyboard event packet.
