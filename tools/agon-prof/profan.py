@@ -65,7 +65,10 @@ for elf in glob.glob(os.path.join(repo, "userspace/usr/obj/**/overlay.elf"), rec
     if "contiguous-filesystem" in rel:
         continue
     with tempfile.NamedTemporaryFile(suffix=".bin") as tmp:
-        subprocess.run([OBJCOPY, "-O", "binary", elf, tmp.name], check=True)
+        # A host build can leave non-eZ80 overlays in the same tree.
+        if subprocess.run([OBJCOPY, "-O", "binary", elf, tmp.name],
+                          capture_output=True).returncode != 0:
+            continue
         fp = fingerprint(tmp.read())
     if fp in overlays:
         print("fingerprint clash:", rel, overlays[fp][0], file=sys.stderr)
