@@ -240,5 +240,188 @@ class FakeVdpScrollTest(unittest.TestCase):
         self.assertEqual(3, len(self.vdp.errors), self.vdp.errors)
 
 
+def word(value):
+    """Return a 16-bit VDU argument's two bytes, low byte first."""
+    return [value & 0xFF, (value >> 8) & 0xFF]
+
+
+def plot(command, point_x, point_y):
+    """Return the bytes of VDU 25,command,point_x;point_y;."""
+    return [25, command] + word(point_x) + word(point_y)
+
+
+RED, BLUE, WHITE, BLACK = 4, 1, 15, 0
+
+
+class FakeVdpCanvasTest(unittest.TestCase):
+    """The fake VDP's pixels, in pixel coordinates."""
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.vdp = FakeVdp(os.path.join(self.directory.name, "vdp"),
+                           answer=False)
+        self.send([23, 0, 0xC0, 0])
+
+    def tearDown(self):
+        self.vdp.close()
+        self.directory.cleanup()
+
+    def send(self, data):
+        """Have the fake VDP read bytes.
+
+        @param data The bytes.
+        """
+        self.vdp._read(BytesConnection(data))
+
+    def assert_pixels(self, expected):
+        """Check pixels of the canvas.
+
+        @param expected A dictionary of (x, y) to palette index.
+        """
+        actual = {point: self.vdp.pixel(*point) for point in expected}
+        self.assertEqual(expected, actual)
+
+    def test_a_filled_rectangle_covers_both_corners_exactly(self):
+        self.send([18, 0, RED] + plot(4, 10, 20) + plot(0x65, 19, 29))
+        self.assert_pixels({(10, 20): RED, (19, 29): RED, (19, 20): RED,
+                            (9, 20): BLACK, (20, 20): BLACK,
+                            (10, 19): BLACK, (10, 30): BLACK})
+        self.assertEqual([], self.vdp.errors)
+
+    def test_a_line_includes_both_ends_unless_the_last_is_left_out(self):
+        self.send([18, 0, RED] + plot(4, 5, 5) + plot(5, 15, 5))
+        self.send(plot(4, 5, 7) + plot(0x0D, 15, 7))
+        self.assert_pixels({(4, 5): BLACK, (5, 5): RED, (15, 5): RED,
+                            (16, 5): BLACK, (5, 7): RED, (14, 7): RED,
+                            (15, 7): BLACK})
+
+    def test_the_graphics_viewport_clips_with_bottom_as_the_second_corner(
+            self):
+        self.send([24] + word(10) + word(29) + word(19) + word(20))
+        self.send([18, 0, RED] + plot(4, 0, 0) + plot(0x65, 639, 479))
+        self.assert_pixels({(9, 25): BLACK, (10, 25): RED, (19, 25): RED,
+                            (20, 25): BLACK, (15, 19): BLACK, (15, 20): RED,
+                            (15, 29): RED, (15, 30): BLACK})
+        self.assertEqual(1, self.vdp.count_events("gviewport"))
+
+    def test_a_viewport_off_the_screen_is_ignored(self):
+        self.send([24] + word(10) + word(500) + word(19) + word(20))
+        self.assertEqual((0, 0, 639, 479), self.vdp.gviewport)
+        self.assertEqual(1, len(self.vdp.errors))
+
+    def test_clearing_fills_the_viewport_with_the_background(self):
+        self.send([18, 0, 128 + BLUE, 24] + word(10) + word(29) + word(19)
+                  + word(20) + [16])
+        self.assert_pixels({(10, 20): BLUE, (19, 29): BLUE, (9, 20): BLACK,
+                            (20, 29): BLACK, (19, 30): BLACK})
+
+    def test_the_origin_offsets_points(self):
+        self.send([29] + word(100) + word(50) + [18, 0, RED] + plot(4, 1, 2)
+                  + plot(0x65, 1, 2))
+        self.assert_pixels({(101, 52): RED, (1, 2): BLACK})
+
+    def test_xor_paints_on_the_palette_index(self):
+        self.send([18, 0, RED] + plot(4, 0, 0) + plot(0x65, 3, 0))
+        self.send([18, 3, WHITE] + plot(4, 2, 0) + plot(0x65, 5, 0))
+        self.assert_pixels({(1, 0): RED, (2, 0): RED ^ WHITE,
+                            (4, 0): WHITE})
+
+    def test_a_triangle_fills_inside_and_not_outside(self):
+        self.send([18, 0, RED] + plot(4, 100, 100) + plot(4, 200, 100)
+                  + plot(0x55, 100, 200))
+        self.assert_pixels({(120, 120): RED, (101, 190): RED,
+                            (190, 190): BLACK, (99, 150): BLACK})
+
+    def test_circles_have_the_radius_of_the_relative_point(self):
+        self.send([18, 0, RED] + plot(4, 100, 100) + plot(0x99, 10, 0))
+        self.assert_pixels({(100, 100): RED, (105, 100): RED,
+                            (100, 112): BLACK, (112, 100): BLACK})
+        self.send([18, 0, BLUE] + plot(4, 300, 100) + plot(0x91, 10, 0))
+        self.assert_pixels({(310, 100): BLUE, (300, 90): BLUE,
+                            (300, 100): BLACK, (305, 100): BLACK})
+
+    def test_a_copy_lands_with_its_bottom_left_on_the_point(self):
+        self.send([18, 0, RED] + plot(4, 50, 50) + plot(0x65, 53, 52))
+        self.send([18, 0, BLUE] + plot(4, 50, 50) + plot(0x45, 50, 50))
+        self.send(plot(4, 50, 50) + plot(4, 53, 52) + plot(0xBE, 60, 72))
+        self.assertEqual([[BLUE, RED, RED, RED, BLACK]] + [[RED] * 4
+                         + [BLACK]] * 2 + [[BLACK] * 5],
+                         self.vdp.pixels(60, 70, 5, 4))
+        self.assertEqual(BLACK, self.vdp.pixel(60, 69))
+
+    def test_a_copy_draws_only_inside_the_viewport(self):
+        self.send([18, 0, RED] + plot(4, 0, 0) + plot(0x65, 9, 9))
+        self.send([24] + word(20) + word(100) + word(24) + word(0))
+        self.send(plot(4, 0, 0) + plot(4, 9, 9) + plot(0xBE, 20, 9))
+        self.assert_pixels({(20, 0): RED, (24, 9): RED, (25, 0): BLACK})
+
+    def test_bitmaps_skip_pixels_whose_alpha_is_0(self):
+        # The VDP's RGBA2222 has red in the low bits and alpha in the high.
+        opaque_red = 0x02 | 0xC0
+        self.send([18, 0, WHITE] + plot(4, 0, 0) + plot(0x65, 9, 9))
+        self.send([23, 0, 0xA0] + word(0xF200) + [0] + word(2)
+                  + [opaque_red, 0x02])
+        self.send([23, 27, 0x20] + word(0xF200) + [23, 27, 0x21] + word(2)
+                  + word(1) + [1] + plot(0xED, 4, 4))
+        self.assert_pixels({(4, 4): RED, (5, 4): WHITE})
+        pixels = bytes([0xAA, 0, 0, 0xFF, 0, 0, 0xAA, 0])
+        self.send([23, 0, 0xA0] + word(0xF201) + [0] + word(8) + list(pixels))
+        self.send([23, 27, 0x20] + word(0xF201) + [23, 27, 0x21] + word(2)
+                  + word(1) + [0] + plot(0xED, 4, 6))
+        self.assert_pixels({(4, 6): RED, (5, 6): WHITE})
+        self.assertEqual([], self.vdp.errors)
+
+    def test_a_capture_is_the_screen_between_the_last_two_points(self):
+        self.send([18, 0, RED] + plot(4, 10, 10) + plot(0x65, 11, 10))
+        self.send(plot(4, 10, 10) + plot(4, 12, 11) + [23, 27, 0x21]
+                  + word(0xF202) + word(0))
+        self.assertEqual((3, 2), self.vdp.bitmaps[0xF202][:2])
+        self.send([23, 27, 0x20] + word(0xF202) + plot(0xED, 100, 100))
+        self.assertEqual([[RED, RED, BLACK], [BLACK] * 3],
+                         self.vdp.pixels(100, 100, 3, 2))
+
+    def test_a_buffer_call_carries_out_its_bytes(self):
+        body = [18, 0, RED] + plot(4, 1, 1) + plot(0x65, 2, 2)
+        self.send([23, 0, 0xA0] + word(0xF300) + [0] + word(len(body)) + body)
+        self.assertEqual(BLACK, self.vdp.pixel(1, 1))
+        self.send([29] + word(10) + word(0) + [23, 0, 0xA0] + word(0xF300)
+                  + [1])
+        self.assert_pixels({(11, 1): RED, (12, 2): RED, (1, 1): BLACK})
+
+    def upload_font(self):
+        """Upload an 8x8 font to buffer 0xF100 whose glyphs are each one row
+        of a set pixel per bit of the character code, and select it at the
+        graphics cursor, which can't wrap."""
+        glyphs = []
+        for code in range(256):
+            glyphs += [code] + [0] * 7
+        self.send([23, 0, 0xA0] + word(0xF100) + [0] + word(len(glyphs))
+                  + glyphs + [23, 0, 0x95, 1] + word(0xF100) + [8, 8, 8, 0])
+        self.send([5, 23, 16, 0x40, 0xBF, 23, 0, 0x95, 0] + word(0xF100)
+                  + [0])
+
+    def test_text_at_the_graphics_cursor_draws_glyphs_in_the_foreground(
+            self):
+        self.upload_font()
+        self.send([18, 0, RED] + plot(4, 10, 20) + [0x81, 27, 10])
+        self.assertEqual([RED] + [BLACK] * 6 + [RED]
+                         + [BLACK] * 4 + [RED, BLACK, RED, BLACK],
+                         self.vdp.pixels(10, 20, 16, 1)[0])
+        self.assertEqual(BLACK, self.vdp.pixel(10, 21))
+        self.assertEqual([], self.vdp.errors)
+
+    def test_control_codes_at_the_graphics_cursor_are_errors(self):
+        self.upload_font()
+        self.send(plot(4, 10, 20) + [10])
+        self.assertEqual(["control code 10 at the graphics cursor"],
+                         self.vdp.errors)
+
+    def test_graphics_text_that_can_wrap_is_an_error(self):
+        self.upload_font()
+        self.send([23, 16, 0, 0xBF, 0x41])
+        self.assertEqual(["text at the graphics cursor can wrap"],
+                         self.vdp.errors)
+
+
 if __name__ == "__main__":
     unittest.main()
