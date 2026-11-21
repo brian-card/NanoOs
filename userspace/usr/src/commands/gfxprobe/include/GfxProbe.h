@@ -58,6 +58,19 @@ typedef struct ProbeArgs {
   int         status;
 } ProbeArgs;
 
+/// @struct StepsArgs
+///
+/// @brief The arguments of the Steps overlay's gfxprobeSteps.
+///
+/// @param numSteps The number of words in steps.
+/// @param steps The steps and their arguments.
+/// @param status The steps' exit status.
+typedef struct StepsArgs {
+  int    numSteps;
+  char **steps;
+  int    status;
+} StepsArgs;
+
 /// @fn static inline int findDriver(ProcessId *pid)
 ///
 /// @brief Look up the display driver and print what was found.

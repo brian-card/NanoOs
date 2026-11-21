@@ -37,8 +37,8 @@
 
 /// @fn void* gfxprobeResources(void *args)
 ///
-/// @brief Send the display driver each display, image and font message type
-/// once, in protocol order, and print each result.
+/// @brief Open the display, then send the display driver each image and font
+/// message type once, in protocol order, and print each result.
 ///
 /// @param args A pointer to the ProbeArgs, whose status is set to 0 if
 ///   there was memory for the font and 1 otherwise.
@@ -55,13 +55,11 @@ void* gfxprobeResources(void *args) {
     return args;
   }
 
-  GfxDisplay opened;
   GfxHandle handle = GFX_INVALID_HANDLE;
   GfxImageDesc image = { 1, 1, GFX_FMT_RGBA2222, NULL, 1 };
   uint16_t width = 0, height = 0;
-  report("OPEN_DISPLAY", gfxOpenDisplay(&opened, GFX_DRIVER_PROCESS_NAME,
+  report("OPEN_DISPLAY", gfxOpenDisplay(disp, GFX_DRIVER_PROCESS_NAME,
     640, 480));
-  report("CLOSE_DISPLAY", gfxCloseDisplay(disp));
   report("GET_SURFACE_SIZE", gfxGetSurfaceSize(disp, &width, &height));
   report("UPLOAD_IMAGE", gfxUploadImage(disp, &image, &handle));
   report("DESTROY_IMAGE", gfxDestroyImage(disp, 1));

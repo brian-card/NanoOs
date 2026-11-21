@@ -53,8 +53,9 @@ static int sendToDriver(void) {
 
 /// @fn static int cycleFonts(void)
 ///
-/// @brief Upload and destroy a font four times, printing each handle, then
-/// try to make the destroyed font the default.
+/// @brief Open the display, upload and destroy a font four times, printing
+/// each handle, try to make the destroyed font the default, and close the
+/// display.
 ///
 /// @return Returns 0 if there was memory for the font, nonzero otherwise.
 static int cycleFonts(void) {
@@ -69,6 +70,7 @@ static int cycleFonts(void) {
     return 1;
   }
 
+  report("open", gfxOpenDisplay(&disp, GFX_DRIVER_PROCESS_NAME, 640, 480));
   GfxHandle handle = GFX_INVALID_HANDLE;
   for (int ii = 1; ii <= 4; ii++) {
     GfxError status = gfxUploadFont(&disp, &font, &handle);
@@ -77,6 +79,7 @@ static int cycleFonts(void) {
     report("destroy", gfxDestroyFont(&disp, handle));
   }
   report("default destroyed", gfxSetDefaultFont(&disp, handle));
+  report("close", gfxCloseDisplay(&disp));
 
   free(bitmap);
   return 0;
@@ -112,7 +115,7 @@ static int sendEveryType(void) {
 
 int main(int argc, char **argv) {
   if ((argc == 2) && (strcmp(argv[1], "--help") == 0)) {
-    printf("Usage: gfxprobe find|send|all|fonts\n");
+    printf("Usage: gfxprobe find|send|all|fonts|do <step>...\n");
     return 0;
   } else if ((argc == 2) && (strcmp(argv[1], "find") == 0)) {
     ProcessId pid = 0;
@@ -123,8 +126,18 @@ int main(int argc, char **argv) {
     return cycleFonts();
   } else if ((argc == 2) && (strcmp(argv[1], "all") == 0)) {
     return sendEveryType();
+  } else if ((argc > 2) && (strcmp(argv[1], "do") == 0)) {
+    StepsArgs stepsArgs = {
+      .numSteps = argc - 2, .steps = &argv[2], .status = 1,
+    };
+    if (callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Steps", "gfxprobeSteps",
+      &stepsArgs) != &stepsArgs
+    ) {
+      return 1;
+    }
+    return stepsArgs.status;
   }
 
-  fprintf(stderr, "Usage: gfxprobe find|send|all|fonts\n");
+  fprintf(stderr, "Usage: gfxprobe find|send|all|fonts|do <step>...\n");
   return 2;
 }

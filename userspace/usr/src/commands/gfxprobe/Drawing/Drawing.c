@@ -39,7 +39,8 @@
 ///
 /// @brief Send the display driver each command buffer, synchronization,
 /// error and cursor message type once, in protocol order, then a
-/// GFX_MSG_GET_ERROR whose size is wrong, and print each result.
+/// GFX_MSG_GET_ERROR whose size is wrong, then close the display, and print
+/// each result.
 ///
 /// @param args A pointer to the ProbeArgs, whose status is set to 0 if
 ///   there was memory for the command buffer and 1 otherwise.
@@ -79,6 +80,7 @@ void* gfxprobeDrawing(void *args) {
   report("WRONG_SIZE", gfxCall_(disp, GFX_MSG_GET_ERROR, wrongSize,
     sizeof(*wrongSize) + 1));
   MESSAGE_ARGS_FREE(wrongSize);
+  report("CLOSE_DISPLAY", gfxCloseDisplay(disp));
 
   gfxCmdBufDestroy(buf);
   probeArgs->status = 0;
