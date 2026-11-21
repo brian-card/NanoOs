@@ -308,3 +308,18 @@ bool vdpIsPollReply(const VdpPacketParser *parser, uint8_t cookie) {
     && (parser->length == 1)
     && (parser->data[0] == cookie);
 }
+
+/// @fn bool vdpIsReleaseKey(const uint8_t *keyData)
+///
+/// @brief Determine whether a keyboard packet is Ctrl+Alt+Backspace going
+/// down, which takes the display back from its owner for the console.
+///
+/// @param keyData The four data bytes of a keyboard packet:  ASCII value,
+///   modifiers, FabGL keycode, and 1 if the key went down.
+///
+/// @return Returns true if it is, false otherwise.
+bool vdpIsReleaseKey(const uint8_t *keyData) {
+  return (keyData[3] == 1) && (keyData[2] == KEYCODE_BACKSPACE)
+    && ((keyData[1] & AGON_KEYMOD_CTRL) != 0)
+    && ((keyData[1] & (AGON_KEYMOD_ALT_LEFT | AGON_KEYMOD_ALT_RIGHT)) != 0);
+}

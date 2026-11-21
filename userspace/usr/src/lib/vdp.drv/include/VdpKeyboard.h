@@ -120,6 +120,7 @@ bool vdpParseByte(VdpPacketParser *parser, uint8_t byte);
 size_t vdpTranslateKey(const uint8_t *keyData, bool numLock, uint8_t *output);
 bool vdpUpdateLocks(const uint8_t *keyData, bool *numLock, uint8_t *leds);
 bool vdpIsPollReply(const VdpPacketParser *parser, uint8_t cookie);
+bool vdpIsReleaseKey(const uint8_t *keyData);
 
 #ifdef __cplusplus
 } // extern "C"

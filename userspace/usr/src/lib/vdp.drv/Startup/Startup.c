@@ -36,6 +36,7 @@
 #include "MouseCursor.h"
 #include "ScreenSetup.h"
 #include "VdpDriver.h"
+#include "VdpFont.h"
 
 /// @def VDP_CURSOR_ID
 ///
@@ -284,6 +285,8 @@ void* vdpStartup(void *args) {
   input->portId = -1;
   input->pollCookie = VDP_GENERAL_POLL_COOKIE;
   memset(vdpOutput, 0, sizeof(*vdpOutput));
+  vdpOutput->owner = PROCESS_ID_NOT_SET;
+  input->output = vdpOutput;
   vdpOutput->textState.numColumns = VDP_SCREEN_WIDTH / VDP_SYSTEM_GLYPH_SIZE;
   vdpOutput->textState.numRows = VDP_SCREEN_HEIGHT / VDP_SYSTEM_GLYPH_SIZE;
   vdpOutput->sizeChanged = true;
@@ -370,14 +373,43 @@ void* vdpSetupScreen(void *args) {
 /// several seconds.
 #define VDP_GENERAL_POLL_RETRY_NS 500000000LL
 
+/// @fn static void vdpLoadBuiltInFont(VdpOutput *vdpOutput)
+///
+/// @brief Upload the driver's built-in font to slot 0 and select it for
+/// console text with VDU 23,0,&95,0,id;flags, noting that the screen's rows
+/// and columns, and a resize report if they're on, are to be sent.
+///
+/// @param vdpOutput A pointer to the driver's VdpOutput.
+///
+/// @return This function returns no value.
+static void vdpLoadBuiltInFont(VdpOutput *vdpOutput) {
+  GfxUploadFontArgs font = {
+    .glyphW = VDP_FONT_WIDTH,
+    .glyphH = VDP_FONT_HEIGHT,
+    .firstChar = VDP_FONT_FIRST_CHAR,
+    .numChars = VDP_FONT_NUM_CHARS,
+    .size = sizeof(vdpFont),
+    .bitmap = vdpFont,
+  };
+  if (vdpUploadFontSlot(vdpOutput, 0, &font) != GFX_OK) {
+    return;
+  }
+
+  const uint8_t select[] = { 23, 0, 0x95, 0, VDP_WORD(VDP_FONT_ID_BASE), 0 };
+  vdpWrite(select, sizeof(select));
+  vdpOutput->textState.numColumns = VDP_SCREEN_WIDTH / VDP_FONT_WIDTH;
+  vdpOutput->textState.numRows = VDP_SCREEN_HEIGHT / VDP_FONT_HEIGHT;
+  vdpOutput->sizeChanged = true;
+  vdpOutput->textState.resizeReportWanted = vdpOutput->textState.resizeReports;
+}
+
 /// @fn static void vdpHandshake(VdpStartupArgs *startupArgs)
 ///
 /// @brief Send the general poll until the VDP answers it or the wait times
 /// out, then set up the screen, and again once the poll that follows the
 /// setup, which is sent the same way, is answered or times out.  If it was
-/// answered, the Graphics overlay loads the built-in font first:  until then
-/// the VDP may be busy resetting the mouse, and the font overflows its receive
-/// buffer.
+/// answered, the built-in font is loaded first:  until then the VDP may be
+/// busy resetting the mouse, and the font overflows its receive buffer.
 ///
 /// @param startupArgs A pointer to the driver's VdpStartupArgs.
 ///
@@ -401,9 +433,7 @@ static void vdpHandshake(VdpStartupArgs *startupArgs) {
   }
 
   if ((vdpOutput->screenSetUp == true) && (input->pollAnswered == true)) {
-    vdpOutput->graphicsMessage = NULL;
-    callOverlayFunction(OVERLAY_SAME_NAMESPACE,
-      "Graphics", "vdpGraphics", vdpOutput);
+    vdpLoadBuiltInFont(vdpOutput);
   }
   vdpSetupScreen(startupArgs);
 }

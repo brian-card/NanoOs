@@ -36,18 +36,6 @@
 #include "VdpDriver.h"
 #include "VdpFont.h"
 
-/// @def VDP_FONT_ID_BASE
-///
-/// @brief The ID of the VDP buffer and font of font slot 0, the built-in
-/// font.  Each slot after it takes the next ID, which is also the slot's
-/// GfxHandle.
-#define VDP_FONT_ID_BASE 0xF100
-
-/// @def VDP_FONT_NUM_GLYPHS
-///
-/// @brief The number of glyphs a VDP font buffer must hold.
-#define VDP_FONT_NUM_GLYPHS 256
-
 /// @def VDP_ONE_WAY_MESSAGES
 ///
 /// @brief The client message types whose arguments the driver destroys.
@@ -80,75 +68,6 @@ static const uint8_t _vdpArgsSizes[GFX_MSG_COUNT] = {
   [GFX_MSG_SHOW_CURSOR]       = sizeof(GfxShowCursorArgs),
   [GFX_MSG_WARP_CURSOR]       = sizeof(GfxWarpCursorArgs),
 };
-
-/// @var _vdpZeros
-///
-/// @brief Blank glyph rows, written for the characters a font has no glyphs
-/// for.
-static const uint8_t _vdpZeros[32] = { 0 };
-
-/// @fn static void vdpWriteZeros(size_t length)
-///
-/// @brief Write zero bytes to the VDP.
-///
-/// @param length The number of zero bytes to write.
-///
-/// @return This function returns no value.
-static void vdpWriteZeros(size_t length) {
-  while (length > 0) {
-    size_t chunk
-      = (length < sizeof(_vdpZeros)) ? length : sizeof(_vdpZeros);
-    vdpWrite(_vdpZeros, chunk);
-    length -= chunk;
-  }
-}
-
-/// @fn static uint8_t vdpUploadFontSlot(VdpOutput *vdpOutput, uint8_t slot,
-///   const GfxUploadFontArgs *font)
-///
-/// @brief Upload a font to a font slot with VDU 23,0,&A0,id;2 to clear the
-/// buffer, VDU 23,0,&A0,id;0,length; to write all 256 glyphs to it, blank for
-/// the characters the font doesn't cover, and VDU 23,0,&95,1,id;width,height,
-/// ascent,flags to make a font of it, then mark the slot used.
-///
-/// @param vdpOutput A pointer to the driver's VdpOutput.
-/// @param slot The font slot.
-/// @param font The font, whose bitmap is readable by the driver.
-///
-/// @return Returns GFX_OK on success, GFX_ERR_NOT_SUPPORTED if the font isn't
-/// one the VDP can hold.
-static uint8_t vdpUploadFontSlot(VdpOutput *vdpOutput, uint8_t slot,
-  const GfxUploadFontArgs *font
-) {
-  size_t glyphSize = ((font->glyphW + 7) / 8) * font->glyphH;
-  size_t fontSize = glyphSize * font->numChars;
-  size_t bufferSize = glyphSize * VDP_FONT_NUM_GLYPHS;
-  if ((font->bitmap == NULL) || (glyphSize == 0) || (font->numChars == 0)
-    || (font->firstChar + font->numChars > VDP_FONT_NUM_GLYPHS)
-    || (font->size < fontSize) || (bufferSize > 0xFFFF)
-  ) {
-    return GFX_ERR_NOT_SUPPORTED;
-  }
-
-  vdpOutput->fontWidths[slot] = font->glyphW;
-  vdpOutput->fontHeights[slot] = font->glyphH;
-  vdpOutput->fontsUsed |= (uint8_t) (1 << slot);
-  uint16_t fontId = VDP_FONT_ID_BASE + slot;
-  const uint8_t upload[] = {
-    23, 0, 0xA0, VDP_WORD(fontId), 2,
-    23, 0, 0xA0, VDP_WORD(fontId), 0, VDP_WORD(bufferSize)
-  };
-  vdpWrite(upload, sizeof(upload));
-  vdpWriteZeros(glyphSize * font->firstChar);
-  vdpWrite((const uint8_t*) font->bitmap, fontSize);
-  vdpWriteZeros(bufferSize - fontSize - (glyphSize * font->firstChar));
-  const uint8_t define[] = {
-    23, 0, 0x95, 1, VDP_WORD(fontId), font->glyphW, font->glyphH,
-    font->glyphH, 0
-  };
-  vdpWrite(define, sizeof(define));
-  return GFX_OK;
-}
 
 /// @fn static uint8_t vdpFontSlot(VdpOutput *vdpOutput, GfxHandle font)
 ///
@@ -249,14 +168,196 @@ static void vdpDestroyFont(VdpOutput *vdpOutput, GfxHandle font) {
   }
 }
 
+/// @var _vdpEnterGraphics
+///
+/// @brief VDU commands that give the display to its owner:  select context 1,
+/// which the VDP makes as a copy of the console's context 0
+/// (VDU 23,0,&C8,0,1), use pixel coordinates (VDU 23,0,&C0,0), turn the text
+/// cursor off (VDU 23,1,0), reset the viewports (VDU 26) and the graphics
+/// origin (VDU 29,0;0;), and clear the screen (VDU 16).
+static const uint8_t _vdpEnterGraphics[] = {
+  23, 0, 0xC8, 0, 1,
+  23, 0, 0xC0, 0,
+  23, 1, 0,
+  26,
+  29, 0, 0, 0, 0,
+  16
+};
+
+/// @var _vdpLeaveGraphics
+///
+/// @brief VDU commands that give the display back to the console:  select
+/// its context 0 (VDU 23,0,&C8,0,0), delete the owner's context 1
+/// (VDU 23,0,&C8,1,1), and clear the screen (VDU 12).
+static const uint8_t _vdpLeaveGraphics[] = {
+  23, 0, 0xC8, 0, 0,
+  23, 0, 0xC8, 1, 1,
+  12
+};
+
+/// @fn static void vdpFreeFonts(VdpOutput *vdpOutput)
+///
+/// @brief Destroy every font a display owner uploaded.
+///
+/// @param vdpOutput A pointer to the driver's VdpOutput.
+///
+/// @return This function returns no value.
+static void vdpFreeFonts(VdpOutput *vdpOutput) {
+  for (uint8_t slot = 1; slot < VDP_MAX_FONTS; slot++) {
+    vdpDestroyFont(vdpOutput, (GfxHandle) (VDP_FONT_ID_BASE + slot));
+  }
+}
+
+/// @var _vdpOwnerFrees
+///
+/// @brief The functions that free each kind of resource a display owner can
+/// create, all of which run when ownership ends.
+static void (*const _vdpOwnerFrees[])(VdpOutput *vdpOutput) = {
+  vdpFreeFonts,
+};
+
+/// @fn static void vdpHoldReplay(VdpOutput *vdpOutput)
+///
+/// @brief Turn the console text held while the display was owned into the
+/// string the main overlay draws once the console has the display back.  If
+/// the held text was cut short, the replay starts after its first newline, so
+/// that a cut escape sequence can't garble the screen.
+///
+/// @param vdpOutput A pointer to the driver's VdpOutput.
+///
+/// @return This function returns no value.
+static void vdpHoldReplay(VdpOutput *vdpOutput) {
+  VdpOutputBuffer *heldText = vdpOutput->heldText;
+  uint16_t start = 0;
+  if (heldText->length == VDP_OUTPUT_BUFFER_SIZE) {
+    while ((start < heldText->length) && (heldText->data[start] != '\n')) {
+      start++;
+    }
+    start++;
+  }
+  if (start < heldText->length) {
+    vdpOutput->replayText = (char*) malloc(heldText->length - start + 1);
+    if (vdpOutput->replayText != NULL) {
+      memcpy(vdpOutput->replayText, &heldText->data[start],
+        heldText->length - start);
+      vdpOutput->replayText[heldText->length - start] = '\0';
+    }
+  }
+  free(heldText);
+  vdpOutput->heldText = NULL;
+}
+
+/// @fn static void vdpRelease(VdpOutput *vdpOutput, bool revoke)
+///
+/// @brief End the display's ownership:  free everything the owner created,
+/// give the screen back to the console's context, and have the console's
+/// held text redrawn from the top of a cleared screen.
+///
+/// @param vdpOutput A pointer to the driver's VdpOutput.
+/// @param revoke Whether to tell the owner with GFX_MSG_DISPLAY_REVOKED,
+///   which it gets only when it didn't ask to give the display up.
+///
+/// @return This function returns no value.
+static void vdpRelease(VdpOutput *vdpOutput, bool revoke) {
+  for (uint8_t ii = 0;
+    ii < sizeof(_vdpOwnerFrees) / sizeof(_vdpOwnerFrees[0]); ii++
+  ) {
+    _vdpOwnerFrees[ii](vdpOutput);
+  }
+  vdpOutput->ownerDefaultFont = 0;
+  vdpWrite(_vdpLeaveGraphics, sizeof(_vdpLeaveGraphics));
+  vdpOutput->textState.row = 0;
+  vdpOutput->textState.column = 0;
+  vdpOutput->textState.escapeState = VDP_ESCAPE_NONE;
+  vdpOutput->textState.erasePending = 0;
+  vdpOutput->textState.scrollDirection = 0;
+  vdpHoldReplay(vdpOutput);
+
+  if (revoke == true) {
+    ProcessMessage *message = getAvailableMessage();
+    if (message != NULL) {
+      processMessageInit(message,
+        GFX_COMMAND_SIGNATURE | GFX_MSG_DISPLAY_REVOKED,
+        NULL, 0, /* waiting= */ false);
+      if (sendProcessMessageToPid(vdpOutput->owner, message)
+        != processSuccess
+      ) {
+        processMessageRelease(message);
+      }
+    }
+  }
+  vdpOutput->owner = PROCESS_ID_NOT_SET;
+  vdpOutput->ownerDescriptor = NULL;
+  vdpOutput->error = GFX_OK;
+}
+
+/// @fn static uint8_t vdpOpenDisplay(VdpOutput *vdpOutput,
+///   ProcessDescriptor *sender, GfxOpenDisplayArgs *args)
+///
+/// @brief Give the display to a process if nobody owns it, and answer with
+/// the display's size and the built-in font's metrics.  Opening a display the
+/// sender already owns changes nothing.
+///
+/// @param vdpOutput A pointer to the driver's VdpOutput.
+/// @param sender The ProcessDescriptor of the process asking.
+/// @param args The message's arguments.
+///
+/// @return Returns GFX_OK on success, GFX_ERR_DISPLAY_BUSY if another process
+/// owns the display, or GFX_ERR_OUT_OF_MEMORY if there was no memory to hold
+/// the console's text.
+static uint8_t vdpOpenDisplay(VdpOutput *vdpOutput,
+  ProcessDescriptor *sender, GfxOpenDisplayArgs *args
+) {
+  if (vdpOutput->owner == PROCESS_ID_NOT_SET) {
+    vdpOutput->heldText = (VdpOutputBuffer*) malloc(sizeof(VdpOutputBuffer));
+    if (vdpOutput->heldText == NULL) {
+      return GFX_ERR_OUT_OF_MEMORY;
+    }
+    vdpOutput->heldText->length = 0;
+    vdpOutput->owner = processPid(sender);
+    vdpOutput->ownerDescriptor = sender;
+    vdpWrite(_vdpEnterGraphics, sizeof(_vdpEnterGraphics));
+  } else if (vdpOutput->owner != processPid(sender)) {
+    return GFX_ERR_DISPLAY_BUSY;
+  }
+
+  args->width = VDP_SCREEN_WIDTH;
+  args->height = VDP_SCREEN_HEIGHT;
+  args->defaultFontW = VDP_FONT_WIDTH;
+  args->defaultFontH = VDP_FONT_HEIGHT;
+  args->defaultFontFirst = VDP_FONT_FIRST_CHAR;
+  args->defaultFontCount = VDP_FONT_NUM_CHARS;
+  return GFX_OK;
+}
+
+/// @fn void* vdpRevoke(void *args)
+///
+/// @brief Take the display back from its owner for the console, telling the
+/// owner, as Ctrl+Alt+Backspace does.  The main overlay calls this so that
+/// the release stays out of it.
+///
+/// @param args A pointer to the driver's VdpOutput.
+///
+/// @return Always returns the provided pointer.
+void* vdpRevoke(void *args) {
+  VdpOutput *vdpOutput = (VdpOutput*) args;
+  if (vdpOutput->owner != PROCESS_ID_NOT_SET) {
+    vdpRelease(vdpOutput, true);
+  }
+  return args;
+}
+
 /// @fn static void vdpHandleGraphics(VdpOutput *vdpOutput,
 ///   ProcessMessage *message, uint8_t type)
 ///
 /// @brief Answer a client's GraphicsProtocol.h message:  a synchronous one
-/// gets a status, GFX_ERR_INVALID_STATE if its arguments are the wrong size
-/// and GFX_ERR_NOT_SUPPORTED if the driver doesn't implement it, and a
-/// one-way one has its arguments destroyed.  A message whose waiting flag
-/// doesn't match its type is left untouched.
+/// gets a status, GFX_ERR_INVALID_STATE if its arguments are the wrong size,
+/// GFX_ERR_NOT_OWNER if its sender doesn't own the display, and
+/// GFX_ERR_NOT_SUPPORTED if the driver doesn't implement it, and a one-way
+/// one has its arguments destroyed.  A message whose waiting flag doesn't
+/// match its type is left untouched.  An owner that is no longer a running
+/// graphics client gives the display up, in case its GFX_MSG_CLIENT_ENDED
+/// was lost.
 ///
 /// @param vdpOutput A pointer to the driver's VdpOutput.
 /// @param message The message.
@@ -271,12 +372,34 @@ static void vdpHandleGraphics(VdpOutput *vdpOutput, ProcessMessage *message,
   if (oneWay == processMessageWaiting(message)) {
     return;
   }
+  ProcessDescriptor *sender = processMessageFrom(message);
+  if ((vdpOutput->owner != PROCESS_ID_NOT_SET)
+    && (vdpOutput->owner != processPid(sender))
+    && ((processRunning(vdpOutput->ownerDescriptor) == false)
+      || (vdpOutput->ownerDescriptor->graphicsClient == false))
+  ) {
+    vdpRelease(vdpOutput, false);
+  }
 
   uint8_t status = GFX_ERR_NOT_SUPPORTED;
   if ((processMessageSize(message) != _vdpArgsSizes[type])
     || ((_vdpArgsSizes[type] > 0) && (payload == NULL))
   ) {
     status = GFX_ERR_INVALID_STATE;
+  } else if (type == GFX_MSG_OPEN_DISPLAY) {
+    status = vdpOpenDisplay(vdpOutput, sender, (GfxOpenDisplayArgs*) payload);
+  } else if (type == GFX_MSG_GET_SURFACE_SIZE) {
+    ((GfxSurfaceSizeArgs*) payload)->width = VDP_SCREEN_WIDTH;
+    ((GfxSurfaceSizeArgs*) payload)->height = VDP_SCREEN_HEIGHT;
+    status = GFX_OK;
+  } else if (vdpOutput->owner != processPid(sender)) {
+    status = GFX_ERR_NOT_OWNER;
+  } else if (type == GFX_MSG_CLOSE_DISPLAY) {
+    vdpRelease(vdpOutput, false);
+  } else if (type == GFX_MSG_GET_ERROR) {
+    ((GfxGetErrorArgs*) payload)->error = vdpOutput->error;
+    vdpOutput->error = GFX_OK;
+    status = GFX_OK;
   } else if (type == GFX_MSG_UPLOAD_FONT) {
     status = vdpUploadFont(vdpOutput, (GfxUploadFontArgs*) payload);
   } else if (type == GFX_MSG_SET_DEFAULT_FONT) {
@@ -293,36 +416,6 @@ static void vdpHandleGraphics(VdpOutput *vdpOutput, ProcessMessage *message,
   } else if ((payload != NULL) && (processMessageSize(message) > 0)) {
     *((uint8_t*) payload) = status;
   }
-}
-
-/// @fn static void vdpLoadBuiltInFont(VdpOutput *vdpOutput)
-///
-/// @brief Upload the driver's built-in font to slot 0 and select it for
-/// console text with VDU 23,0,&95,0,id;flags, noting that the screen's rows
-/// and columns, and a resize report if they're on, are to be sent.
-///
-/// @param vdpOutput A pointer to the driver's VdpOutput.
-///
-/// @return This function returns no value.
-static void vdpLoadBuiltInFont(VdpOutput *vdpOutput) {
-  GfxUploadFontArgs font = {
-    .glyphW = VDP_FONT_WIDTH,
-    .glyphH = VDP_FONT_HEIGHT,
-    .firstChar = VDP_FONT_FIRST_CHAR,
-    .numChars = VDP_FONT_NUM_CHARS,
-    .size = sizeof(vdpFont),
-    .bitmap = vdpFont,
-  };
-  if (vdpUploadFontSlot(vdpOutput, 0, &font) != GFX_OK) {
-    return;
-  }
-
-  const uint8_t select[] = { 23, 0, 0x95, 0, VDP_WORD(VDP_FONT_ID_BASE), 0 };
-  vdpWrite(select, sizeof(select));
-  vdpOutput->textState.numColumns = VDP_SCREEN_WIDTH / VDP_FONT_WIDTH;
-  vdpOutput->textState.numRows = VDP_SCREEN_HEIGHT / VDP_FONT_HEIGHT;
-  vdpOutput->sizeChanged = true;
-  vdpOutput->textState.resizeReportWanted = vdpOutput->textState.resizeReports;
 }
 
 /// @fn static char* vdpAppendNumber(char *text, unsigned int number)
@@ -417,9 +510,9 @@ void* vdpReportSize(void *args) {
 /// @fn void* vdpGraphics(void *args)
 ///
 /// @brief Answer the GraphicsProtocol.h message in the driver's
-/// graphicsMessage, ignoring any other message, or load the built-in font if
-/// there is none.  GFX_MSG_CLIENT_ENDED carries a ProcessId, not storage, and
-/// needs only to be marked done.
+/// graphicsMessage, ignoring any other message.  GFX_MSG_CLIENT_ENDED carries
+/// a ProcessId, not storage, and ends the display's ownership if that process
+/// owns it.
 ///
 /// @param args A pointer to the driver's VdpOutput.
 ///
@@ -428,14 +521,17 @@ void* vdpGraphics(void *args) {
   VdpOutput *vdpOutput = (VdpOutput*) args;
   ProcessMessage *message = vdpOutput->graphicsMessage;
 
-  if (message == NULL) {
-    vdpLoadBuiltInFont(vdpOutput);
-  } else if ((processMessageType(message) & ~((int64_t) 0xff))
+  if ((processMessageType(message) & ~((int64_t) 0xff))
     == GFX_COMMAND_SIGNATURE
   ) {
     uint8_t type = (uint8_t) processMessageType(message);
     if (type < GFX_MSG_COUNT) {
       vdpHandleGraphics(vdpOutput, message, type);
+    } else if ((type == GFX_MSG_CLIENT_ENDED)
+      && ((ProcessId) (uintptr_t) processMessageData(message)
+        == vdpOutput->owner)
+    ) {
+      vdpRelease(vdpOutput, false);
     }
   }
 

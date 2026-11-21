@@ -44,14 +44,18 @@
 
 /// @fn static void vdpWriteText(VdpOutput *vdpOutput, const char *text)
 ///
-/// @brief Draw a string of console text on the VDP, or buffer it if the VDP
-/// isn't listening yet.
+/// @brief Draw a string of console text on the VDP, buffer it if the VDP
+/// isn't listening yet, or hold it if another process owns the display.
 ///
 /// @param vdpOutput A pointer to the driver's VdpOutput.
 /// @param text The NUL-terminated string to draw.
 ///
 /// @return This function returns no value.
 static void vdpWriteText(VdpOutput *vdpOutput, const char *text) {
+  if (vdpOutput->heldText != NULL) {
+    vdpBufferOutput(vdpOutput->heldText, (const uint8_t*) text, strlen(text));
+    return;
+  }
   uint8_t output[4 * VDP_TEXT_MAX_EXPANSION];
   while ((*text != '\0') || (vdpOutput->textState.erasePending > 0)
     || (vdpOutput->textState.scrollDirection != 0)
@@ -68,12 +72,12 @@ static void vdpWriteText(VdpOutput *vdpOutput, const char *text) {
 
 /// @fn static void vdpGraphics(VdpOutput *vdpOutput, ProcessMessage *message)
 ///
-/// @brief Have the Graphics overlay carry out a message, or load the built-in
-/// font if message is NULL.  The overlay checks that the message is a
-/// Graphics.h one, which keeps the check out of the main overlay.
+/// @brief Have the Graphics overlay carry out a message.  The overlay checks
+/// that the message is a GraphicsProtocol.h one, which keeps the check out of
+/// the main overlay.
 ///
 /// @param vdpOutput A pointer to the driver's VdpOutput.
-/// @param message The message to carry out, or NULL.
+/// @param message The message to carry out.
 ///
 /// @return This function returns no value.
 static void vdpGraphics(VdpOutput *vdpOutput, ProcessMessage *message) {
@@ -87,7 +91,8 @@ static void vdpGraphics(VdpOutput *vdpOutput, ProcessMessage *message) {
 /// @brief Read everything the VDP has sent, adding the translation of each
 /// key that went down to the keys waiting to be sent to the console, and
 /// setting the keyboard's LEDs after each lock key.  A key that doesn't fit
-/// is dropped.
+/// is dropped, and so is every key while another process owns the display,
+/// except Ctrl+Alt+Backspace, which takes the display back.
 ///
 /// @param input A pointer to the driver's VdpInput.
 ///
@@ -118,6 +123,13 @@ static bool vdpReadKeyboard(VdpInput *input) {
       uint8_t leds = 0;
       if (vdpUpdateLocks(input->parser.data, &input->numLock, &leds)) {
         vdpSetKeyboardLeds(leds);
+      }
+      if (input->output->heldText != NULL) {
+        if (vdpIsReleaseKey(input->parser.data)) {
+          callOverlayFunction(OVERLAY_SAME_NAMESPACE,
+            "Graphics", "vdpRevoke", input->output);
+        }
+        continue;
       }
       uint8_t key[VDP_KEY_MAX_BYTES];
       size_t keyLength
@@ -223,6 +235,11 @@ int main(int argc, char **argv) {
   }
 
   while (1) {
+    if (vdpOutput.replayText != NULL) {
+      vdpWriteText(&vdpOutput, vdpOutput.replayText);
+      free(vdpOutput.replayText);
+      vdpOutput.replayText = NULL;
+    }
     if (((vdpOutput.listening == false)
         || ((input.portId < 0) && (input.portMessage == NULL)))
       && (callOverlayFunction(OVERLAY_SAME_NAMESPACE,

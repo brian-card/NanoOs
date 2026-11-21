@@ -44,13 +44,22 @@
 
 /// @var vdpScreenSetup
 ///
-/// @brief VDU commands sent once the VDP is listening: select the 640x480,
-/// 16-color screen mode (VDU 22,0), turn on scroll protection so that drawing
-/// the bottom-right character doesn't scroll (VDU 23,16,1,&FE), select the US
-/// keyboard layout (VDU 23,0,&81,1), set the palette to the CGA colors (VDU
-/// 19), clear the screen (VDU 12), and turn the text cursor on (VDU 23,1,1).
-/// The palette follows the mode because changing the mode resets it.
+/// @brief VDU commands sent once the VDP is listening:  take the display back
+/// from any owner an earlier run of the driver had, by selecting the console's
+/// context (VDU 23,0,&C8,0,0), deleting the owner's (VDU 23,0,&C8,1,1), and
+/// deleting the client font slots' fonts (VDU 23,0,&95,4,id;) and buffers
+/// (VDU 23,0,&A0,id;2); select the 640x480, 16-color screen mode (VDU 22,0);
+/// turn on scroll protection so that drawing the bottom-right character
+/// doesn't scroll (VDU 23,16,1,&FE); select the US keyboard layout
+/// (VDU 23,0,&81,1); set the palette to the CGA colors (VDU 19); clear the
+/// screen (VDU 12); and turn the text cursor on (VDU 23,1,1).  The palette
+/// follows the mode because changing the mode resets it.
 const uint8_t vdpScreenSetup[] = {
+  23, 0, 0xC8, 0, 0,
+  23, 0, 0xC8, 1, 1,
+  23, 0, 0x95, 4, 0x01, 0xF1, 23, 0, 0xA0, 0x01, 0xF1, 2,
+  23, 0, 0x95, 4, 0x02, 0xF1, 23, 0, 0xA0, 0x02, 0xF1, 2,
+  23, 0, 0x95, 4, 0x03, 0xF1, 23, 0, 0xA0, 0x03, 0xF1, 2,
   22, 0,
   23, 16, 1, 0xFE,
   23, 0, 0x81, 1,

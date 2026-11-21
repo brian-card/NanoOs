@@ -104,6 +104,18 @@ extern "C"
 /// system font, which it draws text in until another font is selected.
 #define VDP_SYSTEM_GLYPH_SIZE 8
 
+/// @def VDP_FONT_ID_BASE
+///
+/// @brief The ID of the VDP buffer and font of font slot 0, the built-in
+/// font.  Each slot after it takes the next ID, which is also the slot's
+/// GfxHandle.
+#define VDP_FONT_ID_BASE 0xF100
+
+/// @def VDP_FONT_NUM_GLYPHS
+///
+/// @brief The number of glyphs a VDP font buffer must hold.
+#define VDP_FONT_NUM_GLYPHS 256
+
 /// @def VDP_MAX_FONTS
 ///
 /// @brief The number of font slots:  slot 0 for the built-in font, and one
@@ -135,6 +147,8 @@ extern "C"
 /// @param sizeMessage The CONSOLE_SET_WINSIZE message waiting on the console,
 ///   or NULL.
 /// @param sizeArgs The arguments of sizeMessage, created at startup.
+/// @param output A pointer to the driver's VdpOutput, which says whether the
+///   display is owned.
 typedef struct VdpInput {
   ProcessId                    consolePid;
   int                          portId;
@@ -150,6 +164,7 @@ typedef struct VdpInput {
   bool                         numLock;
   ProcessMessage              *sizeMessage;
   ConsoleWinsizeArgs           *sizeArgs;
+  struct VdpOutput             *output;
 } VdpInput;
 
 /// @struct VdpOutput
@@ -165,8 +180,7 @@ typedef struct VdpInput {
 /// @param screenSetUp Whether the screen setup has been sent, so that the
 ///   poll being waited on is the one that follows it.
 /// @param buffer The output written while the VDP wasn't listening, or NULL.
-/// @param graphicsMessage The Graphics.h message for the Graphics overlay to
-///   handle, or NULL to have it load the driver's built-in font.
+/// @param graphicsMessage The message for the Graphics overlay to handle.
 /// @param fontsUsed A bit for each font slot that holds a font.
 /// @param fontWidths The glyph width of the font in each slot.
 /// @param fontHeights The glyph height of the font in each slot.
@@ -174,19 +188,32 @@ typedef struct VdpInput {
 ///   unless they select another.
 /// @param sizeChanged Whether the console hasn't yet been told the number of
 ///   rows and columns the font gives the screen.
+/// @param owner The ProcessId of the process that owns the display, or
+///   PROCESS_ID_NOT_SET when the console has it.
+/// @param ownerDescriptor The owner's ProcessDescriptor, or NULL.
+/// @param error The sticky GfxError that GFX_MSG_GET_ERROR returns and clears.
+/// @param heldText The most recent console text written while the display is
+///   owned, untranslated.  Allocated exactly while the display is owned.
+/// @param replayText The held text to draw once the console has the display
+///   back, or NULL.
 typedef struct VdpOutput {
-  VdpTextState     textState;
-  bool             listening;
-  int64_t          nextPollNs;
-  int64_t          giveUpNs;
-  bool             screenSetUp;
-  VdpOutputBuffer *buffer;
-  ProcessMessage  *graphicsMessage;
-  uint8_t          fontsUsed;
-  uint8_t          fontWidths[VDP_MAX_FONTS];
-  uint8_t          fontHeights[VDP_MAX_FONTS];
-  uint8_t          ownerDefaultFont;
-  bool             sizeChanged;
+  VdpTextState       textState;
+  bool               listening;
+  int64_t            nextPollNs;
+  int64_t            giveUpNs;
+  bool               screenSetUp;
+  VdpOutputBuffer   *buffer;
+  ProcessMessage    *graphicsMessage;
+  uint8_t            fontsUsed;
+  uint8_t            fontWidths[VDP_MAX_FONTS];
+  uint8_t            fontHeights[VDP_MAX_FONTS];
+  uint8_t            ownerDefaultFont;
+  bool               sizeChanged;
+  ProcessId          owner;
+  ProcessDescriptor *ownerDescriptor;
+  uint8_t            error;
+  VdpOutputBuffer   *heldText;
+  char              *replayText;
 } VdpOutput;
 
 /// @struct VdpStartupArgs
@@ -201,6 +228,9 @@ typedef struct VdpStartupArgs {
   VdpOutput  *output;
   char      **argv;
 } VdpStartupArgs;
+
+uint8_t vdpUploadFontSlot(VdpOutput *vdpOutput, uint8_t slot,
+  const GfxUploadFontArgs *font);
 
 /// @fn static inline int64_t vdpNowNs(void)
 ///
