@@ -72,18 +72,27 @@ static void vdpWriteText(VdpOutput *vdpOutput, const char *text) {
 
 /// @fn static void vdpGraphics(VdpOutput *vdpOutput, ProcessMessage *message)
 ///
-/// @brief Have the Graphics overlay carry out a message.  The overlay checks
-/// that the message is a GraphicsProtocol.h one, which keeps the check out of
-/// the main overlay.
+/// @brief Have the Draw overlay carry out a message whose type's low byte is
+/// that of GFX_MSG_SUBMIT or GFX_MSG_PREUPLOAD, and the Graphics overlay any
+/// other, or check on a held GFX_MSG_FINISH if there is no message.  The
+/// overlays check that the message is a GraphicsProtocol.h one, which keeps
+/// the check out of the main overlay.
 ///
 /// @param vdpOutput A pointer to the driver's VdpOutput.
-/// @param message The message to carry out.
+/// @param message The message to carry out, or NULL.
 ///
 /// @return This function returns no value.
 static void vdpGraphics(VdpOutput *vdpOutput, ProcessMessage *message) {
+  const char *overlay = "Graphics";
+  if (message != NULL) {
+    uint8_t type = (uint8_t) processMessageType(message);
+    if ((type == GFX_MSG_SUBMIT) || (type == GFX_MSG_PREUPLOAD)) {
+      overlay = "Draw";
+    }
+  }
   vdpOutput->graphicsMessage = message;
-  callOverlayFunction(OVERLAY_SAME_NAMESPACE,
-    "Graphics", "vdpGraphics", vdpOutput);
+  callOverlayFunction(OVERLAY_SAME_NAMESPACE, overlay, "vdpGraphics",
+    vdpOutput);
 }
 
 /// @fn static bool vdpReadKeyboard(VdpInput *input)
@@ -235,6 +244,9 @@ int main(int argc, char **argv) {
   }
 
   while (1) {
+    if (vdpOutput.finishMessage != NULL) {
+      vdpGraphics(&vdpOutput, NULL);
+    }
     if (vdpOutput.replayText != NULL) {
       vdpWriteText(&vdpOutput, vdpOutput.replayText);
       free(vdpOutput.replayText);
@@ -262,9 +274,7 @@ int main(int argc, char **argv) {
     ) {
       deadlineNs = vdpNowNs() + VDP_POLL_NS;
     }
-    if ((vdpOutput.listening == false)
-      && (vdpOutput.nextPollNs < deadlineNs)
-    ) {
+    if (vdpOutput.nextPollNs < deadlineNs) {
       deadlineNs = vdpOutput.nextPollNs;
     }
     struct timespec deadline;
@@ -292,8 +302,11 @@ int main(int argc, char **argv) {
       vdpPresent = vdpReadKeyboard(&input);
     } else {
       vdpGraphics(&vdpOutput, processMessage);
+      processMessage = vdpOutput.graphicsMessage;
     }
-    consoleOutputDone(processMessage);
+    if (processMessage != NULL) {
+      consoleOutputDone(processMessage);
+    }
     if (vdpPresent == false) {
       // Exiting lets the scheduler restart the driver from scratch.
       goto exit;
