@@ -31,8 +31,10 @@ that window and not to whatever has the focus on the display.
 
 Usage:  xkeys.py <window-id> <text>         (Python escapes:  \\r, \\x1b, ...)
         xkeys.py <window-id> --key <keysym>  (for example Up)
+        xkeys.py <window-id> --key <modifier>+...+<keysym>
+                                    (for example Control_L+Alt_L+BackSpace)
 XKEYS_DELAY is the pause after each key, in seconds (default 0.03).
-Modifiers are sent as real Shift_L/Control_L presses around the key:
+Modifiers are sent as real Shift_L/Control_L/Alt_L presses around the key:
 setting only the event's state leaves the VDP's modifier state stuck.
 """
 import ctypes, os, sys, time
@@ -64,7 +66,8 @@ class XKeyEvent(ctypes.Structure):
                 ("same_screen", ctypes.c_int), ("pad", ctypes.c_char * 128)]
 
 
-KEY_PRESS, KEY_RELEASE, SHIFT, CONTROL = 2, 3, 1, 4
+KEY_PRESS, KEY_RELEASE = 2, 3
+MODIFIER_STATES = {"Shift_L": 1, "Control_L": 4, "Alt_L": 8}
 display = x11.XOpenDisplay(None)
 window = int(sys.argv[1], 0)
 root = x11.XDefaultRootWindow(display)
@@ -72,10 +75,11 @@ delay = float(os.environ.get("XKEYS_DELAY", "0.03"))
 
 
 def event(kind, keycode, state):
-    e = XKeyEvent(type=kind, display=display, window=window, root=root,
-                  state=state, keycode=keycode, same_screen=1)
+    keyEvent = XKeyEvent(type=kind, display=display, window=window,
+                         root=root, state=state, keycode=keycode,
+                         same_screen=1)
     x11.XSendEvent(display, window, 1, 1 if kind == KEY_PRESS else 2,
-                   ctypes.byref(e))
+                   ctypes.byref(keyEvent))
     x11.XFlush(display)
     time.sleep(0.01)
 
@@ -90,21 +94,22 @@ def tap(keysym, modifiers=()):
     if x11.XKeycodeToKeysym(display, keycode, 0) != keysym:
         mods.append("Shift_L")
     state = 0
-    for m in mods:
-        event(KEY_PRESS, code(m), state)
-        state |= SHIFT if m == "Shift_L" else CONTROL
+    for modifier in mods:
+        event(KEY_PRESS, code(modifier), state)
+        state |= MODIFIER_STATES[modifier]
     event(KEY_PRESS, keycode, state)
     event(KEY_RELEASE, keycode, state)
-    for m in reversed(mods):
-        state &= ~(SHIFT if m == "Shift_L" else CONTROL)
-        event(KEY_RELEASE, code(m), state)
+    for modifier in reversed(mods):
+        state &= ~MODIFIER_STATES[modifier]
+        event(KEY_RELEASE, code(modifier), state)
     time.sleep(delay)
 
 
 NAMES = {"\r": "Return", "\n": "Return", "\x1b": "Escape", "\t": "Tab",
          "\b": "BackSpace", " ": "space"}
 if sys.argv[2] == "--key":
-    tap(x11.XStringToKeysym(sys.argv[3].encode()))
+    names = sys.argv[3].split("+")
+    tap(x11.XStringToKeysym(names[-1].encode()), names[:-1])
 else:
     for ch in sys.argv[2].encode().decode("unicode_escape"):
         if ch in NAMES:
