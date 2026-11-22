@@ -13,6 +13,7 @@
 #include <string.h>
 
 #include "../../userspace/usr/src/lib/vdp.drv/main/VdpText.c"
+#include "../../userspace/usr/src/lib/vdp.drv/Console/VdpBuffer.c"
 
 CGA_TO_ANSI_MAP
 
