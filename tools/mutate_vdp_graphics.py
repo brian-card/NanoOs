@@ -46,6 +46,8 @@ MAIN = DRIVER + 'main/main.c'
 SETUP = DRIVER + 'Startup/ScreenSetup.c'
 DRAW = DRIVER + 'Draw/Draw.c'
 IMAGES = DRIVER + 'Images/Images.c'
+CONSOLE = DRIVER + 'Console/Console.c'
+EVENTS_C = DRIVER + 'main/VdpEvents.c'
 EVERY = 'nano-os-sim/test_graphics_driver_answers_every_client_message'
 FONTS = 'nano-os-sim/test_graphics_font_slots_are_reused_and_destroyed_fonts_refused'
 BUSY = 'nano-os-sim/test_graphics_a_second_client_is_busy_and_refused'
@@ -54,10 +56,20 @@ EXIT = 'nano-os-sim/test_graphics_an_owner_that_exits_frees_the_display'
 EXITED = 'nano-os-sim/test_graphics_the_display_is_free_as_soon_as_its_owner_has_exited'
 OWNER_FONTS = 'nano-os-sim/test_graphics_an_owners_fonts_are_freed_when_it_exits'
 HELD = 'nano-os-sim/test_graphics_console_text_is_held_while_owned_and_replayed'
-KEYS = 'nano-os-sim/test_graphics_keys_typed_while_owned_are_dropped'
+KEYS = 'nano-os-sim/test_graphics_keys_typed_while_owned_never_reach_the_shell'
 BURST = 'nano-os-sim/test_graphics_a_long_burst_while_owned_replays_whole_lines'
 RESTART = 'nano-os-sim/test_graphics_a_driver_restart_frees_the_display'
 CLEARS = 'nano-os-sim/test_graphics_clears_fill_exactly_the_viewport_and_scissor'
+POINTER = 'nano-os-sim/test_graphics_pointer_moves_and_clicks_arrive_exactly'
+COALESCED = 'nano-os-sim/test_graphics_motion_while_the_owner_is_busy_arrives_coalesced'
+OWNED_KEYS = 'nano-os-sim/test_graphics_keys_typed_while_owned_arrive_as_key_events'
+CLOSED = 'nano-os-sim/test_graphics_after_closing_keys_reach_the_shell_and_the_mouse_is_ignored'
+ORPHAN = 'nano-os-sim/test_graphics_a_revoked_owner_sitting_on_events_holds_up_nobody'
+CURSOR_IMAGE = 'nano-os-sim/test_graphics_an_image_becomes_the_cursor_with_its_hotspot'
+HIDE = 'nano-os-sim/test_graphics_hiding_the_cursor_never_disables_the_mouse'
+WARP = 'nano-os-sim/test_graphics_warping_moves_the_pointer_and_reports_it'
+DESTROYED_CURSOR = 'nano-os-sim/test_graphics_destroying_the_cursors_image_brings_back_the_drivers'
+NEVER_ANSWERS = 'nano-os-sim/test_vdp_driver_writes_anyway_when_the_vdp_never_answers'
 NESTED = 'nano-os-sim/test_graphics_nested_scissors_intersect_and_a_fifth_push_is_an_error'
 BAD = 'nano-os-sim/test_graphics_a_bad_record_stops_the_buffer'
 ONCE = 'nano-os-sim/test_graphics_an_unchanged_clip_is_sent_once'
@@ -116,7 +128,9 @@ MUTATIONS = [
  ('G3-fonts-kept', [(GRAPHICS, '''    vdpDestroyFont(vdpOutput, (GfxHandle) (VDP_FONT_ID_BASE + slot));''',
   '''    (void) slot;''')], OWNER_FONTS, RED),
  ('G2-text-drawn-while-owned', [(MAIN, '''  if (vdpOutput->heldText != NULL) {
-    vdpBufferOutput(vdpOutput->heldText, (const uint8_t*) text, strlen(text));
+    vdpOutput->textToHold = text;
+    callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Console", "vdpHoldText",
+      vdpOutput);
     return;
   }
 ''', '')], HELD, RED),
@@ -124,11 +138,11 @@ MUTATIONS = [
         continue;
       }''', '''        }
       }''')], KEYS, RED),
- ('G2-no-hot-key', [(MAIN, '''        if (vdpIsReleaseKey(input->parser.data)) {''',
+ ('G2-no-hot-key', [(MAIN, '''        if ((keyboard == true) && (vdpIsReleaseKey(input->parser.data))) {''',
   '''        if (false) {''')], HELD, RED),
  ('G2-owner-not-told', [(GRAPHICS, '''    vdpRelease(vdpOutput, true);''',
   '''    vdpRelease(vdpOutput, false);''')], HELD, RED),
- ('G2-replay-untrimmed', [(GRAPHICS, '''  if (heldText->length == VDP_OUTPUT_BUFFER_SIZE) {''',
+ ('G2-replay-untrimmed', [(CONSOLE, '''  if (heldText->length == VDP_OUTPUT_BUFFER_SIZE) {''',
   '''  if (false) {''')], BURST, RED),
  ('G3-restart-keeps-context', [(SETUP, '''  23, 0, 0xC8, 0, 0,
   23, 0, 0xC8, 1, 1,
@@ -191,6 +205,47 @@ MUTATIONS = [
   } else if (vdpOutput->owner == PROCESS_ID_NOT_SET) {''', '''  if (vdpOutput->owner == PROCESS_ID_NOT_SET) {''')], SET_UP, RED),
  ('G4-killed-finish-answered', [(GRAPHICS, '''(revoke == true) ? GFX_ERR_NOT_OWNER : VDP_UNKNOWN''',
   '''GFX_ERR_NOT_OWNER''')], KILLED_FINISH, RED),
+ ('G5-events-not-queued', [(MAIN, '''          vdpQueueEvent(input->events, &input->eventState, &input->parser);''',
+  '''          (void) 0;''')], POINTER, RED),
+ ('G5-no-coalescing', [(EVENTS_C, '''  if ((motion == true) && (state->motionQueued == true) && (queue->count > 0)) {''',
+  '''  if (false) {''')], COALESCED, RED),
+ ('G5-keys-translated-while-owned', [(MAIN, '''      if (input->events != NULL) {''',
+  '''      if (false) {''')], OWNED_KEYS, RED),
+ ('G5-events-kept-after-close', [(GRAPHICS, '''  vdpReleaseEvents(vdpOutput->input);
+  vdpOutput->ownerDefaultFont = 0;''', '''  vdpOutput->ownerDefaultFont = 0;''')], CLOSED, RED),
+ ('G5-events-never-collected', [(MAIN, '''  vdpCollect(&input->eventsMessage);
+  GfxInputEventsArgs *events''', '''  GfxInputEventsArgs *events''')], POINTER, RED),
+ ('G5-no-orphan', [(GRAPHICS, '''  } else if (input->orphanMessage == NULL) {''',
+  '''  } else if (false) {''')], ORPHAN, RED),
+ ('G5-hotspot-dropped', [(GRAPHICS, '''      23, 27, 0x40, args->hotX, args->hotY''',
+  '''      23, 27, 0x40, 0, 0''')], CURSOR_IMAGE, RED),
+ ('G5-hide-disables-the-mouse', [(GRAPHICS, '''    vdpSelectCursor(VDP_HIDDEN_CURSOR_ID);''',
+  '''    const uint8_t disable[] = { 23, 0, 0x89, 1 };
+    vdpWrite(disable, sizeof(disable));''')], HIDE, RED),
+ ('G5-hidden-after-release', [(GRAPHICS, '''  vdpSelectCursor(VDP_CURSOR_ID);
+  vdpWrite(_vdpLeaveGraphics''', '''  vdpWrite(_vdpLeaveGraphics''')], HIDE, RED),
+ ('G5-warp-unsent', [(GRAPHICS, '''  vdpWrite(warp, sizeof(warp));''',
+  '''  (void) warp;''')], WARP, RED),
+ ('G5-destroyed-cursor-kept', [(GRAPHICS, '''      draw->cursor = VDP_CURSOR_ID;
+      vdpShowCursor(draw);''', '''      (void) 0;''')], DESTROYED_CURSOR, RED),
+ ('G5-any-cursor-handle', [(GRAPHICS, '''  } else if (vdpSlot(draw->imagesUsed, cursor, VDP_IMAGE_ID_BASE,
+      VDP_MAX_IMAGES) == VDP_MAX_IMAGES
+  ) {''', '''  } else if (false) {''')], DESTROYED_CURSOR, RED),
+ ('G5-no-pointer-at-acquire', [(GRAPHICS, '''  23, 0, 0x89, 4,
+  VDP_WORD(VDP_SCREEN_WIDTH / 2), VDP_WORD(VDP_SCREEN_HEIGHT / 2)
+''', '')], POINTER, RED),
+ ('G5-boot-replay-before-setup', [(MAIN, '''    if (vdpOutput.replayText != NULL) {
+      vdpWriteText(&vdpOutput, vdpOutput.replayText);
+      free(vdpOutput.replayText);
+      vdpOutput.replayText = NULL;
+    }
+''', ''),
+  (MAIN, '''    if (vdpOutput.finishMessage != NULL) {''', '''    if (vdpOutput.replayText != NULL) {
+      vdpWriteText(&vdpOutput, vdpOutput.replayText);
+      free(vdpOutput.replayText);
+      vdpOutput.replayText = NULL;
+    }
+    if (vdpOutput.finishMessage != NULL) {''')], NEVER_ANSWERS, RED),
 ]
 
 def run(test):
