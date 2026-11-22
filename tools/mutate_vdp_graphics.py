@@ -94,6 +94,7 @@ LONG_REPAINT = 'nano-os-sim/test_wm_mouse_packets_sent_during_long_repaints_are_
 GIVES_BACK = 'nano-os-sim/test_wm_gives_back_all_the_memory_it_used'
 OWNED_POINTER = 'nano-os-sim/test_graphics_the_pointer_shows_only_while_the_display_is_owned'
 CONSOLE_LOGIN = 'nano-os-sim/test_vdp_console_logs_in_and_runs_a_command'
+TEXT_BACKGROUND = 'nano-os-sim/test_wm_leaves_the_console_drawing_text_with_its_background'
 RED, GREEN = 'red', 'green'
 
 CLIENT_ENDED_IGNORED = (GRAPHICS, '''        == vdpOutput->owner)
@@ -260,6 +261,12 @@ MUTATIONS = [
   23, 0, 0x89, 3, VDP_WORD(VDP_CURSOR_ID)
 };''', '''  VDP_WORD(VDP_SCREEN_WIDTH / 2), VDP_WORD(VDP_SCREEN_HEIGHT / 2)
 };''')], OWNED_POINTER, RED),
+ ('G6-glyph-background-left-off', [(GRAPHICS, '''  23, 0, 0xC8, 1, 1,
+  4,
+  12
+};''', '''  23, 0, 0xC8, 1, 1,
+  12
+};''')], TEXT_BACKGROUND, RED),
  ('G6-events-leaked', [(GRAPHICS, '''static void vdpReleaseEvents(VdpInput *input) {
   MESSAGE_ARGS_DESTROY(input->events);
 ''', '''static void vdpReleaseEvents(VdpInput *input) {

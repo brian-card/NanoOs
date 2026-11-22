@@ -206,6 +206,16 @@ def test_wm_ctrl_q_gives_the_console_back_cleared_to_its_prompt(session):
     check_clean(session)
 
 
+def test_wm_leaves_the_console_drawing_text_with_its_background(session):
+    boot_wm(session)
+    vdp = session.vdp
+    quit_wm(session, start_wm(session))
+    vdp.expect(PROMPT + "$")
+    vdp.type("echo abx\bc\r")
+    vdp.expect(r"\r\nabc\r\n" + PROMPT)
+    check_clean(session)
+
+
 def test_wm_a_second_startwm_is_told_the_display_is_busy(session):
     boot_wm(session)
     base = start_wm(session)

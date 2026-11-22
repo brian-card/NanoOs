@@ -272,6 +272,10 @@ class FakeVdp:
         self.mouse_reset_answered = None  # time of the poll answered after it
         self.busy_bytes = 0    # bytes received during the last mouse reset
         self.received = 0      # bytes received in all, as they are carried out
+        # Whether text glyphs fill their background.  As on the real VDP, this
+        # belongs to the canvas, not to a context:  VDU 5 turns it off, and
+        # only VDU 4 or a mode change turns it back on.
+        self.text_background = True
         self.read_rate = read_rate
         self.flooding = []     # pointer positions to send as bytes are read
         self.listening = not answer
@@ -314,6 +318,7 @@ class FakeVdp:
                         with self.lock:
                             # Changing the mode resets the palette, font, and
                             # viewports.
+                            self.text_background = True
                             self.palette = {}
                             self.nearest = {}
                             self.font = None
@@ -385,6 +390,7 @@ class FakeVdp:
                 elif byte in (4, 5):
                     with self.lock:
                         self.vdu5 = byte == 5
+                        self.text_background = byte == 4
                     self._event("vdu", byte)
                     self._send_mode_packet()
                 elif byte == 16:
@@ -1053,6 +1059,9 @@ class FakeVdp:
             return
         with self.lock:
             self._check_no_viewport(f"glyph {byte}")
+            if not self.text_background:
+                self.errors.append(f"text glyph {byte} drawn without its "
+                                   "background, as after VDU 5")
             self.screen = (self.screen[:self.cursor] + chr(byte)
                            + self.screen[self.cursor + 1:])
             self.cursor += 1
