@@ -111,15 +111,12 @@ static void vdpGraphics(VdpOutput *vdpOutput, ProcessMessage *message) {
 /// @return Returns false if the UART reported that the VDP is gone, true
 /// otherwise.
 static bool vdpReadKeyboard(VdpInput *input) {
-  uint8_t bytes[16];
-  ssize_t numBytes = 0;
   int status = 0;
-  while (((status = getHal()->uart->read(VDP_UART, bytes, sizeof(bytes),
-        &numBytes)) == 0)
-    && (numBytes > 0)
+  while (((status = vdpReceive(input)) == 0)
+    && (input->receivedLength > 0)
   ) {
-    for (ssize_t ii = 0; ii < numBytes; ii++) {
-      if (vdpParseByte(&input->parser, bytes[ii]) == false) {
+    for (size_t ii = 0; ii < input->receivedLength; ii++) {
+      if (vdpParseByte(&input->parser, input->received[ii]) == false) {
         continue;
       }
       if (vdpIsPollReply(&input->parser, input->pollCookie) == true) {
@@ -156,6 +153,7 @@ static bool vdpReadKeyboard(VdpInput *input) {
       memcpy(&input->pending[input->pendingLength], key, keyLength);
       input->pendingLength += (uint8_t) keyLength;
     }
+    input->receivedLength = 0;
   }
 
   return status != -EIO;

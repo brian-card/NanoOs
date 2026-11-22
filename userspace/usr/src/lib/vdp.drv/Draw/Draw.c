@@ -109,12 +109,15 @@ RGB222_TO_CGA_MAP
 /// @param total The number of bytes put in the sink.
 /// @param length The number of bytes in data.
 /// @param counting Whether the bytes are only counted.
+/// @param input A pointer to the driver's VdpInput, which takes what the VDP
+///   sends after each write.
 /// @param data The bytes not yet written.
 typedef struct VdpSink {
-  uint32_t total;
-  uint8_t  length;
-  bool     counting;
-  uint8_t  data[VDP_SINK_SIZE];
+  uint32_t  total;
+  uint8_t   length;
+  bool      counting;
+  VdpInput *input;
+  uint8_t   data[VDP_SINK_SIZE];
 } VdpSink;
 
 /// @struct VdpWalk
@@ -177,7 +180,7 @@ static const GfxRect _vdpScreen = { 0, 0, VDP_SCREEN_WIDTH, VDP_SCREEN_HEIGHT };
 ///   uint8_t length)
 ///
 /// @brief Put VDU bytes in a sink, writing what it holds first if they don't
-/// fit.
+/// fit, and then taking what the VDP has sent meanwhile.
 ///
 /// @param sink The sink.
 /// @param bytes The bytes.
@@ -192,6 +195,7 @@ static void vdpEmit(VdpSink *sink, const uint8_t *bytes, uint8_t length) {
   if (sink->length + length > VDP_SINK_SIZE) {
     vdpWrite(sink->data, sink->length);
     sink->length = 0;
+    vdpReceive(sink->input);
   }
   memcpy(&sink->data[sink->length], bytes, length);
   sink->length += length;
@@ -713,6 +717,7 @@ static void vdpWalkInit(VdpWalk *walk, VdpOutput *vdpOutput, VdpPen *pen,
 ) {
   memset(walk, 0, sizeof(*walk));
   walk->vdpOutput = vdpOutput;
+  walk->sink.input = vdpOutput->input;
   walk->draw = vdpOutput->draw;
   walk->pen = pen;
   walk->preload = preload;

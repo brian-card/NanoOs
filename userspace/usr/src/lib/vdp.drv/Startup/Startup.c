@@ -252,7 +252,7 @@ static void vdpDestroyArgs(ProcessMessage *message, void *args) {
 /// @fn void* vdpShutdown(void *args)
 ///
 /// @brief Free the arguments of the messages to the console and the display's
-/// owner before the driver exits.
+/// owner, and the buffer of received bytes, before the driver exits.
 ///
 /// @param args A pointer to the driver's VdpStartupArgs.
 ///
@@ -265,6 +265,8 @@ void* vdpShutdown(void *args) {
   vdpDestroyArgs(NULL, input->events);
   vdpDestroyArgs(input->eventsMessage, input->sentEvents);
   vdpDestroyArgs(input->orphanMessage, input->orphanEvents);
+  free(input->received);
+  input->received = NULL;
   return args;
 }
 
@@ -276,7 +278,8 @@ void* vdpShutdown(void *args) {
 /// @param args A pointer to the driver's VdpStartupArgs.
 ///
 /// @return Returns the provided pointer on success, NULL if there was no
-/// memory for the arguments of the messages to the console.
+/// memory for the arguments of the messages to the console or the buffer of
+/// received bytes.
 void* vdpStartup(void *args) {
   VdpStartupArgs *startupArgs = (VdpStartupArgs*) args;
   VdpInput *input = startupArgs->input;
@@ -289,8 +292,9 @@ void* vdpStartup(void *args) {
     sizeof(*input->inputArgs));
   input->sizeArgs = (ConsoleWinsizeArgs*) vdpCreateArgs(
     sizeof(*input->sizeArgs));
+  input->received = (uint8_t*) malloc(VDP_RECEIVED_SIZE);
   if ((input->portArgs == NULL) || (input->inputArgs == NULL)
-    || (input->sizeArgs == NULL)
+    || (input->sizeArgs == NULL) || (input->received == NULL)
   ) {
     vdpShutdown(args);
     return NULL;
