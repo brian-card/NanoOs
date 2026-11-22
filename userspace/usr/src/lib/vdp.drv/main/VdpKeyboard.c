@@ -57,6 +57,8 @@ static bool vdpPacketLengthIsValid(uint8_t command, uint8_t length) {
     return length == 1;
   } else if (command == VDP_PACKET_KEYBOARD) {
     return length == 4;
+  } else if (command == VDP_PACKET_MOUSE) {
+    return length == VDP_MOUSE_PACKET_LENGTH;
   }
   return length <= VDP_PACKET_MAX_LENGTH;
 }
