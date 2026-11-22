@@ -68,6 +68,12 @@ extern "C"
 /// @brief The size of the buffer of keys waiting to be sent to the console.
 #define VDP_PENDING_SIZE 32
 
+/// @def VDP_RECEIVED_SIZE
+///
+/// @brief The size of VdpInput's buffer of bytes the VDP has sent that are
+/// waiting to be parsed.
+#define VDP_RECEIVED_SIZE 256
+
 /// @def VDP_GENERAL_POLL_TIMEOUT_SECONDS
 ///
 /// @brief How long, in seconds, to wait for the VDP to answer the general poll
@@ -267,6 +273,9 @@ typedef struct VdpDrawState {
 /// @param orphanMessage The GFX_MSG_INPUT_EVENTS a previous owner hadn't
 ///   finished with when it gave up the display, or NULL.
 /// @param orphanEvents The arguments of orphanMessage.
+/// @param received The bytes the VDP has sent that are waiting to be parsed,
+///   VDP_RECEIVED_SIZE of them, allocated at startup.
+/// @param receivedLength The number of bytes in received.
 typedef struct VdpInput {
   ProcessId                    consolePid;
   int                          portId;
@@ -289,6 +298,8 @@ typedef struct VdpInput {
   GfxInputEventsArgs           *sentEvents;
   ProcessMessage              *orphanMessage;
   GfxInputEventsArgs           *orphanEvents;
+  uint8_t                      *received;
+  size_t                        receivedLength;
 } VdpInput;
 
 /// @struct VdpOutput
@@ -506,6 +517,28 @@ static inline bool vdpTimeReached(const struct timespec *time) {
 /// @return This function returns no value.
 static inline void vdpWrite(const uint8_t *data, size_t length) {
   getHal()->uart->write(VDP_UART, data, (ssize_t) length, NULL);
+}
+
+/// @fn static inline int vdpReceive(VdpInput *input)
+///
+/// @brief Move the bytes the VDP has sent from UART0's receive ring into the
+/// driver's received buffer, as far as it has room.  The Draw overlay calls
+/// this between the writes of a long submit, because the VDP sends whether or
+/// not the ring has room, and the ring would otherwise overflow before the
+/// main overlay next reads it.
+///
+/// @param input A pointer to the driver's VdpInput.
+///
+/// @return Returns the status of the UART read.
+static inline int vdpReceive(VdpInput *input) {
+  ssize_t numBytes = 0;
+  int status = getHal()->uart->read(VDP_UART,
+    &input->received[input->receivedLength],
+    VDP_RECEIVED_SIZE - input->receivedLength, &numBytes);
+  if (numBytes > 0) {
+    input->receivedLength += (size_t) numBytes;
+  }
+  return status;
 }
 
 /// @fn static inline void vdpSetKeyboardLeds(uint8_t leds)
