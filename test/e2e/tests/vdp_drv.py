@@ -50,7 +50,7 @@ def assert_vdp_set_up_on_answer(vdp):
              for _t, kind, detail in vdp.events[first_mode:first_mode + 14]]
     assert setup == [("mode", 0), ("behaviour", (1, 0xFE)), ("layout", 1),
                      ("cls", None), ("cursor", 1), ("mouse", "reset"),
-                     ("mouse", "disable"), ("pointer", VDP_POINTER_ID),
+                     ("mouse", "disable"), ("pointer", VDP_HIDDEN_POINTER_ID),
                      ("font", VDP_FONT_ID),
                      ("colour", CGA_WHITE), ("colour", 128 + CGA_BLACK),
                      ("cls", None), ("tab", (0, 0)),
@@ -90,6 +90,7 @@ VDP_RESET = [
 
 
 VDP_POINTER_ID = 0xF000
+VDP_HIDDEN_POINTER_ID = 0xF001
 
 
 VDP_SETUP_POLL_COOKIE = 0x4f
@@ -165,15 +166,18 @@ def assert_vdp_font(vdp):
 
 
 def assert_vdp_pointer(vdp):
-    """Check that a FakeVdp shows the driver's mouse pointer.
+    """Check that a FakeVdp's mouse is enabled with the transparent cursor,
+    so that the console shows no pointer, and that the driver's cursor is
+    ready for a display owner.
 
     @param vdp The FakeVdp, after the driver has set up its screen.
     """
     assert vdp.mouse_enabled, "the mouse wasn't enabled"
-    assert vdp.mouse_visible, "the pointer isn't shown"
-    assert vdp.mouse_cursor == VDP_POINTER_ID, \
+    assert vdp.mouse_visible, "the VDP shows no cursor at all"
+    assert vdp.mouse_cursor == VDP_HIDDEN_POINTER_ID, \
         f"the pointer is cursor {vdp.mouse_cursor}"
-    image = vdp.pointer_image()
+    assert vdp.pointer_image() == ["."], vdp.pointer_image()
+    image = vdp.pointer_image(VDP_POINTER_ID)
     assert image == VDP_POINTER, \
         "the pointer isn't the driver's cursor:\n" + "\n".join(image or [])
     _bitmap, hot_x, hot_y = vdp.cursors[VDP_POINTER_ID]
@@ -312,7 +316,7 @@ def test_vdp_pointer_appears_once_a_mouse_is_plugged_in(s):
     deadline = time.time() + 10
     while not vdp.mouse_visible:
         assert time.time() < deadline, \
-            "the restarted driver never showed the pointer"
+            "the restarted driver never enabled the mouse"
         time.sleep(0.1)
     assert_vdp_pointer(vdp)
     assert vdp.errors == [], f"unexpected VDU commands: {vdp.errors}"

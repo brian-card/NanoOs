@@ -44,6 +44,7 @@ DRIVER = 'userspace/usr/src/lib/vdp.drv/'
 GRAPHICS = DRIVER + 'Graphics/Graphics.c'
 MAIN = DRIVER + 'main/main.c'
 SETUP = DRIVER + 'Startup/ScreenSetup.c'
+STARTUP = DRIVER + 'Startup/Startup.c'
 DRAW = DRIVER + 'Draw/Draw.c'
 IMAGES = DRIVER + 'Images/Images.c'
 CONSOLE = DRIVER + 'Console/Console.c'
@@ -91,6 +92,8 @@ KILLED_FINISH = 'nano-os-sim/test_graphics_killing_an_owner_waiting_on_finish_fr
 SET_UP = 'nano-os-sim/test_graphics_the_display_is_busy_until_the_driver_has_set_it_up'
 LONG_REPAINT = 'nano-os-sim/test_wm_mouse_packets_sent_during_long_repaints_are_never_lost'
 GIVES_BACK = 'nano-os-sim/test_wm_gives_back_all_the_memory_it_used'
+OWNED_POINTER = 'nano-os-sim/test_graphics_the_pointer_shows_only_while_the_display_is_owned'
+CONSOLE_LOGIN = 'nano-os-sim/test_vdp_console_logs_in_and_runs_a_command'
 RED, GREEN = 'red', 'green'
 
 CLIENT_ENDED_IGNORED = (GRAPHICS, '''        == vdpOutput->owner)
@@ -224,8 +227,8 @@ MUTATIONS = [
  ('G5-hide-disables-the-mouse', [(GRAPHICS, '''    vdpSelectCursor(VDP_HIDDEN_CURSOR_ID);''',
   '''    const uint8_t disable[] = { 23, 0, 0x89, 1 };
     vdpWrite(disable, sizeof(disable));''')], HIDE, RED),
- ('G5-hidden-after-release', [(GRAPHICS, '''  vdpSelectCursor(VDP_CURSOR_ID);
-  vdpWrite(_vdpLeaveGraphics''', '''  vdpWrite(_vdpLeaveGraphics''')], HIDE, RED),
+ ('G5-hidden-after-release', [(GRAPHICS, '''  vdpSelectCursor(VDP_HIDDEN_CURSOR_ID);
+  vdpWrite(_vdpLeaveGraphics''', '''  vdpWrite(_vdpLeaveGraphics''')], CURSOR_IMAGE, RED),
  ('G5-warp-unsent', [(GRAPHICS, '''  vdpWrite(warp, sizeof(warp));''',
   '''  (void) warp;''')], WARP, RED),
  ('G5-destroyed-cursor-kept', [(GRAPHICS, '''      draw->cursor = VDP_CURSOR_ID;
@@ -250,6 +253,13 @@ MUTATIONS = [
     if (vdpOutput.finishMessage != NULL) {''')], NEVER_ANSWERS, RED),
  ('G6-received-not-drained', [(DRAW, '''    vdpReceive(sink->input);
 ''', '')], LONG_REPAINT, RED),
+ ('G6-pointer-shown-at-boot', [(STARTUP, '''  23, 0, 0x89, 3, VDP_WORD(VDP_HIDDEN_CURSOR_ID)
+};''', '''  23, 0, 0x89, 3, VDP_WORD(VDP_CURSOR_ID)
+};''')], CONSOLE_LOGIN, RED),
+ ('G6-no-pointer-for-the-owner', [(GRAPHICS, '''  VDP_WORD(VDP_SCREEN_WIDTH / 2), VDP_WORD(VDP_SCREEN_HEIGHT / 2),
+  23, 0, 0x89, 3, VDP_WORD(VDP_CURSOR_ID)
+};''', '''  VDP_WORD(VDP_SCREEN_WIDTH / 2), VDP_WORD(VDP_SCREEN_HEIGHT / 2)
+};''')], OWNED_POINTER, RED),
  ('G6-events-leaked', [(GRAPHICS, '''static void vdpReleaseEvents(VdpInput *input) {
   MESSAGE_ARGS_DESTROY(input->events);
 ''', '''static void vdpReleaseEvents(VdpInput *input) {

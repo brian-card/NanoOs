@@ -36,7 +36,7 @@ import gfxrecords as gr
 from harness import (PROMPT, VDP_CONFIG_SYS, SkipTest, message_args_reports,
                      vdp_login)
 from fakevdp import KEYCODE_a
-from tests.vdp_drv import VDP_FONT_ID, assert_vdp_font
+from tests.vdp_drv import VDP_FONT_ID, VDP_POINTER, assert_vdp_font
 
 
 GRAPHICS_LINE = "GRAPHICS=/system/drivers/vdp.drv /system/commands/gfxprobe\n"
@@ -1072,7 +1072,6 @@ CURSOR_ROWS = ["WB..", "BWB.", ".BWB", "..BW"]
 
 def test_graphics_an_image_becomes_the_cursor_with_its_hotspot(session):
     boot_with_files(session, {"p": CURSOR_PIXELS})
-    driver_cursor = session.vdp.pointer_image()
     lines = own(session, "image rgba2222 4 4 /etc/p cursor 0xf200 2 1")
     assert lines[2:] == ["gfxprobe: image no error 0xf200",
                          "gfxprobe: cursor no error",
@@ -1080,8 +1079,17 @@ def test_graphics_an_image_becomes_the_cursor_with_its_hotspot(session):
     assert session.vdp.pointer_image() == CURSOR_ROWS
     assert session.vdp.pointer_hotspot() == (2, 1)
     disown(session)
-    assert session.vdp.pointer_image() == driver_cursor
-    assert len(driver_cursor) == 18
+    assert session.vdp.pointer_image() == ["."]
+
+
+def test_graphics_the_pointer_shows_only_while_the_display_is_owned(session):
+    boot_with_files(session, {})
+    assert session.vdp.pointer_image() == ["."]
+    start_owner(session, "hold")
+    assert session.vdp.pointer_image() == VDP_POINTER
+    assert session.vdp.pointer_hotspot() == (0, 0)
+    disown(session)
+    assert session.vdp.pointer_image() == ["."]
 
 
 def mouse_disables(vdp):
@@ -1101,7 +1109,6 @@ def test_graphics_hiding_the_cursor_never_disables_the_mouse(session):
              b"print hidden events 1 10000 show 1 finish print shown "
              b"events 1 10000 show 0 finish print hidden hold"})
     disables = mouse_disables(session.vdp)
-    driver_cursor = session.vdp.pointer_image()
     start_owner(session, "@/etc/s")
     session.child.expect(r"gfxprobe: hidden\r*\n", timeout=30)
     assert session.vdp.pointer_image() == ["."]
@@ -1112,9 +1119,8 @@ def test_graphics_hiding_the_cursor_never_disables_the_mouse(session):
     session.child.expect(r"gfxprobe: hidden\r*\n", timeout=30)
     assert session.vdp.pointer_image() == ["."]
     assert mouse_disables(session.vdp) == disables
-    # Released while hidden, the console gets the driver's cursor back.
     disown(session)
-    assert session.vdp.pointer_image() == driver_cursor
+    assert session.vdp.pointer_image() == ["."]
 
 
 def test_graphics_warping_moves_the_pointer_and_reports_it(session):
@@ -1133,12 +1139,11 @@ def test_graphics_destroying_the_cursors_image_brings_back_the_drivers(
         "p": CURSOR_PIXELS,
         "s": b"image rgba2222 4 4 /etc/p cursor 0xf201 0 0 cursor 0xf200 0 0 "
              b"destroy 0xf200"})
-    driver_cursor = session.vdp.pointer_image()
     lines = own(session, "@/etc/s")
     assert lines[2:] == ["gfxprobe: image no error 0xf200",
                          "gfxprobe: cursor invalid handle",
                          "gfxprobe: cursor no error",
                          "gfxprobe: destroy no error",
                          "gfxprobe: finish no error"], lines
-    assert session.vdp.pointer_image() == driver_cursor
+    assert session.vdp.pointer_image() == VDP_POINTER
     disown(session)

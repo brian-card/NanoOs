@@ -821,18 +821,23 @@ class FakeVdp:
         else:
             self.errors.append(f"VDU 23,0,&89,{command}")
 
-    def pointer_image(self):
-        """Return the mouse pointer as text, one string per row.
+    def pointer_image(self, cursor=None):
+        """Return the mouse pointer, or another cursor, as text, one string
+        per row.
+
+        @param cursor The ID of the cursor, or None for the pointer's.
 
         @return '.' for a transparent pixel, 'B' for opaque black, 'W' for
-          opaque white, and '?' for anything else, or None if no custom
-          pointer is shown.
+          opaque white, and '?' for anything else, or None if the cursor
+          isn't a custom one.
         """
         with self.lock:
-            if self.mouse_cursor not in self.cursors:
+            if cursor is None:
+                cursor = self.mouse_cursor
+            if cursor not in self.cursors:
                 return None
             (width, height, data, fmt), _hot_x, _hot_y = (
-                self.cursors[self.mouse_cursor])
+                self.cursors[cursor])
         rows = []
         for pixel_row in range(height):
             row = ""

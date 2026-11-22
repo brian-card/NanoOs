@@ -696,7 +696,7 @@ def test_wm_gives_back_all_the_memory_it_used(session):
     vdp = session.vdp
     vdp_login_as(vdp, "root", "rootroot")
     heaps = []
-    for _run in range(9):
+    for _run in range(12):
         base = len(vdp.context_events())
         vdp.type("startwm --content=call --move=live\r")
         assert vdp.wait_context_events(base + 1)[base:base + 1] == ACQUIRE
@@ -707,9 +707,9 @@ def test_wm_gives_back_all_the_memory_it_used(session):
         vdp.expect(PROMPT + "$")
         heaps.append(heap_at_prompt(session))
     # The first runs fill the kernel's caches and fragment the heap, and free
-    # memory then moves with the shells' own state; the middle of the last
-    # three runs must not fall below the middle of the three before.
-    assert sorted(heaps[6:9])[1] >= sorted(heaps[3:6])[1], heaps
+    # memory then swings by up to 32 bytes with the shells' own state.  A leak
+    # of 16 bytes a run loses 96 over the six runs between these windows.
+    assert min(heaps[9:12]) >= min(heaps[3:6]) - 48, heaps
     check_clean(session)
 
 

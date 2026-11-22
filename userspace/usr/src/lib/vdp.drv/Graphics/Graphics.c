@@ -369,8 +369,9 @@ static void vdpFinishDone(VdpOutput *vdpOutput, uint8_t status) {
 /// cursor off (VDU 23,1,0), draw text at the graphics cursor (VDU 5) without
 /// wrapping it at the viewport's edge (VDU 23,16,&40,&BF), reset the
 /// viewports (VDU 26) and the graphics origin (VDU 29,0;0;), clear the
-/// screen (VDU 16), and put the pointer in the middle of the screen
-/// (VDU 23,0,&89,4,x;y;).  The VDP turns the pointer's position into the
+/// screen (VDU 16), put the pointer in the middle of the screen
+/// (VDU 23,0,&89,4,x;y;), and show it as the driver's cursor
+/// (VDU 23,0,&89,3,id;).  The VDP turns the pointer's position into the
 /// context's coordinates only when it moves, so without the move the owner's
 /// first mouse packets would carry it in the console's.
 static const uint8_t _vdpEnterGraphics[] = {
@@ -383,7 +384,8 @@ static const uint8_t _vdpEnterGraphics[] = {
   29, 0, 0, 0, 0,
   16,
   23, 0, 0x89, 4,
-  VDP_WORD(VDP_SCREEN_WIDTH / 2), VDP_WORD(VDP_SCREEN_HEIGHT / 2)
+  VDP_WORD(VDP_SCREEN_WIDTH / 2), VDP_WORD(VDP_SCREEN_HEIGHT / 2),
+  23, 0, 0x89, 3, VDP_WORD(VDP_CURSOR_ID)
 };
 
 /// @var _vdpLeaveGraphics
@@ -473,11 +475,10 @@ static void vdpReleaseEvents(VdpInput *input) {
 /// @fn static void vdpRelease(VdpOutput *vdpOutput, bool revoke)
 ///
 /// @brief End the display's ownership:  free everything the owner created,
-/// give the screen and the driver's mouse cursor back to the console's
-/// context, and have the console's held text redrawn from the top of a
-/// cleared screen.  A GFX_MSG_FINISH the
-/// owner is waiting on is answered with GFX_ERR_NOT_OWNER if the owner is
-/// still running, which only a revoke leaves it.
+/// give the screen back to the console's context with the pointer hidden, and
+/// have the console's held text redrawn from the top of a cleared screen.  A
+/// GFX_MSG_FINISH the owner is waiting on is answered with GFX_ERR_NOT_OWNER
+/// if the owner is still running, which only a revoke leaves it.
 ///
 /// @param vdpOutput A pointer to the driver's VdpOutput.
 /// @param revoke Whether to tell the owner with GFX_MSG_DISPLAY_REVOKED,
@@ -495,7 +496,7 @@ static void vdpRelease(VdpOutput *vdpOutput, bool revoke) {
   vdpOutput->draw = NULL;
   vdpReleaseEvents(vdpOutput->input);
   vdpOutput->ownerDefaultFont = 0;
-  vdpSelectCursor(VDP_CURSOR_ID);
+  vdpSelectCursor(VDP_HIDDEN_CURSOR_ID);
   vdpWrite(_vdpLeaveGraphics, sizeof(_vdpLeaveGraphics));
   vdpOutput->textState.row = 0;
   vdpOutput->textState.column = 0;

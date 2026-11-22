@@ -104,8 +104,9 @@ static const uint8_t _vdpCursorUploadStart[] = {
 /// its hotspot at the top left (VDU 23,27,&40,0,0), reset the mouse
 /// (VDU 23,0,&89,2) so that one plugged in or unplugged since the last reset
 /// is noticed, disable it (VDU 23,0,&89,1), enable it (VDU 23,0,&89,0), and
-/// select the cursor (VDU 23,0,&89,3,id;).  The VDP only enables a mouse its
-/// last reset detected, but an enable while the mouse is already enabled
+/// select the transparent cursor (VDU 23,0,&89,3,id;), because the pointer
+/// shows only while a program owns the display.  The VDP only enables a mouse
+/// its last reset detected, but an enable while the mouse is already enabled
 /// shows the pointer without checking, so the disable comes between; it comes
 /// after the reset because it suspends the mouse's port, which the enable
 /// resumes.  The VDP ignores the cursor selection while the mouse is disabled.
@@ -116,17 +117,17 @@ static const uint8_t _vdpCursorUploadEnd[] = {
   23, 0, 0x89, 2,
   23, 0, 0x89, 1,
   23, 0, 0x89, 0,
-  23, 0, 0x89, 3, VDP_WORD(VDP_CURSOR_ID)
+  23, 0, 0x89, 3, VDP_WORD(VDP_HIDDEN_CURSOR_ID)
 };
 
 /// @var _vdpHiddenCursor
 ///
-/// @brief VDU commands that make the transparent cursor a display owner hides
-/// the pointer with:  clear its buffer (VDU 23,0,&A0,id;2), write one
-/// transparent RGBA2222 pixel to it (VDU 23,0,&A0,id;0,1;0), select it as the
-/// bitmap (VDU 23,27,&20,id;), make a 1x1 RGBA2222 bitmap of it
-/// (VDU 23,27,&21,1;1;1), and make a mouse cursor of the bitmap
-/// (VDU 23,27,&40,0,0).
+/// @brief VDU commands that make the transparent cursor, which hides the
+/// pointer while nobody owns the display and when an owner hides it:  clear
+/// its buffer (VDU 23,0,&A0,id;2), write one transparent RGBA2222 pixel to it
+/// (VDU 23,0,&A0,id;0,1;0), select it as the bitmap (VDU 23,27,&20,id;), make
+/// a 1x1 RGBA2222 bitmap of it (VDU 23,27,&21,1;1;1), and make a mouse cursor
+/// of the bitmap (VDU 23,27,&40,0,0).
 static const uint8_t _vdpHiddenCursor[] = {
   23, 0, 0xA0, VDP_WORD(VDP_HIDDEN_CURSOR_ID), 2,
   23, 0, 0xA0, VDP_WORD(VDP_HIDDEN_CURSOR_ID), 0, VDP_WORD(1), 0,
@@ -138,7 +139,7 @@ static const uint8_t _vdpHiddenCursor[] = {
 /// @fn static void vdpDefineCursor(void)
 ///
 /// @brief Upload the mouse cursor and the transparent one to the VDP, reset
-/// and enable the mouse, and make the cursor its pointer.
+/// and enable the mouse, and make the transparent cursor its pointer.
 ///
 /// @return This function returns no value.
 static void vdpDefineCursor(void) {
