@@ -38,14 +38,16 @@
 /// @def VDP_POLL_NS
 ///
 /// @brief How long to wait for a message, in nanoseconds, while a message the
-/// driver sent hasn't been marked done.  The console doesn't notify the
+/// driver sent hasn't been marked done.  Its receiver doesn't notify the
 /// driver when it marks one done.
 #define VDP_POLL_NS 10000000L
 
 /// @fn static void vdpWriteText(VdpOutput *vdpOutput, const char *text)
 ///
-/// @brief Draw a string of console text on the VDP, buffer it if the VDP
-/// isn't listening yet, or hold it if another process owns the display.
+/// @brief Draw a string of console text on the VDP, or have the Console
+/// overlay hold it if the VDP isn't listening yet or another process owns the
+/// display.  Holding it there keeps the buffering, which happens only then,
+/// out of the main overlay.
 ///
 /// @param vdpOutput A pointer to the driver's VdpOutput.
 /// @param text The NUL-terminated string to draw.
@@ -53,7 +55,9 @@
 /// @return This function returns no value.
 static void vdpWriteText(VdpOutput *vdpOutput, const char *text) {
   if (vdpOutput->heldText != NULL) {
-    vdpBufferOutput(vdpOutput->heldText, (const uint8_t*) text, strlen(text));
+    vdpOutput->textToHold = text;
+    callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Console", "vdpHoldText",
+      vdpOutput);
     return;
   }
   uint8_t output[4 * VDP_TEXT_MAX_EXPANSION];
@@ -64,8 +68,6 @@ static void vdpWriteText(VdpOutput *vdpOutput, const char *text) {
       &vdpOutput->textState, &text, output, sizeof(output));
     if (vdpOutput->listening == true) {
       vdpWrite(output, length);
-    } else if (vdpOutput->buffer != NULL) {
-      vdpBufferOutput(vdpOutput->buffer, output, length);
     }
   }
 }
@@ -100,8 +102,9 @@ static void vdpGraphics(VdpOutput *vdpOutput, ProcessMessage *message) {
 /// @brief Read everything the VDP has sent, adding the translation of each
 /// key that went down to the keys waiting to be sent to the console, and
 /// setting the keyboard's LEDs after each lock key.  A key that doesn't fit
-/// is dropped, and so is every key while another process owns the display,
-/// except Ctrl+Alt+Backspace, which takes the display back.
+/// is dropped.  While another process owns the display, keys and the mouse
+/// are queued for it instead, except Ctrl+Alt+Backspace, which takes the
+/// display back, and mouse packets are ignored while nobody does.
 ///
 /// @param input A pointer to the driver's VdpInput.
 ///
@@ -123,21 +126,22 @@ static bool vdpReadKeyboard(VdpInput *input) {
         input->pollAnswered = true;
         continue;
       }
-      if ((input->parser.command != VDP_PACKET_KEYBOARD)
-        || (input->parser.length != 4)
-      ) {
-        continue;
-      }
-
+      bool keyboard = (input->parser.command == VDP_PACKET_KEYBOARD);
       uint8_t leds = 0;
-      if (vdpUpdateLocks(input->parser.data, &input->numLock, &leds)) {
+      if ((keyboard == true)
+        && (vdpUpdateLocks(input->parser.data, &input->numLock, &leds))
+      ) {
         vdpSetKeyboardLeds(leds);
       }
-      if (input->output->heldText != NULL) {
-        if (vdpIsReleaseKey(input->parser.data)) {
+      if (input->events != NULL) {
+        if ((keyboard == true) && (vdpIsReleaseKey(input->parser.data))) {
           callOverlayFunction(OVERLAY_SAME_NAMESPACE,
             "Graphics", "vdpRevoke", input->output);
+        } else {
+          vdpQueueEvent(input->events, &input->eventState, &input->parser);
         }
+        continue;
+      } else if (keyboard == false) {
         continue;
       }
       uint8_t key[VDP_KEY_MAX_BYTES];
@@ -157,6 +161,81 @@ static bool vdpReadKeyboard(VdpInput *input) {
   return status != -EIO;
 }
 
+/// @fn static bool vdpCollect(ProcessMessage **message)
+///
+/// @brief Release a message the driver sent once its receiver has marked it
+/// done.
+///
+/// @param message A pointer to the message, which is set to NULL when it's
+///   released.
+///
+/// @return Returns true if the message was released, false otherwise.
+static bool vdpCollect(ProcessMessage **message) {
+  if ((*message == NULL) || (processMessageDone(*message) == false)) {
+    return false;
+  }
+  processMessageRelease(*message);
+  *message = NULL;
+  return true;
+}
+
+/// @fn static bool vdpSend(ProcessId pid, int64_t type, void *args,
+///   size_t size, ProcessMessage **sent)
+///
+/// @brief Send a message whose receiver marks it done when it has finished
+/// with the arguments.
+///
+/// @param pid The receiver.
+/// @param type The message's type.
+/// @param args The message's arguments.
+/// @param size The size of the arguments.
+/// @param sent Set to the message if it was sent.
+///
+/// @return Returns true if the message was sent, false otherwise.
+static bool vdpSend(ProcessId pid, int64_t type, void *args, size_t size,
+  ProcessMessage **sent
+) {
+  ProcessMessage *message = getAvailableMessage();
+  if (message == NULL) {
+    return false;
+  }
+  processMessageInit(message, type, args, size, /* waiting= */ true);
+  if (sendProcessMessageToPid(pid, message) != processSuccess) {
+    processMessageRelease(message);
+    return false;
+  }
+  *sent = message;
+  return true;
+}
+
+/// @fn static void vdpSendEvents(VdpInput *input)
+///
+/// @brief Send the display's owner the events waiting for it once it has
+/// finished with the last ones, swapping the queue with the spare arguments.
+///
+/// @param input A pointer to the driver's VdpInput.
+///
+/// @return This function returns no value.
+static void vdpSendEvents(VdpInput *input) {
+  vdpCollect(&input->eventsMessage);
+  GfxInputEventsArgs *events = input->events;
+  if ((input->eventsMessage != NULL) || (events == NULL)
+    || (events->count == 0)
+  ) {
+    return;
+  }
+
+  if (vdpSend(input->output->owner,
+      GFX_COMMAND_SIGNATURE | GFX_MSG_INPUT_EVENTS, events, sizeof(*events),
+      &input->eventsMessage) == false
+  ) {
+    return;
+  }
+  input->events = input->sentEvents;
+  input->events->count = 0;
+  input->sentEvents = events;
+}
+
 /// @fn static void vdpSendInput(VdpInput *input)
 ///
 /// @brief Collect the answers to the messages sent to the console, and send
@@ -167,27 +246,13 @@ static bool vdpReadKeyboard(VdpInput *input) {
 ///
 /// @return This function returns no value.
 static void vdpSendInput(VdpInput *input) {
-  if ((input->portMessage != NULL)
-    && (processMessageDone(input->portMessage) == true)
+  if ((vdpCollect(&input->portMessage) == true)
+    && (input->portArgs->returnValue == 0)
   ) {
-    if (input->portArgs->returnValue == 0) {
-      input->portId = input->portArgs->portId;
-    }
-    processMessageRelease(input->portMessage);
-    input->portMessage = NULL;
+    input->portId = input->portArgs->portId;
   }
-  if ((input->inputMessage != NULL)
-    && (processMessageDone(input->inputMessage) == true)
-  ) {
-    processMessageRelease(input->inputMessage);
-    input->inputMessage = NULL;
-  }
-  if ((input->sizeMessage != NULL)
-    && (processMessageDone(input->sizeMessage) == true)
-  ) {
-    processMessageRelease(input->sizeMessage);
-    input->sizeMessage = NULL;
-  }
+  vdpCollect(&input->inputMessage);
+  vdpCollect(&input->sizeMessage);
   if ((input->portId < 0) || (input->inputMessage != NULL)
     || (input->pendingLength == 0)
   ) {
@@ -208,17 +273,12 @@ static void vdpSendInput(VdpInput *input) {
     consumed += 1 + keyLength;
   }
 
-  ProcessMessage *message = getAvailableMessage();
-  if (message == NULL) {
+  if (vdpSend(input->consolePid,
+      CONSOLE_COMMAND_SIGNATURE | CONSOLE_INPUT_READY, input->inputArgs,
+      sizeof(*input->inputArgs), &input->inputMessage) == false
+  ) {
     return;
   }
-  processMessageInit(message, CONSOLE_COMMAND_SIGNATURE | CONSOLE_INPUT_READY,
-    input->inputArgs, sizeof(*input->inputArgs), /* waiting= */ true);
-  if (sendProcessMessageToPid(input->consolePid, message) != processSuccess) {
-    processMessageRelease(message);
-    return;
-  }
-  input->inputMessage = message;
   input->pendingLength -= consumed;
   memmove(input->pending, &input->pending[consumed], input->pendingLength);
 }
@@ -247,11 +307,6 @@ int main(int argc, char **argv) {
     if (vdpOutput.finishMessage != NULL) {
       vdpGraphics(&vdpOutput, NULL);
     }
-    if (vdpOutput.replayText != NULL) {
-      vdpWriteText(&vdpOutput, vdpOutput.replayText);
-      free(vdpOutput.replayText);
-      vdpOutput.replayText = NULL;
-    }
     if (((vdpOutput.listening == false)
         || ((input.portId < 0) && (input.portMessage == NULL)))
       && (callOverlayFunction(OVERLAY_SAME_NAMESPACE,
@@ -259,30 +314,34 @@ int main(int argc, char **argv) {
     ) {
       goto exit;
     }
+    if (vdpOutput.replayText != NULL) {
+      vdpWriteText(&vdpOutput, vdpOutput.replayText);
+      free(vdpOutput.replayText);
+      vdpOutput.replayText = NULL;
+    }
     if ((input.portId >= 0)
       && ((vdpOutput.textState.resizeReportWanted == true)
         || ((vdpOutput.sizeChanged == true) && (input.sizeMessage == NULL)))
     ) {
       callOverlayFunction(OVERLAY_SAME_NAMESPACE,
-        "Graphics", "vdpReportSize", &startupArgs);
+        "Console", "vdpReportSize", &startupArgs);
     }
     vdpSendInput(&input);
+    vdpSendEvents(&input);
 
-    int64_t deadlineNs = INT64_MAX;
+    struct timespec *timeout = NULL;
+    if (vdpOutput.nextPoll.tv_nsec != VDP_NEVER) {
+      timeout = &vdpOutput.nextPoll;
+    }
+    struct timespec soon;
     if ((input.portMessage != NULL) || (input.inputMessage != NULL)
       || (input.pendingLength > 0) || (input.sizeMessage != NULL)
+      || (input.eventsMessage != NULL)
     ) {
-      deadlineNs = vdpNowNs() + VDP_POLL_NS;
-    }
-    if (vdpOutput.nextPollNs < deadlineNs) {
-      deadlineNs = vdpOutput.nextPollNs;
-    }
-    struct timespec deadline;
-    struct timespec *timeout = NULL;
-    if (deadlineNs != INT64_MAX) {
-      deadline.tv_sec = (time_t) (deadlineNs / 1000000000LL);
-      deadline.tv_nsec = (long) (deadlineNs % 1000000000LL);
-      timeout = &deadline;
+      vdpTimeFromNow(&soon, 0, VDP_POLL_NS);
+      if ((timeout == NULL) || (vdpTimeBefore(&soon, timeout) == true)) {
+        timeout = &soon;
+      }
     }
 
     ProcessMessage *processMessage = processMessageQueueWait(timeout);
