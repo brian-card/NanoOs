@@ -46,7 +46,8 @@ make -j "$(nproc)" -C userspace/usr/src clean
 make -j "$(nproc)" -C "userspace/usr/src/filesystems/${blockFilesystem}" clean
 make -j "$(nproc)" -C sim clean
 make -j "$(nproc)" -C userspace/usr/src COMPILE=gcc LINK=ld OBJCOPY=objcopy \
-	OBJDUMP=objdump SIZE=size LINKER_SCRIPT=NanoOsSim.ld overlays
+	OBJDUMP=objdump SIZE=size LINKER_SCRIPT=NanoOsSim.ld WINDOW_MANAGER=1 \
+	overlays
 make -j "$(nproc)" -C "userspace/usr/src/filesystems/${blockFilesystem}" COMPILE=gcc \
 	LINK=ld OBJCOPY=objcopy OBJDUMP=objdump SIZE=size \
 	LINKER_SCRIPT="${filesystemLinkerScript}" FILESYSTEM="${filesystem}" overlays
