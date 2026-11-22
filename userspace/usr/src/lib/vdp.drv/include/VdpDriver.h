@@ -38,6 +38,7 @@
 #include "ExecutiveProcesses.h"
 #include "Console.h"
 #include "GraphicsProtocol.h"
+#include "VdpEvents.h"
 #include "VdpKeyboard.h"
 #include "VdpText.h"
 
@@ -67,11 +68,16 @@ extern "C"
 /// @brief The size of the buffer of keys waiting to be sent to the console.
 #define VDP_PENDING_SIZE 32
 
-/// @def VDP_GENERAL_POLL_TIMEOUT_NS
+/// @def VDP_GENERAL_POLL_TIMEOUT_SECONDS
 ///
-/// @brief How long, in nanoseconds, to wait for the VDP to answer the general
-/// poll before writing to it anyway.
-#define VDP_GENERAL_POLL_TIMEOUT_NS 15000000000LL
+/// @brief How long, in seconds, to wait for the VDP to answer the general poll
+/// before writing to it anyway.
+#define VDP_GENERAL_POLL_TIMEOUT_SECONDS 15
+
+/// @def VDP_NEVER
+///
+/// @brief The tv_nsec of a time that never comes.
+#define VDP_NEVER (-1L)
 
 /// @def VDP_WORD
 ///
@@ -103,6 +109,20 @@ extern "C"
 /// @brief The width and height, in pixels, of the glyphs of the VDP's own
 /// system font, which it draws text in until another font is selected.
 #define VDP_SYSTEM_GLYPH_SIZE 8
+
+/// @def VDP_CURSOR_ID
+///
+/// @brief The ID of the VDP buffer, bitmap, and mouse cursor that hold the
+/// driver's mouse cursor.  IDs up to 255 name the VDP's built-in cursors.
+#define VDP_CURSOR_ID 0xF000
+
+/// @def VDP_HIDDEN_CURSOR_ID
+///
+/// @brief The ID of the VDP buffer, bitmap, and mouse cursor of a 1x1
+/// transparent cursor, which hides the pointer without disabling the mouse:
+/// disabling it suspends its port, which a later reset can't detect it
+/// through.
+#define VDP_HIDDEN_CURSOR_ID 0xF001
 
 /// @def VDP_FONT_ID_BASE
 ///
@@ -192,6 +212,9 @@ typedef struct VdpPen {
 /// @param preloadsUsed A bit for each preload slot that holds a preload.
 /// @param imageWidths The width of the image in each slot.
 /// @param imageHeights The height of the image in each slot.
+/// @param cursor The ID of the owner's mouse cursor:  one of its images, or
+///   VDP_CURSOR_ID.
+/// @param cursorHidden Whether the owner has hidden the mouse cursor.
 typedef struct VdpDrawState {
   GfxPoint origin;
   GfxRect  clip[GFX_MAX_SCISSOR_DEPTH + 1];
@@ -202,11 +225,14 @@ typedef struct VdpDrawState {
   uint16_t preloadsUsed;
   uint16_t imageWidths[VDP_MAX_IMAGES];
   uint16_t imageHeights[VDP_MAX_IMAGES];
+  GfxHandle cursor;
+  bool     cursorHidden;
 } VdpDrawState;
 
 /// @struct VdpInput
 ///
-/// @brief State of the keyboard input the driver forwards to the console.
+/// @brief State of the input the driver forwards to the console or to the
+/// display's owner.
 /// Kept on main's stack because the overlay's static data doesn't survive the
 /// overlay window being given to another program.
 ///
@@ -231,6 +257,16 @@ typedef struct VdpDrawState {
 /// @param sizeArgs The arguments of sizeMessage, created at startup.
 /// @param output A pointer to the driver's VdpOutput, which says whether the
 ///   display is owned.
+/// @param events The events waiting to be sent to the display's owner, NULL
+///   while nobody owns the display.
+/// @param eventState The state of the events queue.
+/// @param eventsMessage The GFX_MSG_INPUT_EVENTS waiting on the owner, or
+///   NULL.
+/// @param sentEvents The arguments of eventsMessage, or the spare that events
+///   swaps with when it's sent, or NULL.
+/// @param orphanMessage The GFX_MSG_INPUT_EVENTS a previous owner hadn't
+///   finished with when it gave up the display, or NULL.
+/// @param orphanEvents The arguments of orphanMessage.
 typedef struct VdpInput {
   ProcessId                    consolePid;
   int                          portId;
@@ -247,6 +283,12 @@ typedef struct VdpInput {
   ProcessMessage              *sizeMessage;
   ConsoleWinsizeArgs           *sizeArgs;
   struct VdpOutput             *output;
+  GfxInputEventsArgs           *events;
+  VdpEventState                eventState;
+  ProcessMessage              *eventsMessage;
+  GfxInputEventsArgs           *sentEvents;
+  ProcessMessage              *orphanMessage;
+  GfxInputEventsArgs           *orphanEvents;
 } VdpInput;
 
 /// @struct VdpOutput
@@ -254,16 +296,15 @@ typedef struct VdpInput {
 /// @brief State of the output the driver draws on the VDP.  Kept on main's
 /// stack for the same reason as VdpInput.
 ///
+/// @param nextPoll When to send the next general poll, or to stop waiting for
+///   the reply to a GFX_MSG_FINISH's:  tv_nsec is VDP_NEVER while neither is
+///   due.
 /// @param textState The state of the translation of the console's text.
 /// @param listening Whether the VDP is drawing what the driver writes.  The
 ///   VDP ignores everything until it has answered a general poll.
-/// @param nextPollNs When to send the next general poll, or to stop waiting
-///   for the reply to a GFX_MSG_FINISH's, in nanoseconds:  INT64_MAX while
-///   neither is due.
-/// @param giveUpNs When to stop waiting for the VDP to answer, in nanoseconds.
+/// @param giveUp When to stop waiting for the VDP to answer.
 /// @param screenSetUp Whether the screen setup has been sent, so that the
 ///   poll being waited on is the one that follows it.
-/// @param buffer The output written while the VDP wasn't listening, or NULL.
 /// @param graphicsMessage The message for the Graphics overlay to handle.
 /// @param fontsUsed A bit for each font slot that holds a font.
 /// @param fontWidths The glyph width of the font in each slot.
@@ -276,8 +317,11 @@ typedef struct VdpInput {
 ///   PROCESS_ID_NOT_SET when the console has it.
 /// @param ownerDescriptor The owner's ProcessDescriptor, or NULL.
 /// @param error The sticky GfxError that GFX_MSG_GET_ERROR returns and clears.
-/// @param heldText The most recent console text written while the display is
-///   owned, untranslated.  Allocated exactly while the display is owned.
+/// @param heldText The most recent console text written while the VDP isn't
+///   listening yet or the display is owned, untranslated, or NULL while the
+///   console's text is drawn.
+/// @param textToHold The text for the Console overlay's vdpHoldText to add to
+///   heldText.
 /// @param replayText The held text to draw once the console has the display
 ///   back, or NULL.
 /// @param draw The owner's drawing state, or NULL while the console has the
@@ -287,12 +331,11 @@ typedef struct VdpInput {
 /// @param input A pointer to the driver's VdpInput, whose poll cookie a
 ///   GFX_MSG_FINISH uses.
 typedef struct VdpOutput {
+  struct timespec    nextPoll;
   VdpTextState       textState;
   bool               listening;
-  int64_t            nextPollNs;
-  int64_t            giveUpNs;
+  struct timespec    giveUp;
   bool               screenSetUp;
-  VdpOutputBuffer   *buffer;
   ProcessMessage    *graphicsMessage;
   uint8_t            fontsUsed;
   uint8_t            fontWidths[VDP_MAX_FONTS];
@@ -303,6 +346,7 @@ typedef struct VdpOutput {
   ProcessDescriptor *ownerDescriptor;
   uint8_t            error;
   VdpOutputBuffer   *heldText;
+  const char        *textToHold;
   char              *replayText;
   VdpDrawState      *draw;
   ProcessMessage    *finishMessage;
@@ -396,15 +440,60 @@ static inline uint8_t vdpChannelBits(uint8_t channel) {
   return 3;
 }
 
-/// @fn static inline int64_t vdpNowNs(void)
+/// @fn static inline void vdpTimeFromNow(struct timespec *time,
+///   time_t seconds, long nanoseconds)
 ///
-/// @brief Get the current time in nanoseconds.
+/// @brief Get the time a while from now.  The driver keeps its times as
+/// timespecs because 64-bit nanoseconds cost the main overlay their
+/// multiplication and division.
 ///
-/// @return Returns the current time in nanoseconds.
-static inline int64_t vdpNowNs(void) {
+/// @param time Where to store the time.
+/// @param seconds The whole seconds from now.
+/// @param nanoseconds The nanoseconds from now on top of seconds, below one
+///   second.
+///
+/// @return This function returns no value.
+static inline void vdpTimeFromNow(struct timespec *time, time_t seconds,
+  long nanoseconds
+) {
+  overlayMap.header.osApi->userApi->nanoOsTimespec_get(time, TIME_UTC);
+  time->tv_sec += seconds;
+  time->tv_nsec += nanoseconds;
+  if (time->tv_nsec >= 1000000000L) {
+    time->tv_nsec -= 1000000000L;
+    time->tv_sec++;
+  }
+}
+
+/// @fn static inline bool vdpTimeBefore(const struct timespec *earlier,
+///   const struct timespec *later)
+///
+/// @brief Determine whether one time comes before another.  Neither may be a
+/// time whose tv_nsec is VDP_NEVER.
+///
+/// @param earlier The time that may be earlier.
+/// @param later The time that may be later.
+///
+/// @return Returns true if earlier comes before later, false otherwise.
+static inline bool vdpTimeBefore(const struct timespec *earlier,
+  const struct timespec *later
+) {
+  return (earlier->tv_sec < later->tv_sec)
+    || ((earlier->tv_sec == later->tv_sec)
+      && (earlier->tv_nsec < later->tv_nsec));
+}
+
+/// @fn static inline bool vdpTimeReached(const struct timespec *time)
+///
+/// @brief Determine whether a time has come.
+///
+/// @param time The time, which may not be one whose tv_nsec is VDP_NEVER.
+///
+/// @return Returns true if the time is now or past, false otherwise.
+static inline bool vdpTimeReached(const struct timespec *time) {
   struct timespec now;
-  overlayMap.header.osApi->userApi->nanoOsTimespec_get(&now, TIME_UTC);
-  return (((int64_t) now.tv_sec) * 1000000000LL) + now.tv_nsec;
+  vdpTimeFromNow(&now, 0, 0);
+  return vdpTimeBefore(&now, time) == false;
 }
 
 /// @fn static inline void vdpWrite(const uint8_t *data, size_t length)
