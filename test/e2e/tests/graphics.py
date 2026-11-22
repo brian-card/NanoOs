@@ -981,10 +981,12 @@ def test_graphics_motion_while_the_owner_is_busy_arrives_coalesced(session):
     boot_with_files(session, {})
     start_owner(session, "sleep 2 events 3 1500 hold")
     session.vdp.mouse(1, 2)
-    # The first move goes out at once; the rest wait behind it.
+    # The first move goes out at once; the rest wait behind it, arriving at a
+    # mouse's 200 reports a second.
     time.sleep(0.5)
     for step in range(100):
         session.vdp.mouse(step * 3, step * 2)
+        time.sleep(0.005)
     assert printed(session, EVENTS) == [
         pointer(1, 2), pointer(297, 198), "gfxprobe: events 2"]
     disown(session)

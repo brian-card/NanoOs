@@ -159,6 +159,7 @@ LAYOUT_UK = 0
 # The real VDP's UART receive buffer, which bytes sent while it is busy
 # overflow:  the eZ80 stops waiting on CTS after about 17 ms.
 RX_BUFFER_SIZE = 256
+FLOOD_BYTES_PER_PACKET = 16
 LAYOUT_US = 1
 # The size, in pixels, of the screen mode vdp.drv uses, and of the system
 # font's glyphs.
@@ -191,7 +192,7 @@ class FakeVdp:
     """A fake VDP serving one connection at a time on a Unix socket."""
 
     def __init__(self, path, answer_after=0.0, answer=True, mouse=True,
-                 mouse_reset_seconds=0.0):
+                 mouse_reset_seconds=0.0, read_rate=None):
         """Start listening.
 
         @param path The path of the Unix socket to create.
@@ -203,6 +204,8 @@ class FakeVdp:
         @param mouse_reset_seconds Seconds a mouse reset takes: polls received
           meanwhile are answered when it ends.  Unlike the real VDP, this one
           keeps reading meanwhile, so that output sent early shows up.
+        @param read_rate The most bytes a second to read, as a slow link and
+          a busy VDP would, or None for as fast as they come.
         """
         self.path = path
         self.answer_after = answer_after
@@ -268,6 +271,9 @@ class FakeVdp:
         self.mouse_reset_until = 0.0
         self.mouse_reset_answered = None  # time of the poll answered after it
         self.busy_bytes = 0    # bytes received during the last mouse reset
+        self.received = 0      # bytes received in all, as they are carried out
+        self.read_rate = read_rate
+        self.flooding = []     # pointer positions to send as bytes are read
         self.listening = not answer
         self.errors = []
         if os.path.exists(path):
@@ -420,12 +426,21 @@ class FakeVdp:
 
     def _bytes(self, conn):
         while True:
+            size = 4096
+            if self.flooding:
+                size = FLOOD_BYTES_PER_PACKET
+            elif self.read_rate is not None:
+                size = 64
             try:
-                data = conn.recv(4096)
+                data = conn.recv(size)
             except OSError:
                 return
             if not data:
                 return
+            if self.read_rate is not None:
+                time.sleep(len(data) / self.read_rate)
+            if self.flooding:
+                self.mouse(*self.flooding.pop(0), buttons=1)
             busy = time.time() < self.mouse_reset_until
             for byte in data:
                 if busy:
@@ -434,6 +449,7 @@ class FakeVdp:
                         self.errors.append(
                             "more than the receive buffer was sent during "
                             "the mouse reset")
+                self.received += 1
                 yield byte
 
     def _vdu23(self, stream):
@@ -866,6 +882,15 @@ class FakeVdp:
                 return None
             _bitmap, hot_x, hot_y = self.cursors[self.mouse_cursor]
         return (hot_x, hot_y)
+
+    def flood(self, points):
+        """Hold the left button and move the pointer through points, one
+        mouse packet for each FLOOD_BYTES_PER_PACKET bytes read, as the real
+        VDP sends packets while the driver is still writing a long repaint.
+
+        @param points The (column, row) of each packet.
+        """
+        self.flooding = list(points)
 
     def mouse(self, column, row, buttons=0, wheel=0):
         """Move the mouse and set its buttons the way the real VDP reports
@@ -1550,6 +1575,20 @@ class FakeVdp:
                             0x81, 0x04, 0, 0, code, 0]))
         time.sleep(0.01)
 
+    def ctrl(self, ch):
+        """Press and release Ctrl and a letter, which types its control
+        character.
+
+        @param ch The letter, in lower case.
+        """
+        code = keycode(ch)
+        control = ord(ch.upper()) - 64
+        with self.lock:
+            conn = self.conn
+            modifiers = self._modifiers() | KEYMOD_CTRL
+        self._send(conn, bytes([0x81, 0x04, control, modifiers, code, 1,
+                                0x81, 0x04, control, modifiers, code, 0]))
+
     def release_display(self):
         """Press and release Ctrl+Alt+Backspace, which takes the display back
         from its owner.  Outside ownership it is an ordinary Backspace."""
@@ -1610,16 +1649,24 @@ class FakeVdp:
             self.cursor = 0
 
     def close(self):
-        """Stop listening and drop the connection."""
-        try:
-            self.server.close()
-        except OSError:
-            pass
+        """Stop listening, drop the connection, and wait for the serving
+        thread to end.  Shutting the sockets down wakes a thread blocked in
+        accept or recv; a thread left in accept takes the connection of the
+        next FakeVdp whose listening socket gets the same descriptor."""
         with self.lock:
-            if self.conn is not None:
-                try:
-                    self.conn.close()
-                except OSError:
-                    pass
+            sockets = [self.server, self.conn]
+        for sock in sockets:
+            if sock is None:
+                continue
+            try:
+                sock.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            try:
+                sock.close()
+            except OSError:
+                pass
+        if self.thread is not threading.current_thread():
+            self.thread.join(5)
         if os.path.exists(self.path):
             os.unlink(self.path)

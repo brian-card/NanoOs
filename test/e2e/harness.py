@@ -216,8 +216,12 @@ class Session:
 
         @return The FakeVdp.
         """
+        if self.vdp is not None:
+            self.vdp.close()
         self.vdp = FakeVdp(os.path.join(self.tmp, "vdp.sock"), **kwargs)
-        self.env = dict(self.env or {}, NANO_OS_SIM_UART0=self.vdp.path)
+        # Like the Agon's, UART0 drops what its receive ring has no room for.
+        self.env = dict(self.env or {}, NANO_OS_SIM_UART0=self.vdp.path,
+                        NANO_OS_SIM_UART0_DROP="1")
         self.restart_with_config_sys(config_sys)
         return self.vdp
 
