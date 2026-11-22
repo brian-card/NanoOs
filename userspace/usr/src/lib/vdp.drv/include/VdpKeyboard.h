@@ -79,6 +79,17 @@ extern "C"
 /// @brief The command of a VDP keyboard event packet.
 #define VDP_PACKET_KEYBOARD 0x01
 
+/// @def VDP_PACKET_MOUSE
+///
+/// @brief The command of a VDP mouse packet:  the X and Y position words, the
+/// buttons, the wheel delta, and the X and Y delta words.
+#define VDP_PACKET_MOUSE 0x09
+
+/// @def VDP_MOUSE_PACKET_LENGTH
+///
+/// @brief The number of data bytes in a VDP mouse packet.
+#define VDP_MOUSE_PACKET_LENGTH 10
+
 /// @def VDP_PACKET_MAX_LENGTH
 ///
 /// @brief The longest data length VdpPacketParser accepts for a command whose
@@ -89,7 +100,7 @@ extern "C"
 ///
 /// @brief The number of data bytes of a packet that VdpPacketParser keeps.
 /// Longer packets are parsed, but only this many of their bytes are kept.
-#define VDP_PACKET_MAX_DATA 8
+#define VDP_PACKET_MAX_DATA VDP_MOUSE_PACKET_LENGTH
 
 /// @def VDP_KEY_MAX_BYTES
 ///
