@@ -1543,6 +1543,50 @@ static inline GfxError gfxWarpCursor(GfxDisplay *disp, int16_t pointerX,
 }
 
 
+// =========================================================================
+// INPUT EVENTS  (messages from driver)
+// =========================================================================
+
+/// @fn static inline bool gfxIsInputEvents(ProcessMessage *message)
+///
+/// @brief Determine whether a message is the driver's GFX_MSG_INPUT_EVENTS.
+///
+/// @param message A message from the caller's queue.
+///
+/// @return Returns true if it is, false otherwise.
+static inline bool gfxIsInputEvents(ProcessMessage *message) {
+  return processMessageType(message)
+    == (GFX_COMMAND_SIGNATURE | GFX_MSG_INPUT_EVENTS);
+}
+
+/// @fn static inline const GfxInputEventsArgs* gfxInputEvents(
+///   ProcessMessage *message)
+///
+/// @brief Get the events a GFX_MSG_INPUT_EVENTS carries, which stay valid until
+/// gfxInputEventsDone.
+///
+/// @param message A message gfxIsInputEvents accepted.
+///
+/// @return Returns the events.
+static inline const GfxInputEventsArgs* gfxInputEvents(
+  ProcessMessage *message
+) {
+  return (const GfxInputEventsArgs*) processMessageData(message);
+}
+
+/// @fn static inline void gfxInputEventsDone(ProcessMessage *message)
+///
+/// @brief Tell the driver the caller has finished with a GFX_MSG_INPUT_EVENTS,
+/// which it sends the next events in only then.
+///
+/// @param message A message gfxIsInputEvents accepted.
+///
+/// @return This function returns no value.
+static inline void gfxInputEventsDone(ProcessMessage *message) {
+  processMessageSetDone(message);
+}
+
+
 #ifdef __cplusplus
 }
 #endif
