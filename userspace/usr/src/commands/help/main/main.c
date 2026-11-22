@@ -136,6 +136,9 @@ int main(int argc, char **argv) {
     "shutdown:               ",
     "Power off or reset the system.");
   printf("%s %s\n",
+    "startwm:                ",
+    "Start the window manager on the display.");
+  printf("%s %s\n",
     "termtest:               ",
     "Exercise the terminal size functions.");
   printf("%s %s\n",
