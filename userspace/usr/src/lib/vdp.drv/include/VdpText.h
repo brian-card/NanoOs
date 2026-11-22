@@ -50,7 +50,7 @@ extern "C"
 
 /// @def VDP_OUTPUT_BUFFER_SIZE
 ///
-/// @brief The number of VDU bytes kept for the VDP until it is listening.
+/// @brief The number of bytes of console text kept until the VDP can draw it.
 #define VDP_OUTPUT_BUFFER_SIZE 256
 
 /// @def VDP_TEXT_DEFAULT_FOREGROUND
@@ -104,7 +104,9 @@ extern "C"
 
 /// @struct VdpOutputBuffer
 ///
-/// @brief The most recent VDU bytes written before the VDP was listening.
+/// @brief The most recent console text the driver couldn't draw yet:  text
+/// written before the VDP was listening or while another process owns the
+/// display.
 ///
 /// @param length The number of bytes in data.
 /// @param data The bytes, oldest first.
