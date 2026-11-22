@@ -392,10 +392,14 @@ static const uint8_t _vdpEnterGraphics[] = {
 ///
 /// @brief VDU commands that give the display back to the console:  select
 /// its context 0 (VDU 23,0,&C8,0,0), delete the owner's context 1
-/// (VDU 23,0,&C8,1,1), and clear the screen (VDU 12).
+/// (VDU 23,0,&C8,1,1), draw text at the text cursor (VDU 4), and clear the
+/// screen (VDU 12).  Context 0 already draws text there, but the VDP keeps
+/// the owner's VDU 5 turning off glyphs' backgrounds through the switch, and
+/// only VDU 4 turns them back on.
 static const uint8_t _vdpLeaveGraphics[] = {
   23, 0, 0xC8, 0, 0,
   23, 0, 0xC8, 1, 1,
+  4,
   12
 };
 
