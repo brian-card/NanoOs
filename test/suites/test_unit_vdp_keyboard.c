@@ -445,3 +445,47 @@ NANO_OS_TEST(unit_vdp_keyboard, anything_short_of_ctrl_alt_backspace_down_is_not
     NANO_OS_ASSERT_FALSE(vdpIsReleaseKey(notRelease[ii]));
   }
 }
+
+/// @var MOUSE_PACKET
+///
+/// @brief A mouse packet at (0x123, 0x1DF) with buttons 0x05, wheel -1, and
+/// deltas (-2, 2), whose data bytes include two with the high bit set.
+static const uint8_t MOUSE_PACKET[] = {
+  0x89, 0x0a, 0x23, 0x01, 0xdf, 0x01, 0x05, 0xff, 0xfe, 0xff, 0x02, 0x00,
+};
+
+NANO_OS_TEST(unit_vdp_keyboard, mouse_packet_keeps_all_ten_bytes) {
+  VdpPacketParser parser;
+  memset(&parser, 0, sizeof(parser));
+
+  NANO_OS_ASSERT_EQ_INT(11, feed(&parser, MOUSE_PACKET, sizeof(MOUSE_PACKET)));
+  NANO_OS_ASSERT_EQ_INT(VDP_PACKET_MOUSE, parser.command);
+  NANO_OS_ASSERT_EQ_INT(VDP_MOUSE_PACKET_LENGTH, parser.length);
+  NANO_OS_ASSERT_EQ_INT(0, memcmp(&MOUSE_PACKET[2], parser.data,
+    VDP_MOUSE_PACKET_LENGTH));
+}
+
+NANO_OS_TEST(unit_vdp_keyboard, mouse_header_with_length_four_is_abandoned) {
+  const uint8_t bytes[] = {
+    0x89, 0x04,
+    0x81, 0x04, 0x61, 0x00, 0x16, 0x01,
+  };
+  uint8_t keys[4];
+
+  NANO_OS_ASSERT_EQ_INT(1, parseKeys(bytes, sizeof(bytes), keys, 4));
+  NANO_OS_ASSERT_EQ_INT('a', keys[0]);
+}
+
+NANO_OS_TEST(unit_vdp_keyboard, keys_on_either_side_of_a_mouse_packet_parse) {
+  uint8_t bytes[6 + sizeof(MOUSE_PACKET) + 6] = {
+    0x81, 0x04, 0x61, 0x00, 0x16, 0x01,
+  };
+  memcpy(&bytes[6], MOUSE_PACKET, sizeof(MOUSE_PACKET));
+  const uint8_t keyB[] = { 0x81, 0x04, 0x62, 0x00, 0x17, 0x01 };
+  memcpy(&bytes[6 + sizeof(MOUSE_PACKET)], keyB, sizeof(keyB));
+  uint8_t keys[4];
+
+  NANO_OS_ASSERT_EQ_INT(2, parseKeys(bytes, sizeof(bytes), keys, 4));
+  NANO_OS_ASSERT_EQ_INT('a', keys[0]);
+  NANO_OS_ASSERT_EQ_INT('b', keys[1]);
+}

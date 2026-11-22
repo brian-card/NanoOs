@@ -128,6 +128,7 @@ SUITE_SRCS     := test_smoke test_unit_misc test_unit_strtoll test_unit_console 
                   test_kernel_user_api test_kernel_fs_handles \
                   test_unit_vdp_text \
                   test_unit_vdp_keyboard \
+                  test_unit_vdp_events \
                   test_unit_agon_reset_keys \
                   test_unit_posix_errno \
                   test_unit_textstore \
@@ -204,12 +205,19 @@ $(OBJ_DIR)/suite_test_unit_textstore.o: \
 # These suites compile the VDP driver's sources directly.
 $(OBJ_DIR)/suite_test_unit_vdp_text.o: \
     ../userspace/usr/src/lib/vdp.drv/main/VdpText.c \
+    ../userspace/usr/src/lib/vdp.drv/Console/VdpBuffer.c \
     ../userspace/usr/src/lib/vdp.drv/include/VdpText.h \
     ../src/kernel/GraphicsColor.h
 $(OBJ_DIR)/suite_test_unit_vdp_text.o: TEST_INC += -iquote ../src/kernel
 $(OBJ_DIR)/suite_test_unit_vdp_keyboard.o: \
     ../userspace/usr/src/lib/vdp.drv/main/VdpKeyboard.c \
     ../userspace/usr/src/lib/vdp.drv/include/VdpKeyboard.h
+$(OBJ_DIR)/suite_test_unit_vdp_events.o: \
+    ../userspace/usr/src/lib/vdp.drv/main/VdpEvents.c \
+    ../userspace/usr/src/lib/vdp.drv/include/VdpEvents.h \
+    ../src/kernel/GraphicsProtocol.h
+$(OBJ_DIR)/suite_test_unit_vdp_events.o: TEST_INC += -iquote ../src/kernel \
+    -iquote ../userspace/usr/src/lib/vdp.drv/include
 $(OBJ_DIR)/suite_test_unit_message_args_production.o: \
     TEST_CFLAGS += -UNANO_OS_MESSAGE_ARGS_CHECKED
 $(OBJ_DIR)/suite_test_kernel_graphics_client.o \
