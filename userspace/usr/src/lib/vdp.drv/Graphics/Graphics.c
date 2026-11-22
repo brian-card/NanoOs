@@ -184,9 +184,39 @@ static void vdpClearBuffer(GfxHandle id) {
   vdpWrite(clear, sizeof(clear));
 }
 
+/// @fn static void vdpSelectCursor(GfxHandle id)
+///
+/// @brief Make a mouse cursor the pointer with VDU 23,0,&89,3,id;.
+///
+/// @param id The cursor's ID.
+///
+/// @return This function returns no value.
+static void vdpSelectCursor(GfxHandle id) {
+  const uint8_t select[] = { 23, 0, 0x89, 3, VDP_WORD(id) };
+  vdpWrite(select, sizeof(select));
+}
+
+/// @fn static void vdpShowCursor(VdpDrawState *draw)
+///
+/// @brief Make the owner's cursor the pointer, or the transparent one if the
+/// owner has hidden it.
+///
+/// @param draw The owner's drawing state.
+///
+/// @return This function returns no value.
+static void vdpShowCursor(VdpDrawState *draw) {
+  if (draw->cursorHidden == true) {
+    vdpSelectCursor(VDP_HIDDEN_CURSOR_ID);
+  } else {
+    vdpSelectCursor(draw->cursor);
+  }
+}
+
 /// @fn static void vdpDestroyImage(VdpOutput *vdpOutput, GfxHandle image)
 ///
-/// @brief Delete an image and free its slot.
+/// @brief Delete an image and free its slot.  The VDP deletes a cursor made
+/// from the image along with it, so an image that was the cursor gives way to
+/// the driver's.
 ///
 /// @param vdpOutput A pointer to the driver's VdpOutput.
 /// @param image The image's handle.
@@ -199,6 +229,10 @@ static void vdpDestroyImage(VdpOutput *vdpOutput, GfxHandle image) {
   if (slot < VDP_MAX_IMAGES) {
     vdpClearBuffer(image);
     draw->imagesUsed ^= (uint16_t) (1 << slot);
+    if (draw->cursor == image) {
+      draw->cursor = VDP_CURSOR_ID;
+      vdpShowCursor(draw);
+    }
   }
 }
 
@@ -218,6 +252,53 @@ static void vdpDiscardPreload(VdpOutput *vdpOutput, GfxHandle preload) {
     vdpClearBuffer(preload);
     draw->preloadsUsed ^= (uint16_t) (1 << slot);
   }
+}
+
+/// @fn static uint8_t vdpSetCursor(VdpDrawState *draw,
+///   const GfxSetCursorArgs *args)
+///
+/// @brief Make one of the owner's images, or the driver's cursor, the mouse
+/// cursor:  select the image's bitmap (VDU 23,27,&20,id;), make a cursor of it
+/// with the hotspot (VDU 23,27,&40,hotX,hotY), and make that the pointer
+/// unless the owner has hidden it.
+///
+/// @param draw The owner's drawing state.
+/// @param args The message's arguments.
+///
+/// @return Returns GFX_OK on success, GFX_ERR_INVALID_HANDLE if the image
+/// isn't one of the owner's.
+static uint8_t vdpSetCursor(VdpDrawState *draw, const GfxSetCursorArgs *args) {
+  GfxHandle cursor = args->image;
+  if (cursor == GFX_INVALID_HANDLE) {
+    cursor = VDP_CURSOR_ID;
+  } else if (vdpSlot(draw->imagesUsed, cursor, VDP_IMAGE_ID_BASE,
+      VDP_MAX_IMAGES) == VDP_MAX_IMAGES
+  ) {
+    return GFX_ERR_INVALID_HANDLE;
+  } else {
+    const uint8_t make[] = {
+      23, 27, 0x20, VDP_WORD(cursor),
+      23, 27, 0x40, args->hotX, args->hotY
+    };
+    vdpWrite(make, sizeof(make));
+  }
+  draw->cursor = cursor;
+  vdpShowCursor(draw);
+  return GFX_OK;
+}
+
+/// @fn static void vdpWarpCursor(const GfxWarpCursorArgs *args)
+///
+/// @brief Move the pointer with VDU 23,0,&89,4,x;y;.
+///
+/// @param args The message's arguments.
+///
+/// @return This function returns no value.
+static void vdpWarpCursor(const GfxWarpCursorArgs *args) {
+  const uint8_t warp[] = {
+    23, 0, 0x89, 4, VDP_WORD(args->x), VDP_WORD(args->y)
+  };
+  vdpWrite(warp, sizeof(warp));
 }
 
 /// @fn static uint8_t vdpFinish(VdpOutput *vdpOutput, ProcessMessage *message)
@@ -249,7 +330,7 @@ static uint8_t vdpFinish(VdpOutput *vdpOutput, ProcessMessage *message) {
   vdpOutput->input->pollCookie = cookie;
   vdpOutput->input->pollAnswered = false;
   vdpWrite(finish, sizeof(finish));
-  vdpOutput->nextPollNs = vdpNowNs() + VDP_GENERAL_POLL_TIMEOUT_NS;
+  vdpTimeFromNow(&vdpOutput->nextPoll, VDP_GENERAL_POLL_TIMEOUT_SECONDS, 0);
   vdpOutput->finishMessage = message;
   vdpOutput->graphicsMessage = NULL;
   return GFX_OK;
@@ -271,7 +352,7 @@ static void vdpFinishDone(VdpOutput *vdpOutput, uint8_t status) {
     return;
   }
   vdpOutput->finishMessage = NULL;
-  vdpOutput->nextPollNs = INT64_MAX;
+  vdpOutput->nextPoll.tv_nsec = VDP_NEVER;
   if (status == VDP_UNKNOWN) {
     processMessageRelease(message);
     return;
@@ -287,8 +368,11 @@ static void vdpFinishDone(VdpOutput *vdpOutput, uint8_t status) {
 /// (VDU 23,0,&C8,0,1), use pixel coordinates (VDU 23,0,&C0,0), turn the text
 /// cursor off (VDU 23,1,0), draw text at the graphics cursor (VDU 5) without
 /// wrapping it at the viewport's edge (VDU 23,16,&40,&BF), reset the
-/// viewports (VDU 26) and the graphics origin (VDU 29,0;0;), and clear the
-/// screen (VDU 16).
+/// viewports (VDU 26) and the graphics origin (VDU 29,0;0;), clear the
+/// screen (VDU 16), and put the pointer in the middle of the screen
+/// (VDU 23,0,&89,4,x;y;).  The VDP turns the pointer's position into the
+/// context's coordinates only when it moves, so without the move the owner's
+/// first mouse packets would carry it in the console's.
 static const uint8_t _vdpEnterGraphics[] = {
   23, 0, 0xC8, 0, 1,
   23, 0, 0xC0, 0,
@@ -297,7 +381,9 @@ static const uint8_t _vdpEnterGraphics[] = {
   23, 16, 0x40, 0xBF,
   26,
   29, 0, 0, 0, 0,
-  16
+  16,
+  23, 0, 0x89, 4,
+  VDP_WORD(VDP_SCREEN_WIDTH / 2), VDP_WORD(VDP_SCREEN_HEIGHT / 2)
 };
 
 /// @var _vdpLeaveGraphics
@@ -360,42 +446,36 @@ static void (*const _vdpOwnerFrees[])(VdpOutput *vdpOutput) = {
   vdpFreePreloads,
 };
 
-/// @fn static void vdpHoldReplay(VdpOutput *vdpOutput)
+/// @fn static void vdpReleaseEvents(VdpInput *input)
 ///
-/// @brief Turn the console text held while the display was owned into the
-/// string the main overlay draws once the console has the display back.  If
-/// the held text was cut short, the replay starts after its first newline, so
-/// that a cut escape sequence can't garble the screen.
+/// @brief Free the events queue of an owner that is giving up the display.
+/// Arguments the owner hasn't finished with are kept until it has:  as the
+/// orphan, so that the next owner's events aren't held up, or, if there
+/// already is one, as the next owner's spare.
 ///
-/// @param vdpOutput A pointer to the driver's VdpOutput.
+/// @param input A pointer to the driver's VdpInput.
 ///
 /// @return This function returns no value.
-static void vdpHoldReplay(VdpOutput *vdpOutput) {
-  VdpOutputBuffer *heldText = vdpOutput->heldText;
-  uint16_t start = 0;
-  if (heldText->length == VDP_OUTPUT_BUFFER_SIZE) {
-    while ((start < heldText->length) && (heldText->data[start] != '\n')) {
-      start++;
-    }
-    start++;
+static void vdpReleaseEvents(VdpInput *input) {
+  MESSAGE_ARGS_DESTROY(input->events);
+  input->events = NULL;
+  if (input->eventsMessage == NULL) {
+    MESSAGE_ARGS_DESTROY(input->sentEvents);
+    input->sentEvents = NULL;
+  } else if (input->orphanMessage == NULL) {
+    input->orphanMessage = input->eventsMessage;
+    input->orphanEvents = input->sentEvents;
+    input->eventsMessage = NULL;
+    input->sentEvents = NULL;
   }
-  if (start < heldText->length) {
-    vdpOutput->replayText = (char*) malloc(heldText->length - start + 1);
-    if (vdpOutput->replayText != NULL) {
-      memcpy(vdpOutput->replayText, &heldText->data[start],
-        heldText->length - start);
-      vdpOutput->replayText[heldText->length - start] = '\0';
-    }
-  }
-  free(heldText);
-  vdpOutput->heldText = NULL;
 }
 
 /// @fn static void vdpRelease(VdpOutput *vdpOutput, bool revoke)
 ///
 /// @brief End the display's ownership:  free everything the owner created,
-/// give the screen back to the console's context, and have the console's
-/// held text redrawn from the top of a cleared screen.  A GFX_MSG_FINISH the
+/// give the screen and the driver's mouse cursor back to the console's
+/// context, and have the console's held text redrawn from the top of a
+/// cleared screen.  A GFX_MSG_FINISH the
 /// owner is waiting on is answered with GFX_ERR_NOT_OWNER if the owner is
 /// still running, which only a revoke leaves it.
 ///
@@ -413,14 +493,17 @@ static void vdpRelease(VdpOutput *vdpOutput, bool revoke) {
   }
   free(vdpOutput->draw);
   vdpOutput->draw = NULL;
+  vdpReleaseEvents(vdpOutput->input);
   vdpOutput->ownerDefaultFont = 0;
+  vdpSelectCursor(VDP_CURSOR_ID);
   vdpWrite(_vdpLeaveGraphics, sizeof(_vdpLeaveGraphics));
   vdpOutput->textState.row = 0;
   vdpOutput->textState.column = 0;
   vdpOutput->textState.escapeState = VDP_ESCAPE_NONE;
   vdpOutput->textState.erasePending = 0;
   vdpOutput->textState.scrollDirection = 0;
-  vdpHoldReplay(vdpOutput);
+  callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Console", "vdpHoldReplay",
+    vdpOutput);
 
   if (revoke == true) {
     ProcessMessage *message = getAvailableMessage();
@@ -454,21 +537,32 @@ static void vdpRelease(VdpOutput *vdpOutput, bool revoke) {
 /// @return Returns GFX_OK on success, GFX_ERR_DISPLAY_BUSY if another process
 /// owns the display or the driver hasn't finished setting up the screen, whose
 /// setup would undo the owner's drawing, or GFX_ERR_OUT_OF_MEMORY if there was
-/// no memory to hold the console's text.
+/// no memory to hold the console's text or the owner's input.
 static uint8_t vdpOpenDisplay(VdpOutput *vdpOutput,
   ProcessDescriptor *sender, GfxOpenDisplayArgs *args
 ) {
   if (vdpOutput->listening == false) {
     return GFX_ERR_DISPLAY_BUSY;
   } else if (vdpOutput->owner == PROCESS_ID_NOT_SET) {
+    VdpInput *input = vdpOutput->input;
     VdpDrawState *draw = (VdpDrawState*) calloc(1, sizeof(VdpDrawState));
     vdpOutput->heldText = (VdpOutputBuffer*) malloc(sizeof(VdpOutputBuffer));
-    if ((draw == NULL) || (vdpOutput->heldText == NULL)) {
+    input->events = MESSAGE_ARGS_CREATE(GfxInputEventsArgs,
+      MESSAGE_ARGS_ROUND_TRIP);
+    if (input->sentEvents == NULL) {
+      input->sentEvents = MESSAGE_ARGS_CREATE(GfxInputEventsArgs,
+        MESSAGE_ARGS_ROUND_TRIP);
+    }
+    if ((draw == NULL) || (vdpOutput->heldText == NULL)
+      || (input->events == NULL) || (input->sentEvents == NULL)
+    ) {
       free(draw);
       free(vdpOutput->heldText);
       vdpOutput->heldText = NULL;
+      vdpReleaseEvents(input);
       return GFX_ERR_OUT_OF_MEMORY;
     }
+    memset(&input->eventState, 0, sizeof(input->eventState));
     vdpOutput->heldText->length = 0;
     draw->clip[0].w = VDP_SCREEN_WIDTH;
     draw->clip[0].h = VDP_SCREEN_HEIGHT;
@@ -478,6 +572,7 @@ static uint8_t vdpOpenDisplay(VdpOutput *vdpOutput,
     draw->pen.vdpBg = VDP_UNKNOWN;
     draw->pen.vdpBlend = VDP_UNKNOWN;
     draw->pen.vdpFont = VDP_UNKNOWN;
+    draw->cursor = VDP_CURSOR_ID;
     vdpOutput->draw = draw;
     vdpOutput->owner = processPid(sender);
     vdpOutput->ownerDescriptor = sender;
@@ -586,6 +681,14 @@ static void vdpHandleGraphics(VdpOutput *vdpOutput, ProcessMessage *message,
     vdpDiscardPreload(vdpOutput, ((GfxHandleArgs*) payload)->handle);
   } else if (type == GFX_MSG_FINISH) {
     status = vdpFinish(vdpOutput, message);
+  } else if (type == GFX_MSG_SET_CURSOR) {
+    status = vdpSetCursor(vdpOutput->draw, (GfxSetCursorArgs*) payload);
+  } else if (type == GFX_MSG_SHOW_CURSOR) {
+    vdpOutput->draw->cursorHidden
+      = (((GfxShowCursorArgs*) payload)->show == 0);
+    vdpShowCursor(vdpOutput->draw);
+  } else if (type == GFX_MSG_WARP_CURSOR) {
+    vdpWarpCursor((GfxWarpCursorArgs*) payload);
   }
 
   if (oneWay == true) {
@@ -597,95 +700,6 @@ static void vdpHandleGraphics(VdpOutput *vdpOutput, ProcessMessage *message,
   }
 }
 
-/// @fn static char* vdpAppendNumber(char *text, unsigned int number)
-///
-/// @brief Write a number in decimal.
-///
-/// @param text Where to write the number.
-/// @param number The number to write.
-///
-/// @return Returns a pointer just past the last digit written.
-static char* vdpAppendNumber(char *text, unsigned int number) {
-  char digits[5];
-  int numDigits = 0;
-  do {
-    digits[numDigits++] = (char) ('0' + (number % 10));
-    number /= 10;
-  } while ((number > 0) && (numDigits < (int) sizeof(digits)));
-  while (numDigits > 0) {
-    *text++ = digits[--numDigits];
-  }
-  return text;
-}
-
-/// @fn void* vdpReportSize(void *args)
-///
-/// @brief Tell the console the screen's rows and columns once the font sets
-/// them, and queue a resize report for the console as keys of up to
-/// CONSOLE_INPUT_READY_SIZE bytes when one is wanted and there's room for it.
-/// The main overlay calls this only when there is something to send, which
-/// keeps it out of the main overlay.
-///
-/// @param args A pointer to the driver's VdpStartupArgs.
-///
-/// @return Always returns the provided pointer.
-void* vdpReportSize(void *args) {
-  VdpInput *input = ((VdpStartupArgs*) args)->input;
-  VdpOutput *vdpOutput = ((VdpStartupArgs*) args)->output;
-  unsigned int rows = vdpOutput->textState.numRows;
-  unsigned int columns = vdpOutput->textState.numColumns;
-
-  if ((vdpOutput->sizeChanged == true) && (input->sizeMessage == NULL)) {
-    ProcessMessage *message = getAvailableMessage();
-    if (message != NULL) {
-      input->sizeArgs->rows = (uint16_t) rows;
-      input->sizeArgs->columns = (uint16_t) columns;
-      input->sizeArgs->returnValue = 0;
-      processMessageInit(message,
-        CONSOLE_COMMAND_SIGNATURE | CONSOLE_SET_WINSIZE,
-        input->sizeArgs, sizeof(*input->sizeArgs), /* waiting= */ true);
-      if (sendProcessMessageToPid(input->consolePid, message)
-        == processSuccess
-      ) {
-        input->sizeMessage = message;
-        vdpOutput->sizeChanged = false;
-      } else {
-        processMessageRelease(message);
-      }
-    }
-  }
-
-  if (vdpOutput->textState.resizeReportWanted == false) {
-    return args;
-  }
-  char report[32] = "\033[48;";
-  char *end = vdpAppendNumber(&report[5], rows);
-  *end++ = ';';
-  end = vdpAppendNumber(end, columns);
-  *end++ = ';';
-  end = vdpAppendNumber(end, VDP_SCREEN_HEIGHT);
-  *end++ = ';';
-  end = vdpAppendNumber(end, VDP_SCREEN_WIDTH);
-  *end++ = 't';
-  uint8_t length = (uint8_t) (end - report);
-  uint8_t numChunks = (uint8_t) ((length + CONSOLE_INPUT_READY_SIZE - 1)
-    / CONSOLE_INPUT_READY_SIZE);
-  if (input->pendingLength + numChunks + length > VDP_PENDING_SIZE) {
-    return args;
-  }
-  for (uint8_t start = 0; start < length; start += CONSOLE_INPUT_READY_SIZE) {
-    uint8_t chunk = length - start;
-    if (chunk > CONSOLE_INPUT_READY_SIZE) {
-      chunk = CONSOLE_INPUT_READY_SIZE;
-    }
-    input->pending[input->pendingLength++] = chunk;
-    memcpy(&input->pending[input->pendingLength], &report[start], chunk);
-    input->pendingLength += chunk;
-  }
-  vdpOutput->textState.resizeReportWanted = false;
-  return args;
-}
-
 /// @fn void* vdpGraphics(void *args)
 ///
 /// @brief Answer the GraphicsProtocol.h message in the driver's
@@ -693,6 +707,8 @@ void* vdpReportSize(void *args) {
 /// a ProcessId, not storage, and ends the display's ownership if that process
 /// owns it.  With no message, finish the held GFX_MSG_FINISH once the VDP has
 /// answered its poll, or with GFX_ERR_DEVICE_LOST once it is too late to.
+/// Either way, free the orphaned events once their receiver has finished with
+/// them.
 ///
 /// @param args A pointer to the driver's VdpOutput.
 ///
@@ -700,11 +716,21 @@ void* vdpReportSize(void *args) {
 void* vdpGraphics(void *args) {
   VdpOutput *vdpOutput = (VdpOutput*) args;
   ProcessMessage *message = vdpOutput->graphicsMessage;
+  VdpInput *input = vdpOutput->input;
+
+  if ((input->orphanMessage != NULL)
+    && (processMessageDone(input->orphanMessage) == true)
+  ) {
+    processMessageRelease(input->orphanMessage);
+    input->orphanMessage = NULL;
+    MESSAGE_ARGS_DESTROY(input->orphanEvents);
+    input->orphanEvents = NULL;
+  }
 
   if (message == NULL) {
     if (vdpOutput->input->pollAnswered == true) {
       vdpFinishDone(vdpOutput, GFX_OK);
-    } else if (vdpNowNs() >= vdpOutput->nextPollNs) {
+    } else if (vdpTimeReached(&vdpOutput->nextPoll) == true) {
       vdpFinishDone(vdpOutput, GFX_ERR_DEVICE_LOST);
     }
   } else if ((processMessageType(message) & ~((int64_t) 0xff))
