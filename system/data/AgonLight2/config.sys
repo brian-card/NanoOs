@@ -3,3 +3,4 @@ DEVICE=/system/drivers/vdp.drv --numlock=on
 HARDWARE=/system/drivers/vdp.drv UART0
 CONSOLE=UART1 /system/bin/getty
 CONSOLE=/system/drivers/vdp.drv /system/bin/getty
+GRAPHICS=/system/drivers/vdp.drv /system/commands/wm
