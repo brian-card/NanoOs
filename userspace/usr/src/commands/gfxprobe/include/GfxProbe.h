@@ -74,8 +74,9 @@ typedef struct StepsArgs {
 
 /// @struct PaintArgs
 ///
-/// @brief The arguments of the Paint overlay's gfxprobePaint and the Media
-/// overlay's gfxprobeMedia, each of which carries out one step.
+/// @brief The arguments of the Paint overlay's gfxprobePaint, the Media
+/// overlay's gfxprobeMedia, and the Input overlay's gfxprobeInput, each of
+/// which carries out one step.
 ///
 /// @param disp The display.
 /// @param words The step, then the words after it.

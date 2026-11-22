@@ -35,6 +35,7 @@ import time
 import gfxrecords as gr
 from harness import (PROMPT, VDP_CONFIG_SYS, SkipTest, message_args_reports,
                      vdp_login)
+from fakevdp import KEYCODE_a
 from tests.vdp_drv import VDP_FONT_ID, assert_vdp_font
 
 
@@ -165,7 +166,7 @@ def test_graphics_driver_answers_every_client_message(s):
         "gfxprobe: FINISH no error",
         "gfxprobe: CAPTURE_RECT no error",
         "gfxprobe: GET_ERROR no error",
-        "gfxprobe: SET_CURSOR not supported",
+        "gfxprobe: SET_CURSOR no error",
         "gfxprobe: SHOW_CURSOR no error",
         "gfxprobe: WARP_CURSOR no error",
         "gfxprobe: WRONG_SIZE invalid state",
@@ -338,7 +339,7 @@ def test_graphics_console_text_is_held_while_owned_and_replayed(s):
     assert_vdp_font(s.vdp)
 
 
-def test_graphics_keys_typed_while_owned_are_dropped(s):
+def test_graphics_keys_typed_while_owned_never_reach_the_shell(s):
     boot(s, GRAPHICS_LINE)
     hold_on_vdp(s, "open hold")
     s.vdp.type("echo leaked\r")
@@ -911,3 +912,231 @@ def test_graphics_the_display_is_busy_until_the_driver_has_set_it_up(session):
     lines, _status = probe(session, "do open close")
     assert lines[1:] == [OPENED, "gfxprobe: close no error"], lines
     assert session.vdp.errors == [], session.vdp.errors
+
+
+READY = "gfxprobe: ready"
+EVENTS = r"gfxprobe: events \d+\r*\n"
+
+
+def start_owner(session, steps):
+    """Run gfxprobe on UART1 to open the display, take the pointer event the
+    driver's move of the pointer to the middle of the screen sends, print
+    "ready", and carry out steps, waiting until it is ready.
+
+    @param session The session.
+    @param steps The steps after "ready".
+    """
+    session.child.sendline("dirtest system gfxprobe do open events 1 5000 "
+                           "print ready " + steps)
+    session.child.expect(re.escape(READY) + r"\r*\n", timeout=30)
+    lines = [line.strip() for line in session.child.before.splitlines()
+             if line.strip().startswith("gfxprobe:")]
+    assert lines[-2:] == [CENTRE, "gfxprobe: events 1"], lines
+
+
+def printed(session, pattern):
+    """Wait for gfxprobe to print a line matching a pattern.
+
+    @param session The session.
+    @param pattern The pattern.
+
+    @return The gfxprobe lines since the last line waited for, up to and
+      including the one that matched.
+    """
+    session.child.expect(pattern, timeout=30)
+    text = session.child.before + session.child.match.group(0)
+    return [line.strip() for line in text.splitlines()
+            if line.strip().startswith("gfxprobe:")]
+
+
+def pointer(point_x, point_y, buttons=0, wheel=0):
+    """Return the line gfxprobe prints for a pointer event.
+
+    @param point_x The column.
+    @param point_y The row.
+    @param buttons The button bits.
+    @param wheel The wheel delta.
+    """
+    return (f"gfxprobe: pointer {point_x} {point_y} buttons {buttons} "
+            f"wheel {wheel}")
+
+
+CENTRE = pointer(320, 240)
+
+
+def test_graphics_pointer_moves_and_clicks_arrive_exactly(session):
+    boot_with_files(session, {})
+    start_owner(session, "events 4 10000 hold")
+    session.vdp.mouse(100, 200)
+    session.vdp.mouse(101, 201, buttons=1)
+    session.vdp.mouse(102, 202, buttons=0, wheel=-2)
+    session.vdp.mouse(639, 479, buttons=4, wheel=3)
+    assert printed(session, EVENTS) == [
+        pointer(100, 200), pointer(101, 201, 1), pointer(102, 202, 0, -2),
+        pointer(639, 479, 4, 3), "gfxprobe: events 4"]
+    disown(session)
+
+
+def test_graphics_motion_while_the_owner_is_busy_arrives_coalesced(session):
+    boot_with_files(session, {})
+    start_owner(session, "sleep 2 events 3 1500 hold")
+    session.vdp.mouse(1, 2)
+    # The first move goes out at once; the rest wait behind it.
+    time.sleep(0.5)
+    for step in range(100):
+        session.vdp.mouse(step * 3, step * 2)
+    assert printed(session, EVENTS) == [
+        pointer(1, 2), pointer(297, 198), "gfxprobe: events 2"]
+    disown(session)
+
+
+def test_graphics_keys_typed_while_owned_arrive_as_key_events(session):
+    boot_with_files(session, {})
+    vdp_login(session.vdp)
+    start_owner(session, "events 4 10000 hold")
+    session.vdp.key("a")
+    session.vdp.key("b")
+    assert printed(session, EVENTS) == [
+        f"gfxprobe: key 97 keycode {KEYCODE_a} modifiers 0x0 down 1",
+        f"gfxprobe: key 97 keycode {KEYCODE_a} modifiers 0x0 down 0",
+        f"gfxprobe: key 98 keycode {KEYCODE_a + 1} modifiers 0x0 down 1",
+        f"gfxprobe: key 98 keycode {KEYCODE_a + 1} modifiers 0x0 down 0",
+        "gfxprobe: events 4"]
+    disown(session)
+    session.vdp.type("echo after\r")
+    session.vdp.expect(r"\r\nafter\r\n" + PROMPT)
+    assert "abecho" not in session.vdp.screen, session.vdp.screen
+
+
+def test_graphics_after_closing_keys_reach_the_shell_and_the_mouse_is_ignored(
+    session
+):
+    boot_with_files(session, {})
+    vdp_login(session.vdp)
+    start_owner(session, "close print closed events 1 1500")
+    session.child.expect(r"gfxprobe: closed\r*\n", timeout=30)
+    session.vdp.mouse(5, 6)
+    session.vdp.type("echo back\r")
+    assert printed(session, EVENTS) == ["gfxprobe: events 0"]
+    session.vdp.expect(r"\r\nback\r\n" + PROMPT)
+    session.child.expect(PROMPT, timeout=30)
+    assert session.vdp.errors == [], session.vdp.errors
+
+
+def test_graphics_an_owner_that_exits_with_events_unread_leaks_nothing(
+    session
+):
+    boot_with_files(session, {})
+    start_owner(session, "sleep 2")
+    session.vdp.mouse(7, 8)
+    session.child.expect(r"system spawn 0 status 0\r*\n", timeout=30)
+    session.child.expect(PROMPT, timeout=30)
+    start_owner(session, "events 1 10000 hold")
+    session.vdp.mouse(9, 10)
+    assert printed(session, EVENTS) == [pointer(9, 10), "gfxprobe: events 1"]
+    disown(session)
+
+
+def test_graphics_a_revoked_owner_sitting_on_events_holds_up_nobody(session):
+    boot_with_files(session, {})
+    vdp = session.vdp
+    hold_on_vdp(session, "open sleep 6")
+    vdp.mouse(7, 8)
+    time.sleep(0.5)
+    vdp.release_display()
+    # The wait ends well before the first probe wakes.
+    start_owner(session, "events 1 2000 hold")
+    vdp.mouse(9, 10)
+    assert printed(session, EVENTS) == [pointer(9, 10), "gfxprobe: events 1"]
+    disown(session)
+    # The first probe exits once it wakes, which completes what it sat on,
+    # and the next graphics message frees it.
+    vdp.expect(r"system spawn 0 status 0\r\n" + PROMPT)
+    start_owner(session, "close")
+    session.child.expect(PROMPT, timeout=30)
+    assert message_args_reports(session) == []
+
+
+# A 4x4 Graphics.h RGBA2222 cursor, red in its top bits and alpha in its
+# bottom two:  a white diagonal edged in black on a transparent ground.
+WHITE_2222 = 0xFF
+BLACK_2222 = 0x03
+CURSOR_PIXELS = bytes([WHITE_2222, BLACK_2222, 0, 0,
+                       BLACK_2222, WHITE_2222, BLACK_2222, 0,
+                       0, BLACK_2222, WHITE_2222, BLACK_2222,
+                       0, 0, BLACK_2222, WHITE_2222])
+CURSOR_ROWS = ["WB..", "BWB.", ".BWB", "..BW"]
+
+
+def test_graphics_an_image_becomes_the_cursor_with_its_hotspot(session):
+    boot_with_files(session, {"p": CURSOR_PIXELS})
+    driver_cursor = session.vdp.pointer_image()
+    lines = own(session, "image rgba2222 4 4 /etc/p cursor 0xf200 2 1")
+    assert lines[2:] == ["gfxprobe: image no error 0xf200",
+                         "gfxprobe: cursor no error",
+                         "gfxprobe: finish no error"], lines
+    assert session.vdp.pointer_image() == CURSOR_ROWS
+    assert session.vdp.pointer_hotspot() == (2, 1)
+    disown(session)
+    assert session.vdp.pointer_image() == driver_cursor
+    assert len(driver_cursor) == 18
+
+
+def mouse_disables(vdp):
+    """Count the times the mouse was disabled.
+
+    @param vdp The FakeVdp.
+    """
+    with vdp.lock:
+        return sum(1 for _t, kind, detail in vdp.events
+                   if (kind, detail) == ("mouse", "disable"))
+
+
+def test_graphics_hiding_the_cursor_never_disables_the_mouse(session):
+    boot_with_files(session, {
+        "p": CURSOR_PIXELS,
+        "s": b"image rgba2222 4 4 /etc/p cursor 0xf200 0 0 show 0 finish "
+             b"print hidden events 1 10000 show 1 finish print shown "
+             b"events 1 10000 show 0 finish print hidden hold"})
+    disables = mouse_disables(session.vdp)
+    driver_cursor = session.vdp.pointer_image()
+    start_owner(session, "@/etc/s")
+    session.child.expect(r"gfxprobe: hidden\r*\n", timeout=30)
+    assert session.vdp.pointer_image() == ["."]
+    session.vdp.mouse(1, 1)
+    session.child.expect(r"gfxprobe: shown\r*\n", timeout=30)
+    assert session.vdp.pointer_image() == CURSOR_ROWS
+    session.vdp.mouse(2, 2)
+    session.child.expect(r"gfxprobe: hidden\r*\n", timeout=30)
+    assert session.vdp.pointer_image() == ["."]
+    assert mouse_disables(session.vdp) == disables
+    # Released while hidden, the console gets the driver's cursor back.
+    disown(session)
+    assert session.vdp.pointer_image() == driver_cursor
+
+
+def test_graphics_warping_moves_the_pointer_and_reports_it(session):
+    boot_with_files(session, {})
+    start_owner(session, "warp 300 200 events 1 10000 hold")
+    assert printed(session, EVENTS) == [
+        "gfxprobe: warp no error", pointer(300, 200), "gfxprobe: events 1"]
+    assert session.vdp.mouse_position == (300, 200)
+    disown(session)
+
+
+def test_graphics_destroying_the_cursors_image_brings_back_the_drivers(
+    session
+):
+    boot_with_files(session, {
+        "p": CURSOR_PIXELS,
+        "s": b"image rgba2222 4 4 /etc/p cursor 0xf201 0 0 cursor 0xf200 0 0 "
+             b"destroy 0xf200"})
+    driver_cursor = session.vdp.pointer_image()
+    lines = own(session, "@/etc/s")
+    assert lines[2:] == ["gfxprobe: image no error 0xf200",
+                         "gfxprobe: cursor invalid handle",
+                         "gfxprobe: cursor no error",
+                         "gfxprobe: destroy no error",
+                         "gfxprobe: finish no error"], lines
+    assert session.vdp.pointer_image() == driver_cursor
+    disown(session)
