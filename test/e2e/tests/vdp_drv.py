@@ -306,7 +306,7 @@ def test_vdp_pointer_appears_once_a_mouse_is_plugged_in(s):
     vdp.expect("login: ")
     assert not vdp.mouse_enabled, "the mouse was enabled with none plugged in"
     assert not vdp.mouse_visible, "a pointer was shown with no mouse"
-    vdp.mouse = True
+    vdp.mouse_plugged_in = True
     vdp.disconnect()
     vdp.wait_connections(2)
     deadline = time.time() + 10
@@ -322,7 +322,7 @@ def test_vdp_pointer_goes_away_once_the_mouse_is_unplugged(s):
     vdp = s.restart_with_vdp()
     vdp.expect("login: ")
     assert_vdp_pointer(vdp)
-    vdp.mouse = False
+    vdp.mouse_plugged_in = False
     vdp.disconnect()
     vdp.wait_connections(2)
     deadline = time.time() + 10

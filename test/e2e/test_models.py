@@ -35,6 +35,7 @@ end-to-end test is the program or the model.
 """
 
 import os
+import socket
 import tempfile
 import unittest
 
@@ -251,6 +252,69 @@ def plot(command, point_x, point_y):
 
 
 RED, BLUE, WHITE, BLACK = 4, 1, 15, 0
+
+
+class FakeVdpMouseTest(unittest.TestCase):
+    """The fake VDP's mouse packets and cursors."""
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.vdp = FakeVdp(os.path.join(self.directory.name, "vdp"),
+                           answer=False)
+        self.driver, self.vdp.conn = socket.socketpair()
+
+    def tearDown(self):
+        self.driver.close()
+        self.vdp.conn.close()
+        self.vdp.close()
+        self.directory.cleanup()
+
+    def send(self, data):
+        """Have the fake VDP read bytes.
+
+        @param data The bytes.
+        """
+        self.vdp._read(BytesConnection(data))
+
+    def received(self, size):
+        """Read what the fake VDP sent the driver.
+
+        @param size The number of bytes to read.
+        @return The bytes.
+        """
+        data = b""
+        while len(data) < size:
+            data += self.driver.recv(size - len(data))
+        return data
+
+    def test_a_mouse_packet_carries_position_buttons_wheel_and_deltas(self):
+        self.vdp.mouse(10, 20)
+        self.received(12)
+        self.vdp.mouse(300, 200, buttons=5, wheel=-1)
+        self.assertEqual(bytes([0x89, 10] + word(300) + word(200) + [5, 0xFF]
+                               + word(290) + word(180)),
+                         self.received(12))
+
+    def test_setting_the_position_is_answered_with_a_mouse_packet(self):
+        self.vdp.mouse(10, 20, buttons=1)
+        self.received(12)
+        self.send([23, 0, 0x89, 4] + word(600) + word(470))
+        self.assertEqual(bytes([0x89, 10] + word(600) + word(470) + [1, 0]
+                               + word(590) + word(450)),
+                         self.received(12))
+        self.assertEqual((600, 470), self.vdp.mouse_position)
+        self.assertEqual(1, self.vdp.count_events("warp"))
+
+    def test_a_cursor_can_come_from_an_rgba8888_bitmap(self):
+        self.send([23, 0, 0x89, 2, 23, 0, 0x89, 0])
+        self.send([23, 0, 0xA0] + word(0xF200) + [0] + word(8)
+                  + [0xFF, 0xFF, 0xFF, 0xFF, 0, 0, 0, 0])
+        self.send([23, 27, 0x20] + word(0xF200) + [23, 27, 0x21] + word(2)
+                  + word(1) + [0] + [23, 27, 0x40, 1, 0]
+                  + [23, 0, 0x89, 3] + word(0xF200))
+        self.assertEqual(["W."], self.vdp.pointer_image())
+        self.assertEqual((1, 0), self.vdp.pointer_hotspot())
+        self.assertEqual([], self.vdp.errors)
 
 
 class FakeVdpCanvasTest(unittest.TestCase):

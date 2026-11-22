@@ -53,6 +53,7 @@ nearest by RGB distance rather than by the real VDP's HSV distance.
 import os
 import re
 import socket
+import struct
 import threading
 import time
 
@@ -95,6 +96,8 @@ MOUSE_ENABLE = 0
 MOUSE_DISABLE = 1
 MOUSE_RESET = 2
 MOUSE_SET_CURSOR = 3
+MOUSE_SET_POSITION = 4
+PACKET_MOUSE = 0x89
 SPRITES = 27
 CURSOR_BEHAVIOUR = 16
 SCROLL = 7
@@ -254,7 +257,10 @@ class FakeVdp:
         self.mode = 0
         self.mouse_enabled = False
         self.mouse_cursor = None
-        self.mouse = mouse
+        self.mouse_position = (0, 0)
+        self.mouse_buttons = 0
+        self.send_lock = threading.Lock()
+        self.mouse_plugged_in = mouse
         self.mouse_detected = False
         self.mouse_visible = False
         self.mouse_port_suspended = False
@@ -553,9 +559,32 @@ class FakeVdp:
                             COLOUR_DEPTH, self.mode])
         if conn is not None:
             try:
-                conn.sendall(packet)
+                self._send(conn, packet)
             except OSError:
                 pass
+
+    def _send(self, conn, data):
+        """Send bytes to the simulator whole, so that a packet the server
+        thread sends and one a test sends can't interleave.
+
+        @param conn The connection.
+        @param data The bytes.
+        """
+        with self.send_lock:
+            conn.sendall(data)
+
+    def _send_mouse_packet(self, conn, position, buttons, wheel, delta):
+        """Send the mouse packet the real VDP sends.
+
+        @param conn The connection.
+        @param position The pointer's (column, row).
+        @param buttons The button bits.
+        @param wheel The wheel delta.
+        @param delta The pointer's movement since the last packet.
+        """
+        data = struct.pack("<HHBbhh", position[0], position[1], buttons,
+                           wheel, delta[0], delta[1])
+        self._send(conn, bytes([PACKET_MOUSE, len(data)]) + data)
 
     def _reset_event(self, command, detail=None):
         if self.listening:
@@ -712,9 +741,6 @@ class FakeVdp:
             hot_y = next(stream)
             if self.bitmap not in self.bitmaps:
                 self.errors.append(f"cursor from missing bitmap {self.bitmap}")
-            elif self.bitmaps[self.bitmap][3] != FORMAT_RGBA2222:
-                self.errors.append(f"cursor from bitmap {self.bitmap} "
-                                   f"in format {self.bitmaps[self.bitmap][3]}")
             else:
                 with self.lock:
                     self.cursors[self.bitmap] = (
@@ -731,7 +757,7 @@ class FakeVdp:
         # needs.
         if command == MOUSE_RESET:
             with self.lock:
-                self.mouse_detected = (self.mouse
+                self.mouse_detected = (self.mouse_plugged_in
                                        and not self.mouse_port_suspended)
                 if self.mouse_detected:
                     self.mouse_visible = True
@@ -751,6 +777,20 @@ class FakeVdp:
                     self.mouse_port_suspended = False
                     self.mouse_enabled = self.mouse_detected
                 self.mouse_visible = self.mouse_enabled
+        elif command == MOUSE_SET_POSITION:
+            position = (self._word(stream), self._word(stream))
+            with self.lock:
+                conn = self.conn
+                delta = (position[0] - self.mouse_position[0],
+                         position[1] - self.mouse_position[1])
+                self.mouse_position = position
+                buttons = self.mouse_buttons
+            self._event("warp", position)
+            if conn is not None:
+                try:
+                    self._send_mouse_packet(conn, position, buttons, 0, delta)
+                except OSError:
+                    pass
         elif command == MOUSE_SET_CURSOR:
             cursor = self._word(stream)
             if not self.mouse_enabled:
@@ -775,15 +815,13 @@ class FakeVdp:
         with self.lock:
             if self.mouse_cursor not in self.cursors:
                 return None
-            (width, height, data, _fmt), _hx, _hy = (
+            (width, height, data, fmt), _hot_x, _hot_y = (
                 self.cursors[self.mouse_cursor])
         rows = []
-        for y in range(height):
+        for pixel_row in range(height):
             row = ""
-            for pixel in data[y * width:(y + 1) * width]:
-                # The VDP's RGBA2222 packs red in the low bits, alpha in the high.
-                rgb = (pixel & 3, (pixel >> 2) & 3, (pixel >> 4) & 3)
-                alpha = pixel >> 6
+            for pixel in self._cursor_pixels(data, fmt, width, pixel_row):
+                rgb, alpha = pixel
                 if alpha == 0:
                     row += "."
                 elif alpha == 3 and rgb == (0, 0, 0):
@@ -794,6 +832,57 @@ class FakeVdp:
                     row += "?"
             rows.append(row)
         return rows
+
+    @staticmethod
+    def _cursor_pixels(data, fmt, width, pixel_row):
+        """Return one row of a cursor's pixels as 2-bit channels.
+
+        @param data The bitmap's bytes.
+        @param fmt FORMAT_RGBA2222 or FORMAT_RGBA8888.
+        @param width The bitmap's width.
+        @param pixel_row The row.
+        @return A list of ((red, green, blue), alpha), each channel 0-3.
+        """
+        pixels = []
+        if fmt == FORMAT_RGBA8888:
+            start = pixel_row * width * 4
+            for index in range(start, start + width * 4, 4):
+                red, green, blue, alpha = data[index:index + 4]
+                pixels.append(((red >> 6, green >> 6, blue >> 6), alpha >> 6))
+            return pixels
+        for pixel in data[pixel_row * width:(pixel_row + 1) * width]:
+            # The VDP's RGBA2222 packs red in the low bits, alpha in the high.
+            pixels.append(((pixel & 3, (pixel >> 2) & 3, (pixel >> 4) & 3),
+                           pixel >> 6))
+        return pixels
+
+    def pointer_hotspot(self):
+        """Return the hotspot of the pointer's cursor.
+
+        @return (column, row), or None if no custom pointer is shown.
+        """
+        with self.lock:
+            if self.mouse_cursor not in self.cursors:
+                return None
+            _bitmap, hot_x, hot_y = self.cursors[self.mouse_cursor]
+        return (hot_x, hot_y)
+
+    def mouse(self, column, row, buttons=0, wheel=0):
+        """Move the mouse and set its buttons the way the real VDP reports
+        it, with one mouse packet.
+
+        @param column The pointer's column, in pixels.
+        @param row The pointer's row, in pixels.
+        @param buttons The button bits.
+        @param wheel The wheel delta.
+        """
+        with self.lock:
+            conn = self.conn
+            delta = (column - self.mouse_position[0],
+                     row - self.mouse_position[1])
+            self.mouse_position = (column, row)
+            self.mouse_buttons = buttons
+        self._send_mouse_packet(conn, (column, row), buttons, wheel, delta)
 
     def _poll(self, cookie):
         now = time.time()
@@ -840,7 +929,7 @@ class FakeVdp:
         @param cookie The poll's cookie.
         """
         try:
-            conn.sendall(bytes([0x80, 0x01, cookie]))
+            self._send(conn, bytes([0x80, 0x01, cookie]))
         except OSError:
             pass
 
@@ -1396,7 +1485,7 @@ class FakeVdp:
             self.leds = ((LED_SCROLL_LOCK if self.scroll_lock else 0)
                          | (LED_CAPS_LOCK if self.caps_lock else 0)
                          | (LED_NUM_LOCK if self.num_lock else 0))
-        conn.sendall(bytes([0x81, 0x04, 0, modifiers, code, 1,
+        self._send(conn, bytes([0x81, 0x04, 0, modifiers, code, 1,
                             0x81, 0x04, 0, modifiers, code, 0]))
         time.sleep(0.01)
 
@@ -1417,7 +1506,7 @@ class FakeVdp:
             else:
                 code = KEYCODE_KEYPAD_NAVIGATION[index]
                 ascii_value = 0
-        conn.sendall(bytes([0x81, 0x04, ascii_value, modifiers, code, 1,
+        self._send(conn, bytes([0x81, 0x04, ascii_value, modifiers, code, 1,
                             0x81, 0x04, ascii_value, modifiers, code, 0]))
         time.sleep(0.01)
 
@@ -1447,7 +1536,7 @@ class FakeVdp:
             if self.layout == LAYOUT_UK:
                 ch = UK_CHARACTER_FOR_US_KEY.get(ch, ch)
         ascii_value = ord(ch)
-        conn.sendall(bytes([0x81, 0x04, ascii_value, 0, code, 1,
+        self._send(conn, bytes([0x81, 0x04, ascii_value, 0, code, 1,
                             0x81, 0x04, ascii_value, 0, code, 0]))
 
     def press(self, code):
@@ -1457,7 +1546,7 @@ class FakeVdp:
         """
         with self.lock:
             conn = self.conn
-        conn.sendall(bytes([0x81, 0x04, 0, 0, code, 1,
+        self._send(conn, bytes([0x81, 0x04, 0, 0, code, 1,
                             0x81, 0x04, 0, 0, code, 0]))
         time.sleep(0.01)
 
@@ -1467,7 +1556,7 @@ class FakeVdp:
         with self.lock:
             conn = self.conn
             modifiers = self._modifiers() | KEYMOD_CTRL | KEYMOD_ALT_LEFT
-        conn.sendall(bytes([0x81, 0x04, 8, modifiers, KEYCODE_BACKSPACE, 1,
+        self._send(conn, bytes([0x81, 0x04, 8, modifiers, KEYCODE_BACKSPACE, 1,
                             0x81, 0x04, 8, modifiers, KEYCODE_BACKSPACE, 0]))
         time.sleep(0.01)
 
