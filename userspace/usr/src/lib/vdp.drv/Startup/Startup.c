@@ -38,18 +38,12 @@
 #include "VdpDriver.h"
 #include "VdpFont.h"
 
-/// @def VDP_CURSOR_ID
+/// @def VDP_SETUP_TIMEOUT_SECONDS
 ///
-/// @brief The ID of the VDP buffer, bitmap, and mouse cursor that hold the
-/// driver's mouse cursor.  IDs up to 255 name the VDP's built-in cursors.
-#define VDP_CURSOR_ID 0xF000
-
-/// @def VDP_SETUP_TIMEOUT_NS
-///
-/// @brief How long, in nanoseconds, to wait for the VDP to answer the poll
-/// that follows the screen setup before writing to it anyway.  Resetting the
-/// mouse can take the VDP about 5 seconds when no mouse is plugged in.
-#define VDP_SETUP_TIMEOUT_NS 8000000000LL
+/// @brief How long, in seconds, to wait for the VDP to answer the poll that
+/// follows the screen setup before writing to it anyway.  Resetting the mouse
+/// can take the VDP about 5 seconds when no mouse is plugged in.
+#define VDP_SETUP_TIMEOUT_SECONDS 8
 
 /// @def VDP_AUDIO_RESET
 ///
@@ -125,13 +119,30 @@ static const uint8_t _vdpCursorUploadEnd[] = {
   23, 0, 0x89, 3, VDP_WORD(VDP_CURSOR_ID)
 };
 
+/// @var _vdpHiddenCursor
+///
+/// @brief VDU commands that make the transparent cursor a display owner hides
+/// the pointer with:  clear its buffer (VDU 23,0,&A0,id;2), write one
+/// transparent RGBA2222 pixel to it (VDU 23,0,&A0,id;0,1;0), select it as the
+/// bitmap (VDU 23,27,&20,id;), make a 1x1 RGBA2222 bitmap of it
+/// (VDU 23,27,&21,1;1;1), and make a mouse cursor of the bitmap
+/// (VDU 23,27,&40,0,0).
+static const uint8_t _vdpHiddenCursor[] = {
+  23, 0, 0xA0, VDP_WORD(VDP_HIDDEN_CURSOR_ID), 2,
+  23, 0, 0xA0, VDP_WORD(VDP_HIDDEN_CURSOR_ID), 0, VDP_WORD(1), 0,
+  23, 27, 0x20, VDP_WORD(VDP_HIDDEN_CURSOR_ID),
+  23, 27, 0x21, VDP_WORD(1), VDP_WORD(1), 1,
+  23, 27, 0x40, 0, 0
+};
+
 /// @fn static void vdpDefineCursor(void)
 ///
-/// @brief Upload the mouse cursor to the VDP, reset and enable the mouse, and
-/// make the cursor its pointer.
+/// @brief Upload the mouse cursor and the transparent one to the VDP, reset
+/// and enable the mouse, and make the cursor its pointer.
 ///
 /// @return This function returns no value.
 static void vdpDefineCursor(void) {
+  vdpWrite(_vdpHiddenCursor, sizeof(_vdpHiddenCursor));
   vdpWrite(_vdpCursorUploadStart, sizeof(_vdpCursorUploadStart));
   vdpWrite(cursorPixels, sizeof(cursorPixels));
   vdpWrite(_vdpCursorUploadEnd, sizeof(_vdpCursorUploadEnd));
@@ -150,9 +161,9 @@ static const char _vdpNumLockOff[] = "--numlock=off";
 /// @fn static void vdpBufferString(VdpOutputBuffer *buffer,
 ///   const char *string)
 ///
-/// @brief Append a string to the output drawn once the VDP is listening, with
-/// any byte that isn't printable ASCII replaced so that it can't start a VDU
-/// command.
+/// @brief Append a string to the console text drawn once the VDP is
+/// listening, with any byte that isn't printable ASCII replaced so that it
+/// can't start an escape sequence.
 ///
 /// @param buffer A pointer to the output buffer, or NULL to drop the string.
 /// @param string The NUL-terminated string to append.
@@ -200,11 +211,11 @@ static void vdpParseArguments(VdpInput *input, VdpOutput *vdpOutput,
     } else if (strcmp(*arg, _vdpNumLockOff) == 0) {
       input->numLock = false;
     } else {
-      vdpBufferString(vdpOutput->buffer, argv[0]);
-      vdpBufferString(vdpOutput->buffer,
+      vdpBufferString(vdpOutput->heldText, argv[0]);
+      vdpBufferString(vdpOutput->heldText,
         ": Ignoring unrecognized argument \"");
-      vdpBufferString(vdpOutput->buffer, *arg);
-      vdpBufferString(vdpOutput->buffer, "\"\r\n");
+      vdpBufferString(vdpOutput->heldText, *arg);
+      vdpBufferString(vdpOutput->heldText, "\"\n");
     }
   }
 }
@@ -225,9 +236,8 @@ static __attribute__((noinline)) void* vdpCreateArgs(size_t size) {
 
 /// @fn static void vdpDestroyArgs(ProcessMessage *message, void *args)
 ///
-/// @brief Free the arguments of a message to the console unless the console
-/// hasn't finished with them, in which case the kernel reclaims them once it
-/// has.
+/// @brief Free the arguments of a message unless its receiver hasn't finished
+/// with them, in which case the kernel reclaims them once it has.
 ///
 /// @param message The message the arguments were sent with, or NULL.
 /// @param args The arguments.
@@ -241,8 +251,8 @@ static void vdpDestroyArgs(ProcessMessage *message, void *args) {
 
 /// @fn void* vdpShutdown(void *args)
 ///
-/// @brief Free the arguments of the messages to the console before the driver
-/// exits.
+/// @brief Free the arguments of the messages to the console and the display's
+/// owner before the driver exits.
 ///
 /// @param args A pointer to the driver's VdpStartupArgs.
 ///
@@ -252,6 +262,9 @@ void* vdpShutdown(void *args) {
   vdpDestroyArgs(input->portMessage, input->portArgs);
   vdpDestroyArgs(input->inputMessage, input->inputArgs);
   vdpDestroyArgs(input->sizeMessage, input->sizeArgs);
+  vdpDestroyArgs(NULL, input->events);
+  vdpDestroyArgs(input->eventsMessage, input->sentEvents);
+  vdpDestroyArgs(input->orphanMessage, input->orphanEvents);
   return args;
 }
 
@@ -291,10 +304,10 @@ void* vdpStartup(void *args) {
   vdpOutput->textState.numColumns = VDP_SCREEN_WIDTH / VDP_SYSTEM_GLYPH_SIZE;
   vdpOutput->textState.numRows = VDP_SCREEN_HEIGHT / VDP_SYSTEM_GLYPH_SIZE;
   vdpOutput->sizeChanged = true;
-  vdpOutput->giveUpNs = vdpNowNs() + VDP_GENERAL_POLL_TIMEOUT_NS;
-  vdpOutput->buffer = (VdpOutputBuffer*) malloc(sizeof(VdpOutputBuffer));
-  if (vdpOutput->buffer != NULL) {
-    vdpOutput->buffer->length = 0;
+  vdpTimeFromNow(&vdpOutput->giveUp, VDP_GENERAL_POLL_TIMEOUT_SECONDS, 0);
+  vdpOutput->heldText = (VdpOutputBuffer*) malloc(sizeof(VdpOutputBuffer));
+  if (vdpOutput->heldText != NULL) {
+    vdpOutput->heldText->length = 0;
   }
   vdpParseArguments(input, vdpOutput, startupArgs->argv);
 
@@ -326,14 +339,15 @@ static void vdpSendScreenSetup(VdpInput *input, VdpOutput *vdpOutput) {
   input->pollAnswered = false;
   input->pollCookie = VDP_SETUP_POLL_COOKIE;
   vdpOutput->screenSetUp = true;
-  vdpOutput->nextPollNs = vdpNowNs();
-  vdpOutput->giveUpNs = vdpOutput->nextPollNs + VDP_SETUP_TIMEOUT_NS;
+  vdpTimeFromNow(&vdpOutput->nextPoll, 0, 0);
+  vdpTimeFromNow(&vdpOutput->giveUp, VDP_SETUP_TIMEOUT_SECONDS, 0);
 }
 
 /// @fn static void vdpFinishSetup(VdpOutput *vdpOutput)
 ///
 /// @brief Start drawing on the VDP once it has finished the screen setup, and
-/// draw the output buffered until then.  No poll is due until a
+/// have the Console overlay turn the text held until then into the main
+/// overlay's replay.  No poll is due until a
 /// GFX_MSG_FINISH sends one.
 ///
 /// @param vdpOutput A pointer to the driver's VdpOutput.
@@ -341,11 +355,10 @@ static void vdpSendScreenSetup(VdpInput *input, VdpOutput *vdpOutput) {
 /// @return This function returns no value.
 static void vdpFinishSetup(VdpOutput *vdpOutput) {
   vdpOutput->listening = true;
-  vdpOutput->nextPollNs = INT64_MAX;
-  if (vdpOutput->buffer != NULL) {
-    vdpWrite(vdpOutput->buffer->data, vdpOutput->buffer->length);
-    free(vdpOutput->buffer);
-    vdpOutput->buffer = NULL;
+  vdpOutput->nextPoll.tv_nsec = VDP_NEVER;
+  if (vdpOutput->heldText != NULL) {
+    callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Console", "vdpHoldReplay",
+      vdpOutput);
   }
 }
 
@@ -374,7 +387,7 @@ void* vdpSetupScreen(void *args) {
 /// @brief How often, in nanoseconds, the general poll is resent until the VDP
 /// answers.  A VDP that has just been powered on ignores everything for
 /// several seconds.
-#define VDP_GENERAL_POLL_RETRY_NS 500000000LL
+#define VDP_GENERAL_POLL_RETRY_NS 500000000L
 
 /// @fn static void vdpLoadBuiltInFont(VdpOutput *vdpOutput)
 ///
@@ -441,13 +454,14 @@ static void vdpHandshake(VdpStartupArgs *startupArgs) {
     return;
   }
 
-  int64_t now = vdpNowNs();
-  if ((input->pollAnswered == false) && (now < vdpOutput->giveUpNs)) {
-    if (now >= vdpOutput->nextPollNs) {
+  if ((input->pollAnswered == false)
+    && (vdpTimeReached(&vdpOutput->giveUp) == false)
+  ) {
+    if (vdpTimeReached(&vdpOutput->nextPoll) == true) {
       // VDU 23,0,&80,cookie, which the VDP answers with the cookie.
       uint8_t poll[] = { 23, 0, 0x80, input->pollCookie };
       vdpWrite(poll, sizeof(poll));
-      vdpOutput->nextPollNs = now + VDP_GENERAL_POLL_RETRY_NS;
+      vdpTimeFromNow(&vdpOutput->nextPoll, 0, VDP_GENERAL_POLL_RETRY_NS);
     }
     return;
   }
