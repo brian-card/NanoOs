@@ -321,9 +321,14 @@ bool posixFileCacheRequested(void) {
 
 /// @def POSIX_UART_RX_BUFFER_SIZE
 ///
-/// @brief Size of each UART's receive ring.  One slot stays empty to tell a
-/// full ring from an empty one, so it holds one less than this.
-#define POSIX_UART_RX_BUFFER_SIZE 64
+/// @brief Size of each UART's receive ring, the Agon's.  One slot stays empty
+/// to tell a full ring from an empty one, so it holds one less than this.
+#define POSIX_UART_RX_BUFFER_SIZE 256
+
+/// @def POSIX_UART0_SEND_BUFFER_SIZE
+///
+/// @brief The send buffer UART0's socket asks for when it models the Agon.
+#define POSIX_UART0_SEND_BUFFER_SIZE 2048
 
 /// @def POSIX_UART_RX_SIGNAL
 ///
@@ -395,6 +400,17 @@ static uint8_t _uartRxSignalStack[POSIX_UART_RX_SIGNAL_STACK_SIZE];
 static const char _uart0EnvironmentVariable[] KEEP_IN_FLASH
   = "NANO_OS_SIM_UART0";
 
+/// @var _uart0DropEnvironmentVariable
+///
+/// @brief The environment variable that makes UART0 drop a byte its receive
+/// ring has no room for, as the Agon's does, since its VDP sends whether or
+/// not the ring has room.
+///
+/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _uart0DropEnvironmentVariable[] KEEP_IN_FLASH
+  = "NANO_OS_SIM_UART0_DROP";
+
 /// @fn bool posixUart0Requested(void)
 ///
 /// @brief Report whether the simulator was asked to connect UART0 to a
@@ -447,21 +463,24 @@ static void posixUartRxSignalHandler(int signal) {
 /// @fn void* posixUartRxThreadFunction(void *arg)
 ///
 /// @brief Block reading a UART's file descriptor, move each byte into its
-/// receive ring, and signal the main thread.  Waits for room rather than
-/// dropping bytes when the ring is full, and exits at end of file.
+/// receive ring, and signal the main thread.  Waits for room when the ring is
+/// full, unless NANO_OS_SIM_UART0_DROP asks UART0 to drop the byte, and exits
+/// at end of file.
 ///
 /// @param arg A pointer to the PosixUartRx of the UART.
 ///
 /// @return This function always returns NULL.
 static void* posixUartRxThreadFunction(void *arg) {
   PosixUartRx *rx = (PosixUartRx*) arg;
+  bool drop = (rx == &_uartRx[0])
+    && (getenv(_uart0DropEnvironmentVariable) != NULL);
 
   // read() rather than getc(): getc() holds stdin's stdio lock while it
   // blocks, and exit() waits on that lock to flush streams.
   uint8_t byte = 0;
   while (read(rx->fd, &byte, 1) == 1) {
     pthread_mutex_lock(&rx->mutex);
-    while (!posixUartRxPushLocked(rx, byte)) {
+    while (!posixUartRxPushLocked(rx, byte) && !drop) {
       pthread_cond_wait(&rx->notFull, &rx->mutex);
     }
     pthread_mutex_unlock(&rx->mutex);
@@ -554,6 +573,13 @@ static int posixConnectUart0(void) {
     int returnValue = -posixErrnoToNanoOs(errno);
     close(fd);
     return returnValue;
+  }
+  if (getenv(_uart0DropEnvironmentVariable) != NULL) {
+    // A small send buffer makes a long write wait for the VDP, as the
+    // Agon's UART does.
+    int sendBufferSize = POSIX_UART0_SEND_BUFFER_SIZE;
+    setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &sendBufferSize,
+      sizeof(sendBufferSize));
   }
   _uartRx[0].disconnected = 0;
   _uartRx[0].fd = fd;
