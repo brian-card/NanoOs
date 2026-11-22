@@ -89,6 +89,8 @@ FREED = 'nano-os-sim/test_graphics_an_owners_images_and_preloads_are_freed_when_
 REVOKED_FINISH = 'nano-os-sim/test_graphics_revoking_answers_a_waiting_finish'
 KILLED_FINISH = 'nano-os-sim/test_graphics_killing_an_owner_waiting_on_finish_frees_the_display'
 SET_UP = 'nano-os-sim/test_graphics_the_display_is_busy_until_the_driver_has_set_it_up'
+LONG_REPAINT = 'nano-os-sim/test_wm_mouse_packets_sent_during_long_repaints_are_never_lost'
+GIVES_BACK = 'nano-os-sim/test_wm_gives_back_all_the_memory_it_used'
 RED, GREEN = 'red', 'green'
 
 CLIENT_ENDED_IGNORED = (GRAPHICS, '''        == vdpOutput->owner)
@@ -246,6 +248,12 @@ MUTATIONS = [
       vdpOutput.replayText = NULL;
     }
     if (vdpOutput.finishMessage != NULL) {''')], NEVER_ANSWERS, RED),
+ ('G6-received-not-drained', [(DRAW, '''    vdpReceive(sink->input);
+''', '')], LONG_REPAINT, RED),
+ ('G6-events-leaked', [(GRAPHICS, '''static void vdpReleaseEvents(VdpInput *input) {
+  MESSAGE_ARGS_DESTROY(input->events);
+''', '''static void vdpReleaseEvents(VdpInput *input) {
+''')], GIVES_BACK, RED),
 ]
 
 def run(test):
