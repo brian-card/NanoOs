@@ -89,29 +89,52 @@ static inline const char *gfxErrorString(GfxError err) {
   }
 }
 
-
-// =========================================================================
-// CLIENT-SIDE STRUCTURES
-// =========================================================================
-
+/// @struct GfxImageDesc
+///
+/// @brief An image for gfxUploadImage.
+///
+/// @param width The image's width.
+/// @param height The image's height.
+/// @param format The GfxPixelFmt of pixels.
+/// @param pixels The pixels, or NULL to allocate the image without
+///   initializing it.  Not in the caller's overlay.
+/// @param size The bytes at pixels.
 typedef struct GfxImageDesc {
   uint16_t       width, height;
   GfxPixelFmt    format;
-  const void    *pixels;    // may be NULL to allocate without initializing;
-                            // not in the caller's overlay
-  size_t         size;      // byte count of pixels buffer
+  const void    *pixels;
+  size_t         size;
 } GfxImageDesc;
 
+/// @struct GfxFontDesc
+///
+/// @brief A font for gfxUploadFont.
+///
+/// @param glyphW The width of each glyph cell, in pixels.
+/// @param glyphH The height of each glyph cell, in pixels.
+/// @param firstChar The first codepoint in the bitmap.
+/// @param numChars The number of glyphs.
+/// @param bitmap 1-bit glyph rows, MSB leftmost, each row padded to a whole
+///   byte.  Not in the caller's overlay.
+/// @param size The bytes at bitmap.
 typedef struct GfxFontDesc {
-  uint8_t      glyphW, glyphH;  // pixel dimensions of each glyph cell
-  uint8_t      firstChar;       // first codepoint in the bitmap
-  uint16_t     numChars;        // number of glyphs
-  const void  *bitmap;          // 1-bit glyph rows, MSB leftmost, each row
-                                // padded to a whole byte; not in the
-                                // caller's overlay
+  uint8_t      glyphW, glyphH;
+  uint8_t      firstChar;
+  uint16_t     numChars;
+  const void  *bitmap;
   size_t       size;
 } GfxFontDesc;
 
+/// @struct GfxFontCacheEntry
+///
+/// @brief The metrics a client keeps of a font, so that text is measured
+/// without asking the driver.
+///
+/// @param handle The font.
+/// @param glyphW The width of each glyph cell, in pixels.
+/// @param glyphH The height of each glyph cell, in pixels.
+/// @param firstChar The first codepoint the font has.
+/// @param numChars The number of glyphs.
 typedef struct GfxFontCacheEntry {
   GfxHandle handle;
   uint8_t   glyphW, glyphH;
@@ -139,11 +162,6 @@ typedef struct GfxDisplay {
   uint8_t           fontCount;
   GfxFontCacheEntry fontCache[GFX_MAX_FONTS];
 } GfxDisplay;
-
-
-// =========================================================================
-// TRANSPORT
-// =========================================================================
 
 /// @fn static inline GfxError gfxCall_(GfxDisplay *disp, uint8_t type,
 ///   void *args, size_t size)
@@ -242,11 +260,6 @@ GFX_OUT_OF_LINE GfxError gfxPostHandle_(GfxDisplay *disp,
   return gfxPost_(disp, type, args, sizeof(*args));
 }
 
-
-// =========================================================================
-// DISPLAY
-// =========================================================================
-
 /// @fn static inline GfxError gfxOpenDisplay(GfxDisplay *disp,
 ///   const char *driverName, uint16_t width, uint16_t height)
 ///
@@ -333,11 +346,6 @@ static inline GfxError gfxGetSurfaceSize(GfxDisplay *disp,
   MESSAGE_ARGS_FREE(args);
   return status;
 }
-
-
-// =========================================================================
-// IMAGES
-// =========================================================================
 
 /// @fn static inline GfxError gfxUploadImage(GfxDisplay *disp,
 ///   const GfxImageDesc *desc, GfxHandle *outImage)
@@ -450,11 +458,6 @@ static inline GfxError gfxCaptureRect(GfxDisplay *disp, const GfxRect *rect,
   MESSAGE_ARGS_FREE(args);
   return status;
 }
-
-
-// =========================================================================
-// FONTS
-// =========================================================================
 
 /// @fn static inline GfxFontCacheEntry* gfxFontEntry_(GfxDisplay *disp,
 ///   GfxHandle font)
@@ -589,17 +592,12 @@ static inline GfxError gfxSetDefaultFont(GfxDisplay *disp, GfxHandle font) {
   return status;
 }
 
-
-// =========================================================================
-// TEXT MEASUREMENT  (client-side, no IPC)
-//
-// Every measurement uses cached metrics of fixed-width fonts, works in
-// uint32_t, and saturates at UINT16_MAX.
-// =========================================================================
-
 /// @fn static inline uint16_t gfxSaturate_(uint32_t value)
 ///
 /// @brief Clamp a measurement to what a uint16_t holds.
+///
+/// @note Every text measurement uses the cached metrics of fixed-width fonts,
+/// works in uint32_t, and saturates at UINT16_MAX.
 ///
 /// @param value The measurement.
 ///
@@ -752,15 +750,6 @@ static inline bool gfxGetFontRange(GfxDisplay *disp, GfxHandle font,
   return true;
 }
 
-
-// =========================================================================
-// COMMAND BUFFER
-//
-// Two equal buffers.  Records go into the write buffer; a submit shares it
-// with the driver, sends it as a persistent round trip, and switches to the
-// other buffer, first waiting for the driver to be done with that one.
-// =========================================================================
-
 /// @def GFX_CMDBUF_NO_FLUSH
 ///
 /// @brief A gfxCmdBufBegin flag:  a record that doesn't fit sets
@@ -770,6 +759,10 @@ static inline bool gfxGetFontRange(GfxDisplay *disp, GfxHandle font,
 /// @struct GfxCmdBuf
 ///
 /// @brief A double-buffered command recording.
+///
+/// @note Records go into the write buffer.  A submit shares it with the
+/// driver, sends it as a persistent round trip, and switches to the other
+/// buffer, first waiting for the driver to be done with that one.
 ///
 /// @param disp The display it submits to.
 /// @param data The two buffers.
@@ -1113,11 +1106,6 @@ static inline GfxError gfxDiscardPreupload(GfxDisplay *disp,
   return gfxPostHandle_(disp, GFX_MSG_DISCARD_PREUPLOAD, handle);
 }
 
-
-// =========================================================================
-// COMMAND RECORDING  (client-side, no IPC)
-// =========================================================================
-
 /// @fn static inline void gfxCmdSetViewport(GfxCmdBuf *buf,
 ///   const GfxRect *rect)
 ///
@@ -1426,11 +1414,6 @@ static inline void gfxCmdScrollRect(GfxCmdBuf *buf, const GfxRect *rect,
   gfxCmdRecordRect_(buf, GFX_CMD_SCROLL_RECT, rect, delta, sizeof(delta));
 }
 
-
-// =========================================================================
-// SYNCHRONIZATION, ERRORS, AND THE CURSOR  (messages to driver)
-// =========================================================================
-
 /// @fn static inline GfxError gfxStatusCall_(GfxDisplay *disp, uint8_t type)
 ///
 /// @brief Send a synchronous message whose arguments are only a status.
@@ -1542,11 +1525,6 @@ static inline GfxError gfxWarpCursor(GfxDisplay *disp, int16_t pointerX,
   return gfxPost_(disp, GFX_MSG_WARP_CURSOR, args, sizeof(*args));
 }
 
-
-// =========================================================================
-// INPUT EVENTS  (messages from driver)
-// =========================================================================
-
 /// @fn static inline bool gfxIsInputEvents(ProcessMessage *message)
 ///
 /// @brief Determine whether a message is the driver's GFX_MSG_INPUT_EVENTS.
@@ -1585,7 +1563,6 @@ static inline const GfxInputEventsArgs* gfxInputEvents(
 static inline void gfxInputEventsDone(ProcessMessage *message) {
   processMessageSetDone(message);
 }
-
 
 #ifdef __cplusplus
 }

@@ -40,41 +40,136 @@
 extern "C" {
 #endif
 
-// Packed RGBA color: 0xRRGGBBAA.
-//
-// The VDP backend maps this to the nearest entry in its 64-color palette.
-// A GPU backend passes it through to the fragment pipeline or clear color.
+/// @typedef GfxColor
+///
+/// @brief A packed RGBA color, 0xRRGGBBAA.  The VDP backend maps it to the
+/// nearest entry in its 64-color palette, and a GPU backend passes it through.
 typedef uint32_t GfxColor;
 
+/// @def GFX_RGBA
+///
+/// @brief Pack red, green, blue, and alpha channels of 0-255 into a GfxColor.
 #define GFX_RGBA(r,g,b,a) \
     (((GfxColor)(r) << 24) | \
      ((GfxColor)(g) << 16) | \
      ((GfxColor)(b) <<  8) | \
      ((GfxColor)(a)))
 
+/// @def GFX_RGB
+///
+/// @brief Pack red, green, and blue channels of 0-255 into an opaque
+/// GfxColor.
 #define GFX_RGB(r,g,b)  GFX_RGBA(r, g, b, 0xFF)
+
+/// @def GFX_TRANSPARENT
+///
+/// @brief The GfxColor with an alpha of 0.
 #define GFX_TRANSPARENT GFX_RGBA(0, 0, 0, 0x00)
 
-// Common palette entries that map cleanly to the VDP's 64-color set.
-//                         RGBA8888       RGB2222
-#define CGA_BLACK          0x000000FF  // (0,0,0,3)
-#define CGA_BLUE           0x0000AAFF  // (0,0,2,3)
-#define CGA_GREEN          0x00AA00FF  // (0,2,0,3)
-#define CGA_CYAN           0x00AAAAFF  // (0,2,2,3)
-#define CGA_RED            0xAA0000FF  // (2,0,0,3)
-#define CGA_MAGENTA        0xAA00AAFF  // (2,0,2,3)
-#define CGA_BROWN          0xAA5500FF  // (2,1,0,3)
-#define CGA_LIGHT_GRAY     0xAAAAAAFF  // (2,2,2,3)
-#define CGA_DARK_GRAY      0x555555FF  // (1,1,1,3)
-#define CGA_LIGHT_BLUE     0x5555FFFF  // (1,1,3,3)
-#define CGA_LIGHT_GREEN    0x55FF55FF  // (1,3,1,3)
-#define CGA_LIGHT_CYAN     0x55FFFFFF  // (1,3,3,3)
-#define CGA_LIGHT_RED      0xFF5555FF  // (3,1,1,3)
-#define CGA_LIGHT_MAGENTA  0xFF55FFFF  // (3,1,3,3)
-#define CGA_YELLOW         0xFFFF55FF  // (3,3,1,3)
-#define CGA_WHITE          0xFFFFFFFF  // (3,3,3,3)
+/// @def CGA_BLACK
+///
+/// @brief Black, a color that maps cleanly to the VDP's 64-color set:
+/// (0,0,0,3) in RGBA2222.
+#define CGA_BLACK          0x000000FF
 
+/// @def CGA_BLUE
+///
+/// @brief Blue, a color that maps cleanly to the VDP's 64-color set:
+/// (0,0,2,3) in RGBA2222.
+#define CGA_BLUE           0x0000AAFF
+
+/// @def CGA_GREEN
+///
+/// @brief Green, a color that maps cleanly to the VDP's 64-color set:
+/// (0,2,0,3) in RGBA2222.
+#define CGA_GREEN          0x00AA00FF
+
+/// @def CGA_CYAN
+///
+/// @brief Cyan, a color that maps cleanly to the VDP's 64-color set:
+/// (0,2,2,3) in RGBA2222.
+#define CGA_CYAN           0x00AAAAFF
+
+/// @def CGA_RED
+///
+/// @brief Red, a color that maps cleanly to the VDP's 64-color set:
+/// (2,0,0,3) in RGBA2222.
+#define CGA_RED            0xAA0000FF
+
+/// @def CGA_MAGENTA
+///
+/// @brief Magenta, a color that maps cleanly to the VDP's 64-color set:
+/// (2,0,2,3) in RGBA2222.
+#define CGA_MAGENTA        0xAA00AAFF
+
+/// @def CGA_BROWN
+///
+/// @brief Brown, a color that maps cleanly to the VDP's 64-color set:
+/// (2,1,0,3) in RGBA2222.
+#define CGA_BROWN          0xAA5500FF
+
+/// @def CGA_LIGHT_GRAY
+///
+/// @brief Light gray, a color that maps cleanly to the VDP's 64-color set:
+/// (2,2,2,3) in RGBA2222.
+#define CGA_LIGHT_GRAY     0xAAAAAAFF
+
+/// @def CGA_DARK_GRAY
+///
+/// @brief Dark gray, a color that maps cleanly to the VDP's 64-color set:
+/// (1,1,1,3) in RGBA2222.
+#define CGA_DARK_GRAY      0x555555FF
+
+/// @def CGA_LIGHT_BLUE
+///
+/// @brief Light blue, a color that maps cleanly to the VDP's 64-color set:
+/// (1,1,3,3) in RGBA2222.
+#define CGA_LIGHT_BLUE     0x5555FFFF
+
+/// @def CGA_LIGHT_GREEN
+///
+/// @brief Light green, a color that maps cleanly to the VDP's 64-color set:
+/// (1,3,1,3) in RGBA2222.
+#define CGA_LIGHT_GREEN    0x55FF55FF
+
+/// @def CGA_LIGHT_CYAN
+///
+/// @brief Light cyan, a color that maps cleanly to the VDP's 64-color set:
+/// (1,3,3,3) in RGBA2222.
+#define CGA_LIGHT_CYAN     0x55FFFFFF
+
+/// @def CGA_LIGHT_RED
+///
+/// @brief Light red, a color that maps cleanly to the VDP's 64-color set:
+/// (3,1,1,3) in RGBA2222.
+#define CGA_LIGHT_RED      0xFF5555FF
+
+/// @def CGA_LIGHT_MAGENTA
+///
+/// @brief Light magenta, a color that maps cleanly to the VDP's 64-color set:
+/// (3,1,3,3) in RGBA2222.
+#define CGA_LIGHT_MAGENTA  0xFF55FFFF
+
+/// @def CGA_YELLOW
+///
+/// @brief Yellow, a color that maps cleanly to the VDP's 64-color set:
+/// (3,3,1,3) in RGBA2222.
+#define CGA_YELLOW         0xFFFF55FF
+
+/// @def CGA_WHITE
+///
+/// @brief White, a color that maps cleanly to the VDP's 64-color set:
+/// (3,3,3,3) in RGBA2222.
+#define CGA_WHITE          0xFFFFFFFF
+
+/// @var cgaColorPalette
+///
+/// @brief The CGA_* colors, indexed by CgaColorIndex.
 extern const GfxColor cgaColorPalette[16];
+
+/// @def CGA_COLOR_PALETTE
+///
+/// @brief The definition of cgaColorPalette, for the one file that defines it.
 #define CGA_COLOR_PALETTE \
 const GfxColor cgaColorPalette[16] = { \
   0x000000FF, /* CGA_BLACK         */ \
@@ -95,7 +190,14 @@ const GfxColor cgaColorPalette[16] = { \
   0xFFFFFFFF, /* CGA_WHITE         */ \
 };
 
+/// @var rgb222ToCgaMap
+///
+/// @brief The CgaColorIndex nearest each RGB222 color.
 extern const uint8_t rgb222ToCgaMap[64];
+
+/// @def RGB222_TO_CGA_MAP
+///
+/// @brief The definition of rgb222ToCgaMap, for the one file that defines it.
 #define RGB222_TO_CGA_MAP \
 const uint8_t rgb222ToCgaMap[64] = { \
   0,  0,  1,  1,  0,  8,  1,  9, \
@@ -108,30 +210,77 @@ const uint8_t rgb222ToCgaMap[64] = { \
   6, 12,  7, 13, 14, 14, 14, 15, \
 };
 
-// Common conversions.
+/// @def rgba8888ToRgb888
+///
+/// @brief Convert an RGBA8888 color to RGB888.
 #define rgba8888ToRgb888(color) ((color) >> 8)
+
+/// @def colorChannelTo2Bits
+///
+/// @brief Round the 8-bit channel at a shift in a color to 2 bits.
 #define colorChannelTo2Bits(color, shift) \
     ((((((GfxColor) (color)) >> (shift)) & 0xff) + 42) / 85)
+
+/// @def rgba8888ToRgba2222
+///
+/// @brief Convert an RGBA8888 color to RGBA2222.
 #define rgba8888ToRgba2222(color) ( \
     (colorChannelTo2Bits(color, 24) << 6) \
   | (colorChannelTo2Bits(color, 16) << 4) \
   | (colorChannelTo2Bits(color,  8) << 2) \
   | (colorChannelTo2Bits(color,  0) << 0) )
+
+/// @def rgba8888ToRgb222
+///
+/// @brief Convert an RGBA8888 color to RGB222.
 #define rgba8888ToRgb222(color) (rgba8888ToRgba2222(color) >> 2)
+
+/// @def rgb888ToRgb222
+///
+/// @brief Convert an RGB888 color to RGB222.
 #define rgb888ToRgb222(color) ( \
     (colorChannelTo2Bits(color, 16) << 4) \
   | (colorChannelTo2Bits(color,  8) << 2) \
   | (colorChannelTo2Bits(color,  0) << 0) )
+
+/// @def rgba2222ToRgb222
+///
+/// @brief Convert an RGBA2222 color to RGB222.
 #define rgba2222ToRgb222(color) ((color) >> 2)
 
+/// @def rgb222ToCga
+///
+/// @brief Get the CgaColorIndex nearest an RGB222 color.
 #define rgb222ToCga(color)   rgb222ToCgaMap[(color)]
+
+/// @def rgba2222ToCga
+///
+/// @brief Get the CgaColorIndex nearest an RGBA2222 color.
 #define rgba2222ToCga(color) rgb222ToCgaMap[rgba2222ToRgb222(color)]
+
+/// @def rgba2222Alpha
+///
+/// @brief Get the 2-bit alpha of an RGBA2222 color.
 #define rgba2222Alpha(color) (color & 0x03)
+
+/// @def rgb888ToCga
+///
+/// @brief Get the CgaColorIndex nearest an RGB888 color.
 #define rgb888ToCga(color)   rgb222ToCgaMap[rgb888ToRgb222(color)]
+
+/// @def rgba8888ToCga
+///
+/// @brief Get the CgaColorIndex nearest an RGBA8888 color.
 #define rgba8888ToCga(color) rgb222ToCgaMap[rgba8888ToRgb222(color)]
+
+/// @def rgba8888Alpha
+///
+/// @brief Get the 8-bit alpha of an RGBA8888 color.
 #define rgba8888Alpha(color) ((color) & 0xff)
 
-// Indices of the colors in cgaColorPalette.
+/// @enum CgaColorIndex
+///
+/// @brief The indices of the colors in cgaColorPalette.
 typedef enum CgaColorIndex {
   CGA_INDEX_BLACK,
   CGA_INDEX_BLUE,
@@ -152,17 +301,55 @@ typedef enum CgaColorIndex {
   CGA_NUM_COLORS
 } CgaColorIndex;
 
-// ANSI SGR (Select Graphic Rendition) parameters for setting terminal colors.
+/// @def ANSI_SGR_RESET
+///
+/// @brief The ANSI SGR (Select Graphic Rendition) parameter that resets every
+/// attribute.
 #define ANSI_SGR_RESET                0
+
+/// @def ANSI_SGR_FOREGROUND
+///
+/// @brief The ANSI SGR parameter that sets the foreground to ANSI color 0;
+/// add the color number for the others.
 #define ANSI_SGR_FOREGROUND           30
+
+/// @def ANSI_SGR_FOREGROUND_DEFAULT
+///
+/// @brief The ANSI SGR parameter that sets the default foreground.
 #define ANSI_SGR_FOREGROUND_DEFAULT   39
+
+/// @def ANSI_SGR_BACKGROUND
+///
+/// @brief The ANSI SGR parameter that sets the background to ANSI color 0;
+/// add the color number for the others.
 #define ANSI_SGR_BACKGROUND           40
+
+/// @def ANSI_SGR_BACKGROUND_DEFAULT
+///
+/// @brief The ANSI SGR parameter that sets the default background.
 #define ANSI_SGR_BACKGROUND_DEFAULT   49
+
+/// @def ANSI_SGR_BRIGHT_FOREGROUND
+///
+/// @brief The ANSI SGR parameter that sets the foreground to bright ANSI
+/// color 0; add the color number for the others.
 #define ANSI_SGR_BRIGHT_FOREGROUND    90
+
+/// @def ANSI_SGR_BRIGHT_BACKGROUND
+///
+/// @brief The ANSI SGR parameter that sets the background to bright ANSI
+/// color 0; add the color number for the others.
 #define ANSI_SGR_BRIGHT_BACKGROUND   100
 
-// ANSI SGR foreground parameter of each CGA color, by CgaColorIndex.
+/// @var cgaToAnsiMap
+///
+/// @brief The ANSI SGR foreground parameter of each CGA color, by
+/// CgaColorIndex.
 extern const uint8_t cgaToAnsiMap[16];
+
+/// @def CGA_TO_ANSI_MAP
+///
+/// @brief The definition of cgaToAnsiMap, for the one file that defines it.
 #define CGA_TO_ANSI_MAP \
 const uint8_t cgaToAnsiMap[16] = { \
   30, /* CGA_BLACK         */ \
@@ -183,9 +370,15 @@ const uint8_t cgaToAnsiMap[16] = { \
   97, /* CGA_WHITE         */ \
 };
 
-// CgaColorIndex of each ANSI color, indexed by the ANSI color number (0-7),
-// plus 8 for the bright variants.
+/// @var ansiToCgaMap
+///
+/// @brief The CgaColorIndex of each ANSI color, indexed by the ANSI color
+/// number (0-7), plus 8 for the bright variants.
 extern const uint8_t ansiToCgaMap[16];
+
+/// @def ANSI_TO_CGA_MAP
+///
+/// @brief The definition of ansiToCgaMap, for the one file that defines it.
 #define ANSI_TO_CGA_MAP \
 const uint8_t ansiToCgaMap[16] = { \
   CGA_INDEX_BLACK,         /* black          */ \
@@ -206,7 +399,14 @@ const uint8_t ansiToCgaMap[16] = { \
   CGA_INDEX_WHITE,         /* bright white   */ \
 };
 
+/// @def cgaToAnsiForeground
+///
+/// @brief Get the ANSI SGR foreground parameter of a CgaColorIndex.
 #define cgaToAnsiForeground(index) cgaToAnsiMap[(index)]
+
+/// @def cgaToAnsiBackground
+///
+/// @brief Get the ANSI SGR background parameter of a CgaColorIndex.
 #define cgaToAnsiBackground(index) \
     (cgaToAnsiMap[(index)] + ANSI_SGR_BACKGROUND - ANSI_SGR_FOREGROUND)
 

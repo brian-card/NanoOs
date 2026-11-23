@@ -48,7 +48,6 @@
 extern "C" {
 #endif
 
-
 /// @def GFX_COMMAND_SIGNATURE
 ///
 /// @brief 64-bit, little-endian value to use as a signature to indicate to the
@@ -56,15 +55,23 @@ extern "C" {
 /// "\0GRAPHIX" expressed as a little-endian value.
 #define GFX_COMMAND_SIGNATURE ((int64_t) 0x5849485041524700)
 
-
-// =========================================================================
-// PRIMITIVE TYPES
-// =========================================================================
-
-// Integer pixel coordinate. Origin is top-left; Y increases downward.
+/// @struct GfxPoint
+///
+/// @brief An integer pixel coordinate.  The origin is the top left, and y
+/// increases downward.
+///
+/// @param x The column.
+/// @param y The row.
 typedef struct GfxPoint { int16_t x, y; } GfxPoint;
 
-// Axis-aligned rectangle. x,y is the top-left corner.
+/// @struct GfxRect
+///
+/// @brief An axis-aligned rectangle.
+///
+/// @param x The column of its top-left corner.
+/// @param y The row of its top-left corner.
+/// @param w Its width.
+/// @param h Its height.
 typedef struct GfxRect { int16_t x, y, w, h; } GfxRect;
 
 /// @typedef GfxHandle
@@ -79,18 +86,15 @@ typedef uint16_t GfxHandle;
 /// font.
 #define GFX_INVALID_HANDLE ((GfxHandle) 0)
 
-
-// =========================================================================
-// ENUMERATIONS - BLEND MODES, PIXEL FORMATS
-// =========================================================================
-
-// Blend mode applied to draw operations.
-//
-// GFX_BLEND_OPAQUE   - overwrite destination (VDP GCOL mode 0)
-// GFX_BLEND_AND      - AND with destination   (VDP GCOL mode 2)
-// GFX_BLEND_OR       - OR with destination    (VDP GCOL mode 1)
-// GFX_BLEND_XOR      - XOR with destination   (VDP GCOL mode 3)
-// GFX_BLEND_INVERT   - invert destination      (VDP GCOL mode 4)
+/// @enum GfxBlendMode
+///
+/// @brief The blend mode applied to draw operations.
+///
+/// @param GFX_BLEND_OPAQUE Overwrite the destination (VDP GCOL mode 0).
+/// @param GFX_BLEND_AND AND with the destination (VDP GCOL mode 2).
+/// @param GFX_BLEND_OR OR with the destination (VDP GCOL mode 1).
+/// @param GFX_BLEND_XOR XOR with the destination (VDP GCOL mode 3).
+/// @param GFX_BLEND_INVERT Invert the destination (VDP GCOL mode 4).
 typedef enum GfxBlendMode {
   GFX_BLEND_OPAQUE = 0,
   GFX_BLEND_AND,
@@ -99,74 +103,117 @@ typedef enum GfxBlendMode {
   GFX_BLEND_INVERT,
 } GfxBlendMode;
 
-// Pixel format for uploaded images.
+/// @enum GfxPixelFmt
+///
+/// @brief The pixel format of an uploaded image.
+///
+/// @param GFX_FMT_RGBA8888 4 bytes a pixel:  R, G, B, A.
+/// @param GFX_FMT_RGBA2222 1 byte a pixel:  RR GG BB AA packed, red highest.
+/// @param GFX_FMT_RGB888 3 bytes a pixel:  R, G, B, with alpha taken as 0xFF.
 typedef enum GfxPixelFmt {
-  GFX_FMT_RGBA8888 = 0,  // 4 bytes/pixel: R G B A
-  GFX_FMT_RGBA2222,      // 1 byte/pixel:  RR GG BB AA packed, red highest
-  GFX_FMT_RGB888,        // 3 bytes/pixel: R G B (alpha treated as 0xFF)
+  GFX_FMT_RGBA8888 = 0,
+  GFX_FMT_RGBA2222,
+  GFX_FMT_RGB888,
 } GfxPixelFmt;
 
-
-// =========================================================================
-// ERROR CODES
-//
-// Every value is below 256, because a message's status is a uint8_t.
-// =========================================================================
-
+/// @enum GfxError
+///
+/// @brief The graphics driver's error codes.  Every value is below 256,
+/// because a message's status is a uint8_t.
+///
+/// @param GFX_OK No error.
+/// @param GFX_ERR_OUT_OF_MEMORY Device or host memory is exhausted.
+/// @param GFX_ERR_OUT_OF_HANDLES The handle table is full.
+/// @param GFX_ERR_CMDBUF_OVERFLOW A record doesn't fit the command buffer.
+/// @param GFX_ERR_INVALID_HANDLE A stale or uninitialized handle.
+/// @param GFX_ERR_INVALID_STATE API misuse.
+/// @param GFX_ERR_DEVICE_LOST The driver is gone or never answered.
+/// @param GFX_ERR_NOT_SUPPORTED The feature isn't available in this driver.
+/// @param GFX_ERR_DISPLAY_BUSY Another process owns the display, or the
+///   driver is still setting it up.
+/// @param GFX_ERR_NOT_OWNER The sender doesn't own the display.
 typedef enum GfxError {
   GFX_OK = 0,
-  GFX_ERR_OUT_OF_MEMORY,      // device or host memory exhausted
-  GFX_ERR_OUT_OF_HANDLES,     // handle table full
-  GFX_ERR_CMDBUF_OVERFLOW,    // a record doesn't fit the command buffer
-  GFX_ERR_INVALID_HANDLE,     // stale or uninitialized handle
-  GFX_ERR_INVALID_STATE,      // API misuse
-  GFX_ERR_DEVICE_LOST,        // the driver is gone or never answered
-  GFX_ERR_NOT_SUPPORTED,      // feature not available in this driver
-  GFX_ERR_DISPLAY_BUSY,       // another process owns the display, or the
-                              // driver is still setting it up
-  GFX_ERR_NOT_OWNER,          // the sender doesn't own the display
+  GFX_ERR_OUT_OF_MEMORY,
+  GFX_ERR_OUT_OF_HANDLES,
+  GFX_ERR_CMDBUF_OVERFLOW,
+  GFX_ERR_INVALID_HANDLE,
+  GFX_ERR_INVALID_STATE,
+  GFX_ERR_DEVICE_LOST,
+  GFX_ERR_NOT_SUPPORTED,
+  GFX_ERR_DISPLAY_BUSY,
+  GFX_ERR_NOT_OWNER,
 } GfxError;
 
-
-// =========================================================================
-// MESSAGE TYPES
-//
-// Each value is the low byte of a message's type, under
-// GFX_COMMAND_SIGNATURE.  Each synchronous message's arguments start with a
-// uint8_t status the driver sets; the client presets it to
-// GFX_ERR_DEVICE_LOST, which is what remains if the driver ends without
-// answering.
-// =========================================================================
-
+/// @enum GfxMsgType
+///
+/// @brief The low byte of each graphics message's type, under
+/// GFX_COMMAND_SIGNATURE.
+///
+/// @note Each synchronous message's arguments start with a uint8_t status the
+/// driver sets.  The client presets it to GFX_ERR_DEVICE_LOST, which is what
+/// remains if the driver ends without answering.
+///
+/// @note Synchronous arguments are inputs, then outputs.  The driver writes
+/// only the outputs, so no answer is larger than its request.  Every buffer an
+/// argument points at is shared MESSAGE_BUFFER_IN with the driver.
+///
+/// @param GFX_MSG_OPEN_DISPLAY Sync, GfxOpenDisplayArgs:  take ownership of
+///   the display.  It starts with the whole screen as its viewport, the origin
+///   at (0,0), a white foreground, a black background, GFX_BLEND_OPAQUE, and
+///   the default font.
+/// @param GFX_MSG_CLOSE_DISPLAY One-way, no arguments.
+/// @param GFX_MSG_GET_SURFACE_SIZE Sync, GfxSurfaceSizeArgs.
+/// @param GFX_MSG_UPLOAD_IMAGE Sync, GfxUploadImageArgs.
+/// @param GFX_MSG_DESTROY_IMAGE One-way, GfxHandleArgs.
+/// @param GFX_MSG_GET_IMAGE_SIZE Sync, GfxImageSizeArgs.
+/// @param GFX_MSG_UPLOAD_FONT Sync, GfxUploadFontArgs.
+/// @param GFX_MSG_DESTROY_FONT One-way, GfxHandleArgs.
+/// @param GFX_MSG_SET_DEFAULT_FONT Sync, GfxSetDefaultFontArgs.
+/// @param GFX_MSG_SUBMIT Persistent round trip, GfxSubmitArgs.
+/// @param GFX_MSG_PREUPLOAD Sync, GfxPreuploadArgs.  A preupload holds only
+///   color, blend, font, and drawing records, and no GFX_CMD_DRAW_SUB_IMAGE or
+///   GFX_CMD_CALL.
+/// @param GFX_MSG_DISCARD_PREUPLOAD One-way, GfxHandleArgs.
+/// @param GFX_MSG_FINISH Sync, GfxFinishArgs; done once drawn.
+/// @param GFX_MSG_CAPTURE_RECT Sync, GfxCaptureRectArgs.
+/// @param GFX_MSG_GET_ERROR Sync, GfxGetErrorArgs.
+/// @param GFX_MSG_SET_CURSOR Sync, GfxSetCursorArgs.
+/// @param GFX_MSG_SHOW_CURSOR One-way, GfxShowCursorArgs.
+/// @param GFX_MSG_WARP_CURSOR One-way, GfxWarpCursorArgs.
+/// @param GFX_MSG_COUNT The number of client message types.
+/// @param GFX_MSG_INPUT_EVENTS Persistent round trip, GfxInputEventsArgs.
+/// @param GFX_MSG_DISPLAY_REVOKED One-way, no arguments.
+/// @param GFX_MSG_CLIENT_ENDED One-way:  the driver's graphics client ended.
+///   The data pointer is the client's ProcessId, not a pointer to storage.
 typedef enum GfxMsgType {
-  // Client to driver
-  GFX_MSG_OPEN_DISPLAY = 0,       // sync, GfxOpenDisplayArgs; takes ownership
-  GFX_MSG_CLOSE_DISPLAY,          // one-way, no arguments
-  GFX_MSG_GET_SURFACE_SIZE,       // sync, GfxSurfaceSizeArgs
-  GFX_MSG_UPLOAD_IMAGE,           // sync, GfxUploadImageArgs
-  GFX_MSG_DESTROY_IMAGE,          // one-way, GfxHandleArgs
-  GFX_MSG_GET_IMAGE_SIZE,         // sync, GfxImageSizeArgs
-  GFX_MSG_UPLOAD_FONT,            // sync, GfxUploadFontArgs
-  GFX_MSG_DESTROY_FONT,           // one-way, GfxHandleArgs
-  GFX_MSG_SET_DEFAULT_FONT,       // sync, GfxSetDefaultFontArgs
-  GFX_MSG_SUBMIT,                 // persistent round trip, GfxSubmitArgs
-  GFX_MSG_PREUPLOAD,              // sync, GfxPreuploadArgs
-  GFX_MSG_DISCARD_PREUPLOAD,      // one-way, GfxHandleArgs
-  GFX_MSG_FINISH,                 // sync, GfxFinishArgs; done once drawn
-  GFX_MSG_CAPTURE_RECT,           // sync, GfxCaptureRectArgs
-  GFX_MSG_GET_ERROR,              // sync, GfxGetErrorArgs
-  GFX_MSG_SET_CURSOR,             // sync, GfxSetCursorArgs
-  GFX_MSG_SHOW_CURSOR,            // one-way, GfxShowCursorArgs
-  GFX_MSG_WARP_CURSOR,            // one-way, GfxWarpCursorArgs
+  // Client to driver:
+  GFX_MSG_OPEN_DISPLAY = 0,
+  GFX_MSG_CLOSE_DISPLAY,
+  GFX_MSG_GET_SURFACE_SIZE,
+  GFX_MSG_UPLOAD_IMAGE,
+  GFX_MSG_DESTROY_IMAGE,
+  GFX_MSG_GET_IMAGE_SIZE,
+  GFX_MSG_UPLOAD_FONT,
+  GFX_MSG_DESTROY_FONT,
+  GFX_MSG_SET_DEFAULT_FONT,
+  GFX_MSG_SUBMIT,
+  GFX_MSG_PREUPLOAD,
+  GFX_MSG_DISCARD_PREUPLOAD,
+  GFX_MSG_FINISH,
+  GFX_MSG_CAPTURE_RECT,
+  GFX_MSG_GET_ERROR,
+  GFX_MSG_SET_CURSOR,
+  GFX_MSG_SHOW_CURSOR,
+  GFX_MSG_WARP_CURSOR,
 
   GFX_MSG_COUNT,
 
-  // Driver to client
-  GFX_MSG_INPUT_EVENTS = 24,      // persistent round trip, GfxInputEventsArgs
-  GFX_MSG_DISPLAY_REVOKED = 25,   // one-way, no arguments
+  // Driver to client:
+  GFX_MSG_INPUT_EVENTS = 24,
+  GFX_MSG_DISPLAY_REVOKED = 25,
 
-  // Scheduler to driver, one-way: the driver's graphics client ended.  The
-  // data pointer is the client's ProcessId, not a pointer to storage.
+  // Scheduler to driver:
   GFX_MSG_CLIENT_ENDED = 31,
 } GfxMsgType;
 
@@ -221,118 +268,226 @@ GFX_STATIC_ASSERT(
 /// @brief The number of fonts a client can have uploaded at once.
 #define GFX_MAX_FONTS 3
 
-
-// =========================================================================
-// MESSAGE ARGUMENTS
-//
-// Synchronous arguments are inputs, then outputs.  The driver writes only
-// the outputs, so no answer is larger than its request.  Every buffer an
-// argument points at is shared MESSAGE_BUFFER_IN with the driver.
-// =========================================================================
-
+/// @struct GfxOpenDisplayArgs
+///
+/// @brief Arguments and return values for GFX_MSG_OPEN_DISPLAY.
+///
+/// @param status The GfxError the driver sets.
+/// @param width In:  the requested width.  Out:  the actual width.
+/// @param height In:  the requested height.  Out:  the actual height.
+/// @param defaultFontW Out:  the width of the default font's glyph cell.
+/// @param defaultFontH Out:  the height of the default font's glyph cell.
+/// @param defaultFontFirst Out:  the default font's first codepoint.
+/// @param defaultFontCount Out:  the number of glyphs in the default font.
 typedef struct GfxOpenDisplayArgs {
   uint8_t   status;
-  uint16_t  width, height;      // in: requested; out: actual
-  uint8_t   defaultFontW, defaultFontH, defaultFontFirst;  // out
-  uint16_t  defaultFontCount;   // out
+  uint16_t  width, height;
+  uint8_t   defaultFontW, defaultFontH, defaultFontFirst;
+  uint16_t  defaultFontCount;
 } GfxOpenDisplayArgs;
 
+/// @struct GfxSurfaceSizeArgs
+///
+/// @brief Arguments and return values for GFX_MSG_GET_SURFACE_SIZE.
+///
+/// @param status The GfxError the driver sets.
+/// @param width Out:  the display's width.
+/// @param height Out:  the display's height.
 typedef struct GfxSurfaceSizeArgs {
   uint8_t   status;
-  uint16_t  width, height;      // out
+  uint16_t  width, height;
 } GfxSurfaceSizeArgs;
 
+/// @struct GfxUploadImageArgs
+///
+/// @brief Arguments and return values for GFX_MSG_UPLOAD_IMAGE.
+///
+/// @param status The GfxError the driver sets.
+/// @param format In:  the GfxPixelFmt.
+/// @param width In:  the image's width.
+/// @param height In:  the image's height.
+/// @param size In:  the bytes at pixels.
+/// @param pixels In:  the pixels, or NULL to allocate the image without
+///   initializing it.
+/// @param handle Out:  the new image.
 typedef struct GfxUploadImageArgs {
   uint8_t     status;
-  uint8_t     format;           // in: GfxPixelFmt
-  uint16_t    width, height;    // in
-  uint32_t    size;             // in: bytes at pixels
-  const void *pixels;           // in: NULL allocates without initializing
-  GfxHandle   handle;           // out
+  uint8_t     format;
+  uint16_t    width, height;
+  uint32_t    size;
+  const void *pixels;
+  GfxHandle   handle;
 } GfxUploadImageArgs;
 
+/// @struct GfxImageSizeArgs
+///
+/// @brief Arguments and return values for GFX_MSG_GET_IMAGE_SIZE.
+///
+/// @param status The GfxError the driver sets.
+/// @param handle In:  the image.
+/// @param width Out:  the image's width.
+/// @param height Out:  the image's height.
 typedef struct GfxImageSizeArgs {
   uint8_t   status;
-  GfxHandle handle;             // in
-  uint16_t  width, height;      // out
+  GfxHandle handle;
+  uint16_t  width, height;
 } GfxImageSizeArgs;
 
+/// @struct GfxUploadFontArgs
+///
+/// @brief Arguments and return values for GFX_MSG_UPLOAD_FONT.
+///
+/// @param status The GfxError the driver sets.
+/// @param glyphW In:  the width of each glyph cell, in pixels.
+/// @param glyphH In:  the height of each glyph cell, in pixels.
+/// @param firstChar In:  the first codepoint in the bitmap.
+/// @param numChars In:  the number of glyphs.
+/// @param size In:  the bytes at bitmap.
+/// @param bitmap In:  1-bit glyph rows, MSB leftmost, each row padded to a
+///   whole byte.
+/// @param handle Out:  the new font.
 typedef struct GfxUploadFontArgs {
   uint8_t     status;
-  uint8_t     glyphW, glyphH;   // in: pixel size of each glyph cell
-  uint8_t     firstChar;        // in: first codepoint in the bitmap
-  uint16_t    numChars;         // in: number of glyphs
-  uint32_t    size;             // in: bytes at bitmap
-  const void *bitmap;           // in: 1-bit glyph rows, MSB leftmost, each
-                                // row padded to a whole byte
-  GfxHandle   handle;           // out
+  uint8_t     glyphW, glyphH;
+  uint8_t     firstChar;
+  uint16_t    numChars;
+  uint32_t    size;
+  const void *bitmap;
+  GfxHandle   handle;
 } GfxUploadFontArgs;
 
+/// @struct GfxSetDefaultFontArgs
+///
+/// @brief Arguments and return values for GFX_MSG_SET_DEFAULT_FONT.
+///
+/// @param status The GfxError the driver sets.
+/// @param handle In:  the font, or GFX_INVALID_HANDLE for the built-in font.
 typedef struct GfxSetDefaultFontArgs {
   uint8_t   status;
-  GfxHandle handle;             // in: GFX_INVALID_HANDLE is the built-in font
+  GfxHandle handle;
 } GfxSetDefaultFontArgs;
 
+/// @struct GfxSubmitArgs
+///
+/// @brief Arguments and return values for GFX_MSG_SUBMIT.
+///
+/// @param status The GfxError the driver sets.
+/// @param cmdSize In:  the bytes at cmdData.
+/// @param cmdData In:  the command records.
 typedef struct GfxSubmitArgs {
   uint8_t        status;
-  uint32_t       cmdSize;       // in
-  const uint8_t *cmdData;       // in
+  uint32_t       cmdSize;
+  const uint8_t *cmdData;
 } GfxSubmitArgs;
 
+/// @struct GfxPreuploadArgs
+///
+/// @brief Arguments and return values for GFX_MSG_PREUPLOAD.
+///
+/// @param status The GfxError the driver sets.
+/// @param cmdSize In:  the bytes at cmdData.
+/// @param cmdData In:  the command records.
+/// @param handle Out:  the new preupload.
 typedef struct GfxPreuploadArgs {
   uint8_t        status;
-  uint32_t       cmdSize;       // in
-  const uint8_t *cmdData;       // in
-  GfxHandle      handle;        // out
+  uint32_t       cmdSize;
+  const uint8_t *cmdData;
+  GfxHandle      handle;
 } GfxPreuploadArgs;
 
+/// @struct GfxFinishArgs
+///
+/// @brief Arguments and return values for GFX_MSG_FINISH.
+///
+/// @param status The GfxError the driver sets.
 typedef struct GfxFinishArgs {
   uint8_t status;
 } GfxFinishArgs;
 
+/// @struct GfxCaptureRectArgs
+///
+/// @brief Arguments and return values for GFX_MSG_CAPTURE_RECT.
+///
+/// @param status The GfxError the driver sets.
+/// @param rect In:  the rectangle, in screen coordinates.
+/// @param handle Out:  a new image of it.
 typedef struct GfxCaptureRectArgs {
   uint8_t   status;
-  GfxRect   rect;               // in: screen coordinates
-  GfxHandle handle;             // out: a new image
+  GfxRect   rect;
+  GfxHandle handle;
 } GfxCaptureRectArgs;
 
+/// @struct GfxGetErrorArgs
+///
+/// @brief Arguments and return values for GFX_MSG_GET_ERROR.
+///
+/// @param status The GfxError the driver sets.
+/// @param error Out:  the driver's sticky GfxError.
 typedef struct GfxGetErrorArgs {
   uint8_t status;
-  uint8_t error;                // out: the driver's sticky GfxError
+  uint8_t error;
 } GfxGetErrorArgs;
 
+/// @struct GfxSetCursorArgs
+///
+/// @brief Arguments and return values for GFX_MSG_SET_CURSOR.
+///
+/// @param status The GfxError the driver sets.
+/// @param image In:  the cursor's image, or GFX_INVALID_HANDLE for the
+///   driver's own.
+/// @param hotX In:  the hotspot's column within the image.
+/// @param hotY In:  the hotspot's row within the image.
 typedef struct GfxSetCursorArgs {
   uint8_t   status;
-  GfxHandle image;              // in: GFX_INVALID_HANDLE is the driver's own
-  uint8_t   hotX, hotY;         // in: the hotspot within the image
+  GfxHandle image;
+  uint8_t   hotX, hotY;
 } GfxSetCursorArgs;
 
+/// @struct GfxHandleArgs
+///
+/// @brief Arguments for GFX_MSG_DESTROY_IMAGE, GFX_MSG_DESTROY_FONT, and
+/// GFX_MSG_DISCARD_PREUPLOAD.
+///
+/// @param handle The image, font, or preupload.
 typedef struct GfxHandleArgs {
   GfxHandle handle;
 } GfxHandleArgs;
 
+/// @struct GfxShowCursorArgs
+///
+/// @brief Arguments for GFX_MSG_SHOW_CURSOR.
+///
+/// @param show Nonzero to show the cursor, 0 to hide it.
 typedef struct GfxShowCursorArgs {
   uint8_t show;
 } GfxShowCursorArgs;
 
+/// @struct GfxWarpCursorArgs
+///
+/// @brief Arguments for GFX_MSG_WARP_CURSOR.
+///
+/// @param x The pointer's new column, in pixels.
+/// @param y The pointer's new row, in pixels.
 typedef struct GfxWarpCursorArgs {
   int16_t x, y;
 } GfxWarpCursorArgs;
-
-
-// =========================================================================
-// INPUT EVENTS  (driver to client)
-// =========================================================================
 
 /// @def GFX_EVENTS_PER_MESSAGE
 ///
 /// @brief The number of events one GFX_MSG_INPUT_EVENTS carries.
 #define GFX_EVENTS_PER_MESSAGE 8
 
+/// @enum GfxEventType
+///
+/// @brief The kind of a GfxEvent.
+///
+/// @param GFX_EVENT_POINTER The pointer moved, or its buttons or wheel did.
+/// @param GFX_EVENT_KEY A key was pressed or released.
+/// @param GFX_EVENT_OVERFLOW Events were dropped after this one.
 typedef enum GfxEventType {
   GFX_EVENT_POINTER = 0,
   GFX_EVENT_KEY,
-  GFX_EVENT_OVERFLOW,           // events were dropped after this one
+  GFX_EVENT_OVERFLOW,
 } GfxEventType;
 
 /// @enum GfxKey
@@ -388,104 +543,239 @@ typedef enum GfxKey {
   GFX_KEY_F12 = 0xB5,
 } GfxKey;
 
-// The bits of a GFX_EVENT_KEY's modifiers:  the keys held, and the locks on.
+/// @def GFX_MOD_CTRL
+///
+/// @brief A GFX_EVENT_KEY modifier bit:  Ctrl is held.
 #define GFX_MOD_CTRL        0x01
+
+/// @def GFX_MOD_SHIFT
+///
+/// @brief A GFX_EVENT_KEY modifier bit:  Shift is held.
 #define GFX_MOD_SHIFT       0x02
+
+/// @def GFX_MOD_ALT
+///
+/// @brief A GFX_EVENT_KEY modifier bit:  Alt is held.
 #define GFX_MOD_ALT         0x04
+
+/// @def GFX_MOD_ALT_GR
+///
+/// @brief A GFX_EVENT_KEY modifier bit:  AltGr is held.
 #define GFX_MOD_ALT_GR      0x08
+
+/// @def GFX_MOD_CAPS_LOCK
+///
+/// @brief A GFX_EVENT_KEY modifier bit:  Caps Lock is on.
 #define GFX_MOD_CAPS_LOCK   0x10
+
+/// @def GFX_MOD_NUM_LOCK
+///
+/// @brief A GFX_EVENT_KEY modifier bit:  Num Lock is on.
 #define GFX_MOD_NUM_LOCK    0x20
+
+/// @def GFX_MOD_SCROLL_LOCK
+///
+/// @brief A GFX_EVENT_KEY modifier bit:  Scroll Lock is on.
 #define GFX_MOD_SCROLL_LOCK 0x40
+
+/// @def GFX_MOD_GUI
+///
+/// @brief A GFX_EVENT_KEY modifier bit:  a GUI key is held.
 #define GFX_MOD_GUI         0x80
 
+/// @struct GfxEvent
+///
+/// @brief One input event from the graphics driver.
+///
+/// @param type The GfxEventType.
+/// @param buttons Pointer:  the button bits after this event.
+/// @param wheel Pointer:  the wheel delta.
+/// @param ascii Key:  the character it types, or 0.
+/// @param keycode Key:  the GfxKey.
+/// @param modifiers Key:  the GFX_MOD_* bits.
+/// @param down Key:  1 pressed, 0 released.
+/// @param x Pointer:  the column, in pixels.
+/// @param y Pointer:  the row, in pixels.
 typedef struct GfxEvent {
-  uint8_t type;                 // GfxEventType
-  uint8_t buttons;              // pointer: button bits after this event
-  int8_t  wheel;                // pointer: wheel delta
-  uint8_t ascii;                // key: the character it types, or 0
-  uint8_t keycode;              // key: GfxKey
-  uint8_t modifiers;            // key: GFX_MOD_* bits
-  uint8_t down;                 // key: 1 pressed, 0 released
-  int16_t x, y;                 // pointer: position in pixels
+  uint8_t type;
+  uint8_t buttons;
+  int8_t  wheel;
+  uint8_t ascii;
+  uint8_t keycode;
+  uint8_t modifiers;
+  uint8_t down;
+  int16_t x, y;
 } GfxEvent;
 
+/// @struct GfxInputEventsArgs
+///
+/// @brief Arguments for GFX_MSG_INPUT_EVENTS.
+///
+/// @param count The number of events.
+/// @param events The events, oldest first.
 typedef struct GfxInputEventsArgs {
   uint8_t  count;
   GfxEvent events[GFX_EVENTS_PER_MESSAGE];
 } GfxInputEventsArgs;
 
-
-// =========================================================================
-// COMMAND RECORDS  (in-buffer encoding)
-//
-// A record is a uint8_t tag followed by its parameters, packed with no
-// padding, each multi-byte value little-endian.  Every record has a fixed
-// size except GFX_CMD_DRAW_TEXT, whose length byte says how many bytes of
-// text follow; the text has no terminator, and control bytes in it are
-// drawn as glyphs.
-//
-// Every coordinate in a record is relative to the origin.  The clip is the
-// viewport intersected with the top of the scissor stack, which holds
-// GFX_MAX_SCISSOR_DEPTH entries; pushing onto a full stack or popping an
-// empty one sets the driver's sticky error, and the record is ignored.  An
-// unknown or short record, or a bad handle, stops the buffer.  An opened
-// display starts with the whole screen as its viewport, the origin at
-// (0,0), a white foreground, a black background, GFX_BLEND_OPAQUE, and the
-// default font.
-//
-// A preupload holds only color, blend, font and drawing records, and no
-// GFX_CMD_DRAW_SUB_IMAGE or GFX_CMD_CALL.  It starts with the colors, blend
-// and font current when it was uploaded, draws relative to the origin and
-// inside the clip current when it is called, and leaves the caller's colors,
-// blend and font as they were.
-// =========================================================================
-
+/// @enum GfxCmdType
+///
+/// @brief The tag of each command record.  A record is a uint8_t tag followed
+/// by its parameters, packed with no padding, each multi-byte value
+/// little-endian.
+///
+/// @note Every coordinate in a record is relative to the origin.  The clip is
+/// the viewport intersected with the top of the scissor stack.  An unknown or
+/// short record, or a bad handle, stops the buffer.
+///
+/// @param GFX_CMD_SET_VIEWPORT GfxRect, in screen coordinates; empties the
+///   scissor stack.
+/// @param GFX_CMD_SET_ORIGIN GfxPoint, the screen position of (0,0).
+/// @param GFX_CMD_PUSH_SCISSOR GfxRect, intersected with the current clip.  On
+///   a full stack it sets the driver's sticky error and is ignored.
+/// @param GFX_CMD_POP_SCISSOR No parameters.  On an empty stack it sets the
+///   driver's sticky error and is ignored.
+/// @param GFX_CMD_SET_FG_COLOR GfxColor.
+/// @param GFX_CMD_SET_BG_COLOR GfxColor.
+/// @param GFX_CMD_SET_BLEND uint8_t GfxBlendMode.
+/// @param GFX_CMD_SET_FONT GfxHandle; GFX_INVALID_HANDLE is the default font.
+/// @param GFX_CMD_CLEAR No parameters; fills the clip with the background.
+/// @param GFX_CMD_DRAW_RECT GfxRect, uint8_t filled.
+/// @param GFX_CMD_DRAW_LINE GfxPoint a, b.
+/// @param GFX_CMD_DRAW_TRIANGLE GfxPoint a, b, c, uint8_t filled.
+/// @param GFX_CMD_DRAW_CIRCLE GfxPoint center, int16_t r, uint8_t filled.
+/// @param GFX_CMD_DRAW_IMAGE GfxHandle, GfxPoint; pixels with an alpha of 0
+///   aren't drawn.
+/// @param GFX_CMD_DRAW_SUB_IMAGE GfxHandle, GfxRect src, GfxPoint.
+/// @param GFX_CMD_DRAW_TEXT GfxPoint, uint8_t len, and len bytes of text, the
+///   one record without a fixed size.  The text has no terminator, and control
+///   bytes in it are drawn as glyphs.
+/// @param GFX_CMD_CALL GfxHandle of a preupload.  It starts with the colors,
+///   blend, and font current when it was uploaded, draws relative to the
+///   origin and inside the clip current when it is called, and leaves the
+///   caller's colors, blend, and font as they were.
+/// @param GFX_CMD_COPY_RECT GfxRect src, GfxPoint dst; clipped at dst.
+/// @param GFX_CMD_SCROLL_RECT GfxRect, int16_t dx, dy; the uncovered strip is
+///   cleared to the background.
+/// @param GFX_CMD_COUNT The number of record types.
 typedef enum GfxCmdType {
-  GFX_CMD_SET_VIEWPORT = 0,   // GfxRect, screen coordinates; empties the
-                              // scissor stack
-  GFX_CMD_SET_ORIGIN,         // GfxPoint, the screen position of (0,0)
-  GFX_CMD_PUSH_SCISSOR,       // GfxRect, intersected with the current clip
-  GFX_CMD_POP_SCISSOR,        // (no parameters)
-  GFX_CMD_SET_FG_COLOR,       // GfxColor
-  GFX_CMD_SET_BG_COLOR,       // GfxColor
-  GFX_CMD_SET_BLEND,          // uint8_t GfxBlendMode
-  GFX_CMD_SET_FONT,           // GfxHandle; GFX_INVALID_HANDLE is the default
-  GFX_CMD_CLEAR,              // (no parameters); fills the clip with the
-                              // background
-  GFX_CMD_DRAW_RECT,          // GfxRect, uint8_t filled
-  GFX_CMD_DRAW_LINE,          // GfxPoint a, b
-  GFX_CMD_DRAW_TRIANGLE,      // GfxPoint a, b, c, uint8_t filled
-  GFX_CMD_DRAW_CIRCLE,        // GfxPoint center, int16_t r, uint8_t filled
-  GFX_CMD_DRAW_IMAGE,         // GfxHandle, GfxPoint; alpha 0 isn't drawn
-  GFX_CMD_DRAW_SUB_IMAGE,     // GfxHandle, GfxRect src, GfxPoint
-  GFX_CMD_DRAW_TEXT,          // GfxPoint, uint8_t len, len bytes
-  GFX_CMD_CALL,               // GfxHandle from a preupload
-  GFX_CMD_COPY_RECT,          // GfxRect src, GfxPoint dst; clipped at dst
-  GFX_CMD_SCROLL_RECT,        // GfxRect, int16_t dx, dy; the uncovered strip
-                              // is cleared to the background
+  GFX_CMD_SET_VIEWPORT = 0,
+  GFX_CMD_SET_ORIGIN,
+  GFX_CMD_PUSH_SCISSOR,
+  GFX_CMD_POP_SCISSOR,
+  GFX_CMD_SET_FG_COLOR,
+  GFX_CMD_SET_BG_COLOR,
+  GFX_CMD_SET_BLEND,
+  GFX_CMD_SET_FONT,
+  GFX_CMD_CLEAR,
+  GFX_CMD_DRAW_RECT,
+  GFX_CMD_DRAW_LINE,
+  GFX_CMD_DRAW_TRIANGLE,
+  GFX_CMD_DRAW_CIRCLE,
+  GFX_CMD_DRAW_IMAGE,
+  GFX_CMD_DRAW_SUB_IMAGE,
+  GFX_CMD_DRAW_TEXT,
+  GFX_CMD_CALL,
+  GFX_CMD_COPY_RECT,
+  GFX_CMD_SCROLL_RECT,
 
   GFX_CMD_COUNT
 } GfxCmdType;
 
-// The size of each record, its tag included.
+/// @def GFX_CMD_SET_VIEWPORT_SIZE
+///
+/// @brief The size of a GFX_CMD_SET_VIEWPORT record, its tag included.
 #define GFX_CMD_SET_VIEWPORT_SIZE    9
+
+/// @def GFX_CMD_SET_ORIGIN_SIZE
+///
+/// @brief The size of a GFX_CMD_SET_ORIGIN record, its tag included.
 #define GFX_CMD_SET_ORIGIN_SIZE      5
+
+/// @def GFX_CMD_PUSH_SCISSOR_SIZE
+///
+/// @brief The size of a GFX_CMD_PUSH_SCISSOR record, its tag included.
 #define GFX_CMD_PUSH_SCISSOR_SIZE    9
+
+/// @def GFX_CMD_POP_SCISSOR_SIZE
+///
+/// @brief The size of a GFX_CMD_POP_SCISSOR record, its tag included.
 #define GFX_CMD_POP_SCISSOR_SIZE     1
+
+/// @def GFX_CMD_SET_FG_COLOR_SIZE
+///
+/// @brief The size of a GFX_CMD_SET_FG_COLOR record, its tag included.
 #define GFX_CMD_SET_FG_COLOR_SIZE    5
+
+/// @def GFX_CMD_SET_BG_COLOR_SIZE
+///
+/// @brief The size of a GFX_CMD_SET_BG_COLOR record, its tag included.
 #define GFX_CMD_SET_BG_COLOR_SIZE    5
+
+/// @def GFX_CMD_SET_BLEND_SIZE
+///
+/// @brief The size of a GFX_CMD_SET_BLEND record, its tag included.
 #define GFX_CMD_SET_BLEND_SIZE       2
+
+/// @def GFX_CMD_SET_FONT_SIZE
+///
+/// @brief The size of a GFX_CMD_SET_FONT record, its tag included.
 #define GFX_CMD_SET_FONT_SIZE        3
+
+/// @def GFX_CMD_CLEAR_SIZE
+///
+/// @brief The size of a GFX_CMD_CLEAR record, its tag included.
 #define GFX_CMD_CLEAR_SIZE           1
+
+/// @def GFX_CMD_DRAW_RECT_SIZE
+///
+/// @brief The size of a GFX_CMD_DRAW_RECT record, its tag included.
 #define GFX_CMD_DRAW_RECT_SIZE      10
+
+/// @def GFX_CMD_DRAW_LINE_SIZE
+///
+/// @brief The size of a GFX_CMD_DRAW_LINE record, its tag included.
 #define GFX_CMD_DRAW_LINE_SIZE       9
+
+/// @def GFX_CMD_DRAW_TRIANGLE_SIZE
+///
+/// @brief The size of a GFX_CMD_DRAW_TRIANGLE record, its tag included.
 #define GFX_CMD_DRAW_TRIANGLE_SIZE  14
+
+/// @def GFX_CMD_DRAW_CIRCLE_SIZE
+///
+/// @brief The size of a GFX_CMD_DRAW_CIRCLE record, its tag included.
 #define GFX_CMD_DRAW_CIRCLE_SIZE     8
+
+/// @def GFX_CMD_DRAW_IMAGE_SIZE
+///
+/// @brief The size of a GFX_CMD_DRAW_IMAGE record, its tag included.
 #define GFX_CMD_DRAW_IMAGE_SIZE      7
+
+/// @def GFX_CMD_DRAW_SUB_IMAGE_SIZE
+///
+/// @brief The size of a GFX_CMD_DRAW_SUB_IMAGE record, its tag included.
 #define GFX_CMD_DRAW_SUB_IMAGE_SIZE 15
+
+/// @def GFX_CMD_DRAW_TEXT_SIZE
+///
+/// @brief The size of a GFX_CMD_DRAW_TEXT record with len bytes of text, its
+/// tag included.
 #define GFX_CMD_DRAW_TEXT_SIZE(len)  (6 + (len))
+
+/// @def GFX_CMD_CALL_SIZE
+///
+/// @brief The size of a GFX_CMD_CALL record, its tag included.
 #define GFX_CMD_CALL_SIZE            3
+
+/// @def GFX_CMD_COPY_RECT_SIZE
+///
+/// @brief The size of a GFX_CMD_COPY_RECT record, its tag included.
 #define GFX_CMD_COPY_RECT_SIZE      13
+
+/// @def GFX_CMD_SCROLL_RECT_SIZE
+///
+/// @brief The size of a GFX_CMD_SCROLL_RECT record, its tag included.
 #define GFX_CMD_SCROLL_RECT_SIZE    13
 
 /// @def GFX_TEXT_MAX
@@ -497,7 +787,6 @@ typedef enum GfxCmdType {
 ///
 /// @brief The number of entries the driver's scissor stack holds.
 #define GFX_MAX_SCISSOR_DEPTH 4
-
 
 #ifdef __cplusplus
 }
