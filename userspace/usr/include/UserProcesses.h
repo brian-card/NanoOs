@@ -49,6 +49,26 @@ static inline ProcessInfo* getProcessInfo(void) {
   return overlayMap.header.osApi->userApi->getProcessInfo();
 }
 
+/// @fn static inline int windowServerRegister(void)
+///
+/// @brief Make the running process the window server.
+///
+/// @return Returns 0 on success, -1 and sets errno on failure.
+static inline int windowServerRegister(void) {
+  return overlayMap.header.osApi->userApi->windowServerRegister();
+}
+
+/// @fn static inline int windowServerConnect(uint8_t *pid)
+///
+/// @brief Connect the running process to the window server.
+///
+/// @param pid Where to store the window server's ProcessId.
+///
+/// @return Returns 0 on success, -1 and sets errno on failure.
+static inline int windowServerConnect(uint8_t *pid) {
+  return overlayMap.header.osApi->userApi->windowServerConnect(pid);
+}
+
 #ifdef __cplusplus
 }
 #endif
