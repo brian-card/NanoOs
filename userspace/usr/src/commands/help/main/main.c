@@ -156,6 +156,9 @@ int main(int argc, char **argv) {
   printf("%s %s\n",
     "vim:                    ",
     "Run vi.");
+  printf("%s %s\n",
+    "wintest:                ",
+    "Talk to the window server, for testing.");
   printf("\nRun a command with --help to see its usage.\n");
 
   return returnValue;
