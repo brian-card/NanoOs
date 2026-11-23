@@ -90,7 +90,7 @@ KERNEL_SRCS := \
 USER_SRCS := \
     NanoOsApi NanoOsDirCap NanoOsErrno NanoOsFcntl NanoOsGrp NanoOsHardware \
     NanoOsLibC NanoOsPwd NanoOsSched NanoOsSignal NanoOsSpawn NanoOsStdio \
-    NanoOsSysUtsname NanoOsTermios NanoOsTime NanoOsUnistd
+    NanoOsSysUtsname NanoOsTermios NanoOsTime NanoOsUnistd NanoOsWindowServer
 
 # HAL: common wiring + the POSIX low-level implementation.  HalMock reuses
 # halPosixImplInit() (overlay-RAM mapping, heap sizing) and the posix
@@ -138,6 +138,7 @@ SUITE_SRCS     := test_smoke test_unit_misc test_unit_strtoll test_unit_console 
                   test_unit_message_args_production \
                   test_unit_overlay_message_args \
                   test_kernel_graphics_client \
+                  test_kernel_window_server \
                   test_kernel_graphics_header
 
 KERNEL_OBJS := $(addprefix $(OBJ_DIR)/kernel_,$(addsuffix .o,$(KERNEL_SRCS)))
@@ -227,6 +228,8 @@ $(OBJ_DIR)/suite_test_unit_message_args_production.o: \
 $(OBJ_DIR)/suite_test_kernel_graphics_client.o \
 $(OBJ_DIR)/suite_test_kernel_graphics_header.o: \
     ../src/kernel/Graphics.h ../src/kernel/GraphicsProtocol.h
+$(OBJ_DIR)/suite_test_kernel_window_server.o: \
+    ../src/kernel/WindowProtocol.h ../src/kernel/GraphicsProtocol.h
 $(OBJ_DIR)/suite_test_unit_agon_reset_keys.o: \
     ../src/hal/AgonLight2/AgonResetKeys.c \
     ../src/hal/AgonLight2/AgonResetKeys.h
