@@ -1956,6 +1956,38 @@ static void schedulerRevokeGraphics(ProcessDescriptor *processDescriptor) {
   processDescriptor->graphicsClient = false;
 }
 
+/// @fn static void schedulerReclaimProcessMessage(
+///   ProcessDescriptor *processDescriptor)
+///
+/// @brief Take back an ending process's own message for the next process in
+/// its slot, unless it is a one-way message that its receiver has popped and
+/// not finished.  The receiver releases that one itself, and the slot's next
+/// process takes its messages from the pool until it does.
+///
+/// @param processDescriptor A pointer to the ending process's
+///   ProcessDescriptor.
+///
+/// @return This function returns no value.
+static void schedulerReclaimProcessMessage(
+  ProcessDescriptor *processDescriptor
+) {
+  ProcessMessage *message = &processDescriptor->message;
+  ProcessDescriptor *receiver = processMessageTo(message);
+  if ((processMessageInUse(message) != NULL)
+    && (processMessageDone(message) == false)
+    && (processMessageWaiting(message) == false)
+    && (receiver != NULL)
+    && (processMessageQueueContains(receiver, message) == false)
+  ) {
+    return;
+  }
+
+  if (receiver != NULL) {
+    processMessageQueueRemove(receiver, message);
+  }
+  memset(message, 0, sizeof(ProcessMessage));
+}
+
 /// @fn static void schedulerRevokeWindowClient(
 ///   ProcessDescriptor *processDescriptor, ProcessId serverPid)
 ///
@@ -5776,9 +5808,7 @@ terminateAndRestart:
   // happens.
   processTerminate(processDescriptor, false);
   threadSetContext(processDescriptor->mainThread, processDescriptor);
-  comessageQueueRemove(msg_to(&processDescriptor->message).coro,
-    &processDescriptor->message);
-  memset(&processDescriptor->message, 0, sizeof(ProcessMessage));
+  schedulerReclaimProcessMessage(processDescriptor);
   schedulerOrphanChildren(processDescriptor);
   if (processDescriptor->restartFunction == NULL) {
     schedulerSetDirCapabilities(processDescriptor, NULL);
@@ -7270,9 +7300,7 @@ void runScheduler(void) {
     processDescriptor->exitSignal = SIGSEGV;
     processTerminate(processDescriptor, false);
     threadSetContext(processDescriptor->mainThread, processDescriptor);
-    comessageQueueRemove(msg_to(&processDescriptor->message).coro,
-      &processDescriptor->message);
-    memset(&processDescriptor->message, 0, sizeof(ProcessMessage));
+    schedulerReclaimProcessMessage(processDescriptor);
     processResetStack(processDescriptor);
   }
 
