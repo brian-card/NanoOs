@@ -335,13 +335,76 @@ typedef enum GfxEventType {
   GFX_EVENT_OVERFLOW,           // events were dropped after this one
 } GfxEventType;
 
+/// @enum GfxKey
+///
+/// @brief The key a GFX_EVENT_KEY names, the same on every platform.  A key
+/// that types a printable character is that character, a letter in lower
+/// case, and the keypad is reported as the keys it acts as.  The named keys'
+/// values have gaps because they follow the order of the Agon VDP's keycodes,
+/// which lets its driver translate them by subtraction.
+typedef enum GfxKey {
+  GFX_KEY_NONE = 0,
+  GFX_KEY_LEFT_SHIFT = 0x80,
+  GFX_KEY_RIGHT_SHIFT = 0x81,
+  GFX_KEY_LEFT_ALT = 0x82,
+  GFX_KEY_RIGHT_ALT = 0x83,
+  GFX_KEY_LEFT_CTRL = 0x84,
+  GFX_KEY_RIGHT_CTRL = 0x85,
+  GFX_KEY_LEFT_GUI = 0x86,
+  GFX_KEY_RIGHT_GUI = 0x87,
+  GFX_KEY_ESCAPE = 0x88,
+  GFX_KEY_PRINT_SCREEN = 0x89,
+  GFX_KEY_SYSREQ = 0x8A,
+  GFX_KEY_INSERT = 0x8B,
+  GFX_KEY_DELETE = 0x8D,
+  GFX_KEY_BACKSPACE = 0x8F,
+  GFX_KEY_HOME = 0x90,
+  GFX_KEY_END = 0x92,
+  GFX_KEY_PAUSE = 0x94,
+  GFX_KEY_BREAK = 0x95,
+  GFX_KEY_SCROLL_LOCK = 0x96,
+  GFX_KEY_NUM_LOCK = 0x97,
+  GFX_KEY_CAPS_LOCK = 0x98,
+  GFX_KEY_TAB = 0x99,
+  GFX_KEY_ENTER = 0x9A,
+  GFX_KEY_MENU = 0x9C,
+  GFX_KEY_PAGE_UP = 0x9D,
+  GFX_KEY_PAGE_DOWN = 0x9F,
+  GFX_KEY_UP = 0xA1,
+  GFX_KEY_DOWN = 0xA3,
+  GFX_KEY_LEFT = 0xA5,
+  GFX_KEY_RIGHT = 0xA7,
+  GFX_KEY_F1 = 0xAA,
+  GFX_KEY_F2 = 0xAB,
+  GFX_KEY_F3 = 0xAC,
+  GFX_KEY_F4 = 0xAD,
+  GFX_KEY_F5 = 0xAE,
+  GFX_KEY_F6 = 0xAF,
+  GFX_KEY_F7 = 0xB0,
+  GFX_KEY_F8 = 0xB1,
+  GFX_KEY_F9 = 0xB2,
+  GFX_KEY_F10 = 0xB3,
+  GFX_KEY_F11 = 0xB4,
+  GFX_KEY_F12 = 0xB5,
+} GfxKey;
+
+// The bits of a GFX_EVENT_KEY's modifiers:  the keys held, and the locks on.
+#define GFX_MOD_CTRL        0x01
+#define GFX_MOD_SHIFT       0x02
+#define GFX_MOD_ALT         0x04
+#define GFX_MOD_ALT_GR      0x08
+#define GFX_MOD_CAPS_LOCK   0x10
+#define GFX_MOD_NUM_LOCK    0x20
+#define GFX_MOD_SCROLL_LOCK 0x40
+#define GFX_MOD_GUI         0x80
+
 typedef struct GfxEvent {
   uint8_t type;                 // GfxEventType
   uint8_t buttons;              // pointer: button bits after this event
   int8_t  wheel;                // pointer: wheel delta
-  uint8_t ascii;                // key
-  uint8_t keycode;              // key: FabGL virtual key
-  uint8_t modifiers;            // key: the VDP's modifier bits
+  uint8_t ascii;                // key: the character it types, or 0
+  uint8_t keycode;              // key: GfxKey
+  uint8_t modifiers;            // key: GFX_MOD_* bits
   uint8_t down;                 // key: 1 pressed, 0 released
   int16_t x, y;                 // pointer: position in pixels
 } GfxEvent;
