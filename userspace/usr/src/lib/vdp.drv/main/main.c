@@ -32,8 +32,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "AgonKeycodes.h"
 #include "ConsoleOutput.h"
 #include "VdpDriver.h"
+
+_Static_assert((KEYCODE_NUMLOCK == KEYCODE_SCROLLLOCK + 1)
+  && (KEYCODE_CAPSLOCK == KEYCODE_SCROLLLOCK + 2),
+  "vdpReadKeyboard takes the lock keys to be three keycodes in a row");
 
 /// @def VDP_POLL_NS
 ///
@@ -124,18 +129,19 @@ static bool vdpReadKeyboard(VdpInput *input) {
         continue;
       }
       bool keyboard = (input->parser.command == VDP_PACKET_KEYBOARD);
-      uint8_t leds = 0;
-      if ((keyboard == true)
-        && (vdpUpdateLocks(input->parser.data, &input->numLock, &leds))
+      if ((keyboard == true) && (input->parser.data[3] == 0)
+        && ((uint8_t) (input->parser.data[2] - KEYCODE_SCROLLLOCK) < 3)
       ) {
-        vdpSetKeyboardLeds(leds);
+        callOverlayFunction(OVERLAY_SAME_NAMESPACE,
+          "Console", "vdpLockKey", input);
       }
       if (input->events != NULL) {
         if ((keyboard == true) && (vdpIsReleaseKey(input->parser.data))) {
           callOverlayFunction(OVERLAY_SAME_NAMESPACE,
             "Graphics", "vdpRevoke", input->output);
         } else {
-          vdpQueueEvent(input->events, &input->eventState, &input->parser);
+          vdpQueueEvent(input->events, &input->eventState, &input->parser,
+            input->numLock);
         }
         continue;
       } else if (keyboard == false) {

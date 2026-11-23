@@ -29,9 +29,8 @@
 /// @brief Parsing of the packets the Agon Light 2 VDP sends and translation of
 /// its keyboard events into the byte stream a terminal sends.
 
-#include <string.h>
-
 #include "AgonKeycodes.h"
+#include "GraphicsProtocol.h"
 #include "VdpKeyboard.h"
 
 /// @enum VdpPacketState
@@ -150,14 +149,127 @@ static int vdpKeypadIndex(uint8_t keycode) {
   return -1;
 }
 
+_Static_assert(
+  (GFX_KEY_LEFT_SHIFT - KEYCODE_LSHIFT == GFX_KEY_ESCAPE - KEYCODE_ESCAPE)
+  && (GFX_KEY_LEFT_SHIFT - KEYCODE_LSHIFT == GFX_KEY_INSERT - KEYCODE_INSERT)
+  && (GFX_KEY_LEFT_SHIFT - KEYCODE_LSHIFT == GFX_KEY_DELETE - KEYCODE_DELETE)
+  && (GFX_KEY_LEFT_SHIFT - KEYCODE_LSHIFT
+    == GFX_KEY_BACKSPACE - KEYCODE_BACKSPACE)
+  && (GFX_KEY_LEFT_SHIFT - KEYCODE_LSHIFT == GFX_KEY_HOME - KEYCODE_HOME)
+  && (GFX_KEY_LEFT_SHIFT - KEYCODE_LSHIFT == GFX_KEY_END - KEYCODE_END)
+  && (GFX_KEY_LEFT_SHIFT - KEYCODE_LSHIFT
+    == GFX_KEY_CAPS_LOCK - KEYCODE_CAPSLOCK)
+  && (GFX_KEY_LEFT_SHIFT - KEYCODE_LSHIFT == GFX_KEY_TAB - KEYCODE_TAB)
+  && (GFX_KEY_LEFT_SHIFT - KEYCODE_LSHIFT == GFX_KEY_ENTER - KEYCODE_RETURN)
+  && (GFX_KEY_LEFT_SHIFT - KEYCODE_LSHIFT
+    == GFX_KEY_MENU - KEYCODE_APPLICATION)
+  && (GFX_KEY_LEFT_SHIFT - KEYCODE_LSHIFT == GFX_KEY_PAGE_UP - KEYCODE_PAGEUP)
+  && (GFX_KEY_LEFT_SHIFT - KEYCODE_LSHIFT
+    == GFX_KEY_PAGE_DOWN - KEYCODE_PAGEDOWN)
+  && (GFX_KEY_LEFT_SHIFT - KEYCODE_LSHIFT == GFX_KEY_UP - KEYCODE_UP)
+  && (GFX_KEY_LEFT_SHIFT - KEYCODE_LSHIFT == GFX_KEY_DOWN - KEYCODE_DOWN)
+  && (GFX_KEY_LEFT_SHIFT - KEYCODE_LSHIFT == GFX_KEY_LEFT - KEYCODE_LEFT)
+  && (GFX_KEY_LEFT_SHIFT - KEYCODE_LSHIFT == GFX_KEY_RIGHT - KEYCODE_RIGHT)
+  && (GFX_KEY_LEFT_SHIFT - KEYCODE_LSHIFT == GFX_KEY_F1 - KEYCODE_F1)
+  && (GFX_KEY_LEFT_SHIFT - KEYCODE_LSHIFT == GFX_KEY_F12 - KEYCODE_F12),
+  "GfxKey's named keys must follow the VDP's keycodes");
+_Static_assert((KEYCODE_KEYPAD_INSERT == KEYCODE_INSERT + 1)
+  && (KEYCODE_KEYPAD_DELETE == KEYCODE_DELETE + 1)
+  && (KEYCODE_KEYPAD_HOME == KEYCODE_HOME + 1)
+  && (KEYCODE_KEYPAD_END == KEYCODE_END + 1)
+  && (KEYCODE_KEYPAD_PAGEUP == KEYCODE_PAGEUP + 1)
+  && (KEYCODE_KEYPAD_PAGEDOWN == KEYCODE_PAGEDOWN + 1)
+  && (KEYCODE_KEYPAD_UP == KEYCODE_UP + 1)
+  && (KEYCODE_KEYPAD_DOWN == KEYCODE_DOWN + 1)
+  && (KEYCODE_KEYPAD_LEFT == KEYCODE_LEFT + 1)
+  && (KEYCODE_KEYPAD_RIGHT == KEYCODE_RIGHT + 1),
+  "vdpGfxKey takes a keypad navigation key's main key to be one below it");
+_Static_assert((GFX_MOD_CTRL == AGON_KEYMOD_CTRL)
+  && (GFX_MOD_SHIFT == AGON_KEYMOD_SHIFT)
+  && (GFX_MOD_ALT == AGON_KEYMOD_ALT_LEFT)
+  && (GFX_MOD_ALT_GR == AGON_KEYMOD_ALT_RIGHT)
+  && (GFX_MOD_CAPS_LOCK == AGON_KEYMOD_CAPS_LOCK)
+  && (GFX_MOD_NUM_LOCK == AGON_KEYMOD_NUM_LOCK)
+  && (GFX_MOD_SCROLL_LOCK == AGON_KEYMOD_SCROLL_LOCK)
+  && (GFX_MOD_GUI == AGON_KEYMOD_GUI),
+  "GFX_MOD_* must be the VDP's modifier bits");
+
+/// @fn uint8_t vdpGfxKey(const uint8_t *keyData, bool numLock,
+///   uint8_t *ascii)
+///
+/// @brief Translate the data of a keyboard packet into the GfxKey it names
+/// and the character it types.  The keypad follows the driver's Num Lock
+/// rather than the VDP's, because the VDP has no command that sets its own.
+///
+/// @param keyData The 4 data bytes of a keyboard packet: ASCII value,
+///   modifiers, FabGL keycode, and 1 if the key went down.
+/// @param numLock Whether the driver's Num Lock is on.
+/// @param ascii Set to the character the key types, or 0.
+///
+/// @return Returns the GfxKey.
+uint8_t vdpGfxKey(const uint8_t *keyData, bool numLock, uint8_t *ascii) {
+  uint8_t keycode = keyData[2];
+  *ascii = keyData[0];
+  int keypadIndex = vdpKeypadIndex(keycode);
+  if (keypadIndex >= 0) {
+    *ascii = 0;
+    if (numLock && ((keyData[1] & AGON_KEYMOD_SHIFT) == 0)) {
+      *ascii = (uint8_t) "0123456789."[keypadIndex];
+      return *ascii;
+    }
+    // Every keypad navigation key's keycode is one above its main key's.
+    keycode = _vdpKeypadNavigation[keypadIndex] - 1;
+    if (keycode == KEYCODE_KEYPAD_CENTER - 1) {
+      return GFX_KEY_NONE;
+    }
+  } else if (keycode == KEYCODE_KEYPAD_ENTER) {
+    keycode = KEYCODE_RETURN;
+  }
+
+  if (keycode >= KEYCODE_LSHIFT) {
+    if (keycode > KEYCODE_F12) {
+      return GFX_KEY_NONE;
+    }
+    return (uint8_t) (keycode - KEYCODE_LSHIFT + GFX_KEY_LEFT_SHIFT);
+  } else if ((keycode >= KEYCODE_a) && (keycode <= KEYCODE_Z)) {
+    keycode -= KEYCODE_a;
+    if (keycode >= 26) {
+      keycode -= 26;
+    }
+    return (uint8_t) ('a' + keycode);
+  } else if ((keycode >= KEYCODE_0) && (keycode <= KEYCODE_9)) {
+    return (uint8_t) ('0' + keycode - KEYCODE_0);
+  } else if (keycode == KEYCODE_SPACE) {
+    return ' ';
+  } else if ((*ascii >= ' ') && (*ascii <= '~')) {
+    return *ascii;
+  }
+
+  return GFX_KEY_NONE;
+}
+
+/// @var _vdpKeySequenceEnds
+///
+/// @brief For each GfxKey from GFX_KEY_INSERT to GFX_KEY_RIGHT, the last
+/// character of the escape sequence a terminal sends for it:  a letter for
+/// ESC [ letter, a digit for ESC [ digit ~, or 0 for no sequence.  A table
+/// costs the main overlay less than a switch over the keys.
+static const uint8_t _vdpKeySequenceEnds[] = {
+  '2', 0, '3', 0, 0, 'H', 0, 'F', 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, '5', 0,
+  '6', 0, 'A', 0, 'B', 0, 'D', 0, 'C',
+};
+
+_Static_assert(sizeof(_vdpKeySequenceEnds)
+  == GFX_KEY_RIGHT - GFX_KEY_INSERT + 1,
+  "_vdpKeySequenceEnds must cover GFX_KEY_INSERT to GFX_KEY_RIGHT");
+
 /// @fn size_t vdpTranslateKey(const uint8_t *keyData, bool numLock,
 ///   uint8_t *output)
 ///
 /// @brief Translate the data of a keyboard packet into the bytes a terminal
-/// sends for the key: an escape sequence for a navigation or function key,
-/// the key's ASCII value otherwise, and nothing for a key release.  The
-/// keypad follows the driver's Num Lock rather than the VDP's, because the
-/// VDP has no command that sets its own.
+/// sends for the key: an escape sequence for a navigation key or F1 to F4,
+/// the character it types otherwise, and nothing for a key release.
 ///
 /// @param keyData The 4 data bytes of a keyboard packet: ASCII value,
 ///   modifiers, FabGL keycode, and 1 if the key went down.
@@ -170,128 +282,33 @@ size_t vdpTranslateKey(const uint8_t *keyData, bool numLock, uint8_t *output) {
     return 0;
   }
 
-  uint8_t keycode = keyData[2];
-  int keypadIndex = vdpKeypadIndex(keycode);
-  if (keypadIndex >= 0) {
-    if (numLock && ((keyData[1] & AGON_KEYMOD_SHIFT) == 0)) {
-      output[0] = (uint8_t) "0123456789."[keypadIndex];
-      return 1;
+  uint8_t ascii = 0;
+  uint8_t key = vdpGfxKey(keyData, numLock, &ascii);
+  output[0] = '\x1b';
+  if ((key >= GFX_KEY_F1) && (key <= GFX_KEY_F4)) {
+    output[1] = 'O';
+    output[2] = (uint8_t) ('P' + key - GFX_KEY_F1);
+    return 3;
+  }
+
+  uint8_t end = 0;
+  if ((key >= GFX_KEY_INSERT) && (key <= GFX_KEY_RIGHT)) {
+    end = _vdpKeySequenceEnds[key - GFX_KEY_INSERT];
+  }
+  if (end != 0) {
+    output[1] = '[';
+    output[2] = end;
+    if (end >= 'A') {
+      return 3;
     }
-    keycode = _vdpKeypadNavigation[keypadIndex];
-  }
-
-  const char *sequence = NULL;
-  switch (keycode) {
-    case KEYCODE_UP:
-    case KEYCODE_KEYPAD_UP:
-      sequence = "\x1b[A";
-      break;
-    case KEYCODE_DOWN:
-    case KEYCODE_KEYPAD_DOWN:
-      sequence = "\x1b[B";
-      break;
-    case KEYCODE_RIGHT:
-    case KEYCODE_KEYPAD_RIGHT:
-      sequence = "\x1b[C";
-      break;
-    case KEYCODE_LEFT:
-    case KEYCODE_KEYPAD_LEFT:
-      sequence = "\x1b[D";
-      break;
-    case KEYCODE_HOME:
-    case KEYCODE_KEYPAD_HOME:
-      sequence = "\x1b[H";
-      break;
-    case KEYCODE_END:
-    case KEYCODE_KEYPAD_END:
-      sequence = "\x1b[F";
-      break;
-    case KEYCODE_INSERT:
-    case KEYCODE_KEYPAD_INSERT:
-      sequence = "\x1b[2~";
-      break;
-    case KEYCODE_DELETE:
-    case KEYCODE_KEYPAD_DELETE:
-      sequence = "\x1b[3~";
-      break;
-    case KEYCODE_PAGEUP:
-    case KEYCODE_KEYPAD_PAGEUP:
-      sequence = "\x1b[5~";
-      break;
-    case KEYCODE_PAGEDOWN:
-    case KEYCODE_KEYPAD_PAGEDOWN:
-      sequence = "\x1b[6~";
-      break;
-    case KEYCODE_F1:
-      sequence = "\x1bOP";
-      break;
-    case KEYCODE_F2:
-      sequence = "\x1bOQ";
-      break;
-    case KEYCODE_F3:
-      sequence = "\x1bOR";
-      break;
-    case KEYCODE_F4:
-      sequence = "\x1bOS";
-      break;
-    default:
-      break;
-  }
-
-  if (sequence != NULL) {
-    size_t length = strlen(sequence);
-    memcpy(output, sequence, length);
-    return length;
-  } else if ((keypadIndex < 0) && (keyData[0] != 0)) {
-    output[0] = keyData[0];
+    output[3] = '~';
+    return 4;
+  } else if (ascii != 0) {
+    output[0] = ascii;
     return 1;
   }
 
   return 0;
-}
-
-/// @fn bool vdpUpdateLocks(const uint8_t *keyData, bool *numLock,
-///   uint8_t *leds)
-///
-/// @brief Toggle the driver's Num Lock on the release of the Num Lock key, and
-/// work out the LEDs the keyboard should show after the release of any lock
-/// key, when the VDP overwrites all three LEDs with its own lock states.
-///
-/// @param keyData The 4 data bytes of a keyboard packet.
-/// @param numLock A pointer to whether the driver's Num Lock is on.
-/// @param leds Set to the LED byte of VDU 23,0,&88 when true is returned.
-///
-/// @return Returns true if the packet is the release of a lock key, so that
-/// leds has to be sent to the VDP, false otherwise.
-bool vdpUpdateLocks(const uint8_t *keyData, bool *numLock, uint8_t *leds) {
-  if (keyData[3] != 0) {
-    return false;
-  }
-
-  // The VDP reports the lock states from before this release toggles them.
-  uint8_t modifiers = keyData[1];
-  if (keyData[2] == KEYCODE_NUMLOCK) {
-    *numLock = !*numLock;
-  } else if (keyData[2] == KEYCODE_CAPSLOCK) {
-    modifiers ^= AGON_KEYMOD_CAPS_LOCK;
-  } else if (keyData[2] == KEYCODE_SCROLLLOCK) {
-    modifiers ^= AGON_KEYMOD_SCROLL_LOCK;
-  } else {
-    return false;
-  }
-
-  *leds = 0;
-  if ((modifiers & AGON_KEYMOD_SCROLL_LOCK) != 0) {
-    *leds |= VDP_LED_SCROLL_LOCK;
-  }
-  if ((modifiers & AGON_KEYMOD_CAPS_LOCK) != 0) {
-    *leds |= VDP_LED_CAPS_LOCK;
-  }
-  if (*numLock) {
-    *leds |= VDP_LED_NUM_LOCK;
-  }
-
-  return true;
 }
 
 /// @fn bool vdpIsPollReply(const VdpPacketParser *parser, uint8_t cookie)

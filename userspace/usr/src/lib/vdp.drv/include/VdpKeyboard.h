@@ -141,6 +141,7 @@ typedef struct VdpPacketParser {
 } VdpPacketParser;
 
 bool vdpParseByte(VdpPacketParser *parser, uint8_t byte);
+uint8_t vdpGfxKey(const uint8_t *keyData, bool numLock, uint8_t *ascii);
 size_t vdpTranslateKey(const uint8_t *keyData, bool numLock, uint8_t *output);
 bool vdpUpdateLocks(const uint8_t *keyData, bool *numLock, uint8_t *leds);
 bool vdpIsPollReply(const VdpPacketParser *parser, uint8_t cookie);

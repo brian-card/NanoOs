@@ -105,6 +105,26 @@ static char* vdpAppendNumber(char *text, unsigned int number) {
   return text;
 }
 
+/// @fn void* vdpLockKey(void *args)
+///
+/// @brief Toggle the driver's Num Lock on the release of the Num Lock key, and
+/// set the keyboard's LEDs after the release of any lock key.  The main
+/// overlay calls this only for the release of a lock key, which keeps the
+/// lock logic out of the main overlay.
+///
+/// @param args A pointer to the driver's VdpInput, whose parser holds the
+///   keyboard packet.
+///
+/// @return Always returns the provided pointer.
+void* vdpLockKey(void *args) {
+  VdpInput *input = (VdpInput*) args;
+  uint8_t leds = 0;
+  if (vdpUpdateLocks(input->parser.data, &input->numLock, &leds)) {
+    vdpSetKeyboardLeds(leds);
+  }
+  return args;
+}
+
 /// @fn void* vdpReportSize(void *args)
 ///
 /// @brief Tell the console the screen's rows and columns once the font sets

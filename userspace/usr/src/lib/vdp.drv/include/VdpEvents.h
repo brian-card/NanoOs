@@ -54,7 +54,7 @@ typedef struct VdpEventState {
 } VdpEventState;
 
 void vdpQueueEvent(GfxInputEventsArgs *queue, VdpEventState *state,
-  const VdpPacketParser *parser);
+  const VdpPacketParser *parser, bool numLock);
 
 #ifdef __cplusplus
 } // extern "C"

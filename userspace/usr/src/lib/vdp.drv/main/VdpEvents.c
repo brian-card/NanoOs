@@ -34,7 +34,7 @@
 #include "VdpEvents.h"
 
 /// @fn void vdpQueueEvent(GfxInputEventsArgs *queue, VdpEventState *state,
-///   const VdpPacketParser *parser)
+///   const VdpPacketParser *parser, bool numLock)
 ///
 /// @brief Add the keyboard or mouse packet a parser just completed to a queue
 /// of events, ignoring any other packet.  Motion, a mouse packet that changes
@@ -46,10 +46,11 @@
 /// @param state The queue's VdpEventState, zeroed when the display is opened.
 /// @param parser A pointer to the VdpPacketParser whose vdpParseByte call
 ///   just returned true.
+/// @param numLock Whether the driver's Num Lock is on.
 ///
 /// @return This function returns no value.
 void vdpQueueEvent(GfxInputEventsArgs *queue, VdpEventState *state,
-  const VdpPacketParser *parser
+  const VdpPacketParser *parser, bool numLock
 ) {
   const uint8_t *data = parser->data;
   GfxEvent event;
@@ -57,9 +58,11 @@ void vdpQueueEvent(GfxInputEventsArgs *queue, VdpEventState *state,
   bool motion = false;
   if (parser->command == VDP_PACKET_KEYBOARD) {
     event.type = GFX_EVENT_KEY;
-    event.ascii = data[0];
-    event.modifiers = data[1];
-    event.keycode = data[2];
+    event.keycode = vdpGfxKey(data, numLock, &event.ascii);
+    event.modifiers = data[1] & ~GFX_MOD_NUM_LOCK;
+    if (numLock) {
+      event.modifiers |= GFX_MOD_NUM_LOCK;
+    }
     event.down = data[3];
   } else if (parser->command == VDP_PACKET_MOUSE) {
     event.x = (int16_t) (data[0] | (data[1] << 8));
