@@ -4423,6 +4423,7 @@ int schedulerGetProcessInfoCommandHandler(
     processes[idx].pid = (int) allProcesses[ii - 1].processId;
     processes[idx].name = allProcesses[ii - 1].name;
     processes[idx].userId = allProcesses[ii - 1].userId;
+    processes[idx].privilegeLevel = allProcesses[ii - 1].privilegeLevel;
     idx++;
   }
 
@@ -5552,7 +5553,7 @@ int schedulerReplaceOverlayCommandHandler(
 /// @fn int schedulerShutdownCommandHandler(
 ///   SchedulerState *schedulerState, ProcessMessage *processMessage)
 ///
-/// @brief Replace the overlay of a process.
+/// @brief Power off, suspend, or reset the system for a root caller.
 ///
 /// @param schedulerState A pointer to the SchedulerState maintained by the
 ///   scheduler process.
@@ -5576,6 +5577,11 @@ int schedulerShutdownCommandHandler(
 
   SchedulerShutdownArgs *schedulerShutdownArgs
     = (SchedulerShutdownArgs*) processMessageData(processMessage);
+  if (processMessageFrom(processMessage)->userId != ROOT_USER_ID) {
+    returnValue = -EPERM;
+    goto exit;
+  }
+
   switch (schedulerShutdownArgs->shutdownType) {
     case NANO_OS_SHUTDOWN_OFF:
       {
@@ -5610,6 +5616,7 @@ int schedulerShutdownCommandHandler(
       break;
   }
 
+exit:
   schedulerShutdownArgs->returnValue = returnValue;
   returnValue = 0;
   processMessageSetDone(processMessage);
