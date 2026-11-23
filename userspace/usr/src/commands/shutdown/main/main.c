@@ -30,6 +30,7 @@
 /// @brief Entrypoint into the looseLoop program.
 
 // Standard C includes
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -71,17 +72,23 @@ int main(int argc, char **argv) {
   if ((strcmp(shutdownType, "-r") == 0)
     || (strcmp(shutdownType, "--reboot") == 0)
   ) {
-    nanoOsShutdown(NANO_OS_SHUTDOWN_RESET);
+    returnValue = nanoOsShutdown(NANO_OS_SHUTDOWN_RESET);
   } else if ((strcmp(shutdownType, "-h") == 0)
     || (strcmp(shutdownType, "--halt") == 0)
   ) {
-    nanoOsShutdown(NANO_OS_SHUTDOWN_OFF);
+    returnValue = nanoOsShutdown(NANO_OS_SHUTDOWN_OFF);
   } else {
     fprintf(stderr, "Error! Unknown shutdown type: \"%s\"\n", shutdownType);
     printUsage(stderr);
     return 1;
   }
 
-  return returnValue;
+  if (returnValue != 0) {
+    fprintf(stderr, "ERROR: Could not shut down: %s\n",
+      strerror(-returnValue));
+    return 1;
+  }
+
+  return 0;
 }
 
