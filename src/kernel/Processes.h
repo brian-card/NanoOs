@@ -328,6 +328,13 @@ static inline bool runningInScheduler(void) {
 #define processMessageQueueRemove(processDescriptor, message) \
   comessageQueueRemove((processDescriptor)->mainThread, message)
 
+/// @def processMessageQueueContains
+///
+/// @brief Function macro to determine whether a specific message is in a
+/// process's message queue.
+#define processMessageQueueContains(processDescriptor, message) \
+  comessageQueueContains((processDescriptor)->mainThread, message)
+
 /// @def processResume
 ///
 /// @brief Resume a process and update the currentProcess state correctly.
