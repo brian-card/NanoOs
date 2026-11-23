@@ -442,6 +442,12 @@ static bool run(WmState *state) {
     }
 
     int64_t type = processMessageType(message);
+    if ((type & ~((int64_t) 0xff)) == WIN_COMMAND_SIGNATURE) {
+      state->message = message;
+      callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Client", "wmClientMessage",
+        state);
+      continue;
+    }
     processMessageSetDone(message);
     if (processMessageWaiting(message) == false) {
       processMessageRelease(message);
@@ -484,7 +490,11 @@ int main(int argc, char **argv) {
     status = paint(state, WM_PAINT_START);
     bool revoked = false;
     if (status == GFX_OK) {
+      callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Client", "wmClientStart",
+        state);
       revoked = run(state);
+      callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Client", "wmClientEnd",
+        state);
     } else {
       fprintf(stderr, "sysnook: %s\n", gfxErrorString(status));
       exitStatus = 1;
