@@ -90,11 +90,11 @@ FREED = 'nano-os-sim/test_graphics_an_owners_images_and_preloads_are_freed_when_
 REVOKED_FINISH = 'nano-os-sim/test_graphics_revoking_answers_a_waiting_finish'
 KILLED_FINISH = 'nano-os-sim/test_graphics_killing_an_owner_waiting_on_finish_frees_the_display'
 SET_UP = 'nano-os-sim/test_graphics_the_display_is_busy_until_the_driver_has_set_it_up'
-LONG_REPAINT = 'nano-os-sim/test_wm_mouse_packets_sent_during_long_repaints_are_never_lost'
-GIVES_BACK = 'nano-os-sim/test_wm_gives_back_all_the_memory_it_used'
+LONG_REPAINT = 'nano-os-sim/test_nook_mouse_packets_sent_during_long_repaints_are_never_lost'
+GIVES_BACK = 'nano-os-sim/test_nook_gives_back_all_the_memory_it_used'
 OWNED_POINTER = 'nano-os-sim/test_graphics_the_pointer_shows_only_while_the_display_is_owned'
 CONSOLE_LOGIN = 'nano-os-sim/test_vdp_console_logs_in_and_runs_a_command'
-TEXT_BACKGROUND = 'nano-os-sim/test_wm_leaves_the_console_drawing_text_with_its_background'
+TEXT_BACKGROUND = 'nano-os-sim/test_nook_leaves_the_console_drawing_text_with_its_background'
 RED, GREEN = 'red', 'green'
 
 CLIENT_ENDED_IGNORED = (GRAPHICS, '''        == vdpOutput->owner)

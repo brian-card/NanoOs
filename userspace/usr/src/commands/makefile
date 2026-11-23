@@ -2,11 +2,11 @@ include include.mk
 
 COMMANDS := $(shell ls | grep -Ev 'makefile|.*\.mk')
 
-# wm needs a display driver, so it is built only when the build that runs
-# this makefile says the platform has one with WINDOW_MANAGER=1.
+# sysnook needs a display driver, so it is built only when the build that
+# runs this makefile says the platform has one with WINDOW_SERVER=1.
 BUILD_COMMANDS := $(COMMANDS)
-ifneq ($(WINDOW_MANAGER),1)
-    BUILD_COMMANDS := $(filter-out wm,$(COMMANDS))
+ifneq ($(WINDOW_SERVER),1)
+    BUILD_COMMANDS := $(filter-out sysnook,$(COMMANDS))
 endif
 
 OBJ_DIR = ../../obj

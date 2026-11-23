@@ -46,7 +46,7 @@ make -j "$(nproc)" -C userspace/usr/src clean
 make -j "$(nproc)" -C "userspace/usr/src/filesystems/${blockFilesystem}" clean
 make -j "$(nproc)" -C sim clean
 make -j "$(nproc)" -C userspace/usr/src COMPILE=gcc LINK=ld OBJCOPY=objcopy \
-	OBJDUMP=objdump SIZE=size LINKER_SCRIPT=NanoOsSim.ld WINDOW_MANAGER=1 \
+	OBJDUMP=objdump SIZE=size LINKER_SCRIPT=NanoOsSim.ld WINDOW_SERVER=1 \
 	overlays
 make -j "$(nproc)" -C "userspace/usr/src/filesystems/${blockFilesystem}" COMPILE=gcc \
 	LINK=ld OBJCOPY=objcopy OBJDUMP=objdump SIZE=size \
@@ -82,9 +82,9 @@ MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s userspace/usr/bin/syspasswd \
 MTOOLS_SKIP_CHECK=1 mdeltree -i "${fatImage}" ::/userspace/usr/bin/gfxprobe
 MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s userspace/usr/bin/gfxprobe \
 	::/system/commands/gfxprobe
-MTOOLS_SKIP_CHECK=1 mdeltree -i "${fatImage}" ::/userspace/usr/bin/wm
-MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s userspace/usr/bin/wm \
-	::/system/commands/wm
+MTOOLS_SKIP_CHECK=1 mdeltree -i "${fatImage}" ::/userspace/usr/bin/sysnook
+MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s userspace/usr/bin/sysnook \
+	::/system/commands/sysnook
 for driver in userspace/usr/lib/*.drv; do
 	MTOOLS_SKIP_CHECK=1 mmove -i "${fatImage}" \
 		"::/userspace/usr/lib/$(basename "${driver}")" ::/system/drivers/

@@ -118,6 +118,9 @@ int main(int argc, char **argv) {
     "mv:                     ",
     "Move or rename a file.");
   printf("%s %s\n",
+    "nook:                   ",
+    "Start the Nook graphical environment on the display.");
+  printf("%s %s\n",
     "passwd:                 ",
     "Change a password.");
   printf("%s %s\n",
@@ -135,9 +138,6 @@ int main(int argc, char **argv) {
   printf("%s %s\n",
     "shutdown:               ",
     "Power off or reset the system.");
-  printf("%s %s\n",
-    "startwm:                ",
-    "Start the window manager on the display.");
   printf("%s %s\n",
     "termtest:               ",
     "Exercise the terminal size functions.");

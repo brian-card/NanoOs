@@ -27,7 +27,7 @@
 
 /// @file main.c
 ///
-/// @brief The window manager:  it takes the display, draws a desktop and
+/// @brief Nook's window server:  it takes the display, draws a desktop and
 /// three windows, moves and resizes them with the mouse, and quits on Ctrl+Q
 /// or when the display is taken back.
 
@@ -35,14 +35,14 @@
 
 /// @fn static void printUsage(FILE *stream)
 ///
-/// @brief Print the usage summary for wm.
+/// @brief Print the usage summary for sysnook.
 ///
 /// @param stream The stream to print to.
 ///
 /// @return This function returns no value.
 static void printUsage(FILE *stream) {
   fputs(
-    "Usage: wm [options]\n"
+    "Usage: sysnook [options]\n"
     "\n"
     "Take the display and manage windows on it until Ctrl+Q.\n"
     "\n"
@@ -403,7 +403,7 @@ static void printTimes(const char *kind, WmTimes *times) {
     median = times->ms[kept / 2];
     longest = times->ms[kept - 1];
   }
-  printf("wm: %s frames %u median %u ms max %u ms\n", kind,
+  printf("sysnook: %s frames %u median %u ms max %u ms\n", kind,
     (unsigned int) times->count, median, longest);
 }
 
@@ -459,7 +459,7 @@ int main(int argc, char **argv) {
   }
   WmState *state = (WmState*) calloc(1, sizeof(WmState));
   if (state == NULL) {
-    fputs("wm: out of memory\n", stderr);
+    fputs("sysnook: out of memory\n", stderr);
     return 1;
   }
   int cells = WM_MAX_CELLS;
@@ -474,10 +474,10 @@ int main(int argc, char **argv) {
   GfxError status = gfxOpenDisplay(&state->display, GFX_DRIVER_PROCESS_NAME,
     640, 480);
   if (status == GFX_ERR_DISPLAY_BUSY) {
-    fputs("wm: display busy\n", stderr);
+    fputs("sysnook: display busy\n", stderr);
     exitStatus = 1;
   } else if (status != GFX_OK) {
-    fprintf(stderr, "wm: %s\n", gfxErrorString(status));
+    fprintf(stderr, "sysnook: %s\n", gfxErrorString(status));
     exitStatus = 1;
   } else {
     layOut(state, cells);
@@ -486,7 +486,7 @@ int main(int argc, char **argv) {
     if (status == GFX_OK) {
       revoked = run(state);
     } else {
-      fprintf(stderr, "wm: %s\n", gfxErrorString(status));
+      fprintf(stderr, "sysnook: %s\n", gfxErrorString(status));
       exitStatus = 1;
     }
     paint(state, WM_PAINT_END);

@@ -28,38 +28,38 @@
 
 """Mutation check of the window manager and its e2e tests.
 
-Each mutation puts one defect into wm, or takes one feature out, and runs
+Each mutation puts one defect into sysnook, or takes one feature out, and runs
 through test/e2e/run.py the one test in the one simulator configuration that
 should notice.  A mutation passes when that test goes red.  Sources are
 restored and touched after every mutation so the e2e image cache rebuilds.
 
-Usage:  mutate_wm.py [mutation ...]
+Usage:  mutate_nook.py [mutation ...]
 """
 import os, re, subprocess, sys, time
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-MAIN = 'userspace/usr/src/commands/wm/main/main.c'
-PAINT = 'userspace/usr/src/commands/wm/Paint/Paint.c'
-CTRL_Q = 'nano-os-sim/test_wm_ctrl_q_gives_the_console_back_cleared_to_its_prompt'
-BUSY = 'nano-os-sim/test_wm_a_second_startwm_is_told_the_display_is_busy'
-PAINTS = 'nano-os-sim/test_wm_paints_its_windows_exactly'
-CALL = 'nano-os-sim/test_wm_cells_painted_by_call_match_cells_sent_as_records'
-LANDS = 'nano-os-sim/test_wm_a_window_moved_live_lands_exactly_and_uncovers_the_desktop'
-ACROSS = 'nano-os-sim/test_wm_a_window_moved_across_another_and_back_restores_it_exactly'
-OFF_SCREEN = 'nano-os-sim/test_wm_a_window_moved_off_the_screen_and_back_is_repainted_exactly'
-LIMITS = 'nano-os-sim/test_wm_a_moved_window_keeps_32_pixels_of_its_title_bar_on_the_screen'
-RESIZE = 'nano-os-sim/test_wm_a_window_resized_live_grows_and_shrinks_exactly'
-MINIMUM = 'nano-os-sim/test_wm_a_window_is_never_resized_below_its_minimum'
-OUTLINE_MOVE = 'nano-os-sim/test_wm_an_outline_move_changes_nothing_but_the_outline_until_release'
-OUTLINE_RESIZE = 'nano-os-sim/test_wm_an_outline_resize_changes_nothing_but_the_outline_until_release'
-REVOKED = 'nano-os-sim/test_wm_exits_0_when_the_display_is_taken_back'
+MAIN = 'userspace/usr/src/commands/sysnook/main/main.c'
+PAINT = 'userspace/usr/src/commands/sysnook/Paint/Paint.c'
+CTRL_Q = 'nano-os-sim/test_nook_ctrl_q_gives_the_console_back_cleared_to_its_prompt'
+BUSY = 'nano-os-sim/test_nook_a_second_nook_is_told_the_display_is_busy'
+PAINTS = 'nano-os-sim/test_nook_paints_its_windows_exactly'
+CALL = 'nano-os-sim/test_nook_cells_painted_by_call_match_cells_sent_as_records'
+LANDS = 'nano-os-sim/test_nook_a_window_moved_live_lands_exactly_and_uncovers_the_desktop'
+ACROSS = 'nano-os-sim/test_nook_a_window_moved_across_another_and_back_restores_it_exactly'
+OFF_SCREEN = 'nano-os-sim/test_nook_a_window_moved_off_the_screen_and_back_is_repainted_exactly'
+LIMITS = 'nano-os-sim/test_nook_a_moved_window_keeps_32_pixels_of_its_title_bar_on_the_screen'
+RESIZE = 'nano-os-sim/test_nook_a_window_resized_live_grows_and_shrinks_exactly'
+MINIMUM = 'nano-os-sim/test_nook_a_window_is_never_resized_below_its_minimum'
+OUTLINE_MOVE = 'nano-os-sim/test_nook_an_outline_move_changes_nothing_but_the_outline_until_release'
+OUTLINE_RESIZE = 'nano-os-sim/test_nook_an_outline_resize_changes_nothing_but_the_outline_until_release'
+REVOKED = 'nano-os-sim/test_nook_exits_0_when_the_display_is_taken_back'
 
 MUTATIONS = [
  ('W1-quit-ignored', [(MAIN,
   '      if ((event->down != 0) && (event->ascii == WM_CTRL_Q)) {',
   '      if (false) {')], CTRL_Q),
  ('W1-busy-unreported', [(MAIN,
-  '    fputs("wm: display busy\\n", stderr);\n', '')], BUSY),
+  '    fputs("sysnook: display busy\\n", stderr);\n', '')], BUSY),
  ('W1-revocation-ignored', [(MAIN,
   '    if (type == (GFX_COMMAND_SIGNATURE | GFX_MSG_DISPLAY_REVOKED)) {\n'
   '      return true;\n'

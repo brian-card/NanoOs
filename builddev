@@ -59,7 +59,7 @@ if [ "${platform}" = "itsybitsy_m0" ] || [ "${platform}" = "feather_m0_wifi" ] \
 	osBuildDir="build/${platform}"
 	osMakeArgs="BOARD=${platform}"
 	contiguousMaxSize=32768
-	windowManager=0
+	windowServer=0
 elif [ "${platform}" = "AgonLight2" ]; then
 	agonHome="${HOME}/agondev"
 	agonDevBin="${agonHome}/bin"
@@ -82,7 +82,7 @@ elif [ "${platform}" = "AgonLight2" ]; then
 	osBuildDir="build/agon"
 	osMakeArgs=""
 	contiguousMaxSize=65536
-	windowManager=1
+	windowServer=1
 else
 	echo "ERROR: Unknown platform '${platform}'." >&2
 	echo "Must be 'AgonLight2' or one of the ArduinoSamd21Makefile boards:" >&2
@@ -139,7 +139,7 @@ make -j $(nproc) -C userspace/usr/src COMPILE="${compile}" LINK="${link}" \
 	OBJCOPY="${objcopy}" OBJDUMP="${objdump}" \
 	SIZE="${size}" LINKER_SCRIPT="${linkerScript}" \
 	EXTRA_INCLUDES="${extraIncludes}" EXTRA_LINKS="${extraLinks}" \
-	WINDOW_MANAGER="${windowManager}" overlays
+	WINDOW_SERVER="${windowServer}" overlays
 make -j $(nproc) -C userspace/usr/src/filesystems/${blockFilesystem} COMPILE="${compile}" LINK="${link}" \
 	OBJCOPY="${objcopy}" OBJDUMP="${objdump}" \
 	SIZE="${size}" LINKER_SCRIPT="${filesystemLinkerScript}" \
@@ -183,9 +183,9 @@ if [ -b "${targetDevice}" ]; then
 		"${mountDir}/system/commands/passwd"
 	sudo mv "${mountDir}/userspace/usr/bin/gfxprobe" \
 		"${mountDir}/system/commands/gfxprobe"
-	if [ -d userspace/usr/bin/wm ]; then
-		sudo mv "${mountDir}/userspace/usr/bin/wm" \
-			"${mountDir}/system/commands/wm"
+	if [ -d userspace/usr/bin/sysnook ]; then
+		sudo mv "${mountDir}/userspace/usr/bin/sysnook" \
+			"${mountDir}/system/commands/sysnook"
 	fi
 	for driver in userspace/usr/lib/*.drv; do
 		sudo mv "${mountDir}/userspace/usr/lib/$(basename "${driver}")" \
@@ -294,11 +294,11 @@ else
 		::/userspace/usr/bin/gfxprobe
 	MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s userspace/usr/bin/gfxprobe \
 		::/system/commands/gfxprobe
-	if [ -d userspace/usr/bin/wm ]; then
+	if [ -d userspace/usr/bin/sysnook ]; then
 		MTOOLS_SKIP_CHECK=1 mdeltree -i "${fatImage}" \
-			::/userspace/usr/bin/wm
-		MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s userspace/usr/bin/wm \
-			::/system/commands/wm
+			::/userspace/usr/bin/sysnook
+		MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s userspace/usr/bin/sysnook \
+			::/system/commands/sysnook
 	fi
 	for driver in userspace/usr/lib/*.drv; do
 		MTOOLS_SKIP_CHECK=1 mmove -i "${fatImage}" \

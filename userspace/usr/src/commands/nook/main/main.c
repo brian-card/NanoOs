@@ -27,8 +27,8 @@
 
 /// @file main.c
 ///
-/// @brief Implementation of the `startwm` command:  run the window manager,
-/// /system/commands/wm, with startwm's arguments, and wait for it.
+/// @brief Implementation of the `nook` command:  run Nook's window server,
+/// /system/commands/sysnook, with nook's arguments, and wait for it.
 
 #include <errno.h>
 #include <spawn.h>
@@ -40,9 +40,9 @@
 int main(int argc, char **argv) {
   if ((argc > 1) && isHelpOption(argv[1])) {
     fputs(
-      "Usage: startwm [options]\n"
+      "Usage: nook [options]\n"
       "\n"
-      "Start the window manager on the display, and wait until it ends.\n"
+      "Start Nook on the display, and wait until it ends.\n"
       "Ctrl+Q quits it.  The options are passed on to it.\n"
       "\n"
       "Options:\n"
@@ -58,7 +58,7 @@ int main(int argc, char **argv) {
     return 0;
   }
 
-  argv[0] = "wm";
+  argv[0] = "sysnook";
   posix_spawnattr_t attr;
   posix_spawnattr_init(&attr);
   posix_spawnattr_setflags(&attr, POSIX_SPAWN_SYSTEM | POSIX_SPAWN_FOREGROUND);
@@ -66,10 +66,10 @@ int main(int argc, char **argv) {
   // *NOT* passing in `environ` for the envp parameter of posix_spawn here
   // because we specified POSIX_SPAWN_SYSTEM in the attributes, which drops
   // all of the environment variables regardless of what we provide.
-  int returnValue = posix_spawn(&pid, "wm", NULL, &attr, argv, NULL);
+  int returnValue = posix_spawn(&pid, "sysnook", NULL, &attr, argv, NULL);
   posix_spawnattr_destroy(&attr);
   if (returnValue != 0) {
-    fprintf(stderr, "startwm: %s\n", strerror(returnValue));
+    fprintf(stderr, "nook: %s\n", strerror(returnValue));
     return 1;
   }
 
