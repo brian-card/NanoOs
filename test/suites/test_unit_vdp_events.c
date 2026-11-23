@@ -36,6 +36,7 @@
 #include <string.h>
 
 #include "../../userspace/usr/src/lib/vdp.drv/main/VdpEvents.c"
+#include "AgonKeycodes.h"
 
 /// @fn static void mouse(GfxInputEventsArgs *queue, VdpEventState *state,
 ///   uint16_t pointerX, uint16_t pointerY, uint8_t buttons, int8_t wheel)
@@ -59,18 +60,19 @@ static void mouse(GfxInputEventsArgs *queue, VdpEventState *state,
       (uint8_t) pointerY, (uint8_t) (pointerY >> 8), buttons, (uint8_t) wheel,
       0x55, 0x55, 0x55, 0x55 },
   };
-  vdpQueueEvent(queue, state, &parser);
+  vdpQueueEvent(queue, state, &parser, false);
 }
 
 /// @fn static void key(GfxInputEventsArgs *queue, VdpEventState *state,
 ///   uint8_t ascii, uint8_t modifiers, uint8_t keycode, uint8_t down)
 ///
-/// @brief Queue the keyboard packet the VDP sends for a key.
+/// @brief Queue the keyboard packet the VDP sends for a key, with the
+/// driver's Num Lock off.
 ///
 /// @param queue The queue.
 /// @param state The queue's VdpEventState.
 /// @param ascii The key's ASCII value.
-/// @param modifiers The modifier bits.
+/// @param modifiers The VDP's modifier bits.
 /// @param keycode The FabGL keycode.
 /// @param down 1 for a press, 0 for a release.
 ///
@@ -82,7 +84,29 @@ static void key(GfxInputEventsArgs *queue, VdpEventState *state,
     .command = VDP_PACKET_KEYBOARD, .length = 4,
     .data = { ascii, modifiers, keycode, down },
   };
-  vdpQueueEvent(queue, state, &parser);
+  vdpQueueEvent(queue, state, &parser, false);
+}
+
+/// @fn static void numLockKey(GfxInputEventsArgs *queue,
+///   VdpEventState *state, uint8_t ascii, uint8_t modifiers, uint8_t keycode)
+///
+/// @brief Queue the press of a key with the driver's Num Lock on.
+///
+/// @param queue The queue.
+/// @param state The queue's VdpEventState.
+/// @param ascii The key's ASCII value.
+/// @param modifiers The VDP's modifier bits.
+/// @param keycode The FabGL keycode.
+///
+/// @return This function returns no value.
+static void numLockKey(GfxInputEventsArgs *queue, VdpEventState *state,
+  uint8_t ascii, uint8_t modifiers, uint8_t keycode
+) {
+  VdpPacketParser parser = {
+    .command = VDP_PACKET_KEYBOARD, .length = 4,
+    .data = { ascii, modifiers, keycode, 1 },
+  };
+  vdpQueueEvent(queue, state, &parser, true);
 }
 
 /// @fn static GfxEvent pointerEvent(int16_t pointerX, int16_t pointerY,
@@ -115,8 +139,8 @@ static GfxEvent pointerEvent(int16_t pointerX, int16_t pointerY,
 /// @brief Make the key event a test expects.
 ///
 /// @param ascii The ASCII value.
-/// @param modifiers The modifier bits.
-/// @param keycode The FabGL keycode.
+/// @param modifiers The GFX_MOD_* bits.
+/// @param keycode The GfxKey.
 /// @param down 1 for a press, 0 for a release.
 ///
 /// @return Returns the event, every other field zero.
@@ -194,13 +218,14 @@ NANO_OS_TEST(unit_vdp_events, twenty_keys_leave_seven_and_an_overflow) {
   VdpEventState state = { 0 };
 
   for (int ii = 0; ii < 20; ii++) {
-    key(&queue, &state, (uint8_t) ('a' + ii), 0x40, (uint8_t) (0x20 + ii), 1);
+    key(&queue, &state, (uint8_t) ('a' + ii), 0x40,
+      (uint8_t) (KEYCODE_a + ii), 1);
   }
 
   NANO_OS_ASSERT_EQ_INT(GFX_EVENTS_PER_MESSAGE, queue.count);
   for (int ii = 0; ii < GFX_EVENTS_PER_MESSAGE - 1; ii++) {
     GfxEvent expected
-      = keyEvent((uint8_t) ('a' + ii), 0x40, (uint8_t) (0x20 + ii), 1);
+      = keyEvent((uint8_t) ('a' + ii), 0x40, (uint8_t) ('a' + ii), 1);
     NANO_OS_ASSERT_TRUE(sameEvent(&expected, &queue.events[ii]));
   }
   GfxEvent overflow;
@@ -210,16 +235,16 @@ NANO_OS_TEST(unit_vdp_events, twenty_keys_leave_seven_and_an_overflow) {
     &queue.events[GFX_EVENTS_PER_MESSAGE - 1]));
 }
 
-NANO_OS_TEST(unit_vdp_events, key_releases_and_raw_fields_are_kept) {
+NANO_OS_TEST(unit_vdp_events, key_releases_keep_their_key_and_modifiers) {
   GfxInputEventsArgs queue;
   memset(&queue, 0, sizeof(queue));
   VdpEventState state = { 0 };
 
-  key(&queue, &state, 0, 0x81, 0x9c, 1);
-  key(&queue, &state, 0, 0x81, 0x9c, 0);
+  key(&queue, &state, 0, 0x81, KEYCODE_RIGHT, 1);
+  key(&queue, &state, 0, 0x81, KEYCODE_RIGHT, 0);
 
-  GfxEvent press = keyEvent(0, 0x81, 0x9c, 1);
-  GfxEvent release = keyEvent(0, 0x81, 0x9c, 0);
+  GfxEvent press = keyEvent(0, GFX_MOD_CTRL | GFX_MOD_GUI, GFX_KEY_RIGHT, 1);
+  GfxEvent release = keyEvent(0, GFX_MOD_CTRL | GFX_MOD_GUI, GFX_KEY_RIGHT, 0);
   NANO_OS_ASSERT_EQ_INT(2, queue.count);
   NANO_OS_ASSERT_TRUE(sameEvent(&press, &queue.events[0]));
   NANO_OS_ASSERT_TRUE(sameEvent(&release, &queue.events[1]));
@@ -245,13 +270,13 @@ NANO_OS_TEST(unit_vdp_events, a_key_between_motions_keeps_them_apart) {
   VdpEventState state = { 0 };
 
   mouse(&queue, &state, 5, 6, 0, 0);
-  key(&queue, &state, 'q', 0, 0x30, 1);
+  key(&queue, &state, 'q', 0, KEYCODE_q, 1);
   mouse(&queue, &state, 7, 8, 0, 0);
   mouse(&queue, &state, 9, 10, 0, 0);
 
   GfxEvent expected[] = {
     pointerEvent(5, 6, 0, 0),
-    keyEvent('q', 0, 0x30, 1),
+    keyEvent('q', 0, 'q', 1),
     pointerEvent(9, 10, 0, 0),
   };
   NANO_OS_ASSERT_EQ_INT(3, queue.count);
@@ -305,7 +330,40 @@ NANO_OS_TEST(unit_vdp_events, other_packets_are_not_events) {
     .command = VDP_PACKET_GENERAL_POLL, .length = 1, .data = { 0x4e },
   };
 
-  vdpQueueEvent(&queue, &state, &parser);
+  vdpQueueEvent(&queue, &state, &parser, false);
 
   NANO_OS_ASSERT_EQ_INT(0, queue.count);
+}
+
+NANO_OS_TEST(unit_vdp_events, num_lock_bit_is_the_drivers_not_the_vdps) {
+  GfxInputEventsArgs queue;
+  memset(&queue, 0, sizeof(queue));
+  VdpEventState state = { 0 };
+
+  key(&queue, &state, 'x', AGON_KEYMOD_NUM_LOCK | AGON_KEYMOD_SHIFT,
+    KEYCODE_X, 1);
+  numLockKey(&queue, &state, 'x', AGON_KEYMOD_SHIFT, KEYCODE_X);
+
+  GfxEvent off = keyEvent('x', GFX_MOD_SHIFT, 'x', 1);
+  GfxEvent on = keyEvent('x', GFX_MOD_SHIFT | GFX_MOD_NUM_LOCK, 'x', 1);
+  NANO_OS_ASSERT_EQ_INT(2, queue.count);
+  NANO_OS_ASSERT_TRUE(sameEvent(&off, &queue.events[0]));
+  NANO_OS_ASSERT_TRUE(sameEvent(&on, &queue.events[1]));
+}
+
+NANO_OS_TEST(unit_vdp_events, keypad_keys_follow_the_drivers_num_lock) {
+  GfxInputEventsArgs queue;
+  memset(&queue, 0, sizeof(queue));
+  VdpEventState state = { 0 };
+
+  numLockKey(&queue, &state, '8', 0, KEYCODE_KEYPAD_8);
+  key(&queue, &state, '8', 0, KEYCODE_KEYPAD_8, 1);
+  numLockKey(&queue, &state, 0, 0, KEYCODE_KEYPAD_UP);
+
+  GfxEvent digit = keyEvent('8', GFX_MOD_NUM_LOCK, '8', 1);
+  GfxEvent up = keyEvent(0, 0, GFX_KEY_UP, 1);
+  NANO_OS_ASSERT_EQ_INT(3, queue.count);
+  NANO_OS_ASSERT_TRUE(sameEvent(&digit, &queue.events[0]));
+  NANO_OS_ASSERT_TRUE(sameEvent(&up, &queue.events[1]));
+  NANO_OS_ASSERT_TRUE(sameEvent(&digit, &queue.events[2]));
 }

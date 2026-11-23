@@ -1578,6 +1578,20 @@ class FakeVdp:
         self._send(conn, bytes([0x81, 0x04, ascii_value, 0, code, 1,
                             0x81, 0x04, ascii_value, 0, code, 0]))
 
+    def key_packet(self, ascii_value, modifiers, code, down=1):
+        """Send one keyboard packet.
+
+        @param ascii_value The ASCII value the VDP reports.
+        @param modifiers The VDP's modifier bits.
+        @param code The FabGL keycode.
+        @param down 1 for a press, 0 for a release.
+        """
+        with self.lock:
+            conn = self.conn
+        self._send(conn, bytes([0x81, 0x04, ascii_value, modifiers, code,
+                                down]))
+        time.sleep(0.01)
+
     def press(self, code):
         """Press and release a key that has no ASCII value.
 

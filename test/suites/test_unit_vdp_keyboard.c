@@ -12,6 +12,7 @@
 #include <string.h>
 
 #include "../../userspace/usr/src/lib/vdp.drv/main/VdpKeyboard.c"
+#include "../../userspace/usr/src/lib/vdp.drv/Console/VdpLocks.c"
 
 /// @fn static int feed(VdpPacketParser *parser, const uint8_t *bytes,
 ///   size_t length)
@@ -181,6 +182,165 @@ NANO_OS_TEST(unit_vdp_keyboard, keys_without_ascii_or_sequence_send_nothing) {
   uint8_t output[VDP_KEY_MAX_BYTES];
 
   NANO_OS_ASSERT_EQ_INT(0, key(0, KEYCODE_NONE, 1, output));
+}
+
+NANO_OS_TEST(unit_vdp_keyboard, every_sequence_key_sends_exactly_its_sequence) {
+  static const struct {
+    uint8_t keycode;
+    const char *sequence;
+  } keys[] = {
+    { KEYCODE_UP, "\x1b[A" }, { KEYCODE_KEYPAD_UP, "\x1b[A" },
+    { KEYCODE_DOWN, "\x1b[B" }, { KEYCODE_KEYPAD_DOWN, "\x1b[B" },
+    { KEYCODE_RIGHT, "\x1b[C" }, { KEYCODE_KEYPAD_RIGHT, "\x1b[C" },
+    { KEYCODE_LEFT, "\x1b[D" }, { KEYCODE_KEYPAD_LEFT, "\x1b[D" },
+    { KEYCODE_HOME, "\x1b[H" }, { KEYCODE_KEYPAD_HOME, "\x1b[H" },
+    { KEYCODE_END, "\x1b[F" }, { KEYCODE_KEYPAD_END, "\x1b[F" },
+    { KEYCODE_INSERT, "\x1b[2~" }, { KEYCODE_KEYPAD_INSERT, "\x1b[2~" },
+    { KEYCODE_DELETE, "\x1b[3~" }, { KEYCODE_KEYPAD_DELETE, "\x1b[3~" },
+    { KEYCODE_PAGEUP, "\x1b[5~" }, { KEYCODE_KEYPAD_PAGEUP, "\x1b[5~" },
+    { KEYCODE_PAGEDOWN, "\x1b[6~" }, { KEYCODE_KEYPAD_PAGEDOWN, "\x1b[6~" },
+    { KEYCODE_F1, "\x1bOP" }, { KEYCODE_F2, "\x1bOQ" },
+    { KEYCODE_F3, "\x1bOR" }, { KEYCODE_F4, "\x1bOS" },
+  };
+  uint8_t output[VDP_KEY_MAX_BYTES];
+
+  for (size_t ii = 0; ii < sizeof(keys) / sizeof(keys[0]); ii++) {
+    size_t length = strlen(keys[ii].sequence);
+    NANO_OS_ASSERT_EQ_INT((int) length, key(0, keys[ii].keycode, 1, output));
+    NANO_OS_ASSERT_TRUE(memcmp(output, keys[ii].sequence, length) == 0);
+  }
+  NANO_OS_ASSERT_EQ_INT(0, key(0, KEYCODE_F5, 1, output));
+  NANO_OS_ASSERT_EQ_INT(0, key(0, KEYCODE_PAUSE, 1, output));
+}
+
+/// @fn static uint8_t gfxKey(uint8_t ascii, uint8_t modifiers,
+///   uint8_t keycode, bool numLock, uint8_t *typed)
+///
+/// @brief Get the GfxKey of a key press.
+///
+/// @param ascii The packet's ASCII value.
+/// @param modifiers The packet's AGON_KEYMOD_* bits.
+/// @param keycode The packet's FabGL keycode.
+/// @param numLock Whether the driver's Num Lock is on.
+/// @param typed Set to the character vdpGfxKey says the key types.
+///
+/// @return Returns what vdpGfxKey returns.
+static uint8_t gfxKey(uint8_t ascii, uint8_t modifiers, uint8_t keycode,
+  bool numLock, uint8_t *typed
+) {
+  uint8_t keyData[4] = { ascii, modifiers, keycode, 1 };
+  return vdpGfxKey(keyData, numLock, typed);
+}
+
+NANO_OS_TEST(unit_vdp_keyboard, letters_name_the_lower_case_letter) {
+  uint8_t typed = 0xff;
+
+  NANO_OS_ASSERT_EQ_INT('a', gfxKey('a', 0, KEYCODE_a, false, &typed));
+  NANO_OS_ASSERT_EQ_INT('a', typed);
+  NANO_OS_ASSERT_EQ_INT('z', gfxKey('z', 0, KEYCODE_z, false, &typed));
+  NANO_OS_ASSERT_EQ_INT('a',
+    gfxKey('A', AGON_KEYMOD_SHIFT, KEYCODE_A, false, &typed));
+  NANO_OS_ASSERT_EQ_INT('A', typed);
+  NANO_OS_ASSERT_EQ_INT('z',
+    gfxKey('Z', AGON_KEYMOD_SHIFT, KEYCODE_Z, false, &typed));
+  NANO_OS_ASSERT_EQ_INT('c',
+    gfxKey(0x03, AGON_KEYMOD_CTRL, KEYCODE_c, false, &typed));
+  NANO_OS_ASSERT_EQ_INT(0x03, typed);
+}
+
+NANO_OS_TEST(unit_vdp_keyboard, digits_space_and_punctuation_name_themselves) {
+  uint8_t typed = 0xff;
+
+  NANO_OS_ASSERT_EQ_INT('0', gfxKey('0', 0, KEYCODE_0, false, &typed));
+  NANO_OS_ASSERT_EQ_INT('9', gfxKey('9', 0, KEYCODE_9, false, &typed));
+  NANO_OS_ASSERT_EQ_INT(' ', gfxKey(' ', 0, KEYCODE_SPACE, false, &typed));
+  NANO_OS_ASSERT_EQ_INT('!',
+    gfxKey('!', AGON_KEYMOD_SHIFT, KEYCODE_EXCLAIM, false, &typed));
+  NANO_OS_ASSERT_EQ_INT('-',
+    gfxKey('-', 0, KEYCODE_KEYPAD_MINUS, false, &typed));
+  NANO_OS_ASSERT_EQ_INT('-', typed);
+}
+
+NANO_OS_TEST(unit_vdp_keyboard, named_keys_name_their_gfx_key) {
+  static const struct {
+    uint8_t keycode;
+    uint8_t key;
+  } keys[] = {
+    { KEYCODE_LSHIFT, GFX_KEY_LEFT_SHIFT },
+    { KEYCODE_RSHIFT, GFX_KEY_RIGHT_SHIFT },
+    { KEYCODE_LALT, GFX_KEY_LEFT_ALT }, { KEYCODE_RALT, GFX_KEY_RIGHT_ALT },
+    { KEYCODE_LCTRL, GFX_KEY_LEFT_CTRL },
+    { KEYCODE_RCTRL, GFX_KEY_RIGHT_CTRL },
+    { KEYCODE_LGUI, GFX_KEY_LEFT_GUI }, { KEYCODE_RGUI, GFX_KEY_RIGHT_GUI },
+    { KEYCODE_ESCAPE, GFX_KEY_ESCAPE },
+    { KEYCODE_PRINTSCREEN, GFX_KEY_PRINT_SCREEN },
+    { KEYCODE_SYSREQ, GFX_KEY_SYSREQ }, { KEYCODE_INSERT, GFX_KEY_INSERT },
+    { KEYCODE_DELETE, GFX_KEY_DELETE },
+    { KEYCODE_BACKSPACE, GFX_KEY_BACKSPACE }, { KEYCODE_HOME, GFX_KEY_HOME },
+    { KEYCODE_END, GFX_KEY_END }, { KEYCODE_PAUSE, GFX_KEY_PAUSE },
+    { KEYCODE_BREAK, GFX_KEY_BREAK },
+    { KEYCODE_SCROLLLOCK, GFX_KEY_SCROLL_LOCK },
+    { KEYCODE_NUMLOCK, GFX_KEY_NUM_LOCK },
+    { KEYCODE_CAPSLOCK, GFX_KEY_CAPS_LOCK }, { KEYCODE_TAB, GFX_KEY_TAB },
+    { KEYCODE_RETURN, GFX_KEY_ENTER }, { KEYCODE_KEYPAD_ENTER, GFX_KEY_ENTER },
+    { KEYCODE_APPLICATION, GFX_KEY_MENU },
+    { KEYCODE_PAGEUP, GFX_KEY_PAGE_UP },
+    { KEYCODE_PAGEDOWN, GFX_KEY_PAGE_DOWN }, { KEYCODE_UP, GFX_KEY_UP },
+    { KEYCODE_DOWN, GFX_KEY_DOWN }, { KEYCODE_LEFT, GFX_KEY_LEFT },
+    { KEYCODE_RIGHT, GFX_KEY_RIGHT }, { KEYCODE_F1, GFX_KEY_F1 },
+    { KEYCODE_F2, GFX_KEY_F2 }, { KEYCODE_F3, GFX_KEY_F3 },
+    { KEYCODE_F4, GFX_KEY_F4 }, { KEYCODE_F5, GFX_KEY_F5 },
+    { KEYCODE_F6, GFX_KEY_F6 }, { KEYCODE_F7, GFX_KEY_F7 },
+    { KEYCODE_F8, GFX_KEY_F8 }, { KEYCODE_F9, GFX_KEY_F9 },
+    { KEYCODE_F10, GFX_KEY_F10 }, { KEYCODE_F11, GFX_KEY_F11 },
+    { KEYCODE_F12, GFX_KEY_F12 },
+  };
+  uint8_t typed = 0xff;
+
+  for (size_t ii = 0; ii < sizeof(keys) / sizeof(keys[0]); ii++) {
+    NANO_OS_ASSERT_EQ_INT(keys[ii].key,
+      gfxKey(0, 0, keys[ii].keycode, false, &typed));
+  }
+  NANO_OS_ASSERT_EQ_INT(GFX_KEY_ESCAPE,
+    gfxKey(0x1b, 0, KEYCODE_ESCAPE, false, &typed));
+  NANO_OS_ASSERT_EQ_INT(0x1b, typed);
+}
+
+NANO_OS_TEST(unit_vdp_keyboard, keypad_names_the_key_it_acts_as) {
+  uint8_t typed = 0xff;
+
+  NANO_OS_ASSERT_EQ_INT('8', gfxKey('8', 0, KEYCODE_KEYPAD_8, true, &typed));
+  NANO_OS_ASSERT_EQ_INT('8', typed);
+  NANO_OS_ASSERT_EQ_INT('8', gfxKey(0, 0, KEYCODE_KEYPAD_UP, true, &typed));
+  NANO_OS_ASSERT_EQ_INT('.',
+    gfxKey(0, 0, KEYCODE_KEYPAD_DELETE, true, &typed));
+  NANO_OS_ASSERT_EQ_INT(GFX_KEY_UP,
+    gfxKey('8', 0, KEYCODE_KEYPAD_8, false, &typed));
+  NANO_OS_ASSERT_EQ_INT(0, typed);
+  NANO_OS_ASSERT_EQ_INT(GFX_KEY_UP,
+    gfxKey(0, AGON_KEYMOD_SHIFT, KEYCODE_KEYPAD_8, true, &typed));
+  NANO_OS_ASSERT_EQ_INT(GFX_KEY_INSERT,
+    gfxKey(0, 0, KEYCODE_KEYPAD_0, false, &typed));
+  NANO_OS_ASSERT_EQ_INT(GFX_KEY_DELETE,
+    gfxKey(0, 0, KEYCODE_KEYPAD_PERIOD, false, &typed));
+  NANO_OS_ASSERT_EQ_INT(GFX_KEY_PAGE_DOWN,
+    gfxKey(0, 0, KEYCODE_KEYPAD_PAGEDOWN, false, &typed));
+  NANO_OS_ASSERT_EQ_INT(GFX_KEY_NONE,
+    gfxKey(0, 0, KEYCODE_KEYPAD_5, false, &typed));
+  NANO_OS_ASSERT_EQ_INT(GFX_KEY_NONE,
+    gfxKey(0, 0, KEYCODE_KEYPAD_CENTER, false, &typed));
+  NANO_OS_ASSERT_EQ_INT(0, typed);
+}
+
+NANO_OS_TEST(unit_vdp_keyboard, keys_past_f12_and_none_name_no_key) {
+  uint8_t typed = 0xff;
+
+  NANO_OS_ASSERT_EQ_INT(GFX_KEY_NONE,
+    gfxKey(0xe4, 0, KEYCODE_UMLAUT_a, false, &typed));
+  NANO_OS_ASSERT_EQ_INT(0xe4, typed);
+  NANO_OS_ASSERT_EQ_INT(GFX_KEY_NONE,
+    gfxKey(0, 0, KEYCODE_NONE, false, &typed));
+  NANO_OS_ASSERT_EQ_INT(0, typed);
 }
 
 NANO_OS_TEST(unit_vdp_keyboard, data_bytes_with_the_high_bit_are_data) {
