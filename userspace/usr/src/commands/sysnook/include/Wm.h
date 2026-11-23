@@ -40,11 +40,17 @@
 #include <time.h>
 #include "ExecutiveProcesses.h"
 #include "../../../src/kernel/Graphics.h"
+#include "../../../src/kernel/WindowProtocol.h"
 
 /// @def WM_MAX_WINDOWS
 ///
 /// @brief The number of windows the window manager draws.
 #define WM_MAX_WINDOWS 3
+
+/// @def WM_MAX_CLIENTS
+///
+/// @brief The most processes connected to the window server at once.
+#define WM_MAX_CLIENTS 16
 
 /// @def WM_TITLE_HEIGHT
 ///
@@ -180,6 +186,7 @@ typedef struct WmTimes {
 /// @param contentByCall Whether the full window's cells are painted by
 ///   calling preloads rather than by sending their records.
 /// @param quit Whether Ctrl+Q has been pressed.
+/// @param numClients The number of entries in clients.
 /// @param cmd The command buffer, 2 x 512 B.
 /// @param times The frame times of moves and of resizes, or NULL without
 ///   --timing.
@@ -191,28 +198,33 @@ typedef struct WmTimes {
 /// @param windows The windows, back to front.
 /// @param damage The rectangles a frame repaints.
 /// @param rows The preloaded rows of cells, or GFX_INVALID_HANDLE.
+/// @param message The window protocol message the Client overlay handles.
+/// @param clients The processes connected to the window server.
 typedef struct WmState {
-  uint8_t     numWindows;
-  uint8_t     grab;
-  uint8_t     numDamage;
-  uint8_t     buttons;
-  uint8_t     operation;
-  uint8_t     status;
-  bool        paintAll;
-  bool        paintTop;
-  bool        liveMove;
-  bool        liveResize;
-  bool        contentByCall;
-  bool        quit;
-  GfxCmdBuf  *cmd;
-  WmTimes    *times;
-  GfxPoint    offset;
-  GfxRect     outline;
-  GfxRect     outlineShown;
-  GfxDisplay  display;
-  WmWindow    windows[WM_MAX_WINDOWS];
-  GfxRect     damage[WM_MAX_DAMAGE];
-  GfxHandle   rows[WM_CELL_ROWS];
+  uint8_t         numWindows;
+  uint8_t         grab;
+  uint8_t         numDamage;
+  uint8_t         buttons;
+  uint8_t         operation;
+  uint8_t         status;
+  bool            paintAll;
+  bool            paintTop;
+  bool            liveMove;
+  bool            liveResize;
+  bool            contentByCall;
+  bool            quit;
+  uint8_t         numClients;
+  GfxCmdBuf      *cmd;
+  WmTimes        *times;
+  GfxPoint        offset;
+  GfxRect         outline;
+  GfxRect         outlineShown;
+  GfxDisplay      display;
+  WmWindow        windows[WM_MAX_WINDOWS];
+  GfxRect         damage[WM_MAX_DAMAGE];
+  GfxHandle       rows[WM_CELL_ROWS];
+  ProcessMessage *message;
+  ProcessId       clients[WM_MAX_CLIENTS];
 } WmState;
 
 /// @fn static inline WmWindow* wmTop(WmState *state)
