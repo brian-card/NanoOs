@@ -46,6 +46,25 @@
 /// reads this directly instead of going through the HAL on every call.
 NanoOsOverlayMap *overlayMap = NULL;
 
+/// @fn static void restoreCallerOverlay(const void *overlayNamespace,
+///   OverlayDescriptor *overlay)
+///
+/// @brief Put the caller's overlay back after an overlay function returns,
+/// yielding and retrying until the scheduler accepts it, because returning to
+/// the caller with another overlay loaded runs whatever code is in the window.
+///
+/// @param overlayNamespace The caller's overlay namespace.
+/// @param overlay The caller's overlay.
+///
+/// @return This function returns no value.
+static void restoreCallerOverlay(const void *overlayNamespace,
+  OverlayDescriptor *overlay
+) {
+  while (schedulerReplaceOverlay(overlayNamespace, overlay) != 0) {
+    processYield();
+  }
+}
+
 /// @fn OverlayFunction findOverlayFunction(const char *overlayFunctionName)
 ///
 /// @brief Find a function in an overlay that's been previously loaded into RAM.
@@ -224,8 +243,7 @@ void* callOverlayFunctionFromFile(const void *od, const void *oo,
   returnValue = overlayFunction(args);
   
 restorePreviousOverlay:
-  // Don't check the return value here.  No point.
-  schedulerReplaceOverlay(previousOverlayDir, &overlayArray[0]);
+  restoreCallerOverlay(previousOverlayDir, &overlayArray[0]);
 
   // Release all the memory for the copies.
 freeOverlayInfo:
@@ -333,7 +351,7 @@ void* callOverlayFunctionFromBlockDevice(
   returnValue = overlayFunction(args);
   
 restorePreviousOverlay:
-  schedulerReplaceOverlay(previousOverlayDevice, &overlayArray[0]);
+  restoreCallerOverlay(previousOverlayDevice, &overlayArray[0]);
   
   // Release all the memory for the copies.
   free(functionCopy);
@@ -756,8 +774,7 @@ loadAndCallFunction:
   returnValue = overlayFunction(args);
   
 restorePreviousOverlay:
-  // Don't check the return value here.  No point.
-  schedulerReplaceOverlay(previousOverlayDir, &overlayArray[0]);
+  restoreCallerOverlay(previousOverlayDir, &overlayArray[0]);
 
   // Release all the memory for the copies.
 freeOverlayInfo:
