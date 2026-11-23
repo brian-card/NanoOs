@@ -60,7 +60,10 @@ def boot(s):
 
 
 def shadow_after_shutdown(s):
-    """Shut the simulator down and return /secure/shadow from the image."""
+    """Log in again as root, shut the simulator down, and return
+    /secure/shadow from the image."""
+    s.child.sendline("exit")
+    s.login("root", "toor")
     s.child.sendline("shutdown -h")
     s.child.expect(pexpect.EOF, timeout=10)
     out = subprocess.run(["mtype", "-i", s.img_copy + "@@2097152",

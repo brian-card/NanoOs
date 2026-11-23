@@ -58,7 +58,17 @@ def test_shutdown_reboots(s):
 
 def test_shutdown_reboots_with_a_passwd_file(s):
     restart_with_users(s)
-    reboot_twice(s, "alice", "wonderland")
+    reboot_twice(s, "root", "toor")
+
+
+def test_shutdown_by_an_ordinary_user_is_refused(s):
+    restart_with_users(s)
+    s.login("alice", "wonderland")
+    for option in ("-r", "-h"):
+        assert s.sh("shutdown " + option) == \
+            "ERROR: Could not shut down: Operation not permitted"
+        assert s.sh("echo $?") == "1"
+    assert s.sh("echo still-here") == "still-here"
 
 
 def test_shutdown_reboots_with_a_config_sys(s):

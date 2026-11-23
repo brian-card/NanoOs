@@ -246,7 +246,8 @@ class Session:
         try:
             if c.isalive():
                 c.sendline("shutdown -h")
-                c.expect(pexpect.EOF, timeout=8)
+                # Only root may shut down, so another user's shell refuses.
+                c.expect([pexpect.EOF, "Could not shut down"], timeout=8)
         except Exception:
             pass
         self.kill()
