@@ -70,7 +70,7 @@ extern ProcessId schedulerPid;
 ///
 /// @brief The size, in bytes, of the simulated memory shared by the process
 /// stacks and the heap when halPosixImplInit is given no size.
-#define DEFAULT_MEMORY_SIZE (96 * 1024)
+#define DEFAULT_MEMORY_SIZE (160 * 1024)
 
 /// @def POSIX_FILE_CACHE_NODE_OVERHEAD
 ///
@@ -88,7 +88,7 @@ extern ProcessId schedulerPid;
 /// @brief The number of process-sized stacks carved out of the simulated
 /// memory:  one per process, plus the scheduler's two, the console's extra
 /// one, and the filesystem's extra one.
-#define POSIX_NUM_PROCESS_STACKS 14
+#define POSIX_NUM_PROCESS_STACKS 22
 
 /// @def MEMORY_MANAGER_STACK_SIZE
 ///
