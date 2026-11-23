@@ -211,9 +211,13 @@ $(OBJ_DIR)/suite_test_unit_vdp_text.o: \
 $(OBJ_DIR)/suite_test_unit_vdp_text.o: TEST_INC += -iquote ../src/kernel
 $(OBJ_DIR)/suite_test_unit_vdp_keyboard.o: \
     ../userspace/usr/src/lib/vdp.drv/main/VdpKeyboard.c \
-    ../userspace/usr/src/lib/vdp.drv/include/VdpKeyboard.h
+    ../userspace/usr/src/lib/vdp.drv/Console/VdpLocks.c \
+    ../userspace/usr/src/lib/vdp.drv/include/VdpKeyboard.h \
+    ../src/kernel/GraphicsProtocol.h
+$(OBJ_DIR)/suite_test_unit_vdp_keyboard.o: TEST_INC += -iquote ../src/kernel
 $(OBJ_DIR)/suite_test_unit_vdp_events.o: \
     ../userspace/usr/src/lib/vdp.drv/main/VdpEvents.c \
+    ../userspace/usr/src/lib/vdp.drv/main/VdpKeyboard.c \
     ../userspace/usr/src/lib/vdp.drv/include/VdpEvents.h \
     ../src/kernel/GraphicsProtocol.h
 $(OBJ_DIR)/suite_test_unit_vdp_events.o: TEST_INC += -iquote ../src/kernel \
