@@ -309,6 +309,10 @@ typedef struct NanoOsUserApi {
   
   // NanoOsHardware.h functions:
   int (*shutdown)(NanoOsShutdownType shutdownType);
+
+  // Window server functions:
+  int (*windowServerRegister)(void);
+  int (*windowServerConnect)(uint8_t *pid);
   
   // NanoOsConsole.h functions:
   int (*getConsoleColors)(void);

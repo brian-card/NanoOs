@@ -55,6 +55,7 @@ char** parseArgs(char *command, int *argc);
 #include "../kernel/Processes.h"
 #include "../hal/HalCommon.h"
 #include "NanoOsDirCap.h"
+#include "NanoOsWindowServer.h"
 #include "NanoOsFcntl.h"
 #include "NanoOsLibC.h"
 #include "NanoOsPwd.h"
@@ -382,6 +383,10 @@ static const NanoOsUserApi _nanoOsUserApi = {
   
   // NanoOsHardware.h functions:
   .shutdown = nanoOsHardwareShutdown,
+
+  // Window server functions:
+  .windowServerRegister = nanoOsWindowServerRegister,
+  .windowServerConnect = nanoOsWindowServerConnect,
   
   // NanoOsConsole.h functions:
   .getConsoleColors = getConsoleColors,
