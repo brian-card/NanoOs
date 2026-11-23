@@ -44,9 +44,9 @@ SCHED = 'src/kernel/Scheduler.c'
 MUTATIONS = [
  ('no-grant', SCHED, '  processDescriptor->graphicsClient = true;\n}\n', '  processDescriptor->graphicsClient = false;\n}\n',
   ['the_client_program_is_granted_both_ways', 'an_exiting_client_is_reported_once', 'a_client_execing_itself_is_reported_and_granted_again']),
- ('no-exit-hook', SCHED, '  schedulerReleaseConsolePorts(processDescriptor);\n  schedulerEndGraphicsClient(processDescriptor);\n\n  if (processDescriptor->envp != NULL) {',
+ ('no-exit-hook', SCHED, '  schedulerReleaseConsolePorts(processDescriptor);\n  schedulerEndClient(processDescriptor);\n\n  if (processDescriptor->envp != NULL) {',
   '  schedulerReleaseConsolePorts(processDescriptor);\n\n  if (processDescriptor->envp != NULL) {', ['an_exiting_client_is_reported_once']),
- ('no-remove-hook', SCHED, '  schedulerReleaseConsolePorts(processDescriptor);\n  schedulerEndGraphicsClient(processDescriptor);\n  schedulerSetDirCapabilities(processDescriptor, NULL);\n',
+ ('no-remove-hook', SCHED, '  schedulerReleaseConsolePorts(processDescriptor);\n  schedulerEndClient(processDescriptor);\n  schedulerSetDirCapabilities(processDescriptor, NULL);\n',
   '  schedulerReleaseConsolePorts(processDescriptor);\n  schedulerSetDirCapabilities(processDescriptor, NULL);\n', ['a_removed_client_is_reported_once']),
  ('no-exec-hook', SCHED, '  schedulerGraphicsProgramChanged(processDescriptor, pathname);\n', '',
   ['a_client_execing_another_program_is_reported', 'a_client_execing_itself_is_reported_and_granted_again']),
@@ -55,8 +55,8 @@ MUTATIONS = [
     GFX_DRIVER_MESSAGE_MASK);
 ''', '', ['an_exiting_client_is_reported_once', 'a_killed_client_is_reported_once', 'a_removed_client_is_reported_once']),
  ('no-notification', SCHED,
-  '  schedulerRevokeGraphics(processDescriptor);\n\n  ProcessMessage *processMessage = getAvailableMessage();\n',
-  '  schedulerRevokeGraphics(processDescriptor);\n\n  ProcessMessage *processMessage = NULL;\n',
+  '    schedulerWindowServerEnded(processDescriptor->processId);\n  }\n\n  ProcessMessage *processMessage = getAvailableMessage();\n',
+  '    schedulerWindowServerEnded(processDescriptor->processId);\n  }\n\n  ProcessMessage *processMessage = NULL;\n',
   ['an_exiting_client_is_reported_once', 'a_killed_client_is_reported_once', 'a_removed_client_is_reported_once']),
 ]
 TESTS = ['the_client_program_is_granted_both_ways','another_system_command_is_not_granted','a_user_level_spawn_of_the_client_is_not_granted','an_exiting_client_is_reported_once','a_killed_client_is_reported_once','a_client_whose_stack_overflowed_is_reported_once','a_removed_client_is_reported_once','a_client_execing_another_program_is_reported','a_client_execing_itself_is_reported_and_granted_again']
