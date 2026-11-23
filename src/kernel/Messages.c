@@ -1021,6 +1021,34 @@ int msg_q_push(msg_q_t *queue, msg_q_t *reply_to, msg_t *msg) {
   return msg_q_push_inline(queue, reply_to, msg);
 }
 
+/// @fn bool msg_q_contains(msg_q_t *queue, msg_t *msg)
+///
+/// @brief Determine whether a message is in a queue.
+///
+/// @param queue A pointer to the msg_q_t to search.
+/// @param msg A pointer to the msg_t to look for.
+///
+/// @return Returns true if the message is in the queue, false if it isn't or
+/// the queue couldn't be searched.
+bool msg_q_contains(msg_q_t *queue, msg_t *msg) {
+  bool found = false;
+  if ((queue == NULL) || (msg == NULL)
+    || (queue->msg_sync->mtx_lock(&queue->lock) != msg_success)
+  ) {
+    return found; // false
+  }
+
+  for (msg_t *cur = queue->head; cur != NULL; cur = cur->next) {
+    if (cur == msg) {
+      found = true;
+      break;
+    }
+  }
+  queue->msg_sync->mtx_unlock(&queue->lock);
+
+  return found;
+}
+
 /// @fn int msg_q_remove(msg_q_t *queue, msg_t *msg)
 ///
 /// @brief Remove a specific message from a message queue, without releasing
