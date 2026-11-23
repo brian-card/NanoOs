@@ -94,6 +94,7 @@ OS_OBJECTS := \
     $(OBJ_DIR)/SdCardSpi.o \
     $(OBJ_DIR)/NanoOsApi.o \
     $(OBJ_DIR)/NanoOsDirCap.o \
+    $(OBJ_DIR)/NanoOsWindowServer.o \
     $(OBJ_DIR)/NanoOsErrno.o \
     $(OBJ_DIR)/NanoOsFcntl.o \
     $(OBJ_DIR)/NanoOsGrp.o \
