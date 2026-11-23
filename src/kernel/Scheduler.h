@@ -282,6 +282,19 @@ typedef struct SchedulerGetDirCapabilitiesArgs {
   int errorNumber;
 } SchedulerGetDirCapabilitiesArgs;
 
+/// @struct SchedulerWindowServerArgs
+///
+/// @brief Arguments and return values for the
+/// SCHEDULER_REGISTER_WINDOW_SERVER and SCHEDULER_CONNECT_WINDOW_SERVER
+/// commands.
+///
+/// @param errorNumber The errno value to set in the calling process, or 0.
+/// @param pid The window server's ProcessId.
+typedef struct SchedulerWindowServerArgs {
+  int       errorNumber;
+  ProcessId pid;
+} SchedulerWindowServerArgs;
+
 /// @enum SchedulerCommandResponse
 ///
 /// @brief Commands and responses understood by the scheduler inter-process
@@ -303,6 +316,8 @@ typedef enum SchedulerCommandResponse {
   SCHEDULER_ADD_DIR_CAPABILITY,
   SCHEDULER_DROP_DIR_CAPABILITY,
   SCHEDULER_GET_DIR_CAPABILITIES,
+  SCHEDULER_REGISTER_WINDOW_SERVER,
+  SCHEDULER_CONNECT_WINDOW_SERVER,
   NUM_SCHEDULER_COMMANDS,
   // Responses:
   SCHEDULER_PROCESS_COMPLETE,
