@@ -303,6 +303,8 @@ typedef struct ProcessQueue ProcessQueue;
 /// @param graphicsClient Whether the process runs the program config.sys's
 ///   GRAPHICS line names, and so holds the IPC grants to and from the
 ///   display driver.
+/// @param windowClient Whether the process has connected to the window
+///   server, and so holds the IPC grants to and from it.
 /// @param halCapabilityBitmap One bit per HAL function, set for each function
 ///   granted in halCapabilities.  Built by setProcessHalCapabilities.
 /// @param halDeviceMasks For each HalSubsystem, the bitmask of device IDs the
@@ -343,6 +345,7 @@ typedef struct ProcessDescriptor {
   DirCapabilities    *dirCapabilities;
   uint8_t             numFilesystemHandles;
   bool                graphicsClient;
+  bool                windowClient;
   // Kept last so that these share the tail padding after the bools above.
   uint8_t             halCapabilityBitmap[HAL_CAPABILITY_BITMAP_SIZE];
   uint8_t             halDeviceMasks[HAL_DEVICE_MASKS_SIZE];
