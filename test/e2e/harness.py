@@ -91,7 +91,7 @@ SMALL_MEMORY_HEAP = 2688
 # Simulated memory size, in bytes, booted once to find the size that leaves
 # SMALL_MEMORY_HEAP.  The heap left at a given size depends on the host
 # compiler's stack frame sizes, so it has to be measured on each host.
-SMALL_MEMORY_PROBE_SIZE = 75000
+SMALL_MEMORY_PROBE_SIZE = 150000
 
 
 _small_memory_sizes = {}
