@@ -129,6 +129,8 @@ void forceYield(void);
 ///   line names as the display driver, or 0 if there is none.
 /// @param graphicsClientPath The full path of the program whose processes
 ///   may use the display driver, or NULL.
+/// @param windowServerPid The ProcessId of the registered window server, or 0
+///   if there is none.
 struct SchedulerState {
   size_t              numManagedProcesses;
   ProcessQueue      **readyQueues;
@@ -144,6 +146,7 @@ struct SchedulerState {
   ProcessId           shellOutputPids[NANO_OS_MAX_NUM_SHELLS];
   int                 runSchedulerDepth;
   ProcessId           graphicsDriverPid;
+  ProcessId           windowServerPid;
   const char         *graphicsClientPath;
 };
 
@@ -609,6 +612,8 @@ IpcCapability baseSupervisorIpcCapabilities[] = {
       | (((uint32_t) 1) << SCHEDULER_ADD_DIR_CAPABILITY)
       | (((uint32_t) 1) << SCHEDULER_DROP_DIR_CAPABILITY)
       | (((uint32_t) 1) << SCHEDULER_GET_DIR_CAPABILITIES)
+      | (((uint32_t) 1) << SCHEDULER_REGISTER_WINDOW_SERVER)
+      | (((uint32_t) 1) << SCHEDULER_CONNECT_WINDOW_SERVER)
   },
   {
     .destinationPid = 0, // Console PID to be set by scheduler
@@ -677,6 +682,8 @@ IpcCapability baseUserIpcCapabilities[] = {
       | (((uint32_t) 1) << SCHEDULER_ADD_DIR_CAPABILITY)
       | (((uint32_t) 1) << SCHEDULER_DROP_DIR_CAPABILITY)
       | (((uint32_t) 1) << SCHEDULER_GET_DIR_CAPABILITIES)
+      | (((uint32_t) 1) << SCHEDULER_REGISTER_WINDOW_SERVER)
+      | (((uint32_t) 1) << SCHEDULER_CONNECT_WINDOW_SERVER)
   },
   {
     .destinationPid = 0, // Console PID to be set by scheduler
@@ -1949,14 +1956,87 @@ static void schedulerRevokeGraphics(ProcessDescriptor *processDescriptor) {
   processDescriptor->graphicsClient = false;
 }
 
+/// @fn static void schedulerRevokeWindowClient(
+///   ProcessDescriptor *processDescriptor, ProcessId serverPid)
+///
+/// @brief Take away a window client's IPC grants to and from the window
+/// server.
+///
+/// @param processDescriptor A pointer to the client's ProcessDescriptor.
+/// @param serverPid The window server's ProcessId.
+///
+/// @return This function returns no value.
+static void schedulerRevokeWindowClient(
+  ProcessDescriptor *processDescriptor, ProcessId serverPid
+) {
+  removeProcessIpcCapabilityMask(processDescriptor, serverPid,
+    WIN_COMMAND_SIGNATURE, WIN_CLIENT_MESSAGE_MASK);
+  removeProcessIpcCapabilityMask(&allProcesses[serverPid - 1],
+    processDescriptor->processId, WIN_COMMAND_SIGNATURE,
+    WIN_SERVER_MESSAGE_MASK);
+  processDescriptor->windowClient = false;
+}
+
+/// @fn static void schedulerWindowServerEnded(ProcessId serverPid)
+///
+/// @brief End the window server's registration and take away every client's
+/// grants to and from it.
+///
+/// @param serverPid The window server's ProcessId.
+///
+/// @return This function returns no value.
+static void schedulerWindowServerEnded(ProcessId serverPid) {
+  _schedulerState->windowServerPid = 0;
+  for (ProcessId ii = 1; ii <= numProcesses; ii++) {
+    if (allProcesses[ii - 1].windowClient) {
+      schedulerRevokeWindowClient(&allProcesses[ii - 1], serverPid);
+    }
+  }
+}
+
+/// @fn static void schedulerWindowClientEnded(
+///   ProcessDescriptor *processDescriptor)
+///
+/// @brief Take away an ending window client's grants and tell the window
+/// server with WIN_MSG_CLIENT_ENDED, without waiting, because a window server
+/// runs from overlays and needs the scheduler to switch them.  Kept out of
+/// line so that the end-of-process handlers carry its frame only for a
+/// window client.
+///
+/// @param processDescriptor A pointer to the client's ProcessDescriptor.
+///
+/// @return This function returns no value.
+static __attribute__((noinline)) void schedulerWindowClientEnded(
+  ProcessDescriptor *processDescriptor
+) {
+  ProcessId serverPid = _schedulerState->windowServerPid;
+  schedulerRevokeWindowClient(processDescriptor, serverPid);
+
+  ProcessMessage *processMessage = getAvailableMessage();
+  if (processMessage != NULL) {
+    processMessageInitInline(processMessage,
+      WIN_COMMAND_SIGNATURE | WIN_MSG_CLIENT_ENDED,
+      (void*) (uintptr_t) processDescriptor->processId, 0,
+      /* waiting= */ false);
+    if (processMessageQueuePush(&allProcesses[serverPid - 1], processMessage)
+      == processSuccess
+    ) {
+      return;
+    }
+    processMessageRelease(processMessage);
+  }
+  logError("Could not tell the window server process %d ended\n",
+    processDescriptor->processId);
+}
+
 /// @fn static void schedulerGraphicsClientEnded(
 ///   ProcessDescriptor *processDescriptor)
 ///
-/// @brief Take away an ending graphics client's grants and tell the display
-/// driver with GFX_MSG_CLIENT_ENDED, without waiting, because a driver that
-/// runs from overlays needs the scheduler to switch them.  Kept out of line
-/// so that the end-of-process handlers carry its frame only for a graphics
-/// client.
+/// @brief Take away an ending graphics client's grants, end its registration
+/// as the window server if it has one, and tell the display driver with
+/// GFX_MSG_CLIENT_ENDED, without waiting, because a driver that runs from
+/// overlays needs the scheduler to switch them.  Kept out of line so that the
+/// end-of-process handlers carry its frame only for a graphics client.
 ///
 /// @param processDescriptor A pointer to the client's ProcessDescriptor.
 ///
@@ -1965,6 +2045,9 @@ static __attribute__((noinline)) void schedulerGraphicsClientEnded(
   ProcessDescriptor *processDescriptor
 ) {
   schedulerRevokeGraphics(processDescriptor);
+  if (processDescriptor->processId == _schedulerState->windowServerPid) {
+    schedulerWindowServerEnded(processDescriptor->processId);
+  }
 
   ProcessMessage *processMessage = getAvailableMessage();
   if (processMessage != NULL) {
@@ -1984,31 +2067,32 @@ static __attribute__((noinline)) void schedulerGraphicsClientEnded(
     processDescriptor->processId);
 }
 
-/// @fn static inline void schedulerEndGraphicsClient(
+/// @fn static inline void schedulerEndClient(
 ///   ProcessDescriptor *processDescriptor)
 ///
-/// @brief Run schedulerGraphicsClientEnded for a process that is ending, if
-/// it's a graphics client.
+/// @brief Run schedulerGraphicsClientEnded or schedulerWindowClientEnded for
+/// a process that is ending, if it's a graphics or window client.
 ///
 /// @param processDescriptor A pointer to the ending process's
 ///   ProcessDescriptor.
 ///
 /// @return This function returns no value.
-static inline void schedulerEndGraphicsClient(
-  ProcessDescriptor *processDescriptor
-) {
+static inline void schedulerEndClient(ProcessDescriptor *processDescriptor) {
   if (processDescriptor->graphicsClient) {
     schedulerGraphicsClientEnded(processDescriptor);
+  }
+  if (processDescriptor->windowClient) {
+    schedulerWindowClientEnded(processDescriptor);
   }
 }
 
 /// @fn void schedulerGraphicsProgramChanged(
 ///   ProcessDescriptor *processDescriptor, const char *newPath)
 ///
-/// @brief End a process's time as a graphics client, if it was one, because
-/// it's starting a new program, then make it a client if the new program is
-/// the one config.sys's GRAPHICS line names and it runs at executive level.
-/// Only the scheduler may call this.
+/// @brief End a process's time as a graphics or window client, if it was
+/// one, because it's starting a new program, then make it a graphics client
+/// if the new program is the one config.sys's GRAPHICS line names and it runs
+/// at executive level.  Only the scheduler may call this.
 ///
 /// @param processDescriptor A pointer to the process's ProcessDescriptor.
 /// @param newPath The full path of the program the process is starting.
@@ -2021,7 +2105,7 @@ void schedulerGraphicsProgramChanged(ProcessDescriptor *processDescriptor,
     return;
   }
 
-  schedulerEndGraphicsClient(processDescriptor);
+  schedulerEndClient(processDescriptor);
   ProcessId driverPid = _schedulerState->graphicsDriverPid;
   if ((driverPid == 0)
     || (processDescriptor->privilegeLevel != PRIVILEGE_LEVEL_EXECUTIVE)
@@ -5650,7 +5734,7 @@ int schedulerCleanupProcessCommandHandler(
 
   processCompleteMessagesTo(processDescriptor);
   schedulerReleaseConsolePorts(processDescriptor);
-  schedulerEndGraphicsClient(processDescriptor);
+  schedulerEndClient(processDescriptor);
 
   if (processDescriptor->envp != NULL) {
     if (assignMemory(processDescriptor->envp[0], 0) != 0) {
@@ -5896,6 +5980,92 @@ int schedulerGetDirCapabilitiesCommandHandler(
   return 0;
 }
 
+/// @fn int schedulerRegisterWindowServerCommandHandler(
+///   SchedulerState *schedulerState, ProcessMessage *processMessage)
+///
+/// @brief Make the calling process the window server.  Only the program on
+/// config.sys's GRAPHICS line may be one, and only one process at a time.
+///
+/// @param schedulerState A pointer to the SchedulerState maintained by the
+///   scheduler process.
+/// @param processMessage A pointer to the ProcessMessage that was received.
+///
+/// @return This function always returns 0.
+int schedulerRegisterWindowServerCommandHandler(
+  SchedulerState *schedulerState, ProcessMessage *processMessage
+) {
+  SchedulerWindowServerArgs *schedulerWindowServerArgs
+    = (SchedulerWindowServerArgs*) processMessageData(processMessage);
+  if (schedulerWindowServerArgs == NULL) {
+    processMessageSetDone(processMessage);
+    return 0;
+  }
+  ProcessDescriptor *caller = processMessageFrom(processMessage);
+
+  schedulerWindowServerArgs->errorNumber = 0;
+  if (caller->graphicsClient == false) {
+    schedulerWindowServerArgs->errorNumber = EPERM;
+  } else if ((schedulerState->windowServerPid != 0)
+    && (schedulerState->windowServerPid != caller->processId)
+  ) {
+    schedulerWindowServerArgs->errorNumber = EBUSY;
+  } else {
+    schedulerState->windowServerPid = caller->processId;
+  }
+  schedulerWindowServerArgs->pid = schedulerState->windowServerPid;
+  processMessageSetDone(processMessage);
+  return 0;
+}
+
+/// @fn int schedulerConnectWindowServerCommandHandler(
+///   SchedulerState *schedulerState, ProcessMessage *processMessage)
+///
+/// @brief Give the calling process and the window server the IPC grants to
+/// send each other the window protocol, if the caller runs as the window
+/// server's user.
+///
+/// @param schedulerState A pointer to the SchedulerState maintained by the
+///   scheduler process.
+/// @param processMessage A pointer to the ProcessMessage that was received.
+///
+/// @return This function always returns 0.
+int schedulerConnectWindowServerCommandHandler(
+  SchedulerState *schedulerState, ProcessMessage *processMessage
+) {
+  SchedulerWindowServerArgs *schedulerWindowServerArgs
+    = (SchedulerWindowServerArgs*) processMessageData(processMessage);
+  if (schedulerWindowServerArgs == NULL) {
+    processMessageSetDone(processMessage);
+    return 0;
+  }
+  ProcessDescriptor *caller = processMessageFrom(processMessage);
+  ProcessId serverPid = schedulerState->windowServerPid;
+
+  schedulerWindowServerArgs->errorNumber = 0;
+  schedulerWindowServerArgs->pid = serverPid;
+  if (serverPid == 0) {
+    schedulerWindowServerArgs->errorNumber = ENOENT;
+  } else if (serverPid == caller->processId) {
+    schedulerWindowServerArgs->errorNumber = EINVAL;
+  } else if (caller->userId != allProcesses[serverPid - 1].userId) {
+    schedulerWindowServerArgs->errorNumber = EPERM;
+  } else if (caller->windowClient == false) {
+    if ((addProcessIpcCapabilityMask(caller, serverPid,
+        WIN_COMMAND_SIGNATURE, WIN_CLIENT_MESSAGE_MASK) != 0)
+      || (addProcessIpcCapabilityMask(&allProcesses[serverPid - 1],
+        caller->processId, WIN_COMMAND_SIGNATURE, WIN_SERVER_MESSAGE_MASK)
+        != 0)
+    ) {
+      schedulerRevokeWindowClient(caller, serverPid);
+      schedulerWindowServerArgs->errorNumber = ENOMEM;
+    } else {
+      caller->windowClient = true;
+    }
+  }
+  processMessageSetDone(processMessage);
+  return 0;
+}
+
 /// @typedef SchedulerCommandHandler
 ///
 /// @brief Signature of command handler for a scheduler command.
@@ -5926,6 +6096,10 @@ const SchedulerCommandHandler schedulerCommandHandlers[] = {
   schedulerDropDirCapabilityCommandHandler,
   // SCHEDULER_GET_DIR_CAPABILITIES:
   schedulerGetDirCapabilitiesCommandHandler,
+  // SCHEDULER_REGISTER_WINDOW_SERVER:
+  schedulerRegisterWindowServerCommandHandler,
+  // SCHEDULER_CONNECT_WINDOW_SERVER:
+  schedulerConnectWindowServerCommandHandler,
 };
 
 /// @fn void handleSchedulerMessage(SchedulerState *schedulerState)
@@ -6187,7 +6361,7 @@ void removeProcess(
   processDescriptor->mainThread->state = PROCESS_STATE_NOT_RUNNING;
   processCompleteMessagesTo(processDescriptor);
   schedulerReleaseConsolePorts(processDescriptor);
-  schedulerEndGraphicsClient(processDescriptor);
+  schedulerEndClient(processDescriptor);
   schedulerSetDirCapabilities(processDescriptor, NULL);
 
   MESSAGE_ARGS_PROCESS_ENDED(processDescriptor->processId, false);
