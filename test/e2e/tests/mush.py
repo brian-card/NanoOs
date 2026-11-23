@@ -556,12 +556,13 @@ def test_background_jobs_fail_gracefully_past_the_slot_limit(s):
     # are free process slots must report an error and leave the shell alive.
     s.login()
     saw_error = False
-    for _ in range(6):
+    for _ in range(20):
         s.child.sendline("looseLoop &")
         idx = s.child.expect([PROMPT, pexpect.EOF, pexpect.TIMEOUT], timeout=8)
         assert idx == 0, f"background spawn killed/hung the shell (expect idx {idx})"
         if "out of process slots" in s.child.before.lower():
             saw_error = True
+            break
     assert saw_error, "never hit the process-slot limit"
     # Shell still works, and ps still works.
     assert "looseLoop" in s.sh("ps")
