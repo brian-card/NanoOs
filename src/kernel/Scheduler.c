@@ -43,6 +43,7 @@
 #include "Processes.h"
 #include "BootTrace.h"
 #include "Scheduler.h"
+#include "WindowProtocol.h"
 
 // HAL space includes
 #include "../hal/HalCommon.h"
@@ -516,6 +517,9 @@ _Static_assert(NUM_LOGGER_COMMANDS
 _Static_assert(GFX_NUM_MESSAGE_TYPES
   <= 8 * sizeof(((IpcCapability*) 0)->messageTypes),
   "IpcCapability.messageTypes is too small for every graphics message");
+_Static_assert(WIN_NUM_MESSAGE_TYPES
+  <= 8 * sizeof(((IpcCapability*) 0)->messageTypes),
+  "IpcCapability.messageTypes is too small for every window message");
 
 /// @var baseSchedulerIpcCapabilities
 ///
