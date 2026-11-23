@@ -849,3 +849,143 @@ NANO_OS_KERNEL_TEST(launch, a_user_path_is_collapsed_before_userspace_is_added) 
   NANO_OS_ASSERT_EQ_INT(10, (int) userspacePathCopy(buffer, "/"));
   NANO_OS_ASSERT_STR_EQ("/userspace", buffer);
 }
+
+/// @var _heldMessages
+///
+/// @brief Every message takeEveryMessage took, for holdingProcess to release.
+static ProcessMessage *_heldMessages[NANO_OS_NUM_MESSAGES + 1];
+
+/// @var _numHeldMessages
+///
+/// @brief Number of entries in _heldMessages.
+static int _numHeldMessages = 0;
+
+/// @var _numMessagesTaken
+///
+/// @brief Number of messages takeEveryMessage took.
+static int _numMessagesTaken = 0;
+
+/// @var _holdingProcessRuns
+///
+/// @brief Number of times holdingProcess has run since the messages were taken.
+static int _holdingProcessRuns = 0;
+
+/// @fn static void* takeEveryMessage(void *args)
+///
+/// @brief Overlay function that takes every free message, the caller's own
+/// included, so the caller's return from the overlay finds none.
+///
+/// @param args Unused.
+///
+/// @return Returns args.
+static void* takeEveryMessage(void *args) {
+  ProcessMessage *processMessage = NULL;
+  while ((_numHeldMessages < NANO_OS_NUM_MESSAGES + 1)
+    && ((processMessage = getAvailableMessage()) != NULL)
+  ) {
+    _heldMessages[_numHeldMessages++] = processMessage;
+  }
+  _numMessagesTaken = _numHeldMessages;
+  _holdingProcessRuns = 0;
+  return args;
+}
+
+/// @fn static void* holdingProcess(void *args)
+///
+/// @brief Release the messages takeEveryMessage took once it has run more
+/// times than a send retries for a message.
+///
+/// @param args Unused.
+///
+/// @return This function never returns.
+static void* holdingProcess(void *args) {
+  (void) args;
+  while (1) {
+    if ((_numHeldMessages > 0)
+      && (++_holdingProcessRuns > (2 * MAX_GET_MESSAGE_RETRIES))
+    ) {
+      for (int ii = 0; ii < _numHeldMessages; ii++) {
+        processMessageRelease(_heldMessages[ii]);
+      }
+      _numHeldMessages = 0;
+    }
+    processYield();
+  }
+
+  return NULL;
+}
+
+/// @var _takeEveryMessageExports
+///
+/// @brief Export table of the overlay that fakeOverlayReadBlocks provides.
+static NanoOsOverlayExport _takeEveryMessageExports[] = {
+  { "run", takeEveryMessage },
+};
+
+/// @fn static int fakeOverlayReadBlocks(void *context, uint32_t startBlock,
+///   uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer)
+///
+/// @brief Stand in for a block device holding one overlay that exports
+/// takeEveryMessage as "run".
+///
+/// @param context Unused.
+/// @param startBlock Unused.
+/// @param numBlocks The number of blocks to read.
+/// @param blockSize The size of a block in bytes.
+/// @param buffer The buffer to read into.
+///
+/// @return Returns 0.
+static int fakeOverlayReadBlocks(void *context, uint32_t startBlock,
+  uint32_t numBlocks, uint16_t blockSize, uint8_t *buffer
+) {
+  (void) context;
+  (void) startBlock;
+  memset(buffer, 0, numBlocks * blockSize);
+  NanoOsOverlayMap *map = (NanoOsOverlayMap*) buffer;
+  map->header.magic = NANO_OS_OVERLAY_MAGIC;
+  map->header.version = NANO_OS_OVERLAY_VERSION;
+  map->exports = _takeEveryMessageExports;
+  map->numExports = 1;
+  return 0;
+}
+
+NANO_OS_KERNEL_TEST_WITH(launch, an_overlay_call_returns_to_its_caller_overlay,
+  useFileCacheOfOne
+) {
+  ProcessDescriptor *holder = processQueuePop(halMockFreeQueue());
+  NANO_OS_ASSERT_NOT_NULL(holder);
+  NANO_OS_ASSERT_EQ_INT(processSuccess,
+    processCreate(holder, holdingProcess, NULL));
+  threadSetContext(holder->mainThread, holder);
+  processQueuePush(holder->readyQueue, holder);
+
+  static BlockDevice blockDevice = {
+    .readBlocks = fakeOverlayReadBlocks,
+    .blockSize = 512,
+  };
+  FileBlockMetadata fileBlockMetadata = {
+    .blockDevice = &blockDevice,
+    .startBlock = 1,
+    .numBlocks = 1,
+  };
+  char overlayId[] = "/userspace/usr/bin/test/f.overlay";
+  fakeOverlayReadBlocks(NULL, 1, 1, 512, (uint8_t*) overlayMap);
+  NANO_OS_ASSERT_NOT_NULL(overlayFifoPush(fileCache, overlayId,
+    sizeof(overlayId), &fileBlockMetadata));
+  memset(overlayMap, 0, 512);
+
+  ProcessDescriptor *self = getRunningProcess();
+  // The scheduler loads overlays only for processes above kernel level.
+  self->privilegeLevel = PRIVILEGE_LEVEL_EXECUTIVE;
+  FileBlockMetadata callerOverlay = self->overlay.fileBlockMetadata;
+  NANO_OS_ASSERT_TRUE(callerOverlay.blockDevice != &blockDevice);
+  NANO_OS_ASSERT_TRUE(callOverlayFunctionFromFileCache(
+    "/usr/bin/test", "f", "run", self) == self);
+  NANO_OS_ASSERT_EQ_INT(NANO_OS_NUM_MESSAGES + 1, _numMessagesTaken);
+  NANO_OS_ASSERT_TRUE(
+    self->overlay.fileBlockMetadata.blockDevice == callerOverlay.blockDevice);
+  NANO_OS_ASSERT_EQ_INT(callerOverlay.startBlock,
+    self->overlay.fileBlockMetadata.startBlock);
+  NANO_OS_ASSERT_EQ_INT(callerOverlay.numBlocks,
+    self->overlay.fileBlockMetadata.numBlocks);
+}
