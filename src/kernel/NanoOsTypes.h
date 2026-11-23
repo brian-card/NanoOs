@@ -359,10 +359,12 @@ typedef struct ProcessDescriptor {
 /// @param pid The numerical ID of the process.
 /// @param name The name of the process.
 /// @param userId The UserId of the user that owns the process.
+/// @param privilegeLevel The PrivilegeLevel the process runs at.
 typedef struct ProcessInfoElement {
   int         pid;
   const char *name;
   UserId      userId;
+  uint8_t     privilegeLevel;
 } ProcessInfoElement;
 
 /// @struct ProcessInfo
