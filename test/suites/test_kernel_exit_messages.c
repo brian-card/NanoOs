@@ -8,11 +8,13 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "NanoOsTest.h"
+#include "HalMock.h"
 
 #include <string.h>
 
 #include "kernel/Processes.h"
 #include "kernel/Scheduler.h"
+#include "user/NanoOsSpawn.h"
 
 static volatile ProcessMessage *poppedMessage;
 
@@ -184,4 +186,68 @@ NANO_OS_KERNEL_TEST(exit_messages, reinitialized_message_is_untouched) {
 
   NANO_OS_ASSERT_FALSE(processMessageDone(sent));
   processMessageRelease(sent);
+}
+
+/// @def ONE_WAY_TYPE
+///
+/// @brief The type of the one-way message oneWaySender sends.
+#define ONE_WAY_TYPE 0x5a
+
+static ProcessDescriptor * volatile oneWayReceiver;
+static volatile ProcessMessage *oneWaySent;
+static volatile bool oneWayPopped;
+
+/// @fn static void* oneWaySender(void *args)
+///
+/// @brief Stand in for a spawned program that sends oneWayReceiver a one-way
+/// message and exits once the receiver has popped it.
+///
+/// @param args Unused.
+///
+/// @return Always returns NULL.
+static void* oneWaySender(void *args) {
+  (void) args;
+  ProcessMessage *processMessage = getAvailableMessage();
+  processMessageInit(processMessage, ONE_WAY_TYPE, NULL, 0,
+    /* waiting= */ false);
+  oneWaySent = processMessage;
+  processMessageQueuePush(oneWayReceiver, processMessage);
+  while (oneWayPopped == false) {
+    processYield();
+  }
+  return NULL;
+}
+
+/// @fn static void oneWayPreBoot(void)
+///
+/// @brief Run spawned programs as oneWaySender.
+///
+/// @return This function returns no value.
+static void oneWayPreBoot(void) {
+  halMockSetExecCommand(oneWaySender);
+}
+
+NANO_OS_KERNEL_TEST_WITH(exit_messages, a_popped_one_way_message_outlives_its_sender,
+  oneWayPreBoot
+) {
+  oneWayReceiver = getRunningProcess();
+  oneWaySent = NULL;
+  oneWayPopped = false;
+  posix_spawnattr_t attr = { .flags = 0 };
+  pid_t pid = 0;
+  char *argv[] = { "sender", NULL };
+  NANO_OS_ASSERT_EQ_INT(0,
+    nanoOsSpawn(&pid, "/usr/bin/sender", NULL, &attr, argv, NULL));
+
+  ProcessMessage *popped = processMessageQueueWait(NULL);
+  NANO_OS_ASSERT_EQ_PTR((ProcessMessage*) oneWaySent, popped);
+  NANO_OS_ASSERT_EQ_PTR(&allProcesses[pid - 1].message, popped);
+  oneWayPopped = true;
+  NANO_OS_ASSERT_EQ_INT(pid, schedulerWaitpid(pid, NULL, 0));
+
+  NANO_OS_ASSERT_EQ_INT(ONE_WAY_TYPE, (int) processMessageType(popped));
+  NANO_OS_ASSERT_NOT_NULL(processMessageInUse(popped));
+  NANO_OS_ASSERT_FALSE(processMessageDone(popped));
+  processMessageSetDone(popped);
+  processMessageRelease(popped);
 }
