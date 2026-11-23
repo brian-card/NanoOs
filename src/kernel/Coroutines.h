@@ -461,6 +461,7 @@ static inline __attribute__((always_inline)) int comessageQueuePushInline(
 
 int comessageQueuePush(Coroutine *coroutine, msg_t *comessage);
 int comessageQueueRemove(Coroutine *coroutine, msg_t *comessage);
+bool comessageQueueContains(Coroutine *coroutine, msg_t *comessage);
 
 
 #ifdef __cplusplus
