@@ -30,8 +30,10 @@
 /// @brief Entrypoint into the ps program.
 
 // Standard C includes
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <pwd.h>
 
 // NanoOs includes
@@ -45,20 +47,46 @@
 /// @return This function returns no value.
 static void printUsage(FILE *stream) {
   fputs(
-    "Usage: ps\n"
+    "Usage: ps [-l]\n"
     "\n"
     "List the running processes with their process IDs, owners, and names,\n"
     "between two lines that show the dynamic memory left.\n"
     "\n"
     "Options:\n"
+    "  -l      Show each process's privilege level after its owner.\n"
     "  --help  Show this help and exit.\n",
     stream);
+}
+
+/// @brief Get the name of a privilege level.
+///
+/// @param privilegeLevel The PrivilegeLevel.
+///
+/// @return Returns the level's name.
+static const char* privilegeLevelName(uint8_t privilegeLevel) {
+  if (privilegeLevel == PRIVILEGE_LEVEL_KERNEL) {
+    return "kernel";
+  } else if (privilegeLevel == PRIVILEGE_LEVEL_EXECUTIVE) {
+    return "executive";
+  } else if (privilegeLevel == PRIVILEGE_LEVEL_SUPERVISOR) {
+    return "supervisor";
+  } else if (privilegeLevel == PRIVILEGE_LEVEL_USER) {
+    return "user";
+  }
+  return "unknown";
 }
 
 int main(int argc, char **argv) {
   if ((argc > 1) && isHelpOption(argv[1])) {
     printUsage(stdout);
     return 0;
+  }
+  bool showLevels = false;
+  if ((argc == 2) && (strcmp(argv[1], "-l") == 0)) {
+    showLevels = true;
+  } else if (argc > 1) {
+    printUsage(stderr);
+    return 1;
   }
   int returnValue = 0;
 
@@ -93,10 +121,18 @@ int main(int argc, char **argv) {
         }
       }
       
-      printf("%d  %s %s\n",
-        processes[ii].pid,
-        pwd.pw_name,
-        processes[ii].name);
+      if (showLevels) {
+        printf("%d  %s %s %s\n",
+          processes[ii].pid,
+          pwd.pw_name,
+          privilegeLevelName(processes[ii].privilegeLevel),
+          processes[ii].name);
+      } else {
+        printf("%d  %s %s\n",
+          processes[ii].pid,
+          pwd.pw_name,
+          processes[ii].name);
+      }
     }
     free(processInfo); processInfo = NULL;
   } else {
