@@ -220,7 +220,7 @@ static uint32_t posixBlockDevicesOnline[] = {
 ///
 /// @brief Value to indicate the maximum number of processes that can be run
 /// concurrently.
-#define NUM_PROCESSES 10
+#define NUM_PROCESSES 18
 _Static_assert(NUM_PROCESSES < PROCESS_ID_NOT_SET,
   "PROCESS_ID_NOT_SET must not be a valid process ID");
 
