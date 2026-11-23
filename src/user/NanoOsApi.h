@@ -111,36 +111,8 @@ typedef struct NanoOsExecutiveApi {
   bool (*coroutineStackOverflowed)(Coroutine *coroutine);
   void* (*coroutineYield)(void *arg, CoroutineState state);
   
-  // Kernel message functions:
-  int (*processMessageInit)(msg_t *msg, msg_safety_t msg_safety,
-    int64_t type, void *data, size_t size, bool waiting);
-  int (*processMessageRelease)(msg_t *msg);
-  int (*processMessageSetDone)(msg_t *msg);
-  int (*processMessageWaitForDone)(msg_t *msg, const struct timespec *ts);
-  void* (*processMessageElement)(msg_t *msg, msg_element_t msg_element);
-  
-  // Kernel message queue functions:
-  msg_t* (*comessageQueuePeek)(void);
-  msg_t* (*comessageQueuePop)(void);
-  msg_t* (*comessageQueuePopType)(int type);
-  msg_t* (*comessageQueueWait)(const struct timespec *ts);
-  msg_t* (*comessageQueueWaitForType)(int64_t type, const struct timespec *ts);
-
   // Kernel IPC functions:
-  msg_t* (*getAvailableMessage)(void);
-  int (*sendProcessMessageToPid)(unsigned int pid, msg_t *message);
   int (*findProcessByName)(const char *name, uint8_t *returnValue);
-
-  // Message argument storage functions:
-  void* (*messageArgsCreate)(size_t size, uint8_t ownership);
-  void (*messageArgsDestroy)(void *ptr);
-  bool messageArgsChecked;
-  void* (*messageArgsAllocate)(size_t size);
-  void (*messageArgsFree)(void *ptr);
-  void* (*messageBufferShare)(void *ptr, size_t size, uint8_t direction,
-    uint8_t recipient);
-  void (*messageBufferUnshare)(void *shared, void *original,
-    uint8_t direction);
 
   // Directory capability functions:
   bool (*dirCapabilityAllows)(const DirCapabilities *set,
@@ -341,6 +313,36 @@ typedef struct NanoOsUserApi {
   // NanoOsConsole.h functions:
   int (*getConsoleColors)(void);
   int (*setConsoleColors)(uint8_t colors);
+
+  // Kernel message functions, which IPC capabilities guard:
+  int (*processMessageInit)(msg_t *msg, msg_safety_t msg_safety,
+    int64_t type, void *data, size_t size, bool waiting);
+  int (*processMessageRelease)(msg_t *msg);
+  int (*processMessageSetDone)(msg_t *msg);
+  int (*processMessageWaitForDone)(msg_t *msg, const struct timespec *ts);
+  void* (*processMessageElement)(msg_t *msg, msg_element_t msg_element);
+  
+  // Kernel message queue functions:
+  msg_t* (*comessageQueuePeek)(void);
+  msg_t* (*comessageQueuePop)(void);
+  msg_t* (*comessageQueuePopType)(int type);
+  msg_t* (*comessageQueueWait)(const struct timespec *ts);
+  msg_t* (*comessageQueueWaitForType)(int64_t type, const struct timespec *ts);
+
+  // Kernel IPC functions:
+  msg_t* (*getAvailableMessage)(void);
+  int (*sendProcessMessageToPid)(unsigned int pid, msg_t *message);
+
+  // Message argument storage functions:
+  void* (*messageArgsCreate)(size_t size, uint8_t ownership);
+  void (*messageArgsDestroy)(void *ptr);
+  bool messageArgsChecked;
+  void* (*messageArgsAllocate)(size_t size);
+  void (*messageArgsFree)(void *ptr);
+  void* (*messageBufferShare)(void *ptr, size_t size, uint8_t direction,
+    uint8_t recipient);
+  void (*messageBufferUnshare)(void *shared, void *original,
+    uint8_t direction);
 } NanoOsUserApi;
 
 typedef struct NanoOsApi {

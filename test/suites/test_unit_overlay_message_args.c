@@ -63,7 +63,8 @@ static FakeCalls calls;
 static uint8_t fakeStorage[64];
 static uint8_t fakeShared[16];
 static NanoOsExecutiveApi fakeExecutiveApi;
-static NanoOsApi fakeApi;
+static NanoOsUserApi fakeUserApi;
+static NanoOsApi fakeApi = { .userApi = &fakeUserApi };
 
 /// @fn static void* fakeAllocate(size_t size)
 ///
@@ -131,8 +132,9 @@ static void fakeUnshare(void *shared, void *original, uint8_t direction) {
 
 /// @fn static void useFakeApi(bool checked)
 ///
-/// @brief Point the test's overlay map at a fake executive API in the given
-/// configuration and clear the recorded calls.
+/// @brief Point the test's overlay map at a fake API in the given
+/// configuration, as an executive process sees it, and clear the recorded
+/// calls.
 ///
 /// @param checked Whether the fake reports the checked configuration.
 ///
@@ -140,12 +142,12 @@ static void fakeUnshare(void *shared, void *original, uint8_t direction) {
 static void useFakeApi(bool checked) {
   memset(&calls, 0, sizeof(calls));
   memset(&fakeExecutiveApi, 0, sizeof(fakeExecutiveApi));
-  fakeExecutiveApi.messageArgsChecked = checked;
-  fakeExecutiveApi.messageArgsAllocate = fakeAllocate;
-  fakeExecutiveApi.messageArgsFree = fakeFree;
-  fakeExecutiveApi.messageBufferShare = fakeShare;
-  fakeExecutiveApi.messageBufferUnshare = fakeUnshare;
-  memset(&fakeApi, 0, sizeof(fakeApi));
+  memset(&fakeUserApi, 0, sizeof(fakeUserApi));
+  fakeUserApi.messageArgsChecked = checked;
+  fakeUserApi.messageArgsAllocate = fakeAllocate;
+  fakeUserApi.messageArgsFree = fakeFree;
+  fakeUserApi.messageBufferShare = fakeShare;
+  fakeUserApi.messageBufferUnshare = fakeUnshare;
   fakeApi.executiveApi = &fakeExecutiveApi;
   testOverlayMap.header.osApi = &fakeApi;
 }
@@ -211,14 +213,16 @@ NANO_OS_TEST(overlay_message_args, checked_share_and_unshare_go_through_the_api)
   NANO_OS_ASSERT_EQ_INT(MESSAGE_BUFFER_INOUT, calls.unshareDirection);
 }
 
-NANO_OS_TEST(overlay_message_args, no_executive_api_means_production) {
+NANO_OS_TEST(overlay_message_args, user_processes_are_checked_too) {
   useFakeApi(true);
   fakeApi.executiveApi = NULL;
   char path[] = "/etc/passwd";
-  NANO_OS_ASSERT_EQ_PTR(path,
+  NANO_OS_ASSERT_EQ_PTR(fakeShared,
     MESSAGE_BUFFER_SHARE(path, sizeof(path), MESSAGE_BUFFER_IN, 7));
   MESSAGE_ARGS_ALLOCATE(OverlayArgs, args);
-  NANO_OS_ASSERT_EQ_PTR(&argsStorage, args);
-  NANO_OS_ASSERT_EQ_INT(0, calls.shares);
-  NANO_OS_ASSERT_EQ_INT(0, calls.allocates);
+  NANO_OS_ASSERT_TRUE(args != &argsStorage);
+  NANO_OS_ASSERT_EQ_INT(1, calls.shares);
+  NANO_OS_ASSERT_EQ_INT(1, calls.allocates);
+  MESSAGE_ARGS_FREE(args);
+  NANO_OS_ASSERT_EQ_INT(1, calls.frees);
 }

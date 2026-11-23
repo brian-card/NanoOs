@@ -170,20 +170,20 @@ static ProcessDescriptor* startIdleProcess(void) {
   return processDescriptor;
 }
 
-/// @fn static int executiveSend(ProcessDescriptor *target,
+/// @fn static int userApiSend(ProcessDescriptor *target,
 ///   IpcCapability *capabilities, size_t numCapabilities,
 ///   ProcessMessage **sent)
 ///
-/// @brief Send a CONSOLE_WRITE_BUFFER message to a process through the
-/// executive API while this process holds the given IPC capabilities.
+/// @brief Send a CONSOLE_WRITE_BUFFER message to a process through the user
+/// API while this process holds the given IPC capabilities.
 ///
 /// @param target A pointer to the ProcessDescriptor to send to.
 /// @param capabilities The IPC capabilities to hold during the send.
 /// @param numCapabilities The number of entries in capabilities.
 /// @param sent Where to store the message that was sent.
 ///
-/// @return Returns the executive API's return value.
-static int executiveSend(ProcessDescriptor *target,
+/// @return Returns the user API's return value.
+static int userApiSend(ProcessDescriptor *target,
   IpcCapability *capabilities, size_t numCapabilities, ProcessMessage **sent
 ) {
   ProcessDescriptor *self = getRunningProcess();
@@ -195,7 +195,7 @@ static int executiveSend(ProcessDescriptor *target,
   *sent = getAvailableMessage();
   processMessageInit(*sent, CONSOLE_COMMAND_SIGNATURE | CONSOLE_WRITE_BUFFER,
     NULL, 0, /* waiting= */ true);
-  int returnValue = nanoOsExecutiveApi.sendProcessMessageToPid(
+  int returnValue = nanoOsApi.userApi->sendProcessMessageToPid(
     target->processId, *sent);
 
   self->ipcCapabilities = savedCapabilities;
@@ -203,7 +203,7 @@ static int executiveSend(ProcessDescriptor *target,
   return returnValue;
 }
 
-NANO_OS_KERNEL_TEST(executive_api, send_with_the_capability_is_queued) {
+NANO_OS_KERNEL_TEST(message_api, send_with_the_capability_is_queued) {
   ProcessDescriptor *target = startIdleProcess();
   NANO_OS_ASSERT_NOT_NULL(target);
   IpcCapability capability = {
@@ -214,14 +214,14 @@ NANO_OS_KERNEL_TEST(executive_api, send_with_the_capability_is_queued) {
   ProcessMessage *sent = NULL;
 
   NANO_OS_ASSERT_EQ_INT(processSuccess,
-    executiveSend(target, &capability, 1, &sent));
+    userApiSend(target, &capability, 1, &sent));
 
   NANO_OS_ASSERT_EQ_PTR(sent, target->mainThread->messageQueue.head);
   comessageQueueRemove(target->mainThread, sent);
   processMessageRelease(sent);
 }
 
-NANO_OS_KERNEL_TEST(executive_api, send_without_the_capability_is_refused) {
+NANO_OS_KERNEL_TEST(message_api, send_without_the_capability_is_refused) {
   ProcessDescriptor *target = startIdleProcess();
   NANO_OS_ASSERT_NOT_NULL(target);
   IpcCapability capability = {
@@ -232,18 +232,18 @@ NANO_OS_KERNEL_TEST(executive_api, send_without_the_capability_is_refused) {
   ProcessMessage *sent = NULL;
 
   NANO_OS_ASSERT_EQ_INT(processError,
-    executiveSend(target, &capability, 1, &sent));
+    userApiSend(target, &capability, 1, &sent));
 
   NANO_OS_ASSERT_NULL(target->mainThread->messageQueue.head);
   processMessageRelease(sent);
 }
 
-NANO_OS_KERNEL_TEST(executive_api, available_message_is_marked_in_use) {
-  ProcessMessage *processMessage = nanoOsExecutiveApi.getAvailableMessage();
+NANO_OS_KERNEL_TEST(message_api, available_message_is_marked_in_use) {
+  ProcessMessage *processMessage = nanoOsApi.userApi->getAvailableMessage();
   NANO_OS_ASSERT_NOT_NULL(processMessage);
   NANO_OS_ASSERT_TRUE(processMessageInUse(processMessage));
 
-  ProcessMessage *second = nanoOsExecutiveApi.getAvailableMessage();
+  ProcessMessage *second = nanoOsApi.userApi->getAvailableMessage();
   NANO_OS_ASSERT_NOT_NULL(second);
   NANO_OS_ASSERT_TRUE(second != processMessage);
   processMessageRelease(second);

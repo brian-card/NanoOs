@@ -215,37 +215,8 @@ const NanoOsExecutiveApi nanoOsExecutiveApi = {
   .coroutineStackOverflowed = coroutineStackOverflowed,
   .coroutineYield = coroutineYield,
   
-  // Kernel message functions:
-  .processMessageInit = msg_init,
-  .processMessageRelease = msg_release,
-  .processMessageSetDone = msg_set_done,
-  .processMessageWaitForDone = msg_wait_for_done,
-  .processMessageElement = msg_element,
-  
-  // Kernel message queue functions:
-  .comessageQueuePeek = comessageQueuePeek,
-  .comessageQueuePop = comessageQueuePop,
-  .comessageQueuePopType = comessageQueuePopType,
-  .comessageQueueWait = comessageQueueWait,
-  .comessageQueueWaitForType = comessageQueueWaitForType,
-
   // Kernel IPC functions:
-  .getAvailableMessage = getAvailableMessage,
-  .sendProcessMessageToPid = sendProcessMessageToPid,
   .findProcessByName = findProcessByName,
-
-  // Message argument storage functions:
-  .messageArgsCreate = overlayMessageArgsCreate,
-  .messageArgsDestroy = overlayMessageArgsDestroy,
-#ifdef NANO_OS_MESSAGE_ARGS_CHECKED
-  .messageArgsChecked = true,
-#else
-  .messageArgsChecked = false,
-#endif
-  .messageArgsAllocate = overlayMessageArgsAllocate,
-  .messageArgsFree = overlayMessageArgsFree,
-  .messageBufferShare = overlayMessageBufferShare,
-  .messageBufferUnshare = overlayMessageBufferUnshare,
 
   // Directory capability functions:
   .dirCapabilityAllows = dirCapabilityAllows,
@@ -415,6 +386,37 @@ static const NanoOsUserApi _nanoOsUserApi = {
   // NanoOsConsole.h functions:
   .getConsoleColors = getConsoleColors,
   .setConsoleColors = setConsoleColors,
+
+  // Kernel message functions, which IPC capabilities guard:
+  .processMessageInit = msg_init,
+  .processMessageRelease = msg_release,
+  .processMessageSetDone = msg_set_done,
+  .processMessageWaitForDone = msg_wait_for_done,
+  .processMessageElement = msg_element,
+  
+  // Kernel message queue functions:
+  .comessageQueuePeek = comessageQueuePeek,
+  .comessageQueuePop = comessageQueuePop,
+  .comessageQueuePopType = comessageQueuePopType,
+  .comessageQueueWait = comessageQueueWait,
+  .comessageQueueWaitForType = comessageQueueWaitForType,
+
+  // Kernel IPC functions:
+  .getAvailableMessage = getAvailableMessage,
+  .sendProcessMessageToPid = sendProcessMessageToPid,
+
+  // Message argument storage functions:
+  .messageArgsCreate = overlayMessageArgsCreate,
+  .messageArgsDestroy = overlayMessageArgsDestroy,
+#ifdef NANO_OS_MESSAGE_ARGS_CHECKED
+  .messageArgsChecked = true,
+#else
+  .messageArgsChecked = false,
+#endif
+  .messageArgsAllocate = overlayMessageArgsAllocate,
+  .messageArgsFree = overlayMessageArgsFree,
+  .messageBufferShare = overlayMessageBufferShare,
+  .messageBufferUnshare = overlayMessageBufferUnshare,
 };
 
 NanoOsApi nanoOsApi = {
