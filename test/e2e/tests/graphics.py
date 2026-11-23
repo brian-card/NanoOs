@@ -277,6 +277,12 @@ def test_graphics_closing_the_display_frees_it(s):
     assert_vdp_font(s.vdp)
 
 
+def test_graphics_a_system_spawn_runs_at_executive_level(s):
+    boot(s, GRAPHICS_LINE)
+    hold_on_vdp(s, "open hold")
+    assert re.search(r"^\d+  root executive gfxprobe$", s.sh("ps -l"), re.M)
+
+
 def test_graphics_killing_the_owner_frees_the_display(s):
     boot(s, GRAPHICS_LINE)
     base = hold_on_vdp(s, "open hold")
