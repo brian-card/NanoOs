@@ -35,7 +35,8 @@ import time
 import gfxrecords as gr
 from harness import (PROMPT, VDP_CONFIG_SYS, SkipTest, message_args_reports,
                      vdp_login)
-from fakevdp import KEYCODE_a
+from fakevdp import (KEYCODE_A, KEYCODE_UP, KEYMOD_ALT_LEFT, KEYMOD_CTRL,
+                     KEYMOD_NUM_LOCK)
 from tests.vdp_drv import VDP_FONT_ID, VDP_POINTER, assert_vdp_font
 
 
@@ -999,16 +1000,49 @@ def test_graphics_keys_typed_while_owned_arrive_as_key_events(session):
     session.vdp.key("a")
     session.vdp.key("b")
     assert printed(session, EVENTS) == [
-        f"gfxprobe: key 97 keycode {KEYCODE_a} modifiers 0x0 down 1",
-        f"gfxprobe: key 97 keycode {KEYCODE_a} modifiers 0x0 down 0",
-        f"gfxprobe: key 98 keycode {KEYCODE_a + 1} modifiers 0x0 down 1",
-        f"gfxprobe: key 98 keycode {KEYCODE_a + 1} modifiers 0x0 down 0",
+        "gfxprobe: key 97 keycode 97 modifiers 0x0 down 1",
+        "gfxprobe: key 97 keycode 97 modifiers 0x0 down 0",
+        "gfxprobe: key 98 keycode 98 modifiers 0x0 down 1",
+        "gfxprobe: key 98 keycode 98 modifiers 0x0 down 0",
         "gfxprobe: events 4"]
     disown(session)
     session.vdp.type("echo after\r")
     session.vdp.expect(r"\r\nafter\r\n" + PROMPT)
     assert "abecho" not in session.vdp.screen, session.vdp.screen
 
+
+# FabGL keycodes and the GfxKey values they arrive as.
+KEYCODE_KEYPAD_8 = 20
+KEYCODE_c = 24
+KEYCODE_F4 = 162
+KEYCODE_F12 = 170
+GFX_KEY_UP = 0xA1
+GFX_KEY_F4 = 0xAD
+GFX_KEY_F12 = 0xB5
+
+
+def test_graphics_key_events_carry_portable_keys_and_modifiers(session):
+    """The owner gets GfxKey codes and GFX_MOD_* bits, never FabGL's, and the
+    keypad follows the driver's Num Lock (off in this config.sys), not the
+    VDP's."""
+    boot_with_files(session, {})
+    vdp_login(session.vdp)
+    start_owner(session, "events 6 10000 hold")
+    session.vdp.key_packet(0, 0, KEYCODE_UP)
+    session.vdp.key_packet(ord("8"), KEYMOD_NUM_LOCK, KEYCODE_KEYPAD_8)
+    session.vdp.key_packet(ord("A"), 0x02, KEYCODE_A)
+    session.vdp.key_packet(3, KEYMOD_CTRL, KEYCODE_c)
+    session.vdp.key_packet(0, 0, KEYCODE_F12)
+    session.vdp.key_packet(0, KEYMOD_ALT_LEFT, KEYCODE_F4)
+    assert printed(session, EVENTS) == [
+        f"gfxprobe: key 0 keycode {GFX_KEY_UP} modifiers 0x0 down 1",
+        f"gfxprobe: key 0 keycode {GFX_KEY_UP} modifiers 0x0 down 1",
+        "gfxprobe: key 65 keycode 97 modifiers 0x2 down 1",
+        "gfxprobe: key 3 keycode 99 modifiers 0x1 down 1",
+        f"gfxprobe: key 0 keycode {GFX_KEY_F12} modifiers 0x0 down 1",
+        f"gfxprobe: key 0 keycode {GFX_KEY_F4} modifiers 0x4 down 1",
+        "gfxprobe: events 6"]
+    disown(session)
 
 def test_graphics_after_closing_keys_reach_the_shell_and_the_mouse_is_ignored(
     session
