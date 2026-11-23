@@ -2865,6 +2865,23 @@ int comessageQueuePush(Coroutine *coroutine, msg_t *msg) {
   return comessageQueuePushInline(coroutine, msg);
 }
 
+/// @fn bool comessageQueueContains(Coroutine *coroutine, msg_t *msg)
+///
+/// @brief Determine whether a message is in a coroutine's message queue.
+///
+/// @param coroutine A pointer to the Coroutine whose message queue should be
+///   searched.
+/// @param msg A pointer to the msg_t to look for.
+///
+/// @return Returns true if the message is in the queue, false otherwise.
+bool comessageQueueContains(Coroutine *coroutine, msg_t *msg) {
+  if (coroutine == NULL) {
+    return false;
+  }
+
+  return msg_q_contains(&coroutine->messageQueue, msg);
+}
+
 /// @fn int comessageQueueRemove(Coroutine *coroutine, msg_t *msg)
 ///
 /// @brief Remove a specific message from a coroutine's message queue,
