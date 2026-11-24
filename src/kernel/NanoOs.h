@@ -103,6 +103,14 @@ extern "C"
 /// the build that is guaranteed to be in flash and not stripped out later.
 #define KEEP_IN_FLASH __attribute__((section(".text")))
 
+/// @def KEEP_IN_RAM
+///
+/// @brief Compiler directive to keep an individual global variable out of
+/// .rodata, which is stripped on some targets, and out of on-chip flash on a
+/// target that loads the rest of its code into RAM (the Agon Light 2's
+/// .ramtext).  Such a variable can't be read before that load.
+#define KEEP_IN_RAM __attribute__((section(".text.keepInRam")))
+
 /// @def floatToInts
 ///
 /// @brief Break a floating-point number into two integer values that represent
