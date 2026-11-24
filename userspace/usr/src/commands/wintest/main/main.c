@@ -29,13 +29,12 @@
 /// @file main.c
 ///
 /// @brief Test-fixture command for the e2e regression suite:  connects to
-/// the window server and prints what it hears.  Not a general-purpose
-/// utility, like termtest.
+/// the window server, makes and changes windows as its arguments say, and
+/// prints what it hears.  Not a general-purpose utility, like termtest.  The
+/// Script overlay carries out wintest run's commands, and the Print overlay
+/// prints what it hears.
 
-#include <stdio.h>
-#include <string.h>
-#include "NanoOsUtils.h"
-#include "../../../src/kernel/Window.h"
+#include "Wintest.h"
 
 /// @fn static void printUsage(FILE *stream)
 ///
@@ -47,12 +46,20 @@
 static void printUsage(FILE *stream) {
   fputs(
     "Usage: wintest hello|wait|hold\n"
+    "       wintest run COMMAND...\n"
     "\n"
     "Connect to the window server.\n"
     "  hello  Print its greeting, then disconnect.\n"
     "  wait   Print its greeting, then wait until the window server goes\n"
     "         away.\n"
     "  hold   Wait until the window server goes away, printing nothing.\n"
+    "  run    Carry out the commands, then print each event until the\n"
+    "         window server goes away:\n"
+    "    create X,Y,W,H TITLE [layer=L] [flags=F,...]  L is desktop, normal,\n"
+    "      topmost or popup; F is plain, notask, fixed, modal, top, bottom,\n"
+    "      left or right\n"
+    "    title N TITLE   destroy N   state N normal|minimized|maximized\n"
+    "    sleep MS   closes (destroy a window asked to close)   exit\n"
     "\n"
     "Options:\n"
     "  --help  Show this help and exit.\n",
@@ -76,29 +83,48 @@ static const char* roleName(uint8_t role) {
 }
 
 int main(int argc, char **argv) {
+  Wintest *wintest = NULL;
   if ((argc > 1) && isHelpOption(argv[1])) {
     printUsage(stdout);
     return 0;
-  } else if ((argc != 2)
+  }
+  bool script = (argc > 1) && (strcmp(argv[1], "run") == 0);
+  if (!script && ((argc != 2)
     || ((strcmp(argv[1], "hello") != 0) && (strcmp(argv[1], "wait") != 0)
-      && (strcmp(argv[1], "hold") != 0))
+      && (strcmp(argv[1], "hold") != 0)))
   ) {
     printUsage(stderr);
     return 1;
   }
 
-  WinSession session;
-  WinError status = winConnect(&session);
+  wintest = (Wintest*) calloc(1, sizeof(Wintest));
+  if (wintest == NULL) {
+    fputs("wintest: out of memory\n", stderr);
+    return 1;
+  }
+  WinSession *session = &wintest->session;
+  WinError status = winConnect(session);
   if (status == WIN_ERR_NOT_FOUND) {
     fputs("wintest: no window server\n", stderr);
+    free(wintest);
     return 1;
   } else if (status != WIN_OK) {
     fprintf(stderr, "wintest: error %d\n", (int) status);
+    free(wintest);
     return 1;
+  }
+  if (script) {
+    wintest->argc = argc;
+    wintest->argv = argv;
+    callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Script", "wintestRun",
+      wintest);
+    int exitStatus = wintest->rc;
+    free(wintest);
+    return exitStatus;
   }
 
   bool quiet = (strcmp(argv[1], "hold") == 0);
-  const WinHelloArgs *hello = &session.hello;
+  const WinHelloArgs *hello = &session->hello;
   if (!quiet) {
     printf("wintest: screen %ux%u work %d,%d,%d,%d cell %ux%u role %s\n",
       (unsigned int) hello->screenWidth, (unsigned int) hello->screenHeight,
@@ -107,24 +133,20 @@ int main(int argc, char **argv) {
       (unsigned int) hello->cellHeight, roleName(hello->role));
   }
   if (strcmp(argv[1], "hello") == 0) {
-    winDisconnect(&session);
+    winDisconnect(session);
+    free(wintest);
     return 0;
   }
 
-  while (1) {
-    ProcessMessage *message = processMessageQueueWait(NULL);
-    if (message == NULL) {
-      continue;
-    } else if (winIsDisconnected(message)) {
-      processMessageRelease(message);
+  WinEvent event;
+  while (winNextEvent(session, &event, NULL) == 0) {
+    if (event.type == WIN_EVENT_DISCONNECTED) {
       if (!quiet) {
         puts("wintest: disconnected");
       }
-      return 0;
-    }
-    processMessageSetDone(message);
-    if (processMessageWaiting(message) == false) {
-      processMessageRelease(message);
+      break;
     }
   }
+  free(wintest);
+  return 0;
 }
