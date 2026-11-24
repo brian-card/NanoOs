@@ -27,143 +27,112 @@
 
 /// @file main.c
 ///
-/// @brief Nook's window server:  it takes the display, draws a desktop and
-/// three windows, moves and resizes them with the mouse, and quits on Ctrl+Q
-/// or when the display is taken back.
+/// @brief Nook's window server:  it takes the display, draws the desktop and
+/// its clients' windows, moves and resizes them with the mouse, and ends
+/// when the display is taken back.  This overlay is the loop and what every
+/// frame does; the others are entered for starting and ending, for presses,
+/// releases and keys, for clients' messages, and for painting.
 
 #include "Wm.h"
 
-/// @fn static void printUsage(FILE *stream)
+/// @fn static bool intersect(const GfxRect *first, const GfxRect *second,
+///   GfxRect *result)
 ///
-/// @brief Print the usage summary for sysnook.
+/// @brief Find where two rectangles overlap.
 ///
-/// @param stream The stream to print to.
+/// @param first One rectangle.
+/// @param second The other.
+/// @param result Where to store the overlap, which may be either input.
 ///
-/// @return This function returns no value.
-static void printUsage(FILE *stream) {
-  fputs(
-    "Usage: sysnook [options]\n"
-    "\n"
-    "Take the display and manage windows on it until Ctrl+Q.\n"
-    "\n"
-    "Options:\n"
-    "  --move=live|outline  How a moved window follows the pointer; outline by\n"
-    "    default.\n"
-    "  --resize=live|outline  How a resized window follows the pointer;\n"
-    "    outline by default.\n"
-    "  --content=records|call  How the full window's cells are painted.\n"
-    "  --cells=N  The number of cells in the full window, up to 192.\n"
-    "  --timing  Print how long frames took when it ends.\n"
-    "  --help  Show this help and exit.\n",
-    stream);
-}
-
-/// @fn static bool parseMode(const char *value, const char *enabled,
-///   const char *disabled, bool *result)
-///
-/// @brief Parse the value of an option that is one of two words.
-///
-/// @param value The option's value.
-/// @param enabled The word that sets the result to true.
-/// @param disabled The word that sets the result to false.
-/// @param result Where to store the result.
-///
-/// @return Returns true if the value is one of the words, false otherwise.
-static bool parseMode(const char *value, const char *enabled,
-  const char *disabled, bool *result
+/// @return Returns true if they overlap, false otherwise.
+static bool intersect(const GfxRect *first, const GfxRect *second,
+  GfxRect *result
 ) {
-  if (strcmp(value, enabled) == 0) {
-    *result = true;
-  } else if (strcmp(value, disabled) == 0) {
-    *result = false;
-  } else {
+  int16_t left = first->x;
+  int16_t top = first->y;
+  int16_t right = first->x + first->w;
+  int16_t bottom = first->y + first->h;
+  if (second->x > left) {
+    left = second->x;
+  }
+  if (second->y > top) {
+    top = second->y;
+  }
+  if (second->x + second->w < right) {
+    right = second->x + second->w;
+  }
+  if (second->y + second->h < bottom) {
+    bottom = second->y + second->h;
+  }
+  if ((left >= right) || (top >= bottom)) {
     return false;
   }
+  result->x = left;
+  result->y = top;
+  result->w = right - left;
+  result->h = bottom - top;
   return true;
 }
 
-/// @fn static bool parseOptions(WmState *state, int argc, char **argv,
-///   int *cells)
+/// @fn static void addDamage(WmState *state, int16_t left, int16_t top,
+///   int16_t width, int16_t height)
 ///
-/// @brief Set the state's modes from the command line.
-///
-/// @param state The window manager's state.
-/// @param argc The number of arguments.
-/// @param argv The arguments.
-/// @param cells Where to store the number of cells of the full window.
-///
-/// @return Returns true if every argument is a valid option, false otherwise.
-static bool parseOptions(WmState *state, int argc, char **argv, int *cells) {
-  for (int ii = 1; ii < argc; ii++) {
-    const char *arg = argv[ii];
-    bool valid = true;
-    if (strncmp(arg, "--move=", 7) == 0) {
-      valid = parseMode(&arg[7], "live", "outline", &state->liveMove);
-    } else if (strncmp(arg, "--resize=", 9) == 0) {
-      valid = parseMode(&arg[9], "live", "outline", &state->liveResize);
-    } else if (strncmp(arg, "--content=", 10) == 0) {
-      valid = parseMode(&arg[10], "call", "records", &state->contentByCall);
-    } else if (strncmp(arg, "--cells=", 8) == 0) {
-      *cells = (int) strtol(&arg[8], NULL, 10);
-      valid = (*cells >= 0) && (*cells <= WM_MAX_CELLS);
-    } else if (strcmp(arg, "--timing") == 0) {
-      if (state->times == NULL) {
-        state->times = (WmTimes*) calloc(2, sizeof(WmTimes));
-      }
-      valid = (state->times != NULL);
-    } else {
-      valid = false;
-    }
-    if (!valid) {
-      return false;
-    }
-  }
-  return true;
-}
-
-/// @fn static void layOut(WmState *state, int cells)
-///
-/// @brief Place the three windows:  two plain ones, and the full one.
+/// @brief Add a rectangle to the frame's damage, unless it's empty.
 ///
 /// @param state The window manager's state.
-/// @param cells The number of cells of the full window.
+/// @param left The rectangle's left edge.
+/// @param top The rectangle's top edge.
+/// @param width The rectangle's width.
+/// @param height The rectangle's height.
 ///
 /// @return This function returns no value.
-static void layOut(WmState *state, int cells) {
-  static const GfxRect frames[WM_MAX_WINDOWS] = {
-    { 24, 24, 200, 150 },
-    { 260, 40, 180, 130 },
-    { 300, 200, WM_CELL_COLUMNS * WM_CELL_SIZE,
-      WM_TITLE_HEIGHT + (WM_CELL_ROWS * WM_CELL_SIZE) },
-  };
-  static const GfxColor bodies[WM_MAX_WINDOWS] = {
-    CGA_LIGHT_GRAY, CGA_YELLOW, CGA_WHITE,
-  };
-  for (uint8_t ii = 0; ii < WM_MAX_WINDOWS; ii++) {
-    WmWindow *window = &state->windows[ii];
-    window->frame = frames[ii];
-    window->shown = frames[ii];
-    window->body = bodies[ii];
-    window->number = ii;
+static __attribute__((noinline)) void addDamage(WmState *state,
+  int16_t left, int16_t top,
+  int16_t width, int16_t height
+) {
+  if ((width > 0) && (height > 0)) {
+    GfxRect rect = { left, top, width, height };
+    wmDamage(state, &rect);
   }
-  state->windows[WM_MAX_WINDOWS - 1].cells = (uint8_t) cells;
-  state->numWindows = WM_MAX_WINDOWS;
-  state->paintAll = true;
 }
 
-/// @fn static bool contains(const GfxRect *rect, int16_t pointX,
-///   int16_t pointY)
+/// @fn static void addRect(WmState *state, const GfxRect *rect)
 ///
-/// @brief Determine whether a point is inside a rectangle.
+/// @brief Add a rectangle to the frame's damage.
 ///
+/// @param state The window manager's state.
 /// @param rect The rectangle.
-/// @param pointX The point's column.
-/// @param pointY The point's row.
 ///
-/// @return Returns true if it is, false otherwise.
-static bool contains(const GfxRect *rect, int16_t pointX, int16_t pointY) {
-  return (pointX >= rect->x) && (pointX < rect->x + rect->w)
-    && (pointY >= rect->y) && (pointY < rect->y + rect->h);
+/// @return This function returns no value.
+static void addRect(WmState *state, const GfxRect *rect) {
+  addDamage(state, rect->x, rect->y, rect->w, rect->h);
+}
+
+/// @fn static void subtract(WmState *state, const GfxRect *from,
+///   const GfxRect *away)
+///
+/// @brief Add the part of one rectangle that another doesn't cover to the
+/// frame's damage, as up to four rectangles.
+///
+/// @param state The window manager's state.
+/// @param from The rectangle.
+/// @param away The rectangle taken away from it.
+///
+/// @return This function returns no value.
+static void subtract(WmState *state, const GfxRect *from,
+  const GfxRect *away
+) {
+  GfxRect overlap;
+  if (!intersect(from, away, &overlap)) {
+    addRect(state, from);
+    return;
+  }
+  addDamage(state, from->x, from->y, from->w, overlap.y - from->y);
+  addDamage(state, from->x, overlap.y + overlap.h, from->w,
+    from->y + from->h - (overlap.y + overlap.h));
+  addDamage(state, from->x, overlap.y, overlap.x - from->x, overlap.h);
+  addDamage(state, overlap.x + overlap.w, overlap.y,
+    from->x + from->w - (overlap.x + overlap.w), overlap.h);
 }
 
 /// @fn static int16_t clamp(int16_t value, int16_t low, int16_t high)
@@ -185,61 +154,12 @@ static int16_t clamp(int16_t value, int16_t low, int16_t high) {
   return value;
 }
 
-/// @fn static void press(WmState *state, int16_t pointX, int16_t pointY)
-///
-/// @brief Raise the window a press lands on, and start a move if it's on
-/// the title bar or a resize if it's on the grip.
-///
-/// @param state The window manager's state.
-/// @param pointX The pointer's column.
-/// @param pointY The pointer's row.
-///
-/// @return This function returns no value.
-static void press(WmState *state, int16_t pointX, int16_t pointY) {
-  int index = state->numWindows - 1;
-  while ((index >= 0)
-    && !contains(&state->windows[index].frame, pointX, pointY)
-  ) {
-    index--;
-  }
-  if (index < 0) {
-    return;
-  }
-  if (index != state->numWindows - 1) {
-    WmWindow raised = state->windows[index];
-    memmove(&state->windows[index], &state->windows[index + 1],
-      sizeof(WmWindow) * (size_t) (state->numWindows - 1 - index));
-    *wmTop(state) = raised;
-    state->paintTop = true;
-  }
-
-  const GfxRect *frame = &wmTop(state)->frame;
-  int16_t right = frame->x + frame->w;
-  int16_t bottom = frame->y + frame->h;
-  if (pointY < frame->y + WM_TITLE_HEIGHT) {
-    state->grab = WM_GRAB_MOVE;
-    state->offset.x = pointX - frame->x;
-    state->offset.y = pointY - frame->y;
-  } else if ((pointX >= right - WM_GRIP_SIZE)
-    && (pointY >= bottom - WM_GRIP_SIZE)
-  ) {
-    state->grab = WM_GRAB_RESIZE;
-    state->offset.x = right - pointX;
-    state->offset.y = bottom - pointY;
-  }
-  bool live = state->liveResize;
-  if (state->grab == WM_GRAB_MOVE) {
-    live = state->liveMove;
-  }
-  if ((state->grab != WM_GRAB_NONE) && !live) {
-    state->outline = *frame;
-  }
-}
-
 /// @fn static void drag(WmState *state, int16_t pointX, int16_t pointY)
 ///
 /// @brief Move or resize the grabbed window, or its outline, to follow the
-/// pointer, within the limits.
+/// pointer, within the limits:  32 pixels of title bar stay on the screen,
+/// and a resize holds the edges it doesn't move still and keeps the window at
+/// least its minimum size.
 ///
 /// @param state The window manager's state.
 /// @param pointX The pointer's column.
@@ -247,7 +167,10 @@ static void press(WmState *state, int16_t pointX, int16_t pointY) {
 ///
 /// @return This function returns no value.
 static void drag(WmState *state, int16_t pointX, int16_t pointY) {
-  WmWindow *window = wmTop(state);
+  WmWindow *window = wmFind(state, state->grabbed);
+  if (window == NULL) {
+    return;
+  }
   GfxRect target = window->frame;
   int16_t width = (int16_t) state->display.width;
   int16_t height = (int16_t) state->display.height;
@@ -255,13 +178,27 @@ static void drag(WmState *state, int16_t pointX, int16_t pointY) {
   if (state->grab == WM_GRAB_MOVE) {
     target.x = clamp(pointX - state->offset.x, WM_KEEP_TITLE - target.w,
       width - WM_KEEP_TITLE);
-    target.y = clamp(pointY - state->offset.y, 0, height - WM_TITLE_HEIGHT);
+    target.y = clamp(pointY - state->offset.y, 0, height - WM_FRAME_TOP);
     live = state->liveMove;
   } else {
-    target.w = clamp(pointX + state->offset.x - target.x, WM_MIN_WIDTH,
-      width - target.x);
-    target.h = clamp(pointY + state->offset.y - target.y, WM_MIN_HEIGHT,
-      height - target.y);
+    int16_t right = target.x + target.w;
+    int16_t bottom = target.y + target.h;
+    if ((state->edges & WM_EDGE_RIGHT) != 0) {
+      target.w = clamp(pointX + state->offset.x - target.x, WM_MIN_WIDTH,
+        width - target.x);
+    }
+    if ((state->edges & WM_EDGE_BOTTOM) != 0) {
+      target.h = clamp(pointY + state->offset.y - target.y, WM_MIN_HEIGHT,
+        height - target.y);
+    }
+    if ((state->edges & WM_EDGE_LEFT) != 0) {
+      target.x = clamp(pointX - state->offset.x, 0, right - WM_MIN_WIDTH);
+      target.w = right - target.x;
+    }
+    if ((state->edges & WM_EDGE_TOP) != 0) {
+      target.y = clamp(pointY - state->offset.y, 0, bottom - WM_MIN_HEIGHT);
+      target.h = bottom - target.y;
+    }
   }
   if (live) {
     window->frame = target;
@@ -270,26 +207,64 @@ static void drag(WmState *state, int16_t pointX, int16_t pointY) {
   }
 }
 
-/// @fn static void release(WmState *state)
+/// @fn static void hover(WmState *state, int16_t pointX, int16_t pointY)
 ///
-/// @brief End a move or resize, putting the window where its outline is if
-/// an outline followed the pointer.
+/// @brief Follow the pointer over caption buttons:  while one is held down,
+/// whether the pointer is still on it, and otherwise which one it's over.
+/// Only a change repaints, and only the buttons it changes.
 ///
 /// @param state The window manager's state.
+/// @param pointX The pointer's column.
+/// @param pointY The pointer's row.
 ///
 /// @return This function returns no value.
-static void release(WmState *state) {
-  if (state->outline.w != 0) {
-    wmTop(state)->frame = state->outline;
-    memset(&state->outline, 0, sizeof(state->outline));
+static void hover(WmState *state, int16_t pointX, int16_t pointY) {
+  if (state->grab == WM_GRAB_BUTTON) {
+    WmWindow *window = wmFind(state, state->grabbed);
+    bool inside = (window != NULL)
+      && (wmButtonAt(window, pointX, pointY) == state->pressButton);
+    if (inside != state->pressInside) {
+      state->pressInside = inside;
+      wmDamageButton(state, state->grabbed, state->pressButton);
+    }
+    return;
   }
-  state->grab = WM_GRAB_NONE;
+  uint8_t id = 0;
+  uint8_t button = WM_BUTTON_NONE;
+  WmWindow *window = wmWindowAt(state, pointX, pointY);
+  if (window != NULL) {
+    button = wmButtonAt(window, pointX, pointY);
+    if (button != WM_BUTTON_NONE) {
+      id = window->id;
+    }
+  }
+  if ((id != state->hoverWindow) || (button != state->hoverButton)) {
+    wmDamageButton(state, state->hoverWindow, state->hoverButton);
+    state->hoverWindow = id;
+    state->hoverButton = button;
+    wmDamageButton(state, id, button);
+  }
+}
+
+/// @fn static void input(WmState *state, const GfxEvent *event)
+///
+/// @brief Have the Input overlay handle a press, a release or a key.
+///
+/// @param state The window manager's state.
+/// @param event The event.
+///
+/// @return This function returns no value.
+static void input(WmState *state, const GfxEvent *event) {
+  state->event = event;
+  callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Input", "wmInput", state);
 }
 
 /// @fn static void applyEvents(WmState *state,
 ///   const GfxInputEventsArgs *events)
 ///
-/// @brief Apply a message's input events to the state.
+/// @brief Apply a message's input events to the state.  Motion is handled
+/// here, since it comes many times a frame; presses, releases and keys go
+/// to the Input overlay.
 ///
 /// @param state The window manager's state.
 /// @param events The events.
@@ -299,9 +274,7 @@ static void applyEvents(WmState *state, const GfxInputEventsArgs *events) {
   for (uint8_t ii = 0; ii < events->count; ii++) {
     const GfxEvent *event = &events->events[ii];
     if (event->type == GFX_EVENT_KEY) {
-      if ((event->down != 0) && (event->ascii == WM_CTRL_Q)) {
-        state->quit = true;
-      }
+      input(state, event);
       continue;
     } else if (event->type != GFX_EVENT_POINTER) {
       continue;
@@ -309,14 +282,82 @@ static void applyEvents(WmState *state, const GfxInputEventsArgs *events) {
     bool wasDown = (state->buttons & 1) != 0;
     bool down = (event->buttons & 1) != 0;
     state->buttons = event->buttons;
-    if (down && !wasDown) {
-      press(state, event->x, event->y);
-    } else if (state->grab != WM_GRAB_NONE) {
-      drag(state, event->x, event->y);
-      if (!down) {
-        release(state);
+    bool dragging = (state->grab == WM_GRAB_MOVE)
+      || (state->grab == WM_GRAB_RESIZE);
+    if (dragging) {
+      if (state->restoreOnDrag && down) {
+        input(state, event);
       }
+      drag(state, event->x, event->y);
+    } else if (down == wasDown) {
+      hover(state, event->x, event->y);
     }
+    if (down != wasDown) {
+      input(state, event);
+    }
+  }
+}
+
+/// @fn static void changeGrabbed(WmState *state, const WmWindow *window)
+///
+/// @brief Work out the damage of a change to where the grabbed window is
+/// shown.  A move of a window nothing covers, when nothing else waits to be
+/// repainted, has Paint copy what's on the screen of it and repaints the
+/// rest; when something does wait, the screen may not show the window as it
+/// is, so both frames are repainted instead.  A resize that keeps the
+/// top-left corner repaints what the old and new frames don't share, the
+/// title bar, and the old and new right and bottom borders; anything else
+/// repaints both frames.
+///
+/// @param state The window manager's state.
+/// @param window The grabbed window.
+///
+/// @return This function returns no value.
+static void changeGrabbed(WmState *state, const WmWindow *window) {
+  const GfxRect *shown = &state->shown;
+  const GfxRect *frame = &window->frame;
+  GfxRect screen = { 0, 0, (int16_t) state->display.width,
+    (int16_t) state->display.height };
+  bool alone = (state->numDamage == 0);
+  for (uint8_t ii = (uint8_t) (window - state->windows) + 1;
+    ii < state->numWindows; ii++
+  ) {
+    const WmWindow *above = &state->windows[ii];
+    GfxRect overlap;
+    if ((above->state != WIN_STATE_MINIMIZED)
+      && (intersect(&above->frame, shown, &overlap)
+        || intersect(&above->frame, frame, &overlap))
+    ) {
+      alone = false;
+    }
+  }
+  GfxRect source;
+  if (alone && (shown->w == frame->w) && (shown->h == frame->h)
+    && intersect(shown, &screen, &source)
+  ) {
+    GfxPoint target = { source.x + frame->x - shown->x,
+      source.y + frame->y - shown->y };
+    GfxRect copied = { target.x, target.y, source.w, source.h };
+    state->copy = true;
+    state->copySource = source;
+    state->copyTarget = target;
+    subtract(state, shown, frame);
+    subtract(state, frame, &copied);
+  } else if ((shown->x == frame->x) && (shown->y == frame->y)) {
+    subtract(state, shown, frame);
+    subtract(state, frame, shown);
+    addDamage(state, frame->x, frame->y, frame->w, WM_FRAME_TOP);
+    addDamage(state, frame->x + frame->w - WM_BORDER, frame->y, WM_BORDER,
+      frame->h);
+    addDamage(state, frame->x, frame->y + frame->h - WM_BORDER, frame->w,
+      WM_BORDER);
+    addDamage(state, shown->x + shown->w - WM_BORDER, shown->y, WM_BORDER,
+      shown->h);
+    addDamage(state, shown->x, shown->y + shown->h - WM_BORDER, shown->w,
+      WM_BORDER);
+  } else {
+    addRect(state, shown);
+    addRect(state, frame);
   }
 }
 
@@ -328,24 +369,36 @@ static void applyEvents(WmState *state, const GfxInputEventsArgs *events) {
 ///
 /// @return Returns true if a frame has to be painted, false otherwise.
 static bool frameNeeded(WmState *state) {
-  const WmWindow *window = wmTop(state);
-  return state->paintTop
-    || (memcmp(&window->frame, &window->shown, sizeof(GfxRect)) != 0)
+  const WmWindow *window = wmFind(state, state->grabbed);
+  return state->paintAll || (state->numDamage > 0)
+    || ((window != NULL)
+      && (memcmp(&window->frame, &state->shown, sizeof(GfxRect)) != 0))
     || (memcmp(&state->outline, &state->outlineShown, sizeof(GfxRect)) != 0);
 }
 
-/// @fn static GfxError paint(WmState *state, uint8_t operation)
+/// @fn static GfxError paint(WmState *state)
 ///
-/// @brief Have the Paint overlay carry out an operation.
+/// @brief Work out the damage of the grabbed window's change, and have the
+/// Paint overlay bring the screen up to date.
 ///
 /// @param state The window manager's state.
-/// @param operation The WmPaintOperation.
 ///
-/// @return Returns the operation's status.
-static GfxError paint(WmState *state, uint8_t operation) {
-  state->operation = operation;
+/// @return Returns the frame's status.
+static GfxError paint(WmState *state) {
+  WmWindow *window = wmFind(state, state->grabbed);
+  if ((window != NULL) && !state->paintAll
+    && (memcmp(&window->frame, &state->shown, sizeof(GfxRect)) != 0)
+  ) {
+    changeGrabbed(state, window);
+  }
   state->status = GFX_ERR_DEVICE_LOST;
   callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Paint", "wmPaint", state);
+  if (window != NULL) {
+    state->shown = window->frame;
+  }
+  if (state->grab == WM_GRAB_NONE) {
+    state->grabbed = 0;
+  }
   return (GfxError) state->status;
 }
 
@@ -374,142 +427,139 @@ static void timeFrame(WmState *state, uint8_t grab,
   times->count++;
 }
 
-/// @fn static void printTimes(const char *kind, WmTimes *times)
+/// @fn static bool postsDone(WmState *state)
 ///
-/// @brief Print the number of frames of a kind, and the median and longest
-/// time of the first WM_TIMED_FRAMES of them.
+/// @brief Determine whether a client has marked an events message done, so
+/// that the Client overlay can collect it and send the client more.
 ///
-/// @param kind The kind of frame.
-/// @param times The frames' times, which are sorted.
+/// @param state The window manager's state.
 ///
-/// @return This function returns no value.
-static void printTimes(const char *kind, WmTimes *times) {
-  uint16_t kept = times->count;
-  if (kept > WM_TIMED_FRAMES) {
-    kept = WM_TIMED_FRAMES;
-  }
-  for (uint16_t ii = 1; ii < kept; ii++) {
-    uint16_t value = times->ms[ii];
-    uint16_t jj = ii;
-    while ((jj > 0) && (times->ms[jj - 1] > value)) {
-      times->ms[jj] = times->ms[jj - 1];
-      jj--;
+/// @return Returns true if one has, false otherwise.
+static bool postsDone(WmState *state) {
+  for (uint8_t ii = 0; ii < state->numClients; ii++) {
+    ProcessMessage *message = state->clients[ii]->message;
+    if ((message != NULL) && processMessageDone(message)) {
+      return true;
     }
-    times->ms[jj] = value;
   }
-  unsigned int median = 0;
-  unsigned int longest = 0;
-  if (kept > 0) {
-    median = times->ms[kept / 2];
-    longest = times->ms[kept - 1];
+  return false;
+}
+
+/// @fn static struct timespec* pollTime(WmState *state,
+///   struct timespec *poll)
+///
+/// @brief Work out how long the next wait for a message may be:  for as long
+/// as it takes, unless a client has events waiting, which are tried again
+/// WM_POLL_MS from now.
+///
+/// @param state The window manager's state.
+/// @param poll Where to store the time to stop waiting.
+///
+/// @return Returns poll, or NULL to wait for as long as it takes.
+static struct timespec* pollTime(WmState *state, struct timespec *poll) {
+  if ((state->numPosts == 0) && !state->eventsWaiting) {
+    return NULL;
   }
-  printf("sysnook: %s frames %u median %u ms max %u ms\n", kind,
-    (unsigned int) times->count, median, longest);
+  timespec_get(poll, TIME_UTC);
+  poll->tv_nsec += WM_POLL_MS * 1000000L;
+  if (poll->tv_nsec >= 1000000000L) {
+    poll->tv_sec++;
+    poll->tv_nsec -= 1000000000L;
+  }
+  return poll;
 }
 
 /// @fn static bool run(WmState *state)
 ///
-/// @brief Apply input events and paint what they change until Ctrl+Q or
-/// until the display is taken back.
+/// @brief Apply input events and clients' messages, and paint what they
+/// change, until the display is taken back.
 ///
 /// @param state The window manager's state.
 ///
-/// @return Returns true if the display was taken back, false on Ctrl+Q.
+/// @return Returns true, since the display was taken back.
 static bool run(WmState *state) {
   while (true) {
-    ProcessMessage *message = processMessageQueueWait(NULL);
-    if (message == NULL) {
-      continue;
-    }
-    if (gfxIsInputEvents(message)) {
-      struct timespec start;
-      uint8_t grab = state->grab;
+    struct timespec poll;
+    ProcessMessage *message = processMessageQueueWait(pollTime(state, &poll));
+    uint8_t grab = state->grab;
+    struct timespec start;
+    bool events = (message != NULL) && gfxIsInputEvents(message);
+    if (events) {
       if (state->times != NULL) {
         timespec_get(&start, TIME_UTC);
       }
       applyEvents(state, gfxInputEvents(message));
       gfxInputEventsDone(message);
-      if (state->quit) {
-        return false;
-      }
-      if (frameNeeded(state)) {
-        paint(state, WM_PAINT_FRAME);
-        if ((state->times != NULL) && (grab != WM_GRAB_NONE)) {
-          timeFrame(state, grab, &start);
+    } else if (message != NULL) {
+      int64_t type = processMessageType(message);
+      if ((type & ~((int64_t) 0xff)) == WIN_COMMAND_SIGNATURE) {
+        state->message = message;
+        uint8_t request = (uint8_t) type;
+        if ((request == WIN_MSG_HELLO) || (request == WIN_MSG_GOODBYE)
+          || (request == WIN_MSG_CLIENT_ENDED)
+        ) {
+          callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Client",
+            "wmClientMessage", state);
+        } else {
+          callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Window",
+            "wmWindowMessage", state);
+        }
+      } else {
+        processMessageSetDone(message);
+        if (processMessageWaiting(message) == false) {
+          processMessageRelease(message);
+        }
+        if (type == (GFX_COMMAND_SIGNATURE | GFX_MSG_DISPLAY_REVOKED)) {
+          return true;
         }
       }
-      continue;
     }
-
-    int64_t type = processMessageType(message);
-    if ((type & ~((int64_t) 0xff)) == WIN_COMMAND_SIGNATURE) {
-      state->message = message;
-      callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Client", "wmClientMessage",
+    if ((state->numOutbox > 0) || postsDone(state)
+      || ((message == NULL) && state->eventsWaiting)
+    ) {
+      callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Client", "wmClientFlush",
         state);
-      continue;
     }
-    processMessageSetDone(message);
-    if (processMessageWaiting(message) == false) {
-      processMessageRelease(message);
-    }
-    if (type == (GFX_COMMAND_SIGNATURE | GFX_MSG_DISPLAY_REVOKED)) {
-      return true;
+    if (frameNeeded(state)) {
+      paint(state);
+      if (events && (state->times != NULL) && (grab != WM_GRAB_NONE)) {
+        timeFrame(state, grab, &start);
+      }
     }
   }
 }
 
 int main(int argc, char **argv) {
-  if ((argc > 1) && (strcmp(argv[1], "--help") == 0)) {
-    printUsage(stdout);
-    return 0;
-  }
   WmState *state = (WmState*) calloc(1, sizeof(WmState));
   if (state == NULL) {
     fputs("sysnook: out of memory\n", stderr);
     return 1;
   }
-  int cells = WM_MAX_CELLS;
-  if (!parseOptions(state, argc, argv, &cells)) {
-    printUsage(stderr);
-    free(state->times);
-    free(state);
-    return 1;
-  }
-
-  int exitStatus = 0;
-  GfxError status = gfxOpenDisplay(&state->display, GFX_DRIVER_PROCESS_NAME,
-    640, 480);
-  if (status == GFX_ERR_DISPLAY_BUSY) {
-    fputs("sysnook: display busy\n", stderr);
-    exitStatus = 1;
-  } else if (status != GFX_OK) {
-    fprintf(stderr, "sysnook: %s\n", gfxErrorString(status));
-    exitStatus = 1;
-  } else {
-    layOut(state, cells);
-    status = paint(state, WM_PAINT_START);
-    bool revoked = false;
+  state->argc = argc;
+  state->argv = argv;
+  state->operation = WM_START_BEGIN;
+  callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Start", "wmStart", state);
+  if (state->displayOpen && (state->exitStatus == 0)) {
+    state->paintAll = true;
+    GfxError status = paint(state);
     if (status == GFX_OK) {
       callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Client", "wmClientStart",
         state);
-      revoked = run(state);
+      state->revoked = run(state);
       callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Client", "wmClientEnd",
         state);
     } else {
       fprintf(stderr, "sysnook: %s\n", gfxErrorString(status));
-      exitStatus = 1;
-    }
-    paint(state, WM_PAINT_END);
-    if (!revoked) {
-      gfxCloseDisplay(&state->display);
+      state->exitStatus = 1;
     }
   }
+  state->operation = WM_START_END;
+  callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Start", "wmStart", state);
 
-  if ((state->times != NULL) && (exitStatus == 0)) {
-    printTimes("move", &state->times[0]);
-    printTimes("resize", &state->times[1]);
+  int exitStatus = state->exitStatus;
+  if (exitStatus == WM_EXIT_HELP) {
+    exitStatus = 0;
   }
-  free(state->times);
   free(state);
   return exitStatus;
 }

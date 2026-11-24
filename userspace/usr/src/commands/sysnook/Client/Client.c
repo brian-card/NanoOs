@@ -25,11 +25,13 @@
 //
 ////////////////////////////////////////////////////////////////////////////////
 
+
 /// @file Client.c
 ///
-/// @brief The window server's side of the window protocol:  registering with
-/// the scheduler, keeping the connected clients, and answering their
-/// messages.  Entered once per message from a client.
+/// @brief The window server's side of the window protocol's connections:
+/// registering with the scheduler, keeping the connected clients, and
+/// sending them their events.  Entered once per connection message, and when
+/// there are events to send.
 
 #include "Wm.h"
 #include "UserProcesses.h"
@@ -40,45 +42,87 @@
 /// gives up on the clients left.
 #define WM_DISCONNECT_TRIES 100
 
-/// @fn static int wmClientIndex(WmState *state, ProcessId pid)
+/// @fn static WmClient* wmClientFind(WmState *state, ProcessId pid)
 ///
 /// @brief Find a connected client.
 ///
 /// @param state The window manager's state.
 /// @param pid The client's ProcessId.
 ///
-/// @return Returns the client's index in state->clients, or -1 if it isn't
-/// connected.
-static int wmClientIndex(WmState *state, ProcessId pid) {
-  for (int ii = 0; ii < (int) state->numClients; ii++) {
-    if (state->clients[ii] == pid) {
-      return ii;
+/// @return Returns the client, or NULL if it isn't connected.
+static WmClient* wmClientFind(WmState *state, ProcessId pid) {
+  for (uint8_t ii = 0; ii < state->numClients; ii++) {
+    if (state->clients[ii]->pid == pid) {
+      return state->clients[ii];
     }
   }
-  return -1;
+  return NULL;
+}
+
+/// @fn static void wmRemoveWindows(WmState *state, ProcessId pid)
+///
+/// @brief Have the Window overlay take away every window a client owns.
+///
+/// @param state The window manager's state.
+/// @param pid The client's ProcessId.
+///
+/// @return This function returns no value.
+static void wmRemoveWindows(WmState *state, ProcessId pid) {
+  state->opPid = pid;
+  callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Window", "wmWindowRemoveOwned",
+    state);
+}
+
+/// @fn static bool wmCollect(WmState *state, WmClient *client)
+///
+/// @brief Release a client's events message once it has marked it done,
+/// which lets the client be sent more.
+///
+/// @param state The window manager's state.
+/// @param client The client.
+///
+/// @return Returns true if the client has no events message waiting on it.
+static bool wmCollect(WmState *state, WmClient *client) {
+  if ((client->message != NULL) && processMessageDone(client->message)) {
+    processMessageRelease(client->message);
+    client->message = NULL;
+    state->numPosts--;
+  }
+  return client->message == NULL;
 }
 
 /// @fn static void wmForgetClient(WmState *state, ProcessId pid)
 ///
-/// @brief Drop a client from the connected clients, if it was one.
+/// @brief Drop a client that has ended:  its windows, and what it was
+/// connected with.
 ///
 /// @param state The window manager's state.
 /// @param pid The client's ProcessId.
 ///
 /// @return This function returns no value.
 static void wmForgetClient(WmState *state, ProcessId pid) {
-  int index = wmClientIndex(state, pid);
-  if (index >= 0) {
-    state->numClients--;
-    state->clients[index] = state->clients[state->numClients];
+  wmRemoveWindows(state, pid);
+  for (uint8_t ii = 0; ii < state->numClients; ii++) {
+    WmClient *client = state->clients[ii];
+    if (client->pid == pid) {
+      if (client->message != NULL) {
+        processMessageRelease(client->message);
+        state->numPosts--;
+      }
+      MESSAGE_ARGS_DESTROY(client->args);
+      free(client);
+      state->numClients--;
+      state->clients[ii] = state->clients[state->numClients];
+      return;
+    }
   }
 }
 
 /// @fn static void wmHello(WmState *state, ProcessId pid,
 ///   WinHelloArgs *helloArgs)
 ///
-/// @brief Add a client to the connected clients and tell it the screen and
-/// the theme's sizes.
+/// @brief Add a client to the connected clients and tell it the screen, the
+/// work area and the theme's sizes.
 ///
 /// @param state The window manager's state.
 /// @param pid The client's ProcessId.
@@ -86,29 +130,138 @@ static void wmForgetClient(WmState *state, ProcessId pid) {
 ///
 /// @return This function returns no value.
 static void wmHello(WmState *state, ProcessId pid, WinHelloArgs *helloArgs) {
-  if (wmClientIndex(state, pid) < 0) {
+  WmClient *client = wmClientFind(state, pid);
+  if (client == NULL) {
     if (state->numClients == WM_MAX_CLIENTS) {
       helloArgs->status = WIN_ERR_NO_MEMORY;
       return;
     }
-    state->clients[state->numClients++] = pid;
+    client = (WmClient*) calloc(1, sizeof(WmClient));
+    if (client != NULL) {
+      client->args = MESSAGE_ARGS_CREATE(WinEventsArgs,
+        MESSAGE_ARGS_ROUND_TRIP);
+    }
+    if ((client == NULL) || (client->args == NULL)) {
+      free(client);
+      helloArgs->status = WIN_ERR_NO_MEMORY;
+      return;
+    }
+    client->pid = pid;
+    state->clients[state->numClients++] = client;
   }
+  client->leaving = false;
 
   GfxDisplay *display = &state->display;
   helloArgs->role = WIN_ROLE_NONE;
   helloArgs->cellWidth = display->builtInFont.glyphW;
   helloArgs->cellHeight = display->builtInFont.glyphH;
   helloArgs->titleHeight = WM_TITLE_HEIGHT;
-  helloArgs->borderWidth = 0;
-  helloArgs->buttonHeight = 0;
+  helloArgs->borderWidth = WM_BORDER;
+  helloArgs->buttonHeight = WM_TITLE_HEIGHT;
   helloArgs->scrollBarWidth = 0;
   helloArgs->screenWidth = display->width;
   helloArgs->screenHeight = display->height;
-  helloArgs->workArea.x = 0;
-  helloArgs->workArea.y = 0;
-  helloArgs->workArea.w = (int16_t) display->width;
-  helloArgs->workArea.h = (int16_t) display->height;
+  helloArgs->workArea = state->workArea;
   helloArgs->status = WIN_OK;
+}
+
+/// @fn static void wmQueue(WmClient *client, const WinEvent *event)
+///
+/// @brief Add an event to what a client is sent next.  A RESIZED replaces
+/// one for the same window that hasn't been sent, and a full queue ends with
+/// WIN_EVENT_OVERFLOW.
+///
+/// @param client The client.
+/// @param event The event.
+///
+/// @return This function returns no value.
+static void wmQueue(WmClient *client, const WinEvent *event) {
+  if (client->leaving) {
+    return;
+  }
+  for (uint8_t ii = 0; ii < client->numPending; ii++) {
+    WinEvent *pending = &client->pending[ii];
+    if ((event->type == WIN_EVENT_RESIZED) && (pending->type == event->type)
+      && (pending->window == event->window)
+    ) {
+      *pending = *event;
+      return;
+    }
+  }
+  if (client->numPending < WM_MAX_PENDING) {
+    client->pending[client->numPending++] = *event;
+  } else {
+    memset(&client->pending[WM_MAX_PENDING - 1], 0, sizeof(WinEvent));
+    client->pending[WM_MAX_PENDING - 1].type = WIN_EVENT_OVERFLOW;
+  }
+}
+
+/// @fn static void wmPost(WmState *state, WmClient *client)
+///
+/// @brief Send a client as many of its waiting events as one WIN_MSG_EVENTS
+/// holds, if it has finished with the last one and the window server isn't
+/// already waiting on WM_MAX_POSTS clients.
+///
+/// @param state The window manager's state.
+/// @param client The client.
+///
+/// @return This function returns no value.
+static void wmPost(WmState *state, WmClient *client) {
+  if ((client->numPending == 0) || !wmCollect(state, client)
+    || (state->numPosts >= WM_MAX_POSTS)
+  ) {
+    return;
+  }
+  ProcessMessage *message = getAvailableMessage();
+  if (message == NULL) {
+    return;
+  }
+  uint8_t count = client->numPending;
+  if (count > WIN_EVENTS_PER_MESSAGE) {
+    count = WIN_EVENTS_PER_MESSAGE;
+  }
+  client->args->count = count;
+  memcpy(client->args->events, client->pending, count * sizeof(WinEvent));
+  processMessageInit(message, WIN_COMMAND_SIGNATURE | WIN_MSG_EVENTS,
+    client->args, sizeof(*client->args), /* waiting= */ true);
+  if (sendProcessMessageToPid(client->pid, message) != processSuccess) {
+    processMessageRelease(message);
+    client->numPending = 0;
+    return;
+  }
+  client->message = message;
+  state->numPosts++;
+  client->numPending -= count;
+  memmove(client->pending, &client->pending[count],
+    client->numPending * sizeof(WinEvent));
+}
+
+/// @fn void* wmClientFlush(void *args)
+///
+/// @brief Hand each event the other overlays left in the outbox to its
+/// client, collect the events messages clients have finished with, and send
+/// what's waiting.
+///
+/// @param args The window manager's state.
+///
+/// @return Always returns the provided pointer.
+void* wmClientFlush(void *args) {
+  WmState *state = (WmState*) args;
+  for (uint8_t ii = 0; ii < state->numOutbox; ii++) {
+    WmClient *client = wmClientFind(state, state->outbox[ii].pid);
+    if (client != NULL) {
+      wmQueue(client, &state->outbox[ii].event);
+    }
+  }
+  state->numOutbox = 0;
+  state->eventsWaiting = false;
+  for (uint8_t ii = 0; ii < state->numClients; ii++) {
+    WmClient *client = state->clients[ii];
+    wmCollect(state, client);
+    wmPost(state, client);
+    state->eventsWaiting |= (client->numPending > 0);
+  }
+  return args;
 }
 
 /// @fn void* wmClientStart(void *args)
@@ -128,9 +281,9 @@ void* wmClientStart(void *args) {
 
 /// @fn void* wmClientMessage(void *args)
 ///
-/// @brief Handle the window protocol message in the state:  WIN_MSG_HELLO
-/// connects a client, WIN_MSG_GOODBYE and WIN_MSG_CLIENT_ENDED forget one,
-/// and every other request is answered WIN_ERR_NOT_SUPPORTED.
+/// @brief Handle the connection message in the state:  WIN_MSG_HELLO
+/// connects a client, and WIN_MSG_GOODBYE and WIN_MSG_CLIENT_ENDED take its
+/// windows away.
 ///
 /// @param args The window manager's state.
 ///
@@ -141,20 +294,17 @@ void* wmClientMessage(void *args) {
   uint8_t type = (uint8_t) processMessageType(message);
   void *data = processMessageData(message);
   bool waiting = processMessageWaiting(message);
+  ProcessId pid = processMessageFrom(message)->processId;
+  WmClient *client = wmClientFind(state, pid);
 
   if (type == WIN_MSG_CLIENT_ENDED) {
     wmForgetClient(state, (ProcessId) (uintptr_t) data);
   } else if (type == WIN_MSG_HELLO) {
-    wmHello(state, processMessageFrom(message)->processId,
-      (WinHelloArgs*) data);
-  } else if (type == WIN_MSG_GOODBYE) {
-    wmForgetClient(state, processMessageFrom(message)->processId);
-  } else if (data != NULL) {
-    if (waiting) {
-      *((uint8_t*) data) = WIN_ERR_NOT_SUPPORTED;
-    } else {
-      MESSAGE_ARGS_DESTROY(data);
-    }
+    wmHello(state, pid, (WinHelloArgs*) data);
+  } else if ((type == WIN_MSG_GOODBYE) && (client != NULL)) {
+    wmRemoveWindows(state, pid);
+    client->leaving = true;
+    client->numPending = 0;
   }
 
   processMessageSetDone(message);
@@ -194,18 +344,18 @@ static void wmClientDrain(void) {
 
 /// @fn void* wmClientEnd(void *args)
 ///
-/// @brief Tell every connected client that the window server is going away.
-/// The kernel's message pool is smaller than the number of clients, so when it
-/// is empty this drains its own queue and yields for the clients to release
-/// the messages they've read, for a bounded time, since a client might never
-/// read its queue.
+/// @brief Tell every connected client that the window server is going away,
+/// and let go of what was kept for it.  The kernel's message pool is smaller
+/// than the number of clients, so when it is empty this drains its own queue
+/// and yields for the clients to release the messages they've read, for a
+/// bounded time, since a client might never read its queue.
 ///
 /// @param args The window manager's state.
 ///
 /// @return Always returns the provided pointer.
 void* wmClientEnd(void *args) {
   WmState *state = (WmState*) args;
-  for (int ii = 0; ii < (int) state->numClients; ii++) {
+  for (uint8_t ii = 0; ii < state->numClients; ii++) {
     ProcessMessage *message = getAvailableMessage();
     for (int tries = 0; (message == NULL) && (tries < WM_DISCONNECT_TRIES);
       tries++
@@ -214,17 +364,32 @@ void* wmClientEnd(void *args) {
       processYield();
       message = getAvailableMessage();
     }
-    if (message == NULL) {
-      break;
-    }
-    processMessageInit(message, WIN_COMMAND_SIGNATURE | WIN_MSG_DISCONNECTED,
-      NULL, 0, /* waiting= */ false);
-    if (sendProcessMessageToPid(state->clients[ii], message)
-      != processSuccess
-    ) {
-      processMessageRelease(message);
+    if (message != NULL) {
+      processMessageInit(message, WIN_COMMAND_SIGNATURE | WIN_MSG_DISCONNECTED,
+        NULL, 0, /* waiting= */ false);
+      if (sendProcessMessageToPid(state->clients[ii]->pid, message)
+        != processSuccess
+      ) {
+        processMessageRelease(message);
+      }
     }
   }
-  state->numClients = 0;
+  for (int tries = 0; (state->numPosts > 0) && (tries < WM_DISCONNECT_TRIES);
+    tries++
+  ) {
+    for (uint8_t ii = 0; ii < state->numClients; ii++) {
+      wmCollect(state, state->clients[ii]);
+    }
+    processYield();
+  }
+  while (state->numClients > 0) {
+    WmClient *client = state->clients[--state->numClients];
+    if (client->message != NULL) {
+      processMessageRelease(client->message);
+    }
+    MESSAGE_ARGS_DESTROY(client->args);
+    free(client);
+  }
+  state->numPosts = 0;
   return args;
 }
