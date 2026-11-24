@@ -46,11 +46,11 @@
 ///
 /// @brief Array of error messages arranged by error code.
 ///
-/// @note KEEP_IN_FLASH is required here because .rodata is removed from the
+/// @note KEEP_IN_RAM is required here because .rodata is removed from the
 /// final binary on some targets.  Entries are copied directly into this
 /// array's own storage rather than being separate string-literal objects
 /// pointed to from it, so tagging the array alone protects every entry.
-const char errorStrings[][33] KEEP_IN_FLASH = {
+const char errorStrings[][33] KEEP_IN_RAM = {
   "Success",                          // ENOERR
   "Unspecified error",                // EOTHER
   "Device or resource busy",          // EBUSY
@@ -81,6 +81,7 @@ const char errorStrings[][33] KEEP_IN_FLASH = {
   "No child processes",               // ECHILD
   "Interrupted system call",          // EINTR
   "Too many open files",              // EMFILE
+  "Not connected",                    // ENOTCONN
 };
 
 /// @def NUM_ERRORS

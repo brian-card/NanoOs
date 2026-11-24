@@ -75,7 +75,8 @@ extern "C"
 #define ECHILD          27      /* No child processes */
 #define EINTR           28      /* Interrupted system call */
 #define EMFILE          29      /* Too many open files */
-#define ELAST           29      /* End of error codes */
+#define ENOTCONN        30      /* Not connected */
+#define ELAST           30      /* End of error codes */
 
 int* errno_(void);
 #define errno (*errno_())
