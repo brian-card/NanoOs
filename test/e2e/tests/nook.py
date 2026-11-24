@@ -33,7 +33,10 @@ import re
 import subprocess
 import time
 
+import pexpect
+
 import gfxrecords as gr
+from fakevdp import KEYMOD_ALT_LEFT
 from harness import (PROMPT, VDP_CONFIG_SYS, heap_at_prompt,
                      message_args_reports, ps_entries)
 from tests.graphics import (ACQUIRE, RELEASE, assert_pixels, glyph_pixels,
@@ -44,18 +47,23 @@ from tests.vdp_drv import VDP_FONT_ID
 NOOK_LINE = "GRAPHICS=/system/drivers/vdp.drv /system/commands/sysnook\n"
 HOMES = ("/home", "/home/user1", "/home/user2")
 
-# The layout in Wm.h and sysnook's main.c.
-TITLE_HEIGHT = 12
-GRIP = 8
+# The layout in WmTheme.h, Wm.h and sysnook's Start.c:  a 1-pixel border, a
+# 14-pixel title bar inside it, and grab zones 2 pixels either side of the
+# frame's edge.
+BORDER = 1
+TITLE_HEIGHT = 14
+FRAME_TOP = BORDER + TITLE_HEIGHT
+INSET = 8
 KEEP_TITLE = 32
-MIN_WIDTH = 64
-MIN_HEIGHT = TITLE_HEIGHT + 16
+MIN_WIDTH = 84
+MIN_HEIGHT = FRAME_TOP + 16 + BORDER
 CELL = 20
-FRAMES = [(24, 24, 200, 150), (260, 40, 180, 130), (300, 200, 320, 252)]
+FRAMES = [(24, 24, 200, 150), (260, 40, 180, 130), (300, 200, 322, 256)]
 BODIES = [gr.LIGHT_GRAY, gr.YELLOW, gr.WHITE]
 DESKTOP = gr.CYAN
 TITLE_BAR = gr.BLUE
-GRIP_COLOUR = gr.DARK_GRAY
+INACTIVE_BAR = gr.LIGHT_GRAY
+INACTIVE_BORDER = gr.DARK_GRAY
 CELL_FILLS = [gr.GREEN, gr.RED, gr.MAGENTA, gr.BROWN]
 CELL_EDGE = gr.BLACK
 ROW_TEXT = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcd"
@@ -114,40 +122,61 @@ def wait_pixels(vdp, expected, timeout=30):
             vdp.lock.wait(0.1)
 
 
-def grip_point(frame):
-    """Return the bottom-right pixel of a frame, which is its grip's."""
+def corner_point(frame):
+    """Return the bottom-right pixel of a frame, its border's corner and the
+    middle of its bottom-right grab zone."""
     left, top, width, height = frame
     return (left + width - 1, top + height - 1)
 
 
-def start_nook(session, options="", user=None):
+def run_nook(vdp, options="", demo=True):
+    """Run nook on the VDP console and wait until the window manager has
+    painted the screen:  the demonstration windows, or the desktop alone.
+
+    @param vdp The FakeVdp.
+    @param options nook's options.
+    @param demo Whether to pass --demo.
+
+    @return The number of context commands FakeVdp had received before.
+    """
+    base = len(vdp.context_events())
+    vdp.type(("nook " + ("--demo " if demo else "") + options).strip() + "\r")
+    assert vdp.wait_context_events(base + 1)[base:base + 1] == ACQUIRE
+    if demo:
+        wait_pixels(vdp, {corner_point(FRAMES[2]): TITLE_BAR})
+    else:
+        wait_pixels(vdp, {(0, 0): DESKTOP, (639, 479): DESKTOP,
+                          (320, 240): DESKTOP})
+    settle(vdp)
+    return base
+
+
+def start_nook(session, options="", user=None, demo=True):
     """Log in on the VDP console, run nook there, and wait until the
     window manager has painted the screen.
 
     @param session The session.
     @param options nook's options.
     @param user (name, password) to log in as, or None for root.
+    @param demo Whether to pass --demo.
 
     @return The number of context commands FakeVdp had received before.
     """
     vdp = session.vdp
     vdp_login_as(vdp, *(user or ("root", "rootroot")))
-    base = len(vdp.context_events())
-    vdp.type(("nook " + options).strip() + "\r")
-    assert vdp.wait_context_events(base + 1)[base:base + 1] == ACQUIRE
-    wait_pixels(vdp, {grip_point(FRAMES[2]): GRIP_COLOUR})
-    return base
+    return run_nook(vdp, options, demo)
 
 
 def quit_nook(session, base):
-    """Press Ctrl+Q and wait until the display has been given back and the
-    VDP console shows its prompt again.
+    """Take the display back with Ctrl+Alt+Backspace, which is how sysnook is
+    ended, and wait until it has been given back and the VDP console shows its
+    prompt again.
 
     @param session The session.
     @param base The number of context commands before nook.
     """
     vdp = session.vdp
-    vdp.ctrl("q")
+    vdp.release_display()
     events = vdp.wait_context_events(base + 3)
     assert events[base:] == ACQUIRE + RELEASE, events[base:]
 
@@ -186,18 +215,16 @@ def check_clean(session):
 
 # Step 1:  nook, the display, and the console.
 
-def test_nook_ctrl_q_gives_the_console_back_cleared_to_its_prompt(session):
+def test_nook_the_revoke_key_gives_the_console_back_cleared_to_its_prompt(
+        session):
     boot_nook(session)
     vdp = session.vdp
     vdp_login_as(vdp, "root", "rootroot")
     vdp.type("echo before\r")
     vdp.expect(r"\r\nbefore\r\n" + PROMPT)
     prompt = [line for line in vdp.grid_lines() if line][-1]
-    base = len(vdp.context_events())
-    vdp.type("nook\r")
-    assert vdp.wait_context_events(base + 1)[base:base + 1] == ACQUIRE
-    wait_pixels(vdp, {grip_point(FRAMES[2]): GRIP_COLOUR, (0, 0): DESKTOP,
-                      (639, 479): DESKTOP})
+    base = run_nook(vdp)
+    wait_pixels(vdp, {(0, 0): DESKTOP, (639, 479): DESKTOP})
     quit_nook(session, base)
     # The driver clears the screen when it takes the display back, and
     # replays only what was printed while it was owned:  nothing here.
@@ -296,49 +323,56 @@ def cell_fill(row, column):
     return CELL_FILLS[(row + column) & 3]
 
 
-def window_points(frame, body):
-    """Return sample points of a plain window:  its title bar, body and grip.
+def window_points(frame, body, active=True):
+    """Return sample points of a plain window:  its title bar, border and
+    body.
 
     @param frame The window's (left, top, width, height).
     @param body The palette index of its body, or None to leave it out.
+    @param active Whether it's the active window.
 
     @return A dictionary of (x, y) to palette index.
     """
     left, top, width, height = frame
     right, bottom = left + width, top + height
-    points = {(right - 12, top + 1): TITLE_BAR, (left, top): TITLE_BAR,
-              (right - GRIP, bottom - GRIP): GRIP_COLOUR,
-              (right - 1, bottom - 1): GRIP_COLOUR}
+    inner_right, inner_bottom = right - BORDER, bottom - BORDER
+    bar = TITLE_BAR if active else INACTIVE_BAR
+    border = TITLE_BAR if active else INACTIVE_BORDER
+    points = {(right - 12, top + 1): bar, (left, top): border,
+              (right - 1, bottom - 1): border}
     if body is not None:
         points[(left + 5, bottom - 5)] = body
-        points[(right - GRIP - 1, bottom - GRIP - 1)] = body
+        points[(inner_right - INSET - 1, inner_bottom - INSET - 1)] = body
     return points
 
 
-def assert_windows(vdp, frames):
+def assert_windows(vdp, frames, active=2):
     """Check sample pixels of the desktop and the three windows, each at a
     frame, window 2 full of cells, and each window's title.
 
     @param vdp The FakeVdp.
     @param frames The windows' frames.
+    @param active The number of the active window.
     """
     expected = {}
     for number, frame in enumerate(frames):
         body = BODIES[number] if number < 2 else None
-        expected.update(window_points(frame, body))
-    left, top = frames[2][0], frames[2][1] + TITLE_HEIGHT
+        expected.update(window_points(frame, body, number == active))
+    left, top = frames[2][0] + BORDER, frames[2][1] + FRAME_TOP
     expected.update({
         # Row 1, column 0:  fill and outline corners.
         (left + 10, top + 30): cell_fill(1, 0),
         (left, top + CELL): CELL_EDGE, (left + 19, top + 39): CELL_EDGE,
-        # Row 11, column 15, just inside the grip's corner.
+        # Row 11, column 15, near the body's bottom-right corner.
         (left + 311, top + 231): cell_fill(11, 15)})
     for point in ((0, 0), (639, 479), (250, 300)):
         expected[point] = DESKTOP
     assert_pixels(vdp, expected)
     for number, frame in enumerate(frames):
-        assert vdp.pixels(frame[0] + 4, frame[1] + 2, 6, 8) == glyph_on(
-            vdp, ord("W"), gr.WHITE, TITLE_BAR), number
+        ink, bar = (gr.WHITE, TITLE_BAR) if number == active else (
+            INACTIVE_BORDER, INACTIVE_BAR)
+        assert vdp.pixels(frame[0] + 5, frame[1] + 4, 6, 8) == glyph_on(
+            vdp, ord("W"), ink, bar), number
     # The row of text across row 0:  its third character, over cell 0.
     assert vdp.pixels(left + 12, top + 6, 6, 8) == glyph_on(
         vdp, ROW_TEXT[2], gr.WHITE, cell_fill(0, 0))
@@ -362,9 +396,7 @@ def test_nook_cells_painted_by_call_match_cells_sent_as_records(session):
     quit_nook(session, base)
     vdp.expect(PROMPT + "$")
     base = len(vdp.context_events())
-    vdp.type("nook --content=call\r")
-    assert vdp.wait_context_events(base + 1)[base:base + 1] == ACQUIRE
-    wait_pixels(vdp, {grip_point(FRAMES[2]): GRIP_COLOUR})
+    base = run_nook(vdp, "--content=call")
     assert_windows(vdp, FRAMES)
     assert bytes(vdp.canvas) == records
     # One call of a preloaded row for each of the 12 rows.
@@ -434,7 +466,7 @@ def test_nook_a_window_moved_live_lands_exactly_and_uncovers_the_desktop(
                   (left + 100, top + 60)):
         expected[point] = DESKTOP
     wait_pixels(vdp, expected)
-    assert vdp.pixels(frame[0] + 4, frame[1] + 2, 6, 8) == glyph_on(
+    assert vdp.pixels(frame[0] + 5, frame[1] + 4, 6, 8) == glyph_on(
         vdp, ord("W"), gr.WHITE, TITLE_BAR)
     assert vdp.count_events("plot") > plots
     quit_nook(session, base)
@@ -450,13 +482,16 @@ def test_nook_a_window_moved_across_another_and_back_restores_it_exactly(
     drag(vdp, (300, 45), (390, 255))
     frame = moved(FRAMES[1], 90, 210)
     expected = window_points(frame, BODIES[1])
-    left, top = FRAMES[2][0], FRAMES[2][1] + TITLE_HEIGHT
+    left, top = FRAMES[2][0] + BORDER, FRAMES[2][1] + FRAME_TOP
     # Window 2's cells beside and below window 1, and where it was.
     expected[(left + 10, top + 30)] = cell_fill(1, 0)
     expected[(left + 310, top + 230)] = cell_fill(11, 15)
     expected[(FRAMES[1][0] + 5, FRAMES[1][1] + 5)] = DESKTOP
     wait_pixels(vdp, expected)
     drag(vdp, (390, 255), (300, 45))
+    # Moving window 1 made it active; a click on window 2 makes the stack
+    # and the colours what they were.
+    click(vdp, (400, 300))
     wait_canvas(vdp, initial)
     quit_nook(session, base)
     check_clean(session)
@@ -482,18 +517,18 @@ def test_nook_a_moved_window_keeps_32_pixels_of_its_title_bar_on_the_screen(
     boot_nook(session)
     vdp = session.vdp
     base = start_nook(session)
-    # Grabbed 170 pixels into its title bar, below window 0, window 1 would
-    # go to x -170.
-    drag(vdp, (430, 45), (0, 245))
-    wait_pixels(vdp, {(KEEP_TITLE - 1, 241): TITLE_BAR,
-                      (KEEP_TITLE, 241): DESKTOP,
-                      (KEEP_TITLE - 1, 240 + FRAMES[1][3] - 1): GRIP_COLOUR})
+    # The caption buttons take the right 54 pixels of a title bar, so a
+    # window can't be dragged far enough left for the limit to hold it.
+    # Grabbed 5 pixels down, window 1 would go to y -5:  it stays at 0.
+    drag(vdp, (300, 45), (300, 0))
+    wait_pixels(vdp, {(300, 0): TITLE_BAR, (300, FRAME_TOP): BODIES[1],
+                      (259, 0): DESKTOP})
     # Window 0, grabbed 4 pixels in, would go to x 635 and y 473.
     drag(vdp, (FRAMES[0][0] + 4, FRAMES[0][1] + 6), (639, 479))
     wait_pixels(vdp, {(640 - KEEP_TITLE, 479): TITLE_BAR,
                       (639 - KEEP_TITLE, 479): DESKTOP,
-                      (639, 480 - TITLE_HEIGHT): TITLE_BAR,
-                      (639, 479 - TITLE_HEIGHT): DESKTOP})
+                      (639, 480 - FRAME_TOP): TITLE_BAR,
+                      (639, 479 - FRAME_TOP): DESKTOP})
     quit_nook(session, base)
     check_clean(session)
 
@@ -505,19 +540,20 @@ def test_nook_a_window_resized_live_grows_and_shrinks_exactly(session):
     vdp = session.vdp
     base = start_nook(session, "--resize=live")
     anchored = {(310, 242): cell_fill(1, 0)}
-    # Grabbed 5 and 4 pixels from its corner, window 2 grows to 340x274.
-    drag(vdp, (615, 448), (635, 470))
-    grown = (300, 200, 340, 274)
+    # Grabbed on its corner pixel, window 2 grows to 340x278.
+    drag(vdp, corner_point(FRAMES[2]), (639, 477))
+    grown = (300, 200, 340, 278)
     expected = window_points(grown, None)
     expected.update(anchored)
     expected.update({
         (639, 201): TITLE_BAR, (630, 300): gr.WHITE, (625, 460): gr.WHITE,
-        # The old grip's place shows the cell under it.
-        (615, 448): cell_fill(11, 15), (612, 444): cell_fill(11, 15)})
+        # Where the old border was is the body's face, beside and below the
+        # cells.
+        (621, 300): gr.WHITE, (615, 455): gr.WHITE})
     wait_pixels(vdp, expected)
-    # Grabbed 5 and 5 pixels from its corner, it shrinks to 155x135.
-    drag(vdp, (635, 469), (450, 330))
-    shrunk = (300, 200, 155, 135)
+    # Grabbed on its corner pixel, it shrinks to 155x139.
+    drag(vdp, corner_point(grown), (454, 338))
+    shrunk = (300, 200, 155, 139)
     expected = window_points(shrunk, None)
     expected.update(anchored)
     expected.update({
@@ -535,13 +571,13 @@ def test_nook_a_window_is_never_resized_below_its_minimum(session):
     boot_nook(session)
     vdp = session.vdp
     base = start_nook(session)
-    drag(vdp, (615, 448), (0, 0))
+    drag(vdp, corner_point(FRAMES[2]), (0, 0))
     smallest = (300, 200, MIN_WIDTH, MIN_HEIGHT)
     expected = window_points(smallest, None)
     expected.update({
-        (363, 201): TITLE_BAR, (364, 201): DESKTOP,
-        (305, 226): cell_fill(0, 0), (305, 228): DESKTOP,
-        (299, 226): DESKTOP, (364, 226): DESKTOP})
+        (383, 201): TITLE_BAR, (384, 201): DESKTOP,
+        (305, 226): cell_fill(0, 0), (305, 232): DESKTOP,
+        (299, 226): DESKTOP, (384, 226): DESKTOP})
     wait_pixels(vdp, expected)
     quit_nook(session, base)
     check_clean(session)
@@ -605,31 +641,33 @@ def restart_nook(session, base, options):
     vdp = session.vdp
     quit_nook(session, base)
     vdp.expect(PROMPT + "$")
-    base = len(vdp.context_events())
-    vdp.type(("nook " + options).strip() + "\r")
-    assert vdp.wait_context_events(base + 1)[base:base + 1] == ACQUIRE
-    wait_pixels(vdp, {grip_point(FRAMES[2]): GRIP_COLOUR})
-    return base
+    return run_nook(vdp, options)
 
 
-def outline_then_live(session, options, start, end, outline):
-    """Drag in outline mode, checking the outline before the release, then
-    check that the canvas after the release equals live mode's after the same
-    drag.
+def outline_then_live(session, options, start, end, grabbed, outline):
+    """Drag in outline mode, checking that after the press only the outline
+    changes until the release, then check that the canvas after the release
+    equals live mode's after the same drag.
 
     @param session The session.
     @param options The nook options for outline mode.
     @param start The (x, y) of the press.
     @param end The (x, y) of the release.
+    @param grabbed The frame of the window pressed on.
     @param outline The frame the outline should have at the end.
     """
     vdp = session.vdp
     base = start_nook(session, options)
     initial = bytes(vdp.canvas)
+    # The press activates the window and draws the outline on its frame.
+    vdp.mouse(*start)
+    vdp.mouse(*start, buttons=1)
+    settle(vdp)
+    pressed = with_outline(bytes(vdp.canvas), grabbed)
     hold_drag(vdp, start, end)
-    wait_canvas(vdp, with_outline(initial, outline))
+    wait_canvas(vdp, with_outline(pressed, outline))
     vdp.mouse(*end)
-    wait_pixels(vdp, {grip_point(outline): GRIP_COLOUR})
+    wait_pixels(vdp, {corner_point(outline): TITLE_BAR})
     time.sleep(1)
     after = bytes(vdp.canvas)
     base = restart_nook(session, base, "--move=live --resize=live")
@@ -644,14 +682,14 @@ def test_nook_an_outline_move_changes_nothing_but_the_outline_until_release(
         session):
     boot_nook(session)
     outline_then_live(session, "--move=outline", (300, 45), (390, 255),
-                      moved(FRAMES[1], 90, 210))
+                      FRAMES[1], moved(FRAMES[1], 90, 210))
 
 
 def test_nook_an_outline_resize_changes_nothing_but_the_outline_until_release(
         session):
     boot_nook(session)
-    outline_then_live(session, "--resize=outline", (615, 448), (450, 330),
-                      (300, 200, 155, 134))
+    outline_then_live(session, "--resize=outline", corner_point(FRAMES[2]),
+                      (454, 338), FRAMES[2], (300, 200, 155, 139))
 
 
 # Step 6:  revocation.
@@ -694,8 +732,8 @@ def test_nook_exits_0_when_the_display_is_taken_back_during_an_outline_drag(
     vdp = session.vdp
     base = start_nook(session, "--move=outline --resize=outline")
     initial = bytes(vdp.canvas)
-    hold_drag(vdp, (615, 448), (450, 330))
-    wait_canvas(vdp, with_outline(initial, (300, 200, 155, 134)))
+    hold_drag(vdp, corner_point(FRAMES[2]), (454, 338))
+    wait_canvas(vdp, with_outline(initial, (300, 200, 155, 139)))
     revoke(session, base)
     check_clean(session)
 
@@ -708,10 +746,7 @@ def test_nook_gives_back_all_the_memory_it_used(session):
     vdp_login_as(vdp, "root", "rootroot")
     heaps = []
     for _run in range(18):
-        base = len(vdp.context_events())
-        vdp.type("nook --content=call --move=live\r")
-        assert vdp.wait_context_events(base + 1)[base:base + 1] == ACQUIRE
-        wait_pixels(vdp, {grip_point(FRAMES[2]): GRIP_COLOUR})
+        base = run_nook(vdp, "--content=call --move=live")
         drag(vdp, (300, 45), (390, 255))
         wait_pixels(vdp, window_points(moved(FRAMES[1], 90, 210), BODIES[1]))
         quit_nook(session, base)
@@ -877,5 +912,680 @@ def test_nook_mouse_packets_sent_during_long_repaints_are_never_lost(session):
     vdp.mouse(390, 255)
     wait_pixels(vdp, window_points(moved(FRAMES[1], 90, 210), BODIES[1]),
                 timeout=20)
+    quit_nook(session, base)
+    check_clean(session)
+
+
+# Nook plan 2:  windows.
+
+ACCENT = gr.BLUE
+FACE = gr.WHITE
+
+
+def run_client(session, commands):
+    """Start wintest run with commands in the background on UART1.
+
+    @param session The session.
+    @param commands wintest run's commands.
+    """
+    session.child.sendline("wintest run " + commands + " &")
+
+
+def expect_line(session, line, timeout=10):
+    """Wait for a line on UART1.
+
+    @param session The session.
+    @param line The line.
+    @param timeout Seconds to wait.
+    """
+    session.child.expect(re.escape(line) + r"\r*\n", timeout=timeout)
+
+
+def text_pixels(vdp, text, colour, background):
+    """Return a line of text in the driver's font as rows of palette
+    indices.
+
+    @param vdp The FakeVdp.
+    @param text The text.
+    @param colour The palette index of its set pixels.
+    @param background The palette index under its clear pixels.
+
+    @return The rows.
+    """
+    glyphs = [glyph_on(vdp, ord(ch), colour, background) for ch in text]
+    return [sum((glyph[row] for glyph in glyphs), []) for row in range(8)]
+
+
+def decorated_points(frame, bar=ACCENT):
+    """Return sample points of a decorated window:  its border's corners, its
+    title bar's, its face's, and the desktop just outside it.
+
+    @param frame The window's (left, top, width, height).
+    @param bar The palette index of its border and title bar.
+
+    @return A dictionary of (x, y) to palette index.
+    """
+    left, top, width, height = frame
+    right, bottom = left + width, top + height
+    return {(left, top): bar, (right - 1, top): bar, (left, bottom - 1): bar,
+            (right - 1, bottom - 1): bar, (left + 1, top + 1): bar,
+            (right - 2, top + FRAME_TOP - 1): bar,
+            (left + 1, top + FRAME_TOP): FACE,
+            (right - 2 - INSET, bottom - 2): FACE,
+            (left - 1, top): DESKTOP, (right, top): DESKTOP,
+            (left, top - 1): DESKTOP, (left, bottom): DESKTOP}
+
+
+def face_points(frame):
+    """Return sample points of a decorated window's face, which keep their
+    colour whether the window is active or not.
+
+    @param frame The window's (left, top, width, height).
+
+    @return A dictionary of (x, y) to palette index.
+    """
+    left, top, width, height = frame
+    return {(left + 1, top + FRAME_TOP): FACE, (left + 5, top + height - 5): FACE,
+            (left + width - 2 - INSET, top + height - 2): FACE}
+
+
+def wintest_pid(session):
+    """Get the process ID of the wintest running on UART1.
+
+    @param session The session.
+
+    @return The process ID.
+    """
+    pids = [pid for pid, _user, name in ps_entries(session)
+            if name == "wintest"]
+    assert len(pids) == 1, pids
+    return pids[0]
+
+
+def test_nook_a_clients_window_is_drawn_exactly(session):
+    boot_nook(session)
+    vdp = session.vdp
+    base = start_nook(session, demo=False)
+    run_client(session, "create 40,40,200,100 Hello")
+    expect_line(session, "wintest: window 1")
+    wait_pixels(vdp, decorated_points((40, 40, 200, 100)))
+    settle(vdp)
+    assert vdp.pixels(45, 44, 30, 8) == text_pixels(vdp, "Hello", gr.WHITE,
+                                                     ACCENT)
+    quit_nook(session, base)
+    check_clean(session)
+
+
+def test_nook_a_client_cant_change_another_clients_window(session):
+    boot_nook(session)
+    vdp = session.vdp
+    base = start_nook(session, demo=False)
+    run_client(session, "create 40,40,200,100 Hello")
+    expect_line(session, "wintest: window 1")
+    wait_pixels(vdp, decorated_points((40, 40, 200, 100)))
+    settle(vdp)
+    before = bytes(vdp.canvas)
+    assert session.sh("wintest run destroy 1 title 1 Mine exit") == \
+        "wintest: title 1: Operation not permitted"
+    time.sleep(1)
+    assert bytes(vdp.canvas) == before
+    quit_nook(session, base)
+    check_clean(session)
+
+
+def test_nook_a_killed_client_takes_its_windows_with_it(session):
+    boot_nook(session)
+    vdp = session.vdp
+    base = start_nook(session, demo=False)
+    initial = bytes(vdp.canvas)
+    run_client(session, "create 40,40,200,100 One create 150,90,200,120 Two")
+    expect_line(session, "wintest: window 1")
+    expect_line(session, "wintest: window 2")
+    points = face_points((40, 40, 200, 100))
+    points.update(face_points((150, 90, 200, 120)))
+    wait_pixels(vdp, points)
+    output = session.sh("kill %d" % wintest_pid(session))
+    assert output.startswith("Termination of process"), output
+    wait_canvas(vdp, initial)
+    quit_nook(session, base)
+    check_clean(session)
+
+
+def click(vdp, point):
+    """Press and let go of the left button at a point.
+
+    @param vdp The FakeVdp.
+    @param point The (x, y).
+    """
+    vdp.mouse(*point)
+    vdp.mouse(*point, buttons=1)
+    vdp.mouse(*point)
+
+
+def button_rect(frame, button):
+    """Return a caption button's rectangle:  0 minimize, 1 maximize, 2 close.
+
+    @param frame The window's (left, top, width, height).
+    @param button The button.
+
+    @return The button's (left, top, width, height).
+    """
+    left, top, width, _height = frame
+    return (left + width - BORDER - (3 - button) * 18, top + BORDER, 18, 14)
+
+
+def drawing(vdp):
+    """Count the drawing commands FakeVdp has received.  Viewports are left
+    out:  the driver sends one only when it changes.
+
+    @param vdp The FakeVdp.
+
+    @return A tuple of the plot, gcol and gtext counts.
+    """
+    return tuple(vdp.count_events(kind) for kind in ("plot", "gcol", "gtext"))
+
+
+def settle(vdp, quiet=0.5, timeout=15):
+    """Wait until FakeVdp has received no drawing commands for a while.
+
+    @param vdp The FakeVdp.
+    @param quiet Seconds without a drawing command.
+    @param timeout Seconds to wait in all.
+
+    @return The drawing command counts at the end.
+    """
+    deadline = time.time() + timeout
+    last = drawing(vdp)
+    since = time.time()
+    while time.time() - since < quiet:
+        assert time.time() < deadline, "FakeVdp is still being drawn on"
+        time.sleep(0.05)
+        now = drawing(vdp)
+        if now != last:
+            last, since = now, time.time()
+    return last
+
+
+def changed_pixels(before, after):
+    """Return the pixels that differ between two canvases.
+
+    @param before One canvas, as bytes.
+    @param after The other.
+
+    @return A set of (x, y).
+    """
+    return {(index % 640, index // 640) for index in range(len(before))
+            if before[index] != after[index]}
+
+
+def inside(points, rect):
+    """Determine whether every point is inside a rectangle."""
+    left, top, width, height = rect
+    return all(left <= x < left + width and top <= y < top + height
+               for x, y in points)
+
+
+def test_nook_a_title_too_long_for_its_window_ends_in_dots(session):
+    boot_nook(session)
+    vdp = session.vdp
+    base = start_nook(session, demo=False)
+    # 118 pixels inside the border, less 54 of buttons and a 4-pixel inset,
+    # holds 10 characters of 6.
+    run_client(session, "create 40,40,120,60 ABCDEFGHIJKLMN")
+    expect_line(session, "wintest: window 1")
+    wait_pixels(vdp, decorated_points((40, 40, 120, 60)))
+    settle(vdp)
+    assert vdp.pixels(45, 44, 60, 8) == text_pixels(vdp, "ABCDEFG...",
+                                                     gr.WHITE, ACCENT)
+    assert vdp.pixels(105, 41, 1, 14) == [[ACCENT]] * 14
+    quit_nook(session, base)
+    check_clean(session)
+
+
+def test_nook_close_asks_the_owner_and_only_when_released_on_it(session):
+    boot_nook(session)
+    vdp = session.vdp
+    base = start_nook(session, demo=False)
+    run_client(session, "create 40,40,200,100 One create 300,200,200,100 Two")
+    expect_line(session, "wintest: window 1")
+    expect_line(session, "wintest: window 2")
+    wait_pixels(vdp, decorated_points((300, 200, 200, 100)))
+    one_close = button_rect((40, 40, 200, 100), 2)
+    two_close = button_rect((300, 200, 200, 100), 2)
+    # Released off the button, the press does nothing; the next close is the
+    # first thing printed.
+    vdp.mouse(one_close[0] + 9, one_close[1] + 7)
+    vdp.mouse(one_close[0] + 9, one_close[1] + 7, buttons=1)
+    vdp.mouse(100, 100, buttons=1)
+    vdp.mouse(100, 100)
+    click(vdp, (two_close[0] + 9, two_close[1] + 7))
+    session.child.expect(r"CLOSE_REQUESTED (\d+)\r*\n", timeout=10)
+    assert session.child.match.group(1) == "2"
+    click(vdp, (one_close[0] + 9, one_close[1] + 7))
+    expect_line(session, "CLOSE_REQUESTED 1")
+    time.sleep(1)
+    points = face_points((40, 40, 200, 100))
+    points.update(face_points((300, 200, 200, 100)))
+    wait_pixels(vdp, points)
+    quit_nook(session, base)
+    check_clean(session)
+
+
+def test_nook_close_turns_red_under_the_pointer_repainting_only_itself(session):
+    boot_nook(session)
+    vdp = session.vdp
+    base = start_nook(session, demo=False)
+    frame = (40, 40, 200, 100)
+    run_client(session, "create 40,40,200,100 Hello")
+    expect_line(session, "wintest: window 1")
+    wait_pixels(vdp, decorated_points(frame))
+    close = button_rect(frame, 2)
+    vdp.mouse(100, 100)
+    before_counts = settle(vdp)
+    before = bytes(vdp.canvas)
+    vdp.mouse(close[0] + 9, close[1] + 7)
+    wait_pixels(vdp, {(close[0], close[1]): gr.LIGHT_RED,
+                      (close[0] + 17, close[1] + 13): gr.LIGHT_RED})
+    hover_counts = settle(vdp)
+    hovered = bytes(vdp.canvas)
+    changed = changed_pixels(before, hovered)
+    assert changed and inside(changed, close), sorted(changed)[:8]
+    # Motion within the button repaints nothing.
+    vdp.mouse(close[0] + 3, close[1] + 3)
+    assert settle(vdp) == hover_counts
+    vdp.mouse(100, 100)
+    wait_canvas(vdp, before)
+    out_counts = settle(vdp)
+    vdp.mouse(close[0] + 9, close[1] + 7)
+    wait_canvas(vdp, hovered)
+    again_counts = settle(vdp)
+    vdp.mouse(close[0] + 9, close[1] + 7, buttons=1)
+    wait_pixels(vdp, {(close[0], close[1]): gr.DARK_GRAY})
+    pressed_counts = settle(vdp)
+    vdp.mouse(100, 100, buttons=1)
+    vdp.mouse(100, 100)
+    deltas = [tuple(after - start for after, start in zip(end, begin))
+              for begin, end in ((before_counts, hover_counts),
+                                 (hover_counts, out_counts),
+                                 (out_counts, again_counts),
+                                 (again_counts, pressed_counts))]
+    # One button:  its face and its glyph's two lines, in two colours.
+    assert deltas == [(3, 2, 0)] * 4, deltas
+    quit_nook(session, base)
+    check_clean(session)
+
+
+KEYCODE_F4 = 162
+
+
+def test_nook_a_click_activates_the_window_under_it_and_tells_both(session):
+    boot_nook(session)
+    vdp = session.vdp
+    base = start_nook(session, demo=False)
+    # Window 2 covers the right of window 1's title bar until window 1 is
+    # clicked.
+    run_client(session, "create 40,40,200,100 One create 100,10,200,100 Two")
+    for line in ("wintest: window 1", "wintest: window 2",
+                 "FOCUS 1 activated", "FOCUS 1 deactivated",
+                 "FOCUS 2 activated"):
+        expect_line(session, line)
+    wait_pixels(vdp, {(150, 11): TITLE_BAR, (150, 45): FACE,
+                      (50, 41): INACTIVE_BAR, (40, 40): INACTIVE_BORDER})
+    click(vdp, (60, 120))
+    expect_line(session, "FOCUS 2 deactivated")
+    expect_line(session, "FOCUS 1 activated")
+    wait_pixels(vdp, {(150, 45): TITLE_BAR, (50, 41): TITLE_BAR,
+                      (40, 40): TITLE_BAR, (150, 11): INACTIVE_BAR,
+                      (299, 109): INACTIVE_BORDER})
+    assert vdp.pixels(45, 44, 18, 8) == text_pixels(vdp, "One", gr.WHITE,
+                                                     TITLE_BAR)
+    settle(vdp)
+    assert vdp.pixels(105, 14, 18, 8) == text_pixels(vdp, "Two",
+                                                      INACTIVE_BORDER,
+                                                      INACTIVE_BAR)
+    quit_nook(session, base)
+    check_clean(session)
+
+
+def test_nook_a_topmost_window_stays_above_a_window_activated_after_it(
+        session):
+    boot_nook(session)
+    vdp = session.vdp
+    base = start_nook(session, demo=False)
+    run_client(session, "create 100,100,200,100 Top layer=topmost "
+               "create 40,40,200,100 Normal")
+    expect_line(session, "wintest: window 1")
+    expect_line(session, "wintest: window 2")
+    # Created after it, the normal window is still behind the topmost one.
+    wait_pixels(vdp, {(150, 101): INACTIVE_BAR, (60, 41): TITLE_BAR})
+    click(vdp, (60, 120))
+    time.sleep(1)
+    wait_pixels(vdp, {(150, 101): INACTIVE_BAR, (120, 120): FACE,
+                      (60, 41): TITLE_BAR})
+    quit_nook(session, base)
+    check_clean(session)
+
+
+def test_nook_ctrl_q_goes_to_the_application_and_nook_keeps_running(session):
+    boot_nook(session)
+    vdp = session.vdp
+    base = start_nook(session, demo=False)
+    run_client(session, "create 40,40,200,100 Keys")
+    expect_line(session, "wintest: window 1")
+    expect_line(session, "FOCUS 1 activated")
+    vdp.ctrl("q")
+    expect_line(session, "KEY q ctrl")
+    expect_line(session, "KEY q ctrl up")
+    time.sleep(1)
+    assert vdp.context_events()[base:] == ACQUIRE
+    assert session.sh("wintest hello") == HELLO
+    quit_nook(session, base)
+    check_clean(session)
+
+
+def test_nook_alt_f4_asks_only_the_active_windows_owner_to_close(session):
+    boot_nook(session)
+    vdp = session.vdp
+    base = start_nook(session, demo=False)
+    run_client(session, "create 40,40,200,100 First")
+    expect_line(session, "wintest: window 1")
+    expect_line(session, "FOCUS 1 activated")
+    run_client(session, "create 300,200,200,100 Second")
+    expect_line(session, "wintest: window 2")
+    # Two processes print these, so they come in either order.
+    seen = set()
+    while len(seen) < 2:
+        session.child.expect(r"(FOCUS 1 deactivated|FOCUS 2 activated)\r*\n",
+                             timeout=10)
+        seen.add(session.child.match.group(1))
+    vdp.key_packet(0, KEYMOD_ALT_LEFT, KEYCODE_F4)
+    vdp.key_packet(0, KEYMOD_ALT_LEFT, KEYCODE_F4, down=0)
+    expect_line(session, "CLOSE_REQUESTED 2")
+    assert session.child.expect([pexpect.TIMEOUT, r"\S"], timeout=2) == 0, \
+        session.child.after
+    quit_nook(session, base)
+    check_clean(session)
+
+
+def test_nook_a_popup_closes_on_a_press_outside_it(session):
+    boot_nook(session)
+    vdp = session.vdp
+    base = start_nook(session, demo=False)
+    initial = bytes(vdp.canvas)
+    run_client(session, "create 200,200,120,80 Menu layer=popup flags=plain "
+               "closes")
+    expect_line(session, "wintest: window 1")
+    wait_pixels(vdp, {(200, 200): FACE, (319, 279): FACE})
+    click(vdp, (50, 50))
+    expect_line(session, "CLOSE_REQUESTED 1")
+    wait_canvas(vdp, initial)
+    quit_nook(session, base)
+    check_clean(session)
+
+
+KEYCODE_TAB = 142
+
+
+def test_nook_maximize_fills_the_work_area_and_restore_brings_the_frame_back(
+        session):
+    boot_nook(session)
+    vdp = session.vdp
+    base = start_nook(session, demo=False)
+    run_client(session, "create 0,458,640,22 Bar layer=topmost "
+               "flags=plain,bottom create 40,40,200,100 Window")
+    expect_line(session, "wintest: window 1")
+    expect_line(session, "wintest: window 2")
+    expect_line(session, "FOCUS 2 activated")
+    wait_pixels(vdp, decorated_points((40, 40, 200, 100)))
+    vdp.mouse(400, 300)
+    settle(vdp)
+    before = bytes(vdp.canvas)
+    maximize = button_rect((40, 40, 200, 100), 1)
+    click(vdp, (maximize[0] + 9, maximize[1] + 7))
+    expect_line(session, "RESIZED 2 638x442")
+    expect_line(session, "STATE 2 maximized")
+    # The work area is the screen less the bar's 22 pixels at the bottom.
+    wait_pixels(vdp, {(0, 0): TITLE_BAR, (639, 0): TITLE_BAR,
+                      (0, 457): TITLE_BAR, (639, 457): TITLE_BAR,
+                      (1, 15): FACE, (638, 456): FACE, (0, 458): FACE,
+                      (320, 479): FACE})
+    restore = button_rect((0, 0, 640, 458), 1)
+    click(vdp, (restore[0] + 9, restore[1] + 7))
+    expect_line(session, "RESIZED 2 198x84")
+    expect_line(session, "STATE 2 normal")
+    vdp.mouse(400, 300)
+    wait_canvas(vdp, before)
+    quit_nook(session, base)
+    check_clean(session)
+
+
+def test_nook_a_reserving_window_resizes_a_maximized_one(session):
+    boot_nook(session)
+    vdp = session.vdp
+    base = start_nook(session, demo=False)
+    run_client(session, "create 40,40,200,100 Window state 1 maximized")
+    expect_line(session, "wintest: window 1")
+    expect_line(session, "FOCUS 1 activated")
+    expect_line(session, "RESIZED 1 638x464")
+    expect_line(session, "STATE 1 maximized")
+    wait_pixels(vdp, {(0, 479): TITLE_BAR, (639, 479): TITLE_BAR})
+    run_client(session, "create 0,458,640,22 Bar layer=topmost "
+               "flags=plain,bottom")
+    expect_line(session, "RESIZED 1 638x442")
+    wait_pixels(vdp, {(0, 457): TITLE_BAR, (639, 457): TITLE_BAR,
+                      (0, 458): FACE, (639, 479): FACE})
+    quit_nook(session, base)
+    check_clean(session)
+
+
+def test_nook_a_double_click_on_a_title_bar_maximizes(session):
+    boot_nook(session)
+    vdp = session.vdp
+    base = start_nook(session, demo=False)
+    run_client(session, "create 40,40,200,100 Window")
+    expect_line(session, "wintest: window 1")
+    expect_line(session, "FOCUS 1 activated")
+    wait_pixels(vdp, decorated_points((40, 40, 200, 100)))
+    # Two clicks 600 ms apart are two clicks.
+    click(vdp, (100, 45))
+    time.sleep(0.6)
+    click(vdp, (100, 45))
+    assert session.child.expect([pexpect.TIMEOUT, r"\S"], timeout=2) == 0, \
+        session.child.after
+    # Two within 500 ms and 4 pixels are a double-click.
+    click(vdp, (100, 45))
+    click(vdp, (103, 47))
+    expect_line(session, "RESIZED 1 638x464")
+    expect_line(session, "STATE 1 maximized")
+    wait_pixels(vdp, {(0, 0): TITLE_BAR, (639, 479): TITLE_BAR})
+    quit_nook(session, base)
+    check_clean(session)
+
+
+def test_nook_minimize_hides_a_window_and_alt_tab_shows_it_again(session):
+    boot_nook(session)
+    vdp = session.vdp
+    base = start_nook(session, demo=False)
+    initial = bytes(vdp.canvas)
+    run_client(session, "create 40,40,200,100 Window")
+    expect_line(session, "wintest: window 1")
+    expect_line(session, "FOCUS 1 activated")
+    wait_pixels(vdp, decorated_points((40, 40, 200, 100)))
+    vdp.mouse(400, 300)
+    settle(vdp)
+    shown = bytes(vdp.canvas)
+    minimize = button_rect((40, 40, 200, 100), 0)
+    click(vdp, (minimize[0] + 9, minimize[1] + 7))
+    expect_line(session, "STATE 1 minimized")
+    expect_line(session, "FOCUS 1 deactivated")
+    vdp.mouse(400, 300)
+    wait_canvas(vdp, initial)
+    vdp.key_packet(9, KEYMOD_ALT_LEFT, KEYCODE_TAB)
+    vdp.key_packet(9, KEYMOD_ALT_LEFT, KEYCODE_TAB, down=0)
+    expect_line(session, "STATE 1 normal")
+    expect_line(session, "FOCUS 1 activated")
+    wait_canvas(vdp, shown)
+    quit_nook(session, base)
+    check_clean(session)
+
+
+def test_nook_dragging_a_maximized_window_restores_it_under_the_pointer(
+        session):
+    boot_nook(session)
+    vdp = session.vdp
+    base = start_nook(session, "--move=live", demo=False)
+    run_client(session, "create 40,40,200,100 Window state 1 maximized")
+    expect_line(session, "STATE 1 maximized")
+    wait_pixels(vdp, {(0, 0): TITLE_BAR, (639, 479): TITLE_BAR})
+    # Grabbed at x 320, half way along 640 pixels:  restored, the 200-pixel
+    # window keeps the pointer half way along, at offset 100.
+    drag(vdp, (320, 7), (300, 207))
+    expect_line(session, "RESIZED 1 198x84")
+    expect_line(session, "STATE 1 normal")
+    wait_pixels(vdp, decorated_points((200, 200, 200, 100)))
+    quit_nook(session, base)
+    check_clean(session)
+
+
+ZONES = {
+    # name: (edges moved, press point in a frame (x, y, w, h))
+    "left": ("l", lambda x, y, w, h: (x, y + h // 2)),
+    "right": ("r", lambda x, y, w, h: (x + w - 1, y + h // 2)),
+    "top": ("t", lambda x, y, w, h: (x + w // 2, y)),
+    "bottom": ("b", lambda x, y, w, h: (x + w // 2, y + h - 1)),
+    "top-left": ("lt", lambda x, y, w, h: (x, y)),
+    "top-right": ("rt", lambda x, y, w, h: (x + w - 1, y)),
+    "bottom-left": ("lb", lambda x, y, w, h: (x, y + h - 1)),
+    "bottom-right": ("rb", lambda x, y, w, h: (x + w - 1, y + h - 1)),
+    # Within 10 pixels of a corner, a side resizes both ways.
+    "right-near-top": ("rt", lambda x, y, w, h: (x + w - 1, y + 5)),
+}
+
+
+def resized(frame, edges, delta_x, delta_y):
+    """Return a frame with edges moved:  l, r, t, b."""
+    left, top, width, height = frame
+    if "l" in edges:
+        left, width = left + delta_x, width - delta_x
+    if "r" in edges:
+        width += delta_x
+    if "t" in edges:
+        top, height = top + delta_y, height - delta_y
+    if "b" in edges:
+        height += delta_y
+    return (left, top, width, height)
+
+
+def test_nook_each_grab_zone_resizes_its_edges_and_holds_the_others(session):
+    boot_nook(session)
+    vdp = session.vdp
+    base = start_nook(session, demo=False)
+    frame = (100, 100, 300, 200)
+    run_client(session, "create 100,100,300,200 Zones")
+    expect_line(session, "wintest: window 1")
+    expect_line(session, "FOCUS 1 activated")
+    wait_pixels(vdp, decorated_points(frame))
+    for name, (edges, at) in ZONES.items():
+        start = at(*frame)
+        drag(vdp, start, (start[0] + 20, start[1] + 20))
+        frame = resized(frame, edges, 20, 20)
+        expect_line(session, "RESIZED 1 %dx%d" % (frame[2] - 2,
+                                                   frame[3] - FRAME_TOP - 1))
+        wait_pixels(vdp, decorated_points(frame))
+        vdp.mouse(600, 400)
+    quit_nook(session, base)
+    check_clean(session)
+
+
+def test_nook_a_left_edge_dragged_past_the_minimum_holds_the_right_edge(
+        session):
+    boot_nook(session)
+    vdp = session.vdp
+    base = start_nook(session, "--resize=live", demo=False)
+    run_client(session, "create 100,100,300,200 Narrow")
+    expect_line(session, "FOCUS 1 activated")
+    wait_pixels(vdp, decorated_points((100, 100, 300, 200)))
+    drag(vdp, (100, 200), (400, 200))
+    expect_line(session, "RESIZED 1 %dx184" % (MIN_WIDTH - 2))
+    wait_pixels(vdp, decorated_points((400 - MIN_WIDTH, 100, MIN_WIDTH, 200)))
+    quit_nook(session, base)
+    check_clean(session)
+
+
+def test_nook_a_grab_zone_reaches_2_pixels_outside_the_border(session):
+    boot_nook(session)
+    vdp = session.vdp
+    base = start_nook(session, demo=False)
+    # Window 2 is in front; window 1 is under the right of it.
+    run_client(session, "create 300,80,200,200 Under "
+               "create 100,100,200,150 Front")
+    expect_line(session, "FOCUS 2 activated")
+    wait_pixels(vdp, face_points((100, 100, 200, 150)))
+    # The right border is column 299, and column 301, 2 pixels outside it,
+    # still resizes window 2.
+    drag(vdp, (301, 175), (321, 175))
+    expect_line(session, "RESIZED 2 218x134")
+    wait_pixels(vdp, {(319, 175): TITLE_BAR, (320, 175): FACE})
+    # The right border is now column 319.  Column 322, 3 pixels outside it,
+    # is window 1's, and a press there activates it.
+    click(vdp, (322, 175))
+    expect_line(session, "FOCUS 2 deactivated")
+    expect_line(session, "FOCUS 1 activated")
+    quit_nook(session, base)
+    check_clean(session)
+
+
+def drag_across_while_retitled(session, title, retitle):
+    """Start nook in outline mode, have wintest make a window titled title
+    and a second window over it, and drag the second window's outline across
+    the first while wintest retitles it, if retitle is set.
+
+    @param session The session.
+    @param title The first window's title.
+    @param retitle The title wintest gives it during the drag, or None.
+
+    @return The canvas held during the drag after the retitle, and the
+      canvas after the release, as bytes; the number of context commands
+      before nook.
+    """
+    vdp = session.vdp
+    base = run_nook(vdp, demo=False)
+    script = "create 300,200,200,100 %s create 40,40,200,100 Mover" % title
+    if retitle is not None:
+        script += " sleep 3000 title 1 %s" % retitle
+    run_client(session, script)
+    expect_line(session, "wintest: window 2")
+    wait_pixels(vdp, decorated_points((40, 40, 200, 100)))
+    vdp.mouse(100, 45)
+    vdp.mouse(100, 45, buttons=1)
+    settle(vdp)
+    pressed = with_outline(bytes(vdp.canvas), (40, 40, 200, 100))
+    hold_drag(vdp, (100, 45), (370, 255))
+    outline = moved((40, 40, 200, 100), 270, 210)
+    wait_canvas(vdp, with_outline(pressed, outline))
+    if retitle is not None:
+        expect_line(session, "wintest: titled 1")
+        time.sleep(1)
+    held = bytes(vdp.canvas)
+    assert held == with_outline(pressed, outline)
+    vdp.mouse(370, 255)
+    wait_pixels(vdp, {(310, 250): TITLE_BAR, (509, 349): TITLE_BAR})
+    settle(vdp)
+    return held, bytes(vdp.canvas), base
+
+
+def test_nook_a_retitle_during_an_outline_drag_is_painted_on_release(
+        session):
+    boot_nook(session)
+    vdp = session.vdp
+    vdp_login_as(vdp, "root", "rootroot")
+    _held, during, base = drag_across_while_retitled(session, "Before",
+                                                     "Renamed")
+    quit_nook(session, base)
+    session.child.expect(r"wintest: disconnected\r*\n", timeout=10)
+    vdp.expect(PROMPT + "$")
+    _held, before, base = drag_across_while_retitled(session, "Renamed",
+                                                     None)
+    assert during == before, sorted(changed_pixels(during, before))[:8]
     quit_nook(session, base)
     check_clean(session)
