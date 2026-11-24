@@ -140,6 +140,7 @@ SUITE_SRCS     := test_smoke test_unit_misc test_unit_strtoll test_unit_console 
                   test_kernel_graphics_client \
                   test_kernel_window_server \
                   test_kernel_app_level \
+                  test_unit_window_client \
                   test_kernel_graphics_header
 
 KERNEL_OBJS := $(addprefix $(OBJ_DIR)/kernel_,$(addsuffix .o,$(KERNEL_SRCS)))
@@ -229,6 +230,10 @@ $(OBJ_DIR)/suite_test_unit_message_args_production.o: \
 $(OBJ_DIR)/suite_test_kernel_graphics_client.o \
 $(OBJ_DIR)/suite_test_kernel_graphics_header.o: \
     ../src/kernel/Graphics.h ../src/kernel/GraphicsProtocol.h
+$(OBJ_DIR)/suite_test_unit_window_client.o: \
+    ../src/kernel/Window.h ../src/kernel/WindowProtocol.h
+$(OBJ_DIR)/suite_test_unit_window_client.o: \
+    TEST_INC += -idirafter ../userspace/usr/include
 $(OBJ_DIR)/suite_test_kernel_window_server.o: \
     ../src/kernel/WindowProtocol.h ../src/kernel/GraphicsProtocol.h
 $(OBJ_DIR)/suite_test_unit_agon_reset_keys.o: \
