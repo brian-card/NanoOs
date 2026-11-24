@@ -26,6 +26,7 @@ NANO_OS_TEST(unit_posix_errno, every_shared_name_maps_to_its_nanoos_value) {
     { ENOTSUP,      20 }, { ENXIO,        21 }, { EPERM,        22 },
     { ESRCH,        23 }, { EAGAIN,       24 }, { ENOTDIR,      25 },
     { EEXIST,       26 }, { ECHILD,       27 }, { EINTR,        28 },
+    { ENOTCONN,     30 },
   };
   for (size_t ii = 0; ii < sizeof(mapping) / sizeof(mapping[0]); ii++) {
     NANO_OS_ASSERT_EQ_INT(mapping[ii][1], posixErrnoToNanoOs(mapping[ii][0]));
