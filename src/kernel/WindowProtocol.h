@@ -649,6 +649,8 @@ typedef struct WinTaskWindowArgs {
 ///   with WIN_MSG_GET_WIDGET.
 /// @param WIN_EVENT_WINDOW_LIST window, and detail:  the WinListChange.
 /// @param WIN_EVENT_OVERFLOW Events were dropped after this one.
+/// @param WIN_EVENT_DISCONNECTED The window server has gone away.  Window.h
+///   makes it from WIN_MSG_DISCONNECTED; the window server never sends it.
 typedef enum WinEventType {
   WIN_EVENT_CLOSE_REQUESTED = 0,
   WIN_EVENT_RESIZED,
@@ -663,6 +665,7 @@ typedef enum WinEventType {
   WIN_EVENT_DIALOG_LIST_REQUEST,
   WIN_EVENT_WINDOW_LIST,
   WIN_EVENT_OVERFLOW,
+  WIN_EVENT_DISCONNECTED,
 } WinEventType;
 
 /// @enum WinListChange
