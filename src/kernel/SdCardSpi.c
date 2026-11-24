@@ -446,8 +446,8 @@ static uint32_t sdSpiNegotiateFastBaud(int sdCardSpiDevice) {
       logDebug("SD: data phase negotiated to %ld baud\n", (long int) baud);
       return baud;
     }
-    logDetail("SD: CMD9 probe failed at %ld baud (%s)\n",
-      (long int) baud, strerror(-status));
+    logDetail("SD: CMD9 probe failed at %ld baud (status %d)\n",
+      (long int) baud, status);
   }
 
   _sdSpiFastBaud = SD_SPI_INIT_BAUD;
@@ -857,8 +857,8 @@ int sdSpiInit(SdCardSpiArgs *sdCardSpiArgs, SdCardState *sdCardState) {
 
   sdCardState->sdCardVersion = sdSpiCardInit(sdCardSpiArgs, sdCardState);
   if (sdCardState->sdCardVersion <= 0) {
-    logError("sdSpiCardInit returned status: %s\n",
-      strerror(-sdCardState->sdCardVersion));
+    logError("sdSpiCardInit returned status: %d\n",
+      sdCardState->sdCardVersion);
     return sdCardState->sdCardVersion;
   }
 
