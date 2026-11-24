@@ -73,7 +73,7 @@ def test_ps_l_shows_each_processs_privilege_level(s):
 
 def test_ps_l_shows_a_background_job_at_user_level(s):
     s.login()
-    s.child.sendline("looseLoop &")
+    s.sh("looseLoop &")
     assert ("root", "user", "looseLoop") in levels(s.sh("ps -l"))
 
 
