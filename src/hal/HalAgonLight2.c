@@ -204,7 +204,7 @@ extern StaticLogs agonLight2StaticLogsArea;
 /// @def AGON_LIGHT_2_FILE_CACHE_DEPTH
 ///
 /// @brief The number of overlays the overlay file cache holds.
-#define AGON_LIGHT_2_FILE_CACHE_DEPTH 14
+#define AGON_LIGHT_2_FILE_CACHE_DEPTH 16
 
 /// @def DIO_PIN_UNDEFINED
 ///
