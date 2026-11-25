@@ -44,6 +44,7 @@ static ConsolePort* inputFixture(ProcessId forwardingPid) {
   consolePort->inputState = CONSOLE_INPUT_STATE_NORMAL;
   consolePort->modes = CONSOLE_MODE_DEFAULT;
   consolePort->forwardingPid = forwardingPid;
+  consolePort->outputPid = forwardingPid;
   consolePort->readByte = consoleReadForwardedByte;
   return consolePort;
 }
@@ -141,11 +142,10 @@ NANO_OS_KERNEL_TEST(console_input, second_message_while_one_is_held_fails) {
   processMessageRelease(first);
 }
 
-NANO_OS_KERNEL_TEST(console_input, index_past_the_last_port_is_rejected) {
+NANO_OS_KERNEL_TEST(console_input, a_port_not_in_use_is_rejected) {
   ConsolePort *consolePort = inputFixture(getRunningPid());
   ConsolePort *unusedPort = &inputState.consolePorts[1];
   unusedPort->forwardingPid = getRunningPid();
-  unusedPort->consoleBuffer = &inputState.consoleBuffers[1];
   inputArgs[0].portId = 1;
   inputArgs[0].numBytes = 1;
   inputArgs[0].bytes[0] = 'x';
@@ -217,6 +217,7 @@ static ConsolePort* addFixture(void) {
 /// @return Returns true if the handler ran and marked the message done.
 static bool addPort(ProcessId forwardingPid) {
   addArgs.forwardingPid = forwardingPid;
+  addArgs.outputPid = PROCESS_ID_NOT_SET;
   addArgs.portId = 0;
   addArgs.returnValue = 1;
   ProcessMessage *sent = getAvailableMessage();
@@ -286,7 +287,12 @@ NANO_OS_KERNEL_TEST(console_add_port, same_process_gets_its_port_back) {
 }
 
 NANO_OS_KERNEL_TEST(console_add_port, full_port_table_fails) {
+  static ConsoleBuffer portBuffers[CONSOLE_NUM_PORTS];
   addFixture();
+  for (int ii = 1; ii < CONSOLE_NUM_PORTS; ii++) {
+    inputState.consolePorts[ii].consoleBuffer = &portBuffers[ii];
+    inputState.consolePorts[ii].forwardingPid = consolePid;
+  }
   inputState.numConsolePorts = CONSOLE_NUM_PORTS;
   NANO_OS_ASSERT_TRUE(addPort(getRunningPid()));
   NANO_OS_ASSERT_EQ_INT(-ENOSPC, addArgs.returnValue);

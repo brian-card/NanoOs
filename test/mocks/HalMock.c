@@ -120,6 +120,11 @@ static const char *_graphicsClientPath = NULL;
 /// is registered as the display driver at launch.
 static uint8_t _graphicsDriverSlot = 0;
 
+/// @var _launchHook
+///
+/// @brief Function run in the scheduler at the end of launch, or NULL.
+static int (*_launchHook)(void) = NULL;
+
 // online bitmasks (pointed at from halImpl at init time)
 static uint32_t _uartsOnline[]        = { 0x00000002 };
 static uint32_t _uartsPollOnly[]      = { 0x00000002 };
@@ -327,6 +332,12 @@ static int mockDoLaunchProcesses(void) {
       returnValue = graphicsStatus;
     }
   }
+  if (_launchHook != NULL) {
+    int hookStatus = _launchHook();
+    if (hookStatus != 0) {
+      returnValue = hookStatus;
+    }
+  }
   return returnValue;
 }
 
@@ -524,6 +535,10 @@ void halMockSetFileCacheDepth(uint8_t depth) {
 void halMockSetGraphics(uint8_t driverSlot, const char *clientPath) {
   _graphicsDriverSlot = driverSlot;
   _graphicsClientPath = clientPath;
+}
+
+void halMockSetLaunchHook(int (*hook)(void)) {
+  _launchHook = hook;
 }
 
 void halMockSetExecCommand(void* (*fn)(void *args)) {

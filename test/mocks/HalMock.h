@@ -102,6 +102,15 @@ void halMockSetFileCacheDepth(uint8_t depth);
 /// halMockInit().
 void halMockSetGraphics(uint8_t driverSlot, const char *clientPath);
 
+/// @fn void halMockSetLaunchHook(int (*hook)(void))
+///
+/// @brief Register a function to run in the scheduler at the end of launch,
+/// after the shells and any display driver are set up, for a test that needs
+/// what only the scheduler may do, such as adding a console port.  A nonzero
+/// return is reported as launch's status.  Must be called before
+/// halMockInit().
+void halMockSetLaunchHook(int (*hook)(void));
+
 /// @fn void halMockSetExecCommand(void* (*fn)(void *args))
 ///
 /// @brief Register the function installed as the platform's execCommand, or
