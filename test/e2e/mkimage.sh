@@ -82,6 +82,9 @@ MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s userspace/usr/bin/syspasswd \
 MTOOLS_SKIP_CHECK=1 mdeltree -i "${fatImage}" ::/userspace/usr/bin/gfxprobe
 MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s userspace/usr/bin/gfxprobe \
 	::/system/commands/gfxprobe
+MTOOLS_SKIP_CHECK=1 mdeltree -i "${fatImage}" ::/userspace/usr/bin/sessiontest
+MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s userspace/usr/bin/sessiontest \
+	::/system/commands/sessiontest
 MTOOLS_SKIP_CHECK=1 mdeltree -i "${fatImage}" ::/userspace/usr/bin/sysnook
 MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s userspace/usr/bin/sysnook \
 	::/system/commands/sysnook

@@ -26,14 +26,17 @@
 #
 ################################################################################
 
-"""Mutation check of the scheduler's window server support and its tests.
+"""Mutation check of the scheduler's window server and console session
+support and their tests.
 
 Each mutation disables one check, grant, hook, or notification in
-Scheduler.c, rebuilds the harness through its own makefile, and runs each
-window_server test on its own under a timeout, since a broken notification
-can leave a test waiting forever.  A mutation passes when every test it
-names goes red.  Sources are restored and touched after every mutation so no
-later build reuses a mutated object.
+Scheduler.c or Console.c, rebuilds the harness through its own makefile, and
+runs each harness test on its own under a timeout, since a broken
+notification can leave a test waiting forever.  A test named e2e/<name> is
+the end-to-end test of that name, run in the nano-os-sim configuration on an
+image the e2e runner rebuilds.  A mutation passes when every test it names
+goes red.  Sources are restored and touched after every
+mutation so no later build reuses a mutated object.
 
 Usage:  mutate_window.py
 """
@@ -41,37 +44,39 @@ import os, re, subprocess, sys, time
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 SCHED = 'src/kernel/Scheduler.c'
-ENDED = ['an_exiting_client_is_reported_once',
-         'a_killed_client_is_reported_once',
-         'a_removed_client_is_reported_once',
-         'a_client_execing_another_program_is_reported']
+CONSOLE = 'src/kernel/Console.c'
+BRIDGE = 'userspace/usr/src/commands/sessiontest/main/main.c'
+ENDED = ['window_server/an_exiting_client_is_reported_once',
+         'window_server/a_killed_client_is_reported_once',
+         'window_server/a_removed_client_is_reported_once',
+         'window_server/a_client_execing_another_program_is_reported']
 MUTATIONS = [
  ('no-graphics-client-check', SCHED,
   '  if (caller->graphicsClient == false) {\n'
   '    schedulerWindowServerArgs->errorNumber = EPERM;\n',
   '  if (false) {\n    schedulerWindowServerArgs->errorNumber = EPERM;\n',
-  ['a_process_that_isnt_the_graphics_client_cant_register']),
+  ['window_server/a_process_that_isnt_the_graphics_client_cant_register']),
  ('no-single-registration', SCHED,
   '  } else if ((schedulerState->windowServerPid != 0)\n'
   '    && (schedulerState->windowServerPid != caller->processId)\n'
   '  ) {',
   '  } else if (false) {',
-  ['the_graphics_client_registers_and_a_second_is_busy']),
+  ['window_server/the_graphics_client_registers_and_a_second_is_busy']),
  ('no-user-check', SCHED,
   '  } else if (caller->userId != allProcesses[serverPid - 1].userId) {',
   '  } else if (false) {',
-  ['another_users_process_cant_connect']),
+  ['window_server/another_users_process_cant_connect']),
  ('no-client-grant', SCHED,
   '    if ((addProcessIpcCapabilityMask(caller, serverPid,\n'
   '        WIN_COMMAND_SIGNATURE, WIN_CLIENT_MESSAGE_MASK) != 0)',
   '    if ((0 != 0)',
-  ['a_connecting_client_is_granted_both_ways']),
+  ['window_server/a_connecting_client_is_granted_both_ways']),
  ('no-server-grant', SCHED,
   '      || (addProcessIpcCapabilityMask(&allProcesses[serverPid - 1],\n'
   '        caller->processId, WIN_COMMAND_SIGNATURE, WIN_SERVER_MESSAGE_MASK)\n'
   '        != 0)',
   '      || (0 != 0)',
-  ['a_connecting_client_is_granted_both_ways']),
+  ['window_server/a_connecting_client_is_granted_both_ways']),
  ('no-client-end-hook', SCHED,
   '  if (processDescriptor->windowClient) {\n'
   '    schedulerWindowClientEnded(processDescriptor);\n'
@@ -87,28 +92,138 @@ MUTATIONS = [
  ('no-server-ended', SCHED,
   '    schedulerWindowServerEnded(processDescriptor->processId);\n',
   '',
-  ['the_window_server_ending_revokes_every_client']),
+  ['window_server/the_window_server_ending_revokes_every_client']),
+ ('session-login-shell-by-pid-range', SCHED,
+  '    && (processDescriptor->shellPath == NULL)\n'
+  '    && processDescriptor->shellSlot\n',
+  '    && (processDescriptor->shellPath == NULL)\n'
+  '    && (processDescriptor->processId - _schedulerState->firstShellPid\n'
+  '      < _schedulerState->numShells)\n',
+  ['session/a_shell_slot_outside_the_boot_range_records_its_login_shell']),
+ ('session-output-by-pid-range', SCHED,
+  '  if (processDescriptor->shellSlot\n'
+  '    && (processDescriptor->shellOutputPid != PROCESS_ID_NOT_SET)',
+  '  if ((processDescriptor->processId - _schedulerState->firstShellPid\n'
+  '      < _schedulerState->numShells)\n'
+  '    && (processDescriptor->shellOutputPid != PROCESS_ID_NOT_SET)',
+  ['session/a_shell_slot_outside_the_boot_range_has_its_output_directed']),
+ ('session-output-servicer-sends-input', SCHED,
+  '  if ((addProcessIpcCapability(inputServicer, consolePid,\n'
+  '      CONSOLE_COMMAND_SIGNATURE, CONSOLE_INPUT_READY) != 0)',
+  '  if ((addProcessIpcCapability(&allProcesses[outputPid - 1], consolePid,\n'
+  '      CONSOLE_COMMAND_SIGNATURE, CONSOLE_INPUT_READY) != 0)\n'
+  '    || (addProcessIpcCapability(inputServicer, consolePid,\n'
+  '      CONSOLE_COMMAND_SIGNATURE, CONSOLE_INPUT_READY) != 0)',
+  ['session/the_output_servicer_cannot_send_a_split_port_input']),
+ ('session-echo-to-input-servicer', CONSOLE,
+  '    consolePort->outputPid,\n'
+  '    CONSOLE_COMMAND_SIGNATURE | CONSOLE_FORWARD_STRING,',
+  '    consolePort->forwardingPid,\n'
+  '    CONSOLE_COMMAND_SIGNATURE | CONSOLE_FORWARD_STRING,',
+  ['session/a_split_port_echoes_to_its_output_servicer_only']),
+ ('session-port-index-not-reused', CONSOLE,
+  '    if (consolePortInUse(&consolePorts[ii]) == false) {\n'
+  '      portId = (unsigned char) ii;',
+  '    if ((consolePortInUse(&consolePorts[ii]) == false)\n'
+  '      && (ii >= consoleState->numConsolePorts)\n'
+  '    ) {\n'
+  '      portId = (unsigned char) ii;',
+  ['session/a_removed_port_index_is_reused']),
+ ('session-held-input-kept', CONSOLE,
+  '    if (consolePort->pendingInput != NULL) {\n'
+  '      processMessageSetDone(consolePort->pendingInput);',
+  '    if (false) {\n'
+  '      processMessageSetDone(consolePort->pendingInput);',
+  ['session/removing_a_port_finishes_its_held_input']),
+ ('session-anyone-removes-a-port', CONSOLE,
+  '  if ((processPid(processMessageFrom(inputMessage)) == schedulerPid)\n'
+  '    && (portId < CONSOLE_NUM_PORTS)',
+  '  if ((portId < CONSOLE_NUM_PORTS)',
+  ['session/only_the_scheduler_removes_a_port']),
+ ('session-anyone-opens', SCHED,
+  '  if (caller->processId != schedulerState->windowServerPid) {\n'
+  '    return EPERM;\n'
+  '  }\n'
+  '  ProcessId display = args->display;',
+  '  ProcessId display = args->display;',
+  ['session/only_the_window_server_opens_a_session']),
+ ('session-any-display-user', SCHED,
+  '    || (displayDescriptor->userId != caller->userId)\n',
+  '',
+  ['session/a_display_of_another_user_is_refused']),
+ ('session-level-not-set', SCHED,
+  '  shell->privilegeLevel = PRIVILEGE_LEVEL_SUPERVISOR;\n'
+  '  schedulerSetBaseHalCapabilities(shell);\n'
+  '  shell->readyQueue = _schedulerState->readyQueues['
+  'PRIVILEGE_LEVEL_SUPERVISOR];\n'
+  '  if (shell->ipcCapabilitiesDynamic) {\n'
+  '    schedFree(shell->ipcCapabilities);\n'
+  '  }\n'
+  '  shell->ipcCapabilities = baseSupervisorIpcCapabilities;\n'
+  '  shell->numIpcCapabilities = sizeof(baseSupervisorIpcCapabilities)\n'
+  '    / sizeof(baseSupervisorIpcCapabilities[0]);\n'
+  '  shell->ipcCapabilitiesDynamic = false;\n'
+  '  schedulerSetDirCapabilities(shell, supervisorDirCapabilities);\n',
+  '  schedulerSetDirCapabilities(shell, supervisorDirCapabilities);\n',
+  ['e2e/test_session_shell_and_its_commands_run_at_a_consoles_levels']),
+ ('session-processes-not-killed', SCHED,
+  '      && processRunning(processDescriptor)\n'
+  '      && (schedulerKillSlot(processDescriptor, SIGKILL, false) == -EBUSY)\n',
+  '      && processRunning(processDescriptor) && false\n'
+  '      && (schedulerKillSlot(processDescriptor, SIGKILL, false) == -EBUSY)\n',
+  ['e2e/test_killing_the_bridge_ends_the_session_and_its_processes']),
+ ('session-port-not-removed', SCHED,
+  '  schedulerRemovePort(port);\n'
+  '  shell->shellSlot = SHELL_SLOT_NONE;\n',
+  '  shell->shellSlot = SHELL_SLOT_NONE;\n',
+  ['e2e/test_exiting_the_shell_ends_the_session_and_frees_its_port']),
+ ('session-getty-instead-of-ending', SCHED,
+  '  if ((processDescriptor->userId == NO_USER_ID)\n'
+  '    && (processDescriptor->shellSlot == SHELL_SLOT_SESSION)\n'
+  '  ) {\n'
+  '    return schedulerEndSession(processDescriptor);\n'
+  '  } else if',
+  '  if',
+  ['e2e/test_exiting_the_shell_ends_the_session_and_frees_its_port']),
+ ('session-bridge-ignores-resize', BRIDGE,
+  '        sendWinsize(bridge, consoleBuffer->buffer);\n',
+  '        if (false) sendWinsize(bridge, consoleBuffer->buffer);\n',
+  ['e2e/test_a_resize_report_through_the_bridge_sets_the_sessions_size']),
+ ('session-last-slot-refused', SCHED,
+  '  if ((shell == 0) || (shell > numProcesses)) {',
+  '  if (shell >= numProcesses) {',
+  ['session/the_last_process_slot_can_be_a_ports_shell']),
  ('no-server-revoke', SCHED,
   '    WIN_COMMAND_SIGNATURE, WIN_CLIENT_MESSAGE_MASK);\n'
   '  removeProcessIpcCapabilityMask(&allProcesses[serverPid - 1],\n'
   '    processDescriptor->processId, WIN_COMMAND_SIGNATURE,\n'
   '    WIN_SERVER_MESSAGE_MASK);',
   '    WIN_COMMAND_SIGNATURE, WIN_CLIENT_MESSAGE_MASK);',
-  ['a_killed_client_is_reported_once']),
+  ['window_server/a_killed_client_is_reported_once']),
 ]
 TESTS = [
-  'the_graphics_client_registers_and_a_second_is_busy',
-  'a_process_that_isnt_the_graphics_client_cant_register',
-  'a_connecting_client_is_granted_both_ways',
-  'connecting_again_grants_nothing_new',
-  'connecting_with_no_window_server_is_not_found',
-  'another_users_process_cant_connect',
-  'an_exiting_client_is_reported_once',
-  'a_killed_client_is_reported_once',
-  'a_removed_client_is_reported_once',
-  'a_client_execing_another_program_is_reported',
-  'a_process_that_never_connected_ends_unreported',
-  'the_window_server_ending_revokes_every_client',
+  'window_server/the_graphics_client_registers_and_a_second_is_busy',
+  'window_server/a_process_that_isnt_the_graphics_client_cant_register',
+  'window_server/a_connecting_client_is_granted_both_ways',
+  'window_server/connecting_again_grants_nothing_new',
+  'window_server/connecting_with_no_window_server_is_not_found',
+  'window_server/another_users_process_cant_connect',
+  'window_server/an_exiting_client_is_reported_once',
+  'window_server/a_killed_client_is_reported_once',
+  'window_server/a_removed_client_is_reported_once',
+  'window_server/a_client_execing_another_program_is_reported',
+  'window_server/a_process_that_never_connected_ends_unreported',
+  'window_server/the_window_server_ending_revokes_every_client',
+  'session/a_shell_slot_outside_the_boot_range_records_its_login_shell',
+  'session/a_shell_slot_outside_the_boot_range_has_its_output_directed',
+  'session/a_removed_port_index_is_reused',
+  'session/removing_a_port_finishes_its_held_input',
+  'session/only_the_scheduler_removes_a_port',
+  'session/a_split_port_echoes_to_its_output_servicer_only',
+  'session/the_output_servicer_cannot_send_a_split_port_input',
+  'session/only_the_window_server_opens_a_session',
+  'session/a_display_of_another_user_is_refused',
+  'session/the_last_process_slot_can_be_a_ports_shell',
 ]
 
 
@@ -120,13 +235,24 @@ def run(command, timeout=None):
     return None
 
 
+def e2eStatus(tests):
+  results = {}
+  for test in tests:
+    name = test[len('e2e/'):]
+    process = run(f'python3 test/e2e/run.py -j 1 nano-os-sim/{name}', 900)
+    results[test] = (process is not None) and re.search(
+      r'^ok \d+ - nano-os-sim/' + re.escape(name) + '$', process.stdout,
+      re.M) is not None
+  return results
+
+
 def status():
   results = {}
   for test in TESTS:
     process = run('setsid --wait timeout -s KILL 40 '
-                  f'./test/bin/nano-os-test window_server/{test}', 60)
+                  f'./test/bin/nano-os-test {test}', 60)
     results[test] = (process is not None) and re.search(
-      r'^ok \d+ - window_server/' + test, process.stdout, re.M) is not None
+      r'^ok \d+ - ' + re.escape(test) + '$', process.stdout, re.M) is not None
   return results
 
 
@@ -143,6 +269,8 @@ for name, path, old, new, expect in MUTATIONS:
       fails += 1
       continue
     results = status()
+    results.update(e2eStatus([test for test in expect
+                              if test.startswith('e2e/')]))
     green = [test for test in expect if results[test]]
     extra = [test for test in TESTS
              if not results[test] and test not in expect]
