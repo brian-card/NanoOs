@@ -210,7 +210,8 @@ def check_clean(session):
     @param session The session.
     """
     assert session.vdp.errors == [], session.vdp.errors
-    assert message_args_reports(session) == []
+    reports = message_args_reports(session)
+    assert reports == [], reports
 
 
 # Step 1:  nook, the display, and the console.
@@ -1237,12 +1238,13 @@ def test_nook_a_click_activates_the_window_under_it_and_tells_both(session):
     wait_pixels(vdp, {(150, 45): TITLE_BAR, (50, 41): TITLE_BAR,
                       (40, 40): TITLE_BAR, (150, 11): INACTIVE_BAR,
                       (299, 109): INACTIVE_BORDER})
-    assert vdp.pixels(45, 44, 18, 8) == text_pixels(vdp, "One", gr.WHITE,
-                                                     TITLE_BAR)
+    # The title bars are filled before their titles are drawn.
     settle(vdp)
+    assert vdp.pixels(45, 44, 18, 8) == text_pixels(vdp, "One", gr.WHITE,
+                                                     TITLE_BAR), "One"
     assert vdp.pixels(105, 14, 18, 8) == text_pixels(vdp, "Two",
                                                       INACTIVE_BORDER,
-                                                      INACTIVE_BAR)
+                                                      INACTIVE_BAR), "Two"
     quit_nook(session, base)
     check_clean(session)
 
