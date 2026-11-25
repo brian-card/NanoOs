@@ -69,6 +69,41 @@ static inline int windowServerConnect(uint8_t *pid) {
   return overlayMap.header.osApi->userApi->windowServerConnect(pid);
 }
 
+/// @fn static inline int windowServerOpenSession(uint8_t rows,
+///   uint8_t columns, uint8_t display, uint8_t *port, uint8_t *shell)
+///
+/// @brief Open a session:  a console port whose input only the running
+/// process, the window server, may send, whose output goes to display, and
+/// on which the user's shell runs.
+///
+/// @param rows The number of rows of the session's port.
+/// @param columns The number of columns of the session's port.
+/// @param display The ProcessId of the process the session's output goes
+///   to.  It must run as the window server's user, below executive level
+///   unless it's the window server itself.
+/// @param port Where to store the session's console port.
+/// @param shell Where to store the ProcessId of the session's shell.
+///
+/// @return Returns 0 on success, -1 and sets errno on failure.
+static inline int windowServerOpenSession(uint8_t rows, uint8_t columns,
+  uint8_t display, uint8_t *port, uint8_t *shell
+) {
+  return overlayMap.header.osApi->userApi->windowServerOpenSession(
+    rows, columns, display, port, shell);
+}
+
+/// @fn static inline int windowServerCloseSession(uint8_t port)
+///
+/// @brief End a session the running process, the window server, opened.  Its
+/// servicers are sent CONSOLE_SESSION_ENDED once it has ended.
+///
+/// @param port The session's console port.
+///
+/// @return Returns 0 on success, -1 and sets errno on failure.
+static inline int windowServerCloseSession(uint8_t port) {
+  return overlayMap.header.osApi->userApi->windowServerCloseSession(port);
+}
+
 #ifdef __cplusplus
 }
 #endif
