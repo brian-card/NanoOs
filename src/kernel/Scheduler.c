@@ -68,6 +68,7 @@ void removeProcess(
   ProcessDescriptor *processDescriptor, const char *errorMessage);
 static void schedulerAbortOverlayLoad(ProcessDescriptor *processDescriptor);
 void forceYield(void);
+void checkForTimeouts(SchedulerState *schedulerState);
 int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
   char *commandPath, char **argv, char **envp);
 static __attribute__((noinline)) void schedulerCloseServicedSessions(
@@ -1506,6 +1507,8 @@ int schedulerSendProcessMessageToProcess(
 
   while (processMessageDone(processMessage) == false) {
     runSchedulerQueues(PRIVILEGE_LEVEL_SUPERVISOR);
+    // The receiver may be in a timed wait with every queue run here empty.
+    checkForTimeouts(_schedulerState);
   }
   MESSAGE_ARGS_SEND_COMPLETE(processMessage);
 
