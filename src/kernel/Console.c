@@ -1149,6 +1149,11 @@ void consoleAddForwardingPort(
   consolePort->pollOnly = false;
   consolePort->readByte = consoleReadForwardedByte;
   consolePort->consolePrintString = consoleForwardString;
+#if NANO_OS_MAX_SESSIONS > 0
+  if (outputPid != PROCESS_ID_NOT_SET) {
+    consolePort->consolePrintString = consoleSessionString;
+  }
+#endif // NANO_OS_MAX_SESSIONS > 0
   consoleState->numConsolePorts++;
   consoleAddForwardingPortArgs->portId = portId;
 
@@ -1859,6 +1864,9 @@ static void consoleHandleInputEvent(
 
     // The user hit Ctrl-C on the keyboard.  Send SIGINT to the input owner.
     if (consolePort->inputOwner != PROCESS_ID_NOT_SET) {
+      // Echoing first lets a session's display take the echo before the
+      // scheduler, ending the owner, waits on this process.
+      consolePort->consolePrintString(consolePort, _ctrlCEcho);
       SchedulerSendSignalArgs *sendSignalArgs = NULL;
       // The memory manager owns the ports only while it prints its boot
       // message, waiting on this process, so allocating then would deadlock.
@@ -1884,7 +1892,6 @@ static void consoleHandleInputEvent(
       if (processMessage == NULL) {
         logError("Could not communicate with scheduler.\n");
       }
-      consolePort->consolePrintString(consolePort, _ctrlCEcho);
     }
   }
 }
@@ -2138,6 +2145,91 @@ int consoleForwardString(ConsolePort *consolePort, const char *string) {
 
   return (int) length;
 }
+
+#if NANO_OS_MAX_SESSIONS > 0
+/// @def CONSOLE_SESSION_OUTPUT_TIMEOUT_MS
+///
+/// @brief How long the console waits for a session's output servicer to
+/// take a string before it stops waiting and drops what follows until the
+/// servicer has taken it.
+#define CONSOLE_SESSION_OUTPUT_TIMEOUT_MS 1000
+
+/// @struct ConsoleSessionOutput
+///
+/// @brief A string the console sends a session's output servicer, which is
+/// kept until the servicer has taken it.
+///
+/// @param message The CONSOLE_FORWARD_STRING message the servicer hasn't
+///   taken yet, or NULL.
+/// @param text The string.
+typedef struct ConsoleSessionOutput {
+  ProcessMessage *message;
+  char            text[CONSOLE_BUFFER_SIZE];
+} ConsoleSessionOutput;
+
+/// @var _consoleSessionOutputs
+///
+/// @brief The string storage of each port that has been a session's, made the
+/// first time the port prints and kept, since a servicer that never takes a
+/// string may outlive the session.
+static ConsoleSessionOutput *_consoleSessionOutputs[CONSOLE_NUM_PORTS];
+
+/// @fn int consoleSessionString(ConsolePort *consolePort, const char *string)
+///
+/// @brief Send a copy of a string to the process that services a session
+/// port's output, which runs as a user and so may never take it:  the console
+/// waits for it for at most CONSOLE_SESSION_OUTPUT_TIMEOUT_MS, and drops the
+/// port's output until a string it stopped waiting for has been taken.
+///
+/// @param consolePort A pointer to the ConsolePort to print to.
+/// @param string A pointer to the NUL-terminated string to print.
+///
+/// @return Returns the number of bytes sent, or 0 if none were.
+int consoleSessionString(ConsolePort *consolePort, const char *string) {
+  uint8_t portId = consolePort->inputReadyArgs.portId;
+  ConsoleSessionOutput *output = _consoleSessionOutputs[portId];
+  if (output == NULL) {
+    output = (ConsoleSessionOutput*) malloc(sizeof(ConsoleSessionOutput));
+    if (output == NULL) {
+      return 0;
+    }
+    output->message = NULL;
+    _consoleSessionOutputs[portId] = output;
+  }
+  if (output->message != NULL) {
+    if (!processMessageDone(output->message)) {
+      return 0;
+    }
+    processMessageRelease(output->message);
+    output->message = NULL;
+  }
+
+  size_t length = strlen(string);
+  if (length >= CONSOLE_BUFFER_SIZE) {
+    length = CONSOLE_BUFFER_SIZE - 1;
+  }
+  memcpy(output->text, string, length);
+  output->text[length] = '\0';
+  ProcessMessage *processMessage = initSendProcessMessageToPid(
+    consolePort->outputPid,
+    CONSOLE_COMMAND_SIGNATURE | CONSOLE_FORWARD_STRING,
+    output->text, length, /* waiting= */ true);
+  if (processMessage == NULL) {
+    return 0;
+  }
+
+  struct timespec deadline;
+  timespec_get(&deadline, TIME_UTC);
+  deadline.tv_sec += CONSOLE_SESSION_OUTPUT_TIMEOUT_MS / 1000;
+  if (processMessageWaitForDone(processMessage, &deadline) == processSuccess) {
+    processMessageRelease(processMessage);
+  } else {
+    output->message = processMessage;
+  }
+
+  return (int) length;
+}
+#endif // NANO_OS_MAX_SESSIONS > 0
 
 /// @fn void* runConsole(void *args)
 ///
