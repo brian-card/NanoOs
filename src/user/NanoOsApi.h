@@ -350,6 +350,10 @@ typedef struct NanoOsUserApi {
     uint8_t recipient);
   void (*messageBufferUnshare)(void *shared, void *original,
     uint8_t direction);
+
+  // Kernel IPC functions added since, last so that the offsets before them
+  // stay as overlays were compiled against them:
+  int (*findProcessByName)(const char *name, uint8_t *returnValue);
 } NanoOsUserApi;
 
 typedef struct NanoOsApi {

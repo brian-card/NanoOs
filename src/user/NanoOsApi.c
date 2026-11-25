@@ -424,6 +424,9 @@ static const NanoOsUserApi _nanoOsUserApi = {
   .messageArgsFree = overlayMessageArgsFree,
   .messageBufferShare = overlayMessageBufferShare,
   .messageBufferUnshare = overlayMessageBufferUnshare,
+
+  // Kernel IPC functions added since:
+  .findProcessByName = findProcessByName,
 };
 
 NanoOsApi nanoOsApi = {
