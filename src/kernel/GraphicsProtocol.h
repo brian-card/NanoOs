@@ -475,7 +475,7 @@ typedef struct GfxWarpCursorArgs {
 /// @def GFX_EVENTS_PER_MESSAGE
 ///
 /// @brief The number of events one GFX_MSG_INPUT_EVENTS carries.
-#define GFX_EVENTS_PER_MESSAGE 8
+#define GFX_EVENTS_PER_MESSAGE 32
 
 /// @enum GfxEventType
 ///
