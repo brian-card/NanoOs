@@ -387,6 +387,8 @@ static const NanoOsUserApi _nanoOsUserApi = {
   // Window server functions:
   .windowServerRegister = nanoOsWindowServerRegister,
   .windowServerConnect = nanoOsWindowServerConnect,
+  .windowServerOpenSession = nanoOsWindowServerOpenSession,
+  .windowServerCloseSession = nanoOsWindowServerCloseSession,
   
   // NanoOsConsole.h functions:
   .getConsoleColors = getConsoleColors,

@@ -313,6 +313,9 @@ typedef struct NanoOsUserApi {
   // Window server functions:
   int (*windowServerRegister)(void);
   int (*windowServerConnect)(uint8_t *pid);
+  int (*windowServerOpenSession)(uint8_t rows, uint8_t columns,
+    uint8_t display, uint8_t *port, uint8_t *shell);
+  int (*windowServerCloseSession)(uint8_t port);
   
   // NanoOsConsole.h functions:
   int (*getConsoleColors)(void);
