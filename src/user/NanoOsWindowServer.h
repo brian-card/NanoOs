@@ -30,7 +30,8 @@
 /// @file              NanoOsWindowServer.h
 ///
 /// @brief             Kernel-side implementation of the calls a process uses
-///                    to register as the window server or connect to it.
+///                    to register as the window server or connect to it, and
+///                    the window server uses to open and close sessions.
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -46,6 +47,9 @@ extern "C"
 
 int nanoOsWindowServerRegister(void);
 int nanoOsWindowServerConnect(uint8_t *pid);
+int nanoOsWindowServerOpenSession(uint8_t rows, uint8_t columns,
+  uint8_t display, uint8_t *port, uint8_t *shell);
+int nanoOsWindowServerCloseSession(uint8_t port);
 
 #ifdef __cplusplus
 }
