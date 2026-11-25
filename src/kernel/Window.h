@@ -235,10 +235,12 @@ static inline void winDisconnect(WinSession *session) {
   }
 }
 
-/// @fn static inline int winCreateWindow(WinSession *session,
-///   const char *title, GfxRect frame, uint8_t layer, uint8_t flags)
+/// @fn static inline int winCreateWindowWith(WinSession *session,
+///   const char *title, GfxRect frame, uint8_t layer, uint8_t flags,
+///   const uint8_t *widgets, uint16_t templateSize)
 ///
-/// @brief Create a window in the normal state.
+/// @brief Create a window in the normal state, with the widgets of a
+/// template.
 ///
 /// @param session The connection.
 /// @param title The title, which the window server copies, or NULL.
@@ -246,11 +248,15 @@ static inline void winDisconnect(WinSession *session) {
 ///   included.
 /// @param layer The WinLayer.
 /// @param flags The WIN_FLAG_* bits.
+/// @param widgets The template's widget records, which the window server
+///   copies, or NULL.
+/// @param templateSize The number of bytes at widgets.
 ///
 /// @return Returns the window's identifier on success, or a negative errno
 /// value on failure.
-WIN_OUT_OF_LINE int winCreateWindow(WinSession *session, const char *title,
-  GfxRect frame, uint8_t layer, uint8_t flags
+WIN_OUT_OF_LINE int winCreateWindowWith(WinSession *session,
+  const char *title, GfxRect frame, uint8_t layer, uint8_t flags,
+  const uint8_t *widgets, uint16_t templateSize
 ) {
   MESSAGE_ARGS_ALLOCATE(WinCreateWindowArgs, args);
   if (args == NULL) {
@@ -268,7 +274,7 @@ WIN_OUT_OF_LINE int winCreateWindow(WinSession *session, const char *title,
   args->state = WIN_STATE_NORMAL;
   args->owner = WIN_NONE;
   args->titleLength = (uint8_t) length;
-  args->templateSize = 0;
+  args->templateSize = (widgets != NULL) ? templateSize : 0;
   args->frame = frame;
   args->title = NULL;
   args->widgets = NULL;
@@ -277,11 +283,20 @@ WIN_OUT_OF_LINE int winCreateWindow(WinSession *session, const char *title,
     args->title = (const char*) MESSAGE_BUFFER_SHARE(title, length,
       MESSAGE_BUFFER_IN, session->server);
   }
-  if ((length == 0) || (args->title != NULL)) {
+  if (args->templateSize > 0) {
+    args->widgets = (const uint8_t*) MESSAGE_BUFFER_SHARE(widgets,
+      args->templateSize, MESSAGE_BUFFER_IN, session->server);
+  }
+  if (((length == 0) || (args->title != NULL))
+    && ((args->templateSize == 0) || (args->widgets != NULL))
+  ) {
     status = winCall_(session, WIN_MSG_CREATE_WINDOW, args, sizeof(*args));
-    if (length > 0) {
-      MESSAGE_BUFFER_UNSHARE(args->title, title, MESSAGE_BUFFER_IN);
-    }
+  }
+  if (args->widgets != NULL) {
+    MESSAGE_BUFFER_UNSHARE(args->widgets, widgets, MESSAGE_BUFFER_IN);
+  }
+  if (args->title != NULL) {
+    MESSAGE_BUFFER_UNSHARE(args->title, title, MESSAGE_BUFFER_IN);
   }
   int result = winErrno(status);
   if (status == WIN_OK) {
@@ -289,6 +304,84 @@ WIN_OUT_OF_LINE int winCreateWindow(WinSession *session, const char *title,
   }
   MESSAGE_ARGS_FREE(args);
   return result;
+}
+
+/// @fn static inline int winCreateWindow(WinSession *session,
+///   const char *title, GfxRect frame, uint8_t layer, uint8_t flags)
+///
+/// @brief Create a window in the normal state, with no widgets.
+///
+/// @param session The connection.
+/// @param title The title, which the window server copies, or NULL.
+/// @param frame Where the window goes, in screen coordinates, decorations
+///   included.
+/// @param layer The WinLayer.
+/// @param flags The WIN_FLAG_* bits.
+///
+/// @return Returns the window's identifier on success, or a negative errno
+/// value on failure.
+static inline int winCreateWindow(WinSession *session, const char *title,
+  GfxRect frame, uint8_t layer, uint8_t flags
+) {
+  return winCreateWindowWith(session, title, frame, layer, flags, NULL, 0);
+}
+
+/// @fn static inline int winGridWrite(WinSession *session, uint8_t window,
+///   uint8_t widget, const uint8_t *operations, uint16_t size)
+///
+/// @brief Carry out text grid operations, waiting until the window server
+/// has.
+///
+/// @param session The connection.
+/// @param window The window.
+/// @param widget The text grid.
+/// @param operations The WinGridOperation records, which the window server
+///   copies.
+/// @param size The number of bytes at operations.
+///
+/// @return Returns 0 on success, or a negative errno value on failure.
+WIN_OUT_OF_LINE int winGridWrite(WinSession *session, uint8_t window,
+  uint8_t widget, const uint8_t *operations, uint16_t size
+) {
+  MESSAGE_ARGS_ALLOCATE(WinBufferArgs, args);
+  if (args == NULL) {
+    return -ENOMEM;
+  }
+  args->window = window;
+  args->widget = widget;
+  args->size = size;
+  args->data = (const uint8_t*) MESSAGE_BUFFER_SHARE(operations, size,
+    MESSAGE_BUFFER_IN, session->server);
+  WinError status = WIN_ERR_NO_MEMORY;
+  if (args->data != NULL) {
+    status = winCall_(session, WIN_MSG_GRID_WRITE, args, sizeof(*args));
+    MESSAGE_BUFFER_UNSHARE(args->data, operations, MESSAGE_BUFFER_IN);
+  }
+  MESSAGE_ARGS_FREE(args);
+  return winErrno(status);
+}
+
+/// @fn static inline void winGridRecord(uint8_t *record, uint8_t widget,
+///   uint8_t flags, GfxRect rect)
+///
+/// @brief Fill in a template record for a text grid anchored to all four
+/// sides of the body, so that it stretches with the window.
+///
+/// @param record Where to write the record's WIN_RECORD_HEADER_SIZE bytes.
+/// @param widget The grid's identifier.
+/// @param flags The WIN_WIDGET_* bits, such as WIN_WIDGET_SESSION.
+/// @param rect The grid's place in the body.
+///
+/// @return This function returns no value.
+static inline void winGridRecord(uint8_t *record, uint8_t widget,
+  uint8_t flags, GfxRect rect
+) {
+  record[WIN_RECORD_KIND] = WIN_WIDGET_TEXT_GRID;
+  record[WIN_RECORD_ID] = widget;
+  record[WIN_RECORD_FLAGS] = flags;
+  record[WIN_RECORD_ANCHOR] = WIN_ANCHOR_LEFT | WIN_ANCHOR_TOP
+    | WIN_ANCHOR_RIGHT | WIN_ANCHOR_BOTTOM;
+  memcpy(&record[WIN_RECORD_RECT], &rect, sizeof(rect));
 }
 
 /// @fn static inline int winSetWindow_(WinSession *session, uint8_t window,
