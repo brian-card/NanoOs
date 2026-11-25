@@ -295,6 +295,27 @@ typedef struct SchedulerWindowServerArgs {
   ProcessId pid;
 } SchedulerWindowServerArgs;
 
+/// @struct SchedulerOpenSessionArgs
+///
+/// @brief Arguments and return values for the SCHEDULER_OPEN_SESSION and
+/// SCHEDULER_CLOSE_SESSION commands.
+///
+/// @param status 0 on success or the errno value of the failure.
+/// @param rows The number of rows of the session's port.
+/// @param columns The number of columns of the session's port.
+/// @param display The ProcessId of the process the session's output goes to.
+/// @param port The session's console port:  set by SCHEDULER_OPEN_SESSION,
+///   given to SCHEDULER_CLOSE_SESSION.
+/// @param shell The ProcessId of the session's shell.
+typedef struct SchedulerOpenSessionArgs {
+  uint8_t   status;
+  uint8_t   rows;
+  uint8_t   columns;
+  ProcessId display;
+  uint8_t   port;
+  ProcessId shell;
+} SchedulerOpenSessionArgs;
+
 /// @enum SchedulerCommandResponse
 ///
 /// @brief Commands and responses understood by the scheduler inter-process
@@ -318,6 +339,8 @@ typedef enum SchedulerCommandResponse {
   SCHEDULER_GET_DIR_CAPABILITIES,
   SCHEDULER_REGISTER_WINDOW_SERVER,
   SCHEDULER_CONNECT_WINDOW_SERVER,
+  SCHEDULER_OPEN_SESSION,
+  SCHEDULER_CLOSE_SESSION,
   NUM_SCHEDULER_COMMANDS,
   // Responses:
   SCHEDULER_PROCESS_COMPLETE,
@@ -348,7 +371,8 @@ ProcessId schedulerGetFirstShellPid(void);
 uint8_t schedulerGetNumShells(void);
 int schedulerGetNumConsolePorts(void);
 int schedulerGetUartConsolePort(uint8_t uartId);
-int schedulerAddForwardingPort(ProcessId forwardingPid);
+int schedulerAddForwardingPort(ProcessId inputPid, ProcessId outputPid,
+  uint8_t rows, uint8_t columns);
 int schedulerSetGraphics(ProcessId driverPid, const char *clientPath);
 void schedulerGraphicsProgramChanged(ProcessDescriptor *processDescriptor,
   const char *newPath);

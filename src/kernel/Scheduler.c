@@ -68,6 +68,10 @@ void removeProcess(
   ProcessDescriptor *processDescriptor, const char *errorMessage);
 static void schedulerAbortOverlayLoad(ProcessDescriptor *processDescriptor);
 void forceYield(void);
+int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
+  char *commandPath, char **argv, char **envp);
+static __attribute__((noinline)) void schedulerCloseServicedSessions(
+  ProcessId pid, bool everySession);
 
 /// @def NUM_STANDARD_FILE_DESCRIPTORS
 ///
@@ -119,9 +123,6 @@ void forceYield(void);
 ///   multitasking.  If this is < 0 then the processes run in cooperative mode.
 /// @param firstUserPid The ProcessId of the first user process.
 /// @param firstShellPid The ProcessId of the first shell process.
-/// @param shellOutputPids For each shell process, the ProcessId of the process
-///   its stdout and stderr are sent to instead of the console, or
-///   PROCESS_ID_NOT_SET.
 /// @param runSchedulerDepth Recursion counter of how many levels of the
 ///   runScheduler function are in progress.  Needed to avoid non-reentrant
 ///   functions that are run by it.
@@ -143,7 +144,6 @@ struct SchedulerState {
   int                 preemptionTimer;
   ProcessId           firstUserPid;
   ProcessId           firstShellPid;
-  ProcessId           shellOutputPids[NANO_OS_MAX_NUM_SHELLS];
   int                 runSchedulerDepth;
   ProcessId           graphicsDriverPid;
   ProcessId           windowServerPid;
@@ -1776,7 +1776,7 @@ int schedulerAssignPortToPid(uint8_t consolePort, ProcessId owner) {
 int schedulerSetPortShell(uint8_t consolePort, ProcessId shell) {
   int returnValue = processError;
 
-  if (shell >= numProcesses) {
+  if ((shell == 0) || (shell > numProcesses)) {
     logError(
       "schedulerSetPortShell called with invalid shell PID %ld\n",
       (long int) shell);
@@ -1856,17 +1856,29 @@ int schedulerGetUartConsolePort(uint8_t uartId) {
   return portId;
 }
 
-/// @fn int schedulerAddForwardingPort(ProcessId forwardingPid)
+/// @fn int schedulerAddForwardingPort(ProcessId inputPid,
+///   ProcessId outputPid, uint8_t rows, uint8_t columns)
 ///
-/// @brief Have the console add a port forwarded to a process, and let the
-/// process and the console send each other the messages a forwarding port
-/// uses.
+/// @brief Have the console add a port forwarded to processes, and let them
+/// and the console send each other the messages a forwarding port uses, by
+/// direction:  only the input servicer may send the port input or set its
+/// size, and only the output servicer is sent its output.
 ///
-/// @param forwardingPid The ProcessId of the process that services the port.
+/// @param inputPid The ProcessId of the process that sends the port input.
+/// @param outputPid The ProcessId of the process the port's output goes to,
+///   or PROCESS_ID_NOT_SET for a device console, which services both and keeps
+///   its port across restarts.
+/// @param rows The number of rows of a new port, or 0 for the default.
+/// @param columns The number of columns of a new port, or 0 for the default.
 ///
 /// @return Returns the index of the port on success, -errno on failure.
-int schedulerAddForwardingPort(ProcessId forwardingPid) {
-  if ((forwardingPid == 0) || (forwardingPid > numProcesses)) {
+int schedulerAddForwardingPort(ProcessId inputPid, ProcessId outputPid,
+  uint8_t rows, uint8_t columns
+) {
+  if ((inputPid == 0) || (inputPid > numProcesses)
+    || (outputPid == 0)
+    || ((outputPid > numProcesses) && (outputPid != PROCESS_ID_NOT_SET))
+  ) {
     return -EINVAL;
   }
 
@@ -1875,7 +1887,10 @@ int schedulerAddForwardingPort(ProcessId forwardingPid) {
   if (consoleAddForwardingPortArgs == NULL) {
     return -ENOMEM;
   }
-  consoleAddForwardingPortArgs->forwardingPid = forwardingPid;
+  consoleAddForwardingPortArgs->forwardingPid = inputPid;
+  consoleAddForwardingPortArgs->outputPid = outputPid;
+  consoleAddForwardingPortArgs->rows = rows;
+  consoleAddForwardingPortArgs->columns = columns;
   consoleAddForwardingPortArgs->portId = 0;
   consoleAddForwardingPortArgs->returnValue = 0;
   int returnValue = -EIO;
@@ -1894,16 +1909,22 @@ int schedulerAddForwardingPort(ProcessId forwardingPid) {
     return returnValue;
   }
 
-  ProcessDescriptor *forwarder = &allProcesses[forwardingPid - 1];
-  if ((addProcessIpcCapability(forwarder, consolePid,
-      CONSOLE_COMMAND_SIGNATURE, CONSOLE_ADD_FORWARDING_PORT) != 0)
-    || (addProcessIpcCapability(forwarder, consolePid,
+  ProcessDescriptor *inputServicer = &allProcesses[inputPid - 1];
+  if (outputPid == PROCESS_ID_NOT_SET) {
+    outputPid = inputPid;
+    if (addProcessIpcCapability(inputServicer, consolePid,
+        CONSOLE_COMMAND_SIGNATURE, CONSOLE_ADD_FORWARDING_PORT) != 0
+    ) {
+      return -ENOMEM;
+    }
+  }
+  if ((addProcessIpcCapability(inputServicer, consolePid,
       CONSOLE_COMMAND_SIGNATURE, CONSOLE_INPUT_READY) != 0)
-    || (addProcessIpcCapability(forwarder, consolePid,
-      CONSOLE_COMMAND_SIGNATURE, CONSOLE_RELEASE_BUFFER) != 0)
-    || (addProcessIpcCapability(forwarder, consolePid,
+    || (addProcessIpcCapability(inputServicer, consolePid,
       CONSOLE_COMMAND_SIGNATURE, CONSOLE_SET_WINSIZE) != 0)
-    || (addProcessIpcCapability(&allProcesses[consolePid - 1], forwardingPid,
+    || (addProcessIpcCapability(&allProcesses[outputPid - 1], consolePid,
+      CONSOLE_COMMAND_SIGNATURE, CONSOLE_RELEASE_BUFFER) != 0)
+    || (addProcessIpcCapability(&allProcesses[consolePid - 1], outputPid,
       CONSOLE_COMMAND_SIGNATURE, CONSOLE_FORWARD_STRING) != 0)
   ) {
     return -ENOMEM;
@@ -2019,6 +2040,18 @@ static void schedulerRevokeWindowClient(
 /// @return This function returns no value.
 static void schedulerWindowServerEnded(ProcessId serverPid) {
   _schedulerState->windowServerPid = 0;
+  if (NANO_OS_MAX_SESSIONS > 0) {
+    ProcessDescriptor *server = &allProcesses[serverPid - 1];
+    removeProcessIpcCapability(server, schedulerPid,
+      SCHEDULER_COMMAND_SIGNATURE, SCHEDULER_OPEN_SESSION);
+    removeProcessIpcCapability(server, schedulerPid,
+      SCHEDULER_COMMAND_SIGNATURE, SCHEDULER_CLOSE_SESSION);
+    removeProcessIpcCapability(server, consolePid,
+      CONSOLE_COMMAND_SIGNATURE, CONSOLE_INPUT_READY);
+    removeProcessIpcCapability(server, consolePid,
+      CONSOLE_COMMAND_SIGNATURE, CONSOLE_SET_WINSIZE);
+    schedulerCloseServicedSessions(serverPid, true);
+  }
   for (ProcessId ii = 1; ii <= numProcesses; ii++) {
     if (allProcesses[ii - 1].windowClient) {
       schedulerRevokeWindowClient(&allProcesses[ii - 1], serverPid);
@@ -2103,7 +2136,8 @@ static __attribute__((noinline)) void schedulerGraphicsClientEnded(
 ///   ProcessDescriptor *processDescriptor)
 ///
 /// @brief Run schedulerGraphicsClientEnded or schedulerWindowClientEnded for
-/// a process that is ending, if it's a graphics or window client.
+/// a process that is ending, if it's a graphics or window client, and close
+/// the sessions whose output it was sent.
 ///
 /// @param processDescriptor A pointer to the ending process's
 ///   ProcessDescriptor.
@@ -2115,6 +2149,9 @@ static inline void schedulerEndClient(ProcessDescriptor *processDescriptor) {
   }
   if (processDescriptor->windowClient) {
     schedulerWindowClientEnded(processDescriptor);
+  }
+  if (NANO_OS_MAX_SESSIONS > 0) {
+    schedulerCloseServicedSessions(processDescriptor->processId, false);
   }
 }
 
@@ -2192,7 +2229,7 @@ int schedulerBindShell(uint8_t shellIndex, uint8_t consolePort,
   }
   allProcesses[pid - 1].restartArgs = shellProgram;
   allProcesses[pid - 1].consolePort = consolePort;
-  _schedulerState->shellOutputPids[shellIndex] = outputPid;
+  allProcesses[pid - 1].shellOutputPid = outputPid;
 
   return 0;
 }
@@ -2248,6 +2285,7 @@ void schedulerSetNumShells(uint8_t numShells) {
     pid++
   ) {
     ProcessDescriptor *processDescriptor = &allProcesses[pid - 1];
+    processDescriptor->shellSlot = SHELL_SLOT_NONE;
     processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_USER;
     processDescriptor->ipcCapabilities = baseUserIpcCapabilities;
     processDescriptor->numIpcCapabilities
@@ -4182,6 +4220,120 @@ static inline bool userMaySignal(UserId senderId, UserId targetId) {
     || ((senderId == ROOT_USER_ID) && (targetId != SYSTEM_USER_ID));
 }
 
+/// @fn static int schedulerKillSlot(ProcessDescriptor *processDescriptor,
+///   int signal, bool selfKill)
+///
+/// @brief End the process in a slot with a signal, as SCHEDULER_KILL_PROCESS
+/// does.  A process that kills itself keeps its console ports, files, memory
+/// and user so that its slot's restart function can start it again.
+///
+/// @param processDescriptor A pointer to the ProcessDescriptor of the process.
+/// @param signal The signal the process is killed with.
+/// @param selfKill Whether the process is killing itself.
+///
+/// @return Returns 0 on success, EBUSY if the process's console ports or
+/// memory couldn't be given back, EOTHER if it couldn't be terminated, or
+/// -EBUSY if its files can't be closed yet, in which case the kill must be
+/// tried again later.
+static int schedulerKillSlot(ProcessDescriptor *processDescriptor,
+  int signal, bool selfKill
+) {
+  int errorNumber = 0;
+  processDescriptor->exitStatus = (uint8_t) (128 + signal);
+  processDescriptor->exitSignal = (uint8_t) signal;
+  // Regardless of whether or not we succeed at terminating it, we have
+  // to remove it from its queue.  We don't know which queue it's on,
+  // though.  The fact that we're killing it makes it likely that it's hung.
+  // The most likely reason is that it's waiting on something with an
+  // infinite timeout, so it's most likely to be on the waiting queue.  The
+  // second most likely reason is that it's in an infinite loop, so the
+  // ready queue is the second-most-likely place it could be.  The least-
+  // likely place for it to be would be the timed waiting queue with a very
+  // long timeout.  So, attempt to remove from the queues in that order.
+  if (processQueueRemove(_schedulerState->waitingQueue,
+    processDescriptor) != 0
+  ) {
+    if (processQueueRemove(processDescriptor->readyQueue,
+      processDescriptor) != 0
+    ) {
+      processQueueRemove(_schedulerState->timedWaitingQueue,
+        processDescriptor);
+    }
+  }
+  processCompleteMessagesTo(processDescriptor);
+
+  if (selfKill == false) {
+    // Tell the console to release the port for us.  We need to do this
+    // before terminating the process because, in the event the process we're
+    // terminating is one of the shell process slots, the message won't get
+    // released because there's no shell blocking waiting for the message.
+    if (schedulerReleaseConsolePorts(processDescriptor) != processSuccess) {
+      errorNumber = EBUSY;
+    }
+
+    // Close the file descriptors before we terminate the process so that
+    // anything that gets sent to the process's queue gets cleaned up when
+    // we terminate it.
+    if (closeProcessFileDescriptors(processDescriptor) != 0) {
+      return -EBUSY;
+    }
+
+    ProcessId pid = processDescriptor->processId;
+    MESSAGE_ARGS_PROCESS_ENDED(pid, false);
+    MESSAGE_ARGS_ALLOCATE(MemoryManagerFreeProcessMemoryArgs,
+      memoryManagerFreeProcessMemoryArgs);
+    int freeStatus = processError;
+    if (memoryManagerFreeProcessMemoryArgs != NULL) {
+      memoryManagerFreeProcessMemoryArgs->pid = pid;
+      memoryManagerFreeProcessMemoryArgs->returnValue = 0;
+      freeStatus = schedulerInitSendMessageToPid(
+        memoryManagerPid,
+        MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_FREE_PROCESS_MEMORY,
+        memoryManagerFreeProcessMemoryArgs,
+        sizeof(*memoryManagerFreeProcessMemoryArgs));
+      MESSAGE_ARGS_FREE(memoryManagerFreeProcessMemoryArgs);
+    }
+    if (freeStatus != processSuccess) {
+      logError(
+        "Could not send MEMORY_MANAGER_FREE_PROCESS_MEMORY"
+        "message to memory manager process\n");
+      errorNumber = EBUSY;
+    }
+
+    // MEMORY_MANAGER_FREE_PROCESS_MEMORY will have freed envp if it
+    // existed, so make sure it's NULL now.
+    processDescriptor->envp = NULL;
+    processDescriptor->name = NULL;
+    processDescriptor->userId = NO_USER_ID;
+  }
+
+  // Terminate the process and make sure its message queue gets flushed.
+  if (processTerminate(processDescriptor, false) == processSuccess) {
+    threadSetContext(processDescriptor->mainThread, processDescriptor);
+
+    // It's likely (i.e. almost certain) that the killed process was a user
+    // process that was killed by a user process.  That would mean that we
+    // were in the middle of processing a user process queue, the number of
+    // items in which was captured before the runScheduler loop was started.
+    // (See the logic at the end of startScheduler.)  Rather than pushing
+    // the killed process onto the free queue, push it back onto its ready
+    // queue so that we don't try to pop a process from an empty queue.
+    // runScheduler will do the cleanup and put the process onto the free
+    // queue again once it picks back up again.
+    processQueuePush(processDescriptor->readyQueue, processDescriptor);
+  } else {
+    logError("Failed to terminate process %d\n",
+      processDescriptor->processId);
+    errorNumber = EOTHER;
+
+    // Do *NOT* push the process back onto the free queue in this case.
+    // If we couldn't terminate it, it's not valid to try and reuse it for
+    // another process.
+  }
+
+  return errorNumber;
+}
+
 /// @fn int schedulerKillProcessCommandHandler(
 ///   SchedulerState *schedulerState, ProcessMessage *processMessage)
 ///
@@ -4198,6 +4350,7 @@ static inline bool userMaySignal(UserId senderId, UserId targetId) {
 int schedulerKillProcessCommandHandler(
   SchedulerState *schedulerState, ProcessMessage *processMessage
 ) {
+  (void) schedulerState;
   int returnValue = 0;
 
   UserId callingUserId = processMessageFrom(processMessage)->userId;
@@ -4218,110 +4371,16 @@ int schedulerKillProcessCommandHandler(
     && (processRunning(&allProcesses[processIndex]))
   ) {
     if (userMaySignal(callingUserId, allProcesses[processIndex].userId)) {
-      ProcessDescriptor *processDescriptor = &allProcesses[processIndex];
-      processDescriptor->exitStatus
-        = (uint8_t) (128 + schedulerKillProcessArgs->signal);
-      processDescriptor->exitSignal
-        = (uint8_t) schedulerKillProcessArgs->signal;
-      // Regardless of whether or not we succeed at terminating it, we have
-      // to remove it from its queue.  We don't know which queue it's on,
-      // though.  The fact that we're killing it makes it likely that it's hung.
-      // The most likely reason is that it's waiting on something with an
-      // infinite timeout, so it's most likely to be on the waiting queue.  The
-      // second most likely reason is that it's in an infinite loop, so the
-      // ready queue is the second-most-likely place it could be.  The least-
-      // likely place for it to be would be the timed waiting queue with a very
-      // long timeout.  So, attempt to remove from the queues in that order.
-      if (processQueueRemove(schedulerState->waitingQueue,
-        processDescriptor) != 0
-      ) {
-        if (processQueueRemove(processDescriptor->readyQueue,
-          processDescriptor) != 0
-        ) {
-          processQueueRemove(schedulerState->timedWaitingQueue,
-            processDescriptor);
-        }
-      }
-      processCompleteMessagesTo(processDescriptor);
-
-      if (selfKill == false) {
-        // Tell the console to release the port for us.  We will forward it
-        // the message we acquired above, which it will use to send to the
-        // correct shell to unblock it.  We need to do this before terminating
-        // the process because, in the event the process we're terminating is
-        // one of the shell process slots, the message won't get released
-        // because there's no shell blocking waiting for the message.
-        if (schedulerReleaseConsolePorts(processDescriptor)
-          != processSuccess
-        ) {
-          schedulerKillProcessArgs->returnValue = 1;
-          schedulerKillProcessArgs->errorNumber = EBUSY;
-        }
-
-        // Close the file descriptors before we terminate the process so that
-        // anything that gets sent to the process's queue gets cleaned up when
-        // we terminate it.
-        if (closeProcessFileDescriptors(processDescriptor) != 0) {
-          // DO NOT mark the message done or release it.  Return an error status
-          // immediately so that we push the message back onto our queue and
-          // try it again later.
-          return -EBUSY;
-        }
-
-        MESSAGE_ARGS_PROCESS_ENDED(pid, false);
-        MESSAGE_ARGS_ALLOCATE(MemoryManagerFreeProcessMemoryArgs,
-          memoryManagerFreeProcessMemoryArgs);
-        int freeStatus = processError;
-        if (memoryManagerFreeProcessMemoryArgs != NULL) {
-          memoryManagerFreeProcessMemoryArgs->pid = pid;
-          memoryManagerFreeProcessMemoryArgs->returnValue = 0;
-          freeStatus = schedulerInitSendMessageToPid(
-            memoryManagerPid,
-            MEMORY_MANAGER_COMMAND_SIGNATURE | MEMORY_MANAGER_FREE_PROCESS_MEMORY,
-            memoryManagerFreeProcessMemoryArgs,
-            sizeof(*memoryManagerFreeProcessMemoryArgs));
-          MESSAGE_ARGS_FREE(memoryManagerFreeProcessMemoryArgs);
-        }
-        if (freeStatus != processSuccess) {
-          logError(
-            "Could not send MEMORY_MANAGER_FREE_PROCESS_MEMORY"
-            "message to memory manager process\n");
-          schedulerKillProcessArgs->returnValue = 1;
-          schedulerKillProcessArgs->errorNumber = EBUSY;
-        }
-
-        // MEMORY_MANAGER_FREE_PROCESS_MEMORY will have freed envp if it
-        // existed, so make sure it's NULL now.
-        processDescriptor->envp = NULL;
-        processDescriptor->name = NULL;
-        processDescriptor->userId = NO_USER_ID;
-      }
-
-      // Terminate the process and make sure its message queue gets flushed.
-      if (processTerminate(processDescriptor, false) == processSuccess) {
-        threadSetContext(processDescriptor->mainThread,
-          processDescriptor);
-
-        // It's likely (i.e. almost certain) that the killed process was a user
-        // process that was killed by a user process.  That would mean that we
-        // were in the middle of processing a user process queue, the number of
-        // items in which was captured before the runScheduler loop was started.
-        // (See the logic at the end of startScheduler.)  Rather than pushing
-        // the killed process onto the free queue, push it back onto its ready
-        // queue so that we don't try to pop a process from an empty queue.
-        // runScheduler will do the cleanup and put the process onto the free
-        // queue again once it picks back up again.
-        processQueuePush(processDescriptor->readyQueue, processDescriptor);
-      } else {
-        // Tell the caller that we've failed.
-        logError("Failed to terminate process; marking message 0x%lx done\n",
-          (unsigned long int) (uintptr_t) processMessage);
+      int killStatus = schedulerKillSlot(&allProcesses[processIndex],
+        schedulerKillProcessArgs->signal, selfKill);
+      if (killStatus == -EBUSY) {
+        // DO NOT mark the message done or release it.  Return an error status
+        // immediately so that we push the message back onto our queue and
+        // try it again later.
+        return -EBUSY;
+      } else if (killStatus != 0) {
         schedulerKillProcessArgs->returnValue = 1;
-        schedulerKillProcessArgs->errorNumber = EOTHER;
-
-        // Do *NOT* push the process back onto the free queue in this case.
-        // If we couldn't terminate it, it's not valid to try and reuse it for
-        // another process.
+        schedulerKillProcessArgs->errorNumber = killStatus;
       }
 
       if (processMessageSetDone(processMessage) != processSuccess) {
@@ -4705,11 +4764,9 @@ int schedulerExecveCommandHandler(
     return 0; // Don't retry this command
   }
 
-  int shellIndex = ((int) processDescriptor->processId)
-    - ((int) _schedulerState->firstShellPid);
   if ((processDescriptor->userId != NO_USER_ID)
     && (processDescriptor->shellPath == NULL)
-    && (shellIndex >= 0) && (shellIndex < _schedulerState->numShells)
+    && processDescriptor->shellSlot
   ) {
     // Login has set the user and is running the user's shell.
     processDescriptor->shellPath = (char*) schedMalloc(strlen(pathname) + 1);
@@ -6020,8 +6077,9 @@ int schedulerGetDirCapabilitiesCommandHandler(
 /// @fn int schedulerRegisterWindowServerCommandHandler(
 ///   SchedulerState *schedulerState, ProcessMessage *processMessage)
 ///
-/// @brief Make the calling process the window server.  Only the program on
-/// config.sys's GRAPHICS line may be one, and only one process at a time.
+/// @brief Make the calling process the window server, which may open
+/// sessions.  Only the program on config.sys's GRAPHICS line may be one, and
+/// only one process at a time.
 ///
 /// @param schedulerState A pointer to the SchedulerState maintained by the
 ///   scheduler process.
@@ -6046,6 +6104,13 @@ int schedulerRegisterWindowServerCommandHandler(
     && (schedulerState->windowServerPid != caller->processId)
   ) {
     schedulerWindowServerArgs->errorNumber = EBUSY;
+  } else if ((NANO_OS_MAX_SESSIONS > 0)
+    && ((addProcessIpcCapability(caller, schedulerPid,
+        SCHEDULER_COMMAND_SIGNATURE, SCHEDULER_OPEN_SESSION) != 0)
+      || (addProcessIpcCapability(caller, schedulerPid,
+        SCHEDULER_COMMAND_SIGNATURE, SCHEDULER_CLOSE_SESSION) != 0))
+  ) {
+    schedulerWindowServerArgs->errorNumber = ENOMEM;
   } else {
     schedulerState->windowServerPid = caller->processId;
   }
@@ -6103,6 +6168,530 @@ int schedulerConnectWindowServerCommandHandler(
   return 0;
 }
 
+/// @var _homeVariable
+///
+/// @brief The start of the HOME environment variable.
+///
+/// @note KEEP_IN_RAM is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _homeVariable[] KEEP_IN_RAM = "HOME=";
+
+/// @var _pwdVariable
+///
+/// @brief The start of the PWD environment variable.
+///
+/// @note KEEP_IN_RAM is required here because .rodata is removed from the
+/// final binary on some targets.
+static const char _pwdVariable[] KEEP_IN_RAM = "PWD=";
+
+/// @fn static char** schedulerSessionEnvironment(char **envp)
+///
+/// @brief Copy the environment of the login a session's shell runs for, with
+/// PWD set to HOME, into one block whose first string is at its start, as an
+/// exec's is.
+///
+/// @param envp The environment to copy.
+///
+/// @return Returns the copy on success, NULL if the environment has no HOME
+/// or memory ran out.
+static char** schedulerSessionEnvironment(char **envp) {
+  const char *home = NULL;
+  size_t numVariables = 1;
+  size_t stringBytes = 0;
+  for (size_t ii = 0; (envp != NULL) && (envp[ii] != NULL); ii++) {
+    if (strncmp(envp[ii], _pwdVariable, sizeof(_pwdVariable) - 1) == 0) {
+      continue;
+    } else if (strncmp(envp[ii], _homeVariable, sizeof(_homeVariable) - 1)
+      == 0
+    ) {
+      home = &envp[ii][sizeof(_homeVariable) - 1];
+    }
+    numVariables++;
+    stringBytes += strlen(envp[ii]) + 1;
+  }
+  if (home == NULL) {
+    return NULL;
+  }
+  stringBytes += (sizeof(_pwdVariable) - 1) + strlen(home) + 1;
+
+  size_t pointersAt
+    = (stringBytes + sizeof(uintptr_t) - 1) & ~(sizeof(uintptr_t) - 1);
+  char *block = (char*) schedMalloc(
+    pointersAt + ((numVariables + 1) * sizeof(char*)));
+  if (block == NULL) {
+    return NULL;
+  }
+  char **sessionEnvp = (char**) &block[pointersAt];
+  char *nextString = block;
+  size_t index = 0;
+  for (size_t ii = 0; envp[ii] != NULL; ii++) {
+    if (strncmp(envp[ii], _pwdVariable, sizeof(_pwdVariable) - 1) != 0) {
+      sessionEnvp[index++] = nextString;
+      strcpy(nextString, envp[ii]);
+      nextString += strlen(envp[ii]) + 1;
+    }
+  }
+  sessionEnvp[index++] = nextString;
+  strcpy(nextString, _pwdVariable);
+  strcat(nextString, home);
+  sessionEnvp[index] = NULL;
+
+  return sessionEnvp;
+}
+
+/// @fn static ProcessDescriptor* schedulerSessionShell(uint8_t port)
+///
+/// @brief Find the shell slot of the session on a console port.
+///
+/// @param port The index of the console port.
+///
+/// @return Returns a pointer to the slot's ProcessDescriptor, or NULL if no
+/// session is on the port.
+static ProcessDescriptor* schedulerSessionShell(uint8_t port) {
+  for (ProcessId ii = 1; ii <= numProcesses; ii++) {
+    if ((allProcesses[ii - 1].shellSlot == SHELL_SLOT_SESSION)
+      && (allProcesses[ii - 1].consolePort == port)
+    ) {
+      return &allProcesses[ii - 1];
+    }
+  }
+
+  return NULL;
+}
+
+/// @fn static void schedulerRemovePort(uint8_t port)
+///
+/// @brief Have the console take a session's port out of use.
+///
+/// @param port The index of the port.
+///
+/// @return This function returns no value.
+static void schedulerRemovePort(uint8_t port) {
+  if (schedulerInitSendMessageToPid(consolePid,
+      CONSOLE_COMMAND_SIGNATURE | CONSOLE_REMOVE_PORT,
+      (void*) (uintptr_t) port, 0) != processSuccess
+  ) {
+    logError("Could not remove console port %d\n", port);
+  }
+}
+
+/// @fn static void schedulerRevokeSessionGrants(uint8_t port,
+///   ProcessId inputPid, ProcessId outputPid)
+///
+/// @brief Take away the grants a session's port gave its servicers, unless
+/// another session's port still needs them.
+///
+/// @param port The index of the session's port.
+/// @param inputPid The ProcessId of the session's input servicer, or 0.
+/// @param outputPid The ProcessId of the session's output servicer.
+///
+/// @return This function returns no value.
+static void schedulerRevokeSessionGrants(uint8_t port, ProcessId inputPid,
+  ProcessId outputPid
+) {
+  bool inputShared = false;
+  bool outputShared = false;
+  for (ProcessId ii = 1; ii <= numProcesses; ii++) {
+    ProcessDescriptor *processDescriptor = &allProcesses[ii - 1];
+    if ((processDescriptor->shellSlot == SHELL_SLOT_SESSION)
+      && (processDescriptor->consolePort != port)
+    ) {
+      inputShared = true;
+      outputShared |= (processDescriptor->shellOutputPid == outputPid);
+    }
+  }
+
+  if ((inputShared == false) && (inputPid != 0)) {
+    removeProcessIpcCapability(&allProcesses[inputPid - 1], consolePid,
+      CONSOLE_COMMAND_SIGNATURE, CONSOLE_INPUT_READY);
+    removeProcessIpcCapability(&allProcesses[inputPid - 1], consolePid,
+      CONSOLE_COMMAND_SIGNATURE, CONSOLE_SET_WINSIZE);
+  }
+  if (outputShared == false) {
+    removeProcessIpcCapability(&allProcesses[consolePid - 1], outputPid,
+      CONSOLE_COMMAND_SIGNATURE, CONSOLE_FORWARD_STRING);
+  }
+}
+
+/// @fn static void schedulerSessionEnded(ProcessId pid, uint8_t port)
+///
+/// @brief Tell a session's servicer, if it's running, that the session has
+/// ended, with a one-way CONSOLE_SESSION_ENDED whose data is the port.
+///
+/// @param pid The ProcessId of the servicer, or 0.
+/// @param port The index of the session's port.
+///
+/// @return This function returns no value.
+static void schedulerSessionEnded(ProcessId pid, uint8_t port) {
+  if ((pid == 0) || (pid > numProcesses)
+    || (processRunning(&allProcesses[pid - 1]) == false)
+  ) {
+    return;
+  }
+
+  ProcessMessage *processMessage = getAvailableMessage();
+  if (processMessage != NULL) {
+    processMessageInitInline(processMessage,
+      CONSOLE_COMMAND_SIGNATURE | CONSOLE_SESSION_ENDED,
+      (void*) (uintptr_t) port, 0, /* waiting= */ false);
+    if (processMessageQueuePush(&allProcesses[pid - 1], processMessage)
+      == processSuccess
+    ) {
+      return;
+    }
+    processMessageRelease(processMessage);
+  }
+  logError("Could not tell process %d that session %d ended\n", pid, port);
+}
+
+/// @fn static __attribute__((noinline)) int schedulerEndSession(
+///   ProcessDescriptor *shell)
+///
+/// @brief End the session whose shell has exited or been killed:  kill its
+/// other processes, remove its port, take back its servicers' grants, tell
+/// them, and free the shell's slot.  Kept out of line so that
+/// restartOverlayShell carries its frame only when a session ends.
+///
+/// @param shell A pointer to the ProcessDescriptor of the session's shell.
+///
+/// @return Returns 0 on success, -EAGAIN if a process couldn't be killed yet.
+static __attribute__((noinline)) int schedulerEndSession(
+  ProcessDescriptor *shell
+) {
+  uint8_t port = shell->consolePort;
+  for (ProcessId ii = 1; ii <= numProcesses; ii++) {
+    ProcessDescriptor *processDescriptor = &allProcesses[ii - 1];
+    if ((processDescriptor != shell)
+      && (processDescriptor->consolePort == port)
+      && processRunning(processDescriptor)
+      && (schedulerKillSlot(processDescriptor, SIGKILL, false) == -EBUSY)
+    ) {
+      return -EAGAIN;
+    }
+  }
+
+  ProcessId outputPid = shell->shellOutputPid;
+  ProcessId inputPid = _schedulerState->windowServerPid;
+  schedulerRemovePort(port);
+  shell->shellSlot = SHELL_SLOT_NONE;
+  schedulerRevokeSessionGrants(port, inputPid, outputPid);
+  removeProcessIpcCapability(&allProcesses[consolePid - 1], shell->processId,
+    CONSOLE_COMMAND_SIGNATURE, CONSOLE_RETURNING_INPUT);
+  schedulerSessionEnded(outputPid, port);
+  if (inputPid != outputPid) {
+    schedulerSessionEnded(inputPid, port);
+  }
+
+  shell->shellOutputPid = PROCESS_ID_NOT_SET;
+  shell->consolePort = NO_CONSOLE_PORT;
+  shell->restartFunction = NULL;
+  schedFree(shell->shellPath);
+  shell->shellPath = NULL;
+  if (shell->envp != NULL) {
+    // The pointer for the envp block is stored at envp[0], so free that.
+    schedFree(shell->envp[0]);
+    shell->envp = NULL;
+  }
+  schedulerSetDirCapabilities(shell, NULL);
+  ipcCapabilitiesReset(shell);
+  if (shell->overlay.overlayIdLength > 0) {
+    schedFree(shell->overlay.overlayId);
+  }
+  shell->overlay.overlayId = NULL;
+  shell->overlay.overlayIdLength = 0;
+
+  return 0;
+}
+
+/// @fn static void schedulerCloseSessionLater(uint8_t port)
+///
+/// @brief Send the scheduler itself SCHEDULER_CLOSE_SESSION for a session,
+/// with the port as its data, so that the session is closed even if the
+/// scheduler can't kill its shell now.
+///
+/// @param port The index of the session's port.
+///
+/// @return This function returns no value.
+static void schedulerCloseSessionLater(uint8_t port) {
+  ProcessMessage *processMessage = getAvailableMessage();
+  if (processMessage != NULL) {
+    processMessageInitInline(processMessage,
+      SCHEDULER_COMMAND_SIGNATURE | SCHEDULER_CLOSE_SESSION,
+      (void*) (uintptr_t) port, 0, /* waiting= */ false);
+    if (processMessageQueuePush(&allProcesses[schedulerPid - 1],
+        processMessage) == processSuccess
+    ) {
+      return;
+    }
+    processMessageRelease(processMessage);
+  }
+  logError("Could not close session %d\n", port);
+}
+
+/// @fn static __attribute__((noinline)) void schedulerCloseServicedSessions(
+///   ProcessId pid, bool everySession)
+///
+/// @brief Close each session an ending process serviced.  Kept out of line so
+/// that the end-of-process handlers carry its frame only where there are
+/// sessions.
+///
+/// @param pid The ProcessId of the ending process.
+/// @param everySession Whether the process serviced every session's input,
+///   as the window server does.
+///
+/// @return This function returns no value.
+static __attribute__((noinline)) void schedulerCloseServicedSessions(
+  ProcessId pid, bool everySession
+) {
+  for (ProcessId ii = 1; ii <= numProcesses; ii++) {
+    ProcessDescriptor *processDescriptor = &allProcesses[ii - 1];
+    if ((processDescriptor->shellSlot == SHELL_SLOT_SESSION)
+      && (everySession || (processDescriptor->shellOutputPid == pid))
+    ) {
+      schedulerCloseSessionLater(processDescriptor->consolePort);
+    }
+  }
+}
+
+/// @fn static int schedulerStartSessionShell(ProcessDescriptor *shell,
+///   ProcessDescriptor *caller, ProcessDescriptor *login, uint8_t port,
+///   ProcessId display)
+///
+/// @brief Make a free slot a session's shell slot, at the level a console's
+/// shell slot has, and start the login's shell in it.
+///
+/// @param shell A pointer to the ProcessDescriptor of the free slot.
+/// @param caller A pointer to the window server's ProcessDescriptor.
+/// @param login A pointer to the ProcessDescriptor of the shell slot whose
+///   login started the window server.
+/// @param port The index of the session's port.
+/// @param display The ProcessId of the session's output servicer.
+///
+/// @return Returns 0 on success or an errno value.
+static int schedulerStartSessionShell(ProcessDescriptor *shell,
+  ProcessDescriptor *caller, ProcessDescriptor *login, uint8_t port,
+  ProcessId display
+) {
+  char **envp = schedulerSessionEnvironment(login->envp);
+  if (envp == NULL) {
+    return ENOMEM;
+  }
+  char *shellPath = (char*) schedMalloc(strlen(login->shellPath) + 1);
+  if (shellPath == NULL) {
+    schedFree(envp[0]);
+    return ENOMEM;
+  }
+  strcpy(shellPath, login->shellPath);
+
+  threadSetContext(shell->mainThread, shell);
+  shell->userId = caller->userId;
+  shell->parentPid = 0;
+  shell->zombie = false;
+  shell->exitStatus = 0;
+  shell->exitSignal = 0;
+  shell->waitMessage = NULL;
+  shell->shellSlot = SHELL_SLOT_SESSION;
+  shell->shellOutputPid = display;
+  shell->consolePort = port;
+  shell->shellPath = shellPath;
+  shell->restartArgs = NULL;
+  HAL->platform->restartShell(&shell->restartFunction);
+  HAL->platform->callFileOverlay(&shell->callOverlayFunction);
+
+  shell->privilegeLevel = PRIVILEGE_LEVEL_SUPERVISOR;
+  schedulerSetBaseHalCapabilities(shell);
+  shell->readyQueue = _schedulerState->readyQueues[PRIVILEGE_LEVEL_SUPERVISOR];
+  if (shell->ipcCapabilitiesDynamic) {
+    schedFree(shell->ipcCapabilities);
+  }
+  shell->ipcCapabilities = baseSupervisorIpcCapabilities;
+  shell->numIpcCapabilities = sizeof(baseSupervisorIpcCapabilities)
+    / sizeof(baseSupervisorIpcCapabilities[0]);
+  shell->ipcCapabilitiesDynamic = false;
+  schedulerSetDirCapabilities(shell, supervisorDirCapabilities);
+
+  addProcessIpcCapability(&allProcesses[consolePid - 1], shell->processId,
+    CONSOLE_COMMAND_SIGNATURE, CONSOLE_RETURNING_INPUT);
+  int returnValue = -EIO;
+  if ((schedulerSetPortShell(port, shell->processId) == processSuccess)
+    && (schedulerAssignPortToPid(port, shell->processId) == processSuccess)
+  ) {
+    char *argv[] = { strrchr(shellPath, '/') + 1, NULL };
+    returnValue = schedulerRunOverlayCommand(shell, shellPath, argv, envp);
+    envp = NULL;
+  }
+  if (returnValue == 0) {
+    processQueuePush(shell->readyQueue, shell);
+    return 0;
+  }
+
+  if (envp != NULL) {
+    schedFree(envp[0]);
+  }
+  shell->shellSlot = SHELL_SLOT_NONE;
+  shell->shellOutputPid = PROCESS_ID_NOT_SET;
+  shell->consolePort = NO_CONSOLE_PORT;
+  shell->restartFunction = NULL;
+  shell->userId = NO_USER_ID;
+  schedFree(shellPath);
+  shell->shellPath = NULL;
+  removeProcessIpcCapability(&allProcesses[consolePid - 1], shell->processId,
+    CONSOLE_COMMAND_SIGNATURE, CONSOLE_RETURNING_INPUT);
+  schedulerSetDirCapabilities(shell, NULL);
+  ipcCapabilitiesReset(shell);
+  return -returnValue;
+}
+
+/// @fn static int schedulerOpenSession(SchedulerState *schedulerState,
+///   ProcessDescriptor *caller, SchedulerOpenSessionArgs *args)
+///
+/// @brief Open a session for the window server:  a forwarding port whose
+/// input only the window server sends and whose output goes to the display,
+/// with the shell of the login that started the window server running on it
+/// in a free slot.
+///
+/// @param schedulerState A pointer to the SchedulerState maintained by the
+///   scheduler process.
+/// @param caller A pointer to the ProcessDescriptor of the caller.
+/// @param args A pointer to the command's SchedulerOpenSessionArgs.
+///
+/// @return Returns 0 on success or an errno value.
+static int schedulerOpenSession(SchedulerState *schedulerState,
+  ProcessDescriptor *caller, SchedulerOpenSessionArgs *args
+) {
+  if (caller->processId != schedulerState->windowServerPid) {
+    return EPERM;
+  }
+  ProcessId display = args->display;
+  if ((display == 0) || (display > numProcesses)) {
+    return EINVAL;
+  }
+  ProcessDescriptor *displayDescriptor = &allProcesses[display - 1];
+  if ((processRunning(displayDescriptor) == false)
+    || (displayDescriptor->userId != caller->userId)
+    || ((display != caller->processId)
+      && (displayDescriptor->privilegeLevel <= PRIVILEGE_LEVEL_EXECUTIVE))
+  ) {
+    return EINVAL;
+  }
+  ProcessDescriptor *login = NULL;
+  if (caller->parentPid != 0) {
+    login = &allProcesses[caller->parentPid - 1];
+  }
+  if ((login == NULL) || (login->shellSlot == SHELL_SLOT_NONE)
+    || (login->shellPath == NULL) || (login->userId != caller->userId)
+  ) {
+    return EINVAL;
+  }
+
+  int portId = schedulerAddForwardingPort(caller->processId, display,
+    args->rows, args->columns);
+  if (portId < 0) {
+    return -portId;
+  }
+  int status = EAGAIN;
+  ProcessDescriptor *shell = processQueuePop(schedulerState->freeQueue);
+  if (shell != NULL) {
+    status = schedulerStartSessionShell(shell, caller, login,
+      (uint8_t) portId, display);
+    if (status != 0) {
+      processQueuePush(schedulerState->freeQueue, shell);
+    }
+  }
+  if (status != 0) {
+    schedulerRemovePort((uint8_t) portId);
+    schedulerRevokeSessionGrants((uint8_t) portId, caller->processId,
+      display);
+    return status;
+  }
+
+  args->port = (uint8_t) portId;
+  args->shell = shell->processId;
+  return 0;
+}
+
+/// @fn int schedulerOpenSessionCommandHandler(
+///   SchedulerState *schedulerState, ProcessMessage *processMessage)
+///
+/// @brief Open a session for the window server, which only it may do.
+///
+/// @param schedulerState A pointer to the SchedulerState maintained by the
+///   scheduler process.
+/// @param processMessage A pointer to the ProcessMessage that was received.
+///
+/// @return Returns 0 on success, -EBUSY to have the command tried again
+/// later.
+int schedulerOpenSessionCommandHandler(
+  SchedulerState *schedulerState, ProcessMessage *processMessage
+) {
+  SchedulerOpenSessionArgs *args
+    = (SchedulerOpenSessionArgs*) processMessageData(processMessage);
+  if (args == NULL) {
+    processMessageSetDone(processMessage);
+    return 0;
+  } else if (_functionInProgress != NULL) {
+    return -EBUSY;
+  }
+
+  args->status = (uint8_t) schedulerOpenSession(schedulerState,
+    processMessageFrom(processMessage), args);
+  processMessageSetDone(processMessage);
+  return 0;
+}
+
+/// @fn int schedulerCloseSessionCommandHandler(
+///   SchedulerState *schedulerState, ProcessMessage *processMessage)
+///
+/// @brief End a session by killing its shell, whose restart ends the rest of
+/// it.  The window server sends this with SchedulerOpenSessionArgs; the
+/// scheduler sends it to itself, without waiting, with the port as the data.
+///
+/// @param schedulerState A pointer to the SchedulerState maintained by the
+///   scheduler process.
+/// @param processMessage A pointer to the ProcessMessage that was received.
+///
+/// @return Returns 0 on success, -EBUSY to have the command tried again
+/// later.
+int schedulerCloseSessionCommandHandler(
+  SchedulerState *schedulerState, ProcessMessage *processMessage
+) {
+  ProcessDescriptor *caller = processMessageFrom(processMessage);
+  SchedulerOpenSessionArgs *args = NULL;
+  uint8_t port = 0;
+  if (caller->processId == schedulerPid) {
+    port = (uint8_t) (uintptr_t) processMessageData(processMessage);
+  } else {
+    args = (SchedulerOpenSessionArgs*) processMessageData(processMessage);
+    if (args == NULL) {
+      processMessageSetDone(processMessage);
+      return 0;
+    }
+    port = args->port;
+  }
+
+  ProcessDescriptor *shell = schedulerSessionShell(port);
+  uint8_t status = 0;
+  if ((args != NULL)
+    && (caller->processId != schedulerState->windowServerPid)
+  ) {
+    status = EPERM;
+  } else if (shell == NULL) {
+    status = EINVAL;
+  } else if (processRunning(shell)
+    && (schedulerKillSlot(shell, SIGKILL, false) == -EBUSY)
+  ) {
+    return -EBUSY;
+  }
+
+  if (args != NULL) {
+    args->status = status;
+    processMessageSetDone(processMessage);
+  } else {
+    processMessageRelease(processMessage);
+  }
+  return 0;
+}
+
 /// @typedef SchedulerCommandHandler
 ///
 /// @brief Signature of command handler for a scheduler command.
@@ -6137,6 +6726,8 @@ const SchedulerCommandHandler schedulerCommandHandlers[] = {
   schedulerRegisterWindowServerCommandHandler,
   // SCHEDULER_CONNECT_WINDOW_SERVER:
   schedulerConnectWindowServerCommandHandler,
+  schedulerOpenSessionCommandHandler,       // SCHEDULER_OPEN_SESSION
+  schedulerCloseSessionCommandHandler,      // SCHEDULER_CLOSE_SESSION
 };
 
 /// @fn void handleSchedulerMessage(SchedulerState *schedulerState)
@@ -6703,16 +7294,13 @@ int schedulerRunOverlayCommand(ProcessDescriptor *processDescriptor,
       = processDescriptor->processId;
   }
 
-  int shellIndex = ((int) processDescriptor->processId)
-    - ((int) _schedulerState->firstShellPid);
-  if ((shellIndex >= 0) && (shellIndex < _schedulerState->numShells)
-    && (_schedulerState->shellOutputPids[shellIndex] != PROCESS_ID_NOT_SET)
+  if (processDescriptor->shellSlot
+    && (processDescriptor->shellOutputPid != PROCESS_ID_NOT_SET)
     && (schedulerDirectOutput(processDescriptor,
-      _schedulerState->shellOutputPids[shellIndex]) != 0)
+      processDescriptor->shellOutputPid) != 0)
   ) {
     logError("Could not send the output of process %d to process %d\n",
-      processDescriptor->processId,
-      _schedulerState->shellOutputPids[shellIndex]);
+      processDescriptor->processId, processDescriptor->shellOutputPid);
   }
 
   HalExecCommandFn execCommand = NULL;
@@ -7065,7 +7653,11 @@ int restartOverlayShell(ProcessDescriptor *processDescriptor) {
   if (processDescriptor->shellPath == NULL) {
     processDescriptor->userId = NO_USER_ID;
   }
-  if (processDescriptor->userId == NO_USER_ID) {
+  if ((processDescriptor->userId == NO_USER_ID)
+    && (processDescriptor->shellSlot == SHELL_SLOT_SESSION)
+  ) {
+    return schedulerEndSession(processDescriptor);
+  } else if (processDescriptor->userId == NO_USER_ID) {
     schedFree(processDescriptor->shellPath);
     processDescriptor->shellPath = NULL;
     // Edits to /etc/passwd take effect at the next login.
@@ -7605,9 +8197,6 @@ int initializeSchedulerState(
   HAL->memory->overlayMap(&overlayMap);
 
   schedulerState->hostname = NULL;
-  for (int ii = 0; ii < NANO_OS_MAX_NUM_SHELLS; ii++) {
-    schedulerState->shellOutputPids[ii] = PROCESS_ID_NOT_SET;
-  }
   processQueueInit(schedulerState->readyQueues[PRIVILEGE_LEVEL_KERNEL],
     _kernelReadyName);
   processQueueInit(schedulerState->readyQueues[PRIVILEGE_LEVEL_EXECUTIVE],
@@ -7910,7 +8499,10 @@ int initializeProcesses(SchedulerState *schedulerState) {
     processDescriptor->userId = NO_USER_ID;
     processDescriptor->name = _dummyName;
     processDescriptor->restartFunction = NULL;
+    processDescriptor->shellOutputPid = PROCESS_ID_NOT_SET;
+    processDescriptor->shellSlot = SHELL_SLOT_NONE;
     if ((ii - schedulerState->firstShellPid) < schedulerState->numShells) {
+      processDescriptor->shellSlot = SHELL_SLOT_CONSOLE;
       processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_SUPERVISOR;
     } else {
       processDescriptor->privilegeLevel = PRIVILEGE_LEVEL_USER;
@@ -7963,12 +8555,10 @@ int initializeProcesses(SchedulerState *schedulerState) {
     allProcesses[ii - 1].dirCapabilities = (ii == schedulerPid)
       ? rootDirCapabilities : kernelDirCapabilities;
   }
-  for (ProcessId ii = schedulerState->firstShellPid;
-    (ii <= numProcesses) && (ii - schedulerState->firstShellPid
-      < schedulerState->numShells);
-    ii++
-  ) {
-    allProcesses[ii - 1].dirCapabilities = supervisorDirCapabilities;
+  for (ProcessId ii = schedulerState->firstShellPid; ii <= numProcesses; ii++) {
+    if (allProcesses[ii - 1].shellSlot) {
+      allProcesses[ii - 1].dirCapabilities = supervisorDirCapabilities;
+    }
   }
   logDebug("Initialized kernel process file descriptors.\n");
 
