@@ -40,7 +40,8 @@ CLOSE_TIME_LIMIT = 30
 # UART report poll-only so the console's polling path stays covered.  The
 # cache passes call file overlays through the overlay file cache.  The checked
 # pass runs the simulator built with the message-argument checker; any report
-# it prints fails the test.
+# it prints fails the test.  The bridge pass runs BRIDGE_MODULES' tests with
+# each login's shell in a console session that sessiontest bridges to UART1.
 SIM_CONFIGS = [
     ("nano-os-sim_stripped", "nano-os-sim_stripped", {}),
     ("nano-os-sim", "nano-os-sim", {}),
@@ -49,7 +50,26 @@ SIM_CONFIGS = [
      {"NANO_OS_SIM_FILE_CACHE": "1"}),
     ("nano-os-sim-cache", "nano-os-sim", {"NANO_OS_SIM_FILE_CACHE": "1"}),
     ("nano-os-sim-checked", "nano-os-sim-checked", {}),
+    ("nano-os-sim-bridge", "nano-os-sim", {harness.BRIDGE_VARIABLE: "1"}),
 ]
+
+# The modules whose tests the bridge pass runs:  the ones that drive a console
+# the way a terminal window's session will be driven.
+BRIDGE_MODULES = ("tests.ed", "tests.help", "tests.kill", "tests.looseLoop",
+                  "tests.mush", "tests.passwd", "tests.termtest",
+                  "tests.tightLoop", "tests.usage", "tests.vi")
+
+# Tests in BRIDGE_MODULES that can't run over the bridge, and why.
+BRIDGE_CANNOT = {
+    "test_line_editor_history_survives_logging_out":
+        "logs out, which ends a session rather than starting getty",
+    "test_logout_silences_background_jobs":
+        "logs out, which ends a session rather than starting getty",
+    "test_failed_pipelines_leave_no_processes_input_or_memory_behind":
+        "lists every process, and the bridge's are among them",
+    "test_pipelines_return_their_memory":
+        "greps every process, and the bridge's are among them",
+}
 
 
 def build_image():
@@ -230,6 +250,8 @@ def run_case(i, label, sim_bin, env, test_module, test_name, image,
     lines = []
     failed = False
     s = None
+    if (harness.BRIDGE_VARIABLE in (env or {})) and (test_name in BRIDGE_CANNOT):
+        return [f"ok {i} - {label} # SKIP {BRIDGE_CANNOT[test_name]}"], False
     try:
         signal.alarm(TEST_TIME_LIMIT)
         s = Session(sim_bin, image, env)
@@ -277,6 +299,9 @@ def main(argv):
     for config_name, sim_name, env in SIM_CONFIGS:
         sim_bin = os.path.join(REPO_ROOT, "sim", "bin", sim_name)
         for t in TESTS:
+            if (harness.BRIDGE_VARIABLE in env) \
+                    and (t.__module__ not in BRIDGE_MODULES):
+                continue
             label = f"{config_name}/{t.__name__}"
             if flt and flt not in label:
                 continue

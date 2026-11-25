@@ -77,6 +77,19 @@ VDP_CONFIG_SYS = (
     "CONSOLE=/system/drivers/vdp.drv /system/bin/getty\n")
 
 
+# The config.sys a bridged Session boots with:  sessiontest, on the GRAPHICS
+# line with loopback.drv standing in for the display driver, bridges a session
+# to UART1.
+BRIDGE_CONFIG_SYS = (
+    "DEVICE=/system/drivers/loopback.drv 1\n"
+    "GRAPHICS=/system/drivers/loopback.drv /system/commands/sessiontest\n")
+
+
+# The environment variable that makes a Session bridged:  its logins run the
+# shell in a console session that sessiontest bridges to UART1.
+BRIDGE_VARIABLE = "NANO_OS_E2E_BRIDGE"
+
+
 VERBOSE = False
 
 
@@ -162,6 +175,7 @@ class Session:
     def __init__(self, sim_bin, image, env=None):
         self.sim_bin = sim_bin
         self.env = env
+        self.bridged = (env or {}).get(BRIDGE_VARIABLE) == "1"
         self.transcript = Transcript()
         self.tmp = tempfile.mkdtemp(prefix=SESSION_DIR_PREFIX)
         img_copy = os.path.join(self.tmp, "disk.img")
@@ -170,6 +184,8 @@ class Session:
         self.vdp = None
         self.child = None
         _open_sessions.add(self)
+        if self.bridged:
+            self._copy_in("/system/data/config.sys", BRIDGE_CONFIG_SYS)
         self.spawn([img_copy])
 
     def spawn(self, args):
@@ -182,7 +198,14 @@ class Session:
                                    env=dict(os.environ, **(self.env or {})))
         self.child.logfile_read = self.transcript
 
+    def _refuse_reboot(self):
+        """Skip a test that boots a configuration of its own when it would
+        replace the bridge's."""
+        if self.bridged:
+            raise SkipTest("boots a configuration of its own")
+
     def restart_with_memory(self, memory_size):
+        self._refuse_reboot()
         if self.child.isalive():
             self.child.terminate(force=True)
         self.spawn([self.img_copy, str(memory_size)])
@@ -192,8 +215,14 @@ class Session:
     def write_file(self, path, text):
         """Stop the simulator and write a file, text or bytes, into this
         session's image."""
+        self._refuse_reboot()
         if self.child.isalive():
             self.child.terminate(force=True)
+        self._copy_in(path, text)
+
+    def _copy_in(self, path, text):
+        """Write a file, text or bytes, into this session's image, which no
+        simulator is using."""
         data = text if isinstance(text, bytes) else text.encode()
         subprocess.run(["mcopy", "-o", "-i", self.img_copy + "@@2097152", "-",
                         "::" + image_path(path)], input=data,
@@ -216,6 +245,7 @@ class Session:
 
         @return The FakeVdp.
         """
+        self._refuse_reboot()
         if self.vdp is not None:
             self.vdp.close()
         self.vdp = FakeVdp(os.path.join(self.tmp, "vdp.sock"), **kwargs)
@@ -234,6 +264,14 @@ class Session:
         self.child.expect("password: ", timeout=10)
         self.child.sendline(password)
         self.child.expect(PROMPT, timeout=10)
+        if self.bridged:
+            self.child.sendline("dirtest system sessiontest 1")
+            self.child.expect(r"sessiontest: opened port \d+ shell \d+",
+                              timeout=15)
+            self.child.expect(PROMPT, timeout=15)
+            # The history holds only the command that started the bridge, which
+            # a console's fresh login wouldn't have.
+            self.sh("rm $HOME/.mush_history")
 
     def sh(self, command, timeout=10):
         self.child.sendline(command)
