@@ -59,10 +59,45 @@ extern "C"
 /// of bytes that printf calls will have to work with.
 #define CONSOLE_BUFFER_SIZE 96
 
+/// @def NANO_OS_MAX_SESSIONS
+///
+/// @brief The most console sessions, ports opened at runtime for the window
+/// server's terminals, that can be open at once.  Only platforms that can run
+/// a window server have any.
+#ifdef ARDUINO
+#define NANO_OS_MAX_SESSIONS 0
+#else
+#define NANO_OS_MAX_SESSIONS 6
+#endif
+
+/// @def CONSOLE_NUM_DEVICE_PORTS
+///
+/// @brief The number of console ports for UARTs and config.sys's device
+/// consoles.
+#define CONSOLE_NUM_DEVICE_PORTS 2
+
 /// @def CONSOLE_NUM_PORTS
 ///
-/// @brief The number of console supports supported.
-#define CONSOLE_NUM_PORTS 2
+/// @brief The number of console ports supported.
+#define CONSOLE_NUM_PORTS (CONSOLE_NUM_DEVICE_PORTS + NANO_OS_MAX_SESSIONS)
+
+/// @def SHELL_SLOT_NONE
+///
+/// @brief Value of a ProcessDescriptor's shellSlot for a slot that isn't a
+/// shell slot.
+#define SHELL_SLOT_NONE 0
+
+/// @def SHELL_SLOT_CONSOLE
+///
+/// @brief Value of a ProcessDescriptor's shellSlot for a shell slot reserved
+/// at boot for a UART or device console.
+#define SHELL_SLOT_CONSOLE 1
+
+/// @def SHELL_SLOT_SESSION
+///
+/// @brief Value of a ProcessDescriptor's shellSlot for the shell slot of a
+/// session the window server opened.
+#define SHELL_SLOT_SESSION 2
 
 /// @def NO_CONSOLE_PORT
 ///
@@ -73,8 +108,9 @@ extern "C"
 /// @def CONSOLE_NUM_BUFFERS
 ///
 /// @brief The number of console buffers that will be allocated within the main
-/// console process's stack.
-#define CONSOLE_NUM_BUFFERS 4
+/// console process's stack:  one for each session's input on top of the ones
+/// the device ports and processes' output share.
+#define CONSOLE_NUM_BUFFERS (4 + NANO_OS_MAX_SESSIONS)
 
 /// @def CONSOLE_INPUT_READY_SIZE
 ///
@@ -292,6 +328,12 @@ typedef struct ProcessQueue ProcessQueue;
 ///   on until one of its children exits, or NULL.
 /// @param consolePort The console port whose session the process belongs to,
 ///   which it may print to without owning, or NO_CONSOLE_PORT.
+/// @param shellSlot What kind of shell slot the slot is, if any:  a
+///   SHELL_SLOT_* value.  A shell slot runs a console port's shell and the
+///   commands that exec over it.
+/// @param shellOutputPid For a shell slot, the ProcessId of the process its
+///   stdout and stderr are sent to instead of the console, or
+///   PROCESS_ID_NOT_SET.
 /// @param shellPath The path of the user's shell in a shell slot, recorded when
 ///   the user's login runs it, or NULL.
 /// @param dirCapabilities The directories the process may use and what it may
@@ -341,6 +383,9 @@ typedef struct ProcessDescriptor {
   ProcessId           parentPid;
   ProcessMessage     *waitMessage;
   uint8_t             consolePort;
+  // Kept after consolePort so that these fill the padding before shellPath.
+  uint8_t             shellSlot;
+  ProcessId           shellOutputPid;
   char               *shellPath;
   DirCapabilities    *dirCapabilities;
   uint8_t             numFilesystemHandles;
@@ -528,9 +573,11 @@ typedef struct ConsoleInputReadyArgs {
 ///
 /// @param uartId The ID of the HAL UART that services the port.  Unused by a
 ///   forwarding port.
+/// @param outputPid For a forwarding port, the ID of the process that its
+///   output and echo are sent to.
 /// @param rows The number of rows of text the port's renderer displays.
 /// @param consoleBuffer A pointer to the ConsoleBuffer used to buffer input
-///   from the user.
+///   from the user, or NULL if the port isn't in use.
 /// @param outputOwner The ID of the process that currently has the ability to
 ///   write output to the port.
 /// @param inputOwner The ID of the process that currently has the ability to
@@ -550,8 +597,8 @@ typedef struct ConsoleInputReadyArgs {
 ///   escape the port is in CONSOLE_INPUT_STATE_ESCAPE for was read.
 /// @param printString A pointer to the function that will print a string of
 ///   output to the console port.
-/// @param forwardingPid The ID of the process that services the port, or
-///   PROCESS_ID_NOT_SET if the port is serviced through the HAL.
+/// @param forwardingPid The ID of the process that sends the port its
+///   input, or PROCESS_ID_NOT_SET if the port is serviced through the HAL.
 /// @param inputReadyArgs The ConsoleInputReadyArgs that the HAL sends when the
 ///   port has input.
 /// @param pendingInput The CONSOLE_INPUT_READY message whose bytes are being
@@ -565,7 +612,10 @@ typedef struct ConsoleInputReadyArgs {
 /// @param pollOnly Whether or not the port has to be polled for input rather
 ///   than being serviced by a CONSOLE_INPUT_READY message.
 typedef struct ConsolePort {
-  unsigned char           uartId;
+  union {
+    unsigned char         uartId;
+    ProcessId             outputPid;
+  };
   uint16_t                rows;
   ConsoleBuffer          *consoleBuffer;
   ProcessId               outputOwner;
@@ -598,7 +648,7 @@ typedef struct ConsolePort {
 ///   from the user.
 /// @param consoleBuffers The array of ConsoleBuffers that can be used by
 ///   the console ports for input and by processes for output.
-/// @param numConsolePorts The number of active console ports.
+/// @param numConsolePorts The number of console ports in use.
 typedef struct ConsoleState {
   ConsolePort   consolePorts[CONSOLE_NUM_PORTS];
   ConsoleBuffer consoleBuffers[CONSOLE_NUM_BUFFERS];
