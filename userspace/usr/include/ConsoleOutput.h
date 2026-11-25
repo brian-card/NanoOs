@@ -103,6 +103,44 @@ static inline void consoleOutputDone(ProcessMessage *processMessage) {
   }
 }
 
+/// @fn static inline void consoleOutputDoneTo(ProcessMessage *processMessage,
+///   ProcessId consolePid)
+///
+/// @brief consoleOutputDone for a process below executive level, which can't
+/// look the console up itself:  the caller gives the console's ProcessId,
+/// from findSystemProcess.
+///
+/// @param processMessage A pointer to the handled ProcessMessage.
+/// @param consolePid The console's ProcessId.
+///
+/// @return This function returns no value.
+static inline void consoleOutputDoneTo(ProcessMessage *processMessage,
+  ProcessId consolePid
+) {
+  if ((processMessageType(processMessage)
+      == (CONSOLE_COMMAND_SIGNATURE | CONSOLE_WRITE_BUFFER))
+    && (processMessageData(processMessage) != NULL)
+  ) {
+    // The release has to reach the console before the writer can ask for a
+    // buffer again, so it's sent before the message is marked done.
+    ProcessMessage *release = getAvailableMessage();
+    if (release != NULL) {
+      processMessageInit(release,
+        CONSOLE_COMMAND_SIGNATURE | CONSOLE_RELEASE_BUFFER,
+        processMessageData(processMessage), sizeof(ConsoleBuffer),
+        /* waiting= */ false);
+      if (sendProcessMessageToPid(consolePid, release) != processSuccess) {
+        processMessageRelease(release);
+      }
+    }
+  }
+
+  processMessageSetDone(processMessage);
+  if (processMessageWaiting(processMessage) == false) {
+    processMessageRelease(processMessage);
+  }
+}
+
 #ifdef __cplusplus
 } // extern "C"
 #endif
