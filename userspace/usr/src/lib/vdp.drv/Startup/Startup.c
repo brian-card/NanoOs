@@ -499,6 +499,9 @@ static void vdpRequestPort(VdpInput *input) {
     return;
   }
   input->portArgs->forwardingPid = getRunningPid();
+  input->portArgs->outputPid = PROCESS_ID_NOT_SET;
+  input->portArgs->rows = 0;
+  input->portArgs->columns = 0;
   input->portArgs->portId = 0;
   input->portArgs->returnValue = 0;
   processMessageInit(message,
