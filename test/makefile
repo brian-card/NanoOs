@@ -138,7 +138,7 @@ SUITE_SRCS     := test_smoke test_unit_misc test_unit_strtoll test_unit_console 
                   test_unit_message_args_production \
                   test_unit_overlay_message_args \
                   test_kernel_graphics_client \
-                  test_kernel_window_server \
+                  test_kernel_window_server test_kernel_session \
                   test_kernel_app_level \
                   test_unit_window_client \
                   test_kernel_graphics_header
