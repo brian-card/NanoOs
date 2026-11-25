@@ -183,6 +183,8 @@ if [ -b "${targetDevice}" ]; then
 		"${mountDir}/system/commands/passwd"
 	sudo mv "${mountDir}/userspace/usr/bin/gfxprobe" \
 		"${mountDir}/system/commands/gfxprobe"
+	sudo mv "${mountDir}/userspace/usr/bin/sessiontest" \
+		"${mountDir}/system/commands/sessiontest"
 	if [ -d userspace/usr/bin/sysnook ]; then
 		sudo mv "${mountDir}/userspace/usr/bin/sysnook" \
 			"${mountDir}/system/commands/sysnook"
@@ -294,6 +296,10 @@ else
 		::/userspace/usr/bin/gfxprobe
 	MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s userspace/usr/bin/gfxprobe \
 		::/system/commands/gfxprobe
+	MTOOLS_SKIP_CHECK=1 mdeltree -i "${fatImage}" \
+		::/userspace/usr/bin/sessiontest
+	MTOOLS_SKIP_CHECK=1 mcopy -i "${fatImage}" -s userspace/usr/bin/sessiontest \
+		::/system/commands/sessiontest
 	if [ -d userspace/usr/bin/sysnook ]; then
 		MTOOLS_SKIP_CHECK=1 mdeltree -i "${fatImage}" \
 			::/userspace/usr/bin/sysnook
