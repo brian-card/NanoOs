@@ -67,6 +67,40 @@
 /// when the console process is created in initializeProcesses.
 ProcessId consolePid = 0;
 
+/// @fn static inline bool consolePortInUse(const ConsolePort *consolePort)
+///
+/// @brief Determine whether a port is in use.  A port that isn't has no
+/// input buffer.
+///
+/// @param consolePort A pointer to the ConsolePort.
+///
+/// @return Returns true if the port is in use, false otherwise.
+static inline bool consolePortInUse(const ConsolePort *consolePort) {
+  return consolePort->consoleBuffer != NULL;
+}
+
+/// @fn static ConsolePort* consoleBufferPort(ConsoleState *consoleState,
+///   const ConsoleBuffer *consoleBuffer)
+///
+/// @brief Find the port a ConsoleBuffer is the input buffer of.
+///
+/// @param consoleState A pointer to the ConsoleState structure held by the
+///   runConsole process.
+/// @param consoleBuffer A pointer to the ConsoleBuffer.
+///
+/// @return Returns a pointer to the port, or NULL if the buffer is no port's.
+static ConsolePort* consoleBufferPort(
+  ConsoleState *consoleState, const ConsoleBuffer *consoleBuffer
+) {
+  for (int ii = 0; ii < CONSOLE_NUM_PORTS; ii++) {
+    if (consoleState->consolePorts[ii].consoleBuffer == consoleBuffer) {
+      return &consoleState->consolePorts[ii];
+    }
+  }
+
+  return NULL;
+}
+
 /// @fn int consolePrintMessage(ConsoleState *consoleState,
 ///   ProcessMessage *inputMessage, const char *message)
 ///
@@ -87,8 +121,10 @@ int consolePrintMessage(
   ConsolePort *consolePorts = consoleState->consolePorts;
 
   bool portFound = false;
-  for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
-    if (consolePorts[ii].outputOwner == owner) {
+  for (int ii = 0; ii < CONSOLE_NUM_PORTS; ii++) {
+    if (consolePortInUse(&consolePorts[ii])
+      && (consolePorts[ii].outputOwner == owner)
+    ) {
       consolePorts[ii].consolePrintString(&consolePorts[ii], message);
       portFound = true;
     }
@@ -96,7 +132,8 @@ int consolePrintMessage(
 
   ProcessDescriptor *sender = processMessageFrom(inputMessage);
   if ((portFound == false)
-    && (sender->consolePort < consoleState->numConsolePorts)
+    && (sender->consolePort < CONSOLE_NUM_PORTS)
+    && consolePortInUse(&consolePorts[sender->consolePort])
   ) {
     consolePorts[sender->consolePort].consolePrintString(
       &consolePorts[sender->consolePort], message);
@@ -156,7 +193,7 @@ static bool consoleBufferHasInput(
   ConsoleState *consoleState, ConsoleBuffer *consoleBuffer
 ) {
   ConsolePort *consolePorts = consoleState->consolePorts;
-  for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
+  for (int ii = 0; ii < CONSOLE_NUM_PORTS; ii++) {
     if (consolePorts[ii].consoleBuffer == consoleBuffer) {
       return (consoleBuffer->consoleBufferIndex > 0)
         || (consolePorts[ii].typeAheadStart < consolePorts[ii].typeAheadEnd)
@@ -220,7 +257,7 @@ int releaseConsoleBuffer(
 ) {
   // Check to see if the returned buffer belongs to one of the ports.
   ConsolePort *consolePorts = consoleState->consolePorts;
-  for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
+  for (int ii = 0; ii < CONSOLE_NUM_PORTS; ii++) {
     if (consolePorts[ii].consoleBuffer == consoleBuffer) {
       // Buffer belongs to a port.  Keep it for the process printing there.
       consoleBuffer->owner = consolePorts[ii].outputOwner;
@@ -503,7 +540,9 @@ void consoleSetPortShellCommandHandler(
   uint8_t consolePort = consolePortPidAssociation->consolePort;
   ProcessId pid = consolePortPidAssociation->pid;
 
-  if (consolePort < consoleState->numConsolePorts) {
+  if ((consolePort < CONSOLE_NUM_PORTS)
+    && consolePortInUse(&consoleState->consolePorts[consolePort])
+  ) {
     consoleState->consolePorts[consolePort].shell = pid;
     processMessageSetDone(inputMessage);
     consoleMessageCleanup(inputMessage);
@@ -547,7 +586,9 @@ void consoleAssignPortHelper(
   uint8_t consolePort = consolePortPidAssociation->consolePort;
   ProcessId pid = consolePortPidAssociation->pid;
 
-  if (consolePort < consoleState->numConsolePorts) {
+  if ((consolePort < CONSOLE_NUM_PORTS)
+    && consolePortInUse(&consoleState->consolePorts[consolePort])
+  ) {
     if (assignOutput == true) {
       consoleState->consolePorts[consolePort].outputOwner = pid;
     }
@@ -615,11 +656,13 @@ void consoleGetOwnedPortCommandHandler(
   ConsolePort *consolePorts = consoleState->consolePorts;
 
   int ownedPort = -1;
-  for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
+  for (int ii = 0; ii < CONSOLE_NUM_PORTS; ii++) {
     // inputOwner is assigned at the same as outputOwner, but inputOwner can be
     // set separately later if the commands are being piped together.
     // Therefore, checking inputOwner checks both of them.
-    if (consolePorts[ii].inputOwner == owner) {
+    if (consolePortInUse(&consolePorts[ii])
+      && (consolePorts[ii].inputOwner == owner)
+    ) {
       consoleGetOwnedPortArgs->ownedPort = ii;
       break;
     }
@@ -688,8 +731,10 @@ void consoleGetModesCommandHandler(
   ConsolePort *consolePorts = consoleState->consolePorts;
 
   consoleModesArgs->returnValue = -1;
-  for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
-    if (consolePorts[ii].outputOwner == owner) {
+  for (int ii = 0; ii < CONSOLE_NUM_PORTS; ii++) {
+    if (consolePortInUse(&consolePorts[ii])
+      && (consolePorts[ii].outputOwner == owner)
+    ) {
       consoleModesArgs->modes = consolePorts[ii].modes;
       consoleModesArgs->returnValue = 0;
       break;
@@ -723,8 +768,10 @@ void consoleSetModesCommandHandler(
   ConsolePort *consolePorts = consoleState->consolePorts;
 
   consoleModesArgs->returnValue = -1;
-  for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
-    if (consolePorts[ii].outputOwner == owner) {
+  for (int ii = 0; ii < CONSOLE_NUM_PORTS; ii++) {
+    if (consolePortInUse(&consolePorts[ii])
+      && (consolePorts[ii].outputOwner == owner)
+    ) {
       ConsoleBuffer *consoleBuffer = consolePorts[ii].consoleBuffer;
       bool replayHeldInput
         = ((consolePorts[ii].modes & CONSOLE_MODE_CANONICAL) == 0)
@@ -772,8 +819,10 @@ void consoleWaitForInputCommandHandler(
   ConsolePort *consolePorts = consoleState->consolePorts;
 
   bool portFound = false;
-  for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
-    if (consolePorts[ii].inputOwner == owner) {
+  for (int ii = 0; ii < CONSOLE_NUM_PORTS; ii++) {
+    if (consolePortInUse(&consolePorts[ii])
+      && (consolePorts[ii].inputOwner == owner)
+    ) {
       consolePorts[ii].waitingForInput = true;
       consolePorts[ii].consoleBuffer->bufferAwaitingRelease = false;
       portFound = true;
@@ -820,7 +869,10 @@ void consoleReleasePidPortCommandHandler(
   ConsolePort *consolePorts = consoleState->consolePorts;
 
   ProcessId processId = consoleReleasePidPortArgs->processId;
-  for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
+  for (int ii = 0; ii < CONSOLE_NUM_PORTS; ii++) {
+    if (!consolePortInUse(&consolePorts[ii])) {
+      continue;
+    }
     ProcessId newOwner = consoleReleasePidPortArgs->newOwner;
     if (newOwner == PROCESS_ID_NOT_SET) {
       newOwner = consolePorts[ii].shell;
@@ -848,8 +900,10 @@ void consoleReleasePidPortCommandHandler(
   }
 
   ConsoleBuffer *consoleBuffers = consoleState->consoleBuffers;
-  for (int ii = consoleState->numConsolePorts; ii < CONSOLE_NUM_BUFFERS; ii++) {
-    if (consoleBuffers[ii].owner == processId) {
+  for (int ii = 0; ii < CONSOLE_NUM_BUFFERS; ii++) {
+    if ((consoleBuffers[ii].owner == processId)
+      && (consoleBufferPort(consoleState, &consoleBuffers[ii]) == NULL)
+    ) {
       consoleBuffers[ii].owner = PROCESS_ID_NOT_SET;
       consoleBuffers[ii].bufferAwaitingRelease = false;
     }
@@ -971,7 +1025,10 @@ void consoleInputReadyCommandHandler(
   ConsoleInputReadyArgs *consoleInputReadyArgs
     = (ConsoleInputReadyArgs*) processMessageData(inputMessage);
   ConsolePort *consolePort = NULL;
-  if (consoleInputReadyArgs->portId < consoleState->numConsolePorts) {
+  if ((consoleInputReadyArgs->portId < CONSOLE_NUM_PORTS)
+    && consolePortInUse(
+      &consoleState->consolePorts[consoleInputReadyArgs->portId])
+  ) {
     consolePort = &consoleState->consolePorts[consoleInputReadyArgs->portId];
   }
 
@@ -1017,14 +1074,7 @@ static ConsoleBuffer* consoleGetUnattachedBuffer(ConsoleState *consoleState) {
       continue;
     }
 
-    bool attached = false;
-    for (int jj = 0; jj < consoleState->numConsolePorts; jj++) {
-      if (consoleState->consolePorts[jj].consoleBuffer == consoleBuffer) {
-        attached = true;
-        break;
-      }
-    }
-    if (attached == false) {
+    if (consoleBufferPort(consoleState, consoleBuffer) == NULL) {
       return consoleBuffer;
     }
   }
@@ -1036,8 +1086,8 @@ static ConsoleBuffer* consoleGetUnattachedBuffer(ConsoleState *consoleState) {
 ///   ConsoleState *consoleState, ProcessMessage *inputMessage)
 ///
 /// @brief Add a console port whose input is sent to the console by a process
-/// with CONSOLE_INPUT_READY.  A process that already has a port gets that port
-/// back.
+/// with CONSOLE_INPUT_READY.  A device console, which names no separate
+/// output servicer, gets back the port it already has, if any.
 ///
 /// @param consoleState A pointer to the ConsoleState being maintained by the
 ///   runConsole function that's running.
@@ -1051,8 +1101,9 @@ void consoleAddForwardingPort(
   ConsoleAddForwardingPortArgs *consoleAddForwardingPortArgs
     = (ConsoleAddForwardingPortArgs*) processMessageData(inputMessage);
   ProcessId forwardingPid = consoleAddForwardingPortArgs->forwardingPid;
+  ProcessId outputPid = consoleAddForwardingPortArgs->outputPid;
   ConsolePort *consolePorts = consoleState->consolePorts;
-  unsigned char portId = (unsigned char) consoleState->numConsolePorts;
+  unsigned char portId = CONSOLE_NUM_PORTS;
   ConsoleBuffer *consoleBuffer = NULL;
   ConsolePort *consolePort = NULL;
   int returnValue = 0;
@@ -1062,14 +1113,18 @@ void consoleAddForwardingPort(
     goto exit;
   }
 
-  for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
-    if (consolePorts[ii].forwardingPid == forwardingPid) {
+  for (int ii = CONSOLE_NUM_PORTS - 1; ii >= 0; ii--) {
+    if (consolePortInUse(&consolePorts[ii]) == false) {
+      portId = (unsigned char) ii;
+    } else if ((outputPid == PROCESS_ID_NOT_SET)
+      && (consolePorts[ii].forwardingPid == forwardingPid)
+    ) {
       consoleAddForwardingPortArgs->portId = (unsigned char) ii;
       goto exit;
     }
   }
 
-  if (consoleState->numConsolePorts >= CONSOLE_NUM_PORTS) {
+  if (portId == CONSOLE_NUM_PORTS) {
     returnValue = -ENOSPC;
     goto exit;
   }
@@ -1083,6 +1138,14 @@ void consoleAddForwardingPort(
   consolePort = &consolePorts[portId];
   consolePort->consoleBuffer = consoleBuffer;
   consoleInitPort(consolePort, portId, forwardingPid);
+  consolePort->outputPid
+    = (outputPid == PROCESS_ID_NOT_SET) ? forwardingPid : outputPid;
+  if (consoleAddForwardingPortArgs->rows != 0) {
+    consolePort->rows = consoleAddForwardingPortArgs->rows;
+  }
+  if (consoleAddForwardingPortArgs->columns != 0) {
+    consolePort->columns = consoleAddForwardingPortArgs->columns;
+  }
   consolePort->pollOnly = false;
   consolePort->readByte = consoleReadForwardedByte;
   consolePort->consolePrintString = consoleForwardString;
@@ -1091,6 +1154,50 @@ void consoleAddForwardingPort(
 
 exit:
   consoleAddForwardingPortArgs->returnValue = returnValue;
+  processMessageSetDone(inputMessage);
+  consoleMessageCleanup(inputMessage);
+
+  return;
+}
+
+/// @fn void consoleRemovePortCommandHandler(
+///   ConsoleState *consoleState, ProcessMessage *inputMessage)
+///
+/// @brief Take a forwarding port out of use, finishing any input it holds and
+/// detaching its input buffer.  Only the scheduler may send this.
+///
+/// @param consoleState A pointer to the ConsoleState being maintained by the
+///   runConsole function that's running.
+/// @param inputMessage A pointer to the ProcessMessage with the received
+///   command.  Its data is the index of the port.
+///
+/// @return This function returns no value.
+void consoleRemovePortCommandHandler(
+  ConsoleState *consoleState, ProcessMessage *inputMessage
+) {
+  uintptr_t portId = (uintptr_t) processMessageData(inputMessage);
+  ConsolePort *consolePort = NULL;
+  if ((processPid(processMessageFrom(inputMessage)) == schedulerPid)
+    && (portId < CONSOLE_NUM_PORTS)
+  ) {
+    consolePort = &consoleState->consolePorts[portId];
+  }
+  if ((consolePort != NULL) && consolePortInUse(consolePort)
+    && (consolePort->forwardingPid != PROCESS_ID_NOT_SET)
+  ) {
+    if (consolePort->pendingInput != NULL) {
+      processMessageSetDone(consolePort->pendingInput);
+      consoleMessageCleanup(consolePort->pendingInput);
+      consolePort->pendingInput = NULL;
+    }
+    consolePort->consoleBuffer->owner = PROCESS_ID_NOT_SET;
+    consolePort->consoleBuffer->bufferAwaitingRelease = false;
+    consolePort->consoleBuffer->holdsCompletedLine = false;
+    consolePort->consoleBuffer = NULL;
+    consolePort->forwardingPid = PROCESS_ID_NOT_SET;
+    consoleState->numConsolePorts--;
+  }
+
   processMessageSetDone(inputMessage);
   consoleMessageCleanup(inputMessage);
 
@@ -1116,8 +1223,9 @@ void consoleGetUartPortCommandHandler(
   ConsolePort *consolePorts = consoleState->consolePorts;
 
   consoleGetUartPortArgs->portId = -1;
-  for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
-    if ((consolePorts[ii].forwardingPid == PROCESS_ID_NOT_SET)
+  for (int ii = 0; ii < CONSOLE_NUM_PORTS; ii++) {
+    if (consolePortInUse(&consolePorts[ii])
+      && (consolePorts[ii].forwardingPid == PROCESS_ID_NOT_SET)
       && (consolePorts[ii].uartId == consoleGetUartPortArgs->uartId)
     ) {
       consoleGetUartPortArgs->portId = ii;
@@ -1151,8 +1259,10 @@ void consoleGetColorsCommandHandler(
   ConsolePort *consolePorts = consoleState->consolePorts;
 
   consoleColorsArgs->returnValue = -1;
-  for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
-    if (consolePorts[ii].outputOwner == owner) {
+  for (int ii = 0; ii < CONSOLE_NUM_PORTS; ii++) {
+    if (consolePortInUse(&consolePorts[ii])
+      && (consolePorts[ii].outputOwner == owner)
+    ) {
       consoleColorsArgs->colors = consolePorts[ii].colors;
       consoleColorsArgs->returnValue = 0;
       break;
@@ -1184,8 +1294,10 @@ void consoleSetColorsCommandHandler(
   ConsolePort *consolePorts = consoleState->consolePorts;
 
   consoleColorsArgs->returnValue = -1;
-  for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
-    if (consolePorts[ii].outputOwner == owner) {
+  for (int ii = 0; ii < CONSOLE_NUM_PORTS; ii++) {
+    if (consolePortInUse(&consolePorts[ii])
+      && (consolePorts[ii].outputOwner == owner)
+    ) {
       consolePorts[ii].colors = consoleColorsArgs->colors;
       consoleColorsArgs->returnValue = 0;
     }
@@ -1217,9 +1329,10 @@ void consoleGetWinsizeCommandHandler(
   ConsolePort *consolePorts = consoleState->consolePorts;
 
   consoleWinsizeArgs->returnValue = -1;
-  for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
-    if ((consolePorts[ii].outputOwner == sender)
-      || (consolePorts[ii].forwardingPid == sender)
+  for (int ii = 0; ii < CONSOLE_NUM_PORTS; ii++) {
+    if (consolePortInUse(&consolePorts[ii])
+      && ((consolePorts[ii].outputOwner == sender)
+        || (consolePorts[ii].forwardingPid == sender))
     ) {
       consoleWinsizeArgs->rows = consolePorts[ii].rows;
       consoleWinsizeArgs->columns = consolePorts[ii].columns;
@@ -1253,9 +1366,10 @@ void consoleSetWinsizeCommandHandler(
   ConsolePort *consolePorts = consoleState->consolePorts;
 
   consoleWinsizeArgs->returnValue = -1;
-  for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
-    if ((consolePorts[ii].outputOwner == sender)
-      || (consolePorts[ii].forwardingPid == sender)
+  for (int ii = 0; ii < CONSOLE_NUM_PORTS; ii++) {
+    if (consolePortInUse(&consolePorts[ii])
+      && ((consolePorts[ii].outputOwner == sender)
+        || (consolePorts[ii].forwardingPid == sender))
     ) {
       consolePorts[ii].rows = consoleWinsizeArgs->rows;
       consolePorts[ii].columns = consoleWinsizeArgs->columns;
@@ -1290,8 +1404,10 @@ void consoleLendPortCommandHandler(
   ConsolePort *consolePorts = consoleState->consolePorts;
 
   if (processPid(processMessageFrom(inputMessage)) == schedulerPid) {
-    for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
-      if (consolePorts[ii].inputOwner != consoleLendPortArgs->lender) {
+    for (int ii = 0; ii < CONSOLE_NUM_PORTS; ii++) {
+      if ((consolePortInUse(&consolePorts[ii]) == false)
+        || (consolePorts[ii].inputOwner != consoleLendPortArgs->lender)
+      ) {
         continue;
       }
       consolePorts[ii].inputOwner = consoleLendPortArgs->borrower;
@@ -1338,6 +1454,7 @@ const ConsoleCommandHandler consoleCommandHandlers[] = {
   consoleLendPortCommandHandler,        // CONSOLE_LEND_PORT
   consoleGetWinsizeCommandHandler,      // CONSOLE_GET_WINSIZE
   consoleSetWinsizeCommandHandler,      // CONSOLE_SET_WINSIZE
+  consoleRemovePortCommandHandler,      // CONSOLE_REMOVE_PORT
 };
 
 /// @fn static bool consoleHoldsInput(
@@ -1354,7 +1471,7 @@ const ConsoleCommandHandler consoleCommandHandlers[] = {
 static bool consoleHoldsInput(
   ConsoleState *consoleState, ProcessMessage *message
 ) {
-  for (int ii = 0; ii < consoleState->numConsolePorts; ii++) {
+  for (int ii = 0; ii < CONSOLE_NUM_PORTS; ii++) {
     if (consoleState->consolePorts[ii].pendingInput == message) {
       return true;
     }
@@ -1996,10 +2113,10 @@ static int consolePrintSerialString(
 
 /// @fn int consoleForwardString(ConsolePort *consolePort, const char *string)
 ///
-/// @brief Send a string to the process that services a forwarding port as a
-/// CONSOLE_FORWARD_STRING command whose data is the string, and wait for it to
-/// be done.  Waiting keeps the string valid while the process reads it, so the
-/// process must never wait on the console.
+/// @brief Send a string to the process that services a forwarding port's
+/// output as a CONSOLE_FORWARD_STRING command whose data is the string, and
+/// wait for it to be done.  Waiting keeps the string valid while the process
+/// reads it, so the process must never wait on the console.
 ///
 /// @param consolePort A pointer to the ConsolePort to print to.
 /// @param string A pointer to the NUL-terminated string to print.
@@ -2009,7 +2126,7 @@ static int consolePrintSerialString(
 int consoleForwardString(ConsolePort *consolePort, const char *string) {
   size_t length = strlen(string);
   ProcessMessage *processMessage = initSendProcessMessageToPid(
-    consolePort->forwardingPid,
+    consolePort->outputPid,
     CONSOLE_COMMAND_SIGNATURE | CONSOLE_FORWARD_STRING,
     (void*) string, length, /* waiting= */ true);
   if (processMessage == NULL) {
@@ -2040,25 +2157,14 @@ void* runConsole(void *args) {
   ConsoleState consoleState;
   memset(&consoleState, 0, sizeof(ConsoleState));
 
-  consoleState.numConsolePorts
-    = (HAL->uart != NULL) ? CONSOLE_NUM_PORTS : 0;
-
-  // For each console port, use the console buffer at the corresponding index.
-  for (uint8_t ii = 0; ii < consoleState.numConsolePorts; ii++) {
-    consoleState.consolePorts[ii].consoleBuffer
-      = &consoleState.consoleBuffers[ii];
-    consoleState.consolePorts[ii].consoleBuffer->owner = PROCESS_ID_NOT_SET;
-  }
-  for (uint8_t ii = consoleState.numConsolePorts;
-    ii < CONSOLE_NUM_BUFFERS;
-    ii++
-  ) {
+  for (uint8_t ii = 0; ii < CONSOLE_NUM_BUFFERS; ii++) {
     consoleState.consoleBuffers[ii].owner = PROCESS_ID_NOT_SET;
   }
 
+  int numUarts = (HAL->uart != NULL) ? CONSOLE_NUM_DEVICE_PORTS : 0;
   int port = 0;
   int pollNeeded = false;
-  for (int ii = 0; ii < consoleState.numConsolePorts; ii++) {
+  for (int ii = 0; ii < numUarts; ii++) {
     bool isConsolePort = false;
     HAL->uart->isConsole(ii, &isConsolePort);
     if (isConsolePort == false) {
@@ -2066,8 +2172,9 @@ void* runConsole(void *args) {
       continue;
     }
 
-    // Set the port-specific data.
+    // Set the port-specific data, with the console buffer at the port's index.
     ConsolePort *consolePort = &consoleState.consolePorts[port];
+    consolePort->consoleBuffer = &consoleState.consoleBuffers[port];
     consoleInitPort(consolePort, port, PROCESS_ID_NOT_SET);
     consolePort->uartId = ii;
     consolePort->consolePrintString = consolePrintSerialString;
@@ -2096,9 +2203,11 @@ void* runConsole(void *args) {
   // anyone, so the first pass has to service every port.
   while (1) {
     bool escapePending = false;
-    for (uint8_t ii = 0; ii < consoleState.numConsolePorts; ii++) {
-      escapePending |= consoleServicePort(
-        &consoleState, &consoleState.consolePorts[ii]);
+    for (uint8_t ii = 0; ii < CONSOLE_NUM_PORTS; ii++) {
+      if (consolePortInUse(&consoleState.consolePorts[ii])) {
+        escapePending |= consoleServicePort(
+          &consoleState, &consoleState.consolePorts[ii]);
+      }
     }
 
     if (pollNeeded > 0) {

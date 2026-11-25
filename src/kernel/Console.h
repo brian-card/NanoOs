@@ -173,12 +173,21 @@ typedef struct ConsoleGetNumPortsArgs {
 /// @brief Arguments and return value for the CONSOLE_ADD_FORWARDING_PORT
 /// command.
 ///
-/// @param forwardingPid The ProcessId of the process to redirect
-///   CONSOLE_WRITE_BUFFER commands to.
+/// @param forwardingPid The ProcessId of the process that sends the port its
+///   input.
+/// @param outputPid The ProcessId of the process the port's output and echo
+///   go to, or PROCESS_ID_NOT_SET for a device console, whose forwardingPid
+///   services both and gets back the port it already has, if any.
+/// @param rows The number of rows to give a new port, or 0 for the default.
+/// @param columns The number of columns to give a new port, or 0 for the
+///   default.
 /// @param portId The index of the port that gets assigned for the process.
 /// @param returnValue 0 on success, -errno on failure.
 typedef struct ConsoleAddForwardingPortArgs {
   ProcessId     forwardingPid;
+  ProcessId     outputPid;
+  uint8_t       rows;
+  uint8_t       columns;
   unsigned char portId;
   int           returnValue;
 } ConsoleAddForwardingPortArgs;
@@ -221,11 +230,14 @@ typedef enum ConsoleCommandResponse {
   CONSOLE_LEND_PORT,
   CONSOLE_GET_WINSIZE,
   CONSOLE_SET_WINSIZE,
+  CONSOLE_REMOVE_PORT,
   NUM_CONSOLE_COMMANDS,
   // Responses:
   CONSOLE_RETURNING_INPUT,
   // Sent to the process that services a forwarding port:
   CONSOLE_FORWARD_STRING,
+  // Sent by the scheduler to a session's servicers when it ends:
+  CONSOLE_SESSION_ENDED,
 } ConsoleCommand;
 
 /// @enum ConsoleInputEvent
@@ -308,6 +320,10 @@ void consoleInputReadyCommandHandler(
 void consoleAddForwardingPort(
   ConsoleState *consoleState, ProcessMessage *inputMessage);
 void consoleReleasePidPortCommandHandler(
+  ConsoleState *consoleState, ProcessMessage *inputMessage);
+void consoleGetNumPortsCommandHandler(
+  ConsoleState *consoleState, ProcessMessage *inputMessage);
+void consoleRemovePortCommandHandler(
   ConsoleState *consoleState, ProcessMessage *inputMessage);
 void consoleGetUartPortCommandHandler(
   ConsoleState *consoleState, ProcessMessage *inputMessage);
