@@ -342,6 +342,22 @@ static inline int sendProcessMessageToPid(
     pid, message);
 }
 
+/// @fn static inline int findSystemProcess(
+///   const char *name, ProcessId *returnValue)
+///
+/// @brief Look up a system process's PID by the name it was registered under,
+/// from a process at any level.  Executive code has findProcessByName.
+///
+/// @param name The name to search for.
+/// @param returnValue A pointer to a ProcessId that will hold the result on
+///   success.
+///
+/// @return Returns 0 on success, -errno on failure.
+static inline int findSystemProcess(const char *name, ProcessId *returnValue) {
+  return overlayMap.header.osApi->userApi->findProcessByName(
+    name, returnValue);
+}
+
 /// @fn static inline ProcessMessage* processMessageQueuePop(void)
 ///
 /// @brief Pop a process message from the running process's message queue.
@@ -350,6 +366,17 @@ static inline int sendProcessMessageToPid(
 /// failure.
 static inline ProcessMessage* processMessageQueuePop(void) {
   return overlayMap.header.osApi->userApi->comessageQueuePop();
+}
+
+/// @fn static inline ProcessMessage* processMessageQueuePeek(void)
+///
+/// @brief Get the message at the head of the running process's message
+/// queue without taking it off.
+///
+/// @return Returns a pointer to the ProcessMessage, or NULL if the queue is
+/// empty.
+static inline ProcessMessage* processMessageQueuePeek(void) {
+  return overlayMap.header.osApi->userApi->comessageQueuePeek();
 }
 
 /// @typedef ProcessMessageElement
