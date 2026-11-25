@@ -17,6 +17,7 @@
 #include "kernel/Console.h"
 #include "kernel/Hal.h"
 #include "user/NanoOsApi.h"
+#include "user/NanoOsErrno.h"
 
 #define TEST_CAPABILITY_SLOTS 8
 
@@ -257,4 +258,13 @@ NANO_OS_KERNEL_TEST(executive_api, console_is_found_by_name) {
   NANO_OS_ASSERT_EQ_INT(consolePid, pid);
   NANO_OS_ASSERT_TRUE(
     nanoOsExecutiveApi.findProcessByName("no-such-process", &pid) != 0);
+}
+
+NANO_OS_KERNEL_TEST(message_api, console_is_found_by_name) {
+  uint8_t pid = 0;
+  NANO_OS_ASSERT_EQ_INT(0,
+    nanoOsApi.userApi->findProcessByName(CONSOLE_PROCESS_NAME, &pid));
+  NANO_OS_ASSERT_EQ_INT(consolePid, pid);
+  NANO_OS_ASSERT_EQ_INT(-ENOENT,
+    nanoOsApi.userApi->findProcessByName("no-such-process", &pid));
 }

@@ -212,20 +212,20 @@ NANO_OS_TEST(unit_vdp_events, press_motion_and_release_keep_all_three) {
   }
 }
 
-NANO_OS_TEST(unit_vdp_events, twenty_keys_leave_seven_and_an_overflow) {
+NANO_OS_TEST(unit_vdp_events, keys_past_a_full_message_leave_an_overflow) {
   GfxInputEventsArgs queue;
   memset(&queue, 0, sizeof(queue));
   VdpEventState state = { 0 };
 
-  for (int ii = 0; ii < 20; ii++) {
-    key(&queue, &state, (uint8_t) ('a' + ii), 0x40,
-      (uint8_t) (KEYCODE_a + ii), 1);
+  for (int ii = 0; ii < GFX_EVENTS_PER_MESSAGE + 12; ii++) {
+    key(&queue, &state, (uint8_t) ('a' + (ii % 26)), 0x40,
+      (uint8_t) (KEYCODE_a + (ii % 26)), 1);
   }
 
   NANO_OS_ASSERT_EQ_INT(GFX_EVENTS_PER_MESSAGE, queue.count);
   for (int ii = 0; ii < GFX_EVENTS_PER_MESSAGE - 1; ii++) {
-    GfxEvent expected
-      = keyEvent((uint8_t) ('a' + ii), 0x40, (uint8_t) ('a' + ii), 1);
+    GfxEvent expected = keyEvent((uint8_t) ('a' + (ii % 26)), 0x40,
+      (uint8_t) ('a' + (ii % 26)), 1);
     NANO_OS_ASSERT_TRUE(sameEvent(&expected, &queue.events[ii]));
   }
   GfxEvent overflow;

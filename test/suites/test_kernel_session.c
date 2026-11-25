@@ -619,6 +619,84 @@ static void* outputServicer(void *args) {
   return NULL;
 }
 
+/// @var stallOutput
+///
+/// @brief Whether the split port's servicers are typingInputServicer and
+/// stalledOutputServicer.
+static volatile bool stallOutput;
+
+/// @var outputStalled
+///
+/// @brief Whether stalledOutputServicer leaves what the console sends it
+/// unread.
+static volatile bool outputStalled = true;
+
+/// @var typed
+///
+/// @brief The byte typingInputServicer sends the split port next, or '\0'.
+static volatile char typed;
+
+/// @fn static void* typingInputServicer(void *args)
+///
+/// @brief Send the split port each byte put in typed, once the console has
+/// read the last.
+///
+/// @param args Unused.
+///
+/// @return This function never returns.
+static void* typingInputServicer(void *args) {
+  (void) args;
+  static ConsoleInputReadyArgs inputArgs;
+  ProcessMessage *message = NULL;
+  while (1) {
+    if ((typed == '\0')
+      || ((message != NULL) && (processMessageDone(message) == false))
+    ) {
+      processYield();
+      continue;
+    }
+    if (message != NULL) {
+      processMessageRelease(message);
+    }
+    message = getAvailableMessage();
+    if (message == NULL) {
+      continue;
+    }
+    inputArgs.portId = (uint8_t) splitPortId;
+    inputArgs.numBytes = 1;
+    inputArgs.bytes[0] = (uint8_t) typed;
+    processMessageInit(message, CONSOLE_COMMAND_SIGNATURE | CONSOLE_INPUT_READY,
+      &inputArgs, sizeof(inputArgs), /* waiting= */ true);
+    if (sendProcessMessageToPid(consolePid, message) != processSuccess) {
+      processMessageRelease(message);
+      message = NULL;
+    }
+    typed = '\0';
+  }
+  return NULL;
+}
+
+/// @fn static void* stalledOutputServicer(void *args)
+///
+/// @brief Leave what the console sends unread while outputStalled is set,
+/// as a display that has stopped would, moving the virtual clock on 10 ms
+/// each time it yields so that timed waits can end, then record it.
+///
+/// @param args Unused.
+///
+/// @return This function never returns.
+static void* stalledOutputServicer(void *args) {
+  (void) args;
+  while (outputStalled) {
+    mockClockAdvanceNs(10000000ULL);
+    processYield();
+  }
+  while (1) {
+    recordForward(1, processMessageQueueWait(NULL));
+  }
+  return NULL;
+}
+
 /// @fn static int startServicer(ProcessDescriptor *processDescriptor)
 ///
 /// @brief Run a split port's servicer in its slot when the slot's boot
@@ -629,8 +707,16 @@ static void* outputServicer(void *args) {
 ///
 /// @return Returns 0 on success, -ENOMEM on failure.
 static int startServicer(ProcessDescriptor *processDescriptor) {
-  void* (*body)(void*) = (processDescriptor->processId == inputPid)
-    ? inputServicer : outputServicer;
+  void* (*body)(void*) = outputServicer;
+  if (stallOutput) {
+    body = stalledOutputServicer;
+  }
+  if (processDescriptor->processId == inputPid) {
+    body = inputServicer;
+    if (stallOutput) {
+      body = typingInputServicer;
+    }
+  }
   if (processCreate(processDescriptor, body, NULL) != processSuccess) {
     return -ENOMEM;
   }
@@ -706,6 +792,82 @@ NANO_OS_KERNEL_TEST_WITH(session,
   NANO_OS_ASSERT_STR_EQ("", forwardedTo[1]);
   NANO_OS_ASSERT_EQ_INT(CONSOLE_DEFAULT_ROWS, portRows);
   NANO_OS_ASSERT_EQ_INT(CONSOLE_DEFAULT_COLUMNS, portColumns);
+}
+
+/// @fn static void stallPreBoot(void)
+///
+/// @brief Add the split port at launch, with an input servicer that types
+/// what a test asks and an output servicer that has stopped reading.
+///
+/// @return This function returns no value.
+static void stallPreBoot(void) {
+  stallOutput = true;
+  halMockSetLaunchHook(addSplitPort);
+}
+
+/// @fn static int numPortsBy(int seconds)
+///
+/// @brief Ask the console how many ports are in use, waiting for its answer
+/// for a number of seconds.
+///
+/// @param seconds How long to wait.
+///
+/// @return Returns the number, or -1 if the console didn't answer in time.
+static int numPortsBy(int seconds) {
+  static ConsoleGetNumPortsArgs args;
+  args.numPorts = -1;
+  addProcessIpcCapability(getRunningProcess(), consolePid,
+    CONSOLE_COMMAND_SIGNATURE, CONSOLE_GET_NUM_PORTS);
+  ProcessMessage *message = initSendProcessMessageToPid(consolePid,
+    CONSOLE_COMMAND_SIGNATURE | CONSOLE_GET_NUM_PORTS, &args, sizeof(args),
+    true);
+  if (message == NULL) {
+    return -1;
+  }
+  struct timespec deadline;
+  timespec_get(&deadline, TIME_UTC);
+  deadline.tv_sec += seconds;
+  if (processMessageWaitForDone(message, &deadline) != processSuccess) {
+    return -1;
+  }
+  processMessageRelease(message);
+  return args.numPorts;
+}
+
+/// @fn static void typeAndSettle(char byte)
+///
+/// @brief Have the split port's input servicer type a byte, and yield until
+/// it has been sent and the console has had time to handle it.
+///
+/// @param byte The byte.
+///
+/// @return This function returns no value.
+static void typeAndSettle(char byte) {
+  typed = byte;
+  for (int ii = 0; (ii < MAX_YIELDS) && (typed != '\0'); ii++) {
+    processYield();
+  }
+  for (int ii = 0; ii < 100; ii++) {
+    processYield();
+  }
+}
+
+NANO_OS_KERNEL_TEST_WITH(session,
+  a_display_that_stops_reading_doesnt_stop_the_console, stallPreBoot
+) {
+  NANO_OS_ASSERT_TRUE(splitPortId >= 0);
+  typeAndSettle('a');
+  NANO_OS_ASSERT_TRUE(numPortsBy(5) > 0);
+  typeAndSettle('c');
+  outputStalled = false;
+  for (int ii = 0; (ii < MAX_YIELDS) && (forwardedTo[1][0] == '\0'); ii++) {
+    processYield();
+  }
+  typeAndSettle('b');
+  for (int ii = 0; (ii < MAX_YIELDS) && (strlen(forwardedTo[1]) < 2); ii++) {
+    processYield();
+  }
+  NANO_OS_ASSERT_STR_EQ("ab", forwardedTo[1]);
 }
 
 /// @def SERVER_PATH
