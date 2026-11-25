@@ -313,6 +313,9 @@ ConsoleBuffer* getAvailableConsoleBuffer(
 int releaseConsoleBuffer(
   ConsoleState *consoleState, ConsoleBuffer *consoleBuffer);
 int consoleForwardString(ConsolePort *consolePort, const char *string);
+#if NANO_OS_MAX_SESSIONS > 0
+int consoleSessionString(ConsolePort *consolePort, const char *string);
+#endif // NANO_OS_MAX_SESSIONS > 0
 void consoleEchoInput(
   ConsolePort *consolePort, ConsoleEcho echo, uint8_t byte);
 void consoleInputReadyCommandHandler(
