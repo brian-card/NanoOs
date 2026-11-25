@@ -1289,8 +1289,6 @@ int halCommonLaunchProcesses(void) {
   if (queueStatus != 0) {
     returnValue = queueStatus;
   }
-  ProcessId firstShellPid = schedulerGetFirstShellPid();
-  uint8_t numShells = schedulerGetNumShells();
   for (ProcessId pid = 1; pid <= numProcesses; pid++) {
     ProcessDescriptor *processDescriptor = &allProcesses[pid - 1];
     if ((processDescriptor->readyQueue != NULL)
@@ -1302,7 +1300,7 @@ int halCommonLaunchProcesses(void) {
     HAL->platform->callFileOverlay(&processDescriptor->callOverlayFunction);
     if (pid == loggerPid) {
       processDescriptor->restartFunction = restartLogger;
-    } else if ((pid >= firstShellPid) && (pid - firstShellPid < numShells)) {
+    } else if (processDescriptor->shellSlot) {
       HAL->platform->restartShell(&processDescriptor->restartFunction);
     } else {
       processDescriptor->restartFunction = NULL;
@@ -1768,7 +1766,7 @@ static int configSysConsolePort(const char *port, ProcessId *outputPid) {
     return -ENOENT;
   }
   *outputPid = device->pid;
-  return schedulerAddForwardingPort(device->pid);
+  return schedulerAddForwardingPort(device->pid, PROCESS_ID_NOT_SET, 0, 0);
 }
 
 /// @fn static int configSysAddHardware(char *value, int lineNumber)
