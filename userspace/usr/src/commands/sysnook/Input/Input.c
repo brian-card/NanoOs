@@ -35,6 +35,7 @@
 /// per press, release, and key.
 
 #include "Wm.h"
+#include "WmKeys.h"
 
 /// @def WM_DOUBLE_CLICK_MS
 ///
@@ -432,11 +433,137 @@ static void altTab(WmState *state) {
   }
 }
 
+/// @fn static bool sendToConsole(WmState *state, ProcessMessage **message,
+///   ConsoleCommand command, void *args, size_t size)
+///
+/// @brief Send the console a message for a session and keep it, without
+/// waiting for it, since the console may be waiting on the session's
+/// display, which may be waiting on the window server.
+///
+/// @param state The window manager's state.
+/// @param message Where to keep the message.
+/// @param command The ConsoleCommand.
+/// @param args The arguments.
+/// @param size The size of the arguments.
+///
+/// @return Returns true if it was sent, false otherwise.
+static bool sendToConsole(WmState *state, ProcessMessage **message,
+  ConsoleCommand command, void *args, size_t size
+) {
+  if ((state->consolePid == 0)
+    && (findProcessByName(CONSOLE_PROCESS_NAME, &state->consolePid) != 0)
+  ) {
+    return false;
+  }
+  ProcessMessage *sent = getAvailableMessage();
+  if (sent == NULL) {
+    return false;
+  }
+  processMessageInit(sent, CONSOLE_COMMAND_SIGNATURE | command, args, size,
+    /* waiting= */ true);
+  if (sendProcessMessageToPid(state->consolePid, sent) != processSuccess) {
+    processMessageRelease(sent);
+    return false;
+  }
+  *message = sent;
+  return true;
+}
+
+/// @fn static bool finished(ProcessMessage **message)
+///
+/// @brief Let go of a message the console has finished.
+///
+/// @param message Where the message is kept, NULL if there is none.
+///
+/// @return Returns true if no message is kept any more, false if the
+/// console hasn't finished it.
+static bool finished(ProcessMessage **message) {
+  if ((*message != NULL) && processMessageDone(*message)) {
+    processMessageRelease(*message);
+    *message = NULL;
+  }
+  return *message == NULL;
+}
+
+/// @fn static bool flushGrid(WmState *state, WmGrid *grid)
+///
+/// @brief Send a session's console what is waiting for it:  the session's
+/// size once it changes, then the keys held for it and a resize report the
+/// window server makes from the grid's size, up to CONSOLE_INPUT_READY_SIZE
+/// bytes at a time, each once the console has read the last.
+///
+/// @param state The window manager's state.
+/// @param grid The session's text grid.
+///
+/// @return Returns true if something is still waiting to be sent, false
+/// otherwise.
+static bool flushGrid(WmState *state, WmGrid *grid) {
+  if (grid->port == WM_NO_PORT) {
+    return false;
+  }
+  if (finished(&grid->winsize) && grid->winsizeWanted) {
+    grid->winsizeArgs->rows = grid->rows;
+    grid->winsizeArgs->columns = grid->columns;
+    grid->winsizeArgs->returnValue = 0;
+    grid->winsizeWanted = !sendToConsole(state, &grid->winsize,
+      CONSOLE_SET_WINSIZE, grid->winsizeArgs, sizeof(*grid->winsizeArgs));
+  }
+  if (grid->reportWanted) {
+    char report[24];
+    int length = snprintf(report, sizeof(report), "\033[48;%u;%u;%u;%ut",
+      (unsigned int) grid->rows, (unsigned int) grid->columns,
+      (unsigned int) (grid->rows * state->display.builtInFont.glyphH),
+      (unsigned int) (grid->columns * state->display.builtInFont.glyphW));
+    if ((length > 0) && (length <= WM_GRID_HOLD - grid->numHeld)) {
+      memcpy(&grid->held[grid->numHeld], report, (size_t) length);
+      grid->numHeld += (uint8_t) length;
+      grid->reportWanted = false;
+    }
+  }
+  if (finished(&grid->input) && (grid->numHeld > 0)
+    && !grid->winsizeWanted
+  ) {
+    uint8_t count = grid->numHeld;
+    if (count > CONSOLE_INPUT_READY_SIZE) {
+      count = CONSOLE_INPUT_READY_SIZE;
+    }
+    grid->inputArgs->portId = grid->port;
+    grid->inputArgs->numBytes = count;
+    memcpy(grid->inputArgs->bytes, grid->held, count);
+    if (sendToConsole(state, &grid->input, CONSOLE_INPUT_READY,
+        grid->inputArgs, sizeof(*grid->inputArgs))
+    ) {
+      grid->numHeld -= count;
+      memmove(grid->held, &grid->held[count], grid->numHeld);
+    }
+  }
+  return (grid->numHeld > 0) || grid->winsizeWanted || grid->reportWanted;
+}
+
+/// @fn static void flushSessions(WmState *state)
+///
+/// @brief Send each session's console what is waiting for it, and note
+/// whether anything still is.
+///
+/// @param state The window manager's state.
+///
+/// @return This function returns no value.
+static void flushSessions(WmState *state) {
+  state->inputWaiting = false;
+  for (uint8_t ii = 0; ii < state->numWindows; ii++) {
+    WmGrid *grid = (WmGrid*) state->windows[ii].content;
+    if ((grid != NULL) && flushGrid(state, grid)) {
+      state->inputWaiting = true;
+    }
+  }
+}
+
 /// @fn static void key(WmState *state, const GfxEvent *event)
 ///
 /// @brief Handle a key:  Alt+Tab activates the next normal window, Alt+F4
-/// asks the owner of the window with the keys to close it, and every other
-/// key goes to that owner.
+/// asks the owner of the window with the keys to close it, every other key
+/// going down goes to the session of a window whose text grid has one, as
+/// the bytes a terminal sends, and every other key goes to the owner.
 ///
 /// @param state The window manager's state.
 /// @param event The key's event.
@@ -458,6 +585,24 @@ static void key(WmState *state, const GfxEvent *event) {
   } else if (window == NULL) {
     return;
   }
+  WmGrid *grid = (WmGrid*) window->content;
+  if ((grid != NULL) && (grid->port != WM_NO_PORT)) {
+    uint8_t bytes[WM_KEY_MAX_BYTES];
+    uint8_t count = 0;
+    if (event->down != 0) {
+      count = wmTranslateKey(event->keycode, event->ascii, bytes);
+    }
+    if ((count > 0) && (count <= WM_GRID_HOLD - grid->numHeld)) {
+      memcpy(&grid->held[grid->numHeld], bytes, count);
+      grid->numHeld += count;
+      if ((state->times != NULL) && !state->echoKey) {
+        timespec_get(&state->keySent, TIME_UTC);
+        state->echoKey = true;
+      }
+      flushSessions(state);
+    }
+    return;
+  }
   WinEvent *sent = wmSend(state, window->owner, WIN_EVENT_KEY, window->id);
   if (sent != NULL) {
     sent->key = event->keycode;
@@ -469,7 +614,8 @@ static void key(WmState *state, const GfxEvent *event) {
 
 /// @fn void* wmInput(void *args)
 ///
-/// @brief Handle the press, release or key in the state's event.
+/// @brief Handle the press, release or key in the state's event, or, with
+/// no event, send each session's console what is waiting for it.
 ///
 /// @param args A pointer to the WmState.
 ///
@@ -477,7 +623,9 @@ static void key(WmState *state, const GfxEvent *event) {
 void* wmInput(void *args) {
   WmState *state = (WmState*) args;
   const GfxEvent *event = state->event;
-  if (event->type == GFX_EVENT_KEY) {
+  if (event == NULL) {
+    flushSessions(state);
+  } else if (event->type == GFX_EVENT_KEY) {
     key(state, event);
   } else if (state->restoreOnDrag && (state->grab == WM_GRAB_MOVE)) {
     restoreUnderPointer(state, event->x);
