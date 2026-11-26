@@ -477,6 +477,11 @@ typedef struct GfxWarpCursorArgs {
 /// @brief The number of events one GFX_MSG_INPUT_EVENTS carries.
 #define GFX_EVENTS_PER_MESSAGE 32
 
+/// @def GFX_BUTTON_LEFT
+///
+/// @brief The bit of a pointer event's buttons that is the left button.
+#define GFX_BUTTON_LEFT 0x01
+
 /// @enum GfxEventType
 ///
 /// @brief The kind of a GfxEvent.
@@ -757,11 +762,31 @@ typedef enum GfxCmdType {
 /// @brief The size of a GFX_CMD_DRAW_SUB_IMAGE record, its tag included.
 #define GFX_CMD_DRAW_SUB_IMAGE_SIZE 15
 
+/// @def GFX_CMD_TAG
+///
+/// @brief The offset of every record's tag.
+#define GFX_CMD_TAG 0
+
+/// @def GFX_CMD_DRAW_TEXT_AT
+///
+/// @brief The offset of a GFX_CMD_DRAW_TEXT record's GfxPoint.
+#define GFX_CMD_DRAW_TEXT_AT     1
+
+/// @def GFX_CMD_DRAW_TEXT_LENGTH
+///
+/// @brief The offset of a GFX_CMD_DRAW_TEXT record's number of bytes of text.
+#define GFX_CMD_DRAW_TEXT_LENGTH 5
+
+/// @def GFX_CMD_DRAW_TEXT_TEXT
+///
+/// @brief The offset of a GFX_CMD_DRAW_TEXT record's text.
+#define GFX_CMD_DRAW_TEXT_TEXT   6
+
 /// @def GFX_CMD_DRAW_TEXT_SIZE
 ///
 /// @brief The size of a GFX_CMD_DRAW_TEXT record with len bytes of text, its
 /// tag included.
-#define GFX_CMD_DRAW_TEXT_SIZE(len)  (6 + (len))
+#define GFX_CMD_DRAW_TEXT_SIZE(len)  (GFX_CMD_DRAW_TEXT_TEXT + (len))
 
 /// @def GFX_CMD_CALL_SIZE
 ///
