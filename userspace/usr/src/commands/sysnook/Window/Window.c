@@ -387,7 +387,7 @@ static uint8_t wmMakeGrid(WmState *state, WmWindow *window,
   grid->marginRight = body.w - grid->rect.x - grid->rect.w;
   grid->marginBottom = body.h - grid->rect.y - grid->rect.h;
   GfxRect place;
-  wmGridPlace(state, window, &place);
+  grid->coversBody = wmGridPlace(state, window, &place);
   grid->columns = (uint8_t) place.w;
   grid->rows = (uint8_t) place.h;
   size_t plane = (size_t) grid->columns * grid->rows;

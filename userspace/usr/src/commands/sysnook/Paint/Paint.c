@@ -315,9 +315,9 @@ static void drawRun(GfxCmdBuf *cmd, int16_t left, int16_t top,
 ///   const GfxRect *clip)
 ///
 /// @brief Record the rows of a window's text grid that meet the rectangle
-/// being painted, as runs of one attribute:  a background unless it is the
-/// body's black, then the run's text up to its last character that isn't a
-/// space.
+/// being painted, as runs of one attribute:  a background, unless it is
+/// black on a body filled black, then the run's text up to its last
+/// character that isn't a space.
 ///
 /// @param state The window manager's state.
 /// @param window The window, whose content is a WmGrid.
@@ -354,7 +354,9 @@ static __attribute__((noinline)) void paintGrid(
       } while ((end < columns) && (chars[plane + end] == attribute));
       int16_t left = window->frame.x + grid->left
         + (int16_t) (column * glyphW);
-      if (WIN_ATTRIBUTE_BACKGROUND(attribute) != WIN_ANSI_BLACK) {
+      if (grid->coversBody
+        || (WIN_ATTRIBUTE_BACKGROUND(attribute) != WIN_ANSI_BLACK)
+      ) {
         fill(cmd, _ansiColors[WIN_ATTRIBUTE_BACKGROUND(attribute)], left, top,
           (int16_t) ((end - column) * glyphW), glyphH);
       }
@@ -372,7 +374,9 @@ static __attribute__((noinline)) void paintGrid(
 ///   const GfxRect *clip)
 ///
 /// @brief Record a window's decorations, body and cells, inside its frame,
-/// leaving out what doesn't meet the rectangle being painted.
+/// leaving out what doesn't meet the rectangle being painted.  A body that
+/// is all text grid isn't filled first, so that no cell shows black between
+/// its old colours and its new.
 ///
 /// @param state The window manager's state.
 /// @param window The window.
@@ -396,8 +400,11 @@ static __attribute__((noinline)) void paintWindow(
   }
   GfxRect overlap;
   if (wmIntersect(&body, clip, &overlap)) {
-    fill(cmd, window->face, overlap.x, overlap.y, overlap.w, overlap.h);
-    if (window->content != NULL) {
+    const WmGrid *grid = (const WmGrid*) window->content;
+    if ((grid == NULL) || !grid->coversBody) {
+      fill(cmd, window->face, overlap.x, overlap.y, overlap.w, overlap.h);
+    }
+    if (grid != NULL) {
       paintGrid(state, window, clip);
     } else if (window->cells > 0) {
       GfxPoint origin = { body.x, body.y };
