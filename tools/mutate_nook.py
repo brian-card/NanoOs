@@ -88,8 +88,9 @@ MUTATIONS = [
   '    gfxCmdSetFgColor(cmd, border);\n'
   '    gfxCmdDrawRect(cmd, frame, false);\n', '')], PAINTS),
  ('W2-no-cell-edges', [(CELLS,
-  '      gfxCmdDrawRect(cmd, &cell, pass == 0);',
-  '      if (pass == 0) gfxCmdDrawRect(cmd, &cell, true);')], PAINTS),
+  '      gfxCmdDrawRect(cmd, &cell, pass == WM_PASS_FILL);',
+  '      if (pass == WM_PASS_FILL) gfxCmdDrawRect(cmd, &cell, true);')],
+  PAINTS),
  ('W2-preloads-never-called', [(PAINT,
   '    gfxCmdCall(cmd, state->rows[row]);\n', '')], CALL),
  ('W3-no-windows-under-damage', [(PAINT,
@@ -143,11 +144,10 @@ MUTATIONS = [
   '      wmDamage(state, &window->frame);\n'
   '    }\n  }\n}')], HOVER),
  ('P4-ctrl-q-quits-again', [(INPUT,
-  '  } else if (window == NULL) {\n    return;\n  }\n'
-  '  WinEvent *sent',
-  '  } else if ((window == NULL) || (event->ascii == 17)) {\n'
-  '    return;\n  }\n'
-  '  WinEvent *sent')], CTRL_Q),
+  '  WinEvent *sent = wmSend(state, window->owner, WIN_EVENT_KEY,',
+  '  if (event->ascii == 17) {\n    return;\n  }\n'
+  '  WinEvent *sent = wmSend(state, window->owner, WIN_EVENT_KEY,')],
+  CTRL_Q),
  ('P4-no-alt-f4', [(INPUT,
   '    } else if (window != NULL) {\n'
   '      wmSend(state, window->owner, WIN_EVENT_CLOSE_REQUESTED, window->id);',

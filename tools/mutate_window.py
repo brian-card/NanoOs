@@ -45,7 +45,7 @@ import os, re, subprocess, sys, time
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 SCHED = 'src/kernel/Scheduler.c'
 CONSOLE = 'src/kernel/Console.c'
-BRIDGE = 'userspace/usr/src/commands/sessiontest/main/main.c'
+BRIDGE = 'userspace/usr/src/commands/sessiontest/Bridge/Bridge.c'
 ENDED = ['window_server/an_exiting_client_is_reported_once',
          'window_server/a_killed_client_is_reported_once',
          'window_server/a_removed_client_is_reported_once',
