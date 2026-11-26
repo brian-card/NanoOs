@@ -2144,6 +2144,28 @@ typedef struct ConsolePortOutput {
 /// outlive its port.
 static ConsolePortOutput *_consolePortOutputs[CONSOLE_NUM_PORTS];
 
+/// @fn static ConsolePortOutput* consolePortOutput(ConsolePort *consolePort)
+///
+/// @brief Get a forwarding port's string storage, making it if the port has
+/// none yet.
+///
+/// @param consolePort A pointer to the ConsolePort.
+///
+/// @return Returns a pointer to the storage, or NULL if there's no memory for
+/// it.
+static ConsolePortOutput* consolePortOutput(ConsolePort *consolePort) {
+  uint8_t portId = consolePort->inputReadyArgs.portId;
+  ConsolePortOutput *output = _consolePortOutputs[portId];
+  if (output == NULL) {
+    output = (ConsolePortOutput*) malloc(sizeof(ConsolePortOutput));
+    if (output != NULL) {
+      output->message = NULL;
+      _consolePortOutputs[portId] = output;
+    }
+  }
+  return output;
+}
+
 /// @fn static bool consoleOutputTaken(ProcessMessage *processMessage)
 ///
 /// @brief Wait at most CONSOLE_OUTPUT_TIMEOUT_MS for an output servicer to
@@ -2184,15 +2206,9 @@ static bool consoleOutputTaken(ProcessMessage *processMessage) {
 static int consoleSendOutput(ConsolePort *consolePort, const char *string,
   size_t length, bool waitForEarlier
 ) {
-  uint8_t portId = consolePort->inputReadyArgs.portId;
-  ConsolePortOutput *output = _consolePortOutputs[portId];
+  ConsolePortOutput *output = consolePortOutput(consolePort);
   if (output == NULL) {
-    output = (ConsolePortOutput*) malloc(sizeof(ConsolePortOutput));
-    if (output == NULL) {
-      return 0;
-    }
-    output->message = NULL;
-    _consolePortOutputs[portId] = output;
+    return 0;
   }
   if (output->message != NULL) {
     if (processMessageDone(output->message)) {
@@ -2227,7 +2243,8 @@ static int consoleSendOutput(ConsolePort *consolePort, const char *string,
 /// @brief Send a string, in pieces that fit CONSOLE_BUFFER_SIZE, to the
 /// process that services a forwarding port's output, a driver, which takes
 /// every piece:  one it hasn't taken in time is waited for again before the
-/// next is sent.
+/// next is sent.  With no memory to copy the pieces into, the string itself
+/// is sent and waited for until it's taken.
 ///
 /// @param consolePort A pointer to the ConsolePort to print to.
 /// @param string A pointer to the NUL-terminated string to print.
@@ -2236,6 +2253,18 @@ static int consoleSendOutput(ConsolePort *consolePort, const char *string,
 /// length if a piece could not be sent.
 int consoleForwardString(ConsolePort *consolePort, const char *string) {
   size_t length = strlen(string);
+  if (consolePortOutput(consolePort) == NULL) {
+    ProcessMessage *processMessage = initSendProcessMessageToPid(
+      consolePort->outputPid,
+      CONSOLE_COMMAND_SIGNATURE | CONSOLE_FORWARD_STRING,
+      (void*) string, length, /* waiting= */ true);
+    if (processMessage == NULL) {
+      return 0;
+    }
+    processMessageWaitForDone(processMessage, NULL);
+    processMessageRelease(processMessage);
+    return (int) length;
+  }
   size_t sent = 0;
   while (sent < length) {
     int piece = consoleSendOutput(consolePort, &string[sent], length - sent,
