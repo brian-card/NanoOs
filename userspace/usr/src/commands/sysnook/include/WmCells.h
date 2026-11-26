@@ -47,10 +47,36 @@
 /// @brief The colour of the text across every third row of cells.
 #define WM_ROW_TEXT CGA_WHITE
 
+/// @def WM_CELL_FILLS
+///
+/// @brief The number of fill colours the cells take in turn.
+#define WM_CELL_FILLS 4
+
+/// @def WM_TEXT_ROW_EVERY
+///
+/// @brief How many rows of cells there are to each row with a line of text.
+#define WM_TEXT_ROW_EVERY 3
+
+/// @def WM_ROW_TEXT_TOP
+///
+/// @brief How far below the top of its row of cells a line of text is.
+#define WM_ROW_TEXT_TOP 6
+
+/// @def WM_PASS_FILL
+///
+/// @brief The pass over a row that records the cells' fills.
+#define WM_PASS_FILL 0
+
+/// @def WM_PASS_OUTLINE
+///
+/// @brief The pass over a row that records the cells' outlines, after their
+/// fills.
+#define WM_PASS_OUTLINE 1
+
 /// @var _wmCellFills
 ///
 /// @brief The fill colours of the cells, in turn along each row.
-static const GfxColor _wmCellFills[4] = {
+static const GfxColor _wmCellFills[WM_CELL_FILLS] = {
   CGA_GREEN, CGA_RED, CGA_MAGENTA, CGA_BROWN,
 };
 
@@ -121,8 +147,8 @@ WM_SHARED void wmRecordRow(GfxCmdBuf *cmd, uint8_t row, uint8_t cells,
     count = WM_CELL_COLUMNS;
   }
   int16_t top = origin.y + (int16_t) (row * WM_CELL_SIZE);
-  for (uint8_t pass = 0; pass < 2; pass++) {
-    if (pass == 1) {
+  for (uint8_t pass = WM_PASS_FILL; pass <= WM_PASS_OUTLINE; pass++) {
+    if (pass == WM_PASS_OUTLINE) {
       gfxCmdSetFgColor(cmd, WM_CELL_EDGE);
     }
     for (uint8_t column = 0; column < count; column++) {
@@ -132,14 +158,14 @@ WM_SHARED void wmRecordRow(GfxCmdBuf *cmd, uint8_t row, uint8_t cells,
       if ((clip != NULL) && !wmIntersect(&cell, clip, &overlap)) {
         continue;
       }
-      if (pass == 0) {
-        gfxCmdSetFgColor(cmd, _wmCellFills[(row + column) & 3]);
+      if (pass == WM_PASS_FILL) {
+        gfxCmdSetFgColor(cmd, _wmCellFills[(row + column) % WM_CELL_FILLS]);
       }
-      gfxCmdDrawRect(cmd, &cell, pass == 0);
+      gfxCmdDrawRect(cmd, &cell, pass == WM_PASS_FILL);
     }
   }
-  if ((row % 3) == 0) {
-    GfxPoint position = { origin.x, top + 6 };
+  if ((row % WM_TEXT_ROW_EVERY) == 0) {
+    GfxPoint position = { origin.x, top + WM_ROW_TEXT_TOP };
     gfxCmdSetFgColor(cmd, WM_ROW_TEXT);
     gfxCmdDrawText(cmd, position, _wmRowText);
   }
