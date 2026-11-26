@@ -341,6 +341,12 @@ typedef enum CgaColorIndex {
 /// color 0; add the color number for the others.
 #define ANSI_SGR_BRIGHT_BACKGROUND   100
 
+/// @def ANSI_COLORS_PER_SET
+///
+/// @brief The number of ANSI colors in the normal set and in the bright set;
+/// a bright color's number is its normal one's plus this.
+#define ANSI_COLORS_PER_SET           8
+
 /// @var cgaToAnsiMap
 ///
 /// @brief The ANSI SGR foreground parameter of each CGA color, by
