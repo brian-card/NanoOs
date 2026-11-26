@@ -139,6 +139,9 @@ int main(int argc, char **argv) {
     "shutdown:               ",
     "Power off or reset the system.");
   printf("%s %s\n",
+    "term:                   ",
+    "Open a terminal window in Nook.");
+  printf("%s %s\n",
     "termtest:               ",
     "Exercise the terminal size functions.");
   printf("%s %s\n",
