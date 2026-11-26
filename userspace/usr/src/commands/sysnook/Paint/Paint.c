@@ -39,44 +39,10 @@
 /// @brief The colour an outline is drawn with, by XOR.
 #define WM_OUTLINE CGA_WHITE
 
-/// @fn static bool intersect(const GfxRect *first, const GfxRect *second,
-///   GfxRect *result)
+/// @def WM_ELLIPSIS_LENGTH
 ///
-/// @brief Find where two rectangles overlap.
-///
-/// @param first One rectangle.
-/// @param second The other.
-/// @param result Where to store the overlap, which may be either input.
-///
-/// @return Returns true if they overlap, false otherwise.
-static bool intersect(const GfxRect *first, const GfxRect *second,
-  GfxRect *result
-) {
-  int16_t left = first->x;
-  int16_t top = first->y;
-  int16_t right = first->x + first->w;
-  int16_t bottom = first->y + first->h;
-  if (second->x > left) {
-    left = second->x;
-  }
-  if (second->y > top) {
-    top = second->y;
-  }
-  if (second->x + second->w < right) {
-    right = second->x + second->w;
-  }
-  if (second->y + second->h < bottom) {
-    bottom = second->y + second->h;
-  }
-  if ((left >= right) || (top >= bottom)) {
-    return false;
-  }
-  result->x = left;
-  result->y = top;
-  result->w = right - left;
-  result->h = bottom - top;
-  return true;
-}
+/// @brief The number of dots that end a title cut short to fit its bar.
+#define WM_ELLIPSIS_LENGTH 3
 
 /// @fn static bool meets(const GfxRect *rect, const GfxRect *clip)
 ///
@@ -89,7 +55,7 @@ static bool intersect(const GfxRect *first, const GfxRect *second,
 static __attribute__((noinline)) bool meets(
   const GfxRect *rect, const GfxRect *clip) {
   GfxRect overlap;
-  return intersect(rect, clip, &overlap);
+  return wmIntersect(rect, clip, &overlap);
 }
 
 /// @fn static void fill(GfxCmdBuf *cmd, GfxColor colour, int16_t left,
@@ -224,8 +190,10 @@ static __attribute__((noinline)) void paintButton(
     line(cmd, left, top, right, bottom);
     line(cmd, right, top, left, bottom);
   } else if (window->state == WIN_STATE_MAXIMIZED) {
-    GfxRect back = { left + 2, top, WM_GLYPH_SIZE - 2, WM_GLYPH_SIZE - 2 };
-    GfxRect front = { left, top + 2, WM_GLYPH_SIZE - 2, WM_GLYPH_SIZE - 2 };
+    GfxRect back = { left + WM_RESTORE_OFFSET, top,
+      WM_GLYPH_SIZE - WM_RESTORE_OFFSET, WM_GLYPH_SIZE - WM_RESTORE_OFFSET };
+    GfxRect front = { left, top + WM_RESTORE_OFFSET,
+      WM_GLYPH_SIZE - WM_RESTORE_OFFSET, WM_GLYPH_SIZE - WM_RESTORE_OFFSET };
     gfxCmdDrawRect(cmd, &back, false);
     fill(cmd, face, front.x, front.y, front.w, front.h);
     gfxCmdSetFgColor(cmd, ink);
@@ -268,7 +236,7 @@ static __attribute__((noinline)) void paintTitle(
   GfxRect inner = { frame->x + WM_BORDER, frame->y + WM_BORDER,
     frame->w - 2 * WM_BORDER, frame->h - 2 * WM_BORDER };
   GfxRect overlap;
-  if (!intersect(clip, &inner, &overlap)
+  if (!wmIntersect(clip, &inner, &overlap)
     || (overlap.w != clip->w) || (overlap.h != clip->h)
   ) {
     gfxCmdSetFgColor(cmd, border);
@@ -276,7 +244,7 @@ static __attribute__((noinline)) void paintTitle(
   }
   GfxRect text = { inner.x, inner.y, inner.w - WM_BUTTONS_WIDTH,
     WM_TITLE_HEIGHT };
-  if (intersect(&text, clip, &overlap)) {
+  if (wmIntersect(&text, clip, &overlap)) {
     fill(cmd, bar, overlap.x, overlap.y, overlap.w, overlap.h);
     uint8_t glyphW = state->display.builtInFont.glyphW;
     int16_t room = (text.w - WM_TITLE_INSET) / glyphW;
@@ -287,7 +255,11 @@ static __attribute__((noinline)) void paintTitle(
       if ((int16_t) length > room) {
         length = (size_t) room;
         shown[length] = '\0';
-        for (size_t ii = (length > 3) ? length - 3 : 0; ii < length; ii++) {
+        size_t firstDot = 0;
+        if (length > WM_ELLIPSIS_LENGTH) {
+          firstDot = length - WM_ELLIPSIS_LENGTH;
+        }
+        for (size_t ii = firstDot; ii < length; ii++) {
           shown[ii] = '.';
         }
       }
@@ -304,6 +276,94 @@ static __attribute__((noinline)) void paintTitle(
     wmButtonRect(window, button, &rect);
     if (meets(&rect, clip)) {
       paintButton(state, window, button, bar, ink);
+    }
+  }
+}
+
+/// @var _ansiColors
+///
+/// @brief The colour of each ANSI colour index a text grid's attributes use.
+static const GfxColor _ansiColors[WIN_ANSI_NUM_COLORS] = WM_ANSI_COLORS;
+
+/// @fn static void drawRun(GfxCmdBuf *cmd, int16_t left, int16_t top,
+///   const uint8_t *text, uint8_t length)
+///
+/// @brief Record a run of a text grid's characters, which have no
+/// terminator, in the foreground colour.
+///
+/// @param cmd The command buffer.
+/// @param left The run's left edge.
+/// @param top The run's top edge.
+/// @param text The characters.
+/// @param length The number of characters.
+///
+/// @return This function returns no value.
+static void drawRun(GfxCmdBuf *cmd, int16_t left, int16_t top,
+  const uint8_t *text, uint8_t length
+) {
+  uint8_t *record = gfxCmdBufReserve_(cmd, GFX_CMD_DRAW_TEXT_SIZE(length));
+  if (record != NULL) {
+    GfxPoint at = { left, top };
+    record[GFX_CMD_TAG] = GFX_CMD_DRAW_TEXT;
+    memcpy(&record[GFX_CMD_DRAW_TEXT_AT], &at, sizeof(at));
+    record[GFX_CMD_DRAW_TEXT_LENGTH] = length;
+    memcpy(&record[GFX_CMD_DRAW_TEXT_TEXT], text, length);
+  }
+}
+
+/// @fn static void paintGrid(WmState *state, const WmWindow *window,
+///   const GfxRect *clip)
+///
+/// @brief Record the rows of a window's text grid that meet the rectangle
+/// being painted, as runs of one attribute:  a background unless it is the
+/// body's black, then the run's text up to its last character that isn't a
+/// space.
+///
+/// @param state The window manager's state.
+/// @param window The window, whose content is a WmGrid.
+/// @param clip The rectangle being painted.
+///
+/// @return This function returns no value.
+static __attribute__((noinline)) void paintGrid(
+  WmState *state, const WmWindow *window, const GfxRect *clip
+) {
+  GfxCmdBuf *cmd = state->cmd;
+  const WmGrid *grid = (const WmGrid*) window->content;
+  uint8_t glyphW = state->display.builtInFont.glyphW;
+  uint8_t glyphH = state->display.builtInFont.glyphH;
+  uint8_t columns = grid->columns;
+  const uint8_t *chars = grid->cells;
+  size_t plane = (size_t) columns * grid->rows;
+  int16_t top = window->frame.y + grid->top;
+  for (uint8_t row = 0; row < grid->rows;
+    row++, chars += columns, top += glyphH
+  ) {
+    if ((top + glyphH <= clip->y) || (top >= clip->y + clip->h)) {
+      continue;
+    }
+    uint8_t column = 0;
+    while (column < columns) {
+      uint8_t attribute = chars[plane + column];
+      uint8_t end = column;
+      uint8_t last = column;
+      do {
+        if (chars[end] != ' ') {
+          last = end + 1;
+        }
+        end++;
+      } while ((end < columns) && (chars[plane + end] == attribute));
+      int16_t left = window->frame.x + grid->left
+        + (int16_t) (column * glyphW);
+      if (WIN_ATTRIBUTE_BACKGROUND(attribute) != WIN_ANSI_BLACK) {
+        fill(cmd, _ansiColors[WIN_ATTRIBUTE_BACKGROUND(attribute)], left, top,
+          (int16_t) ((end - column) * glyphW), glyphH);
+      }
+      if (last > column) {
+        gfxCmdSetFgColor(cmd,
+          _ansiColors[WIN_ATTRIBUTE_FOREGROUND(attribute)]);
+        drawRun(cmd, left, top, &chars[column], last - column);
+      }
+      column = end;
     }
   }
 }
@@ -335,9 +395,11 @@ static __attribute__((noinline)) void paintWindow(
     body.h -= WM_FRAME_TOP + WM_BORDER;
   }
   GfxRect overlap;
-  if (intersect(&body, clip, &overlap)) {
+  if (wmIntersect(&body, clip, &overlap)) {
     fill(cmd, window->face, overlap.x, overlap.y, overlap.w, overlap.h);
-    if (window->cells > 0) {
+    if (window->content != NULL) {
+      paintGrid(state, window, clip);
+    } else if (window->cells > 0) {
       GfxPoint origin = { body.x, body.y };
       paintCells(state, window, origin, clip);
     }
@@ -360,7 +422,7 @@ static __attribute__((noinline)) bool covered(
     const WmWindow *window = &state->windows[ii];
     GfxRect overlap;
     if ((window->state != WIN_STATE_MINIMIZED)
-      && intersect(&window->frame, rect, &overlap)
+      && wmIntersect(&window->frame, rect, &overlap)
       && (overlap.w == rect->w) && (overlap.h == rect->h)
     ) {
       return true;
@@ -383,7 +445,7 @@ static void paintRect(WmState *state, const GfxRect *rect) {
   GfxRect screen = { 0, 0, (int16_t) state->display.width,
     (int16_t) state->display.height };
   GfxRect clip;
-  if (!intersect(rect, &screen, &clip)) {
+  if (!wmIntersect(rect, &screen, &clip)) {
     return;
   }
   gfxCmdPushScissor(cmd, &clip);
@@ -420,8 +482,9 @@ static void xorOutline(GfxCmdBuf *cmd, const GfxRect *outline) {
 /// @fn static void paintFrame(WmState *state)
 ///
 /// @brief Record and submit what brings the screen up to date with the
-/// state:  the old outline erased, the grabbed window's pixels copied if main
-/// asked for it, the damage repainted, and the new outline drawn.  While an
+/// state:  the old outline erased, the pixels of the grabbed window or a
+/// scrolled text grid copied if main or the Grid overlay asked for it, the
+/// damage repainted, and the new outline drawn.  While an
 /// outline stays on the screen, the damage is kept for the frame that takes
 /// it away, because painting under it would leave the outline's XOR to undo
 /// pixels it wasn't drawn over.
@@ -440,6 +503,7 @@ static void paintFrame(WmState *state) {
   if (state->copy) {
     gfxCmdCopyRect(cmd, &state->copySource, state->copyTarget);
   }
+
   if (!hold) {
     if (state->paintAll) {
       GfxRect screen = { 0, 0, (int16_t) state->display.width,
