@@ -188,6 +188,26 @@ def test_terminal_grid_cursor_is_its_cell_in_swapped_colours(session):
     check_clean(session)
 
 
+def test_terminal_grid_row_repainted_never_shows_black_under_it(session):
+    base = start_grid(session, "clear 1 0,0,0,79,0x40 sleep 4000 "
+                      "put 1 0,0,0x4F a sleep 300 put 1 0,1,0x4F b "
+                      "sleep 300 put 1 0,2,0x4F c")
+    vdp = session.vdp
+    model = GridModel(80, 24)
+    model.clear(0, 0, 0, 79, 0x40)
+    wait_grid_cells(vdp, 40, 40, model)
+    left, top = grid_origin(40, 40)
+    # A pixel of the row's background, well clear of the text put on it.
+    point = (left + 60 * CELL_WIDTH + 2, top + 3)
+    vdp.watch([point])
+    model.put(0, 0, 0x4F, "abc")
+    wait_grid_cells(vdp, 40, 40, model)
+    painted = vdp.painted(point)
+    assert painted and set(painted) == {ANSI_TO_CGA[4]}, painted
+    quit_nook(session, base)
+    check_clean(session)
+
+
 def fill_rows(model, rows):
     """Return wintest commands that put a line of text on each of a number of
     rows, and put the same in a model."""

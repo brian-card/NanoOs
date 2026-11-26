@@ -259,6 +259,7 @@ class FakeVdp:
         self.text_fg = DEFAULT_TEXT_FG
         self.text_bg = DEFAULT_TEXT_BG
         self.canvas = bytearray(SCREEN_WIDTH * SCREEN_HEIGHT)
+        self.watched = {}      # canvas index -> every palette index painted
         self._graphics_reset()
         # Seconds to hold back replies to polls once listening.
         self.poll_delay = 0.0
@@ -1236,6 +1237,9 @@ class FakeVdp:
             self.errors.append(f"paint mode {mode}")
             return
         self.canvas[index] = new & (COLOUR_DEPTH - 1)
+        history = self.watched.get(index)
+        if history is not None:
+            history.append(self.canvas[index])
 
     def _fill(self, rect, colour, mode):
         """Paint every pixel of an inclusive rectangle.  Call with the lock
@@ -1454,6 +1458,25 @@ class FakeVdp:
             self.points = ((cursor_x + width, cursor_y),) + self.points[1:]
             self.events.append((time.time(), "gtext", byte))
             self.lock.notify_all()
+
+    def watch(self, points):
+        """Start recording every palette index painted at some pixels,
+        forgetting what was recorded before.
+
+        @param points The (column, row) of each pixel.
+        """
+        with self.lock:
+            self.watched = {row * SCREEN_WIDTH + column: []
+                            for column, row in points}
+
+    def painted(self, point):
+        """Return every palette index painted at a watched pixel since the
+        watch began, in order.
+
+        @param point The (column, row) of the pixel.
+        """
+        with self.lock:
+            return list(self.watched[point[1] * SCREEN_WIDTH + point[0]])
 
     def pixel(self, column, row):
         """Return the palette index of a pixel of the canvas."""

@@ -56,6 +56,7 @@ CONSOLE = 'src/kernel/Console.c'
 SCHED = 'src/kernel/Scheduler.c'
 FAKEVDP = 'test/e2e/fakevdp.py'
 PROTOCOL = 'src/kernel/GraphicsProtocol.h'
+PAINT = SYSNOOK + 'Paint/Paint.c'
 MUTATIONS = [
  ('decoder-off-by-a-pixel', FAKEVDP,
   '        pixels = self.pixels(left, top, columns * width, rows * height)',
@@ -157,6 +158,10 @@ MUTATIONS = [
   '#define GFX_EVENTS_PER_MESSAGE 32',
   '#define GFX_EVENTS_PER_MESSAGE 8',
   ['e2e/test_terminal_keys_typed_while_the_window_server_is_busy_all_arrive']),
+ ('body-filled-under-a-grid', PAINT,
+  '    if ((grid == NULL) || !grid->coversBody) {',
+  '    if (true) {',
+  ['e2e/test_terminal_grid_row_repainted_never_shows_black_under_it']),
 ]
 
 
