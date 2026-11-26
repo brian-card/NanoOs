@@ -154,6 +154,38 @@ static int16_t clamp(int16_t value, int16_t low, int16_t high) {
   return value;
 }
 
+/// @fn static void snap(int16_t *start, int16_t *size, int16_t around,
+///   int16_t minimum, uint8_t cell, bool leading)
+///
+/// @brief Shorten a resized window's width or height to hold whole cells of
+/// its text grid, or lengthen it by one if that would make it too small,
+/// keeping the edge the resize doesn't move still.
+///
+/// @param start The window's left or top edge.
+/// @param size The window's width or height.
+/// @param around How much of the width or height isn't the grid's.
+/// @param minimum The window's minimum width or height.
+/// @param cell The width or height of a cell.
+/// @param leading Whether the resize moves the left or top edge.
+///
+/// @return This function returns no value.
+static __attribute__((noinline)) void snap(int16_t *start, int16_t *size,
+  int16_t around, int16_t minimum, uint8_t cell, bool leading
+) {
+  int16_t extra = (int16_t) ((*size - around) % cell);
+  if (extra < 0) {
+    extra += cell;
+  }
+  int16_t snapped = *size - extra;
+  if (snapped < minimum) {
+    snapped += cell;
+  }
+  if (leading) {
+    *start += *size - snapped;
+  }
+  *size = snapped;
+}
+
 /// @fn static void drag(WmState *state, int16_t pointX, int16_t pointY)
 ///
 /// @brief Move or resize the grabbed window, or its outline, to follow the
@@ -199,6 +231,24 @@ static void drag(WmState *state, int16_t pointX, int16_t pointY) {
       target.y = clamp(pointY - state->offset.y, 0, bottom - WM_MIN_HEIGHT);
       target.h = bottom - target.y;
     }
+  }
+  const WmGrid *grid = (const WmGrid*) window->content;
+  if ((state->grab == WM_GRAB_RESIZE) && (grid != NULL)
+    && (grid->anchor == (WIN_ANCHOR_LEFT | WIN_ANCHOR_TOP | WIN_ANCHOR_RIGHT
+      | WIN_ANCHOR_BOTTOM))
+  ) {
+    int16_t across = grid->rect.x + grid->marginRight;
+    int16_t down = grid->rect.y + grid->marginBottom;
+    if ((window->flags & WIN_FLAG_DECORATED) != 0) {
+      across += 2 * WM_BORDER;
+      down += WM_FRAME_TOP + WM_BORDER;
+    }
+    snap(&target.x, &target.w, across, WM_MIN_WIDTH,
+      state->display.builtInFont.glyphW,
+      (state->edges & WM_EDGE_LEFT) != 0);
+    snap(&target.y, &target.h, down, WM_MIN_HEIGHT,
+      state->display.builtInFont.glyphH,
+      (state->edges & WM_EDGE_TOP) != 0);
   }
   if (live) {
     window->frame = target;
@@ -274,13 +324,20 @@ static void applyEvents(WmState *state, const GfxInputEventsArgs *events) {
   for (uint8_t ii = 0; ii < events->count; ii++) {
     const GfxEvent *event = &events->events[ii];
     if (event->type == GFX_EVENT_KEY) {
-      input(state, event);
+      // A session is sent only keys going down, so a release in a window
+      // with a session's grid costs no overlay call.
+      const WmWindow *focus = wmFind(state, state->focus);
+      if ((event->down != 0) || (focus == NULL) || (focus->content == NULL)
+        || (((const WmGrid*) focus->content)->port == WM_NO_PORT)
+      ) {
+        input(state, event);
+      }
       continue;
     } else if (event->type != GFX_EVENT_POINTER) {
       continue;
     }
-    bool wasDown = (state->buttons & 1) != 0;
-    bool down = (event->buttons & 1) != 0;
+    bool wasDown = (state->buttons & GFX_BUTTON_LEFT) != 0;
+    bool down = (event->buttons & GFX_BUTTON_LEFT) != 0;
     state->buttons = event->buttons;
     bool dragging = (state->grab == WM_GRAB_MOVE)
       || (state->grab == WM_GRAB_RESIZE);
@@ -378,8 +435,9 @@ static bool frameNeeded(WmState *state) {
 
 /// @fn static GfxError paint(WmState *state)
 ///
-/// @brief Work out the damage of the grabbed window's change, and have the
-/// Paint overlay bring the screen up to date.
+/// @brief Work out the damage of the grabbed window's change, have the Paint
+/// overlay bring the screen up to date, and wait until it's drawn if --finish
+/// asked.
 ///
 /// @param state The window manager's state.
 ///
@@ -393,6 +451,9 @@ static GfxError paint(WmState *state) {
   }
   state->status = GFX_ERR_DEVICE_LOST;
   callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Paint", "wmPaint", state);
+  if (state->finishFrames) {
+    gfxFinish(&state->display);
+  }
   if (window != NULL) {
     state->shown = window->frame;
   }
@@ -402,24 +463,25 @@ static GfxError paint(WmState *state) {
   return (GfxError) state->status;
 }
 
-/// @fn static void timeFrame(WmState *state, uint8_t grab,
+/// @fn static void timeFrame(WmState *state, uint8_t kind,
 ///   const struct timespec *start)
 ///
-/// @brief Wait until a frame is drawn and keep how long it took since its
-/// events arrived.
+/// @brief Wait until a frame is drawn and keep how long it took since what
+/// it shows happened.
 ///
 /// @param state The window manager's state.
-/// @param grab The WmGrab the frame belongs to.
-/// @param start When the frame's events arrived.
+/// @param kind The WmTimed the frame belongs to.
+/// @param start When the frame's events arrived, or the key it echoes was
+///   sent.
 ///
 /// @return This function returns no value.
-static void timeFrame(WmState *state, uint8_t grab,
+static void timeFrame(WmState *state, uint8_t kind,
   const struct timespec *start
 ) {
   gfxFinish(&state->display);
   struct timespec now;
   timespec_get(&now, TIME_UTC);
-  WmTimes *times = &state->times[grab - WM_GRAB_MOVE];
+  WmTimes *times = &state->times[kind];
   if (times->count < WM_TIMED_FRAMES) {
     times->ms[times->count] = (uint16_t) (((now.tv_sec - start->tv_sec)
       * 1000L) + ((now.tv_nsec - start->tv_nsec) / 1000000L));
@@ -457,7 +519,9 @@ static bool postsDone(WmState *state) {
 ///
 /// @return Returns poll, or NULL to wait for as long as it takes.
 static struct timespec* pollTime(WmState *state, struct timespec *poll) {
-  if ((state->numPosts == 0) && !state->eventsWaiting) {
+  if ((state->numPosts == 0) && !state->eventsWaiting
+    && !state->inputWaiting
+  ) {
     return NULL;
   }
   timespec_get(poll, TIME_UTC);
@@ -480,8 +544,13 @@ static struct timespec* pollTime(WmState *state, struct timespec *poll) {
 static bool run(WmState *state) {
   while (true) {
     struct timespec poll;
-    ProcessMessage *message = processMessageQueueWait(pollTime(state, &poll));
+    ProcessMessage *message = state->next;
+    state->next = NULL;
+    if (message == NULL) {
+      message = processMessageQueueWait(pollTime(state, &poll));
+    }
     uint8_t grab = state->grab;
+    ProcessMessage *gridMessage = NULL;
     struct timespec start;
     bool events = (message != NULL) && gfxIsInputEvents(message);
     if (events) {
@@ -492,8 +561,12 @@ static bool run(WmState *state) {
       gfxInputEventsDone(message);
     } else if (message != NULL) {
       int64_t type = processMessageType(message);
-      if ((type & ~((int64_t) 0xff)) == WIN_COMMAND_SIGNATURE) {
-        state->message = message;
+      state->message = message;
+      if ((type == (WIN_COMMAND_SIGNATURE | WIN_MSG_GRID_WRITE))
+        || (type == (CONSOLE_COMMAND_SIGNATURE | CONSOLE_SESSION_ENDED))
+      ) {
+        gridMessage = message;
+      } else if ((type & ~WIN_MSG_TYPE_MASK) == WIN_COMMAND_SIGNATURE) {
         uint8_t request = (uint8_t) type;
         if ((request == WIN_MSG_HELLO) || (request == WIN_MSG_GOODBYE)
           || (request == WIN_MSG_CLIENT_ENDED)
@@ -514,17 +587,33 @@ static bool run(WmState *state) {
         }
       }
     }
+    if (state->inputWaiting) {
+      input(state, NULL);
+    }
+    if ((gridMessage != NULL) || state->gridsResized || state->gridsDirty) {
+      state->message = gridMessage;
+      callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Grid", "wmGrid", state);
+    }
     if ((state->numOutbox > 0) || postsDone(state)
       || ((message == NULL) && state->eventsWaiting)
     ) {
       callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Client", "wmClientFlush",
         state);
     }
+    if (state->deferring) {
+      continue;
+    }
     if (frameNeeded(state)) {
       paint(state);
-      if (events && (state->times != NULL) && (grab != WM_GRAB_NONE)) {
-        timeFrame(state, grab, &start);
+      if ((state->times != NULL) && events && (grab != WM_GRAB_NONE)) {
+        timeFrame(state, grab - WM_GRAB_MOVE, &start);
+      } else if ((state->times != NULL) && state->echoKey
+        && state->gridPainted
+      ) {
+        state->echoKey = false;
+        timeFrame(state, WM_TIMED_ECHO, &state->keySent);
       }
+      state->gridPainted = false;
     }
   }
 }
@@ -549,8 +638,7 @@ int main(int argc, char **argv) {
       callOverlayFunction(OVERLAY_SAME_NAMESPACE, "Client", "wmClientEnd",
         state);
     } else {
-      fprintf(stderr, "sysnook: %s\n", gfxErrorString(status));
-      state->exitStatus = 1;
+      state->exitStatus = WM_EXIT_PAINT;
     }
   }
   state->operation = WM_START_END;
