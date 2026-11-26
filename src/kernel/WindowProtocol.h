@@ -893,31 +893,126 @@ typedef enum WinGridOperation {
   WIN_GRID_REPORTS,
 } WinGridOperation;
 
+/// @def WIN_GRID_TAG
+///
+/// @brief The offset of the tag of every text grid operation.
+#define WIN_GRID_TAG              0
+
+/// @def WIN_GRID_PUT_ROW
+///
+/// @brief The offset of a WIN_GRID_PUT's row.
+#define WIN_GRID_PUT_ROW          1
+
+/// @def WIN_GRID_PUT_COLUMN
+///
+/// @brief The offset of a WIN_GRID_PUT's first column.
+#define WIN_GRID_PUT_COLUMN       2
+
+/// @def WIN_GRID_PUT_ATTRIBUTE
+///
+/// @brief The offset of a WIN_GRID_PUT's attribute.
+#define WIN_GRID_PUT_ATTRIBUTE    3
+
+/// @def WIN_GRID_PUT_LENGTH
+///
+/// @brief The offset of a WIN_GRID_PUT's number of bytes.
+#define WIN_GRID_PUT_LENGTH       4
+
+/// @def WIN_GRID_PUT_TEXT
+///
+/// @brief The offset of a WIN_GRID_PUT's bytes.
+#define WIN_GRID_PUT_TEXT         5
+
+/// @def WIN_GRID_CLEAR_TOP
+///
+/// @brief The offset of a WIN_GRID_CLEAR's first row.
+#define WIN_GRID_CLEAR_TOP        1
+
+/// @def WIN_GRID_CLEAR_LEFT
+///
+/// @brief The offset of a WIN_GRID_CLEAR's first column.
+#define WIN_GRID_CLEAR_LEFT       2
+
+/// @def WIN_GRID_CLEAR_BOTTOM
+///
+/// @brief The offset of a WIN_GRID_CLEAR's last row.
+#define WIN_GRID_CLEAR_BOTTOM     3
+
+/// @def WIN_GRID_CLEAR_RIGHT
+///
+/// @brief The offset of a WIN_GRID_CLEAR's last column.
+#define WIN_GRID_CLEAR_RIGHT      4
+
+/// @def WIN_GRID_CLEAR_ATTRIBUTE
+///
+/// @brief The offset of a WIN_GRID_CLEAR's attribute.
+#define WIN_GRID_CLEAR_ATTRIBUTE  5
+
+/// @def WIN_GRID_SCROLL_TOP
+///
+/// @brief The offset of a WIN_GRID_SCROLL's first row.
+#define WIN_GRID_SCROLL_TOP       1
+
+/// @def WIN_GRID_SCROLL_BOTTOM
+///
+/// @brief The offset of a WIN_GRID_SCROLL's last row.
+#define WIN_GRID_SCROLL_BOTTOM    2
+
+/// @def WIN_GRID_SCROLL_COUNT
+///
+/// @brief The offset of a WIN_GRID_SCROLL's int8_t count.
+#define WIN_GRID_SCROLL_COUNT     3
+
+/// @def WIN_GRID_SCROLL_ATTRIBUTE
+///
+/// @brief The offset of a WIN_GRID_SCROLL's attribute for the rows uncovered.
+#define WIN_GRID_SCROLL_ATTRIBUTE 4
+
+/// @def WIN_GRID_CURSOR_ROW
+///
+/// @brief The offset of a WIN_GRID_CURSOR's row.
+#define WIN_GRID_CURSOR_ROW       1
+
+/// @def WIN_GRID_CURSOR_COLUMN
+///
+/// @brief The offset of a WIN_GRID_CURSOR's column.
+#define WIN_GRID_CURSOR_COLUMN    2
+
+/// @def WIN_GRID_CURSOR_SHOWN
+///
+/// @brief The offset of a WIN_GRID_CURSOR's shown flag.
+#define WIN_GRID_CURSOR_SHOWN     3
+
+/// @def WIN_GRID_REPORTS_ON
+///
+/// @brief The offset of a WIN_GRID_REPORTS's flag.
+#define WIN_GRID_REPORTS_ON       1
+
 /// @def WIN_GRID_PUT_SIZE
 ///
 /// @brief The size of a WIN_GRID_PUT operation with length bytes, its tag
 /// included.
-#define WIN_GRID_PUT_SIZE(length) (5 + (length))
+#define WIN_GRID_PUT_SIZE(length) (WIN_GRID_PUT_TEXT + (length))
 
 /// @def WIN_GRID_CLEAR_SIZE
 ///
 /// @brief The size of a WIN_GRID_CLEAR operation, its tag included.
-#define WIN_GRID_CLEAR_SIZE       6
+#define WIN_GRID_CLEAR_SIZE       (WIN_GRID_CLEAR_ATTRIBUTE + 1)
 
 /// @def WIN_GRID_SCROLL_SIZE
 ///
 /// @brief The size of a WIN_GRID_SCROLL operation, its tag included.
-#define WIN_GRID_SCROLL_SIZE      5
+#define WIN_GRID_SCROLL_SIZE      (WIN_GRID_SCROLL_ATTRIBUTE + 1)
 
 /// @def WIN_GRID_CURSOR_SIZE
 ///
 /// @brief The size of a WIN_GRID_CURSOR operation, its tag included.
-#define WIN_GRID_CURSOR_SIZE      4
+#define WIN_GRID_CURSOR_SIZE      (WIN_GRID_CURSOR_SHOWN + 1)
 
 /// @def WIN_GRID_REPORTS_SIZE
 ///
 /// @brief The size of a WIN_GRID_REPORTS operation, its tag included.
-#define WIN_GRID_REPORTS_SIZE     2
+#define WIN_GRID_REPORTS_SIZE     (WIN_GRID_REPORTS_ON + 1)
 
 #ifdef __cplusplus
 }
