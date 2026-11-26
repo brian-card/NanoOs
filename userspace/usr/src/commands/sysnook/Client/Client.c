@@ -342,13 +342,48 @@ static void wmClientDrain(void) {
   }
 }
 
+/// @fn static void printTimes(const char *kind, WmTimes *times)
+///
+/// @brief Print the number of frames of a kind, and the median and longest
+/// time of the first WM_TIMED_FRAMES of them.
+///
+/// @param kind The kind of frame.
+/// @param times The frames' times, which are sorted.
+///
+/// @return This function returns no value.
+static void printTimes(const char *kind, WmTimes *times) {
+  uint16_t kept = times->count;
+  if (kept > WM_TIMED_FRAMES) {
+    kept = WM_TIMED_FRAMES;
+  }
+  for (uint16_t ii = 1; ii < kept; ii++) {
+    uint16_t value = times->ms[ii];
+    uint16_t jj = ii;
+    while ((jj > 0) && (times->ms[jj - 1] > value)) {
+      times->ms[jj] = times->ms[jj - 1];
+      jj--;
+    }
+    times->ms[jj] = value;
+  }
+  unsigned int median = 0;
+  unsigned int longest = 0;
+  if (kept > 0) {
+    median = times->ms[kept / 2];
+    longest = times->ms[kept - 1];
+  }
+  printf("sysnook: %s frames %u median %u ms max %u ms\n", kind,
+    (unsigned int) times->count, median, longest);
+}
+
 /// @fn void* wmClientEnd(void *args)
 ///
 /// @brief Tell every connected client that the window server is going away,
-/// and let go of what was kept for it.  The kernel's message pool is smaller
-/// than the number of clients, so when it is empty this drains its own queue
-/// and yields for the clients to release the messages they've read, for a
-/// bounded time, since a client might never read its queue.
+/// let go of what was kept for it, its windows and their sessions included,
+/// and print the frame and echo times if --timing asked for them.  The
+/// kernel's message pool is smaller than the number of clients, so when it
+/// is empty this drains its own queue and yields for the clients to release
+/// the messages they've read, for a bounded time, since a client might never
+/// read its queue.
 ///
 /// @param args The window manager's state.
 ///
@@ -384,6 +419,7 @@ void* wmClientEnd(void *args) {
   }
   while (state->numClients > 0) {
     WmClient *client = state->clients[--state->numClients];
+    wmRemoveWindows(state, client->pid);
     if (client->message != NULL) {
       processMessageRelease(client->message);
     }
@@ -391,5 +427,10 @@ void* wmClientEnd(void *args) {
     free(client);
   }
   state->numPosts = 0;
+  if (state->times != NULL) {
+    printTimes("move", &state->times[WM_TIMED_MOVE]);
+    printTimes("resize", &state->times[WM_TIMED_RESIZE]);
+    printTimes("echo", &state->times[WM_TIMED_ECHO]);
+  }
   return args;
 }
