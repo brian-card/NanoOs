@@ -40,6 +40,7 @@
 #include <string.h>
 #include <time.h>
 #include "ExecutiveProcesses.h"
+#include "../../../src/kernel/Console.h"
 #include "../../../src/kernel/Graphics.h"
 #include "../../../src/kernel/WindowProtocol.h"
 #include "WmTheme.h"
@@ -115,6 +116,62 @@
 /// @brief The number of frames of each kind whose time --timing keeps.
 #define WM_TIMED_FRAMES 64
 
+/// @def WM_GRID_HOLD
+///
+/// @brief The most bytes of keys a session's text grid holds while the
+/// console is still reading the last ones it was sent.
+#define WM_GRID_HOLD 32
+
+/// @def WM_GRID_MAX_ROWS
+///
+/// @brief The most rows a text grid has, which its dirty bits cover.
+#define WM_GRID_MAX_ROWS 64
+
+/// @def WM_GRID_DIRTY_SHIFT
+///
+/// @brief How far a row's number shifts right to give the byte of a text
+/// grid's dirty bits that holds the row's bit.
+#define WM_GRID_DIRTY_SHIFT 3
+
+/// @def WM_GRID_ROWS_PER_BYTE
+///
+/// @brief The number of rows whose dirty bits one byte holds.
+#define WM_GRID_ROWS_PER_BYTE (1 << WM_GRID_DIRTY_SHIFT)
+
+/// @def WM_GRID_DIRTY_BYTES
+///
+/// @brief The size of a text grid's dirty bits.
+#define WM_GRID_DIRTY_BYTES (WM_GRID_MAX_ROWS / WM_GRID_ROWS_PER_BYTE)
+
+/// @def WM_GRID_DIRTY_BYTE(row)
+///
+/// @brief The index of the byte of a text grid's dirty bits that holds a
+/// row's bit.
+#define WM_GRID_DIRTY_BYTE(row) ((row) >> WM_GRID_DIRTY_SHIFT)
+
+/// @def WM_GRID_DIRTY_BIT(row)
+///
+/// @brief A row's bit within its byte of a text grid's dirty bits.
+#define WM_GRID_DIRTY_BIT(row) \
+  ((uint8_t) (1 << ((row) & (WM_GRID_ROWS_PER_BYTE - 1))))
+
+/// @def WM_MAX_DEFERRED
+///
+/// @brief The most frames in a row the window server puts off while clients'
+/// grid writes keep arriving.
+#define WM_MAX_DEFERRED 8
+
+/// @def WM_WRITE_WAIT_NS
+///
+/// @brief How long, in nanoseconds, the window server waits after a grid
+/// write for the writer's next one before it paints.
+#define WM_WRITE_WAIT_NS 2000000L
+
+/// @def WM_NO_PORT
+///
+/// @brief The port of a text grid bound to no session.
+#define WM_NO_PORT 0xFF
+
 /// @def WM_SHARED
 ///
 /// @brief Declare a helper more than one overlay calls, kept out of line so
@@ -186,6 +243,13 @@ typedef enum WmStartOperation {
 /// usage, which main turns into 0 without running the window server.
 #define WM_EXIT_HELP 2
 
+/// @def WM_EXIT_PAINT
+///
+/// @brief The exit status main sets when the first frame fails, whose
+/// GfxError is the state's status, which the Start overlay prints and turns
+/// into 1, so that main carries no error strings.
+#define WM_EXIT_PAINT 3
+
 /// @struct WmWindow
 ///
 /// @brief One window.  The bytes come first, because ez80-clang can't
@@ -205,7 +269,7 @@ typedef enum WmStartOperation {
 ///   decorations.
 /// @param restored The frame a maximized window goes back to.
 /// @param title The title, on the heap, or NULL.
-/// @param content The window's widgets or text grid, from plans 4 and 5.
+/// @param content The window's WmGrid, or NULL.
 typedef struct WmWindow {
   uint8_t   id;
   uint8_t   layer;
@@ -220,6 +284,82 @@ typedef struct WmWindow {
   char     *title;
   void     *content;
 } WmWindow;
+
+/// @struct WmGrid
+///
+/// @brief A text grid:  rows and columns of cells, each a character byte and
+/// an attribute byte, the foreground ANSI colour in its low 4 bits and the
+/// background in its high 4.
+///
+/// @param widget The widget's identifier.
+/// @param flags The WIN_WIDGET_* bits of its record.
+/// @param anchor The WIN_ANCHOR_* bits of its record.
+/// @param columns The number of columns.
+/// @param rows The number of rows.
+/// @param cursorRow The cursor's row.
+/// @param cursorColumn The cursor's column.
+/// @param cursorShown Whether the cursor is shown.
+/// @param reports Whether the session's program asked for resize reports.
+/// @param reportWanted Whether a resize report is to be sent the session.
+/// @param winsizeWanted Whether the session's size is to be sent the
+///   console.
+/// @param resized Whether the body changed size since the grid followed it.
+/// @param noBlit Whether the scrolls since the last frame can't be painted
+///   by moving pixels.
+/// @param scroll The rows the pixels of scrollTop to scrollBottom move up
+///   in the next frame, or down if negative.
+/// @param scrollTop The first row of the scroll.
+/// @param scrollBottom The last row of the scroll.
+/// @param port The console port of the grid's session, or WM_NO_PORT.
+/// @param numHeld The number of bytes in held.
+/// @param shell The ProcessId of the session's shell.
+/// @param left How far right of the frame's left edge the grid starts.
+/// @param top How far below the frame's top edge the grid starts.
+/// @param rect The grid's place in the body when the window was made.
+/// @param marginRight How far the grid's right edge is from the body's.
+/// @param marginBottom How far the grid's bottom edge is from the body's.
+/// @param dirty A bit per row to repaint.
+/// @param held Keys typed that the session hasn't been sent.
+/// @param input The CONSOLE_INPUT_READY the console hasn't finished, or
+///   NULL.
+/// @param inputArgs The arguments of the input sent the session.
+/// @param winsize The CONSOLE_SET_WINSIZE the console hasn't finished, or
+///   NULL.
+/// @param winsizeArgs The arguments of the size sent the console.
+/// @param cells The characters, row by row, then the attributes.
+typedef struct WmGrid {
+  uint8_t                widget;
+  uint8_t                flags;
+  uint8_t                anchor;
+  uint8_t                columns;
+  uint8_t                rows;
+  uint8_t                cursorRow;
+  uint8_t                cursorColumn;
+  bool                   cursorShown;
+  bool                   reports;
+  bool                   reportWanted;
+  bool                   winsizeWanted;
+  bool                   resized;
+  bool                   noBlit;
+  int8_t                 scroll;
+  uint8_t                scrollTop;
+  uint8_t                scrollBottom;
+  uint8_t                port;
+  uint8_t                numHeld;
+  ProcessId              shell;
+  int16_t                left;
+  int16_t                top;
+  GfxRect                rect;
+  int16_t                marginRight;
+  int16_t                marginBottom;
+  uint8_t                dirty[WM_GRID_DIRTY_BYTES];
+  uint8_t                held[WM_GRID_HOLD];
+  ProcessMessage        *input;
+  ConsoleInputReadyArgs *inputArgs;
+  ProcessMessage        *winsize;
+  ConsoleWinsizeArgs    *winsizeArgs;
+  uint8_t               *cells;
+} WmGrid;
 
 /// @struct WmClient
 ///
@@ -254,6 +394,22 @@ typedef struct WmOutgoing {
   WinEvent  event;
 } WmOutgoing;
 
+/// @enum WmTimed
+///
+/// @brief The kinds of frame --timing keeps the times of.
+///
+/// @param WM_TIMED_MOVE A frame of a move.
+/// @param WM_TIMED_RESIZE A frame of a resize.
+/// @param WM_TIMED_ECHO The first frame to repaint a text grid after a key
+///   was sent a session.
+/// @param WM_TIMED_KINDS The number of kinds.
+typedef enum WmTimed {
+  WM_TIMED_MOVE = 0,
+  WM_TIMED_RESIZE,
+  WM_TIMED_ECHO,
+  WM_TIMED_KINDS,
+} WmTimed;
+
 /// @struct WmTimes
 ///
 /// @brief The times --timing keeps for one kind of frame.
@@ -287,10 +443,12 @@ typedef struct WmTimes {
 /// @param contentByCall Whether the full window's cells are painted by
 ///   calling preloads rather than by sending their records.
 /// @param demo Whether --demo asked for the demonstration windows.
+/// @param finishFrames Whether --finish asked for each frame to be drawn
+///   before the next message is handled.
 /// @param displayOpen Whether the display was opened.
 /// @param revoked Whether the display was taken back.
 /// @param copy Whether the next frame starts by copying copySource to
-///   copyTarget.
+///   copyTarget:  the pixels of a moved window, or of a scrolled text grid.
 /// @param restoreOnDrag Whether the window being moved is maximized, and is
 ///   restored under the pointer once the pointer moves.
 /// @param numClients The number of entries in clients.
@@ -319,8 +477,7 @@ typedef struct WmTimes {
 /// @param argv The command-line arguments.
 /// @param event The input event the Input overlay handles.
 /// @param cmd The command buffer, 2 x 512 B.
-/// @param times The frame times of moves and of resizes, or NULL without
-///   --timing.
+/// @param times The frame times of each WmTimed, or NULL without --timing.
 /// @param windows The windows, by layer and back to front within each.
 /// @param lastPressTime When the last press on a title bar was.
 /// @param lastPressAt Where the last press on a title bar was.
@@ -341,6 +498,22 @@ typedef struct WmTimes {
 /// @param message The window protocol message the Client overlay handles.
 /// @param clients The connected processes.
 /// @param outbox The events the Client overlay sends next.
+/// @param gridsResized Whether a text grid's body changed size.
+/// @param inputWaiting Whether a session has keys, a size or a report to be
+///   sent, or input the console hasn't finished.
+/// @param gridsDirty Whether a text grid has rows to repaint.
+/// @param deferred The number of frames put off in a row because messages
+///   were waiting.
+/// @param consolePid The console's ProcessId, once a session needed it.
+/// @param deferring Whether the Grid overlay put off the frame because
+///   another message came, which it does only while a text grid has rows to
+///   repaint, so that it is called again and clears this.
+/// @param next The message the Grid overlay took from the queue while it
+///   waited, which main handles next, or NULL.
+/// @param echoKey Whether --timing waits for the frame that echoes the key
+///   sent at keySent.
+/// @param gridPainted Whether the next frame repaints text grid rows.
+/// @param keySent When the key echoKey waits on was sent.
 typedef struct WmState {
   uint8_t         numWindows;
   uint8_t         grab;
@@ -354,6 +527,7 @@ typedef struct WmState {
   bool            liveResize;
   bool            contentByCall;
   bool            demo;
+  bool            finishFrames;
   bool            displayOpen;
   bool            revoked;
   bool            copy;
@@ -399,6 +573,16 @@ typedef struct WmState {
   ProcessMessage *message;
   WmClient       *clients[WM_MAX_CLIENTS];
   WmOutgoing      outbox[WM_OUTBOX];
+  bool            gridsResized;
+  bool            inputWaiting;
+  bool            gridsDirty;
+  uint8_t         deferred;
+  ProcessId       consolePid;
+  bool            deferring;
+  ProcessMessage *next;
+  bool            echoKey;
+  bool            gridPainted;
+  struct timespec keySent;
 } WmState;
 
 /// @fn static WmWindow* wmFind(WmState *state, uint8_t id)
@@ -705,6 +889,8 @@ WM_SHARED WmWindow* wmTopNormal(WmState *state) {
 ///   const GfxRect *before)
 ///
 /// @brief Tell a window's owner that its body's size changed, if it did.
+/// A window with a text grid is told by the Grid overlay, once the grid has
+/// followed the body.
 ///
 /// @param state The window manager's state.
 /// @param window The window.
@@ -716,6 +902,10 @@ WM_SHARED void wmResized(WmState *state, const WmWindow *window,
 ) {
   if ((before->w == window->frame.w) && (before->h == window->frame.h)) {
     return;
+  } else if (window->content != NULL) {
+    ((WmGrid*) window->content)->resized = true;
+    state->gridsResized = true;
+    return;
   }
   WinEvent *event = wmSend(state, window->owner, WIN_EVENT_RESIZED,
     window->id);
@@ -726,6 +916,124 @@ WM_SHARED void wmResized(WmState *state, const WmWindow *window,
       event->x -= 2 * WM_BORDER;
       event->y -= WM_FRAME_TOP + WM_BORDER;
     }
+  }
+}
+
+/// @fn static void wmBody(const WmWindow *window, GfxRect *body)
+///
+/// @brief Find where a window's body is:  its frame, less the border and
+/// title bar if it is decorated.
+///
+/// @param window The window.
+/// @param body Where to store the body's rectangle, in screen coordinates.
+///
+/// @return This function returns no value.
+WM_SHARED void wmBody(const WmWindow *window, GfxRect *body) {
+  *body = window->frame;
+  if ((window->flags & WIN_FLAG_DECORATED) != 0) {
+    body->x += WM_BORDER;
+    body->y += WM_FRAME_TOP;
+    body->w -= 2 * WM_BORDER;
+    body->h -= WM_FRAME_TOP + WM_BORDER;
+  }
+}
+
+/// @fn static void wmGridPlace(WmState *state, const WmWindow *window,
+///   GfxRect *place)
+///
+/// @brief Find where a window's text grid is on the screen and how many
+/// columns and rows of cells fit it:  its record's rectangle, stretched on
+/// each axis it is anchored to both sides of.
+///
+/// @param state The window manager's state.
+/// @param window The window, whose content is a WmGrid.
+/// @param place Where to store the grid's top-left corner, in screen
+///   coordinates, and its columns and rows as w and h.
+///
+/// @return This function returns no value.
+WM_SHARED void wmGridPlace(WmState *state, const WmWindow *window,
+  GfxRect *place
+) {
+  const WmGrid *grid = (const WmGrid*) window->content;
+  GfxRect body;
+  wmBody(window, &body);
+  int16_t width = grid->rect.w;
+  int16_t height = grid->rect.h;
+  if ((grid->anchor & (WIN_ANCHOR_LEFT | WIN_ANCHOR_RIGHT))
+    == (WIN_ANCHOR_LEFT | WIN_ANCHOR_RIGHT)
+  ) {
+    width = body.w - grid->rect.x - grid->marginRight;
+  }
+  if ((grid->anchor & (WIN_ANCHOR_TOP | WIN_ANCHOR_BOTTOM))
+    == (WIN_ANCHOR_TOP | WIN_ANCHOR_BOTTOM)
+  ) {
+    height = body.h - grid->rect.y - grid->marginBottom;
+  }
+  place->x = body.x + grid->rect.x;
+  place->y = body.y + grid->rect.y;
+  place->w = width / state->display.builtInFont.glyphW;
+  place->h = height / state->display.builtInFont.glyphH;
+  if (place->w < 1) {
+    place->w = 1;
+  } else if (place->w > 255) {
+    place->w = 255;
+  }
+  if (place->h < 1) {
+    place->h = 1;
+  } else if (place->h > WM_GRID_MAX_ROWS) {
+    place->h = WM_GRID_MAX_ROWS;
+  }
+}
+
+/// @fn static void wmGridDirty(WmState *state, WmGrid *grid, uint8_t first,
+///   uint8_t last)
+///
+/// @brief Mark rows of a text grid to be repainted.
+///
+/// @param state The window manager's state.
+/// @param grid The grid.
+/// @param first The first row.
+/// @param last The last row, which may be before first to mark none.
+///
+/// @return This function returns no value.
+WM_SHARED void wmGridDirty(WmState *state, WmGrid *grid, uint8_t first,
+  uint8_t last
+) {
+  for (uint8_t row = first; (row <= last) && (row < grid->rows); row++) {
+    grid->dirty[WM_GRID_DIRTY_BYTE(row)] |= WM_GRID_DIRTY_BIT(row);
+    state->gridsDirty = true;
+  }
+}
+
+/// @fn static void wmGridUnbind(WmGrid *grid)
+///
+/// @brief Unbind a text grid from its session, which has ended or been
+/// closed:  forget the keys held for it, and let go of the messages the
+/// console has finished and of their arguments.
+///
+/// @param grid The grid.
+///
+/// @return This function returns no value.
+WM_SHARED void wmGridUnbind(WmGrid *grid) {
+  grid->port = WM_NO_PORT;
+  grid->numHeld = 0;
+  grid->reportWanted = false;
+  grid->winsizeWanted = false;
+  if ((grid->input != NULL) && processMessageDone(grid->input)) {
+    processMessageRelease(grid->input);
+    grid->input = NULL;
+  }
+  if ((grid->winsize != NULL) && processMessageDone(grid->winsize)) {
+    processMessageRelease(grid->winsize);
+    grid->winsize = NULL;
+  }
+  if ((grid->input == NULL) && (grid->inputArgs != NULL)) {
+    MESSAGE_ARGS_DESTROY(grid->inputArgs);
+    grid->inputArgs = NULL;
+  }
+  if ((grid->winsize == NULL) && (grid->winsizeArgs != NULL)) {
+    MESSAGE_ARGS_DESTROY(grid->winsizeArgs);
+    grid->winsizeArgs = NULL;
   }
 }
 
