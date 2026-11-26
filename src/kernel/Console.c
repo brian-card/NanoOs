@@ -2118,93 +2118,91 @@ static int consolePrintSerialString(
   return printSerialString(consolePort->uartId, string);
 }
 
-/// @fn int consoleForwardString(ConsolePort *consolePort, const char *string)
+/// @def CONSOLE_OUTPUT_TIMEOUT_MS
 ///
-/// @brief Send a string to the process that services a forwarding port's
-/// output as a CONSOLE_FORWARD_STRING command whose data is the string, and
-/// wait for it to be done.  Waiting keeps the string valid while the process
-/// reads it, so the process must never wait on the console.
-///
-/// @param consolePort A pointer to the ConsolePort to print to.
-/// @param string A pointer to the NUL-terminated string to print.
-///
-/// @return Returns the number of bytes sent on success, 0 if the process could
-/// not be sent the string.
-int consoleForwardString(ConsolePort *consolePort, const char *string) {
-  size_t length = strlen(string);
-  ProcessMessage *processMessage = initSendProcessMessageToPid(
-    consolePort->outputPid,
-    CONSOLE_COMMAND_SIGNATURE | CONSOLE_FORWARD_STRING,
-    (void*) string, length, /* waiting= */ true);
-  if (processMessage == NULL) {
-    return 0;
-  }
+/// @brief How long the console waits for a forwarding port's output servicer
+/// to take a string before it goes on, keeping the string until it's taken.
+#define CONSOLE_OUTPUT_TIMEOUT_MS 1000
 
-  processMessageWaitForDone(processMessage, NULL);
-  processMessageRelease(processMessage);
-
-  return (int) length;
-}
-
-#if NANO_OS_MAX_SESSIONS > 0
-/// @def CONSOLE_SESSION_OUTPUT_TIMEOUT_MS
+/// @struct ConsolePortOutput
 ///
-/// @brief How long the console waits for a session's output servicer to
-/// take a string before it stops waiting and drops what follows until the
-/// servicer has taken it.
-#define CONSOLE_SESSION_OUTPUT_TIMEOUT_MS 1000
-
-/// @struct ConsoleSessionOutput
-///
-/// @brief A string the console sends a session's output servicer, which is
-/// kept until the servicer has taken it.
+/// @brief A string the console sends a forwarding port's output servicer,
+/// which is kept until the servicer has taken it.
 ///
 /// @param message The CONSOLE_FORWARD_STRING message the servicer hasn't
 ///   taken yet, or NULL.
 /// @param text The string.
-typedef struct ConsoleSessionOutput {
+typedef struct ConsolePortOutput {
   ProcessMessage *message;
   char            text[CONSOLE_BUFFER_SIZE];
-} ConsoleSessionOutput;
+} ConsolePortOutput;
 
-/// @var _consoleSessionOutputs
+/// @var _consolePortOutputs
 ///
-/// @brief The string storage of each port that has been a session's, made the
-/// first time the port prints and kept, since a servicer that never takes a
-/// string may outlive the session.
-static ConsoleSessionOutput *_consoleSessionOutputs[CONSOLE_NUM_PORTS];
+/// @brief The string storage of each forwarding port, made the first time the
+/// port prints and kept, since a servicer that never takes a string may
+/// outlive its port.
+static ConsolePortOutput *_consolePortOutputs[CONSOLE_NUM_PORTS];
 
-/// @fn int consoleSessionString(ConsolePort *consolePort, const char *string)
+/// @fn static bool consoleOutputTaken(ProcessMessage *processMessage)
 ///
-/// @brief Send a copy of a string to the process that services a session
-/// port's output, which runs as a user and so may never take it:  the console
-/// waits for it for at most CONSOLE_SESSION_OUTPUT_TIMEOUT_MS, and drops the
-/// port's output until a string it stopped waiting for has been taken.
+/// @brief Wait at most CONSOLE_OUTPUT_TIMEOUT_MS for an output servicer to
+/// take a string, and release its message if it does.
+///
+/// @param processMessage The CONSOLE_FORWARD_STRING message.
+///
+/// @return Returns true if the string was taken, false otherwise.
+static bool consoleOutputTaken(ProcessMessage *processMessage) {
+  struct timespec deadline;
+  timespec_get(&deadline, TIME_UTC);
+  deadline.tv_sec += CONSOLE_OUTPUT_TIMEOUT_MS / 1000;
+  if (processMessageWaitForDone(processMessage, &deadline) != processSuccess) {
+    return false;
+  }
+  processMessageRelease(processMessage);
+  return true;
+}
+
+/// @fn static int consoleSendOutput(ConsolePort *consolePort,
+///   const char *string, size_t length, bool waitForEarlier)
+///
+/// @brief Send a copy of the start of a string to the process that services
+/// a forwarding port's output, waiting at most CONSOLE_OUTPUT_TIMEOUT_MS for
+/// it to be taken, which no wait may outlast:  the servicer doesn't run while
+/// the scheduler waits on the console.  A string sent while the last one is
+/// untaken is dropped, after waiting for the last one again if waitForEarlier
+/// is set.
 ///
 /// @param consolePort A pointer to the ConsolePort to print to.
-/// @param string A pointer to the NUL-terminated string to print.
+/// @param string A pointer to the string to print.
+/// @param length The number of bytes of it to send, which are cut to fit
+///   CONSOLE_BUFFER_SIZE with a terminator.
+/// @param waitForEarlier Whether to wait for an untaken string before
+///   dropping this one.
 ///
 /// @return Returns the number of bytes sent, or 0 if none were.
-int consoleSessionString(ConsolePort *consolePort, const char *string) {
+static int consoleSendOutput(ConsolePort *consolePort, const char *string,
+  size_t length, bool waitForEarlier
+) {
   uint8_t portId = consolePort->inputReadyArgs.portId;
-  ConsoleSessionOutput *output = _consoleSessionOutputs[portId];
+  ConsolePortOutput *output = _consolePortOutputs[portId];
   if (output == NULL) {
-    output = (ConsoleSessionOutput*) malloc(sizeof(ConsoleSessionOutput));
+    output = (ConsolePortOutput*) malloc(sizeof(ConsolePortOutput));
     if (output == NULL) {
       return 0;
     }
     output->message = NULL;
-    _consoleSessionOutputs[portId] = output;
+    _consolePortOutputs[portId] = output;
   }
   if (output->message != NULL) {
-    if (!processMessageDone(output->message)) {
+    if (processMessageDone(output->message)) {
+      processMessageRelease(output->message);
+    } else if (!waitForEarlier || !consoleOutputTaken(output->message)) {
       return 0;
     }
-    processMessageRelease(output->message);
     output->message = NULL;
   }
 
-  size_t length = strlen(string);
   if (length >= CONSOLE_BUFFER_SIZE) {
     length = CONSOLE_BUFFER_SIZE - 1;
   }
@@ -2217,17 +2215,53 @@ int consoleSessionString(ConsolePort *consolePort, const char *string) {
   if (processMessage == NULL) {
     return 0;
   }
-
-  struct timespec deadline;
-  timespec_get(&deadline, TIME_UTC);
-  deadline.tv_sec += CONSOLE_SESSION_OUTPUT_TIMEOUT_MS / 1000;
-  if (processMessageWaitForDone(processMessage, &deadline) == processSuccess) {
-    processMessageRelease(processMessage);
-  } else {
+  if (!consoleOutputTaken(processMessage)) {
     output->message = processMessage;
   }
 
   return (int) length;
+}
+
+/// @fn int consoleForwardString(ConsolePort *consolePort, const char *string)
+///
+/// @brief Send a string, in pieces that fit CONSOLE_BUFFER_SIZE, to the
+/// process that services a forwarding port's output, a driver, which takes
+/// every piece:  one it hasn't taken in time is waited for again before the
+/// next is sent.
+///
+/// @param consolePort A pointer to the ConsolePort to print to.
+/// @param string A pointer to the NUL-terminated string to print.
+///
+/// @return Returns the number of bytes sent, which is less than the string's
+/// length if a piece could not be sent.
+int consoleForwardString(ConsolePort *consolePort, const char *string) {
+  size_t length = strlen(string);
+  size_t sent = 0;
+  while (sent < length) {
+    int piece = consoleSendOutput(consolePort, &string[sent], length - sent,
+      /* waitForEarlier= */ true);
+    if (piece == 0) {
+      break;
+    }
+    sent += (size_t) piece;
+  }
+  return (int) sent;
+}
+
+#if NANO_OS_MAX_SESSIONS > 0
+/// @fn int consoleSessionString(ConsolePort *consolePort, const char *string)
+///
+/// @brief Send a copy of a string to the process that services a session
+/// port's output, which runs as a user and so may never take it:  the port's
+/// output is dropped until a string it stopped waiting for has been taken.
+///
+/// @param consolePort A pointer to the ConsolePort to print to.
+/// @param string A pointer to the NUL-terminated string to print.
+///
+/// @return Returns the number of bytes sent, or 0 if none were.
+int consoleSessionString(ConsolePort *consolePort, const char *string) {
+  return consoleSendOutput(consolePort, string, strlen(string),
+    /* waitForEarlier= */ false);
 }
 #endif // NANO_OS_MAX_SESSIONS > 0
 
