@@ -122,6 +122,12 @@
 /// console is still reading the last ones it was sent.
 #define WM_GRID_HOLD 32
 
+/// @def WM_GRID_MARGINS
+///
+/// @brief The most parts of a window's body its text grid's cells leave
+/// uncovered:  above, below, left of and right of them.
+#define WM_GRID_MARGINS 4
+
 /// @def WM_GRID_PLANES
 ///
 /// @brief The number of planes of a text grid's cells:  its characters, then
@@ -316,7 +322,7 @@ typedef struct WmWindow {
 /// @param winsizeWanted Whether the session's size is to be sent the
 ///   console.
 /// @param resized Whether the body changed size since the grid followed it.
-/// @param coversBody Whether the grid's cells cover the whole of the body.
+/// @param numMargins The number of margins.
 /// @param noBlit Whether the scrolls since the last frame can't be painted
 ///   by moving pixels.
 /// @param scroll The rows the pixels of scrollTop to scrollBottom move up
@@ -331,6 +337,10 @@ typedef struct WmWindow {
 /// @param rect The grid's place in the body when the window was made.
 /// @param marginRight How far the grid's right edge is from the body's.
 /// @param marginBottom How far the grid's bottom edge is from the body's.
+/// @param margins The parts of the body the cells leave uncovered, relative
+///   to the window's frame, which are painted the body's colour instead of
+///   the whole body, so that no cell shows it between its old colours and
+///   its new.
 /// @param dirty A bit per row to repaint.
 /// @param held Keys typed that the session hasn't been sent.
 /// @param input The CONSOLE_INPUT_READY the console hasn't finished, or
@@ -353,7 +363,7 @@ typedef struct WmGrid {
   bool                   reportWanted;
   bool                   winsizeWanted;
   bool                   resized;
-  bool                   coversBody;
+  uint8_t                numMargins;
   bool                   noBlit;
   int8_t                 scroll;
   uint8_t                scrollTop;
@@ -366,6 +376,7 @@ typedef struct WmGrid {
   GfxRect                rect;
   int16_t                marginRight;
   int16_t                marginBottom;
+  GfxRect                margins[WM_GRID_MARGINS];
   uint8_t                dirty[WM_GRID_DIRTY_BYTES];
   uint8_t                held[WM_GRID_HOLD];
   ProcessMessage        *input;
@@ -952,7 +963,7 @@ WM_SHARED void wmBody(const WmWindow *window, GfxRect *body) {
   }
 }
 
-/// @fn static bool wmGridPlace(WmState *state, const WmWindow *window,
+/// @fn static void wmGridPlace(WmState *state, const WmWindow *window,
 ///   GfxRect *place)
 ///
 /// @brief Find where a window's text grid is on the screen and how many
@@ -964,9 +975,8 @@ WM_SHARED void wmBody(const WmWindow *window, GfxRect *body) {
 /// @param place Where to store the grid's top-left corner, in screen
 ///   coordinates, and its columns and rows as w and h.
 ///
-/// @return Returns true if the cells cover the whole of the body, false
-/// otherwise.
-WM_SHARED bool wmGridPlace(WmState *state, const WmWindow *window,
+/// @return This function returns no value.
+WM_SHARED void wmGridPlace(WmState *state, const WmWindow *window,
   GfxRect *place
 ) {
   const WmGrid *grid = (const WmGrid*) window->content;
@@ -998,9 +1008,51 @@ WM_SHARED bool wmGridPlace(WmState *state, const WmWindow *window,
   } else if (place->h > WM_GRID_MAX_ROWS) {
     place->h = WM_GRID_MAX_ROWS;
   }
-  return (grid->rect.x == 0) && (grid->rect.y == 0)
-    && (place->w * state->display.builtInFont.glyphW == body.w)
-    && (place->h * state->display.builtInFont.glyphH == body.h);
+}
+
+/// @fn static void wmGridMargins(WmState *state, const WmWindow *window,
+///   WmGrid *grid)
+///
+/// @brief Work out the margins of a window's text grid:  the parts of the
+/// body above, below, left of and right of its cells, as far as the body
+/// goes, leaving out those that are empty.
+///
+/// @param state The window manager's state.
+/// @param window The window.
+/// @param grid The window's grid, whose columns and rows are set.
+///
+/// @return This function returns no value.
+WM_SHARED void wmGridMargins(WmState *state, const WmWindow *window,
+  WmGrid *grid
+) {
+  GfxRect body;
+  wmBody(window, &body);
+  int16_t left = body.x - window->frame.x;
+  int16_t top = body.y - window->frame.y;
+  int16_t right = left + body.w;
+  int16_t bottom = top + body.h;
+  int16_t cellsRight
+    = grid->left + grid->columns * state->display.builtInFont.glyphW;
+  int16_t cellsBottom
+    = grid->top + grid->rows * state->display.builtInFont.glyphH;
+  if (cellsRight > right) {
+    cellsRight = right;
+  }
+  if (cellsBottom > bottom) {
+    cellsBottom = bottom;
+  }
+  GfxRect margins[WM_GRID_MARGINS] = {
+    { left, top, body.w, grid->top - top },
+    { left, cellsBottom, body.w, bottom - cellsBottom },
+    { left, grid->top, grid->left - left, cellsBottom - grid->top },
+    { cellsRight, grid->top, right - cellsRight, cellsBottom - grid->top },
+  };
+  grid->numMargins = 0;
+  for (uint8_t ii = 0; ii < WM_GRID_MARGINS; ii++) {
+    if ((margins[ii].w > 0) && (margins[ii].h > 0)) {
+      grid->margins[grid->numMargins++] = margins[ii];
+    }
+  }
 }
 
 /// @fn static void wmGridDirty(WmState *state, WmGrid *grid, uint8_t first,

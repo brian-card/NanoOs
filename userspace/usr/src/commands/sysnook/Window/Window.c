@@ -387,9 +387,10 @@ static uint8_t wmMakeGrid(WmState *state, WmWindow *window,
   grid->marginRight = body.w - grid->rect.x - grid->rect.w;
   grid->marginBottom = body.h - grid->rect.y - grid->rect.h;
   GfxRect place;
-  grid->coversBody = wmGridPlace(state, window, &place);
+  wmGridPlace(state, window, &place);
   grid->columns = (uint8_t) place.w;
   grid->rows = (uint8_t) place.h;
+  wmGridMargins(state, window, grid);
   size_t plane = (size_t) grid->columns * grid->rows;
   grid->cells = (uint8_t*) malloc(plane * WM_GRID_PLANES);
   uint8_t status = WIN_ERR_NO_MEMORY;

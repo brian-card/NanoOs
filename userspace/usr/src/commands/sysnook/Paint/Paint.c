@@ -315,9 +315,8 @@ static void drawRun(GfxCmdBuf *cmd, int16_t left, int16_t top,
 ///   const GfxRect *clip)
 ///
 /// @brief Record the rows of a window's text grid that meet the rectangle
-/// being painted, as runs of one attribute:  a background, unless it is
-/// black on a body filled black, then the run's text up to its last
-/// character that isn't a space.
+/// being painted, as runs of one attribute:  a background, then the run's
+/// text up to its last character that isn't a space.
 ///
 /// @param state The window manager's state.
 /// @param window The window, whose content is a WmGrid.
@@ -335,6 +334,7 @@ static __attribute__((noinline)) void paintGrid(
   const uint8_t *chars = grid->cells;
   size_t plane = (size_t) columns * grid->rows;
   int16_t top = window->frame.y + grid->top;
+  int16_t gridLeft = window->frame.x + grid->left;
   for (uint8_t row = 0; row < grid->rows;
     row++, chars += columns, top += glyphH
   ) {
@@ -352,14 +352,9 @@ static __attribute__((noinline)) void paintGrid(
         }
         end++;
       } while ((end < columns) && (chars[plane + end] == attribute));
-      int16_t left = window->frame.x + grid->left
-        + (int16_t) (column * glyphW);
-      if (grid->coversBody
-        || (WIN_ATTRIBUTE_BACKGROUND(attribute) != WIN_ANSI_BLACK)
-      ) {
-        fill(cmd, _ansiColors[WIN_ATTRIBUTE_BACKGROUND(attribute)], left, top,
-          (int16_t) ((end - column) * glyphW), glyphH);
-      }
+      int16_t left = gridLeft + (int16_t) (column * glyphW);
+      fill(cmd, _ansiColors[WIN_ATTRIBUTE_BACKGROUND(attribute)], left, top,
+        (int16_t) ((end - column) * glyphW), glyphH);
       if (last > column) {
         gfxCmdSetFgColor(cmd,
           _ansiColors[WIN_ATTRIBUTE_FOREGROUND(attribute)]);
@@ -374,9 +369,9 @@ static __attribute__((noinline)) void paintGrid(
 ///   const GfxRect *clip)
 ///
 /// @brief Record a window's decorations, body and cells, inside its frame,
-/// leaving out what doesn't meet the rectangle being painted.  A body that
-/// is all text grid isn't filled first, so that no cell shows black between
-/// its old colours and its new.
+/// leaving out what doesn't meet the rectangle being painted.  Under a text
+/// grid, only the grid's margins are filled with the body's colour, so that
+/// no cell shows it between its old colours and its new.
 ///
 /// @param state The window manager's state.
 /// @param window The window.
@@ -401,12 +396,15 @@ static __attribute__((noinline)) void paintWindow(
   GfxRect overlap;
   if (wmIntersect(&body, clip, &overlap)) {
     const WmGrid *grid = (const WmGrid*) window->content;
-    if ((grid == NULL) || !grid->coversBody) {
-      fill(cmd, window->face, overlap.x, overlap.y, overlap.w, overlap.h);
-    }
     if (grid != NULL) {
+      const GfxRect *end = &grid->margins[grid->numMargins];
+      for (const GfxRect *margin = grid->margins; margin < end; margin++) {
+        fill(cmd, window->face, frame->x + margin->x, frame->y + margin->y,
+          margin->w, margin->h);
+      }
       paintGrid(state, window, clip);
-    } else if (window->cells > 0) {
+    } else {
+      fill(cmd, window->face, overlap.x, overlap.y, overlap.w, overlap.h);
       GfxPoint origin = { body.x, body.y };
       paintCells(state, window, origin, clip);
     }

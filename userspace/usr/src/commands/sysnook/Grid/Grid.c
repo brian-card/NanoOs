@@ -304,7 +304,7 @@ static void wmGridFollow(WmState *state, WmWindow *window) {
   WmGrid *grid = (WmGrid*) window->content;
   grid->resized = false;
   GfxRect place;
-  grid->coversBody = wmGridPlace(state, window, &place);
+  wmGridPlace(state, window, &place);
   uint8_t columns = (uint8_t) place.w;
   uint8_t rows = (uint8_t) place.h;
   wmGridCursor(grid);
@@ -342,6 +342,7 @@ static void wmGridFollow(WmState *state, WmWindow *window) {
       }
     }
   }
+  wmGridMargins(state, window, grid);
   wmGridCursor(grid);
   grid->scroll = 0;
   grid->noBlit = false;
