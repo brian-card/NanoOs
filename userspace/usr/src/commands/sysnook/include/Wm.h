@@ -137,7 +137,7 @@
 /// @def WM_GRID_MAX_ROWS
 ///
 /// @brief The most rows a text grid has, which its dirty bits cover.
-#define WM_GRID_MAX_ROWS 64
+#define WM_GRID_MAX_ROWS WIN_GRID_MAX_ROWS
 
 /// @def WM_GRID_DIRTY_SHIFT
 ///
