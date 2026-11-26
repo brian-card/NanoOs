@@ -31,7 +31,9 @@
 /// @brief What wintest prints:  each event, one line each, and the commands
 /// that failed.  Entered once per line.
 
+#include "ConsoleOutput.h"
 #include "Wintest.h"
+#include "../../../src/kernel/Console.h"
 
 /// @var _stateNames
 ///
@@ -52,16 +54,19 @@ static void printKey(const WinEvent *event) {
   static const char *const modifiers[] = {
     " ctrl", " shift", " alt", " altgr",
   };
-  char name[8];
-  if ((event->key > ' ') && (event->key < 0x7f)) {
+  static const uint8_t modifierBits[] = {
+    GFX_MOD_CTRL, GFX_MOD_SHIFT, GFX_MOD_ALT, GFX_MOD_ALT_GR,
+  };
+  char name[sizeof("0xff")];
+  if ((event->key > ' ') && (event->key < ASCII_DELETE)) {
     name[0] = (char) event->key;
     name[1] = '\0';
   } else {
     snprintf(name, sizeof(name), "0x%02x", (unsigned int) event->key);
   }
   printf("KEY %s", name);
-  for (int ii = 0; ii < 4; ii++) {
-    if ((event->modifiers & (1 << ii)) != 0) {
+  for (size_t ii = 0; ii < WINTEST_COUNT(modifiers); ii++) {
+    if ((event->modifiers & modifierBits[ii]) != 0) {
       fputs(modifiers[ii], stdout);
     }
   }
@@ -89,8 +94,13 @@ static bool printEvent(const WinEvent *event) {
   } else if (event->type == WIN_EVENT_STATE) {
     printf("STATE %u %s\n", window,
       _stateNames[(event->detail <= WIN_STATE_MAXIMIZED) ? event->detail : 0]);
+  } else if ((event->type == WIN_EVENT_RESIZED) && (event->widget != 0)) {
+    printf("RESIZED %u %dx%d grid %ux%u\n", window, event->x, event->y,
+      (unsigned int) event->columns, (unsigned int) event->rows);
   } else if (event->type == WIN_EVENT_RESIZED) {
     printf("RESIZED %u %dx%d\n", window, event->x, event->y);
+  } else if (event->type == WIN_EVENT_SESSION_ENDED) {
+    printf("SESSION_ENDED %u\n", window);
   } else if (event->type == WIN_EVENT_KEY) {
     printKey(event);
   } else if (event->type == WIN_EVENT_OVERFLOW) {
@@ -128,6 +138,88 @@ void* wintestPrint(void *args) {
     report(wintest->command, wintest->window, wintest->rc);
   } else {
     wintest->more = printEvent(&wintest->event);
+  }
+  return args;
+}
+
+/// @fn static void printOutput(const char *text)
+///
+/// @brief Print a session's output as one line, "wintest: output " and the
+/// text with a newline shown as \n, a carriage return as \r and escape as
+/// ^[.
+///
+/// @param text The text, or NULL for a message that isn't output.
+///
+/// @return This function returns no value.
+static void printOutput(const char *text) {
+  if (text == NULL) {
+    return;
+  }
+  fputs("wintest: output ", stdout);
+  for (; *text != '\0'; text++) {
+    if (*text == '\n') {
+      fputs("\\n", stdout);
+    } else if (*text == '\r') {
+      fputs("\\r", stdout);
+    } else if (*text == '\033') {
+      fputs("^[", stdout);
+    } else {
+      fwrite(text, 1, 1, stdout);
+    }
+  }
+  fputs("\n", stdout);
+}
+
+/// @fn void* wintestEvents(void *args)
+///
+/// @brief Print each event until the window server goes away, or for the
+/// context's waitMs, destroying a window asked to close if closes was
+/// given.  Console output for a session
+/// whose grid is wintest's is printed, then finished as a display finishes
+/// it, its buffer given back.
+///
+/// @param args A pointer to the Wintest.
+///
+/// @return Always returns the provided pointer.
+void* wintestEvents(void *args) {
+  Wintest *wintest = (Wintest*) args;
+  WinSession *session = &wintest->session;
+  ProcessId consolePid = 0;
+  findSystemProcess(CONSOLE_PROCESS_NAME, &consolePid);
+  struct timespec deadline;
+  struct timespec *until = NULL;
+  if (wintest->waitMs > 0) {
+    timespec_get(&deadline, TIME_UTC);
+    deadline.tv_sec += wintest->waitMs / WINTEST_MS_PER_SECOND;
+    deadline.tv_nsec
+      += (wintest->waitMs % WINTEST_MS_PER_SECOND) * WINTEST_NS_PER_MS;
+    if (deadline.tv_nsec >= WINTEST_NS_PER_SECOND) {
+      deadline.tv_sec++;
+      deadline.tv_nsec -= WINTEST_NS_PER_SECOND;
+    }
+    until = &deadline;
+  }
+  wintest->more = true;
+  while (wintest->more) {
+    if ((session->nextEvent < session->numEvents) || !session->connected) {
+      if (winNextEvent(session, &wintest->event, until) != 0) {
+        break;
+      }
+      wintest->more = printEvent(&wintest->event);
+      if (wintest->closes
+        && (wintest->event.type == WIN_EVENT_CLOSE_REQUESTED)
+      ) {
+        winDestroyWindow(session, wintest->event.window);
+      }
+      continue;
+    }
+    ProcessMessage *message = processMessageQueueWait(until);
+    if ((message == NULL) && (until != NULL)) {
+      break;
+    } else if ((message != NULL) && !winHandleMessage(session, message)) {
+      printOutput(consoleOutputText(message));
+      consoleOutputDoneTo(message, consolePid);
+    }
   }
   return args;
 }
