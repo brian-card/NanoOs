@@ -34,6 +34,53 @@
 
 #include "WmCells.h"
 
+/// @def WM_LITERAL_LENGTH(literal)
+///
+/// @brief The number of characters in a string literal, its terminator left
+/// out.
+#define WM_LITERAL_LENGTH(literal) (sizeof(literal) - 1)
+
+/// @def WM_OPTION_MOVE
+///
+/// @brief The start of the option that picks how a window is moved.
+#define WM_OPTION_MOVE "--move="
+
+/// @def WM_OPTION_RESIZE
+///
+/// @brief The start of the option that picks how a window is resized.
+#define WM_OPTION_RESIZE "--resize="
+
+/// @def WM_OPTION_CONTENT
+///
+/// @brief The start of the option that picks how the cells are recorded.
+#define WM_OPTION_CONTENT "--content="
+
+/// @def WM_OPTION_CELLS
+///
+/// @brief The start of the option that sets the number of cells.
+#define WM_OPTION_CELLS "--cells="
+
+/// @def WM_DEMO_TITLE
+///
+/// @brief The title of a demo window, whose last character is replaced by
+/// the window's number.
+#define WM_DEMO_TITLE "Window 0"
+
+/// @def WM_DISPLAY_WIDTH
+///
+/// @brief The width, in pixels, of the display sysnook asks for.
+#define WM_DISPLAY_WIDTH 640
+
+/// @def WM_DISPLAY_HEIGHT
+///
+/// @brief The height, in pixels, of the display sysnook asks for.
+#define WM_DISPLAY_HEIGHT 480
+
+/// @def WM_CMD_BUF_SIZE
+///
+/// @brief The size of the command buffer frames are recorded in.
+#define WM_CMD_BUF_SIZE 512
+
 /// @fn static void printUsage(FILE *stream)
 ///
 /// @brief Print the usage summary for sysnook.
@@ -54,8 +101,9 @@ static void printUsage(FILE *stream) {
     "    outline by default.\n"
     "  --content=records|call  How the full window's cells are painted.\n"
     "  --cells=N  The number of cells in the full window, up to 192.\n"
-    "  --timing  Print how long frames took when it ends.\n"
+    "  --timing  Print how long frames and echoes took when it ends.\n"
     "  --demo  Draw three demonstration windows of the window server's own.\n"
+    "  --finish  Wait until each frame is drawn before going on.\n"
     "  --help  Show this help and exit.\n",
     stream);
 }
@@ -96,20 +144,32 @@ static bool parseOptions(WmState *state, int *cells) {
   for (int ii = 1; ii < state->argc; ii++) {
     const char *arg = state->argv[ii];
     bool valid = true;
-    if (strncmp(arg, "--move=", 7) == 0) {
-      valid = parseMode(&arg[7], "live", "outline", &state->liveMove);
-    } else if (strncmp(arg, "--resize=", 9) == 0) {
-      valid = parseMode(&arg[9], "live", "outline", &state->liveResize);
-    } else if (strncmp(arg, "--content=", 10) == 0) {
-      valid = parseMode(&arg[10], "call", "records", &state->contentByCall);
-    } else if (strncmp(arg, "--cells=", 8) == 0) {
-      *cells = (int) strtol(&arg[8], NULL, 10);
+    if (strncmp(arg, WM_OPTION_MOVE, WM_LITERAL_LENGTH(WM_OPTION_MOVE)) == 0) {
+      valid = parseMode(&arg[WM_LITERAL_LENGTH(WM_OPTION_MOVE)], "live",
+        "outline", &state->liveMove);
+    } else if (strncmp(arg, WM_OPTION_RESIZE,
+      WM_LITERAL_LENGTH(WM_OPTION_RESIZE)) == 0
+    ) {
+      valid = parseMode(&arg[WM_LITERAL_LENGTH(WM_OPTION_RESIZE)], "live",
+        "outline", &state->liveResize);
+    } else if (strncmp(arg, WM_OPTION_CONTENT,
+      WM_LITERAL_LENGTH(WM_OPTION_CONTENT)) == 0
+    ) {
+      valid = parseMode(&arg[WM_LITERAL_LENGTH(WM_OPTION_CONTENT)], "call",
+        "records", &state->contentByCall);
+    } else if (strncmp(arg, WM_OPTION_CELLS,
+      WM_LITERAL_LENGTH(WM_OPTION_CELLS)) == 0
+    ) {
+      *cells = (int) strtol(&arg[WM_LITERAL_LENGTH(WM_OPTION_CELLS)], NULL,
+        10);
       valid = (*cells >= 0) && (*cells <= WM_MAX_CELLS);
     } else if (strcmp(arg, "--demo") == 0) {
       state->demo = true;
+    } else if (strcmp(arg, "--finish") == 0) {
+      state->finishFrames = true;
     } else if (strcmp(arg, "--timing") == 0) {
       if (state->times == NULL) {
-        state->times = (WmTimes*) calloc(2, sizeof(WmTimes));
+        state->times = (WmTimes*) calloc(WM_TIMED_KINDS, sizeof(WmTimes));
       }
       valid = (state->times != NULL);
     } else {
@@ -149,49 +209,16 @@ static void layOut(WmState *state, int cells) {
       | WIN_FLAG_IN_TASKBAR;
     window->frame = frames[ii];
     window->face = faces[ii];
-    window->title = (char*) malloc(sizeof("Window 0"));
+    window->title = (char*) malloc(sizeof(WM_DEMO_TITLE));
     if (window->title != NULL) {
-      strcpy(window->title, "Window 0");
-      window->title[7] = (char) ('0' + ii);
+      strcpy(window->title, WM_DEMO_TITLE);
+      window->title[WM_LITERAL_LENGTH(WM_DEMO_TITLE) - 1] = (char) ('0' + ii);
     }
   }
   state->windows[WM_DEMO_WINDOWS - 1].cells = (uint8_t) cells;
   state->numWindows = WM_DEMO_WINDOWS;
   state->active = state->windows[WM_DEMO_WINDOWS - 1].id;
   state->focus = state->active;
-}
-
-/// @fn static void printTimes(const char *kind, WmTimes *times)
-///
-/// @brief Print the number of frames of a kind, and the median and longest
-/// time of the first WM_TIMED_FRAMES of them.
-///
-/// @param kind The kind of frame.
-/// @param times The frames' times, which are sorted.
-///
-/// @return This function returns no value.
-static void printTimes(const char *kind, WmTimes *times) {
-  uint16_t kept = times->count;
-  if (kept > WM_TIMED_FRAMES) {
-    kept = WM_TIMED_FRAMES;
-  }
-  for (uint16_t ii = 1; ii < kept; ii++) {
-    uint16_t value = times->ms[ii];
-    uint16_t jj = ii;
-    while ((jj > 0) && (times->ms[jj - 1] > value)) {
-      times->ms[jj] = times->ms[jj - 1];
-      jj--;
-    }
-    times->ms[jj] = value;
-  }
-  unsigned int median = 0;
-  unsigned int longest = 0;
-  if (kept > 0) {
-    median = times->ms[kept / 2];
-    longest = times->ms[kept - 1];
-  }
-  printf("sysnook: %s frames %u median %u ms max %u ms\n", kind,
-    (unsigned int) times->count, median, longest);
 }
 
 /// @fn static GfxError preloadRows(WmState *state)
@@ -240,7 +267,7 @@ static void wmBegin(WmState *state) {
     return;
   }
   GfxError status = gfxOpenDisplay(&state->display, GFX_DRIVER_PROCESS_NAME,
-    640, 480);
+    WM_DISPLAY_WIDTH, WM_DISPLAY_HEIGHT);
   if (status == GFX_ERR_DISPLAY_BUSY) {
     fputs("sysnook: display busy\n", stderr);
     state->exitStatus = 1;
@@ -254,7 +281,7 @@ static void wmBegin(WmState *state) {
     state->workArea.w = (int16_t) state->display.width;
     state->workArea.h = (int16_t) state->display.height;
     timespec_get(&state->started, TIME_UTC);
-    state->cmd = gfxCmdBufCreate(&state->display, 512);
+    state->cmd = gfxCmdBufCreate(&state->display, WM_CMD_BUF_SIZE);
     if ((state->windows == NULL) || (state->cmd == NULL)) {
       fputs("sysnook: out of memory\n", stderr);
       state->exitStatus = 1;
@@ -276,13 +303,17 @@ static void wmBegin(WmState *state) {
 
 /// @fn static void wmFinish(WmState *state)
 ///
-/// @brief Destroy the command buffer, give the display back unless it was
-/// taken back, and print the frame times if --timing asked for them.
+/// @brief Print why the first frame failed if it did, destroy the command
+/// buffer, and give the display back unless it was taken back.
 ///
 /// @param state The window manager's state.
 ///
 /// @return This function returns no value.
 static void wmFinish(WmState *state) {
+  if (state->exitStatus == WM_EXIT_PAINT) {
+    fprintf(stderr, "sysnook: %s\n", gfxErrorString(state->status));
+    state->exitStatus = 1;
+  }
   state->cmd = gfxCmdBufDestroy(state->cmd);
   if (state->displayOpen && !state->revoked) {
     gfxCloseDisplay(&state->display);
@@ -293,10 +324,6 @@ static void wmFinish(WmState *state) {
   free(state->windows);
   state->windows = NULL;
   state->numWindows = 0;
-  if ((state->times != NULL) && (state->exitStatus == 0)) {
-    printTimes("move", &state->times[0]);
-    printTimes("resize", &state->times[1]);
-  }
   free(state->times);
   state->times = NULL;
 }
