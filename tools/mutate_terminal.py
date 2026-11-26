@@ -159,9 +159,15 @@ MUTATIONS = [
   '#define GFX_EVENTS_PER_MESSAGE 8',
   ['e2e/test_terminal_keys_typed_while_the_window_server_is_busy_all_arrive']),
  ('body-filled-under-a-grid', PAINT,
-  '    if ((grid == NULL) || !grid->coversBody) {',
-  '    if (true) {',
+  '      const GfxRect *end = &grid->margins[grid->numMargins];',
+  '      fill(cmd, window->face, overlap.x, overlap.y, overlap.w, overlap.h);\n'
+  '      const GfxRect *end = &grid->margins[grid->numMargins];',
   ['e2e/test_terminal_grid_row_repainted_never_shows_black_under_it']),
+ ('margins-left-unfilled', PAINT,
+  '      const GfxRect *end = &grid->margins[grid->numMargins];',
+  '      const GfxRect *end = grid->margins;',
+  ['e2e/test_terminal_grid_row_of_a_maximized_window_never_shows_black_under_'
+   'it']),
 ]
 
 

@@ -208,6 +208,34 @@ def test_terminal_grid_row_repainted_never_shows_black_under_it(session):
     check_clean(session)
 
 
+def test_terminal_grid_row_of_a_maximized_window_never_shows_black_under_it(
+        session):
+    # Maximized, the body is 638x464:  106x58 cells and a 2-pixel margin to
+    # their right.  Only the first row is read back, which reading all 58
+    # rows of is too slow to see in the time before the puts.
+    base = start_grid(session, "state 1 maximized sleep 3000 "
+                      "clear 1 0,0,0,105,0x40 sleep 4000 "
+                      "put 1 0,0,0x4F a sleep 300 put 1 0,1,0x4F b "
+                      "sleep 300 put 1 0,2,0x4F c")
+    vdp = session.vdp
+    model = GridModel(106, 1)
+    model.clear(0, 0, 0, 105, 0x40)
+    wait_grid_cells(vdp, 0, 0, model)
+    left, top = grid_origin(0, 0)
+    point = (left + 60 * CELL_WIDTH + 2, top + 3)
+    margin = (left + 106 * CELL_WIDTH + 1, top + 3)
+    vdp.watch([point])
+    model.put(0, 0, 0x4F, "abc")
+    wait_grid_cells(vdp, 0, 0, model)
+    painted = vdp.painted(point)
+    assert painted and set(painted) == {ANSI_TO_CGA[4]}, painted
+    assert vdp.pixel(*margin) == ANSI_TO_CGA[0], vdp.pixel(*margin)
+    # wintest prints the events once its commands are done.
+    expect_line(session, "STATE 1 maximized")
+    quit_nook(session, base)
+    check_clean(session)
+
+
 def fill_rows(model, rows):
     """Return wintest commands that put a line of text on each of a number of
     rows, and put the same in a model."""
