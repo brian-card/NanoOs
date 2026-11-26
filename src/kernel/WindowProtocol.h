@@ -55,6 +55,12 @@ extern "C" {
 /// This is "\0WINDOWS" expressed as a little-endian value.
 #define WIN_COMMAND_SIGNATURE ((int64_t) 0x53574F444E495700)
 
+/// @def WIN_MSG_TYPE_MASK
+///
+/// @brief The bits of a window message's type that are its WinMsgType, below
+/// WIN_COMMAND_SIGNATURE.
+#define WIN_MSG_TYPE_MASK ((int64_t) 0xff)
+
 /// @enum WinError
 ///
 /// @brief The window server's error codes.  Every value is below 256,
@@ -892,6 +898,52 @@ typedef enum WinGridOperation {
   WIN_GRID_CURSOR,
   WIN_GRID_REPORTS,
 } WinGridOperation;
+
+/// @def WIN_ANSI_NUM_COLORS
+///
+/// @brief The number of ANSI colour indexes a text grid attribute uses.
+#define WIN_ANSI_NUM_COLORS 16
+
+/// @def WIN_ANSI_BLACK
+///
+/// @brief The ANSI colour index of black.
+#define WIN_ANSI_BLACK 0
+
+/// @def WIN_ANSI_BRIGHT_WHITE
+///
+/// @brief The ANSI colour index of bright white.
+#define WIN_ANSI_BRIGHT_WHITE 15
+
+/// @def WIN_ATTRIBUTE_SHIFT
+///
+/// @brief How far a text grid attribute's background colour index is
+/// shifted left.
+#define WIN_ATTRIBUTE_SHIFT 4
+
+/// @def WIN_ATTRIBUTE_FOREGROUND_MASK
+///
+/// @brief The bits of a text grid attribute that are its foreground colour
+/// index.
+#define WIN_ATTRIBUTE_FOREGROUND_MASK 0x0F
+
+/// @def WIN_ATTRIBUTE(foreground, background)
+///
+/// @brief The text grid attribute of a foreground and a background colour
+/// index.
+#define WIN_ATTRIBUTE(foreground, background) \
+  ((uint8_t) (((background) << WIN_ATTRIBUTE_SHIFT) | (foreground)))
+
+/// @def WIN_ATTRIBUTE_FOREGROUND(attribute)
+///
+/// @brief The foreground colour index of a text grid attribute.
+#define WIN_ATTRIBUTE_FOREGROUND(attribute) \
+  ((attribute) & WIN_ATTRIBUTE_FOREGROUND_MASK)
+
+/// @def WIN_ATTRIBUTE_BACKGROUND(attribute)
+///
+/// @brief The background colour index of a text grid attribute.
+#define WIN_ATTRIBUTE_BACKGROUND(attribute) \
+  ((attribute) >> WIN_ATTRIBUTE_SHIFT)
 
 /// @def WIN_GRID_TAG
 ///
