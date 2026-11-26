@@ -83,24 +83,27 @@
 
 /// @fn static void printUsage(FILE *stream)
 ///
-/// @brief Print the usage summary for sysnook.
+/// @brief Print the usage summary for sysnook, as nook, the command that
+/// runs it.
 ///
 /// @param stream The stream to print to.
 ///
 /// @return This function returns no value.
 static void printUsage(FILE *stream) {
   fputs(
-    "Usage: sysnook [options]\n"
+    "Usage: nook [options]\n"
     "\n"
-    "Take the display and manage windows on it until it's taken back.\n"
+    "Start Nook on the display, and wait until it ends.  Ctrl+Q quits it.\n"
     "\n"
     "Options:\n"
     "  --move=live|outline  How a moved window follows the pointer; outline by\n"
     "    default.\n"
     "  --resize=live|outline  How a resized window follows the pointer;\n"
     "    outline by default.\n"
-    "  --content=records|call  How the full window's cells are painted.\n"
-    "  --cells=N  The number of cells in the full window, up to 192.\n"
+    "  --content=records|call  How the full window's cells are painted;\n"
+    "    records by default.  Only with --demo.\n"
+    "  --cells=N  The number of cells in the full window, up to 192.  Only\n"
+    "    with --demo.\n"
     "  --timing  Print how long frames and echoes took when it ends.\n"
     "  --demo  Draw three demonstration windows of the window server's own.\n"
     "  --finish  Wait until each frame is drawn before going on.\n"
