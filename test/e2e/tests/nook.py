@@ -140,8 +140,8 @@ def run_nook(vdp, options="", demo=True):
     @return The number of context commands FakeVdp had received before.
     """
     base = len(vdp.context_events())
-    vdp.type(("nook --finish " + ("--demo " if demo else "") + options).strip()
-             + "\r")
+    line = ("nook --finish " + ("--demo " if demo else "") + options).strip()
+    vdp.type(line + "\r")
     assert vdp.wait_context_events(base + 1)[base:base + 1] == ACQUIRE
     if demo:
         wait_pixels(vdp, {corner_point(FRAMES[2]): TITLE_BAR})

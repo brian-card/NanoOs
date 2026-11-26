@@ -26,10 +26,7 @@
 
 """End-to-end tests of caps."""
 
-import os
-import subprocess
-
-from harness import help_text, REPO_ROOT
+from harness import help_text
 from tests.capabilities import HOMES, boot_with, repo_file
 
 LETTERS = "rwcdlsx"
@@ -81,10 +78,7 @@ def test_every_line_matches_the_mask_the_process_holds(s):
 def test_a_full_path_entry_is_marked(s):
     if s.child.isalive():
         s.child.terminate(force=True)
-    subprocess.run(["mcopy", "-s", "-i", s.img_copy + "@@2097152",
-                    os.path.join(REPO_ROOT, "userspace", "usr", "bin", "caps"),
-                    "::/system/commands/caps"],
-                   env=dict(os.environ, MTOOLS_SKIP_CHECK="1"), check=True)
+    s.copy_program("/usr/bin/caps", "/system/commands/caps")
     s.spawn([s.img_copy])
     s.login()
     assert s.sh("dirtest system caps").splitlines() == [

@@ -167,9 +167,7 @@ def test_root_can_grant_a_new_top_level_directory(s):
     image = s.img_copy + "@@2097152"
     subprocess.run(["mmd", "-i", image, "::/userspace/apps"], env=env,
                    check=True)
-    subprocess.run(["mcopy", "-s", "-i", image,
-                    os.path.join(REPO_ROOT, "userspace", "usr", "bin", "helloworld"),
-                    "::/userspace/apps/hi"], env=env, check=True)
+    s.copy_program("/usr/bin/helloworld", "/apps/hi")
     boot_with(s, {"/etc/capabilities": repo_file("userspace", "etc", "capabilities")
                   + "* rxls /apps/\n"}, HOMES)
     s.login("user1", "user1user1")

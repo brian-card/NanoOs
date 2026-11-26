@@ -342,6 +342,23 @@ class Session:
                         "::" + image_path(path)], input=data,
                        env=dict(os.environ, MTOOLS_SKIP_CHECK="1"), check=True)
 
+    def copy_program(self, source, target):
+        """Copy a program on this session's image to another path on it,
+        which no simulator is using.  The copy comes from the image, not the
+        tree, whose programs another target's build may have replaced.
+
+        @param source The program's directory, as a process names it.
+        @param target Where to copy it, as a process names it.
+        """
+        image = self.img_copy + "@@2097152"
+        env = dict(os.environ, MTOOLS_SKIP_CHECK="1")
+        staging = tempfile.mkdtemp(dir=self.tmp)
+        subprocess.run(["mcopy", "-s", "-i", image, "::" + image_path(source),
+                        staging], env=env, check=True)
+        subprocess.run(["mcopy", "-s", "-i", image,
+                        os.path.join(staging, os.path.basename(source)),
+                        "::" + image_path(target)], env=env, check=True)
+
     def restart_with_file(self, path, text):
         """Write a file into this session's image and boot again."""
         self.write_file(path, text)

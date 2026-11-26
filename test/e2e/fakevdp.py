@@ -64,6 +64,9 @@ FINISH_POLL_COOKIES = range(0x50, 0x80)
 
 # The kinds of event a frame draws with.
 DRAWING_KINDS = ("plot", "gcol", "gtext")
+# The keys FakeVdp.type sends before it waits for the simulator:  half of the
+# 16 that vdp.drv holds for a console that hasn't taken them yet.
+TYPE_AHEAD = 8
 KEYCODE_SPACE = 1
 KEYCODE_0 = 2
 KEYCODE_a = 22
@@ -1805,7 +1808,30 @@ class FakeVdp:
         return self.context_events()
 
     def type(self, text):
-        """Type a string, one key at a time.
+        """Type a string, one key at a time, and after each TYPE_AHEAD keys
+        wait until the simulator has sent something since, as it does to
+        echo them, or half a second.  The driver holds at most 16 keys for a
+        console that hasn't taken them yet and drops the rest, so a longer
+        burst can lose keys when the console is slow.
+
+        @param text The characters to type.
+        """
+        for index, ch in enumerate(text):
+            if (index > 0) and (index % TYPE_AHEAD == 0):
+                deadline = time.time() + 0.5
+                with self.lock:
+                    while (len(self.events) == count) \
+                            and (time.time() < deadline):
+                        self.lock.wait(0.02)
+            if index % TYPE_AHEAD == 0:
+                with self.lock:
+                    count = len(self.events)
+            self.key(ch)
+            time.sleep(0.01)
+
+    def type_burst(self, text):
+        """Type a string, one key at a time, without waiting for the
+        simulator, for tests of keys that pile up.
 
         @param text The characters to type.
         """

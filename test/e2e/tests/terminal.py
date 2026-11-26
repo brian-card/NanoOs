@@ -740,7 +740,7 @@ def test_terminal_keys_typed_while_the_window_server_is_busy_all_arrive(
     # writing while the keys are typed.
     vdp.read_rate = 5000
     resize_term(session, 30, 16)
-    vdp.type("echo abcdefghi")
+    vdp.type_burst("echo abcdefghi")
     vdp.read_rate = None
     vdp.type_paced("\r")
     lines = wait_lines(vdp, lambda lines: is_prompt(lines[2]), columns=85,
