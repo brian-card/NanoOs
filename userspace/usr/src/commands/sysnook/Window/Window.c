@@ -33,7 +33,9 @@
 /// by the Client and Input overlays to take a client's windows away and to
 /// change a window's state.
 
+#include <errno.h>
 #include "Wm.h"
+#include "UserProcesses.h"
 
 /// @fn static bool wmConnected(WmState *state, ProcessId pid)
 ///
@@ -172,6 +174,25 @@ static void wmSetState(WmState *state, WmWindow *window, uint8_t newState) {
   }
 }
 
+/// @fn static void wmFreeGrid(WmGrid *grid)
+///
+/// @brief Close a text grid's session, if it has one, and free the grid.
+///
+/// @param grid The grid, or NULL.
+///
+/// @return This function returns no value.
+static void wmFreeGrid(WmGrid *grid) {
+  if (grid == NULL) {
+    return;
+  }
+  if (grid->port != WM_NO_PORT) {
+    windowServerCloseSession(grid->port);
+  }
+  wmGridUnbind(grid);
+  free(grid->cells);
+  free(grid);
+}
+
 /// @fn static void wmRemoveWindow(WmState *state, WmWindow *window)
 ///
 /// @brief Take a window away, repainting where it was.  If it was active or
@@ -198,6 +219,7 @@ static void wmRemoveWindow(WmState *state, WmWindow *window) {
     memset(&state->outline, 0, sizeof(state->outline));
   }
   free(window->title);
+  wmFreeGrid((WmGrid*) window->content);
   uint8_t index = (uint8_t) (window - state->windows);
   state->numWindows--;
   memmove(window, window + 1,
@@ -290,6 +312,105 @@ static void wmLimit(WmState *state, WmWindow *window) {
   }
 }
 
+/// @fn static uint8_t wmOpenSession(WmGrid *grid, ProcessId display)
+///
+/// @brief Open the session a text grid is bound to, as big as the grid,
+/// whose output goes to the grid's owner.
+///
+/// @param grid The grid.
+/// @param display The ProcessId of the window's owner.
+///
+/// @return Returns WIN_OK, or the WinError for why the session couldn't be
+/// opened.
+static uint8_t wmOpenSession(WmGrid *grid, ProcessId display) {
+  grid->inputArgs = MESSAGE_ARGS_CREATE(ConsoleInputReadyArgs,
+    MESSAGE_ARGS_ROUND_TRIP);
+  grid->winsizeArgs = MESSAGE_ARGS_CREATE(ConsoleWinsizeArgs,
+    MESSAGE_ARGS_ROUND_TRIP);
+  if ((grid->inputArgs == NULL) || (grid->winsizeArgs == NULL)) {
+    return WIN_ERR_NO_MEMORY;
+  }
+  uint8_t port = WM_NO_PORT;
+  uint8_t shell = 0;
+  if (windowServerOpenSession(grid->rows, grid->columns, display, &port,
+      &shell) != 0
+  ) {
+    if (errno == EPERM) {
+      return WIN_ERR_PERMISSION;
+    } else if (errno == EINVAL) {
+      return WIN_ERR_INVALID;
+    }
+    return WIN_ERR_NO_MEMORY;
+  }
+  grid->port = port;
+  grid->shell = shell;
+  return WIN_OK;
+}
+
+/// @fn static uint8_t wmMakeGrid(WmState *state, WmWindow *window,
+///   const uint8_t *widgets, uint16_t size)
+///
+/// @brief Make a window's content from its template, which may be one text
+/// grid record and nothing else, and open the grid's session if its record
+/// asks for one.
+///
+/// @param state The window manager's state.
+/// @param window The window, whose frame is set.
+/// @param widgets The template.
+/// @param size The number of bytes in the template.
+///
+/// @return Returns WIN_OK, or the WinError for why the content couldn't be
+/// made, in which case the window has none.
+static uint8_t wmMakeGrid(WmState *state, WmWindow *window,
+  const uint8_t *widgets, uint16_t size
+) {
+  if ((widgets == NULL) || (size != WIN_RECORD_HEADER_SIZE)
+    || (widgets[WIN_RECORD_KIND] != WIN_WIDGET_TEXT_GRID)
+  ) {
+    return WIN_ERR_NOT_SUPPORTED;
+  }
+  WmGrid *grid = (WmGrid*) calloc(1, sizeof(WmGrid));
+  if (grid == NULL) {
+    return WIN_ERR_NO_MEMORY;
+  }
+  window->content = grid;
+  window->face = WM_GRID_FACE;
+  grid->widget = widgets[WIN_RECORD_ID];
+  grid->flags = widgets[WIN_RECORD_FLAGS];
+  grid->anchor = widgets[WIN_RECORD_ANCHOR];
+  grid->port = WM_NO_PORT;
+  memcpy(&grid->rect, &widgets[WIN_RECORD_RECT], sizeof(grid->rect));
+  GfxRect body;
+  wmBody(window, &body);
+  grid->left = body.x - window->frame.x + grid->rect.x;
+  grid->top = body.y - window->frame.y + grid->rect.y;
+  grid->marginRight = body.w - grid->rect.x - grid->rect.w;
+  grid->marginBottom = body.h - grid->rect.y - grid->rect.h;
+  GfxRect place;
+  wmGridPlace(state, window, &place);
+  grid->columns = (uint8_t) place.w;
+  grid->rows = (uint8_t) place.h;
+  size_t plane = (size_t) grid->columns * grid->rows;
+  grid->cells = (uint8_t*) malloc(plane * WM_GRID_PLANES);
+  uint8_t status = WIN_ERR_NO_MEMORY;
+  if (grid->cells != NULL) {
+    memset(grid->cells, ' ', plane);
+    memset(&grid->cells[plane], WM_BLANK_ATTRIBUTE, plane);
+    grid->cells[plane]
+      = WIN_ATTRIBUTE(WIN_ANSI_BLACK, WIN_ANSI_BRIGHT_WHITE);
+    grid->cursorShown = true;
+    status = WIN_OK;
+    if ((grid->flags & WIN_WIDGET_SESSION) != 0) {
+      status = wmOpenSession(grid, window->owner);
+    }
+  }
+  if (status != WIN_OK) {
+    wmFreeGrid(grid);
+    window->content = NULL;
+  }
+  return status;
+}
+
 /// @fn static void wmCreateWindow(WmState *state, ProcessId pid,
 ///   WinCreateWindowArgs *args)
 ///
@@ -317,25 +438,30 @@ static void wmCreateWindow(WmState *state, ProcessId pid,
   ) {
     args->status = WIN_ERR_INVALID;
     return;
-  } else if (args->templateSize != 0) {
-    args->status = WIN_ERR_NOT_SUPPORTED;
-    return;
   }
 
   WmWindow window;
   memset(&window, 0, sizeof(window));
-  window.title = wmCopyTitle(args->title, args->titleLength);
-  if ((args->titleLength != 0) && (window.title == NULL)) {
-    args->status = WIN_ERR_NO_MEMORY;
-    return;
-  }
-  window.id = wmFreeId(state);
   window.layer = args->layer;
   window.flags = args->flags;
   window.owner = pid;
   window.face = WM_FACE;
   window.frame = args->frame;
   wmLimit(state, &window);
+  if (args->templateSize != 0) {
+    args->status = wmMakeGrid(state, &window, args->widgets,
+      args->templateSize);
+    if (args->status != WIN_OK) {
+      return;
+    }
+  }
+  window.title = wmCopyTitle(args->title, args->titleLength);
+  if ((args->titleLength != 0) && (window.title == NULL)) {
+    wmFreeGrid((WmGrid*) window.content);
+    args->status = WIN_ERR_NO_MEMORY;
+    return;
+  }
+  window.id = wmFreeId(state);
 
   uint8_t index = 0;
   while ((index < state->numWindows)
