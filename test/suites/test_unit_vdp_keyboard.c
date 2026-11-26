@@ -13,6 +13,7 @@
 
 #include "../../userspace/usr/src/lib/vdp.drv/main/VdpKeyboard.c"
 #include "../../userspace/usr/src/lib/vdp.drv/Console/VdpLocks.c"
+#include "../../userspace/usr/src/commands/sysnook/include/WmKeys.h"
 
 /// @fn static int feed(VdpPacketParser *parser, const uint8_t *bytes,
 ///   size_t length)
@@ -648,4 +649,36 @@ NANO_OS_TEST(unit_vdp_keyboard, keys_on_either_side_of_a_mouse_packet_parse) {
   NANO_OS_ASSERT_EQ_INT(2, parseKeys(bytes, sizeof(bytes), keys, 4));
   NANO_OS_ASSERT_EQ_INT('a', keys[0]);
   NANO_OS_ASSERT_EQ_INT('b', keys[1]);
+}
+
+NANO_OS_TEST(unit_vdp_keyboard,
+  the_window_server_sends_a_session_what_the_console_driver_would
+) {
+  static const uint8_t asciis[] = { 0, 'a', 'A', '1', ' ', '~', 0x1b, 0x03,
+    0x7f, 0x0d, 0x08, 0x09 };
+  static const uint8_t modifiers[] = { 0, AGON_KEYMOD_SHIFT,
+    AGON_KEYMOD_CTRL };
+  int compared = 0;
+  for (int numLock = 0; numLock <= 1; numLock++) {
+    for (int keycode = 0; keycode < 256; keycode++) {
+      for (size_t ii = 0; ii < sizeof(asciis); ii++) {
+        for (size_t jj = 0; jj < sizeof(modifiers); jj++) {
+          uint8_t keyData[4] = { asciis[ii], modifiers[jj], (uint8_t) keycode,
+            1 };
+          uint8_t expected[VDP_KEY_MAX_BYTES] = { 0 };
+          uint8_t actual[WM_KEY_MAX_BYTES] = { 0 };
+          size_t expectedLength = vdpTranslateKey(keyData, numLock != 0,
+            expected);
+          uint8_t ascii = 0;
+          uint8_t key = vdpGfxKey(keyData, numLock != 0, &ascii);
+          uint8_t actualLength = wmTranslateKey(key, ascii, actual);
+          NANO_OS_ASSERT_EQ_INT((int) expectedLength, (int) actualLength);
+          NANO_OS_ASSERT_TRUE(
+            memcmp(expected, actual, expectedLength) == 0);
+          compared++;
+        }
+      }
+    }
+  }
+  NANO_OS_ASSERT_EQ_INT(2 * 256 * 12 * 3, compared);
 }
